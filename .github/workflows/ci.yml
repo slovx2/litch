@@ -68,6 +68,23 @@ jobs:
         if: runner.os == 'Linux'
         run: node scripts/check-adapter-package.mjs
 
+  # Computer Use 的原生助手（Swift）和主进程里接它的那一层：助手的单元测试、执行器与看护的单元测试（桩助手），
+  # 再真的经 LaunchServices 起一次临时签名的助手、握手、调不要系统授权的几样（不点、不截图）
+  computer-use:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --prefix apps/desktop --no-audit --no-fund
+      - run: swift --version
+      - run: swift test --package-path apps/computer-use
+      - run: npm run test:computer-use --prefix apps/desktop
+      - run: npm run check:computer-use --prefix apps/desktop
+
   # 客户端：核心的单元测试、三个包的类型检查、界面构建，再起真的 Electron 做自检、对话区的滚动验收、输入区的验收、终端面板的验收和远程设备的验收（窗口不显示）。
   # 代码规范检查由上面 adapters 里的 npm run check 一并覆盖。
   client:

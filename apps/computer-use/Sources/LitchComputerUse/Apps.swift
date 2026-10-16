@@ -1,0 +1,146 @@
+// 权限状态、在跑的应用、把应用切到前台。
+//
+// 权限只用不弹窗的检查：AXIsProcessTrusted、CGPreflightScreenCaptureAccess。
+// 不调会弹系统授权框的那几个（带提示的 AXIsProcessTrustedWithOptions、CGRequestScreenCaptureAccess），
+// 授权由用户自己在系统设置里点；助手只负责把对应的那一页打开。
+import AppKit
+import ApplicationServices
+import CoreGraphics
+import Foundation
+import LitchComputerUseCore
+
+enum Permissions {
+  static func accessibility() -> Bool { AXIsProcessTrusted() }
+  static func screenRecording() -> Bool { CGPreflightScreenCaptureAccess() }
+
+  static func status() -> JSONValue {
+    ["accessibility": .bool(accessibility()), "screenRecording": .bool(screenRecording())]
+  }
+
+  /// 系统设置里“隐私与安全性”的对应一页
+  static func settingsURL(_ pane: String) -> URL? {
+    let anchor: String
+    switch pane {
+    case "accessibility": anchor = "Privacy_Accessibility"
+    case "screenRecording": anchor = "Privacy_ScreenCapture"
+    default: return nil
+    }
+    return URL(string: "x-apple.systempreferences:com.apple.preference.security?\(anchor)")
+  }
+
+  /// 动作要两项权限都在；缺哪项说哪项
+  static func require() throws {
+    var missing: [String] = []
+    if !accessibility() { missing.append("Accessibility") }
+    if !screenRecording() { missing.append("Screen Recording") }
+    if !missing.isEmpty {
+      throw RPCError(.permission, missing.joined(separator: ","))
+    }
+  }
+}
+
+struct AppInfo {
+  var name: String
+  var bundleId: String?
+  var pid: pid_t
+  var active: Bool
+  var windows: Int
+
+  var json: JSONValue {
+    [
+      "name": .string(name), "bundleId": .optional(bundleId), "pid": .int(Int(pid)),
+      "active": .bool(active), "windows": .int(windows),
+    ]
+  }
+}
+
+enum Apps {
+  /// 屏幕上各进程的普通窗口（第 0 层）个数。不要屏幕录制权限：只读窗口的归属，不读标题
+  static func windowCounts() -> [pid_t: Int] {
+    let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
+    guard let list = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]]
+    else { return [:] }
+    var counts: [pid_t: Int] = [:]
+    for window in list {
+      guard let layer = window[kCGWindowLayer as String] as? Int, layer == 0,
+        let owner = window[kCGWindowOwnerPID as String] as? Int
+      else { continue }
+      counts[pid_t(owner), default: 0] += 1
+    }
+    return counts
+  }
+
+  /// 在跑的、有窗口的普通应用
+  static func list() -> [AppInfo] {
+    let counts = windowCounts()
+    let front = NSWorkspace.shared.frontmostApplication?.processIdentifier
+    return NSWorkspace.shared.runningApplications
+      .filter { $0.activationPolicy == .regular && !$0.isTerminated }
+      .compactMap { app -> AppInfo? in
+        let windows = counts[app.processIdentifier] ?? 0
+        guard windows > 0 else { return nil }
+        return AppInfo(
+          name: app.localizedName ?? app.bundleIdentifier ?? "pid \(app.processIdentifier)",
+          bundleId: app.bundleIdentifier, pid: app.processIdentifier,
+          active: app.processIdentifier == front, windows: windows)
+      }
+      .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+  }
+
+  /// 按包标识或名字找在跑的应用。有好几个实例时挑有窗口的、在前台的
+  static func resolve(_ query: String) throws -> NSRunningApplication {
+    let needle = query.trimmingCharacters(in: .whitespaces)
+    guard !needle.isEmpty else { throw RPCError(.invalid, "app is empty") }
+    let running = NSWorkspace.shared.runningApplications.filter {
+      $0.activationPolicy == .regular && !$0.isTerminated
+    }
+    var matches = running.filter { $0.bundleIdentifier == needle }
+    if matches.isEmpty {
+      matches = running.filter {
+        $0.localizedName?.compare(needle, options: [.caseInsensitive, .diacriticInsensitive])
+          == .orderedSame
+      }
+    }
+    if matches.isEmpty {
+      matches = running.filter {
+        $0.bundleIdentifier?.compare(needle, options: .caseInsensitive) == .orderedSame
+      }
+    }
+    guard !matches.isEmpty else {
+      throw RPCError(
+        .notFound,
+        "No running app matches \"\(query)\". Call list_apps to see running apps; if it is not running, ask the user to open it."
+      )
+    }
+    let counts = windowCounts()
+    return matches.max { a, b in
+      let scoreA = (a.isActive ? 2 : 0) + ((counts[a.processIdentifier] ?? 0) > 0 ? 1 : 0)
+      let scoreB = (b.isActive ? 2 : 0) + ((counts[b.processIdentifier] ?? 0) > 0 ? 1 : 0)
+      return scoreA < scoreB
+    }!
+  }
+
+  /// 把应用切到前台。macOS 14 起后台应用调 activate 可能被系统拒（要让出焦点的才行），
+  /// 所以经辅助功能设它的 AXFrontmost，再等它真的到前台，最多等 1.5 秒
+  static func activate(_ app: NSRunningApplication, window: AXUIElement?) throws {
+    let pid = app.processIdentifier
+    if NSWorkspace.shared.frontmostApplication?.processIdentifier != pid {
+      let element = AXUIElementCreateApplication(pid)
+      AXUIElementSetAttributeValue(element, kAXFrontmostAttribute as CFString, kCFBooleanTrue)
+      app.activate(options: [])
+      let deadline = Date().addingTimeInterval(1.5)
+      while NSWorkspace.shared.frontmostApplication?.processIdentifier != pid, Date() < deadline {
+        Thread.sleep(forTimeInterval: 0.05)
+      }
+      guard NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else {
+        throw RPCError(
+          .failed,
+          "Could not bring \(app.localizedName ?? "the app") to the front. Try again; if it keeps failing, ask the user to switch to it."
+        )
+      }
+    }
+    if let window {
+      AXUIElementPerformAction(window, kAXRaiseAction as CFString)
+    }
+  }
+}

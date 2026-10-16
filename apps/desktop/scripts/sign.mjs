@@ -5,8 +5,9 @@
 // Resources 下面的可执行文件它只当成资源记一个哈希，不给它们签名。所以这里先把它们各签一遍，
 // 再给整个应用签：里面的先签、外面的后签，顺序反了外面记下的哈希就对不上了。
 import { execFileSync } from 'node:child_process'
-import { closeSync, openSync, readdirSync, readSync } from 'node:fs'
+import { closeSync, existsSync, openSync, readdirSync, readSync } from 'node:fs'
 import { join } from 'node:path'
+import { HELPER_APP_NAME, signHelper } from '../../computer-use/build-app.mjs'
 
 /** Mach-O 的文件头：64 位、32 位（两种字节序），和装着几种架构的胖文件 */
 const THIN = new Set(['cffaedfe', 'cefaedfe', 'feedfacf', 'feedface'])
@@ -52,6 +53,13 @@ export function signAdHoc(appPath) {
   // 打包器改了应用的名字和信息，原来那份签名对不上了：整个重新签一次，
   // 这样系统认得出它是“Litch”而不是“Electron”
   codesign('--force', '--deep', '--sign', '-', appPath)
+  // Computer Use 的助手在 SharedSupport 里，--deep 刚才把它也签成了没有加固运行时的样子：按它自己的规矩
+  // （加固的运行时、固定的签名标识）重签一遍，外层的签名记着里面的哈希，所以外层只签自己（不带 --deep）再签一次
+  const helper = join(appPath, 'Contents', 'SharedSupport', HELPER_APP_NAME)
+  if (existsSync(helper)) {
+    signHelper(helper, {})
+    codesign('--force', '--sign', '-', appPath)
+  }
   codesign('--verify', '--deep', '--strict', appPath)
   return inner
 }

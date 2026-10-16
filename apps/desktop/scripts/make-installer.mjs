@@ -22,6 +22,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync } from 'node:f
 import { basename, join, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { sign } from '@electron/osx-sign'
+import { HELPER_APP_NAME, helperTeam, signHelper } from '../../computer-use/build-app.mjs'
 import { OUT_DIR } from './packed.mjs'
 import { machOFiles } from './sign.mjs'
 
@@ -121,14 +122,24 @@ async function macos() {
         file,
       ])
     }
+    // Computer Use 的助手：自己的签名（加固的运行时、没有额外权限、固定的签名标识），osx-sign 跳过它，
+    // 免得被套上 Electron 那一份权限
+    const helper = join(app, 'Contents', 'SharedSupport', HELPER_APP_NAME)
+    const helperTeamId = signHelper(helper, creds)
     await sign({
       app,
       identity: creds.identity,
       keychain: creds.keychain,
       platform: 'darwin',
-      ignore: (file) => file.startsWith(adapter + sep),
+      ignore: (file) => file.startsWith(adapter + sep) || file.startsWith(helper),
     })
     run('codesign', ['--verify', '--deep', '--strict', '--verbose=2', app])
+    // 助手和 Litch 必须是同一个团队签的：助手只认同团队签名的 Litch 连进来
+    const appTeam = helperTeam(app)
+    if (!helperTeamId || helperTeamId !== appTeam) {
+      throw new Error(`Computer Use 助手的团队号（${helperTeamId}）和 Litch 的（${appTeam}）对不上`)
+    }
+    run(join(helper, 'Contents', 'MacOS', 'LitchComputerUse'), ['--diagnostics'])
     // 加固的运行时下内置的 Node 还跑得起来（少了即时编译的权限，V8 一起来就崩），命令行也是
     const node = join(adapter, 'node', 'bin', 'node')
     run(node, ['-e', 'console.log(`内置的 Node 能跑：${process.version}`)'])

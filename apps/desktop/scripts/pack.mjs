@@ -12,6 +12,11 @@
 // （stage-adapter.mjs，要求仓库根目录已经 npm run build 过），再作为额外的资源原样放进应用，
 // 落在 Contents/Resources/adapter，不进 asar：里面的可执行文件得是磁盘上真的文件。
 //
+// macOS 上再带 Computer Use 的原生助手（apps/computer-use，Swift 构建）：落在 Contents/SharedSupport/Litch Computer Use.app。
+// 放在 SharedSupport 而不是 Resources：它是一个完整的、单独签名的应用（系统授权记在它的包标识和签名上），
+// SharedSupport 是苹果约定的放辅助应用的位置之一，codesign 认得出它是嵌套的代码；不放 Contents/Helpers 或
+// Library/LoginItems，是因为它既不是 Electron 的辅助进程，也不是登录项。
+//
 // 再带一份许可文本：界面和外壳里打进去的第三方代码各自的许可（licenses.mjs），连同本项目自己的
 // LICENSE 和 THIRD_PARTY_NOTICES.md，落在 Contents/Resources/licenses。
 //
@@ -26,6 +31,7 @@ import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { packager } from '@electron/packager'
+import { buildHelper } from '../../computer-use/build-app.mjs'
 import { collectLicenses } from './licenses.mjs'
 import { NODE_VERSION } from './node-runtime.mjs'
 import { OUT_DIR } from './packed.mjs'
@@ -123,6 +129,10 @@ rmSync(stage, { recursive: true, force: true })
 rmSync(licenses, { recursive: true, force: true })
 
 const appPath = join(outPath, `${manifest.productName}.app`)
+if (process.platform === 'darwin') {
+  const helper = buildHelper({ out: join(appPath, 'Contents', 'SharedSupport') })
+  console.log(`Computer Use 助手：${helper}`)
+}
 // 临时签名只在本机有效。适配器带的可执行文件也要签到，见 sign.mjs
 if (process.platform === 'darwin') signAdHoc(appPath)
 console.log(`应用已装好：${process.platform === 'darwin' ? appPath : outPath}`)
