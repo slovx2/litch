@@ -58,6 +58,12 @@ export const EXTENSION = {
    * 哪个 harness 支持看它声明里的 `extensions`。
    */
   planConfirmation: 'planConfirmation',
+  /**
+   * 客户端工具：`litch_` 开头的命名空间的动态工具调用只交给声明过能执行它的连接，没有这样的连接时
+   * 当场回失败（client-tools.mts，定义在 protocol/extensions/client-tools.json）。
+   * 声明时还要在 `capabilities.litchClientTools.namespaces` 里列出能执行哪些命名空间。
+   */
+  clientTools: 'clientTools',
 } as const
 
 export type ExtensionName = (typeof EXTENSION)[keyof typeof EXTENSION]

@@ -5,7 +5,7 @@
 - 用中文写新增注释与维护文档。在当前分支工作，不创建 worktree。
 - `packages/claude`、`packages/pi`、`packages/dsh`（DeepSeek Harness，实验性）是并列适配器；`packages/shared` 只承载共享能力。
 - `sshserver` 是通用 Go 库，不允许依赖 Tyrs Hand。`cmd/codex-harness-adapter` 是仅监听本机的 CLI。
-- `packages/device` 是设备进程：把这台机器上的各个运行时收在一个入口（聚合面，`<状态目录>/device/device.sock`）后面，给我们自己的客户端连。它由命令行的 `start` 拉起并看着，对各运行时来说只是又一个客户端，起不来不影响任何入口；父进程没了它自己退出。它没有自己的 `node_modules`，依赖从根目录解析，不要给它加 `npm ci --prefix`；它只能引用 `packages/protocol/src/` 下自包含的那几份（`device.mts`、`device-processes.mts`、`device-settings.mts`、`device-service.mts`、`harness-identity.mts`），不能引用 `codex.mts`。
+- `packages/device` 是设备进程：把这台机器上的各个运行时收在一个入口（聚合面，`<状态目录>/device/device.sock`）后面，给我们自己的客户端连。它由命令行的 `start` 拉起并看着，对各运行时来说只是又一个客户端，起不来不影响任何入口；父进程没了它自己退出。它没有自己的 `node_modules`，依赖从根目录解析，不要给它加 `npm ci --prefix`；它只能引用 `packages/protocol/src/` 下自包含的那几份（`device.mts`、`device-processes.mts`、`device-settings.mts`、`device-service.mts`、`harness-identity.mts`、`client-tools.mts`），不能引用 `codex.mts`。
 - 聚合面只给握手时声明了 `harness` 扩展的客户端用（`capabilities.litchExtensions`），官方桌面端连的仍然是各 harness 自己的 SSH 入口，行为不许因为聚合面而变。扩展的定义在 `protocol/extensions/harness.json`，设备包的测试按它校验真实的应答：改形状要同步改它和 `packages/protocol/src/device.mts`。协议扩展的规矩（只增不改、服务端主动发的扩展内容只发给声明过的连接、用自己的前缀）见设计文档 03 第十五节。
 - `<状态目录>/device/` 是保留的名字。里面 `serve.lock`、`start.lock`、`service.json`、`service.log`、`device.log` 归命令行，`device.sock`、`device.sqlite` 归设备进程。
 - 连 unix 套接字上的 WebSocket 时，路径不要写进 `ws+unix://` 地址：地址里的路径会被转义，空格、中文都变成 `%xx`，连的就不是那个文件了。给 `ws` 传 `createConnection: () => net.createConnection(路径)`，地址写 `ws://localhost/` 当摆设（`packages/device/src/sockets.mts`、`apps/desktop/src/transport-unix.mts`）。本机自带适配器的真链路自检（`client:check:local`）特意把状态目录起成带空格和汉字的名字，守着整条链路。

@@ -1,6 +1,17 @@
 // 协议包的入口。设备进程（packages/device）和客户端核心（packages/core）都从这里取类型。
 // codex.mts 是 Codex 原有的，extensions.mts 是我们加的，两边分开放
 // （设计文档 01 第五节规则 4、03 第十五节）。
+
+// 客户端工具（clientTools 扩展）：谁能执行 litch_ 开头的动态工具、没人能执行时怎么回。不依赖别的文件
+export type * from './client-tools.mjs'
+export {
+  CLIENT_TOOL_NAMESPACE,
+  CLIENT_TOOL_NAMESPACE_PREFIX,
+  CLIENT_TOOLS_CAPABILITY,
+  clientToolFailure,
+  declaredClientToolNamespaces,
+  isClientToolNamespace,
+} from './client-tools.mjs'
 export type * from './codex.mjs'
 export { CODEX_PROTOCOL_VERSION } from './codex.mjs'
 // 设备服务（聚合面）的扩展：device.mts 只取 harness-capabilities.mts 的类型，device-codex.mts 是它和 codex 类型拼出来的形状
