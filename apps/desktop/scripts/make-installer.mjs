@@ -3,11 +3,11 @@
 //   Windows  Litch-<版本>-windows-<架构>-setup.exe（Inno Setup 6.7.1 编，见 packaging/litch.iss；不签名）
 //
 // macOS 上给了开发者身份就签名并公证：
-//   LITCH_SIGN_IDENTITY    “Developer ID Application”证书的名字或者它的 SHA-1
-//   LITCH_SIGN_KEYCHAIN    证书在哪个钥匙串里（不给就在默认的那几个里找）
-//   LITCH_NOTARY_KEY       App Store Connect API 密钥（.p8 文件）的路径
-//   LITCH_NOTARY_KEY_ID    这把密钥的编号
-//   LITCH_NOTARY_ISSUER    签发者编号（App Store Connect 的“集成”页上，团队密钥列表上面那一串）
+//   LITCH_SIGN_IDENTITY     “Developer ID Application”证书的名字或者它的 SHA-1
+//   LITCH_SIGN_KEYCHAIN     证书在哪个钥匙串里（不给就在默认的那几个里找；同名的证书在几个钥匙串里都有时要给）
+//   LITCH_NOTARY_PROFILE    公证凭据：notarytool 存在钥匙串里的配置名（xcrun notarytool store-credentials 存的）
+//   LITCH_NOTARY_KEYCHAIN   这份配置不在默认的钥匙串里时，它在哪个钥匙串里
+// 本机用登录钥匙串里的证书和已经存好的配置；发布流程把机密导进一个临时钥匙串，再存一份配置（见 release.yml）。
 // 顺序：内置适配器里的两个可执行文件先各自签（加固的运行时，Node 带上它要的权限，见 packaging/node.entitlements.plist）；
 // 再用 @electron/osx-sign 签 Electron 的部分和整个应用（它会把 Resources 下面所有像二进制的文件都签一遍，
 // 适配器那一大棵依赖不该这样，所以让它跳过适配器目录）；然后公证应用、把公证票钉进去；
@@ -36,33 +36,24 @@ const run = (command, args, options = {}) =>
 
 const sha256Of = (file) => createHash('sha256').update(readFileSync(file)).digest('hex')
 
-/** 开发者身份和公证凭据。一个都没给就是 null；给了一部分是配错了，直接报 */
+/** 开发者身份和公证凭据。一个都没给就是 null；只给了一半是配错了，直接报 */
 function credentials() {
-  const names = [
-    'LITCH_SIGN_IDENTITY',
-    'LITCH_NOTARY_KEY',
-    'LITCH_NOTARY_KEY_ID',
-    'LITCH_NOTARY_ISSUER',
-  ]
-  const given = names.filter((name) => process.env[name])
-  if (given.length === 0) return null
-  if (given.length < names.length) {
-    const missing = names.filter((name) => !process.env[name])
-    throw new Error(`签名和公证的设置不全，缺 ${missing.join('、')}`)
+  const identity = process.env.LITCH_SIGN_IDENTITY
+  const profile = process.env.LITCH_NOTARY_PROFILE
+  if (!identity && !profile) return null
+  if (!identity || !profile) {
+    throw new Error(
+      `签名和公证的设置不全，缺 ${identity ? 'LITCH_NOTARY_PROFILE' : 'LITCH_SIGN_IDENTITY'}`,
+    )
   }
-  if (!existsSync(process.env.LITCH_NOTARY_KEY)) {
-    throw new Error(`LITCH_NOTARY_KEY 指的文件不存在：${process.env.LITCH_NOTARY_KEY}`)
-  }
+  const notaryKeychain = process.env.LITCH_NOTARY_KEYCHAIN
   return {
-    identity: process.env.LITCH_SIGN_IDENTITY,
+    identity,
     keychain: process.env.LITCH_SIGN_KEYCHAIN || undefined,
     notary: [
-      '--key',
-      process.env.LITCH_NOTARY_KEY,
-      '--key-id',
-      process.env.LITCH_NOTARY_KEY_ID,
-      '--issuer',
-      process.env.LITCH_NOTARY_ISSUER,
+      '--keychain-profile',
+      profile,
+      ...(notaryKeychain ? ['--keychain', notaryKeychain] : []),
     ],
   }
 }
