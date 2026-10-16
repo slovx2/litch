@@ -1,0 +1,461 @@
+/* 极客复古（默认皮肤）。浅色是米色机箱和打印纸，深色是一块绿色单色显示器。
+   方角、实线、硬投影，全部等宽。前半是变量，后半是这个皮肤专属的组件规则。 */
+:root[data-skin="retro"],
+[data-skin-preview="retro"] {
+  --win: var(--L, #d9d3be) var(--D, #09100b);
+  --panel: var(--L, #e8e3d1) var(--D, #0c150f);
+  --raised: var(--L, #f4f0e2) var(--D, #121e16);
+  --overlay: var(--L, #f4f0e2) var(--D, #16251b);
+  --sunken: var(--L, #ddd7c3) var(--D, #060b08);
+  --ink: var(--L, #1a1a14) var(--D, #cdeed4);
+  --ink-2: var(--L, #4b4a3d) var(--D, #8dba98);
+  --ink-3: var(--L, #726f59) var(--D, #5f8a6c);
+  --ink-rgb: var(--L, 26 26 20) var(--D, 205 238 212);
+  /* 变量在声明它的元素上求值，所以依赖墨色的派生变量要在这里重新声明一遍 */
+  --line-1: rgb(var(--ink-rgb) / var(--L, 0.18) var(--D, 0.14));
+  --line-2: rgb(var(--ink-rgb) / var(--L, 0.5) var(--D, 0.32));
+  --line-3: rgb(var(--ink-rgb) / var(--L, 1) var(--D, 0.7));
+  --hover: rgb(var(--ink-rgb) / 0.08);
+  --press: rgb(var(--ink-rgb) / 0.16);
+  --sel: rgb(var(--ink-rgb) / 0.14);
+  --shadow: var(--L, 6px 6px 0 rgb(26 26 20 / 0.9)) var(--D, 6px 6px 0 rgb(77 255 136 / 0.26));
+  /* 浅色里实心块一律用墨色，绿色只做信号；深色里两者都是荧光绿 */
+  --accent: var(--L, #0b6b3d) var(--D, #4dff88);
+  --accent-solid: var(--L, #1a1a14) var(--D, #35d873);
+  --on-accent: var(--L, #f4f0e2) var(--D, #04130a);
+  --ok: var(--L, #0b6b3d) var(--D, #4dff88);
+  --wait: var(--L, #9a5b00) var(--D, #ffb83d);
+  --err: var(--L, #b3261e) var(--D, #ff6a5c);
+  --ui:
+    "IBM Plex Mono", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Noto Sans CJK SC",
+    ui-monospace, Menlo, Consolas, monospace;
+  --mono:
+    "IBM Plex Mono", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Noto Sans CJK SC",
+    ui-monospace, Menlo, Consolas, monospace;
+  --r1: 0px;
+  --r2: 0px;
+  --r3: 0px;
+  /* 反白：底和字对调，选中态用 */
+  --inv-bg: var(--L, #1a1a14) var(--D, #cdeed4);
+  --inv-fg: var(--L, #f4f0e2) var(--D, #07100a);
+  --inv-fg-2: var(--L, #bdb8a4) var(--D, #2f5a3c);
+  --inv-line: var(--L, rgb(244 240 226 / 0.5)) var(--D, rgb(7 16 10 / 0.5));
+  /* 辉光只在深色里有；打印纸的绿条只在浅色里有 */
+  --glow: var(--L, none) var(--D, 0 0 8px rgb(77 255 136 / 0.7));
+  --tglow: var(--L, none) var(--D, 0 0 10px rgb(77 255 136 / 0.35));
+  --bar: var(--L, rgb(11 107 61 / 0.1)) var(--D, transparent);
+  /* 终端是一张打印纸（浅色）或者那块显示器本身（深色），不是凹下去的槽 */
+  --term-bg: var(--raised);
+  --term-font-size: 12px;
+}
+
+/* 方角：连状态记号、色块都是方的。设置页里别的皮肤的预览除外：那一小块画的是另一种皮肤，圆角照它自己的变量来 */
+[data-skin="retro"] :not([data-skin-preview], [data-skin-preview] *),
+[data-skin="retro"] :not([data-skin-preview], [data-skin-preview] *)::before,
+[data-skin="retro"] :not([data-skin-preview], [data-skin-preview] *)::after {
+  /* biome-ignore lint/complexity/noImportantStyles: 这个皮肤里任何东西都不许有圆角，包括组件自己写死的那些 */
+  border-radius: 0 !important;
+}
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* 小标题前面的记号；标签不填底色，只画框 */
+[data-skin="retro"] .sec-label::before {
+  content: "## ";
+  white-space: pre;
+}
+[data-skin="retro"] .pill {
+  background: none;
+  border: 1px solid currentColor;
+  line-height: 14px;
+}
+[data-skin="retro"] .mini:hover {
+  background: var(--sel);
+}
+
+/* 选中 = 反白。在选中的那一行上把墨色变量整套换掉，里面的文字、徽标、记号自动跟着反过来 */
+[data-skin="retro"] .ss-row.sel {
+  background: var(--inv-bg);
+  color: var(--inv-fg);
+  --ink: var(--inv-fg);
+  --ink-2: var(--inv-fg);
+  --ink-3: var(--inv-fg-2);
+  --line-1: var(--inv-line);
+  --line-2: var(--inv-line);
+  --line-3: var(--inv-fg);
+  --accent: var(--inv-fg);
+  --ok: var(--inv-fg);
+  --wait: var(--inv-fg);
+  --err: var(--inv-fg);
+}
+
+/* 状态记号：闪烁的光标块、?、*、! */
+[data-skin="retro"] .st.run::before {
+  width: 6px;
+  height: 11px;
+  animation: blink 1s steps(1) infinite;
+  box-shadow: var(--glow);
+}
+[data-skin="retro"] .st.wait::before {
+  content: "?";
+  width: auto;
+  height: auto;
+  background: none;
+  transform: none;
+  font: 700 12px / 14px var(--mono);
+  color: var(--wait);
+}
+[data-skin="retro"] .st.unread::before {
+  content: "*";
+  width: auto;
+  height: 9px;
+  background: none;
+  font: 700 15px / 14px var(--mono);
+  color: var(--ink);
+}
+[data-skin="retro"] .st.err::before {
+  content: "!";
+  font-weight: 700;
+}
+
+/* 标题栏、侧栏 */
+[data-skin="retro"] .tb {
+  border-bottom: 3px double var(--line-3);
+}
+[data-skin="retro"] .crumb b {
+  text-shadow: var(--tglow);
+}
+[data-skin="retro"] .sb {
+  border-right-color: var(--line-3);
+}
+[data-skin="retro"] .sb-foot {
+  border-top: 1px dashed var(--line-2);
+}
+[data-skin="retro"] .dev-body::before {
+  opacity: 1;
+}
+[data-skin="retro"] .dev-note {
+  border-style: dashed;
+}
+
+/* 对话 */
+[data-skin="retro"] .umsg {
+  border-color: var(--line-3);
+  box-shadow: 3px 3px 0 var(--line-3);
+}
+[data-skin="retro"] .mention {
+  background: none;
+  border: 1px solid var(--line-2);
+  line-height: 16px;
+}
+[data-skin="retro"] .act-body,
+[data-skin="retro"] .plan,
+[data-skin="retro"] .todo,
+[data-skin="retro"] .code {
+  border-color: var(--line-3);
+}
+[data-skin="retro"] .item + .item,
+[data-skin="retro"] .item-detail {
+  border-top-style: dashed;
+  border-top-color: var(--line-2);
+}
+[data-skin="retro"] .md code {
+  background: none;
+  border: 1px solid var(--line-2);
+}
+[data-skin="retro"] .code pre code {
+  border: 0;
+}
+[data-skin="retro"] .md a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+[data-skin="retro"] .code-head,
+[data-skin="retro"] .plan-head,
+[data-skin="retro"] .todo-head,
+[data-skin="retro"] .file-head {
+  border-bottom: 1px dashed var(--line-2);
+}
+[data-skin="retro"] .code-head {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+[data-skin="retro"] .dl.hunk {
+  background: none;
+  border-block: 1px dashed var(--line-2);
+}
+/* 命令输出像打印纸：浅色里隔行一道淡绿条 */
+[data-skin="retro"] .well pre {
+  background-image: repeating-linear-gradient(to bottom, var(--bar) 0 19px, transparent 19px 38px);
+  background-position: 0 8px;
+}
+[data-skin="retro"] .errbox {
+  border-color: var(--err);
+}
+/* 待办：方块不带圆角，进度条是一格一格的；正在做的那一步是闪烁的光标块（沿用 .st.run） */
+[data-skin="retro"] .todo-mark::before,
+[data-skin="retro"] .todo-bar {
+  border-radius: 0;
+}
+[data-skin="retro"] .todo-bar {
+  height: 6px;
+  background: none;
+  border: 1px solid var(--line-3);
+}
+[data-skin="retro"] .todo-bar i {
+  transition: none;
+}
+/* 输出中的光标：一闪一闪的方块，深色里带辉光 */
+[data-skin="retro"] .md.live ::after,
+[data-skin="retro"] .md.live::after {
+  animation: blink 1s steps(1) infinite;
+  box-shadow: var(--glow);
+}
+[data-skin="retro"] .to-bottom {
+  border-color: var(--line-3);
+  box-shadow: 3px 3px 0 var(--line-3);
+}
+
+/* 输入区：前面有提示符，线色是左边一整条色块 */
+[data-skin="retro"] .cmp {
+  border-color: var(--line-3);
+  box-shadow: 4px 4px 0 var(--line-3);
+}
+[data-skin="retro"] .cmp::before {
+  top: -1px;
+  bottom: -1px;
+  width: 4px;
+}
+[data-skin="retro"] .cmp-row::before {
+  content: "> ";
+  white-space: pre;
+  color: var(--accent);
+  font: 600 14px / 24px var(--mono);
+}
+/* 复古皮肤里图片也是直角 */
+[data-skin="retro"] :is(.cmp-att img, .cmp-att-x, .uimg, .viewer img) {
+  border-radius: 0;
+}
+[data-skin="retro"] .cmp-att img,
+[data-skin="retro"] .uimg {
+  border-color: var(--line-3);
+}
+[data-skin="retro"] .cmp.off {
+  box-shadow: none;
+  border-style: dashed;
+}
+[data-skin="retro"] .cmp:focus-within {
+  border-color: var(--line-3);
+}
+/* 按钮：实线框加硬投影，按下去陷进去 */
+[data-skin="retro"] .btn {
+  border-color: var(--line-3);
+  box-shadow: 2px 2px 0 var(--line-3);
+}
+[data-skin="retro"] .btn:hover {
+  background: var(--sel);
+}
+[data-skin="retro"] .btn:active {
+  transform: translate(2px, 2px);
+  box-shadow: none;
+}
+[data-skin="retro"] .btn.primary,
+[data-skin="retro"] .btn.primary:hover {
+  filter: none;
+  background: var(--accent-solid);
+  border-color: var(--accent-solid);
+}
+[data-skin="retro"] .btn.ghost {
+  border-color: transparent;
+  box-shadow: none;
+}
+[data-skin="retro"] .btn.danger,
+[data-skin="retro"] .btn.danger:hover {
+  background: var(--err);
+  border-color: var(--err);
+}
+/* 选择器：方括号括起来的当前值，弹出来的是带硬投影的菜单，选中的那一项反白 */
+[data-skin="retro"] .pick-btn::before {
+  content: "[";
+  color: var(--ink-3);
+}
+[data-skin="retro"] .pick-btn::after {
+  content: "]";
+  color: var(--ink-3);
+}
+[data-skin="retro"] .pick-btn svg {
+  display: none;
+}
+[data-skin="retro"] .pick-pop,
+[data-skin="retro"] .sug,
+[data-skin="retro"] .peek,
+[data-skin="retro"] .info-card {
+  border-color: var(--line-3);
+  box-shadow: 4px 4px 0 var(--line-3);
+}
+[data-skin="retro"] .pick-opt[aria-selected="true"] {
+  background: var(--inv-bg);
+  color: var(--inv-fg);
+}
+[data-skin="retro"] .pick-opt[aria-selected="true"] span {
+  color: inherit;
+}
+/* 计划模式的开关和选择器一样用方括号括着；开着的时候反白 */
+[data-skin="retro"] .mode-btn::before {
+  content: "[";
+  color: var(--ink-3);
+}
+[data-skin="retro"] .mode-btn::after {
+  content: "]";
+  color: var(--ink-3);
+}
+[data-skin="retro"] .mode-btn .ic {
+  display: none;
+}
+[data-skin="retro"] .mode-btn[aria-pressed="true"] {
+  background: var(--inv-bg);
+  color: var(--inv-fg);
+}
+[data-skin="retro"] .mode-btn[aria-pressed="true"]::before,
+[data-skin="retro"] .mode-btn[aria-pressed="true"]::after {
+  color: inherit;
+}
+[data-skin="retro"] .plan-ask {
+  border-color: var(--wait);
+}
+/* 单子里选中的那一行和选择器的一样：反白，行里的字都跟着 */
+[data-skin="retro"] .sug-opt[aria-selected="true"] {
+  background: var(--inv-bg);
+  color: var(--inv-fg);
+}
+[data-skin="retro"] .sug-opt[aria-selected="true"] :is(b, span, .ic) {
+  color: inherit;
+}
+[data-skin="retro"] .req {
+  border-color: var(--wait);
+  box-shadow: 4px 4px 0 var(--wait);
+}
+[data-skin="retro"] .req-frame::after {
+  top: 0;
+  bottom: 0;
+  width: 4px;
+}
+[data-skin="retro"] .req-q {
+  text-shadow: var(--tglow);
+}
+[data-skin="retro"] .req-foot {
+  border-top-style: dashed;
+  border-top-color: var(--line-2);
+}
+[data-skin="retro"] :is(.opt, .step, .tray, .req-input, .req-body .well) {
+  border-color: var(--line-3);
+}
+/* 答了的题反白，和选中的选项一个做法 */
+[data-skin="retro"] .step[data-state="answered"] {
+  background: var(--inv-bg);
+  border-color: var(--inv-bg);
+  color: var(--inv-fg);
+}
+[data-skin="retro"] .opt[aria-checked="true"] {
+  background: var(--inv-bg);
+  color: var(--inv-fg);
+  --ink-2: var(--inv-fg);
+  --ink-3: var(--inv-fg-2);
+  --line-2: var(--inv-line);
+}
+
+/* 设备列表：实线框带一道硬影，行与行之间是虚线 */
+[data-skin="retro"] .devp-list {
+  border-color: var(--line-3);
+  box-shadow: 3px 3px 0 var(--line-2);
+}
+[data-skin="retro"] .devp-item + .devp-item {
+  border-top-style: dashed;
+  border-top-color: var(--line-2);
+}
+
+/* 设备详情：实线框、虚线分隔、标题前面的记号；开关是一个方的拨块 */
+[data-skin="retro"] .mng-sec-head h2::before {
+  content: "## ";
+  white-space: pre;
+  color: var(--ink-3);
+}
+/* 能收起的一节前面已经有箭头了，不再放记号 */
+[data-skin="retro"] .mng-sec-head h2:has(.fold)::before {
+  content: none;
+}
+[data-skin="retro"] :is(.mng-sec, .mng-state) {
+  border-top-style: dashed;
+  border-top-color: var(--line-2);
+}
+[data-skin="retro"] :is(.mng-h, .ssh-entries, .ssh-snippet, .mng-log) {
+  border-color: var(--line-3);
+}
+[data-skin="retro"] .mng-h {
+  box-shadow: 3px 3px 0 var(--line-2);
+}
+[data-skin="retro"]
+  :is(
+    .mng-h-body > .mng-rows,
+    .mng-row + .mng-row,
+    .mng-bucket + .mng-bucket,
+    .ssh-entry + .ssh-entry,
+    .ssh-snippet pre,
+    .mng-log pre
+  ) {
+  border-top-style: dashed;
+  border-top-color: var(--line-2);
+}
+[data-skin="retro"] .mng-tag {
+  border-style: dashed;
+}
+[data-skin="retro"] .mng-conflict {
+  border-style: dashed;
+  border-color: var(--wait);
+  background: none;
+}
+[data-skin="retro"] .switch[aria-checked="true"] i {
+  box-shadow: var(--glow);
+}
+[data-skin="retro"] .mng-save {
+  border-top: 3px double var(--line-3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-skin="retro"] .st.run::before,
+  [data-skin="retro"] .md.live ::after,
+  [data-skin="retro"] .md.live::after {
+    animation: none;
+  }
+}
+
+/* 设置页里这种皮肤的预览（样式在 settings.css，那边只用变量）：选中的行反白，输入框前面有提示符 */
+[data-skin-preview="retro"] .pv-side i.on {
+  background: var(--inv-bg);
+}
+[data-skin-preview="retro"] .pv-side i.on::after {
+  background: var(--inv-fg);
+}
+[data-skin-preview="retro"] .pv-box::before {
+  content: ">";
+  color: var(--accent);
+  font-weight: 600;
+}
+[data-skin="retro"] .set-nav,
+[data-skin="retro"] .set-rows {
+  border-color: var(--line-3);
+}
+
+/* 代码上色：借来的线色是给近白的底配的，压在这里米色的纸上太淡（字串、数字、类型的对比度不到 3）。
+   浅色下换成深一档的同色相；深色下底是近黑的，照旧用线色 */
+[data-skin="retro"] :is(.code, .fv-code, .dp) {
+  --syn-keyword: var(--L, #6a34ab) var(--D, var(--wire-violet));
+  --syn-string: var(--L, #0b6b3d) var(--D, var(--wire-green));
+  --syn-number: var(--L, #8a4a00) var(--D, var(--wire-orange));
+  --syn-func: var(--L, #1f55b5) var(--D, var(--wire-blue));
+  --syn-type: var(--L, #6f5300) var(--D, var(--wire-yellow));
+  --syn-meta: var(--L, #74482c) var(--D, var(--wire-brown));
+}

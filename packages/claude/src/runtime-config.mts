@@ -1,0 +1,140 @@
+import {
+  providerLoopSelectionInputFromEnv,
+  resolveProviderLoopSelection,
+} from './provider-loop-selection.mjs'
+
+export type RuntimeBackendType =
+  | 'mock'
+  | 'agent-sdk-sidecar'
+  | 'agent-http'
+  | 'agentapi'
+  | 'claude-p'
+  // codex-proxy = `codex exec --json` per turn. Selected per-thread when the
+  // user picks a gpt-* model in the App's model dropdown.
+  | 'codex-proxy'
+
+export interface RuntimeConfig {
+  type: RuntimeBackendType
+  http: {
+    baseUrl: string
+    useSse: boolean
+    pollIntervalMs: number
+    timeoutMs: number
+    sendInterruptRaw: boolean
+    manageBridge: boolean
+    modeCommand: string
+  }
+  claudeP: {
+    command: string
+    extraArgs: string[]
+    timeoutMs: number
+    skipPermissions: boolean
+    resume: boolean
+    stopTimeoutRetries: number
+  }
+}
+
+export function resolveRuntimeConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig {
+  const explicit = normalizeRuntimeType(
+    env.CHA_CLAUDE_RUNTIME_TYPE ?? env.CHA_CLAUDE_RUNTIME ?? env.CHA_CLAUDE_BACKEND,
+  )
+  const selection = resolveProviderLoopSelection(providerLoopSelectionInputFromEnv(env, explicit))
+  const type = selection.runtimeType
+
+  return {
+    type,
+    http: {
+      baseUrl: normalizeBaseUrl(
+        env.CHA_CLAUDE_HTTP_BASE_URL ??
+          env.CHA_CLAUDE_AGENT_HTTP_URL ??
+          env.CHA_CLAUDE_AGENTAPI_URL ??
+          'http://127.0.0.1:3284',
+      ),
+      useSse: envFlag(env.CHA_CLAUDE_HTTP_USE_SSE, true),
+      pollIntervalMs: numericEnv(env.CHA_CLAUDE_HTTP_POLL_MS, 500, 100, 60_000),
+      timeoutMs: numericEnv(env.CHA_CLAUDE_HTTP_TIMEOUT_MS, 5 * 60_000, 1_000, 24 * 60 * 60_000),
+      sendInterruptRaw: envFlag(env.CHA_CLAUDE_HTTP_INTERRUPT_RAW, false),
+      manageBridge: envFlag(env.CHA_CLAUDE_HTTP_MANAGE_BRIDGE, false),
+      modeCommand: env.CHA_CLAUDE_MODE_COMMAND || 'codex-harness-adapter-mode',
+    },
+    claudeP: {
+      command: env.CHA_CLAUDE_CLAUDE_P_COMMAND || env.CLAUDE_P || 'claude-p',
+      extraArgs: stringList(env.CHA_CLAUDE_CLAUDE_P_ARGS),
+      timeoutMs: numericEnv(
+        env.CHA_CLAUDE_CLAUDE_P_TIMEOUT_MS,
+        5 * 60_000,
+        1_000,
+        24 * 60 * 60_000,
+      ),
+      skipPermissions: envFlag(env.CHA_CLAUDE_CLAUDE_P_SKIP_PERMISSIONS, false),
+      resume: envFlag(env.CHA_CLAUDE_CLAUDE_P_RESUME, false),
+      stopTimeoutRetries: numericEnv(env.CHA_CLAUDE_CLAUDE_P_STOP_TIMEOUT_RETRIES, 1, 0, 5),
+    },
+  }
+}
+
+export function normalizeRuntimeType(value: string | undefined): RuntimeBackendType | null {
+  const raw = (value ?? '').trim().toLowerCase()
+  if (!raw) return null
+  switch (raw) {
+    case 'mock':
+      return 'mock'
+    case 'sdk':
+    case 'agent-sdk':
+    case 'agent-sdk-sidecar':
+    case 'sidecar':
+    case 'cloud-agent-sdk':
+      return 'agent-sdk-sidecar'
+    case 'agent-sdk-socket':
+    case 'socket':
+    case 'runtime-socket':
+      return 'agent-sdk-sidecar'
+    case 'agent-http':
+    case 'channels':
+    case 'channel':
+    case 'http-channel':
+      return 'agent-http'
+    case 'agentapi':
+    case 'agent-api':
+      return 'agentapi'
+    case 'claude-p':
+    case 'claudep':
+    case 'pty-transcript':
+      return 'claude-p'
+    case 'codex-proxy':
+    case 'codex-exec':
+      // Per-thread codex-proxy passthrough. Distinct from the shim-level
+      // 'codex' mode (which bypasses our adapter entirely) — codex-proxy
+      // keeps the adapter daemon in the loop and forwards just the turn.
+      return 'codex-proxy'
+    default:
+      throw new Error(`unknown CHA_CLAUDE_RUNTIME_TYPE: ${value}`)
+  }
+}
+
+function normalizeBaseUrl(value: string): string {
+  const trimmed = value.trim()
+  return trimmed.endsWith('/') ? trimmed.slice(0, -1) : trimmed
+}
+
+function envFlag(value: string | undefined, fallback: boolean): boolean {
+  if (value == null || value.trim() === '') return fallback
+  const raw = value.trim().toLowerCase()
+  return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on'
+}
+
+function numericEnv(value: string | undefined, fallback: number, min: number, max: number): number {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) return fallback
+  return Math.max(min, Math.min(max, parsed))
+}
+
+function stringList(value: string | undefined): string[] {
+  if (!value || !value.trim()) return []
+  const raw = value.trim()
+  try {
+    const parsed = JSON.parse(raw)
+    if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean)
+  } catch {}
+  return raw.split(/\s+/).filter(Boolean)
+}

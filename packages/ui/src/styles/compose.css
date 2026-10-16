@@ -1,0 +1,321 @@
+/* 写消息时的几样：输入框上面弹出来的单子、随消息带的小片。只用变量；皮肤各自的细节在皮肤文件里 */
+
+/* ---------- 弹出来的单子：打 / 列命令和技能 ---------- */
+/* 和输入框一样宽，贴在它上面。焦点一直在输入框里，所以这里没有落了焦点的样子，只有“选中的那一项” */
+.sug {
+  position: absolute;
+  left: -1px;
+  right: -1px;
+  bottom: calc(100% + 6px);
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  max-height: min(320px, 50vh);
+  overflow: hidden;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  background: var(--overlay);
+  box-shadow: var(--shadow);
+}
+.sug-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px;
+}
+.sug-head {
+  padding: 4px 8px 2px;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--ink-3);
+}
+/* 一行：记号、名字、一句说明。说明放不下就截断，全文在底下那一栏 */
+.sug-opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  padding: 4px 8px;
+  border-radius: var(--r1);
+  text-align: left;
+  font-size: 12px;
+  line-height: 18px;
+}
+.sug-opt .ic {
+  flex: none;
+  color: var(--ink-3);
+}
+.sug-opt b {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 500 12px / 18px var(--mono);
+}
+.sug-opt span {
+  flex: 1 1 0;
+  color: var(--ink-3);
+}
+.sug-opt[aria-selected="true"] {
+  background: var(--sel);
+}
+.sug-opt[aria-selected="true"] b {
+  color: var(--accent);
+}
+/* 一组现在的状况：正在取、没取到、这里没有 */
+.sug-note {
+  padding: 4px 8px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-3);
+}
+.sug-note.err {
+  color: var(--err);
+}
+/* 底下那一栏：选中那一项的全文，和行上不放的几样（来源、位置） */
+.sug-foot {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+  padding: 6px 12px;
+  border-top: 1px solid var(--line-1);
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-2);
+}
+.sug-foot-note {
+  flex: 1 1 100%;
+  overflow-wrap: anywhere;
+}
+.sug-fact {
+  display: inline-flex;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  color: var(--ink-3);
+}
+.sug-fact i {
+  flex: none;
+  font-style: normal;
+}
+.sug-fact .ell {
+  font-family: var(--mono);
+}
+
+/* ---------- 随消息带的小片：选中的技能、贴进来的长文字 ---------- */
+/* 和图片的缩略图排在同一排里，矮的靠下对齐 */
+.cmp-atts {
+  align-items: flex-end;
+}
+.cmp-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+  height: 24px;
+  padding: 0 3px 0 7px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r1);
+  background: var(--hover);
+  font: 12px / 18px var(--mono);
+}
+.cmp-chip > .ic {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  color: var(--ink-3);
+}
+.cmp-chip-x {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--r1);
+  color: var(--ink-3);
+}
+.cmp-chip-x:hover {
+  color: var(--ink);
+  background: var(--press);
+}
+.cmp-chip-x .ic {
+  width: 10px;
+  height: 10px;
+}
+
+/* 带着的文字那一片点得开。里面这一层不占位置，片里的东西照旧排成一行 */
+.cmp-chip-box {
+  display: contents;
+}
+.cmp-chip-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  height: 100%;
+  font: inherit;
+  color: inherit;
+}
+.cmp-chip-open .ic {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  color: var(--ink-3);
+}
+.cmp-chip-open:hover,
+.cmp-chip-open[aria-expanded="true"] {
+  color: var(--accent);
+}
+.cmp-chip-open:is(:hover, [aria-expanded="true"]) .ic {
+  color: inherit;
+}
+/* 点开的那一块：和 / 的单子在同一个位置（输入框上面，和它一样宽）。看开头一段，底下两个动作 */
+.peek {
+  position: absolute;
+  left: -1px;
+  right: -1px;
+  bottom: calc(100% + 6px);
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  max-height: min(360px, 55vh);
+  overflow: hidden;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  background: var(--overlay);
+  box-shadow: var(--shadow);
+  font: 12px / 18px var(--ui);
+  color: var(--ink);
+}
+.peek-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 6px 6px 12px;
+  border-bottom: 1px solid var(--line-1);
+}
+.peek .peek-head > .ic {
+  flex: none;
+  color: var(--ink-3);
+}
+.peek .peek-head b {
+  flex: 0 1 auto;
+  font-weight: 600;
+}
+.peek-size {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-3);
+}
+.peek-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 8px 12px;
+  overflow: auto;
+  font: 12px / 18px var(--mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--ink-2);
+}
+.peek-body:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+.peek-more {
+  flex: none;
+  padding: 4px 12px;
+  color: var(--ink-3);
+}
+.peek-foot {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  padding: 6px 8px 6px 12px;
+  border-top: 1px solid var(--line-1);
+  color: var(--ink-3);
+}
+.peek-foot .grow {
+  flex: 1 1 140px;
+}
+.peek-foot .btn {
+  height: 24px;
+  font-size: 12px;
+}
+
+/* ---------- 计划模式 ---------- */
+/* 底栏上的开关：和旁边的选择器一样高，开着的时候是强调色 */
+.mode-btn {
+  flex: none;
+  height: 24px;
+  padding: 0 6px;
+  border-radius: var(--r1);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.cmp-bar .mode-btn .ic {
+  flex: none;
+  color: var(--ink-3);
+}
+.mode-btn:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.mode-btn[aria-pressed="true"] {
+  background: var(--sel);
+  color: var(--accent);
+}
+.mode-btn[aria-pressed="true"] .ic {
+  color: inherit;
+}
+/* “计划写好了，要不要执行”：排在输入框上面，和输入区一样宽。一句话在左，三个按钮在右，窄了就换行 */
+.plan-ask {
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 8px 8px 8px 14px;
+  border: 1px solid color-mix(in srgb, var(--wait) 60%, transparent);
+  border-radius: var(--r2);
+  background: var(--raised);
+  font-size: 12px;
+  line-height: 18px;
+}
+.plan-ask-text {
+  flex: 1 1 260px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.plan-ask .plan-ask-text b {
+  font-size: 13px;
+  font-weight: 600;
+}
+.plan-ask-text span {
+  color: var(--ink-2);
+}
+.plan-ask-acts {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-width: 100%;
+}

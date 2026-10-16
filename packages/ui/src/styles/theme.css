@@ -1,0 +1,37 @@
+/* 明暗的开关。两个变量里总有一个是“无效值”、另一个是“空值”：
+   var(--L, 甲) 在 --L 无效时取甲，在 --L 为空时取空，于是“var(--L, 浅) var(--D, 深)”正好只剩一个。
+   根元素上没有 data-theme 时跟随系统。 */
+:root {
+  --L: initial;
+  --D: ;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --L: ;
+    --D: initial;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --L: ;
+  --D: initial;
+  color-scheme: dark;
+}
+/* 密度：列表一行多高、上下留多少。它和皮肤、明暗互相独立，所以写在这里，不写在皮肤文件里
+   （写在皮肤的变量块里，优先级会和下面这两条打平，后导入的皮肤文件就把密度盖掉了）。
+   三档：紧凑、标准（默认）、宽松。只管“一行一行”的东西：侧栏的行、设备列表、已归档列表、设置页的行。
+   字号不跟着它变（整套放大缩小是界面缩放的事）；对话正文、代码、终端、文件树的行高也不变，
+   后面三样的行高在脚本里另有一份，要和样式一样 */
+:root {
+  --row-h: 28px;
+  --row-pad: 6px;
+}
+:root[data-density="compact"] {
+  --row-h: 24px;
+  --row-pad: 3px;
+}
+:root[data-density="roomy"] {
+  --row-h: 32px;
+  --row-pad: 9px;
+}

@@ -1,0 +1,537 @@
+/* 侧面板里的“差异”标签：上面一条工具，下面左边变了的文件、右边差异。只用变量。
+   行高在脚本里也有一份（diff/Pane.tsx 的 LINE、diff/ChangedTree.tsx 的 TREE_ROW）：只画看得见的行，
+   位置是按行高算的，两边要一样。
+   加的、删的行的底色从“正常”“出错”两个状态色调出来：整行一层淡的，行号那一栏再深一点，
+   三种皮肤的明暗两面都要看得出是哪一种（验收里量过对比）。 */
+.diffs {
+  --dl: 20px;
+  --dt-row: 24px;
+  --dnum: 44px;
+  --d-add: color-mix(in srgb, var(--ok) 20%, transparent);
+  --d-add-2: color-mix(in srgb, var(--ok) 32%, transparent);
+  --d-del: color-mix(in srgb, var(--err) 20%, transparent);
+  --d-del-2: color-mix(in srgb, var(--err) 32%, transparent);
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---------- 顶上那一条 ---------- */
+.db {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 36px;
+  padding: 0 6px 0 8px;
+  border-bottom: 1px solid var(--line-1);
+}
+.db-seg {
+  flex: none;
+  display: flex;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r1);
+  overflow: hidden;
+}
+.db-seg button {
+  height: 22px;
+  padding: 0 8px;
+  font-size: 12px;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.db-seg button + button {
+  border-left: 1px solid var(--line-2);
+}
+.db-seg button:hover {
+  background: var(--hover);
+}
+.db-seg button[aria-checked="true"] {
+  background: var(--sel);
+  color: var(--ink);
+}
+.db-total {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 6px;
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+.diffs[data-tight="on"] .db-total > * {
+  display: none;
+}
+.db .ibtn[aria-pressed="true"] {
+  background: var(--sel);
+  color: var(--ink);
+}
+.db .ibtn.spin .ic {
+  animation: d-spin 0.9s linear infinite;
+}
+@keyframes d-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .db .ibtn.spin .ic {
+    animation: none;
+    opacity: 0.5;
+  }
+}
+
+/* 增删行数：加的、删的各一个颜色 */
+.dcount {
+  flex: none;
+  display: inline-flex;
+  gap: 6px;
+  font: 11px / 1 var(--mono);
+}
+.dcount i {
+  font-style: normal;
+}
+.dcount .add {
+  color: var(--ok);
+}
+.dcount .del {
+  color: var(--err);
+}
+
+/* 状态记号：一个字母 */
+.dmark {
+  flex: none;
+  width: 14px;
+  font: 600 11px / 1 var(--mono);
+  text-align: center;
+  color: var(--ink-3);
+}
+.dmark.added,
+.dmark.untracked,
+.dmark.copied {
+  color: var(--ok);
+}
+.dmark.deleted,
+.dmark.conflicted {
+  color: var(--err);
+}
+.dmark.modified,
+.dmark.typeChanged {
+  color: var(--wait);
+}
+.dmark.renamed {
+  color: var(--accent);
+}
+
+/* 说明、空着的时候 */
+.dz {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--ink-3);
+}
+.dnote {
+  flex: none;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line-1);
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.dmain {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+}
+.dside {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 这里的类名都带着 d 开头的前缀，行的种类写在 data-kind 上：
+   全局里已经有 .file、.ctx、.pick 这些短名字的规则，撞上了会被它们改了样子 */
+
+/* ---------- 变了的文件 ---------- */
+.dt {
+  flex: none;
+  width: 220px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--line-1);
+}
+.dt-tools {
+  flex: none;
+  padding: 6px;
+}
+.dt-search {
+  width: 100%;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r1);
+  background: var(--panel);
+  color: var(--ink);
+  font: 12px / 1 var(--mono);
+}
+.dt-search::placeholder {
+  color: var(--ink-3);
+  font-family: var(--ui);
+}
+.dt-list {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+}
+.dt-pad {
+  position: relative;
+}
+.dt-none {
+  padding: 8px 10px;
+  font-size: 12px;
+}
+.dt-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: var(--dt-row);
+  padding-right: 8px;
+  font-size: 12px;
+  color: var(--ink-2);
+  text-align: left;
+}
+.dt-row:hover {
+  background: var(--hover);
+}
+.dt-row[aria-current="true"] {
+  background: var(--sel);
+  color: var(--ink);
+}
+.dt-row[data-kind="dir"] {
+  color: var(--ink-3);
+}
+.dt-row[data-kind="dir"][aria-expanded="false"] .caret-ic {
+  transform: rotate(-90deg);
+}
+.dt-name {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+}
+.dt-row[data-status="deleted"] .dt-name {
+  text-decoration: line-through;
+}
+
+/* ---------- 一次看一个文件时的那一条 ---------- */
+.dstep {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 30px;
+  padding: 0 6px 0 10px;
+  border-bottom: 1px solid var(--line-1);
+  font-size: 12px;
+}
+.dstep .dim {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dstep-at {
+  font-family: var(--mono);
+  color: var(--ink-3);
+}
+
+/* ---------- 差异 ---------- */
+.dp {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-width: thin;
+  font: 12px / var(--dl) var(--mono);
+  background: var(--raised);
+}
+.dp:focus-visible {
+  outline: none;
+}
+.dp[data-wrap="off"][data-layout="unified"] .dp-pad {
+  min-width: calc(var(--dnum) * 2 + 18px + var(--dp-one));
+}
+.dp-anchor {
+  height: 0;
+}
+/* 文件头：滚动时贴在顶上，横着滚的时候不跟着走。--dp-w 是内容区看得见的宽度（脚本量的，不算滚动条） */
+.dp-head {
+  position: sticky;
+  top: 0;
+  left: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: var(--dp-w);
+  height: 30px;
+  padding: 0 6px 0 10px;
+  border-bottom: 1px solid var(--line-1);
+  background: var(--panel);
+  font: 12px / 1 var(--ui);
+}
+.dh-path {
+  display: flex;
+  min-width: 0;
+  font-family: var(--mono);
+  color: var(--ink);
+  white-space: nowrap;
+}
+/* 路径太长时省略的是目录那一截，文件名留着 */
+.dh-path .dim {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dh-name {
+  flex: none;
+}
+.dh-mode {
+  flex: none;
+  font: 11px / 1 var(--mono);
+  color: var(--ink-3);
+}
+.dh-acts {
+  flex: none;
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+}
+.dp-note {
+  position: sticky;
+  left: 0;
+  width: var(--dp-w);
+  padding: 12px;
+  border-bottom: 1px solid var(--line-1);
+  font: 12px / 1.5 var(--ui);
+  color: var(--ink-3);
+}
+.dp-rows:last-child {
+  padding-bottom: 12px;
+}
+
+.dr {
+  display: grid;
+  min-height: var(--dl);
+  white-space: pre;
+}
+.dp[data-wrap="on"] .dr {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.dr.one {
+  grid-template-columns: var(--dnum) var(--dnum) 18px minmax(0, 1fr);
+}
+.dr.two {
+  grid-template-columns: var(--dnum) minmax(0, 1fr) var(--dnum) minmax(0, 1fr);
+}
+.dn {
+  padding-right: 8px;
+  color: var(--ink-3);
+  text-align: right;
+  font: inherit;
+  user-select: none;
+}
+button.dn-pick {
+  cursor: pointer;
+}
+button.dn-pick:hover,
+button.dn-pick.on {
+  color: var(--accent);
+  background: var(--sel);
+}
+.ds {
+  color: var(--ink-3);
+  text-align: center;
+  user-select: none;
+}
+.dc {
+  min-width: 0;
+  padding-right: 12px;
+}
+.dr.two .dc {
+  padding-left: 6px;
+}
+.dr.two .dc:nth-child(2) {
+  border-right: 1px solid var(--line-1);
+}
+.dr.one.add,
+.dr.two .dc.add {
+  background: var(--d-add);
+}
+.dr.one.del,
+.dr.two .dc.del {
+  background: var(--d-del);
+}
+.dr.one.add .dn,
+.dr.two .dn:has(+ .dc.add) {
+  background: var(--d-add-2);
+  color: var(--ink-2);
+}
+.dr.one.del .dn,
+.dr.two .dn:has(+ .dc.del) {
+  background: var(--d-del-2);
+  color: var(--ink-2);
+}
+.dr.one.add .ds {
+  color: var(--ok);
+}
+.dr.one.del .ds {
+  color: var(--err);
+}
+/* 并排时缺的那一边 */
+.dr.two .dc.void {
+  background: var(--hover);
+}
+.dr.gap,
+.dr.eol {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  position: sticky;
+  left: 0;
+  width: var(--dp-w);
+  padding: 0 10px;
+  background: var(--hover);
+  color: var(--ink-3);
+  font: 11px / var(--dl) var(--ui);
+  white-space: nowrap;
+}
+.dr.eol {
+  background: none;
+  font-style: italic;
+}
+button.dr-more {
+  color: var(--accent);
+}
+button.dr-more:hover {
+  text-decoration: underline;
+}
+.dr-sec {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--mono);
+}
+.dr-cut {
+  color: var(--ink-3);
+  font-style: italic;
+}
+
+/* ---------- 地方窄：文件挪到上面 ---------- */
+.diffs[data-stack="on"] .dmain {
+  flex-direction: column;
+}
+.diffs[data-stack="on"] .dt {
+  width: auto;
+  height: 34%;
+  min-height: 96px;
+  max-height: 240px;
+  border-right: 0;
+  border-bottom: 1px solid var(--line-1);
+}
+
+/* ---------- 行内批注 ---------- */
+.dnotes {
+  position: sticky;
+  left: 0;
+  width: var(--dp-w);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 10px 8px calc(var(--dnum) + 6px);
+  border-block: 1px solid var(--line-1);
+  background: var(--panel);
+  font: 12px / 1.5 var(--ui);
+  white-space: normal;
+}
+.dnote-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 6px 4px 6px 8px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r1);
+  background: var(--raised);
+  color: var(--ink);
+}
+/* 开头那个小图标 */
+.dnote-card > :first-child {
+  margin-top: 2px;
+  color: var(--accent);
+}
+.dnote-text {
+  flex: 1 1 0;
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.dnote-at {
+  margin-right: 8px;
+  color: var(--ink-3);
+  font: 11px / 1 var(--mono);
+}
+.dnote-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.dnote-edit textarea {
+  width: 100%;
+  min-height: 48px;
+  padding: 6px 8px;
+  border: 1px solid var(--line-3);
+  border-radius: var(--r1);
+  background: var(--raised);
+  color: var(--ink);
+  font: 12px / 1.5 var(--ui);
+  resize: vertical;
+}
+.dnote-acts {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+/* 输入区底栏上“攒着几条批注”的小牌子 */
+.cmp-notes {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.cmp-notes-x {
+  display: inline-flex;
+  color: var(--ink-3);
+}
+.cmp-notes-x:hover {
+  color: var(--ink);
+}

@@ -1,0 +1,25 @@
+{
+  "method": "getAuthStatus",
+  "kind": "ClientRequest",
+  "description": "Codex Desktop 每次连接调用的 v1 认证状态查询。0.157.1 原生仍支持，但官方 JSON Schema 导出排除 v1 方法；依据同版本官方 TS 定义 GetAuthStatusParams/GetAuthStatusResponse/AuthMode 编写。",
+  "params": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "includeToken": { "type": ["boolean", "null"] },
+      "refreshToken": { "type": ["boolean", "null"] }
+    }
+  },
+  "response": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["authMethod", "authToken", "requiresOpenaiAuth"],
+    "properties": {
+      "authMethod": {
+        "enum": ["apikey", "chatgpt", "chatgptAuthTokens", "headers", "agentIdentity", "personalAccessToken", "bedrockApiKey", "bedrockAccessKeys", null]
+      },
+      "authToken": { "type": ["string", "null"] },
+      "requiresOpenaiAuth": { "type": ["boolean", "null"] }
+    }
+  }
+}

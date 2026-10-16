@@ -1,0 +1,21 @@
+{
+  "note": "官方同一 CLI 生成的 JSON Schema 与 TypeScript 定义互相矛盾时的字段改名勘误。只允许改名，依据必须是同版本官方 TS 定义，且原生 wire 与之一致；勘误无法命中即报错，上游修正后须删除。",
+  "corrections": [
+    {
+      "file": "v2/ThreadTimelineListResponse.json",
+      "definition": "ThreadTimelineEntry",
+      "variant": "turnStarted",
+      "rename": { "turn_id": "turnId", "started_at": "startedAt" },
+      "typescript": "typescript/v2/ThreadTimelineEntry.ts",
+      "reason": "Rust 类型以 serde rename_all_fields=camelCase 序列化，schemars 未应用该规则；官方 TS 与原生 wire 均为驼峰"
+    },
+    {
+      "file": "v2/ThreadTimelineListResponse.json",
+      "definition": "ThreadTimelineEntry",
+      "variant": "turnCompleted",
+      "rename": { "turn_id": "turnId", "started_at": "startedAt", "completed_at": "completedAt", "duration_ms": "durationMs" },
+      "typescript": "typescript/v2/ThreadTimelineEntry.ts",
+      "reason": "Rust 类型以 serde rename_all_fields=camelCase 序列化，schemars 未应用该规则；官方 TS 与原生 wire 均为驼峰"
+    }
+  ]
+}

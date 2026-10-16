@@ -1,0 +1,5 @@
+#!/bin/sh
+# Worker 专用入口，不读取个人 runtime.env，不回落到宿主 Codex。
+set -eu
+adapter_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+exec "${CHA_CLAUDE_NODE:-node}" "$adapter_root/packages/claude/dist/claude/src/adapter.mjs" "$@"

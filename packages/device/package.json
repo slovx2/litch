@@ -1,0 +1,18 @@
+{
+  "name": "@codex-harness-adapter/device",
+  "version": "0.7.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "设备进程：把一台机器上的多个 harness 运行时收在一个入口（聚合面）后面",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "check": "biome check src test ../protocol/src/device.mts ../protocol/src/device-codex.mts",
+    "start": "node dist/device/src/main.mjs",
+    "test": "npm run build && npm run build --prefix ../pi && npm run build --prefix ../claude && cd ../.. && node scripts/build-cli.mjs && node --test --test-timeout=300000 packages/device/dist/device/test/*.test.mjs"
+  }
+}

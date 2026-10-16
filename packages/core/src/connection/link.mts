@@ -1,0 +1,245 @@
+// 连接层的中间一层：一台设备的一条连接。
+// 负责开传输、握手、断了之后按退避重连，并把状态变化报出去。连上之后的事（问设备信息、取目录）不归它管。
+import {
+  type ClientInfo,
+  type ClientRequestMethod,
+  type ClientRequests,
+  type DeviceInitializeCapabilities,
+  EXTENSION,
+  type InitializeResponse,
+  type JsonRpcId,
+} from '../../../protocol/src/index.mjs'
+import { type Cancel, createCancel } from '../channel/cancel.mjs'
+import type { Clock } from '../channel/protocol.mjs'
+import type { ConnectGuide, ConnectStage } from '../model.mjs'
+import { phrase, type Text } from '../phrase.mjs'
+import { createRpc, type Rpc, RpcAbortError, RpcError, type RpcRequestOptions } from './rpc.mjs'
+import { ConnectError, type TransportOpener, toConnectError } from './transport.mjs'
+
+export interface ConnectFailure {
+  stage: ConnectStage
+  /** 给人看的原因 */
+  text: Text
+  /** 对面原话的末尾，见 ConnectError */
+  detail: string | null
+  /** 该给哪一份“怎么办”，见 ConnectError。没有就不带这一项 */
+  guide?: ConnectGuide
+}
+
+/**
+ * 设计文档 01 第 7.3 节的状态。“探测中”“启动中”发生在开传输的过程里，这里统称 connecting，
+ * 具体到了哪一步由开传输的那一方报上来，放在 step 里。
+ */
+export type LinkState =
+  | { phase: 'idle' }
+  | { phase: 'connecting'; attempt: number; step: Text | null }
+  | { phase: 'handshaking'; attempt: number }
+  | { phase: 'connected'; info: InitializeResponse }
+  | { phase: 'waiting'; attempt: number; retryAt: number; failure: ConnectFailure }
+  | { phase: 'failed'; failure: ConnectFailure }
+
+export interface LinkOptions {
+  open: TransportOpener
+  clock: Clock
+  clientInfo: ClientInfo
+  /** 第 n 次失败后等多久再试。用完最后一个就一直用它 */
+  backoffMs?: number[]
+  handshakeTimeoutMs?: number
+  requestTimeoutMs?: number
+  state(state: LinkState): void
+  notification(method: string, params: unknown): void
+  /** 对面发来、要答复的请求。返回 undefined 表示不处理（会回“方法不存在”） */
+  request?(method: string, params: unknown, id: JsonRpcId): Promise<unknown> | undefined
+  log?(line: string): void
+}
+
+export interface Link {
+  readonly state: LinkState
+  start(): void
+  /** 正在等重连或已经失败时，立刻再试一次 */
+  retry(): void
+  /**
+   * 连着的时候丢掉这条连接、从头再连一次。对面换了东西（比如装上了设备服务）之后用：
+   * 对面是什么是开传输的那一方每次现认的，重新连一次就换过去了
+   */
+  reopen(): void
+  stop(): void
+  request<M extends ClientRequestMethod>(
+    method: M,
+    params: ClientRequests[M]['params'],
+    options?: RpcRequestOptions,
+  ): Promise<ClientRequests[M]['result']>
+}
+
+const DEFAULT_BACKOFF = [500, 1000, 2000, 5000, 10_000, 30_000]
+
+export function createLink(options: LinkOptions): Link {
+  const { clock } = options
+  const backoff = options.backoffMs ?? DEFAULT_BACKOFF
+  let state: LinkState = { phase: 'idle' }
+  let rpc: Rpc | null = null
+  let opening: Cancel | null = null
+  let stopTimer: (() => void) | null = null
+  // 每次尝试一个代号。异步步骤回来时代号对不上，说明这次尝试已经作废
+  let epoch = 0
+
+  const setState = (next: LinkState) => {
+    state = next
+    options.state(next)
+  }
+
+  const teardown = () => {
+    epoch++
+    stopTimer?.()
+    stopTimer = null
+    opening?.abort()
+    opening = null
+    const old = rpc
+    rpc = null
+    old?.close()
+  }
+
+  const fail = (attempt: number, failure: ConnectError) => {
+    const shape: ConnectFailure = {
+      stage: failure.stage,
+      text: failure.text,
+      detail: failure.detail,
+      ...(failure.guide ? { guide: failure.guide } : {}),
+    }
+    if (!failure.retriable) {
+      setState({ phase: 'failed', failure: shape })
+      return
+    }
+    const delay = backoff[Math.min(attempt, backoff.length) - 1] ?? 1000
+    setState({ phase: 'waiting', attempt, retryAt: clock.now() + delay, failure: shape })
+    stopTimer = clock.setTimer(() => {
+      stopTimer = null
+      void connect(attempt + 1)
+    }, delay)
+  }
+
+  const connect = async (attempt: number) => {
+    const mine = ++epoch
+    const stale = () => mine !== epoch
+    setState({ phase: 'connecting', attempt, step: null })
+    const cancel = createCancel()
+    opening = cancel
+    try {
+      const transport = await options.open(cancel.signal, (step) => {
+        if (!stale() && state.phase === 'connecting') {
+          setState({ phase: 'connecting', attempt, step })
+        }
+      })
+      if (stale()) {
+        transport.close()
+        return
+      }
+      opening = null
+      setState({ phase: 'handshaking', attempt })
+      const peer = createRpc(transport, {
+        clock,
+        ...(options.requestTimeoutMs === undefined
+          ? {}
+          : { requestTimeoutMs: options.requestTimeoutMs }),
+        notification: (method, params) => {
+          if (rpc === peer) options.notification(method, params)
+        },
+        request: (method, params, id) =>
+          rpc === peer ? options.request?.(method, params, id) : undefined,
+        close: (reason) => {
+          // 只关心“当前这条、已经连上”的断开；握手期间的断开由下面的 catch 处理
+          if (rpc !== peer || stale()) return
+          rpc = null
+          fail(1, new ConnectError('unreachable', reason ?? phrase('connect.dropped')))
+        },
+        ...(options.log ? { log: options.log } : {}),
+      })
+      let info: InitializeResponse
+      try {
+        info = (await peer.request(
+          'initialize',
+          {
+            clientInfo: options.clientInfo,
+            capabilities: {
+              experimentalApi: true,
+              requestAttestation: false,
+              // 我们认识的协议扩展。设备服务的聚合面要求声明了 harness 才让连；
+              // 原生 codex 和适配器的单个入口不认识这个键，会忽略它（设计文档 03 第十五节）
+              // deviceSettings：声明了才收得到设置变化的通知、不可用原因的两种语言版本
+              // deviceProcesses：声明了，起进程时的扩展参数才生效，才收得到设备上终端增减的通知
+              litchExtensions: [
+                EXTENSION.harness,
+                // deviceWorkspaces：声明了才收得到置顶、分区变化的通知
+                EXTENSION.deviceWorkspaces,
+                EXTENSION.declineWithNote,
+                EXTENSION.deviceSettings,
+                EXTENSION.deviceProcesses,
+                // deviceService：声明了，runtime/info 的 device.service 里才有“在跑的是哪一份服务”
+                EXTENSION.deviceService,
+                // planConfirmation：声明了，Claude Code 和 Pi 的引擎在交计划时自己在回合里问要不要执行，
+                // 界面不再问（plan-ask.ts）；不声明的话它们和原生 codex 一样回合带着计划结束，由客户端来问
+                EXTENSION.planConfirmation,
+              ],
+            } satisfies DeviceInitializeCapabilities,
+          },
+          { timeoutMs: options.handshakeTimeoutMs ?? 10_000 },
+        )) as InitializeResponse
+      } catch (error) {
+        peer.close()
+        if (stale()) return
+        // 对面明确拒绝了握手，再试也是一样的结果；超时和断开可以再试
+        const refused = error instanceof RpcError
+        const message = error instanceof Error ? error.message : String(error)
+        throw new ConnectError(
+          'handshake',
+          phrase('connect.handshakeFailed', { message }),
+          !refused,
+        )
+      }
+      if (stale()) {
+        peer.close()
+        return
+      }
+      peer.notify('initialized')
+      rpc = peer
+      setState({ phase: 'connected', info })
+    } catch (error) {
+      if (stale()) return
+      opening = null
+      fail(attempt, toConnectError(error))
+    }
+  }
+
+  return {
+    get state() {
+      return state
+    },
+
+    start() {
+      if (state.phase !== 'idle') return
+      void connect(1)
+    },
+
+    retry() {
+      if (state.phase !== 'waiting' && state.phase !== 'failed') return
+      teardown()
+      void connect(1)
+    },
+
+    reopen() {
+      if (state.phase !== 'connected') return
+      teardown()
+      void connect(1)
+    },
+
+    stop() {
+      teardown()
+      setState({ phase: 'idle' })
+    },
+
+    request(method, params, requestOptions) {
+      if (!rpc) return Promise.reject(new RpcAbortError('closed', '设备没有连上'))
+      return rpc.request(method, params, requestOptions) as Promise<never>
+    },
+  }
+}

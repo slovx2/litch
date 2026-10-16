@@ -1,0 +1,268 @@
+/* 对话区下面的终端面板。只用变量；终端里的字和颜色由终端控件自己画，配色从 --term-* 读（skins/ 里定义） */
+.term-dock {
+  flex: none;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  border-top: 1px solid var(--line-2);
+  background: var(--term-bg);
+}
+.term-dock[hidden] {
+  display: none;
+}
+/* 顶边那一条能拖：比看得见的线宽一点，好抓 */
+.term-grip {
+  position: absolute;
+  top: -4px;
+  left: 0;
+  right: 0;
+  height: 8px;
+  z-index: 2;
+  cursor: row-resize;
+  touch-action: none;
+}
+.term-grip:hover,
+.term-grip:focus-visible {
+  background: var(--press);
+  outline: none;
+}
+
+/* ---------- 标签栏 ---------- */
+.term-bar {
+  height: 34px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 6px;
+  border-bottom: 1px solid var(--line-2);
+  background: var(--win);
+}
+.term-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 0;
+}
+.term-tab {
+  height: 26px;
+  min-width: 56px;
+  max-width: 180px;
+  flex: 0 1 auto;
+  display: flex;
+  align-items: center;
+  border-radius: var(--r1);
+  color: var(--ink-2);
+  font-size: 12px;
+}
+.term-tab:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.term-tab[data-active="true"] {
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: 0 0 0 1px var(--line-2);
+}
+.term-tab-btn {
+  height: 100%;
+  min-width: 0;
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 2px 0 8px;
+  white-space: nowrap;
+}
+/* 状态记号：在跑是实心的线色方块，退出了是空心的，断着是等人的颜色，没了是出错的颜色 */
+.term-dot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 1px;
+  background: var(--wire);
+}
+.term-tab[data-state="starting"] .term-dot {
+  opacity: 0.5;
+}
+.term-tab[data-state="exited"] .term-dot {
+  background: none;
+  box-shadow: inset 0 0 0 1.5px var(--ink-3);
+}
+.term-tab[data-state="away"] .term-dot {
+  background: none;
+  box-shadow: inset 0 0 0 1.5px var(--wait);
+}
+.term-tab[data-state="lost"] .term-dot {
+  background: none;
+  box-shadow: inset 0 0 0 1.5px var(--err);
+}
+.term-tab .ibtn {
+  width: 20px;
+  height: 20px;
+  margin-right: 2px;
+}
+.term-rename {
+  min-width: 0;
+  flex: 1 1 0;
+  height: 20px;
+  margin: 0 2px 0 6px;
+  padding: 0 4px;
+  font: inherit;
+  color: var(--ink);
+  background: var(--raised);
+  border: 1px solid var(--line-3);
+  border-radius: var(--r1);
+}
+.term-x {
+  display: flex;
+  flex: none;
+}
+.term-new:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.term-tools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  flex: 0 1 auto;
+}
+.term-tools .mini {
+  align-self: center;
+}
+.term-cwd {
+  min-width: 0;
+  max-width: 260px;
+  font: 11px / 16px var(--mono);
+  color: var(--ink-3);
+  /* 路径太长时留住末尾：从右往左排，省略号落在开头 */
+  direction: rtl;
+  text-align: left;
+}
+.term-eph {
+  cursor: help;
+}
+
+/* 关标签时问的那一块、设备上的终端那一块：都是从标签栏往上弹 */
+.term-close {
+  width: 280px;
+}
+.term-close-head {
+  padding: 6px 8px 4px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-2);
+}
+.term-end b,
+.mini.term-end {
+  color: var(--err);
+}
+.term-stowed-pop {
+  left: auto;
+  right: 0;
+  width: 300px;
+}
+.term-stowed-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 4px 3px 8px;
+  font-size: 12px;
+  line-height: 18px;
+}
+.term-stowed-row .ell {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* ---------- 终端本身 ---------- */
+.term-body {
+  flex: 1 1 0;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+.term-mount {
+  flex: 1 1 0;
+  min-height: 0;
+  position: relative;
+}
+.term-mount[hidden] {
+  display: none;
+}
+.term-stage {
+  position: absolute;
+  inset: 6px 4px 4px 10px;
+}
+/* 不在台上的终端只是看不见：不拆，量得到大小，滚到哪了也还在 */
+.term-host {
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
+}
+.term-host.on {
+  visibility: visible;
+}
+.term-host .xterm {
+  height: 100%;
+}
+/* 终端控件自带的样式把滚动的那一层底色写死成黑的。面板的高度凑不满整数行时，
+   最后一行下面露出来的那一条就是它，所以改成和终端同一个底色 */
+.term-host .xterm .xterm-viewport {
+  background-color: var(--term-bg);
+}
+.term-status {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  padding: 4px 12px;
+  border-top: 1px dashed var(--line-3);
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-2);
+  background: var(--term-bg);
+}
+/* “正在启动”“设备没连上”是一时的：盖在终端最底下，不占地方。
+   占地方的话，它一出一收终端就要改两次大小，对面的 shell 各收到一次“窗口变了”。
+   刚起来的 shell 这时候正好在收头一条命令：bash 在回车前后收到它，会把提示符在下一行重画一遍，
+   命令的输出就接在重画的提示符后面（流水线上的终端验收就这样挂过） */
+.term-status[data-state="starting"],
+.term-status[data-state="away"] {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
+}
+.term-status[data-state="lost"] {
+  color: var(--err);
+}
+.term-status[data-state="away"] {
+  color: var(--wait);
+}
+.term-status .btn {
+  height: 24px;
+}
+.term-empty {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+/* 标题栏上开合终端的按钮 */
+.tb-term[aria-pressed="true"] {
+  background: var(--sel);
+  color: var(--ink);
+}

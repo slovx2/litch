@@ -1,0 +1,10 @@
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "thread/start",
+  "params": {
+    "cwd": "/workspace/codex-harness-adapter",
+    "experimentalRawEvents": false,
+    "persistExtendedHistory": false
+  }
+}

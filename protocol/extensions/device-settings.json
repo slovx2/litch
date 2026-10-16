@@ -1,0 +1,750 @@
+{
+  "extension": "deviceSettings",
+  "description": "设备配置接口：读写设备服务的设置、重启 harness、运行诊断、读日志末尾、取给官方 Codex 桌面端用的 ssh 配置片段。设置的结构由设备服务声明，客户端按声明画界面，不认识具体的设置项。设计见 design/harness-client/03-adapter-device-service.md 第十三节、第十五节。类型在 packages/protocol/src/device-settings.mts；runtime/info 里跟着多出来的不可用原因在 packages/protocol/src/device.mts 的 HarnessUnavailable 上。",
+  "appliesTo": "只有聚合面，而且要这个设备服务是由带设置功能的适配器主进程拉起的：runtime/info 的 device.extensions 里列了 deviceSettings 才能用。每个 harness 自己的入口（给官方 Codex 桌面端用的兼容面）上没有这个扩展的任何内容。",
+  "declaration": {
+    "description": "方法由客户端主动调用，不要求声明。想收到设置变化的通知、想在不可用原因上拿到两种语言的说明，握手时在 capabilities.litchExtensions 里列上 deviceSettings。",
+    "where": "initialize.params.capabilities.litchExtensions",
+    "schema": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "contains": {
+        "const": "deviceSettings"
+      }
+    }
+  },
+  "undeclared": "没声明的连接收不到 litch/device/settings/changed，runtime/info 和 litch/harness/status/changed 里的 unavailable 上没有 text；方法照样可以调用，设置变没变要自己再读一遍。runtime/info 里 unavailable.kind 的新值（disabled、notInstalled 等）不看这个声明：harness 扩展本来就约定了 kind 以后会加、不认识的按一般的不可用处理。设备服务没有适配器主进程在管时（device.extensions 里没有 deviceSettings），这些方法一律回 settingsUnavailable。",
+  "rules": [
+    "密钥只能写、不能读回：secret 类型读到的是 {set}，环境变量表里的密钥读到的没有 value；通知和日志里也没有。名字看着像密钥的环境变量（含 key、token、secret、passw、credential、auth，不分大小写）不标也按密钥处理。",
+    "改了要重启才生效的设置（restart 为 harness）：那个 harness 没有回合在跑时，写入之后设备服务自己把它重新起一遍（停用就是停掉）；有回合在跑、或者判断不了时，写入照样成功，它出现在 snapshot.pendingRestart 里，等用户调 litch/device/harness/restart。",
+    "谁能连上聚合面谁就能配置，不另设权限。远程设备走的是同一条连接。",
+    "启动参数（--ssh、--claude-port、--pi-port、--dsh-port、--harness）是设置里没写过时的默认值，写过就以设置为准。设置文件不存在时一切和没有这个扩展时一样。"
+  ],
+  "parts": [
+    {
+      "kind": "ClientRequest",
+      "method": "litch/device/settings/read",
+      "description": "读设置的结构和当前值。",
+      "params": {
+        "type": "object"
+      },
+      "response": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["schema", "snapshot", "inheritedEnv"],
+        "properties": {
+          "schema": {
+            "$ref": "#/definitions/DeviceSettingsSchema"
+          },
+          "snapshot": {
+            "$ref": "#/definitions/DeviceSettingsSnapshot"
+          },
+          "inheritedEnv": {
+            "description": "环境文件（状态目录下的 env）里的变量：对每个 harness 都生效，优先级在设置之下。只读，要改去改那个文件。",
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/InheritedEnvEntry"
+            }
+          }
+        }
+      }
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/device/settings/write",
+      "description": "按键写入。要么全部写入，要么一项都不写。expectedVersion 和现在的版本号对不上就拒绝（settingsConflict），错误里带最新的快照。应答等事情定下来才回：要顺手重新起的 harness 等到它有了结果（起来了、没起来、停了），SSH 入口等到它照新设置听上或者说明了为什么没听上；通常不到一秒到几秒，重新起 harness 最长约一分半钟。应答里的 snapshot 就是定下来的样子，不用再等后面的通知来补。途中的样子（先标成待重启又摘掉、入口没了又回来）不通知：这次写入只在应答之前发一条 litch/device/settings/changed，带改了的键和同一份 snapshot。真的要等回合结束才能重启的 harness 照旧留在 snapshot.pendingRestart 里。",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["expectedVersion", "edits"],
+        "properties": {
+          "expectedVersion": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "edits": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["key", "value"],
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "value": {
+                  "description": "新的值；null 表示清掉，回到默认值。secret 类型写字符串（空串等于清掉）；env 类型写整张表；其余和读到的同形。",
+                  "oneOf": [
+                    {
+                      "type": ["boolean", "integer", "string", "null"]
+                    },
+                    {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/definitions/EnvEntry"
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "response": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["snapshot", "changed", "restarted"],
+        "properties": {
+          "snapshot": {
+            "description": "写入并且该重新起的都有了结果之后的现状，和这次写入发的那条通知里的是同一份",
+            "$ref": "#/definitions/DeviceSettingsSnapshot"
+          },
+          "changed": {
+            "description": "这次写入真的改了的键。一个都没改时版本号不变。",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "restarted": {
+            "description": "因为这次写入已经重新起了（或者停掉了）的 harness。",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/device/harness/restart",
+      "description": "重启一个 harness，同时把它待重启的设置用上；没在跑的会再试着起一次。等到它有了结果才应答（通常几秒，最长约一分半钟），状态同时经 litch/harness/status/changed 通知。有回合在跑（或者判断不了）而没带 force 时回 harnessBusy。",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["harness"],
+        "properties": {
+          "harness": {
+            "type": "string"
+          },
+          "force": {
+            "description": "true：有回合在跑也照做",
+            "type": "boolean"
+          }
+        }
+      },
+      "response": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["harness", "state", "text", "snapshot"],
+        "properties": {
+          "harness": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/definitions/ManagedHarnessState"
+          },
+          "text": {
+            "description": "不在运行时的说明",
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/definitions/LocalizedText"
+              }
+            ]
+          },
+          "snapshot": {
+            "$ref": "#/definitions/DeviceSettingsSnapshot"
+          }
+        }
+      }
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/device/diagnostics/run",
+      "description": "运行诊断，和命令行的 doctor 是同一套检查，另外带上每个 SSH 入口现在的状况。全查时可能要一分钟左右。",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "harness": {
+            "description": "只查这一个；不带就全查",
+            "type": "string"
+          }
+        }
+      },
+      "response": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["ranAt", "checks"],
+        "properties": {
+          "ranAt": {
+            "description": "ISO 8601",
+            "type": "string"
+          },
+          "checks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/DiagnosticCheck"
+            }
+          }
+        }
+      }
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/device/logs/read",
+      "description": "读日志的末尾。device：设备进程的日志；service：常驻服务的输出（由客户端拉起时才有）；runtime、diagnostics：某个 harness 的运行日志、诊断日志，要带 harness。文件还没有时 text 是空串，不算错。",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source"],
+        "properties": {
+          "source": {
+            "enum": ["device", "service", "runtime", "diagnostics"]
+          },
+          "harness": {
+            "type": "string"
+          },
+          "maxBytes": {
+            "description": "最多取末尾这么多字节，默认 65536，超过 1048576 按 1048576 算",
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
+      "response": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "text", "truncated", "size"],
+        "properties": {
+          "path": {
+            "description": "日志文件在设备上的路径",
+            "type": "string"
+          },
+          "text": {
+            "description": "从整行开始",
+            "type": "string"
+          },
+          "truncated": {
+            "description": "前面还有没取的内容",
+            "type": "boolean"
+          },
+          "size": {
+            "description": "文件现在的大小（字节）",
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/device/sshConfig/read",
+      "description": "取给官方 Codex 桌面端用的 ssh 配置片段。只给出片段，从不改用户的 ssh 配置。",
+      "params": {
+        "type": "object"
+      },
+      "response": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["entries", "text"],
+        "properties": {
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/SshConfigEntry"
+            }
+          },
+          "text": {
+            "description": "给得出来的各段拼在一起",
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "kind": "ServerNotification",
+      "method": "litch/device/settings/changed",
+      "description": "设置变了，或者待重启的名单、SSH 入口的状况变了。只发给声明过 deviceSettings 的连接，发给全部这样的连接（包括提出写入的那一条）。一次写入从头到尾只发一条：等它定下来、在写入的应答之前发，snapshot 和应答里的是同一份，途中的样子不发。",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["keys", "snapshot"],
+        "properties": {
+          "keys": {
+            "description": "这一次改了的键；只是别的东西变了时是空数组",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "snapshot": {
+            "$ref": "#/definitions/DeviceSettingsSnapshot"
+          }
+        }
+      }
+    },
+    {
+      "kind": "EnumValue",
+      "on": "HarnessInfo.unavailable.kind（harness 扩展，runtime/info 和 litch/harness/status/changed）",
+      "values": ["starting", "disabled", "notInstalled", "versionTooLow", "startFailed", "stopped"],
+      "description": "适配器主进程告诉设备进程的不可用原因。starting：正在检查环境、启动；disabled：在设置里停用了，或者这次启动没有选它；notInstalled：没装，找不到它的命令行；versionTooLow：装了但版本低于适配器要求的下限；startFailed：环境检查没过或者没能启动；stopped：起来过，后来自己退出了。有适配器主进程在管时，runtime/info 的 harnesses 列出这台设备上全部已知的 harness（claude-code、pi、dsh），不管起没起来。对所有聚合面连接都发，不看声明。harness.json 里 kind 的说明也列着这几种。"
+    },
+    {
+      "kind": "Field",
+      "on": "HarnessInfo.unavailable（harness 扩展）",
+      "name": "text",
+      "schema": {
+        "$ref": "#/definitions/LocalizedText"
+      },
+      "description": "message 的两种语言版本，message 是其中中文那一份。只发给声明过 deviceSettings 的连接，而且只有适配器主进程给的原因才有（设备进程自己判断的 connecting、unreachable、handshakeFailed、disconnected 没有）。harness.json 的 HarnessInfo 定义里登记了这个可选字段，两份定义是一致的。"
+    },
+    {
+      "kind": "Error",
+      "description": "这个扩展的方法自己回的错误在 error.data.litch 里带原因，error.data.text 是说明的两种语言版本（error.message 是中文那一份）。harness 参数填的不是这台设备上的 harness 时，回的是 harness 扩展里的 unknownHarness。",
+      "errors": [
+        {
+          "litch": "settingsUnavailable",
+          "code": -32052,
+          "description": "设置功能现在用不了：没有适配器主进程在管这个设备服务，或者和它的控制通道断了、它没有应答"
+        },
+        {
+          "litch": "settingsConflict",
+          "code": -32053,
+          "description": "写入时带的版本号和现在的对不上。data.snapshot 是最新的"
+        },
+        {
+          "litch": "invalidSetting",
+          "code": -32602,
+          "description": "键不认识，或者值不合规矩。data.key 是哪一项"
+        },
+        {
+          "litch": "harnessBusy",
+          "code": -32054,
+          "description": "要重启的 harness 有回合在跑（或者判断不了），没有带 force"
+        },
+        {
+          "litch": "deviceActionFailed",
+          "code": -32055,
+          "description": "动作没做成（设置写不进磁盘、读不了日志等）"
+        }
+      ],
+      "data": {
+        "type": "object",
+        "required": ["litch"],
+        "properties": {
+          "litch": {
+            "enum": [
+              "settingsUnavailable",
+              "settingsConflict",
+              "invalidSetting",
+              "harnessBusy",
+              "deviceActionFailed"
+            ]
+          },
+          "text": {
+            "$ref": "#/definitions/LocalizedText"
+          },
+          "key": {
+            "type": "string"
+          },
+          "harness": {
+            "type": "string"
+          },
+          "snapshot": {
+            "$ref": "#/definitions/DeviceSettingsSnapshot"
+          }
+        }
+      }
+    }
+  ],
+  "definitions": {
+    "LocalizedText": {
+      "description": "给人看的字，中文和英文各一份，客户端按自己的语言取",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["zh-CN", "en"],
+      "properties": {
+        "zh-CN": {
+          "type": "string"
+        },
+        "en": {
+          "type": "string"
+        }
+      }
+    },
+    "SettingScope": {
+      "description": "作用范围：整台设备，或者某一个 harness",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": {
+            "kind": {
+              "const": "device"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "harness"],
+          "properties": {
+            "kind": {
+              "const": "harness"
+            },
+            "harness": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      ]
+    },
+    "EnvEntry": {
+      "description": "环境变量表里的一项。读到的：普通变量是 {name, value}，密钥是 {name, secret: true}、没有 value。写入的：{name, value} 或 {name, value, secret: true}；{name, secret: true} 不带 value 表示保留原来的值，原来没有这个密钥就拒绝。",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+        },
+        "value": {
+          "type": "string"
+        },
+        "secret": {
+          "type": "boolean"
+        }
+      }
+    },
+    "SettingValue": {
+      "description": "读到的值，形状由设置项的 type 决定：boolean 是布尔；integer 是整数；string、enum、path 是字符串（path 空串表示没填）；env 是 EnvEntry 的数组；secret 是 {set}，只说设没设过",
+      "oneOf": [
+        {
+          "type": ["boolean", "integer", "string"]
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/EnvEntry"
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["set"],
+          "properties": {
+            "set": {
+              "type": "boolean"
+            }
+          }
+        }
+      ]
+    },
+    "SettingSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "group", "type", "title", "description", "scope", "default", "restart"],
+      "properties": {
+        "key": {
+          "description": "键，写入时用它",
+          "type": "string",
+          "minLength": 1
+        },
+        "group": {
+          "description": "属于哪个分组（SettingGroup.id）",
+          "type": "string"
+        },
+        "type": {
+          "description": "决定画什么控件、值是什么形状",
+          "enum": ["boolean", "string", "integer", "enum", "path", "env", "secret"]
+        },
+        "title": {
+          "$ref": "#/definitions/LocalizedText"
+        },
+        "description": {
+          "$ref": "#/definitions/LocalizedText"
+        },
+        "scope": {
+          "$ref": "#/definitions/SettingScope"
+        },
+        "default": {
+          "description": "设置里没写过时的值。启动参数决定的就是它",
+          "$ref": "#/definitions/SettingValue"
+        },
+        "restart": {
+          "description": "改了之后怎么生效。none：立刻；harness：要重启它所属的那个 harness",
+          "enum": ["none", "harness"]
+        },
+        "role": {
+          "description": "这一项在它的作用范围里担当的角色，没有就是普通的一项。enable：它是所属 harness 的启用开关（scope 是 harness、type 是 boolean，一个 harness 至多一项），客户端可以把它另外放在这个 harness 的标题行上。客户端认这个标记，不认键名，也不按声明的先后猜。以后可能加别的值，不认识的按没有处理。",
+          "enum": ["enable"]
+        },
+        "minimum": {
+          "description": "integer：取值范围（含两端）",
+          "type": "integer"
+        },
+        "maximum": {
+          "type": "integer"
+        },
+        "options": {
+          "description": "enum：可选的值",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["value", "title"],
+            "properties": {
+              "value": {
+                "type": "string"
+              },
+              "title": {
+                "$ref": "#/definitions/LocalizedText"
+              }
+            }
+          }
+        }
+      }
+    },
+    "SettingGroup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "description", "scope"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "$ref": "#/definitions/LocalizedText"
+        },
+        "description": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/definitions/LocalizedText"
+            }
+          ]
+        },
+        "scope": {
+          "$ref": "#/definitions/SettingScope"
+        }
+      }
+    },
+    "DeviceSettingsSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["groups", "settings"],
+      "properties": {
+        "groups": {
+          "description": "顺序就是显示的顺序",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SettingGroup"
+          }
+        },
+        "settings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SettingSpec"
+          }
+        }
+      }
+    },
+    "SshEntryState": {
+      "description": "给官方 Codex 桌面端的一个 SSH 入口现在的状况",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["harness", "enabled", "port", "state", "reason"],
+      "properties": {
+        "harness": {
+          "type": "string"
+        },
+        "enabled": {
+          "description": "设置的现行值",
+          "type": "boolean"
+        },
+        "port": {
+          "type": "integer"
+        },
+        "state": {
+          "description": "off：关着；listening：在听；failed：开着但没起来；idle：这个 harness 的运行时没在跑（或者入口正在换设置），入口还没起",
+          "enum": ["off", "listening", "failed", "idle"]
+        },
+        "reason": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kind", "text", "detail"],
+              "properties": {
+                "kind": {
+                  "description": "portUnavailable：端口被占，空出来会自己接上；setupFailed：身份或主机密钥没备好；startFailed：别的原因",
+                  "enum": ["portUnavailable", "setupFailed", "startFailed"]
+                },
+                "text": {
+                  "$ref": "#/definitions/LocalizedText"
+                },
+                "detail": {
+                  "description": "系统给的原话",
+                  "type": "string"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "DeviceSettingsSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "values", "explicit", "pendingRestart", "sshEntries"],
+      "properties": {
+        "version": {
+          "description": "每写入成功一次加一；没有写过设置时是 0",
+          "type": "integer",
+          "minimum": 0
+        },
+        "values": {
+          "description": "每个设置项现在的值：设置里写过的，没写过就是默认值。键是 SettingSpec.key",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/SettingValue"
+          }
+        },
+        "explicit": {
+          "description": "设置里写过的键。不在这里面的用的是默认值",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "pendingRestart": {
+          "description": "设置已经改了、但运行中的进程还是照旧设置起的 harness。重启它才生效",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "sshEntries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SshEntryState"
+          }
+        }
+      }
+    },
+    "InheritedEnvEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "secret"],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "value": {
+          "description": "名字看着像密钥的不给值",
+          "type": "string"
+        },
+        "secret": {
+          "type": "boolean"
+        }
+      }
+    },
+    "ManagedHarnessState": {
+      "description": "适配器主进程眼里一个 harness 的状态。running 之外的同时是 runtime/info 里不可用原因的 kind",
+      "enum": [
+        "running",
+        "starting",
+        "disabled",
+        "notInstalled",
+        "versionTooLow",
+        "startFailed",
+        "stopped"
+      ]
+    },
+    "DiagnosticCheck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "scope", "status", "title", "detail", "logPath"],
+      "properties": {
+        "id": {
+          "description": "runtime：引擎的命令行和运行环境；terminal：终端；sshEntry：给 Codex 桌面端的 SSH 入口；shell：Windows 上的 bash。以后会加，不认识的照 title 显示",
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/definitions/SettingScope"
+        },
+        "status": {
+          "description": "skipped：前面的检查没过，或者这一项不适用",
+          "enum": ["ok", "failed", "skipped"]
+        },
+        "title": {
+          "$ref": "#/definitions/LocalizedText"
+        },
+        "detail": {
+          "description": "没过时的原因和该怎么办；别的状态下可能有补充说明",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/definitions/LocalizedText"
+            }
+          ]
+        },
+        "logPath": {
+          "description": "详细的输出在设备上的哪个文件里",
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "SshConfigEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["harness", "alias", "port", "config", "unavailable"],
+      "properties": {
+        "harness": {
+          "type": "string"
+        },
+        "alias": {
+          "description": "ssh 配置里的别名，例如 codex-harness-adapter-claude",
+          "type": "string"
+        },
+        "port": {
+          "type": "integer"
+        },
+        "config": {
+          "description": "可以直接贴进 ~/.ssh/config 的一段。给不出来时是 null",
+          "type": ["string", "null"]
+        },
+        "unavailable": {
+          "description": "给不出来的原因（入口关着、还没初始化过）",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/definitions/LocalizedText"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

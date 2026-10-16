@@ -1,0 +1,21 @@
+/* 顺序有讲究：先明暗开关，再皮肤的变量，最后是只用变量的组件样式。
+   皮肤文件后半的专属组件规则都带着 [data-skin] 前缀，优先级比通用样式高，不靠先后顺序 */
+@import "./theme.css";
+@import "./skins/standard.css";
+@import "./skins/retro.css";
+@import "./skins/human.css";
+@import "./base.css";
+@import "./shell.css";
+@import "./transcript.css";
+@import "./transcript-prose.css";
+@import "./dock.css";
+@import "./compose.css";
+@import "./terminal.css";
+@import "./side.css";
+@import "./files.css";
+@import "./diff.css";
+@import "./archived.css";
+@import "./settings.css";
+@import "./devices.css";
+@import "./manage.css";
+@import "./organize.css";

@@ -1,0 +1,387 @@
+/* 助手回答（Markdown）、计划、出错提示、回合收尾、输入区 */
+
+/* 行高一律写成整数像素。回答一行一行长出来的时候，不在底部的用户靠改滚动位置来保持眼前的内容不动，
+   而滚动位置只能是整数像素：行高带零头的话，零头会越积越多，内容就会时不时抖一个像素 */
+.md {
+  font-size: 14px;
+  line-height: 23px;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+/* 先把块的默认外边距清掉，再统一给顶层的块之间留间距。
+   清零这一条要用 :where，让它不比下面那条“优先”：否则不管谁写在后面，间距都会被它盖掉 */
+.md :where(p, ul, ol, blockquote, pre, h1, h2, h3, h4, h5, h6) {
+  margin: 0;
+}
+.md > * + * {
+  margin-top: 10px;
+}
+.md :is(ul, ol) {
+  padding-left: 22px;
+}
+.md li + li,
+.md li > :is(ul, ol) {
+  margin-top: 4px;
+}
+.md li > p + p {
+  margin-top: 6px;
+}
+.md li.task {
+  list-style: none;
+  margin-left: -20px;
+}
+.md li.task input {
+  margin: 0 6px 0 0;
+  vertical-align: -1px;
+}
+.md :is(h1, h2, h3, h4, h5, h6) {
+  font-weight: 600;
+}
+.md > :is(h1, h2, h3, h4, h5, h6):not(:first-child) {
+  margin-top: 18px;
+}
+.md h1 {
+  font-size: 18px;
+  line-height: 24px;
+}
+.md h2 {
+  font-size: 16px;
+  line-height: 22px;
+}
+.md h3 {
+  font-size: 15px;
+  line-height: 20px;
+}
+.md :is(h4, h5, h6) {
+  font-size: 14px;
+  line-height: 20px;
+}
+.md code {
+  font: 12.5px / 1 var(--mono);
+  background: var(--hover);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+.md a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.md a:hover {
+  text-decoration: underline;
+}
+.md-dead {
+  color: var(--ink-2);
+  text-decoration: underline dotted;
+}
+.md blockquote {
+  padding-left: 12px;
+  border-left: 2px solid var(--line-3);
+  color: var(--ink-2);
+}
+.md blockquote > * + * {
+  margin-top: 8px;
+}
+.md hr {
+  border: 0;
+  border-top: 1px solid var(--line-2);
+  margin-block: 14px;
+}
+.md-table {
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.md table {
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.md :is(th, td) {
+  border: 1px solid var(--line-2);
+  padding: 4px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+.md th {
+  font-weight: 600;
+  background: var(--hover);
+}
+
+/* 代码块 */
+.code {
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  overflow: hidden;
+  background: var(--sunken);
+}
+.code-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 28px;
+  padding: 0 4px 0 12px;
+  font: 11px / 1 var(--mono);
+  color: var(--ink-3);
+  border-bottom: 1px solid var(--line-1);
+}
+.code-head .mini {
+  align-self: center;
+}
+.code pre {
+  margin: 0;
+  padding: 10px 12px;
+  font: 12px / 20px var(--mono);
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.code pre code {
+  font: inherit;
+  background: none;
+  padding: 0;
+  border-radius: 0;
+}
+
+/* 代码上色（对话里的代码块、文件查看器，和差异面板）。只换颜色，不换字重和字形：上色前后每个字占的地方一样，内容不会因此挪动。
+   颜色取皮肤里现成的几种，皮肤想另配就在自己的文件里改这几个变量 */
+.code,
+.fv-code,
+.dp {
+  --syn-comment: var(--ink-3);
+  --syn-keyword: var(--wire-violet);
+  --syn-string: var(--wire-green);
+  --syn-number: var(--wire-orange);
+  --syn-func: var(--wire-blue);
+  --syn-type: var(--wire-yellow);
+  --syn-meta: var(--wire-brown);
+}
+:is(.code, .fv-code, .dp) :is(.hljs-comment, .hljs-quote) {
+  color: var(--syn-comment);
+}
+:is(.code, .fv-code, .dp) :is(.hljs-keyword, .hljs-selector-tag, .hljs-doctag) {
+  color: var(--syn-keyword);
+}
+:is(.code, .fv-code, .dp) :is(.hljs-string, .hljs-regexp, .hljs-char, .hljs-addition) {
+  color: var(--syn-string);
+}
+:is(.code, .fv-code, .dp) :is(.hljs-number, .hljs-literal, .hljs-symbol, .hljs-bullet) {
+  color: var(--syn-number);
+}
+:is(.code, .fv-code, .dp) :is(.hljs-title, .hljs-section, .hljs-selector-id, .hljs-selector-class) {
+  color: var(--syn-func);
+}
+:is(.code, .fv-code, .dp) :is(.hljs-type, .hljs-built_in, .hljs-title.class_) {
+  color: var(--syn-type);
+}
+:is(.code, .fv-code, .dp)
+  :is(.hljs-attr, .hljs-attribute, .hljs-property, .hljs-variable, .hljs-name, .hljs-meta) {
+  color: var(--syn-meta);
+}
+:is(.code, .fv-code, .dp) .hljs-deletion {
+  color: var(--err);
+}
+
+/* 输出中的光标：画在最后一块的结尾 */
+.md.live > :is(p, h1, h2, h3, h4, h5, h6):last-child::after,
+.md.live > :is(ul, ol):last-child > li:last-child::after,
+.md.live > .code:last-child code::after,
+.md.live:empty::after {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 15px;
+  background: var(--accent);
+  vertical-align: -2px;
+  margin-left: 2px;
+  animation: beat 0.7s ease-in-out infinite alternate;
+}
+
+/* 计划 */
+.plan {
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  background: var(--raised);
+}
+.plan-head {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line-1);
+  font-weight: 500;
+}
+.plan-body {
+  padding: 10px 12px 12px;
+}
+
+/* 待办进度：标题一行（做完几步、正在做第几步、进度条），下面一步一行 */
+.todo {
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  background: var(--raised);
+}
+.todo-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 34px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--line-1);
+  white-space: nowrap;
+}
+.todo-title {
+  font-weight: 500;
+}
+.todo-count,
+.todo-now {
+  font: 11px / 1 var(--mono);
+  color: var(--ink-3);
+}
+.todo-bar {
+  margin-left: auto;
+  width: 72px;
+  height: 4px;
+  flex: none;
+  background: var(--hover);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.todo-bar i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.2s ease-out;
+}
+/* 行高写整数像素，原因见这个文件开头 */
+.todo-note {
+  padding: 8px 12px 0;
+  font-size: 12px;
+  line-height: 19px;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.todo-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px 12px 8px;
+}
+.todo-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 2px 0;
+  font-size: 13px;
+  line-height: 21px;
+  color: var(--ink-2);
+}
+.todo-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+/* 记号和第一行字一样高，字折行了它也对着第一行 */
+.todo-mark {
+  width: 14px;
+  height: 21px;
+  flex: none;
+  display: grid;
+  place-items: center;
+}
+/* 还没做：空心方块 */
+.todo-mark::before {
+  content: "";
+  display: block;
+  box-sizing: border-box;
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid var(--ink-3);
+  border-radius: 2px;
+}
+/* 正在做：和侧栏里“进行中”的记号是同一个（.st.run），这里只把上面那圈边去掉 */
+.todo-mark.st.run::before {
+  border: 0;
+  border-radius: 0;
+}
+.todo-step.inProgress {
+  color: var(--ink);
+}
+/* 做完了：一个勾 */
+.todo-step.completed .todo-mark::before {
+  width: 5px;
+  height: 9px;
+  border: solid var(--ok);
+  border-width: 0 1.5px 1.5px 0;
+  border-radius: 0;
+  transform: translateY(-1px) rotate(45deg);
+}
+.todo-step.completed {
+  color: var(--ink-3);
+}
+
+/* 出错提示 */
+.errbox {
+  border: 1px solid color-mix(in srgb, var(--err) 45%, transparent);
+  background: color-mix(in srgb, var(--err) 8%, transparent);
+  border-radius: var(--r2);
+  padding: 8px 8px 8px 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: center;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.errbox .mono {
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.errbox .mini {
+  align-self: center;
+  margin-left: auto;
+}
+
+/* 回合收尾 */
+.turn-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font: 11px / 1 var(--mono);
+  color: var(--ink-3);
+}
+/* 分叉出来的会话：对话最上面一行写明从哪个会话分出来，点名字回到那个会话 */
+.forked-from {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 16px;
+  padding-bottom: 10px;
+  border-bottom: 1px dashed var(--line-2);
+  font: 12px / 1.5 var(--ui);
+  color: var(--ink-3);
+}
+.forked-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--ink-2);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.forked-link:hover {
+  color: var(--ink);
+}
+.running-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+/* 系统设了“减少动态效果”时，记号和光标不闪。这一段要放在所有动画规则之后 */
+@media (prefers-reduced-motion: reduce) {
+  .todo-bar i {
+    transition: none;
+  }
+  .st.run::before,
+  .md.live ::after,
+  .md.live::after {
+    animation: none;
+  }
+}

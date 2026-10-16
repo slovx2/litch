@@ -1,0 +1,84 @@
+/* 标准皮肤的变量，也是另外两种皮肤没有重新定义的变量的来源（比如设备线色）。每个值写成“浅色 深色”一对，由 theme.css 里的两个开关变量决定取哪一个。
+   组件样式只许用这里的变量，不许写死颜色、字体、圆角、阴影（设计文档 01 第 5.1 节）。 */
+/* 第三个选择器是设置页里的皮肤预览（settings/Look.tsx 的 SkinPreview）：在那一小块上把这种皮肤的变量整套重新声明一遍，
+   里面的小部件只用变量，画出来就是这种皮肤，不管现在用的是哪一种。明暗的两个开关变量是继承来的，预览跟着现在的明暗走 */
+:root,
+:root[data-skin="standard"],
+[data-skin-preview="standard"] {
+  /* 表面：窗口底、内容面、凸起面、浮层、下沉面 */
+  --win: var(--L, #e8eaef) var(--D, #111217);
+  --panel: var(--L, #f6f7f9) var(--D, #16171d);
+  --raised: var(--L, #ffffff) var(--D, #1d1f26);
+  --overlay: var(--L, #ffffff) var(--D, #24262f);
+  --sunken: var(--L, #eceef2) var(--D, #0c0d11);
+  /* 墨色三级；描边和交互态一律是墨色乘透明度 */
+  --ink: var(--L, #191a21) var(--D, #e7e8ef);
+  --ink-2: var(--L, #50535f) var(--D, #a6a9b7);
+  --ink-3: var(--L, #7d808c) var(--D, #747786);
+  --ink-rgb: var(--L, 25 26 33) var(--D, 231 232 239);
+  --line-1: rgb(var(--ink-rgb) / 0.07);
+  --line-2: rgb(var(--ink-rgb) / 0.12);
+  --line-3: rgb(var(--ink-rgb) / 0.22);
+  --hover: rgb(var(--ink-rgb) / 0.05);
+  --press: rgb(var(--ink-rgb) / 0.1);
+  --sel: rgb(var(--ink-rgb) / 0.08);
+  --shadow: var(--L, 0 8px 28px rgb(20 22 34 / 0.14)) var(--D, 0 10px 32px rgb(0 0 0 / 0.55));
+  /* 强调色：主按钮、焦点、链接、进行中 */
+  --accent: var(--L, #4a4dd8) var(--D, #9da0ff);
+  --accent-solid: var(--L, #4a4dd8) var(--D, #6266ea);
+  --on-accent: #ffffff;
+  /* 状态：正常、等人、出错 */
+  --ok: var(--L, #1f8a4c) var(--D, #4cc38a);
+  --wait: var(--L, #a86a00) var(--D, #f0b23e);
+  --err: var(--L, #cc3b31) var(--D, #ff6f65);
+  /* 设备线色：名字借用通信线缆的色标 */
+  --wire-blue: var(--L, #2f6fe0) var(--D, #6ea3ff);
+  --wire-orange: var(--L, #d2651a) var(--D, #ff9a4d);
+  --wire-green: var(--L, #2b9348) var(--D, #57c878);
+  --wire-brown: var(--L, #8a5a3c) var(--D, #c08d6b);
+  --wire-slate: var(--L, #5f6b7a) var(--D, #9aa6b5);
+  --wire-red: var(--L, #c9423a) var(--D, #ff7469);
+  --wire-yellow: var(--L, #a88400) var(--D, #e6c544);
+  --wire-violet: var(--L, #8d4bd1) var(--D, #c08cff);
+  --wire: var(--wire-slate);
+  /* 终端：底、字、光标、选区，和程序用的十六种颜色（普通八种、亮八种）。
+     尽量借已有的变量，换皮肤时跟着走；终端控件要的是算好的颜色值，由 terminal/look.ts 读出来交给它 */
+  --term-bg: var(--sunken);
+  --term-fg: var(--ink);
+  --term-cursor: var(--accent);
+  --term-sel: rgb(var(--ink-rgb) / 0.22);
+  --term-black: var(--L, #2b2d36) var(--D, #3b3e4a);
+  --term-red: var(--err);
+  --term-green: var(--ok);
+  --term-yellow: var(--wait);
+  --term-blue: var(--wire-blue);
+  --term-magenta: var(--wire-violet);
+  --term-cyan: var(--L, #0f7f8c) var(--D, #4fc3d1);
+  --term-white: var(--ink-2);
+  --term-bright-black: var(--ink-3);
+  --term-bright-red: var(--wire-red);
+  --term-bright-green: var(--wire-green);
+  --term-bright-yellow: var(--wire-yellow);
+  --term-bright-blue: var(--accent);
+  --term-bright-magenta: var(--L, #a25fe0) var(--D, #d3a8ff);
+  --term-bright-cyan: var(--L, #1795a4) var(--D, #7ad9e4);
+  --term-bright-white: var(--ink);
+  /* 字号用整数：终端里一个字占的格子是量出来的，带小数的字号在不同缩放下量不准 */
+  --term-font-size: 13px;
+  /* 行高是“字的高度”的倍数，不是字号的：等宽字本身就比字号高两三成 */
+  --term-line-height: 1.25;
+  /* 字体 */
+  --ui:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei UI", "Noto Sans CJK SC", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, "PingFang SC", monospace;
+  /* 形状。行高这类跟密度走的变量在 theme.css */
+  --r1: 3px;
+  --r2: 6px;
+  --r3: 10px;
+}
+
+/* 代码上色：类型用的黄线色压在浅色的代码底上对比度刚到 3，换深一档的同色相；深色下照旧用线色 */
+[data-skin="standard"] :is(.code, .fv-code, .dp) {
+  --syn-type: var(--L, #866b00) var(--D, var(--wire-yellow));
+}

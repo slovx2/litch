@@ -1,0 +1,386 @@
+{
+  "method": "runtime/info",
+  "kind": "ClientRequest",
+  "params": {
+    "type": "object",
+    "additionalProperties": false
+  },
+  "response": {
+    "type": "object",
+    "required": [
+      "engine",
+      "protocolVersion",
+      "cliBuild",
+      "capabilities",
+      "releaseReady"
+    ],
+    "properties": {
+      "engine": {
+        "enum": [
+          "claude-code",
+          "pi",
+          "dsh"
+        ]
+      },
+      "protocolVersion": {
+        "const": "0.157.1"
+      },
+      "cliBuild": {
+        "type": "string",
+        "minLength": 1
+      },
+      "capabilities": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "uniqueItems": true
+      },
+      "releaseReady": {
+        "type": "boolean"
+      },
+      "nodeVersion": {
+        "type": "string",
+        "pattern": "^\\d+\\.\\d+\\.\\d+$"
+      },
+      "sdkVersion": {
+        "type": "string",
+        "pattern": "^\\d+\\.\\d+\\.\\d+$"
+      },
+      "pluginVersions": {
+        "type": "object",
+        "required": [
+          "@narumitw/pi-plan-mode",
+          "@narumitw/pi-tui-kit",
+          "@gotgenes/pi-subagents"
+        ],
+        "properties": {
+          "@narumitw/pi-plan-mode": {
+            "type": "string",
+            "pattern": "^\\d+\\.\\d+\\.\\d+$"
+          },
+          "@narumitw/pi-tui-kit": {
+            "type": "string",
+            "pattern": "^\\d+\\.\\d+\\.\\d+$"
+          },
+          "@gotgenes/pi-subagents": {
+            "type": "string",
+            "pattern": "^\\d+\\.\\d+\\.\\d+$"
+          }
+        },
+        "additionalProperties": false
+      },
+      "cliSha256": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      },
+      "displayName": {
+        "description": "结构化声明（下面五个字段）是后加的，都可选：没报的客户端按“不知道”处理，退回先调用、失败再降级。类型在 packages/protocol/src/harness-capabilities.mts，设计见 design/harness-client/03-adapter-device-service.md 第 6.4 节。displayName 是显示名",
+        "type": "string",
+        "minLength": 1
+      },
+      "badge": {
+        "description": "两个字母的徽标",
+        "type": "string",
+        "minLength": 1
+      },
+      "extensions": {
+        "description": "这个引擎支持的我们自己的扩展（扩展名各有一份定义在本目录下）",
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "uniqueItems": true
+      },
+      "features": {
+        "$ref": "#/definitions/HarnessFeatures"
+      },
+      "permissionPresets": {
+        "description": "顺序是界面上从上到下的顺序，限制最多的在前。客户端选了之后把 id 放在 thread/start、turn/start、thread/settings/update 的 permissions 里发回来，到底层设置的映射在引擎里",
+        "type": "array",
+        "items": {
+          "$ref": "#/definitions/PermissionPreset"
+        }
+      }
+    },
+    "oneOf": [
+      {
+        "properties": {
+          "engine": {
+            "const": "claude-code"
+          }
+        },
+        "required": [
+          "nodeVersion",
+          "sdkVersion",
+          "cliSha256"
+        ]
+      },
+      {
+        "properties": {
+          "engine": {
+            "const": "pi"
+          },
+          "cliBuild": {
+            "type": "string",
+            "pattern": "^\\d+\\.\\d+\\.\\d+$"
+          }
+        },
+        "required": [
+          "nodeVersion",
+          "sdkVersion",
+          "pluginVersions"
+        ]
+      },
+      {
+        "properties": {
+          "engine": {
+            "const": "dsh"
+          },
+          "cliBuild": {
+            "type": "string",
+            "pattern": "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?$"
+          }
+        },
+        "required": [
+          "nodeVersion"
+        ]
+      }
+    ],
+    "additionalProperties": false,
+    "definitions": {
+      "CapabilityText": {
+        "description": "给人看的字，中文和英文各一份",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "zh-CN",
+          "en"
+        ],
+        "properties": {
+          "zh-CN": {
+            "type": "string",
+            "minLength": 1
+          },
+          "en": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "HarnessInputType": {
+        "description": "协议里用户输入的种类（UserInput 的 type）",
+        "enum": [
+          "text",
+          "image",
+          "localImage",
+          "skill",
+          "mention"
+        ]
+      },
+      "HarnessFeatures": {
+        "description": "能力位。每一位说的是经适配器实际做得到，不是协议里有这个方法",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "steer",
+          "interrupt",
+          "compact",
+          "fork",
+          "revert",
+          "queue",
+          "turnDiff",
+          "commandOutputDelta",
+          "approvals",
+          "userInput",
+          "mcpElicitation",
+          "planUpdates",
+          "inputTypes",
+          "steerInputTypes",
+          "archive",
+          "delete",
+          "rename",
+          "agentMessagePhase"
+        ],
+        "properties": {
+          "steer": {
+            "description": "回合进行中追加输入（turn/steer）",
+            "type": "boolean"
+          },
+          "interrupt": {
+            "description": "打断回合（turn/interrupt）",
+            "type": "boolean"
+          },
+          "compact": {
+            "description": "手动压缩上下文（thread/compact/start）",
+            "type": "boolean"
+          },
+          "fork": {
+            "description": "分叉（thread/fork），可以用 lastTurnId 或 beforeTurnId 指定从哪一轮分",
+            "type": "boolean"
+          },
+          "revert": {
+            "description": "回退：把会话退回到某一轮之前",
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "byTurnId",
+              "byCount",
+              "restoresFiles"
+            ],
+            "properties": {
+              "byTurnId": {
+                "description": "thread/revert 带 beforeTurnId",
+                "type": "boolean"
+              },
+              "byCount": {
+                "description": "thread/rollback 带 numTurns",
+                "type": "boolean"
+              },
+              "restoresFiles": {
+                "description": "回退时会不会把那几轮改过的文件也恢复原样",
+                "type": "boolean"
+              }
+            }
+          },
+          "queue": {
+            "description": "设备侧的消息队列（thread/queue/*）",
+            "type": "boolean"
+          },
+          "turnDiff": {
+            "description": "发不发本回合的差异（turn/diff/updated）。靠 git 算的引擎只在工作目录是 git 仓库时才有",
+            "type": "boolean"
+          },
+          "commandOutputDelta": {
+            "description": "命令还在跑的时候输出是不是一段一段地来（item/commandExecution/outputDelta）；不是的话命令结束时一次给全",
+            "type": "boolean"
+          },
+          "approvals": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kinds",
+              "uncovered"
+            ],
+            "properties": {
+              "kinds": {
+                "description": "会发起哪几类审批：command 是 item/commandExecution/requestApproval，fileChange 是 item/fileChange/requestApproval，permissions 是 item/permissions/requestApproval。空数组表示这个引擎从不来问",
+                "type": "array",
+                "items": {
+                  "enum": [
+                    "command",
+                    "fileChange",
+                    "permissions"
+                  ]
+                },
+                "uniqueItems": true
+              },
+              "uncovered": {
+                "description": "审批覆盖不到的范围。subagents：子代理里的操作不会来问用户。以后还会加，不认识的值照样当作有覆盖不到的地方",
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "uniqueItems": true
+              }
+            }
+          },
+          "userInput": {
+            "description": "向用户提问（item/tool/requestUserInput）",
+            "type": "boolean"
+          },
+          "mcpElicitation": {
+            "description": "转发 MCP 服务的征询（mcpServer/elicitation/request）",
+            "type": "boolean"
+          },
+          "planUpdates": {
+            "description": "发不发待办进度（turn/plan/updated）",
+            "type": "boolean"
+          },
+          "inputTypes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/HarnessInputType"
+            },
+            "uniqueItems": true,
+            "description": "turn/start 接受的输入种类"
+          },
+          "steerInputTypes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/HarnessInputType"
+            },
+            "uniqueItems": true,
+            "description": "turn/steer 接受的输入种类。比 inputTypes 少的那几种在引导时带不过去"
+          },
+          "archive": {
+            "description": "归档与恢复（thread/archive、thread/unarchive）",
+            "type": "boolean"
+          },
+          "delete": {
+            "description": "删除会话（thread/delete）",
+            "type": "boolean"
+          },
+          "rename": {
+            "description": "会话改名（thread/name/set）",
+            "type": "boolean"
+          },
+          "agentMessagePhase": {
+            "description": "助手消息的过程说明和最终回答什么时候分得清：onStart 是消息一开始就准，onCompleted 是消息结束时才准（开始时的阶段值不能信），none 是不区分",
+            "enum": [
+              "onStart",
+              "onCompleted",
+              "none"
+            ]
+          }
+        }
+      },
+      "PermissionPreset": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "title",
+          "description",
+          "risk",
+          "requiresConfirmation",
+          "switchInSession",
+          "switchDuringTurn"
+        ],
+        "properties": {
+          "id": {
+            "description": "协议里原有的权限档标识",
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "$ref": "#/definitions/CapabilityText"
+          },
+          "description": {
+            "$ref": "#/definitions/CapabilityText",
+            "description": "一句话说明"
+          },
+          "risk": {
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ]
+          },
+          "requiresConfirmation": {
+            "description": "选它之前要不要再问用户一遍",
+            "type": "boolean"
+          },
+          "switchInSession": {
+            "description": "会话建好之后还能不能换到这一档（两个回合之间）",
+            "type": "boolean"
+          },
+          "switchDuringTurn": {
+            "description": "回合进行中换到这一档，对正在进行的回合起不起作用。false 时要等下一个回合",
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "@codex-harness-adapter/adapter-shared",
+  "version": "0.7.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "ws": "8.22.0"
+  }
+}

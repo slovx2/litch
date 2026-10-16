@@ -1,0 +1,189 @@
+import { type RefObject, useEffect, useImperativeHandle, useLayoutEffect, useState } from 'react'
+import { wireStyle } from '../app/device.ts'
+import { More } from '../app/icons.tsx'
+import { usePopover } from '../app/popover.ts'
+
+/** 让这一行别处的操作（在行上点右键）也能把这份菜单叫出来 */
+export interface RowMenuHandle {
+  /** 在窗口里的这个位置弹出来 */
+  openAt(x: number, y: number): void
+}
+
+/** 菜单和窗口边沿之间留的空 */
+const EDGE = 8
+
+export interface RowAction {
+  id: string
+  title: string
+  /** 做之前要再确认一次（删除这类找不回来的事） */
+  confirm?: { title: string; note: string; yes: string; no: string }
+  /** 点了之后还要再挑一个（移到哪个工作区）：换成一屏选项，挑中的那一项的标识随 onAction 给出去 */
+  choices?: { title: string; back: string; options: RowChoice[] }
+}
+
+export interface RowChoice {
+  id: string
+  title: string
+  /** 名字前面的色块用哪根线色。不给就没有色块 */
+  wire?: string | null
+}
+
+interface RowMenuProps {
+  label: string
+  actions: RowAction[]
+  onAction(id: string, choice?: string): void
+  handle?: RefObject<RowMenuHandle | null>
+}
+
+/** 侧栏一行行尾的“更多”：点开是这一行能做的事。在行上点右键出的也是这一份，只是弹在鼠标那里 */
+export function RowMenu({ label, actions, onAction, handle }: RowMenuProps) {
+  const [asking, setAsking] = useState<RowAction | null>(null)
+  /** 正在“再挑一个”的那一项 */
+  const [choosing, setChoosing] = useState<RowAction | null>(null)
+  /** 是从右键叫出来的：弹在哪。null 就是照常弹在按钮底下 */
+  const [spot, setSpot] = useState<{ x: number; y: number } | null>(null)
+  const { open, setOpen, close, root, trigger, pop, onKeyDown } = usePopover(asking ?? choosing)
+
+  useImperativeHandle(
+    handle,
+    () => ({
+      openAt(x, y) {
+        setAsking(null)
+        setChoosing(null)
+        setSpot({ x, y })
+        setOpen(true)
+      },
+    }),
+    [setOpen],
+  )
+
+  useEffect(() => {
+    if (open) return
+    setAsking(null)
+    setChoosing(null)
+    setSpot(null)
+  }, [open])
+
+  // 弹在鼠标那里的：靠近窗口边沿时往回挪，整块都留在窗口里。换成确认那一屏会变大，再量一次
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 换了一屏要重新量
+  useLayoutEffect(() => {
+    const box = pop.current
+    if (!open || !spot || !box) return
+    const x = Math.max(EDGE, Math.min(spot.x, window.innerWidth - box.offsetWidth - EDGE))
+    const y = Math.max(EDGE, Math.min(spot.y, window.innerHeight - box.offsetHeight - EDGE))
+    if (x !== spot.x || y !== spot.y) setSpot({ x, y })
+  }, [open, spot, asking, choosing, pop])
+
+  // 弹在鼠标那里的不跟着行走：侧栏一滚、窗口一失焦就收起
+  const floating = open && spot !== null
+  useEffect(() => {
+    if (!floating) return
+    const gone = () => setOpen(false)
+    window.addEventListener('scroll', gone, true)
+    window.addEventListener('blur', gone)
+    return () => {
+      window.removeEventListener('scroll', gone, true)
+      window.removeEventListener('blur', gone)
+    }
+  }, [floating, setOpen])
+
+  const run = (action: RowAction, confirmed = false) => {
+    if (action.choices) {
+      setChoosing(action)
+      return
+    }
+    if (action.confirm && !confirmed) {
+      setAsking(action)
+      return
+    }
+    close(false)
+    onAction(action.id)
+  }
+  const choose = (action: RowAction, choice: string) => {
+    close(false)
+    onAction(action.id, choice)
+  }
+
+  return (
+    <div className={open ? 'row-more on' : 'row-more'} ref={root}>
+      <button
+        ref={trigger}
+        type="button"
+        className="ibtn"
+        title={label}
+        aria-label={label}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+      >
+        <More />
+      </button>
+      {open ? (
+        // biome-ignore lint/a11y/noStaticElementInteractions: 键盘事件是从里面的按钮冒上来的
+        <div
+          className={spot ? 'pick-pop down at' : 'pick-pop down'}
+          style={spot ? { left: spot.x, top: spot.y } : undefined}
+          ref={pop}
+          onKeyDown={onKeyDown}
+        >
+          {asking?.confirm ? (
+            <div className="pick-ask">
+              <b>{asking.confirm.title}</b>
+              <span>{asking.confirm.note}</span>
+              <div className="pick-ask-actions">
+                <button type="button" className="btn ghost" onClick={() => setAsking(null)}>
+                  {asking.confirm.no}
+                </button>
+                <button type="button" className="btn danger" onClick={() => run(asking, true)}>
+                  {asking.confirm.yes}
+                </button>
+              </div>
+            </div>
+          ) : choosing?.choices ? (
+            <div role="menu" aria-label={choosing.choices.title} className="pick-list">
+              <div className="pick-title">{choosing.choices.title}</div>
+              {choosing.choices.options.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  role="menuitem"
+                  className="pick-opt pick-choice"
+                  data-choice={option.id}
+                  onClick={() => choose(choosing, option.id)}
+                >
+                  <b>
+                    {option.wire ? <i className="ws-dot" style={wireStyle(option.wire)} /> : null}
+                    {option.title}
+                  </b>
+                </button>
+              ))}
+              <button
+                type="button"
+                role="menuitem"
+                className="pick-opt pick-back"
+                onClick={() => setChoosing(null)}
+              >
+                <span>{choosing.choices.back}</span>
+              </button>
+            </div>
+          ) : (
+            <div role="menu" aria-label={label} className="pick-list">
+              {actions.map((action) => (
+                <button
+                  key={action.id}
+                  type="button"
+                  role="menuitem"
+                  className="pick-opt"
+                  data-action={action.id}
+                  onClick={() => run(action)}
+                >
+                  <b>{action.title}</b>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : null}
+    </div>
+  )
+}

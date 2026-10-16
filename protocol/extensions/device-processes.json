@@ -1,0 +1,322 @@
+{
+  "extension": "deviceProcesses",
+  "description": "可重连的终端：进程可以属于设备。协议原本的进程属于发起它的连接，连接一断就结束；远程设备上网络抖一下终端就没了。这个扩展在 process/spawn 上加一个可选参数 litchDevice，带了它的进程属于设备：发起它的连接断开后接着跑，设备为它留着末尾一段输出，退出后把退出状态和末尾的输出再留一阵。别的连接、或者重连之后的同一个客户端，可以列出这些进程、按句柄挂回去（先回放留着的输出，再接着收新的）、解除挂接、结束、清掉退出后的记录。输出和退出用的还是协议原有的 process/outputDelta、process/exited，写输入、改行列数用的还是 process/writeStdin、process/resizePty。设计见 design/harness-client/03-adapter-device-service.md 第 6.3 节，类型在 packages/protocol/src/device-processes.mts。",
+  "appliesTo": "只有聚合面。每个 harness 自己的入口（给官方 Codex 桌面端用的兼容面）上没有这个扩展的任何内容：那里的 process/* 属于连接，和以前一样。",
+  "declaration": {
+    "description": "设备服务在 runtime/info 的 device.extensions 里列出 deviceProcesses，表示它支持（没列的旧版设备服务不认识 litchDevice，带了也只是被略过）。客户端握手时在 capabilities.litchExtensions 里声明 deviceProcesses，这个扩展的全部内容才对这条连接生效。",
+    "where": "initialize.params.capabilities.litchExtensions",
+    "schema": {
+      "type": "array",
+      "items": { "type": "string" },
+      "contains": { "const": "deviceProcesses" }
+    }
+  },
+  "undeclared": "没声明的连接上，线上内容和标准协议一致。process/spawn 带了 litchDevice 等于没带：和别的不认识的字段一样被略过，起来的是属于这条连接的进程，应答是空对象，连接断开时进程结束。litch/process/ 开头的方法回 extensionRequired（harness 扩展里的那个错误，data.required 是 [\"deviceProcesses\"]）。挂不上别人的进程，所以 process/outputDelta、process/exited 上不会出现 litchDevice，也收不到 litch/process/changed。标准的 process/writeStdin、process/resizePty、process/kill 只认这条连接自己的进程，别的连接起的属于设备的进程对它不存在（回协议原有的 no active process）。客户端判断这次 spawn 生效没有，看应答里有没有 litchDevice。",
+  "rules": [
+    "不带 litchDevice（或者给 null）的 process/spawn，行为和没有这个扩展时相同，声明没声明都一样：进程属于连接，通知的内容和先后不变。",
+    "句柄的范围：属于设备的进程，句柄在设备范围内唯一（包括退出后记录还留着的），两条连接各起一个同名的，后一个被拒绝，不会顶掉前一个；用过的句柄要等那条记录清掉才能再用，客户端应该用不会重复的句柄（比如 UUID）。属于连接的进程照旧按连接算。两种句柄互不相干，只有一条限制：同一条连接上，一个句柄不能同时指它自己的进程和它挂着的设备进程，后来的那个请求（spawn 或者 attach）回协议原有的 duplicate active process handle。",
+    "标准的 process/writeStdin、process/resizePty、process/kill：句柄是这条连接挂着的设备进程，就落到那个进程上；否则是这条连接自己的进程。没挂着的设备进程要结束它用 litch/process/kill。",
+    "带 litchDevice 意味着 streamStdoutStderr（就像 tty 意味着它）：留着的输出和回放靠的是流式输出，process/exited 里的 stdout、stderr 总是空字符串。别的标准参数含义不变，尤其是这两项的默认值对终端不合适，要显式给 null：timeoutMs 不带是 10 秒后结束进程，outputBytesCap 不带是每路输出到 1 MiB 就不再读。",
+    "输出的位置用字节偏移表示：从进程启动算起，stdout 和 stderr 合在一起按到达的先后数。属于设备的进程发给挂着的连接的每一帧 process/outputDelta 都带着这一帧第一个字节的偏移，偏移加上这一帧的字节数就是“我已经有到哪了”。同一条连接上，一个进程的帧按偏移递增、首尾相接；接不上的地方，那一帧上有 missedBytes 说明中间少了多少。",
+    "发起 spawn 的那条连接自动挂着，从头收输出，不用再调 attach。没有连接挂着时输出不发给谁，只进缓冲。",
+    "几条连接可以同时挂着同一个进程：输出各发一份；谁写输入都行，设备不排队也不加锁；行列数以最后一次 process/resizePty 为准，改了之后发 litch/process/changed（updated）让别的连接知道现在是多大。",
+    "流量控制：设备按连接看发送的积压（已经交出去、系统还没收下的字节数），到了 256 KiB 这条连接算堵着，降到 64 KiB 以下算通了。挂着某个进程的连接全都堵着时，设备不再读这个进程的输出，管道写满后进程自己停在写上，通了再接着读：只有一条连接时这是不丢数据的背压。几条连接同时挂着时，只要有一条跟得上就不停，进程照常跑；落后的连接通了之后从缓冲里补，落后超过缓冲容量的那一段不补，补上来的第一帧带 missedBytes。所以一条慢连接拖不住别的连接，代价是它自己可能少一段。属于连接的进程（标准的 process/spawn）也有同样的背压：它的连接堵着时不读它的输出。",
+    "伪终端的输出很碎，发之前在 2 毫秒的窗口里并成一帧（一帧最多 64 KiB）；歇了一阵之后来的第一块不等，立刻发，所以敲一个键的回显不因此变慢。帧怎么切分没有含义，客户端按偏移拼。",
+    "上限与期限（设备服务的启动选项，括号里是默认值）：每个进程留多少输出（2 MiB）；设备上同时最多几个这类进程在跑（32），到了回 processLimitReached；没有连接挂着的进程留多久（不过期；配了的话到点结束它）；退出后的记录留多久（10 分钟）。退出后的记录另有数量上限，和同时在跑的上限是同一个数，超了先清退出得早的。",
+    "标记（litchDevice.tag）是客户端自己的东西：任意 JSON，写成 JSON 之后不超过 4096 字节，设备不看，列出来时原样带回。桌面端用它把终端对回工作区。",
+    "设备服务退出时，这些进程连同它们的进程组一起结束，不留孤儿；设备服务重启之后列表是空的，之前的进程和输出都没有了。这是已知的边界：客户端重连后发现列表里没有自己记着的句柄，就当那个终端已经结束。进程自己另起会话或者换了进程组的后代（比如交互式 shell 里放到后台的作业）不在进程组里，结束不到，和属于连接的进程一样。",
+    "谁能连上聚合面谁就能列出、挂接、结束这些进程，不另设权限：它们本来就是这个用户的 shell。环境变量不在列出的内容里。"
+  ],
+  "parts": [
+    {
+      "kind": "Param",
+      "on": "process/spawn",
+      "name": "litchDevice",
+      "schema": {
+        "oneOf": [{ "type": "null" }, { "$ref": "#/definitions/SpawnOption" }]
+      },
+      "description": "带了它（哪怕是空对象）并且这条连接声明过 deviceProcesses，进程就属于设备。null 等于不带。不是对象、或者 tag 太大，回 -32602。"
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "process/spawn",
+      "description": "带了 litchDevice 并且生效时的应答：多一个 litchDevice，是刚起来的这个进程。没生效（没带、给了 null、这条连接没声明、设备服务不认识）时应答是协议原有的空对象。句柄在设备上已经有人用回 processHandleInUse；到了数量上限回 processLimitReached；别的参数错误和起不来的错误与标准协议相同。",
+      "response": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["litchDevice"],
+        "properties": { "litchDevice": { "$ref": "#/definitions/DeviceProcess" } }
+      }
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/process/list",
+      "description": "列出设备上属于设备的进程，按启动的先后。退出后记录还留着的也在里面。",
+      "params": { "type": "object" },
+      "response": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data"],
+        "properties": {
+          "data": { "type": "array", "items": { "$ref": "#/definitions/DeviceProcess" } }
+        }
+      }
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/process/attach",
+      "description": "按句柄挂接。应答先到，随后留着的输出作为 process/outputDelta 发来（litchDevice.replay 为 true，偏移从 replayFrom 到 replayTo），再往后是新的输出，中间不丢不重。进程已经退出、记录还在的也能挂：回放完留着的输出之后发 process/exited。已经挂着的再调一次，是从新给的位置重新回放。fromOffset 比这个进程已有的输出还靠后回 -32602（手里的位置不是这个进程的，多半是设备服务重启过、句柄被重新用了）。",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["processHandle"],
+        "properties": {
+          "processHandle": { "type": "string" },
+          "fromOffset": {
+            "description": "我已经有到哪了：这个偏移之前的输出客户端手里有，只补后面的。不带或 null 是把留着的输出全部回放一遍",
+            "type": ["integer", "null"],
+            "minimum": 0
+          }
+        }
+      },
+      "response": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["process", "replayFrom", "replayTo", "missedBytes"],
+        "properties": {
+          "process": { "$ref": "#/definitions/DeviceProcess" },
+          "replayFrom": { "description": "回放从这个偏移开始", "type": "integer", "minimum": 0 },
+          "replayTo": {
+            "description": "回放到这个偏移为止（挂接这一刻的输出总量），之后的是新输出",
+            "type": "integer",
+            "minimum": 0
+          },
+          "missedBytes": {
+            "description": "从客户端说的位置（没说就是 0，进程的开头）到回放起点之间、已经不在缓冲里的字节数。不是 0 就是中间丢了一段",
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/process/detach",
+      "description": "解除挂接，不结束进程。没挂着也算成功。连接断开等于把它挂着的全部解除。",
+      "params": { "$ref": "#/definitions/HandleParams" },
+      "response": { "type": "object", "additionalProperties": false }
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/process/kill",
+      "description": "按句柄结束进程，不要求挂着（挂着的也可以用标准的 process/kill）。和标准协议一样是立刻对整个进程组发 SIGKILL。应答不等进程退出：退出之后挂着的连接收到 process/exited，声明过的连接收到 litch/process/changed。已经退出的算成功。remove 为 true 时退出之后不留记录（已经退出的就直接清掉），省得再调一次 remove。",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["processHandle"],
+        "properties": {
+          "processHandle": { "type": "string" },
+          "remove": { "type": "boolean" }
+        }
+      },
+      "response": { "type": "object", "additionalProperties": false }
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/process/remove",
+      "description": "把已经退出的那条记录清掉（它留着的输出一起没了，句柄可以再用）。进程还在跑回 processRunning。",
+      "params": { "$ref": "#/definitions/HandleParams" },
+      "response": { "type": "object", "additionalProperties": false }
+    },
+    {
+      "kind": "Field",
+      "on": "process/outputDelta 的 params",
+      "name": "litchDevice",
+      "schema": { "$ref": "#/definitions/OutputMark" },
+      "description": "属于设备的进程发给挂着的连接的每一帧都带。别的字段和标准协议相同；capReached 标在那一路输出的最后一块上（outputBytesCap 为 0 时一块输出都没有，只在 process/exited 的 stdoutCapReached、stderrCapReached 里看得到）。属于连接的进程的通知上没有它。"
+    },
+    {
+      "kind": "Field",
+      "on": "process/exited 的 params",
+      "name": "litchDevice",
+      "schema": { "$ref": "#/definitions/ExitMark" },
+      "description": "属于设备的进程的退出通知上带。这条通知排在这条连接该收的输出之后；只有结束时说了不留记录、而这条连接又堵着没收完的时候，会不等输出发完就发，这时 offset 比客户端手里的位置靠后。"
+    },
+    {
+      "kind": "ServerNotification",
+      "method": "litch/process/changed",
+      "description": "设备上属于设备的进程多了、少了、变了。发给所有握手完成并且声明过 deviceProcesses 的连接，发起变更的那条也收（排在它那个请求的应答后面）。started：新起了一个；updated：挂着的连接数或者行列数变了；exited：退出了，记录还在；removed：记录没了（被清掉、留到期了，或者结束时说了不留）。输出的偏移一直在变，不为它发通知。",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["processHandle", "change", "process"],
+        "properties": {
+          "processHandle": { "type": "string" },
+          "change": { "enum": ["started", "updated", "exited", "removed"] },
+          "process": {
+            "description": "变化之后的样子；removed 时是 null",
+            "oneOf": [{ "type": "null" }, { "$ref": "#/definitions/DeviceProcess" }]
+          }
+        }
+      }
+    },
+    {
+      "kind": "Error",
+      "description": "这个扩展自己回的错误在 error.data.litch 里带原因。除了数量上限都用标准的 -32600，和协议原有的句柄重复、没有这个进程是同一个码。没声明扩展的连接调 litch/process/ 开头的方法，回的是 harness 扩展里的 extensionRequired。",
+      "errors": [
+        {
+          "litch": "processLimitReached",
+          "code": -32060,
+          "description": "设备上同时在跑的这类进程到了上限。data.limit 是上限"
+        },
+        {
+          "litch": "processHandleInUse",
+          "code": -32600,
+          "description": "这个句柄在设备上已经有一个这类进程在用：还在跑，或者退出后记录还留着"
+        },
+        {
+          "litch": "unknownProcess",
+          "code": -32600,
+          "description": "设备上没有这个句柄的属于设备的进程（没起过、记录已经清掉，或者设备服务重启过）"
+        },
+        {
+          "litch": "processRunning",
+          "code": -32600,
+          "description": "要清掉的那条记录，进程还在跑"
+        }
+      ],
+      "data": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["litch"],
+        "properties": {
+          "litch": {
+            "enum": [
+              "processLimitReached",
+              "processHandleInUse",
+              "unknownProcess",
+              "processRunning"
+            ]
+          },
+          "processHandle": { "type": "string" },
+          "limit": { "type": "integer" }
+        }
+      }
+    }
+  ],
+  "definitions": {
+    "SpawnOption": {
+      "type": "object",
+      "properties": {
+        "tag": {
+          "description": "客户端自己的标记：任意 JSON，写成 JSON 之后不超过 4096 字节。设备不看，列出来时原样带回"
+        }
+      }
+    },
+    "HandleParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["processHandle"],
+      "properties": { "processHandle": { "type": "string" } }
+    },
+    "TerminalSize": {
+      "description": "就是协议里的 ProcessTerminalSize",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rows", "cols"],
+      "properties": {
+        "rows": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "cols": { "type": "integer", "minimum": 1, "maximum": 65535 }
+      }
+    },
+    "DeviceProcess": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "processHandle",
+        "command",
+        "cwd",
+        "tty",
+        "size",
+        "startedAt",
+        "running",
+        "exit",
+        "attached",
+        "tag",
+        "retained"
+      ],
+      "properties": {
+        "processHandle": { "type": "string", "minLength": 1 },
+        "command": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+        "cwd": { "type": "string" },
+        "tty": { "description": "是不是伪终端", "type": "boolean" },
+        "size": {
+          "description": "伪终端现在的行列数；不是伪终端为 null",
+          "oneOf": [{ "type": "null" }, { "$ref": "#/definitions/TerminalSize" }]
+        },
+        "startedAt": { "description": "启动时间，Unix 秒", "type": "integer" },
+        "running": { "type": "boolean" },
+        "exit": {
+          "description": "退出状态；还在跑是 null",
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["exitCode", "exitedAt"],
+              "properties": {
+                "exitCode": { "type": "integer" },
+                "exitedAt": { "description": "退出时间，Unix 秒", "type": "integer" }
+              }
+            }
+          ]
+        },
+        "attached": { "description": "现在有几条连接挂着", "type": "integer", "minimum": 0 },
+        "tag": { "description": "发起时带的标记，原样带回；没带是 null" },
+        "retained": {
+          "description": "设备上留着的输出是哪一段，按字节偏移，含头不含尾：to 是这个进程到现在为止输出的总字节数，from 之前的已经不在缓冲里了",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["from", "to"],
+          "properties": {
+            "from": { "type": "integer", "minimum": 0 },
+            "to": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "OutputMark": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["offset"],
+      "properties": {
+        "offset": {
+          "description": "这一帧第一个字节的偏移",
+          "type": "integer",
+          "minimum": 0
+        },
+        "replay": {
+          "description": "这一帧是挂接时回放的旧输出。不是回放就没有这个字段",
+          "const": true
+        },
+        "missedBytes": {
+          "description": "这一帧之前有这么多字节没有发给这条连接：它落后太多，中间那段已经不在缓冲里了。没有少就没有这个字段",
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "ExitMark": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["offset"],
+      "properties": {
+        "offset": {
+          "description": "这个进程一共输出了多少字节。和客户端手里的位置一样，就是一个字节都没落下",
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

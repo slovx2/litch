@@ -1,0 +1,10 @@
+{
+  "extends": "../../../tsconfig.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "rootDir": "../../..",
+    "outDir": "../dist"
+  },
+  "include": ["./**/*.mts", "../src/**/*.mts", "../../protocol/src/**/*.mts"]
+}

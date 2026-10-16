@@ -1,0 +1,177 @@
+{
+  "extension": "deviceWorkspaces",
+  "description": "设备级的工作区与置顶。设备上的一个工作区下面并列着各个 harness 的会话，所以工作区、会话到工作区的归属、分区与置顶存在设备进程自己的库里，不存在任何引擎里。对外用的全是 Codex 协议里现成的方法和通知（project/*、thread/metadata/update、threadSection/*、thread/section/move、project/changed、thread/project/updated），形状和语义照引擎里现有的实现；协议里没有的只有两条通知（分区与置顶变了），是这个扩展加的。设计见 design/harness-client/03-adapter-device-service.md 第 6.1 节，类型在 packages/protocol/src/device.mts。",
+  "appliesTo": "只有聚合面。每个 harness 自己的入口上，这几组方法读写的仍然是那个引擎自己的项目存储，和聚合面上的互不相通（设计文档 03 第四节的做法甲）。",
+  "declaration": {
+    "description": "设备服务在 runtime/info 的 device.extensions 里列出 deviceWorkspaces，表示聚合面上这几组方法由设备层处理、可以用（没列的旧版设备服务对它们回“聚合面不支持”）。客户端握手时在 capabilities.litchExtensions 里声明 deviceWorkspaces，表示它认识下面两条通知。",
+    "where": "initialize.params.capabilities.litchExtensions",
+    "schema": {
+      "type": "array",
+      "items": { "type": "string" },
+      "contains": { "const": "deviceWorkspaces" }
+    }
+  },
+  "undeclared": "没声明的连接上：这几组方法照样能用（它们是客户端发起的标准方法），标准的 project/changed 和 thread/project/updated 照发；只是收不到 litch/thread/section/updated 和 litch/threadSection/changed。这样的客户端要知道别的连接改了分区或置顶，得自己重新读（thread/read、thread/list、threadSection/list），和它连单个引擎时一样：标准协议里本来就没有这种通知。",
+  "parts": [
+    {
+      "kind": "ClientRequest",
+      "methods": [
+        "project/list",
+        "project/read",
+        "project/create",
+        "project/import",
+        "project/update",
+        "project/move",
+        "project/delete"
+      ],
+      "description": "工作区就是协议里的项目。参数和应答的形状与标准协议相同，实现和引擎用的是同一份（packages/shared 的 project-rpc.mts、project-store.mts）：create、import 用幂等键去重；import 的 threads 里有设备上哪个 harness 都不认识的会话时整个失败；delete 只解除归属，不删会话；list 可按 position（默认）或 recencyAt 排序。不带 harness 参数，带了也不看。和单个引擎不同的地方：数据是跨 harness 的；recencyAt 取的是设备层最近一次见到的成员会话的更新时间（会话对象经过聚合面时记下的），成员在别处有了新动静而聚合面还没见到时会偏旧。",
+      "response": {
+        "description": "project/read、create、import、update 的应答是 {project}；list 是 {data, nextCursor}；move、delete 是空对象",
+        "type": "object"
+      }
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "thread/metadata/update",
+      "description": "归属记在设备层：projectId 不带或为 null 是不改，空字符串是解除，别的是归到那个工作区（工作区不存在时失败）。isPinned（不在标准协议里，适配器的引擎都认）也记在设备层：和现在的置顶状态不同才动。这两个字段不带给引擎；其余字段（gitInfo 等）照旧交给会话所属的引擎，除它们之外没有别的字段时不去动引擎。应答是 {thread}，会话对象上的工作区、分区是设备层的值。会话所属的 harness 当时不可用时失败（harnessUnavailable）：拿不到会话对象来答。"
+    },
+    {
+      "kind": "ClientRequest",
+      "methods": [
+        "threadSection/list",
+        "threadSection/create",
+        "threadSection/update",
+        "threadSection/delete",
+        "thread/section/move"
+      ],
+      "description": "分区与置顶。形状与标准协议相同。置顶就是会话在固定标识的那个分区里（definitions 的 PinnedSectionId），它一直排在 threadSection/list 的最前面，不能改也不能删。删分区只是把里面的会话放出来。thread/section/move 的 sectionId 给 null 是把会话从分区里拿出来；beforeThreadId 收下但不起作用：聚合面的会话列表只有按更新时间一种排序，分区里的手动顺序没有地方读，所以不存（要顺序的客户端按会话对象上的 sectionEnteredAt 排）。会话所属的 harness 不可用时也能改分区。"
+    },
+    {
+      "kind": "Param",
+      "on": "thread/start",
+      "name": "projectId",
+      "schema": { "type": ["string", "null"] },
+      "description": "新建的会话落进这个工作区。聚合面把它摘下来不带给引擎（引擎不认识设备层的标识），等引擎把会话建好再记进设备层；应答和随后的 thread/started 通知里的会话对象带着它。有的引擎先发 thread/started 再回应答：聚合面把这条连接上的 thread/started 扣到应答之后再放，所以发起的那条连接上应答在前。扣是有期限的：引擎 30 秒还没有应答，扣着的通知先放出去（这时会话对象上的工作区还是空的），之后也不再为这个新建扣；应答迟到了会话照样落进工作区，归属由一条 thread/project/updated 补上。工作区不存在时失败，不新建会话。thread/fork 分出来的会话跟着原会话待在同一个工作区里。"
+    },
+    {
+      "kind": "Param",
+      "on": "thread/list",
+      "names": ["projectId", "sectionId", "isPinned"],
+      "description": "由设备层来筛，不交给上游。写法照引擎：不带是全部，null 是没有归属的（不在分区里的），字符串是指定的那一个；isPinned 是布尔。筛掉的会话不占翻页的位置，不漏不重。要的会话很少时一页可能要往后读很多页上游才凑得满；知道这些会话都属于哪些 harness 时只问那些 harness。"
+    },
+    {
+      "kind": "Field",
+      "on": "Thread",
+      "names": ["projectId", "section", "sectionEnteredAt", "isPinned"],
+      "description": "会话对象经过聚合面时（thread/list 的每一项、各种应答里的 thread、thread/started 通知的 thread），这几项换成设备层的值，引擎自己那一份不带上来。projectId 是显式的归属，没有就是 null：按工作目录把没有归属的会话归进工作区是客户端自己的事。isPinned 不在标准协议里，引擎给了才换、没给的不添；判断置顶以 section.id 等于 PinnedSectionId 为准。"
+    },
+    {
+      "kind": "ServerNotification",
+      "methods": ["project/changed", "thread/project/updated"],
+      "description": "标准协议里的通知，形状不变。聚合面上它们只由设备层发：工作区或者归属一变，发给所有握手完成的聚合面连接，发起变更的那条也收（排在它那个请求的应答后面）。引擎自己发的同名通知说的是它那一份项目存储，聚合面不转发。和引擎不同的一处：带工作区新建、或者从有归属的会话分叉出来的会话，设备层记下归属时也发一条 thread/project/updated。原因是每条连接各自从引擎收到 thread/started，别的连接收到的那一条可能比设备层记下归属来得早，上面的 projectId 还是空的，靠这一条补上；发起新建的那条连接上，应答和 thread/started 里已经带着归属，这一条对它是重复的。"
+    },
+    {
+      "kind": "ServerNotification",
+      "method": "litch/thread/section/updated",
+      "description": "一个会话进了、出了、换了分区（置顶和取消置顶也是它），或者它所在的分区改了名称、外观。只发给声明过 deviceWorkspaces 的连接。",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["threadId", "section", "sectionEnteredAt", "isPinned"],
+        "properties": {
+          "threadId": { "type": "string" },
+          "section": {
+            "description": "现在所在的分区；不在任何分区里是 null",
+            "oneOf": [{ "type": "null" }, { "$ref": "#/definitions/ThreadSection" }]
+          },
+          "sectionEnteredAt": {
+            "description": "进这个分区的时间，Unix 秒",
+            "type": ["integer", "null"]
+          },
+          "isPinned": { "type": "boolean" }
+        }
+      }
+    },
+    {
+      "kind": "ServerNotification",
+      "method": "litch/threadSection/changed",
+      "description": "分区本身建了、改了、删了。形状照 project/changed。只发给声明过 deviceWorkspaces 的连接。",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["sectionId", "changeType"],
+        "properties": {
+          "sectionId": { "type": "string" },
+          "changeType": { "enum": ["created", "updated", "deleted"] }
+        }
+      }
+    },
+    {
+      "kind": "Import",
+      "description": "第一次启用时从各引擎现有的项目导入，只读引擎，不改它们。每个 harness 只导入一次，记在设备库里；当时不可用的 harness，它下一次可用时补导入。规则：根目录集合相同的项目合成一个工作区（不管来自几个引擎），名称、根目录、标识取其中最早创建的那个，各个来源记在元数据的 litch.import.sources 里（JSON：[{harness, projectId, name}]）；一个根目录都没有的项目不和谁合，名称相同但根目录不同的不合；设备上已经有根目录集合相同的工作区时并进它，不改它的名称和根目录；新工作区按 harness 的顺序、它在引擎里的顺序排在现有的后面；自定义分区按名称合；会话的归属、分区、置顶从会话对象上读（归档了的也读），只补不盖。导入之后两边各管各的：引擎那边再建的项目不会跟过来。删掉设备库（<状态目录>/device/device.sqlite）再启动就是从头再导一遍，引擎的数据没有动过，同样的输入得到同样的结果。"
+    }
+  ],
+  "definitions": {
+    "PinnedSectionId": {
+      "description": "置顶用的那个分区的标识，Codex 客户端内置的，各引擎和设备层用的是同一个",
+      "const": "01984de2-8f74-7c91-a3b2-5c5e937cf318"
+    },
+    "ThreadSection": {
+      "description": "就是协议里的 ThreadSection",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "appearance"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "appearance": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["icon", "color"],
+              "properties": {
+                "icon": { "type": ["string", "null"] },
+                "color": { "type": ["string", "null"] }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "Project": {
+      "description": "就是协议里的 Project",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "roots",
+        "metadata",
+        "position",
+        "createdAt",
+        "updatedAt",
+        "recencyAt"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "roots": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path"],
+            "properties": { "path": { "type": "string" } }
+          }
+        },
+        "metadata": { "type": "object", "additionalProperties": { "type": "string" } },
+        "position": { "type": "integer" },
+        "createdAt": { "type": "integer" },
+        "updatedAt": { "type": "integer" },
+        "recencyAt": { "type": ["integer", "null"] }
+      }
+    }
+  }
+}

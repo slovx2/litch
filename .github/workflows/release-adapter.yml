@@ -1,0 +1,90 @@
+name: Release adapter packages
+
+# 出适配器的独立发布包（linux-x64、linux-arm64、darwin-arm64）、校验和清单和安装脚本，挂到这个标签的发布页。
+# 打 v 开头的标签时自动跑；也可以手动跑：填一个已有的标签，不勾“挂到发布页”就只出包、验证、留作流程产物。
+# 发布页还没有时建成草稿：压缩包先挂上去，人看过再公开，安装脚本取“最新一版”时不会碰到一个还没有包的发布页。
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 给哪个标签出包，例如 v0.5.2（标签要已经推上来）
+        required: true
+        type: string
+      publish:
+        description: 挂到发布页（不勾就只出包和验证）
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-adapter-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  packages:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: refs/tags/${{ inputs.tag || github.ref_name }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: 1.26.6
+      - name: 标签和版本号要对得上
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if [ "v${version}" != "${TAG}" ]; then
+            echo "标签是 ${TAG}，package.json 里的版本号是 ${version}" >&2
+            exit 1
+          fi
+      - run: npm ci --no-audit --no-fund
+      - run: npm ci --prefix packages/claude --no-audit --no-fund
+      - run: npm ci --prefix packages/pi --no-audit --no-fund
+      - run: npm ci --prefix packages/dsh --no-audit --no-fund
+      - run: npm run build
+      - name: 安装脚本的静态检查
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends shellcheck=0.9.0-1
+          sh -n scripts/install.sh
+          sh -n scripts/adapter-launcher.sh
+          shellcheck --shell=sh scripts/install.sh scripts/adapter-launcher.sh
+      # 三个平台的包在这一台机器上出：命令行是 Go 交叉编译的，Node 取各平台的官方包，
+      # 其余依赖裁剪后全是纯 JavaScript（暂存时会查，混进了分平台的东西就不让过）
+      - name: 出包
+        run: |
+          SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)" node scripts/package-adapter.mjs --target all --out "${RUNNER_TEMP}/release"
+          cat "${RUNNER_TEMP}/release/codex-harness-adapter-SHA256SUMS.txt"
+      # 拿刚出的那个 linux-x64 的包，在干净的容器里把安装、连接、升级、卸载过一遍（含装一份 Pi 跑通一个回合），
+      # musl 的系统给出明确的说法。验的就是要发的那一份
+      - name: 容器验证
+        run: node scripts/check-adapter-package.mjs --release "${RUNNER_TEMP}/release"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: codex-harness-adapter-${{ inputs.tag || github.ref_name }}
+          path: ${{ runner.temp }}/release
+          if-no-files-found: error
+      - name: 挂到发布页
+        if: github.event_name == 'push' || inputs.publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh release view "${TAG}" >/dev/null 2>&1; then
+            gh release create "${TAG}" --draft --verify-tag --title "${TAG}" --generate-notes
+          fi
+          gh release upload "${TAG}" --clobber \
+            "${RUNNER_TEMP}"/release/codex-harness-adapter-*.tar.gz \
+            "${RUNNER_TEMP}/release/codex-harness-adapter-SHA256SUMS.txt" \
+            "${RUNNER_TEMP}/release/install.sh"

@@ -1,0 +1,51 @@
+{
+  "name": "@litch/desktop",
+  "productName": "Litch",
+  "version": "0.7.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "桌面外壳：Electron 主进程、预加载脚本、承载核心的工具进程",
+  "main": "dist/main.mjs",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "npm run build && electron .",
+    "start:mock": "npm run build && LITCH_MOCK=1 electron .",
+    "dev": "npm run build && LITCH_UI_URL=http://localhost:5199 electron .",
+    "smoke": "npm run build && node scripts/smoke.mjs",
+    "smoke:entry": "npm run build && node scripts/smoke.mjs --entry",
+    "check:scroll": "npm run build && node scripts/smoke.mjs --scroll",
+    "shots": "npm run build && node scripts/shots.mjs",
+    "check:scroll:entry": "npm run build && node scripts/smoke.mjs --scroll --entry",
+    "check:compose": "npm run build && node scripts/smoke.mjs --compose",
+    "check:compose:entry": "npm run build && node scripts/smoke.mjs --compose --entry",
+    "check:ssh": "npm run build && node scripts/check-ssh.mjs",
+    "check:adapter": "npm run build && node scripts/check-adapter.mjs",
+    "check:local": "npm run build && node scripts/check-local.mjs",
+    "stage:adapter": "node scripts/stage-adapter.mjs",
+    "check:remote": "npm run build && node scripts/smoke.mjs --remote && node scripts/smoke.mjs --remote --service",
+    "check:full": "npm run build && node scripts/smoke.mjs --full --mock && node scripts/smoke.mjs --sidebar && node scripts/smoke.mjs --full",
+    "check:sidebar": "npm run build && node scripts/smoke.mjs --sidebar",
+    "check:manage": "npm run build && node scripts/smoke.mjs --manage --mock && node scripts/smoke.mjs --manage",
+    "check:terminal": "npm run build && node scripts/check-terminal.mjs",
+    "check:files": "npm run build && node scripts/check-files.mjs",
+    "check:diff": "npm run build && node scripts/check-diff.mjs",
+    "check:settings": "npm run build && node scripts/check-settings.mjs",
+    "check:engines": "npm run build && node scripts/check-engines.mjs",
+    "pack": "npm run build && node scripts/pack.mjs",
+    "check:packed": "node scripts/smoke.mjs --packed && node scripts/smoke.mjs --packed --compose --entry && node scripts/smoke.mjs --packed --remote"
+  },
+  "devDependencies": {
+    "@electron/packager": "20.3.0",
+    "@types/ws": "8.18.2",
+    "electron": "44.7.0",
+    "esbuild": "0.28.2"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "dependencies": {
+    "ws": "8.22.0"
+  }
+}

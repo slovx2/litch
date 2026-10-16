@@ -1,0 +1,262 @@
+{
+  "extension": "harness",
+  "description": "一条连接里有多个 harness。设备服务的聚合面（device.sock）把一台机器上的多个 harness 运行时收在一个入口后面：会话对象、请求、通知上多一个 harness，会话列表是各 harness 合并后的，runtime/info 返回设备信息和每个 harness 的状态，harness 的状态变了有通知。设计见 design/harness-client/03-adapter-device-service.md 第五节、第 6.4 节、第十五节。类型在 packages/protocol/src/device.mts 和 device-codex.mts。",
+  "appliesTo": "只有聚合面。每个 harness 自己的入口（给官方 Codex 桌面端用的兼容面）上没有这个扩展的任何内容，线上与标准协议一致。",
+  "declaration": {
+    "description": "客户端握手时在 initialize 的 capabilities 里用我们自己的键列出认识的扩展名，一个扩展一个名字。聚合面把客户端的 capabilities 原样带给每个上游。",
+    "where": "initialize.params.capabilities.litchExtensions",
+    "schema": { "type": "array", "items": { "type": "string" }, "contains": { "const": "harness" } }
+  },
+  "undeclared": "聚合面拒绝握手：initialize 回错误，code 为 -32600，data 为 {litch: \"extensionRequired\", required, supported}，message 里说明要声明什么。握手没有成功，连接保持未初始化，不会连任何上游。不存在“没声明也能用、只是少些字段”的形态：聚合面上的会话来自多个 harness，不认识 harness 的客户端分不清它们，新建会话也无从指定。只说标准协议的客户端应当连各个 harness 自己的入口。",
+  "parts": [
+    {
+      "kind": "ClientRequest",
+      "method": "runtime/info",
+      "description": "保持原名。聚合面上返回设备信息和每个 harness 的声明；单个运行时上的同名方法返回的是那个引擎自己的信息（见 runtime-info.json），有 device 和 harnesses 的是设备服务。",
+      "params": { "type": "object" },
+      "response": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["device", "harnesses"],
+        "properties": {
+          "device": { "$ref": "#/definitions/DeviceInfo" },
+          "harnesses": {
+            "description": "顺序是设备上配置的顺序",
+            "type": "array",
+            "items": { "$ref": "#/definitions/HarnessInfo" }
+          }
+        }
+      }
+    },
+    {
+      "kind": "ServerNotification",
+      "method": "litch/harness/status/changed",
+      "description": "某个 harness 的可用状态、不可用的原因或者名字版本变了。只在和上一次报给这条连接的内容不同时才发。收到恢复可用之后，这个 harness 上打开着的会话要由客户端重新订阅（thread/resume），之前的订阅随上游连接一起丢了。",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["harness", "info"],
+        "properties": {
+          "harness": { "type": "string" },
+          "info": { "$ref": "#/definitions/HarnessInfo" }
+        }
+      }
+    },
+    {
+      "kind": "Field",
+      "on": "Thread",
+      "name": "harness",
+      "schema": { "type": "string" },
+      "description": "聚合面按这条记录从哪个上游来的打上。出现在 thread/list 的每一项、应答里的 thread（thread/start、thread/resume、thread/read、thread/fork、thread/unarchive 等）、thread/started 通知的 thread 上。"
+    },
+    {
+      "kind": "Field",
+      "on": "ServerNotification.params",
+      "name": "harness",
+      "schema": { "type": "string" },
+      "description": "不带 threadId 的引擎通知（account/updated、mcpServer/startupStatus/updated、skills/changed、account/rateLimits/updated 等）转发时加上，说明是哪个 harness 发的。带 threadId 的通知原样转发，不加。"
+    },
+    {
+      "kind": "Param",
+      "on": "不带 threadId 的 ClientRequest（thread/start、model/list、collaborationMode/list、skills/list、config/read、account/read 等）",
+      "name": "harness",
+      "schema": { "type": "string" },
+      "description": "必填：指明发给哪个 harness。聚合面转给上游之前把它摘掉。带 threadId 的请求按会话归属路由，不用带；带了的话只在聚合面还不认识这个会话时用来指路。"
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "thread/list",
+      "description": "发给全部可用的上游，合并后返回。只支持按更新时间倒序。翻页期间列表有变动时，同一个会话可能给出两次，客户端按标识去重。",
+      "params": {
+        "description": "ThreadListParams，另有下面的约束。projectId、sectionId 由设备层来筛（会话的工作区、分区存在设备层，见 device-workspaces.json），不交给上游；其余筛选条件原样交给各个上游",
+        "type": "object",
+        "properties": {
+          "sortKey": { "enum": ["updated_at", null] },
+          "sortDirection": { "enum": ["desc", null] },
+          "limit": { "type": ["integer", "null"], "minimum": 1, "maximum": 1000 },
+          "cursor": {
+            "description": "只能是聚合面上一次给的 nextCursor：里面打包着各上游的游标",
+            "type": ["string", "null"]
+          },
+          "harness": { "description": "只列这一个 harness 的", "type": ["string", "null"] }
+        }
+      },
+      "response": {
+        "type": "object",
+        "required": ["data", "nextCursor", "backwardsCursor", "skippedHarnesses"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": { "type": "object", "required": ["id", "harness"] }
+          },
+          "nextCursor": { "type": ["string", "null"] },
+          "backwardsCursor": { "description": "聚合面不支持反着翻页", "type": "null" },
+          "skippedHarnesses": {
+            "description": "这一次没有列它的会话的 harness。凡是该问而没问到的都在：正在连或者断了的、适配器主进程说没在跑的（停用了、没装、版本太低、没起来、正在起、自己退出了）、问了没成的。带 harness 参数只问一个、或者按工作区和父会话筛到只该问某几个时，只说这几个。应答里没有某个 harness 的会话时，看这里就知道是它真的没有，还是这一次没问到它",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["harness", "reason", "message"],
+              "properties": {
+                "harness": { "type": "string" },
+                "reason": {
+                  "description": "unavailable：当时不可用，没有问；failed：问了，它回了错误或者中途断了",
+                  "enum": ["unavailable", "failed"]
+                },
+                "kind": {
+                  "description": "为什么不可用，和 runtime/info 里 HarnessInfo.unavailable.kind 是同一套词、同一个值（connecting、unreachable、handshakeFailed、disconnected、starting、disabled、notInstalled、versionTooLow、startFailed、stopped；以后还会加，所以不限定取值）。reason 是 unavailable 而且应答的这一刻它确实不可用时才有；failed 的没有，这一轮翻页开始时不可用、现在已经恢复的也没有",
+                  "type": "string"
+                },
+                "message": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "kind": "NativeUpstream",
+      "name": "原生 codex",
+      "description": "聚合面后面的上游除了适配器的运行时，还可以是用户自己装的原生 codex 起的 app-server（设计文档 03 第 12.2 节）。它只说标准的 Codex 协议，不认识我们加的任何东西，聚合面替它做下面几件事，别的帧一律原样转发（仓库里固定的协议类型不认识的方法和字段照样透传，不因为版本对不上就拒绝）。握手：capabilities.litchExtensions 不带给它，别的照客户端给的带（客户端没声明 experimentalApi 的话，它标着实验性的方法照它的原话拒绝）。声明：它没有 runtime/info，这个 harness 的 displayName、badge、version、engine、extensions、features、permissionPresets 由设备进程替它整理，形状和引擎自己报的一样（runtime-info.json）；extensions 是空数组，它不支持我们的任何扩展。权限预设：标识是它内置的三个权限档（:read-only、:workspace、:danger-full-access），它不许选的档不报；thread/start、thread/resume、thread/fork、turn/start、thread/settings/update 选了内置档又没带 approvalPolicy 时，设备进程转给它之前配上这一档的审批策略（:read-only 和 :workspace 配 on-request，:danger-full-access 配 never），客户端自己带了 approvalPolicy 的不动。不支持：见 Error 里的 unsupported。审批：命令审批用它自己的 availableDecisions，文件改动审批的决定列表由设备进程补（decline-with-note.json）。"
+    },
+    {
+      "kind": "Error",
+      "description": "聚合面自己回的错误在 error.data.litch 里带原因；上游引擎回的错误原样转发，没有这个字段。",
+      "errors": [
+        {
+          "litch": "unsupported",
+          "code": -32601,
+          "description": "聚合面不支持这个方法（command/exec、设备层不认识的 project/* 与分区方法、既不带 threadId 也不带 harness 的请求）；或者请求要发给的那个原生 codex 不认识这个方法，这时 data 里除了 method 还带 harness。后一种是从它的应答换过来的：原生 codex 对不认识的方法回的是 -32600、原文点名这个方法名（Invalid request: unknown variant `方法名`），只有这一种换；它回的别的错误（参数类型不对、参数里的枚举值不认识、会话不在、实验性方法没声明、会话正被别的 codex 进程写着等）原样转发，没有 data.litch"
+        },
+        {
+          "litch": "extensionRequired",
+          "code": -32600,
+          "description": "握手时没有声明聚合面要求的扩展"
+        },
+        {
+          "litch": "unknownHarness",
+          "code": -32602,
+          "description": "harness 参数填的不是这台设备上配置的 harness"
+        },
+        {
+          "litch": "unknownThread",
+          "code": -32602,
+          "description": "哪个 harness 都不认识这个会话"
+        },
+        {
+          "litch": "harnessUnavailable",
+          "code": -32050,
+          "description": "请求要发给的 harness 现在不可用，或者等应答的时候它断开了"
+        }
+      ],
+      "data": {
+        "type": "object",
+        "required": ["litch"],
+        "properties": {
+          "litch": {
+            "enum": [
+              "unsupported",
+              "extensionRequired",
+              "unknownHarness",
+              "unknownThread",
+              "harnessUnavailable"
+            ]
+          },
+          "method": { "type": "string" },
+          "harness": { "type": "string" },
+          "threadId": { "type": "string" },
+          "required": { "type": "array", "items": { "type": "string" } },
+          "supported": { "type": "array", "items": { "type": "string" } },
+          "unavailable": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    }
+  ],
+  "definitions": {
+    "DeviceInfo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hostname", "os", "home", "version", "protocolVersion", "extensions"],
+      "properties": {
+        "hostname": { "type": "string" },
+        "os": { "description": "macos、linux、windows", "type": "string" },
+        "home": { "description": "用户主目录", "type": "string" },
+        "version": { "description": "设备服务的版本", "type": "string" },
+        "protocolVersion": { "description": "Codex 协议版本", "type": "string" },
+        "extensions": {
+          "description": "这个设备服务支持的扩展",
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        },
+        "service": {
+          "description": "正在运行的那份适配器常驻服务的来历。属于 deviceService 扩展，只有声明了它的连接才有；形状见 device-service.json 的 DeviceServiceInfo",
+          "type": "object"
+        }
+      }
+    },
+    "HarnessInfo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "displayName", "badge", "version", "engine", "available", "unavailable"],
+      "properties": {
+        "id": {
+          "description": "标识，别处的 harness 填的都是它",
+          "type": "string",
+          "minLength": 1
+        },
+        "displayName": { "type": "string", "minLength": 1 },
+        "badge": { "description": "两个字母的徽标", "type": "string", "minLength": 1 },
+        "version": { "type": ["string", "null"] },
+        "engine": { "description": "运行时自己报的引擎名", "type": ["string", "null"] },
+        "available": { "type": "boolean" },
+        "extensions": {
+          "description": "这一项和下面两项是这个引擎在自己的 runtime/info 里报的结构化声明（runtime-info.json），聚合面原样带过来，不改不补；原生 codex 自己报不了，它的这三项由设备进程替它整理（见 NativeUpstream）。没有声明的（旧版的适配器、还没连上过）就没有这个字段。extensions 是这个引擎支持的我们自己的扩展",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "features": {
+          "description": "能力位。形状的定义在 runtime-info.json 的 HarnessFeatures，这里不重复写",
+          "type": "object"
+        },
+        "permissionPresets": {
+          "description": "权限预设，顺序是界面上从上到下的顺序。每一项的形状在 runtime-info.json 的 PermissionPreset",
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "unavailable": {
+          "description": "可用时是 null。kind 以后还会加，不认识的按一般的不可用处理",
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kind", "message"],
+              "properties": {
+                "kind": {
+                  "description": "原因分类。设备进程自己判断的：connecting（这条连接刚建立，还在连这个运行时）、unreachable（连不上运行时的套接字）、handshakeFailed（连上了但握手没成功）、disconnected（本来连着，断了，正在重连）。适配器主进程告诉设备进程的：starting（正在检查环境、启动）、disabled（在设置里停用了，或者这次启动没有选它）、notInstalled（没装，找不到它的命令行）、versionTooLow（装了但版本低于适配器要求的下限）、startFailed（环境检查没过或者没能启动）、stopped（起来过，后来自己退出了）。以后还会加，所以不限定取值",
+                  "type": "string"
+                },
+                "message": {
+                  "description": "给人看的说明，客户端可以原样显示。里面不带设备上的路径（连不上时系统给的原文里有套接字的路径，那个只进设备进程的日志）",
+                  "type": "string"
+                },
+                "text": {
+                  "description": "message 的两种语言版本，message 是其中中文那一份。属于 deviceSettings 扩展（device-settings.json）：只发给声明过它的连接，而且只有适配器主进程给的原因才有",
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["zh-CN", "en"],
+                  "properties": {
+                    "zh-CN": { "type": "string" },
+                    "en": { "type": "string" }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

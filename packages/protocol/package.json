@@ -1,0 +1,8 @@
+{
+  "name": "@litch/protocol",
+  "version": "0.7.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "Codex app-server 协议的类型，加上我们自己的扩展定义。设备进程和客户端共用"
+}

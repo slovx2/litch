@@ -1,0 +1,605 @@
+/* 窗口骨架：上面一条标题栏；下面左边是侧栏，右边那一块（.body）里是主区和侧面板。
+   侧栏那一栏的宽度跟着侧栏自己走，它收起来这一栏就没了，右边那一块占满 */
+.app {
+  height: 100%;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+}
+.body {
+  grid-column: 2;
+  grid-row: 2;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+}
+
+/* ---------- 标题栏 ---------- */
+.tb {
+  grid-column: 1 / -1;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px 0 14px;
+  background: var(--win);
+  border-bottom: 1px solid var(--line-2);
+  -webkit-app-region: drag;
+  user-select: none;
+}
+/* macOS 的桌面外壳里系统的窗口按钮盖在左上角，给它让出位置；别的系统上它们在系统自己的标题栏里 */
+:root[data-shell="electron"][data-platform="mac"] .tb {
+  padding-left: 82px;
+}
+.tb button {
+  -webkit-app-region: no-drag;
+}
+.crumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1 1 0;
+  color: var(--ink-2);
+}
+.crumb .dev {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink);
+  flex: none;
+}
+.crumb .sep {
+  color: var(--ink-3);
+}
+.crumb b {
+  font-weight: 500;
+  color: var(--ink);
+}
+
+/* ---------- 侧栏 ---------- */
+/* 宽度由组件写在元素上（sidebar/state.ts 的 widthCss：记着的宽度，窗口窄的时候自己收窄） */
+.sb {
+  grid-column: 1;
+  grid-row: 2;
+  display: flex;
+  flex-direction: column;
+  background: var(--win);
+  border-right: 1px solid var(--line-2);
+  min-height: 0;
+}
+.sb[hidden] {
+  display: none;
+}
+/* 右边沿那一条能拖：骑在侧栏和主区的分界线上，比看得见的线宽一点，好抓。
+   它和右边那一块放在同一格里、贴着左边，不在侧栏里面：免得被主区盖住 */
+.sb-grip {
+  grid-column: 2;
+  grid-row: 2;
+  justify-self: start;
+  width: 8px;
+  margin-left: -4px;
+  z-index: 2;
+  cursor: col-resize;
+  touch-action: none;
+}
+.sb-grip:hover,
+.sb-grip:focus-visible {
+  background: var(--press);
+  outline: none;
+}
+.sb-scroll {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px 0 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  scrollbar-width: thin;
+}
+.sb-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 12px 8px;
+  border-top: 1px solid var(--line-1);
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.sb-core {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 16px;
+}
+/* 侧栏最上面常驻的“新对话”：不跟着下面的设备和会话滚。
+   它右边是筛选的小按钮（有得挑才出现）；正筛着的时候下面多一行，自己占一整行 */
+.sb-top {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 8px;
+  padding: 8px 12px 0;
+}
+/* 筛选的按钮：和下面各行行尾的按钮对齐。点开的那一块往下弹、靠右 */
+.sb-filter {
+  position: relative;
+  flex: none;
+  margin-right: -2px;
+}
+.sb-filter > .ibtn[aria-expanded="true"] {
+  background: var(--hover);
+  color: var(--ink);
+}
+.sb-filter > .ibtn.on {
+  color: var(--accent);
+}
+.sb-filter .pick-opt b {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sb-filter .pick-title {
+  white-space: nowrap;
+}
+/* 正在只看某个 harness：一行小字说清在看谁，整行点一下就取消 */
+.sb-filter-on {
+  flex: 0 0 calc(100% + 12px);
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  margin: 2px -6px 0;
+  padding: 0 6px;
+  border-radius: var(--r1);
+  background: var(--sel);
+  color: var(--ink-2);
+  font-size: 12px;
+  text-align: left;
+}
+.sb-filter-on:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.sb-filter-on > svg.ic {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  color: var(--ink-3);
+}
+/* 筛选之后这台设备下面一个会话都不剩 */
+.dev-none {
+  padding: 4px 6px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+/* 侧栏里的入口：最上面的“新对话”，底部的“设备”“已归档对话”“设置” */
+.sb-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: calc(var(--row-h) - 4px);
+  margin: 0 -6px 2px;
+  padding: 0 6px;
+  border-radius: var(--r1);
+  color: var(--ink-2);
+  font-size: 12px;
+  text-align: left;
+}
+.sb-link:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.sb-link.on {
+  background: var(--sel);
+  color: var(--ink);
+}
+/* 最上面的那一个和会话的行一样高，字也显眼些；右边有筛选的按钮时把剩下的宽度占满 */
+.sb-top .sb-link {
+  flex: 1 1 0;
+  min-width: 0;
+  height: var(--row-h);
+  margin-bottom: 0;
+  color: var(--ink);
+  font-weight: 500;
+}
+.dev-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: var(--row-h);
+  padding: 0 10px 0 12px;
+  text-align: left;
+}
+.dev-row:hover {
+  background: var(--hover);
+}
+/* 一行加上行尾的“新建会话”。按钮平时不显示，鼠标到这一行或者键盘走到它上面才出来 */
+.row-line {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.row-line > :first-child {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.row-add {
+  position: absolute;
+  right: 4px;
+  opacity: 0;
+  background: var(--panel);
+}
+.row-line:hover .row-add,
+.row-add:focus-visible,
+.row-add.on {
+  opacity: 1;
+}
+.row-add.on {
+  color: var(--accent);
+}
+/* 设备行尾的小标在“新建会话”露出来的时候让位，免得被它盖住一半。
+   没连上的设备没有这个按钮，小标一直在 */
+.row-line:has(.row-add):hover > .dev-row .pill,
+.row-line:has(.row-add:focus-visible) > .dev-row .pill,
+.row-line:has(.row-add.on) > .dev-row .pill {
+  visibility: hidden;
+}
+/* 会话行尾的“更多”，盖在时间上面 */
+.row-more {
+  position: absolute;
+  right: 4px;
+  opacity: 0;
+}
+.row-more > .ibtn {
+  background: var(--panel);
+}
+.row-line:hover .row-more,
+.row-more:focus-within,
+.row-more.on {
+  opacity: 1;
+}
+/* 改名：标题的位置换成输入框 */
+.ss-row.editing {
+  padding: 0 4px;
+}
+.ss-name {
+  flex: 1 1 0;
+  min-width: 0;
+  height: calc(var(--row-h) - 6px);
+  padding: 0 6px;
+  border: 1px solid var(--accent);
+  border-radius: var(--r1);
+  background: var(--raised);
+  color: var(--ink);
+  font: inherit;
+  outline: 0;
+}
+.row-err {
+  padding: 2px 6px 4px 12px;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--err);
+}
+.dev-row .name {
+  font-weight: 600;
+}
+/* 设备行上的记号：这台设备上有 harness 用不了。只是个记号，是哪个、为什么在信息卡里 */
+.dev-flag {
+  flex: none;
+  display: inline-flex;
+  color: var(--wait);
+}
+.dev-flag.mute {
+  color: var(--ink-3);
+}
+.dev-flag svg.ic {
+  width: 14px;
+  height: 14px;
+}
+.dev-body {
+  position: relative;
+  padding: 0 6px 0 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+/* 设备的线色：一根竖线贯穿它下面的所有内容 */
+.dev-body::before {
+  content: "";
+  position: absolute;
+  left: 15px;
+  top: 0;
+  bottom: 4px;
+  width: 2px;
+  background: var(--wire);
+  opacity: 0.6;
+  border-radius: 1px;
+}
+.dev-group.off .dev-body::before {
+  background: repeating-linear-gradient(var(--wire) 0 3px, transparent 3px 7px);
+}
+.dev-group.off .dev-body > :not(.dev-note) {
+  opacity: 0.62;
+}
+.dev-note {
+  margin: 2px 0 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  background: var(--panel);
+  color: var(--ink-2);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.ws-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: var(--row-h);
+  padding: 0 4px;
+  border-radius: var(--r1);
+  color: var(--ink-2);
+  text-align: left;
+}
+.ws-row:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.ws-row .name {
+  font-weight: 500;
+  color: var(--ink);
+}
+/* 收起的工作区、设备：行尾汇总里面的状况。在等人的是和会话行上一样的小标，
+   在跑的、没看过的是和会话行上一样的小记号（方块、圆点，各皮肤有各自的画法）。不写数目，数目在信息卡里 */
+.tally {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+/* 行尾的按钮（新建会话、更多）露出来的时候，汇总往左让出它们的位置，不被盖住：
+   一个按钮让 30，两个让 54。设备行上别的小标这时是藏起来的，汇总里等人的那个不藏 */
+.row-line:has(> .row-add, > .row-more):is(
+  :hover,
+  :has(> .row-add:focus-visible),
+  :has(> .row-add.on),
+  :has(> .row-more:focus-within),
+  :has(> .row-more.on)
+) > :first-child:has(.tally) {
+  padding-right: 30px;
+}
+.row-line:has(> .row-add):has(> .row-more):is(
+    :hover,
+    :has(> .row-add:focus-visible),
+    :has(> .row-add.on),
+    :has(> .row-more:focus-within),
+    :has(> .row-more.on)
+  )
+  > :first-child:has(.tally) {
+  padding-right: 54px;
+}
+.dev-group > .row-line > .dev-row > .tally > .pill.wait {
+  visibility: visible;
+}
+.sec-label {
+  padding: 6px 4px 2px;
+  font-size: 11px;
+  color: var(--ink-3);
+  letter-spacing: 0.06em;
+}
+.ss-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: var(--row-h);
+  padding: 0 6px 0 12px;
+  border-radius: var(--r1);
+  text-align: left;
+}
+.ss-row:hover {
+  background: var(--hover);
+}
+/* 会话多的工作区：只露出前几个，这一行放“展示更多”和“收起” */
+.ss-more {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--row-h);
+  padding: 0 6px 0 28px;
+  font-size: 11px;
+}
+.ss-more .mini {
+  align-self: center;
+}
+.ss-row .title {
+  color: var(--ink-2);
+}
+.ss-row.is-unread .title,
+.ss-row.sel .title {
+  color: var(--ink);
+}
+.ss-row.is-unread .title {
+  font-weight: 600;
+}
+.ss-row .time {
+  font: 11px / 1 var(--mono);
+  color: var(--ink-3);
+  flex: none;
+}
+/* 工作目录不是工作区的根：标题后面一个很小的记号。标题优先，地方不够时先收掉的是它：
+   带记号的行标题按自己的字宽起算，记号的收缩系数又大得多，标题还没开始截断它就让完了。
+   记号里前面垫着的那一小段是它和标题之间的空（抵掉行上的一格间距，收完之后不多占地方）；
+   图标放不下整个的时候折到下一行去、被裁掉，不会露出半个 */
+.ss-row .title:has(+ .cwd-mark) {
+  flex-basis: auto;
+}
+.cwd-mark {
+  flex: 0 1000000 auto;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  height: 12px;
+  margin-left: -6px;
+  overflow: hidden;
+  color: var(--ink-3);
+}
+.cwd-mark::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 12px;
+}
+.cwd-mark > svg.ic {
+  flex: none;
+  width: 12px;
+  height: 12px;
+}
+/* 所属的 harness 现在用不了：这一行是上次留下的，淡下去（和离线设备下面的会话一个画法） */
+.ss-row.down > :not(.chip) {
+  opacity: 0.62;
+}
+.ss-row.sel {
+  background: var(--sel);
+}
+/* 选中的那一行垫了一层底色，时间还用最淡的那一档就读不清了（浅色下对比度不到 3） */
+.ss-row.sel .time {
+  color: var(--ink-2);
+}
+/* 选中的会话有一小段“分接线”连到设备的竖线上 */
+.ss-row.sel::before {
+  content: "";
+  position: absolute;
+  left: -10px;
+  top: 50%;
+  width: 10px;
+  height: 2px;
+  margin-top: -1px;
+  background: var(--wire);
+}
+
+/* ---------- 主区 ---------- */
+.main {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  position: relative;
+}
+
+/* ---------- 信息卡：鼠标在设备行、工作区行上停一下才出来的细节 ---------- */
+.info-card {
+  position: fixed;
+  z-index: 30;
+  width: max-content;
+  min-width: 220px;
+  max-width: min(380px, calc(100vw - 32px));
+  padding: 10px 12px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  background: var(--overlay);
+  box-shadow: var(--shadow);
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-2);
+  /* 里面的字可以选、可以复制 */
+  user-select: text;
+}
+.info-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: var(--ink);
+}
+.info-facts {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.info-facts > div {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+.info-facts dt {
+  flex: none;
+  min-width: 56px;
+  color: var(--ink-3);
+}
+.info-facts dd {
+  margin: 0;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 12px;
+  overflow-wrap: anywhere;
+}
+/* 目录可能很长：折行显示全，一个目录一行 */
+.info-path {
+  flex-basis: 100%;
+}
+/* 会话的工作目录和工作区的根不是一回事：目录下面多一句 */
+.info-cwd {
+  flex-basis: 100%;
+  color: var(--ink-3);
+}
+
+/* ---------- 短暂的提示：浮在主区顶上，几秒后自己消失 ---------- */
+.toasts {
+  position: absolute;
+  top: 10px;
+  left: 16px;
+  right: 16px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  /* 提示之间、两边的空地不挡下面的东西 */
+  pointer-events: none;
+}
+.toast {
+  pointer-events: auto;
+  max-width: min(520px, 100%);
+  min-height: 34px;
+  padding: 5px 6px 5px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  background: var(--overlay);
+  box-shadow: var(--shadow);
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink);
+}
+.toast.err {
+  border-color: color-mix(in srgb, var(--err) 55%, transparent);
+}
+.toast.err .toast-text {
+  color: var(--err);
+  white-space: normal;
+}
+.toast .mini {
+  align-self: center;
+}
+.toast .toast-act {
+  color: var(--accent);
+  font-weight: 500;
+}

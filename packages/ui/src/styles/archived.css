@@ -1,0 +1,132 @@
+/* 已归档对话：占着对话区的一整页，按设备分开列 */
+.arch-page {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.arch-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 24px 24px 12px;
+}
+.arch-head > div {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.arch-head h1 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+.arch-head p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.arch-body {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: auto;
+}
+.arch-dev {
+  width: 100%;
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 8px 24px 16px;
+}
+.arch-dev-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line-2);
+  font-size: 13px;
+  font-weight: 600;
+}
+.arch-dev-head .mono {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--ink-3);
+}
+.arch-note {
+  padding: 8px 0 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-3);
+}
+.arch-note.err {
+  color: var(--err);
+}
+.arch-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.arch-item {
+  padding: var(--row-pad) 0;
+  border-bottom: 1px solid var(--line-1);
+}
+.arch-item .arch-note {
+  padding: 2px 0 0;
+}
+.arch-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 30px;
+}
+.arch-title {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.arch-where {
+  flex: 0 1 140px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.arch-time {
+  flex: none;
+  width: 44px;
+  text-align: right;
+  font: 11px / 1 var(--mono);
+  color: var(--ink-3);
+}
+.arch-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.arch-ask {
+  font-size: 12px;
+  color: var(--ink-2);
+}
+/* 标题可以点：只读地打开看 */
+.arch-open {
+  text-align: left;
+  border-radius: var(--r1);
+}
+.arch-open:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+/* 只读地看一个已归档的对话：输入区的位置上是一条说明，右边是“回到列表”和“恢复” */
+.arch-bar {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 8px 10px 8px 14px;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.arch-bar:focus-visible {
+  outline: 0;
+}

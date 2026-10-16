@@ -1,0 +1,22 @@
+{
+  "method": "gitDiffToRemote",
+  "kind": "ClientRequest",
+  "description": "相对远端基线的差异，官方桌面端的界面里有一处调用。0.157.1 原生仍支持，但官方 JSON Schema 导出排除 v1 方法；依据同版本官方 TS 定义 GitDiffToRemoteParams/GitDiffToRemoteResponse/GitSha 编写。",
+  "params": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["cwd"],
+    "properties": {
+      "cwd": { "type": "string" }
+    }
+  },
+  "response": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["sha", "diff"],
+    "properties": {
+      "sha": { "type": "string" },
+      "diff": { "type": "string" }
+    }
+  }
+}

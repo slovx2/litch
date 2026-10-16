@@ -1,0 +1,359 @@
+{
+  "note": "官方 Codex 桌面端会发的请求序列，按协议的方法名和参数形状自己写的（不是抓包，也没有照搬它的代码）。依据是 research/codex-desktop-analysis-2026-10-12/06-protocol-usage-gap.md 里“官方桌面端：调用”的清单、它的握手（第 3.1、3.2 节）、连接后的探测（第 3.4 节）和四块功能各自落到协议上的做法（第六节）。各入口的 upstream-compat.test.mts 把它对着自己回放一遍：每一步要么成功且应答严格符合上游结构，要么是 expectations 里登记的那个错误码；不许挂住，回放完服务还要能应答。{{名字}} 是回放时填进去的值（cwd 是会话的工作目录，repo 是回放时在它下面现建的一个带远端的 git 仓库）；scene 是这一回合要模型怎么演，由各入口的测试去排。absent 为真的步骤问的是这个入口上没有的会话（桌面端找一个置顶会话在哪台机器上时，拿它的会话号向每个连着的入口都问一遍）：必须被拒绝，而且错误的话以上游的 `thread not found: <会话号>` 开头（桌面端按话术认“这里没有”，错误码它不看），不进 expectations。",
+  "protocol": "0.157.1",
+  "client": {
+    "clientInfo": {
+      "name": "litch-desktop-replay",
+      "title": "Desktop Replay",
+      "version": "26.1007.0"
+    },
+    "capabilities": {
+      "experimentalApi": true,
+      "requestAttestation": false,
+      "mcpServerOpenaiFormElicitation": true,
+      "extensions": { "openai/form": {} },
+      "optOutNotificationMethods": [
+        "warning",
+        "thread/closed",
+        "thread/reverted",
+        "thread/compacted",
+        "project/changed",
+        "thread/project/updated",
+        "thread/prediction/updated",
+        "command/exec/outputDelta",
+        "turn/diff/updated",
+        "rawResponseItem/completed",
+        "rawResponse/completed",
+        "modelProvider/authRecoveryStarted",
+        "modelProvider/authRecoveryCompleted",
+        "turn/moderationMetadata",
+        "externalAgentConfig/import/progress",
+        "windows/worldWritableWarning"
+      ]
+    }
+  },
+  "steps": [
+    { "phase": "连接后的探测", "method": "account/read", "params": { "refreshToken": false } },
+    { "method": "getAuthStatus", "params": { "includeToken": false, "refreshToken": false } },
+    { "method": "account/rateLimits/read" },
+    { "method": "model/list", "params": { "includeHidden": true, "limit": 100 } },
+    { "method": "collaborationMode/list", "params": {} },
+    { "method": "permissionProfile/list", "params": { "cwd": "{{cwd}}" } },
+    { "method": "experimentalFeature/list", "params": { "limit": 100 } },
+    { "method": "config/read", "params": { "cwd": "{{cwd}}", "includeLayers": true } },
+    { "method": "configRequirements/read" },
+    { "method": "modelProvider/capabilities/read", "params": {} },
+    { "method": "app/list", "params": { "limit": 100, "forceRefetch": false } },
+    { "method": "plugin/list", "params": { "cwds": ["{{cwd}}"] } },
+    { "method": "skills/list", "params": { "cwds": ["{{cwd}}"], "forceReload": false } },
+    { "method": "hooks/list", "params": { "cwds": ["{{cwd}}"] } },
+    { "method": "mcpServerStatus/list", "params": { "limit": 100 } },
+    {
+      "method": "externalAgentConfig/detect",
+      "params": { "includeHome": true, "cwds": ["{{cwd}}"] }
+    },
+    { "method": "remoteControl/status/read" },
+    { "method": "server/diagnostics", "params": {} },
+
+    {
+      "phase": "侧栏",
+      "id": "thread/list#初次",
+      "method": "thread/list",
+      "params": {
+        "useStateDbOnly": true,
+        "sortKey": "updated_at",
+        "sortDirection": "desc",
+        "archived": false,
+        "limit": 100,
+        "sourceKinds": ["cli", "vscode", "appServer", "exec"]
+      }
+    },
+    { "method": "project/list", "params": { "limit": 100 } },
+    { "method": "threadSection/list", "params": { "limit": 100 } },
+    { "method": "thread/loaded/list", "params": {} },
+    {
+      "id": "thread/read#别处的会话",
+      "method": "thread/read",
+      "params": { "threadId": "0190f0a0-0000-7000-8000-000000000002", "includeTurns": false },
+      "absent": true
+    },
+
+    {
+      "phase": "新建会话，发几轮",
+      "method": "thread/start",
+      "threadStart": true,
+      "params": { "cwd": "{{cwd}}" },
+      "save": { "threadId": "thread.id" }
+    },
+    {
+      "id": "thread/metadata/update#分支",
+      "method": "thread/metadata/update",
+      "params": { "threadId": "{{threadId}}", "gitInfo": { "branch": "main" } }
+    },
+    {
+      "id": "turn/start#一句话",
+      "method": "turn/start",
+      "scene": "plain",
+      "params": {
+        "threadId": "{{threadId}}",
+        "clientUserMessageId": "replay-first",
+        "input": [{ "type": "text", "text": "{{prompt}}", "text_elements": [] }]
+      },
+      "save": { "turnId": "turn.id", "firstTurnId": "turn.id" },
+      "await": "turn/completed"
+    },
+    { "method": "thread/name/set", "params": { "threadId": "{{threadId}}", "name": "回放的会话" } },
+    {
+      "id": "turn/start#审批",
+      "method": "turn/start",
+      "scene": "approval",
+      "params": {
+        "threadId": "{{threadId}}",
+        "input": [{ "type": "text", "text": "{{prompt}}", "text_elements": [] }]
+      },
+      "save": { "turnId": "turn.id", "secondTurnId": "turn.id" },
+      "await": "turn/completed"
+    },
+    {
+      "id": "turn/start#打断",
+      "method": "turn/start",
+      "scene": "slow",
+      "params": {
+        "threadId": "{{threadId}}",
+        "input": [{ "type": "text", "text": "{{prompt}}", "text_elements": [] }]
+      },
+      "save": { "turnId": "turn.id" },
+      "await": "turn/started"
+    },
+    {
+      "method": "turn/interrupt",
+      "params": { "threadId": "{{threadId}}", "turnId": "{{turnId}}" },
+      "await": "turn/completed"
+    },
+
+    {
+      "phase": "读历史",
+      "method": "thread/read",
+      "params": { "threadId": "{{threadId}}", "includeTurns": true }
+    },
+    {
+      "method": "thread/turns/list",
+      "params": {
+        "threadId": "{{threadId}}",
+        "limit": 20,
+        "sortDirection": "desc",
+        "itemsView": "summary"
+      }
+    },
+    { "method": "thread/items/list", "params": { "threadId": "{{threadId}}", "limit": 50 } },
+    { "method": "thread/timeline/list", "params": { "threadId": "{{threadId}}", "limit": 500 } },
+    { "method": "thread/resume", "params": { "threadId": "{{threadId}}" } },
+    { "method": "thread/queue/list", "params": { "threadId": "{{threadId}}" } },
+    { "method": "thread/goal/get", "params": { "threadId": "{{threadId}}" } },
+    { "method": "thread/attachment/list", "params": { "threadId": "{{threadId}}" } },
+    { "method": "thread/backgroundTerminals/clean", "params": { "threadId": "{{threadId}}" } },
+    {
+      "method": "thread/settings/update",
+      "params": { "threadId": "{{threadId}}", "approvalPolicy": "on-request" }
+    },
+
+    {
+      "phase": "分叉与回退",
+      "method": "thread/fork",
+      "params": { "threadId": "{{threadId}}", "lastTurnId": "{{secondTurnId}}" },
+      "save": { "forkId": "thread.id", "forkFirstTurnId": "thread.turns.0.id" }
+    },
+    {
+      "method": "thread/rollback",
+      "needs": ["forkId"],
+      "params": { "threadId": "{{forkId}}", "numTurns": 1 }
+    },
+    {
+      "method": "thread/revert",
+      "needs": ["forkId", "forkFirstTurnId"],
+      "params": { "threadId": "{{forkId}}", "beforeTurnId": "{{forkFirstTurnId}}" }
+    },
+    {
+      "id": "thread/archive#分叉",
+      "method": "thread/archive",
+      "needs": ["forkId"],
+      "params": { "threadId": "{{forkId}}" }
+    },
+    {
+      "id": "thread/list#已归档",
+      "method": "thread/list",
+      "params": { "useStateDbOnly": true, "sortKey": "updated_at", "archived": true, "limit": 100 }
+    },
+    { "method": "thread/unarchive", "needs": ["forkId"], "params": { "threadId": "{{forkId}}" } },
+    { "method": "thread/delete", "needs": ["forkId"], "params": { "threadId": "{{forkId}}" } },
+
+    {
+      "phase": "整理侧栏",
+      "method": "project/create",
+      "params": {
+        "idempotencyKey": "replay-project",
+        "name": "回放项目",
+        "roots": [{ "path": "{{cwd}}" }]
+      },
+      "save": { "projectId": "project.id" }
+    },
+    {
+      "id": "thread/metadata/update#归属",
+      "method": "thread/metadata/update",
+      "needs": ["projectId"],
+      "params": { "threadId": "{{threadId}}", "projectId": "{{projectId}}" }
+    },
+    {
+      "method": "project/update",
+      "needs": ["projectId"],
+      "params": { "projectId": "{{projectId}}", "name": "回放项目改名" }
+    },
+    {
+      "method": "project/read",
+      "needs": ["projectId"],
+      "params": { "projectId": "{{projectId}}" }
+    },
+    {
+      "method": "threadSection/create",
+      "params": { "name": "回放分区" },
+      "save": { "sectionId": "section.id" }
+    },
+    {
+      "id": "thread/section/move#移入",
+      "method": "thread/section/move",
+      "needs": ["sectionId"],
+      "params": { "threadId": "{{threadId}}", "sectionId": "{{sectionId}}" }
+    },
+    {
+      "id": "thread/section/move#移出",
+      "method": "thread/section/move",
+      "needs": ["sectionId"],
+      "params": { "threadId": "{{threadId}}", "sectionId": null }
+    },
+    {
+      "method": "threadSection/update",
+      "needs": ["sectionId"],
+      "params": { "sectionId": "{{sectionId}}", "name": "回放分区改名" }
+    },
+    {
+      "method": "threadSection/delete",
+      "needs": ["sectionId"],
+      "params": { "sectionId": "{{sectionId}}" }
+    },
+    {
+      "method": "project/delete",
+      "needs": ["projectId"],
+      "params": { "projectId": "{{projectId}}" }
+    },
+
+    { "phase": "文件与终端", "method": "fs/getMetadata", "params": { "path": "{{cwd}}" } },
+    { "method": "fs/readDirectory", "params": { "path": "{{cwd}}" } },
+    { "method": "fs/createDirectory", "params": { "path": "{{dir}}", "recursive": true } },
+    { "method": "fs/writeFile", "params": { "path": "{{file}}", "dataBase64": "aGVsbG8K" } },
+    { "method": "fs/readFile", "params": { "path": "{{file}}" } },
+    {
+      "method": "fs/copy",
+      "params": { "sourcePath": "{{file}}", "destinationPath": "{{copy}}", "recursive": false }
+    },
+    { "method": "fs/watch", "params": { "path": "{{cwd}}", "watchId": "replay-watch" } },
+    { "method": "fs/unwatch", "params": { "watchId": "replay-watch" } },
+    { "method": "fs/remove", "params": { "path": "{{copy}}", "force": true, "recursive": false } },
+    {
+      "method": "fuzzyFileSearch/sessionStart",
+      "params": { "sessionId": "replay-search", "roots": ["{{cwd}}"] }
+    },
+    {
+      "method": "fuzzyFileSearch/sessionUpdate",
+      "params": { "sessionId": "replay-search", "query": "note" }
+    },
+    { "method": "fuzzyFileSearch/sessionStop", "params": { "sessionId": "replay-search" } },
+    { "method": "fuzzyFileSearch", "params": { "query": "note", "roots": ["{{cwd}}"] } },
+    {
+      "method": "process/spawn",
+      "params": {
+        "command": ["/bin/sh"],
+        "cwd": "{{cwd}}",
+        "processHandle": "replay-terminal",
+        "tty": true,
+        "size": { "rows": 24, "cols": 80 },
+        "streamStdin": true,
+        "streamStdoutStderr": true
+      }
+    },
+    {
+      "method": "process/resizePty",
+      "params": { "processHandle": "replay-terminal", "size": { "rows": 30, "cols": 100 } }
+    },
+    {
+      "method": "process/writeStdin",
+      "params": { "processHandle": "replay-terminal", "deltaBase64": "ZWNobyBvawo=" }
+    },
+    {
+      "method": "process/kill",
+      "params": { "processHandle": "replay-terminal" },
+      "await": "process/exited"
+    },
+    {
+      "method": "command/exec",
+      "params": { "command": ["/bin/sh", "-c", "printf ok"], "cwd": "{{cwd}}" }
+    },
+    { "method": "gitDiffToRemote", "params": { "cwd": "{{repo}}" } },
+    {
+      "id": "gitDiffToRemote#不是仓库",
+      "method": "gitDiffToRemote",
+      "params": { "cwd": "{{cwd}}" }
+    },
+
+    {
+      "phase": "它会试、我们没有的",
+      "method": "thread/search",
+      "params": { "searchTerm": "回放" }
+    },
+    {
+      "method": "thread/attachmentOwner/list",
+      "params": { "attachmentType": "replay", "identityKey": "none" }
+    },
+    { "method": "memory/status", "params": {} },
+    { "method": "windowsSandbox/readiness" },
+
+    { "phase": "收尾", "method": "thread/unsubscribe", "params": { "threadId": "{{threadId}}" } },
+    {
+      "id": "thread/list#收尾",
+      "method": "thread/list",
+      "params": { "useStateDbOnly": true, "sortKey": "updated_at", "archived": false, "limit": 100 }
+    }
+  ],
+  "expectations": {
+    "note": "各入口上不成功的那些步骤，值是 JSON-RPC 错误码；没列的步骤都必须成功。键是步骤的 id（没写 id 的就是方法名）。-32601 是没有这个方法，-32004 是这个运行时不适用。某个入口后来支持了，回放会失败并提醒把它从这里删掉。",
+    "claude": {
+      "plugin/list": -32004,
+      "remoteControl/status/read": -32004,
+      "gitDiffToRemote#不是仓库": -32600,
+      "thread/search": -32601,
+      "thread/attachmentOwner/list": -32601,
+      "memory/status": -32004
+    },
+    "pi": {
+      "mcpServerStatus/list": -32601,
+      "remoteControl/status/read": -32601,
+      "thread/goal/get": -32601,
+      "gitDiffToRemote#不是仓库": -32600,
+      "thread/search": -32601,
+      "thread/attachmentOwner/list": -32601,
+      "memory/status": -32601,
+      "windowsSandbox/readiness": -32601
+    },
+    "dsh": {
+      "mcpServerStatus/list": -32004,
+      "remoteControl/status/read": -32601,
+      "thread/timeline/list": -32601,
+      "thread/fork": -32601,
+      "threadSection/create": -32601,
+      "gitDiffToRemote#不是仓库": -32600,
+      "thread/search": -32601,
+      "thread/attachmentOwner/list": -32601,
+      "memory/status": -32601,
+      "windowsSandbox/readiness": -32601
+    }
+  }
+}

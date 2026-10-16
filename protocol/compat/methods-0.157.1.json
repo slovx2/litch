@@ -1,0 +1,610 @@
+{
+  "note": "从上游 codex 的定义宏里提取的“方法 → 应答类型”（带 experimental 的是握手声明了 experimentalApi 才能用的），由 scripts/extract-protocol-methods.mjs 生成，不要手改。协议兼容性测试用它找到每个应答该按哪个类型校验。",
+  "source": "openai/codex 标签 rust-v0.157.1，codex-rs/app-server-protocol/src/protocol/common.rs",
+  "version": "0.157.1",
+  "clientRequests": {
+    "initialize": {
+      "response": "InitializeResponse"
+    },
+    "server/diagnostics": {
+      "response": "ServerDiagnosticsResponse",
+      "experimental": true
+    },
+    "userVerification/status": {
+      "response": "UserVerificationStatusResponse",
+      "experimental": true
+    },
+    "userVerification/enroll": {
+      "response": "UserVerificationEnrollResponse",
+      "experimental": true
+    },
+    "userVerification/delete": {
+      "response": "UserVerificationDeleteResponse",
+      "experimental": true
+    },
+    "userVerification/verify": {
+      "response": "UserVerificationVerifyResponse",
+      "experimental": true
+    },
+    "userVerification/cancel": {
+      "response": "UserVerificationCancelResponse",
+      "experimental": true
+    },
+    "thread/start": {
+      "response": "ThreadStartResponse"
+    },
+    "thread/resume": {
+      "response": "ThreadResumeResponse"
+    },
+    "thread/fork": {
+      "response": "ThreadForkResponse"
+    },
+    "thread/archive": {
+      "response": "ThreadArchiveResponse"
+    },
+    "thread/delete": {
+      "response": "ThreadDeleteResponse"
+    },
+    "thread/unsubscribe": {
+      "response": "ThreadUnsubscribeResponse"
+    },
+    "thread/increment_elicitation": {
+      "response": "ThreadIncrementElicitationResponse",
+      "experimental": true
+    },
+    "thread/decrement_elicitation": {
+      "response": "ThreadDecrementElicitationResponse",
+      "experimental": true
+    },
+    "thread/name/set": {
+      "response": "ThreadSetNameResponse"
+    },
+    "thread/goal/set": {
+      "response": "ThreadGoalSetResponse"
+    },
+    "thread/goal/get": {
+      "response": "ThreadGoalGetResponse"
+    },
+    "thread/goal/clear": {
+      "response": "ThreadGoalClearResponse"
+    },
+    "thread/queue/add": {
+      "response": "ThreadQueueAddResponse",
+      "experimental": true
+    },
+    "thread/queue/list": {
+      "response": "ThreadQueueListResponse",
+      "experimental": true
+    },
+    "thread/queue/update": {
+      "response": "ThreadQueueUpdateResponse",
+      "experimental": true
+    },
+    "thread/queue/delete": {
+      "response": "ThreadQueueDeleteResponse",
+      "experimental": true
+    },
+    "thread/queue/reorder": {
+      "response": "ThreadQueueReorderResponse",
+      "experimental": true
+    },
+    "thread/queue/start": {
+      "response": "ThreadQueueStartResponse",
+      "experimental": true
+    },
+    "thread/metadata/update": {
+      "response": "ThreadMetadataUpdateResponse"
+    },
+    "thread/attachment/add": {
+      "response": "ThreadAttachmentAddResponse"
+    },
+    "thread/attachment/list": {
+      "response": "ThreadAttachmentListResponse"
+    },
+    "thread/attachment/remove": {
+      "response": "ThreadAttachmentRemoveResponse"
+    },
+    "thread/section/move": {
+      "response": "ThreadSectionMoveResponse"
+    },
+    "thread/settings/update": {
+      "response": "ThreadSettingsUpdateResponse",
+      "experimental": true
+    },
+    "thread/memoryMode/set": {
+      "response": "ThreadMemoryModeSetResponse",
+      "experimental": true
+    },
+    "memory/status": {
+      "response": "MemoryStatusResponse",
+      "experimental": true
+    },
+    "memory/reset": {
+      "response": "MemoryResetResponse",
+      "experimental": true
+    },
+    "rollout/compress": {
+      "response": "RolloutCompressResponse",
+      "experimental": true
+    },
+    "thread/unarchive": {
+      "response": "ThreadUnarchiveResponse"
+    },
+    "thread/compact/start": {
+      "response": "ThreadCompactStartResponse"
+    },
+    "thread/shellCommand": {
+      "response": "ThreadShellCommandResponse"
+    },
+    "thread/approveGuardianDeniedAction": {
+      "response": "ThreadApproveGuardianDeniedActionResponse"
+    },
+    "thread/backgroundTerminals/clean": {
+      "response": "ThreadBackgroundTerminalsCleanResponse",
+      "experimental": true
+    },
+    "thread/backgroundTerminals/list": {
+      "response": "ThreadBackgroundTerminalsListResponse",
+      "experimental": true
+    },
+    "thread/backgroundTerminals/terminate": {
+      "response": "ThreadBackgroundTerminalsTerminateResponse",
+      "experimental": true
+    },
+    "thread/revert": {
+      "response": "ThreadRevertResponse"
+    },
+    "thread/list": {
+      "response": "ThreadListResponse"
+    },
+    "project/list": {
+      "response": "ProjectListResponse",
+      "experimental": true
+    },
+    "project/read": {
+      "response": "ProjectReadResponse",
+      "experimental": true
+    },
+    "project/create": {
+      "response": "ProjectCreateResponse",
+      "experimental": true
+    },
+    "project/import": {
+      "response": "ProjectImportResponse",
+      "experimental": true
+    },
+    "project/update": {
+      "response": "ProjectUpdateResponse",
+      "experimental": true
+    },
+    "project/move": {
+      "response": "ProjectMoveResponse",
+      "experimental": true
+    },
+    "project/delete": {
+      "response": "ProjectDeleteResponse",
+      "experimental": true
+    },
+    "threadSection/list": {
+      "response": "ThreadSectionListResponse"
+    },
+    "threadSection/create": {
+      "response": "ThreadSectionCreateResponse"
+    },
+    "threadSection/update": {
+      "response": "ThreadSectionUpdateResponse"
+    },
+    "threadSection/delete": {
+      "response": "ThreadSectionDeleteResponse"
+    },
+    "thread/search": {
+      "response": "ThreadSearchResponse",
+      "experimental": true
+    },
+    "thread/searchOccurrences": {
+      "response": "ThreadSearchOccurrencesResponse",
+      "experimental": true
+    },
+    "thread/loaded/list": {
+      "response": "ThreadLoadedListResponse"
+    },
+    "thread/read": {
+      "response": "ThreadReadResponse"
+    },
+    "thread/turns/list": {
+      "response": "ThreadTurnsListResponse"
+    },
+    "thread/items/list": {
+      "response": "ThreadItemsListResponse"
+    },
+    "thread/inject_items": {
+      "response": "ThreadInjectItemsResponse"
+    },
+    "skills/list": {
+      "response": "SkillsListResponse"
+    },
+    "skills/extraRoots/set": {
+      "response": "SkillsExtraRootsSetResponse"
+    },
+    "hooks/list": {
+      "response": "HooksListResponse"
+    },
+    "marketplace/add": {
+      "response": "MarketplaceAddResponse"
+    },
+    "marketplace/remove": {
+      "response": "MarketplaceRemoveResponse"
+    },
+    "marketplace/upgrade": {
+      "response": "MarketplaceUpgradeResponse"
+    },
+    "plugin/list": {
+      "response": "PluginListResponse"
+    },
+    "plugin/search": {
+      "response": "PluginSearchResponse",
+      "experimental": true
+    },
+    "plugin/installed": {
+      "response": "PluginInstalledResponse"
+    },
+    "plugin/reconcile": {
+      "response": "PluginReconcileResponse"
+    },
+    "plugin/read": {
+      "response": "PluginReadResponse"
+    },
+    "plugin/skill/read": {
+      "response": "PluginSkillReadResponse"
+    },
+    "plugin/share/save": {
+      "response": "PluginShareSaveResponse"
+    },
+    "plugin/share/updateTargets": {
+      "response": "PluginShareUpdateTargetsResponse"
+    },
+    "plugin/share/list": {
+      "response": "PluginShareListResponse"
+    },
+    "plugin/share/checkout": {
+      "response": "PluginShareCheckoutResponse"
+    },
+    "plugin/share/delete": {
+      "response": "PluginShareDeleteResponse"
+    },
+    "app/read": {
+      "response": "AppsReadResponse"
+    },
+    "app/list": {
+      "response": "AppsListResponse"
+    },
+    "app/installed": {
+      "response": "AppsInstalledResponse"
+    },
+    "fs/readFile": {
+      "response": "FsReadFileResponse"
+    },
+    "fs/writeFile": {
+      "response": "FsWriteFileResponse"
+    },
+    "fs/createDirectory": {
+      "response": "FsCreateDirectoryResponse"
+    },
+    "fs/getMetadata": {
+      "response": "FsGetMetadataResponse"
+    },
+    "fs/readDirectory": {
+      "response": "FsReadDirectoryResponse"
+    },
+    "fs/remove": {
+      "response": "FsRemoveResponse"
+    },
+    "fs/copy": {
+      "response": "FsCopyResponse"
+    },
+    "fs/watch": {
+      "response": "FsWatchResponse"
+    },
+    "fs/unwatch": {
+      "response": "FsUnwatchResponse"
+    },
+    "skills/config/write": {
+      "response": "SkillsConfigWriteResponse"
+    },
+    "plugin/install": {
+      "response": "PluginInstallResponse"
+    },
+    "plugin/uninstall": {
+      "response": "PluginUninstallResponse"
+    },
+    "turn/start": {
+      "response": "TurnStartResponse"
+    },
+    "turn/settings/update": {
+      "response": "TurnSettingsUpdateResponse",
+      "experimental": true
+    },
+    "turn/steer": {
+      "response": "TurnSteerResponse"
+    },
+    "turn/interrupt": {
+      "response": "TurnInterruptResponse"
+    },
+    "thread/realtime/start": {
+      "response": "ThreadRealtimeStartResponse",
+      "experimental": true
+    },
+    "thread/realtime/appendAudio": {
+      "response": "ThreadRealtimeAppendAudioResponse",
+      "experimental": true
+    },
+    "thread/realtime/appendText": {
+      "response": "ThreadRealtimeAppendTextResponse",
+      "experimental": true
+    },
+    "thread/realtime/appendSpeech": {
+      "response": "ThreadRealtimeAppendSpeechResponse",
+      "experimental": true
+    },
+    "thread/realtime/stop": {
+      "response": "ThreadRealtimeStopResponse",
+      "experimental": true
+    },
+    "thread/timeline/list": {
+      "response": "ThreadTimelineListResponse",
+      "experimental": true
+    },
+    "thread/realtime/listVoices": {
+      "response": "ThreadRealtimeListVoicesResponse",
+      "experimental": true
+    },
+    "review/start": {
+      "response": "ReviewStartResponse"
+    },
+    "model/list": {
+      "response": "ModelListResponse"
+    },
+    "account/gatewayOAuth/read": {
+      "response": "GatewayOAuthReadResponse"
+    },
+    "account/gatewayOAuth/login": {
+      "response": "GatewayOAuthLoginResponse"
+    },
+    "account/gatewayOAuth/cancel": {
+      "response": "GatewayOAuthCancelResponse"
+    },
+    "modelProvider/capabilities/read": {
+      "response": "ModelProviderCapabilitiesReadResponse"
+    },
+    "experimentalFeature/list": {
+      "response": "ExperimentalFeatureListResponse"
+    },
+    "permissionProfile/list": {
+      "response": "PermissionProfileListResponse"
+    },
+    "experimentalFeature/enablement/set": {
+      "response": "ExperimentalFeatureEnablementSetResponse"
+    },
+    "remoteControl/enable": {
+      "response": "RemoteControlEnableResponse",
+      "experimental": true
+    },
+    "remoteControl/disable": {
+      "response": "RemoteControlDisableResponse",
+      "experimental": true
+    },
+    "remoteControl/status/read": {
+      "response": "RemoteControlStatusReadResponse",
+      "experimental": true
+    },
+    "remoteControl/pairing/start": {
+      "response": "RemoteControlPairingStartResponse",
+      "experimental": true
+    },
+    "remoteControl/pairing/status": {
+      "response": "RemoteControlPairingStatusResponse",
+      "experimental": true
+    },
+    "remoteControl/client/list": {
+      "response": "RemoteControlClientsListResponse",
+      "experimental": true
+    },
+    "remoteControl/client/revoke": {
+      "response": "RemoteControlClientsRevokeResponse",
+      "experimental": true
+    },
+    "collaborationMode/list": {
+      "response": "CollaborationModeListResponse",
+      "experimental": true
+    },
+    "mock/experimentalMethod": {
+      "response": "MockExperimentalMethodResponse",
+      "experimental": true
+    },
+    "environment/add": {
+      "response": "EnvironmentAddResponse",
+      "experimental": true
+    },
+    "environment/info": {
+      "response": "EnvironmentInfoResponse",
+      "experimental": true
+    },
+    "environment/status": {
+      "response": "EnvironmentStatusResponse",
+      "experimental": true
+    },
+    "mcpServer/oauth/login": {
+      "response": "McpServerOauthLoginResponse"
+    },
+    "config/mcpServer/reload": {
+      "response": "McpServerRefreshResponse"
+    },
+    "mcpServerStatus/list": {
+      "response": "ListMcpServerStatusResponse"
+    },
+    "mcpServer/resource/read": {
+      "response": "McpResourceReadResponse"
+    },
+    "mcpServer/event/stream/start": {
+      "response": "McpServerEventStreamStartResponse",
+      "experimental": true
+    },
+    "mcpServer/event/stream/stop": {
+      "response": "McpServerEventStreamStopResponse",
+      "experimental": true
+    },
+    "mcpServer/tool/call": {
+      "response": "McpServerToolCallResponse"
+    },
+    "windowsSandbox/setupStart": {
+      "response": "WindowsSandboxSetupStartResponse"
+    },
+    "windowsSandbox/readiness": {
+      "response": "WindowsSandboxReadinessResponse"
+    },
+    "account/login/start": {
+      "response": "LoginAccountResponse"
+    },
+    "account/bedrock/discover": {
+      "response": "BedrockDiscoverResponse",
+      "experimental": true
+    },
+    "account/bedrock/setup": {
+      "response": "BedrockSetupResponse",
+      "experimental": true
+    },
+    "account/login/cancel": {
+      "response": "CancelLoginAccountResponse"
+    },
+    "account/logout": {
+      "response": "LogoutAccountResponse"
+    },
+    "account/rateLimits/read": {
+      "response": "GetAccountRateLimitsResponse"
+    },
+    "account/rateLimitResetCredit/consume": {
+      "response": "ConsumeAccountRateLimitResetCreditResponse"
+    },
+    "account/usage/read": {
+      "response": "GetAccountTokenUsageResponse"
+    },
+    "account/workspaceMessages/read": {
+      "response": "GetWorkspaceMessagesResponse"
+    },
+    "account/sendAddCreditsNudgeEmail": {
+      "response": "SendAddCreditsNudgeEmailResponse"
+    },
+    "feedback/upload": {
+      "response": "FeedbackUploadResponse"
+    },
+    "command/exec": {
+      "response": "CommandExecResponse"
+    },
+    "command/exec/write": {
+      "response": "CommandExecWriteResponse"
+    },
+    "command/exec/terminate": {
+      "response": "CommandExecTerminateResponse"
+    },
+    "command/exec/resize": {
+      "response": "CommandExecResizeResponse"
+    },
+    "process/spawn": {
+      "response": "ProcessSpawnResponse",
+      "experimental": true
+    },
+    "process/writeStdin": {
+      "response": "ProcessWriteStdinResponse",
+      "experimental": true
+    },
+    "process/kill": {
+      "response": "ProcessKillResponse",
+      "experimental": true
+    },
+    "process/resizePty": {
+      "response": "ProcessResizePtyResponse",
+      "experimental": true
+    },
+    "config/read": {
+      "response": "ConfigReadResponse"
+    },
+    "externalAgentConfig/detect": {
+      "response": "ExternalAgentConfigDetectResponse"
+    },
+    "externalAgentConfig/import": {
+      "response": "ExternalAgentConfigImportResponse"
+    },
+    "externalAgentConfig/import/recordHistory": {
+      "response": "ExternalAgentConfigImportHistoryRecordResponse"
+    },
+    "externalAgentConfig/import/readHistories": {
+      "response": "ExternalAgentConfigImportHistoriesReadResponse"
+    },
+    "config/value/write": {
+      "response": "ConfigWriteResponse"
+    },
+    "config/batchWrite": {
+      "response": "ConfigWriteResponse"
+    },
+    "configRequirements/read": {
+      "response": "ConfigRequirementsReadResponse"
+    },
+    "account/read": {
+      "response": "GetAccountResponse"
+    },
+    "getConversationSummary": {
+      "response": "GetConversationSummaryResponse"
+    },
+    "gitDiffToRemote": {
+      "response": "GitDiffToRemoteResponse"
+    },
+    "getAuthStatus": {
+      "response": "GetAuthStatusResponse"
+    },
+    "fuzzyFileSearch": {
+      "response": "FuzzyFileSearchResponse"
+    },
+    "fuzzyFileSearch/sessionStart": {
+      "response": "FuzzyFileSearchSessionStartResponse",
+      "experimental": true
+    },
+    "fuzzyFileSearch/sessionUpdate": {
+      "response": "FuzzyFileSearchSessionUpdateResponse",
+      "experimental": true
+    },
+    "fuzzyFileSearch/sessionStop": {
+      "response": "FuzzyFileSearchSessionStopResponse",
+      "experimental": true
+    }
+  },
+  "serverRequests": {
+    "item/commandExecution/requestApproval": {
+      "response": "CommandExecutionRequestApprovalResponse"
+    },
+    "item/fileChange/requestApproval": {
+      "response": "FileChangeRequestApprovalResponse"
+    },
+    "item/tool/requestUserInput": {
+      "response": "ToolRequestUserInputResponse"
+    },
+    "mcpServer/elicitation/request": {
+      "response": "McpServerElicitationRequestResponse"
+    },
+    "item/permissions/requestApproval": {
+      "response": "PermissionsRequestApprovalResponse"
+    },
+    "item/tool/call": {
+      "response": "DynamicToolCallResponse"
+    },
+    "account/chatgptAuthTokens/refresh": {
+      "response": "ChatgptAuthTokensRefreshResponse"
+    },
+    "attestation/generate": {
+      "response": "AttestationGenerateResponse"
+    },
+    "currentTime/read": {
+      "response": "CurrentTimeReadResponse",
+      "experimental": true
+    }
+  }
+}

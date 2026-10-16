@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "rootDir": "../..",
+    "outDir": "./dist",
+    "types": [],
+    "lib": ["ES2023"]
+  },
+  "include": ["src/**/*.mts", "../protocol/src/**/*.mts"]
+}

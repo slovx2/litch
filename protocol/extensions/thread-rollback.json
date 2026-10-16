@@ -1,0 +1,14 @@
+{
+  "method": "thread/rollback",
+  "kind": "ClientRequest",
+  "description": "旧 Desktop 回滚入口；0.157.1 已移除原生方法，Hub 需转换为 paginated thread/revert，legacy 必须明确拒绝。",
+  "params": {
+    "type": "object",
+    "required": ["threadId", "numTurns"],
+    "properties": {
+      "threadId": { "type": "string" },
+      "numTurns": { "type": "integer", "minimum": 0 }
+    }
+  },
+  "responseFile": "v2/ThreadReadResponse.json"
+}

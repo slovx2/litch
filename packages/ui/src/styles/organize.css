@@ -1,0 +1,149 @@
+/* 完整模式收尾这一批的样式：整理侧栏（置顶、分区、工作区）、按声明显示的几处、
+   harness 不可用之后的“下一步”。只用变量，三种皮肤和明暗都跟着走 */
+
+/* ---------- 工作区挑过的颜色：名字前面一个小圆点 ----------
+   行上、信息卡里、“移到工作区”的选项里都是它。设备的线色是方块，工作区用圆点，不会看混 */
+.ws-dot {
+  flex: none;
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--wire);
+}
+.pick-opt b > .ws-dot {
+  margin-right: 6px;
+}
+
+/* ---------- 一行行尾有两个按钮（新建会话、更多）：新建让到左边一格 ---------- */
+.row-line:has(> .row-more) > .row-add {
+  right: 28px;
+}
+/* 设备行尾的小标在“更多”露出来的时候也让位（和“新建会话”的规矩一样） */
+.row-line:has(> .row-more):hover > .dev-row .pill,
+.row-line:has(> .row-more:focus-within) > .dev-row .pill,
+.row-line:has(> .row-more.on) > .dev-row .pill {
+  visibility: hidden;
+}
+
+/* ---------- 行菜单里“再挑一个”的那一屏（移到哪个工作区） ---------- */
+.pick-title {
+  padding: 4px 8px 2px;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.pick-choice b {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.pick-back {
+  margin-top: 2px;
+  border-top: 1px solid var(--line-1);
+  border-radius: 0 0 var(--r1) var(--r1);
+}
+
+/* ---------- 会话的信息卡：标题在行上会截断，这里折行显示全 ---------- */
+.info-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: 600;
+}
+
+/* ---------- 工作区对话框 ---------- */
+.ws-dialog {
+  width: min(480px, calc(100vw - 48px));
+}
+.ws-fixed {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-2);
+  user-select: text;
+}
+/* 可以直接挑的目录：一行一个，点一下填进上面那一栏 */
+.ws-roots {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: 168px;
+  overflow-y: auto;
+}
+.ws-root {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  padding: 3px 8px;
+  border-radius: var(--r1);
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-2);
+  text-align: left;
+}
+.ws-root:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.ws-root.on {
+  background: var(--sel);
+  color: var(--accent);
+}
+/* 色板最前面的“不要颜色”：一个空心的格子，里面一道斜线 */
+.ws-colors button.none {
+  background:
+    linear-gradient(
+      to top right,
+      transparent calc(50% - 1px),
+      var(--ink-3) calc(50% - 1px),
+      var(--ink-3) calc(50% + 1px),
+      transparent calc(50% + 1px)
+    ),
+    var(--raised);
+  box-shadow: inset 0 0 0 1px var(--line-2);
+}
+.ws-colors button.none[aria-checked="true"] {
+  box-shadow:
+    inset 0 0 0 1px var(--line-2),
+    0 0 0 2px var(--panel),
+    0 0 0 3px var(--ink);
+}
+
+/* ---------- harness 用不了：原因、下一步、设备的原话 ----------
+   原因和下一步是界面自己说的，是主要的；设备的原话排在最后、小一号、淡一些 */
+.harness-reason {
+  color: var(--ink-2);
+}
+.harness-next {
+  flex-basis: 100%;
+  color: var(--ink-2);
+}
+.harness-said {
+  flex-basis: 100%;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--ink-3);
+  overflow-wrap: anywhere;
+}
+
+/* ---------- 审批：“以后都允许”记下来的那一条 ---------- */
+.req-rule {
+  display: inline-block;
+  max-width: 220px;
+  margin-left: 6px;
+  padding: 0 4px;
+  border: 1px solid var(--line-2);
+  border-radius: 3px;
+  font: 11px / 16px var(--mono);
+  color: var(--ink-2);
+  vertical-align: middle;
+}
+
+/* ---------- 排着的消息带着图、这时插不进去：“现在就说”淡下去，留着能点 ---------- */
+.tray-row .mini[aria-disabled="true"] {
+  color: var(--ink-3);
+  cursor: default;
+}

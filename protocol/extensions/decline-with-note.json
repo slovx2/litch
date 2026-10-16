@@ -1,0 +1,71 @@
+{
+  "extension": "declineWithNote",
+  "description": "拒绝审批时附一句说明。标准协议里命令和文件改动的“拒绝”只有一个词，带不了话；这项扩展加一种决定：拒绝，并把用户写的说明交给模型，让它知道为什么被拒绝。设计见 design/harness-client/03-adapter-device-service.md 第 6.4 节末尾和第十五节。类型在 packages/protocol/src/harness-capabilities.mts 和 extensions.mts（DeclineWithNoteDecision）。",
+  "appliesTo": "每个 harness 自己的入口，以及经聚合面连到它的连接（聚合面把客户端的握手参数原样带给每个上游）。哪个 harness 支持，看它在 runtime/info 里报的 extensions 有没有 declineWithNote：现在 claude-code 支持；pi 在设置里打开了审批（harness.pi.approvals）时支持，关着时它不发审批，extensions 是空的；dsh 的审批裁决是封闭的几个值、拒绝的理由是固定的，带不了话；原生 codex 的拒绝也带不了话（聚合面上它的文件改动审批另有一处补充，见 SuppliedField）。",
+  "declaration": {
+    "description": "客户端握手时在 initialize 的 capabilities 里用我们自己的键列出认识的扩展名。",
+    "where": "initialize.params.capabilities.litchExtensions",
+    "schema": { "type": "array", "items": { "type": "string" }, "contains": { "const": "declineWithNote" } }
+  },
+  "undeclared": "没声明的连接上线上内容和标准协议一致：命令审批的 availableDecisions 是 [accept, acceptForSession, decline, cancel]，文件改动审批不带 availableDecisions，和加这项扩展之前逐字段相同。用户只能选普通的拒绝，模型看到的是不带说明的拒绝。同一条审批请求可能同时送给几条连接，也可能之后补送给新订阅的连接：每次按要送去的那条连接有没有声明来给参数。",
+  "parts": [
+    {
+      "kind": "EnumValue",
+      "on": "item/commandExecution/requestApproval 的 params.availableDecisions",
+      "value": "declineWithNote",
+      "description": "列了它表示这条请求收“拒绝并附说明”。它排在 decline 后面；客户端可以把两者并成一个“拒绝”，写了说明就答 declineWithNote，没写答 decline。声明了的连接上这份列表只列引擎真的区分对待的决定：没有命令原文可记时不列 acceptForSession。",
+      "schema": { "$ref": "#/definitions/ListedApprovalDecisions" }
+    },
+    {
+      "kind": "Field",
+      "on": "item/fileChange/requestApproval 的 params",
+      "name": "availableDecisions",
+      "description": "标准协议里文件改动的审批不带决定列表，客户端按固定的四个按钮画。声明了的连接上引擎带上这个字段，含义和命令审批的同名字段相同。acceptForSession 只在引擎真的会记住时才列：claude-code 的“这个会话里都允许”是按命令原文记的，改文件的调用选了它下次照样会问，所以不列；pi 的文件改动是按文件记的，其余走这条审批的工具调用按工具记，都列。",
+      "schema": { "$ref": "#/definitions/ListedApprovalDecisions" }
+    },
+    {
+      "kind": "ResponseVariant",
+      "on": "item/commandExecution/requestApproval 与 item/fileChange/requestApproval 的应答",
+      "description": "decision 的一种新取值。只对列了 declineWithNote 的请求用。效果是拒绝这一次调用、回合继续（和 decline 一样），另外把 note 交给模型：claude-code 和 pi 都把它写进这次工具调用的拒绝结果里。note 去掉首尾空白后是空的，等同于 decline。超过 4000 个字符的部分引擎不会交给模型。应答形状是客户端发的，引擎不看这条连接有没有声明就认；没声明的客户端本来就不会发。",
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["decision"],
+        "properties": { "decision": { "$ref": "#/definitions/DeclineWithNoteDecision" } }
+      }
+    },
+    {
+      "kind": "SuppliedField",
+      "on": "聚合面上来自原生 codex 的 item/fileChange/requestApproval 的 params",
+      "name": "availableDecisions",
+      "description": "原生 codex 不支持这项扩展（它在 runtime/info 里的 extensions 是空的），它的拒绝带不了话。它的命令审批自己带 availableDecisions（标准协议的字段，里面可能有带参数的决定），聚合面原样转发，不加 declineWithNote。它的文件改动审批在标准协议里不带决定列表：声明了 declineWithNote 的连接上，设备进程替它补上固定的四种（标准协议里 FileChangeApprovalDecision 的全部取值），不含 declineWithNote；没声明的连接上不补，和标准协议逐字段相同。客户端看到列表里没有 declineWithNote，就知道这条请求的拒绝带不了说明。",
+      "schema": { "$ref": "#/definitions/PlainFileChangeDecisions" }
+    }
+  ],
+  "definitions": {
+    "PlainFileChangeDecisions": {
+      "description": "设备进程替原生 codex 的文件改动审批补的决定列表：固定是这四种，顺序也固定",
+      "const": ["accept", "acceptForSession", "decline", "cancel"]
+    },
+    "ListedApprovalDecisions": {
+      "description": "声明了 declineWithNote 的连接上的决定列表",
+      "type": "array",
+      "items": { "enum": ["accept", "acceptForSession", "decline", "declineWithNote", "cancel"] },
+      "uniqueItems": true,
+      "contains": { "const": "declineWithNote" }
+    },
+    "DeclineWithNoteDecision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["declineWithNote"],
+      "properties": {
+        "declineWithNote": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["note"],
+          "properties": { "note": { "type": "string", "maxLength": 4000 } }
+        }
+      }
+    }
+  }
+}

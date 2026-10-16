@@ -1,0 +1,830 @@
+/* 对话区下面那一块：输入区、排着队的消息、审批卡片、提问向导。只用变量，皮肤的差别在各自的皮肤文件里 */
+.dock-wrap {
+  position: relative;
+  flex: none;
+}
+.dock {
+  padding: 0 24px 16px;
+}
+.dock-in {
+  max-width: 760px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ---------- 通用小控件 ---------- */
+.btn {
+  height: 28px;
+  padding: 0 10px;
+  border-radius: var(--r2);
+  border: 1px solid var(--line-2);
+  background: var(--raised);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  color: var(--ink);
+}
+.btn:hover {
+  border-color: var(--line-3);
+}
+.btn.primary {
+  background: var(--accent-solid);
+  border-color: transparent;
+  color: var(--on-accent);
+  font-weight: 500;
+}
+.btn.primary:hover {
+  filter: brightness(1.08);
+}
+.btn.ghost {
+  border-color: transparent;
+  background: none;
+  color: var(--ink-2);
+}
+.btn.ghost:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.btn:disabled,
+.send:disabled {
+  opacity: 0.45;
+  cursor: default;
+  filter: none;
+}
+.kbd {
+  font: 10px / 14px var(--mono);
+  padding: 0 4px;
+  border: 1px solid var(--line-2);
+  border-radius: 3px;
+  color: var(--ink-3);
+}
+/* 选项里的键位标记跟第一行文字对齐 */
+.opt .kbd {
+  margin-top: 3px;
+}
+.btn.primary .kbd {
+  border-color: color-mix(in srgb, var(--on-accent) 35%, transparent);
+  color: var(--on-accent);
+}
+.ibtn {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r1);
+  color: var(--ink-3);
+  flex: none;
+}
+.ibtn:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+/* ---------- 新建对话页：一句提示语和输入区一起摆在主区域正中 ----------
+   上下各留一块一样高的空：提示语贴着上面那块的底，紧挨着输入区。输入区不在哪个会滚的容器里，
+   选择器往上弹出来的那一块不会被裁掉；主区域矮的时候让出去的是提示语上面的空。
+   消息发出去之后（.sending）换成和会话里一样的摆法：上面是对话，输入区贴底，建好切过去时不跳 */
+.new-page {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.new-page:not(.sending)::after {
+  content: "";
+  flex: 1 1 0;
+}
+.new-hero {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 24px 24px 20px;
+  text-align: center;
+}
+.new-hero h1 {
+  margin: 0;
+  font-size: 24px;
+  line-height: 32px;
+  font-weight: 600;
+  color: var(--ink);
+}
+/* 输入框下面那一排：建在哪台设备上、哪个工作区里 */
+.new-place {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 14px;
+  padding: 0 4px;
+}
+.new-place-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+.new-place-label {
+  flex: none;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+/* 选择器上的小记号：设备的线色（方块）、工作区挑过的颜色（圆点） */
+.pick-btn > :is(.wire-sq, .ws-dot) {
+  margin-right: 4px;
+}
+.pick-opt b > .wire-sq {
+  margin-right: 6px;
+}
+/* 现在建不了的时候，为什么、下一步做什么：排在那句原因的下面 */
+.new-why {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  background: var(--raised);
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-2);
+}
+.new-why-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+.new-why-row b {
+  flex: none;
+  font-weight: 500;
+  color: var(--ink);
+}
+.new-why-acts {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* ---------- 输入区 ---------- */
+.cmp {
+  position: relative;
+  border: 1px solid var(--line-3);
+  border-radius: var(--r2);
+  background: var(--raised);
+  display: flex;
+  flex-direction: column;
+}
+.cmp:focus-within {
+  border-color: var(--accent);
+}
+/* 输入区左缘是当前设备的线色：这条消息会发到哪台机器 */
+.cmp::before,
+.req-frame::after {
+  content: "";
+  position: absolute;
+  left: -1px;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  background: var(--wire);
+  border-radius: 1px;
+}
+/* 卡片的那一条画在外框上（卡片自己会滚，画在它里面会跟着滚走）。外框没有边框，
+   往里挪一个边框的宽度，位置就和输入框的那一条对齐 */
+.req-frame::after {
+  left: 0;
+  top: 9px;
+  bottom: 9px;
+}
+.cmp.off {
+  background: var(--panel);
+}
+/* 有文件拖在上面 */
+.cmp.dropping {
+  border-color: var(--accent);
+  border-style: dashed;
+}
+/* 要发的图片：一排小缩略图，每张右上角一个拿掉的按钮 */
+.cmp-atts {
+  margin: 0;
+  padding: 10px 12px 0 14px;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.cmp-att {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  flex: none;
+}
+.cmp-att img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  background: var(--hover);
+}
+.cmp-att-x {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line-3);
+  border-radius: 50%;
+  background: var(--raised);
+  color: var(--ink-2);
+}
+.cmp-att-x:hover {
+  color: var(--ink);
+  background: var(--hover);
+}
+.cmp-att-x .ic {
+  width: 10px;
+  height: 10px;
+}
+.cmp-bar > .ibtn:disabled {
+  opacity: 0.4;
+}
+.cmp-row {
+  display: flex;
+  align-items: flex-start;
+  padding: 10px 12px 2px 14px;
+}
+.cmp-text {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 24px;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  resize: none;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  /* 行高写整数像素：输入框的高度是按内容量出来的，带零头会让下面的对话区跟着抖 */
+  line-height: 24px;
+}
+.cmp-text::placeholder {
+  color: var(--ink-3);
+}
+.cmp.off .cmp-text {
+  min-height: 46px;
+  padding: 11px 12px 11px 14px;
+  color: var(--ink-3);
+}
+.cmp-bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px 6px 8px;
+}
+.send {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r2);
+  background: var(--accent-solid);
+  color: var(--on-accent);
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.send.stop {
+  background: var(--ink);
+  color: var(--panel);
+}
+/* 上下文占用：小圆环加百分比。平时很淡，快满的时候换成提醒的颜色 */
+.ctx {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-right: 8px;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.ctx svg {
+  width: 14px;
+  height: 14px;
+}
+.ctx circle {
+  fill: none;
+  stroke-width: 2;
+}
+.ctx-track {
+  stroke: var(--line-3);
+}
+.ctx-fill {
+  stroke: var(--accent);
+}
+.ctx.high .ctx-fill {
+  stroke: var(--wait);
+}
+.ctx.full {
+  color: var(--err);
+}
+.ctx.full .ctx-fill {
+  stroke: var(--err);
+}
+/* 圆环是个按钮的时候（已有的会话）：点开是上下文的详情和“压缩上下文” */
+.ctx-pick {
+  flex: none;
+  margin-right: 8px;
+}
+.ctx-btn {
+  height: 24px;
+  margin-right: 0;
+  padding: 0 6px;
+  border-radius: var(--r1);
+}
+.ctx-btn:hover,
+.ctx-btn[aria-expanded="true"] {
+  background: var(--hover);
+  color: var(--ink-2);
+}
+.ctx-btn.full:hover {
+  color: var(--err);
+}
+/* 圆环在底栏的右头，浮层靠右对齐，不伸到输入区外面 */
+.ctx-pop {
+  left: auto;
+  right: 0;
+  min-width: 240px;
+}
+.ctx-detail {
+  padding: 5px 8px 6px;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--ink-3);
+}
+/* 底栏上的选择器：模型、强度、权限。按钮平时很淡，不跟输入的文字抢 */
+.pick {
+  position: relative;
+  min-width: 0;
+}
+.pick-btn {
+  /* 再窄也不比它所在的那一格宽：地方不够时名字截成省略号，不压到旁边的选择器上（侧面板开着、窗口又窄的时候会这样） */
+  max-width: min(180px, 100%);
+  height: 24px;
+  padding: 0 4px 0 6px;
+  border-radius: var(--r1);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.pick-btn:hover,
+.pick-btn[aria-expanded="true"] {
+  background: var(--hover);
+  color: var(--ink);
+}
+.pick-btn svg {
+  flex: none;
+  color: var(--ink-3);
+}
+.pick-pop {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 6px);
+  z-index: 5;
+  min-width: 200px;
+  max-width: min(340px, 80vw);
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  background: var(--overlay);
+  box-shadow: var(--shadow);
+}
+/* 在行上点右键叫出来的：弹在鼠标那里，位置由脚本给 */
+.pick-pop.down.at {
+  position: fixed;
+  right: auto;
+  z-index: 30;
+}
+/* 往下弹、靠右对齐的那一种：侧栏行上的菜单 */
+.pick-pop.down {
+  top: calc(100% + 4px);
+  bottom: auto;
+  left: auto;
+  right: 0;
+  min-width: 140px;
+}
+.pick-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.pick-opt {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 100%;
+  padding: 5px 8px;
+  border-radius: var(--r1);
+  text-align: left;
+  font-size: 12px;
+  line-height: 18px;
+}
+.pick-opt b {
+  font-weight: 500;
+}
+.pick-opt span {
+  color: var(--ink-3);
+}
+.pick-opt:hover {
+  background: var(--hover);
+}
+/* 选中的那一项：标题用强调色（说明那一行有自己的颜色，不跟着变） */
+.pick-opt[aria-selected="true"] {
+  background: var(--sel);
+  color: var(--accent);
+}
+/* 现在做不了的那一项：留着能看到为什么，只是淡下去 */
+.pick-opt[aria-disabled="true"] {
+  color: var(--ink-3);
+  cursor: default;
+}
+.pick-opt[aria-disabled="true"]:hover {
+  background: none;
+}
+/* 不是值、是一件事的那一项（“添加工作区…”）：和上面的值隔开 */
+.pick-opt[data-action] {
+  margin-top: 3px;
+  border-top: 1px solid var(--line-2);
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+  padding-top: 7px;
+}
+.pick-ask {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  width: 260px;
+  font-size: 12px;
+  line-height: 18px;
+}
+.pick-ask span {
+  color: var(--ink-2);
+}
+.pick-ask-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 4px;
+}
+.btn.danger {
+  background: var(--err);
+  border-color: transparent;
+  color: var(--on-accent);
+  font-weight: 500;
+}
+.cmp-hint {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-3);
+  padding: 0 2px;
+}
+.cmp-hint.err,
+.req-foot .err {
+  color: var(--err);
+}
+
+/* 排着队的消息 */
+.tray {
+  margin: 0;
+  padding: 4px 4px 4px 10px;
+  list-style: none;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+}
+.tray-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-2);
+  min-height: 24px;
+}
+.tray-row .mini {
+  align-self: center;
+}
+
+/* ---------- 审批与提问：排在输入框上面，输入框照常在 ---------- */
+/* 卡片自己占一行，夹在对话区和输入区之间（transcript.css 的 .tr-tail 里）。主区域从上到下是：
+   对话区（能伸能缩）、这一行（只能缩）、输入区（不伸不缩）、终端面板。地方不够时先缩对话区，
+   再缩这一行——卡片在里面自己滚；输入区不在能缩的东西里，所以请求怎么也挤不到它。
+   这一层管左右留白和跟输入区之间的空 */
+.req-slot {
+  flex: 0 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0 24px 8px;
+}
+/* 卡片占的地方，和输入区一样宽。最高到窗口的一半，再多就在卡片里面滚 */
+.req-frame {
+  position: relative;
+  flex: 0 1 auto;
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  min-height: 0;
+  max-height: 50vh;
+  display: flex;
+  flex-direction: column;
+}
+.req {
+  position: relative;
+  border: 1px solid color-mix(in srgb, var(--wait) 60%, transparent);
+  border-radius: var(--r2);
+  background: var(--raised);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+/* 卡片里的东西各占各的高度，不够就滚，不互相挤扁 */
+.req > * {
+  flex: none;
+}
+/* 有请求等着的时候，下面的终端面板让一让：上面至少留得下输入区和一张压矮了的卡片。
+   平常大小的窗口里这个上限比面板高得多，碰不到 */
+.main:has(.req-frame) > .term-dock {
+  max-height: max(120px, calc(100% - 360px));
+}
+/* 卡片自己拿着焦点时不画焦点框：它的边框已经够显眼了 */
+.req:focus-visible {
+  outline: 0;
+}
+.req-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px 0 14px;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.req-q {
+  padding: 6px 12px 0 14px;
+  font-size: 15px;
+  font-weight: 600;
+}
+/* 提问向导：每道题一个小标记，答了的实心，跳过的虚线加删除线，当前这一道底下有一道杠 */
+.req-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 12px 5px 14px;
+}
+.step {
+  position: relative;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 5px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r1);
+  font: 11px / 20px var(--mono);
+  color: var(--ink-2);
+  text-align: center;
+}
+.step:hover {
+  border-color: var(--line-3);
+}
+.step[data-state="answered"] {
+  background: var(--accent-solid);
+  border-color: var(--accent-solid);
+  color: var(--on-accent);
+}
+.step[data-state="skipped"] {
+  border-style: dashed;
+  border-color: var(--line-3);
+  color: var(--ink-3);
+  text-decoration: line-through;
+}
+.step[aria-current="step"]::after {
+  content: "";
+  position: absolute;
+  left: -1px;
+  right: -1px;
+  bottom: -5px;
+  height: 2px;
+  background: var(--ink);
+}
+.step:disabled,
+.opt:disabled {
+  cursor: default;
+}
+/* 题目下面的一句说明：这道题跳过了、这道题还没答 */
+.req-hint {
+  padding: 8px 12px 0 14px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-2);
+}
+.req-hint.err {
+  color: var(--err);
+}
+.req-body {
+  margin: 10px 12px 0 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.req-body .well {
+  /* 对话里的输出框是贴底的；这里要批准的东西得从头看起 */
+  display: block;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r1);
+  background: var(--sunken);
+  max-height: 96px;
+  overflow: auto;
+}
+.req-body .well pre {
+  margin: 0;
+  padding: 8px 10px;
+  font: 12px / 19px var(--mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.req-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  font: 11px / 1.5 var(--mono);
+  color: var(--ink-3);
+}
+.req-meta b {
+  font-weight: 400;
+  color: var(--ink-2);
+}
+.req-why {
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.55;
+}
+/* 卡片滚起来的时候这一排按钮留在底下看得见 */
+.req-actions {
+  position: sticky;
+  bottom: 0;
+  background: var(--raised);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 12px 12px 14px;
+}
+.req-foot {
+  border-top: 1px solid var(--line-1);
+  padding: 7px 12px 7px 14px;
+  font-size: 11px;
+  color: var(--ink-3);
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+.req-input {
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  background: var(--sunken);
+  color: var(--ink);
+  font: inherit;
+  outline: 0;
+}
+.req-input:focus {
+  border-color: var(--accent);
+}
+/* 拒绝时写的那句说明：一行输入，右边是发出去和不写了 */
+.req-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 12px 0 14px;
+}
+.req-note .req-input {
+  min-width: 0;
+}
+/* 表单：一栏一栏往下排。太长了和别的卡片一样，整张卡片在外框里滚 */
+.req-form {
+  gap: 12px;
+  padding-bottom: 2px;
+}
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.form-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+.form-label i {
+  font-style: normal;
+  color: var(--err);
+  margin-left: 3px;
+}
+.form-note {
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--ink-3);
+}
+.form-note.err {
+  color: var(--err);
+}
+.form-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.form-check input {
+  accent-color: var(--accent-solid);
+}
+/* 选一个或者选几个：一排能换行的小按钮 */
+.pickset {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.pickset-opt {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  color: var(--ink-2);
+}
+.pickset-opt:hover {
+  border-color: var(--line-3);
+}
+.pickset-opt[aria-checked="true"] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  color: var(--ink);
+}
+a.btn {
+  text-decoration: none;
+}
+/* 没填对的那一栏 */
+.req-input.wrong,
+.pickset.wrong .pickset-opt {
+  border-color: var(--err);
+}
+.opts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.opt {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  text-align: left;
+  width: 100%;
+}
+.opt:hover {
+  border-color: var(--line-3);
+}
+.opt[aria-checked="true"] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+.opt .tx {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.opt .tx b {
+  font-weight: 500;
+}
+.opt .tx span {
+  color: var(--ink-2);
+  font-size: 12px;
+}

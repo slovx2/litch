@@ -1,0 +1,15 @@
+{
+  "repository": "https://github.com/slovx2/litch",
+  "node": "24",
+  "claudeAgentSdk": "0.3.282",
+  "codexProtocol": "0.157.1",
+  "claudeCli": "2.1.282",
+  "piCodingAgent": "0.99.1",
+  "piCli": "0.99.1",
+  "piPlanMode": "0.58.3",
+  "piTuiKit": "0.59.0",
+  "piSubagents": "21.8.1",
+  "dshMinimum": "0.2.0-rc.2",
+  "dshVerified": ["0.2.0-rc.2"],
+  "releaseReady": false
+}

@@ -1,0 +1,520 @@
+// 主进程：只管窗口、生命周期，以及给窗口和核心之间牵一条消息端口。
+// 它不解析协议，不持有会话状态，不在数据路径上（设计文档 01 第四节）。
+import { join, normalize, sep } from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  Menu,
+  MessageChannelMain,
+  nativeTheme,
+  net,
+  protocol,
+  screen,
+  shell,
+  type UtilityProcess,
+  utilityProcess,
+} from 'electron'
+import { openLicenses } from './about.mjs'
+import {
+  ABOUT,
+  ATTACH,
+  CORE_PORT,
+  LANGUAGE,
+  LICENSE_TEXT,
+  MENU,
+  OPEN_EXTERNAL,
+  REQUEST_CORE_PORT,
+  SET_LANGUAGE,
+  SET_LOOK,
+  TERMINALS,
+} from './ipc.mjs'
+import {
+  backdropOf,
+  DEFAULT_LOOK,
+  MIN_SIZE,
+  minSizeOf,
+  parseLook,
+  readLook,
+  type ShellLook,
+  writeLook,
+} from './look.mjs'
+import { installMenu, type MenuLang } from './menu.mjs'
+import {
+  type AliveCount,
+  type QuitOutcome,
+  readQuitChoice,
+  settleTerminalsBeforeQuit,
+  writeQuitChoice,
+} from './quit-terminals.mjs'
+import { runShots } from './shots.mjs'
+import { MOCK_MODES, runSmoke, SMOKE_MODES, type SmokeMode } from './smoke.mjs'
+
+const here = fileURLToPath(new URL('.', import.meta.url))
+/** 界面的构建产物在哪。开发时直接用界面包的产物目录；装成应用后界面跟外壳放在一起（见 scripts/pack.mjs） */
+const uiRoot = normalize(join(here, app.isPackaged ? '../ui' : '../../../packages/ui/dist'))
+// 图标：开发时就在外壳的 assets 目录里，打包时 pack.mjs 把用得着的那一张放在同样的相对位置上
+const assetsDir = normalize(join(here, '../assets'))
+/** 设了就从界面的开发服务器加载，改界面不用重启外壳 */
+const devUrl = process.env.LITCH_UI_URL
+/** 自检的方式，见 smoke.mts。没设就是正常运行 */
+const smokeMode = SMOKE_MODES.includes(process.env.LITCH_SMOKE ?? '')
+  ? (process.env.LITCH_SMOKE as SmokeMode)
+  : undefined
+/** 设了就是给 README 截图：截完存到这个目录里就退出，见 shots.mts */
+const shotsDir = process.env.LITCH_SHOTS
+/** 自检和截图都不显示窗口、不抢单实例锁 */
+const smoke = smokeMode !== undefined || shotsDir !== undefined
+/**
+ * 指定了就不看系统和上次的选择，界面和示例数据都用这种语言。自检固定用中文：
+ * 验收脚本是按中文的会话标题去点的，不能跟着机器的语言变。
+ */
+const forcedLang: 'zh-CN' | 'en' | undefined =
+  process.env.LITCH_LANG === 'en' || process.env.LITCH_LANG === 'zh-CN'
+    ? process.env.LITCH_LANG
+    : smoke
+      ? 'zh-CN'
+      : undefined
+/** 外观上的临时指定，原样交给界面。LITCH_SKIN、LITCH_THEME 是给开发时换着皮肤跑自检用的 */
+const forcedLook: Record<string, string> = {
+  ...(forcedLang ? { lang: forcedLang } : {}),
+  ...(process.env.LITCH_SKIN ? { skin: process.env.LITCH_SKIN } : {}),
+  ...(process.env.LITCH_THEME ? { theme: process.env.LITCH_THEME } : {}),
+}
+/**
+ * 自检和截图由启动它们的脚本给一份临时的用户数据目录，跑完删掉：
+ * 它们会写草稿、存外观的选择，不能落进平时用的那一份里。这一句必须在应用就绪之前执行
+ */
+if (process.env.LITCH_PROFILE) app.setPath('userData', process.env.LITCH_PROFILE)
+// 开发时对着模拟核心跑（client:start:mock）没给目录的，用一份自己的，和平时那份分开：
+// 模拟核心的设备配置、侧栏快照、外观的选择都不该落进平时用的那一份
+else if (process.env.LITCH_MOCK) app.setPath('userData', `${app.getPath('userData')} Mock`)
+/**
+ * 应用自带的适配器在哪，交给核心去启动和连接（见 local-adapter.mts）。空的就是没有。
+ * 装好的应用里它在 Resources/adapter（scripts/pack.mjs 放进去的）；开发时用 LITCH_ADAPTER_ROOT
+ * 指到一份暂存好的目录。
+ * 自检和截图除非明说了状态目录（LITCH_ADAPTER_HOME），否则一律当作没有：
+ * 默认的状态目录是用户平时在用的那一份，自检不许去碰它。
+ */
+const adapterRoot =
+  smoke && !process.env.LITCH_ADAPTER_HOME
+    ? ''
+    : (process.env.LITCH_ADAPTER_ROOT ??
+      (app.isPackaged ? join(process.resourcesPath, 'adapter') : ''))
+const UI_ORIGIN = 'app://ui'
+
+// 界面从自己的协议加载，不用 file://：这样它有一个正常的来源，内容安全策略里的 'self' 才成立，
+// 页面也碰不到安装目录之外的文件。这一句必须在应用就绪之前执行。
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true } },
+])
+
+function serveUi(request: Request): Response | Promise<Response> {
+  const url = new URL(request.url)
+  if (url.host !== 'ui') return new Response('not found', { status: 404 })
+  const path = decodeURIComponent(url.pathname)
+  const file = normalize(join(uiRoot, path === '/' ? 'index.html' : path))
+  // 不许走出界面的产物目录
+  if (!file.startsWith(uiRoot + sep)) return new Response('forbidden', { status: 403 })
+  return net.fetch(pathToFileURL(file).toString())
+}
+
+/** 界面的地址。params 是外观上的临时指定（语言、皮肤、明暗），界面优先用它，但不会记下来 */
+export function uiUrl(params: Record<string, string>): string {
+  const url = new URL(devUrl ?? `${UI_ORIGIN}/index.html`)
+  for (const [name, value] of Object.entries(params)) url.searchParams.set(name, value)
+  return url.toString()
+}
+
+const isUiUrl = (url: string): boolean =>
+  devUrl ? url.startsWith(devUrl) : url.startsWith(`${UI_ORIGIN}/`)
+
+let core: UtilityProcess | null = null
+let quitting = false
+/** 核心连续几次刚起来就退出了。用来拉开重启的间隔，免得出错时原地打转 */
+let quickExits = 0
+
+function startCore(): void {
+  const startedAt = Date.now()
+  const child = utilityProcess.fork(join(here, 'core-host.mjs'), [], {
+    serviceName: 'Litch core',
+    env: {
+      ...process.env,
+      LITCH_VERSION: app.getVersion(),
+      // 设备配置和侧栏快照存在用户数据目录里
+      LITCH_DATA_DIR: app.getPath('userData'),
+      LITCH_ADAPTER_ROOT: adapterRoot,
+      // 示例数据的语言：没指定就跟系统
+      LITCH_LANG: forcedLang ?? (app.getLocale().startsWith('zh') ? 'zh-CN' : 'en'),
+      // 对着模拟核心自检时不连任何设备
+      ...(MOCK_MODES.includes(smokeMode ?? '') || shotsDir ? { LITCH_MOCK: '1' } : {}),
+    },
+  })
+  core = child
+  // 核心只往回发一种消息：退出前问它终端的事，它的回答
+  child.on('message', (message: unknown) => {
+    const data = message as { type?: unknown; id?: unknown; alive?: AliveCount } | null
+    if (data?.type !== TERMINALS || typeof data.id !== 'number') return
+    askWaiting.get(data.id)?.(data.alive ?? null)
+  })
+  child.on('exit', (code) => {
+    if (core === child) core = null
+    if (quitting) return
+    // 核心意外退出：重新拉起，并让所有窗口重新加载，它们会各自再要一个端口
+    quickExits = Date.now() - startedAt < 30_000 ? quickExits + 1 : 0
+    const delay = quickExits === 0 ? 0 : Math.min(500 * 2 ** (quickExits - 1), 10_000)
+    console.error(`核心进程退出了（退出码 ${code}），${delay} 毫秒后重新启动`)
+    setTimeout(() => {
+      if (quitting) return
+      startCore()
+      for (const window of BrowserWindow.getAllWindows()) window.webContents.reload()
+    }, delay)
+  })
+}
+
+// ---------- 外观里要外壳来办的：窗口的底色、页面的缩放、窗口最小多大（look.mts） ----------
+
+/**
+ * 现在按哪一份外观办。启动时是上次记下来的（地址里临时指定了皮肤、明暗的，这一次按指定的来），
+ * 界面起来之后每次报过来就换成它报的
+ */
+let look: ShellLook = DEFAULT_LOOK
+/** 用环境变量临时指定了皮肤或明暗的这一次，界面报来的外观不往下记：那不是用户选的 */
+const keepLook = !process.env.LITCH_SKIN && !process.env.LITCH_THEME
+/** 窗口刚建出来时用的底色、缩放、最小的大小。设置页的验收拿它对“冷启动直接是上次选的” */
+let born: { backdrop: string; zoom: number; minSize: [number, number] } | null = null
+
+/** 屏幕上能放窗口的地方有多大。window 给了就看它所在的那块屏幕 */
+const workArea = (window?: BrowserWindow) =>
+  (window ? screen.getDisplayMatching(window.getBounds()) : screen.getPrimaryDisplay()).workAreaSize
+
+/** 让一个窗口照现在这份外观来：底色、缩放、最小的大小 */
+function dressWindow(window: BrowserWindow): void {
+  const contents = window.webContents
+  if (Math.abs(contents.getZoomFactor() - look.zoom) > 0.001) contents.setZoomFactor(look.zoom)
+  const least = minSizeOf(look.zoom, workArea(window))
+  window.setMinimumSize(least.width, least.height)
+  const [width = 0, height = 0] = window.getSize()
+  // 改最小的大小不会把已经比它小的窗口撑开，这里自己撑
+  if (width < least.width || height < least.height) {
+    window.setSize(Math.max(width, least.width), Math.max(height, least.height))
+  }
+  window.setBackgroundColor(backdropOf(look, nativeTheme.shouldUseDarkColors))
+}
+
+function createWindow(): BrowserWindow {
+  const least = minSizeOf(look.zoom, workArea())
+  const backdrop = backdropOf(look, nativeTheme.shouldUseDarkColors)
+  born = { backdrop, zoom: look.zoom, minSize: [least.width, least.height] }
+  const window = new BrowserWindow({
+    // 截图用固定的尺寸
+    width: Math.max(shotsDir ? 1280 : 1360, least.width),
+    height: Math.max(shotsDir ? 800 : 860, least.height),
+    minWidth: least.width,
+    minHeight: least.height,
+    show: false,
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+    // Linux 上窗口不会自己从可执行文件上取图标，要给；macOS 和 Windows 用的是应用自己的
+    ...(process.platform === 'linux' ? { icon: join(assetsDir, 'icon.png') } : {}),
+    // 页面画出来之前窗口的底色：上次选的皮肤和明暗下内容面的颜色，免得先闪一下白或者闪一下别的皮肤
+    backgroundColor: backdrop,
+    webPreferences: {
+      preload: join(here, 'preload.cjs'),
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
+      backgroundThrottling: !smoke,
+      // 页面一开始就按上次的倍数缩放，不等界面起来再报
+      zoomFactor: look.zoom,
+    },
+  })
+  // 界面不开新窗口，也不跳到别的地址
+  window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  window.webContents.on('will-navigate', (event, url) => {
+    if (!isUiUrl(url)) event.preventDefault()
+  })
+  if (!smoke) window.once('ready-to-show', () => window.show())
+  void window.loadURL(uiUrl(forcedLook))
+  return window
+}
+
+// 牵线：界面要端口时，新开一对端口，一头给核心，一头给界面。之后两边直接对话
+ipcMain.on(REQUEST_CORE_PORT, (event) => {
+  const frame = event.senderFrame
+  if (!core || !frame || frame !== event.sender.mainFrame || !isUiUrl(frame.url)) return
+  const { port1, port2 } = new MessageChannelMain()
+  core.postMessage({ type: ATTACH }, [port1])
+  event.sender.postMessage(CORE_PORT, null, [port2])
+})
+
+// 回答里的链接交给系统的浏览器。只接受界面自己的主框架发来的、http 或 https 的网址
+ipcMain.on(OPEN_EXTERNAL, (event, url: unknown) => {
+  const frame = event.senderFrame
+  if (!frame || frame !== event.sender.mainFrame || !isUiUrl(frame.url)) return
+  if (typeof url !== 'string') return
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    return
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return
+  void shell.openExternal(parsed.toString())
+})
+
+// 界面的外观是用户在界面里选的，存在界面那边：它启动时和每次改的时候报一声。
+// 缩放这里照办；三样都记一份，下次冷启动、页面还没起来的时候窗口先按它们来
+ipcMain.on(SET_LOOK, (event, value: unknown) => {
+  const frame = event.senderFrame
+  if (!frame || frame !== event.sender.mainFrame || !isUiUrl(frame.url)) return
+  const next = parseLook(value)
+  if (!next) return
+  const changed = next.skin !== look.skin || next.theme !== look.theme || next.zoom !== look.zoom
+  look = next
+  const window = BrowserWindow.fromWebContents(event.sender)
+  if (window) dressWindow(window)
+  if (!changed || !keepLook) return
+  try {
+    writeLook(app.getPath('userData'), next)
+  } catch (error) {
+    // 记不下来只影响下次冷启动头一眼的底色，不值得打断人
+    console.error(`没能记下外观：${String(error)}`)
+  }
+})
+
+// 明暗跟随系统的时候，系统换了深浅，窗口的底色跟着换（拖大窗口时露出来的就是它）
+nativeTheme.on('updated', () => {
+  for (const window of BrowserWindow.getAllWindows()) {
+    window.setBackgroundColor(backdropOf(look, nativeTheme.shouldUseDarkColors))
+  }
+})
+
+// ---------- “关于”那一页：版本和许可文本（about.mts） ----------
+
+/**
+ * 应用里带着的许可文本。装好的应用里在资源目录的 licenses 下；没打包时逐包的文本没有收，
+ * 只有仓库根目录里本项目自己的两份。LITCH_LICENSES_DIR 是给自检用的：指到一份收好的目录
+ */
+let licenses: ReturnType<typeof openLicenses> | null = null
+const licensesNow = () => {
+  licenses ??= openLicenses(
+    app.name,
+    process.env.LITCH_LICENSES_DIR ||
+      (app.isPackaged ? join(process.resourcesPath, 'licenses') : null),
+    app.isPackaged ? null : normalize(join(here, '../../..')),
+  )
+  return licenses
+}
+
+ipcMain.handle(ABOUT, (event) => {
+  const frame = event.senderFrame
+  if (!frame || frame !== event.sender.mainFrame || !isUiUrl(frame.url)) return null
+  return {
+    name: app.name,
+    version: app.getVersion(),
+    electron: process.versions.electron ?? '',
+    chrome: process.versions.chrome ?? '',
+    ...licensesNow().shelf,
+  }
+})
+
+ipcMain.handle(LICENSE_TEXT, (event, id: unknown) => {
+  const frame = event.senderFrame
+  if (!frame || frame !== event.sender.mainFrame || !isUiUrl(frame.url)) return null
+  return typeof id === 'string' ? licensesNow().text(id) : null
+})
+
+// ---------- 退出之前：还有终端在运行的话问一声（quit-terminals.mts） ----------
+
+let askSeq = 0
+const askWaiting = new Map<number, (alive: AliveCount | null) => void>()
+
+/** 问核心终端的事：数一数（count），或者都结束（end）。核心没了、到点没答，都是 null */
+function askCore(op: 'count' | 'end', timeoutMs: number): Promise<AliveCount | null> {
+  const child = core
+  if (!child) return Promise.resolve(null)
+  return new Promise((resolve) => {
+    const id = ++askSeq
+    const timer = setTimeout(() => {
+      askWaiting.delete(id)
+      resolve(null)
+    }, timeoutMs)
+    askWaiting.set(id, (alive) => {
+      clearTimeout(timer)
+      askWaiting.delete(id)
+      resolve(alive)
+    })
+    child.postMessage({ type: TERMINALS, id, op })
+  })
+}
+
+/** 自检时不弹窗，用这里给的回答（leave、end、cancel） */
+const quitAnswer = ['leave', 'end', 'cancel'].includes(process.env.LITCH_QUIT_TERMINALS ?? '')
+  ? (process.env.LITCH_QUIT_TERMINALS as 'leave' | 'end' | 'cancel')
+  : undefined
+
+/** answer：不弹窗，直接当作用户点了这一项。验收用 */
+function settleQuit(answer = quitAnswer): Promise<QuitOutcome> {
+  const dataDir = app.getPath('userData')
+  return settleTerminalsBeforeQuit({
+    lang: menuLang ?? 'en',
+    count: () => askCore('count', 1500),
+    async end() {
+      await askCore('end', 5000)
+    },
+    choice: () => readQuitChoice(dataDir),
+    remember(choice) {
+      writeQuitChoice(dataDir, choice)
+      refreshMenu()
+    },
+    window: () => BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null,
+    // 自检不弹窗；没给回答的自检按“留着”算，免得卡在一个看不见的对话框上
+    ...(answer ? { answer } : smoke ? { answer: 'leave' as const } : {}),
+  })
+}
+
+/** 应用菜单现在用的语言。界面起来之前先按系统的来，界面报上来之后跟界面的 */
+let menuLang: MenuLang | null = null
+function refreshMenu(): void {
+  if (!menuLang) return
+  const dataDir = app.getPath('userData')
+  installMenu(menuLang, {
+    toggleSidebar() {
+      const window = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+      window?.webContents.send(MENU, 'sidebar.toggle')
+    },
+    toggleTerminal() {
+      const window = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+      window?.webContents.send(MENU, 'terminal.toggle')
+    },
+    toggleSide() {
+      const window = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+      window?.webContents.send(MENU, 'side.toggle')
+    },
+    openSettings(section) {
+      const window = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+      window?.webContents.send(MENU, section === 'about' ? 'settings.about' : 'settings.open')
+    },
+    zoom(step) {
+      const window = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+      window?.webContents.send(MENU, `zoom.${step}`)
+    },
+    askOnQuit: () => readQuitChoice(dataDir) === 'ask',
+    setAskOnQuit(ask) {
+      try {
+        // 关掉“每次都问”等于记住“留着”：这是不结束任何东西的那一种
+        writeQuitChoice(dataDir, ask ? 'ask' : 'leave')
+      } catch (error) {
+        dialog.showErrorBox(app.name, String(error))
+      }
+      refreshMenu()
+    },
+  })
+}
+function showMenu(lang: MenuLang): void {
+  if (lang === menuLang) return
+  menuLang = lang
+  refreshMenu()
+}
+
+// 界面的语言是用户在界面里选的，存在界面那边：它启动时和每次改的时候报一声，菜单跟着换。
+// 也转告核心：本机的适配器说的话会原样显示在界面上，得是同一种语言
+ipcMain.on(SET_LANGUAGE, (event, lang: unknown) => {
+  const frame = event.senderFrame
+  if (!frame || frame !== event.sender.mainFrame || !isUiUrl(frame.url)) return
+  if (lang !== 'zh-CN' && lang !== 'en') return
+  showMenu(lang)
+  core?.postMessage({ type: LANGUAGE, lang })
+})
+
+/** 这一次退出，终端的事已经问过、办过了 */
+let quitSettled = false
+/** 正在问：这期间再按一次退出不重复问 */
+let quitAsking = false
+
+app.on('before-quit', (event) => {
+  if (!quitSettled && !quitting && core) {
+    // 先别退：问清楚终端怎么办（留在设备上、结束、还是不退了），办完再退
+    event.preventDefault()
+    if (quitAsking) return
+    quitAsking = true
+    void settleQuit()
+      .catch((error: unknown): QuitOutcome => {
+        console.error(`退出前清点终端失败：${String(error)}`)
+        return { proceed: true, alive: null, asked: false, did: 'none' }
+      })
+      .then((outcome) => {
+        quitAsking = false
+        if (!outcome.proceed) return
+        quitSettled = true
+        app.quit()
+      })
+    return
+  }
+  quitting = true
+  core?.kill()
+})
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') app.quit()
+})
+
+app.on('activate', () => {
+  if (BrowserWindow.getAllWindows().length === 0) createWindow()
+})
+
+// 自检时不抢单实例锁，免得和正在用的那个实例互相影响
+if (!smoke && !app.requestSingleInstanceLock()) {
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    const [window] = BrowserWindow.getAllWindows()
+    if (!window) return
+    if (window.isMinimized()) window.restore()
+    window.focus()
+  })
+  // 这里不能在模块顶层等待“就绪”：Electron 要等入口模块执行完才发出就绪事件，顶层一等就成了互相等
+  void app.whenReady().then(() => {
+    if (smoke) app.dock?.hide()
+    // 没打包的时候程序坞上是 Electron 自己的图标，换成我们的，免得和别的 Electron 应用分不清
+    else if (!app.isPackaged) app.dock?.setIcon(join(assetsDir, 'icon-dock.png'))
+    showMenu(forcedLang ?? (app.getLocale().startsWith('zh') ? 'zh-CN' : 'en'))
+    protocol.handle('app', serveUi)
+    // 上次的外观：窗口一建出来就按它来。地址里临时指定了皮肤、明暗的这一次按指定的
+    look =
+      parseLook({ ...readLook(app.getPath('userData')), ...forcedLook }) ??
+      readLook(app.getPath('userData'))
+    startCore()
+    const window = createWindow()
+    const finish = (ok: boolean) => {
+      // 直接退出不会经过“退出前”的事件，这里自己把核心停掉，免得它被当成意外退出再拉起来
+      quitting = true
+      core?.kill()
+      app.exit(ok ? 0 : 1)
+    }
+    if (shotsDir) {
+      const load = (params: Record<string, string>) =>
+        window.loadURL(uiUrl({ ...forcedLook, ...params }))
+      void runShots(window, shotsDir, load).then(finish)
+    } else if (smokeMode) {
+      void runSmoke(window, smokeMode, {
+        quit: (answer) => settleQuit(answer),
+        // 把核心进程杀掉：上面的退出处理会把它重新拉起来，并让窗口重新加载
+        restartCore: () => core?.kill(),
+        // 当作用户点了应用菜单里的那一项：走的是菜单项自己的处理函数
+        menu(id) {
+          const item = Menu.getApplicationMenu()?.getMenuItemById(id)
+          if (!item) return false
+          item.click()
+          return true
+        },
+        load: (params) => window.loadURL(uiUrl(params)),
+        born: () => born,
+        minSize: MIN_SIZE,
+        version: app.getVersion(),
+      }).then(finish)
+    }
+  })
+}

@@ -1,0 +1,251 @@
+{
+  "note": "现有实现与上游结构（protocol/codex-app-server/0.157.1）的出入。各入口的 upstream-compat.test.mts 用不声明任何扩展的客户端回放官方桌面端的请求序列、再走一遍常用流程，服务端发来的每条消息都严格校验；实际的出入必须都在这里，这里的每一条也必须还在出现。这份清单只许变短：修掉一条就删一条；新加的扩展内容不许进来，要按连接的声明来发。where 的每一项是“消息类别 方法 位置”。",
+  "entries": {
+    "claude": [
+      {
+        "problem": "多出字段 jsonrpc",
+        "reason": "信封带了 jsonrpc: \"2.0\"。上游的线上格式不带这个字段（上游自己的客户端会忽略它）。去不去掉待定。",
+        "where": [
+          "envelope error /",
+          "envelope notification /",
+          "envelope response /",
+          "envelope serverRequest /"
+        ]
+      },
+      {
+        "problem": ["多出字段 isPinned", "多出字段 activePermissionProfile"],
+        "reason": "会话对象上自己加的字段：置顶和当前的权限档位。上游的 Thread 没有这两个字段（上游的 activePermissionProfile 在 thread/start 这类应答的顶层）。扩展机制之前就有，客户端在读，还没有改成按连接的声明来发。",
+        "where": [
+          "notification thread/started /thread",
+          "response thread/fork /thread",
+          "response thread/list /data/*",
+          "response thread/metadata/update /thread",
+          "response thread/read /thread",
+          "response thread/resume /thread",
+          "response thread/revert /thread",
+          "response thread/rollback /thread",
+          "response thread/start /thread",
+          "response thread/unarchive /thread"
+        ]
+      },
+      {
+        "problem": ["多出字段 permissionProfile", "多出字段 permissions"],
+        "reason": "应答顶层多带了权限档位的两种写法；上游 0.157.1 这几个应答里只有 activePermissionProfile、approvalPolicy 和 sandbox。",
+        "where": ["response thread/fork /", "response thread/resume /", "response thread/start /"]
+      },
+      {
+        "problem": [
+          "多出字段 initialTurnsPage",
+          "多出字段 itemsBackwardsCursor",
+          "多出字段 turnsBackwardsCursor"
+        ],
+        "reason": "新建和分叉的应答沿用了恢复会话的形状；上游只有 thread/resume 的应答带首页回合和这两个游标。",
+        "where": ["response thread/fork /", "response thread/start /"]
+      },
+      {
+        "problem": [
+          "多出字段 activePermissionProfile",
+          "多出字段 approvalPolicy",
+          "多出字段 approvalsReviewer",
+          "多出字段 cwd",
+          "多出字段 initialTurnsPage",
+          "多出字段 instructionSources",
+          "多出字段 itemsBackwardsCursor",
+          "多出字段 model",
+          "多出字段 modelProvider",
+          "多出字段 multiAgentMode",
+          "多出字段 permissionProfile",
+          "多出字段 permissions",
+          "多出字段 reasoningEffort",
+          "多出字段 runtimeWorkspaceRoots",
+          "多出字段 sandbox",
+          "多出字段 serviceTier",
+          "多出字段 turnsBackwardsCursor"
+        ],
+        "reason": "thread/metadata/update 回的是新建会话那样的整包；上游的应答只有 thread。这个入口还让它改模型和权限，客户端靠回来的整包刷新，改之前要先看谁在读。",
+        "where": ["response thread/metadata/update /"]
+      },
+      {
+        "problem": ["多出字段 turn_id", "多出字段 started_at"],
+        "reason": "时间线里回合边界的条目同时带驼峰和下划线两种写法的字段（有意的，照顾两种读法）；上游线上的是驼峰（见 protocol/schema-corrections/0.157.1.json）。",
+        "where": [
+          "response thread/timeline/list /data/*<turnCompleted>",
+          "response thread/timeline/list /data/*<turnStarted>"
+        ]
+      },
+      {
+        "problem": ["多出字段 completed_at", "多出字段 duration_ms"],
+        "reason": "同上：时间线里回合结束的条目多出来的下划线写法。",
+        "where": ["response thread/timeline/list /data/*<turnCompleted>"]
+      }
+    ],
+    "pi": [
+      {
+        "problem": "多出字段 jsonrpc",
+        "reason": "信封带了 jsonrpc: \"2.0\"。上游的线上格式不带这个字段（上游自己的客户端会忽略它）。去不去掉待定。",
+        "where": ["envelope error /", "envelope response /", "envelope serverRequest /"]
+      },
+      {
+        "problem": ["多出字段 isPinned", "多出字段 activePermissionProfile"],
+        "reason": "会话对象上自己加的字段：置顶和当前的权限档位。上游的 Thread 没有这两个字段（上游的 activePermissionProfile 在 thread/start 这类应答的顶层）。扩展机制之前就有，客户端在读，还没有改成按连接的声明来发。",
+        "where": [
+          "notification thread/started /thread",
+          "response thread/fork /thread",
+          "response thread/list /data/*",
+          "response thread/metadata/update /thread",
+          "response thread/read /thread",
+          "response thread/resume /thread",
+          "response thread/revert /thread",
+          "response thread/rollback /thread",
+          "response thread/start /thread",
+          "response thread/unarchive /thread"
+        ]
+      },
+      {
+        "problem": "多出字段 sectionId",
+        "reason": "会话列表的条目带了所在的分区；上游的 Thread 没有这个字段。",
+        "where": ["response thread/list /data/*"]
+      },
+      {
+        "problem": "多出字段 clientId",
+        "reason": "回合对象带了客户端提交时给的消息标识；上游只在 userMessage 条目上有 clientId，Turn 上没有。",
+        "where": [
+          "response thread/fork /thread/turns/*",
+          "response thread/read /thread/turns/*",
+          "response thread/resume /thread/turns/*",
+          "response thread/rollback /thread/turns/*",
+          "response thread/turns/list /data/*"
+        ]
+      },
+      {
+        "problem": "多出字段 sandboxPolicy",
+        "reason": "应答顶层多带了一份沙箱策略；上游这几个应答里沙箱在 sandbox 字段。",
+        "where": ["response thread/fork /", "response thread/resume /", "response thread/start /"]
+      },
+      {
+        "problem": "多出字段 collaborationMode",
+        "reason": "新建和分叉的应答多带了协作模式；上游的应答里没有。",
+        "where": ["response thread/fork /", "response thread/start /"]
+      },
+      {
+        "problem": ["多出字段 itemsBackwardsCursor", "多出字段 turnsBackwardsCursor"],
+        "reason": "thread/rollback 上游已经删了，结构按 protocol/extensions/thread-rollback.json（照它被删之前的样子）；应答里多带了 thread/revert 才有的两个游标。",
+        "where": ["response thread/rollback /"]
+      },
+      {
+        "problem": "多出字段 threadId",
+        "reason": "thread/started 的参数顶层多带了一份会话标识；上游只有 thread。",
+        "where": ["notification thread/started /"]
+      },
+      {
+        "problem": "多出字段 startedAtMs",
+        "reason": "item/completed 多带了条目开始的时间；上游只有 item/started 带 startedAtMs，item/completed 带的是 completedAtMs。",
+        "where": ["notification item/completed /"]
+      },
+      {
+        "problem": ["多出字段 thread", "多出字段 sandbox", "多出字段 reasoningEffort"],
+        "reason": "thread/settings/updated 的 threadSettings 里多了自己的字段；上游的 ThreadSettings 里对应的是 effort、sandboxPolicy、activePermissionProfile，不含会话对象。",
+        "where": ["notification thread/settings/updated /threadSettings"]
+      },
+      {
+        "problem": "多出字段 severity",
+        "reason": "Pi 的扩展界面发来的提示转成 warning 通知时带了级别；上游的 warning 没有这个字段。",
+        "where": ["notification warning /"]
+      },
+      {
+        "problem": "多出字段 backwardsCursor",
+        "reason": "共用的分页函数一律带回往前翻的游标；上游这几个列表的应答里没有这个字段。",
+        "where": [
+          "response thread/attachment/list /",
+          "response thread/queue/list /",
+          "response threadSection/list /"
+        ]
+      },
+      {
+        "problem": "多出字段 nextCursor",
+        "reason": "hooks/list 的应答多带了下一页的游标；上游这个接口不分页。",
+        "where": ["response hooks/list /"]
+      },
+      {
+        "problem": "多出字段 developer_instructions",
+        "reason": "collaborationMode/list 的条目多带了开发者指令；上游的 CollaborationModeMask 没有这个字段。",
+        "where": ["response collaborationMode/list /data/*"]
+      }
+    ],
+    "dsh": [
+      {
+        "problem": "多出字段 jsonrpc",
+        "reason": "信封带了 jsonrpc: \"2.0\"。上游的线上格式不带这个字段（上游自己的客户端会忽略它）。去不去掉待定。",
+        "where": ["envelope error /", "envelope response /", "envelope serverRequest /"]
+      },
+      {
+        "problem": ["多出字段 isPinned", "多出字段 activePermissionProfile"],
+        "reason": "会话对象上自己加的字段：置顶和当前的权限档位。上游的 Thread 没有这两个字段（上游的 activePermissionProfile 在 thread/start 这类应答的顶层）。扩展机制之前就有，客户端在读，还没有改成按连接的声明来发。",
+        "where": [
+          "notification thread/started /thread",
+          "response thread/list /data/*",
+          "response thread/metadata/update /thread",
+          "response thread/read /thread",
+          "response thread/resume /thread",
+          "response thread/start /thread",
+          "response thread/unarchive /thread"
+        ]
+      },
+      {
+        "problem": "多出字段 archived",
+        "reason": "会话对象带了是否已归档；上游的 Thread 没有这个字段。",
+        "where": ["response thread/list /data/*", "response thread/unarchive /thread"]
+      },
+      {
+        "problem": ["多出字段 sandboxPolicy", "多出字段 permissions"],
+        "reason": "应答顶层多带了一份沙箱策略和权限档位；上游这两个应答里对应的是 sandbox 和 activePermissionProfile。",
+        "where": ["response thread/resume /", "response thread/start /"]
+      },
+      {
+        "problem": "多出字段 collaborationMode",
+        "reason": "新建会话的应答多带了协作模式；上游的应答里没有。",
+        "where": ["response thread/start /"]
+      },
+      {
+        "problem": "多出字段 threadId",
+        "reason": "thread/started 的参数顶层多带了一份会话标识；上游只有 thread。",
+        "where": ["notification thread/started /"]
+      },
+      {
+        "problem": "多出字段 startedAtMs",
+        "reason": "item/completed 多带了条目开始的时间；上游只有 item/started 带 startedAtMs，item/completed 带的是 completedAtMs。",
+        "where": ["notification item/completed /"]
+      },
+      {
+        "problem": [
+          "多出字段 thread",
+          "多出字段 sandbox",
+          "多出字段 reasoningEffort",
+          "多出字段 permissions"
+        ],
+        "reason": "thread/settings/updated 的 threadSettings 里多了自己的字段；上游的 ThreadSettings 里对应的是 effort、sandboxPolicy、activePermissionProfile，不含会话对象。",
+        "where": ["notification thread/settings/updated /threadSettings"]
+      },
+      {
+        "problem": "多出字段 backwardsCursor",
+        "reason": "共用的分页函数一律带回往前翻的游标；上游这几个列表的应答里没有这个字段。",
+        "where": [
+          "response thread/attachment/list /",
+          "response thread/queue/list /",
+          "response threadSection/list /"
+        ]
+      },
+      {
+        "problem": "多出字段 nextCursor",
+        "reason": "hooks/list 的应答多带了下一页的游标；上游这个接口不分页。",
+        "where": ["response hooks/list /"]
+      },
+      {
+        "problem": "多出字段 developer_instructions",
+        "reason": "collaborationMode/list 的条目多带了开发者指令；上游的 CollaborationModeMask 没有这个字段。",
+        "where": ["response collaborationMode/list /data/*"]
+      }
+    ],
+    "device": []
+  }
+}

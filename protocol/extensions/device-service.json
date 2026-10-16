@@ -1,0 +1,52 @@
+{
+  "extension": "deviceService",
+  "description": "常驻服务报自己是哪一份。适配器的常驻服务一旦起来，跑的就一直是起它那一刻的那份程序：应用升级了、另外装了新版，后台的还是旧的。这项扩展让客户端在聚合面上问得到“正在运行的是哪个版本、从哪份适配器起的、什么时候起的、怎么起的”，据此说得出“服务比应用旧”这样的话。它只是报告：能用什么功能仍然只看 runtime/info 的 device.extensions 和每个 harness 的声明，不拿版本号去猜。同一份来历在本机另有两处：<状态目录>/device/service.json 的 service 字段，和 codex-harness-adapter device-start 就绪行的 service 字段（那两处还多一项 options，是服务启动时带的参数，只在本机用）。类型在 packages/protocol/src/device-service.mts。规矩见 design/harness-client/03-adapter-device-service.md 第十五节。",
+  "appliesTo": "只有聚合面，而且要这个设备服务是由适配器主进程拉起的（来历是主进程给的）：runtime/info 的 device.extensions 里列了 deviceService 才有。每个 harness 自己的入口（给官方 Codex 桌面端用的兼容面）上没有这个扩展的任何内容。",
+  "declaration": {
+    "description": "客户端握手时在 capabilities.litchExtensions 里列上 deviceService，runtime/info 的 device 里才有 service 字段。",
+    "where": "initialize.params.capabilities.litchExtensions",
+    "schema": { "type": "array", "items": { "type": "string" }, "contains": { "const": "deviceService" } }
+  },
+  "undeclared": "没声明的连接上 runtime/info 的 device 里没有 service 字段，别的逐字段相同：和加这项扩展之前一样。",
+  "rules": [
+    "来历在服务启动时定下来，之后不变；服务换了一份（停掉再起）以后聚合面的连接也都断过了，重新连上再问一遍就是新的。所以没有变化通知。",
+    "声明了的连接上 service 字段也可能没有：设备进程刚起来、主进程的第一条状态还没有送到的那一小会儿。没有就是“还不知道”，不是“没有服务”。",
+    "version 是给人看、给客户端比新旧用的，不是能力开关。拿不到版本号的构建报 0.0.0-unknown。",
+    "build 只用来比“是不是同一份程序文件”，而且只在 root 相同的时候有意义：版本号相同的两份构建（开发时反复构建）靠它分辨。不要解析它的内容。"
+  ],
+  "parts": [
+    {
+      "kind": "Field",
+      "on": "runtime/info 应答的 device（harness.json 的 DeviceInfo）",
+      "name": "service",
+      "description": "正在运行的那份适配器常驻服务的来历。只给握手时声明了 deviceService 的连接。",
+      "schema": { "$ref": "#/definitions/DeviceServiceInfo" }
+    }
+  ],
+  "definitions": {
+    "DeviceServiceInfo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pid", "version", "root", "startedAt", "detached"],
+      "properties": {
+        "pid": { "description": "常驻进程的进程号", "type": "integer", "minimum": 1 },
+        "version": {
+          "description": "服务的版本，和那份适配器的 codex-harness-adapter version 报的是同一个",
+          "type": "string",
+          "minLength": 1
+        },
+        "root": { "description": "它是从哪份适配器起的：那份适配器的根目录，设备上的绝对路径", "type": "string" },
+        "startedAt": { "description": "什么时候起的，RFC 3339，UTC", "type": "string", "minLength": 1 },
+        "detached": {
+          "description": "true：由 device-start 按需拉起、脱离出去的，没有别的东西管着它的生死。false：在前台运行，或者由服务管理器（brew services、systemd）启动的",
+          "type": "boolean"
+        },
+        "build": {
+          "description": "那份适配器的程序文件的戳，不透明。取不到时没有这个字段",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

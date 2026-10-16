@@ -1,0 +1,343 @@
+// 模拟核心用的示例数据：设备与 harness 管理（设置的结构、一开始的值、环境文件里的变量）。
+// 设置有哪些由“设备服务”声明，界面按类型画——这里就是那个声明。各种类型都放了几项，
+// 还有一项故意用了这一版界面不认识的类型，用来看兜底。内容全是编出来的。
+// 给人看的字本来就要两种语言各一份（界面按当前语言取），所以直接写在这里，不放进 sample-text.mts。
+import type { Bilingual, HarnessView } from '../model.mjs'
+import type {
+  InheritedEnvView,
+  SettingGroupView,
+  SettingSpecView,
+  SettingValueView,
+} from '../model-manage.mjs'
+
+export const both = (zh: string, en: string): Bilingual => ({ 'zh-CN': zh, en })
+
+/** 多数设置项用不到的那几样 */
+const BASE: Pick<SettingSpecView, 'role' | 'minimum' | 'maximum' | 'options'> = {
+  role: null,
+  minimum: null,
+  maximum: null,
+  options: [],
+}
+
+/** 一台设备上的设置：结构，和设置里已经写过的值 */
+export interface SampleSettings {
+  groups: SettingGroupView[]
+  settings: SettingSpecView[]
+  /**
+   * 写过的值，键是设置项的键。密钥只记“设过了”，环境变量表里的密钥没有值：
+   * 模拟核心里根本不留密钥，写进来的密钥当场丢掉
+   */
+  written: Map<string, SettingValueView>
+  inheritedEnv: InheritedEnvView[]
+  /** 一开始就等着重启的 harness */
+  pendingRestart: string[]
+  /** 示例里被别的程序占着的端口：开在这个端口上的入口起不来 */
+  takenPort: number | null
+}
+
+/**
+ * 每个 harness 都有的三项：启用、命令行路径、环境变量。
+ * 启用那一项带着角色标记，界面凭它把开关放到标题行上。codex 那一组故意把它排在第二：
+ * 验收靠这一处确认界面认的是标记，不是“排在最前面的开关”
+ */
+function harnessSettings(harness: HarnessView): SettingSpecView[] {
+  const scope = { kind: 'harness', harness: harness.id } as const
+  const group = `harness.${harness.id}`
+  const { name } = harness
+  const [enabled, cliPath, env] = baseSettings(group, scope, name)
+  return harness.id === 'codex' ? [cliPath, enabled, env] : [enabled, cliPath, env]
+}
+
+function baseSettings(
+  group: string,
+  scope: SettingSpecView['scope'],
+  name: string,
+): [SettingSpecView, SettingSpecView, SettingSpecView] {
+  return [
+    {
+      ...BASE,
+      key: `${group}.enabled`,
+      group,
+      type: 'boolean',
+      scope,
+      default: true,
+      restart: 'harness',
+      role: 'enable',
+      title: both('启用', 'Enabled'),
+      description: both(
+        `关掉之后 ${name} 的运行时会停下来，这台设备不再提供它。会话都留着，重新打开就回来。`,
+        `Turning this off stops the ${name} runtime and this device stops offering it. Sessions are kept and return when you turn it back on.`,
+      ),
+    },
+    {
+      ...BASE,
+      key: `${group}.cliPath`,
+      group,
+      type: 'path',
+      scope,
+      default: '',
+      restart: 'harness',
+      title: both('命令行路径', 'CLI path'),
+      description: both(
+        `这台设备上 ${name} 命令行的绝对路径。留空就到 PATH 里去找。`,
+        `Absolute path to the ${name} command-line tool on this device. Leave it empty to search PATH.`,
+      ),
+    },
+    {
+      ...BASE,
+      key: `${group}.env`,
+      group,
+      type: 'env',
+      scope,
+      default: [],
+      restart: 'harness',
+      title: both('环境变量', 'Environment variables'),
+      description: both(
+        `只给 ${name} 的运行时用：代理、接口地址、密钥之类。同名的变量以这里为准。`,
+        `Used only by the ${name} runtime: proxy, API endpoint, keys and the like. A variable set here wins over one with the same name elsewhere.`,
+      ),
+    },
+  ]
+}
+
+/** 个别 harness 多出来的几项，各是一种类型 */
+function extraSettings(harness: HarnessView): SettingSpecView[] {
+  const scope = { kind: 'harness', harness: harness.id } as const
+  const group = `harness.${harness.id}`
+  if (harness.id === 'claude') {
+    return [
+      {
+        ...BASE,
+        key: `${group}.idleExitMinutes`,
+        group,
+        type: 'integer',
+        scope,
+        default: 30,
+        restart: 'none',
+        minimum: 0,
+        maximum: 1440,
+        title: both('空闲多久后退出（分钟）', 'Exit after idle (minutes)'),
+        description: both(
+          '没有会话在用它的时候，运行时等这么久就自己退出，下次用到再起。填 0 表示一直留着。',
+          'With no session using it, the runtime exits after this long and starts again on demand. 0 keeps it running.',
+        ),
+      },
+      {
+        ...BASE,
+        key: `${group}.logLevel`,
+        group,
+        type: 'enum',
+        scope,
+        default: 'info',
+        restart: 'harness',
+        title: both('日志详细程度', 'Log level'),
+        description: both(
+          '排查问题时调高；越详细日志文件长得越快。',
+          'Raise it while troubleshooting; more detail makes the log file grow faster.',
+        ),
+        options: [
+          { value: 'info', title: both('一般', 'Info') },
+          { value: 'debug', title: both('详细', 'Debug') },
+          { value: 'trace', title: both('逐条协议消息', 'Trace every protocol message') },
+        ],
+      },
+    ]
+  }
+  if (harness.id === 'pi') {
+    return [
+      {
+        ...BASE,
+        key: `${group}.endpoint`,
+        group,
+        type: 'string',
+        scope,
+        default: '',
+        restart: 'harness',
+        title: both('模型接口地址', 'Model endpoint'),
+        description: both(
+          '留空就用 Pi 自己配置里的那个。',
+          'Leave it empty to use the one in Pi’s own configuration.',
+        ),
+      },
+      {
+        ...BASE,
+        key: `${group}.apiKey`,
+        group,
+        type: 'secret',
+        scope,
+        default: { set: false },
+        restart: 'harness',
+        title: both('模型接口的密钥', 'Model API key'),
+        description: both(
+          '只能填新的，填过的不会再显示出来。',
+          'You can only enter a new one; a saved key is never shown again.',
+        ),
+      },
+    ]
+  }
+  if (harness.id === 'dsh') {
+    return [
+      {
+        ...BASE,
+        key: `${group}.wakeSchedule`,
+        group,
+        // 这一版界面不认识的类型：看兜底
+        type: 'schedule',
+        scope,
+        default: 'weekdays 09:00',
+        restart: 'none',
+        title: both('定时唤醒', 'Scheduled wake-up'),
+        description: both(
+          '到点把排着的任务接着做下去。',
+          'Picks queued tasks back up at the scheduled time.',
+        ),
+      },
+    ]
+  }
+  return []
+}
+
+/** 设备级的两组：给官方桌面端的 SSH 入口、可重连的终端 */
+function deviceSettings(harnesses: HarnessView[], firstPort: number): SettingSpecView[] {
+  const scope = { kind: 'device' } as const
+  const entries = harnesses.flatMap((harness, index): SettingSpecView[] => [
+    {
+      ...BASE,
+      key: `ssh.${harness.id}.enabled`,
+      group: 'ssh',
+      type: 'boolean',
+      scope,
+      default: false,
+      restart: 'none',
+      title: both(`${harness.name} 入口`, `${harness.name} entry`),
+      description: both(
+        `开着的时候，Codex 桌面端可以经 SSH 连到 ${harness.name}。关掉会断开它在这个入口上的连接。`,
+        `While on, the Codex desktop app can reach ${harness.name} over SSH. Turning it off drops its connections on this entry.`,
+      ),
+    },
+    {
+      ...BASE,
+      key: `ssh.${harness.id}.port`,
+      group: 'ssh',
+      type: 'integer',
+      scope,
+      default: firstPort + index,
+      restart: 'none',
+      minimum: 1,
+      maximum: 65535,
+      title: both(`${harness.name} 入口的端口`, `${harness.name} entry port`),
+      description: both(
+        '只在 127.0.0.1 上监听。各入口的端口不能相同；改了之后 Codex 桌面端那边的 ssh 配置也要跟着改。',
+        'Listens on 127.0.0.1 only. Each entry needs its own port; after a change the ssh config on the Codex desktop side has to follow.',
+      ),
+    },
+  ])
+  return [
+    ...entries,
+    {
+      ...BASE,
+      key: 'terminal.scrollback',
+      group: 'terminal',
+      type: 'integer',
+      scope,
+      default: 10000,
+      restart: 'none',
+      minimum: 1000,
+      maximum: 1000000,
+      title: both('保留多少行输出', 'Scrollback lines'),
+      description: both(
+        '终端断开再连上时，能补回来这么多行。',
+        'How many lines can be replayed when a terminal reconnects.',
+      ),
+    },
+    {
+      ...BASE,
+      key: 'terminal.keepAlive',
+      group: 'terminal',
+      type: 'enum',
+      scope,
+      default: 'hour',
+      restart: 'none',
+      title: both('没人连着时保留多久', 'Keep unattended terminals for'),
+      description: both(
+        '超过这个时间还没人连回来，终端和里面的进程一起结束。',
+        'A terminal nobody reconnects to within this time is ended together with its processes.',
+      ),
+      options: [
+        { value: 'tenMinutes', title: both('10 分钟', '10 minutes') },
+        { value: 'hour', title: both('1 小时', '1 hour') },
+        { value: 'day', title: both('1 天', '1 day') },
+        { value: 'forever', title: both('一直留着', 'Forever') },
+      ],
+    },
+  ]
+}
+
+/** 这台设备上的设置。哪几台设备能管理由 sample-data.mts 的 manageable 决定 */
+export function sampleSettings(deviceId: string, harnesses: HarnessView[]): SampleSettings {
+  const local = deviceId === 'local'
+  const firstPort = local ? 22230 : 22330
+  const groups: SettingGroupView[] = [
+    ...harnesses.map(
+      (harness): SettingGroupView => ({
+        id: `harness.${harness.id}`,
+        title: both(harness.name, harness.name),
+        description: null,
+        scope: { kind: 'harness', harness: harness.id },
+      }),
+    ),
+    {
+      id: 'ssh',
+      title: both('给 Codex 桌面端的 SSH 入口', 'SSH entries for the Codex desktop app'),
+      description: both(
+        '官方的 Codex 桌面端经这些入口连到各个 harness。只在本机回环地址上监听；Litch 自己不走它们。',
+        'The official Codex desktop app reaches each harness through these entries. They listen on the loopback address only; Litch itself does not use them.',
+      ),
+      scope: { kind: 'device' },
+    },
+    {
+      id: 'terminal',
+      title: both('可重连的终端', 'Reconnectable terminals'),
+      description: null,
+      scope: { kind: 'device' },
+    },
+  ]
+  const settings = [
+    ...harnesses.flatMap((harness) => [...harnessSettings(harness), ...extraSettings(harness)]),
+    ...deviceSettings(harnesses, firstPort),
+  ]
+  const has = (id: string) => harnesses.some((harness) => harness.id === id)
+  const written = new Map<string, SettingValueView>()
+  if (local) {
+    if (has('claude')) {
+      written.set('harness.claude.env', [
+        { name: 'HTTPS_PROXY', value: 'http://127.0.0.1:7890' },
+        { name: 'ANTHROPIC_API_KEY', secret: true },
+      ])
+      written.set('ssh.claude.enabled', true)
+    }
+    if (has('pi')) {
+      written.set('harness.pi.endpoint', 'https://gate.example.com/v1')
+      written.set('harness.pi.apiKey', { set: true })
+      written.set('ssh.pi.enabled', true)
+    }
+  } else if (has('claude')) {
+    written.set('harness.claude.cliPath', '/opt/claude/bin/claude')
+  }
+  return {
+    groups,
+    settings,
+    written,
+    inheritedEnv: local
+      ? [
+          { name: 'NO_PROXY', value: 'localhost,127.0.0.1', secret: false },
+          { name: 'OPENAI_API_KEY', secret: true },
+        ]
+      : [],
+    // 远程那台一开始就有一个 harness 等着重启：改过它的设置，当时它有回合在跑
+    pendingRestart: !local && has('pi') ? ['pi'] : [],
+    // 本机上 Pi 入口的默认端口被别的程序占着
+    takenPort: local ? firstPort + 1 : null,
+  }
+}

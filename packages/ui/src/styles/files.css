@@ -1,0 +1,458 @@
+/* 侧面板里的“文件”标签：左边文件树，右边只读的文件查看器。只用变量。
+   行高在脚本里也有一份（FileTree.tsx 的 ROW_HEIGHT、CodeView.tsx 的 LINE_HEIGHT）：只画看得见的行，位置是按行高算的，
+   两边要一样 */
+.files {
+  --ft-row: 24px;
+  --fv-line: 20px;
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+}
+/* 一个工作区有几个根的时候，最上面挑看哪一个 */
+.ft-roots {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--line-1);
+  font-size: 12px;
+}
+.ft-roots select {
+  min-width: 0;
+  flex: 1 1 0;
+  height: 22px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r1);
+  background: var(--panel);
+  color: var(--ink);
+  font: 11px / 1 var(--mono);
+}
+
+/* ---------- 文件树 ---------- */
+.ft {
+  flex: none;
+  /* 宽度是人拖出来的（FilesTab.tsx 给的变量）；再宽也给右边的内容留一半 */
+  width: var(--ft-w, 200px);
+  max-width: 50%;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  border-right: 1px solid var(--line-1);
+}
+.ft-grip {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: -4px;
+  width: 8px;
+  z-index: 2;
+  cursor: col-resize;
+  touch-action: none;
+}
+.ft-grip:hover,
+.ft-grip:focus-visible {
+  background: var(--press);
+  outline: none;
+}
+.ft-tools {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px;
+}
+.ft-search {
+  min-width: 0;
+  flex: 1 1 0;
+  height: 26px;
+  margin-right: 2px;
+  padding: 0 8px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r1);
+  background: var(--panel);
+  color: var(--ink);
+  font: 12px / 1 var(--mono);
+}
+.ft-search::placeholder {
+  color: var(--ink-3);
+}
+.ft-search:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+.ft-tools .ibtn[aria-pressed="true"] {
+  background: var(--sel);
+  color: var(--ink);
+}
+.ft-tools .ibtn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.ft-scroll {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  /* 行是按位置摆的：滚得再快也别让浏览器去挪锚点 */
+  overflow-anchor: none;
+}
+.ft-scroll:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.ft-pad {
+  position: relative;
+  overflow: hidden;
+}
+.ft-win {
+  padding: 0 6px;
+  will-change: transform;
+}
+.ft-row,
+.ft-note {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: var(--ft-row);
+  padding-left: calc(2px + var(--d, 0) * 12px);
+  padding-right: 6px;
+  border-radius: var(--r1);
+  font-size: 12px;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.ft-row {
+  cursor: pointer;
+  user-select: none;
+}
+.ft-row:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.ft-row[data-kind="dir"] {
+  color: var(--ink);
+}
+.ft-row[aria-selected="true"] {
+  background: var(--sel);
+  color: var(--ink);
+}
+/* 焦点在树上的时候，选中的那一行看得出来是键盘在的地方 */
+.ft-scroll:focus-visible .ft-row[aria-selected="true"] {
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.ft-row > svg.ic {
+  color: var(--ink-3);
+}
+.ft-row .caret-ic {
+  flex: none;
+  color: var(--ink-3);
+  transform: rotate(-90deg);
+}
+.ft-row[aria-expanded="true"] .caret-ic {
+  transform: none;
+}
+.ft-gap {
+  width: 12px;
+  flex: none;
+}
+/* 说明行：正在取、没取到、空的、太多了 */
+.ft-note {
+  padding-left: calc(18px + var(--d, 0) * 12px);
+  color: var(--ink-3);
+  font-size: 11px;
+}
+.ft-note[data-kind="failed"] {
+  color: var(--err);
+}
+.ft-note .mini {
+  flex: none;
+}
+
+/* 整块的说明：根目录没取到、对面不支持、找文件没结果 */
+.ft-hold,
+.fv-hold {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink-3);
+  overflow: auto;
+}
+.ft-hold b,
+.fv-hold b {
+  font-weight: 500;
+  color: var(--ink-2);
+}
+.ft-hold span,
+.fv-hold span {
+  overflow-wrap: anywhere;
+}
+
+/* ---------- 找文件的结果 ---------- */
+.ft-hits {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  padding: 0 6px 6px;
+}
+.ft-hit {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--ft-row);
+  padding: 0 6px;
+  border-radius: var(--r1);
+  font-size: 12px;
+  color: var(--ink);
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+.ft-hit:hover {
+  background: var(--hover);
+}
+.ft-hit[aria-selected="true"] {
+  background: var(--sel);
+}
+.ft-hit > svg.ic {
+  color: var(--ink-3);
+}
+.ft-hit-name {
+  flex: none;
+  max-width: 70%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ft-hit-dir {
+  flex: 1 1 0;
+  font: 11px / 1.4 var(--mono);
+  color: var(--ink-3);
+}
+.ft-hit mark {
+  background: none;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* ---------- 文件查看器 ---------- */
+.fv {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+}
+.fv-none {
+  flex: 1 1 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.6;
+}
+/* 开着的文件 */
+.fv-tabs {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 30px;
+  padding: 0 4px;
+  border-bottom: 1px solid var(--line-1);
+  background: var(--win);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.fv-tab {
+  height: 22px;
+  min-width: 48px;
+  max-width: 160px;
+  flex: 0 1 auto;
+  display: flex;
+  align-items: center;
+  border-radius: var(--r1);
+  color: var(--ink-2);
+  font-size: 12px;
+}
+.fv-tab:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.fv-tab[data-active="true"] {
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: 0 0 0 1px var(--line-2);
+}
+.fv-tab-btn {
+  height: 100%;
+  min-width: 0;
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  padding: 0 2px 0 8px;
+  white-space: nowrap;
+}
+/* 预览：名字是斜的。再点开别的文件它就被换掉 */
+.fv-tab[data-preview="true"] .fv-tab-btn {
+  font-style: italic;
+}
+.fv-tab .ibtn {
+  width: 18px;
+  height: 18px;
+  margin-right: 2px;
+}
+.fv-file {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.fv-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 6px 0 10px;
+  border-bottom: 1px solid var(--line-1);
+  font: 11px / 1 var(--mono);
+  color: var(--ink-2);
+}
+.fv-head .mini {
+  flex: none;
+}
+.fv-foot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 24px;
+  padding: 0 8px 0 10px;
+  border-top: 1px solid var(--line-1);
+  font: 11px / 1 var(--mono);
+  color: var(--ink-3);
+  background: var(--win);
+}
+.fv-foot .pill {
+  flex: none;
+}
+.fv-head .ibtn[aria-busy="true"] svg {
+  animation: fv-turn 0.9s linear infinite;
+}
+@keyframes fv-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fv-head .ibtn[aria-busy="true"] svg {
+    animation: none;
+  }
+}
+
+/* 文件的文字。上色用的颜色和对话里的代码块是同一套（transcript-prose.css） */
+.fv-code {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-width: thin;
+  overflow-anchor: none;
+  font: 12px / var(--fv-line) var(--mono);
+  tab-size: 4;
+  color: var(--ink);
+}
+.fv-code:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.fv-pad {
+  position: relative;
+  overflow: hidden;
+}
+.fv-win {
+  will-change: transform;
+}
+.cl {
+  display: flex;
+  height: var(--fv-line);
+  white-space: pre;
+}
+.cl .ln {
+  position: sticky;
+  left: 0;
+  width: calc(var(--fv-digits, 3) * 1ch + 22px);
+  flex: none;
+  padding-right: 12px;
+  text-align: right;
+  color: var(--ink-3);
+  background: var(--panel);
+  user-select: none;
+}
+.cl .lc {
+  padding-right: 16px;
+}
+/* 定位到的那一行 */
+.cl.hl {
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+}
+.cl.hl .ln {
+  background: color-mix(in srgb, var(--accent) 13%, var(--panel));
+  box-shadow: inset 2px 0 0 var(--accent);
+  color: var(--ink);
+}
+.cl-cut {
+  margin-left: 8px;
+  color: var(--ink-3);
+  font-style: italic;
+}
+
+/* ---------- 对话里能点开的文件路径 ---------- */
+.file-link {
+  color: var(--accent);
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.file-link:hover {
+  text-decoration: underline;
+}
+/* 工具调用里改动的文件、行内代码里的路径：字的颜色照旧，只多一道虚线 */
+.file-head .file-link {
+  color: inherit;
+}
+.md code > .file-link {
+  color: inherit;
+  text-decoration-color: var(--accent);
+}
+
+/* ---------- 窗口窄、面板也跟着窄了的时候：树在上、内容在下 ----------
+   面板不到 360 宽，左右各一半谁都看不了。上下摆之后树和内容都是整个面板那么宽 */
+.side[data-mode="tight"] .files {
+  flex-direction: column;
+}
+.side[data-mode="tight"] .ft {
+  width: auto;
+  max-width: none;
+  height: 42%;
+  min-height: 120px;
+  border-right: 0;
+  border-bottom: 1px solid var(--line-1);
+}
+.side[data-mode="tight"] .ft-grip {
+  display: none;
+}

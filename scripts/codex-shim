@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+RUNTIME_ENV="${CHA_CLAUDE_RUNTIME_ENV:-$HOME/.codex-harness-adapter/runtime.env}"
+
+if [ -f "$RUNTIME_ENV" ]; then
+  # shellcheck source=/dev/null
+  source "$RUNTIME_ENV"
+fi
+
+ADAPTER="${CHA_CLAUDE_ADAPTER:-/opt/codex-harness-adapter/packages/claude/dist/claude/src/adapter.mjs}"
+NODE_BIN="${CHA_CLAUDE_NODE:-node}"
+# Keep the reported version in sync with codexCompatVersion() in src/util.mts —
+# both default to 0.157.1 and honour CHA_CLAUDE_COMPAT_VERSION.
+COMPAT_VERSION="${CHA_CLAUDE_COMPAT_VERSION:-${CODEX_SHIM_COMPAT_VERSION:-0.157.1}}"
+# Distinguishing suffix (see codexVersionSuffix() in src/util.mts). The `-`
+# form (not `:-`) means CHA_CLAUDE_VERSION_SUFFIX="" disables it.
+VERSION_SUFFIX="${CHA_CLAUDE_VERSION_SUFFIX-codex-harness-adapter}"
+MODE="${CHA_CLAUDE_ROUTE:-${CHA_CLAUDE_RUNTIME_TYPE:-agent-sdk-sidecar}}"
+
+resolve_real_codex() {
+  if [ -n "${CODEX_REAL:-}" ] && [ -x "$CODEX_REAL" ]; then
+    printf '%s\n' "$CODEX_REAL"
+    return 0
+  fi
+
+  local self
+  self="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/$(basename "${BASH_SOURCE[0]}")"
+
+  local candidate
+  while IFS= read -r candidate; do
+    [ -n "$candidate" ] || continue
+    [ "$candidate" != "$self" ] || continue
+    [ -x "$candidate" ] || continue
+    printf '%s\n' "$candidate"
+    return 0
+  done < <({ type -P -a codex 2>/dev/null || which -a codex 2>/dev/null; } | awk '!seen[$0]++')
+
+  return 1
+}
+
+is_native_codex_mode() {
+  case "$MODE" in
+    codex|native-codex|real-codex|native|real)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+REAL_CODEX="$(resolve_real_codex || true)"
+
+case "${1:-}" in
+  --version|-V|version)
+    if is_native_codex_mode && [ -n "$REAL_CODEX" ]; then
+      exec "$REAL_CODEX" "$@"
+    fi
+    echo "${CODEX_SHIM_VERSION:-codex-cli ${COMPAT_VERSION}${VERSION_SUFFIX:+ (${VERSION_SUFFIX})}}"
+    exit 0
+    ;;
+  app-server)
+    if is_native_codex_mode; then
+      if [ -n "$REAL_CODEX" ]; then
+        exec "$REAL_CODEX" "$@"
+      fi
+      echo "codex shim is in native Codex mode, but no real codex binary was found; set CODEX_REAL" >&2
+      exit 127
+    fi
+    exec "$NODE_BIN" "$ADAPTER" "$@"
+    ;;
+esac
+
+if [ -n "$REAL_CODEX" ]; then
+  exec "$REAL_CODEX" "$@"
+fi
+
+echo "codex shim supports --version and app-server; set CODEX_REAL for fallback" >&2
+exit 127

@@ -1,0 +1,566 @@
+/* 设备：设备页、添加设备的对话框，以及“没连上”时的原因和该怎么办（侧栏的设备行也用） */
+.pill.ok {
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 14%, transparent);
+}
+
+/* ---------- 没连上：原因、该怎么办、对面的原话 ---------- */
+.cfail {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.cfail-text {
+  color: var(--ink);
+}
+.cfail-guide {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--ink-2);
+}
+.cfail-cmd {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 4px 3px 8px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r1);
+  background: var(--sunken);
+}
+.cfail-cmd code {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--ink);
+  user-select: all;
+}
+.cfail-acts {
+  display: flex;
+  gap: 4px;
+}
+.cfail-acts:empty {
+  display: none;
+}
+.cfail-acts .mini,
+.cfail-cmd .mini {
+  align-self: center;
+  border: 1px solid var(--line-2);
+}
+.cfail-detail {
+  margin: 0;
+  padding: 6px 8px;
+  max-height: 160px;
+  overflow: auto;
+  border-radius: var(--r1);
+  background: var(--sunken);
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--ink-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ---------- 设备页：一台设备一行 ----------
+   一行上只有一眼要看的：线色和在不在线、名字和主机、连接状态、harness、忙闲、最近活动。
+   别的都在点进去的详情里，所以这里没有按钮的样式。 */
+.devp-add {
+  flex: none;
+}
+/* 列表有多宽决定收哪几栏（见这一段末尾），量的是这一层 */
+.devp-wrap {
+  width: 100%;
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 0 24px 24px;
+  container: devp / inline-size;
+}
+.devp-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  /* 线色、名字和主机、连接状态、harness、忙闲、最近活动、箭头。
+     各行共用这几条轨道（下面的 subgrid），栏才对得齐，宽度又跟着内容走 */
+  grid-template-columns: auto minmax(104px, 1fr) auto auto auto auto auto;
+  column-gap: 16px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  background: var(--raised);
+  overflow: hidden;
+}
+.devp-item,
+.devp-row {
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
+}
+.devp-item + .devp-item {
+  border-top: 1px solid var(--line-1);
+}
+.devp-row {
+  align-items: center;
+  min-height: calc(42px + 2 * var(--row-pad));
+  padding: calc(var(--row-pad) + 2px) 10px calc(var(--row-pad) + 2px) 14px;
+  text-align: left;
+}
+.devp-row:hover {
+  background: var(--hover);
+}
+/* 列表把出了边的东西裁掉了，焦点框画在里面 */
+.devp-row:focus-visible {
+  outline-offset: -2px;
+}
+.devp-row > svg.ic {
+  color: var(--ink-3);
+}
+.devp-cell {
+  min-width: 0;
+  display: flex;
+}
+.devp-who {
+  flex-direction: column;
+  gap: 1px;
+}
+.devp-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+.devp-sub {
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--ink-3);
+}
+.devp-has {
+  flex-direction: column;
+  gap: 3px;
+}
+.devp-chips {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.devp-more {
+  font-size: 10px;
+  line-height: 14px;
+  color: var(--ink-3);
+}
+/* 没连上的设备：上面有什么是上次知道的，画得淡一些 */
+.devp-row.off .devp-has {
+  opacity: 0.62;
+}
+.devp-busy {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+.devp-running {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--ink-2);
+}
+.devp-when {
+  justify-content: flex-end;
+  min-width: 30px;
+  font-size: 11px;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+/* 窗口窄的时候先收次要的栏：最近活动，然后忙闲，最后是 harness。名字和连接状态一直在 */
+@container devp (max-width: 600px) {
+  .devp-list {
+    grid-template-columns: auto minmax(104px, 1fr) auto auto auto auto;
+  }
+  .devp-when {
+    display: none;
+  }
+}
+@container devp (max-width: 470px) {
+  .devp-list {
+    grid-template-columns: auto minmax(104px, 1fr) auto auto auto;
+  }
+  .devp-busy {
+    display: none;
+  }
+}
+@container devp (max-width: 340px) {
+  .devp-list {
+    grid-template-columns: auto minmax(104px, 1fr) auto auto;
+  }
+  .devp-has {
+    display: none;
+  }
+}
+
+/* ---------- 设备详情的第一节：这台设备怎么连的、线色，和能对它做的事 ---------- */
+.devp-acts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.devp-ask {
+  font-size: 12px;
+  color: var(--ink-2);
+}
+/* 改名：标题的位置换成输入框 */
+.devp-rename {
+  flex: 0 1 260px;
+  min-width: 0;
+  font-weight: 400;
+}
+.devp-facts {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.devp-facts > div {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-height: 20px;
+  font-size: 12px;
+}
+.devp-facts dt {
+  flex: none;
+  width: 72px;
+  color: var(--ink-3);
+}
+.devp-facts dd {
+  margin: 0;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.devp-note {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-3);
+}
+.devp-note.err {
+  color: var(--err);
+}
+
+/* 线色：一排色块，选中的那个套一圈 */
+.wires {
+  display: inline-flex;
+  gap: 6px;
+}
+.wires button {
+  width: 16px;
+  height: 16px;
+  border-radius: 2px;
+  background: var(--wire);
+}
+.wires button[aria-checked="true"] {
+  box-shadow:
+    0 0 0 2px var(--panel),
+    0 0 0 3px var(--ink);
+}
+
+/* ---------- 对话框 ---------- */
+.modal {
+  width: min(600px, calc(100vw - 48px));
+  /* 顶边固定在一个位置：检查结果一条条出来时对话框只往下长，
+     上面那几行不会从鼠标底下挪走（居中的话每多一条说明，整个列表就往上移一截） */
+  --modal-top: max(24px, 12vh);
+  margin-top: var(--modal-top);
+  max-height: calc(100vh - var(--modal-top) - 24px);
+  padding: 0;
+  border: 0;
+  border-radius: var(--r3);
+  background: var(--overlay);
+  color: var(--ink);
+  box-shadow:
+    0 0 0 1px var(--line-2),
+    var(--shadow);
+  overflow: hidden;
+}
+.modal[open] {
+  display: flex;
+}
+.modal::backdrop {
+  background: rgb(0 0 0 / 42%);
+}
+.modal form {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.modal-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+.modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 16px 14px;
+}
+.modal-foot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--line-2);
+  font-size: 12px;
+}
+.modal-note {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-3);
+}
+.modal-note.err {
+  color: var(--err);
+}
+.modal .form-row {
+  display: flex;
+  gap: 12px;
+}
+.modal .form-row > :first-child {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.modal .form-row > :last-child {
+  flex: 0 0 96px;
+}
+
+/* 两种添加方式之间切换 */
+.seg {
+  display: inline-flex;
+  padding: 1px;
+  gap: 1px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  background: var(--win);
+  font-weight: 400;
+}
+.seg button {
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+  color: var(--ink-2);
+}
+.seg button:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.seg button[aria-pressed="true"] {
+  background: var(--raised);
+  color: var(--ink);
+  box-shadow: 0 0 0 1px var(--line-2);
+}
+
+/* 从 ssh 配置里发现到的主机 */
+.hosts {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  max-height: 260px;
+  overflow: auto;
+}
+.host {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  padding: 4px 12px;
+}
+.host + .host {
+  border-top: 1px solid var(--line-1);
+}
+.host label {
+  flex: 0 1 190px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.host .nm {
+  font: 500 12px / 1.4 var(--mono);
+}
+.host .ad {
+  font: 11px / 1.4 var(--mono);
+  color: var(--ink-3);
+}
+.host input:disabled + .nm {
+  color: var(--ink-3);
+}
+
+/* 检查的结果，一行一条 */
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.steps:empty {
+  display: none;
+}
+.check {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-height: 22px;
+  font-size: 12px;
+  line-height: 18px;
+}
+.check .btn {
+  align-self: center;
+}
+.check .pill {
+  align-self: center;
+}
+.check .mk {
+  flex: none;
+  width: 14px;
+  text-align: center;
+  font: 600 12px / 18px var(--mono);
+}
+.check.pass .mk {
+  color: var(--ok);
+}
+.check.fail .mk {
+  color: var(--err);
+}
+.callout {
+  padding: 8px 10px;
+  border-radius: var(--r2);
+  background: var(--hover);
+  color: var(--ink-2);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* 复古皮肤：硬边、虚线 */
+[data-skin="retro"] .seg {
+  padding: 0;
+  gap: 0;
+  border-color: var(--line-3);
+  background: var(--raised);
+}
+[data-skin="retro"] .seg button {
+  border-radius: 0;
+}
+[data-skin="retro"] .seg button + button {
+  border-left: 1px solid var(--line-3);
+}
+[data-skin="retro"] .seg button[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--panel);
+  box-shadow: none;
+}
+[data-skin="retro"] .modal {
+  box-shadow:
+    0 0 0 1px var(--line-3),
+    var(--shadow);
+}
+[data-skin="retro"] .modal-head {
+  padding-bottom: 10px;
+  border-bottom: 3px double var(--line-3);
+}
+[data-skin="retro"] .modal-foot {
+  border-top-color: var(--line-3);
+}
+[data-skin="retro"] .hosts {
+  border-color: var(--line-3);
+}
+[data-skin="retro"] .host + .host {
+  border-top-style: dashed;
+  border-top-color: var(--line-2);
+}
+[data-skin="retro"] .callout {
+  background: none;
+  border: 1px dashed var(--line-2);
+}
+[data-skin="retro"] .wires button[aria-checked="true"] {
+  box-shadow:
+    0 0 0 2px var(--panel),
+    0 0 0 3px var(--line-3);
+}
+
+/* 做一件找不回来的事之前再问一次（app/Confirm.tsx）：窄一些的对话框 */
+.modal.confirm {
+  width: min(380px, calc(100vw - 48px));
+}
+.confirm-body {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  font-size: 13px;
+  line-height: 20px;
+}
+.confirm-body span {
+  color: var(--ink-2);
+}
+.confirm-body .pick-ask-actions {
+  margin-top: 8px;
+}
+
+/* ---------- 设备详情：设备服务一节；设备列表行上的那一个记号 ---------- */
+/* 换版本的说明：和“这台设备”里没连上的说明是同一种框 */
+.svc-note {
+  padding: 8px 10px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  background: var(--panel);
+  font-size: 12px;
+  line-height: 1.5;
+}
+/* 不闲的原因，一条一行 */
+.svc-busy {
+  margin: 0;
+  padding-left: 18px;
+  list-style: disc;
+  color: var(--ink-2);
+}
+.svc-said {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+/* 列表行：服务比应用自带的旧、这次没换成。只是个记号，跟在连接状态后面 */
+.devp-state {
+  align-items: center;
+  gap: 6px;
+}
+.devp-flag {
+  flex: none;
+  display: inline-flex;
+  color: var(--wait);
+}
+.devp-flag svg.ic {
+  width: 14px;
+  height: 14px;
+}

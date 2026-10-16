@@ -1,0 +1,13 @@
+{
+  "name": "@litch/core",
+  "version": "0.7.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "客户端核心：通道、连接、状态、投影。纯 TypeScript，不依赖 Node、DOM、Electron",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p test/tsconfig.json --noEmit",
+    "build": "tsc -p test/tsconfig.json",
+    "test": "npm run build && node --test dist/packages/core/test/*.test.mjs"
+  }
+}

@@ -1,0 +1,405 @@
+/* 对话区的骨架、用户消息、活动区。回答和输入区在 transcript-prose.css */
+
+/* 反向列布局：滚动位置是“离底部多远”，内容在底部增长时浏览器自己保持贴底。
+   关掉浏览器的滚动锚定，离开底部之后的补偿由 transcript/scroll.ts 自己算 */
+.tr-scroll {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column-reverse;
+  overflow-anchor: none;
+  scrollbar-width: thin;
+}
+.tr {
+  width: 100%;
+  max-width: 808px;
+  /* 反向列里内容不满一屏时默认贴着底排。下边距设成自动，把它推到顶上：
+     短对话从上往下长，点开一个条目时上面的内容也不会被顶走 */
+  margin: 0 auto auto;
+  padding: 20px 24px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.turn {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.mini {
+  align-self: flex-start;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: var(--r1);
+  font-size: 12px;
+  color: var(--ink-2);
+  flex: none;
+}
+.mini:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+/* 对话区和输入区之间的那一条：平时没有高度，只挂着“回到底部”；有请求等着回答时，卡片在这里（dock.css）。
+   它能被压矮（卡片在里面自己滚），下面的输入区不能 */
+.tr-tail {
+  position: relative;
+  flex: 0 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.to-bottom {
+  position: absolute;
+  left: 50%;
+  /* 贴在对话区的底边上面：输入区会长高、请求卡片会出现，所以相对那一条的顶边定位 */
+  bottom: calc(100% + 12px);
+  transform: translateX(-50%);
+  z-index: 2;
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  background: var(--overlay);
+  box-shadow: var(--shadow);
+  font-size: 12px;
+}
+.to-bottom:hover {
+  background: var(--raised);
+}
+
+/* ---------- 用户消息 ---------- */
+.umsg {
+  align-self: flex-end;
+  max-width: 82%;
+  background: var(--raised);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r3) var(--r3) var(--r1) var(--r3);
+  padding: 9px 12px;
+  font-size: 14px;
+  /* 行高写整数像素，原因见 transcript-prose.css 开头 */
+  line-height: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+/* 消息上的操作（分叉、回退）：贴在气泡左边、底边对齐，不占排版的位置。
+   平时看不见，鼠标到这条消息上或者键盘焦点进来才出现。右边的内边距把它和气泡连起来，
+   鼠标从气泡移过来的路上不会因为离开了气泡而消失 */
+.umsg {
+  position: relative;
+}
+.umsg-acts {
+  position: absolute;
+  right: 100%;
+  bottom: 0;
+  display: flex;
+  gap: 2px;
+  padding-right: 6px;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.umsg:hover .umsg-acts,
+.umsg-acts:focus-within {
+  opacity: 1;
+}
+.umsg-acts .ibtn[aria-disabled="true"] {
+  color: var(--ink-3);
+  opacity: 0.55;
+}
+.umsg-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+/* 超过 20 行先收起来 */
+.umsg-text.clamp {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 20;
+  line-clamp: 20;
+  overflow: hidden;
+}
+.umsg .atts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+/* 消息里的图片：固定大小的缩略图，解出来之前之后占的地方一样 */
+.uimg {
+  width: 96px;
+  height: 96px;
+  flex: none;
+  padding: 0;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  background: var(--hover);
+  overflow: hidden;
+  cursor: zoom-in;
+}
+.uimg img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* ---------- 看大图 ---------- */
+.viewer {
+  max-width: none;
+  max-height: none;
+  width: 100vw;
+  height: 100vh;
+  margin: 0;
+  padding: 32px;
+  border: 0;
+  background: none;
+  cursor: zoom-out;
+}
+.viewer[open] {
+  display: grid;
+  place-items: center;
+}
+.viewer::backdrop {
+  background: rgb(0 0 0 / 72%);
+}
+.viewer img {
+  max-width: 100%;
+  max-height: 100%;
+  min-width: 0;
+  min-height: 0;
+  object-fit: contain;
+  border-radius: var(--r2);
+  cursor: default;
+}
+.viewer-x {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  width: 28px;
+  height: 28px;
+  background: var(--raised);
+  border: 1px solid var(--line-2);
+  color: var(--ink);
+}
+
+.mention {
+  font: 12px / 18px var(--mono);
+  background: var(--hover);
+  border-radius: 3px;
+  padding: 0 5px;
+  white-space: nowrap;
+}
+
+/* ---------- 活动区：一行总结 → 条目行 → 条目详情，三级收纳 ---------- */
+.act {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.act-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  color: var(--ink-2);
+  font-size: 12px;
+  align-self: flex-start;
+  padding: 0 6px 0 2px;
+  border-radius: 3px;
+}
+.act-head:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.act-body {
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  overflow: hidden;
+}
+.item + .item {
+  border-top: 1px solid var(--line-1);
+}
+.item-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 30px;
+  padding: 0 10px;
+  text-align: left;
+  color: var(--ink-2);
+}
+.item-head:disabled {
+  cursor: default;
+}
+.item-head:not(:disabled):hover {
+  background: var(--hover);
+}
+.item-head .verb {
+  color: var(--ink);
+  flex: none;
+}
+.item-head .tgt {
+  font: 12px / 1.4 var(--mono);
+}
+.item-head .meta,
+.file-head .meta {
+  margin-left: auto;
+  font: 11px / 1 var(--mono);
+  color: var(--ink-3);
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.item.note {
+  padding: 8px 12px;
+}
+.item-detail {
+  border-top: 1px solid var(--line-1);
+  background: var(--sunken);
+}
+/* 固定高度的内滚框。也是反向列：输出增长时自己贴着底 */
+.well {
+  max-height: 168px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column-reverse;
+  overflow-anchor: none;
+  scrollbar-width: thin;
+}
+.well pre {
+  font: 12px / 19px var(--mono);
+  padding: 8px 12px;
+  margin: 0;
+  white-space: pre;
+  flex: none;
+}
+/*
+ * 命令输出、工具结果太长时中间省掉的地方：单独占一行（块级），高度和输出的一行一样，不打乱逐行的底纹。
+ * 块级还有一个用处：头尾两段各在自己的匿名块里排版，流式时只改末尾那段，开头那段不跟着重排
+ */
+.well-gap {
+  display: block;
+  height: 19px;
+  font: 11px / 19px var(--ui);
+  color: var(--ink-3);
+  background: var(--hover);
+}
+/* 工具结果里图片、音频、资源那一段：只有一行说明，块级、和输出的一行一样高 */
+.well-blob {
+  display: block;
+  height: 19px;
+  font: 11px / 19px var(--ui);
+  color: var(--ink-3);
+}
+.think {
+  padding: 8px 12px;
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 21px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 168px;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+.io + .io {
+  border-top: 1px solid var(--line-1);
+}
+.io-label {
+  padding: 6px 12px 0;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.plus {
+  color: var(--ok);
+}
+.minus {
+  color: var(--err);
+}
+
+/* ---------- 文件改动 ---------- */
+.file + .file {
+  border-top: 1px solid var(--line-1);
+}
+.file-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  padding: 0 10px 0 12px;
+  font: 12px / 1 var(--mono);
+  color: var(--ink-2);
+  border-bottom: 1px solid var(--line-1);
+}
+.diff {
+  max-height: 240px;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+.diff-note {
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+/* 太长不展开时，去差异面板的入口 */
+.diff-open {
+  margin-left: 8px;
+  color: var(--accent);
+}
+.diff-open:hover {
+  text-decoration: underline;
+}
+.file-head .file-diff {
+  width: 20px;
+  height: 20px;
+}
+.dl {
+  display: flex;
+  font: 12px / 20px var(--mono);
+  white-space: pre;
+  min-width: max-content;
+}
+.dl .ln {
+  width: 34px;
+  text-align: right;
+  padding-right: 6px;
+  color: var(--ink-3);
+  flex: none;
+  user-select: none;
+}
+.dl .sg {
+  width: 16px;
+  flex: none;
+  color: var(--ink-3);
+  text-align: center;
+  user-select: none;
+}
+.dl .tx {
+  padding-right: 12px;
+}
+.dl.add {
+  background: color-mix(in srgb, var(--ok) 15%, transparent);
+}
+.dl.del {
+  background: color-mix(in srgb, var(--err) 14%, transparent);
+}
+.dl.add .sg {
+  color: var(--ok);
+}
+.dl.del .sg {
+  color: var(--err);
+}
+.dl.hunk {
+  padding: 0 12px;
+  color: var(--ink-3);
+  background: var(--hover);
+}
+/* 太长的差异中间省掉的那一段：一行说明，和差异的一行一样高 */
+.dl.gap {
+  padding: 0 12px;
+  font: 11px / 20px var(--ui);
+  color: var(--ink-3);
+  background: var(--hover);
+}
