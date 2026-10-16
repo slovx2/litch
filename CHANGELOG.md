@@ -5,6 +5,13 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
+## 未发布
+
+- Litch：内置浏览器。侧面板里多了“浏览器”标签，你和代理都能用：地址栏、前进后退、多标签，所有会话共用一份登录状态。代理经 `litch_browser` 这组工具打开网页、读页面（可访问性树带编号）、点击、输入、滚动、截图、等待、看控制台、上传文件，截图在对话里显示缩略图。第一次访问本机以外的网站要你同意（本回合、本会话、一直允许或拒绝），本机地址直接放行；代理只碰自己开的标签，回合结束关掉没让留下的临时标签。网页拿不到 Node，也碰不到界面。
+- Litch：Computer Use（只有 macOS）。代理经 `litch_computer` 这组工具看 Mac 上应用的窗口和可访问性树、点击、打字、按键、滚动、拖拽。系统权限授给随应用带的单独签名的助手（Litch Computer Use），不授给 Litch 本身；每个会话第一次操作某个应用前要你批准，密码管理器、钥匙串、系统设置一律不许碰，浏览器、终端标成高风险；操作时屏幕顶上有提示，按 Esc 或“停止”就停。
+- 这两项能力远程设备上的会话也能用：代理跑在远程机器上，用的是这台桌面的浏览器和 Mac。设备详情里每台设备各有两个开关，浏览器默认开，Computer Use 默认关；远程设备的会话操作应用时没有“始终允许”，每次都要批准，卡片上标明来自哪台设备。工具在 Litch 新建会话时带上（恢复会话后还在）；别处建的会话、DSH 的会话没有。
+- 适配器：新的协议扩展 `clientTools`（`protocol/extensions/client-tools.json`）。`litch_` 开头的动态工具调用只交给声明过能执行它的连接，发起回合的那条优先，没有就当场回失败、不让回合干等；原生 codex 会把调用发给所有订阅者，设备进程替它只转给一条。Claude Code 入口里这类工具不经 CLI 自己的审批和沙箱；Pi 入口的工具调用参数不再多带 `itemId`。
+
 ## 0.7.2
 
 - Claude Code 入口列出这台机器上别处（命令行、Claude 桌面端）开的 Claude Code 会话：`~/.claude/projects` 里的、不是程序化调用起的（SDK、`claude -p`，适配器自己跑的也在里面）都在会话列表里，能打开看历史、接着聊（接着同一个原生会话）。历史在第一次打开时照原生记录画进适配器的库，原生记录里又多了内容（命令行里接着说过）再接着画后面的。别处新开的会话半分钟内出现。在这里删掉只是不再列出，原生记录不动。`CHA_CLAUDE_NATIVE_SESSIONS=0` 关掉。此前这个入口只列经它建的会话，Litch 里看不到本机用 Claude Code 聊过的那些。
