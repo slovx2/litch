@@ -17,7 +17,7 @@
 // 可以给别的系统和架构暂存（Go 交叉编译，Node 取对应的官方包）。这件事成立的前提是裁剪之后的依赖
 // 全是纯 JavaScript：暂存完会查一遍（auditPlatform），混进了别的平台的二进制、或者留着分平台的包，
 // 就不让过，改到目标平台上去构建。
-import { execFileSync, spawnSync } from 'node:child_process'
+import { execFileSync, execSync, spawnSync } from 'node:child_process'
 import {
   closeSync,
   constants,
@@ -140,21 +140,18 @@ function prune(directory, out, omit) {
   if (inside.startsWith('..') || resolve(directory).startsWith(resolve(repo, 'packages') + sep)) {
     throw new Error(`拒绝在暂存目录之外裁剪依赖：${directory}`)
   }
-  // Windows 上的 npm 是 npm.cmd，不经命令行解释器起不来；参数都是上面这些固定的字，不怕被解释
-  const windows = process.platform === 'win32'
-  execFileSync(
-    windows ? 'npm.cmd' : 'npm',
-    [
-      'prune',
-      ...omit.map((kind) => `--omit=${kind}`),
-      '--offline',
-      '--ignore-scripts',
-      '--no-audit',
-      '--no-fund',
-      '--loglevel=error',
-    ],
-    { cwd: directory, stdio: ['ignore', 'ignore', 'inherit'], shell: windows },
-  )
+  // 经命令行解释器起：Windows 上的 npm 是 npm.cmd，不经它起不来。整条命令写成一句交给它
+  // （参数分开传、又开着解释器，Node 会告警），里面都是下面这些固定的字，不怕被解释
+  const args = [
+    'prune',
+    ...omit.map((kind) => `--omit=${kind}`),
+    '--offline',
+    '--ignore-scripts',
+    '--no-audit',
+    '--no-fund',
+    '--loglevel=error',
+  ]
+  execSync(`npm ${args.join(' ')}`, { cwd: directory, stdio: ['ignore', 'ignore', 'inherit'] })
 }
 
 /**
