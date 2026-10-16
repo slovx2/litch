@@ -23,6 +23,7 @@ import { openLicenses } from './about.mjs'
 import { createClientToolHost } from './client-tools/host.mjs'
 import { createExecutors } from './client-tools/registry.mjs'
 import { CLIENT_TOOL, type ClientToolToMain } from './client-tools/types.mjs'
+import { createComputerUse, locateHelperApp } from './computer-use/index.mjs'
 import {
   ABOUT,
   ATTACH,
@@ -144,12 +145,32 @@ let quitting = false
  * 客户端工具的执行器（client-tools/registry.mts 里登记的，这台桌面上用得了的那几个）。核心发来的调用交给它们，
  * 结果和要用户点头的卡片发回给现在的核心
  */
+/**
+ * Computer Use（只有 macOS）：系统权限授给单独签名的助手应用，助手用到时才拉起（computer-use/index.mts）。
+ * 界面语言变了告诉它（屏幕提示跟着换），退出前收掉
+ */
+const computerUse =
+  process.platform === 'darwin'
+    ? createComputerUse({
+        userData: app.getPath('userData'),
+        appPath: locateHelperApp({
+          packaged: app.isPackaged,
+          resourcesPath: process.resourcesPath,
+        }),
+        version: app.isPackaged ? app.getVersion() : null,
+        lang: forcedLang ?? (app.getLocale().startsWith('zh') ? 'zh-CN' : 'en'),
+        log: (line) => console.error(`[computer-use] ${line}`),
+      })
+    : null
 const clientTools = createClientToolHost(
-  createExecutors({
-    platform: process.platform,
-    env: process.env,
-    log: (line) => console.error(`[client-tools] ${line}`),
-  }),
+  [
+    ...createExecutors({
+      platform: process.platform,
+      env: process.env,
+      log: (line) => console.error(`[client-tools] ${line}`),
+    }),
+    ...(computerUse ? [computerUse.executor] : []),
+  ],
   (message) => core?.postMessage(message),
 )
 /** 核心连续几次刚起来就退出了。用来拉开重启的间隔，免得出错时原地打转 */
@@ -479,6 +500,7 @@ ipcMain.on(SET_LANGUAGE, (event, lang: unknown) => {
   if (lang !== 'zh-CN' && lang !== 'en') return
   showMenu(lang)
   core?.postMessage({ type: LANGUAGE, lang })
+  computerUse?.setLanguage(lang)
 })
 
 /** 这一次退出，终端的事已经问过、办过了 */
@@ -507,6 +529,7 @@ app.on('before-quit', (event) => {
   }
   quitting = true
   core?.kill()
+  void computerUse?.dispose()
 })
 
 app.on('window-all-closed', () => {

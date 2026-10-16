@@ -8,7 +8,7 @@
 import { CLIENT_TOOL_NAMESPACE, type ClientToolNamespaceSpec } from './client-tools.mjs'
 
 // 合并时加在这里：import { BROWSER_TOOLS } from './client-tools-browser.mjs'
-// 合并时加在这里：import { COMPUTER_TOOLS } from './client-tools-computer.mjs'
+import { COMPUTER_TOOLS } from './client-tools-computer.mjs'
 
 /** echo 工具的参数 */
 export interface EchoArguments {
@@ -56,7 +56,7 @@ export const ECHO_TOOLS: ClientToolNamespaceSpec = {
 const SPECS: Record<string, ClientToolNamespaceSpec> = {
   [ECHO_TOOLS.name]: ECHO_TOOLS,
   // 合并时加在这里：[BROWSER_TOOLS.name]: BROWSER_TOOLS,
-  // 合并时加在这里：[COMPUTER_TOOLS.name]: COMPUTER_TOOLS,
+  [COMPUTER_TOOLS.name]: COMPUTER_TOOLS,
 }
 
 /** 一个命名空间的定义。没有这一份（还没接上的、不认识的）是 null */
