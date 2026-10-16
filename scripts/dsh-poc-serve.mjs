@@ -472,6 +472,22 @@ async function verify(instance) {
     `[dsh-poc] 协议级验证通过：线程 ${listed.data.length} 个，增量 ${deltas.length} 次（跨 ${span} 毫秒），` +
       `审批请求 ${desktop.requests.length} 次，模型请求 ${instance.model.requests.length} 次（全部回环）`,
   )
+  // 过了也把诊断里出过的错亮出来：dsh 的主请求出错会自己重试，测试照样过，只有标题请求出错（不重试）才会挂
+  const troubles = (await diagnosed(instance, '')).filter(
+    (line) =>
+      / (fetch failed|fetch headers unreadable|adapter request threw|adapter not watched) /.test(
+        line,
+      ) ||
+      (/ (warn|error) /.test(line) && !line.includes('weaker process-tree containment')),
+  )
+  if (troubles.length) console.log(`[dsh-poc] dsh 的诊断里有这些：\n${troubles.join('\n')}`)
+  // 第一个线程的标题请求各步的时刻，攒着和出事那次比
+  const steps = (await diagnosed(instance, first)).filter(
+    (line) =>
+      / title (requested|ended) /.test(line) ||
+      (/ fetch( answered)? /.test(line) && line.includes('不带工具')),
+  )
+  console.log(`[dsh-poc] 第一个线程的标题请求：\n${steps.join('\n')}`)
 }
 
 async function cleanup(instance) {
