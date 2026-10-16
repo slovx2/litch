@@ -65,8 +65,8 @@ const plan =
 const write: StepJudge = (id, _spec, raw, v) => {
   const seen = raw as WriteSeen
   const file = `agent-written.${id}.txt`
-  // 写之前问不问：Claude Code 的“工作区”档动手之前先问；Pi 的审批开着；dsh 的“工作区”档在工作区里写文件不问
-  if (id === 'dsh') v.check(seen.card === null, 'dsh 在“工作区”档上写工作区里的文件，却来问了')
+  // 写之前问不问：Claude Code 的“项目内”档动手之前先问；Pi 的审批开着；dsh 的“项目内”档在项目里写文件不问
+  if (id === 'dsh') v.check(seen.card === null, 'dsh 在“项目内”档上写项目里的文件，却来问了')
   else {
     v.check(
       seen.card?.head === '要你批准：修改文件',

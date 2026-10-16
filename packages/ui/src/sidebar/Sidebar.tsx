@@ -31,7 +31,7 @@ import { HarnessFilter } from './HarnessFilter.tsx'
 import { DeviceInfo, SessionInfo, WorkspaceInfo } from './InfoCards.tsx'
 import { type RowAction, RowMenu, type RowMenuHandle } from './RowMenu.tsx'
 import { SidebarFrame } from './SidebarFrame.tsx'
-import { useSidebarHarness } from './state.ts'
+import { useSidebarHarnesses } from './state.ts'
 import { TallyMarks } from './TallyMarks.tsx'
 import { WorkspaceDialog } from './WorkspaceDialog.tsx'
 
@@ -342,8 +342,8 @@ function DeviceGroup({ deviceId, selection, draft, onSelect, onCompose }: GroupP
   /** 各个工作区点“展示更多”多露出来的个数。没点过的不在里面 */
   const [extra, setExtra] = useState<Readonly<Record<string, number>>>({})
   const pressing = useKey<string[]>(keys.pressing(deviceId)) ?? NO_IDS
-  /** 侧栏正只看哪个 harness 的会话。null：都看 */
-  const filter = useSidebarHarness()
+  /** 侧栏正只看哪几个 harness 的会话。空的：都看 */
+  const filter = useSidebarHarnesses()
   const harnessOf = useKey<SessionHarnesses>(keys.harnessOf(deviceId))
   const reconnect = useReconnect(deviceId)
   const t = useT()
@@ -352,7 +352,7 @@ function DeviceGroup({ deviceId, selection, draft, onSelect, onCompose }: GroupP
   const picked = selection?.deviceId === deviceId ? selection.sessionId : null
   /** 非露出来不可的会话：正选中的那个，和停下来等人的那些。筛选筛不掉它们，“展示更多”也折不住它们 */
   const always = (id: string) => id === picked || pressing.includes(id)
-  /** 一组里现在要画的会话：只看某个 harness 的时候是筛过的 */
+  /** 一组里现在要画的会话：只看某几个 harness 的时候是筛过的 */
   const shown = (groupId: string) => keepSessions(groups[groupId], filter, harnessOf, always)
 
   const toggle = (id: string) =>
@@ -563,7 +563,7 @@ function DeviceGroup({ deviceId, selection, draft, onSelect, onCompose }: GroupP
           ) : null}
           {/* 置顶的和各个分区排在工作区前面：是用户特意拿出来的。里面的会话不再出现在工作区里。
               每一组的外框上写着它是哪一组（和数据副本里分组的键一样），自检按它找 */}
-          {filter !== null && Object.keys(groups).every((group) => shown(group).length === 0) ? (
+          {filter.length > 0 && Object.keys(groups).every((group) => shown(group).length === 0) ? (
             <div className="dev-none">{t('sidebar.filter.none')}</div>
           ) : null}
           {shown(PINNED).length > 0 ? (
@@ -584,8 +584,8 @@ function DeviceGroup({ deviceId, selection, draft, onSelect, onCompose }: GroupP
           })}
           {workspaces.map((workspace, at) => {
             const list = shown(workspace.id)
-            // 只看某个 harness 的时候，里面一个它的会话都没有的工作区整行不出：留着一串空的工作区只是添乱
-            if (filter !== null && list.length === 0) return null
+            // 只看某几个 harness 的时候，里面一个它们的会话都没有的工作区整行不出：留着一串空的工作区只是添乱
+            if (filter.length > 0 && list.length === 0) return null
             const expanded = !closed.has(workspace.id)
             return (
               <div key={workspace.id} data-group={workspace.id}>

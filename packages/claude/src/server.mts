@@ -47,6 +47,12 @@ import { mcpOAuthManager } from './mcp-oauth.mjs'
 import { type McpCallbacks, McpOperationCancelled, McpRpc, type McpScope } from './mcp-rpc.mjs'
 import { type McpToolRef, mcpToolRef } from './mcp-tool-name.mjs'
 import { parseContextItems } from './native-context.mjs'
+import {
+  type NativeSessionSource,
+  NativeSessions,
+  nativeSessionsEnabled,
+  sdkNativeSessionSource,
+} from './native-sessions.mjs'
 import { PendingInteractions } from './pending-interactions.mjs'
 import {
   copyPermissionOverlay,
@@ -152,6 +158,7 @@ import { patchGitInfo } from './thread-metadata.mjs'
 import { threadQueueRequest } from './thread-queue.mjs'
 import { ThreadSubscribers } from './thread-subscribers.mjs'
 import { threadTimelineList } from './thread-timeline.mjs'
+import { toolUseItem } from './tool-items.mjs'
 import { parseTurnSettings } from './turn-settings.mjs'
 import type {
   ClaudeRuntime,
@@ -259,6 +266,9 @@ function turnItemsView(value: unknown): TurnItemsView {
   return 'summary'
 }
 
+/** 隔多久扫一次本机别处开的 Claude Code 会话（有连接时） */
+const NATIVE_WATCH_MS = 30_000
+
 export class CodexClaudeAppServer {
   private readonly rateLimits = new AccountRateLimits()
   private readonly accountPeers = new Set<RpcPeer>()
@@ -333,10 +343,27 @@ export class CodexClaudeAppServer {
   private stopped = false
   private readonly store: SessionStore
   private readonly runtime: ClaudeRuntime
+  /** 本机别处开的 Claude Code 会话（native-sessions.mts）。关掉了是 null */
+  private readonly native: NativeSessions | null
+  private nativeTimer: NodeJS.Timeout | null = null
 
-  constructor(store: SessionStore, runtime: ClaudeRuntime) {
+  constructor(
+    store: SessionStore,
+    runtime: ClaudeRuntime,
+    nativeSource: NativeSessionSource | null = nativeSessionsEnabled()
+      ? sdkNativeSessionSource()
+      : null,
+  ) {
     this.store = store
     this.runtime = runtime
+    this.native = nativeSource
+      ? new NativeSessions({
+          store,
+          source: nativeSource,
+          newThread: (fields) => this.nativeThreadRecord(fields),
+          busy: (threadId) => this.sessionHolder(threadId) !== null,
+        })
+      : null
     this.runtime.setSessionHandlers?.({
       onSpontaneousTurn: (threadId) => this.spontaneousTurn(threadId),
       onBackgroundCommandEnded: (threadId, end) => {
@@ -417,6 +444,8 @@ export class CodexClaudeAppServer {
 
   async stop(): Promise<void> {
     if (this.stopped) return
+    if (this.nativeTimer) clearInterval(this.nativeTimer)
+    this.nativeTimer = null
     // 先同步通知仍连接的客户端审批已失效，再抑制退出过程中的其他事件。
     this.pendingInteractions.close()
     this.stopped = true
@@ -633,6 +662,7 @@ export class CodexClaudeAppServer {
         // Claude 用户设置（如模型服务）变更后，新连接看到的模型目录随之刷新。
         await loadRuntimeModelCatalog(this.runtime)
         this.accountPeers.add(peer)
+        this.watchNative()
         if (this.detachedReapTimer) clearTimeout(this.detachedReapTimer)
         this.detachedReapTimer = null
         const initParams = asRecord(params)
@@ -712,12 +742,15 @@ export class CodexClaudeAppServer {
           (threadId, projectId) => this.threadProjectUpdated(threadId, projectId),
         )
       case 'thread/resume':
+        await this.nativeHistory(asRecord(params).threadId)
         return this.threadResume(peer, asRecord(params))
       case 'thread/fork':
         return this.threadFork(peer, asRecord(params))
       case 'thread/list':
+        await this.refreshNative()
         return this.threadList(asRecord(params))
       case 'thread/read':
+        await this.nativeHistory(asRecord(params).threadId)
         return this.threadRead(asRecord(params))
       case 'thread/attachment/add':
       case 'thread/attachment/list':
@@ -731,6 +764,7 @@ export class CodexClaudeAppServer {
           )
         })
       case 'thread/turns/list':
+        await this.nativeHistory(asRecord(params).threadId)
         return this.threadTurnsList(asRecord(params))
       case 'thread/timeline/list':
         return threadTimelineList(this.store, asRecord(params))
@@ -833,6 +867,8 @@ export class CodexClaudeAppServer {
       case 'thread/inject_items':
         return this.threadInjectItems(peer, asRecord(params))
       case 'turn/start':
+        // 导进来的会话在命令行里又说过几句：先把那几句画进来，回合接在后面
+        await this.nativeHistory(asRecord(params).threadId)
         return this.turnStart(peer, asRecord(params))
       case 'turn/steer':
         return this.turnSteer(peer, asRecord(params))
@@ -1329,6 +1365,95 @@ export class CodexClaudeAppServer {
     this.subscribers.add(id, peer)
     this.notify(peer, { method: 'thread/started', params: { thread: this.toThread(thread, []) } })
     return this.threadEnvelope(thread, params.excludeTurns === true ? [] : this.store.listTurns(id))
+  }
+
+  /**
+   * 扫一遍本机别处开的 Claude Code 会话，登记新的。announce：新登记的告诉所有握手过的连接（和新建会话一样
+   * 发 thread/started）；只给后台定时扫到的用，头一遍扫到的不算（那是本来就有的，列表里自然有，
+   * 一下子发上百条只是添乱）。扫不了（目录读不了之类）不影响列表：记一笔，照列库里有的
+   */
+  private async refreshNative(announce = false): Promise<void> {
+    if (!this.native) return
+    const baseline = !this.native.scanned
+    let added: string[]
+    try {
+      added = await this.native.refresh(announce)
+    } catch (error) {
+      debugLog('native.sessions.refreshFailed', { error: String(error) })
+      return
+    }
+    for (const threadId of added) {
+      const thread = this.store.getThread(threadId)
+      if (!thread) continue
+      const settings = this.store.threadSettings(threadId)
+      settings.sandboxPolicy = this.configSandboxPolicy(thread.sandboxMode, thread.cwd)
+      this.store.saveThreadSettings(threadId, settings)
+      if (announce && !baseline)
+        this.announce({ method: 'thread/started', params: { thread: this.toThread(thread, []) } })
+    }
+    if (added.length > 0) debugLog('native.sessions.imported', { count: added.length })
+  }
+
+  /**
+   * 有连接握手过以后，隔一阵扫一次本机的原生会话：别处新开的会话不用等下一次列表就出现。
+   * 没有连接的时候不扫
+   */
+  private watchNative(): void {
+    if (!this.native || this.nativeTimer || this.stopped) return
+    this.nativeTimer = setInterval(() => {
+      if (this.accountPeers.size > 0) void this.refreshNative(true)
+    }, NATIVE_WATCH_MS)
+    this.nativeTimer.unref()
+  }
+
+  /** 导进来的会话：原生记录里还没画进来的部分画进来。会话不认识的先扫一遍（可能是刚在别处开的） */
+  private async nativeHistory(threadId: unknown): Promise<void> {
+    if (!this.native || typeof threadId !== 'string' || !threadId) return
+    if (!this.store.getThread(threadId)) await this.refreshNative()
+    try {
+      await this.native.history(threadId)
+    } catch (error) {
+      debugLog('native.sessions.historyFailed', { threadId, error: String(error) })
+    }
+  }
+
+  /** 给一个本机别处开的 Claude Code 会话建记录：模型、权限照新建会话的默认来 */
+  private nativeThreadRecord(fields: {
+    id: string
+    cwd: string
+    preview: string
+    name: string | null
+    createdAt: number
+    updatedAt: number
+  }): ThreadRecord {
+    return {
+      ...fields,
+      sessionId: fields.id,
+      forkedFromId: null,
+      isPinned: false,
+      sectionId: null,
+      sectionEnteredAt: null,
+      sectionPosition: null,
+      archived: false,
+      model: this.configModel,
+      reasoningEffort: this.configReasoningEffort,
+      modelProvider: 'claude-code',
+      claudeSessionId: fields.id,
+      source: 'cli',
+      status: { type: 'idle' },
+      approvalPolicy: normalizeApprovalPolicy(this.configOverrides.approval_policy) ?? 'on-request',
+      sandboxMode: normalizeSandboxMode(this.configOverrides.sandbox_mode) ?? 'workspace-write',
+      permissionProfileId: null,
+      ephemeral: false,
+      threadSource: null,
+      agentRole: null,
+      agentNickname: null,
+      baseInstructions: null,
+      developerInstructions: null,
+      personality: null,
+      runtimeBackend: 'claude',
+      codexSessionId: null,
+    }
   }
 
   private threadList(params: Record<string, unknown>): unknown {
@@ -5738,93 +5863,7 @@ export class CodexClaudeAppServer {
     cwd: string,
     mcpServers: readonly string[],
   ): ThreadItem {
-    const id = newId()
-    if (event.toolName === 'Bash') {
-      return {
-        type: 'commandExecution',
-        id,
-        command: String(event.input.command ?? ''),
-        cwd: String(event.input.cwd ?? cwd),
-        // Use the SDK's tool_use_id as a stable handle. Without a non-null
-        // processId the Codex App was treating these as "Background terminal"
-        // entries (no attached process) and hiding their output; with a
-        // synthetic id they render as inline command items like a normal
-        // foreground bash invocation.
-        processId: `claude:${event.toolUseId}`,
-        source: 'agent',
-        status: 'inProgress',
-        commandActions: [],
-        aggregatedOutput: null,
-        exitCode: null,
-        durationMs: null,
-      }
-    }
-    if (['Edit', 'Write', 'MultiEdit'].includes(event.toolName)) {
-      return {
-        type: 'fileChange',
-        id,
-        changes: fileChangeFromTool(event.toolName, event.input),
-        status: 'inProgress',
-      }
-    }
-    if (event.toolName === 'WebSearch') {
-      // Codex App has a dedicated `webSearch` ThreadItem with a structured
-      // action — emit it instead of a generic mcpToolCall so the App can show
-      // the search badge (and follow-up open-page links) natively. The action
-      // is finalized when the tool_result arrives (see tool_result handler).
-      // The 'search' variant's `query` / `queries` are required (Option fields
-      // with no serde default), so always populate both even on the initial
-      // inProgress emit.
-      const q = String(event.input.query ?? '')
-      return {
-        type: 'webSearch',
-        id,
-        query: q,
-        action: { type: 'search', query: q || null, queries: null },
-      }
-    }
-    let displayTool = event.toolName
-    if (event.toolName === 'Read') {
-      const raw = String(event.input.file_path || event.input.path || '')
-      if (raw) {
-        let displayPath = raw
-        try {
-          if (cwd && raw.startsWith(cwd)) {
-            displayPath = raw.slice(cwd.length).replace(/^\/+/, '')
-          } else {
-            const parts = raw.split(/\//).filter(Boolean)
-            displayPath = parts.length > 2 ? parts.slice(-2).join('/') : raw
-          }
-        } catch {}
-        displayTool = `Read ${displayPath || raw}`
-      }
-    } else if (event.toolName === 'Grep') {
-      const pat = String(event.input.pattern ?? '')
-      const rawPath = event.input.path ? String(event.input.path) : ''
-      let pathStr = ''
-      if (rawPath) {
-        const parts = rawPath.split(/\//).filter(Boolean)
-        pathStr = ` (${parts.length > 2 ? parts.slice(-2).join('/') : rawPath})`
-      }
-      if (pat) displayTool = `Grep ${pat}${pathStr}`
-    } else if (event.toolName === 'Glob') {
-      const pat = String(event.input.pattern ?? '')
-      if (pat) displayTool = `Glob ${pat}`
-    }
-
-    // 真正的 MCP 工具报它所在的服务和不带前缀的工具名；Claude Code 自带的工具没有服务，记在 claude-code 名下。
-    const mcp = mcpToolRef(event.toolName, mcpServers)
-    return {
-      type: 'mcpToolCall',
-      id,
-      server: mcp?.server ?? 'claude-code',
-      tool: mcp?.tool ?? displayTool,
-      status: 'inProgress',
-      arguments: event.input,
-      result: null,
-      error: null,
-      durationMs: null,
-    }
+    return toolUseItem(event, cwd, mcpServers)
   }
 
   private threadEnvelope(thread: ThreadRecord, turns: TurnRecord[] = []): unknown {

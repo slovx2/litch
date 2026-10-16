@@ -87,8 +87,8 @@ test('dsh：runtime/info 带结构化声明，原有字段原样保留', { timeo
       { displayName, badge, extensions, features: wired, permissionPresets },
       declaration,
     )
-    // 名字是产品自己的叫法（它的 --help 里自称 DeepSeek Harness），dsh 是命令名
-    assert.deepEqual([displayName, badge], ['DeepSeek Harness', 'DS'])
+    // 名字是产品自己的叫法（它的 --help 里自称 DeepSeek Harness，界面里用简称 DSH），dsh 是命令名
+    assert.deepEqual([displayName, badge], ['DSH', 'DS'])
     // dsh 的审批带不了话：不支持 declineWithNote。
     assert.deepEqual(extensions, [])
     assert.deepEqual(

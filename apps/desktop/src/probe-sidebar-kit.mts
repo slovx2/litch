@@ -16,7 +16,7 @@ export interface SidebarKit {
   /** 侧栏里的一台设备（按设备标识找），和它自己的那一行 */
   device(id: string): HTMLElement
   deviceLine(id: string): HTMLElement
-  /** 这台设备下面的一个工作区那一行（按名字找） */
+  /** 这台设备下面的一个项目那一行（按名字找） */
   workspaceLine(deviceId: string, name: string): HTMLElement
   /** 一行里那个管展开收起的按钮现在是不是展开着 */
   expanded(line: Element): boolean
@@ -79,7 +79,7 @@ export function installSidebarKit(): void {
     const found = all('[data-workspace]', device(deviceId)).find(
       (line) => text(one('.name', line)) === name,
     )
-    if (!found) throw new Error(`${deviceId} 下面没有工作区“${name}”`)
+    if (!found) throw new Error(`${deviceId} 下面没有项目“${name}”`)
     return found
   }
   const toggle = (line: Element) => one<HTMLButtonElement>('[aria-expanded]', line)

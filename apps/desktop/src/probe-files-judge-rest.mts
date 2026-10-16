@@ -27,7 +27,7 @@ export interface ShellSeen {
   room: RoomSeen
   middle: FrameSeen
   restored: FrameSeen
-  /** 新建对话页上面板跟着页上选的设备和工作区走 */
+  /** 新建对话页上面板跟着页上选的设备和项目走 */
   newPage: NewPageSeen
   /** 开着终端面板：侧面板开着、收起、再打开，终端里的程序看到的行列数和屏幕上的 */
   term: { withSide: SizeSeen; withoutSide: SizeSeen; again: SizeSeen }
@@ -119,7 +119,7 @@ function judgeLinks(links: LinksSeen, lines: FileLines): string[] {
   )
   must(
     ['console.log', '../outside/secret.txt'].every((entry) => links.plain.includes(entry)),
-    `不是工作区里的文件的也被认成了文件，没认的只有：${links.plain.join(' ／ ')}`,
+    `不是项目里的文件的也被认成了文件，没认的只有：${links.plain.join(' ／ ')}`,
   )
   must(links.panelOpened, '面板收着的时候点对话里的路径，面板没有自己打开到“文件”标签')
   const wantJumps = [
@@ -157,11 +157,11 @@ function judgePlaces(places: PlacesSeen): string[] {
   must(places.home === 'local/litch｜~/work/litch', `起头的会话，面板挂的地方不对：${places.home}`)
   must(
     places.other === 'local/docs｜~/work/docs-site',
-    `换到另一个工作区的会话，面板没跟着换：${places.other}`,
+    `换到另一个项目的会话，面板没跟着换：${places.other}`,
   )
   must(
     places.otherFresh === '没展开｜没开文件｜滚到 0',
-    `另一个工作区的树带着别处的状态：${places.otherFresh}`,
+    `另一个项目的树带着别处的状态：${places.otherFresh}`,
   )
   const { kept } = places
   must(
@@ -175,7 +175,7 @@ function judgePlaces(places: PlacesSeen): string[] {
   must(places.keptSelected, '换回来之后选中的那一行没留住')
   must(
     places.loose === 'local/｜/Users/dev/notes/launchd' && places.looseRows > 0,
-    `不属于工作区的会话，根应该是它的工作目录：${places.loose}（${places.looseRows} 行）`,
+    `不属于项目的会话，根应该是它的工作目录：${places.loose}（${places.looseRows} 行）`,
   )
   must(
     places.unsupported.startsWith('unsupported｜这台设备上看不了文件｜') &&
@@ -287,19 +287,19 @@ function judgeShell(shell: ShellSeen): string[] {
   // ---- 新建对话页 ----
   must(
     newPage.start === 'local/litch｜~/work/litch' && newPage.startRows > 0,
-    `到新建对话页，面板没有挂在要建的那个工作区上：${newPage.start}`,
+    `到新建对话页，面板没有挂在要建的那个项目上：${newPage.start}`,
   )
   must(
     newPage.workspace === 'local/docs｜~/work/docs-site',
-    `在新建对话页上换了工作区，面板没跟着换：${newPage.workspace}`,
+    `在新建对话页上换了项目，面板没跟着换：${newPage.workspace}`,
   )
   must(
-    newPage.noWorkspace.startsWith('没有工作区目录可看'),
-    `新建对话页上选了“无工作区”，面板里没有说明：${newPage.noWorkspace}`,
+    newPage.noWorkspace.startsWith('没有项目目录可看'),
+    `新建对话页上选了“无项目”，面板里没有说明：${newPage.noWorkspace}`,
   )
   must(
     newPage.device === 'build/infra｜/srv/work/infra',
-    `在新建对话页上换了设备和工作区，面板没跟着换：${newPage.device}`,
+    `在新建对话页上换了设备和项目，面板没跟着换：${newPage.device}`,
   )
   // ---- 终端的行列数 ----
   for (const [name, size] of [

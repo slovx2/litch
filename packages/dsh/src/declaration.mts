@@ -75,8 +75,8 @@ export const declaration: HarnessDeclaration = {
       PRESET.workspace,
       {
         'zh-CN':
-          '可以直接改工作区和临时目录里的文件、运行命令、联网，不会先问你。要写到别的地方时模型得先申请，那时才来问你',
-        en: 'Can change files in the workspace and temp directories, run commands and use the network without asking. To write anywhere else, the model has to request it first, and only then are you asked',
+          '可以直接改项目和临时目录里的文件、运行命令、联网，不会先问你。要写到别的地方时模型得先申请，那时才来问你',
+        en: 'Can change files in the project and temp directories, run commands and use the network without asking. To write anywhere else, the model has to request it first, and only then are you asked',
       },
       switching,
     ),

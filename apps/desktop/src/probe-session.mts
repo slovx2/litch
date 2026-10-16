@@ -24,7 +24,7 @@ export interface SessionProbe {
   } | null
   /** 会话行的右键菜单 */
   contextMenu: {
-    /** 在行上点右键：出的是行尾“更多”那一份（置顶、移到工作区、改名、归档、删除），弹在鼠标那里，系统自己的菜单没出来 */
+    /** 在行上点右键：出的是行尾“更多”那一份（置顶、移到项目、改名、归档、删除），弹在鼠标那里，系统自己的菜单没出来 */
     opened: boolean
     atPointer: boolean
     /** 焦点落在菜单里，Esc 收起 */
@@ -288,16 +288,16 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
   await frame()
   const names = [...popped.querySelectorAll('.pick-opt')].map((entry) => entry.textContent)
   const spot = popped.getBoundingClientRect()
-  // 末尾三项总是这三样。设备上能整理侧栏的话前面多出“置顶”和“移到工作区…”：
-  // 模拟核心里一定有；真实入口上看对面有没有这组方法、有没有别的工作区
+  // 末尾三项总是这三样。设备上能整理侧栏的话前面多出“置顶”和“移到项目…”：
+  // 模拟核心里一定有；真实入口上看对面有没有这组方法、有没有别的项目
   const organizing = names.slice(0, -3).join('|')
   const contextMenu: SessionProbe['contextMenu'] = {
     opened:
       click.handled &&
       names.slice(-3).join('|') === '改名|归档|删除' &&
       (real
-        ? ['', '置顶', '置顶|移到工作区…'].includes(organizing)
-        : organizing === '置顶|移到工作区…'),
+        ? ['', '置顶', '置顶|移到项目…'].includes(organizing)
+        : organizing === '置顶|移到项目…'),
     atPointer: Math.abs(spot.left - click.x) < 2 && Math.abs(spot.top - click.y) < 2,
     focused: popped.contains(document.activeElement),
     closed: false,

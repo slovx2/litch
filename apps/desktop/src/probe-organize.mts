@@ -1,21 +1,21 @@
 // 完整模式收尾的验收（真设备这一半）：对着隔离的多 harness 设备整理侧栏。
-// 跟在 fullProbe 后面，在同一个窗口里接着量（见 smoke.mts）。夹具起来时一个工作区都没有，从空开始建：
-// 工作区是设备级的，一个工作区里混着两个 harness 的会话；置顶在 harness 掉线的时候也能做。
+// 跟在 fullProbe 后面，在同一个窗口里接着量（见 smoke.mts）。夹具起来时一个项目都没有，从空开始建：
+// 项目是设备级的，一个项目里混着两个 harness 的会话；置顶在 harness 掉线的时候也能做。
 // “另一条连接改了，这边跟着变”在这里量不了（页面里起不了第二条连接），那一项在核心的单元测试和模拟核心那一半里。
 // 和别的验收一样，下面的函数会被原样送进页面里执行，不能引用函数外面的东西。
 
 export interface OrganizeProbe {
-  /** 一开始：没有工作区，会话都在“无工作区”里；设备行上有“更多” */
+  /** 一开始：没有项目，会话都在“无项目”里；设备行上有“更多” */
   empty: boolean
   /** 添加：候选目录里有会话用过的目录；加成之后带着颜色，目录在它下面的会话归了进去，两个 harness 的都有 */
   candidates: boolean
   added: boolean
   mixed: boolean
-  /** 目录不在它下面的会话还在“无工作区” */
+  /** 目录不在它下面的会话还在“无项目” */
   looseKept: boolean
-  /** 再加一个目录更深的：工作目录落在两个工作区里的会话，归到更深的那个 */
+  /** 再加一个目录更深的：工作目录落在两个项目里的会话，归到更深的那个 */
   deepest: boolean
-  /** 移到另一个工作区：明说的归属压过按目录认的 */
+  /** 移到另一个项目：明说的归属压过按目录认的 */
   moved: boolean
   /** 置顶、取消置顶 */
   pinned: boolean
@@ -27,7 +27,7 @@ export interface OrganizeProbe {
   /** 改名换色、调顺序 */
   edited: boolean
   reordered: boolean
-  /** 删除只删记录：里面的会话都还在，按工作目录回到上一层的工作区 */
+  /** 删除只删记录：里面的会话都还在，按工作目录回到上一层的项目 */
   deleted: boolean
   /** 看到的原样。判不过的时候靠它知道差在哪 */
   seen: Record<string, string>
@@ -92,10 +92,10 @@ export async function organizeProbe(second: string): Promise<OrganizeProbe> {
   const submit = () => one<HTMLButtonElement>('.ws-dialog .btn.primary')
   const color = (wire: string) =>
     one<HTMLButtonElement>(`.ws-colors button[aria-label="${wire}"]`)?.click()
-  /** 打开“添加工作区”，等目录那一栏出来 */
+  /** 打开“添加项目”，等目录那一栏出来 */
   const adding = async () => {
     await choose(one(':scope > .row-line', local()), '本机', 'addWorkspace')
-    await until('添加工作区的对话框', dialog)
+    await until('添加项目的对话框', dialog)
     return until('目录那一栏', () => one<HTMLInputElement>('#ws-root'))
   }
   const name = async (words: string) =>
@@ -121,7 +121,7 @@ export async function organizeProbe(second: string): Promise<OrganizeProbe> {
     groupOf(LIST) === '' &&
     Boolean(one(':scope > .row-line > .row-more', local()))
 
-  // ---- 二、添加一个工作区：目录从候选里挑 ----
+  // ---- 二、添加一个项目：目录从候选里挑 ----
   await adding()
   const roots = await until('候选的目录', () => {
     const found = all('.ws-dialog .ws-root').map(text)
@@ -137,7 +137,7 @@ export async function organizeProbe(second: string): Promise<OrganizeProbe> {
   await name('应用')
   color('blue')
   await send()
-  await until('新的工作区出现在侧栏里', () => workspaceLine('应用'))
+  await until('新的项目出现在侧栏里', () => workspaceLine('应用'))
   const appKey = keyOf('应用')
   await until('目录在它下面的会话归了进去', () => groupOf(LIST) === appKey)
   const inApp = [LIST, BUILD, RELEASE, TIMEOUT].map(groupOf)
@@ -147,19 +147,19 @@ export async function organizeProbe(second: string): Promise<OrganizeProbe> {
   const mixed = badges.size >= 2
   const looseKept = groupOf(WEEKLY) === ''
 
-  // ---- 三、再加一个目录更深的：落在两个工作区里的会话归到更深的那个 ----
+  // ---- 三、再加一个目录更深的：落在两个项目里的会话归到更深的那个 ----
   write(await adding(), `${app}/web`)
   await name('网页')
   await send()
-  await until('第二个工作区', () => workspaceLine('网页'))
+  await until('第二个项目', () => workspaceLine('网页'))
   const webKey = keyOf('网页')
   const deepest =
-    Boolean(await until('它归到更深的那个工作区', () => groupOf(BUILD) === webKey)) &&
+    Boolean(await until('它归到更深的那个项目', () => groupOf(BUILD) === webKey)) &&
     groupOf(LIST) === appKey
 
-  // ---- 四、移到另一个工作区 ----
+  // ---- 四、移到另一个项目 ----
   const movePop = await choose(lineOf(RELEASE), RELEASE, 'move')
-  const targets = await until('可以移去的工作区', () => {
+  const targets = await until('可以移去的项目', () => {
     const found = all('.pick-choice', movePop)
     return found.length > 0 ? found : null
   })
@@ -168,14 +168,14 @@ export async function organizeProbe(second: string): Promise<OrganizeProbe> {
   // 它的工作目录是 work/app：按目录认该在“应用”里，明说的归属压过它
   const moved =
     seen.moveChoices === '网页' &&
-    Boolean(await until('它换到了那个工作区下面', () => groupOf(RELEASE) === webKey))
+    Boolean(await until('它换到了那个项目下面', () => groupOf(RELEASE) === webKey))
 
   // ---- 五、置顶、取消置顶；harness 掉线的时候也置得了 ----
   await choose(lineOf(TIMEOUT), TIMEOUT, 'pin')
   await until('它到了置顶组里', () => groupOf(TIMEOUT) === ':pinned')
   const pinned = groupKeys()[0] === ':pinned'
   await choose(lineOf(TIMEOUT), TIMEOUT, 'unpin')
-  const unpinned = Boolean(await until('它回到工作区里', () => groupOf(TIMEOUT) === appKey))
+  const unpinned = Boolean(await until('它回到项目里', () => groupOf(TIMEOUT) === appKey))
   const isDown = () => Boolean(rowOf(TIMEOUT)?.classList.contains('down'))
   console.log(`LITCH_SIGNAL stop ${second}`)
   await until('这一行显示成用不了', isDown)
@@ -193,10 +193,10 @@ export async function organizeProbe(second: string): Promise<OrganizeProbe> {
   await sleep(500)
   const pinKept = groupOf(TIMEOUT) === ':pinned'
   await choose(lineOf(TIMEOUT), TIMEOUT, 'unpin')
-  await until('它回到工作区里', () => groupOf(TIMEOUT) === appKey)
+  await until('它回到项目里', () => groupOf(TIMEOUT) === appKey)
 
   // ---- 六、改名换色、调顺序 ----
-  await choose(workspaceLine('应用'), '头一个工作区', 'edit')
+  await choose(workspaceLine('应用'), '头一个项目', 'edit')
   await until('改名与颜色的对话框', dialog)
   await name('应用（改）')
   color('red')
@@ -204,20 +204,20 @@ export async function organizeProbe(second: string): Promise<OrganizeProbe> {
   await until('行上是新的名字', () => workspaceLine('应用（改）'))
   const edited =
     dotOf('应用（改）').includes('red') && keyOf('应用（改）') === appKey && !workspaceLine('应用')
-  await choose(workspaceLine('网页'), '第二个工作区', 'up')
+  await choose(workspaceLine('网页'), '第二个项目', 'up')
   const reordered = Boolean(
     await until('它挪到了前面', () => workspaceNames().join('|') === '网页|应用（改）'),
   )
 
-  // ---- 七、删除：只删记录，里面的会话按工作目录回到上一层的工作区 ----
-  const deletePop = await choose(workspaceLine('网页'), '第二个工作区', 'delete')
+  // ---- 七、删除：只删记录，里面的会话按工作目录回到上一层的项目 ----
+  const deletePop = await choose(workspaceLine('网页'), '第二个项目', 'delete')
   const asking = await until('删除之前的那一问', () => one('.pick-ask', deletePop))
   seen.deleteAsk = text(asking)
   one<HTMLButtonElement>('.btn.danger', asking)?.click()
-  await until('工作区没了', () => !workspaceLine('网页'))
-  await until('里面的会话回到上一层的工作区', () => groupOf(BUILD) === appKey)
+  await until('项目没了', () => !workspaceLine('网页'))
+  await until('里面的会话回到上一层的项目', () => groupOf(BUILD) === appKey)
   const deleted =
-    seen.deleteAsk.includes('只删掉工作区这条记录') &&
+    seen.deleteAsk.includes('只删掉项目这条记录') &&
     groupOf(RELEASE) === appKey &&
     Boolean(rowOf(BUILD)) &&
     Boolean(rowOf(RELEASE))

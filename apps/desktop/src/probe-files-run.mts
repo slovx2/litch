@@ -38,15 +38,15 @@ const DEADLINE_MS: Record<FilesMode, number> = {
 
 /** 模拟核心里用的那几个会话（示例数据里的标题）。用哪个都明着去点，不靠启动后选中了谁 */
 const MOCK = {
-  // 本机、litch 工作区，闲着的，它的 harness 是能用的（要往里发消息）
+  // 本机、litch 项目，闲着的，它的 harness 是能用的（要往里发消息）
   home: '设备进程的转发开销基准',
-  // 同一个工作区里带文件改动的那个
+  // 同一个项目里带文件改动的那个
   tools: '把运行时与 SSH 入口的启动拆开',
-  // 本机、docs-site 工作区
+  // 本机、docs-site 项目
   other: '远程设备安装指引',
-  // 不属于任何工作区，工作目录是 /Users/dev/notes/launchd
+  // 不属于任何项目，工作目录是 /Users/dev/notes/launchd
   loose: '查一下 launchd 的 KeepAlive 语义',
-  // 同一个工作区里正等着审批的那个：一打开就有请求卡片
+  // 同一个项目里正等着审批的那个：一打开就有请求卡片
   waiting: '聚合面：会话列表合并与复合游标',
   // nas：不提供文件访问；build-01：不提供找文件；gpu-box：没连上
   noFiles: '整理快照保留策略',
@@ -92,7 +92,7 @@ async function shellSeen(window: BrowserWindow, hooks: SmokeHooks): Promise<Shel
   const newPage = await inPage(window, newPageSeen, {
     session: MOCK.home,
     workspace: 'docs-site',
-    none: '无工作区',
+    none: '无项目',
     device: 'build-01',
     deviceWorkspace: 'infra',
   })
@@ -167,7 +167,7 @@ async function runMock(window: BrowserWindow, hooks: SmokeHooks): Promise<MockSe
 async function runReal(window: BrowserWindow, mode: FilesMode): Promise<RealSeen> {
   // 夹具里那几个目录在哪，由起验收的脚本告诉我们
   const dirs = JSON.parse(process.env.LITCH_FILES_DIRS ?? '{}') as RealDirs
-  // 两种夹具里工作目录是工作区根的会话
+  // 两种夹具里工作目录是项目根的会话
   const session = mode === 'files-device' ? '给列表加上分页' : '逐个检查一百多个文件'
   await inPage(window, installFilesKit)
   const tree = await inPage(window, realTree, session, dirs.outside)

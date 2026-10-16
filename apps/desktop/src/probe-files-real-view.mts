@@ -37,7 +37,7 @@ export interface RealView {
   links: string[]
   plain: string[]
   jumps: RealJump[]
-  /** 工作目录在工作区的子目录里的会话：回答里相对于工作目录写的文件名点开的是谁（没有这样的会话就是空的） */
+  /** 工作目录在项目的子目录里的会话：回答里相对于工作目录写的文件名点开的是谁（没有这样的会话就是空的） */
   cwdOpened: string
   cwdText: string
   /** 换到另一个根的会话：面板挂到哪了、根是谁、有没有行；换回来原来开着的文件还在 */
@@ -98,7 +98,7 @@ export async function realView(args: {
   const turnsBefore = all('.turn').length
   // 假模型会把这句话原样带回来：回答里就有了这几个路径
   await kit.say(
-    '看看 `src/long.ts:4200` 和 `notes.txt:12`，还有 `src/app.ts`；`../../outside/secret.txt` 不在工作区里，`console.log` 不是文件。',
+    '看看 `src/long.ts:4200` 和 `notes.txt:12`，还有 `src/app.ts`；`../../outside/secret.txt` 不在项目里，`console.log` 不是文件。',
   )
   const turn = await until(
     '带路径的回答',

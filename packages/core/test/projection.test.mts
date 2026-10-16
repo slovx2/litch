@@ -244,6 +244,37 @@ test('工作区：显式归属优先，其次按目录匹配取最深的，都�
   assert.equal(at('/tmp'), null)
 })
 
+test('工作区：同一个目录是几个工作区的根时，只有一个根的优先，其次是主目录，再其次按排的先后', () => {
+  const withRoots = (id: string, roots: string[], position: number) => ({
+    ...project(id, id, roots[0] ?? '', position),
+    roots: roots.map((path) => ({ path })),
+  })
+  // 照用户机器上从 Codex 导入的那几个：home 这个目录同时在三个工作区里，单目录的 home 排在最后
+  const workspaces = projectWorkspaces([
+    withRoots('tales', ['/u/Tales', '/w/games', '/w/home'], 0),
+    withRoots('games', ['/w/games', '/w/home'], 1),
+    withRoots('home', ['/w/home'], 2),
+  ])
+  const at = (cwd: string) => resolveWorkspace({ cwd, projectId: null }, workspaces)
+  assert.equal(at('/w/home'), 'home')
+  assert.equal(at('/w/home/sub'), 'home')
+  // games 只在两个多目录的工作区里：它是 games 的主目录，不是 tales 的
+  assert.equal(at('/w/games'), 'games')
+  assert.equal(at('/u/Tales'), 'tales')
+  // 都是多目录、都不是主目录：按排的先后
+  const tie = projectWorkspaces([
+    withRoots('b', ['/x/b', '/x/shared'], 1),
+    withRoots('a', ['/x/a', '/x/shared'], 0),
+  ])
+  assert.equal(resolveWorkspace({ cwd: '/x/shared', projectId: null }, tie), 'a')
+  // 深的照样先于这些规则：子目录自己是单目录工作区的根时归它
+  const deep = projectWorkspaces([
+    withRoots('one', ['/y'], 0),
+    withRoots('many', ['/y/deep', '/z'], 1),
+  ])
+  assert.equal(resolveWorkspace({ cwd: '/y/deep/x', projectId: null }, deep), 'many')
+})
+
 test('工作区：macOS 上会话的工作目录是根的另一种写法（/private/tmp 和 /tmp）也归进去；Linux 上不认', () => {
   const workspaces = projectWorkspaces([
     project('tri', 'tri', '/tmp/w/tri', 0),

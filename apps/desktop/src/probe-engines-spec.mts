@@ -42,7 +42,7 @@ export const SPECS: Record<string, EngineSpec> = {
   },
   dsh: {
     opening: '头一句（dsh）',
-    name: 'DeepSeek Harness',
+    name: 'DSH',
     badge: 'DS',
     asking: ':workspace',
     single: false,

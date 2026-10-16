@@ -1,4 +1,4 @@
-// 侧栏验收里“只看某个 harness”那一半量到的东西，哪些算不合格。在主进程里跑。
+// 侧栏验收里“只看某几个 harness”那一半量到的东西，哪些算不合格。在主进程里跑。
 import type { FilterKept, FilterSeen } from './probe-sidebar-filter.mjs'
 
 /** 一行会话读成的那一句（标题｜徽标｜等人｜选中）拆开 */
@@ -53,6 +53,7 @@ export function judgeFilter(seen: FilterSeen, kept: FilterKept, session: string)
 
   // ---- 只看 Pi ----
   must(seen.line === 'PI｜只看 Pi', `“正在只看”那一行写的不对：${seen.line}`)
+  must(seen.stayed, '挑了 Pi 之后选项就收起了：多选该能接着挑')
   must(seen.entryOn, '筛着的时候入口没有画成开着的')
   must(seen.saved === 'pi', `挑的 harness 没有记在界面本地：${seen.saved}`)
   for (const [deviceId, rows] of Object.entries(seen.after)) {
@@ -105,8 +106,8 @@ export function judgeFilter(seen: FilterSeen, kept: FilterKept, session: string)
     `只看 Pi 的时候没连着的 gpu-box 下面的会话不对：${titlesOf(seen.after.gpu).join('、')}`,
   )
 
-  // ---- 各组：置顶、分区、无工作区跟着筛；筛空了的工作区整行不出 ----
-  // 没有工作区的那一组的键是空的
+  // ---- 各组：置顶、分区、无项目跟着筛；筛空了的项目整行不出 ----
+  // 没有项目的那一组的键是空的
   must(
     JSON.stringify(seen.groupsBefore.local) ===
       JSON.stringify([':pinned', ':section:sec-later', 'litch', 'docs', '']) &&
@@ -116,11 +117,11 @@ export function judgeFilter(seen: FilterSeen, kept: FilterKept, session: string)
   )
   must(
     seen.groupsAfter.local?.join() === ':pinned,litch,docs',
-    `只看 Pi 的时候本机下面的组不对（分区、无工作区里没有 Pi 的，不该出）：${seen.groupsAfter.local?.join()}`,
+    `只看 Pi 的时候本机下面的组不对（分区、无项目里没有 Pi 的，不该出）：${seen.groupsAfter.local?.join()}`,
   )
   must(
     seen.groupsAfter.build?.join() === 'litch2',
-    `只看 Pi 的时候 build-01 上没有 Pi 会话的工作区（infra）还在：${seen.groupsAfter.build?.join()}`,
+    `只看 Pi 的时候 build-01 上没有 Pi 会话的项目（infra）还在：${seen.groupsAfter.build?.join()}`,
   )
   must(
     seen.groupsAfter.nas?.length === 0 && seen.none.nas?.join() === '没有符合筛选的会话',
@@ -135,7 +136,7 @@ export function judgeFilter(seen: FilterSeen, kept: FilterKept, session: string)
   must(seen.pickedGone, '到别处去之后，原来开着的那个 Claude Code 的会话还留在筛过的树里')
   must(
     seen.tally === '待审批｜｜未读｜1/0/0/1',
-    `筛着的时候收起的工作区上的汇总不对（别的 harness 在跑的不算，等审批的照算）：${seen.tally}`,
+    `筛着的时候收起的项目上的汇总不对（别的 harness 在跑的不算，等审批的照算）：${seen.tally}`,
   )
   for (const entry of seen.skins) {
     const [where, text, button, over, height] = entry.split('｜')
@@ -148,6 +149,20 @@ export function judgeFilter(seen: FilterSeen, kept: FilterKept, session: string)
     )
   }
   must(seen.skins.length === 6, `皮肤没有量全：${seen.skins.length}`)
+
+  // ---- 再挑上 Codex ----
+  must(
+    seen.twoLine === 'PI CX｜只看 Pi、Codex',
+    `挑了两个之后“正在只看”那一行写的不对：${seen.twoLine}`,
+  )
+  must(seen.twoSaved === 'pi,codex', `挑了两个之后记在界面本地的不对：${seen.twoSaved}`)
+  const twoRows = seen.twoRows.map(parse)
+  must(
+    twoRows.some((row) => row.badge === 'CX') &&
+      twoRows.some((row) => row.badge === 'PI') &&
+      twoRows.every((row) => row.badge === 'PI' || row.badge === 'CX' || row.waiting),
+    `挑了 Pi 和 Codex 之后本机下面的会话不对：${seen.twoRows.join('、')}`,
+  )
 
   // ---- 取消 ----
   must(

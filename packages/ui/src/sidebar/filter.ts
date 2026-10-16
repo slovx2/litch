@@ -1,5 +1,5 @@
-// 侧栏“只看某个 harness 的会话”：能挑哪几个、挑中的那个怎么称呼、一组会话里留哪些。
-// 挑的是哪个记在 state.ts 里（界面本地）；这里只管算，不碰页面，好单独测。
+// 侧栏“只看某几个 harness 的会话”：能挑哪几个、挑中的怎么称呼、一组会话里留哪些。
+// 挑的是哪几个记在 state.ts 里（界面本地）；这里只管算，不碰页面，好单独测。
 import type { DeviceView, SessionHarnesses } from '@litch/core'
 
 export interface HarnessChoice {
@@ -40,7 +40,7 @@ export function harnessChoices(devices: Devices): HarnessChoice[] {
 }
 
 /**
- * 正筛着的那个 harness 怎么称呼。先在连着的设备里找，再在没连着的里找（设备还在连、或者断了）；
+ * 正筛着的某个 harness 怎么称呼。先在连着的设备里找，再在没连着的里找（设备还在连、或者断了）；
  * 哪儿都没有就用它的标识：筛选开着就得说得出在筛什么，好让人取消
  */
 export function describeHarness(devices: Devices, id: string): HarnessChoice {
@@ -51,16 +51,33 @@ export function describeHarness(devices: Devices, id: string): HarnessChoice {
 }
 
 /**
- * 筛选开着时一组里留哪些会话，先后不变。harness 是 null（没在筛）原样给回去。
+ * 筛选开着时一组里留哪些会话，先后不变。harnesses 是空的（没在筛）原样给回去。
  * always：不管属于谁都留着的，见 Sidebar.tsx（正选中的、停下来等人的）
  */
 export function keepSessions(
   ids: readonly string[] | undefined,
-  harness: string | null,
+  harnesses: readonly string[],
   harnessOf: SessionHarnesses | undefined,
   always: (sessionId: string) => boolean,
 ): readonly string[] {
   if (!ids) return []
-  if (harness === null) return ids
-  return ids.filter((id) => harnessOf?.[id] === harness || always(id))
+  if (harnesses.length === 0) return ids
+  return ids.filter((id) => {
+    const owner = harnessOf?.[id]
+    return (owner !== undefined && harnesses.includes(owner)) || always(id)
+  })
+}
+
+/**
+ * 点了某个 harness 之后挑中的是哪几个：挑着的去掉，没挑的加上。
+ * 加上之后能挑的全挑上了，和都看是一回事，记成空的（都看）：免得以后多出一个 harness 时它被悄悄筛掉
+ */
+export function toggleHarness(
+  picked: readonly string[],
+  id: string,
+  choices: readonly HarnessChoice[],
+): readonly string[] {
+  const next = picked.includes(id) ? picked.filter((entry) => entry !== id) : [...picked, id]
+  const all = choices.length > 0 && choices.every((choice) => next.includes(choice.id))
+  return all ? [] : next
 }

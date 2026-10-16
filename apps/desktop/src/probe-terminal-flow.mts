@@ -1,17 +1,17 @@
 // 终端验收的第二段，接在 probe-terminal.mts 的 mockBasics 后面（两个标签都开着，第一个叫“构建”）：
 // 切走再回来内容和滚到哪了还在不在、刷屏的时候界面卡不卡、能不能切标签、中断多久生效、全屏程序进出。
-// 最后面的 mockHome 排在整套验收的末尾：新建对话页上换设备、换工作区，面板里的那一组跟着换。
+// 最后面的 mockHome 排在整套验收的末尾：新建对话页上换设备、换项目，面板里的那一组跟着换。
 import type { TerminalKit } from './probe-terminal-kit.mjs'
 
 export interface MockFlow {
   /** 往上滚过之后屏幕上是另一截内容（确实滚动了） */
   scrolled: boolean
-  /** 切到另一个标签再回来、收起面板再打开、换到别的工作区的会话再回来、开一页再回来：显示的还是那一截 */
+  /** 切到另一个标签再回来、收起面板再打开、换到别的项目的会话再回来、开一页再回来：显示的还是那一截 */
   keptAcrossTabs: boolean
   keptAcrossPanel: boolean
   keptAcrossSession: boolean
   keptAcrossPage: boolean
-  /** 换到别的工作区的会话时，面板里是那个工作区自己的一组（这里是空的） */
+  /** 换到别的项目的会话时，面板里是那个项目自己的一组（这里是空的） */
   otherGroupEmpty: boolean
   /** 开着“设备”那一页的时候面板不显示 */
   hiddenOnPage: boolean
@@ -65,7 +65,7 @@ export async function mockFlow(): Promise<MockFlow> {
   await frame()
   const keptAcrossPanel = await kit.seen(() => same(kit.rows(), held), 3000)
 
-  // 换到别的工作区的会话：面板里换成那个工作区的一组
+  // 换到别的项目的会话：面板里换成那个项目的一组
   const group = () => kit.panel()?.dataset.group ?? ''
   const home = group()
   const homeTitle = text(one('.ss-row[aria-current="true"] .title'))
@@ -194,11 +194,11 @@ export async function mockFlow(): Promise<MockFlow> {
 }
 
 export interface MockHome {
-  /** 回到新建对话页：面板里是默认去处的那一组（“设备/工作区”，本机、不属于任何工作区） */
+  /** 回到新建对话页：面板里是默认去处的那一组（“设备/项目”，本机、不属于任何项目） */
   start: string
   /** 在页上换了一台设备：面板里是那台设备主目录的那一组 */
   afterDevice: string
-  /** 再换到那台设备上的一个工作区：面板里是那个工作区的一组。wanted 是该是哪一组 */
+  /** 再换到那台设备上的一个项目：面板里是那个项目的一组。wanted 是该是哪一组 */
   afterWorkspace: string
   wanted: string
   /** 换回本机：回到开头那一组 */
@@ -232,10 +232,10 @@ export async function mockHome(): Promise<MockHome> {
   await choose('device', (option) => option.dataset.option === 'build')
   await until('面板换到另一台设备', () => where().startsWith('build/'))
   const afterDevice = where()
-  // 那台设备上的头一个工作区（“不属于任何工作区”那一项的标识是空的）
+  // 那台设备上的头一个项目（“不属于任何项目”那一项的标识是空的）
   const workspace = await choose('workspace', (option) => Boolean(option.dataset.option))
   const wanted = `build/${workspace}`
-  await until('面板换到那个工作区', () => where() === wanted, 5000).catch(() => null)
+  await until('面板换到那个项目', () => where() === wanted, 5000).catch(() => null)
   const afterWorkspace = where()
   await choose('device', (option) => option.dataset.option === 'local')
   await until('面板回到本机', () => where().startsWith('local/'), 5000).catch(() => null)

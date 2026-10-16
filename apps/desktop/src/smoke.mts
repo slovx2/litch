@@ -65,7 +65,7 @@ import { manageProbe } from './probe-manage.mjs'
 import { judgeManage, judgeMockManage } from './probe-manage-judge.mjs'
 import { mockManageProbe } from './probe-manage-mock.mjs'
 import { judgeOrganize, organizeProbe } from './probe-organize.mjs'
-import { judgeOrganizeMock, organizeMockProbe } from './probe-organize-mock.mjs'
+import { judgeOrganizeMock, organizeMockProbe, PICKED_FOLDER } from './probe-organize-mock.mjs'
 import { judgeOutput, outputProbe } from './probe-output.mjs'
 import { judgeRemote, remoteProbe } from './probe-remote.mjs'
 import { type ServiceAliases, serviceConnect } from './probe-remote-service.mjs'
@@ -298,7 +298,10 @@ async function measure(
     const narrow = await runInPage(window, narrowDevicesProbe)
     window.setSize(width, height)
     // 整理侧栏、按声明给入口那一组排在最后：它会改侧栏（置顶、加工作区），放前面会动到上面几组量的数
+    // 添加项目时的“选择…”：系统的选文件夹对话框在自检里不弹，由这个变量代答（main.mts 的 PICK_FOLDER）
+    process.env.LITCH_PICK_FOLDER = PICKED_FOLDER
     const organize = await runInPage(window, organizeMockProbe)
+    delete process.env.LITCH_PICK_FOLDER
     return [
       { ...result, devices, narrow, organize },
       [

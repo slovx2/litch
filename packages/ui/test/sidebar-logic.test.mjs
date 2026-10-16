@@ -28,15 +28,18 @@ test('汇总：一组的是组里各个 harness 加起来，整台设备的是�
   assert.deepEqual(TALLIES.litch.claude, tally(1, 0, 1, 0))
 })
 
-test('汇总：只看某个 harness 时，在跑的、未读的只算它的，等人的照样都算', () => {
+test('汇总：只看某几个 harness 时，在跑的、未读的只算它们的，等人的照样都算', () => {
   // 只看 Pi：Claude Code 那个在跑的不算了，它那个等审批的还算（那一行筛选时也留在树里）
-  assert.deepEqual(tallyOf(TALLIES, 'litch', 'pi'), tally(1, 0, 0, 1))
-  assert.deepEqual(tallyOf(TALLIES, 'litch', 'claude'), tally(1, 0, 1, 0))
-  assert.deepEqual(tallyOf(TALLIES, null, 'pi'), tally(1, 2, 0, 2))
-  assert.deepEqual(tallyOf(TALLIES, null, 'codex'), tally(1, 2, 3, 0))
+  assert.deepEqual(tallyOf(TALLIES, 'litch', ['pi']), tally(1, 0, 0, 1))
+  assert.deepEqual(tallyOf(TALLIES, 'litch', ['claude']), tally(1, 0, 1, 0))
+  assert.deepEqual(tallyOf(TALLIES, null, ['pi']), tally(1, 2, 0, 2))
+  assert.deepEqual(tallyOf(TALLIES, null, ['codex']), tally(1, 2, 3, 0))
   // 这一组里没有它的会话：只剩等人的
-  assert.deepEqual(tallyOf(TALLIES, ':pinned', 'pi'), NO_TALLY)
-  assert.deepEqual(tallyOf(TALLIES, 'docs', 'dsh'), tally(0, 2, 0, 0))
+  assert.deepEqual(tallyOf(TALLIES, ':pinned', ['pi']), NO_TALLY)
+  assert.deepEqual(tallyOf(TALLIES, 'docs', ['dsh']), tally(0, 2, 0, 0))
+  // 挑了两个：两家的在跑、未读加起来；空的是都看
+  assert.deepEqual(tallyOf(TALLIES, 'litch', ['pi', 'claude']), tallyOf(TALLIES, 'litch'))
+  assert.deepEqual(tallyOf(TALLIES, null, []), tallyOf(TALLIES, null))
 })
 
 test('汇总：什么事都没有才算安静', () => {
@@ -125,32 +128,39 @@ test('侧栏的状态：没记过就是开着、默认宽度；改了就记下�
   assert.deepEqual(state.sidebarNow(), {
     open: true,
     width: state.SIDEBAR_DEFAULT,
-    harness: null,
+    harnesses: [],
   })
   state.setSidebarWidth(356.4)
-  assert.deepEqual(saved(), { open: true, width: 356, harness: null })
+  assert.deepEqual(saved(), { open: true, width: 356, harnesses: [] })
   // 存的是想要的宽度，夹在最窄和最宽之间
   state.setSidebarWidth(5000)
   assert.equal(state.sidebarNow().width, state.SIDEBAR_MAX)
   state.setSidebarWidth(1)
   assert.equal(state.sidebarNow().width, state.SIDEBAR_MIN)
   state.setSidebarOpen(false)
-  assert.deepEqual(saved(), { open: false, width: state.SIDEBAR_MIN, harness: null })
-  // 只看哪个 harness 也记在这一份里；取消就是记回“都看”
-  state.setSidebarHarness('pi')
-  assert.deepEqual(saved(), { open: false, width: state.SIDEBAR_MIN, harness: 'pi' })
-  state.setSidebarHarness(null)
-  assert.equal(saved().harness, null)
+  assert.deepEqual(saved(), { open: false, width: state.SIDEBAR_MIN, harnesses: [] })
+  // 只看哪几个 harness 也记在这一份里，重复的只留一个；取消就是记回“都看”
+  state.setSidebarHarnesses(['pi', 'claude', 'pi'])
+  assert.deepEqual(saved(), {
+    open: false,
+    width: state.SIDEBAR_MIN,
+    harnesses: ['pi', 'claude'],
+  })
+  state.setSidebarHarnesses([])
+  assert.deepEqual(saved().harnesses, [])
 })
 
 test('侧栏的状态：记着的照记着的来，离谱的宽度拉回范围里；同一次按键来两回只算一回', async () => {
   stored.clear()
-  stored.set('litch.sidebar', JSON.stringify({ open: false, width: 9999, harness: 'codex' }))
+  stored.set(
+    'litch.sidebar',
+    JSON.stringify({ open: false, width: 9999, harnesses: ['codex', 'pi'] }),
+  )
   const state = await import('../src/sidebar/state.ts?remembered')
   assert.deepEqual(state.sidebarNow(), {
     open: false,
     width: state.SIDEBAR_MAX,
-    harness: 'codex',
+    harnesses: ['codex', 'pi'],
   })
   state.toggleSidebar()
   // 应用菜单的快捷键和页面自己的按键各来一次：第二次不算
@@ -165,17 +175,22 @@ test('侧栏的状态：记着的照记着的来，离谱的宽度拉回范围�
   assert.deepEqual(broken.sidebarNow(), {
     open: true,
     width: broken.SIDEBAR_DEFAULT,
-    harness: null,
+    harnesses: [],
   })
-  // 记着的 harness 不是字符串：当成没在筛
-  stored.set('litch.sidebar', JSON.stringify({ harness: 3 }))
+  // 记着的不是数组：当成没在筛；数组里不是字符串的、空的丢掉
+  stored.set('litch.sidebar', JSON.stringify({ harnesses: 'pi' }))
   const odd = await import('../src/sidebar/state.ts?odd')
-  assert.equal(odd.sidebarNow().harness, null)
+  assert.deepEqual(odd.sidebarNow().harnesses, [])
+  stored.set('litch.sidebar', JSON.stringify({ harnesses: [3, '', 'pi'] }))
+  const mixed = await import('../src/sidebar/state.ts?mixed')
+  assert.deepEqual(mixed.sidebarNow().harnesses, ['pi'])
 })
 
-// ---------- 只看某个 harness 的会话 ----------
+// ---------- 只看某几个 harness 的会话 ----------
 
-const { describeHarness, harnessChoices, keepSessions } = await import('../src/sidebar/filter.ts')
+const { describeHarness, harnessChoices, keepSessions, toggleHarness } = await import(
+  '../src/sidebar/filter.ts'
+)
 
 const harness = (id, name, badge) => ({ id, name, badge })
 const device = (connection, ...harnesses) => ({ connection, harnesses })
@@ -189,7 +204,7 @@ test('筛选：能挑的是连着的设备上的 harness，同一个只出一次
     // 这台的数据还没到
     undefined,
     device('online', PI, CODEX),
-    device('offline', harness('dsh', 'DeepSeek Harness', 'DS')),
+    device('offline', harness('dsh', 'DSH', 'DS')),
   ]
   assert.deepEqual(harnessChoices(devices), [CLAUDE, PI, CODEX])
   // 一共只有一个：没什么可挑的（入口按“不到两个”不出现）
@@ -199,28 +214,42 @@ test('筛选：能挑的是连着的设备上的 harness，同一个只出一次
 
 test('筛选：正筛着的那个怎么称呼——先看连着的设备，再看没连着的，都没有用它的标识', () => {
   const devices = [
-    device('offline', harness('pi', '旧名字', 'P0'), harness('dsh', 'DeepSeek Harness', 'DS')),
+    device('offline', harness('pi', '旧名字', 'P0'), harness('dsh', 'DSH', 'DS')),
     device('online', PI),
   ]
   assert.deepEqual(describeHarness(devices, 'pi'), PI)
-  assert.deepEqual(describeHarness(devices, 'dsh'), harness('dsh', 'DeepSeek Harness', 'DS'))
+  assert.deepEqual(describeHarness(devices, 'dsh'), harness('dsh', 'DSH', 'DS'))
   assert.deepEqual(describeHarness(devices, 'gone'), harness('gone', 'gone', 'GO'))
 })
 
-test('筛选：一组里只留这个 harness 的会话，先后不变；正选中的、等人的不筛掉', () => {
+test('筛选：一组里只留挑中的 harness 的会话，先后不变；正选中的、等人的不筛掉', () => {
   const ids = ['s1', 's2', 's3', 's4', 's5']
   const harnessOf = { s1: 'claude', s2: 'claude', s3: 'pi', s4: 'codex', s5: 'pi' }
   const never = () => false
   // 没在筛：原样给回去，连数组都是同一个
-  assert.equal(keepSessions(ids, null, harnessOf, never), ids)
-  assert.deepEqual(keepSessions(ids, 'pi', harnessOf, never), ['s3', 's5'])
-  assert.deepEqual(keepSessions(ids, 'dsh', harnessOf, never), [])
+  assert.equal(keepSessions(ids, [], harnessOf, never), ids)
+  assert.deepEqual(keepSessions(ids, ['pi'], harnessOf, never), ['s3', 's5'])
+  assert.deepEqual(keepSessions(ids, ['dsh'], harnessOf, never), [])
   // s2 在等审批、s4 正开着：不属于 Pi 也留着，位置不动
   const always = (id) => id === 's2' || id === 's4'
-  assert.deepEqual(keepSessions(ids, 'pi', harnessOf, always), ['s2', 's3', 's4', 's5'])
+  assert.deepEqual(keepSessions(ids, ['pi'], harnessOf, always), ['s2', 's3', 's4', 's5'])
   // 这一组没有会话；属于谁的那张表还没到
-  assert.deepEqual(keepSessions(undefined, 'pi', harnessOf, never), [])
-  assert.deepEqual(keepSessions(ids, 'pi', undefined, always), ['s2', 's4'])
+  assert.deepEqual(keepSessions(undefined, ['pi'], harnessOf, never), [])
+  assert.deepEqual(keepSessions(ids, ['pi'], undefined, always), ['s2', 's4'])
+  // 挑了两个
+  assert.deepEqual(keepSessions(ids, ['pi', 'codex'], harnessOf, never), ['s3', 's4', 's5'])
+})
+
+test('筛选：点一下挑上或去掉；能挑的全挑上了就是都看', () => {
+  const choices = [CLAUDE, PI, CODEX]
+  assert.deepEqual(toggleHarness([], 'pi', choices), ['pi'])
+  assert.deepEqual(toggleHarness(['pi'], 'claude', choices), ['pi', 'claude'])
+  assert.deepEqual(toggleHarness(['pi', 'claude'], 'pi', choices), ['claude'])
+  assert.deepEqual(toggleHarness(['claude'], 'claude', choices), [])
+  // 三个都挑上了：记成都看
+  assert.deepEqual(toggleHarness(['pi', 'claude'], 'codex', choices), [])
+  // 挑着的设备断了、不在能挑的里面：照常加减
+  assert.deepEqual(toggleHarness(['dsh'], 'pi', choices), ['dsh', 'pi'])
 })
 
 // ---------- 会话的工作目录不是工作区的根 ----------

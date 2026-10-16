@@ -8,6 +8,7 @@ import {
   LICENSE_TEXT,
   MENU,
   OPEN_EXTERNAL,
+  PICK_FOLDER,
   REQUEST_CORE_PORT,
   SET_LANGUAGE,
   SET_LOOK,
@@ -38,6 +39,9 @@ contextBridge.exposeInMainWorld('litchShell', {
   // “关于”里的版本和许可文本
   about: () => ipcRenderer.invoke(ABOUT),
   licenseText: (id: string) => ipcRenderer.invoke(LICENSE_TEXT, id),
+  // 添加项目时用系统的对话框选一个本机目录
+  pickFolder: (options: { defaultPath?: string; title?: string }) =>
+    ipcRenderer.invoke(PICK_FOLDER, options),
   // 应用菜单里要界面来办的那几项。只把是哪一项交给页面，事件对象不给
   onMenu(handler: (action: string) => void) {
     const listener = (_event: unknown, action: unknown) => {

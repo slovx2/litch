@@ -76,7 +76,7 @@ async function run(window: BrowserWindow, hooks: SmokeHooks): Promise<readonly [
     skill: { name: string; mark: string }
   }
   const ids = fixture.ids
-  // 排查时只走其中几步（scripts/check-engines.mjs --steps）：建工作区和建会话那两步照走，别的没点到的跳过
+  // 排查时只走其中几步（scripts/check-engines.mjs --steps）：建项目和建会话那两步照走，别的没点到的跳过
   const picked = (process.env.LITCH_SMOKE_STEPS ?? '').split(',').filter(Boolean)
   const wanted = (name: string) => picked.length === 0 || name === 'start' || picked.includes(name)
   const place: EnginesPlace = { cwd: fixture.cwd, workspace: WORDS.workspace, skill: fixture.skill }
@@ -124,7 +124,7 @@ async function run(window: BrowserWindow, hooks: SmokeHooks): Promise<readonly [
   }
 
   await installKits(window)
-  // ---- 一、设备和三个 harness；给三家共用的工作目录建一个工作区 ----
+  // ---- 一、设备和三个 harness；给三家共用的工作目录建一个项目 ----
   seen.device = (await inPage(window, enginesDevice, place, ids)) as DeviceSeen
   line('device', seen.device)
   // ---- 二、各建一个会话、发头一句 ----

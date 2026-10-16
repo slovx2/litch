@@ -44,3 +44,4 @@ elsewhere.
 - **回合用的设置一次读齐**：一个回合用的审批策略、权限模式、沙箱策略、计划模式，要在回合开始、第一次
   `await` 之前一次读齐（`runRuntimeTurn` 开头的 `turnSettings`）。`turn/started` 发出之后客户端随时会改
   会话设置，等完再读会读到另一档，几样凑不到一起（工作区档配上没有可写目录的完全访问策略，写文件全被当成越界）。
+- 本机别处（命令行、Claude 桌面端）开的 Claude Code 会话也进会话列表（`native-sessions.mts`，历史怎么画在 `native-history.mts`）：列表时用 SDK 的 `listSessions({ includeProgrammatic: false })` 扫一遍、登记进库（会话号就是原生会话号），历史在读、恢复、发消息之前才画，原生记录变了接着最后一个回合的边界往后画，边界对不上整份重画。库里的 `native_sessions` 记着每个原生会话号是怎么来的（适配器自己用过的、导进来的、导进来又删掉的），这几种都不再导；适配器自己的会话换原生会话号（`upsertThread`、`updateClaudeSessionId`）时自动记上。工具调用画成哪种条目只有一份（`tool-items.mts`），实时回合和读历史共用。有连接时每 30 秒再扫一次，头一遍之后扫到的新会话发 `thread/started`。`CHA_CLAUDE_NATIVE_SESSIONS=0` 关掉。测试里主目录是空的，什么都列不出来；要测就像 `native-sessions.test.mts` 那样先设 `CLAUDE_CONFIG_DIR` 再引入服务的模块（SDK 装载时就定下了目录）。

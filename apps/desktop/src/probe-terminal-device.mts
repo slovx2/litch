@@ -24,7 +24,7 @@ export interface RealBasics {
 export async function realBasics(): Promise<RealBasics> {
   const kit = (window as unknown as { __termKit: TerminalKit }).__termKit
   const { until, one, text } = kit
-  // 有会话就选第一个：终端开在它的工作区里。没有会话的话用的是设备主目录的那一组
+  // 有会话就选第一个：终端开在它的项目里。没有会话的话用的是设备主目录的那一组
   await until('侧栏里有会话', () => one('.ss-row'), 30_000).catch(() => null)
   const first = one<HTMLElement>('.ss-row')
   first?.click()

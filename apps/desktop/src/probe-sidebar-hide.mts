@@ -25,7 +25,7 @@ export interface HideSeen {
   newByKey: boolean
   /** 焦点在输入框里再按一次快捷键：展开 */
   openedFromComposer: boolean
-  /** 展开之后宽度还是原来的；之前收起的那个工作区还收着（收起侧栏只是不显示） */
+  /** 展开之后宽度还是原来的；之前收起的那个项目还收着（收起侧栏只是不显示） */
   widthBefore: number
   widthBack: number
   foldKept: boolean
@@ -56,7 +56,7 @@ export async function hideSeen(session: string): Promise<HideSeen> {
   const first = () => Math.round((one('.tb > *') as HTMLElement).getBoundingClientRect().left)
   const onNewPage = () => Boolean(one('.new-hero'))
 
-  // 留一个记号：收起一个工作区，等会儿看侧栏展开回来它还收着没有
+  // 留一个记号：收起一个项目，等会儿看侧栏展开回来它还收着没有
   const backup = () => kit.workspaceLine('nas', 'backup-scripts')
   await kit.fold(backup(), false)
   await kit.open(session)

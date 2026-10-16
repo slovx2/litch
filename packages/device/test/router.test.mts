@@ -158,7 +158,7 @@ test('runtime/info：设备信息和每个 harness 的状态，形状和扩展�
       {
         id: 'dsh',
         // 没连上过的 harness 用仓库里登记的名字，和引擎自报的、设置里那一组的标题是同一个出处
-        displayName: 'DeepSeek Harness',
+        displayName: 'DSH',
         badge: 'DS',
         version: null,
         engine: null,

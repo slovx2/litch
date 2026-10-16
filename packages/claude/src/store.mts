@@ -25,6 +25,15 @@ import type {
 } from './types.mjs'
 import { adapterHome, jsonClone, newId, nowSeconds } from './util.mjs'
 
+/** 一个原生会话号是怎么来的，见 native_sessions 那张表 */
+export type NativeSessionOrigin = 'adapter' | 'imported' | 'dismissed'
+
+export interface NativeSessionRecord {
+  threadId: string
+  origin: NativeSessionOrigin
+  mark: string | null
+}
+
 const require = createRequire(import.meta.url)
 
 export const PINNED_SECTION_ID = '01984de2-8f74-7c91-a3b2-5c5e937cf318'
@@ -131,6 +140,12 @@ export class SessionStore {
       CREATE TABLE IF NOT EXISTS native_turn_boundaries (
         turn_id TEXT PRIMARY KEY, message_id TEXT NOT NULL
       );
+      -- 用过的 Claude Code 原生会话号各是怎么来的（native-sessions.mts）：adapter 是适配器自己的会话用过的
+      -- （回退、追加上下文换下来的旧号也留着），imported 是从本机的原生会话导进来的，dismissed 是导进来又被删掉的。
+      -- 列本机原生会话时这几种都不再导一遍。mark 是导入的那份历史对应的原生记录（大小和修改时间）
+      CREATE TABLE IF NOT EXISTS native_sessions (
+        session_id TEXT PRIMARY KEY, thread_id TEXT NOT NULL, origin TEXT NOT NULL, mark TEXT
+      );
       CREATE TABLE IF NOT EXISTS context_injections (
         message_id TEXT PRIMARY KEY, thread_id TEXT NOT NULL, turn_id TEXT,
         context_json TEXT NOT NULL, committed INTEGER NOT NULL DEFAULT 0
@@ -232,6 +247,12 @@ export class SessionStore {
     this.db.exec(
       'CREATE INDEX IF NOT EXISTS idx_threads_section_position ON threads(section_id, section_position, id)',
     )
+    // 有这张表之前建的会话：它们现在用着的原生会话号补记上（以前换下来的旧号已经不知道了，
+    // 那些原生记录是 SDK 写的，列本机原生会话时本来就不列）
+    this.db.exec(`
+      INSERT OR IGNORE INTO native_sessions (session_id, thread_id, origin, mark)
+        SELECT claude_session_id, id, 'adapter', NULL FROM threads WHERE claude_session_id IS NOT NULL
+    `)
     this.ensurePinnedSection()
   }
 
@@ -335,6 +356,85 @@ export class SessionStore {
         thread.runtimeBackend,
         thread.codexSessionId,
       )
+    if (thread.claudeSessionId) this.claimNativeSession(thread.claudeSessionId, thread.id)
+  }
+
+  /** 这个原生会话号归这个会话用了。已经记过的（导入的、别的会话的）不动 */
+  private claimNativeSession(sessionId: string, threadId: string): void {
+    this.db
+      .prepare(
+        "INSERT INTO native_sessions (session_id, thread_id, origin, mark) VALUES (?, ?, 'adapter', NULL) ON CONFLICT(session_id) DO NOTHING",
+      )
+      .run(sessionId, threadId)
+  }
+
+  /** 记过的原生会话号：会话号 → 归哪个会话、怎么来的、导入的历史对应哪一份记录 */
+  nativeSessions(): Map<string, NativeSessionRecord> {
+    const rows = this.db
+      .prepare('SELECT session_id, thread_id, origin, mark FROM native_sessions')
+      .all() as Array<{
+      session_id: string
+      thread_id: string
+      origin: string
+      mark: string | null
+    }>
+    return new Map(
+      rows.map((row) => [
+        row.session_id,
+        { threadId: row.thread_id, origin: row.origin as NativeSessionOrigin, mark: row.mark },
+      ]),
+    )
+  }
+
+  /** 导入一个原生会话：先记下它是导进来的，再建会话（建的时候不会被当成适配器自己的） */
+  importNativeSession(sessionId: string, thread: ThreadRecord): void {
+    this.db.exec('BEGIN IMMEDIATE')
+    try {
+      this.db
+        .prepare(
+          "INSERT INTO native_sessions (session_id, thread_id, origin, mark) VALUES (?, ?, 'imported', NULL)",
+        )
+        .run(sessionId, thread.id)
+      this.upsertThread(thread)
+      this.db.exec('COMMIT')
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
+  }
+
+  /**
+   * 换上一份从原生记录画出来的历史：keep 个回合原样留着（已经在库里、和原生记录对得上的），
+   * 后面的整个换成 turns。mark 记下这份历史对应的原生记录
+   */
+  replaceNativeHistory(
+    threadId: string,
+    sessionId: string,
+    keep: number,
+    turns: readonly TurnRecord[],
+    boundaries: ReadonlyMap<string, string>,
+    mark: string,
+  ): void {
+    this.flushAll()
+    this.db.exec('BEGIN IMMEDIATE')
+    try {
+      const drop = this.listTurns(threadId).slice(keep)
+      for (const turn of drop) {
+        this.db.prepare('DELETE FROM hook_runs WHERE turn_id=?').run(turn.id)
+        this.db.prepare('DELETE FROM native_turn_boundaries WHERE turn_id=?').run(turn.id)
+        this.db.prepare('DELETE FROM turns WHERE id=?').run(turn.id)
+      }
+      for (const turn of turns) {
+        this.writeTurn(turn)
+        const boundary = boundaries.get(turn.id)
+        if (boundary) this.saveNativeBoundary(turn.id, boundary)
+      }
+      this.db.prepare('UPDATE native_sessions SET mark=? WHERE session_id=?').run(mark, sessionId)
+      this.db.exec('COMMIT')
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
   }
 
   getThread(id: string): ThreadRecord | null {
@@ -760,6 +860,7 @@ export class SessionStore {
     this.db
       .prepare('UPDATE threads SET claude_session_id = ?, updated_at = ? WHERE id = ?')
       .run(claudeSessionId, nowSeconds(), threadId)
+    if (claudeSessionId) this.claimNativeSession(claudeSessionId, threadId)
   }
 
   // Stored separately from Claude's session id so a thread that was
@@ -1207,6 +1308,12 @@ export class SessionStore {
       ])
         this.db.prepare(`DELETE FROM ${table} WHERE thread_id=?`).run(threadId)
       this.db.prepare('DELETE FROM threads WHERE id=?').run(threadId)
+      // 导进来的原生会话被删了：原生记录不动（它可能还在命令行、Claude 桌面端里用着），只是不再导进来
+      this.db
+        .prepare(
+          "UPDATE native_sessions SET origin='dismissed' WHERE thread_id=? AND origin='imported'",
+        )
+        .run(threadId)
       this.db.exec('COMMIT')
     } catch (error) {
       this.db.exec('ROLLBACK')

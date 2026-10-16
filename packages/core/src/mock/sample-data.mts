@@ -427,10 +427,18 @@ const OTHER_OPTIONS: Record<string, ModelList> = {
   dsh: {
     models: [sampleModel('deepseek-chat', 'DeepSeek Chat', [], true)],
   },
+  // codex 的清单长：选择器顶上会出筛选框（选项 8 个起才出）
   codex: {
     models: [
       sampleModel('gpt-5.5-codex', 'GPT-5.5 Codex', ['low', 'medium', 'high'], true),
       sampleModel('gpt-5.5-mini', 'GPT-5.5 mini', ['low', 'medium']),
+      sampleModel('gpt-5.5', 'GPT-5.5', ['low', 'medium', 'high']),
+      sampleModel('gpt-5.4-codex', 'GPT-5.4 Codex', ['low', 'medium', 'high']),
+      sampleModel('gpt-5.4', 'GPT-5.4', ['low', 'medium', 'high']),
+      sampleModel('gpt-5.4-mini', 'GPT-5.4 mini', ['low', 'medium']),
+      sampleModel('o5', 'o5', ['medium', 'high']),
+      sampleModel('o5-mini', 'o5 mini', ['medium']),
+      sampleModel('gpt-5.3-codex', 'GPT-5.3 Codex', ['low', 'medium', 'high']),
     ],
   },
 }

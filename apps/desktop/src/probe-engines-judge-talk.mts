@@ -26,7 +26,7 @@ const start: StepJudge = (id, spec, raw, v, place) => {
   v.check(seen.crumbHarness === spec.name, `新建页标题栏上的徽标是“${seen.crumbHarness}”`)
   v.check(
     seen.device === '本机' && seen.workspace === place.workspace,
-    '新建页上选着的不是那个工作区',
+    '新建页上选着的不是那个项目',
   )
   // 模型和强度：清单是 harness 自己报的，这里只看画出来了、选着的是清单里的一个
   for (const [name, picker] of [
@@ -59,12 +59,9 @@ const start: StepJudge = (id, spec, raw, v, place) => {
   v.check(seen.rowTitle === spec.opening, `侧栏里这一行的标题是“${seen.rowTitle}”`)
   v.check(seen.crumb === spec.opening, `标题栏上的标题是“${seen.crumb}”`)
   v.check(seen.rowHarness === spec.name, `侧栏里这一行的徽标是“${seen.rowHarness}”`)
-  v.check(
-    seen.rowWorkspace === place.workspace,
-    `这一行落在了“${seen.rowWorkspace || '工作区外面'}”`,
-  )
+  v.check(seen.rowWorkspace === place.workspace, `这一行落在了“${seen.rowWorkspace || '项目外面'}”`)
   // 建好之后底栏：权限选着的是它默认的那一档
-  const preset = id === 'pi' ? '完全访问' : '工作区'
+  const preset = id === 'pi' ? '完全访问' : '项目'
   v.check(
     seen.permissionAfter === preset,
     `建好之后权限选着“${seen.permissionAfter}”，该是“${preset}”`,

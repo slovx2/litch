@@ -358,7 +358,7 @@ export interface MockFullProbe {
   leftNote: string
   /**
    * 不可用的 harness 的会话那一行看得出用不了。行尾的菜单里只剩“置顶”：那是设备上的记录，不经过 harness；
-   * 要够得着它才做得了的（改名、归档、删除、换工作区）都不出
+   * 要够得着它才做得了的（改名、归档、删除、换项目）都不出
    */
   downRows: number
   downRowMenu: string

@@ -40,7 +40,7 @@ export interface TreeSeen {
   tab: string
   tabLabel: string
   focusInTree: boolean
-  /** 面板挂在哪台设备的哪个工作区、哪个根 */
+  /** 面板挂在哪台设备的哪个项目、哪个根 */
   place: string
   root: string
   /** 根下面有什么，每项写成“种类:名字” */

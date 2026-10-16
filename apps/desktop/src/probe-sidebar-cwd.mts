@@ -1,6 +1,6 @@
-// 侧栏验收：会话的工作目录不是工作区的根时，行上的小记号。
+// 侧栏验收：会话的工作目录不是项目的根时，行上的小记号。
 // 模拟核心里有三个这样的会话：本机 docs-site 里一个在子目录里开的，build-01 的 litch 里一个在子目录里开的，
-// build-01 的 infra 里一个目录根本不在工作区里的。
+// build-01 的 infra 里一个目录根本不在项目里的。
 // cwdSeen 会被原样送进页面里执行，不能引用函数外面的东西；judgeCwd 在主进程里跑。
 import type { SidebarKit } from './probe-sidebar-kit.mjs'
 
@@ -9,11 +9,11 @@ export interface CwdSeen {
   marked: string[]
   /** 记号给读屏的话和提示是同一句 */
   spoken: boolean
-  /** 工作目录就是工作区的根的那一行、没有归属的那一行：有没有记号 */
+  /** 工作目录就是项目的根的那一行、没有归属的那一行：有没有记号 */
   plain: boolean[]
   /** 记号在标题和徽标之间 */
   between: boolean
-  /** 鼠标停到行上，信息卡里目录那一栏：目录｜多说的那一句。子目录的、不在工作区里的、平常的各一个 */
+  /** 鼠标停到行上，信息卡里目录那一栏：目录｜多说的那一句。子目录的、不在项目里的、平常的各一个 */
   cards: string[]
   /** 侧栏宽的时候、调到最窄之后，每个带记号的行：标题｜标题截断了没有｜图标（整个、没有、半个）｜图标多大 */
   wide: string[]
@@ -144,23 +144,23 @@ export function judgeCwd(seen: CwdSeen): string[] {
   must(
     seen.marked.join('\n') ===
       [
-        'local｜导航栏按使用场景重排｜sub｜工作目录是工作区里的子目录：~/work/docs-site/content/guide',
-        'build｜差异面板的大文件降级｜sub｜工作目录是工作区里的子目录：/srv/work/litch/apps/desktop',
-        'build｜缓存目录配额｜away｜工作目录不在这个工作区的目录里：/var/cache/ci',
+        'local｜导航栏按使用场景重排｜sub｜工作目录是项目里的子目录：~/work/docs-site/content/guide',
+        'build｜差异面板的大文件降级｜sub｜工作目录是项目里的子目录：/srv/work/litch/apps/desktop',
+        'build｜缓存目录配额｜away｜工作目录不在这个项目的目录里：/var/cache/ci',
       ].join('\n'),
-    `工作目录不是工作区的根的会话，行上的记号不对：${seen.marked.join('；')}`,
+    `工作目录不是项目的根的会话，行上的记号不对：${seen.marked.join('；')}`,
   )
   must(seen.spoken, '工作目录的记号没有给读屏说清楚（该和提示是同一句）')
   must(
     seen.plain.join() === 'false,false',
-    `工作目录就是工作区的根的、没有归属的会话，行上不该有记号：${seen.plain.join()}`,
+    `工作目录就是项目的根的、没有归属的会话，行上不该有记号：${seen.plain.join()}`,
   )
   must(seen.between, '工作目录的记号不在标题和徽标之间')
   must(
     seen.cards.join('\n') ===
       [
-        '~/work/docs-site/content/guide｜工作区里的子目录',
-        '/var/cache/ci｜不在这个工作区的目录里',
+        '~/work/docs-site/content/guide｜项目里的子目录',
+        '/var/cache/ci｜不在这个项目的目录里',
         '~/work/docs-site｜',
       ].join('\n'),
     `信息卡里目录那一栏不对：${seen.cards.join('；')}`,

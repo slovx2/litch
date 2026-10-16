@@ -1,7 +1,7 @@
 // `@` 提到文件的验收：打 @ 弹出找文件的单子、选中变成一片、发出去怎么带。
 // 接在带文件那一组后面，模拟核心和真实入口都跑；单子的样子用 probe-compose-more.mts 的 slashLook('at') 量。
 // 和别的验收一样，下面的函数会被原样送进页面里执行，不能引用函数外面的东西。
-// 模拟核心里每个工作区的根下面都是同一棵示例文件树（serve.go、docs/ 等），build-01 上不提供找文件；
+// 模拟核心里每个项目的根下面都是同一棵示例文件树（serve.go、docs/ 等），build-01 上不提供找文件；
 // “原生 codex 上路径写进正文”不在这里量：模拟核心里没有哪台设备既会找文件、又有能发消息的 Codex，
 // 它在核心的单元测试里（declared.test.mts）。
 // 真实入口上那个会话的工作目录里有夹具造会话时写下的 status.txt。
@@ -43,7 +43,7 @@ export interface MentionProbe {
   } | null
   /** 对面不提供找文件的设备（模拟核心里的 build-01）：单子照样出来，上面说的是什么。只在模拟核心上量 */
   unsupported: string | null
-  /** 新建对话页：选了工作区就找得了；没选工作区的时候单子上说先选一个。只在模拟核心上量 */
+  /** 新建对话页：选了项目就找得了；没选项目的时候单子上说先选一个。只在模拟核心上量 */
   fresh: { listed: number; noRoot: string } | null
 }
 
@@ -337,7 +337,7 @@ export async function mentionProbe(real: boolean): Promise<MentionProbe> {
       await frame()
     }
     await choose('device', '本机')
-    await choose('workspace', '无工作区')
+    await choose('workspace', '无项目')
     field = await until('新建对话页的输入框', area)
     field.focus()
     write(field, '@serve')
@@ -345,7 +345,7 @@ export async function mentionProbe(real: boolean): Promise<MentionProbe> {
     await sleep(400)
     const noRoot = rows().length === 0 ? note() : `列了 ${rows().length} 项`
     write(field, '')
-    // 选一个工作区：这回找得了
+    // 选一个项目：这回找得了
     await choose('workspace', 'docs-site')
     field = await until('新建对话页的输入框', area)
     field.focus()
@@ -433,10 +433,10 @@ export function judgeMention(probe: MentionProbe, real: boolean): string[] {
     )
   }
   if (probe.fresh) {
-    check(probe.fresh.listed > 0, '新建对话页上选了工作区，打 @ 没有找到文件')
+    check(probe.fresh.listed > 0, '新建对话页上选了项目，打 @ 没有找到文件')
     check(
-      probe.fresh.noRoot.includes('工作区'),
-      `新建对话页上没选工作区，打 @ 该说先选一个：“${probe.fresh.noRoot}”`,
+      probe.fresh.noRoot.includes('项目'),
+      `新建对话页上没选项目，打 @ 该说先选一个：“${probe.fresh.noRoot}”`,
     )
   }
   return failed

@@ -44,6 +44,8 @@ export function usePopover(screen: unknown = null) {
     }
     const step = { ArrowDown: 1, ArrowUp: -1 }[event.key]
     if (!step && event.key !== 'Home' && event.key !== 'End') return
+    // 在里面的输入框（选择器的筛选框）里：Home、End 是挪光标的，不拿来走选项
+    if (!step && event.target instanceof HTMLInputElement) return
     const items = [...(pop.current?.querySelectorAll<HTMLElement>('button') ?? [])]
     if (items.length === 0) return
     event.preventDefault()

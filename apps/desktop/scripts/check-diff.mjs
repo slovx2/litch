@@ -7,7 +7,7 @@
 // 不带参数就是三种依次跑。量法在 src/probe-diff*.mts。
 //
 // 后两种要的仓库由这里在夹具自己的临时目录里现建（只往那里面写，git 的写操作也只对它做；夹具退出时连目录一起删）：
-//   work/app/            工作区的根（夹具造的会话就在这里），在这里 git init、提交一次，再摆出这些没提交的改动：
+//   work/app/            项目的根（夹具造的会话就在这里），在这里 git init、提交一次，再摆出这些没提交的改动：
 //     src/app.ts         改了两处，隔得远（中间有没显示的行，给“展开上下文”用）；没暂存
 //     README.md          加了一行，暂存了
 //     notes.txt → renamed.txt   改了名，暂存了
@@ -88,7 +88,7 @@ function arrange(root) {
   const inside = insideOf(root)
   const app = inside('work/app')
   const notes = inside('notes')
-  if (!existsSync(app)) throw new Error(`夹具里没有工作区的目录：${app}`)
+  if (!existsSync(app)) throw new Error(`夹具里没有项目的目录：${app}`)
   const put = (content, ...parts) => {
     mkdirSync(dirname(inside(...parts)), { recursive: true })
     writeFileSync(inside(...parts), content)
@@ -131,7 +131,7 @@ function arrange(root) {
       .concat('\n')
 
   git('init', '-q', '-b', 'main')
-  if (!existsSync(join(app, '.git'))) throw new Error(`没能在夹具的工作区里建出仓库：${app}`)
+  if (!existsSync(join(app, '.git'))) throw new Error(`没能在夹具的项目里建出仓库：${app}`)
   put(lines(), 'work/app/src/app.ts')
   put('# app\n\nA fixture repository.\n', 'work/app/README.md')
   put('one\ntwo\nthree\nfour\nfive\nsix\n', 'work/app/notes.txt')

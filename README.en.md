@@ -30,17 +30,17 @@ The screenshots show demo data. Skin, light or dark, and language (中文 / Engl
 
 ## Features
 
-- **Multiple harnesses.** Claude Code, Pi, Codex (native), plus experimental DeepSeek Harness. Each engine keeps its own sessions, tools, model configuration and login. If codex is installed on a machine, its sessions show up next to the other harnesses by themselves.
+- **Multiple harnesses.** Claude Code, Pi, Codex (native), plus experimental DeepSeek Harness (DSH). Each engine keeps its own sessions, tools, model configuration and login. If codex is installed on a machine, its sessions show up next to the other harnesses by themselves.
 - **Panels for coding work.** A terminal that survives a dropped connection, a file tree and viewer, and diff review (stage, revert, and inline comments that go out with your next message).
-- **Remote machines.** Litch reaches a remote machine through your system's ssh. Neither side opens a port, and login is left to your own ssh config and key agent, so the app has no password field. If the adapter is installed there, all of that machine's harnesses come in together, with settings, workspaces and terminals that survive a dropped connection; a machine with only native codex works too, with nothing else to install. It reconnects by itself after a drop, and a turn that was running is not lost. The adapter route needs adapter 0.6.0 or later on that machine.
+- **Remote machines.** Litch reaches a remote machine through your system's ssh. Neither side opens a port, and login is left to your own ssh config and key agent, so the app has no password field. If the adapter is installed there, all of that machine's harnesses come in together, with settings, projects and terminals that survive a dropped connection; a machine with only native codex works too, with nothing else to install. It reconnects by itself after a drop, and a turn that was running is not lost. The adapter route needs adapter 0.6.0 or later on that machine.
 - **Mobile.** In development.
 
 ## Status
 
 | Part | Status |
 |---|---|
-| Adapter `codex-harness-adapter` | Usable. Lets the Codex desktop app drive Claude Code, Pi and the experimental DeepSeek Harness directly; Litch also reaches all the harnesses on a machine through it. See [install and usage](ADAPTER.en.md) |
-| Desktop client Litch | Early development. Installers are available for macOS (Apple Silicon) and Windows (see Download below; the Windows build has not been fully tested), or run it from source. The app ships with its own copy of the adapter and gathers the harnesses installed on this machine under one device, Local. You can browse sessions, send messages (with images and attachments), queue, interrupt and steer, answer approvals and questions, and use plan mode, `/` commands and `@` to find files. When starting a session you pick the device, workspace and harness, and sessions from different harnesses in the same folder share one workspace. The side panel has a terminal, files and diff review. The Devices page can enable or disable a harness, change its settings, and show diagnostics and logs. It can also connect over SSH to the device service or native codex on a remote machine |
+| Adapter `codex-harness-adapter` | Usable. Lets the Codex desktop app drive Claude Code, Pi and the experimental DSH directly; Litch also reaches all the harnesses on a machine through it. See [install and usage](ADAPTER.en.md) |
+| Desktop client Litch | Early development. Installers are available for macOS (Apple Silicon) and Windows (see Download below; the Windows build has not been fully tested), or run it from source. The app ships with its own copy of the adapter and gathers the harnesses installed on this machine under one device, Local. You can browse sessions, send messages (with images and attachments), queue, interrupt and steer, answer approvals and questions, and use plan mode, `/` commands and `@` to find files. When starting a session you pick the device, project and harness, and sessions from different harnesses in the same folder share one workspace. The side panel has a terminal, files and diff review. The Devices page can enable or disable a harness, change its settings, and show diagnostics and logs. It can also connect over SSH to the device service or native codex on a remote machine |
 | Mobile | In development |
 
 ## Download
@@ -52,7 +52,7 @@ Get it from the [releases page](https://github.com/slovx2/litch/releases/latest)
 | macOS (Apple Silicon) | `Litch-<version>-macos-arm64.dmg` | Signed and notarized by Apple. Open it and drag Litch into Applications |
 | Windows (x64) | `Litch-<version>-windows-x64-setup.exe` | **Not fully tested yet**; some things may not work. The installer is not signed, so Windows warns that the publisher is unknown: click "More info", then "Run anyway". It installs for the current user only and does not need administrator rights |
 
-The app ships with its own copy of the adapter and, when opened, gathers the Claude Code, Pi, DeepSeek Harness and codex installed on this machine under the device named Local; install and sign in to those harnesses separately. There is no installer for Intel Macs yet; run it from source there.
+The app ships with its own copy of the adapter and, when opened, gathers the Claude Code, Pi, DSH and codex installed on this machine under the device named Local; install and sign in to those harnesses separately. There is no installer for Intel Macs yet; run it from source there.
 
 ## Run from source
 
@@ -85,7 +85,7 @@ npm run client:pack
 open apps/desktop/out/Litch-darwin-arm64/Litch.app
 ```
 
-When it opens, it starts that adapter by itself, and the Claude Code, Pi, DeepSeek Harness and codex installed on this machine show up under the device named Local (codex uses your own data, in `~/.codex` by default; disable it on the Devices page if you do not want it). A harness that is not installed says why; on the Devices page you can give the path to its command or disable it. The adapter keeps its state in `~/.codex-harness-adapter`, shared with a standalone install of the adapter. The service keeps running after you quit the app, so sessions are not interrupted.
+When it opens, it starts that adapter by itself, and the Claude Code, Pi, DSH and codex installed on this machine show up under the device named Local (codex uses your own data, in `~/.codex` by default; disable it on the Devices page if you do not want it). A harness that is not installed says why; on the Devices page you can give the path to its command or disable it. The adapter keeps its state in `~/.codex-harness-adapter`, shared with a standalone install of the adapter. The service keeps running after you quit the app, so sessions are not interrupted.
 
 An app you package yourself is only ad-hoc signed for this machine, so another Mac will refuse to open it; to give it to someone else, use the installer from the releases page.
 

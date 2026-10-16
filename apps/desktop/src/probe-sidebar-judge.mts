@@ -65,7 +65,7 @@ export function judgeFrame(seen: FrameChecks): string[] {
   )
   laid(seen.afterDrag, 360, '拖到 360 之后')
   must(
-    seen.afterDrag.saved === JSON.stringify({ open: true, width: 360, harness: null }),
+    seen.afterDrag.saved === JSON.stringify({ open: true, width: 360, harnesses: [] }),
     `拖出来的宽度没有记下来：${seen.afterDrag.saved}`,
   )
   must(
@@ -95,12 +95,12 @@ export function judgeFrame(seen: FrameChecks): string[] {
     hide.widthBack === hide.widthBefore && hide.widthBefore === 360,
     `侧栏展开回来宽度变了：${hide.widthBefore} → ${hide.widthBack}`,
   )
-  must(hide.foldKept, '侧栏收起再展开，里面原来收着的工作区被展开了')
+  must(hide.foldKept, '侧栏收起再展开，里面原来收着的项目被展开了')
   must(hide.closedByButton, '点标题栏的开关没有收起侧栏')
   must(hide.newByButton, '侧栏收着的时候点标题栏的“新对话”没有到新建对话页')
   must(hide.openedByButton, '再点标题栏的开关没有展开侧栏，或者“新对话”没收掉')
   must(
-    hide.savedClosed === JSON.stringify({ open: false, width: 360, harness: null }),
+    hide.savedClosed === JSON.stringify({ open: false, width: 360, harnesses: [] }),
     `侧栏收起没有记下来：${hide.savedClosed}`,
   )
   must(seen.menuFound, '应用菜单里没有“侧栏”那一项')

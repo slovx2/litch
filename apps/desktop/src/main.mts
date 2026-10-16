@@ -1,6 +1,6 @@
 // 主进程：只管窗口、生命周期，以及给窗口和核心之间牵一条消息端口。
 // 它不解析协议，不持有会话状态，不在数据路径上（设计文档 01 第四节）。
-import { join, normalize, sep } from 'node:path'
+import { isAbsolute, join, normalize, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import {
   app,
@@ -26,6 +26,7 @@ import {
   LICENSE_TEXT,
   MENU,
   OPEN_EXTERNAL,
+  PICK_FOLDER,
   REQUEST_CORE_PORT,
   SET_LANGUAGE,
   SET_LOOK,
@@ -324,6 +325,31 @@ ipcMain.handle(LICENSE_TEXT, (event, id: unknown) => {
   const frame = event.senderFrame
   if (!frame || frame !== event.sender.mainFrame || !isUiUrl(frame.url)) return null
   return typeof id === 'string' ? licensesNow().text(id) : null
+})
+
+// ---------- 添加项目时选目录 ----------
+
+/**
+ * 系统的选文件夹对话框，挂在发请求的那个窗口上。defaultPath 是框里已经填了的（从那里开始找）；
+ * 选了回绝对路径，取消回 null。LITCH_PICK_FOLDER 是给自检用的：不弹框，直接当作选了这个目录
+ */
+ipcMain.handle(PICK_FOLDER, async (event, options: unknown) => {
+  const frame = event.senderFrame
+  if (!frame || frame !== event.sender.mainFrame || !isUiUrl(frame.url)) return null
+  if (process.env.LITCH_PICK_FOLDER !== undefined) return process.env.LITCH_PICK_FOLDER || null
+  const asked = (options ?? {}) as { defaultPath?: unknown; title?: unknown }
+  const window = BrowserWindow.fromWebContents(event.sender)
+  const settings: Electron.OpenDialogOptions = {
+    properties: ['openDirectory', 'createDirectory'],
+    ...(typeof asked.title === 'string' ? { title: asked.title, message: asked.title } : {}),
+    ...(typeof asked.defaultPath === 'string' && isAbsolute(asked.defaultPath)
+      ? { defaultPath: asked.defaultPath }
+      : {}),
+  }
+  const result = window
+    ? await dialog.showOpenDialog(window, settings)
+    : await dialog.showOpenDialog(settings)
+  return result.canceled ? null : (result.filePaths[0] ?? null)
 })
 
 // ---------- 退出之前：还有终端在运行的话问一声（quit-terminals.mts） ----------

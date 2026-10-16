@@ -5,7 +5,7 @@
 //                          再来一遍（--remote --service）：那台机器上装了适配器，连的是它的设备服务
 //   npm run check:full     完整模式（一台设备上多个 harness）：先对着模拟核心，再对着隔离的多 harness 设备
 //   npm run check:manage   设备与 harness 管理：先对着模拟核心，再对着带设置接口的隔离设备
-//   npm run check:sidebar  侧栏自己（对着模拟核心）：收起的工作区和设备那一行上的汇总。check:full 里也有它
+//   npm run check:sidebar  侧栏自己（对着模拟核心）：收起的项目和设备那一行上的汇总。check:full 里也有它
 //   加 --packed            不用开发时的外壳，改成起装好的应用（先 npm run pack），验的是打包出来的那一份
 import { execFile, execFileSync, spawn } from 'node:child_process'
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -248,7 +248,7 @@ const child = spawn(usePacked ? packedBinary() : electron, usePacked ? [] : [app
           LITCH_REMOTE_CODEX: remote.codex,
           LITCH_REMOTE_ADAPTER: remote.adapter,
           LITCH_SMOKE_ALIASES: JSON.stringify(remote.aliases),
-          // 设备服务那边建工作区用的目录（在假机器的临时主目录里）
+          // 设备服务那边建项目用的目录（在假机器的临时主目录里）
           LITCH_SMOKE_WORK: remote.work,
           // 本机这一版要靠这个变量指定入口：这里故意不给，顺便验“一台连不上不耽误别的”
           LITCH_ENTRY: '',

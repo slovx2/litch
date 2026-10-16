@@ -8,7 +8,7 @@
 import type { EnginesKit, PickerSeen } from './probe-engines-kit.mjs'
 import type { FilesKit } from './probe-files-kit.mjs'
 
-/** 夹具报上来的：三家共用的工作目录、里面那项技能，和验收给这个目录起的工作区名字 */
+/** 夹具报上来的：三家共用的工作目录、里面那项技能，和验收给这个目录起的项目名字 */
 export interface EnginesPlace {
   cwd: string
   workspace: string
@@ -34,11 +34,11 @@ export interface HarnessShown {
 export interface DeviceSeen {
   /** 设备详情里列的 harness */
   harnesses: HarnessShown[]
-  /** 给三家共用的工作目录建的那个工作区出现在侧栏里了 */
+  /** 给三家共用的工作目录建的那个项目出现在侧栏里了 */
   workspace: boolean
 }
 
-/** 设备详情里各个 harness 的样子；再给三家共用的那个工作目录建一个工作区 */
+/** 设备详情里各个 harness 的样子；再给三家共用的那个工作目录建一个项目 */
 export async function enginesDevice(place: EnginesPlace, wanted: string[]): Promise<DeviceSeen> {
   const files = (window as unknown as { __filesKit: FilesKit }).__filesKit
   const { one, all, text, until, frame, write } = files
@@ -60,14 +60,14 @@ export async function enginesDevice(place: EnginesPlace, wanted: string[]): Prom
     said: text(one('[data-harness-state]', entry)),
   }))
 
-  // ---- 二、给三家共用的工作目录建一个工作区：新建会话时选它，会话的工作目录就是它 ----
+  // ---- 二、给三家共用的工作目录建一个项目：新建会话时选它，会话的工作目录就是它 ----
   const local = () => one('.dev-group')
   const line = () => one(':scope > .row-line', local())
   ;(
     await until('本机那一行的“更多”', () => one<HTMLButtonElement>('.row-more > .ibtn', line()))
   ).click()
   ;(
-    await until('“添加工作区”', () =>
+    await until('“添加项目”', () =>
       one<HTMLButtonElement>('.row-more .pick-opt[data-action="addWorkspace"]', line()),
     )
   ).click()
@@ -92,7 +92,7 @@ export interface StartSeen {
   effort: PickerSeen | null
   permission: PickerSeen | null
   plan: boolean
-  /** 页上选着的设备和工作区 */
+  /** 页上选着的设备和项目 */
   device: string
   workspace: string
   /** 头一句发出去：气泡当场出现、落到了新会话里 */
@@ -104,7 +104,7 @@ export interface StartSeen {
   /** 回合怎么结束的、回答是什么 */
   foot: string
   answer: string
-  /** 侧栏里选中的那一行：标题、徽标说的是哪个 harness；标题栏上的标题；所在的工作区 */
+  /** 侧栏里选中的那一行：标题、徽标说的是哪个 harness；标题栏上的标题；所在的项目 */
   rowTitle: string
   rowHarness: string
   crumb: string
@@ -122,8 +122,8 @@ export async function enginesStart(spec: EngineSpec, place: EnginesPlace): Promi
   const { one, all, text, until, frame, write, press } = files
   const harnessOn = (root: Element | null) => kit.sub(root, '.chip')?.title ?? ''
 
-  // ---- 一、新建对话页：从工作区那一行的加号进，选这个 harness ----
-  const add = await until('工作区行上的新建按钮', () =>
+  // ---- 一、新建对话页：从项目那一行的加号进，选这个 harness ----
+  const add = await until('项目行上的新建按钮', () =>
     all('.row-add').find((button) => button.parentElement?.textContent?.includes(place.workspace)),
   )
   add.click()

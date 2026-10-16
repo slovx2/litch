@@ -1,12 +1,12 @@
-// 侧栏的验收，对着模拟核心：收起的工作区和设备那一行上看得出里面的状况。
-// 模拟核心里本机的 litch 工作区有一个在跑的、一个等审批的、一个没看过的，docs-site 里有一个没看过的；
+// 侧栏的验收，对着模拟核心：收起的项目和设备那一行上看得出里面的状况。
+// 模拟核心里本机的 litch 项目有一个在跑的、一个等审批的、一个没看过的，docs-site 里有一个没看过的；
 // build-01 的 litch 里有一个等回答的；nas 上的都闲着。
 // 和别的验收一样，下面带 Seen 的函数会被原样送进页面里执行，不能引用函数外面的东西
 // （手是 probe-sidebar-kit.mts 先装好的）；judge 开头的在主进程里跑。编排在 probe-sidebar-run.mts。
 import type { SidebarKit } from './probe-sidebar-kit.mjs'
 
 export interface TallySeen {
-  /** 展开着的时候：设备那一行、工作区那一行上都没有汇总 */
+  /** 展开着的时候：设备那一行、项目那一行上都没有汇总 */
   quietWhenOpen: boolean
   /** 收起本机的 litch：行尾的汇总（等人的小标上的字｜在跑的记号｜没看过的记号｜待审批/待回答/在跑/未读各几个） */
   workspace: string
@@ -21,18 +21,18 @@ export interface TallySeen {
   /** 收起本机：整台设备合起来的；信息卡里的那一行 */
   device: string
   deviceCard: string
-  /** 什么事都没有的工作区（nas 上的）收起来：没有汇总，信息卡里也没有那一行 */
+  /** 什么事都没有的项目（nas 上的）收起来：没有汇总，信息卡里也没有那一行 */
   idle: string
   /**
    * build-01 的 litch 一直收着，小标一路上写的是什么：
    * 开头（一个等回答的）→ 里面又有一个停下来等审批 → 同意之后
    */
   live: string[]
-  /** 行尾的按钮露出来的时候，汇总的右边离最左边那个按钮还有多远。负数就是被盖住了。工作区那一行、设备那一行各量一次 */
+  /** 行尾的按钮露出来的时候，汇总的右边离最左边那个按钮还有多远。负数就是被盖住了。项目那一行、设备那一行各量一次 */
   clearance: number[]
   /** 设备那一行的按钮露出来时别的小标是藏起来的，汇总里等人的那个不藏 */
   pillKept: boolean
-  /** 六套皮肤明暗，工作区那一行和设备那一行各量一遍：哪里｜行高差｜横向溢出｜名字露出多宽（没被截断是“全”）｜小标的对比度｜两个记号的大小 */
+  /** 六套皮肤明暗，项目那一行和设备那一行各量一遍：哪里｜行高差｜横向溢出｜名字露出多宽（没被截断是“全”）｜小标的对比度｜两个记号的大小 */
   skins: string[]
 }
 
@@ -62,16 +62,16 @@ export async function tallySeen(): Promise<TallySeen> {
   await until('侧栏里的会话', () => kit.titles('local').length >= 5 && kit.titles('build').length)
   const WAITING = '聚合面：会话列表合并与复合游标'
 
-  // ---- 一、展开着没有汇总；收起工作区就有 ----
+  // ---- 一、展开着没有汇总；收起项目就有 ----
   const localLine = kit.deviceLine('local')
   const litch = () => kit.workspaceLine('local', 'litch')
   const quietWhenOpen = all('.tally').length === 0 && Boolean(kit.row(WAITING))
   await kit.fold(litch(), false)
-  const mark = await until('收起的工作区上的汇总', () => one('.tally', litch()), 5000)
+  const mark = await until('收起的项目上的汇总', () => one('.tally', litch()), 5000)
   const workspace = read(litch())
   const spoken = `${mark.getAttribute('role')}：${mark.getAttribute('aria-label')}`
   const digits = /\d/.test(text(mark))
-  const card = await fact(litch(), '收起的工作区')
+  const card = await fact(litch(), '收起的项目')
 
   // ---- 二、行尾的按钮露出来（点开“更多”，它和“新建会话”就都露着）：汇总往左让 ----
   const clearance: number[] = []
@@ -95,7 +95,7 @@ export async function tallySeen(): Promise<TallySeen> {
     kit.press(document.activeElement ?? pop, 'Escape')
     await until('菜单收起', () => !pop.isConnected, 5000)
   }
-  await withMenu(litch(), '工作区')
+  await withMenu(litch(), '项目')
 
   // ---- 三、六套皮肤：汇总不把行撑高、不溢出，名字还在，小标看得清 ----
   const plain = () => one('.ws-row', kit.workspaceLine('local', 'docs-site')) as HTMLElement
@@ -117,7 +117,7 @@ export async function tallySeen(): Promise<TallySeen> {
       `${size('.tally .st.run')}+${size('.tally .st.unread')}`,
     ].join('｜')
   }
-  const skins = await kit.eachSkin((where) => look(`工作区 ${where}`, litch(), plain()))
+  const skins = await kit.eachSkin((where) => look(`项目 ${where}`, litch(), plain()))
 
   // ---- 四、展开回去；收起整台设备 ----
   await kit.fold(litch(), true)
@@ -134,7 +134,7 @@ export async function tallySeen(): Promise<TallySeen> {
   // ---- 五、什么事都没有的：收起来也没有汇总 ----
   const backup = kit.workspaceLine('nas', 'backup-scripts')
   await kit.fold(backup, false)
-  const idle = `${read(backup)}｜${await fact(backup, '闲着的工作区')}`
+  const idle = `${read(backup)}｜${await fact(backup, '闲着的项目')}`
   await kit.fold(backup, true)
 
   // ---- 六、收着的时候里面有会话停下来等人：行上跟着变 ----
@@ -182,18 +182,18 @@ export function judgeTally(seen: TallySeen): string[] {
   must(seen.quietWhenOpen, '展开着的行上不该有汇总')
   must(
     seen.workspace === '待审批｜在跑｜未读｜1/0/1/1',
-    `收起的工作区那一行上看不出里面有等审批的、在跑的、没看过的：${seen.workspace}`,
+    `收起的项目那一行上看不出里面有等审批的、在跑的、没看过的：${seen.workspace}`,
   )
   must(
     seen.spoken === 'img：1 个待审批，1 个在跑，1 个未读',
-    `收起的工作区上的汇总，读屏听到的不对：${seen.spoken}`,
+    `收起的项目上的汇总，读屏听到的不对：${seen.spoken}`,
   )
   must(!seen.digits, '行上的汇总里写了数目（数目该在信息卡里）')
   must(
     seen.card === '现在：1 个待审批｜1 个在跑｜1 个未读',
-    `工作区的信息卡里没有写里面各有几个：${seen.card}`,
+    `项目的信息卡里没有写里面各有几个：${seen.card}`,
   )
-  must(seen.backWhenOpen, '工作区展开回去之后汇总还在，或者里面等审批的会话没画出来')
+  must(seen.backWhenOpen, '项目展开回去之后汇总还在，或者里面等审批的会话没画出来')
   must(
     seen.device === '待审批｜在跑｜未读｜1/0/1/2',
     `收起的设备那一行上的汇总不对：${seen.device}`,
@@ -202,14 +202,14 @@ export function judgeTally(seen: TallySeen): string[] {
     seen.deviceCard === '现在：1 个待审批｜1 个在跑｜2 个未读',
     `设备的信息卡里没有写下面各有几个：${seen.deviceCard}`,
   )
-  must(seen.idle === '没有｜', `什么事都没有的工作区收起来不该有汇总：${seen.idle}`)
+  must(seen.idle === '没有｜', `什么事都没有的项目收起来不该有汇总：${seen.idle}`)
   must(
     seen.live.join(' → ') === '待回答｜｜｜0/1/0/0 → 等你处理｜｜｜1/1/0/0 → 待回答｜｜｜0/1/0/0',
-    `工作区收着的时候里面有会话停下来等审批，行上没有跟着变：${seen.live.join(' → ')}`,
+    `项目收着的时候里面有会话停下来等审批，行上没有跟着变：${seen.live.join(' → ')}`,
   )
   must(
     seen.clearance.length === 2 && seen.clearance.every((gap) => gap >= 2),
-    `行尾的按钮露出来的时候盖住了汇总（工作区、设备各差 ${seen.clearance.join('、')} 像素）`,
+    `行尾的按钮露出来的时候盖住了汇总（项目、设备各差 ${seen.clearance.join('、')} 像素）`,
   )
   must(seen.pillKept, '设备行尾的按钮露出来的时候，汇总里等人的小标被藏起来了')
   for (const line of seen.skins) {

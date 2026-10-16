@@ -47,7 +47,7 @@ export const PRESET = {
 
 const TITLE: Record<string, CapabilityText> = {
   [PRESET.readOnly]: { 'zh-CN': '只读', en: 'Read only' },
-  [PRESET.workspace]: { 'zh-CN': '工作区', en: 'Workspace' },
+  [PRESET.workspace]: { 'zh-CN': '项目内', en: 'In project' },
   [PRESET.fullAccess]: { 'zh-CN': '完全访问', en: 'Full access' },
 }
 

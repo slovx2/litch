@@ -1,7 +1,7 @@
 // 远程设备第二遍的验收：对面装了适配器（设备服务）的那几种情形。真的外壳对着假的远程机器
 // （scripts/client-ssh-fixture.mjs 里“装了适配器”的那几个别名：真的适配器命令行，经 ssh 执行它的
 // device-start 才把常驻服务拉起来，模型是回环上的假模型）。
-// 这个文件是前一半：添加时的预览、连上之后是完整模式、管理页、整理工作区。
+// 这个文件是前一半：添加时的预览、连上之后是完整模式、管理页、整理项目。
 // 后一半（发消息、断线、终端、对面变了自己换过去、各种没连上）在 probe-remote-service-more.mts，
 // 判定在 probe-remote-service-judge.mts，编排在 smoke.mts。
 // 和别的验收一样，下面的函数会被原样送进页面里执行，不能引用函数外面的东西；
@@ -51,7 +51,7 @@ export interface ServiceConnect {
   /** 只有 codex 的那台：列表上说“只有它” */
   growPeer: string
   growText: string
-  /** 整理工作区：在远程设备上添加一个工作区，侧栏里出现了 */
+  /** 整理项目：在远程设备上添加一个项目，侧栏里出现了 */
   workspaceAdded: boolean
   workspaces: string[]
   noPasswordField: boolean
@@ -189,7 +189,7 @@ export async function serviceConnect(
     serviceFact('launch')?.dataset.detached ?? '',
   ].join('｜')
 
-  // ---- 四、整理工作区：工作区记在那台机器的设备服务上，经远程连接照样能加 ----
+  // ---- 四、整理项目：项目记在那台机器的设备服务上，经远程连接照样能加 ----
   one<HTMLButtonElement>('[data-act="back"]', page)?.click()
   await until('回到设备列表', () => !one('[data-detail]') && one('.devp-list'))
   one<HTMLButtonElement>('.devp .arch-head .ibtn')?.click()
@@ -201,11 +201,11 @@ export async function serviceConnect(
     )
   ).click()
   ;(
-    await until('菜单里的“添加工作区”', () =>
+    await until('菜单里的“添加项目”', () =>
       one<HTMLButtonElement>('.row-more .pick-opt[data-action="addWorkspace"]', remote),
     )
   ).click()
-  await until('添加工作区的对话框', () => one('dialog.ws-dialog[open]'))
+  await until('添加项目的对话框', () => one('dialog.ws-dialog[open]'))
   write(await until('目录那一栏', () => one<HTMLInputElement>('#ws-root')), work)
   write(await until('名字那一栏', () => one<HTMLInputElement>('#ws-name')), '远程区')
   await frame()
@@ -213,7 +213,7 @@ export async function serviceConnect(
   await until('对话框关掉', () => !one('dialog.ws-dialog[open]'))
   const names = () => all('[data-workspace] .name', remote).map(text)
   const workspaceAdded = Boolean(
-    await until('新的工作区出现在侧栏里', () => names().includes('远程区')).catch(() => null),
+    await until('新的项目出现在侧栏里', () => names().includes('远程区')).catch(() => null),
   )
 
   return {

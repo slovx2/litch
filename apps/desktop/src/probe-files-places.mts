@@ -5,9 +5,9 @@
 import type { FilesKit } from './probe-files-kit.mjs'
 
 export interface PlacesSeen {
-  /** 起头那个会话：面板挂在哪（设备/工作区｜根） */
+  /** 起头那个会话：面板挂在哪（设备/项目｜根） */
   home: string
-  /** 换到另一个工作区的会话：挂到了哪；那棵树是从头开始的（没展开的、没开着的文件、没滚过） */
+  /** 换到另一个项目的会话：挂到了哪；那棵树是从头开始的（没展开的、没开着的文件、没滚过） */
   other: string
   otherFresh: string
   /** 再换回来：展开的还展开着（行数）、滚到的地方、开着的文件、选中的，都还在 */
@@ -20,7 +20,7 @@ export interface PlacesSeen {
     tabsBefore: string
   }
   keptSelected: boolean
-  /** 不属于任何工作区的会话：根是它的工作目录 */
+  /** 不属于任何项目的会话：根是它的工作目录 */
   loose: string
   looseRows: number
   /** 不提供文件访问的设备：树那里写的什么（种类｜标题｜说明）；有没有“重试” */
@@ -91,7 +91,7 @@ export async function mockPlaces(titles: {
   const scrollBefore = kit.tree()?.scrollTop ?? 0
   const tabsBefore = shape()
 
-  // ---------- 另一个工作区 ----------
+  // ---------- 另一个项目 ----------
   await settle(titles.other, 'local')
   await until('换了一个根', () => !placeNow().endsWith(home.split('｜')[1] ?? ''))
   await until('那棵树取到了根', () => kit.rows().length > 0)
@@ -120,7 +120,7 @@ export async function mockPlaces(titles: {
   await kit.collapse('fixtures/many')
   await kit.collapse('fixtures')
 
-  // ---------- 不属于工作区的会话 ----------
+  // ---------- 不属于项目的会话 ----------
   await settle(titles.loose, 'local')
   await until('根换成了它的工作目录', () => placeNow() !== home)
   const loose = placeNow()

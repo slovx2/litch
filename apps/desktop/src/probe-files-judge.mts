@@ -86,7 +86,7 @@ export function judgeTree(tree: TreeSeen, lines: FileLines): string[] {
   must(tree.focusInTree, '人打开面板之后焦点不在文件树上')
   must(
     tree.place === 'local/litch' && tree.root === '~/work/litch',
-    `面板没有挂在眼前会话的工作区上：${tree.place}｜${tree.root}`,
+    `面板没有挂在眼前会话的项目上：${tree.place}｜${tree.root}`,
   )
   const firstFile = tree.rootRows.findIndex((row) => row.startsWith('file:'))
   must(

@@ -59,9 +59,8 @@ const permissionPresets: PermissionPreset[] = [
   builtinPreset(
     PRESET.workspace,
     {
-      'zh-CN':
-        '可以改工作区里的文件、运行命令，动手之前先问你；命令在只能写工作区、断网的沙箱里运行',
-      en: 'Can change files in the workspace and run commands, asking you first. Commands run in a sandbox that can only write to the workspace and has no network',
+      'zh-CN': '可以改项目里的文件、运行命令，动手之前先问你；命令在只能写项目、断网的沙箱里运行',
+      en: 'Can change files in the project and run commands, asking you first. Commands run in a sandbox that can only write to the project and has no network',
     },
     switching,
   ),

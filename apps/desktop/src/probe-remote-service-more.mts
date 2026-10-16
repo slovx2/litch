@@ -6,7 +6,7 @@ import type { TerminalKit } from './probe-terminal-kit.mjs'
 
 export interface ServiceSession {
   /**
-   * 新建对话页：换到远程设备和它的工作区之后，页上说了会建在哪个 harness 上（标题栏的徽标）。
+   * 新建对话页：换到远程设备和它的项目之后，页上说了会建在哪个 harness 上（标题栏的徽标）。
    * 假机器上可用的只有 Pi 一个，所以没有选 harness 的选择器：可用的不止一个才出，和本机一样
    * （选择器本身在 check:full 里量）。pickerShown 照实记下来
    */
@@ -14,7 +14,7 @@ export interface ServiceSession {
   pickerShown: boolean
   /** 换过去之后页上不该再说“建不了” */
   stillBlocked: string
-  /** 建在远程设备上的新会话：回话带着发的那一句，落在选的工作区里，徽标是选的那个 harness */
+  /** 建在远程设备上的新会话：回话带着发的那一句，落在选的项目里，徽标是选的那个 harness */
   created: boolean
   inWorkspace: boolean
   badge: string
@@ -82,7 +82,7 @@ export async function serviceSession(svc: string, opening: string): Promise<Serv
     await frame()
   }
 
-  // ---- 一、新建对话页：设备换成远程的那台，工作区选刚加的 ----
+  // ---- 一、新建对话页：设备换成远程的那台，项目选刚加的 ----
   ;(await until('侧栏最上面的“新对话”', () => one<HTMLButtonElement>('.sb-link.new'))).click()
   await until('新建对话页', () => one('.new-hero') && picker('device'))
   await choose('device', svc)

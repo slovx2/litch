@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import type { NativeSessionSource } from '../../src/native-sessions.mjs'
 import { CodexClaudeAppServer } from '../../src/server.mjs'
 import { SessionStore } from '../../src/store.mjs'
 import type {
@@ -121,7 +122,14 @@ export const sayAndFinish =
     await handlers.onEvent({ type: 'completed', success: true, result: text })
   }
 
-export async function openStage(name: string): Promise<Stage> {
+/**
+ * native：本机原生会话从哪里读（native-sessions.mts）。不给就和平时一样按环境来
+ * （npm test 下主目录是空的临时目录，什么都列不出来）
+ */
+export async function openStage(
+  name: string,
+  options: { native?: NativeSessionSource | null } = {},
+): Promise<Stage> {
   const directory = await mkdtemp(join(tmpdir(), `${name}-`))
   const previousHome = process.env.CHA_CLAUDE_HOME
   process.env.CHA_CLAUDE_HOME = directory
@@ -144,7 +152,10 @@ export async function openStage(name: string): Promise<Stage> {
     interrupt: async () => {},
     stop: async () => {},
   }
-  const server = new CodexClaudeAppServer(store, runtime)
+  const server =
+    options.native === undefined
+      ? new CodexClaudeAppServer(store, runtime)
+      : new CodexClaudeAppServer(store, runtime, options.native)
   return Object.assign(stage, {
     server,
     store,

@@ -15,20 +15,20 @@ export interface HomeProbe {
   title: string
   /** 输入框一出现就拿着焦点：打开应用就能直接打字 */
   focused: boolean
-  /** 默认的去处：“设备/工作区” */
+  /** 默认的去处：“设备/项目” */
   defaults: string
-  /** 设备、工作区两个选择器里各列了什么 */
+  /** 设备、项目两个选择器里各列了什么 */
   devices: string[]
   workspaces: string[]
-  /** 在页上换设备、换工作区、换 harness。只在模拟核心上量（隔离入口只有一台设备、一个 harness） */
+  /** 在页上换设备、换项目、换 harness。只在模拟核心上量（隔离入口只有一台设备、一个 harness） */
   follow: {
-    /** 各台设备上能选的：“工作区｜harness｜模型”。没有选 harness 的选择器（只有一个可用）记成“（没有）” */
+    /** 各台设备上能选的：“项目｜harness｜模型”。没有选 harness 的选择器（只有一个可用）记成“（没有）” */
     local: string
     build: string
     nas: string
     /** 换了设备，标题栏上的设备跟着换 */
     titleDevice: string
-    /** 换了工作区：标题栏跟着换，侧栏里那个工作区行上的加号亮着 */
+    /** 换了项目：标题栏跟着换，侧栏里那个项目行上的加号亮着 */
     titleWorkspace: string
     addLit: boolean
     /** 换了 harness：模型的清单跟着换（换之前、换之后） */
@@ -61,26 +61,26 @@ export interface HomeProbe {
   created: {
     /** 按下回车到这句话出现在对话的位置上，隔了多久（毫秒） */
     bubbleMs: number
-    /** 建好之后落在新会话里：标题栏是“设备/工作区/这句话” */
+    /** 建好之后落在新会话里：标题栏是“设备/项目/这句话” */
     crumb: string
-    /** 侧栏里它那一行在哪台设备、哪个工作区下面，徽标是什么 */
+    /** 侧栏里它那一行在哪台设备、哪个项目下面，徽标是什么 */
     place: string
     chip: string
     /** 第一条回话有没有对上。只在真实入口上量 */
     echoed: boolean | null
   }
-  /** 该建在哪：“设备/工作区” */
+  /** 该建在哪：“设备/项目” */
   wanted: string
-  /** 再点“新对话”：默认的去处换成了刚才用的（“设备/工作区/harness”，没有选 harness 的选择器时最后一段是空的） */
+  /** 再点“新对话”：默认的去处换成了刚才用的（“设备/项目/harness”，没有选 harness 的选择器时最后一段是空的） */
   remembered: string
-  /** 换到没在上面建过会话的设备是“无工作区”，换回来又是上次用的。只在模拟核心上量 */
+  /** 换到没在上面建过会话的设备是“无项目”，换回来又是上次用的。只在模拟核心上量 */
   rememberedPerDevice: string | null
-  /** 工作区行上的加号：带着那个设备和工作区落到这一页（看到的、该是的） */
+  /** 项目行上的加号：带着那个设备和项目落到这一页（看到的、该是的） */
   rowAdd: string
   rowAddWanted: string
   /** 没有眼前的会话（开着设备页）时按 Ctrl+N：到这一页，用默认的去处 */
   shortcutBare: string
-  /** 开着一个会话时按 Ctrl+N：到这一页，去处是那个会话所在的设备和工作区（看到的、该是的） */
+  /** 开着一个会话时按 Ctrl+N：到这一页，去处是那个会话所在的设备和项目（看到的、该是的） */
   shortcutFrom: string
   shortcutFromWanted: string
   /** 把刚建的会话删掉（当时正开着它）：回到新建对话页，不是落到别的会话里 */
@@ -136,7 +136,7 @@ export async function homeProbe(real: boolean): Promise<HomeProbe> {
     const found = await until(`“${kind}”的选项`, () =>
       options(kind).length > 0 ? options(kind) : null,
     )
-    // 最后那项“添加工作区…”不是一个值，不算在列的东西里（它自己在 probe-home-more.mts 里量）
+    // 最后那项“添加项目…”不是一个值，不算在列的东西里（它自己在 probe-home-more.mts 里量）
     const titles = found
       .filter((option) => option.dataset.action === undefined)
       .map((option) => text(one('b', option)))
@@ -156,7 +156,7 @@ export async function homeProbe(real: boolean): Promise<HomeProbe> {
     await frame()
   }
   const rowOf = (title: string) => all('.ss-row').find((row) => text(row).includes(title))
-  /** 侧栏里一行会话在哪：“设备/工作区”。不属于任何工作区的那一组，名字就是它上面那个小标题 */
+  /** 侧栏里一行会话在哪：“设备/项目”。不属于任何项目的那一组，名字就是它上面那个小标题 */
   const placeOf = (row: Element | undefined) => {
     const group = row?.closest('[data-group]')
     const device = text(one('.dev-row .name', row?.closest('.dev-group') ?? document))
@@ -177,12 +177,12 @@ export async function homeProbe(real: boolean): Promise<HomeProbe> {
   const devices = await listed('device')
   const workspaces = await listed('workspace')
 
-  // ---- 二、在页上换设备、换工作区、换 harness：各个选择器里能选的跟着换 ----
+  // ---- 二、在页上换设备、换项目、换 harness：各个选择器里能选的跟着换 ----
   let follow: HomeProbe['follow'] = null
   let offline: HomeProbe['offline'] = null
   let failed: HomeProbe['failed'] = null
   if (!real) {
-    /** 现在这台设备上能选的：“工作区｜harness｜模型” */
+    /** 现在这台设备上能选的：“项目｜harness｜模型” */
     const offered = async () => {
       // 模型的清单是换了设备之后现问的：等它的选择器出来
       const models = await until('模型的选择器', () => picker('model'), 5000).catch(() => null)
@@ -218,7 +218,7 @@ export async function homeProbe(real: boolean): Promise<HomeProbe> {
     }
     // 换回来：后面的验收在本机上新建会话，用的是排第一个的 harness
     await choose('harness', 'Claude Code')
-    await choose('workspace', '无工作区')
+    await choose('workspace', '无项目')
     follow = {
       local,
       build,
@@ -284,9 +284,9 @@ export async function homeProbe(real: boolean): Promise<HomeProbe> {
 
   // ---- 五、写一句发出去：这句话立刻出现，建好之后落在新会话里 ----
   // 模拟核心：建在另一台设备上、换一个 harness，好看出后面记住的是不是这一次用的。
-  // 真实入口：只有本机一台，建在它的头一个工作区里
+  // 真实入口：只有本机一台，建在它的头一个项目里
   if (real) {
-    await choose('workspace', workspaces[0] ?? '无工作区')
+    await choose('workspace', workspaces[0] ?? '无项目')
   } else {
     await choose('device', 'build-01')
     await choose('workspace', 'infra')
@@ -330,9 +330,9 @@ export async function homeProbe(real: boolean): Promise<HomeProbe> {
     rememberedPerDevice = `${elsewhere}→${place()}`
   }
 
-  // ---- 七、工作区行上的加号：带着那个设备和工作区落到这一页 ----
-  // 模拟核心点本机上另一个工作区的；真实入口点设备行上的（不属于任何工作区）。都和记住的默认值不一样
-  const rowAddWanted = real ? '本机/无工作区' : '本机/docs-site'
+  // ---- 七、项目行上的加号：带着那个设备和项目落到这一页 ----
+  // 模拟核心点本机上另一个项目的；真实入口点设备行上的（不属于任何项目）。都和记住的默认值不一样
+  const rowAddWanted = real ? '本机/无项目' : '本机/docs-site'
   const add = real
     ? one<HTMLButtonElement>('.row-add', one('.dev-row')?.parentElement ?? document)
     : all('.row-add').find((button) => text(button.parentElement).includes('docs-site'))
@@ -348,8 +348,8 @@ export async function homeProbe(real: boolean): Promise<HomeProbe> {
   await until('快捷键带到新建对话页', () => home() && picker('device'), 5000).catch(() => null)
   await frame()
   const shortcutBare = home() ? place() : ''
-  // 开着一个会话：去处是它所在的设备和工作区。挑一个和默认值不在一处的
-  const shortcutFromWanted = real ? '本机/无工作区' : '本机/docs-site'
+  // 开着一个会话：去处是它所在的设备和项目。挑一个和默认值不在一处的
+  const shortcutFromWanted = real ? '本机/无项目' : '本机/docs-site'
   const from = real ? one('.ss-row', one('[data-group=""]') ?? document) : rowOf('首页文案')
   from?.click()
   await until('点开的会话', () => from?.classList.contains('sel') && !home(), 10_000).catch(
@@ -419,30 +419,30 @@ export function judgeHome(probe: HomeProbe, real: boolean): string[] {
   if (!probe.entryCurrent) failed.push('在新建对话页上，侧栏最上面的“新对话”没有标成当前页')
   if (probe.title !== '新对话') failed.push(`新建对话页的标题栏不对：“${probe.title}”`)
   if (!probe.focused) failed.push('新建对话页的输入框没有拿到焦点')
-  if (probe.defaults !== '本机/无工作区') {
-    failed.push(`头一次打开，默认的去处该是本机、不属于任何工作区：“${probe.defaults}”`)
+  if (probe.defaults !== '本机/无项目') {
+    failed.push(`头一次打开，默认的去处该是本机、不属于任何项目：“${probe.defaults}”`)
   }
   const devices = probe.devices.join('|')
   if (real ? devices !== '本机' : devices !== '本机|build-01|nas|gpu-box') {
     failed.push(`选设备的选择器里列的不对：${devices}`)
   }
   const workspaces = probe.workspaces.join('|')
-  if (real ? probe.workspaces.at(-1) !== '无工作区' : workspaces !== 'litch|docs-site|无工作区') {
-    failed.push(`选工作区的选择器里列的不对：${workspaces}`)
+  if (real ? probe.workspaces.at(-1) !== '无项目' : workspaces !== 'litch|docs-site|无项目') {
+    failed.push(`选项目的选择器里列的不对：${workspaces}`)
   }
 
-  // ---- 换设备、换工作区、换 harness ----
+  // ---- 换设备、换项目、换 harness ----
   const { follow } = probe
   if (follow) {
     const [localSpaces = '', localHarness = '', localModels = ''] = follow.local.split('｜')
     const [buildSpaces = '', buildHarness = '', buildModels = ''] = follow.build.split('｜')
     const [nasSpaces = '', nasHarness = '', nasModels = ''] = follow.nas.split('｜')
     if (
-      localSpaces !== 'litch|docs-site|无工作区' ||
-      buildSpaces !== 'litch|infra|无工作区' ||
-      nasSpaces !== 'backup-scripts|无工作区'
+      localSpaces !== 'litch|docs-site|无项目' ||
+      buildSpaces !== 'litch|infra|无项目' ||
+      nasSpaces !== 'backup-scripts|无项目'
     ) {
-      failed.push(`换了设备，工作区的清单没有跟着换：${localSpaces}；${buildSpaces}；${nasSpaces}`)
+      failed.push(`换了设备，项目的清单没有跟着换：${localSpaces}；${buildSpaces}；${nasSpaces}`)
     }
     // 本机上的 Codex 没装：列着，选不了；另一台上四个都能选；第三台只有一个，不出选择器
     if (
@@ -465,15 +465,15 @@ export function judgeHome(probe: HomeProbe, real: boolean): string[] {
       failed.push(`在页上换了设备，标题栏没有跟着换：“${follow.titleDevice}”`)
     }
     if (follow.titleWorkspace !== 'docs-site') {
-      failed.push(`在页上换了工作区，标题栏没有跟着换：“${follow.titleWorkspace}”`)
+      failed.push(`在页上换了项目，标题栏没有跟着换：“${follow.titleWorkspace}”`)
     }
-    if (!follow.addLit) failed.push('在页上换了工作区，侧栏里那个工作区行上的加号没有亮')
+    if (!follow.addLit) failed.push('在页上换了项目，侧栏里那个项目行上的加号没有亮')
     if (!follow.modelsAfter || follow.modelsAfter === follow.modelsBefore) {
       failed.push(
         `换了 harness，模型的清单没有跟着换：${follow.modelsBefore} → ${follow.modelsAfter}`,
       )
     }
-    if (!follow.draftKept) failed.push('在页上换设备、换工作区，输入框里写了一半的字没了')
+    if (!follow.draftKept) failed.push('在页上换设备、换项目，输入框里写了一半的字没了')
   }
 
   // ---- 没连上的设备 ----
@@ -529,9 +529,9 @@ export function judgeHome(probe: HomeProbe, real: boolean): string[] {
   }
   if (
     probe.rememberedPerDevice !== null &&
-    probe.rememberedPerDevice !== '本机/无工作区→build-01/infra'
+    probe.rememberedPerDevice !== '本机/无项目→build-01/infra'
   ) {
-    failed.push(`各台设备上次用的工作区没有各记各的：“${probe.rememberedPerDevice}”`)
+    failed.push(`各台设备上次用的项目没有各记各的：“${probe.rememberedPerDevice}”`)
   }
 
   // ---- 入口 ----

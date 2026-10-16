@@ -424,6 +424,33 @@
   right: 0;
   min-width: 140px;
 }
+/* 选项多的选择器顶上的筛选框：列表在下面滚，它贴在顶上不动 */
+.pick-search {
+  position: sticky;
+  top: -4px;
+  z-index: 1;
+  width: 100%;
+  margin: -4px 0 3px;
+  padding: 8px 8px 7px;
+  border: none;
+  border-bottom: 1px solid var(--line-2);
+  border-radius: 0;
+  background: var(--overlay);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  outline: none;
+}
+.pick-search::placeholder {
+  color: var(--ink-3);
+}
+.pick-none {
+  padding: 5px 8px;
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 18px;
+}
 .pick-list {
   display: flex;
   flex-direction: column;

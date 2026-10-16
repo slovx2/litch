@@ -1,6 +1,6 @@
 // 文件面板的验收：侧面板和主区域里那几行（对话、请求卡片、输入区、终端面板）摆在一起的时候。
 // 窗口缩到最窄、面板开着：输入框整个看得见，请求卡片没被挤没，面板没有压到对话上；
-// 新建对话页上面板跟着页上选的设备和工作区走；面板一开一合，终端的行列数跟得上。
+// 新建对话页上面板跟着页上选的设备和项目走；面板一开一合，终端的行列数跟得上。
 // 主进程在这几段之间改窗口大小，编排在 probe-files-run.mts。
 import type { FilesKit } from './probe-files-kit.mjs'
 import type { TerminalKit } from './probe-terminal-kit.mjs'
@@ -121,14 +121,14 @@ export async function roomSeen(
 }
 
 export interface NewPageSeen {
-  /** 从一个会话按 Cmd/Ctrl+N 过来：面板挂在哪（设备/工作区｜根），树有没有 */
+  /** 从一个会话按 Cmd/Ctrl+N 过来：面板挂在哪（设备/项目｜根），树有没有 */
   start: string
   startRows: number
-  /** 在页上换了工作区：面板跟着换到哪 */
+  /** 在页上换了项目：面板跟着换到哪 */
   workspace: string
-  /** 换成“无工作区”：面板里写的什么 */
+  /** 换成“无项目”：面板里写的什么 */
   noWorkspace: string
-  /** 换了设备、再选那台设备上的一个工作区：面板跟到哪 */
+  /** 换了设备、再选那台设备上的一个项目：面板跟到哪 */
   device: string
 }
 
@@ -171,7 +171,7 @@ export async function newPageSeen(args: {
   const workspace = placeNow()
 
   await choose('workspace', args.none)
-  const noWorkspace = text(await until('没有工作区的说明', () => one('.side-body .side-none')))
+  const noWorkspace = text(await until('没有项目的说明', () => one('.side-body .side-none')))
 
   await choose('device', args.device)
   await choose('workspace', args.deviceWorkspace)

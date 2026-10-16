@@ -1,6 +1,6 @@
 {
   "claude-code": { "displayName": "Claude Code", "badge": "CC" },
   "pi": { "displayName": "Pi", "badge": "PI" },
-  "dsh": { "displayName": "DeepSeek Harness", "badge": "DS" },
+  "dsh": { "displayName": "DSH", "badge": "DS" },
   "codex": { "displayName": "Codex", "badge": "CX" }
 }

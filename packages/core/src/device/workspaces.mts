@@ -73,6 +73,9 @@ function contains(root: string, path: string, twin: PathTwin): boolean {
  * 会话归到哪个工作区（设计文档 01 第 9.2 节）：
  * 1. 会话上记了工作区，而且这个工作区还在，就用它；
  * 2. 否则找根目录是会话工作目录上级（或就是它）的工作区，命中多个时取最深的那个；
+ *    一样深（同一个目录是好几个工作区的根）时照官方桌面端的优先规则：只有一个根的优先，
+ *    其次是这个目录是它的主目录（第一个根）的，再其次按设备上排的先后
+ *    （官方最后一条比的是建的先后；从 Codex 导入的工作区是按它的项目排的，差不多是一回事）；
  * 3. 都不命中就不属于任何工作区，返回 null。
  * 这是确定性的纯计算，结果不写回设备。twin 是这台设备上路径的另一种写法（见 contains）
  */
@@ -85,12 +88,19 @@ export function resolveWorkspace(
     return thread.projectId
   }
   const cwd = trimSeparators(thread.cwd ?? '')
-  let best: { id: string; depth: number } | null = null
+  /** 越大越优先：先比深浅，再比是不是只有一个根，再比是不是主目录。一样大的留先遇到的 */
+  let best: { id: string; rank: [number, number, number] } | null = null
+  const better = (a: [number, number, number], b: [number, number, number]) =>
+    a[0] !== b[0] ? a[0] > b[0] : a[1] !== b[1] ? a[1] > b[1] : a[2] > b[2]
   for (const workspace of workspaces) {
-    for (const root of workspace.roots) {
+    for (const [at, root] of workspace.roots.entries()) {
       if (!contains(root, cwd, twin)) continue
-      const depth = trimSeparators(root).length
-      if (!best || depth > best.depth) best = { id: workspace.id, depth }
+      const rank: [number, number, number] = [
+        trimSeparators(root).length,
+        workspace.roots.length === 1 ? 1 : 0,
+        at === 0 ? 1 : 0,
+      ]
+      if (!best || better(rank, best.rank)) best = { id: workspace.id, rank }
     }
   }
   return best?.id ?? null

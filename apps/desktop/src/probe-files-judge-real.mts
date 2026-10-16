@@ -41,7 +41,7 @@ function judgeRealTree(tree: RealTree, dirs: RealDirs, lines: FileLines): string
   const must = (ok: boolean, what: string) => {
     if (!ok) failed.push(what)
   }
-  must(tree.root === dirs.app, `面板的根不是会话所在的工作区：${tree.root}，该是 ${dirs.app}`)
+  must(tree.root === dirs.app, `面板的根不是会话所在的项目：${tree.root}，该是 ${dirs.app}`)
   const firstFile = tree.rootRows.findIndex((row) => !row.startsWith('dir:'))
   must(
     firstFile > 0 && !tree.rootRows.slice(firstFile).some((row) => row.startsWith('dir:')),
@@ -158,7 +158,7 @@ function judgeRealView(
   )
   must(
     view.plain.includes('../../outside/secret.txt') && view.plain.includes('console.log'),
-    `工作区外面的路径、不是文件的字被认成了文件，没认的只有：${view.plain.join(' ／ ')}`,
+    `项目外面的路径、不是文件的字被认成了文件，没认的只有：${view.plain.join(' ／ ')}`,
   )
   const wantText = ['value4200', 'notes line 12', 'export const app']
   view.jumps.forEach((jump, index) => {

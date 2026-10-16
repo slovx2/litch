@@ -3,7 +3,7 @@
 import { type GroupTallies, keys } from '@litch/core'
 import { useT } from '../app/appearance.ts'
 import { useKey } from '../app/services.tsx'
-import { useSidebarHarness } from './state.ts'
+import { useSidebarHarnesses } from './state.ts'
 import { isQuiet, tallyOf, tallyParts, waitLabel } from './tally.ts'
 
 interface TallyProps {
@@ -15,10 +15,10 @@ interface TallyProps {
 /**
  * 行尾的汇总：在等人的用和会话行上一样的小标，在跑的、没看过的各一个和会话行上一样的小记号。
  * 行上不写数目：一眼只要知道“里面有事”，几个在信息卡里。
- * 侧栏正只看某个 harness 的时候，汇总跟着只算展开后看得见的那些
+ * 侧栏正只看某几个 harness 的时候，汇总跟着只算展开后看得见的那些
  */
 export function TallyMarks({ deviceId, group }: TallyProps) {
-  const only = useSidebarHarness()
+  const only = useSidebarHarnesses()
   const tally = tallyOf(useKey<GroupTallies>(keys.tallies(deviceId)), group, only)
   const t = useT()
   if (isQuiet(tally)) return null

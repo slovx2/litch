@@ -10,31 +10,33 @@ export interface OrganizeMockProbe {
     pinnedFirst: boolean
     /** 接着是别处建的分区“稍后看”，里面是放进去的那一个 */
     sectionNext: boolean
-    /** 置顶的、分区里的会话不再出现在工作区里：每个标题在侧栏里只有一行 */
+    /** 置顶的、分区里的会话不再出现在项目里：每个标题在侧栏里只有一行 */
     shownOnce: boolean
-    /** 挑过颜色的工作区名字前面有色块，没挑过的没有 */
+    /** 挑过颜色的项目名字前面有色块，没挑过的没有 */
     colorDot: boolean
-    /** 会话的信息卡：工作区、目录、置顶都在卡片里（行上没有这些字） */
+    /** 会话的信息卡：项目、目录、置顶都在卡片里（行上没有这些字） */
     sessionCard: boolean
   }
-  /** 置顶、取消置顶、移出分区、移到另一个工作区 */
+  /** 置顶、取消置顶、移出分区、移到另一个项目 */
   place: {
     pinned: boolean
     unpinned: boolean
-    /** 分区里的那一个：菜单里是“移出…”和“置顶”；移出之后回到它的工作区，空了的分区不再画 */
+    /** 分区里的那一个：菜单里是“移出…”和“置顶”；移出之后回到它的项目，空了的分区不再画 */
     sectionMenu: boolean
     unsectioned: boolean
-    /** “移到工作区…”换成一屏选项：只列别的工作区；挑了之后这一行换到那个工作区下面 */
+    /** “移到项目…”换成一屏选项：只列别的项目；挑了之后这一行换到那个项目下面 */
     moveChoices: boolean
     moved: boolean
   }
-  /** 工作区的添加、改名换色、调顺序、删除 */
+  /** 项目的添加、改名换色、调顺序、删除 */
   workspace: {
     /** 添加：没填目录不能提交；目录不是完整路径，核心拒绝，对话框留着并说了原因 */
     addGated: boolean
     rootRefused: boolean
-    /** 候选目录来自还没归进工作区的会话；点一下填进去，名字默认是目录的最后一段 */
+    /** 候选目录来自还没归进项目的会话；点一下填进去，名字默认是目录的最后一段 */
     candidate: boolean
+    /** 本机的设备有“选择…”：点了弹系统的选文件夹对话框（自检里由 LITCH_PICK_FOLDER 代答），选的目录填进去 */
+    browsed: boolean
     /** 加成了：排在最后，带着挑的颜色；工作目录在它下面的那个会话归了进去 */
     added: boolean
     adopted: boolean
@@ -43,11 +45,11 @@ export interface OrganizeMockProbe {
     /** 改名换色：对话框里目录只读；保存之后行上是新名字、新颜色 */
     edited: boolean
     movedUp: boolean
-    /** 删除先问一句，写明只删记录；确认之后工作区没了，里面的会话回到“无工作区” */
+    /** 删除先问一句，写明只删记录；确认之后项目没了，里面的会话回到“无项目” */
     deleteAsked: boolean
     deleted: boolean
   }
-  /** 别的客户端置顶了正开着的会话、又建了一个工作区：这边什么都没点，侧栏自己跟上 */
+  /** 别的客户端置顶了正开着的会话、又建了一个项目：这边什么都没点，侧栏自己跟上 */
   elsewhere: { pinned: boolean; workspace: boolean }
   /** 按声明给入口 */
   declared: {
@@ -73,6 +75,9 @@ export interface OrganizeMockProbe {
   /** 看到的原样。判不过的时候靠它知道差在哪 */
   seen: Record<string, string>
 }
+
+/** 自检里系统的选文件夹对话框“选中”的目录（smoke.mts 经 LITCH_PICK_FOLDER 交给主进程） */
+export const PICKED_FOLDER = '/Users/dev/notes/picked'
 
 export async function organizeMockProbe(): Promise<OrganizeMockProbe> {
   const sleep = (ms: number) => new Promise<void>((done) => setTimeout(done, ms))
@@ -126,7 +131,7 @@ export async function organizeMockProbe(): Promise<OrganizeMockProbe> {
   const groupKeys = () => all('[data-group]', local()).map((group) => group.dataset.group ?? '')
   const titlesIn = (group: string) =>
     all(`[data-group="${group}"] .ss-row .title`, local()).map(text)
-  /** 工作区那一行（按名字找） */
+  /** 项目那一行（按名字找） */
   const workspaceLine = (name: string) =>
     all('[data-workspace]', local()).find((line) => text(one('.name', line)) === name)
   const workspaceNames = () => all('[data-workspace] .name', local()).map(text)
@@ -207,32 +212,32 @@ export async function organizeMockProbe(): Promise<OrganizeMockProbe> {
       !text(rowOf(P1)).includes('~/work/litch'),
   }
 
-  // ---- 二、置顶、取消置顶、移出分区、移到另一个工作区 ----
+  // ---- 二、置顶、取消置顶、移出分区、移到另一个项目 ----
   const S3 = 'Pi 入口过早上报最终回答'
   await choose(lineOf(S3), S3, 'pin')
   await until('它到了置顶组里', () => groupOf(S3) === ':pinned')
   // 后置顶的排在后面
   const pinned = titlesIn(':pinned').join('|') === `${P1}|${P2}|${S3}`
   await choose(lineOf(S3), S3, 'unpin')
-  await until('它回到工作区里', () => groupOf(S3) === 'litch')
+  await until('它回到项目里', () => groupOf(S3) === 'litch')
   const unpinned = titlesIn(':pinned').join('|') === `${P1}|${P2}`
   const sectionPop = await menuOf(lineOf(K1), K1)
   seen.sectionMenu = items(sectionPop)
   const sectionMenu = seen.sectionMenu.startsWith('移出“稍后看”|置顶|')
   one<HTMLButtonElement>('.pick-opt[data-action="unsection"]', sectionPop)?.click()
-  await until('它回到工作区里', () => groupOf(K1) === 'litch')
+  await until('它回到项目里', () => groupOf(K1) === 'litch')
   const unsectioned = !groupKeys().some((key) => key.startsWith(':section:'))
   const S7 = '能力矩阵页改成从声明生成'
   const movePop = await choose(lineOf(S7), S7, 'move')
-  const targets = await until('可以移去的工作区', () => {
+  const targets = await until('可以移去的项目', () => {
     const found = all('.pick-choice', movePop)
     return found.length > 0 ? found : null
   })
   seen.moveChoices = targets.map(text).join('|')
-  // 只列别的工作区（它现在在 docs-site 里）；挑过颜色的带着色块
+  // 只列别的项目（它现在在 docs-site 里）；挑过颜色的带着色块
   const moveChoices = seen.moveChoices === 'litch' && Boolean(one('.ws-dot', targets[0]))
   targets[0]?.click()
-  await until('它换到了那个工作区下面', () => groupOf(S7) === 'litch')
+  await until('它换到了那个项目下面', () => groupOf(S7) === 'litch')
   const place: OrganizeMockProbe['place'] = {
     pinned,
     unpinned,
@@ -242,13 +247,13 @@ export async function organizeMockProbe(): Promise<OrganizeMockProbe> {
     moved: rowsOf(S7).length === 1,
   }
 
-  // ---- 三、工作区：添加、改名换色、调顺序、删除 ----
+  // ---- 三、项目：添加、改名换色、调顺序、删除 ----
   const dialog = () => one<HTMLDialogElement>('dialog.ws-dialog[open]')
   const submit = () => one<HTMLButtonElement>('.ws-dialog .btn.primary')
   const S9 = '查一下 launchd 的 KeepAlive 语义'
   const ROOT = '/Users/dev/notes/launchd'
   await choose(one(':scope > .row-line', local()), '本机', 'addWorkspace')
-  await until('添加工作区的对话框', dialog)
+  await until('添加项目的对话框', dialog)
   const rootField = await until('目录那一栏', () => one<HTMLInputElement>('#ws-root'))
   const addGated = submit()?.disabled === true
   write(rootField, 'notes/launchd')
@@ -259,6 +264,17 @@ export async function organizeMockProbe(): Promise<OrganizeMockProbe> {
   const rootRefused = refusal.includes('完整路径') && Boolean(dialog())
   const candidates = all('.ws-dialog .ws-root')
   seen.candidates = candidates.map(text).join('|')
+  // 和外面的 PICKED_FOLDER 是同一个：这个函数被原样送进页面里执行，引用不到外面的
+  const PICKED = '/Users/dev/notes/picked'
+  const browse = one<HTMLButtonElement>('.ws-dialog .ws-browse')
+  browse?.click()
+  const browsed = browse
+    ? Boolean(
+        await until('选的目录填进了目录那一栏', () => rootField.value === PICKED, 5000).catch(
+          () => null,
+        ),
+      )
+    : false
   candidates.find((entry) => text(entry) === ROOT)?.click()
   await until('候选填进了目录那一栏', () => rootField.value === ROOT)
   const candidate = one<HTMLInputElement>('#ws-name')?.placeholder === 'launchd'
@@ -266,17 +282,17 @@ export async function organizeMockProbe(): Promise<OrganizeMockProbe> {
   await frame()
   submit()?.click()
   await until('对话框关掉', () => !dialog())
-  await until('新的工作区出现在侧栏里', () => workspaceLine('launchd'))
+  await until('新的项目出现在侧栏里', () => workspaceLine('launchd'))
   seen.added = workspaceNames().join('|')
   const dotOf = (name: string) => one('.ws-dot', workspaceLine(name))?.getAttribute('style') ?? ''
   const added = seen.added === 'litch|docs-site|launchd' && dotOf('launchd').includes('violet')
   const launchdKey = workspaceLine('launchd')?.dataset.workspace ?? '\0'
   const adopted = Boolean(await until('它下面的会话归了进去', () => groupOf(S9) === launchdKey))
   // 头一个没有“上移”，最后一个没有“下移”
-  const firstPop = await menuOf(workspaceLine('litch'), '头一个工作区')
+  const firstPop = await menuOf(workspaceLine('litch'), '头一个项目')
   seen.firstMenu = items(firstPop)
   await closeMenu(firstPop)
-  const lastPop = await menuOf(workspaceLine('launchd'), '最后一个工作区')
+  const lastPop = await menuOf(workspaceLine('launchd'), '最后一个项目')
   seen.lastMenu = items(lastPop)
   const menuEnds =
     seen.firstMenu === '改名与颜色…|下移|删除' && seen.lastMenu === '改名与颜色…|上移|删除'
@@ -292,24 +308,25 @@ export async function organizeMockProbe(): Promise<OrganizeMockProbe> {
   await until('对话框关掉', () => !dialog())
   await until('行上是新的名字', () => workspaceLine('日志笔记'))
   const edited = fixedRoot && dotOf('日志笔记').includes('red') && !workspaceLine('launchd')
-  await choose(workspaceLine('日志笔记'), '改了名的工作区', 'up')
+  await choose(workspaceLine('日志笔记'), '改了名的项目', 'up')
   await until(
     '它挪到了前一个的前面',
     () => workspaceNames().join('|') === 'litch|日志笔记|docs-site',
   )
   const movedUp = true
-  const deletePop = await choose(workspaceLine('日志笔记'), '改了名的工作区', 'delete')
+  const deletePop = await choose(workspaceLine('日志笔记'), '改了名的项目', 'delete')
   const asking = await until('删除之前的那一问', () => one('.pick-ask', deletePop))
   seen.deleteAsk = text(asking)
   const deleteAsked =
-    seen.deleteAsk.includes('只删掉工作区这条记录') && Boolean(workspaceLine('日志笔记'))
+    seen.deleteAsk.includes('只删掉项目这条记录') && Boolean(workspaceLine('日志笔记'))
   one<HTMLButtonElement>('.btn.danger', asking)?.click()
-  await until('工作区没了', () => !workspaceLine('日志笔记'))
-  const deleted = Boolean(await until('里面的会话回到“无工作区”', () => groupOf(S9) === ''))
+  await until('项目没了', () => !workspaceLine('日志笔记'))
+  const deleted = Boolean(await until('里面的会话回到“无项目”', () => groupOf(S9) === ''))
   const workspace: OrganizeMockProbe['workspace'] = {
     addGated,
     rootRefused,
     candidate,
+    browsed,
     added,
     adopted,
     menuEnds,
@@ -325,7 +342,7 @@ export async function organizeMockProbe(): Promise<OrganizeMockProbe> {
   const claudeHasFork = Boolean(await until('消息上的分叉按钮', () => one('.umsg .act-fork')))
   await say('别处整理一下')
   await until('别处把它置顶了', () => groupOf(S6) === ':pinned')
-  await until('别处建的工作区', () => workspaceLine('别处建的'))
+  await until('别处建的项目', () => workspaceLine('别处建的'))
   await until('这个回合结束', () => !one('.running-line'))
   const elsewhere: OrganizeMockProbe['elsewhere'] = {
     pinned: one('.ss-row.sel') === rowOf(S6),
@@ -378,7 +395,7 @@ export async function organizeMockProbe(): Promise<OrganizeMockProbe> {
   const declared: OrganizeMockProbe['declared'] = {
     hidden,
     shownOnOthers: claudeHasFork,
-    noDelete: seen.dshMenu === '置顶|移到工作区…|改名|归档',
+    noDelete: seen.dshMenu === '置顶|移到项目…|改名|归档',
     presetNotes: dsh.read.length === 3 && Boolean(dsh.read[0]?.startsWith('只读：不能改文件')),
     solePreset:
       pi.read.length === 1 &&
@@ -458,7 +475,7 @@ export function judgeOrganizeMock(probe: OrganizeMockProbe): string[] {
   const names: Record<string, string> = {
     groups: '置顶组和分区组',
     place: '置顶和移动会话',
-    workspace: '工作区的增删改和排序',
+    workspace: '项目的增删改和排序',
     elsewhere: '别处改了这边跟上',
     declared: '按声明给入口',
     reasons: '不可用的原因和下一步',

@@ -143,10 +143,20 @@
   align-items: center;
   gap: 6px;
 }
+.sb-filter .pick-mark {
+  flex: none;
+  display: inline-flex;
+  width: 12px;
+  height: 12px;
+}
+.sb-filter .pick-mark > svg.ic {
+  width: 12px;
+  height: 12px;
+}
 .sb-filter .pick-title {
   white-space: nowrap;
 }
-/* 正在只看某个 harness：一行小字说清在看谁，整行点一下就取消 */
+/* 正在只看某几个 harness：一行小字说清在看谁，整行点一下就取消 */
 .sb-filter-on {
   flex: 0 0 calc(100% + 12px);
   min-width: 0;

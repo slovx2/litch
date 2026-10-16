@@ -1,19 +1,19 @@
 // 新建对话页上后补的两件事，只对着模拟核心量，接在 probe-home.mts 后面（那一组刚在 build-01 的 infra 里
 // 用 Pi 建过一个会话，这里的默认值是从它记下的东西来的）：
-// 一、建在哪个 harness 上是按工作区记的：没用过的工作区拿这台设备最近用的，用过的各记各的；
+// 一、建在哪个 harness 上是按项目记的：没用过的项目拿这台设备最近用的，用过的各记各的；
 //     这次只是点选、还没发出去的，换走再换回来也还在。
-// 二、工作区的选择器最后一项是“添加工作区…”：添加成了页上就指着新的那个，写了一半的字不动。
+// 二、项目的选择器最后一项是“添加项目…”：添加成了页上就指着新的那个，写了一半的字不动。
 // 整个函数会被转成文字放进页面里执行，所以用到的工具都写在函数里面。
 
 export interface HomeMoreProbe {
   harness: {
-    /** 一开始的去处和 harness：“设备/工作区/harness” */
+    /** 一开始的去处和 harness：“设备/项目/harness” */
     start: string
-    /** 换到这台设备上还没建过会话的工作区，默认的 harness */
+    /** 换到这台设备上还没建过会话的项目，默认的 harness */
     fresh: string
-    /** 在那里换了一个 harness 建成会话之后，再到新建对话页：“设备/工作区/harness” */
+    /** 在那里换了一个 harness 建成会话之后，再到新建对话页：“设备/项目/harness” */
     after: string
-    /** 换回原来那个工作区、再换过来，各是哪个 harness */
+    /** 换回原来那个项目、再换过来，各是哪个 harness */
     back: string
     again: string
     /** 没发出去只是点选的：换走再换回来是哪个 */
@@ -27,11 +27,11 @@ export interface HomeMoreProbe {
     /** 点了它出对话框；取消之后页上指的没变 */
     dialog: boolean
     cancelKept: boolean
-    /** 填了目录点添加之后页上指着哪（“设备/工作区”），标题栏上的工作区，输入框里写了一半的字还在不在 */
+    /** 填了目录点添加之后页上指着哪（“设备/项目”），标题栏上的项目，输入框里写了一半的字还在不在 */
     picked: string
     crumb: string
     draftKept: boolean
-    /** 选择器里现在列的工作区（不算最后那一项） */
+    /** 选择器里现在列的项目（不算最后那一项） */
     listed: string
     /** 没连着的设备上有没有这一项 */
     offlineHas: boolean
@@ -99,7 +99,7 @@ export async function homeMoreProbe(): Promise<HomeMoreProbe> {
     await frame()
   }
   const rowOf = (title: string) => all('.ss-row').find((row) => text(row).includes(title))
-  /** 一行（会话或者工作区）行尾的“更多”里点“删除”，再确认 */
+  /** 一行（会话或者项目）行尾的“更多”里点“删除”，再确认 */
   const removeVia = async (line: Element | null | undefined, what: string) => {
     line?.querySelector<HTMLButtonElement>('.row-more > .ibtn')?.click()
     const remove = await until(`${what}菜单里的“删除”`, () =>
@@ -113,14 +113,14 @@ export async function homeMoreProbe(): Promise<HomeMoreProbe> {
     ).click()
   }
 
-  // ---- 一、harness 按工作区记 ----
+  // ---- 一、harness 按项目记 ----
   await toHome()
   await choose('device', 'build-01')
   const start = `${place()}/${shown('harness')}`
   await choose('workspace', 'litch')
   const fresh = shown('harness')
   await choose('harness', 'Claude Code')
-  const second = '第二个工作区里开的一句'
+  const second = '第二个项目里开的一句'
   const input = await until('输入框', area)
   write(input, second)
   await frame()
@@ -152,7 +152,7 @@ export async function homeMoreProbe(): Promise<HomeMoreProbe> {
   await until('删掉的那一行消失', () => !rowOf(second))
   await until('回到新建对话页', () => home() && area())
 
-  // ---- 二、工作区选择器里的“添加工作区…” ----
+  // ---- 二、项目选择器里的“添加项目…” ----
   await toHome()
   await choose('device', '本机')
   const kept = place()
@@ -171,7 +171,7 @@ export async function homeMoreProbe(): Promise<HomeMoreProbe> {
     last?.click()
     return {
       ...seen,
-      dialog: Boolean(await until('添加工作区的对话框', dialog, 5000).catch(() => null)),
+      dialog: Boolean(await until('添加项目的对话框', dialog, 5000).catch(() => null)),
     }
   }
   const first = await openAdd()
@@ -188,7 +188,7 @@ export async function homeMoreProbe(): Promise<HomeMoreProbe> {
   })
   submit.click()
   await until('对话框关了', () => !dialog())
-  await until('页上指着新的工作区', () => shown('workspace') === 'probe-space', 5000).catch(
+  await until('页上指着新的项目', () => shown('workspace') === 'probe-space', 5000).catch(
     () => null,
   )
   const picked = place()
@@ -199,20 +199,20 @@ export async function homeMoreProbe(): Promise<HomeMoreProbe> {
     .map(titleOf)
     .join('|')
   await fold('workspace')
-  // 没连着的设备上管不了工作区：没有这一项
+  // 没连着的设备上管不了项目：没有这一项
   await choose('device', 'gpu-box')
   const offlineHas = (await unfold('workspace')).some(
     (option) => option.dataset.action !== undefined,
   )
   await fold('workspace')
-  // 收拾：新加的工作区删掉，写了一半的字清掉
+  // 收拾：新加的项目删掉，写了一半的字清掉
   await choose('device', '本机')
   const line = all('.row-line[data-workspace]').find(
     (entry) => text(one('.ws-row .name', entry)) === 'probe-space',
   )
   if (line) {
-    await removeVia(line, '工作区')
-    await until('新加的工作区没了', () =>
+    await removeVia(line, '项目')
+    await until('新加的项目没了', () =>
       all('.ws-row .name').every((entry) => text(entry) !== 'probe-space'),
     )
   }
@@ -234,31 +234,31 @@ export function judgeHomeMore(probe: HomeMoreProbe): string[] {
     failed.push(`这一组开头的去处和 harness 不是上一组留下的：“${harness.start}”`)
   }
   if (harness.fresh !== 'Pi') {
-    failed.push(`还没建过会话的工作区，默认的 harness 该是这台设备最近用的 Pi：“${harness.fresh}”`)
+    failed.push(`还没建过会话的项目，默认的 harness 该是这台设备最近用的 Pi：“${harness.fresh}”`)
   }
   if (harness.after !== 'build-01/litch/Claude Code') {
-    failed.push(`在另一个工作区里换了 harness 建成之后，默认值不是这一次用的：“${harness.after}”`)
+    failed.push(`在另一个项目里换了 harness 建成之后，默认值不是这一次用的：“${harness.after}”`)
   }
   if (harness.back !== 'Pi' || harness.again !== 'Claude Code') {
     failed.push(
-      `harness 没有按工作区各记各的：换回去是“${harness.back}”，再换过来是“${harness.again}”`,
+      `harness 没有按项目各记各的：换回去是“${harness.back}”，再换过来是“${harness.again}”`,
     )
   }
   if (harness.pickedKept !== 'dsh') {
-    failed.push(`只是点选、没发出去的 harness，换了工作区再换回来没了：“${harness.pickedKept}”`)
+    failed.push(`只是点选、没发出去的 harness，换了项目再换回来没了：“${harness.pickedKept}”`)
   }
-  if (add.last !== '添加工作区…' || !add.marked || add.before !== '无工作区') {
-    failed.push(`工作区选择器的最后一项不是“添加工作区…”：“${add.before}”“${add.last}”`)
+  if (add.last !== '添加项目…' || !add.marked || add.before !== '无项目') {
+    failed.push(`项目选择器的最后一项不是“添加项目…”：“${add.before}”“${add.last}”`)
   }
-  if (!add.dialog) failed.push('点了“添加工作区…”，没有出添加的对话框')
-  if (!add.cancelKept) failed.push('添加工作区点了取消，页上指的去处变了')
+  if (!add.dialog) failed.push('点了“添加项目…”，没有出添加的对话框')
+  if (!add.cancelKept) failed.push('添加项目点了取消，页上指的去处变了')
   if (add.picked !== '本机/probe-space' || add.crumb !== 'probe-space') {
-    failed.push(`添加成了之后页上没有指着新的工作区：“${add.picked}”，标题栏“${add.crumb}”`)
+    failed.push(`添加成了之后页上没有指着新的项目：“${add.picked}”，标题栏“${add.crumb}”`)
   }
-  if (!add.draftKept) failed.push('添加工作区之后，输入框里写了一半的字没了')
-  if (add.listed !== 'litch|docs-site|probe-space|无工作区') {
-    failed.push(`添加之后工作区选择器里列的不对：${add.listed}`)
+  if (!add.draftKept) failed.push('添加项目之后，输入框里写了一半的字没了')
+  if (add.listed !== 'litch|docs-site|probe-space|无项目') {
+    failed.push(`添加之后项目选择器里列的不对：${add.listed}`)
   }
-  if (add.offlineHas) failed.push('没连着的设备上，工作区选择器里还有“添加工作区…”')
+  if (add.offlineHas) failed.push('没连着的设备上，项目选择器里还有“添加项目…”')
   return failed
 }

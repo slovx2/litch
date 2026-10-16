@@ -64,6 +64,11 @@ export interface ComposeProbe {
    * 只在模拟核心上量（模拟的 codex 照真的报 null）
    */
   effortDefault: string | null
+  /**
+   * 模型多的选择器顶上的筛选框：点开时焦点在框里，写“mini”只剩名字带它的，回车选中头一个。
+   * 只在模拟核心上量（模拟的 codex 列了九个模型）。量到的是：焦点在框里｜筛完剩下的｜回车之后按钮上写的
+   */
+  modelSearch: string | null
   /** 高风险的权限预设：点了先问，确认之后才换过去。只在模拟核心上量 */
   riskAsked: boolean | null
   riskSwitched: boolean | null
@@ -141,7 +146,7 @@ export interface ComposeProbe {
     /** 填好之后回车：发出去，卡片消失 */
     formSent: boolean
   } | null
-  /** 会话多的工作区：只露出最近的几个，其余的收在“展示更多”后面。只在模拟核心上量 */
+  /** 会话多的项目：只露出最近的几个，其余的收在“展示更多”后面。只在模拟核心上量 */
   folded: {
     /** 先只露出五个，旁边写着还有几个 */
     first: boolean
@@ -280,18 +285,18 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
   const main = real ? '给首页加一个状态条' : '首页文案'
   const other = real ? '连接层的重连与对账' : '远程设备安装指引'
 
-  // ---- 零、会话多的工作区：只露出最近的几个（示例数据里 docs-site 有十二个会话） ----
+  // ---- 零、会话多的项目：只露出最近的几个（示例数据里 docs-site 有十二个会话） ----
   let folded: ComposeProbe['folded'] = null
   if (!real) {
     const group = await until(
-      'docs-site 这个工作区',
+      'docs-site 这个项目',
       () =>
         all('.ws-row')
           .find((row) => row.textContent?.includes('docs-site'))
           ?.closest('.row-line')?.parentElement,
     )
     const shown = () => group.querySelectorAll('.ss-row').length
-    await until('工作区里的会话', () => shown() > 0)
+    await until('项目里的会话', () => shown() > 0)
     const first =
       shown() === 5 && Boolean(group.querySelector('.ss-more')?.textContent?.includes('7'))
     group.querySelector<HTMLButtonElement>('.ss-more .more')?.click()
@@ -504,10 +509,36 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
     // 按钮的无障碍名字是“思考强度：<当前那一档>”，没有值时冒号后面是空的
     effortDefault = (effort.getAttribute('aria-label') ?? '').split('：')[1] ?? ''
   }
+  let modelSearch: string | null = null
+  if (!real) {
+    const button = () => one<HTMLButtonElement>('.dock .pick[data-kind="model"] .pick-btn')
+    ;(await until('模型的选择器', button)).click()
+    const field = await until('模型的筛选框', () =>
+      one<HTMLInputElement>('.dock .pick[data-kind="model"] .pick-search'),
+    )
+    await frame()
+    const focused = document.activeElement === field
+    write(field, 'mini')
+    await frame()
+    const left = all('.dock .pick[data-kind="model"] .pick-opt').map((option) =>
+      (option.querySelector('b')?.textContent ?? '').trim(),
+    )
+    press(field, 'Enter')
+    await until('选择器收起', () => button()?.getAttribute('aria-expanded') !== 'true', 5000)
+    // 选了之后经核心改会话的设置，按钮上的字随后才换
+    await until('模型换过去', () => button()?.textContent?.includes('mini'), 5000).catch(() => null)
+    modelSearch = [
+      focused ? '框里' : '不在框里',
+      left.join('、'),
+      button()?.textContent?.trim(),
+    ].join('｜')
+    // 换回原来的默认模型，后面的步骤照旧
+    await choose(0, 'GPT-5.5 Codex')
+  }
 
   // ---- 七、新建会话：第一条消息立刻出现，建好之后落在新会话里 ----
   const home = real ? 'app' : 'docs-site'
-  const add = await until('工作区行上的新建按钮', () =>
+  const add = await until('项目行上的新建按钮', () =>
     all('.row-add').find((button) => button.parentElement?.textContent?.includes(home)),
   )
   add.click()
@@ -1120,6 +1151,7 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
     modelShown,
     effortFollowsModel,
     effortDefault,
+    modelSearch,
     riskAsked,
     riskSwitched,
     newBubbleMs,
@@ -1179,6 +1211,11 @@ export function judgeCompose(probe: ComposeProbe): string[] {
     failed.push(
       `原生 codex 没配强度时底栏的强度应显示模型默认的“中”，显示的是“${probe.effortDefault}”`,
     )
+  if (
+    probe.modelSearch !== null &&
+    probe.modelSearch !== '框里｜GPT-5.5 mini、GPT-5.4 mini、o5 mini｜GPT-5.5 mini'
+  )
+    failed.push(`模型选择器的筛选框不对（焦点｜筛完剩下的｜回车之后）：${probe.modelSearch}`)
   if (probe.riskAsked === false) failed.push('高风险的权限预设没有先问一句就换过去了')
   if (probe.riskSwitched === false) failed.push('确认之后权限预设没有换过去')
   if (!(probe.newBubbleMs < 300))
@@ -1209,7 +1246,7 @@ export function judgeCompose(probe: ComposeProbe): string[] {
   if (probe.wizardSkins && probe.wizardSkins.length !== 6)
     failed.push(`提问向导的皮肤没有量全：${probe.wizardSkins.length}`)
   for (const [name, ok] of Object.entries(probe.folded ?? {})) {
-    if (!ok) failed.push(`会话多的工作区：${name} 不对`)
+    if (!ok) failed.push(`会话多的项目：${name} 不对`)
   }
   for (const [name, ok] of Object.entries(probe.asked ?? {})) {
     if (!ok) failed.push(`引擎发来的提问：${name} 不对`)

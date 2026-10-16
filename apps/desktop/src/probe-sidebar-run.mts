@@ -16,7 +16,7 @@ import { type FrameChecks, judgeFrame } from './probe-sidebar-judge.mjs'
 import { installSidebarKit, type SidebarKit } from './probe-sidebar-kit.mjs'
 import type { SmokeHooks } from './smoke.mjs'
 
-/** 模拟核心里用的那个会话（示例数据里的标题）：本机、docs-site 工作区，闲着的 */
+/** 模拟核心里用的那个会话（示例数据里的标题）：本机、docs-site 项目，闲着的 */
 const SESSION = '远程设备安装指引'
 
 /** 走到哪一步了。只记在内存里，没跑完的时候才报出去 */

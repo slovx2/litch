@@ -303,7 +303,7 @@ func TestHarnessGroupTitlesComeFromTheSharedIdentity(t *testing.T) {
 			t.Fatalf("%s 那一组的标题应是登记的显示名 %q", id, identity.DisplayName)
 		}
 	}
-	if harnessNames["dsh"] != "DeepSeek Harness" {
+	if harnessNames["dsh"] != "DSH" {
 		t.Fatalf("dsh 的显示名不对: %q", harnessNames["dsh"])
 	}
 }

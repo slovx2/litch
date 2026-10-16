@@ -1,6 +1,8 @@
-import { type ReactNode, useEffect, useState } from 'react'
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useT } from '../app/appearance.ts'
 import { Caret } from '../app/icons.tsx'
 import { usePopover } from '../app/popover.ts'
+import { matchOptions, SEARCH_FROM } from './picker-search.ts'
 
 export interface PickerOption {
   id: string
@@ -25,19 +27,42 @@ interface PickerProps {
   value: string | null
   options: PickerOption[]
   onPick(id: string): void
+  /**
+   * 选项多的时候（SEARCH_FROM 个起）在列表顶上放一个筛选框，这是框里的提示语。
+   * 不给就没有筛选框：只有几项的选择器用不着（模型清单有的 harness 能列出上百个）
+   */
+  search?: string
 }
 
 /** 底栏上的一个选择器：一个显示当前值的按钮，点开是往上弹的选项列表 */
-export function Picker({ kind, label, value, options, onPick }: PickerProps) {
+export function Picker({ kind, label, value, options, onPick, search }: PickerProps) {
+  const t = useT()
   /** 正在等用户确认的那一项 */
   const [asking, setAsking] = useState<PickerOption | null>(null)
+  const [query, setQuery] = useState('')
   const { open, setOpen, close, root, trigger, pop, onKeyDown } = usePopover(asking)
+  const field = useRef<HTMLInputElement>(null)
   const current = options.find((option) => option.id === value)
+  const searching = search !== undefined && options.length >= SEARCH_FROM
+  const shown = searching ? matchOptions(options, query) : options
 
-  // 收起之后，下次点开回到列表那一屏
+  // 收起之后，下次点开回到列表那一屏，筛选框是空的
   useEffect(() => {
-    if (!open) setAsking(null)
+    if (!open) {
+      setAsking(null)
+      setQuery('')
+    }
   }, [open])
+
+  // 有筛选框的：点开时焦点落在框里（浮层自己先把焦点给了选中的那一项，这里接着改），
+  // 选中的那一项滚进看得见的地方
+  useLayoutEffect(() => {
+    if (!open || !searching || asking) return
+    pop.current?.querySelector<HTMLElement>('[aria-selected="true"]')?.scrollIntoView({
+      block: 'nearest',
+    })
+    field.current?.focus()
+  }, [open, searching, asking, pop])
 
   const pick = (option: PickerOption, confirmed = false) => {
     if (option.disabled) return
@@ -83,7 +108,30 @@ export function Picker({ kind, label, value, options, onPick }: PickerProps) {
             </div>
           ) : (
             <div role="listbox" aria-label={label} className="pick-list">
-              {options.map((option) => (
+              {searching ? (
+                <input
+                  ref={field}
+                  className="pick-search"
+                  type="search"
+                  value={query}
+                  placeholder={search}
+                  aria-label={search}
+                  spellCheck={false}
+                  autoComplete="off"
+                  onChange={(event) => setQuery(event.target.value)}
+                  onKeyDown={(event) => {
+                    // 回车：筛出来的头一个能选的
+                    if (event.key !== 'Enter' || event.nativeEvent.isComposing) return
+                    event.preventDefault()
+                    const first = shown.find((option) => !option.disabled && !option.action)
+                    if (first) pick(first)
+                  }}
+                />
+              ) : null}
+              {searching && shown.length === 0 ? (
+                <div className="pick-none">{t('picker.noMatch')}</div>
+              ) : null}
+              {shown.map((option) => (
                 <button
                   key={option.id}
                   type="button"

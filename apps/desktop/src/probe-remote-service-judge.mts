@@ -72,14 +72,14 @@ export function judgeRemoteService(seen: ServiceSeen, aliases: ServiceAliases): 
     connect.growPeer === 'codex' && connect.growText.startsWith('只有'),
     `只有 codex 的那台，设备列表上没有照实说：${connect.growPeer}｜${connect.growText}`,
   )
-  must(connect.workspaceAdded, `在远程设备上没能添加工作区：${connect.workspaces.join('、')}`)
+  must(connect.workspaceAdded, `在远程设备上没能添加项目：${connect.workspaces.join('、')}`)
   must(connect.noPasswordField && failures.noPasswordField, '出现了密码输入框')
 
   // ---- 新建会话、发消息、断线、终端 ----
   must(session.target.length > 0, '新建对话页上换到远程设备之后，没有说会建在哪个 harness 上')
   must(session.stillBlocked === '', `换到连着的远程设备之后还说建不了：${session.stillBlocked}`)
   must(session.created, '在远程设备服务上新建会话没有收到回话')
-  must(session.inWorkspace, '新会话没有落在选的工作区里')
+  must(session.inWorkspace, '新会话没有落在选的项目里')
   must(
     session.badge === session.target,
     `新会话没有建在页上说的那个 harness 上：${session.target}｜${session.badge}`,

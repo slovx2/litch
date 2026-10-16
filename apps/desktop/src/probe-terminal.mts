@@ -39,11 +39,11 @@ export async function mockBasics(): Promise<MockBasics> {
   const kit = (window as unknown as { __termKit: TerminalKit }).__termKit
   const { until, one, all, text, frame, sleep } = kit
   await until('侧栏里有会话', () => one('.ss-row'))
-  // 启动落在新建对话页。终端跟着眼前的会话走：先点开第一个工作区里排最前面的那个会话，
-  // 这一段和后面几段量的都是它所在工作区的那一组
+  // 启动落在新建对话页。终端跟着眼前的会话走：先点开第一个项目里排最前面的那个会话，
+  // 这一段和后面几段量的都是它所在项目的那一组
   const first = one('.ws-row')?.closest('[data-group]')?.querySelector<HTMLElement>('.ss-row')
   first?.click()
-  await until('选中了第一个工作区里的会话', () => first?.getAttribute('aria-current') === 'true')
+  await until('选中了第一个项目里的会话', () => first?.getAttribute('aria-current') === 'true')
   const startsClosed = !kit.panelOpen()
   kit.toggle()
   await until('面板打开', () => kit.panelOpen())

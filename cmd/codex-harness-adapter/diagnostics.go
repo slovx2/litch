@@ -141,9 +141,9 @@ func runDiagnostic(ctx context.Context, c configuration, flag string) ([]byte, e
 		message = both("用户安装的 Pi 与当前适配器不兼容，请升级适配器，或通过 PI_CLI 指定受支持的 Pi 版本", "Your Pi installation is not compatible with this adapter; upgrade the adapter, or point PI_CLI at a supported Pi version")
 	case strings.Contains(stderr.String(), "dsh CLI 版本不符"):
 		kind = "versionTooLow"
-		message = both("DeepSeek Harness 版本低于适配器要求的下限，请升级 dsh 后重试", "DeepSeek Harness is older than the minimum this adapter requires; upgrade dsh and retry")
+		message = both("DSH 版本低于适配器要求的下限，请升级 dsh 后重试", "DSH is older than the minimum this adapter requires; upgrade dsh and retry")
 	case strings.Contains(stderr.String(), "无法读取宿主 dsh CLI 版本"):
-		message = both("无法读取 DeepSeek Harness 版本，请先确认 dsh --version 可以正常运行", "Cannot read the DeepSeek Harness version; make sure dsh --version runs first")
+		message = both("无法读取 DSH 版本，请先确认 dsh --version 可以正常运行", "Cannot read the DSH version; make sure dsh --version runs first")
 	case strings.Contains(stderr.String(), "Claude CLI 版本不符"), strings.Contains(stderr.String(), "需要用户安装的 Pi CLI"):
 		kind = "versionTooLow"
 		message = both("引擎 CLI 版本检查未通过，请安装适配器说明（ADAPTER.md）要求的最低稳定版本或更高版本", "The engine CLI failed the version check; install the minimum stable version listed in the adapter guide (ADAPTER.en.md) or newer")

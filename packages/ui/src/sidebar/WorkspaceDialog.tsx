@@ -1,11 +1,11 @@
 // 添加一个工作区，或者改一个工作区的名字和颜色。
 // 工作区是设备上的一条记录（名字 + 目录），不是磁盘上的东西：这里不建目录、不删目录。
-import { WIRES, type WireColor, type WorkspaceView } from '@litch/core'
+import { type DeviceView, keys, WIRES, type WireColor, type WorkspaceView } from '@litch/core'
 import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { wireStyle } from '../app/device.ts'
 import { reasonOf } from '../app/errors.ts'
-import { useServices } from '../app/services.tsx'
+import { useKey, useServices } from '../app/services.tsx'
 
 interface WorkspaceDialogProps {
   deviceId: string
@@ -35,6 +35,22 @@ export function WorkspaceDialog({ deviceId, workspace, onAdded, onClose }: Works
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
   const adding = workspace === null
+  const device = useKey<DeviceView>(keys.device(deviceId))
+  /**
+   * 系统的选文件夹对话框：只有本机的设备、外壳又给得出才有。选出来的是这台电脑上的路径，
+   * 远程设备的目录还是自己填（或者从候选里挑）
+   */
+  const pickFolder = device?.kind === 'local' ? window.litchShell?.pickFolder : undefined
+  const browse = () => {
+    if (!pickFolder) return
+    const from = root.trim()
+    pickFolder({ title: t('workspace.root.browse.title'), ...(from ? { defaultPath: from } : {}) })
+      .then((picked) => {
+        if (picked) setRoot(picked)
+      })
+      // 弹不出来：自己填路径不受影响
+      .catch(() => {})
+  }
 
   // 用模态方式打开：焦点留在里面，Esc 由浏览器处理
   useEffect(() => {
@@ -101,17 +117,24 @@ export function WorkspaceDialog({ deviceId, workspace, onAdded, onClose }: Works
               <label className="form-label" htmlFor="ws-root">
                 {t('workspace.root')}
               </label>
-              <input
-                id="ws-root"
-                className="req-input mono"
-                value={root}
-                placeholder="/home/me/project"
-                autoComplete="off"
-                autoCapitalize="off"
-                spellCheck={false}
-                autoFocus
-                onChange={(event) => setRoot(event.target.value)}
-              />
+              <span className="ws-pathrow">
+                <input
+                  id="ws-root"
+                  className="req-input mono"
+                  value={root}
+                  placeholder="/home/me/project"
+                  autoComplete="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  autoFocus
+                  onChange={(event) => setRoot(event.target.value)}
+                />
+                {pickFolder ? (
+                  <button type="button" className="btn ws-browse" onClick={browse}>
+                    {t('workspace.root.browse')}
+                  </button>
+                ) : null}
+              </span>
               <span className="form-note">{t('workspace.root.hint')}</span>
               {candidates.length > 0 ? (
                 <ul className="ws-roots" aria-label={t('workspace.root.candidates')}>

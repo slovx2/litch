@@ -1,4 +1,4 @@
-// 侧栏验收：只看某个 harness 的会话。对着模拟核心：本机和 build-01 上各有四个 harness 的会话，
+// 侧栏验收：只看某几个 harness 的会话。对着模拟核心：本机和 build-01 上各有四个 harness 的会话，
 // nas 上只有 Codex 的，gpu-box 没连着（留着一个 Pi 的、一个 Claude Code 的）。
 // 和别的验收一样，这里的函数会被原样送进页面里执行，不能引用函数外面的东西。
 // 量到的东西怎么算合格在 probe-sidebar-filter-judge.mts。
@@ -28,7 +28,9 @@ export interface FilterSeen {
   /** 本机的 docs-site：筛之前有“展示更多”，筛之后没有了（剩下的不到一屏） */
   moreBefore: boolean
   moreAfter: boolean
-  /** “正在只看”那一行：徽标｜字；入口是不是画成开着的；记在界面本地的是哪个 */
+  /** 挑了 Pi 之后选项没有收起（能接着挑）；按 Esc 收起 */
+  stayed: boolean
+  /** “正在只看”那一行：徽标｜字；入口是不是画成开着的；记在界面本地的是哪几个（逗号连起来） */
   line: string
   entryOn: boolean
   saved: string | null
@@ -38,6 +40,10 @@ export interface FilterSeen {
   tally: string
   /** 六套皮肤明暗：哪里｜那一行的字和底的对比度｜入口和底的对比度｜顶上那一块横向溢出｜那一行多高 */
   skins: string[]
+  /** 再挑上 Codex：“正在只看”那一行（徽标们｜字）、记着的、本机下面画出来的会话 */
+  twoLine: string
+  twoSaved: string | null
+  twoRows: string[]
   /** 点一下那一行：筛选没了，树里和筛之前一样 */
   cleared: boolean
   restored: PerDevice
@@ -65,9 +71,12 @@ export async function filterSeen(session: string): Promise<FilterSeen> {
     each((deviceId) =>
       all('[data-group]', kit.device(deviceId)).map((group) => group.dataset.group ?? ''),
     )
-  const saved = () =>
-    (JSON.parse(localStorage.getItem('litch.sidebar') ?? '{}') as { harness?: string | null })
-      .harness ?? null
+  const saved = () => {
+    const kept = (
+      JSON.parse(localStorage.getItem('litch.sidebar') ?? '{}') as { harnesses?: string[] }
+    ).harnesses
+    return kept && kept.length > 0 ? kept.join(',') : null
+  }
   const entry = () => one<HTMLButtonElement>('.sb-filter > .ibtn')
   const line = () => one<HTMLButtonElement>('.sb-filter-on')
   const more = () => Boolean(one('[data-group="docs"] .ss-more .more', kit.device('local')))
@@ -106,6 +115,11 @@ export async function filterSeen(session: string): Promise<FilterSeen> {
   pop = await openChoices()
   one<HTMLButtonElement>('[data-harness="pi"]', pop)?.click()
   const shownLine = await until('“正在只看”那一行', line, 5000)
+  // 多选：挑了一个不收起，按 Esc 才收
+  await kit.frame()
+  const stayed = Boolean(one('.sb-filter .pick-pop'))
+  kit.press(document.activeElement ?? pop, 'Escape')
+  await kit.seen(() => !one('.sb-filter .pick-pop'), 3000)
   await until('树跟着筛了', () => !kit.row('把运行时与 SSH 入口的启动拆开'), 5000)
   await kit.frame()
   const after = rows()
@@ -137,7 +151,7 @@ export async function filterSeen(session: string): Promise<FilterSeen> {
   const pickedGone = await kit.seen(() => !kit.row(session), 3000)
   const litch = () => kit.workspaceLine('local', 'litch')
   await kit.fold(litch(), false)
-  const mark = await until('收起的工作区上的汇总', () => one<HTMLElement>('.tally', litch()), 5000)
+  const mark = await until('收起的项目上的汇总', () => one<HTMLElement>('.tally', litch()), 5000)
   const { approval, answer, running, unread } = mark.dataset
   const tally = [
     text(one('.pill.wait', mark)),
@@ -147,7 +161,19 @@ export async function filterSeen(session: string): Promise<FilterSeen> {
   ].join('｜')
   await kit.fold(litch(), true)
 
-  // ---- 六、点一下那一行：取消 ----
+  // ---- 六、再挑上 Codex：两家的都留着 ----
+  pop = await openChoices()
+  one<HTMLButtonElement>('[data-harness="codex"]', pop)?.click()
+  await until('挑了两个', () => line()?.dataset.harness === 'pi,codex', 5000)
+  kit.press(document.activeElement ?? pop, 'Escape')
+  await kit.seen(() => !one('.sb-filter .pick-pop'), 3000)
+  await kit.frame()
+  const two = line() as HTMLElement
+  const twoLine = `${all('.chip', two).map(text).join(' ')}｜${text(one('.ell', two))}`
+  const twoSaved = saved()
+  const twoRows = rows().local ?? []
+
+  // ---- 七、点一下那一行：取消 ----
   line()?.click()
   const cleared = await kit.seen(() => !line() && !entry()?.classList.contains('on'), 3000)
   await until('树回到没筛的样子', () => kit.row('把运行时与 SSH 入口的启动拆开'), 5000)
@@ -167,19 +193,23 @@ export async function filterSeen(session: string): Promise<FilterSeen> {
     none,
     moreBefore,
     moreAfter,
+    stayed,
     line: said,
     entryOn,
     saved: savedOn,
     pickedGone,
     tally,
     skins,
+    twoLine,
+    twoSaved,
+    twoRows,
     cleared,
     restored: rows(),
     savedAfter: saved(),
   }
 }
 
-/** 挑一个 harness 只看它（null 是取消），等树跟上。重开应用之前、截图之前用 */
+/** 挑一个 harness 只看它（null 是取消），等树跟上。重开应用之前、截图之前用。从没筛的时候起挑 */
 export async function filterTo(harness: string | null): Promise<void> {
   const kit = (window as unknown as { __sidebarKit: SidebarKit }).__sidebarKit
   const { one, until } = kit
@@ -189,6 +219,9 @@ export async function filterTo(harness: string | null): Promise<void> {
   const pop = await until('筛选的选项', () => one('.sb-filter .pick-pop'), 5000)
   one<HTMLButtonElement>(`[data-harness="${harness ?? ''}"]`, pop)?.click()
   await until('筛选换过去', () => now() === harness, 5000)
+  // 挑一个 harness 时选项不收（多选），收起来
+  if (one('.sb-filter .pick-pop')) kit.press(document.activeElement ?? pop, 'Escape')
+  await kit.seen(() => !one('.sb-filter .pick-pop'), 3000)
   await kit.frame()
 }
 

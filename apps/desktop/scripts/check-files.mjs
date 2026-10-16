@@ -6,14 +6,14 @@
 // 不带参数就是三种依次跑。量法在 src/probe-files*.mts。
 //
 // 后两种要的文件由这里摆进夹具自己的临时目录（只往那里面写，夹具退出时连目录一起删）：
-//   work/app/            工作区的根（夹具造的会话就在这里）
+//   work/app/            项目的根（夹具造的会话就在这里）
 //     many/              三万个条目：30 个目录 group-00…，再加 item-00000.txt…
 //     src/long.ts        六千行；src/app.ts 一个小的
 //     lib/deep/nested/needle-file.ts   给“找文件”找的，藏在没展开过的目录里
 //     notes.txt          二十行文字；big.log 超过显示上限；blob.dat 不是文字；shot.png 看扩展名就不读
 //     empty/             空目录；.hidden.txt、.config/ 隐藏的
 //     link-dir → src、link-file → notes.txt、link-broken → 不存在的、link-out → 根外面的 outside/
-//   outside/secret.txt   在工作区的根之外（还在夹具的临时目录里）：验“根之外的路径被拒”
+//   outside/secret.txt   在项目的根之外（还在夹具的临时目录里）：验“根之外的路径被拒”
 //   notes/weekly.md      另一个会话的工作目录里放一个文件
 //
 // 时间上的线（展开大目录、帧间隔、开大文件、定位到行）有严和宽两套（src/probe-files-judge.mts）：
@@ -91,7 +91,7 @@ function arrange(root) {
   const app = inside('work/app')
   const notes = inside('notes')
   const outside = inside('outside')
-  if (!existsSync(app)) throw new Error(`夹具里没有工作区的目录：${app}`)
+  if (!existsSync(app)) throw new Error(`夹具里没有项目的目录：${app}`)
   const dir = (...parts) => mkdirSync(inside(...parts), { recursive: true })
   const put = (content, ...parts) => writeFileSync(inside(...parts), content)
   const pad = (n, width) => String(n).padStart(width, '0')
@@ -203,7 +203,7 @@ async function remoteFacts(socket, dirs, aggregate) {
       `元数据里有：${Object.keys(meta.result ?? {}).join('、')}（没有大小）`,
       `问一个不存在的文件：${error(gone)}；问断了的符号链接：${error(broken)}`,
       `读三兆的文件：${big.result ? `整个读回来了，base64 ${big.result.dataBase64.length} 个字` : error(big)}`,
-      `读工作区根之外的文件：${out.result ? '读得到（对面不拦，要客户端自己拦）' : error(out)}`,
+      `读项目根之外的文件：${out.result ? '读得到（对面不拦，要客户端自己拦）' : error(out)}`,
     ]
   } finally {
     peer.close()

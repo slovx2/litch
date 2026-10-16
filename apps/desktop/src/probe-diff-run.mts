@@ -45,19 +45,19 @@ const DEADLINE_MS: Record<DiffMode, number> = {
 
 /** 模拟核心里用的那几个会话（示例数据里的标题）。用哪个都明着去点，不靠启动后选中了谁 */
 const MOCK = {
-  // 本机、litch 工作区（各种改动都有的那个仓库），闲着的，它的 harness 是能用的（要往里发消息）
+  // 本机、litch 项目（各种改动都有的那个仓库），闲着的，它的 harness 是能用的（要往里发消息）
   home: '设备进程的转发开销基准',
-  // 同一个工作区里的另一个会话：看批注是跟着会话存的
+  // 同一个项目里的另一个会话：看批注是跟着会话存的
   tools: '把运行时与 SSH 入口的启动拆开',
-  // 本机、docs-site 工作区：四百多个文件的改动
+  // 本机、docs-site 项目：四百多个文件的改动
   many: '远程设备安装指引',
   // build-01 上的 litch：改了上万行的文件、装不下的日志、单行很长的文件。
-  // 这两个只是点开来看，挑的是工作目录正好在仓库根上的会话：同一个工作区里另有会话的工作目录
-  // 是子目录或者在工作区外面（侧栏拿它们演示工作目录的记号），那几个看不到根上的这些文件
+  // 这两个只是点开来看，挑的是工作目录正好在仓库根上的会话：同一个项目里另有会话的工作目录
+  // 是子目录或者在项目外面（侧栏拿它们演示工作目录的记号），那几个看不到根上的这些文件
   huge: '跑一遍官方桌面端请求回放',
   // build-01 上的 infra：干净的仓库
   clean: '轮换构建机的磁盘',
-  // 不属于任何工作区，工作目录不是仓库，harness 声明了会给本回合的差异
+  // 不属于任何项目，工作目录不是仓库，harness 声明了会给本回合的差异
   loose: '查一下 launchd 的 KeepAlive 语义',
   // nas：起不了进程；gpu-box：没连上
   noSpawn: '整理快照保留策略',
@@ -212,7 +212,7 @@ async function runMock(window: BrowserWindow): Promise<MockSeen> {
 }
 
 async function runReal(window: BrowserWindow, mode: DiffMode): Promise<RealSeenAll> {
-  // 两种夹具里工作目录是工作区根的会话
+  // 两种夹具里工作目录是项目根的会话
   const session = mode === 'diff-device' ? '给列表加上分页' : '逐个检查一百多个文件'
   await inPage(window, installFilesKit)
   await inPage(window, installDiffKit)

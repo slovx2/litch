@@ -82,6 +82,8 @@ export const Send = glyph('M8 13V3.5M4 7.5l4-4 4 4')
 /** 停止：一个方块 */
 export const Stop = glyph('M4.5 4.5h7v7h-7z')
 export const Close = glyph('M4 4l8 8M12 4l-8 8')
+/** 勾：多选的选项里挑中了 */
+export const Check = glyph('M3.5 8.5l3 3 6-7')
 export const Plus = glyph('M8 3.5v9M3.5 8h9')
 /** 图片：一个画框，里面一道山和一个太阳 */
 export const Picture = glyph('M2.5 3.5h11v9h-11zM2.5 10.5l3-3 2.5 2.5 1.5-1.5 4 4M10.5 6.2v.1')

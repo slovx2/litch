@@ -5,6 +5,15 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
+## 未发布
+
+- Claude Code 入口列出这台机器上别处（命令行、Claude 桌面端）开的 Claude Code 会话：`~/.claude/projects` 里的、不是程序化调用起的（SDK、`claude -p`，适配器自己跑的也在里面）都在会话列表里，能打开看历史、接着聊（接着同一个原生会话）。历史在第一次打开时照原生记录画进适配器的库，原生记录里又多了内容（命令行里接着说过）再接着画后面的。别处新开的会话半分钟内出现。在这里删掉只是不再列出，原生记录不动。`CHA_CLAUDE_NATIVE_SESSIONS=0` 关掉。此前这个入口只列经它建的会话，Litch 里看不到本机用 Claude Code 聊过的那些。
+- Litch：同一个目录同时是几个项目的根时（从 Codex 导入的项目常这样），会话照官方桌面端的规则归：只有这一个目录的项目优先，其次是把它当主目录的，再其次按排的先后。此前归给排在最前面的那个，比如 home 目录下的会话全落进一个把 home 当作第三个目录的项目里，home 项目自己是空的。
+- Litch：“工作区”改叫“项目”，和官方桌面端一样；DeepSeek Harness 在界面上简称 DSH。
+- Litch：侧栏按 harness 筛选可以多选。
+- Litch：添加项目时，本机的设备可以点“选择…”用系统的选文件夹对话框挑目录。
+- Litch：模型多的选择器（8 个起）顶上有筛选框，按名字、标识筛，回车选第一个。
+
 ## 0.7.1
 
 - Litch 有了安装包，随发布页一起出：macOS（Apple Silicon）的 dmg，用 Developer ID 签名并经苹果公证；Windows（x64）的安装程序，只装给当前用户、不要管理员权限，没有签名，**还没有经过完整的测试**。发布流程改名为 `release.yml`，适配器的包和两种安装包都出好才一起挂到草稿发布页；手动跑时不填标签就是试跑。

@@ -299,7 +299,7 @@ test('真的主进程加真的设备进程加假的运行时：一条聚合面�
         [
           ['Claude Code', 'CC'],
           ['Pi', 'PI'],
-          ['DeepSeek Harness', 'DS'],
+          ['DSH', 'DS'],
           ['Codex', 'CX'],
         ],
       )

@@ -212,7 +212,7 @@ export function judgeHomeLook(wide: HomeLook, narrow: HomeLook, minWidth: number
   if (hero !== 'What magic shall we cast today') {
     failed.push(`英文界面的提示语不对：“${hero}”`)
   }
-  if (labels !== 'Device/Workspace') failed.push(`英文界面里选去处的两个标签不对：“${labels}”`)
+  if (labels !== 'Device/Project') failed.push(`英文界面里选去处的两个标签不对：“${labels}”`)
   if (title !== 'New session' || entry !== 'New session') {
     failed.push(`英文界面的标题栏或者侧栏入口不对：“${title}”“${entry}”`)
   }

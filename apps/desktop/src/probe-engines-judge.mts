@@ -25,7 +25,7 @@ export function judgeEngines(seen: EnginesSeen): Judged {
   const check = (ok: unknown, what: string) => {
     if (!ok) failed.push(what)
   }
-  check(seen.device?.workspace, '设备：给三家共用的工作目录建的工作区没有出现在侧栏里')
+  check(seen.device?.workspace, '设备：给三家共用的工作目录建的项目没有出现在侧栏里')
   table.device = {}
   for (const id of seen.ids) {
     const spec = SPECS[id]

@@ -128,9 +128,9 @@ export function judgeMock(seen: MockSeen, lenient: boolean): string[] {
   must(flow.scrolled, '往回翻没有翻动')
   must(flow.keptAcrossTabs, '切到别的标签再回来，滚到的位置变了')
   must(flow.keptAcrossPanel, '收起面板再打开，滚到的位置变了')
-  must(flow.keptAcrossSession, '换到别的工作区的会话再回来，滚到的位置变了')
+  must(flow.keptAcrossSession, '换到别的项目的会话再回来，滚到的位置变了')
   must(flow.keptAcrossPage, '开“设备”页再回来，滚到的位置变了')
-  must(flow.otherGroupEmpty, '别的工作区的会话里看到的不是它自己那一组终端')
+  must(flow.otherGroupEmpty, '别的项目的会话里看到的不是它自己那一组终端')
   must(flow.hiddenOnPage, '开着“设备”页的时候面板还显示着')
 
   // ---------- 刷屏 ----------
@@ -254,12 +254,12 @@ export function judgeMock(seen: MockSeen, lenient: boolean): string[] {
   must(quit.end.proceed && quit.end.did === 'end', `退出时选“结束”：${JSON.stringify(quit.end)}`)
   must(quit.afterEnd.length === 0, `选了“结束”，还剩着终端：${quit.afterEnd.join('、')}`)
 
-  // ---------- 新建对话页：面板跟着页上选的设备和工作区走 ----------
+  // ---------- 新建对话页：面板跟着页上选的设备和项目走 ----------
   must(home.start === 'local/', `新建对话页上面板不是默认去处的那一组：${home.start}`)
   must(home.afterDevice === 'build/', `在页上换了设备，面板没有跟着换：${home.afterDevice}`)
   must(
     home.afterWorkspace === home.wanted && home.wanted !== 'build/',
-    `在页上换了工作区，面板没有跟着换：${home.afterWorkspace}，该是 ${home.wanted}`,
+    `在页上换了项目，面板没有跟着换：${home.afterWorkspace}，该是 ${home.wanted}`,
   )
   must(home.back === 'local/', `换回本机，面板没有回到原来那一组：${home.back}`)
   return failed

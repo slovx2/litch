@@ -8,7 +8,7 @@
 
 **Control Claude Code, Pi, and other harnesses through the mature Codex desktop UI.** Manage projects, conversations, file changes, and approvals in one place while keeping each harness's own models and login.
 
-Currently supports Claude Code and Pi on macOS, Linux, and Windows; DeepSeek Harness support is experimental ([details](docs/guide/configuration.md#deepseek-harness实验性)).
+Currently supports Claude Code and Pi on macOS, Linux, and Windows; DeepSeek Harness (DSH) support is experimental ([details](docs/guide/configuration.md#deepseek-harness实验性)).
 
 ## Install and run
 
@@ -102,10 +102,12 @@ Put adapter and harness environment variables (such as `CHA_CLAUDE_*`, `PI_CLI`,
 
 With the [Litch](README.en.md) desktop app you can change these on its Devices page instead: enable or disable each harness, set the path to its command and its environment variables, and switch the SSH entries and their ports. Changes are stored in `~/.codex-harness-adapter/device/settings.json` and take precedence over startup flags and the env file: a flag is only the default for a setting that was never written, and the env file comes after settings. The adapter bundled with Litch is the same program and shares this state directory. Litch starts it with `--ssh=off`, so it listens on no port, and the service stays up even when no harness can start, so the app can connect, show why, and let you fix the settings. If the Codex CLI (0.157.1 or later) is installed on the machine, you can also turn it on as a harness on the Devices page (off by default). It uses your own Codex data directory, and only one codex process can write to a given session at a time.
 
+The Claude Code entry also lists Claude Code sessions started elsewhere on this machine (the command line, the Claude desktop app), as found in `~/.claude/projects`; sessions started programmatically are left out. You can open them to read the history and keep talking; that continues the same native session, so if it is still open elsewhere both sides write to it. Deleting one here only stops listing it; the native transcript stays. To turn this off, put `CHA_CLAUDE_NATIVE_SESSIONS=0` in the environment file.
+
 Command-line output comes in Chinese and English and follows the system language by default. Set `CHA_LANG=en` or `CHA_LANG=zh-CN` to choose; it can also go in the environment file above. Messages a harness sends to the Codex UI over the protocol are Chinese only for now.
 
 - **Startup fails:** Run `doctor` for that harness and follow its guidance. Detailed logs are in `~/.codex-harness-adapter/<harness>/`.
-- **A harness shows as "not installed":** Install its command-line tool and restart the service; or fill in its "CLI path" in Litch's device management (setting key `harness.<id>.cliPath`); or point to it with its own environment variable (`CHA_CLAUDE_CLI` for Claude Code, `PI_CLI` for Pi, `CHA_DSH_CLI` for DeepSeek Harness).
+- **A harness shows as "not installed":** Install its command-line tool and restart the service; or fill in its "CLI path" in Litch's device management (setting key `harness.<id>.cliPath`); or point to it with its own environment variable (`CHA_CLAUDE_CLI` for Claude Code, `PI_CLI` for Pi, `CHA_DSH_CLI` for DSH).
 - **Connection fails:** Check that the service is running and the port and private key match its output.
 - **Model unavailable:** Check login and model settings in native Claude Code / Pi first.
 

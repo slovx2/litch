@@ -140,11 +140,11 @@ test('没换成：开头一句说清两边各是哪版；小标只说旧，没�
 })
 
 test('不闲的原因：harness 说名字，终端和客户端说个数，不认识的照原样说', () => {
-  const nameOf = (id) => ({ claude: 'Claude Code', dsh: 'DeepSeek Harness' })[id] ?? id
+  const nameOf = (id) => ({ claude: 'Claude Code', dsh: 'DSH' })[id] ?? id
   const line = (entry) => busyLine({ harnesses: [], count: 0, ...entry }, nameOf, '、')
   assert.deepEqual(line({ reason: 'activeTurns', harnesses: ['claude', 'dsh'] }), {
     key: 'service.busy.turns',
-    args: { names: 'Claude Code、DeepSeek Harness' },
+    args: { names: 'Claude Code、DSH' },
   })
   assert.equal(line({ reason: 'activeTurns' }).key, 'service.busy.turnsUnnamed')
   assert.deepEqual(line({ reason: 'deviceProcesses', count: 2 }), {

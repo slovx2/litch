@@ -1,4 +1,4 @@
-// 侧栏自己的状态：开没开、多宽、是不是只看某个 harness 的会话。
+// 侧栏自己的状态：开没开、多宽、是不是只看某几个 harness 的会话。
 // 记在这台电脑的界面里（litch.sidebar），和外观、终端面板、侧面板一样不经核心。
 // 这个文件不碰页面上的元素，只管数和存取：窗口窄的时候侧栏最宽能画多宽也在这里，好单独测。
 import { useSyncExternalStore } from 'react'
@@ -7,9 +7,11 @@ export interface SidebarState {
   open: boolean
   /** 侧栏想要的宽度，像素。窗口不够宽的时候实际画出来的会更窄，这个数不跟着改 */
   width: number
-  /** 只看哪个 harness 的会话（它的标识）。null：都看 */
-  harness: string | null
+  /** 只看哪几个 harness 的会话（它们的标识，按挑的先后）。空的：都看 */
+  harnesses: readonly string[]
 }
+
+const NONE: readonly string[] = []
 
 const STORAGE_KEY = 'litch.sidebar'
 export const SIDEBAR_MIN = 240
@@ -37,11 +39,13 @@ function readSaved(): SidebarState {
         typeof parsed.width === 'number' && Number.isFinite(parsed.width)
           ? within(parsed.width)
           : SIDEBAR_DEFAULT,
-      harness: typeof parsed.harness === 'string' && parsed.harness ? parsed.harness : null,
+      harnesses: Array.isArray(parsed.harnesses)
+        ? [...new Set(parsed.harnesses.filter((id) => typeof id === 'string' && id !== ''))]
+        : NONE,
     }
   } catch {
     // 读不到就用默认的：开着，默认宽度，都看
-    return { open: true, width: SIDEBAR_DEFAULT, harness: null }
+    return { open: true, width: SIDEBAR_DEFAULT, harnesses: NONE }
   }
 }
 
@@ -71,12 +75,17 @@ export const useSidebar = (): SidebarState => useSyncExternalStore(subscribe, ()
 
 export const sidebarNow = (): SidebarState => sidebar
 
-/** 只要“只看哪个 harness”这一项：拖宽、开合的时候用它的组件（各台设备的会话树）不跟着重画 */
-export const useSidebarHarness = (): string | null =>
-  useSyncExternalStore(subscribe, () => sidebar.harness)
+/** 只要“只看哪几个 harness”这一项：拖宽、开合的时候用它的组件（各台设备的会话树）不跟着重画 */
+export const useSidebarHarnesses = (): readonly string[] =>
+  useSyncExternalStore(subscribe, () => sidebar.harnesses)
 
-export function setSidebarHarness(harness: string | null): void {
-  if (sidebar.harness !== harness) publish({ ...sidebar, harness })
+/** 换成只看这几个（空的是都看）。同一个标识只留一次 */
+export function setSidebarHarnesses(harnesses: readonly string[]): void {
+  const next = [...new Set(harnesses)]
+  const same =
+    next.length === sidebar.harnesses.length &&
+    next.every((id, index) => id === sidebar.harnesses[index])
+  if (!same) publish({ ...sidebar, harnesses: next.length === 0 ? NONE : next })
 }
 
 export function setSidebarOpen(open: boolean): void {

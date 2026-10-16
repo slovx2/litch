@@ -156,6 +156,7 @@ export function SettingsBar({ options, settings, fresh, onChange }: SettingsBarP
             ...(entry.note ? { note: entry.note } : {}),
           }))}
           onPick={pickModel}
+          search={t('composer.modelSearch')}
         />
       ) : null}
       {model && model.efforts.length > 0 ? (

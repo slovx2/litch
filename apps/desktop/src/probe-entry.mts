@@ -17,7 +17,7 @@ export interface EntryProbe {
   /** 长对话：回合数，以及切走再切回来之后位置差了多少 */
   longTurns: number
   restoreShift: number
-  /** 不属于任何工作区的会话有没有出现在“无工作区”下面 */
+  /** 不属于任何项目的会话有没有出现在“无项目”下面 */
   looseListed: boolean
 }
 
@@ -117,7 +117,7 @@ export async function entryProbe(): Promise<EntryProbe> {
   )
 
   const looseLabel = [...document.querySelectorAll('.sec-label')].find((element) =>
-    element.textContent?.includes('无工作区'),
+    element.textContent?.includes('无项目'),
   )
   return {
     manyRows,
@@ -151,6 +151,6 @@ export function judgeEntry(probe: EntryProbe, slow: boolean): string[] {
   if (probe.longTurns !== 24) failed.push(`长对话应该有 24 个回合，画出了 ${probe.longTurns} 个`)
   if (!(probe.restoreShift <= 1))
     failed.push(`切回会话后位置差了 ${probe.restoreShift.toFixed(2)} 像素`)
-  if (!probe.looseListed) failed.push('不属于任何工作区的会话没有出现在“无工作区”下面')
+  if (!probe.looseListed) failed.push('不属于任何项目的会话没有出现在“无项目”下面')
   return failed
 }

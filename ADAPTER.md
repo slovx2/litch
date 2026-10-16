@@ -8,7 +8,7 @@
 
 **用成熟的 Codex 桌面 UI 控制 Claude Code、Pi 等 harness。** 在一个界面里管理项目、对话、文件修改和审批，继续使用各引擎自己的模型配置与登录。
 
-目前支持 Claude Code、Pi，适用于 macOS、Linux、Windows；DeepSeek Harness 为实验性支持（[说明](docs/guide/configuration.md#deepseek-harness实验性)）。
+目前支持 Claude Code、Pi，适用于 macOS、Linux、Windows；DeepSeek Harness（DSH）为实验性支持（[说明](docs/guide/configuration.md#deepseek-harness实验性)）。
 
 ## 安装与启动
 
@@ -102,10 +102,12 @@ npm run ssh-config -- --harness pi --port 7442
 
 用 [Litch](README.md) 桌面端时，各 harness 的启用与停用、命令路径、环境变量，以及 SSH 入口的开关和端口，都可以在它的“设备”页里改。改动存在 `~/.codex-harness-adapter/device/settings.json`，优先于启动参数和环境文件：启动参数只是设置里没写过时的默认值，环境文件排在设置之后。Litch 自带的那份适配器和这里装的是同一个东西、共用同一个状态目录，它是用 `--ssh=off` 起的，不监听任何端口；一个 harness 都起不来时服务也留着，好让桌面端连上去看原因、改设置。机器上装了 Codex 命令行（0.157.1 及以上）的话，可以在设备页里把它也作为一个 harness 打开（默认关）：用的是你自己的 Codex 数据目录，同一个会话同一时间只能有一个 codex 进程在写。
 
+Claude Code 入口会列出这台机器上别处（命令行、Claude 桌面端）开的 Claude Code 会话（`~/.claude/projects` 里的，程序化调用起的不算），能打开看历史，也能接着聊；接着聊用的是同一个原生会话，别处正开着它的话两边会各写各的。在这里删掉只是不再列出，原生记录不动。不想列的话在环境文件里写 `CHA_CLAUDE_NATIVE_SESSIONS=0`。
+
 命令行的输出有中文和英文两种，默认跟随系统语言；用 `CHA_LANG=zh-CN` 或 `CHA_LANG=en` 指定，也可以写进上面的环境文件。引擎经协议发到 Codex 界面里的提示目前只有中文。
 
 - **启动失败：** 运行对应引擎的 `doctor`，按提示处理；详细日志在 `~/.codex-harness-adapter/<引擎>/`。
-- **某个 harness 显示“没装”：** 装好它的命令行后重启服务；或者在 Litch 的设备管理里给它填“命令行路径”（设置键 `harness.<标识>.cliPath`）；或者用它自己的环境变量指路（Claude Code 是 `CHA_CLAUDE_CLI`，Pi 是 `PI_CLI`，DeepSeek Harness 是 `CHA_DSH_CLI`）。
+- **某个 harness 显示“没装”：** 装好它的命令行后重启服务；或者在 Litch 的设备管理里给它填“命令行路径”（设置键 `harness.<标识>.cliPath`）；或者用它自己的环境变量指路（Claude Code 是 `CHA_CLAUDE_CLI`，Pi 是 `PI_CLI`，DSH 是 `CHA_DSH_CLI`）。
 - **连接失败：** 确认服务仍在运行，端口和私钥与启动输出一致。
 - **模型不可用：** 先在原生 Claude Code / Pi 中检查登录和模型配置。
 

@@ -34,6 +34,11 @@ export interface ShellBridge {
   about(): Promise<ShellAbout>
   /** 取一份许可文本的全文。id 是 about() 给的；没有这一份是 null */
   licenseText(id: string): Promise<string | null>
+  /**
+   * 弹系统的选文件夹对话框，回选中的目录（取消了是 null）。只对本机的设备有意义：
+   * 选出来的是这台电脑上的路径。defaultPath 是从哪里开始找
+   */
+  pickFolder?(options: { defaultPath?: string; title?: string }): Promise<string | null>
 }
 
 /** 一份能在应用里看的许可文本 */
