@@ -15,8 +15,9 @@ export const DUMP_END = '-- end of dump --'
 export const SHOTS_NAMESPACE = 'browser'
 export const SHOTS_TOOL = 'capture_frames'
 const SHOTS = 3000
-/** 一张小图：内联的 PNG，内容是凑的 */
-const FRAME = `data:image/png;base64,${'A'.repeat(400)}`
+/** 一张小图：内联的 8×8 PNG（真的能解出来：动态工具结果里的头几张图界面画成缩略图） */
+const FRAME =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGNwaHiAFTEMLQkAeyBoAS7EOkcAAAAASUVORK5CYII='
 
 /** 导出的全文。不留着：模拟核心进程的内存也要量，投影截过之后它就该没了 */
 const dumpText = (): string => {

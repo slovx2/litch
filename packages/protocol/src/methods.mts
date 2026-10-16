@@ -1,6 +1,8 @@
 // 客户端实际会调用的方法、会处理的通知，各自的参数和应答类型。
 // 没列在这里的方法客户端不调用；没列在这里的通知客户端不处理（记日志后丢弃）。
 // 新增一项要在这里登记，核心里才有类型可用。
+
+import type { ClientToolCallParams, ClientToolCallResponse } from './client-tools.mjs'
 import type {
   AgentMessageDeltaNotification,
   CollaborationModeListResponse,
@@ -386,6 +388,14 @@ export interface ServerRequests {
   'mcpServer/elicitation/request': {
     params: McpServerElicitationRequestParams
     result: McpServerElicitationRequestResponse
+  }
+  /**
+   * 在客户端上执行一次动态工具调用。核心只认 litch_ 开头的命名空间（客户端工具扩展，client-tools.mts），
+   * 别的照旧回“方法不存在”
+   */
+  'item/tool/call': {
+    params: ClientToolCallParams
+    result: ClientToolCallResponse
   }
 }
 

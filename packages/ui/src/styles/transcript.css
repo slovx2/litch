@@ -293,6 +293,16 @@
   font: 11px / 19px var(--ui);
   color: var(--ink-3);
 }
+/* 工具结果里的截图：和消息里的图片一样是固定大小的缩略图，一张占一行，上下留一点空 */
+.well-img {
+  display: block;
+  width: 160px;
+  height: 100px;
+  margin: 4px 0;
+}
+.well-img img {
+  object-fit: contain;
+}
 .think {
   padding: 8px 12px;
   color: var(--ink-2);

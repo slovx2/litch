@@ -7,7 +7,10 @@
 // 握手之后问一次 runtime/info 来认。对面没声明的扩展连参数都不带（设计文档 03 第十五节）。
 // 数据流的纪律见设计文档 01 第十节：通知按白名单路由；连接健康时通知是唯一的数据来源；
 // 只在刚连上、重连之后、手动刷新这三个时机做全量对账。
+
+import { clientToolSpecs } from '../../../protocol/src/client-tools-specs.mjs'
 import {
+  CLIENT_TOOL_NAMESPACE,
   type ClientInfo,
   DEVICE_SETTINGS_CHANGED,
   type DeviceSettingsChangedNotification,
@@ -41,9 +44,11 @@ import type {
   SessionSettings,
   SessionSummary,
   SidebarView,
+  ToolSwitches,
   WireColor,
   WorkspaceView,
 } from '../model.mjs'
+import type { ToolInvocation } from '../model-client-tools.mjs'
 import type {
   DiagnosticsView,
   HarnessRestartResult,
@@ -65,6 +70,7 @@ import { projectSummary, threadTitle } from '../projection/session.mjs'
 import { composeOptions, projectDefaults } from '../projection/settings.mjs'
 import type { SkillCatalog } from '../projection/skills.mjs'
 import { pathTwin } from '../text/paths.mjs'
+import type { ToolHub } from '../tool-hub.mjs'
 import { collectThreads, type Listing, mergeListing } from './catalog.mjs'
 import { createComposeAids } from './compose.mjs'
 import { createDiffs, type Diffs } from './diffs.mjs'
@@ -85,6 +91,7 @@ import { createOrganizer, looseDirectories, type Organizer } from './organize.mj
 import type { SnapshotStore } from './snapshot.mjs'
 import type { TerminalNotesStore } from './terminal-launch.mjs'
 import { createTerminals, type Terminals } from './terminals.mjs'
+import { clientAskOptions, createToolCalls, type ToolAskPlace } from './tool-calls.mjs'
 import { projectWorkspaces, resolveWorkspace } from './workspaces.mjs'
 
 export type { DeviceSnapshot, SnapshotStore } from './snapshot.mjs'
@@ -122,7 +129,22 @@ export interface DeviceOptions {
   snapshot?: SnapshotStore
   /** 终端的两样记在这台电脑上的东西（改过的名字、留在设备上不看的）存在哪。不给就不记 */
   terminalNotes?: TerminalNotesStore
+  /** 通往主进程的客户端工具那一头（tool-hub.mts）。不给就是这台桌面什么都执行不了 */
+  tools?: ToolHub
+  /** 这台设备的两个开关现在是什么（决 190）。不给按默认：浏览器开、Computer Use 关 */
+  toolSwitches?(): { browser: boolean; computer: boolean }
   log?(line: string): void
+}
+
+/** 设备设置页上两个开关的默认值（决 190） */
+export const DEFAULT_TOOL_SWITCHES = { browser: true, computer: false } as const
+
+/** 给执行器的 ssh 目标：别名原样；主机写成 user@host，带端口时用 ssh 认的 ssh://user@host:端口 */
+const sshTarget = (target: RemoteTarget | null): string | null => {
+  if (!target) return null
+  if (target.kind === 'alias') return target.alias
+  const at = target.user ? `${target.user}@${target.host}` : target.host
+  return target.port ? `ssh://${at}:${target.port}` : at
 }
 
 export interface Device {
@@ -335,7 +357,18 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     manageable,
     service,
     upgrade,
+    tools: toolSwitchesView(),
   })
+
+  /** 设置页上的两个开关：这台桌面执行不了的那一项是 null，不出开关 */
+  const toolSwitchesView = (): ToolSwitches => {
+    const can = options.tools?.namespaces() ?? []
+    const now = options.toolSwitches?.() ?? DEFAULT_TOOL_SWITCHES
+    return {
+      browser: can.includes(CLIENT_TOOL_NAMESPACE.browser) ? now.browser : null,
+      computer: can.includes(CLIENT_TOOL_NAMESPACE.computer) ? now.computer : null,
+    }
+  }
 
   /**
    * 这个会话属于哪个 harness：完整模式下看聚合面打在会话对象上的，
@@ -353,13 +386,30 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   /** 请求没做成：换成给人看的错误，聚合面回的那几种说得出是哪一句 */
   const fail = (error: unknown): ChannelError => channelFailure(error, harnessName)
 
-  const summaryOf = (thread: Thread) => ({
-    ...projectSummary(thread, {
-      harness: harnessOf(thread),
-      workspaceId: resolveWorkspace(thread, workspaces, pathTwin(platform)),
-    }),
-    unread: unread.has(thread.id),
-  })
+  /**
+   * 挂着客户端工具卡片的会话：卡片有几张。对面不知道这边在等人（它那头只是工具还没回），
+   * 侧栏上的“等待”记号由这边自己打，和审批一样
+   */
+  const asking = new Map<string, number>()
+  const summaryOf = (thread: Thread): SessionSummary => {
+    const summary: SessionSummary = {
+      ...projectSummary(thread, {
+        harness: harnessOf(thread),
+        workspaceId: resolveWorkspace(thread, workspaces, pathTwin(platform)),
+      }),
+      unread: unread.has(thread.id),
+    }
+    if (!asking.has(thread.id)) return summary
+    return { ...summary, status: 'waiting', waitingFor: 'approval' }
+  }
+  /** 一个会话上的卡片多了一张（+1）或少了一张（-1）：侧栏那一行跟着换 */
+  const markAsking = (threadId: string, change: 1 | -1) => {
+    const count = (asking.get(threadId) ?? 0) + change
+    if (count > 0) asking.set(threadId, count)
+    else asking.delete(threadId)
+    const thread = threads.get(threadId)
+    if (thread) hooks.sidebarOps([{ op: 'session.upsert', session: summaryOf(thread) }])
+  }
 
   /** 已归档的会话。null：界面还没要过，不去取 */
   let archived: Map<string, Thread> | null = null
@@ -977,6 +1027,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       holders = 0
       askingService?.()
       askingService = null
+      if (dropped) toolCalls.offline()
       if (dropped) live.offline()
       if (dropped) terminals.offline()
       if (dropped) files.offline()
@@ -1016,8 +1067,14 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     open: config.open,
     clock: options.clock,
     clientInfo: options.clientInfo,
+    clientTools: () => options.tools?.namespaces() ?? [],
     state: onState,
     notification(method, params) {
+      // 引擎撤回了一个请求（别处答了、作废了）：正在执行的客户端工具调用不等了。会话里的卡片照常由下面撤
+      if (method === 'serverRequest/resolved') {
+        const requestId = (params as { requestId?: unknown } | null)?.requestId
+        if (requestId !== undefined && requestId !== null) toolCalls.resolved(String(requestId))
+      }
       // 设置变了：和会话目录是两回事，不跟着对账攒着（攒着再放会把读到的新值盖回去）
       if (method === DEVICE_SETTINGS_CHANGED) {
         manage.changed(params as DeviceSettingsChangedNotification)
@@ -1031,7 +1088,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       if (held && method in routes) held.push({ method, params })
       else route(method, params)
     },
-    request: (method, params, id) => live.serverRequest(method, params, id),
+    request: (method, params, id) =>
+      toolCalls.serverRequest(method, params, id) ?? live.serverRequest(method, params, id),
     log,
   })
 
@@ -1063,8 +1121,77 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       })
     },
     started: (thread) => upsertThread(thread),
-    turnEnded: (sessionId) => diffs.turnEnded(sessionId),
+    turnEnded(sessionId, turnId) {
+      diffs.turnEnded(sessionId)
+      toolCalls.turnEnded(sessionId, turnId)
+    },
+    interrupting: (sessionId) => toolCalls.interrupted(sessionId),
+    dynamicTools(harness) {
+      // dsh 不认这个参数（决 197：第一版不给 dsh 工具）
+      if (harness === 'dsh') return null
+      return clientToolSpecs(options.tools?.namespaces() ?? [])
+    },
     turnDiff: (sessionId, turnId, diff) => diffs.turnDiff(sessionId, turnId, diff),
+    log,
+  })
+
+  /** 这台桌面执行客户端工具（内置浏览器、Computer Use）的调用：开关、交给主进程、卡片、收尾（tool-calls.mts） */
+  const toolCalls = createToolCalls({
+    deviceId: config.id,
+    clock: options.clock,
+    hub: options.tools ?? {
+      namespaces: () => [],
+      call: () => {},
+      cancel: () => {},
+      answer: () => {},
+      turnEnded: () => {},
+    },
+    device: (): ToolInvocation['device'] => ({
+      id: config.id,
+      // 核心不认识语言：本机的名字是一句“本机”，给执行器的是主机标识
+      name: typeof name === 'string' ? name : config.host,
+      kind: config.kind,
+      target: sshTarget(config.target),
+    }),
+    allowed(namespace) {
+      const now = options.toolSwitches?.() ?? DEFAULT_TOOL_SWITCHES
+      if (namespace === CLIENT_TOOL_NAMESPACE.browser) return now.browser
+      if (namespace === CLIENT_TOOL_NAMESPACE.computer) return now.computer
+      return true
+    },
+    context(threadId) {
+      const thread = threads.get(threadId) ?? archived?.get(threadId)
+      return {
+        harness: thread ? harnessOf(thread) : mode === 'full' ? null : (harnesses[0]?.id ?? null),
+        cwd: thread?.cwd || null,
+      }
+    },
+    showAsk(place: ToolAskPlace, answer) {
+      const request = {
+        id: `litch-ask:${place.askId}`,
+        kind: 'clientAsk' as const,
+        itemId: null,
+        device: { name, kind: config.kind, host: config.host },
+        tool: { namespace: place.namespace, name: place.tool },
+        ask: place.ask,
+        options: clientAskOptions(place.ask),
+      }
+      markAsking(place.threadId, 1)
+      let counted = true
+      const uncount = () => {
+        if (!counted) return
+        counted = false
+        markAsking(place.threadId, -1)
+      }
+      const drop = live.clientAsk(place, request, (picked) => {
+        uncount()
+        answer(picked)
+      })
+      return () => {
+        uncount()
+        drop()
+      }
+    },
     log,
   })
 

@@ -2,6 +2,7 @@
 // 平台能力（定时器、端口、传输）在这里做成核心要的接口再交进去，核心自己不碰 Node 和 Electron。
 import { hostname, userInfo } from 'node:os'
 import {
+  type ClientToolPort,
   type Clock,
   type Core,
   createCore,
@@ -10,8 +11,11 @@ import {
   type Port,
   phrase,
   serveChannel,
+  type ToolToCore,
+  type ToolToMain,
 } from '@litch/core'
 import type { MessagePortMain } from 'electron'
+import { CLIENT_TOOL, type ClientToolToCore, type ClientToolToMain } from './client-tools/types.mjs'
 import { fileDeviceStore } from './device-store.mjs'
 import { ATTACH, LANGUAGE, TERMINALS } from './ipc.mjs'
 import { type AdapterLang, localDevice, upgradeReport } from './local-adapter.mjs'
@@ -57,6 +61,23 @@ const local = localDevice({
   lang: () => adapterLang,
 })
 
+// ---------- 客户端工具：核心经这里和主进程说话（设计文档 05 第九节） ----------
+// 核心和外壳各有一份同形的消息类型（核心不认识 Electron）：这两个函数在编译时对一遍，两边改了形状这里过不去
+const toMain = (message: ToolToMain): ClientToolToMain => message
+const toCore = (message: ClientToolToCore): ToolToCore => message
+
+/** 主进程报来的、这台桌面能执行的命名空间。还没报之前是空的 */
+let toolNamespaces: string[] = []
+/** 核心收主进程消息的那个函数 */
+let toolInbox: ((message: ToolToCore) => void) | null = null
+const toolPort: ClientToolPort = {
+  namespaces: () => toolNamespaces,
+  post: (message) => process.parentPort.postMessage(toMain(message)),
+  listen(handler) {
+    toolInbox = handler
+  },
+}
+
 function createHost(): Core | MockCore {
   // LITCH_MOCK=1：不连任何设备，用示例数据。界面开发和不带入口的自检用
   // 示例数据用哪种语言由主进程定（LITCH_LANG），和界面的语言对上
@@ -74,6 +95,7 @@ function createHost(): Core | MockCore {
     version,
     log: (line) => console.error(`[core] ${line}`),
     remote: { opener: sshOpener, discover: discoverHosts, check: checkRemote },
+    clientTools: toolPort,
     ...(dataDir ? { store: fileDeviceStore(dataDir) } : {}),
     devices: [
       {
@@ -89,13 +111,35 @@ function createHost(): Core | MockCore {
       },
     ],
   })
-  core.start()
   return core
 }
 
 const core = createHost()
 
+/**
+ * 真的核心等主进程报完能执行哪些命名空间再开始连设备：握手时要照它声明（客户端工具）。
+ * 主进程一拉起工具进程就报，正常是立刻到；万一没到，过一会儿照样开始，只是这一次握手不声明
+ */
+let begun = false
+const begin = () => {
+  if (begun) return
+  begun = true
+  clearTimeout(waitTools)
+  if ('start' in core) core.start()
+}
+const waitTools = setTimeout(begin, 3000)
+
 process.parentPort.on('message', (event) => {
+  if (event.data?.type === CLIENT_TOOL) {
+    const message = toCore(event.data as ClientToolToCore)
+    if (message.op === 'namespaces') {
+      toolNamespaces = message.namespaces.filter((one) => typeof one === 'string')
+      begin()
+      return
+    }
+    toolInbox?.(message)
+    return
+  }
   if (event.data?.type === TERMINALS) {
     // 退出应用之前主进程来问：还有几个终端活着，或者把它们都结束。答的只有个数
     const { id, op } = event.data as { id: number; op: string }

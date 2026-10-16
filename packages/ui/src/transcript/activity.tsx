@@ -13,10 +13,11 @@ import type {
   WebSearchItem,
 } from '@litch/core'
 import { keys } from '@litch/core'
-import { Fragment, memo, type ReactNode, useRef } from 'react'
+import { Fragment, memo, type ReactNode, useRef, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { useElapsed } from '../app/clock.ts'
 import { duration, elapsed } from '../app/format.ts'
+import { ImageViewer } from '../app/ImageViewer.tsx'
 import { Caret, Icon, type IconName } from '../app/icons.tsx'
 import { useKey } from '../app/services.tsx'
 import { openDiffAt } from '../diff/state.ts'
@@ -257,6 +258,8 @@ function partsGap(part: Extract<ToolPart, { kind: 'gap' }>, t: Translator): stri
  */
 function PartsWell({ parts }: { parts: ToolPart[] }) {
   const t = useT()
+  /** 正在看大图的那一张的地址 */
+  const [viewing, setViewing] = useState<string | null>(null)
   return (
     <Well>
       {parts.map((part, index) => {
@@ -275,13 +278,35 @@ function PartsWell({ parts }: { parts: ToolPart[] }) {
           )
         }
         const facts = [part.name, part.mime, part.bytes === null ? null : byteSize(part.bytes)]
+        const label = [t(BLOB_TEXT[part.type]), ...facts.filter(Boolean)].join(' · ')
+        if (part.src) {
+          // 客户端工具的截图：固定大小的缩略图（解出来之前之后占的地方一样），点开看大图。
+          // 一个条目至多几张留着内容（核心那边定的上限），再多的只有一行说明
+          const src = part.src
+          return (
+            <button
+              // biome-ignore lint/suspicious/noArrayIndexKey: 段只按先后排，整份一起换
+              key={index}
+              type="button"
+              className="uimg well-img"
+              title={label}
+              aria-label={t('tool.image.view')}
+              onClick={() => setViewing(src)}
+            >
+              <img src={src} alt={label} loading="lazy" decoding="async" />
+            </button>
+          )
+        }
         return (
           // biome-ignore lint/suspicious/noArrayIndexKey: 段只按先后排，整份一起换
           <span key={index} className="well-blob" data-blob={part.type}>
-            {[t(BLOB_TEXT[part.type]), ...facts.filter(Boolean)].join(' · ')}
+            {label}
           </span>
         )
       })}
+      {viewing ? (
+        <ImageViewer url={viewing} label={t('tool.blob.image')} onClose={() => setViewing(null)} />
+      ) : null}
     </Well>
   )
 }

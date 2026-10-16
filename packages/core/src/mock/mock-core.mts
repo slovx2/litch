@@ -44,6 +44,7 @@ import { createMockFiles } from './mock-files.mjs'
 import { createMockManagement } from './mock-manage.mjs'
 import { createMockService } from './mock-service.mjs'
 import { createMockTerminals } from './mock-terminals.mjs'
+import { type ClientToolDemo, clientAskRequest, clientToolCall } from './sample-client-tools.mjs'
 import { PI_PLAN_QUESTION, samplePlan } from './sample-compose.mjs'
 import {
   SAMPLE_HOSTS,
@@ -157,6 +158,16 @@ export const FLOOD_COMMAND = 'npm run build -- --verbose'
 const HUGE_TOOLS = /工具大结果|huge tool result/i
 const TOOL_MS = 600
 const toolKey = (turnId: string): string => `${turnId}-w2`
+
+/**
+ * 发的话里带这些字样时，演一次客户端工具调用：回合里出一条工具条目，停下来出一张“要你批准”的卡片
+ * （和审批卡片同一处），答应了条目带着一张截图完成、拒绝了条目失败，再照常回话。
+ * - 用浏览器：内置浏览器要打开一个没去过的网站（这一次 / 这个会话 / 一直 / 拒绝）；
+ * - 操作应用：Computer Use 要操作一个高风险的应用。远程设备上的会话没有“始终允许”，卡片上标着来自哪台设备。
+ * 条目标识和“工具大结果”的第二次是同一个，被打断时一样记成没成
+ */
+const BROWSES = /用浏览器|use the browser/i
+const USES_APP = /操作应用|use an app/i
 
 /** 狂打的日志里的第 n 行。行里带着序号，看得出头尾各是哪几行 */
 const floodLine = (n: number): string =>
@@ -461,6 +472,10 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       hugeTools(view, turnId)
       return
     }
+    if (BROWSES.test(message.text) || USES_APP.test(message.text)) {
+      askClientTool(view, turnId, BROWSES.test(message.text) ? 'site' : 'app')
+      return
+    }
     if (ASKS_QUESTIONS.test(message.text)) {
       askQuestions(view, turnId, sampleQuestions(SAMPLE_TEXT[lang].questions, true))
       return
@@ -643,6 +658,23 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       if (steps.length > 0) replies.set(sessionKey(view), clock.setTimer(next, TOOL_MS))
     }
     replies.set(sessionKey(view), clock.setTimer(next, TOOL_MS))
+  }
+
+  /** 客户端工具那两出：卡片的标识 → 演的是哪一出、条目是哪个 */
+  const clientAsks = new Map<string, { demo: ClientToolDemo; itemId: string }>()
+
+  /** 回合里调一次客户端工具，停下来等用户点头（见 BROWSES、USES_APP） */
+  const askClientTool = (view: SessionView, turnId: string, demo: ClientToolDemo) => {
+    const device = app.devices.find((entry) => entry.id === view.deviceId)
+    if (!device) return
+    const itemId = toolKey(turnId)
+    const requestId = `${turnId}-r`
+    clientAsks.set(requestId, { demo, itemId })
+    applySessionOps(view, [
+      { op: 'item.add', turnId, item: projectItem(clientToolCall(demo, itemId, null)) },
+      { op: 'request.add', request: clientAskRequest(demo, requestId, itemId, device) },
+    ])
+    updateSummary(view.deviceId, view.sessionId, { status: 'waiting', waitingFor: 'approval' })
   }
 
   /** 回合停下来提问。答完之后照常回话 */
@@ -1137,6 +1169,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         manageable: false,
         service: null,
         upgrade: null,
+        tools: { browser: true, computer: false },
       }
       app.devices.push(device)
       sidebars.set(device.id, { deviceId: device.id, workspaces: [], sessions: [], archived: null })
@@ -1182,6 +1215,18 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       )
       sidebars.delete(deviceId)
       emit('app', [{ op: 'device.remove', deviceId }])
+      return {}
+    }
+    if (name === 'device.tools.set') {
+      const { deviceId, browser, computer } = params as Commands['device.tools.set']['params']
+      const device = app.devices.find((entry) => entry.id === deviceId)
+      if (!device) throw new ChannelError('notFound', `没有这台设备：${deviceId}`)
+      patchDevice(deviceId, {
+        tools: {
+          browser: typeof browser === 'boolean' ? browser : device.tools.browser,
+          computer: typeof computer === 'boolean' ? computer : device.tools.computer,
+        },
+      })
       return {}
     }
     if (name === 'device.reconnect') {
@@ -1459,6 +1504,33 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         const view = openView(where)
         const request = view.requests.find((entry) => entry.id === requestId)
         if (!request) throw new ChannelError('rejected', '这个请求已经不在了')
+        if (request.kind === 'clientAsk') {
+          // 客户端工具的卡片：答应了条目带着截图完成，拒绝了条目失败；然后照常回话
+          const option = request.options.find((entry) => entry.id === optionId)
+          if (!option) throw new ChannelError('rejected', '这个请求没有这样的选项')
+          const demo = clientAsks.get(requestId)
+          clientAsks.delete(requestId)
+          const turn = running(view)
+          const declined = option.role === 'decline'
+          applySessionOps(view, [
+            { op: 'request.remove', requestId },
+            ...(demo && turn
+              ? [
+                  {
+                    op: 'item.add',
+                    turnId: turn.id,
+                    item: projectItem(
+                      clientToolCall(demo.demo, demo.itemId, declined ? 'declined' : 'shot'),
+                    ),
+                  } satisfies SessionOp,
+                ]
+              : []),
+          ])
+          if (!turn) return {}
+          updateSummary(view.deviceId, view.sessionId, { status: 'running', waitingFor: null })
+          replyHeard(view, turn.id)
+          return {}
+        }
         if (request.kind === 'question') {
           // 和真的核心一样再查一遍：每道题都要有个说法，答了或者明确跳过
           const settled = settleAnswers(request.questions, answers)

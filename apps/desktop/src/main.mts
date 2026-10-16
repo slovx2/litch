@@ -1,5 +1,7 @@
 // 主进程：只管窗口、生命周期，以及给窗口和核心之间牵一条消息端口。
 // 它不解析协议，不持有会话状态，不在数据路径上（设计文档 01 第四节）。
+// 唯一的例外是客户端工具（内置浏览器、Computer Use）：核心把模型的工具调用交给这里登记的执行器（client-tools/），
+// 经手的只有那一次调用的参数和结果（设计文档 05 第九节）。
 import { isAbsolute, join, normalize, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import {
@@ -18,6 +20,9 @@ import {
   utilityProcess,
 } from 'electron'
 import { openLicenses } from './about.mjs'
+import { createClientToolHost } from './client-tools/host.mjs'
+import { createExecutors } from './client-tools/registry.mjs'
+import { CLIENT_TOOL, type ClientToolToMain } from './client-tools/types.mjs'
 import {
   ABOUT,
   ATTACH,
@@ -134,6 +139,19 @@ const isUiUrl = (url: string): boolean =>
 
 let core: UtilityProcess | null = null
 let quitting = false
+
+/**
+ * 客户端工具的执行器（client-tools/registry.mts 里登记的，这台桌面上用得了的那几个）。核心发来的调用交给它们，
+ * 结果和要用户点头的卡片发回给现在的核心
+ */
+const clientTools = createClientToolHost(
+  createExecutors({
+    platform: process.platform,
+    env: process.env,
+    log: (line) => console.error(`[client-tools] ${line}`),
+  }),
+  (message) => core?.postMessage(message),
+)
 /** 核心连续几次刚起来就退出了。用来拉开重启的间隔，免得出错时原地打转 */
 let quickExits = 0
 
@@ -154,14 +172,22 @@ function startCore(): void {
     },
   })
   core = child
-  // 核心只往回发一种消息：退出前问它终端的事，它的回答
+  // 先告诉核心这台桌面能执行哪些客户端工具：它等这一句再去连设备，握手时照着声明
+  child.postMessage({ type: CLIENT_TOOL, op: 'namespaces', namespaces: clientTools.namespaces() })
+  // 核心往回发两种消息：客户端工具的调用和答复；退出前问它终端的事，它的回答
   child.on('message', (message: unknown) => {
+    if ((message as { type?: unknown } | null)?.type === CLIENT_TOOL) {
+      if (core === child) clientTools.handle(message as ClientToolToMain)
+      return
+    }
     const data = message as { type?: unknown; id?: unknown; alive?: AliveCount } | null
     if (data?.type !== TERMINALS || typeof data.id !== 'number') return
     askWaiting.get(data.id)?.(data.alive ?? null)
   })
   child.on('exit', (code) => {
     if (core === child) core = null
+    // 核心没了：它交来的调用都不用做了，卡片都当作没答
+    clientTools.reset()
     if (quitting) return
     // 核心意外退出：重新拉起，并让所有窗口重新加载，它们会各自再要一个端口
     quickExits = Date.now() - startedAt < 30_000 ? quickExits + 1 : 0

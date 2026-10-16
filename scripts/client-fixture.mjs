@@ -7,6 +7,8 @@
 //   就绪后输出一行 LITCH_FIXTURE {"entry": "...", "root": "..."}，然后一直运行到被结束，退出时清掉临时目录。
 //   会话造完之后再发消息：话里带“改个文件”时，假模型会调 bash 工具在会话的工作目录里接着写一个文件、
 //   新写一个文件（见 client-fixture-edit.mjs），差异面板的验收拿它看“代理改完，回合结束后面板自己跟上”。
+//   话里带“回声”时，假模型调用桌面端提供的客户端工具 litch_echo.echo，把结果原样说出来（见 client-fixture-echo.mjs），
+//   客户端工具的自检拿它看工具调用经引擎回到桌面端、结果再回到模型。
 import { spawn } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
@@ -15,6 +17,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { WebSocket } from 'ws'
 import { ASK_TOOL, askOffered, askReply, installAskExtension } from './client-fixture-ask.mjs'
+import { echoReply } from './client-fixture-echo.mjs'
 import { editReply } from './client-fixture-edit.mjs'
 import { planReply } from './client-fixture-plan.mjs'
 import { seedSessions } from './client-fixture-seed.mjs'
@@ -77,6 +80,7 @@ const model = createServer(async (req, res) => {
     (paced
       ? (planReply(body, lastUserText(body)) ??
         editReply(body, lastUserText(body)) ??
+        echoReply(body, lastUserText(body)) ??
         askReply(body, lastUserText(body)) ?? {
           text: `收到：${lastUserText(body)}${lastUserImages(body) ? `（图 ${lastUserImages(body)} 张）` : ''}\n\n这是隔离入口里的假模型在回话，分成几段慢慢发，好让界面上看得到字是一点一点出来的。`,
           pace: 200,

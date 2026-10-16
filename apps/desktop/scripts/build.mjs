@@ -19,8 +19,14 @@ const common = {
 
 await build({
   ...common,
-  // ssh-check、adapter-check 是远程传输和本机内置适配器的自检工具，不随界面运行
-  entryPoints: ['src/main.mts', 'src/core-host.mts', 'src/ssh-check.mts', 'src/adapter-check.mts'],
+  // ssh-check、adapter-check 是远程传输和本机内置适配器的自检工具，tools-check 是客户端工具的，都不随界面运行
+  entryPoints: {
+    main: 'src/main.mts',
+    'core-host': 'src/core-host.mts',
+    'ssh-check': 'src/ssh-check.mts',
+    'adapter-check': 'src/adapter-check.mts',
+    'tools-check': 'src/client-tools/check.mts',
+  },
   outdir: 'dist',
   format: 'esm',
   outExtension: { '.js': '.mjs' },
