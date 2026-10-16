@@ -257,7 +257,7 @@ test('真的主进程加真的设备进程加假的 codex 命令行：原生 cod
       const codex = await codexOf()
       assert.deepEqual(
         [codex.available, codex.version, codex.engine, codex.extensions],
-        [true, '0.160.0', 'codex', []],
+        [true, '0.160.0', 'codex', ['clientTools']],
       )
       assertDeclaration(codex)
       assert.ok(alive(pid()))

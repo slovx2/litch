@@ -33,6 +33,11 @@ export interface UpstreamDialect {
     params: Record<string, unknown>,
     declares: (extension: string) => boolean,
   ): boolean
+  /**
+   * 客户端工具（clientTools 扩展）的调用由设备进程挑执行方：这个上游不认识那项扩展，
+   * 会把同一个调用发给所有订阅连接（client-tools.mts）。适配器的运行时自己挑，不用设
+   */
+  clientToolsByDevice?: boolean
 }
 
 /**

@@ -402,7 +402,11 @@ async function main() {
   expect(info.available && info.engine === 'codex', `应该可用：${JSON.stringify(info.unavailable)}`)
   expect(/^\d+\.\d+\.\d+/.test(info.version ?? ''), `版本没有认出来：${info.version}`)
   expect(info.features && info.permissionPresets?.length > 0, '声明里应有能力位和权限预设')
-  expect(Array.isArray(info.extensions) && info.extensions.length === 0, '它不支持我们的扩展')
+  // 它不认识我们的扩展；只有客户端工具是设备进程替它挑执行方，所以报这一项
+  expect(
+    JSON.stringify(info.extensions) === JSON.stringify(['clientTools']),
+    `扩展只应有设备进程替它做的 clientTools：${JSON.stringify(info.extensions)}`,
+  )
   passed(
     `启用后可用：${info.displayName} ${info.version}（${codex}），权限预设 ${info.permissionPresets.map((preset) => preset.id).join('、')}`,
   )

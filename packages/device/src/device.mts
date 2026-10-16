@@ -4,6 +4,7 @@ import { mkdirSync } from 'node:fs'
 import type { DatabaseSync } from 'node:sqlite'
 import { EXTENSION } from '../../protocol/src/device.mjs'
 import type { DeviceSettingsSnapshot } from '../../protocol/src/device-settings.mjs'
+import { ClientToolRouter } from './client-tools.mjs'
 import type { ControlChannel, ControlState } from './control.mjs'
 import { DeviceLayer } from './device-layer.mjs'
 import type { ProcessLimits } from './device-processes.mjs'
@@ -62,6 +63,8 @@ const DEFAULT_TIMING: SessionTiming = {
   // 和客户端等一个请求的默认时限（packages/core 的 rpc.mts，30 秒）一样长：
   // 再久，发起新建的那一头自己都已经不等了
   startedHoldMs: 30_000,
+  // 原生 codex 发给各条连接的几份客户端工具调用前后只差几毫秒，见 client-tools.mts
+  clientToolGraceMs: 50,
 }
 
 export class DeviceServer {
@@ -138,6 +141,10 @@ export class DeviceServer {
       timing: { ...DEFAULT_TIMING, ...options.timing },
       log,
       closed: (session) => this.sessions.delete(session),
+      clientTools: new ClientToolRouter({
+        graceMs: options.timing?.clientToolGraceMs ?? DEFAULT_TIMING.clientToolGraceMs,
+        log,
+      }),
       reachable: () => this.importer?.kick(),
       importing: () => {
         this.importer?.kick()

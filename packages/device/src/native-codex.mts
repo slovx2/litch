@@ -8,6 +8,8 @@
 //   - 审批：它的协议里有决定列表的用它原生的，没有的补上固定的几种。
 // 下面每一项后面写着依据。“实测”指 codex 0.160.0 在隔离的数据目录里对着回环地址上的假模型跑出来的结果；
 // “源码”指上游 openai/codex 在 rust-v0.157.1（仓库里协议类型固定的那一版）的代码。
+
+import { CLIENT_TOOLS_CAPABILITY } from '../../protocol/src/client-tools.mjs'
 import {
   DEVICE_ERROR_CODE,
   type DeviceErrorData,
@@ -178,21 +180,30 @@ async function allowedPresets(ask: Ask): Promise<PermissionPreset[]> {
 export const NATIVE_CODEX_DIALECT: UpstreamDialect = {
   /**
    * 我们的扩展键它不认识，不带过去（第十五节：没声明认识的对面，线上只有标准协议的内容）；
-   * 退订名单也不带，和适配器的运行时一样由聚合面自己拦
+   * 退订名单也不带，和适配器的运行时一样由聚合面自己拦；客户端工具的声明（litchClientTools）也是我们的键，
+   * 由设备进程自己看（client-tools.mts）
    */
   initializeParams(given) {
     const plain = withoutOptOut(given)
     if (!isObject(plain) || !isObject(plain.capabilities)) return plain
-    const { [EXTENSIONS_CAPABILITY]: _ours, ...capabilities } = plain.capabilities
+    const {
+      [EXTENSIONS_CAPABILITY]: _ours,
+      [CLIENT_TOOLS_CAPABILITY]: _tools,
+      ...capabilities
+    } = plain.capabilities
     return { ...plain, capabilities }
   },
+
+  // 它把动态工具的调用发给所有订阅连接（实测），litch_ 命名空间的由设备进程挑执行方
+  clientToolsByDevice: true,
 
   async describe(initialized, ask) {
     const version = isObject(initialized) ? codexVersion(initialized.userAgent) : null
     const declaration: Required<HarnessDeclaration> = {
       ...HARNESS_IDENTITY.codex,
-      // 它不认识我们的任何扩展。“拒绝时附说明”也没有：它的拒绝带不了话
-      extensions: [],
+      // 它不认识我们的任何扩展。“拒绝时附说明”也没有：它的拒绝带不了话。
+      // 客户端工具是设备进程替它做的（client-tools.mts），经聚合面连到它时成立
+      extensions: [EXTENSION.clientTools],
       features: codexFeatures(),
       permissionPresets: await allowedPresets(ask),
     }

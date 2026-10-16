@@ -59,6 +59,7 @@
     "bench:router": "npm run build && node scripts/bench-router.mjs",
     "bench:delta": "npm run build && node scripts/bench-delta.mjs",
     "check:native-codex": "node scripts/check-native-codex.mjs",
+    "check:client-tools-codex": "node scripts/check-client-tools-codex.mjs",
     "package:adapter": "node scripts/package-adapter.mjs",
     "check:adapter-package": "node scripts/check-adapter-package.mjs",
     "test:dsh-ssh": "npm run build --prefix packages/dsh && node scripts/dsh-poc-serve.mjs --verify",
