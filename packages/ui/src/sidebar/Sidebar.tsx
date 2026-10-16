@@ -24,6 +24,7 @@ import { useKey, useServices } from '../app/services.tsx'
 import { showToast } from '../app/toasts.tsx'
 import type { PlaceWish } from '../composer/new-place.ts'
 import { FailureNote, shownState, useReconnect } from '../devices/status.tsx'
+import { useBrowserWants } from '../side/browser/store.ts'
 import { offerUndo } from './archive-undo.ts'
 import { cwdMark } from './cwd.ts'
 import { keepSessions } from './filter.ts'
@@ -247,6 +248,7 @@ const SessionRow = memo(function SessionRow({ deviceId, sessionId, selected, onS
               <Icon name="folder" />
             </span>
           ) : null}
+          <BrowserWants deviceId={deviceId} sessionId={sessionId} />
           <span
             className={down ? 'chip off' : 'chip'}
             title={down ? downText(down, 'chip', t) : nameOf(device, summary.harness)}
@@ -270,6 +272,22 @@ const SessionRow = memo(function SessionRow({ deviceId, sessionId, selected, onS
     </>
   )
 })
+
+/**
+ * 代理调 show 要给人看一个网页、用户当时没看着这个会话：标题后面一个小地球，打开这个会话就会显示那个网页
+ * （side/browser/store.ts）。只订阅这一个会话有没有，别的会话的网页变了这一行不重画
+ */
+function BrowserWants({ deviceId, sessionId }: { deviceId: string; sessionId: string }) {
+  const t = useT()
+  const wants = useBrowserWants(deviceId, sessionId)
+  if (!wants) return null
+  const said = t('browser.wants')
+  return (
+    <span className="web-mark" role="img" title={said} aria-label={said}>
+      <Icon name="globe" />
+    </span>
+  )
+}
 
 interface GroupProps {
   deviceId: string

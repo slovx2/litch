@@ -3,6 +3,7 @@ import { BACKDROPS, type ShellLook } from './look.mjs'
 import type { AboutSeen, ColdSeen, KeyRow } from './probe-settings-about.mjs'
 import type { ScreensSeen, ZoomLists } from './probe-settings-audit.mjs'
 import type { ControlsSeen, PageSeen, PreviewSeen } from './probe-settings-page.mjs'
+import { judgeTools, type ToolsSeen } from './probe-settings-tools.mjs'
 import type { PersistSeen, TurnSeen } from './probe-settings-turn.mjs'
 import type { SizeSeen } from './probe-terminal-size.mjs'
 
@@ -44,6 +45,7 @@ export interface FirstSeen {
   keys: KeyRow[]
   menuKeys: MenuKey[]
   about: AboutSeen
+  tools: ToolsSeen
   turn: TurnSeen
   screens: ScreensSeen
   zooms: ZoomSeen[]
@@ -52,7 +54,26 @@ export interface FirstSeen {
 }
 
 const HOME = 'https://github.com/slovx2/litch'
-const SECTIONS = ['look', 'lang', 'devices', 'keys', 'about']
+/** 设置页左边的分组和标题：Computer Use 那一组只在 macOS 上有 */
+const sectionsOn = (platform: string) =>
+  platform === 'darwin'
+    ? ['look', 'lang', 'devices', 'browser', 'computer', 'keys', 'about']
+    : ['look', 'lang', 'devices', 'browser', 'keys', 'about']
+const titlesOn = (platform: string, lang: 'zh-CN' | 'en' = 'zh-CN') => {
+  const all =
+    lang === 'en'
+      ? [
+          'Appearance',
+          'Language',
+          'Devices',
+          'Built-in browser',
+          'Computer Use',
+          'Shortcuts',
+          'About',
+        ]
+      : ['外观', '语言', '设备', '内置浏览器', 'Computer Use', '快捷键', '关于']
+  return platform === 'darwin' ? all : all.filter((title) => title !== 'Computer Use')
+}
 /** 只在没打包时才有的两项菜单，清单里不列（装好的应用里没有） */
 const DEV_ONLY = ['role:reload', 'role:toggledevtools']
 
@@ -127,9 +148,10 @@ export function judgeFirst(
     )
   const { page, menu, controls, preview, about, turn, screens, persist } = seen
 
-  // ---- 设置页：打得开、关得掉、五组都在 ----
-  same(page.sections, SECTIONS, '设置页左边的分组')
-  same(page.titles, ['外观', '语言', '设备', '快捷键', '关于'], '各组的标题')
+  // ---- 设置页：打得开、关得掉、各组都在 ----
+  const sections = sectionsOn(platform)
+  same(page.sections, sections, '设置页左边的分组')
+  same(page.titles, titlesOn(platform), '各组的标题')
   same(page.first, 'look', '设置页默认在哪一组')
   must(page.crumb === '设置', `标题栏上写的不是“设置”：“${page.crumb}”`)
   must(page.entryCurrent, '侧栏底部的“设置”没有标成正开着')
@@ -166,8 +188,8 @@ export function judgeFirst(
   )
   same(controls.rowHeights, [24, 32, 28], '三档密度下侧栏一行的高度')
   same(controls.langChoices, ['zh-CN', 'en'], '语言有哪几档')
-  same(controls.english, ['Appearance', 'Language', 'Devices', 'Shortcuts', 'About'], '英文的组名')
-  same(controls.chinese, ['外观', '语言', '设备', '快捷键', '关于'], '换回中文的组名')
+  same(controls.english, titlesOn(platform, 'en'), '英文的组名')
+  same(controls.chinese, titlesOn(platform), '换回中文的组名')
   same(controls.zoomChoices, ['0.8', '0.9', '1', '1.1', '1.25', '1.5'], '缩放有哪几档')
   same(controls.zoomRatios, [0.8, 0.9, 1.1, 1.25, 1.5, 1], '每一档点了之后页面是原来的几倍')
   must(
@@ -185,6 +207,7 @@ export function judgeFirst(
 
   // ---- 快捷键、关于 ----
   failed.push(...judgeKeys(seen.keys, seen.menuKeys, platform))
+  failed.push(...judgeTools(seen.tools, platform))
   same(about.name, 'Litch', '关于里的名字')
   same(about.version, hooks.version, '关于里的版本')
   must(about.versionLine.includes(hooks.version), `版本那一行没有写版本：“${about.versionLine}”`)
@@ -224,8 +247,8 @@ export function judgeFirst(
   // ---- 六套组合下各屏 ----
   must(screens.cardShown, '量审批卡片那一屏的时候卡片不在')
   must(screens.archivedRows > 0, '量已归档那一屏的时候列表是空的')
-  // 对话区三块、审批、已归档各六套，设置页五组乘两种语言各六套
-  same(screens.rows.length, (3 + 1 + 1 + 5 * 2) * 6, '量了多少屏')
+  // 对话区三块、审批、已归档各六套，设置页各组乘两种语言各六套
+  same(screens.rows.length, (3 + 1 + 1 + sections.length * 2) * 6, '量了多少屏')
   for (const row of screens.rows) {
     must(row.audit.texts > 0, `${row.where}：一处字都没量到`)
     must(row.audit.overflow.length === 0, `${row.where}：横向溢出 ${row.audit.overflow.join('、')}`)

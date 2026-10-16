@@ -6,12 +6,12 @@ import { NewSession } from '../composer/NewSession.tsx'
 import type { PlaceWish } from '../composer/new-place.ts'
 import { useNewPlace } from '../composer/useNewPlace.ts'
 import { DevicesPage } from '../devices/DevicesPage.tsx'
-import { SettingsPage, type SettingsSection } from '../settings/SettingsPage.tsx'
+import { isSettingsSection, SettingsPage, type SettingsSection } from '../settings/SettingsPage.tsx'
 import { SideSlot } from '../side/SideSlot.tsx'
 import { Sidebar } from '../sidebar/Sidebar.tsx'
 import { TerminalSlot } from '../terminal/TerminalSlot.tsx'
 import { Transcript } from '../transcript/Transcript.tsx'
-import { onNewSessionRequest } from './actions.ts'
+import { onNewSessionRequest, onOpenSessionRequest, onSettingsRequest } from './actions.ts'
 import { useKey, useServices } from './services.tsx'
 import { TitleBar } from './TitleBar.tsx'
 import { Toasts } from './toasts.tsx'
@@ -119,11 +119,20 @@ export function App() {
       if (action === 'settings.about') setSettingsAt('about')
       openPage('settings')
     })
+    // 别处要直接开到某一组（设备详情里 Computer Use 开关旁的“去设置里看看”）
+    const offAsk = onSettingsRequest((section) => {
+      if (isSettingsSection(section)) setSettingsAt(section)
+      openPage('settings')
+    })
     return () => {
       document.removeEventListener('keydown', onKey)
       offMenu?.()
+      offAsk()
     }
   }, [openPage])
+
+  // 别处要打开某个会话（浏览器的 show 留在别的会话上的提示，点“去看”）
+  useEffect(() => onOpenSessionRequest(select), [select])
 
   // Cmd/Ctrl+N，和输入框里的 /new，是同一件事
   useEffect(() => {

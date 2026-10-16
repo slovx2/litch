@@ -55,16 +55,30 @@ export async function screensSeen(titles: { talk: string; waiting: string }): Pr
   await sweep('已归档', ['.main'])
   one<HTMLButtonElement>('.arch-head .ibtn')?.click()
 
-  // 设置页的五组：中文量一遍，英文（字更长）量一遍。“关于”里点开一份许可再量
+  // 设置页的各组（照左边列出来的，Computer Use 只在 macOS 上有）：中文量一遍，英文（字更长）量一遍。
+  // “关于”里点开一份许可再量；内置浏览器、Computer Use 等清单和权限取到了再量
+  await kit.openSettings()
+  const sections = all('.set-nav [data-section]').map((entry) => entry.dataset.section ?? '')
   for (const lang of ['zh-CN', 'en']) {
     kit.look.set({ lang })
-    for (const section of ['look', 'lang', 'devices', 'keys', 'about']) {
+    for (const section of sections) {
       await kit.openSettings(section)
       if (section === 'about') {
         const fold = await until('“关于”里的许可', () =>
           one<HTMLButtonElement>('.lic .fold, .set-para'),
         )
         if (fold.matches('.fold') && fold.getAttribute('aria-expanded') !== 'true') fold.click()
+      }
+      if (section === 'browser' || section === 'computer') {
+        await until(`“${section}”那一组取到`, () =>
+          all(
+            '.set-content [data-sites], .set-content [data-perms], .set-content [data-apps]',
+          ).every(
+            (block) =>
+              (block.dataset.sites ?? block.dataset.perms ?? block.dataset.apps) !== 'loading' &&
+              block.dataset.checking !== 'true',
+          ),
+        )
       }
       await sweep(`设置·${section}·${lang}`, ['.main'])
     }

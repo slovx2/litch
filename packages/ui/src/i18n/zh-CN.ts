@@ -491,6 +491,10 @@ export const zhCN = {
   'browser.stop': '停止加载',
   'browser.address': '搜索或输入网址',
   'browser.external': '在系统浏览器中打开',
+  'browser.showElsewhere': '“{title}”里的代理想给你看一个网页',
+  'browser.showGo': '去看',
+  'browser.showElsewhereUntitled': '另一个会话里的代理想给你看一个网页',
+  'browser.wants': '代理想给你看一个网页，打开这个会话就会显示',
   'diffs.noRoot': '没有工作目录可看：打开一个有工作目录的会话，或者选一个项目。',
   'diffs.scope': '看哪些改动',
   'diffs.scope.all': '全部',
@@ -709,6 +713,59 @@ export const zhCN = {
     '现在是在浏览器里打开的，没有桌面外壳，读不到随应用带着的许可文本。本项目用的是 MIT 许可证；装好的应用里可以在这里逐份看全文。',
   'settings.about.loading': '正在取…',
   'settings.about.missing': '没有取到这一份。',
+  'settings.group.browser': '内置浏览器',
+  'settings.group.computer': 'Computer Use',
+  'settings.browser.intro':
+    '所有会话、所有设备共用这一份浏览器：登录状态和对网站的决定都记在这台电脑上。',
+  'settings.browser.desktopOnly':
+    '内置浏览器只在 Litch 桌面应用里有。现在是在普通浏览器里打开的，这里没有可以设置的东西。',
+  'settings.browser.sites': '一直允许的网站',
+  'settings.browser.sites.note': '模型打开这些网站之前不再问你；删掉之后下次会再问',
+  'settings.browser.sites.empty': '还没有一直允许的网站。',
+  'settings.browser.sites.at': '{day} 允许',
+  'settings.browser.forget': '删除',
+  'settings.browser.forgetAll': '全部删除',
+  'settings.browser.data': '浏览数据',
+  'settings.browser.data.note':
+    'Cookie、登录状态、网站存下的数据和缓存。清除之后，在内置浏览器里登录过的网站都要重新登录；一直允许的网站不受影响。',
+  'settings.browser.clear': '清除浏览数据…',
+  'settings.browser.clear.title': '清除内置浏览器的浏览数据？',
+  'settings.browser.clear.note':
+    '所有会话、所有设备共用的这一份 Cookie、登录状态、网站存下的数据和缓存都会删掉，找不回来。开着的网页不会关掉。',
+  'settings.browser.clear.yes': '清除',
+  'settings.browser.cleared': '浏览数据已清除',
+  'settings.browser.clearFailed': '浏览数据没清除成，请再试一次',
+  'settings.browser.failed': '没做成：{reason}',
+  'settings.computer.intro':
+    '让模型操作这台 Mac 上的应用。系统权限授给单独的助手应用“Litch Computer Use”，不授给 Litch 本身。',
+  'settings.computer.permissions': '系统权限',
+  'settings.computer.permissions.note':
+    '在系统设置的“隐私与安全性”里给“Litch Computer Use”打开；Litch 不会替你改',
+  'settings.computer.accessibility': '辅助功能',
+  'settings.computer.accessibility.note': '读应用的界面、点击和输入要用它。',
+  'settings.computer.screenRecording': '屏幕录制',
+  'settings.computer.screenRecording.note': '给应用的窗口截图要用它。打开之后要重启助手才生效。',
+  'settings.computer.granted': '已允许',
+  'settings.computer.missing': '没有允许',
+  'settings.computer.unknown': '不知道',
+  'settings.computer.open': '打开系统设置',
+  'settings.computer.openFailed':
+    '没能打开系统设置。请自己到“系统设置 › 隐私与安全性 › {pane}”里打开“Litch Computer Use”。',
+  'settings.computer.restart': '重启助手',
+  'settings.computer.restart.note':
+    '在系统设置里打开屏幕录制之后，点“重启助手”让它生效。助手正在操作的应用会被打断。',
+  'settings.computer.recheck': '重新检查',
+  'settings.computer.checking': '正在问助手…',
+  'settings.computer.failed': '助手没起来：{reason}',
+  'settings.computer.ready': '两项都给了，模型可以操作这台 Mac 上的应用。',
+  'settings.computer.apps': '始终允许的应用',
+  'settings.computer.apps.note':
+    '这台电脑上的会话操作这些应用前不再问你；远程设备上的会话每次都要问',
+  'settings.computer.apps.empty': '还没有始终允许的应用。',
+  'settings.computer.apps.at': '{day} 加的',
+  'settings.computer.forget': '删除',
+  'settings.computer.devices':
+    '每台设备上的会话能不能用 Computer Use，在设备详情的“用这台电脑的能力”里开关，默认关着。',
 
   'keys.group.app': '应用与窗口',
   'keys.group.app.note': '在哪儿都管用，应用菜单里也有',
@@ -1083,8 +1140,12 @@ export const zhCN = {
   'devices.tools.computer.note':
     '让模型操作这台电脑上的应用：点、输入、截屏。头一次操作一个应用前会先问你。',
   'devices.tools.computer.remote':
-    '这是远程设备：打开之后，那台机器上的模型就能操作这台电脑。每个会话、每个应用都要你单独批准，没有“始终允许”。',
+    '这是远程设备：打开之后，跑在那台远程机器上的代理会来操作这台 Mac（你面前的这台），不是操作那台远程机器。那台机器要是被别人控制了，别人就能遥控你的桌面。每个会话、每个应用都要你单独批准，没有“始终允许”。',
   'devices.tools.failed': '没改成：{reason}',
+  'devices.tools.computer.missing':
+    '这台 Mac 还没给 Computer Use 两项系统权限（辅助功能、屏幕录制），开关打开了也用不了。',
+  'devices.tools.computer.unknown': '这台 Mac 还要给两项系统权限（辅助功能、屏幕录制）才用得了。',
+  'devices.tools.computer.check': '去设置里看看',
   'tool.image.view': '看大图',
   'request.option.accept': '允许这一次',
   'request.option.acceptSession': '这个会话里都允许',

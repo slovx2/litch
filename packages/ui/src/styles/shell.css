@@ -613,3 +613,14 @@
   color: var(--accent);
   font-weight: 500;
 }
+/* 代理想给你看一个网页（浏览器的 show 留在这个会话上）：标题后面一个小地球，不让位、用强调色 */
+.web-mark {
+  flex: none;
+  display: flex;
+  margin-left: -2px;
+  color: var(--accent);
+}
+.web-mark > svg {
+  width: 12px;
+  height: 12px;
+}
