@@ -26,8 +26,10 @@ plain `.mjs` / shell.
   for the desktop app. Needs a user-installed `dsh` (`CHA_DSH_CLI` or `PATH`).
   `dsh-poc-diagnostics.mjs` is a test-only dsh plugin it mounts through the
   instance's `DSH_HOME/cordis.patch.yml`: dsh's own warn/error lines (which the web
-  profile otherwise keeps in memory only) and the fate of each session-title
-  request go to stderr, i.e. the instance's `runtime.log`; a missing title quotes them.
+  profile otherwise keeps in memory only), the fate of each session-title request
+  and every model `fetch` (with the full cause chain when it fails — dsh itself
+  reduces it to a message and a code) go to stderr, i.e. the instance's
+  `runtime.log`; a missing title quotes them.
 
 - `bench-router.mjs` (+ `bench-router-model.mjs`, its mock model in a worker
   thread) — measures what the device process's routing layer adds in latency and

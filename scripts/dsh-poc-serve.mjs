@@ -271,7 +271,7 @@ async function titleTrail(instance, threadId) {
       const event = JSON.parse(line)
       return event.data?.source ? `${event.type}（${event.data.source.kind}）` : event.type
     })
-  // 模拟模型这头的连接和请求，时刻从头一条算起
+  // 模拟模型这头的连接和请求，时刻从头一条算起；起点的绝对时刻和诊断行里的对得上
   const start = instance.model.events[0]?.at ?? 0
   const timeline = instance.model.events.map(
     (event) =>
@@ -281,7 +281,7 @@ async function titleTrail(instance, threadId) {
     `标题请求 ${asked} 次，dsh 的标题事件：${events.join('、') || '没有'}`,
     'dsh 的诊断（告警和这个线程的标题请求）：',
     ...(await diagnosed(instance, threadId)).map((line) => `  ${line}`),
-    `模拟模型的连接与请求（共 ${instance.model.requests.length} 个请求）：`,
+    `模拟模型的连接与请求（共 ${instance.model.requests.length} 个请求，+0 是 ${start}）：`,
     ...timeline,
   ].join('\n')
 }
