@@ -61,7 +61,7 @@ const start: StepJudge = (id, spec, raw, v, place) => {
   v.check(seen.rowHarness === spec.name, `侧栏里这一行的徽标是“${seen.rowHarness}”`)
   v.check(seen.rowWorkspace === place.workspace, `这一行落在了“${seen.rowWorkspace || '项目外面'}”`)
   // 建好之后底栏：权限选着的是它默认的那一档
-  const preset = id === 'pi' ? '完全访问' : '项目'
+  const preset = id === 'pi' ? '完全访问' : '项目内'
   v.check(
     seen.permissionAfter === preset,
     `建好之后权限选着“${seen.permissionAfter}”，该是“${preset}”`,
