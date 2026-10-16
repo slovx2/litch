@@ -21,7 +21,10 @@ plain `.mjs` / shell.
   ssh-runtime-matrix); transcripts land under git-ignored `.codex-harness-adapter/`.
 - `probe-*.mjs` — capability / codex-cli-remote probes.
 - `dsh-poc-serve.mjs` — isolated DeepSeek Harness entry (workspace CLI, loopback
-  mock model, own state dir and port, loopback-only sandbox). `--verify` runs the
+  mock model, own state dir and port; HTTP(S) to anything but loopback goes to a
+  trap proxy that `--verify` requires to stay unused — not `sandbox-exec`, whose
+  localhost rule on macOS 14 sporadically refuses allowed loopback connects with
+  EPERM, which cost dsh its non-retried title request on CI). `--verify` runs the
   protocol-level check over real SSH (`npm run test:dsh-ssh`); `--gui` keeps it up
   for the desktop app. Needs a user-installed `dsh` (`CHA_DSH_CLI` or `PATH`).
   `dsh-poc-diagnostics.mjs` is a test-only dsh plugin it mounts through the

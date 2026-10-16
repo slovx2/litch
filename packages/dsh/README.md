@@ -57,7 +57,7 @@ npm run test:dsh-ssh                     # 隔离实例经真实 SSH 走一遍�
 node scripts/dsh-poc-serve.mjs --gui     # 同一实例常驻，写入 ~/.ssh/config.d/cha-dsh-poc 供桌面端连接
 ```
 
-测试与隔离实例都使用假密钥、临时目录和回环 mock 模型，不读取个人配置；隔离实例整体运行在只允许回环外连的沙箱里。测试需要本机已安装 dsh，没有时直接失败而不是跳过，因此不并入根目录的 `npm test`；CI 的 `dsh` 任务按 `protocol/versions.json` 的 `dshMinimum` 把 dsh 装到临时前缀后运行。
+测试与隔离实例都使用假密钥、临时目录和回环 mock 模型，不读取个人配置；隔离实例发往回环之外的 HTTP(S) 请求都会走到一个陷阱代理，验收要求一次也没有（以前用的 sandbox-exec 回环沙箱在 macOS 14 上会偶发拒掉回环连接，见 `scripts/dsh-poc-serve.mjs` 的 `startTrap`）。测试需要本机已安装 dsh，没有时直接失败而不是跳过，因此不并入根目录的 `npm test`；CI 的 `dsh` 任务按 `protocol/versions.json` 的 `dshMinimum` 把 dsh 装到临时前缀后运行。
 
 ## 尚未覆盖
 

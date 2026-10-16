@@ -9,6 +9,7 @@ import { spawn, spawnSync } from 'node:child_process'
 import { once } from 'node:events'
 import { existsSync } from 'node:fs'
 import { mkdir, readdir, readFile, realpath, rm, writeFile } from 'node:fs/promises'
+import { createServer } from 'node:net'
 import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { Duplex } from 'node:stream'
@@ -127,6 +128,7 @@ async function startInstance() {
   })
   assert.equal(built.status, 0, 'CLI 构建失败')
   const model = await startMockModel(respond)
+  const trap = await startTrap()
   const env = {
     PATH: `${dirname(process.execPath)}:/usr/bin:/bin:/usr/sbin:/sbin`,
     HOME: join(root, 'home'),
@@ -142,6 +144,10 @@ async function startInstance() {
     DSH_AGENTS_HOME: join(root, 'agents'),
     CHA_DSH_CLI: resolve(dshCli),
     CHA_DSH_TRACE: join(root, 'wire.jsonl'),
+    // 回环之外的 HTTP(S) 一律走陷阱代理（dsh 启动时按这几个变量装全局代理，回环地址总是直连），见 startTrap
+    ...Object.fromEntries(
+      ['http_proxy', 'HTTP_PROXY', 'https_proxy', 'HTTPS_PROXY'].map((name) => [name, trap.url]),
+    ),
   }
   const args = ['--harness', 'dsh', '--home', join(root, 'state'), '--port', String(port)]
   args.push('--node', process.execPath, '--root', repo)
@@ -154,14 +160,7 @@ async function startInstance() {
   const sshConfig = `${printed.stdout.replace(/^Host .*$/m, `Host ${alias}`)}  ConnectTimeout 5\n`
   assert.match(sshConfig, new RegExp(`^Host ${alias}$`, 'm'))
   await writeFile(join(root, 'ssh_config'), sshConfig, { mode: 0o600 })
-  // 整个实例放进只允许回环外连的沙箱：即便配置有误，也发不出真实的模型请求或其它外连。
-  const loopbackOnly =
-    '(version 1)(allow default)(deny network-outbound)' +
-    '(allow network-outbound (remote ip "localhost:*") (remote unix-socket))'
-  const service = spawn('/usr/bin/sandbox-exec', ['-p', loopbackOnly, cli, 'serve', ...args], {
-    env,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
+  const service = spawn(cli, ['serve', ...args], { env, stdio: ['ignore', 'pipe', 'pipe'] })
   active.push(service)
   let output = ''
   service.stderr.on('data', (chunk) => {
@@ -177,7 +176,30 @@ async function startInstance() {
       done()
     })
   })
-  return { root, project, model, env, sshConfig, service }
+  return { root, project, model, trap, env, sshConfig, service }
+}
+
+// 陷阱代理：配置有误时发往回环之外的 HTTP(S) 请求（真实的模型服务之类）到这里，记下头一行就断开，
+// 验收结束时要求一次也没有。以前是把整个实例放进只放行回环外连的 sandbox-exec 沙箱，但 macOS 14 的
+// Seatbelt 会偶发拒掉它放行了的回环连接（EPERM，约每 15 秒一次、每次几毫秒，换个新连接就好；
+// openai/codex#44890、crocodile-labs/openmoat#361）。CI 上抓到过两种：dsh 发标题请求时被拒，
+// 35 毫秒就以 TRANSPORT 收场、模拟模型连连接都没见到，dsh 不重试标题，线程就一直没有名字；
+// 适配器连 dsh 的 Web Remote 时被拒，列会话直接报错。这两处都不该替一个测试专用的沙箱去重试。
+async function startTrap() {
+  const hits = []
+  const server = createServer((socket) => {
+    socket.on('error', () => {})
+    socket.once('data', (chunk) => {
+      hits.push(String(chunk).split('\r\n', 1)[0])
+      socket.destroy()
+    })
+  })
+  await new Promise((done) => server.listen(0, '127.0.0.1', done))
+  return {
+    url: `http://127.0.0.1:${server.address().port}`,
+    hits,
+    close: () => new Promise((done) => server.close(() => done())),
+  }
 }
 
 // 经真实 ssh 进入 `codex app-server proxy`，在其标准输入输出上跑 WebSocket。
@@ -468,6 +490,7 @@ async function verify(instance) {
     instance.model.requests.every((request) => !('dsh_session_log' in request)),
     '会话日志不应上传',
   )
+  assert.deepEqual(instance.trap.hits, [], '有请求要往回环之外去（走到了陷阱代理）')
   console.log(
     `[dsh-poc] 协议级验证通过：线程 ${listed.data.length} 个，增量 ${deltas.length} 次（跨 ${span} 毫秒），` +
       `审批请求 ${desktop.requests.length} 次，模型请求 ${instance.model.requests.length} 次（全部回环）`,
@@ -481,13 +504,6 @@ async function verify(instance) {
       (/ (warn|error) /.test(line) && !line.includes('weaker process-tree containment')),
   )
   if (troubles.length) console.log(`[dsh-poc] dsh 的诊断里有这些：\n${troubles.join('\n')}`)
-  // 第一个线程的标题请求各步的时刻，攒着和出事那次比
-  const steps = (await diagnosed(instance, first)).filter(
-    (line) =>
-      / title (requested|ended) /.test(line) ||
-      (/ fetch( answered)? /.test(line) && line.includes('不带工具')),
-  )
-  console.log(`[dsh-poc] 第一个线程的标题请求：\n${steps.join('\n')}`)
 }
 
 async function cleanup(instance) {
@@ -500,6 +516,7 @@ async function cleanup(instance) {
         new Promise((done) => setTimeout(done, 15000)),
       ])
     await instance.model.close()
+    await instance.trap.close()
     // 按唯一根目录回收可能残留的子进程，再删除目录。
     spawnSync('pkill', ['-KILL', '-f', instance.root])
   }

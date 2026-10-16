@@ -129,7 +129,7 @@ jobs:
       - run: npm run client:check:remote
 
   # dsh 本体不随适配器分发，测试需要一份真实的 dsh：按 protocol/versions.json 登记的下限版本装到临时前缀。
-  # 模型端是回环 mock，SSH 实例整体运行在只允许回环外连的沙箱里（macOS 的 sandbox-exec）。
+  # 模型端是回环 mock，SSH 实例发往回环之外的 HTTP(S) 请求都落到陷阱代理上，验收要求一次也没有。
   dsh:
     runs-on: macos-14
     timeout-minutes: 20
