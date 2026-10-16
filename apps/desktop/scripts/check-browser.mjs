@@ -2,9 +2,11 @@
 // 按来源审批、回合收尾）。测试网页由自检自己在回环上起，用户数据目录是临时的，跑完删掉。
 //   node scripts/check-browser.mjs          自检
 //   node scripts/check-browser.mjs --v0     V0 ③ 实测：WebContentsView 在面板关着的各种挂法下截图、输入能不能用
+//   node scripts/check-browser.mjs --ui     浏览器面板：真的界面（先构建 packages/ui）对着页面里的模拟核心，
+//                                          量矩形、叠上去、收起摘下、浮层撤下、show 打开面板
 //   加 --shown                             V0 那一项改成窗口透明度 0、不接鼠标地显示（对照窗口在屏幕上的情形）
 import { spawn } from 'node:child_process'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -15,7 +17,17 @@ const require = createRequire(import.meta.url)
 const electron = require('electron')
 const appDir = fileURLToPath(new URL('..', import.meta.url))
 const v0 = process.argv.includes('--v0')
-const entry = v0 ? 'src/probe-browser-v0.mts' : 'src/probe-browser.mts'
+const ui = process.argv.includes('--ui')
+const entry = v0
+  ? 'src/probe-browser-v0.mts'
+  : ui
+    ? 'src/probe-browser-ui.mts'
+    : 'src/probe-browser.mts'
+const uiRoot = fileURLToPath(new URL('../../../packages/ui/dist', import.meta.url))
+if (ui && !existsSync(join(uiRoot, 'index.html'))) {
+  console.error('没有界面的构建产物，先 npm run build --prefix packages/ui')
+  process.exit(1)
+}
 const marker = v0 ? 'LITCH_V0 ' : 'LITCH_BROWSER '
 
 const work = mkdtempSync(join(tmpdir(), 'litch-browser-check-'))
@@ -35,7 +47,28 @@ await build({
   },
 })
 
-const env = { ...process.env, LITCH_PROFILE: join(work, 'profile') }
+// 面板的自检要一份只给 litchBrowser 的预加载脚本（沙箱里只认 CommonJS）
+const preload = join(work, 'preload.cjs')
+if (ui) {
+  await build({
+    entryPoints: ['src/probe-browser-preload.mts'],
+    absWorkingDir: appDir,
+    outfile: preload,
+    bundle: true,
+    platform: 'node',
+    target: 'node22',
+    format: 'cjs',
+    external: ['electron'],
+    logLevel: 'warning',
+  })
+}
+
+const env = {
+  ...process.env,
+  LITCH_PROFILE: join(work, 'profile'),
+  LITCH_UI_ROOT: uiRoot,
+  LITCH_PROBE_PRELOAD: preload,
+}
 if (process.argv.includes('--shown')) env.LITCH_V0_SHOWN = '1'
 delete env.ELECTRON_RUN_AS_NODE
 

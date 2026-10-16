@@ -1,0 +1,72 @@
+// 桌面外壳的预加载脚本挂在 window.litchBrowser 上的内置浏览器接口（apps/desktop/src/browser/bridge.mts），
+// 这里是界面这边的类型，改一边要改另一边。普通浏览器里没有外壳，就没有它：浏览器标签只显示一句说明。
+//
+// 网页不在界面里：界面只占一块矩形、把它的位置大小报给外壳，网页由外壳在主进程里叠上去。
+
+/** 标签归哪个会话。新建对话页上（会话还没建）threadId 是空字符串 */
+export interface BrowserOwner {
+  deviceId: string
+  threadId: string
+}
+
+/** 外壳报来的一个标签的样子 */
+export interface BrowserTabInfo {
+  id: string
+  owner: BrowserOwner
+  /** agent：代理开的；user：用户自己开的 */
+  kind: 'agent' | 'user'
+  url: string
+  title: string
+  loading: boolean
+  canGoBack: boolean
+  canGoForward: boolean
+  /** 代理这个回合正在用它 */
+  agentActive: boolean
+  /** 代理标了留给用户 */
+  keep: boolean
+}
+
+/** 设置页里一条“一直允许”的网站 */
+export interface BrowserSavedSite {
+  origin: string
+  /** 什么时候允许的，毫秒 */
+  at: number
+}
+
+export interface BrowserBridge {
+  /** 这个窗口里、这块矩形（页面里的 CSS 像素）上显示哪个标签。都给 null 就是什么都不显示 */
+  place(
+    tabId: string | null,
+    rect: { x: number; y: number; width: number; height: number } | null,
+  ): void
+  /** 用户开一个新标签；url 是地址栏里打的字（空的就是空白页） */
+  open(owner: BrowserOwner, url: string): Promise<BrowserTabInfo | null>
+  /** 地址栏里打的字，或者 back、forward、reload、stop */
+  navigate(tabId: string, to: string): void
+  close(tabId: string): void
+  /** 用系统的浏览器打开这个标签现在的地址 */
+  openExternal(tabId: string): void
+  tabs(): Promise<BrowserTabInfo[]>
+  onState(handler: (tabs: BrowserTabInfo[]) => void): () => void
+  /** 代理要给用户看一个标签 */
+  onShow(handler: (tab: BrowserTabInfo) => void): () => void
+  /** 设置页用：“一直允许”的网站 */
+  sites(): Promise<BrowserSavedSite[]>
+  /** 删掉一条“一直允许”；给 null 全删。回删了几条 */
+  forgetSite(origin: string | null): Promise<number>
+  /** 清除浏览数据（cookie、站点存储、缓存） */
+  clearData(): Promise<boolean>
+}
+
+declare global {
+  interface Window {
+    litchBrowser?: BrowserBridge
+  }
+}
+
+/** 外壳给的接口。普通浏览器里、不在页面里（界面的单元测试直接在 Node 里读源文件）时没有 */
+export const browserBridge = (): BrowserBridge | undefined =>
+  typeof window === 'undefined' ? undefined : window.litchBrowser
+
+/** 会话的键 */
+export const ownerKey = (owner: BrowserOwner): string => `${owner.deviceId}\u0000${owner.threadId}`
