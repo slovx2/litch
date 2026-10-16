@@ -1,0 +1,142 @@
+{
+  "extension": "clientTools",
+  "description": "客户端工具：模型调用的工具由连着的 Litch 桌面端执行（内置浏览器、Computer Use）。走的是协议原有的动态工具：建会话时 thread/start.dynamicTools 带上命名空间形式的工具清单，模型调用时引擎向客户端发 item/tool/call，客户端执行后答复。标准协议里这个请求发给谁由各引擎自己定（原生 codex 发给订阅着会话的全部连接，谁先答算谁的），可这类工具只有 Litch 桌面端执行得了，官方桌面端、移动端收到了也只能干等或者乱答。这项扩展加的只是“谁能执行、交给谁、没人能执行时怎么回”：客户端握手时声明自己能执行哪些命名空间，litch_ 开头的命名空间的调用只交给声明过的一条连接，没有就当场回失败，不让回合干等。工具本身的定义（参数、结果）不在这里，在 packages/protocol/src/client-tools-browser.mts、client-tools-computer.mts。设计见 design/harness-client/05-browser-and-computer-use.md 第三、九节；类型在 packages/protocol/src/client-tools.mts。",
+  "appliesTo": "每个 harness 自己的入口，以及经聚合面连到它的连接（聚合面把客户端的握手参数原样带给适配器的运行时）。claude-code、pi 的入口自己按这里的规矩挑执行方；原生 codex 不认识这项扩展（握手时 litchExtensions、litchClientTools 都不带给它），它照旧发给所有订阅者，由设备进程拦下来再挑，所以经聚合面连到它时也成立，直连它时不成立。哪个 harness 支持，看它在 runtime/info 里报的 extensions 有没有 clientTools：现在 claude-code、pi，以及经聚合面的原生 codex；dsh 的入口会静默忽略 dynamicTools，不支持。",
+  "declaration": {
+    "description": "客户端握手时在 initialize 的 capabilities 里用我们自己的键列出认识的扩展名，同时用 litchClientTools 列出这条连接能执行的命名空间。只列了命名空间、没在 litchExtensions 里声明 clientTools 的，当作什么都执行不了。",
+    "where": "initialize.params.capabilities.litchExtensions",
+    "schema": { "type": "array", "items": { "type": "string" }, "contains": { "const": "clientTools" } }
+  },
+  "undeclared": "没声明的连接上线上内容和标准协议一致，只是收不到 litch_ 开头的命名空间的 item/tool/call：这类调用不会发给它，也不会因为它订阅着就等它答。别的命名空间的动态工具调用照各引擎原来的做法发（claude-code、pi 发给发起回合的连接，它不在了发给全部订阅者；原生 codex 发给全部订阅者），不看这项声明。",
+  "rules": [
+    "只有命名空间以 litch_ 开头的 item/tool/call 按本扩展挑执行方；namespace 为 null 或者别的前缀照上游。",
+    "执行方：发起这个回合的连接，前提是它还连着、声明了这个命名空间；否则是订阅着这个会话、声明了这个命名空间的连接里最早订阅的那条；都没有就当场回失败（noExecutor），不等人订阅，也不交给没声明的连接。",
+    "发起回合的连接只要还连着、声明了就算，不要求它还订阅着这个会话。claude-code 里 CLI 自己开的回合（后台命令结束后把结果告诉模型）没有发起者，直接看订阅者。",
+    "调用交出去以后执行方断开了，这次调用按失败结束（claude-code：工具结果是错误；pi：工具抛错；原生 codex：设备进程替它答 failed），不改交给别的连接：浏览器、桌面上的操作做到一半换一台机器接着做没有意义。",
+    "这类调用在 claude-code 里不经它自己的权限审批和沙箱（任何权限档、计划模式里都一样），和原生 codex 一致：执行方是客户端，要不要问用户由客户端定。别的命名空间的动态工具照旧走审批。",
+    "失败答复的文字第一行以 [litch:<kind>] 开头，kind 见 definitions.FailureKind；后面是给模型看的说明，要告诉模型该怎么办（比如“请用户在 Litch 里打开这个会话”），不要让它反复重试。"
+  ],
+  "parts": [
+    {
+      "kind": "Param",
+      "method": "initialize",
+      "name": "capabilities.litchClientTools",
+      "description": "这条连接能执行的命名空间。每个都以 litch_ 开头，不是的忽略。只在 litchExtensions 里声明了 clientTools 时看；同一条连接握手之后不能再改。",
+      "schema": { "$ref": "#/definitions/ClientToolsDeclaration" }
+    },
+    {
+      "kind": "Behavior",
+      "on": "item/tool/call（服务端发给客户端的请求，namespace 以 litch_ 开头）",
+      "description": "只发给按 rules 挑出来的那一条连接，参数是标准形状（definitions.ToolCallParams）。pi 的入口以前在参数里多带一个 itemId（和请求号相同），现在不带了，和标准协议一致。一次调用只发一次：不会在执行方断开后补发给别人，也不会在有连接恢复会话时补发（原生 codex 会把还在等的请求补发给恢复会话的连接，设备进程拦下不转）。",
+      "params": { "$ref": "#/definitions/ToolCallParams" }
+    },
+    {
+      "kind": "Behavior",
+      "on": "聚合面上来自原生 codex 的 item/tool/call（namespace 以 litch_ 开头）",
+      "description": "原生 codex 把同一个请求（请求号相同）发给订阅着会话的每条连接，在设备进程里就是每条客户端连接各自的上游连接上各一份；答复从哪条连接回去都算数，答了之后它不发 serverRequest/resolved。设备进程把这几份并成一次调用：按 rules 挑执行方（发起回合的连接由设备进程看 turn/start 的应答记下，订阅的先后看 thread/start、thread/resume、thread/fork 的应答和 thread/unsubscribe），只转给它一份（请求号和别的待答请求撞了时照旧换一个），别的连接上的那份不转，也不替它答。执行方答了，设备进程把答复交给原生 codex，其余几份就此作废。挑不出执行方时由设备进程当场替这次调用回 noExecutor 失败。执行方断开时替它回 failed；回合结束（turn/completed）、原生 codex 自己说这个请求有结果了（serverRequest/resolved）、或者上游连接全断了，这次调用就算了结，执行方那边收到一条 serverRequest/resolved，卡片收得掉。"
+    },
+    {
+      "kind": "Response",
+      "on": "item/tool/call 的应答（客户端或者引擎入口、设备进程替它回的）",
+      "description": "标准形状。失败时 success 为 false，contentItems 第一项是文字，以 [litch:<kind>] 开头。图片只能是 data: 地址（http(s) 地址会让整个结果作废）；claude-code 会把大图片自己转码压缩（实测 2.1.282：约 270KB 以内原样交，1MB 起转成 JPEG，边长超过 2000 缩到 2000），但都是整张交给模型，不截断、不落盘换成路径。",
+      "response": { "$ref": "#/definitions/ToolCallResponse" }
+    },
+    {
+      "kind": "Error",
+      "on": "item/tool/call 的应答（success 为 false）",
+      "name": "noExecutor",
+      "description": "引擎入口或设备进程替这次调用回的：这个会话现在没有连着能执行这个命名空间的 Litch 桌面端。说明里叫模型告诉用户在 Litch 里打开这个会话后再试，不要反复重试。其余几种（disabled、permission、declined、invalid、failed）由执行的客户端回，设备进程在执行方断开时也回 failed。",
+      "response": { "$ref": "#/definitions/FailureResponse" }
+    },
+    {
+      "kind": "Field",
+      "on": "runtime/info 的应答里每个 harness 的 extensions",
+      "name": "clientTools",
+      "description": "列了它表示经这个入口（或聚合面）连到这个 harness 时，litch_ 开头的命名空间的调用按本扩展挑执行方。没列的（dsh）别带这类工具建会话：带了也用不了。"
+    }
+  ],
+  "definitions": {
+    "ClientToolsDeclaration": {
+      "type": "object",
+      "required": ["namespaces"],
+      "properties": {
+        "namespaces": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^litch_" },
+          "uniqueItems": true
+        }
+      }
+    },
+    "ToolCallParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["threadId", "turnId", "callId", "namespace", "tool", "arguments"],
+      "properties": {
+        "threadId": { "type": "string" },
+        "turnId": { "type": "string" },
+        "callId": { "type": "string" },
+        "namespace": { "type": "string", "pattern": "^litch_" },
+        "tool": { "type": "string" },
+        "arguments": true
+      }
+    },
+    "ContentItem": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "text"],
+          "properties": { "type": { "const": "inputText" }, "text": { "type": "string" } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "imageUrl"],
+          "properties": {
+            "type": { "const": "inputImage" },
+            "imageUrl": { "type": "string", "pattern": "^data:" }
+          }
+        }
+      ]
+    },
+    "ToolCallResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contentItems", "success"],
+      "properties": {
+        "contentItems": { "type": "array", "items": { "$ref": "#/definitions/ContentItem" } },
+        "success": { "type": "boolean" }
+      }
+    },
+    "FailureKind": {
+      "enum": ["noExecutor", "disabled", "permission", "declined", "invalid", "failed"]
+    },
+    "FailureResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contentItems", "success"],
+      "properties": {
+        "success": { "const": false },
+        "contentItems": {
+          "type": "array",
+          "minItems": 1,
+          "items": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["type", "text"],
+              "properties": {
+                "type": { "const": "inputText" },
+                "text": {
+                  "type": "string",
+                  "pattern": "^\\[litch:(noExecutor|disabled|permission|declined|invalid|failed)\\] "
+                }
+              }
+            }
+          ],
+          "additionalItems": { "$ref": "#/definitions/ContentItem" }
+        }
+      }
+    }
+  }
+}

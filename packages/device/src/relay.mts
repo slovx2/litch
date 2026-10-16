@@ -3,6 +3,7 @@
 //
 // 会话对象经过这里时（应答里的、会话开始的通知里的），工作区、分区、置顶换成设备层的值（第 6.1 节）：
 // 归属存在设备层，引擎自己那一份和聚合面互不相通。
+import { isClientToolNamespace } from '../../protocol/src/client-tools.mjs'
 import type { ThreadIndex } from './thread-index.mjs'
 import type { ForwardedRequest, UpstreamLink } from './upstream.mjs'
 import { DeviceError, type Frame, idKey, isObject, type RpcId, toRpcError } from './wire.mjs'
@@ -20,7 +21,25 @@ export interface RelayHost {
   /** 会话开始的通知最多扣多久（毫秒），见 SessionTiming.startedHoldMs */
   startedHoldMs: number
   log(line: string): void
+  /** 原生 codex 的客户端工具调用交给设备进程挑执行方（client-tools.mts），这几处要告诉它 */
+  clientTools: RelayClientTools
 }
+
+/** 只对 dialect.clientToolsByDevice 的上游（原生 codex）调用 */
+export interface RelayClientTools {
+  /** 一份 litch_ 命名空间的 item/tool/call 到了：不往下转 */
+  offer(link: UpstreamLink, frame: Frame, upstreamId: RpcId): void
+  /** 上游说这个请求有结果了。返回 true：是客户端工具调用，这条通知不往下转 */
+  resolved(link: UpstreamLink, requestId: RpcId): boolean
+  /** 这条连接订阅了会话（新建、恢复、分叉成功） */
+  subscribed(link: UpstreamLink, threadId: string): void
+  /** 这条连接发起的回合开始了 */
+  turnStarted(link: UpstreamLink, turnId: string): void
+  turnEnded(link: UpstreamLink, turnId: string): void
+}
+
+/** 应答成功就说明这条连接订阅了会话的方法 */
+const SUBSCRIBING = new Set(['thread/start', 'thread/resume', 'thread/fork'])
 
 type Tracked = Expectation & {
   link: UpstreamLink
@@ -37,7 +56,9 @@ type Tracked = Expectation & {
 const ENGINE_PROJECT_NOTIFICATIONS = new Set(['project/changed', 'thread/project/updated'])
 
 interface PendingServerRequest {
-  link: UpstreamLink
+  /** null：设备进程替原生 codex 转来的客户端工具调用，答复交给 onAnswer（client-tools.mts） */
+  link: UpstreamLink | null
+  onAnswer?: (frame: Frame) => void
   /** 上游用的请求号 */
   upstreamId: RpcId
   /** 客户端看到的请求号。和别的上游撞了的时候才和 upstreamId 不同 */
@@ -116,6 +137,8 @@ export class Relay {
     }
     const result = frame.result
     if (tracked && frame.error === undefined) this.fulfil(link, tracked, result)
+    if (request && frame.error === undefined && link.dialect.clientToolsByDevice)
+      this.clientToolsSaw(link, request.method, result)
     let changed = false
     if (isObject(result)) {
       changed = this.stamp(link, result.thread)
@@ -133,6 +156,17 @@ export class Relay {
     // 扣着的会话开始通知现在可以放了：归属已经记好，放出去的时候带得上
     for (const held of tracked?.held ?? [])
       this.notification(link, held, 'thread/started', JSON.stringify(held))
+  }
+
+  /** 订阅了哪个会话、发起了哪个回合：设备进程替原生 codex 挑客户端工具的执行方时要用 */
+  private clientToolsSaw(link: UpstreamLink, method: string, result: unknown): void {
+    if (!isObject(result)) return
+    const thread = isObject(result.thread) ? result.thread : null
+    if (SUBSCRIBING.has(method) && typeof thread?.id === 'string')
+      this.host.clientTools.subscribed(link, thread.id)
+    const turn = isObject(result.turn) ? result.turn : null
+    if (method === 'turn/start' && typeof turn?.id === 'string')
+      this.host.clientTools.turnStarted(link, turn.id)
   }
 
   /** 上游说成了：把设备层这边该记的记上 */
@@ -204,6 +238,14 @@ export class Relay {
     } else if (method === 'thread/archived' && threadId) this.host.index.setArchived(threadId, true)
     else if (method === 'thread/unarchived' && threadId)
       this.host.index.setArchived(threadId, false)
+    else if (
+      method === 'serverRequest/resolved' &&
+      fields &&
+      fields.requestId != null &&
+      link.dialect.clientToolsByDevice &&
+      this.host.clientTools.resolved(link, fields.requestId as RpcId)
+    )
+      return
     else if (method === 'serverRequest/resolved' && fields && fields.requestId != null) {
       // 上游说这个请求已经有结果了（客户端答了、回合结束作废了）：不用再等客户端
       const renamed = this.renamed.get(link)
@@ -214,6 +256,10 @@ export class Relay {
         fields.requestId = facing
         changed = true
       }
+    }
+    if (method === 'turn/completed' && link.dialect.clientToolsByDevice) {
+      const turn = isObject(fields?.turn) ? fields.turn : null
+      if (typeof turn?.id === 'string') this.host.clientTools.turnEnded(link, turn.id)
     }
     if (this.host.optedOut(method)) return
     // 带会话标识的通知原样转发；不带的（账号变化、MCP 状态、技能变化、限额等）加上是哪个 harness 发的
@@ -232,6 +278,15 @@ export class Relay {
   private serverRequest(link: UpstreamLink, frame: Frame, upstreamId: RpcId, raw: string): void {
     const fields = isObject(frame.params) ? frame.params : null
     const threadId = typeof fields?.threadId === 'string' ? fields.threadId : null
+    // 原生 codex 发给每条订阅连接的客户端工具调用：由设备进程挑一条转（client-tools.mts）
+    if (
+      frame.method === 'item/tool/call' &&
+      link.dialect.clientToolsByDevice &&
+      isClientToolNamespace(fields?.namespace as string | undefined)
+    ) {
+      this.host.clientTools.offer(link, frame, upstreamId)
+      return
+    }
     let facingId = upstreamId
     // 这个上游的协议里没有、要由聚合面补的内容（原生 codex 的文件改动审批不带决定列表），
     // 只补给声明过相应扩展的连接
@@ -251,13 +306,42 @@ export class Relay {
     this.host.send(changed ? JSON.stringify(frame) : raw)
   }
 
+  /**
+   * 设备进程替原生 codex 挑中这条连接执行一次客户端工具调用：转给客户端，答复交给 onAnswer。
+   * 请求号和这条连接上别的待答请求撞了就换一个。返回客户端看到的请求号
+   */
+  deliver(harness: string, frame: Frame, onAnswer: (frame: Frame) => void): RpcId {
+    const upstreamId = frame.id as RpcId
+    const fields = isObject(frame.params) ? frame.params : null
+    const threadId = typeof fields?.threadId === 'string' ? fields.threadId : null
+    const facingId = this.pending.has(idKey(upstreamId))
+      ? `litch:${harness}:${++this.sequence}`
+      : upstreamId
+    this.pending.set(idKey(facingId), { link: null, onAnswer, upstreamId, facingId, threadId })
+    this.host.send(JSON.stringify({ ...frame, id: facingId }))
+    return facingId
+  }
+
+  /** deliver 转过来的调用了结了（不是这条连接答的）：说一声这个请求有结果了，客户端的卡片收得掉 */
+  withdraw(facingId: RpcId, threadId: string): void {
+    if (!this.pending.delete(idKey(facingId))) return
+    if (this.host.optedOut('serverRequest/resolved')) return
+    this.host.send(
+      JSON.stringify({
+        method: 'serverRequest/resolved',
+        params: { threadId, requestId: facingId },
+      }),
+    )
+  }
+
   /** 客户端对服务端请求的应答：送回发出请求的那个上游 */
   answer(frame: Frame, raw: string): void {
     const entry = this.pending.get(idKey(frame.id))
     // 找不到：那个上游已经断开，或者它已经说过这个请求有结果了
     if (!entry) return
     this.pending.delete(idKey(frame.id))
-    if (entry.upstreamId === entry.facingId) entry.link.reply(raw)
+    if (!entry.link) entry.onAnswer?.(frame)
+    else if (entry.upstreamId === entry.facingId) entry.link.reply(raw)
     else entry.link.reply(JSON.stringify({ ...frame, id: entry.upstreamId }))
   }
 

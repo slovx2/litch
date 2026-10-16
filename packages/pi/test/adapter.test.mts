@@ -809,7 +809,8 @@ createInterface({input:process.stdin}).on('line',line=>{
     assert.equal(dynamicCalls.at(-1).namespace, 'native_ui')
     assert.equal(dynamicCalls.at(-1).tool, 'echo')
     assert.match(dynamicCalls.at(-1).callId, /^call_/)
-    assert.equal(dynamicCalls.at(-1).callId, dynamicCalls.at(-1).itemId)
+    // 参数是标准形状：以前多带的 itemId（和请求号相同）不再带
+    assert.equal('itemId' in dynamicCalls.at(-1), false)
     const dynamicHistory = (
       await ok('desktop', 'thread/read', { threadId: dynamic.id, includeTurns: true })
     ).thread

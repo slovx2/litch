@@ -1,6 +1,12 @@
 import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { EXTENSION } from '../../protocol/src/device.mjs'
+import {
+  clientToolNamespaces,
+  isClientToolNamespace,
+  noClientToolExecutor,
+  pickClientToolExecutor,
+} from '../../shared/src/client-tool-executor.mjs'
 import { FilesystemRpc } from '../../shared/src/filesystem-rpc.mjs'
 import { FuzzyFileSearch, FuzzySearchSessions } from '../../shared/src/fuzzy-session.mjs'
 import { declaredExtensions } from '../../shared/src/harness-declaration.mjs'
@@ -101,6 +107,8 @@ export class PiServer {
   private readonly attached = new Set<string>()
   /** 每条连接握手时声明认识的扩展：连接标识 → 扩展名 */
   private readonly declared = new Map<string, Set<string>>()
+  /** 每条连接握手时声明能执行的客户端工具命名空间（clientTools 扩展）：连接标识 → 命名空间 */
+  private readonly toolNamespaces = new Map<string, ReadonlySet<string>>()
   /** 工具执行之前问不问用户。运行时起来时定下，之后不变（设置 harness.pi.approvals，改了要重启运行时） */
   readonly approvals: boolean
   constructor(home: string, options: { approvals?: boolean } = {}) {
@@ -124,6 +132,7 @@ export class PiServer {
       // 也记下它退订的通知：从这里起，这条连接上不发名单里的通知。
       if (message.method === 'initialize') {
         this.declared.set(peer.id, declaredExtensions(params))
+        this.toolNamespaces.set(peer.id, clientToolNamespaces(params))
         applyNotificationOptOut(peer, params)
       }
       const work = () => dispatch(this, peer, message.method, params)
@@ -332,17 +341,37 @@ export class PiServer {
   ): Promise<any> {
     // 客户端执行的工具调用可能有副作用，只交给一条连接、也不补送给后来订阅的连接。
     const tool = method === 'item/tool/call'
+    const turnId = this.active.get(threadId)?.turn.id ?? ''
+    let targets: RpcPeer[]
+    if (tool && isClientToolNamespace(params.namespace)) {
+      // 客户端工具（litch_ 开头的命名空间）只交给声明了它的连接，挑不出来当场失败，不交给别人
+      const executor = this.clientToolExecutor(peer, threadId, params.namespace)
+      if (!executor) return Promise.resolve(noClientToolExecutor(params.namespace))
+      targets = [executor]
+    } else targets = this.targets(peer, threadId, tool)
     return this.requests.send(
-      this.targets(peer, threadId, tool),
+      targets,
       threadId,
       method,
-      (id) => ({
-        threadId,
-        turnId: this.active.get(threadId)?.turn.id ?? '',
-        itemId: id,
-        ...params,
-      }),
+      // 工具调用的参数照上游的形状（DynamicToolCallParams），不带 itemId
+      (id) =>
+        tool ? { threadId, turnId, ...params } : { threadId, turnId, itemId: id, ...params },
       { signal, replayable: !tool },
+    )
+  }
+  // 客户端工具的执行方（规矩在 shared/src/client-tool-executor.mts）：发起回合的连接还连着、声明了这个
+  // 命名空间就是它；否则订阅着会话、声明了的连接里最早订阅的那条；都没有返回 null
+  private clientToolExecutor(
+    peer: RpcPeer | undefined,
+    threadId: string,
+    namespace: string,
+  ): RpcPeer | null {
+    const starter = (peer && this.peers.get(peer.id)) ?? null
+    return pickClientToolExecutor(
+      namespace,
+      starter,
+      this.subscribers(threadId),
+      (target) => this.toolNamespaces.get(target.id) ?? new Set(),
     )
   }
   /** 订阅着这个会话、还连着的连接，按订阅的先后 */
@@ -464,7 +493,7 @@ export class PiServer {
         tool: (tool, args, id, signal) =>
           reverse(
             'item/tool/call',
-            { tool: tool.name, namespace: tool.namespace, arguments: args, callId: id, itemId: id },
+            { callId: id, namespace: tool.namespace, tool: tool.name, arguments: args },
             signal,
           ),
         // 没打开审批时不给这一项：Pi 那边不挂钩子，和以前一样什么都不问。
@@ -681,6 +710,7 @@ export class PiServer {
   closePeer(peer: RpcPeer): void {
     this.peers.delete(peer.id)
     this.declared.delete(peer.id)
+    this.toolNamespaces.delete(peer.id)
     this.files.closePeer(peer.id)
     this.processes.closePeer(peer.id)
     for (const ids of this.subscriptions.values()) ids.delete(peer.id)

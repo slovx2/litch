@@ -131,8 +131,8 @@ test('声明：设备进程替原生 codex 整理，形状和引擎自己报的�
         engine: 'codex',
         available: true,
         unavailable: null,
-        // 它不认识我们的任何扩展，没有“拒绝时附说明”
-        extensions: [],
+        // 它不认识我们的任何扩展，没有“拒绝时附说明”；客户端工具是设备进程替它挑执行方，所以报
+        extensions: ['clientTools'],
       },
     )
     assertDeclaration(codex)

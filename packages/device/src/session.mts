@@ -13,6 +13,7 @@ import {
   DEVICE_SETTINGS_CHANGED,
   type DeviceSettingsChangedNotification,
 } from '../../protocol/src/device-settings.mjs'
+import { clientToolNamespaces } from '../../shared/src/client-tool-executor.mjs'
 import { ProtocolError, requiredString } from '../../shared/src/protocol-contract.mjs'
 import {
   CODEX_PROTOCOL_VERSION,
@@ -20,6 +21,7 @@ import {
   platformFamily,
   platformOs,
 } from '../../shared/src/runtime-version.mjs'
+import type { ClientToolPeer, ClientToolRouter } from './client-tools.mjs'
 import type { ManagedHarness } from './control.mjs'
 import { DeviceCalls, type DeviceLayer } from './device-layer.mjs'
 import { describeHarness, type HarnessCatalog, REQUIRED_EXTENSIONS } from './harness-info.mjs'
@@ -62,6 +64,8 @@ export interface SessionTiming {
    * 到点还没等到应答就放出去，不再扣（见 relay.mts）。
    */
   startedHoldMs: number
+  /** 原生 codex 的客户端工具调用挑不出执行方时，等其余几份到齐的工夫（毫秒），见 client-tools.mts */
+  clientToolGraceMs: number
 }
 
 /** 这台设备上的一个 harness：怎么连它的运行时，以及适配器主进程眼里它的状态 */
@@ -93,6 +97,8 @@ export interface SessionHost {
   reachable(harness: string): void
   /** 正在进行的那一次“从引擎导入现有的项目”结束。没有在导入就立刻结束 */
   importing(): Promise<void>
+  /** 原生 codex 的客户端工具调用由这里挑执行方（各连接共用） */
+  clientTools: ClientToolRouter
 }
 
 /** 请求已经有着落：转给上游了（应答由上游来），或者已经自己答过了 */
@@ -104,7 +110,7 @@ const DEVICE_METADATA = new Set(['harness', 'projectId', 'isPinned'])
 const strings = (value: unknown): string[] =>
   Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
 
-export class ClientSession {
+export class ClientSession implements ClientToolPeer {
   readonly id = randomUUID()
   private readonly host: SessionHost
   private readonly wire: Wire
@@ -119,6 +125,8 @@ export class ClientSession {
   private declared = new Set<string>()
   /** 握手时客户端给的参数，之后才出现的 harness 也用它去握手 */
   private initializeParams: unknown = null
+  /** 握手时声明能执行的客户端工具命名空间（clientTools 扩展） */
+  clientToolNamespaces: ReadonlySet<string> = new Set()
   /** 每个 harness 上一次报给客户端的声明，用来判断状态是不是真的变了 */
   private readonly announced = new Map<string, string>()
   private readonly probes = new Map<string, Promise<string | null>>()
@@ -134,6 +142,13 @@ export class ClientSession {
       workspaces: host.workspaces,
       startedHoldMs: host.timing.startedHoldMs,
       log: (line) => host.log(`${this.tag} ${line}`),
+      clientTools: {
+        offer: (link, frame, upstreamId) => host.clientTools.offer(this, link, frame, upstreamId),
+        resolved: (link, requestId) => host.clientTools.resolved(link, requestId),
+        subscribed: (link, threadId) => host.clientTools.subscribed(this, link.harness, threadId),
+        turnStarted: (link, turnId) => host.clientTools.turnStarted(this, link.harness, turnId),
+        turnEnded: (link, turnId) => host.clientTools.turnEnded(link.harness, turnId),
+      },
     })
     // 设备层（终端输出、文件变化、找文件的结果）经它把通知发回这条连接
     this.calls = new DeviceCalls(host.layer, {
@@ -173,8 +188,21 @@ export class ClientSession {
     for (const link of this.links.values()) link.stop()
     this.relay.close()
     this.calls.close()
+    this.host.clientTools.left(this)
     this.host.closed(this)
     if (greeted) this.host.log(`${this.tag} 断开`)
+  }
+
+  deliverClientTool(harness: string, frame: Frame, onAnswer: (reply: Frame) => void): RpcId {
+    return this.relay.deliver(harness, frame, onAnswer)
+  }
+
+  withdrawClientTool(facingId: RpcId, threadId: string): void {
+    this.relay.withdraw(facingId, threadId)
+  }
+
+  upstream(harness: string): UpstreamLink | null {
+    return this.links.get(harness) ?? null
   }
 
   /** 日志里认这条连接用的短名字 */
@@ -302,6 +330,10 @@ export class ClientSession {
     if (params) params = link.dialect.outgoing(method, params) ?? params
     const text = params === fields ? raw : JSON.stringify({ ...frame, params })
     if (!link.forward(id, method, text)) throw this.unavailable(link, method)
+    // 退订不等应答：之后到的客户端工具调用不再按订阅者挑给它
+    if (method === 'thread/unsubscribe' && link.dialect.clientToolsByDevice)
+      if (typeof fields?.threadId === 'string')
+        this.host.clientTools.unsubscribed(this, link.harness, fields.threadId)
     if (expectation) this.relay.expect(link, id, expectation)
     return HANDLED
   }
@@ -556,6 +588,7 @@ export class ClientSession {
     this.state = 'initializing'
     this.declared = new Set(declared)
     this.initializeParams = params
+    this.clientToolNamespaces = clientToolNamespaces(params)
     // 退订名单在路由层生效：被退订的通知直接不转发（设计文档 03 第 5.4 节）
     this.optOut = new Set(strings(capabilities.optOutNotificationMethods))
     const { timing } = this.host
@@ -598,6 +631,7 @@ export class ClientSession {
     const held = this.gate ?? []
     this.gate = null
     this.state = 'ready'
+    this.host.clientTools.join(this)
     for (const text of held) this.wire.send(text)
     return HANDLED
   }

@@ -86,6 +86,7 @@ export class FakeCodex extends FakeUpstream {
       }
     }
     this.handlers['permissionProfile/list'] = () => ({ data: this.profiles, nextCursor: null })
+    this.handlers['thread/unsubscribe'] = () => ({ status: 'unsubscribed' })
     for (const method of EXPERIMENTAL) {
       const inner = this.handlers[method] ?? (() => ({}))
       this.handlers[method] = (params, connection) => {
@@ -131,6 +132,29 @@ export class FakeCodex extends FakeUpstream {
     const id = this.nextRequest++
     for (const connection of this.live) connection.send({ id, method, params })
     return id
+  }
+
+  /**
+   * 动态工具调用（item/tool/call）。真的 codex 只发给订阅着会话的连接，to 给出是哪几条；
+   * 同一个请求发给每条的请求号相同（实测）。返回请求号和参数，补发时用得上
+   */
+  toolCall(
+    threadId: string,
+    namespace: string,
+    to: FakeConnection[] = this.live,
+    callId = 'call_tool_1',
+  ): { id: number; params: Record<string, unknown> } {
+    const id = this.nextRequest++
+    const params = {
+      threadId,
+      turnId: `turn-of-${threadId}`,
+      callId,
+      namespace,
+      tool: 'echo',
+      arguments: { text: 'hi' },
+    }
+    for (const connection of to) connection.send({ id, method: 'item/tool/call', params })
+    return { id, params }
   }
 
   /** 命令审批：它自己带着决定列表，里面有带参数的决定 */
