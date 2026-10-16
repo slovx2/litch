@@ -182,6 +182,12 @@ jobs:
       - run: npm ci --prefix packages/dsh --no-audit --no-fund
       - run: npm run build
       - run: npm run client:setup
+      # Computer Use 的原生助手（apps/computer-use）：打包时由 client:pack 构建并放进应用的 SharedSupport，
+      # 签名在下一步 make-installer.mjs 里（同一个开发者身份，加固的运行时）。这里先把它的单元测试跑一遍
+      - name: Computer Use 助手的单元测试
+        run: |
+          swift --version
+          swift test --package-path apps/computer-use
       - run: npm run client:pack
       - name: 签名、公证，做成 dmg
         run: |
@@ -193,6 +199,9 @@ jobs:
       # 签过、钉过票的应用照样起得来：对着模拟核心起一次，界面和核心打通
       - name: 签好的应用能起来
         run: node apps/desktop/scripts/smoke.mjs --packed
+      # 助手单独签过、和应用同一个团队（make-installer.mjs 已经比过）；这里再打出来留个底
+      - name: Computer Use 助手的签名
+        run: codesign -dv --verbose=2 "apps/desktop/out/Litch-darwin-arm64/Litch.app/Contents/SharedSupport/Litch Computer Use.app"
       - name: 收掉签名用的钥匙串
         if: always()
         run: |
