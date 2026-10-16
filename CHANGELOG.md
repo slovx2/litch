@@ -5,7 +5,7 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
-## 未发布
+## 0.7.1
 
 - Litch 有了安装包，随发布页一起出：macOS（Apple Silicon）的 dmg，用 Developer ID 签名并经苹果公证；Windows（x64）的安装程序，只装给当前用户、不要管理员权限，没有签名，**还没有经过完整的测试**。发布流程改名为 `release.yml`，适配器的包和两种安装包都出好才一起挂到草稿发布页；手动跑时不填标签就是试跑。
 - 自带的适配器能给 Windows 暂存了：命令行和 Node 带 `.exe`，Node 取官方的 .zip（校验和照官方签过名的清单登记）；按文件头认 Windows 可执行文件的架构。
