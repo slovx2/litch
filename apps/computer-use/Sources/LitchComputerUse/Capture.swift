@@ -21,20 +21,40 @@ enum Capture {
 
   /// 截 pid 的一个窗口：在它屏幕上的普通窗口里挑和 axFrame 最接近的那个
   static func window(pid: pid_t, axFrame: Rect) throws -> Screenshot {
-    let semaphore = DispatchSemaphore(value: 0)
-    var outcome: Result<Screenshot, Error> = .failure(RPCError(.failed, "capture timed out"))
+    // 截图接口是异步的，这里在连接的线程上等它（每条连接本来就是一个一个处理请求）
+    let box = Outcome()
     Task.detached {
       do {
-        outcome = .success(try await capture(pid: pid, axFrame: axFrame))
+        box.set(.success(try await capture(pid: pid, axFrame: axFrame)))
       } catch {
-        outcome = .failure(error)
+        box.set(.failure(error))
       }
-      semaphore.signal()
     }
-    if semaphore.wait(timeout: .now() + 10) == .timedOut {
+    guard let outcome = box.wait(seconds: 10) else {
       throw RPCError(.failed, "Taking the screenshot timed out. Try again.")
     }
     return try outcome.get()
+  }
+
+  /// 跨线程交一次结果
+  private final class Outcome: @unchecked Sendable {
+    private let lock = NSLock()
+    private let done = DispatchSemaphore(value: 0)
+    private var value: Result<Screenshot, Error>?
+
+    func set(_ result: Result<Screenshot, Error>) {
+      lock.lock()
+      value = result
+      lock.unlock()
+      done.signal()
+    }
+
+    func wait(seconds: Double) -> Result<Screenshot, Error>? {
+      guard done.wait(timeout: .now() + seconds) == .success else { return nil }
+      lock.lock()
+      defer { lock.unlock() }
+      return value
+    }
   }
 
   private static func capture(pid: pid_t, axFrame: Rect) async throws -> Screenshot {

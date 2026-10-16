@@ -57,6 +57,11 @@ do {
   exit(1)
 }
 
+// 进程号文件：主进程握手不过（开发期上一次的令牌对不上）时凭它结束这个旧助手
+FileManager.default.createFile(
+  atPath: (directory as NSString).appendingPathComponent("helper.pid"),
+  contents: Data("\(getpid())\n".utf8), attributes: [.posixPermissions: 0o600])
+
 Overlay.shared.onStop = { Activity.shared.stopAll() }
 signal(SIGTERM, SIG_IGN)
 let termination = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)

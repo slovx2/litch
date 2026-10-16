@@ -12,7 +12,15 @@
 // 证书没从参数给时看环境变量 LITCH_SIGN_IDENTITY（和安装包用的同一个），钥匙串看 LITCH_SIGN_KEYCHAIN。
 // 打包（apps/desktop/scripts/pack.mjs）和做安装包（make-installer.mjs）引用这里导出的函数。
 import { execFileSync, spawnSync } from 'node:child_process'
-import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  chmodSync,
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
