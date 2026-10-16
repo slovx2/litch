@@ -18,8 +18,9 @@
 // 图标在 assets/ 下（icon.icns、icon.ico、icon.png，由 scripts/make-brand.py 从原图生成后提交进仓库），
 // 应用自己的图标打包器按平台挑后缀；Linux 上窗口的图标是另外带进去的那张 icon.png。
 //
-// 这一版只是本机验收用：没有开发者签名和公证（只做了本机的临时签名），
-// 换一台机器打开会被系统拦下。只在 macOS 上验过。
+// 这里出来的应用在 macOS 上只有本机的临时签名，换一台机器打开会被系统拦下。要发给别人的安装包
+// （签名、公证过的 dmg，Windows 的安装程序）在这之后用 scripts/make-installer.mjs 做。
+// Windows 上也能打包（发布流程里在 Windows 的机器上打），但那一份还没有经过完整的测试。
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
@@ -103,6 +104,8 @@ const [outPath] = await packager({
   appBundleId: 'io.github.slovx2.litch',
   appVersion: manifest.version,
   appCategoryType: 'public.app-category.developer-tools',
+  // Windows 上 Litch.exe 的文件属性里写的名字
+  win32metadata: { CompanyName: 'slovx2', ProductName: 'Litch', FileDescription: 'Litch' },
   // 不带后缀：macOS 用 icon.icns，Windows 用 icon.ico
   icon: join(appDir, 'assets', 'icon'),
   platform: process.platform,

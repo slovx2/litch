@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  应用里内置适配器带的那份官方 Node 用开发者身份重签时声明的权限（scripts/make-installer.mjs）。
+  照官方 Node 自己签名时声明的那几项：V8 要即时编译；Node 起的引擎会加载用户自己装的 harness
+  （比如 Pi）带的原生插件，那些插件不是我们签的，所以要关掉库校验。
+  官方那份里的 get-task-allow（允许调试器挂上来）不要：带着它过不了公证。
+-->
+<plist version="1.0">
+  <dict>
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+    <key>com.apple.security.cs.disable-executable-page-protection</key>
+    <true/>
+    <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+    <true/>
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+  </dict>
+</plist>

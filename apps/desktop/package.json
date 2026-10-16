@@ -34,9 +34,11 @@
     "check:settings": "npm run build && node scripts/check-settings.mjs",
     "check:engines": "npm run build && node scripts/check-engines.mjs",
     "pack": "npm run build && node scripts/pack.mjs",
+    "installer": "node scripts/make-installer.mjs",
     "check:packed": "node scripts/smoke.mjs --packed && node scripts/smoke.mjs --packed --compose --entry && node scripts/smoke.mjs --packed --remote"
   },
   "devDependencies": {
+    "@electron/osx-sign": "2.7.1",
     "@electron/packager": "20.3.0",
     "@types/ws": "8.18.2",
     "electron": "44.7.0",

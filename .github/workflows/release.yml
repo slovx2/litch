@@ -1,0 +1,275 @@
+name: Release
+
+# 出这一版要发的全部东西，挂到这个标签的发布页：
+#   适配器的独立发布包（linux-x64、linux-arm64、darwin-arm64）、它的校验和清单、安装脚本
+#   桌面应用 Litch 的安装包：macOS（Apple Silicon）签名并公证过的 dmg，Windows（x64）的安装程序（不签名，还没有经过完整的测试）
+# 打 v 开头的标签时自动跑。也可以手动跑：
+#   填一个已有的标签：给它出包、验证，勾了“挂到发布页”才挂上去
+#   标签不填：照选的分支试跑一遍，只出包、验证、留作流程产物，不挂发布页，也不查版本号和标签对不对得上
+# 全部出好才一起挂上去；发布页还没有时建成草稿，人看过再公开，安装脚本取“最新一版”时不会碰到一个缺包的发布页。
+#
+# macOS 的签名和公证要在仓库的 Actions 机密里配好这五项（怎么取见 CONTRIBUTING.md 的“发版”一节）：
+#   MACOS_CERTIFICATE_P12        “Developer ID Application”证书连同私钥导出的 .p12，base64 编码
+#   MACOS_CERTIFICATE_PASSWORD   导出 .p12 时设的密码
+#   APPLE_API_KEY                App Store Connect API 密钥，.p8 文件的全文
+#   APPLE_API_KEY_ID             这把密钥的编号
+#   APPLE_API_ISSUER             签发者编号
+# 试跑时没配就出一份只有临时签名的 dmg 并说明；要挂到发布页时没配直接失败。
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 给哪个标签出包，例如 v0.7.1（标签要已经推上来）；不填就照选的分支试跑，不挂发布页
+        required: false
+        default: ''
+        type: string
+      publish:
+        description: 挂到发布页（只对填了标签的有用）
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  # 出包用的提交：标签，或者试跑时选的分支
+  REF: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.ref }}
+  # 要发的标签，试跑时是空的
+  TAG: ${{ inputs.tag || (github.event_name == 'push' && github.ref_name || '') }}
+  # 这一趟要不要挂到发布页
+  PUBLISH: ${{ github.event_name == 'push' || (inputs.tag != '' && inputs.publish) }}
+
+jobs:
+  adapter:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.REF }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: 1.26.6
+      - name: 标签和版本号要对得上
+        if: env.TAG != ''
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if [ "v${version}" != "${TAG}" ]; then
+            echo "标签是 ${TAG}，package.json 里的版本号是 ${version}" >&2
+            exit 1
+          fi
+      - run: npm ci --no-audit --no-fund
+      - run: npm ci --prefix packages/claude --no-audit --no-fund
+      - run: npm ci --prefix packages/pi --no-audit --no-fund
+      - run: npm ci --prefix packages/dsh --no-audit --no-fund
+      - run: npm run build
+      - name: 安装脚本的静态检查
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends shellcheck=0.9.0-1
+          sh -n scripts/install.sh
+          sh -n scripts/adapter-launcher.sh
+          shellcheck --shell=sh scripts/install.sh scripts/adapter-launcher.sh
+      # 三个平台的包在这一台机器上出：命令行是 Go 交叉编译的，Node 取各平台的官方包，
+      # 其余依赖裁剪后全是纯 JavaScript（暂存时会查，混进了分平台的东西就不让过）
+      - name: 出包
+        run: |
+          SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)" node scripts/package-adapter.mjs --target all --out "${RUNNER_TEMP}/release"
+          cat "${RUNNER_TEMP}/release/codex-harness-adapter-SHA256SUMS.txt"
+      # 拿刚出的那个 linux-x64 的包，在干净的容器里把安装、连接、升级、卸载过一遍（含装一份 Pi 跑通一个回合），
+      # musl 的系统给出明确的说法。验的就是要发的那一份
+      - name: 容器验证
+        run: node scripts/check-adapter-package.mjs --release "${RUNNER_TEMP}/release"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: adapter
+          path: ${{ runner.temp }}/release
+          if-no-files-found: error
+
+  desktop-macos:
+    runs-on: macos-15
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.REF }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: 1.26.6
+      - name: 标签和版本号要对得上
+        if: env.TAG != ''
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if [ "v${version}" != "${TAG}" ]; then
+            echo "标签是 ${TAG}，package.json 里的版本号是 ${version}" >&2
+            exit 1
+          fi
+      # 证书放进一个临时的钥匙串，用完删掉；公证密钥写成文件交给 notarytool。
+      # 签名身份从导入的证书里找“Developer ID Application”那一个
+      - name: 导入签名证书和公证密钥
+        env:
+          P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          P12_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          API_KEY: ${{ secrets.APPLE_API_KEY }}
+          API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          if [ -z "$P12" ] && [ -z "$API_KEY" ]; then
+            if [ "$PUBLISH" = true ]; then
+              echo "要挂到发布页的 dmg 必须签名并公证，可仓库里没有配签名证书和公证密钥（见本文件开头）" >&2
+              exit 1
+            fi
+            echo "::warning::没有配签名证书和公证密钥，这一趟出的 dmg 只有临时签名"
+            exit 0
+          fi
+          for name in P12 P12_PASSWORD API_KEY API_KEY_ID API_ISSUER; do
+            eval "value=\${$name}"
+            if [ -z "$value" ]; then
+              echo "签名和公证的机密不全，$name 对应的那一项是空的（见本文件开头）" >&2
+              exit 1
+            fi
+          done
+          keychain="${RUNNER_TEMP}/litch-signing.keychain-db"
+          password="$(openssl rand -hex 24)"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          printf '%s' "$P12" | base64 --decode > "${RUNNER_TEMP}/certificate.p12"
+          security import "${RUNNER_TEMP}/certificate.p12" -k "$keychain" -P "$P12_PASSWORD" -T /usr/bin/codesign
+          rm -f "${RUNNER_TEMP}/certificate.p12"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain" > /dev/null
+          # shellcheck disable=SC2046
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          identity="$(security find-identity -v -p codesigning "$keychain" | awk -F'"' '/Developer ID Application/ { print $2; exit }')"
+          if [ -z "$identity" ]; then
+            echo "导入的证书里没有 Developer ID Application 的签名身份" >&2
+            exit 1
+          fi
+          echo "签名身份：$identity"
+          printf '%s' "$API_KEY" > "${RUNNER_TEMP}/notary-key.p8"
+          {
+            echo "LITCH_SIGN_IDENTITY=$identity"
+            echo "LITCH_SIGN_KEYCHAIN=$keychain"
+            echo "LITCH_NOTARY_KEY=${RUNNER_TEMP}/notary-key.p8"
+            echo "LITCH_NOTARY_KEY_ID=$API_KEY_ID"
+            echo "LITCH_NOTARY_ISSUER=$API_ISSUER"
+          } >> "$GITHUB_ENV"
+      - run: npm ci --no-audit --no-fund
+      - run: npm ci --prefix packages/claude --no-audit --no-fund
+      - run: npm ci --prefix packages/pi --no-audit --no-fund
+      - run: npm ci --prefix packages/dsh --no-audit --no-fund
+      - run: npm run build
+      - run: npm run client:setup
+      - run: npm run client:pack
+      - name: 签名、公证，做成 dmg
+        run: |
+          if [ "$PUBLISH" = true ]; then
+            node apps/desktop/scripts/make-installer.mjs --require-signing
+          else
+            node apps/desktop/scripts/make-installer.mjs
+          fi
+      # 签过、钉过票的应用照样起得来：对着模拟核心起一次，界面和核心打通
+      - name: 签好的应用能起来
+        run: node apps/desktop/scripts/smoke.mjs --packed
+      - name: 收掉签名用的钥匙串和密钥
+        if: always()
+        run: |
+          if [ -n "${LITCH_SIGN_KEYCHAIN:-}" ]; then
+            security delete-keychain "$LITCH_SIGN_KEYCHAIN"
+          fi
+          rm -f "${RUNNER_TEMP}/notary-key.p8"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: desktop-macos
+          path: apps/desktop/out/installer/*.dmg
+          if-no-files-found: error
+
+  # Windows 的安装程序：不签名（打开时系统会提示来源不明），还没有经过完整的测试，这里只出包、不验收
+  desktop-windows:
+    runs-on: windows-2025
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.REF }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: 1.26.6
+      - name: 标签和版本号要对得上
+        if: env.TAG != ''
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if [ "v${version}" != "${TAG}" ]; then
+            echo "标签是 ${TAG}，package.json 里的版本号是 ${version}" >&2
+            exit 1
+          fi
+      # 机器上已经有这一版时 choco 什么都不做；版本不对就装成这一版
+      - name: Inno Setup 6.7.1
+        run: choco install innosetup --version=6.7.1 --no-progress -y
+      - run: npm ci --no-audit --no-fund
+      - run: npm ci --prefix packages/claude --no-audit --no-fund
+      - run: npm ci --prefix packages/pi --no-audit --no-fund
+      - run: npm ci --prefix packages/dsh --no-audit --no-fund
+      - run: npm run build
+      - run: npm run client:setup
+      - run: npm run client:pack
+      - run: node apps/desktop/scripts/make-installer.mjs
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: desktop-windows
+          path: apps/desktop/out/installer/*.exe
+          if-no-files-found: error
+
+  publish:
+    needs: [adapter, desktop-macos, desktop-windows]
+    if: github.event_name == 'push' || (inputs.tag != '' && inputs.publish)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          path: ${{ runner.temp }}/release
+          merge-multiple: true
+      - name: 桌面安装包的校验和清单
+        working-directory: ${{ runner.temp }}/release
+        run: |
+          sha256sum Litch-*.dmg Litch-*-setup.exe > Litch-SHA256SUMS.txt
+          cat Litch-SHA256SUMS.txt
+      - name: 挂到发布页
+        working-directory: ${{ runner.temp }}/release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if ! gh release view "${TAG}" >/dev/null 2>&1; then
+            gh release create "${TAG}" --draft --verify-tag --title "${TAG}" --generate-notes
+          fi
+          gh release upload "${TAG}" --clobber \
+            codex-harness-adapter-*.tar.gz \
+            codex-harness-adapter-SHA256SUMS.txt \
+            install.sh \
+            Litch-*.dmg \
+            Litch-*-setup.exe \
+            Litch-SHA256SUMS.txt

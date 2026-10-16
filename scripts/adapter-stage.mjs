@@ -5,6 +5,7 @@
 // 目录里有什么（和 Homebrew 配方的 libexec 对齐）：
 //   bin/codex-harness-adapter   Go 写的命令行，就地编译。终端用的伪终端桥也是它（pty-bridge 子命令）
 //   node/bin/node               官方的 Node（apps/desktop/scripts/node-runtime.mjs），适配器的各个进程都用它跑
+//   （给 Windows 暂存时这两个文件带 .exe 后缀，别的一样）
 //   packages/<引擎>/            构建产物（不带测试），加只有运行依赖的 node_modules
 //   node_modules/ package.json  根目录的运行依赖
 //   protocol/                   协议的契约
@@ -86,6 +87,9 @@ const HARNESS = [
 
 const GO_ARCH = { arm64: 'arm64', x64: 'amd64' }
 
+/** 可执行文件在目标系统上的名字：Windows 上带 .exe */
+const executable = (name, platform) => (platform === 'win32' ? `${name}.exe` : name)
+
 /** 复制一棵目录。符号链接照原样复制（不改成绝对路径）；同一个卷上用写时复制，不真的占两份地方 */
 const copyTree = (from, to, filter) =>
   cpSync(from, to, {
@@ -134,8 +138,10 @@ function prune(directory, out, omit) {
   if (inside.startsWith('..') || resolve(directory).startsWith(resolve(repo, 'packages') + sep)) {
     throw new Error(`拒绝在暂存目录之外裁剪依赖：${directory}`)
   }
+  // Windows 上的 npm 是 npm.cmd，不经命令行解释器起不来；参数都是上面这些固定的字，不怕被解释
+  const windows = process.platform === 'win32'
   execFileSync(
-    'npm',
+    windows ? 'npm.cmd' : 'npm',
     [
       'prune',
       ...omit.map((kind) => `--omit=${kind}`),
@@ -145,7 +151,7 @@ function prune(directory, out, omit) {
       '--no-fund',
       '--loglevel=error',
     ],
-    { cwd: directory, stdio: ['ignore', 'ignore', 'inherit'] },
+    { cwd: directory, stdio: ['ignore', 'ignore', 'inherit'], shell: windows },
   )
 }
 
@@ -273,10 +279,14 @@ function nativeTarget(path) {
       return { platform: 'darwin', arch: 'universal' }
     }
     if (head.readUInt16BE(0) === 0x4d5a && length === head.length) {
-      // “MZ”开头的不一定是 PE：再看它指过去的位置上有没有 PE 的签名
-      const signature = Buffer.alloc(4)
-      readSync(file, signature, 0, 4, head.readUInt32LE(60))
-      if (signature.toString('latin1') === 'PE\0\0') return { platform: 'win32', arch: 'pe' }
+      // “MZ”开头的不一定是 PE：再看它指过去的位置上有没有 PE 的签名，签名后面紧跟着机器类型
+      const signature = Buffer.alloc(6)
+      readSync(file, signature, 0, 6, head.readUInt32LE(60))
+      if (signature.toString('latin1', 0, 4) === 'PE\0\0') {
+        const machine = signature.readUInt16LE(4)
+        const arch = { 34404: 'x64', 43620: 'arm64' }[machine] ?? `machine-${machine}`
+        return { platform: 'win32', arch }
+      }
     }
     return null
   } finally {
@@ -301,7 +311,10 @@ function allows(list, value) {
  * 这份暂存不能交出去：到目标平台上装依赖、构建，再在那里暂存。
  */
 export function auditPlatform(out, platform, arch) {
-  const executables = new Set(['bin/codex-harness-adapter', 'node/bin/node'])
+  const executables = new Set([
+    `bin/${executable('codex-harness-adapter', platform)}`,
+    `node/bin/${executable('node', platform)}`,
+  ])
   const problems = []
   walk(out, (path, entry) => {
     if (!entry.isFile()) return true
@@ -372,7 +385,7 @@ export async function stageAdapterTree(
   // Go 的命令行：直接编译进暂存目录，不动仓库里的 bin/
   const goArch = GO_ARCH[arch]
   if (!goArch) throw new Error(`不认识的架构：${arch}`)
-  const binary = join(out, 'bin', 'codex-harness-adapter')
+  const binary = join(out, 'bin', executable('codex-harness-adapter', platform))
   try {
     execFileSync('go', ['build', '-trimpath', '-o', binary, './cmd/codex-harness-adapter'], {
       cwd: resolve(goFrom),

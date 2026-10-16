@@ -108,12 +108,15 @@ export interface BundledAdapter {
   node: string
 }
 
-/** 目录里的布局是 scripts/stage-adapter.mjs 摆的，两边要对得上 */
-export const bundledAdapter = (root: string): BundledAdapter => ({
-  root,
-  bin: join(root, 'bin', 'codex-harness-adapter'),
-  node: join(root, 'node', 'bin', 'node'),
-})
+/** 目录里的布局是 scripts/stage-adapter.mjs 摆的，两边要对得上。Windows 上两个可执行文件带 .exe */
+export const bundledAdapter = (root: string): BundledAdapter => {
+  const suffix = process.platform === 'win32' ? '.exe' : ''
+  return {
+    root,
+    bin: join(root, 'bin', `codex-harness-adapter${suffix}`),
+    node: join(root, 'node', 'bin', `node${suffix}`),
+  }
+}
 
 /** 默认的状态目录 */
 export const defaultAdapterHome = (): string => join(homedir(), '.codex-harness-adapter')

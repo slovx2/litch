@@ -28,19 +28,22 @@ import { fileURLToPath } from 'node:url'
 export const NODE_VERSION = '24.21.0'
 
 /**
- * 官方压缩包（.tar.gz）的 SHA-256，取自 https://nodejs.org/dist/v24.21.0/SHASUMS256.txt。
+ * 官方压缩包的 SHA-256（Windows 是 .zip，别的是 .tar.gz），取自 https://nodejs.org/dist/v24.21.0/SHASUMS256.txt。
  * 2026-10-13 取的时候核对过：那份清单带签名的版本（SHASUMS256.txt.asc）用 Node 发行密钥
  * （nodejs/release-keys 的钥匙环）验过，签名完好；darwin-arm64 的压缩包下载后实算一致。
  * 加别的平台或换版本时照同样的办法取，不要从别处抄。
  * linux 的两项是给独立发布包用的（scripts/package-adapter.mjs），同一天从同一份清单取的：
  * 清单的分离签名（SHASUMS256.txt.sig）用同一个钥匙环验过，签名完好；两个压缩包下载后实算一致。
  * 官方的 linux 包是按 glibc 编的，musl 的系统（Alpine）上跑不了。
+ * win32-x64 是给桌面应用的 Windows 安装包用的，2026-10-16 照同样的办法取：清单的签名
+ * （SHASUMS256.txt.asc）用同一个钥匙环验过，签名完好；压缩包下载后实算一致。
  */
 const SHA256 = {
   'darwin-arm64': 'bed7eea5325e1108f32ce5228ddd6a5f0f08a499ee42aa7442aea583702f6057',
   'darwin-x64': '1462cb3b3046b815cf8ea436d3da450ec1a9f11dac7e5a46b0ada5305d7e8097',
   'linux-arm64': '724282c3b43aec998aa9527380465b45d229e021b58035f5f4f63095eabfe5d5',
   'linux-x64': '6e1db87ef58b8819e5d5402eff1536491b18edd8eb7bee5ef7897876e88dc5ff',
+  'win32-x64': '158f7685b44de51f6c0df1d153526cbcd3e1bc739a8dfc607721cef75de9e541',
 }
 
 /** 下载的压缩包缓存在哪 */
@@ -52,8 +55,12 @@ const sha256Of = async (file) => {
   return hash.digest('hex')
 }
 
-/** 压缩包里最外面那层目录的名字，也是压缩包去掉后缀的名字 */
-const baseName = (platform, arch) => `node-v${NODE_VERSION}-${platform}-${arch}`
+/** 压缩包里最外面那层目录的名字，也是压缩包去掉后缀的名字。Node 管 Windows 叫 win */
+const baseName = (platform, arch) =>
+  `node-v${NODE_VERSION}-${platform === 'win32' ? 'win' : platform}-${arch}`
+
+/** Windows 的官方包只有 .zip */
+const extension = (platform) => (platform === 'win32' ? 'zip' : 'tar.gz')
 
 /**
  * 保证缓存里有一份校验过的压缩包，返回它的路径。
@@ -66,7 +73,7 @@ export async function fetchNodeArchive({ platform = process.platform, arch = pro
       `还没有登记 ${platform}-${arch} 的 Node 压缩包哈希（见 scripts/node-runtime.mjs 里的 SHA256）`,
     )
   }
-  const name = `${baseName(platform, arch)}.tar.gz`
+  const name = `${baseName(platform, arch)}.${extension(platform)}`
   const archive = join(CACHE_DIR, name)
   if (existsSync(archive)) {
     if ((await sha256Of(archive)) === expected) return archive
@@ -97,20 +104,31 @@ export async function fetchNodeArchive({ platform = process.platform, arch = pro
 }
 
 /**
- * 把 Node 装到 dest 下面：dest/bin/node 和 dest/LICENSE（分发它的可执行文件要带上许可）。
+ * 把 Node 装到 dest 下面：dest/bin/node（Windows 上是 dest/bin/node.exe）和 dest/LICENSE（分发它的可执行文件要带上许可）。
  * 压缩包里别的东西（npm、头文件、文档）都不要。dest 应当是一个新建的空目录。
+ * Windows 的包里 node.exe 在最外层，这里挪进 bin/，两边的布局一样。
+ * 解压用 bsdtar（macOS 和 Windows 自带的 tar 都是它），.zip 也解得开；在 Windows 上点名用系统自带的那个，
+ * 免得 PATH 里排在前面的别的 tar（比如 Git 带的）不认 .zip。
  */
 export async function installNode(dest, target = {}) {
   const { platform = process.platform, arch = process.arch } = target
   const archive = await fetchNodeArchive({ platform, arch })
   const top = baseName(platform, arch)
-  mkdirSync(dest, { recursive: true })
+  const windows = platform === 'win32'
+  const tar =
+    process.platform === 'win32'
+      ? join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe')
+      : 'tar'
+  mkdirSync(join(dest, 'bin'), { recursive: true })
+  const binary = windows ? 'node.exe' : 'bin/node'
   execFileSync(
-    'tar',
-    ['-xzf', archive, '-C', dest, '--strip-components=1', `${top}/bin/node`, `${top}/LICENSE`],
+    tar,
+    ['-xf', archive, '-C', dest, '--strip-components=1', `${top}/${binary}`, `${top}/LICENSE`],
     { stdio: ['ignore', 'inherit', 'inherit'] },
   )
-  return { node: join(dest, 'bin', 'node'), license: join(dest, 'LICENSE'), version: NODE_VERSION }
+  const node = join(dest, 'bin', windows ? 'node.exe' : 'node')
+  if (windows) renameSync(join(dest, 'node.exe'), node)
+  return { node, license: join(dest, 'LICENSE'), version: NODE_VERSION }
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

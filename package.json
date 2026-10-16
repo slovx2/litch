@@ -92,6 +92,7 @@
     "client:check:engines": "npm run build --prefix packages/ui && npm run check:engines --prefix apps/desktop --",
     "client:shots": "npm run build --prefix packages/ui && npm run shots --prefix apps/desktop",
     "client:pack": "npm run build --prefix packages/ui && npm run pack --prefix apps/desktop",
+    "client:installer": "npm run installer --prefix apps/desktop",
     "client:check:packed": "npm run check:packed --prefix apps/desktop"
   },
   "dependencies": {
