@@ -77,11 +77,11 @@ test('APPROVAL-007：入口进程按环境变量定开关：值是 1 才算开�
     const asking = { kinds: ['command', 'fileChange'], uncovered: ['subagents'] }
     const silent = { kinds: [], uncovered: [] }
     for (const [value, approvals, extensions] of [
-      [undefined, silent, ['planConfirmation']],
-      ['0', silent, ['planConfirmation']],
+      [undefined, silent, ['planConfirmation', 'clientTools']],
+      ['0', silent, ['planConfirmation', 'clientTools']],
       // 只认 1：别的写法不算开，免得写错了的值悄悄变成“会问”的声明。
-      ['true', silent, ['planConfirmation']],
-      ['1', asking, ['declineWithNote', 'planConfirmation']],
+      ['true', silent, ['planConfirmation', 'clientTools']],
+      ['1', asking, ['declineWithNote', 'planConfirmation', 'clientTools']],
     ] as const) {
       const before = detected(value)
       assert.deepEqual(before.features.approvals, approvals, `检测，变量是 ${value}`)

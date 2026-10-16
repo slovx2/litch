@@ -71,9 +71,10 @@ export function harnessDeclaration(approvals: boolean): HarnessDeclaration {
     ...HARNESS_IDENTITY.pi,
     // 审批请求上的“拒绝并附说明”只在打开审批时有。计划插件交了计划之后的那一问（就绪菜单）
     // 只对声明了 planConfirmation 的连接问，没声明的由客户端在回合结束后自己问（ui.mts）。
+    // litch_ 命名空间的动态工具只交给声明了 clientTools 的连接（server.mts 的 call）。
     extensions: approvals
-      ? [EXTENSION.declineWithNote, EXTENSION.planConfirmation]
-      : [EXTENSION.planConfirmation],
+      ? [EXTENSION.declineWithNote, EXTENSION.planConfirmation, EXTENSION.clientTools]
+      : [EXTENSION.planConfirmation, EXTENSION.clientTools],
     features: features(approvals),
     permissionPresets: [
       {
