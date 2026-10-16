@@ -9,7 +9,15 @@ export type MockBlock =
 export interface MockModel {
   url: string
   requests: any[]
+  // 连接和请求的时间线，排查“请求到底到没到”时看：哪条连接（从 1 数）、什么时候、发生了什么
+  events: MockEvent[]
   close(): Promise<void>
+}
+export interface MockEvent {
+  at: number
+  socket: number
+  kind: 'connect' | 'request' | 'body' | 'close'
+  detail?: string
 }
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
@@ -46,8 +54,18 @@ export function scripted(scripts: Record<string, MockBlock[][]>): MockResponder 
 
 export async function startMockModel(script: MockBlock[][] | MockResponder): Promise<MockModel> {
   const requests: any[] = []
+  const events: MockEvent[] = []
+  const sockets = new WeakMap<object, number>()
   let cursor = 0
   const server: Server = createServer(async (request, response) => {
+    const socket = sockets.get(request.socket) ?? 0
+    const session = request.headers['x-deepseek-harness-session-id']
+    events.push({
+      at: Date.now(),
+      socket,
+      kind: 'request',
+      detail: `${request.method} ${request.url}${session ? ` ${session}` : ''}`,
+    })
     const chunks: Buffer[] = []
     for await (const chunk of request) chunks.push(chunk as Buffer)
     if (request.method !== 'POST' || !String(request.url).endsWith('/v1/messages')) {
@@ -56,6 +74,12 @@ export async function startMockModel(script: MockBlock[][] | MockResponder): Pro
     }
     const body = JSON.parse(Buffer.concat(chunks).toString() || '{}')
     requests.push(body)
+    events.push({
+      at: Date.now(),
+      socket,
+      kind: 'body',
+      detail: body.tools?.length ? `${body.tools.length} 个工具` : '不带工具',
+    })
     const blocks: MockBlock[] =
       typeof script === 'function'
         ? script(body)
@@ -119,11 +143,19 @@ export async function startMockModel(script: MockBlock[][] | MockResponder): Pro
     emit('message_stop', {})
     response.end()
   })
+  let opened = 0
+  server.on('connection', (socket) => {
+    const id = ++opened
+    sockets.set(socket, id)
+    events.push({ at: Date.now(), socket: id, kind: 'connect' })
+    socket.on('close', () => events.push({ at: Date.now(), socket: id, kind: 'close' }))
+  })
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
   const { port } = server.address() as { port: number }
   return {
     url: `http://127.0.0.1:${port}/anthropic`,
     requests,
+    events,
     close: () =>
       new Promise((resolve) => {
         server.closeAllConnections()

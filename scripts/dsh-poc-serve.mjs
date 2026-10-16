@@ -12,9 +12,11 @@ import { mkdir, readdir, readFile, realpath, rm, writeFile } from 'node:fs/promi
 import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { Duplex } from 'node:stream'
+import { fileURLToPath } from 'node:url'
 import { zstdDecompressSync } from 'node:zlib'
 import { WebSocket } from 'ws'
 import { startMockModel } from '../packages/dsh/dist/dsh/test/mock-model.mjs'
+import { MARK } from './dsh-poc-diagnostics.mjs'
 
 const flags = new Set(process.argv.slice(2).filter((entry) => entry.startsWith('--')))
 const option = (name, fallback) => {
@@ -110,6 +112,14 @@ async function startInstance() {
     await mkdir(join(root, name), { recursive: true, mode: 0o700 })
   await writeFile(join(project, 'README.md'), 'dsh 打样验证项目\n')
   spawnSync('git', ['init', '--quiet', project])
+  // dsh 的家目录（适配器状态目录下的 dsh/dsh-home）里的补丁层：挂上诊断插件，dsh 自己的告警和标题请求的去向进运行日志
+  const dshHome = join(root, 'state', 'dsh', 'dsh-home')
+  await mkdir(dshHome, { recursive: true, mode: 0o700 })
+  const diagnostics = fileURLToPath(new URL('./dsh-poc-diagnostics.mjs', import.meta.url))
+  await writeFile(
+    join(dshHome, 'cordis.patch.yml'),
+    `- insert:\n    - id: cha-dsh-poc-diagnostics\n      name: ${JSON.stringify(diagnostics)}\n`,
+  )
   // 自带一份 CLI，避免占用或覆盖工作区里别人正在用的 bin/。
   const cli = join(root, 'codex-harness-adapter')
   const built = spawnSync('go', ['build', '-o', cli, './cmd/codex-harness-adapter'], {
@@ -261,7 +271,30 @@ async function titleTrail(instance, threadId) {
       const event = JSON.parse(line)
       return event.data?.source ? `${event.type}（${event.data.source.kind}）` : event.type
     })
-  return `标题请求 ${asked} 次，dsh 的标题事件：${events.join('、') || '没有'}`
+  // 模拟模型这头的连接和请求，时刻从头一条算起
+  const start = instance.model.events[0]?.at ?? 0
+  const timeline = instance.model.events.map(
+    (event) =>
+      `  +${event.at - start}ms 连接${event.socket} ${event.kind}${event.detail ? ` ${event.detail}` : ''}`,
+  )
+  return [
+    `标题请求 ${asked} 次，dsh 的标题事件：${events.join('、') || '没有'}`,
+    'dsh 的诊断（告警和这个线程的标题请求）：',
+    ...(await diagnosed(instance, threadId)).map((line) => `  ${line}`),
+    `模拟模型的连接与请求（共 ${instance.model.requests.length} 个请求）：`,
+    ...timeline,
+  ].join('\n')
+}
+
+// 运行日志里诊断插件写的行：dsh 的告警，和这个线程的标题请求的去向
+async function diagnosed(instance, threadId) {
+  const log = await readFile(join(instance.root, 'state', 'dsh', 'runtime.log'), 'utf8').catch(
+    () => '',
+  )
+  return log
+    .split('\n')
+    .filter((line) => line.startsWith(MARK))
+    .filter((line) => line.includes(threadId) || / (warn|error) /.test(line))
 }
 
 async function verify(instance) {
@@ -382,7 +415,23 @@ async function verify(instance) {
     )
   for (let waited = 0; waited < 10000 && !titled(); waited += 50)
     await new Promise((done) => setTimeout(done, 50))
-  if (!titled()) assert.fail(`第一个线程没收到 dsh 起的标题：${await titleTrail(instance, first)}`)
+  if (!titled()) {
+    const missing = (await titleTrail(instance, first)).split('\n', 1)[0]
+    // 再等 dsh 给这次标题请求一个结局（结束、出错、被取消），最多等过它自己的 60 秒时限，
+    // 分得清是卡住了还是早就失败了。等到了也照样算失败
+    const settled = async () =>
+      (await diagnosed(instance, first)).some((line) =>
+        / title (ended|threw|closed early|aborted) |automatic title generation failed/.test(line),
+      )
+    const since = Date.now()
+    while (Date.now() - since < 65000 && !titled() && !(await settled()))
+      await new Promise((done) => setTimeout(done, 500))
+    assert.fail(
+      `第一个线程没收到 dsh 起的标题：${missing}\n` +
+        `又等了 ${Math.round((Date.now() - since) / 1000)} 秒，${titled() ? '标题到了' : '仍然没有标题'}：` +
+        (await titleTrail(instance, first)),
+    )
+  }
   desktop.close()
 
   // 4. 线程列表与历史：另开一条连接，两个线程都在，历史条目与实时一致。
