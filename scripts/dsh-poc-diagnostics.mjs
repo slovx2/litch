@@ -60,8 +60,12 @@ function watchFetch(ctx) {
     const wrapped = function (input, init) {
       const url = String(input?.url ?? input)
       if (!active || !url.endsWith('/messages')) return original.call(this, input, init)
-      const headers = new Headers(init?.headers)
-      const id = headers.get('x-deepseek-harness-session-id') ?? '-'
+      let id = '-'
+      try {
+        id = new Headers(init?.headers).get('x-deepseek-harness-session-id') ?? '-'
+      } catch (error) {
+        say('fetch headers unreadable', causes(error))
+      }
       const kind =
         typeof init?.body !== 'string'
           ? `正文是 ${typeof init?.body}`
@@ -88,6 +92,30 @@ function watchFetch(ctx) {
   })
 }
 
+// fetch 之前也可能出错（凭据、附件、请求扩展……），dsh 一样归成 TRANSPORT。模型服务适配器里发请求的那个方法
+// （dsh 0.2.0-rc.2 的 DeepSeekAdapter.request）在实例上包一层，里面抛出的都带 cause 链记一行；形状不对就不包
+const watchedAdapters = new WeakSet()
+function watchAdapter(ctx, provider) {
+  const adapter = ctx.get('llm')?.adapters?.get?.(provider)?.adapter
+  if (!adapter || watchedAdapters.has(adapter) || typeof adapter.request !== 'function') return
+  watchedAdapters.add(adapter)
+  say('adapter watched', provider)
+  const request = adapter.request
+  adapter.request = async function* (options, ...rest) {
+    try {
+      yield* request.call(this, options, ...rest)
+    } catch (error) {
+      say(
+        'adapter request threw',
+        options?.sessionId ?? '-',
+        options?.purpose ?? '-',
+        causes(error),
+      )
+      throw error
+    }
+  }
+}
+
 export function apply(ctx) {
   watchFetch(ctx)
   // 级别：error 0、info 1、warn 2
@@ -100,6 +128,11 @@ export function apply(ctx) {
   ctx.on(
     'llm/stream',
     (options, next) => {
+      try {
+        watchAdapter(ctx, options.provider)
+      } catch (error) {
+        say('adapter not watched', causes(error))
+      }
       if (options.purpose !== 'session-title') return next()
       const id = options.sessionId
       say('title requested', id)
