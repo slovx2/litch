@@ -19,6 +19,11 @@ import {
 export interface ClientToolHost {
   /** 能执行的命名空间：登记了执行器的那几个。启动时报给核心，核心握手时照它声明 */
   namespaces(): string[]
+  /**
+   * 再登记一个执行器。要等应用就绪才建得出来的（内置浏览器）用它，必须在核心启动之前登记，
+   * 否则这一次握手没有声明它
+   */
+  add(executor: ClientToolExecutor): void
   /** 核心发来的一条消息 */
   handle(message: ClientToolToMain): void
   /** 核心没了（退出、重启）：手上的调用都中止，卡片都当作没答 */
@@ -37,13 +42,14 @@ export function createClientToolHost(
   log: (line: string) => void = (line) => console.error(`[client-tools] ${line}`),
 ): ClientToolHost {
   const byNamespace = new Map<string, ClientToolExecutor>()
-  for (const executor of executors) {
+  const add = (executor: ClientToolExecutor) => {
     if (byNamespace.has(executor.namespace)) {
       log(`命名空间 ${executor.namespace} 登记了两个执行器，只用头一个`)
-      continue
+      return
     }
     byNamespace.set(executor.namespace, executor)
   }
+  for (const executor of executors) add(executor)
   const running = new Map<string, Running>()
   /** 等用户答的卡片：卡片的标识 → 答了（或者撤了，null）之后怎么办 */
   const waiting = new Map<string, (answer: ClientToolAnswer | null) => void>()
@@ -106,6 +112,7 @@ export function createClientToolHost(
 
   return {
     namespaces: () => [...byNamespace.keys()],
+    add,
 
     handle(message) {
       if (message?.type !== CLIENT_TOOL) return

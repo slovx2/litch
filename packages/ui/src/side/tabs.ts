@@ -3,6 +3,9 @@
 import { type ComponentType, type LazyExoticComponent, lazy } from 'react'
 import type { IconName } from '../app/icons.tsx'
 import type { MessageKey } from '../i18n/index.ts'
+// 内置浏览器：代理要给人看网页时打开面板（启动时就装上，见 browser/show.ts）
+import './browser/show.ts'
+import { BROWSER_TAB } from './browser/store.ts'
 
 /**
  * 面板现在挂在哪：眼前的会话（或者正在写的新会话）所在的设备和工作区。
@@ -57,6 +60,14 @@ export const SIDE_TABS: readonly SideTabSpec[] = [
     icon: 'diff',
     Panel: lazy(() =>
       import('../diff/DiffTab.tsx').then((module) => ({ default: module.DiffTab })),
+    ),
+  },
+  {
+    id: BROWSER_TAB,
+    label: 'side.tab.browser',
+    icon: 'globe',
+    Panel: lazy(() =>
+      import('./browser/BrowserTab.tsx').then((module) => ({ default: module.BrowserTab })),
     ),
   },
 ]

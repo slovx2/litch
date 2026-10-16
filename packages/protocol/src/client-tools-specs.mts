@@ -7,7 +7,7 @@
 // 这个文件只引用 client-tools.mts 和各命名空间的定义，核心（packages/core）和桌面外壳都直接引用它。
 import { CLIENT_TOOL_NAMESPACE, type ClientToolNamespaceSpec } from './client-tools.mjs'
 
-// 合并时加在这里：import { BROWSER_TOOLS } from './client-tools-browser.mjs'
+import { BROWSER_TOOLS } from './client-tools-browser.mjs'
 import { COMPUTER_TOOLS } from './client-tools-computer.mjs'
 
 /** echo 工具的参数 */
@@ -55,7 +55,7 @@ export const ECHO_TOOLS: ClientToolNamespaceSpec = {
 /** 各命名空间的定义。键是命名空间 */
 const SPECS: Record<string, ClientToolNamespaceSpec> = {
   [ECHO_TOOLS.name]: ECHO_TOOLS,
-  // 合并时加在这里：[BROWSER_TOOLS.name]: BROWSER_TOOLS,
+  [BROWSER_TOOLS.name]: BROWSER_TOOLS,
   [COMPUTER_TOOLS.name]: COMPUTER_TOOLS,
 }
 
