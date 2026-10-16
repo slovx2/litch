@@ -5,6 +5,12 @@ import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { EXTENSION } from '../../protocol/src/device.mjs'
 import { catalogPagination } from '../../shared/src/catalog-pagination.mjs'
+import {
+  clientToolNamespaces,
+  isClientToolNamespace,
+  noClientToolExecutor,
+  pickClientToolExecutor,
+} from '../../shared/src/client-tool-executor.mjs'
 import { FilesystemRpc } from '../../shared/src/filesystem-rpc.mjs'
 import { FuzzyFileSearch, FuzzySearchSessions } from '../../shared/src/fuzzy-session.mjs'
 import { gitDiffToRemote as computeGitDiffToRemote } from '../../shared/src/git-diff-remote.mjs'
@@ -259,6 +265,8 @@ interface PeerFeatures {
   supportsCompletedSubagentActivity: boolean
   // 握手时声明认识的协议扩展（capabilities.litchExtensions）。扩展内容只发给声明过的连接。
   extensions: Set<string>
+  // 声明能执行的客户端工具命名空间（clientTools 扩展的 capabilities.litchClientTools）
+  clientTools: ReadonlySet<string>
 }
 
 function turnItemsView(value: unknown): TurnItemsView {
@@ -677,6 +685,7 @@ export class CodexClaudeAppServer {
             declaredActivityKinds.includes('completed') ||
             process.env.CHA_CLAUDE_SUBAGENT_COMPLETED === '1',
           extensions: declaredExtensions(initParams),
+          clientTools: clientToolNamespaces(initParams),
         })
         // 客户端退订的通知，这条连接上从现在起不发（握手之后排着要推的那几条也算）。
         applyNotificationOptOut(peer, initParams)
@@ -3724,16 +3733,35 @@ export class CodexClaudeAppServer {
               },
             })
           }
+          // 客户端工具（litch_ 开头的命名空间）只交给声明过能执行它的连接，挑不出来当场失败，不等人订阅
+          const namespace = tool.namespace ?? null
+          const executor = isClientToolNamespace(namespace)
+            ? this.clientToolExecutor(peer, thread.id, namespace as string)
+            : undefined
+          if (executor === null) {
+            const result = noClientToolExecutor(namespace as string)
+            this.store.completeTool(thread.id, callId, result)
+            finish(result)
+            return result
+          }
           try {
             const result = dynamicToolResult(
-              await this.sendServerRequest(peer, 'item/tool/call', requestId, {
-                threadId: thread.id,
-                turnId: turn.id,
-                callId,
-                tool: tool.name,
-                namespace: tool.namespace ?? null,
-                arguments: args,
-              }),
+              await this.sendServerRequest(
+                peer,
+                'item/tool/call',
+                requestId,
+                {
+                  threadId: thread.id,
+                  turnId: turn.id,
+                  callId,
+                  tool: tool.name,
+                  namespace,
+                  arguments: args,
+                },
+                undefined,
+                undefined,
+                executor,
+              ),
             )
             this.store.completeTool(thread.id, callId, result)
             finish(result)
@@ -6219,10 +6247,13 @@ export class CodexClaudeAppServer {
     signal?: AbortSignal,
     // 带协议扩展内容的请求用它按要送去的连接给参数；不给就都用 params。
     paramsFor?: (target: RpcPeer) => unknown,
+    // 已经挑好的执行方（客户端工具）：只送它一条，它断开就按失败结束，不改送别人
+    chosen?: RpcPeer,
   ): Promise<unknown> {
     const threadId = stringOr(asRecord(params).threadId, '')
     // 该由谁来答：线程的全部订阅连接，先答的生效；没人订阅时是发起回合的连接；它也断开了就没有人可送。
     const targets = (): RpcPeer[] => {
+      if (chosen) return this.isConnected(chosen) ? [chosen] : []
       const watching = this.recipients(peer, params).filter((target) => this.isConnected(target))
       if (method !== 'item/tool/call') return watching
       // 客户端执行的工具调用有副作用，只交给一条连接：发起回合的连接还订阅着就给它，否则给最早订阅的那条。
@@ -6242,6 +6273,19 @@ export class CodexClaudeAppServer {
           })
       },
     })
+  }
+
+  // 客户端工具的执行方（规矩在 shared/src/client-tool-executor.mts）：发起回合的连接还连着、声明了这个
+  // 命名空间就是它；否则订阅着线程（或照 recipients 跟着父会话）、声明了的连接里最早订阅的那条；没有返回 null。
+  // CLI 自己开的回合没有发起者（peer 是脱离的那个）。
+  private clientToolExecutor(peer: RpcPeer, threadId: string, namespace: string): RpcPeer | null {
+    const namespacesOf = (target: RpcPeer) =>
+      this.peerFeatures.get(target)?.clientTools ?? new Set()
+    const starter = this.isConnected(peer) ? peer : null
+    const watching = this.recipients(peer, { threadId }).filter((target) =>
+      this.isConnected(target),
+    )
+    return pickClientToolExecutor(namespace, starter, watching, namespacesOf)
   }
 
   private completeActiveTurns(status: 'interrupted' | 'failed', error: unknown): void {

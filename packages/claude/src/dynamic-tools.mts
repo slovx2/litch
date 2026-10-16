@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
 import type { ValidateFunction } from 'ajv'
+import { isClientToolNamespace } from '../../shared/src/client-tool-executor.mjs'
 import { dynamicToolResult } from './dynamic-tool-result.mjs'
 import { jsonSchemaValidator } from './json-schema.mjs'
 import { ProtocolError, requiredString } from './protocol-contract.mjs'
@@ -12,6 +13,41 @@ export interface DynamicTool {
   namespace?: string
   description: string
   inputSchema: Record<string, unknown>
+}
+
+/** 动态工具交给 CLI 的那个进程内 MCP 服务的名字 */
+export const DYNAMIC_TOOL_SERVER = 'codex_harness_adapter'
+
+/** 模型看到的工具名（不带 MCP 前缀）。编码完整标识，避免 namespace 和 name 拼接产生碰撞 */
+export function dynamicToolName(namespace: string | null | undefined, name: string): string {
+  return `t_${createHash('sha256')
+    .update(JSON.stringify([namespace ?? null, name]))
+    .digest('hex')
+    .slice(0, 40)}`
+}
+
+const clientToolNames = new WeakMap<unknown[], ReadonlySet<string>>()
+
+/**
+ * 会话的动态工具里，客户端工具命名空间（`litch_` 开头，clientTools 扩展）的那些在 CLI 里的完整工具名
+ * （`mcp__codex_harness_adapter__t_…`）。这些工具由客户端执行，要不要问用户由执行方决定，
+ * 所以不受 Claude Code 这边的沙箱和审批管（和原生 codex 一样：它对动态工具不审批、不按沙箱拦）。
+ */
+export function clientToolCliNames(raw: unknown[] | undefined): ReadonlySet<string> {
+  if (!raw?.length) return new Set()
+  const cached = clientToolNames.get(raw)
+  if (cached) return cached
+  const names = new Set<string>()
+  for (const spec of raw) {
+    const fields = spec && typeof spec === 'object' ? (spec as Record<string, unknown>) : {}
+    if (fields.type !== 'namespace' || typeof fields.name !== 'string') continue
+    if (!isClientToolNamespace(fields.name) || !Array.isArray(fields.tools)) continue
+    for (const tool of fields.tools)
+      if (tool && typeof tool.name === 'string')
+        names.add(`mcp__${DYNAMIC_TOOL_SERVER}__${dynamicToolName(fields.name, tool.name)}`)
+  }
+  clientToolNames.set(raw, names)
+  return names
 }
 
 export function dynamicToolServer(
@@ -39,11 +75,7 @@ export function dynamicToolServer(
     requiredString(tool.name, 'tool.name')
     if (!tool.inputSchema || typeof tool.inputSchema !== 'object')
       throw new ProtocolError(-32602, '工具 inputSchema 无效')
-    // 编码完整标识，避免 namespace 和 name 拼接产生碰撞。
-    const name = `t_${createHash('sha256')
-      .update(JSON.stringify([tool.namespace ?? null, tool.name]))
-      .digest('hex')
-      .slice(0, 40)}`
+    const name = dynamicToolName(tool.namespace, tool.name)
     if (tools.has(name)) throw new ProtocolError(-32602, '重复工具定义')
     tools.set(name, tool)
     schemas.set(
@@ -51,7 +83,7 @@ export function dynamicToolServer(
       jsonSchemaValidator(tool.inputSchema, { allErrors: true }).compile(tool.inputSchema),
     )
   }
-  const config = createSdkMcpServer({ name: 'codex_harness_adapter', version: '1.0.0' })
+  const config = createSdkMcpServer({ name: DYNAMIC_TOOL_SERVER, version: '1.0.0' })
   config.instance.server.registerCapabilities({ tools: {} })
   config.instance.server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [...tools].map(([name, tool]) => ({
