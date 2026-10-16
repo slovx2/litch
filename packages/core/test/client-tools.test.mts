@@ -184,7 +184,8 @@ test('握手：主进程报了能执行的命名空间就声明 clientTools 扩�
   withTools.core.start()
   await settle()
   const init = withTools.peer.last().seen.find((entry) => entry.method === 'initialize')
-  const capabilities = (init?.params as { capabilities: Record<string, unknown> }).capabilities
+  assert.ok(init)
+  const capabilities = (init.params as { capabilities: Record<string, unknown> }).capabilities
   assert.ok((capabilities.litchExtensions as string[]).includes('clientTools'))
   assert.deepEqual(capabilities.litchClientTools, { namespaces: ['litch_echo', 'litch_browser'] })
 
@@ -192,11 +193,9 @@ test('握手：主进程报了能执行的命名空间就声明 clientTools 扩�
     const bare = setup({ namespaces })
     bare.core.start()
     await settle()
-    const caps = (
-      bare.peer.last().seen.find((entry) => entry.method === 'initialize')?.params as {
-        capabilities: Record<string, unknown>
-      }
-    ).capabilities
+    const hello = bare.peer.last().seen.find((entry) => entry.method === 'initialize')
+    assert.ok(hello)
+    const caps = (hello.params as { capabilities: Record<string, unknown> }).capabilities
     assert.ok(!(caps.litchExtensions as string[]).includes('clientTools'))
     assert.equal(caps.litchClientTools, undefined)
   }
@@ -208,7 +207,8 @@ test('建会话：带上这台桌面能执行的那几份工具定义（决 189�
   await settle()
   await world.command('session.create', { deviceId: 'local', cwd: '/work', text: '你好' })
   const start = world.peer.last().seen.find((entry) => entry.method === 'thread/start')
-  const tools = (start?.params as { dynamicTools?: { name: string; type: string }[] }).dynamicTools
+  assert.ok(start)
+  const tools = (start.params as { dynamicTools?: { name: string; type: string }[] }).dynamicTools
   assert.deepEqual(
     tools?.map((entry) => [entry.type, entry.name]),
     [['namespace', 'litch_echo']],
@@ -219,14 +219,16 @@ test('建会话：带上这台桌面能执行的那几份工具定义（决 189�
   await settle()
   await dsh.command('session.create', { deviceId: 'local', cwd: '/work', text: '你好' })
   const plain = dsh.peer.last().seen.find((entry) => entry.method === 'thread/start')
-  assert.equal((plain?.params as { dynamicTools?: unknown }).dynamicTools, undefined)
+  assert.ok(plain)
+  assert.equal((plain.params as { dynamicTools?: unknown }).dynamicTools, undefined)
 
   const none = setup({ namespaces: null })
   none.core.start()
   await settle()
   await none.command('session.create', { deviceId: 'local', cwd: '/work', text: '你好' })
   const bare = none.peer.last().seen.find((entry) => entry.method === 'thread/start')
-  assert.equal((bare?.params as { dynamicTools?: unknown }).dynamicTools, undefined)
+  assert.ok(bare)
+  assert.equal((bare.params as { dynamicTools?: unknown }).dynamicTools, undefined)
 })
 
 test('调用：别的命名空间回“方法不存在”；litch_ 的交给主进程，带着设备、harness、工作目录，结果原样回给引擎', async () => {
