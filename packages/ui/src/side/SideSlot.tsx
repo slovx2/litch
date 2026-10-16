@@ -3,10 +3,14 @@
 import { keys, type SessionSummary, type WorkspaceView } from '@litch/core'
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import type { Draft, Selection } from '../app/App.tsx'
+import { requestOpenSession } from '../app/actions.ts'
 import { useT } from '../app/appearance.ts'
 import { Icon } from '../app/icons.tsx'
-import { useKey } from '../app/services.tsx'
-import { toggleSide, useSide } from './side.ts'
+import { useKey, useServices } from '../app/services.tsx'
+import { dismissToast, showToast } from '../app/toasts.tsx'
+import { ownerKey } from './browser/bridge.ts'
+import { BROWSER_TAB, onPendingShow, setViewing } from './browser/store.ts'
+import { showSideTab, toggleSide, useSide } from './side.ts'
 import type { SidePlace } from './tabs.ts'
 
 // 面板第一次打开之前，它不在启动要读的那一包里
@@ -63,6 +67,8 @@ export function SideSlot({
     if (open) setLoaded(true)
   }, [open])
 
+  useShowRouting(selection, draft, page)
+
   useEffect(() => {
     // 在捕获阶段接：焦点在终端里的时候，这个键不能先被终端当成输入
     const onKey = (event: KeyboardEvent) => {
@@ -87,6 +93,54 @@ export function SideSlot({
       <SidePanel place={place} available={page === null} startedOpen={startedOpen.current} />
     </Suspense>
   ) : null
+}
+
+/** 浏览器 show 留在别的会话上的提示的标识 */
+const showToastId = (key: string) => `browser-show:${key}`
+
+/**
+ * 代理调 show 要给人看网页（browser/store.ts）：告诉浏览器的状态眼前看着的是哪个会话（侧面板显示不出来的页面上是没有，
+ * 新建对话页上是那台设备上还没建的会话），
+ * 切到一个有网页等着看的会话时打开面板换到浏览器标签；网页记在了别的会话名下时出一条提示，点“去看”切过去
+ */
+function useShowRouting(
+  selection: Selection | null,
+  draft: Draft | null,
+  page: string | null,
+): void {
+  const { replica } = useServices()
+  // 和浏览器标签认的会话一样：新建对话页上是那台设备、会话标识为空
+  const deviceId = page === null ? (selection?.deviceId ?? draft?.deviceId ?? null) : null
+  const sessionId = selection?.sessionId ?? ''
+  useEffect(() => {
+    const owner = deviceId === null ? null : { deviceId, threadId: sessionId }
+    if (setViewing(owner) && owner) {
+      showSideTab(BROWSER_TAB)
+      dismissToast(showToastId(ownerKey(owner)))
+    }
+  }, [deviceId, sessionId])
+
+  useEffect(
+    () =>
+      onPendingShow((tab) => {
+        const { deviceId: device, threadId } = tab.owner
+        // 侧栏里折着、没画出来的会话界面这边没有它的摘要：不写标题
+        const summary = replica.store.get<SessionSummary>(keys.summary(device, threadId))
+        showToast({
+          id: showToastId(ownerKey(tab.owner)),
+          lifeMs: 10_000,
+          text: (t) =>
+            summary
+              ? t('browser.showElsewhere', { title: t.text(summary.title) })
+              : t('browser.showElsewhereUntitled'),
+          action: {
+            label: (t) => t('browser.showGo'),
+            run: () => requestOpenSession({ deviceId: device, sessionId: threadId }),
+          },
+        })
+      }),
+    [replica],
+  )
 }
 
 /** 标题栏右边开合侧面板的按钮 */

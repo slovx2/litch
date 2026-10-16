@@ -538,6 +538,10 @@ export const en: Record<MessageKey, Entry> = {
   'browser.stop': 'Stop loading',
   'browser.address': 'Search or enter address',
   'browser.external': 'Open in system browser',
+  'browser.showElsewhere': 'The agent in “{title}” wants to show you a web page',
+  'browser.showGo': 'Show me',
+  'browser.showElsewhereUntitled': 'The agent in another session wants to show you a web page',
+  'browser.wants': 'The agent wants to show you a web page; it opens when you open this session',
   'diffs.noRoot':
     'No working directory to look at: open a session that has one, or pick a project.',
   'diffs.scope': 'Which changes',
@@ -774,6 +778,61 @@ export const en: Record<MessageKey, Entry> = {
     'This is running in a browser without the desktop shell, so the license texts shipped with the app can’t be read. The project is under the MIT license; the installed app shows every text here.',
   'settings.about.loading': 'Loading…',
   'settings.about.missing': 'Couldn’t load this one.',
+  'settings.group.browser': 'Built-in browser',
+  'settings.group.computer': 'Computer Use',
+  'settings.browser.intro':
+    'Every session on every device shares this one browser: sign-ins and site decisions are kept on this computer.',
+  'settings.browser.desktopOnly':
+    'The built-in browser only exists in the Litch desktop app. This is a regular browser, so there is nothing to set here.',
+  'settings.browser.sites': 'Always-allowed sites',
+  'settings.browser.sites.note':
+    'The model opens these without asking you; remove one and you will be asked again',
+  'settings.browser.sites.empty': 'No always-allowed sites yet.',
+  'settings.browser.sites.at': 'Allowed {day}',
+  'settings.browser.forget': 'Remove',
+  'settings.browser.forgetAll': 'Remove all',
+  'settings.browser.data': 'Browsing data',
+  'settings.browser.data.note':
+    'Cookies, sign-ins, site storage and cache. After clearing you will need to sign in again to sites you used in the built-in browser; always-allowed sites stay.',
+  'settings.browser.clear': 'Clear browsing data…',
+  'settings.browser.clear.title': 'Clear the built-in browser’s data?',
+  'settings.browser.clear.note':
+    'The cookies, sign-ins, site storage and cache shared by every session and device will be deleted for good. Open pages stay open.',
+  'settings.browser.clear.yes': 'Clear',
+  'settings.browser.cleared': 'Browsing data cleared',
+  'settings.browser.clearFailed': 'Browsing data wasn’t cleared; please try again',
+  'settings.browser.failed': 'Didn’t work: {reason}',
+  'settings.computer.intro':
+    'Lets the model use apps on this Mac. The system permissions go to a separate helper app, “Litch Computer Use”, not to Litch itself.',
+  'settings.computer.permissions': 'System permissions',
+  'settings.computer.permissions.note':
+    'Turn on “Litch Computer Use” under Privacy & Security in System Settings; Litch never changes this for you',
+  'settings.computer.accessibility': 'Accessibility',
+  'settings.computer.accessibility.note': 'Needed to read app interfaces, click and type.',
+  'settings.computer.screenRecording': 'Screen Recording',
+  'settings.computer.screenRecording.note':
+    'Needed to take screenshots of app windows. Takes effect after the helper restarts.',
+  'settings.computer.granted': 'Allowed',
+  'settings.computer.missing': 'Not allowed',
+  'settings.computer.unknown': 'Unknown',
+  'settings.computer.open': 'Open System Settings',
+  'settings.computer.openFailed':
+    'Couldn’t open System Settings. Go to System Settings › Privacy & Security › {pane} and turn on “Litch Computer Use”.',
+  'settings.computer.restart': 'Restart helper',
+  'settings.computer.restart.note':
+    'After turning on Screen Recording in System Settings, restart the helper so it takes effect. Anything the helper is doing right now is interrupted.',
+  'settings.computer.recheck': 'Check again',
+  'settings.computer.checking': 'Asking the helper…',
+  'settings.computer.failed': 'The helper didn’t start: {reason}',
+  'settings.computer.ready': 'Both are allowed; the model can use apps on this Mac.',
+  'settings.computer.apps': 'Always-allowed apps',
+  'settings.computer.apps.note':
+    'Sessions on this computer use these apps without asking; sessions on remote devices always ask',
+  'settings.computer.apps.empty': 'No always-allowed apps yet.',
+  'settings.computer.apps.at': 'Added {day}',
+  'settings.computer.forget': 'Remove',
+  'settings.computer.devices':
+    'Whether each device’s sessions may use Computer Use is switched in the device details under “Use this computer”, off by default.',
 
   'keys.group.app': 'App and window',
   'keys.group.app.note': 'Work anywhere; also in the app menu',
@@ -1163,8 +1222,13 @@ export const en: Record<MessageKey, Entry> = {
   'devices.tools.computer.note':
     'Lets the model use apps on this computer: click, type, take screenshots. You are asked before it first uses an app.',
   'devices.tools.computer.remote':
-    'This is a remote device: once this is on, the model on that machine can control this computer. Every session and every app needs your approval, with no "always allow".',
+    'This is a remote device: once this is on, agents running on that remote machine operate this Mac (the one in front of you), not the remote machine. If someone takes over that machine, they can drive your desktop. Every session and every app needs your approval; there is no "always allow".',
   'devices.tools.failed': 'Not changed: {reason}',
+  'devices.tools.computer.missing':
+    'This Mac hasn’t granted Computer Use its two system permissions (Accessibility, Screen Recording), so it won’t work even when switched on.',
+  'devices.tools.computer.unknown':
+    'This Mac also needs to grant two system permissions (Accessibility, Screen Recording).',
+  'devices.tools.computer.check': 'Check in Settings',
   'tool.image.view': 'View image',
   'request.option.accept': 'Allow once',
   'request.option.acceptSession': 'Allow for this session',

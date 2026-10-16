@@ -1,10 +1,16 @@
 // 预加载脚本。它是界面和外壳之间唯一的接触面：帮界面拿到通往核心的消息端口、请系统的浏览器打开网址、
-// 告诉外壳界面用的是哪种语言和外观、取“关于”里要的版本和许可文本、告诉界面用户选的文件在磁盘上的位置。
+// 告诉外壳界面用的是哪种语言和外观、取“关于”里要的版本和许可文本、告诉界面用户选的文件在磁盘上的位置，
+// 以及设置页里内置浏览器、Computer Use 那两节要的几件事（各自一个全局对象，和 litchShell 分开）。
 // 拿到端口之后界面和核心直接对话，主进程和这个脚本都不在数据路径上。
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { browserBridge } from './browser/bridge.mjs'
 import {
   ABOUT,
+  COMPUTER_USE_APPS,
+  COMPUTER_USE_FORGET_APP,
+  COMPUTER_USE_OPEN_SETTINGS,
+  COMPUTER_USE_RESTART,
+  COMPUTER_USE_STATUS,
   CORE_PORT,
   LICENSE_TEXT,
   MENU,
@@ -57,3 +63,16 @@ contextBridge.exposeInMainWorld('litchShell', {
 
 // 内置浏览器：界面报矩形、开关标签、导航，设置页取“一直允许”的网站、清除浏览数据（browser/bridge.mts）
 contextBridge.exposeInMainWorld('litchBrowser', browserBridge())
+
+// Computer Use（只在 macOS 上有）：设置页里那一节要的权限状态、打开系统设置对应的那一页、重启助手、“始终允许”的清单。
+// 界面那边的类型在 packages/ui/src/settings/computer-bridge.ts，改一边要改另一边。别的系统上没有这个对象，界面就不显示那一节
+if (process.platform === 'darwin') {
+  contextBridge.exposeInMainWorld('litchComputerUse', {
+    // launch：助手没在跑时要不要拉起它（设置页那一节要，设备详情里顺带看一眼不要）
+    status: (launch: boolean) => ipcRenderer.invoke(COMPUTER_USE_STATUS, launch === true),
+    openSettings: (pane: string) => ipcRenderer.invoke(COMPUTER_USE_OPEN_SETTINGS, pane),
+    restart: () => ipcRenderer.invoke(COMPUTER_USE_RESTART),
+    apps: () => ipcRenderer.invoke(COMPUTER_USE_APPS),
+    forgetApp: (bundleId: string) => ipcRenderer.invoke(COMPUTER_USE_FORGET_APP, bundleId),
+  })
+}

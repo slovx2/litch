@@ -29,3 +29,14 @@ export const ABOUT = 'litch:about'
 export const LICENSE_TEXT = 'litch:license-text'
 /** 界面 → 主进程，等应答：弹系统的选文件夹对话框，回选中的那个目录（没选是 null）。只给本机的设备用 */
 export const PICK_FOLDER = 'litch:pick-folder'
+// —— 设置页里 Computer Use 那一节（只在 macOS 上有；computer-use/settings.mts） ——
+/** 界面 → 主进程，等应答：助手和两项系统权限的状态。参数 launch：助手没在跑时要不要拉起它 */
+export const COMPUTER_USE_STATUS = 'litch:computer-use:status'
+/** 界面 → 主进程，等应答：打开系统设置里对应的那一页（accessibility、screenRecording），让用户自己去打开 */
+export const COMPUTER_USE_OPEN_SETTINGS = 'litch:computer-use:open-settings'
+/** 界面 → 主进程，等应答：重启助手（授完屏幕录制之后要重启才生效），回重启之后的状态 */
+export const COMPUTER_USE_RESTART = 'litch:computer-use:restart'
+/** 界面 → 主进程，等应答：“始终允许”的应用 */
+export const COMPUTER_USE_APPS = 'litch:computer-use:apps'
+/** 界面 → 主进程，等应答：从“始终允许”里删掉一个（按包标识），回删没删掉 */
+export const COMPUTER_USE_FORGET_APP = 'litch:computer-use:forget-app'

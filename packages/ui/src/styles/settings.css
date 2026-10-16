@@ -408,3 +408,61 @@
   overflow-wrap: anywhere;
   user-select: text;
 }
+
+/* ---------- 内置浏览器、Computer Use：一行一个网站或应用，权限一行一项 ---------- */
+.tool-row {
+  flex-wrap: nowrap;
+}
+.tool-name {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+/* 应用的包标识跟在名字后面，淡一点 */
+.tool-id {
+  margin-left: 8px;
+  color: var(--ink-3);
+  font-size: 11px;
+}
+.tool-when {
+  flex: none;
+  font: 11px / 16px var(--mono);
+  color: var(--ink-3);
+}
+/* 一组下面的一排动作（全部删除、重新检查），靠右；左边可以有一句说明 */
+.set-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px 12px;
+  margin-top: 8px;
+}
+.set-actions .set-note {
+  flex: 1 1 200px;
+}
+.set-para.err,
+.set-note.err {
+  color: var(--err);
+}
+/* 权限给没给：一个小牌子 */
+.perm-state {
+  flex: none;
+  padding: 0 6px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r1);
+  font: 11px / 16px var(--mono);
+  color: var(--ink-2);
+}
+.perm-state[data-perm="granted"] {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+.perm-state[data-perm="missing"] {
+  border-color: var(--err);
+  color: var(--err);
+}

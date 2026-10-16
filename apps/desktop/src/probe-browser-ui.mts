@@ -165,6 +165,39 @@ void app.whenReady().then(async () => {
       browser.host.list().length === 0 &&
         (await until("document.querySelectorAll('.bw-tab').length === 0")),
     )
+
+    // show 的是别的会话的网页：不把人从眼前拽走，侧栏那一行出记号、出提示，切过去才打开面板
+    await page(`document.querySelector('.side button[data-tool="hide"]')?.click()`)
+    await pause(300)
+    const elsewhere = browser.host.open({ deviceId: 'local', threadId: 's4' }, 'agent', {
+      keep: true,
+    })
+    browser.host.show(elsewhere.id)
+    const rowOf =
+      "[...document.querySelectorAll('.ss-row')].find((r) => r.textContent.includes('设备进程的转发开销基准'))"
+    check('show 别的会话：侧栏那一行出记号', await until(`${rowOf}?.querySelector('.web-mark')`))
+    check(
+      'show 别的会话：出提示',
+      await until(
+        "document.querySelector('.toasts')?.textContent.includes('设备进程的转发开销基准')",
+      ),
+    )
+    check(
+      'show 别的会话：面板不打开',
+      await page("!document.querySelector('.side:not([hidden]) .bw-view')"),
+    )
+    await page(`${rowOf}.click()`)
+    check(
+      '切到那个会话：打开面板、记号没了',
+      (await until("document.querySelector('.side:not([hidden]) .bw-view')")) &&
+        (await until(`!${rowOf}?.querySelector('.web-mark')`)),
+    )
+    await pause(400)
+    check(
+      '切到那个会话：网页叠上去',
+      window.contentView.children.includes(viewOf(elsewhere.id) as never),
+    )
+    browser.host.close(elsewhere.id)
   } catch (error) {
     check('没有意外出错', false, error instanceof Error ? error.stack : String(error))
   }

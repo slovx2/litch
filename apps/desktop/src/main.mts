@@ -25,9 +25,15 @@ import { createClientToolHost } from './client-tools/host.mjs'
 import { createExecutors } from './client-tools/registry.mjs'
 import { CLIENT_TOOL, type ClientToolToMain } from './client-tools/types.mjs'
 import { createComputerUse, locateHelperApp } from './computer-use/index.mjs'
+import { createComputerUseSettings, fakePermissions } from './computer-use/settings.mjs'
 import {
   ABOUT,
   ATTACH,
+  COMPUTER_USE_APPS,
+  COMPUTER_USE_FORGET_APP,
+  COMPUTER_USE_OPEN_SETTINGS,
+  COMPUTER_USE_RESTART,
+  COMPUTER_USE_STATUS,
   CORE_PORT,
   LANGUAGE,
   LICENSE_TEXT,
@@ -401,6 +407,46 @@ ipcMain.handle(PICK_FOLDER, async (event, options: unknown) => {
     : await dialog.showOpenDialog(settings)
   return result.canceled ? null : (result.filePaths[0] ?? null)
 })
+
+// ---------- 设置页里 Computer Use 那一节（只在 macOS 上有，computer-use/settings.mts） ----------
+
+/**
+ * 两项系统权限的状态、打开系统设置对应的那一页、重启助手、“始终允许”的清单。
+ * 只接受界面自己的主框架发来的；预加载脚本也只在 macOS 上给界面这一组接口
+ */
+const computerUseSettings = computerUse
+  ? createComputerUseSettings(
+      {
+        permissions: () => computerUse.permissions(),
+        running: () => computerUse.supervisor.connected !== null,
+        openPermissionSettings: (pane) => computerUse.openPermissionSettings(pane),
+        restartHelper: () => computerUse.restartHelper(),
+        listAlwaysAllowed: () => computerUse.listAlwaysAllowed(),
+        removeAlwaysAllowed: (bundleId) => computerUse.removeAlwaysAllowed(bundleId),
+      },
+      // 自检和截图一律不去拉起真的助手：没指定假权限时当作两项都没给
+      fakePermissions(process.env.LITCH_COMPUTER_USE_PERMISSIONS ?? (smoke ? 'none' : undefined)),
+    )
+  : null
+const fromUi = (event: Electron.IpcMainInvokeEvent): boolean => {
+  const frame = event.senderFrame
+  return !!frame && frame === event.sender.mainFrame && isUiUrl(frame.url)
+}
+ipcMain.handle(COMPUTER_USE_STATUS, (event, launch: unknown) =>
+  fromUi(event) && computerUseSettings ? computerUseSettings.status(launch === true) : null,
+)
+ipcMain.handle(COMPUTER_USE_OPEN_SETTINGS, (event, pane: unknown) =>
+  fromUi(event) && computerUseSettings ? computerUseSettings.openSettings(pane) : false,
+)
+ipcMain.handle(COMPUTER_USE_RESTART, (event) =>
+  fromUi(event) && computerUseSettings ? computerUseSettings.restart() : null,
+)
+ipcMain.handle(COMPUTER_USE_APPS, (event) =>
+  fromUi(event) && computerUseSettings ? computerUseSettings.apps() : [],
+)
+ipcMain.handle(COMPUTER_USE_FORGET_APP, (event, bundleId: unknown) =>
+  fromUi(event) && computerUseSettings ? computerUseSettings.forgetApp(bundleId) : false,
+)
 
 // ---------- 退出之前：还有终端在运行的话问一声（quit-terminals.mts） ----------
 

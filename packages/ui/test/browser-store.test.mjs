@@ -4,7 +4,9 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-const { chooseTab, tabsOf } = await import('../src/side/browser/store.ts')
+const { EMPTY_STATE, arrive, chooseTab, noteShow, prunePending, tabsOf } = await import(
+  '../src/side/browser/store.ts'
+)
 
 const tab = (id, threadId, extra = {}) => ({
   id,
@@ -43,4 +45,69 @@ test('眼前显示哪个：代理要给人看的、人点的、代理在用的�
   assert.equal(chooseTab(mine, 't9', 't8'), 't2')
   assert.equal(chooseTab([tab('t1', 'a'), tab('t5', 'a')], undefined, undefined), 't5')
   assert.equal(chooseTab([], 't1', undefined), null)
+})
+
+const key = (threadId, deviceId = 'local') => `${deviceId}\u0000${threadId}`
+
+test('show：用户正看着那个会话，当场打开面板换到那个网页', () => {
+  const t1 = tab('t1', 'a', { kind: 'agent' })
+  const { state, open } = noteShow(EMPTY_STATE, t1, key('a'))
+  assert.equal(open, true)
+  assert.equal(state.wanted[key('a')], 't1')
+  assert.equal(state.chosen[key('a')], 't1')
+  assert.deepEqual(state.pending, {})
+  // show 带来的标签并进清单（清单可能还没跟上）
+  assert.deepEqual(
+    state.tabs.map((one) => one.id),
+    ['t1'],
+  )
+})
+
+test('show：用户看着别的会话或者在别的页面上，记在那个会话名下，不打开、不切走', () => {
+  const t1 = tab('t1', 'a')
+  for (const viewing of [key('b'), null, key('a', 'build')]) {
+    const { state, open } = noteShow(EMPTY_STATE, t1, viewing)
+    assert.equal(open, false)
+    assert.deepEqual(state.pending, { [key('a')]: 't1' })
+    assert.deepEqual(state.wanted, {})
+    assert.deepEqual(state.chosen, {})
+  }
+})
+
+test('切到有网页等着看的会话：打开面板，记号清掉；切到别的会话不动', () => {
+  const t1 = tab('t1', 'a')
+  const { state: waiting } = noteShow(EMPTY_STATE, t1, key('b'))
+  const elsewhere = arrive(waiting, key('c'))
+  assert.equal(elsewhere.open, false)
+  assert.equal(elsewhere.state, waiting)
+  assert.equal(arrive(waiting, null).open, false)
+
+  const there = arrive(waiting, key('a'))
+  assert.equal(there.open, true)
+  assert.deepEqual(there.state.pending, {})
+  assert.equal(there.state.wanted[key('a')], 't1')
+  assert.equal(
+    chooseTab(tabsOf(there.state.tabs, t1.owner), undefined, there.state.wanted[key('a')]),
+    't1',
+  )
+  // 再来一次不再打开
+  assert.equal(arrive(there.state, key('a')).open, false)
+})
+
+test('等着看的网页被关掉了（回合结束收掉）：不再算数，切过去也不打开', () => {
+  const { state: waiting } = noteShow(EMPTY_STATE, tab('t1', 'a'), key('b'))
+  const pruned = prunePending(waiting.pending, [tab('t2', 'a')])
+  assert.deepEqual(pruned, {})
+  // 都还在就原样给回（不换对象，侧栏不重画）
+  assert.equal(prunePending(waiting.pending, waiting.tabs), waiting.pending)
+  const gone = arrive({ ...waiting, tabs: [] }, key('a'))
+  assert.equal(gone.open, false)
+  assert.deepEqual(gone.state.pending, {})
+})
+
+test('同一个会话又 show 了一个：等着看的换成后来的', () => {
+  const { state: first } = noteShow(EMPTY_STATE, tab('t1', 'a'), key('b'))
+  const { state: second } = noteShow(first, tab('t2', 'a'), key('b'))
+  assert.deepEqual(second.pending, { [key('a')]: 't2' })
+  assert.equal(arrive(second, key('a')).state.wanted[key('a')], 't2')
 })

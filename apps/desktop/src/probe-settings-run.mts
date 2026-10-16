@@ -20,6 +20,7 @@ import {
 } from './probe-settings-judge.mjs'
 import { installSettingsKit, type SettingsKit } from './probe-settings-kit.mjs'
 import { controlsSeen, menuSeen, pageSeen, previewSeen } from './probe-settings-page.mjs'
+import { toolsSeen } from './probe-settings-tools.mjs'
 import {
   innerSize,
   lookSet,
@@ -159,6 +160,7 @@ async function runFirst(window: BrowserWindow, hooks: SmokeHooks): Promise<First
   await shot(window, 'keys')
   const about = await inPage(window, aboutSeen)
   await shot(window, 'about')
+  const tools = await inPage(window, toolsSeen)
   const turn = await inPage(window, turnSeen, MOCK.talk, MOCK.other)
   const screens = await inPage(window, screensSeen, { talk: MOCK.talk, waiting: MOCK.waiting })
 
@@ -191,6 +193,7 @@ async function runFirst(window: BrowserWindow, hooks: SmokeHooks): Promise<First
     keys,
     menuKeys: menuKeys(),
     about,
+    tools,
     turn,
     screens,
     zooms,
