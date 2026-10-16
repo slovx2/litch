@@ -32,6 +32,8 @@ import { createServer as createHttpServer } from 'node:http'
 import { createServer as createSocketServer } from 'node:net'
 import { dirname, join } from 'node:path'
 import { askReply, installAskExtension } from './client-fixture-ask.mjs'
+import { browseReply } from './client-fixture-browse.mjs'
+import { echoReply } from './client-fixture-echo.mjs'
 
 /** 假的远程机器上适配器的替身名。客户端那边用 LITCH_REMOTE_ADAPTER 指过来 */
 export const ADAPTER = 'litch-fx-adapter'
@@ -91,10 +93,13 @@ export async function prepareService({ repo, root, pace = 200 }) {
     requests++
     const said = lastUserText(body)
     appendFileSync(modelLog, `${JSON.stringify({ at: Date.now(), model: body.model, said })}\n`)
-    const reply = askReply(body, said) ?? {
-      text: `收到：${said}\n\n这是假的远程机器上的假模型在回话，分成几段慢慢发，好让界面上看得到字是一点一点出来的。`,
-      pace,
-    }
+    // 客户端工具（回声、浏览）认得出自己那一次，排在提问前面：提问见到工具结果就当成是它的回答
+    const reply = echoReply(body, said) ??
+      browseReply(body, said) ??
+      askReply(body, said) ?? {
+        text: `收到：${said}\n\n这是假的远程机器上的假模型在回话，分成几段慢慢发，好让界面上看得到字是一点一点出来的。`,
+        pace,
+      }
     res.writeHead(200, { 'Content-Type': 'text/event-stream' })
     const head = {
       id: `mock_${requests}`,

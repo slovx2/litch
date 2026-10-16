@@ -42,6 +42,8 @@ export interface Call {
   host: BrowserHost
   /** 导航前改写网址的钩子（远端 localhost 转发用） */
   resolveUrl(url: string): Promise<string>
+  /** 这个地址是远端 localhost 转发出来的话，给模型的一句说明；不是是 null */
+  describeUrl(url: string): string | null
   /** 挑这次要动的标签：给了 tabId 用它（必须是这个会话里代理的），没给用当前的。都没有时抛错 */
   pick(): BrowserPage
   /** 同上，但没有标签时回 null */
@@ -67,9 +69,11 @@ export interface BrowserExecutorOptions {
   host: BrowserHost
   sites: SiteBook
   /**
-   * 导航之前改写网址。第二波给 ssh 设备上的 localhost 接端口转发（决 191）；这一波原样返回
+   * 导航之前改写网址：ssh 设备上的 localhost 经端口转发打开（决 191，browser/forwarding.mts）。不给就原样
    */
   resolveUrl?: (url: string, device: ClientToolDevice) => Promise<string> | string
+  /** 转发出来的地址给模型的说明（每次答复里，页面在这种地址上时带一句）。不给就没有 */
+  describeUrl?: (url: string, device: ClientToolDevice) => string | null
   statFile?: (path: string) => { file: boolean; size: number } | null
 }
 
@@ -224,6 +228,7 @@ export function createBrowserExecutor(options: BrowserExecutorOptions): BrowserE
       host,
       resolveUrl: async (url) =>
         options.resolveUrl ? options.resolveUrl(url, invocation.device) : url,
+      describeUrl: (url) => options.describeUrl?.(url, invocation.device) ?? null,
       pick() {
         const page = pickMaybe()
         if (!page) {
@@ -247,6 +252,8 @@ export function createBrowserExecutor(options: BrowserExecutorOptions): BrowserE
       done(page, text, images = []) {
         const lines = [text]
         if (page) {
+          const forwarded = kit.describeUrl(page.info().url)
+          if (forwarded) lines.push(forwarded)
           const notices = page.takeNotices()
           if (notices.length > 0) lines.push('', 'Notices:', ...notices.map((one) => `- ${one}`))
           const dialog = page.dialog()

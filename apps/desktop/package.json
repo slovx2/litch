@@ -22,6 +22,7 @@
     "check:compose:entry": "npm run build && node scripts/smoke.mjs --compose --entry",
     "check:ssh": "npm run build && node scripts/check-ssh.mjs",
     "check:client-tools": "npm run build && node scripts/check-client-tools.mjs",
+    "check:tools:remote": "node scripts/check-tools-remote.mjs",
     "check:adapter": "npm run build && node scripts/check-adapter.mjs",
     "check:local": "npm run build && node scripts/check-local.mjs",
     "stage:adapter": "node scripts/stage-adapter.mjs",

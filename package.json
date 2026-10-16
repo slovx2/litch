@@ -80,6 +80,7 @@
     "client:check:compose:entry": "npm run build --prefix packages/ui && npm run check:compose:entry --prefix apps/desktop",
     "client:check:ssh": "npm run check:ssh --prefix apps/desktop",
     "client:check:tools": "npm run check:client-tools --prefix apps/desktop --",
+    "client:check:tools:remote": "npm run check:tools:remote --prefix apps/desktop",
     "client:check:adapter": "npm run check:adapter --prefix apps/desktop",
     "client:stage:adapter": "npm run stage:adapter --prefix apps/desktop",
     "client:check:local": "npm run stage:adapter --prefix apps/desktop && npm run check:local --prefix apps/desktop",
