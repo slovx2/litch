@@ -9,6 +9,7 @@ import {
   type RemoteTarget,
   type Text,
 } from '@litch/core'
+import { sshBase } from './args.mjs'
 import type { RemoteScript } from './script.mjs'
 
 /** ssh 自己出错（连不上、认证没过、配置有问题）时的退出码 */
@@ -16,37 +17,11 @@ const SSH_FAILED = 255
 /** 报错只留末尾这么多字 */
 const TAIL = 2000
 
-/**
- * ssh 的参数。有别名就只传别名，其余全交给用户自己的 ssh 配置，跳板机、代理命令、硬件密钥自然可用。
- * BatchMode 让 ssh 在需要人输入（密码、口令、确认主机密钥）时直接失败，而不是挂在那里等。
- */
+/** 跑远程脚本用的 ssh 参数 */
 export function sshArgs(target: RemoteTarget): string[] {
-  const args = [
-    '-T',
-    '-o',
-    'BatchMode=yes',
-    '-o',
-    'ConnectTimeout=20',
-    '-o',
-    'ServerAliveInterval=15',
-    '-o',
-    'ServerAliveCountMax=12',
-  ]
-  // 换一份 ssh 配置文件：开发和自检用，平时不设
-  const config = process.env.LITCH_SSH_CONFIG
-  if (config) args.unshift('-F', config)
-  let destination: string
-  if (target.kind === 'alias') {
-    destination = target.alias
-  } else {
-    if (target.port) args.push('-p', String(target.port))
-    if (target.keyFile) args.push('-i', target.keyFile, '-o', 'IdentitiesOnly=yes')
-    destination = target.user ? `${target.user}@${target.host}` : target.host
-  }
-  // 核心已经检查过这些值；这里再挡一次，绝不让一个以减号开头的目标被 ssh 当成选项
-  if (destination.startsWith('-')) throw new Error('目标主机不合规')
+  const { options, destination } = sshBase(target)
   // 远程命令固定是这一句，脚本从标准输入喂进去，见 script.mts
-  return [...args, '--', destination, 'exec sh']
+  return [...options, '--', destination, 'exec sh']
 }
 
 /** 交互式 shell 在没有终端时会抱怨这两句，和出了什么错没有关系 */

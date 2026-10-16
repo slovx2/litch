@@ -3,6 +3,7 @@
 // 它碰不到界面，也拿不到通往核心的端口（那个端口只给界面自己的主框架，见 main.mts 的 REQUEST_CORE_PORT）。
 import { type Event, WebContentsView } from 'electron'
 import { CdpRefused, isAllowedCdp } from './cdp-allow.mjs'
+import { failurePage } from './forwarding.mjs'
 import type {
   BrowserPage,
   ConsoleEntry,
@@ -31,6 +32,11 @@ export interface TabHooks {
   gate(page: BrowserPage, url: string): boolean
   /** 网页要开新窗口：在内置浏览器里开新标签 */
   popup(from: HostTab, url: string): void
+  /**
+   * 网页自己要去的地址要不要先改写（远程会话里的远端 localhost 要经 ssh 转发，决 191）。
+   * 不用改回 null；要改回改写后的地址（可能要等转发就绪），改写失败时拒绝
+   */
+  rewrite(page: BrowserPage, url: string): Promise<string> | null
 }
 
 export interface HostTab extends BrowserPage {
@@ -85,6 +91,9 @@ export function createTab(
   let agentActive = false
   let highlightTimer: ReturnType<typeof setTimeout> | null = null
   let attaching: Promise<void> | null = null
+  /** 网页自己的跳转被拦下来改写过几次，和最近的那一次（done：改写后的地址加载完；error：改写失败的原因） */
+  let rewrites = 0
+  let rewrite: { done: Promise<void>; error: string | null } | null = null
 
   const addNotice = (text: string) => {
     notices.push(text)
@@ -189,14 +198,26 @@ export function createTab(
     }
     contents.on('did-fail-load', onFail)
     try {
+      const seq = rewrites
       const started = work().catch((reason: unknown) => {
-        error = reason instanceof Error ? reason.message : String(reason)
+        // 半路被拦下来改写（重定向去了远端 localhost）而取消的不算这一次失败，下面接着等改写后的那一次
+        if (rewrites === seq) error = reason instanceof Error ? reason.message : String(reason)
       })
       const finished = await Promise.race([
         started.then(() => true),
         new Promise<boolean>((resolve) => setTimeout(() => resolve(false), timeoutMs)),
       ])
       if (finished) await settled(Math.max(until - Date.now(), 0))
+      if (rewrites !== seq) {
+        let followed: typeof rewrite = null
+        while (rewrite && rewrite !== followed && Date.now() < until) {
+          followed = rewrite
+          const rest = Math.max(until - Date.now(), 0)
+          await Promise.race([followed.done, new Promise((resolve) => setTimeout(resolve, rest))])
+          await settled(Math.max(until - Date.now(), 0))
+        }
+        if (followed?.error) error = followed.error
+      }
       if (failed) return { ok: false, error: failed }
       if (!finished || contents.isLoading()) {
         return { ok: false, error: `still loading after ${timeoutMs} ms` }
@@ -209,6 +230,41 @@ export function createTab(
   }
 
   // ---------- 网页自己的事 ----------
+
+  /**
+   * 网页自己要去的地址要改写的话：拦下这一次，等改写好了再去改写后的地址。改写失败时代理的标签记一条提示，
+   * 用户的标签换成一页说明。回 true 是拦下了
+   */
+  const redirect = (event: Event, url: string): boolean => {
+    const next = hooks.rewrite(tab, url)
+    if (!next) return false
+    event.preventDefault()
+    rewrites++
+    const state: { done: Promise<void>; error: string | null } = {
+      done: Promise.resolve(),
+      error: null,
+    }
+    state.done = next.then(
+      (rewritten) =>
+        contents.loadURL(rewritten).then(
+          () => {},
+          () => {},
+        ),
+      (reason: unknown) => {
+        const why = reason instanceof Error ? reason.message : String(reason)
+        state.error = `could not open ${url}: ${why}`
+        addNotice(`Could not open ${url}: ${why}`)
+        if (tab.kind === 'user') {
+          return contents.loadURL(failurePage(url, why)).then(
+            () => {},
+            () => {},
+          )
+        }
+      },
+    )
+    rewrite = state
+    return true
+  }
 
   contents.setWindowOpenHandler(({ url }) => {
     if (isOpenable(url) && url !== BLANK) hooks.popup(tab, url)
@@ -225,6 +281,7 @@ export function createTab(
       addNotice(`Navigation to ${url} was blocked: only http and https pages can be opened.`)
       return
     }
+    if (redirect(event, url)) return
     if (agentActive && !hooks.gate(tab, url)) {
       event.preventDefault()
       addNotice(
@@ -234,6 +291,7 @@ export function createTab(
   })
   contents.on('will-redirect', (event) => {
     if (!event.isMainFrame) return
+    if (isOpenable(event.url) && redirect(event, event.url)) return
     if (!isOpenable(event.url) || (agentActive && !hooks.gate(tab, event.url))) {
       event.preventDefault()
       addNotice(`A redirect to ${event.url} was blocked because that site is not approved yet.`)

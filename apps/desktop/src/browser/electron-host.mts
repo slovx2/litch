@@ -31,6 +31,11 @@ export interface ElectronBrowserHost extends BrowserHost {
   onShow(listener: (tab: TabInfo) => void): () => void
   /** 清除浏览数据：cookie、站点存储、缓存、登录的凭据 */
   clearData(): Promise<void>
+  /**
+   * 网页自己要去的地址（点链接、重定向、开新窗口）先过这个改写：远程会话里的远端 localhost 要经 ssh 转发（决 191）。
+   * 不用改回 null
+   */
+  setNavigationRewrite(rewrite: (page: BrowserPage, url: string) => Promise<string> | null): void
 }
 
 let partitionReady = false
@@ -58,6 +63,7 @@ export function createElectronHost(): ElectronBrowserHost {
   const tabs = new Map<string, HostTab>()
   let seq = 0
   let gate: (page: BrowserPage, url: string) => boolean = () => false
+  let rewrite: (page: BrowserPage, url: string) => Promise<string> | null = () => null
   const changeListeners = new Set<(tabs: TabInfo[]) => void>()
   const showListeners = new Set<(tab: TabInfo) => void>()
   /** 每个窗口里现在显示的是哪个标签 */
@@ -95,6 +101,7 @@ export function createElectronHost(): ElectronBrowserHost {
     const tab = createTab(id, { ...owner }, kind, options.keep === true, {
       changed,
       gate: (page, url) => gate(page, url),
+      rewrite: (page, url) => rewrite(page, url),
       popup(from, url) {
         // 网页要开的新窗口改成同一个会话里的新标签。代理的标签开出来的还是代理的（回合结束时关）
         if (from.kind === 'agent' && from.info().agentActive && !gate(from, url)) {
@@ -104,7 +111,16 @@ export function createElectronHost(): ElectronBrowserHost {
           return
         }
         const next = open(from.owner, from.kind)
-        void next.load(url, 30_000)
+        const rewritten = rewrite(from, url)
+        if (rewritten) {
+          rewritten.then(
+            (target) => void next.load(target, 30_000),
+            (reason: unknown) =>
+              next.notice(
+                `Could not open ${url}: ${reason instanceof Error ? reason.message : String(reason)}`,
+              ),
+          )
+        } else void next.load(url, 30_000)
         from.notice(`The page opened ${url} in a new tab ${next.id}.`)
       },
     })
@@ -145,6 +161,9 @@ export function createElectronHost(): ElectronBrowserHost {
     },
     setNavigationGate(next) {
       gate = next
+    },
+    setNavigationRewrite(next) {
+      rewrite = next
     },
     place(window, tabId, rect) {
       const before = shown.get(window)

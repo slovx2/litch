@@ -18,10 +18,14 @@ const sameSession = (call: Call, page: BrowserPage) => {
   )
 }
 
-/** 远程设备上的会话打开 localhost：这一波打开的是这台桌面的 localhost，提醒模型 */
+/**
+ * 远程设备上的会话打开 localhost，而这个地址没有经 ssh 转发（没接转发的执行器，比如单元测试）：
+ * 打开的是这台桌面的 localhost，提醒模型。转发出来的地址由 done 带上说明
+ */
 function remoteNote(call: Call, url: string): string | null {
   const parsed = parseUrl(url)
   if (call.invocation.device.kind !== 'ssh' || !parsed || !isLocalHost(parsed.hostname)) return null
+  if (call.describeUrl(url)) return null
   return `Note: this conversation runs on the remote device "${call.invocation.device.name}", but the browser runs on the user's desktop, so ${parsed.host} here is the desktop's, not the remote machine's.`
 }
 
