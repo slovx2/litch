@@ -200,6 +200,17 @@ export interface DeviceView {
    * 远程设备、另外指定了入口的本机、还没连上过的都是 null
    */
   upgrade: ServiceUpgradeView | null
+  /**
+   * 这台设备上的会话能不能用这台桌面端的两项能力（设备设置页的两个开关，存在桌面端、按设备记）。
+   * null：这台桌面端根本执行不了这一项（比如不在 macOS 上就没有 Computer Use），设置页不出这个开关
+   */
+  tools: ToolSwitches
+}
+
+/** 设备设置页上“内置浏览器”“Computer Use”两个开关。默认浏览器开、Computer Use 关（决 190） */
+export interface ToolSwitches {
+  browser: boolean | null
+  computer: boolean | null
 }
 
 /** 用户的 ssh 配置里的一台主机 */
@@ -435,6 +446,11 @@ export type ToolPart =
       bytes: number | null
       /** 给人看的名字：资源的地址、链接的名字、不是内联的图片地址、不认识的种类。没有是 null */
       name: string | null
+      /**
+       * 能直接显示的图片（内联的 data: 地址）：界面画成缩略图、点开看大图。只有动态工具（客户端工具的截图）的结果里有，
+       * 一个条目至多几张、每张有大小上限（projection/items.mts 的 IMAGE_KEEP、IMAGE_CHARS），别的 blob 没有这一项
+       */
+      src?: string
     }
   | { kind: 'gap'; chars: number; bytes: number; parts: number }
 
@@ -618,8 +634,43 @@ export interface FormRequest {
   link: { url: string; openable: boolean } | null
 }
 
+/** 客户端工具要用户点头的事：文字由界面按结构和语言拼（和桌面端的 ClientToolAsk 同形） */
+export type ClientAskView =
+  | {
+      kind: 'site'
+      /** 要访问的网站来源，比如 https://example.com */
+      origin: string
+      url: string
+    }
+  | {
+      kind: 'app'
+      app: { name: string; bundleId: string }
+      /** elevated：浏览器、终端这类高风险应用，卡片上标出来 */
+      risk: 'normal' | 'elevated'
+      /** 能不能选“始终允许”（远程设备的会话不能） */
+      allowAlways: boolean
+    }
+
+/**
+ * 这台桌面端在执行一次客户端工具调用（内置浏览器、Computer Use）时要用户点头。
+ * 由桌面端自己发起、自己答，不是对面的请求；样子和审批卡片一样，排在同一处
+ */
+export interface ClientAskRequest {
+  id: string
+  kind: 'clientAsk'
+  /** 对话流里那次工具调用的条目。对不上是 null */
+  itemId: string | null
+  /** 调用来自哪台设备上的会话。远程设备要显眼：那是别的机器上的模型在用这台电脑 */
+  device: { name: Text; kind: 'local' | 'ssh'; host: string }
+  /** 哪个命名空间的哪个工具在问 */
+  tool: { namespace: string; name: string }
+  ask: ClientAskView
+  /** accept 是“仅这一次”，acceptSession 是“这个会话里都允许”，acceptAlways 是“一直允许”，decline 是拒绝 */
+  options: ApprovalOption[]
+}
+
 /** 对面停下来等人答复的一件事 */
-export type RequestView = ApprovalRequest | QuestionRequest | FormRequest
+export type RequestView = ApprovalRequest | QuestionRequest | FormRequest | ClientAskRequest
 
 /** 回合进行中发的消息先排着，回合结束后按顺序发出去 */
 export interface QueuedMessage extends OutgoingMessage {

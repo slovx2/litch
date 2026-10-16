@@ -113,17 +113,52 @@ const base64Bytes = (data: string): number => {
   return Math.max(0, Math.floor((data.length * 3) / 4) - pad)
 }
 
-/** 一个地址指着的图片、音频：内联的（data URL）记格式和大小，别的地址只记地址，界面不去取 */
-function addressed(type: 'image' | 'audio', url: unknown): ToolPart {
+/**
+ * 动态工具（客户端工具：浏览器、Computer Use 的截图）结果里的图片，一个条目至多给几张留着内容，界面画成缩略图、
+ * 点开看大图；再多的、太大的、不是常见格式的只留一行说明（和别的工具结果一样）。
+ * 留着的内容在核心和界面的副本里各有一份、快照里也带着，所以要有上限：一个条目至多 IMAGE_KEEP 张，
+ * 每张的 data: 地址至多 IMAGE_CHARS 个字（截图的大小由执行器自己压，见设计文档 05 第 3.3 节）。
+ * 只看这一份结果，三条路（实时、读历史、恢复会话）一样
+ */
+export const IMAGE_KEEP = 4
+export const IMAGE_CHARS = 4 * 1024 * 1024
+const SHOWN_IMAGE = /^data:image\/(?:png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]*$/
+
+/**
+ * 一个地址指着的图片、音频：内联的（data URL）记格式和大小，别的地址只记地址，界面不去取。
+ * shown 为真时（动态工具的结果），能直接显示的图片把地址留在 src 上（之后由 keepImages 只留头几张）
+ */
+function addressed(type: 'image' | 'audio', url: unknown, shown = false): ToolPart {
   if (typeof url !== 'string') return blob(type)
   const inline = url.match(/^data:([^;,]*)((?:;[^;,]*)*),/)
   if (!inline) return blob(type, { name: url })
   const payload = url.length - inline[0].length
   const base64 = inline[2]?.split(';').includes('base64') === true
-  return blob(type, {
+  const part = blob(type, {
     mime: inline[1] || null,
     bytes: base64 ? base64Bytes(url.slice(inline[0].length)) : payload,
   })
+  if (shown && type === 'image' && url.length <= IMAGE_CHARS && SHOWN_IMAGE.test(url)) {
+    return { ...part, src: url }
+  }
+  return part
+}
+
+/** 截过之后，只有头 IMAGE_KEEP 张图片留着内容，后面的去掉 src（只留一行说明） */
+function keepImages(parts: ToolPart[]): ToolPart[] {
+  let kept = 0
+  let changed = false
+  const next = parts.map((part) => {
+    if (part.kind !== 'blob' || part.src === undefined) return part
+    if (kept < IMAGE_KEEP) {
+      kept++
+      return part
+    }
+    changed = true
+    const { src: _dropped, ...rest } = part
+    return rest
+  })
+  return changed ? next : parts
 }
 
 const stringOr = (value: unknown): string | null => (typeof value === 'string' ? value : null)
@@ -133,7 +168,7 @@ const stringOr = (value: unknown): string | null => (typeof value === 'string' ?
  * 文字原样；图片、音频、资源只留种类、格式、大小和名字（照上游 TUI：内容不留，只写一行说明）；
  * 认不出的段排成 JSON（也照上游 TUI）。太长的由 capParts 统一截
  */
-function resultPart(block: unknown): ToolPart {
+function resultPart(block: unknown, images = false): ToolPart {
   if (typeof block === 'string') return { kind: 'text', text: block }
   if (typeof block !== 'object' || block === null) return { kind: 'text', text: showJson(block) }
   const entry = block as Record<string, unknown>
@@ -150,7 +185,7 @@ function resultPart(block: unknown): ToolPart {
       break
     // 动态工具、函数工具的图片和音频是地址
     case 'inputImage':
-      return addressed('image', entry.imageUrl)
+      return addressed('image', entry.imageUrl, images)
     case 'inputAudio':
       return addressed('audio', entry.audioUrl)
     case 'input_image':
@@ -198,12 +233,14 @@ const textParts = (text: string): ToolPart[] => capParts(text ? [{ kind: 'text',
 function resultParts(
   blocks: readonly unknown[] | null | undefined,
   structured?: unknown,
+  images = false,
 ): ToolPart[] {
-  const parts = (blocks ?? []).map(resultPart)
+  const parts = (blocks ?? []).map((block) => resultPart(block, images))
   if (structured != null && !parts.some((part) => part.kind === 'text')) {
     parts.push({ kind: 'text', text: showJson(structured) })
   }
-  return capParts(parts)
+  const capped = capParts(parts)
+  return images ? keepImages(capped) : capped
 }
 
 function searchQuery(query: string, action: WebSearchAction | null): string {
@@ -317,16 +354,25 @@ export function projectItem(item: ThreadItem, streaming = false): ItemView {
         durationMs: item.durationMs ?? null,
         status: toolStatus(item.status),
       })
-    case 'dynamicToolCall':
+    case 'dynamicToolCall': {
+      // 客户端工具的截图要看得见：头几张图片留着内容（keepImages）
+      const output = resultParts(item.contentItems, null, true)
       return toolCall(id, {
         source: item.namespace ?? null,
         tool: item.tool,
         input: textParts(showJson(item.arguments)),
-        output: resultParts(item.contentItems),
-        error: item.success === false ? phrase('tool.failed') : null,
+        output,
+        // 失败的结果里带着原因（客户端工具的“设备设置里关着”之类）就照它说；只报了失败的是核心自己的一句话
+        error:
+          item.success === false
+            ? output.some((part) => part.kind === 'text')
+              ? output
+              : phrase('tool.failed')
+            : null,
         durationMs: item.durationMs ?? null,
         status: toolStatus(item.status),
       })
+    }
     case 'functionCallOutput':
       return toolCall(id, {
         source: item.namespace ?? null,

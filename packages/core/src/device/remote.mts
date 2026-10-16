@@ -28,6 +28,16 @@ export interface SavedDevices {
   /** 本机设备改过的线色。没改过就是 null */
   localWire: WireColor | null
   remotes: SavedRemote[]
+  /**
+   * 各台设备（键是设备标识，本机是 local）改过的两个开关：内置浏览器、Computer Use（决 190）。
+   * 没改过的不记，按默认来（浏览器开、Computer Use 关）；一个都没改过时没有这一项
+   */
+  tools?: Record<string, SavedToolSwitches>
+}
+
+export interface SavedToolSwitches {
+  browser?: boolean
+  computer?: boolean
 }
 
 /** 设备配置和各台设备的侧栏快照存在哪，由外壳定 */
@@ -141,5 +151,23 @@ export function checkSaved(value: unknown): SavedDevices {
       // 这一条读不懂，跳过
     }
   }
-  return { localWire: wireOf(raw.localWire), remotes }
+  const tools: Record<string, SavedToolSwitches> = {}
+  const rawTools = raw.tools
+  if (typeof rawTools === 'object' && rawTools !== null && !Array.isArray(rawTools)) {
+    for (const [id, value] of Object.entries(rawTools as Record<string, unknown>)) {
+      if (id !== 'local' && !remotes.some((remote) => remote.id === id)) continue
+      if (typeof value !== 'object' || value === null) continue
+      const { browser, computer } = value as Record<string, unknown>
+      const kept: SavedToolSwitches = {
+        ...(typeof browser === 'boolean' ? { browser } : {}),
+        ...(typeof computer === 'boolean' ? { computer } : {}),
+      }
+      if (Object.keys(kept).length > 0) tools[id] = kept
+    }
+  }
+  return {
+    localWire: wireOf(raw.localWire),
+    remotes,
+    ...(Object.keys(tools).length > 0 ? { tools } : {}),
+  }
 }

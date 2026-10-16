@@ -711,6 +711,14 @@
   font-size: 13px;
   line-height: 1.55;
 }
+/* 客户端工具的卡片：远程设备上的模型在用这台电脑、高风险的应用，这两句用醒目的颜色 */
+.req-why.err {
+  color: var(--err);
+}
+/* 远程设备来的卡片左边多一道醒目的边 */
+.req[data-remote="true"] {
+  box-shadow: inset 3px 0 0 var(--err);
+}
 /* 卡片滚起来的时候这一排按钮留在底下看得见 */
 .req-actions {
   position: sticky;

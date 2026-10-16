@@ -1,4 +1,6 @@
 // 主进程、预加载脚本、工具进程之间用到的消息名。只有这几条，不传业务数据。
+// 例外是客户端工具（client-tools/types.mts 的 CLIENT_TOOL）：主进程 ↔ 工具进程之间传模型的一次工具调用的参数和结果，
+// 消息的形状在那个文件里（设计文档 05 第九节）。
 
 /** 界面 → 主进程：请给我一个连着核心的消息端口 */
 export const REQUEST_CORE_PORT = 'litch:request-core-port'

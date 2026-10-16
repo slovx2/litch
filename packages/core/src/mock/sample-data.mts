@@ -101,6 +101,8 @@ export function sampleApp(_lang: SampleLang, now: number): AppView {
       manageable: true,
       // 在跑的就是应用自带的那一份。别的情形由对话里的关键字来演（mock-service.mts）
       ...sampleLocalService(now),
+      // 设备设置页的两个开关：默认浏览器开、Computer Use 关（决 190）
+      tools: { browser: true, computer: false },
     },
     {
       id: 'build',
@@ -123,6 +125,7 @@ export function sampleApp(_lang: SampleLang, now: number): AppView {
       // 远程设备上的服务也看得到是哪一份；换版本是那台机器上的事，这边没有
       service: sampleRemoteService(now),
       upgrade: null,
+      tools: { browser: true, computer: false },
     },
     {
       id: 'nas',
@@ -146,6 +149,7 @@ export function sampleApp(_lang: SampleLang, now: number): AppView {
       // 也没有设备服务
       service: null,
       upgrade: null,
+      tools: { browser: true, computer: false },
     },
     {
       id: 'gpu',
@@ -176,6 +180,7 @@ export function sampleApp(_lang: SampleLang, now: number): AppView {
       // 这次运行里还没连上过：在跑的是哪一份不知道
       service: null,
       upgrade: null,
+      tools: { browser: true, computer: false },
     },
   ]
   return { devices }

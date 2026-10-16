@@ -395,6 +395,14 @@ export interface Commands {
   /** 去掉一台远程设备。只是不再连它，那台机器上的东西一样不动 */
   'device.remove': { params: { deviceId: string }; result: Record<string, never> }
   /**
+   * 设备设置页上的两个开关：这台设备上的会话能不能用这台桌面端的内置浏览器、Computer Use（决 190）。
+   * 只改给了的那一项。存在桌面端；用的时候才查，已经建好的会话下一次调用就按新的来
+   */
+  'device.tools.set': {
+    params: { deviceId: string; browser?: boolean; computer?: boolean }
+    result: Record<string, never>
+  }
+  /**
    * 改设备服务的设置。一次写入要么全部生效，要么一项都不写；expectedVersion 是界面看到的那个版本号。
    * 别处先改过了（版本号对不上）就以 conflict 结束：什么都没写，最新的值已经经订阅到了界面，不会悄悄覆盖。
    * 哪一项的值不合规矩以 invalid 结束，错误里说是哪一项。

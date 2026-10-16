@@ -1,6 +1,7 @@
 // 设备详情：从“设备”一页里点开一台设备。列表的一行上放不下、也不该放的东西都在这里。
 // 上面一节是这台设备自己：怎么连的、线色、改名、改连接、移除、重新连接，没连上时的原因和该怎么办；
-// 接着是它上面在跑的设备服务（ServiceSection.tsx）：哪一版、哪来的，本机另外说这次连接换没换版本；
+// 接着是这台设备上的会话能不能用这台电脑的内置浏览器、Computer Use（ToolSwitches.tsx，两个开关）；
+// 再是它上面在跑的设备服务（ServiceSection.tsx）：哪一版、哪来的，本机另外说这次连接换没换版本；
 // 下面是它的管理（harness、设置、诊断、日志）——本机和远程是同一套，本机没有改名、改连接和移除。
 // 对面没有设置接口（只有 codex 的机器、旧版的设备服务）时只有上面这一节，不摆空的管理区。
 // 远程设备还说一句对面是哪一种：设备服务，还是只有 codex；只有 codex 的给出装设备服务的办法。
@@ -17,6 +18,7 @@ import { HarnessList } from './HarnessList.tsx'
 import { ManagePanel } from './manage/ManagePanel.tsx'
 import { ServiceSection } from './ServiceSection.tsx'
 import { FailureNote, GuideSteps, StatePill, useReconnect } from './status.tsx'
+import { ToolSwitches } from './ToolSwitches.tsx'
 
 interface DeviceDetailProps {
   deviceId: string
@@ -304,6 +306,7 @@ export function DeviceDetail({ deviceId, onBack, onClose }: DeviceDetailProps) {
               </div>
             ) : null}
           </section>
+          <ToolSwitches device={device} />
           <ServiceSection device={device} />
           {managed ? (
             <ManagePanel device={device} />

@@ -4,7 +4,12 @@ import type { ClientInfo } from '../../protocol/src/index.mjs'
 import { ChannelError, type Clock, type Commands } from './channel/protocol.mjs'
 import type { CoreHost, HostSink } from './channel/server.mjs'
 import { ConnectError } from './connection/transport.mjs'
-import { createDevice, type Device, type DeviceConfig } from './device/device.mjs'
+import {
+  createDevice,
+  DEFAULT_TOOL_SWITCHES,
+  type Device,
+  type DeviceConfig,
+} from './device/device.mjs'
 import { channelFailure } from './device/faults.mjs'
 import {
   checkTarget,
@@ -17,9 +22,11 @@ import {
   WIRES,
 } from './device/remote.mjs'
 import type { AppView, RemoteCheck, WireColor } from './model.mjs'
+import type { ClientToolPort } from './model-client-tools.mjs'
 import type { TerminalsAlive } from './model-terminal.mjs'
 import { phrase } from './phrase.mjs'
 import { outgoing } from './projection/outgoing.mjs'
+import { createToolHub } from './tool-hub.mjs'
 
 export interface CoreOptions {
   clock: Clock
@@ -31,6 +38,8 @@ export interface CoreOptions {
   remote?: RemotePlatform
   /** 设备配置和侧栏快照存在哪。不给就什么都不记 */
   store?: DeviceStore
+  /** 通往主进程的客户端工具那一头（内置浏览器、Computer Use）。不给就是这台桌面什么都执行不了 */
+  clientTools?: ClientToolPort
   log?(line: string): void
 }
 
@@ -65,6 +74,12 @@ export function createCore(options: CoreOptions): Core {
   const { remote, store } = options
   let saved = store?.load() ?? { localWire: null, remotes: [] }
   let started = false
+  const hub = createToolHub(options.clientTools, (line) => options.log?.(line))
+  /** 一台设备的两个开关现在是什么：改过的按改的，没改过的按默认 */
+  const switchesOf = (deviceId: string) => ({
+    ...DEFAULT_TOOL_SWITCHES,
+    ...(saved.tools?.[deviceId] ?? {}),
+  })
 
   const build = (config: DeviceConfig): Device => {
     // 已经换掉或者去掉的设备再报什么都不理
@@ -75,6 +90,8 @@ export function createCore(options: CoreOptions): Core {
       ...(options.log ? { log: options.log } : {}),
       ...(store ? { snapshot: store.snapshot(config.id) } : {}),
       ...(store?.terminals ? { terminalNotes: store.terminals(config.id) } : {}),
+      tools: hub,
+      toolSwitches: () => switchesOf(config.id),
       hooks: {
         device(view) {
           if (!current()) return
@@ -461,11 +478,33 @@ export function createCore(options: CoreOptions): Core {
           if (started) fresh.start()
           return {}
         }
+        case 'device.tools.set': {
+          const { deviceId, browser, computer } = params as Commands['device.tools.set']['params']
+          const device = deviceOf(deviceId)
+          const before = saved.tools?.[deviceId] ?? {}
+          const next = {
+            ...before,
+            ...(typeof browser === 'boolean' ? { browser } : {}),
+            ...(typeof computer === 'boolean' ? { computer } : {}),
+          }
+          saved = { ...saved, tools: { ...(saved.tools ?? {}), [deviceId]: next } }
+          persist()
+          // 开关只在执行时查：已经建好的会话里的调用，下一次就按新的来
+          device.update({})
+          return {}
+        }
         case 'device.remove': {
           const { deviceId } = params as Commands['device.remove']['params']
           const device = deviceOf(deviceId)
           savedRemote(deviceId)
-          saved = { ...saved, remotes: saved.remotes.filter((entry) => entry.id !== deviceId) }
+          // 它的两个开关也不留
+          const tools = { ...(saved.tools ?? {}) }
+          delete tools[deviceId]
+          saved = {
+            localWire: saved.localWire,
+            remotes: saved.remotes.filter((entry) => entry.id !== deviceId),
+            ...(Object.keys(tools).length > 0 ? { tools } : {}),
+          }
           persist()
           devices.delete(deviceId)
           device.stop()

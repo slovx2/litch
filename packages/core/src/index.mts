@@ -114,10 +114,13 @@ export {
   type Terminals,
   type TerminalsHost,
 } from './device/terminals.mjs'
+export { CALL_TIMEOUT_MS } from './device/tool-calls.mjs'
 export { projectWorkspaces, resolveWorkspace } from './device/workspaces.mjs'
 export { createMockCore, type MockCore, type MockCoreOptions } from './mock/mock-core.mjs'
 export type { SampleLang } from './mock/sample-text.mjs'
 export type * from './model.mjs'
+export type * from './model-client-tools.mjs'
+export { CLIENT_TOOL } from './model-client-tools.mjs'
 export type * from './model-diff.mjs'
 export { DIFF_SCOPES } from './model-diff.mjs'
 export type * from './model-files.mjs'
@@ -268,3 +271,4 @@ export {
 } from './text/paths.mjs'
 export { parseSpans, type SpanNode, spanText, splitSpanLines } from './text/spans.mjs'
 export { capParts, PART_CHARS } from './text/tool-cap.mjs'
+export { createToolHub, type ToolCallHandlers, type ToolHub } from './tool-hub.mjs'

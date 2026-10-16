@@ -1,9 +1,11 @@
 // 连接层的中间一层：一台设备的一条连接。
 // 负责开传输、握手、断了之后按退避重连，并把状态变化报出去。连上之后的事（问设备信息、取目录）不归它管。
 import {
+  CLIENT_TOOLS_CAPABILITY,
   type ClientInfo,
   type ClientRequestMethod,
   type ClientRequests,
+  type ClientToolsCapabilities,
   type DeviceInitializeCapabilities,
   EXTENSION,
   type InitializeResponse,
@@ -48,6 +50,11 @@ export interface LinkOptions {
   requestTimeoutMs?: number
   state(state: LinkState): void
   notification(method: string, params: unknown): void
+  /**
+   * 这台桌面能执行的客户端工具命名空间（clientTools 扩展）。每次握手时现取；空的就不声明这项扩展。
+   * 不给就是没有
+   */
+  clientTools?(): readonly string[]
   /** 对面发来、要答复的请求。返回 undefined 表示不处理（会回“方法不存在”） */
   request?(method: string, params: unknown, id: JsonRpcId): Promise<unknown> | undefined
   log?(line: string): void
@@ -155,6 +162,8 @@ export function createLink(options: LinkOptions): Link {
         ...(options.log ? { log: options.log } : {}),
       })
       let info: InitializeResponse
+      // 能执行的客户端工具：声明了扩展，还要在 litchClientTools 里列出命名空间（client-tools.mts）
+      const tools = [...(options.clientTools?.() ?? [])]
       try {
         info = (await peer.request(
           'initialize',
@@ -179,8 +188,11 @@ export function createLink(options: LinkOptions): Link {
                 // planConfirmation：声明了，Claude Code 和 Pi 的引擎在交计划时自己在回合里问要不要执行，
                 // 界面不再问（plan-ask.ts）；不声明的话它们和原生 codex 一样回合带着计划结束，由客户端来问
                 EXTENSION.planConfirmation,
+                // clientTools：litch_ 开头的命名空间的工具调用交给声明了的连接执行（内置浏览器、Computer Use）
+                ...(tools.length > 0 ? [EXTENSION.clientTools] : []),
               ],
-            } satisfies DeviceInitializeCapabilities,
+              ...(tools.length > 0 ? { [CLIENT_TOOLS_CAPABILITY]: { namespaces: tools } } : {}),
+            } satisfies DeviceInitializeCapabilities & ClientToolsCapabilities,
           },
           { timeoutMs: options.handshakeTimeoutMs ?? 10_000 },
         )) as InitializeResponse

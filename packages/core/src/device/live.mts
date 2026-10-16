@@ -23,6 +23,7 @@ import { ChannelError, type Clock, type SessionOp } from '../channel/protocol.mj
 import type { HostSink } from '../channel/server.mjs'
 import { NO_REPLY, RpcError, type RpcRequestOptions } from '../connection/rpc.mjs'
 import type {
+  ClientAskRequest,
   HarnessAbilities,
   HarnessId,
   ItemView,
@@ -35,6 +36,7 @@ import type {
   SessionView,
   TurnView,
 } from '../model.mjs'
+import type { ToolAnswer } from '../model-client-tools.mjs'
 import { phrase } from '../phrase.mjs'
 import { projectFileChange, projectItem } from '../projection/items.mjs'
 import { bodyOf, localUserMessage, outgoing, toInput } from '../projection/outgoing.mjs'
@@ -101,8 +103,15 @@ export interface LiveHost {
   touched(sessionId: string, said?: string): void
   /** 刚建了一个会话。设备据此把它放进侧栏，不等对面的通知 */
   started(thread: Thread): void
-  /** 一个回合结束了。差异面板据此重新取 */
-  turnEnded?(sessionId: string): void
+  /** 一个回合结束了（turnId 是协议里的回合标识）。差异面板据此重新取；客户端工具据此收尾 */
+  turnEnded?(sessionId: string, turnId: string): void
+  /** 用户在这边打断了这个会话的回合（请求发出去之前）。客户端工具据此当场取消正在执行的调用 */
+  interrupting?(sessionId: string): void
+  /**
+   * 建会话时带上的客户端工具定义（thread/start.dynamicTools）。harness 是建在哪个上，不知道是 null。
+   * 返回 null 或空的就不带这个参数
+   */
+  dynamicTools?(harness: HarnessId | null): unknown[] | null
   /** 对面给了这个回合到现在为止的差异（整份）。工作目录不是 git 仓库时，差异面板只有它可看 */
   turnDiff?(sessionId: string, turnId: string, diff: string): void
   log(line: string): void
@@ -133,6 +142,16 @@ export interface LiveSessions {
   /** 返回 false 表示这条通知不归会话管 */
   notification(method: string, params: unknown): boolean
   serverRequest(method: string, params: unknown, id: JsonRpcId): Promise<unknown> | undefined
+  /**
+   * 客户端工具要用户点头：在这个会话的请求卡片那一处出一张。会话没在核心里开着就载入并订阅它（回合在后台跑），
+   * 载入期间先记着，载入好了一起摆上。用户答了、或者卡片被撤了（回合结束、连接断开，这时是 null）调 answer；
+   * 返回的函数撤掉卡片、不再调 answer
+   */
+  clientAsk(
+    place: { threadId: string; turnId: string; callId: string },
+    request: ClientAskRequest,
+    answer: (answer: ToolAnswer | null) => void,
+  ): () => void
   /**
    * 建一个会话并发出第一条消息，返回会话标识。cwd 给 null 时工作目录由对面定。
    * harness：对面是聚合面时建在哪个 harness 上；别的对面给 null，请求里不带这个参数。
@@ -550,7 +569,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       // 回合结束时还没答的请求已经没有意义了
       settleRequests(live, (request) => request.turnId === turn.id)
       host.touched(live.id)
-      host.turnEnded?.(live.id)
+      host.turnEnded?.(live.id, turn.id)
       pump(live)
       release(live)
     },
@@ -675,6 +694,13 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
         }
         const kept = todos.get(live.id)
         if (kept) placeTodos(live.view, kept)
+        // 客户端工具的卡片是这边自己的，对面给的会话里没有：还挂着的放回去
+        for (const waiting of live.requests.values()) {
+          if (waiting.view.kind !== 'clientAsk') continue
+          if (!live.view.requests.some((request) => request.id === waiting.view.id)) {
+            live.view.requests.push(waiting.view)
+          }
+        }
         for (const sink of live.sinks) sink.snapshot(live.view)
         const held = live.held
         live.held = []
@@ -977,12 +1003,64 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       })
     },
 
+    clientAsk(place, request, answer) {
+      let live = sessions.get(place.threadId)
+      if (!live) {
+        // 会话没在核心里开着（没人看、回合在后台跑）：载入并订阅，卡片才有地方摆
+        live = blank(place.threadId)
+        sessions.set(live.id, live)
+        if (reachable(live)) load(live)
+      }
+      const entry = live
+      const viewId = viewTurn(entry, place.turnId)
+      const key = viewItem(entry, viewId, place.callId)
+      const view: ClientAskRequest = {
+        ...request,
+        itemId: entry.view?.items[key] ? key : null,
+      }
+      let open = true
+      const waiting: Waiting = {
+        threadId: place.threadId,
+        turnId: place.turnId,
+        itemId: place.callId,
+        view,
+        answer(choice) {
+          const option = view.options.find((one) => one.id === choice.optionId)
+          if (!option) return null
+          return option.role === 'accept'
+            ? 'once'
+            : option.role === 'acceptSession'
+              ? 'session'
+              : option.role === 'acceptAlways'
+                ? 'always'
+                : 'decline'
+        },
+        resolve(result) {
+          if (!open) return
+          open = false
+          answer(result === NO_REPLY ? null : (result as ToolAnswer))
+        },
+      }
+      entry.requests.set(view.id, waiting)
+      emit(entry, [{ op: 'request.add', request: view }])
+      return () => {
+        if (!open) return
+        open = false
+        if (entry.requests.get(view.id) !== waiting) return
+        entry.requests.delete(view.id)
+        emit(entry, [{ op: 'request.remove', requestId: view.id }])
+        release(entry)
+      }
+    },
+
     async create(cwd, message, settings, harness, workspaceId) {
       if (!host.online()) throw new ChannelError('offline', '设备没有连上')
       let started: Awaited<ReturnType<typeof host.request<'thread/start'>>>
       // 还没有会话对象：它算在谁头上，聚合面上就是指定的那个，单个入口上只有那一个
       const target = harness ?? host.sole()
       const presets = target === null ? null : presetsOf(target)
+      // 这台桌面能执行的客户端工具（决 189：都默认带上，用的时候再查开关）。工具只能在建会话时定
+      const tools = host.dynamicTools?.(target) ?? null
       try {
         // 建会话时能带的先带上（模型、权限）；带不了的（强度、协作模式）跟着第一个回合发
         const {
@@ -999,6 +1077,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
             ...(harness === null ? {} : { harness }),
             // 归到哪个工作区。这是协议里原有的参数；对面没有工作区这回事时调用方给的是 null
             ...(workspaceId === null ? {} : { projectId: workspaceId }),
+            ...(tools && tools.length > 0 ? { dynamicTools: tools as never } : {}),
           },
           { timeoutMs: LOAD_TIMEOUT },
         )
@@ -1123,6 +1202,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       const running = isRunning(live.view)
       const turnId = running ? serverTurn(live, running.id) : null
       if (!turnId) throw new ChannelError('rejected', '没有可以打断的回合')
+      host.interrupting?.(sessionId)
       try {
         await host.request('turn/interrupt', { threadId: sessionId, turnId })
       } catch (error) {

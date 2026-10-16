@@ -100,7 +100,7 @@ test('工具结果：不长的原样留；图片、音频、资源只留种类�
   assert.deepEqual(toolCall(mcp(null, null)).output, [])
   assert.deepEqual(toolCall(mcp(null, null)).input, [])
 
-  // 动态工具：图片是地址，内联的记格式和大小，别的只记地址
+  // 动态工具：图片是地址，内联的记格式和大小，别的只记地址；能直接显示的内联图片留着地址（界面画缩略图）
   const dynamic = toolCall({
     type: 'dynamicToolCall',
     id: 'd',
@@ -118,7 +118,14 @@ test('工具结果：不长的原样留；图片、音频、资源只留种类�
   })
   assert.deepEqual(dynamic.output, [
     { kind: 'text', text: '第一段' },
-    { kind: 'blob', type: 'image', mime: 'image/webp', bytes: 5, name: null },
+    {
+      kind: 'blob',
+      type: 'image',
+      mime: 'image/webp',
+      bytes: 5,
+      name: null,
+      src: 'data:image/webp;base64,AAAAAAA=',
+    },
     { kind: 'blob', type: 'image', mime: null, bytes: null, name: 'https://example.com/a.png' },
   ])
 
