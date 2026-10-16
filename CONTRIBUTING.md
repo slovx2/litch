@@ -52,15 +52,15 @@ coding conventions.
 
 发版由维护者做。整个仓库只有一个版本号（根目录 `package.json`），适配器各包、客户端各包和它们的锁文件一起改，`npm run check` 会指出落下的；更新日志里“未发布”那一节改成版本号。打标签之前在本机跑 `npm run check:adapter-package`（要 Docker）。推 `v<版本>` 标签后，`.github/workflows/release.yml` 出全部的包：适配器的独立发布包和安装脚本、macOS 的 dmg、Windows 的安装程序，都出好了一起挂到草稿发布页。核对过再公开，**不要标成预发布**：安装脚本取的是“最新一版”。
 
-macOS 的 dmg 要用 Developer ID 签名并经苹果公证，公证用 Apple ID 加应用专用密码。要在仓库的 Settings → Secrets and variables → Actions 里配这五项机密（也可以用 `gh secret set <名字> --repo slovx2/litch`，值从标准输入给）：
+macOS 的 dmg 要用 Developer ID 签名并经苹果公证，公证用 App Store Connect 的 API 密钥（.p8）。要在仓库的 Settings → Secrets and variables → Actions 里配这五项机密（也可以用 `gh secret set <名字> --repo slovx2/litch`，值从标准输入给）：
 
 | 名字 | 内容 | 怎么来 |
 |---|---|---|
-| `APPLE_CERTIFICATE_P12_BASE64` | “Developer ID Application”证书连同私钥导出的 .p12，base64 编码 | 证书装在 Mac 的登录钥匙串里（没有的话在 Apple 开发者网站的 Certificates 里新建一张，只有账号持有人能建）。在“钥匙串访问”的“我的证书”里找到它（能展开看到私钥），右键导出成 .p12 并设一个密码；或者 `security export -k ~/Library/Keychains/login.keychain-db -t identities -f pkcs12 -P <密码> -o 证书.p12`（登录钥匙串里只有这一张签名证书时）。再 `base64 -i 证书.p12` 得到这一项 |
-| `APPLE_CERTIFICATE_PASSWORD` | 导出 .p12 时设的密码，不能是空的 | |
-| `APPLE_ID` | 开发者账号的 Apple ID（邮箱） | |
-| `APPLE_APP_SPECIFIC_PASSWORD` | 这个 Apple ID 的应用专用密码 | 登录 account.apple.com → 登录与安全 → App 专用密码，新建一个 |
-| `APPLE_TEAM_ID` | 开发者团队编号 | 证书名字最后括号里的那一串，或者 Apple 开发者网站的 Membership 页 |
+| `MACOS_CERTIFICATE_P12` | “Developer ID Application”证书连同私钥导出的 .p12，base64 编码 | 证书装在 Mac 的登录钥匙串里（没有的话在 Apple 开发者网站的 Certificates 里新建一张，只有账号持有人能建）。在“钥匙串访问”的“我的证书”里只选这一张（能展开看到私钥），右键导出成 .p12 并设一个密码，再 `base64 -i 证书.p12` 得到这一项 |
+| `MACOS_CERTIFICATE_PASSWORD` | 导出 .p12 时设的密码，不能是空的 | |
+| `APPLE_API_KEY` | API 密钥 .p8 文件的内容，原文或者 base64 都行 | App Store Connect → 用户和访问 → 集成 → App Store Connect API，新建一把团队密钥（权限选“开发者”就够），.p8 只能下载一次 |
+| `APPLE_API_KEY_ID` | 这把密钥的编号 | 同一页的“密钥 ID” |
+| `APPLE_API_ISSUER` | 签发者编号 | 同一页上方的 Issuer ID |
 
 配好之后可以先在 Actions 里手动跑一次 Release、标签不填：照选的分支出包，不挂发布页，看 macOS 那一步签名、公证、起应用都过了再打标签。没配这几项时试跑出的是只有临时签名的 dmg，要挂到发布页时直接失败。Windows 的安装程序不签名，打开时系统会提示来源不明。
 

@@ -9,11 +9,11 @@ name: Release
 # 全部出好才一起挂上去；发布页还没有时建成草稿，人看过再公开，安装脚本取“最新一版”时不会碰到一个缺包的发布页。
 #
 # macOS 的签名和公证要在仓库的 Actions 机密里配好这五项（怎么取见 CONTRIBUTING.md 的“发版”一节）：
-#   APPLE_CERTIFICATE_P12_BASE64   “Developer ID Application”证书连同私钥导出的 .p12，base64 编码
-#   APPLE_CERTIFICATE_PASSWORD     导出 .p12 时设的密码
-#   APPLE_ID                       开发者账号的 Apple ID
-#   APPLE_APP_SPECIFIC_PASSWORD    这个 Apple ID 的应用专用密码（公证用）
-#   APPLE_TEAM_ID                  开发者团队编号
+#   MACOS_CERTIFICATE_P12        “Developer ID Application”证书连同私钥导出的 .p12，base64 编码
+#   MACOS_CERTIFICATE_PASSWORD   导出 .p12 时设的密码
+#   APPLE_API_KEY                App Store Connect 的 API 密钥（.p8 文件的内容，原文或者 base64 都行），公证用
+#   APPLE_API_KEY_ID             这把密钥的编号
+#   APPLE_API_ISSUER             签发者编号（Issuer ID）
 # 试跑时没配就出一份只有临时签名的 dmg 并说明；要挂到发布页时没配直接失败。
 on:
   push:
@@ -123,13 +123,13 @@ jobs:
       # 签名身份从导入的证书里找“Developer ID Application”那一个
       - name: 导入签名证书和公证凭据
         env:
-          P12: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
-          P12_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          P12_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          API_KEY: ${{ secrets.APPLE_API_KEY }}
+          API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
         run: |
-          if [ -z "$P12" ] && [ -z "$APPLE_ID" ]; then
+          if [ -z "$P12" ] && [ -z "$API_KEY" ]; then
             if [ "$PUBLISH" = true ]; then
               echo "要挂到发布页的 dmg 必须签名并公证，可仓库里没有配签名证书和公证凭据（见本文件开头）" >&2
               exit 1
@@ -137,7 +137,7 @@ jobs:
             echo "::warning::没有配签名证书和公证凭据，这一趟出的 dmg 只有临时签名"
             exit 0
           fi
-          for name in P12 P12_PASSWORD APPLE_ID APPLE_PASSWORD TEAM_ID; do
+          for name in P12 P12_PASSWORD API_KEY API_KEY_ID API_ISSUER; do
             eval "value=\${$name}"
             if [ -z "$value" ]; then
               echo "签名和公证的机密不全，$name 对应的那一项是空的（见本文件开头）" >&2
@@ -162,7 +162,14 @@ jobs:
             exit 1
           fi
           echo "签名身份：$identity"
-          xcrun notarytool store-credentials litch-ci --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$TEAM_ID" --keychain "$keychain" > /dev/null
+          # .p8 是 PEM 原文就照写，不是就当 base64 解开；存进钥匙串之后文件删掉
+          key="${RUNNER_TEMP}/AuthKey_${API_KEY_ID}.p8"
+          case "$API_KEY" in
+            *"BEGIN PRIVATE KEY"*) printf '%s\n' "$API_KEY" > "$key" ;;
+            *) printf '%s' "$API_KEY" | base64 --decode > "$key" ;;
+          esac
+          xcrun notarytool store-credentials litch-ci --key "$key" --key-id "$API_KEY_ID" --issuer "$API_ISSUER" --keychain "$keychain" > /dev/null
+          rm -f "$key"
           {
             echo "LITCH_SIGN_IDENTITY=$identity"
             echo "LITCH_SIGN_KEYCHAIN=$keychain"
