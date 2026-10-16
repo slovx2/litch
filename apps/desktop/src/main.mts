@@ -18,6 +18,7 @@ import {
   utilityProcess,
 } from 'electron'
 import { openLicenses } from './about.mjs'
+import { type InstalledBrowser, installBrowser } from './browser/install.mjs'
 import {
   ABOUT,
   ATTACH,
@@ -133,6 +134,8 @@ const isUiUrl = (url: string): boolean =>
   devUrl ? url.startsWith(devUrl) : url.startsWith(`${UI_ORIGIN}/`)
 
 let core: UtilityProcess | null = null
+/** 内置浏览器。它的 executor 交给客户端工具的执行器登记表（命名空间 litch_browser） */
+export let browser: InstalledBrowser | null = null
 let quitting = false
 /** 核心连续几次刚起来就退出了。用来拉开重启的间隔，免得出错时原地打转 */
 let quickExits = 0
@@ -512,6 +515,8 @@ if (!smoke && !app.requestSingleInstanceLock()) {
     look =
       parseLook({ ...readLook(app.getPath('userData')), ...forcedLook }) ??
       readLook(app.getPath('userData'))
+    // 内置浏览器：宿主、litch_browser 的执行器、界面和设置页用的消息（browser/install.mts）
+    browser = installBrowser({ isUiUrl, userData: app.getPath('userData') })
     startCore()
     const window = createWindow()
     const finish = (ok: boolean) => {

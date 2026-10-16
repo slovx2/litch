@@ -2,6 +2,7 @@
 // 告诉外壳界面用的是哪种语言和外观、取“关于”里要的版本和许可文本、告诉界面用户选的文件在磁盘上的位置。
 // 拿到端口之后界面和核心直接对话，主进程和这个脚本都不在数据路径上。
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
+import { browserBridge } from './browser/bridge.mjs'
 import {
   ABOUT,
   CORE_PORT,
@@ -53,3 +54,6 @@ contextBridge.exposeInMainWorld('litchShell', {
     }
   },
 })
+
+// 内置浏览器：界面报矩形、开关标签、导航，设置页取“一直允许”的网站、清除浏览数据（browser/bridge.mts）
+contextBridge.exposeInMainWorld('litchBrowser', browserBridge())
