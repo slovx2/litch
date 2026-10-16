@@ -86,6 +86,8 @@ const HARNESS = [
 ]
 
 const GO_ARCH = { arm64: 'arm64', x64: 'amd64' }
+/** Go 管 Windows 叫 windows，别的系统和 Node 叫法一样 */
+const goOs = (platform) => (platform === 'win32' ? 'windows' : platform)
 
 /** 可执行文件在目标系统上的名字：Windows 上带 .exe */
 const executable = (name, platform) => (platform === 'win32' ? `${name}.exe` : name)
@@ -391,7 +393,7 @@ export async function stageAdapterTree(
       cwd: resolve(goFrom),
       env: {
         ...process.env,
-        GOOS: platform,
+        GOOS: goOs(platform),
         GOARCH: goArch,
         ...(staticGo ? { CGO_ENABLED: '0' } : {}),
       },
