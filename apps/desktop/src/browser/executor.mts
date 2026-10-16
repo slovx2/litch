@@ -270,7 +270,15 @@ export function createBrowserExecutor(options: BrowserExecutorOptions): BrowserE
       callArgs = objectOf(invocation.arguments)
       kit.args = callArgs
       if (context.signal.aborted) return clientToolFailure('failed', 'the call was cancelled')
-      return await tool(kit)
+      // 回合被打断、连接断了：当场回失败，不等手上那一步（加载、等元素）自己做完
+      const cancelled = new Promise<ClientToolCallResponse>((resolve) => {
+        context.signal.addEventListener(
+          'abort',
+          () => resolve(clientToolFailure('failed', 'the call was cancelled')),
+          { once: true },
+        )
+      })
+      return await Promise.race([tool(kit), cancelled])
     } catch (error) {
       if (error instanceof BadArgs) return clientToolFailure('invalid', error.message)
       if (error instanceof CdpRefused) return clientToolFailure('failed', error.message)

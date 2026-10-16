@@ -342,3 +342,27 @@ test('show 交给宿主', async () => {
   assert.equal((await run('show')).success, true)
   assert.equal(host.shown.length, 1)
 })
+
+test('被取消时当场回失败', async () => {
+  const host = fakeHost()
+  const executor = createBrowserExecutor({ host, sites: createSiteBook(null) })
+  const controller = new AbortController()
+  const reply = executor.call(
+    {
+      id: 'i1',
+      threadId: 'a',
+      turnId: 't1',
+      callId: 'c1',
+      namespace: 'litch_browser',
+      tool: 'navigate',
+      arguments: { url: 'https://slow.test/' },
+      device: { id: 'local', name: 'Mac', kind: 'local', target: null },
+      harness: null,
+      cwd: null,
+    },
+    // 审批卡片一直没人答，回合被打断
+    { signal: controller.signal, ask: () => new Promise(() => {}) },
+  )
+  controller.abort()
+  assert.match(text(await reply), /^\[litch:failed\] the call was cancelled/)
+})
