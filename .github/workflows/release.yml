@@ -6,6 +6,8 @@ name: Release
 # 打 v 开头的标签时自动跑。也可以手动跑：
 #   填一个已有的标签：给它出包、验证，勾了“挂到发布页”才挂上去
 #   标签不填：照选的分支试跑一遍，只出包、验证、留作流程产物，不挂发布页，也不查版本号和标签对不对得上
+# 挂之前要求标签指的提交上有一轮通过的全量（full.yml，手动触发）：门禁只跑冒烟，0.8.0 那种在 Codex 上建不成会话的问题
+# 要全量才拦得全。没有就不挂，先 gh workflow run full.yml --ref <那个提交所在的分支>，过了再重跑这一趟。
 # 全部出好才一起挂上去；发布页还没有时建成草稿，人看过再公开，安装脚本取“最新一版”时不会碰到一个缺包的发布页。
 #
 # macOS 的签名和公证要在仓库的 Actions 机密里配好这五项（怎么取见 CONTRIBUTING.md 的“发版”一节）：
@@ -33,6 +35,8 @@ on:
 
 permissions:
   contents: write
+  # 查这个提交上的全量过没过
+  actions: read
 
 concurrency:
   group: release-${{ inputs.tag || github.ref_name }}
@@ -269,6 +273,17 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
+      - name: 这个提交上要有一轮通过的全量
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          sha="$(gh api "repos/${GH_REPO}/commits/${TAG}" --jq .sha)"
+          passed="$(gh run list --workflow full.yml --commit "${sha}" --status success --limit 1 --json databaseId --jq length)"
+          if [ "${passed}" != "1" ]; then
+            echo "${TAG}（${sha}）上没有通过的全量：先 gh workflow run full.yml，过了再重跑这一趟" >&2
+            exit 1
+          fi
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           path: ${{ runner.temp }}/release

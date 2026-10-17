@@ -1,13 +1,13 @@
-# 全量：所有单元测试、各平台、各引擎、全部桌面验收、真的原生 codex、移动端模拟器上的端到端。
-# 一轮一个多小时、十来台跑机，不自动跑：发版前、动了大块之后手动触发（gh workflow run full.yml）。
-# 每次推送和合并请求只跑门禁（ci.yml），门禁里的步骤这里都有。
+# 全量：门禁（ci.yml，整个带上）加上各平台、各引擎、全部桌面验收、各家真命令行上的首回合、移动端模拟器上的端到端。
+# 墙钟十五到二十多分钟，但要占十几台跑机（其中一半是要排队的 macOS），不自动跑：
+# 发版前（release.yml 要求打标签的提交上有一轮通过的全量）和动了大块之后手动触发：gh workflow run full.yml
 name: Full
 on:
   workflow_dispatch:
 
 jobs:
-  windows:
-    uses: ./.github/workflows/windows.yml
+  gate:
+    uses: ./.github/workflows/ci.yml
 
   adapters:
     strategy:
@@ -195,23 +195,6 @@ jobs:
           echo "CHA_OPENCODE_CLI=${GITHUB_WORKSPACE}/.artifacts/host-opencode/node_modules/.bin/opencode" >> "${GITHUB_ENV}"
       - run: npm run test:opencode
 
-  # 通用 ACP 引擎（扮演 gemini、qwen、acp）：对着包里自带的假 ACP agent 测，不装真的 agent，不发模型请求
-  acp:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
-        with:
-          node-version: 24
-          cache: npm
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
-        with:
-          go-version: 1.26.6
-      - run: npm ci --no-audit --no-fund
-      - run: npm ci --prefix packages/acp --no-audit --no-fund
-      - run: npm run test:acp
-
   # 客户端对着三个引擎各走一遍的验收：真的适配器主进程管着 Claude Code、Pi、dsh，模型请求全部走回环上的假模型，
   # 界面在不显示的窗口里把新建、审批、提问、技能、打断、读历史、计划模式、改文件与差异、图片、分叉回退压缩各走一遍。
   # Claude Code 和 dsh 的命令行不随适配器分发：各装一份隔离的到临时前缀（版本和上面两个 job 的一样），
@@ -246,12 +229,6 @@ jobs:
       # 各个引擎包、设备进程和命令行
       - run: npm run build
       - run: npm run client:check:engines
-
-  protocol-fixtures:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - run: cargo test --workspace --locked
 
   # 真的原生 codex（protocol/versions.json 的 codexVerified 里第一个版本，装到临时前缀）：Litch 建会话带的工具定义
   # codex 收不收、客户端工具调用由设备进程挑执行方，再在各家真的命令行上从界面建会话跑头一个回合。
@@ -290,9 +267,10 @@ jobs:
           echo "CHA_OPENCODE_CLI=${GITHUB_WORKSPACE}/.artifacts/host-opencode/node_modules/.bin/opencode" >> "${GITHUB_ENV}"
           echo "CHA_ACP_CLI=${GITHUB_WORKSPACE}/.artifacts/host-opencode/node_modules/.bin/opencode" >> "${GITHUB_ENV}"
       - run: npm run build
+      # 首回合在前：它会构建外壳，后面两条 codex 检查里“客户端核心那一遍”要用到构建产物
+      - run: npm run client:check:first-turn -- --engines pi,codex,claude,dsh,opencode,acp
       - run: npm run check:native-codex
       - run: npm run check:client-tools-codex
-      - run: npm run client:check:first-turn -- --engines pi,codex,claude,dsh,opencode,acp
 
   # 移动端：单元测试，再在安卓模拟器上对着 release 包跑端到端（Maestro，模拟核心和夹具两组，apps/mobile/e2e/README.md）。
   # GitHub 的 macOS 跑机不能嵌套虚拟化，起不了安卓模拟器，所以用 ubuntu 加 KVM；包在这里现打
@@ -324,8 +302,8 @@ jobs:
       - run: npm ci --prefix packages/pi --no-audit --no-fund
       - run: npm ci --prefix apps/mobile --no-audit --no-fund
       - run: npm run mobile:test
-      # 夹具那一组要真的适配器、Pi 和设备进程
-      - run: npm run build
+      # 夹具那一组要真的适配器命令行、Pi 和设备进程（不要别的引擎包，所以不跑根目录的 npm run build）
+      - run: npm run build --prefix packages/pi && npm run build --prefix packages/device && node scripts/build-cli.mjs
       - name: 打 release 包
         working-directory: apps/mobile
         run: |

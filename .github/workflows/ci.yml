@@ -1,5 +1,6 @@
 # 门禁：每次推送和合并请求都跑，只放关键的冒烟，墙钟控制在 20 分钟以内（macOS 跑机要排队，门禁里只用一台）。
-# 全量（各平台、各引擎、全部桌面验收、移动端模拟器上的端到端）在 full.yml，不自动跑，发版前和动了大块之后手动触发。
+# 全量（各平台、各引擎、全部桌面验收、移动端模拟器上的端到端）在 full.yml，不自动跑，发版前和动了大块之后手动触发；
+# 全量经 workflow_call 把这一份整个带上，门禁有的全量一定有。
 name: CI
 on:
   push:
@@ -7,10 +8,12 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+  workflow_call:
 
-# 同一个分支或合并请求上新的推送来了，旧的那一轮就不用跑完了
+# 同一个分支或合并请求上新的推送来了，旧的那一轮就不用跑完了。被全量调用时 github.workflow 是调用方的名字，
+# 不会和推送触发的门禁互相取消
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -82,8 +85,9 @@ jobs:
       - run: npm run test --prefix packages/claude
 
   # 客户端的冒烟（窗口不显示）：核心的单元测试（含发给原生 codex 的参数照上游约束核对），界面构建，
-  # 外壳对着模拟核心和真实入口各起一次，对着真实入口发消息，再在真的原生 codex 和 Pi 上从界面建会话跑头一个回合
-  # （0.8.0 在 Codex 上一个会话都建不成，就是这一条该拦住的）。其余的桌面验收在 full.yml
+  # 外壳对着模拟核心和真实入口各起一次，对着真实入口发消息，再在真的原生 codex、Claude Code 和 Pi 上从界面建会话
+  # 跑头一个回合（0.8.0 在 Codex 上一个会话都建不成，就是这一条该拦住的），codex 收不收 Litch 的工具定义，
+  # 本机内置适配器的拉起与换版本。其余的桌面验收在 full.yml
   client:
     runs-on: macos-14
     timeout-minutes: 20
@@ -104,11 +108,13 @@ jobs:
       - run: npm ci --prefix packages/opencode --no-audit --no-fund
       - run: npm ci --prefix packages/acp --no-audit --no-fund
       - run: npm run client:setup
-      - name: 安装隔离的原生 codex
+      - name: 安装隔离的原生 codex 和 Claude Code
         run: |
           codex="$(node -p "require('./protocol/versions.json').codexVerified[0]")"
           npm install --prefix .artifacts/host-codex --save-exact "@openai/codex@${codex}" --no-audit --no-fund
           echo "CHA_CODEX_CLI=${GITHUB_WORKSPACE}/.artifacts/host-codex/node_modules/.bin/codex" >> "${GITHUB_ENV}"
+          npm install --prefix .artifacts/host-cli --save-exact @anthropic-ai/claude-code@2.1.282 --no-audit --no-fund
+          echo "CHA_CLAUDE_CLI=${GITHUB_WORKSPACE}/.artifacts/host-cli/node_modules/.bin/claude" >> "${GITHUB_ENV}"
       - run: npm run client:typecheck
       - run: npm run client:test
       - run: npm run client:test:ui
@@ -116,7 +122,11 @@ jobs:
       - run: npm run client:smoke
       - run: npm run client:smoke:entry
       - run: npm run client:check:compose:entry
-      - run: npm run client:check:first-turn
+      # 首回合在前：它会构建外壳，后面两条 codex 检查里“客户端核心那一遍”要用到构建产物
+      - run: npm run client:check:first-turn -- --engines pi,codex,claude
+      - run: npm run check:native-codex
+      - run: npm run check:client-tools-codex
+      - run: npm run client:check:adapter
 
   protocol-fixtures:
     runs-on: ubuntu-24.04
