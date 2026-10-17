@@ -32,5 +32,9 @@ class LitchSshModule : Module() {
     AsyncFunction("generateEd25519Key") {
       Sshtransport.generateEd25519Key()
     }
+
+    AsyncFunction("inspectPrivateKey") { privateKey: String, passphrase: String ->
+      Sshtransport.inspectPrivateKey(privateKey, passphrase)
+    }
   }
 }

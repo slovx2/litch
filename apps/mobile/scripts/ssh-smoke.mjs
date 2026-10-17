@@ -1,5 +1,5 @@
 // 在电脑上验手机端的 SSH 模块（mobile/sshtransport）：不装到手机上，直接对着测试夹具走一遍
-// 探测、启动、开流、WebSocket 握手、初始化、列会话。脚本用的是手机端那一份（src/core/script.ts）。
+// 探测、启动、开流、WebSocket 握手、初始化、列会话。脚本用的是手机端那一份（src/platform/ssh-script.ts）。
 //
 // 用法：先起 node apps/mobile/scripts/fixture.mjs --out <配置>，再 node apps/mobile/scripts/ssh-smoke.mjs <配置>
 import { spawn } from 'node:child_process'
@@ -9,13 +9,17 @@ import { createRequire } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 import { fileURLToPath } from 'node:url'
-import { parsePairs, probeScript, proxyScript, startScript } from '../src/core/script.ts'
+import { parsePairs, probeScript, proxyScript, startScript } from '../src/platform/ssh-script.ts'
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
 // 用仓库根目录那一份 ws（移动端目录下的是 RN 自带的旧版本）
 const { WebSocket } = createRequire(join(repo, 'package.json'))('ws')
 const config = JSON.parse(readFileSync(process.argv[2], 'utf8'))
-const names = { adapter: config.adapter, randomHex: () => randomBytes(16).toString('hex') }
+const names = {
+  adapter: config.adapter,
+  codex: 'codex',
+  randomHex: () => randomBytes(16).toString('hex'),
+}
 
 const tool = spawn('go', ['run', './sshtransport/smoke'], {
   cwd: join(repo, 'mobile'),
@@ -38,18 +42,37 @@ const step = (name, ok, detail = '') => {
   }
 }
 
+const hostKey = await call({ op: 'probe' })
+step('读主机指纹', hostKey.fingerprint === config.target.hostFingerprint, hostKey.fingerprint)
+
 const probe = probeScript(names)
+const changed = await call({
+  op: 'run',
+  target: { ...config.target, hostFingerprint: 'SHA256:不是这一个' },
+  script: probe.text,
+  marker: probe.marker,
+})
+step('指纹不对时拒绝', /^\[hostKeyChanged\] /.test(changed.error ?? ''), changed.error)
+const stranger = await call({ op: 'generate' })
+const refused = await call({
+  op: 'run',
+  target: { ...config.target, privateKey: stranger.privateKey },
+  script: probe.text,
+  marker: probe.marker,
+})
+step('钥匙不对时拒绝', /^\[auth\] /.test(refused.error ?? ''), refused.error)
+
 let said = await call({ op: 'run', script: probe.text, marker: probe.marker })
 let pairs = parsePairs(said.output ?? '')
 step('探测', said.marked && pairs.adapter === 'yes', JSON.stringify(pairs))
 
-const start = startScript(names)
+const start = startScript(names, 'service')
 const t0 = Date.now()
 said = await call({ op: 'run', script: start.text, marker: start.marker })
 pairs = parsePairs(said.output ?? '')
 step('启动设备服务', pairs.code === '0', `${Date.now() - t0}ms ${pairs.said ?? ''}`.slice(0, 200))
 
-const proxy = proxyScript(names)
+const proxy = proxyScript(names, 'auto')
 const opened = await call({ op: 'open', id: 'smoke', script: proxy.text, marker: proxy.marker })
 step('开流', typeof opened.url === 'string', opened.url ?? opened.error)
 

@@ -94,7 +94,7 @@ func OpenStream(id, targetJSON, script, marker string) (string, error) {
 	if previous != nil {
 		previous.close()
 	}
-	go keepAlive(ctx, client)
+	go keepAlive(ctx, client, func(reason string) { s.fail("%s", reason) })
 	go s.serve()
 	return marshalJSON(streamEndpoint{URL: "ws://" + listener.Addr().String() + "/" + token})
 }

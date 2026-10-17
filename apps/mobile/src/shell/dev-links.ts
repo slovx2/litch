@@ -5,11 +5,13 @@
 //   litch://send?text=短回答                       往最近新建的会话里再发一句
 //   litch://home                                   回首页
 //   litch://bench                                  WebView 吞吐测试
+//   litch://remote?adapter=…&env=名=值             远程设备的开发参数（src/platform/dev.ts），验收接测试夹具用
 // 每个链接都可以带测量开关（src/experiment.ts）：render、seal、pace、freeze、tail、keyboard、markers，以及 probe=1|0。
 import { keys } from '@litch/core'
 import { createNavigationContainerRef, StackActions } from '@react-navigation/native'
 import { experiment } from '../experiment'
 import type { RootStackParamList } from '../nav/routes'
+import { setRemoteDev } from '../platform/dev'
 import { markOpen, startProbe, stopProbe } from '../probe'
 import type { BootMode } from './boot'
 import type { Services } from './services'
@@ -38,6 +40,10 @@ export function handleDevLink(url: string, services: Services | null): BootMode 
   const parsed = new URL(url)
   const params = parsed.searchParams
   applyExperiment(params)
+  if (parsed.hostname === 'remote') {
+    setRemoteDev(params)
+    return null
+  }
   if (parsed.hostname === 'boot') {
     const mode = params.get('mode')
     return mode === 'mock' || mode === 'fixture' || mode === 'stored' ? mode : null
