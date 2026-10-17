@@ -67,6 +67,8 @@ enum Permissions {
 
 struct AppInfo {
   var name: String
+  /// 应用包的文件名去掉 .app（文本编辑是 TextEdit）：系统是中文时 name 是本地化的，模型多半用这个英文名叫它
+  var fileName: String?
   var bundleId: String?
   var pid: pid_t
   var active: Bool
@@ -74,8 +76,8 @@ struct AppInfo {
 
   var json: JSONValue {
     [
-      "name": .string(name), "bundleId": .optional(bundleId), "pid": .int(Int(pid)),
-      "active": .bool(active), "windows": .int(windows),
+      "name": .string(name), "fileName": .optional(fileName), "bundleId": .optional(bundleId),
+      "pid": .int(Int(pid)), "active": .bool(active), "windows": .int(windows),
     ]
   }
 }
@@ -96,6 +98,11 @@ enum Apps {
     return counts
   }
 
+  /// 应用包的文件名去掉 .app
+  static func fileName(_ app: NSRunningApplication) -> String? {
+    app.bundleURL?.deletingPathExtension().lastPathComponent
+  }
+
   /// 在跑的、有窗口的普通应用
   static func list() -> [AppInfo] {
     let counts = windowCounts()
@@ -107,13 +114,13 @@ enum Apps {
         guard windows > 0 else { return nil }
         return AppInfo(
           name: app.localizedName ?? app.bundleIdentifier ?? "pid \(app.processIdentifier)",
-          bundleId: app.bundleIdentifier, pid: app.processIdentifier,
+          fileName: fileName(app), bundleId: app.bundleIdentifier, pid: app.processIdentifier,
           active: app.processIdentifier == front, windows: windows)
       }
       .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
   }
 
-  /// 按包标识或名字找在跑的应用。有好几个实例时挑有窗口的、在前台的
+  /// 按包标识、名字或包的文件名找在跑的应用。有好几个实例时挑有窗口的、在前台的
   static func resolve(_ query: String) throws -> NSRunningApplication {
     let needle = query.trimmingCharacters(in: .whitespaces)
     guard !needle.isEmpty else { throw RPCError(.invalid, "app is empty") }
@@ -124,6 +131,12 @@ enum Apps {
     if matches.isEmpty {
       matches = running.filter {
         $0.localizedName?.compare(needle, options: [.caseInsensitive, .diacriticInsensitive])
+          == .orderedSame
+      }
+    }
+    if matches.isEmpty {
+      matches = running.filter {
+        fileName($0)?.compare(needle, options: [.caseInsensitive, .diacriticInsensitive])
           == .orderedSame
       }
     }

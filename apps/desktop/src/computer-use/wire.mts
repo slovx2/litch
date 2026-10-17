@@ -80,7 +80,10 @@ export interface PermissionStatus {
 }
 
 export interface HelperApp {
+  /** 系统显示的名字，跟着系统语言（中文系统上文本编辑叫“文本编辑”） */
   name: string
+  /** 应用包的文件名去掉 .app（TextEdit），不跟语言变 */
+  fileName: string | null
   bundleId: string | null
   pid: number
   active: boolean

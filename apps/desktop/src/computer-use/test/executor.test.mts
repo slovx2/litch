@@ -24,11 +24,40 @@ function tempDir(): string {
   return dir
 }
 
+// 文本编辑按中文系统的样子给：显示名是本地化的，模型叫它 TextEdit（包的文件名）也要找得到
 const APPS: HelperApp[] = [
-  { name: 'TextEdit', bundleId: 'com.apple.TextEdit', pid: 11, active: true, windows: 1 },
-  { name: 'Safari', bundleId: 'com.apple.Safari', pid: 12, active: false, windows: 2 },
-  { name: '1Password', bundleId: 'com.1password.1password', pid: 13, active: false, windows: 1 },
-  { name: 'Litch', bundleId: 'io.github.slovx2.litch', pid: 14, active: false, windows: 1 },
+  {
+    name: '文本编辑',
+    fileName: 'TextEdit',
+    bundleId: 'com.apple.TextEdit',
+    pid: 11,
+    active: true,
+    windows: 1,
+  },
+  {
+    name: 'Safari',
+    fileName: 'Safari',
+    bundleId: 'com.apple.Safari',
+    pid: 12,
+    active: false,
+    windows: 2,
+  },
+  {
+    name: '1Password',
+    fileName: '1Password',
+    bundleId: 'com.1password.1password',
+    pid: 13,
+    active: false,
+    windows: 1,
+  },
+  {
+    name: 'Litch',
+    fileName: 'Litch',
+    bundleId: 'io.github.slovx2.litch',
+    pid: 14,
+    active: false,
+    windows: 1,
+  },
 ]
 
 interface Call {
@@ -139,7 +168,8 @@ test('list_apps 不查权限，禁止的应用标出来', async () => {
   const { ctx } = context()
   const response = await executor.call(invocation('list_apps', {}), ctx)
   assert.equal(response.success, true)
-  assert.match(textOf(response), /TextEdit — com\.apple\.TextEdit \(frontmost\)/)
+  assert.match(textOf(response), /文本编辑 \(TextEdit\) — com\.apple\.TextEdit \(frontmost\)/)
+  assert.match(textOf(response), /- Safari — com\.apple\.Safari\n/)
   assert.match(textOf(response), /1Password — com\.1password\.1password \(not allowed\)/)
   assert.deepEqual(
     helper.calls.map((call) => call.method),

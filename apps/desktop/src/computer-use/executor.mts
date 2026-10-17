@@ -111,6 +111,7 @@ export function createComputerExecutor(options: ComputerExecutorOptions): Client
     return (
       apps.find((one) => one.bundleId === needle) ??
       apps.find((one) => one.name.toLowerCase() === lower) ??
+      apps.find((one) => one.fileName?.toLowerCase() === lower) ??
       apps.find((one) => one.bundleId?.toLowerCase() === lower) ??
       null
     )
@@ -185,7 +186,8 @@ export function createComputerExecutor(options: ComputerExecutorOptions): Client
       const lines = apps.map((one) => {
         const risk = classifyApp(one)
         const note = risk === 'forbidden' ? ' (not allowed)' : one.active ? ' (frontmost)' : ''
-        return `- ${one.name} — ${one.bundleId ?? 'no bundle id'}${note}`
+        const also = one.fileName && one.fileName !== one.name ? ` (${one.fileName})` : ''
+        return `- ${one.name}${also} — ${one.bundleId ?? 'no bundle id'}${note}`
       })
       return text(
         lines.length > 0
