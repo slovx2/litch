@@ -15,6 +15,10 @@ module.exports = {
       sourceType: 'module',
       presets: [require.resolve('@babel/preset-typescript')],
     })
-    return upstream.transform({ ...args, src: stripped.code, filename: args.filename.replace(/\.mts$/, '.js') })
+    return upstream.transform({
+      ...args,
+      src: stripped.code,
+      filename: args.filename.replace(/\.mts$/, '.js'),
+    })
   },
 }

@@ -1,13 +1,14 @@
 // 远程设备的传输：手机端 SSH 模块（modules/litch-ssh）在本机回环上开一个 WebSocket 入口，
 // 这边用 RN 自带的 WebSocket 连上去，包成核心要的传输接口。和桌面端一样三步走：
 // 先直接接代理（服务多半已经在跑）；接不上就让设备服务常驻，再接一次。
-import { getRandomBytes } from 'expo-crypto'
+
 import {
   ConnectError,
   type Transport,
   type TransportHandlers,
   type TransportOpener,
-} from '../../../../packages/core/src/index.mts'
+} from '@litch/core'
+import { getRandomBytes } from 'expo-crypto'
 import { type SshTarget, ssh } from '../../modules/litch-ssh/src'
 import { noteWork } from '../probe'
 import { EXIT, parsePairs, proxyScript, startScript } from './script'
@@ -64,7 +65,10 @@ function wrap(socket: WebSocket, id: string): Transport {
   }
   socket.onclose = (event) => {
     void ssh.closeStream(id)
-    const reason = event.code === 1000 ? null : `连接断开（${event.code}${event.reason ? `，${event.reason}` : ''}）`
+    const reason =
+      event.code === 1000
+        ? null
+        : `连接断开（${event.code}${event.reason ? `，${event.reason}` : ''}）`
     if (handlers) handlers.close(reason)
     else closedWith = { reason }
   }
@@ -109,7 +113,12 @@ export function sshOpener(config: RemoteConfig): TransportOpener {
     }
     const pairs = parsePairs(said.output)
     if (pairs.code !== '0') {
-      throw new ConnectError('unreachable', `设备服务没起来（${pairs.code ?? said.code}）`, true, pairs.said ?? said.stderr)
+      throw new ConnectError(
+        'unreachable',
+        `设备服务没起来（${pairs.code ?? said.code}）`,
+        true,
+        pairs.said ?? said.stderr,
+      )
     }
     const second = await tryProxy(config)
     if (typeof second !== 'string') return second

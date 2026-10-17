@@ -5,8 +5,8 @@
 import { spawn } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
 import { createRequire } from 'node:module'
+import { dirname, join, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 import { fileURLToPath } from 'node:url'
 import { parsePairs, probeScript, proxyScript, startScript } from '../src/core/script.ts'
@@ -17,7 +17,10 @@ const { WebSocket } = createRequire(join(repo, 'package.json'))('ws')
 const config = JSON.parse(readFileSync(process.argv[2], 'utf8'))
 const names = { adapter: config.adapter, randomHex: () => randomBytes(16).toString('hex') }
 
-const tool = spawn('go', ['run', './sshtransport/smoke'], { cwd: join(repo, 'mobile'), stdio: ['pipe', 'pipe', 'inherit'] })
+const tool = spawn('go', ['run', './sshtransport/smoke'], {
+  cwd: join(repo, 'mobile'),
+  stdio: ['pipe', 'pipe', 'inherit'],
+})
 const lines = createInterface({ input: tool.stdout })
 const waiting = []
 lines.on('line', (line) => waiting.shift()?.(JSON.parse(line)))

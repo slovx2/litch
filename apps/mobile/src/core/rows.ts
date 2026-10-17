@@ -3,7 +3,7 @@
 // - 过程（命令、工具调用、改文件、搜索、待办）连成一组，收起时是一行高度固定的摘要；
 //   展开收起只由用户点，回合结束时不自动收起（S3）。
 // - 每个回合末尾一行状态，从回合开始到结束一直在，只换字不换高度（S4）。
-import type { ItemView, SessionView, TurnView } from '../../../../packages/core/src/index.mts'
+import type { ItemView, SessionView, TurnView } from '@litch/core'
 import { type ChunkState, chunkText, emptyChunks } from './blocks'
 
 export type Row =
@@ -12,7 +12,13 @@ export type Row =
   | { type: 'md'; key: string; text: string; open: boolean; live: boolean }
   | { type: 'reasoning'; key: string; text: string; open: boolean }
   | { type: 'process'; key: string; steps: Step[]; expanded: boolean; running: boolean }
-  | { type: 'status'; key: string; status: TurnView['status']; durationMs: number | null; error: string | null }
+  | {
+      type: 'status'
+      key: string
+      status: TurnView['status']
+      durationMs: number | null
+      error: string | null
+    }
 
 export interface Step {
   id: string
@@ -58,7 +64,15 @@ export class RowBuilder {
     const flush = () => {
       if (!group) return
       const running = group.some((step) => step.state === 'running')
-      out.push(this.keep({ type: 'process', key: groupKey, steps: group, expanded: this.expanded.has(groupKey), running }))
+      out.push(
+        this.keep({
+          type: 'process',
+          key: groupKey,
+          steps: group,
+          expanded: this.expanded.has(groupKey),
+          running,
+        }),
+      )
       group = null
     }
     for (const itemId of turn.itemIds) {
@@ -74,10 +88,19 @@ export class RowBuilder {
         continue
       }
       flush()
-      if (item.kind === 'userMessage') out.push(this.keep({ type: 'user', key: item.id, text: item.text }))
-      else if (item.kind === 'agentMessage') out.push(...this.markdown(item.id, item.text, item.status === 'inProgress'))
+      if (item.kind === 'userMessage')
+        out.push(this.keep({ type: 'user', key: item.id, text: item.text }))
+      else if (item.kind === 'agentMessage')
+        out.push(...this.markdown(item.id, item.text, item.status === 'inProgress'))
       else if (item.kind === 'reasoning') {
-        out.push(this.keep({ type: 'reasoning', key: item.id, text: lastLine(item.text), open: item.status === 'inProgress' }))
+        out.push(
+          this.keep({
+            type: 'reasoning',
+            key: item.id,
+            text: lastLine(item.text),
+            open: item.status === 'inProgress',
+          }),
+        )
       } else if (item.kind === 'plan') out.push(...this.markdown(item.id, item.text, false))
     }
     flush()
@@ -102,7 +125,13 @@ export class RowBuilder {
     const chunks = chunkText(cache.chunks, text, cache.text, open)
     cache.text = text
     return chunks.map((chunk) =>
-      this.keep({ type: 'md', key: `${itemId}:${chunk.index}`, text: chunk.text, open: chunk.open, live: open }),
+      this.keep({
+        type: 'md',
+        key: `${itemId}:${chunk.index}`,
+        text: chunk.text,
+        open: chunk.open,
+        live: open,
+      }),
     )
   }
 
@@ -121,12 +150,18 @@ function sameRow(a: Row, b: Row): boolean {
     case 'user':
       return a.text === (b as typeof a).text
     case 'md':
-      return a.text === (b as typeof a).text && a.open === (b as typeof a).open && a.live === (b as typeof a).live
+      return (
+        a.text === (b as typeof a).text &&
+        a.open === (b as typeof a).open &&
+        a.live === (b as typeof a).live
+      )
     case 'reasoning':
       return a.text === (b as typeof a).text && a.open === (b as typeof a).open
     case 'status': {
       const other = b as typeof a
-      return a.status === other.status && a.durationMs === other.durationMs && a.error === other.error
+      return (
+        a.status === other.status && a.durationMs === other.durationMs && a.error === other.error
+      )
     }
     case 'process': {
       const other = b as typeof a
@@ -134,7 +169,12 @@ function sameRow(a: Row, b: Row): boolean {
       if (a.steps.length !== other.steps.length) return false
       return a.steps.every((step, index) => {
         const next = other.steps[index]
-        return next && step.label === next.label && step.state === next.state && step.detail === next.detail
+        return (
+          next &&
+          step.label === next.label &&
+          step.state === next.state &&
+          step.detail === next.detail
+        )
       })
     }
   }
@@ -145,9 +185,19 @@ function stepOf(item: ItemView): Step | null {
     status === 'inProgress' ? 'running' : status === 'completed' ? 'done' : 'failed'
   switch (item.kind) {
     case 'command':
-      return { id: item.id, label: item.command, detail: tailLines(item.output, 6), state: state(item.status) }
+      return {
+        id: item.id,
+        label: item.command,
+        detail: tailLines(item.output, 6),
+        state: state(item.status),
+      }
     case 'toolCall':
-      return { id: item.id, label: typeof item.tool === 'string' ? item.tool : item.tool.key, detail: '', state: state(item.status) }
+      return {
+        id: item.id,
+        label: typeof item.tool === 'string' ? item.tool : item.tool.key,
+        detail: '',
+        state: state(item.status),
+      }
     case 'fileChange':
       return {
         id: item.id,
@@ -160,7 +210,12 @@ function stepOf(item: ItemView): Step | null {
     case 'todo':
       return { id: item.id, label: `待办 ${item.steps.length} 项`, detail: '', state: 'done' }
     case 'notice':
-      return { id: item.id, label: typeof item.label === 'string' ? item.label : item.label.key, detail: '', state: 'done' }
+      return {
+        id: item.id,
+        label: typeof item.label === 'string' ? item.label : item.label.key,
+        detail: '',
+        state: 'done',
+      }
     default:
       return null
   }
@@ -171,4 +226,5 @@ const lastLine = (text: string): string => {
   return lines[lines.length - 1] ?? ''
 }
 
-const tailLines = (text: string, count: number): string => text.replace(/\s+$/, '').split('\n').slice(-count).join('\n')
+const tailLines = (text: string, count: number): string =>
+  text.replace(/\s+$/, '').split('\n').slice(-count).join('\n')

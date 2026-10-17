@@ -37,7 +37,7 @@ if (!['md', 'plain'].includes(render) || !/^\d+$/.test(seal) || !/^\d+$/.test(pa
 const out = resolve(arg('--out', '.'))
 // legacy：对照组，现有的 tyrs-hand 移动端。它不认链接，要先用 legacy-flow.mjs 把新任务开好、字打好，这里只点发送
 const app = arg('--app', 'litch')
-const pkg = app === 'legacy' ? 'com.tyrshand.app' : 'dev.litch.mobileproto'
+const pkg = app === 'legacy' ? 'com.tyrshand.app' : 'dev.litch.app'
 const measure = !process.argv.includes('--no-measure')
 // 不录屏：录屏本身占模拟器的 GPU，只看帧统计时关掉，排除它的影响
 const record = !process.argv.includes('--no-record')
@@ -142,7 +142,8 @@ mkdirSync(out, { recursive: true })
 const adb = (...args) => execFileSync('adb', args, { encoding: 'utf8', maxBuffer: 64 << 20 })
 const adbAsync = promisify(execFile)
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms))
-const link = (path) => adb('shell', 'am', 'start', '-a', 'android.intent.action.VIEW', '-d', `'litchproto://${path}'`)
+const link = (path) =>
+  adb('shell', 'am', 'start', '-a', 'android.intent.action.VIEW', '-d', `'litch://${path}'`)
 // 录屏开始以来的动作时刻（秒），写进 meta.json 的 actions：分析时按它切出“手指离开、停稳了”的那几段
 const actions = []
 let recordingAt = 0
@@ -152,7 +153,8 @@ const swipe = (from, to, ms) => {
   mark('swipe-end')
 }
 const tap = ([x, y]) => adb('shell', 'input', 'tap', String(x), String(y))
-const create = (prompt) => link(`new?prompt=${encodeURIComponent(prompt)}&markers=1&variant=${variant}&render=${render}`)
+const create = (prompt) =>
+  link(`new?prompt=${encodeURIComponent(prompt)}&markers=1&variant=${variant}&render=${render}`)
 
 /** 造一个两轮十万字回答的会话（五百多行），回首页 */
 async function seedHuge() {
@@ -173,9 +175,16 @@ function center(id) {
   return [(Number(box[1]) + Number(box[3])) >> 1, (Number(box[2]) + Number(box[4])) >> 1]
 }
 
-// 先回首页，标记线打开，选好变体
+// 先让应用连上夹具（核心换成 fixture 装法，已经是就什么都不做），再回首页，标记线打开
 const send = app === 'legacy' ? center('composer:send') : null
-if (!send) link(`home?markers=1&variant=${variant}&render=${render}&seal=${seal}&pace=${pace}&freeze=${freeze}&tail=${tail}&probe=1`)
+if (!send) {
+  link('boot?mode=fixture')
+  await sleep(4000)
+}
+if (!send)
+  link(
+    `home?markers=1&variant=${variant}&render=${render}&seal=${seal}&pace=${pace}&freeze=${freeze}&tail=${tail}&probe=1`,
+  )
 await sleep(1500)
 if (!send && plan.prepare) await plan.prepare()
 adb('shell', 'dumpsys', 'gfxinfo', pkg, 'reset')
@@ -183,7 +192,15 @@ adb('logcat', '-c')
 const remote = '/sdcard/litch-bench.mp4'
 recordingAt = Date.now()
 const recorder = record
-  ? spawn('adb', ['shell', 'screenrecord', '--bit-rate', '20000000', '--time-limit', String(seconds), remote])
+  ? spawn('adb', [
+      'shell',
+      'screenrecord',
+      '--bit-rate',
+      '20000000',
+      '--time-limit',
+      String(seconds),
+      remote,
+    ])
   : null
 // 录屏结束得可能比下面的采样早，先把“结束了”接住
 const recorded = recorder ? new Promise((done) => recorder.on('exit', done)) : null
@@ -192,18 +209,35 @@ const started = Date.now()
 const acting = send ? tap(send) : plan.act()
 // 各线程的 CPU：JS 线程（mqt_v_js / mqt_js）、主线程、渲染线程。对照组没有 JS 探针，看 JS 线程忙不忙只能靠这个
 const pid = adb('shell', 'pidof', pkg).trim()
-const top = threads && adbAsync(
-  'adb',
-  ['shell', 'top', '-H', '-b', '-d', '1', '-n', String(Math.max(1, seconds - 4)), '-p', pid, '-o', 'TID,%CPU,CMD'],
-  { maxBuffer: 64 << 20 },
-)
+const top =
+  threads &&
+  adbAsync(
+    'adb',
+    [
+      'shell',
+      'top',
+      '-H',
+      '-b',
+      '-d',
+      '1',
+      '-n',
+      String(Math.max(1, seconds - 4)),
+      '-p',
+      pid,
+      '-o',
+      'TID,%CPU,CMD',
+    ],
+    { maxBuffer: 64 << 20 },
+  )
 const perfDone = perf ? samplePerf() : null
 // framestats 每次只给最近 120 帧，每秒取一次、按 IntendedVsync 去重，就有了整段的逐帧数据
 const frames = new Map()
 let header = null
 const deadline = started + seconds * 1000 - 1500
 while (Date.now() < deadline) {
-  const { stdout } = await adbAsync('adb', ['shell', 'dumpsys', 'gfxinfo', pkg, 'framestats'], { maxBuffer: 64 << 20 })
+  const { stdout } = await adbAsync('adb', ['shell', 'dumpsys', 'gfxinfo', pkg, 'framestats'], {
+    maxBuffer: 64 << 20,
+  })
   collectFrames(stdout)
   await sleep(1000)
 }
@@ -215,7 +249,10 @@ writeFileSync(join(out, 'gfxinfo.txt'), gfx)
 writeFileSync(join(out, 'framestats.txt'), framestats)
 collectFrames(framestats)
 const rows = [...frames.values()].sort((a, b) => a.IntendedVsync - b.IntendedVsync)
-writeFileSync(join(out, 'frames.csv'), [header.join(','), ...rows.map((row) => header.map((key) => row[key]).join(','))].join('\n'))
+writeFileSync(
+  join(out, 'frames.csv'),
+  [header.join(','), ...rows.map((row) => header.map((key) => row[key]).join(','))].join('\n'),
+)
 const logLines = adb('logcat', '-d', '-s', 'ReactNativeJS:I').split('\n')
 const tagged = (tag) =>
   logLines
@@ -229,7 +266,15 @@ writeFileSync(join(out, 'probe.json'), `${JSON.stringify(probes, null, 1)}\n`)
 const { stdout: topText } = top ? await top : { stdout: '' }
 const perfSummary = perfDone ? await perfDone : null
 writeFileSync(join(out, 'threads.txt'), topText)
-const summary = { app, opens, webview, frames: summarizeFrames(rows), js: summarizeProbes(probes), threads: top ? summarizeThreads(topText) : null, perf: perfSummary }
+const summary = {
+  app,
+  opens,
+  webview,
+  frames: summarizeFrames(rows),
+  js: summarizeProbes(probes),
+  threads: top ? summarizeThreads(topText) : null,
+  perf: perfSummary,
+}
 writeFileSync(join(out, 'summary.json'), `${JSON.stringify(summary, null, 2)}\n`)
 console.log(JSON.stringify(summary, null, 2))
 if (recorder) {
@@ -245,12 +290,26 @@ console.log(`录好了：${out}`)
 
 if (measure) {
   const tool = join(here, '../measure')
-  const run = (...args) => execFileSync('uv', ['run', 'python', '-m', 'chatmeasure', ...args], { cwd: tool, stdio: 'inherit' })
+  const run = (...args) =>
+    execFileSync('uv', ['run', 'python', '-m', 'chatmeasure', ...args], {
+      cwd: tool,
+      stdio: 'inherit',
+    })
   run('frametimes', join(out, 'gfxinfo.txt'), '--json', join(out, 'gfx.json'))
   if (recorder && ['t1', 't1x3', 't3', 't4'].includes(scenario)) {
     run(
-      'markers', join(out, 'video.mp4'), '--x-range', '0,256', '--scale', '0.5', '--line-height-dp', '22',
-      '--json', join(out, 'markers.json'), '--csv', join(out, 'markers.csv'),
+      'markers',
+      join(out, 'video.mp4'),
+      '--x-range',
+      '0,256',
+      '--scale',
+      '0.5',
+      '--line-height-dp',
+      '22',
+      '--json',
+      join(out, 'markers.json'),
+      '--csv',
+      join(out, 'markers.csv'),
     )
   }
 }
@@ -272,7 +331,12 @@ function percentiles(values) {
   const sorted = [...values].sort((a, b) => a - b)
   const at = (q) => sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * q))] ?? 0
   const round = (ms) => Math.round(ms * 10) / 10
-  return { p50: round(at(0.5)), p90: round(at(0.9)), p99: round(at(0.99)), max: round(sorted[sorted.length - 1] ?? 0) }
+  return {
+    p50: round(at(0.5)),
+    p90: round(at(0.9)),
+    p99: round(at(0.99)),
+    max: round(sorted[sorted.length - 1] ?? 0),
+  }
 }
 
 /**
@@ -319,16 +383,32 @@ function summarizeThreads(text) {
     if (!match || !current) continue
     const cpu = Number(match[2])
     const name = match[3]
-    const bucket = /mqt_(v_)?js/.test(name) ? 'js' : match[1] === pid ? 'main' : name === 'RenderThread' ? 'render' : 'other'
+    const bucket = /mqt_(v_)?js/.test(name)
+      ? 'js'
+      : match[1] === pid
+        ? 'main'
+        : name === 'RenderThread'
+          ? 'render'
+          : 'other'
     current[bucket] += cpu
   }
   const used = samples.slice(1)
   const stat = (key) => {
     const values = used.map((sample) => sample[key]).sort((a, b) => a - b)
     const mean = values.reduce((sum, v) => sum + v, 0) / Math.max(1, values.length)
-    return { mean: Math.round(mean), p90: Math.round(values[Math.floor(values.length * 0.9)] ?? 0), max: Math.round(values.at(-1) ?? 0) }
+    return {
+      mean: Math.round(mean),
+      p90: Math.round(values[Math.floor(values.length * 0.9)] ?? 0),
+      max: Math.round(values.at(-1) ?? 0),
+    }
   }
-  return { samples: used.length, js: stat('js'), main: stat('main'), render: stat('render'), other: stat('other') }
+  return {
+    samples: used.length,
+    js: stat('js'),
+    main: stat('main'),
+    render: stat('render'),
+    other: stat('other'),
+  }
 }
 
 async function samplePerf() {
@@ -340,7 +420,22 @@ async function samplePerf() {
   if (!jsThread) return null
   const seconds = 20
   const file = '/data/local/tmp/litch-bench.perf'
-  await adbAsync('adb', ['shell', 'simpleperf', 'record', '-t', jsThread, '-e', 'cpu-clock', '-g', '-f', '1000', '--duration', String(seconds), '-o', file])
+  await adbAsync('adb', [
+    'shell',
+    'simpleperf',
+    'record',
+    '-t',
+    jsThread,
+    '-e',
+    'cpu-clock',
+    '-g',
+    '-f',
+    '1000',
+    '--duration',
+    String(seconds),
+    '-o',
+    file,
+  ])
   const { stdout } = await adbAsync(
     'adb',
     ['shell', 'simpleperf', 'report', '-i', file, '--children', '--sort', 'symbol'],

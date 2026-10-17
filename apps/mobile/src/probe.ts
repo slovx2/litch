@@ -30,7 +30,8 @@ export function startProbe(): void {
   flusher = setInterval(() => {
     if (lags.length === 0) return
     const sorted = lags.sort((a, b) => a - b)
-    const at = (q: number) => sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * q))] ?? 0
+    const at = (q: number) =>
+      sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * q))] ?? 0
     console.log(
       `LITCH_PROBE ${JSON.stringify({
         t: Date.now(),
@@ -40,7 +41,15 @@ export function startProbe(): void {
         lagMax: Math.round(sorted[sorted.length - 1] ?? 0),
         over50: sorted.filter((lag) => lag > 50).length,
         work: Object.fromEntries(
-          [...work].map(([kind, e]) => [kind, { total: Math.round(e.total), max: Math.round(e.max), count: e.count, kb: Math.round(e.bytes / 1024) }]),
+          [...work].map(([kind, e]) => [
+            kind,
+            {
+              total: Math.round(e.total),
+              max: Math.round(e.max),
+              count: e.count,
+              kb: Math.round(e.bytes / 1024),
+            },
+          ]),
         ),
       })}`,
     )
@@ -76,6 +85,8 @@ export function noteFirstContent(): void {
   if (openAt === null) return
   const ms = performance.now() - openAt
   openAt = null
-  console.log(`LITCH_PROBE_OPEN ${JSON.stringify({ t: Date.now(), ms: Math.round(ms), ...stages })}`)
+  console.log(
+    `LITCH_PROBE_OPEN ${JSON.stringify({ t: Date.now(), ms: Math.round(ms), ...stages })}`,
+  )
   stages = {}
 }

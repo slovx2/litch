@@ -239,6 +239,14 @@ npm run client:check:packed        # 对着装好的那一份跑三组自检：�
 - 代理的 `show`：用户正看着那个会话才打开面板切到浏览器标签；否则不切走用户眼前的会话，在那个会话的侧栏行上留一个地球记号加一条带“去看”的提示，用户切过去时再打开。
 - 对话里的 http(s) 链接（回答、请求卡片、终端）点了作为眼前会话的用户标签在内置浏览器里开，同网址的用户标签切过去不重开；远端 localhost 经 `BROWSER_OPEN` 转发。Cmd/Ctrl 点、中键点、设置里关掉、没有会话的页面、终端和会话不在同一台设备、普通浏览器预览，都交给系统浏览器；Litch 自己的链接（关于页、菜单里的主页和反馈、标签栏上的“在系统浏览器打开”）照旧在外面开。规则在 `packages/ui/src/side/browser/link-logic.ts`，动手和设置（界面本地的 `litch.browser`）在 `links.ts`，单测 `packages/ui/test/browser-links.test.mjs`，实点在 `apps/desktop/src/probe-browser-links.mts`（属于 `check:browser --ui`）。
 
+### 移动端（apps/mobile）
+
+- React Native（Expo，新架构，Hermes），先做安卓。直接跑 `packages/core`：引用一律写 `@litch/core`（Metro 与 tsconfig 都映射到 `packages/core/src/index.mts`），不另写一份核心。执行计划在工作区的 `design/harness-client/06-mobile-plan.md`。
+- 数据只来自订阅：`createReplica` 加 `keys.*`，组件用 `useKey`（`src/shell/services.tsx`）；会话详情用 `src/core/session-store.ts`（行、末尾在流的块、会话层面的状态三种订阅），不整份拉、不轮询。
+- 页面一律用 `src/ui/kit/Screen.tsx` 画标题栏，标题首帧就从路由参数来；路由表是 `src/nav/routes.ts`。文案 `useT()`，手机自己的在 `src/ui/messages/` 按区域分文件；颜色、字号只从 `useTheme()` 取。
+- SSH 在 Go（仓库根目录 `mobile/sshtransport`，独立 go.mod），经 gomobile 编进 `modules/litch-ssh`；终端、差异的网页内嵌在 WebView 里，页面由 `scripts/build-webview-*.mjs` 打成字符串。
+- 检查：`cd apps/mobile && npx tsc --noEmit`，根目录 `npx biome check apps/mobile`。验流畅度用 release 包（`npx expo prebuild --platform android --clean`，`cd android && ./gradlew assembleRelease`），测量脚本 `scripts/bench.mjs`（T1–T7），真链路用 `scripts/fixture.mjs` 起的假远程。
+
 ## 构建和检查
 
 CI 使用 Node 24 最新补丁版、Go 1.26.6 复现基线；本地可使用满足最低版本要求的更高稳定版。

@@ -5,7 +5,8 @@
 // 用法：node apps/mobile/scripts/fixture.mjs --out <配置文件> [--serve <端口>] [--adb]
 //   --out    就绪后把连接配置写到这个文件（JSON：target、adapter、states、root）
 //   --serve  在回环上开一个只读的 HTTP 口，GET /config 给出同一份配置：模拟器里的原型启动时从这里取
-//   --adb    用 adb reverse 把 sshd 的端口和 --serve 的端口映射进模拟器（模拟器里连 127.0.0.1 就到这台电脑）
+//   --adb    用 adb reverse 把 sshd 的端口和 --serve 的端口映射进模拟器（模拟器里连 127.0.0.1 就到这台电脑；
+//            --serve 的端口映射成手机上的 8765）。有几台模拟器时用 ANDROID_SERIAL 指定是哪一台
 // 一直运行到被结束，退出时夹具自己停掉 sshd 和设备服务、删掉临时目录。
 import { execFileSync, spawn } from 'node:child_process'
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -66,16 +67,21 @@ child.stdout.on('data', (chunk) => {
     if (newline < 0) return
     const line = buffer.slice(0, newline)
     buffer = buffer.slice(newline + 1)
-    if (line.startsWith('LITCH_SSH_FIXTURE ')) ready(JSON.parse(line.slice('LITCH_SSH_FIXTURE '.length)))
+    if (line.startsWith('LITCH_SSH_FIXTURE '))
+      ready(JSON.parse(line.slice('LITCH_SSH_FIXTURE '.length)))
     else if (line.trim()) console.log(`[夹具] ${line}`)
   }
 })
 
 function ready(fixture) {
   const options = hostOptions(readFileSync(fixture.config, 'utf8'), fixture.aliases.svc)
-  const said = execFileSync('ssh-keygen', ['-l', '-E', 'sha256', '-f', join(fixture.root, 'host_key.pub')], {
-    encoding: 'utf8',
-  })
+  const said = execFileSync(
+    'ssh-keygen',
+    ['-l', '-E', 'sha256', '-f', join(fixture.root, 'host_key.pub')],
+    {
+      encoding: 'utf8',
+    },
+  )
   const fingerprint = said.split(/\s+/)[1]
   const target = {
     host: options.HostName,
@@ -97,9 +103,9 @@ function ready(fixture) {
   writeFileSync(out, `${JSON.stringify(config, null, 2)}\n`)
   legacyRemote(fixture)
   if (useAdb) {
-    for (const port of [target.port, serve].filter(Boolean)) {
-      execFileSync('adb', ['reverse', `tcp:${port}`, `tcp:${port}`])
-    }
+    execFileSync('adb', ['reverse', `tcp:${target.port}`, `tcp:${target.port}`])
+    // 应用固定从手机的 8765 取配置（src/shell/boot.ts），电脑这头的端口随意：几条开发线各用各的、互不相撞
+    if (serve) execFileSync('adb', ['reverse', 'tcp:8765', `tcp:${serve}`])
   }
   if (serve) {
     createServer((req, res) => {
@@ -126,7 +132,11 @@ function legacyRemote(fixture) {
   const sock = join(fixture.states.svc, 'pi', 'runtime.sock')
   const q = (text) => `'${text.replaceAll("'", `'\\''`)}'`
   const wrapper = (toolName) =>
-    ['#!/bin/sh', `LEGACY_TOOL=${toolName} LEGACY_SOCK=${q(sock)} exec ${q(process.execPath)} ${q(script)} "$@"`, ''].join('\n')
+    [
+      '#!/bin/sh',
+      `LEGACY_TOOL=${toolName} LEGACY_SOCK=${q(sock)} exec ${q(process.execPath)} ${q(script)} "$@"`,
+      '',
+    ].join('\n')
   writeFileSync(join(bin, 'tyrs-hand-worker'), wrapper('worker'))
   writeFileSync(join(bin, 'codex'), wrapper('codex'))
   chmodSync(join(bin, 'tyrs-hand-worker'), 0o755)

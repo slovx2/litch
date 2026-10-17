@@ -28,7 +28,10 @@ function checkName(name: string): string {
   return name
 }
 
-function wrap(names: ScriptNames, inner: (marker: string, adapter: string) => string[]): RemoteScript {
+function wrap(
+  names: ScriptNames,
+  inner: (marker: string, adapter: string) => string[],
+): RemoteScript {
   const marker = `litch-${names.randomHex()}`
   const adapter = quote(checkName(names.adapter))
   const body = [

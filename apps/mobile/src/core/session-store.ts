@@ -6,8 +6,8 @@
 // - 正在流式的那条回答（切成的各块）和它下面的状态行单独作为“尾巴”交出去（splitTail 打开时）。尾巴每帧都在变，
 //   列表的数据却不动：列表不用每帧重渲染、重算布局，只有正在长的那一块重画。
 //   尾巴放在倒置列表的表头里（最底下），长高时上面的行跟着一起被顶上去，和原生的普通布局一样，同一帧完成。
-import type { CoreChannel, SessionOp, SessionView } from '../../../../packages/core/src/index.mts'
-import { reduceSession } from '../../../../packages/core/src/index.mts'
+import type { CoreChannel, SessionOp, SessionView } from '@litch/core'
+import { reduceSession } from '@litch/core'
 import { experiment } from '../experiment'
 import { noteOpenStage, noteWork } from '../probe'
 import { type Row, RowBuilder } from './rows'
@@ -25,6 +25,26 @@ export interface TailSnapshot {
   /** 新的在前：[状态行, 正在长的那一块, 同一条回答已经封口的块…]，没有在流式的回答时是空的 */
   rows: Row[]
   publishedAt: number
+}
+
+/**
+ * 会话层面的状态（不进对话区的行）：输入区、请求卡片、标题栏用。核心报了会话层面的增量（请求、排队、设置、用量、
+ * 能不能发、会做哪些事）或者整份快照到了才换一份新的；数组是拷贝，组件拿到的永远是不可变的值
+ */
+export interface SessionMeta {
+  title: SessionView['title']
+  harness: string
+  cwd: string
+  live: boolean
+  note: SessionView['note']
+  requests: SessionView['requests']
+  queued: SessionView['queued']
+  settings: SessionView['settings']
+  usage: SessionView['usage']
+  can: SessionView['can']
+  forkedFrom: string | null
+  /** 有回合在跑 */
+  running: boolean
 }
 
 const EMPTY: SessionSnapshot = { rows: [], running: false, error: null, publishedAt: 0 }
@@ -49,7 +69,8 @@ function tailSize(built: Row[]): number {
   }
 }
 
-const sameRows = (a: Row[], b: Row[]): boolean => a.length === b.length && a.every((row, index) => row === b[index])
+const sameRows = (a: Row[], b: Row[]): boolean =>
+  a.length === b.length && a.every((row, index) => row === b[index])
 
 export class SessionStore {
   private snapshot: SessionSnapshot = EMPTY
@@ -57,6 +78,9 @@ export class SessionStore {
   private readonly tailListeners = new Set<() => void>()
   private split = false
   private view: SessionView | null = null
+  private meta: SessionMeta | null = null
+  private readonly metaListeners = new Set<() => void>()
+  private metaDirty = false
   private readonly builder = new RowBuilder()
   private readonly listeners = new Set<() => void>()
   private readonly itemTurn = new Map<string, string>()
@@ -83,8 +107,10 @@ export class SessionStore {
           noteOpenStage('snapshot')
           this.view = data
           this.itemTurn.clear()
-          for (const turn of data.turns) for (const id of turn.itemIds) this.itemTurn.set(id, turn.id)
+          for (const turn of data.turns)
+            for (const id of turn.itemIds) this.itemTurn.set(id, turn.id)
           this.dirty = 'all'
+          this.metaDirty = true
           this.schedule()
         },
         delta: (ops) => {
@@ -132,6 +158,14 @@ export class SessionStore {
 
   readonly getTail = (): TailSnapshot => this.tail
 
+  readonly subscribeMeta = (listener: () => void): (() => void) => {
+    this.metaListeners.add(listener)
+    return () => this.metaListeners.delete(listener)
+  }
+
+  /** 快照还没到时是 null */
+  readonly getMeta = (): SessionMeta | null => this.meta
+
   /** 尾巴单独交出去（贴底时）还是并回列表（往上翻着看时：列表要靠数据变化来保持可见位置） */
   setSplitTail(split: boolean): void {
     if (this.split === split) return
@@ -153,6 +187,8 @@ export class SessionStore {
       case 'turn.remove':
       case 'turn.status':
         mark(op.turnId)
+        // 回合开始、结束改变“有回合在跑”
+        this.metaDirty = true
         return
       case 'item.add':
         this.itemTurn.set(op.item.id, op.turnId)
@@ -167,7 +203,8 @@ export class SessionStore {
         mark(this.itemTurn.get(op.itemId))
         return
       default:
-        // 会话层面的状态（排队、设置、用量、请求）这个原型不画在对话区里
+        // 会话层面的状态（排队、设置、用量、请求、能不能发）：不进行，换一份 meta
+        this.metaDirty = true
         return
     }
   }
@@ -209,7 +246,9 @@ export class SessionStore {
     const running = view.turns.some((turn) => turn.status === 'running')
     const now = performance.now()
     const listChanged =
-      !sameRows(rows, this.snapshot.rows) || running !== this.snapshot.running || this.snapshot.error !== null
+      !sameRows(rows, this.snapshot.rows) ||
+      running !== this.snapshot.running ||
+      this.snapshot.error !== null
     const tailChanged = !sameRows(tail, this.tail.rows)
     if (tailChanged) this.tail = { rows: tail, publishedAt: now }
     if (listChanged) this.snapshot = { rows, running, error: null, publishedAt: now }
@@ -217,6 +256,24 @@ export class SessionStore {
     // 两边都变时一起通知：React 把同一轮里的更新合成一次提交，块封口时尾巴缩回、列表多一行在同一帧
     if (tailChanged) for (const listener of this.tailListeners) listener()
     if (listChanged) this.emit()
+    if (this.metaDirty) {
+      this.metaDirty = false
+      this.meta = {
+        title: view.title,
+        harness: view.harness,
+        cwd: view.cwd,
+        live: view.live,
+        note: view.note,
+        requests: [...view.requests],
+        queued: [...view.queued],
+        settings: { ...view.settings },
+        usage: view.usage,
+        can: { ...view.can },
+        forkedFrom: view.forkedFrom,
+        running,
+      }
+      for (const listener of this.metaListeners) listener()
+    }
     noteWork('emit', performance.now() - emitted)
   }
 

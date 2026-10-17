@@ -4,7 +4,7 @@
 //   steady   匀速喂日志（约 200 KB/s，像构建、测试在刷屏），页面每秒出几帧、卡不卡
 //   flood    能喂多快就喂多快，按页面的确认收着（在途不超过 256 KB，桌面端终端也是按确认限量），量吞吐
 // 生成的页面在 terminal-html.generated.ts（scripts/build-webview-bench.mjs）。
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { WebView, type WebViewMessageEvent } from 'react-native-webview'
 import { TERMINAL_HTML, XTERM_VERSION } from './terminal-html.generated'
@@ -22,7 +22,12 @@ const PHASE_MS = 10_000
 
 /** 一行像样的日志：时间、级别（带颜色）、来源、一句话，约一百个字 */
 function logLine(n: number): string {
-  const level = n % 17 === 0 ? '\x1b[31mERROR\x1b[0m' : n % 5 === 0 ? '\x1b[33mWARN \x1b[0m' : '\x1b[32mINFO \x1b[0m'
+  const level =
+    n % 17 === 0
+      ? '\x1b[31mERROR\x1b[0m'
+      : n % 5 === 0
+        ? '\x1b[33mWARN \x1b[0m'
+        : '\x1b[32mINFO \x1b[0m'
   const ms = String(n % 1000).padStart(3, '0')
   return `[12:00:${String(Math.floor(n / 1000) % 60).padStart(2, '0')}.${ms}] ${level} worker-${n % 8} processed item ${n} in ${(n % 97) / 10}ms 中文也有一点\r\n`
 }
@@ -36,14 +41,20 @@ function text(bytes: number, from: number): { text: string; next: number } {
 
 const percentile = (values: number[], q: number) => {
   const sorted = [...values].sort((a, b) => a - b)
-  return Math.round((sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * q))] ?? 0) * 10) / 10
+  return (
+    Math.round((sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * q))] ?? 0) * 10) / 10
+  )
 }
 
 export function WebViewBench({ onBack }: { onBack(): void }) {
   const view = useRef<WebView>(null)
   const listeners = useRef(new Set<(message: PageMessage) => void>())
   const [lines, setLines] = useState<string[]>([`xterm ${XTERM_VERSION}，等页面…`])
-  const say = (line: string) => setLines((current) => [...current, line])
+  // 每行带上序号做键：同样的字可能出现两次
+  const say = useCallback(
+    (line: string) => setLines((current) => [...current, `${current.length}　${line}`]),
+    [],
+  )
 
   const onMessage = (event: WebViewMessageEvent) => {
     const message = JSON.parse(event.nativeEvent.data) as PageMessage
@@ -54,7 +65,9 @@ export function WebViewBench({ onBack }: { onBack(): void }) {
     let stopped = false
     // 进页面走 injectJavaScript：每条是一段要页面解析执行的脚本，这也是要量的开销的一部分
     const send = (message: unknown) =>
-      view.current?.injectJavaScript(`window.__litchReceive(${JSON.stringify(JSON.stringify(message))});true;`)
+      view.current?.injectJavaScript(
+        `window.__litchReceive(${JSON.stringify(JSON.stringify(message))});true;`,
+      )
     const wait = (ms: number) => new Promise<void>((done) => setTimeout(done, ms))
     const listen = (listener: (message: PageMessage) => void) => {
       listeners.current.add(listener)
@@ -107,7 +120,12 @@ export function WebViewBench({ onBack }: { onBack(): void }) {
         await wait(100)
       }
       stopPong()
-      report('latency', { count: trips.length, p50: percentile(trips, 0.5), p95: percentile(trips, 0.95), max: percentile(trips, 1) })
+      report('latency', {
+        count: trips.length,
+        p50: percentile(trips, 0.5),
+        p95: percentile(trips, 0.95),
+        max: percentile(trips, 1),
+      })
 
       // 匀速
       send({ t: 'reset' })
@@ -128,7 +146,11 @@ export function WebViewBench({ onBack }: { onBack(): void }) {
         await wait(50)
       }
       await wait(1000)
-      report('steady', { sentKB: Math.round(sent / 1024), ackedKB: Math.round(acked / 1024), ...steadyFrames() })
+      report('steady', {
+        sentKB: Math.round(sent / 1024),
+        ackedKB: Math.round(acked / 1024),
+        ...steadyFrames(),
+      })
 
       // 能多快就多快
       send({ t: 'reset' })
@@ -161,7 +183,7 @@ export function WebViewBench({ onBack }: { onBack(): void }) {
     return () => {
       stopped = true
     }
-  }, [])
+  }, [say])
 
   return (
     <View style={styles.screen}>
@@ -181,8 +203,8 @@ export function WebViewBench({ onBack }: { onBack(): void }) {
         />
       </View>
       <View style={styles.log}>
-        {lines.slice(-6).map((line, index) => (
-          <Text key={`${index}:${line}`} style={styles.logLine} numberOfLines={2}>
+        {lines.slice(-6).map((line) => (
+          <Text key={line} style={styles.logLine} numberOfLines={2}>
             {line}
           </Text>
         ))}
@@ -193,7 +215,13 @@ export function WebViewBench({ onBack }: { onBack(): void }) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#fff' },
-  header: { height: 48, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, gap: 16 },
+  header: {
+    height: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    gap: 16,
+  },
   back: { color: '#0a66c2', fontSize: 15 },
   title: { fontSize: 16, fontWeight: '600' },
   term: { flex: 1 },

@@ -1,180 +1,134 @@
-// 原型的入口：取连接配置、装核心、在首页和详情之间切换。没有路由库：只有三屏，用状态切。
-// 测试脚本可以用链接直接驱动（adb shell am start -a android.intent.action.VIEW -d '<链接>'）：
-//   litchproto://new?prompt=长回答&variant=A&markers=1   新建会话并打开
-//   litchproto://open?session=<标识>&variant=B             打开已有的会话（session=last 是这次启动里最近新建的）
-//   litchproto://send?text=短回答                          往最近新建的会话里再发一句
-//   litchproto://home                                      回首页
-//   litchproto://bench                                     WebView 吞吐测试
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { Linking, StyleSheet, Text, View } from 'react-native'
+// 应用的根：读设置、定主题和语言、装核心，然后交给页面栈。核心没装好之前只画一块和页面同色的底（不闪）。
+import {
+  DarkTheme,
+  DefaultTheme,
+  NavigationContainer,
+  type Theme as NavTheme,
+} from '@react-navigation/native'
+import { StatusBar } from 'expo-status-bar'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Linking, StyleSheet, Text, useColorScheme, View } from 'react-native'
 import { KeyboardProvider } from 'react-native-keyboard-controller'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
-import { WebViewBench } from './bench/WebViewBench'
-import { experiment } from './experiment'
-import { markOpen, startProbe, stopProbe } from './probe'
-import { type Booted, bootCore, DEVICE_ID, fetchDevConfig } from './core/boot'
-import type { RemoteConfig } from './core/transport'
-import { DetailScreen } from './detail/DetailScreen'
-import { colors } from './detail/theme'
-import type { Variant } from './detail/Transcript'
-import { HomeScreen, titleOf } from './HomeScreen'
+import { Navigator } from './nav/Navigator'
+import { type Booted, boot } from './shell/boot'
+import { handleDevLink, navigationRef } from './shell/dev-links'
+import { loadPrefs, type Prefs, type Services, ServicesProvider, savePrefs } from './shell/services'
+import { I18nContext, systemLang, translator } from './ui/i18n'
+import { Button } from './ui/kit/controls'
+import { makeTheme, ThemeContext } from './ui/theme'
 
-const CONFIG_PORT = 8765
-
-type Screen =
-  | { kind: 'home' }
-  | { kind: 'detail'; sessionId: string; title: string }
-  | { kind: 'bench' }
-
-interface Booting {
-  booted: Booted | null
-  config: (RemoteConfig & { work?: string }) | null
-  error: string | null
-}
-
-function useBoot(): Booting {
-  const [state, setState] = useState<Booting>({ booted: null, config: null, error: null })
+function useBooted(prefs: Prefs, lang: 'zh-CN' | 'en') {
+  const [booted, setBooted] = useState<Booted | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [attempt, setAttempt] = useState(0)
+  // 语言只影响模拟核心的示例数据，换语言不重装核心；attempt 变了就是用户点了“重试”
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 见上
   useEffect(() => {
-    let booted: Booted | null = null
     let cancelled = false
-    const attempt = async (left: number) => {
-      try {
-        const config = await fetchDevConfig(CONFIG_PORT)
-        if (cancelled) return
-        booted = bootCore(config)
-        setState({ booted, config, error: null })
-      } catch (error) {
-        if (cancelled) return
-        setState({ booted: null, config: null, error: String(error) })
-        if (left > 0) setTimeout(() => void attempt(left - 1), 1500)
-      }
-    }
-    void attempt(20)
+    let current: Booted | null = null
+    setBooted(null)
+    setError(null)
+    boot(prefs.boot, lang).then(
+      (next) => {
+        if (cancelled) next.stop()
+        else {
+          current = next
+          setBooted(next)
+        }
+      },
+      (failure: Error) => {
+        if (!cancelled) setError(failure.message)
+      },
+    )
     return () => {
       cancelled = true
-      booted?.stop()
+      current?.stop()
     }
-  }, [])
-  return state
+  }, [prefs.boot, attempt])
+  return { booted, error, retry: () => setAttempt((n) => n + 1) }
 }
 
 export default function App() {
-  const { booted, config, error } = useBoot()
-  const [screen, setScreen] = useState<Screen>({ kind: 'home' })
-  const [variant, setVariant] = useState<Variant>('A')
-  const [markers, setMarkers] = useState(process.env.EXPO_PUBLIC_MARKERS === '1')
-  const lastCreated = useRef<string | null>(null)
+  const [prefs, setPrefsState] = useState(loadPrefs)
+  const setPrefs = useCallback((patch: Partial<Prefs>) => {
+    setPrefsState((current) => {
+      const next = { ...current, ...patch }
+      savePrefs(next)
+      return next
+    })
+  }, [])
+  const scheme = useColorScheme()
+  const isDark = prefs.appearance === 'system' ? scheme === 'dark' : prefs.appearance === 'dark'
+  const theme = useMemo(() => makeTheme(isDark), [isDark])
+  const lang = prefs.lang === 'system' ? systemLang() : prefs.lang
+  const t = useMemo(() => translator(lang), [lang])
+  const { booted, error, retry } = useBooted(prefs, lang)
 
-  const create = useCallback(
-    async (prompt: string) => {
-      if (!booted) return
-      const { sessionId } = await booted.channel.command('session.create', {
-        deviceId: DEVICE_ID,
-        cwd: config?.work ?? null,
-        text: prompt,
-      })
-      lastCreated.current = sessionId
-      setScreen({ kind: 'detail', sessionId, title: prompt })
-    },
-    [booted, config],
-  )
+  const navTheme = useMemo<NavTheme>(() => {
+    const base = isDark ? DarkTheme : DefaultTheme
+    return {
+      ...base,
+      colors: { ...base.colors, background: theme.c.win, card: theme.c.panel, text: theme.c.ink },
+    }
+  }, [isDark, theme])
 
+  // 测试用的链接：要用到最新的 services，放在 ref 里给监听器读
+  const services = useRef<Services | null>(null)
   useEffect(() => {
-    if (!booted) return
     const handle = (url: string | null) => {
       if (!url) return
-      const parsed = new URL(url)
-      const params = parsed.searchParams
-      const v = params.get('variant')
-      if (v === 'A' || v === 'B') setVariant(v)
-      if (params.has('markers')) setMarkers(params.get('markers') === '1')
-      const render = params.get('render')
-      if (render === 'md' || render === 'plain') experiment.render = render
-      const seal = Number(params.get('seal'))
-      if (seal > 0) experiment.seal = seal
-      if (params.has('pace')) experiment.pace = Math.max(0, Number(params.get('pace')) || 0)
-      if (params.has('freeze')) experiment.freeze = params.get('freeze') === '1'
-      const tail = params.get('tail')
-      if (tail === 'open' || tail === 'whole') experiment.tail = tail
-      const keyboard = params.get('keyboard')
-      if (keyboard === 'sticky' || keyboard === 'chat') experiment.keyboard = keyboard
-      if (params.has('probe')) (params.get('probe') === '1' ? startProbe : stopProbe)()
-      switch (parsed.hostname) {
-        case 'new':
-          void create(params.get('prompt') ?? '长回答')
-          return
-        case 'open': {
-          // session=last：这次启动里最近新建的那个会话（测量脚本先建好再进出它）
-          const asked = params.get('session')
-          const sessionId = asked === 'last' ? lastCreated.current : asked
-          if (!sessionId) return
-          markOpen()
-          setScreen({ kind: 'detail', sessionId, title: params.get('title') ?? sessionId })
-          return
-        }
-        case 'send': {
-          // 往正打开的（或最近新建的）会话里再发一句：测量脚本造多轮的历史用
-          const sessionId = lastCreated.current
-          if (sessionId) {
-            void booted.channel.command('session.send', {
-              deviceId: DEVICE_ID,
-              sessionId,
-              text: params.get('text') ?? '短回答',
-            })
-          }
-          return
-        }
-        case 'bench':
-          setScreen({ kind: 'bench' })
-          return
-        default:
-          setScreen({ kind: 'home' })
-      }
+      const mode = handleDevLink(url, services.current)
+      if (mode && mode !== prefs.boot) setPrefs({ boot: mode })
     }
-    void Linking.getInitialURL().then(handle)
     const subscription = Linking.addEventListener('url', (event) => handle(event.url))
+    void Linking.getInitialURL().then(handle)
     return () => subscription.remove()
-  }, [booted, create])
+  }, [prefs.boot, setPrefs])
 
   let body: React.ReactNode
   if (!booted) {
     body = (
-      <View style={styles.center}>
-        <Text style={styles.wait}>{error ? `等连接配置：${error}` : '启动中…'}</Text>
+      <View style={[styles.center, { backgroundColor: theme.c.win }]}>
+        {error ? (
+          <>
+            <Text style={[styles.wait, { color: theme.c.err }]}>
+              {t('app.bootFailed', { error })}
+            </Text>
+            <Button label={t('app.retry')} onPress={retry} />
+          </>
+        ) : null}
       </View>
     )
-  } else if (screen.kind === 'detail') {
-    body = (
-      <DetailScreen
-        channel={booted.channel}
-        sessionId={screen.sessionId}
-        title={screen.title}
-        variant={variant}
-        markers={markers}
-        onBack={() => setScreen({ kind: 'home' })}
-        onVariant={setVariant}
-      />
-    )
-  } else if (screen.kind === 'bench') {
-    body = <WebViewBench onBack={() => setScreen({ kind: 'home' })} />
   } else {
     body = (
-      <HomeScreen
-        channel={booted.channel}
-        onOpen={(session) => setScreen({ kind: 'detail', sessionId: session.id, title: titleOf(session.title) })}
-        onCreate={(prompt) => void create(prompt)}
-        onBench={() => setScreen({ kind: 'bench' })}
-      />
+      <ServicesProvider
+        booted={booted}
+        prefs={prefs}
+        setPrefs={setPrefs}
+        onReady={(value) => (services.current = value)}
+      >
+        <NavigationContainer ref={navigationRef} theme={navTheme}>
+          <Navigator />
+        </NavigationContainer>
+      </ServicesProvider>
     )
   }
   return (
     <SafeAreaProvider>
-      <KeyboardProvider>{body}</KeyboardProvider>
+      <KeyboardProvider>
+        <ThemeContext.Provider value={theme}>
+          <I18nContext.Provider value={t}>
+            <StatusBar style={isDark ? 'light' : 'dark'} />
+            {body}
+          </I18nContext.Provider>
+        </ThemeContext.Provider>
+      </KeyboardProvider>
     </SafeAreaProvider>
   )
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background },
-  wait: { color: colors.muted, fontSize: 14, padding: 24 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24 },
+  wait: { fontSize: 14, textAlign: 'center' },
 })

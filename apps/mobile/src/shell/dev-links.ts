@@ -1,0 +1,99 @@
+// 测试和测量用的链接（adb shell am start -a android.intent.action.VIEW -d '<链接>'），scripts/bench.mjs 和端到端验收靠它驱动：
+//   litch://boot?mode=mock|fixture|stored        换核心的装法（记进设置，重新装一次）
+//   litch://new?prompt=长回答[&device=<标识>]      新建会话并打开（设备不给：夹具装法用夹具那台，否则用第一台）
+//   litch://open?session=<标识>|last[&device=…]  打开会话（last 是这次启动里最近新建的）
+//   litch://send?text=短回答                       往最近新建的会话里再发一句
+//   litch://home                                   回首页
+//   litch://bench                                  WebView 吞吐测试
+// 每个链接都可以带测量开关（src/experiment.ts）：render、seal、pace、freeze、tail、keyboard、markers，以及 probe=1|0。
+import { keys } from '@litch/core'
+import { createNavigationContainerRef, StackActions } from '@react-navigation/native'
+import { experiment } from '../experiment'
+import type { RootStackParamList } from '../nav/routes'
+import { markOpen, startProbe, stopProbe } from '../probe'
+import type { BootMode } from './boot'
+import type { Services } from './services'
+
+export const navigationRef = createNavigationContainerRef<RootStackParamList>()
+
+function applyExperiment(params: URLSearchParams) {
+  if (params.has('markers')) experiment.markers = params.get('markers') === '1'
+  const render = params.get('render')
+  if (render === 'md' || render === 'plain') experiment.render = render
+  const seal = Number(params.get('seal'))
+  if (seal > 0) experiment.seal = seal
+  if (params.has('pace')) experiment.pace = Math.max(0, Number(params.get('pace')) || 0)
+  if (params.has('freeze')) experiment.freeze = params.get('freeze') === '1'
+  const tail = params.get('tail')
+  if (tail === 'open' || tail === 'whole') experiment.tail = tail
+  const keyboard = params.get('keyboard')
+  if (keyboard === 'sticky' || keyboard === 'chat') experiment.keyboard = keyboard
+  if (params.has('probe')) (params.get('probe') === '1' ? startProbe : stopProbe)()
+}
+
+let lastCreated: { deviceId: string; sessionId: string } | null = null
+
+/** 链接里要换装法时返回新的装法，App 据此重新装核心；别的链接就地办完 */
+export function handleDevLink(url: string, services: Services | null): BootMode | null {
+  const parsed = new URL(url)
+  const params = parsed.searchParams
+  applyExperiment(params)
+  if (parsed.hostname === 'boot') {
+    const mode = params.get('mode')
+    return mode === 'mock' || mode === 'fixture' || mode === 'stored' ? mode : null
+  }
+  if (!services || !navigationRef.isReady()) return null
+  const { channel, replica, booted } = services
+  const deviceOf = () => {
+    const asked = params.get('device')
+    if (asked) return asked
+    const ids = replica.store.get<string[]>(keys.devices) ?? []
+    return ids[0] ?? null
+  }
+  switch (parsed.hostname) {
+    case 'new': {
+      const deviceId = deviceOf()
+      if (!deviceId) return null
+      const text = params.get('prompt') ?? '长回答'
+      void channel
+        .command('session.create', { deviceId, cwd: booted.work, text })
+        .then(({ sessionId }) => {
+          lastCreated = { deviceId, sessionId }
+          navigationRef.navigate('Detail', { deviceId, sessionId, title: text })
+        })
+      return null
+    }
+    case 'open': {
+      const asked = params.get('session')
+      const target =
+        asked === 'last'
+          ? lastCreated
+          : asked
+            ? { deviceId: deviceOf() ?? '', sessionId: asked }
+            : null
+      if (!target?.deviceId) return null
+      markOpen()
+      navigationRef.navigate('Detail', {
+        ...target,
+        title: params.get('title') ?? target.sessionId,
+      })
+      return null
+    }
+    case 'send': {
+      if (lastCreated)
+        void channel.command('session.send', {
+          ...lastCreated,
+          text: params.get('text') ?? '短回答',
+        })
+      return null
+    }
+    case 'bench':
+      navigationRef.navigate('Bench')
+      return null
+    case 'home':
+      if (navigationRef.canGoBack()) navigationRef.dispatch(StackActions.popToTop())
+      return null
+    default:
+      return null
+  }
+}

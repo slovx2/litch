@@ -4,8 +4,8 @@ import { memo, useState } from 'react'
 import { type LayoutChangeEvent, Pressable, StyleSheet, Text, View } from 'react-native'
 import { EnrichedMarkdownText } from 'react-native-enriched-markdown'
 import type { Row, Step } from '../core/rows'
-import { noteWork } from '../probe'
 import { experiment } from '../experiment'
+import { noteWork } from '../probe'
 import { colors } from './theme'
 
 type Props<T extends Row['type']> = { row: Extract<Row, { type: T }> }
@@ -24,7 +24,14 @@ const markdownStyle = {
   paragraph: { fontSize: 15, lineHeight: 22, color: colors.text },
   h2: { fontSize: 19, lineHeight: 26, color: colors.text, fontWeight: '700' as const },
   h3: { fontSize: 17, lineHeight: 24, color: colors.text, fontWeight: '700' as const },
-  codeBlock: { fontSize: 13, lineHeight: 19, color: colors.text, backgroundColor: colors.code, padding: 10, borderRadius: 6 },
+  codeBlock: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: colors.text,
+    backgroundColor: colors.code,
+    padding: 10,
+    borderRadius: 6,
+  },
   code: { fontSize: 13, color: colors.text, backgroundColor: colors.code },
   blockquote: { borderColor: colors.border },
 }
@@ -37,7 +44,10 @@ const markdownStyle = {
 export const MarkdownCell = memo(function MarkdownCell({ row }: Props<'md'>) {
   noteWork('mdCell', 0, row.text.length)
   const [frozen, setFrozen] = useState<number | null>(null)
-  const freeze = row.open || frozen !== null ? undefined : (event: LayoutChangeEvent) => setFrozen(event.nativeEvent.layout.height)
+  const freeze =
+    row.open || frozen !== null
+      ? undefined
+      : (event: LayoutChangeEvent) => setFrozen(event.nativeEvent.layout.height)
   if (experiment.render === 'plain') {
     return (
       <View style={styles.md}>
@@ -91,7 +101,11 @@ export const ProcessCell = memo(function ProcessCell({
     row.running && last ? ` · 正在运行：${last.label}` : ''
   }`
   const header = (
-    <Pressable onPress={() => onToggle(row.key)} style={styles.processHeader} testID="process-toggle">
+    <Pressable
+      onPress={() => onToggle(row.key)}
+      style={styles.processHeader}
+      testID="process-toggle"
+    >
       <Text style={styles.processText} numberOfLines={1}>
         {summary}
       </Text>
@@ -150,7 +164,13 @@ export const StatusCell = memo(function StatusCell({ row }: Props<'status'>) {
 
 const styles = StyleSheet.create({
   userWrap: { paddingHorizontal: 16, paddingVertical: 6, alignItems: 'flex-end' },
-  userBubble: { backgroundColor: colors.bubble, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 8, maxWidth: '85%' },
+  userBubble: {
+    backgroundColor: colors.bubble,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    maxWidth: '85%',
+  },
   userText: { fontSize: 15, lineHeight: 22, color: colors.text },
   md: { paddingHorizontal: 16, paddingVertical: 4 },
   line: { paddingHorizontal: 16, height: 28, justifyContent: 'center' },

@@ -45,7 +45,9 @@ export const ssh = {
     return JSON.parse(await native.runScript(JSON.stringify(target), script, marker)) as RunResult
   },
   async openStream(id: string, target: SshTarget, script: string, marker: string): Promise<string> {
-    const opened = JSON.parse(await native.openStream(id, JSON.stringify(target), script, marker)) as {
+    const opened = JSON.parse(
+      await native.openStream(id, JSON.stringify(target), script, marker),
+    ) as {
       url: string
     }
     return opened.url

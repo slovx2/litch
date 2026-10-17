@@ -99,14 +99,17 @@ export function streamReply(body, said) {
   if (messages.at(-1)?.role === 'tool') {
     // 只认自己发起的那一批调用的结果
     const asked = messages.findLast((message) => message.role === 'assistant' && message.tool_calls)
-    const mine = asked?.tool_calls?.some((call) => (call.function?.arguments ?? '').includes(STEP_MARK))
+    const mine = asked?.tool_calls?.some((call) =>
+      (call.function?.arguments ?? '').includes(STEP_MARK),
+    )
     return mine ? { text: `${STEPS} 步都跑完了。`, chunk: 40, pace: 20 } : null
   }
   const says = (zh, ascii) => said.includes(zh) || said.includes(ascii)
   if (says('长回答三倍', 'LONG_X3')) return { text: longText(), chunk: 72, pace: 50 }
   if (says('长回答', 'LONG_ANSWER')) return { text: longText(), chunk: 24, pace: 50 }
   if (says('十万字', 'HUGE_ANSWER')) return { text: hugeText(), chunk: 4000, pace: 0 }
-  if (says('短回答', 'SHORT_ANSWER')) return { text: `${section(0)}\n\n${section(1)}`, chunk: 40, pace: 20 }
+  if (says('短回答', 'SHORT_ANSWER'))
+    return { text: `${section(0)}\n\n${section(1)}`, chunk: 40, pace: 20 }
   if (says('五十步', 'MANY_STEPS')) {
     // 一次发起五十条命令（Pi 的 bash 工具），界面上是一组五十步的过程
     return {

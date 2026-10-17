@@ -8,11 +8,21 @@
 //   tail=open|whole  尾巴只放正在长的那一块，还是整条正在流式的回答（core/session-store.ts）
 //   keyboard=sticky|chat  变体 A 跟键盘的做法：整个对话区和输入区一样跟着键盘平移（detail/DetailScreen.tsx），
 //                 还是交给键盘库的聊天滚动组件（KeyboardChatScrollView）
+//   markers=1     画两条测量用的标记线（measure/README.md）：内容末尾一条洋红、输入区上沿一条青色
 export const experiment: {
+  markers: boolean
   render: 'md' | 'plain'
   seal: number
   pace: number
   freeze: boolean
   tail: 'open' | 'whole'
   keyboard: 'sticky' | 'chat'
-} = { render: 'md', seal: 300, pace: 100, freeze: true, tail: 'whole', keyboard: 'sticky' }
+} = {
+  markers: false,
+  render: 'md',
+  seal: 300,
+  pace: 100,
+  freeze: true,
+  tail: 'whole',
+  keyboard: 'sticky',
+}

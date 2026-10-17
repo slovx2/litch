@@ -49,9 +49,19 @@ export function Composer({
 }
 
 const styles = StyleSheet.create({
-  bar: { backgroundColor: colors.bar, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  bar: {
+    backgroundColor: colors.bar,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
   mark: { height: 2, backgroundColor: colors.markComposer },
-  row: { height: COMPOSER_HEIGHT - 2, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, gap: 8 },
+  row: {
+    height: COMPOSER_HEIGHT - 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    gap: 8,
+  },
   input: {
     flex: 1,
     height: 42,
@@ -63,6 +73,12 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: colors.text,
   },
-  send: { paddingHorizontal: 14, height: 42, borderRadius: 21, backgroundColor: colors.accent, justifyContent: 'center' },
+  send: {
+    paddingHorizontal: 14,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: colors.accent,
+    justifyContent: 'center',
+  },
   sendText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
 })

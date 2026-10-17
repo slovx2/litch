@@ -54,7 +54,12 @@ function completedBlocks(text: string, from: number): number[] {
  * 按新的全文更新分组，返回全部的组（封口的加上最后那一组）。
  * 新文字不是旧文字往后长出来的（定稿时对面给的最终内容和流式拼出来的不一样）就从头切。
  */
-export function chunkText(state: ChunkState, text: string, previous: string | null, open: boolean): Chunk[] {
+export function chunkText(
+  state: ChunkState,
+  text: string,
+  previous: string | null,
+  open: boolean,
+): Chunk[] {
   if (previous !== null && !text.startsWith(previous.slice(0, state.consumed))) {
     state.sealed = []
     state.consumed = 0
@@ -66,7 +71,9 @@ export function chunkText(state: ChunkState, text: string, previous: string | nu
   }
   sealFrom(state, text, false)
   const tail = text.slice(state.consumed)
-  return tail ? [...state.sealed, { index: state.sealed.length, text: tail, open: true }] : state.sealed
+  return tail
+    ? [...state.sealed, { index: state.sealed.length, text: tail, open: true }]
+    : state.sealed
 }
 
 function sealFrom(state: ChunkState, text: string, all: boolean): void {
@@ -74,7 +81,11 @@ function sealFrom(state: ChunkState, text: string, all: boolean): void {
   let start = state.consumed
   for (const end of ends) {
     if (end - start >= experiment.seal) {
-      state.sealed.push({ index: state.sealed.length, text: trimEnd(text.slice(start, end)), open: false })
+      state.sealed.push({
+        index: state.sealed.length,
+        text: trimEnd(text.slice(start, end)),
+        open: false,
+      })
       start = end
     }
   }

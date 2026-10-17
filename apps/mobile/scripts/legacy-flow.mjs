@@ -21,7 +21,8 @@ mkdirSync(out, { recursive: true })
 
 const q = JSON.stringify
 const tap = (id) => `- tapOn:\n    id: ${q(id)}\n`
-const waitFor = (id, timeout = 30000) => `- extendedWaitUntil:\n    visible:\n      id: ${q(id)}\n    timeout: ${timeout}\n`
+const waitFor = (id, timeout = 30000) =>
+  `- extendedWaitUntil:\n    visible:\n      id: ${q(id)}\n    timeout: ${timeout}\n`
 const scrollTo = (id, direction = 'DOWN') =>
   `- scrollUntilVisible:\n    element:\n      id: ${q(id)}\n    direction: ${direction}\n    timeout: 15000\n`
 const field = (id, text) => `${tap(id)}- eraseText: 100\n- inputText: ${q(text)}\n`

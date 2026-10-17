@@ -10,7 +10,10 @@
     "skipLibCheck": true,
     "allowImportingTsExtensions": true,
     "noEmit": true,
-    "types": ["react-native"]
+    "types": ["react-native"],
+    "paths": {
+      "@litch/core": ["../../packages/core/src/index.mts"]
+    }
   },
   "include": ["src", "modules/*/src", "index.js"]
 }

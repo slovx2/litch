@@ -1,13 +1,17 @@
 {
   "expo": {
-    "name": "Litch Proto",
-    "slug": "litch-mobile-proto",
-    "version": "0.0.0",
+    "name": "Litch",
+    "slug": "litch",
+    "version": "0.8.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
-    "scheme": "litchproto",
+    "scheme": "litch",
     "android": {
-      "package": "dev.litch.mobileproto"
+      "package": "dev.litch.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#000000"
+      }
     },
     "plugins": [
       [
@@ -16,12 +20,11 @@
           "android": {
             "minSdkVersion": 24,
             "usesCleartextTraffic": true,
-            "buildArchs": [
-              "arm64-v8a"
-            ]
+            "buildArchs": ["arm64-v8a"]
           }
         }
       ]
-    ]
+    ],
+    "icon": "./assets/icon.png"
   }
 }
