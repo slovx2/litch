@@ -195,6 +195,10 @@ export function Prompt({
         placeholder={placeholder}
         placeholderTextColor={c.ink3}
         onSubmitEditing={submit}
+        // 填的是路径、目录、名字：不许输入法自作主张改字、改大小写（Gboard 曾把 …/s/work 改成 …/s/works ）
+        autoCorrect={false}
+        autoCapitalize="none"
+        spellCheck={false}
         testID="prompt:input"
         style={[
           styles.promptInput,

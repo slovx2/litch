@@ -4,7 +4,7 @@
 import type { RemoteCheck, RemoteTarget } from '@litch/core'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useState } from 'react'
-import { StyleSheet, Text, View } from 'react-native'
+import { Keyboard, StyleSheet, Text, View } from 'react-native'
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 import type { RootStackParamList } from '../../nav/routes'
 import { type KeyInfo, listKeys } from '../../platform/keys'
@@ -90,6 +90,9 @@ export function AddDeviceScreen({ navigation }: Props) {
   }
 
   const check = async () => {
+    // 先收键盘、让输入框失焦：结果和下面的按钮露出来；首次连接的指纹确认框关掉时也就没有焦点可回，
+    // 不会又把键盘弹出来盖住它们（没有硬键盘的手机上会这样）
+    Keyboard.dismiss()
     setError(null)
     setResult(null)
     const wanted = target()

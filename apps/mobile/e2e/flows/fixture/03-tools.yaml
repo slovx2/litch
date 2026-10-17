@@ -9,13 +9,30 @@ tags: [fixture, smoke]
     env:
       MODE: fixture
       READY: device:fixture
-# 等设备连上再用测试链接建会话（litch://new 不等连接，设备刚列出来时发会落空）：建在入口脚本备好的那个 git 仓库里。
-# 不在新建会话页上填目录：那个输入框开着自动纠错，键盘会把路径改掉（产品问题，见 e2e/README.md）
+# 走界面新建会话：litch://new 不等设备连上，设备刚列出来时发会落空
+- tapOn:
+    id: device:fixture
+- tapOn:
+    id: sessions:new
+# 建在入口脚本备好的那个 git 仓库里（WORK 是真实路径：/tmp 和 /private/tmp 不认作同一个目录）。
+# 路径敲进“其他目录”的输入框（那个框关了自动纠错和首字母大写）
 - extendedWaitUntil:
     visible:
-      text: .*(Connected|已连接).*
-    timeout: 60000
-- openLink: litch://new?prompt=tools
+      id: new:where:dir
+    timeout: 30000
+- tapOn:
+    id: new:where:dir
+- tapOn:
+    id: prompt:input
+- eraseText: 200
+- inputText: ${WORK}
+# 小屏幕上键盘会盖住“确定”：用键盘上的回车交
+- pressKey: Enter
+- tapOn:
+    id: new-input
+- inputText: tools
+- tapOn:
+    id: new-send
 - extendedWaitUntil:
     visible:
       id: turn-menu
