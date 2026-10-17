@@ -11,7 +11,7 @@ import type { HarnessDeclaration } from './harness-capabilities.mjs'
  * `capabilities` 是早先那份字符串清单，原样留着。
  */
 export interface RuntimeInfoResponse extends HarnessDeclaration {
-  engine: 'claude-code' | 'pi' | 'dsh'
+  engine: 'claude-code' | 'pi' | 'dsh' | 'opencode' | 'gemini' | 'qwen' | 'acp'
   protocolVersion: string
   cliBuild: string
   capabilities: string[]

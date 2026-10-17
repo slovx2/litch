@@ -354,6 +354,18 @@
       "thread/attachmentOwner/list": -32601,
       "memory/status": -32601,
       "windowsSandbox/readiness": -32601
+    },
+    "acp": {
+      "mcpServerStatus/list": -32004,
+      "remoteControl/status/read": -32601,
+      "thread/timeline/list": -32601,
+      "thread/fork": -32602,
+      "threadSection/create": -32601,
+      "gitDiffToRemote#不是仓库": -32600,
+      "thread/search": -32601,
+      "thread/attachmentOwner/list": -32601,
+      "memory/status": -32601,
+      "windowsSandbox/readiness": -32601
     }
   }
 }

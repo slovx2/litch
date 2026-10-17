@@ -19,7 +19,11 @@
         "enum": [
           "claude-code",
           "pi",
-          "dsh"
+          "dsh",
+          "opencode",
+          "gemini",
+          "qwen",
+          "acp"
         ]
       },
       "protocolVersion": {
@@ -140,6 +144,34 @@
           "cliBuild": {
             "type": "string",
             "pattern": "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?$"
+          }
+        },
+        "required": [
+          "nodeVersion"
+        ]
+      },
+      {
+        "properties": {
+          "engine": {
+            "const": "opencode"
+          },
+          "cliBuild": {
+            "type": "string",
+            "pattern": "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?$"
+          }
+        },
+        "required": [
+          "nodeVersion"
+        ]
+      },
+      {
+        "properties": {
+          "engine": {
+            "enum": [
+              "gemini",
+              "qwen",
+              "acp"
+            ]
           }
         },
         "required": [
