@@ -14,8 +14,11 @@
 // 做成 dmg，给 dmg 签名、公证、钉票。
 // 没给身份时只有 npm run pack 做的本机临时签名，dmg 不签不公证，换一台机器打开会被系统拦下；
 // 带 --require-signing 时（发布流程）这样就报错。
+// 带 --sign-only 时只用 LITCH_SIGN_IDENTITY 把装好的应用原地签好，不公证、不做 dmg：本机测 Computer Use 的授权用。
+// 临时签名的助手每打一次包签名就变，系统设置里给过的授权跟着失效；用开发者身份签，授权认团队号，重打也留得住，
+// 也能验助手和 Litch 之间按团队号的握手。
 //
-//   node scripts/make-installer.mjs [--require-signing]
+//   node scripts/make-installer.mjs [--require-signing | --sign-only]
 import { execFileSync, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync } from 'node:fs'
@@ -31,6 +34,7 @@ const manifest = JSON.parse(readFileSync(here('../package.json'), 'utf8'))
 const version = manifest.version
 const installerDir = join(OUT_DIR, 'installer')
 const requireSigning = process.argv.includes('--require-signing')
+const signOnly = process.argv.includes('--sign-only')
 
 const run = (command, args, options = {}) =>
   execFileSync(command, args, { stdio: ['ignore', 'inherit', 'inherit'], ...options })
@@ -41,6 +45,10 @@ const sha256Of = (file) => createHash('sha256').update(readFileSync(file)).diges
 function credentials() {
   const identity = process.env.LITCH_SIGN_IDENTITY
   const profile = process.env.LITCH_NOTARY_PROFILE
+  if (signOnly) {
+    if (!identity) throw new Error('--sign-only 要给 LITCH_SIGN_IDENTITY')
+    return { identity, keychain: process.env.LITCH_SIGN_KEYCHAIN || undefined, notary: null }
+  }
   if (!identity && !profile) return null
   if (!identity || !profile) {
     throw new Error(
@@ -145,6 +153,10 @@ async function macos() {
     run(node, ['-e', 'console.log(`内置的 Node 能跑：${process.version}`)'])
     run(join(adapter, 'bin', 'codex-harness-adapter'), ['version'])
 
+    if (signOnly) {
+      console.log(`已用开发者身份签好（没公证）：${app}`)
+      return null
+    }
     const zip = join(OUT_DIR, 'Litch-notarize.zip')
     run('ditto', ['-c', '-k', '--keepParent', app, zip])
     notarize(zip, creds)
@@ -213,7 +225,11 @@ try {
   rmSync(installerDir, { recursive: true, force: true })
   mkdirSync(installerDir, { recursive: true })
   let installer
-  if (process.platform === 'darwin') installer = await macos()
+  if (process.platform === 'darwin') {
+    installer = await macos()
+    if (signOnly) process.exit(0)
+  }
+  else if (signOnly) throw new Error('--sign-only 只用在 macOS 上')
   else if (process.platform === 'win32') installer = windows()
   else throw new Error(`这一版只出 macOS 和 Windows 的安装包，不出 ${process.platform} 的`)
   console.log(`安装包：${installer}\nSHA-256：${sha256Of(installer)}`)
