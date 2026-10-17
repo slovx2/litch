@@ -4,6 +4,7 @@ import type { HarnessFeatures, PermissionPreset } from '../../protocol/src/index
 import {
   type AppOp,
   type AppView,
+  type ClientToolPort,
   createCore,
   type DeviceView,
   type SessionSummary,
@@ -61,6 +62,8 @@ export function deviceWorld(
     prepare?(device: FakeDevice): void
     /** 另外的、或者要盖掉的方法 */
     extra?: Record<string, Handler>
+    /** 这台桌面能执行的客户端工具（主进程那一头）。不给就是没有 */
+    clientTools?: ClientToolPort
   } = {},
 ) {
   const fake = fakeDevice(harnesses)
@@ -72,6 +75,7 @@ export function deviceWorld(
     clock: time.clock,
     version: '9.9.9',
     log: (line) => logs.push(line),
+    ...(options.clientTools ? { clientTools: options.clientTools } : {}),
     devices: [
       {
         id: 'local',

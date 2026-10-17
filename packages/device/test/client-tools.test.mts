@@ -6,7 +6,10 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import test from 'node:test'
 import { Ajv } from 'ajv'
-import { codexRig } from './codex-kit.mjs'
+import { CLIENT_TOOL_NAMESPACE } from '../../protocol/src/client-tools.mjs'
+import { clientToolSpecs } from '../../protocol/src/client-tools-specs.mjs'
+import { codexVerdict } from '../../shared/test/codex-params.mjs'
+import { codexRig, sentTo } from './codex-kit.mjs'
 import { codexThread } from './fake-codex.mjs'
 import type { FakeConnection } from './fake-upstream.mjs'
 import { REPO, settle, type TestClient } from './helpers.mjs'
@@ -14,6 +17,7 @@ import { REPO, settle, type TestClient } from './helpers.mjs'
 const THREAD = codexThread(1, 400).id
 const TURN = `turn-of-${THREAD}`
 const ECHO = 'litch_echo'
+const NAMESPACES = Object.values(CLIENT_TOOL_NAMESPACE)
 const OK = { success: true, contentItems: [{ type: 'inputText', text: 'ECHO hi' }] }
 
 const definition = JSON.parse(
@@ -278,6 +282,38 @@ test('CLIENT-TOOLS-DEV-010：退订了的连接不再按订阅者挑', async () 
     stay.client.answer(call.id, OK)
     await settle()
     assert.equal(calls(gone.client).length, 0)
+  } finally {
+    await env.close()
+  }
+})
+
+test('CLIENT-TOOLS-DEV-011：带着 Litch 的全部工具定义经聚合面建会话，到 codex 手里的参数它收；过不了它校验的，原话带回客户端', async () => {
+  const env = codexRig()
+  try {
+    const litch = await join_(env, NAMESPACES)
+    const params = {
+      harness: 'codex',
+      cwd: '/work/codex',
+      permissions: ':workspace',
+      dynamicTools: clientToolSpecs(NAMESPACES),
+    }
+    const started = await litch.client.call('thread/start', params)
+    assert.ok(started.thread.id)
+    const [seen] = sentTo(env.codex, 'thread/start')
+    // 聚合面的 harness 摘掉了，权限档配套的审批策略配上了；codex 不认识的字段一个都没有
+    assert.equal('harness' in seen, false)
+    assert.equal(seen.approvalPolicy, 'on-request')
+    assert.deepEqual(codexVerdict('thread/start', seen), { rejects: [], ignored: [] })
+
+    // 0.8.0 那样的定义：命名空间说明超过 1024 个字，codex 整个拒绝。设备进程不能把它换成“不支持”
+    const [first, ...rest] = clientToolSpecs(NAMESPACES)
+    assert.ok(first)
+    const failure = await litch.client.fails('thread/start', {
+      ...params,
+      dynamicTools: [{ ...first, description: '字'.repeat(1025) }, ...rest],
+    })
+    assert.equal(failure.code, -32600)
+    assert.match(failure.message, /说明有 1025 个字/)
   } finally {
     await env.close()
   }
