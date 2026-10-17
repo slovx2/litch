@@ -25,6 +25,8 @@
 // 带上 --managed --engines claude,pi,dsh：三个引擎都起来（要先 npm run build 把三个引擎包都构建好）。
 //   Claude Code 和 dsh 各要一份隔离的命令行（CHA_CLAUDE_CLI、CHA_DSH_CLI），没给就报错退出；
 //   怎么隔离、配置怎么交给主进程见 client-fixture-engines.mjs，这两家的假模型见 client-fixture-anthropic.mjs。
+//   --engines 里还可以写 opencode（CHA_OPENCODE_CLI）和 acp（CHA_ACP_CLI，只认 opencode，参数默认 acp），
+//   模型同样是假模型，见 client-fixture-engines.mjs；scripts/check-opencode-e2e.mjs 用的就是这两个。
 //   这时 Pi 的“动手之前先问”也开着，三家都在会来问的那一档上。假模型对三家认同一套词：
 //   跑个命令、改个文件、写个文件、问我、问一句、出个计划、慢慢说（各家用自己的工具，没有的照常回话）。
 //   另备一个 git 仓库当工作目录（就绪行的 engines.cwd），里面给三家各放了一份同名的技能。
@@ -98,6 +100,7 @@ for (const [path, name] of [
   ...(engines.opencode
     ? [[join(repo, 'packages/opencode/dist/opencode/src/adapter.mjs'), 'packages/opencode']]
     : []),
+  ...(engines.acp ? [[join(repo, 'packages/acp/dist/acp/src/adapter.mjs'), 'packages/acp']] : []),
 ]) {
   if (existsSync(path)) continue
   console.error(`没有找到 ${name} 的构建产物，请先运行 npm run build --prefix ${name}`)
@@ -260,9 +263,15 @@ async function startService(spec) {
     })
     prepareWorkDirectory(dirs.tri, engines)
   }
-  // 要起的入口给空闲端口。OpenCode 只在要它时才给；它和经 ACP 接的几个不起时用默认端口（7334 起）也不会去听，
+  // 要起的入口给空闲端口。OpenCode、acp 只在要它时才给；它们和经 ACP 接的另几个不起时用默认端口（7334 起）也不会去听，
   // 不另占：设置页的验收（probe-manage.mts）拿 Pi、dsh 的端口加一加二当“别处没用的端口”，空闲端口挨得紧，多占几个就撞上
-  const flags = ['claude', 'pi', 'dsh', ...(engines.opencode ? ['opencode'] : [])]
+  const flags = [
+    'claude',
+    'pi',
+    'dsh',
+    ...(engines.opencode ? ['opencode'] : []),
+    ...(engines.acp ? ['acp'] : []),
+  ]
   const ports = (await freePorts(flags.length)).flatMap((port, index) => [
     `--${flags[index]}-port`,
     String(port),

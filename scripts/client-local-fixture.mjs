@@ -185,9 +185,10 @@ const model = createServer(async (req, res) => {
   const said = lastUserText(body)
   appendFileSync(modelLog, `${JSON.stringify({ at: Date.now(), model: body.model, said })}\n`)
   // 三个引擎都在的时候 Pi 和另两家认同一套词（client-fixture-marks.mjs）；平时只认“跑个命令”和“问我”。
-  // OpenCode 也说 OpenAI 兼容的这一种，地址带着它的标识（/opencode/v1），回话开头写它自己的名字
+  // OpenCode（还有接 opencode acp 的 acp 入口）也说 OpenAI 兼容的这一种，地址带着它的标识（/opencode/v1、/acp/v1），
+  // 回话开头写它自己的名字
   const reply = threeEngines
-    ? piReply(id === 'opencode' ? 'opencode' : 'pi', body, pace)
+    ? piReply(id === 'opencode' || id === 'acp' ? id : 'pi', body, pace)
     : (runReply(body, said) ??
       browseReply(body, said) ??
       computerReply(body, said) ??

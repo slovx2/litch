@@ -5,6 +5,8 @@
 //   CHA_CLAUDE_CLI     隔离的 Claude Code（流水线上是装到 .artifacts/host-cli 的那一份）
 //   CHA_DSH_CLI        隔离的 dsh（流水线上是装到 .artifacts/host-dsh 的那一份）
 //   CHA_OPENCODE_CLI   隔离的 opencode（--engines 里写了 opencode 才要；三引擎验收还不带它）
+//   CHA_ACP_CLI        --engines 里写了 acp 才要：自填命令的 ACP 入口（标识 acp）要接的 agent。夹具只会给
+//                      OpenCode 配模型，所以这里只认 opencode（参数取 CHA_ACP_ARGS，没给就是 acp，即 opencode acp）
 // 没要的新 harness（OpenCode，经 ACP 接的 Gemini CLI、Qwen Code、acp）在设置里明写停用，免得哪一层漏了隔离时
 // 它们去找用户自己装的那一份。
 // 要了却没给、给的不是可执行文件：报错退出，不悄悄少起一个。没要的照旧报“没装”。
@@ -25,7 +27,7 @@
 //   状态目录      三个引擎的都在 <状态目录>/<标识>/ 下，是适配器自己定死的
 import { spawnSync } from 'node:child_process'
 import { accessSync, constants, mkdirSync, realpathSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { FIXTURE_SKILL, skillFile } from './client-fixture-marks.mjs'
 
 /** 开关里的名字 → harness 的标识、给它命令行的环境变量 */
@@ -33,10 +35,14 @@ const ENGINES = {
   claude: { id: 'claude-code', variable: 'CHA_CLAUDE_CLI', name: 'Claude Code' },
   dsh: { id: 'dsh', variable: 'CHA_DSH_CLI', name: 'DeepSeek Harness' },
   opencode: { id: 'opencode', variable: 'CHA_OPENCODE_CLI', name: 'OpenCode' },
+  acp: { id: 'acp', variable: 'CHA_ACP_CLI', name: 'ACP（opencode acp）' },
 }
 
-/** 经 ACP 接的几个 harness：夹具不起它们（要真的 agent），一律在设置里停用 */
+/** 经 ACP 接的几个 harness：夹具不起 gemini、qwen（要真的 agent、会花钱），一律在设置里停用；acp 要了才开 */
 const ACP_HARNESSES = ['gemini', 'qwen', 'acp']
+
+/** 回环上连不通的地址：npm 源和代理都指到这里，OpenCode 想往外连（装插件包之类）一律连不出去 */
+const DEAD_END = 'http://127.0.0.1:9'
 
 /**
  * 读开关。返回要起的那几个引擎的命令行：{ claude: 路径或 null, dsh: 路径或 null }。
@@ -44,13 +50,13 @@ const ACP_HARNESSES = ['gemini', 'qwen', 'acp']
  */
 export function wantedEngines(argv = process.argv, env = process.env) {
   const at = argv.indexOf('--engines')
-  const wanted = { claude: null, dsh: null, opencode: null }
+  const wanted = { claude: null, dsh: null, opencode: null, acp: null }
   if (at < 0) return wanted
   const names = (argv[at + 1] ?? '').split(',').filter(Boolean)
   const unknown = names.filter((name) => name !== 'pi' && !ENGINES[name])
   if (names.length === 0 || unknown.length > 0) {
     console.error(
-      `--engines 后面写要起的引擎，用逗号隔开（claude、pi、dsh、opencode）${unknown.join(' ')}`,
+      `--engines 后面写要起的引擎，用逗号隔开（claude、pi、dsh、opencode、acp）${unknown.join(' ')}`,
     )
     process.exit(1)
   }
@@ -67,6 +73,11 @@ export function wantedEngines(argv = process.argv, env = process.env) {
       console.error(`${variable} 指的不是一个可执行的文件：${cli}`)
       process.exit(1)
     }
+    if (name === 'acp' && basename(cli) !== 'opencode') {
+      // 别的 agent 的模型和配置目录夹具不会配，起起来就可能去用这台机器上的真凭据
+      console.error(`${variable} 只能指一份 opencode（夹具只会给 OpenCode 配假模型）：${cli}`)
+      process.exit(1)
+    }
     wanted[name] = cli
   }
   return wanted
@@ -78,10 +89,58 @@ export const engineIds = (engines) => [
   'pi',
   ...(engines.dsh ? ['dsh'] : []),
   ...(engines.opencode ? ['opencode'] : []),
+  ...(engines.acp ? ['acp'] : []),
 ]
 
 const plain = (name, value) => ({ name, value })
 const secret = (name, value) => ({ name, value, secret: true })
+
+/**
+ * 给一份 OpenCode（opencode serve 或 opencode acp）的隔离环境：配置、数据、缓存、状态都按 XDG 找，全指进 dir，
+ * 不碰 ~/.config/opencode、~/.local/share/opencode。模型走回环上的假模型（OpenAI 兼容的那一种，和 Pi 同一路，
+ * baseURL 里带着 harness 的标识，假模型据此知道请求是谁发来的），配置整份经 OPENCODE_CONFIG_CONTENT 给。
+ * 命令和改文件都调到“问”，和另外几家一样在会来问的那一档上（OpenCode 默认不问）。
+ * OpenCode 起来时会在配置目录里装插件包（npm），联网拉模型清单、分享：源和代理都指到连不通的回环端口，一律连不出去
+ */
+function opencodeEnv(dir, baseURL) {
+  for (const name of ['config', 'data', 'cache', 'state'])
+    mkdirSync(join(dir, name), { recursive: true })
+  return [
+    plain('XDG_CONFIG_HOME', join(dir, 'config')),
+    plain('XDG_DATA_HOME', join(dir, 'data')),
+    plain('XDG_CACHE_HOME', join(dir, 'cache')),
+    plain('XDG_STATE_HOME', join(dir, 'state')),
+    plain('OPENCODE_DISABLE_AUTOUPDATE', '1'),
+    plain('OPENCODE_DISABLE_MODELS_FETCH', '1'),
+    plain('OPENCODE_DISABLE_LSP_DOWNLOAD', '1'),
+    plain('OPENCODE_DISABLE_SHARE', '1'),
+    plain('OPENCODE_DISABLE_DEFAULT_PLUGINS', '1'),
+    plain('npm_config_registry', `${DEAD_END}/`),
+    ...['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'http_proxy', 'https_proxy', 'all_proxy'].map(
+      (name) => plain(name, DEAD_END),
+    ),
+    plain('NO_PROXY', '127.0.0.1,localhost'),
+    plain('no_proxy', '127.0.0.1,localhost'),
+    plain(
+      'OPENCODE_CONFIG_CONTENT',
+      JSON.stringify({
+        autoupdate: false,
+        share: 'disabled',
+        model: 'fixture/gate',
+        small_model: 'fixture/gate',
+        permission: { bash: 'ask', edit: 'ask' },
+        provider: {
+          fixture: {
+            npm: '@ai-sdk/openai-compatible',
+            name: 'Fixture',
+            options: { baseURL, apiKey: 'fixture-only' },
+            models: { gate: { name: 'Gate', tool_call: true } },
+          },
+        },
+      }),
+    ),
+  ]
+}
 
 /**
  * 把这两个引擎的配置写进设置文件（主进程起来之前写，它一起来就照着起）。
@@ -92,7 +151,8 @@ export function writeEngineSettings({ home, root, modelUrl, engines }) {
     'harness.pi.approvals': true,
     'harness.opencode.enabled': Boolean(engines.opencode),
   }
-  for (const id of ACP_HARNESSES) values[`harness.${id}.enabled`] = false
+  for (const id of ACP_HARNESSES)
+    values[`harness.${id}.enabled`] = id === 'acp' && Boolean(engines.acp)
   if (engines.claude) {
     values['harness.claude-code.cliPath'] = engines.claude
     values['harness.claude-code.env'] = [
@@ -123,40 +183,16 @@ export function writeEngineSettings({ home, root, modelUrl, engines }) {
     mkdirSync(join(root, 'agents'), { recursive: true })
   }
   if (engines.opencode) {
-    // OpenCode 的配置、数据、缓存都按 XDG 找：全指进夹具，不碰 ~/.config/opencode、~/.local/share/opencode。
-    // 模型走回环上的假模型（OpenAI 兼容的那一种，和 Pi 同一路），配置整份经 OPENCODE_CONFIG_CONTENT 给。
-    // 还没对着真的 OpenCode 引擎跑过（引擎包在另一条线上），合进来之后要核对
-    const xdg = join(root, 'oc')
     values['harness.opencode.cliPath'] = engines.opencode
-    values['harness.opencode.env'] = [
-      plain('XDG_CONFIG_HOME', join(xdg, 'config')),
-      plain('XDG_DATA_HOME', join(xdg, 'data')),
-      plain('XDG_CACHE_HOME', join(xdg, 'cache')),
-      plain('XDG_STATE_HOME', join(xdg, 'state')),
-      plain('OPENCODE_DISABLE_AUTOUPDATE', '1'),
-      plain('OPENCODE_DISABLE_MODELS_FETCH', '1'),
-      plain('OPENCODE_DISABLE_LSP_DOWNLOAD', '1'),
-      plain(
-        'OPENCODE_CONFIG_CONTENT',
-        JSON.stringify({
-          autoupdate: false,
-          share: 'disabled',
-          model: 'fixture/gate',
-          provider: {
-            fixture: {
-              npm: '@ai-sdk/openai-compatible',
-              name: 'Fixture',
-              // 地址里带着 harness 的标识，假模型据此知道请求是谁发来的
-              options: { baseURL: `${modelUrl}/opencode/v1`, apiKey: 'fixture-only' },
-              models: { gate: { name: 'Gate' } },
-            },
-          },
-        }),
-      ),
+    values['harness.opencode.env'] = opencodeEnv(join(root, 'oc'), `${modelUrl}/opencode/v1`)
+  }
+  if (engines.acp) {
+    // 自填命令的 ACP 入口接的是 opencode acp：和上面那份 OpenCode 各用各的数据目录，模型地址带着 acp
+    values['harness.acp.cliPath'] = engines.acp
+    values['harness.acp.env'] = [
+      plain('CHA_ACP_ARGS', process.env.CHA_ACP_ARGS?.trim() || 'acp'),
+      ...opencodeEnv(join(root, 'oa'), `${modelUrl}/acp/v1`),
     ]
-    for (const name of ['config', 'data', 'cache', 'state']) {
-      mkdirSync(join(xdg, name), { recursive: true })
-    }
   }
   mkdirSync(join(home, 'device'), { recursive: true, mode: 0o700 })
   writeFileSync(
