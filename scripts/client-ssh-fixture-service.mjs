@@ -35,6 +35,7 @@ import { askReply, installAskExtension } from './client-fixture-ask.mjs'
 import { browseReply } from './client-fixture-browse.mjs'
 import { computerReply } from './client-fixture-computer.mjs'
 import { echoReply, lastUserText } from './client-fixture-echo.mjs'
+import { streamReply } from './client-fixture-stream.mjs'
 
 /** 假的远程机器上适配器的替身名。客户端那边用 LITCH_REMOTE_ADAPTER 指过来 */
 export const ADAPTER = 'litch-fx-adapter'
@@ -93,7 +94,8 @@ export async function prepareService({ repo, root, pace = 200 }) {
     const reply = echoReply(body, said) ??
       browseReply(body, said) ??
       computerReply(body, said) ??
-      askReply(body, said) ?? {
+      askReply(body, said) ??
+      streamReply(body, said) ?? {
         text: `收到：${said}\n\n这是假的远程机器上的假模型在回话，分成几段慢慢发，好让界面上看得到字是一点一点出来的。`,
         pace,
       }
@@ -117,7 +119,8 @@ export async function prepareService({ repo, root, pace = 200 }) {
     if (calls) chunk({ role: 'assistant', tool_calls: calls })
     else {
       // 文字分几段发，让运行时那边产生真实的增量
-      const size = Math.max(1, Math.ceil(reply.text.length / 6))
+      // 长回答自己定每块多少字（client-fixture-stream.mjs）；别的分成六段
+      const size = reply.chunk ?? Math.max(1, Math.ceil(reply.text.length / 6))
       for (let at = 0; at < reply.text.length; at += size) {
         chunk(
           at === 0

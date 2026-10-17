@@ -1,0 +1,40 @@
+{
+  "name": "@litch/mobile",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Litch 移动端验证原型：核心原样跑在 Hermes 上、经 SSH 连设备服务；详情页的流畅度实验",
+  "license": "MIT",
+  "main": "index.js",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "prebuild": "expo prebuild --platform android --no-install",
+    "android:release": "cd android && ./gradlew assembleRelease",
+    "fixture": "node scripts/fixture.mjs",
+    "smoke:ssh": "node scripts/ssh-smoke.mjs",
+    "bench:webview:build": "node scripts/build-webview-bench.mjs"
+  },
+  "dependencies": {
+    "@legendapp/list": "3.6.0",
+    "@shopify/flash-list": "2.3.3",
+    "expo": "57.0.26",
+    "expo-build-properties": "57.0.22",
+    "expo-crypto": "57.0.3",
+    "expo-status-bar": "57.0.1",
+    "katex": "0.16.47",
+    "react": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-enriched-markdown": "1.1.0",
+    "react-native-keyboard-controller": "1.21.9",
+    "react-native-reanimated": "4.5.1",
+    "react-native-safe-area-context": "5.7.0",
+    "react-native-webview": "13.16.1",
+    "react-native-worklets": "0.10.1"
+  },
+  "devDependencies": {
+    "@babel/core": "7.29.7",
+    "@babel/preset-typescript": "7.29.7",
+    "@types/react": "19.2.18",
+    "babel-preset-expo": "57.0.13",
+    "typescript": "7.0.2"
+  }
+}

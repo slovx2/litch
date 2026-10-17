@@ -1,0 +1,25 @@
+[project]
+name = "chatmeasure"
+version = "0.1.0"
+description = "安卓录屏逐帧分析：客观度量聊天界面的飘、跳、闪、卡"
+requires-python = "==3.12.*"
+dependencies = [
+    "numpy==2.5.3",
+    "opencv-python-headless==4.14.0.94",
+]
+
+[dependency-groups]
+dev = [
+    "pytest==9.1.1",
+]
+
+[tool.uv]
+# 不打包，直接用 `uv run python -m chatmeasure ...` 运行
+package = false
+# 所有依赖（含传递依赖）只取 2026-10-03 之前发布的版本
+exclude-newer = "2026-10-03T00:00:00Z"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"

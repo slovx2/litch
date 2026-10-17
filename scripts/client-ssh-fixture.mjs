@@ -285,6 +285,8 @@ try {
       // 登录进去的环境和这台电脑平时的隔开：家目录换成临时的
       `SetEnv HOME=${home}`,
       'AcceptEnv LITCH_FX_MODE',
+      // 移动端的对照组（旧的 tyrs-hand 客户端）选项目目录时走 SFTP
+      'Subsystem sftp internal-sftp',
       '',
     ].join('\n'),
   )

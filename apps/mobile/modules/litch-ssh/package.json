@@ -1,0 +1,8 @@
+{
+  "name": "litch-ssh",
+  "version": "0.0.0",
+  "private": true,
+  "description": "手机端 SSH：mobile/sshtransport 经 gomobile 打成的库，加一层 Expo 原生模块",
+  "license": "MIT",
+  "main": "src/index.ts"
+}

@@ -1,0 +1,53 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'dev.litch'
+version = '0.0.0'
+
+// Go 的部分在仓库的 mobile/ 模块里（独立的 go.mod）。构建时用锁定版本的 gomobile 现编成 aar，取出类和 so
+def goModule = file("${projectDir}/../../../../../mobile")
+def goMobileDirectory = file("${buildDir}/generated/gomobile")
+def goMobileAAR = file("${goMobileDirectory}/binding.aar")
+def goMobileClasses = file("${goMobileDirectory}/classes.jar")
+
+tasks.register('buildGoMobile', Exec) {
+  workingDir goModule
+  inputs.dir file("${goModule}/sshtransport")
+  inputs.file file("${goModule}/go.mod")
+  inputs.file file("${goModule}/go.sum")
+  outputs.files goMobileAAR, goMobileClasses
+  outputs.dir file("${goMobileDirectory}/jni")
+  environment 'LITCH_GO_MOBILE_AAR', goMobileAAR.absolutePath
+  // 不经登录 shell：它会把调用方锁定的 Go 换成系统里别的版本
+  commandLine 'bash', '-c', '''
+    set -euo pipefail
+    go run golang.org/x/mobile/cmd/gomobile@v0.0.0-20260803200217-62cee1672c8e init
+    export PATH="$(go env GOPATH)/bin:$PATH"
+    rm -rf "$(dirname "$LITCH_GO_MOBILE_AAR")"
+    mkdir -p "$(dirname "$LITCH_GO_MOBILE_AAR")"
+    go run golang.org/x/mobile/cmd/gomobile@v0.0.0-20260803200217-62cee1672c8e bind \
+      -target=android/arm64,android/amd64 -androidapi 24 -o "$LITCH_GO_MOBILE_AAR" ./sshtransport
+    cd "$(dirname "$LITCH_GO_MOBILE_AAR")"
+    unzip -q -o binding.aar classes.jar 'jni/*'
+  '''
+}
+
+preBuild.dependsOn tasks.named('buildGoMobile')
+
+android {
+  namespace 'dev.litch.ssh'
+  defaultConfig {
+    minSdkVersion 24
+    versionCode 1
+    versionName '0.0.0'
+  }
+  sourceSets {
+    main.jniLibs.srcDirs += file("${goMobileDirectory}/jni")
+  }
+}
+
+dependencies {
+  implementation files(goMobileClasses)
+}

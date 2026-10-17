@@ -1,0 +1,8 @@
+# expo prebuild 生成的原生工程，按 app.json 重新生成
+/android/
+/ios/
+# 原生模块的构建产物（含 gomobile 现编的 aar）
+modules/*/android/build/
+.expo/
+measure/.venv/
+src/bench/terminal-html.generated.ts
