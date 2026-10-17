@@ -6,6 +6,8 @@
 //	{"op":"open","id":"a","target":{...},"script":"...","marker":"..."}
 //	{"op":"state","id":"a"}
 //	{"op":"close","id":"a"}
+//	{"op":"probe","target":{...}}           只读主机指纹
+//	{"op":"generate"}                       生成一把 Ed25519 钥匙
 package main
 
 import (
@@ -41,6 +43,19 @@ func main() {
 			reply(sshtransport.OpenStream(c.ID, string(c.Target), c.Script, c.Marker))
 		case "state":
 			reply(sshtransport.StreamState(c.ID))
+		case "probe":
+			var target struct {
+				Host string `json:"host"`
+				Port int    `json:"port"`
+				User string `json:"user"`
+			}
+			if err := json.Unmarshal(c.Target, &target); err != nil {
+				reply("", err)
+				continue
+			}
+			reply(sshtransport.ProbeHost(target.Host, target.Port, target.User))
+		case "generate":
+			reply(sshtransport.GenerateEd25519Key())
 		case "close":
 			sshtransport.CloseStream(c.ID)
 			reply("{}", nil)

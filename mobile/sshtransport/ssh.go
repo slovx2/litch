@@ -42,26 +42,34 @@ func parseTarget(encoded string) (Target, error) {
 	return target, nil
 }
 
-// ProbeHost 只读主机指纹，不认证。第一次连之前给人确认用
+type hostDescription struct {
+	// SHA256:… 的写法，和 ssh-keygen -l -E sha256 给的一样
+	Fingerprint string `json:"fingerprint"`
+	// 主机钥匙的算法，例如 ssh-ed25519
+	KeyType string `json:"keyType"`
+}
+
+// ProbeHost 只读主机指纹，不认证（返回 JSON：hostDescription）。第一次连之前、指纹变了之后给人确认用
 func ProbeHost(host string, port int, user string) (string, error) {
 	address, err := sshAddress(host, port)
 	if err != nil {
 		return "", err
 	}
 	if strings.TrimSpace(user) == "" {
-		return "", errors.New("SSH 用户不能为空")
+		return "", kindf(kindInvalid, "SSH 用户不能为空")
 	}
-	var fingerprint string
+	var found *hostDescription
 	config := &ssh.ClientConfig{
 		User: strings.TrimSpace(user),
 		HostKeyCallback: func(_ string, _ net.Addr, key ssh.PublicKey) error {
-			fingerprint = ssh.FingerprintSHA256(key)
-			return nil
+			found = &hostDescription{Fingerprint: ssh.FingerprintSHA256(key), KeyType: key.Type()}
+			// 读到就够了：拒掉，不往下认证
+			return errors.New("只读指纹")
 		},
 	}
 	connection, err := (&net.Dialer{Timeout: 10 * time.Second}).Dial("tcp", address)
 	if err != nil {
-		return "", fmt.Errorf("连接 SSH 主机: %w", err)
+		return "", kindf(kindUnreachable, "连接 SSH 主机: %w", err)
 	}
 	defer func() { _ = connection.Close() }()
 	_ = connection.SetDeadline(time.Now().Add(10 * time.Second))
@@ -69,10 +77,10 @@ func ProbeHost(host string, port int, user string) (string, error) {
 	if clientConnection != nil {
 		_ = clientConnection.Close()
 	}
-	if fingerprint != "" {
-		return fingerprint, nil
+	if found != nil {
+		return marshalJSON(found)
 	}
-	return "", fmt.Errorf("读取 SSH 主机指纹: %w", handshakeErr)
+	return "", kindf(kindUnreachable, "读取 SSH 主机指纹: %w", handshakeErr)
 }
 
 func connectSSH(ctx context.Context, target Target) (*ssh.Client, error) {
@@ -81,11 +89,11 @@ func connectSSH(ctx context.Context, target Target) (*ssh.Client, error) {
 		return nil, err
 	}
 	if target.User == "" {
-		return nil, errors.New("SSH 用户不能为空")
+		return nil, kindf(kindInvalid, "SSH 用户不能为空")
 	}
 	expected := strings.TrimSpace(target.HostFingerprint)
 	if expected == "" {
-		return nil, errors.New("尚未确认 SSH 主机 SHA-256 指纹")
+		return nil, kindf(kindHostKeyUnknown, "尚未确认 SSH 主机 SHA-256 指纹")
 	}
 	signer, err := parseSigner(target.PrivateKey, target.Passphrase)
 	if err != nil {
@@ -98,21 +106,28 @@ func connectSSH(ctx context.Context, target Target) (*ssh.Client, error) {
 	}
 	connection, err := (&net.Dialer{Timeout: 12 * time.Second}).DialContext(ctx, "tcp", address)
 	if err != nil {
-		return nil, fmt.Errorf("连接 SSH 主机: %w", err)
+		return nil, kindf(kindUnreachable, "连接 SSH 主机: %w", err)
 	}
 	_ = connection.SetDeadline(time.Now().Add(15 * time.Second))
 	clientConnection, channels, requests, err := ssh.NewClientConn(connection, address, config)
 	if err != nil {
 		_ = connection.Close()
-		return nil, fmt.Errorf("SSH 握手失败: %w", err)
+		return nil, kindf(handshakeKind(err), "SSH 握手失败: %w", err)
 	}
 	_ = connection.SetDeadline(time.Time{})
 	return ssh.NewClient(clientConnection, channels, requests), nil
 }
 
-// keepAlive 定期发一个全局请求：手机网络常常静默断开，没有动静就发现不了
-func keepAlive(ctx context.Context, client *ssh.Client) {
-	ticker := time.NewTicker(15 * time.Second)
+// 心跳：多久发一次、等多久没回音就算断了。变量是为了测试能调短
+var (
+	keepAliveEvery = 15 * time.Second
+	keepAliveWait  = 10 * time.Second
+)
+
+// keepAlive 定期发一个全局请求：手机网络常常静默断开（切网络、休眠），没有动静就发现不了。
+// 发不出去、等不到回音就关掉整条连接，上面的流跟着断，核心照常走重连。lost 收到原因（给界面的详情）
+func keepAlive(ctx context.Context, client *ssh.Client, lost func(reason string)) {
+	ticker := time.NewTicker(keepAliveEvery)
 	defer ticker.Stop()
 	for {
 		select {
@@ -127,10 +142,12 @@ func keepAlive(ctx context.Context, client *ssh.Client) {
 			select {
 			case err := <-done:
 				if err != nil {
+					lost(fmt.Sprintf("心跳发不出去: %v", err))
 					_ = client.Close()
 					return
 				}
-			case <-time.After(10 * time.Second):
+			case <-time.After(keepAliveWait):
+				lost(fmt.Sprintf("心跳 %s 没有回音", keepAliveWait))
 				_ = client.Close()
 				return
 			case <-ctx.Done():
@@ -152,11 +169,12 @@ func newSession(client *ssh.Client, target Target) (*ssh.Session, error) {
 	return session, nil
 }
 
+// pinnedHostKeyCallback 只认记下的那一个指纹。常量时间比较：比较花的时间不透露对上了几个字
 func pinnedHostKeyCallback(expected string) ssh.HostKeyCallback {
 	return func(_ string, _ net.Addr, key ssh.PublicKey) error {
 		actual := ssh.FingerprintSHA256(key)
 		if subtle.ConstantTimeCompare([]byte(actual), []byte(expected)) != 1 {
-			return fmt.Errorf("SSH 主机指纹已变化：期望 %s，实际 %s", expected, actual)
+			return &hostKeyChangedError{expected: expected, actual: actual}
 		}
 		return nil
 	}
@@ -165,7 +183,7 @@ func pinnedHostKeyCallback(expected string) ssh.HostKeyCallback {
 func sshAddress(host string, port int) (string, error) {
 	host = strings.TrimSpace(host)
 	if host == "" || port < 1 || port > 65535 {
-		return "", errors.New("SSH Host 或 Port 无效")
+		return "", kindf(kindInvalid, "SSH Host 或 Port 无效")
 	}
 	return net.JoinHostPort(host, strconv.Itoa(port)), nil
 }

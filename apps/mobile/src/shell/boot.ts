@@ -14,8 +14,8 @@ import {
   type DeviceConfig,
   serveChannel,
 } from '@litch/core'
-import { type RemoteConfig, sshOpener } from '../core/transport'
 import { mobilePlatform } from '../platform'
+import { type RemoteConfig, sshOpener } from '../platform/ssh-transport'
 
 export type BootMode = 'stored' | 'mock' | 'fixture'
 
@@ -90,7 +90,7 @@ export async function boot(mode: BootMode, lang: 'zh-CN' | 'en'): Promise<Booted
     )
     return { mode, work: config.work ?? null, ...served }
   }
-  const platform = mobilePlatform()
+  const platform = mobilePlatform({ clock, version: VERSION })
   const core = createCore({
     clock,
     version: VERSION,
