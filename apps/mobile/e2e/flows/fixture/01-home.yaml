@@ -1,0 +1,33 @@
+# 夹具（真的适配器经 SSH）：首页列出夹具那台设备，设备详情里列出它上面的 harness，点进去是会话列表
+appId: dev.litch.app
+name: fixture-首页列出设备与 harness
+tags: [fixture, smoke]
+---
+- runFlow:
+    file: ../_shared/fresh.yaml
+    env:
+      MODE: fixture
+      READY: device:fixture
+- tapOn:
+    id: device:fixture:more
+- tapOn:
+    id: menu:detail
+# 设备服务报上来 8 个 harness（夹具里只装了 Pi，其余标着没装）
+- extendedWaitUntil:
+    visible:
+      text: .*(Device service, 8 harnesses|设备服务，8 个 harness).*
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      id: manage:pi
+    direction: DOWN
+- assertVisible:
+    text: .*Ready.*|.*就绪.*
+- tapOn:
+    id: header:back
+- tapOn:
+    id: device:fixture
+- extendedWaitUntil:
+    visible:
+      id: sessions
+    timeout: 15000

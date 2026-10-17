@@ -12,6 +12,7 @@
     "android:release": "npm run web:build && cd android && ./gradlew assembleRelease",
     "fixture": "node scripts/fixture.mjs",
     "smoke:ssh": "node scripts/ssh-smoke.mjs",
+    "e2e": "node scripts/e2e.mjs",
     "test": "node --experimental-transform-types --disable-warning=ExperimentalWarning --import ./test/register.mjs --test test/*.test.mjs"
   },
   "dependencies": {

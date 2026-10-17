@@ -1,0 +1,66 @@
+# 模拟核心：计划模式。Claude Code 写完计划自己问要不要执行（提问卡片，选“执行”就交）；
+# 只有 codex 的设备上 codex 写完就结束，由界面来问（计划卡片，点“执行”开始新的回合）
+appId: dev.litch.app
+name: mock-计划卡片
+tags: [mock]
+---
+- runFlow:
+    file: ../_shared/fresh.yaml
+    env:
+      MODE: mock
+      READY: device:local
+- tapOn:
+    id: device:local
+- tapOn:
+    id: sessions:new
+- extendedWaitUntil:
+    visible:
+      id: settings:plan
+    timeout: 15000
+- tapOn:
+    id: settings:plan
+- tapOn:
+    id: new-input
+- inputText: plan it
+- tapOn:
+    id: new-send
+- extendedWaitUntil:
+    visible:
+      id: request:question
+    timeout: 30000
+- tapOn:
+    id: request:pick:0
+- extendedWaitUntil:
+    notVisible:
+      id: request:question
+    timeout: 10000
+# codex 那一条
+- tapOn:
+    id: header:back
+- tapOn:
+    id: header:back
+- tapOn:
+    id: device:nas
+- tapOn:
+    id: sessions:new
+- extendedWaitUntil:
+    visible:
+      id: settings:plan
+    timeout: 15000
+- tapOn:
+    id: settings:plan
+- tapOn:
+    id: new-input
+- inputText: plan it
+- tapOn:
+    id: new-send
+- extendedWaitUntil:
+    visible:
+      id: request:plan
+    timeout: 30000
+- tapOn:
+    id: plan:implement
+- extendedWaitUntil:
+    notVisible:
+      id: request:plan
+    timeout: 10000
