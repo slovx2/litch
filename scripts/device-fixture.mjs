@@ -260,8 +260,9 @@ async function startService(spec) {
     })
     prepareWorkDirectory(dirs.tri, engines)
   }
-  // 每个入口都给一个空闲端口：默认端口（7331 起）上可能有这台机器自己在跑的服务
-  const flags = ['claude', 'pi', 'dsh', 'opencode', 'gemini', 'qwen', 'acp']
+  // 要起的入口给空闲端口。OpenCode 只在要它时才给；它和经 ACP 接的几个不起时用默认端口（7334 起）也不会去听，
+  // 不另占：设置页的验收（probe-manage.mts）拿 Pi、dsh 的端口加一加二当“别处没用的端口”，空闲端口挨得紧，多占几个就撞上
+  const flags = ['claude', 'pi', 'dsh', ...(engines.opencode ? ['opencode'] : [])]
   const ports = (await freePorts(flags.length)).flatMap((port, index) => [
     `--${flags[index]}-port`,
     String(port),
