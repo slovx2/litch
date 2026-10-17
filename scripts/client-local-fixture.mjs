@@ -13,6 +13,8 @@
 // 回环上的假模型和 client-fixture.mjs 里的是同一种：把收到的那句话带回来，分几段慢慢发；
 // 话里带“问我”时向用户提两个问题（client-fixture-ask.mjs）。
 // 话里带“跑个命令”时调用 Pi 内置的 bash 跑一条固定的命令（client-fixture-run.mjs）：打开 Pi 的审批之后，界面上能看到命令审批卡片。
+// 话里带“浏览”和网址时用桌面的内置浏览器打开（client-fixture-browse.mjs），带“操作应用”时用 Computer Use 看一个应用、打一段字
+// （client-fixture-computer.mjs）：真实窗口验收用它们验客户端工具，模型仍是假的。
 //
 // 隔离靠的是假登录 shell 给出的环境（它盖过应用自己的环境）：
 //   PATH 只有夹具自己的空目录和系统目录，里面没有用户装的 claude、pi、dsh；
@@ -73,6 +75,9 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { serveAnthropic } from './client-fixture-anthropic.mjs'
 import { askReply, installAskExtension } from './client-fixture-ask.mjs'
+import { browseReply } from './client-fixture-browse.mjs'
+import { computerReply } from './client-fixture-computer.mjs'
+import { lastUserText } from './client-fixture-echo.mjs'
 import {
   engineIds,
   prepareWorkDirectory,
@@ -164,12 +169,6 @@ chmodSync(home, 0o700)
 // 每收到一次模型请求记一行，自检据此确认请求真的到了这里
 const modelLog = join(root, 'model.jsonl')
 let requests = 0
-/** 请求里用户说的最后一句话 */
-const lastUserText = (body) => {
-  const content = body.messages?.findLast((message) => message.role === 'user')?.content
-  if (typeof content === 'string') return content
-  return (content ?? []).map((part) => part.text ?? '').join('')
-}
 const model = createServer(async (req, res) => {
   const chunks = []
   for await (const chunk of req) chunks.push(chunk)
@@ -189,6 +188,8 @@ const model = createServer(async (req, res) => {
   const reply = threeEngines
     ? piReply('pi', body, pace)
     : (runReply(body, said) ??
+      browseReply(body, said) ??
+      computerReply(body, said) ??
       askReply(body, said) ?? {
         text: `收到：${said}\n\n这是隔离环境里的假模型在回话，分成几段慢慢发，好让界面上看得到字是一点一点出来的。`,
         pace,

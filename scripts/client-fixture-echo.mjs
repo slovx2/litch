@@ -14,6 +14,27 @@ export const ECHO_HEARD = '回声结果：'
 export const ECHO_MISSING = '没有 litch_echo 这个工具'
 
 /** Pi 入口给动态工具起的名字（packages/pi/src/dynamic-tools.mts 的 clientTools） */
+/**
+ * 是不是用户自己说的话。Pi 把工具结果里的图片另起一条 role 为 user 的消息带给模型
+ * （开头是 “Attached image(s) from tool result”），那条不算
+ */
+export const isUserTurn = (message) => {
+  if (message?.role !== 'user') return false
+  const content = message.content
+  const text =
+    typeof content === 'string'
+      ? content
+      : (content ?? []).map((part) => (part?.type === 'text' ? part.text : '')).join('')
+  return !text.startsWith('Attached image(s) from tool result')
+}
+
+/** 请求里用户说的最后一句话（不算附图的那种） */
+export const lastUserText = (body) => {
+  const content = body.messages?.findLast(isUserTurn)?.content
+  if (typeof content === 'string') return content
+  return (content ?? []).map((part) => part.text ?? '').join('')
+}
+
 export const piToolName = (namespace, name) =>
   `client_${createHash('sha256')
     .update(JSON.stringify([namespace, name]))

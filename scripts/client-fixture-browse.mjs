@@ -4,7 +4,7 @@
 //
 // 用户的话里带“浏览”和一个网址时：navigate 到那个网址 → wait 页面上出现“等字：”后面那段字（没写就不等）
 // → snapshot → 回话“浏览结果：”加上这几次的结果。工具不在（会话不是 Litch 建的）时照实说一句。
-import { piToolName } from './client-fixture-echo.mjs'
+import { isUserTurn, piToolName } from './client-fixture-echo.mjs'
 
 export const BROWSE_TRIGGER = /浏览|browse/i
 export const BROWSE_HEARD = '浏览结果：'
@@ -25,7 +25,7 @@ const textOf = (content) =>
 export function browseReply(body, lastUserText) {
   if (!BROWSE_TRIGGER.test(lastUserText)) return null
   const messages = body.messages ?? []
-  const userAt = messages.findLastIndex((message) => message.role === 'user')
+  const userAt = messages.findLastIndex(isUserTurn)
   const since = messages.slice(userAt + 1)
   const calls = since.flatMap((message) => message.tool_calls ?? [])
   const mine = calls.filter((call) => Object.values(NAMES).includes(nameOf(call)))

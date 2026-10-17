@@ -33,7 +33,8 @@ import { createServer as createSocketServer } from 'node:net'
 import { dirname, join } from 'node:path'
 import { askReply, installAskExtension } from './client-fixture-ask.mjs'
 import { browseReply } from './client-fixture-browse.mjs'
-import { echoReply } from './client-fixture-echo.mjs'
+import { computerReply } from './client-fixture-computer.mjs'
+import { echoReply, lastUserText } from './client-fixture-echo.mjs'
 
 /** 假的远程机器上适配器的替身名。客户端那边用 LITCH_REMOTE_ADAPTER 指过来 */
 export const ADAPTER = 'litch-fx-adapter'
@@ -81,11 +82,6 @@ export async function prepareService({ repo, root, pace = 200 }) {
   const modelLog = join(root, 'model.jsonl')
   let requests = 0
   const pause = (ms) => new Promise((done) => setTimeout(done, ms))
-  const lastUserText = (body) => {
-    const content = body.messages?.findLast((message) => message.role === 'user')?.content
-    if (typeof content === 'string') return content
-    return (content ?? []).map((part) => part.text ?? '').join('')
-  }
   const model = createHttpServer(async (req, res) => {
     const chunks = []
     for await (const chunk of req) chunks.push(chunk)
@@ -93,9 +89,10 @@ export async function prepareService({ repo, root, pace = 200 }) {
     requests++
     const said = lastUserText(body)
     appendFileSync(modelLog, `${JSON.stringify({ at: Date.now(), model: body.model, said })}\n`)
-    // 客户端工具（回声、浏览）认得出自己那一次，排在提问前面：提问见到工具结果就当成是它的回答
+    // 客户端工具（回声、浏览、操作应用）认得出自己那一次，排在提问前面：提问见到工具结果就当成是它的回答
     const reply = echoReply(body, said) ??
       browseReply(body, said) ??
+      computerReply(body, said) ??
       askReply(body, said) ?? {
         text: `收到：${said}\n\n这是假的远程机器上的假模型在回话，分成几段慢慢发，好让界面上看得到字是一点一点出来的。`,
         pace,
