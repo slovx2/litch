@@ -5,7 +5,7 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
-## 未发布
+## 0.8.0
 
 - Litch：内置浏览器。侧面板里多了“浏览器”标签，你和代理都能用：地址栏、前进后退、多标签，所有会话共用一份登录状态。代理经 `litch_browser` 这组工具打开网页、读页面（可访问性树带编号）、点击、输入、滚动、截图、等待、看控制台、上传文件，截图在对话里显示缩略图。第一次访问本机以外的网站要你同意（本回合、本会话、一直允许或拒绝），本机地址直接放行；代理只碰自己开的标签，回合结束关掉没让留下的临时标签。网页拿不到 Node，也碰不到界面。
 - Litch：Computer Use（只有 macOS）。代理经 `litch_computer` 这组工具看 Mac 上应用的窗口和可访问性树、点击、打字、按键、滚动、拖拽。系统权限授给随应用带的单独签名的助手（Litch Computer Use），不授给 Litch 本身；每个会话第一次操作某个应用前要你批准，密码管理器、钥匙串、系统设置一律不许碰，浏览器、终端标成高风险；操作时屏幕顶上有提示，按 Esc 或“停止”就停。
