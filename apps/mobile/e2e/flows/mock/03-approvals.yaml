@@ -1,0 +1,28 @@
+# 模拟核心：等审批的会话里排着两张审批（命令、MCP 工具），一张张答完，卡片都没了
+appId: dev.litch.app
+name: mock-审批卡片答完
+tags: [mock, smoke]
+---
+- runFlow:
+    file: ../_shared/fresh.yaml
+    env:
+      MODE: mock
+      READY: device:local
+- openLink: litch://open?session=s2&device=local
+- extendedWaitUntil:
+    visible:
+      id: request:approval
+    timeout: 15000
+- tapOn:
+    id: request:option:accept
+# 第二张接上：工具调用的审批（只有它带“一直允许”），也允许
+- extendedWaitUntil:
+    visible:
+      id: request:option:acceptAlways
+    timeout: 10000
+- tapOn:
+    id: request:option:accept
+- extendedWaitUntil:
+    notVisible:
+      id: request:approval
+    timeout: 10000

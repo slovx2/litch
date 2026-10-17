@@ -252,6 +252,7 @@ npm run client:check:packed        # 对着装好的那一份跑三组自检：�
 - 终端页、测量页的网页由 `npm run web:build` 生成成字符串（`src/web/`、`src/bench/` 下的 `*.generated.ts`，不进仓库），`npm run typecheck` 和 `npm run android:release` 会先跑它。
 - 检查：`cd apps/mobile && npm run typecheck`，根目录 `npx biome check apps/mobile`。验流畅度用 release 包：`npx expo prebuild --platform android --clean --no-install`，再 `npm run android:release`（要 JDK 17 以上的 `JAVA_HOME` 和 `ANDROID_HOME`；`--clean` 会清掉 `local.properties`）。测量脚本 `scripts/bench.mjs`（T1–T7），真链路用 `scripts/fixture.mjs` 起的假远程。
 - 测试链接（`src/shell/dev-links.ts`，`litch://boot?mode=mock|fixture|stored`、`new`、`open`、`send`、`terminal`、`diff`、`seed`、`remote` 等）只给验收和测量用；应用还没装好核心时发来的会稍后重试。
+- 用例（说明在 `apps/mobile/e2e/README.md`）：单元测试 `npm test`（根目录 `npm run mobile:test`），Node 24 直接跑 `src` 下的 `.ts`，不用装依赖，原生模块和导航的替身在 `test/stubs/`；端到端 `npm run e2e`（`scripts/e2e.mjs`：起模拟器、装 release 包、起夹具、用 Maestro 2.3.0 跑 `e2e/flows/`、收尾），流程用测试链接和 testID 驱动，改了 testID 要同步改流程。
 
 ## 构建和检查
 

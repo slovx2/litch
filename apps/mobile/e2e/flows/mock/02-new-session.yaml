@@ -1,0 +1,38 @@
+# 模拟核心：会话列表 → 新建会话页 → 发第一句 → 详情页收到流式回答、回合结束
+appId: dev.litch.app
+name: mock-新建会话收到回答
+tags: [mock, smoke]
+---
+- runFlow:
+    file: ../_shared/fresh.yaml
+    env:
+      MODE: mock
+      READY: device:local
+- tapOn:
+    id: device:local
+- tapOn:
+    id: sessions:new
+- extendedWaitUntil:
+    visible:
+      id: new-input
+    timeout: 15000
+- tapOn:
+    id: new-input
+- inputText: hello e2e
+- tapOn:
+    id: new-send
+- extendedWaitUntil:
+    visible:
+      id: detail
+    timeout: 15000
+- assertVisible:
+    id: user-message
+- extendedWaitUntil:
+    visible:
+      text: .*(mock core answering|模拟核心的回答).*
+    timeout: 20000
+# 回合结束时状态行上才有“⋯”
+- extendedWaitUntil:
+    visible:
+      id: turn-menu
+    timeout: 30000

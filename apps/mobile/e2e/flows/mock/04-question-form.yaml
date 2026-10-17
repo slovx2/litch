@@ -1,0 +1,54 @@
+# 模拟核心：等回答的会话里先是三道题的提问（单选、自己写、单选），答完接着一张 MCP 表单，填完交上
+appId: dev.litch.app
+name: mock-提问与表单
+tags: [mock]
+---
+- runFlow:
+    file: ../_shared/fresh.yaml
+    env:
+      MODE: mock
+      READY: device:local
+- openLink: litch://open?session=b1&device=build
+- extendedWaitUntil:
+    visible:
+      id: request:question
+    timeout: 15000
+# 第一道：选第一个，选了自己翻到下一道
+- tapOn:
+    id: request:pick:0
+# 第二道没有选项：自己写一句，再往下翻
+- extendedWaitUntil:
+    visible:
+      id: request:other
+    timeout: 5000
+- tapOn:
+    id: request:other
+- inputText: e2e answer
+- hideKeyboard
+- tapOn:
+    id: request:next
+# 第三道：选第一个，最后一道选了就交
+- extendedWaitUntil:
+    visible:
+      id: request:step:2
+    timeout: 5000
+- tapOn:
+    id: request:pick:0
+- extendedWaitUntil:
+    visible:
+      id: request:form
+    timeout: 10000
+- tapOn:
+    id: form:region:ap-east
+- scrollUntilVisible:
+    element:
+      id: form:submit
+    direction: DOWN
+- tapOn:
+    id: form:submit
+- extendedWaitUntil:
+    notVisible:
+      id: request:form
+    timeout: 10000
+- assertNotVisible:
+    id: request:question

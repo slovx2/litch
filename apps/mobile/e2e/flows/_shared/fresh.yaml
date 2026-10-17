@@ -1,0 +1,17 @@
+# 清掉应用的数据重新打开，等首页出来（JS 起来了、挂上了链接的监听；早于这个发的链接会丢），
+# 再用测试链接换成要的装法（MODE），等那种装法才有的元素（READY）出现。
+# 每个流程都从这里起：互不依赖，单跑哪一个都行
+appId: dev.litch.app
+---
+- launchApp:
+    clearState: true
+    stopApp: true
+- extendedWaitUntil:
+    visible:
+      id: devices
+    timeout: 30000
+- openLink: litch://boot?mode=${MODE}
+- extendedWaitUntil:
+    visible:
+      id: ${READY}
+    timeout: 30000

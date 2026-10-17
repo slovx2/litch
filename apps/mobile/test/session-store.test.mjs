@@ -1,0 +1,145 @@
+// 会话存储（src/core/session-store.ts）接在模拟核心上：和手机上 mock 装法同一条数据路径（核心 → 内存端口 → 订阅 → 行）。
+// 新建会话收到流式回答、流式时尾巴单独交出、审批答完回合接着走、展开一组只重算那个回合、停了就不再交。
+import assert from 'node:assert/strict'
+import { afterEach, test } from 'node:test'
+import { SessionStore } from '../src/core/session-store.ts'
+import { acquireStore, releaseStore } from '../src/core/store-cache.ts'
+import { mockChannel, until } from './helpers.mjs'
+
+const cleanup = []
+afterEach(() => {
+  for (const done of cleanup.splice(0)) done()
+})
+
+async function open(text, options) {
+  const mock = mockChannel(options)
+  const { sessionId } = await mock.channel.command('session.create', {
+    deviceId: 'local',
+    cwd: null,
+    text,
+  })
+  const store = new SessionStore(mock.channel, 'local', sessionId)
+  cleanup.push(() => {
+    store.stop()
+    mock.close()
+  })
+  return { store, channel: mock.channel, sessionId }
+}
+
+/** 新的在前的行，倒回成从旧到新再看种类 */
+const kinds = (rows) => rows.map((row) => row.type).toReversed()
+const finished = (store) => {
+  const { rows, running } = store.getSnapshot()
+  return !running && rows[0]?.type === 'status' && rows[0].status === 'completed'
+}
+
+test('新建会话：收到回答，回合结束后是用户消息、回答、状态行', async () => {
+  const { store } = await open('你好')
+  store.start()
+  await until(() => finished(store), { what: '回合结束' })
+  const { rows, error } = store.getSnapshot()
+  assert.equal(error, null)
+  assert.deepEqual(kinds(rows), ['user', 'md', 'status'])
+  assert.equal(rows.at(-1).text, '你好')
+  assert.ok(rows[1].text.length > 0, '回答有字')
+  const meta = store.getMeta()
+  assert.equal(meta.running, false)
+  assert.equal(meta.lastTurn.status, 'completed')
+  assert.ok(store.stats.publishes > 1, '流式时交了不止一次')
+})
+
+test('流式时尾巴单独交出：列表里没有正在长的回答，写完才并回列表', async () => {
+  // 慢一点流，好在中途看
+  const { store } = await open('长回答', { chunkMs: 20 })
+  store.setSplitTail(true)
+  store.start()
+  const tail = await until(() => (store.getTail().rows.length >= 2 ? store.getTail() : null), {
+    what: '尾巴',
+  })
+  assert.equal(tail.rows[0].type, 'status')
+  assert.equal(tail.rows[0].status, 'running')
+  assert.equal(tail.rows[1].type, 'md')
+  assert.equal(tail.rows[1].live, true)
+  assert.ok(
+    store.getSnapshot().rows.every((row) => !(row.type === 'md' && row.live)),
+    '列表里没有在流式的块',
+  )
+  await until(() => finished(store), { timeoutMs: 20000, what: '长回答写完' })
+  assert.deepEqual(store.getTail().rows, [])
+  assert.ok(store.getSnapshot().rows.some((row) => row.type === 'md'))
+})
+
+test('审批：请求进会话层面的状态，答了“允许”之后请求没了、回合走完', async () => {
+  const { store, channel, sessionId } = await open('要审批')
+  store.start()
+  const meta = await until(() => (store.getMeta()?.requests.length ? store.getMeta() : null), {
+    what: '审批请求',
+  })
+  const [request] = meta.requests
+  assert.equal(request.kind, 'approval')
+  assert.ok(request.options.some((option) => option.role === 'accept'))
+  assert.equal(meta.running, true)
+  await channel.command('session.respond', {
+    deviceId: 'local',
+    sessionId,
+    requestId: request.id,
+    optionId: request.options.find((option) => option.role === 'accept').id,
+  })
+  await until(() => finished(store), { what: '答完之后回合结束' })
+  assert.deepEqual(store.getMeta().requests, [])
+  // 命令那一步收在过程组里；展开后多出一步，只重算这个回合
+  const group = store.getSnapshot().rows.find((row) => row.type === 'group')
+  assert.ok(group, '有过程组')
+  const before = store.getSnapshot().rows.length
+  store.toggle(group.key, group.turnId)
+  assert.equal(store.getSnapshot().rows.length, before + group.count)
+  assert.ok(store.getSnapshot().rows.some((row) => row.type === 'step'))
+})
+
+test('回合里的用户消息、最后一条回答的全文', async () => {
+  const { store } = await open('你好')
+  store.start()
+  await until(() => finished(store), { what: '回合结束' })
+  const turnId = store.getMeta().lastTurn.id
+  assert.equal(store.userMessage(turnId)?.text, '你好')
+  assert.equal(store.userMessage('没有这个回合'), null)
+  const md = store
+    .getSnapshot()
+    .rows.filter((row) => row.type === 'md')
+    .map((row) => row.text)
+  assert.ok(store.answerText(turnId)?.startsWith(md.at(-1).slice(0, 5)))
+})
+
+test('停了就不再交给界面', async () => {
+  const { store, channel, sessionId } = await open('你好')
+  store.start()
+  await until(() => finished(store), { what: '回合结束' })
+  store.stop()
+  const publishes = store.stats.publishes
+  await channel.command('session.send', { deviceId: 'local', sessionId, text: '再来一句' })
+  await new Promise((done) => setTimeout(done, 200))
+  assert.equal(store.stats.publishes, publishes)
+})
+
+test('刚看过的会话留着：再进来是同一个存储，用完的过期关掉', async (t) => {
+  const mock = mockChannel()
+  cleanup.push(() => mock.close())
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] })
+  const a = acquireStore(mock.channel, 'local', 's-a')
+  releaseStore(a)
+  assert.equal(acquireStore(mock.channel, 'local', 's-a'), a, '离开后马上回来还是那一个')
+  releaseStore(a)
+  t.mock.timers.tick(60_001)
+  const again = acquireStore(mock.channel, 'local', 's-a')
+  assert.notEqual(again, a, '过了一分钟就关了')
+  releaseStore(again)
+  // 最多留三个：第四个离开时，离开最久的那个先关
+  const stores = ['s1', 's2', 's3', 's4'].map((id) => acquireStore(mock.channel, 'local', id))
+  for (const store of stores) {
+    releaseStore(store)
+    t.mock.timers.tick(10)
+  }
+  assert.notEqual(acquireStore(mock.channel, 'local', 's1'), stores[0])
+  assert.equal(acquireStore(mock.channel, 'local', 's4'), stores[3])
+  t.mock.timers.tick(120_000)
+})

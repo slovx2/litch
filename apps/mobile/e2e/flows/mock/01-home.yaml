@@ -1,0 +1,22 @@
+# 模拟核心：首页列出四台设备，点进一台看到会话列表（等审批、等回答的都在）
+appId: dev.litch.app
+name: mock-首页与会话列表
+tags: [mock, smoke]
+---
+- runFlow:
+    file: ../_shared/fresh.yaml
+    env:
+      MODE: mock
+      READY: device:local
+- assertVisible:
+    id: device:build
+- assertVisible:
+    id: device:gpu
+- tapOn:
+    id: device:local
+- extendedWaitUntil:
+    visible:
+      id: sessions:list
+    timeout: 15000
+- assertVisible:
+    id: session:s2

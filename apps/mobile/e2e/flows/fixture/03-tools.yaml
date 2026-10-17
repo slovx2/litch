@@ -1,0 +1,105 @@
+# 夹具：会话的标题栏菜单进终端，敲一条命令真在远端跑了（入口脚本那边看工作目录里写出的文件）；
+# 再进差异页看文件列表和单文件差异（工作目录是入口脚本备好的、有改动的 git 仓库），再进文件页逐层打开一个文件
+appId: dev.litch.app
+name: fixture-终端差异文件
+tags: [fixture, smoke]
+---
+- runFlow:
+    file: ../_shared/fresh.yaml
+    env:
+      MODE: fixture
+      READY: device:fixture
+# 走界面新建会话：litch://new 不等设备连上，设备刚列出来时发会落空
+- tapOn:
+    id: device:fixture
+- tapOn:
+    id: sessions:new
+# 建在入口脚本备好的那个 git 仓库里（WORK 是真实路径：/tmp 和 /private/tmp 不认作同一个目录）
+- extendedWaitUntil:
+    visible:
+      id: new:where:dir
+    timeout: 30000
+- tapOn:
+    id: new:where:dir
+- tapOn:
+    id: prompt:input
+- eraseText: 200
+- inputText: ${WORK}
+- tapOn:
+    id: prompt:ok
+- tapOn:
+    id: new-input
+- inputText: tools
+- tapOn:
+    id: new-send
+- extendedWaitUntil:
+    visible:
+      id: turn-menu
+    timeout: 60000
+# 终端
+- tapOn:
+    id: detail:menu
+- tapOn:
+    id: detail:menu:terminal
+- extendedWaitUntil:
+    visible:
+      id: terminal:web
+    timeout: 30000
+- tapOn:
+    id: terminal:key:keyboard
+- inputText: echo e2e-$((6*7)) > e2e-mark.txt
+- pressKey: Enter
+- runScript:
+    file: ../_shared/wait-file.js
+    env:
+      NAME: e2e-mark.txt
+      TEXT: e2e-42
+- assertTrue: ${output.found}
+- hideKeyboard
+- tapOn:
+    id: header:back
+# 差异
+- tapOn:
+    id: detail:menu
+- tapOn:
+    id: detail:menu:diff
+- extendedWaitUntil:
+    visible:
+      id: diff:file:README.md
+    timeout: 30000
+- assertVisible:
+    id: diff:file:notes.txt
+- tapOn:
+    id: diff:file:README.md
+- extendedWaitUntil:
+    visible:
+      id: diff:lines
+    timeout: 15000
+- assertVisible:
+    text: .*改过的第二行.*
+# 单文件的差异是差异页里的一层：退两次回到会话
+- tapOn:
+    id: header:back
+- extendedWaitUntil:
+    visible:
+      id: diff:files
+    timeout: 10000
+- tapOn:
+    id: header:back
+# 文件
+- tapOn:
+    id: detail:menu
+- tapOn:
+    id: detail:menu:files
+- extendedWaitUntil:
+    visible:
+      id: file:README.md
+    timeout: 30000
+- tapOn:
+    id: file:README.md
+- extendedWaitUntil:
+    visible:
+      id: files:text
+    timeout: 15000
+- assertVisible:
+    text: .*改过的第二行.*

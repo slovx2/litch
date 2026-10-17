@@ -1,0 +1,31 @@
+# 夹具：新建会话页发第一句（夹具上能用的只有 Pi，页面上不列 harness、直接用它），详情页收到假模型一段段发来的回答（它把收到的话带回来）
+appId: dev.litch.app
+name: fixture-新建会话收到回答
+tags: [fixture, smoke]
+---
+- runFlow:
+    file: ../_shared/fresh.yaml
+    env:
+      MODE: fixture
+      READY: device:fixture
+- tapOn:
+    id: device:fixture
+- tapOn:
+    id: sessions:new
+- extendedWaitUntil:
+    visible:
+      text: .*Pi.*
+    timeout: 30000
+- tapOn:
+    id: new-input
+- inputText: hello fixture
+- tapOn:
+    id: new-send
+- extendedWaitUntil:
+    visible:
+      text: 收到：hello fixture
+    timeout: 60000
+- extendedWaitUntil:
+    visible:
+      id: turn-menu
+    timeout: 60000

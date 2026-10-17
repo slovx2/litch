@@ -56,6 +56,7 @@
     "test:opencode": "npm run test --prefix packages/opencode",
     "test:acp": "npm run test --prefix packages/acp",
     "test:device": "npm run test --prefix packages/device",
+    "mobile:test": "npm run test --prefix apps/mobile",
     "test:compat": "npm run build && node --import ./packages/claude/dist/claude/test/fixtures/isolate-process.mjs --test --test-force-exit packages/claude/dist/claude/test/upstream-compat.test.mjs && node --import ./packages/pi/dist/pi/test/setup.mjs --test packages/pi/dist/pi/test/upstream-compat.test.mjs packages/pi/dist/pi/test/upstream-validator.test.mjs && node --test packages/device/dist/device/test/upstream-compat.test.mjs",
     "device:fixture": "node scripts/device-fixture.mjs",
     "bench:router": "npm run build && node scripts/bench-router.mjs",
