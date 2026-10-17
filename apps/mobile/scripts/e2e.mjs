@@ -25,6 +25,7 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from 'node:fs'
@@ -472,6 +473,7 @@ async function runMaestro(serial, flows, fixture, report) {
         FX_MODE: fixture.config.target.env.LITCH_FX_MODE ?? '',
         FINGERPRINT_RE: escapeRe(fixture.config.target.hostFingerprint),
         HELPER: fixture.helper,
+        WORK: realpathSync(fixture.config.work),
       }
     : {}
   const list = [
