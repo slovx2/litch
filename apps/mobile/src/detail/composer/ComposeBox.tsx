@@ -1,0 +1,308 @@
+// 输入框那一块：要带的图片、多行输入框、加图片和发送（排队、停止）两个按钮，底下一排设置条（由外面给）。
+// 会话详情和新建会话页共用；发去哪、发成功没有由外面定，这里只管写、清空、没发成时还回来。
+// 草稿按会话记（drafts.ts）：文字落盘，图片只在内存里。回车在手机上是换行，发送只靠按钮。
+import type { ImageAttachment } from '@litch/core'
+import { type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from 'react'
+import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import { useT } from '../../ui/i18n'
+import { useTheme } from '../../ui/theme'
+import { colors } from '../theme'
+import {
+  dropDraft,
+  flushDrafts,
+  loadDraft,
+  loadDraftImages,
+  saveDraft,
+  saveDraftImages,
+} from './drafts'
+import { MAX_IMAGE_MB, MAX_IMAGES, pickImages, REFUSAL_TEXT } from './images'
+import { reasonOf } from './reason'
+
+export interface Draft {
+  text: string
+  images: ImageAttachment[]
+  setText(text: string): void
+  setImages(update: (current: ImageAttachment[]) => ImageAttachment[]): void
+  /** 把一段话和几张图放回输入框（没发出去的、从队列里拿回来改的），接在现有的后面 */
+  refill(text: string, images: ImageAttachment[]): void
+  clear(): void
+}
+
+/** 一个会话的草稿。换了会话（键变了）就换一份 */
+export function useDraft(key: string): Draft {
+  const [state, setState] = useState(() => ({
+    key,
+    text: loadDraft(key),
+    images: loadDraftImages(key),
+  }))
+  const current =
+    state.key === key ? state : { key, text: loadDraft(key), images: loadDraftImages(key) }
+  if (current !== state) setState(current)
+  useEffect(() => {
+    saveDraft(key, current.text)
+  }, [key, current.text])
+  useEffect(() => {
+    saveDraftImages(key, current.images)
+  }, [key, current.images])
+  // 离开页面时把攒着的草稿写进文件
+  useEffect(() => () => flushDrafts(), [])
+  const setText = useCallback((text: string) => setState((s) => ({ ...s, text })), [])
+  const setImages = useCallback(
+    (update: (list: ImageAttachment[]) => ImageAttachment[]) =>
+      setState((s) => ({ ...s, images: update(s.images) })),
+    [],
+  )
+  const refill = useCallback((text: string, images: ImageAttachment[]) => {
+    setState((s) => ({
+      ...s,
+      text: s.text && text ? `${text}\n${s.text}` : text || s.text,
+      images: [...images, ...s.images].slice(0, MAX_IMAGES),
+    }))
+  }, [])
+  const clear = useCallback(() => {
+    dropDraft(key)
+    setState((s) => ({ ...s, text: '', images: [] }))
+  }, [key])
+  return { text: current.text, images: current.images, setText, setImages, refill, clear }
+}
+
+export function ComposeBox({
+  draft,
+  placeholder,
+  running,
+  blocked,
+  imagesOff,
+  error,
+  top,
+  bar,
+  markers,
+  inputRef,
+  onSend,
+  onStop,
+  onError,
+  testID = 'composer',
+}: {
+  inputRef?: RefObject<TextInput | null>
+  draft: Draft
+  placeholder: string
+  /** 回合在跑：有字时按钮是“排队”，没字时是“停止”（给了 onStop 的话） */
+  running: boolean
+  /** 发不了的原因（设备没连上、harness 用不了）。照样能写草稿 */
+  blocked: string | null
+  /** 带不了图片的原因。null 是能带 */
+  imagesOff: string | null
+  /** 外面要说的一句（没发出去、没停下来）。null 是没有 */
+  error: string | null
+  /** 输入框上面的东西：排着队的消息 */
+  top?: ReactNode
+  /** 输入框下面一排：设置条 */
+  bar?: ReactNode
+  markers?: boolean
+  /** 发出去。出错时把文字、图片还回输入框，并给外面一个说法 */
+  onSend(text: string, images: ImageAttachment[]): Promise<void>
+  onStop?(): void
+  onError(message: string | null): void
+  testID?: string
+}) {
+  const t = useT()
+  const theme = useTheme()
+  const { c } = theme
+  const [sending, setSending] = useState(false)
+  const own = useRef<TextInput>(null)
+  const input = inputRef ?? own
+  const filled = draft.text.trim().length > 0 || draft.images.length > 0
+  const mode = filled ? (running ? 'queue' : 'send') : running && onStop ? 'stop' : 'send'
+
+  const send = () => {
+    if (mode === 'stop') {
+      onStop?.()
+      return
+    }
+    const text = draft.text.trim()
+    const images = draft.images
+    if ((!text && images.length === 0) || blocked || sending) return
+    if (images.length > 0 && imagesOff) {
+      onError(imagesOff)
+      return
+    }
+    // 先清空：消息已经显示在对话里了。没发成功再还回来
+    draft.clear()
+    onError(null)
+    setSending(true)
+    onSend(text, images)
+      .catch((reason: unknown) => {
+        draft.refill(text, images)
+        onError(t('composer.failed', { reason: reasonOf(reason, t) }))
+      })
+      .finally(() => setSending(false))
+  }
+
+  const addImages = async () => {
+    if (imagesOff) {
+      onError(imagesOff)
+      return
+    }
+    const picked = await pickImages(MAX_IMAGES - draft.images.length)
+    if (!picked) return
+    if (picked.images.length)
+      draft.setImages((list) => [...list, ...picked.images].slice(0, MAX_IMAGES))
+    onError(
+      picked.refused
+        ? t(REFUSAL_TEXT[picked.refused], {
+            max: picked.refused === 'size' ? MAX_IMAGE_MB : MAX_IMAGES,
+          })
+        : null,
+    )
+  }
+
+  const note = error ?? blocked
+  const sendLabel =
+    mode === 'stop'
+      ? t('composer.stop')
+      : mode === 'queue'
+        ? t('composer.queue')
+        : t('composer.send')
+  return (
+    <View
+      testID={testID}
+      style={[styles.box, { backgroundColor: c.panel, borderTopColor: c.line2 }]}
+    >
+      {markers ? <View style={styles.mark} /> : null}
+      {top}
+      {note ? (
+        <Text
+          testID={`${testID}-note`}
+          numberOfLines={3}
+          style={[styles.note, { color: error ? c.err : c.ink2 }]}
+        >
+          {note}
+        </Text>
+      ) : null}
+      {draft.images.length > 0 ? (
+        <ScrollView horizontal style={styles.strip} contentContainerStyle={styles.stripIn}>
+          {draft.images.map((image, index) => (
+            <View
+              // biome-ignore lint/suspicious/noArrayIndexKey: 同一张图可以加两次，缩略图没有自己的状态
+              key={`${index}:${image.url.length}`}
+              style={[styles.thumb, { borderColor: c.line2 }]}
+            >
+              <Image source={{ uri: image.url }} style={styles.thumbImage} resizeMode="cover" />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('composer.image.remove')}
+                testID={`${testID}-image-remove-${index}`}
+                hitSlop={6}
+                onPress={() => draft.setImages((list) => list.filter((_, at) => at !== index))}
+                style={[styles.thumbX, { backgroundColor: c.invBg }]}
+              >
+                <Text style={{ color: c.invFg, fontSize: 12 }}>✕</Text>
+              </Pressable>
+            </View>
+          ))}
+        </ScrollView>
+      ) : null}
+      <View style={styles.row}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('compose.addImage')}
+          testID={`${testID}-image`}
+          hitSlop={6}
+          onPress={() => void addImages()}
+          style={[styles.side, { borderColor: c.line2 }]}
+        >
+          <Text style={[styles.sideText, { color: imagesOff ? c.ink3 : c.ink }]}>＋</Text>
+        </Pressable>
+        <TextInput
+          ref={input}
+          value={draft.text}
+          onChangeText={draft.setText}
+          placeholder={placeholder}
+          placeholderTextColor={c.ink3}
+          multiline
+          testID={`${testID}-input`}
+          style={[
+            styles.input,
+            {
+              color: c.ink,
+              backgroundColor: c.raised,
+              borderColor: c.line2,
+              fontSize: theme.font.size.body,
+            },
+          ]}
+        />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ disabled: mode !== 'stop' && (!filled || !!blocked) }}
+          testID={`${testID}-send`}
+          onPress={send}
+          style={({ pressed }) => [
+            styles.send,
+            {
+              backgroundColor: mode === 'stop' ? 'transparent' : c.accentSolid,
+              borderColor: mode === 'stop' ? c.err : c.accentSolid,
+              opacity: mode !== 'stop' && (!filled || blocked) ? 0.45 : pressed ? 0.75 : 1,
+            },
+          ]}
+        >
+          <Text style={[styles.sendText, { color: mode === 'stop' ? c.err : c.onAccent }]}>
+            {sendLabel}
+          </Text>
+        </Pressable>
+      </View>
+      {bar}
+    </View>
+  )
+}
+
+const styles = StyleSheet.create({
+  box: { borderTopWidth: 1, paddingTop: 8 },
+  mark: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 2,
+    backgroundColor: colors.markComposer,
+  },
+  note: { fontSize: 13, paddingHorizontal: 12, paddingBottom: 6 },
+  strip: { flexGrow: 0 },
+  stripIn: { gap: 8, paddingHorizontal: 12, paddingBottom: 8 },
+  thumb: { width: 56, height: 56, borderWidth: 1 },
+  thumbImage: { width: '100%', height: '100%' },
+  thumbX: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingBottom: 8,
+  },
+  side: { width: 40, height: 40, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  sideText: { fontSize: 22, lineHeight: 26 },
+  input: {
+    flex: 1,
+    minHeight: 40,
+    maxHeight: 132,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    textAlignVertical: 'top',
+  },
+  send: {
+    minWidth: 56,
+    height: 40,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sendText: { fontSize: 15, fontWeight: '600' },
+})

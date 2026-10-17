@@ -1,0 +1,221 @@
+// 输入区底下一排：模型、强度、权限预设、计划模式，和上下文用了多少。可选值全部来自设备，这里只管显示和交回改动
+// （会话里走 session.configure，从下一个回合起生效；新建会话页记着，建会话时一起发）。
+// 规矩照桌面端（packages/ui/src/composer/SettingsBar.tsx）：换模型时没有现在那一档强度就换成它的默认档；
+// 会话建好之后换不了的那几档权限只在新建时能选；声明了要确认的那一档切过去之前先问一句。
+import {
+  type ComposeOptions,
+  type ContextUsage,
+  type PermissionPreset,
+  type SessionSettings,
+  shownEffort,
+} from '@litch/core'
+import { useState } from 'react'
+import { Pressable, ScrollView, StyleSheet, Text } from 'react-native'
+import { useT } from '../../ui/i18n'
+import { Confirm } from '../../ui/kit/overlays'
+import { useTheme } from '../../ui/theme'
+import { effortTitle, permissionText } from './labels'
+import { type PickerOption, PickerSheet } from './PickerSheet'
+
+type Open = 'model' | 'effort' | 'permission' | null
+
+function Chip({
+  label,
+  on,
+  onPress,
+  testID,
+}: {
+  label: string
+  on?: boolean
+  onPress?(): void
+  testID?: string
+}) {
+  const theme = useTheme()
+  const { c } = theme
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected: !!on }}
+      disabled={!onPress}
+      onPress={onPress}
+      testID={testID}
+      hitSlop={4}
+      style={({ pressed }) => [
+        styles.chip,
+        {
+          borderColor: on ? c.line3 : c.line2,
+          backgroundColor: on ? c.invBg : pressed ? c.press : 'transparent',
+        },
+      ]}
+    >
+      <Text
+        numberOfLines={1}
+        style={[styles.chipText, { color: on ? c.invFg : onPress ? c.ink : c.ink3 }]}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  )
+}
+
+export function SettingsBar({
+  options,
+  settings,
+  usage,
+  fresh,
+  onChange,
+}: {
+  options: ComposeOptions | null
+  settings: SessionSettings
+  usage?: ContextUsage | null
+  /** 这是在新建会话：会话建好之后换不了的那几档权限这时可以选 */
+  fresh?: boolean
+  onChange(patch: Partial<SessionSettings>): void
+}) {
+  const t = useT()
+  const theme = useTheme()
+  const [open, setOpen] = useState<Open>(null)
+  const [asking, setAsking] = useState<{ preset: PermissionPreset; title: string } | null>(null)
+  const percent =
+    usage?.windowTokens && usage.windowTokens > 0
+      ? Math.min(100, Math.round((usage.usedTokens / usage.windowTokens) * 100))
+      : null
+  if (!options) {
+    return percent === null ? null : (
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.bar}>
+        <Chip label={`${t('compose.context')} ${percent}%`} />
+      </ScrollView>
+    )
+  }
+  const model = options.models.find((entry) => entry.id === settings.model)
+  const effort = model ? shownEffort(settings.effort, model) : null
+  // 只有一档的（没得选）：它就是现在这一档，对面没说也这样显示
+  const sole = options.permissions.length === 1 ? options.permissions[0]?.id : undefined
+  const permission = settings.permission ?? sole ?? null
+  const currentPreset = options.permissions.find((entry) => entry.id === permission)
+
+  const pickModel = (id: string) => {
+    const next = options.models.find((entry) => entry.id === id)
+    // 现在用的本来就是模型的默认档（强度是 null）的，换了模型还跟着新模型的默认档走
+    const keep =
+      settings.effort === null || next?.efforts.some((entry) => entry.id === settings.effort)
+    onChange({ model: id, ...(keep || !next?.defaultEffort ? {} : { effort: next.defaultEffort }) })
+  }
+  const pickPermission = (id: string) => {
+    const preset = options.permissions.find((entry) => entry.id === id)
+    if (!preset) return
+    if (preset.confirm) setAsking({ preset, title: permissionText(t, preset).title })
+    else onChange({ permission: id })
+  }
+  const permissionOptions: PickerOption[] = options.permissions.map((preset) => {
+    const text = permissionText(t, preset)
+    const locked = !fresh && !preset.switchable && preset.id !== permission
+    return {
+      id: preset.id,
+      title: text.title,
+      note: locked ? t('permission.newOnly') : text.note,
+      disabled: locked,
+    }
+  })
+  const plan = settings.mode === 'plan'
+  return (
+    <>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        style={styles.bar}
+        contentContainerStyle={styles.barIn}
+      >
+        {options.models.length > 0 ? (
+          <Chip
+            testID="settings:model"
+            label={`${model?.title ?? settings.model ?? t('composer.model')} ▾`}
+            onPress={() => setOpen('model')}
+          />
+        ) : null}
+        {model && model.efforts.length > 0 ? (
+          <Chip
+            testID="settings:effort"
+            label={`${effort ? effortTitle(t, effort) : t('composer.effort')} ▾`}
+            onPress={() => setOpen('effort')}
+          />
+        ) : null}
+        {options.permissions.length > 0 ? (
+          <Chip
+            testID="settings:permission"
+            label={`${currentPreset ? permissionText(t, currentPreset).title : t('composer.permission')} ▾`}
+            onPress={() => setOpen('permission')}
+          />
+        ) : null}
+        {options.plan ? (
+          <Chip
+            testID="settings:plan"
+            label={t('composer.plan')}
+            on={plan}
+            onPress={() => onChange({ mode: plan ? 'default' : 'plan' })}
+          />
+        ) : null}
+        {percent !== null ? (
+          <Text style={[styles.usage, { color: theme.c.ink3, fontFamily: theme.font.mono }]}>
+            {t('compose.context')} {percent}%
+          </Text>
+        ) : null}
+      </ScrollView>
+      <PickerSheet
+        visible={open === 'model'}
+        title={t('composer.model')}
+        value={settings.model}
+        search={t('composer.modelSearch')}
+        options={options.models.map((entry) => ({
+          id: entry.id,
+          title: entry.title,
+          note: entry.note || null,
+        }))}
+        onPick={pickModel}
+        onClose={() => setOpen(null)}
+      />
+      <PickerSheet
+        visible={open === 'effort'}
+        title={t('composer.effort')}
+        value={effort}
+        options={(model?.efforts ?? []).map((entry) => ({
+          id: entry.id,
+          title: effortTitle(t, entry.id),
+          note: entry.note || null,
+        }))}
+        onPick={(id) => onChange({ effort: id })}
+        onClose={() => setOpen(null)}
+      />
+      <PickerSheet
+        visible={open === 'permission'}
+        title={t('composer.permission')}
+        value={permission}
+        options={permissionOptions}
+        onPick={pickPermission}
+        onClose={() => setOpen(null)}
+      />
+      <Confirm
+        visible={asking !== null}
+        title={t('permission.confirm.title', { name: asking?.title ?? '' })}
+        detail={
+          asking?.preset.title
+            ? (permissionText(t, asking.preset).note ?? t('permission.confirm.declared'))
+            : t('permission.confirm.note')
+        }
+        confirmLabel={t('permission.confirm.yes')}
+        danger
+        onConfirm={() => asking && onChange({ permission: asking.preset.id })}
+        onClose={() => setAsking(null)}
+      />
+    </>
+  )
+}
+
+const styles = StyleSheet.create({
+  bar: { flexGrow: 0 },
+  barIn: { alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingBottom: 6 },
+  chip: { borderWidth: 1, paddingHorizontal: 8, height: 28, justifyContent: 'center' },
+  chipText: { fontSize: 13 },
+  usage: { fontSize: 11, marginLeft: 4 },
+})
