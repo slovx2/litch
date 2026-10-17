@@ -321,6 +321,18 @@ jobs:
           rm -rf "${ANDROID_HOME:?}/cmdline-tools/latest"
           mv "${RUNNER_TEMP}/cmdline-tools/cmdline-tools" "${ANDROID_HOME:?}/cmdline-tools/latest"
           "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --version
+      # 下面那个 action 装模拟器时不重试、输出也丢掉了，跑机上十次里有三四次下载失败：先在这里带重试装好，它再装就是现成的
+      - name: 装模拟器（带重试）
+        run: |
+          yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          for attempt in 1 2 3 4; do
+            if "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --install emulator && [ -x "${ANDROID_HOME}/emulator/emulator" ]; then
+              exit 0
+            fi
+            echo "第 ${attempt} 次没装上，过一会儿再试" >&2
+            sleep 15
+          done
+          exit 1
       - uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
           api-level: 35
@@ -330,12 +342,12 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
           script: node apps/mobile/scripts/e2e.mjs --serial emulator-5554
         env:
-          LITCH_E2E_ARTIFACTS: ${{ runner.temp }}/maestro
+          LITCH_E2E_ARTIFACTS: ${{ runner.temp }}/maestro-out
       # 没过时把 Maestro 的截图和日志传上来看
       - if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: mobile-e2e-maestro
-          path: ${{ runner.temp }}/maestro
+          path: ${{ runner.temp }}/maestro-out
           if-no-files-found: ignore
           retention-days: 7
