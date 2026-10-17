@@ -35,6 +35,8 @@ jobs:
       - run: npm ci --prefix packages/claude --no-audit --no-fund
       - run: npm ci --prefix packages/pi --no-audit --no-fund
       - run: npm ci --prefix packages/dsh --no-audit --no-fund
+      - run: npm ci --prefix packages/opencode --no-audit --no-fund
+      - run: npm ci --prefix packages/acp --no-audit --no-fund
       - name: 安装隔离的测试 CLI
         run: |
           npm install --prefix .artifacts/host-cli --save-exact @anthropic-ai/claude-code@2.1.282 --no-audit --no-fund
@@ -170,10 +172,51 @@ jobs:
       - run: npm run test:dsh
       - run: npm run test:dsh-ssh
 
+  # OpenCode 本体不随适配器分发，测试要一份真实的 opencode：按 protocol/versions.json 登记的验证过的版本
+  # （opencodeVerified 的第一个）装到临时前缀。模型端是回环上的假模型，数据目录按 HOME/XDG 隔离在临时目录里。
+  opencode:
+    runs-on: macos-14
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: 1.26.6
+      - run: npm ci --no-audit --no-fund
+      - run: npm ci --prefix packages/opencode --no-audit --no-fund
+      - name: 安装隔离的 opencode
+        run: |
+          version="$(node -p "require('./protocol/versions.json').opencodeVerified[0]")"
+          npm install --prefix .artifacts/host-opencode --save-exact "opencode-ai@${version}" --no-audit --no-fund
+          echo "CHA_OPENCODE_CLI=${GITHUB_WORKSPACE}/.artifacts/host-opencode/node_modules/.bin/opencode" >> "${GITHUB_ENV}"
+      - run: npm run test:opencode
+
+  # 通用 ACP 引擎（扮演 gemini、qwen、acp）：对着包里自带的假 ACP agent 测，不装真的 agent，不发模型请求
+  acp:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: 1.26.6
+      - run: npm ci --no-audit --no-fund
+      - run: npm ci --prefix packages/acp --no-audit --no-fund
+      - run: npm run test:acp
+
   # 客户端对着三个引擎各走一遍的验收：真的适配器主进程管着 Claude Code、Pi、dsh，模型请求全部走回环上的假模型，
   # 界面在不显示的窗口里把新建、审批、提问、技能、打断、读历史、计划模式、改文件与差异、图片、分叉回退压缩各走一遍。
   # Claude Code 和 dsh 的命令行不随适配器分发：各装一份隔离的到临时前缀（版本和上面两个 job 的一样），
-  # 缺哪一个这一步都会直接失败，不会跳过。单独一个 job：它要的依赖比 client 多（三个引擎包都要装、都要构建）
+  # 缺哪一个这一步都会直接失败，不会跳过。单独一个 job：它要的依赖比 client 多（引擎包都要装、都要构建；
+  # OpenCode 和 ACP 的两个包也在里面，只因为 npm run build 要构建它们，验收还不走这两个引擎）
   client-engines:
     runs-on: macos-14
     timeout-minutes: 30
@@ -190,6 +233,8 @@ jobs:
       - run: npm ci --prefix packages/claude --no-audit --no-fund
       - run: npm ci --prefix packages/pi --no-audit --no-fund
       - run: npm ci --prefix packages/dsh --no-audit --no-fund
+      - run: npm ci --prefix packages/opencode --no-audit --no-fund
+      - run: npm ci --prefix packages/acp --no-audit --no-fund
       - run: npm run client:setup
       - name: 安装隔离的 Claude Code 和 dsh
         run: |
@@ -198,7 +243,7 @@ jobs:
           version="$(node -p "require('./protocol/versions.json').dshMinimum")"
           npm install --prefix .artifacts/host-dsh --save-exact "@deepseek-ai/dsh@${version}" --no-audit --no-fund
           echo "CHA_DSH_CLI=${GITHUB_WORKSPACE}/.artifacts/host-dsh/node_modules/.bin/dsh" >> "${GITHUB_ENV}"
-      # 三个引擎包、设备进程和命令行
+      # 各个引擎包、设备进程和命令行
       - run: npm run build
       - run: npm run client:check:engines
 
