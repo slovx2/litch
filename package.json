@@ -95,6 +95,7 @@
     "client:check:diff": "npm run build --prefix packages/ui && npm run check:diff --prefix apps/desktop",
     "client:check:settings": "npm run build --prefix packages/ui && npm run check:settings --prefix apps/desktop",
     "client:check:engines": "npm run build --prefix packages/ui && npm run check:engines --prefix apps/desktop --",
+    "client:check:first-turn": "npm run build --prefix packages/ui && npm run check:first-turn --prefix apps/desktop --",
     "client:check:opencode": "node scripts/check-opencode-e2e.mjs",
     "client:shots": "npm run build --prefix packages/ui && npm run shots --prefix apps/desktop",
     "client:pack": "npm run build --prefix packages/ui && npm run pack --prefix apps/desktop",

@@ -27,6 +27,10 @@
 //   怎么隔离、配置怎么交给主进程见 client-fixture-engines.mjs，这两家的假模型见 client-fixture-anthropic.mjs。
 //   --engines 里还可以写 opencode（CHA_OPENCODE_CLI）和 acp（CHA_ACP_CLI，只认 opencode，参数默认 acp），
 //   模型同样是假模型，见 client-fixture-engines.mjs；scripts/check-opencode-e2e.mjs 用的就是这两个。
+//   还可以写 codex（CHA_CODEX_CLI，隔离的原生 codex，数据目录在夹具里，假模型是 Responses 形态的
+//   client-fixture-responses.mjs，只会把话带回来）；模型每收到一次请求，标准输出打一行
+//   LITCH_FIXTURE_TOOLS {"harness":"codex","namespaces":[…]}，是请求里工具表上的命名空间。
+//   apps/desktop/scripts/check-first-turn.mjs 用它。
 //   这时 Pi 的“动手之前先问”也开着，三家都在会来问的那一档上。假模型对三家认同一套词：
 //   跑个命令、改个文件、写个文件、问我、问一句、出个计划、慢慢说（各家用自己的工具，没有的照常回话）。
 //   另备一个 git 仓库当工作目录（就绪行的 engines.cwd），里面给三家各放了一份同名的技能。
@@ -42,7 +46,15 @@
 //   不带这个开关时各个运行时里没有项目，聚合面上的工作区是空的，要客户端自己建。
 //   不能和 --managed 一起用：那时设备进程是主进程一开始就拉起来的，导入发生在造数据之前。
 import { spawn, spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readlinkSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { createServer } from 'node:http'
 import net from 'node:net'
 import { tmpdir } from 'node:os'
@@ -61,6 +73,7 @@ import {
   writeEngineSettings,
 } from './client-fixture-engines.mjs'
 import { FIXTURE_SKILL, piReply, sendCompletion } from './client-fixture-marks.mjs'
+import { serveResponses } from './client-fixture-responses.mjs'
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 /** 由真的适配器主进程来管运行时和设备进程 */
@@ -192,6 +205,15 @@ const model = createServer(async (req, res) => {
   // Claude Code 和 dsh 说的是另一种形态，怎么答在 client-fixture-anthropic.mjs
   if (id === 'claude-code' || id === 'dsh') {
     await serveAnthropic(id, `/${rest.join('/')}`, raw, res, 150)
+    return
+  }
+  // 原生 codex 说的是 Responses 形态。工具表上的命名空间打一行出来：建会话时带的工具定义到没到模型手里，看它
+  if (id === 'codex') {
+    const namespaces = await serveResponses(id, `/${rest.join('/')}`, raw, res, {
+      serial: ++requests,
+    })
+    if (namespaces)
+      console.log(`LITCH_FIXTURE_TOOLS ${JSON.stringify({ harness: id, namespaces })}`)
     return
   }
   const body = JSON.parse(raw.toString() || '{}')
@@ -326,12 +348,23 @@ async function cleanup(code, detail) {
   if (cleaning) return
   cleaning = true
   if (detail) console.error(detail)
+  // 原生 codex 的套接字是个链接，真的文件建在 /tmp/codex-daemon-<uid>/ 下（旁边还有一把锁），它退出时链接没了、
+  // 锁还留着：趁它还在跑先认下来，收完进程再删
+  const codexFiles = []
+  try {
+    const socket = join(home, 'codex', 'runtime.sock')
+    const physical = resolve(dirname(socket), readlinkSync(socket))
+    codexFiles.push(physical, `${physical}.lock`)
+  } catch {
+    // 没起原生 codex，或者这一版直接在给的路径上建套接字
+  }
   // 主进程要先把它管着的运行时和设备进程一个个收掉，多等它一会儿：强杀它会把那些进程留下
   await Promise.all(
     [...children].map(([id, child]) => stop(child, id === 'service' ? 30_000 : 3000)),
   )
   model.closeAllConnections()
   model.close()
+  for (const path of codexFiles) rmSync(path, { force: true })
   rmSync(root, { recursive: true, force: true })
   process.exit(code)
 }

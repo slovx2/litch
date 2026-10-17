@@ -5,7 +5,11 @@
 //   - 不认识的方法回 -32600“Invalid request: unknown variant `<方法名>`, expected one of …”，
 //     参数不对也是 -32600，原文不一样；
 //   - 标着实验性的方法，握手时没声明 experimentalApi 的连接上回“<方法名> requires experimentalApi capability”；
-//   - 服务端请求的请求号是递增的整数，从 0 起；命令审批带 availableDecisions，文件改动审批不带。
+//   - 服务端请求的请求号是递增的整数，从 0 起；命令审批带 availableDecisions，文件改动审批不带；
+//   - thread/start、turn/start 的参数照上游的约束核对（packages/shared/test/codex-params.mts）：真的 codex 会整个拒绝的
+//     （动态工具过不了 validate_dynamic_tools、类型不对、permissions 和 sandbox 一起给……）这里也拒绝；
+//     它不认识的字段不报错，悄悄丢掉，记在 ignored 里。
+import { codexVerdict } from '../../shared/test/codex-params.mjs'
 import {
   type FakeConnection,
   type FakeProject,
@@ -61,6 +65,8 @@ export class FakeCodex extends FakeUpstream {
   profiles = CODEX_PROFILES.map((profile) => ({ ...profile }))
   /** 每条连接握手时带来的参数，按连上的顺序 */
   readonly greetings: any[] = []
+  /** thread/start、turn/start 里它不认识、悄悄丢掉的字段 */
+  readonly ignored: string[] = []
   private readonly experimental = new WeakSet<FakeConnection>()
   private nextRequest = 0
 
@@ -111,6 +117,17 @@ export class FakeCodex extends FakeUpstream {
       if (!this.threads.some((thread) => thread.id === params.threadId))
         throw new RpcFailure(-32600, `thread not found: ${params.threadId}`)
       return { turn: { id: `turn-of-${params.threadId}`, status: 'inProgress', items: [] } }
+    }
+    for (const method of ['thread/start', 'turn/start'] as const) {
+      const inner = this.handlers[method] as NonNullable<(typeof this.handlers)[string]>
+      this.handlers[method] = (params, connection) => {
+        // 缺字段、枚举值不认识的，先按上面那两种原话回（设备进程认原话，见 native-codex.mts 的 rejection）
+        if (method === 'turn/start') inspect(params)
+        const { rejects, ignored } = codexVerdict(method, params)
+        this.ignored.push(...ignored)
+        if (rejects.length > 0) throw new RpcFailure(-32600, `Invalid request: ${rejects[0]}`)
+        return inner(params, connection)
+      }
     }
     this.handlers['thread/settings/update'] = (params, connection) => {
       if (!this.experimental.has(connection))

@@ -36,6 +36,8 @@
 // engines 对着由真的适配器主进程管着的三引擎隔离设备（真的 Claude Code、Pi、dsh，模型是假的），
 // 在界面里把三家各走一遍：建会话、审批、提问、技能、打断、读历史、计划、改文件、图片、分叉回退压缩，
 // 每一步三家的结果并排打出来（probe-engines*.mts）。由 scripts/check-engines.mjs 起。
+// first-turn 对着同一种隔离设备，只走主路径：每个真的 harness（含原生 codex）从界面新建会话、发头一句、收到回话
+// （probe-first-turn.mts）。由 scripts/check-first-turn.mjs 起。
 import { OUTPUT_KEEP, PART_CHARS } from '@litch/core'
 import { app, type BrowserWindow } from 'electron'
 import { activityProbe, judgeActivity } from './probe-activity.mjs'
@@ -57,6 +59,7 @@ import { type DiffMode, runDiffChecks } from './probe-diff-run.mjs'
 import { runEnginesChecks } from './probe-engines-run.mjs'
 import { entryProbe, judgeEntry } from './probe-entry.mjs'
 import { type FilesMode, runFilesChecks } from './probe-files-run.mjs'
+import { runFirstTurnChecks } from './probe-first-turn.mjs'
 import { fullProbe, judgeFull, judgeMockFull, mockFullProbe } from './probe-full.mjs'
 import { homeProbe, judgeHome } from './probe-home.mjs'
 import { homeLook, judgeHomeLook } from './probe-home-look.mjs'
@@ -95,6 +98,7 @@ type ProbeMode =
   | 'manage-mock'
   | 'sidebar'
   | 'engines'
+  | 'first-turn'
   | TerminalMode
   | FilesMode
   | DiffMode
@@ -140,6 +144,7 @@ const PROBE_MODES: readonly string[] = [
   'manage-mock',
   'sidebar',
   'engines',
+  'first-turn',
   ...TERMINAL_MODES,
   ...FILES_MODES,
   ...DIFF_MODES,
@@ -234,6 +239,7 @@ async function measure(
   }
   if (mode === 'sidebar') return runSidebarChecks(window, hooks)
   if (mode === 'engines') return runEnginesChecks(window, hooks)
+  if (mode === 'first-turn') return runFirstTurnChecks(window)
   if (mode === 'diff' || mode === 'diff-device' || mode === 'diff-entry') {
     return runDiffChecks(window, mode)
   }

@@ -35,6 +35,7 @@
     "check:diff": "npm run build && node scripts/check-diff.mjs",
     "check:settings": "npm run build && node scripts/check-settings.mjs",
     "check:engines": "npm run build && node scripts/check-engines.mjs",
+    "check:first-turn": "npm run build && node scripts/check-first-turn.mjs",
     "test:computer-use": "node scripts/test-computer-use.mjs",
     "check:computer-use": "node scripts/check-computer-use.mjs",
     "test:browser": "node scripts/test-browser.mjs",
