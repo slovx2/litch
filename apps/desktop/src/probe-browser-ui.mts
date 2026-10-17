@@ -1,13 +1,14 @@
 // 浏览器面板的自检（scripts/check-browser.mjs --ui，窗口不显示）：真的界面（packages/ui/dist，对着页面里的
 // 模拟核心）、真的主进程那一半（installBrowser），量界面和外壳之间的那几件事：
 // 打开浏览器标签、地址栏开网页、网页叠在 .bw-view 那块矩形上、收起面板就摘下来、浮层压上来时撤下、
-// 代理的 show 打开面板、在标签上关掉。结果打一行 LITCH_BROWSER {ok, checks}；LITCH_BROWSER_SHOTS 给了目录时存几张截图。
+// 代理的 show 打开面板、在标签上关掉、对话里的链接在内置浏览器里开。结果打一行 LITCH_BROWSER {ok, checks}；LITCH_BROWSER_SHOTS 给了目录时存几张截图。
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join, normalize, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { app, BrowserWindow, net, protocol } from 'electron'
 import type { HostTab } from './browser/electron-tab.mjs'
 import { installBrowser } from './browser/install.mjs'
+import { checkLinks } from './probe-browser-links.mjs'
 import { startPages } from './probe-browser-pages.mjs'
 
 if (process.env.LITCH_PROFILE) app.setPath('userData', process.env.LITCH_PROFILE)
@@ -198,6 +199,9 @@ void app.whenReady().then(async () => {
       window.contentView.children.includes(viewOf(elsewhere.id) as never),
     )
     browser.host.close(elsewhere.id)
+
+    // 对话里的链接（probe-browser-links.mts）
+    await checkLinks({ window, browser, uiUrl: 'app://ui/index.html?lang=zh-CN', check, shot })
   } catch (error) {
     check('没有意外出错', false, error instanceof Error ? error.stack : String(error))
   }

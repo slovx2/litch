@@ -784,6 +784,10 @@ export const en: Record<MessageKey, Entry> = {
     'Every session on every device shares this one browser: sign-ins and site decisions are kept on this computer.',
   'settings.browser.desktopOnly':
     'The built-in browser only exists in the Litch desktop app. This is a regular browser, so there is nothing to set here.',
+  'settings.browser.links': 'Links',
+  'settings.browser.links.title': 'Open links from conversations in the built-in browser',
+  'settings.browser.links.note':
+    'Links open in a browser tab of the current session, including links on request cards and in terminals. {key}-click or middle-click still opens your system browser; turn this off to always use the system browser.',
   'settings.browser.sites': 'Always-allowed sites',
   'settings.browser.sites.note':
     'The model opens these without asking you; remove one and you will be asked again',

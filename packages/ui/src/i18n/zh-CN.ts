@@ -719,6 +719,10 @@ export const zhCN = {
     '所有会话、所有设备共用这一份浏览器：登录状态和对网站的决定都记在这台电脑上。',
   'settings.browser.desktopOnly':
     '内置浏览器只在 Litch 桌面应用里有。现在是在普通浏览器里打开的，这里没有可以设置的东西。',
+  'settings.browser.links': '链接',
+  'settings.browser.links.title': '对话里的链接用内置浏览器打开',
+  'settings.browser.links.note':
+    '在眼前这个会话的浏览器标签里打开，请求卡片和终端里的网址也算。按住 {key} 点或用中键点，仍在系统的浏览器里打开；关掉这一项就都交给系统的浏览器。',
   'settings.browser.sites': '一直允许的网站',
   'settings.browser.sites.note': '模型打开这些网站之前不再问你；删掉之后下次会再问',
   'settings.browser.sites.empty': '还没有一直允许的网站。',

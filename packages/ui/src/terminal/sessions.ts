@@ -12,6 +12,8 @@ import { currentLang } from '../app/appearance.ts'
 import { currentPlatform } from '../app/platform.ts'
 import { showToast } from '../app/toasts.tsx'
 import { translator } from '../i18n/index.ts'
+import type { LinkClick } from '../side/browser/link-logic.ts'
+import { clickLink } from '../side/browser/links.ts'
 import { latestOnly } from './latest.ts'
 import { fontsReady, type Look, readLook, sizeText } from './look.ts'
 import { TerminalSession } from './session.ts'
@@ -70,10 +72,10 @@ export function createTerminalSessions(options: {
   const nameOf = (info: TerminalInfo | undefined, t: ReturnType<typeof translator>): string =>
     info?.title ?? t('terminal.defaultName', { n: info?.seq ?? 1 })
 
-  const openLink = (uri: string) => {
-    const shell = window.litchShell
-    if (shell) shell.openExternal(uri)
-    else window.open(uri, '_blank', 'noopener,noreferrer')
+  // 和对话里的链接一样默认在内置浏览器里开（side/browser/links.ts）；终端在别的设备上、按着 Cmd/Ctrl 之类交给系统的浏览器，
+  // 普通浏览器里的预览开一个新标签页
+  const openLink = (deviceId: string) => (uri: string, click: LinkClick) => {
+    if (!clickLink(uri, click, deviceId)) window.open(uri, '_blank', 'noopener,noreferrer')
   }
 
   const gapText = (mark: TerminalMark): string => {
@@ -105,7 +107,7 @@ export function createTerminalSessions(options: {
       cols: info.cols,
       look: lookNow(),
       mac,
-      openLink,
+      openLink: openLink(deviceId),
       gapText,
       gapNotice(mark) {
         showToast({

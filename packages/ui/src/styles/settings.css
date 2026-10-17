@@ -445,6 +445,21 @@
 .set-actions .set-note {
   flex: 1 1 200px;
 }
+/* 一行开关：左边标题加一句说明，右边开关 */
+.set-switch-text {
+  display: flex;
+  flex: 1 1 240px;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.set-switch-text label {
+  color: var(--ink);
+}
+/* 竖排里不能按横排的那个基准伸长，不然这一行会被撑高 */
+.set-switch-text .set-note {
+  flex: none;
+}
 .set-para.err,
 .set-note.err {
   color: var(--err);
