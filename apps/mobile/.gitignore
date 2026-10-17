@@ -6,3 +6,4 @@ modules/*/android/build/
 .expo/
 measure/.venv/
 src/bench/terminal-html.generated.ts
+src/web/terminal-html.generated.ts

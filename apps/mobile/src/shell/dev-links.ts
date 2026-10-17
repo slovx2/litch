@@ -7,6 +7,8 @@
 //   litch://bench                                  WebView 吞吐测试
 //   litch://remote?adapter=…&env=名=值             远程设备的开发参数（src/platform/dev.ts），验收接测试夹具用
 //   litch://seed?count=300[&device=…]              建一批会话（量会话列表的滑动，只在模拟核心里用）
+//   litch://terminal[?device=…&root=…&terminal=…&stats=1]  终端页（root 不给：夹具的工作目录，否则设备上第一个工作区的根）
+//   litch://diff[?device=…&root=…&scope=all|staged|unstaged&session=…]  差异页（root 同上）
 // 每个链接都可以带测量开关（src/experiment.ts）：render、seal、pace、freeze、tail、keyboard、markers，以及 probe=1|0。
 import { keys } from '@litch/core'
 import { createNavigationContainerRef, StackActions } from '@react-navigation/native'
@@ -15,6 +17,7 @@ import type { RootStackParamList } from '../nav/routes'
 import { setRemoteDev } from '../platform/dev'
 import { markOpen, startProbe, stopProbe } from '../probe'
 import { seedSessions } from '../screens/sessions/seed'
+import { termStats } from '../screens/tools/tool-flags'
 import type { BootMode } from './boot'
 import type { Services } from './services'
 
@@ -102,6 +105,32 @@ export function handleDevLink(url: string, services: Services | null): BootMode 
       const deviceId = deviceOf()
       if (deviceId)
         void seedSessions(channel, replica.store, deviceId, Number(params.get('count')) || 300)
+      return null
+    }
+    case 'terminal':
+    case 'diff': {
+      const deviceId = deviceOf()
+      if (!deviceId) return null
+      const firstRoot = replica.store.get<{ roots: string[] }[]>(keys.workspaces(deviceId))?.[0]
+        ?.roots[0]
+      const root = params.get('root') ?? booted.work ?? firstRoot ?? null
+      if (parsed.hostname === 'terminal') {
+        termStats.on = params.get('stats') === '1'
+        const terminalId = params.get('terminal')
+        navigationRef.navigate('Terminal', {
+          deviceId,
+          root,
+          ...(terminalId ? { terminalId } : {}),
+        })
+      } else if (root) {
+        const scope = params.get('scope')
+        navigationRef.navigate('Diff', {
+          deviceId,
+          root,
+          scope: scope === 'staged' || scope === 'unstaged' ? scope : 'all',
+          sessionId: params.get('session'),
+        })
+      }
       return null
     }
     case 'home':
