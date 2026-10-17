@@ -66,10 +66,18 @@ Maestro 的调试输出（失败时的截图、日志）默认放在临时目录
 - 夹具的流程要先在仓库根目录 `npm run build`（适配器、Pi、设备进程）和 `npm ci --prefix packages/pi`；要 `/usr/sbin/sshd`。不要真的 codex，
   不碰 `~/.codex`、`~/.claude`、用户自己的 ssh 配置。
 
-CI 上的模拟器（reactivecircus/android-emulator-runner 的默认配置）屏幕是 320×640、160dpi，比本地小得多：
-本地要复现就加 `--screen 320x640@160`。流程里要点的、要看的东西一律先滚到看得见（`scrollUntilVisible`），不假定一屏放得下。
+CI 上的模拟器（reactivecircus/android-emulator-runner 的默认配置）和本地的 `tyrs_hand_e2e_api35` 有两处不一样：
+屏幕是 320×640、160dpi，比本地小得多；**没有硬键盘**（本地那台 `hw.keyboard=yes`），软键盘会在焦点回到输入框时自己弹出来。
+本地加 `--screen 320x640@160` 只能复现前一条；要和 CI 一模一样，用默认配置新建一台再 `--avd` 指过去：
 
-发现的产品问题（事实：在 320×640 上稳定复现；1080×2400 上回答一屏放得下，看不出来）：
+```sh
+echo no | avdmanager create avd -n <名字> --package 'system-images;android-35;google_apis;arm64-v8a'
+```
+
+流程里要点的、要看的东西一律先滚到看得见（`scrollUntilVisible`），不假定一屏放得下；键盘可能自己弹出来的地方用
+`_shared/hide-keyboard.js`（弹着才收），不用 Maestro 的 `hideKeyboard`（它不管有没有键盘都按返回，没弹时会退出当前页）。
+
+发现的产品问题（前两条事实：在 320×640 上稳定复现；1080×2400 上回答一屏放得下，看不出来）：
 
 - 会话停在请求卡片上（提问、表单、计划要不要执行）时，答完卡片、回答写完之后，对话区不再贴底：屏幕上停在回答的开头，
   状态行和回答的后半截在下面，要手动往上划才看得到。没有卡片时同样长的对话是贴底的。
@@ -77,6 +85,10 @@ CI 上的模拟器（reactivecircus/android-emulator-runner 的默认配置）�
 - 一行字的输入框（`src/ui/kit/overlays.tsx` 的 `Prompt`，新建会话页的“其他目录”、改名都用它）没关自动纠错和首字母大写：
   在 Gboard 上输入路径 `…/s/work` 被改成了 `…/s/works `。填目录的地方应该关掉（`autoCorrect={false}`、`autoCapitalize="none"`）。
   `fixture/03` 因此不在那里填目录，改用测试链接建会话。
+- 加设备页（`src/screens/devices/AddDeviceScreen.tsx`）：填完栏位点“检查”，首次连接的指纹确认框点“信任”关掉之后，
+  焦点回到最后填的那一栏、软键盘又弹出来，页面滚回那一栏，检查结果和下面的按钮被键盘盖住（事实：没有硬键盘的模拟器上稳定复现；
+  有硬键盘的不弹）。推测真机上一样。建议点“检查”时先收键盘、让输入框失焦（`Keyboard.dismiss()`），确认框关了就没有焦点可回。
+  `fixture/04` 因此在点“信任”之后收一次键盘。
 
 几个坑：
 

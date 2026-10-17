@@ -297,7 +297,7 @@ async function startFixture(serial) {
     ['tcp:8765', `tcp:${serve}`],
   ])
   prepareRepo(config.work)
-  const helper = await startHelper(config)
+  const helper = await startHelper(config, serial)
   log(`夹具就绪（${since(start)}），sshd 在 127.0.0.1:${config.target.port}`)
   return { config, helper }
 }
@@ -345,8 +345,21 @@ function prepareRepo(dir) {
  *   POST /authorize        请求体是一行公钥，写进夹具 sshd 的 authorized_keys（演“用户在电脑上授权了手机的钥匙”）
  *   GET  /file?name=&text= 夹具的工作目录里这个文件有没有写出这段字（终端里敲的命令真跑了没有），最多等十秒
  */
-async function startHelper(config) {
+async function startHelper(config, serial) {
   const port = await freePort()
+  const adbOut = (...rest) =>
+    new Promise((done) =>
+      execFile(adbBin, ['-s', serial, ...rest], (error, out) => done(error ? '' : out)),
+    )
+  const keyboardShown = async () =>
+    /mInputShown=true/.test(await adbOut('shell', 'dumpsys', 'input_method'))
+  /** 软键盘弹着就按返回收起来（返回这时只收键盘）；没弹就什么都不做，不会退出当前页 */
+  const hideKeyboard = async () => {
+    if (!(await keyboardShown())) return false
+    await adbOut('shell', 'input', 'keyevent', 'KEYCODE_BACK')
+    for (let i = 0; i < 20 && (await keyboardShown()); i++) await sleep(100)
+    return true
+  }
   const fileHas = async (name, text) => {
     if (!/^[A-Za-z0-9._-]+$/.test(name)) return false
     for (let i = 0; i < 40; i++) {
@@ -361,6 +374,10 @@ async function startHelper(config) {
     req.on('data', (chunk) => (body += chunk))
     req.on('end', async () => {
       const url = new URL(req.url ?? '/', 'http://helper')
+      if (req.method === 'POST' && url.pathname === '/hide-keyboard') {
+        res.writeHead(200).end((await hideKeyboard()) ? 'hidden' : 'none')
+        return
+      }
       if (req.method === 'GET' && url.pathname === '/file') {
         const found = await fileHas(
           url.searchParams.get('name') ?? '',

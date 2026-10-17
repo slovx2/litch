@@ -90,6 +90,10 @@ tags: [fixture]
     timeout: 30000
 - tapOn:
     id: confirm:ok
+# 产品问题（e2e/README.md）：确认框一关，焦点回到最后填的那一栏、软键盘又弹出来（没有硬键盘的设备上，CI 就是），
+# 盖住下面的按钮，后面再点“检查”会点到键盘上。像人一样先把它收起来
+- runScript:
+    file: ../_shared/hide-keyboard.js
 - scrollUntilVisible:
     element:
       id: failure:auth
