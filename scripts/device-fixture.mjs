@@ -46,15 +46,7 @@
 //   不带这个开关时各个运行时里没有项目，聚合面上的工作区是空的，要客户端自己建。
 //   不能和 --managed 一起用：那时设备进程是主进程一开始就拉起来的，导入发生在造数据之前。
 import { spawn, spawnSync } from 'node:child_process'
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  readlinkSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import net from 'node:net'
 import { tmpdir } from 'node:os'
@@ -73,7 +65,7 @@ import {
   writeEngineSettings,
 } from './client-fixture-engines.mjs'
 import { FIXTURE_SKILL, piReply, sendCompletion } from './client-fixture-marks.mjs'
-import { serveResponses } from './client-fixture-responses.mjs'
+import { codexSocketCleanup, serveResponses } from './client-fixture-responses.mjs'
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 /** 由真的适配器主进程来管运行时和设备进程 */
@@ -348,23 +340,15 @@ async function cleanup(code, detail) {
   if (cleaning) return
   cleaning = true
   if (detail) console.error(detail)
-  // 原生 codex 的套接字是个链接，真的文件建在 /tmp/codex-daemon-<uid>/ 下（旁边还有一把锁），它退出时链接没了、
-  // 锁还留着：趁它还在跑先认下来，收完进程再删
-  const codexFiles = []
-  try {
-    const socket = join(home, 'codex', 'runtime.sock')
-    const physical = resolve(dirname(socket), readlinkSync(socket))
-    codexFiles.push(physical, `${physical}.lock`)
-  } catch {
-    // 没起原生 codex，或者这一版直接在给的路径上建套接字
-  }
+  // 原生 codex 在 /tmp/codex-daemon-<uid>/ 下留的套接字和锁：趁它还在跑先认下来，收完进程再删
+  const removeCodexSocket = codexSocketCleanup(join(home, 'codex', 'runtime.sock'))
   // 主进程要先把它管着的运行时和设备进程一个个收掉，多等它一会儿：强杀它会把那些进程留下
   await Promise.all(
     [...children].map(([id, child]) => stop(child, id === 'service' ? 30_000 : 3000)),
   )
   model.closeAllConnections()
   model.close()
-  for (const path of codexFiles) rmSync(path, { force: true })
+  removeCodexSocket()
   rmSync(root, { recursive: true, force: true })
   process.exit(code)
 }
