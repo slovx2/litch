@@ -135,6 +135,7 @@ npm run client:check:diff          # 侧面板里“差异”标签的验收，�
 npm run client:check:settings      # 设置页与外观的验收，只对着模拟核心，同一份临时用户数据目录起两次外壳：头一遍量设置页、五项外观、快捷键与应用菜单对账、关于与许可、回合正在跑的时候换外观、六套皮肤组合下各屏的溢出与对比度、缩放到最小最大；第二遍冷启动看窗口一建出来的底色和缩放。只跑一遍：npm run check:settings --prefix apps/desktop -- --first（或 --cold；--json 打出全部量到的数；LITCH_SETTINGS_SHOTS=<目录> 顺手存几张截图）
 npm run client:check:local         # 自带适配器的真链路自检，不起界面：真的命令行、自带的 Node、设备进程和一份隔离的 Pi，被本机设备的打开方式拉起来、连上、跑通一个回合（会先暂存适配器）
 npm run client:check:engines       # 三个引擎各走一遍的验收：真的适配器主进程管着 Claude Code、Pi、dsh（模型是回环上的假模型），界面里把新建、审批、提问、技能、打断、读历史、计划模式、改文件与差异、图片、分叉回退压缩各走一遍，三家的结果并排成一张表。要先在根目录 npm run build，并用 CHA_CLAUDE_CLI、CHA_DSH_CLI 各指一份隔离的命令行（缺了直接失败，不跳过）。只走几步：npm run client:check:engines -- --steps approve,decline
+npm run client:check:opencode      # OpenCode 和 ACP 入口的端到端检查，不起界面：真的适配器主进程管着设备进程、OpenCode 运行时（opencode serve）和自填命令的 ACP 运行时（opencode acp），模型是回环上的假模型（device-fixture.mjs --managed --engines opencode,acp），经聚合面把 runtime/info、新建会话跑回合、命令审批的批准与拒绝、会话列表各走一遍。要先 npm run build 和本机有 go；没装 opencode 就跳过。不进流水线
 npm run client:shots               # 重新生成 README 的界面截图（docs/images/zh 和 en），对着模拟核心，窗口不显示
 npm run client:pack                # 把外壳、界面和适配器装成能直接打开的应用（apps/desktop/out，在哪个系统上跑就出哪个系统的；macOS 上是临时签名；先在根目录 npm run build）
 npm run client:installer           # 接着把它做成安装包（apps/desktop/out/installer：macOS 的 dmg，给了开发者身份就签名公证；Windows 的安装程序，要 Inno Setup 6.7.1）

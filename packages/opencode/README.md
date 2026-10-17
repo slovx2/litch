@@ -100,6 +100,8 @@ npm test                                          # 在本目录：构建后跑�
 
 所以不发真实模型请求，也不碰用户的 `~/.config/opencode`、`~/.local/share/opencode`。本机没装 OpenCode 时，需要它的用例跳过。
 
+经适配器主进程、设备进程和聚合面的整条链在根目录跑 `npm run client:check:opencode`（`scripts/check-opencode-e2e.mjs`，连同 `acp` 入口接 `opencode acp` 的那一条），隔离做法相同，没装 OpenCode 时跳过。
+
 ## 尚未覆盖
 
 以下几项还没接：
