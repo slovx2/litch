@@ -10,6 +10,7 @@ import type { TerminalOp } from '@litch/core'
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef } from 'react'
 import { Linking, StyleSheet } from 'react-native'
 import { WebView, type WebViewMessageEvent } from 'react-native-webview'
+import { showKeyboard } from '../../../../modules/litch-keyboard/src'
 import { useChannel } from '../../../shell/services'
 import { TERMINAL_HTML } from '../../../web/terminal-html.generated'
 import { TERM_FONT_SIZE, type TermTheme } from './look'
@@ -75,6 +76,8 @@ export const TerminalView = forwardRef<TerminalHandle, TerminalViewProps>(
     latest.current = props
     /** 页面还没好时要送的，好了一起送 */
     const pending = useRef<string[]>([])
+    /** 按了 ⌨、还等着页面里的输入框拿到焦点：拿到了再请系统输入法弹键盘 */
+    const wantKeyboard = useRef(false)
 
     const post = useCallback((message: unknown) => {
       const code = script(message)
@@ -87,7 +90,10 @@ export const TerminalView = forwardRef<TerminalHandle, TerminalViewProps>(
       () => ({
         send(input: TerminalInput) {
           // WebView 在原生层没拿过焦点时，页面里 focus() 弹不出系统键盘：先让它拿焦点
-          if (input.t === 'focus') view.current?.requestFocus()
+          if (input.t === 'focus') {
+            view.current?.requestFocus()
+            wantKeyboard.current = true
+          } else if (input.t === 'blur') wantKeyboard.current = false
           post(input)
         },
       }),
@@ -205,6 +211,12 @@ export const TerminalView = forwardRef<TerminalHandle, TerminalViewProps>(
           now.onCtrlUsed()
           break
         case 'kb':
+          // 页面里 focus() 在没有手势时弹不出软键盘：输入框真拿到焦点了，由原生那头弹
+          // （页面会先让开焦点再拿回来，让开那一下的回报不算）
+          if (message.on && wantKeyboard.current) {
+            wantKeyboard.current = false
+            showKeyboard()
+          }
           now.onKeyboard(message.on)
           break
         case 'link':

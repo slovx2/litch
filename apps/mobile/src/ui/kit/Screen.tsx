@@ -1,5 +1,6 @@
 // 页面外框：安全区、标题栏（返回、标题、副标题、右侧按钮）、页面底色。标题栏在首帧就是最终的样子（F1）：
 // 标题从路由参数来，不等数据。各页面一律用它，别自己画标题栏。
+// compact 是矮的一条（32 高，标题和副标题挤在一行，左右让开安全区）：横屏时屏幕矮，键盘一弹起来通用的 52 高太占地方。
 import { useNavigation } from '@react-navigation/native'
 import type { ReactNode } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
@@ -21,6 +22,7 @@ export function Screen({
   back = true,
   actions = [],
   wire,
+  compact = false,
   children,
   testID,
 }: {
@@ -31,6 +33,8 @@ export function Screen({
   actions?: HeaderAction[]
   /** 设备的线色：标题栏左边一道竖线（设计稿里每台设备一根线色贯穿各处） */
   wire?: string
+  /** 矮标题栏（横屏用） */
+  compact?: boolean
   children: ReactNode
   testID?: string
 }) {
@@ -41,10 +45,20 @@ export function Screen({
   const { c } = theme
   return (
     <View
-      style={[styles.screen, { backgroundColor: c.win, paddingTop: insets.top }]}
+      style={[
+        styles.screen,
+        { backgroundColor: c.win, paddingTop: insets.top },
+        compact ? { paddingLeft: insets.left, paddingRight: insets.right } : null,
+      ]}
       testID={testID}
     >
-      <View style={[styles.header, { borderBottomColor: c.line1, backgroundColor: c.panel }]}>
+      <View
+        style={[
+          styles.header,
+          compact ? styles.headerCompact : null,
+          { borderBottomColor: c.line1, backgroundColor: c.panel },
+        ]}
+      >
         {wire ? <View style={[styles.wire, { backgroundColor: wire }]} /> : null}
         {back ? (
           <Pressable
@@ -52,33 +66,47 @@ export function Screen({
             accessibilityLabel={t('app.back')}
             testID="header:back"
             hitSlop={8}
-            style={styles.side}
+            style={compact ? styles.sideCompact : styles.side}
             onPress={() => navigation.goBack()}
           >
-            <Text style={[styles.backText, { color: c.ink }]}>‹</Text>
+            <Text style={[compact ? styles.backTextCompact : styles.backText, { color: c.ink }]}>
+              ‹
+            </Text>
           </Pressable>
         ) : (
           <View style={styles.pad} />
         )}
-        <View style={styles.titles}>
-          <Text
-            numberOfLines={1}
-            style={[styles.title, { color: c.ink, fontSize: theme.font.size.title }]}
-          >
+        {compact ? (
+          <Text numberOfLines={1} style={[styles.titles, styles.titleCompact, { color: c.ink }]}>
             {title}
+            {subtitle ? (
+              <Text style={{ color: c.ink3, fontFamily: theme.font.mono, fontSize: 11 }}>
+                {'  '}
+                {subtitle}
+              </Text>
+            ) : null}
           </Text>
-          {subtitle ? (
+        ) : (
+          <View style={styles.titles}>
             <Text
               numberOfLines={1}
-              style={[
-                styles.subtitle,
-                { color: c.ink3, fontSize: theme.font.size.small, fontFamily: theme.font.mono },
-              ]}
+              style={[styles.title, { color: c.ink, fontSize: theme.font.size.title }]}
             >
-              {subtitle}
+              {title}
             </Text>
-          ) : null}
-        </View>
+            {subtitle ? (
+              <Text
+                numberOfLines={1}
+                style={[
+                  styles.subtitle,
+                  { color: c.ink3, fontSize: theme.font.size.small, fontFamily: theme.font.mono },
+                ]}
+              >
+                {subtitle}
+              </Text>
+            ) : null}
+          </View>
+        )}
         {actions.map((action) => (
           <Pressable
             key={action.label}
@@ -86,10 +114,16 @@ export function Screen({
             testID={action.testID}
             disabled={action.disabled}
             hitSlop={8}
-            style={styles.action}
+            style={compact ? styles.actionCompact : styles.action}
             onPress={action.onPress}
           >
-            <Text style={[styles.actionText, { color: action.disabled ? c.ink3 : c.accent }]}>
+            <Text
+              style={[
+                styles.actionText,
+                compact ? styles.actionTextCompact : null,
+                { color: action.disabled ? c.ink3 : c.accent },
+              ]}
+            >
               {action.label}
             </Text>
           </Pressable>
@@ -111,7 +145,13 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   wire: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 3 },
+  headerCompact: { height: 32 },
   side: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  sideCompact: { width: 40, height: 32, alignItems: 'center', justifyContent: 'center' },
+  backTextCompact: { fontSize: 24, lineHeight: 28, marginTop: -3 },
+  titleCompact: { fontSize: 14, fontWeight: '600' },
+  actionCompact: { height: 32, paddingHorizontal: 10, justifyContent: 'center' },
+  actionTextCompact: { fontSize: 14 },
   pad: { width: 16 },
   backText: { fontSize: 30, lineHeight: 34, marginTop: -4 },
   titles: { flex: 1, minWidth: 0 },

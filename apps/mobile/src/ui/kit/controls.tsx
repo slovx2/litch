@@ -35,6 +35,9 @@ export function Button({
   const border = kind === 'danger' ? c.err : c.line3
   return (
     <Pressable
+      // 安卓上忙过一次之后，读屏的“忙”不会随 busy 变回 false 清掉（uiautomator 里一直挂着 busy）：
+      // 忙和不忙换一个视图
+      key={busy ? 'busy' : 'idle'}
       accessibilityRole="button"
       accessibilityState={{ disabled: !!inactive, busy: !!busy }}
       testID={testID}

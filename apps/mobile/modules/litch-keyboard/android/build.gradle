@@ -1,0 +1,16 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'dev.litch'
+version = '0.0.0'
+
+android {
+  namespace 'dev.litch.keyboard'
+  defaultConfig {
+    minSdkVersion 24
+    versionCode 1
+    versionName '0.0.0'
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "name": "litch-keyboard",
+  "version": "0.0.0",
+  "private": true,
+  "description": "让系统输入法给眼下拿着焦点的视图弹出软键盘（安卓的 WebView 没有用户手势时自己弹不出来）",
+  "license": "MIT",
+  "main": "src/index.ts"
+}
