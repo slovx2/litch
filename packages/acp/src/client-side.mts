@@ -191,10 +191,14 @@ export class Terminals {
       } catch {}
     }
     signal('SIGTERM')
+    let timer: NodeJS.Timeout | undefined
     const quit = await Promise.race([
       terminal.exited.then(() => true),
-      new Promise<boolean>((resolve) => setTimeout(resolve, KILL_GRACE_MS, false)),
+      new Promise<boolean>((resolve) => {
+        timer = setTimeout(resolve, KILL_GRACE_MS, false)
+      }),
     ])
+    clearTimeout(timer)
     if (!quit) signal('SIGKILL')
   }
 

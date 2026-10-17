@@ -436,6 +436,8 @@ lines.on('line', (line) => {
 lines.on('close', () => {
   log({ event: 'eof' })
   if (process.env.FAKE_ACP_IGNORE_EOF !== '1') process.exit(0)
+  // 不退的：留一个计时器，不然事件循环空了进程照样会走
+  setInterval(() => {}, 1000)
 })
 process.on('SIGTERM', () => {
   log({ event: 'sigterm' })

@@ -720,6 +720,10 @@ export class AcpServer {
       : undefined
     if (submitted) return submitted
     const input = checkedInput(params.input)
+    // agent 没声明收图片的，带图片的回合直接拒绝（还没握过手的不知道，交的时候再查）
+    const known = this.runtime.known
+    if (known && !known.image && input.some((item) => /^(image|localImage)$/.test(item?.type)))
+      throw new ProtocolError(-32602, `${this.agentName()} 不收图片`)
     if (projection.thread.ephemeral) return this.helperTurn(peer, live, params, input, clientId)
     if (params.outputSchema != null)
       throw new ProtocolError(-32602, 'ACP agent 不支持严格结构化输出（outputSchema）')
@@ -878,7 +882,7 @@ export class AcpServer {
     const agent = this.runtime.current()
     if (running.sent && agent && live.generation === agent.generation)
       agent.connection.notify('session/cancel', { sessionId: id })
-    await Promise.race([running.done, sleep(INTERRUPT_WAIT_MS)])
+    await within(running.done, INTERRUPT_WAIT_MS)
     // agent 迟迟不回 session/prompt 的，由适配器收尾
     if (live.projection.active === running.turn) {
       live.projection.finish({ interrupted: true }, (method, params) =>
@@ -915,7 +919,15 @@ export class AcpServer {
   }
 }
 
-const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+/** 等 work，最多等 ms；计时器用完就清掉，不拖住进程退出 */
+async function within(work: Promise<unknown>, ms: number): Promise<void> {
+  let timer: NodeJS.Timeout | undefined
+  try {
+    await Promise.race([work, new Promise<void>((resolve) => (timer = setTimeout(resolve, ms)))])
+  } finally {
+    clearTimeout(timer)
+  }
+}
 
 const nonEmpty = (value: unknown): string | null =>
   typeof value === 'string' && value ? value : null

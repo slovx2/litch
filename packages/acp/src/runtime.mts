@@ -172,8 +172,18 @@ export class AcpRuntime {
     const { child } = handle
     if (child.exitCode !== null || child.signalCode !== null) return
     const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()))
-    const wait = (ms: number) =>
-      Promise.race([exited.then(() => true), new Promise<boolean>((r) => setTimeout(r, ms, false))])
+    // 等到点的计时器用完就清掉，不让它把适配器自己的退出拖住
+    const wait = async (ms: number) => {
+      let timer: NodeJS.Timeout | undefined
+      const late = new Promise<boolean>((r) => {
+        timer = setTimeout(r, ms, false)
+      })
+      try {
+        return await Promise.race([exited.then(() => true), late])
+      } finally {
+        clearTimeout(timer)
+      }
+    }
     child.stdin?.end()
     if (await wait(signalled ? EXIT_TIMING.signalledGraceMs : EXIT_TIMING.graceMs)) return
     child.kill('SIGTERM')

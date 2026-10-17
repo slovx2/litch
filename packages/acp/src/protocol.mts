@@ -24,6 +24,7 @@ import { envelope, PROFILE, settings } from './envelope.mjs'
 import type { AcpServer } from './server.mjs'
 import { runtimeInfo, versions } from './versions.mjs'
 
+// 声明里关掉的（插话、压缩、回退、删除等，见 declaration.mts）都落到这里：-32601
 const unsupported = (s: AcpServer, method: string) =>
   new ProtocolError(-32601, `${s.agentId} 入口不支持 ${method}`)
 
@@ -33,9 +34,6 @@ const NOT_APPLICABLE: Record<string, string> = {
   'app/installed': 'OpenAI 应用连接器是 Codex 专属能力',
   'plugin/installed': 'Codex 插件是 Codex 专属能力',
   'marketplace/add': 'Codex 插件市场是 Codex 专属能力',
-  'thread/compact/start': 'ACP 没有压缩上下文的方法',
-  'thread/rollback': 'ACP 没有回退回合的方法',
-  'turn/steer': 'ACP 没有往进行中的回合插话的方法',
 }
 
 /** agent 报的模型换成 Codex 的模型清单；还没见过 agent 报的（一个会话都没建过）是空的 */
