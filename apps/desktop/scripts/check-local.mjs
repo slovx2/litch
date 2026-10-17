@@ -112,6 +112,8 @@ function fingerprint(directory) {
 /** 平时用的状态目录。这次自检从头到尾不许动它 */
 const realHome = join(homedir(), '.codex-harness-adapter')
 const realBefore = fingerprint(realHome)
+/** 有没有进程（主人自己开着的 Litch 或命令行起的服务）正用着平时的状态目录 */
+const realInUse = () => processes().some((entry) => entry.command.includes(realHome))
 
 /** 起隔离环境，等它就绪 */
 function startFixture() {
@@ -486,7 +488,7 @@ const decoyRan = readLog(decoyLog)
 const ended = await fixture.stop()
 try {
   await check(
-    '结束后：服务停干净，没有残留的进程，临时目录删掉了，平时用的状态目录没被碰',
+    '结束后：服务停干净，没有残留的进程，临时目录删掉了，平时用的状态目录没被碰（它正被别的服务用着时不比）',
     async () => {
       assert.equal(ended.code, 0, `隔离环境收尾时出了问题：\n${ended.errors}`)
       assert.equal(decoyRan, '', `应用自己环境里的 harness 被执行了：\n${decoyRan}`)
@@ -497,8 +499,10 @@ try {
       )
       assert.deepEqual(strays(), [], '还有带着这次临时目录的进程')
       assert.equal(existsSync(fixture.root), false, '临时目录没有删掉')
-      // 这时候要是有别的服务正用着平时的状态目录，这一条会误报；这次自检自己不往里写任何东西
-      assert.deepEqual(fingerprint(realHome), realBefore, `${realHome} 在自检期间变了`)
+      // 这台机器上的主人自己开着 Litch 时，它的服务一直在往平时的状态目录里写（会话库、日志），比不出谁动的：
+      // 那就不比，写一句；没人用着它时照旧要一模一样（这次自检自己不往里写任何东西）
+      if (realInUse()) notes.push(`${realHome} 有服务正用着，自检前后没有比对它`)
+      else assert.deepEqual(fingerprint(realHome), realBefore, `${realHome} 在自检期间变了`)
     },
   )
 } catch (error) {
