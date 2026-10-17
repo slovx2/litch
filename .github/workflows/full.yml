@@ -1,0 +1,341 @@
+# 全量：所有单元测试、各平台、各引擎、全部桌面验收、真的原生 codex、移动端模拟器上的端到端。
+# 一轮一个多小时、十来台跑机，不自动跑：发版前、动了大块之后手动触发（gh workflow run full.yml）。
+# 每次推送和合并请求只跑门禁（ci.yml），门禁里的步骤这里都有。
+name: Full
+on:
+  workflow_dispatch:
+
+jobs:
+  windows:
+    uses: ./.github/workflows/windows.yml
+
+  adapters:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-14]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: 1.26.6
+      - name: Linux 沙箱依赖
+        if: runner.os == 'Linux'
+        run: |
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends bubblewrap=0.9.0-1ubuntu0.3 socat=1.8.0.0-4ubuntu0.1
+      - run: npm ci --no-audit --no-fund
+      - run: npm ci --prefix packages/claude --no-audit --no-fund
+      - run: npm ci --prefix packages/pi --no-audit --no-fund
+      - run: npm ci --prefix packages/dsh --no-audit --no-fund
+      - run: npm ci --prefix packages/opencode --no-audit --no-fund
+      - run: npm ci --prefix packages/acp --no-audit --no-fund
+      - name: 安装隔离的测试 CLI
+        run: |
+          npm install --prefix .artifacts/host-cli --save-exact @anthropic-ai/claude-code@2.1.282 --no-audit --no-fund
+          echo "CHA_CLAUDE_CLI=${GITHUB_WORKSPACE}/.artifacts/host-cli/node_modules/.bin/claude" >> "${GITHUB_ENV}"
+      - run: npm run check
+      - run: npm run typecheck
+      - run: npm run build
+      # 含协议兼容性的两项测试（回放、结构校验，各包的 upstream-compat.test.mts）：
+      # Claude Code、Pi 两个入口和设备聚合面在这里，dsh 入口的在下面的 dsh job 里
+      - run: npm test
+      - run: npm run mobile:test
+      - run: npm run test:local-ssh
+      - run: npm run docs:build
+      # 独立发布包：安装脚本和包里的入口做静态检查；出一个本机平台的包，装进临时的主目录，确认装上的命令报得出版本。
+      # Linux 上再把完整的容器验证跑一遍（发版的流程里验的是要发的那一份，这里先拦住平时的改动把它弄坏）
+      - name: 安装脚本的静态检查
+        run: |
+          sh -n scripts/install.sh
+          sh -n scripts/adapter-launcher.sh
+      - name: shellcheck
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends shellcheck=0.9.0-1
+          shellcheck --shell=sh scripts/install.sh scripts/adapter-launcher.sh
+      - name: 出本机平台的发布包并试装
+        run: |
+          node scripts/package-adapter.mjs --target host --out "${RUNNER_TEMP}/release"
+          HOME="${RUNNER_TEMP}/home" sh "${RUNNER_TEMP}/release/install.sh" --from "${RUNNER_TEMP}"/release/codex-harness-adapter-*.tar.gz
+          "${RUNNER_TEMP}/home/.local/bin/codex-harness-adapter" version
+      - name: 发布包的容器验证
+        if: runner.os == 'Linux'
+        run: node scripts/check-adapter-package.mjs
+
+  # Computer Use 的原生助手（Swift）和主进程里接它的那一层：助手的单元测试、执行器与看护的单元测试（桩助手），
+  # 再真的经 LaunchServices 起一次临时签名的助手、握手、调不要系统授权的几样（不点、不截图）
+  computer-use:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --prefix apps/desktop --no-audit --no-fund
+      - run: swift --version
+      - run: swift test --package-path apps/computer-use
+      - run: npm run test:computer-use --prefix apps/desktop
+      - run: npm run check:computer-use --prefix apps/desktop
+
+  # 客户端：核心的单元测试、三个包的类型检查、界面构建，再起真的 Electron 做自检、对话区的滚动验收、输入区的验收、终端面板的验收和远程设备的验收（窗口不显示）。
+  # 代码规范检查由上面 adapters 里的 npm run check 一并覆盖。
+  client:
+    runs-on: macos-14
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24
+          cache: npm
+      # 带终端的进程由适配器命令行（Go）的 pty-bridge 子命令来起，下面对着真实入口的那几步要用到它
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: 1.26.6
+      - run: npm ci --no-audit --no-fund
+      - run: npm run client:setup
+      - run: npm run client:typecheck
+      - run: npm run client:test
+      # 界面里不靠浏览器就能测的那部分逻辑（终端面板的开合、只认最新的那一次）
+      - run: npm run client:test:ui
+      - run: npm run client:build
+      - run: npm run client:smoke
+      # 对话区“不飘”的验收：在不显示的窗口里真的去滚、去点，逐帧量位置
+      - run: npm run client:check:scroll
+      # 输入区的验收：输入法回车不误发、发送与排队的顺序、打断、草稿、审批和提问卡片的快捷键
+      - run: npm run client:check:compose
+      # 对着真实入口的自检：在临时目录里起一个 Pi 引擎，模型请求全部走回环上的假模型
+      - run: npm ci --no-audit --no-fund --prefix packages/pi
+      - run: npm run build --prefix packages/pi
+      # 这里的引擎和设备进程是直接用 node 起的，没有命令行那一层：把命令行编到 bin/ 下，它们才找得到伪终端桥
+      - run: node scripts/build-cli.mjs
+      - run: npm run client:smoke:entry
+      - run: npm run client:check:scroll:entry
+      - run: npm run client:check:compose:entry
+      # 终端面板的验收：模拟核心、多 harness 的隔离设备（可重连的终端）、单个 harness 的入口（随连接结束的终端）。
+      # 流水线上时间的线按宽的算（回显和帧间隔只报数），功能对不对照旧严
+      - run: npm run build --prefix packages/device
+      - run: npm run client:check:terminal
+      # 侧面板和文件标签的验收：模拟核心、多 harness 的隔离设备、单个 harness 的入口（后两种是真的文件系统）。
+      # 流水线上时间的线按宽的算（展开大目录、帧间隔、开大文件只报数），功能对不对照旧严
+      - run: npm run client:check:files
+      # 设置页与外观的验收（只对着模拟核心）：设置页的五组与入口、皮肤明暗密度缩放语言当场生效并记得住、
+      # 快捷键一览和真的应用菜单对账、关于与许可、回合正在跑的时候换外观、六套皮肤组合下各屏的溢出与对比度、
+      # 缩放到最小最大时的终端行列数；再用同一份用户数据目录冷启动一遍，看窗口一建出来的底色和缩放
+      - run: npm run client:check:settings
+      # 完整模式（多 harness 的会话目录、工作区、置顶与分区、新建时选 harness、提问向导）和设备管理页的验收：
+      # 各跑两遍，模拟核心一遍、多 harness 的隔离设备一遍
+      - run: npm run client:check:full
+      - run: npm run client:check:manage
+      # 本机内置适配器的打开方式（拿假的适配器，不起界面）：拉起、已经在跑就复用、换版本的各种情形、每一种没连上
+      - run: npm run client:check:adapter
+      # 侧面板里“差异”标签的验收：模拟核心（示例仓库）、多 harness 的隔离设备、单个 harness 的入口
+      # （后两种是脚本在夹具的临时目录里现建的 git 仓库，暂存、还原只对它做）。时间的线同样按宽的算
+      - run: npm run client:check:diff
+      # 远程设备：在回环上起一个用户态的 sshd 当假的远程机器（临时密钥、临时主目录，跑完就删），
+      # 先不起界面把每一种连接情形过一遍，再在真的外壳里走添加、连接、断线重连、移除
+      - run: npm run client:check:ssh
+      - run: npm run client:check:remote
+
+  # dsh 本体不随适配器分发，测试需要一份真实的 dsh：按 protocol/versions.json 登记的下限版本装到临时前缀。
+  # 模型端是回环 mock，SSH 实例发往回环之外的 HTTP(S) 请求都落到陷阱代理上，验收要求一次也没有。
+  dsh:
+    runs-on: macos-14
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: 1.26.6
+      - run: npm ci --no-audit --no-fund
+      - run: npm ci --prefix packages/dsh --no-audit --no-fund
+      - name: 安装隔离的 dsh
+        run: |
+          version="$(node -p "require('./protocol/versions.json').dshMinimum")"
+          npm install --prefix .artifacts/host-dsh --save-exact "@deepseek-ai/dsh@${version}" --no-audit --no-fund
+          echo "CHA_DSH_CLI=${GITHUB_WORKSPACE}/.artifacts/host-dsh/node_modules/.bin/dsh" >> "${GITHUB_ENV}"
+      # 含 dsh 入口的协议兼容性测试（packages/dsh/test/upstream-compat.test.mts）
+      - run: npm run test:dsh
+      - run: npm run test:dsh-ssh
+
+  # OpenCode 本体不随适配器分发，测试要一份真实的 opencode：按 protocol/versions.json 登记的验证过的版本
+  # （opencodeVerified 的第一个）装到临时前缀。模型端是回环上的假模型，数据目录按 HOME/XDG 隔离在临时目录里。
+  opencode:
+    runs-on: macos-14
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: 1.26.6
+      - run: npm ci --no-audit --no-fund
+      - run: npm ci --prefix packages/opencode --no-audit --no-fund
+      - name: 安装隔离的 opencode
+        run: |
+          version="$(node -p "require('./protocol/versions.json').opencodeVerified[0]")"
+          npm install --prefix .artifacts/host-opencode --save-exact "opencode-ai@${version}" --no-audit --no-fund
+          echo "CHA_OPENCODE_CLI=${GITHUB_WORKSPACE}/.artifacts/host-opencode/node_modules/.bin/opencode" >> "${GITHUB_ENV}"
+      - run: npm run test:opencode
+
+  # 通用 ACP 引擎（扮演 gemini、qwen、acp）：对着包里自带的假 ACP agent 测，不装真的 agent，不发模型请求
+  acp:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: 1.26.6
+      - run: npm ci --no-audit --no-fund
+      - run: npm ci --prefix packages/acp --no-audit --no-fund
+      - run: npm run test:acp
+
+  # 客户端对着三个引擎各走一遍的验收：真的适配器主进程管着 Claude Code、Pi、dsh，模型请求全部走回环上的假模型，
+  # 界面在不显示的窗口里把新建、审批、提问、技能、打断、读历史、计划模式、改文件与差异、图片、分叉回退压缩各走一遍。
+  # Claude Code 和 dsh 的命令行不随适配器分发：各装一份隔离的到临时前缀（版本和上面两个 job 的一样），
+  # 缺哪一个这一步都会直接失败，不会跳过。单独一个 job：它要的依赖比 client 多（引擎包都要装、都要构建；
+  # OpenCode 和 ACP 的两个包也在里面，只因为 npm run build 要构建它们，验收还不走这两个引擎）
+  client-engines:
+    runs-on: macos-14
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: 1.26.6
+      - run: npm ci --no-audit --no-fund
+      - run: npm ci --prefix packages/claude --no-audit --no-fund
+      - run: npm ci --prefix packages/pi --no-audit --no-fund
+      - run: npm ci --prefix packages/dsh --no-audit --no-fund
+      - run: npm ci --prefix packages/opencode --no-audit --no-fund
+      - run: npm ci --prefix packages/acp --no-audit --no-fund
+      - run: npm run client:setup
+      - name: 安装隔离的 Claude Code 和 dsh
+        run: |
+          npm install --prefix .artifacts/host-cli --save-exact @anthropic-ai/claude-code@2.1.282 --no-audit --no-fund
+          echo "CHA_CLAUDE_CLI=${GITHUB_WORKSPACE}/.artifacts/host-cli/node_modules/.bin/claude" >> "${GITHUB_ENV}"
+          version="$(node -p "require('./protocol/versions.json').dshMinimum")"
+          npm install --prefix .artifacts/host-dsh --save-exact "@deepseek-ai/dsh@${version}" --no-audit --no-fund
+          echo "CHA_DSH_CLI=${GITHUB_WORKSPACE}/.artifacts/host-dsh/node_modules/.bin/dsh" >> "${GITHUB_ENV}"
+      # 各个引擎包、设备进程和命令行
+      - run: npm run build
+      - run: npm run client:check:engines
+
+  protocol-fixtures:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - run: cargo test --workspace --locked
+
+  # 真的原生 codex（protocol/versions.json 的 codexVerified 里第一个版本，装到临时前缀）：Litch 建会话带的工具定义
+  # codex 收不收、客户端工具调用由设备进程挑执行方，再在各家真的命令行上从界面建会话跑头一个回合。
+  # 模型都是回环上的假模型，各家的数据目录隔离在临时目录里。门禁只跑其中 codex 和 Pi 的首回合
+  real-engines:
+    runs-on: macos-14
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: 1.26.6
+      - run: npm ci --no-audit --no-fund
+      - run: npm ci --prefix packages/claude --no-audit --no-fund
+      - run: npm ci --prefix packages/pi --no-audit --no-fund
+      - run: npm ci --prefix packages/dsh --no-audit --no-fund
+      - run: npm ci --prefix packages/opencode --no-audit --no-fund
+      - run: npm ci --prefix packages/acp --no-audit --no-fund
+      - run: npm run client:setup
+      - name: 安装隔离的各家命令行
+        run: |
+          codex="$(node -p "require('./protocol/versions.json').codexVerified[0]")"
+          npm install --prefix .artifacts/host-codex --save-exact "@openai/codex@${codex}" --no-audit --no-fund
+          echo "CHA_CODEX_CLI=${GITHUB_WORKSPACE}/.artifacts/host-codex/node_modules/.bin/codex" >> "${GITHUB_ENV}"
+          npm install --prefix .artifacts/host-cli --save-exact @anthropic-ai/claude-code@2.1.282 --no-audit --no-fund
+          echo "CHA_CLAUDE_CLI=${GITHUB_WORKSPACE}/.artifacts/host-cli/node_modules/.bin/claude" >> "${GITHUB_ENV}"
+          dsh="$(node -p "require('./protocol/versions.json').dshMinimum")"
+          npm install --prefix .artifacts/host-dsh --save-exact "@deepseek-ai/dsh@${dsh}" --no-audit --no-fund
+          echo "CHA_DSH_CLI=${GITHUB_WORKSPACE}/.artifacts/host-dsh/node_modules/.bin/dsh" >> "${GITHUB_ENV}"
+          opencode="$(node -p "require('./protocol/versions.json').opencodeVerified[0]")"
+          npm install --prefix .artifacts/host-opencode --save-exact "opencode-ai@${opencode}" --no-audit --no-fund
+          echo "CHA_OPENCODE_CLI=${GITHUB_WORKSPACE}/.artifacts/host-opencode/node_modules/.bin/opencode" >> "${GITHUB_ENV}"
+          echo "CHA_ACP_CLI=${GITHUB_WORKSPACE}/.artifacts/host-opencode/node_modules/.bin/opencode" >> "${GITHUB_ENV}"
+      - run: npm run build
+      - run: npm run check:native-codex
+      - run: npm run check:client-tools-codex
+      - run: npm run client:check:first-turn -- --engines pi,codex,claude,dsh,opencode,acp
+
+  # 移动端：单元测试，再在安卓模拟器上对着 release 包跑端到端（Maestro，模拟核心和夹具两组，apps/mobile/e2e/README.md）。
+  # GitHub 的 macOS 跑机不能嵌套虚拟化，起不了安卓模拟器，所以用 ubuntu 加 KVM；包在这里现打
+  mobile:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: 1.26.6
+      - name: 模拟器用的 KVM、打包用的 JDK 17
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          echo "JAVA_HOME=${JAVA_HOME_17_X64}" >> "${GITHUB_ENV}"
+      - name: 装 Maestro 2.3.0
+        run: |
+          curl -fsSL -o "${RUNNER_TEMP}/maestro.zip" https://github.com/mobile-dev-inc/Maestro/releases/download/cli-2.3.0/maestro.zip
+          echo "aaf524c6bcd456013855b1337464f964d9a65e2fb88861affea9b4c014644e50  ${RUNNER_TEMP}/maestro.zip" | sha256sum -c -
+          unzip -q "${RUNNER_TEMP}/maestro.zip" -d "${RUNNER_TEMP}"
+          echo "MAESTRO=${RUNNER_TEMP}/maestro/bin/maestro" >> "${GITHUB_ENV}"
+      - run: npm ci --no-audit --no-fund
+      - run: npm ci --prefix packages/pi --no-audit --no-fund
+      - run: npm ci --prefix apps/mobile --no-audit --no-fund
+      - run: npm run mobile:test
+      # 夹具那一组要真的适配器、Pi 和设备进程
+      - run: npm run build
+      - name: 打 release 包
+        working-directory: apps/mobile
+        run: |
+          npx expo prebuild --platform android --clean --no-install
+          npm run android:release -- --max-workers=4
+      - uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
+          script: node apps/mobile/scripts/e2e.mjs --serial emulator-5554

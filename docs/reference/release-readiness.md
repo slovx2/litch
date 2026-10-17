@@ -18,7 +18,7 @@ Windows 的命令执行需要显式完全访问。受限命令缺少操作系统
 
 ## 自动检查
 
-`.github/workflows/ci.yml` 执行以下检查：
+流水线分两档：`.github/workflows/ci.yml` 是门禁，每次推送都跑，只放关键的冒烟；`.github/workflows/full.yml` 是全量，发版前手动触发。全量执行以下检查：
 
 - macOS / Linux：格式、类型、构建、Claude/Pi 测试、Go 测试、文档构建。
 - Windows Server 2025 x64：类型、构建、路径转换、沙箱权限边界、旧数据库拒绝、Go 测试。
@@ -26,6 +26,7 @@ Windows 的命令执行需要显式完全访问。受限命令缺少操作系统
   WebSocket proxy、模型回合和历史读取，不使用个人模型凭据。
 - Go 测试覆盖公钥拒绝、HostKey、转发策略、PTY 调整尺寸、SFTP 写文件和生命周期。
 - Rust 协议 crate 使用锁定依赖运行契约 fixture 测试；它不是生产运行时。
+- 真的原生 codex（`protocol/versions.json` 的 `codexVerified`）和各家真命令行上，从 Litch 界面新建会话跑头一个回合；Litch 的移动端在安卓模拟器上跑端到端。
 
 源码安装和所有依赖版本以[适配器说明](https://github.com/slovx2/litch/blob/main/ADAPTER.md)为准。
 Linux 运行包由独立 `runtime-artifacts.yml` 构建并验收。
