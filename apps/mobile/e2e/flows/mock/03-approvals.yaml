@@ -26,3 +26,8 @@ tags: [mock, smoke]
     notVisible:
       id: request:approval
     timeout: 10000
+# 答完回合接着走完：状态行上出现“⋯”（这个会话只有这一个回合，之前没有）
+- extendedWaitUntil:
+    visible:
+      id: turn-menu
+    timeout: 20000

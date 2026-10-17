@@ -21,8 +21,12 @@ tags: [fixture, smoke]
     element:
       id: manage:pi
     direction: DOWN
+# Pi 那一行写着“版本 · 可用”：就在“Pi”这行字的下面（这一版的视图树里它不是 manage:pi 的子节点，childOf 配不上）。
+# 整串匹配、要带版本号：“不可用”、没装的那几行（“不可用 · 没装”）都配不上
 - assertVisible:
-    text: .*Ready.*|.*就绪.*
+    text: \d+\.\d+\.\d+ · (Ready|可用)
+    below:
+      text: Pi
 - tapOn:
     id: header:back
 - tapOn:

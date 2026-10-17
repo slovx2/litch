@@ -22,9 +22,14 @@ cd apps/mobile && npm test        # 或者仓库根目录 npm run mobile:test
 cd apps/mobile && npm run e2e -- [--build] [--only mock|fixture|<流程文件>] [--tags smoke] [--keep]
 ```
 
-入口 `scripts/e2e.mjs`：没有开着的模拟器就无窗口、只读地起一台（默认 AVD `tyrs_hand_e2e_api35`、端口 5590，不碰别人开着的），
-装包，要夹具的流程先起夹具（`scripts/fixture.mjs`，真的适配器经 SSH、隔离的 Pi、回环上的假模型），跑完收尾：
-停夹具、撤 `adb reverse`、关掉自己起的模拟器、删临时目录（Maestro 的截图和日志在里面，`--keep` 才留下）。有流程没过返回非零。
+入口 `scripts/e2e.mjs`：不给 `--serial` 就在 `--port`（默认 5590）上无窗口、只读地起一台（默认 AVD `tyrs_hand_e2e_api35`）；
+那个端口上已经有设备（不管什么状态）就报错，让你换 `--port` 或者用 `--serial` 指定，不拿别人的来用。
+然后装包，要夹具的流程先起夹具（`scripts/fixture.mjs`，真的适配器经 SSH、隔离的 Pi、回环上的假模型），跑完收尾：
+停夹具、只撤夹具加的那两条 `adb reverse`、关掉自己起的模拟器（`--serial` 给的不关）、删临时目录。有流程没过返回非零；
+Ctrl-C 打断时照样收完尾，退出码 130。
+
+Maestro 的调试输出（失败时的截图、日志）默认放在临时目录里、跑完删掉（`--keep` 才留下）；设了 `LITCH_E2E_ARTIFACTS=<目录>`
+就放到那个目录并留着，CI 上失败时上传它。
 
 流程在 `flows/`，靠测试链接和 testID 驱动，不点坐标；每个流程开头清掉应用数据（`_shared/fresh.yaml`），互不依赖、可以单跑。
 
@@ -66,3 +71,5 @@ cd apps/mobile && npm run e2e -- [--build] [--only mock|fixture|<流程文件>] 
 - `litch://new` 不等设备连上，夹具刚列出设备时发会落空；夹具的流程一律走界面新建会话。
 - xterm 的内容读屏读不到：终端里的命令跑没跑，由入口脚本开在回环上的小口去看工作目录里的文件（`_shared/wait-file.js`）。
 - 入口脚本不能用同步的方式起 Maestro：流程里的 `runScript` 要连同一个进程里的小口。
+- 同一台电脑上同时只能跑一个 Maestro：2.3.0 在安卓上把驱动固定映射到电脑的 7001 口、没有参数能改，第二个会在启动应用时超时。
+  入口脚本开头先看 7001 有没有被占，被占就直接报错。换 `--port` 只能让模拟器不撞，躲不开这一条。

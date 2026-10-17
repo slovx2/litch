@@ -43,6 +43,9 @@ registerHooks({
       }
     }
     const resolved = next(specifier, context)
-    return resolved.url.endsWith('.ts') ? { ...resolved, format: 'module-typescript' } : resolved
+    // 地址可能带查询串（测试里重新载入模块用的 ?run=n），看路径的结尾
+    return resolved.url.startsWith('file:') && new URL(resolved.url).pathname.endsWith('.ts')
+      ? { ...resolved, format: 'module-typescript' }
+      : resolved
   },
 })

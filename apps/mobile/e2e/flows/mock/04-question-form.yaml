@@ -27,10 +27,10 @@ tags: [mock]
 - hideKeyboard
 - tapOn:
     id: request:next
-# 第三道：选第一个，最后一道选了就交
+# 第三道：等翻到它（标题栏右边写着第几题），选第一个，最后一道选了就交
 - extendedWaitUntil:
     visible:
-      id: request:step:2
+      text: (Question 3 of 3|第 3 题，共 3 题)
     timeout: 5000
 - tapOn:
     id: request:pick:0
@@ -52,3 +52,8 @@ tags: [mock]
     timeout: 10000
 - assertNotVisible:
     id: request:question
+# 答完回合接着走完：状态行上出现“⋯”
+- extendedWaitUntil:
+    visible:
+      id: turn-menu
+    timeout: 20000
