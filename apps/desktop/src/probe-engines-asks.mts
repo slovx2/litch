@@ -39,7 +39,7 @@ export async function enginesApproval(
 ): Promise<ApprovalSeen> {
   const files = (window as unknown as { __filesKit: FilesKit }).__filesKit
   const kit = (window as unknown as { __enginesKit: EnginesKit }).__enginesKit
-  const { one, text } = files
+  const { one, text, until } = files
   const chosen = () => text(one('.dock .pick[data-kind="permission"] .pick-btn'))
 
   await kit.idle()
@@ -53,7 +53,14 @@ export async function enginesApproval(
   const pending = shown
     ? text(kit.sub(kit.turns().at(-1), '.item-head .meta [data-state="waiting"]'))
     : ''
-  const flagged = shown ? Boolean(one('.ss-row.sel .pill.wait')) : false
+  // 侧栏的记号和卡片走两条订阅，各按各的帧到，谁先到不一定（流水线上 dsh 卡片先到、记号晚一帧，量空过一次）。
+  // 卡片这时一直开着，等记号出现再下结论，不在卡片刚出现的那一帧就读
+  const flagged = shown
+    ? await until('侧栏这一行上“等你”的记号', () => one('.ss-row.sel .pill.wait'), 5000).then(
+        () => true,
+        () => false,
+      )
+    : false
   if (shown) await kit.answer(shown, label)
   await kit.idle()
 
