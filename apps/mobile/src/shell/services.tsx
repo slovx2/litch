@@ -65,7 +65,10 @@ export function ServicesProvider({
     () => ({ booted, channel: booted.channel, replica, prefs, setPrefs }),
     [booted, replica, prefs, setPrefs],
   )
-  useEffect(() => onReady?.(value), [onReady, value])
+  // 花括号不能省：onReady 的返回值会被当成清理函数，设置一变就拿它去调
+  useEffect(() => {
+    onReady?.(value)
+  }, [onReady, value])
   return <ServicesContext.Provider value={value}>{children}</ServicesContext.Provider>
 }
 

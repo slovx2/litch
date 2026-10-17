@@ -6,6 +6,7 @@
 //   litch://home                                   回首页
 //   litch://bench                                  WebView 吞吐测试
 //   litch://remote?adapter=…&env=名=值             远程设备的开发参数（src/platform/dev.ts），验收接测试夹具用
+//   litch://seed?count=300[&device=…]              建一批会话（量会话列表的滑动，只在模拟核心里用）
 // 每个链接都可以带测量开关（src/experiment.ts）：render、seal、pace、freeze、tail、keyboard、markers，以及 probe=1|0。
 import { keys } from '@litch/core'
 import { createNavigationContainerRef, StackActions } from '@react-navigation/native'
@@ -13,6 +14,7 @@ import { experiment } from '../experiment'
 import type { RootStackParamList } from '../nav/routes'
 import { setRemoteDev } from '../platform/dev'
 import { markOpen, startProbe, stopProbe } from '../probe'
+import { seedSessions } from '../screens/sessions/seed'
 import type { BootMode } from './boot'
 import type { Services } from './services'
 
@@ -96,6 +98,12 @@ export function handleDevLink(url: string, services: Services | null): BootMode 
     case 'bench':
       navigationRef.navigate('Bench')
       return null
+    case 'seed': {
+      const deviceId = deviceOf()
+      if (deviceId)
+        void seedSessions(channel, replica.store, deviceId, Number(params.get('count')) || 300)
+      return null
+    }
     case 'home':
       if (navigationRef.canGoBack()) navigationRef.dispatch(StackActions.popToTop())
       return null
