@@ -1418,10 +1418,14 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         guarded(() => listModels(target)),
         aids.plan(target ?? undefined),
       ]).then(([models, plan]) => composeOptions(models, presets, plan))
-      // 没问成的不留着，下次再问
-      value.catch(() => {
+      // 没问成的不留着，下次再问。一个模型都没报的也不留：ACP 这类引擎要建过会话才知道有哪些模型，
+      // 记住了空清单，建完会话也一直没有选择器
+      const drop = () => {
         if (composeCache.get(key)?.value === value) composeCache.delete(key)
-      })
+      }
+      value.then((options) => {
+        if (options.models.length === 0) drop()
+      }, drop)
       composeCache.set(key, { session, value })
       return value
     },

@@ -831,6 +831,26 @@ test('可选项：隐藏的模型不列，没有强度档的模型强度是空�
   assert.equal(sent('model/list').length, 1)
 })
 
+test('可选项：对面一个模型都没报的不记着，下次再问（ACP 要建过会话才报得出模型）', async () => {
+  const { core, world, command, sent } = setup()
+  const listed = world.models
+  world.models = []
+  core.start()
+  await settle()
+  const empty = (await command('device.composeOptions', { deviceId: 'local' })) as ComposeOptions
+  assert.deepEqual(empty.models, [])
+  world.models = listed
+  const later = (await command('device.composeOptions', { deviceId: 'local' })) as ComposeOptions
+  assert.deepEqual(
+    later.models.map((entry) => entry.id),
+    ['gate/small', 'gate/plain'],
+  )
+  assert.equal(sent('model/list').length, 2)
+  // 问到了就记着
+  await command('device.composeOptions', { deviceId: 'local' })
+  assert.equal(sent('model/list').length, 2)
+})
+
 test('会话操作：改名马上反映到侧栏；归档和删除把它从侧栏拿掉，开着的也不再管', async () => {
   const { core, sidebar, command, sent } = setup([
     thread({ id: 'a', turns: [] }),

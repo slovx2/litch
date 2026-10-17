@@ -11,6 +11,8 @@ versioning or publishing metadata.
 - 新增通用 ACP 入口（实验性）：说 ACP（Agent Client Protocol）的 agent 都能接进来，内置 Gemini CLI（`gemini --acp`）和 Qwen Code（`qwen --acp`）两个预设，另有一个自己填命令的 `acp` 入口（`CHA_ACP_CLI`、`CHA_ACP_ARGS`）。三个默认停用，在设备设置里打开；SSH 端口 7335 到 7337。
 - 适配器：命令行多了 `--opencode-port`、`--gemini-port`、`--qwen-port`、`--acp-port` 四个参数，后台服务的启动参数记录里也会带上它们；换回更早版本的命令行时它不认这些参数。
 - Litch：本机设备下会出现 OpenCode 和三个 ACP 入口；新建会话时带不带桌面的工具（浏览器、Computer Use）改成看引擎是否声明支持。
+- Litch：回退的确认框照引擎的声明说清会不会恢复文件（OpenCode 会连那之后改过的文件一起恢复，其余只截掉对话）。
+- Litch：引擎一个模型都没报时不再把空清单记到下次重连：ACP 入口要建过会话才知道有哪些模型，以前第一次新建会话之后输入区一直没有模型和计划模式的选择。
 
 ## 0.8.1
 
