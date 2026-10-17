@@ -8,7 +8,7 @@
 // CI 上没有 codex，自动化测试用的是假的 codex（packages/device/test/client-tools.test.mts）；这一条在本机跑。
 //
 // 用法：node scripts/check-client-tools-codex.mjs（先 npm run build --prefix packages/device；需要本机有 go）
-//   PATH 里没有 codex 时说明原因后跳过（退出码 0）。
+//   CHA_CODEX_CLI 指定用哪一份 codex；没给时用 PATH 里的，PATH 里也没有就说明原因后跳过（退出码 0）。
 // 隔离照 scripts/check-native-codex.mjs：HOME、CODEX_HOME 都在临时目录，环境从零写，模型是回环上的假接口，
 // 代理指到回环上没人听的端口；不碰 ~/.codex 和 ~/.codex-harness-adapter；结束时收掉进程、删掉临时目录。
 import { spawn, spawnSync } from 'node:child_process'
@@ -31,8 +31,21 @@ import { WebSocket } from 'ws'
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const pause = (ms) => new Promise((done) => setTimeout(done, ms))
 
-/** PATH 里第一个可执行的 codex。官方桌面端自带的那一份不算 */
+/**
+ * 用哪一份 codex：给了 CHA_CODEX_CLI 就用它（流水线上是 npm 装的精确版本，给了却用不了直接失败，不跳过），
+ * 没给是 PATH 里第一个可执行的 codex。官方桌面端自带的那一份不算
+ */
 function findCodex() {
+  const given = process.env.CHA_CODEX_CLI?.trim()
+  if (given) {
+    try {
+      if (statSync(given).isFile() && (statSync(given).mode & 0o111) !== 0) return given
+    } catch {
+      // 下面报错
+    }
+    console.error(`CHA_CODEX_CLI 指的不是一个可执行的文件：${given}`)
+    process.exit(1)
+  }
   for (const directory of (process.env.PATH ?? '').split(delimiter)) {
     if (!directory) continue
     const candidate = join(directory, 'codex')

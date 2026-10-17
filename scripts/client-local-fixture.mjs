@@ -86,6 +86,7 @@ import {
   writeEngineSettings,
 } from './client-fixture-engines.mjs'
 import { FIXTURE_SKILL, piReply, sendCompletion } from './client-fixture-marks.mjs'
+import { serveResponses } from './client-fixture-responses.mjs'
 import { runReply } from './client-fixture-run.mjs'
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -178,6 +179,12 @@ const model = createServer(async (req, res) => {
   if (id === 'claude-code' || id === 'dsh') {
     appendFileSync(modelLog, `${JSON.stringify({ at: Date.now(), harness: id })}\n`)
     await serveAnthropic(id, `/${rest.join('/')}`, raw, res, pace)
+    return
+  }
+  // 原生 codex 说的是 Responses 形态（client-fixture-responses.mjs），只会把话带回来
+  if (id === 'codex') {
+    appendFileSync(modelLog, `${JSON.stringify({ at: Date.now(), harness: id })}\n`)
+    await serveResponses(id, `/${rest.join('/')}`, raw, res, { serial: ++requests, pace })
     return
   }
   const body = JSON.parse(raw.toString() || '{}')

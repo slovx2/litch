@@ -7,6 +7,9 @@
 //   CHA_OPENCODE_CLI   隔离的 opencode（--engines 里写了 opencode 才要；三引擎验收还不带它）
 //   CHA_ACP_CLI        --engines 里写了 acp 才要：自填命令的 ACP 入口（标识 acp）要接的 agent。夹具只会给
 //                      OpenCode 配模型，所以这里只认 opencode（参数取 CHA_ACP_ARGS，没给就是 acp，即 opencode acp）
+//   CHA_CODEX_CLI      --engines 里写了 codex 才要：隔离的原生 codex（流水线上可以是 npm 装的精确版本
+//                      @openai/codex@0.160.0 的 bin/codex.js）。数据目录 CODEX_HOME 在夹具里，模型是回环上的假接口
+//                      （Responses 形态，client-fixture-responses.mjs），不碰 ~/.codex。没要时在设置里明写停用
 // 没要的新 harness（OpenCode，经 ACP 接的 Gemini CLI、Qwen Code、acp）在设置里明写停用，免得哪一层漏了隔离时
 // 它们去找用户自己装的那一份。
 // 要了却没给、给的不是可执行文件：报错退出，不悄悄少起一个。没要的照旧报“没装”。
@@ -29,6 +32,7 @@ import { spawnSync } from 'node:child_process'
 import { accessSync, constants, mkdirSync, realpathSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { FIXTURE_SKILL, skillFile } from './client-fixture-marks.mjs'
+import { codexConfig } from './client-fixture-responses.mjs'
 
 /** 开关里的名字 → harness 的标识、给它命令行的环境变量 */
 const ENGINES = {
@@ -36,6 +40,7 @@ const ENGINES = {
   dsh: { id: 'dsh', variable: 'CHA_DSH_CLI', name: 'DeepSeek Harness' },
   opencode: { id: 'opencode', variable: 'CHA_OPENCODE_CLI', name: 'OpenCode' },
   acp: { id: 'acp', variable: 'CHA_ACP_CLI', name: 'ACP（opencode acp）' },
+  codex: { id: 'codex', variable: 'CHA_CODEX_CLI', name: 'Codex' },
 }
 
 /** 经 ACP 接的几个 harness：夹具不起 gemini、qwen（要真的 agent、会花钱），一律在设置里停用；acp 要了才开 */
@@ -50,13 +55,13 @@ const DEAD_END = 'http://127.0.0.1:9'
  */
 export function wantedEngines(argv = process.argv, env = process.env) {
   const at = argv.indexOf('--engines')
-  const wanted = { claude: null, dsh: null, opencode: null, acp: null }
+  const wanted = { claude: null, dsh: null, opencode: null, acp: null, codex: null }
   if (at < 0) return wanted
   const names = (argv[at + 1] ?? '').split(',').filter(Boolean)
   const unknown = names.filter((name) => name !== 'pi' && !ENGINES[name])
   if (names.length === 0 || unknown.length > 0) {
     console.error(
-      `--engines 后面写要起的引擎，用逗号隔开（claude、pi、dsh、opencode、acp）${unknown.join(' ')}`,
+      `--engines 后面写要起的引擎，用逗号隔开（claude、pi、dsh、opencode、acp、codex）${unknown.join(' ')}`,
     )
     process.exit(1)
   }
@@ -90,6 +95,7 @@ export const engineIds = (engines) => [
   ...(engines.dsh ? ['dsh'] : []),
   ...(engines.opencode ? ['opencode'] : []),
   ...(engines.acp ? ['acp'] : []),
+  ...(engines.codex ? ['codex'] : []),
 ]
 
 const plain = (name, value) => ({ name, value })
@@ -150,6 +156,7 @@ export function writeEngineSettings({ home, root, modelUrl, engines }) {
   const values = {
     'harness.pi.approvals': true,
     'harness.opencode.enabled': Boolean(engines.opencode),
+    'harness.codex.enabled': Boolean(engines.codex),
   }
   for (const id of ACP_HARNESSES)
     values[`harness.${id}.enabled`] = id === 'acp' && Boolean(engines.acp)
@@ -192,6 +199,22 @@ export function writeEngineSettings({ home, root, modelUrl, engines }) {
     values['harness.acp.env'] = [
       plain('CHA_ACP_ARGS', process.env.CHA_ACP_ARGS?.trim() || 'acp'),
       ...opencodeEnv(join(root, 'oa'), `${modelUrl}/acp/v1`),
+    ]
+  }
+  if (engines.codex) {
+    // 原生 codex 的数据目录（会话、配置、登录状态）整个在夹具里；配置只指向回环上的假模型，没有凭据。
+    // 它想往外连的（插件市场、更新检查）一律走连不通的代理
+    const codexHome = join(root, 'cx')
+    mkdirSync(codexHome, { recursive: true })
+    writeFileSync(join(codexHome, 'config.toml'), codexConfig(`${modelUrl}/codex/v1`))
+    values['harness.codex.cliPath'] = engines.codex
+    values['harness.codex.env'] = [
+      plain('CODEX_HOME', codexHome),
+      ...['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'http_proxy', 'https_proxy', 'all_proxy'].map(
+        (name) => plain(name, DEAD_END),
+      ),
+      plain('NO_PROXY', '127.0.0.1,localhost'),
+      plain('no_proxy', '127.0.0.1,localhost'),
     ]
   }
   mkdirSync(join(home, 'device'), { recursive: true, mode: 0o700 })
