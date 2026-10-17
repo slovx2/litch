@@ -237,6 +237,7 @@ npm run client:check:packed        # 对着装好的那一份跑三组自检：�
 - 远程会话打开远端 localhost（localhost、`*.localhost`、127.0.0.1、`[::1]`、0.0.0.0）时，主进程用这台设备的 ssh 目标起 `ssh -N -L 127.0.0.1:<随机端口>:localhost:<远端端口>`（`ssh/forward.mts`、`ssh/forward-url.mts`、`browser/forwarding.mts`），只在本机回环监听，是“这边不监听任何端口”的例外。不走连接复用（`ControlPath=none`），外面套一层 sh 看门狗免得留孤儿；按“设备 + 远端端口”复用，本机端口记在 `<用户数据>/browser/forwards.json` 长期固定；没标签用了 5 分钟、设备删掉或改了目标时撤掉，ssh 自己退了会在原端口重起。代理的导航、页面里的跳转与重定向、用户地址栏都经过它；给模型的结果里带一句桌面地址和远端地址的对应。本机设备不起转发。转发出来的来源是 `localhost:<本机端口>`：localStorage 按端口隔开，Cookie 不分端口、和桌面自己的 localhost 共用。
 - 设置页的“内置浏览器”（一直允许的网站、清除浏览数据）和“Computer Use”（两项权限、打开系统设置、重启助手、始终允许的应用）在 `packages/ui/src/settings/BrowserSection.tsx`、`ComputerSection.tsx`；Computer Use 的五条消息是 `litch:computer-use:*`，主进程一侧在 `computer-use/settings.mts`。权限只在用户打开那一组时查（会拉起助手），设备详情里从不为看一眼拉起助手。自检和截图用 `LITCH_COMPUTER_USE_PERMISSIONS`（`none`、`accessibility`、`screenRecording`、`both`）假装权限，不碰真的助手。
 - 代理的 `show`：用户正看着那个会话才打开面板切到浏览器标签；否则不切走用户眼前的会话，在那个会话的侧栏行上留一个地球记号加一条带“去看”的提示，用户切过去时再打开。
+- 对话里的 http(s) 链接（回答、请求卡片、终端）点了作为眼前会话的用户标签在内置浏览器里开，同网址的用户标签切过去不重开；远端 localhost 经 `BROWSER_OPEN` 转发。Cmd/Ctrl 点、中键点、设置里关掉、没有会话的页面、终端和会话不在同一台设备、普通浏览器预览，都交给系统浏览器；Litch 自己的链接（关于页、菜单里的主页和反馈、标签栏上的“在系统浏览器打开”）照旧在外面开。规则在 `packages/ui/src/side/browser/link-logic.ts`，动手和设置（界面本地的 `litch.browser`）在 `links.ts`，单测 `packages/ui/test/browser-links.test.mjs`，实点在 `apps/desktop/src/probe-browser-links.mts`（属于 `check:browser --ui`）。
 
 ## 构建和检查
 
