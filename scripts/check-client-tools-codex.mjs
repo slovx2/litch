@@ -1,7 +1,7 @@
 // 对着这台机器上真的 codex 检查“原生 codex 的客户端工具调用由设备进程挑执行方”
 // （clientTools 扩展，protocol/extensions/client-tools.json；实现在 packages/device/src/client-tools.mts）。
 // 真的适配器主进程（Go，现编到临时目录里）+ 真的设备进程 + PATH 里的 codex，两个客户端只连聚合面：
-//   - litch：声明了 clientTools、能执行 litch_echo，带着这个命名空间的工具新建会话；
+//   - litch：声明了 clientTools、能执行 litch_echo，带着 Litch 的全部工具定义新建会话（codex 先得收下它们）；
 //   - desktop：什么都没声明（当作官方桌面端），恢复同一个会话、发起回合。
 // 模型调 litch_echo 时 codex 把调用发给两条连接，设备进程只转给 litch；litch 答的文字和图片交到模型手里。
 // 然后 litch 断开，desktop 再发起一个要调工具的回合：设备进程当场替它回 noExecutor，回合照常结束。
@@ -23,6 +23,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { createServer } from 'node:http'
+import { registerHooks } from 'node:module'
 import { delimiter, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { WebSocket } from 'ws'
@@ -75,27 +76,24 @@ for (const directory of Object.values(dirs)) mkdirSync(directory, { recursive: t
 const runtimeSocket = join(dirs.adapterHome, 'codex', 'runtime.sock')
 const deviceSocket = join(dirs.adapterHome, 'device', 'device.sock')
 
-const ECHO = 'litch_echo'
-const TOOLS = [
-  {
-    type: 'namespace',
-    name: ECHO,
-    description: 'Litch 测试工具',
-    tools: [
-      {
-        type: 'function',
-        name: 'echo',
-        description: '原样回参数',
-        inputSchema: {
-          type: 'object',
-          properties: { text: { type: 'string' } },
-          required: ['text'],
-          additionalProperties: false,
-        },
-      },
-    ],
+// 建会话带的就是 Litch 自己的那一份定义（三个命名空间都带，codex 对整份做校验：0.8.0 的命名空间说明超过
+// 1024 个字，codex 拒绝了 thread/start）。定义是 .mts，彼此按 .mjs 引用，这里装一个解析钩子换回 .mts
+registerHooks({
+  resolve(specifier, context, next) {
+    try {
+      return next(specifier, context)
+    } catch (error) {
+      if (!specifier.endsWith('.mjs')) throw error
+      return next(specifier.replace(/\.mjs$/, '.mts'), context)
+    }
   },
-]
+})
+const { CLIENT_TOOL_NAMESPACE } = await import('../packages/protocol/src/client-tools.mts')
+const { clientToolSpecs } = await import('../packages/protocol/src/client-tools-specs.mts')
+const ECHO = CLIENT_TOOL_NAMESPACE.echo
+const TOOLS = clientToolSpecs(Object.values(CLIENT_TOOL_NAMESPACE))
+/** 模型请求里出现过的命名空间：codex 收下的定义要原样交给模型 */
+const namespacesSeen = new Set()
 // 1x1 的 PNG
 const PNG =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
@@ -124,6 +122,8 @@ const model = createServer(async (request, response) => {
   const last = input.at(-1)
   lastInputs.push(last)
   const said = JSON.stringify(input.findLast((item) => item.role === 'user') ?? {})
+  for (const entry of body.tools ?? [])
+    if (entry.type === 'namespace') namespacesSeen.add(entry.name)
   const tool = (body.tools ?? []).find((entry) => entry.type === 'namespace' && entry.name === ECHO)
   response.writeHead(200, { 'content-type': 'text/event-stream' })
   const emit = (event) => response.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`)
@@ -361,6 +361,9 @@ async function main() {
   // 会话记录要等第一个回合才落盘，之前恢复不了（实测 0.160.0：no rollout found）：先跑一个不调工具的回合
   const warm = await litch.call('turn/start', { threadId, input: text('你好') })
   await turnDone(litch, warm.turn.id)
+  for (const spec of TOOLS)
+    expect(namespacesSeen.has(spec.name), `模型请求里没有 ${spec.name}：${[...namespacesSeen]}`)
+  passed(`Codex 收下了 Litch 的全部工具定义（${TOOLS.map((spec) => spec.name).join('、')}）`)
   await desktop.call('thread/resume', { threadId })
 
   // 一：桌面端发起，Litch 执行

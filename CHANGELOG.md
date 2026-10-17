@@ -5,6 +5,10 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
+## 未发布
+
+- Litch：Codex 上新建会话失败（“dynamic tool namespace description must be at most 1024 characters”）。原生 codex 从 0.150 起要求每个工具命名空间的说明不超过 1024 个字，0.8.0 里浏览器和 Computer Use 的说明都超了，codex 整个拒绝建会话；Claude Code、Pi 不查这一条，不受影响。两段说明压到 1000 字以内，用法的细节挪进各个工具自己的说明，安全规则都留着。
+
 ## 0.8.0
 
 - Litch：内置浏览器。侧面板里多了“浏览器”标签，你和代理都能用：地址栏、前进后退、多标签，所有会话共用一份登录状态。代理经 `litch_browser` 这组工具打开网页、读页面（可访问性树带编号）、点击、输入、滚动、截图、等待、看控制台、上传文件，截图在对话里显示缩略图。第一次访问本机以外的网站要你同意（本回合、本会话、一直允许或拒绝），本机地址直接放行；代理只碰自己开的标签，回合结束关掉没让留下的临时标签。网页拿不到 Node，也碰不到界面。
