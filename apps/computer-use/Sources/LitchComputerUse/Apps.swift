@@ -8,6 +8,7 @@ import AppKit
 import ApplicationServices
 import CoreGraphics
 import Foundation
+import ScreenCaptureKit
 import LitchComputerUseCore
 
 enum Permissions {
@@ -18,16 +19,26 @@ enum Permissions {
     ["accessibility": .bool(accessibility()), "screenRecording": .bool(screenRecording())]
   }
 
-  /// 向系统申请这一项：没给过时系统把助手加进列表（开关关着），可能弹它自己的提示框；已经给了什么都不做
+  /// 向系统申请这一项：没给过时系统把助手加进列表（开关关着），可能弹它自己的提示框；已经给了什么都不做。
+  /// 要在主线程上调。助手是从后台拉起的（open -g），申请前先切到前台：会议软件、官方的助手申请时都在前台，
+  /// 后台应用申请屏幕录制，系统可能既不弹框也不登记。屏幕录制另外再走一遍 ScreenCaptureKit 自己的申请，
+  /// 较新的系统上列表认的是这一条
   static func request(_ pane: String) {
     switch pane {
     case "accessibility":
       if !accessibility() {
+        NSApp.activate()
         let key = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
         _ = AXIsProcessTrustedWithOptions([key: true] as CFDictionary)
       }
     case "screenRecording":
-      if !screenRecording() { _ = CGRequestScreenCaptureAccess() }
+      if !screenRecording() {
+        NSApp.activate()
+        _ = CGRequestScreenCaptureAccess()
+        Task {
+          _ = try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+        }
+      }
     default: break
     }
   }
