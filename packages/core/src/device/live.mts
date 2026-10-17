@@ -258,6 +258,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       compact: can('compact'),
       steer: can('steer'),
       steerImages: declared ? declared.steerImages : true,
+      rollbackRestoresFiles: declared ? declared.rollbackRestoresFiles : false,
       finalOnStart: declared ? declared.finalOnStart : false,
       declared: declared !== null,
     }

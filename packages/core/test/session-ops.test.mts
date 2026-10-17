@@ -818,6 +818,7 @@ test('分叉、回退、压缩：模拟核心都支持；没有声明的不会�
   assert.deepEqual(dsh.view?.can, {
     fork: false,
     rollback: false,
+    rollbackRestoresFiles: false,
     compact: false,
     steer: true,
     steerImages: true,

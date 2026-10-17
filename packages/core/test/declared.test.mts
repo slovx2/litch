@@ -4,6 +4,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import type { ThreadItem } from '../../protocol/src/index.mjs'
+import { abilitiesOf } from '../src/device/harness.mjs'
 import type { ChannelError, UserMessageItem } from '../src/index.mjs'
 import { ALL_ABLE } from '../src/projection/session.mjs'
 import { declaredPreset, deviceWorld, features } from './device-world.mjs'
@@ -70,6 +71,7 @@ test('声明到了界面看得到的地方：harness 上带着它会什么；没
   assert.deepEqual(abilities.dsh, {
     fork: false,
     rollback: false,
+    rollbackRestoresFiles: false,
     compact: false,
     steer: true,
     steerImages: true,
@@ -97,6 +99,7 @@ test('会话操作按声明来：声明了不会的一上来就是不会，去�
   assert.deepEqual(onDsh.seen.view?.can, {
     fork: false,
     rollback: false,
+    rollbackRestoresFiles: false,
     compact: false,
     steer: true,
     steerImages: true,
@@ -673,4 +676,14 @@ test('提到的文件：声明了收 mention 的用 mention 带；原生 codex �
     }),
   )
   assert.equal(refused.code, 'rejected')
+})
+
+test('回退会不会连文件一起恢复照声明给界面：OpenCode 这样的声明 restoresFiles，别的不算', () => {
+  const restores = abilitiesOf(
+    features({ revert: { byTurnId: true, byCount: false, restoresFiles: true } }),
+    'opencode',
+  )
+  assert.deepEqual([restores?.rollback, restores?.rollbackRestoresFiles], [true, true])
+  assert.equal(abilitiesOf(features(), 'pi')?.rollbackRestoresFiles, false)
+  assert.equal(ALL_ABLE.rollbackRestoresFiles, false)
 })

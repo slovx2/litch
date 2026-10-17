@@ -24,6 +24,7 @@ const TITLE_MAX = 80
 export const ALL_ABLE: SessionAbilities = {
   fork: true,
   rollback: true,
+  rollbackRestoresFiles: false,
   compact: true,
   steer: true,
   steerImages: true,

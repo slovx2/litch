@@ -86,9 +86,13 @@ export function writeReply(body, lastUserText, harness) {
     return { text: `写文件的结果：\n\n${textOf(last.content)}`, pace: 150 }
   }
   if (!WRITE_TRIGGER.test(lastUserText)) return null
-  if (!(body.tools ?? []).some((tool) => nameOf(tool) === WRITE_TOOL)) return null
+  const tool = (body.tools ?? []).find((entry) => nameOf(entry) === WRITE_TOOL)
+  if (!tool) return null
+  // OpenCode 的写文件工具也叫 write，路径参数叫 filePath；Pi 的叫 path
+  const properties = (tool.function ?? tool).parameters?.properties ?? {}
+  const key = 'filePath' in properties ? 'filePath' : 'path'
   return {
-    tools: [{ name: WRITE_TOOL, args: { path: writtenFile(harness), content: WRITE_BODY } }],
+    tools: [{ name: WRITE_TOOL, args: { [key]: writtenFile(harness), content: WRITE_BODY } }],
   }
 }
 

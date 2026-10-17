@@ -118,7 +118,11 @@ export function TurnActions({ deviceId, sessionId, turnId, itemId }: TurnActions
       {asking ? (
         <Confirm
           title={t('turn.rollback.askTitle')}
-          note={t('turn.rollback.askNote')}
+          note={t(
+            meta?.can.rollbackRestoresFiles
+              ? 'turn.rollback.askNoteRestores'
+              : 'turn.rollback.askNote',
+          )}
           yes={t('turn.rollback.yes')}
           no={t('turn.rollback.no')}
           onYes={() => {

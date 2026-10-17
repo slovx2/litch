@@ -72,9 +72,22 @@ export function installAskExtension(agentDir) {
 const textOf = (content) =>
   typeof content === 'string' ? content : (content ?? []).map((part) => part.text ?? '').join('')
 
+/** OpenCode 自带的提问工具（opencode serve 起的时候适配器打开了它），参数形状和上面的扩展不一样 */
+export const OPENCODE_ASK_TOOL = 'question'
+
+const offered = (body, name) =>
+  (body.tools ?? []).some((tool) => (tool.function?.name ?? tool.name) === name)
+
 /** 这次模型请求里有没有把提问的工具交给模型 */
-export const askOffered = (body) =>
-  (body.tools ?? []).some((tool) => (tool.function?.name ?? tool.name) === ASK_TOOL)
+export const askOffered = (body) => offered(body, ASK_TOOL) || offered(body, OPENCODE_ASK_TOOL)
+
+/** 同样两道题，写成 OpenCode 提问工具要的样子：没选项的那道给空的选项，让用户自己写 */
+const opencodeQuestions = () =>
+  ASK_QUESTIONS.map((question, index) => ({
+    question: question.title,
+    header: `第 ${index + 1} 题`,
+    options: (question.options ?? []).map((label) => ({ label, description: label })),
+  }))
 
 /**
  * 这次请求要不要走提问这条路。要的话返回假模型该给的回复，不要就是 null。
@@ -90,5 +103,8 @@ export function askReply(body, lastUserText) {
     }
   }
   if (!ASK_TRIGGER.test(lastUserText) || !askOffered(body)) return null
+  if (!offered(body, ASK_TOOL)) {
+    return { tools: [{ name: OPENCODE_ASK_TOOL, args: { questions: opencodeQuestions() } }] }
+  }
   return { tools: [{ name: ASK_TOOL, args: { questions: ASK_QUESTIONS } }] }
 }

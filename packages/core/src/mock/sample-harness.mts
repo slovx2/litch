@@ -12,6 +12,7 @@ import { type PhraseKey, phrase } from '../phrase.mjs'
 const ALL: HarnessAbilities = {
   fork: true,
   rollback: true,
+  rollbackRestoresFiles: false,
   compact: true,
   steer: true,
   steerImages: true,

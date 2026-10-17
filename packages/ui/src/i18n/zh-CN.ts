@@ -866,6 +866,8 @@ export const zhCN = {
   'turn.rollback.askTitle': '回退到这条消息之前？',
   'turn.rollback.askNote':
     '这条消息和它后面的对话会从会话里撤掉，找不回来；消息的内容会放回输入框，改完可以重发。已经对文件做的改动不会还原。',
+  'turn.rollback.askNoteRestores':
+    '这条消息和它后面的对话会从会话里撤掉，找不回来；消息的内容会放回输入框，改完可以重发。这个引擎回退时会把那之后改过的文件也恢复原样。',
   'turn.rollback.yes': '回退',
   'turn.rollback.no': '取消',
   'turn.rollback.failed': '没回退成：{reason}',

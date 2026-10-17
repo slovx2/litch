@@ -938,6 +938,8 @@ export const en: Record<MessageKey, Entry> = {
   'turn.rollback.askTitle': 'Roll back to before this message?',
   'turn.rollback.askNote':
     'This message and everything after it will be removed from the conversation for good. Its text goes back into the input so you can edit and resend. Changes already made to files are not undone.',
+  'turn.rollback.askNoteRestores':
+    'This message and everything after it will be removed from the conversation for good. Its text goes back into the input so you can edit and resend. This engine also restores the files changed since then to how they were.',
   'turn.rollback.yes': 'Roll back',
   'turn.rollback.no': 'Cancel',
   'turn.rollback.failed': 'Could not roll back: {reason}',

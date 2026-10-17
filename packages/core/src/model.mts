@@ -50,6 +50,8 @@ export interface HarnessAbilities {
   fork: boolean
   /** 把会话回退到某个回合之前 */
   rollback: boolean
+  /** 回退时连那之后改过的文件也照快照恢复（OpenCode 是这样）；不会的只截掉对话 */
+  rollbackRestoresFiles: boolean
   /** 手动压缩上下文 */
   compact: boolean
   /** 回合进行中把排着的消息插进去（引导） */
@@ -761,6 +763,8 @@ export interface SessionAbilities {
   fork: boolean
   /** 把会话回退到某个回合之前 */
   rollback: boolean
+  /** 回退时连那之后改过的文件也照快照恢复（OpenCode 是这样）；不会的只截掉对话 */
+  rollbackRestoresFiles: boolean
   /** 手动压缩上下文 */
   compact: boolean
   /** 回合进行中把排着的消息插进去（引导） */
