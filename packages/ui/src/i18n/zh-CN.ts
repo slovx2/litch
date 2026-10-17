@@ -1148,7 +1148,8 @@ export const zhCN = {
   'devices.tools.failed': '没改成：{reason}',
   'devices.tools.computer.missing':
     '这台 Mac 还没给 Computer Use 两项系统权限（辅助功能、屏幕录制），开关打开了也用不了。',
-  'devices.tools.computer.unknown': '这台 Mac 还要给两项系统权限（辅助功能、屏幕录制）才用得了。',
+  'devices.tools.computer.unknown':
+    '用 Computer Use 要这台 Mac 给“Litch Computer Use”两项系统权限（辅助功能、屏幕录制）。',
   'devices.tools.computer.check': '去设置里看看',
   'tool.image.view': '看大图',
   'request.option.accept': '允许这一次',

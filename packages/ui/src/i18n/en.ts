@@ -1231,7 +1231,7 @@ export const en: Record<MessageKey, Entry> = {
   'devices.tools.computer.missing':
     'This Mac hasn’t granted Computer Use its two system permissions (Accessibility, Screen Recording), so it won’t work even when switched on.',
   'devices.tools.computer.unknown':
-    'This Mac also needs to grant two system permissions (Accessibility, Screen Recording).',
+    'Computer Use needs two system permissions on this Mac for “Litch Computer Use” (Accessibility, Screen Recording).',
   'devices.tools.computer.check': 'Check in Settings',
   'tool.image.view': 'View image',
   'request.option.accept': 'Allow once',

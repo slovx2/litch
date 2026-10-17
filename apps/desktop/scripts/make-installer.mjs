@@ -228,8 +228,7 @@ try {
   if (process.platform === 'darwin') {
     installer = await macos()
     if (signOnly) process.exit(0)
-  }
-  else if (signOnly) throw new Error('--sign-only 只用在 macOS 上')
+  } else if (signOnly) throw new Error('--sign-only 只用在 macOS 上')
   else if (process.platform === 'win32') installer = windows()
   else throw new Error(`这一版只出 macOS 和 Windows 的安装包，不出 ${process.platform} 的`)
   console.log(`安装包：${installer}\nSHA-256：${sha256Of(installer)}`)
