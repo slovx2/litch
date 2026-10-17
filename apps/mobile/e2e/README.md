@@ -25,7 +25,8 @@ cd apps/mobile && npm run e2e -- [--build] [--only mock|fixture|<流程文件>] 
 入口 `scripts/e2e.mjs`：不给 `--serial` 就在 `--port`（默认 5590）上无窗口、只读地起一台（默认 AVD `tyrs_hand_e2e_api35`）；
 那个端口上已经有设备（不管什么状态）就报错，让你换 `--port` 或者用 `--serial` 指定，不拿别人的来用。
 然后装包，要夹具的流程先起夹具（`scripts/fixture.mjs`，真的适配器经 SSH、隔离的 Pi、回环上的假模型），跑完收尾：
-停夹具、只撤夹具加的那两条 `adb reverse`、关掉自己起的模拟器（`--serial` 给的不关）、删临时目录。有流程没过返回非零；
+停夹具、只撤夹具加的那两条 `adb reverse`、关掉自己起的模拟器（`--serial` 给的不关）、删临时目录。
+没过的流程重跑一次（`--no-retry` 不重跑），重跑才过的在最后点名“不稳”；重跑还没过才返回非零。
 Ctrl-C 打断时照样收完尾，退出码 130。
 
 Maestro 的调试输出（失败时的截图、日志）默认放在临时目录里、跑完删掉（`--keep` 才留下）；设了 `LITCH_E2E_ARTIFACTS=<目录>`
@@ -81,6 +82,9 @@ CI 上的模拟器（reactivecircus/android-emulator-runner 的默认配置）�
 
 - `launchApp` 之后立刻发的测试链接会丢（JS 还没挂上监听），所以 `fresh.yaml` 先等首页出来再发。
 - `litch://new` 不等设备连上，夹具刚列出设备时发会落空：用它之前先等设备那一行写着“已连接”。
+- CI 的模拟器偶尔掉线一下（Maestro 打出 `device offline`），正跑着的流程会挂，`adb reverse` 的映射也全没了、
+  后面的夹具流程都连不上 127.0.0.1:8765。入口脚本跑的时候每两秒看一眼映射、少了就补，再加上没过的重跑一次。
+  本地用 `adb -s <序列号> reconnect` 能复现。
 - xterm 的内容读屏读不到：终端里的命令跑没跑，由入口脚本开在回环上的小口去看工作目录里的文件（`_shared/wait-file.js`）。
 - 入口脚本不能用同步的方式起 Maestro：流程里的 `runScript` 要连同一个进程里的小口。
 - 同一台电脑上同时只能跑一个 Maestro：2.3.0 在安卓上把驱动固定映射到电脑的 7001 口、没有参数能改，第二个会在启动应用时超时。
