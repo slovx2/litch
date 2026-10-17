@@ -42,6 +42,39 @@ Pi 默认不询问。打开设置 `harness.pi.approvals`（或者在环境文件
 
 尚未支持：计划模式、分叉与回滚、压缩、子代理展示、MCP 管理、技能的开关与额外目录、结构化输出、很长会话里更早的历史。只在 macOS 上验证过。
 
+## OpenCode（实验性）
+
+用 Codex 桌面或 Litch 驱动 [OpenCode](https://opencode.ai)。适配器走 OpenCode 自带的 `opencode serve`（原生的 HTTP 接口和事件流），不经 ACP。
+
+- **安装。** 适配器不自带 OpenCode，用你自己装的、配好提供方和密钥的那一份，要求不低于 **1.18.0**（验证过 1.18.33）。默认先从 `PATH` 找 `opencode`，再找官方安装脚本的位置 `~/.opencode/bin/opencode`，也可用 `CHA_OPENCODE_CLI` 指定。
+- **启动。** 检测到 OpenCode 时一并启动，SSH 监听 `127.0.0.1:7334`（`--opencode-port` 可改），别名 `codex-harness-adapter-opencode`；没装时不提示、不占端口。第一次用到时，适配器才在回环地址上起一个带随机口令的 `opencode serve`，退出时一并收掉。
+- **会话。** 会话就是 OpenCode 自己的会话，和你平时用的 OpenCode 共用一份数据，在哪边建的另一边都能打开。OpenCode 的终端界面起的是它自己的服务，看不到这边正在跑的回合，重开会话后才看得到。
+- **能做的。** 发消息与逐字输出、思考过程、插话、中断；命令与改文件的审批（允许一次、本会话都允许、拒绝，拒绝可附一句说明交给模型），其他权限（读项目外文件、取网页、子代理等）也走命令审批；模型用提问工具问你时弹题卡；待办当计划、回合差异、用量；技能与自定义斜杠命令；计划模式（OpenCode 的 plan 代理）；按消息分叉、压缩、删除、改名、`!` 跑命令；带图片。
+- **回退会恢复文件。** OpenCode 的回退会把那之后改过的文件也照快照恢复，和 Codex 只截掉历史不同。
+- **权限三档。** OpenCode 没有沙箱：只读档不给模型改文件、跑命令、子代理三类工具；项目内档照 OpenCode 自己的权限设置；完全访问档由适配器把来问的一律放行。“本会话都允许”交给 OpenCode 的 always，它在服务退出前对同一项目都有效。
+- **归档。** OpenCode 只能归档不能取消，所以归档只记在适配器这边，OpenCode 自己的界面里照样看得到。
+- **尚未支持。** 很长会话的历史分页、设备侧排队、MCP 管理与征询、技能开关、子代理会话单独展示。
+- **排查。** `doctor --harness opencode`；设 `CHA_OPENCODE_TRACE=<文件>` 可以逐行记下与客户端往来的协议消息。
+
+## ACP agent（实验性）
+
+说 [ACP](https://agentclientprotocol.com)（Agent Client Protocol）的编码 agent 都能经同一个通用入口接进来。内置两个预设，另留一个自填命令的入口：
+
+| 标识 | 默认命令 | SSH 端口 | 命令行变量 |
+|---|---|---|---|
+| `gemini`（Gemini CLI） | `gemini --acp` | 7335（`--gemini-port`） | `CHA_GEMINI_CLI`、`CHA_GEMINI_ARGS` |
+| `qwen`（Qwen Code） | `qwen --acp` | 7336（`--qwen-port`） | `CHA_QWEN_CLI`、`CHA_QWEN_ARGS` |
+| `acp`（自填） | 无，必须填 | 7337（`--acp-port`） | `CHA_ACP_CLI`、`CHA_ACP_ARGS` |
+
+- **默认关闭。** 三个入口都要在设备设置（或设置文件的 `harness.<标识>.enabled`）里打开才会启动；`acp` 打开了却没填命令时报“没装”。agent 本体不随适配器分发，用你自己装的、自己登录好的那一份。
+- **命令与参数。** `CHA_<ID>_CLI` 换命令（路径或 `PATH` 里的名字），`CHA_<ID>_ARGS` 整个替换预设参数：按空白切开，双引号里的空白不切。例：`CHA_ACP_CLI=opencode`、`CHA_ACP_ARGS=acp`。这两个变量可以写进环境文件，也可以写进设置里该入口的环境变量。
+- **能做的。** 新建、列出、重新打开会话（agent 支持 `session/load` 时能看到在别处建的会话的历史），发消息与逐字输出、思考过程、命令与改文件的审批（允许一次、本会话都允许、拒绝），工具调用（命令输出、带差异的改文件），计划，用量，斜杠命令当技能用，切模型、强度与模式（计划模式对应 agent 的 plan 模式），中断；agent 支持时可以从末尾分叉、可以带图片。agent 读写文件、跑命令都经适配器，所以改动会出现在对话里。
+- **尚未支持。** 插话、压缩、回退、删除会话、向你提问、MCP 管理；权限只有一档，什么时候问由 agent 自己定。
+- **登录。** 适配器不代为登录：agent 说要登录时，按提示去终端里先用它自己的命令登录好。
+- **排查。** `doctor --harness gemini` 会真的起一次 agent 做握手（不建会话、不发消息）。诊断里的原因：找不到命令、`ACP 协议版本不符`（只认第 1 版）、没有完成握手（附 agent 标准错误的最后几行）。设 `CHA_ACP_TRACE=<文件>` 可以逐行记下与客户端往来的协议消息。
+
+验证过：Gemini CLI 0.38.0（只做到握手）、`opencode acp` 1.18.33（假模型下的完整对话与审批）。Qwen Code 没有实测。
+
 ## Runtime backend
 
 ```bash

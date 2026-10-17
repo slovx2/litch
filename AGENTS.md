@@ -3,7 +3,8 @@
 本项目将 Claude Code、Pi 等 harness 接入 Codex app-server 协议。仓库里还有建在它上面的桌面客户端 Litch（仓库也叫这个名字），见下面“客户端”一节。
 
 - 用中文写新增注释与维护文档。在当前分支工作，不创建 worktree。
-- `packages/claude`、`packages/pi`、`packages/dsh`（DeepSeek Harness，实验性）是并列适配器；`packages/shared` 只承载共享能力。
+- `packages/claude`、`packages/pi`、`packages/dsh`（DeepSeek Harness，实验性）、`packages/opencode`（OpenCode，实验性，经用户安装的 `opencode serve` 的 v1 HTTP 接口与 `/global/event` 事件流）、`packages/acp`（通用 ACP 引擎，实验性，一份代码扮演 `gemini`、`qwen`、`acp` 三个标识，由命令行传 `CHA_ACP_AGENT` 指定，预设命令在 `packages/protocol/src/acp-agents.json`）是并列适配器；`packages/shared` 只承载共享能力。
+- Go 层认识哪些 harness 只写在 `cmd/codex-harness-adapter/harness_table.go` 的登记表里（入口、端口参数与默认端口、命令行变量、默认启用、装没装的检测都从它取）；加一个普通的 harness 只在表里加一行、再在 `harness-identity.json` 登记名字和徽标。建会话时带不带客户端工具（`dynamicTools`）看引擎在 `runtime/info` 的扩展里有没有报 `clientTools`。
 - `sshserver` 是通用 Go 库，不允许依赖 Tyrs Hand。`cmd/codex-harness-adapter` 是仅监听本机的 CLI。
 - `packages/device` 是设备进程：把这台机器上的各个运行时收在一个入口（聚合面，`<状态目录>/device/device.sock`）后面，给我们自己的客户端连。它由命令行的 `start` 拉起并看着，对各运行时来说只是又一个客户端，起不来不影响任何入口；父进程没了它自己退出。它没有自己的 `node_modules`，依赖从根目录解析，不要给它加 `npm ci --prefix`；它只能引用 `packages/protocol/src/` 下自包含的那几份（`device.mts`、`device-processes.mts`、`device-settings.mts`、`device-service.mts`、`harness-identity.mts`、`client-tools.mts`），不能引用 `codex.mts`。
 - 聚合面只给握手时声明了 `harness` 扩展的客户端用（`capabilities.litchExtensions`），官方桌面端连的仍然是各 harness 自己的 SSH 入口，行为不许因为聚合面而变。扩展的定义在 `protocol/extensions/harness.json`，设备包的测试按它校验真实的应答：改形状要同步改它和 `packages/protocol/src/device.mts`。协议扩展的规矩（只增不改、服务端主动发的扩展内容只发给声明过的连接、用自己的前缀）见设计文档 03 第十五节。
@@ -43,9 +44,9 @@
 - 安装脚本 `scripts/install.sh`（POSIX sh，过 `sh -n` 和 shellcheck）：装到 `~/.local/share/codex-harness-adapter/<版本>/`，`current` 链接一步切换，当前的之外留最近 4 个版本，命令链到 `~/.local/bin`；不要 root，不碰状态目录，**不停也不重启正在跑的常驻服务**（会打断回合），只说明现状和该敲的命令；给人看的字中英文写在同一处。压缩包先解到临时目录、随包的 Node 和命令行试运行通过才落位；校验和对不上、架构不对、musl 的系统都在动手之前停下。发版流程在 `.github/workflows/release.yml`：推 `v` 开头的标签时出适配器的包并在容器里验证，同时出桌面应用的安装包（见下面“装成应用”那一条），全部出好才一起挂到**草稿**发布页，人看过再公开；手动跑时不填标签就是照选的分支试跑，不挂发布页。签名要的机密和发版步骤见 `CONTRIBUTING.md` 的“发版”一节。发版前本机跑 `npm run check:adapter-package`（要 Docker，约两三分钟，没有 Docker 就跳过）。
 - TypeScript 使用 `.mts`、ESM、可擦除语法；不手工修改 `dist` 或生成的协议材料。
 - 仓库的依赖声明与锁文件必须使用精确版本，CI 的可复现验证基线见 `protocol/versions.json`；不要因此要求用户把本机工具降级或安装精确版本。
-- harness 本体（Claude Code、Pi、DeepSeek Harness 等的 CLI 与运行时）不打包进适配器：不作为依赖随仓库、构建产物或 Homebrew 配方分发，一律使用用户自己安装的 harness。适配器为接入某个 harness 而必须携带的插件包（如 Pi 的计划模式、子代理、界面组件插件）不属于本体，随适配器分发并使用精确版本。
+- harness 本体（Claude Code、Pi、DeepSeek Harness 等的 CLI 与运行时）不打包进适配器：不作为依赖随仓库、构建产物或 Homebrew 配方分发，一律使用用户自己安装的 harness（OpenCode、Gemini CLI、Qwen Code 的本体出现在暂存包里时 `scripts/adapter-stage.mjs` 会直接失败）。适配器为接入某个 harness 而必须携带的插件包（如 Pi 的计划模式、子代理、界面组件插件）不属于本体，随适配器分发并使用精确版本。
 - 对用户安装的 harness 只设版本下限（高于或等于某个版本即可），不写死版本，不做完全相等校验。
-- 用户环境采用最低稳定版要求：Node.js 24（>= 24.0.0）、Go >= 1.26.6（仅源码构建）、Claude Code CLI >= 2.1.282、Pi CLI >= 0.99.1、DeepSeek Harness >= 0.2.0-rc.2；作为 harness 接进聚合面的 Codex CLI >= 0.157.1（仓库固定的协议类型就是这一版，它的预发布版按先后比，不是一律拒绝）。版本检测接受基线及更高稳定版，拒绝低版本、预发布及非法格式（DeepSeek Harness 尚无稳定版，其入口按预发布号比较）；`engines` 是环境范围，不是依赖锁。
+- 用户环境采用最低稳定版要求：Node.js 24（>= 24.0.0）、Go >= 1.26.6（仅源码构建）、Claude Code CLI >= 2.1.282、Pi CLI >= 0.99.1、DeepSeek Harness >= 0.2.0-rc.2、OpenCode >= 1.18.0（ACP agent 不查 CLI 版本，只认 ACP 第 1 版）；作为 harness 接进聚合面的 Codex CLI >= 0.157.1（仓库固定的协议类型就是这一版，它的预发布版按先后比，不是一律拒绝）。版本检测接受基线及更高稳定版，拒绝低版本、预发布及非法格式（DeepSeek Harness 尚无稳定版，其入口按预发布号比较）；`engines` 是环境范围，不是依赖锁。
 - 适配器说明（`ADAPTER.md`）中区分用户环境下限、仓库自动安装的 SDK/插件版本和 Codex 协议版本。不得把 CI 精确版本写成用户必须安装的版本。
 - 首页是 Litch 的 `README.md`（中文）和 `README.en.md`（英文），只讲是什么、界面截图、特性、当前状态、怎么从源码跑；截图用 `npm run client:shots` 重新生成，不要手工截。适配器的说明在 `ADAPTER.md` 和 `ADAPTER.en.md`，只保留四部分：解决什么问题、安装与启动（Homebrew 与源码）、Codex 桌面配置、工作原理/高级使用/排障；保持简短，开发细节与平台限制放到链接文档。
 - 默认用户入口是 `npm start`（macOS 另有 Homebrew `brew services` 后台服务，读取同一状态目录与 `env` 文件）：自动检测 Claude/Pi 的 CLI 和运行环境，初始化并启动可用入口，逐项输出状态；缺失或失败只告警，不影响其他入口；实验性的 dsh 入口只在检测到用户装了 dsh 时才启动，没装时不告警。支持 `--harness` 单独选择，没有入口可用才整体失败；中断时清理本次启动的全部进程。
@@ -256,6 +257,8 @@ npm ci
 npm ci --prefix packages/claude
 npm ci --prefix packages/pi
 npm ci --prefix packages/dsh
+npm ci --prefix packages/opencode
+npm ci --prefix packages/acp
 npm run build              # 三个引擎包、设备进程和命令行
 npm run check:fix
 npm run typecheck

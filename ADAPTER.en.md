@@ -8,7 +8,7 @@
 
 **Control Claude Code, Pi, and other harnesses through the mature Codex desktop UI.** Manage projects, conversations, file changes, and approvals in one place while keeping each harness's own models and login.
 
-Currently supports Claude Code and Pi on macOS, Linux, and Windows; DeepSeek Harness (DSH) support is experimental ([details](docs/guide/configuration.md#deepseek-harness实验性)).
+Currently supports Claude Code and Pi on macOS, Linux, and Windows; DeepSeek Harness (DSH, [details](docs/guide/configuration.md#deepseek-harness实验性)), OpenCode ([details](docs/guide/configuration.md#opencode实验性)) and agents that speak ACP (Gemini CLI, Qwen Code or a command you supply, [details](docs/guide/configuration.md#acp-agent实验性)) are experimental.
 
 ## Install and run
 
@@ -77,7 +77,7 @@ Litch reaches a remote machine through that machine's own SSH service (if `ssh h
 Codex Desktop → local SSH → adapter → Claude Code / Pi
 ```
 
-SSH listens only on `127.0.0.1`: **7331** for Claude, **7332** for Pi. Each harness runs independently. Your global Codex CLI is unchanged.
+SSH listens only on `127.0.0.1`: **7331** for Claude, **7332** for Pi; the experimental DSH, OpenCode, Gemini CLI, Qwen Code and custom ACP entries use 7333 through 7337. Each harness runs independently. Your global Codex CLI is unchanged.
 
 ```sh
 # Start one harness (replace claude-code with pi as needed)
@@ -107,7 +107,7 @@ The Claude Code entry also lists Claude Code sessions started elsewhere on this 
 Command-line output comes in Chinese and English and follows the system language by default. Set `CHA_LANG=en` or `CHA_LANG=zh-CN` to choose; it can also go in the environment file above. Messages a harness sends to the Codex UI over the protocol are Chinese only for now.
 
 - **Startup fails:** Run `doctor` for that harness and follow its guidance. Detailed logs are in `~/.codex-harness-adapter/<harness>/`.
-- **A harness shows as "not installed":** Install its command-line tool and restart the service; or fill in its "CLI path" in Litch's device management (setting key `harness.<id>.cliPath`); or point to it with its own environment variable (`CHA_CLAUDE_CLI` for Claude Code, `PI_CLI` for Pi, `CHA_DSH_CLI` for DSH).
+- **A harness shows as "not installed":** Install its command-line tool and restart the service; or fill in its "CLI path" in Litch's device management (setting key `harness.<id>.cliPath`); or point to it with its own environment variable (`CHA_CLAUDE_CLI` for Claude Code, `PI_CLI` for Pi, `CHA_DSH_CLI` for DSH, `CHA_OPENCODE_CLI` for OpenCode, and `CHA_GEMINI_CLI`, `CHA_QWEN_CLI`, `CHA_ACP_CLI` for the ACP entries). Gemini CLI, Qwen Code and the custom ACP entry are disabled by default; turn them on in the settings first.
 - **Connection fails:** Check that the service is running and the port and private key match its output.
 - **Model unavailable:** Check login and model settings in native Claude Code / Pi first.
 

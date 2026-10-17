@@ -41,7 +41,7 @@ The screenshots show demo data. Skin, light or dark, and language (中文 / Engl
 - **Remote machines.** Litch reaches a remote machine through your system's ssh. Neither side opens a port, and login is left to your own ssh config and key agent, so the app has no password field. If the adapter is installed there, all of that machine's harnesses come in together, with settings, projects and terminals that survive a dropped connection; a machine with only native codex works too, with nothing else to install. It reconnects by itself after a drop, and a turn that was running is not lost. The adapter route needs adapter 0.6.0 or later on that machine; for agents there to use this desktop's browser and Computer Use, it needs 0.8.0 or later.
 - **Built-in browser.** A browser in the side panel that both you and the agent can use: open pages, read them, click, fill in forms, upload files, take screenshots. The first visit to an outside site asks for your consent (for this turn, this session, always, or deny); local addresses are allowed. Links in the conversation open in the built-in browser by default; Cmd/Ctrl-click them, or turn this off in Settings, to use your system browser instead. Agents on remote devices use this same browser, and the remote machine's localhost is forwarded over ssh.
 - **Computer Use (macOS only).** The agent looks at the screen and operates apps on your Mac. System permissions go to a small, separately signed helper, "Litch Computer Use", not to Litch itself: click "Open System Settings" in the Computer Use group of Settings, and the helper appears in the list, so you only need to turn on Accessibility and Screen Recording for it. Each app needs your approval before the first action, password managers and the like are always off limits, an on-screen notice shows while it works, and Esc stops it. Agents on remote devices can use it too, but only after you turn it on in that device's settings, and every session asks again.
-- **Multiple harnesses.** Claude Code, Pi, Codex (native), plus experimental DeepSeek Harness (DSH). Each engine keeps its own sessions, tools, model configuration and login. If codex is installed on a machine, its sessions show up next to the other harnesses by themselves.
+- **Multiple harnesses.** Claude Code, Pi, Codex (native), plus experimental DeepSeek Harness (DSH), OpenCode, and agents that speak ACP (Gemini CLI, Qwen Code, or any ACP agent through a command you supply). Each engine keeps its own sessions, tools, model configuration and login. If codex is installed on a machine, its sessions show up next to the other harnesses by themselves.
 - **Panels for coding work.** A terminal that survives a dropped connection, a file tree and viewer, and diff review (stage, revert, and inline comments that go out with your next message).
 - **Mobile.** In development.
 
@@ -49,7 +49,7 @@ The screenshots show demo data. Skin, light or dark, and language (中文 / Engl
 
 | Part | Status |
 |---|---|
-| Adapter `codex-harness-adapter` | Usable. Lets the Codex desktop app drive Claude Code, Pi and the experimental DSH directly; Litch also reaches all the harnesses on a machine through it. See [install and usage](ADAPTER.en.md) |
+| Adapter `codex-harness-adapter` | Usable. Lets the Codex desktop app drive Claude Code, Pi and the experimental DSH, OpenCode and ACP agents directly; Litch also reaches all the harnesses on a machine through it. See [install and usage](ADAPTER.en.md) |
 | Desktop client Litch | Early development. Installers are available for macOS (Apple Silicon) and Windows (see Download below; the Windows build has not been fully tested), or run it from source. The app ships with its own copy of the adapter and gathers the harnesses installed on this machine under one device, Local. You can browse sessions, send messages (with images and attachments), queue, interrupt and steer, answer approvals and questions, and use plan mode, `/` commands and `@` to find files. When starting a session you pick the device, project and harness, and sessions from different harnesses in the same folder share one workspace. The side panel has a terminal, files and diff review. The Devices page can enable or disable a harness, change its settings, and show diagnostics and logs. It can also connect over SSH to the device service or native codex on a remote machine |
 | Built-in browser, Computer Use | Available since 0.8.0; Computer Use is macOS only. Agents on remote devices can use both capabilities of the desktop (the adapter there needs 0.8.0 or later) |
 | Mobile | In development |
@@ -63,7 +63,7 @@ Get it from the [releases page](https://github.com/slovx2/litch/releases/latest)
 | macOS (Apple Silicon) | `Litch-<version>-macos-arm64.dmg` | Signed and notarized by Apple. Open it and drag Litch into Applications |
 | Windows (x64) | `Litch-<version>-windows-x64-setup.exe` | **Not fully tested yet**; some things may not work. The installer is not signed, so Windows warns that the publisher is unknown: click "More info", then "Run anyway". It installs for the current user only and does not need administrator rights |
 
-The app ships with its own copy of the adapter and, when opened, gathers the Claude Code, Pi, DSH and codex installed on this machine under the device named Local; install and sign in to those harnesses separately. There is no installer for Intel Macs yet; run it from source there.
+The app ships with its own copy of the adapter and, when opened, gathers the Claude Code, Pi, DSH, OpenCode and codex installed on this machine under the device named Local; install and sign in to those harnesses separately. There is no installer for Intel Macs yet; run it from source there.
 
 ## Run from source
 
@@ -91,12 +91,14 @@ npm ci
 npm ci --prefix packages/claude
 npm ci --prefix packages/pi
 npm ci --prefix packages/dsh
+npm ci --prefix packages/opencode
+npm ci --prefix packages/acp
 npm run build
 npm run client:pack
 open apps/desktop/out/Litch-darwin-arm64/Litch.app
 ```
 
-When it opens, it starts that adapter by itself, and the Claude Code, Pi, DSH and codex installed on this machine show up under the device named Local (codex uses your own data, in `~/.codex` by default; disable it on the Devices page if you do not want it). A harness that is not installed says why; on the Devices page you can give the path to its command or disable it. The adapter keeps its state in `~/.codex-harness-adapter`, shared with a standalone install of the adapter. The service keeps running after you quit the app, so sessions are not interrupted.
+When it opens, it starts that adapter by itself, and the Claude Code, Pi, DSH, OpenCode and codex installed on this machine show up under the device named Local (codex uses your own data, in `~/.codex` by default; disable it on the Devices page if you do not want it). A harness that is not installed says why; on the Devices page you can give the path to its command or disable it. The adapter keeps its state in `~/.codex-harness-adapter`, shared with a standalone install of the adapter. The service keeps running after you quit the app, so sessions are not interrupted.
 
 An app you package yourself is only ad-hoc signed for this machine, so another Mac will refuse to open it. Computer Use permissions are tied to the signature too, so every repackage needs them granted again. To give it to someone else, or to use Computer Use for long, use the installer from the releases page.
 
