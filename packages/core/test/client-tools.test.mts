@@ -60,6 +60,8 @@ function setup(
   options: {
     namespaces?: string[] | null
     engine?: string
+    /** runtime/info 里声明的扩展；不给就是没有声明的旧适配器 */
+    extensions?: string[]
     kind?: 'local' | 'ssh'
     threads?: Thread[]
   } = {},
@@ -74,6 +76,7 @@ function setup(
       cliBuild: '0.99.1',
       capabilities: [],
       releaseReady: true,
+      ...(options.extensions ? { extensions: options.extensions } : {}),
     }),
     'project/list': () => ({ data: [], nextCursor: null }),
     'thread/list': () => ({
@@ -201,7 +204,7 @@ test('握手：主进程报了能执行的命名空间就声明 clientTools 扩�
   }
 })
 
-test('建会话：带上这台桌面能执行的那几份工具定义（决 189），没有定义的命名空间跳过；dsh 不带', async () => {
+test('建会话：带上这台桌面能执行的那几份工具定义（决 189），没有定义的命名空间跳过；没声明的旧适配器里只有 dsh 不带', async () => {
   const world = setup({ namespaces: ['litch_echo', 'litch_unknown'] })
   world.core.start()
   await settle()
@@ -221,6 +224,23 @@ test('建会话：带上这台桌面能执行的那几份工具定义（决 189�
   const plain = dsh.peer.last().seen.find((entry) => entry.method === 'thread/start')
   assert.ok(plain)
   assert.equal((plain.params as { dynamicTools?: unknown }).dynamicTools, undefined)
+
+  // 声明了的按声明：报了 clientTools 的带，没报的（dsh、还没接上客户端工具的引擎）不带
+  for (const [engine, extensions, expected] of [
+    ['pi', ['clientTools'], true],
+    ['dsh', ['clientTools'], true],
+    ['opencode', [], false],
+    ['gemini', ['planConfirmation'], false],
+  ] as const) {
+    const declared = setup({ engine, extensions: [...extensions] })
+    declared.core.start()
+    await settle()
+    await declared.command('session.create', { deviceId: 'local', cwd: '/work', text: '你好' })
+    const sent = declared.peer.last().seen.find((entry) => entry.method === 'thread/start')
+    assert.ok(sent)
+    const given = (sent.params as { dynamicTools?: unknown[] }).dynamicTools
+    assert.equal(given !== undefined, expected, `${engine} 声明了 ${extensions.join('、') || '空'}`)
+  }
 
   const none = setup({ namespaces: null })
   none.core.start()

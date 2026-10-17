@@ -8,6 +8,10 @@ versioning or publishing metadata.
 ## 未发布
 
 - Litch：Codex 上新建会话失败（“dynamic tool namespace description must be at most 1024 characters”）。原生 codex 从 0.150 起要求每个工具命名空间的说明不超过 1024 个字，0.8.0 里浏览器和 Computer Use 的说明都超了，codex 整个拒绝建会话；Claude Code、Pi 不查这一条，不受影响。两段说明压到 1000 字以内，用法的细节挪进各个工具自己的说明，安全规则都留着。
+- 新增 OpenCode 入口（实验性）：经你自己装的 OpenCode（>= 1.18.0）的 `opencode serve` 接入，会话和 OpenCode 自己共用。支持逐字输出、思考过程、插话、中断、命令与改文件的审批（拒绝可附说明）、提问题卡、待办当计划、回合差异、用量、技能与斜杠命令、计划模式、按消息分叉、回退（会连文件一起恢复）、压缩、图片。装了就启用，SSH 端口 7334（`--opencode-port`），`CHA_OPENCODE_CLI` 可指定路径。
+- 新增通用 ACP 入口（实验性）：说 ACP（Agent Client Protocol）的 agent 都能接进来，内置 Gemini CLI（`gemini --acp`）和 Qwen Code（`qwen --acp`）两个预设，另有一个自己填命令的 `acp` 入口（`CHA_ACP_CLI`、`CHA_ACP_ARGS`）。三个默认停用，在设备设置里打开；SSH 端口 7335 到 7337。
+- 适配器：命令行多了 `--opencode-port`、`--gemini-port`、`--qwen-port`、`--acp-port` 四个参数，后台服务的启动参数记录里也会带上它们；换回更早版本的命令行时它不认这些参数。
+- Litch：本机设备下会出现 OpenCode 和三个 ACP 入口；新建会话时带不带桌面的工具（浏览器、Computer Use）改成看引擎是否声明支持。
 
 ## 0.8.0
 

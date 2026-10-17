@@ -26,10 +26,19 @@ func TestControlTurnsHarnessOffAndOn(t *testing.T) {
 	first := control.waitState("收到完整的状态", func(state controlState) bool {
 		return state.harness("claude-code").State == stateRunning && state.harness("pi").State == stateRunning
 	})
-	// 四个已知的 harness 都在名单里，没装的 dsh、原生 codex 说明了原因（用例里 codex 一律按没装）。
+	// 已知的 harness 都在名单里（三个老引擎、OpenCode、ACP 那三个、原生 codex），没装的 dsh、OpenCode、原生 codex
+	// 说明了原因（用例里它们一律按没装），默认不启用的 ACP 那几个报停用。
 	dsh := first.harness("dsh")
-	if len(first.Harnesses) != 4 || dsh.State != stateNotInstalled || dsh.Text == nil || dsh.Text.ZH == "" || dsh.Text.EN == "" {
+	if len(first.Harnesses) != 8 || dsh.State != stateNotInstalled || dsh.Text == nil || dsh.Text.ZH == "" || dsh.Text.EN == "" {
 		t.Fatalf("名单应列出全部已知的 harness: %+v", first.Harnesses)
+	}
+	if opencode := first.harness("opencode"); opencode.State != stateNotInstalled || opencode.Text == nil || !strings.Contains(opencode.Text.ZH, "CHA_OPENCODE_CLI") {
+		t.Fatalf("没装的 OpenCode 应报没装、提它自己的变量: %+v", opencode)
+	}
+	for _, id := range []string{"gemini", "qwen", "acp"} {
+		if view := first.harness(id); view.State != stateDisabled || view.Text == nil || !strings.Contains(view.Text.ZH, "默认不启用") {
+			t.Fatalf("%s 默认不启用: %+v", id, view)
+		}
 	}
 	// 没装的原因只提它自己的那个变量，并说明设置里能填路径。
 	for _, said := range []string{dsh.Text.ZH, dsh.Text.EN} {
@@ -195,8 +204,8 @@ func TestControlMovesSSHEntryWithoutRestart(t *testing.T) {
 		Text    string           `json:"text"`
 	}
 	control.must("ssh.config", nil, &config)
-	if len(config.Entries) != 3 {
-		t.Fatalf("应有三个入口: %+v", config.Entries)
+	if len(config.Entries) != len(adapterHarnesses) {
+		t.Fatalf("每个引擎都应有一个入口: %+v", config.Entries)
 	}
 	claude, turnedOff, dsh := config.Entries[0], config.Entries[1], config.Entries[2]
 	if claude.Config == nil || !strings.Contains(*claude.Config, "Host codex-harness-adapter-claude\n") || !strings.Contains(*claude.Config, "Port "+strconv.Itoa(entries[0].port)+"\n") || config.Text != *claude.Config {

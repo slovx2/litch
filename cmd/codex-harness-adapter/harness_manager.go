@@ -127,10 +127,11 @@ func (m *harnessManager) wanted(id string) (bool, string, bilingual) {
 	}
 	if raw, written := m.base.settings.lookup(enabledKey(id)); written && json.Unmarshal(raw, &enabled) == nil {
 		if enabled {
-			return true, "", bilingual{}
+			return m.hasCLI(id)
 		}
 		return false, stateDisabled, both("已在设置里停用", "Turned off in settings")
 	}
+	spec, entry := specOf(id), m.base.forHarness(id)
 	switch {
 	case m.base.harness == id:
 	case m.base.harness != "":
@@ -138,18 +139,30 @@ func (m *harnessManager) wanted(id string) (bool, string, bilingual) {
 			"这次启动只选了 %s（--harness）；在设置里启用它就会起来",
 			"This run was started for %s only (--harness); enable it in settings to start it",
 		).with(harnessNames[m.base.harness])
-	case id == "dsh" && !dshInstalled(m.base.forHarness(id)):
+	case spec.enable == enableWhenInstalled && spec.experimental && !entry.installed(id):
 		// 怎么办和别的 harness 找不到命令行时是同一句（cliMissing），前面多交代一句它为什么没有照常去试。
-		remedy := cliMissing(m.base.forHarness(id))
 		return false, stateNotInstalled, both(
 			"%s 还在实验阶段，检测到装了才启用。%s",
 			"%s is experimental and only starts when it is installed. %s",
-		).pair(verbatim(harnessNames[id]), remedy)
-	case id == nativeCodex && !codexInstalled(m.base.forHarness(id)):
+		).pair(verbatim(harnessNames[id]), cliMissing(entry))
+	case spec.enable == enableWhenInstalled && !entry.installed(id):
 		return false, stateNotInstalled, both(
 			"检测到这台设备装了 %s 才启用。%s",
 			"%s is turned on once it is found on this device. %s",
-		).pair(verbatim(harnessNames[id]), cliMissing(m.base.forHarness(id)))
+		).pair(verbatim(harnessNames[id]), cliMissing(entry))
+	case spec.enable == enableOptIn:
+		return false, stateDisabled, both(
+			"%s 默认不启用；在设置里启用它就会起来",
+			"%s is off by default; enable it in settings to start it",
+		).with(harnessNames[id])
+	}
+	return m.hasCLI(id)
+}
+
+// 要启用的 harness 有没有命令可起。没有预设命令的（自填命令的 acp）没给命令行路径时启用了也不去试，报没装。
+func (m *harnessManager) hasCLI(id string) (bool, string, bilingual) {
+	if entry := m.base.forHarness(id); entry.lacksCLI() {
+		return false, stateNotInstalled, cliMissing(entry)
 	}
 	return true, "", bilingual{}
 }

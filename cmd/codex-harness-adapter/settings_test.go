@@ -15,7 +15,7 @@ func settingsTestConfiguration(t *testing.T) configuration {
 	t.Helper()
 	cfg := testConfiguration(t)
 	cfg.harness, cfg.port = "", 0
-	cfg.claudePort, cfg.piPort, cfg.dshPort = 7331, 7332, 7333
+	cfg.ports = nil
 	settings, err := loadSettings(cfg.home)
 	if err != nil {
 		t.Fatal(err)
@@ -273,7 +273,7 @@ func TestSSHConfigFollowsSettings(t *testing.T) {
 	}
 	cfg.settings = settings
 	base := cfg
-	base.harness, base.port, base.claudePort, base.piPort, base.dshPort = "", 0, 7331, 7332, 7333
+	base.harness, base.port, base.ports = "", 0, nil
 	if _, problem, err := settings.apply(0, []settingEdit{edit("ssh.pi.port", 7555)}, buildSettingsSchema(base), base.validateSettings); err != nil || problem != nil {
 		t.Fatalf("写入失败: %+v %v", problem, err)
 	}

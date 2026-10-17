@@ -20,7 +20,7 @@
     "密钥只能写、不能读回：secret 类型读到的是 {set}，环境变量表里的密钥读到的没有 value；通知和日志里也没有。名字看着像密钥的环境变量（含 key、token、secret、passw、credential、auth，不分大小写）不标也按密钥处理。",
     "改了要重启才生效的设置（restart 为 harness）：那个 harness 没有回合在跑时，写入之后设备服务自己把它重新起一遍（停用就是停掉）；有回合在跑、或者判断不了时，写入照样成功，它出现在 snapshot.pendingRestart 里，等用户调 litch/device/harness/restart。",
     "谁能连上聚合面谁就能配置，不另设权限。远程设备走的是同一条连接。",
-    "启动参数（--ssh、--claude-port、--pi-port、--dsh-port、--harness）是设置里没写过时的默认值，写过就以设置为准。设置文件不存在时一切和没有这个扩展时一样。"
+    "启动参数（--ssh、--claude-port、--pi-port、--dsh-port、--opencode-port、--gemini-port、--qwen-port、--acp-port、--harness）是设置里没写过时的默认值，写过就以设置为准。设置文件不存在时一切和没有这个扩展时一样。"
   ],
   "parts": [
     {
@@ -295,7 +295,7 @@
       "kind": "EnumValue",
       "on": "HarnessInfo.unavailable.kind（harness 扩展，runtime/info 和 litch/harness/status/changed）",
       "values": ["starting", "disabled", "notInstalled", "versionTooLow", "startFailed", "stopped"],
-      "description": "适配器主进程告诉设备进程的不可用原因。starting：正在检查环境、启动；disabled：在设置里停用了，或者这次启动没有选它；notInstalled：没装，找不到它的命令行；versionTooLow：装了但版本低于适配器要求的下限；startFailed：环境检查没过或者没能启动；stopped：起来过，后来自己退出了。有适配器主进程在管时，runtime/info 的 harnesses 列出这台设备上全部已知的 harness（claude-code、pi、dsh），不管起没起来。对所有聚合面连接都发，不看声明。harness.json 里 kind 的说明也列着这几种。"
+      "description": "适配器主进程告诉设备进程的不可用原因。starting：正在检查环境、启动；disabled：在设置里停用了，或者这次启动没有选它；notInstalled：没装，找不到它的命令行；versionTooLow：装了但版本低于适配器要求的下限；startFailed：环境检查没过或者没能启动；stopped：起来过，后来自己退出了。有适配器主进程在管时，runtime/info 的 harnesses 列出这台设备上全部已知的 harness（claude-code、pi、dsh、opencode、gemini、qwen、acp），不管起没起来。对所有聚合面连接都发，不看声明。harness.json 里 kind 的说明也列着这几种。"
     },
     {
       "kind": "Field",

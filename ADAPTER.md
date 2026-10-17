@@ -8,7 +8,7 @@
 
 **用成熟的 Codex 桌面 UI 控制 Claude Code、Pi 等 harness。** 在一个界面里管理项目、对话、文件修改和审批，继续使用各引擎自己的模型配置与登录。
 
-目前支持 Claude Code、Pi，适用于 macOS、Linux、Windows；DeepSeek Harness（DSH）为实验性支持（[说明](docs/guide/configuration.md#deepseek-harness实验性)）。
+目前支持 Claude Code、Pi，适用于 macOS、Linux、Windows；DeepSeek Harness（DSH，[说明](docs/guide/configuration.md#deepseek-harness实验性)）、OpenCode（[说明](docs/guide/configuration.md#opencode实验性)）和说 ACP 协议的 agent（Gemini CLI、Qwen Code 或自填命令，[说明](docs/guide/configuration.md#acp-agent实验性)）为实验性支持。
 
 ## 安装与启动
 
@@ -77,7 +77,7 @@ Litch 连远程机器只用那台机器自己的 SSH 服务（平时 `ssh 主机
 Codex 桌面 → 本地 SSH → 适配器 → Claude Code / Pi
 ```
 
-SSH 仅监听 `127.0.0.1`：Claude 默认 **7331**，Pi 默认 **7332**。两个引擎独立运行，不修改全局 Codex CLI。
+SSH 仅监听 `127.0.0.1`：Claude 默认 **7331**，Pi 默认 **7332**；实验性的 DSH、OpenCode、Gemini CLI、Qwen Code、自填命令的 ACP 依次是 7333 到 7337。两个引擎独立运行，不修改全局 Codex CLI。
 
 ```sh
 # 单独启动引擎（claude-code 可换成 pi）
@@ -107,7 +107,7 @@ Claude Code 入口会列出这台机器上别处（命令行、Claude 桌面端�
 命令行的输出有中文和英文两种，默认跟随系统语言；用 `CHA_LANG=zh-CN` 或 `CHA_LANG=en` 指定，也可以写进上面的环境文件。引擎经协议发到 Codex 界面里的提示目前只有中文。
 
 - **启动失败：** 运行对应引擎的 `doctor`，按提示处理；详细日志在 `~/.codex-harness-adapter/<引擎>/`。
-- **某个 harness 显示“没装”：** 装好它的命令行后重启服务；或者在 Litch 的设备管理里给它填“命令行路径”（设置键 `harness.<标识>.cliPath`）；或者用它自己的环境变量指路（Claude Code 是 `CHA_CLAUDE_CLI`，Pi 是 `PI_CLI`，DSH 是 `CHA_DSH_CLI`）。
+- **某个 harness 显示“没装”：** 装好它的命令行后重启服务；或者在 Litch 的设备管理里给它填“命令行路径”（设置键 `harness.<标识>.cliPath`）；或者用它自己的环境变量指路（Claude Code 是 `CHA_CLAUDE_CLI`，Pi 是 `PI_CLI`，DSH 是 `CHA_DSH_CLI`，OpenCode 是 `CHA_OPENCODE_CLI`，ACP 的几个是 `CHA_GEMINI_CLI`、`CHA_QWEN_CLI`、`CHA_ACP_CLI`）。Gemini CLI、Qwen Code 和自填命令的 ACP 入口默认停用，要先在设置里打开。
 - **连接失败：** 确认服务仍在运行，端口和私钥与启动输出一致。
 - **模型不可用：** 先在原生 Claude Code / Pi 中检查登录和模型配置。
 

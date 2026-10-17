@@ -11,5 +11,8 @@
   "piSubagents": "21.8.1",
   "dshMinimum": "0.2.0-rc.2",
   "dshVerified": ["0.2.0-rc.2"],
+  "opencodeMinimum": "1.18.0",
+  "opencodeVerified": ["1.18.33"],
+  "acpProtocol": 1,
   "releaseReady": false
 }

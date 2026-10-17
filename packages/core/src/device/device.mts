@@ -1127,8 +1127,12 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     },
     interrupting: (sessionId) => toolCalls.interrupted(sessionId),
     dynamicTools(harness) {
-      // dsh 不认这个参数（决 197：第一版不给 dsh 工具）
-      if (harness === 'dsh') return null
+      // 按声明给：引擎在 runtime/info 的 extensions 里报了 clientTools 才带（dsh 不认这个参数，决 197；
+      // 还没接上客户端工具的引擎也不报）。没有声明的是更早的适配器，那时只有 dsh 不认
+      const declared = harness === null ? undefined : terms.get(harness)
+      if (declared ? !declared.extensions.includes(EXTENSION.clientTools) : harness === 'dsh') {
+        return null
+      }
       return clientToolSpecs(options.tools?.namespaces() ?? [])
     },
     turnDiff: (sessionId, turnId, diff) => diffs.turnDiff(sessionId, turnId, diff),

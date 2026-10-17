@@ -86,7 +86,9 @@ func processAlive(pid int) bool {
 func deviceTestConfiguration(t *testing.T) (configuration, []configuration) {
 	t.Helper()
 	cfg := testConfiguration(t)
-	cfg.harness, cfg.claudePort, cfg.piPort = "", cfg.port, otherPort(t, cfg.port)
+	cfg.harness = ""
+	cfg.setPort("claude-code", cfg.port)
+	cfg.setPort("pi", otherPort(t, cfg.port))
 	entries := cfg.entries()
 	for _, entry := range entries {
 		writeStartFixture(t, entry)
@@ -349,5 +351,5 @@ func parseDeviceStartOutput(t *testing.T, result cliResult) deviceStartResult {
 
 func deviceStartArguments(cfg configuration, extra ...string) []string {
 	return append([]string{"device-start", "--home", cfg.home, "--root", cfg.root,
-		"--claude-port", strconv.Itoa(cfg.claudePort), "--pi-port", strconv.Itoa(cfg.piPort)}, extra...)
+		"--claude-port", strconv.Itoa(cfg.portOf("claude-code")), "--pi-port", strconv.Itoa(cfg.portOf("pi"))}, extra...)
 }

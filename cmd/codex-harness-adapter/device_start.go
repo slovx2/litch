@@ -37,15 +37,7 @@ var (
 	deviceStartPoll    = 100 * time.Millisecond
 )
 
-// 适配器自己的三个引擎：各有一个 Node 运行时，各有一个给官方桌面端的 SSH 入口。
-// 探测“有没有别的服务在这个状态目录上跑”时把它们都看一遍，不管这次选了哪个、dsh 装没装。
-var adapterHarnesses = []string{"claude-code", "pi", "dsh"}
-
-// 这台设备上受管的全部 harness，顺序就是报给客户端的顺序：三个引擎，加上原生 codex（native_codex.go）。
-var knownHarnesses = append(append([]string{}, adapterHarnesses...), nativeCodex)
-
-// 这个 harness 有没有给官方桌面端的 SSH 入口。原生 codex 没有。
-func hasSSHEntry(id string) bool { return id != nativeCodex }
+// 适配器的引擎和全部受管的 harness 都登记在 harness_table.go。
 
 type deviceStartResult struct {
 	// 恒为 true：有这一行就说明聚合面能连了。

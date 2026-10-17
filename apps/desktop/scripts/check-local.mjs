@@ -150,15 +150,15 @@ const { home, login } = fixture
 const socket = join(home, 'device', 'device.sock')
 
 /**
- * 哨兵：四个名叫 claude、pi、dsh、codex 的小脚本，被执行就记一笔。放进小工具自己的环境里（PATH 的最前面，
- * 加上三个指路的变量），装成“应用自己的环境里就有用户装的 harness”，比如应用是从终端里启动的。
+ * 哨兵：名叫 claude、pi、dsh、codex、opencode、gemini、qwen 的小脚本，被执行就记一笔。放进小工具自己的环境里
+ * （PATH 的最前面，加上几个指路的变量），装成“应用自己的环境里就有用户装的 harness”，比如应用是从终端里启动的。
  * 登录 shell 给的环境应当把它们全盖掉：记录里只要有一行，就说明服务用了应用自己环境里的 harness，
  * 换成真的机器，被执行的就是用户真实的 claude，或者对着用户自己的 ~/.codex 起来的 codex（它装了就默认启用）。
  */
 const decoys = join(fixture.root, 'decoy')
 const decoyLog = join(decoys, 'ran.log')
 mkdirSync(decoys)
-for (const name of ['claude', 'pi', 'dsh', 'codex']) {
+for (const name of ['claude', 'pi', 'dsh', 'codex', 'opencode', 'gemini', 'qwen']) {
   writeFileSync(join(decoys, name), `#!/bin/sh\necho "${name} $*" >> '${decoyLog}'\nexit 1\n`)
   chmodSync(join(decoys, name), 0o755)
 }
@@ -177,6 +177,9 @@ function run(flags) {
         CHA_CLAUDE_CLI: join(decoys, 'claude'),
         PI_CLI: join(decoys, 'pi'),
         CHA_DSH_CLI: join(decoys, 'dsh'),
+        CHA_OPENCODE_CLI: join(decoys, 'opencode'),
+        CHA_GEMINI_CLI: join(decoys, 'gemini'),
+        CHA_QWEN_CLI: join(decoys, 'qwen'),
         ...fixture.env,
         LITCH_LANG: 'zh-CN',
         ELECTRON_RUN_AS_NODE: '1',
@@ -295,7 +298,16 @@ try {
       assert.equal(info.device.home, login.home, '设备进程看到的主目录不是登录 shell 给的那个')
       // 已知的 harness 不管起没起来都要列出来，客户端才说得出哪个不可用、为什么
       const byId = Object.fromEntries(info.harnesses.map((entry) => [entry.id, entry]))
-      assert.deepEqual(Object.keys(byId).sort(), ['claude-code', 'codex', 'dsh', 'pi'])
+      assert.deepEqual(Object.keys(byId).sort(), [
+        'acp',
+        'claude-code',
+        'codex',
+        'dsh',
+        'gemini',
+        'opencode',
+        'pi',
+        'qwen',
+      ])
       assert.equal(
         byId.codex.unavailable?.kind,
         'notInstalled',
@@ -311,6 +323,12 @@ try {
       // dsh 还在实验阶段，检测到装了才启用：这里要么是没启用，要么是没装
       assert.equal(dsh.available, false, 'dsh 居然可用')
       assert.ok(['disabled', 'notInstalled'].includes(dsh.unavailable?.kind), JSON.stringify(dsh))
+      // OpenCode 装了才启用，这里没装；经 ACP 接的几个默认不启用
+      assert.equal(byId.opencode.available, false, 'opencode 居然可用')
+      assert.equal(byId.opencode.unavailable?.kind, 'notInstalled', JSON.stringify(byId.opencode))
+      for (const id of ['gemini', 'qwen', 'acp']) {
+        assert.equal(byId[id].unavailable?.kind, 'disabled', JSON.stringify(byId[id]))
+      }
       // “没装”得是真的没找到，不是执行了什么之后失败：它要找的那个路径（夹具指的）确实不存在；
       // 它自己的诊断日志里是“未找到”那一句，找的正是这个路径；执行过再失败的话，日志里会是读不出版本或版本不符
       assert.equal(existsSync(login.claude), false)
@@ -324,8 +342,8 @@ try {
         readLog(join(home, 'dsh', 'diagnostics.log')),
         /无法读取宿主 dsh CLI 版本|dsh CLI 版本不符/,
       )
-      // 这两个的运行时都没有起
-      for (const id of ['claude-code', 'dsh']) {
+      // 这几个的运行时都没有起
+      for (const id of ['claude-code', 'dsh', 'opencode', 'gemini', 'qwen', 'acp']) {
         assert.equal(existsSync(join(home, id, 'runtime.sock')), false, `${id} 的运行时起来了`)
       }
     },

@@ -246,6 +246,80 @@
         "where": ["response collaborationMode/list /data/*"]
       }
     ],
+    "acp": [
+      {
+        "problem": "多出字段 jsonrpc",
+        "reason": "信封带了 jsonrpc: \"2.0\"。上游的线上格式不带这个字段（上游自己的客户端会忽略它）。去不去掉待定。",
+        "where": ["envelope serverRequest /"]
+      },
+      {
+        "problem": ["多出字段 isPinned", "多出字段 activePermissionProfile"],
+        "reason": "会话对象上自己加的字段：置顶和当前的权限档位。上游的 Thread 没有这两个字段（上游的 activePermissionProfile 在 thread/start 这类应答的顶层）。扩展机制之前就有，客户端在读，还没有改成按连接的声明来发。",
+        "where": [
+          "notification thread/started /thread",
+          "response thread/list /data/*",
+          "response thread/metadata/update /thread",
+          "response thread/read /thread",
+          "response thread/resume /thread",
+          "response thread/start /thread",
+          "response thread/unarchive /thread"
+        ]
+      },
+      {
+        "problem": "多出字段 archived",
+        "reason": "会话对象带了是否已归档；上游的 Thread 没有这个字段。",
+        "where": ["response thread/list /data/*", "response thread/unarchive /thread"]
+      },
+      {
+        "problem": ["多出字段 sandboxPolicy", "多出字段 permissions"],
+        "reason": "应答顶层多带了一份沙箱策略和权限档位；上游这两个应答里对应的是 sandbox 和 activePermissionProfile。",
+        "where": ["response thread/resume /", "response thread/start /"]
+      },
+      {
+        "problem": "多出字段 collaborationMode",
+        "reason": "新建会话的应答多带了协作模式；上游的应答里没有。",
+        "where": ["response thread/start /"]
+      },
+      {
+        "problem": "多出字段 threadId",
+        "reason": "thread/started 的参数顶层多带了一份会话标识；上游只有 thread。",
+        "where": ["notification thread/started /"]
+      },
+      {
+        "problem": "多出字段 startedAtMs",
+        "reason": "item/completed 多带了条目开始的时间；上游只有 item/started 带 startedAtMs，item/completed 带的是 completedAtMs。",
+        "where": ["notification item/completed /"]
+      },
+      {
+        "problem": [
+          "多出字段 thread",
+          "多出字段 sandbox",
+          "多出字段 reasoningEffort",
+          "多出字段 permissions"
+        ],
+        "reason": "thread/settings/updated 的 threadSettings 里多了自己的字段；上游的 ThreadSettings 里对应的是 effort、sandboxPolicy、activePermissionProfile，不含会话对象。",
+        "where": ["notification thread/settings/updated /threadSettings"]
+      },
+      {
+        "problem": "多出字段 backwardsCursor",
+        "reason": "共用的分页函数一律带回往前翻的游标；上游这几个列表的应答里没有这个字段。",
+        "where": [
+          "response thread/attachment/list /",
+          "response thread/queue/list /",
+          "response threadSection/list /"
+        ]
+      },
+      {
+        "problem": "多出字段 nextCursor",
+        "reason": "hooks/list 的应答多带了下一页的游标；上游这个接口不分页。",
+        "where": ["response hooks/list /"]
+      },
+      {
+        "problem": "多出字段 developer_instructions",
+        "reason": "collaborationMode/list 的条目多带了开发者指令；上游的 CollaborationModeMask 没有这个字段。",
+        "where": ["response collaborationMode/list /data/*"]
+      }
+    ],
     "device": []
   }
 }
