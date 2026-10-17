@@ -310,7 +310,17 @@ jobs:
         working-directory: apps/mobile
         run: |
           npx expo prebuild --platform android --clean --no-install
-          npm run android:release -- --max-workers=4
+          # 手机上发的包只有 arm64-v8a；跑机上的模拟器是 x86_64，这里只给它打 x86_64 的
+          npm run android:release -- --max-workers=4 -PreactNativeArchitectures=x86_64
+      # 跑机自带的 cmdline-tools 太旧，读不了新的 SDK 清单（XML 第 4 版），装模拟器时下载失败；
+      # 换成这个 action 自己在没有 cmdline-tools 时会下的那一版
+      - name: 换新的 Android cmdline-tools
+        run: |
+          curl -fsSL -o "${RUNNER_TEMP}/cmdline-tools.zip" https://dl.google.com/android/repository/commandlinetools-linux-14742923_latest.zip
+          unzip -q "${RUNNER_TEMP}/cmdline-tools.zip" -d "${RUNNER_TEMP}/cmdline-tools"
+          rm -rf "${ANDROID_HOME:?}/cmdline-tools/latest"
+          mv "${RUNNER_TEMP}/cmdline-tools/cmdline-tools" "${ANDROID_HOME:?}/cmdline-tools/latest"
+          "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --version
       - uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
           api-level: 35
@@ -319,3 +329,13 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
           script: node apps/mobile/scripts/e2e.mjs --serial emulator-5554
+        env:
+          LITCH_E2E_ARTIFACTS: ${{ runner.temp }}/maestro
+      # 没过时把 Maestro 的截图和日志传上来看
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: mobile-e2e-maestro
+          path: ${{ runner.temp }}/maestro
+          if-no-files-found: ignore
+          retention-days: 7
