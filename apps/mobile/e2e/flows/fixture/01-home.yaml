@@ -13,10 +13,12 @@ tags: [fixture, smoke]
 - tapOn:
     id: menu:detail
 # 设备服务报上来 8 个 harness（夹具里只装了 Pi，其余标着没装）
-- extendedWaitUntil:
-    visible:
+# 屏幕小（CI 上是 320×640）时这一行在下面，要滚下去才看得见
+- scrollUntilVisible:
+    element:
       text: .*(Device service, 8 harnesses|设备服务，8 个 harness).*
-    timeout: 30000
+    direction: DOWN
+    timeout: 60000
 - scrollUntilVisible:
     element:
       id: manage:pi

@@ -11,6 +11,7 @@
 //   --serial <序列号>                 用已经开着的这台（收尾不关它）；不给就用 --avd 在 --port 上起一台（默认 5590），
 //                                     那个端口上已经有设备（不管什么状态）就报错，不用别人的、也不再起一台
 //   --avd <名字>                      默认 tyrs_hand_e2e_api35；以只读方式起（-read-only），不改 AVD、可以和别人同时用
+//   --screen 320x640@160              把模拟器的屏幕改成这个尺寸和密度（wm size/density）再跑；CI 的模拟器就是这个，本地复现 CI 用
 //   --keep                            跑完不关模拟器、留下 Maestro 的调试输出（截图、日志），排查失败用，用完自己删
 // 要的环境：ANDROID_HOME（默认 ~/Library/Android/sdk）、JDK 17 以上（JAVA_HOME，Maestro 和 gradle 都要）、
 // Maestro 2.3.0（MAESTRO 指过去，或者在 PATH 里）；跑夹具的流程要先在仓库根目录 npm run build（适配器、Pi、设备进程）。
@@ -23,7 +24,6 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
-  realpathSync,
   rmSync,
   writeFileSync,
 } from 'node:fs'
@@ -193,6 +193,21 @@ async function startEmulator() {
 }
 
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms))
+
+/** --screen 给了就改屏幕的尺寸和密度，收尾时改回去 */
+function setScreen(serial) {
+  const screen = arg('--screen')
+  if (!screen) return
+  const found = screen.match(/^(\d+x\d+)@(\d+)$/)
+  if (!found) throw new Error(`--screen 要写成 宽x高@密度，比如 320x640@160：${screen}`)
+  adb(serial, 'shell', 'wm', 'size', found[1])
+  adb(serial, 'shell', 'wm', 'density', found[2])
+  cleanups.push(() => {
+    spawnSync(adbBin, ['-s', serial, 'shell', 'wm', 'size', 'reset'], { stdio: 'ignore' })
+    spawnSync(adbBin, ['-s', serial, 'shell', 'wm', 'density', 'reset'], { stdio: 'ignore' })
+  })
+  log(`屏幕改成 ${found[1]}、密度 ${found[2]}`)
+}
 
 // ---------- 安装包 ----------
 
@@ -386,7 +401,6 @@ async function runMaestro(serial, flows, fixture) {
         FX_MODE: fixture.config.target.env.LITCH_FX_MODE ?? '',
         FINGERPRINT_RE: escapeRe(fixture.config.target.hostFingerprint),
         HELPER: fixture.helper,
-        WORK: realpathSync(fixture.config.work),
       }
     : {}
   const list = [
@@ -439,6 +453,7 @@ async function main() {
   if (!flag('--no-install') && !existsSync(apk))
     throw new Error(`没有安装包 ${apk}：加 --build，或者用 --apk 指过去`)
   const serial = await startEmulator()
+  setScreen(serial)
   install(serial)
   const fixture = needsFixture ? await startFixture(serial) : null
   const code = await runMaestro(serial, flows, fixture)
