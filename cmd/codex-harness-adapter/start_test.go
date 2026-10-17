@@ -104,8 +104,8 @@ func TestSSHConfigSkipsUnavailableHarness(t *testing.T) {
 func TestStartAllInitializesAndStopsBothHarnesses(t *testing.T) {
 	cfg := testConfiguration(t)
 	cfg.harness = ""
-	cfg.claudePort = cfg.port
-	cfg.piPort = otherPort(t, cfg.port)
+	cfg.setPort("claude-code", cfg.port)
+	cfg.setPort("pi", otherPort(t, cfg.port))
 	for _, entry := range cfg.entries() {
 		writeStartFixture(t, entry)
 	}
@@ -114,7 +114,9 @@ func TestStartAllInitializesAndStopsBothHarnesses(t *testing.T) {
 	for attempt := 0; attempt < 2; attempt++ {
 		if attempt == 1 {
 			// 换端口后专用 known_hosts 必须同步更新，且身份保持不变。
-			cfg.claudePort, cfg.piPort = cfg.piPort, cfg.claudePort
+			claude, pi := cfg.portOf("claude-code"), cfg.portOf("pi")
+			cfg.setPort("claude-code", pi)
+			cfg.setPort("pi", claude)
 		}
 		ctx, cancel := context.WithCancel(t.Context())
 		t.Cleanup(cancel)
@@ -176,7 +178,9 @@ else { net.createServer(c=>{c.on('error',()=>{});c.end('runtime-proxy')}).listen
 
 func TestUnavailableHarnessDoesNotStopWorkingSSH(t *testing.T) {
 	cfg := testConfiguration(t)
-	cfg.harness, cfg.claudePort, cfg.piPort = "", cfg.port, otherPort(t, cfg.port)
+	cfg.harness = ""
+	cfg.setPort("claude-code", cfg.port)
+	cfg.setPort("pi", otherPort(t, cfg.port))
 	entries := cfg.entries()
 	for _, entry := range entries {
 		writeStartFixture(t, entry)

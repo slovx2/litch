@@ -95,6 +95,9 @@ for (const [path, name] of [
     ? [[join(repo, 'packages/claude/dist/claude/src/adapter.mjs'), 'packages/claude']]
     : []),
   ...(engines.dsh ? [[join(repo, 'packages/dsh/dist/dsh/src/adapter.mjs'), 'packages/dsh']] : []),
+  ...(engines.opencode
+    ? [[join(repo, 'packages/opencode/dist/opencode/src/adapter.mjs'), 'packages/opencode']]
+    : []),
 ]) {
   if (existsSync(path)) continue
   console.error(`没有找到 ${name} 的构建产物，请先运行 npm run build --prefix ${name}`)
@@ -257,11 +260,13 @@ async function startService(spec) {
     })
     prepareWorkDirectory(dirs.tri, engines)
   }
-  const [claudePort, piPort, dshPort] = await freePorts(3)
-  const ports = [
-    ...['--claude-port', String(claudePort), '--pi-port', String(piPort)],
-    ...['--dsh-port', String(dshPort)],
-  ]
+  // 要起的入口给空闲端口。OpenCode 只在要它时才给；它和经 ACP 接的几个不起时用默认端口（7334 起）也不会去听，
+  // 不另占：设置页的验收（probe-manage.mts）拿 Pi、dsh 的端口加一加二当“别处没用的端口”，空闲端口挨得紧，多占几个就撞上
+  const flags = ['claude', 'pi', 'dsh', ...(engines.opencode ? ['opencode'] : [])]
+  const ports = (await freePorts(flags.length)).flatMap((port, index) => [
+    `--${flags[index]}-port`,
+    String(port),
+  ])
   service.binary = binary
   service.ports = ports
   const path = [dirname(process.execPath), '/usr/bin', '/bin', '/usr/sbin', '/sbin']

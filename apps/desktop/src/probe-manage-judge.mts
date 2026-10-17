@@ -243,10 +243,20 @@ export function judgeManage(probe: ManageProbe): string[] {
     probe.folded === `0/${probe.harnesses.length}`,
     `详情一打开不是“harness 各一行、设置项都收着”（露出来的设置项/标题行）：${probe.folded}`,
   )
-  // 夹具里只有 Pi 装着：Claude Code、dsh 和原生 codex 都没装，所以不可用（codex 装了才默认启用）
+  // 夹具里只有 Pi 装着：Claude Code、dsh、OpenCode 和原生 codex 都没装，所以不可用（后三个装了才默认启用）；
+  // 经 ACP 接的 Gemini CLI、Qwen Code、acp 默认不启用
   same(
     probe.harnesses,
-    ['claude-code:unavailable', 'pi:ready', 'dsh:unavailable', 'codex:unavailable'],
+    [
+      'claude-code:unavailable',
+      'pi:ready',
+      'dsh:unavailable',
+      'opencode:unavailable',
+      'gemini:disabled',
+      'qwen:disabled',
+      'acp:disabled',
+      'codex:unavailable',
+    ],
     '详情页上的 harness 和状态不对',
   )
   const unusable = probe.harnesses.filter((entry) => !entry.endsWith(':ready')).length
@@ -254,10 +264,20 @@ export function judgeManage(probe: ManageProbe): string[] {
     probe.downReasons.length === unusable && probe.downReasons.every((reason) => reason.length > 0),
     `用不了的 harness 没有都写原因：${JSON.stringify(probe.downReasons)}`,
   )
-  // 真的设备服务给每个 harness 的启用项都标了角色，标题行上各有一个开关（dsh、codex 没装，默认关着）
+  // 真的设备服务给每个 harness 的启用项都标了角色，标题行上各有一个开关（dsh、OpenCode、codex 没装，
+  // ACP 那三个默认不启用，都关着）
   same(
     probe.leads,
-    ['claude-code:true', 'pi:true', 'dsh:false', 'codex:false'],
+    [
+      'claude-code:true',
+      'pi:true',
+      'dsh:false',
+      'opencode:false',
+      'gemini:false',
+      'qwen:false',
+      'acp:false',
+      'codex:false',
+    ],
     '每个 harness 的标题行上的启用开关不对（标识:开着没有）',
   )
   for (const type of ['boolean', 'env', 'integer', 'path']) {

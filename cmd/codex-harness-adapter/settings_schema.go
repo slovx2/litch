@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"strings"
 
 	"github.com/slovx2/litch/packages/protocol"
 )
@@ -94,10 +95,6 @@ var harnessNames = func() map[string]string {
 	return names
 }()
 
-// 命令行路径这一项落到哪个环境变量上：引擎就是按这几个变量找用户装的命令行的。
-// 原生 codex 不在这张表里：它的路径由服务自己读（locateCodex），不经环境变量。
-var harnessCLIVariable = map[string]string{"claude-code": "CHA_CLAUDE_CLI", "pi": "PI_CLI", "dsh": "CHA_DSH_CLI"}
-
 // Pi 的审批开关落到这个环境变量上，值是 1 就打开；运行时起来时读一次（packages/pi/src/approvals.mts）。
 const piApprovalsVariable = "CHA_PI_APPROVALS"
 
@@ -115,28 +112,23 @@ func (c configuration) defaultPort(id string) int {
 	if c.harness == id && c.port != 0 {
 		return c.port
 	}
-	switch id {
-	case "pi":
-		return c.piPort
-	case "dsh":
-		return c.dshPort
-	}
-	return c.claudePort
+	return c.portOf(id)
 }
 
-// 设置里没写过“是否启用”时：--harness 选了谁就只有谁；没选时 Claude Code 和 Pi 都启用，
-// 实验性的 dsh 和原生 codex 只在检测到本机装了它时启用（原生 codex 用的是用户自己的数据目录，见 native_codex.go）。
+// 设置里没写过“是否启用”时：--harness 选了谁就只有谁；没选时照登记表（harness_table.go）：Claude Code 和 Pi 都启用，
+// 实验性的 dsh、OpenCode 和原生 codex 只在检测到本机装了它时启用（原生 codex 用的是用户自己的数据目录，见 native_codex.go），
+// 经 ACP 接的几个默认不启用。
 func (c configuration) defaultEnabled(id string) bool {
 	if c.harness != "" {
 		return c.harness == id
 	}
-	switch id {
-	case "dsh":
-		return dshInstalled(c.forHarness(id))
-	case nativeCodex:
-		return codexInstalled(c.forHarness(id))
+	switch specOf(id).enable {
+	case enableAlways:
+		return true
+	case enableWhenInstalled:
+		return c.forHarness(id).installed(id)
 	}
-	return true
+	return false
 }
 
 // 某个 harness 的现行配置：启动参数给默认值，设置里写过的盖过它。
@@ -233,6 +225,9 @@ func harnessSettingTexts(id string) harnessTexts {
 		return codexSettingTexts()
 	}
 	name := harnessNames[id]
+	if specOf(id).acp {
+		return acpSettingTexts(id)
+	}
 	return harnessTexts{
 		enabled: both(
 			"关掉后停掉 %s 的运行时，这台设备上不再提供它；会话都还在，再打开就回来。",
@@ -242,6 +237,38 @@ func harnessSettingTexts(id string) harnessTexts {
 			"这台设备上 %s 命令行的绝对路径。留空就在 PATH 里找。",
 			"Absolute path of the %s command-line tool on this device. Leave empty to look it up on PATH.",
 		).with(name),
+		env: both(
+			"只给 %s 的运行时：代理、接口地址、密钥等。优先于启动服务的进程自己的环境，也优先于环境文件（状态目录下的 env）。",
+			"Only for the %s runtime: proxy, API endpoint, keys and so on. These take precedence over the environment of the process that started the service and over the environment file (env in the state directory).",
+		).with(name),
+	}
+}
+
+// 经通用 ACP 引擎接的几个：分组里说明它怎么接、默认不启用；命令行路径一项说明预设和参数怎么改。
+func acpSettingTexts(id string) harnessTexts {
+	spec, name := specOf(id), harnessNames[id]
+	args := strings.TrimSuffix(spec.cliVariable, "_CLI") + "_ARGS"
+	group := both(
+		"经 ACP（Agent Client Protocol）接入，默认不启用。参数可以在下面的环境变量里用 %s 改（按空白切分，支持双引号）。",
+		"Connected over ACP (Agent Client Protocol); off by default. Change the arguments with %s in the environment variables below (split on whitespace, double quotes supported).",
+	).with(args)
+	cliPath := both(
+		"这台设备上 %s 命令行的绝对路径，适配器以 ACP 方式起它。留空就用预设的命令，在 PATH 里找。",
+		"Absolute path of the %s command-line tool on this device; the adapter starts it in ACP mode. Leave empty to use the preset command, looked up on PATH.",
+	).with(name)
+	if spec.needsCLI {
+		cliPath = both(
+			"要接的 ACP agent 的命令行（绝对路径）。没有预设，不填就起不来；参数写在环境变量 %s 里。",
+			"Command-line tool (absolute path) of the ACP agent to connect. There is no preset; it cannot start without this. Put its arguments in the %s environment variable.",
+		).with(args)
+	}
+	return harnessTexts{
+		group: &group,
+		enabled: both(
+			"打开后在这台设备上提供 %s；关掉就停掉它的运行时，它自己保存的会话不受影响。",
+			"Turning this on offers %s on this device; turning it off stops its runtime. The sessions it keeps itself are not affected.",
+		).with(name),
+		cliPath: cliPath,
 		env: both(
 			"只给 %s 的运行时：代理、接口地址、密钥等。优先于启动服务的进程自己的环境，也优先于环境文件（状态目录下的 env）。",
 			"Only for the %s runtime: proxy, API endpoint, keys and so on. These take precedence over the environment of the process that started the service and over the environment file (env in the state directory).",

@@ -95,7 +95,7 @@ func TestServiceReportsItsFacts(t *testing.T) {
 		t.Fatalf("启动时间不对: %q %v", facts.StartedAt, err)
 	}
 	// 启动参数里当默认值用的那一部分原样记着：换版本重新拉起时照它带上。
-	want := []string{"--ssh=off", "--claude-port", strconv.Itoa(cfg.claudePort), "--pi-port", strconv.Itoa(cfg.piPort), "--dsh-port", "7333"}
+	want := append([]string{"--ssh=off", "--claude-port", strconv.Itoa(cfg.portOf("claude-code")), "--pi-port", strconv.Itoa(cfg.portOf("pi")), "--dsh-port", "7333"}, newerPorts...)
 	if !reflect.DeepEqual(facts.Options, want) {
 		t.Fatalf("记下的启动参数不对:\n得到 %q\n应为 %q", facts.Options, want)
 	}
@@ -198,13 +198,23 @@ func TestDefaultNodePrefersTheBundledOne(t *testing.T) {
 	}
 }
 
+// OpenCode 和 ACP 那几个入口的端口参数排在原来三个的后面，没给时是各自的默认端口。
+var newerPorts = []string{"--opencode-port", "7334", "--gemini-port", "7335", "--qwen-port", "7336", "--acp-port", "7337"}
+
 // 启动参数里当默认值用的那一部分，照命令行给的原样记下来。
 func TestLaunchOptionsAreRecordedAsGiven(t *testing.T) {
+	ports := func(head []string, rest ...string) []string {
+		return append(append(append([]string{}, head...), newerPorts...), rest...)
+	}
 	cases := map[string][]string{
-		"":                                       {"--ssh=on", "--claude-port", "7331", "--pi-port", "7332", "--dsh-port", "7333"},
-		"--ssh=off --claude-port 7441":           {"--ssh=off", "--claude-port", "7441", "--pi-port", "7332", "--dsh-port", "7333"},
-		"--harness pi --port 7500 --ssh=off":     {"--ssh=off", "--claude-port", "7331", "--pi-port", "7332", "--dsh-port", "7333", "--harness", "pi", "--port", "7500"},
-		"--harness dsh --dsh-port 7600 --ssh=on": {"--ssh=on", "--claude-port", "7331", "--pi-port", "7332", "--dsh-port", "7600", "--harness", "dsh", "--port", "7600"},
+		"":                                       ports([]string{"--ssh=on", "--claude-port", "7331", "--pi-port", "7332", "--dsh-port", "7333"}),
+		"--ssh=off --claude-port 7441":           ports([]string{"--ssh=off", "--claude-port", "7441", "--pi-port", "7332", "--dsh-port", "7333"}),
+		"--harness pi --port 7500 --ssh=off":     ports([]string{"--ssh=off", "--claude-port", "7331", "--pi-port", "7332", "--dsh-port", "7333"}, "--harness", "pi", "--port", "7500"),
+		"--harness dsh --dsh-port 7600 --ssh=on": ports([]string{"--ssh=on", "--claude-port", "7331", "--pi-port", "7332", "--dsh-port", "7600"}, "--harness", "dsh", "--port", "7600"),
+		"--harness acp --acp-port 7700": {
+			"--ssh=on", "--claude-port", "7331", "--pi-port", "7332", "--dsh-port", "7333", "--opencode-port", "7334",
+			"--gemini-port", "7335", "--qwen-port", "7336", "--acp-port", "7700", "--harness", "acp", "--port", "7700",
+		},
 	}
 	for args, want := range cases {
 		cfg, err := parseConfiguration(append([]string{"--home", t.TempDir()}, strings.Fields(args)...))

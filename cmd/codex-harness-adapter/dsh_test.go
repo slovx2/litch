@@ -11,13 +11,14 @@ import (
 
 const testCLIEnvironment = "CHA_TEST_RUN_AS_CLI"
 
-// 测试机上可能装有 dsh、codex；默认按未安装处理，入口集合才是确定的。需要验证检测本身的用例自行恢复。
-var detectDsh, detectCodex = dshInstalled, codexInstalled
+// 测试机上可能装有 dsh、opencode、codex；默认按未安装处理，入口集合才是确定的。需要验证检测本身的用例自行恢复。
+var detectDsh, detectOpencode, detectCodex = dshInstalled, opencodeInstalled, codexInstalled
 
 func TestMain(m *testing.M) {
 	// 测试要把命令行当成真的进程来跑时（device-start、device-proxy），用测试程序自己顶替。
 	if os.Getenv(testCLIEnvironment) == "1" {
 		dshInstalled = func(configuration) bool { return false }
+		opencodeInstalled = func(configuration) bool { return false }
 		codexInstalled = func(configuration) bool { return false }
 		outputLanguage = chinese
 		// 等聚合面的时限只在用例里要调短，不做成正式的选项。
@@ -34,6 +35,7 @@ func TestMain(m *testing.M) {
 		os.Exit(0)
 	}
 	dshInstalled = func(configuration) bool { return false }
+	opencodeInstalled = func(configuration) bool { return false }
 	codexInstalled = func(configuration) bool { return false }
 	// 重试间隔缩短，用例不用干等。
 	sshRetryDelay, deviceRestartDelay = 50*time.Millisecond, 50*time.Millisecond

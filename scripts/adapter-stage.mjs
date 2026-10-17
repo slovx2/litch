@@ -9,7 +9,7 @@
 //   packages/<引擎>/            构建产物（不带测试），加只有运行依赖的 node_modules
 //   node_modules/ package.json  根目录的运行依赖
 //   protocol/                   协议的契约
-// harness 本体（Claude Code 的命令行、Pi、dsh）一律不带，用的是用户自己装的那一份。
+// harness 本体（Claude Code 的命令行、Pi、dsh、OpenCode、Gemini CLI、Qwen Code）一律不带，用的是用户自己装的那一份。
 //
 // 依赖的裁剪只在暂存目录里做：把仓库里装好的 node_modules 整个复制过来，再在副本上去掉开发依赖。
 // 仓库自己的 node_modules 只读不写。
@@ -69,10 +69,17 @@ const PACKAGES = [
   },
   { name: 'pi', entry: 'dist/pi/src/adapter.mjs', required: true, omit: ['dev'] },
   { name: 'dsh', entry: 'dist/dsh/src/adapter.mjs', required: true, omit: ['dev'] },
+  { name: 'opencode', entry: 'dist/opencode/src/adapter.mjs', required: true, omit: ['dev'] },
+  // 通用 ACP 引擎：一份代码扮演 gemini、qwen、acp 三个 harness（CHA_ACP_AGENT）
+  { name: 'acp', entry: 'dist/acp/src/adapter.mjs', required: true, omit: ['dev'] },
   { name: 'device', entry: 'dist/device/src/main.mjs', required: true, omit: ['dev'] },
 ]
 
-/** harness 本体在 node_modules 里会是什么样子。出现任何一个就算暂存失败 */
+/**
+ * harness 本体在 node_modules 里会是什么样子。出现任何一个就算暂存失败。
+ * scope 是 null 的不在作用域里（npm 上的 opencode 是不带作用域的 opencode-ai，加上按平台分的 opencode-<系统>-<架构>）。
+ * 只认本体：OpenCode 的 SDK（@opencode-ai/sdk）、ACP 的 SDK 这类客户端库是引擎自己的依赖，照常带。
+ */
 const HARNESS = [
   { scope: '@anthropic-ai', match: (name) => name === 'claude-code', what: 'Claude Code 的命令行' },
   {
@@ -83,6 +90,21 @@ const HARNESS = [
   },
   { scope: '@earendil-works', match: () => true, what: 'Pi 本体' },
   { scope: '@deepseek-ai', match: () => true, what: 'dsh 本体' },
+  {
+    scope: null,
+    match: (name) => name === 'opencode-ai' || /^opencode-(darwin|linux|windows)-/.test(name),
+    what: 'OpenCode 本体',
+  },
+  {
+    scope: '@google',
+    match: (name) => name === 'gemini-cli' || name.startsWith('gemini-cli-'),
+    what: 'Gemini CLI 本体',
+  },
+  {
+    scope: '@qwen-code',
+    match: (name) => name === 'qwen-code' || name.startsWith('qwen-code-'),
+    what: 'Qwen Code 本体',
+  },
 ]
 
 const GO_ARCH = { arm64: 'arm64', x64: 'amd64' }
@@ -169,6 +191,13 @@ function tidyModules(out) {
     if (entry.name === '.bin' && basename(join(path, '..')) === 'node_modules') {
       rmSync(path, { recursive: true, force: true })
       return false
+    }
+    if (!entry.name.startsWith('@') && basename(join(path, '..')) === 'node_modules') {
+      for (const rule of HARNESS) {
+        if (rule.scope === null && rule.match(entry.name)) {
+          throw new Error(`${rule.what}不应随适配器分发：${relative(out, path)}`)
+        }
+      }
     }
     if (entry.name.startsWith('@') && basename(join(path, '..')) === 'node_modules') {
       const inside = readdirSync(path)
@@ -428,6 +457,10 @@ export async function stageAdapterTree(
   for (const [path, what] of [
     ['packages/pi/node_modules/@earendil-works', 'Pi 本体'],
     ['packages/dsh/node_modules/@deepseek-ai', 'dsh 本体'],
+    ['packages/opencode/node_modules/opencode-ai', 'OpenCode 本体'],
+    ['packages/acp/node_modules/@google/gemini-cli', 'Gemini CLI 本体'],
+    ['packages/acp/node_modules/@qwen-code/qwen-code', 'Qwen Code 本体'],
+    ['node_modules/opencode-ai', 'OpenCode 本体'],
   ]) {
     if (existsSync(join(out, path))) throw new Error(`${what}不应随适配器分发：${path}`)
   }
