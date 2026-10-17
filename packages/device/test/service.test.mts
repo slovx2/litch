@@ -524,7 +524,9 @@ test('真的主进程加真的设备进程加假的运行时：一条聚合面�
 
       const ssh = await until(async () => {
         const current = await call('litch/device/sshConfig/read')
-        return current.entries.every((item: any) => NOT_RUNNING.includes(item.harness) || item.config)
+        return current.entries.every(
+          (item: any) => NOT_RUNNING.includes(item.harness) || item.config,
+        )
           ? current
           : undefined
       }, '两个入口的 ssh 配置都给得出来')
