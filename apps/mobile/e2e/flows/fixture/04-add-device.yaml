@@ -18,16 +18,45 @@ tags: [fixture]
     visible:
       id: add:host
     timeout: 10000
+# 屏幕小（CI 上是 320×640）时键盘会盖住下面的栏、页面还在滚就点会点偏：
+# 每填一栏收起键盘，每次点之前先把它滚到中间、等滚动停下
+- scrollUntilVisible:
+    element:
+      id: add:host
+    direction: DOWN
+    centerElement: true
+- waitForAnimationToEnd
 - tapOn:
     id: add:host
 - inputText: 127.0.0.1
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: add:port
+    direction: DOWN
+    centerElement: true
+- waitForAnimationToEnd
 - tapOn:
     id: add:port
 - eraseText: 10
 - inputText: ${FIXTURE_PORT}
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: add:user
+    direction: DOWN
+    centerElement: true
+- waitForAnimationToEnd
 - tapOn:
     id: add:user
 - inputText: ${FIXTURE_USER}
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: add:name
+    direction: DOWN
+    centerElement: true
+- waitForAnimationToEnd
 - tapOn:
     id: add:name
 - inputText: e2e-box
@@ -36,6 +65,8 @@ tags: [fixture]
     element:
       id: key:generate
     direction: DOWN
+    centerElement: true
+- waitForAnimationToEnd
 - tapOn:
     id: key:generate
 - scrollUntilVisible:
@@ -48,20 +79,26 @@ tags: [fixture]
     element:
       id: add:check
     direction: DOWN
+    centerElement: true
+- waitForAnimationToEnd
 - tapOn:
     id: add:check
 # 首次连接：确认框里的指纹要和夹具主机钥匙的一样
 - extendedWaitUntil:
     visible:
       text: .*${FINGERPRINT_RE}.*
-    timeout: 20000
+    timeout: 30000
 - tapOn:
     id: confirm:ok
+# 产品问题（e2e/README.md）：确认框一关，焦点回到最后填的那一栏、软键盘又弹出来（没有硬键盘的设备上，CI 就是），
+# 盖住下面的按钮，后面再点“检查”会点到键盘上。像人一样先把它收起来
+- runScript:
+    file: ../_shared/hide-keyboard.js
 - scrollUntilVisible:
     element:
       id: failure:auth
     direction: DOWN
-    timeout: 30000
+    timeout: 60000
 - runScript:
     file: ../_shared/authorize.js
 - assertTrue: ${output.authorized}
@@ -69,26 +106,30 @@ tags: [fixture]
     element:
       id: add:check
     direction: UP
+    centerElement: true
+- waitForAnimationToEnd
 - tapOn:
     id: add:check
 - scrollUntilVisible:
     element:
       id: check:service
     direction: DOWN
-    timeout: 30000
+    timeout: 60000
 - scrollUntilVisible:
     element:
       id: add:submit
     direction: DOWN
+    centerElement: true
+- waitForAnimationToEnd
 - tapOn:
     id: add:submit
 - extendedWaitUntil:
     visible:
       id: sessions
-    timeout: 30000
+    timeout: 60000
 - tapOn:
     id: header:back
 - extendedWaitUntil:
     visible:
       text: .*e2e-box.*
-    timeout: 15000
+    timeout: 30000

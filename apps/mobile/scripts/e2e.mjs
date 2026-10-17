@@ -11,11 +11,13 @@
 //   --serial <序列号>                 用已经开着的这台（收尾不关它）；不给就用 --avd 在 --port 上起一台（默认 5590），
 //                                     那个端口上已经有设备（不管什么状态）就报错，不用别人的、也不再起一台
 //   --avd <名字>                      默认 tyrs_hand_e2e_api35；以只读方式起（-read-only），不改 AVD、可以和别人同时用
+//   --screen 320x640@160              把模拟器的屏幕改成这个尺寸和密度（wm size/density）再跑；CI 的模拟器就是这个，本地复现 CI 用
+//   --no-retry                        没过的不重跑（默认重跑一次，重跑才过的会点名“不稳”）
 //   --keep                            跑完不关模拟器、留下 Maestro 的调试输出（截图、日志），排查失败用，用完自己删
 // 要的环境：ANDROID_HOME（默认 ~/Library/Android/sdk）、JDK 17 以上（JAVA_HOME，Maestro 和 gradle 都要）、
 // Maestro 2.3.0（MAESTRO 指过去，或者在 PATH 里）；跑夹具的流程要先在仓库根目录 npm run build（适配器、Pi、设备进程）。
 // LITCH_E2E_ARTIFACTS=<目录>：Maestro 的调试输出（失败时的截图、日志）放到这里并留着（CI 上传用）；不给就放临时目录、跑完删掉。
-import { execFileSync, spawn, spawnSync } from 'node:child_process'
+import { execFile, execFileSync, spawn, spawnSync } from 'node:child_process'
 import {
   appendFileSync,
   existsSync,
@@ -23,13 +25,12 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
-  realpathSync,
   rmSync,
   writeFileSync,
 } from 'node:fs'
 import { createServer } from 'node:http'
 import { homedir, tmpdir } from 'node:os'
-import { dirname, join, relative, resolve } from 'node:path'
+import { basename, dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const mobile = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -194,6 +195,21 @@ async function startEmulator() {
 
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms))
 
+/** --screen 给了就改屏幕的尺寸和密度，收尾时改回去 */
+function setScreen(serial) {
+  const screen = arg('--screen')
+  if (!screen) return
+  const found = screen.match(/^(\d+x\d+)@(\d+)$/)
+  if (!found) throw new Error(`--screen 要写成 宽x高@密度，比如 320x640@160：${screen}`)
+  adb(serial, 'shell', 'wm', 'size', found[1])
+  adb(serial, 'shell', 'wm', 'density', found[2])
+  cleanups.push(() => {
+    spawnSync(adbBin, ['-s', serial, 'shell', 'wm', 'size', 'reset'], { stdio: 'ignore' })
+    spawnSync(adbBin, ['-s', serial, 'shell', 'wm', 'density', 'reset'], { stdio: 'ignore' })
+  })
+  log(`屏幕改成 ${found[1]}、密度 ${found[2]}`)
+}
+
 // ---------- 安装包 ----------
 
 function buildApk() {
@@ -275,10 +291,36 @@ async function startFixture(serial) {
     child.on('exit', (code) => fail(new Error(`夹具退出了（${code}）：${said.slice(-2000)}`)))
   })
   const config = JSON.parse(readFileSync(out, 'utf8'))
+  // 和夹具加的那两条一样（scripts/fixture.mjs 的 --adb）；后登记先收：先停盯梢，再撤映射
+  keepReverse(serial, [
+    [`tcp:${config.target.port}`, `tcp:${config.target.port}`],
+    ['tcp:8765', `tcp:${serve}`],
+  ])
   prepareRepo(config.work)
-  const helper = await startHelper(config)
+  const helper = await startHelper(config, serial)
   log(`夹具就绪（${since(start)}），sshd 在 127.0.0.1:${config.target.port}`)
   return { config, helper }
+}
+
+/**
+ * CI 的模拟器偶尔掉线一下（adb 报 device offline）再连上，adb reverse 的映射跟着全没了，后面的夹具流程都连不上：
+ * 跑的时候每两秒看一眼，少了就补回去。掉线那会儿看不了，跳过
+ */
+function keepReverse(serial, rules) {
+  let busy = false
+  const timer = setInterval(() => {
+    if (busy) return
+    busy = true
+    execFile(adbBin, ['-s', serial, 'reverse', '--list'], (error, out) => {
+      const missing = error ? [] : rules.filter((pair) => !out.includes(pair.join(' ')))
+      for (const pair of missing)
+        execFile(adbBin, ['-s', serial, 'reverse', ...pair], (failed) => {
+          if (!failed) log(`模拟器掉过线，补回端口映射 ${pair.join(' → ')}`)
+        })
+      busy = false
+    })
+  }, 2000)
+  cleanups.push(() => clearInterval(timer))
 }
 
 /** 新会话的工作目录做成一个有改动的 git 仓库：差异页才有东西看 */
@@ -303,8 +345,21 @@ function prepareRepo(dir) {
  *   POST /authorize        请求体是一行公钥，写进夹具 sshd 的 authorized_keys（演“用户在电脑上授权了手机的钥匙”）
  *   GET  /file?name=&text= 夹具的工作目录里这个文件有没有写出这段字（终端里敲的命令真跑了没有），最多等十秒
  */
-async function startHelper(config) {
+async function startHelper(config, serial) {
   const port = await freePort()
+  const adbOut = (...rest) =>
+    new Promise((done) =>
+      execFile(adbBin, ['-s', serial, ...rest], (error, out) => done(error ? '' : out)),
+    )
+  const keyboardShown = async () =>
+    /mInputShown=true/.test(await adbOut('shell', 'dumpsys', 'input_method'))
+  /** 软键盘弹着就按返回收起来（返回这时只收键盘）；没弹就什么都不做，不会退出当前页 */
+  const hideKeyboard = async () => {
+    if (!(await keyboardShown())) return false
+    await adbOut('shell', 'input', 'keyevent', 'KEYCODE_BACK')
+    for (let i = 0; i < 20 && (await keyboardShown()); i++) await sleep(100)
+    return true
+  }
   const fileHas = async (name, text) => {
     if (!/^[A-Za-z0-9._-]+$/.test(name)) return false
     for (let i = 0; i < 40; i++) {
@@ -319,6 +374,10 @@ async function startHelper(config) {
     req.on('data', (chunk) => (body += chunk))
     req.on('end', async () => {
       const url = new URL(req.url ?? '/', 'http://helper')
+      if (req.method === 'POST' && url.pathname === '/hide-keyboard') {
+        res.writeHead(200).end((await hideKeyboard()) ? 'hidden' : 'none')
+        return
+      }
       if (req.method === 'GET' && url.pathname === '/file') {
         const found = await fileHas(
           url.searchParams.get('name') ?? '',
@@ -377,7 +436,34 @@ function freePort() {
 
 const escapeRe = (text) => text.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')
 
-async function runMaestro(serial, flows, fixture) {
+/** 流程开头那段里的 name:；没写就是文件名（Maestro 报告里也这么叫） */
+function nameOf(file) {
+  const found = readFileSync(file, 'utf8').match(/^name:\s*(.+?)\s*$/m)
+  return found ? found[1] : basename(file, '.yaml')
+}
+
+/** JUnit 报告里没过的流程，按名字对回文件；报告没写出来（Maestro 自己挂了）或者对不上就是 null */
+function failedFlows(report, flows) {
+  if (!existsSync(report)) return null
+  const fromXml = (text) =>
+    text.replace(
+      /&(lt|gt|quot|apos|amp);/g,
+      (_, name) => ({ lt: '<', gt: '>', quot: '"', apos: "'", amp: '&' })[name],
+    )
+  const failed = []
+  for (const [, attrs, body = ''] of readFileSync(report, 'utf8').matchAll(
+    /<testcase\b([^>]*?)(?:\/>|>([\s\S]*?)<\/testcase>)/g,
+  )) {
+    if (!body.includes('<failure') && !body.includes('<error')) continue
+    const name = fromXml(attrs.match(/\bname="([^"]*)"/)?.[1] ?? '')
+    const file = flows.find((one) => nameOf(one) === name)
+    if (!file) return null
+    failed.push(file)
+  }
+  return failed
+}
+
+async function runMaestro(serial, flows, fixture, report) {
   const env = fixture
     ? {
         FIXTURE_PORT: String(fixture.config.target.port),
@@ -386,7 +472,6 @@ async function runMaestro(serial, flows, fixture) {
         FX_MODE: fixture.config.target.env.LITCH_FX_MODE ?? '',
         FINGERPRINT_RE: escapeRe(fixture.config.target.hostFingerprint),
         HELPER: fixture.helper,
-        WORK: realpathSync(fixture.config.work),
       }
     : {}
   const list = [
@@ -397,6 +482,10 @@ async function runMaestro(serial, flows, fixture) {
     '--debug-output',
     debugDir,
     '--flatten-debug-output',
+    '--format',
+    'JUNIT',
+    '--output',
+    report,
     ...Object.entries(env).flatMap(([name, value]) => ['-e', `${name}=${value}`]),
     ...flows,
   ]
@@ -439,9 +528,22 @@ async function main() {
   if (!flag('--no-install') && !existsSync(apk))
     throw new Error(`没有安装包 ${apk}：加 --build，或者用 --apk 指过去`)
   const serial = await startEmulator()
+  setScreen(serial)
   install(serial)
   const fixture = needsFixture ? await startFixture(serial) : null
-  const code = await runMaestro(serial, flows, fixture)
+  const first = join(work, 'report-1.xml')
+  let code = await runMaestro(serial, flows, fixture, first)
+  // 没过的重跑一次（CI 的模拟器偶尔掉线，正跑着的那个流程会跟着挂）；重跑才过的照样点名，别当没事
+  const failed = code === 0 || flag('--no-retry') ? null : failedFlows(first, flows)
+  if (failed?.length && !interrupted) {
+    log(`没过的重跑一次：${failed.map((file) => relative(flowsDir, file)).join(' ')}`)
+    execFileSync(adbBin, ['-s', serial, 'wait-for-device'], { stdio: 'ignore', timeout: 120_000 })
+    code = await runMaestro(serial, failed, fixture, join(work, 'report-2.xml'))
+    const still = code === 0 ? [] : (failedFlows(join(work, 'report-2.xml'), failed) ?? failed)
+    const flaky = failed.filter((file) => !still.includes(file))
+    if (flaky.length)
+      log(`重跑才过（不稳，要查）：${flaky.map((file) => relative(flowsDir, file)).join(' ')}`)
+  }
   log(`${code === 0 ? '全部通过' : '有流程没过'}（总共 ${since(total)}）`)
   return code
 }

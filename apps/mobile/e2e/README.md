@@ -25,7 +25,8 @@ cd apps/mobile && npm run e2e -- [--build] [--only mock|fixture|<流程文件>] 
 入口 `scripts/e2e.mjs`：不给 `--serial` 就在 `--port`（默认 5590）上无窗口、只读地起一台（默认 AVD `tyrs_hand_e2e_api35`）；
 那个端口上已经有设备（不管什么状态）就报错，让你换 `--port` 或者用 `--serial` 指定，不拿别人的来用。
 然后装包，要夹具的流程先起夹具（`scripts/fixture.mjs`，真的适配器经 SSH、隔离的 Pi、回环上的假模型），跑完收尾：
-停夹具、只撤夹具加的那两条 `adb reverse`、关掉自己起的模拟器（`--serial` 给的不关）、删临时目录。有流程没过返回非零；
+停夹具、只撤夹具加的那两条 `adb reverse`、关掉自己起的模拟器（`--serial` 给的不关）、删临时目录。
+没过的流程重跑一次（`--no-retry` 不重跑），重跑才过的在最后点名“不稳”；重跑还没过才返回非零。
 Ctrl-C 打断时照样收完尾，退出码 130。
 
 Maestro 的调试输出（失败时的截图、日志）默认放在临时目录里、跑完删掉（`--keep` 才留下）；设了 `LITCH_E2E_ARTIFACTS=<目录>`
@@ -65,10 +66,37 @@ Maestro 的调试输出（失败时的截图、日志）默认放在临时目录
 - 夹具的流程要先在仓库根目录 `npm run build`（适配器、Pi、设备进程）和 `npm ci --prefix packages/pi`；要 `/usr/sbin/sshd`。不要真的 codex，
   不碰 `~/.codex`、`~/.claude`、用户自己的 ssh 配置。
 
+CI 上的模拟器（reactivecircus/android-emulator-runner 的默认配置）和本地的 `tyrs_hand_e2e_api35` 有两处不一样：
+屏幕是 320×640、160dpi，比本地小得多；**没有硬键盘**（本地那台 `hw.keyboard=yes`），软键盘会在焦点回到输入框时自己弹出来。
+本地加 `--screen 320x640@160` 只能复现前一条；要和 CI 一模一样，用默认配置新建一台再 `--avd` 指过去：
+
+```sh
+echo no | avdmanager create avd -n <名字> --package 'system-images;android-35;google_apis;arm64-v8a'
+```
+
+流程里要点的、要看的东西一律先滚到看得见（`scrollUntilVisible`），不假定一屏放得下；键盘可能自己弹出来的地方用
+`_shared/hide-keyboard.js`（弹着才收），不用 Maestro 的 `hideKeyboard`（它不管有没有键盘都按返回，没弹时会退出当前页）。
+
+发现的产品问题（前两条事实：在 320×640 上稳定复现；1080×2400 上回答一屏放得下，看不出来）：
+
+- 会话停在请求卡片上（提问、表单、计划要不要执行）时，答完卡片、回答写完之后，对话区不再贴底：屏幕上停在回答的开头，
+  状态行和回答的后半截在下面，要手动往上划才看得到。没有卡片时同样长的对话是贴底的。
+  推测和卡片撤掉时对话区变高、列表一直开着的“保持可见位置”有关，没有查到根因。`mock/04`、`mock/05` 的结尾因此是往下滚着找状态行。
+- 一行字的输入框（`src/ui/kit/overlays.tsx` 的 `Prompt`，新建会话页的“其他目录”、改名都用它）没关自动纠错和首字母大写：
+  在 Gboard 上输入路径 `…/s/work` 被改成了 `…/s/works `。填目录的地方应该关掉（`autoCorrect={false}`、`autoCapitalize="none"`）。
+  `fixture/03` 因此不在那里填目录，改用测试链接建会话。
+- 加设备页（`src/screens/devices/AddDeviceScreen.tsx`）：填完栏位点“检查”，首次连接的指纹确认框点“信任”关掉之后，
+  焦点回到最后填的那一栏、软键盘又弹出来，页面滚回那一栏，检查结果和下面的按钮被键盘盖住（事实：没有硬键盘的模拟器上稳定复现；
+  有硬键盘的不弹）。推测真机上一样。建议点“检查”时先收键盘、让输入框失焦（`Keyboard.dismiss()`），确认框关了就没有焦点可回。
+  `fixture/04` 因此在点“信任”之后收一次键盘。
+
 几个坑：
 
 - `launchApp` 之后立刻发的测试链接会丢（JS 还没挂上监听），所以 `fresh.yaml` 先等首页出来再发。
-- `litch://new` 不等设备连上，夹具刚列出设备时发会落空；夹具的流程一律走界面新建会话。
+- `litch://new` 不等设备连上，夹具刚列出设备时发会落空：用它之前先等设备那一行写着“已连接”。
+- CI 的模拟器偶尔掉线一下（Maestro 打出 `device offline`），正跑着的流程会挂，`adb reverse` 的映射也全没了、
+  后面的夹具流程都连不上 127.0.0.1:8765。入口脚本跑的时候每两秒看一眼映射、少了就补，再加上没过的重跑一次。
+  本地用 `adb -s <序列号> reconnect` 能复现。
 - xterm 的内容读屏读不到：终端里的命令跑没跑，由入口脚本开在回环上的小口去看工作目录里的文件（`_shared/wait-file.js`）。
 - 入口脚本不能用同步的方式起 Maestro：流程里的 `runScript` 要连同一个进程里的小口。
 - 同一台电脑上同时只能跑一个 Maestro：2.3.0 在安卓上把驱动固定映射到电脑的 7001 口、没有参数能改，第二个会在启动应用时超时。

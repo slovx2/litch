@@ -34,11 +34,13 @@ tags: [mock]
     notVisible:
       id: request:question
     timeout: 10000
-# 选了执行，回合接着走完：状态行上出现“⋯”（计划那个回合一直在跑，之前没有）
-- extendedWaitUntil:
-    visible:
+# 选了执行，回合接着走完（计划那个回合一直在跑，之前没有“⋯”）：状态行上出现“⋯”。往下滚着找：回答比一屏长时（CI 的 320×640 上就是），答完卡片之后对话区不再贴底，
+# 状态行在屏幕下面（产品问题，见 e2e/README.md）
+- scrollUntilVisible:
+    element:
       id: turn-menu
-    timeout: 30000
+    direction: DOWN
+    timeout: 60000
 # codex 那一条
 - tapOn:
     id: header:back
@@ -69,8 +71,9 @@ tags: [mock]
     notVisible:
       id: request:plan
     timeout: 10000
-# 执行计划是一个新的回合，收到回答（计划那个回合里只有计划，没有这句）
-- extendedWaitUntil:
-    visible:
+# 执行计划是一个新的回合，收到回答（计划那个回合里只有计划，没有这句）；同上，往下滚着找
+- scrollUntilVisible:
+    element:
       text: .*(mock core answering|模拟核心的回答).*
-    timeout: 30000
+    direction: DOWN
+    timeout: 60000
