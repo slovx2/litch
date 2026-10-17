@@ -91,6 +91,11 @@ const KNOWN: Record<string, { id: string; name: string; badge: string }> = {
   'claude-code': { id: 'claude', name: 'Claude Code', badge: 'CC' },
   pi: { id: 'pi', name: 'Pi', badge: 'PI' },
   dsh: { id: 'dsh', name: 'dsh', badge: 'DS' },
+  // 下面四个都自报显示名和徽标，这里只是兜底，和 packages/protocol/src/harness-identity.json 一致
+  opencode: { id: 'opencode', name: 'OpenCode', badge: 'OC' },
+  gemini: { id: 'gemini', name: 'Gemini CLI', badge: 'GE' },
+  qwen: { id: 'qwen', name: 'Qwen Code', badge: 'QW' },
+  acp: { id: 'acp', name: 'ACP', badge: 'AC' },
 }
 
 const VERSION = /\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?/
