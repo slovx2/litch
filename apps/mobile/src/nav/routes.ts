@@ -19,7 +19,7 @@ export type RootStackParamList = {
   Terminal: { deviceId: string; root: string | null; terminalId?: string }
   /** 未提交的改动：文件列表和逐个文件的差异 */
   Diff: { deviceId: string; root: string; scope: DiffScope; sessionId: string | null }
-  /** 文件：浏览一个根下面的目录、看文件内容。path 是目录就列它，是文件就打开看；line 是打开后定位到第几行（从 1 起） */
+  /** 文件：浏览一个根下面的目录、看文件内容。path 是完整路径，是目录就列它，是文件就打开看；line 是打开后定位到第几行（从 1 起，对话区里的文件引用会带） */
   Files: { deviceId: string; root: string; path?: string; line?: number }
   /** 应用设置：语言、明暗、关于 */
   Settings: undefined

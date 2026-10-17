@@ -6,7 +6,7 @@
 // - 正在流式的那条回答（切成的各块）和它下面的状态行单独作为“尾巴”交出去（splitTail 打开时）。尾巴每帧都在变，
 //   列表的数据却不动：列表不用每帧重渲染、重算布局，只有正在长的那一块重画。
 //   尾巴放在倒置列表的表头里（最底下），长高时上面的行跟着一起被顶上去，和原生的普通布局一样，同一帧完成。
-import type { CoreChannel, SessionOp, SessionView } from '@litch/core'
+import type { CoreChannel, SessionOp, SessionView, UserMessageItem } from '@litch/core'
 import { reduceSession } from '@litch/core'
 import { experiment } from '../experiment'
 import { noteOpenStage, noteWork } from '../probe'
@@ -59,12 +59,11 @@ function tailSize(built: Row[]): number {
   const live = built[1]
   // 看的是整条回答还在不在流式，不看最后一块：字刚好停在块的边上时，最后一块已经封口、新的一块还没开始
   if (built[0]?.type !== 'status' || live?.type !== 'md' || !live.live) return 0
-  const item = live.key.slice(0, live.key.lastIndexOf(':'))
   let size = 2
   if (experiment.tail === 'open') return live.open ? size : 0
   while (true) {
     const row = built[size]
-    if (row?.type !== 'md' || row.key.slice(0, row.key.lastIndexOf(':')) !== item) return size
+    if (row?.type !== 'md' || row.itemId !== live.itemId) return size
     size += 1
   }
 }
@@ -135,13 +134,34 @@ export class SessionStore {
     this.timer = null
   }
 
-  /** 展开或收起一组过程。只重算那一个回合 */
-  toggle(groupKey: string): void {
-    if (this.builder.expanded.has(groupKey)) this.builder.expanded.delete(groupKey)
-    else this.builder.expanded.add(groupKey)
-    const turnId = groupKey.slice(0, groupKey.indexOf(':p:'))
+  /** 展开或收起一样东西（一组过程、其中一步、一段思考）。只重算它所在的那一个回合 */
+  toggle(key: string, turnId: string): void {
+    if (this.builder.expanded.has(key)) this.builder.expanded.delete(key)
+    else this.builder.expanded.add(key)
     if (this.dirty !== 'all') this.dirty.add(turnId)
     this.publish()
+  }
+
+  /** 一个回合开头的那条用户消息（分叉、回退、复制用）。回合不在了或者没有就是 null */
+  userMessage(turnId: string): UserMessageItem | null {
+    const turn = this.view?.turns.find((each) => each.id === turnId)
+    for (const id of turn?.itemIds ?? []) {
+      const item = this.view?.items[id]
+      if (item?.kind === 'userMessage') return item
+    }
+    return null
+  }
+
+  /** 这一回合最后一条回答的全文（行里只有切出来的一块）；没有回答时是计划 */
+  answerText(turnId: string): string | null {
+    const turn = this.view?.turns.find((each) => each.id === turnId)
+    let plan: string | null = null
+    for (const id of (turn?.itemIds ?? []).toReversed()) {
+      const item = this.view?.items[id]
+      if (item?.kind === 'agentMessage' && item.text) return item.text
+      if (item?.kind === 'plan' && item.text) plan ??= item.text
+    }
+    return plan
   }
 
   readonly subscribe = (listener: () => void): (() => void) => {
