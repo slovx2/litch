@@ -86,7 +86,7 @@ import {
   writeEngineSettings,
 } from './client-fixture-engines.mjs'
 import { FIXTURE_SKILL, piReply, sendCompletion } from './client-fixture-marks.mjs'
-import { serveResponses } from './client-fixture-responses.mjs'
+import { codexSocketCleanup, serveResponses } from './client-fixture-responses.mjs'
 import { runReply } from './client-fixture-run.mjs'
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -372,6 +372,8 @@ let cleaning = false
 async function cleanup(code) {
   if (cleaning) return
   cleaning = true
+  // 原生 codex 在 /tmp/codex-daemon-<uid>/ 下留的套接字和锁：趁它还在跑先认下来，服务停了再删
+  const removeCodexSocket = codexSocketCleanup(join(home, 'codex', 'runtime.sock'))
   try {
     const stopped = await stopService()
     if (stopped.length > 0)
@@ -389,6 +391,7 @@ async function cleanup(code) {
   }
   model.closeAllConnections()
   model.close()
+  removeCodexSocket()
   rmSync(root, { recursive: true, force: true })
   process.exit(code)
 }
