@@ -6,7 +6,7 @@
 // - 正在流式的那条回答（切成的各块）和它下面的状态行单独作为“尾巴”交出去（splitTail 打开时）。尾巴每帧都在变，
 //   列表的数据却不动：列表不用每帧重渲染、重算布局，只有正在长的那一块重画。
 //   尾巴放在倒置列表的表头里（最底下），长高时上面的行跟着一起被顶上去，和原生的普通布局一样，同一帧完成。
-import type { CoreChannel, SessionOp, SessionView, UserMessageItem } from '@litch/core'
+import type { CoreChannel, SessionOp, SessionView, TurnStatus, UserMessageItem } from '@litch/core'
 import { reduceSession } from '@litch/core'
 import { experiment } from '../experiment'
 import { noteOpenStage, noteWork } from '../probe'
@@ -45,6 +45,11 @@ export interface SessionMeta {
   forkedFrom: string | null
   /** 有回合在跑 */
   running: boolean
+  /**
+   * 最后一个回合：标识、状态，和它里面最后一个计划条目（没有是 null）。输入线据此定“计划写好了，要不要执行”
+   * 那一问（请求卡片的位置）。回合开始结束、请求来去时跟着换；计划条目在回合结束、请求到达之前就已经在了
+   */
+  lastTurn: { id: string; status: TurnStatus; planId: string | null } | null
 }
 
 const EMPTY: SessionSnapshot = { rows: [], running: false, error: null, publishedAt: 0 }
@@ -66,6 +71,18 @@ function tailSize(built: Row[]): number {
     if (row?.type !== 'md' || row.itemId !== live.itemId) return size
     size += 1
   }
+}
+
+function lastTurnOf(view: SessionView): SessionMeta['lastTurn'] {
+  const turn = view.turns[view.turns.length - 1]
+  if (!turn) return null
+  let planId: string | null = null
+  // 从后往前找：Hermes 上新一点的数组方法不一定有（原型报告第六节）
+  for (let index = turn.itemIds.length - 1; index >= 0 && !planId; index--) {
+    const id = turn.itemIds[index]
+    if (id && view.items[id]?.kind === 'plan') planId = id
+  }
+  return { id: turn.id, status: turn.status, planId }
 }
 
 const sameRows = (a: Row[], b: Row[]): boolean =>
@@ -203,6 +220,8 @@ export class SessionStore {
       case 'turn.add':
         for (const id of op.turn.itemIds) this.itemTurn.set(id, op.turn.id)
         mark(op.turn.id)
+        // 新回合多半一来就是在跑的，还换了“最后一个回合”
+        this.metaDirty = true
         return
       case 'turn.remove':
       case 'turn.status':
@@ -291,6 +310,7 @@ export class SessionStore {
         can: { ...view.can },
         forkedFrom: view.forkedFrom,
         running,
+        lastTurn: lastTurnOf(view),
       }
       for (const listener of this.metaListeners) listener()
     }
