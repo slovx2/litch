@@ -1,6 +1,10 @@
 // 对话区：倒置的 FlashList（验证原型里和 LegendList 贴底模式比过，只有它过了 T1，
 // 见 research/mobile-prototype-2026-10-17/report.md）。第 0 行（最新的）在最下面，底部在几何上就是偏移 0，
-// 内容变高、键盘升起都不用 JS 追底（S1）。贴着底的时候关掉“保持可见位置”，不然它会和贴底抢位置；往上翻着看时再打开。
+// 内容变高、键盘升起都不用 JS 追底（S1）。“保持可见位置”一直开着：原型在贴底时把它关掉，可开关一次列表就插拔一次
+// 它的锚点视图，刚打开长会话就快速甩动时安卓 Fabric 挂载会崩（Unable to add a view into a view that is not a ViewGroup，
+// 2026-10-17 复现：开关时 15 次崩 5–7 次，一直开 15 次 0 次）。一直开着贴底也没受影响（T1 的偏差仍是 0.00x dp）。
+import { useNavigation } from '@react-navigation/native'
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { FlashList, type ListRenderItem } from '@shopify/flash-list'
 import {
   forwardRef,
@@ -11,14 +15,30 @@ import {
   useState,
   useSyncExternalStore,
 } from 'react'
-import { type ScrollViewProps, StyleSheet, View } from 'react-native'
+import { Linking, type ScrollViewProps, StyleSheet, View } from 'react-native'
 import { KeyboardChatScrollView, useKeyboardState } from 'react-native-keyboard-controller'
 import type { Row } from '../core/rows'
 import type { SessionSnapshot, SessionStore } from '../core/session-store'
 import { experiment } from '../experiment'
+import type { RootStackParamList } from '../nav/routes'
 import { noteFirstContent, noteWork } from '../probe'
-import { MarkdownCell, ProcessCell, ReasoningCell, StatusCell, UserCell } from './cells'
+import { useT } from '../ui/i18n'
+import { useTheme } from '../ui/theme'
+import {
+  ErrorCell,
+  ForkedCell,
+  MarkdownCell,
+  NoticeCell,
+  ReasoningCell,
+  StatusCell,
+  TodoCell,
+  UserCell,
+} from './cells'
+import { type TranscriptActions, TranscriptContext, useFileScope } from './context'
+import { isWebUrl, parseFileHref } from './links'
+import { GroupCell, StepCell } from './steps'
 import { colors } from './theme'
+import { Flash, ImageViewer, TurnMenu } from './turn-menu'
 
 interface Props {
   store: SessionStore
@@ -27,16 +47,26 @@ interface Props {
   markers: boolean
 }
 
-function renderRow(row: Row, upward: boolean, toggle: (key: string) => void) {
+function renderRow(row: Row) {
   switch (row.type) {
+    case 'forked':
+      return <ForkedCell row={row} />
     case 'user':
       return <UserCell row={row} />
     case 'md':
       return <MarkdownCell row={row} />
     case 'reasoning':
       return <ReasoningCell row={row} />
-    case 'process':
-      return <ProcessCell row={row} upward={upward} onToggle={toggle} />
+    case 'group':
+      return <GroupCell row={row} />
+    case 'step':
+      return <StepCell row={row} />
+    case 'todo':
+      return <TodoCell row={row} />
+    case 'notice':
+      return <NoticeCell row={row} />
+    case 'error':
+      return <ErrorCell row={row} />
     case 'status':
       return <StatusCell row={row} />
   }
@@ -51,15 +81,7 @@ function EndMark({ markers }: { markers: boolean }) {
  * 倒置列表的表头（在最底下）：正在流式的那一块和状态行，再下面是标记线。
  * 自己订阅尾巴，尾巴变时只有这里重渲染，列表本身不动
  */
-function Tail({
-  store,
-  markers,
-  toggle,
-}: {
-  store: SessionStore
-  markers: boolean
-  toggle(key: string): void
-}) {
+function Tail({ store, markers }: { store: SessionStore; markers: boolean }) {
   const tail = useSyncExternalStore(store.subscribeTail, store.getTail)
   useLayoutEffect(() => {
     if (tail.publishedAt) noteWork('tail', performance.now() - tail.publishedAt)
@@ -67,7 +89,7 @@ function Tail({
   return (
     <View>
       {tail.rows.toReversed().map((row) => (
-        <View key={row.key}>{renderRow(row, true, toggle)}</View>
+        <View key={row.key}>{renderRow(row)}</View>
       ))}
       <EndMark markers={markers} />
     </View>
@@ -80,6 +102,73 @@ function useCommitTiming(snapshot: SessionSnapshot) {
     if (snapshot.publishedAt) noteWork('react', performance.now() - snapshot.publishedAt)
     if (snapshot.rows.length > 0) noteFirstContent()
   }, [snapshot])
+}
+
+/**
+ * 单元格共用的动作（经上下文给下去）和对话区上面的几层浮层：回合的菜单、看大图、一闪而过的提示。
+ * 上下文的值只在会话、认路径的范围变了时才换，单元格不会因为浮层开合重画
+ */
+function useActions(store: SessionStore) {
+  const { deviceId, sessionId } = store
+  const t = useT()
+  const { c } = useTheme()
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+  const cwd = useSyncExternalStore(store.subscribeMeta, () => store.getMeta()?.cwd ?? null)
+  const { scope, root } = useFileScope(deviceId, sessionId, cwd)
+  const [menu, setMenu] = useState<string | null>(null)
+  const [image, setImage] = useState<string | null>(null)
+  const [flash, setFlash] = useState<string | null>(null)
+  const clearFlash = useCallback(() => setFlash(null), [])
+  const openSession = useCallback(
+    (id: string) => navigation.push('Detail', { deviceId, sessionId: id }),
+    [navigation, deviceId],
+  )
+  const value = useMemo<TranscriptActions>(
+    () => ({
+      deviceId,
+      sessionId,
+      scope,
+      root,
+      toggle: (key, turnId) => store.toggle(key, turnId),
+      openLink: (url) => {
+        const file = parseFileHref(url)
+        if (file) {
+          if (!root) return setFlash(t('detail.link.noFiles'))
+          navigation.navigate('Files', {
+            deviceId,
+            root,
+            path: file.path,
+            ...(file.line === null ? {} : { line: file.line }),
+          })
+          return
+        }
+        if (isWebUrl(url))
+          Linking.openURL(url).catch(() => setFlash(t('detail.link.failed', { url })))
+      },
+      turnMenu: setMenu,
+      openDiff: () => {
+        const dir = cwd ?? root
+        if (dir) navigation.navigate('Diff', { deviceId, root: dir, scope: 'all', sessionId })
+      },
+      openSession,
+      viewImage: setImage,
+    }),
+    [store, deviceId, sessionId, scope, root, cwd, navigation, openSession, t],
+  )
+  const overlays = (
+    <>
+      <TurnMenu
+        store={store}
+        turnId={menu}
+        onClose={() => setMenu(null)}
+        onForked={openSession}
+        say={setFlash}
+      />
+      <ImageViewer url={image} onClose={() => setImage(null)} />
+      <Flash text={flash} onDone={clearFlash} />
+    </>
+  )
+  return { value, overlays, background: c.raised }
 }
 
 /** 一次多给列表多少行更早的历史（T6）。核心给的是整个会话，分页只在界面这层：一进来只排最近的这些 */
@@ -99,11 +188,8 @@ export function Transcript({ store, bottomOffset, markers }: Props) {
   }, [more, limit])
   const [pinned, setPinned] = useState(true)
   const pinnedRef = useRef(true)
-  const toggle = useCallback((key: string) => store.toggle(key), [store])
-  const renderItem = useCallback<ListRenderItem<Row>>(
-    ({ item }) => renderRow(item, true, toggle),
-    [toggle],
-  )
+  const actions = useActions(store)
+  const renderItem = useCallback<ListRenderItem<Row>>(({ item }) => renderRow(item), [])
   const ScrollComponent = useMemo(
     () =>
       forwardRef<unknown, ScrollViewProps>(function ChatScroll(scrollProps, ref) {
@@ -122,10 +208,7 @@ export function Transcript({ store, bottomOffset, markers }: Props) {
   // 贴底时尾巴放表头；往上翻着看时并回列表，靠列表的“保持可见位置”稳住正在看的内容
   useLayoutEffect(() => store.setSplitTail(pinned), [store, pinned])
   useLayoutEffect(() => () => store.setSplitTail(false), [store])
-  const header = useMemo(
-    () => <Tail store={store} markers={markers} toggle={toggle} />,
-    [store, markers, toggle],
-  )
+  const header = useMemo(() => <Tail store={store} markers={markers} />, [store, markers])
   // 整个对话区跟着键盘上移时，最上面那一截被标题栏挡住：键盘开着时在最早的内容上面垫同样高，翻到顶还看得全
   const keyboardHeight = useKeyboardState((state) => (state.isVisible ? state.height : 0))
   const footer = useMemo(
@@ -133,33 +216,37 @@ export function Transcript({ store, bottomOffset, markers }: Props) {
     [keyboardHeight],
   )
   return (
-    <FlashList
-      data={rows}
-      inverted
-      renderItem={renderItem}
-      keyExtractor={keyOf}
-      getItemType={typeOf}
-      drawDistance={1500}
-      ListHeaderComponent={header}
-      onEndReached={loadOlder}
-      onEndReachedThreshold={0.5}
-      maintainVisibleContentPosition={{ disabled: pinned }}
-      renderScrollComponent={
-        experiment.keyboard === 'chat' ? (ScrollComponent as never) : undefined
-      }
-      ListFooterComponent={footer}
-      scrollEventThrottle={16}
-      onScroll={(event) => {
-        noteWork('offset', event.nativeEvent.contentOffset.y)
-        const next = event.nativeEvent.contentOffset.y < 8
-        if (next !== pinnedRef.current) {
-          noteWork(next ? 'pin' : 'unpin', event.nativeEvent.contentOffset.y)
-          pinnedRef.current = next
-          setPinned(next)
-        }
-      }}
-      style={styles.list}
-    />
+    <TranscriptContext.Provider value={actions.value}>
+      <View style={[styles.list, { backgroundColor: actions.background }]}>
+        <FlashList
+          data={rows}
+          inverted
+          renderItem={renderItem}
+          keyExtractor={keyOf}
+          getItemType={typeOf}
+          drawDistance={1500}
+          ListHeaderComponent={header}
+          onEndReached={loadOlder}
+          onEndReachedThreshold={0.5}
+          renderScrollComponent={
+            experiment.keyboard === 'chat' ? (ScrollComponent as never) : undefined
+          }
+          ListFooterComponent={footer}
+          scrollEventThrottle={16}
+          onScroll={(event) => {
+            noteWork('offset', event.nativeEvent.contentOffset.y)
+            const next = event.nativeEvent.contentOffset.y < 8
+            if (next !== pinnedRef.current) {
+              noteWork(next ? 'pin' : 'unpin', event.nativeEvent.contentOffset.y)
+              pinnedRef.current = next
+              setPinned(next)
+            }
+          }}
+          style={styles.list}
+        />
+        {actions.overlays}
+      </View>
+    </TranscriptContext.Provider>
   )
 }
 
@@ -167,7 +254,7 @@ const keyOf = (row: Row) => row.key
 const typeOf = (row: Row) => row.type
 
 const styles = StyleSheet.create({
-  list: { flex: 1, backgroundColor: colors.background },
+  list: { flex: 1 },
   endSpace: { height: 10, justifyContent: 'flex-start' },
   endMark: { height: 2, backgroundColor: colors.markEnd },
 })

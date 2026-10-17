@@ -19,8 +19,8 @@ export type RootStackParamList = {
   Terminal: { deviceId: string; root: string | null; terminalId?: string }
   /** 未提交的改动：文件列表和逐个文件的差异 */
   Diff: { deviceId: string; root: string; scope: DiffScope; sessionId: string | null }
-  /** 文件：浏览一个根下面的目录、看文件内容 */
-  Files: { deviceId: string; root: string; path?: string }
+  /** 文件：浏览一个根下面的目录、看文件内容。path 是完整路径，line 给了就定位到那一行（从 1 起，对话区里的文件引用带来的） */
+  Files: { deviceId: string; root: string; path?: string; line?: number }
   /** 应用设置：语言、明暗、关于 */
   Settings: undefined
   /** 开发用：WebView 吞吐测试（scripts/bench.mjs 的 webview 场景） */
