@@ -1,0 +1,20 @@
+{
+  "name": "@codex-harness-adapter/opencode",
+  "version": "0.8.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "dependencies": {
+    "diff": "8.0.4",
+    "ws": "8.22.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "check": "biome check src test ../shared/src",
+    "start": "node dist/opencode/src/adapter.mjs",
+    "test": "npm run build && node --test --test-concurrency=1 dist/opencode/test/*.test.mjs"
+  }
+}
