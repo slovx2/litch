@@ -1,6 +1,6 @@
 // 移动端的端到端用例：在安卓模拟器上装 release 包，用 Maestro 跑 e2e/flows 下的流程（测试链接加 testID 驱动，不点坐标）。
-// 一条命令从头到尾：起模拟器（没开着就无窗口起一台）→ 装包 → 要夹具的流程先起夹具 → 跑流程 → 收尾（停夹具、撤端口映射、
-// 关掉自己起的模拟器、删临时目录）。有流程没过返回非零。
+// 一条命令从头到尾：起模拟器（不给 --serial 就在 --port 上无窗口起一台）→ 装包 → 要夹具的流程先起夹具 → 跑流程 → 收尾（停夹具、撤端口映射、
+// 关掉自己起的模拟器、删临时目录）。有流程没过返回非零；被 Ctrl-C 打断时收完尾退出码是 130。
 //
 // 用法（apps/mobile 里，Node 24）：npm run e2e -- [选项]
 //   --only mock|fixture|<流程文件>   只跑一组或一个（可以给几次）；默认全跑
@@ -8,15 +8,18 @@
 //   --apk <路径>                      默认 android/app/build/outputs/apk/release/app-release.apk
 //   --build                           先打 release 包（expo prebuild --clean 再 assembleRelease，要 JAVA_HOME 和 ANDROID_HOME）
 //   --no-install                      用模拟器上已经装着的包
-//   --serial <序列号>                 用已经开着的这台；不给就用 --avd 起一台（--port 定端口，默认 5590）
+//   --serial <序列号>                 用已经开着的这台（收尾不关它）；不给就用 --avd 在 --port 上起一台（默认 5590），
+//                                     那个端口上已经有设备（不管什么状态）就报错，不用别人的、也不再起一台
 //   --avd <名字>                      默认 tyrs_hand_e2e_api35；以只读方式起（-read-only），不改 AVD、可以和别人同时用
 //   --keep                            跑完不关模拟器、留下 Maestro 的调试输出（截图、日志），排查失败用，用完自己删
 // 要的环境：ANDROID_HOME（默认 ~/Library/Android/sdk）、JDK 17 以上（JAVA_HOME，Maestro 和 gradle 都要）、
 // Maestro 2.3.0（MAESTRO 指过去，或者在 PATH 里）；跑夹具的流程要先在仓库根目录 npm run build（适配器、Pi、设备进程）。
+// LITCH_E2E_ARTIFACTS=<目录>：Maestro 的调试输出（失败时的截图、日志）放到这里并留着（CI 上传用）；不给就放临时目录、跑完删掉。
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import {
   appendFileSync,
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
@@ -50,25 +53,36 @@ const apk = resolve(
 )
 const keep = flag('--keep')
 const work = mkdtempSync(join(tmpdir(), 'litch-e2e-'))
+/** Maestro 的调试输出（失败时的截图、日志）：给了 LITCH_E2E_ARTIFACTS 就放那里、不删（CI 上传用），不给就放临时目录里 */
+const artifacts = process.env.LITCH_E2E_ARTIFACTS ? resolve(process.env.LITCH_E2E_ARTIFACTS) : null
+const debugDir = artifacts ?? join(work, 'debug')
 const log = (line) => console.log(`[e2e] ${line}`)
 const since = (start) => `${((Date.now() - start) / 1000).toFixed(1)}s`
 
-/** 收尾要做的事，倒着做；出错、被打断都会走到 */
+/** 收尾要做的事，后登记的先做；出错、被打断都会走到 */
 const cleanups = []
-let cleaning = false
-async function cleanup() {
-  if (cleaning) return
-  cleaning = true
-  for (const step of cleanups.reverse()) {
-    try {
-      await step()
-    } catch (error) {
-      log(`收尾时出错（接着收）：${error.message}`)
+/** 收尾只跑一次：信号和主流程的 finally 都会来调，等的是同一次 */
+let cleaning = null
+const cleanup = () =>
+  (cleaning ??= (async () => {
+    // 一项项取出来做：收尾途中主流程又登记的也收得到
+    while (cleanups.length > 0) {
+      try {
+        await cleanups.pop()()
+      } catch (error) {
+        log(`收尾时出错（接着收）：${error.message}`)
+      }
     }
-  }
-}
+  })())
+/** 被 Ctrl-C 或 SIGTERM 打断了：收完尾退出码是 130 */
+let interrupted = false
 for (const signal of ['SIGINT', 'SIGTERM'])
-  process.on(signal, () => void cleanup().then(() => process.exit(130)))
+  process.on(signal, () => {
+    if (interrupted) return
+    interrupted = true
+    log(`收到 ${signal}，收尾`)
+    void cleanup().then(() => process.exit(130))
+  })
 
 // ---------- 要跑哪些流程 ----------
 
@@ -100,27 +114,31 @@ const adb = (serial, ...rest) =>
     stdio: ['ignore', 'pipe', 'pipe'],
   })
 
-function attached() {
-  return execFileSync(adbBin, ['devices'], { encoding: 'utf8' })
-    .split('\n')
-    .slice(1)
-    .map((line) => line.split('\t'))
-    .filter(([, state]) => state === 'device')
-    .map(([serial]) => serial)
+/** adb 认得的设备和各自的状态（device、offline、unauthorized…） */
+function devices() {
+  return new Map(
+    execFileSync(adbBin, ['devices'], { encoding: 'utf8' })
+      .split('\n')
+      .slice(1)
+      .map((line) => line.trim().split('\t'))
+      .filter((pair) => pair.length === 2),
+  )
 }
 
 async function startEmulator() {
   const given = arg('--serial')
   if (given) {
-    if (!attached().includes(given)) throw new Error(`没有连着的 ${given}`)
+    if (devices().get(given) !== 'device') throw new Error(`没有连着的 ${given}`)
     return given
   }
   const port = Number(arg('--port', '5590'))
   const serial = `emulator-${port}`
-  if (attached().includes(serial)) {
-    log(`${serial} 已经开着，直接用（不归这次收尾关）`)
-    return serial
-  }
+  // 这个端口上已经有一台（不管什么状态）：多半是别人的，不用它、也不再起一台
+  const there = devices().get(serial)
+  if (there)
+    throw new Error(
+      `${serial} 已经有设备（${there}）：换一个 --port，或者用 --serial 指定要用的那台`,
+    )
   const avd = arg('--avd', 'tyrs_hand_e2e_api35')
   const gpu =
     process.env.LITCH_E2E_GPU ?? (process.platform === 'darwin' ? 'host' : 'swiftshader_indirect')
@@ -145,9 +163,12 @@ async function startEmulator() {
   )
   child.unref()
   cleanups.push(async () => {
+    // 自己起的那个进程已经没了：这个序列号上要是又有了设备，那不是我们的
+    if (child.exitCode !== null || child.signalCode !== null) return
     if (keep) return log(`模拟器 ${serial} 留着（--keep），用完执行：adb -s ${serial} emu kill`)
     spawnSync(adbBin, ['-s', serial, 'emu', 'kill'], { stdio: 'ignore' })
-    for (let i = 0; i < 40 && attachedAny(serial); i++) await sleep(500)
+    for (let i = 0; i < 60 && child.exitCode === null && child.signalCode === null; i++)
+      await sleep(500)
     log(`模拟器 ${serial} 关了`)
   })
   for (;;) {
@@ -171,8 +192,6 @@ async function startEmulator() {
   return serial
 }
 
-const attachedAny = (serial) =>
-  execFileSync(adbBin, ['devices'], { encoding: 'utf8' }).includes(`${serial}\t`)
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms))
 
 // ---------- 安装包 ----------
@@ -232,7 +251,10 @@ async function startFixture(serial) {
   let said = ''
   child.stderr.on('data', (chunk) => (said += chunk))
   cleanups.push(async () => {
-    spawnSync(adbBin, ['-s', serial, 'reverse', '--remove-all'], { stdio: 'ignore' })
+    // 只撤夹具加的那两条（sshd 的端口、手机上取配置的 8765），别人的映射（比如 Metro 的 8081）不动
+    const port = existsSync(out) ? JSON.parse(readFileSync(out, 'utf8')).target?.port : null
+    for (const local of [port ? `tcp:${port}` : null, 'tcp:8765'].filter(Boolean))
+      spawnSync(adbBin, ['-s', serial, 'reverse', '--remove', local], { stdio: 'ignore' })
     if (child.exitCode !== null) return
     child.kill('SIGTERM')
     for (let i = 0; i < 40 && child.exitCode === null; i++) await sleep(250)
@@ -323,6 +345,24 @@ async function startHelper(config) {
   return `http://127.0.0.1:${port}`
 }
 
+/**
+ * Maestro（2.3.0）在安卓上把驱动固定映射到这台电脑的 7001 口，没有参数能改：同一台电脑上同时只能跑一个 Maestro，
+ * 第二个会在启动应用时超时（报 Unable to launch app）。先看一眼，被占着就直接说清楚
+ */
+function checkDriverPort() {
+  return new Promise((done, fail) => {
+    const probe = createServer()
+    probe.once('error', () =>
+      fail(
+        new Error(
+          '电脑上的 7001 口被占着：多半是另一个 Maestro 在跑（它固定用这个口），等它跑完再来',
+        ),
+      ),
+    )
+    probe.listen(7001, '127.0.0.1', () => probe.close(() => done()))
+  })
+}
+
 function freePort() {
   return new Promise((done) => {
     const server = createServer()
@@ -349,18 +389,13 @@ async function runMaestro(serial, flows, fixture) {
         WORK: realpathSync(fixture.config.work),
       }
     : {}
-  const report = join(work, 'report.xml')
   const list = [
     '--device',
     serial,
     'test',
     '--no-ansi',
-    '--format',
-    'JUNIT',
-    '--output',
-    report,
     '--debug-output',
-    join(work, 'debug'),
+    debugDir,
     '--flatten-debug-output',
     ...Object.entries(env).flatMap(([name, value]) => ['-e', `${name}=${value}`]),
     ...flows,
@@ -385,22 +420,9 @@ async function runMaestro(serial, flows, fixture) {
     )
     child.on('exit', (code) => done(code ?? 1))
   })
+  // 每个流程的结果和耗时 Maestro 自己已经打出来了
   log(`流程跑完（${since(start)}）`)
-  printReport(report)
   return status
-}
-
-/** 每个流程的结果和耗时，从 JUnit 报告里取 */
-function printReport(file) {
-  if (!existsSync(file)) return
-  const xml = readFileSync(file, 'utf8')
-  for (const found of xml.matchAll(/<testcase\b([^>]*)>/g)) {
-    const attr = (name) => found[1].match(new RegExp(`${name}="([^"]*)"`))?.[1] ?? ''
-    const status = attr('status') || 'SUCCESS'
-    log(
-      `  ${status === 'SUCCESS' ? '过' : '没过'}  ${Number(attr('time')).toFixed(1).padStart(6)}s  ${attr('name')}`,
-    )
-  }
 }
 
 // ---------- 主流程 ----------
@@ -412,6 +434,7 @@ async function main() {
     (file) => file.includes(`${join('flows', 'fixture')}/`) || tagsOf(file).includes('fixture'),
   )
   const total = Date.now()
+  await checkDriverPort()
   if (flag('--build')) buildApk()
   if (!flag('--no-install') && !existsSync(apk))
     throw new Error(`没有安装包 ${apk}：加 --build，或者用 --apk 指过去`)
@@ -428,6 +451,7 @@ cleanups.push(() => {
   rmSync(work, { recursive: true, force: true })
 })
 
+if (artifacts) mkdirSync(artifacts, { recursive: true })
 let code = 1
 try {
   code = await main()
@@ -436,4 +460,5 @@ try {
 } finally {
   await cleanup()
 }
-process.exit(code)
+if (artifacts) log(`Maestro 的调试输出在 ${artifacts}`)
+process.exit(interrupted ? 130 : code)

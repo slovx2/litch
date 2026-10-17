@@ -34,6 +34,11 @@ tags: [mock]
     notVisible:
       id: request:question
     timeout: 10000
+# 选了执行，回合接着走完：状态行上出现“⋯”（计划那个回合一直在跑，之前没有）
+- extendedWaitUntil:
+    visible:
+      id: turn-menu
+    timeout: 30000
 # codex 那一条
 - tapOn:
     id: header:back
@@ -64,3 +69,8 @@ tags: [mock]
     notVisible:
       id: request:plan
     timeout: 10000
+# 执行计划是一个新的回合，收到回答（计划那个回合里只有计划，没有这句）
+- extendedWaitUntil:
+    visible:
+      text: .*(mock core answering|模拟核心的回答).*
+    timeout: 30000
