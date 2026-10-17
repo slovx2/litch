@@ -54,18 +54,19 @@ export function useComposeOptions(deviceId: string, harness?: string): ComposeOp
 
 /**
  * 在这台设备的这个 harness 上不带设置新建会话（在 cwd 下）时，对面会用的模型、强度、权限档。
- * 不记着：每次打开新建页、换了设备、harness、工作目录都现问，别处改了配置这里跟着变。还没问到、问不到是 null
+ * 不记着：每次打开新建页、换了设备、harness、工作目录都现问，别处改了配置这里跟着变。
+ * 还在问是 undefined；问不到（对面不认识、出错了、眼下问不了）是 null
  */
 export function useNewSessionDefaults(
   deviceId: string,
   harness: string | undefined,
   cwd: string | null,
-): SessionDefaults | null {
+): SessionDefaults | null | undefined {
   const { channel } = useServices()
   const device = useKey<DeviceView>(keys.device(deviceId))
   const reachable = device?.connection === 'online' && !downHarness(device, harness)
   const key = `${deviceId}\n${harness ?? ''}\n${cwd ?? ''}`
-  const [asked, setAsked] = useState<{ key: string; value: SessionDefaults } | null>(null)
+  const [asked, setAsked] = useState<{ key: string; value: SessionDefaults | null } | null>(null)
   useEffect(() => {
     if (!reachable) return
     const controller = new AbortController()
@@ -76,11 +77,14 @@ export function useNewSessionDefaults(
         { signal: controller.signal },
       )
       .then((value) => setAsked({ key, value }))
-      // 问不到就照以前：没选的不显示、不发，由对面用它自己的默认
-      .catch(() => {})
+      // 问不到就照以前：没选的不显示、不发，由对面用它自己的默认。换了去处被撤掉的那一问不算
+      .catch(() => {
+        if (!controller.signal.aborted) setAsked({ key, value: null })
+      })
     return () => controller.abort()
   }, [channel, deviceId, harness, cwd, key, reachable])
-  return asked?.key === key ? asked.value : null
+  if (asked?.key === key) return asked.value
+  return reachable ? undefined : null
 }
 
 /** 认识的权限预设怎么叫、怎么解释 */
