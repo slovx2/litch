@@ -123,8 +123,8 @@ if (adapterRoot && !existsSync(join(adapterRoot, 'bin', 'codex-harness-adapter')
 
 /** 假登录 shell 给出的 PATH 里的系统目录 */
 const SYSTEM_PATH = ['/usr/bin', '/bin', '/usr/sbin', '/sbin']
-// 原生 codex 装了就默认启用，所以它也不能在这里
-const HARNESS_COMMANDS = ['claude', 'pi', 'dsh', 'codex']
+// 原生 codex、OpenCode 装了就默认启用，所以它们也不能在这里；经 ACP 接的 agent 一样
+const HARNESS_COMMANDS = ['claude', 'pi', 'dsh', 'codex', 'opencode', 'gemini', 'qwen']
 for (const directory of SYSTEM_PATH) {
   for (const name of HARNESS_COMMANDS) {
     try {
@@ -184,9 +184,10 @@ const model = createServer(async (req, res) => {
   requests++
   const said = lastUserText(body)
   appendFileSync(modelLog, `${JSON.stringify({ at: Date.now(), model: body.model, said })}\n`)
-  // 三个引擎都在的时候 Pi 和另两家认同一套词（client-fixture-marks.mjs）；平时只认“跑个命令”和“问我”
+  // 三个引擎都在的时候 Pi 和另两家认同一套词（client-fixture-marks.mjs）；平时只认“跑个命令”和“问我”。
+  // OpenCode 也说 OpenAI 兼容的这一种，地址带着它的标识（/opencode/v1），回话开头写它自己的名字
   const reply = threeEngines
-    ? piReply('pi', body, pace)
+    ? piReply(id === 'opencode' ? 'opencode' : 'pi', body, pace)
     : (runReply(body, said) ??
       browseReply(body, said) ??
       computerReply(body, said) ??
@@ -246,6 +247,13 @@ const pinned = {
   CHA_CLAUDE_CLI: join(dirs.bin, 'claude'),
   // 同样不存在。只在登录 shell 没问到时起作用：dsh 这个入口会被带上，但只报“没装”，不去 PATH 里找
   CHA_DSH_CLI: join(dirs.bin, 'dsh'),
+  // 同样不存在。OpenCode 除了 PATH 还会找 ~/.opencode/bin/opencode：登录 shell 没问到时主目录是真的那个，
+  // 有这个变量它才不去那里找，只报“没装”
+  CHA_OPENCODE_CLI: join(dirs.bin, 'opencode'),
+  // 经 ACP 接的几个默认不启用，也指到不存在的路径，万一被打开了也找不到用户自己的
+  CHA_GEMINI_CLI: join(dirs.bin, 'gemini'),
+  CHA_QWEN_CLI: join(dirs.bin, 'qwen'),
+  CHA_ACP_CLI: join(dirs.bin, 'acp'),
   PI_CLI: piCli,
   PI_CODING_AGENT_DIR: dirs.agent,
 }
@@ -256,6 +264,11 @@ const isolated = {
   ...pinned,
   // 空的：命令行据此认为没装 dsh（它只认非空的值，再不然去 PATH 里找），不起这个入口
   CHA_DSH_CLI: '',
+  // OpenCode 也一样：PATH 里没有，主目录是假的，~/.opencode/bin 里也没有
+  CHA_OPENCODE_CLI: '',
+  CHA_GEMINI_CLI: '',
+  CHA_QWEN_CLI: '',
+  CHA_ACP_CLI: '',
   [mark.name]: mark.value,
 }
 const quote = (value) => `'${value.replaceAll("'", `'\\''`)}'`

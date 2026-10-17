@@ -95,6 +95,9 @@ for (const [path, name] of [
     ? [[join(repo, 'packages/claude/dist/claude/src/adapter.mjs'), 'packages/claude']]
     : []),
   ...(engines.dsh ? [[join(repo, 'packages/dsh/dist/dsh/src/adapter.mjs'), 'packages/dsh']] : []),
+  ...(engines.opencode
+    ? [[join(repo, 'packages/opencode/dist/opencode/src/adapter.mjs'), 'packages/opencode']]
+    : []),
 ]) {
   if (existsSync(path)) continue
   console.error(`没有找到 ${name} 的构建产物，请先运行 npm run build --prefix ${name}`)
@@ -257,11 +260,12 @@ async function startService(spec) {
     })
     prepareWorkDirectory(dirs.tri, engines)
   }
-  const [claudePort, piPort, dshPort] = await freePorts(3)
-  const ports = [
-    ...['--claude-port', String(claudePort), '--pi-port', String(piPort)],
-    ...['--dsh-port', String(dshPort)],
-  ]
+  // 每个入口都给一个空闲端口：默认端口（7331 起）上可能有这台机器自己在跑的服务
+  const flags = ['claude', 'pi', 'dsh', 'opencode', 'gemini', 'qwen', 'acp']
+  const ports = (await freePorts(flags.length)).flatMap((port, index) => [
+    `--${flags[index]}-port`,
+    String(port),
+  ])
   service.binary = binary
   service.ports = ports
   const path = [dirname(process.execPath), '/usr/bin', '/bin', '/usr/sbin', '/sbin']

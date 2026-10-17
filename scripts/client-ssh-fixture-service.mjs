@@ -178,6 +178,12 @@ export async function prepareService({ repo, root, pace = 200 }) {
     // 故意指到不存在的文件：有这两个变量，引擎就不去 PATH 里找 claude、dsh，这两个 harness 报“没装”
     CHA_CLAUDE_CLI: join(root, 'no-claude'),
     CHA_DSH_CLI: join(root, 'no-dsh'),
+    // 新的几个照做：OpenCode 装了就启用，还会找 ~/.opencode/bin（这里的主目录是登录时的那个）；
+    // 经 ACP 接的几个默认不启用，万一被打开了也找不到用户自己的
+    CHA_OPENCODE_CLI: join(root, 'no-opencode'),
+    CHA_GEMINI_CLI: join(root, 'no-gemini'),
+    CHA_QWEN_CLI: join(root, 'no-qwen'),
+    CHA_ACP_CLI: join(root, 'no-acp'),
     // 自检按中文的原话判断
     CHA_LANG: 'zh-CN',
   }
