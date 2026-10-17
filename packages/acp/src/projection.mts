@@ -351,11 +351,13 @@ export class Projection {
     const id = typeof update.toolCallId === 'string' ? update.toolCallId : null
     if (!id) return
     let state = this.tools.get(id)
+    // 调用号只在一个回合里认：别的回合用过的同一个号（有的 agent 每回合从头数）是新的调用
+    if (state && this.active && state.turn !== this.active) state = undefined
     if (!state) {
       const turn = this.active
       if (!turn) return
       this.closeCurrent(notify, false)
-      const item = toolItem(`tool:${id}`, update, this.thread.cwd, this.server)
+      const item = toolItem(`${turn.id}:tool:${id}`, update, this.thread.cwd, this.server)
       state = { item, turn, startedMs: Date.now(), declined: false, writes: new Map() }
       this.tools.set(id, state)
       this.put(turn, item, false, notify)
@@ -457,15 +459,10 @@ export class Projection {
    * 返回它的状态，没有回合时是 undefined。
    */
   ensureTool(update: any, notify: Notify): ToolState | undefined {
-    if (typeof update?.toolCallId !== 'string') return undefined
-    if (!this.tools.has(update.toolCallId))
-      this.toolUpdate({ ...update, status: 'pending' }, notify)
-    else
-      this.mergeTool(
-        this.tools.get(update.toolCallId) as ToolState,
-        { ...update, status: undefined },
-        notify,
-      )
+    if (typeof update?.toolCallId !== 'string' || !this.active) return undefined
+    const known = this.tools.get(update.toolCallId)
+    if (known?.turn !== this.active) this.toolUpdate({ ...update, status: 'pending' }, notify)
+    else this.mergeTool(known, { ...update, status: undefined }, notify)
     return this.tools.get(update.toolCallId)
   }
 
