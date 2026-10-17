@@ -544,10 +544,11 @@ test('执行器：远程会话的 navigate 经转发打开、结果里说明；�
     assert.match(text(reply), new RegExp(`localhost:${forward.localPort}/app`))
     assert.match(text(reply), new RegExp(`remote device's localhost:${remote}, forwarded over ssh`))
     assert.doesNotMatch(text(reply), /desktop's, not the remote machine's/)
-    // 之后的每次答复也带着这句
-    assert.match(
-      text(await run(remoteDevice, 'tabs', { action: 'list' })),
-      /forwarded over ssh|tabs/,
+    // 说明单独成段；同一个标签再操作时不重复，说法变了（下面 ssh 报了问题）才再说
+    assert.match(text(reply), /\n\nNote: localhost:\d+ in this tab is the remote device's/)
+    assert.doesNotMatch(
+      text(await run(remoteDevice, 'navigate', { action: 'reload' })),
+      /forwarded over ssh/,
     )
     // 远端那个端口上没人听：说明里带上 ssh 的原话
     const dead = await new Promise<number>((done) => {

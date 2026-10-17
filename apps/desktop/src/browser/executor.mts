@@ -31,6 +31,8 @@ export interface TabState {
   lastSnapshot: string[] | null
   /** 上一次截图里一个 CSS 像素合多少截图像素；还没截过是 1 */
   shotScale: number
+  /** 上一次告诉模型的转发说明：同一句不再重复，换了（端口变了、ssh 报了问题）才再说 */
+  forwardNote: string | null
 }
 
 /** 一次工具调用里各个工具能用的东西 */
@@ -105,7 +107,10 @@ export function createBrowserExecutor(options: BrowserExecutorOptions): BrowserE
   const stateOf = (page: BrowserPage): TabState => {
     let state = tabStates.get(page.id)
     if (!state)
-      tabStates.set(page.id, (state = { book: newRefBook(), lastSnapshot: null, shotScale: 1 }))
+      tabStates.set(
+        page.id,
+        (state = { book: newRefBook(), lastSnapshot: null, shotScale: 1, forwardNote: null }),
+      )
     return state
   }
 
@@ -252,8 +257,11 @@ export function createBrowserExecutor(options: BrowserExecutorOptions): BrowserE
       done(page, text, images = []) {
         const lines = [text]
         if (page) {
+          // 单独成段，免得接在快照最后一行后面像是网页上的字
           const forwarded = kit.describeUrl(page.info().url)
-          if (forwarded) lines.push(forwarded)
+          const state = stateOf(page)
+          if (forwarded && forwarded !== state.forwardNote) lines.push('', forwarded)
+          state.forwardNote = forwarded
           const notices = page.takeNotices()
           if (notices.length > 0) lines.push('', 'Notices:', ...notices.map((one) => `- ${one}`))
           const dialog = page.dialog()
