@@ -20,6 +20,8 @@ import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { CLIENT_TOOL_NAMESPACE } from '../../../packages/protocol/src/client-tools.mts'
+import { ENGINES } from '../../../scripts/client-fixture-engines.mjs'
 
 const require = createRequire(import.meta.url)
 // electron 这个包的默认导出就是它的可执行文件的路径
@@ -30,13 +32,10 @@ const verbose = process.argv.includes('--verbose')
 const skipMissing = process.argv.includes('--skip-missing')
 const startedAt = Date.now()
 
-const VARIABLES = {
-  codex: 'CHA_CODEX_CLI',
-  claude: 'CHA_CLAUDE_CLI',
-  dsh: 'CHA_DSH_CLI',
-  opencode: 'CHA_OPENCODE_CLI',
-  acp: 'CHA_ACP_CLI',
-}
+/** 各家的命令行在哪个环境变量里：和夹具（device-fixture.mjs）认的是同一张表 */
+const VARIABLES = Object.fromEntries(
+  Object.entries(ENGINES).map(([name, engine]) => [name, engine.variable]),
+)
 const at = process.argv.indexOf('--engines')
 const asked = (at < 0 ? 'codex' : (process.argv[at + 1] ?? '')).split(',').filter(Boolean)
 const unknown = asked.filter((name) => name !== 'pi' && !VARIABLES[name])
@@ -187,11 +186,10 @@ if (engines.ids.includes('codex')) {
       .filter((entry) => entry.startsWith('LITCH_FIXTURE_TOOLS '))
       .flatMap((entry) => JSON.parse(entry.slice('LITCH_FIXTURE_TOOLS '.length)).namespaces),
   )
-  const expected = [
-    'litch_browser',
-    ...(process.platform === 'darwin' ? ['litch_computer'] : []),
-    'litch_echo',
-  ]
+  // 外壳认得的全部命名空间（开了 LITCH_CLIENT_TOOLS_ECHO，回声也在），Computer Use 只在 macOS 上登记
+  const expected = Object.values(CLIENT_TOOL_NAMESPACE).filter(
+    (name) => name !== CLIENT_TOOL_NAMESPACE.computer || process.platform === 'darwin',
+  )
   const lost = expected.filter((name) => !seen.has(name))
   if (lost.length > 0)
     outside.push(
