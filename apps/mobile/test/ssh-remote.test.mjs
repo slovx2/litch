@@ -32,7 +32,11 @@ function tools(scripts) {
   }
 }
 
-/** 把脚本喂给 sh，extra 是脚本之后接着写进标准输入的东西（代理那一步对面会读到它） */
+/**
+ * 把脚本喂给 sh，extra 是标准输入里接在脚本后面的东西（代理那一步对面会读到它）。
+ * 和 Go 那头（mobile/sshtransport/stream.go）一样，看到标记那一行才写 extra：dash 从管道读脚本是成块读的，
+ * 早写进去的会被它一起读走
+ */
 function runLocally(script, marker, extra = '') {
   return new Promise((resolve, reject) => {
     const child = spawn('/bin/sh', [], {
@@ -41,7 +45,11 @@ function runLocally(script, marker, extra = '') {
     })
     let out = ''
     let err = ''
-    child.stdout.on('data', (chunk) => (out += chunk))
+    child.stdout.on('data', (chunk) => {
+      out += chunk
+      if (child.stdin.writable && out.split('\n').some((line) => line.startsWith(marker)))
+        child.stdin.end(extra)
+    })
     child.stderr.on('data', (chunk) => (err += chunk))
     child.on('error', reject)
     child.on('close', (code) => {
@@ -55,7 +63,8 @@ function runLocally(script, marker, extra = '') {
         stderr: err,
       })
     })
-    child.stdin.end(script + extra)
+    child.stdin.write(script)
+    if (!extra) child.stdin.end()
   })
 }
 
