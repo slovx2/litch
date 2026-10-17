@@ -68,7 +68,8 @@ export function approvalRequest(
   const patterns: string[] = Array.isArray(request.patterns) ? request.patterns.map(String) : []
   const meta = request.metadata ?? {}
   const item = projection.itemByCall(request.tool?.callID)
-  const itemId = item?.id ?? String(request.id)
+  // 条目还没画（请求抢在部件进入 running 之前到）时用部件号，之后画出来的条目就是这个号
+  const itemId = projection.itemIdOfCall(request.tool?.callID) ?? String(request.id)
   const base = { ...ids, itemId, startedAtMs: Date.now() }
   if (permission === 'edit' && (!item || item.type === 'fileChange')) {
     const params = {

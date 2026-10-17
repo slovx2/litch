@@ -69,7 +69,8 @@ export async function ask(
   const threadId = projection.thread.id
   const raw: any[] = Array.isArray(request.questions) ? request.questions : []
   const questions = userQuestions(raw)
-  const item = projection.itemByCall(request.tool?.callID)
+  // 条目还没画时用部件号（见 projection.itemIdOfCall）
+  const itemId = projection.itemIdOfCall(request.tool?.callID) ?? String(request.id)
   try {
     return await projection.waiting(
       'question',
@@ -80,7 +81,7 @@ export async function ask(
           const reply = await server.call(
             threadId,
             'item/tool/requestUserInput',
-            { itemId: item?.id ?? String(request.id), isBlocking: true, questions: card },
+            { itemId, isBlocking: true, questions: card },
             signal,
           )
           if (!reply || typeof reply !== 'object') return null

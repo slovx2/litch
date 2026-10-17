@@ -133,6 +133,9 @@ export class Projection {
   private readonly parts = new Map<string, PartState>()
   private readonly byMessage = new Map<string, PartState[]>()
   private readonly calls = new Map<string, PartState>()
+  // 还在 pending 的工具部件：调用号 → 部件号（条目还没画）。OpenCode 的权限请求、提问会抢在部件进入 running
+  // 之前到（模型一上来就调工具时每次都这样），审批、提问的 itemId 用它，和之后画出来的条目对得上
+  private readonly pendingCalls = new Map<string, string>()
   private readonly open = new Set<string>()
   // 计划模式（agent=plan）的回合：模型说的话进计划条目
   private readonly planTurns = new Set<string>()
@@ -196,6 +199,17 @@ export class Projection {
   /** 工具调用号对应的条目（审批、提问按它找条目） */
   itemByCall(callID: unknown): any {
     return typeof callID === 'string' ? (this.calls.get(callID)?.item ?? undefined) : undefined
+  }
+
+  /**
+   * 工具调用号对应的条目标识：画了的就是那个条目的；还在 pending、没画的是它的部件号（画出来的条目就用这个号）。
+   * 都不知道的（子代理会话里的调用、不画条目的工具）是 undefined
+   */
+  itemIdOfCall(callID: unknown): string | undefined {
+    if (typeof callID !== 'string') return undefined
+    const state = this.calls.get(callID)
+    if (state) return state.item?.id ?? undefined
+    return this.pendingCalls.get(callID)
   }
 
   /** 审批时 OpenCode 给了这次改动的 diff：记下，文件改动条目用它 */
@@ -469,7 +483,10 @@ export class Projection {
     const list = this.byMessage.get(info.id) ?? []
     list.push(state)
     this.byMessage.set(info.id, list)
-    if (typeof part.callID === 'string') this.calls.set(part.callID, state)
+    if (typeof part.callID === 'string') {
+      this.calls.set(part.callID, state)
+      this.pendingCalls.delete(part.callID)
+    }
     return state
   }
 
@@ -528,8 +545,11 @@ export class Projection {
     const status = part.state?.status
     let state = this.parts.get(part.id)
     if (!state) {
-      // pending 时参数还没齐，等它开始跑（或者直接到了终态）再画
-      if (status === 'pending') return
+      // pending 时参数还没齐，等它开始跑（或者直接到了终态）再画；部件号先记下，审批、提问可能先到
+      if (status === 'pending') {
+        if (typeof part.callID === 'string') this.pendingCalls.set(part.callID, String(part.id))
+        return
+      }
       const item = toolItem(part, this.thread.cwd, this.hooks.mcpServers())
       state = this.track(turn, info, part, item)
       if (!item) {
