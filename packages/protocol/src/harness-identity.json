@@ -2,5 +2,9 @@
   "claude-code": { "displayName": "Claude Code", "badge": "CC" },
   "pi": { "displayName": "Pi", "badge": "PI" },
   "dsh": { "displayName": "DSH", "badge": "DS" },
-  "codex": { "displayName": "Codex", "badge": "CX" }
+  "codex": { "displayName": "Codex", "badge": "CX" },
+  "opencode": { "displayName": "OpenCode", "badge": "OC" },
+  "gemini": { "displayName": "Gemini CLI", "badge": "GE" },
+  "qwen": { "displayName": "Qwen Code", "badge": "QW" },
+  "acp": { "displayName": "ACP", "badge": "AC" }
 }
