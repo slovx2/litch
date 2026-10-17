@@ -301,6 +301,8 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - run: npm ci --prefix packages/pi --no-audit --no-fund
       - run: npm ci --prefix apps/mobile --no-audit --no-fund
+      # 终端页的网页（npm run web:build）用的是界面包里的那份 xterm
+      - run: npm ci --prefix packages/ui --no-audit --no-fund
       - run: npm run mobile:test
       # 夹具那一组要真的适配器命令行、Pi 和设备进程（不要别的引擎包，所以不跑根目录的 npm run build）
       - run: npm run build --prefix packages/pi && npm run build --prefix packages/device && node scripts/build-cli.mjs
