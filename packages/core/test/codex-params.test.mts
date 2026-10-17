@@ -12,7 +12,7 @@ import { test } from 'node:test'
 import { NATIVE_CODEX_DIALECT } from '../../device/src/native-codex.mjs'
 import { CLIENT_TOOL_NAMESPACE } from '../../protocol/src/client-tools.mjs'
 import { clientToolSpecs } from '../../protocol/src/client-tools-specs.mjs'
-import { codexRejects } from '../../shared/test/codex-params.mjs'
+import { codexRejects, dynamicToolProblems } from '../../shared/test/codex-params.mjs'
 import { type ClientToolPort, createCore } from '../src/index.mjs'
 import { deviceWorld } from './device-world.mjs'
 import { harness, model } from './fake-device.mjs'
@@ -238,6 +238,20 @@ test('核对本身：codex 会拒的几种都认得出来', () => {
     codexRejects('thread/start', { cwd: '/work', harness: 'codex' }).join('\n'),
     /多出字段 harness/,
   )
-  const remote = { threadId: 't', input: [{ type: 'image', url: 'https://example.com/a.png' }] }
-  assert.match(codexRejects('turn/start', remote).join('\n'), /远程地址的图片/)
+  // 上游只看第一个冒号前面是不是 http、https（大小写都算），后面有没有 // 不管
+  for (const url of ['https://example.com/a.png', 'HTTP:example.com/a.png']) {
+    const remote = { threadId: 't', input: [{ type: 'image', url }] }
+    assert.match(codexRejects('turn/start', remote).join('\n'), /远程地址的图片/, url)
+  }
+  // 参数结构里 codex 交给模型之前丢掉的键认得出来：format 只拿来推断类型，推断完不留
+  const dropped = new Set<string>()
+  const withFormat = {
+    ...spec,
+    tools: spec.tools.map((tool) => ({
+      ...tool,
+      inputSchema: { type: 'object', properties: { link: { type: 'string', format: 'uri' } } },
+    })),
+  }
+  assert.deepEqual(dynamicToolProblems([withFormat], dropped), [])
+  assert.deepEqual([...dropped], ['format'])
 })

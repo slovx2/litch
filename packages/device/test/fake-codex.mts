@@ -112,8 +112,8 @@ export class FakeCodex extends FakeUpstream {
           `Invalid request: unknown variant \`${policy}\`, expected one of \`untrusted\`, \`on-request\`, \`granular\`, \`never\``,
         )
     }
+    // 缺字段、枚举值的核对在下面那层外壳里，和参数的其余约束一起
     this.handlers['turn/start'] = (params) => {
-      inspect(params)
       if (!this.threads.some((thread) => thread.id === params.threadId))
         throw new RpcFailure(-32600, `thread not found: ${params.threadId}`)
       return { turn: { id: `turn-of-${params.threadId}`, status: 'inProgress', items: [] } }
