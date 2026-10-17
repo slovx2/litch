@@ -19,9 +19,10 @@ import (
 type configuration struct {
 	harness, home, root, node string
 	port                      int
-	claudePort, piPort        int
-	dshPort                   int
-	userEnv                   map[string]string
+	// 全部启动时各入口的 SSH 端口（--claude-port 等，按登记表的 portFlag），键是 harness 标识。
+	// 只经 portOf、setPort 读写：setPort 换一份新表，不改别的配置副本手里的那一份。
+	ports   map[string]int
+	userEnv map[string]string
 	// 给 Codex 桌面端的内置 SSH 入口默认开着；--ssh=off 时一个都不起，不占端口。
 	sshDisabled bool
 	// 设备的设置。启动参数里的端口、--ssh、--harness 是设置里没写过时的默认值，写过就以设置为准。
@@ -74,12 +75,20 @@ func main() {
 
 // 两种语言的第一行都原样保留子命令清单，Homebrew 配方的自检按它匹配。
 func usage() string {
-	return tr(
+	ports, ids := []string{}, strings.Join(adapterHarnesses, "|")
+	for _, spec := range harnessTable {
+		if spec.portFlag != "" {
+			ports = append(ports, fmt.Sprintf("--%s %d", spec.portFlag, spec.defaultPort))
+		}
+	}
+	return fmt.Sprintf(tr(
 		"用法: codex-harness-adapter start|init|serve|ssh-config|doctor [选项]\n"+
 			"start: 自动初始化并启动可用的 Claude Code 和 Pi；可用 --harness claude-code|pi 仅启动一个\n"+
-			"全部启动端口: --claude-port 7331 --pi-port 7332 --dsh-port 7333\n"+
-			"单入口端口: --harness claude-code|pi|dsh --port PORT\n"+
+			"全部启动端口: %[1]s\n"+
+			"单入口端口: --harness %[2]s --port PORT\n"+
 			"实验入口 dsh（DeepSeek Harness）: 检测到本机装有 dsh 时随全部启动，没装时不提示\n"+
+			"OpenCode: 检测到本机装有 opencode（PATH 里，或 ~/.opencode/bin/opencode）时随全部启动，没装时不提示；可用 CHA_OPENCODE_CLI 指定路径\n"+
+			"ACP（Gemini CLI、Qwen Code、自填命令的 acp）: 默认不启用，在 Litch 的设置里打开；命令和参数可用 CHA_<标识>_CLI、CHA_<标识>_ARGS 覆盖，acp 必须给 CHA_ACP_CLI\n"+
 			"原生 Codex: 检测到本机装有 codex 时启用（在 Litch 的设置里可以关掉），用它起一个 app-server，只经聚合面提供，没有 SSH 入口\n"+
 			"公共选项: --home DIR --node PATH --root DIR\n"+
 			"SSH 入口: --ssh=on|off（默认 on）；off 时不启动给 Codex 桌面端的内置 SSH 服务，不占端口\n"+
@@ -90,9 +99,11 @@ func usage() string {
 			"首次连接: Codex 设置 → 连接 → SSH → 添加；可选将输出的配置加入 ~/.ssh/config；Ctrl-C 停止全部入口",
 		"Usage: codex-harness-adapter start|init|serve|ssh-config|doctor [options]\n"+
 			"start: initialise and start every available harness (Claude Code and Pi); use --harness claude-code|pi to start only one\n"+
-			"Ports when starting all: --claude-port 7331 --pi-port 7332 --dsh-port 7333\n"+
-			"Port for a single entry: --harness claude-code|pi|dsh --port PORT\n"+
+			"Ports when starting all: %[1]s\n"+
+			"Port for a single entry: --harness %[2]s --port PORT\n"+
 			"Experimental dsh entry (DeepSeek Harness): started with the others when dsh is installed; silent when it is not\n"+
+			"OpenCode: started with the others when opencode is installed (on PATH, or ~/.opencode/bin/opencode); silent when it is not; set CHA_OPENCODE_CLI to point to it\n"+
+			"ACP (Gemini CLI, Qwen Code, and acp with a command of your own): off by default, turn them on in Litch's settings; override the command and arguments with CHA_<ID>_CLI and CHA_<ID>_ARGS; acp needs CHA_ACP_CLI\n"+
 			"Native Codex: on when codex is installed on this machine (it can be turned off in Litch's settings); an app-server is started with it, offered through the aggregate endpoint only, with no SSH entry\n"+
 			"Common options: --home DIR --node PATH --root DIR\n"+
 			"SSH entries: --ssh=on|off (default on); off starts none of the built-in SSH servers for the Codex desktop app and takes no port\n"+
@@ -101,7 +112,7 @@ func usage() string {
 			"Environment file: <home>/env, one KEY=VALUE per line, read by foreground runs and by the background service\n"+
 			"Output language: follows the system language; set CHA_LANG=zh-CN or CHA_LANG=en to choose, in the environment file if you like\n"+
 			"First connection: Codex Settings → Connections → SSH → Add; optionally add the printed config to ~/.ssh/config; Ctrl-C stops every entry",
-	)
+	), strings.Join(ports, " "), ids)
 }
 
 func run(ctx context.Context, args []string) error {
@@ -194,14 +205,17 @@ func parseConfiguration(args []string) (configuration, error) {
 	}
 	flags := flag.NewFlagSet("codex-harness-adapter", flag.ContinueOnError)
 	cfg := configuration{}
-	flags.StringVar(&cfg.harness, "harness", "", tr("claude-code、pi 或实验性的 dsh", "claude-code, pi, or the experimental dsh"))
+	flags.StringVar(&cfg.harness, "harness", "", strings.Join(adapterHarnesses, tr("、", ", ")))
 	flags.StringVar(&cfg.home, "home", filepath.Join(home, ".codex-harness-adapter"), tr("适配器状态根目录", "root directory for adapter state"))
 	flags.StringVar(&cfg.root, "root", root, tr("适配器源码根目录", "root directory of the adapter source"))
 	flags.StringVar(&cfg.node, "node", "node", tr("Node 可执行文件；不给时先用随这份适配器带的那一份，没有才是 PATH 里的 node", "Node executable; when omitted, the one bundled with this adapter if there is one, otherwise node on PATH"))
 	flags.IntVar(&cfg.port, "port", 0, tr("回环 SSH 端口", "loopback SSH port"))
-	flags.IntVar(&cfg.claudePort, "claude-port", 7331, tr("全部启动时 Claude SSH 端口", "Claude SSH port when starting all entries"))
-	flags.IntVar(&cfg.piPort, "pi-port", 7332, tr("全部启动时 Pi SSH 端口", "Pi SSH port when starting all entries"))
-	flags.IntVar(&cfg.dshPort, "dsh-port", 7333, tr("全部启动时 dsh SSH 端口", "dsh SSH port when starting all entries"))
+	given := map[string]*int{}
+	for _, spec := range harnessTable {
+		if spec.portFlag != "" {
+			given[spec.id] = flags.Int(spec.portFlag, spec.defaultPort, fmt.Sprintf(tr("全部启动时 %s 的 SSH 端口", "%s SSH port when starting all entries"), harnessNames[spec.id]))
+		}
+	}
 	sshMode := "on"
 	flags.StringVar(&sshMode, "ssh", sshMode, tr("给 Codex 桌面端的内置 SSH 入口：on 或 off", "built-in SSH entries for the Codex desktop app: on or off"))
 	flags.BoolVar(&cfg.ifIdle, "if-idle", false, tr("device-stop：有回合或终端在跑、有客户端连着时不停", "device-stop: leave the service alone while a turn or a terminal is running or a client is connected"))
@@ -219,26 +233,26 @@ func parseConfiguration(args []string) (configuration, error) {
 	default:
 		return cfg, errors.New(tr("--ssh 只能是 on 或 off", "--ssh must be on or off"))
 	}
-	if cfg.harness != "" && cfg.harness != "claude-code" && cfg.harness != "pi" && cfg.harness != "dsh" {
-		return cfg, errors.New(tr("harness 必须为 claude-code、pi 或 dsh", "harness must be claude-code, pi, or dsh"))
+	cfg.ports = map[string]int{}
+	for id, port := range given {
+		cfg.ports[id] = *port
+	}
+	if spec, known := harnessByID(cfg.harness); cfg.harness != "" && (!known || spec.native) {
+		return cfg, fmt.Errorf(tr("harness 必须为 %s", "harness must be %s"), strings.Join(adapterHarnesses, tr("、", ", ")))
 	}
 	if cfg.harness == "" && cfg.port != 0 {
 		return cfg, errors.New(tr("--port 需要指定 --harness；全部启动请用 --claude-port 和 --pi-port", "--port requires --harness; when starting all entries use --claude-port and --pi-port"))
 	}
-	if cfg.claudePort < 1 || cfg.claudePort > 65535 || cfg.piPort < 1 || cfg.piPort > 65535 || cfg.claudePort == cfg.piPort {
-		return cfg, errors.New(tr("Claude 和 Pi 端口必须不同，且在 1 到 65535 之间", "the Claude and Pi ports must differ and be between 1 and 65535"))
-	}
-	if cfg.dshPort < 1 || cfg.dshPort > 65535 || cfg.dshPort == cfg.claudePort || cfg.dshPort == cfg.piPort {
-		return cfg, errors.New(tr("dsh 端口必须与 Claude 和 Pi 的端口不同，且在 1 到 65535 之间", "the dsh port must differ from the Claude and Pi ports and be between 1 and 65535"))
+	if err := cfg.checkPorts(); err != nil {
+		return cfg, err
 	}
 	if cfg.port == 0 {
-		cfg.port = cfg.claudePort
-		if cfg.harness == "pi" {
-			cfg.port = cfg.piPort
+		// 全部启动时这一项只是占位，沿用 Claude Code 的端口，和以前一样
+		id := cfg.harness
+		if id == "" {
+			id = harnessTable[0].id
 		}
-		if cfg.harness == "dsh" {
-			cfg.port = cfg.dshPort
-		}
+		cfg.port = cfg.portOf(id)
 	}
 	if cfg.port < 1 || cfg.port > 65535 {
 		return cfg, errors.New(tr("端口必须为 1 到 65535", "the port must be between 1 and 65535"))
@@ -263,48 +277,70 @@ func parseConfiguration(args []string) (configuration, error) {
 	return cfg, nil
 }
 
-// dsh 入口还在实验阶段，默认启动时是特例：只有检测到本机装有 dsh 才带上它，没装时不告警也不占端口，
-// Claude 和 Pi 不受影响。装了但版本过低或启动失败时，与另外两个入口一样只告警。
+// 不带 --harness 时 init、ssh-config、doctor 照看的入口：总是启用的（Claude Code、Pi），检测到装了的（dsh、OpenCode），
+// 加上设置里明确启用了的（默认不启用的 ACP 那几个）。没装的不告警也不占端口，其余入口不受影响。
+// 装了但版本过低或启动失败时，与别的入口一样只告警。
 func (c configuration) entries() []configuration {
 	if c.harness != "" {
 		return []configuration{c.forHarness(c.harness)}
 	}
-	claude, pi, dsh := c.forHarness("claude-code"), c.forHarness("pi"), c.forHarness("dsh")
-	if dshInstalled(dsh) {
-		return []configuration{claude, pi, dsh}
+	entries := []configuration{}
+	for _, spec := range harnessTable {
+		if spec.native {
+			continue
+		}
+		entry := c.forHarness(spec.id)
+		wanted := spec.enable == enableAlways || c.settings.boolean(enabledKey(spec.id), false)
+		if spec.enable == enableWhenInstalled && !wanted {
+			wanted = entry.installed(spec.id)
+		}
+		if wanted {
+			entries = append(entries, entry)
+		}
 	}
-	return []configuration{claude, pi}
+	return entries
 }
 
-// 与适配器定位 dsh 的规则一致：设置了 CHA_DSH_CLI 就认为用户要用 dsh（路径无效会在启动时告警），
-// 否则在 PATH 里找可执行的 dsh。版本是否达到下限由适配器启动前的环境检查判断。
-var dshInstalled = func(c configuration) bool {
-	env := map[string]string{}
-	for _, entry := range c.environment() {
-		name, value, _ := strings.Cut(entry, "=")
-		env[name] = value
+// 全部启动时一个入口的端口。--harness 只选一个时它用 --port（没给就用它自己那一项）。
+func (c configuration) portOf(id string) int {
+	if port, given := c.ports[id]; given {
+		return port
 	}
-	if strings.TrimSpace(env["CHA_DSH_CLI"]) != "" {
-		return true
+	return specOf(id).defaultPort
+}
+
+func (c *configuration) setPort(id string, port int) {
+	ports := map[string]int{}
+	for name, value := range c.ports {
+		ports[name] = value
 	}
-	names := []string{"dsh"}
-	if runtime.GOOS == "windows" {
-		names = []string{"dsh.exe", "dsh.cmd", "dsh"}
+	ports[id] = port
+	c.ports = ports
+}
+
+// 各入口的端口要在 1 到 65535 之间，彼此不同。
+func (c configuration) checkPorts() error {
+	seen := map[int]string{}
+	for _, spec := range harnessTable {
+		if spec.portFlag == "" {
+			continue
+		}
+		port := c.portOf(spec.id)
+		if port < 1 || port > 65535 {
+			return fmt.Errorf(tr("--%s 必须在 1 到 65535 之间", "--%s must be between 1 and 65535"), spec.portFlag)
+		}
+		if other, taken := seen[port]; taken {
+			return fmt.Errorf(tr("--%s 和 --%s 的端口不能相同", "--%s and --%s must use different ports"), other, spec.portFlag)
+		}
+		seen[port] = spec.portFlag
 	}
-	search := env["PATH"]
-	if search == "" {
-		search = env["Path"]
-	}
-	return executableOnPath(search, names) != ""
+	return nil
 }
 
 func (c configuration) directory() string { return filepath.Join(c.home, c.harness) }
 func (c configuration) socket() string    { return hostplatform.SocketPath(c.directory()) }
 func (c configuration) adapter() string {
-	name := "claude"
-	if c.harness == "pi" || c.harness == "dsh" {
-		name = c.harness
-	}
+	name := specOf(c.harness).pkg
 	return filepath.Join(c.root, "packages", name, "dist", name, "src", "adapter.mjs")
 }
 
@@ -325,9 +361,18 @@ var adapterCLIPath = sync.OnceValue(func() string {
 // 原生 codex 没有固定变量：它的数据目录是用户自己的，CODEX_HOME 由用户的环境（或者设置）说了算。
 func (c configuration) environment() []string {
 	values := map[string]string{
-		"CODEX_HOME":      filepath.Join(c.directory(), "codex"),
-		"CHA_CLAUDE_HOME": c.directory(), "CHA_PI_HOME": c.directory(), "CHA_DSH_HOME": c.directory(),
+		"CODEX_HOME":              filepath.Join(c.directory(), "codex"),
 		"CHA_CLAUDE_IDLE_EXIT_MS": "0",
+	}
+	// 每个引擎的状态目录变量都给成这个入口的目录，不让外面的同名变量漏进来。
+	for _, spec := range harnessTable {
+		if spec.homeVariable != "" {
+			values[spec.homeVariable] = c.directory()
+		}
+	}
+	// 通用 ACP 引擎一份代码扮演几个 harness，靠这个变量知道这一次是哪个
+	if specOf(c.harness).acp {
+		values[acpAgentVariable] = c.harness
 	}
 	if path := adapterCLIPath(); path != "" {
 		values[adapterCLIEnvironment] = path

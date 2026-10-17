@@ -83,12 +83,14 @@ func TestSSHOptionParsing(t *testing.T) {
 // 端口被占只是这个入口连不上：运行时照常工作，原因记下来并告警；端口空出来之后入口自己接上。
 func TestSSHListenFailureKeepsRuntime(t *testing.T) {
 	cfg := testConfiguration(t)
-	cfg.harness, cfg.claudePort, cfg.piPort = "", cfg.port, otherPort(t, cfg.port)
+	cfg.harness = ""
+	cfg.setPort("claude-code", cfg.port)
+	cfg.setPort("pi", otherPort(t, cfg.port))
 	entries := cfg.entries()
 	for _, entry := range entries {
 		writeStartFixture(t, entry)
 	}
-	blocker, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", cfg.claudePort))
+	blocker, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", cfg.portOf("claude-code")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +104,7 @@ func TestSSHListenFailureKeepsRuntime(t *testing.T) {
 		waitStartedHarness(t, entries[1], done)
 		waitUntil(t, "记下监听失败的原因", func() bool { return readSSHEntryStatus(entries[0]).State == "failed" })
 		status := readSSHEntryStatus(entries[0])
-		if status.Reason != "port-unavailable" || status.Port != cfg.claudePort || status.Detail == "" {
+		if status.Reason != "port-unavailable" || status.Port != cfg.portOf("claude-code") || status.Detail == "" {
 			t.Fatalf("没有如实记下原因: %+v", status)
 		}
 		// 多等几轮重试，运行时一直在，状态锁也一直由它拿着。
@@ -148,7 +150,9 @@ func TestSSHListenFailureKeepsRuntime(t *testing.T) {
 // --ssh=off：不起内置 SSH 服务、不占端口，也不生成 SSH 用的密钥；运行时照常。
 func TestSSHOffStartsNoSSHServer(t *testing.T) {
 	cfg := testConfiguration(t)
-	cfg.harness, cfg.claudePort, cfg.piPort = "", cfg.port, otherPort(t, cfg.port)
+	cfg.harness = ""
+	cfg.setPort("claude-code", cfg.port)
+	cfg.setPort("pi", otherPort(t, cfg.port))
 	cfg.sshDisabled = true
 	entries := cfg.entries()
 	for _, entry := range entries {

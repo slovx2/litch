@@ -107,8 +107,12 @@ func (c configuration) launchOptions() []string {
 	if c.sshDisabled {
 		mode = "off"
 	}
-	options := []string{"--ssh=" + mode,
-		"--claude-port", strconv.Itoa(c.claudePort), "--pi-port", strconv.Itoa(c.piPort), "--dsh-port", strconv.Itoa(c.dshPort)}
+	options := []string{"--ssh=" + mode}
+	for _, spec := range harnessTable {
+		if spec.portFlag != "" {
+			options = append(options, "--"+spec.portFlag, strconv.Itoa(c.portOf(spec.id)))
+		}
+	}
 	if c.harness != "" {
 		options = append(options, "--harness", c.harness, "--port", strconv.Itoa(c.port))
 	}

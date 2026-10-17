@@ -43,9 +43,10 @@ func (s *controlServer) diagnostics(harness string) (any, *controlError) {
 }
 
 func (m *harnessManager) harnessDiagnostics(s *controlServer, id string) []diagnosticCheck {
-	// 实验性的 dsh 没装时不算毛病，和启动时不告警是一个道理：记成跳过，说明原因。
+	// 装了才启用的（dsh、OpenCode）没装时不算毛病，和启动时不告警是一个道理；默认不启用的（ACP 那几个）
+	// 没打开（或者关掉了）时也一样，用户没要它：都记成跳过，说明原因。
 	enabled, state, text := m.wanted(id)
-	if !enabled && state == stateNotInstalled {
+	if !enabled && (state == stateNotInstalled || specOf(id).enable == enableOptIn) {
 		return []diagnosticCheck{{ID: "runtime", Scope: harnessScope(id), Status: "skipped", Detail: &text,
 			Title: both("引擎的命令行和运行环境", "Engine CLI and runtime environment")}}
 	}

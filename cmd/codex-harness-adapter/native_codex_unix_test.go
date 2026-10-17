@@ -102,7 +102,7 @@ func TestControlManagesNativeCodex(t *testing.T) {
 	if _, err := os.Stat(codex.directory()); !os.IsNotExist(err) {
 		t.Fatal("没启用时不该为原生 codex 建任何东西")
 	}
-	if len(first.Snapshot.SSHEntries) != 3 || first.Snapshot.sshEntry(nativeCodex).Harness != "" {
+	if len(first.Snapshot.SSHEntries) != len(adapterHarnesses) || first.Snapshot.sshEntry(nativeCodex).Harness != "" {
 		t.Fatalf("原生 codex 没有 SSH 入口: %+v", first.Snapshot.SSHEntries)
 	}
 	if arguments := strings.Join(deviceFixtureArguments(t, cfg), " "); strings.Contains(arguments, "codex=") {
@@ -143,7 +143,7 @@ func TestControlManagesNativeCodex(t *testing.T) {
 	running := control.waitState("状态里是在运行", func(state controlState) bool {
 		return state.harness(nativeCodex).State == stateRunning
 	})
-	if running.harness(nativeCodex).Text != nil || len(running.Snapshot.SSHEntries) != 3 {
+	if running.harness(nativeCodex).Text != nil || len(running.Snapshot.SSHEntries) != len(adapterHarnesses) {
 		t.Fatalf("在运行时的状态不对: %+v", running.harness(nativeCodex))
 	}
 	if _, err := os.Stat(filepath.Join(codex.directory(), "identity")); !os.IsNotExist(err) {

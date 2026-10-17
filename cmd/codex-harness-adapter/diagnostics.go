@@ -82,6 +82,12 @@ func cliMissing(c configuration) bilingual {
 			"设置里给 %s 填的“命令行路径”（%s）不是一个可执行的文件。改成它的命令行的绝对路径，或者清空这一项改在 PATH 里找",
 			"The \"CLI path\" set for %s in settings (%s) is not an executable file. Set it to the absolute path of its command-line tool, or clear it to look it up on PATH",
 		).with(name, key)
+	case specOf(id).needsCLI && c.environmentValue(variable) == "":
+		// 没有预设命令：不是“没装”，是还没说要接哪个 agent
+		return both(
+			"%[1]s 没有预设的命令，要告诉它接哪个 ACP agent：在这台设备的设置里填“命令行路径”（%[2]s），或者用环境变量 %[3]s 指定命令；参数写在环境变量 %[4]s 里",
+			"%[1]s has no preset command; tell it which ACP agent to run: fill in \"CLI path\" (%[2]s) in this device's settings, or set the %[3]s environment variable; put the arguments in the %[4]s environment variable",
+		).with(name, key, variable, strings.TrimSuffix(variable, "_CLI")+"_ARGS")
 	case variable == "":
 		return both(
 			"没有找到 %s 的命令行。装好之后重新启动它；也可以在这台设备的设置里填“命令行路径”（%s）",
@@ -144,6 +150,18 @@ func runDiagnostic(ctx context.Context, c configuration, flag string) ([]byte, e
 		message = both("DSH 版本低于适配器要求的下限，请升级 dsh 后重试", "DSH is older than the minimum this adapter requires; upgrade dsh and retry")
 	case strings.Contains(stderr.String(), "无法读取宿主 dsh CLI 版本"):
 		message = both("无法读取 DSH 版本，请先确认 dsh --version 可以正常运行", "Cannot read the DSH version; make sure dsh --version runs first")
+	case strings.Contains(stderr.String(), "OpenCode CLI 版本不符"):
+		kind = "versionTooLow"
+		message = both("OpenCode 版本低于适配器要求的下限，请升级 opencode 后重试", "OpenCode is older than the minimum this adapter requires; upgrade opencode and retry")
+	case strings.Contains(stderr.String(), "无法读取宿主 OpenCode CLI 版本"):
+		message = both("无法读取 OpenCode 版本，请先确认 opencode --version 可以正常运行", "Cannot read the OpenCode version; make sure opencode --version runs first")
+	case strings.Contains(stderr.String(), "ACP 协议版本不符"):
+		// 适配器说的是 ACP 协议第 1 版；对面回的不是这一版，多半是 agent 太旧
+		kind = "versionTooLow"
+		message = both(
+			"%s 说的 ACP 协议版本和适配器不一致，请升级它后重试",
+			"%s speaks a different version of the ACP protocol from this adapter; upgrade it and retry",
+		).with(harnessNames[c.harness])
 	case strings.Contains(stderr.String(), "Claude CLI 版本不符"), strings.Contains(stderr.String(), "需要用户安装的 Pi CLI"):
 		kind = "versionTooLow"
 		message = both("引擎 CLI 版本检查未通过，请安装适配器说明（ADAPTER.md）要求的最低稳定版本或更高版本", "The engine CLI failed the version check; install the minimum stable version listed in the adapter guide (ADAPTER.en.md) or newer")
