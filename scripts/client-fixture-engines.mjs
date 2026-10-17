@@ -210,6 +210,8 @@ export function writeEngineSettings({ home, root, modelUrl, engines }) {
     values['harness.codex.cliPath'] = engines.codex
     values['harness.codex.env'] = [
       plain('CODEX_HOME', codexHome),
+      // npm 装的 codex 是个 node 脚本（#!/usr/bin/env node），隔离的登录 shell 给的 PATH 里没有 node：补上跑夹具的这份
+      plain('PATH', `${dirname(process.execPath)}:/usr/bin:/bin:/usr/sbin:/sbin`),
       ...['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'http_proxy', 'https_proxy', 'all_proxy'].map(
         (name) => plain(name, DEAD_END),
       ),
