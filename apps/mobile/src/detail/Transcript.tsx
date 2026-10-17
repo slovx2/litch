@@ -5,7 +5,7 @@
 // 2026-10-17 复现：开关时 15 次崩 5–7 次，一直开 15 次 0 次）。一直开着贴底也没受影响（T1 的偏差仍是 0.00x dp）。
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import { FlashList, type ListRenderItem } from '@shopify/flash-list'
+import { FlashList, type FlashListRef, type ListRenderItem } from '@shopify/flash-list'
 import {
   forwardRef,
   useCallback,
@@ -175,7 +175,21 @@ function useActions(store: SessionStore) {
 const PAGE = 40
 
 export function Transcript({ store, bottomOffset, markers }: Props) {
-  const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot)
+  const listRef = useRef<FlashListRef<Row>>(null)
+  const pinnedRef = useRef(true)
+  // 贴底时列表的数据变了（回合结束、尾巴并回列表，发了新的一句）：这一次别让“保持可见位置”去校正。
+  // 它只看行的位置，不管表头（尾巴）同时缩了多少，会按并进来的行高把列表推离底部，而且不发滚动事件，
+  // 这边还以为贴着底（2026-10-18 复现：回答比一屏长时，回合一结束就停在回答开头）。
+  // 不能贴底时把它关掉：开关一次就插拔一次锚点视图，会崩（见文件开头）
+  const subscribe = useCallback(
+    (listener: () => void) =>
+      store.subscribe(() => {
+        if (pinnedRef.current) listRef.current?.prepareForLayoutAnimationRender()
+        listener()
+      }),
+    [store],
+  )
+  const snapshot = useSyncExternalStore(subscribe, store.getSnapshot)
   useCommitTiming(snapshot)
   const [limit, setLimit] = useState(PAGE)
   const rows = useMemo(() => snapshot.rows.slice(0, limit), [snapshot.rows, limit])
@@ -187,7 +201,6 @@ export function Transcript({ store, bottomOffset, markers }: Props) {
     setLimit((current) => current + PAGE)
   }, [more, limit])
   const [pinned, setPinned] = useState(true)
-  const pinnedRef = useRef(true)
   const actions = useActions(store)
   const renderItem = useCallback<ListRenderItem<Row>>(({ item }) => renderRow(item), [])
   const ScrollComponent = useMemo(
@@ -219,6 +232,7 @@ export function Transcript({ store, bottomOffset, markers }: Props) {
     <TranscriptContext.Provider value={actions.value}>
       <View style={[styles.list, { backgroundColor: actions.background }]}>
         <FlashList
+          ref={listRef}
           data={rows}
           inverted
           renderItem={renderItem}

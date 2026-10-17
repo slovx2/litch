@@ -26,10 +26,9 @@ tags: [mock, smoke]
     notVisible:
       id: request:approval
     timeout: 10000
-# 答完回合接着走完（这个会话只有这一个回合，之前没有“⋯”）：状态行上出现“⋯”。往下滚着找：回答比一屏长时（CI 的 320×640 上就是），答完卡片之后对话区不再贴底，
-# 状态行在屏幕下面（产品问题，见 e2e/README.md）
-- scrollUntilVisible:
-    element:
+# 答完回合接着走完（这个会话只有这一个回合，之前没有“⋯”）：状态行上出现“⋯”。
+# 不滚动：对话区要一直贴着底，回答比一屏长（CI 的 320×640 上就是）也一样
+- extendedWaitUntil:
+    visible:
       id: turn-menu
-    direction: DOWN
-    timeout: 60000
+    timeout: 30000
