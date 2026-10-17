@@ -3,8 +3,9 @@
 // 发消息走 session.send：没有回合在跑就开一个，在跑就由核心排队；排着的可以现在就插进去（steer）、拿回来改、拿掉。
 // 回合在跑而输入框是空的，按钮是“停止”（session.interrupt）。
 import { type DeviceView, type ImageAttachment, keys, type QueuedMessage } from '@litch/core'
-import { type RefObject, useState, useSyncExternalStore } from 'react'
+import { type RefObject, useEffect, useState, useSyncExternalStore } from 'react'
 import type { TextInput } from 'react-native'
+import { whyNot } from '../../../../packages/ui/src/app/errors.ts'
 import type { SessionStore } from '../core/session-store'
 import { useChannel, useKey } from '../shell/services'
 import { useT } from '../ui/i18n'
@@ -12,8 +13,8 @@ import { ComposeBox, useDraft } from './composer/ComposeBox'
 import { draftKey } from './composer/drafts'
 import { downHarness, useComposeOptions } from './composer/options'
 import { QueueTray } from './composer/QueueTray'
-import { reasonOf } from './composer/reason'
 import { SettingsBar } from './composer/SettingsBar'
+import { onRefill } from './refill'
 
 export function Composer({
   store,
@@ -33,6 +34,12 @@ export function Composer({
   const draft = useDraft(draftKey(deviceId, sessionId))
   const options = useComposeOptions(deviceId, meta?.harness)
   const [error, setError] = useState<string | null>(null)
+  const { refill } = draft
+  // 对话区回退了一个回合：那条消息放回输入框（src/detail/refill.ts）
+  useEffect(
+    () => onRefill(deviceId, sessionId, (message) => refill(message.text, message.images)),
+    [deviceId, sessionId, refill],
+  )
 
   const running = meta?.running ?? false
   const down = downHarness(device, meta?.harness)
@@ -67,7 +74,7 @@ export function Composer({
     channel
       .command('session.interrupt', { deviceId, sessionId })
       .catch((reason: unknown) =>
-        setError(t('composer.interruptFailed', { reason: reasonOf(reason, t) })),
+        setError(t('composer.interruptFailed', { reason: whyNot(reason, t) })),
       )
   }
   const steer = (message: QueuedMessage) => {
@@ -75,7 +82,7 @@ export function Composer({
     channel
       .command('session.steer', { deviceId, sessionId, messageId: message.id })
       .catch((reason: unknown) =>
-        setError(t('composer.steerFailed', { reason: reasonOf(reason, t) })),
+        setError(t('composer.steerFailed', { reason: whyNot(reason, t) })),
       )
   }
   const unqueue = (message: QueuedMessage, edit: boolean) => {
@@ -121,7 +128,7 @@ export function Composer({
             onChange={(patch) => {
               channel
                 .command('session.configure', { deviceId, sessionId, settings: patch })
-                .catch((reason: unknown) => setError(reasonOf(reason, t)))
+                .catch((reason: unknown) => setError(whyNot(reason, t)))
             }}
           />
         ) : null

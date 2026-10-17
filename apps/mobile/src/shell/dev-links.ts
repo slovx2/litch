@@ -41,7 +41,11 @@ function applyExperiment(params: URLSearchParams) {
 let lastCreated: { deviceId: string; sessionId: string } | null = null
 
 /** 链接里要换装法时返回新的装法，App 据此重新装核心；别的链接就地办完 */
-export function handleDevLink(url: string, services: Services | null): BootMode | null {
+/**
+ * 处理一个测试链接。返回要换的启动方式；'later' 是现在还做不了（核心没装好、页面栈没就绪、还没有设备），
+ * 由外面过一会儿再交一次（应用刚起来时发的第一个链接就是这种）
+ */
+export function handleDevLink(url: string, services: Services | null): BootMode | 'later' | null {
   const parsed = new URL(url)
   const params = parsed.searchParams
   applyExperiment(params)
@@ -53,7 +57,7 @@ export function handleDevLink(url: string, services: Services | null): BootMode 
     const mode = params.get('mode')
     return mode === 'mock' || mode === 'fixture' || mode === 'stored' ? mode : null
   }
-  if (!services || !navigationRef.isReady()) return null
+  if (!services || !navigationRef.isReady()) return 'later'
   const { channel, replica, booted } = services
   const deviceOf = () => {
     const asked = params.get('device')
@@ -64,7 +68,7 @@ export function handleDevLink(url: string, services: Services | null): BootMode 
   switch (parsed.hostname) {
     case 'new': {
       const deviceId = deviceOf()
-      if (!deviceId) return null
+      if (!deviceId) return 'later'
       const text = params.get('prompt') ?? '长回答'
       void channel
         .command('session.create', { deviceId, cwd: booted.work, text })
@@ -103,14 +107,14 @@ export function handleDevLink(url: string, services: Services | null): BootMode 
       return null
     case 'seed': {
       const deviceId = deviceOf()
-      if (deviceId)
-        void seedSessions(channel, replica.store, deviceId, Number(params.get('count')) || 300)
+      if (!deviceId) return 'later'
+      void seedSessions(channel, replica.store, deviceId, Number(params.get('count')) || 300)
       return null
     }
     case 'terminal':
     case 'diff': {
       const deviceId = deviceOf()
-      if (!deviceId) return null
+      if (!deviceId) return 'later'
       const firstRoot = replica.store.get<{ roots: string[] }[]>(keys.workspaces(deviceId))?.[0]
         ?.roots[0]
       const root = params.get('root') ?? booted.work ?? firstRoot ?? null

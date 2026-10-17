@@ -5,12 +5,17 @@ import type { DiffEntry, DiffScope, FileDiff } from '@litch/core'
 import { FlashList } from '@shopify/flash-list'
 import { useEffect, useMemo, useState } from 'react'
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
+import { reasonOf } from '../../../../../../packages/ui/src/app/errors.ts'
+import {
+  changedLines,
+  FILE_LINES_MAX,
+  tooBig,
+} from '../../../../../../packages/ui/src/diff/model.ts'
 import { useChannel } from '../../../shell/services'
 import { useT } from '../../../ui/i18n'
 import { Empty } from '../../../ui/kit/controls'
 import { useTheme } from '../../../ui/theme'
-import { reasonOf } from '../tool-errors'
-import { changedLines, type DiffRow, FILE_LINES_MAX, rowsOf } from './rows'
+import { type DiffRow, rowsOf } from './rows'
 
 export interface Where {
   deviceId: string
@@ -38,7 +43,7 @@ export function FileDiffPane({
   const theme = useTheme()
   const t = useT()
   const { c } = theme
-  const huge = changedLines(entry) > FILE_LINES_MAX
+  const huge = tooBig(entry)
   const [loaded, setLoaded] = useState<Loaded>({ state: 'loading' })
   const { deviceId, root, scope, sessionId } = where
 

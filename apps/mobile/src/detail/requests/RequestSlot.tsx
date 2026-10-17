@@ -2,15 +2,15 @@
 // 输入框一直在、照常能写，请求不挡它；请求挂着时发消息就是“回合进行中发消息”那一套。
 // 没有请求的时候这个位置留给“计划写好了，要不要执行”（PlanAsk.tsx）。数据只来自会话存储的 meta。
 import { useEffect, useSyncExternalStore } from 'react'
+import { asksAboutPlan, markPlanAsked } from '../../../../../packages/ui/src/composer/plan-ask.ts'
+import { keepQuestionDrafts } from '../../../../../packages/ui/src/composer/question-drafts.ts'
 import type { SessionStore } from '../../core/session-store'
 import { ApprovalCard } from './ApprovalCard'
 import { CardHeight } from './Card'
 import { ClientAskCard } from './ClientAskCard'
 import { FormCard } from './FormCard'
 import { PlanAsk } from './PlanAsk'
-import { asksAboutPlan, markPlanAsked } from './plan-ask'
 import { QuestionCard } from './QuestionCard'
-import { keepQuestionDrafts } from './question-drafts'
 
 export function RequestSlot({
   store,
@@ -43,7 +43,7 @@ export function RequestSlot({
     request?.kind === 'question' &&
     asksAboutPlan(
       request.questions.map((entry) => entry.id),
-      lastTurn?.planId != null,
+      (lastTurn?.itemIds ?? []).some((id) => store.kindOf(id) === 'plan'),
     )
   useEffect(() => {
     if (planAsked && lastTurn) markPlanAsked(`${deviceId}\n${sessionId}`, lastTurn.id)
@@ -55,7 +55,7 @@ export function RequestSlot({
   return (
     <CardHeight.Provider value={maxHeight}>
       {!request ? (
-        <PlanAsk deviceId={deviceId} sessionId={sessionId} meta={meta} onRevise={onRevise} />
+        <PlanAsk store={store} meta={meta} onRevise={onRevise} />
       ) : request.kind === 'approval' ? (
         <ApprovalCard key={request.id} {...common} request={request} />
       ) : request.kind === 'question' ? (

@@ -12,11 +12,11 @@ import {
   Text,
   View,
 } from 'react-native'
+import { reasonOf } from '../../../../../packages/ui/src/app/errors.ts'
 import { useBusy, useChannel } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Button, Field } from '../../ui/kit/controls'
 import { useTheme } from '../../ui/theme'
-import { reasonOf } from './format'
 
 const COLORS: WireColor[] = ['blue', 'orange', 'green', 'brown', 'slate', 'red', 'yellow', 'violet']
 

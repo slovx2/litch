@@ -17,6 +17,8 @@ import { FlashList } from '@shopify/flash-list'
 import { useEffect, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { reasonOf } from '../../../../../packages/ui/src/app/errors.ts'
+import { totalsOf } from '../../../../../packages/ui/src/diff/model.ts'
 import type { RootStackParamList } from '../../nav/routes'
 import { useKey, useReplica, useServices } from '../../shell/services'
 import { useT } from '../../ui/i18n'
@@ -24,8 +26,7 @@ import { Button, Empty } from '../../ui/kit/controls'
 import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
 import { FileDiffPane } from './diff/FileDiffPane'
-import { STATUS_LETTER, splitPath, totalsOf } from './diff/rows'
-import { reasonOf } from './tool-errors'
+import { STATUS_LETTER, splitPath } from './diff/rows'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Diff'>
 

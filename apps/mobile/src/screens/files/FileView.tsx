@@ -1,5 +1,5 @@
 // 只读看一个文件：等宽、带行号、不折行（横着滑）。按行虚拟化，行高固定，几千行的文件也只画看得见的几十行；
-// 一行太长（超过 LINE_CUT 个字）只显示前面一截并说还有多少（照桌面端的文件查看器）。
+// 一行太长只显示前面一截并说还有多少。按行切、切长行、字节数的写法用桌面的 packages/ui/src/files/lines.ts。
 // 带了 line 的打开时滚到那一行并标出来。不按文字显示的文件（太大、不是文字、不在了）只说是哪一种。
 import type { FileContent } from '@litch/core'
 import { useCallback, useMemo, useState } from 'react'
@@ -13,24 +13,17 @@ import {
   View,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { byteSize, cutLine, splitLines } from '../../../../../packages/ui/src/files/lines.ts'
 import { useT } from '../../ui/i18n'
 import { Empty } from '../../ui/kit/controls'
 import { useTheme } from '../../ui/theme'
 
 const LINE_H = 18
 const FONT = 12
-const LINE_CUT = 4000
 /** 量字宽用的那串字有多长 */
 const PROBE = 64
 /** 定位到某一行时，它上面留几行 */
 const ABOVE = 4
-
-const sizeOf = (bytes: number): string =>
-  bytes < 1024
-    ? `${bytes} B`
-    : bytes < 1024 * 1024
-      ? `${(bytes / 1024).toFixed(1)} KB`
-      : `${(bytes / 1024 / 1024).toFixed(1)} MB`
 
 export function FileView({ content, line }: { content: FileContent; line?: number }) {
   const t = useT()
@@ -40,8 +33,8 @@ export function FileView({ content, line }: { content: FileContent; line?: numbe
       <Empty
         title={t('files.view.tooLarge')}
         detail={t('files.view.tooLarge.note', {
-          size: sizeOf(content.bytes),
-          limit: sizeOf(content.limit),
+          size: byteSize(content.bytes),
+          limit: byteSize(content.limit),
         })}
       />
     )
@@ -53,7 +46,7 @@ export function FileView({ content, line }: { content: FileContent; line?: numbe
           t('files.view.binary.note'),
           content.bytes === null
             ? ''
-            : t('files.view.binary.sized', { size: sizeOf(content.bytes) }),
+            : t('files.view.binary.sized', { size: byteSize(content.bytes) }),
         ].join('')}
       />
     )
@@ -84,13 +77,10 @@ function TextView({
   // 等宽字一个多宽：先按字号估，量到了再换
   const [charW, setCharW] = useState(FONT * 0.6)
   const lines = useMemo(() => {
-    const raw = content.text.split('\n')
-    if (raw.length > 1 && raw[raw.length - 1] === '') raw.pop()
-    return raw.map<Line>((text, at) =>
-      text.length > LINE_CUT
-        ? { n: at + 1, text: text.slice(0, LINE_CUT), cut: text.length - LINE_CUT }
-        : { n: at + 1, text, cut: 0 },
-    )
+    return splitLines(content.text).map<Line>((raw, at) => {
+      const { text, hidden } = cutLine(raw)
+      return { n: at + 1, text, cut: hidden }
+    })
   }, [content.text])
   const longest = useMemo(
     () =>
@@ -142,7 +132,7 @@ function TextView({
 
   const facts = [
     t('files.view.lines', { n: lines.length }),
-    sizeOf(content.bytes),
+    byteSize(content.bytes),
     content.language ?? t('files.view.plain'),
     t('files.view.readonly'),
   ]

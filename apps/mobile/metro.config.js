@@ -10,8 +10,9 @@ const config = getDefaultConfig(__dirname)
 config.watchFolders = [
   path.join(repo, 'packages/core/src'),
   path.join(repo, 'packages/protocol/src'),
-  // 界面的文案和桌面界面共用（src/ui/i18n.ts）
-  path.join(repo, 'packages/ui/src/i18n'),
+  // 桌面界面里不依赖 React 和浏览器的纯逻辑（文案、时间与原因的说法、计划确认、提问草稿、差异模型等）和手机共用；
+  // 只能引这类文件，引到带 React 或 DOM 的会出两份 React
+  path.join(repo, 'packages/ui/src'),
 ]
 const CORE_ENTRY = path.join(repo, 'packages/core/src/index.mts')
 config.resolver.sourceExts = [...config.resolver.sourceExts, 'mts']

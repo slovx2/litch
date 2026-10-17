@@ -245,7 +245,10 @@ npm run client:check:packed        # 对着装好的那一份跑三组自检：�
 - 数据只来自订阅：`createReplica` 加 `keys.*`，组件用 `useKey`（`src/shell/services.tsx`）；会话详情用 `src/core/session-store.ts`（行、末尾在流的块、会话层面的状态三种订阅），不整份拉、不轮询。
 - 页面一律用 `src/ui/kit/Screen.tsx` 画标题栏，标题首帧就从路由参数来；路由表是 `src/nav/routes.ts`。文案 `useT()`，手机自己的在 `src/ui/messages/` 按区域分文件；颜色、字号只从 `useTheme()` 取。
 - SSH 在 Go（仓库根目录 `mobile/sshtransport`，独立 go.mod），经 gomobile 编进 `modules/litch-ssh`；终端、差异的网页内嵌在 WebView 里，页面由 `scripts/build-webview-*.mjs` 打成字符串。
-- 检查：`cd apps/mobile && npx tsc --noEmit`，根目录 `npx biome check apps/mobile`。验流畅度用 release 包（`npx expo prebuild --platform android --clean`，`cd android && ./gradlew assembleRelease`），测量脚本 `scripts/bench.mjs`（T1–T7），真链路用 `scripts/fixture.mjs` 起的假远程。
+- 桌面界面 `packages/ui/src` 里不依赖 React 和浏览器的纯逻辑（时间与原因的说法、计划确认、提问草稿、差异模型、文件行、连接指引等）直接引用（相对路径带 `.ts`，Metro 的 watchFolders 已放开），不要另抄一份；带 React 或 DOM 的不能引，会出两份 React。
+- 终端页、测量页的网页由 `npm run web:build` 生成成字符串（`src/web/`、`src/bench/` 下的 `*.generated.ts`，不进仓库），`npm run typecheck` 和 `npm run android:release` 会先跑它。
+- 检查：`cd apps/mobile && npm run typecheck`，根目录 `npx biome check apps/mobile`。验流畅度用 release 包：`npx expo prebuild --platform android --clean --no-install`，再 `npm run android:release`（要 JDK 17 以上的 `JAVA_HOME` 和 `ANDROID_HOME`；`--clean` 会清掉 `local.properties`）。测量脚本 `scripts/bench.mjs`（T1–T7），真链路用 `scripts/fixture.mjs` 起的假远程。
+- 测试链接（`src/shell/dev-links.ts`，`litch://boot?mode=mock|fixture|stored`、`new`、`open`、`send`、`terminal`、`diff`、`seed`、`remote` 等）只给验收和测量用；应用还没装好核心时发来的会稍后重试。
 
 ## 构建和检查
 

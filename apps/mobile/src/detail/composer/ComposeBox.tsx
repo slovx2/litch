@@ -4,6 +4,7 @@
 import type { ImageAttachment } from '@litch/core'
 import { type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from 'react'
 import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import { whyNot } from '../../../../../packages/ui/src/app/errors.ts'
 import { useT } from '../../ui/i18n'
 import { useTheme } from '../../ui/theme'
 import { colors } from '../theme'
@@ -16,7 +17,6 @@ import {
   saveDraftImages,
 } from './drafts'
 import { MAX_IMAGE_MB, MAX_IMAGES, pickImages, REFUSAL_TEXT } from './images'
-import { reasonOf } from './reason'
 
 export interface Draft {
   text: string
@@ -132,7 +132,7 @@ export function ComposeBox({
     onSend(text, images)
       .catch((reason: unknown) => {
         draft.refill(text, images)
-        onError(t('composer.failed', { reason: reasonOf(reason, t) }))
+        onError(t('composer.failed', { reason: whyNot(reason, t) }))
       })
       .finally(() => setSending(false))
   }

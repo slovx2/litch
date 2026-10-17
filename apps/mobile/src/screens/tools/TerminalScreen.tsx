@@ -14,6 +14,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { StyleSheet, Text, View } from 'react-native'
 import { KeyboardAvoidingView, useKeyboardState } from 'react-native-keyboard-controller'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { reasonOf } from '../../../../../packages/ui/src/app/errors.ts'
 import type { RootStackParamList } from '../../nav/routes'
 import { useKey, useReplica, useServices } from '../../shell/services'
 import { useT } from '../../ui/i18n'
@@ -32,7 +33,6 @@ import {
   workspaceOf,
 } from './terminal/pick'
 import { type TerminalHandle, TerminalView } from './terminal/TerminalView'
-import { reasonOf } from './tool-errors'
 import { termStats } from './tool-flags'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Terminal'>

@@ -46,10 +46,11 @@ export interface SessionMeta {
   /** 有回合在跑 */
   running: boolean
   /**
-   * 最后一个回合：标识、状态，和它里面最后一个计划条目（没有是 null）。输入线据此定“计划写好了，要不要执行”
-   * 那一问（请求卡片的位置）。回合开始结束、请求来去时跟着换；计划条目在回合结束、请求到达之前就已经在了
+   * 最后一个回合：标识、状态、里面的条目。输入线据此定“计划写好了，要不要执行”那一问（请求卡片的位置，
+   * 判断用桌面的 composer/plan-ask.ts，条目的种类问 SessionStore.kindOf）。回合开始结束、请求来去时跟着换；
+   * 计划条目在回合结束、请求到达之前就已经在了
    */
-  lastTurn: { id: string; status: TurnStatus; planId: string | null } | null
+  lastTurn: { id: string; status: TurnStatus; itemIds: readonly string[] } | null
 }
 
 const EMPTY: SessionSnapshot = { rows: [], running: false, error: null, publishedAt: 0 }
@@ -75,14 +76,7 @@ function tailSize(built: Row[]): number {
 
 function lastTurnOf(view: SessionView): SessionMeta['lastTurn'] {
   const turn = view.turns[view.turns.length - 1]
-  if (!turn) return null
-  let planId: string | null = null
-  // 从后往前找：Hermes 上新一点的数组方法不一定有（原型报告第六节）
-  for (let index = turn.itemIds.length - 1; index >= 0 && !planId; index--) {
-    const id = turn.itemIds[index]
-    if (id && view.items[id]?.kind === 'plan') planId = id
-  }
-  return { id: turn.id, status: turn.status, planId }
+  return turn ? { id: turn.id, status: turn.status, itemIds: [...turn.itemIds] } : null
 }
 
 const sameRows = (a: Row[], b: Row[]): boolean =>
@@ -168,6 +162,9 @@ export class SessionStore {
     }
     return null
   }
+
+  /** 一个条目是什么种类。条目的种类定了就不变，现取就行 */
+  readonly kindOf = (itemId: string): string | undefined => this.view?.items[itemId]?.kind
 
   /** 这一回合最后一条回答的全文（行里只有切出来的一块）；没有回答时是计划 */
   answerText(turnId: string): string | null {

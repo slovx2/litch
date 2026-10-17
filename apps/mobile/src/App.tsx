@@ -75,15 +75,30 @@ export default function App() {
 
   // 测试用的链接：要用到最新的 services，放在 ref 里给监听器读
   const services = useRef<Services | null>(null)
+  // 启动应用的那个链接只处理一次：换了装法这里会重新挂一遍，再读一次就又换回去了
+  const initialHandled = useRef(false)
   useEffect(() => {
-    const handle = (url: string | null) => {
+    // 现在做不了的（核心还在装、还没有设备）每 250 毫秒再交一次，最多 15 秒；后来的链接顶掉还在等的
+    let retry: ReturnType<typeof setTimeout> | undefined
+    const handle = (url: string | null, tries = 0) => {
       if (!url) return
+      clearTimeout(retry)
       const mode = handleDevLink(url, services.current)
+      if (mode === 'later') {
+        if (tries < 60) retry = setTimeout(() => handle(url, tries + 1), 250)
+        return
+      }
       if (mode && mode !== prefs.boot) setPrefs({ boot: mode })
     }
     const subscription = Linking.addEventListener('url', (event) => handle(event.url))
-    void Linking.getInitialURL().then(handle)
-    return () => subscription.remove()
+    if (!initialHandled.current) {
+      initialHandled.current = true
+      void Linking.getInitialURL().then((url) => handle(url))
+    }
+    return () => {
+      clearTimeout(retry)
+      subscription.remove()
+    }
   }, [prefs.boot, setPrefs])
 
   let body: React.ReactNode

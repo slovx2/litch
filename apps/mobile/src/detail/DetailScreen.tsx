@@ -8,6 +8,7 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'reac
 import { StyleSheet, Text, type TextInput, useWindowDimensions, View } from 'react-native'
 import { KeyboardStickyView, useKeyboardState } from 'react-native-keyboard-controller'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { whyNot } from '../../../../packages/ui/src/app/errors.ts'
 import { acquireStore, releaseStore } from '../core/store-cache'
 import { experiment } from '../experiment'
 import type { RootStackParamList } from '../nav/routes'
@@ -17,7 +18,6 @@ import { Confirm, Prompt, Sheet } from '../ui/kit/overlays'
 import { Screen } from '../ui/kit/Screen'
 import { useTheme } from '../ui/theme'
 import { Composer } from './Composer'
-import { reasonOf } from './composer/reason'
 import { RequestSlot } from './requests/RequestSlot'
 import { Transcript } from './Transcript'
 
@@ -86,7 +86,7 @@ export function DetailScreen({ route, navigation }: Props) {
   }
   const run = (work: Promise<unknown>, after?: () => void) => {
     setFailure(null)
-    work.then(after, (reason: unknown) => setFailure(reasonOf(reason, t)))
+    work.then(after, (reason: unknown) => setFailure(whyNot(reason, t)))
   }
   const actions = [
     ...(cwd

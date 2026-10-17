@@ -1,4 +1,4 @@
-// 提问：一次请求里有几道题就一道一道地问，可以来回翻、可以跳过，答到一半的内容记着（question-drafts.ts）。
+// 提问：一次请求里有几道题就一道一道地问，可以来回翻、可以跳过，答到一半的内容记着（桌面那份 question-drafts.ts）。
 // 选项单选；题目允许的话最后一项是“其他”，点了自己填（保密的题用密码框）；没有选项的题只有输入框。
 // 选了一个选项之后隔一小会儿自己到下一题；在最后一题上选完、每道题都有了说法就直接交。
 // 跳过的题回给对面的是空答案。答案怎么核对、怎么组织由核心定（collectAnswers）。
@@ -11,10 +11,14 @@ import {
 } from '@litch/core'
 import { useEffect, useRef, useState } from 'react'
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import {
+  loadQuestionDraft,
+  type QuestionDraft,
+  saveQuestionDraft,
+} from '../../../../../packages/ui/src/composer/question-drafts.ts'
 import { useT } from '../../ui/i18n'
 import { useTheme } from '../../ui/theme'
 import { Card, CardButton, type CardProps, useRespond, Why } from './Card'
-import { loadQuestionDraft, type QuestionDraft, saveQuestionDraft } from './question-drafts'
 
 /** 选了一个选项之后隔这么久自己前进：够看清选中了哪个，又不用再点一下 */
 const ADVANCE_MS = 180
@@ -68,12 +72,13 @@ function Option({
 
 export function QuestionCard(props: CardProps<QuestionRequest>) {
   const { request, waiting, deviceId, sessionId } = props
+  const ref = { deviceId, sessionId, requestId: request.id }
   const t = useT()
   const theme = useTheme()
   const { c } = theme
   const { busy, error, respond } = useRespond(props)
   const [draft, setDraft] = useState<QuestionDraft>(
-    () => loadQuestionDraft(deviceId, sessionId, request.id) ?? { page: 0, entries: {} },
+    () => loadQuestionDraft(ref) ?? { page: 0, entries: {} },
   )
   /** 交卷时发现还没答的那道题排第几。说明留到它有了说法，或者人翻走了为止 */
   const [nagged, setNagged] = useState<number | null>(null)
@@ -107,7 +112,7 @@ export function QuestionCard(props: CardProps<QuestionRequest>) {
 
   const update = (next: QuestionDraft) => {
     latest.current = next
-    saveQuestionDraft(deviceId, sessionId, request.id, next)
+    saveQuestionDraft(ref, next)
     setDraft(next)
   }
   const goto = (index: number) => {

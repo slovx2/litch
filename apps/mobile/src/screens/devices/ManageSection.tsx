@@ -15,24 +15,13 @@ import {
 } from '@litch/core'
 import { type ReactNode, useEffect, useState } from 'react'
 import { Pressable, StyleSheet, Switch, Text, View } from 'react-native'
+import { whyNot } from '../../../../../packages/ui/src/app/errors.ts'
 import { useBusy, useChannel, useKey, useReplica } from '../../shell/services'
 import { type Translator, useT } from '../../ui/i18n'
 import { Button } from '../../ui/kit/controls'
 import { Confirm } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
 import { type Draft, editOf, problemOf, SettingControl } from './SettingControl'
-
-/** 通道上的错误说成一句话 */
-export function whyNot(error: unknown, t: Translator): string {
-  const shaped = error as (Partial<ChannelErrorShape> & { text?: unknown; said?: unknown }) | null
-  if (shaped?.text && typeof shaped.text === 'object') {
-    return t.text(shaped.text as Parameters<Translator['text']>[0])
-  }
-  if (shaped?.said && typeof shaped.said === 'object') {
-    return t.said(shaped.said as Parameters<Translator['said']>[0])
-  }
-  return error instanceof Error ? error.message : String(error)
-}
 
 function harnessLine(harness: HarnessView, t: Translator): string {
   const state =

@@ -4,10 +4,10 @@
 import type { RequestView } from '@litch/core'
 import { createContext, type ReactNode, useContext, useRef, useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { whyNot } from '../../../../../packages/ui/src/app/errors.ts'
 import { useChannel } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { useTheme } from '../../ui/theme'
-import { reasonOf } from '../composer/reason'
 
 export interface CardProps<R extends RequestView = RequestView> {
   deviceId: string
@@ -46,7 +46,7 @@ export function useRespond({ deviceId, sessionId, request }: CardProps) {
         // 成功的话卡片会随着请求一起消失，不用把 busy 放开
         sending.current = false
         setBusy(false)
-        setError(t('request.failed', { reason: reasonOf(failure, t) }))
+        setError(t('request.failed', { reason: whyNot(failure, t) }))
       })
   }
   return { busy, error, setError, respond }

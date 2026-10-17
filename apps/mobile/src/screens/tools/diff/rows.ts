@@ -1,8 +1,7 @@
-// 差异页里不靠画面就能算的：一个文件的差异摊成一行一行（合并的视图）、文件列表的统计、状态的记号。
-import type { DiffEntry, DiffStatus, FileDiff } from '@litch/core'
-
-/** 一个文件增删超过这么多行就不画内容，只给摘要（和桌面端 packages/ui/src/diff/model.ts 的 FILE_LINES_MAX 一样） */
-export const FILE_LINES_MAX = 8000
+// 差异页里不靠画面就能算的：一个文件的差异摊成一行一行（合并的视图）、状态的记号。
+// 太大的文件、增删行数、文件列表的统计直接用桌面的 packages/ui/src/diff/model.ts。那边的 rowsOf 带展开上下文和并排，
+// 行的形状不一样，手机上只要合并的视图，所以这里的 rowsOf 自己排
+import type { DiffStatus, FileDiff } from '@litch/core'
 
 export type DiffRow =
   /** 一段改动的开头：@@ -旧起始,行数 +新起始,行数 @@ 所在的函数 */
@@ -43,20 +42,7 @@ export function rowsOf(file: FileDiff): DiffRow[] {
   return rows
 }
 
-export const changedLines = (entry: Pick<DiffEntry, 'added' | 'removed'>): number =>
-  (entry.added ?? 0) + (entry.removed ?? 0)
-
-export function totalsOf(entries: readonly DiffEntry[]) {
-  let added = 0
-  let removed = 0
-  for (const entry of entries) {
-    added += entry.added ?? 0
-    removed += entry.removed ?? 0
-  }
-  return { files: entries.length, added, removed }
-}
-
-/** 列表里每个文件前面的那个字母（和 git status 的写法一样，人一眼认得） */
+/** 列表里每个文件前面的那个字母（和 git status 的写法一样，人一眼认得；桌面的在 ChangedTree.tsx 里，带 React） */
 export const STATUS_LETTER: Record<DiffStatus, string> = {
   modified: 'M',
   added: 'A',

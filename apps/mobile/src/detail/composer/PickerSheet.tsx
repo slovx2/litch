@@ -1,9 +1,11 @@
 // 从底下升起来的单选清单：设置条上的模型、强度、权限，新建会话页的 harness、项目都用它。
 // 现在选着的那一项反白（复古皮肤的选中态）；不能选的灰着、带一句为什么。选项多的（模型）顶上有筛选框，
-// 按空白拆开的每一段都要在标题、标识或说明里出现（和桌面端 picker-search.ts 一样的规矩）。
+// 按空白拆开的每一段都要在标题、标识或说明里出现。从几个起出筛选框用桌面的 composer/picker-search.ts；
+// 那边的 matchOptions 要的说明是 string | undefined，这里的选项说明可以是 null，筛的那几行留在这边。
 import { useEffect, useMemo, useState } from 'react'
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { SEARCH_FROM } from '../../../../../packages/ui/src/composer/picker-search.ts'
 import { useT } from '../../ui/i18n'
 import { useTheme } from '../../ui/theme'
 
@@ -13,9 +15,6 @@ export interface PickerOption {
   note?: string | null
   disabled?: boolean
 }
-
-/** 选项有这么多个起，顶上出筛选框 */
-const SEARCH_FROM = 8
 
 const matches = (option: PickerOption, words: string[]): boolean => {
   const hay = `${option.title}\n${option.id}\n${option.note ?? ''}`.toLowerCase()

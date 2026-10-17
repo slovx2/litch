@@ -9,12 +9,12 @@ import {
 } from '@litch/core'
 import { memo } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { ago } from '../../../../../packages/ui/src/app/format.ts'
 import { useKey } from '../../shell/services'
 import { type Translator, useT } from '../../ui/i18n'
 import { StatusMark } from '../../ui/kit/controls'
 import { useTheme } from '../../ui/theme'
 import { useNow } from './clock'
-import { ago } from './format'
 import { type GroupHead, groupKeyOf } from './list'
 
 export const SESSION_ROW_H = 60

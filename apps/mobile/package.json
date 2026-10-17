@@ -6,12 +6,12 @@
   "license": "MIT",
   "main": "index.js",
   "scripts": {
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "web:build": "node scripts/build-webview-terminal.mjs && node scripts/build-webview-bench.mjs",
+    "typecheck": "npm run web:build && tsc -p tsconfig.json --noEmit",
     "prebuild": "expo prebuild --platform android --no-install",
-    "android:release": "cd android && ./gradlew assembleRelease",
+    "android:release": "npm run web:build && cd android && ./gradlew assembleRelease",
     "fixture": "node scripts/fixture.mjs",
-    "smoke:ssh": "node scripts/ssh-smoke.mjs",
-    "bench:webview:build": "node scripts/build-webview-bench.mjs"
+    "smoke:ssh": "node scripts/ssh-smoke.mjs"
   },
   "dependencies": {
     "@react-navigation/native": "7.5.0",

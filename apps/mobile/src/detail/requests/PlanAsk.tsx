@@ -1,25 +1,29 @@
 // “计划写好了，要不要执行”：出完计划回合就结束了的引擎（原生 codex），由这里来问。排在请求卡片的位置。
 // 三条路：执行（session.implementPlan）；带意见修改（焦点放进输入框，写了发出去，还在计划模式里）；
-// 先不执行（收起，这份计划不再问）。什么时候出见 plan-ask.ts。
+// 先不执行（收起，这份计划不再问）。什么时候出见桌面的 composer/plan-ask.ts。
 import { useState } from 'react'
-import type { SessionMeta } from '../../core/session-store'
+import { whyNot } from '../../../../../packages/ui/src/app/errors.ts'
+import {
+  planAskedIn,
+  planToConfirm,
+  settledPlan,
+  settlePlan,
+} from '../../../../../packages/ui/src/composer/plan-ask.ts'
+import type { SessionMeta, SessionStore } from '../../core/session-store'
 import { useChannel } from '../../shell/services'
 import { useT } from '../../ui/i18n'
-import { reasonOf } from '../composer/reason'
 import { Card, CardButton, Why } from './Card'
-import { planAskedIn, planToConfirm, settledPlan, settlePlan } from './plan-ask'
 
 export function PlanAsk({
-  deviceId,
-  sessionId,
+  store,
   meta,
   onRevise,
 }: {
-  deviceId: string
-  sessionId: string
+  store: SessionStore
   meta: SessionMeta
   onRevise(): void
 }) {
+  const { deviceId, sessionId } = store
   const channel = useChannel()
   const t = useT()
   const session = `${deviceId}\n${sessionId}`
@@ -29,8 +33,10 @@ export function PlanAsk({
   const planId = planToConfirm({
     mode: meta.settings.mode,
     live: meta.live,
-    turn: meta.lastTurn,
-    askedIn: planAskedIn(session),
+    turn: meta.lastTurn ?? undefined,
+    // 回合结束时条目都已经到了：现取就行
+    kindOf: store.kindOf,
+    asked: meta.lastTurn !== null && planAskedIn(session) === meta.lastTurn.id,
     settled: settledPlan(session),
   })
   if (!planId) return null
@@ -39,7 +45,7 @@ export function PlanAsk({
     setSending(true)
     channel
       .command('session.implementPlan', { deviceId, sessionId, text: t('plan.ask.implementText') })
-      .catch((reason: unknown) => setError(t('plan.ask.failed', { reason: reasonOf(reason, t) })))
+      .catch((reason: unknown) => setError(t('plan.ask.failed', { reason: whyNot(reason, t) })))
       .finally(() => setSending(false))
   }
   const dismiss = () => {
