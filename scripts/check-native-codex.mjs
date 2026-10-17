@@ -15,55 +15,29 @@
 // - 不连真实的适配器状态目录（~/.codex-harness-adapter）；Claude Code 和 Pi 的命令行指到不存在的路径，不会被拿去跑；
 // - 结束时按进程号收掉自己起的进程，删掉临时目录和 codex 在 /tmp/codex-daemon-<uid>/ 下给这个套接字留的文件。
 import { spawn, spawnSync } from 'node:child_process'
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  readlinkSync,
-  realpathSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from 'node:fs'
-import { createServer } from 'node:http'
-import { delimiter, dirname, join, resolve } from 'node:path'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { WebSocket } from 'ws'
+import {
+  codexConfig,
+  codexSocketCleanup,
+  findCodex,
+  startResponsesModel,
+  userText,
+} from './client-fixture-responses.mjs'
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const pause = (ms) => new Promise((done) => setTimeout(done, ms))
 
-/**
- * 用哪一份 codex：给了 CHA_CODEX_CLI 就用它（流水线上是 npm 装的精确版本，给了却用不了直接失败，不跳过），
- * 没给是 PATH 里第一个可执行的 codex。官方桌面端自带的那一份不算
- */
-function findCodex() {
-  const given = process.env.CHA_CODEX_CLI?.trim()
-  if (given) {
-    try {
-      if (statSync(given).isFile() && (statSync(given).mode & 0o111) !== 0) return given
-    } catch {
-      // 下面报错
-    }
-    console.error(`CHA_CODEX_CLI 指的不是一个可执行的文件：${given}`)
-    process.exit(1)
-  }
-  for (const directory of (process.env.PATH ?? '').split(delimiter)) {
-    if (!directory) continue
-    const candidate = join(directory, 'codex')
-    try {
-      if (!statSync(candidate).isFile() || (statSync(candidate).mode & 0o111) === 0) continue
-      if (realpathSync(candidate).startsWith('/Applications/')) continue
-      return candidate
-    } catch {
-      // 这个目录里没有
-    }
-  }
-  return null
+let codex = null
+try {
+  codex = findCodex()
+} catch (error) {
+  // 给了 CHA_CODEX_CLI 却用不了：直接失败，不跳过
+  console.error(error.message)
+  process.exit(1)
 }
-
-const codex = findCodex()
 if (!codex) {
   console.log(
     '跳过：PATH 里没有 codex 命令行（官方桌面端自带的那一份不算），这一条检查要它才能跑。',
@@ -107,31 +81,11 @@ const PATCH_COMMAND = [
   '*** End Patch',
   'PATCH',
 ].join('\n')
-const textOf = (item) =>
-  (Array.isArray(item?.content) ? item.content : []).map((part) => part.text ?? '').join('')
-let modelRequests = 0
-const model = createServer(async (request, response) => {
-  const chunks = []
-  for await (const chunk of request) chunks.push(chunk)
-  let body = {}
-  try {
-    body = JSON.parse(Buffer.concat(chunks).toString() || '{}')
-  } catch {
-    // 不是 JSON：照空的处理
-  }
-  if (request.method !== 'POST' || !(request.url ?? '').endsWith('/responses')) {
-    response.writeHead(404, { 'content-type': 'application/json' })
-    response.end('{"error":{"message":"not found"}}')
-    return
-  }
-  const count = ++modelRequests
+const model = await startResponsesModel((body) => {
   const input = Array.isArray(body.input) ? body.input : []
   const tools = (body.tools ?? []).map((tool) => tool.name ?? tool.type)
-  const said = textOf(input.findLast((item) => item.type === 'message' && item.role === 'user'))
+  const said = userText(body)
   const afterTool = input.at(-1)?.type === 'function_call_output'
-  response.writeHead(200, { 'content-type': 'text/event-stream' })
-  const emit = (event) => response.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`)
-  emit({ type: 'response.created', response: { id: `resp_${count}` } })
   const command = afterTool
     ? null
     : said.includes('改文件')
@@ -139,58 +93,16 @@ const model = createServer(async (request, response) => {
       : said.includes('跑命令')
         ? `echo probe > ${PROBE_FILE}`
         : null
-  if (command) {
-    const call = tools.includes('exec_command')
+  if (!command) return { text: afterTool ? `命令跑完了。收到：${said}` : `假模型收到：${said}` }
+  return {
+    call: tools.includes('exec_command')
       ? { name: 'exec_command', arguments: JSON.stringify({ cmd: command }) }
       : tools.includes('shell_command')
         ? { name: 'shell_command', arguments: JSON.stringify({ command }) }
-        : { name: 'shell', arguments: JSON.stringify({ command: ['bash', '-lc', command] }) }
-    emit({
-      type: 'response.output_item.done',
-      item: { type: 'function_call', call_id: `call_${count}`, ...call },
-    })
-  } else {
-    const text = afterTool ? `命令跑完了。收到：${said}` : `假模型收到：${said}`
-    const item = { type: 'message', role: 'assistant', id: `msg_${count}`, phase: 'final_answer' }
-    emit({ type: 'response.output_item.added', item: { ...item, content: [] } })
-    emit({ type: 'response.output_text.delta', delta: text })
-    emit({
-      type: 'response.output_item.done',
-      item: { ...item, content: [{ type: 'output_text', text }] },
-    })
+        : { name: 'shell', arguments: JSON.stringify({ command: ['bash', '-lc', command] }) },
   }
-  const usage = {
-    input_tokens: 10,
-    input_tokens_details: null,
-    output_tokens: 5,
-    output_tokens_details: null,
-    total_tokens: 15,
-  }
-  emit({ type: 'response.completed', response: { id: `resp_${count}`, usage } })
-  response.end()
 })
-await new Promise((done) => model.listen(0, '127.0.0.1', done))
-const modelPort = model.address().port
-
-// codex 的配置：模型提供方指到上面那个假模型，不重试，不上报
-writeFileSync(
-  join(dirs.codexHome, 'config.toml'),
-  [
-    'model = "fake-model"',
-    'model_provider = "fake"',
-    '',
-    '[model_providers.fake]',
-    'name = "Fake"',
-    `base_url = "http://127.0.0.1:${modelPort}/v1"`,
-    'wire_api = "responses"',
-    'request_max_retries = 0',
-    'stream_max_retries = 0',
-    '',
-    '[analytics]',
-    'enabled = false',
-    '',
-  ].join('\n'),
-)
+writeFileSync(join(dirs.codexHome, 'config.toml'), codexConfig(model.baseUrl))
 
 /** 主进程（和它起的 codex）用的环境：从零写的，不继承这个进程的任何变量 */
 const DEAD_PROXY = 'http://127.0.0.1:9'
@@ -276,8 +188,8 @@ const built = spawnSync('go', ['build', '-o', binary, './cmd/codex-harness-adapt
 })
 let service = null
 let output = ''
-/** codex 给这个套接字在 /tmp/codex-daemon-<uid>/ 下建的实际文件：套接字本身，和它旁边的锁 */
-let physicalSocket = null
+/** 删掉 codex 给这个套接字在 /tmp/codex-daemon-<uid>/ 下建的实际文件（codex 起来之后才认得出） */
+let removeCodexSocket = () => {}
 
 function stopService() {
   const child = service
@@ -304,7 +216,6 @@ function leftovers() {
 
 async function cleanup() {
   await stopService()
-  model.closeAllConnections()
   model.close()
   const left = leftovers()
   for (const pid of left) {
@@ -314,8 +225,7 @@ async function cleanup() {
       // 已经退出了
     }
   }
-  if (physicalSocket)
-    for (const path of [physicalSocket, `${physicalSocket}.lock`]) rmSync(path, { force: true })
+  removeCodexSocket()
   rmSync(root, { recursive: true, force: true })
   return left
 }
@@ -423,11 +333,7 @@ async function main() {
   passed(
     `启用后可用：${info.displayName} ${info.version}（${codex}），权限预设 ${info.permissionPresets.map((preset) => preset.id).join('、')}`,
   )
-  try {
-    physicalSocket = resolve(dirname(runtimeSocket), readlinkSync(runtimeSocket))
-  } catch {
-    // 这一版的 codex 直接在给的路径上建套接字，没有另外的文件
-  }
+  removeCodexSocket = codexSocketCleanup(runtimeSocket)
 
   // 新建会话，跑一个回合。选了“工作区”这一档，设备进程替它配上 on-request
   const started = await client.call('thread/start', {
@@ -679,5 +585,5 @@ if (left.length > 0) {
 }
 if (failure) process.exit(1)
 console.log(
-  `检查通过：模型请求 ${modelRequests} 次，都打在回环上的假模型；没有留下进程和临时文件。`,
+  `检查通过：模型请求 ${model.requests()} 次，都打在回环上的假模型；没有留下进程和临时文件。`,
 )

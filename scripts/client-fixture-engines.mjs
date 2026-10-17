@@ -35,7 +35,7 @@ import { FIXTURE_SKILL, skillFile } from './client-fixture-marks.mjs'
 import { codexConfig } from './client-fixture-responses.mjs'
 
 /** 开关里的名字 → harness 的标识、给它命令行的环境变量 */
-const ENGINES = {
+export const ENGINES = {
   claude: { id: 'claude-code', variable: 'CHA_CLAUDE_CLI', name: 'Claude Code' },
   dsh: { id: 'dsh', variable: 'CHA_DSH_CLI', name: 'DeepSeek Harness' },
   opencode: { id: 'opencode', variable: 'CHA_OPENCODE_CLI', name: 'OpenCode' },

@@ -216,13 +216,16 @@ export function NewSession({ draft, onPlace, onCreated, onDevices }: NewSessionP
   const [pending, setPending] = useState<UserMessageItem | null>(null)
 
   const cwd = workspace?.roots[0] ?? null
-  /** 对面不带设置新建会话时会用的。还没问到、问不到是 null */
+  /** 对面不带设置新建会话时会用的。还在问是 undefined，问不到是 null */
   const defaults = useNewSessionDefaults(deviceId, harness?.id, cwd)
+  // 还在问的时候底栏先不出选择器：先按清单猜一个、问回来再换掉的话，底栏会跳一下，
+  // 正点开的选项（比如那个模型才有的强度）会在手底下没了
+  const holding = defaults === undefined
 
   const own = chosen.slot === slot ? chosen.picks : {}
   const picks = { ...(options ? recallPicks(deviceId, harnessId, options) : {}), ...own }
   // 底栏上显示的：选过的；没选的是对面不带设置新建时会用的（决 149），建会话时也照显示的发，显示的就是会用的
-  const settled = options ? newSessionSettings(picks, defaults, options) : null
+  const settled = options && !holding ? newSessionSettings(picks, defaults, options) : null
   const shown: SessionSettings = {
     model: settled?.model ?? null,
     effort: settled?.effort ?? null,
@@ -404,6 +407,7 @@ export function NewSession({ draft, onPlace, onCreated, onDevices }: NewSessionP
               running={false}
               queued={[]}
               settings={shown}
+              holdSettings={holding}
               onSettings={(patch) => setChosen({ slot, picks: { ...own, ...patch } })}
               onSend={create}
               failure={(reason) => t('newSession.failed', { reason })}

@@ -31,7 +31,10 @@ const RESERVED_NAMESPACES = new Set([
   'web',
 ])
 const PRIMITIVES = ['string', 'number', 'boolean', 'integer', 'object', 'array', 'null']
-/** 上游的 JsonSchema 结构认的键；别的键整理之后被丢掉，模型看不到 */
+/**
+ * 上游的 JsonSchema 结构认的键；别的键整理之后被丢掉，模型看不到。format、prefixItems 整理时只拿来推断类型，
+ * 推断完也丢掉，所以不在这里面
+ */
 const KEPT = new Set([
   '$ref',
   'type',
@@ -49,9 +52,6 @@ const KEPT = new Set([
   'allOf',
   '$defs',
   'definitions',
-  // 整理时用来推断类型，推断完不留
-  'prefixItems',
-  'format',
 ])
 
 type Json = Record<string, unknown>
@@ -181,8 +181,8 @@ export function dynamicToolProblems(tools: unknown, dropped = new Set<string>())
   return problems
 }
 
-/** 远程地址的图片（上游 is_remote_image_url：http、https 开头的） */
-const remote = (url: unknown) => typeof url === 'string' && /^https?:\/\//i.test(url)
+/** 远程地址的图片（上游 is_remote_image_url：第一个冒号前面是 http 或 https，不管后面有没有 //） */
+const remote = (url: unknown) => typeof url === 'string' && /^https?:/i.test(url)
 
 /** 一份参数到了原生 codex 手里：rejects 是它会整个拒绝的原因，ignored 是它不认识、悄悄丢掉的字段（发了等于没发） */
 export interface CodexVerdict {

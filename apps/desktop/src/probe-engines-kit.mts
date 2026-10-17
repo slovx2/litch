@@ -185,6 +185,17 @@ export function installEnginesKit(): boolean {
     await wait(`点了“${wanted}”之后卡片收掉`, () => !found.isConnected, 30_000)
   }
   const pickerOf = (kind: string) => one(`.pick[data-kind="${kind}"]`)
+  /** 等点开的选项收起。开着的时候整个选择器被换掉了（底栏在手底下重画）：旧的那个永远收不起来，当场报出来 */
+  const folded = (kind: string, root: Element) =>
+    wait(
+      `“${kind}”的选项收起`,
+      () => {
+        if (!root.isConnected)
+          throw new Error(`“${kind}”的选项开着的时候选择器被换掉了（${where()}）`)
+        return !one('.pick-pop', root)
+      },
+      10_000,
+    )
   const picker = async (kind: string): Promise<PickerSeen | null> => {
     const root = pickerOf(kind)
     const button = root ? one<HTMLButtonElement>('.pick-btn', root) : null
@@ -201,7 +212,7 @@ export function installEnginesKit(): boolean {
         disabled: option.getAttribute('aria-disabled') === 'true',
       }))
     button.click()
-    await wait(`“${kind}”的选项收起`, () => !one('.pick-pop', root), 10_000)
+    await folded(kind, root)
     return { current, options }
   }
   const pick = async (kind: string, id: string) => {
@@ -218,7 +229,7 @@ export function installEnginesKit(): boolean {
     await frame()
     // 要再确认一次的（风险高的权限档）：照确认
     one<HTMLButtonElement>('.pick-ask .btn.danger', root)?.click()
-    await wait(`“${kind}”的选项收起`, () => !one('.pick-pop', root), 10_000)
+    await folded(kind, root)
     await frame()
   }
   const unfold = async () => {

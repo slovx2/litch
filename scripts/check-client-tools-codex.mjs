@@ -12,55 +12,31 @@
 // 隔离照 scripts/check-native-codex.mjs：HOME、CODEX_HOME 都在临时目录，环境从零写，模型是回环上的假接口，
 // 代理指到回环上没人听的端口；不碰 ~/.codex 和 ~/.codex-harness-adapter；结束时收掉进程、删掉临时目录。
 import { spawn, spawnSync } from 'node:child_process'
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readlinkSync,
-  realpathSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from 'node:fs'
-import { createServer } from 'node:http'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { registerHooks } from 'node:module'
-import { delimiter, dirname, join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { WebSocket } from 'ws'
+import {
+  codexConfig,
+  codexSocketCleanup,
+  findCodex,
+  namespacesOf,
+  startResponsesModel,
+  userText,
+} from './client-fixture-responses.mjs'
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const pause = (ms) => new Promise((done) => setTimeout(done, ms))
 
-/**
- * 用哪一份 codex：给了 CHA_CODEX_CLI 就用它（流水线上是 npm 装的精确版本，给了却用不了直接失败，不跳过），
- * 没给是 PATH 里第一个可执行的 codex。官方桌面端自带的那一份不算
- */
-function findCodex() {
-  const given = process.env.CHA_CODEX_CLI?.trim()
-  if (given) {
-    try {
-      if (statSync(given).isFile() && (statSync(given).mode & 0o111) !== 0) return given
-    } catch {
-      // 下面报错
-    }
-    console.error(`CHA_CODEX_CLI 指的不是一个可执行的文件：${given}`)
-    process.exit(1)
-  }
-  for (const directory of (process.env.PATH ?? '').split(delimiter)) {
-    if (!directory) continue
-    const candidate = join(directory, 'codex')
-    try {
-      if (!statSync(candidate).isFile() || (statSync(candidate).mode & 0o111) === 0) continue
-      if (realpathSync(candidate).startsWith('/Applications/')) continue
-      return candidate
-    } catch {
-      // 这个目录里没有
-    }
-  }
-  return null
+let codex = null
+try {
+  codex = findCodex()
+} catch (error) {
+  // 给了 CHA_CODEX_CLI 却用不了：直接失败，不跳过
+  console.error(error.message)
+  process.exit(1)
 }
-
-const codex = findCodex()
 if (!codex) {
   console.log(
     '跳过：PATH 里没有 codex 命令行（官方桌面端自带的那一份不算），这一条检查要它才能跑。',
@@ -115,82 +91,23 @@ const PNG =
 // 用户的话里有“调用工具”、工具表里有 litch_echo、上一项还不是工具结果时，调一次它；否则回一句话。
 // 每次请求的最后一项记下来，用来看工具结果交到模型手里没有
 const lastInputs = []
-let modelRequests = 0
-const model = createServer(async (request, response) => {
-  const chunks = []
-  for await (const chunk of request) chunks.push(chunk)
-  let body = {}
-  try {
-    body = JSON.parse(Buffer.concat(chunks).toString() || '{}')
-  } catch {
-    // 不是 JSON：照空的处理
-  }
-  if (request.method !== 'POST' || !(request.url ?? '').endsWith('/responses')) {
-    response.writeHead(404, { 'content-type': 'application/json' })
-    response.end('{"error":{"message":"not found"}}')
-    return
-  }
-  const count = ++modelRequests
+const model = await startResponsesModel((body, serial) => {
   const input = Array.isArray(body.input) ? body.input : []
   const last = input.at(-1)
   lastInputs.push(last)
-  const said = JSON.stringify(input.findLast((item) => item.role === 'user') ?? {})
-  for (const entry of body.tools ?? [])
-    if (entry.type === 'namespace') namespacesSeen.add(entry.name)
+  for (const name of namespacesOf(body)) namespacesSeen.add(name)
   const tool = (body.tools ?? []).find((entry) => entry.type === 'namespace' && entry.name === ECHO)
-  response.writeHead(200, { 'content-type': 'text/event-stream' })
-  const emit = (event) => response.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`)
-  emit({ type: 'response.created', response: { id: `resp_${count}` } })
-  if (said.includes('调用工具') && tool && last?.type !== 'function_call_output') {
-    emit({
-      type: 'response.output_item.done',
-      item: {
-        type: 'function_call',
-        call_id: `call_${count}`,
+  if (userText(body).includes('调用工具') && tool && last?.type !== 'function_call_output')
+    return {
+      call: {
         namespace: ECHO,
         name: tool.tools[0].name,
         arguments: JSON.stringify({ text: 'hi' }),
       },
-    })
-  } else {
-    const text = `ok ${count}`
-    const item = { type: 'message', role: 'assistant', id: `msg_${count}`, phase: 'final_answer' }
-    emit({ type: 'response.output_item.added', item: { ...item, content: [] } })
-    emit({ type: 'response.output_text.delta', delta: text })
-    emit({
-      type: 'response.output_item.done',
-      item: { ...item, content: [{ type: 'output_text', text }] },
-    })
-  }
-  const usage = {
-    input_tokens: 10,
-    input_tokens_details: null,
-    output_tokens: 5,
-    output_tokens_details: null,
-    total_tokens: 15,
-  }
-  emit({ type: 'response.completed', response: { id: `resp_${count}`, usage } })
-  response.end()
+    }
+  return { text: `ok ${serial}` }
 })
-await new Promise((done) => model.listen(0, '127.0.0.1', done))
-writeFileSync(
-  join(dirs.codexHome, 'config.toml'),
-  [
-    'model = "fake-model"',
-    'model_provider = "fake"',
-    '',
-    '[model_providers.fake]',
-    'name = "Fake"',
-    `base_url = "http://127.0.0.1:${model.address().port}/v1"`,
-    'wire_api = "responses"',
-    'request_max_retries = 0',
-    'stream_max_retries = 0',
-    '',
-    '[analytics]',
-    'enabled = false',
-    '',
-  ].join('\n'),
-)
+writeFileSync(join(dirs.codexHome, 'config.toml'), codexConfig(model.baseUrl))
 
 /** 主进程（和它起的 codex）用的环境：从零写的，不继承这个进程的任何变量 */
 const DEAD_PROXY = 'http://127.0.0.1:9'
@@ -280,7 +197,8 @@ const built = spawnSync('go', ['build', '-o', binary, './cmd/codex-harness-adapt
 })
 let service = null
 let output = ''
-let physicalSocket = null
+/** 删掉 codex 给这个套接字在 /tmp/codex-daemon-<uid>/ 下建的实际文件（codex 起来之后才认得出） */
+let removeCodexSocket = () => {}
 
 function stopService() {
   const child = service
@@ -351,11 +269,7 @@ async function main() {
   expect(info?.available, `Codex 应该可用：${JSON.stringify(info?.unavailable)}`)
   expect(info.extensions?.includes('clientTools'), `声明里应有 clientTools：${info.extensions}`)
   passed(`Codex ${info.version} 可用，经聚合面报 clientTools`)
-  try {
-    physicalSocket = resolve(dirname(runtimeSocket), readlinkSync(runtimeSocket))
-  } catch {
-    // 这一版的 codex 直接在给的路径上建套接字
-  }
+  removeCodexSocket = codexSocketCleanup(runtimeSocket)
   // 当作官方桌面端：只声明聚合面必需的扩展
   const desktop = await connect('desktop-check', { litchExtensions: ['harness'] })
 
@@ -434,10 +348,8 @@ for (const pid of left) {
     // 已经退出了
   }
 }
-model.closeAllConnections()
 model.close()
-if (physicalSocket)
-  for (const path of [physicalSocket, `${physicalSocket}.lock`]) rmSync(path, { force: true })
+removeCodexSocket()
 rmSync(root, { recursive: true, force: true })
 if (left.length > 0) {
   console.error(`✖ 主进程退出之后还留着 ${left.length} 个进程（已强杀）：${left.join('、')}`)
@@ -445,5 +357,5 @@ if (left.length > 0) {
 }
 if (failure) process.exit(1)
 console.log(
-  `检查通过：模型请求 ${modelRequests} 次，都打在回环上的假模型；没有留下进程和临时文件。`,
+  `检查通过：模型请求 ${model.requests()} 次，都打在回环上的假模型；没有留下进程和临时文件。`,
 )

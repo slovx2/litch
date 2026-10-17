@@ -22,6 +22,14 @@ test('过得了原生 codex 的校验', () => {
   assert.deepEqual(dynamicToolProblems(specs), [])
 })
 
+test('每个工具的参数最外层是对象', () => {
+  // 守的是模型接口（OpenAI、Anthropic 的函数调用都要求参数是对象）的要求，不是 codex 的：codex 的整理
+  // 对最外层不是对象的结构不报错（没有类型提示的会被清空），过得了上面那一条也照样会让模型那一头出错
+  for (const spec of specs)
+    for (const tool of spec.tools)
+      assert.equal(tool.inputSchema.type, 'object', `${spec.name}.${tool.name} 的参数要是对象`)
+})
+
 test('codex 交给模型时丢掉的键只有范围（minimum、maximum），别的写了就到得了模型', () => {
   const dropped = new Set<string>()
   dynamicToolProblems(specs, dropped)

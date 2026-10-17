@@ -108,6 +108,8 @@ interface ComposerProps {
   steerImages?: boolean
   /** 没发成时怎么说。不给就说“没发出去” */
   failure?(reason: string): string
+  /** 底栏的选择器先不出（新建页上对面的默认还在问，显示的值还定不下来） */
+  holdSettings?: boolean
 }
 
 /** 输入框最多长到这么高，再多就在里面滚 */
@@ -127,7 +129,8 @@ export function Composer(props: ComposerProps) {
   const [busy, setBusy] = useState(false)
   /** 有文件正拖在输入区上面 */
   const [dropping, setDropping] = useState(false)
-  const options = useComposeOptions(deviceId, props.harness)
+  const asked = useComposeOptions(deviceId, props.harness)
+  const options = props.holdSettings ? null : asked
   const input = useRef<HTMLTextAreaElement>(null)
   const picker = useRef<HTMLInputElement>(null)
   /** 正在翻输入历史：翻到倒数第几条，以及翻之前写了一半的字。没在翻就是 null */
