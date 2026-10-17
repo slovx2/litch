@@ -1,12 +1,15 @@
-// 设置页“内置浏览器”那一组：一直允许的网站（列出、删一个、全删），清除浏览数据（先确认）。
-// 都经外壳的 window.litchBrowser（apps/desktop/src/browser/install.mts 的 settings）；普通浏览器里没有外壳，只写一句说明。
+// 设置页“内置浏览器”那一组：对话里的链接用不用内置浏览器打开（记在界面本地，side/browser/links.ts），
+// 一直允许的网站（列出、删一个、全删），清除浏览数据（先确认）。
+// 后两样经外壳的 window.litchBrowser（apps/desktop/src/browser/install.mts 的 settings）；普通浏览器里没有外壳，只写一句说明。
 // 浏览器是这台电脑上的，所有会话、所有设备共用一份，所以放在应用级的设置里，不按设备。
 import { useCallback, useEffect, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { Confirm } from '../app/Confirm.tsx'
 import { reasonOf } from '../app/errors.ts'
+import { currentPlatform } from '../app/platform.ts'
 import { showToast } from '../app/toasts.tsx'
 import { type BrowserBridge, type BrowserSavedSite, browserBridge } from '../side/browser/bridge.ts'
+import { setLinksInBrowser, useLinksInBrowser } from '../side/browser/links.ts'
 import { dayOf, listPhase, siteLabel, sortSites } from './tools-logic.ts'
 
 export function BrowserSection() {
@@ -21,9 +24,41 @@ export function BrowserSection() {
   }
   return (
     <>
+      <LinkSwitch />
       <SavedSites bridge={bridge} />
       <BrowsingData bridge={bridge} />
     </>
+  )
+}
+
+/** 对话里的链接用不用内置浏览器打开。默认开 */
+function LinkSwitch() {
+  const t = useT()
+  const on = useLinksInBrowser()
+  const key = currentPlatform() === 'mac' ? 'Cmd' : 'Ctrl'
+  return (
+    <section className="set-block" data-links={on ? 'browser' : 'external'}>
+      <h3>{t('settings.browser.links')}</h3>
+      <div className="set-rows">
+        <div className="set-row">
+          <div className="set-switch-text">
+            <label htmlFor="set-links-in-browser">{t('settings.browser.links.title')}</label>
+            <span className="set-note">{t('settings.browser.links.note', { key })}</span>
+          </div>
+          <button
+            id="set-links-in-browser"
+            type="button"
+            role="switch"
+            className="switch"
+            data-act="links-in-browser"
+            aria-checked={on}
+            onClick={() => setLinksInBrowser(!on)}
+          >
+            <i />
+          </button>
+        </div>
+      </div>
+    </section>
   )
 }
 

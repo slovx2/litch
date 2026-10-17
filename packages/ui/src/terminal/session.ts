@@ -32,8 +32,8 @@ export interface SessionHost {
   look: Look
   /** 是不是 macOS：复制粘贴的键位不一样 */
   mac: boolean
-  /** 只有 http 和 https 的会到这里 */
-  openLink(uri: string): void
+  /** 只有 http 和 https 的会到这里。click：点的那一下按着什么（Cmd/Ctrl、中键交给系统的浏览器） */
+  openLink(uri: string, click: MouseEvent): void
   /** 输出里少了一段，终端里要写的那一行说明 */
   gapText(mark: TerminalMark): string
   /** 正开着全屏程序的时候少了一段：不能往它的画面里写字，换个地方说 */
@@ -99,8 +99,8 @@ export class TerminalSession {
     this.term.unicode.activeVersion = '11'
     this.term.loadAddon(this.#fit)
     this.term.loadAddon(
-      new WebLinksAddon((_event, uri) => {
-        if (/^https?:\/\//i.test(uri)) owner.openLink(uri)
+      new WebLinksAddon((event, uri) => {
+        if (/^https?:\/\//i.test(uri)) owner.openLink(uri, event)
       }),
     )
     this.term.onData((data) => this.#send(encodeBase64(encodeUtf8(data))))

@@ -26,6 +26,8 @@ export const EMPTY_STATE: State = { tabs: [], chosen: {}, wanted: {}, pending: {
 let state: State = EMPTY_STATE
 /** 眼前看着的会话（ownerKey；新建对话页上会话标识是空的），侧面板显示不出来的时候（设置这类页面）是 null */
 let viewing: string | null = null
+/** 同一个会话，原样记着（对话里的链接要用它开标签） */
+let viewingOwner: BrowserOwner | null = null
 const listeners = new Set<() => void>()
 const publish = (next: State) => {
   state = next
@@ -179,10 +181,14 @@ export function routeShow(tab: BrowserTabInfo): boolean {
 /** 眼前看着的会话换了（侧面板显示不出来时给 null）。回 true 是它名下有要看的网页，该打开面板了 */
 export function setViewing(owner: BrowserOwner | null): boolean {
   viewing = owner ? ownerKey(owner) : null
+  viewingOwner = owner
   const { state: next, open } = arrive(state, viewing)
   if (next !== state) publish(next)
   return open
 }
+
+/** 眼前看着的会话；侧面板显示不出来的页面上是 null */
+export const viewingNow = (): BrowserOwner | null => viewingOwner
 
 /** 只听状态的变化，不为此去接外壳（侧栏每一行都要听，没人 show 过就没什么可听的） */
 const subscribeQuietly = (listener: () => void) => {
