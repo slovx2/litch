@@ -1,8 +1,9 @@
 // 权限状态、在跑的应用、把应用切到前台。
 //
-// 权限只用不弹窗的检查：AXIsProcessTrusted、CGPreflightScreenCaptureAccess。
-// 不调会弹系统授权框的那几个（带提示的 AXIsProcessTrustedWithOptions、CGRequestScreenCaptureAccess），
-// 授权由用户自己在系统设置里点；助手只负责把对应的那一页打开。
+// 查权限只用不弹窗的检查：AXIsProcessTrusted、CGPreflightScreenCaptureAccess，看一眼、拉起助手都不会弹系统的框。
+// 只有用户在 Litch 的设置里点“打开系统设置”时才向系统申请（带提示的 AXIsProcessTrustedWithOptions、
+// CGRequestScreenCaptureAccess）：系统借此把助手登记进“隐私与安全性”的列表，用户只要打开开关，
+// 不用自己去找应用包（它在 Litch.app 里面，文件选择框里进不去）。系统可能顺带弹它自己的提示框。
 import AppKit
 import ApplicationServices
 import CoreGraphics
@@ -15,6 +16,20 @@ enum Permissions {
 
   static func status() -> JSONValue {
     ["accessibility": .bool(accessibility()), "screenRecording": .bool(screenRecording())]
+  }
+
+  /// 向系统申请这一项：没给过时系统把助手加进列表（开关关着），可能弹它自己的提示框；已经给了什么都不做
+  static func request(_ pane: String) {
+    switch pane {
+    case "accessibility":
+      if !accessibility() {
+        let key = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
+        _ = AXIsProcessTrustedWithOptions([key: true] as CFDictionary)
+      }
+    case "screenRecording":
+      if !screenRecording() { _ = CGRequestScreenCaptureAccess() }
+    default: break
+    }
   }
 
   /// 系统设置里“隐私与安全性”的对应一页

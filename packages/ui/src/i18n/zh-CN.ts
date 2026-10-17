@@ -744,7 +744,7 @@ export const zhCN = {
     '让模型操作这台 Mac 上的应用。系统权限授给单独的助手应用“Litch Computer Use”，不授给 Litch 本身。',
   'settings.computer.permissions': '系统权限',
   'settings.computer.permissions.note':
-    '在系统设置的“隐私与安全性”里给“Litch Computer Use”打开；Litch 不会替你改',
+    '点“打开系统设置”，列表里会出现“Litch Computer Use”，打开它的开关；Litch 不会替你改',
   'settings.computer.accessibility': '辅助功能',
   'settings.computer.accessibility.note': '读应用的界面、点击和输入要用它。',
   'settings.computer.screenRecording': '屏幕录制',

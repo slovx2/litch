@@ -5,6 +5,7 @@
 // 查权限要助手在跑。launch 为真（用户打开了设置页的那一节）时，助手没在跑就拉起它；为假（设备详情里顺带看一眼）时
 // 不拉起：只问在跑的那个，没在跑就回这次运行里上一次问到的（一次都没问过是 null）。权限只用助手那头不弹窗的检查
 // （AXIsProcessTrusted、CGPreflightScreenCaptureAccess），这里不碰系统设置，也不替用户授权。
+// 只有用户点“打开系统设置”时助手才向系统申请一次，好让列表里出现“Litch Computer Use”（Apps.swift 开头）。
 //
 // LITCH_COMPUTER_USE_PERMISSIONS 是给自检和截图用的：设了就不碰助手，权限照它说的回
 // （none、accessibility、screenRecording、both），打开系统设置、重启助手都只当作做了。

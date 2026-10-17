@@ -810,7 +810,7 @@ export const en: Record<MessageKey, Entry> = {
     'Lets the model use apps on this Mac. The system permissions go to a separate helper app, “Litch Computer Use”, not to Litch itself.',
   'settings.computer.permissions': 'System permissions',
   'settings.computer.permissions.note':
-    'Turn on “Litch Computer Use” under Privacy & Security in System Settings; Litch never changes this for you',
+    'Click “Open System Settings”; “Litch Computer Use” shows up in the list, turn it on. Litch never changes this for you',
   'settings.computer.accessibility': 'Accessibility',
   'settings.computer.accessibility.note': 'Needed to read app interfaces, click and type.',
   'settings.computer.screenRecording': 'Screen Recording',

@@ -5,7 +5,7 @@
 //   hello          {protocol, token?, lang?}            → {protocol, pid, version, bundleId, auth, teamId}
 //   diagnostics    {}                                   → 进程号、父进程、责任进程、签名
 //   permissions    {}                                   → {accessibility, screenRecording}
-//   openSettings   {pane: accessibility|screenRecording} → {opened}
+//   openSettings   {pane: accessibility|screenRecording} → {opened}（没给过的先向系统申请，见 Apps.swift）
 //   setLanguage    {lang}
 //   listApps       {}                                   → {apps: [...]}
 //   getAppState    {session, app, full?}                → {app, window, screenshot, text, diff, truncated}
@@ -52,10 +52,15 @@ final class Engine: ConnectionHandler {
     case "diagnostics": return Diagnostics.collect()
     case "permissions": return Permissions.status()
     case "openSettings":
-      guard let url = Permissions.settingsURL(params["pane"]?.stringValue ?? "") else {
+      let pane = params["pane"]?.stringValue ?? ""
+      guard let url = Permissions.settingsURL(pane) else {
         throw RPCError(.invalid, "unknown pane")
       }
-      let opened = DispatchQueue.main.sync { NSWorkspace.shared.open(url) }
+      // 先申请再打开那一页：申请过列表里才有“Litch Computer Use”（见 Apps.swift 开头）
+      let opened = DispatchQueue.main.sync {
+        Permissions.request(pane)
+        return NSWorkspace.shared.open(url)
+      }
       return ["opened": .bool(opened)]
     case "setLanguage":
       Overlay.shared.setLanguage(Copy.language(params["lang"]?.stringValue))
