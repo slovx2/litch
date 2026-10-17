@@ -20,7 +20,12 @@ export function Navigator() {
   return (
     <Stack.Navigator
       initialRouteName="Devices"
-      screenOptions={{ headerShown: false, animation: 'slide_from_right' }}
+      // 锁竖屏（和 app.json 一样）。要写在这里：终端页放开了方向，没写的页面回来时会跟着放开
+      screenOptions={{
+        headerShown: false,
+        animation: 'slide_from_right',
+        orientation: 'portrait_up',
+      }}
     >
       <Stack.Screen name="Devices" component={DevicesScreen} />
       <Stack.Screen name="AddDevice" component={AddDeviceScreen} />

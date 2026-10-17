@@ -5,12 +5,15 @@
 //   litch://send?text=短回答                       往最近新建的会话里再发一句
 //   litch://home                                   回首页
 //   litch://bench                                  WebView 吞吐测试
+//   litch://terminal[?device=…&root=…&terminal=…&stats=1]  终端页（root 不给：夹具的工作目录，否则设备上第一个工作区的根）
+//   litch://diff[?device=…&root=…&scope=all|staged|unstaged&session=…]  差异页（root 同上）
 // 每个链接都可以带测量开关（src/experiment.ts）：render、seal、pace、freeze、tail、keyboard、markers，以及 probe=1|0。
 import { keys } from '@litch/core'
 import { createNavigationContainerRef, StackActions } from '@react-navigation/native'
 import { experiment } from '../experiment'
 import type { RootStackParamList } from '../nav/routes'
 import { markOpen, startProbe, stopProbe } from '../probe'
+import { termStats } from '../screens/tools/tool-flags'
 import type { BootMode } from './boot'
 import type { Services } from './services'
 
@@ -90,6 +93,32 @@ export function handleDevLink(url: string, services: Services | null): BootMode 
     case 'bench':
       navigationRef.navigate('Bench')
       return null
+    case 'terminal':
+    case 'diff': {
+      const deviceId = deviceOf()
+      if (!deviceId) return null
+      const firstRoot = replica.store.get<{ roots: string[] }[]>(keys.workspaces(deviceId))?.[0]
+        ?.roots[0]
+      const root = params.get('root') ?? booted.work ?? firstRoot ?? null
+      if (parsed.hostname === 'terminal') {
+        termStats.on = params.get('stats') === '1'
+        const terminalId = params.get('terminal')
+        navigationRef.navigate('Terminal', {
+          deviceId,
+          root,
+          ...(terminalId ? { terminalId } : {}),
+        })
+      } else if (root) {
+        const scope = params.get('scope')
+        navigationRef.navigate('Diff', {
+          deviceId,
+          root,
+          scope: scope === 'staged' || scope === 'unstaged' ? scope : 'all',
+          sessionId: params.get('session'),
+        })
+      }
+      return null
+    }
     case 'home':
       if (navigationRef.canGoBack()) navigationRef.dispatch(StackActions.popToTop())
       return null
