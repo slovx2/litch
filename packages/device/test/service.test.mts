@@ -31,6 +31,15 @@ const READ = 'litch/device/settings/read'
 const WRITE = 'litch/device/settings/write'
 const RESTART = 'litch/device/harness/restart'
 const SECRET = 'TOP-SECRET-VALUE'
+// 2026-10-17 加的四个 harness 在这里的默认状况：隔离的 HOME 里没有 opencode，三个 ACP 入口默认停用
+const NEW_HARNESSES: [string, string][] = [
+  ['opencode', 'notInstalled'],
+  ['gemini', 'disabled'],
+  ['qwen', 'disabled'],
+  ['acp', 'disabled'],
+]
+/** 这里起不来的入口，给不出 ssh 配置片段 */
+const NOT_RUNNING = ['dsh', ...NEW_HARNESSES.map(([id]) => id)]
 
 /** 编译出来的测试所在的目录（dist/device/test），假运行时就在这里 */
 const HERE = dirname(fileURLToPath(import.meta.url))
@@ -243,6 +252,7 @@ test('真的主进程加真的设备进程加假的运行时：一条聚合面�
           ['pi', null],
           ['dsh', 'notInstalled'],
           // 原生 codex 装了才默认启用，这里的 PATH 里没有它（它的端到端用例在 service-codex.test.mts）
+          ...NEW_HARNESSES,
           ['codex', 'notInstalled'],
         ],
       )
@@ -300,6 +310,10 @@ test('真的主进程加真的设备进程加假的运行时：一条聚合面�
           ['Claude Code', 'CC'],
           ['Pi', 'PI'],
           ['DSH', 'DS'],
+          ['OpenCode', 'OC'],
+          ['Gemini CLI', 'GE'],
+          ['Qwen Code', 'QW'],
+          ['ACP', 'AC'],
           ['Codex', 'CX'],
         ],
       )
@@ -350,6 +364,10 @@ test('真的主进程加真的设备进程加假的运行时：一条聚合面�
         'claude-code': 'listening',
         pi: 'listening',
         dsh: 'idle',
+        opencode: 'idle',
+        gemini: 'idle',
+        qwen: 'idle',
+        acp: 'idle',
       })
       assert.equal(alive(before.pid), false, '原来的运行时进程停掉了')
       const after = await runtimeEnv(client as TestClient, 'pi', 'FIXTURE_MARK')
@@ -443,6 +461,7 @@ test('真的主进程加真的设备进程加假的运行时：一条聚合面�
           ['claude-code', null],
           ['pi', 'disabled'],
           ['dsh', 'notInstalled'],
+          ...NEW_HARNESSES,
           ['codex', 'notInstalled'],
         ],
       )
@@ -505,7 +524,7 @@ test('真的主进程加真的设备进程加假的运行时：一条聚合面�
 
       const ssh = await until(async () => {
         const current = await call('litch/device/sshConfig/read')
-        return current.entries.every((item: any) => item.harness === 'dsh' || item.config)
+        return current.entries.every((item: any) => NOT_RUNNING.includes(item.harness) || item.config)
           ? current
           : undefined
       }, '两个入口的 ssh 配置都给得出来')
@@ -631,6 +650,7 @@ test('一个 harness 都起不来：服务留着，聚合面上看得到各自�
         ['claude-code', false, 'notInstalled'],
         ['pi', false, 'notInstalled'],
         ['dsh', false, 'notInstalled'],
+        ...NEW_HARNESSES.map(([id, kind]) => [id, false, kind]),
         ['codex', false, 'notInstalled'],
       ],
     )
@@ -686,6 +706,7 @@ test('一个 harness 都起不来：服务留着，聚合面上看得到各自�
         ['claude-code', 'notInstalled'],
         ['pi', null],
         ['dsh', 'notInstalled'],
+        ...NEW_HARNESSES,
         ['codex', 'notInstalled'],
       ],
     )

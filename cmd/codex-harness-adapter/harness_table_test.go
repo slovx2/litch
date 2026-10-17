@@ -159,10 +159,12 @@ func TestACPHarnessesAreOptIn(t *testing.T) {
 	if enabled || state != stateNotInstalled || !strings.Contains(text.ZH, "CHA_ACP_CLI") || !strings.Contains(text.ZH, "CHA_ACP_ARGS") || !strings.Contains(text.EN, cliPathKey("acp")) {
 		t.Fatalf("acp 没给命令行时应报没装并说怎么给: %v %s %+v", enabled, state, text)
 	}
-	if _, problem, err := cfg.settings.apply(1, []settingEdit{edit(cliPathKey("acp"), "/opt/agent/bin/agent")}, schema, cfg.validateSettings); err != nil || problem != nil {
+	// 绝对路径要按所在系统的写法给（Windows 上 /opt/... 不算绝对路径）
+	agent := filepath.Join(t.TempDir(), "agent")
+	if _, problem, err := cfg.settings.apply(1, []settingEdit{edit(cliPathKey("acp"), agent)}, schema, cfg.validateSettings); err != nil || problem != nil {
 		t.Fatalf("写设置失败: %v %+v", err, problem)
 	}
-	if enabled, _, _ := manager.wanted("acp"); !enabled || cfg.forHarness("acp").settingsEnv["CHA_ACP_CLI"] != "/opt/agent/bin/agent" {
+	if enabled, _, _ := manager.wanted("acp"); !enabled || cfg.forHarness("acp").settingsEnv["CHA_ACP_CLI"] != agent {
 		t.Fatalf("给了命令行之后 acp 应启用，路径落到 CHA_ACP_CLI 上: %v", cfg.forHarness("acp").settingsEnv)
 	}
 	// 分组里说明怎么接、参数怎么改；ACP 的几项设置都在

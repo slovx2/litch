@@ -15,6 +15,6 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "check": "biome check src test ../shared/src",
     "start": "node dist/opencode/src/adapter.mjs",
-    "test": "npm run build && node --test --test-concurrency=1 dist/opencode/test/*.test.mjs"
+    "test": "npm run build && cd ../.. && node scripts/build-cli.mjs && node --test --test-concurrency=1 packages/opencode/dist/opencode/test/*.test.mjs"
   }
 }
