@@ -549,7 +549,9 @@ export class AcpServer {
    * 经这里建了、一句话都没说过的会话不列（和上游一样，没有内容的会话不进列表）。
    */
   async sessions(): Promise<AcpThread[]> {
-    const agent = await this.runtime.agent().catch(() => null)
+    // 握过手、知道它不能列会话的，不为列清单去起它
+    const known = this.runtime.known
+    const agent = known && !known.list ? null : await this.runtime.agent().catch(() => null)
     if (agent?.caps.list) {
       const known = new Map<string, AcpThread>()
       let cursor: string | null = null

@@ -256,7 +256,8 @@ async function threads(s: AcpServer, peer: RpcPeer, method: string, p: any): Pro
       if (p.ephemeral === true) {
         // 临时线程不建 agent 会话
         const live = s.openEphemeral(peer, cwd)
-        s.applySettings(live, selection, p.allowProviderModelFallback === true)
+        // 没有 agent 会话可设置，只记下来回报：不认识的值不管
+        s.applySettings(live, selection, true)
         const started = envelope(s, live.projection.thread)
         setImmediate(() => s.notify(started.id, 'thread/started', { thread: started }))
         return settings(s, live)
