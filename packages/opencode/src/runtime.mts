@@ -97,6 +97,8 @@ export class OpencodeRuntime {
       stdio: ['ignore', 'pipe', 'pipe'],
     })
     this.child = child
+    const guard = watchdog(child.pid)
+    child.once('exit', () => guard?.kill('SIGKILL'))
     let stderr = ''
     child.stderr.on('data', (chunk: Buffer) => {
       stderr = (stderr + chunk.toString()).slice(-4000)
@@ -235,6 +237,32 @@ export class OpencodeRuntime {
     )
     await exited
     clearTimeout(timer)
+  }
+}
+
+// 入口被强杀（SIGKILL、崩溃）时收不了场，serve 会一直留着（它不看标准输入，也不管父进程在不在）。
+// 旁边起一个极小的 sh 看着它：sh 的标准输入是入口这头的管道，入口一没、管道读到结尾，sh 就结束 serve，
+// 到点还没退的强杀。serve 退了（正常收场也一样）就把 sh 停掉。这个管道不拦着入口退出。
+function watchdog(pid: number | undefined): ChildProcess | null {
+  if (!pid || process.platform === 'win32') return null
+  try {
+    const guard = spawn(
+      '/bin/sh',
+      [
+        '-c',
+        'read _; kill -TERM "$1" 2>/dev/null; sleep 4; kill -KILL "$1" 2>/dev/null',
+        'opencode-guard',
+        String(pid),
+      ],
+      { stdio: ['pipe', 'ignore', 'ignore'] },
+    )
+    guard.on('error', () => {})
+    guard.stdin?.on('error', () => {})
+    ;(guard.stdin as any)?.unref?.()
+    guard.unref()
+    return guard
+  } catch {
+    return null
   }
 }
 

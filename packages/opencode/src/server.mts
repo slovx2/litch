@@ -295,10 +295,8 @@ export class OpencodeServer {
     }
     this.live.set(id, live)
     this.sessions.display(id, projection)
-    // 打开期间到的事件补上（投影按部件号归并，重复的不会重复发）；先摘掉缓冲，补的事件才不会又进缓冲
-    const pending = this.buffered.get(id) ?? []
-    this.buffered.delete(id)
-    for (const [dir, payload] of pending) this.event(dir, payload)
+    // 打开期间到的事件补上（投影按部件号归并，重复的不会重复发）
+    this.flush(id)
     // 打开之前就在等用户的权限请求和提问（适配器重启、别处发起的回合）补问
     void this.asks.resume(live)
     return live
@@ -337,11 +335,29 @@ export class OpencodeServer {
   }
 
   // 事件流断过又接上了：打开着的会话都重读一遍补齐
+  // 缓冲着的事件按到达的先后补上。先摘掉缓冲，补的事件才不会又进缓冲。
+  private flush(id: string): void {
+    const pending = this.buffered.get(id) ?? []
+    this.buffered.delete(id)
+    for (const [dir, payload] of pending) this.event(dir, payload)
+  }
+
+  // 事件流断过又连上：打开着的会话逐个从 OpenCode 重读补齐。重读期间这个会话的事件先缓着，重读完再补上，
+  // 还在流式输出的几段改为只认结束时的全文（Projection.staleStreams）。
   private async resync(): Promise<void> {
-    for (const live of [...this.live.values()])
-      await this.reload(live, true).catch((error) =>
-        console.error(`[opencode] 补齐会话 ${live.projection.thread.id} 失败: ${error.message}`),
-      )
+    const lives = [...this.live.values()]
+    for (const live of lives) this.buffered.set(live.projection.thread.id, [])
+    for (const live of lives) {
+      const id = live.projection.thread.id
+      try {
+        await this.reload(live, true)
+        live.projection.staleStreams()
+      } catch (error) {
+        console.error(`[opencode] 补齐会话 ${id} 失败: ${(error as Error).message}`)
+      } finally {
+        this.flush(id)
+      }
+    }
   }
 
   // OpenCode 不落盘的会话没有，这里只建内存里的线程，线程列表和 OpenCode 的会话存储里都不会出现。

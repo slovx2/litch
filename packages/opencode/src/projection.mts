@@ -63,6 +63,8 @@ interface PartState {
   done: boolean
   // 命令输出：上一次的全量快照
   output: string
+  // 事件流断过：断线前后的增量对不上了，这一段之后的增量不再采信，等它结束时的全文（见 staleStreams）
+  stale?: boolean
 }
 
 const noop: Notify = () => {}
@@ -288,10 +290,26 @@ export class Projection {
   /** message.part.delta：文字一段段到（只认 text 这个字段） */
   delta(partID: string, field: string, delta: string, notify: Notify): void {
     const state = this.parts.get(partID)
-    if (!state?.item || state.done || field !== 'text') return
+    if (!state?.item || state.done || state.stale || field !== 'text') return
     const item = state.item
     const current = item.type === 'reasoning' ? item.summary[0] : item.text
     this.grow(state, current + delta, notify)
+  }
+
+  /**
+   * 事件流断线重连、从 OpenCode 重读过一遍之后调：还在流式输出的文字和思考，重读拿到的全文和之后到的增量
+   * 衔接不上（增量不带位置，分不清哪些已经算在全文里了），这几段改为只认它们结束时的全文（message.part.updated），
+   * 中间不再逐字推送，结束时把差的一次补上。
+   */
+  staleStreams(): void {
+    for (const state of this.parts.values())
+      if (
+        !state.done &&
+        (state.item?.type === 'agentMessage' ||
+          state.item?.type === 'plan' ||
+          state.item?.type === 'reasoning')
+      )
+        state.stale = true
   }
 
   /** todo.updated：照上游的 update_plan 发 turn/plan/updated；没有进行中的回合时没有回合号可挂，不发 */
@@ -460,7 +478,8 @@ export class Projection {
     const item = state.item
     const reasoning = item.type === 'reasoning'
     const current: string = reasoning ? item.summary[0] : item.text
-    if (text === current) return
+    // 比手上的短、又是它的开头：晚到的旧快照（断线补齐时缓存的事件），不往回退
+    if (current.startsWith(text)) return
     if (reasoning) item.summary[0] = text
     else item.text = text
     if (!text.startsWith(current)) return
