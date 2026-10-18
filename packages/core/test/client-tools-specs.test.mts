@@ -37,3 +37,34 @@ test('codex 交给模型时丢掉的键只有范围（minimum、maximum），别
   // 写在说明里的才看得到。新用到别的会被丢掉的键时这里会知道
   assert.deepEqual([...dropped].sort(), ['maximum', 'minimum'])
 })
+
+test('litch_computer 的说明按桌面的平台出：Windows 那份也过得了校验，多一个 window 参数', () => {
+  const [mac] = clientToolSpecs([CLIENT_TOOL_NAMESPACE.computer], { machine: null })
+  const [win] = clientToolSpecs([CLIENT_TOOL_NAMESPACE.computer], {
+    machine: null,
+    desktopPlatform: 'win32',
+  })
+  assert.ok(mac && win)
+  assert.deepEqual(dynamicToolProblems([win]), [])
+  assert.match(mac.description, /^Control macOS apps/)
+  assert.match(win.description, /^Control Windows apps/)
+  assert.match(win.description, /Windows key/)
+  assert.deepEqual(
+    win.tools.map((tool) => tool.name),
+    mac.tools.map((tool) => tool.name),
+  )
+  for (const tool of win.tools) {
+    const properties = tool.inputSchema.properties as Record<string, unknown>
+    if (tool.name === 'list_apps') continue
+    assert.ok('window' in properties, `${tool.name} 在 Windows 上要有 window`)
+  }
+  for (const tool of mac.tools) {
+    assert.ok(!('window' in (tool.inputSchema.properties as Record<string, unknown>)))
+  }
+  // 认不出的平台按 macOS
+  const [other] = clientToolSpecs([CLIENT_TOOL_NAMESPACE.computer], {
+    machine: null,
+    desktopPlatform: 'linux',
+  })
+  assert.equal(other?.description, mac.description)
+})

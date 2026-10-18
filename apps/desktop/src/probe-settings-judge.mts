@@ -54,9 +54,11 @@ export interface FirstSeen {
 }
 
 const HOME = 'https://github.com/slovx2/litch'
-/** 设置页左边的分组和标题：Computer Use 那一组只在 macOS 上有 */
+/** 有 Computer Use 那一组的平台（macOS 和 Windows） */
+const hasComputerUse = (platform: string) => platform === 'darwin' || platform === 'win32'
+/** 设置页左边的分组和标题：Computer Use 那一组只在 macOS 和 Windows 上有 */
 const sectionsOn = (platform: string) =>
-  platform === 'darwin'
+  hasComputerUse(platform)
     ? ['look', 'lang', 'devices', 'browser', 'computer', 'keys', 'about']
     : ['look', 'lang', 'devices', 'browser', 'keys', 'about']
 const titlesOn = (platform: string, lang: 'zh-CN' | 'en' = 'zh-CN') => {
@@ -72,7 +74,7 @@ const titlesOn = (platform: string, lang: 'zh-CN' | 'en' = 'zh-CN') => {
           'About',
         ]
       : ['外观', '语言', '设备', '内置浏览器', 'Computer Use', '快捷键', '关于']
-  return platform === 'darwin' ? all : all.filter((title) => title !== 'Computer Use')
+  return hasComputerUse(platform) ? all : all.filter((title) => title !== 'Computer Use')
 }
 /** 只在没打包时才有的两项菜单，清单里不列（装好的应用里没有） */
 const DEV_ONLY = ['role:reload', 'role:toggledevtools']

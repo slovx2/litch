@@ -58,6 +58,8 @@ export type ToolToCore =
 export interface ClientToolPort {
   /** 主进程报来的、这台桌面能执行的命名空间。还没报是空的：握手时就不声明 */
   namespaces(): readonly string[]
+  /** 这台桌面的平台（process.platform）。litch_computer 的说明按它挑；没有按 macOS */
+  platform?(): string
   post(message: ToolToMain): void
   /** 收主进程发来的。只调一次 */
   listen(handler: (message: ToolToCore) => void): void

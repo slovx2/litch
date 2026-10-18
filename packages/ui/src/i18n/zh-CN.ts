@@ -755,6 +755,20 @@ export const zhCN = {
   'settings.browser.failed': '没做成：{reason}',
   'settings.computer.intro':
     '让模型操作这台 Mac 上的应用。系统权限授给单独的助手应用“Litch Computer Use”，不授给 Litch 本身。',
+  'settings.computer.intro.win':
+    '让模型操作这台 Windows 电脑上的应用。操作由 Litch 自己起的助手程序来做，每个应用第一次用时都要你点头。',
+  'settings.computer.helper': '助手',
+  'settings.computer.helper.note': 'Windows 上没有要授的系统权限；助手用到时才起，闲一分钟自己退出',
+  'settings.computer.helper.state': '状态',
+  'settings.computer.helper.running': '在运行',
+  'settings.computer.helper.idle': '没在运行',
+  'settings.computer.helper.failed': '没起来',
+  'settings.computer.helper.version': '版本 {version}，进程 {pid}',
+  'settings.computer.helper.lazy': '模型要用时会自己起来。',
+  'settings.computer.helper.admin':
+    'Litch 正以管理员身份运行：助手也能操作管理员窗口，模型能碰到的东西更多。没有必要的话，请以普通身份重新打开 Litch。',
+  'settings.computer.helper.uac':
+    '这台电脑关了用户账户控制（UAC）：程序都以管理员权限运行，Computer Use 少了管理员窗口这一道隔离。',
   'settings.computer.permissions': '系统权限',
   'settings.computer.permissions.note':
     '点“打开系统设置”，列表里会出现“Litch Computer Use”，打开它的开关；Litch 不会替你改',
@@ -1159,7 +1173,7 @@ export const zhCN = {
   'devices.tools.computer.note':
     '让模型操作这台电脑上的应用：点、输入、截屏。头一次操作一个应用前会先问你。',
   'devices.tools.computer.remote':
-    '这是远程设备：打开之后，跑在那台远程机器上的代理会来操作这台 Mac（你面前的这台），不是操作那台远程机器。那台机器要是被别人控制了，别人就能遥控你的桌面。每个会话、每个应用都要你单独批准，没有“始终允许”。',
+    '这是远程设备：打开之后，跑在那台远程机器上的代理会来操作这台电脑（你面前的这台），不是操作那台远程机器。那台机器要是被别人控制了，别人就能遥控你的桌面。每个会话、每个应用都要你单独批准，没有“始终允许”。',
   'devices.tools.failed': '没改成：{reason}',
   'devices.tools.computer.missing':
     '这台 Mac 还没给 Computer Use 两项系统权限（辅助功能、屏幕录制），开关打开了也用不了。',

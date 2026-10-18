@@ -8,6 +8,7 @@ const {
   allGranted,
   dayOf,
   deviceHint,
+  helperLook,
   listPhase,
   offersRestart,
   PANES,
@@ -15,6 +16,7 @@ const {
   siteLabel,
   sortApps,
   sortSites,
+  winWarnings,
 } = await import('../src/settings/tools-logic.ts')
 
 const ready = (accessibility, screenRecording) => ({
@@ -110,4 +112,30 @@ test('日期写成 年-月-日，认不出的给空的', () => {
   assert.equal(dayOf(new Date(2026, 9, 7, 23, 59).getTime()), '2026-10-07')
   assert.equal(dayOf(new Date(2026, 0, 2).toISOString()), '2026-01-02')
   assert.equal(dayOf('not a date'), '')
+})
+
+test('Windows：设备详情里不提系统权限；助手的样子和两条提醒只认助手报过的', () => {
+  assert.equal(deviceHint({ platform: 'win32', helper: 'idle', permissions: null }), null)
+  assert.equal(helperLook(null), 'unknown')
+  assert.equal(helperLook({ platform: 'win32', helper: 'ready', permissions: null }), 'running')
+  assert.equal(helperLook({ platform: 'win32', helper: 'idle', permissions: null }), 'idle')
+  assert.equal(
+    helperLook({ platform: 'win32', helper: 'failed', permissions: null, reason: 'x' }),
+    'failed',
+  )
+  assert.deepEqual(winWarnings({ platform: 'win32', helper: 'idle', permissions: null }), [])
+  const info = { pid: 1, version: '0.9.0', integrity: 'medium', uacEnabled: true }
+  assert.deepEqual(
+    winWarnings({ platform: 'win32', helper: 'ready', permissions: null, windows: info }),
+    [],
+  )
+  assert.deepEqual(
+    winWarnings({
+      platform: 'win32',
+      helper: 'ready',
+      permissions: null,
+      windows: { ...info, integrity: 'high', uacEnabled: false },
+    }),
+    ['admin', 'uac'],
+  )
 })

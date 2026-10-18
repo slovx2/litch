@@ -85,10 +85,12 @@ contextBridge.exposeInMainWorld('litchUpdate', {
   },
 })
 
-// Computer Use（只在 macOS 上有）：设置页里那一节要的权限状态、打开系统设置对应的那一页、重启助手、“始终允许”的清单。
+// Computer Use（macOS 和 Windows 上有）：设置页里那一节要的状态（macOS 是两项权限，Windows 是助手的状态）、
+// 打开系统设置对应的那一页（只有 macOS）、重启助手、“始终允许”的清单。
 // 界面那边的类型在 packages/ui/src/settings/computer-bridge.ts，改一边要改另一边。别的系统上没有这个对象，界面就不显示那一节
-if (process.platform === 'darwin') {
+if (process.platform === 'darwin' || process.platform === 'win32') {
   contextBridge.exposeInMainWorld('litchComputerUse', {
+    platform: process.platform,
     // launch：助手没在跑时要不要拉起它（设置页那一节要，设备详情里顺带看一眼不要）
     status: (launch: boolean) => ipcRenderer.invoke(COMPUTER_USE_STATUS, launch === true),
     openSettings: (pane: string) => ipcRenderer.invoke(COMPUTER_USE_OPEN_SETTINGS, pane),

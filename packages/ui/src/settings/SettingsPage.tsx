@@ -5,7 +5,7 @@ import type { MessageKey } from '../i18n/index.ts'
 import { AboutSection } from './About.tsx'
 import { BrowserSection } from './BrowserSection.tsx'
 import { ComputerSection } from './ComputerSection.tsx'
-import { computerBridge } from './computer-bridge.ts'
+import { computerBridge, computerIntro } from './computer-bridge.ts'
 import { LangSection, LookSection } from './Look.tsx'
 import { ShortcutsSection } from './Shortcuts.tsx'
 
@@ -100,7 +100,7 @@ export function SettingsPage({ section: asked, onSection, onClose, onDevices }: 
         <header className="set-head">
           <div>
             <h2>{t(TITLES[section])}</h2>
-            <p>{t(INTROS[section])}</p>
+            <p>{t(section === 'computer' ? computerIntro() : INTROS[section])}</p>
           </div>
           <button
             type="button"

@@ -33,7 +33,7 @@ export interface ToolsSeen {
     localHint: string
     /** 点“去设置里看看”到了设置页的 Computer Use 那一组 */
     linkLands: string
-    /** 远程设备的说明里写着操作的是这台 Mac */
+    /** 远程设备的说明里写着操作的是面前的这台电脑（macOS、Windows 一个说法） */
     remoteSaysThisMac: boolean
   }
 }
@@ -141,7 +141,7 @@ export async function toolsSeen(): Promise<ToolsSeen> {
     await until('设备列表', () => one('.devp-list'))
   }
   const remoteRow = await openDevice('build')
-  const remoteSaysThisMac = text(remoteRow).includes('这台 Mac')
+  const remoteSaysThisMac = text(remoteRow).includes('你面前的这台')
   // 收尾：关掉设备页
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
   await seen(() => !one('.devp[data-detail]'), 2000)
@@ -163,7 +163,9 @@ export function judgeTools(seen: ToolsSeen, platform: string): string[] {
     if (!ok) failed.push(what)
   }
   const mac = platform === 'darwin'
-  must(seen.computerBridge === mac, `Computer Use 的接口${mac ? '没有' : '不该有'}`)
+  // Windows 上也有这一组，但没有系统权限那一块（09 号 3.11），下面权限那几条只在 macOS 上量
+  const has = mac || platform === 'win32'
+  must(seen.computerBridge === has, `Computer Use 的接口${has ? '没有' : '不该有'}`)
   must(seen.browser.sites === 'empty', `一直允许的网站不是空的样子：${seen.browser.sites}`)
   must(seen.browser.confirmShown, '点“清除浏览数据”没有先出确认框')
   must(seen.browser.cancelKeptQuiet, '确认框点了取消却清了，或者框没关')
@@ -188,10 +190,13 @@ export function judgeTools(seen: ToolsSeen, platform: string): string[] {
       `本机 Computer Use 开关下面该说没给全：${seen.devices.localHint}`,
     )
     must(seen.devices.linkLands === 'computer', `“去设置里看看”到了：${seen.devices.linkLands}`)
+  } else if (has) {
+    must(seen.computer, '设置页里没有 Computer Use 那一组')
+    must(seen.devices.localHint === 'none', 'Windows 上不该在开关下面说系统权限')
   } else {
     must(seen.computer === null, '不是 macOS 却有 Computer Use 那一组')
     must(seen.devices.localHint === 'none', '不是 macOS 却在开关下面说了系统权限')
   }
-  must(seen.devices.remoteSaysThisMac, '远程设备的 Computer Use 说明里没讲操作的是这台 Mac')
+  must(seen.devices.remoteSaysThisMac, '远程设备的 Computer Use 说明里没讲操作的是面前这台电脑')
   return failed
 }

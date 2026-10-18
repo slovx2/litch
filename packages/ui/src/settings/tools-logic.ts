@@ -31,14 +31,37 @@ export const allGranted = (state: ComputerUseState | null | undefined): boolean 
 
 /**
  * 设备详情里 Computer Use 开关旁边那一句：missing 是知道这台 Mac 没给全，unknown 是没问过（不为看一眼去拉起助手），
- * null 是两项都给了，不用说
+ * null 是两项都给了，不用说。Windows 上没有系统权限，不说
  */
 export function deviceHint(
   state: ComputerUseState | null | undefined,
 ): 'missing' | 'unknown' | null {
+  if (state?.platform === 'win32') return null
   const permissions = state?.permissions
   if (!permissions) return 'unknown'
   return permissions.accessibility && permissions.screenRecording ? null : 'missing'
+}
+
+/** Windows 助手的样子：在跑、没在跑（用到时才起）、没起来 */
+export type HelperLook = 'running' | 'idle' | 'failed' | 'unknown'
+
+export function helperLook(state: ComputerUseState | null | undefined): HelperLook {
+  if (!state) return 'unknown'
+  if (state.helper === 'failed') return 'failed'
+  return state.helper === 'ready' ? 'running' : 'idle'
+}
+
+/**
+ * Windows 上要提醒的：admin 是 Litch 以管理员身份运行（助手继承它的完整性级别，高于 medium 就是），
+ * uac 是这台电脑关了用户账户控制。只认助手报过的，没报过的不猜
+ */
+export function winWarnings(state: ComputerUseState | null | undefined): ('admin' | 'uac')[] {
+  const info = state?.windows
+  if (!info) return []
+  const warnings: ('admin' | 'uac')[] = []
+  if (info.integrity === 'high' || info.integrity === 'system') warnings.push('admin')
+  if (!info.uacEnabled) warnings.push('uac')
+  return warnings
 }
 
 /** 一张清单现在是什么样：在取、取不到、空的、有东西 */

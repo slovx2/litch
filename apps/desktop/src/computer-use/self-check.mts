@@ -6,8 +6,9 @@ import { readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { HelperClient } from './helper-client.mjs'
 import { createComputerUse } from './index.mjs'
+import { MacLauncher } from './launcher-mac.mjs'
 import { HelperSupervisor } from './supervisor.mjs'
-import { HelperError } from './wire.mjs'
+import { type HelloResult, HelperError } from './wire.mjs'
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -31,15 +32,16 @@ export async function checkAdhoc(appPath: string, userData: string): Promise<str
   const report: string[] = []
   const logs: string[] = []
   const cu = createComputerUse({
+    platform: 'darwin',
     userData,
-    appPath,
+    helperPath: appPath,
     version: null,
     lang: 'zh-CN',
     log: (line) => logs.push(line),
   })
   try {
     const client = await cu.supervisor.client()
-    const hello = client.hello
+    const hello = client.hello as HelloResult | null
     assert.ok(hello, '握手过的连接带着握手结果')
     assert.equal(hello.auth, 'token', '临时签名的助手按令牌验')
     assert.equal(hello.teamId, null)
@@ -90,7 +92,7 @@ export async function checkAdhoc(appPath: string, userData: string): Promise<str
     report.push(`list_apps：${first.text.split('\n').length - 1} 个带窗口的应用`)
 
     // 该拒的连接
-    const socket = cu.supervisor.socketPath
+    const socket = join(userData, 'computer-use', 'helper.sock')
     const stranger = await HelperClient.connect(socket)
     await expectRejected(stranger.request('listApps'), 'unauthorized', '没握手就请求')
     const wrong = await HelperClient.connect(socket)
@@ -139,9 +141,7 @@ export async function checkAdhoc(appPath: string, userData: string): Promise<str
 export async function checkTeamSigned(appPath: string, directory: string): Promise<string[]> {
   const report: string[] = []
   const supervisor = new HelperSupervisor({
-    appPath,
-    directory,
-    version: null,
+    launcher: new MacLauncher({ appPath, directory, version: null }),
     lang: () => 'en',
   })
   try {

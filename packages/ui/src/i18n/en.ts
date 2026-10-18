@@ -822,6 +822,21 @@ export const en: Record<MessageKey, Entry> = {
   'settings.browser.failed': 'Didn’t work: {reason}',
   'settings.computer.intro':
     'Lets the model use apps on this Mac. The system permissions go to a separate helper app, “Litch Computer Use”, not to Litch itself.',
+  'settings.computer.intro.win':
+    'Lets the model use apps on this Windows PC. A helper program started by Litch does the work, and each app needs your approval the first time.',
+  'settings.computer.helper': 'Helper',
+  'settings.computer.helper.note':
+    'Windows has no system permissions to grant; the helper starts when needed and quits after a minute idle',
+  'settings.computer.helper.state': 'Status',
+  'settings.computer.helper.running': 'Running',
+  'settings.computer.helper.idle': 'Not running',
+  'settings.computer.helper.failed': 'Did not start',
+  'settings.computer.helper.version': 'Version {version}, process {pid}',
+  'settings.computer.helper.lazy': 'It starts by itself when the model needs it.',
+  'settings.computer.helper.admin':
+    'Litch is running as administrator: the helper can control administrator windows too, so the model can reach more. Unless you need this, reopen Litch normally.',
+  'settings.computer.helper.uac':
+    'User Account Control (UAC) is off on this PC: programs run with administrator rights, so Computer Use loses the separation from administrator windows.',
   'settings.computer.permissions': 'System permissions',
   'settings.computer.permissions.note':
     'Click “Open System Settings”; “Litch Computer Use” shows up in the list, turn it on. Litch never changes this for you',
@@ -1242,7 +1257,7 @@ export const en: Record<MessageKey, Entry> = {
   'devices.tools.computer.note':
     'Lets the model use apps on this computer: click, type, take screenshots. You are asked before it first uses an app.',
   'devices.tools.computer.remote':
-    'This is a remote device: once this is on, agents running on that remote machine operate this Mac (the one in front of you), not the remote machine. If someone takes over that machine, they can drive your desktop. Every session and every app needs your approval; there is no "always allow".',
+    'This is a remote device: once this is on, agents running on that remote machine operate this computer (the one in front of you), not the remote machine. If someone takes over that machine, they can drive your desktop. Every session and every app needs your approval; there is no "always allow".',
   'devices.tools.failed': 'Not changed: {reason}',
   'devices.tools.computer.missing':
     'This Mac hasn’t granted Computer Use its two system permissions (Accessibility, Screen Recording), so it won’t work even when switched on.',
