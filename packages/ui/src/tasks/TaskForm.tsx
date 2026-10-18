@@ -252,6 +252,7 @@ export function TaskFormPage({ mode, onDone, onClose }: TaskFormPageProps) {
               remote={said('schedule')}
               editing={editing}
               now={now}
+              deviceZone={devices.find((entry) => entry.id === form.deviceId)?.timezone ?? null}
               onChange={change}
             />
           </section>

@@ -178,6 +178,8 @@ export interface DeviceView {
    * 路径的另一种写法按它认（text/paths.mts 的 pathTwin）。这次运行里还没连上过是 null，断开之后留着
    */
   os: string | null
+  /** 设备所在的时区（IANA 名，设备服务支持定时任务时才报）。不知道是 null 或没有 */
+  timezone?: string | null
   harnesses: HarnessView[]
   /**
    * 现在用不了（不可用或已停用）、而侧栏里还留着它上次的会话的 harness。连着的时候才有。

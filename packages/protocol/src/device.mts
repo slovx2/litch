@@ -169,6 +169,11 @@ export interface DeviceInfo {
    * 而且要有适配器主进程在管这个设备进程、它也报了自己的来历（旧版的不报）。
    */
   service?: DeviceServiceInfo
+  /**
+   * 设备所在的时区（IANA 名）。属于 deviceTasks 扩展：设备服务支持定时任务时才报，
+   * 客户端在定时任务的表单里按它预览“下一次”（任务没指定时区时设备按它算）
+   */
+  timezone?: string
 }
 
 /**

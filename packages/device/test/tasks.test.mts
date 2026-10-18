@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { TASK_LIMIT } from '../../protocol/src/device-tasks.mjs'
+import { localTaskTimeZone } from '../../protocol/src/task-schedule.mjs'
 import { assertErrorData, errorCode, settle, tempDir } from './helpers.mjs'
 import {
   assertNotification,
@@ -24,11 +25,15 @@ test('没声明 deviceTasks 的连接调任务方法回 extensionRequired，收�
     await plain.initialize()
     const info = await plain.call('runtime/info')
     assert.ok(info.device.extensions.includes('deviceTasks'))
+    // 设备的时区属于这个扩展：没声明的看不到，声明了的看到的是设备这台机器的
+    assert.equal('timezone' in info.device, false)
     const failure = await plain.fails('litch/task/list', {})
     assert.equal(failure.code, errorCode('extensionRequired'))
     assert.deepEqual(failure.data.required, ['deviceTasks'])
     assertErrorData(failure.data)
     const declared = await tasksClient(target)
+    const seen = await declared.call('runtime/info')
+    assert.equal(seen.device.timezone, localTaskTimeZone())
     await declared.call('litch/task/create', intervalTask(target.stateDir))
     await declared.waitFor((frame) => frame.method === 'litch/task/changed')
     await settle()
