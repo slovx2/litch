@@ -6,7 +6,9 @@
 // 才把常驻服务拉起来（真的设备进程加一份隔离的 Pi，模型是回环上的假模型），见 client-ssh-fixture-service.mjs。
 // 每种情形一个别名，登录时由别名带一个记号（LITCH_FX_MODE），启动脚本按它定主目录和 PATH。
 //
-// 用法：node scripts/client-ssh-fixture.mjs [--native <codex 的路径>]
+// 用法：node scripts/client-ssh-fixture.mjs [--native <codex 的路径>] [--engines claude,dsh,opencode,codex]
+//   --engines：装了适配器的那台（svc）除了 Pi 再起这几家，各用 CHA_CLAUDE_CLI 之类给的隔离副本，
+//   模型一样是回环上的假模型（写法和隔离见 client-fixture-engines.mjs）。
 //   --native：替身换成这台电脑上真的 codex，它的数据目录放在临时目录里（不登录、不碰平时用的那一份）。
 //   用来对着原生 codex 核对一遍探测、启动、代理这三步；没有登录，所以只能握手和列会话，跑不了回合。
 //   就绪后输出一行 LITCH_SSH_FIXTURE {"config": "...", "aliases": {...}, ...}，然后一直运行到被结束，
@@ -28,6 +30,7 @@ import { connect, createServer } from 'node:net'
 import { tmpdir, userInfo } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { refuseHarnessOnPath, wantedEngines } from './client-fixture-engines.mjs'
 import { longestSocket, prepareService } from './client-ssh-fixture-service.mjs'
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -46,6 +49,11 @@ if (native && !existsSync(native)) {
   console.error(`没有这个文件：${native}`)
   process.exit(1)
 }
+
+/** --engines 要的那几家（隔离的命令行），没带是全 null */
+const engines = wantedEngines()
+// 服务的 PATH 里只有起夹具的这份 Node 的目录和系统目录：那里不能有用户装的 harness
+refuseHarnessOnPath([dirname(process.execPath)])
 
 /** 各种情形各一个别名。除了 ok，其余都是为了验某一种“没连上” */
 const ALIASES = {
@@ -186,7 +194,7 @@ const keygen = (file, comment) =>
 
 try {
   const entry = await startEntry()
-  service = await prepareService({ repo, root })
+  service = await prepareService({ repo, root, engines })
   const [port, deadPort] = [await freePort(), await freePort()]
   /** 这个文件在，grow 那个别名就是“装上了适配器” */
   const growFlag = join(root, 'grow.installed')

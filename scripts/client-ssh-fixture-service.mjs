@@ -15,7 +15,8 @@
 // 哪个别名用哪个主目录、PATH 里有什么，由 client-ssh-fixture.mjs 写的启动脚本按情形定。
 //
 // 隔离：包装脚本把 PATH 换成“起夹具的这份 Node 的目录加系统目录”，各 harness 的命令行都指死——
-// Pi 指到仓库里夹具用的那一份（packages/pi 的开发依赖），Claude Code 和 dsh 指到不存在的路径；
+// Pi 指到仓库里夹具用的那一份（packages/pi 的开发依赖），Claude Code 和 dsh 指到不存在的路径
+// （--engines 要了的几家由设置文件给隔离的副本，设置比环境变量优先，见 client-fixture-engines.mjs）；
 // 原生 codex 在设备服务里装了才默认打开，而 PATH 里没有它。所以这台电脑上装着的 claude、pi、dsh、codex 一个都不会被执行，
 // 模型请求全部落在回环上的假模型上，~/.codex-harness-adapter 也碰不到（主目录是临时的）。
 import { spawnSync } from 'node:child_process'
@@ -31,11 +32,15 @@ import {
 import { createServer as createHttpServer } from 'node:http'
 import { createServer as createSocketServer } from 'node:net'
 import { dirname, join } from 'node:path'
+import { serveAnthropic } from './client-fixture-anthropic.mjs'
 import { askReply, installAskExtension } from './client-fixture-ask.mjs'
 import { browseReply } from './client-fixture-browse.mjs'
 import { computerReply } from './client-fixture-computer.mjs'
 import { echoReply, lastUserText } from './client-fixture-echo.mjs'
+import { writeEngineSettings } from './client-fixture-engines.mjs'
 import { machineReply } from './client-fixture-machine.mjs'
+import { piReply } from './client-fixture-marks.mjs'
+import { serveResponses } from './client-fixture-responses.mjs'
 import { streamReply } from './client-fixture-stream.mjs'
 
 /** 假的远程机器上适配器的替身名。客户端那边用 LITCH_REMOTE_ADAPTER 指过来 */
@@ -54,7 +59,7 @@ export const longestSocket = (root) =>
  * 备好“装了适配器”的那一半。返回各个主目录、要写进启动脚本的几个目录，以及收尾的函数。
  * 缺构建产物时抛错，由调用方报出来。
  */
-export async function prepareService({ repo, root, pace = 200 }) {
+export async function prepareService({ repo, root, engines = {}, pace = 200 }) {
   const cli = join(repo, 'bin', 'codex-harness-adapter')
   for (const [path, hint] of [
     [cli, 'npm run build（根目录，要有 go）'],
@@ -87,12 +92,29 @@ export async function prepareService({ repo, root, pace = 200 }) {
   const model = createHttpServer(async (req, res) => {
     const chunks = []
     for await (const chunk of req) chunks.push(chunk)
-    const body = JSON.parse(Buffer.concat(chunks).toString() || '{}')
+    const raw = Buffer.concat(chunks)
+    // --engines 起的几家，地址里带着各自的标识（client-fixture-engines.mjs 写的设置）：说的是别的形态
+    const [, id, ...rest] = (req.url ?? '').split('/')
+    if (id === 'claude-code' || id === 'dsh') {
+      appendFileSync(modelLog, `${JSON.stringify({ at: Date.now(), harness: id })}\n`)
+      await serveAnthropic(id, `/${rest.join('/')}`, raw, res, pace)
+      return
+    }
+    if (id === 'codex') {
+      appendFileSync(modelLog, `${JSON.stringify({ at: Date.now(), harness: id })}\n`)
+      await serveResponses(id, `/${rest.join('/')}`, raw, res, { serial: ++requests, pace })
+      return
+    }
+    const body = JSON.parse(raw.toString() || '{}')
     requests++
     const said = lastUserText(body)
     appendFileSync(modelLog, `${JSON.stringify({ at: Date.now(), model: body.model, said })}\n`)
+    // OpenCode 也说 OpenAI 兼容的这一种（/opencode/v1）：只认操作本机的那几句，别的照三引擎夹具的说法
+    const other =
+      id === 'opencode' ? (machineReply(body, said) ?? piReply('opencode', body, pace)) : null
     // 客户端工具（回声、浏览、操作应用、操作本机）认得出自己那一次，排在提问前面：提问见到工具结果就当成是它的回答
-    const reply = echoReply(body, said) ??
+    const reply = other ??
+      echoReply(body, said) ??
       browseReply(body, said) ??
       computerReply(body, said) ??
       machineReply(body, said) ??
@@ -169,6 +191,15 @@ export async function prepareService({ repo, root, pace = 200 }) {
     JSON.stringify({ defaultProvider: 'gate', defaultModel: 'gate', retry: { enabled: false } }),
   )
   installAskExtension(agent)
+  // --engines 要的几家：设置在服务起来之前写进 svc 那个状态目录，服务一起来就照着起
+  if (Object.values(engines).some(Boolean)) {
+    writeEngineSettings({
+      home: stateOf(homes.svc),
+      root,
+      modelUrl: `http://127.0.0.1:${model.address().port}`,
+      engines,
+    })
+  }
 
   // ---------- 适配器的包装脚本 ----------
   /** 服务和它跑的命令拿到的环境：只有这几样是指死的，主目录跟着登录时的那一个 */

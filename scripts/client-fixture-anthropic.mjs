@@ -10,6 +10,7 @@
 //   出个计划     先说计划、再调 ExitPlanMode             没有计划模式：照常回话
 //               （计划模式开着才有这个工具）
 //   慢慢说       回话分很多段慢慢发
+//   本机：…、命令行：…、你在哪   操作本机，见 client-fixture-machine.mjs
 //   别的         把收到的话带回来，开头注明是哪个 harness 收到的；带着技能正文的记号时把记号带回来
 //
 // 走到第几步按请求的内容算，不按到达的先后：引擎自己还会发别的请求（dsh 起标题、Claude Code 数词元），
@@ -19,6 +20,7 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { ASK_QUESTIONS, ASK_TRIGGER } from './client-fixture-ask.mjs'
 import { EDIT_APPENDED, EDIT_COMMAND, EDIT_CREATED, EDIT_TRIGGER } from './client-fixture-edit.mjs'
+import { machineAnthropic } from './client-fixture-machine.mjs'
 import {
   ONE_TRIGGER,
   SLOW_PACE,
@@ -131,6 +133,9 @@ export function anthropicReply(harness, body, pace) {
   const step = messages.slice(asked + 1).filter((message) => message.role === 'assistant').length
   const result = lastResult(messages)
   const say = (text) => [{ text, pace }]
+  // 操作本机（litch_machine 和 litch-machine 命令）的那几句，见 client-fixture-machine.mjs
+  const machine = machineAnthropic(harness, body, said)
+  if (machine) return machine
   // 一句话里有好几个词时认最后出现的那个：被打断的回合留下的话，会和新的一句并在同一条消息里
   const marks = [
     [RUN_TRIGGER, 'run', tools.shell],
