@@ -137,7 +137,8 @@ export const clientAskOptions = (ask: ClientAskView): ApprovalOption[] =>
     ? // 远程设备操作本机（08 号 3.2）：没有“始终允许”
       [
         { id: 'once', role: 'accept' },
-        { id: 'session', role: 'acceptSession' },
+        // “逐条确认”下的执行、写入每次都问，允许整个会话没有意义
+        ...(ask.perCall ? [] : [{ id: 'session', role: 'acceptSession' } as const]),
         // 拒绝时可以附一句理由给模型
         { id: 'decline', role: 'decline', note: true },
       ]

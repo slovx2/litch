@@ -534,7 +534,13 @@ test('审批·逐条确认：执行每次都弹，读每个会话一次；不确
     const pending = call({ command: cmd })
     await settle()
     assert.equal(cardsOf(session).length, 1, `命令 ${cmd} 要弹`)
-    await respond(world, cardsOf(session)[0], 'session')
+    const [card] = cardsOf(session)
+    // 每次都问：卡片上没有“本会话都允许”
+    assert.deepEqual(
+      card?.options.map((option) => option.id),
+      ['once', 'decline'],
+    )
+    await respond(world, card, 'once')
     assert.equal(textOf(await pending), 'ok')
   }
   const read = call({ path: '/x' }, { tool: 'read_file' })

@@ -46,6 +46,8 @@ export interface MachineAskView {
   copy: { from: { machine: string; path: string }; to: { machine: string; path: string } } | null
   /** 命令里提到的禁止位置（已经“本会话都允许”也再弹一次，卡片标红）。没有是空的 */
   flagged: string[]
+  /** “逐条确认”下执行、写入类的卡片：每次都问，卡片上没有“本会话都允许” */
+  perCall?: boolean
 }
 
 /** 远程会话在这台电脑上起的一个进程（顶栏弹层里的一行） */

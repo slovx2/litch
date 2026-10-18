@@ -17,8 +17,10 @@ export const SENSITIVE_PRESETS: readonly string[] = [
   '~/Library/Application Support/Arc',
   '~/Library/Safari',
   '~/Library/Cookies',
-  // Litch 自己的设置和状态
+  // Litch 自己的设置和状态：桌面端的用户数据，以及设备服务的状态目录（设置里有各 harness 的环境变量和密钥，
+  // 改了它就能改本机 harness 的启动方式）
   '~/Library/Application Support/Litch',
+  '~/.codex-harness-adapter',
   // 各 harness 和常用命令行的登录凭据
   '~/.codex/auth.json',
   '~/.claude/.credentials.json',

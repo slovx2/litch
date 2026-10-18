@@ -363,7 +363,9 @@ export function createMachineWiring(host: MachineWiringHost): MachineWiring {
           host: device?.host ?? '',
           harness: input.harness,
           ask,
-          options: PENDING_OPTIONS.map((option) => ({ ...option })),
+          options: PENDING_OPTIONS.filter(
+            (option) => !(ask.perCall && option.role === 'acceptSession'),
+          ).map((option) => ({ ...option })),
           expiresAt: clock.now() + MACHINE_ASK_EXPIRES_MS,
         }
         pending.set(id, { view, settle })
@@ -403,7 +405,8 @@ export function createMachineWiring(host: MachineWiringHost): MachineWiring {
       const flagged = request.ask.flagged.length > 0
       const each = settings.approval === 'each' && request.class === 'mutate'
       if (!flagged && !each && grants.has(grant)) return { kind: 'allowed' } as const
-      const outcome = await askUser(deviceId, input, request.ask, session)
+      const ask = each ? { ...request.ask, perCall: true } : request.ask
+      const outcome = await askUser(deviceId, input, ask, session)
       if (outcome.kind !== 'answered') return outcome
       if (outcome.pick === 'decline') {
         if (turnKey !== null) declined.set(turnKey, outcome.note)
