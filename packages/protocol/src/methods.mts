@@ -287,6 +287,25 @@ export interface ClientRequests {
   'fs/readFile': { params: FsReadFileParams; result: FsReadFileResponse }
   /** 跟着符号链接走到底之后是什么；`isSymlink` 说的是这个路径本身 */
   'fs/getMetadata': { params: FsGetMetadataParams; result: FsGetMetadataResponse }
+  // 以下四个是 litch_machine 的执行器写文件、建目录用的（08 号设计 2.4，core 的 device/machine/）。
+  // 形状照上游 codex 0.157.1 的 v2/Fs*Params（都只回空对象）；适配器的实现在 packages/shared/src/filesystem-rpc.mts
+  /** 整个写进去（已有的覆盖），父目录要已经在了。协议里没有“接在后面写” */
+  'fs/writeFile': { params: { path: string; dataBase64: string }; result: Record<string, never> }
+  /** recursive 缺省为真（连父目录一起建，已有的不算错） */
+  'fs/createDirectory': {
+    params: { path: string; recursive?: boolean | null }
+    result: Record<string, never>
+  }
+  /** recursive、force 缺省都为真 */
+  'fs/remove': {
+    params: { path: string; recursive?: boolean | null; force?: boolean | null }
+    result: Record<string, never>
+  }
+  /** 复制目录要 recursive 为真 */
+  'fs/copy': {
+    params: { sourcePath: string; destinationPath: string; recursive?: boolean }
+    result: Record<string, never>
+  }
   /**
    * 一次性的模糊找文件：最多回 50 条，`path` 相对于 `root`。同一个 `cancellationToken` 的新请求会让还没完的旧请求作废
    * （适配器上旧请求回空结果，所以“没找到”和“被顶掉了”要靠客户端自己记是哪一次）。
