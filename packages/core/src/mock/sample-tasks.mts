@@ -1,6 +1,8 @@
 // 模拟核心的定时任务示例：本机和 build-01 上各有几个，两种目标、几种日程，最近一次成功、失败、排队、在跑都有，
 // 有没看过的。运行跑在已有的示例会话里（本机的 s3、s4、s8，build-01 的 b2），更早的那些会话已经不在了。
 // 内容全是编出来的。nas 只有原生 codex（不支持定时任务），gpu-box 还没连上过。
+
+import { nextTaskRun } from '../../../protocol/src/task-schedule.mjs'
 import type {
   TaskErrorView,
   TaskRunStatus,
@@ -116,10 +118,19 @@ interface Spec {
   status: TaskView['status']
   target: TaskTarget
   createdAgo: number
-  /** 下一次离现在多久；null 是没有 */
-  nextIn: number | null
   /** 不给是界面上建的 */
   origin?: TaskView['origin']
+}
+
+/** 按日程算下一次（毫秒）。日程从任务建好的时候起算 */
+function nextOf(spec: Spec, now: number): number | null {
+  const next = nextTaskRun(
+    spec.schedule,
+    spec.timezone,
+    Math.floor(now / 1000),
+    Math.floor((now - spec.createdAgo) / 1000),
+  )
+  return next === null ? null : next * 1000
 }
 
 interface RunSpec {
@@ -168,7 +179,6 @@ export function sampleTasks(deviceId: string, now: number, lang: SampleLang): Sa
         status: 'active',
         target: newThread('dsh', '~/work/litch', 'litch'),
         createdAgo: 70 * DAY,
-        nextIn: 17 * HOUR,
       },
       {
         id: 'task-deps',
@@ -178,7 +188,6 @@ export function sampleTasks(deviceId: string, now: number, lang: SampleLang): Sa
         status: 'active',
         target: newThread('pi', '~/work/litch', 'litch'),
         createdAgo: 30 * DAY,
-        nextIn: 2 * DAY + 3 * HOUR,
       },
       {
         id: 'task-watch',
@@ -188,7 +197,6 @@ export function sampleTasks(deviceId: string, now: number, lang: SampleLang): Sa
         status: 'active',
         target: { kind: 'thread', harness: 'claude', threadId: 's8' },
         createdAgo: 5 * DAY,
-        nextIn: 26 * MINUTE,
         // 模型在 s8 里用 litch_tasks 建的
         origin: { kind: 'tool', harness: 'claude', threadId: 's8' },
       },
@@ -200,7 +208,6 @@ export function sampleTasks(deviceId: string, now: number, lang: SampleLang): Sa
         status: 'paused',
         target: newThread('claude', '~/work/litch', 'litch', 'claude-opus-5-5'),
         createdAgo: 90 * DAY,
-        nextIn: null,
       },
       {
         id: 'task-remind',
@@ -210,7 +217,6 @@ export function sampleTasks(deviceId: string, now: number, lang: SampleLang): Sa
         status: 'active',
         target: newThread('claude', '~/work/docs-site', 'docs'),
         createdAgo: 2 * DAY,
-        nextIn: 11 * DAY,
       },
     )
     // 每日站会：最近一次在 s4 里，往前两个多月每个工作日一次（那些会话已经不在了），够翻好几页
@@ -280,7 +286,6 @@ export function sampleTasks(deviceId: string, now: number, lang: SampleLang): Sa
         status: 'active',
         target: newThread('pi', '/srv/work/litch', 'litch2'),
         createdAgo: 40 * DAY,
-        nextIn: 9 * HOUR,
       },
       {
         id: 'task-disk',
@@ -290,7 +295,6 @@ export function sampleTasks(deviceId: string, now: number, lang: SampleLang): Sa
         status: 'active',
         target: newThread('dsh', '/srv', null),
         createdAgo: 12 * DAY,
-        nextIn: 3 * HOUR,
       },
     )
     runSpecs.push(
@@ -349,7 +353,8 @@ export function sampleTasks(deviceId: string, now: number, lang: SampleLang): Sa
       revision: 3,
       createdAt: now - spec.createdAgo,
       updatedAt: now - spec.createdAgo + HOUR,
-      nextRunAt: spec.nextIn === null ? null : now + spec.nextIn,
+      // 下一次按日程算（和设备进程同一份算法）：暂停了的没有，一次性的过了也没有
+      nextRunAt: spec.status === 'active' ? nextOf(spec, now) : null,
       lastRunAt: last?.startedAt ?? last?.scheduledFor ?? null,
       lastRun: last,
       // 最近一次结束了的是失败的，就记着它的原因

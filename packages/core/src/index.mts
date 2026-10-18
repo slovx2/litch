@@ -141,6 +141,7 @@ export type * from './model-manage.mjs'
 export type * from './model-service.mjs'
 export type * from './model-tasks.mjs'
 export type * from './model-terminal.mjs'
+export type * from './model-tree.mjs'
 export {
   describeText,
   type Phrase,
@@ -155,6 +156,7 @@ export {
   type Block,
   type BlockInput,
   bucketItems,
+  cardOf,
 } from './projection/blocks.mjs'
 export {
   type FileRef,
@@ -226,9 +228,11 @@ export {
   type ManageSchema,
   PINNED,
   type Replica,
+  type SessionChildren,
   type SessionGroups,
   type SessionHarnesses,
   type SessionMeta,
+  type SessionNotes,
   type TaskRunsPage,
   type TerminalGroups,
 } from './replica/replica.mjs'

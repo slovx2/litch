@@ -153,6 +153,16 @@ import type {
   DeviceTaskUpdateParams,
 } from './device-tasks.mjs'
 import type { RuntimeInfoResponse } from './extensions.mjs'
+import type {
+  LineageUpdatedNotification,
+  ProposalChangedNotification,
+  SessionDetachParams,
+  SessionProposalIdParams,
+  SessionProposalListParams,
+  SessionProposalListResponse,
+  SessionStartParams,
+  SessionStartResponse,
+} from './session-tree.mjs'
 
 /**
  * 设备服务的聚合面上，不带会话标识的请求要多带一个 `harness` 指明发给谁（见 device.mts）。
@@ -303,6 +313,19 @@ export interface ClientRequests {
     params: DeviceTaskRunsMarkReadParams
     result: Record<string, never>
   }
+  // 以下是会话树（扩展 sessionTree，见 session-tree.mts）：只有聚合面有，
+  // 而且设备信息的 `extensions` 里列了 sessionTree 才能用
+  'litch/session/start': { params: SessionStartParams; result: SessionStartResponse }
+  'litch/session/detach': { params: SessionDetachParams; result: Record<string, never> }
+  'litch/sessionProposal/list': {
+    params: SessionProposalListParams
+    result: SessionProposalListResponse
+  }
+  'litch/sessionProposal/accept': { params: SessionProposalIdParams; result: SessionStartResponse }
+  'litch/sessionProposal/dismiss': {
+    params: SessionProposalIdParams
+    result: Record<string, never>
+  }
   // 以下是文件面板用的：列目录、读文件、取元数据、模糊找文件。都是协议里现成的方法，哪种对面都有。
   // 聚合面上它们由设备进程自己处理（packages/device/src/routes.mts），不转给任何引擎，所以不带 `harness`，
   // 哪个 harness 掉线都不影响；单个 harness 的入口上是那个引擎进程在读；原生 codex 是它自己读。
@@ -381,6 +404,10 @@ export interface ServerNotifications {
   'fs/changed': FsChangedNotification
   /** 扩展，只发给握手时声明过 deviceProcesses 的连接：设备上属于设备的进程多了、少了、变了 */
   'litch/process/changed': DeviceProcessChangedNotification
+  /** 扩展，只发给握手时声明过 sessionTree 的连接：一个会话的父子关系建立或脱离了 */
+  'litch/thread/lineage/updated': LineageUpdatedNotification
+  /** 扩展，只发给握手时声明过 sessionTree 的连接：一个会话上的提案变了 */
+  'litch/sessionProposal/changed': ProposalChangedNotification
   /** 扩展，只发给握手时声明过 deviceTasks 的连接：任务多了、变了、没了 */
   'litch/task/changed': DeviceTaskChangedNotification
   /** 扩展，只发给握手时声明过 deviceTasks 的连接：一次运行开始了、结束了、标成看过了 */

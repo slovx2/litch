@@ -70,6 +70,13 @@ export const EXTENSION = {
    * 设备信息的 `extensions` 里列了它才能用；声明了它的连接才会收到任务和运行的变化通知。
    */
   deviceTasks: 'deviceTasks',
+  /**
+   * 会话树：子会话的父子关系、提案、回报与唤醒，以及由设备进程执行的 litch_sessions 工具
+   * （session-tree.mts、client-tools-sessions.mts，定义在 protocol/extensions/session-tree.json）。
+   * 设备信息的 `extensions` 里列了它，litch/session/*、litch/sessionProposal/* 才能用；
+   * 声明了它的连接才会在会话对象上看到 litchLineage、收到相关通知。
+   */
+  sessionTree: 'sessionTree',
 } as const
 
 export type ExtensionName = (typeof EXTENSION)[keyof typeof EXTENSION]

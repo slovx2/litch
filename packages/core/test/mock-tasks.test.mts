@@ -2,6 +2,7 @@
 // 所以它要和真的核心一个样——立即运行真的演一次、结束算未读、打开会话算看过、记号跟着变、冲突不覆盖。
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import { nextTaskRun } from '../../protocol/src/task-schedule.mjs'
 import {
   type ChannelError,
   connectChannel,
@@ -78,7 +79,7 @@ function setup() {
     for (let round = 0; round < 50 && !done; round++) await pass(20)
     return reply
   }
-  return { channel, rows, tasks, views, ops, pass, command }
+  return { channel, rows, tasks, views, ops, pass, command, now: () => time.clock.now() }
 }
 
 test('示例：本机和 build-01 有任务，nas 不支持，gpu-box 还没连上；示例会话带着记号', async () => {
@@ -188,4 +189,58 @@ test('运行记录分页：每页 50 条，nextCursor 接着往下', async () =>
   })) as { runs: unknown[]; nextCursor: string | null }
   assert.equal(second.runs.length, 15)
   assert.equal(second.nextCursor, null)
+})
+
+test('示例任务的下一次按日程算；新建算出下一次，暂停清掉、继续再算回来；日程不对是 invalid 并说哪个字段', async () => {
+  const w = setup()
+  await w.pass(40)
+  const now = w.now()
+  for (const task of w.tasks.values()) {
+    if (task.status !== 'active') {
+      assert.equal(task.nextRunAt, null, task.id)
+      continue
+    }
+    if (task.nextRunAt === null) continue
+    const expected = nextTaskRun(
+      task.schedule,
+      task.timezone,
+      Math.floor(now / 1000),
+      Math.floor(task.createdAt / 1000),
+    )
+    assert.ok(expected !== null && Math.abs(task.nextRunAt - expected * 1000) < 60_000, task.id)
+  }
+  const made = (await w.command('tasks.create', {
+    task: {
+      name: '周报',
+      prompt: '整理周报',
+      schedule: { type: 'weekly', days: ['MO', 'FR'], time: '09:00' },
+      timezone: 'Asia/Shanghai',
+      target: {
+        kind: 'newThread',
+        harness: 'claude',
+        cwd: '~/work/litch',
+        workspaceId: null,
+        settings: { model: null, effort: null, permission: null },
+      },
+    },
+  })) as { task: TaskView }
+  assert.equal(made.task.status, 'active')
+  assert.ok(made.task.nextRunAt !== null && made.task.nextRunAt > w.now())
+  const paused = (await w.command('tasks.pause', { taskId: made.task.id, paused: true })) as {
+    task: TaskView
+  }
+  assert.equal(paused.task.nextRunAt, null)
+  const resumed = (await w.command('tasks.pause', { taskId: made.task.id, paused: false })) as {
+    task: TaskView
+  }
+  assert.equal(resumed.task.nextRunAt, made.task.nextRunAt)
+  const wrong = (await w
+    .command('tasks.update', {
+      taskId: made.task.id,
+      revision: resumed.task.revision,
+      patch: { schedule: { type: 'daily', time: '25:00' } },
+    })
+    .catch((error: unknown) => error)) as ChannelError
+  assert.equal(wrong.code, 'invalid')
+  assert.match(wrong.key ?? '', /^schedule/)
 })

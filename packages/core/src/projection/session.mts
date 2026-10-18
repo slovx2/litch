@@ -1,6 +1,7 @@
 // 投影的第二步：协议里的会话和回合 → 界面看到的会话。纯函数。
 import {
   PINNED_SECTION_ID,
+  type SessionTreeThreadFields,
   type Thread,
   type ThreadStatus,
   type Turn,
@@ -14,6 +15,7 @@ import type {
   SessionView,
   TurnView,
 } from '../model.mjs'
+import type { SessionLineageView } from '../model-tree.mjs'
 import { phrase, type Text } from '../phrase.mjs'
 import { projectItem } from './items.mjs'
 import { NO_SETTINGS } from './settings.mjs'
@@ -40,10 +42,17 @@ export const ALL_ABLE: SessionAbilities = {
 export const toMs = (value: number | null | undefined): number | null =>
   typeof value !== 'number' ? null : value > 1e11 ? value : value * 1000
 
-/** 会话的标题：起过名字就用名字，否则取开头那句话的第一行 */
-export function threadTitle(thread: Pick<Thread, 'name' | 'preview'>): Text {
+/**
+ * 会话的标题：起过名字就用名字；Litch 派出的子会话用派出时给的标题（它开头那句话是派出说明，
+ * dsh、OpenCode 在自己起好标题之前不留客户端设的名字）；否则取开头那句话的第一行
+ */
+export function threadTitle(
+  thread: Pick<Thread, 'name' | 'preview'> & SessionTreeThreadFields,
+): Text {
   const named = thread.name?.trim()
   if (named) return named
+  const given = lineageOf(thread.litchLineage)?.title.trim()
+  if (given) return given
   const line = (thread.preview ?? '')
     .split('\n')
     .map((part) => part.trim())
@@ -109,14 +118,16 @@ export function projectThread(
     turns.push(projected.turn)
     for (const item of projected.items) items[item.id] = item
   }
+  // 引擎自己的子代理线程，对面明说不接受直接输入（V2 的子线程）：只能看，要跟它说话得经主会话
+  const mute = thread.canAcceptDirectInput === false
   return {
     deviceId: scope.deviceId,
     sessionId: thread.id,
     title: threadTitle(thread),
     harness: scope.harness,
     cwd: thread.cwd,
-    live: true,
-    note: null,
+    live: !mute,
+    note: mute ? phrase('session.agentReadOnly') : null,
     turns,
     items,
     requests: [],
@@ -125,7 +136,59 @@ export function projectThread(
     usage: null,
     can: { ...ALL_ABLE },
     forkedFrom: forkedFrom(thread),
+    proposals: [],
   }
+}
+
+/**
+ * 会话对象上设备进程加的 Litch 父子关系（只发给声明了 sessionTree 的连接）。没有、形状不对的是 null。
+ * 时间是秒，界面用毫秒
+ */
+export function projectLineage(thread: Thread): SessionLineageView | null {
+  const raw: unknown = (thread as Thread & SessionTreeThreadFields).litchLineage
+  return lineageOf(raw)
+}
+
+export function lineageOf(raw: unknown): SessionLineageView | null {
+  if (typeof raw !== 'object' || raw === null) return null
+  const { parentThreadId, kind, origin, title, wakeParent, createdAt } = raw as Record<
+    string,
+    unknown
+  >
+  if (typeof parentThreadId !== 'string' || !parentThreadId) return null
+  return {
+    parentId: parentThreadId,
+    kind: kind === 'fork' ? 'fork' : 'fresh',
+    origin: origin === 'model' || origin === 'proposal' ? origin : 'user',
+    title: typeof title === 'string' ? title : '',
+    wakeParent: wakeParent === true,
+    createdAt: toMs(typeof createdAt === 'number' ? createdAt : null) ?? 0,
+  }
+}
+
+/**
+ * 引擎自己的子代理线程：协议里的 parentThreadId，或者来历是“由某个线程派出”。
+ * 这种不进侧栏（子代理调用的卡片和父会话的信息卡里看得到）；Litch 子会话不是这种，它们是普通的顶层会话
+ */
+export function isAgentThread(thread: Pick<Thread, 'parentThreadId' | 'source'>): boolean {
+  return parentOf(thread) !== null
+}
+
+/** 子代理线程的父线程：会话对象上的 parentThreadId，没有的再看它的来历。不是子代理线程是 null */
+export function parentOf(thread: Pick<Thread, 'parentThreadId' | 'source'>): string | null {
+  if (thread.parentThreadId) return thread.parentThreadId
+  const source = thread.source
+  if (
+    typeof source === 'object' &&
+    source !== null &&
+    'subAgent' in source &&
+    typeof source.subAgent === 'object' &&
+    source.subAgent !== null &&
+    'thread_spawn' in source.subAgent
+  ) {
+    return source.subAgent.thread_spawn.parent_thread_id || null
+  }
+  return null
 }
 
 /**
@@ -174,5 +237,6 @@ export function projectSummary(
     cwd: thread.cwd,
     // 和定时任务的关系由设备那一层按任务模块补上（device.mts 的 summaryOf）
     task: null,
+    lineage: projectLineage(thread),
   }
 }

@@ -61,6 +61,10 @@ export class Sessions {
       createdAt: Math.floor(Number(info.time?.created ?? Date.now()) / 1000),
       updatedAt: Math.floor(Number(info.time?.updated ?? Date.now()) / 1000),
       parentThreadId: typeof info.parentID === 'string' ? info.parentID : null,
+      agent:
+        typeof info.parentID === 'string' && typeof info.agent === 'string' && info.agent
+          ? info.agent
+          : null,
       ephemeral: false,
     }
   }

@@ -182,6 +182,21 @@ test('设备没列 deviceTasks：available 为假，命令以 unsupported 结束
   assert.ok(!(start.dynamicTools ?? []).some((entry) => entry.name === 'litch_tasks'))
 })
 
+test('建会话：设备既列了 deviceTasks 又声明了会话树，litch_tasks 和 litch_sessions 都带上', async () => {
+  const w = world(['harness', 'deviceTasks', 'sessionTree'])
+  w.core.start()
+  await settled()
+  await w.command('session.create', { harness: 'pi', cwd: '/work', text: '你好' })
+  const start = w.sent('thread/start').at(-1) as { dynamicTools?: { name: string; type: string }[] }
+  assert.deepEqual(
+    start.dynamicTools?.map((entry) => [entry.type, entry.name]),
+    [
+      ['namespace', 'litch_tasks'],
+      ['namespace', 'litch_sessions'],
+    ],
+  )
+})
+
 test('建会话：设备列了 deviceTasks 就带上 litch_tasks（这台桌面什么都执行不了也带）；声明了不收客户端工具的 harness 不带', async () => {
   const w = world()
   w.core.start()

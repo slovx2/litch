@@ -16,6 +16,8 @@ const PATHS = {
   filter: <path d="M2.5 3.5h11L9.5 8.5v4.5l-3-1.5v-3z" />,
   /** 文件树：一根主干，岔出两支 */
   tree: <path d="M4 3.5h6M4 3.5V12h3M4 7.5h3M9.5 7.5h3.5M9.5 12h3.5" />,
+  /** 子会话、子代理：上面一个方块，往下岔出两个小方块 */
+  agents: <path d="M6 2.5h4v3H6zM8 5.5v2.5M4 8h8M4 8v2M12 8v2M2.5 10h3v3h-3zM10.5 10h3v3h-3z" />,
   folder: <path d="M2.5 4.5h4L8 6h5.5v6.5h-11z" />,
   /** 展开着的目录：盖子掀开了 */
   folderOpen: <path d="M2.5 12.5v-8h4L8 6h4.5v2M2.5 12.5l1.8-4.5h9.7l-1.8 4.5z" />,

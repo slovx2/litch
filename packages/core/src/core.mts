@@ -516,6 +516,51 @@ export function createCore(options: CoreOptions): Core {
           }
           return {}
         }
+        // ---------- 会话树 ----------
+        case 'session.spawn': {
+          const { deviceId, ...request } = params as Commands['session.spawn']['params']
+          try {
+            return { sessionId: await deviceOf(deviceId).spawn(request) }
+          } catch (error) {
+            throw toChannelFailure(error)
+          }
+        }
+        case 'session.detach': {
+          const { deviceId, sessionId } = params as Commands['session.detach']['params']
+          try {
+            await deviceOf(deviceId).detach(sessionId)
+          } catch (error) {
+            throw toChannelFailure(error)
+          }
+          return {}
+        }
+        case 'session.proposal.accept': {
+          const { deviceId, sessionId, proposalId } =
+            params as Commands['session.proposal.accept']['params']
+          try {
+            return { sessionId: await deviceOf(deviceId).acceptProposal(sessionId, proposalId) }
+          } catch (error) {
+            throw toChannelFailure(error)
+          }
+        }
+        case 'session.proposal.dismiss': {
+          const { deviceId, sessionId, proposalId } =
+            params as Commands['session.proposal.dismiss']['params']
+          try {
+            await deviceOf(deviceId).dismissProposal(sessionId, proposalId)
+          } catch (error) {
+            throw toChannelFailure(error)
+          }
+          return {}
+        }
+        case 'session.agents': {
+          const { deviceId, sessionId } = params as Commands['session.agents']['params']
+          try {
+            return { agents: await deviceOf(deviceId).agents(sessionId) }
+          } catch (error) {
+            throw toChannelFailure(error)
+          }
+        }
         case 'device.add': {
           const { name, target, wire } = params as Commands['device.add']['params']
           const checked = checkTarget(target)

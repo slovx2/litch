@@ -12,6 +12,7 @@ import { memo, useLayoutEffect, useRef, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { ImageViewer } from '../app/ImageViewer.tsx'
 import { useKey } from '../app/services.tsx'
+import { SessionEventBar } from '../tree/EventBar.tsx'
 import { Markdown } from './Markdown.tsx'
 import { usePin } from './scroll.ts'
 import { useSmoothText, useToggle } from './state.ts'
@@ -75,7 +76,10 @@ interface UserMessageProps extends ItemRef {
   turnId?: string | undefined
 }
 
-/** 用户消息：靠右的气泡。很长的时候先收成 20 行，可以展开 */
+/**
+ * 用户消息：靠右的气泡。很长的时候先收成 20 行，可以展开。
+ * 设备进程注入的回报、唤醒（item.event）画成气泡上面的一条系统提示；唤醒的回合没有用户自己的话，只有那一条
+ */
 export const UserMessage = memo(function UserMessage({ turnId, ...ref }: UserMessageProps) {
   const item = useItem<UserMessageItem>(ref)
   const [open, setOpen] = useToggle(sessionKeyOf(ref), `u:${ref.itemId}`, false)
@@ -99,7 +103,11 @@ export const UserMessage = memo(function UserMessage({ turnId, ...ref }: UserMes
   }, [hasText, open])
 
   if (item?.kind !== 'userMessage') return null
-  return (
+  const event = item.event
+  if (event && !text && item.attachments.length === 0) {
+    return <SessionEventBar deviceId={ref.deviceId} event={event} anchor={`u:${ref.itemId}`} />
+  }
+  const message = (
     <div className="umsg" data-anchor={`u:${ref.itemId}`} ref={bubble}>
       <UserAttachments attachments={item.attachments} />
       {text ? (
@@ -121,6 +129,13 @@ export const UserMessage = memo(function UserMessage({ turnId, ...ref }: UserMes
       ) : null}
       {turnId ? <TurnActions {...ref} turnId={turnId} /> : null}
     </div>
+  )
+  if (!event) return message
+  return (
+    <>
+      <SessionEventBar deviceId={ref.deviceId} event={event} />
+      {message}
+    </>
   )
 })
 

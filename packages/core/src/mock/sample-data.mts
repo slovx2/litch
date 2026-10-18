@@ -105,6 +105,8 @@ export function sampleApp(_lang: SampleLang, now: number): AppView {
       // 设备设置页的两个开关：默认浏览器开、Computer Use 关
       tools: { browser: true, computer: false },
       machine: null,
+      // 会话树：对话里说“派子会话”“提个子会话”“用子代理”各演一出（mock-tree.mts）
+      sessionTree: true,
     },
     {
       id: 'build',
@@ -130,6 +132,7 @@ export function sampleApp(_lang: SampleLang, now: number): AppView {
       tools: { browser: true, computer: false },
       // 08 号：远程设备“操作这台电脑”。示例里只有 build-01 开着
       machine: sampleMachineAccess('build'),
+      sessionTree: true,
     },
     {
       id: 'nas',
@@ -155,6 +158,8 @@ export function sampleApp(_lang: SampleLang, now: number): AppView {
       upgrade: null,
       tools: { browser: true, computer: false },
       machine: sampleMachineAccess('nas'),
+      // 只有原生 codex：没有设备服务，也就没有会话树
+      sessionTree: false,
     },
     {
       id: 'gpu',
@@ -187,6 +192,7 @@ export function sampleApp(_lang: SampleLang, now: number): AppView {
       upgrade: null,
       tools: { browser: true, computer: false },
       machine: sampleMachineAccess('gpu'),
+      sessionTree: true,
     },
   ]
   return { devices }
@@ -221,6 +227,7 @@ const summaries = (
     section: null,
     placedAt: null,
     task: null,
+    lineage: null,
     ...extra,
   }))
 
@@ -875,5 +882,6 @@ export function sampleSession(
       : null,
     can: { ...ALL_ABLE },
     forkedFrom: null,
+    proposals: [],
   }
 }

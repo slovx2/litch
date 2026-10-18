@@ -85,6 +85,7 @@ import { judgeTasks, TASK_NAME, tasksProbe } from './probe-tasks.mjs'
 import { installTerminalKit } from './probe-terminal-kit.mjs'
 import { runTerminalChecks, type TerminalMode } from './probe-terminal-run.mjs'
 import { judgeTools, toolsProbe } from './probe-tools.mjs'
+import { runTreeChecks } from './probe-tree.mjs'
 import type { QuitOutcome } from './quit-terminals.mjs'
 
 type ProbeMode =
@@ -100,6 +101,7 @@ type ProbeMode =
   | 'manage-mock'
   | 'sidebar'
   | 'tasks'
+  | 'tree'
   | 'engines'
   | 'first-turn'
   | TerminalMode
@@ -147,6 +149,7 @@ const PROBE_MODES: readonly string[] = [
   'manage-mock',
   'sidebar',
   'tasks',
+  'tree',
   'engines',
   'first-turn',
   ...TERMINAL_MODES,
@@ -164,6 +167,7 @@ export const MOCK_MODES: readonly string[] = [
   'manage-mock',
   'sidebar',
   'tasks',
+  'tree',
   'terminal',
   'files',
   'diff',
@@ -247,6 +251,7 @@ async function measure(
     const result = await runInPage(window, tasksProbe, TASK_NAME)
     return [result, judgeTasks(result, TASK_NAME)]
   }
+  if (mode === 'tree') return runTreeChecks(window)
   if (mode === 'engines') return runEnginesChecks(window, hooks)
   if (mode === 'first-turn') return runFirstTurnChecks(window)
   if (mode === 'diff' || mode === 'diff-device' || mode === 'diff-entry') {

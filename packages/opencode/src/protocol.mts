@@ -13,6 +13,7 @@ import { codexUserAgent, platformFamily, platformOs } from '../../shared/src/run
 import { PINNED_SECTION, PINNED_SECTION_ID } from '../../shared/src/thread-sections.mjs'
 import type { RpcPeer } from '../../shared/src/types.mjs'
 import { DEFAULT_EFFORT } from './catalog.mjs'
+import { dynamicToolSpecs, toolRules, toolRuleset } from './client-tools.mjs'
 import { envelope, settings } from './envelope.mjs'
 import { threadMutation } from './mutations.mjs'
 import type { OpencodeServer, ThreadSettings } from './server.mjs'
@@ -266,12 +267,30 @@ async function startThread(s: OpencodeServer, peer: RpcPeer, p: any): Promise<an
     setImmediate(() => s.notify(started.id, 'thread/started', { thread: started }))
     return settings(s, live)
   }
-  // 项目不在就不建会话
+  // 项目不在就不建会话；动态工具先校验，不合规矩的不建会话
   if (p.projectId) s.projects.read(p.projectId)
+  const tools = dynamicToolSpecs(p.dynamicTools)
   const api = await s.api()
-  const created = await api.request('POST', '/session', { directory: cwd, body: {} })
+  // 会话的权限规则建的时候就带上动态工具那几条（第一句话经 /command 发时也只看得到自己的工具）；
+  // 会话号这时还没有，先禁掉全部，有动态工具的第一次发消息时再放开自己的
+  const created = await api.request('POST', '/session', {
+    directory: cwd,
+    body: { permission: toolRuleset(toolRules(null)) },
+  })
   if (typeof created?.id !== 'string')
     throw new ProtocolError(-32603, 'OpenCode 建会话没有返回会话号')
+  if (tools.length) {
+    s.clientTools.remember(created.id, p.dynamicTools)
+    // 有了会话号再放开自己的服务（OpenCode 把这几条接在原有规则后面；之后每次发消息整个替换）
+    await api
+      .request('PATCH', `/session/${created.id}`, {
+        directory: cwd,
+        body: { permission: toolRuleset(toolRules(created.id)) },
+      })
+      .catch((error) =>
+        console.error(`[opencode] 会话 ${created.id} 的工具规则没有写上: ${error.message}`),
+      )
+  }
   s.sessions.saveSettings(created.id, base)
   const live = await s.load(created.id)
   const { thread } = live.projection

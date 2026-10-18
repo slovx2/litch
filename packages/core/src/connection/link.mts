@@ -197,6 +197,8 @@ export function createLink(options: LinkOptions): Link {
                 EXTENSION.planConfirmation,
                 // deviceTasks：声明了才收得到定时任务和运行的变化通知（litch/task/changed、litch/task/run/changed）
                 EXTENSION.deviceTasks,
+                // sessionTree：声明了，会话对象上才有 Litch 子会话的 litchLineage，才收得到父子关系、提案变了的通知
+                EXTENSION.sessionTree,
                 // clientTools：litch_ 开头的命名空间的工具调用交给声明了的连接执行（内置浏览器、Computer Use）
                 ...(tools.length > 0 ? [EXTENSION.clientTools] : []),
               ],

@@ -12,6 +12,8 @@ export {
   declaredClientToolNamespaces,
   isClientToolNamespace,
 } from './client-tools.mjs'
+export type * from './client-tools-sessions.mjs'
+export { SESSION_TOOL, SESSION_TOOL_LIMITS, SESSION_TOOLS } from './client-tools-sessions.mjs'
 // litch_tasks 工具（模型建定时任务），执行方是设备服务
 export type * from './client-tools-tasks.mjs'
 export { TASKS_TOOLS } from './client-tools-tasks.mjs'
@@ -98,6 +100,16 @@ export type {
   ServerRequests,
 } from './methods.mjs'
 export { isUnknownMethodError, RPC_ERROR } from './methods.mjs'
+// 会话树（sessionTree 扩展）：子会话的父子关系、提案、回报与唤醒；模型用的 litch_sessions 工具。不依赖别的文件
+export type * from './session-tree.mjs'
+export {
+  formatSessionEvent,
+  parseSessionEvent,
+  SESSION_EVENT_TAG,
+  SESSION_TREE_LIMITS,
+  SESSION_TREE_METHOD,
+  SESSION_TREE_NOTIFICATION,
+} from './session-tree.mjs'
 // 定时任务的日程：校验、下一次、错过了几次。只用标准库
 export type * from './task-schedule.mjs'
 export {

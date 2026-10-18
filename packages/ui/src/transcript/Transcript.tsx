@@ -2,6 +2,7 @@ import {
   activitySettled,
   type Block,
   bucketItems,
+  cardOf,
   type DeviceView,
   type ItemView,
   keys,
@@ -28,6 +29,8 @@ import { useKey, useServices } from '../app/services.tsx'
 import { Dock, Requests } from '../composer/Dock.tsx'
 import type { MessageKey, Translator } from '../i18n/index.ts'
 import { TaskNote } from '../tasks/TaskNote.tsx'
+import { LineageBar } from '../tree/LineageBar.tsx'
+import { TreeCard } from '../tree/TreeCards.tsx'
 import { ActionsProvider } from './actions.tsx'
 import { Activity, Notes } from './activity.tsx'
 import { FileLinksProvider, useSessionFileLinks } from './FileLinks.tsx'
@@ -58,7 +61,9 @@ function useBlocks({ deviceId, sessionId }: SessionRef, itemIds: string[]): Turn
       inputs.push(
         item.kind === 'agentMessage'
           ? { id, kind: item.kind, phase: item.phase }
-          : { id, kind: item.kind },
+          : cardOf(item)
+            ? { id, kind: item.kind, card: true }
+            : { id, kind: item.kind },
       )
     }
     return { blocks: bucketItems(inputs), kinds }
@@ -204,6 +209,8 @@ const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { 
           return <PlanCard key={block.itemId} {...ref} itemId={block.itemId} />
         if (block.type === 'todo')
           return <TodoCard key={block.itemId} {...ref} itemId={block.itemId} />
+        if (block.type === 'card')
+          return <TreeCard key={block.itemId} {...ref} itemId={block.itemId} />
         if (block.type === 'notes')
           return <Notes key={block.key} {...ref} itemIds={block.itemIds} />
         return (
@@ -327,7 +334,10 @@ export function Transcript({ deviceId, sessionId, footer, onOpen }: TranscriptPr
             <FileLinksProvider value={fileLinks}>
               <ActionsProvider value={actions}>
                 {turnIds && !failure ? (
-                  <ForkedFrom deviceId={deviceId} sessionId={sessionId} onOpen={onOpen} />
+                  <>
+                    <ForkedFrom deviceId={deviceId} sessionId={sessionId} onOpen={onOpen} />
+                    <LineageBar deviceId={deviceId} sessionId={sessionId} onOpen={onOpen} />
+                  </>
                 ) : null}
                 {turnIds && !failure ? (
                   <TaskNote deviceId={deviceId} sessionId={sessionId} />

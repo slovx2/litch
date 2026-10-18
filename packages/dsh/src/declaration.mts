@@ -1,6 +1,8 @@
 // dsh 引擎的结构化声明：`runtime/info` 里给客户端照着画界面的那部分。
 // 每一位说的是“经这个适配器实际做得到”，依据写在旁边；改了对应的实现要回来改这里，
 // test/declaration.test.mts 守着声明和行为一致。
+
+import { EXTENSION } from '../../protocol/src/device.mjs'
 import type {
   HarnessDeclaration,
   HarnessFeatures,
@@ -58,7 +60,9 @@ export const declaration: HarnessDeclaration = {
   ...HARNESS_IDENTITY.dsh,
   // dsh 的审批裁决只有“允许这一次”和“拒绝”，拒绝的理由是固定的一句话，带不了用户写的说明：
   // 所以不支持 declineWithNote，审批请求里也不列它。
-  extensions: [],
+  // litch_ 命名空间的动态工具只交给声明了 clientTools 的连接（server.mts 的 clientToolCall），
+  // 工具经 dsh 里的插件交给模型（client-tools.mts）。
+  extensions: [EXTENSION.clientTools],
   features,
   // dsh 的沙箱只管写文件：三档都能读任何文件，也都不限制联网。
   permissionPresets: [
