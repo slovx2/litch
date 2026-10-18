@@ -106,6 +106,7 @@ async function fork(s: OpencodeServer, peer: RpcPeer, live: LiveThread, p: any):
   })
   s.store.setMeta('thread', created.id, { forkedFromId: thread.id })
   s.sessions.saveSettings(created.id, { ...live.settings })
+  s.clientTools.copy(thread.id, created.id)
   if (thread.preview) s.store.setMeta('display', created.id, { preview: thread.preview })
   const forked = await s.load(created.id)
   s.subscribe(peer, created.id)

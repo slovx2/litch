@@ -56,7 +56,8 @@ export function client(server: OpencodeServer, declare: string[] = []) {
         if (result !== undefined) void server.handle(peer, { jsonrpc: '2.0', id: wire.id, result })
       } else if (wire.method) {
         checked(() => assertNotification(wire.method, wire.params))
-        notifications.push(wire)
+        // 记下发出那一刻的样子（真实线路上发出时就序列化了，之后投影再改条目也不影响）
+        notifications.push(structuredClone(wire))
       } else waiting.get(String(wire.id))?.(wire)
     },
   }

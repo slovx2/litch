@@ -60,7 +60,8 @@ export const declaration: HarnessDeclaration = {
   // 名字和徽标不在这里写：和设置里这一组的标题是同一个出处
   ...HARNESS_IDENTITY.opencode,
   // 拒绝时附的说明经 OpenCode 的权限应答交给模型，模型接着干（approvals.mts）。
-  extensions: [EXTENSION.declineWithNote],
+  // 动态工具经适配器的 MCP 服务交给 OpenCode，litch_ 命名空间的调用照 clientTools 的规矩挑执行方（client-tools.mts）。
+  extensions: [EXTENSION.declineWithNote, EXTENSION.clientTools],
   features,
   // OpenCode 没有沙箱：三档的差别只在给不给工具、问不问。
   permissionPresets: [

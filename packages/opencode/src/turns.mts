@@ -67,11 +67,18 @@ export class Turns {
   private async body(live: LiveThread, preset: Preset) {
     const { model, effort } = await this.selection(live)
     const ref = splitModel(model)
+    const { thread } = live.projection
     return {
       ...(ref ? { model: { providerID: ref.providerID, modelID: ref.modelID } } : {}),
       ...(effort && effort !== DEFAULT_EFFORT ? { variant: effort } : {}),
       ...(live.settings.plan ? { agent: 'plan' } : {}),
-      tools: presetTools(preset),
+      tools: {
+        ...presetTools(preset),
+        // 子代理的会话直接发话时照 OpenCode 给子代理的默认：不能再派子代理、不记待办
+        ...(thread.parentThreadId ? { task: false, todowrite: false } : {}),
+        // 动态工具的 MCP 服务只给自己的会话看（client-tools.mts）
+        ...this.server.clientTools.rules(thread.id),
+      },
       ref,
       effort,
     }
@@ -101,9 +108,11 @@ export class Turns {
     if (clientId) live.submitted.set(clientId, turn)
     const preset = live.settings.preset
     live.turnPreset = preset
+    live.starter = { turnId: turn.id, peerId: peer.id }
     const deliver = async () => {
       try {
         const api = await this.server.api()
+        await this.server.clientTools.ensure(api, live)
         const { ref, effort, ...body } = await this.body(live, preset)
         const options = { directory: live.directory }
         if (input.command) {
@@ -184,7 +193,9 @@ export class Turns {
       ...body
     } = await this.body(live, live.turnPreset ?? live.settings.preset)
     // 会话忙着的时候再发一句，OpenCode 在当前这一步结束后把它并进正在跑的循环，不打断正在进行的输出。
-    await (await this.server.api()).request('POST', `/session/${threadId}/prompt_async`, {
+    const api = await this.server.api()
+    await this.server.clientTools.ensure(api, live)
+    await api.request('POST', `/session/${threadId}/prompt_async`, {
       directory: live.directory,
       body: { messageID: id, parts: input.parts, ...body },
     })
