@@ -169,7 +169,7 @@ export function useSheet({
           onPress: () => setWorkspaceEdit({ kind: 'add' }),
         })
       actions.push({
-        label: t('timed.title'),
+        label: t('tasks.title'),
         testID: 'menu:screen:tasks',
         onPress: () => navigation.navigate('Tasks', { deviceId }),
       })

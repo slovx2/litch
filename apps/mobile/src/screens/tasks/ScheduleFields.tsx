@@ -1,51 +1,49 @@
-// 表单里的日程一块：日程种类一排、按种类出的几栏（时刻、星期、每月第几天、间隔……）、时区、
-// 底下一行“下一次在…”的预览（preview.ts，和设备上排日程用的是同一套函数）。
-// 敲进去的字留原文，失去焦点时把时刻整理成 HH:MM；读不成日程的那一栏标红。
-
+// 表单里的日程一块：多久一次的一排、按种类出的几栏（时刻、星期、几号、间隔……）、时区、
+// 底下一行“下一次在…”的预览。表单的样子和校验、预览都用桌面界面那一份纯逻辑（packages/ui/src/tasks/form.ts、
+// preview.ts），这里只管手机上怎么画：数字栏敲的是字，空着或不是整数时交给 checkForm 说；时刻失去焦点时整理成 HH:MM。
+import type { TaskWeekday } from '@litch/core'
 import { type ReactNode, useState } from 'react'
 import { StyleSheet, Switch, Text, View } from 'react-native'
-import type {
-  TaskScheduleType,
-  TaskWeekday,
-} from '../../../../../packages/protocol/src/device-tasks.mjs'
-import { MIN_TASK_INTERVAL_MINUTES } from '../../../../../packages/protocol/src/task-schedule.mjs'
+import { WEEKDAYS, whenText } from '../../../../../packages/ui/src/tasks/describe.ts'
+import {
+  type FormField,
+  type FormProblems,
+  REPEATS,
+  type TaskForm,
+  toggleDay,
+} from '../../../../../packages/ui/src/tasks/form.ts'
+import type { Preview } from '../../../../../packages/ui/src/tasks/preview.ts'
 import { PickerSheet } from '../../detail/composer/PickerSheet'
 import { useT } from '../../ui/i18n'
 import { Chip, Field, Row } from '../../ui/kit/controls'
 import { Prompt } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
-import type { Preview } from './preview'
-import {
-  dayName,
-  SCHEDULE_TYPES,
-  type ScheduleForm,
-  tidyTime,
-  typeName,
-  WEEKDAYS,
-} from './schedule'
-import { whenText } from './when'
-import { zoneChoices, zoneOk } from './zones'
+import { numberOf, textOf, tidyTime } from './time'
+import { zoneChoices } from './zones'
+
+const DEVICE = '\u0000device'
+const OTHER = '\u0000other'
 
 export function ScheduleFields({
   form,
   onChange,
-  timezone,
-  onTimezone,
+  problems,
   localZone,
   originalZone,
+  editing,
   preview,
   now,
 }: {
-  form: ScheduleForm
-  onChange(patch: Partial<ScheduleForm>): void
-  timezone: string
-  onTimezone(zone: string): void
+  form: TaskForm
+  onChange(patch: Partial<TaskForm>): void
+  problems: FormProblems
   /** 手机所在的时区 */
   localZone: string
   /** 编辑时任务原来的时区 */
   originalZone: string | null
+  /** 编辑：没有“设备的时区”这一档（任务已经有自己的时区了） */
+  editing: boolean
   preview: Preview
-  /** 毫秒 */
   now: number
 }) {
   const t = useT()
@@ -53,213 +51,199 @@ export function ScheduleFields({
   const { c } = theme
   const [zonePicking, setZonePicking] = useState(false)
   const [zoneTyping, setZoneTyping] = useState(false)
-  const [zoneError, setZoneError] = useState<string | null>(null)
-  const bad = (field: keyof ScheduleForm) =>
-    preview.kind === 'form' && preview.field === field
-      ? t(preview.message, preview.args ?? {})
-      : undefined
-  const pickType = (type: TaskScheduleType) => onChange({ type })
-  const toggleDay = (day: TaskWeekday) =>
-    onChange({
-      days: form.days.includes(day)
-        ? form.days.filter((each) => each !== day)
-        : [...form.days, day],
-    })
-  const tidy = (field: 'time' | 'onceTime') => () => {
-    const tidied = tidyTime(form[field])
-    if (tidied && tidied !== form[field]) onChange({ [field]: tidied })
+  const bad = (field: FormField) => {
+    const key = problems[field]
+    return key ? t(key) : undefined
   }
-  const timeField = (field: 'time' | 'onceTime') => (
+  const [date = '', clock = ''] = form.at.split('T')
+  const timeField = (
+    value: string,
+    set: (text: string) => void,
+    field: FormField,
+    testID: string,
+  ) => (
     <Field
-      label={t('timed.field.time')}
-      value={form[field]}
-      onChangeText={(text) => onChange({ [field]: text })}
-      onEndEditing={tidy(field)}
+      label={t('tasks.form.time')}
+      value={value}
+      onChangeText={set}
+      onEndEditing={() => {
+        const tidied = tidyTime(value)
+        if (tidied && tidied !== value) set(tidied)
+      }}
       keyboardType="numbers-and-punctuation"
       placeholder="09:00"
       error={bad(field)}
-      testID={`task:${field}`}
+      testID={testID}
     />
   )
-  const dayChips = (
+  const dayChips = (days: TaskWeekday[], set: (days: TaskWeekday[]) => void) => (
     <View style={styles.chips}>
       {WEEKDAYS.map((day) => (
         <Chip
           key={day}
-          label={dayName(day, t)}
-          on={form.days.includes(day)}
-          onPress={() => toggleDay(day)}
+          label={t(`tasks.dayName.${day}`)}
+          on={days.includes(day)}
+          onPress={() => set(toggleDay(days, day))}
           testID={`task:day:${day}`}
         />
       ))}
     </View>
   )
-  const daysError = bad('days')
-  const numberField = (
-    field: 'monthDay' | 'intervalHours' | 'minute' | 'minutes',
-    label: string,
-    hint?: string,
-  ) => (
+  const numberField = (field: 'monthDay' | 'hours' | 'minute' | 'minutes', label: string) => (
     <Field
       label={label}
-      value={form[field]}
-      onChangeText={(text) => onChange({ [field]: text })}
+      value={textOf(form[field])}
+      onChangeText={(text) => onChange({ [field]: numberOf(text) })}
       keyboardType="number-pad"
       error={bad(field)}
-      hint={hint}
       testID={`task:${field}`}
     />
   )
+  const daysError = bad('days')
 
   let fields: ReactNode = null
-  switch (form.type) {
+  switch (form.repeat) {
     case 'daily':
     case 'weekdays':
-      fields = timeField('time')
+      fields = timeField(form.time, (time) => onChange({ time }), 'time', 'task:time')
       break
     case 'weekly':
       fields = (
         <>
-          <Text style={[styles.label, { color: c.ink2 }]}>{t('timed.field.days')}</Text>
-          {dayChips}
+          <Text style={[styles.label, { color: c.ink2 }]}>{t('tasks.form.days')}</Text>
+          {dayChips(form.days, (days) => onChange({ days }))}
           {daysError ? <Text style={[styles.hint, { color: c.err }]}>{daysError}</Text> : null}
-          {timeField('time')}
+          {timeField(form.time, (time) => onChange({ time }), 'time', 'task:time')}
         </>
       )
       break
     case 'monthly':
       fields = (
         <>
-          {numberField('monthDay', t('timed.field.monthDay'), t('timed.field.monthDay.note'))}
-          {timeField('time')}
+          {numberField('monthDay', t('tasks.form.monthDay'))}
+          <Text style={[styles.hint, { color: c.ink3 }]}>{t('timed.monthDay.note')}</Text>
+          {timeField(form.time, (time) => onChange({ time }), 'time', 'task:time')}
         </>
       )
       break
-    case 'hourly':
+    case 'hourly': {
+      const allDays = form.hourlyDays.length === 0
       fields = (
         <>
-          {numberField('intervalHours', t('timed.field.intervalHours'))}
-          {numberField('minute', t('timed.field.minute'))}
+          {numberField('hours', t('tasks.form.hours'))}
+          {numberField('minute', t('tasks.form.minute'))}
           <View style={styles.switchRow}>
-            <Text style={[styles.switchText, { color: c.ink }]}>{t('timed.field.allDays')}</Text>
+            <Text style={[styles.switchText, { color: c.ink }]}>{t('tasks.form.allDays')}</Text>
             <Switch
               testID="task:allDays"
-              value={form.hourlyAllDays}
-              onValueChange={(value) => onChange({ hourlyAllDays: value })}
+              value={allDays}
+              onValueChange={(value) =>
+                onChange({ hourlyDays: value ? [] : ['MO', 'TU', 'WE', 'TH', 'FR'] })
+              }
             />
           </View>
-          {form.hourlyAllDays ? null : dayChips}
-          {daysError ? <Text style={[styles.hint, { color: c.err }]}>{daysError}</Text> : null}
+          {allDays ? null : dayChips(form.hourlyDays, (hourlyDays) => onChange({ hourlyDays }))}
         </>
       )
       break
+    }
     case 'interval':
-      fields = numberField('minutes', t('timed.field.minutes', { min: MIN_TASK_INTERVAL_MINUTES }))
+      fields = numberField('minutes', t('tasks.form.minutes'))
       break
     case 'once':
       fields = (
         <>
           <Field
-            label={t('timed.field.date')}
-            value={form.date}
-            onChangeText={(text) => onChange({ date: text })}
+            label={t('timed.date')}
+            value={date}
+            onChangeText={(text) => onChange({ at: `${text}T${clock}` })}
             keyboardType="numbers-and-punctuation"
             placeholder="2026-10-20"
-            error={bad('date')}
+            error={bad('at')}
             testID="task:date"
           />
-          {timeField('onceTime')}
+          {timeField(clock, (text) => onChange({ at: `${date}T${text}` }), 'at', 'task:onceTime')}
         </>
       )
       break
   }
 
   const previewText =
-    preview.kind === 'next'
-      ? t('timed.preview', { when: whenText(preview.at, now, t) })
-      : preview.kind === 'never'
-        ? t('timed.preview.never')
-        : preview.kind === 'invalid'
-          ? preview.message
-          : null
-  const zones = zoneChoices(localZone, originalZone, timezone)
-  const zoneLabel = (zone: string) =>
-    zone === localZone
-      ? t('timed.field.timezone.local', { zone })
-      : zone === originalZone
-        ? t('timed.field.timezone.device', { zone })
-        : zone
+    preview.kind === 'at'
+      ? preview.estimated
+        ? t('timed.preview.estimated', { when: whenText(preview.ms, now, t) })
+        : t('tasks.form.preview', { when: whenText(preview.ms, now, t) })
+      : preview.kind === 'none'
+        ? t('tasks.form.previewNone')
+        : t('tasks.form.previewUnknown')
+  const zoneLabel = (zone: string | null) =>
+    zone === null
+      ? t('tasks.form.deviceZone')
+      : zone === localZone
+        ? t('timed.zone.local', { zone })
+        : zone === originalZone
+          ? t('timed.zone.task', { zone })
+          : zone
+  const zones = zoneChoices(localZone, originalZone, form.timezone)
   return (
     <View>
       <View style={[styles.chips, styles.pad]}>
-        {SCHEDULE_TYPES.map((type) => (
+        {REPEATS.map((repeat) => (
           <Chip
-            key={type}
-            label={typeName(type, t)}
-            on={form.type === type}
-            onPress={() => pickType(type)}
-            testID={`task:type:${type}`}
+            key={repeat}
+            label={t(`tasks.repeat.${repeat}`)}
+            on={form.repeat === repeat}
+            onPress={() => onChange({ repeat })}
+            testID={`task:type:${repeat}`}
           />
         ))}
       </View>
       <View style={[styles.pad, styles.fields]}>{fields}</View>
       <Row
-        title={t('timed.field.timezone')}
-        detail={zoneLabel(timezone)}
+        title={t('tasks.form.timezone')}
+        detail={zoneLabel(form.timezone)}
         testID="task:timezone"
         onPress={() => setZonePicking(true)}
       />
-      {previewText ? (
-        <Text
-          testID="task:preview"
-          style={[
-            styles.preview,
-            {
-              color: preview.kind === 'next' ? c.ink : c.err,
-              fontFamily: theme.font.mono,
-            },
-          ]}
-        >
-          {previewText}
-        </Text>
+      {problems.timezone ? (
+        <Text style={[styles.preview, { color: c.err }]}>{t(problems.timezone)}</Text>
       ) : null}
+      <Text
+        testID="task:preview"
+        style={[
+          styles.preview,
+          { color: preview.kind === 'at' ? c.ink : c.ink3, fontFamily: theme.font.mono },
+        ]}
+      >
+        {previewText}
+      </Text>
       <PickerSheet
         visible={zonePicking}
-        title={t('timed.field.timezone')}
-        value={timezone}
+        title={t('tasks.form.timezone')}
+        value={form.timezone ?? DEVICE}
         search={t('composer.modelSearch')}
         options={[
+          ...(editing ? [] : [{ id: DEVICE, title: zoneLabel(null) }]),
           ...zones.map((zone) => ({ id: zone, title: zoneLabel(zone) })),
-          { id: '', title: t('timed.field.timezone.other') },
+          { id: OTHER, title: t('tasks.form.otherZone') },
         ]}
-        onPick={(zone) => {
+        onPick={(id) => {
           setZonePicking(false)
-          if (zone) onTimezone(zone)
-          else setZoneTyping(true)
+          if (id === OTHER) setZoneTyping(true)
+          else onChange({ timezone: id === DEVICE ? null : id })
         }}
         onClose={() => setZonePicking(false)}
         testID="task:zones"
       />
       <Prompt
         visible={zoneTyping}
-        title={t('timed.field.timezone.prompt')}
-        initial={timezone}
-        placeholder="Asia/Shanghai"
+        title={t('tasks.form.timezone')}
+        initial={form.timezone ?? ''}
+        placeholder={t('tasks.form.zonePlaceholder')}
         submitLabel={t('form.confirm')}
-        onSubmit={(zone) => {
-          const name = zone.trim()
-          if (zoneOk(name)) {
-            setZoneError(null)
-            onTimezone(name)
-          } else setZoneError(t('timed.field.timezone.bad'))
-        }}
+        onSubmit={(zone) => onChange({ timezone: zone.trim() })}
         onClose={() => setZoneTyping(false)}
       />
-      {zoneError ? (
-        <Text style={[styles.preview, { color: c.err }]} testID="task:timezone:error">
-          {zoneError}
-        </Text>
-      ) : null}
     </View>
   )
 }

@@ -11,6 +11,12 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useEffect, useState } from 'react'
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { whyNot } from '../../../../../packages/ui/src/app/errors.ts'
+import {
+  errorText,
+  scheduleLine,
+  viewerZone,
+  whenText,
+} from '../../../../../packages/ui/src/tasks/describe.ts'
 import type { RootStackParamList } from '../../nav/routes'
 import { useBusy, useChannel, useKey, useReplica } from '../../shell/services'
 import { useT } from '../../ui/i18n'
@@ -20,11 +26,8 @@ import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
 import { InfoLine } from '../devices/parts'
 import { useNow } from '../sessions/clock'
-import { errorText, runLines } from './lines'
-import { describeSchedule } from './schedule'
-import { useTargetLine } from './target'
-import { whenText } from './when'
-import { phoneZone } from './zones'
+import { runLines } from './lines'
+import { useOriginLine, useTargetLine } from './target'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'TaskDetail'>
 
@@ -39,23 +42,24 @@ export function TaskDetailScreen({ route, navigation }: Props) {
   const t = useT()
   const now = useNow()
   const target = useTargetLine(deviceId, task?.target)
+  const origin = useOriginLine(deviceId, task?.origin)
   const [running, runNow] = useBusy()
   const [toggling, toggle] = useBusy()
   const [deleting, setDeleting] = useState(false)
   const [said, setSaid] = useState<{ text: string; bad: boolean } | null>(null)
   useEffect(() => replica.openTaskRuns(deviceId, taskId), [replica, deviceId, taskId])
   const page = useKey<TaskRunsPage>(keys.taskRuns(deviceId, taskId))
-  const title = task?.name ?? route.params.title ?? t('timed.title')
+  const title = task?.name ?? route.params.title ?? t('tasks.title')
   const online = device?.connection === 'online'
 
   const fail = (failed: unknown) =>
-    setSaid({ text: t('timed.failed', { reason: whyNot(failed, t) }), bad: true })
+    setSaid({ text: t('tasks.failed', { reason: whyNot(failed, t) }), bad: true })
   const doRunNow = () => {
     setSaid(null)
     runNow(channel.command('tasks.runNow', { deviceId, taskId })).then(
       (result) =>
         setSaid({
-          text: t(result.deduplicated ? 'timed.runNow.dedup' : 'timed.runNow.started'),
+          text: t(result.deduplicated ? 'tasks.detail.already' : 'tasks.detail.started'),
           bad: false,
         }),
       fail,
@@ -77,14 +81,14 @@ export function TaskDetailScreen({ route, navigation }: Props) {
   if (!task) {
     return (
       <Screen title={title} testID="task-detail">
-        <Empty title={t('timed.gone')} />
+        <Empty title={t('tasks.detail.gone')} />
       </Screen>
     )
   }
   const statusLine =
     task.status === 'active' && task.nextRunAt !== null
-      ? `${t('timed.status.active')} · ${t('timed.next', { when: whenText(task.nextRunAt, now, t) })}`
-      : t(`timed.status.${task.status}`)
+      ? whenText(task.nextRunAt, now, t)
+      : t(`tasks.status.${task.status}`)
   return (
     <Screen
       title={title}
@@ -92,7 +96,7 @@ export function TaskDetailScreen({ route, navigation }: Props) {
       wire={device ? c.wire[device.wire] : undefined}
       actions={[
         {
-          label: t('timed.action.edit'),
+          label: t('tasks.detail.edit'),
           testID: 'task:edit',
           disabled: !online,
           onPress: () => navigation.navigate('TaskEdit', { deviceId, taskId }),
@@ -102,19 +106,19 @@ export function TaskDetailScreen({ route, navigation }: Props) {
     >
       <ScrollView>
         <InfoLine
-          label={t('timed.field.schedule')}
-          value={describeSchedule(task.schedule, task.timezone, phoneZone(), t)}
+          label={t('tasks.detail.schedule')}
+          value={scheduleLine(task, t, viewerZone(), now)}
           testID="task:detail:schedule"
         />
-        <InfoLine label={t('timed.field.state')} value={statusLine} testID="task:detail:status" />
-        <InfoLine label={t('timed.field.target')} value={target} />
-        <InfoLine
-          label={t('timed.field.timezone')}
-          value={`${task.timezone} · ${t(task.origin.kind === 'tool' ? 'timed.origin.tool' : 'timed.origin.client')}`}
-        />
+        <InfoLine label={t('tasks.detail.next')} value={statusLine} testID="task:detail:status" />
+        <InfoLine label={t('tasks.detail.target')} value={target} />
+        <InfoLine label={t('tasks.detail.origin')} value={origin} />
         {task.lastError ? (
           <Text testID="task:detail:error" style={[styles.note, { color: c.err }]}>
-            {t('timed.lastError', { reason: errorText(task.lastError, t) })}
+            {t('tasks.error.line', {
+              reason: t('tasks.detail.lastError'),
+              message: errorText(task.lastError, t),
+            })}
           </Text>
         ) : null}
         <Text
@@ -125,7 +129,7 @@ export function TaskDetailScreen({ route, navigation }: Props) {
         </Text>
         <View style={styles.buttons}>
           <Button
-            label={t('timed.action.runNow')}
+            label={t('tasks.detail.runNow')}
             testID="task:runNow"
             busy={running}
             disabled={!online}
@@ -133,7 +137,7 @@ export function TaskDetailScreen({ route, navigation }: Props) {
           />
           <Button
             kind="plain"
-            label={t(task.status === 'paused' ? 'timed.action.resume' : 'timed.action.pause')}
+            label={t(task.status === 'paused' ? 'tasks.detail.resume' : 'tasks.detail.pause')}
             testID="task:toggle"
             busy={toggling}
             disabled={!online || task.status === 'completed'}
@@ -141,7 +145,7 @@ export function TaskDetailScreen({ route, navigation }: Props) {
           />
           <Button
             kind="danger"
-            label={t('timed.action.delete')}
+            label={t('tasks.detail.delete')}
             testID="task:delete"
             disabled={!online}
             onPress={() => setDeleting(true)}
@@ -153,7 +157,7 @@ export function TaskDetailScreen({ route, navigation }: Props) {
           </Text>
         ) : null}
         {!online ? (
-          <Text style={[styles.note, { color: c.ink3 }]}>{t('timed.device.offline')}</Text>
+          <Text style={[styles.note, { color: c.ink3 }]}>{t('tasks.detail.offline')}</Text>
         ) : null}
 
         <SectionLabel
@@ -170,7 +174,7 @@ export function TaskDetailScreen({ route, navigation }: Props) {
             ) : undefined
           }
         >
-          {t('timed.runs')}
+          {t('tasks.detail.runs')}
         </SectionLabel>
         {(page?.runs ?? []).map((run) => {
           const lines = runLines(run, now, t)
@@ -179,18 +183,18 @@ export function TaskDetailScreen({ route, navigation }: Props) {
               key={run.id}
               testID={`run:${run.id}`}
               title={lines.title}
-              detail={lines.detail || (run.threadId ? undefined : t('timed.run.noThread'))}
+              detail={lines.detail || (run.threadId ? undefined : t('tasks.run.pending'))}
               left={<StatusMark status={lines.mark} />}
               onPress={run.threadId ? () => openRun(run) : undefined}
             />
           )
         })}
         {page && !page.loading && page.runs.length === 0 && !page.error ? (
-          <Text style={[styles.note, { color: c.ink3 }]}>{t('timed.runs.empty')}</Text>
+          <Text style={[styles.note, { color: c.ink3 }]}>{t('tasks.detail.noRuns')}</Text>
         ) : null}
         {page?.error ? (
           <Text style={[styles.note, { color: c.err }]}>
-            {t('timed.failed', { reason: whyNot(page.error, t) })}
+            {t('tasks.failed', { reason: whyNot(page.error, t) })}
           </Text>
         ) : null}
         {!page || page.loading ? (
@@ -199,7 +203,7 @@ export function TaskDetailScreen({ route, navigation }: Props) {
           <View style={styles.more}>
             <Button
               kind="plain"
-              label={t('timed.runs.more')}
+              label={t('tasks.detail.more')}
               testID="task:runs:more"
               onPress={() => replica.moreTaskRuns(deviceId, taskId)}
             />
@@ -210,9 +214,9 @@ export function TaskDetailScreen({ route, navigation }: Props) {
       <Confirm
         visible={deleting}
         danger
-        title={t('timed.delete.title', { name: task.name })}
-        detail={t('timed.delete.detail')}
-        confirmLabel={t('timed.action.delete')}
+        title={t('tasks.detail.deleteAsk')}
+        detail={t('tasks.detail.deleteNote')}
+        confirmLabel={t('tasks.detail.delete')}
         onConfirm={() => {
           channel
             .command('tasks.delete', { deviceId, taskId })

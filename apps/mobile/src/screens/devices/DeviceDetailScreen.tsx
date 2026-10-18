@@ -37,7 +37,7 @@ function TasksLine({ deviceId, onPress }: { deviceId: string; onPress(): void })
     <Row
       testID="detail:tasks"
       title={t('timed.entry.count', { count: ids.length })}
-      detail={available === false ? t('timed.device.unsupported') : t('timed.entry.none')}
+      detail={available === false ? t('tasks.unsupported') : t('timed.entry.none')}
       onPress={onPress}
     />
   )
@@ -158,7 +158,7 @@ export function DeviceDetailScreen({ route, navigation }: Props) {
           </View>
         ) : null}
 
-        <SectionLabel>{t('timed.title')}</SectionLabel>
+        <SectionLabel>{t('tasks.title')}</SectionLabel>
         <TasksLine deviceId={deviceId} onPress={() => navigation.navigate('Tasks', { deviceId })} />
 
         <SectionLabel>{t('manage.harness.title')}</SectionLabel>

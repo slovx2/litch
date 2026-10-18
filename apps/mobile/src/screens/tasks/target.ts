@@ -1,9 +1,10 @@
-// 任务的目标说成一行：每次新建会话（harness、项目或目录），或者在哪个会话里接着发（harness、会话名）。
-// 会话名、项目名、harness 名都从订阅里拿：会话不在列表里了就说一声。
+// 任务详情里的两行：到点之后做什么（每次新建会话的 harness、项目或目录；或者在哪个会话里接着发），
+// 任务是怎么来的（界面上建的，或者模型在哪个会话里建的）。会话名、项目名、harness 名都从订阅里拿。
 import {
   type DeviceView,
   keys,
   type SessionSummary,
+  type TaskOrigin,
   type TaskTarget,
   type WorkspaceView,
 } from '@litch/core'
@@ -21,15 +22,26 @@ export function useTargetLine(deviceId: string, target: TaskTarget | undefined):
   const harness =
     device?.harnesses.find((entry) => entry.id === target.harness)?.name ?? target.harness
   if (target.kind === 'thread')
-    return t('timed.target.summary.thread', {
+    return [
+      t('tasks.detail.inThread'),
       harness,
-      title: summary ? t.text(summary.title) : t('timed.target.thread.gone'),
-    })
+      summary ? t.text(summary.title) : t('tasks.run.gone'),
+    ].join(' · ')
   const workspace = target.workspaceId
     ? workspaces?.find((entry) => entry.id === target.workspaceId)
     : undefined
-  return t('timed.target.summary.new', {
-    harness,
-    where: workspace ? `${workspace.name} (${target.cwd})` : target.cwd,
-  })
+  const where = workspace ? `${workspace.name} (${target.cwd})` : target.cwd
+  return [t('tasks.detail.newThread'), harness, where].join(' · ')
+}
+
+export function useOriginLine(deviceId: string, origin: TaskOrigin | undefined): string {
+  const t = useT()
+  const summary = useKey<SessionSummary>(
+    keys.summary(deviceId, origin?.kind === 'tool' ? origin.threadId : ''),
+  )
+  if (!origin) return ''
+  if (origin.kind === 'client') return t('tasks.detail.origin.client')
+  return summary
+    ? t('tasks.detail.origin.tool', { title: t.text(summary.title) })
+    : t('tasks.detail.origin.toolGone')
 }

@@ -1,38 +1,16 @@
-// 任务和运行记录在列表里的几行字：日程、下一次、最近一次的状态、错误的说法。纯逻辑，单测在 test/tasks.test.mjs。
-import type { TaskErrorView, TaskRunStatus, TaskRunView, TaskView } from '@litch/core'
-import type { Key, Translator } from '../../ui/i18n'
-import { describeSchedule } from './schedule'
-import { whenText } from './when'
+// 任务和运行记录在列表里的几行字。日程、时间点、运行状态、失败原因的说法用桌面界面那一份
+// （packages/ui/src/tasks/describe.ts，纯函数），这里只管怎么摆成手机上的几行。单测在 test/tasks.test.mjs。
+import type { TaskRunView, TaskView } from '@litch/core'
+import {
+  errorText,
+  runStatusText,
+  scheduleLine,
+  triggerText,
+  whenText,
+} from '../../../../../packages/ui/src/tasks/describe.ts'
+import type { Translator } from '../../ui/i18n'
 
-const RUN_KEY: Record<TaskRunStatus, Key> = {
-  queued: 'timed.run.queued',
-  running: 'timed.run.running',
-  succeeded: 'timed.run.succeeded',
-  failed: 'timed.run.failed',
-  canceled: 'timed.run.canceled',
-}
-
-export const runStatusText = (status: TaskRunStatus, t: Translator): string => t(RUN_KEY[status])
-
-const ERROR_KEY: Record<TaskErrorView['code'], Key> = {
-  harnessUnavailable: 'timed.error.harnessUnavailable',
-  threadMissing: 'timed.error.threadMissing',
-  cwdMissing: 'timed.error.cwdMissing',
-  turnFailed: 'timed.error.turnFailed',
-  timedOut: 'timed.error.timedOut',
-  interrupted: 'timed.error.interrupted',
-  internal: 'timed.error.internal',
-}
-
-/** 错误说成人话；设备给的原话不一样时接在后面 */
-export function errorText(error: TaskErrorView, t: Translator): string {
-  const said = t(ERROR_KEY[error.code] ?? 'timed.error.internal')
-  return error.message && error.message !== said
-    ? t('timed.error.with', { reason: said, message: error.message })
-    : said
-}
-
-/** 状态记号：在跑、排队算 running；暂停、跑完的不显眼；最近一次失败标错；有没看过的标未读 */
+/** 状态记号：在跑、排队算 running；最近一次失败标错；有没看过的标未读；暂停、跑完的不显眼 */
 export type TaskMark = 'idle' | 'running' | 'error' | 'unread' | 'offline'
 
 export interface TaskLines {
@@ -44,22 +22,19 @@ export interface TaskLines {
   mark: TaskMark
 }
 
-export function taskLines(
-  task: TaskView,
-  now: number,
-  localZone: string,
-  t: Translator,
-): TaskLines {
-  const schedule = describeSchedule(task.schedule, task.timezone, localZone, t)
+export function taskLines(task: TaskView, now: number, here: string, t: Translator): TaskLines {
+  const schedule = scheduleLine(task, t, here, now)
   const state: string[] = []
   if (task.status === 'active' && task.nextRunAt !== null)
-    state.push(t('timed.next', { when: whenText(task.nextRunAt, now, t) }))
-  else state.push(t(`timed.status.${task.status}`))
+    state.push(
+      t('timed.row', { label: t('tasks.row.next'), value: whenText(task.nextRunAt, now, t) }),
+    )
+  else state.push(t(`tasks.status.${task.status}`))
   const last = task.lastRun
   if (last) {
-    const status = runStatusText(last.status, t)
     const at = last.finishedAt ?? last.startedAt ?? last.scheduledFor
-    state.push(`${t('timed.last', { status })} ${whenText(at, now, t)}`)
+    const value = `${runStatusText(last.status, t)} ${whenText(at, now, t)}`
+    state.push(t('timed.row', { label: t('tasks.row.last'), value }))
   }
   const running = last?.status === 'running' || last?.status === 'queued'
   const mark: TaskMark = running
@@ -85,16 +60,14 @@ export interface RunLines {
   mark: TaskMark
 }
 
-/** 运行记录的一行：状态、什么时候、怎么来的、合并了几次；摘要或错误在第二行 */
+/** 运行记录的一行：状态、什么时候、怎么来的、合并了几次；错误或摘要在第二行 */
 export function runLines(run: TaskRunView, now: number, t: Translator): RunLines {
-  const at = run.startedAt ?? run.scheduledFor
   const head = [
     runStatusText(run.status, t),
-    whenText(at, now, t),
-    t(run.trigger === 'manual' ? 'timed.run.manual' : 'timed.run.scheduled'),
+    whenText(run.startedAt ?? run.scheduledFor, now, t),
+    triggerText(run.trigger, t),
   ]
-  if (run.coalesced > 0) head.push(t('timed.run.coalesced', { count: run.coalesced }))
-  const body = run.error ? errorText(run.error, t) : (run.summary ?? '')
+  if (run.coalesced > 0) head.push(t('tasks.run.coalesced', { count: run.coalesced }))
   const mark: TaskMark =
     run.status === 'running' || run.status === 'queued'
       ? 'running'
@@ -103,7 +76,9 @@ export function runLines(run: TaskRunView, now: number, t: Translator): RunLines
         : run.read
           ? 'idle'
           : 'unread'
-  // 状态在句中是小写（英文的“Last run failed”），放在行首要大写
-  const title = head.join(' · ')
-  return { title: title.charAt(0).toUpperCase() + title.slice(1), detail: body, mark }
+  return {
+    title: head.join(' · '),
+    detail: run.error ? errorText(run.error, t) : (run.summary ?? ''),
+    mark,
+  }
 }

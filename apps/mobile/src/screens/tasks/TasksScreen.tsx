@@ -4,6 +4,7 @@
 import { type DeviceView, keys, type TaskView } from '@litch/core'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { ScrollView, StyleSheet, Text, View } from 'react-native'
+import { viewerZone } from '../../../../../packages/ui/src/tasks/describe.ts'
 import type { RootStackParamList } from '../../nav/routes'
 import { useKey } from '../../shell/services'
 import { useT } from '../../ui/i18n'
@@ -12,7 +13,6 @@ import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
 import { useNow } from '../sessions/clock'
 import { taskLines } from './lines'
-import { phoneZone } from './zones'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Tasks'>
 type Navigation = Props['navigation']
@@ -31,7 +31,7 @@ function TaskRow({
   const task = useKey<TaskView>(keys.task(deviceId, taskId))
   const t = useT()
   if (!task) return null
-  const lines = taskLines(task, now, phoneZone(), t)
+  const lines = taskLines(task, now, viewerZone(), t)
   return (
     <Row
       testID={`task:${taskId}`}
@@ -65,14 +65,14 @@ function DeviceBlock({
   const online = device.connection === 'online'
   const note =
     available === false
-      ? t('timed.device.unsupported')
-      : ids.length > 0
-        ? null
-        : !online
-          ? t('timed.device.offline')
+      ? t('tasks.unsupported')
+      : !online
+        ? t(ids.length > 0 ? 'tasks.offline' : 'tasks.unknown')
+        : ids.length > 0
+          ? null
           : available === undefined || available === null
-            ? t('timed.device.loading')
-            : t('timed.device.empty')
+            ? t('tasks.loading')
+            : t('tasks.empty')
   return (
     <View testID={`tasks:device:${deviceId}`}>
       {titled ? (
@@ -105,7 +105,7 @@ export function TasksScreen({ route, navigation }: Props) {
   const { c } = useTheme()
   return (
     <Screen
-      title={t('timed.title')}
+      title={t('tasks.title')}
       subtitle={only && device ? t.text(device.name) : undefined}
       wire={only && device ? c.wire[device.wire] : undefined}
       actions={[
@@ -123,7 +123,7 @@ export function TasksScreen({ route, navigation }: Props) {
     >
       <ScrollView>
         {ids.length === 0 ? (
-          <Empty title={t('timed.empty.title')} detail={t('timed.empty.detail')} />
+          <Empty title={t('tasks.title')} detail={t('tasks.intro')} />
         ) : (
           ids.map((id) => (
             <DeviceBlock
@@ -135,7 +135,7 @@ export function TasksScreen({ route, navigation }: Props) {
             />
           ))
         )}
-        <Text style={[styles.foot, { color: c.ink3 }]}>{t('timed.entry.none')}</Text>
+        <Text style={[styles.foot, { color: c.ink3 }]}>{t('tasks.intro')}</Text>
       </ScrollView>
     </Screen>
   )

@@ -4,12 +4,12 @@ import { keys, type SessionTaskMark, type TaskView } from '@litch/core'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { Pressable, StyleSheet, Text } from 'react-native'
+import { triggerText, whenText } from '../../../../../packages/ui/src/tasks/describe.ts'
 import type { RootStackParamList } from '../../nav/routes'
 import { useKey } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { useTheme } from '../../ui/theme'
 import { useNow } from '../sessions/clock'
-import { whenText } from './when'
 
 export function SessionTaskStrip({
   deviceId,
@@ -26,8 +26,12 @@ export function SessionTaskStrip({
   if (!mark || !task) return null
   const text =
     mark.kind === 'run'
-      ? `${t('timed.mark')} · ${task.name} · ${t('timed.run.for', { when: whenText(mark.scheduledFor, now, t) })}`
-      : `${t('timed.mark')} · ${task.name}`
+      ? t('tasks.note.run', {
+          name: task.name,
+          when: whenText(mark.scheduledFor, now, t),
+          trigger: triggerText(mark.trigger, t),
+        })
+      : t('tasks.note.target', { name: task.name })
   return (
     <Pressable
       accessibilityRole="button"

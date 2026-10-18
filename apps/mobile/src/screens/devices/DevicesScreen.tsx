@@ -125,8 +125,8 @@ function TasksEntry({ onPress }: { onPress(): void }) {
   return (
     <Row
       testID="devices:tasks"
-      title={t('timed.entry')}
-      detail={unread > 0 ? t('timed.entry.unread', { count: unread }) : t('timed.entry.none')}
+      title={t('tasks.title')}
+      detail={unread > 0 ? t('tasks.unread', { count: unread }) : t('timed.entry.none')}
       meta={unread > 0 ? String(unread) : undefined}
       left={<StatusMark status={unread > 0 ? 'unread' : 'idle'} />}
       onPress={onPress}

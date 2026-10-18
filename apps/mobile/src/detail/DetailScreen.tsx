@@ -127,7 +127,7 @@ export function DetailScreen({ route, navigation }: Props) {
     ...(tasksAvailable
       ? [
           {
-            label: t('timed.forSession'),
+            label: t('tasks.forSession'),
             testID: 'detail:menu:task',
             onPress: () => navigation.navigate('TaskEdit', { deviceId, sessionId }),
           },

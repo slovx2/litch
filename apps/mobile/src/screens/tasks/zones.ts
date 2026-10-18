@@ -1,10 +1,5 @@
 // 时区的选项：手机所在的、任务原来的、现在选着的排在前面，后面是一份常用的；都没有的点“其他时区”自己填。
-// 认不认识用协议包的 isTaskTimeZone（和设备上校验用的同一个）。
-import {
-  isTaskTimeZone,
-  localTaskTimeZone,
-} from '../../../../../packages/protocol/src/task-schedule.mjs'
-
+// 认不认识用桌面界面的 zoneKnown（packages/ui/src/tasks/preview.ts，和设备上校验用的是同一个函数）。
 const COMMON = [
   'UTC',
   'Asia/Shanghai',
@@ -28,26 +23,11 @@ const COMMON = [
   'Pacific/Auckland',
 ]
 
-export function zoneChoices(local: string, original: string | null, current: string): string[] {
+export function zoneChoices(
+  local: string,
+  original: string | null,
+  current: string | null,
+): string[] {
   const front = [local, original, current].filter((zone): zone is string => !!zone)
   return [...new Set([...front, ...COMMON])]
-}
-
-/** 认不认识这个时区。日程函数出了意外时不拦着，设备那边还会校验 */
-export function zoneOk(name: string): boolean {
-  if (!name) return false
-  try {
-    return isTaskTimeZone(name)
-  } catch {
-    return true
-  }
-}
-
-/** 手机所在的时区 */
-export function phoneZone(): string {
-  try {
-    return localTaskTimeZone()
-  } catch {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
-  }
 }
