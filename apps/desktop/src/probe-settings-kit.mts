@@ -125,7 +125,7 @@ export function installSettingsKit(): boolean {
 
   /** 本来就该自己横着滚、或者自己管内容怎么画的东西：代码、表格、终端、许可的全文 */
   const SCROLLS_BY_DESIGN = 'pre, .code, .md table, .xterm, .lic-text, textarea'
-  /** 读不清的硬线。4.5 是小字的标准线，三级墨色在浅色下本来就到不了（设计文档 01 第 5.1 节记着），所以只报数 */
+  /** 读不清的硬线。4.5 是小字的标准线，三级墨色在浅色下本来就到不了，所以只报数 */
   const HARD_LINE = 3
   const label = (element: Element) =>
     `${element.tagName.toLowerCase()}${[...element.classList]

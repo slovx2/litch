@@ -4,7 +4,7 @@
 /** 空白页。新开的标签先是它 */
 export const BLANK = 'about:blank'
 
-/** 地址栏里打的不是网址时，拿去搜索。选了不跟踪的那一家（决策见交回报告） */
+/** 地址栏里打的不是网址时，拿去搜索。选了不跟踪的那一家 */
 const SEARCH = 'https://duckduckgo.com/?q='
 
 /** 本机的主机名：localhost、*.localhost、127.0.0.0/8、::1 */

@@ -1,5 +1,5 @@
 // 在模拟器上跑一个场景并录下来：清零帧统计、开始录屏、用链接触发、等到结束、取帧统计、拉回视频，
-// 再交给 measure/ 分析（研究记录在 research/mobile-prototype-2026-10-17/）。
+// 再交给 measure/ 分析。
 //
 // 用法：node apps/mobile/scripts/bench.mjs --scenario t1 --variant A --out <目录> [--seconds 75] [--render md|plain] [--seal 300] [--pace 100] [--freeze 1|0] [--tail whole|open] [--no-measure] [--no-record] [--no-threads] [--app litch|legacy]
 //   场景：t1    新建会话、长回答（约 62 秒），流式贴底；录到结束之后，定稿（T2）也从这段里量

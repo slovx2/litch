@@ -1,6 +1,6 @@
 // 设备配置和各台设备的侧栏快照存在哪：用户数据目录下的几个 JSON 文件。
-// 里面只有主机名、别名、端口、用户名、密钥文件的路径和会话的摘要；没有密码，没有密钥的内容
-// （设计文档 01 第十一节）。写的时候先写到旁边再改名，断电也不会留下半个文件。
+// 里面只有主机名、别名、端口、用户名、密钥文件的路径和会话的摘要；没有密码，没有密钥的内容。
+// 写的时候先写到旁边再改名，断电也不会留下半个文件。
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {

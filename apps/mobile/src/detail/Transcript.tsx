@@ -1,6 +1,6 @@
-// 对话区：倒置的 FlashList（验证原型里和 LegendList 贴底模式比过，只有它过了 T1，
-// 见 research/mobile-prototype-2026-10-17/report.md）。第 0 行（最新的）在最下面，底部在几何上就是偏移 0，
-// 内容变高、键盘升起都不用 JS 追底（S1）。“保持可见位置”一直开着：原型在贴底时把它关掉，可开关一次列表就插拔一次
+// 对话区：倒置的 FlashList（验证原型里和 LegendList 贴底模式比过，只有它在 60 秒的长回答
+// 流式输出里不飘）。第 0 行（最新的）在最下面，底部在几何上就是偏移 0，
+// 内容变高、键盘升起都不用 JS 追底。“保持可见位置”一直开着：原型在贴底时把它关掉，可开关一次列表就插拔一次
 // 它的锚点视图，刚打开长会话就快速甩动时安卓 Fabric 挂载会崩（Unable to add a view into a view that is not a ViewGroup，
 // 2026-10-17 复现：开关时 15 次崩 5–7 次，一直开 15 次 0 次）。一直开着贴底也没受影响（T1 的偏差仍是 0.00x dp）。
 import { useNavigation } from '@react-navigation/native'

@@ -1,7 +1,7 @@
 // 主进程：只管窗口、生命周期，以及给窗口和核心之间牵一条消息端口。
-// 它不解析协议，不持有会话状态，不在数据路径上（设计文档 01 第四节）。
+// 它不解析协议，不持有会话状态，不在数据路径上。
 // 唯一的例外是客户端工具（内置浏览器、Computer Use）：核心把模型的工具调用交给这里登记的执行器（client-tools/），
-// 经手的只有那一次调用的参数和结果（设计文档 05 第九节）。
+// 经手的只有那一次调用的参数和结果。
 import { spawn } from 'node:child_process'
 import { isAbsolute, join, normalize, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -473,7 +473,7 @@ ipcMain.handle(COMPUTER_USE_FORGET_APP, (event, bundleId: unknown) =>
   fromUi(event) && computerUseSettings ? computerUseSettings.forgetApp(bundleId) : false,
 )
 
-// ---------- 应用自己的更新（updater.mts，工作区 design/harness-client/07-auto-update.md） ----------
+// ---------- 应用自己的更新（updater.mts） ----------
 
 /**
  * 只在装好的应用里查；LITCH_UPDATE_FEED 换成本机的假清单时没打包也查（开发、验收用，允许 http）。

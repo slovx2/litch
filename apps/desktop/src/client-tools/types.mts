@@ -1,5 +1,5 @@
 // 客户端工具在桌面端这一侧的约定：核心（工具进程）收到 `item/tool/call` 之后经主进程的消息交给这里登记的
-// 执行器；执行器要用户点头时经核心在对话里出一张卡片。设计见 design/harness-client/05-browser-and-computer-use.md。
+// 执行器；执行器要用户点头时经核心在对话里出一张卡片。
 //
 // 这是“主进程不在数据路径上”的一处例外：浏览器视图和 Computer Use 助手都只能由主进程管。
 // 传的只有这一次调用的参数和结果，不传会话内容。
@@ -77,7 +77,7 @@ export interface ClientToolExecutor {
 }
 
 /**
- * litch_machine 的调用找不到会话、卡片进了全局待处理时，核心请主进程发的系统通知（08 号设计 4.2）。
+ * litch_machine 的调用找不到会话、卡片进了全局待处理时，核心请主进程发的系统通知。
  * 核心只给结构，文字由这边按界面的语言拼（client-tools/notice.mts）
  */
 export interface MachineNotice {

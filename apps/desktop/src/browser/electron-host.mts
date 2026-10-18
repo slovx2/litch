@@ -1,6 +1,6 @@
 // 内置浏览器在主进程里的宿主：所有标签（WebContentsView）、共用分区的安全设置、把标签叠到界面报来的那块矩形上。
 //
-// 面板关着、或者标签不是眼前显示的那个时，视图从窗口上摘下来，不挂在任何窗口里。V0 ③ 实测（Electron 44，
+// 面板关着、或者标签不是眼前显示的那个时，视图从窗口上摘下来，不挂在任何窗口里。实测（Electron 44，
 // probe-browser-v0.mts）：摘下来的视图 CDP 截图、鼠标、键盘、插入文字都照常；移出可视区（坐标放到窗口外）
 // 和 setVisible(false) 反而不行（截图超时、点击丢失）。摘下来的页面算“看不见”，rAF 停着，所以代理在用时关掉
 // 后台节流（electron-tab.mts 的 setAgentActive），这时页面算看得见、rAF 照跑。截图一律用 CDP，
@@ -32,7 +32,7 @@ export interface ElectronBrowserHost extends BrowserHost {
   /** 清除浏览数据：cookie、站点存储、缓存、登录的凭据 */
   clearData(): Promise<void>
   /**
-   * 网页自己要去的地址（点链接、重定向、开新窗口）先过这个改写：远程会话里的远端 localhost 要经 ssh 转发（决 191）。
+   * 网页自己要去的地址（点链接、重定向、开新窗口）先过这个改写：远程会话里的远端 localhost 要经 ssh 转发。
    * 不用改回 null
    */
   setNavigationRewrite(rewrite: (page: BrowserPage, url: string) => Promise<string> | null): void

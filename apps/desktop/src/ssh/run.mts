@@ -1,5 +1,5 @@
 // 调系统的 ssh：拼参数、把一段远程脚本跑到结束、把 ssh 自己的报错归到“哪一步没成”上。
-// 只调用系统的 ssh 可执行文件，不内嵌任何 SSH 协议库；不传密码，不上传文件（设计文档 01 第 7.2 节）。
+// 只调用系统的 ssh 可执行文件，不内嵌任何 SSH 协议库；不传密码，不上传文件。
 import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process'
 import {
   type AbortSignalLike,

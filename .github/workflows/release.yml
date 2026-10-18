@@ -4,7 +4,7 @@ name: Release
 #   适配器的独立发布包（linux-x64、linux-arm64、darwin-arm64）、它的校验和清单、安装脚本
 #   桌面应用 Litch 的安装包：macOS（Apple Silicon）签名并公证过的 dmg，Windows（x64）的安装程序（不签名，还没有经过完整的测试）
 #   安卓应用（arm64）：发版钥匙签名的 apk
-#   应用自己的更新（工作区 design/harness-client/07-auto-update.md）：macOS 的 zip（Squirrel 下这个）和更新清单 litch-update.json，
+#   应用自己的更新：macOS 的 zip（Squirrel 下这个）和更新清单 litch-update.json，
 #   三个端都从“最新一版”下面取这份清单，草稿不算，人公开之后才收得到
 # 打 v 开头的标签时自动跑。也可以手动跑：
 #   填一个已有的标签：给它出包、验证，勾了“挂到发布页”才挂上去

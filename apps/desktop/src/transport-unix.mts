@@ -1,5 +1,5 @@
 // 本机设备的传输：直接连套接字文件，上面跑 WebSocket，一帧一条 JSON。
-// 这条路上没有 SSH，没有 TCP，不占端口（设计文档 01 第 7.2 节）。
+// 这条路上没有 SSH，没有 TCP，不占端口。
 import { createConnection } from 'node:net'
 import { ConnectError, phrase, type Transport, type TransportOpener } from '@litch/core'
 import { WebSocket } from 'ws'

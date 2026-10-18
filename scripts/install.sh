@@ -124,7 +124,7 @@ esac
 base_dir=$HOME/.local/share/$NAME
 bin_dir=$HOME/.local/bin
 bin_link=$bin_dir/$NAME
-# machine 子命令的短名（08 号设计决 245）：远程设备上的模型用它操作用户的 Litch 桌面端
+# machine 子命令的短名：远程设备上的模型用它操作用户的 Litch 桌面端
 SHORT=litch-machine
 short_link=$bin_dir/$SHORT
 state_dir=$HOME/.$NAME

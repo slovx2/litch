@@ -9,7 +9,7 @@ export const MAX_PAYLOAD = 512 * 1024 * 1024
 export interface WrapOptions {
   /**
    * 心跳：隔这么久发一个 ping，对面在 timeoutMs 之内什么都没发回来就当它死了，主动断开。
-   * ssh 假死很常见，光等 ssh 自己发现要好几分钟（设计文档 01 第 7.3 节）。本机套接字不用。
+   * ssh 假死很常见，光等 ssh 自己发现要好几分钟。本机套接字不用。
    */
   heartbeat?: { everyMs: number; timeoutMs: number }
   /** 不是自己关的时候，问一句断开的原因（ssh 退出时留下的报错比 WebSocket 的关闭码有用） */

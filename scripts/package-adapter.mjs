@@ -14,7 +14,7 @@
 //
 // 压缩包里（最外面一层目录和压缩包同名）：
 //   bin/codex-harness-adapter   入口（scripts/adapter-launcher.sh）：找到真实的位置，把参数原样交给 libexec 里的命令行
-//   bin/litch-machine           同一个入口脚本，按这个名字调用时是 machine 子命令（短名，08 号设计决 245）
+//   bin/litch-machine           同一个入口脚本，按这个名字调用时是 machine 子命令（短名）
 //   libexec/                    暂存出来的适配器，和桌面应用自带的那份是同一份实现（scripts/adapter-stage.mjs）
 //   install.sh                  安装脚本，装好之后升级、卸载还用得着
 //   LICENSE、THIRD_PARTY_NOTICES.md

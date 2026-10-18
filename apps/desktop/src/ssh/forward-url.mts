@@ -1,4 +1,4 @@
-// 远端 localhost 的网址改写（决 191）：会话在 ssh 设备上时，localhost、127.0.0.1、[::1]、0.0.0.0、*.localhost
+// 远端 localhost 的网址改写：会话在 ssh 设备上时，localhost、127.0.0.1、[::1]、0.0.0.0、*.localhost
 // 说的是那台远程机器自己。浏览器在桌面上，所以经 forward.mts 起一条 ssh 端口转发，把网址改到桌面的本机端口上。
 // 本机设备的会话一律不动。纯函数加一个转发器，不碰 Electron。
 //

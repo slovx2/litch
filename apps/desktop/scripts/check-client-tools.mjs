@@ -1,4 +1,4 @@
-// 客户端工具的端到端自检（设计文档 05 的 T1：本机和远程各跑通一次 litch_echo）。不起界面、不起 Electron：
+// 客户端工具的端到端自检（本机和远程各跑通一次 litch_echo）。不起界面、不起 Electron：
 // 真的核心加主进程那一份执行器登记表（dist/tools-check.mjs，源码在 src/client-tools/check.mts），
 //   1. 本机：对着 scripts/client-fixture.mjs 起的隔离 Pi 入口（模型是回环上的假模型）；
 //   2. 远程：对着 scripts/client-ssh-fixture.mjs 起的假远程机器（回环上的 sshd，里面的“codex”背后接的也是一份隔离的 Pi），

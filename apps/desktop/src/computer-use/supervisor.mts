@@ -1,6 +1,6 @@
 // 拉起并看护 Computer Use 助手。
 //
-// 怎么拉起：经 LaunchServices（`open -n -g -a 助手.app`），不直接 spawn。实测（交回报告的 V0 ④）：直接 spawn 出来的
+// 怎么拉起：经 LaunchServices（`open -n -g -a 助手.app`），不直接 spawn。实测：直接 spawn 出来的
 // 助手，系统记的“责任进程”是拉起它的那一个（Litch），辅助功能、屏幕录制的授权会算在 Litch 头上；经 open 打开的助手
 // 父进程是 launchd，责任进程是它自己，授权记在 “Litch Computer Use” 名下。所以只能用 open。
 // 代价：拿不到子进程句柄，助手活没活着靠套接字连接来看；进程号由握手告诉我们。

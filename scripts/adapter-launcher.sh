@@ -3,7 +3,7 @@
 #
 # 包里的布局：
 #   bin/codex-harness-adapter           这个脚本
-#   bin/litch-machine                   还是这个脚本：按这个名字调用时就是 machine 子命令（08 号设计决 245）
+#   bin/litch-machine                   还是这个脚本：按这个名字调用时就是 machine 子命令
 #   libexec/bin/codex-harness-adapter   Go 写的命令行，它按自己的位置把 libexec 认作安装根目录
 #   libexec/node/bin/node               随包带的 Node，适配器的各个进程都用它跑
 #

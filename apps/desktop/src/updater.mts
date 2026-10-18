@@ -1,4 +1,4 @@
-// 应用自己的更新（工作区 design/harness-client/07-auto-update.md）。清单的读法、版本比较在核心里（update-feed.mts），
+// 应用自己的更新。清单的读法、版本比较在核心里（update-feed.mts），
 // 这里管取清单、下载、到点换：
 //   macOS    Electron 自带的 autoUpdater（Squirrel.Mac，JSON 格式）照同一份清单下 zip；它会核对新应用的签名满足
 //            眼前这个应用的指定要求（同一个开发者身份），不满足就不装。下好后点“重启以更新”换，不点的话下次退出时它自己换。

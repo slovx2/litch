@@ -62,7 +62,7 @@ const local = localDevice({
   lang: () => adapterLang,
 })
 
-// ---------- 客户端工具：核心经这里和主进程说话（设计文档 05 第九节） ----------
+// ---------- 客户端工具：核心经这里和主进程说话 ----------
 // 核心和外壳各有一份同形的消息类型（核心不认识 Electron）：这两个函数在编译时对一遍，两边改了形状这里过不去
 const toMain = (message: ToolToMain): ClientToolToMain => message
 const toCore = (message: ClientToolToCore): ToolToCore => message
@@ -89,7 +89,7 @@ function quick(command: string, args: string[]): string {
 }
 
 /**
- * 这台桌面端自己的情况（litch_machine，08 号设计 2.4）：远程会话的说明开头写它、machines 工具列它、
+ * 这台桌面端自己的情况（litch_machine）：远程会话的说明开头写它、machines 工具列它、
  * 握手时报给设备进程。核心就住在这台电脑上，所以在这里现查，不绕本机设备服务
  */
 function desktopFacts() {

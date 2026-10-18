@@ -2,7 +2,7 @@
 // 带终端的命令和进程由命令行的 pty-bridge 子命令来起，而测试是直接用 node 起运行时的，没有命令行那一层，
 // 引擎只能从自己的位置往上找到 bin/ 里的这一份（packages/shared/src/adapter-cli.mts）。
 // 没改过源码时再编一次很快，Go 自己有缓存。
-// 旁边放一个短名 litch-machine（machine 子命令，08 号设计决 245）：命令行按调用时的名字认出它。
+// 旁边放一个短名 litch-machine（machine 子命令）：命令行按调用时的名字认出它。
 // 从源码装的（Homebrew 配方把整个 bin/ 装进 libexec）也就有了它。
 import { spawnSync } from 'node:child_process'
 import { copyFileSync, lstatSync, rmSync, symlinkSync } from 'node:fs'
