@@ -8,7 +8,12 @@ import type {
 } from '@earendil-works/pi-coding-agent'
 import { ProtocolError } from '../../shared/src/protocol-contract.mjs'
 import type { ToolCallAsk, ToolCallBlock } from './approvals.mjs'
-import { type ClientTool, clientToolContent, clientTools } from './dynamic-tools.mjs'
+import {
+  type ClientTool,
+  clientToolContent,
+  clientTools,
+  toolDescription,
+} from './dynamic-tools.mjs'
 import { sessionDirectory } from './native-files.mjs'
 import {
   builtInExtensions,
@@ -171,7 +176,7 @@ export async function openSession(
     customTools: clientTools(thread.dynamicTools).map((tool) => ({
       name: tool.piName,
       label: tool.name,
-      description: `[${tool.namespace ?? 'functions'}.${tool.name}] ${tool.description ?? ''}`,
+      description: toolDescription(tool),
       parameters: tool.inputSchema as any,
       async execute(id: string, args: unknown, signal?: AbortSignal) {
         const result = await host.tool(tool, args, id, signal)

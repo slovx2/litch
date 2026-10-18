@@ -11,9 +11,18 @@ import type { RuntimeHandlers } from './types.mjs'
 export interface DynamicTool {
   name: string
   namespace?: string
+  /** 命名空间的说明，只挂在它的第一个工具上（见 toolDescription） */
+  namespaceDescription?: string
   description: string
   inputSchema: Record<string, unknown>
 }
+
+/**
+ * 交给模型的工具说明。CLI 没有“命名空间”这一层，命名空间的说明（比如 litch_machine 开头写的“你在哪台机器、
+ * 控制端是哪台”）接在它第一个工具的说明前面，不然模型看不到
+ */
+export const toolDescription = (tool: DynamicTool): string =>
+  `[${tool.namespace ?? 'functions'}.${tool.name}] ${tool.namespaceDescription ? `${tool.namespaceDescription}\n\n` : ''}${tool.description}`
 
 /** 动态工具交给 CLI 的那个进程内 MCP 服务的名字 */
 export const DYNAMIC_TOOL_SERVER = 'codex_harness_adapter'
@@ -50,6 +59,27 @@ export function clientToolCliNames(raw: unknown[] | undefined): ReadonlySet<stri
   return names
 }
 
+/** 把 function 和 namespace 两种定义摊平成一个个工具，命名空间的说明挂在它第一个工具上 */
+export function dynamicToolSpecs(raw: unknown[]): DynamicTool[] {
+  return raw.flatMap((value): unknown[] => {
+    if (!value || typeof value !== 'object') throw new ProtocolError(-32602, '工具定义无效')
+    const spec = value as Record<string, unknown>
+    if (spec.type === 'function') return [spec]
+    if (spec.type !== 'namespace' || !Array.isArray(spec.tools))
+      throw new ProtocolError(-32602, '工具定义必须是 function 或 namespace')
+    const namespace = requiredString(spec.name, 'namespace.name')
+    const about = typeof spec.description === 'string' ? spec.description.trim() : ''
+    return spec.tools.map((tool, index) => {
+      if (tool?.type !== 'function') throw new ProtocolError(-32602, 'namespace 内必须是 function')
+      return {
+        ...tool,
+        namespace,
+        ...(index === 0 && about ? { namespaceDescription: about } : {}),
+      }
+    })
+  }) as DynamicTool[]
+}
+
 export function dynamicToolServer(
   raw: unknown[],
   handlers: RuntimeHandlers,
@@ -57,18 +87,7 @@ export function dynamicToolServer(
 ) {
   const tools = new Map<string, DynamicTool>()
   const schemas = new Map<string, ValidateFunction>()
-  const flattened = raw.flatMap((value) => {
-    if (!value || typeof value !== 'object') throw new ProtocolError(-32602, '工具定义无效')
-    const spec = value as Record<string, unknown>
-    if (spec.type === 'function') return [spec]
-    if (spec.type !== 'namespace' || !Array.isArray(spec.tools))
-      throw new ProtocolError(-32602, '工具定义必须是 function 或 namespace')
-    const namespace = requiredString(spec.name, 'namespace.name')
-    return spec.tools.map((tool) => {
-      if (tool?.type !== 'function') throw new ProtocolError(-32602, 'namespace 内必须是 function')
-      return { ...tool, namespace }
-    })
-  })
+  const flattened = dynamicToolSpecs(raw)
   for (const value of flattened) {
     if (!value || typeof value !== 'object') throw new ProtocolError(-32602, '工具定义无效')
     const tool = value as DynamicTool
@@ -88,7 +107,7 @@ export function dynamicToolServer(
   config.instance.server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [...tools].map(([name, tool]) => ({
       name,
-      description: `[${tool.namespace ?? 'functions'}.${tool.name}] ${tool.description}`,
+      description: toolDescription(tool),
       inputSchema: tool.inputSchema,
       _meta: { 'anthropic/alwaysLoad': true },
     })),

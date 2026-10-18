@@ -4,9 +4,18 @@ import { ProtocolError, requiredString } from '../../shared/src/protocol-contrac
 export interface ClientTool {
   name: string
   namespace: string | null
+  /** 命名空间的说明，只挂在它的第一个工具上（见 toolDescription） */
+  namespaceDescription?: string
   description: string
   inputSchema: Record<string, unknown>
 }
+
+/**
+ * 交给模型的工具说明。Pi 没有“命名空间”这一层，命名空间的说明（比如 litch_machine 开头写的“你在哪台机器、
+ * 控制端是哪台”）接在它第一个工具的说明前面，不然模型看不到
+ */
+export const toolDescription = (tool: ClientTool): string =>
+  `[${tool.namespace ?? 'functions'}.${tool.name}] ${tool.namespaceDescription ? `${tool.namespaceDescription}\n\n` : ''}${tool.description ?? ''}`
 export function clientTools(raw: unknown[]): Array<ClientTool & { piName: string }> {
   const tools: ClientTool[] = []
   for (const value of raw) {
@@ -14,10 +23,15 @@ export function clientTools(raw: unknown[]): Array<ClientTool & { piName: string
     if (spec?.type === 'function') tools.push({ ...spec, namespace: null })
     else if (spec?.type === 'namespace' && Array.isArray(spec.tools)) {
       const namespace = requiredString(spec.name, 'namespace.name')
-      for (const tool of spec.tools) {
+      const about = typeof spec.description === 'string' ? spec.description.trim() : ''
+      spec.tools.forEach((tool: any, index: number) => {
         if (tool.type !== 'function') throw new ProtocolError(-32602, 'namespace 中必须是 function')
-        tools.push({ ...tool, namespace })
-      }
+        tools.push({
+          ...tool,
+          namespace,
+          ...(index === 0 && about ? { namespaceDescription: about } : {}),
+        })
+      })
     } else throw new ProtocolError(-32602, '动态工具必须是 function 或 namespace')
   }
   const names = new Set<string>()
