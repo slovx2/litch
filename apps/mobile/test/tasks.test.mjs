@@ -255,3 +255,8 @@ test('运行记录一行：状态、时间、触发、合并；错误优先于�
     'Internal error in the device service: disk full',
   )
 })
+
+test('英文的运行记录行首字母大写', async () => {
+  const { runLines } = await import('../src/screens/tasks/lines.ts')
+  assert.match(runLines(run({ status: 'failed' }), Date.now(), en).title, /^Failed · /)
+})

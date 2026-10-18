@@ -1,5 +1,5 @@
 // 一个定时任务的详情：日程、状态、目标、提示词；立即运行、暂停继续、编辑、删除（要确认）；运行记录（新的在前，
-// 往下翻页）。点一条运行记录进它跑在的会话，并把这一条标成看过。运行记录开着这一页才订阅（replica.openTaskRuns）。
+// 往下翻页）。点一条运行记录进它跑在的会话（核心打开会话时把里面跑完的运行标成看过）。运行记录开着这一页才订阅（replica.openTaskRuns）。
 import {
   type DeviceView,
   keys,
@@ -70,8 +70,6 @@ export function TaskDetailScreen({ route, navigation }: Props) {
   }
   const openRun = (run: TaskRunView) => {
     if (!run.threadId) return
-    if (!run.read)
-      void channel.command('tasks.markRead', { deviceId, runIds: [run.id] }).catch(() => {})
     navigation.navigate('Detail', { deviceId, sessionId: run.threadId })
   }
   const markAll = () => void channel.command('tasks.markRead', { deviceId, taskId }).catch(fail)

@@ -103,5 +103,7 @@ export function runLines(run: TaskRunView, now: number, t: Translator): RunLines
         : run.read
           ? 'idle'
           : 'unread'
-  return { title: head.join(' · '), detail: body, mark }
+  // 状态在句中是小写（英文的“Last run failed”），放在行首要大写
+  const title = head.join(' · ')
+  return { title: title.charAt(0).toUpperCase() + title.slice(1), detail: body, mark }
 }

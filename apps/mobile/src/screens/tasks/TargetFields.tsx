@@ -60,6 +60,8 @@ export interface TargetModel {
   target: TaskTarget | null
   problem: Key | null
   harnessId: string | null
+  /** 实际用的建在哪（没选时是默认的那个） */
+  where: Where | null
   cwd: string | null
   /** 设置条上显示的（没选的显示对面的默认） */
   shown: SessionSettings
@@ -75,11 +77,12 @@ export function useTargetModel(deviceId: string, form: TargetForm): TargetModel 
     form.kind === 'thread'
       ? (summary?.harness ?? form.harness ?? null)
       : (form.harness ?? ready[0]?.id ?? null)
+  // 还没选建在哪：默认第一个项目（没有项目就得自己填目录）
+  const first = workspaces?.find((entry) => entry.roots[0])
+  const where: Where | null = form.where ?? (first ? { kind: 'workspace', id: first.id } : null)
   const workspace =
-    form.where?.kind === 'workspace'
-      ? workspaces?.find((entry) => entry.id === (form.where as { id: string }).id)
-      : undefined
-  const cwd = form.where?.kind === 'dir' ? form.where.path : (workspace?.roots[0] ?? null)
+    where?.kind === 'workspace' ? workspaces?.find((entry) => entry.id === where.id) : undefined
+  const cwd = where?.kind === 'dir' ? where.path : (workspace?.roots[0] ?? null)
   const options = useComposeOptions(
     deviceId,
     form.kind === 'newThread' ? (harnessId ?? undefined) : undefined,
@@ -94,19 +97,29 @@ export function useTargetModel(deviceId: string, form: TargetForm): TargetModel 
   }
   if (form.kind === 'thread') {
     if (!form.threadId || !harnessId)
-      return { target: null, problem: 'timed.bad.thread', harnessId, cwd: null, shown, options }
+      return {
+        target: null,
+        problem: 'timed.bad.thread',
+        harnessId,
+        where,
+        cwd: null,
+        shown,
+        options,
+      }
     return {
       target: { kind: 'thread', harness: harnessId, threadId: form.threadId },
       problem: null,
       harnessId,
+      where,
       cwd: null,
       shown,
       options,
     }
   }
   if (!harnessId)
-    return { target: null, problem: 'newSession.noHarness', harnessId, cwd, shown, options }
-  if (!cwd) return { target: null, problem: 'timed.bad.where', harnessId, cwd, shown, options }
+    return { target: null, problem: 'newSession.noHarness', harnessId, where, cwd, shown, options }
+  if (!cwd)
+    return { target: null, problem: 'timed.bad.where', harnessId, where, cwd, shown, options }
   return {
     target: {
       kind: 'newThread',
@@ -124,6 +137,7 @@ export function useTargetModel(deviceId: string, form: TargetForm): TargetModel 
     },
     problem: null,
     harnessId,
+    where,
     cwd,
     shown,
     options,
@@ -234,15 +248,15 @@ export function TargetFields({
               testID={`task:where:${entry.id}`}
               title={entry.name}
               detail={entry.roots[0]}
-              selected={form.where?.kind === 'workspace' && form.where.id === entry.id}
+              selected={model.where?.kind === 'workspace' && model.where.id === entry.id}
               onPress={() => onChange({ where: { kind: 'workspace', id: entry.id } })}
             />
           ))}
           <Row
             testID="task:where:dir"
-            title={form.where?.kind === 'dir' ? form.where.path : t('compose.new.otherDir')}
-            detail={form.where?.kind === 'dir' ? t('compose.new.dir') : undefined}
-            selected={form.where?.kind === 'dir'}
+            title={model.where?.kind === 'dir' ? model.where.path : t('compose.new.otherDir')}
+            detail={model.where?.kind === 'dir' ? t('compose.new.dir') : undefined}
+            selected={model.where?.kind === 'dir'}
             onPress={() => setAsking(true)}
           />
           <View style={styles.bar}>

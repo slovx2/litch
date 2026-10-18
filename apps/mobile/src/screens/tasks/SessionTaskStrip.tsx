@@ -1,12 +1,11 @@
 // 会话详情顶上的一条：这个会话是哪个定时任务跑出来的（或者是哪个任务的目标会话），点了去任务详情。
-// 打开任务跑出来的会话就算看过了那一次运行：进来时标一次（设备那边是幂等的）。
+// 打开任务跑出来的会话就算看过了那一次运行：核心在会话订阅上自己标（device.mts 的 openSession），这里不用管。
 import { keys, type SessionTaskMark, type TaskView } from '@litch/core'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import { useEffect } from 'react'
 import { Pressable, StyleSheet, Text } from 'react-native'
 import type { RootStackParamList } from '../../nav/routes'
-import { useChannel, useKey } from '../../shell/services'
+import { useKey } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { useTheme } from '../../ui/theme'
 import { useNow } from '../sessions/clock'
@@ -19,16 +18,11 @@ export function SessionTaskStrip({
   deviceId: string
   mark: SessionTaskMark | null | undefined
 }) {
-  const channel = useChannel()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const task = useKey<TaskView>(keys.task(deviceId, mark?.taskId ?? ''))
   const theme = useTheme()
   const t = useT()
   const now = useNow()
-  const runId = mark?.kind === 'run' ? mark.runId : null
-  useEffect(() => {
-    if (runId) void channel.command('tasks.markRead', { deviceId, runIds: [runId] }).catch(() => {})
-  }, [channel, deviceId, runId])
   if (!mark || !task) return null
   const text =
     mark.kind === 'run'
