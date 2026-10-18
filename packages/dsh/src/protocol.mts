@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { isAbsolute } from 'node:path'
+import { clientToolNamespaces } from '../../shared/src/client-tool-executor.mjs'
 import { gitDiffToRemote } from '../../shared/src/git-diff-remote.mjs'
 import { applyNotificationOptOut } from '../../shared/src/notification-opt-out.mjs'
 import { projectRequest } from '../../shared/src/project-rpc.mjs'
@@ -13,6 +14,7 @@ import {
 import { codexUserAgent, platformFamily, platformOs } from '../../shared/src/runtime-version.mjs'
 import { PINNED_SECTION, PINNED_SECTION_ID } from '../../shared/src/thread-sections.mjs'
 import type { RpcPeer } from '../../shared/src/types.mjs'
+import { dshClientTools } from './client-tools.mjs'
 import { envelope, PROFILE, settings, summary } from './envelope.mjs'
 import type { Preset } from './projection.mjs'
 import { type DshServer, presetFromParams } from './server.mjs'
@@ -112,6 +114,8 @@ export async function dispatch(s: DshServer, peer: RpcPeer, method: string, p: a
     case 'initialize':
       // 客户端退订的通知，这条连接上从现在起不发。
       applyNotificationOptOut(peer, p)
+      // 这条连接能执行哪些客户端工具命名空间（clientTools 扩展），挑执行方时看
+      s.toolNamespaces.set(peer.id, clientToolNamespaces(p))
       return {
         userAgent: codexUserAgent(
           typeof p.clientInfo?.name === 'string' ? p.clientInfo.name : 'codex-app',
@@ -158,7 +162,8 @@ export async function dispatch(s: DshServer, peer: RpcPeer, method: string, p: a
     case 'configRequirements/read':
       return { requirements: null }
     case 'modelProvider/capabilities/read':
-      return { namespaceTools: false, imageGeneration: false, webSearch: false }
+      // 命名空间形式的动态工具经插件交给 dsh 的模型（client-tools.mts）
+      return { namespaceTools: true, imageGeneration: false, webSearch: false }
     case 'app/list':
     case 'hooks/list':
     case 'experimentalFeature/list':
@@ -268,8 +273,9 @@ export async function dispatch(s: DshServer, peer: RpcPeer, method: string, p: a
         setImmediate(() => s.notify(started.id, 'thread/started', { thread: started }))
         return settings(s, live)
       }
-      // 项目不在就不建会话：dsh 没有删除会话的接口，建好了才发现会留下一个没人要的空会话。
+      // 项目不在、动态工具的形状不对就不建会话：dsh 没有删除会话的接口，建好了才发现会留下一个没人要的空会话。
       if (p.projectId) s.projects.read(p.projectId)
+      const clientTools = dshClientTools(p.dynamicTools)
       const remote = await s.remote()
       const created = await remote.rpc(
         'session/create',
@@ -279,6 +285,8 @@ export async function dispatch(s: DshServer, peer: RpcPeer, method: string, p: a
       const live = await s.load(created.sessionId)
       const { thread } = live.projection
       s.subscribe(peer, thread.id)
+      // 动态工具记到会话上，交给 dsh 里的插件装好再回应答：客户端拿到应答就可能发第一句话
+      if (clientTools.length) await s.setClientTools(thread.id, p.dynamicTools)
       live.preset = presetFromParams(p)
       const saved = s.store.getMeta('config', 'defaults') ?? {}
       const selection = {
@@ -365,6 +373,7 @@ export async function dispatch(s: DshServer, peer: RpcPeer, method: string, p: a
       const active = live.projection.active
       if (!active || active.id !== p.expectedTurnId)
         throw new ProtocolError(-32009, '指定回合与活动回合不一致')
+      s.assertDirectInput(live)
       const content = await promptContent(p.input ?? [])
       // 回合是适配器先建的，提示词随后才交给 dsh（见 DshServer.start）。插话先到的话 dsh 那边还没有回合可并：
       // 它拿插话起了回合，原来那句排到后面成了另一个回合，两句的先后就反了。所以和打断一样，等提示词交到了再发。
@@ -375,9 +384,7 @@ export async function dispatch(s: DshServer, peer: RpcPeer, method: string, p: a
       const requestId = p.clientUserMessageId ?? p.clientMessageId ?? randomUUID()
       s.remember(p.threadId, requestId, p.input ?? [])
       // dsh 的插话在当前这一步结束后并入同一回合，不会立即打断模型。
-      await (await s.remote()).rpc('session/prompt', {
-        request: { requestId, sessionId: p.threadId, mode: 'steer', content },
-      })
+      await s.prompt(await s.remote(), live, requestId, 'steer', content)
       return { turnId: active.id }
     }
     case 'thread/name/set': {
