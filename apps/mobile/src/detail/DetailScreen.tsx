@@ -12,6 +12,7 @@ import { whyNot } from '../../../../packages/ui/src/app/errors.ts'
 import { acquireStore, releaseStore } from '../core/store-cache'
 import { experiment } from '../experiment'
 import type { RootStackParamList } from '../nav/routes'
+import { SessionTaskStrip } from '../screens/tasks/SessionTaskStrip'
 import { useChannel, useKey } from '../shell/services'
 import { useT } from '../ui/i18n'
 import { Confirm, Prompt, Sheet } from '../ui/kit/overlays'
@@ -47,6 +48,7 @@ export function DetailScreen({ route, navigation }: Props) {
   const workspaces = useKey<WorkspaceView[]>(keys.workspaces(deviceId))
   const harness = device?.harnesses.find((entry) => entry.id === meta?.harness)
   const abilities = harness?.abilities
+  const tasksAvailable = useKey<boolean | null>(keys.tasksAvailable(deviceId))
 
   const [menu, setMenu] = useState(false)
   const [renaming, setRenaming] = useState(false)
@@ -122,6 +124,15 @@ export function DetailScreen({ route, navigation }: Props) {
             onPress: () => setRenaming(true),
           },
         ]),
+    ...(tasksAvailable
+      ? [
+          {
+            label: t('tasks.forSession'),
+            testID: 'detail:menu:task',
+            onPress: () => navigation.navigate('TaskEdit', { deviceId, sessionId }),
+          },
+        ]
+      : []),
     ...(abilities?.archive === false
       ? []
       : [
@@ -145,6 +156,7 @@ export function DetailScreen({ route, navigation }: Props) {
     >
       {/* 键盘升起时整块往上平移，移出去的那一截裁在标题栏下沿，不压到状态栏上 */}
       <View style={styles.clip}>
+        <SessionTaskStrip deviceId={deviceId} mark={summary?.task} />
         {error ? (
           <Text
             testID="detail:error"

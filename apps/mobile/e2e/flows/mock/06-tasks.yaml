@@ -1,0 +1,86 @@
+# 模拟核心：定时任务。首页的入口 → 列表（本机的示例任务）→ 详情里立即运行，运行记录多出一条在跑的 →
+# 新建一个每周一、三的任务（表单里有“下一次”的预览）→ 建好进它的详情 → 任务跑出来的会话顶上有“定时”那一条
+appId: dev.litch.app
+name: mock-定时任务
+tags: [mock]
+---
+- runFlow:
+    file: ../_shared/fresh.yaml
+    env:
+      MODE: mock
+      READY: device:local
+# 换成模拟核心之后首页会重画一遍（设备一台台进来），等画稳了再点入口，免得点在重画的那一下上
+- extendedWaitUntil:
+    visible:
+      id: devices:tasks
+    timeout: 15000
+- waitForAnimationToEnd:
+    timeout: 3000
+- tapOn:
+    id: devices:tasks
+- extendedWaitUntil:
+    visible:
+      id: task:task-standup
+    timeout: 15000
+- tapOn:
+    id: task:task-standup
+- extendedWaitUntil:
+    visible:
+      id: task:runNow
+    timeout: 10000
+- tapOn:
+    id: task:runNow
+- extendedWaitUntil:
+    visible:
+      id: task:said
+    timeout: 10000
+- back
+# 新建：名字、提示词、每周一和周三 08:30，建在默认的项目里
+- tapOn:
+    id: tasks:new
+- extendedWaitUntil:
+    visible:
+      id: task:name
+    timeout: 10000
+- tapOn:
+    id: task:name
+- inputText: e2e weekly
+- tapOn:
+    id: task:prompt
+- inputText: say hi
+- tapOn:
+    id: task:type:weekly
+- scrollUntilVisible:
+    element:
+      id: task:day:WE
+- tapOn:
+    id: task:day:WE
+- scrollUntilVisible:
+    element:
+      id: task:time
+- tapOn:
+    id: task:time
+- eraseText: 10
+- inputText: '08:30'
+- scrollUntilVisible:
+    element:
+      id: task:preview
+- assertVisible:
+    id: task:preview
+- scrollUntilVisible:
+    element:
+      id: task:save
+- tapOn:
+    id: task:save
+- extendedWaitUntil:
+    visible:
+      id: task:runNow
+    timeout: 10000
+- assertVisible:
+    id: task:detail:schedule
+# 任务跑出来的会话：顶上一条写着是哪个任务跑的
+- openLink: litch://open?session=s3&device=local
+- extendedWaitUntil:
+    visible:
+      id: detail:task
+    timeout: 15000

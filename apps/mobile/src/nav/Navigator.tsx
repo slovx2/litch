@@ -10,6 +10,9 @@ import { FilesScreen } from '../screens/files/FilesScreen'
 import { NewSessionScreen } from '../screens/new-session/NewSessionScreen'
 import { SessionsScreen } from '../screens/sessions/SessionsScreen'
 import { SettingsScreen } from '../screens/settings/SettingsScreen'
+import { TaskDetailScreen } from '../screens/tasks/TaskDetailScreen'
+import { TaskEditScreen } from '../screens/tasks/TaskEditScreen'
+import { TasksScreen } from '../screens/tasks/TasksScreen'
 import { DiffScreen } from '../screens/tools/DiffScreen'
 import { TerminalScreen } from '../screens/tools/TerminalScreen'
 import type { RootStackParamList } from './routes'
@@ -36,6 +39,9 @@ export function Navigator() {
       <Stack.Screen name="Terminal" component={TerminalScreen} />
       <Stack.Screen name="Diff" component={DiffScreen} />
       <Stack.Screen name="Files" component={FilesScreen} />
+      <Stack.Screen name="Tasks" component={TasksScreen} />
+      <Stack.Screen name="TaskEdit" component={TaskEditScreen} />
+      <Stack.Screen name="TaskDetail" component={TaskDetailScreen} />
       <Stack.Screen name="Settings" component={SettingsScreen} />
       <Stack.Screen name="Bench" component={WebViewBenchScreen} />
     </Stack.Navigator>

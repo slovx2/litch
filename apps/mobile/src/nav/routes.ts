@@ -20,6 +20,12 @@ export type RootStackParamList = {
   Diff: { deviceId: string; root: string; scope: DiffScope; sessionId: string | null }
   /** 文件：浏览一个根下面的目录、看文件内容。path 是完整路径，是目录就列它，是文件就打开看；line 是打开后定位到第几行（从 1 起，对话区里的文件引用会带） */
   Files: { deviceId: string; root: string; path?: string; line?: number }
+  /** 定时任务：按设备分组列出（名字、日程、下一次、最近一次、没看过的运行）。deviceId 给了只列这一台 */
+  Tasks: { deviceId?: string }
+  /** 新建或编辑一个定时任务。taskId 给了是编辑；sessionId 给了是新建“在这个会话里接着发”的任务 */
+  TaskEdit: { deviceId: string; taskId?: string; sessionId?: string }
+  /** 一个定时任务的详情：立即运行、暂停继续、编辑、删除，运行记录（点进会话）。title 是任务名，首帧就画 */
+  TaskDetail: { deviceId: string; taskId: string; title?: string }
   /** 应用设置：语言、明暗、关于 */
   Settings: undefined
   /** 开发用：WebView 吞吐测试（scripts/bench.mjs 的 webview 场景） */

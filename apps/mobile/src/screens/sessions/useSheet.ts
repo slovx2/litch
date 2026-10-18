@@ -168,6 +168,11 @@ export function useSheet({
           testID: 'menu:screen:addWorkspace',
           onPress: () => setWorkspaceEdit({ kind: 'add' }),
         })
+      actions.push({
+        label: t('tasks.title'),
+        testID: 'menu:screen:tasks',
+        onPress: () => navigation.navigate('Tasks', { deviceId }),
+      })
       return { actions }
     }
   }
