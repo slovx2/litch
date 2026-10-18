@@ -164,16 +164,24 @@ export function lineageOf(raw: unknown): SessionLineageView | null {
  * 这种不进侧栏（子代理调用的卡片和父会话的信息卡里看得到）；Litch 子会话不是这种，它们是普通的顶层会话
  */
 export function isAgentThread(thread: Pick<Thread, 'parentThreadId' | 'source'>): boolean {
-  if (thread.parentThreadId) return true
+  return parentOf(thread) !== null
+}
+
+/** 子代理线程的父线程：会话对象上的 parentThreadId，没有的再看它的来历。不是子代理线程是 null */
+export function parentOf(thread: Pick<Thread, 'parentThreadId' | 'source'>): string | null {
+  if (thread.parentThreadId) return thread.parentThreadId
   const source = thread.source
-  return (
+  if (
     typeof source === 'object' &&
     source !== null &&
     'subAgent' in source &&
     typeof source.subAgent === 'object' &&
     source.subAgent !== null &&
     'thread_spawn' in source.subAgent
-  )
+  ) {
+    return source.subAgent.thread_spawn.parent_thread_id || null
+  }
+  return null
 }
 
 /**

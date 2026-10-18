@@ -144,6 +144,7 @@ export {
   type Block,
   type BlockInput,
   bucketItems,
+  cardOf,
 } from './projection/blocks.mjs'
 export {
   type FileRef,

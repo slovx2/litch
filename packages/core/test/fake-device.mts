@@ -90,6 +90,8 @@ export interface FakeDevice {
   assigned: Map<string, string>
   /** 设备层记的分区：会话 → 所在的分区和进去的时间 */
   placed: Map<string, { id: string; name: string; at: number }>
+  /** 列表认不认 parentThreadId。不认的（有的引擎）照样回全部会话 */
+  byParent: boolean
 }
 
 const fault = (code: number, message: string, data: Record<string, unknown>) =>
@@ -123,6 +125,7 @@ export function fakeDevice(harnesses: FakeHarness[]): {
     projects: [],
     assigned: new Map(),
     placed: new Map(),
+    byParent: true,
   }
 
   /** 聚合面给出的会话对象：打上 harness；设备层记着的归属和分区盖在引擎自己的那一份上 */
@@ -329,7 +332,12 @@ export function fakeDevice(harnesses: FakeHarness[]): {
         .flatMap((entry) =>
           (asked.archived ? entry.archived : entry.threads)
             // 给了父会话：只回它的直接子线程（上游 thread/list 的 parentThreadId）
-            .filter((item) => !asked.parentThreadId || item.parentThreadId === asked.parentThreadId)
+            .filter(
+              (item) =>
+                !asked.parentThreadId ||
+                !device.byParent ||
+                item.parentThreadId === asked.parentThreadId,
+            )
             .map((item) => stamp(entry, item, false)),
         )
         .sort((a, b) => b.updatedAt - a.updatedAt)

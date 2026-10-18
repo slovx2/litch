@@ -76,7 +76,7 @@ import type { AgentThreadView, LineageKind } from '../model-tree.mjs'
 import { phrase, sameText, type Text } from '../phrase.mjs'
 import type { RequestChoice } from '../projection/requests.mjs'
 import { projectService, projectUpgrade } from '../projection/service.mjs'
-import { isAgentThread, projectSummary, threadTitle } from '../projection/session.mjs'
+import { isAgentThread, parentOf, projectSummary, threadTitle } from '../projection/session.mjs'
 import { composeOptions, projectDefaults } from '../projection/settings.mjs'
 import type { SkillCatalog } from '../projection/skills.mjs'
 import { projectAgentThread } from '../projection/tree.mjs'
@@ -1874,13 +1874,10 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
           }),
         ),
       )
-      for (const thread of listing.threads) {
-        if (isAgentThread(thread)) agentThreads.set(thread.id, { ...thread, turns: [] })
-      }
-      return listing.threads
-        .filter((thread) => thread.id !== sessionId)
-        .map(projectAgentThread)
-        .sort((a, b) => b.updatedAt - a.updatedAt)
+      // 不认识 parentThreadId 的引擎会把全部会话都回来：只留父会话确实是它的
+      const own = listing.threads.filter((thread) => parentOf(thread) === sessionId)
+      for (const thread of own) agentThreads.set(thread.id, { ...thread, turns: [] })
+      return own.map(projectAgentThread).sort((a, b) => b.updatedAt - a.updatedAt)
     },
   }
 }

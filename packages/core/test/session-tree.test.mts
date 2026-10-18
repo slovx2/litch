@@ -5,7 +5,9 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { formatSessionEvent, type SessionProposal } from '../../protocol/src/index.mjs'
 import {
+  bucketItems,
   type ChannelError,
+  cardOf,
   connectChannel,
   createMockCore,
   createPortPair,
@@ -376,6 +378,66 @@ test('设备：子代理线程列表按父会话问；能打开、能读，不�
   assert.deepEqual(watched.seen.view?.note, { key: 'session.agentReadOnly' })
   assert.ok(!world.side.sessions.has('ag1'))
   watched.close()
+})
+
+test('设备：对面不认 parentThreadId、回了全部会话时，只留父会话确实是它的子代理线程', async () => {
+  const world = treeWorld()
+  world.fake.byParent = false
+  world.core.start()
+  await settle()
+  const { agents } = (await world.command('session.agents', { sessionId: 'p' })) as {
+    agents: { id: string }[]
+  }
+  assert.deepEqual(
+    agents.map((entry) => entry.id),
+    ['ag1'],
+  )
+  assert.deepEqual([...world.side.sessions.keys()].sort(), ['c1', 'p'])
+})
+
+test('分块：派出子会话、启动子代理（开始时还不知道子线程）画成露在外面的卡片；等待子代理还是活动里的一行', () => {
+  const spawn = projectItem({
+    type: 'dynamicToolCall',
+    id: 'd1',
+    namespace: 'litch_sessions',
+    tool: 'start',
+    arguments: { title: 'x', prompt: 'y' },
+    status: 'inProgress',
+    contentItems: null,
+    success: null,
+    durationMs: null,
+  } as never)
+  const collab = (tool: string) =>
+    projectItem({
+      type: 'collabAgentToolCall',
+      id: tool,
+      tool,
+      status: 'inProgress',
+      senderThreadId: 'p',
+      receiverThreadIds: [],
+      prompt: null,
+      model: null,
+      reasoningEffort: null,
+      agentsStates: {},
+    } as never)
+  assert.equal(cardOf(spawn), true)
+  assert.equal(cardOf(collab('spawnAgent')), true)
+  assert.equal(cardOf(collab('wait')), false)
+  assert.equal(cardOf(projectItem(userText('u', 'hi'))), false)
+  assert.deepEqual(
+    bucketItems([
+      { id: 'u', kind: 'userMessage' },
+      { id: 'r', kind: 'reasoning' },
+      { id: 'd1', kind: 'toolCall', card: true },
+      { id: 'w', kind: 'toolCall' },
+    ]),
+    [
+      { type: 'user', itemId: 'u' },
+      { type: 'activity', key: 'r', itemIds: ['r'] },
+      { type: 'card', itemId: 'd1' },
+      { type: 'activity', key: 'w', itemIds: ['w'] },
+    ],
+  )
 })
 
 test('设备：派子会话发 litch/session/start，起好的立刻进侧栏；脱离发 detach 并先改侧栏', async () => {
