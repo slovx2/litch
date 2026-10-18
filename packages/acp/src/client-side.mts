@@ -83,6 +83,11 @@ export class Terminals {
     const env = { ...process.env }
     for (const entry of Array.isArray(params.env) ? params.env : [])
       if (typeof entry?.name === 'string') env[entry.name] = String(entry.value ?? '')
+    // 会话号交给命令（litch-machine 按它把确认卡片放进这个会话，08 号设计 V3）：这里的会话号就是 ACP 的 sessionId。
+    // 只有经客户端终端跑的命令有；agent 自己起的 shell 不经这里，给不了
+    const sessionId = typeof params.sessionId === 'string' ? params.sessionId : ''
+    if (sessionId) env.LITCH_THREAD_ID = sessionId
+    else delete env.LITCH_THREAD_ID
     const cwd = typeof params.cwd === 'string' && isAbsolute(params.cwd) ? params.cwd : undefined
     // 只给了命令、没给参数的，多半是一整行 shell 命令：交给 sh 去解释
     const [command, argv] =

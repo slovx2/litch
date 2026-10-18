@@ -3,6 +3,7 @@
 #
 # 包里的布局：
 #   bin/codex-harness-adapter           这个脚本
+#   bin/litch-machine                   还是这个脚本：按这个名字调用时就是 machine 子命令（08 号设计决 245）
 #   libexec/bin/codex-harness-adapter   Go 写的命令行，它按自己的位置把 libexec 认作安装根目录
 #   libexec/node/bin/node               随包带的 Node，适配器的各个进程都用它跑
 #
@@ -12,6 +13,11 @@
 # 这里不替它加 --node，也不去动 PATH：常驻服务里用户跑的命令会继承服务的环境，
 # 把这份 Node 放到 PATH 最前面的话，就盖住了用户自己装的那一份。
 set -eu
+
+# 先认调用时的名字，再去解链接：~/.local/bin/litch-machine 是指向 bin/litch-machine 的链接
+case ${0##*/} in
+  litch-machine) set -- machine "$@" ;;
+esac
 
 # 经符号链接执行时（~/.local/bin 里的那个、指向当前版本的那个）先找到真实的位置
 self=$0

@@ -1,6 +1,11 @@
 // 聚合面上的一条客户端连接：握手、路由、它专属的那一组上游连接。
 import { randomUUID } from 'node:crypto'
 import {
+  CLIENT_TOOL_METHOD,
+  CLIENT_TOOLS_CAPABILITY,
+  type ClientToolsDesktopInfo,
+} from '../../protocol/src/client-tools.mjs'
+import {
   type DeviceInfo,
   type DeviceRuntimeInfo,
   EXTENSION,
@@ -21,6 +26,7 @@ import {
   platformFamily,
   platformOs,
 } from '../../shared/src/runtime-version.mjs'
+import type { ClientToolInvoker } from './client-tool-invoke.mjs'
 import type { ClientToolPeer, ClientToolRouter } from './client-tools.mjs'
 import type { ManagedHarness } from './control.mjs'
 import { DeviceCalls, type DeviceLayer } from './device-layer.mjs'
@@ -99,6 +105,8 @@ export interface SessionHost {
   importing(): Promise<void>
   /** 原生 codex 的客户端工具调用由这里挑执行方（各连接共用） */
   clientTools: ClientToolRouter
+  /** 命令行经聚合面发来的客户端工具调用（litch/clientTool/invoke），由这里转给一台 Litch */
+  clientInvoke: ClientToolInvoker
 }
 
 /** 请求已经有着落：转给上游了（应答由上游来），或者已经自己答过了 */
@@ -106,6 +114,17 @@ const HANDLED = Symbol('handled')
 
 /** `thread/metadata/update` 里归设备层管、不带给引擎的字段（isPinned 不在协议里，是适配器的引擎多认的） */
 const DEVICE_METADATA = new Set(['harness', 'projectId', 'isPinned'])
+
+/** 握手时 Litch 报的“我是哪台桌面端”。没报、形状不对是 null */
+function desktopOf(capabilities: Record<string, unknown>): ClientToolsDesktopInfo | null {
+  const declared = capabilities[CLIENT_TOOLS_CAPABILITY]
+  const desktop = isObject(declared) ? declared.desktop : null
+  if (!isObject(desktop) || typeof desktop.hostname !== 'string' || !desktop.hostname) return null
+  return {
+    hostname: desktop.hostname,
+    ...(typeof desktop.name === 'string' && desktop.name ? { name: desktop.name } : {}),
+  }
+}
 
 const strings = (value: unknown): string[] =>
   Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
@@ -127,6 +146,8 @@ export class ClientSession implements ClientToolPeer {
   private initializeParams: unknown = null
   /** 握手时声明能执行的客户端工具命名空间（clientTools 扩展） */
   clientToolNamespaces: ReadonlySet<string> = new Set()
+  /** 握手时报的桌面端信息（声明了 litch_machine 的 Litch 带） */
+  desktop: ClientToolsDesktopInfo | null = null
   /** 每个 harness 上一次报给客户端的声明，用来判断状态是不是真的变了 */
   private readonly announced = new Map<string, string>()
   private readonly probes = new Map<string, Promise<string | null>>()
@@ -147,6 +168,8 @@ export class ClientSession implements ClientToolPeer {
         resolved: (link, requestId) => host.clientTools.resolved(link, requestId),
         subscribed: (link, threadId) => host.clientTools.subscribed(this, link.harness, threadId),
         turnStarted: (link, turnId) => host.clientTools.turnStarted(this, link.harness, turnId),
+        turnBegan: (link, threadId, turnId) =>
+          host.clientTools.turnBegan(link.harness, threadId, turnId),
         turnEnded: (link, turnId) => host.clientTools.turnEnded(link.harness, turnId),
       },
     })
@@ -189,6 +212,8 @@ export class ClientSession implements ClientToolPeer {
     this.relay.close()
     this.calls.close()
     this.host.clientTools.left(this)
+    this.host.clientInvoke.callerLeft(this)
+    this.host.clientInvoke.peerLeft(this)
     this.host.closed(this)
     if (greeted) this.host.log(`${this.tag} 断开`)
   }
@@ -197,7 +222,7 @@ export class ClientSession implements ClientToolPeer {
     return this.relay.deliver(harness, frame, onAnswer)
   }
 
-  withdrawClientTool(facingId: RpcId, threadId: string): void {
+  withdrawClientTool(facingId: RpcId, threadId: string | null): void {
     this.relay.withdraw(facingId, threadId)
   }
 
@@ -246,6 +271,14 @@ export class ClientSession implements ClientToolPeer {
 
   private dispatch(id: RpcId, method: string, frame: Frame, raw: string): unknown {
     if (method === 'initialize') return this.initialize(id, frame.params)
+    // 命令行（litch-machine）的两个方法不用握手：握手要为它连一遍每个 harness 的运行时
+    if (method === CLIENT_TOOL_METHOD.desktops && this.state !== 'closed')
+      return this.host.clientInvoke.desktops()
+    if (method === CLIENT_TOOL_METHOD.invoke && this.state !== 'closed')
+      return this.host.clientInvoke.invoke(this, frame.params).then((outcome) => {
+        if ('error' in outcome) throw new UpstreamRpcError(outcome.error)
+        return outcome.result
+      })
     if (this.state !== 'ready') throw new ProtocolError(-32600, 'Not initialized')
     if (typeof id === 'string' && id.startsWith(INTERNAL_ID_PREFIX))
       throw new ProtocolError(-32600, `请求号不能以 ${INTERNAL_ID_PREFIX} 开头`)
@@ -331,7 +364,7 @@ export class ClientSession implements ClientToolPeer {
     const text = params === fields ? raw : JSON.stringify({ ...frame, params })
     if (!link.forward(id, method, text)) throw this.unavailable(link, method)
     // 退订不等应答：之后到的客户端工具调用不再按订阅者挑给它
-    if (method === 'thread/unsubscribe' && link.dialect.clientToolsByDevice)
+    if (method === 'thread/unsubscribe')
       if (typeof fields?.threadId === 'string')
         this.host.clientTools.unsubscribed(this, link.harness, fields.threadId)
     if (expectation) this.relay.expect(link, id, expectation)
@@ -589,6 +622,7 @@ export class ClientSession implements ClientToolPeer {
     this.declared = new Set(declared)
     this.initializeParams = params
     this.clientToolNamespaces = clientToolNamespaces(params)
+    this.desktop = this.clientToolNamespaces.size ? desktopOf(capabilities) : null
     // 退订名单在路由层生效：被退订的通知直接不转发（设计文档 03 第 5.4 节）
     this.optOut = new Set(strings(capabilities.optOutNotificationMethods))
     const { timing } = this.host

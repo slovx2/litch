@@ -409,6 +409,15 @@ async function cleanMachine(outDir, built) {
   assert.ok(service.includes(`--node ${BASE}/${built.version}/libexec/node/bin/node`), service)
   pass('device-start 给出就绪的那一行；常驻服务用的是随包带的 Node')
 
+  // 短名 litch-machine 装在命令旁边：连得上设备服务，没有 Litch 连着时当场说明、退出码 75
+  const machine = sh(
+    name,
+    `CHA_LANG=zh-CN ${HOME}/.local/bin/litch-machine machines; echo "exit=$?"`,
+  )
+  assert.match(machine.err, /^\[litch:noExecutor\] /, machine.all)
+  assert.match(machine.out, /exit=75$/, machine.all)
+  pass('短名 litch-machine 装好了，经设备服务转交，没有 Litch 连着时退出码 75')
+
   const client = await connect(name)
   const info = await client.call('runtime/info', {})
   client.close()

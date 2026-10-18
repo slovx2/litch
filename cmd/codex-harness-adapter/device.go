@@ -53,26 +53,29 @@ func (c configuration) serviceStatusPath() string {
 }
 
 // 设备进程不属于任何一个 harness：带启动进程的环境和环境文件里的值，不带各入口自己的固定变量。
-// 只有命令行自己的路径是定死的（属于设备的终端要用它的 pty-bridge 子命令），别处给的同名变量不算数。
+// 定死的只有命令行自己的路径（属于设备的终端要用它的 pty-bridge 子命令）和设备服务的套接字（终端里的 litch-machine 用），
+// 别处给的同名变量不算数；外面带进来的会话号不往下传（machineThreadVariables）。
 func (c configuration) serviceEnvironment() []string {
 	result := []string{}
 	present := map[string]bool{adapterCLIEnvironment: true}
 	for _, entry := range os.Environ() {
 		name, _, _ := strings.Cut(entry, "=")
-		if name == adapterCLIEnvironment {
+		if name == adapterCLIEnvironment || name == deviceSocketEnvironment || isMachineThreadVariable(name) {
 			continue
 		}
 		present[name] = true
 		result = append(result, entry)
 	}
 	for name, value := range c.userEnv {
-		if !present[name] {
+		if !present[name] && name != deviceSocketEnvironment && !isMachineThreadVariable(name) {
 			result = append(result, name+"="+value)
 		}
 	}
 	if path := adapterCLIPath(); path != "" {
 		result = append(result, adapterCLIEnvironment+"="+path)
 	}
+	// 属于设备的终端里跑 litch-machine 时靠它找到服务（状态目录不是默认的那个时）
+	result = append(result, deviceSocketEnvironment+"="+c.deviceSocket())
 	return result
 }
 

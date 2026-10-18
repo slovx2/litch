@@ -132,7 +132,18 @@ export const CLIENT_TOOL_METHOD = {
   invoke: 'litch/clientTool/invoke',
   /** 设备进程 → Litch（服务端请求）：执行一次不来自回合的工具调用。应答是 ClientToolCallResponse */
   call: 'litch/clientTool/call',
+  /**
+   * 客户端（命令行）→ 设备进程：现在连着、能执行客户端工具的 Litch 桌面端有哪些。应答是
+   * ClientToolDesktopsResult。命令行的说明开头要写桌面端的名字（决 252），有歧义时也按它列
+   */
+  desktops: 'litch/clientTool/desktops',
 } as const
+
+/** `litch/clientTool/desktops` 的应答 */
+export interface ClientToolDesktopsResult {
+  /** 按连上的先后。没报 desktop 的连接 hostname 是空字符串 */
+  desktops: (ClientToolsDesktopInfo & { namespaces: string[] })[]
+}
 
 /** `litch/clientTool/invoke` 的参数 */
 export interface ClientToolInvokeParams {
