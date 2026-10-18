@@ -17,6 +17,8 @@ export const CLIENT_TOOL_NAMESPACE_PREFIX = 'litch_'
 export const CLIENT_TOOL_NAMESPACE = {
   browser: 'litch_browser',
   computer: 'litch_computer',
+  /** 操作机器上的命令和文件（第一期只有桌面端这台），设计见 design/harness-client/08-remote-control-desktop.md */
+  machine: 'litch_machine',
   /** 只在测试里用：原样回参数，用来打通链路 */
   echo: 'litch_echo',
 } as const
@@ -25,6 +27,8 @@ export const CLIENT_TOOL_NAMESPACE = {
 export interface ClientToolsDeclaration {
   /** 这条连接能执行的命名空间。每个都必须以 CLIENT_TOOL_NAMESPACE_PREFIX 开头 */
   namespaces: string[]
+  /** Litch 桌面端报的自己是哪台（声明了 litch_machine 时带）。设备进程按它列出、挑选桌面端 */
+  desktop?: ClientToolsDesktopInfo
 }
 
 /** 握手参数里我们这个扩展加的部分 */
@@ -102,6 +106,10 @@ export type ClientToolFailureKind =
   | 'invalid'
   /** 执行出错、超时、被打断 */
   | 'failed'
+  /** 访问范围挡住了（litch_machine 碰到禁止位置），说明里写是哪条规则 */
+  | 'blocked'
+  /** 不知道交给哪台：命令行调用找不到会话、又连着不止一台桌面端（决 251），说明里列出各台的主机名 */
+  | 'ambiguous'
 
 /** 拼一个失败答复。文字第一行是 `[litch:<kind>]`，后面是给模型看的说明（说明要告诉模型该怎么办） */
 export function clientToolFailure(
@@ -112,4 +120,55 @@ export function clientToolFailure(
     success: false,
     contentItems: [{ type: 'inputText', text: `[litch:${kind}] ${message}` }],
   }
+}
+
+// —— 不经动态工具的调用（08 号设计 2.2 节、第五节）——
+// 装了适配器的远程设备上，`codex-harness-adapter machine …`（短名 litch-machine）连本机的 device.sock，
+// 调 CLIENT_TOOL_METHOD.invoke；设备进程挑一条声明过这个命名空间的 Litch 连接，向它发 CLIENT_TOOL_METHOD.call。
+// 两样都是我们的扩展（clientTools），只发给、只接受声明过的连接。
+
+export const CLIENT_TOOL_METHOD = {
+  /** 客户端（命令行）→ 设备进程：请连着的 Litch 执行一次工具调用。应答就是执行的结果 */
+  invoke: 'litch/clientTool/invoke',
+  /** 设备进程 → Litch（服务端请求）：执行一次不来自回合的工具调用。应答是 ClientToolCallResponse */
+  call: 'litch/clientTool/call',
+} as const
+
+/** `litch/clientTool/invoke` 的参数 */
+export interface ClientToolInvokeParams {
+  namespace: string
+  tool: string
+  arguments: unknown
+  /**
+   * 调用者所在的会话，从环境变量里找到的（CODEX_THREAD_ID、LITCH_THREAD_ID）。找不到是 null：
+   * 卡片放进桌面端的全局待处理
+   */
+  threadId: string | null
+  /**
+   * 指定交给哪台桌面端（Litch 连接报的主机名）。不给时：找得到会话就交给发起那个回合的那台；
+   * 找不到、又连着不止一台声明了的，回 ambiguous 失败，说明里列出各台的主机名（决 251）
+   */
+  desktop?: string
+}
+
+/** `litch/clientTool/call` 的参数：和 item/tool/call 同形，但不一定来自某个回合 */
+export interface ClientToolDetachedCallParams {
+  /** 设备进程给的标识，取消时按它对 */
+  callId: string
+  namespace: string
+  tool: string
+  arguments: unknown
+  /** 找到了会话就有，否则 null */
+  threadId: string | null
+  /** 这个会话当时在跑的回合，不知道是 null */
+  turnId: string | null
+  /** 调用者是哪个 harness 的进程，设备进程不知道就是 null（只用来显示） */
+  harness: string | null
+}
+
+/** 握手时 Litch 连接在 capabilities.litchClientTools 里额外报的：这台桌面端的主机名（决 251 列出、指定时用） */
+export interface ClientToolsDesktopInfo {
+  hostname: string
+  /** 给人看的名字，比如“Song 的 MacBook”。没有就用主机名 */
+  name?: string
 }

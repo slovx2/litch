@@ -23,6 +23,7 @@ import {
 } from './device/remote.mjs'
 import type { AppView, RemoteCheck, WireColor } from './model.mjs'
 import type { ClientToolPort } from './model-client-tools.mjs'
+import type { MachineActivityView } from './model-machine.mjs'
 import type { TerminalsAlive } from './model-terminal.mjs'
 import { phrase } from './phrase.mjs'
 import { outgoing } from './projection/outgoing.mjs'
@@ -681,6 +682,11 @@ export function createCore(options: CoreOptions): Core {
         return () => {
           appSinks.delete(sink)
         }
+      }
+      // 08 号：远程会话在这台电脑上的动静。现在是空的占位，乙线接上执行器后换成真的
+      if (topic.kind === 'machine') {
+        sink.snapshot({ running: [], pending: [] } satisfies MachineActivityView)
+        return () => {}
       }
       const device = deviceOf(topic.deviceId)
       if (topic.kind === 'sidebar') {

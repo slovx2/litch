@@ -91,18 +91,25 @@ const DISABLED: Record<string, string> = {
  * 应用是“这个会话 / 始终 / 拒绝”，执行器说不许“始终”（远程设备）时没有那一项
  */
 export const clientAskOptions = (ask: ClientAskView): ApprovalOption[] =>
-  ask.kind === 'site'
-    ? [
+  ask.kind === 'machine'
+    ? // 远程设备操作本机（08 号 3.2）：没有“始终允许”
+      [
         { id: 'once', role: 'accept' },
         { id: 'session', role: 'acceptSession' },
-        { id: 'always', role: 'acceptAlways' },
         { id: 'decline', role: 'decline' },
       ]
-    : [
-        { id: 'session', role: 'acceptSession' },
-        ...(ask.allowAlways ? [{ id: 'always', role: 'acceptAlways' } as const] : []),
-        { id: 'decline', role: 'decline' },
-      ]
+    : ask.kind === 'site'
+      ? [
+          { id: 'once', role: 'accept' },
+          { id: 'session', role: 'acceptSession' },
+          { id: 'always', role: 'acceptAlways' },
+          { id: 'decline', role: 'decline' },
+        ]
+      : [
+          { id: 'session', role: 'acceptSession' },
+          ...(ask.allowAlways ? [{ id: 'always', role: 'acceptAlways' } as const] : []),
+          { id: 'decline', role: 'decline' },
+        ]
 
 const turnKey = (threadId: string, turnId: string) => `${threadId}\u0000${turnId}`
 

@@ -1,6 +1,7 @@
 // 界面看到的数据形状。界面不认识协议类型，只认识这里的类型（设计文档 01 第五节规则 3）。
 // 协议条目怎么变成这些显示条目，见 projection 目录。
 // 类型是 Text 的字段可能是对面给的原文，也可能是核心自己要说的一句话（见 phrase.mts），界面按当前语言显示。
+import type { MachineAccessView, MachineAskView } from './model-machine.mjs'
 import type { DeviceServiceView, ServiceUpgradeView } from './model-service.mjs'
 import type { Phrase, Text } from './phrase.mjs'
 import type { DiffElision } from './text/diff.mjs'
@@ -207,6 +208,11 @@ export interface DeviceView {
    * null：这台桌面端根本执行不了这一项（比如不在 macOS 上就没有 Computer Use），设置页不出这个开关
    */
   tools: ToolSwitches
+  /**
+   * 设备设置页上“操作这台电脑（命令与文件）”一项（08 号设计，model-machine.mts）。
+   * 只有远程设备有；本机设备、这台桌面端执行不了 litch_machine 时是 null，设置页不出这一项
+   */
+  machine: MachineAccessView | null
 }
 
 /** 设备设置页上“内置浏览器”“Computer Use”两个开关。默认浏览器开、Computer Use 关（决 190） */
@@ -652,6 +658,7 @@ export type ClientAskView =
       /** 能不能选“始终允许”（远程设备的会话不能） */
       allowAlways: boolean
     }
+  | MachineAskView
 
 /**
  * 这台桌面端在执行一次客户端工具调用（内置浏览器、Computer Use）时要用户点头。
