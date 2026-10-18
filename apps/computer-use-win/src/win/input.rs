@@ -22,12 +22,18 @@ const BATCH: usize = 200;
 const TYPE_GAP_MS: u64 = 5;
 /// 'V' 的虚拟键码（Ctrl+V 粘贴用）
 const VK_V: u16 = 0x56;
-/// 没有可轮询的元素时，发完 Ctrl+V 固定等多久再恢复剪贴板（目标异步读剪贴板，等太短会把要粘的内容抢回去）
+/// 写完剪贴板、核对一致后，等一下再发 Ctrl+V（刚写完马上粘，目标 OpenClipboard 时剪贴板可能正被
+/// 剪贴板历史、串流软件的剪贴板同步等占着而静默失败；也和前一个按键挨太近有关）
+const PRE_PASTE_MS: u64 = 50;
+/// 没有可确认的元素时，发完 Ctrl+V 固定等多久再恢复剪贴板（目标异步读剪贴板，等太短会把要粘的内容抢回去）
 const PASTE_SETTLE_MS: u64 = 700;
-/// 有可轮询的元素时，最多等多久确认粘贴已落下
-const PASTE_CONFIRM_MAX_MS: u64 = 1000;
-/// 轮询元素值变化的间隔
+/// 有可确认的元素时，每发一次 Ctrl+V 最多等多久确认粘贴已落下
+const PASTE_CONFIRM_MAX_MS: u64 = 800;
+/// 轮询元素文字变化的间隔
 const PASTE_POLL_MS: u64 = 50;
+
+/// 粘贴没确认落下时给模型看的英文提示（写进动作结果的 notes）
+pub const PASTE_UNCONFIRMED_NOTE: &str = "typing may not have landed; check with get_app_state";
 
 /// 虚拟桌面（所有显示器合起来）的矩形，物理像素
 pub fn desktop() -> Rect {
@@ -129,15 +135,35 @@ pub fn drag(from: (i32, i32), to: (i32, i32)) -> RpcResult<()> {
     Ok(())
 }
 
+/// 粘贴的结果
+enum Paste {
+    /// 确认粘贴已落下（元素文字变了），或没有可确认的元素、固定等后假定已落下
+    Ok,
+    /// 有可确认的元素，重发后仍没确认到变化——很可能没粘进去
+    Unconfirmed,
+    /// 剪贴板不可用（打不开、写回核对不一致）——调用方退回逐字
+    ClipboardUnavailable,
+}
+
 /// 输入文字：普通窗口走剪贴板 + Ctrl+V（记事本这类 TSF 控件逐字发会吞字）；控制台类窗口的粘贴快捷键
-/// 不统一（旧控制台要右键、各家终端不一），所以照旧逐字发。粘贴不可用（打不开剪贴板、写回核对不一致）时退回逐字。
-/// `confirmed`：给了就用它判粘贴有没有落下（轮询元素值变化），用来决定何时恢复剪贴板；没给就固定等。
-pub fn enter_text(value: &str, window_class: &str, confirmed: Option<&dyn Fn() -> bool>) {
+/// 不统一（旧控制台要右键、各家终端不一），所以照旧逐字发。剪贴板不可用时退回逐字。
+/// `confirmed`：给了就用它判粘贴有没有落下（轮询目标元素文字变化），用来决定何时恢复剪贴板、要不要重发；
+/// 没给（焦点元素既没有值也没有文字）就固定等。回一个可选的 notes 提示：粘贴没确认落下时提醒模型去核对。
+pub fn enter_text(value: &str, window_class: &str, confirmed: Option<&dyn Fn() -> bool>) -> Option<&'static str> {
     if value.is_empty() {
-        return;
+        return None;
     }
-    if is_console_class(window_class) || !paste_text(value, confirmed) {
+    if is_console_class(window_class) {
         type_per_char(value);
+        return None;
+    }
+    match paste_text(value, confirmed) {
+        Paste::Ok => None,
+        Paste::Unconfirmed => Some(PASTE_UNCONFIRMED_NOTE),
+        Paste::ClipboardUnavailable => {
+            type_per_char(value);
+            None
+        }
     }
 }
 
@@ -152,42 +178,65 @@ fn is_console_class(class: &str) -> bool {
     )
 }
 
-/// 剪贴板 + Ctrl+V：存原内容 → 写入 → 读回核对 → 粘贴 → 等粘贴落下 → 恢复原内容。成功回 true；
-/// 打不开剪贴板或写回核对不一致时回 false（恢复原内容后由调用方退回逐字）。
+/// 剪贴板 + Ctrl+V：存原内容 → 写入 → 读回核对 → 等 50ms → 粘贴 → 确认落下 → 恢复原内容。
 /// 注意：粘贴期间剪贴板被临时占用（放的是要打的文字），落下后才会恢复成用户原来的内容。
-fn paste_text(value: &str, confirmed: Option<&dyn Fn() -> bool>) -> bool {
+/// 有确认回调时：发一次等最多 800ms，没变化就再发一次（剪贴板里还是要打的文字）再等；两次都没变化回
+/// Unconfirmed。没有确认回调（焦点元素既没有值也没有文字）就固定等 PASTE_SETTLE_MS，当作已落下。
+fn paste_text(value: &str, confirmed: Option<&dyn Fn() -> bool>) -> Paste {
     let saved = clipboard::get_text();
     if !clipboard::set_text(value) {
-        return false;
+        return Paste::ClipboardUnavailable;
     }
     if clipboard::get_text().as_deref() != Some(value) {
         if let Some(prev) = &saved {
             clipboard::set_text(prev);
         }
-        return false;
+        return Paste::ClipboardUnavailable;
     }
-    press_key(&KeyCombo { modifiers: vec![VK_CONTROL], key: VK_V, extended: false }, 1);
-    wait_until_pasted(confirmed);
-    if let Some(prev) = saved {
-        clipboard::set_text(&prev);
-    }
-    true
-}
-
-/// 等粘贴生效再恢复剪贴板：给了确认回调就轮询到它为真（最多 PASTE_CONFIRM_MAX_MS，目标异步读剪贴板，
-/// 恢复早了会把要粘的内容抢回去）；没给就固定等 PASTE_SETTLE_MS。
-fn wait_until_pasted(confirmed: Option<&dyn Fn() -> bool>) {
-    match confirmed {
+    // 刚写完剪贴板稍等再粘，躲开剪贴板被别的进程短暂占用导致 Ctrl+V 静默失败
+    std::thread::sleep(Duration::from_millis(PRE_PASTE_MS));
+    send_paste();
+    let result = match confirmed {
+        None => {
+            std::thread::sleep(Duration::from_millis(PASTE_SETTLE_MS));
+            Paste::Ok
+        }
         Some(check) => {
-            let deadline = Instant::now() + Duration::from_millis(PASTE_CONFIRM_MAX_MS);
-            loop {
-                std::thread::sleep(Duration::from_millis(PASTE_POLL_MS));
-                if check() || Instant::now() >= deadline {
-                    break;
+            if wait_for_change(check) {
+                Paste::Ok
+            } else {
+                // 没落下，剪贴板里还是要打的文字，再发一次
+                send_paste();
+                if wait_for_change(check) {
+                    Paste::Ok
+                } else {
+                    Paste::Unconfirmed
                 }
             }
         }
-        None => std::thread::sleep(Duration::from_millis(PASTE_SETTLE_MS)),
+    };
+    if let Some(prev) = saved {
+        clipboard::set_text(&prev);
+    }
+    result
+}
+
+/// 发一次 Ctrl+V（带 INJECTED_TAG）
+fn send_paste() {
+    press_key(&KeyCombo { modifiers: vec![VK_CONTROL], key: VK_V, extended: false }, 1);
+}
+
+/// 轮询确认回调，最多等 PASTE_CONFIRM_MAX_MS；变化了回 true，超时回 false
+fn wait_for_change(check: &dyn Fn() -> bool) -> bool {
+    let deadline = Instant::now() + Duration::from_millis(PASTE_CONFIRM_MAX_MS);
+    loop {
+        std::thread::sleep(Duration::from_millis(PASTE_POLL_MS));
+        if check() {
+            return true;
+        }
+        if Instant::now() >= deadline {
+            return false;
+        }
     }
 }
 
