@@ -2,6 +2,7 @@
 // 这里只管各条客户端连接共用的东西；一条连接上的事在 session.mts。
 import { mkdirSync } from 'node:fs'
 import type { DatabaseSync } from 'node:sqlite'
+import { CLIENT_TOOL_NAMESPACE } from '../../protocol/src/client-tools.mjs'
 import { EXTENSION } from '../../protocol/src/device.mjs'
 import type { DeviceSettingsSnapshot } from '../../protocol/src/device-settings.mjs'
 import { ClientToolInvoker } from './client-tool-invoke.mjs'
@@ -9,7 +10,7 @@ import { ClientToolRouter } from './client-tools.mjs'
 import type { ControlChannel, ControlState } from './control.mjs'
 import { DeviceLayer } from './device-layer.mjs'
 import type { ProcessLimits } from './device-processes.mjs'
-import { type DeviceToolRegistry, DeviceTools } from './device-tools.mjs'
+import { DeviceTools } from './device-tools.mjs'
 import { connectEngineLink, type EngineLink, EngineUnavailable } from './engine-link.mjs'
 import type { FlowLimits } from './flow.mjs'
 import { deviceInfo, deviceVersion, HarnessCatalog } from './harness-info.mjs'
@@ -25,13 +26,16 @@ import {
   type SessionTiming,
   type UpstreamConfig,
 } from './session.mjs'
+import { openSessionDatabase, SessionStore } from './session-store.mjs'
+import { sessionToolsHandler } from './session-tools.mjs'
+import { SessionTree } from './session-tree.mjs'
 import { openDeviceStore } from './store.mjs'
 import { DEFAULT_TASK_TIMING, type TaskTiming } from './task-run.mjs'
 import { DEFAULT_TASK_SETTINGS, type TaskClock, type TaskSettings } from './task-scheduler.mjs'
 import { DeviceTasks } from './tasks.mjs'
 import { registerTasksTool } from './tasks-tool.mjs'
 import { ThreadIndex } from './thread-index.mjs'
-import { type Connector, isObject, type Wire, type WireHandlers } from './wire.mjs'
+import { type Connector, DeviceError, isObject, type Wire, type WireHandlers } from './wire.mjs'
 import { Workspaces } from './workspaces.mjs'
 
 export interface DeviceOptions {
@@ -95,12 +99,21 @@ const DEFAULT_TIMING: SessionTiming = {
   startedHoldMs: 30_000,
   // 原生 codex 发给各条连接的几份客户端工具调用前后只差几毫秒，见 client-tools.mts
   clientToolGraceMs: 50,
+  // 子会话里的审批、提问挂了这么久没人答，算它停下来在等用户（会话树的唤醒看它）
+  needsUserMs: 10_000,
 }
+
+/**
+ * 设置里“会话编排”的开关（Go 层的 settings_sessions.go 声明）。没有主进程在管（没有设置功能）时按开着算
+ */
+export const SESSION_TREE_SETTING = 'sessions.enabled'
 
 export class DeviceServer {
   private readonly host: SessionHost
   private readonly sessions = new Set<ClientSession>()
   private readonly db: DatabaseSync
+  /** 会话树的库（sessions.sqlite），带迁移，和 device.sqlite 分开 */
+  private readonly sessionsDb: DatabaseSync
   private readonly index: ThreadIndex
   private readonly workspaces: Workspaces
   private readonly importer: WorkspaceImporter | null
@@ -112,9 +125,6 @@ export class DeviceServer {
   private readonly tasks: DeviceTasks | null
   private tasksWait: NodeJS.Timeout | null = null
   private readonly taskTiming: TaskTiming
-  /** 由设备进程自己执行的 litch_ 命名空间（litch_tasks……），见 device-tools.mts */
-  readonly deviceTools: DeviceToolRegistry
-  private readonly tools: DeviceTools
   /** 设备进程自己开着的引擎连接：设备进程关的时候一起关 */
   private readonly engineLinks = new Set<EngineLink>()
   /** 主进程给的名单里的 harness 怎么连，按套接字地址记着 */
@@ -126,6 +136,12 @@ export class DeviceServer {
   /** 还没告诉客户端的那些变化动过的设置键 */
   private readonly unannounced = new Set<string>()
   private closed = false
+  /** 由设备进程自己执行的 litch_ 命名空间（litch_tasks、litch_sessions），见 device-tools.mts */
+  readonly deviceTools: DeviceTools
+  /** 会话树：父子关系、提案、回报与唤醒（session-tree.mts） */
+  readonly sessionTree: SessionTree
+  /** 上一次看到的“会话编排”开关，变了才动 */
+  private orchestrating: boolean
 
   constructor(options: DeviceOptions) {
     mkdirSync(options.stateDir, { recursive: true, mode: 0o700 })
@@ -148,8 +164,7 @@ export class DeviceServer {
     const log = options.log ?? (() => {})
     const taskTiming = { ...DEFAULT_TASK_TIMING, ...options.tasks?.timing }
     this.taskTiming = taskTiming
-    this.tools = new DeviceTools(log)
-    this.deviceTools = this.tools
+    this.deviceTools = new DeviceTools(log)
     // litch_tasks 是第一个注册者：调用从哪条连接来都由设备进程答
     registerTasksTool(this.deviceTools, {
       tasks: () => this.tasks,
@@ -189,10 +204,28 @@ export class DeviceServer {
       this.control.onState = (state) => this.controlChanged(state)
       this.control.onAsk = (method) => this.asked(method)
     }
+    this.sessionsDb = openSessionDatabase(options.stateDir)
+    this.orchestrating = this.sessionTreeOn()
+    this.sessionTree = new SessionTree({
+      harnesses: () => this.harnesses(),
+      openEngineLink: (harness) => this.openEngineLink(harness),
+      index: this.index,
+      workspaces: this.workspaces,
+      store: new SessionStore(this.sessionsDb),
+      enabled: () => this.sessionTreeOn(),
+      clients: () => [...this.sessions].filter((session) => session.ready).length,
+      announce: (method, params, extension) => this.announce(method, params, extension),
+      threadStarted: (harness, thread) => {
+        for (const session of this.sessions) session.threadStarted(harness, thread)
+      },
+      timeoutMs: options.timing?.listTimeoutMs ?? DEFAULT_TIMING.listTimeoutMs,
+      needsUserMs: options.timing?.needsUserMs ?? DEFAULT_TIMING.needsUserMs,
+      log,
+    })
+    this.deviceTools.register(CLIENT_TOOL_NAMESPACE.sessions, sessionToolsHandler(this.sessionTree))
     const router = new ClientToolRouter({
       graceMs: options.timing?.clientToolGraceMs ?? DEFAULT_TIMING.clientToolGraceMs,
       log,
-      deviceTools: this.tools,
     })
     this.host = {
       harnesses: () => this.harnesses(),
@@ -215,7 +248,9 @@ export class DeviceServer {
       clientTools: router,
       clientInvoke: new ClientToolInvoker({ router, index: this.index, log }),
       tasks: this.tasks,
-      deviceTools: this.tools,
+      deviceTools: this.deviceTools,
+      sessionTree: this.sessionTree,
+      sessionTreeOn: () => this.sessionTreeOn(),
       reachable: () => this.importer?.kick(),
       importing: () => {
         this.importer?.kick()
@@ -289,12 +324,21 @@ export class DeviceServer {
     return connect
   }
 
+  /** 设置里“会话编排”开着没有。没有设置功能（没有主进程在管）时按开着算 */
+  private sessionTreeOn(): boolean {
+    return this.control?.state?.snapshot.values[SESSION_TREE_SETTING] !== false
+  }
+
   /** 主进程推来了新的状态：各条连接跟着调整上游，设置真的变了就通知声明过的客户端 */
   private controlChanged(state: ControlState): void {
     this.applyProcessLimits(state)
     if (this.tasksWait) clearTimeout(this.tasksWait)
     this.tasksWait = null
     this.tasks?.setSettings(taskSettings(state))
+    const orchestrating = this.sessionTreeOn()
+    // 会话编排刚打开：关着时攒下的回报现在可以唤醒了
+    if (orchestrating && !this.orchestrating) this.sessionTree.checkAll()
+    this.orchestrating = orchestrating
     for (const session of this.sessions) session.sync()
     // 刚起来的 harness，它现有的项目还没导入过的话现在去读
     this.importer?.kick()
@@ -392,14 +436,20 @@ export class DeviceServer {
   async openEngineLink(harness: string, options: { waitMs?: number } = {}): Promise<EngineLink> {
     const deadline = Date.now() + (options.waitMs ?? 0)
     for (;;) {
-      if (this.closed) throw new EngineUnavailable('the device service is shutting down')
+      if (this.closed) throw new EngineUnavailable(harness, 'the device service is shutting down')
       const source = this.harnesses().find((item) => item.id === harness)
-      if (!source) throw new EngineUnavailable(`${harness} is not configured on this device`)
+      if (!source)
+        throw new EngineUnavailable(
+          harness,
+          `${harness} is not configured on this device`,
+          'unknownHarness',
+        )
       const state = source.managed?.state
       if (state && state !== 'running' && state !== 'starting')
-        throw new EngineUnavailable(`${harness} is not running (${state})`)
+        throw new EngineUnavailable(harness, `${harness} is not running (${state})`)
       let failure: EngineUnavailable | null = null
-      if (state === 'starting') failure = new EngineUnavailable(`${harness} is still starting`)
+      if (state === 'starting')
+        failure = new EngineUnavailable(harness, `${harness} is still starting`)
       else
         try {
           return this.keep(
@@ -410,7 +460,7 @@ export class DeviceServer {
               version: this.version,
               handshakeTimeoutMs: this.taskTiming.handshakeTimeoutMs,
               requestTimeoutMs: this.taskTiming.requestTimeoutMs,
-              tools: this.tools,
+              tools: this.deviceTools,
               ...this.options.engineLinks,
               held: (from, requestId) =>
                 [...this.sessions].some((session) => session.holdsServerRequest(from, requestId)),
@@ -418,7 +468,9 @@ export class DeviceServer {
           )
         } catch (error) {
           failure =
-            error instanceof EngineUnavailable ? error : new EngineUnavailable(String(error))
+            error instanceof EngineUnavailable
+              ? error
+              : new EngineUnavailable(harness, String(error))
         }
       if (Date.now() >= deadline) throw failure
       await new Promise((resolve) => setTimeout(resolve, 1000).unref())
@@ -428,7 +480,7 @@ export class DeviceServer {
   private keep(link: EngineLink): EngineLink {
     if (this.closed) {
       link.close()
-      throw new EngineUnavailable('the device service is shutting down')
+      throw new EngineUnavailable(link.harness, 'the device service is shutting down')
     }
     this.engineLinks.add(link)
     link.onClose(() => this.engineLinks.delete(link))
@@ -454,11 +506,13 @@ export class DeviceServer {
     if (this.tasksWait) clearTimeout(this.tasksWait)
     // 先停任务、关内部连接：等着的回合当场醒来，运行留着 running，下次起来去查
     this.tasks?.close()
-    this.tools.close()
     for (const link of [...this.engineLinks]) link.close()
     for (const session of [...this.sessions]) session.close()
+    this.sessionTree.close()
+    this.deviceTools.close()
     await this.importer?.close()
     await this.layer.close()
     this.db.close()
+    this.sessionsDb.close()
   }
 }

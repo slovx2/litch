@@ -17,6 +17,7 @@ import type { RpcPeer, WireMessage } from '../../shared/src/types.mjs'
 import { type OpencodeApi, OpencodeError } from './api.mjs'
 import { Asks } from './asks.mjs'
 import { Catalog } from './catalog.mjs'
+import { ClientTools } from './client-tools.mjs'
 import {
   type OcThread,
   type OcTurn,
@@ -60,6 +61,8 @@ export interface LiveThread {
   delivered: Promise<void>
   // 当前回合开始时的权限档：完全访问在回合里自动放行，回合中途换档从下一个回合起作用
   turnPreset: Preset | null
+  // 最近一个由客户端发起的回合是哪条连接发起的：客户端工具先交给它（client-tools.mts）
+  starter: { turnId: string; peerId: string } | null
 }
 
 export class OpencodeServer {
@@ -80,6 +83,7 @@ export class OpencodeServer {
   readonly sessions: Sessions
   readonly asks: Asks
   readonly turns: Turns
+  readonly clientTools: ClientTools
   // 各连接握手时声明认识的扩展：服务端主动给的扩展内容只发给声明过的连接
   readonly declared = new Map<string, Set<string>>()
   private readonly loading = new Map<string, Promise<LiveThread>>()
@@ -114,6 +118,7 @@ export class OpencodeServer {
     this.sessions = new Sessions(this)
     this.asks = new Asks(this)
     this.turns = new Turns(this)
+    this.clientTools = new ClientTools(this)
   }
 
   api(): Promise<OpencodeApi> {
@@ -146,6 +151,7 @@ export class OpencodeServer {
         message.params && typeof message.params === 'object' ? (message.params as any) : {}
       if (message.method === 'initialize') {
         this.declared.set(peer.id, declaredExtensions(params))
+        this.clientTools.declare(peer, params)
         applyNotificationOptOut(peer, params)
       }
       const work = () => dispatch(this, peer, message.method, params)
@@ -238,6 +244,9 @@ export class OpencodeServer {
       steer: (messageId) => this.store.getMeta('steer', `${threadId}:${messageId}`) !== null,
       contextWindow: (provider, model) => this.catalog.contextWindow(provider, model),
       mcpServers: () => this.catalog.mcpServers(),
+      dynamicTool: (name) => this.clientTools.lookup(threadId, name),
+      dynamicToolStarted: (itemId, name, input) =>
+        this.clientTools.started(threadId, itemId, name, input),
     }
   }
 
@@ -292,6 +301,7 @@ export class OpencodeServer {
       submitted: new Map(),
       delivered: Promise.resolve(),
       turnPreset: null,
+      starter: null,
     }
     this.live.set(id, live)
     this.sessions.display(id, projection)
@@ -372,6 +382,7 @@ export class OpencodeServer {
       createdAt: now,
       updatedAt: now,
       parentThreadId: null,
+      agent: null,
       ephemeral: true,
     }
     const live: LiveThread = {
@@ -381,6 +392,7 @@ export class OpencodeServer {
       submitted: new Map(),
       delivered: Promise.resolve(),
       turnPreset: null,
+      starter: null,
     }
     this.ephemeral.set(thread.id, live)
     this.subscribe(peer, thread.id)
@@ -464,6 +476,7 @@ export class OpencodeServer {
   closePeer(peer: RpcPeer): void {
     this.peers.delete(peer.id)
     this.declared.delete(peer.id)
+    this.clientTools.drop(peer.id)
     this.files.closePeer(peer.id)
     this.processes.closePeer(peer.id)
     for (const ids of this.subscriptions.values()) ids.delete(peer.id)
@@ -479,6 +492,7 @@ export class OpencodeServer {
     this.closing ??= (async () => {
       this.requests.reject(() => true, '适配器正在关闭')
       await this.runtime.close(signalled)
+      await this.clientTools.close()
       this.files.close()
       await this.processes.close()
       this.store.close()

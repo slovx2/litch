@@ -15,6 +15,7 @@ import { useEffect, useRef } from 'react'
 import { useT } from '../app/appearance.ts'
 import { downHarness, downText, wireStyle } from '../app/device.ts'
 import { useKey, useServices } from '../app/services.tsx'
+import { Proposals } from '../tree/Proposals.tsx'
 import { SessionComposer } from './Composer.tsx'
 import { PlanAsk } from './PlanAsk.tsx'
 import { asksAboutPlan, markPlanAsked } from './plan-ask.ts'
@@ -124,8 +125,14 @@ export function Requests({ deviceId, sessionId }: DockProps) {
     if (planAsked && lastTurn) markPlanAsked(`${deviceId}:${sessionId}`, lastTurn)
   }, [deviceId, sessionId, planAsked, lastTurn])
 
-  // 没有请求等着的时候：计划写好了、还没人拿主意的话，这里问一句
-  if (!request) return meta ? <PlanAsk deviceId={deviceId} sessionId={sessionId} /> : null
+  // 没有请求等着的时候：计划写好了、还没人拿主意的话，这里问一句；模型提了子会话的话，提案也在这里
+  if (!request)
+    return meta ? (
+      <>
+        <PlanAsk deviceId={deviceId} sessionId={sessionId} />
+        <Proposals deviceId={deviceId} sessionId={sessionId} />
+      </>
+    ) : null
   return (
     <div className="req-slot" style={wireStyle(device?.wire)}>
       <RequestCard

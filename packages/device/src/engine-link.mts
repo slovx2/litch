@@ -1,20 +1,22 @@
-// 设备进程自有的引擎连接（定时任务的运行、会话树的编排都用它）：不对应任何客户端连接，用完就关。
-// 要一直听着：通知交给 onNotification 的订阅者；引擎发来要答复的请求里：
+// 设备进程自有的引擎连接（定时任务的运行、会话树的编排都用它）：不对应任何客户端连接，没有客户端在中间，
+// 设备进程自己对引擎建会话、发回合、读会话。和聚合面上的上游连接（upstream.mts，每条客户端连接一组、断了自己重连）
+// 不同，它断了就报 onClose，要再用由调用方重新开；和 side-link.mts（问几句就关）也不同，它一直听着。
+// 通知交给 onNotification 的订阅者；引擎发来要答复的请求里：
 //   - 设备工具（device-tools.mts 注册的 litch_ 命名空间）的 item/tool/call 交给注册表答；
-//   - 别的（审批、提问、MCP 征询……）这一版不答。只有一件事要替引擎做：这条连接订阅着会话，引擎把请求
+//   - 别的（审批、提问、MCP 征询……）交给 onServerRequest 的订阅者看（会话树看子会话是不是在等用户），
+//     这一版不答。只有一件事要替引擎做：这条连接订阅着会话，引擎把请求
 //     也发给了它。对“没有连接可送就当场失败”的引擎（Pi、dsh、OpenCode、ACP 这几个用共享的
 //     ServerRequests 的），这条连接一直拿着请求不答，请求就一直挂着、回合卡到时限。所以没有真正的客户端
 //     连接拿着这条请求时，替引擎回它原来“没人可送”的结果；有客户端拿着就留给客户端，客户端都走了再回。
 //     没人可送时本来就一直等着、等有连接来再送的引擎（Claude、原生 codex）照它原来的做法，不答。
 // 握手时声明 clientTools，命名空间取注册表里的，引擎挑执行方时挑得中这条连接。
 
-import type { ClientToolCallResponse } from '../../protocol/src/client-tools.mjs'
 import { NO_RECIPIENT_MESSAGE } from '../../shared/src/server-requests.mjs'
 import { type DeviceTools, declareDeviceTools } from './device-tools.mjs'
 import type { UpstreamDialect } from './dialect.mjs'
 import {
   type Connector,
-  type Frame,
+  DeviceError,
   idKey,
   isObject,
   type RpcId,
@@ -28,6 +30,8 @@ export interface EngineLink {
   readonly runtime: Record<string, unknown> | null
   /** 对面是原生 codex（不认识我们的扩展键，threadSource 之类只有它认） */
   readonly native: boolean
+  /** 断了、关了 */
+  readonly closed: boolean
   /**
    * 发一个请求等应答。上游回了错误时抛 UpstreamRpcError；超时、断开抛普通的 Error。
    * timeoutMs 不给用开连接时定的默认时限
@@ -35,14 +39,25 @@ export interface EngineLink {
   request(method: string, params: unknown, options?: { timeoutMs?: number }): Promise<any>
   /** 收通知；返回取消订阅 */
   onNotification(listener: (method: string, params: any) => void): () => void
+  /** 对面发来、要答复的请求（设备工具的调用除外）：只给看，不由订阅者答。返回取消订阅 */
+  onServerRequest(listener: (method: string, params: any, id: RpcId) => void): () => void
   /** 连接断了（引擎退出、设备进程关、自己关）。已经断了的当场调用。返回取消订阅 */
   onClose(listener: (reason: string) => void): () => void
   close(): void
 }
 
-/** 开不了内部连接：harness 没配、没在跑、连不上 */
-export class EngineUnavailable extends Error {
-  readonly code = 'harnessUnavailable'
+/**
+ * 开不了内部连接：harness 没配（unknownHarness）、没在跑、连不上（harnessUnavailable）。
+ * 是 DeviceError，经客户端的请求抛出去时带着设备层的错误码
+ */
+export class EngineUnavailable extends DeviceError {
+  constructor(
+    harness: string,
+    message: string,
+    reason: 'harnessUnavailable' | 'unknownHarness' = 'harnessUnavailable',
+  ) {
+    super(reason, message, { harness })
+  }
 }
 
 /** 没人可送时一直等着（等有连接订阅会话再送）的引擎。原生 codex 也是，另按方言认 */
@@ -61,7 +76,7 @@ export interface EngineLinkOptions {
   handshakeTimeoutMs: number
   /** request 不给时限时用的 */
   requestTimeoutMs: number
-  tools: Pick<DeviceTools, 'namespaces' | 'has' | 'dispatch'>
+  tools: Pick<DeviceTools, 'namespaces' | 'has' | 'dispatch' | 'turnEnded'>
   /** 这个 harness 发来的这条请求（按请求号）此刻有没有真正的客户端连接拿着 */
   held(harness: string, requestId: RpcId): boolean
   heldGraceMs?: number
@@ -78,6 +93,7 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
   const { dialect, harness, tools } = options
   const waiting = new Map<number, Waiting>()
   const notified = new Set<(method: string, params: any) => void>()
+  const requested = new Set<(method: string, params: any, id: RpcId) => void>()
   const closing = new Set<(reason: string) => void>()
   /** 替引擎看着的请求（没答的审批、提问……），键是请求号 */
   const unanswered = new Map<string, NodeJS.Timeout>()
@@ -137,16 +153,22 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
           clearTimeout(unanswered.get(key))
           unanswered.delete(key)
         }
+        // 回合结束：这个回合里还在执行的设备工具作废
+        if (frame.method === 'turn/completed' && isObject(params.turn))
+          tools.turnEnded(harness, String(params.turn.id))
         for (const listener of [...notified]) listener(frame.method, params)
         return
       }
       const id = frame.id as RpcId
       if (frame.method === 'item/tool/call' && tools.has(params.namespace)) {
-        tools.dispatch(harness, frame as Frame, (result: ClientToolCallResponse) =>
-          send({ id, result }),
-        )
+        tools.dispatch(harness, params, (result) => {
+          if (closedWith !== null) return false
+          send({ id, result })
+          return true
+        })
         return
       }
+      for (const listener of [...requested]) listener(frame.method, params, id)
       if (failsUnheld()) watchRequest(id)
       return
     }
@@ -169,7 +191,7 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
   try {
     wire = await options.connect({ message: receive, close: () => shut('连接断开了') })
   } catch (error) {
-    throw new EngineUnavailable(`could not connect to ${harness}: ${message(error)}`)
+    throw new EngineUnavailable(harness, `could not connect to ${harness}: ${message(error)}`)
   }
   const opened = wire
   const call = (method: string, params: unknown, timeoutMs: number): Promise<any> =>
@@ -207,12 +229,15 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
     )
   } catch (error) {
     close()
-    throw new EngineUnavailable(`could not connect to ${harness}: ${message(error)}`)
+    throw new EngineUnavailable(harness, `could not connect to ${harness}: ${message(error)}`)
   }
   return {
     harness,
     runtime,
     native: dialect.clientToolsByDevice === true,
+    get closed() {
+      return closedWith !== null
+    },
     request: (method, params, requestOptions) =>
       call(
         method,
@@ -222,6 +247,10 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
     onNotification(listener) {
       notified.add(listener)
       return () => notified.delete(listener)
+    },
+    onServerRequest(listener) {
+      requested.add(listener)
+      return () => requested.delete(listener)
     },
     onClose(listener) {
       if (closedWith !== null) {

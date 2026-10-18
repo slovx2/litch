@@ -38,6 +38,8 @@ import { dialectFor } from './native-codex.mjs'
 import { Relay } from './relay.mjs'
 import { classify } from './routes.mjs'
 import { describeDevice } from './service-info.mjs'
+import { sessionTreeCall } from './session-methods.mjs'
+import type { SessionTree } from './session-tree.mjs'
 import { DEVICE_TASK_PREFIX, type DeviceTasks } from './tasks.mjs'
 import type { ThreadIndex } from './thread-index.mjs'
 import { type ForwardedRequest, INTERNAL_ID_PREFIX, UpstreamLink } from './upstream.mjs'
@@ -74,6 +76,8 @@ export interface SessionTiming {
   startedHoldMs: number
   /** 原生 codex 的客户端工具调用挑不出执行方时，等其余几份到齐的工夫（毫秒），见 client-tools.mts */
   clientToolGraceMs: number
+  /** 子会话里的审批、提问挂了这么久没人答，算它停下来在等用户（session-tree.mts） */
+  needsUserMs: number
 }
 
 /** 这台设备上的一个 harness：怎么连它的运行时，以及适配器主进程眼里它的状态 */
@@ -111,8 +115,12 @@ export interface SessionHost {
   clientInvoke: ClientToolInvoker
   /** 定时任务（deviceTasks 扩展）。任务库打不开时是 null，设备上就没有这项扩展 */
   tasks: DeviceTasks | null
-  /** 由设备进程自己执行的命名空间（device-tools.mts） */
+  /** 由设备进程自己执行的 litch_ 命名空间：替每条上游连接声明，调用落到哪条上就在那里拦（device-tools.mts） */
   deviceTools: DeviceTools
+  /** 会话树（session-tree.mts） */
+  sessionTree: SessionTree
+  /** 设置里“会话编排”开着 */
+  sessionTreeOn(): boolean
 }
 
 /** 请求已经有着落：转给上游了（应答由上游来），或者已经自己答过了 */
@@ -170,9 +178,13 @@ export class ClientSession implements ClientToolPeer {
       startedHoldMs: host.timing.startedHoldMs,
       log: (line) => host.log(`${this.tag} ${line}`),
       deviceTools: host.deviceTools,
+      sessions: {
+        clientTurn: (harness, turnId) => host.sessionTree.clientTurn(harness, turnId),
+        turnEvent: (harness, method, params) => host.sessionTree.turnEvent(harness, method, params),
+        decorate: (thread) => host.sessionTree.decorate(thread),
+      },
       clientTools: {
         offer: (link, frame, upstreamId) => host.clientTools.offer(this, link, frame, upstreamId),
-        device: (link, frame, upstreamId) => host.clientTools.device(link, frame, upstreamId),
         resolved: (link, requestId) => host.clientTools.resolved(link, requestId),
         subscribed: (link, threadId) => host.clientTools.subscribed(this, link.harness, threadId),
         turnStarted: (link, turnId) => host.clientTools.turnStarted(this, link.harness, turnId),
@@ -299,6 +311,13 @@ export class ClientSession implements ClientToolPeer {
     switch (route.kind) {
       case 'device':
         if (method === 'runtime/info') return this.runtimeInfo()
+        if (method.startsWith('litch/session/') || method.startsWith('litch/sessionProposal/'))
+          return sessionTreeCall(
+            this.host.sessionTree,
+            this.host.sessionTreeOn(),
+            method,
+            frame.params,
+          )
         if (method.startsWith(MANAGEMENT_PREFIX))
           return this.host.management.call(method, frame.params)
         if (method.startsWith(DEVICE_TASK_PREFIX)) return this.tasks(method, frame.params)
@@ -316,6 +335,9 @@ export class ClientSession implements ClientToolPeer {
             index: this.host.index,
             workspaces: this.host.workspaces,
             timeoutMs: this.host.timing.listTimeoutMs,
+            ...(this.declared.has(EXTENSION.sessionTree)
+              ? { decorate: (row: Record<string, unknown>) => this.host.sessionTree.decorate(row) }
+              : {}),
           },
           frame.params,
         )
@@ -373,6 +395,20 @@ export class ClientSession implements ClientToolPeer {
     let params = fields
     if (fields && dropped.some((key) => key in fields))
       params = Object.fromEntries(Object.entries(fields).filter(([key]) => !dropped.includes(key)))
+    // 客户端发起回合就是用户说了一句话：子会话的回报排着队的话，包好放在这句话前面（session-tree.mts）
+    if (params && method === 'turn/start' && typeof params.threadId === 'string') {
+      const input = this.host.sessionTree.beforeUserTurn(params.threadId, params.input)
+      if (input) params = { ...params, input }
+    }
+    // 建会话时带的动态工具记下来：设备进程替这个会话派子会话时照样带上
+    if (method === 'thread/start' && Array.isArray(params?.dynamicTools)) {
+      const tools = params.dynamicTools as unknown[]
+      this.relay.after(id, (result) => {
+        const thread = isObject(result) ? result.thread : null
+        if (isObject(thread) && typeof thread.id === 'string')
+          this.host.sessionTree.store.setTools(thread.id, tools)
+      })
+    }
     // 这个上游的“话”里要另外带的参数（原生 codex：选了权限预设时配套的审批策略）
     if (params) params = link.dialect.outgoing(method, params) ?? params
     const text = params === fields ? raw : JSON.stringify({ ...frame, params })
@@ -459,6 +495,7 @@ export class ClientSession implements ClientToolPeer {
     if (typeof fields.isPinned === 'boolean') workspaces.pin(threadId, fields.isPinned)
     thread.harness = link.harness
     workspaces.decorate(threadId, thread)
+    if (this.declared.has(EXTENSION.sessionTree)) this.host.sessionTree.decorate(thread)
     return more ? result : { thread }
   }
 
@@ -524,6 +561,14 @@ export class ClientSession implements ClientToolPeer {
     )
   }
 
+  /** 设备信息。会话编排开着才列 sessionTree：客户端按它决定带不带 litch_sessions、出不出派子会话的界面 */
+  private deviceInfo(): DeviceInfo {
+    const { info } = this.host
+    return this.host.sessionTreeOn()
+      ? { ...info, extensions: [...info.extensions, EXTENSION.sessionTree] }
+      : info
+  }
+
   private runtimeInfo(): DeviceRuntimeInfo {
     const harnesses: HarnessInfo[] = []
     for (const source of this.host.harnesses()) {
@@ -532,7 +577,7 @@ export class ClientSession implements ClientToolPeer {
     }
     const service = this.host.service() ?? null
     const declared = this.declared.has(EXTENSION.deviceService)
-    return { device: describeDevice(this.host.info, service, declared), harnesses }
+    return { device: describeDevice(this.deviceInfo(), service, declared), harnesses }
   }
 
   /** 定时任务的方法。只给声明过 deviceTasks 的连接 */
@@ -561,8 +606,8 @@ export class ClientSession implements ClientToolPeer {
       // 对面是适配器的运行时还是原生的 codex：适配器主进程说了算，没有它管着的看启动配置
       dialect: dialectFor(source.managed ? source.managed.native : source.native),
       // 客户端声明的能力带给上游，包括它认识哪些扩展（原生 codex 不认识扩展键，握手时会摘掉）。
-      // 设备进程替这条连接声明能执行它自己的那几个命名空间（litch_tasks……）：调用到了由设备进程自己答
-      // （relay.mts、device-tools.mts），引擎挑执行方时挑得中它
+      // 设备进程自己执行的命名空间（litch_tasks、litch_sessions）也替这条连接声明上：适配器的入口挑执行方时挑得中它，
+      // 调用落到这条连接上，设备进程在这里拦下（relay.mts）
       initializeParams: declareDeviceTools(
         this.initializeParams,
         this.host.deviceTools.namespaces(),
@@ -625,6 +670,23 @@ export class ClientSession implements ClientToolPeer {
     this.send(JSON.stringify({ method, params }))
   }
 
+  /**
+   * 设备进程自己建出来的会话（派出的子会话）：照引擎的样子发一条 thread/started，会话对象挂上 harness、
+   * 设备层的归属，声明了 sessionTree 的再挂上 litchLineage。各条连接各自一份
+   */
+  threadStarted(harness: string, thread: Record<string, unknown>): void {
+    if (
+      this.state !== 'ready' ||
+      this.optOut.has('thread/started') ||
+      typeof thread.id !== 'string'
+    )
+      return
+    const copy: Record<string, unknown> = { ...thread, harness }
+    this.host.workspaces.decorate(thread.id, copy)
+    if (this.declared.has(EXTENSION.sessionTree)) this.host.sessionTree.decorate(copy)
+    this.send(JSON.stringify({ method: 'thread/started', params: { thread: copy } }))
+  }
+
   /** 一个上游的状态变了：真的和上次报的不一样才通知客户端 */
   private status(link: UpstreamLink): void {
     if (link.available) {
@@ -652,7 +714,7 @@ export class ClientSession implements ClientToolPeer {
       throw new DeviceError(
         'extensionRequired',
         `这是设备服务的聚合入口，要求客户端握手时在 capabilities.${EXTENSIONS_CAPABILITY} 里声明认识这些扩展：${REQUIRED_EXTENSIONS.join('、')}。只说标准 Codex 协议的客户端请连各个 harness 自己的入口`,
-        { required: [...REQUIRED_EXTENSIONS], supported: [...this.host.info.extensions] },
+        { required: [...REQUIRED_EXTENSIONS], supported: [...this.deviceInfo().extensions] },
       )
     this.state = 'initializing'
     this.declared = new Set(declared)
@@ -703,6 +765,8 @@ export class ClientSession implements ClientToolPeer {
     this.state = 'ready'
     this.host.clientTools.join(this)
     for (const text of held) this.wire.send(text)
+    // 有客户端连着了：没人连着时攒下的唤醒现在可以做了
+    this.host.sessionTree.clientJoined()
     return HANDLED
   }
 }

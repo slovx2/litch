@@ -12,9 +12,30 @@ export interface DshThread {
   model: string | null
   effort: string | null
   preset: Preset
+  // 这是 dsh 的子代理时，派它出来的会话（dsh 会话头里 origin 是 subagent 的 parentSession）。
+  // dsh 自己分叉出来的会话也带 parentSession，但没有 origin：那是 forkedFromId，不是子代理。
   parentThreadId: string | null
+  forkedFromId: string | null
   // 临时线程只存在于适配器内存里，没有对应的 dsh 会话。
   ephemeral: boolean
+}
+
+/** 子代理的方式：continuable 是后台跑、能接着发消息的；one-shot 跑完就结束，不能再对话 */
+export type SubagentMode = 'one-shot' | 'continuable'
+/** 一个子代理的情况：派它的会话里的 subagent/catalog 事件、它自己的 subagent/descriptor 事件里有 */
+export interface SubagentInfo {
+  mode: SubagentMode | null
+  label: string | null
+}
+
+/** 投影要向外问、向外报的几件事（DshServer 给） */
+export interface ProjectionHooks {
+  // 按提交标识找适配器记下的、客户端发来的那份输入（DshServer.remember），没记的是 null。
+  recorded?: (requestId: string) => any[] | null
+  // 模型看到的工具名是不是这个会话的客户端工具（client-tools.mts），是的话是哪个命名空间的哪个工具
+  clientTool?: (name: string) => { namespace: string | null; tool: string } | null
+  // 见到了一个子代理的情况（派出去的、自己就是子代理的）
+  subagent?: (threadId: string, info: SubagentInfo) => void
 }
 export interface DshTurn {
   id: string
@@ -45,10 +66,78 @@ const parse = (json: unknown): any => {
     return {}
   }
 }
+const PRESETS: readonly Preset[] = ['read-only', 'workspace-write', 'danger-full-access']
+/** dsh 的权限预设、沙箱方式里，和三个权限档对得上的那些；别的（用户自己配的、子代理的 custom）是 null */
+export const knownPreset = (value: unknown): Preset | null =>
+  PRESETS.includes(value as Preset) ? (value as Preset) : null
+const optionalText = (value: unknown): string | null =>
+  typeof value === 'string' && value ? value : null
+const subagentMode = (value: unknown): SubagentMode | null =>
+  value === 'continuable' || value === 'one-shot' ? value : null
 const selectionKey = (value: any): unknown[] | null =>
   value ? [value.provider, value.model, value.reasoningEffort ?? null] : null
 
-function toolItem(id: string, name: string, args: any, cwd: string): any {
+// dsh 的子代理工具，映射成协议的子代理条目（collabAgentToolCall）：subagent、subagent_fork 是派一个出去，
+// send_message 是给子代理（或者子代理给它的上级）发消息，interrupt_agent 是打断，list_agents 是列出来
+const COLLAB_TOOLS: Record<string, string> = {
+  subagent: 'spawnAgent',
+  subagent_fork: 'spawnAgent',
+  send_message: 'sendInput',
+  interrupt_agent: 'interruptAgent',
+  list_agents: 'listAgents',
+}
+
+function toolItem(
+  id: string,
+  name: string,
+  args: any,
+  thread: DshThread,
+  clientTool: ProjectionHooks['clientTool'],
+): any {
+  const cwd = thread.cwd
+  const client = clientTool?.(name)
+  // 客户端工具（thread/start 带来的动态工具）：和 Claude、Pi 入口一样是动态工具条目
+  if (client)
+    return {
+      type: 'dynamicToolCall',
+      id,
+      namespace: client.namespace,
+      tool: client.tool,
+      arguments: args,
+      status: 'inProgress',
+      contentItems: null,
+      success: null,
+      durationMs: null,
+    }
+  const collab = COLLAB_TOOLS[name]
+  if (collab) {
+    const target = typeof args.agent_id === 'string' ? args.agent_id : null
+    return {
+      type: 'collabAgentToolCall',
+      id,
+      // 子代理给它的上级发消息是 sendMessage，别的方向是 sendInput
+      tool:
+        collab === 'sendInput' && target && target === thread.parentThreadId
+          ? 'sendMessage'
+          : collab,
+      status: 'inProgress',
+      senderThreadId: thread.id,
+      // 派出去的那个，到 subagent/catalog 事件（或者工具结果）才知道是谁
+      receiverThreadIds: target ? [target] : [],
+      prompt:
+        typeof args.prompt === 'string'
+          ? args.prompt
+          : typeof args.message === 'string'
+            ? args.message
+            : null,
+      model:
+        typeof args.provider === 'string' && typeof args.model === 'string'
+          ? `${args.provider}/${args.model}`
+          : null,
+      reasoningEffort: typeof args.reasoning_effort === 'string' ? args.reasoning_effort : null,
+      agentsStates: {},
+    }
+  }
   if (name === 'bash')
     return {
       type: 'commandExecution',
@@ -118,16 +207,40 @@ function finishTool(item: any, args: any, message: any, meta: any): void {
           ),
         }))
       : [{ path, kind: { type: 'add' }, diff: String(args.content ?? '') }]
-  } else if (item.type === 'dynamicToolCall') {
+  } else if (isQuestion(item)) {
     // 答了的是每道题一行答案；没问成、被中止的是 dsh 交给模型的那句报错
     item.success = !failed
     item.contentItems = failed
       ? [{ type: 'inputText', text: output }]
       : answerContent(item.arguments.questions, args?.questions, output)
+  } else if (item.type === 'dynamicToolCall') {
+    // 客户端工具：结果是客户端答的那些字。图片在 dsh 的记录里只剩附件号，这里不带
+    item.success = !failed
+    item.contentItems = output ? [{ type: 'inputText', text: output }] : []
+  } else if (item.type === 'collabAgentToolCall') {
+    finishCollab(item, failed, output)
   } else {
     item.result = { content: message?.content ?? [], structuredContent: null, _meta: null }
     item.error = failed ? { message: output } : null
   }
+}
+
+// dsh 的提问工具的条目（见 toolItem）。客户端工具的条目也是动态工具条目，靠命名空间和工具名分开
+const isQuestion = (item: any): boolean =>
+  item.type === 'dynamicToolCall' && item.namespace === 'dsh' && item.tool === 'ask_user_question'
+
+// 子代理条目收尾。派出去的：后台跑的结果是“started subagent <号>”，子代理还在跑；前台跑的结果就是它的回答
+function finishCollab(item: any, failed: boolean, output: string): void {
+  if (item.tool !== 'spawnAgent') return
+  const started = /^started subagent (\S+)/.exec(output)
+  if (started?.[1] && !item.receiverThreadIds.length) item.receiverThreadIds = [started[1]]
+  const background = started !== null || /^started background subagent job /.test(output)
+  for (const child of item.receiverThreadIds)
+    item.agentsStates[child] = failed
+      ? { status: 'errored', message: output || null }
+      : background
+        ? { status: 'running', message: null }
+        : { status: 'completed', message: output || null }
 }
 
 /**
@@ -186,12 +299,13 @@ export class Projection {
   // 没有记录的用户消息里的图片（见 userMessage）：dsh 的记录里只有附件号，内容要另去取，
   // 取了补进那条消息的内容里（DshServer.restoreImages）。
   readonly unfetched: { content: any[]; attachmentId: string }[] = []
-  private readonly recorded: (requestId: string) => any[] | null
+  // 这个会话自己是子代理时，它是哪种（会话记录开头的 subagent/descriptor）
+  subagent: SubagentInfo | null = null
+  private readonly hooks: ProjectionHooks
 
-  // recorded：按提交标识找适配器记下的、客户端发来的那份输入（DshServer.remember），没记的是 null。
-  constructor(thread: DshThread, recorded: (requestId: string) => any[] | null = () => null) {
+  constructor(thread: DshThread, hooks: ProjectionHooks = {}) {
     this.thread = thread
-    this.recorded = recorded
+    this.hooks = hooks
   }
 
   call(id: string): { item: any; args: any } | undefined {
@@ -237,7 +351,7 @@ export class Projection {
   claimQuestion(ids: string[]): any {
     const key = JSON.stringify(ids)
     for (const [id, call] of this.calls) {
-      if (call.done || this.claimed.has(id) || call.item.type !== 'dynamicToolCall') continue
+      if (call.done || this.claimed.has(id) || !isQuestion(call.item)) continue
       const asked = call.item.arguments.questions.map((question: any) => question.id)
       if (JSON.stringify(asked) !== key) continue
       this.claimed.add(id)
@@ -275,7 +389,16 @@ export class Projection {
       this.thread.effort = data.reasoningEffort ?? this.thread.effort
       this.chosen = true
     } else if (event.type === 'request/header') this.requested(data.header?.config)
-    else if (event.type === 'permission/preset') this.thread.preset = data.preset
+    // 权限档：dsh 的预设是三个内置的之一时就是它。子代理的预设是 custom（派它时按上级定的沙箱和“一律拒绝”的审批），
+    // 这时看沙箱：sandbox/mode 的三种和三个预设同名，内置预设切换时 dsh 也记一条
+    else if (event.type === 'permission/preset' || event.type === 'sandbox/mode') {
+      const preset = knownPreset(event.type === 'sandbox/mode' ? data.mode : data.preset)
+      if (preset) this.thread.preset = preset
+    } else if (event.type === 'subagent/catalog') this.catalog(data)
+    else if (event.type === 'subagent/descriptor') {
+      this.subagent = { mode: subagentMode(data.mode), label: optionalText(data.label) }
+      this.hooks.subagent?.(this.thread.id, this.subagent)
+    }
     this.thread.updatedAt = Math.max(this.thread.updatedAt, Math.floor(event.time / 1000))
   }
 
@@ -412,7 +535,7 @@ export class Projection {
     const clientId = message.source?.rpcId ?? null
     // 回给客户端的是它发来的样子：适配器记着那一份的就用它。dsh 的记录里技能只是一句“/名字”，图片只有附件号。
     // 没记的（记录丢了、记这一份之前发的）照 dsh 的记录来：文字是交给 dsh 的那一句，图片等着按附件号去取。
-    let content = clientId === null ? null : this.recorded(clientId)
+    let content = clientId === null ? null : (this.hooks.recorded?.(clientId) ?? null)
     if (!content) {
       content = [{ type: 'text', text: body, text_elements: [] }]
       for (const part of Array.isArray(message.content) ? message.content : [])
@@ -462,9 +585,31 @@ export class Projection {
     const turn = this.active
     if (!turn || this.calls.has(data.callId)) return
     const args = parse(data.arguments)
-    const item = toolItem(data.callId, String(data.name), args, this.thread.cwd)
+    const item = toolItem(data.callId, String(data.name), args, this.thread, this.hooks.clientTool)
     this.calls.set(data.callId, { item, args, done: false, startedMs: time })
     this.put(turn, item, false, notify)
+  }
+
+  // 派了一个子代理：派它的工具调用落盘之后、结果之前，dsh 在派它的会话里记一条 subagent/catalog，
+  // 带子代理的会话号（就是它的线程号）、方式和标签。接到还没有子代理的那个派出条目上（标签就是调用时给的 description）
+  private catalog(data: any): void {
+    const child = optionalText(data.childId)
+    if (!child) return
+    const label = optionalText(data.label)
+    this.hooks.subagent?.(child, { mode: subagentMode(data.mode), label })
+    let spawn: any
+    for (const call of this.calls.values())
+      if (
+        !call.done &&
+        call.item.type === 'collabAgentToolCall' &&
+        call.item.tool === 'spawnAgent' &&
+        !call.item.receiverThreadIds.length &&
+        (spawn === undefined || call.args.description === label)
+      )
+        spawn = call.item
+    if (!spawn) return
+    spawn.receiverThreadIds = [child]
+    spawn.agentsStates[child] = { status: 'pendingInit', message: null }
   }
 
   private toolResult(data: any, time: number, notify: Notify): void {
@@ -474,8 +619,8 @@ export class Projection {
     if (!call || call.done || !turn) return
     call.done = true
     finishTool(call.item, call.args, data.message, data.meta)
-    // 时长取调用与结果两个落盘事件的时间差，实时与回放得到同一个值；文件修改条目没有这个字段。
-    if (call.item.type !== 'fileChange')
+    // 时长取调用与结果两个落盘事件的时间差，实时与回放得到同一个值；文件修改、子代理条目没有这个字段。
+    if ('durationMs' in call.item)
       call.item.durationMs = Math.max(0, Math.round(time - call.startedMs))
     // 用户拒绝提权的调用按协议标成 declined，而不是普通的执行失败；依据是落盘的裁决事件，回放时同样成立。
     if (call.declined) declineItem(call.item)

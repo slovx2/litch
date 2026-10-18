@@ -57,8 +57,9 @@ export function envelope(s: OpencodeServer, thread: OcThread, turns: OcTurn[] = 
     parentThreadId: thread.parentThreadId,
     ephemeral: thread.ephemeral,
     gitInfo: null,
-    agentNickname: null,
-    agentRole: null,
+    // 子代理的会话：昵称和角色都是子代理的种类（OpenCode 没有另起的昵称）
+    agentNickname: thread.agent,
+    agentRole: thread.agent,
     turns,
     projectId: s.projects.projectId(thread.id),
     // 分组、置顶这些界面元数据照 dsh 入口原样带上

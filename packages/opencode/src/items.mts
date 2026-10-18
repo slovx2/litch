@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
 import { createTwoFilesPatch } from 'diff'
+import type { DynamicToolSpec } from './client-tools.mjs'
 import { answerContent, userQuestions } from './questions.mjs'
 
 // OpenCode 的一个工具部件（part.type 为 tool）在协议里画成哪种条目，以及它跑完时怎么收尾。
@@ -127,12 +128,59 @@ function mcpRef(name: string, servers: readonly string[]): { server: string; too
   return { server, tool: name.slice(server.replace(/[^a-zA-Z0-9_-]/g, '_').length + 1) }
 }
 
+export interface ToolContext {
+  /** 部件所在的会话 */
+  threadId: string
+  /** 会话的动态工具（经适配器的 MCP 服务交给 OpenCode 的），不是的返回 null */
+  dynamicTool(name: string): DynamicToolSpec | null
+}
+
+/** 子代理（task）调用的子会话号：OpenCode 建好子会话后写在部件的 metadata 里 */
+const childSession = (part: any): string | null =>
+  typeof part.state?.metadata?.sessionId === 'string' ? part.state.metadata.sessionId : null
+
 /** 工具部件第一次能画时（不再是 pending：参数齐了）建条目；待办工具返回 null */
-export function toolItem(part: any, cwd: string, mcpServers: readonly string[]): any | null {
+export function toolItem(
+  part: any,
+  cwd: string,
+  mcpServers: readonly string[],
+  context: ToolContext,
+): any | null {
   const tool = String(part.tool)
   if (PLAN_TOOLS.has(tool)) return null
   const id = String(part.id)
   const input = part.state?.input ?? {}
+  // 动态工具（含 Litch 的客户端工具）：画成上游的动态工具条目，和原生 codex、Claude、Pi 入口一样
+  const dynamic = context.dynamicTool(tool)
+  if (dynamic)
+    return {
+      type: 'dynamicToolCall',
+      id,
+      namespace: dynamic.namespace,
+      tool: dynamic.tool,
+      arguments: input,
+      status: 'inProgress',
+      contentItems: null,
+      success: null,
+      durationMs: null,
+    }
+  // 子代理：OpenCode 的 task 每次调用建（或者接着用）一个子会话，画成上游派子代理的条目，指向子线程
+  if (tool === 'task') {
+    const child = childSession(part)
+    const model = part.state?.metadata?.model
+    return {
+      type: 'collabAgentToolCall',
+      id,
+      tool: 'spawnAgent',
+      status: 'inProgress',
+      senderThreadId: context.threadId,
+      receiverThreadIds: child ? [child] : [],
+      prompt: typeof input.prompt === 'string' ? input.prompt : null,
+      model: model?.providerID && model?.modelID ? `${model.providerID}/${model.modelID}` : null,
+      reasoningEffort: null,
+      agentsStates: child ? { [child]: { status: 'running', message: null } } : {},
+    }
+  }
   if (tool === 'bash')
     return {
       type: 'commandExecution',
@@ -217,6 +265,22 @@ export function finishTool(item: any, part: any, cwd: string, approvalDiff: stri
   } else if (item.type === 'fileChange') {
     item.changes = fileChanges(part, cwd, approvalDiff, item.changes)
     item.status = failed ? 'failed' : 'completed'
+  } else if (item.type === 'dynamicToolCall' && item.namespace !== 'opencode') {
+    // 动态工具：文字是 MCP 结果里的文字，图片 OpenCode 记成附件（data: 地址）
+    item.success = !failed
+    item.durationMs = duration(state)
+    item.status = failed ? 'failed' : 'completed'
+    const images = (Array.isArray(state.attachments) ? state.attachments : [])
+      .filter(
+        (file: any) => /^image\//.test(String(file?.mime)) && /^data:/.test(String(file?.url)),
+      )
+      .map((file: any) => ({ type: 'inputImage', imageUrl: String(file.url) }))
+    item.contentItems = [
+      ...(output || !images.length ? [{ type: 'inputText', text: output }] : []),
+      ...(failed ? [] : images),
+    ]
+  } else if (item.type === 'collabAgentToolCall') {
+    finishAgent(item, part, failed, output)
   } else if (item.type === 'dynamicToolCall') {
     item.success = !failed
     item.durationMs = duration(state)
@@ -249,4 +313,27 @@ export function declineItem(item: any): void {
       durationMs: null,
     })
   else if (item.type === 'fileChange') item.status = 'declined'
+}
+
+// task 的输出是 `<task id="…" state="…"><task_result>…</task_result></task>` 这样的一段，取里面的结果
+function taskResult(output: string): string {
+  const match = /<task_result>([\s\S]*?)<\/task_result>/.exec(output)
+  return (match?.[1] ?? output).trim()
+}
+
+/** 子代理条目收尾：子线程号到这时一定有了（没有的话补上），子代理的状态跟着工具的状态 */
+function finishAgent(item: any, part: any, failed: boolean, output: string): void {
+  const child = childSession(part)
+  if (child && !item.receiverThreadIds.includes(child)) item.receiverThreadIds = [child]
+  const aborted = failed && /abort/i.test(output)
+  // 后台跑的（OpenCode 的实验开关）调用立刻返回，子代理还在跑
+  const background = !failed && part.state?.metadata?.background === true
+  item.status = aborted ? 'interrupted' : failed ? 'failed' : 'completed'
+  const status = aborted ? 'interrupted' : failed ? 'errored' : background ? 'running' : 'completed'
+  item.agentsStates = Object.fromEntries(
+    item.receiverThreadIds.map((id: string) => [
+      id,
+      { status, message: background ? null : taskResult(output) || null },
+    ]),
+  )
 }

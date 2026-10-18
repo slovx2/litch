@@ -3,6 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
+import { CLIENT_TOOL_NAMESPACE } from '../../protocol/src/client-tools.mjs'
 import type { RpcPeer } from '../../shared/src/types.mjs'
 import { PiServer } from '../src/server.mjs'
 
@@ -124,5 +125,37 @@ test('CLIENT-TOOLS-PI-005：别的命名空间照旧交给发起回合的连接�
     assert.equal('itemId' in call.params, false)
     await server.handle(desktop, reply(call.id, OK))
     assert.deepEqual(await called, OK)
+  })
+})
+
+test('CLIENT-TOOLS-PI-006：litch_sessions 照同一套规矩：设备进程替上游连接声明了的收得到，只声明了浏览器的收不到', async () => {
+  await scene(async (server) => {
+    const sessions = CLIENT_TOOL_NAMESPACE.sessions
+    // 回合由只声明了浏览器的连接发起；设备进程替另一条（官方桌面端）声明了 litch_sessions
+    const browserOnly = await join_(server, recorder('browser-only'), OTHER)
+    const official = await join_(server, recorder('official'), {
+      litchExtensions: ['clientTools'],
+      litchClientTools: { namespaces: [sessions] },
+    })
+    const called = server.call(browserOnly, 't', 'item/tool/call', {
+      ...echo,
+      namespace: sessions,
+      tool: 'list',
+    })
+    assert.equal(browserOnly.calls().length, 0)
+    const [call] = official.calls()
+    assert.equal(call.params.namespace, sessions)
+    await server.handle(official, reply(call.id, OK))
+    assert.deepEqual(await called, OK)
+    // 浏览器的调用照旧交给声明了浏览器的那条，不会因为它声明了 litch_sessions 落到官方桌面端
+    const browsing = server.call(browserOnly, 't', 'item/tool/call', {
+      ...echo,
+      callId: 'c-2',
+      namespace: 'litch_browser',
+    })
+    assert.equal(official.calls().length, 1)
+    const [browse] = browserOnly.calls()
+    await server.handle(browserOnly, reply(browse.id, OK))
+    assert.deepEqual(await browsing, OK)
   })
 })

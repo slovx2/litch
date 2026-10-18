@@ -85,8 +85,7 @@ test('握手：我们的扩展键和退订名单不带给原生 codex，别的�
       env.codex.seen.map((entry) => entry.method),
       ['initialize', 'initialized', 'permissionProfile/list'],
     )
-    // 适配器的运行时照旧收到扩展键，外加设备进程替这条连接声明能执行 litch_tasks（clientTools）；
-    // 退订名单两种上游都不带
+    // 适配器的运行时照旧收到扩展键（另加设备进程替它声明的客户端工具）；退订名单两种上游都不带
     const toPi = sentTo(env.pi, 'initialize')[0]
     assert.deepEqual(toPi.capabilities.litchExtensions, [
       'harness',
@@ -94,7 +93,9 @@ test('握手：我们的扩展键和退订名单不带给原生 codex，别的�
       'declineWithNote',
       'clientTools',
     ])
-    assert.deepEqual(toPi.capabilities.litchClientTools, { namespaces: ['litch_tasks'] })
+    assert.deepEqual(toPi.capabilities.litchClientTools, {
+      namespaces: ['litch_tasks', 'litch_sessions'],
+    })
     assert.equal(toPi.capabilities.optOutNotificationMethods, undefined)
   } finally {
     await env.close()

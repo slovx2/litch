@@ -32,6 +32,7 @@ import type {
   SettingsSnapshotView,
 } from '../model-manage.mjs'
 import type { TerminalInfo, TerminalsOp, TerminalsView } from '../model-terminal.mjs'
+import type { SessionNoteView, SessionProposalView } from '../model-tree.mjs'
 import type { Text } from '../phrase.mjs'
 import { changedKeys } from '../projection/manage.mjs'
 import { appendOutput, appendSkipping } from '../text/output-cap.mjs'
@@ -58,6 +59,11 @@ export const keys = {
   tallies: (deviceId: string) => `sidebar:${deviceId}:tallies`,
   /** SessionHarnesses：这台设备上每个会话属于哪个 harness。侧栏只看某个 harness 时按它挑会话 */
   harnessOf: (deviceId: string) => `sidebar:${deviceId}:harnessOf`,
+  /**
+   * SessionChildren：会话树里每个父会话下面的 Litch 子会话，按派出的先后。只有父会话也在列表里的才算
+   * （父会话归档了、删了的子会话照常单列）。groups 里照样有子会话，嵌不嵌由界面按这张表决定
+   */
+  children: (deviceId: string) => `sidebar:${deviceId}:children`,
   /** SessionSummary */
   summary: (deviceId: string, sessionId: string) => `summary:${deviceId}:${sessionId}`,
   /** SessionSummary[] | null：已归档的会话，最近动过的在前。null 或者没有这个键：还没取过 */
@@ -81,6 +87,13 @@ export const keys = {
   /** SessionSettings：下一个回合会用的模型、强度、权限预设 */
   settings: (deviceId: string, sessionId: string) => `session:${deviceId}:${sessionId}:settings`,
   usage: (deviceId: string, sessionId: string) => `session:${deviceId}:${sessionId}:usage`,
+  /** SessionProposalView[]：这个会话上等着用户点的子会话提案 */
+  proposals: (deviceId: string, sessionId: string) => `session:${deviceId}:${sessionId}:proposals`,
+  /**
+   * SessionNotes：这个会话收到过的子会话回报，每个子会话留最近的一条（对话里注入的 <litch-session-event>）。
+   * 派出子会话的那张卡片上的“最后一句回报”用它
+   */
+  notes: (deviceId: string, sessionId: string) => `session:${deviceId}:${sessionId}:notes`,
   /** ManageSchema：这台设备上有哪些设置。有这个键说明管理数据的快照已经到了 */
   manage: (deviceId: string) => `manage:${deviceId}:schema`,
   /** SettingsSnapshotView：设置现在的值、待重启的 harness、SSH 入口的状况 */
@@ -180,6 +193,43 @@ export type GroupTallies = Record<string, Record<HarnessId, GroupTally>>
  * 只看某个 harness 时靠这张表挑
  */
 export type SessionHarnesses = Record<string, HarnessId>
+
+/** 父会话 → 它下面的 Litch 子会话（按派出的先后） */
+export type SessionChildren = Record<string, string[]>
+
+/** 子会话 → 父会话收到的它最近的一条回报 */
+export type SessionNotes = Record<string, SessionNoteView>
+
+/** 会话树：父会话也在列表里的子会话，按父会话归拢，组里按派出的先后排 */
+function childrenOf(sessions: Map<string, SessionSummary>): SessionChildren {
+  const children: SessionChildren = {}
+  const sorted = [...sessions.values()]
+    .filter((session) => session.lineage && sessions.has(session.lineage.parentId))
+    .sort(
+      (a, b) => (a.lineage?.createdAt ?? 0) - (b.lineage?.createdAt ?? 0) || (a.id < b.id ? -1 : 1),
+    )
+  for (const session of sorted) {
+    const parent = session.lineage?.parentId
+    // 自己挂在自己下面（对面给错了）不算
+    if (!parent || parent === session.id) continue
+    children[parent] ??= []
+    children[parent].push(session.id)
+  }
+  return children
+}
+
+/** 一批条目里注入的回报，并进已有的那张表：后到的盖掉先到的。没有新的返回原来那张 */
+function gatherNotes(before: SessionNotes, items: Iterable<ItemView>): SessionNotes {
+  let next = before
+  for (const item of items) {
+    if (item.kind !== 'userMessage' || !item.event) continue
+    for (const note of item.event.notes) {
+      if (next === before) next = { ...before }
+      next[note.threadId] = note
+    }
+  }
+  return next
+}
 
 export interface SessionMeta {
   title: Text
@@ -374,6 +424,12 @@ export function createReplica(channel: CoreChannel): Replica {
     for (const session of sessions.values()) harnessOf[session.id] = session.harness
     const known = store.get<SessionHarnesses>(keys.harnessOf(deviceId))
     if (!known || !sameHarnesses(known, harnessOf)) store.set(keys.harnessOf(deviceId), harnessOf)
+    // 会话树：父子关系变了、会话多了少了才换
+    const children = childrenOf(sessions)
+    const nested = store.get<SessionChildren>(keys.children(deviceId))
+    if (!nested || JSON.stringify(nested) !== JSON.stringify(children)) {
+      store.set(keys.children(deviceId), children)
+    }
   }
 
   const applySidebar = (deviceId: string, sessions: Map<string, SessionSummary>, op: SidebarOp) => {
@@ -565,6 +621,10 @@ export function createReplica(channel: CoreChannel): Replica {
       }
       case 'item.add': {
         store.set(itemKey(op.item.id), op.item)
+        if (op.item.kind === 'userMessage' && op.item.event) {
+          const before = store.get<SessionNotes>(keys.notes(deviceId, sessionId)) ?? {}
+          store.set(keys.notes(deviceId, sessionId), gatherNotes(before, [op.item]))
+        }
         const turn = store.get<TurnView>(turnKey(op.turnId))
         if (turn && !turn.itemIds.includes(op.item.id)) {
           store.set(turnKey(op.turnId), { ...turn, itemIds: [...turn.itemIds, op.item.id] })
@@ -644,6 +704,9 @@ export function createReplica(channel: CoreChannel): Replica {
         if (meta) store.set(keys.session(deviceId, sessionId), { ...meta, can: op.can })
         return
       }
+      case 'session.proposals':
+        store.set(keys.proposals(deviceId, sessionId), op.proposals satisfies SessionProposalView[])
+        return
     }
   }
 
@@ -755,6 +818,12 @@ export function createReplica(channel: CoreChannel): Replica {
                 store.set(keys.queued(deviceId, sessionId), view.queued)
                 store.set(keys.settings(deviceId, sessionId), view.settings)
                 store.set(keys.usage(deviceId, sessionId), view.usage)
+                store.set(keys.proposals(deviceId, sessionId), view.proposals)
+                // 按回合、条目的先后：同一个子会话后来的回报盖掉先前的
+                const ordered = view.turns.flatMap((turn) =>
+                  turn.itemIds.flatMap((id) => view.items[id] ?? []),
+                )
+                store.set(keys.notes(deviceId, sessionId), gatherNotes({}, ordered))
                 const meta: SessionMeta = {
                   title: view.title,
                   harness: view.harness,

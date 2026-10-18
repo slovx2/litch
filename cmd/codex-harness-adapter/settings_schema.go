@@ -356,5 +356,8 @@ func buildSettingsSchema(c configuration) settingsSchema {
 	group, specs = taskSettings()
 	schema.Groups = append(schema.Groups, group)
 	schema.Settings = append(schema.Settings, specs...)
+	group, specs = sessionSettings()
+	schema.Groups = append(schema.Groups, group)
+	schema.Settings = append(schema.Settings, specs...)
 	return schema
 }

@@ -37,13 +37,16 @@ test('注册表：命名空间要以 litch_ 开头、不能注册两次；同一
 
   const replies: ClientToolCallResponse[] = []
   const frame = (tool: string, callId: string, namespace = 'litch_demo') => ({
-    id: 7,
-    method: 'item/tool/call',
-    params: { threadId: 'th', turnId: 'tu', callId, namespace, tool, arguments: { a: 1 } },
+    threadId: 'th',
+    turnId: 'tu',
+    callId,
+    namespace,
+    tool,
+    arguments: { a: 1 },
   })
   // 原生 codex 的几份：请求号相同、callId 相同，从不同的连接来
-  tools.dispatch('codex', frame('echo', 'c1'), (result) => replies.push(result))
-  tools.dispatch('codex', frame('echo', 'c1'), (result) => replies.push(result))
+  tools.dispatch('codex', frame('echo', 'c1'), (result) => replies.push(result) > 0)
+  tools.dispatch('codex', frame('echo', 'c1'), (result) => replies.push(result) > 0)
   await until('答了', () => replies.length === 1)
   await settle(20)
   assert.deepEqual(replies, [ok('answered echo')])
@@ -57,9 +60,9 @@ test('注册表：命名空间要以 litch_ 开头、不能注册两次；同一
     arguments: { a: 1 },
   })
   // 别的 harness 上同样的 callId 是另一次调用
-  tools.dispatch('pi', frame('echo', 'c1'), (result) => replies.push(result))
-  tools.dispatch('pi', frame('boom', 'c2'), (result) => replies.push(result))
-  tools.dispatch('pi', frame('x', 'c3', 'litch_nope'), (result) => replies.push(result))
+  tools.dispatch('pi', frame('echo', 'c1'), (result) => replies.push(result) > 0)
+  tools.dispatch('pi', frame('boom', 'c2'), (result) => replies.push(result) > 0)
+  tools.dispatch('pi', frame('x', 'c3', 'litch_nope'), (result) => replies.push(result) > 0)
   await until('都答了', () => replies.length === 4)
   // 没注册的当场答，处理函数的结果晚一点：不看先后
   assert.deepEqual(
@@ -84,7 +87,7 @@ test('另注册一个命名空间：每条通往引擎的连接都替它声明�
     const client = await tasksClient(target)
     const greeting = engine.seen.findLast((item) => item.method === 'initialize')?.params
     assert.deepEqual(greeting.capabilities.litchClientTools, {
-      namespaces: ['litch_tasks', 'litch_demo'],
+      namespaces: ['litch_tasks', 'litch_sessions', 'litch_demo'],
     })
     const upstream = engine.live.at(-1) as FakeConnection
     upstream.send({
@@ -112,7 +115,7 @@ test('另注册一个命名空间：每条通往引擎的连接都替它声明�
     const own = internal(engine)[0]
     assert.ok(own, '内部连接连上了')
     assert.deepEqual(JSON.parse(own.raw[0] as string).params.capabilities.litchClientTools, {
-      namespaces: ['litch_tasks', 'litch_demo'],
+      namespaces: ['litch_tasks', 'litch_sessions', 'litch_demo'],
     })
     link.close()
   } finally {
@@ -127,7 +130,7 @@ test('内部连接：请求、通知、发一个回合等它结束；harness 不
   try {
     await assert.rejects(
       target.device.openEngineLink('nope'),
-      (error) => error instanceof EngineUnavailable && error.code === 'harnessUnavailable',
+      (error) => error instanceof EngineUnavailable && error.data.litch === 'unknownHarness',
     )
     const link = await target.device.openEngineLink('pi')
     assert.equal(link.harness, 'pi')

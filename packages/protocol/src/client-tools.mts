@@ -20,6 +20,8 @@ export const CLIENT_TOOL_NAMESPACE = {
   machine: 'litch_machine',
   /** 定时任务。执行方是设备服务自己，不是桌面端（client-tools-tasks.mts、device-tasks.mts） */
   tasks: 'litch_tasks',
+  /** 同一台设备上的会话：列出、读取、派子会话、发消息、打断（执行方是设备进程，见 client-tools-sessions.mts） */
+  sessions: 'litch_sessions',
   /** 只在测试里用：原样回参数，用来打通链路 */
   echo: 'litch_echo',
 } as const

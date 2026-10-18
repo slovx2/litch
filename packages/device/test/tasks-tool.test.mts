@@ -48,7 +48,7 @@ test('适配器的引擎：litch_tasks 的调用由设备答，不转给客户�
     })
     const greeting = engine.seen.find((item) => item.method === 'initialize')?.params
     assert.deepEqual(greeting.capabilities.litchClientTools, {
-      namespaces: ['litch_browser', 'litch_tasks'],
+      namespaces: ['litch_browser', 'litch_tasks', 'litch_sessions'],
     })
     assert.deepEqual(greeting.capabilities.litchExtensions, [...DECLARED, 'clientTools'])
     const upstream = engine.live.at(-1) as FakeConnection

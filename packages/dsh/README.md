@@ -21,6 +21,8 @@ dsh 本体不随适配器分发：适配器使用用户自己安装的 `dsh`，�
 - dsh 没有删除会话的接口，所以新建会话时会失败的核对（项目在不在）放在建 dsh 会话之前，不留下空会话。
 - 关 dsh 只能发结束信号（Web Remote 里没有“请收尾退出”的请求），而且它只认头一个：收场途中再来一个就丢下收尾立刻退出，刚完成的回合可能还没落盘。适配器对一个 dsh 进程至多发一次：自己被信号要求退出时先等 dsh 断开连接（同一个进程组里的它多半也收到了，收场的头一件事就是断开连接），等不到才发；连接是 dsh 那头先断的先等不发，过了它自己的收场上限（5 秒）还在才发。等它收尾 6 秒（适配器被信号要求退出时 4 秒，主进程给运行时的时限是 5 秒），到点才强杀。
 - dsh 没有对应物的方法（`mcpServerStatus/list`、`app/installed`、`plugin/installed`、`marketplace/add`）答复 -32004"不适用"，与 Claude 入口同一做法；`thread/goal/get` 如实回报没有目标。
+- 客户端工具（Litch 的 clientTools 扩展：内置浏览器、Computer Use、`litch_machine`、`litch_sessions`、`litch_tasks` 等）：`thread/start.dynamicTools` 记在适配器库里（重启、恢复会话之后还在），经适配器插进 dsh 的一个 cordis 插件交给模型（`src/plugin.mts`，起 dsh 时用 `--patch` 加载，不改 dsh 本体）。插件给每个会话注册只对它可见的工具，模型看到的名字是 `<命名空间>__<工具名>`，命名空间的说明接在它第一个工具的说明前面；模型调用时插件经回环 TCP 连接（端口和一次性令牌写在只有属主读得到的补丁文件里）交回适配器，适配器照 `protocol/extensions/client-tools.json` 的规矩挑执行方、发标准的 `item/tool/call`，答复里的图片存进 dsh 的附件再交给模型。条目是动态工具条目（`dynamicToolCall`）；重读历史时结果只有文字，图片在 dsh 的记录里只剩附件号。dsh 的子代理看不到这些工具（dsh 的按会话注册不会传给子代理）。
+- 子代理：dsh 的 `subagent`、`subagent_fork` 映射成子代理条目（`collabAgentToolCall`，`spawnAgent`），接收方是子代理的会话号（派它的会话里的 `subagent/catalog` 事件给的）；`send_message`、`interrupt_agent`、`list_agents` 也是子代理条目。子代理的会话（会话头 `origin` 是 `subagent`）是独立线程，带 `parentThreadId`，`thread/list` 默认不列；dsh 只让按派它的会话的地址跟随它（普通地址报 `session/agent-busy`），地址里的方式（`continuable`、`one-shot`）还得对上。后台可继续的子代理能在它自己的线程里接着发消息、插话、打断（`subagents/prompt`、`subagents/interruptByParent`），跑完就结束的 `canAcceptDirectInput` 为假，发消息如实拒绝；子代理的权限和模型是派它时定的，客户端带来的设置不管。dsh 自己分叉出来的会话也带上一级的会话号，但没有 `origin`：记成 `forkedFromId`，照普通会话列出来。
 - 技能清单（`skills/list`）问的是 dsh 自己（Web Remote 的 `skills/list`），适配器不另扫目录：列出来的就是用户能用 `/名字` 点名的那些。dsh 的这个接口按会话问，所以每个工作目录配一个只用来问技能的 dsh 会话（会话号 `session-skills-` 开头，由目录定），从不发消息、不进线程列表；dsh 没有删除会话的接口，它建了就一直在。来源范围是按文件所在的目录归的（项目的 `.dsh/skills`、`.agents/skills` 算仓库的，`<DSH_HOME>/skills`、`~/.agents/skills` 算用户的，其余算系统的）。dsh 不往远程客户端推技能变化，适配器每两秒问一遍，变了给问过清单的连接发 `skills/changed`。别的程序改了技能文件，dsh 要等系统的文件事件才知道，系统忙时会迟，这期间清单是旧的，`forceReload` 也不能让它重扫。dsh 没有逐项的开关，`enabled` 恒为真，`skills/config/write`、`skills/extraRoots/set` 不支持。消息里的技能输入化成单独一行的 `/名字`，由 dsh 展开；回显和重读历史里它仍是一项技能。注意 `DSH_HOME` 是适配器自己的那一份，用户放在 `~/.dsh/skills` 里的技能读不到。
 
 ## 版本
@@ -61,4 +63,4 @@ node scripts/dsh-poc-serve.mjs --gui     # 同一实例常驻，写入 ~/.ssh/co
 
 ## 尚未覆盖
 
-历史分页（快照之外更早的记录）、计划模式（dsh 只能用 `/plan` 命令打开，适配器不发；模型自己调 `exit_plan_mode` 只会得到“只在计划模式里可用”的报错，这个工具 dsh 不让单独关）、分叉与回滚、压缩、子代理展示、MCP 管理、技能的开关与额外目录、`thread/timeline/list`。结构化输出也不支持（见上）。只在 macOS 上验证过；真实桌面界面已在 ChatGPT.app 26.1007 上用回环 mock 模型验证过，真实 DeepSeek 端点尚未经适配器端到端验证。
+历史分页（快照之外更早的记录）、计划模式（dsh 只能用 `/plan` 命令打开，适配器不发；模型自己调 `exit_plan_mode` 只会得到“只在计划模式里可用”的报错，这个工具 dsh 不让单独关）、分叉与回滚、压缩、MCP 管理、技能的开关与额外目录、`thread/timeline/list`。结构化输出也不支持（见上）。只在 macOS 上验证过；真实桌面界面已在 ChatGPT.app 26.1007 上用回环 mock 模型验证过，真实 DeepSeek 端点尚未经适配器端到端验证。

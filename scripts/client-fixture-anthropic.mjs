@@ -34,6 +34,7 @@ import {
 } from './client-fixture-marks.mjs'
 import { FIXTURE_PLAN, PLAN_TRIGGER } from './client-fixture-plan.mjs'
 import { RUN_COMMAND, RUN_TRIGGER } from './client-fixture-run.mjs'
+import { sessionsAnthropic } from './client-fixture-sessions.mjs'
 
 /** 两家各自的工具名。没有的是 null */
 const TOOLS = {
@@ -136,6 +137,9 @@ export function anthropicReply(harness, body, pace) {
   // 操作本机（litch_machine 和 litch-machine 命令）的那几句，见 client-fixture-machine.mjs
   const machine = machineAnthropic(harness, body, said)
   if (machine) return machine
+  // 会话树（litch_sessions 和设备注入的唤醒）的那几句，见 client-fixture-sessions.mjs
+  const sessions = sessionsAnthropic(body, said)
+  if (sessions) return sessions
   // 一句话里有好几个词时认最后出现的那个：被打断的回合留下的话，会和新的一句并在同一条消息里
   const marks = [
     [RUN_TRIGGER, 'run', tools.shell],

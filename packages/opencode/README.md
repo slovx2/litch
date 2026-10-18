@@ -19,6 +19,8 @@ OpenCode 本体不随适配器分发：适配器使用用户自己安装的 `ope
   - bash → `commandExecution`，输出跑着的时候分段推。
   - edit、write、apply_patch → `fileChange`。
   - 提问工具 → `dynamicToolCall`。
+  - 动态工具（见下）→ `dynamicToolCall`，命名空间、工具名照建会话时给的。
+  - 子代理（task）→ `collabAgentToolCall`（`spawnAgent`），`receiverThreadIds` 是子会话号，`agentsStates` 跟着工具的状态走。条目等 OpenCode 建好子会话才画，一出来就指向子线程。
   - websearch、codesearch、webfetch → `webSearch`。
   - MCP 和其余工具 → `mcpToolCall`。
   - 压缩 → `contextCompaction`。
@@ -38,6 +40,12 @@ OpenCode 本体不随适配器分发：适配器使用用户自己安装的 `ope
 
   注意：OpenCode 拒一个就把这个会话里别的挂着的请求一起拒掉。
 - **提问：** 模型调 OpenCode 的提问工具（`question`）时，适配器转成 `item/tool/requestUserInput`。一次可以问几道题；有选项的题和没选项的题分开问。问不成（没有连着的客户端、拿着请求的连接都断了、回合被打断）就拒掉，模型拿到 OpenCode 的“用户没理会这道题”。适配器起 serve 时设了 `OPENCODE_ENABLE_QUESTION_TOOL=1`，这个工具默认只对 OpenCode 自己的界面开着。
+- **动态工具（`thread/start.dynamicTools`，含 Litch 的客户端工具）：** 声明里报 `clientTools` 扩展。
+  - 工具定义记在适配器库里，适配器重启、会话恢复后还在；分叉出来的会话带着原会话的。
+  - 交给模型的办法：适配器在回环上开一个 MCP 服务（Streamable HTTP，只认适配器随机生成的口令），每个有动态工具的会话一个地址，发消息前经 OpenCode 的 `POST /mcp` 挂到会话所在的目录上，服务名是 `litch_` 加会话号的摘要。OpenCode 的 MCP 按目录共用，所以每条消息的 `tools` 里先禁掉 `litch_*`、再放开自己那个服务，别的会话看不到；子代理只继承禁止的规则，也看不到。没用插件的 `tool()`：插件的工具在目录实例建起来时就定了，不能按会话不同。
+  - 模型调用时：照 `protocol/extensions/client-tools.json` 挑执行方，向它发标准的 `item/tool/call`，`callId` 就是条目号（按会话、工具名、参数对上 OpenCode 的工具部件）。没有能执行的连接当场回 `noExecutor`；执行方半路断开、回合停止都按失败结束，不改交给别人。`litch_` 的工具在会话规则里是“允许”，不经 OpenCode 自己的审批。
+  - 结果：文字照原样，图片成为 OpenCode 的附件交给模型（不支持在工具结果里放图的提供方，OpenCode 另起一条用户消息带上）。跑得久的调用每 15 秒报一次进度，OpenCode 那边不会超时。
+- **子代理的会话：** 线程上 `agentNickname`、`agentRole` 是子代理的种类（OpenCode 会话上的 `agent`）；能打开、订阅，也能直接发话（`canAcceptDirectInput`）。直接发话时照 OpenCode 给子代理的默认，不给 `task`、`todowrite`。
 - **权限三档：** OpenCode 没有沙箱，三档的差别在给不给工具、问不问。每条消息都带上档位，正在跑的回合用的是发出时的那一档。
   - 只读：不给模型 edit、bash、task 三类工具（经消息的 `tools`，它会整个替换会话的权限规则）。
   - 项目内：照 OpenCode 自己的权限设置。
@@ -111,7 +119,6 @@ npm test                                          # 在本目录：构建后跑�
 - MCP 服务的征询（`mcpServer/elicitation/request`）；
 - MCP 管理；
 - 技能的开关与额外目录；
-- 子代理会话的单独展示（子代理的权限请求已转到主会话）；
 - `thread/timeline/list`。
 
 用户在 OpenCode 自己的界面里对同一会话的操作，适配器通过事件流看得到；但 OpenCode 自己的界面起的是它自己的 serve，看不到适配器这边的实时事件，要重开会话才看得到。只在 macOS 上验证过。

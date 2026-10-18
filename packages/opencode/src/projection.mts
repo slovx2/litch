@@ -1,3 +1,4 @@
+import type { DynamicToolSpec } from './client-tools.mjs'
 import {
   declineItem,
   fileChanges,
@@ -28,6 +29,8 @@ export interface OcThread {
   createdAt: number
   updatedAt: number
   parentThreadId: string | null
+  // 子代理的会话是哪种子代理（OpenCode 会话上的 agent，比如 explore、general）；主会话是 null
+  agent: string | null
   // 临时线程只存在于适配器内存里，没有对应的 OpenCode 会话
   ephemeral: boolean
 }
@@ -53,6 +56,10 @@ export interface ProjectionHooks {
   contextWindow(providerID: string, modelID: string): number | null
   /** 现有的 MCP 服务名：拆 MCP 工具名用 */
   mcpServers(): readonly string[]
+  /** 这个工具名是不是会话的动态工具（经适配器的 MCP 服务交给 OpenCode 的，client-tools.mts） */
+  dynamicTool(name: string): DynamicToolSpec | null
+  /** 一个动态工具的部件开始跑了（MCP 调用进来时按它认出条目号） */
+  dynamicToolStarted(itemId: string, name: string, input: unknown): void
 }
 
 interface PartState {
@@ -546,16 +553,25 @@ export class Projection {
     let state = this.parts.get(part.id)
     if (!state) {
       // pending 时参数还没齐，等它开始跑（或者直接到了终态）再画；部件号先记下，审批、提问可能先到
-      if (status === 'pending') {
+      // 子代理（task）跑起来以后才建子会话、把会话号写进 metadata：等有了会话号再画，条目一出来就指向子线程
+      const waiting =
+        status === 'pending' ||
+        (status === 'running' && part.tool === 'task' && !part.state?.metadata?.sessionId)
+      if (waiting) {
         if (typeof part.callID === 'string') this.pendingCalls.set(part.callID, String(part.id))
         return
       }
-      const item = toolItem(part, this.thread.cwd, this.hooks.mcpServers())
+      const item = toolItem(part, this.thread.cwd, this.hooks.mcpServers(), {
+        threadId: this.thread.id,
+        dynamicTool: (name) => this.hooks.dynamicTool(name),
+      })
       state = this.track(turn, info, part, item)
       if (!item) {
         state.done = true
         return
       }
+      if (item.type === 'dynamicToolCall' && item.namespace !== 'opencode' && status === 'running')
+        this.hooks.dynamicToolStarted(item.id, String(part.tool), part.state?.input ?? {})
       if (item.type === 'commandExecution' && this.shellTurns.has(turn.id))
         item.source = 'userShell'
       this.put(turn, item, false, notify)

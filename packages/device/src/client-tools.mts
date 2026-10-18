@@ -13,16 +13,11 @@
 //     哪怕它没订阅、没收到那一份；
 //   - 答了之后它不发 serverRequest/resolved（实测）；有连接恢复会话时，还在等的请求会补发给它；
 //   - turn/start 不会让发起的连接订阅会话（实测），所以“发起回合的连接”要设备进程自己记。
-import {
-  type ClientToolCallResponse,
-  type ClientToolsDesktopInfo,
-  clientToolFailure,
-} from '../../protocol/src/client-tools.mjs'
+import { type ClientToolsDesktopInfo, clientToolFailure } from '../../protocol/src/client-tools.mjs'
 import {
   noClientToolExecutor,
   pickClientToolExecutor,
 } from '../../shared/src/client-tool-executor.mjs'
-import type { DeviceTools } from './device-tools.mjs'
 import type { UpstreamLink } from './upstream.mjs'
 import { type Frame, idKey, isObject, type RpcId } from './wire.mjs'
 
@@ -62,9 +57,6 @@ interface Call {
   grace: NodeJS.Timeout | null
 }
 
-/** 设备进程自己执行的那几个命名空间（device-tools.mts 的注册表） */
-export type DeviceToolDispatch = Pick<DeviceTools, 'has' | 'dispatch'>
-
 export interface ClientToolRouterOptions {
   /**
    * 按已知的发起者和订阅者挑不出执行方时，等其余几份到齐的工夫（毫秒）。几份是 codex 一口气发给
@@ -74,8 +66,6 @@ export interface ClientToolRouterOptions {
    */
   graceMs: number
   log(line: string): void
-  /** 设备工具（litch_tasks……）的调用由设备进程自己答。没给（测试）就当场回 noExecutor */
-  deviceTools?: DeviceToolDispatch
 }
 
 const sep = '\u0000'
@@ -134,11 +124,6 @@ export class ClientToolRouter {
   /** 原生 codex 发来一份 litch_ 命名空间的 item/tool/call。这一份不再往下转，怎么办都在这里 */
   offer(peer: ClientToolPeer, link: UpstreamLink, frame: Frame, upstreamId: RpcId): void {
     const params = isObject(frame.params) ? frame.params : {}
-    // 设备进程自己执行的命名空间不挑客户端连接
-    if (this.options.deviceTools?.has(params.namespace)) {
-      this.device(link, frame, upstreamId)
-      return
-    }
     const threadId = typeof params.threadId === 'string' ? params.threadId : ''
     const callId = typeof params.callId === 'string' ? params.callId : idKey(upstreamId)
     const key = [link.harness, threadId, callId].join(sep)
@@ -174,19 +159,6 @@ export class ClientToolRouter {
         if (late) this.deliver(current, late)
         else this.finish(current, noClientToolExecutor(current.namespace), '没有能执行的连接')
       }, this.options.graceMs)
-  }
-
-  /**
-   * 设备工具的一份调用（任何上游来的）：执行方是设备进程自己，不挑客户端连接，从收到它的这条上游连接答。
-   * 原生 codex 发给每条订阅连接的那几份由注册表按 callId 只答第一份（device-tools.mts）
-   */
-  device(link: UpstreamLink, frame: Frame, upstreamId: RpcId): void {
-    const params = isObject(frame.params) ? frame.params : {}
-    const reply = (result: ClientToolCallResponse) => {
-      if (link.available) link.reply(JSON.stringify({ id: upstreamId, result }))
-    }
-    if (this.options.deviceTools) this.options.deviceTools.dispatch(link.harness, frame, reply)
-    else reply(noClientToolExecutor(String(params.namespace)))
   }
 
   /** 发起者优先，其次订阅者（设备进程看到的先后），最后是收到了某一份的连接（到达的先后） */

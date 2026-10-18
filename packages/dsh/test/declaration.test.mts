@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import test from 'node:test'
+import { EXTENSION } from '../../protocol/src/device.mjs'
 import type { HarnessFeatures, PermissionPreset } from '../../protocol/src/harness-capabilities.mjs'
 import { declaration } from '../src/declaration.mjs'
 import { DshServer } from '../src/server.mjs'
@@ -89,8 +90,8 @@ test('dsh：runtime/info 带结构化声明，原有字段原样保留', { timeo
     )
     // 名字是产品自己的叫法（它的 --help 里自称 DeepSeek Harness，界面里用简称 DSH），dsh 是命令名
     assert.deepEqual([displayName, badge], ['DSH', 'DS'])
-    // dsh 的审批带不了话：不支持 declineWithNote。
-    assert.deepEqual(extensions, [])
+    // dsh 的审批带不了话：不支持 declineWithNote。客户端工具经插件交给 dsh 的模型（client-tools.test.mts）
+    assert.deepEqual(extensions, [EXTENSION.clientTools])
     assert.deepEqual(
       presets.map((preset) => [preset.id, preset.risk, preset.requiresConfirmation]),
       [

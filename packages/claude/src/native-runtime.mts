@@ -47,7 +47,7 @@ import { deniedMessage } from './approval-request.mjs'
 import { cliOutputFormat } from './cli-output-schema.mjs'
 import { clientToolCliNames, dynamicToolServer } from './dynamic-tools.mjs'
 import { goalToolServer, isGoalTool } from './goal-tools.mjs'
-import { hostClaudeExecutable } from './host-claude.mjs'
+import { hostClaudeEnvOverrides, hostClaudeExecutable } from './host-claude.mjs'
 import { jsonSchemaValidator } from './json-schema.mjs'
 import { sdkMcpStartupEnvironment } from './mcp-config.mjs'
 import {
@@ -1030,7 +1030,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         tools: [],
         mcpServers: {},
         strictMcpConfig: true,
-        env: { ...process.env },
+        env: { ...process.env, ...hostClaudeEnvOverrides },
         stderr: (data: string) => process.stderr.write(data),
         spawnClaudeCodeProcess: nativeProcess.spawn.bind(nativeProcess),
       },
@@ -1158,6 +1158,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       // 失败后由持久化状态对账；禁止 CLI 自行重放可能已接收的模型请求。
       env: {
         ...process.env,
+        ...hostClaudeEnvOverrides,
         ...sdkMcpStartupEnvironment(context.mcpServers),
         CLAUDE_CODE_MAX_RETRIES: '0',
         CLAUDE_CODE_DISABLE_NONSTREAMING_FALLBACK: '1',

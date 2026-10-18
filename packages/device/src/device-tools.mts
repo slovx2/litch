@@ -1,10 +1,12 @@
 // 由设备进程自己执行的 litch_ 命名空间（litch_tasks、会话树的 litch_sessions……）。
 // 各模块把处理函数注册进来；调用从哪来都交到这里：
-//   - 客户端连接对应的上游连接上，适配器的引擎发来的 item/tool/call（relay.mts 截下）；
-//   - 原生 codex 那条路由（client-tools.mts），它把同一次调用发给每条订阅着会话的连接；
+//   - 客户端连接对应的上游连接上发来的 item/tool/call：不分适配器的引擎还是原生 codex，都在 relay.mts 的
+//     serverRequest 开头按 has(namespace) 截下（原生 codex 把同一次调用发给每条订阅着会话的连接，几份都到这里）；
 //   - 设备进程自己开的内部连接（engine-link.mts）。
 // 设备进程替每条通往引擎的连接在握手里声明这些命名空间（declareDeviceTools），引擎挑执行方时挑得中它。
-// 同一次调用（harness + 会话 + callId）只答第一份，其余几份不答：原生 codex 的答复从哪条连接回去都算数。
+// 同一次调用（harness + 会话 + callId）只执行一次，答复从最先到的那份所在的连接回（它断了换下一份）：
+// 原生 codex 的答复从哪条连接回去都算数。处理函数抛错时替它回 failed；回合结束（turn/completed）时
+// 它拿到的 signal 作废（litch_sessions.wait 这种会等的工具要看它），设备进程关的时候也作废。
 import {
   CLIENT_TOOL_NAMESPACE_PREFIX,
   CLIENT_TOOLS_CAPABILITY,
@@ -12,7 +14,7 @@ import {
   clientToolFailure,
 } from '../../protocol/src/client-tools.mjs'
 import { EXTENSION, EXTENSIONS_CAPABILITY } from '../../protocol/src/device.mjs'
-import { type Frame, isObject } from './wire.mjs'
+import { isObject } from './wire.mjs'
 
 /** 一次调用。arguments 是模型给的原样参数 */
 export interface DeviceToolCall {
@@ -39,16 +41,31 @@ export interface DeviceToolRegistry {
   has(namespace: string): boolean
 }
 
-/** 答过的调用记多久（毫秒）。原生 codex 的几份前后只差几毫秒，恢复会话时补发的也在回合之内 */
-const REMEMBER_MS = 30 * 60 * 1000
+/** 把答复送回收到这一份的那条连接。连接已经不在了返回 false */
+export type DeviceToolReply = (response: ClientToolCallResponse) => boolean
 
+interface Running {
+  harness: string
+  turnId: string
+  controller: AbortController
+  /** 收到的每一份各自的回法，按到达的先后 */
+  replies: DeviceToolReply[]
+}
+
+/** 记着“已经答过”的调用最多这么多个（迟到的副本丢掉用）；回合结束时清，这里只防漏清 */
+const DONE_LIMIT = 10_000
+
+const sep = '\u0000'
 const text = (value: unknown): string => (typeof value === 'string' ? value : '')
+const message = (error: unknown): string => (error instanceof Error ? error.message : String(error))
 
 export class DeviceTools implements DeviceToolRegistry {
   private readonly handlers = new Map<string, DeviceToolHandler>()
-  private readonly answered = new Map<string, number>()
-  /** 设备进程关了：还在跑的处理函数收到取消 */
-  private readonly lifetime = new AbortController()
+  /** 正在执行的调用。键：harness + 会话 + callId */
+  private readonly running = new Map<string, Running>()
+  /** 已经答过的调用到它的回合。之后再到的副本（原生 codex 恢复会话时补发的）直接丢掉；回合结束时清 */
+  private readonly done = new Map<string, { harness: string; turnId: string }>()
+  private closed = false
   private readonly log: (line: string) => void
 
   constructor(log: (line: string) => void = () => {}) {
@@ -71,49 +88,73 @@ export class DeviceTools implements DeviceToolRegistry {
   }
 
   /**
-   * 一份 item/tool/call 到了（frame 是上游发来的原样请求）。同一次调用的别的几份不答。
-   * reply 把答复送回收到这一份的那条连接
+   * 一份 item/tool/call 到了（params 是请求的参数）。同一次调用（harness + 会话 + callId）的几份只执行一次：
+   * 已经在执行的把这一份的回法记上，执行完从最先到的、还连着的那份回；已经答过的直接丢掉。
+   * 没注册的命名空间当场回 invalid
    */
-  dispatch(harness: string, frame: Frame, reply: (result: ClientToolCallResponse) => void): void {
-    const params = isObject(frame.params) ? frame.params : {}
+  dispatch(harness: string, params: Record<string, unknown>, reply: DeviceToolReply): void {
     const call: DeviceToolCall = {
       harness,
       threadId: text(params.threadId),
       turnId: text(params.turnId),
-      callId: text(params.callId) || String(frame.id),
+      callId: text(params.callId),
       namespace: text(params.namespace),
       tool: text(params.tool),
       arguments: params.arguments,
     }
-    const key = [harness, call.threadId, call.callId].join('\u0000')
-    const now = Date.now()
-    for (const [old, at] of this.answered) if (now - at > REMEMBER_MS) this.answered.delete(old)
-    if (this.answered.has(key)) return
-    this.answered.set(key, now)
     const handler = this.handlers.get(call.namespace)
     if (!handler) {
       reply(clientToolFailure('invalid', `${call.namespace} is not available on this device.`))
       return
     }
-    let work: Promise<ClientToolCallResponse>
-    try {
-      work = handler(call, { signal: this.lifetime.signal })
-    } catch (error) {
-      work = Promise.reject(error)
+    const key = [harness, call.threadId, call.callId].join(sep)
+    if (this.done.has(key)) return
+    const running = this.running.get(key)
+    if (running) {
+      running.replies.push(reply)
+      return
     }
-    work.then(reply, (error) => {
-      this.log(`设备工具 ${call.namespace}.${call.tool} 出错：${String(error)}`)
-      reply(
-        clientToolFailure(
-          'failed',
-          `${call.namespace}.${call.tool} failed: ${error instanceof Error ? error.message : String(error)}`,
-        ),
-      )
-    })
+    const entry: Running = {
+      harness,
+      turnId: call.turnId,
+      controller: new AbortController(),
+      replies: [reply],
+    }
+    if (this.closed) entry.controller.abort(new Error('设备进程关了'))
+    this.running.set(key, entry)
+    const finish = (response: ClientToolCallResponse) => {
+      this.running.delete(key)
+      if (this.done.size >= DONE_LIMIT) this.done.clear()
+      this.done.set(key, { harness, turnId: call.turnId })
+      if (!entry.replies.some((send) => send(response)))
+        this.log(
+          `${harness} 的 ${call.namespace}.${call.tool}（会话 ${call.threadId}）答不回去了：连接都断了`,
+        )
+    }
+    // 处理函数同步抛的也按失败答
+    Promise.resolve()
+      .then(() => handler(call, { signal: entry.controller.signal }))
+      .then(finish, (error: unknown) => {
+        this.log(`设备工具 ${call.namespace}.${call.tool} 出错：${message(error)}`)
+        finish(
+          clientToolFailure('failed', `${call.namespace}.${call.tool} failed: ${message(error)}`),
+        )
+      })
   }
 
+  /** 一个回合结束了：它里面还在执行的调用作废（signal），记着的“已答过”清掉 */
+  turnEnded(harness: string, turnId: string): void {
+    for (const entry of this.running.values())
+      if (entry.harness === harness && entry.turnId === turnId)
+        entry.controller.abort(new Error('回合结束了'))
+    for (const [key, entry] of this.done)
+      if (entry.harness === harness && entry.turnId === turnId) this.done.delete(key)
+  }
+
+  /** 设备进程关了：还在跑的处理函数收到取消 */
   close(): void {
-    this.lifetime.abort(new Error('设备进程关了'))
+    this.closed = true
+    for (const entry of this.running.values()) entry.controller.abort(new Error('设备进程关了'))
   }
 }
 
@@ -123,6 +164,7 @@ export class DeviceTools implements DeviceToolRegistry {
  * 原生 codex 不认识这两个键，它的“话”在握手前会摘掉（native-codex.mts），由设备进程自己拦它的调用。
  */
 export function declareDeviceTools(given: unknown, namespaces: readonly string[]): unknown {
+  if (namespaces.length === 0) return given
   const fields = isObject(given) ? given : {}
   const capabilities = isObject(fields.capabilities) ? fields.capabilities : {}
   const listed = capabilities[EXTENSIONS_CAPABILITY]
