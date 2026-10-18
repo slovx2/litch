@@ -1,7 +1,8 @@
 // 客户端工具（内置浏览器、Computer Use）要人点头的事。手机上执行不了这些工具，不会自己发起这种询问；
 // 会话同时开在桌面端时，同一份请求也会排到这里（模拟核心里也有），照样能答。文字按结构在这里拼，核心只给“问的是什么”；
 // 远程设备上的模型要用那台电脑时写明白（和桌面端 ClientAskCard 同样的取舍）。
-import type { ApprovalOption, ClientAskRequest } from '@litch/core'
+// 操作那台桌面端的命令与文件（ask.kind 是 machine）也会排到这里：写出要做的事，选项的说法照桌面端的那一套。
+import type { ApprovalOption, ClientAskRequest, MachineAskView } from '@litch/core'
 import { type Key, useT } from '../../ui/i18n'
 import { Card, CardButton, type CardProps, Meta, useRespond, Well, Why } from './Card'
 
@@ -13,6 +14,23 @@ const OPTION_TEXT: Record<ApprovalOption['role'], Key> = {
   cancel: 'clientAsk.option.decline',
 }
 
+const MACHINE_TITLE: Record<MachineAskView['action'], Key> = {
+  exec: 'machine.ask.exec',
+  read: 'machine.ask.read',
+  write: 'machine.ask.write',
+  list: 'machine.ask.list',
+  copy: 'machine.ask.copy',
+  process: 'machine.ask.process',
+}
+
+const MACHINE_OPTION_TEXT: Record<ApprovalOption['role'], Key> = {
+  accept: 'machine.option.once',
+  acceptSession: 'machine.option.session',
+  acceptAlways: 'clientAsk.option.always',
+  decline: 'machine.option.decline',
+  cancel: 'machine.option.decline',
+}
+
 export function ClientAskCard(props: CardProps<ClientAskRequest>) {
   const { request, waiting } = props
   const t = useT()
@@ -20,10 +38,17 @@ export function ClientAskCard(props: CardProps<ClientAskRequest>) {
   const primary = request.options.find((option) => option.role !== 'decline')
   const { ask, device } = request
   const remote = device.kind === 'ssh'
+  const optionText = ask.kind === 'machine' ? MACHINE_OPTION_TEXT : OPTION_TEXT
   return (
     <Card
       testID="request:clientAsk"
-      title={t(ask.kind === 'site' ? 'clientAsk.site' : 'clientAsk.app')}
+      title={t(
+        ask.kind === 'site'
+          ? 'clientAsk.site'
+          : ask.kind === 'machine'
+            ? MACHINE_TITLE[ask.action]
+            : 'clientAsk.app',
+      )}
       waiting={waiting}
       error={error}
       actions={request.options.map((option) => (
@@ -31,7 +56,7 @@ export function ClientAskCard(props: CardProps<ClientAskRequest>) {
           key={option.id}
           kind={option === primary ? 'primary' : option.role === 'decline' ? 'ghost' : 'plain'}
           testID={`request:option:${option.id}`}
-          label={t(OPTION_TEXT[option.role])}
+          label={t(optionText[option.role])}
           disabled={busy}
           onPress={() => respond({ optionId: option.id })}
         />
@@ -51,6 +76,8 @@ export function ClientAskCard(props: CardProps<ClientAskRequest>) {
           <Meta label={t('clientAsk.origin')} value={ask.origin} />
           {ask.url && ask.url !== ask.origin ? <Well>{ask.url}</Well> : null}
         </>
+      ) : ask.kind === 'machine' ? (
+        <MachineWhat ask={ask} />
       ) : (
         <>
           <Meta label={t('clientAsk.appName')} value={`${ask.app.name}  ${ask.app.bundleId}`} />
@@ -59,5 +86,29 @@ export function ClientAskCard(props: CardProps<ClientAskRequest>) {
         </>
       )}
     </Card>
+  )
+}
+
+/** 操作那台电脑要做的事：命令和目录、路径、复制的两头，提到了禁止的位置标红 */
+function MachineWhat({ ask }: { ask: MachineAskView }) {
+  const t = useT()
+  return (
+    <>
+      {ask.flagged.length > 0 ? (
+        <Why tone="err">{`${t('machine.ask.flagged')}：${ask.flagged.join('、')}`}</Why>
+      ) : null}
+      {ask.copy ? (
+        <>
+          <Meta
+            label={t('machine.ask.from')}
+            value={`${ask.copy.from.machine}  ${ask.copy.from.path}`}
+          />
+          <Meta label={t('machine.ask.to')} value={`${ask.copy.to.machine}  ${ask.copy.to.path}`} />
+        </>
+      ) : null}
+      {ask.command !== null ? <Well>{ask.command}</Well> : null}
+      {ask.cwd ? <Meta label={t('machine.ask.cwd')} value={ask.cwd} /> : null}
+      {ask.path ? <Meta label={t('machine.ask.path')} value={ask.path} /> : null}
+    </>
   )
 }
