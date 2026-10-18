@@ -33,7 +33,8 @@
     "litch_tasks 工具：设备列了 deviceTasks 时，客户端建会话可以带上它（要那个 harness 在 runtime/info 里报了 clientTools：opencode、acp、dsh 没报，带了也用不了）。设备服务替自己通往引擎的每条连接（客户端连接对应的那组、任务自己的内部连接）都在握手的 capabilities.litchClientTools.namespaces 里加上 litch_tasks（并声明 clientTools 扩展），客户端自己的声明照原样保留；调用来了设备服务自己答，不转给客户端，所以没有桌面端连着、在定时任务自己的回合里也能用。原生 codex 把同一次调用发给每条订阅连接，设备服务按 callId 只答第一份。create 的 target 不给是 this_thread：在发起调用的会话里接着发；new_thread 沿用这个会话的 harness、cwd、工作区和设置（设备服务恢复一下这个会话看它的模型、强度和权限）。update 不用带 revision，按当时最新的改；状态只能改成 active 或 paused。建出来的任务 origin 是 tool。工具的结果是一段 JSON 文本（list：{tasks}；create、update：{task}；delete：{deleted}；run_now：{run, deduplicated}），出错时 success 为 false，文字是 [litch:invalid] 或 [litch:failed] 开头的一句英文说明。",
     "上限：一台设备最多 TASK_LIMIT（200）个任务；名字 1–120 字、提示词 1–100000 字，都不能全是空白；相邻两次运行至少隔 5 分钟。运行记录每个任务留最近 200 条（结束了的；没结束的不删）。",
     "删除任务时，正在跑的那一次不打断，跑完不再记录；排着的不再跑；它建出来的会话不删。",
-    "谁能连上聚合面谁就能管理这些任务，不另设权限：任务以这台设备上这个用户的身份运行。device-stop --if-idle 问忙不忙时，在执行的运行算忙（原因 tasks），换版本时不打断它们。"
+    "谁能连上聚合面谁就能管理这些任务，不另设权限：任务以这台设备上这个用户的身份运行。device-stop --if-idle 问忙不忙时，在执行的运行算忙（原因 tasks），换版本时不打断它们。",
+    "设备的时区：声明了 deviceTasks 的连接在 runtime/info 的 device.timezone 里看到设备所在的时区（IANA 名）。任务不指定时区时设备按它算，客户端的表单按它预览下一次；没声明的连接看不到这个字段。"
   ],
   "parts": [
     {

@@ -18,6 +18,7 @@ import {
   DEVICE_SETTINGS_CHANGED,
   type DeviceSettingsChangedNotification,
 } from '../../protocol/src/device-settings.mjs'
+import { localTaskTimeZone } from '../../protocol/src/task-schedule.mjs'
 import { clientToolNamespaces } from '../../shared/src/client-tool-executor.mjs'
 import { ProtocolError, requiredString } from '../../shared/src/protocol-contract.mjs'
 import {
@@ -577,7 +578,14 @@ export class ClientSession implements ClientToolPeer {
     }
     const service = this.host.service() ?? null
     const declared = this.declared.has(EXTENSION.deviceService)
-    return { device: describeDevice(this.deviceInfo(), service, declared), harnesses }
+    const device = describeDevice(this.deviceInfo(), service, declared)
+    // 设备的时区属于 deviceTasks：声明了的连接才看得到（表单按它预览“下一次”）
+    return {
+      device: this.declared.has(EXTENSION.deviceTasks)
+        ? { ...device, timezone: localTaskTimeZone() }
+        : device,
+      harnesses,
+    }
   }
 
   /** 定时任务的方法。只给声明过 deviceTasks 的连接 */

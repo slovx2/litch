@@ -17,6 +17,8 @@ interface ScheduleFieldsProps {
   /** 编辑已有的任务：时区没有“设备的”这一档（任务已经有自己的时区） */
   editing: boolean
   now: number
+  /** 选中的设备报的时区；旧版设备服务不报是 null，预览按这台电脑估 */
+  deviceZone?: string | null
   onChange(patch: Partial<TaskForm>): void
 }
 
@@ -64,6 +66,7 @@ export function ScheduleFields({
   remote,
   editing,
   now,
+  deviceZone = null,
   onChange,
 }: ScheduleFieldsProps) {
   const t = useT()
@@ -111,7 +114,7 @@ export function ScheduleFields({
       : []),
     { id: OTHER_ZONE, title: t('tasks.form.otherZone'), action: true },
   ]
-  const preview = previewOf(form, now)
+  const preview = previewOf(form, now, deviceZone)
 
   return (
     <>

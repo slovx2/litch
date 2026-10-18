@@ -442,6 +442,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   let catalogError: Text | null = null
   /** 设备服务报的主机名（runtime/info 的 device.hostname）。单个入口不报，是 null */
   let deviceHostname: string | null = null
+  /** 设备服务报的时区（runtime/info 的 device.timezone，支持定时任务的才报）。不知道是 null */
+  let deviceZone: string | null = null
 
   const view = (): DeviceView => ({
     id: config.id,
@@ -453,6 +455,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     connection,
     mode,
     os: platform,
+    timezone: deviceZone,
     harnesses,
     stranded,
     note,
@@ -1120,6 +1123,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         home = typeof info.device.home === 'string' ? info.device.home : null
         platform = info.device.os ?? null
         deviceHostname = typeof info.device.hostname === 'string' ? info.device.hostname : null
+        deviceZone = typeof info.device.timezone === 'string' ? info.device.timezone : null
       } else {
         // 上一次连的是设备服务的话，那时认的不算数：单个入口有没有这组方法要问了才知道
         if (mode === 'full') hasProjects = null
@@ -1133,6 +1137,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         service = null
         home = null
         deviceHostname = null
+        deviceZone = null
       }
     } catch (error) {
       if (mine !== session) return
