@@ -888,6 +888,8 @@ export function createCore(options: CoreOptions): Core {
       if (topic.kind === 'diff') {
         return device.diffs.open(topic.root, topic.scope, topic.sessionId ?? null, sink)
       }
+      // 定时任务：设备没连上时给上次知道的，不支持时 available 是 false
+      if (topic.kind === 'tasks') return device.tasks.open(sink)
       // 设备还没连上时订阅照样成立，连上之后才有快照
       return device.openSession(topic.sessionId, sink)
     },

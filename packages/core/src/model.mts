@@ -1,8 +1,10 @@
 // 界面看到的数据形状。界面不认识协议类型，只认识这里的类型，各种 harness 的差异在核心里消化掉。
 // 协议条目怎么变成这些显示条目，见 projection 目录。
 // 类型是 Text 的字段可能是对面给的原文，也可能是核心自己要说的一句话（见 phrase.mts），界面按当前语言显示。
+
 import type { MachineAccessView, MachineAskView } from './model-machine.mjs'
 import type { DeviceServiceView, ServiceUpgradeView } from './model-service.mjs'
+import type { SessionTaskMark } from './model-tasks.mjs'
 import type { Phrase, Text } from './phrase.mjs'
 import type { DiffElision } from './text/diff.mjs'
 import type { OutputElision } from './text/output-cap.mjs'
@@ -295,7 +297,11 @@ export interface SessionSummary {
   /** 所在的自定义分区（置顶不算）。不在哪个分区里是 null。一个会话同一时间只在一处：置顶，或者一个分区 */
   section: SectionView | null
   /** 进置顶或者进分区的时间，毫秒时间戳。组里按它排，先进去的在前；都不在是 null */
-  placedAt: number | null
+  placedAt: number | null /**
+   * 和定时任务的关系：任务跑出来的会话、任务的目标会话。侧栏行上出一个“定时”的小记号，
+   * 打开之后顶上说是哪个任务。和定时任务无关是 null（model-tasks.mts）
+   */
+  task: SessionTaskMark | null
 }
 
 export interface SidebarView {

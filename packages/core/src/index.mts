@@ -18,6 +18,7 @@ export {
   type ServerMessage,
   type SessionOp,
   type SidebarOp,
+  type TasksOp,
   type Topic,
   type TopicData,
   type TopicKind,
@@ -128,6 +129,7 @@ export type * from './model-files.mjs'
 export type * from './model-machine.mjs'
 export type * from './model-manage.mjs'
 export type * from './model-service.mjs'
+export type * from './model-tasks.mjs'
 export type * from './model-terminal.mjs'
 export {
   describeText,
@@ -217,6 +219,7 @@ export {
   type SessionGroups,
   type SessionHarnesses,
   type SessionMeta,
+  type TaskRunsPage,
   type TerminalGroups,
 } from './replica/replica.mjs'
 export {

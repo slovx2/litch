@@ -1502,6 +1502,13 @@ export const en: Record<MessageKey, Entry> = {
     'This session is read-only for now: the device refused the subscription ({message}).',
   'session.archived': 'This conversation is archived and read-only. Restore it to continue.',
   'session.queueFailed': 'A queued message was not sent: {message}. Sending again will retry it.',
+  'tasks.unsupported':
+    'The service on this device doesn’t support scheduled tasks. Update the adapter on it to use them.',
+  'tasks.gone': 'This task no longer exists (it may have been deleted elsewhere).',
+  'tasks.conflict':
+    'This task was just changed elsewhere and now shows the latest version. Review it, then save again.',
+  'tasks.limit':
+    'This device has reached its limit of 200 scheduled tasks. Delete some before adding more.',
   'tool.failed': 'The tool reported a failure',
   'collab.source': 'Subagent',
   'collab.spawnAgent': 'Start subagent',

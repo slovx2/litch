@@ -220,6 +220,7 @@ const summaries = (
     pinned: false,
     section: null,
     placedAt: null,
+    task: null,
     ...extra,
   }))
 
