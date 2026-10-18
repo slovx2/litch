@@ -129,6 +129,7 @@ impl Engine {
                     .collect();
                 json!({
                     "appId": a.app_id, "name": a.name, "exe": a.exe, "aumid": a.aumid,
+                    "originalFilename": a.original_filename,
                     "pid": a.pid, "active": a.active(), "integrity": integrity_name(a.integrity), "windows": windows,
                 })
             })
@@ -172,7 +173,7 @@ impl Engine {
                     let map = ShotMap::for_window(area);
                     let data = capture::jpeg(&image, &map).map_err(|e| fail!(Failed, "could not encode the screenshot: {e}"))?;
                     let id = self.store_shot(&session, map, frame);
-                    let shot = json!({ "id": id, "mime": "image/jpeg", "data": STANDARD.encode(&data), "width": map.width, "height": map.height });
+                    let shot = json!({ "id": id.to_string(), "mime": "image/jpeg", "data": STANDARD.encode(&data), "width": map.width, "height": map.height });
                     (map, shot)
                 }
                 None => {
@@ -232,7 +233,7 @@ impl Engine {
 
     /// 取某张截图的映射，并判 stale（窗口挪过、缩放过）
     fn shot(&self, p: &Value, hwnd: windows::Win32::Foundation::HWND) -> RpcResult<&Shot> {
-        let id = req_str(p, "screenshotId")?;
+        let id = shot_id(p)?;
         let shot = self.shots.get(&id).ok_or_else(|| fail!(Stale, "screenshot {id} is unknown; read the window state again"))?;
         if apps::bounds(hwnd) != shot.frame {
             return Err(fail!(Stale, "the window moved or resized since the screenshot; read the window state again"));
@@ -358,6 +359,15 @@ fn str_of(p: &Value, key: &str) -> Option<String> {
 
 fn req_str(p: &Value, key: &str) -> RpcResult<String> {
     str_of(p, key).filter(|s| !s.is_empty()).ok_or_else(|| fail!(Invalid, "{key} is required"))
+}
+
+/// 截图号：主进程原样带回（决 7.1.9），字符串或数字都认
+fn shot_id(p: &Value) -> RpcResult<String> {
+    match p.get("screenshotId") {
+        Some(Value::String(s)) if !s.is_empty() => Ok(s.clone()),
+        Some(Value::Number(n)) => Ok(n.to_string()),
+        _ => Err(fail!(Invalid, "screenshotId is required")),
+    }
 }
 
 fn req_f64(p: &Value, key: &str) -> RpcResult<f64> {
