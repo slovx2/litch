@@ -75,7 +75,9 @@ export function TaskEditScreen({ route, navigation }: Props) {
 
   const full = resolvedForm(form, model)
   const problems = checkForm(full, zoneKnown, editing)
-  const preview = previewOf(full, now)
+  // 设备报了自己的时区，时区选“设备的”时按它算；旧版设备服务不报，按手机的估并说明
+  const deviceZone = device?.timezone ?? null
+  const preview = previewOf(full, now, deviceZone)
   const blocked =
     available === false
       ? t('tasks.unsupported')
@@ -182,6 +184,7 @@ export function TaskEditScreen({ route, navigation }: Props) {
           onChange={patch}
           problems={problems}
           localZone={here}
+          deviceZone={deviceZone}
           originalZone={start?.timezone ?? null}
           editing={editing}
           preview={preview}

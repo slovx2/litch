@@ -9,6 +9,13 @@ tags: [mock]
     env:
       MODE: mock
       READY: device:local
+# 换成模拟核心之后首页会重画一遍（设备一台台进来），等画稳了再点入口，免得点在重画的那一下上
+- extendedWaitUntil:
+    visible:
+      id: devices:tasks
+    timeout: 15000
+- waitForAnimationToEnd:
+    timeout: 3000
 - tapOn:
     id: devices:tasks
 - extendedWaitUntil:

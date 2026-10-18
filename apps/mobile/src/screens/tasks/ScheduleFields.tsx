@@ -29,6 +29,7 @@ export function ScheduleFields({
   onChange,
   problems,
   localZone,
+  deviceZone,
   originalZone,
   editing,
   preview,
@@ -39,6 +40,8 @@ export function ScheduleFields({
   problems: FormProblems
   /** 手机所在的时区 */
   localZone: string
+  /** 设备报的时区；旧版设备服务不报是 null */
+  deviceZone: string | null
   /** 编辑时任务原来的时区 */
   originalZone: string | null
   /** 编辑：没有“设备的时区”这一档（任务已经有自己的时区了） */
@@ -178,7 +181,9 @@ export function ScheduleFields({
         : t('tasks.form.previewUnknown')
   const zoneLabel = (zone: string | null) =>
     zone === null
-      ? t('tasks.form.deviceZone')
+      ? deviceZone
+        ? t('timed.zone.device', { zone: deviceZone })
+        : t('tasks.form.deviceZone')
       : zone === localZone
         ? t('timed.zone.local', { zone })
         : zone === originalZone

@@ -13,6 +13,7 @@ export const zhCN = {
   'timed.date': '日期（年-月-日）',
   'timed.monthDay.note': '没有这一天的月份（比如 31 号）在当月最后一天跑',
   'timed.preview.estimated': '下一次在 {when}（按手机的时区估算，设备的时区可能不一样）',
+  'timed.zone.device': '设备的时区（{zone}）',
   'timed.zone.local': '{zone}（手机所在）',
   'timed.zone.task': '{zone}（任务原来的）',
 } satisfies Record<string, Entry>
@@ -31,6 +32,7 @@ export const en: Record<keyof typeof zhCN, Entry> = {
   'timed.monthDay.note': 'Months without that day (like the 31st) run on their last day',
   'timed.preview.estimated':
     'Next run {when} (estimated in this phone’s time zone; the device’s may differ)',
+  'timed.zone.device': 'The device’s time zone ({zone})',
   'timed.zone.local': '{zone} (this phone)',
   'timed.zone.task': '{zone} (the task’s)',
 }
