@@ -201,6 +201,45 @@ export function Empty({
   )
 }
 
+/** 可选的小块：一排里选一个或几个（日程种类、星期）。选中反白 */
+export function Chip({
+  label,
+  on,
+  onPress,
+  disabled,
+  testID,
+}: {
+  label: string
+  on?: boolean
+  onPress?(): void
+  disabled?: boolean
+  testID?: string
+}) {
+  const { c } = useTheme()
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected: !!on, disabled: !!disabled }}
+      disabled={disabled || !onPress}
+      onPress={onPress}
+      testID={testID}
+      hitSlop={4}
+      style={({ pressed }) => [
+        styles.chip,
+        {
+          borderColor: on ? c.line3 : c.line2,
+          backgroundColor: on ? c.invBg : pressed ? c.press : 'transparent',
+          opacity: disabled ? 0.5 : 1,
+        },
+      ]}
+    >
+      <Text numberOfLines={1} style={[styles.chipText, { color: on ? c.invFg : c.ink }]}>
+        {label}
+      </Text>
+    </Pressable>
+  )
+}
+
 /** 状态记号：用形状区分（设计稿：会话状态用形状，不只靠颜色） */
 export function StatusMark({
   status,
@@ -263,4 +302,6 @@ const styles = StyleSheet.create({
   emptyTitle: { fontSize: 16, fontWeight: '600', textAlign: 'center' },
   emptyDetail: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
   mark: { width: 16, textAlign: 'center', fontSize: 12 },
+  chip: { borderWidth: 1, paddingHorizontal: 10, minHeight: 34, justifyContent: 'center' },
+  chipText: { fontSize: 14 },
 })
