@@ -667,6 +667,15 @@ createInterface({input:process.stdin}).on('line',line=>{
       (await ok('desktop', 'thread/list')).data.some((t: any) => t.id === children[0].id),
       false,
     )
+    // 子代理条目指向真实的子线程：客户端从卡片点进去用的就是这个号
+    assert.deepEqual(collab.receiverThreadIds, [children[0].id])
+    assert.deepEqual(Object.keys(collab.agentsStates), [children[0].id])
+    const persisted = (
+      await ok('desktop', 'thread/read', { threadId, includeTurns: true })
+    ).thread.turns
+      .find((t: any) => t.id === delegated.turn.id)
+      .items.find((i: any) => i.type === 'collabAgentToolCall')
+    assert.deepEqual(persisted.receiverThreadIds, [children[0].id])
     replies.push({ thinking: ['先分析。', '再核对。'], text: '思考结束' })
     const thinking = await ok('desktop', 'turn/start', {
       threadId,
@@ -964,6 +973,29 @@ createInterface({input:process.stdin}).on('line',line=>{
     })
     await childArrived
     await completed(background.turn.id)
+    // 后台子代理：子会话在父回合结束之后才建，建好时把存着的条目上的 agentId 换成子线程号
+    const backgroundChild = (
+      await ok('desktop', 'thread/list', {
+        ancestorThreadId: threadId,
+        sourceKinds: ['subAgentThreadSpawn'],
+      })
+    ).data.find((t: any) => t.id !== children[0].id)
+    assert.ok(backgroundChild)
+    const backgroundItem = (
+      await ok('desktop', 'thread/read', { threadId, includeTurns: true })
+    ).thread.turns
+      .find((t: any) => t.id === background.turn.id)
+      .items.find((i: any) => i.type === 'collabAgentToolCall')
+    assert.deepEqual(backgroundItem.receiverThreadIds, [backgroundChild.id])
+    assert.ok(
+      messages.desktop!.some(
+        (m) =>
+          m.method === 'item/completed' &&
+          m.params.item.id === backgroundItem.id &&
+          m.params.item.receiverThreadIds[0] === backgroundChild.id,
+      ),
+      '换号要通知客户端',
+    )
     let nativeRelease: (value: any) => void = () => {},
       nativeStarted = () => {}
     const nativeArrived = new Promise<void>((resolve) => {
@@ -991,6 +1023,13 @@ createInterface({input:process.stdin}).on('line',line=>{
     )
     nativeRelease({ text: 'Pi spontaneous reply' })
     const nativeDone = (await completed(nativeTurn.turn.id)).params.turn
+    const finishedChild = (
+      await ok('desktop', 'thread/read', { threadId, includeTurns: true })
+    ).thread.turns
+      .find((t: any) => t.id === background.turn.id)
+      .items.find((i: any) => i.type === 'collabAgentToolCall')
+    assert.deepEqual(Object.keys(finishedChild.agentsStates), [backgroundChild.id])
+    assert.equal(finishedChild.agentsStates[backgroundChild.id].status, 'completed')
     assert.ok(nativeDone.items.some((i: any) => i.text === 'Pi spontaneous reply'))
     const replay = (await ok('desktop', 'thread/read', { threadId })).thread.turns.find(
       (t: any) => t.id === nativeTurn.turn.id,

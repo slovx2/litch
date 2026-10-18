@@ -87,6 +87,8 @@ export class PiServer {
   readonly active = new Map<string, ActiveTurn>()
   readonly nativeFiles = new NativeFiles()
   readonly background = new Map<string, Set<string>>()
+  /** gotgenes 的 agentId → 子会话的线程号，子会话建好时记（runtime.mts）；重新载入的历史从父会话的记录里配 */
+  readonly subagentThreads = new Map<string, string>()
   private readonly loading = new Map<string, Promise<LiveSession>>()
   private readonly releasing = new Map<string, Promise<void>>()
   private readonly locks = new Map<string, Promise<unknown>>()

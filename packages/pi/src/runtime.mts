@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -49,6 +50,12 @@ const APPROVAL_PATH = `<inline:${APPROVAL_EXTENSION}>`
 // 压缩之前的事件也经一个内联扩展接：Pi 判断会话太小、不用压时直接报错，不发这个事件。
 const COMPACTION_EXTENSION = 'codex-harness-adapter-compaction'
 
+// 子代理条目要指向子会话的线程号（原生会话号），gotgenes 的事件却只带它自己的 agentId；两者只在它内部的记录上
+// 连着。它的子代理 run() 里先同步发 subagents:started（带 agentId），再在同一条异步链里建子会话、发
+// subagents:child:session-created（带子会话号）：started 时把 agentId 记进当前的异步上下文，建好时取出来配对。
+// 并行的几个子代理各走各的异步链，不会串。
+const spawningAgent = new AsyncLocalStorage<string>()
+
 // prepared 是调用方已经建好的会话（分叉、临时会话）；省略时按线程记录打开或新建原生会话文件。
 // 临时会话只在内存里，由调用方建好交进来（PiServer.open 守着：没交的临时会话不在这里新建）。
 export async function openSession(
@@ -69,6 +76,16 @@ export async function openSession(
     'resuming',
   ])
     eventBus.on(`subagents:${kind}`, (data) => host.emit({ type: 'subagent', kind, data }))
+  eventBus.on('subagents:started', (data) => {
+    const id = (data as { id?: unknown } | undefined)?.id
+    if (typeof id === 'string') spawningAgent.enterWith(id)
+  })
+  eventBus.on('subagents:child:session-created', (data) => {
+    const id = spawningAgent.getStore()
+    const threadId = (data as { sessionId?: unknown } | undefined)?.sessionId
+    if (id && typeof threadId === 'string')
+      host.emit({ type: 'subagent', kind: 'session', data: { id, threadId } })
+  })
   const planPath = fileURLToPath(
     new URL('./dist/index.ts', import.meta.resolve('@narumitw/pi-plan-mode/package.json')),
   )

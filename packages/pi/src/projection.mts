@@ -140,7 +140,22 @@ export function toolItem(
     durationMs: null,
   }
 }
-export function finishTool(item: any, result: any, isError: boolean, args: any): void {
+/**
+ * 父会话里记一笔 gotgenes 的 agentId 对应哪个子会话（runtime.mts 配出来的），重新载入历史时
+ * 子代理条目照样指向子线程
+ */
+export const SUBAGENT_THREAD_ENTRY = 'codex-harness-adapter-subagent'
+
+/** 子代理条目的 receiverThreadIds、agentsStates 用子会话的线程号；还不知道（子会话没建成）时只能用 agentId */
+export type SubagentReceiver = (agentId: string) => string
+
+export function finishTool(
+  item: any,
+  result: any,
+  isError: boolean,
+  args: any,
+  receiver: SubagentReceiver = (agentId) => agentId,
+): void {
   item.status = isError ? 'failed' : 'completed'
   const text = textContent(result?.content)
   if (item.type === 'dynamicToolCall') {
@@ -168,7 +183,7 @@ export function finishTool(item: any, result: any, isError: boolean, args: any):
     }
     item.error = isError ? { message: text } : null
   } else if (item.type === 'collabAgentToolCall' && result?.details?.agentId) {
-    const id = result.details.agentId
+    const id = receiver(result.details.agentId)
     item.receiverThreadIds = [id]
     const status = result.details.status
     item.agentsStates = {
@@ -206,6 +221,12 @@ export function projectHistory(entries: any[], thread: PiThread): PiTurn[] {
   const calls = new Map<string, { item: any; args: any }>()
   // 被用户否决的调用：标记记在工具结果之前，结果到了再落到条目上。
   const declined = new Set<string>()
+  // 后台子代理的子会话可能在工具结果之后才建，先整个扫一遍
+  const subagentThreads = new Map<string, string>()
+  for (const entry of entries)
+    if (entry.type === 'custom' && entry.customType === SUBAGENT_THREAD_ENTRY)
+      subagentThreads.set(entry.data.agentId, entry.data.threadId)
+  const receiver: SubagentReceiver = (agentId) => subagentThreads.get(agentId) ?? agentId
   for (const entry of entries) {
     if (entry.type === 'custom' && entry.customType === 'codex-harness-adapter-declined')
       declined.add(entry.data.id)
@@ -219,11 +240,12 @@ export function projectHistory(entries: any[], thread: PiThread): PiTurn[] {
         )
     }
     if (entry.type === 'custom' && entry.customType === 'subagents:record') {
+      const id = receiver(entry.data.id)
       for (const previous of turns)
         for (const item of previous.items)
-          if (item.type === 'collabAgentToolCall' && item.receiverThreadIds.includes(entry.data.id))
+          if (item.type === 'collabAgentToolCall' && item.receiverThreadIds.includes(id))
             item.agentsStates = {
-              [entry.data.id]: {
+              [id]: {
                 status: entry.data.error
                   ? 'errored'
                   : entry.data.status === 'stopped'
@@ -319,7 +341,7 @@ export function projectHistory(entries: any[], thread: PiThread): PiTurn[] {
         }
     if (msg.role === 'toolResult') {
       const call = calls.get(msg.toolCallId)
-      if (call) finishTool(call.item, msg, msg.isError, call.args)
+      if (call) finishTool(call.item, msg, msg.isError, call.args, receiver)
       if (call && declined.has(msg.toolCallId)) declineItem(call.item)
       if (msg.details?.source === 'plan_mode_complete')
         turn.items.push({ type: 'plan', id: `plan:${msg.toolCallId}`, text: msg.details.plan })
