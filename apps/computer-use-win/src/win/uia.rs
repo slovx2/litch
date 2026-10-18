@@ -61,6 +61,14 @@ fn cache_request(auto: &IUIAutomation, scope: TreeScope) -> RpcResult<IUIAutomat
             UIA_IsEnabledPropertyId,
             UIA_IsOffscreenPropertyId,
             UIA_IsPasswordPropertyId,
+            // 模式对象的 Cached* 值要单独把对应属性缓存进来：光 AddPattern 只让 GetCachedPattern 拿到模式本身，
+            // 不缓存它的值。少了这几项，ValuePattern.CachedValue、TogglePattern.CachedToggleState 等会取不到，
+            // 结果 value / readonly / checked / unchecked / selected / expanded / collapsed 全读不出来。
+            UIA_ValueValuePropertyId,
+            UIA_ValueIsReadOnlyPropertyId,
+            UIA_ToggleToggleStatePropertyId,
+            UIA_SelectionItemIsSelectedPropertyId,
+            UIA_ExpandCollapseExpandCollapseStatePropertyId,
         ] {
             req.AddProperty(prop).ok();
         }
