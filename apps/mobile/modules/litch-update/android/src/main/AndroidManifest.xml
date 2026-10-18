@@ -1,0 +1,9 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- 安卓 11 起要声明才查得到谁能打开安装包：用来把 ACTION_VIEW 直接交给系统安装器，不弹“用什么打开” -->
+  <queries>
+    <intent>
+      <action android:name="android.intent.action.VIEW" />
+      <data android:mimeType="application/vnd.android.package-archive" />
+    </intent>
+  </queries>
+</manifest>

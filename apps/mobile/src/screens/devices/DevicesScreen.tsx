@@ -2,6 +2,7 @@
 // 点一行进这台设备的会话；右边的“⋯”和长按出菜单（详情、重新连接、改名、移除）。
 // 一行只订阅它自己的两个键（keys.device、keys.activity），不遍历会话。
 // 应用回到前台时，没连着的设备立刻重连一次（手机切到后台时连接常被系统掐掉，不等退避的下一拍）。
+// 顶上有新版本时出更新的横条（UpdateBanner）；定时查更新也挂在这一页（首页一直在栈底）。
 import { type DeviceActivity, type DeviceView, keys } from '@litch/core'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useEffect, useState } from 'react'
@@ -14,8 +15,10 @@ import { Button, Empty, Row, StatusMark } from '../../ui/kit/controls'
 import { Confirm, Prompt, Sheet } from '../../ui/kit/overlays'
 import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
+import { useUpdateSchedule } from '../../update/use-update'
 import { reasonText, type ShownState, shownState } from './failure'
 import { forgetUnusedKey } from './forget'
+import { UpdateBanner } from './UpdateBanner'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Devices'>
 
@@ -123,6 +126,7 @@ export function DevicesScreen({ navigation }: Props) {
   const [renaming, setRenaming] = useState<DeviceView | null>(null)
   const [removing, setRemoving] = useState<DeviceView | null>(null)
   useForegroundReconnect()
+  useUpdateSchedule()
   const add = () => navigation.navigate('AddDevice')
   return (
     <Screen
@@ -134,6 +138,7 @@ export function DevicesScreen({ navigation }: Props) {
       ]}
       testID="devices"
     >
+      <UpdateBanner />
       <FlatList
         data={ids}
         keyExtractor={(id) => id}

@@ -40,3 +40,14 @@ export const COMPUTER_USE_RESTART = 'litch:computer-use:restart'
 export const COMPUTER_USE_APPS = 'litch:computer-use:apps'
 /** 界面 → 主进程，等应答：从“始终允许”里删掉一个（按包标识），回删没删掉 */
 export const COMPUTER_USE_FORGET_APP = 'litch:computer-use:forget-app'
+// —— 应用自己的更新（updater.mts） ——
+/** 界面 → 主进程，等应答：这台机器出不出更新、现在的状态、自动检查开着没有 */
+export const UPDATE_GET = 'litch:update:get'
+/** 界面 → 主进程，等应答：现在查一次 */
+export const UPDATE_CHECK = 'litch:update:check'
+/** 界面 → 主进程，等应答：重启以更新（先照退出的规矩问终端怎么办，不退就什么都不做） */
+export const UPDATE_INSTALL = 'litch:update:install'
+/** 界面 → 主进程，等应答：自动检查的开关 */
+export const UPDATE_SET_AUTO = 'litch:update:set-auto'
+/** 主进程 → 界面：状态变了（UpdateState） */
+export const UPDATE_STATE = 'litch:update:state'

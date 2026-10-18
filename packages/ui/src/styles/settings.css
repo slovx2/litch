@@ -453,7 +453,8 @@
   gap: 2px;
   min-width: 0;
 }
-.set-switch-text label {
+.set-switch-text label,
+.set-switch-text .update-text {
   color: var(--ink);
 }
 /* 竖排里不能按横排的那个基准伸长，不然这一行会被撑高 */

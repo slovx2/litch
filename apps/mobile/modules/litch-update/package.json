@@ -1,0 +1,8 @@
+{
+  "name": "litch-update",
+  "version": "0.0.0",
+  "private": true,
+  "description": "应用自己的更新（只有安卓）：算安装包的 SHA-256、看安装包的包名与签名、拉起系统安装器",
+  "license": "MIT",
+  "main": "src/index.ts"
+}

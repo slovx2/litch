@@ -272,3 +272,15 @@ export {
 export { parseSpans, type SpanNode, spanText, splitSpanLines } from './text/spans.mjs'
 export { capParts, PART_CHARS } from './text/tool-cap.mjs'
 export { createToolHub, type ToolCallHandlers, type ToolHub } from './tool-hub.mjs'
+export {
+  compareVersions,
+  parseUpdateFeed,
+  UPDATE_CHECK_INTERVAL_MS,
+  UPDATE_FEED_URL,
+  type UpdateAsset,
+  type UpdateFeed,
+  type UpdateOffer,
+  type UpdatePlatform,
+  type UpdateState,
+  updateFor,
+} from './update-feed.mjs'

@@ -19,6 +19,11 @@ import {
   REQUEST_CORE_PORT,
   SET_LANGUAGE,
   SET_LOOK,
+  UPDATE_CHECK,
+  UPDATE_GET,
+  UPDATE_INSTALL,
+  UPDATE_SET_AUTO,
+  UPDATE_STATE,
 } from './ipc.mjs'
 
 // 端口到了隔离环境里，要再转一手才能进到页面自己的环境
@@ -63,6 +68,22 @@ contextBridge.exposeInMainWorld('litchShell', {
 
 // 内置浏览器：界面报矩形、开关标签、导航，设置页取“一直允许”的网站、清除浏览数据（browser/bridge.mts）
 contextBridge.exposeInMainWorld('litchBrowser', browserBridge())
+
+// 应用自己的更新（updater.mts）：设置的“关于”里的状态和按钮、下好之后的提示。
+// 界面那边的类型在 packages/ui/src/settings/update-bridge.ts，改一边要改另一边
+contextBridge.exposeInMainWorld('litchUpdate', {
+  get: () => ipcRenderer.invoke(UPDATE_GET),
+  check: () => ipcRenderer.invoke(UPDATE_CHECK),
+  install: () => ipcRenderer.invoke(UPDATE_INSTALL),
+  setAuto: (on: boolean) => ipcRenderer.invoke(UPDATE_SET_AUTO, on === true),
+  onState(handler: (state: unknown) => void) {
+    const listener = (_event: unknown, state: unknown) => handler(state)
+    ipcRenderer.on(UPDATE_STATE, listener)
+    return () => {
+      ipcRenderer.removeListener(UPDATE_STATE, listener)
+    }
+  },
+})
 
 // Computer Use（只在 macOS 上有）：设置页里那一节要的权限状态、打开系统设置对应的那一页、重启助手、“始终允许”的清单。
 // 界面那边的类型在 packages/ui/src/settings/computer-bridge.ts，改一边要改另一边。别的系统上没有这个对象，界面就不显示那一节

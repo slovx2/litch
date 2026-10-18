@@ -8,12 +8,14 @@
     "scheme": "litch",
     "android": {
       "package": "dev.litch.app",
+      "permissions": ["android.permission.REQUEST_INSTALL_PACKAGES"],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#000000"
       }
     },
     "plugins": [
+      "./plugins/release-signing",
       [
         "expo-build-properties",
         {

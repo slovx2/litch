@@ -1,5 +1,6 @@
 // 整个仓库只有一个版本号：根目录 package.json 里的那个。
-// 适配器的各个包、客户端的各个包（协议、核心、界面、桌面外壳）都跟它一样，各自的锁文件里记的也一样。
+// 适配器的各个包、客户端的各个包（协议、核心、界面、桌面外壳）都跟它一样，各自的锁文件里记的也一样；
+// 安卓应用的版本在 apps/mobile/app.json 的 expo.version（versionCode 由它算出，应用里也从它取）。
 // 发版时改一处、别的跟着改；哪一个落下了，这里指出来。npm run check 会带上它。
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
@@ -27,8 +28,11 @@ for (const path of tracked) {
   if (self !== wanted) wrong.push(`${path} 的 packages[""]：${self ?? '没写'}`)
 }
 
+const mobile = read('apps/mobile/app.json').expo?.version
+if (mobile !== wanted) wrong.push(`apps/mobile/app.json 的 expo.version：${mobile ?? '没写'}`)
+
 if (wrong.length > 0) {
   console.error(`版本号不一致（根目录 package.json 里是 ${wanted}）：\n  ${wrong.join('\n  ')}`)
   process.exit(1)
 }
-console.log(`版本号一致：${wanted}（${tracked.length} 个文件）`)
+console.log(`版本号一致：${wanted}（${tracked.length + 1} 个文件）`)

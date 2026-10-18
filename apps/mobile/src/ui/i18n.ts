@@ -11,6 +11,7 @@ import * as detail from './messages/detail'
 import * as devices from './messages/devices'
 import * as sessions from './messages/sessions'
 import * as tools from './messages/tools'
+import * as update from './messages/update'
 
 export type { Lang } from '../../../../packages/ui/src/i18n/index.ts'
 
@@ -21,6 +22,7 @@ const zhCN = {
   ...detail.zhCN,
   ...compose.zhCN,
   ...tools.zhCN,
+  ...update.zhCN,
 }
 type MobileKey = keyof typeof zhCN
 const en: Record<MobileKey, Entry> = {
@@ -30,6 +32,7 @@ const en: Record<MobileKey, Entry> = {
   ...detail.en,
   ...compose.en,
   ...tools.en,
+  ...update.en,
 }
 const MOBILE: Record<Lang, Record<MobileKey, Entry>> = { 'zh-CN': zhCN, en }
 

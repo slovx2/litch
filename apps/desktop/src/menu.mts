@@ -45,6 +45,7 @@ const WORDS = {
     help: '帮助',
     home: '{name} 项目主页',
     issues: '反馈问题',
+    checkUpdates: '检查更新…',
   },
   en: {
     about: 'About {name}',
@@ -83,6 +84,7 @@ const WORDS = {
     help: 'Help',
     home: '{name} on GitHub',
     issues: 'Report an Issue',
+    checkUpdates: 'Check for Updates…',
   },
 } as const
 
@@ -96,6 +98,7 @@ export const SIDEBAR_ITEM = 'sidebar.toggle'
 /** “设置…”和“关于”两项的标识。点了都是打开设置页，后一个直接到“关于”那一组 */
 export const SETTINGS_ITEM = 'settings.open'
 export const ABOUT_ITEM = 'settings.about'
+export const CHECK_UPDATES_ITEM = 'update.check'
 /** “显示”里管缩放的三项。缩放有哪几档、走到哪一档由界面定（它记着），这里只转告点的是哪一项 */
 export const ZOOM_ITEMS = { in: 'zoom.in', out: 'zoom.out', reset: 'zoom.reset' } as const
 
@@ -114,6 +117,8 @@ export interface MenuHooks {
   /** 退出时还有终端在运行，问不问 */
   askOnQuit(): boolean
   setAskOnQuit(ask: boolean): void
+  /** 检查更新：打开“关于”并现在查一次。这台机器不出更新（没打包、平台没有包）时是 null，菜单里不放这一项 */
+  checkUpdates: (() => void) | null
 }
 
 /** 按这种语言排好菜单并装上。语言变了再调一次 */
@@ -135,6 +140,10 @@ export function installMenu(lang: MenuLang, hooks: MenuHooks): void {
     click: () => hooks.openSettings('about'),
   }
 
+  const checkUpdates: MenuItemConstructorOptions[] = hooks.checkUpdates
+    ? [{ id: CHECK_UPDATES_ITEM, label: say('checkUpdates'), click: hooks.checkUpdates }]
+    : []
+
   const template: MenuItemConstructorOptions[] = [
     // macOS 上第一个菜单是应用自己的菜单，标题由系统写成应用的名字
     ...(mac
@@ -143,6 +152,7 @@ export function installMenu(lang: MenuLang, hooks: MenuHooks): void {
             label: app.name,
             submenu: [
               about,
+              ...checkUpdates,
               line,
               settings,
               line,
@@ -269,7 +279,7 @@ export function installMenu(lang: MenuLang, hooks: MenuHooks): void {
       submenu: [
         { label: say('home'), click: () => void shell.openExternal(HOME) },
         { label: say('issues'), click: () => void shell.openExternal(`${HOME}/issues`) },
-        ...(mac ? [] : [line, about]),
+        ...(mac ? [] : [line, ...checkUpdates, about]),
       ],
     },
   ]

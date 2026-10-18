@@ -6,15 +6,11 @@
 
 [简体中文](README.md) | **English**
 
-Drive the coding agents on every machine from one desktop.
+Litch aims to be a comfortable desktop client with a great remote-connection experience.
 
-Litch is an open-source desktop client that brings Claude Code, Pi, Codex and other harnesses, on this machine and on remote ones, into a single window. It speaks the Codex app-server protocol. It focuses on three things:
-
-- **Remote connections.** Reach any number of machines through your own ssh, with no port opened on either side. Every harness on each machine comes in together; dropped connections reconnect by themselves and running turns are not lost.
-- **Built-in browser.** Agents can open pages, click, fill in forms and take screenshots in the browser that ships with Litch, while you watch in the side panel and can take over at any time.
-- **Computer Use (macOS).** Agents can operate the apps on this Mac, and each app needs your approval before the first action.
-
-**Agents on remote machines can use this desktop's browser and Computer Use too.** The agent runs on the server while the browser and the desktop stay with you: a dev server on the remote machine (addresses like `localhost:3000`) is forwarded over ssh and opens in the desktop's browser automatically. Each device has its own switch for each capability (the browser is on by default, Computer Use is off).
+- Direct SSH connections
+- Built-in browser + Computer Use (macOS only for now)
+- While the desktop is connected, remote devices can use its browser and Computer Use
 
 ## Screenshots
 
@@ -38,12 +34,12 @@ The screenshots show demo data. Skin, light or dark, and language (中文 / Engl
 
 ## Features
 
-- **Remote machines.** Litch reaches a remote machine through your system's ssh. Neither side opens a port, and login is left to your own ssh config and key agent, so the app has no password field. If the adapter is installed there, all of that machine's harnesses come in together, with settings, projects and terminals that survive a dropped connection; a machine with only native codex works too, with nothing else to install. It reconnects by itself after a drop, and a turn that was running is not lost. The adapter route needs adapter 0.6.0 or later on that machine; for agents there to use this desktop's browser and Computer Use, it needs 0.8.0 or later.
-- **Built-in browser.** A browser in the side panel that both you and the agent can use: open pages, read them, click, fill in forms, upload files, take screenshots. The first visit to an outside site asks for your consent (for this turn, this session, always, or deny); local addresses are allowed. Links in the conversation open in the built-in browser by default; Cmd/Ctrl-click them, or turn this off in Settings, to use your system browser instead. Agents on remote devices use this same browser, and the remote machine's localhost is forwarded over ssh.
-- **Computer Use (macOS only).** The agent looks at the screen and operates apps on your Mac. System permissions go to a small, separately signed helper, "Litch Computer Use", not to Litch itself: click "Open System Settings" in the Computer Use group of Settings, and the helper appears in the list, so you only need to turn on Accessibility and Screen Recording for it. Each app needs your approval before the first action, password managers and the like are always off limits, an on-screen notice shows while it works, and Esc stops it. Agents on remote devices can use it too, but only after you turn it on in that device's settings, and every session asks again.
-- **Multiple harnesses.** Claude Code, Pi, Codex (native), plus experimental DeepSeek Harness (DSH), OpenCode, and agents that speak ACP (Gemini CLI, Qwen Code, or any ACP agent through a command you supply). Each engine keeps its own sessions, tools, model configuration and login. If codex is installed on a machine, its sessions show up next to the other harnesses by themselves.
-- **Panels for coding work.** A terminal that survives a dropped connection, a file tree and viewer, and diff review (stage, revert, and inline comments that go out with your next message).
-- **Mobile.** In development.
+- **Remote connections.** Connect through your own ssh config and keys, with no port opened on either side; dropped connections reconnect by themselves and running turns are not lost.
+- **Multiple harnesses.** Claude Code, Pi, Codex, plus experimental DeepSeek Harness (DSH), OpenCode and ACP agents (Gemini CLI, Qwen Code and more), all in one window.
+- **Built-in browser.** Shared by you and the agent; the remote machine's localhost is forwarded over ssh.
+- **Computer Use (macOS).** The agent operates apps on your Mac, and each app needs your approval before the first action.
+- **Panels for coding.** A terminal that survives a dropped connection, a file tree, and diff review.
+- **Android client.** Browse sessions, send messages, answer approvals and open terminals from your phone.
 
 ## Status
 
@@ -52,7 +48,7 @@ The screenshots show demo data. Skin, light or dark, and language (中文 / Engl
 | Adapter `codex-harness-adapter` | Usable. Lets the Codex desktop app drive Claude Code, Pi and the experimental DSH, OpenCode and ACP agents directly; Litch also reaches all the harnesses on a machine through it. See [install and usage](ADAPTER.en.md) |
 | Desktop client Litch | Early development. Installers are available for macOS (Apple Silicon) and Windows (see Download below; the Windows build has not been fully tested), or run it from source. The app ships with its own copy of the adapter and gathers the harnesses installed on this machine under one device, Local. You can browse sessions, send messages (with images and attachments), queue, interrupt and steer, answer approvals and questions, and use plan mode, `/` commands and `@` to find files. When starting a session you pick the device, project and harness, and sessions from different harnesses in the same folder share one workspace. The side panel has a terminal, files and diff review. The Devices page can enable or disable a harness, change its settings, and show diagnostics and logs. It can also connect over SSH to the device service or native codex on a remote machine |
 | Built-in browser, Computer Use | Available since 0.8.0; Computer Use is macOS only. Agents on remote devices can use both capabilities of the desktop (the adapter there needs 0.8.0 or later) |
-| Mobile | In development |
+| Android client | Available since 0.9.0, early version. Connects over SSH to remote machines with the adapter installed: browse sessions, send messages, answer approvals, open terminals |
 
 ## Download
 
@@ -62,6 +58,7 @@ Get it from the [releases page](https://github.com/slovx2/litch/releases/latest)
 |---|---|---|
 | macOS (Apple Silicon) | `Litch-<version>-macos-arm64.dmg` | Signed and notarized by Apple. Open it and drag Litch into Applications |
 | Windows (x64) | `Litch-<version>-windows-x64-setup.exe` | **Not fully tested yet**; some things may not work. The installer is not signed, so Windows warns that the publisher is unknown: click "More info", then "Run anyway". It installs for the current user only and does not need administrator rights |
+| Android (arm64, Android 7.0 or later) | `Litch-<version>-android-arm64.apk` | Install it directly; the first time, Android asks you to allow installing unknown apps. The app generates its own SSH key; add its public key to the remote machine's `authorized_keys` to connect |
 
 The app ships with its own copy of the adapter and, when opened, gathers the Claude Code, Pi, DSH, OpenCode and codex installed on this machine under the device named Local; install and sign in to those harnesses separately. There is no installer for Intel Macs yet; run it from source there.
 

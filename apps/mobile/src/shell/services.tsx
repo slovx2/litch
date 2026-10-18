@@ -22,9 +22,16 @@ export interface Prefs {
   appearance: 'system' | 'light' | 'dark'
   /** 核心怎么装（src/shell/boot.ts）。正式用是 stored；开发、测试时用链接 litch://boot?mode=… 切换 */
   boot: BootMode
+  /** 自动检查应用更新（src/update/）；关了只在设置页点“检查更新”时查 */
+  autoUpdate: boolean
 }
 
-const DEFAULT_PREFS: Prefs = { lang: 'system', appearance: 'system', boot: 'stored' }
+const DEFAULT_PREFS: Prefs = {
+  lang: 'system',
+  appearance: 'system',
+  boot: 'stored',
+  autoUpdate: true,
+}
 const prefsFile = jsonFile<Partial<Prefs>>('prefs.json')
 
 export function loadPrefs(): Prefs {

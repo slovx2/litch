@@ -6,6 +6,7 @@ import { useServices } from '../app/services.tsx'
 import { showToast } from '../app/toasts.tsx'
 import type { LicenseEntry, ShellAbout } from '../boot/channel.ts'
 import iconUrl from './litch-icon.png'
+import { UpdateBlock } from './UpdateBlock.tsx'
 
 /** 项目主页。显示成文字，可以选、可以复制；不做成点了就跳走的链接 */
 export const PROJECT_HOME = 'https://github.com/slovx2/litch'
@@ -121,6 +122,7 @@ export function AboutSection() {
           ) : null}
         </div>
       </section>
+      <UpdateBlock />
       <section className="set-block">
         <div className="set-rows">
           <div className="set-row">

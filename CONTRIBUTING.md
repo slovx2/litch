@@ -50,7 +50,7 @@ coding conventions.
 
 ## 发版
 
-发版由维护者做。整个仓库只有一个版本号（根目录 `package.json`），适配器各包、客户端各包和它们的锁文件一起改，`npm run check` 会指出落下的；更新日志里“未发布”那一节改成版本号。打标签之前在本机跑 `npm run check:adapter-package`（要 Docker），并在要打标签的提交上跑一轮全量（`gh workflow run full.yml`）；release.yml 查不到这个提交上有通过的全量，就不挂发布页。推 `v<版本>` 标签后，`.github/workflows/release.yml` 出全部的包：适配器的独立发布包和安装脚本、macOS 的 dmg、Windows 的安装程序，都出好了一起挂到草稿发布页。核对过再公开，**不要标成预发布**：安装脚本取的是“最新一版”。
+发版由维护者做。整个仓库只有一个版本号（根目录 `package.json`），适配器各包、客户端各包和它们的锁文件一起改，`npm run check` 会指出落下的；更新日志里“未发布”那一节改成版本号。打标签之前在本机跑 `npm run check:adapter-package`（要 Docker），并在要打标签的提交上跑一轮全量（`gh workflow run full.yml`）；release.yml 查不到这个提交上有通过的全量，就不挂发布页。推 `v<版本>` 标签后，`.github/workflows/release.yml` 出全部的包：适配器的独立发布包和安装脚本、macOS 的 dmg 和 zip、Windows 的安装程序、安卓的 apk，以及应用自动更新读的清单 `litch-update.json`（`scripts/update-manifest.mjs` 生成），都出好了一起挂到草稿发布页。安卓包的 `versionCode` 由版本号算出（`apps/mobile/plugins/release-signing.js`），`apps/mobile/app.json` 的版本号也要一起改。核对过再公开，**不要标成预发布**：安装脚本和三个端的自动更新取的都是“最新一版”，公开之前谁也收不到。
 
 macOS 的 dmg 要用 Developer ID 签名并经苹果公证，公证用 App Store Connect 的 API 密钥（.p8）。要在仓库的 Settings → Secrets and variables → Actions 里配这五项机密（也可以用 `gh secret set <名字> --repo slovx2/litch`，值从标准输入给）：
 
@@ -63,5 +63,15 @@ macOS 的 dmg 要用 Developer ID 签名并经苹果公证，公证用 App Store
 | `APPLE_API_ISSUER` | 签发者编号 | 同一页上方的 Issuer ID |
 
 配好之后可以先在 Actions 里手动跑一次 Release、标签不填：照选的分支出包，不挂发布页，看 macOS 那一步签名、公证、起应用都过了再打标签。没配这几项时试跑出的是只有临时签名的 dmg，要挂到发布页时直接失败。Windows 的安装程序不签名，打开时系统会提示来源不明。
+
+安卓的 apk 要用发版钥匙签名：安卓只接受同一把钥匙签的更新，钥匙丢了就发不出能覆盖安装的新版本，务必另外备份。另配这三项机密：
+
+| 名字 | 内容 |
+|---|---|
+| `ANDROID_KEYSTORE_P12` | 钥匙库（PKCS12）的 base64（`base64 -i 钥匙库.p12`） |
+| `ANDROID_KEYSTORE_PASSWORD` | 钥匙库和钥匙的密码（PKCS12 里两者是同一个） |
+| `ANDROID_KEY_ALIAS` | 钥匙的别名 |
+
+release.yml 用 `apksigner` 核对签出来的包的证书指纹（写在 android 作业的 `RELEASE_CERT_SHA256` 里），对不上不发。本机签一个包：给出 `LITCH_ANDROID_KEYSTORE`（钥匙库路径）、`LITCH_ANDROID_KEYSTORE_PASSWORD`、`LITCH_ANDROID_KEY_ALIAS`、`LITCH_ANDROID_KEY_PASSWORD` 四个环境变量，再在 `apps/mobile` 下 `npx expo prebuild --platform android --clean --no-install && npm run android:release`；不给就用调试钥匙签。
 
 本机也能出安装包：`npm run client:pack` 之后 `npm run client:installer`，在 `apps/desktop/out/installer/` 下。macOS 上给了 `LITCH_SIGN_IDENTITY`（证书的名字）和 `LITCH_NOTARY_PROFILE`（`xcrun notarytool store-credentials` 存在钥匙串里的配置名）就签名并公证，见 `apps/desktop/scripts/make-installer.mjs` 开头；Windows 上要装 Inno Setup 6.7.1。

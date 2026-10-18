@@ -1,16 +1,18 @@
-// 应用设置：语言、明暗、关于、开发者里的启动方式。都记在 prefs.json（useServices 的 prefs/setPrefs），
+// 应用设置：语言、明暗、关于（版本与更新，UpdateSection.tsx）、开发者里的启动方式。都记在 prefs.json（useServices 的 prefs/setPrefs），
 // 改了马上生效：语言和明暗由 App 跟着换，启动方式换了核心重新装一次。
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import type { ReactNode } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { RootStackParamList } from '../../nav/routes'
-import { type BootMode, VERSION } from '../../shell/boot'
+import type { BootMode } from '../../shell/boot'
 import { type Prefs, useServices } from '../../shell/services'
 import { type Key, useT } from '../../ui/i18n'
 import { SectionLabel } from '../../ui/kit/controls'
 import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
+import { CURRENT_VERSION } from '../../update/store'
+import { AutoUpdateSwitch, UpdateStatus } from './UpdateSection'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>
 
@@ -112,9 +114,11 @@ export function SettingsScreen(_props: Props) {
           <Text style={[styles.name, { color: c.ink }]}>Litch</Text>
           <Text style={{ color: c.ink2 }}>{t('settings.about.tagline')}</Text>
           <Text testID="settings:version" style={{ color: c.ink2, fontFamily: theme.font.mono }}>
-            {t('settings.about.version', { version: VERSION })}
+            {t('settings.about.version', { version: CURRENT_VERSION })}
           </Text>
+          <UpdateStatus />
         </View>
+        <AutoUpdateSwitch />
 
         <SectionLabel>{t('sessions.settings.dev')}</SectionLabel>
         <Text style={[styles.sub, { color: c.ink2 }]}>{t('sessions.settings.boot')}</Text>

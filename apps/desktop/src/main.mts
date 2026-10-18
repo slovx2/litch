@@ -2,8 +2,10 @@
 // 它不解析协议，不持有会话状态，不在数据路径上（设计文档 01 第四节）。
 // 唯一的例外是客户端工具（内置浏览器、Computer Use）：核心把模型的工具调用交给这里登记的执行器（client-tools/），
 // 经手的只有那一次调用的参数和结果（设计文档 05 第九节）。
+import { spawn } from 'node:child_process'
 import { isAbsolute, join, normalize, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { UPDATE_FEED_URL, type UpdateState } from '@litch/core'
 import {
   app,
   BrowserWindow,
@@ -44,7 +46,13 @@ import {
   SET_LANGUAGE,
   SET_LOOK,
   TERMINALS,
+  UPDATE_CHECK,
+  UPDATE_GET,
+  UPDATE_INSTALL,
+  UPDATE_SET_AUTO,
+  UPDATE_STATE,
 } from './ipc.mjs'
+import { bundledAdapter, defaultAdapterHome, serviceEnv, stopIdleDevice } from './local-adapter.mjs'
 import {
   backdropOf,
   DEFAULT_LOOK,
@@ -56,6 +64,7 @@ import {
   writeLook,
 } from './look.mjs'
 import { installMenu, type MenuLang } from './menu.mjs'
+import { readPreferences, writePreference } from './preferences.mjs'
 import {
   type AliveCount,
   type QuitOutcome,
@@ -65,6 +74,7 @@ import {
 } from './quit-terminals.mjs'
 import { runShots } from './shots.mjs'
 import { MOCK_MODES, runSmoke, SMOKE_MODES, type SmokeMode } from './smoke.mjs'
+import { createUpdater, type Updater, updatePlatform } from './updater.mjs'
 
 const here = fileURLToPath(new URL('.', import.meta.url))
 /** 界面的构建产物在哪。开发时直接用界面包的产物目录；装成应用后界面跟外壳放在一起（见 scripts/pack.mjs） */
@@ -448,6 +458,117 @@ ipcMain.handle(COMPUTER_USE_FORGET_APP, (event, bundleId: unknown) =>
   fromUi(event) && computerUseSettings ? computerUseSettings.forgetApp(bundleId) : false,
 )
 
+// ---------- 应用自己的更新（updater.mts，工作区 design/harness-client/07-auto-update.md） ----------
+
+/**
+ * 只在装好的应用里查；LITCH_UPDATE_FEED 换成本机的假清单时没打包也查（开发、验收用，允许 http）。
+ * 自检和截图一律不查。应用就绪后才建出来
+ */
+let updater: Updater | null = null
+const updateFeedOverride = process.env.LITCH_UPDATE_FEED
+/** 设置里“自动检查更新”的开关，存在外壳的偏好里，默认开 */
+const AUTO_UPDATE_KEY = 'autoUpdate'
+const autoUpdateOn = () => readPreferences(app.getPath('userData'))[AUTO_UPDATE_KEY] !== false
+/** Windows：这一次退出是点了“重启以更新”，装完要把应用再打开 */
+let relaunchAfterInstall = false
+
+function createAppUpdater(): Updater | null {
+  if (smoke || (!app.isPackaged && !updateFeedOverride)) return null
+  return createUpdater({
+    version: app.getVersion(),
+    platform: updatePlatform(),
+    dataDir: app.getPath('userData'),
+    feedUrl: updateFeedOverride || UPDATE_FEED_URL,
+    allowHttp: !!updateFeedOverride,
+    auto: autoUpdateOn,
+    onState(state: UpdateState) {
+      for (const window of BrowserWindow.getAllWindows())
+        window.webContents.send(UPDATE_STATE, state)
+    },
+    log: (line) => console.error(`[update] ${line}`),
+  })
+}
+
+const updateView = () => ({
+  supported: updater !== null && updatePlatform() !== null,
+  auto: autoUpdateOn(),
+  state: updater?.state() ?? ({ phase: 'idle' } as UpdateState),
+})
+ipcMain.handle(UPDATE_GET, (event) => (fromUi(event) ? updateView() : null))
+ipcMain.handle(UPDATE_CHECK, async (event) => {
+  if (!fromUi(event) || !updater) return null
+  await updater.check()
+  return updateView()
+})
+ipcMain.handle(UPDATE_SET_AUTO, (event, on: unknown) => {
+  if (!fromUi(event) || typeof on !== 'boolean') return null
+  writePreference(app.getPath('userData'), AUTO_UPDATE_KEY, on)
+  return updateView()
+})
+// 点了“重启以更新”：退出前的规矩照旧（还有终端在跑就问一声），点了“不退了”就什么都不做
+ipcMain.handle(UPDATE_INSTALL, async (event) => {
+  if (!fromUi(event) || updater?.state().phase !== 'ready') return false
+  const outcome = await settleQuit().catch(
+    (): QuitOutcome => ({ proceed: true, alive: null, asked: false, did: 'none' }),
+  )
+  if (!outcome.proceed) return false
+  quitSettled = true
+  if (process.platform === 'darwin') {
+    // 它会先关窗口，再走 before-quit（这时已经问过，直接把核心停掉）
+    updater.quitAndInstall()
+  } else {
+    relaunchAfterInstall = true
+    app.quit()
+  }
+  return true
+})
+
+/**
+ * Windows：退出时有下好的安装程序就装。新版本要换掉内置适配器的文件，常驻的设备服务正用着它们，
+ * 所以先请服务闲着的话停下（有回合、终端在跑就不停，这一次不装，下次退出再说，免得把用户的活儿打断）。
+ * 核心刚被结束，它和服务之间的连接可能还没断干净，服务会因此说自己忙：隔一会儿再问，问三次。
+ * 返回装没装
+ */
+async function installOnQuit(installer: string): Promise<boolean> {
+  if (adapterRoot) {
+    const adapter = bundledAdapter(adapterRoot)
+    const home = process.env.LITCH_ADAPTER_HOME || defaultAdapterHome()
+    const env = serviceEnv(menuLang ?? 'en', null)
+    for (let attempt = 1; ; attempt++) {
+      const stop = await stopIdleDevice(adapter, home, env, new AbortController().signal, 15_000)
+      if (stop.kind === 'stopped') break
+      if (stop.kind === 'busy' && attempt < 3) {
+        await new Promise((resolve) => setTimeout(resolve, 1000))
+        continue
+      }
+      console.error(`[update] 设备服务没停（${stop.kind}），这次不装，下次退出再装`)
+      return false
+    }
+  }
+  const args = ['/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART']
+  if (relaunchAfterInstall) args.push('/LITCHRELAUNCH')
+  spawn(installer, args, { detached: true, stdio: 'ignore' }).unref()
+  return true
+}
+
+let installingOnQuit = false
+app.on('will-quit', (event) => {
+  const installer = process.platform === 'win32' ? updater?.installer() : null
+  if (!installer || installingOnQuit) return
+  event.preventDefault()
+  installingOnQuit = true
+  void installOnQuit(installer)
+    .catch((error: unknown) => {
+      console.error(`[update] 拉起安装程序失败：${String(error)}`)
+      return false
+    })
+    .then((installed) => {
+      // 点了“重启以更新”却没装成：照样把应用重新打开，下好的安装程序留着，下次退出再装
+      if (!installed && relaunchAfterInstall) app.relaunch()
+      app.exit(0)
+    })
+})
+
 // ---------- 退出之前：还有终端在运行的话问一声（quit-terminals.mts） ----------
 
 let askSeq = 0
@@ -523,6 +644,14 @@ function refreshMenu(): void {
       const window = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
       window?.webContents.send(MENU, `zoom.${step}`)
     },
+    checkUpdates:
+      updater && updatePlatform()
+        ? () => {
+            const window = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+            window?.webContents.send(MENU, 'settings.about')
+            void updater?.check()
+          }
+        : null,
     askOnQuit: () => readQuitChoice(dataDir) === 'ask',
     setAskOnQuit(ask) {
       try {
@@ -614,6 +743,10 @@ if (!smoke && !app.requestSingleInstanceLock()) {
     browser = installBrowser({ isUiUrl, userData: app.getPath('userData') })
     clientTools.add(browser.executor)
     startCore()
+    updater = createAppUpdater()
+    updater?.start()
+    // 菜单里的“检查更新…”要等更新器建出来才放
+    refreshMenu()
     const window = createWindow()
     const finish = (ok: boolean) => {
       // 直接退出不会经过“退出前”的事件，这里自己把核心停掉，免得它被当成意外退出再拉起来

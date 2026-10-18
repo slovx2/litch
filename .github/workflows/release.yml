@@ -3,6 +3,9 @@ name: Release
 # 出这一版要发的全部东西，挂到这个标签的发布页：
 #   适配器的独立发布包（linux-x64、linux-arm64、darwin-arm64）、它的校验和清单、安装脚本
 #   桌面应用 Litch 的安装包：macOS（Apple Silicon）签名并公证过的 dmg，Windows（x64）的安装程序（不签名，还没有经过完整的测试）
+#   安卓应用（arm64）：发版钥匙签名的 apk
+#   应用自己的更新（工作区 design/harness-client/07-auto-update.md）：macOS 的 zip（Squirrel 下这个）和更新清单 litch-update.json，
+#   三个端都从“最新一版”下面取这份清单，草稿不算，人公开之后才收得到
 # 打 v 开头的标签时自动跑。也可以手动跑：
 #   填一个已有的标签：给它出包、验证，勾了“挂到发布页”才挂上去
 #   标签不填：照选的分支试跑一遍，只出包、验证、留作流程产物，不挂发布页，也不查版本号和标签对不对得上
@@ -17,6 +20,12 @@ name: Release
 #   APPLE_API_KEY_ID             这把密钥的编号
 #   APPLE_API_ISSUER             签发者编号（Issuer ID）
 # 试跑时没配就出一份只有临时签名的 dmg 并说明；要挂到发布页时没配直接失败。
+#
+# 安卓的签名要这三项（钥匙库的原件和密码在维护者电脑的 ~/Documents/litch-android-release/，见那里的 README）：
+#   ANDROID_KEYSTORE_P12         钥匙库（PKCS12），base64 编码
+#   ANDROID_KEYSTORE_PASSWORD    钥匙库和钥匙的密码（PKCS12 里两者是同一个）
+#   ANDROID_KEY_ALIAS            钥匙的别名
+# 试跑时没配就用调试钥匙签并说明（那样的包装不到装了正式版的手机上）；要挂到发布页时没配直接失败。
 on:
   push:
     tags: ['v*']
@@ -204,6 +213,11 @@ jobs:
           else
             node apps/desktop/scripts/make-installer.mjs
           fi
+      # 应用自己的更新在 macOS 上下的是 zip（Squirrel.Mac 只认 zip），从签过、公证过、钉过票的那份应用打
+      - name: 给自动更新打 zip
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          ditto -c -k --sequesterRsrc --keepParent "apps/desktop/out/Litch-darwin-arm64/Litch.app" "apps/desktop/out/installer/Litch-${version}-macos-arm64.zip"
       # 签过、钉过票的应用照样起得来：对着模拟核心起一次，界面和核心打通
       - name: 签好的应用能起来
         run: node apps/desktop/scripts/smoke.mjs --packed
@@ -219,7 +233,9 @@ jobs:
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: desktop-macos
-          path: apps/desktop/out/installer/*.dmg
+          path: |
+            apps/desktop/out/installer/*.dmg
+            apps/desktop/out/installer/*.zip
           if-no-files-found: error
 
   # Windows 的安装程序：不签名（打开时系统会提示来源不明），还没有经过完整的测试，这里只出包、不验收
@@ -267,8 +283,92 @@ jobs:
           path: apps/desktop/out/installer/*.exe
           if-no-files-found: error
 
+  # 安卓应用：arm64 的 release 包，发版钥匙签名（apps/mobile/plugins/release-signing.js 在 prebuild 时把签名接进生成的 gradle）。
+  # 装上去之后的整套验收在全量（full.yml 的 mobile）里，这里只出包、核对签名
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      # 发版钥匙的证书指纹（SHA-256）：签出来的包对不上就不发
+      RELEASE_CERT_SHA256: 61b7ed82ed03a87efd86f9ba7a7a0a93b328426e33586b3ba3330c0e9efcdfdf
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.REF }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: 1.26.6
+      - name: 标签和版本号要对得上
+        if: env.TAG != ''
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          mobile="$(node -p "require('./apps/mobile/app.json').expo.version")"
+          if [ "v${version}" != "${TAG}" ] || [ "v${mobile}" != "${TAG}" ]; then
+            echo "标签是 ${TAG}，package.json 里是 ${version}，apps/mobile/app.json 里是 ${mobile}" >&2
+            exit 1
+          fi
+      - name: JDK 17
+        run: echo "JAVA_HOME=${JAVA_HOME_17_X64}" >> "${GITHUB_ENV}"
+      - name: 取出签名钥匙
+        env:
+          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_P12 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          if [ -z "$KEYSTORE" ] || [ -z "$KEYSTORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ]; then
+            if [ "$PUBLISH" = true ]; then
+              echo "要挂到发布页的安卓包必须用发版钥匙签，可仓库里的安卓签名机密不全（见本文件开头）" >&2
+              exit 1
+            fi
+            echo "::warning::没有配安卓签名机密，这一趟的 apk 用调试钥匙签"
+            exit 0
+          fi
+          umask 077
+          printf '%s' "$KEYSTORE" | base64 --decode > "${RUNNER_TEMP}/litch-release.p12"
+          {
+            echo "LITCH_ANDROID_KEYSTORE=${RUNNER_TEMP}/litch-release.p12"
+            echo "LITCH_ANDROID_KEYSTORE_PASSWORD=${KEYSTORE_PASSWORD}"
+            echo "LITCH_ANDROID_KEY_ALIAS=${KEY_ALIAS}"
+            echo "LITCH_ANDROID_KEY_PASSWORD=${KEYSTORE_PASSWORD}"
+          } >> "$GITHUB_ENV"
+      - run: npm ci --no-audit --no-fund
+      # 终端页的网页（npm run web:build）用的是界面包里的那份 xterm
+      - run: npm ci --prefix packages/ui --no-audit --no-fund
+      - run: npm ci --prefix apps/mobile --no-audit --no-fund
+      - name: 打 release 包
+        working-directory: apps/mobile
+        run: |
+          npx expo prebuild --platform android --clean --no-install
+          npm run android:release -- --max-workers=4 -PreactNativeArchitectures=arm64-v8a
+      - name: 核对签名，改成发布的名字
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          apk="apps/mobile/android/app/build/outputs/apk/release/app-release.apk"
+          apksigner="$(ls -d "${ANDROID_HOME}"/build-tools/* | sort -V | tail -1)/apksigner"
+          "$apksigner" verify --print-certs "$apk" | tee "${RUNNER_TEMP}/certs.txt"
+          if [ -n "${LITCH_ANDROID_KEYSTORE:-}" ]; then
+            if ! grep -qi "certificate SHA-256 digest: ${RELEASE_CERT_SHA256}" "${RUNNER_TEMP}/certs.txt"; then
+              echo "签出来的包不是发版钥匙签的（证书指纹对不上）" >&2
+              exit 1
+            fi
+          fi
+          mkdir -p "${RUNNER_TEMP}/android"
+          cp "$apk" "${RUNNER_TEMP}/android/Litch-${version}-android-arm64.apk"
+      - name: 收掉签名钥匙
+        if: always()
+        run: rm -f "${RUNNER_TEMP}/litch-release.p12"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: android
+          path: ${{ runner.temp }}/android/*.apk
+          if-no-files-found: error
+
   publish:
-    needs: [adapter, desktop-macos, desktop-windows]
+    needs: [adapter, desktop-macos, desktop-windows, android]
     if: github.event_name == 'push' || (inputs.tag != '' && inputs.publish)
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -284,15 +384,23 @@ jobs:
             echo "${TAG}（${sha}）上没有通过的全量：先 gh workflow run full.yml，过了再重跑这一趟" >&2
             exit 1
           fi
+      # 只为了下面生成更新清单的那个脚本
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.REF }}
+          sparse-checkout: scripts/update-manifest.mjs
+          sparse-checkout-cone-mode: false
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           path: ${{ runner.temp }}/release
           merge-multiple: true
-      - name: 桌面安装包的校验和清单
+      - name: 应用安装包的校验和清单
         working-directory: ${{ runner.temp }}/release
         run: |
-          sha256sum Litch-*.dmg Litch-*-setup.exe > Litch-SHA256SUMS.txt
+          sha256sum Litch-*.dmg Litch-*-setup.exe Litch-*.apk Litch-*-macos-arm64.zip > Litch-SHA256SUMS.txt
           cat Litch-SHA256SUMS.txt
+      - name: 更新清单
+        run: node scripts/update-manifest.mjs --dir "${RUNNER_TEMP}/release" --tag "${TAG}" --repo "${GITHUB_REPOSITORY}"
       - name: 挂到发布页
         working-directory: ${{ runner.temp }}/release
         env:
@@ -308,4 +416,7 @@ jobs:
             install.sh \
             Litch-*.dmg \
             Litch-*-setup.exe \
-            Litch-SHA256SUMS.txt
+            Litch-*-macos-arm64.zip \
+            Litch-*-android-arm64.apk \
+            Litch-SHA256SUMS.txt \
+            litch-update.json

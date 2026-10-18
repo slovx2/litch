@@ -7,6 +7,7 @@ import type { PlaceWish } from '../composer/new-place.ts'
 import { useNewPlace } from '../composer/useNewPlace.ts'
 import { DevicesPage } from '../devices/DevicesPage.tsx'
 import { isSettingsSection, SettingsPage, type SettingsSection } from '../settings/SettingsPage.tsx'
+import { useUpdateToast } from '../settings/UpdateBlock.tsx'
 import { SideSlot } from '../side/SideSlot.tsx'
 import { Sidebar } from '../sidebar/Sidebar.tsx'
 import { TerminalSlot } from '../terminal/TerminalSlot.tsx'
@@ -32,6 +33,7 @@ export interface Draft {
 
 export function App() {
   const { channel, replica } = useServices()
+  useUpdateToast()
   /** 选中的会话。启动时不选：没有选中会话的时候，主区域就是新建对话页 */
   const [picked, setPicked] = useState<Selection | null>(null)
   /**

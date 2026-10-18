@@ -14,6 +14,7 @@ import {
   type DeviceConfig,
   serveChannel,
 } from '@litch/core'
+import app from '../../app.json'
 import { mobilePlatform } from '../platform'
 import { type RemoteConfig, sshOpener } from '../platform/ssh-transport'
 
@@ -35,7 +36,8 @@ export const clock: Clock = {
   },
 }
 
-export const VERSION = '0.8.0'
+/** 应用的版本：app.json 的 expo.version（打包时它也成了安装包的版本），自动更新也照它比 */
+export const VERSION: string = app.expo.version
 
 /** fixture 装法里那台设备的标识 */
 export const FIXTURE_DEVICE = 'fixture'
