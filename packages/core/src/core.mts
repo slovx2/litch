@@ -841,6 +841,37 @@ export function createCore(options: CoreOptions): Core {
           const { deviceId } = params as Commands['diff.requests']['params']
           return deviceOf(deviceId).diffs.requests()
         }
+        // 定时任务。出错的原因任务模块自己已经换成界面能用的了，原样过去
+        case 'tasks.create': {
+          const { deviceId, task } = params as Commands['tasks.create']['params']
+          return { task: await deviceOf(deviceId).tasks.create(task) }
+        }
+        case 'tasks.update': {
+          const { deviceId, taskId, revision, patch } = params as Commands['tasks.update']['params']
+          return { task: await deviceOf(deviceId).tasks.update(taskId, revision, patch) }
+        }
+        case 'tasks.pause': {
+          const { deviceId, taskId, paused } = params as Commands['tasks.pause']['params']
+          return { task: await deviceOf(deviceId).tasks.pause(taskId, paused === true) }
+        }
+        case 'tasks.delete': {
+          const { deviceId, taskId } = params as Commands['tasks.delete']['params']
+          await deviceOf(deviceId).tasks.remove(taskId)
+          return {}
+        }
+        case 'tasks.runNow': {
+          const { deviceId, taskId } = params as Commands['tasks.runNow']['params']
+          return await deviceOf(deviceId).tasks.runNow(taskId)
+        }
+        case 'tasks.runs': {
+          const { deviceId, taskId, cursor, limit } = params as Commands['tasks.runs']['params']
+          return await deviceOf(deviceId).tasks.runs(taskId ?? null, cursor ?? null, limit)
+        }
+        case 'tasks.markRead': {
+          const { deviceId, taskId, runIds } = params as Commands['tasks.markRead']['params']
+          await deviceOf(deviceId).tasks.markRead(taskId, runIds)
+          return {}
+        }
         case 'device.refresh':
           try {
             await deviceOf((params as { deviceId: string }).deviceId).refresh()

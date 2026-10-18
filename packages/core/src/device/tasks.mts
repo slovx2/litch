@@ -158,7 +158,14 @@ export function createTasks(host: TasksHost): Tasks {
   /** 记下一次运行。比手上的旧的不要（先后按走到哪一步、看没看过）。返回之前知道的那一份 */
   const keepRun = (run: TaskRunView): TaskRunView | undefined => {
     const was = runs.get(run.id)
-    if (was && (STAGE[was.status] > STAGE[run.status] || (was.read && !run.read))) return was
+    // 看过了不会变回没看过：同一步上，看过了的那一份更新
+    if (
+      was &&
+      (STAGE[was.status] > STAGE[run.status] ||
+        (STAGE[was.status] === STAGE[run.status] && was.read && !run.read))
+    ) {
+      return was
+    }
     runs.set(run.id, run)
     if (run.threadId) {
       const latest = latestByThread.get(run.threadId)
