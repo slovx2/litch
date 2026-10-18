@@ -310,7 +310,12 @@ export function fakeDevice(harnesses: FakeHarness[]): {
       return {}
     }),
     'thread/list': (params) => {
-      const asked = params as { cursor?: string; archived?: boolean; harness?: string }
+      const asked = params as {
+        cursor?: string
+        archived?: boolean
+        harness?: string
+        parentThreadId?: string
+      }
       const sources = asked.harness ? [named(asked.harness, 'thread/list')] : device.harnesses
       const skipped = sources.flatMap((entry) =>
         entry.down
@@ -322,9 +327,10 @@ export function fakeDevice(harnesses: FakeHarness[]): {
       const merged = sources
         .filter((entry) => !entry.down && !entry.listFailure)
         .flatMap((entry) =>
-          (asked.archived ? entry.archived : entry.threads).map((item) =>
-            stamp(entry, item, false),
-          ),
+          (asked.archived ? entry.archived : entry.threads)
+            // 给了父会话：只回它的直接子线程（上游 thread/list 的 parentThreadId）
+            .filter((item) => !asked.parentThreadId || item.parentThreadId === asked.parentThreadId)
+            .map((item) => stamp(entry, item, false)),
         )
         .sort((a, b) => b.updatedAt - a.updatedAt)
       const start = Number(asked.cursor ?? 0)

@@ -3,6 +3,13 @@
 // 类型是 Text 的字段可能是对面给的原文，也可能是核心自己要说的一句话（见 phrase.mts），界面按当前语言显示。
 import type { MachineAccessView, MachineAskView } from './model-machine.mjs'
 import type { DeviceServiceView, ServiceUpgradeView } from './model-service.mjs'
+import type {
+  AgentRefView,
+  SessionEventView,
+  SessionLineageView,
+  SessionProposalView,
+  SpawnedView,
+} from './model-tree.mjs'
 import type { Phrase, Text } from './phrase.mjs'
 import type { DiffElision } from './text/diff.mjs'
 import type { OutputElision } from './text/output-cap.mjs'
@@ -213,6 +220,11 @@ export interface DeviceView {
    * 只有远程设备有；本机设备、这台桌面端执行不了 litch_machine 时是 null，设置页不出这一项
    */
   machine: MachineAccessView | null
+  /**
+   * 设备服务声明了会话树（sessionTree 扩展）：会话上的 Litch 父子关系、提案、手动派子会话都有。
+   * 单 harness 模式、旧版的设备服务、设置里关了“会话编排”的都是 false；断开之后留着断开前知道的
+   */
+  sessionTree: boolean
 }
 
 /** 设备设置页上“内置浏览器”“Computer Use”两个开关。默认浏览器开、Computer Use 关 */
@@ -296,6 +308,8 @@ export interface SessionSummary {
   section: SectionView | null
   /** 进置顶或者进分区的时间，毫秒时间戳。组里按它排，先进去的在前；都不在是 null */
   placedAt: number | null
+  /** 它是哪个会话派出的 Litch 子会话（会话树）。不是子会话的、对面没有会话树的是 null */
+  lineage: SessionLineageView | null
 }
 
 export interface SidebarView {
@@ -315,6 +329,11 @@ export interface UserMessageItem {
   text: string
   /** 文字之外带的东西：图片、提到的文件、技能。没有名字的（贴进来的图）label 是 null */
   attachments: UserAttachment[]
+  /**
+   * 设备进程注入在这条消息开头的那一段（子会话的回报、唤醒，<litch-session-event>）认出来的样子。
+   * 有它的时候 text 是去掉注入部分之后用户自己说的话（唤醒回合是空的）。没有注入的不带这一项
+   */
+  event?: SessionEventView
 }
 
 export interface UserAttachment {
@@ -479,6 +498,10 @@ export interface ToolCallItem {
   error: ToolPart[] | Phrase | null
   durationMs: number | null
   status: ItemStatus
+  /** 子代理调用（collabAgentToolCall）涉及的子线程，点开在侧面板里看。别的工具调用没有这一项 */
+  agents?: AgentRefView[]
+  /** litch_sessions.start：派出的 Litch 子会话（或者降成的提案）。别的工具调用没有这一项 */
+  spawned?: SpawnedView
 }
 
 export interface PlanItem {
@@ -812,4 +835,6 @@ export interface SessionView {
    * 不是分叉出来的、对面不报的是 null；子代理会话照着上一级起的那一层不算
    */
   forkedFrom: string | null
+  /** 模型提的、还等着用户点的子会话提案（会话树）。排在输入框上面，和请求卡片同一处 */
+  proposals: SessionProposalView[]
 }
