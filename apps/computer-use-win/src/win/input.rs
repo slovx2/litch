@@ -2,8 +2,9 @@
 // 鼠标用虚拟桌面上的绝对坐标；type_text 用 KEYEVENTF_UNICODE 逐个 UTF-16 码元发（中文不经输入法）；
 // press_key 的组合键先按下修饰键、再按主键，倒序松开。每个事件在 dwExtraInfo 里带固定标记 INJECTED_TAG，
 // 低级钩子凭它把助手自己发的和其余输入（物理的，以及串流/远程软件转发进来的）分开。
+use super::clipboard;
 use crate::geometry::{absolute, Rect};
-use crate::keys::KeyCombo;
+use crate::keys::{KeyCombo, VK_CONTROL};
 use crate::text::{self, Keystroke};
 use crate::wire::RpcResult;
 use std::time::Duration;
@@ -17,9 +18,12 @@ pub const INJECTED_TAG: usize = 0x4C49_5443;
 const WHEEL_DELTA: i32 = 120;
 /// 一批最多发多少个事件（点击、组合键这类一次发多个事件时分批，免得数组太大）
 const BATCH: usize = 200;
-/// 打字时每个键击之间等多久（毫秒）。整串一次发太快，记事本这类 TSF 控件会吞字或重复最后一个字，
-/// 所以一次只发一个字符、中间留这点间隔。约 2000 字一次输入在这个间隔下大致 10 秒量级。
+/// 逐字发时每个键击之间等多久（毫秒）。只在退回逐字（粘贴不可用、或控制台类窗口）时用。
 const TYPE_GAP_MS: u64 = 5;
+/// 'V' 的虚拟键码（Ctrl+V 粘贴用）
+const VK_V: u16 = 0x56;
+/// 发完 Ctrl+V 后等目标读走剪贴板再恢复原内容的时间
+const PASTE_SETTLE_MS: u64 = 200;
 
 /// 虚拟桌面（所有显示器合起来）的矩形，物理像素
 pub fn desktop() -> Rect {
@@ -121,9 +125,51 @@ pub fn drag(from: (i32, i32), to: (i32, i32)) -> RpcResult<()> {
     Ok(())
 }
 
-/// 一次一个键击打字：每个字符（或回车、Tab）单独一次 SendInput、中间留间隔，避免一次批量发太快被吞字。
-/// 代理对的两个码元放进同一次 SendInput 一起发，保证成对到达。
-pub fn type_text(value: &str) {
+/// 输入文字：普通窗口走剪贴板 + Ctrl+V（记事本这类 TSF 控件逐字发会吞字）；控制台类窗口的粘贴快捷键
+/// 不统一（旧控制台要右键、各家终端不一），所以照旧逐字发。粘贴不可用（打不开剪贴板、写回核对不一致）时退回逐字。
+pub fn enter_text(value: &str, window_class: &str) {
+    if value.is_empty() {
+        return;
+    }
+    if is_console_class(window_class) || !paste_text(value) {
+        type_per_char(value);
+    }
+}
+
+/// 控制台/终端类窗口（粘贴快捷键不统一，走逐字更稳）
+fn is_console_class(class: &str) -> bool {
+    matches!(
+        class,
+        "ConsoleWindowClass"              // 传统 conhost
+            | "CASCADIA_HOSTING_WINDOW_CLASS" // Windows Terminal
+            | "PseudoConsoleWindow"
+            | "mintty"                        // Git Bash
+    )
+}
+
+/// 剪贴板 + Ctrl+V：存原内容 → 写入 → 读回核对 → 粘贴 → 等一下恢复原内容。成功回 true；
+/// 打不开剪贴板或写回核对不一致时回 false（恢复原内容后由调用方退回逐字）。
+fn paste_text(value: &str) -> bool {
+    let saved = clipboard::get_text();
+    if !clipboard::set_text(value) {
+        return false;
+    }
+    if clipboard::get_text().as_deref() != Some(value) {
+        if let Some(prev) = &saved {
+            clipboard::set_text(prev);
+        }
+        return false;
+    }
+    press_key(&KeyCombo { modifiers: vec![VK_CONTROL], key: VK_V, extended: false }, 1);
+    std::thread::sleep(Duration::from_millis(PASTE_SETTLE_MS));
+    if let Some(prev) = saved {
+        clipboard::set_text(&prev);
+    }
+    true
+}
+
+/// 一次一个键击逐字发：每个字符（或回车、Tab）单独一次 SendInput、中间留间隔。代理对的两个码元同一次发。
+fn type_per_char(value: &str) {
     for stroke in text::keystrokes(value) {
         let mut inputs = vec![];
         match stroke {
