@@ -13,6 +13,7 @@ import {
   inputRecord,
   messageItems,
   previewOf,
+  SUBAGENT_THREAD_ENTRY,
   toolItem,
 } from './projection.mjs'
 import { planState } from './runtime.mjs'
@@ -86,6 +87,16 @@ export function onEvent(server: PiServer, thread: PiThread, event: any): void {
   const touched = new Set<any>()
   if (event.type === 'subagent' && event.data?.id) {
     const data = event.data
+    if (event.kind === 'session' && typeof data.threadId === 'string') {
+      server.subagentThreads.set(data.id, data.threadId)
+      server.sessions
+        .get(thread.id)
+        ?.session.sessionManager.appendCustomEntry(SUBAGENT_THREAD_ENTRY, {
+          agentId: data.id,
+          threadId: data.threadId,
+        })
+    }
+    const receiver = server.subagentThreads.get(data.id) ?? data.id
     const running = server.background.get(thread.id) ?? new Set<string>()
     if (['completed', 'failed', 'resumed'].includes(event.kind)) {
       running.delete(data.id)
@@ -95,8 +106,11 @@ export function onEvent(server: PiServer, thread: PiThread, event: any): void {
     const turns = active ? [active.turn] : server.store.turns(thread.id)
     for (const turn of turns) {
       const item =
+        // 子会话建好之前条目上先挂着 agentId，建好时换成子线程号
         turn.items.find(
-          (i) => i.type === 'collabAgentToolCall' && i.receiverThreadIds.includes(data.id),
+          (i) =>
+            i.type === 'collabAgentToolCall' &&
+            (i.receiverThreadIds.includes(receiver) || i.receiverThreadIds.includes(data.id)),
         ) ??
         (active?.turn === turn
           ? turn.items.findLast(
@@ -104,7 +118,7 @@ export function onEvent(server: PiServer, thread: PiThread, event: any): void {
             )
           : undefined)
       if (!item) continue
-      item.receiverThreadIds = [data.id]
+      item.receiverThreadIds = [receiver]
       const status =
         event.kind === 'failed'
           ? 'errored'
@@ -113,7 +127,7 @@ export function onEvent(server: PiServer, thread: PiThread, event: any): void {
               ? 'errored'
               : 'completed'
             : 'running'
-      item.agentsStates = { [data.id]: { status, message: data.error ?? data.result ?? null } }
+      item.agentsStates = { [receiver]: { status, message: data.error ?? data.result ?? null } }
       // 进行中的回合随这个事件一起写（末尾），结束了的回合整个写一遍
       if (active?.turn === turn) touched.add(item)
       else server.store.saveTurn(thread.id, turn)
@@ -289,7 +303,13 @@ export function onEvent(server: PiServer, thread: PiThread, event: any): void {
           changes: call.item.changes,
         })
       }
-      finishTool(call.item, event.result, event.isError, call.args)
+      finishTool(
+        call.item,
+        event.result,
+        event.isError,
+        call.args,
+        (agentId) => server.subagentThreads.get(agentId) ?? agentId,
+      )
       if (call.declined) {
         declineItem(call.item)
         journal?.appendCustomEntry('codex-harness-adapter-declined', { id: event.toolCallId })
