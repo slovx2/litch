@@ -8,10 +8,9 @@
 // 数据流的纪律见设计文档 01 第十节：通知按白名单路由；连接健康时通知是唯一的数据来源；
 // 只在刚连上、重连之后、手动刷新这三个时机做全量对账。
 
-import {
-  type ClientToolCallResponse,
-  type ClientToolsDesktopInfo,
-  clientToolFailure,
+import type {
+  ClientToolCallResponse,
+  ClientToolsDesktopInfo,
 } from '../../../protocol/src/client-tools.mjs'
 import type { MachineSpecContext } from '../../../protocol/src/client-tools-machine.mjs'
 import { clientToolSpecs } from '../../../protocol/src/client-tools-specs.mjs'

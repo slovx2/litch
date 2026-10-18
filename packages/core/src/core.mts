@@ -143,7 +143,7 @@ export function createCore(options: CoreOptions): Core {
           [...devices.values()].find((device) => device.view.kind === 'local')?.machineLink ?? null,
         device(deviceId) {
           const device = devices.get(deviceId)
-          if (!device || device.view.kind !== 'ssh') return null
+          if (device?.view.kind !== 'ssh') return null
           return {
             name: device.view.name,
             host: device.view.host,
