@@ -72,6 +72,7 @@ let toolNamespaces: string[] = []
 let toolInbox: ((message: ToolToCore) => void) | null = null
 const toolPort: ClientToolPort = {
   namespaces: () => toolNamespaces,
+  platform: () => process.platform,
   post: (message) => process.parentPort.postMessage(toMain(message)),
   listen(handler) {
     toolInbox = handler

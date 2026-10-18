@@ -9,7 +9,7 @@
 import { CLIENT_TOOL_NAMESPACE, type ClientToolNamespaceSpec } from './client-tools.mjs'
 
 import { BROWSER_TOOLS } from './client-tools-browser.mjs'
-import { COMPUTER_TOOLS } from './client-tools-computer.mjs'
+import { computerPlatform, computerToolsSpec } from './client-tools-computer.mjs'
 import { type MachineSpecContext, machineToolsSpec } from './client-tools-machine.mjs'
 
 /** echo 工具的参数 */
@@ -58,12 +58,13 @@ export const ECHO_TOOLS: ClientToolNamespaceSpec = {
 const SPECS: Record<string, ClientToolNamespaceSpec> = {
   [ECHO_TOOLS.name]: ECHO_TOOLS,
   [BROWSER_TOOLS.name]: BROWSER_TOOLS,
-  [COMPUTER_TOOLS.name]: COMPUTER_TOOLS,
 }
 
 /** 建会话时知道的、按会话生成定义要用的东西。没有就给 null，说明里不写具体的机器 */
 export interface ClientToolSpecContext {
   machine: MachineSpecContext | null
+  /** 执行客户端工具的那台桌面的平台（process.platform）：litch_computer 的说明按它出。没有按 macOS */
+  desktopPlatform?: string | null
 }
 
 /** 一个命名空间的定义。没有这一份（还没接上的、不认识的）是 null */
@@ -72,6 +73,9 @@ export function clientToolSpec(
   context: ClientToolSpecContext | null = null,
 ): ClientToolNamespaceSpec | null {
   if (namespace === CLIENT_TOOL_NAMESPACE.machine) return machineToolsSpec(context?.machine ?? null)
+  if (namespace === CLIENT_TOOL_NAMESPACE.computer) {
+    return computerToolsSpec(computerPlatform(context?.desktopPlatform))
+  }
   return Object.hasOwn(SPECS, namespace) ? (SPECS[namespace] ?? null) : null
 }
 

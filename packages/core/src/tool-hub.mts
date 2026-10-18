@@ -22,6 +22,8 @@ export interface ToolCallHandlers {
 export interface ToolHub {
   /** 这台桌面能执行的命名空间。没有外壳（测试、模拟核心之外的纯核心）时是空的 */
   namespaces(): readonly string[]
+  /** 执行工具的这台桌面的平台（process.platform），不知道是 null */
+  platform?(): string | null
   /** 交给主进程执行。之后的回话经 handlers 报回来，直到结果到了或者 cancel */
   call(invocation: ToolInvocation, handlers: ToolCallHandlers): void
   /** 不等了（超时、回合结束、连接断了）：告诉主进程，之后它再报这一次调用的事都不理 */
@@ -80,6 +82,7 @@ export function createToolHub(
 
   return {
     namespaces: () => port?.namespaces() ?? [],
+    platform: () => port?.platform?.() ?? null,
     call(invocation, handlers) {
       if (!port) {
         handlers.result({

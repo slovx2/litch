@@ -1135,7 +1135,10 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       if (declared ? !declared.extensions.includes(EXTENSION.clientTools) : harness === 'dsh') {
         return null
       }
-      return clientToolSpecs(options.tools?.namespaces() ?? [])
+      return clientToolSpecs(options.tools?.namespaces() ?? [], {
+        machine: null,
+        desktopPlatform: options.tools?.platform?.() ?? null,
+      })
     },
     turnDiff: (sessionId, turnId, diff) => diffs.turnDiff(sessionId, turnId, diff),
     log,
