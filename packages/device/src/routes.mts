@@ -1,4 +1,4 @@
-// 请求怎么路由（设计文档 03 第 5.2 节）。只看方法名、会话标识和 harness 参数，别的一概不看。
+// 请求怎么路由。只看方法名、会话标识和 harness 参数，别的一概不看。
 import { DEVICE_PROCESS_PREFIX } from './device-processes.mjs'
 import { isObject } from './wire.mjs'
 import { isWorkspaceMethod } from './workspaces.mjs'
@@ -52,7 +52,7 @@ export function classify(method: string, params: unknown): Route {
   if (method.startsWith('process/')) return { kind: 'unsupported', hint: '设备层没有这个终端方法' }
   if (method === 'command/exec' || method.startsWith('command/exec/'))
     return { kind: 'unsupported', hint: '聚合面不提供 command/exec，跑命令用 process/*' }
-  // 工作区、分区与置顶存在设备层（设计文档 03 第 6.1 节）。这几组方法绝不转给引擎：
+  // 工作区、分区与置顶存在设备层。这几组方法绝不转给引擎：
   // 引擎各有一份互不相通的项目存储，写进去的归属和聚合面上的对不上。
   // `thread/metadata/update` 按会话走（下面），归属以外的字段还是要到引擎，由连接那一层拆开
   if (isWorkspaceMethod(method)) return { kind: 'workspace' }

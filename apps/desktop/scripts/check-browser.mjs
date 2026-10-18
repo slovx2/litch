@@ -1,7 +1,7 @@
 // 内置浏览器的自检：不显示窗口，起一次 Electron，跑 src/probe-browser.mts（工具逐个调用、CDP 白名单、
 // 按来源审批、回合收尾）。测试网页由自检自己在回环上起，用户数据目录是临时的，跑完删掉。
 //   node scripts/check-browser.mjs          自检
-//   node scripts/check-browser.mjs --v0     V0 ③ 实测：WebContentsView 在面板关着的各种挂法下截图、输入能不能用
+//   node scripts/check-browser.mjs --v0     实测：WebContentsView 在面板关着的各种挂法下截图、输入能不能用
 //   node scripts/check-browser.mjs --ui     浏览器面板：真的界面（先构建 packages/ui）对着页面里的模拟核心，
 //                                          量矩形、叠上去、收起摘下、浮层撤下、show 打开面板
 //   加 --shown                             V0 那一项改成窗口透明度 0、不接鼠标地显示（对照窗口在屏幕上的情形）

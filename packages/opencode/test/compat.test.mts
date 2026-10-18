@@ -37,7 +37,7 @@ test('runtime/info 的扩展 schema 接受 OpenCode 的版本号，拒绝非法�
     assert.throws(() => assertResponse('runtime/info', { ...info, ...change }))
 })
 
-// 这三句话的开头是约定（设计文档 06 第四节）：设备层的诊断照开头认出“没装”“版本不对”“读不出版本”
+// 这三句话的开头是约定：设备层的诊断照开头认出“没装”“版本不对”“读不出版本”
 test('找不到 OpenCode、版本过低、读不出版本时按约定的原文报错', async () => {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'cha-opencode-cli-')))
   try {

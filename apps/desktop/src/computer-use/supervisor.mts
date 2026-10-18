@@ -4,7 +4,7 @@
 //
 // 用到时才拉起（Computer Use 默认关，没用过就不起后台进程）。连接意外断了怎么办看启动器：
 //   - eager（macOS）：退避着重拉，一分钟里超过五次就不再自己拉，等下一次用到时再试。
-//   - onDemand（Windows）：不自己拉，下一次用到时再起。Windows 助手 60 秒没有请求就自己退出（09 号 9.2），
+//   - onDemand（Windows）：不自己拉，下一次用到时再起。Windows 助手 60 秒没有请求就自己退出，
 //     要是退出了就重拉，进程会一直在，“用到时才起”就不成立了；助手崩了，下一次调用照样会起一个新的。
 import type { HelperClient } from './helper-client.mjs'
 import { HelperError, type HelperStopped } from './wire.mjs'

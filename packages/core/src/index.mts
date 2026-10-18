@@ -55,7 +55,7 @@ export {
   type TransportOpener,
   toConnectError,
 } from './connection/transport.mjs'
-export { type Core, type CoreOptions, createCore } from './core.mjs'
+export { type Core, type CoreMachineOptions, type CoreOptions, createCore } from './core.mjs'
 export {
   createDevice,
   type Device,
@@ -88,6 +88,7 @@ export {
   type DeviceStore,
   defaultName,
   hostLabel,
+  type MachineLogStore,
   type RemotePlatform,
   type SavedDevices,
   type SavedRemote,
@@ -124,6 +125,7 @@ export { CLIENT_TOOL } from './model-client-tools.mjs'
 export type * from './model-diff.mjs'
 export { DIFF_SCOPES } from './model-diff.mjs'
 export type * from './model-files.mjs'
+export type * from './model-machine.mjs'
 export type * from './model-manage.mjs'
 export type * from './model-service.mjs'
 export type * from './model-terminal.mjs'

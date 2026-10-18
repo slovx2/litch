@@ -1,4 +1,4 @@
-// 设备层：终端与进程、文件访问与监听、模糊找文件（设计文档 03 第 6.2 节）。
+// 设备层：终端与进程、文件访问与监听、模糊找文件。
 // 直接复用 packages/shared 里现有的实现，在设备进程里跑一份；聚合面的 process/*、fs/* 由它处理，不再转给任何引擎。
 // process/* 不加沙箱，与现状一致：它是用户自己开的 shell，信任级别等同于用户登录到这台机器。
 //
@@ -120,7 +120,7 @@ export class DeviceCalls {
     switch (method) {
       case 'process/spawn': {
         // 扩展参数只有声明过这项扩展的连接带了才算数；没声明的连接带了等于没带，
-        // 和别的不认识的字段一样略过，行为与标准协议相同（设计文档 03 第十五节）。
+        // 和别的不认识的字段一样略过，行为与标准协议相同。
         // 取的是没做过路径改写的原文：里面的标记是客户端的东西，不能动
         const option = raw[DEVICE_PROCESS_FIELD]
         if (option != null && this.connection.declares(EXTENSION.deviceProcesses))

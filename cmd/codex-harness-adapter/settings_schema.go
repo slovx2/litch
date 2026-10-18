@@ -9,7 +9,7 @@ import (
 	"github.com/slovx2/litch/packages/protocol"
 )
 
-// 设置的结构由这里声明，界面按声明画，不认识具体的设置项（设计文档 03 第十三节）。
+// 设置的结构由这里声明，界面按声明画，不认识具体的设置项。
 // 加一项设置：在 buildSettingsSchema 里加一条声明，再在用到它的地方按键读出来。
 
 const (

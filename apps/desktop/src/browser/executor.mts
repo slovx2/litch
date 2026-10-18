@@ -71,7 +71,7 @@ export interface BrowserExecutorOptions {
   host: BrowserHost
   sites: SiteBook
   /**
-   * 导航之前改写网址：ssh 设备上的 localhost 经端口转发打开（决 191，browser/forwarding.mts）。不给就原样
+   * 导航之前改写网址：ssh 设备上的 localhost 经端口转发打开（browser/forwarding.mts）。不给就原样
    */
   resolveUrl?: (url: string, device: ClientToolDevice) => Promise<string> | string
   /** 转发出来的地址给模型的说明（每次答复里，页面在这种地址上时带一句）。不给就没有 */

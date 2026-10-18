@@ -16,7 +16,7 @@ import (
 	"github.com/slovx2/litch/internal/hostplatform"
 )
 
-// device-start 和 device-proxy 是给我们自己的客户端用的，本机和经 ssh 都是这两条（设计文档 03 第七节）。
+// device-start 和 device-proxy 是给我们自己的客户端用的，本机和经 ssh 都是这两条。
 // 停服务的 device-stop 在 device_stop.go。
 //
 // device-start 的三种结果，调用方按退出码区分：

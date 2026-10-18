@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { type Connection, openStage, type Stage } from './fixtures/in-process.mjs'
 
-// 一个会话多个订阅连接（设计文档 03 第八节 A6）之三：不是“要一个决定”的那两类。
+// 一个会话多个订阅连接之三：不是“要一个决定”的那两类。
 // 客户端执行的工具调用有副作用，只交给一条连接；子代理活动里新加的种类只发给声明过认识它的连接。
 
 const text = (value: string) => [{ type: 'text', text: value }]

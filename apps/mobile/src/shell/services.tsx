@@ -1,5 +1,5 @@
 // 全局的几样东西经上下文给页面：通往核心的通道、界面侧的数据副本（replica）、应用设置。
-// 页面取数据的规矩（调研报告第 7.3 节、设计文档 01 第十节）：
+// 页面取数据的规矩：
 // - 只从订阅拿数据，不经路由传；按键订阅（useKey），一个键变了只重画用它的那个组件。
 // - 会话详情不走 replica，用 src/core/session-store.ts（对话区为流式专门做过的那一套）。
 import { type CoreChannel, createReplica, type Replica } from '@litch/core'

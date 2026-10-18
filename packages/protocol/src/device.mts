@@ -1,7 +1,7 @@
 // 设备服务（聚合面）的协议扩展：握手里的声明、扩展名、`runtime/info` 的应答、harness 状态变化的通知、错误，
 // 以及设备级的工作区与置顶（分区变化的通知）。
 // 这里的东西都不是 codex 原有的。定义的原文在仓库根目录 protocol/extensions/harness.json 和
-// device-workspaces.json，规矩见设计文档 03 第五节和第十五节。
+// device-workspaces.json。规矩：扩展只增不改，扩展内容只发给声明过的连接，没改过的官方桌面端要始终能连。
 //
 // 这个文件只引用同样自成一体的 harness-capabilities.mts 和 device-service.mts（而且只取类型）：设备进程
 // （packages/device，按 Node 的方式解析模块）和客户端核心（packages/core，按打包器的方式解析）都直接引用它。

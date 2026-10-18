@@ -11,7 +11,7 @@ import { versions } from '../src/versions.mjs'
 import { FAKE_AGENT, isolate } from './client.mjs'
 import { assertResponse } from './schema.mjs'
 
-// 扮演哪个 agent、起什么命令（设计文档 06 第一节的约定），以及命令行用到的 --version、--runtime-info。
+// 扮演哪个 agent、起什么命令（CHA_ACP_AGENT 和 CHA_<标识>_CLI、CHA_<标识>_ARGS 的约定），以及命令行用到的 --version、--runtime-info。
 
 const run = promisify(execFile)
 const ADAPTER = fileURLToPath(new URL('../src/adapter.mjs', import.meta.url))

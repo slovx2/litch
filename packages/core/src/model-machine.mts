@@ -1,5 +1,4 @@
-// 远程设备操作本机（命名空间 litch_machine）在核心和界面之间的形状。设计见
-// design/harness-client/08-remote-control-desktop.md 第三、四节。
+// 远程设备操作本机（命名空间 litch_machine）在核心和界面之间的形状。
 //
 // 三处界面要用：
 // - 设备设置页：远程设备的“操作这台电脑（命令与文件）”一项（DeviceView.machine）；
@@ -10,10 +9,10 @@
 import type { ApprovalOption } from './model.mjs'
 import type { Text } from './phrase.mjs'
 
-/** 审批方式（决 244）：session 每个会话确认一次（默认）；each 逐条确认执行和写入；never 不确认 */
+/** 审批方式：session 每个会话确认一次（默认）；each 逐条确认执行和写入；never 不确认 */
 export type MachineApproval = 'session' | 'each' | 'never'
 
-/** 访问范围（决 248）：sensitive 禁止常用敏感位置（默认）；open 全放开；custom 自定义禁止位置 */
+/** 访问范围：sensitive 禁止常用敏感位置（默认）；open 全放开；custom 自定义禁止位置 */
 export type MachineAccessMode = 'sensitive' | 'open' | 'custom'
 
 /** 设备设置页上“操作这台电脑”一项的现值。只有远程设备有，本机设备是 null */
@@ -45,7 +44,7 @@ export interface MachineAskView {
   path: string | null
   /** copy：从哪到哪。machine 是给人看的机器名 */
   copy: { from: { machine: string; path: string }; to: { machine: string; path: string } } | null
-  /** 命令里提到的禁止位置（3.3：已经“本会话都允许”也再弹一次，卡片标红）。没有是空的 */
+  /** 命令里提到的禁止位置（已经“本会话都允许”也再弹一次，卡片标红）。没有是空的 */
   flagged: string[]
 }
 
@@ -75,7 +74,7 @@ export interface MachinePendingView {
   ask: MachineAskView
   /** acceptSession 在这里的意思是“这台设备上找不到会话的调用都允许”，到 Litch 重启或开关关掉为止 */
   options: ApprovalOption[]
-  /** 毫秒时间戳。到点没答当作拒绝（决 246：10 分钟） */
+  /** 毫秒时间戳。到点没答当作拒绝（10 分钟） */
   expiresAt: number
 }
 

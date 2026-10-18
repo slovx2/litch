@@ -24,6 +24,7 @@ import { phrase } from '../phrase.mjs'
 import { ALL_ABLE } from '../projection/session.mjs'
 import { BUILTIN_PERMISSIONS } from '../projection/settings.mjs'
 import { sampleHarness, samplePresets, takesNote } from './sample-harness.mjs'
+import { sampleMachineAccess } from './sample-machine.mjs'
 import { sampleLocalService, sampleRemoteService } from './sample-service.mjs'
 import {
   SAMPLE_TEXT,
@@ -101,7 +102,7 @@ export function sampleApp(_lang: SampleLang, now: number): AppView {
       manageable: true,
       // 在跑的就是应用自带的那一份。别的情形由对话里的关键字来演（mock-service.mts）
       ...sampleLocalService(now),
-      // 设备设置页的两个开关：默认浏览器开、Computer Use 关（决 190）
+      // 设备设置页的两个开关：默认浏览器开、Computer Use 关
       tools: { browser: true, computer: false },
       machine: null,
     },
@@ -127,7 +128,8 @@ export function sampleApp(_lang: SampleLang, now: number): AppView {
       service: sampleRemoteService(now),
       upgrade: null,
       tools: { browser: true, computer: false },
-      machine: null,
+      // 08 号：远程设备“操作这台电脑”。示例里只有 build-01 开着
+      machine: sampleMachineAccess('build'),
     },
     {
       id: 'nas',
@@ -152,7 +154,7 @@ export function sampleApp(_lang: SampleLang, now: number): AppView {
       service: null,
       upgrade: null,
       tools: { browser: true, computer: false },
-      machine: null,
+      machine: sampleMachineAccess('nas'),
     },
     {
       id: 'gpu',
@@ -184,7 +186,7 @@ export function sampleApp(_lang: SampleLang, now: number): AppView {
       service: null,
       upgrade: null,
       tools: { browser: true, computer: false },
-      machine: null,
+      machine: sampleMachineAccess('gpu'),
     },
   ]
   return { devices }

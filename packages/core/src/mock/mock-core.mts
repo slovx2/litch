@@ -30,7 +30,6 @@ import type {
   SidebarView,
   TodoStep,
 } from '../model.mjs'
-import type { MachineActivityView } from '../model-machine.mjs'
 import type { TerminalsAlive } from '../model-terminal.mjs'
 import { phrase } from '../phrase.mjs'
 import { projectItem } from '../projection/items.mjs'
@@ -42,6 +41,7 @@ import { createMockOrganize } from './mock-arrange.mjs'
 import { createMockCompose } from './mock-compose.mjs'
 import { createMockDiffs } from './mock-diffs.mjs'
 import { createMockFiles } from './mock-files.mjs'
+import { createMockMachine } from './mock-machine.mjs'
 import { createMockManagement } from './mock-manage.mjs'
 import { createMockService } from './mock-service.mjs'
 import { createMockTerminals } from './mock-terminals.mjs'
@@ -61,6 +61,14 @@ import {
   streamText,
 } from './sample-data.mjs'
 import { sampleHarness, takesNote } from './sample-harness.mjs'
+import {
+  type MachineDemo,
+  machineAskRequest,
+  machineDemoAsk,
+  machineSummary,
+  machineToolCall,
+  sampleMachineAccess,
+} from './sample-machine.mjs'
 import { sampleRemoteService } from './sample-service.mjs'
 import { SAMPLE_TEXT, type SampleLang } from './sample-text.mjs'
 import { dumpCall, shotsCall } from './sample-tools.mjs'
@@ -169,6 +177,20 @@ const toolKey = (turnId: string): string => `${turnId}-w2`
  */
 const BROWSES = /用浏览器|use the browser/i
 const USES_APP = /操作应用|use an app/i
+
+/**
+ * 发的话里带这些字样时，演一次远程设备操作这台电脑（litch_machine）：回合里出一条工具条目，
+ * 按这台设备的开关和审批方式走——关着当场失败；不确认直接做；要问就停下来出一张卡片，拒绝能附一句理由。
+ * - 在我电脑上跑：起一个不会自己结束的开发服务器，允许了之后顶栏里多一个进程；
+ * - 看我的 ssh：命令里提到禁止位置，卡片标红，已经“本会话都允许”了也再问；
+ * - 搬到我电脑：把远程的一个文件搬到这台电脑。
+ * 另有“命令行来的”（mock-machine.mts 的 MACHINE_CLI）：在全局待处理里加一张卡片，回合照常往下走。
+ */
+const MACHINE_ASKS: [RegExp, MachineDemo][] = [
+  [/在我电脑上跑|run on my computer/i, 'exec'],
+  [/看我的 ?ssh|peek at my ssh/i, 'flagged'],
+  [/搬到我电脑|copy to my computer/i, 'copy'],
+]
 
 /** 狂打的日志里的第 n 行。行里带着序号，看得出头尾各是哪几行 */
 const floodLine = (n: number): string =>
@@ -474,6 +496,12 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       hugeTools(view, turnId)
       return
     }
+    machine.stage(view.deviceId, message.text)
+    const machineDemo = MACHINE_ASKS.find(([pattern]) => pattern.test(message.text))?.[1]
+    if (machineDemo) {
+      askMachine(view, turnId, machineDemo)
+      return
+    }
     if (BROWSES.test(message.text) || USES_APP.test(message.text)) {
       askClientTool(view, turnId, BROWSES.test(message.text) ? 'site' : 'app')
       return
@@ -675,6 +703,87 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     applySessionOps(view, [
       { op: 'item.add', turnId, item: projectItem(clientToolCall(demo, itemId, null)) },
       { op: 'request.add', request: clientAskRequest(demo, requestId, itemId, device) },
+    ])
+    updateSummary(view.deviceId, view.sessionId, { status: 'waiting', waitingFor: 'approval' })
+  }
+
+  /** 远程设备操作这台电脑那几出：卡片的标识 → 演的是哪一出、条目是哪个 */
+  const machineAsks = new Map<string, { demo: MachineDemo; itemId: string }>()
+  /** “本会话都允许”记下的：会话 → 允许过（三出都是执行类的，只记这一类） */
+  const machineGranted = new Set<string>()
+
+  /** 那一次调用做完了：执行类的起一个进程、记一笔，条目带着结果完成，照常回话 */
+  const machineDone = (view: SessionView, turnId: string, demo: MachineDemo, itemId: string) => {
+    const device = app.devices.find((entry) => entry.id === view.deviceId)
+    const ask = machineDemoAsk(demo)
+    const processId =
+      demo === 'exec' && device
+        ? machine.start({
+            deviceId: device.id,
+            deviceName: device.name,
+            sessionId: view.sessionId,
+            harness: view.harness,
+            command: ask.command ?? '',
+            cwd: ask.cwd ?? '~',
+          })
+        : undefined
+    machine.record({
+      deviceId: view.deviceId,
+      sessionId: view.sessionId,
+      harness: view.harness,
+      tool: demo === 'copy' ? 'copy' : 'exec',
+      summary: machineSummary(ask),
+      result: 'ok',
+      flagged: ask.flagged.length > 0,
+    })
+    applySessionOps(view, [
+      {
+        op: 'item.add',
+        turnId,
+        item: projectItem(machineToolCall(demo, itemId, 'done', processId)),
+      },
+    ])
+    replyHeard(view, turnId)
+  }
+
+  /** 回合里调一次 litch_machine（见 MACHINE_ASKS）：按开关和审批方式，当场失败、直接做，或者停下来问 */
+  const askMachine = (view: SessionView, turnId: string, demo: MachineDemo) => {
+    const device = app.devices.find((entry) => entry.id === view.deviceId)
+    if (!device) return
+    const access = device.machine
+    const itemId = toolKey(turnId)
+    const ask = machineDemoAsk(demo)
+    if (!access?.enabled) {
+      if (access) {
+        machine.record({
+          deviceId: device.id,
+          sessionId: view.sessionId,
+          harness: view.harness,
+          tool: demo === 'copy' ? 'copy' : 'exec',
+          summary: machineSummary(ask),
+          result: 'disabled',
+          flagged: false,
+        })
+      }
+      applySessionOps(view, [
+        { op: 'item.add', turnId, item: projectItem(machineToolCall(demo, itemId, 'disabled')) },
+      ])
+      replyHeard(view, turnId)
+      return
+    }
+    const granted =
+      access.approval === 'session' &&
+      machineGranted.has(sessionKey(view)) &&
+      ask.flagged.length === 0
+    if (access.approval === 'never' || granted) {
+      machineDone(view, turnId, demo, itemId)
+      return
+    }
+    const requestId = `${turnId}-r`
+    machineAsks.set(requestId, { demo, itemId })
+    applySessionOps(view, [
+      { op: 'item.add', turnId, item: projectItem(machineToolCall(demo, itemId, null)) },
+      { op: 'request.add', request: machineAskRequest(demo, requestId, itemId, device) },
     ])
     updateSummary(view.deviceId, view.sessionId, { status: 'waiting', waitingFor: 'approval' })
   }
@@ -896,6 +1005,13 @@ export function createMockCore(options: MockCoreOptions): MockCore {
   })
 
   // ---------- 设备服务是哪一份、换没换版本 ----------
+  // ---------- 远程设备操作这台电脑（08 号） ----------
+  const machine = createMockMachine({
+    clock,
+    device: (deviceId) => app.devices.find((entry) => entry.id === deviceId),
+    patch: (deviceId, patch) => void patchDevice(deviceId, patch),
+  })
+
   const service = createMockService({
     clock,
     stepMs: chunkMs,
@@ -1172,7 +1288,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         service: null,
         upgrade: null,
         tools: { browser: true, computer: false },
-        machine: null,
+        // 新加的远程设备：“操作这台电脑”默认关
+        machine: sampleMachineAccess(''),
       }
       app.devices.push(device)
       sidebars.set(device.id, { deviceId: device.id, workspaces: [], sessions: [], archived: null })
@@ -1221,9 +1338,15 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       return {}
     }
     if (name === 'device.tools.set') {
-      const { deviceId, browser, computer } = params as Commands['device.tools.set']['params']
+      const {
+        deviceId,
+        browser,
+        computer,
+        machine: operate,
+      } = params as Commands['device.tools.set']['params']
       const device = app.devices.find((entry) => entry.id === deviceId)
       if (!device) throw new ChannelError('notFound', `没有这台设备：${deviceId}`)
+      if (typeof operate === 'boolean') machine.toggle(deviceId, operate)
       patchDevice(deviceId, {
         tools: {
           browser: typeof browser === 'boolean' ? browser : device.tools.browser,
@@ -1258,6 +1381,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       }
       const handled = deviceCommand(name, params)
       if (handled !== undefined) return handled
+      const operated = machine.command(name, params)
+      if (operated !== undefined) return operated
       const organized = organize.command(name, params)
       if (organized !== undefined) return organized
       const managed = manage.command(name, params)
@@ -1507,6 +1632,43 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         const view = openView(where)
         const request = view.requests.find((entry) => entry.id === requestId)
         if (!request) throw new ChannelError('rejected', '这个请求已经不在了')
+        const machineAsk = machineAsks.get(requestId)
+        if (request.kind === 'clientAsk' && machineAsk) {
+          // 远程设备操作这台电脑的卡片：允许了照常做完，拒绝了条目失败、理由带给模型
+          const option = request.options.find((entry) => entry.id === optionId)
+          if (!option) throw new ChannelError('rejected', '这个请求没有这样的选项')
+          machineAsks.delete(requestId)
+          const turn = running(view)
+          applySessionOps(view, [{ op: 'request.remove', requestId }])
+          if (option.role === 'acceptSession') machineGranted.add(sessionKey(view))
+          if (!turn) return {}
+          updateSummary(view.deviceId, view.sessionId, { status: 'running', waitingFor: null })
+          if (option.role !== 'decline') {
+            machineDone(view, turn.id, machineAsk.demo, machineAsk.itemId)
+            return {}
+          }
+          const ask = machineDemoAsk(machineAsk.demo)
+          machine.record({
+            deviceId: view.deviceId,
+            sessionId: view.sessionId,
+            harness: view.harness,
+            tool: machineAsk.demo === 'copy' ? 'copy' : 'exec',
+            summary: machineSummary(ask),
+            result: 'declined',
+            flagged: ask.flagged.length > 0,
+          })
+          applySessionOps(view, [
+            {
+              op: 'item.add',
+              turnId: turn.id,
+              item: projectItem(machineToolCall(machineAsk.demo, machineAsk.itemId, 'declined')),
+            },
+          ])
+          const said = note?.trim()
+          if (said) heard.set(sessionKey(view), said)
+          replyHeard(view, turn.id)
+          return {}
+        }
         if (request.kind === 'clientAsk') {
           // 客户端工具的卡片：答应了条目带着截图完成，拒绝了条目失败；然后照常回话
           const option = request.options.find((entry) => entry.id === optionId)
@@ -1730,11 +1892,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         return terminals.subscribe(topic, sink)
       }
       if (topic.kind === 'diff') return diffs.subscribe(topic, sink)
-      // 08 号：远程会话在这台电脑上的动静。占位，丙线换成模拟数据
-      if (topic.kind === 'machine') {
-        sink.snapshot({ running: [], pending: [] } satisfies MachineActivityView)
-        return () => {}
-      }
+      // 08 号：远程会话在这台电脑上的动静（mock-machine.mts）
+      if (topic.kind === 'machine') return machine.subscribe(sink)
       const key = topicKey(topic)
       if (topic.kind === 'app') {
         sink.snapshot(app)

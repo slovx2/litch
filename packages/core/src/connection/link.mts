@@ -6,6 +6,7 @@ import {
   type ClientRequestMethod,
   type ClientRequests,
   type ClientToolsCapabilities,
+  type ClientToolsDesktopInfo,
   type DeviceInitializeCapabilities,
   EXTENSION,
   type InitializeResponse,
@@ -29,7 +30,7 @@ export interface ConnectFailure {
 }
 
 /**
- * 设计文档 01 第 7.3 节的状态。“探测中”“启动中”发生在开传输的过程里，这里统称 connecting，
+ * 一条连接的状态。“探测中”“启动中”发生在开传输的过程里，这里统称 connecting，
  * 具体到了哪一步由开传输的那一方报上来，放在 step 里。
  */
 export type LinkState =
@@ -55,6 +56,11 @@ export interface LinkOptions {
    * 不给就是没有
    */
   clientTools?(): readonly string[]
+  /**
+   * 这台桌面端是哪台（主机名、名字），声明了 litch_machine 时随命名空间一起报，设备进程挑执行方、命令行写说明都用它。
+   * 不给、或者返回 null 就不报
+   */
+  clientToolsDesktop?(): ClientToolsDesktopInfo | null
   /** 对面发来、要答复的请求。返回 undefined 表示不处理（会回“方法不存在”） */
   request?(method: string, params: unknown, id: JsonRpcId): Promise<unknown> | undefined
   log?(line: string): void
@@ -164,6 +170,7 @@ export function createLink(options: LinkOptions): Link {
       let info: InitializeResponse
       // 能执行的客户端工具：声明了扩展，还要在 litchClientTools 里列出命名空间（client-tools.mts）
       const tools = [...(options.clientTools?.() ?? [])]
+      const desktop = tools.length > 0 ? (options.clientToolsDesktop?.() ?? null) : null
       try {
         info = (await peer.request(
           'initialize',
@@ -173,7 +180,7 @@ export function createLink(options: LinkOptions): Link {
               experimentalApi: true,
               requestAttestation: false,
               // 我们认识的协议扩展。设备服务的聚合面要求声明了 harness 才让连；
-              // 原生 codex 和适配器的单个入口不认识这个键，会忽略它（设计文档 03 第十五节）
+              // 原生 codex 和适配器的单个入口不认识这个键，会忽略它：扩展只增不改，没声明的连接看到的是标准协议
               // deviceSettings：声明了才收得到设置变化的通知、不可用原因的两种语言版本
               // deviceProcesses：声明了，起进程时的扩展参数才生效，才收得到设备上终端增减的通知
               litchExtensions: [
@@ -191,7 +198,14 @@ export function createLink(options: LinkOptions): Link {
                 // clientTools：litch_ 开头的命名空间的工具调用交给声明了的连接执行（内置浏览器、Computer Use）
                 ...(tools.length > 0 ? [EXTENSION.clientTools] : []),
               ],
-              ...(tools.length > 0 ? { [CLIENT_TOOLS_CAPABILITY]: { namespaces: tools } } : {}),
+              ...(tools.length > 0
+                ? {
+                    [CLIENT_TOOLS_CAPABILITY]: {
+                      namespaces: tools,
+                      ...(desktop ? { desktop: { ...desktop } } : {}),
+                    },
+                  }
+                : {}),
             } satisfies DeviceInitializeCapabilities & ClientToolsCapabilities,
           },
           { timeoutMs: options.handshakeTimeoutMs ?? 10_000 },

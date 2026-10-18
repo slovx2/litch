@@ -11,12 +11,19 @@ import { DeviceRow } from './DeviceRow.tsx'
  * 设备：这台电脑和加进来的远程机器，一台一行。这一页只管“有哪些、各自怎么样”和添加；
  * 一台设备的细节和能对它做的事（线色、改名、改连接、移除、重新连接、管理）都在点进去的详情里
  */
-export function DevicesPage({ onClose }: { onClose(): void }) {
+export function DevicesPage({
+  initial = null,
+  onClose,
+}: {
+  /** 一打开就进这台设备的详情。null：在列表上 */
+  initial?: string | null
+  onClose(): void
+}) {
   const deviceIds = useKey<string[]>(keys.devices) ?? []
   const t = useT()
   const [adding, setAdding] = useState(false)
   /** 点开了哪台设备的详情。null：在列表上 */
-  const [detail, setDetail] = useState<string | null>(null)
+  const [detail, setDetail] = useState<string | null>(initial)
   /** 刚从哪台设备的详情里退回来：焦点落回它那一行 */
   const [left, setLeft] = useState<string | null>(null)
   const back = useCallback(() => {

@@ -5,6 +5,7 @@ import type { ClientAskView } from './model.mjs'
 import {
   CLIENT_TOOL,
   type ClientToolPort,
+  type MachineNotice,
   type ToolAnswer,
   type ToolInvocation,
   type ToolToCore,
@@ -32,6 +33,8 @@ export interface ToolHub {
   answer(askId: string, answer: ToolAnswer | null): void
   /** 一个执行过工具调用的回合结束了：执行器收拾这个回合留下的临时东西 */
   turnEnded(deviceId: string, threadId: string, turnId: string): void
+  /** 请主进程发一条系统通知（litch_machine 找不到会话的卡片，08 号 4.2）。没有外壳就不发 */
+  notify(notice: MachineNotice): void
 }
 
 export function createToolHub(
@@ -105,6 +108,9 @@ export function createToolHub(
     },
     turnEnded(deviceId, threadId, turnId) {
       port?.post({ type: CLIENT_TOOL, op: 'turnEnded', deviceId, threadId, turnId })
+    },
+    notify(notice) {
+      port?.post({ type: CLIENT_TOOL, op: 'notify', notice })
     },
   }
 }

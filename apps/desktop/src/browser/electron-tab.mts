@@ -15,7 +15,7 @@ import type {
 } from './model.mjs'
 import { BLANK, isOpenable } from './url.mjs'
 
-/** 共用的持久分区：登录一次，各个会话的代理都能用（决 195） */
+/** 共用的持久分区：登录一次，各个会话的代理都能用 */
 export const PARTITION = 'persist:litch-browser'
 
 const CONSOLE_KEEP = 200
@@ -33,7 +33,7 @@ export interface TabHooks {
   /** 网页要开新窗口：在内置浏览器里开新标签 */
   popup(from: HostTab, url: string): void
   /**
-   * 网页自己要去的地址要不要先改写（远程会话里的远端 localhost 要经 ssh 转发，决 191）。
+   * 网页自己要去的地址要不要先改写（远程会话里的远端 localhost 要经 ssh 转发）。
    * 不用改回 null；要改回改写后的地址（可能要等转发就绪），改写失败时拒绝
    */
   rewrite(page: BrowserPage, url: string): Promise<string> | null
@@ -377,7 +377,7 @@ export function createTab(
     setAgentActive(active) {
       if (agentActive === active) return
       agentActive = active
-      // 代理在用时不节流：面板关着的时候页面也照常跑定时器和动画（V0 ③ 实测）
+      // 代理在用时不节流：面板关着的时候页面也照常跑定时器和动画（实测过，见 probe-browser-v0.mts）
       contents.setBackgroundThrottling(!active)
       hooks.changed()
     },

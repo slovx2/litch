@@ -1,6 +1,6 @@
 {
   "extension": "harness",
-  "description": "一条连接里有多个 harness。设备服务的聚合面（device.sock）把一台机器上的多个 harness 运行时收在一个入口后面：会话对象、请求、通知上多一个 harness，会话列表是各 harness 合并后的，runtime/info 返回设备信息和每个 harness 的状态，harness 的状态变了有通知。设计见 design/harness-client/03-adapter-device-service.md 第五节、第 6.4 节、第十五节。类型在 packages/protocol/src/device.mts 和 device-codex.mts。",
+  "description": "一条连接里有多个 harness。设备服务的聚合面（device.sock）把一台机器上的多个 harness 运行时收在一个入口后面：会话对象、请求、通知上多一个 harness，会话列表是各 harness 合并后的，runtime/info 返回设备信息和每个 harness 的状态，harness 的状态变了有通知。类型在 packages/protocol/src/device.mts 和 device-codex.mts。",
   "appliesTo": "只有聚合面。每个 harness 自己的入口（给官方 Codex 桌面端用的兼容面）上没有这个扩展的任何内容，线上与标准协议一致。",
   "declaration": {
     "description": "客户端握手时在 initialize 的 capabilities 里用我们自己的键列出认识的扩展名，一个扩展一个名字。聚合面把客户端的 capabilities 原样带给每个上游。",
@@ -118,7 +118,7 @@
     {
       "kind": "NativeUpstream",
       "name": "原生 codex",
-      "description": "聚合面后面的上游除了适配器的运行时，还可以是用户自己装的原生 codex 起的 app-server（设计文档 03 第 12.2 节）。它只说标准的 Codex 协议，不认识我们加的任何东西，聚合面替它做下面几件事，别的帧一律原样转发（仓库里固定的协议类型不认识的方法和字段照样透传，不因为版本对不上就拒绝）。握手：capabilities.litchExtensions 不带给它，别的照客户端给的带（客户端没声明 experimentalApi 的话，它标着实验性的方法照它的原话拒绝）。声明：它没有 runtime/info，这个 harness 的 displayName、badge、version、engine、extensions、features、permissionPresets 由设备进程替它整理，形状和引擎自己报的一样（runtime-info.json）；extensions 是空数组，它不支持我们的任何扩展。权限预设：标识是它内置的三个权限档（:read-only、:workspace、:danger-full-access），它不许选的档不报；thread/start、thread/resume、thread/fork、turn/start、thread/settings/update 选了内置档又没带 approvalPolicy 时，设备进程转给它之前配上这一档的审批策略（:read-only 和 :workspace 配 on-request，:danger-full-access 配 never），客户端自己带了 approvalPolicy 的不动。不支持：见 Error 里的 unsupported。审批：命令审批用它自己的 availableDecisions，文件改动审批的决定列表由设备进程补（decline-with-note.json）。"
+      "description": "聚合面后面的上游除了适配器的运行时，还可以是用户自己装的原生 codex 起的 app-server。它只说标准的 Codex 协议，不认识我们加的任何东西，聚合面替它做下面几件事，别的帧一律原样转发（仓库里固定的协议类型不认识的方法和字段照样透传，不因为版本对不上就拒绝）。握手：capabilities.litchExtensions 不带给它，别的照客户端给的带（客户端没声明 experimentalApi 的话，它标着实验性的方法照它的原话拒绝）。声明：它没有 runtime/info，这个 harness 的 displayName、badge、version、engine、extensions、features、permissionPresets 由设备进程替它整理，形状和引擎自己报的一样（runtime-info.json）；extensions 是空数组，它不支持我们的任何扩展。权限预设：标识是它内置的三个权限档（:read-only、:workspace、:danger-full-access），它不许选的档不报；thread/start、thread/resume、thread/fork、turn/start、thread/settings/update 选了内置档又没带 approvalPolicy 时，设备进程转给它之前配上这一档的审批策略（:read-only 和 :workspace 配 on-request，:danger-full-access 配 never），客户端自己带了 approvalPolicy 的不动。不支持：见 Error 里的 unsupported。审批：命令审批用它自己的 availableDecisions，文件改动审批的决定列表由设备进程补（decline-with-note.json）。"
     },
     {
       "kind": "Error",

@@ -1,5 +1,5 @@
 // 各引擎共用的两件事：读握手里客户端声明的扩展，和内置三档权限预设的标识与标题。
-// 形状定义在 packages/protocol/src/harness-capabilities.mts，规矩见设计文档 03 第十五节：
+// 形状定义在 packages/protocol/src/harness-capabilities.mts，规矩是：
 // 服务端主动给出的扩展内容只发给握手时声明过的连接，按声明区分，不按客户端的名字猜。
 import { EXTENSIONS_CAPABILITY } from '../../protocol/src/device.mjs'
 import {

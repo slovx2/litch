@@ -1,6 +1,5 @@
 // 连接层的最下面一层：传输。它只是一条已经打开的双向文本帧通道，一帧一条 JSON。
 // 怎么打开（本机套接字、ssh 的标准输入输出）是平台的事，由外壳实现后注入，核心只认这个接口。
-// 见设计文档 01 第七节。
 import type { AbortSignalLike } from '../channel/protocol.mjs'
 import type { ConnectGuide, ConnectStage } from '../model.mjs'
 import { describeText, type Text } from '../phrase.mjs'

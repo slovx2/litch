@@ -184,7 +184,7 @@ func TestACPHarnessesAreOptIn(t *testing.T) {
 	}
 }
 
-// 引擎写到标准错误的原文（设计文档 06 第 1.3 节）认得出来，归到对的分类。
+// 引擎写到标准错误的原文（开头几个字是和引擎约定好的）认得出来，归到对的分类。
 func TestNewerEngineFailuresAreClassified(t *testing.T) {
 	for _, scenario := range []struct{ harness, fixture, kind, message string }{
 		{"opencode", `console.error('宿主 OpenCode CLI 版本不符: 需要 >= 1.18.0，实际 1.2.0 INTERNAL_DETAIL'); process.exit(1);`, stateVersionTooLow, "OpenCode 版本低于"},

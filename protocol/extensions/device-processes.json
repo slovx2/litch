@@ -1,6 +1,6 @@
 {
   "extension": "deviceProcesses",
-  "description": "可重连的终端：进程可以属于设备。协议原本的进程属于发起它的连接，连接一断就结束；远程设备上网络抖一下终端就没了。这个扩展在 process/spawn 上加一个可选参数 litchDevice，带了它的进程属于设备：发起它的连接断开后接着跑，设备为它留着末尾一段输出，退出后把退出状态和末尾的输出再留一阵。别的连接、或者重连之后的同一个客户端，可以列出这些进程、按句柄挂回去（先回放留着的输出，再接着收新的）、解除挂接、结束、清掉退出后的记录。输出和退出用的还是协议原有的 process/outputDelta、process/exited，写输入、改行列数用的还是 process/writeStdin、process/resizePty。设计见 design/harness-client/03-adapter-device-service.md 第 6.3 节，类型在 packages/protocol/src/device-processes.mts。",
+  "description": "可重连的终端：进程可以属于设备。协议原本的进程属于发起它的连接，连接一断就结束；远程设备上网络抖一下终端就没了。这个扩展在 process/spawn 上加一个可选参数 litchDevice，带了它的进程属于设备：发起它的连接断开后接着跑，设备为它留着末尾一段输出，退出后把退出状态和末尾的输出再留一阵。别的连接、或者重连之后的同一个客户端，可以列出这些进程、按句柄挂回去（先回放留着的输出，再接着收新的）、解除挂接、结束、清掉退出后的记录。输出和退出用的还是协议原有的 process/outputDelta、process/exited，写输入、改行列数用的还是 process/writeStdin、process/resizePty。类型在 packages/protocol/src/device-processes.mts。",
   "appliesTo": "只有聚合面。每个 harness 自己的入口（给官方 Codex 桌面端用的兼容面）上没有这个扩展的任何内容：那里的 process/* 属于连接，和以前一样。",
   "declaration": {
     "description": "设备服务在 runtime/info 的 device.extensions 里列出 deviceProcesses，表示它支持（没列的旧版设备服务不认识 litchDevice，带了也只是被略过）。客户端握手时在 capabilities.litchExtensions 里声明 deviceProcesses，这个扩展的全部内容才对这条连接生效。",

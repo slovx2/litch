@@ -1,4 +1,4 @@
-// 原生 codex 作为聚合面上的一个 harness（设计文档 03 第 12.2 节）。
+// 原生 codex 作为聚合面上的一个 harness。
 // 它是用户自己装的 codex 起的 app-server，只说标准的 Codex 协议：握手时不认识我们的扩展键，
 // 没有 `runtime/info`，不认识的方法一律回“无效请求”。和适配器的运行时不一样的地方都在这个文件里：
 //   - 握手：我们的扩展键不带过去；
@@ -179,7 +179,7 @@ async function allowedPresets(ask: Ask): Promise<PermissionPreset[]> {
 
 export const NATIVE_CODEX_DIALECT: UpstreamDialect = {
   /**
-   * 我们的扩展键它不认识，不带过去（第十五节：没声明认识的对面，线上只有标准协议的内容）；
+   * 我们的扩展键它不认识，不带过去（没声明认识的对面，线上只有标准协议的内容）；
    * 退订名单也不带，和适配器的运行时一样由聚合面自己拦；客户端工具的声明（litchClientTools）也是我们的键，
    * 由设备进程自己看（client-tools.mts）
    */

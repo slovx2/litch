@@ -1,9 +1,9 @@
 // 操作机器上的命令和文件（命名空间 litch_machine），建会话时放进 `thread/start.dynamicTools`。
-// 执行方是 Litch 桌面端的核心（packages/core/src/device/machine/），第一期只能操作桌面端这台；
-// 设计见 design/harness-client/08-remote-control-desktop.md 第 2.4 节和第五节。说明是写给模型看的，用英文。
+// 执行方是 Litch 桌面端的核心（packages/core/src/device/machine/），第一期只能操作桌面端这台。
+// 说明是写给模型看的，用英文。
 //
-// 和另外两份定义不同，命名空间的说明开头两句按会话生成：这个会话在哪台机器上、用户的桌面端（控制端）是哪台
-// （决 252）。原生 codex 的命名空间说明有 1024 字符的上限（0.8.0 就栽在这上面），machineToolsSpec 保证不超。
+// 和另外两份定义不同，命名空间的说明开头两句按会话生成：这个会话在哪台机器上、用户的桌面端（控制端）是哪台，
+// 免得模型把两台搞混。原生 codex 的命名空间说明有 1024 字符的上限（0.8.0 就栽在这上面），machineToolsSpec 保证不超。
 //
 // 这个文件只引用 client-tools.mts，设备进程、核心、适配器的命令行都能直接引用它。
 
@@ -146,7 +146,7 @@ const clip = (text: string, max: number) =>
 const describe = (one: { name: string; hostname: string; system: string }) =>
   `"${clip(one.name, 40)}" (${clip(one.hostname, 40)}, ${clip(one.system, 30)})`
 
-/** 命名空间说明：开头两句按会话写（决 252），后面是通用的用法。保证不超过上限（头一段以换行结尾，截了也只截头一段） */
+/** 命名空间说明：开头两句按会话写，后面是通用的用法。保证不超过上限（头一段以换行结尾，截了也只截头一段） */
 export function machineNamespaceDescription(context: MachineSpecContext | null): string {
   const head = context
     ? `You are running on ${describe(context.session)}. ${describe(context.desktop)} is the user's desktop running Litch (the controller). Call machines to list every machine you can operate; machine "desktop" is the user's desktop, "session" is this one. Trust machines over this note.\n`

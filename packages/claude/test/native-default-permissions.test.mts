@@ -7,7 +7,7 @@ import { MockLLM } from './fixtures/mock-llm.mjs'
 import { ProtocolClient } from './fixtures/protocol-client.mjs'
 
 // config/read 报的默认（模型、强度、权限档 default_permissions）就是不带这几项新建会话时真的会用的。
-// 客户端的新建页照它显示（决 149）：权限档照上游的顺序取，configRequirements/read 的 defaultPermissions、
+// 客户端的新建页照它显示，显示的就是会用的：权限档照上游的顺序取，configRequirements/read 的 defaultPermissions、
 // 然后是这里的 default_permissions。默认档跟着配置里的 sandbox_mode、approval_policy 走（桌面端写的就是这两项），
 // 两项凑不成一个预设时报 null，建出来的会话也报不出现用的权限档。
 test('CONFIG-DEFAULT-001：config/read 的默认模型、强度、权限档和不带设置新建的会话一致', {

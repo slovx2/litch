@@ -1,4 +1,4 @@
-// 内置浏览器和远端 localhost 转发（决 191）接在一起：给执行器的改写钩子和说明、用户地址栏用的改写、
+// 内置浏览器和远端 localhost 转发接在一起：给执行器的改写钩子和说明、用户地址栏用的改写、
 // 网页自己跳转时的改写、标签还在不在用。转发本身在 ssh/forward.mts，网址怎么改在 ssh/forward-url.mts。
 // install.mts 和远程端到端的自检（probe-tools-remote.mts）用的是同一份。不碰 Electron 的运行时。
 import type { RemoteTarget } from '@litch/core'

@@ -1,5 +1,4 @@
-// 全部页面和各自的参数。这是各条开发线之间的约定：页面归谁写见 design/harness-client/06-mobile-plan.md 第三节，
-// 改这里要先和其他线对齐。参数只放标识和少量首帧要用的字（标题），数据一律从核心订阅，不经路由传。
+// 全部页面和各自的参数，是页面之间互相跳转的约定，改这里要连带看所有用到它的页面。参数只放标识和少量首帧要用的字（标题），数据一律从核心订阅，不经路由传。
 import type { DiffScope } from '@litch/core'
 
 export type RootStackParamList = {

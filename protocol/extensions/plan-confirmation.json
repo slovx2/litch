@@ -1,6 +1,6 @@
 {
   "extension": "planConfirmation",
-  "description": "计划确认由引擎在回合里问。标准协议里计划模式的回合产出计划条目（plan），回合正常结束，要不要执行由客户端自己问：官方桌面端、移动端、上游的终端界面都是回合结束后看这个回合有没有计划条目，有就问一句，选了执行就把协作模式切回 default、发一个新回合（桌面端的用户消息是固定的一行加计划全文），写的意见是计划模式里的普通跟进消息。我们的引擎各自另有一道确认：Claude Code 在模型调 ExitPlanMode 时问（选“执行计划”就放行这次调用，回合里接着执行，带着的话并进计划交给模型），Pi 的计划插件在交了计划之后弹它的就绪菜单。两边都问，用户就要确认两次。这项扩展让客户端声明“我不自己问，由引擎在回合里问”：声明了的连接上引擎照旧问，没声明的连接上引擎不问，按标准协议的样子把回合交回去。设计见 design/harness-client/03-adapter-device-service.md 第十五节，官方桌面端的做法见 research/codex-desktop-analysis-2026-10-12/04-composer-approvals-plan.md 第 2.6.4 节。",
+  "description": "计划确认由引擎在回合里问。标准协议里计划模式的回合产出计划条目（plan），回合正常结束，要不要执行由客户端自己问：官方桌面端、移动端、上游的终端界面都是回合结束后看这个回合有没有计划条目，有就问一句，选了执行就把协作模式切回 default、发一个新回合（桌面端的用户消息是固定的一行加计划全文），写的意见是计划模式里的普通跟进消息。我们的引擎各自另有一道确认：Claude Code 在模型调 ExitPlanMode 时问（选“执行计划”就放行这次调用，回合里接着执行，带着的话并进计划交给模型），Pi 的计划插件在交了计划之后弹它的就绪菜单。两边都问，用户就要确认两次。这项扩展让客户端声明“我不自己问，由引擎在回合里问”：声明了的连接上引擎照旧问，没声明的连接上引擎不问，按标准协议的样子把回合交回去。官方桌面端的做法在 packages/claude/test/native-plan-desktop.test.mts 开头。",
   "appliesTo": "每个 harness 自己的入口，以及经聚合面连到它的连接（聚合面把客户端的握手参数原样带给每个上游）。哪个 harness 支持，看它在 runtime/info 里报的 extensions 有没有 planConfirmation：现在 claude-code 和 pi 支持；dsh 没接计划模式；原生 codex 本来就是标准做法，引擎不问。",
   "declaration": {
     "description": "客户端握手时在 initialize 的 capabilities 里用我们自己的键列出认识的扩展名。",

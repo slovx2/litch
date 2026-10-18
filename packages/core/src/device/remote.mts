@@ -1,8 +1,9 @@
 // 远程设备的连接配置：检查、显示用的主机标识，以及外壳要为远程设备提供的那几样能力。
-// 核心不碰 ssh：怎么连、用户的 ssh 配置里有什么，都由外壳实现后注入（设计文档 01 第七节）。
+// 核心不碰 ssh：怎么连、用户的 ssh 配置里有什么，都由外壳实现后注入。
 import { type AbortSignalLike, ChannelError } from '../channel/protocol.mjs'
 import type { TransportOpener } from '../connection/transport.mjs'
 import type { DiscoveredHost, RemoteCheck, RemoteTarget, WireColor } from '../model.mjs'
+import type { MachineAccessMode, MachineApproval, MachineLogEntry } from '../model-machine.mjs'
 import type { SnapshotStore } from './device.mjs'
 import type { TerminalNotesStore } from './terminal-launch.mjs'
 
@@ -29,15 +30,35 @@ export interface SavedDevices {
   localWire: WireColor | null
   remotes: SavedRemote[]
   /**
-   * 各台设备（键是设备标识，本机是 local）改过的两个开关：内置浏览器、Computer Use（决 190）。
+   * 各台设备（键是设备标识，本机是 local）改过的两个开关：内置浏览器、Computer Use。
    * 没改过的不记，按默认来（浏览器开、Computer Use 关）；一个都没改过时没有这一项
    */
   tools?: Record<string, SavedToolSwitches>
+  /**
+   * 各台远程设备“操作这台电脑”的审批方式和访问范围（开关本身在 tools 的 machine 里）。
+   * 没改过的不记，按默认来（每个会话确认一次、禁止常用敏感位置）
+   */
+  machine?: Record<string, SavedMachineSettings>
 }
 
 export interface SavedToolSwitches {
   browser?: boolean
   computer?: boolean
+  /** 远程设备“操作这台电脑”，默认关。本机设备没有这一项 */
+  machine?: boolean
+}
+
+export interface SavedMachineSettings {
+  approval?: MachineApproval
+  access?: MachineAccessMode
+  /** 自定义的禁止位置。第一次切到 custom 时从内置名单抄一份 */
+  custom?: string[]
+}
+
+/** 一台设备的操作记录存在哪（只在本机，08 号 3.4）。读回来的形状由核心认 */
+export interface MachineLogStore {
+  load(): unknown
+  save(entries: readonly MachineLogEntry[]): void
 }
 
 /** 设备配置和各台设备的侧栏快照存在哪，由外壳定 */
@@ -48,6 +69,8 @@ export interface DeviceStore {
   snapshot(deviceId: string): SnapshotStore
   /** 一台设备上终端的两样记在这台电脑上的东西：改过的名字、留在设备上不看的。不实现就不记 */
   terminals?(deviceId: string): TerminalNotesStore
+  /** 一台设备的 litch_machine 操作记录。不实现就只记在内存里 */
+  machineLog?(deviceId: string): MachineLogStore
   /** 设备去掉了，或者换了一台机器：它的快照不要了 */
   forget(deviceId: string): void
 }
@@ -157,17 +180,62 @@ export function checkSaved(value: unknown): SavedDevices {
     for (const [id, value] of Object.entries(rawTools as Record<string, unknown>)) {
       if (id !== 'local' && !remotes.some((remote) => remote.id === id)) continue
       if (typeof value !== 'object' || value === null) continue
-      const { browser, computer } = value as Record<string, unknown>
+      const { browser, computer, machine } = value as Record<string, unknown>
       const kept: SavedToolSwitches = {
         ...(typeof browser === 'boolean' ? { browser } : {}),
         ...(typeof computer === 'boolean' ? { computer } : {}),
+        // 本机设备没有“操作这台电脑”
+        ...(typeof machine === 'boolean' && id !== 'local' ? { machine } : {}),
       }
       if (Object.keys(kept).length > 0) tools[id] = kept
+    }
+  }
+  const machine: Record<string, SavedMachineSettings> = {}
+  const rawMachine = raw.machine
+  if (typeof rawMachine === 'object' && rawMachine !== null && !Array.isArray(rawMachine)) {
+    for (const [id, value] of Object.entries(rawMachine as Record<string, unknown>)) {
+      if (!remotes.some((remote) => remote.id === id)) continue
+      const kept = checkMachineSettings(value)
+      if (Object.keys(kept).length > 0) machine[id] = kept
     }
   }
   return {
     localWire: wireOf(raw.localWire),
     remotes,
     ...(Object.keys(tools).length > 0 ? { tools } : {}),
+    ...(Object.keys(machine).length > 0 ? { machine } : {}),
+  }
+}
+
+const APPROVALS: readonly MachineApproval[] = ['session', 'each', 'never']
+const ACCESS_MODES: readonly MachineAccessMode[] = ['sensitive', 'open', 'custom']
+/** 自定义禁止位置最多几条、每条最长多少字 */
+export const MACHINE_CUSTOM_LIMIT = 200
+const MACHINE_PATH_MAX = 1024
+
+/** 整理自定义的禁止位置：去掉空的、太长的、重复的，条数有上限 */
+export function cleanDeniedPaths(list: readonly unknown[]): string[] {
+  const kept: string[] = []
+  for (const one of list) {
+    if (typeof one !== 'string') continue
+    const path = one.trim()
+    if (!path || path.length > MACHINE_PATH_MAX || kept.includes(path)) continue
+    kept.push(path)
+    if (kept.length >= MACHINE_CUSTOM_LIMIT) break
+  }
+  return kept
+}
+
+function checkMachineSettings(value: unknown): SavedMachineSettings {
+  if (typeof value !== 'object' || value === null) return {}
+  const { approval, access, custom } = value as Record<string, unknown>
+  return {
+    ...(APPROVALS.includes(approval as MachineApproval)
+      ? { approval: approval as MachineApproval }
+      : {}),
+    ...(ACCESS_MODES.includes(access as MachineAccessMode)
+      ? { access: access as MachineAccessMode }
+      : {}),
+    ...(Array.isArray(custom) ? { custom: cleanDeniedPaths(custom) } : {}),
   }
 }

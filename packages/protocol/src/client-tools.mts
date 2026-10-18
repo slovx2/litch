@@ -1,8 +1,7 @@
 // 客户端工具（扩展名 clientTools）：模型调用的工具由连着的 Litch 桌面端执行，比如内置浏览器、Computer Use。
 // 走的是 codex 协议原有的动态工具：建会话时 `thread/start.dynamicTools` 带上工具清单，模型调用时
 // 引擎向客户端发 `item/tool/call`，客户端执行后答复。这里只有协议里没有的那部分：谁能执行、交给谁、
-// 没人能执行时怎么回。定义的原文在仓库根目录 protocol/extensions/client-tools.json，
-// 设计见 design/harness-client/05-browser-and-computer-use.md。
+// 没人能执行时怎么回。定义的原文在仓库根目录 protocol/extensions/client-tools.json。
 //
 // 这个文件不引用别的文件：设备进程（packages/device）、引擎入口（packages/claude、packages/pi）、
 // 客户端核心（packages/core）和桌面外壳都直接引用它。
@@ -17,7 +16,7 @@ export const CLIENT_TOOL_NAMESPACE_PREFIX = 'litch_'
 export const CLIENT_TOOL_NAMESPACE = {
   browser: 'litch_browser',
   computer: 'litch_computer',
-  /** 操作机器上的命令和文件（第一期只有桌面端这台），设计见 design/harness-client/08-remote-control-desktop.md */
+  /** 操作机器上的命令和文件（第一期只有桌面端这台） */
   machine: 'litch_machine',
   /** 只在测试里用：原样回参数，用来打通链路 */
   echo: 'litch_echo',
@@ -108,7 +107,7 @@ export type ClientToolFailureKind =
   | 'failed'
   /** 访问范围挡住了（litch_machine 碰到禁止位置），说明里写是哪条规则 */
   | 'blocked'
-  /** 不知道交给哪台：命令行调用找不到会话、又连着不止一台桌面端（决 251），说明里列出各台的主机名 */
+  /** 不知道交给哪台：命令行调用找不到会话、又连着不止一台桌面端，说明里列出各台的主机名 */
   | 'ambiguous'
 
 /** 拼一个失败答复。文字第一行是 `[litch:<kind>]`，后面是给模型看的说明（说明要告诉模型该怎么办） */
@@ -122,7 +121,7 @@ export function clientToolFailure(
   }
 }
 
-// —— 不经动态工具的调用（08 号设计 2.2 节、第五节）——
+// —— 不经动态工具的调用 ——
 // 装了适配器的远程设备上，`codex-harness-adapter machine …`（短名 litch-machine）连本机的 device.sock，
 // 调 CLIENT_TOOL_METHOD.invoke；设备进程挑一条声明过这个命名空间的 Litch 连接，向它发 CLIENT_TOOL_METHOD.call。
 // 两样都是我们的扩展（clientTools），只发给、只接受声明过的连接。
@@ -132,7 +131,18 @@ export const CLIENT_TOOL_METHOD = {
   invoke: 'litch/clientTool/invoke',
   /** 设备进程 → Litch（服务端请求）：执行一次不来自回合的工具调用。应答是 ClientToolCallResponse */
   call: 'litch/clientTool/call',
+  /**
+   * 客户端（命令行）→ 设备进程：现在连着、能执行客户端工具的 Litch 桌面端有哪些。应答是
+   * ClientToolDesktopsResult。命令行的说明开头要写桌面端的名字，有歧义时也按它列
+   */
+  desktops: 'litch/clientTool/desktops',
 } as const
+
+/** `litch/clientTool/desktops` 的应答 */
+export interface ClientToolDesktopsResult {
+  /** 按连上的先后。没报 desktop 的连接 hostname 是空字符串 */
+  desktops: (ClientToolsDesktopInfo & { namespaces: string[] })[]
+}
 
 /** `litch/clientTool/invoke` 的参数 */
 export interface ClientToolInvokeParams {
@@ -146,7 +156,7 @@ export interface ClientToolInvokeParams {
   threadId: string | null
   /**
    * 指定交给哪台桌面端（Litch 连接报的主机名）。不给时：找得到会话就交给发起那个回合的那台；
-   * 找不到、又连着不止一台声明了的，回 ambiguous 失败，说明里列出各台的主机名（决 251）
+   * 找不到、又连着不止一台声明了的，回 ambiguous 失败，说明里列出各台的主机名，好让调用方指定
    */
   desktop?: string
 }
@@ -166,7 +176,7 @@ export interface ClientToolDetachedCallParams {
   harness: string | null
 }
 
-/** 握手时 Litch 连接在 capabilities.litchClientTools 里额外报的：这台桌面端的主机名（决 251 列出、指定时用） */
+/** 握手时 Litch 连接在 capabilities.litchClientTools 里额外报的：这台桌面端的主机名（ambiguous 时列出、指定交给哪台时用） */
 export interface ClientToolsDesktopInfo {
   hostname: string
   /** 给人看的名字，比如“Song 的 MacBook”。没有就用主机名 */

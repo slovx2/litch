@@ -1,7 +1,7 @@
-// 上游来的帧怎么转给客户端，以及服务端发起的请求（审批、提问）怎么原路送回（设计文档 03 第 5.1、5.4 节）。
-// 每帧只解析一次，只看方法名、会话标识和请求号；不需要改的帧把收到的原文原样发出去，不重新序列化（第九节 R1）。
+// 上游来的帧怎么转给客户端，以及服务端发起的请求（审批、提问）怎么原路送回。
+// 每帧只解析一次，只看方法名、会话标识和请求号；不需要改的帧把收到的原文原样发出去，不重新序列化：路由层给每条消息加的开销要压到最低。
 //
-// 会话对象经过这里时（应答里的、会话开始的通知里的），工作区、分区、置顶换成设备层的值（第 6.1 节）：
+// 会话对象经过这里时（应答里的、会话开始的通知里的），工作区、分区、置顶换成设备层的值：
 // 归属存在设备层，引擎自己那一份和聚合面互不相通。
 import { isClientToolNamespace } from '../../protocol/src/client-tools.mjs'
 import type { ThreadIndex } from './thread-index.mjs'
@@ -25,7 +25,10 @@ export interface RelayHost {
   clientTools: RelayClientTools
 }
 
-/** 只对 dialect.clientToolsByDevice 的上游（原生 codex）调用 */
+/**
+ * offer、resolved 只对 dialect.clientToolsByDevice 的上游（原生 codex）调用；订阅、回合的几样对每个上游都调：
+ * 命令行的调用（litch/clientTool/invoke）按会话找发起回合的 Litch，哪个 harness 的会话都要
+ */
 export interface RelayClientTools {
   /** 一份 litch_ 命名空间的 item/tool/call 到了：不往下转 */
   offer(link: UpstreamLink, frame: Frame, upstreamId: RpcId): void
@@ -33,8 +36,10 @@ export interface RelayClientTools {
   resolved(link: UpstreamLink, requestId: RpcId): boolean
   /** 这条连接订阅了会话（新建、恢复、分叉成功） */
   subscribed(link: UpstreamLink, threadId: string): void
-  /** 这条连接发起的回合开始了 */
+  /** 这条连接发起的回合开始了（turn/start 的应答） */
   turnStarted(link: UpstreamLink, turnId: string): void
+  /** 会话的一个回合开始了（turn/started 通知） */
+  turnBegan(link: UpstreamLink, threadId: string, turnId: string): void
   turnEnded(link: UpstreamLink, turnId: string): void
 }
 
@@ -137,8 +142,7 @@ export class Relay {
     }
     const result = frame.result
     if (tracked && frame.error === undefined) this.fulfil(link, tracked, result)
-    if (request && frame.error === undefined && link.dialect.clientToolsByDevice)
-      this.clientToolsSaw(link, request.method, result)
+    if (request && frame.error === undefined) this.clientToolsSaw(link, request.method, result)
     let changed = false
     if (isObject(result)) {
       changed = this.stamp(link, result.thread)
@@ -158,7 +162,7 @@ export class Relay {
       this.notification(link, held, 'thread/started', JSON.stringify(held))
   }
 
-  /** 订阅了哪个会话、发起了哪个回合：设备进程替原生 codex 挑客户端工具的执行方时要用 */
+  /** 订阅了哪个会话、发起了哪个回合：设备进程替原生 codex、替命令行挑客户端工具的执行方时要用 */
   private clientToolsSaw(link: UpstreamLink, method: string, result: unknown): void {
     if (!isObject(result)) return
     const thread = isObject(result.thread) ? result.thread : null
@@ -188,7 +192,7 @@ export class Relay {
   /**
    * 给会话对象打上 harness 并登记进索引，工作区、分区、置顶换成设备层的。
    * 这里拿到的是会话对象上的标识，也就是最终标识：
-   * Pi 新建会话时内部用过的临时标识不会出现在会话对象上，所以不会被登记（第九节 R4）。
+   * Pi 新建会话时内部用过的临时标识不会出现在会话对象上，所以不会被登记。
    */
   private stamp(link: UpstreamLink, thread: unknown): boolean {
     if (!isObject(thread) || typeof thread.id !== 'string') return false
@@ -257,9 +261,12 @@ export class Relay {
         changed = true
       }
     }
-    if (method === 'turn/completed' && link.dialect.clientToolsByDevice) {
+    if (method === 'turn/started' || method === 'turn/completed') {
       const turn = isObject(fields?.turn) ? fields.turn : null
-      if (typeof turn?.id === 'string') this.host.clientTools.turnEnded(link, turn.id)
+      if (typeof turn?.id === 'string' && method === 'turn/completed')
+        this.host.clientTools.turnEnded(link, turn.id)
+      else if (typeof turn?.id === 'string' && threadId)
+        this.host.clientTools.turnBegan(link, threadId, turn.id)
     }
     if (this.host.optedOut(method)) return
     // 带会话标识的通知原样转发；不带的（账号变化、MCP 状态、技能变化、限额等）加上是哪个 harness 发的
@@ -323,7 +330,7 @@ export class Relay {
   }
 
   /** deliver 转过来的调用了结了（不是这条连接答的）：说一声这个请求有结果了，客户端的卡片收得掉 */
-  withdraw(facingId: RpcId, threadId: string): void {
+  withdraw(facingId: RpcId, threadId: string | null): void {
     if (!this.pending.delete(idKey(facingId))) return
     if (this.host.optedOut('serverRequest/resolved')) return
     this.host.send(

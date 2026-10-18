@@ -150,7 +150,8 @@ export interface LiveSessions {
   clientAsk(
     place: { threadId: string; turnId: string; callId: string },
     request: ClientAskRequest,
-    answer: (answer: ToolAnswer | null) => void,
+    /** note：用户选了能附说明的选项（litch_machine 的拒绝）时附的那句话，没附是 null */
+    answer: (answer: ToolAnswer | null, note: string | null) => void,
   ): () => void
   /**
    * 建一个会话并发出第一条消息，返回会话标识。cwd 给 null 时工作目录由对面定。
@@ -1028,18 +1029,24 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
         answer(choice) {
           const option = view.options.find((one) => one.id === choice.optionId)
           if (!option) return null
-          return option.role === 'accept'
-            ? 'once'
-            : option.role === 'acceptSession'
-              ? 'session'
-              : option.role === 'acceptAlways'
-                ? 'always'
-                : 'decline'
+          const pick: ToolAnswer =
+            option.role === 'accept'
+              ? 'once'
+              : option.role === 'acceptSession'
+                ? 'session'
+                : option.role === 'acceptAlways'
+                  ? 'always'
+                  : 'decline'
+          return { pick, note: option.note ? choice.note?.trim() || null : null }
         },
         resolve(result) {
           if (!open) return
           open = false
-          answer(result === NO_REPLY ? null : (result as ToolAnswer))
+          if (result === NO_REPLY) answer(null, null)
+          else {
+            const { pick, note } = result as { pick: ToolAnswer; note: string | null }
+            answer(pick, note)
+          }
         },
       }
       entry.requests.set(view.id, waiting)
@@ -1060,7 +1067,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       // 还没有会话对象：它算在谁头上，聚合面上就是指定的那个，单个入口上只有那一个
       const target = harness ?? host.sole()
       const presets = target === null ? null : presetsOf(target)
-      // 这台桌面能执行的客户端工具（决 189：都默认带上，用的时候再查开关）。工具只能在建会话时定
+      // 这台桌面能执行的客户端工具（都默认带上，用的时候再查开关）。工具只能在建会话时定
       const tools = host.dynamicTools?.(target) ?? null
       try {
         // 建会话时能带的先带上（模型、权限）；带不了的（强度、协作模式）跟着第一个回合发
@@ -1228,7 +1235,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
         // 说明只能跟着声明了能带说明的选项走，别的不替用户悄悄丢掉
         const { view } = request
         const option =
-          view.kind === 'approval'
+          view.kind === 'approval' || view.kind === 'clientAsk'
             ? view.options.find((entry) => entry.id === choice.optionId)
             : undefined
         if (!option?.note) throw new ChannelError('rejected', '这个选项不能附说明')

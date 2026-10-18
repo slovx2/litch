@@ -1,7 +1,7 @@
 // 主进程：只管窗口、生命周期，以及给窗口和核心之间牵一条消息端口。
-// 它不解析协议，不持有会话状态，不在数据路径上（设计文档 01 第四节）。
+// 它不解析协议，不持有会话状态，不在数据路径上。
 // 唯一的例外是客户端工具（内置浏览器、Computer Use）：核心把模型的工具调用交给这里登记的执行器（client-tools/），
-// 经手的只有那一次调用的参数和结果（设计文档 05 第九节）。
+// 经手的只有那一次调用的参数和结果。
 import { spawn } from 'node:child_process'
 import { isAbsolute, join, normalize, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -24,6 +24,7 @@ import {
 import { openLicenses } from './about.mjs'
 import { type InstalledBrowser, installBrowser } from './browser/install.mjs'
 import { createClientToolHost } from './client-tools/host.mjs'
+import { showMachineNotice } from './client-tools/notice.mjs'
 import { createExecutors } from './client-tools/registry.mjs'
 import { CLIENT_TOOL, type ClientToolToMain } from './client-tools/types.mjs'
 import { createComputerUse, locateHelper } from './computer-use/index.mjs'
@@ -219,7 +220,21 @@ function startCore(): void {
   // 核心往回发两种消息：客户端工具的调用和答复；退出前问它终端的事，它的回答
   child.on('message', (message: unknown) => {
     if ((message as { type?: unknown } | null)?.type === CLIENT_TOOL) {
-      if (core === child) clientTools.handle(message as ClientToolToMain)
+      if (core !== child) return
+      const tool = message as ClientToolToMain
+      // litch_machine 找不到会话的卡片进了全局待处理：发一条系统通知（08 号 4.2），点了把窗口叫到前面
+      if (tool.op === 'notify') {
+        const lang = menuLang ?? forcedLang ?? (app.getLocale().startsWith('zh') ? 'zh-CN' : 'en')
+        showMachineNotice(tool.notice, lang, () => {
+          const window = BrowserWindow.getAllWindows()[0]
+          if (!window) return
+          if (window.isMinimized()) window.restore()
+          window.show()
+          window.focus()
+        })
+        return
+      }
+      clientTools.handle(tool)
       return
     }
     const data = message as { type?: unknown; id?: unknown; alive?: AliveCount } | null
@@ -463,7 +478,7 @@ ipcMain.handle(COMPUTER_USE_FORGET_APP, (event, bundleId: unknown) =>
   fromUi(event) && computerUseSettings ? computerUseSettings.forgetApp(bundleId) : false,
 )
 
-// ---------- 应用自己的更新（updater.mts，工作区 design/harness-client/07-auto-update.md） ----------
+// ---------- 应用自己的更新（updater.mts） ----------
 
 /**
  * 只在装好的应用里查；LITCH_UPDATE_FEED 换成本机的假清单时没打包也查（开发、验收用，允许 http）。

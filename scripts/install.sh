@@ -11,6 +11,7 @@
 #   ~/.local/share/codex-harness-adapter/current     指向当前版本的链接
 #   ~/.local/share/codex-harness-adapter/history     用过的版本，最近的在最前
 #   ~/.local/bin/codex-harness-adapter               指向 current/bin/codex-harness-adapter
+#   ~/.local/bin/litch-machine                       指向 current/bin/litch-machine（machine 子命令的短名，0.9.0 之后的包才有）
 # 状态目录 ~/.codex-harness-adapter（会话、设置、密钥）不归这个脚本管，装和卸载都不碰它。
 #
 # 几条规矩：
@@ -123,6 +124,9 @@ esac
 base_dir=$HOME/.local/share/$NAME
 bin_dir=$HOME/.local/bin
 bin_link=$bin_dir/$NAME
+# machine 子命令的短名：远程设备上的模型用它操作用户的 Litch 桌面端
+SHORT=litch-machine
+short_link=$bin_dir/$SHORT
 state_dir=$HOME/.$NAME
 
 # 给人看的路径：主目录写成 ~，短一些，贴进 shell 里也照样能用
@@ -227,15 +231,16 @@ service_notice() {
 }
 
 uninstall() {
-  if [ -L "$bin_link" ]; then
-    case $(readlink "$bin_link") in
-      "$base_dir"/*) rm -f "$bin_link" ;;
+  for link in "$bin_link" "$short_link"; do
+    [ -L "$link" ] || continue
+    case $(readlink "$link") in
+      "$base_dir"/*) rm -f "$link" ;;
       *)
         say '%s 不是这个脚本装的，没有动它' \
-          '%s was not put there by this script; left alone' "$(show "$bin_link")"
+          '%s was not put there by this script; left alone' "$(show "$link")"
         ;;
     esac
-  fi
+  done
   if [ -d "$base_dir" ]; then
     # 先记下还在跑的服务：程序目录一删就认不出是哪一版了
     notice=$(service_notice '')
@@ -380,6 +385,26 @@ remember() {
   done
 }
 
+# 短名的链接：这一版带着它就链上；不带（旧版本）就撤掉指向本脚本目录的那个。别人放的同名文件不动，只提一句
+link_short() {
+  if [ -e "$short_link" ] && [ ! -L "$short_link" ]; then
+    say '%s 已经存在，而且不是这个脚本装的，没有动它；短名 %s 用不了，可以用 %s machine' \
+      '%s already exists and was not put there by this script; left alone. The short name %s is unavailable; use %s machine' \
+      "$(show "$short_link")" "$SHORT" "$NAME"
+    return 0
+  fi
+  if [ -e "$base_dir/$1/bin/$SHORT" ]; then
+    if [ "$(readlink "$short_link" 2>/dev/null || true)" != "$base_dir/current/bin/$SHORT" ]; then
+      switch_link "$base_dir/current/bin/$SHORT" "$short_link" ||
+        fail '建不了命令的链接：%s' 'Cannot create the command link: %s' "$(show "$short_link")"
+    fi
+  elif [ -L "$short_link" ]; then
+    case $(readlink "$short_link") in
+      "$base_dir"/*) rm -f "$short_link" ;;
+    esac
+  fi
+}
+
 # 让 $1 成为当前版本，并说明装在哪、接下来怎么用
 activate() {
   previous=$(readlink "$base_dir/current" 2>/dev/null || true)
@@ -394,6 +419,7 @@ activate() {
     switch_link "$base_dir/current/bin/$NAME" "$bin_link" ||
       fail '建不了命令的链接：%s' 'Cannot create the command link: %s' "$(show "$bin_link")"
   fi
+  link_short "$1"
   remember "$1"
   if [ "$previous" = "$1" ]; then
     say '已经是 %s，没有要做的' 'Already on %s; nothing to do' "$1"

@@ -1,13 +1,18 @@
 // 一台设备：一条连接，加上连上之后要做的事。
-// 对面有两种（设计文档 01 第 7.5 节）：
+// 对面有两种：
 // - 一个普通的 Codex 服务（原生 codex，或适配器的一个入口）：单 harness 模式，这是基础层；
 // - 设备服务的聚合面，一条连接里有多个 harness：完整模式，在基础层上多了 harness 这个维度——
 //   每个会话记着自己属于哪个 harness；不带会话标识的请求要指明发给哪个；某个 harness 可以单独不可用、
 //   单独恢复，恢复之后它的会话列表要补取、它上面打开着的会话要重新订阅。
-// 握手之后问一次 runtime/info 来认。对面没声明的扩展连参数都不带（设计文档 03 第十五节）。
-// 数据流的纪律见设计文档 01 第十节：通知按白名单路由；连接健康时通知是唯一的数据来源；
+// 握手之后问一次 runtime/info 来认。对面没声明的扩展连参数都不带。
+// 数据流的纪律：通知按白名单路由；连接健康时通知是唯一的数据来源；
 // 只在刚连上、重连之后、手动刷新这三个时机做全量对账。
 
+import type {
+  ClientToolCallResponse,
+  ClientToolsDesktopInfo,
+} from '../../../protocol/src/client-tools.mjs'
+import type { MachineSpecContext } from '../../../protocol/src/client-tools-machine.mjs'
 import { clientToolSpecs } from '../../../protocol/src/client-tools-specs.mjs'
 import {
   CLIENT_TOOL_NAMESPACE,
@@ -30,6 +35,7 @@ import type { HostSink } from '../channel/server.mjs'
 import { createLink, type LinkState } from '../connection/link.mjs'
 import { RpcError } from '../connection/rpc.mjs'
 import type { TransportOpener } from '../connection/transport.mjs'
+import type { MachineDeviceLink, MachineSessionAsk } from '../machine-wiring.mjs'
 import type {
   ComposeOptions,
   ConnectFailureView,
@@ -48,7 +54,8 @@ import type {
   WireColor,
   WorkspaceView,
 } from '../model.mjs'
-import type { ToolInvocation } from '../model-client-tools.mjs'
+import type { ToolAnswer, ToolInvocation } from '../model-client-tools.mjs'
+import type { MachineAccessView } from '../model-machine.mjs'
 import type {
   DiagnosticsView,
   HarnessRestartResult,
@@ -74,6 +81,7 @@ import type { ToolHub } from '../tool-hub.mjs'
 import { collectThreads, type Listing, mergeListing } from './catalog.mjs'
 import { createComposeAids } from './compose.mjs'
 import { createDiffs, type Diffs } from './diffs.mjs'
+import { createExec } from './exec.mjs'
 import { channelFailure, listNames } from './faults.mjs'
 import { createFiles, type Files } from './files.mjs'
 import {
@@ -86,12 +94,18 @@ import {
   termsOf,
 } from './harness.mjs'
 import { createLiveSessions } from './live.mjs'
+import type { MachineFacts } from './machine/types.mjs'
 import { createManagement } from './manage.mjs'
 import { createOrganizer, looseDirectories, type Organizer } from './organize.mjs'
 import type { SnapshotStore } from './snapshot.mjs'
 import type { TerminalNotesStore } from './terminal-launch.mjs'
 import { createTerminals, type Terminals } from './terminals.mjs'
-import { clientAskOptions, createToolCalls, type ToolAskPlace } from './tool-calls.mjs'
+import {
+  clientAskOptions,
+  createToolCalls,
+  type MachineCallInput,
+  type ToolAskPlace,
+} from './tool-calls.mjs'
 import { projectWorkspaces, resolveWorkspace } from './workspaces.mjs'
 
 export type { DeviceSnapshot, SnapshotStore } from './snapshot.mjs'
@@ -131,12 +145,27 @@ export interface DeviceOptions {
   terminalNotes?: TerminalNotesStore
   /** 通往主进程的客户端工具那一头（tool-hub.mts）。不给就是这台桌面什么都执行不了 */
   tools?: ToolHub
-  /** 这台设备的两个开关现在是什么（决 190）。不给按默认：浏览器开、Computer Use 关 */
+  /** 这台设备的两个开关现在是什么。不给按默认：浏览器开、Computer Use 关 */
   toolSwitches?(): { browser: boolean; computer: boolean }
+  /** litch_machine：远程设备上的会话操作这台电脑。只有远程设备、核心有执行器时给 */
+  machine?: DeviceMachine
   log?(line: string): void
 }
 
-/** 设备设置页上两个开关的默认值（决 190） */
+/** 一台远程设备上 litch_machine 的那几样，由核心给（machine-wiring.mts 的接线） */
+export interface DeviceMachine {
+  /** 设备设置页上“操作这台电脑”一项的现值 */
+  view(): MachineAccessView
+  /** 握手时报给对面的这台桌面端；system 是建会话时写进说明的 */
+  desktop: ClientToolsDesktopInfo & { system: string }
+  /** 一次调用。session：放进会话对话里的卡片，找不到会话是 null */
+  call(input: MachineCallInput, session: MachineSessionAsk | null): Promise<ClientToolCallResponse>
+  turnEnded(threadId: string, turnId: string): void
+  /** 连上了、断开了（断开太久执行器会结束这台设备发起的进程） */
+  presence(online: boolean): void
+}
+
+/** 设备设置页上两个开关的默认值 */
 export const DEFAULT_TOOL_SWITCHES = { browser: true, computer: false } as const
 
 /** 给执行器的 ssh 目标：别名原样；主机写成 user@host，带端口时用 ssh 认的 ssh://user@host:端口 */
@@ -232,6 +261,42 @@ export interface Device {
   readonly files: Files
   /** 这台设备上的差异：没提交的改动、暂存和还原（diffs.mts） */
   readonly diffs: Diffs
+  /** litch_machine 把这台设备当作一台能操作的机器时用的：它的连接 */
+  readonly machineLink: MachineDeviceLink
+  /** 现查这台设备的情况（主机名、系统、用户、主目录、shell），缓存一会儿。没连着时抛错 */
+  machineFacts(): Promise<MachineFacts>
+  /** litch_machine 的开关关掉了：进行中的调用都回失败，挂着的卡片撤掉 */
+  stopMachine(response: ClientToolCallResponse): void
+}
+
+// —— litch_machine：现查一台设备的情况（08 号 2.4 的 machines、说明开头那两句） ——
+
+/** 一行一项：主机名、内核、架构、用户、主目录、shell、macOS 的版本号（别的系统是空行） */
+const FACTS_SCRIPT = [
+  'hostname 2>/dev/null || uname -n',
+  'uname -s',
+  'uname -m',
+  'id -un 2>/dev/null || whoami',
+  'printf "%s\\n" "$HOME"',
+  'printf "%s\\n" "${SHELL:-}"',
+  'sw_vers -productVersion 2>/dev/null || echo',
+].join('\n')
+const FACTS_TIMEOUT_MS = 5000
+/** 查到的记多久 */
+const FACTS_TTL_MS = 60_000
+
+/** 给人看的主机标识里去掉用户名，剩下的当主机名 */
+const hostOf = (label: string): string => label.slice(label.lastIndexOf('@') + 1)
+
+/** 握手时知道的系统（macos、linux、windows）换成给模型看的写法 */
+const osName = (os: string | null): string =>
+  os === 'macos' ? 'macOS' : os === 'linux' ? 'Linux' : os === 'windows' ? 'Windows' : (os ?? '')
+
+/** 比如 macOS 26.5 arm64、Linux x86_64 */
+const systemOf = (kernel: string, release: string, arch: string): string => {
+  if (!kernel) return ''
+  const base = kernel === 'Darwin' ? `macOS${release ? ` ${release}` : ''}` : kernel
+  return arch ? `${base} ${arch}` : base
 }
 
 const PAGE = 100
@@ -337,6 +402,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   const gaps = new Map<HarnessId, ThreadListSkippedHarness>()
   /** 最近一次全量对账整个没成的原因。成了就清掉 */
   let catalogError: Text | null = null
+  /** 设备服务报的主机名（runtime/info 的 device.hostname）。单个入口不报，是 null */
+  let deviceHostname: string | null = null
 
   const view = (): DeviceView => ({
     id: config.id,
@@ -358,8 +425,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     service,
     upgrade,
     tools: toolSwitchesView(),
-    // 08 号：远程设备“操作这台电脑”。占位，乙线接上设置后换成真的
-    machine: null,
+    // 远程设备“操作这台电脑”：本机设备、执行不了的桌面端是 null
+    machine: options.machine?.view() ?? null,
   })
 
   /** 设置页上的两个开关：这台桌面执行不了的那一项是 null，不出开关 */
@@ -713,7 +780,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   }
 
   /**
-   * 一个 harness 恢复可用了（设计文档 03 第 5.5 节）：它上面打开着的会话重新订阅——之前的订阅随它的
+   * 一个 harness 恢复可用了：它上面打开着的会话重新订阅——之前的订阅随它的
    * 上游连接一起丢了；它的会话列表补取一遍——不可用的那段时间里，合并的列表里没有它。
    */
   const recover = async (id: HarnessId) => {
@@ -974,6 +1041,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
           service === null && info.device.extensions?.includes(EXTENSION.deviceService) === true
         home = typeof info.device.home === 'string' ? info.device.home : null
         platform = info.device.os ?? null
+        deviceHostname = typeof info.device.hostname === 'string' ? info.device.hostname : null
       } else {
         // 上一次连的是设备服务的话，那时认的不算数：单个入口有没有这组方法要问了才知道
         if (mode === 'full') hasProjects = null
@@ -984,6 +1052,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         reattachable = false
         service = null
         home = null
+        deviceHostname = null
       }
     } catch (error) {
       if (mine !== session) return
@@ -1007,6 +1076,11 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     upgrade = projectUpgrade(config.upgrade?.())
     online = true
     everConnected = true
+    if (options.machine) {
+      options.machine.presence(true)
+      // 先查一遍这台设备的情况，建会话时说明里写得准一些（查不到就按握手时知道的写）
+      machineFacts().catch(() => {})
+    }
     // 上一次连接留下的说明不算数了，对账之后重新算
     gaps.clear()
     catalogError = null
@@ -1030,6 +1104,9 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       askingService?.()
       askingService = null
       if (dropped) toolCalls.offline()
+      if (dropped) machineExec.offline()
+      if (dropped) machineFactsCache = null
+      if (dropped) options.machine?.presence(false)
       if (dropped) live.offline()
       if (dropped) terminals.offline()
       if (dropped) files.offline()
@@ -1069,7 +1146,11 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     open: config.open,
     clock: options.clock,
     clientInfo: options.clientInfo,
-    clientTools: () => options.tools?.namespaces() ?? [],
+    clientTools: () => toolNamespaces(),
+    clientToolsDesktop: () => {
+      const desktop = options.machine?.desktop
+      return desktop ? { hostname: desktop.hostname, name: desktop.name ?? desktop.hostname } : null
+    },
     state: onState,
     notification(method, params) {
       // 引擎撤回了一个请求（别处答了、作废了）：正在执行的客户端工具调用不等了。会话里的卡片照常由下面撤
@@ -1084,6 +1165,9 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       }
       // 差异面板在设备上跑的命令结束了、它盯着的路径变了：先认它自己起的那些，剩下的进程通知才是终端的
       if (diffs.notification(method, params)) return
+      // litch_machine 起的进程（执行器的、现查设备情况的）也不是终端的
+      if (machineExec.notification(method, params)) return
+      if (machineProcess(method, params)) return
       // 终端的输出和进程的增减：量大、和会话目录无关，不经下面那几道
       if (terminals.notification(method, params)) return
       // 目录的通知在对账期间先攒着；会话里的通知不碰目录，不用等
@@ -1129,14 +1213,15 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     },
     interrupting: (sessionId) => toolCalls.interrupted(sessionId),
     dynamicTools(harness) {
-      // 按声明给：引擎在 runtime/info 的 extensions 里报了 clientTools 才带（dsh 不认这个参数，决 197；
+      // 按声明给：引擎在 runtime/info 的 extensions 里报了 clientTools 才带（dsh 不认这个参数；
       // 还没接上客户端工具的引擎也不报）。没有声明的是更早的适配器，那时只有 dsh 不认
       const declared = harness === null ? undefined : terms.get(harness)
       if (declared ? !declared.extensions.includes(EXTENSION.clientTools) : harness === 'dsh') {
         return null
       }
-      return clientToolSpecs(options.tools?.namespaces() ?? [], {
-        machine: null,
+      // litch_machine 的说明按会话生成：开头写这个会话在哪台、桌面端是哪台；litch_computer 的说明按桌面的平台挑
+      return clientToolSpecs(toolNamespaces(), {
+        machine: machineSpec(),
         desktopPlatform: options.tools?.platform?.() ?? null,
       })
     },
@@ -1154,6 +1239,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       cancel: () => {},
       answer: () => {},
       turnEnded: () => {},
+      notify: () => {},
     },
     device: (): ToolInvocation['device'] => ({
       id: config.id,
@@ -1175,34 +1261,181 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         cwd: thread?.cwd || null,
       }
     },
-    showAsk(place: ToolAskPlace, answer) {
-      const request = {
-        id: `litch-ask:${place.askId}`,
-        kind: 'clientAsk' as const,
-        itemId: null,
-        device: { name, kind: config.kind, host: config.host },
-        tool: { namespace: place.namespace, name: place.tool },
-        ask: place.ask,
-        options: clientAskOptions(place.ask),
-      }
-      markAsking(place.threadId, 1)
-      let counted = true
-      const uncount = () => {
-        if (!counted) return
-        counted = false
-        markAsking(place.threadId, -1)
-      }
-      const drop = live.clientAsk(place, request, (picked) => {
-        uncount()
-        answer(picked)
-      })
-      return () => {
-        uncount()
-        drop()
-      }
-    },
+    showAsk: (place: ToolAskPlace, answer) => askInSession(place, (picked) => answer(picked)),
+    ...(options.machine ? { machine: machineCalls(options.machine) } : {}),
     log,
   })
+
+  /**
+   * 在会话的对话里出一张客户端工具的卡片（和审批卡片同一处），侧栏那一行打上“等待”。
+   * 用户答了、或者卡片被撤了（null）调 answer；返回的函数撤掉卡片
+   */
+  const askInSession = (
+    place: ToolAskPlace,
+    answer: (picked: ToolAnswer | null, note: string | null) => void,
+  ): (() => void) => {
+    const request = {
+      id: `litch-ask:${place.askId}`,
+      kind: 'clientAsk' as const,
+      itemId: null,
+      device: { name, kind: config.kind, host: config.host },
+      tool: { namespace: place.namespace, name: place.tool },
+      ask: place.ask,
+      options: clientAskOptions(place.ask),
+    }
+    markAsking(place.threadId, 1)
+    let counted = true
+    const uncount = () => {
+      if (!counted) return
+      counted = false
+      markAsking(place.threadId, -1)
+    }
+    const drop = live.clientAsk(place, request, (picked, note) => {
+      uncount()
+      answer(picked, note)
+    })
+    return () => {
+      uncount()
+      drop()
+    }
+  }
+
+  /** litch_machine 的卡片编号（和主进程给的卡片标识分开） */
+  let machineAskSeq = 0
+
+  /**
+   * litch_machine 的调用交给核心的接线。卡片放哪（08 号 4.2）：回合里的调用、命令行调用里会话在这台设备上找得到的，
+   * 放进那个会话的对话；找不到会话的交给接线放进全局待处理
+   */
+  function machineCalls(machine: DeviceMachine) {
+    return {
+      call(input: MachineCallInput) {
+        const { threadId } = input
+        const known =
+          threadId !== null &&
+          (input.turnId !== null || threads.has(threadId) || archived?.has(threadId) === true)
+        const session: MachineSessionAsk | null =
+          known && threadId !== null
+            ? (ask, answer) =>
+                askInSession(
+                  {
+                    threadId,
+                    turnId: input.turnId ?? '',
+                    callId: input.callId,
+                    askId: `machine-${config.id}-${++machineAskSeq}`,
+                    namespace: CLIENT_TOOL_NAMESPACE.machine,
+                    tool: input.tool,
+                    ask,
+                  },
+                  answer,
+                )
+            : null
+        return machine.call(input, session)
+      },
+      turnEnded: (threadId: string, turnId: string) => machine.turnEnded(threadId, turnId),
+    }
+  }
+
+  // —— litch_machine：这台设备作为“会话所在的那台”时用的 ——
+
+  /** 建会话时声明、握手时报的命名空间：主进程能执行的，加上核心自己执行的 litch_machine（只有远程设备） */
+  const toolNamespaces = (): string[] => [
+    ...(options.tools?.namespaces() ?? []),
+    ...(options.machine ? [CLIENT_TOOL_NAMESPACE.machine] : []),
+  ]
+
+  /** 执行器在这条连接上起的进程的通知交给它们（MachineTarget.onProcessNotification） */
+  const machineWatchers = new Set<(method: string, params: unknown) => boolean>()
+  const machineProcess = (method: string, params: unknown): boolean => {
+    if (method !== 'process/outputDelta' && method !== 'process/exited') return false
+    for (const watcher of [...machineWatchers]) if (watcher(method, params)) return true
+    return false
+  }
+
+  const machineLink: MachineDeviceLink = {
+    online: () => online,
+    request(method, params, requestOptions) {
+      if (!online) return Promise.reject(new ChannelError('offline', '设备没有连上'))
+      return link.request(method, params, requestOptions)
+    },
+    onProcessNotification(handler) {
+      machineWatchers.add(handler)
+      return () => {
+        machineWatchers.delete(handler)
+      }
+    },
+  }
+
+  /** 现查设备情况用的（不经 shell 起 sh，输出很短） */
+  const machineExec = createExec({
+    clock: options.clock,
+    request: (method, params, requestOptions) => link.request(method, params, requestOptions),
+  })
+  let machineFactsCache: { at: number; facts: MachineFacts } | null = null
+  let machineFactsLoading: Promise<MachineFacts> | null = null
+
+  const probeFacts = async (): Promise<MachineFacts> => {
+    const label = typeof name === 'string' ? name : config.host
+    let lines: string[] = []
+    try {
+      const result = await machineExec.run(['sh', '-c', FACTS_SCRIPT], {
+        cwd: home ?? '/',
+        capBytes: 8192,
+        timeoutMs: FACTS_TIMEOUT_MS,
+      })
+      if (result.exitCode === 0) lines = result.stdout.split('\n').map((line) => line.trim())
+    } catch (error) {
+      log(`查设备情况没成：${String(error)}`)
+    }
+    const [hostname, kernel, arch, user, homeDir, shell, release] = lines
+    const facts: MachineFacts = {
+      name: label,
+      hostname: hostname || deviceHostname || hostOf(config.host),
+      system: systemOf(kernel ?? '', release ?? '', arch ?? '') || osName(platform),
+      user: user ?? '',
+      home: homeDir || home || '',
+      shell: shell ?? '',
+    }
+    // 查到了才记着；没查到的这一次凑合用，下次再查
+    if (lines.length > 0) machineFactsCache = { at: options.clock.now(), facts }
+    return facts
+  }
+
+  const machineFacts = (): Promise<MachineFacts> => {
+    if (!online) return Promise.reject(new ChannelError('offline', '设备没有连上'))
+    const cached = machineFactsCache
+    if (cached && options.clock.now() - cached.at < FACTS_TTL_MS) {
+      return Promise.resolve({
+        ...cached.facts,
+        name: typeof name === 'string' ? name : config.host,
+      })
+    }
+    machineFactsLoading ??= probeFacts().finally(() => {
+      machineFactsLoading = null
+    })
+    return machineFactsLoading
+  }
+
+  /** 建会话时写进 litch_machine 说明的两台。不知道这台的主机名时是 null，说明里不写具体的机器 */
+  const machineSpec = (): MachineSpecContext | null => {
+    const machine = options.machine
+    if (!machine) return null
+    const known = machineFactsCache?.facts
+    const hostname = known?.hostname || deviceHostname || hostOf(config.host)
+    if (!hostname) return null
+    return {
+      session: {
+        name: typeof name === 'string' ? name : config.host,
+        hostname,
+        system: known?.system || osName(platform),
+      },
+      desktop: {
+        name: machine.desktop.name ?? machine.desktop.hostname,
+        hostname: machine.desktop.hostname,
+        system: machine.desktop.system,
+      },
+    }
+  }
 
   const organize = createOrganizer({
     online: () => online,
@@ -1479,5 +1712,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     terminals,
     files,
     diffs,
+    machineLink,
+    machineFacts,
+    stopMachine: (response) => toolCalls.stopMachine(response),
   }
 }

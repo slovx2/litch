@@ -1,7 +1,7 @@
 // 这个 ACP 引擎扮演哪一个 harness、起哪个命令。
 //
-// 一个引擎包管三个标识（gemini、qwen、acp），由命令行用 CHA_ACP_AGENT 告诉它这一次是哪一个
-//（设计文档 06 第一节）。命令和参数先看用户给的 CHA_<标识>_CLI、CHA_<标识>_ARGS，
+// 一个引擎包管三个标识（gemini、qwen、acp），由命令行用 CHA_ACP_AGENT 告诉它这一次是哪一个。
+// 命令和参数先看用户给的 CHA_<标识>_CLI、CHA_<标识>_ARGS，
 // 没给的用 packages/protocol/src/acp-agents.json 里的预设；acp 这一项没有预设命令，必须由用户给。
 // agent 本体不随适配器分发，一律用用户自己装的。
 import { homedir } from 'node:os'
@@ -40,7 +40,7 @@ export function agentId(env: NodeJS.ProcessEnv = process.env): AcpAgentId {
 
 /**
  * 把一行参数按空白切开，双引号里的空白不切；引号本身去掉，`\"` 是字面的引号。
- * 没配对的引号把后面的都算进同一个参数。单引号不特殊（设计文档只约定了双引号）。
+ * 没配对的引号把后面的都算进同一个参数。单引号不特殊（只约定了双引号）。
  */
 export function splitArgs(line: string): string[] {
   const args: string[] = []

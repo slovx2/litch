@@ -4,6 +4,7 @@ import { mkdirSync } from 'node:fs'
 import type { DatabaseSync } from 'node:sqlite'
 import { EXTENSION } from '../../protocol/src/device.mjs'
 import type { DeviceSettingsSnapshot } from '../../protocol/src/device-settings.mjs'
+import { ClientToolInvoker } from './client-tool-invoke.mjs'
 import { ClientToolRouter } from './client-tools.mjs'
 import type { ControlChannel, ControlState } from './control.mjs'
 import { DeviceLayer } from './device-layer.mjs'
@@ -30,7 +31,7 @@ export interface DeviceOptions {
   /** 设备进程自己的状态目录，设备库 device.sqlite 放在里面 */
   stateDir: string
   /**
-   * 设备级的工作区第一次启用时，要不要从各引擎现有的项目导入（设计文档 03 第 6.1 节）。
+   * 设备级的工作区第一次启用时，要不要从各引擎现有的项目导入。
    * 默认要。只有测试会关：和导入无关的测试不想让设备进程自己另开连接去读上游。
    */
   importExisting?: boolean
@@ -123,6 +124,10 @@ export class DeviceServer {
       this.control.onState = (state) => this.controlChanged(state)
       this.control.onAsk = (method) => this.asked(method)
     }
+    const router = new ClientToolRouter({
+      graceMs: options.timing?.clientToolGraceMs ?? DEFAULT_TIMING.clientToolGraceMs,
+      log,
+    })
     this.host = {
       harnesses: () => this.harnesses(),
       management: new DeviceManagement({
@@ -141,10 +146,8 @@ export class DeviceServer {
       timing: { ...DEFAULT_TIMING, ...options.timing },
       log,
       closed: (session) => this.sessions.delete(session),
-      clientTools: new ClientToolRouter({
-        graceMs: options.timing?.clientToolGraceMs ?? DEFAULT_TIMING.clientToolGraceMs,
-        log,
-      }),
+      clientTools: router,
+      clientInvoke: new ClientToolInvoker({ router, index: this.index, log }),
       reachable: () => this.importer?.kick(),
       importing: () => {
         this.importer?.kick()
@@ -168,7 +171,7 @@ export class DeviceServer {
   }
 
   /**
-   * 设备层的数据变了：告诉所有聚合面连接（设计文档 03 第 5.4 节），发起变更的那条也收，和引擎里的做法一样。
+   * 设备层的数据变了：告诉所有聚合面连接，发起变更的那条也收，和引擎里的做法一样。
    * 变更都是在处理某个请求的时候发生的，通知排到那个请求的应答后面再发。
    * 发给谁按变更发生的这一刻算：这之后才握手完成的连接，握手之后读到的已经是变更后的，不用再通知
    * （第一次导入时会有成百上千条，不该追着刚连上的客户端发）。
@@ -260,7 +263,7 @@ export class DeviceServer {
     if (isObject(state.processes)) this.layer.deviceProcesses.setLimits(state.processes)
   }
 
-  /** 这个 harness 是不是有回合在跑。判断不了的时候返回 true（设计文档 03 第十三节） */
+  /** 这个 harness 是不是有回合在跑。判断不了的时候返回 true，宁可不重启也不打断回合 */
   private async busy(harness: string): Promise<boolean> {
     const source = this.harnesses().find((item) => item.id === harness)
     if (!source?.managed) return true

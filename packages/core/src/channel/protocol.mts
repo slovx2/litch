@@ -1,5 +1,5 @@
 // 界面与核心之间那条通道的约定：有哪些主题、增量长什么样、有哪些命令、线上发什么消息。
-// 通道只有两种用法：命令（一问一答，可取消）和订阅（先快照，后增量）。见设计文档 01 第六节。
+// 通道只有两种用法：命令（一问一答，可取消）和订阅（先快照，后增量）。
 import type {
   AppView,
   Bilingual,
@@ -94,7 +94,7 @@ export type Topic =
    */
   | { kind: 'diff'; deviceId: string; root: string; scope: DiffScope; sessionId: string | null }
   /**
-   * 远程会话在这台电脑上的动静（08 号设计 3.4、4.2）：还在跑的进程、找不到会话的待处理卡片。
+   * 远程会话在这台电脑上的动静：还在跑的进程、找不到会话的待处理卡片。
    * 顶栏标记一直订阅；什么都没有时两样都是空的
    */
   | { kind: 'machine' }
@@ -409,7 +409,7 @@ export interface Commands {
   /** 去掉一台远程设备。只是不再连它，那台机器上的东西一样不动 */
   'device.remove': { params: { deviceId: string }; result: Record<string, never> }
   /**
-   * 设备设置页上的两个开关：这台设备上的会话能不能用这台桌面端的内置浏览器、Computer Use（决 190）。
+   * 设备设置页上的两个开关：这台设备上的会话能不能用这台桌面端的内置浏览器、Computer Use。
    * 只改给了的那一项。存在桌面端；用的时候才查，已经建好的会话下一次调用就按新的来
    */
   'device.tools.set': {

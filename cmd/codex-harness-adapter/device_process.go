@@ -14,7 +14,7 @@ import (
 	"github.com/slovx2/litch/internal/hostplatform"
 )
 
-// 设备进程的启动命令行是定死的接口（设计文档 04 第二节）：
+// 设备进程的启动命令行是定死的接口，packages/device/src/args.mts 照同一份解析：
 //
 //	<node> <root>/packages/device/dist/device/src/main.mjs \
 //	  --listen unix://<home>/device/device.sock --state <home>/device \

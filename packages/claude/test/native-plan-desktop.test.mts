@@ -18,7 +18,6 @@ import { ProtocolClient } from './fixtures/protocol-client.mjs'
 // 自己在回合结束后问“要不要执行”，入口不再问一次。照官方桌面端的请求序列走：
 // 计划模式的回合带着计划条目正常结束（completed）；选“执行”是一个协作模式切回 default 的新回合，
 // 用户消息是固定的一行加计划全文；写意见是计划模式里的普通跟进消息，模型改了计划再交一次。
-// 桌面端的做法见 research/codex-desktop-analysis-2026-10-12/04-composer-approvals-plan.md 第 2.6.4 节。
 
 const PLAN = '# 计划\n\n1. 写 done.txt\n2. 读回来核对'
 const REVISED = '# 计划（改过）\n\n1. 先备份\n2. 写 done.txt'

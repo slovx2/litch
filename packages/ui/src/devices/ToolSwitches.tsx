@@ -1,9 +1,10 @@
-// 设备详情里的“用这台电脑的能力”：两个开关，这台设备上的会话能不能用这台桌面端的内置浏览器、Computer Use（决 190）。
+// 设备详情里的“用这台电脑的能力”：两个开关，这台设备上的会话能不能用这台桌面端的内置浏览器、Computer Use。
 // 开关存在桌面端、按设备记（核心的 device.tools.set），默认浏览器开、Computer Use 关；用的时候才查，
 // 关着的时候模型的调用当场失败、被告知来这里打开。这台桌面执行不了的那一项（DeviceView.tools 里是 null）不出开关。
 // 远程设备的 Computer Use 多一句说明：那台机器上的代理操作的是这台 Mac，没有“始终允许”。
 // Computer Use 还要这台 Mac 给两项系统权限：知道没给全时开关下面说一句，并能直接去设置页的 Computer Use 那一组。
 // 这里不为看一眼去拉起助手，只问在跑的那个、或者这次运行里上一次问到的（computer-bridge.ts 的 status(false)）。
+// 远程设备在这一组里还多一行“操作这台电脑（命令与文件）”（machine/MachineAccess.tsx）。
 import type { DeviceView } from '@litch/core'
 import { useEffect, useState } from 'react'
 import { requestSettings } from '../app/actions.ts'
@@ -11,6 +12,7 @@ import { useT } from '../app/appearance.ts'
 import { reasonOf } from '../app/errors.ts'
 import { useServices } from '../app/services.tsx'
 import type { MessageKey } from '../i18n/index.ts'
+import { MachineAccess } from '../machine/MachineAccess.tsx'
 import { type ComputerUseState, computerBridge } from '../settings/computer-bridge.ts'
 import { deviceHint } from '../settings/tools-logic.ts'
 
@@ -28,7 +30,7 @@ export function ToolSwitches({ device }: { device: DeviceView }) {
   const [failure, setFailure] = useState<string | null>(null)
   const rows = ROWS.filter((row) => device.tools[row.which] !== null)
   const permitted = usePermissions(device.tools.computer !== null)
-  if (rows.length === 0) return null
+  if (rows.length === 0 && !device.machine) return null
   const remote = device.kind === 'ssh'
 
   const flip = (which: Which, on: boolean) => {
@@ -83,6 +85,7 @@ export function ToolSwitches({ device }: { device: DeviceView }) {
           </div>
         )
       })}
+      <MachineAccess device={device} busy={busy} />
       {failure ? (
         <div className="devp-note err" role="alert">
           {failure}

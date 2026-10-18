@@ -1,4 +1,4 @@
-// 设备进程的启动参数。写法是定死的（设计文档 04 第二节），Go 层照这个拉起：
+// 设备进程的启动参数。写法是定死的，Go 层（cmd/codex-harness-adapter/device_process.go）照这个拉起：
 //   main.mjs --listen unix://<home>/device/device.sock --state <home>/device \
 //     --upstream claude-code=unix://<home>/claude-code/runtime.sock --upstream pi=unix://...
 // Windows 上套接字都是命名管道，地址写成 pipe://\\.\pipe\<名字>（internal/hostplatform/platform_windows.go）。

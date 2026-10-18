@@ -1,6 +1,6 @@
 // 应用自己的更新：三个端（macOS、Windows、安卓）都看同一份更新清单 litch-update.json。
 // 清单由发版流程（.github/workflows/release.yml）生成、挂在每一版的发布页上；客户端取“最新一版”下面的那一份，
-// 草稿和预发布不会被当成最新，人公开之前谁也收不到。设计见工作区 design/harness-client/07-auto-update.md。
+// 草稿和预发布不会被当成最新，人公开之前谁也收不到。
 //
 // 清单的样子：
 //   {

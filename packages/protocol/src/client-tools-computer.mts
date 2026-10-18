@@ -1,6 +1,5 @@
 // Computer Use 的工具定义（命名空间 litch_computer），建会话时放进 `thread/start.dynamicTools`。
-// 执行方是 Litch 桌面端（apps/desktop/src/computer-use/），macOS 和 Windows 各有一个助手。设计见
-// design/harness-client/05-browser-and-computer-use.md 第 3.3 节（macOS）和 09-windows-computer-use.md 第 3.6 节（Windows）。
+// 执行方是 Litch 桌面端（apps/desktop/src/computer-use/），macOS 和 Windows 各有一个助手。
 // 说明是写给模型看的，用英文。
 //
 // 九个工具的名字和参数两个平台一样（各 harness 的接入、卡片、结果组装都不用分平台），说明按桌面的平台出两份：

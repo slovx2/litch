@@ -123,7 +123,8 @@ export class ClaudePTranscriptRuntime implements ClaudeRuntime {
   ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
     const child = spawn(this.options.command, args, {
       cwd,
-      env: { ...process.env },
+      // 命令里调 litch-machine 时按它认会话
+      env: { ...process.env, LITCH_THREAD_ID: threadId },
       stdio: ['ignore', 'pipe', 'pipe'],
       detached: process.platform !== 'win32',
     })

@@ -1,6 +1,6 @@
 // swift-tools-version:5.9
 // Litch Computer Use：替 Litch 操作 macOS 上别的应用的原生助手（无界面，LSUIElement）。
-// 辅助功能、屏幕录制两项系统权限授给它，不授给 Litch.app（设计见 design/harness-client/05 第 3.3 节）。
+// 辅助功能、屏幕录制两项系统权限授给它，不授给 Litch.app。
 //
 // 两个目标：
 //   LitchComputerUseCore  不碰系统接口的纯逻辑（帧编解码、JSON-RPC、坐标换算、可访问性文本与差异、按键解析、

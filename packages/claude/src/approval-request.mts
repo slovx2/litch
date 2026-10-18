@@ -1,7 +1,7 @@
 // 工具调用的审批请求：发给客户端的参数，以及用户拒绝后交给模型的那句话。
 // 命令走命令审批，MCP 工具照原生 codex 的做法走征询的形状，其余的走文件改动审批。
-// “拒绝时附说明”是我们加的扩展（protocol/extensions/decline-with-note.json），按设计文档 03 第十五节，
-// 扩展内容只发给握手时声明过的连接：同一条请求备两份参数，标准的一份和带扩展的一份。
+// “拒绝时附说明”是我们加的扩展（protocol/extensions/decline-with-note.json），
+// 协议扩展的规矩是扩展内容只发给握手时声明过的连接，官方桌面端照常能用：同一条请求备两份参数，标准的一份和带扩展的一份。
 import {
   DECLINE_WITH_NOTE_DECISION,
   type ListedApprovalDecision,

@@ -14,6 +14,7 @@
 //
 // 压缩包里（最外面一层目录和压缩包同名）：
 //   bin/codex-harness-adapter   入口（scripts/adapter-launcher.sh）：找到真实的位置，把参数原样交给 libexec 里的命令行
+//   bin/litch-machine           同一个入口脚本，按这个名字调用时是 machine 子命令（短名）
 //   libexec/                    暂存出来的适配器，和桌面应用自带的那份是同一份实现（scripts/adapter-stage.mjs）
 //   install.sh                  安装脚本，装好之后升级、卸载还用得着
 //   LICENSE、THIRD_PARTY_NOTICES.md
@@ -73,9 +74,12 @@ export async function stageStandalone({ target, work, goFrom, deviceFrom }) {
     staticGo: true,
   })
   const launcher = join(root, 'bin', 'codex-harness-adapter')
+  const short = join(root, 'bin', 'litch-machine')
   cpSync(join(repo, 'scripts', 'adapter-launcher.sh'), launcher)
+  // 拷一份而不是链接：压缩包里不放链接，装的时候 ~/.local/bin 里的链接指向它
+  cpSync(join(repo, 'scripts', 'adapter-launcher.sh'), short)
   cpSync(join(repo, 'scripts', 'install.sh'), join(root, 'install.sh'))
-  for (const file of [launcher, join(root, 'install.sh')]) chmodSync(file, 0o755)
+  for (const file of [launcher, short, join(root, 'install.sh')]) chmodSync(file, 0o755)
   for (const file of ['LICENSE', 'THIRD_PARTY_NOTICES.md']) {
     cpSync(join(repo, file), join(root, file))
   }
@@ -91,6 +95,18 @@ export async function stageStandalone({ target, work, goFrom, deviceFrom }) {
     const reported = execFileSync(launcher, ['version'], { encoding: 'utf8' }).trim()
     if (reported !== `codex-harness-adapter ${version}`) {
       throw new Error(`入口报的版本是“${reported}”，应为 codex-harness-adapter ${version}`)
+    }
+    // 短名就是 machine 子命令。套接字指到不存在的地方：说明照样给，不去碰这台机器上在跑的设备服务
+    const help = execFileSync(short, ['--help'], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        CHA_LANG: 'en',
+        LITCH_DEVICE_SOCKET: join(root, 'no-such-device.sock'),
+      },
+    })
+    if (!help.startsWith('litch-machine: ')) {
+      throw new Error(`短名 litch-machine 的说明不对：${help.slice(0, 200)}`)
     }
   }
   return { root, target, version, staged }

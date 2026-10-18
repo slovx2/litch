@@ -5,7 +5,7 @@ import { parseAskUserQuestions } from '../src/user-questions.mjs'
 import { declaring } from './fixtures/extension-wire.mjs'
 import { type Connection, openStage, type Stage, type TurnScript } from './fixtures/in-process.mjs'
 
-// 一个会话多个订阅连接（设计文档 03 第八节 A6）之二：等人回答的请求。
+// 一个会话多个订阅连接之二：等人回答的请求。
 // 审批、提问、MCP 征询用同一个请求号发给全部订阅连接；先答的生效，拿着这条请求的其余连接收到
 // serverRequest/resolved，它们迟到的应答被丢弃、不产生任何效果。
 // 扩展内容（审批里的“拒绝并附说明”）按每条连接自己握手时的声明给。

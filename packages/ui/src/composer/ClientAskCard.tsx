@@ -1,10 +1,13 @@
 // 客户端工具（内置浏览器、Computer Use）要用户点头的卡片。不是对面的请求：是这台桌面端在替某个会话执行工具时
 // 自己要问的（打开一个没去过的网站、操作一个应用）。样子和审批卡片一样、排在同一处；文字按结构在这里拼，
 // 核心只给“问的是什么”。卡片上写明调用来自哪台设备：远程设备上的模型在用这台电脑时要显眼。
+// 远程设备操作这台电脑的命令与文件（ask.kind 是 machine）是另一个样子，和顶栏里的全局待处理共用
+// 一个组件（machine/MachineCard.tsx）。
 import type { ApprovalOption, ClientAskRequest } from '@litch/core'
 import { useEffect, useRef } from 'react'
 import { useT } from '../app/appearance.ts'
 import type { MessageKey } from '../i18n/index.ts'
+import { MachineSessionCard } from '../machine/MachineCard.tsx'
 import { useCardFocus } from './focus.ts'
 import { type CardProps, Foot, ownsKey, useRespond } from './respond.tsx'
 
@@ -17,6 +20,13 @@ const OPTION_TEXT: Record<ApprovalOption['role'], MessageKey> = {
 }
 
 export function ClientAskCard(props: CardProps<ClientAskRequest>) {
+  const { ask } = props.request
+  if (ask.kind === 'machine') return <MachineSessionCard {...props} ask={ask} />
+  return <SiteOrAppCard {...props} />
+}
+
+/** 内置浏览器、Computer Use 的那两种 */
+function SiteOrAppCard(props: CardProps<ClientAskRequest>) {
   const { request, waiting } = props
   const t = useT()
   const { busy, error, respond } = useRespond(props)
@@ -85,12 +95,7 @@ export function ClientAskCard(props: CardProps<ClientAskRequest>) {
               </div>
             ) : null}
           </>
-        ) : ask.kind === 'machine' ? (
-          // 08 号：远程设备操作本机。占位，丙线换成正式的样子
-          <div className="well">
-            <pre>{ask.command ?? ask.path ?? ''}</pre>
-          </div>
-        ) : (
+        ) : ask.kind === 'app' ? (
           <>
             <div className="req-meta">
               <span>
@@ -105,7 +110,7 @@ export function ClientAskCard(props: CardProps<ClientAskRequest>) {
             ) : null}
             {!ask.allowAlways ? <div className="req-why">{t('clientAsk.noAlways')}</div> : null}
           </>
-        )}
+        ) : null}
       </div>
       <div className="req-actions">
         {request.options.map((option) => (

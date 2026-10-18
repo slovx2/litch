@@ -1,4 +1,4 @@
-// 设备级的工作区第一次启用时从各引擎现有的项目导入（设计文档 03 第 6.1 节）：经一个真的设备、假的上游。
+// 设备级的工作区第一次启用时从各引擎现有的项目导入：经一个真的设备、假的上游。
 // 合并规则的边角在 workspace-merge.test.mts。
 import assert from 'node:assert/strict'
 import { rmSync } from 'node:fs'

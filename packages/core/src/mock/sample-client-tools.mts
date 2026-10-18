@@ -61,7 +61,7 @@ export function clientToolCall(
   }
 }
 
-/** 那一次调用要用户点头的卡片。远程设备上的会话操作应用时没有“始终允许”（决 190） */
+/** 那一次调用要用户点头的卡片。远程设备上的会话操作应用时没有“始终允许” */
 export function clientAskRequest(
   demo: ClientToolDemo,
   id: string,

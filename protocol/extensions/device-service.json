@@ -1,6 +1,6 @@
 {
   "extension": "deviceService",
-  "description": "常驻服务报自己是哪一份。适配器的常驻服务一旦起来，跑的就一直是起它那一刻的那份程序：应用升级了、另外装了新版，后台的还是旧的。这项扩展让客户端在聚合面上问得到“正在运行的是哪个版本、从哪份适配器起的、什么时候起的、怎么起的”，据此说得出“服务比应用旧”这样的话。它只是报告：能用什么功能仍然只看 runtime/info 的 device.extensions 和每个 harness 的声明，不拿版本号去猜。同一份来历在本机另有两处：<状态目录>/device/service.json 的 service 字段，和 codex-harness-adapter device-start 就绪行的 service 字段（那两处还多一项 options，是服务启动时带的参数，只在本机用）。类型在 packages/protocol/src/device-service.mts。规矩见 design/harness-client/03-adapter-device-service.md 第十五节。",
+  "description": "常驻服务报自己是哪一份。适配器的常驻服务一旦起来，跑的就一直是起它那一刻的那份程序：应用升级了、另外装了新版，后台的还是旧的。这项扩展让客户端在聚合面上问得到“正在运行的是哪个版本、从哪份适配器起的、什么时候起的、怎么起的”，据此说得出“服务比应用旧”这样的话。它只是报告：能用什么功能仍然只看 runtime/info 的 device.extensions 和每个 harness 的声明，不拿版本号去猜。同一份来历在本机另有两处：<状态目录>/device/service.json 的 service 字段，和 codex-harness-adapter device-start 就绪行的 service 字段（那两处还多一项 options，是服务启动时带的参数，只在本机用）。类型在 packages/protocol/src/device-service.mts。",
   "appliesTo": "只有聚合面，而且要这个设备服务是由适配器主进程拉起的（来历是主进程给的）：runtime/info 的 device.extensions 里列了 deviceService 才有。每个 harness 自己的入口（给官方 Codex 桌面端用的兼容面）上没有这个扩展的任何内容。",
   "declaration": {
     "description": "客户端握手时在 capabilities.litchExtensions 里列上 deviceService，runtime/info 的 device 里才有 service 字段。",

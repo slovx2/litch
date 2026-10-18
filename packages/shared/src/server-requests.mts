@@ -30,7 +30,7 @@ interface PendingRequest {
 export interface ServerRequestOptions {
   signal?: AbortSignal | undefined
   replayable: boolean
-  // 请求里有按连接握手时的声明才给的扩展内容时用（设计文档 03 第十五节）：送给某条连接之前问一遍，
+  // 请求里有按连接握手时的声明才给的扩展内容时用：送给某条连接之前问一遍，
   // 返回的就是这条连接收到的参数，返回 undefined 的收到 params 那一份。请求号和方法每条连接都一样。
   // 不给这一项时每条连接收到的是同一份，和加它之前逐字节相同。
   paramsFor?: ((peer: RpcPeer) => unknown) | undefined

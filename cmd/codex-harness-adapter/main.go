@@ -67,8 +67,16 @@ func main() {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	if err := run(ctx, os.Args[1:]); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+	args := os.Args[1:]
+	// 按短名 litch-machine 调用的就是 machine 子命令（machine.go）
+	if strings.TrimSuffix(filepath.Base(os.Args[0]), ".exe") == machineShortName {
+		args = append([]string{"machine"}, args...)
+	}
+	if err := run(ctx, args); err != nil {
+		// 自己已经把话说完了的（machine 子命令）只带退出码
+		if err.Error() != "" {
+			fmt.Fprintln(os.Stderr, err)
+		}
 		os.Exit(exitCode(err))
 	}
 }
@@ -93,6 +101,7 @@ func usage() string {
 			"公共选项: --home DIR --node PATH --root DIR\n"+
 			"SSH 入口: --ssh=on|off（默认 on）；off 时不启动给 Codex 桌面端的内置 SSH 服务，不占端口\n"+
 			"给 Litch 客户端: version 打印版本号；device-start 让常驻服务在后台运行（已在运行就直接成功）；device-proxy 把标准输入输出接到聚合面\n"+
+			"操作用户的 Litch 桌面端: machine（短名 litch-machine）经设备服务请连着的 Litch 执行命令、读写文件，详见 litch-machine --help\n"+
 			"停掉常驻服务: device-stop 请它平稳停下并等它退出（没在运行也算成功）；加 --if-idle 时，有回合或终端在跑、有客户端连着就不停，并说明是哪一种\n"+
 			"环境文件: <home>/env，每行 KEY=VALUE，前台和后台服务启动都会读取\n"+
 			"输出语言: 跟随系统语言；用 CHA_LANG=zh-CN 或 CHA_LANG=en 指定，可写在环境文件里\n"+
@@ -108,6 +117,7 @@ func usage() string {
 			"Common options: --home DIR --node PATH --root DIR\n"+
 			"SSH entries: --ssh=on|off (default on); off starts none of the built-in SSH servers for the Codex desktop app and takes no port\n"+
 			"For the Litch client: version prints the version; device-start keeps the service running in the background (succeeds at once if it already is); device-proxy connects stdin and stdout to the aggregate endpoint\n"+
+			"Operating the user's Litch desktop: machine (short name litch-machine) asks the connected Litch to run commands and read or write files through the device service; see litch-machine --help\n"+
 			"Stopping the service: device-stop asks it to shut down cleanly and waits for it to exit (succeeds when nothing is running); with --if-idle it leaves the service alone while a turn or a terminal is running or a client is connected, and says which\n"+
 			"Environment file: <home>/env, one KEY=VALUE per line, read by foreground runs and by the background service\n"+
 			"Output language: follows the system language; set CHA_LANG=zh-CN or CHA_LANG=en to choose, in the environment file if you like\n"+
@@ -125,6 +135,9 @@ func run(ctx context.Context, args []string) error {
 	}
 	if args[0] == "version" || args[0] == "--version" {
 		return runVersion(args[1:])
+	}
+	if args[0] == "machine" {
+		return runMachine(ctx, args[1:])
 	}
 	command := args[0]
 	switch command {
@@ -380,6 +393,9 @@ func (c configuration) environment() []string {
 	if c.native() {
 		values = map[string]string{}
 	}
+	// 设备服务的套接字：harness 跑的命令继承得到，litch-machine 靠它找到不在默认状态目录下的服务。
+	// 原生 codex 也给（它没有别的固定变量，这一个不碰它的数据），它的 shell 命令照它的环境策略继承
+	values[deviceSocketEnvironment] = c.deviceSocket()
 	result := []string{}
 	present := map[string]bool{}
 	for name, value := range c.settingsEnv {
@@ -390,7 +406,7 @@ func (c configuration) environment() []string {
 	}
 	for _, entry := range os.Environ() {
 		name, _, _ := strings.Cut(entry, "=")
-		if _, fixed := values[name]; fixed {
+		if _, fixed := values[name]; fixed || isMachineThreadVariable(name) {
 			continue
 		}
 		if _, configured := c.settingsEnv[name]; configured {
@@ -400,7 +416,7 @@ func (c configuration) environment() []string {
 		result = append(result, entry)
 	}
 	for name, value := range c.userEnv {
-		if _, fixed := values[name]; !fixed && !present[name] {
+		if _, fixed := values[name]; !fixed && !present[name] && !isMachineThreadVariable(name) {
 			result = append(result, name+"="+value)
 		}
 	}

@@ -276,7 +276,7 @@ try {
       'UsePAM no',
       // 临时目录的属主和权限不合 sshd 平时的要求
       'StrictModes no',
-      // 只许客户端这头的 -L：远端 localhost 的转发（决 191）要用；反向转发、套接字转发都不开
+      // 只许客户端这头的 -L：远端 localhost 的转发要用；反向转发、套接字转发都不开
       'AllowTcpForwarding local',
       'AllowStreamLocalForwarding no',
       'AllowAgentForwarding no',

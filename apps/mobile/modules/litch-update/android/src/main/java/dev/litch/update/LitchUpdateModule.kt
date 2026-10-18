@@ -16,7 +16,7 @@ import expo.modules.kotlin.modules.ModuleDefinition
 import java.io.File
 import java.security.MessageDigest
 
-// 应用自己的更新（设计见工作区 design/harness-client/07-auto-update.md）。下载在 JS 里用 expo-file-system 做，
+// 应用自己的更新。下载在 JS 里用 expo-file-system 做，
 // 这里只做 JS 做不了或做着太费的几件事：
 // - 算安装包的 SHA-256：安装包几十 MB，整个读进 JS 再算既慢又占内存，这里按块读；
 // - 看安装包的包名、版本、签名：签名和眼前这个应用不一样时系统一定装不上，先在这里说清楚，不让人去系统安装器里撞；

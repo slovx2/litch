@@ -1,5 +1,5 @@
 // 入口。由 Litch 主进程经 LaunchServices 打开（open -n -g -a），这样它自己是“责任进程”，
-// 辅助功能和屏幕录制的授权记在它名下，不记在 Litch 头上（实测见交回报告的 V0 ④）。
+// 辅助功能和屏幕录制的授权记在它名下，不记在 Litch 头上（实测过：直接 spawn 的话授权算在 Litch 头上）。
 //
 // 环境变量（主进程打开时经 open --env 交过来）：
 //   LITCH_COMPUTER_USE_DIR    套接字和日志所在的目录（默认 ~/Library/Application Support/Litch/computer-use）

@@ -1,5 +1,6 @@
 // 真正的核心：管着各台设备，对通道实现“命令”和“订阅”两个入口。
 // 它和模拟核心实现的是同一个接口，界面分不出对面是哪一个。
+import { clientToolFailure } from '../../protocol/src/client-tools.mjs'
 import type { ClientInfo } from '../../protocol/src/index.mjs'
 import { ChannelError, type Clock, type Commands } from './channel/protocol.mjs'
 import type { CoreHost, HostSink } from './channel/server.mjs'
@@ -11,8 +12,12 @@ import {
   type DeviceConfig,
 } from './device/device.mjs'
 import { channelFailure } from './device/faults.mjs'
+import { createMachineExecutor, type MachineExecutorOptions } from './device/machine/executor.mjs'
+import { SENSITIVE_PRESETS } from './device/machine/presets.mjs'
+import type { MachineExecutor, MachineFacts } from './device/machine/types.mjs'
 import {
   checkTarget,
+  cleanDeniedPaths,
   type DeviceStore,
   defaultName,
   hostLabel,
@@ -21,9 +26,15 @@ import {
   sameTarget,
   WIRES,
 } from './device/remote.mjs'
+import {
+  createMachineWiring,
+  MACHINE_DISABLED,
+  type MachineSettings,
+  type MachineWiring,
+} from './machine-wiring.mjs'
 import type { AppView, RemoteCheck, WireColor } from './model.mjs'
 import type { ClientToolPort } from './model-client-tools.mjs'
-import type { MachineActivityView } from './model-machine.mjs'
+import type { MachineAccessMode, MachineAccessView, MachineApproval } from './model-machine.mjs'
 import type { TerminalsAlive } from './model-terminal.mjs'
 import { phrase } from './phrase.mjs'
 import { outgoing } from './projection/outgoing.mjs'
@@ -41,8 +52,22 @@ export interface CoreOptions {
   store?: DeviceStore
   /** 通往主进程的客户端工具那一头（内置浏览器、Computer Use）。不给就是这台桌面什么都执行不了 */
   clientTools?: ClientToolPort
+  /**
+   * 远程设备上的会话操作这台电脑（litch_machine）。不给就不声明这个命名空间（测试、没有外壳的核心）
+   */
+  machine?: CoreMachineOptions
   log?(line: string): void
 }
+
+export interface CoreMachineOptions {
+  /** 这台桌面端自己的情况，外壳现查的（核心就住在这台电脑上） */
+  desktop: MachineFacts
+  /** 造执行器。不给就用真的（device/machine/executor.mts）；测试里换成假的 */
+  executor?(options: MachineExecutorOptions): MachineExecutor
+}
+
+const APPROVALS: readonly MachineApproval[] = ['session', 'each', 'never']
+const ACCESS_MODES: readonly MachineAccessMode[] = ['sensitive', 'open', 'custom']
 
 export interface Core extends CoreHost {
   /** 开始连接各台设备。各连各的，谁连不上都不耽误别人 */
@@ -77,10 +102,71 @@ export function createCore(options: CoreOptions): Core {
   let started = false
   const hub = createToolHub(options.clientTools, (line) => options.log?.(line))
   /** 一台设备的两个开关现在是什么：改过的按改的，没改过的按默认 */
-  const switchesOf = (deviceId: string) => ({
-    ...DEFAULT_TOOL_SWITCHES,
-    ...(saved.tools?.[deviceId] ?? {}),
-  })
+  const switchesOf = (deviceId: string) => {
+    const kept = saved.tools?.[deviceId] ?? {}
+    return {
+      browser: kept.browser ?? DEFAULT_TOOL_SWITCHES.browser,
+      computer: kept.computer ?? DEFAULT_TOOL_SWITCHES.computer,
+    }
+  }
+
+  // —— litch_machine：远程设备上的会话操作这台电脑 ——
+
+  /** 一台远程设备上“操作这台电脑”的设置：开关默认关，每个会话确认一次，禁止常用敏感位置 */
+  const machineSettingsOf = (deviceId: string): MachineSettings => {
+    const kept = saved.machine?.[deviceId] ?? {}
+    return {
+      enabled: saved.tools?.[deviceId]?.machine === true,
+      approval: kept.approval ?? 'session',
+      access: { mode: kept.access ?? 'sensitive', custom: kept.custom ?? [] },
+    }
+  }
+  const machineView = (deviceId: string): MachineAccessView => {
+    const settings = machineSettingsOf(deviceId)
+    return {
+      enabled: settings.enabled,
+      approval: settings.approval,
+      access: { mode: settings.access.mode, custom: [...settings.access.custom] },
+      presets: [...SENSITIVE_PRESETS],
+    }
+  }
+  const machineOptions = options.machine
+  const wiring: MachineWiring | null = machineOptions
+    ? createMachineWiring({
+        clock: options.clock,
+        executor: (machineOptions.executor ?? createMachineExecutor)({
+          clock: options.clock,
+          ...(options.log ? { log: options.log } : {}),
+        }),
+        desktop: machineOptions.desktop,
+        local: () =>
+          [...devices.values()].find((device) => device.view.kind === 'local')?.machineLink ?? null,
+        device(deviceId) {
+          const device = devices.get(deviceId)
+          if (device?.view.kind !== 'ssh') return null
+          return {
+            name: device.view.name,
+            host: device.view.host,
+            link: device.machineLink,
+            facts: () => device.machineFacts(),
+          }
+        },
+        settings: machineSettingsOf,
+        notify: (notice) => hub.notify(notice),
+        ...(store?.machineLog
+          ? { logStore: (deviceId: string) => store.machineLog?.(deviceId) ?? null }
+          : {}),
+        log: (line) => options.log?.(line),
+      })
+    : null
+  /** 握手时报的这台桌面端 */
+  const desktopInfo = machineOptions
+    ? {
+        hostname: machineOptions.desktop.hostname,
+        name: machineOptions.desktop.name,
+        system: machineOptions.desktop.system,
+      }
+    : null
 
   const build = (config: DeviceConfig): Device => {
     // 已经换掉或者去掉的设备再报什么都不理
@@ -93,6 +179,20 @@ export function createCore(options: CoreOptions): Core {
       ...(store?.terminals ? { terminalNotes: store.terminals(config.id) } : {}),
       tools: hub,
       toolSwitches: () => switchesOf(config.id),
+      // 只有远程设备有“操作这台电脑”
+      ...(wiring && desktopInfo && config.kind === 'ssh'
+        ? {
+            machine: {
+              view: () => machineView(config.id),
+              desktop: desktopInfo,
+              call: (input, session) => wiring.call(config.id, input, session),
+              turnEnded: (threadId, turnId) => wiring.turnEnded(config.id, threadId, turnId),
+              presence(online) {
+                if (current()) wiring.presence(config.id, online)
+              },
+            },
+          }
+        : {}),
       hooks: {
         device(view) {
           if (!current()) return
@@ -166,6 +266,13 @@ export function createCore(options: CoreOptions): Core {
     const entry = saved.remotes.find((remote) => remote.id === deviceId)
     if (!entry) throw new ChannelError('rejected', '本机设备不能这样改')
     return entry
+  }
+
+  /** “操作这台电脑”只有远程设备有，这台桌面端也得执行得了 */
+  const machineDevice = (deviceId: string): void => {
+    const device = deviceOf(deviceId)
+    if (device.view.kind !== 'ssh') throw new ChannelError('invalid', '本机设备没有这一项')
+    if (!wiring) throw new ChannelError('unsupported', '这台桌面端执行不了 litch_machine')
   }
 
   const wireOf = (value: unknown): WireColor => {
@@ -468,7 +575,10 @@ export function createCore(options: CoreOptions): Core {
             device.update({ name: next.name, wire: next.wire })
             return {}
           }
-          // 换了一台机器：原来那条连接和它的侧栏都不要了，按新的配置重新来
+          // 换了一台机器：原来那条连接和它的侧栏都不要了，按新的配置重新来；
+          // 原来那台在这台电脑上起的进程、挂着的卡片、操作记录也不要了
+          device.stopMachine(clientToolFailure('disabled', MACHINE_DISABLED))
+          wiring?.forget(deviceId)
           device.stop()
           device.terminals.dispose()
           store?.forget(deviceId)
@@ -480,34 +590,103 @@ export function createCore(options: CoreOptions): Core {
           return {}
         }
         case 'device.tools.set': {
-          const { deviceId, browser, computer } = params as Commands['device.tools.set']['params']
+          const { deviceId, browser, computer, machine } =
+            params as Commands['device.tools.set']['params']
           const device = deviceOf(deviceId)
+          if (typeof machine === 'boolean') machineDevice(deviceId)
           const before = saved.tools?.[deviceId] ?? {}
           const next = {
             ...before,
             ...(typeof browser === 'boolean' ? { browser } : {}),
             ...(typeof computer === 'boolean' ? { computer } : {}),
+            ...(typeof machine === 'boolean' ? { machine } : {}),
           }
           saved = { ...saved, tools: { ...(saved.tools ?? {}), [deviceId]: next } }
           persist()
+          // 关掉“操作这台电脑”的那一刻（08 号 3.1）：进行中的调用回失败、卡片撤掉、它起的进程都结束
+          if (machine === false && before.machine === true) {
+            device.stopMachine(clientToolFailure('disabled', MACHINE_DISABLED))
+            wiring?.disabled(deviceId)
+          }
           // 开关只在执行时查：已经建好的会话里的调用，下一次就按新的来
           device.update({})
+          return {}
+        }
+        case 'device.machine.set': {
+          const { deviceId, approval, access } = params as Commands['device.machine.set']['params']
+          const device = deviceOf(deviceId)
+          machineDevice(deviceId)
+          const before = saved.machine?.[deviceId] ?? {}
+          const next = { ...before }
+          if (approval !== undefined) {
+            if (!APPROVALS.includes(approval)) throw new ChannelError('invalid', '没有这种审批方式')
+            next.approval = approval
+          }
+          if (access !== undefined) {
+            if (!access || !ACCESS_MODES.includes(access.mode)) {
+              throw new ChannelError('invalid', '没有这种访问范围')
+            }
+            next.access = access.mode
+            if (Array.isArray(access.custom)) next.custom = cleanDeniedPaths(access.custom)
+            else if (access.mode === 'custom' && before.custom === undefined) {
+              // 第一次切到自定义：从内置名单起步
+              next.custom = [...SENSITIVE_PRESETS]
+            }
+          }
+          saved = { ...saved, machine: { ...(saved.machine ?? {}), [deviceId]: next } }
+          persist()
+          device.update({})
+          return {}
+        }
+        case 'machine.answer': {
+          const { pendingId, optionId, note } = params as Commands['machine.answer']['params']
+          if (!wiring?.answer(String(pendingId), String(optionId), note ?? null)) {
+            throw new ChannelError('notFound', '这张卡片已经不在了')
+          }
+          return {}
+        }
+        case 'machine.process.kill': {
+          const { processId } = params as Commands['machine.process.kill']['params']
+          if (!wiring?.kill(String(processId))) {
+            throw new ChannelError('notFound', '这个进程已经不在了')
+          }
+          return {}
+        }
+        case 'machine.stopAll': {
+          const { deviceId } = params as Commands['machine.stopAll']['params']
+          wiring?.stopAll(typeof deviceId === 'string' ? deviceId : undefined)
+          return {}
+        }
+        case 'machine.log': {
+          const { deviceId } = params as Commands['machine.log']['params']
+          deviceOf(deviceId)
+          return { entries: wiring?.logOf(deviceId) ?? [] }
+        }
+        case 'machine.log.clear': {
+          const { deviceId } = params as Commands['machine.log.clear']['params']
+          deviceOf(deviceId)
+          wiring?.clearLog(deviceId)
           return {}
         }
         case 'device.remove': {
           const { deviceId } = params as Commands['device.remove']['params']
           const device = deviceOf(deviceId)
           savedRemote(deviceId)
-          // 它的两个开关也不留
+          // 它的两个开关、“操作这台电脑”的设置也不留
           const tools = { ...(saved.tools ?? {}) }
           delete tools[deviceId]
+          const machine = { ...(saved.machine ?? {}) }
+          delete machine[deviceId]
           saved = {
             localWire: saved.localWire,
             remotes: saved.remotes.filter((entry) => entry.id !== deviceId),
             ...(Object.keys(tools).length > 0 ? { tools } : {}),
+            ...(Object.keys(machine).length > 0 ? { machine } : {}),
           }
           persist()
           devices.delete(deviceId)
+          device.stopMachine(clientToolFailure('disabled', MACHINE_DISABLED))
+          wiring?.forget(deviceId)
           device.stop()
           device.terminals.dispose()
           store?.forget(deviceId)
@@ -683,9 +862,10 @@ export function createCore(options: CoreOptions): Core {
           appSinks.delete(sink)
         }
       }
-      // 08 号：远程会话在这台电脑上的动静。现在是空的占位，乙线接上执行器后换成真的
+      // 远程会话在这台电脑上的动静（08 号 3.4、4.2）。这台桌面端执行不了 litch_machine 时一直是空的
       if (topic.kind === 'machine') {
-        sink.snapshot({ running: [], pending: [] } satisfies MachineActivityView)
+        if (wiring) return wiring.subscribe(sink)
+        sink.snapshot({ running: [], pending: [] })
         return () => {}
       }
       const device = deviceOf(topic.deviceId)

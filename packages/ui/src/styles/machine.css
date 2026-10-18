@@ -1,0 +1,477 @@
+/* 远程设备操作这台电脑：设备详情里那一行、卡片、顶栏标记和它的弹层。
+   只用皮肤的变量；皮肤专属的规则写在各自的皮肤文件里 */
+
+/* ---------- 设备详情里的一行 ---------- */
+/* 打开之后下面展开的几样，左边一道细线把它们和开关那一行连在一起 */
+.mach-opts {
+  --mach-name: 64px;
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 6px;
+  padding: 2px 0 2px 12px;
+  border-left: 2px solid var(--line-1);
+}
+.mach-opt {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+}
+.mach-opt-name {
+  flex: none;
+  width: var(--mach-name);
+  font-size: 12px;
+  color: var(--ink-3);
+}
+/* 名单、路径列表跟在“范围”那一排下面，和选项对齐 */
+.mach-sub {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-left: calc(var(--mach-name) + 12px);
+  min-width: 0;
+}
+.mach-fold {
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.mach-paths {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-width: 520px;
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--line-1);
+  border-radius: var(--r2);
+  background: var(--sunken);
+}
+.mach-path {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 26px;
+  padding: 2px 4px 2px 10px;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.mach-path + .mach-path {
+  border-top: 1px solid var(--line-1);
+}
+.mach-path > .ell {
+  flex: 1 1 0;
+}
+.mach-path > .mini {
+  align-self: center;
+}
+.mach-add {
+  display: flex;
+  gap: 6px;
+  max-width: 520px;
+}
+.mach-add .req-input {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 28px;
+  font-size: 12px;
+}
+.mach-empty {
+  padding: 2px 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-3);
+}
+.mach-empty.err {
+  color: var(--err);
+}
+/* 设了“不确认”：这一行左边一道醒目的边 */
+.mach-row[data-never] {
+  box-shadow: inset 2px 0 0 var(--err);
+}
+.mach-never {
+  font-weight: 500;
+}
+.mach-warn {
+  margin-top: -4px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--err);
+}
+
+/* 最近的操作：和上面的选项隔一道线 */
+.mach-log {
+  margin-left: 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--line-1);
+}
+.mach-log-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+}
+.mach-log-head > .mini {
+  align-self: center;
+}
+.mach-entries {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid var(--line-1);
+  border-radius: var(--r2);
+}
+.mach-entry {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  padding: 5px 10px;
+  font-size: 12px;
+  line-height: 18px;
+}
+.mach-entry + .mach-entry {
+  border-top: 1px solid var(--line-1);
+}
+.mach-entry[data-flagged] {
+  box-shadow: inset 2px 0 0 var(--err);
+}
+.mach-when {
+  flex: none;
+  width: 40px;
+  font: 11px / 18px var(--mono);
+  color: var(--ink-3);
+}
+.mach-what {
+  flex: 1 1 220px;
+  min-width: 0;
+  display: flex;
+  gap: 6px;
+  color: var(--ink);
+}
+.mach-tool {
+  flex: none;
+  color: var(--ink-3);
+}
+.mach-who {
+  flex: 0 1 auto;
+  max-width: 100%;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.mach-flag-mark {
+  flex: none;
+  font-size: 11px;
+  color: var(--err);
+}
+
+/* ---------- 卡片 ---------- */
+/* 来自哪台设备：远程的醒目 */
+.mach-from {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.mach-from.remote {
+  padding: 5px 8px;
+  border-radius: var(--r1);
+  background: color-mix(in srgb, var(--err) 9%, transparent);
+  color: var(--err);
+}
+.mach-from .mono {
+  font-size: 11px;
+}
+/* 不知道是哪个会话：照实写，换一种颜色 */
+.req-meta b.mach-unknown,
+.mach-unknown {
+  color: var(--wait);
+}
+/* 长命令先折起来：只露头几行，点“展开全部”看全 */
+.req-body .mach-cmd.shut {
+  /* 正好露出 FOLD_LINES（4）行：行高 19、上下各垫 8、边框各 1（logic.ts） */
+  max-height: calc(4 * 19px + 18px);
+  overflow: hidden;
+}
+.req-body .mach-cmd:not(.shut) {
+  max-height: none;
+}
+.mach-more {
+  font: inherit;
+}
+.mach-target {
+  display: flex;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r1);
+  background: var(--sunken);
+  font-size: 12px;
+  line-height: 19px;
+}
+.mach-target-name {
+  flex: none;
+  color: var(--ink-3);
+}
+.mach-target .mono {
+  overflow-wrap: anywhere;
+}
+.mach-copy {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 10px;
+  margin: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r1);
+  background: var(--sunken);
+  font-size: 12px;
+  line-height: 19px;
+}
+.mach-copy dt {
+  color: var(--ink-3);
+}
+.mach-copy dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+/* 命令里提到了禁止的位置：整张卡片换成出错的颜色，列出是哪几处 */
+.req.mach-card[data-flagged] {
+  border-color: color-mix(in srgb, var(--err) 70%, transparent);
+}
+.mach-flagged {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  padding: 6px 8px;
+  border: 1px solid color-mix(in srgb, var(--err) 45%, transparent);
+  border-radius: var(--r1);
+  background: color-mix(in srgb, var(--err) 9%, transparent);
+  color: var(--err);
+  font-size: 12px;
+  line-height: 18px;
+}
+.mach-flagged-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.mach-flagged code {
+  padding: 0 5px;
+  border: 1px solid color-mix(in srgb, var(--err) 45%, transparent);
+  border-radius: var(--r1);
+  font: 11px / 17px var(--mono);
+}
+.mach-expires {
+  flex: none;
+  font: 11px / 16px var(--mono);
+  color: var(--ink-3);
+}
+.mach-expires.urgent {
+  color: var(--err);
+}
+
+/* ---------- 顶栏标记 ---------- */
+.mach-mark-wrap {
+  position: relative;
+  flex: none;
+}
+.mach-mark {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  font-size: 12px;
+  white-space: nowrap;
+  color: var(--ink-2);
+}
+.mach-mark[data-tone="run"] {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+}
+.mach-mark[data-tone="wait"] {
+  border-color: color-mix(in srgb, var(--wait) 60%, transparent);
+  background: color-mix(in srgb, var(--wait) 13%, transparent);
+  color: var(--wait);
+}
+.mach-mark[data-tone="never"] {
+  border-color: color-mix(in srgb, var(--err) 60%, transparent);
+  background: color-mix(in srgb, var(--err) 10%, transparent);
+  color: var(--err);
+}
+/* 有设备设了“不确认”，同时又有别的事：右上角一个出错颜色的小点，一直在 */
+.mach-mark[data-never]:not([data-tone="never"])::after {
+  content: "";
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--err);
+}
+.mach-mark:hover {
+  filter: brightness(1.05);
+}
+.mach-mark[aria-expanded="true"] {
+  box-shadow: 0 0 0 1px currentColor;
+}
+
+/* 弹层：往下弹、靠右对齐。顶栏是能拖动窗口的地方，弹层里不能 */
+.mach-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  width: min(460px, calc(100vw - 24px));
+  max-height: calc(100vh - 64px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  background: var(--overlay);
+  box-shadow: var(--shadow);
+  color: var(--ink);
+  user-select: text;
+  -webkit-app-region: no-drag;
+  cursor: default;
+}
+.mach-pop-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  font-size: 13px;
+}
+.mach-pop-ask,
+.mach-pop-never {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  padding: 6px 8px;
+  border-radius: var(--r1);
+  background: color-mix(in srgb, var(--err) 9%, transparent);
+  font-size: 12px;
+  line-height: 18px;
+}
+.mach-pop-never {
+  color: var(--err);
+}
+.mach-pop-note {
+  font-size: 12px;
+  line-height: 18px;
+}
+.mach-pop-note.err {
+  color: var(--err);
+}
+.mach-pop-sec h3 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.mach-count {
+  font: 11px / 16px var(--mono);
+  color: var(--ink-3);
+}
+.mach-pop-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.mach-procs {
+  border: 1px solid var(--line-1);
+  border-radius: var(--r2);
+  background: var(--raised);
+}
+.mach-procs + .mach-procs {
+  margin-top: 8px;
+}
+.mach-procs-dev {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line-1);
+  font-size: 12px;
+}
+.mach-dim {
+  color: var(--ink-3);
+}
+.mach-proc-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.mach-proc {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 10px;
+}
+.mach-proc + .mach-proc {
+  border-top: 1px solid var(--line-1);
+}
+.mach-proc-main {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.mach-proc-cmd {
+  font: 12px / 18px var(--mono);
+  color: var(--ink);
+}
+.mach-proc-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--ink-3);
+}
+.mach-proc-meta .linkish {
+  max-width: 220px;
+  font-size: 11px;
+}
+.mach-kill {
+  flex: none;
+  height: 24px;
+  font-size: 12px;
+  color: var(--err);
+}
+
+/* 几处加粗的名字放在最后，按选择器的具体程度从低到高排，免得前后打架 */
+.mach-from b,
+.mach-pop-head b,
+.mach-procs-dev b {
+  font-weight: 600;
+}
+.mach-from b {
+  color: var(--ink);
+}
+.mach-copy dd b {
+  font-weight: 600;
+}
+.mach-from.remote b {
+  color: var(--err);
+}

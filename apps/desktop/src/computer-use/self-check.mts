@@ -47,7 +47,7 @@ export async function checkAdhoc(appPath: string, userData: string): Promise<str
     assert.equal(hello.teamId, null)
     report.push(`握手：进程 ${hello.pid}，版本 ${hello.version}，校验方式 ${hello.auth}`)
 
-    // V0 ④ 的守护：经 open 起的助手父进程是 launchd，责任进程是它自己
+    // 守住授权的归属：经 open 起的助手父进程是 launchd，责任进程是它自己
     const diagnostics = (await client.request('diagnostics')) as Record<string, unknown>
     assert.equal(diagnostics.ppid, 1, '助手的父进程应当是 launchd')
     assert.equal(diagnostics.responsibleIsSelf, true, '助手应当是自己的责任进程')

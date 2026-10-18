@@ -46,7 +46,7 @@ export interface InstalledBrowser {
   host: ElectronBrowserHost
   sites: SiteBook
   settings: BrowserSettings
-  /** 远端 localhost 的端口转发（决 191） */
+  /** 远端 localhost 的端口转发 */
   forwarding: BrowserForwarding
 }
 
@@ -103,7 +103,7 @@ export function installBrowser(options: {
 }): InstalledBrowser {
   const host = createElectronHost()
   const sites = createSiteBook(sitesFile(options.userData))
-  // 远端 localhost：会话在 ssh 设备上时经 ssh 转发到这台电脑的回环上再打开（决 191）
+  // 远端 localhost：会话在 ssh 设备上时经 ssh 转发到这台电脑的回环上再打开
   const forwarding = createBrowserForwarding({
     targetOf: deviceTargets(options.userData),
     tabs: () => host.list(),

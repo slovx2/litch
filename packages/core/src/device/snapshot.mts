@@ -4,7 +4,7 @@ import type { DeviceView, HarnessView, WorkspaceView } from '../model.mjs'
 
 /**
  * 一台设备上次留下的侧栏：对面是哪种、有哪些 harness、有哪些工作区、有哪些会话（只有元数据，不带回合）。
- * 设备还没连上或者连不上时，拿它只读地显示；连上之后以对面为准整体换掉（设计文档 01 第十一节）。
+ * 设备还没连上或者连不上时，拿它只读地显示；连上之后以对面为准整体换掉。
  * 完整模式下会话对象上带着它属于哪个 harness（聚合面打的 `harness`），原样存着。
  */
 export interface DeviceSnapshot {

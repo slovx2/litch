@@ -28,7 +28,7 @@ const builtin = (id: string, risk: PermissionPreset['risk']): PermissionPreset =
 
 /**
  * 没有能力声明时用的权限预设：Codex 协议内置的三档。
- * harness 声明了自己的预设之后以它的为准（设计文档 03 第 6.4 节）。
+ * harness 声明了自己的预设之后以它的为准。
  */
 export const BUILTIN_PERMISSIONS: readonly PermissionPreset[] = [
   builtin(':read-only', 'low'),

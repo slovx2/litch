@@ -1,7 +1,7 @@
 // 客户端工具的远程端到端（补上 client:check:tools 只经“只装了 codex”的假远程跑 echo 的缺口）：
 // 假远程机器（scripts/client-ssh-fixture.mjs）上的完整设备服务，经系统的 ssh 连过去；桌面这一头起一次不开窗口的
 // Electron（src/probe-tools-remote.mts），真的内置浏览器和 litch_echo。模型调 echo、用浏览器打开远端的
-// localhost 页面（经 ssh -L 转发，决 191），见那份探针开头。
+// localhost 页面（经 ssh -L 转发），见那份探针开头。
 // 远端的网页在这里起（假远程机器和这台电脑是同一台，网页只在回环上听），记下每个请求的路径和 Host 头。
 // 要先 npm run build（根目录，要有 go）和 npm run build --prefix packages/pi。
 //   npm run check:tools:remote

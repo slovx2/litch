@@ -1,6 +1,7 @@
 // 应用的授权：本会话允许的记在内存里，“始终允许”的存在桌面端用户数据目录的 computer-use-approvals.json。
 // 设置页读、删“始终允许”的清单用这里导出的 list、remove。
-// 远程设备的会话（invocation.device.kind === 'ssh'）不认“始终允许”：每个会话每个应用都要问（决 190）。
+// 远程设备的会话（invocation.device.kind === 'ssh'）不认“始终允许”：每个会话每个应用都要问。
+// 模型在别的机器上，不让一次“始终允许”让它一直能操作这台电脑上的应用。
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 
