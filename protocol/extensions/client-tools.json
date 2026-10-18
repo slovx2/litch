@@ -54,7 +54,23 @@
       "name": "clientTools",
       "description": "列了它表示经这个入口（或聚合面）连到这个 harness 时，litch_ 开头的命名空间的调用按本扩展挑执行方。没列的（dsh）别带这类工具建会话：带了也用不了。"
     }
+,
+    {
+      "kind": "Method",
+      "method": "litch/clientTool/invoke",
+      "description": "客户端发给聚合面（设备进程）的请求。调用者是这台机器上的一个进程（适配器的 machine 子命令，短名 litch-machine），不是 Litch，不必声明 clientTools；套接字只有属主能连，不另做认证。设备进程按 threadId 找发起那个回合的、声明了这个命名空间的 Litch 连接；找不到会话时只有一条声明了的就交给它，不止一条回 ambiguous（说明里列出各台的 desktop.hostname）；给了 desktop 就只交给主机名对得上的那条；一条都没有回 noExecutor。交出去用 litch/clientTool/call；调用者断开时设备进程撤回那次调用（serverRequest/resolved）。应答就是执行方的应答。",
+      "params": { "$ref": "#/definitions/InvokeParams" },
+      "response": { "$ref": "#/definitions/ToolCallResponse" }
+    },
+    {
+      "kind": "ServerRequest",
+      "method": "litch/clientTool/call",
+      "description": "设备进程发给按 litch/clientTool/invoke 挑出来的那条 Litch 连接，只发给声明了这个命名空间的连接，没声明的连接上不会出现。和 item/tool/call 的区别只是不一定来自某个回合（threadId、turnId 可以是 null）：执行方找不到会话时把卡片放进全局待处理。应答同 item/tool/call；执行方断开时设备进程替它回 failed。",
+      "params": { "$ref": "#/definitions/DetachedCallParams" },
+      "response": { "$ref": "#/definitions/ToolCallResponse" }
+    }
   ],
+  "machineParts": "下面 parts 里的 litch/clientTool/invoke、litch/clientTool/call 是 2026-10-18 为 litch_machine 加的（08 号设计第五节），让不支持动态工具的 harness 经设备上的命令也能用。",
   "definitions": {
     "ClientToolsDeclaration": {
       "type": "object",
@@ -64,7 +80,40 @@
           "type": "array",
           "items": { "type": "string", "pattern": "^litch_" },
           "uniqueItems": true
-        }
+        },
+        "desktop": { "$ref": "#/definitions/DesktopInfo" }
+      }
+    },
+    "DesktopInfo": {
+      "description": "Litch 桌面端报的自己是哪台（声明了 litch_machine 时带），设备进程按它列出、挑选桌面端。",
+      "type": "object",
+      "required": ["hostname"],
+      "properties": { "hostname": { "type": "string" }, "name": { "type": "string" } }
+    },
+    "InvokeParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["namespace", "tool", "arguments", "threadId"],
+      "properties": {
+        "namespace": { "type": "string", "pattern": "^litch_" },
+        "tool": { "type": "string" },
+        "arguments": true,
+        "threadId": { "type": ["string", "null"] },
+        "desktop": { "type": "string" }
+      }
+    },
+    "DetachedCallParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["callId", "namespace", "tool", "arguments", "threadId", "turnId", "harness"],
+      "properties": {
+        "callId": { "type": "string" },
+        "namespace": { "type": "string", "pattern": "^litch_" },
+        "tool": { "type": "string" },
+        "arguments": true,
+        "threadId": { "type": ["string", "null"] },
+        "turnId": { "type": ["string", "null"] },
+        "harness": { "type": ["string", "null"] }
       }
     },
     "ToolCallParams": {
@@ -109,7 +158,7 @@
       }
     },
     "FailureKind": {
-      "enum": ["noExecutor", "disabled", "permission", "declined", "invalid", "failed"]
+      "enum": ["noExecutor", "disabled", "permission", "declined", "invalid", "failed", "blocked", "ambiguous"]
     },
     "FailureResponse": {
       "type": "object",
@@ -129,7 +178,7 @@
                 "type": { "const": "inputText" },
                 "text": {
                   "type": "string",
-                  "pattern": "^\\[litch:(noExecutor|disabled|permission|declined|invalid|failed)\\] "
+                  "pattern": "^\\[litch:(noExecutor|disabled|permission|declined|invalid|failed|blocked|ambiguous)\\] "
                 }
               }
             }

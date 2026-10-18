@@ -103,6 +103,7 @@ export function sampleApp(_lang: SampleLang, now: number): AppView {
       ...sampleLocalService(now),
       // 设备设置页的两个开关：默认浏览器开、Computer Use 关（决 190）
       tools: { browser: true, computer: false },
+      machine: null,
     },
     {
       id: 'build',
@@ -126,6 +127,7 @@ export function sampleApp(_lang: SampleLang, now: number): AppView {
       service: sampleRemoteService(now),
       upgrade: null,
       tools: { browser: true, computer: false },
+      machine: null,
     },
     {
       id: 'nas',
@@ -150,6 +152,7 @@ export function sampleApp(_lang: SampleLang, now: number): AppView {
       service: null,
       upgrade: null,
       tools: { browser: true, computer: false },
+      machine: null,
     },
     {
       id: 'gpu',
@@ -181,6 +184,7 @@ export function sampleApp(_lang: SampleLang, now: number): AppView {
       service: null,
       upgrade: null,
       tools: { browser: true, computer: false },
+      machine: null,
     },
   ]
   return { devices }

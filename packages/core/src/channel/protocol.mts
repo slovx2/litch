@@ -38,6 +38,13 @@ import type {
 } from '../model-diff.mjs'
 import type { DirectoryView, FileContent, FileSearchView } from '../model-files.mjs'
 import type {
+  MachineAccessMode,
+  MachineActivityView,
+  MachineApproval,
+  MachineLogEntry,
+  MachineOp,
+} from '../model-machine.mjs'
+import type {
   DiagnosticsView,
   HarnessRestartResult,
   LogSource,
@@ -86,6 +93,11 @@ export type Topic =
    * 设备没连上时订阅照样成立，连上之后才有内容
    */
   | { kind: 'diff'; deviceId: string; root: string; scope: DiffScope; sessionId: string | null }
+  /**
+   * 远程会话在这台电脑上的动静（08 号设计 3.4、4.2）：还在跑的进程、找不到会话的待处理卡片。
+   * 顶栏标记一直订阅；什么都没有时两样都是空的
+   */
+  | { kind: 'machine' }
 
 export type TopicKind = Topic['kind']
 
@@ -97,6 +109,7 @@ export interface TopicData {
   terminals: TerminalsView
   terminal: TerminalStreamView
   diff: DiffView
+  machine: MachineActivityView
 }
 
 // ---------- 增量 ----------
@@ -163,6 +176,7 @@ export interface TopicOp {
   terminals: TerminalsOp
   terminal: TerminalOp
   diff: DiffOp
+  machine: MachineOp
 }
 
 // ---------- 命令 ----------
@@ -399,9 +413,33 @@ export interface Commands {
    * 只改给了的那一项。存在桌面端；用的时候才查，已经建好的会话下一次调用就按新的来
    */
   'device.tools.set': {
-    params: { deviceId: string; browser?: boolean; computer?: boolean }
+    params: { deviceId: string; browser?: boolean; computer?: boolean; machine?: boolean }
     result: Record<string, never>
   }
+  /**
+   * 远程设备“操作这台电脑”的审批方式和访问范围（08 号 3.2、3.3）。只改给了的那几项；
+   * 开关本身走 device.tools.set。本机设备以 invalid 结束
+   */
+  'device.machine.set': {
+    params: {
+      deviceId: string
+      approval?: MachineApproval
+      access?: { mode: MachineAccessMode; custom?: string[] }
+    }
+    result: Record<string, never>
+  }
+  /** 答全局待处理里的一张卡片。已经答过、过期了以 notFound 结束 */
+  'machine.answer': {
+    params: { pendingId: string; optionId: string; note?: string }
+    result: Record<string, never>
+  }
+  /** 结束顶栏弹层里的一个进程 */
+  'machine.process.kill': { params: { processId: string }; result: Record<string, never> }
+  /** 全部停：结束远程会话在这台电脑上起的所有进程、撤掉所有待处理卡片。给了 deviceId 只停这台设备的 */
+  'machine.stopAll': { params: { deviceId?: string }; result: Record<string, never> }
+  /** 一台设备最近的操作记录，新的在前 */
+  'machine.log': { params: { deviceId: string }; result: { entries: MachineLogEntry[] } }
+  'machine.log.clear': { params: { deviceId: string }; result: Record<string, never> }
   /**
    * 改设备服务的设置。一次写入要么全部生效，要么一项都不写；expectedVersion 是界面看到的那个版本号。
    * 别处先改过了（版本号对不上）就以 conflict 结束：什么都没写，最新的值已经经订阅到了界面，不会悄悄覆盖。

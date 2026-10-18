@@ -358,6 +358,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     service,
     upgrade,
     tools: toolSwitchesView(),
+    // 08 号：远程设备“操作这台电脑”。占位，乙线接上设置后换成真的
+    machine: null,
   })
 
   /** 设置页上的两个开关：这台桌面执行不了的那一项是 null，不出开关 */

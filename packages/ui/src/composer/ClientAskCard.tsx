@@ -85,6 +85,11 @@ export function ClientAskCard(props: CardProps<ClientAskRequest>) {
               </div>
             ) : null}
           </>
+        ) : ask.kind === 'machine' ? (
+          // 08 号：远程设备操作本机。占位，丙线换成正式的样子
+          <div className="well">
+            <pre>{ask.command ?? ask.path ?? ''}</pre>
+          </div>
         ) : (
           <>
             <div className="req-meta">

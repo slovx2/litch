@@ -30,6 +30,7 @@ import type {
   SidebarView,
   TodoStep,
 } from '../model.mjs'
+import type { MachineActivityView } from '../model-machine.mjs'
 import type { TerminalsAlive } from '../model-terminal.mjs'
 import { phrase } from '../phrase.mjs'
 import { projectItem } from '../projection/items.mjs'
@@ -1171,6 +1172,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         service: null,
         upgrade: null,
         tools: { browser: true, computer: false },
+        machine: null,
       }
       app.devices.push(device)
       sidebars.set(device.id, { deviceId: device.id, workspaces: [], sessions: [], archived: null })
@@ -1728,6 +1730,11 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         return terminals.subscribe(topic, sink)
       }
       if (topic.kind === 'diff') return diffs.subscribe(topic, sink)
+      // 08 号：远程会话在这台电脑上的动静。占位，丙线换成模拟数据
+      if (topic.kind === 'machine') {
+        sink.snapshot({ running: [], pending: [] } satisfies MachineActivityView)
+        return () => {}
+      }
       const key = topicKey(topic)
       if (topic.kind === 'app') {
         sink.snapshot(app)
