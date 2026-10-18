@@ -16,11 +16,12 @@ use windows::Win32::UI::HiDpi::GetDpiForWindow;
 use windows::Win32::UI::WindowsAndMessaging::*;
 
 const WM_WAKE: u32 = WM_APP + 2;
-/// 100% 缩放下的基准尺寸（物理像素；实际按目标窗口所在显示器的 DPI 放大）
-const BORDER_BASE: f32 = 4.0; // 边框粗细
-const TAB_H_BASE: f32 = 32.0; // 提示标签高
-const FONT_BASE: f32 = 17.0; // 字号
-const PAD_BASE: f32 = 12.0; // 标签左右内边距
+/// 100% 缩放下的基准尺寸（物理像素；实际按目标窗口所在显示器的 DPI 放大，不写死像素）。
+/// 用户要求标签显眼，尺寸偏大。
+const BORDER_BASE: f32 = 6.0; // 边框粗细
+const TAB_H_BASE: f32 = 40.0; // 提示标签高
+const FONT_BASE: f32 = 20.0; // 字号（加粗）
+const PAD_BASE: f32 = 20.0; // 标签左右内边距
 /// Litch 橙（put 的参数序是 b, g, r）
 const ORANGE: (u8, u8, u8) = (0, 120, 255);
 /// 标签上的深色文字（COLORREF 是 0x00BBGGRR）
