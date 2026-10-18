@@ -1,0 +1,5 @@
+# Windows Computer Use 助手的 Rust 工具链。流水线（丙线）读这个文件，不另写版本。
+[toolchain]
+channel = "1.95.0"
+targets = ["x86_64-pc-windows-msvc"]
+profile = "minimal"
