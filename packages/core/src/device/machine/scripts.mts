@@ -33,16 +33,17 @@ const REAL = `real() {
 
 /**
  * 看一个路径：真实路径、种类（d 目录、f 普通文件、o 别的、l 断了的链接、m 不存在）、大小（读不了是 -）；
- * 后面的参数各解一个真实路径（禁止位置）。输出各项以 NUL 结尾
+ * 后面的参数各解一个真实路径（禁止位置）。输出各项以 NUL 结尾。
+ * sh 的函数里没有局部变量：real 会改掉 p、d、t 这些，所以要看的路径放在 real 不碰的 x 里
  */
 const PROBE = `CDPATH=
 ${REAL}
-p=$1; shift
-real "$p"
-if [ -d "$p" ]; then t=d; s=0
-elif [ -f "$p" ]; then t=f; s=-; if [ -r "$p" ] && v=$(wc -c < "$p" 2>/dev/null); then s=$v; fi
-elif [ -e "$p" ]; then t=o; s=0
-elif [ -L "$p" ]; then t=l; s=0
+x=$1; shift
+real "$x"
+if [ -d "$x" ]; then t=d; s=0
+elif [ -f "$x" ]; then t=f; s=-; if [ -r "$x" ] && v=$(wc -c < "$x" 2>/dev/null); then s=$v; fi
+elif [ -e "$x" ]; then t=o; s=0
+elif [ -L "$x" ]; then t=l; s=0
 else t=m; s=0; fi
 printf '%s\\000%s\\000' "$t" $s
 for d do real "$d"; done`
