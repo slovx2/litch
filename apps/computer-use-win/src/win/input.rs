@@ -1,6 +1,7 @@
 // 按坐标和键盘发真实输入：SendInput。
 // 鼠标用虚拟桌面上的绝对坐标；type_text 用 KEYEVENTF_UNICODE 逐个 UTF-16 码元发（中文不经输入法）；
-// press_key 的组合键先按下修饰键、再按主键，倒序松开。SendInput 自己会给事件打上“注入”标记，低级钩子据此和物理输入区分。
+// press_key 的组合键先按下修饰键、再按主键，倒序松开。每个事件在 dwExtraInfo 里带固定标记 INJECTED_TAG，
+// 低级钩子凭它把助手自己发的和其余输入（物理的，以及串流/远程软件转发进来的）分开。
 use crate::geometry::{absolute, Rect};
 use crate::keys::KeyCombo;
 use crate::text::{self, Keystroke};
