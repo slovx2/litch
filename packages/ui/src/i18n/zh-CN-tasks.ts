@@ -182,7 +182,7 @@ export const zhTasks = {
   // 会话上的记号和顶上那一条
   'tasks.mark.run': '定时任务跑出来的会话',
   'tasks.mark.target': '有定时任务在这个会话里接着发',
-  'tasks.note.run': '这是定时任务「{name}」{when}的那次运行（{trigger}）',
+  'tasks.note.run': '这是定时任务「{name}」{when} 的那次运行（{trigger}）',
   'tasks.note.target': '这个会话有定时任务「{name}」，到点在这里接着发',
   'tasks.note.unknown': '定时任务',
   'tasks.note.open': '去看任务',

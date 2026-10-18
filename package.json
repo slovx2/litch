@@ -91,6 +91,7 @@
     "client:check:remote": "npm run build --prefix packages/ui && npm run check:remote --prefix apps/desktop",
     "client:check:full": "npm run build --prefix packages/ui && npm run check:full --prefix apps/desktop",
     "client:check:manage": "npm run build --prefix packages/ui && npm run check:manage --prefix apps/desktop",
+    "client:check:tasks": "npm run build --prefix packages/ui && npm run check:tasks --prefix apps/desktop",
     "client:check:terminal": "npm run build --prefix packages/ui && npm run check:terminal --prefix apps/desktop",
     "client:check:files": "npm run build --prefix packages/ui && npm run check:files --prefix apps/desktop",
     "client:check:diff": "npm run build --prefix packages/ui && npm run check:diff --prefix apps/desktop",

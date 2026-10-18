@@ -59,8 +59,8 @@ const hasComputerUse = (platform: string) => platform === 'darwin' || platform =
 /** 设置页左边的分组和标题：Computer Use 那一组只在 macOS 和 Windows 上有 */
 const sectionsOn = (platform: string) =>
   hasComputerUse(platform)
-    ? ['look', 'lang', 'devices', 'browser', 'computer', 'keys', 'about']
-    : ['look', 'lang', 'devices', 'browser', 'keys', 'about']
+    ? ['look', 'lang', 'devices', 'browser', 'computer', 'notify', 'keys', 'about']
+    : ['look', 'lang', 'devices', 'browser', 'notify', 'keys', 'about']
 const titlesOn = (platform: string, lang: 'zh-CN' | 'en' = 'zh-CN') => {
   const all =
     lang === 'en'
@@ -70,10 +70,11 @@ const titlesOn = (platform: string, lang: 'zh-CN' | 'en' = 'zh-CN') => {
           'Devices',
           'Built-in browser',
           'Computer Use',
+          'Notifications',
           'Shortcuts',
           'About',
         ]
-      : ['外观', '语言', '设备', '内置浏览器', 'Computer Use', '快捷键', '关于']
+      : ['外观', '语言', '设备', '内置浏览器', 'Computer Use', '通知', '快捷键', '关于']
   return hasComputerUse(platform) ? all : all.filter((title) => title !== 'Computer Use')
 }
 /** 只在没打包时才有的两项菜单，清单里不列（装好的应用里没有） */
@@ -249,8 +250,10 @@ export function judgeFirst(
   // ---- 六套组合下各屏 ----
   must(screens.cardShown, '量审批卡片那一屏的时候卡片不在')
   must(screens.archivedRows > 0, '量已归档那一屏的时候列表是空的')
-  // 对话区三块、审批、已归档各六套，设置页各组乘两种语言各六套
-  same(screens.rows.length, (3 + 1 + 1 + sections.length * 2) * 6, '量了多少屏')
+  must(screens.taskRows > 0, '量定时任务列表那一屏的时候列表是空的')
+  must(screens.taskRuns > 0, '量定时任务详情那一屏的时候运行记录是空的')
+  // 对话区三块、审批、已归档、定时任务的列表、详情、表单各六套，设置页各组乘两种语言各六套
+  same(screens.rows.length, (3 + 1 + 1 + 3 + sections.length * 2) * 6, '量了多少屏')
   for (const row of screens.rows) {
     must(row.audit.texts > 0, `${row.where}：一处字都没量到`)
     must(row.audit.overflow.length === 0, `${row.where}：横向溢出 ${row.audit.overflow.join('、')}`)

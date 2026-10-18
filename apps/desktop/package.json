@@ -29,6 +29,7 @@
     "check:remote": "npm run build && node scripts/smoke.mjs --remote && node scripts/smoke.mjs --remote --service",
     "check:full": "npm run build && node scripts/smoke.mjs --full --mock && node scripts/smoke.mjs --sidebar && node scripts/smoke.mjs --full",
     "check:sidebar": "npm run build && node scripts/smoke.mjs --sidebar",
+    "check:tasks": "npm run build && node scripts/smoke.mjs --tasks",
     "check:manage": "npm run build && node scripts/smoke.mjs --manage --mock && node scripts/smoke.mjs --manage",
     "check:terminal": "npm run build && node scripts/check-terminal.mjs",
     "check:files": "npm run build && node scripts/check-files.mjs",
