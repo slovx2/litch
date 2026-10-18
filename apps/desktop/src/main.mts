@@ -24,6 +24,7 @@ import {
 import { openLicenses } from './about.mjs'
 import { type InstalledBrowser, installBrowser } from './browser/install.mjs'
 import { createClientToolHost } from './client-tools/host.mjs'
+import { showMachineNotice } from './client-tools/notice.mjs'
 import { createExecutors } from './client-tools/registry.mjs'
 import { CLIENT_TOOL, type ClientToolToMain } from './client-tools/types.mjs'
 import { createComputerUse, locateHelperApp } from './computer-use/index.mjs'
@@ -217,7 +218,21 @@ function startCore(): void {
   // 核心往回发两种消息：客户端工具的调用和答复；退出前问它终端的事，它的回答
   child.on('message', (message: unknown) => {
     if ((message as { type?: unknown } | null)?.type === CLIENT_TOOL) {
-      if (core === child) clientTools.handle(message as ClientToolToMain)
+      if (core !== child) return
+      const tool = message as ClientToolToMain
+      // litch_machine 找不到会话的卡片进了全局待处理：发一条系统通知（08 号 4.2），点了把窗口叫到前面
+      if (tool.op === 'notify') {
+        const lang = menuLang ?? forcedLang ?? (app.getLocale().startsWith('zh') ? 'zh-CN' : 'en')
+        showMachineNotice(tool.notice, lang, () => {
+          const window = BrowserWindow.getAllWindows()[0]
+          if (!window) return
+          if (window.isMinimized()) window.restore()
+          window.show()
+          window.focus()
+        })
+        return
+      }
+      clientTools.handle(tool)
       return
     }
     const data = message as { type?: unknown; id?: unknown; alive?: AliveCount } | null

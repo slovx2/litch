@@ -7,15 +7,22 @@
 // - 超时（等人答卡片的时间不算）、引擎撤回请求、回合结束或被打断、连接断开时取消，并告诉主进程；
 // - 执行过工具调用的回合结束时告诉主进程（turnEnded），执行器收拾临时的东西。
 // 会话在核心里有没有开着视图都要处理：回合在后台跑的时候引擎照样会调。
+//
+// litch_machine（08 号设计）不交给主进程：交给核心自己的接线那一层（host.machine，machine-wiring.mts），
+// 开关、审批、卡片放哪都在那里。这里照样管超时（卡片挂着时停表）、撤回、打断、断线。它有两种来路：
+// 回合里的 item/tool/call，和设备进程转来的命令行调用 litch/clientTool/call（不一定有会话和回合）。
 import {
+  CLIENT_TOOL_METHOD,
   CLIENT_TOOL_NAMESPACE,
   type ClientToolCallParams,
   type ClientToolCallResponse,
+  type ClientToolDetachedCallParams,
   clientToolFailure,
   isClientToolNamespace,
 } from '../../../protocol/src/client-tools.mjs'
 import type { JsonRpcId } from '../../../protocol/src/index.mjs'
-import type { Clock } from '../channel/protocol.mjs'
+import { createCancel } from '../channel/cancel.mjs'
+import type { AbortSignalLike, Clock } from '../channel/protocol.mjs'
 import { NO_REPLY } from '../connection/rpc.mjs'
 import type { ApprovalOption, ClientAskView } from '../model.mjs'
 import type { ToolAnswer, ToolInvocation } from '../model-client-tools.mjs'
@@ -35,10 +42,37 @@ export interface ToolAskPlace {
   ask: ClientAskView
 }
 
+/** litch_machine 的一次调用，交给接线那一层时带的 */
+export interface MachineCallInput {
+  /** 会话。命令行调用找不到会话时是 null */
+  threadId: string | null
+  /** 回合。命令行调用不一定知道，是 null */
+  turnId: string | null
+  /** 工具调用的标识（item/tool/call 的 callId，或者设备进程给的那个） */
+  callId: string
+  harness: string | null
+  tool: string
+  arguments: unknown
+  /** 超时、撤回、打断、断线、开关关掉时中止 */
+  signal: AbortSignalLike
+  /** 有卡片挂着的时候调：停表（等人答不算在 120 秒里）。返回“卡片没了”，表从头算 */
+  hold(): () => void
+}
+
+/** 接线那一层（machine-wiring.mts 经设备转过来的） */
+export interface MachineCalls {
+  /** 不许抛错：出错也回 success:false 的答复 */
+  call(input: MachineCallInput): Promise<ClientToolCallResponse>
+  /** 回合结束了：同一回合里被拒的记录不要了 */
+  turnEnded(threadId: string, turnId: string): void
+}
+
 export interface ToolCallsHost {
   deviceId: string
   clock: Clock
   hub: ToolHub
+  /** litch_machine 的调用交给它。不给就是这台桌面执行不了，回 noExecutor */
+  machine?: MachineCalls
   /** 调用来自哪台设备，交给执行器（远程设备的 Computer Use 没有“始终允许”，执行器按 kind 判断） */
   device(): ToolInvocation['device']
   /** 这台设备的开关里这个命名空间开着没有。没有开关的命名空间（测试用的 echo）一律算开着 */
@@ -64,18 +98,26 @@ export interface ToolCalls {
   turnEnded(threadId: string, turnId: string): void
   /** 连接断了：都不等了，执行过调用的回合一并当作结束 */
   offline(): void
+  /** litch_machine 的开关关掉了：进行中的调用都以这个答复结束，挂着的卡片撤掉 */
+  stopMachine(response: ClientToolCallResponse): void
 }
 
 interface Running {
   id: string
   rpcId: string
-  threadId: string
-  turnId: string
+  threadId: string | null
+  turnId: string | null
+  /** litch_machine 的调用（交给接线那一层，不经主进程） */
+  machine: boolean
   resolve(result: ClientToolCallResponse | typeof NO_REPLY): void
+  /** 不等了：告诉执行的那一方（主进程，或者中止 litch_machine 的信号） */
+  stop(): void
   /** 超时的定时器：取消函数。卡片挂着的时候停表，是 null */
   stopTimer: (() => void) | null
   /** 挂着的卡片：卡片的标识 → 撤掉它 */
   asks: Map<string, () => void>
+  /** litch_machine 那边挂着的卡片有几张（它自己管卡片，这里只停表） */
+  holds: number
 }
 
 /** 设备开关关着时给模型的话：告诉它让用户去哪里打开 */
@@ -96,7 +138,8 @@ export const clientAskOptions = (ask: ClientAskView): ApprovalOption[] =>
       [
         { id: 'once', role: 'accept' },
         { id: 'session', role: 'acceptSession' },
-        { id: 'decline', role: 'decline' },
+        // 拒绝时可以附一句理由给模型
+        { id: 'decline', role: 'decline', note: true },
       ]
     : ask.kind === 'site'
       ? [
@@ -129,10 +172,15 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
     call.resolve(result)
   }
 
-  /** 不等了：告诉主进程取消，给引擎回这一句 */
+  /** 不等了：告诉执行的那一方取消，给引擎回这一句 */
   const abandon = (call: Running, result: ClientToolCallResponse | typeof NO_REPLY) => {
-    host.hub.cancel(call.id)
+    if (running.get(call.id) === call) call.stop()
     finish(call, result)
+  }
+
+  /** 卡片都答完了（或者撤了）：表从头算 */
+  const resume = (call: Running) => {
+    if (running.get(call.id) === call && call.asks.size === 0 && call.holds === 0) startTimer(call)
   }
 
   const startTimer = (call: Running) => {
@@ -193,9 +241,12 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
         rpcId,
         threadId: params.threadId,
         turnId: params.turnId,
+        machine: false,
         resolve,
+        stop: () => host.hub.cancel(id),
         stopTimer: null,
         asks: new Map(),
+        holds: 0,
       }
       running.set(id, entry)
       startTimer(entry)
@@ -218,7 +269,7 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
           const drop = host.showAsk(place, (answer) => {
             entry.asks.delete(askId)
             host.hub.answer(askId, answer)
-            if (running.get(id) === entry && entry.asks.size === 0) startTimer(entry)
+            resume(entry)
           })
           entry.asks.set(askId, drop)
         },
@@ -227,14 +278,110 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
           if (!drop) return
           entry.asks.delete(askId)
           drop()
-          if (running.get(id) === entry && entry.asks.size === 0) startTimer(entry)
+          resume(entry)
         },
       })
     })
   }
 
+  /** litch_machine：交给接线那一层。超时、撤回、打断、断线照样在这里管 */
+  const machineCall = (
+    input: Omit<MachineCallInput, 'signal' | 'hold'>,
+    rpcId: string,
+  ): Promise<unknown> => {
+    const machine = host.machine
+    if (!machine) {
+      return Promise.resolve(
+        clientToolFailure(
+          'noExecutor',
+          'The connected Litch desktop cannot run litch_machine tools for this device.',
+        ),
+      )
+    }
+    const id = `${host.deviceId}:${++seq}`
+    const cancel = createCancel()
+    return new Promise<unknown>((resolve) => {
+      const entry: Running = {
+        id,
+        rpcId,
+        threadId: input.threadId,
+        turnId: input.turnId,
+        machine: true,
+        resolve,
+        stop: () => cancel.abort(),
+        stopTimer: null,
+        asks: new Map(),
+        holds: 0,
+      }
+      running.set(id, entry)
+      startTimer(entry)
+      const hold = () => {
+        entry.holds++
+        entry.stopTimer?.()
+        entry.stopTimer = null
+        let held = true
+        return () => {
+          if (!held) return
+          held = false
+          entry.holds--
+          resume(entry)
+        }
+      }
+      machine.call({ ...input, signal: cancel.signal, hold }).then(
+        (response) => finish(entry, response),
+        (error: unknown) => {
+          host.log(`litch_machine 调用 ${id} 出错：${String(error)}`)
+          finish(entry, clientToolFailure('failed', 'The desktop failed to run this tool call.'))
+        },
+      )
+    })
+  }
+
+  /** 命令行调用（设备进程转来的 litch/clientTool/call）：只认 litch_machine */
+  const detachedCall = (params: unknown, rpcId: string): Promise<unknown> => {
+    const raw = params as Partial<ClientToolDetachedCallParams> | null
+    const nullable = (value: unknown) => value === null || typeof value === 'string'
+    if (
+      !raw ||
+      typeof raw.callId !== 'string' ||
+      typeof raw.namespace !== 'string' ||
+      typeof raw.tool !== 'string' ||
+      !nullable(raw.threadId) ||
+      !nullable(raw.turnId)
+    ) {
+      return Promise.resolve(clientToolFailure('invalid', 'Malformed litch/clientTool/call.'))
+    }
+    if (raw.namespace !== CLIENT_TOOL_NAMESPACE.machine) {
+      return Promise.resolve(
+        clientToolFailure(
+          'noExecutor',
+          `The Litch desktop runs only ${CLIENT_TOOL_NAMESPACE.machine} tools from the command line.`,
+        ),
+      )
+    }
+    const threadId = raw.threadId ?? null
+    const harness =
+      typeof raw.harness === 'string'
+        ? raw.harness
+        : threadId
+          ? host.context(threadId).harness
+          : null
+    return machineCall(
+      {
+        threadId,
+        turnId: raw.turnId ?? null,
+        callId: raw.callId,
+        harness,
+        tool: raw.tool,
+        arguments: raw.arguments,
+      },
+      rpcId,
+    )
+  }
+
   return {
     serverRequest(method, params, id) {
+      if (method === CLIENT_TOOL_METHOD.call) return detachedCall(params, String(id))
       if (method !== 'item/tool/call') return undefined
       const raw = params as Partial<ClientToolCallParams> | null
       if (
@@ -246,6 +393,19 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
         !isClientToolNamespace(raw.namespace)
       ) {
         return undefined
+      }
+      if (raw.namespace === CLIENT_TOOL_NAMESPACE.machine) {
+        return machineCall(
+          {
+            threadId: raw.threadId,
+            turnId: raw.turnId,
+            callId: raw.callId,
+            harness: host.context(raw.threadId).harness,
+            tool: raw.tool,
+            arguments: raw.arguments,
+          },
+          String(id),
+        )
       }
       return call(raw as ClientToolCallParams, String(id))
     },
@@ -268,6 +428,7 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
         if (entry.threadId !== threadId || entry.turnId !== turnId) continue
         abandon(entry, clientToolFailure('failed', 'The turn ended before the tool finished.'))
       }
+      host.machine?.turnEnded(threadId, turnId)
       const key = turnKey(threadId, turnId)
       if (!turns.delete(key)) return
       host.hub.turnEnded(host.deviceId, threadId, turnId)
@@ -280,6 +441,10 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
         host.hub.turnEnded(host.deviceId, threadId, turnId)
       }
       turns.clear()
+    },
+
+    stopMachine(response) {
+      for (const entry of [...running.values()]) if (entry.machine) abandon(entry, response)
     },
   }
 }

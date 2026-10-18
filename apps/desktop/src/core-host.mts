@@ -1,6 +1,7 @@
 // 工具进程的入口：核心就住在这个进程里。主进程每给一个端口，就在上面开一条通道。
 // 平台能力（定时器、端口、传输）在这里做成核心要的接口再交进去，核心自己不碰 Node 和 Electron。
-import { hostname, userInfo } from 'node:os'
+import { execFileSync } from 'node:child_process'
+import { arch, homedir, hostname, release, userInfo } from 'node:os'
 import {
   type ClientToolPort,
   type Clock,
@@ -78,6 +79,44 @@ const toolPort: ClientToolPort = {
   },
 }
 
+/** 跑一个很快的系统命令拿一行字；没有这个命令、出错都是空串 */
+function quick(command: string, args: string[]): string {
+  try {
+    return execFileSync(command, args, { encoding: 'utf8', timeout: 2000 }).trim()
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * 这台桌面端自己的情况（litch_machine，08 号设计 2.4）：远程会话的说明开头写它、machines 工具列它、
+ * 握手时报给设备进程。核心就住在这台电脑上，所以在这里现查，不绕本机设备服务
+ */
+function desktopFacts() {
+  const user = userInfo()
+  const host = hostname()
+  const mac = process.platform === 'darwin'
+  // 系统设置里“电脑名称”那一栏，比主机名好认
+  const computerName = mac ? quick('scutil', ['--get', 'ComputerName']) : ''
+  const version = mac ? quick('sw_vers', ['-productVersion']) : ''
+  const system =
+    process.platform === 'darwin'
+      ? `macOS${version ? ` ${version}` : ''} ${arch()}`
+      : process.platform === 'linux'
+        ? `Linux ${arch()}`
+        : process.platform === 'win32'
+          ? `Windows ${release()} ${arch()}`
+          : `${process.platform} ${arch()}`
+  return {
+    name: computerName || host,
+    hostname: host,
+    system,
+    user: user.username,
+    home: homedir(),
+    shell: user.shell ?? process.env.SHELL ?? '',
+  }
+}
+
 function createHost(): Core | MockCore {
   // LITCH_MOCK=1：不连任何设备，用示例数据。界面开发和不带入口的自检用
   // 示例数据用哪种语言由主进程定（LITCH_LANG），和界面的语言对上
@@ -96,6 +135,7 @@ function createHost(): Core | MockCore {
     log: (line) => console.error(`[core] ${line}`),
     remote: { opener: sshOpener, discover: discoverHosts, check: checkRemote },
     clientTools: toolPort,
+    machine: { desktop: desktopFacts() },
     ...(dataDir ? { store: fileDeviceStore(dataDir) } : {}),
     devices: [
       {
