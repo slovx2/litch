@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { ECHO_TOOLS } from '../../protocol/src/client-tools-specs.mjs'
+import { CLIENT_TOOL_NAMESPACE } from '../../protocol/src/client-tools.mjs'
+import { clientToolSpecs, ECHO_TOOLS } from '../../protocol/src/client-tools-specs.mjs'
 import { serverName } from '../src/client-tools.mjs'
 import { OpencodeServer } from '../src/server.mjs'
 import { client, isolate, skip, text, violations } from './client.mjs'
@@ -234,6 +235,43 @@ test('OpenCode：动态工具记在会话上，适配器重启后恢复会话照
     assert.deepEqual(replayed.contentItems, [{ type: 'inputText', text: 'echo again' }])
   } finally {
     await second?.close()
+    await env.restore()
+  }
+  assert.deepEqual([...violations], [])
+})
+
+test('OpenCode：桌面端带的整套客户端工具（浏览器、Computer Use、机器、定时任务、会话）OpenCode 都收下交给模型', {
+  skip,
+  timeout: 120000,
+}, async () => {
+  const env = await isolate(scripted({ ALL: [[{ type: 'text', chunks: ['看到了。'] }]] }))
+  try {
+    const desktop = client(env.server)
+    await desktop.call('initialize', handshake(['litch_browser', 'litch_computer']))
+    const machine = { name: '这台', hostname: 'host', system: 'macOS' }
+    const specs = clientToolSpecs(Object.values(CLIENT_TOOL_NAMESPACE), {
+      machine: { session: machine, desktop: machine },
+      desktopPlatform: 'darwin',
+    })
+    const { thread } = await desktop.call('thread/start', { cwd: env.cwd, dynamicTools: specs })
+    const { turn } = await desktop.call('turn/start', { threadId: thread.id, input: text('ALL') })
+    const done = (await desktop.until('turn/completed', (p) => p.turn.id === turn.id, 60000)).turn
+    assert.equal(done.status, 'completed', JSON.stringify(done.error))
+    const asked = env.model.requests.find((body) =>
+      toolNames(body).some((name) => name.startsWith('litch_')),
+    )
+    const names = toolNames(asked).filter((name) => name.startsWith(serverName(thread.id)))
+    const expected = specs.reduce((count, spec) => count + spec.tools.length, 0)
+    assert.equal(names.length, expected, names.join(', '))
+    for (const name of names) assert.ok(name.length <= 64, name)
+    for (const spec of specs)
+      assert.ok(
+        asked.tools.some((tool: any) =>
+          String(tool.function?.description).startsWith(`[${spec.name}.`),
+        ),
+        `${spec.name} 的工具交给了模型`,
+      )
+  } finally {
     await env.restore()
   }
   assert.deepEqual([...violations], [])

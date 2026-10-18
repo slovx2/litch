@@ -279,7 +279,18 @@ async function startThread(s: OpencodeServer, peer: RpcPeer, p: any): Promise<an
   })
   if (typeof created?.id !== 'string')
     throw new ProtocolError(-32603, 'OpenCode 建会话没有返回会话号')
-  if (tools.length) s.clientTools.remember(created.id, p.dynamicTools)
+  if (tools.length) {
+    s.clientTools.remember(created.id, p.dynamicTools)
+    // 有了会话号再放开自己的服务（OpenCode 把这几条接在原有规则后面；之后每次发消息整个替换）
+    await api
+      .request('PATCH', `/session/${created.id}`, {
+        directory: cwd,
+        body: { permission: toolRuleset(toolRules(created.id)) },
+      })
+      .catch((error) =>
+        console.error(`[opencode] 会话 ${created.id} 的工具规则没有写上: ${error.message}`),
+      )
+  }
   s.sessions.saveSettings(created.id, base)
   const live = await s.load(created.id)
   const { thread } = live.projection
