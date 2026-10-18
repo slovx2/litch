@@ -1,10 +1,10 @@
-// litch_machine 的接线（08 号设计第三、四节，接口见 device/machine/types.mts）：远程设备上的会话要操作这台电脑时，
+// litch_machine 的接线（接口见 device/machine/types.mts）：远程设备上的会话要操作这台电脑时，
 // 各台设备把调用交到这里（device/tool-calls.mts → device.mts → 这里），这里
 // - 查这台设备的开关（默认关），关着当场回 disabled，说明写给模型；
 // - 把“能操作的机器”交给执行器：desktop 是本机设备的连接，session 是会话所在那台远程设备的连接；
-// - 按审批方式决定 approve 弹不弹卡片（3.2）：“本会话都允许”按 mutate、read 两类各记；命令里提到禁止位置
-//   （ask.flagged）时除了“不确认”都再弹；同一回合里被拒的同一件事不再问；卡片 10 分钟没人答作废（决 246）；
-// - 卡片放哪（4.2）：找得到会话的放进那个会话的对话（设备给的 showAsk）；找不到的放进全局待处理（主题 machine），
+// - 按审批方式决定 approve 弹不弹卡片：“本会话都允许”按 mutate、read 两类各记；命令里提到禁止位置
+//   （ask.flagged）时除了“不确认”都再弹；同一回合里被拒的同一件事不再问；卡片 10 分钟没人答作废；
+// - 卡片放哪：找得到会话的放进那个会话的对话（设备给的 showAsk）；找不到的放进全局待处理（主题 machine），
 //   并请主进程发一条系统通知；
 // - 主题 machine（还在跑的进程、全局待处理）、操作记录（只存本机、按设备、条数有上限）。
 // 执行器只有一个，所有设备共用：进程表是全局的，顶栏标记看的就是它。
@@ -35,7 +35,7 @@ import type {
 } from './model-machine.mjs'
 import type { Text } from './phrase.mjs'
 
-/** 卡片挂多久没人答就作废（决 246） */
+/** 卡片挂多久没人答就作废（当作拒绝） */
 export const MACHINE_ASK_EXPIRES_MS = 10 * 60_000
 /** 每台设备的操作记录最多留多少条 */
 export const MACHINE_LOG_LIMIT = 500
@@ -102,7 +102,7 @@ export interface MachineWiring {
   turnEnded(deviceId: string, threadId: string, turnId: string): void
   /** 这台设备的开关关掉了：停它发起的进程、撤它的待处理卡片、忘掉“本会话都允许” */
   disabled(deviceId: string): void
-  /** 会话所在的设备断开、连回来（决 250：断开 10 分钟后执行器收拾它的进程） */
+  /** 会话所在的设备断开、连回来（断开 10 分钟后执行器收拾它的进程） */
   presence(deviceId: string, online: boolean): void
   /** 设备去掉了：同 disabled，操作记录也不要了 */
   forget(deviceId: string): void
@@ -383,7 +383,7 @@ export function createMachineWiring(host: MachineWiringHost): MachineWiring {
       input.signal.addEventListener('abort', () => settle({ kind: 'cancelled' }), { once: true })
     })
 
-  /** MachineCallContext.approve：按审批方式决定弹不弹（3.2、3.3） */
+  /** MachineCallContext.approve：按审批方式决定弹不弹，命令里提到禁止位置时再弹 */
   const approver =
     (deviceId: string, input: MachineCallInput, session: MachineSessionAsk | null) =>
     async (request: { class: 'mutate' | 'read'; ask: MachineAskView }) => {

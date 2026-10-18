@@ -1067,7 +1067,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       // 还没有会话对象：它算在谁头上，聚合面上就是指定的那个，单个入口上只有那一个
       const target = harness ?? host.sole()
       const presets = target === null ? null : presetsOf(target)
-      // 这台桌面能执行的客户端工具（决 189：都默认带上，用的时候再查开关）。工具只能在建会话时定
+      // 这台桌面能执行的客户端工具（都默认带上，用的时候再查开关）。工具只能在建会话时定
       const tools = host.dynamicTools?.(target) ?? null
       try {
         // 建会话时能带的先带上（模型、权限）；带不了的（强度、协作模式）跟着第一个回合发

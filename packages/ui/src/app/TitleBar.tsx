@@ -83,7 +83,7 @@ export function TitleBar({
           </b>
         )}
       </nav>
-      {/* 远程设备在这台电脑上有动静时才出（08 号设计） */}
+      {/* 远程设备在这台电脑上有动静时才出 */}
       <MachineMarker />
       <TerminalToggle />
       <SideToggle />

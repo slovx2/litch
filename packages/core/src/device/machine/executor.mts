@@ -1,4 +1,4 @@
-// litch_machine 的执行器（08 号设计 2.3、2.4、3.3；接口见 types.mts）。接线那边（乙线）只调 createMachineExecutor。
+// litch_machine 的执行器（接口见 types.mts）。接线那边只调 createMachineExecutor。
 //
 // 七个工具分在几个文件里：exec 和 process 在 processes.mts（连同进程表），read_file、write_file、list_dir 在
 // files.mts，copy 在 copy.mts，machines 在这里。各工具共用的（找机器、审批、看路径）在 common.mts。

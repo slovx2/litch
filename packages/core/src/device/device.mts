@@ -1,11 +1,11 @@
 // 一台设备：一条连接，加上连上之后要做的事。
-// 对面有两种（设计文档 01 第 7.5 节）：
+// 对面有两种：
 // - 一个普通的 Codex 服务（原生 codex，或适配器的一个入口）：单 harness 模式，这是基础层；
 // - 设备服务的聚合面，一条连接里有多个 harness：完整模式，在基础层上多了 harness 这个维度——
 //   每个会话记着自己属于哪个 harness；不带会话标识的请求要指明发给哪个；某个 harness 可以单独不可用、
 //   单独恢复，恢复之后它的会话列表要补取、它上面打开着的会话要重新订阅。
-// 握手之后问一次 runtime/info 来认。对面没声明的扩展连参数都不带（设计文档 03 第十五节）。
-// 数据流的纪律见设计文档 01 第十节：通知按白名单路由；连接健康时通知是唯一的数据来源；
+// 握手之后问一次 runtime/info 来认。对面没声明的扩展连参数都不带。
+// 数据流的纪律：通知按白名单路由；连接健康时通知是唯一的数据来源；
 // 只在刚连上、重连之后、手动刷新这三个时机做全量对账。
 
 import type {
@@ -145,9 +145,9 @@ export interface DeviceOptions {
   terminalNotes?: TerminalNotesStore
   /** 通往主进程的客户端工具那一头（tool-hub.mts）。不给就是这台桌面什么都执行不了 */
   tools?: ToolHub
-  /** 这台设备的两个开关现在是什么（决 190）。不给按默认：浏览器开、Computer Use 关 */
+  /** 这台设备的两个开关现在是什么。不给按默认：浏览器开、Computer Use 关 */
   toolSwitches?(): { browser: boolean; computer: boolean }
-  /** litch_machine（08 号设计）：远程设备上的会话操作这台电脑。只有远程设备、核心有执行器时给 */
+  /** litch_machine：远程设备上的会话操作这台电脑。只有远程设备、核心有执行器时给 */
   machine?: DeviceMachine
   log?(line: string): void
 }
@@ -161,11 +161,11 @@ export interface DeviceMachine {
   /** 一次调用。session：放进会话对话里的卡片，找不到会话是 null */
   call(input: MachineCallInput, session: MachineSessionAsk | null): Promise<ClientToolCallResponse>
   turnEnded(threadId: string, turnId: string): void
-  /** 连上了、断开了（决 250） */
+  /** 连上了、断开了（断开太久执行器会结束这台设备发起的进程） */
   presence(online: boolean): void
 }
 
-/** 设备设置页上两个开关的默认值（决 190） */
+/** 设备设置页上两个开关的默认值 */
 export const DEFAULT_TOOL_SWITCHES = { browser: true, computer: false } as const
 
 /** 给执行器的 ssh 目标：别名原样；主机写成 user@host，带端口时用 ssh 认的 ssh://user@host:端口 */
@@ -261,7 +261,7 @@ export interface Device {
   readonly files: Files
   /** 这台设备上的差异：没提交的改动、暂存和还原（diffs.mts） */
   readonly diffs: Diffs
-  /** litch_machine 把这台设备当作一台能操作的机器时用的：它的连接（08 号设计 2.3） */
+  /** litch_machine 把这台设备当作一台能操作的机器时用的：它的连接 */
   readonly machineLink: MachineDeviceLink
   /** 现查这台设备的情况（主机名、系统、用户、主目录、shell），缓存一会儿。没连着时抛错 */
   machineFacts(): Promise<MachineFacts>
@@ -425,7 +425,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     service,
     upgrade,
     tools: toolSwitchesView(),
-    // 远程设备“操作这台电脑”（08 号设计 3.1）：本机设备、执行不了的桌面端是 null
+    // 远程设备“操作这台电脑”：本机设备、执行不了的桌面端是 null
     machine: options.machine?.view() ?? null,
   })
 
@@ -780,7 +780,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   }
 
   /**
-   * 一个 harness 恢复可用了（设计文档 03 第 5.5 节）：它上面打开着的会话重新订阅——之前的订阅随它的
+   * 一个 harness 恢复可用了：它上面打开着的会话重新订阅——之前的订阅随它的
    * 上游连接一起丢了；它的会话列表补取一遍——不可用的那段时间里，合并的列表里没有它。
    */
   const recover = async (id: HarnessId) => {
@@ -1213,13 +1213,13 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     },
     interrupting: (sessionId) => toolCalls.interrupted(sessionId),
     dynamicTools(harness) {
-      // 按声明给：引擎在 runtime/info 的 extensions 里报了 clientTools 才带（dsh 不认这个参数，决 197；
+      // 按声明给：引擎在 runtime/info 的 extensions 里报了 clientTools 才带（dsh 不认这个参数；
       // 还没接上客户端工具的引擎也不报）。没有声明的是更早的适配器，那时只有 dsh 不认
       const declared = harness === null ? undefined : terms.get(harness)
       if (declared ? !declared.extensions.includes(EXTENSION.clientTools) : harness === 'dsh') {
         return null
       }
-      // litch_machine 的说明按会话生成：开头写这个会话在哪台、桌面端是哪台（决 252）
+      // litch_machine 的说明按会话生成：开头写这个会话在哪台、桌面端是哪台
       return clientToolSpecs(toolNamespaces(), { machine: machineSpec() })
     },
     turnDiff: (sessionId, turnId, diff) => diffs.turnDiff(sessionId, turnId, diff),
@@ -1333,7 +1333,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     }
   }
 
-  // —— litch_machine（08 号设计）：这台设备作为“会话所在的那台”时用的 ——
+  // —— litch_machine：这台设备作为“会话所在的那台”时用的 ——
 
   /** 建会话时声明、握手时报的命名空间：主进程能执行的，加上核心自己执行的 litch_machine（只有远程设备） */
   const toolNamespaces = (): string[] => [
@@ -1413,7 +1413,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     return machineFactsLoading
   }
 
-  /** 建会话时写进 litch_machine 说明的两台（决 252）。不知道这台的主机名时是 null，说明里不写具体的机器 */
+  /** 建会话时写进 litch_machine 说明的两台。不知道这台的主机名时是 null，说明里不写具体的机器 */
   const machineSpec = (): MachineSpecContext | null => {
     const machine = options.machine
     if (!machine) return null

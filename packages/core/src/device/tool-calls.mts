@@ -1,14 +1,14 @@
-// 一台设备上的客户端工具调用（扩展 clientTools，设计文档 05 第三、九节）：
+// 一台设备上的客户端工具调用（扩展 clientTools）：
 // 引擎要这台桌面端执行 litch_ 开头的命名空间里的工具时发来 `item/tool/call`。这里管：
 // - 认不认：别的命名空间照旧回“方法不存在”；这台桌面执行不了的命名空间当场回 noExecutor；
-// - 设备的开关（决 190：浏览器默认开、Computer Use 默认关），关着当场回 disabled，说明写给模型；
+// - 设备的开关（浏览器默认开、Computer Use 默认关），关着当场回 disabled，说明写给模型；
 // - 交给主进程执行（经 ToolHub），带上设备、harness、工作目录；
 // - 执行器要用户点头时在这个会话的对话里出卡片（经 host.showAsk），答了回给主进程；
 // - 超时（等人答卡片的时间不算）、引擎撤回请求、回合结束或被打断、连接断开时取消，并告诉主进程；
 // - 执行过工具调用的回合结束时告诉主进程（turnEnded），执行器收拾临时的东西。
 // 会话在核心里有没有开着视图都要处理：回合在后台跑的时候引擎照样会调。
 //
-// litch_machine（08 号设计）不交给主进程：交给核心自己的接线那一层（host.machine，machine-wiring.mts），
+// litch_machine 不交给主进程：交给核心自己的接线那一层（host.machine，machine-wiring.mts），
 // 开关、审批、卡片放哪都在那里。这里照样管超时（卡片挂着时停表）、撤回、打断、断线。它有两种来路：
 // 回合里的 item/tool/call，和设备进程转来的命令行调用 litch/clientTool/call（不一定有会话和回合）。
 import {
@@ -129,7 +129,7 @@ const DISABLED: Record<string, string> = {
 }
 
 /**
- * 卡片上的选项（决 190、05 第 3.2、3.3 节）：网站是“这一次 / 这个会话 / 一直 / 拒绝”；
+ * 卡片上的选项：网站是“这一次 / 这个会话 / 一直 / 拒绝”；
  * 应用是“这个会话 / 始终 / 拒绝”，执行器说不许“始终”（远程设备）时没有那一项
  */
 export const clientAskOptions = (ask: ClientAskView): ApprovalOption[] =>

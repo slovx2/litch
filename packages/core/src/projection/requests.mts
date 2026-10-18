@@ -1,5 +1,5 @@
 // 对面停下来等人答复的请求 → 界面看到的请求，以及怎么把用户的选择换回协议里的应答。纯函数。
-// 审批卡片上有哪些按钮从请求里来（设计文档 02 第 2.6 节），界面不按请求类型写死。
+// 审批卡片上有哪些按钮从请求里来，界面不按请求类型写死。
 import type {
   CommandExecutionApprovalDecision,
   CommandExecutionRequestApprovalParams,

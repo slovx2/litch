@@ -1,4 +1,4 @@
-// 设备详情里“最近的操作”：这台设备上的会话在这台电脑上做过什么（08 号设计 3.4）。只存在这台电脑上。
+// 设备详情里“最近的操作”：这台设备上的会话在这台电脑上做过什么。只存在这台电脑上。
 // 默认收着，点开才去取（命令 machine.log，不走订阅），新的在前；结果按颜色分开，碰到禁止位置的标出来；能清空。
 import type { DeviceView, MachineLogEntry, SessionSummary } from '@litch/core'
 import { keys } from '@litch/core'

@@ -1,5 +1,5 @@
 // 设备与 harness 管理：核心对着假的聚合面（fake-device.mts）和假的设备配置接口（fake-settings.mts）跑。
-// 守的是设计文档 02 第 2.11 节的几条：读写、冲突不悄悄覆盖、通知、密钥到不了界面、对面没有这个接口时的表现。
+// 守的是这几条：读写、冲突不悄悄覆盖、通知、密钥到不了界面、对面没有这个接口时的表现。
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import type { DeviceSettingsSnapshot, Thread } from '../../protocol/src/index.mjs'

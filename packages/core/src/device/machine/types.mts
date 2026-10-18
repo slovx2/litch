@@ -1,9 +1,9 @@
-// litch_machine 在核心里分两层（08 号设计 2.3、第五节）：
-// - 执行器（这个目录，甲线）：拿到一次调用和“能操作的机器”，真去起进程、读写文件、搬文件，管进程表、截断输出、
+// litch_machine 在核心里分两层：
+// - 执行器（这个目录）：拿到一次调用和“能操作的机器”，真去起进程、读写文件、搬文件，管进程表、截断输出、
 //   按访问范围挡禁止位置。它不知道设置存在哪、卡片怎么出，要用户点头时调 context.approve。
-// - 接线（乙线，tool-calls.mts、device.mts、core.mts 一带）：认调用（item/tool/call、litch/clientTool/call），
+// - 接线（machine-wiring.mts，加上 tool-calls.mts、device.mts、core.mts 一带）：认调用（item/tool/call、litch/clientTool/call），
 //   查开关，按审批方式决定 approve 弹不弹卡片、卡片放哪，把“能操作的机器”交给执行器，管设置、记录、主题 machine。
-// 两边只经这里的接口说话。改这里要先和主线说。
+// 两边只经这里的接口说话，改这里要两边一起看。
 import type { ClientToolCallResponse } from '../../../../protocol/src/client-tools.mjs'
 import type { ClientRequestMethod, ClientRequests } from '../../../../protocol/src/index.mjs'
 import type { AbortSignalLike } from '../../channel/protocol.mjs'
@@ -43,7 +43,7 @@ export interface MachineTarget {
   onProcessNotification(handler: (method: string, params: unknown) => boolean): () => void
 }
 
-/** 访问范围，接线那边从设置算好交过来（3.3） */
+/** 访问范围，接线那边从设置算好交过来 */
 export interface MachinePolicy {
   mode: MachineAccessMode
   /** 生效的禁止位置：sensitive 是内置名单，custom 是用户的，open 是空的。可能以 ~ 开头，执行器自己展开 */
@@ -51,7 +51,7 @@ export interface MachinePolicy {
 }
 
 /**
- * 要用户点头的一件事。class 决定按哪一类记“本会话都允许”（3.2）：
+ * 要用户点头的一件事。class 决定按哪一类记“本会话都允许”：
  * mutate 是执行命令、写文件、复制到桌面端；read 是读文件、列目录、复制出桌面端
  */
 export interface MachineApprovalRequest {
@@ -63,7 +63,7 @@ export type MachineApprovalResult =
   | { kind: 'allowed' }
   /** 用户拒绝了，note 是用户附的一句话 */
   | { kind: 'declined'; note: string | null }
-  /** 10 分钟没人答（决 246） */
+  /** 10 分钟没人答 */
   | { kind: 'expired' }
   /** 调用被取消了（回合打断、连接断开、开关关掉） */
   | { kind: 'cancelled' }
@@ -96,7 +96,7 @@ export interface MachineCallContext {
   policy: MachinePolicy
   /** 审批方式和访问范围的名字，machines 工具里写给模型看 */
   settings: { approval: 'session' | 'each' | 'never'; access: MachineAccessMode }
-  /** 要用户点头。按审批方式可能不弹卡片直接回 allowed；ask.flagged 非空时（3.3）除了“不确认”那档都会弹 */
+  /** 要用户点头。按审批方式可能不弹卡片直接回 allowed；ask.flagged 非空时（命令里提到了禁止位置）除了“不确认”那档都会弹 */
   approve(request: MachineApprovalRequest): Promise<MachineApprovalResult>
   log(note: MachineLogNote): void
   /** 回合被打断、连接断开、超时时被中止 */
@@ -125,7 +125,7 @@ export interface MachineExecutor {
   kill(processId: string): boolean
   /** 结束这台设备发起的全部进程（开关关掉、全部停）；不给就是全部 */
   stopAll(deviceId?: string): void
-  /** 会话所在的设备断开了：10 分钟后还没回来就结束它发起的进程（决 250）；online 为真表示回来了，取消计时 */
+  /** 会话所在的设备断开了：10 分钟后还没回来就结束它发起的进程；online 为真表示回来了，取消计时 */
   ownerPresence(deviceId: string, online: boolean): void
   dispose(): void
 }

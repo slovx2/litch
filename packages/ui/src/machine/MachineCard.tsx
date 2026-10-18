@@ -1,4 +1,4 @@
-// 远程设备要操作这台电脑时问用户的卡片（08 号设计 3.2、4.2）。两处用同一个组件：
+// 远程设备要操作这台电脑时问用户的卡片。两处用同一个组件：
 // - 会话的对话里（ClientAskRequest，ask.kind 是 machine）：MachineSessionCard，答复走 session.respond；
 // - 顶栏弹层里的全局待处理（找不到会话的调用）：MachinePendingCard，答复走 machine.answer，带倒计时。
 // 卡片上写清：哪台设备（远程的醒目）、哪个 harness、哪个会话（找不到写明）、要做什么——命令完整可见（长了折起，

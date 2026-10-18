@@ -1,5 +1,5 @@
 // 远程设备的连接配置：检查、显示用的主机标识，以及外壳要为远程设备提供的那几样能力。
-// 核心不碰 ssh：怎么连、用户的 ssh 配置里有什么，都由外壳实现后注入（设计文档 01 第七节）。
+// 核心不碰 ssh：怎么连、用户的 ssh 配置里有什么，都由外壳实现后注入。
 import { type AbortSignalLike, ChannelError } from '../channel/protocol.mjs'
 import type { TransportOpener } from '../connection/transport.mjs'
 import type { DiscoveredHost, RemoteCheck, RemoteTarget, WireColor } from '../model.mjs'
@@ -30,12 +30,12 @@ export interface SavedDevices {
   localWire: WireColor | null
   remotes: SavedRemote[]
   /**
-   * 各台设备（键是设备标识，本机是 local）改过的两个开关：内置浏览器、Computer Use（决 190）。
+   * 各台设备（键是设备标识，本机是 local）改过的两个开关：内置浏览器、Computer Use。
    * 没改过的不记，按默认来（浏览器开、Computer Use 关）；一个都没改过时没有这一项
    */
   tools?: Record<string, SavedToolSwitches>
   /**
-   * 各台远程设备“操作这台电脑”的审批方式和访问范围（08 号设计 3.2、3.3；开关本身在 tools 的 machine 里）。
+   * 各台远程设备“操作这台电脑”的审批方式和访问范围（开关本身在 tools 的 machine 里）。
    * 没改过的不记，按默认来（每个会话确认一次、禁止常用敏感位置）
    */
   machine?: Record<string, SavedMachineSettings>

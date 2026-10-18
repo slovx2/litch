@@ -1,4 +1,4 @@
-// read_file、write_file、list_dir（08 号设计 2.4、3.3）。
+// read_file、write_file、list_dir。
 // 先看路径（真实路径、种类、大小，桌面端这台连同禁止位置），挡住的直接回 blocked、不弹卡片；再审批；再动手。
 // 读：小文件用 fs/readFile 整读再切；大文件只读要的那一段（脚本 tail | head），不把整个文件搬过来。
 import { MACHINE_LIMITS } from '../../../../protocol/src/client-tools-machine.mjs'

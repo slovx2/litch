@@ -53,7 +53,7 @@ export interface CoreOptions {
   /** 通往主进程的客户端工具那一头（内置浏览器、Computer Use）。不给就是这台桌面什么都执行不了 */
   clientTools?: ClientToolPort
   /**
-   * 远程设备上的会话操作这台电脑（litch_machine，08 号设计）。不给就不声明这个命名空间（测试、没有外壳的核心）
+   * 远程设备上的会话操作这台电脑（litch_machine）。不给就不声明这个命名空间（测试、没有外壳的核心）
    */
   machine?: CoreMachineOptions
   log?(line: string): void
@@ -110,7 +110,7 @@ export function createCore(options: CoreOptions): Core {
     }
   }
 
-  // —— litch_machine（08 号设计）：远程设备上的会话操作这台电脑 ——
+  // —— litch_machine：远程设备上的会话操作这台电脑 ——
 
   /** 一台远程设备上“操作这台电脑”的设置：开关默认关，每个会话确认一次，禁止常用敏感位置 */
   const machineSettingsOf = (deviceId: string): MachineSettings => {
@@ -629,7 +629,7 @@ export function createCore(options: CoreOptions): Core {
             next.access = access.mode
             if (Array.isArray(access.custom)) next.custom = cleanDeniedPaths(access.custom)
             else if (access.mode === 'custom' && before.custom === undefined) {
-              // 第一次切到自定义：从内置名单起步（3.3）
+              // 第一次切到自定义：从内置名单起步
               next.custom = [...SENSITIVE_PRESETS]
             }
           }

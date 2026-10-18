@@ -55,7 +55,7 @@ export interface RpcOptions {
   notification(method: string, params: unknown): void
   /**
    * 对面发来的请求。返回 undefined 表示不处理。
-   * 不处理的请求会得到一个“方法不存在”的应答：不应答的话对面的回合会一直挂着（设计文档 01 第十节第 7 条）。
+   * 不处理的请求会得到一个“方法不存在”的应答：不应答的话对面的回合会一直挂着。
    * id 是这个请求的编号，对面之后用它通知“这个请求已经有结果了”。
    */
   request?(method: string, params: unknown, id: JsonRpcId): Promise<unknown> | undefined

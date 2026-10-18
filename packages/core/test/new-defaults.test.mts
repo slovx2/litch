@@ -1,4 +1,4 @@
-// 新建页的默认（决 149）：不带设置新建会话时对面会用的模型、强度、权限档怎么算（projectDefaults），
+// 新建页的默认（显示的就是建会话时会用的）：不带设置新建会话时对面会用的模型、强度、权限档怎么算（projectDefaults），
 // 新建页上显示、建会话时发出去的是什么（newSessionSettings），以及设备那头怎么问（device.newSessionDefaults）。
 import assert from 'node:assert/strict'
 import { test } from 'node:test'

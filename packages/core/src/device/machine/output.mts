@@ -1,4 +1,4 @@
-// litch_machine 的输出：跨块接着解 UTF-8、按字节掐掉中间、进程输出带序号留一段（08 号设计 2.4）。
+// litch_machine 的输出：跨块接着解 UTF-8、按字节掐掉中间、进程输出带序号留一段。
 // 核心没有 TextDecoder，字节和文本之间用 text/bytes.mts 的那几样。
 import { decodeUtf8 } from '../../text/bytes.mjs'
 import { utf8Length } from '../../text/output-cap.mjs'

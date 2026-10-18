@@ -224,7 +224,7 @@ export function NewSession({ draft, onPlace, onCreated, onDevices }: NewSessionP
 
   const own = chosen.slot === slot ? chosen.picks : {}
   const picks = { ...(options ? recallPicks(deviceId, harnessId, options) : {}), ...own }
-  // 底栏上显示的：选过的；没选的是对面不带设置新建时会用的（决 149），建会话时也照显示的发，显示的就是会用的
+  // 底栏上显示的：选过的；没选的是对面不带设置新建时会用的，建会话时也照显示的发，显示的就是会用的
   const settled = options && !holding ? newSessionSettings(picks, defaults, options) : null
   const shown: SessionSettings = {
     model: settled?.model ?? null,

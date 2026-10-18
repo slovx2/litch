@@ -1,4 +1,4 @@
-// 客户端工具（clientTools 扩展，设计文档 05 第九节）：握手时声明、建会话带工具、认 item/tool/call、
+// 客户端工具（clientTools 扩展）：握手时声明、建会话带工具、认 item/tool/call、
 // 设备开关、交给主进程、卡片、超时、回合结束和打断、连接断开、引擎撤回请求。对着假对端和假的主进程跑。
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
@@ -204,7 +204,7 @@ test('握手：主进程报了能执行的命名空间就声明 clientTools 扩�
   }
 })
 
-test('建会话：带上这台桌面能执行的那几份工具定义（决 189），没有定义的命名空间跳过；没声明的旧适配器里只有 dsh 不带', async () => {
+test('建会话：带上这台桌面能执行的那几份工具定义（不看开关），没有定义的命名空间跳过；没声明的旧适配器里只有 dsh 不带', async () => {
   const world = setup({ namespaces: ['litch_echo', 'litch_unknown'] })
   world.core.start()
   await settle()

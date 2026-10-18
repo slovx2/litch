@@ -1,4 +1,4 @@
-// litch_machine 的接线（08 号设计第三、四节）：开关、三档审批、命令里提到禁止位置时再弹、卡片过期、
+// litch_machine 的接线：开关、三档审批、命令里提到禁止位置时再弹、卡片过期、
 // 同一回合里拒过的不再问、对话里和全局待处理两种卡片、系统通知、关开关时收拾、握手声明、建会话时的说明、
 // 交给执行器的两台机器。执行器是假的（真的那份归执行器那条线，见 machine-*.test.mts），设备是假对端。
 import assert from 'node:assert/strict'
@@ -775,7 +775,7 @@ test('主题 machine：执行器的进程表带上设备名和会话，变了整
   assert.deepEqual(fake.stopped, [undefined])
 })
 
-test('设备断开、连回来时告诉执行器（决 250 的 10 分钟由执行器计）', async () => {
+test('设备断开、连回来时告诉执行器（断开 10 分钟由执行器计）', async () => {
   const { remote, fake, time } = await started()
   assert.deepEqual(fake.presence, [['box', true]])
   remote.last().drop()

@@ -1,4 +1,4 @@
-// 界面看到的数据形状。界面不认识协议类型，只认识这里的类型（设计文档 01 第五节规则 3）。
+// 界面看到的数据形状。界面不认识协议类型，只认识这里的类型，各种 harness 的差异在核心里消化掉。
 // 协议条目怎么变成这些显示条目，见 projection 目录。
 // 类型是 Text 的字段可能是对面给的原文，也可能是核心自己要说的一句话（见 phrase.mts），界面按当前语言显示。
 import type { MachineAccessView, MachineAskView } from './model-machine.mjs'
@@ -106,7 +106,7 @@ export type RemoteTarget =
     }
 
 /**
- * 连接在哪一步没成。每一步对应界面上一个明确的动作（设计文档 01 第 7.3 节）：
+ * 连接在哪一步没成。每一步对应界面上一个明确的动作：
  * - unreachable：连不到对面（主机不可达、套接字不存在或没人监听）
  * - hostKey：主机密钥没被信任，或者变了。我们不替用户做这个决定
  * - auth：ssh 认证没过
@@ -209,13 +209,13 @@ export interface DeviceView {
    */
   tools: ToolSwitches
   /**
-   * 设备设置页上“操作这台电脑（命令与文件）”一项（08 号设计，model-machine.mts）。
+   * 设备设置页上“操作这台电脑（命令与文件）”一项（model-machine.mts）。
    * 只有远程设备有；本机设备、这台桌面端执行不了 litch_machine 时是 null，设置页不出这一项
    */
   machine: MachineAccessView | null
 }
 
-/** 设备设置页上“内置浏览器”“Computer Use”两个开关。默认浏览器开、Computer Use 关（决 190） */
+/** 设备设置页上“内置浏览器”“Computer Use”两个开关。默认浏览器开、Computer Use 关 */
 export interface ToolSwitches {
   browser: boolean | null
   computer: boolean | null
@@ -231,7 +231,7 @@ export interface DiscoveredHost {
 }
 
 /**
- * 添加之前先看一眼对面有什么。先找设备服务，没有再找 codex（设计文档 03 第 12.1 节）：
+ * 添加之前先看一眼对面有什么。先找设备服务，没有再找 codex：
  * - service：装了适配器，连上之后是完整模式。它的服务这时在跑的话顺便问出上面有哪些 harness；
  *   没在跑就不知道（只是看一眼，不替用户启动任何东西），harnesses 是 null
  * - codex：只有原生 codex，连上之后是单 harness 模式

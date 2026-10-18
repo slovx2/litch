@@ -1,4 +1,4 @@
-// copy：在两台机器之间（或者一台里面）搬文件和目录（08 号设计 2.4）。
+// copy：在两台机器之间（或者一台里面）搬文件和目录。
 // 桌面端的核心在中间转：从一头分块读（小文件 fs/readFile，大的用脚本按段读），往另一头写
 // （小文件 fs/writeFile，大的起一个 cat > 文件 的进程、分块写进它的标准输入，写一块等一块，不在核心里攒）。
 // 桌面端那一头照访问范围挡：源在禁止位置里、目标落进禁止位置，直接回 blocked；
@@ -117,7 +117,7 @@ export async function copyTool(kit: ToolKit, raw: unknown): Promise<Outcome> {
     if (sameMachine && source.looked.probe.real === dest.looked.probe.real)
       return failed('invalid', 'Source and destination are the same file.', summary)
 
-    // 复制到桌面端算“写”，从桌面端复制出去算“读”（3.2）
+    // 复制到桌面端算“写”，从桌面端复制出去算“读”（“本会话都允许”按这两类各记）
     const cls =
       dest.target.role === 'desktop'
         ? 'mutate'

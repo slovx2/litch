@@ -1,4 +1,4 @@
-// 客户端工具在核心这一侧和外壳之间的约定（设计文档 05 第九节）。
+// 客户端工具在核心这一侧和外壳之间的约定。
 // 核心收到 `item/tool/call` 之后经外壳交给主进程里登记的执行器去做，执行器要用户点头时经核心在对话里出一张卡片。
 // 核心不认识 Electron：这里的形状和桌面外壳的 apps/desktop/src/client-tools/types.mts 是同一份，
 // 由外壳（core-host.mts）把两边接起来，类型在那里对一遍。
@@ -34,7 +34,7 @@ export interface ToolInvocation extends ClientToolCallParams {
 export type ToolAnswer = 'once' | 'session' | 'always' | 'decline'
 
 /**
- * litch_machine 的调用找不到会话、卡片进了全局待处理时，请主进程发的系统通知（08 号设计 4.2）。
+ * litch_machine 的调用找不到会话、卡片进了全局待处理时，请主进程发的系统通知。
  * 核心不认识语言，只给结构，文字由主进程按界面的语言拼
  */
 export interface MachineNotice {
