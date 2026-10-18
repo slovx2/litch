@@ -351,17 +351,30 @@ pub fn set_focus(el: &IUIAutomationElement) -> RpcResult<()> {
     unsafe { el.SetFocus() }.map_err(|e| sys("focus the element", e))
 }
 
-/// 实时读元素的文本值（粘贴后确认“值变了没有”用）：优先 ValuePattern.CurrentValue，退回 CurrentName。
-/// 只为前后对比，读不到就回 None（对比不出变化，调用方会等满超时再恢复剪贴板）。
-pub fn snapshot_value(el: &IUIAutomationElement) -> Option<String> {
+/// 读元素“当前文字”用于粘贴前后对比：优先 ValuePattern.CurrentValue，退回 TextPattern 文档文字。
+/// 能读到（哪怕空串）就 Some；元素根本没有值/文字模式时回 None（视作无法确认，调用方回落固定等待）。
+pub fn text_probe(el: &IUIAutomationElement) -> Option<String> {
     unsafe {
         if let Ok(p) = el.GetCurrentPatternAs::<IUIAutomationValuePattern>(UIA_ValuePatternId) {
-            if let Some(v) = bstr(p.CurrentValue()) {
-                return Some(v);
+            if let Ok(v) = p.CurrentValue() {
+                return Some(crate::text::clip(&v.to_string(), 8192));
             }
         }
-        bstr(el.CurrentName())
+        if let Ok(tp) = el.GetCurrentPatternAs::<IUIAutomationTextPattern>(UIA_TextPatternId) {
+            if let Ok(range) = tp.DocumentRange() {
+                if let Ok(s) = range.GetText(8192) {
+                    return Some(s.to_string());
+                }
+            }
+        }
+        None
     }
+}
+
+/// 当前键盘焦点所在的元素（typeText 不带 ref 时，用来确认粘贴落下）。拿不到回 None。
+pub fn focused_element() -> Option<IUIAutomationElement> {
+    let auto = automation().ok()?;
+    unsafe { auto.GetFocusedElement().ok() }
 }
 
 /// 用 UIA 模式“激活”元素：Invoke → 默认动作 → 选择 → 开合 → 勾选。都没有回 false，让调用方改真实点击

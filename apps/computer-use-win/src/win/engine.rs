@@ -272,26 +272,27 @@ impl Engine {
         let hwnd = apps::hwnd(win.hwnd);
         let text = req_str(p, "text")?;
         foreground::ensure(hwnd)?;
+        // 确认粘贴落下的元素：带 ref 用 ref 并聚焦，否则用当前键盘焦点元素
         let el = match str_of(p, "ref") {
             Some(reference) => {
                 let el = uia::find(hwnd, &reference)?;
                 let _ = uia::set_focus(&el);
                 Some(el)
             }
-            None => None,
+            None => uia::focused_element(),
         };
         let class = apps::class(hwnd);
-        // 有元素就用它的值变化确认粘贴已落下，再恢复剪贴板；没有就固定等
-        match &el {
-            Some(el) => {
-                let before = uia::snapshot_value(el);
-                let check = || uia::snapshot_value(el) != before;
+        // 元素能读出文字（哪怕空串）才用它做前后对比来确认；读不出就固定等
+        let before = el.as_ref().and_then(uia::text_probe);
+        let note = match (&el, &before) {
+            (Some(el), Some(_)) => {
+                let check = || uia::text_probe(el).as_deref() != before.as_deref();
                 let check: &dyn Fn() -> bool = &check;
-                input::enter_text(&text, &class, Some(check));
+                input::enter_text(&text, &class, Some(check))
             }
-            None => input::enter_text(&text, &class, None),
-        }
-        self.done()
+            _ => input::enter_text(&text, &class, None),
+        };
+        self.done_with_notes(note)
     }
 
     fn press_key(&mut self, p: &Value) -> RpcResult<Value> {
@@ -366,6 +367,15 @@ impl Engine {
     fn done(&self) -> RpcResult<Value> {
         std::thread::sleep(Duration::from_millis(400));
         Ok(json!({}))
+    }
+
+    /// 带一条可选 notes 的 done（typeText 粘贴没确认落下时提醒模型去核对）
+    fn done_with_notes(&self, note: Option<&str>) -> RpcResult<Value> {
+        std::thread::sleep(Duration::from_millis(400));
+        match note {
+            Some(n) => Ok(json!({ "notes": [n] })),
+            None => Ok(json!({})),
+        }
     }
 }
 
