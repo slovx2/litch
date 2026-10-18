@@ -107,22 +107,6 @@ pub fn root(h: HWND) -> HWND {
     }
 }
 
-/// a 是不是 b 自己，或者被 b（一层层）拥有
-pub fn owned_by(a: HWND, b: HWND) -> bool {
-    let mut cur = a;
-    for _ in 0..16 {
-        if cur == b {
-            return true;
-        }
-        let owner = unsafe { GetWindow(cur, GW_OWNER) }.unwrap_or_default();
-        if owner.is_invalid() {
-            return false;
-        }
-        cur = owner;
-    }
-    false
-}
-
 /// 按 Z 序（从上到下）列出所有顶层窗口
 pub fn top_level() -> Vec<HWND> {
     unsafe extern "system" fn collect(h: HWND, l: LPARAM) -> BOOL {

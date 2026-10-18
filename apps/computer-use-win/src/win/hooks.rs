@@ -7,7 +7,7 @@ use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{mpsc, Mutex};
 use std::time::{Duration, Instant};
-use windows::Win32::Foundation::{LPARAM, LRESULT, POINT, WPARAM};
+use windows::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Threading::GetCurrentThreadId;
 use windows::Win32::UI::Input::KeyboardAndMouse::VK_ESCAPE;
@@ -108,10 +108,6 @@ pub fn start() -> bool {
     rx.recv_timeout(Duration::from_secs(3)).unwrap_or(false)
 }
 
-pub fn installed() -> bool {
-    INSTALLED.load(Ordering::SeqCst)
-}
-
 /// 用户最近一次在这个窗口上动（鼠标落在 rect 里，或这个窗口在前台时按键）的时间
 pub fn last_user_input(hwnd: isize, rect: &crate::geometry::Rect) -> Option<Instant> {
     let events = EVENTS.lock().unwrap_or_else(|e| e.into_inner());
@@ -120,11 +116,4 @@ pub fn last_user_input(hwnd: isize, rect: &crate::geometry::Rect) -> Option<Inst
         Physical::Key { foreground, at } if foreground == hwnd => Some(at),
         _ => None,
     })
-}
-
-/// 光标现在的位置（物理像素）
-pub fn cursor() -> Option<(i32, i32)> {
-    let mut point = POINT::default();
-    unsafe { GetCursorPos(&mut point).ok()? };
-    Some((point.x, point.y))
 }
