@@ -3,15 +3,19 @@
 // press_key 的组合键先按下修饰键、再按主键，倒序松开。SendInput 自己会给事件打上“注入”标记，低级钩子据此和物理输入区分。
 use crate::geometry::{absolute, Rect};
 use crate::keys::KeyCombo;
-use crate::text::{self, TypeStep};
+use crate::text::{self, Keystroke};
 use crate::wire::RpcResult;
+use std::time::Duration;
 use windows::Win32::UI::Input::KeyboardAndMouse::*;
 use windows::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN};
 
 /// 一个滚轮刻度
 const WHEEL_DELTA: i32 = 120;
-/// 一批最多发多少个事件（长文字分批，免得一次的数组太大）
+/// 一批最多发多少个事件（点击、组合键这类一次发多个事件时分批，免得数组太大）
 const BATCH: usize = 200;
+/// 打字时每个键击之间等多久（毫秒）。整串一次发太快，记事本这类 TSF 控件会吞字或重复最后一个字，
+/// 所以一次只发一个字符、中间留这点间隔。约 2000 字一次输入在这个间隔下大致 10 秒量级。
+const TYPE_GAP_MS: u64 = 5;
 
 /// 虚拟桌面（所有显示器合起来）的矩形，物理像素
 pub fn desktop() -> Rect {
@@ -113,22 +117,27 @@ pub fn drag(from: (i32, i32), to: (i32, i32)) -> RpcResult<()> {
     Ok(())
 }
 
-/// 逐个 UTF-16 码元打字（换行、制表符按真实键发）
+/// 一次一个键击打字：每个字符（或回车、Tab）单独一次 SendInput、中间留间隔，避免一次批量发太快被吞字。
+/// 代理对的两个码元放进同一次 SendInput 一起发，保证成对到达。
 pub fn type_text(value: &str) {
-    let mut inputs = vec![];
-    for step in text::plan(value) {
-        match step {
-            TypeStep::Unit(unit) => {
-                inputs.push(key(0, unit, KEYEVENTF_UNICODE));
-                inputs.push(key(0, unit, KEYEVENTF_UNICODE | KEYEVENTF_KEYUP));
+    for stroke in text::keystrokes(value) {
+        let mut inputs = vec![];
+        match stroke {
+            Keystroke::Char(c) => {
+                let mut buf = [0u16; 2];
+                for unit in c.encode_utf16(&mut buf) {
+                    inputs.push(key(0, *unit, KEYEVENTF_UNICODE));
+                    inputs.push(key(0, *unit, KEYEVENTF_UNICODE | KEYEVENTF_KEYUP));
+                }
             }
-            TypeStep::Key(vk) => {
+            Keystroke::Key(vk) => {
                 inputs.push(key(vk, 0, KEYBD_EVENT_FLAGS(0)));
                 inputs.push(key(vk, 0, KEYEVENTF_KEYUP));
             }
         }
+        send(&inputs);
+        std::thread::sleep(Duration::from_millis(TYPE_GAP_MS));
     }
-    send(&inputs);
 }
 
 /// 发一个组合键 repeat 次

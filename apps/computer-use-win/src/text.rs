@@ -1,17 +1,19 @@
 // 打字的拆分和长文字的截断。
-// type_text 用 KEYEVENTF_UNICODE 逐个 UTF-16 码元发（中文不经输入法）；换行、制表符按真实的键发，
-// 否则很多控件收到 Unicode 的 \n 不会换行。
+// type_text 把文字拆成一次一个“键击”：一个字符用 KEYEVENTF_UNICODE 发（中文不经输入法，代理对由调用方
+// encode_utf16 成两个码元一起发），换行、制表符按真实的键发（很多控件收到 Unicode 的 \n 不会换行）。
+// 一次一个键击分开发、中间留间隔，是因为一次 SendInput 把整串发太快时，记事本这类 TSF 控件会吞字或把字
+// 替换成最后一个字的重复。
 use crate::keys::{VK_RETURN, VK_TAB};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TypeStep {
-    /// 一个 UTF-16 码元（代理对拆成两个，按顺序发）
-    Unit(u16),
+pub enum Keystroke {
+    /// 一个字符（代理对由调用方 encode_utf16 成一到两个 UTF-16 码元）
+    Char(char),
     /// 一个虚拟键（回车、Tab）
     Key(u16),
 }
 
-pub fn plan(text: &str) -> Vec<TypeStep> {
+pub fn keystrokes(text: &str) -> Vec<Keystroke> {
     let mut steps = vec![];
     let mut chars = text.chars().peekable();
     while let Some(c) = chars.next() {
@@ -21,16 +23,11 @@ pub fn plan(text: &str) -> Vec<TypeStep> {
                 if chars.peek() == Some(&'\n') {
                     chars.next();
                 }
-                steps.push(TypeStep::Key(VK_RETURN));
+                steps.push(Keystroke::Key(VK_RETURN));
             }
-            '\n' => steps.push(TypeStep::Key(VK_RETURN)),
-            '\t' => steps.push(TypeStep::Key(VK_TAB)),
-            _ => {
-                let mut buf = [0u16; 2];
-                for unit in c.encode_utf16(&mut buf) {
-                    steps.push(TypeStep::Unit(*unit));
-                }
-            }
+            '\n' => steps.push(Keystroke::Key(VK_RETURN)),
+            '\t' => steps.push(Keystroke::Key(VK_TAB)),
+            _ => steps.push(Keystroke::Char(c)),
         }
     }
     steps
@@ -51,20 +48,21 @@ mod tests {
 
     #[test]
     fn splits_text() {
-        assert_eq!(plan("a中"), vec![TypeStep::Unit(0x61), TypeStep::Unit(0x4E2D)]);
-        assert_eq!(plan("x\r\ny\nz\tw\r"), vec![
-            TypeStep::Unit(0x78),
-            TypeStep::Key(VK_RETURN),
-            TypeStep::Unit(0x79),
-            TypeStep::Key(VK_RETURN),
-            TypeStep::Unit(0x7A),
-            TypeStep::Key(VK_TAB),
-            TypeStep::Unit(0x77),
-            TypeStep::Key(VK_RETURN),
+        assert_eq!(keystrokes("a中"), vec![Keystroke::Char('a'), Keystroke::Char('中')]);
+        assert_eq!(keystrokes("x\r\ny\nz\tw\r"), vec![
+            Keystroke::Char('x'),
+            Keystroke::Key(VK_RETURN),
+            Keystroke::Char('y'),
+            Keystroke::Key(VK_RETURN),
+            Keystroke::Char('z'),
+            Keystroke::Key(VK_TAB),
+            Keystroke::Char('w'),
+            Keystroke::Key(VK_RETURN),
         ]);
-        // 代理对
-        assert_eq!(plan("😀"), vec![TypeStep::Unit(0xD83D), TypeStep::Unit(0xDE00)]);
-        assert!(plan("").is_empty());
+        // 代理对：一个字符，encode_utf16 交给调用方
+        assert_eq!(keystrokes("😀"), vec![Keystroke::Char('😀')]);
+        assert_eq!('😀'.encode_utf16(&mut [0u16; 2]), [0xD83D, 0xDE00]);
+        assert!(keystrokes("").is_empty());
     }
 
     #[test]
