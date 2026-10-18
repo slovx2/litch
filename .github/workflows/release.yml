@@ -238,7 +238,8 @@ jobs:
             apps/desktop/out/installer/*.zip
           if-no-files-found: error
 
-  # Windows 的安装程序：不签名（打开时系统会提示来源不明），还没有经过完整的测试，这里只出包、不验收
+  # Windows 的安装程序：不签名（打开时系统会提示来源不明），这里只出包、不验收（真机验收见设计 09 号）。
+  # 带 Computer Use 的助手（apps/computer-use-win，Rust）：打包前先构建，打包和做安装包都核对它在
   desktop-windows:
     runs-on: windows-2025
     timeout-minutes: 60
@@ -273,8 +274,19 @@ jobs:
       - run: npm ci --prefix packages/dsh --no-audit --no-fund
       - run: npm ci --prefix packages/opencode --no-audit --no-fund
       - run: npm ci --prefix packages/acp --no-audit --no-fund
+      # 工具链的版本只在 rust-toolchain.toml 里写（乙线定），rustup 在 crate 目录里按它装、按它用
+      - name: Rust 工具链（apps/computer-use-win/rust-toolchain.toml）
+        working-directory: apps/computer-use-win
+        run: |
+          rustup toolchain install
+          rustup show active-toolchain
+          cargo --version
+      - name: Computer Use 助手
+        working-directory: apps/computer-use-win
+        run: cargo build --release --locked --target x86_64-pc-windows-msvc
       - run: npm run build
       - run: npm run client:setup
+      - run: node apps/desktop/scripts/check-computer-use.mjs --require
       - run: npm run client:pack
       - run: node apps/desktop/scripts/make-installer.mjs
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9

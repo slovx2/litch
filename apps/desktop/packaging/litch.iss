@@ -8,8 +8,10 @@
 ;
 ; 只给当前用户装，不要管理员权限：默认装到 %LOCALAPPDATA%\Programs\Litch，开始菜单里放一个快捷方式。
 ; 安装界面只有英文：Inno Setup 自带的语言里没有简体中文（那份在“非官方”里，不随它安装）。应用本身照系统语言显示。
+; 应用目录整个装进去，其中 resources\computer-use\litch-computer-use.exe 是 Computer Use 的助手
+; （scripts/pack.mjs 放进去的，make-installer.mjs 编之前核对过它在）。
 ; 升级、卸载时，内置适配器的常驻服务要是还在跑，它的文件被占着，安装程序会照 Windows 的“重启管理器”
-; 问要不要先关掉占着文件的程序。
+; 问要不要先关掉占着文件的程序。助手是 Litch 的子进程，Litch 退出它就跟着退，不另外处理。
 ; 应用自己的更新（src/updater.mts、src/main.mts）在退出时先请常驻服务闲着的话停下，再带
 ; /VERYSILENT /SUPPRESSMSGBOXES /NORESTART 静默跑这个安装程序；用户点的是“重启以更新”的话再带上
 ; /LITCHRELAUNCH，装完把应用重新打开（见 [Run] 和 [Code]）。
