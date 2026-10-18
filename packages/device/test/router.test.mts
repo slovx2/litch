@@ -32,7 +32,7 @@ test('握手：没声明 harness 扩展的被拒绝并说明原因，声明了�
     assert.deepEqual(refused.data, {
       litch: 'extensionRequired',
       required: ['harness'],
-      supported: ['harness', 'deviceWorkspaces', 'deviceProcesses', 'sessionTree'],
+      supported: ['harness', 'deviceWorkspaces', 'deviceProcesses', 'deviceTasks', 'sessionTree'],
     })
     assertErrorData(refused.data)
     // 被拒绝的连接没有连任何上游，也还是未初始化
@@ -64,7 +64,7 @@ test('握手：没声明 harness 扩展的被拒绝并说明原因，声明了�
     // 握手应答是客户端收到的第一帧
     assert.equal(JSON.parse(client.raw[0] ?? '{}').result?.userAgent, result.userAgent)
     // 客户端声明的能力带给了上游，包括它认识哪些扩展；退订名单不带，那是聚合面自己拦的。
-    // 设备进程自己执行的命名空间（litch_sessions）替这条连接声明上（客户端工具的扩展跟着加上）
+    // 设备进程自己执行的命名空间（litch_tasks、litch_sessions）替这条连接声明上（客户端工具的扩展跟着加上）
     const upstream = pi.seen.find((entry) => entry.method === 'initialize')
     assert.deepEqual(upstream?.params, {
       clientInfo: { name: 'device-test', title: null, version: '0.0.1' },
@@ -73,7 +73,7 @@ test('握手：没声明 harness 扩展的被拒绝并说明原因，声明了�
         requestAttestation: false,
         litchExtensions: ['harness', 'futureThing', 'clientTools'],
         subAgentActivityKinds: ['completed'],
-        litchClientTools: { namespaces: ['litch_sessions'] },
+        litchClientTools: { namespaces: ['litch_tasks', 'litch_sessions'] },
       },
     })
     assert.ok(pi.seen.some((entry) => entry.method === 'initialized' && entry.id === undefined))
@@ -135,6 +135,7 @@ test('runtime/info：设备信息和每个 harness 的状态，形状和扩展�
       'harness',
       'deviceWorkspaces',
       'deviceProcesses',
+      'deviceTasks',
       'sessionTree',
     ])
     assert.ok(info.device.hostname && info.device.home && info.device.os)

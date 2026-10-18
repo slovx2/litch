@@ -17,7 +17,9 @@ test('ENGINE-LINK-001：openEngineLink 握手时声明设备注册的命名空�
     assert.deepEqual(link.runtime?.extensions, ['clientTools'])
     const greeting = [...pi.greetings.values()][0]
     assert.equal(greeting.clientInfo.name, 'litch-device')
-    assert.deepEqual(greeting.capabilities.litchClientTools, { namespaces: ['litch_sessions'] })
+    assert.deepEqual(greeting.capabilities.litchClientTools, {
+      namespaces: ['litch_tasks', 'litch_sessions'],
+    })
     const { thread } = await link.request('thread/start', { cwd: '/work' })
     const running = runTurn(
       link,
@@ -33,10 +35,10 @@ test('ENGINE-LINK-001：openEngineLink 握手时声明设备注册的命名空�
     const timedOut = await runTurn(
       link,
       { threadId: thread.id, input: text('再跑') },
-      { timeoutMs: 50 },
+      // 到点打断，再等打断的结果一小会儿
+      { timeoutMs: 50, interruptGraceMs: 50 },
     )
     assert.equal(timedOut.status, 'timedOut')
-    pi.end(thread.id)
     let closed = ''
     link.onClose((reason) => {
       closed = reason
@@ -56,8 +58,8 @@ test('ENGINE-LINK-002：没在跑的 harness、没配置的 harness 开不了连
   const pi = new FakeEngine('pi')
   const env = rig({}, {}, { control, dial: () => pi.connector })
   try {
-    await assert.rejects(env.device.openEngineLink('pi'), /没有在运行/)
-    await assert.rejects(env.device.openEngineLink('nope'), /没有配置/)
+    await assert.rejects(env.device.openEngineLink('pi'), /is not running/)
+    await assert.rejects(env.device.openEngineLink('nope'), /is not configured/)
   } finally {
     await env.close()
   }

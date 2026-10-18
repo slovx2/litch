@@ -386,6 +386,14 @@ export class Relay {
     )
   }
 
+  /** 这个 harness 发来的这条请求（上游的请求号）是不是转给了客户端、还在等它答 */
+  holds(harness: string, upstreamId: RpcId): boolean {
+    const key = idKey(upstreamId)
+    for (const entry of this.pending.values())
+      if (entry.link?.harness === harness && idKey(entry.upstreamId) === key) return true
+    return false
+  }
+
   /** 客户端对服务端请求的应答：送回发出请求的那个上游 */
   answer(frame: Frame, raw: string): void {
     const entry = this.pending.get(idKey(frame.id))

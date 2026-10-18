@@ -27,6 +27,8 @@ type controlState struct {
 	// 属于设备的进程（可重连的终端）的上限和期限现在是多少，键和设备进程那边的字段同名。
 	// 设备进程照它当场换上：这几项设置改了不用重启它（settings_processes.go）。
 	Processes map[string]int `json:"processes"`
+	// 定时任务的总开关和同时运行的上限（settings_tasks.go），设备进程照它当场换上。
+	Tasks map[string]any `json:"tasks"`
 	// 这份服务的来历（service_facts.go）。设备进程在 runtime/info 的 device.service 里把它给客户端。
 	Service *serviceFacts `json:"service,omitempty"`
 }
@@ -56,7 +58,7 @@ type sshEntryReason struct {
 }
 
 func (m *harnessManager) view(keys []string) controlState {
-	state := controlState{Keys: append([]string{}, keys...), Snapshot: m.snapshot(), Processes: m.base.processLimits()}
+	state := controlState{Keys: append([]string{}, keys...), Snapshot: m.snapshot(), Processes: m.base.processLimits(), Tasks: m.base.taskSettings()}
 	for _, id := range knownHarnesses {
 		current, text, _ := m.status(id)
 		if current == stateRunning {

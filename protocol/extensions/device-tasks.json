@@ -17,21 +17,23 @@
   },
   "undeclared": "没声明的连接上，线上内容和标准协议一致：litch/task/ 开头的方法回 extensionRequired（data.required 是 [\"deviceTasks\"]），收不到 litch/task/changed、litch/task/run/changed。任务照样按时跑，跑出来的会话、回合和通知照标准协议出现在它订阅了的会话上，会话级的通知（thread/started、thread/status/changed）照旧发给每条连接。",
   "rules": [
-    "存储：任务和运行记录存在设备服务的状态目录里，和设备库分开、带迁移，设备库重建不影响它们。设备服务重启后照样在。",
-    "调度：设备服务按每个 active 任务的 nextRunAt 定时；醒来、启动、改了任务时都重新算。到点时如果错过了不止一个时间点（设备关机、睡眠、设备服务没在跑），只跑一次，coalesced 记下合并掉了几个；下一次从现在往后算。一次性任务错过了也补跑这一次，跑完是 completed。",
-    "同一个任务同时只有一次运行（queued 或 running）。到点时上一次还没结束，不另起，那个时间点算进上一次之后要跑的那一次的 coalesced；runNow 遇到这种情况回的是那一次，deduplicated 为 true。同一个时间点不会跑两次，设备服务重启也不会。",
-    "并发：整台设备同时 running 的运行有上限（设备设置里的一项，默认 2），到了上限的排着（queued），按 scheduledFor 先后开始。",
-    "执行 newThread：设备服务在 target.harness 上 thread/start（cwd、模型、权限照 target；workspaceId 不是 null 时归进那个工作区），给会话起名“任务名 · 计划时间”，再 turn/start 发提示词（强度照 target）。建出来的会话是普通会话，出现在 thread/list 里，客户端可以打开、接着聊。",
-    "执行 thread：设备服务恢复那个会话、在里面 turn/start。会话正在跑回合时排着等它结束（最多等 TASK_THREAD_WAIT，默认 30 分钟，超了这次失败）；会话没了这次失败（threadMissing），任务暂停。",
-    "发给模型的提示词前面加一段说明：这是定时任务的自动运行、任务名、计划时间和当前时间、合并了几次、没有人在看要尽量自己完成。原文照用户写的放在后面。",
-    "回合的时限：一次运行最长 2 小时，超了打断，记 timedOut。回合里的审批、提问照各引擎原有的做法（这一版不另做无人值守的审批策略）：Claude Code 会停着等有客户端连上来回答；别的引擎没有连接时按失败处理。",
-    "结果：回合结束后记 succeeded（回合 completed）或 failed，summary 是最后一条回答的开头。失败不让任务暂停，只记 lastError；之后成功一次清掉。设备服务在回合结束前退出，重启后去对应会话里查这个回合：查到结束了照实记，查不到记 interrupted。",
-    "未读：结束的运行 read 为 false，客户端打开它（或者它的会话）后调 litch/task/runs/markRead；任务上的 unreadRuns 跟着变。",
-    "通知：任务的任何字段变了（包括 nextRunAt、lastRun、unreadRuns）发 litch/task/changed；一次运行开始、结束、标成看过了发 litch/task/run/changed。发给每条声明过 deviceTasks 的连接，发起改动的那条也收。",
-    "litch_tasks 工具：设备列了 deviceTasks 时，客户端建会话可以带上它。设备服务替自己通往引擎的每条连接都声明能执行 litch_tasks，调用来了自己答，不转给客户端；所以没有桌面端连着、在定时任务自己的回合里也能用。create 的 target 不给是 this_thread：在发起调用的会话里接着发；new_thread 沿用这个会话的 harness、cwd、工作区和设置。建出来的任务 origin 是 tool。工具的结果是一段 JSON 文本（任务或任务列表），出错时是一句说明。",
-    "上限：一台设备最多 TASK_LIMIT 个任务；名字 1–120 字、提示词 1–100000 字；相邻两次运行至少隔 5 分钟。运行记录每个任务留最近 200 条。",
-    "删除任务时，正在跑的那一次不打断，跑完不再记录；它建出来的会话不删。",
-    "谁能连上聚合面谁就能管理这些任务，不另设权限：任务以这台设备上这个用户的身份运行。"
+    "存储：任务和运行记录存在设备服务的状态目录里（<状态目录>/device/tasks.sqlite），和设备库分开、带迁移，设备库重建不影响它们。设备服务重启后照样在。库比这一版的结构新（用过更新的版本）时设备服务不碰它，这时 runtime/info 里不列 deviceTasks。",
+    "调度：设备服务按每个 active 任务的 nextRunAt 定时，不按固定间隔轮询；定时器最长等 5 分钟就醒来看一眼墙钟（机器睡眠时单调时钟停着，到点的定时器会晚）。启动、醒来、改了任务时都重新算。到点时如果错过了不止一个时间点（设备关机、睡眠、设备服务没在跑），只跑一次：scheduledFor 是错过的时间点里最近的那个，coalesced 记下其余的个数；下一次从现在往后算。一次性任务错过了也补跑这一次，跑完是 completed。",
+    "同一个任务同时只有一次运行（queued 或 running）。到点时上一次还没结束，不另起，那个时间点（连同它之前错过的）算进下一次按日程跑的那一次的 coalesced；runNow 遇到这种情况回的是那一次，deduplicated 为 true。同一个时间点不会跑两次，设备服务重启也不会（排运行和推进 nextRunAt 在同一个事务里，另有触发键：任务、revision、时间点）。",
+    "并发：整台设备同时在执行的运行有上限（设备设置 tasks.maxConcurrent，默认 2），到了上限的排着（queued），按 scheduledFor 先后开始。thread 目标等会话空下来的那段工夫里，运行还是 queued，但已经占着一个名额。",
+    "总开关（设备设置 tasks.enabled，默认开）：关着时不按日程触发；已经排上的、立即运行的照跑，客户端的方法照常能用。再打开时，关着期间错过的时间点不补跑，nextRunAt 从那一刻往后算；一次性任务除外，照常补跑一次。设备服务刚起来时等适配器主进程把设置送过来再开始排（最多等 10 秒）。",
+    "执行：到点后设备服务自己开一条内部连接到 target.harness（握手时声明能执行 litch_tasks）。harness 停用了、没装、起不来，这次失败（harnessUnavailable）；正在起或者暂时连不上的，最多等 60 秒。",
+    "执行 newThread：工作目录不存在这次失败（cwdMissing）。设备服务在 target.harness 上 thread/start（cwd、模型照 target；权限：harness 声明了权限预设的给 permissions，没声明的当作审批策略给 approvalPolicy；harness 报了 clientTools 的带上 litch_tasks 的动态工具；原生 codex 带 threadSource automation），workspaceId 不是 null 时归进那个工作区（工作区这期间被删了就不归），用 thread/name/set 给会话起名“任务名 · 计划时间”（计划时间是任务时区里的 YYYY-MM-DD HH:MM，起名失败不影响运行），再 turn/start 发提示词（强度照 target）。建出来的会话是普通会话，出现在 thread/list 里，客户端可以打开、接着聊。",
+    "执行 thread：设备服务恢复那个会话（thread/resume）、在里面 turn/start。会话正在跑回合时等它空下来（最多 TASK_THREAD_WAIT，30 分钟，超了这次失败，原因 internal）；会话没了（恢复时引擎回了错误）这次失败（threadMissing），任务暂停（revision 加一）。",
+    "发给模型的提示词前面加一段英文说明：这是定时任务的自动运行、任务名、是按日程还是手动、计划时间和当前时间（任务时区）、合并了几次、没有人在看要尽量自己完成。原文照用户写的放在后面，中间隔一行 ---。",
+    "回合的时限：一次运行最长 2 小时（从回合开始算），超了 turn/interrupt 打断，记 timedOut。回合里的审批、提问照各引擎原有的“没有连接可送”时的做法（这一版不另做无人值守的审批策略）：Claude Code、原生 codex 会停着，等有客户端连上来恢复会话再回答，设备服务的内部连接不答；Pi、dsh、OpenCode、ACP 这几个原本没有连接可送就让这条请求当场失败，内部连接也订阅着会话、会收到它，所以没有客户端连接拿着这条请求时（收到后稍等一下再看；客户端拿着的，等客户端都走了再看），内部连接替引擎回一个错误，结果和原来没人可送时一样；有客户端拿着就留给客户端答。",
+    "结果：回合结束后记 succeeded（回合 completed）或 failed（turnFailed，message 里带回合的错误），summary 是回合最后一条回答的开头（最多 500 字；通知里没见到时读一遍会话）。失败不让任务暂停，只记 lastError；之后成功一次清掉。设备服务在回合结束前退出，重启后去对应会话里查这个回合：结束了照实记；还在跑就接着等它（时限照旧从回合开始时算）；查不到、harness 连不上记 interrupted。排着还没开始的那几次重启后接着排；会话已经建好、回合还没发出去的，重启后在那个会话里接着发，不另建会话。",
+    "未读：结束的运行 read 为 false，客户端打开它（或者它的会话）后调 litch/task/runs/markRead；任务上的 unreadRuns 跟着变。没结束的总是 true。",
+    "通知：任务的任何字段变了（包括 nextRunAt、lastRun、lastRunAt、unreadRuns）发 litch/task/changed；一次运行排上、建好会话、开始、结束、标成看过了发 litch/task/run/changed。发给每条声明过 deviceTasks 的连接，发起改动的那条也收。revision 只在客户端或工具改任务、以及设备服务改任务状态（暂停、完成）时加一；跟着运行变的字段不加。",
+    "litch_tasks 工具：设备列了 deviceTasks 时，客户端建会话可以带上它（要那个 harness 在 runtime/info 里报了 clientTools：opencode、acp、dsh 没报，带了也用不了）。设备服务替自己通往引擎的每条连接（客户端连接对应的那组、任务自己的内部连接）都在握手的 capabilities.litchClientTools.namespaces 里加上 litch_tasks（并声明 clientTools 扩展），客户端自己的声明照原样保留；调用来了设备服务自己答，不转给客户端，所以没有桌面端连着、在定时任务自己的回合里也能用。原生 codex 把同一次调用发给每条订阅连接，设备服务按 callId 只答第一份。create 的 target 不给是 this_thread：在发起调用的会话里接着发；new_thread 沿用这个会话的 harness、cwd、工作区和设置（设备服务恢复一下这个会话看它的模型、强度和权限）。update 不用带 revision，按当时最新的改；状态只能改成 active 或 paused。建出来的任务 origin 是 tool。工具的结果是一段 JSON 文本（list：{tasks}；create、update：{task}；delete：{deleted}；run_now：{run, deduplicated}），出错时 success 为 false，文字是 [litch:invalid] 或 [litch:failed] 开头的一句英文说明。",
+    "上限：一台设备最多 TASK_LIMIT（200）个任务；名字 1–120 字、提示词 1–100000 字，都不能全是空白；相邻两次运行至少隔 5 分钟。运行记录每个任务留最近 200 条（结束了的；没结束的不删）。",
+    "删除任务时，正在跑的那一次不打断，跑完不再记录；排着的不再跑；它建出来的会话不删。",
+    "谁能连上聚合面谁就能管理这些任务，不另设权限：任务以这台设备上这个用户的身份运行。device-stop --if-idle 问忙不忙时，在执行的运行算忙（原因 tasks），换版本时不打断它们。"
   ],
   "parts": [
     {
@@ -74,7 +76,7 @@
         "$ref": "#/definitions/IdParams"
       },
       "response": {
-        "type": "object"
+        "$ref": "#/definitions/Empty"
       },
       "description": "删掉任务和它的运行记录。"
     },
@@ -107,7 +109,7 @@
         "$ref": "#/definitions/MarkReadParams"
       },
       "response": {
-        "type": "object"
+        "$ref": "#/definitions/Empty"
       },
       "description": "标成看过了。"
     },
@@ -122,23 +124,920 @@
       "kind": "ServerNotification",
       "method": "litch/task/run/changed",
       "params": {
-        "type": "object",
-        "required": [
-          "run"
-        ],
-        "properties": {
-          "run": {
-            "$ref": "#/definitions/Run"
-          }
-        }
+        "$ref": "#/definitions/RunChanged"
       }
     },
     {
       "kind": "Error",
-      "description": "原因在 error.data.litch：unknownTask（-32602）、taskConflict（-32600）、invalidTask（-32602）、invalidTarget（-32602）、taskLimitReached（-32061）。data 里可能带 taskId、task、field。"
+      "description": "这个扩展自己回的错误在 error.data.litch 里带原因，都用标准码，只认标准错误码的客户端照样能处理。message 是一句英文（litch_tasks 工具把它原样交给模型）。没声明扩展的连接调 litch/task/ 开头的方法，回的是 harness 扩展里的 extensionRequired（data.required 是 [\"deviceTasks\"]）。",
+      "errors": [
+        {
+          "litch": "unknownTask",
+          "code": -32602,
+          "description": "没有这个任务。data.taskId"
+        },
+        {
+          "litch": "taskConflict",
+          "code": -32600,
+          "description": "update 带的 revision 对不上：别处先改了。data.task 是最新的任务"
+        },
+        {
+          "litch": "invalidTask",
+          "code": -32602,
+          "description": "字段不对：名字或提示词太长太短、日程或时区不合法、日程往后没有时间点了（比如过去的一次性时间）、改了不让改的 target 字段、分页游标不对。data.field 是哪个字段（schedule.time、timezone、target.harness 这样的路径）"
+        },
+        {
+          "litch": "invalidTarget",
+          "code": -32602,
+          "description": "target 指的 harness 不是这台设备上配置的、工作区不存在、thread 目标的会话在那个 harness 上找不到。data.field 是哪个字段"
+        },
+        {
+          "litch": "taskLimitReached",
+          "code": -32061,
+          "description": "设备上的任务数到了上限（TASK_LIMIT，200）"
+        }
+      ],
+      "data": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "litch"
+        ],
+        "properties": {
+          "litch": {
+            "enum": [
+              "unknownTask",
+              "taskConflict",
+              "invalidTask",
+              "invalidTarget",
+              "taskLimitReached"
+            ]
+          },
+          "taskId": {
+            "type": "string"
+          },
+          "task": {
+            "$ref": "#/definitions/Task"
+          },
+          "field": {
+            "type": "string"
+          }
+        }
+      }
     }
   ],
   "definitions": {
-    "_note": "字段的完整定义以 packages/protocol/src/device-tasks.mts 为准，设备那条线把这里的 JSON Schema 补齐，测试按它校验线上内容。"
+    "Weekday": {
+      "enum": [
+        "MO",
+        "TU",
+        "WE",
+        "TH",
+        "FR",
+        "SA",
+        "SU"
+      ]
+    },
+    "TimeOfDay": {
+      "description": "24 小时制的 HH:MM，按任务的时区算",
+      "type": "string",
+      "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+    },
+    "Schedule": {
+      "description": "日程。墙钟时间都按任务的 timezone 算；相邻两次至少隔 5 分钟（MIN_TASK_INTERVAL_MINUTES）。算法在 packages/protocol/src/task-schedule.mts",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "at"
+          ],
+          "properties": {
+            "type": {
+              "const": "once"
+            },
+            "at": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}$",
+              "description": "任务时区里的墙钟时间 YYYY-MM-DDTHH:MM"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "minutes"
+          ],
+          "properties": {
+            "type": {
+              "const": "interval"
+            },
+            "minutes": {
+              "type": "integer",
+              "minimum": 5
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "intervalHours",
+            "minute",
+            "days"
+          ],
+          "properties": {
+            "type": {
+              "const": "hourly"
+            },
+            "intervalHours": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 23
+            },
+            "minute": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 59
+            },
+            "days": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "$ref": "#/definitions/Weekday"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "time"
+          ],
+          "properties": {
+            "type": {
+              "enum": [
+                "daily",
+                "weekdays"
+              ]
+            },
+            "time": {
+              "$ref": "#/definitions/TimeOfDay"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "days",
+            "time"
+          ],
+          "properties": {
+            "type": {
+              "const": "weekly"
+            },
+            "days": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/definitions/Weekday"
+              }
+            },
+            "time": {
+              "$ref": "#/definitions/TimeOfDay"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "day",
+            "time"
+          ],
+          "properties": {
+            "type": {
+              "const": "monthly"
+            },
+            "day": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 31
+            },
+            "time": {
+              "$ref": "#/definitions/TimeOfDay"
+            }
+          }
+        }
+      ]
+    },
+    "SessionSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "model",
+        "effort",
+        "permission"
+      ],
+      "properties": {
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "effort": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "permission": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "description": "null 是用那个 harness 的默认。permission 是 runtime/info 里声明的权限预设的 id；没声明预设的 harness 上是审批策略名"
+    },
+    "Target": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "harness",
+            "cwd",
+            "workspaceId",
+            "settings"
+          ],
+          "properties": {
+            "kind": {
+              "const": "newThread"
+            },
+            "harness": {
+              "type": "string",
+              "minLength": 1
+            },
+            "cwd": {
+              "type": "string",
+              "minLength": 1
+            },
+            "workspaceId": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "settings": {
+              "$ref": "#/definitions/SessionSettings"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "harness",
+            "threadId"
+          ],
+          "properties": {
+            "kind": {
+              "const": "thread"
+            },
+            "harness": {
+              "type": "string",
+              "minLength": 1
+            },
+            "threadId": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      ]
+    },
+    "TaskStatus": {
+      "enum": [
+        "active",
+        "paused",
+        "completed"
+      ]
+    },
+    "Origin": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind"
+          ],
+          "properties": {
+            "kind": {
+              "const": "client"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "harness",
+            "threadId"
+          ],
+          "properties": {
+            "kind": {
+              "const": "tool"
+            },
+            "harness": {
+              "type": "string"
+            },
+            "threadId": {
+              "type": "string"
+            }
+          }
+        }
+      ]
+    },
+    "RunErrorCode": {
+      "enum": [
+        "harnessUnavailable",
+        "threadMissing",
+        "cwdMissing",
+        "turnFailed",
+        "timedOut",
+        "interrupted",
+        "internal"
+      ]
+    },
+    "TaskError": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "message"
+      ],
+      "properties": {
+        "code": {
+          "$ref": "#/definitions/RunErrorCode"
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    },
+    "RunStatus": {
+      "enum": [
+        "queued",
+        "running",
+        "succeeded",
+        "failed",
+        "canceled"
+      ]
+    },
+    "Run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "taskId",
+        "trigger",
+        "scheduledFor",
+        "coalesced",
+        "status",
+        "harness",
+        "threadId",
+        "turnId",
+        "startedAt",
+        "finishedAt",
+        "summary",
+        "error",
+        "read"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "taskId": {
+          "type": "string"
+        },
+        "trigger": {
+          "enum": [
+            "scheduled",
+            "manual"
+          ]
+        },
+        "scheduledFor": {
+          "type": "integer"
+        },
+        "coalesced": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "status": {
+          "$ref": "#/definitions/RunStatus"
+        },
+        "harness": {
+          "type": "string"
+        },
+        "threadId": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "turnId": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "startedAt": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "finishedAt": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 500
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "error": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TaskError"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "read": {
+          "type": "boolean"
+        }
+      }
+    },
+    "Task": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "prompt",
+        "schedule",
+        "timezone",
+        "status",
+        "target",
+        "origin",
+        "revision",
+        "createdAt",
+        "updatedAt",
+        "nextRunAt",
+        "lastRunAt",
+        "lastRun",
+        "lastError",
+        "unreadRuns"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "prompt": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100000
+        },
+        "schedule": {
+          "$ref": "#/definitions/Schedule"
+        },
+        "timezone": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "$ref": "#/definitions/TaskStatus"
+        },
+        "target": {
+          "$ref": "#/definitions/Target"
+        },
+        "origin": {
+          "$ref": "#/definitions/Origin"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "createdAt": {
+          "type": "integer"
+        },
+        "updatedAt": {
+          "type": "integer"
+        },
+        "nextRunAt": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "lastRunAt": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "lastRun": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Run"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "lastError": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TaskError"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "unreadRuns": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "TaskList": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "data"
+      ],
+      "properties": {
+        "data": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Task"
+          }
+        }
+      }
+    },
+    "TaskResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "task"
+      ],
+      "properties": {
+        "task": {
+          "$ref": "#/definitions/Task"
+        }
+      }
+    },
+    "CreateParams": {
+      "type": "object",
+      "required": [
+        "name",
+        "prompt",
+        "schedule",
+        "target"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "prompt": {
+          "type": "string"
+        },
+        "schedule": {
+          "$ref": "#/definitions/Schedule"
+        },
+        "timezone": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "target": {
+          "$ref": "#/definitions/Target"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "enum": [
+                "active",
+                "paused"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "UpdateParams": {
+      "type": "object",
+      "required": [
+        "id",
+        "revision"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        },
+        "prompt": {
+          "type": "string"
+        },
+        "schedule": {
+          "$ref": "#/definitions/Schedule"
+        },
+        "timezone": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/definitions/TaskStatus"
+        },
+        "target": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "cwd": {
+              "type": "string"
+            },
+            "workspaceId": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "settings": {
+              "$ref": "#/definitions/SessionSettings"
+            }
+          }
+        }
+      }
+    },
+    "IdParams": {
+      "type": "object",
+      "required": [
+        "id"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        }
+      }
+    },
+    "RunNowResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run",
+        "deduplicated"
+      ],
+      "properties": {
+        "run": {
+          "$ref": "#/definitions/Run"
+        },
+        "deduplicated": {
+          "type": "boolean"
+        }
+      }
+    },
+    "RunsListParams": {
+      "type": "object",
+      "properties": {
+        "taskId": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "limit": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cursor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "RunsListResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "data",
+        "nextCursor"
+      ],
+      "properties": {
+        "data": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Run"
+          }
+        },
+        "nextCursor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "MarkReadParams": {
+      "type": "object",
+      "properties": {
+        "taskId": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "runIds": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "TaskChanged": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "change",
+        "taskId",
+        "task"
+      ],
+      "properties": {
+        "change": {
+          "enum": [
+            "created",
+            "updated",
+            "deleted"
+          ]
+        },
+        "taskId": {
+          "type": "string"
+        },
+        "task": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Task"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "RunChanged": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run"
+      ],
+      "properties": {
+        "run": {
+          "$ref": "#/definitions/Run"
+        }
+      }
+    },
+    "Empty": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+    }
   }
 }

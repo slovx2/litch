@@ -1,5 +1,6 @@
 // 请求怎么路由。只看方法名、会话标识和 harness 参数，别的一概不看。
 import { DEVICE_PROCESS_PREFIX } from './device-processes.mjs'
+import { DEVICE_TASK_PREFIX } from './tasks.mjs'
 import { isObject } from './wire.mjs'
 import { isWorkspaceMethod } from './workspaces.mjs'
 
@@ -51,6 +52,8 @@ export function classify(method: string, params: unknown): Route {
   if (PROCESS_METHODS.has(method) || SEARCH_METHODS.has(method)) return { kind: 'device' }
   // 属于设备的进程（可重连的终端，deviceProcesses 扩展）：列出、挂接、解除、结束、清除
   if (method.startsWith(DEVICE_PROCESS_PREFIX)) return { kind: 'device' }
+  // 定时任务（deviceTasks 扩展）：任务存在设备进程自己的库里，由它按时执行
+  if (method.startsWith(DEVICE_TASK_PREFIX)) return { kind: 'device' }
   // 终端与进程归设备层。这里没列的 process/* 不转给任何引擎：引擎里的那一份属于它自己的连接
   if (method.startsWith('process/')) return { kind: 'unsupported', hint: '设备层没有这个终端方法' }
   if (method === 'command/exec' || method.startsWith('command/exec/'))

@@ -148,14 +148,23 @@ test('主进程问忙不忙：答的是有回合在跑的 harness、属于设备
     dsh: 'disabled',
   })
   try {
-    assert.deepEqual(await activity(), { turns: [], processes: 0, connections: 0 }, '闲着')
+    assert.deepEqual(
+      await activity(),
+      { turns: [], processes: 0, connections: 0, tasks: 0 },
+      '闲着',
+    )
     assert.equal(fakes.dsh?.connections.length, 0, '没在跑的运行时不去问')
 
     // 回合：哪怕聚合面上一个客户端都没有，也问得出来（回合可能是官方桌面端经 SSH 入口发起的）
     const claude = fakes['claude-code'] as FakeUpstream
     const pi = fakes.pi as FakeUpstream
     claude.threads = [ACTIVE]
-    assert.deepEqual(await activity(), { turns: ['claude-code'], processes: 0, connections: 0 })
+    assert.deepEqual(await activity(), {
+      turns: ['claude-code'],
+      processes: 0,
+      connections: 0,
+      tasks: 0,
+    })
     // 问不出来的按有算，顺序照对外报告的顺序
     const listing = pi.handlers['thread/list'] as NonNullable<(typeof pi.handlers)[string]>
     pi.handlers['thread/list'] = () => {
@@ -171,7 +180,7 @@ test('主进程问忙不忙：答的是有回合在跑的 harness、属于设备
     await first.initialize(['harness', 'deviceProcesses'])
     const second = connect()
     await second.initialize()
-    assert.deepEqual(await activity(), { turns: [], processes: 0, connections: 2 })
+    assert.deepEqual(await activity(), { turns: [], processes: 0, connections: 2, tasks: 0 })
     second.close()
     await idle(async () => (await activity()).connections === 1, '第二条连接走了')
 
@@ -185,10 +194,10 @@ test('主进程问忙不忙：答的是有回合在跑的 harness、属于设备
     })
     // 属于连接的进程不另数：它随连接走，有连接在就已经算忙了
     await first.call('process/spawn', { processHandle: 'own', command: SLEEP, cwd: stateDir })
-    assert.deepEqual(await activity(), { turns: [], processes: 1, connections: 1 })
+    assert.deepEqual(await activity(), { turns: [], processes: 1, connections: 1, tasks: 0 })
     first.close()
     await idle(async () => (await activity()).connections === 0, '起它的那条连接走了')
-    assert.deepEqual(await activity(), { turns: [], processes: 1, connections: 0 })
+    assert.deepEqual(await activity(), { turns: [], processes: 1, connections: 0, tasks: 0 })
 
     const again = connect()
     await again.initialize(['harness', 'deviceProcesses'])
@@ -198,7 +207,11 @@ test('主进程问忙不忙：答的是有回合在跑的 harness、属于设备
       const now = await activity()
       return now.processes === 0 && now.connections === 0
     }, '终端结束了，连接也走了')
-    assert.deepEqual(await activity(), { turns: [], processes: 0, connections: 0 }, '又闲了')
+    assert.deepEqual(
+      await activity(),
+      { turns: [], processes: 0, connections: 0, tasks: 0 },
+      '又闲了',
+    )
   } finally {
     await close()
   }

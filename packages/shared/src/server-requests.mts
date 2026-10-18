@@ -12,6 +12,9 @@ import type { JsonRpcRequest, JsonRpcResponse, RpcPeer } from './types.mjs'
 
 type Notify = (threadId: string, method: string, params: any) => void
 
+/** 没有连接可送时请求失败的说明。设备进程的内部连接替这种引擎回同样的话（device/src/engine-link.mts） */
+export const NO_RECIPIENT_MESSAGE = '没有可处理交互的已连接客户端'
+
 interface PendingRequest {
   threadId: string
   message: JsonRpcRequest
@@ -58,7 +61,7 @@ export class ServerRequests {
   ): Promise<any> {
     const { signal } = options
     if (signal?.aborted) return Promise.reject(new Error('已取消'))
-    if (targets.length === 0) return Promise.reject(new Error('没有可处理交互的已连接客户端'))
+    if (targets.length === 0) return Promise.reject(new Error(NO_RECIPIENT_MESSAGE))
     const id = randomUUID()
     return new Promise((resolve, reject) => {
       const cancel = () => {
