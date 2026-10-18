@@ -5,6 +5,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { type ClientToolCallResponse, clientToolFailure } from '../../protocol/src/client-tools.mjs'
 import type { JsonRpcMessage, Thread } from '../../protocol/src/index.mjs'
+import { codexRejects } from '../../shared/test/codex-params.mjs'
 import { SENSITIVE_PRESETS } from '../src/device/machine/presets.mjs'
 import type {
   MachineApprovalResult,
@@ -434,6 +435,8 @@ test('建会话：远程会话带上 litch_machine，说明开头写这个会话
     /"Song 的 MacBook" \(songs-mbp, macOS 26\.5 arm64\) is the user's desktop/,
   )
   assert.ok(spec.description.length <= 1024)
+  // 整份参数过得了原生 codex 对 thread/start 的校验（命名空间说明的上限就在这里面）
+  assert.deepEqual(codexRejects('thread/start', start.params), [])
 
   await command('session.create', { deviceId: 'local', cwd: '/work', text: '你好' })
   const mine = local.last().seen.find((entry) => entry.method === 'thread/start')
