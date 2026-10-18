@@ -1,3 +1,6 @@
+// 【桩】这一份是丁线（会话树）在定时任务线的正式版合进 main 之前放的桩，照 11-scheduled-tasks.md“四之一”的签名写。
+// 合并时删掉，换成定时任务线写的那份；本文件里多出来的东西（见下文“多给了”）要先跟它对齐。
+//
 // 由设备进程自己执行的 litch_ 命名空间（litch_sessions、litch_tasks）。这类工具的执行方不是桌面端，
 // 是设备进程：会话、任务都在设备上。按命名空间注册处理函数，调用到了设备进程就在这里答，不转给任何客户端。
 //
@@ -11,7 +14,8 @@
 // 处理函数抛错时替它回 failed；回合结束（turn/completed）时它拿到的 signal 作废（wait 这种会等的工具要看它）。
 //
 // 和定时任务线约定的接口（design/harness-client/11-scheduled-tasks.md“四之一”）：DeviceToolCall、
-// DeviceToolHandler、DeviceToolRegistry 的名字和形状不改。
+// DeviceToolHandler、DeviceToolRegistry 的名字和形状不改。多给了：实现类 DeviceTools 的 dispatch、turnEnded、close，
+// 和 declareDeviceTools（会话树要用，合并时请定时任务线的那份提供同样的东西）。
 import {
   CLIENT_TOOLS_CAPABILITY,
   type ClientToolCallResponse,
