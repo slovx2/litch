@@ -25,7 +25,8 @@ import (
 //   device.log    设备进程的输出
 //   start.lock    device-start 排队用的锁
 //   service.log   device-start 拉起的常驻服务的输出
-// device.sock（聚合面）和 device.sqlite 归设备进程自己。
+// device.sock（聚合面）、device.sqlite（设备库，删掉不丢东西）和 tasks.sqlite（定时任务和运行记录，带迁移，
+// 不随设备库重建）归设备进程自己。
 
 // 设备进程就绪后在标准输出打的那一行。
 const deviceReadyMarker = "LITCH_DEVICE_READY"

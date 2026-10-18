@@ -3,7 +3,7 @@
 //
 // 会话对象经过这里时（应答里的、会话开始的通知里的），工作区、分区、置顶换成设备层的值：
 // 归属存在设备层，引擎自己那一份和聚合面互不相通。
-import { isClientToolNamespace } from '../../protocol/src/client-tools.mjs'
+import { CLIENT_TOOL_NAMESPACE, isClientToolNamespace } from '../../protocol/src/client-tools.mjs'
 import type { ThreadIndex } from './thread-index.mjs'
 import type { ForwardedRequest, UpstreamLink } from './upstream.mjs'
 import { DeviceError, type Frame, idKey, isObject, type RpcId, toRpcError } from './wire.mjs'
@@ -32,6 +32,8 @@ export interface RelayHost {
 export interface RelayClientTools {
   /** 一份 litch_ 命名空间的 item/tool/call 到了：不往下转 */
   offer(link: UpstreamLink, frame: Frame, upstreamId: RpcId): void
+  /** litch_tasks 的调用（哪种上游来的都是）：设备进程自己答，不往下转 */
+  device(link: UpstreamLink, frame: Frame, upstreamId: RpcId): void
   /** 上游说这个请求有结果了。返回 true：是客户端工具调用，这条通知不往下转 */
   resolved(link: UpstreamLink, requestId: RpcId): boolean
   /** 这条连接订阅了会话（新建、恢复、分叉成功） */
@@ -285,6 +287,11 @@ export class Relay {
   private serverRequest(link: UpstreamLink, frame: Frame, upstreamId: RpcId, raw: string): void {
     const fields = isObject(frame.params) ? frame.params : null
     const threadId = typeof fields?.threadId === 'string' ? fields.threadId : null
+    // litch_tasks 的执行方是设备进程自己：截下来答，不转给客户端（client-tools.mts、tasks-tool.mts）
+    if (frame.method === 'item/tool/call' && fields?.namespace === CLIENT_TOOL_NAMESPACE.tasks) {
+      this.host.clientTools.device(link, frame, upstreamId)
+      return
+    }
     // 原生 codex 发给每条订阅连接的客户端工具调用：由设备进程挑一条转（client-tools.mts）
     if (
       frame.method === 'item/tool/call' &&

@@ -13,7 +13,11 @@
 //     哪怕它没订阅、没收到那一份；
 //   - 答了之后它不发 serverRequest/resolved（实测）；有连接恢复会话时，还在等的请求会补发给它；
 //   - turn/start 不会让发起的连接订阅会话（实测），所以“发起回合的连接”要设备进程自己记。
-import { type ClientToolsDesktopInfo, clientToolFailure } from '../../protocol/src/client-tools.mjs'
+import {
+  type ClientToolCallResponse,
+  type ClientToolsDesktopInfo,
+  clientToolFailure,
+} from '../../protocol/src/client-tools.mjs'
 import {
   noClientToolExecutor,
   pickClientToolExecutor,
@@ -57,6 +61,13 @@ interface Call {
   grace: NodeJS.Timeout | null
 }
 
+/** 设备进程自己执行的那种调用（litch_tasks）：答复交给 reply */
+export type DeviceToolAnswer = (
+  harness: string,
+  frame: Frame,
+  reply: (result: ClientToolCallResponse) => void,
+) => void
+
 export interface ClientToolRouterOptions {
   /**
    * 按已知的发起者和订阅者挑不出执行方时，等其余几份到齐的工夫（毫秒）。几份是 codex 一口气发给
@@ -66,6 +77,8 @@ export interface ClientToolRouterOptions {
    */
   graceMs: number
   log(line: string): void
+  /** litch_tasks 的调用由设备进程自己答。没给（测试）就当场回 noExecutor */
+  device?: DeviceToolAnswer
 }
 
 const sep = '\u0000'
@@ -159,6 +172,19 @@ export class ClientToolRouter {
         if (late) this.deliver(current, late)
         else this.finish(current, noClientToolExecutor(current.namespace), '没有能执行的连接')
       }, this.options.graceMs)
+  }
+
+  /**
+   * litch_tasks 的一份调用（任何上游来的）：执行方是设备进程自己，不挑客户端连接，从收到它的这条上游连接答。
+   * 原生 codex 发给每条订阅连接的那几份由执行方按 callId 只答第一份（tasks-tool.mts）
+   */
+  device(link: UpstreamLink, frame: Frame, upstreamId: RpcId): void {
+    const params = isObject(frame.params) ? frame.params : {}
+    const reply = (result: ClientToolCallResponse) => {
+      if (link.available) link.reply(JSON.stringify({ id: upstreamId, result }))
+    }
+    if (this.options.device) this.options.device(link.harness, frame, reply)
+    else reply(noClientToolExecutor(String(params.namespace)))
   }
 
   /** 发起者优先，其次订阅者（设备进程看到的先后），最后是收到了某一份的连接（到达的先后） */

@@ -37,6 +37,8 @@ import { dialectFor } from './native-codex.mjs'
 import { Relay } from './relay.mjs'
 import { classify } from './routes.mjs'
 import { describeDevice } from './service-info.mjs'
+import { declareTasksTool } from './task-link.mjs'
+import { DEVICE_TASK_PREFIX, type DeviceTasks } from './tasks.mjs'
 import type { ThreadIndex } from './thread-index.mjs'
 import { type ForwardedRequest, INTERNAL_ID_PREFIX, UpstreamLink } from './upstream.mjs'
 import {
@@ -107,6 +109,8 @@ export interface SessionHost {
   clientTools: ClientToolRouter
   /** 命令行经聚合面发来的客户端工具调用（litch/clientTool/invoke），由这里转给一台 Litch */
   clientInvoke: ClientToolInvoker
+  /** 定时任务（deviceTasks 扩展）。任务库打不开时是 null，设备上就没有这项扩展 */
+  tasks: DeviceTasks | null
 }
 
 /** 请求已经有着落：转给上游了（应答由上游来），或者已经自己答过了 */
@@ -165,6 +169,7 @@ export class ClientSession implements ClientToolPeer {
       log: (line) => host.log(`${this.tag} ${line}`),
       clientTools: {
         offer: (link, frame, upstreamId) => host.clientTools.offer(this, link, frame, upstreamId),
+        device: (link, frame, upstreamId) => host.clientTools.device(link, frame, upstreamId),
         resolved: (link, requestId) => host.clientTools.resolved(link, requestId),
         subscribed: (link, threadId) => host.clientTools.subscribed(this, link.harness, threadId),
         turnStarted: (link, turnId) => host.clientTools.turnStarted(this, link.harness, turnId),
@@ -288,6 +293,7 @@ export class ClientSession implements ClientToolPeer {
         if (method === 'runtime/info') return this.runtimeInfo()
         if (method.startsWith(MANAGEMENT_PREFIX))
           return this.host.management.call(method, frame.params)
+        if (method.startsWith(DEVICE_TASK_PREFIX)) return this.tasks(method, frame.params)
         return this.calls.call(method, frame.params)
       case 'workspace':
         return this.workspace(method, frame.params)
@@ -521,6 +527,23 @@ export class ClientSession implements ClientToolPeer {
     return { device: describeDevice(this.host.info, service, declared), harnesses }
   }
 
+  /** 定时任务的方法。只给声明过 deviceTasks 的连接 */
+  private tasks(method: string, params: unknown): unknown {
+    const declared = this.declared.has(EXTENSION.deviceTasks)
+    if (!this.host.tasks) {
+      if (!declared)
+        throw new DeviceError(
+          'extensionRequired',
+          `${method} 属于 ${EXTENSION.deviceTasks} 扩展，握手时在 capabilities.litchExtensions 里声明了它才能用`,
+          { method, required: [EXTENSION.deviceTasks] },
+        )
+      throw new DeviceError('unsupported', `聚合面不支持 ${method}：这台设备上的定时任务不可用`, {
+        method,
+      })
+    }
+    return this.host.tasks.call(method, params, declared)
+  }
+
   /** 给一个 harness 开一条上游连接。主进程说它没在跑的话先歇着，不去连 */
   private open(source: HarnessSource): UpstreamLink {
     const { timing } = this.host
@@ -529,8 +552,11 @@ export class ClientSession implements ClientToolPeer {
       connect: source.connect,
       // 对面是适配器的运行时还是原生的 codex：适配器主进程说了算，没有它管着的看启动配置
       dialect: dialectFor(source.managed ? source.managed.native : source.native),
-      // 客户端声明的能力带给上游，包括它认识哪些扩展（原生 codex 不认识扩展键，握手时会摘掉）
-      initializeParams: this.initializeParams,
+      // 客户端声明的能力带给上游，包括它认识哪些扩展（原生 codex 不认识扩展键，握手时会摘掉）。
+      // 设备进程替这条连接声明能执行 litch_tasks：调用到了由设备进程自己答（relay.mts），引擎挑执行方时挑得中它
+      initializeParams: this.host.tasks
+        ? declareTasksTool(this.initializeParams)
+        : this.initializeParams,
       retryMs: timing.retryMs,
       handshakeTimeoutMs: timing.handshakeTimeoutMs,
       frame: (from, frame, raw, request) => this.relay.upstream(from, frame, raw, request),

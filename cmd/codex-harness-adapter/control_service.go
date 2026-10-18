@@ -12,8 +12,8 @@ import (
 // 控制通道上和“停服务”有关的那一部分：device-stop 请服务自己停（service.stop）；
 // 带着 ifIdle 来的，停之前先看忙不忙。
 //
-// 忙不忙有三样要看：有没有回合在跑、有没有属于设备的终端在跑、有没有客户端连着。
-// 前两样和聚合面上的连接数只有设备进程知道（回合还可能是官方桌面端经 SSH 入口发起的，
+// 忙不忙有四样要看：有没有回合在跑、有没有属于设备的终端在跑、有没有定时任务在跑、有没有客户端连着。
+// 前三样和聚合面上的连接数只有设备进程知道（回合还可能是官方桌面端经 SSH 入口发起的，
 // 设备进程会另开连接去问每个运行时），所以这一层反过来问它一句（ask）；
 // 经 SSH 入口连着的官方桌面端是这一层自己数的。
 
@@ -24,6 +24,7 @@ var activityTimeout = 25 * time.Second
 type busyReason struct {
 	// activeTurns     harnesses 里的这几个有回合在跑（或者判断不了，按有算）
 	// deviceProcesses 有 count 个属于设备的终端在跑
+	// tasks           有 count 次定时任务的运行在跑（换版本时不打断它们）
 	// clients         有 count 个客户端连着：聚合面上的，加上经 SSH 入口连着的官方桌面端
 	// undetermined    设备进程没有答，而 harnesses 里的这几个运行时在跑：有没有回合判断不了
 	Reason    string   `json:"reason"`
@@ -50,6 +51,8 @@ type deviceActivity struct {
 	Processes int `json:"processes"`
 	// 聚合面上连着的客户端。
 	Connections int `json:"connections"`
+	// 在跑的定时任务运行。旧版的设备进程不报，按 0 算。
+	Tasks int `json:"tasks"`
 }
 
 type askAnswer struct {
@@ -145,6 +148,9 @@ func (s *controlServer) busy(requester net.Conn) []busyReason {
 		}
 		if activity.Processes > 0 {
 			reasons = append(reasons, busyReason{Reason: "deviceProcesses", Count: activity.Processes})
+		}
+		if activity.Tasks > 0 {
+			reasons = append(reasons, busyReason{Reason: "tasks", Count: activity.Tasks})
 		}
 		clients += activity.Connections
 	} else {

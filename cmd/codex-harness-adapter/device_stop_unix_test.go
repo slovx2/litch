@@ -232,7 +232,7 @@ func TestDeviceStopStopsTheServiceAndWaits(t *testing.T) {
 	dialControl(t, cfg)
 }
 
-// 带 --if-idle 时服务去问设备进程忙不忙，三样里有一样就不停，并说明是哪一样；都没有才停。
+// 带 --if-idle 时服务去问设备进程忙不忙，几样里有一样就不停，并说明是哪一样；都没有才停。
 func TestDeviceStopIfIdleAsksTheDeviceProcess(t *testing.T) {
 	cfg, _, device, stop := startManaged(t)
 	defer stop()
@@ -252,6 +252,7 @@ func TestDeviceStopIfIdleAsksTheDeviceProcess(t *testing.T) {
 	}{
 		{"有回合在跑", &deviceActivity{Turns: []string{"pi"}}, []busyReason{{Reason: "activeTurns", Harnesses: []string{"pi"}}}, "pi 有回合在跑"},
 		{"有属于设备的终端在跑", &deviceActivity{Processes: 2}, []busyReason{{Reason: "deviceProcesses", Count: 2}}, "有 2 个属于设备的终端在跑"},
+		{"有定时任务在跑", &deviceActivity{Tasks: 1}, []busyReason{{Reason: "tasks", Count: 1}}, "有 1 次定时任务的运行在跑"},
 		{"有别的客户端连着", &deviceActivity{Connections: 1}, []busyReason{{Reason: "clients", Count: 1}}, "有 1 个客户端连着"},
 		{"三样都有", &deviceActivity{Turns: []string{"claude-code", "pi"}, Processes: 1, Connections: 3}, []busyReason{
 			{Reason: "activeTurns", Harnesses: []string{"claude-code", "pi"}}, {Reason: "deviceProcesses", Count: 1}, {Reason: "clients", Count: 3},

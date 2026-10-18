@@ -23,6 +23,10 @@ import {
   type UpstreamConfig,
 } from './session.mjs'
 import { openDeviceStore } from './store.mjs'
+import { DEFAULT_TASK_TIMING, type TaskTiming } from './task-run.mjs'
+import { DEFAULT_TASK_SETTINGS, type TaskClock, type TaskSettings } from './task-scheduler.mjs'
+import { DeviceTasks } from './tasks.mjs'
+import { TasksTool } from './tasks-tool.mjs'
 import { ThreadIndex } from './thread-index.mjs'
 import { type Connector, isObject, type Wire, type WireHandlers } from './wire.mjs'
 import { Workspaces } from './workspaces.mjs'
@@ -52,6 +56,26 @@ export interface DeviceOptions {
   flow?: Partial<FlowLimits>
   /** 运行日志：连接的建立与断开、harness 的可用状态变化。不给就不记 */
   log?(line: string): void
+  /** 定时任务的时钟和时限。只有测试会改 */
+  tasks?: { clock?: TaskClock; timing?: Partial<TaskTiming>; maxTimerMs?: number }
+}
+
+/**
+ * 有主进程在管时，等它把设置送过来再开始排定时任务，最多等这么久（毫秒）：
+ * 总开关关着的话，刚起来就不该把错过的补跑了
+ */
+const TASK_SETTINGS_WAIT_MS = 10_000
+
+/** 主进程推来的定时任务设置（settings_tasks.go）。没有、不成样子的项用默认值 */
+export function taskSettings(state: ControlState | null): TaskSettings {
+  const given = state?.tasks
+  const settings = { ...DEFAULT_TASK_SETTINGS }
+  if (isObject(given)) {
+    if (typeof given.enabled === 'boolean') settings.enabled = given.enabled
+    if (Number.isInteger(given.maxConcurrent) && (given.maxConcurrent as number) >= 1)
+      settings.maxConcurrent = given.maxConcurrent as number
+  }
+  return settings
 }
 
 const DEFAULT_TIMING: SessionTiming = {
@@ -79,6 +103,9 @@ export class DeviceServer {
   private readonly options: DeviceOptions
   private readonly control: ControlChannel | null
   private readonly version: string
+  /** 定时任务。任务库打不开时是 null */
+  private readonly tasks: DeviceTasks | null
+  private tasksWait: NodeJS.Timeout | null = null
   /** 主进程给的名单里的 harness 怎么连，按套接字地址记着 */
   private readonly dialed = new Map<string, Connector>()
   /** 上一次发给客户端的设置快照（起步时是主进程给的第一份现状），用来判断是不是真的变了 */
@@ -108,6 +135,31 @@ export class DeviceServer {
     // 可重连的终端：进程可以属于设备
     info.extensions.push(EXTENSION.deviceProcesses)
     const log = options.log ?? (() => {})
+    const taskTiming = { ...DEFAULT_TASK_TIMING, ...options.tasks?.timing }
+    // litch_tasks 的调用（客户端连接对应的上游连接上、任务自己的内部连接上）都由它答
+    const tasksTool = new TasksTool({
+      tasks: () => this.tasks,
+      harnesses: () => this.harnesses(),
+      workspaces: this.workspaces,
+      version: this.version,
+      timing: taskTiming,
+      log,
+    })
+    this.tasks = DeviceTasks.open({
+      stateDir: options.stateDir,
+      harnesses: () => this.harnesses(),
+      index: this.index,
+      workspaces: this.workspaces,
+      announce: (method, params, extension) => this.announce(method, params, extension),
+      log,
+      version: this.version,
+      timing: taskTiming,
+      ...(options.tasks?.clock ? { clock: options.tasks.clock } : {}),
+      ...(options.tasks?.maxTimerMs ? { maxTimerMs: options.tasks.maxTimerMs } : {}),
+      toolCall: (harness, frame, reply) => tasksTool.answer(harness, frame, reply),
+    })
+    // 定时任务：任务存在设备上，到点由设备进程自己连上 harness 去跑
+    if (this.tasks) info.extensions.push(EXTENSION.deviceTasks)
     this.layer = new DeviceLayer({
       ...(options.processes ? { processes: options.processes } : {}),
       ...(options.flow ? { flow: options.flow } : {}),
@@ -127,6 +179,7 @@ export class DeviceServer {
     const router = new ClientToolRouter({
       graceMs: options.timing?.clientToolGraceMs ?? DEFAULT_TIMING.clientToolGraceMs,
       log,
+      device: (harness, frame, reply) => tasksTool.answer(harness, frame, reply),
     })
     this.host = {
       harnesses: () => this.harnesses(),
@@ -148,6 +201,7 @@ export class DeviceServer {
       closed: (session) => this.sessions.delete(session),
       clientTools: router,
       clientInvoke: new ClientToolInvoker({ router, index: this.index, log }),
+      tasks: this.tasks,
       reachable: () => this.importer?.kick(),
       importing: () => {
         this.importer?.kick()
@@ -168,6 +222,15 @@ export class DeviceServer {
           })
     // 运行时已经在跑的话现在就导入，不等第一个客户端连进来
     this.importer?.kick()
+    if (!this.control) this.tasks?.begin()
+    else if (this.control.state) this.tasks?.begin(taskSettings(this.control.state))
+    else if (this.tasks) {
+      this.tasksWait = setTimeout(() => {
+        log('适配器主进程一直没有送来设置，定时任务按默认的设置开始')
+        this.tasks?.begin()
+      }, TASK_SETTINGS_WAIT_MS)
+      this.tasksWait.unref()
+    }
   }
 
   /**
@@ -215,6 +278,9 @@ export class DeviceServer {
   /** 主进程推来了新的状态：各条连接跟着调整上游，设置真的变了就通知声明过的客户端 */
   private controlChanged(state: ControlState): void {
     this.applyProcessLimits(state)
+    if (this.tasksWait) clearTimeout(this.tasksWait)
+    this.tasksWait = null
+    this.tasks?.setSettings(taskSettings(state))
     for (const session of this.sessions) session.sync()
     // 刚起来的 harness，它现有的项目还没导入过的话现在去读
     this.importer?.kick()
@@ -290,6 +356,7 @@ export class DeviceServer {
       turns: running.filter((_, index) => busy[index]).map((source) => source.id),
       processes: this.layer.deviceProcesses.running,
       connections: this.sessions.size,
+      tasks: this.tasks?.running ?? 0,
     }
   }
 
@@ -320,6 +387,8 @@ export class DeviceServer {
       this.control.onAsk = null
     }
     for (const session of [...this.sessions]) session.close()
+    if (this.tasksWait) clearTimeout(this.tasksWait)
+    this.tasks?.close()
     await this.importer?.close()
     await this.layer.close()
     this.db.close()
