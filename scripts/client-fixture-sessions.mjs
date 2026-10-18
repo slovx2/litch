@@ -3,17 +3,18 @@
 //
 // 用户的话（一回合一次调用，工具结果回来后把结果原样说出来）：
 //   会话：<工具> <JSON 参数>   要在行首（子会话的派出说明会引用父会话的标题，别再触发一次），调 litch_sessions.<工具>，比如 会话：start {"title":"查日志","prompt":"你好","initiation":"user_asked"}
+//   任务：<工具> <JSON 参数>   同样的做法调 litch_tasks.<工具>（定时任务，设备执行），比如 任务：create {"name":"日报","prompt":"总结","schedule":{"type":"interval","minutes":5}}
 //   浏览器：<工具> <JSON 参数> 同样的做法调 litch_browser.<工具>（只认 navigate、snapshot），比如 浏览器：navigate {"url":"about:blank"}，
 //                              用来在 dsh、OpenCode 上验桌面端执行的客户端工具（client-fixture-browse.mjs 只认 Pi 的工具名）
 // 设备进程注入的唤醒（<litch-session-event kind="wake">）：回一句“收到子会话的结果：<几条>”，不调工具。
 // 工具不在（会话不是 Litch 建的、这家没有客户端工具、设置里关了会话编排）时照实说一句。
 //
 // 各家给模型的工具名不一样（Claude Code 是哈希过的 MCP 名，dsh 是 <命名空间>__<工具>，OpenCode 是挂上去的 MCP 名，
-// Pi 是拼起来的名字，原生 codex 是命名空间），所以不按名字认，按工具说明的开头认：说明是 client-tools-sessions.mts
+// Pi 是拼起来的名字，原生 codex 是命名空间），所以不按名字认，按工具说明的开头认：说明是 client-tools-sessions.mts、client-tools-tasks.mts
 // 里写死的，各家都原样交给模型（Claude、Pi、dsh 会把命名空间的说明接在第一个工具前面，所以用“包含”）。
 // 改了那边的说明要跟着改这里的 MARKS。
 
-export const SESSIONS_TRIGGER = /^(会话|浏览器)：(\w+)\s*(\{[\s\S]*\})?/m
+export const SESSIONS_TRIGGER = /^(会话|任务|浏览器)：(\w+)\s*(\{[\s\S]*\})?/m
 export const SESSIONS_HEARD = '会话结果：'
 export const SESSIONS_WOKEN = '收到子会话的结果：'
 const WAKE = /<litch-session-event kind="wake">([\s\S]*?)<\/litch-session-event>/
@@ -28,6 +29,16 @@ const SPACES = {
       send: 'Send a message to one of your sub-sessions',
       wait: 'Wait until the given sessions stop',
       interrupt: 'Interrupt the running turn of one of your sub-sessions',
+    },
+  },
+  任务: {
+    namespace: 'litch_tasks',
+    marks: {
+      list: 'List the scheduled tasks on this device',
+      create: 'Create a scheduled task.',
+      update: 'Change a task. Only the given fields change.',
+      delete: 'Delete a task and its run history.',
+      run_now: 'Run a task once now, without changing its schedule.',
     },
   },
   浏览器: {
