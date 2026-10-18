@@ -7,6 +7,7 @@ import type {
   ClientToolCallResponse,
 } from '../../protocol/src/client-tools.mjs'
 import type { ClientAskView } from './model.mjs'
+import type { MachineAction } from './model-machine.mjs'
 
 /** 核心 ↔ 主进程的消息名 */
 export const CLIENT_TOOL = 'clientTool'
@@ -32,6 +33,21 @@ export interface ToolInvocation extends ClientToolCallParams {
 /** 卡片的答复。null：没答就被取消了 */
 export type ToolAnswer = 'once' | 'session' | 'always' | 'decline'
 
+/**
+ * litch_machine 的调用找不到会话、卡片进了全局待处理时，请主进程发的系统通知（08 号设计 4.2）。
+ * 核心不认识语言，只给结构，文字由主进程按界面的语言拼
+ */
+export interface MachineNotice {
+  /** 全局待处理里那张卡片的标识 */
+  pendingId: string
+  /** 调用来自哪台设备：给人看的名字和主机 */
+  deviceName: string
+  host: string
+  action: MachineAction
+  /** 命令，或者路径，或者“从哪到哪”。主进程只拿来显示，会截短 */
+  summary: string
+}
+
 /** 核心 → 主进程 */
 export type ToolToMain =
   | { type: typeof CLIENT_TOOL; op: 'call'; invocation: ToolInvocation }
@@ -44,6 +60,7 @@ export type ToolToMain =
       threadId: string
       turnId: string
     }
+  | { type: typeof CLIENT_TOOL; op: 'notify'; notice: MachineNotice }
 
 /** 主进程 → 核心 */
 export type ToolToCore =

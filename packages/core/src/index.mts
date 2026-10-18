@@ -55,7 +55,7 @@ export {
   type TransportOpener,
   toConnectError,
 } from './connection/transport.mjs'
-export { type Core, type CoreOptions, createCore } from './core.mjs'
+export { type Core, type CoreMachineOptions, type CoreOptions, createCore } from './core.mjs'
 export {
   createDevice,
   type Device,
@@ -88,6 +88,7 @@ export {
   type DeviceStore,
   defaultName,
   hostLabel,
+  type MachineLogStore,
   type RemotePlatform,
   type SavedDevices,
   type SavedRemote,

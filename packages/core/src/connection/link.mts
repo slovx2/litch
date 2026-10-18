@@ -6,6 +6,7 @@ import {
   type ClientRequestMethod,
   type ClientRequests,
   type ClientToolsCapabilities,
+  type ClientToolsDesktopInfo,
   type DeviceInitializeCapabilities,
   EXTENSION,
   type InitializeResponse,
@@ -55,6 +56,11 @@ export interface LinkOptions {
    * 不给就是没有
    */
   clientTools?(): readonly string[]
+  /**
+   * 这台桌面端是哪台（主机名、名字），声明了 litch_machine 时随命名空间一起报（08 号设计第五节）。
+   * 不给、或者返回 null 就不报
+   */
+  clientToolsDesktop?(): ClientToolsDesktopInfo | null
   /** 对面发来、要答复的请求。返回 undefined 表示不处理（会回“方法不存在”） */
   request?(method: string, params: unknown, id: JsonRpcId): Promise<unknown> | undefined
   log?(line: string): void
@@ -164,6 +170,7 @@ export function createLink(options: LinkOptions): Link {
       let info: InitializeResponse
       // 能执行的客户端工具：声明了扩展，还要在 litchClientTools 里列出命名空间（client-tools.mts）
       const tools = [...(options.clientTools?.() ?? [])]
+      const desktop = tools.length > 0 ? (options.clientToolsDesktop?.() ?? null) : null
       try {
         info = (await peer.request(
           'initialize',
@@ -191,7 +198,14 @@ export function createLink(options: LinkOptions): Link {
                 // clientTools：litch_ 开头的命名空间的工具调用交给声明了的连接执行（内置浏览器、Computer Use）
                 ...(tools.length > 0 ? [EXTENSION.clientTools] : []),
               ],
-              ...(tools.length > 0 ? { [CLIENT_TOOLS_CAPABILITY]: { namespaces: tools } } : {}),
+              ...(tools.length > 0
+                ? {
+                    [CLIENT_TOOLS_CAPABILITY]: {
+                      namespaces: tools,
+                      ...(desktop ? { desktop: { ...desktop } } : {}),
+                    },
+                  }
+                : {}),
             } satisfies DeviceInitializeCapabilities & ClientToolsCapabilities,
           },
           { timeoutMs: options.handshakeTimeoutMs ?? 10_000 },

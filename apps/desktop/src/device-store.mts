@@ -9,6 +9,7 @@ import {
   checkSnapshot,
   type DeviceSnapshot,
   type DeviceStore,
+  type MachineLogStore,
   type SavedDevices,
   type SnapshotStore,
   type TerminalNotes,
@@ -41,6 +42,9 @@ export function fileDeviceStore(dir: string): DeviceStore {
   // 和设备上的终端有关、只记在这台电脑上的两样：改过的名字、留在设备上没开成标签的
   const terminalDir = join(dir, 'terminals')
   const terminalFile = (deviceId: string) => join(terminalDir, `${safe(deviceId)}.json`)
+  // 远程设备在这台电脑上的操作记录（litch_machine，08 号 3.4）：只存在本机，条数由核心限着
+  const machineDir = join(dir, 'machine-log')
+  const machineFile = (deviceId: string) => join(machineDir, `${safe(deviceId)}.json`)
 
   return {
     load(): SavedDevices {
@@ -74,9 +78,20 @@ export function fileDeviceStore(dir: string): DeviceStore {
       }
     },
 
+    machineLog(deviceId): MachineLogStore {
+      return {
+        load: () => readJson(machineFile(deviceId)),
+        save(entries) {
+          mkdirSync(machineDir, { recursive: true, mode: 0o700 })
+          writeJson(machineFile(deviceId), entries)
+        },
+      }
+    },
+
     forget(deviceId) {
       rmSync(snapshotFile(deviceId), { force: true })
       rmSync(terminalFile(deviceId), { force: true })
+      rmSync(machineFile(deviceId), { force: true })
     },
   }
 }
