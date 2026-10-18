@@ -1,6 +1,8 @@
 // 把装好的应用（npm run pack 出来的那一份）做成发给别人的安装包，放在 out/installer/ 下面。
 //   macOS    Litch-<版本>-macos-<架构>.dmg
 //   Windows  Litch-<版本>-windows-<架构>-setup.exe（Inno Setup 6.7.1 编，见 packaging/litch.iss；不签名）
+//            装好的应用里要有 Computer Use 的助手（resources/computer-use，pack.mjs 放进去的），
+//            没有就报错，除非设了 LITCH_WITHOUT_COMPUTER_USE=1（见 win-helper.mjs）
 //
 // macOS 上给了开发者身份就签名并公证：
 //   LITCH_SIGN_IDENTITY     “Developer ID Application”证书的名字或者它的 SHA-1
@@ -28,6 +30,7 @@ import { sign } from '@electron/osx-sign'
 import { HELPER_APP_NAME, helperTeam, signHelper } from '../../computer-use/build-app.mjs'
 import { OUT_DIR } from './packed.mjs'
 import { machOFiles } from './sign.mjs'
+import { WIN_HELPER_DIR, WIN_HELPER_EXE, withoutWinHelper } from './win-helper.mjs'
 
 const here = (path) => fileURLToPath(new URL(path, import.meta.url))
 const manifest = JSON.parse(readFileSync(here('../package.json'), 'utf8'))
@@ -200,6 +203,15 @@ function windows() {
   const source = join(OUT_DIR, `Litch-win32-${process.arch}`)
   if (!existsSync(join(source, 'Litch.exe'))) {
     throw new Error(`没有找到装好的应用 ${source}，请先运行 npm run pack`)
+  }
+  const helper = join(source, 'resources', WIN_HELPER_DIR, WIN_HELPER_EXE)
+  if (!existsSync(helper)) {
+    if (!withoutWinHelper()) {
+      throw new Error(
+        `装好的应用里没有 Computer Use 的助手 ${helper}：先构建助手再 npm run pack（见 scripts/win-helper.mjs）`,
+      )
+    }
+    console.warn('已设 LITCH_WITHOUT_COMPUTER_USE=1：这个安装包里没有 Computer Use 的助手')
   }
   const iscc =
     process.env.LITCH_ISCC ||

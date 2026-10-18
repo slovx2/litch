@@ -1,4 +1,4 @@
-# 全量：门禁（ci.yml，整个带上）加上各平台、各引擎、全部桌面验收、各家真命令行上的首回合、移动端模拟器上的端到端。
+# 全量：门禁（ci.yml，整个带上）加上各平台、各引擎、全部桌面验收、Windows 上的 Computer Use 助手与打包、各家真命令行上的首回合、移动端模拟器上的端到端。
 # 墙钟十五到二十多分钟，但要占十几台跑机（其中一半是要排队的 macOS），不自动跑：
 # 发版前（release.yml 要求打标签的提交上有一轮通过的全量）和动了大块之后手动触发：gh workflow run full.yml
 name: Full
@@ -86,6 +86,54 @@ jobs:
       - run: swift test --package-path apps/computer-use
       - run: npm run test:computer-use --prefix apps/desktop
       - run: npm run check:computer-use --prefix apps/desktop
+
+  # Windows 的 Computer Use 助手（Rust）：纯逻辑的单元测试、构建，照主进程的做法拉起它、握手、调不动界面的几样；
+  # 再把 Windows 的应用和安装包打一遍（和 release.yml 的 desktop-windows 同样的步骤），核对助手装进了 resources/computer-use。
+  # 打包的整条链平时只有发版才走，放在这里是为了发版前就拦住它被弄坏
+  computer-use-windows:
+    runs-on: windows-2025
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: 1.26.6
+      # 工具链的版本只在 rust-toolchain.toml 里写，rustup 在 crate 目录里按它装、按它用
+      - name: Rust 工具链（apps/computer-use-win/rust-toolchain.toml）
+        working-directory: apps/computer-use-win
+        run: |
+          rustup set auto-self-update disable
+          rustup toolchain install
+          rustup show active-toolchain
+          cargo --version
+      - name: 助手的单元测试
+        working-directory: apps/computer-use-win
+        run: cargo test --locked --target x86_64-pc-windows-msvc
+      - name: 构建助手
+        working-directory: apps/computer-use-win
+        run: cargo build --release --locked --target x86_64-pc-windows-msvc
+      - name: Inno Setup 6.7.1
+        run: choco install innosetup --version=6.7.1 --no-progress -y
+      - run: npm ci --no-audit --no-fund
+      - run: npm ci --prefix packages/claude --no-audit --no-fund
+      - run: npm ci --prefix packages/pi --no-audit --no-fund
+      - run: npm ci --prefix packages/dsh --no-audit --no-fund
+      - run: npm ci --prefix packages/opencode --no-audit --no-fund
+      - run: npm ci --prefix packages/acp --no-audit --no-fund
+      - run: npm run build
+      - run: npm run client:setup
+      - run: node apps/desktop/scripts/check-computer-use.mjs --require
+      - run: npm run client:pack
+      - run: node apps/desktop/scripts/make-installer.mjs
+      - name: 助手装进了应用
+        run: test -f apps/desktop/out/Litch-win32-x64/resources/computer-use/litch-computer-use.exe
 
   # 客户端：核心的单元测试、三个包的类型检查、界面构建，再起真的 Electron 做自检、对话区的滚动验收、输入区的验收、终端面板的验收和远程设备的验收（窗口不显示）。
   # 代码规范检查由上面 adapters 里的 npm run check 一并覆盖。

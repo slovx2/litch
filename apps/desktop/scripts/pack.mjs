@@ -17,6 +17,10 @@
 // SharedSupport 是苹果约定的放辅助应用的位置之一，codesign 认得出它是嵌套的代码；不放 Contents/Helpers 或
 // Library/LoginItems，是因为它既不是 Electron 的辅助进程，也不是登录项。
 //
+// Windows 上带 Computer Use 的助手（apps/computer-use-win，Rust，见 win-helper.mjs）：作为额外的资源放进应用，
+// 落在 resources/computer-use/litch-computer-use.exe，不进 asar（主进程直接 spawn 它）。
+// 这里不构建它，要先编好；没有又没设 LITCH_WITHOUT_COMPUTER_USE=1 就报错。
+//
 // 再带一份许可文本：界面和外壳里打进去的第三方代码各自的许可（licenses.mjs），连同本项目自己的
 // LICENSE 和 THIRD_PARTY_NOTICES.md，落在 Contents/Resources/licenses。
 //
@@ -25,7 +29,7 @@
 //
 // 这里出来的应用在 macOS 上只有本机的临时签名，换一台机器打开会被系统拦下。要发给别人的安装包
 // （签名、公证过的 dmg，Windows 的安装程序）在这之后用 scripts/make-installer.mjs 做。
-// Windows 上也能打包（发布流程里在 Windows 的机器上打），但那一份还没有经过完整的测试。
+// Windows 上也能打包（发布流程里在 Windows 的机器上打）。
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
@@ -37,6 +41,7 @@ import { NODE_VERSION } from './node-runtime.mjs'
 import { OUT_DIR } from './packed.mjs'
 import { signAdHoc } from './sign.mjs'
 import { stageAdapter } from './stage-adapter.mjs'
+import { requireWinHelper, WIN_HELPER_DIR, WIN_HELPER_EXE } from './win-helper.mjs'
 
 const here = (path) => fileURLToPath(new URL(path, import.meta.url))
 const appDir = here('..')
@@ -44,6 +49,20 @@ const uiDist = here('../../../packages/ui/dist')
 const stage = join(OUT_DIR, 'stage')
 
 const manifest = JSON.parse(readFileSync(join(appDir, 'package.json'), 'utf8'))
+
+// Windows 的 Computer Use 助手先看在不在，免得前面忙了半天到最后才报
+let winHelper = null
+if (process.platform === 'win32') {
+  try {
+    winHelper = requireWinHelper()
+  } catch (error) {
+    console.error(error.message)
+    process.exit(1)
+  }
+  if (!winHelper)
+    console.warn('已设 LITCH_WITHOUT_COMPUTER_USE=1：这次打出来的应用里没有 Computer Use 的助手')
+}
+
 const shell = ['main.mjs', 'core-host.mjs', 'preload.cjs']
 for (const file of shell) {
   if (!existsSync(join(appDir, 'dist', file))) {
@@ -99,6 +118,17 @@ for (const file of ['LICENSE', 'THIRD_PARTY_NOTICES.md']) {
 }
 console.log(`许可文本：${bundled.length} 个第三方包`)
 
+// Windows 的助手。目录名就是它在应用资源目录里的名字
+const extraResource = [adapter.out, licenses]
+const winHelperStage = join(OUT_DIR, WIN_HELPER_DIR)
+if (winHelper) {
+  rmSync(winHelperStage, { recursive: true, force: true })
+  mkdirSync(winHelperStage, { recursive: true })
+  cpSync(winHelper, join(winHelperStage, WIN_HELPER_EXE))
+  extraResource.push(winHelperStage)
+  console.log(`Computer Use 助手：${winHelper}`)
+}
+
 // 打包器要知道用哪一版 Electron：就用装着的这一版，它的压缩包安装时已经下到本机缓存里了
 const require = createRequire(import.meta.url)
 const electronVersion = require('electron/package.json').version
@@ -118,8 +148,8 @@ const [outPath] = await packager({
   arch: process.arch,
   electronVersion,
   asar: true,
-  // 按目录名放进应用的资源目录，所以暂存目录必须叫 adapter
-  extraResource: [adapter.out, licenses],
+  // 按目录名放进应用的资源目录，所以暂存目录必须叫 adapter（助手的叫 computer-use）
+  extraResource,
   // 暂存目录里没有 node_modules，没有什么可剪的
   prune: false,
   overwrite: true,
@@ -127,6 +157,7 @@ const [outPath] = await packager({
 })
 rmSync(stage, { recursive: true, force: true })
 rmSync(licenses, { recursive: true, force: true })
+rmSync(winHelperStage, { recursive: true, force: true })
 
 const appPath = join(outPath, `${manifest.productName}.app`)
 if (process.platform === 'darwin') {

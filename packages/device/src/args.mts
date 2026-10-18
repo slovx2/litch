@@ -1,9 +1,10 @@
 // 设备进程的启动参数。写法是定死的（设计文档 04 第二节），Go 层照这个拉起：
 //   main.mjs --listen unix://<home>/device/device.sock --state <home>/device \
 //     --upstream claude-code=unix://<home>/claude-code/runtime.sock --upstream pi=unix://...
+// Windows 上套接字都是命名管道，地址写成 pipe://\\.\pipe\<名字>（internal/hostplatform/platform_windows.go）。
 import { isAbsolute } from 'node:path'
 import type { ProcessLimits } from './device-processes.mjs'
-import { parseUnixUrl } from './sockets.mjs'
+import { parseSocketUrl } from './sockets.mjs'
 
 export interface DeviceArgs {
   /** 聚合面的套接字路径 */
@@ -57,7 +58,7 @@ export function parseArgs(argv: string[]): DeviceArgs {
       throw new Error(`不认识的参数 ${flag}\n${USAGE}`)
     if (value === undefined) throw new Error(`${flag} 后面缺少值\n${USAGE}`)
     index++
-    if (flag === '--listen') listen = parseUnixUrl(value, '--listen')
+    if (flag === '--listen') listen = parseSocketUrl(value, '--listen')
     else if (flag === '--state') {
       if (!isAbsolute(value)) throw new Error(`--state 要写绝对路径，收到的是 ${value}`)
       stateDir = value
@@ -68,7 +69,7 @@ export function parseArgs(argv: string[]): DeviceArgs {
         throw new Error(`--upstream 要写成 标识=unix://路径，收到的是 ${value}`)
       if (upstreams.some((upstream) => upstream.id === id))
         throw new Error(`--upstream 里 ${id} 出现了不止一次`)
-      upstreams.push({ id, path: parseUnixUrl(value.slice(split + 1), `--upstream ${id}`) })
+      upstreams.push({ id, path: parseSocketUrl(value.slice(split + 1), `--upstream ${id}`) })
     }
   }
   if (listen === null || stateDir === null) throw new Error(`--listen 和 --state 都要给\n${USAGE}`)
