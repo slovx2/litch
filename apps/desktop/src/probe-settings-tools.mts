@@ -163,7 +163,7 @@ export function judgeTools(seen: ToolsSeen, platform: string): string[] {
     if (!ok) failed.push(what)
   }
   const mac = platform === 'darwin'
-  // Windows 上也有这一组，但没有系统权限那一块（09 号 3.11），下面权限那几条只在 macOS 上量
+  // Windows 上也有这一组，但没有系统权限那一块，下面权限那几条只在 macOS 上量
   const has = mac || platform === 'win32'
   must(seen.computerBridge === has, `Computer Use 的接口${has ? '没有' : '不该有'}`)
   must(seen.browser.sites === 'empty', `一直允许的网站不是空的样子：${seen.browser.sites}`)

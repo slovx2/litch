@@ -1,4 +1,4 @@
-// 界面树 → 给模型看的文字（决 253：编号、差异、文本化放在主进程，Windows 先用）。
+// 界面树 → 给模型看的文字（编号、差异、文本化放在主进程，助手只回结构化的节点；Windows 先用，macOS 的还在 Swift 里）。
 // 规则照 macOS 助手的 apps/computer-use/Sources/LitchComputerUseCore/AXText.swift，两个平台给模型的文字形状一样：
 //   1. 编号：同一个会话、同一个应用里，同一个元素前后几次取状态号码不变；新出现的给新号，号码不重用。
 //      “同一个元素”先按助手给的 ref（UIA 的 RuntimeId，同一进程生命周期内稳定）认；没有 ref、或者同一棵树里

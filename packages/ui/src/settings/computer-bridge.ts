@@ -1,7 +1,7 @@
 // 桌面外壳的预加载脚本挂在 window.litchComputerUse 上的 Computer Use 设置接口（apps/desktop/src/preload.mts，
 // 主进程那一侧在 apps/desktop/src/computer-use/settings.mts），这里是界面这边的类型，改一边要改另一边。
 // macOS 和 Windows 上的桌面外壳有它：Linux 和普通浏览器里没有，设置页就不显示 Computer Use 那一节。
-// macOS 上这一节是两项系统权限；Windows 上没有系统权限，是助手的状态和两条提醒（09 号 3.11）。
+// macOS 上这一节是两项系统权限；Windows 上没有系统权限，是助手的状态和两条提醒。
 
 /** 两项系统权限：辅助功能、屏幕录制 */
 export type PermissionPane = 'accessibility' | 'screenRecording'

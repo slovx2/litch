@@ -8,7 +8,7 @@ import { classifyWinApp, exeName, WIN_BASELINE } from '../policy-win.mjs'
 
 const exe = (path: string, name = 'App') => classifyWinApp({ appId: path, name, exe: path })
 
-test('助手底线名单（9.2）里的每一项主进程这份都禁止', () => {
+test('助手底线名单里的每一项主进程这份都禁止', () => {
   assert.deepEqual([...WIN_BASELINE].sort(), [
     'consent.exe',
     'credentialuibroker.exe',

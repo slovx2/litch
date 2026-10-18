@@ -1,6 +1,6 @@
 // 和 Computer Use 助手之间的线上格式：每帧 4 字节大端的长度，后面是 UTF-8 的 JSON-RPC 2.0。两个平台同一套帧。
 // macOS 助手（apps/computer-use）那一头在 Sources/LitchComputerUseCore/Wire.swift；Windows 助手（apps/computer-use-win）
-// 的方法和形状照 design/harness-client/09-windows-computer-use.md 第 9.2 节。常量和方法的形状两边要一致。
+// 的方法和形状在下面“Windows 助手”那一段。常量和方法的形状两边要一致。
 
 /** macOS 助手的通道协议版本，握手时对不上助手直接断开 */
 export const HELPER_PROTOCOL = 1
@@ -120,7 +120,7 @@ export interface StoppedNotice {
   bundleId: string
 }
 
-// —— Windows 助手的参数和结果（09 号第 9.2 节） ——
+// —— Windows 助手的参数和结果 ——
 
 /** 完整性级别 */
 export type WinIntegrity = 'low' | 'medium' | 'high' | 'system'
@@ -159,7 +159,7 @@ export interface WinHelperApp {
   pid: number
   active: boolean
   integrity: WinIntegrity
-  /** 版本资源里的 OriginalFilename（防改名）。9.2 没有要求，助手给了就用 */
+  /** 版本资源里的 OriginalFilename（防改名）。可选，助手给了就用 */
   originalFilename?: string | null
   windows: WinWindow[]
 }
@@ -188,7 +188,7 @@ export interface WinAppStateResult {
   /** 这个应用的其他窗口（弹出的对话框、菜单也算） */
   windows: { id: number; title: string }[]
   screenshot: {
-    /** 截图号：坐标动作要带回去（9.2 没定类型，原样带回） */
+    /** 截图号：坐标动作要带回去（字符串，原样带回） */
     id: string | number
     mime: string
     data: string

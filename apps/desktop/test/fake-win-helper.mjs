@@ -1,4 +1,4 @@
-// 假的 Windows Computer Use 助手：按 design/harness-client/09-windows-computer-use.md 第 9.2 节的协议回应，
+// 假的 Windows Computer Use 助手：按 src/computer-use/wire.mts 里 Windows 助手的协议回应，
 // 让 macOS 上也能把主进程的 Windows 那一套（launcher-win、executor-win、ax-text、名单）整条测到。
 // 不碰任何系统接口：应用、窗口、界面树都是写死的，动作只改内存里的状态并记下来。
 //

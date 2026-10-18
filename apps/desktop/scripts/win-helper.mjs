@@ -1,5 +1,5 @@
 // Windows 的 Computer Use 助手（apps/computer-use-win，Rust）：构建产物在哪、装进应用后放哪。
-// 约定见设计文档 09 号第 9.3 节，打包（pack.mjs）、做安装包（make-installer.mjs）、自检（check-computer-use.mjs）都从这里取。
+// 助手的位置和构建命令只写在这里，打包（pack.mjs）、做安装包（make-installer.mjs）、自检（check-computer-use.mjs）都从这里取。
 //
 // 打包不替你构建助手：先在 apps/computer-use-win 里跑一遍 WIN_HELPER_BUILD（发布流程在打包前跑）。
 // 要在 crate 目录里跑：rustup 按当前目录找 rust-toolchain.toml，在仓库根目录用 --manifest-path 跑的话用的是默认工具链。

@@ -6,7 +6,7 @@
 // 查权限会拉起助手，只在这一组打开时查（不在启动时、也不在设备详情里为看一眼去拉起）。用户从系统设置切回来时
 // 窗口重新拿到焦点，再问一次在跑的助手（不拉起）。应用从不替用户改系统设置，也不调会弹系统授权框的接口。
 // Windows：没有系统权限这一块，换成助手的状态（在不在跑、版本、上次的错）和两条提醒（Litch 以管理员身份运行、
-// UAC 关着），见 09 号 3.11。“始终允许”的清单和设备开关的说明两个平台一样。
+// UAC 关着）。“始终允许”的清单和设备开关的说明两个平台一样。
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { reasonOf } from '../app/errors.ts'

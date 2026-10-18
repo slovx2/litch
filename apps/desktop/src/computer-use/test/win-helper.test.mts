@@ -1,5 +1,5 @@
-// Windows 那一套整条走一遍：看护（launcher-win）用 node 跑假助手（apps/desktop/test/fake-win-helper.mjs，按 09 号 9.2
-// 回应），执行器走 win32 分支。不要求真的是 Windows：平台是传进去的。
+// Windows 那一套整条走一遍：看护（launcher-win）用 node 跑假助手（apps/desktop/test/fake-win-helper.mjs，按 wire.mts 里
+// Windows 助手的协议回应），执行器走 win32 分支。不要求真的是 Windows：平台是传进去的。
 import assert from 'node:assert/strict'
 import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process'
 import { existsSync, mkdtempSync, rmSync } from 'node:fs'

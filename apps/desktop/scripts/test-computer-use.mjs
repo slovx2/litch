@@ -1,6 +1,6 @@
 // Computer Use 主进程一侧的单元测试（src/computer-use/test/*.test.mts）：每个测试文件用 esbuild 打成一个文件放进
 // 临时目录，再交给 node --test。助手用桩或假的套接字服务，不起真的应用、不碰系统权限。Windows 那一套用
-// test/fake-win-helper.mjs 这个假助手（按 09 号 9.2 的协议回应），测试经 LITCH_DESKTOP_ROOT 找到它。
+// test/fake-win-helper.mjs 这个假助手（按 wire.mts 里 Windows 助手的协议回应），测试经 LITCH_DESKTOP_ROOT 找到它。
 //   node scripts/test-computer-use.mjs
 import { spawnSync } from 'node:child_process'
 import { mkdtempSync, readdirSync, rmSync } from 'node:fs'

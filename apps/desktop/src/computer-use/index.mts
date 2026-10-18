@@ -20,7 +20,7 @@ import {
 
 /** 助手应用的名字（macOS） */
 export const HELPER_APP_NAME = 'Litch Computer Use.app'
-/** 助手的可执行文件名（Windows，09 号 9.3） */
+/** 助手的可执行文件名（Windows，装在 <resources>/computer-use/ 下） */
 export const HELPER_EXE_NAME = 'litch-computer-use.exe'
 
 export interface ComputerUseOptions {
@@ -54,7 +54,7 @@ export interface WinHelperInfo {
  * macOS：设了 LITCH_COMPUTER_USE_APP 用它；打包后在 Litch.app/Contents/SharedSupport 里（resourcesPath 是
  * Contents/Resources）；开发时用 apps/computer-use/build-app.mjs 组装出来的那一份。
  * Windows：设了 LITCH_COMPUTER_USE_WIN_HELPER 用它；打包后在 <resources>/computer-use/ 下；开发时是
- * apps/computer-use-win 交叉编译出来的那一份（构建命令见 09 号 9.3）。
+ * apps/computer-use-win 交叉编译出来的那一份（构建命令见 scripts/win-helper.mjs）。
  */
 export function locateHelper(where: {
   platform: string

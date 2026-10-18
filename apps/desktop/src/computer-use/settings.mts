@@ -7,7 +7,7 @@
 // （AXIsProcessTrusted、CGPreflightScreenCaptureAccess），这里不碰系统设置，也不替用户授权。
 // 只有用户点“打开系统设置”时助手才向系统申请一次，好让列表里出现“Litch Computer Use”（Apps.swift 开头）。
 //
-// Windows 上没有系统权限这回事（09 号 3.11）：这一节换成助手的状态（在不在跑、版本、上次的错）和两条提醒的依据——
+// Windows 上没有系统权限这回事：这一节换成助手的状态（在不在跑、版本、上次的错）和两条提醒的依据——
 // 助手的完整性级别（助手继承 Litch 的令牌，高于 medium 就是 Litch 以管理员身份运行）、UAC 开没开。
 //
 // LITCH_COMPUTER_USE_PERMISSIONS 是给自检和截图用的：设了就不碰助手，权限照它说的回

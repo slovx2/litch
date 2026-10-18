@@ -238,7 +238,7 @@ jobs:
             apps/desktop/out/installer/*.zip
           if-no-files-found: error
 
-  # Windows 的安装程序：不签名（打开时系统会提示来源不明），这里只出包、不验收（真机验收见设计 09 号）。
+  # Windows 的安装程序：不签名（打开时系统会提示来源不明），这里只出包、不验收（真机验收另做）。
   # 带 Computer Use 的助手（apps/computer-use-win，Rust）：打包前先构建，打包和做安装包都核对它在
   desktop-windows:
     runs-on: windows-2025

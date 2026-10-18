@@ -1,4 +1,4 @@
-// Windows 上拉起并连上 Computer Use 助手（看护的另一半在 supervisor.mts；协议是 09 号第 9.2 节）。
+// Windows 上拉起并连上 Computer Use 助手（看护的另一半在 supervisor.mts；协议见 wire.mts）。
 //
 // 怎么拉起：主进程直接 spawn `litch-computer-use.exe --parent-pid <主进程号>`，连接就是它的标准输入输出这对匿名管道，
 // 标准错误只写日志（转进 [computer-use] 日志）。不开命名管道、不开端口，别的进程连不上它，所以不要 macOS 那套

@@ -1,4 +1,4 @@
-// litch_computer 在 Windows 上的那一半（共用的审批、名单、出错的说法在 executor.mts）。助手的协议见 09 号第 9.2 节。
+// litch_computer 在 Windows 上的那一半（共用的审批、名单、出错的说法在 executor.mts）。助手的协议见 wire.mts。
 //
 // 和 macOS 不同的地方：
 //   - 没有系统权限这一步。

@@ -1,14 +1,14 @@
-// Windows 上哪些应用不许操作、哪些算高风险（09 号第 3.10 节，按平台分派在 policy.mts）。名单是自己整理的。
+// Windows 上哪些应用不许操作、哪些算高风险（按平台分派在 policy.mts）。名单是自己整理的。
 //
 // 认应用看三样：exe 的文件名、版本资源里的 OriginalFilename（改了文件名也认得出）、AUMID（打包应用）。都不分大小写。
 // 认不出的再看显示名里有没有“密码”一类的字（和 macOS 一样，宁可错拦密码管理器）。
 //
 // 禁止（当场回 declined，不弹卡片）：Litch 自己和助手；密码管理器；Windows 安全中心、Defender 和常见杀毒软件的界面；
 // 凭据与提权界面；系统设置、控制面板、注册表编辑器、组策略、服务、任务计划程序、mmc、任务管理器（能改系统设置就能
-// 给自己开权限，理由同决 206）；官方的 ChatGPT / Codex 桌面端。
+// 给自己开权限、关掉安全设置）；官方的 ChatGPT / Codex 桌面端。
 // 高风险（卡片上标出来，远程会话不给“始终允许”这一条对所有应用都成立）：浏览器、终端与命令行、文件资源管理器
 // （地址栏能直接跑命令）、能直接跑脚本的宿主。
-// 助手那一侧还有一份底线名单（apps/computer-use-win 的 baseline.rs，09 号 9.2），WIN_BASELINE 是它的每一项，这里都要禁止。
+// 助手那一侧还有一份底线名单（apps/computer-use-win 的 baseline.rs），WIN_BASELINE 是它的每一项，这里都要禁止。
 import type { AppRisk } from './policy.mjs'
 
 /** 认一个 Windows 应用要的几样（listApps 给的，或者 getAppState 的 app） */
@@ -20,7 +20,7 @@ export interface WinAppIdentity {
   originalFilename?: string | null
 }
 
-/** 助手的底线名单（9.2）：Litch 自身与助手、凭据与提权界面、锁屏 */
+/** 助手的底线名单（baseline.rs 的 FORBIDDEN_EXES）：Litch 自身与助手、凭据与提权界面、锁屏 */
 export const WIN_BASELINE: readonly string[] = [
   'litch.exe',
   'litch-computer-use.exe',

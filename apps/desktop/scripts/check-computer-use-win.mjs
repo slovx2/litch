@@ -1,5 +1,5 @@
 // Computer Use 自检的 Windows 分支（check-computer-use.mjs 在 Windows 上走这里）：照主进程的做法把助手当子进程拉起来，
-// 经标准输入输出说 09 号设计 9.2 节的协议（4 字节大端长度 + JSON-RPC），调不动界面的几样：
+// 经标准输入输出说主进程那套协议（4 字节大端长度 + JSON-RPC，方法和形状见 src/computer-use/wire.mts），调不动界面的几样：
 //   hello（协议号、平台、进程号）、diagnostics、listApps（有没有界面都只要求回一个列表：流水线的机器上可能一个窗口都没有）；
 //   shutdown 之后进程自己退出；再起一次，关掉它的标准输入，它也自己退出。不点、不截图、不打字。
 // 不用主进程里接助手的那一层（src/computer-use），这里只验助手本身和打包约定，主进程那边有自己的测试。
@@ -12,7 +12,7 @@ import { WIN_HELPER_BUILD, winHelperPath } from './win-helper.mjs'
 
 /** 每一步最多等多久 */
 const STEP_MS = 15_000
-/** 协议版本，见 9.2 */
+/** 协议版本，和 src/computer-use/wire.mts 的 HELPER_PROTOCOL_WIN 一致 */
 const PROTOCOL = 1
 
 const withTimeout = (promise, what) =>
