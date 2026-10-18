@@ -80,6 +80,8 @@ export type PhraseKey =
   // 会话
   | 'session.untitled'
   | 'session.readOnly'
+  // 引擎自己的子代理线程，对面说它不接受直接输入（canAcceptDirectInput 为假）：只能看
+  | 'session.agentReadOnly'
   | 'session.archived'
   | 'session.queueFailed'
   // 终端

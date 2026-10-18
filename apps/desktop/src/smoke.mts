@@ -83,6 +83,7 @@ import { runSidebarChecks } from './probe-sidebar-run.mjs'
 import { installTerminalKit } from './probe-terminal-kit.mjs'
 import { runTerminalChecks, type TerminalMode } from './probe-terminal-run.mjs'
 import { judgeTools, toolsProbe } from './probe-tools.mjs'
+import { runTreeChecks } from './probe-tree.mjs'
 import type { QuitOutcome } from './quit-terminals.mjs'
 
 type ProbeMode =
@@ -97,6 +98,7 @@ type ProbeMode =
   | 'manage'
   | 'manage-mock'
   | 'sidebar'
+  | 'tree'
   | 'engines'
   | 'first-turn'
   | TerminalMode
@@ -143,6 +145,7 @@ const PROBE_MODES: readonly string[] = [
   'manage',
   'manage-mock',
   'sidebar',
+  'tree',
   'engines',
   'first-turn',
   ...TERMINAL_MODES,
@@ -159,6 +162,7 @@ export const MOCK_MODES: readonly string[] = [
   'full-mock',
   'manage-mock',
   'sidebar',
+  'tree',
   'terminal',
   'files',
   'diff',
@@ -238,6 +242,7 @@ async function measure(
     return runFilesChecks(window, mode, hooks)
   }
   if (mode === 'sidebar') return runSidebarChecks(window, hooks)
+  if (mode === 'tree') return runTreeChecks(window)
   if (mode === 'engines') return runEnginesChecks(window, hooks)
   if (mode === 'first-turn') return runFirstTurnChecks(window)
   if (mode === 'diff' || mode === 'diff-device' || mode === 'diff-entry') {

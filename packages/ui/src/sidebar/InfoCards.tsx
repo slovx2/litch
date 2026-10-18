@@ -1,9 +1,18 @@
 // 侧栏里设备行、工作区行、会话行的信息卡：行上只留一眼要看的，主机、路径这些细节鼠标停上去才看得到。
-import { type DeviceView, pathTwin, type SessionSummary, type WorkspaceView } from '@litch/core'
+import {
+  type DeviceView,
+  keys,
+  pathTwin,
+  type SessionChildren,
+  type SessionSummary,
+  type WorkspaceView,
+} from '@litch/core'
 import { useT } from '../app/appearance.ts'
 import { badgeOf, downHarness, nameOf, viaOf, wireStyle } from '../app/device.ts'
+import { useKey } from '../app/services.tsx'
 import { HarnessList, HarnessWhy } from '../devices/HarnessList.tsx'
 import { StatePill } from '../devices/status.tsx'
+import { useAgentList } from '../tree/useAgentList.ts'
 import { cwdMark } from './cwd.ts'
 import { TallyFact } from './TallyMarks.tsx'
 
@@ -142,7 +151,79 @@ export function SessionInfo({ summary, device, workspace }: SessionInfoProps) {
           <dt>{t('info.device')}</dt>
           <dd>{t.text(device.name)}</dd>
         </div>
+        <TreeFacts summary={summary} device={device} />
       </dl>
     </div>
+  )
+}
+
+/** 列出来的子代理最多几个，再多写个数 */
+const AGENTS_SHOWN = 5
+
+/**
+ * 会话树的几条：它是谁派出的、怎么派的；下面挂着几个子会话；引擎自己派出的子代理有哪些。
+ * 信息卡里不放能点的东西：子代理在对话里的卡片上、侧面板的“子代理”标签里点开
+ */
+function TreeFacts({ summary, device }: { summary: SessionSummary; device: DeviceView }) {
+  const t = useT()
+  const lineage = summary.lineage
+  const parent = useKey<SessionSummary>(keys.summary(device.id, lineage?.parentId ?? ''))
+  const children = useKey<SessionChildren>(keys.children(device.id))
+  const kids = children?.[summary.id]?.length ?? 0
+  // 子代理只有完整模式的设备问得到（按父会话列）；卡片出来的时候问一次，几秒内不重复问
+  const agents = useAgentList(
+    device.id,
+    summary.id,
+    '',
+    device.connection === 'online' && device.mode === 'full' && !summary.lineage,
+  )
+  return (
+    <>
+      {lineage ? (
+        <>
+          <div>
+            <dt>{t('info.parent')}</dt>
+            <dd>{parent ? t.text(parent.title) : t('tree.lineage.unknown')}</dd>
+          </div>
+          <div>
+            <dt>{t('info.lineage')}</dt>
+            <dd>
+              {t(lineage.kind === 'fork' ? 'info.lineage.fork' : 'info.lineage.fresh')}
+              {' · '}
+              {t(`info.lineage.${lineage.origin}`)}
+              {lineage.wakeParent ? (
+                <span className="info-cwd">{t('info.lineage.wake')}</span>
+              ) : null}
+            </dd>
+          </div>
+        </>
+      ) : null}
+      {kids > 0 ? (
+        <div>
+          <dt>{t('info.children')}</dt>
+          <dd>{t('info.children.count', { n: kids })}</dd>
+        </div>
+      ) : null}
+      {agents && agents.length > 0 ? (
+        <div>
+          <dt>{t('info.agents')}</dt>
+          <dd className="info-agents">
+            {agents.slice(0, AGENTS_SHOWN).map((agent, index) => (
+              <span key={agent.id} className="info-agent" data-agent={agent.id}>
+                {agent.nickname ?? t('tree.agent.unnamed', { n: index + 1 })}
+                {agent.role ? ` (${agent.role})` : ''}
+                {' · '}
+                {t(`tree.status.${agent.status}`)}
+              </span>
+            ))}
+            {agents.length > AGENTS_SHOWN ? (
+              <span className="dim">
+                {t('info.agents.more', { n: agents.length - AGENTS_SHOWN })}
+              </span>
+            ) : null}
+          </dd>
+        </div>
+      ) : null}
+    </>
   )
 }

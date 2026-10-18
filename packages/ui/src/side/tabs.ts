@@ -5,6 +5,7 @@ import type { IconName } from '../app/icons.tsx'
 import type { MessageKey } from '../i18n/index.ts'
 // 内置浏览器：代理要给人看网页时打开面板（启动时就装上，见 browser/show.ts）
 import './browser/show.ts'
+import { AGENTS_TAB } from '../tree/agents.ts'
 import { BROWSER_TAB } from './browser/store.ts'
 
 /**
@@ -68,6 +69,15 @@ export const SIDE_TABS: readonly SideTabSpec[] = [
     icon: 'globe',
     Panel: lazy(() =>
       import('./browser/BrowserTab.tsx').then((module) => ({ default: module.BrowserTab })),
+    ),
+  },
+  {
+    // 引擎自己派出的子代理：对话里点子代理卡片时打开（tree/agents.ts 的 openAgent）
+    id: AGENTS_TAB,
+    label: 'side.tab.agents',
+    icon: 'agents',
+    Panel: lazy(() =>
+      import('../tree/AgentsTab.tsx').then((module) => ({ default: module.AgentsTab })),
     ),
   },
 ]

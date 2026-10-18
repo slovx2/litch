@@ -8,6 +8,8 @@ export interface BlockInput {
   id: string
   kind: ItemView['kind']
   phase?: 'commentary' | 'final' | 'unknown'
+  /** 露在外面的卡片（cardOf）：派出子会话、启动子代理。不收进活动块 */
+  card?: boolean
 }
 
 export type Block =
@@ -15,6 +17,8 @@ export type Block =
   | { type: 'answer'; itemId: string }
   | { type: 'plan'; itemId: string }
   | { type: 'todo'; itemId: string }
+  /** 派出的子会话、启动的子代理：一张能点开的卡片，一直露在外面（cardOf） */
+  | { type: 'card'; itemId: string }
   /** key 是组里第一个条目的标识，组里再加条目它也不变 */
   | { type: 'activity'; key: string; itemIds: string[] }
   /** 整个回合只有说明（手动压缩上下文的那个回合就是这样）：说明直接露在外面，不收进“活动”里 */
@@ -27,6 +31,8 @@ export function bucketItems(items: BlockInput[]): Block[] {
       blocks.push({ type: 'user', itemId: item.id })
     } else if (item.kind === 'plan') {
       blocks.push({ type: 'plan', itemId: item.id })
+    } else if (item.card === true) {
+      blocks.push({ type: 'card', itemId: item.id })
     } else if (item.kind === 'todo') {
       // 待办进度一直露在外面，不跟着活动区收起来
       blocks.push({ type: 'todo', itemId: item.id })
@@ -64,5 +70,21 @@ export function activitySettled(
       item.kind === 'agentMessage' &&
       item.phase === 'final' &&
       (finalOnStart || item.status === 'completed'),
+  )
+}
+
+/**
+ * 这个条目要不要画成露在外面的卡片：litch_sessions.start（派出的子会话或提案），
+ * 和启动子代理的那次调用（点开看子线程）。等待、发输入这些别的子代理调用还是活动里的一行。
+ * 判断只看条目开始时就有的东西（对话区只在条目增减时重新分块），条目后来更新也不会从卡片变成一行
+ */
+export function cardOf(item: ItemView): boolean {
+  if (item.kind !== 'toolCall') return false
+  if (item.spawned) return true
+  // 启动子代理刚开始时还不知道子线程是谁（上游开始的事件里没有），也画成卡片，等结束时填上
+  return (
+    item.agents !== undefined &&
+    typeof item.tool === 'object' &&
+    item.tool.key === 'collab.spawnAgent'
   )
 }

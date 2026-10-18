@@ -62,6 +62,7 @@ import type {
   TerminalsOp,
   TerminalsView,
 } from '../model-terminal.mjs'
+import type { AgentThreadView, LineageKind, SessionProposalView } from '../model-tree.mjs'
 import type { Phrase, Text } from '../phrase.mjs'
 import type { SkippingOutput } from '../text/output-cap.mjs'
 
@@ -158,6 +159,8 @@ export type SessionOp =
   | { op: 'session.usage'; usage: ContextUsage | null }
   /** 对面做不做得了的几件事变了（刚发现有一件它不认识） */
   | { op: 'session.can'; can: SessionAbilities }
+  /** 这个会话上等着用户点的子会话提案整份换掉（会话树） */
+  | { op: 'session.proposals'; proposals: SessionProposalView[] }
 
 /**
  * 设置现在的值整份换掉：这份东西不大，变得也少。
@@ -608,6 +611,52 @@ export interface Commands {
   }
   /** 差异模块在设备上起过多少次 git、概况取过多少遍。没有界面用它，是给验收量的 */
   'diff.requests': { params: { deviceId: string }; result: DiffRequests }
+  // ---------- 会话树 ----------
+  // 这一组要设备服务声明了会话树（DeviceView.sessionTree），没有时以 unsupported 结束（session.agents 除外）。
+  /**
+   * 在 parentId 这个会话下面派一个 Litch 子会话（设备上的 litch/session/start）。harness 不给是父会话的，
+   * kind 为 fork 时只能和父会话同一个 harness；workspaceId、cwd 不给跟父会话一样。
+   * 应答时子会话已经建好、第一段话已经发给它；侧栏里它嵌在父会话下面
+   */
+  'session.spawn': {
+    params: {
+      deviceId: string
+      parentId: string
+      harness?: string
+      model?: string
+      effort?: string
+      workspaceId?: string
+      cwd?: string
+      kind: LineageKind
+      title: string
+      prompt: string
+      wakeParent: boolean
+    }
+    result: { sessionId: string }
+  }
+  /** 把一个 Litch 子会话脱离成独立会话：去掉父子关系，会话本身不动 */
+  'session.detach': {
+    params: { deviceId: string; sessionId: string }
+    result: Record<string, never>
+  }
+  /** 用户点了提案上的“开始”：起这个子会话。应答时子会话已经建好 */
+  'session.proposal.accept': {
+    params: { deviceId: string; sessionId: string; proposalId: string }
+    result: { sessionId: string }
+  }
+  /** 用户点了提案上的“不要” */
+  'session.proposal.dismiss': {
+    params: { deviceId: string; sessionId: string; proposalId: string }
+    result: Record<string, never>
+  }
+  /**
+   * 这个会话下面引擎自己的子代理线程（thread/list 带 parentThreadId，只要直接的子女）。
+   * 不缓存，每次现问；对面不会按父会话查的以 unsupported 结束
+   */
+  'session.agents': {
+    params: { deviceId: string; sessionId: string }
+    result: { agents: AgentThreadView[] }
+  }
   /** 用户的 ssh 配置里有哪些主机 */
   'remote.discover': { params: Record<string, never>; result: { hosts: DiscoveredHost[] } }
   /** 添加之前先连过去看一眼对面有什么。不启动任何东西 */
