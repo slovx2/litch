@@ -229,6 +229,8 @@ pub fn window(h: HWND, pid: u32, notes: &mut Vec<String>) -> Option<(Image, Rect
     // WGC 的图和可见边界一般一样大；对不上时以图为准，从可见边界的左上角起算
     let area = Rect::new(visible.left, visible.top, visible.left + image.width as i32, visible.top + image.height as i32);
     let mut image = image;
+    // 只贴目标进程（pid）自己的弹出层（菜单、下拉、提示）。助手的提示窗口属于助手进程，这里天然不会被贴进来，
+    // 所以提示窗口不需要 WDA_EXCLUDEFROMCAPTURE 也进不了我们的截图。
     for popup in apps::popups(h, pid) {
         let popup_area = apps::bounds(popup);
         if popup_area.intersect(&area).is_empty() {

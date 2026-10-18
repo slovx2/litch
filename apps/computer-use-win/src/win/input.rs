@@ -9,6 +9,9 @@ use std::time::Duration;
 use windows::Win32::UI::Input::KeyboardAndMouse::*;
 use windows::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN};
 
+/// 助手自己发的输入，在 dwExtraInfo 里带这个标记（ASCII "LITC"）。低级钩子凭它把自己发的和真实输入
+/// （含 Moonlight、RDP 一类工具经 SendInput 转发的——那些带注入标记却没有这个值）分开。
+pub const INJECTED_TAG: usize = 0x4C49_5443;
 /// 一个滚轮刻度
 const WHEEL_DELTA: i32 = 120;
 /// 一批最多发多少个事件（点击、组合键这类一次发多个事件时分批，免得数组太大）
@@ -31,14 +34,14 @@ pub fn desktop() -> Rect {
 fn key(vk: u16, scan: u16, flags: KEYBD_EVENT_FLAGS) -> INPUT {
     INPUT {
         r#type: INPUT_KEYBOARD,
-        Anonymous: INPUT_0 { ki: KEYBDINPUT { wVk: VIRTUAL_KEY(vk), wScan: scan, dwFlags: flags, time: 0, dwExtraInfo: 0 } },
+        Anonymous: INPUT_0 { ki: KEYBDINPUT { wVk: VIRTUAL_KEY(vk), wScan: scan, dwFlags: flags, time: 0, dwExtraInfo: INJECTED_TAG } },
     }
 }
 
 fn mouse(dx: i32, dy: i32, data: i32, flags: MOUSE_EVENT_FLAGS) -> INPUT {
     INPUT {
         r#type: INPUT_MOUSE,
-        Anonymous: INPUT_0 { mi: MOUSEINPUT { dx, dy, mouseData: data as u32, dwFlags: flags, time: 0, dwExtraInfo: 0 } },
+        Anonymous: INPUT_0 { mi: MOUSEINPUT { dx, dy, mouseData: data as u32, dwFlags: flags, time: 0, dwExtraInfo: INJECTED_TAG } },
     }
 }
 

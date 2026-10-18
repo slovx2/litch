@@ -1,12 +1,13 @@
 // 屏幕提示：一个置顶、点击穿透、不抢焦点的分层窗口，沿目标窗口画一圈边框，顶部一条
 // “Litch 正在使用此电脑 · 按 Esc 停止”。内容、要不要显示、跟着哪个窗口都来自 activity::overlay_target()。
 // 单独一条线程持有窗口并跑消息循环：定时（每 250 ms）复看一次，activity 变化时 wake() 催一次即时更新。
-// 设 WDA_EXCLUDEFROMCAPTURE，不进截图。
+// 不设 WDA_EXCLUDEFROMCAPTURE：我们自己的截图只截目标窗口（capture.rs 的 CreateForWindow / PrintWindow，
+// 贴弹出层也只贴目标进程的窗口），提示窗口本来就进不去；留着这个标志只会让串流/远程软件的画面里也看不到提示。
 use super::{activity, apps};
 use crate::geometry::Rect;
 use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicU32, Ordering};
 use windows::core::w;
-use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, POINT, SIZE, WPARAM};
+use windows::Win32::Foundation::{GetLastError, COLORREF, HWND, LPARAM, LRESULT, POINT, SIZE, WPARAM};
 use windows::Win32::Graphics::Gdi::*;
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Threading::GetCurrentThreadId;
@@ -97,8 +98,6 @@ unsafe fn create() -> Option<HWND> {
         None,
     )
     .ok()?;
-    // 不进截图
-    let _ = SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE);
     Some(hwnd)
 }
 
@@ -214,10 +213,9 @@ fn draw(hwnd: HWND, bounds: &Rect, text: &str) {
             }
             SelectObject(dc, old_font);
             let _ = DeleteObject(font.into());
-            SelectObject(dc, old);
-
-            // 贴到屏幕上
+            // UpdateLayeredWindow 读的是当前选进 dc 的那张位图，必须在把位图换出去之前贴
             blit(hwnd, bounds, w, h, dc);
+            SelectObject(dc, old);
             let _ = DeleteDC(dc);
         } else {
             let dc = CreateCompatibleDC(None);
@@ -231,10 +229,14 @@ fn draw(hwnd: HWND, bounds: &Rect, text: &str) {
 }
 
 unsafe fn blit(hwnd: HWND, bounds: &Rect, w: i32, h: i32, dc: HDC) {
-    let _ = SetWindowPos(hwnd, Some(HWND_TOPMOST), bounds.left, bounds.top, w, h, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    if let Err(e) = SetWindowPos(hwnd, Some(HWND_TOPMOST), bounds.left, bounds.top, w, h, SWP_NOACTIVATE | SWP_SHOWWINDOW) {
+        super::system::log(format!("提示窗口 SetWindowPos 失败：{e}（GetLastError {:?}）", GetLastError()));
+    }
     let dst = POINT { x: bounds.left, y: bounds.top };
     let size = SIZE { cx: w, cy: h };
     let src = POINT { x: 0, y: 0 };
     let blend = BLENDFUNCTION { BlendOp: AC_SRC_OVER as u8, BlendFlags: 0, SourceConstantAlpha: 255, AlphaFormat: AC_SRC_ALPHA as u8 };
-    let _ = UpdateLayeredWindow(hwnd, None, Some(&dst), Some(&size), Some(dc), Some(&src), COLORREF(0), Some(&blend), ULW_ALPHA);
+    if let Err(e) = UpdateLayeredWindow(hwnd, None, Some(&dst), Some(&size), Some(dc), Some(&src), COLORREF(0), Some(&blend), ULW_ALPHA) {
+        super::system::log(format!("提示窗口 UpdateLayeredWindow 失败：{e}（GetLastError {:?}）", GetLastError()));
+    }
 }
