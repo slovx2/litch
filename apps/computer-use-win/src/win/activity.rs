@@ -107,8 +107,3 @@ pub fn overlay_target() -> Option<(isize, String)> {
     let target = if s.entries.iter().any(|e| e.hwnd == s.target) { s.target } else { s.entries[s.entries.len() - 1].hwnd };
     Some((target, copy::banner(s.language, &names)))
 }
-
-/// 有没有正在操作的项（钩子只在这时把 Esc 当成停止）
-pub fn active() -> bool {
-    !state().entries.is_empty()
-}

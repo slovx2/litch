@@ -1,7 +1,7 @@
 // 系统信息与小工具：日志、宽字符串、进程的 exe 与完整性级别、输入桌面、系统版本、UAC、单实例互斥量。
 use crate::ident::integrity_name;
 use std::ffi::c_void;
-use windows::core::{HSTRING, PCWSTR, PWSTR};
+use windows::core::{HSTRING, PWSTR};
 use windows::Win32::Foundation::{CloseHandle, GetLastError, ERROR_ALREADY_EXISTS, HANDLE, HWND};
 use windows::Win32::Security::Authorization::ConvertSidToStringSidW;
 use windows::Win32::Security::{
@@ -22,10 +22,6 @@ use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThre
 pub fn log(message: impl AsRef<str>) {
     use std::io::Write;
     let _ = writeln!(std::io::stderr(), "{}", message.as_ref());
-}
-
-pub fn wide(text: &str) -> Vec<u16> {
-    text.encode_utf16().chain(std::iter::once(0)).collect()
 }
 
 pub fn from_wide(buf: &[u16]) -> String {
@@ -91,10 +87,6 @@ pub fn own_process() -> Handle {
 
 pub fn own_integrity() -> u32 {
     integrity_rid(&own_process()).unwrap_or(0x2000)
-}
-
-pub fn integrity_of_pid(pid: u32) -> Option<u32> {
-    open_process(pid).and_then(|p| integrity_rid(&p))
 }
 
 pub fn integrity_label(rid: u32) -> &'static str {
@@ -260,9 +252,4 @@ pub fn version_string(exe: &str, field: &str) -> Option<String> {
         }
         None
     }
-}
-
-/// 给 PCWSTR 参数用的宽字符串（调用期间要活着）
-pub fn pcwstr(buf: &[u16]) -> PCWSTR {
-    PCWSTR(buf.as_ptr())
 }
