@@ -1,4 +1,4 @@
-// 截窗口（09 号 3.7 节）：Windows.Graphics.Capture 的 CreateForWindow，被挡住也截得到；系统支持时关掉黄框。
+// 截窗口：Windows.Graphics.Capture 的 CreateForWindow，被挡住也截得到；系统支持时关掉黄框。
 // 不支持或失败时退回 PrintWindow(PW_RENDERFULLCONTENT)。同一进程盖在上面的菜单、下拉框按屏幕位置叠进同一张图。
 // 最后缩到最长边 1568、编成 JPEG（WIC）。
 use super::apps;

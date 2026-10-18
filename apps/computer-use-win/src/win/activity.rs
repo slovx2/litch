@@ -6,7 +6,7 @@ use serde_json::json;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-/// 最后一个动作之后，屏幕提示再留多久（09 号 9.2 节：5 秒没有动作就撤）
+/// 最后一个动作之后，屏幕提示再留多久（5 秒没有动作就撤）
 const SHOW_FOR: Duration = Duration::from_secs(5);
 
 struct Entry {

@@ -26,7 +26,7 @@ pub fn match_score(query: &str, app: &AppNames) -> u8 {
     0
 }
 
-/// 完整性级别的 RID → 名字（9.2 节的 low / medium / high / system）
+/// 完整性级别的 RID → 名字（low / medium / high / system）
 pub fn integrity_name(rid: u32) -> &'static str {
     match rid {
         0..=0x1FFF => "low",

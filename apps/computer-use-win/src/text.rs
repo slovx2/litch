@@ -1,5 +1,5 @@
 // 打字的拆分和长文字的截断。
-// type_text 用 KEYEVENTF_UNICODE 逐个 UTF-16 码元发（中文不经输入法，09 号 3.8 节）；换行、制表符按真实的键发，
+// type_text 用 KEYEVENTF_UNICODE 逐个 UTF-16 码元发（中文不经输入法）；换行、制表符按真实的键发，
 // 否则很多控件收到 Unicode 的 \n 不会换行。
 use crate::keys::{VK_RETURN, VK_TAB};
 

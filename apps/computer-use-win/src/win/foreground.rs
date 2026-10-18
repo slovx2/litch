@@ -1,4 +1,4 @@
-// 切前台与落点核对（09 号 3.8 节、决 260）。
+// 切前台与落点核对。
 // 每个输入动作前确认目标窗口在前台：不在就 SetForegroundWindow，不行再借 AttachThreadInput 挂到当前前台线程上再试，
 // 仍然不行就回 foreground 错误，让模型请用户点一下那个窗口。坐标点击前用 WindowFromPoint 核对落点，避免点到盖在上面的窗口。
 use super::apps;
