@@ -23,6 +23,7 @@ import { useKey } from '../app/services.tsx'
 import { openDiffAt } from '../diff/state.ts'
 import { byteSize } from '../files/lines.ts'
 import type { Translator } from '../i18n/index.ts'
+import { openAgent } from '../tree/agents.ts'
 import { commandLook, commandState } from './command-state.ts'
 import { Diff } from './Diff.tsx'
 import { ToolPath } from './FileLinks.tsx'
@@ -319,7 +320,9 @@ const ToolCall = memo(function ToolCall(ref: ItemRef) {
   // 对面给的原话是截过的几段，按结果那样画；核心自己说的一句话照当前语言说
   const { error } = item
   const tool = t.text(item.tool)
-  const hasDetail = input.length > 0 || output.length > 0 || error !== null
+  // 等待、发输入这些子代理调用（启动子代理那一次是露在外面的卡片）：涉及的子线程在详情里，点开在侧面板里看
+  const agents = item.agents ?? []
+  const hasDetail = input.length > 0 || output.length > 0 || error !== null || agents.length > 0
   return (
     <Row
       itemRef={ref}
@@ -339,6 +342,26 @@ const ToolCall = memo(function ToolCall(ref: ItemRef) {
         hasDetail
           ? () => (
               <>
+                {agents.length > 0 ? (
+                  <div className="io">
+                    <div className="io-label">{t('info.agents')}</div>
+                    <div className="tree-chips">
+                      {agents.map((agent, index) => (
+                        <button
+                          key={agent.threadId}
+                          type="button"
+                          className="mini"
+                          data-agent={agent.threadId}
+                          title={t('tree.agent.open')}
+                          onClick={() => openAgent(ref.deviceId, ref.sessionId, agent.threadId)}
+                        >
+                          {t('tree.agent.unnamed', { n: index + 1 })}
+                          {agent.state ? ` · ${t(`tree.agent.${agent.state}`)}` : ''}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
                 {input.length > 0 ? (
                   <div className="io">
                     <div className="io-label">{t('tool.args')}</div>

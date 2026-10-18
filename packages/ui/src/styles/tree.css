@@ -1,0 +1,411 @@
+/* 会话树：对话里的子会话卡片和子代理卡片、注入的回报提示条、提案卡片、子会话那一行、
+   侧栏里的嵌套、派子会话的对话框、侧面板的“子代理”标签。只用变量；三种皮肤的差别在文件末尾 */
+
+/* ---------- 对话里的卡片 ---------- */
+.tree-card {
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  background: var(--raised);
+  font-size: 13px;
+  line-height: 20px;
+}
+.tree-card-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+button.tree-card-main {
+  cursor: pointer;
+  border-radius: var(--r2);
+}
+button.tree-card-main:hover {
+  background: var(--hover);
+}
+.tree-card-kind {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.tree-card-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.tree-card-line b {
+  font-weight: 600;
+}
+.tree-card-state {
+  flex: none;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.tree-card-report {
+  display: flex;
+  gap: 8px;
+  padding: 6px 12px 8px;
+  border-top: 1px solid var(--line-1);
+  font-size: 12px;
+}
+.tree-card-label {
+  flex: none;
+  color: var(--ink-3);
+}
+.tree-card-text {
+  min-width: 0;
+  color: var(--ink-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.tree-agents {
+  margin: 0;
+  padding: 0 0 4px;
+  list-style: none;
+  border-top: 1px solid var(--line-1);
+}
+.tree-agent {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 30px;
+  padding: 4px 12px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tree-agent:hover {
+  background: var(--hover);
+}
+.tree-agent-name {
+  flex: none;
+  font-weight: 600;
+}
+.tree-agent-role {
+  flex: none;
+  font: 11px / 1 var(--mono);
+  color: var(--ink-3);
+}
+.tree-agent-msg {
+  color: var(--ink-2);
+  font-size: 12px;
+}
+.tree-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+/* ---------- 注入的回报、唤醒：一条系统提示，不是用户的气泡 ---------- */
+.sev {
+  align-self: stretch;
+  padding: 6px 10px;
+  border: 1px dashed var(--line-2);
+  border-radius: var(--r2);
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-2);
+}
+.sev-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-3);
+}
+.sev-notes {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sev-note {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+.sev-note .st {
+  align-self: center;
+}
+.sev-title {
+  flex: none;
+  max-width: 40%;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+button.sev-title {
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.sev-status {
+  flex: none;
+  color: var(--ink-3);
+}
+.sev-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- 提案：和“要不要执行计划”同一个位置、同一种框 ---------- */
+.tree-proposal {
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 8px 8px 8px 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
+  border-radius: var(--r2);
+  background: var(--raised);
+  font-size: 12px;
+  line-height: 18px;
+}
+.tree-proposal-text {
+  flex: 1 1 260px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.tree-proposal-head {
+  color: var(--ink-3);
+}
+.tree-proposal-text b {
+  font-size: 13px;
+  font-weight: 600;
+}
+.tree-proposal-prompt {
+  color: var(--ink-2);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.tree-proposal-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.tree-proposal .err {
+  color: var(--err);
+}
+
+/* ---------- 子会话最上面那一行（和“分叉自”同一种样子） ---------- */
+.lineage {
+  align-items: center;
+}
+.lineage-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.lineage .err {
+  color: var(--err);
+}
+
+/* ---------- 侧栏里的嵌套 ---------- */
+.tree-kids {
+  position: relative;
+  padding-left: 14px;
+}
+/* 一根竖线把子会话和父会话连起来 */
+.tree-kids::before {
+  content: "";
+  position: absolute;
+  left: 18px;
+  top: 0;
+  bottom: 6px;
+  border-left: 1px solid var(--line-2);
+}
+/* 选中的子会话：连到设备竖线上的那一小段跨过缩进 */
+.tree-kids .ss-row.sel::before {
+  left: calc(-10px - var(--indent, 0px));
+  width: calc(10px + var(--indent, 0px));
+}
+/* 父会话行首左边的小箭头：收起、展开下面的子会话。压在行的左边距里，不挤开状态点 */
+.tree-fold {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 12px;
+  height: 18px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: var(--r1);
+  background: none;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+.tree-fold:hover {
+  color: var(--ink);
+  background: var(--hover);
+}
+.tree-fold .caret-ic {
+  width: 10px;
+  height: 10px;
+}
+
+/* ---------- 派一个子会话 ---------- */
+.spawn-dialog .modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.spawn-kind {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.spawn-kind label,
+.spawn-wake {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+.spawn-kind label.off {
+  color: var(--ink-3);
+}
+.spawn-prompt {
+  height: auto;
+  min-height: 84px;
+  padding-block: 6px;
+  resize: vertical;
+  font: inherit;
+}
+
+/* ---------- 侧面板的“子代理”标签 ---------- */
+.agents-tab {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.agents-list {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line-1);
+}
+.agents-pick {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r1);
+  background: none;
+  font-size: 12px;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.agents-pick:hover {
+  background: var(--hover);
+}
+.agents-pick[aria-selected="true"] {
+  border-color: var(--accent);
+  color: var(--ink);
+}
+/* 子代理的对话：和主区一样，对话区能伸能缩，下面是输入区（或者“只能看”的说明） */
+.agents-view {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.agents-view .tr {
+  padding: 14px 14px 10px;
+}
+.agents-view .dock {
+  padding: 0 12px 12px;
+}
+.agents-view .req-slot {
+  padding: 0 12px 8px;
+}
+
+/* ---------- 信息卡 ---------- */
+.info-agents {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---------- 皮肤 ---------- */
+[data-skin="retro"] .tree-card,
+[data-skin="retro"] .agents-pick {
+  border-radius: 0;
+  border-color: var(--line-3);
+}
+[data-skin="retro"] .tree-card {
+  box-shadow: 3px 3px 0 var(--line-3);
+}
+[data-skin="retro"] .tree-card-report,
+[data-skin="retro"] .tree-agents {
+  border-top-style: dashed;
+  border-top-color: var(--line-2);
+}
+[data-skin="retro"] .tree-proposal {
+  border-color: var(--accent);
+  border-radius: 0;
+}
+[data-skin="retro"] .tree-kids::before {
+  border-left-style: dashed;
+}
+[data-skin="retro"] .agents-pick[aria-selected="true"] {
+  background: var(--inv-bg);
+  color: var(--inv-fg);
+}
+[data-skin="human"] .tree-card {
+  border-radius: 14px;
+  box-shadow: var(--soft-sm);
+}
+[data-skin="human"] button.tree-card-main {
+  border-radius: 14px;
+}
+[data-skin="human"] .tree-proposal {
+  padding: 10px 10px 10px 18px;
+  border-radius: 16px;
+}
+[data-skin="human"] .sev {
+  border-style: solid;
+  border-color: var(--line-1);
+  border-radius: 14px;
+  background: var(--hover);
+}
+[data-skin="human"] .agents-pick {
+  border-radius: 13px;
+}

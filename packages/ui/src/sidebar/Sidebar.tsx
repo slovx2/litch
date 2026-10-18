@@ -6,12 +6,13 @@ import {
   PINNED,
   pathTwin,
   type SectionView,
+  type SessionChildren,
   type SessionGroups,
   type SessionHarnesses,
   type SessionSummary,
   type WorkspaceView,
 } from '@litch/core'
-import { memo, type ReactNode, useEffect, useRef, useState } from 'react'
+import { type CSSProperties, memo, type ReactNode, useEffect, useRef, useState } from 'react'
 import type { Draft, Page, Selection } from '../app/App.tsx'
 import { useT } from '../app/appearance.ts'
 import { useNow } from '../app/clock.ts'
@@ -25,6 +26,7 @@ import { showToast } from '../app/toasts.tsx'
 import type { PlaceWish } from '../composer/new-place.ts'
 import { FailureNote, shownState, useReconnect } from '../devices/status.tsx'
 import { useBrowserWants } from '../side/browser/store.ts'
+import { SpawnDialog } from '../tree/SpawnDialog.tsx'
 import { offerUndo } from './archive-undo.ts'
 import { cwdMark } from './cwd.ts'
 import { keepSessions } from './filter.ts'
@@ -43,10 +45,25 @@ interface RowProps {
   sessionId: string
   selected: boolean
   onSelect(selection: Selection): void
+  /** 挂在父会话下面的子会话：行上只有状态点和名字，别的在信息卡里 */
+  nested?: boolean
+  /** 下面挂着几个子会话。有的话行首左边一个收起、展开的小箭头 */
+  kids?: number
+  folded?: boolean
+  onFold?(): void
 }
 
 /** 一行会话。只订阅这一个会话的摘要：别的会话变了，这一行不重画 */
-const SessionRow = memo(function SessionRow({ deviceId, sessionId, selected, onSelect }: RowProps) {
+const SessionRow = memo(function SessionRow({
+  deviceId,
+  sessionId,
+  selected,
+  onSelect,
+  nested = false,
+  kids = 0,
+  folded = false,
+  onFold,
+}: RowProps) {
   const { channel, replica } = useServices()
   const summary = useKey<SessionSummary>(keys.summary(deviceId, sessionId))
   const device = useKey<DeviceView>(keys.device(deviceId))
@@ -66,6 +83,8 @@ const SessionRow = memo(function SessionRow({ deviceId, sessionId, selected, onS
   /** 正在改名时输入框里的字。null：没在改 */
   const [naming, setNaming] = useState<string | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
+  /** 开着“派一个子会话”的对话框 */
+  const [spawning, setSpawning] = useState(false)
   const field = useRef<HTMLInputElement>(null)
   const menu = useRef<RowMenuHandle>(null)
   /** 这一次改名已经有了结果（提交或者放弃）。输入框消失时还会再报一次失焦，不能当成又提交一次 */
@@ -184,6 +203,22 @@ const SessionRow = memo(function SessionRow({ deviceId, sessionId, selected, onS
         },
       })
   }
+  // 会话树是设备层的事：设备连着、声明了就能派、能脱离，不用经过它所属的 harness
+  const tree = device?.connection === 'online' && device.sessionTree
+  if (tree) {
+    actions.push({ id: 'spawn', title: t('tree.spawnMenu') })
+    if (summary.lineage)
+      actions.push({
+        id: 'detach',
+        title: t('tree.detach'),
+        confirm: {
+          title: t('tree.detach.title'),
+          note: t('tree.detach.note'),
+          yes: t('tree.detach.yes'),
+          no: t('tree.dialog.cancel'),
+        },
+      })
+  }
   if (online) {
     if (can?.rename !== false) actions.push({ id: 'rename', title: t('session.rename') })
     if (can?.archive !== false) actions.push({ id: 'archive', title: t('session.archive') })
@@ -203,6 +238,10 @@ const SessionRow = memo(function SessionRow({ deviceId, sessionId, selected, onS
     if (id === 'rename') {
       settled.current = false
       setNaming(t.text(summary.title))
+    } else if (id === 'spawn') setSpawning(true)
+    else if (id === 'detach') {
+      setFailure(null)
+      channel.command('session.detach', { deviceId, sessionId }).catch(failed)
     } else if (id === 'pin') place('pinned')
     else if (id === 'unpin' || id === 'unsection') place(null)
     else if (id === 'move') {
@@ -214,6 +253,8 @@ const SessionRow = memo(function SessionRow({ deviceId, sessionId, selected, onS
       {/* biome-ignore lint/a11y/noStaticElementInteractions: 右键出的菜单和行尾“更多”按钮是同一份，键盘走那个按钮 */}
       <div
         className="row-line"
+        data-session={sessionId}
+        data-parent={nested ? (summary.lineage?.parentId ?? '') : undefined}
         {...info.area}
         onContextMenu={(event) => {
           // 一件能做的事都没有（没连着）就不出菜单；在已经弹出来的菜单里点右键也不管
@@ -237,7 +278,7 @@ const SessionRow = memo(function SessionRow({ deviceId, sessionId, selected, onS
         >
           <i className={mark ? `st ${mark}` : 'st'} />
           <span className="title ell grow">{t.text(summary.title)}</span>
-          {apart ? (
+          {nested ? null : apart ? (
             <span
               className="cwd-mark"
               role="img"
@@ -248,27 +289,53 @@ const SessionRow = memo(function SessionRow({ deviceId, sessionId, selected, onS
               <Icon name="folder" />
             </span>
           ) : null}
-          <BrowserWants deviceId={deviceId} sessionId={sessionId} />
-          <span
-            className={down ? 'chip off' : 'chip'}
-            title={down ? downText(down, 'chip', t) : nameOf(device, summary.harness)}
-          >
-            {badgeOf(device, summary.harness)}
-          </span>
-          {summary.status === 'waiting' ? (
-            <span className="pill wait">
-              {t(summary.waitingFor === 'answer' ? 'sidebar.waitAnswer' : 'sidebar.waitApproval')}
-            </span>
-          ) : (
-            <span className="time">{ago(summary.updatedAt, now, t)}</span>
+          {nested ? null : (
+            <>
+              <BrowserWants deviceId={deviceId} sessionId={sessionId} />
+              <span
+                className={down ? 'chip off' : 'chip'}
+                title={down ? downText(down, 'chip', t) : nameOf(device, summary.harness)}
+              >
+                {badgeOf(device, summary.harness)}
+              </span>
+              {summary.status === 'waiting' ? (
+                <span className="pill wait">
+                  {t(
+                    summary.waitingFor === 'answer' ? 'sidebar.waitAnswer' : 'sidebar.waitApproval',
+                  )}
+                </span>
+              ) : (
+                <span className="time">{ago(summary.updatedAt, now, t)}</span>
+              )}
+            </>
           )}
         </button>
+        {kids > 0 && onFold ? (
+          <button
+            type="button"
+            className="tree-fold"
+            aria-expanded={!folded}
+            title={folded ? t('tree.unfold', { n: kids }) : t('tree.fold')}
+            aria-label={folded ? t('tree.unfold', { n: kids }) : t('tree.fold')}
+            onClick={onFold}
+          >
+            <Caret />
+          </button>
+        ) : null}
         {actions.length > 0 ? (
           <RowMenu handle={menu} label={t('session.menu')} actions={actions} onAction={act} />
         ) : null}
         {info.card}
       </div>
       {failure ? <div className="row-err">{failure}</div> : null}
+      {spawning ? (
+        <SpawnDialog
+          deviceId={deviceId}
+          parent={summary}
+          onSpawned={(child) => onSelect({ deviceId, sessionId: child })}
+          onClose={() => setSpawning(false)}
+        />
+      ) : null}
     </>
   )
 })
@@ -346,6 +413,11 @@ const FIRST_ROWS = 5
 /** 点一次“展示更多”多露出几个 */
 const MORE_ROWS = 10
 const NO_IDS: readonly string[] = []
+const NO_CHILDREN: SessionChildren = {}
+/** 侧栏里子会话最多套几层 */
+const MAX_DEPTH = 8
+/** 子会话每一层往里缩多少像素（和 tree.css 的 .tree-kids 一致） */
+const INDENT = 14
 const NO_SECTIONS: readonly SectionView[] = []
 
 function DeviceGroup({ deviceId, selection, draft, onSelect, onCompose }: GroupProps) {
@@ -359,6 +431,10 @@ function DeviceGroup({ deviceId, selection, draft, onSelect, onCompose }: GroupP
   const [closed, setClosed] = useState<ReadonlySet<string>>(new Set())
   /** 各个工作区点“展示更多”多露出来的个数。没点过的不在里面 */
   const [extra, setExtra] = useState<Readonly<Record<string, number>>>({})
+  /** 收起了子会话的父会话 */
+  const [folded, setFolded] = useState<ReadonlySet<string>>(new Set())
+  /** 父会话 → 挂在它下面的子会话（只有父会话也在侧栏里的才在） */
+  const children = useKey<SessionChildren>(keys.children(deviceId)) ?? NO_CHILDREN
   const pressing = useKey<string[]>(keys.pressing(deviceId)) ?? NO_IDS
   /** 侧栏正只看哪几个 harness 的会话。空的：都看 */
   const filter = useSidebarHarnesses()
@@ -373,6 +449,53 @@ function DeviceGroup({ deviceId, selection, draft, onSelect, onCompose }: GroupP
   /** 一组里现在要画的会话：只看某几个 harness 的时候是筛过的 */
   const shown = (groupId: string) => keepSessions(groups[groupId], filter, harnessOf, always)
 
+  /**
+   * 挂到父会话下面去画的子会话：父会话这时也画在侧栏里（没被筛掉）的那些。
+   * 父会话被筛掉了的，子会话照常排在自己那一组里
+   */
+  const listed = new Set(Object.keys(groups).flatMap((group) => shown(group)))
+  const nested = new Set(
+    Object.entries(children).flatMap(([parent, ids]) => (listed.has(parent) ? ids : [])),
+  )
+  const kidsOf = (id: string) => keepSessions(children[id], filter, harnessOf, always)
+  const fold = (id: string) =>
+    setFolded((prev) => {
+      const next = new Set(prev)
+      if (!next.delete(id)) next.add(id)
+      return next
+    })
+  /** 一行会话，和挂在它下面的子会话（一层套一层）。收起了的父会话下面只露出非露出来不可的 */
+  const tree = (sessionId: string, depth: number): ReactNode => {
+    // 父子关系由设备进程保证不成环；万一对面给错了，也不至于一直套下去
+    if (depth > MAX_DEPTH) return null
+    const kids = kidsOf(sessionId)
+    const shut = folded.has(sessionId)
+    const visible = shut ? kids.filter(always) : kids
+    return (
+      <div
+        key={sessionId}
+        className="tree-node"
+        data-depth={depth}
+        // 选中那一行连到设备竖线上的“分接线”要跨过缩进（tree.css）
+        style={depth > 0 ? ({ '--indent': `${depth * INDENT}px` } as CSSProperties) : undefined}
+      >
+        <SessionRow
+          deviceId={deviceId}
+          sessionId={sessionId}
+          selected={sessionId === picked}
+          onSelect={onSelect}
+          nested={depth > 0}
+          kids={kids.length}
+          folded={shut}
+          onFold={() => fold(sessionId)}
+        />
+        {visible.length > 0 ? (
+          <div className="tree-kids">{visible.map((id) => tree(id, depth + 1))}</div>
+        ) : null}
+      </div>
+    )
+  }
+
   const toggle = (id: string) =>
     setClosed((prev) => {
       const next = new Set(prev)
@@ -383,7 +506,9 @@ function DeviceGroup({ deviceId, selection, draft, onSelect, onCompose }: GroupP
    * 一个工作区（或“无工作区”）里的会话。多的时候只露出最近的几个，其余的收在“展示更多”后面，
    * 点一次多露出一批。折在后面的也有非露出来不可的（见上面的 always）。
    */
-  const rows = (list: readonly string[], groupId: string) => {
+  const rows = (all: readonly string[], groupId: string) => {
+    // 挂在父会话下面的不在组里单独占一行
+    const list = all.filter((id) => !nested.has(id))
     const more = extra[groupId] ?? 0
     let limit = FIRST_ROWS + more
     // 只剩一个没露出来，不值得为它多一个按钮
@@ -393,15 +518,7 @@ function DeviceGroup({ deviceId, selection, draft, onSelect, onCompose }: GroupP
     const folded = more > 0 && list.length > FIRST_ROWS + 1
     return (
       <>
-        {visible.map((sessionId) => (
-          <SessionRow
-            key={sessionId}
-            deviceId={deviceId}
-            sessionId={sessionId}
-            selected={sessionId === picked}
-            onSelect={onSelect}
-          />
-        ))}
+        {visible.map((sessionId) => tree(sessionId, 0))}
         {hidden > 0 || folded ? (
           <div className="ss-more">
             {hidden > 0 ? (
