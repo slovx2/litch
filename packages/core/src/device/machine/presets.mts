@@ -4,6 +4,11 @@ export const SENSITIVE_PRESETS: readonly string[] = [
   '~/.ssh',
   '~/.gnupg',
   '~/Library/Keychains',
+  // 邮件、信息、通讯录、日历（V2 实测：经本机设备服务起的命令读得到，不弹授权框）
+  '~/Library/Mail',
+  '~/Library/Messages',
+  '~/Library/Application Support/AddressBook',
+  '~/Library/Calendars',
   // 浏览器的资料（Cookie、保存的密码）
   '~/Library/Application Support/Google/Chrome',
   '~/Library/Application Support/Firefox',
