@@ -109,6 +109,7 @@ jobs:
       - name: Rust 工具链（apps/computer-use-win/rust-toolchain.toml）
         working-directory: apps/computer-use-win
         run: |
+          rustup set auto-self-update disable
           rustup toolchain install
           rustup show active-toolchain
           cargo --version
