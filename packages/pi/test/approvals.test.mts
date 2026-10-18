@@ -7,7 +7,7 @@ import { approvalKind, type ToolCallAsk } from '../src/approvals.mjs'
 import { harnessDeclaration } from '../src/declaration.mjs'
 import { approvalHarness, pause, toolResults } from './approval-harness.mjs'
 
-// Pi 的审批（设计文档 03 第八节 A5）：由设置打开，默认不问。这个文件看一条连接上的事：
+// Pi 的审批：由设置打开，默认不问。这个文件看一条连接上的事：
 // 声明、哪些调用被拦下、四种决定各自的结果、差异。等待、作废、多条连接、别的工具在 approvals-flow.test.mts。
 
 const MODEL = 'gate/gate'

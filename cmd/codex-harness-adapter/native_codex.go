@@ -17,7 +17,7 @@ import (
 	"github.com/slovx2/litch/internal/hostplatform"
 )
 
-// 原生 codex：这台设备上用户自己装的 codex，作为又一个受管的 harness 接进聚合面（设计文档 03 第 12.2 节）。
+// 原生 codex：这台设备上用户自己装的 codex，作为又一个受管的 harness 接进聚合面。
 // 它和适配器自己的三个引擎不一样的地方都收在这个文件里：
 //   - 运行时不是适配器的 Node 进程，而是用户的 codex 起的一个 app-server，监听 <home>/codex/runtime.sock；
 //   - 没有给官方桌面端的 SSH 入口：官方桌面端自己会连 codex，用不着我们转；

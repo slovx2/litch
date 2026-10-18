@@ -6,7 +6,7 @@ import test from 'node:test'
 import type { RpcPeer } from '../../shared/src/types.mjs'
 import { PiServer } from '../src/server.mjs'
 
-// 一个会话多个订阅连接（设计文档 03 第八节 A6）：通知每条订阅连接都收到；提问发给全部订阅连接，
+// 一个会话多个订阅连接：通知每条订阅连接都收到；提问发给全部订阅连接，
 // 请求号相同，先答的生效，其余连接收到 serverRequest/resolved，迟到的应答被丢弃。
 // 这里直接对着服务对象测分发；真实 SDK 上两条连接的整轮过程在 adapter.test.mts 里。
 

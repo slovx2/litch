@@ -52,7 +52,7 @@ function source(link: UpstreamLink, timeoutMs: number): ListSource {
 
 export async function listThreads(context: ListContext, params: unknown): Promise<unknown> {
   const fields = isObject(params) ? params : {}
-  // 三家都有的排序只有这一种（设计文档 03 第 5.3 节）
+  // 三家都有的排序只有这一种
   if (fields.sortKey != null && fields.sortKey !== 'updated_at')
     throw new ProtocolError(
       -32602,

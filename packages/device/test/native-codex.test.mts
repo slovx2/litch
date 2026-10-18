@@ -1,4 +1,4 @@
-// 原生 codex 作为聚合面上的又一个 harness（设计文档 03 第 12.2 节）：状态、握手、声明、合并列表、路由、通知。
+// 原生 codex 作为聚合面上的又一个 harness：状态、握手、声明、合并列表、路由、通知。
 // 审批、“不支持”的错误、权限预设的映射、导入它的项目在 native-codex-requests.test.mts。
 // 对面是假的原生 codex（fake-codex.mts）；对着真的 codex 的检查是 scripts/check-native-codex.mjs。
 import assert from 'node:assert/strict'

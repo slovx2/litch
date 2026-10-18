@@ -299,7 +299,7 @@ const threadFrames = (client: TestClient, threadId: string, from: number) =>
 
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
-// 一个会话多个订阅者（设计文档 03 第八节 A6）：聚合面上每条客户端连接各有自己的上游连接，
+// 一个会话多个订阅者：聚合面上每条客户端连接各有自己的上游连接，
 // 两条连接恢复同一个会话，在引擎那边就是两个订阅者。
 test('端到端：两条聚合面连接同看一个会话，通知两边都收到；提问两边都到，一边答了另一边收到已解决，迟到的应答不起作用；一条走了另一条照常', async () => {
   const fixture = await startFixture()

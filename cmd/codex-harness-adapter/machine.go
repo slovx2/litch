@@ -1,7 +1,7 @@
 package main
 
-// machine 子命令（短名 litch-machine）：让这台机器上任何能跑 shell 的 harness 操作用户的 Litch 桌面端那台电脑
-// （08 号设计 2.2 节、第五节）。动作和工具 litch_machine 一一对应（packages/protocol/src/client-tools-machine.mts）：
+// machine 子命令（短名 litch-machine）：让这台机器上任何能跑 shell 的 harness 操作用户的 Litch 桌面端那台电脑，
+// 不支持动态工具的 harness 靠它。动作和工具 litch_machine 一一对应（packages/protocol/src/client-tools-machine.mts）：
 // machines、exec、ps（process）、read（read_file）、write（write_file）、ls（list_dir）、cp（copy）。
 // 请求经本机的设备服务转给连着的 Litch，审批和执行都在桌面端；这里只管参数、转交和把结果打出来。
 
@@ -21,7 +21,7 @@ const machineShortName = "litch-machine"
 
 const machineNamespace = "litch_machine"
 
-// 命令从哪个会话里跑出来的，按先后认这几个环境变量（08 号设计 V3）：
+// 命令从哪个会话里跑出来的，按先后认这几个环境变量：
 // LITCH_THREAD_ID 是 Claude Code 入口给它起的 CLI 的；CODEX_THREAD_ID 是原生 codex 给每条命令的；
 // Pi、dsh 的入口里会话号就是它们自己的会话号，它们给命令的 PI_SESSION_ID、DSH_SESSION_ID 拿来就能用。
 // 这几个变量只对起它的那个会话有意义：命令行起运行时和设备进程时不把外面带进来的传下去（environment、serviceEnvironment）。

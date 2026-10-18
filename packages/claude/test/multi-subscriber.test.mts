@@ -3,7 +3,7 @@ import test from 'node:test'
 import { deferred } from './fixtures/deferred.mjs'
 import { type Connection, openStage, type Stage, sayAndFinish } from './fixtures/in-process.mjs'
 
-// 一个会话多个订阅连接（设计文档 03 第八节 A6）之一：通知与订阅的进出。
+// 一个会话多个订阅连接之一：通知与订阅的进出。
 // 每条订阅连接都收到这个会话的通知；订阅者断开或退订只摘掉它自己。
 // 审批、提问这类请求见 multi-subscriber-requests.test.mts。
 

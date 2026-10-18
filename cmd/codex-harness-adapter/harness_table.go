@@ -46,7 +46,7 @@ type harnessSpec struct {
 	native bool
 }
 
-// 通用 ACP 引擎从这个变量知道自己这次扮演哪个标识（设计文档 06 第 1.1 节）。
+// 通用 ACP 引擎从这个变量知道自己这次扮演哪个标识（gemini、qwen、acp 共用一个引擎包）。
 const acpAgentVariable = "CHA_ACP_AGENT"
 
 // 顺序就是报给客户端的顺序，也是全部启动时各入口的顺序。
@@ -59,7 +59,7 @@ var harnessTable = []harnessSpec{
 	},
 	{
 		id: "opencode", pkg: "opencode", portFlag: "opencode-port", defaultPort: 7334, cliVariable: "CHA_OPENCODE_CLI", homeVariable: "CHA_OPENCODE_HOME",
-		// 官方安装脚本装在 ~/.opencode/bin，不一定进了 PATH（引擎找命令行的次序与此相同，设计文档 06 第 1.2 节）
+		// 官方安装脚本装在 ~/.opencode/bin，不一定进了 PATH（引擎找命令行的次序与此相同）
 		commands: []string{"opencode"}, fallbacks: []string{filepath.Join(".opencode", "bin", "opencode")}, enable: enableWhenInstalled,
 	},
 	{id: "gemini", pkg: "acp", portFlag: "gemini-port", defaultPort: 7335, cliVariable: "CHA_GEMINI_CLI", homeVariable: "CHA_GEMINI_HOME", enable: enableOptIn, acp: true},

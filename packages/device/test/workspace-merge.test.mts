@@ -1,4 +1,4 @@
-// 从各引擎读到的项目怎么并进设备库：规则的边角（设计文档 03 第 6.1 节）。不经设备进程，直接对着库。
+// 从各引擎读到的项目怎么并进设备库：规则的边角。不经设备进程，直接对着库。
 import assert from 'node:assert/strict'
 import { rmSync } from 'node:fs'
 import test from 'node:test'

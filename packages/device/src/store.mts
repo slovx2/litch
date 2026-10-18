@@ -1,6 +1,6 @@
 // 设备进程自己的库（<状态目录>/device.sqlite）。里面是设备层的数据，不是任何引擎的：
 // - threads：见过的会话属于哪个 harness（路由要用），外加它的近况（更新时间、归没归档、是不是临时的）
-// - 工作区、会话到工作区的归属、分区与置顶（设计文档 03 第 6.1 节，表由 workspaces.mts、sections.mts 建）
+// - 工作区、会话到工作区的归属、分区与置顶（表由 workspaces.mts、sections.mts 建）
 // - 从各引擎导入过没有（workspace-import.mts）
 // 删掉它不丢任何引擎的数据：索引会重新积累，工作区会从各引擎现有的项目重新导入一遍。
 import { closeSync, existsSync, openSync, rmSync, statSync } from 'node:fs'

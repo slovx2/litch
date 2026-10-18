@@ -42,7 +42,7 @@ test('通知：带会话标识的原样转发，不带的加上 harness，会话
       },
     ])
 
-    // 会话开始：会话对象打上 harness，最终标识进索引；之前用临时标识发的通知不会让临时标识进索引（R4）
+    // 会话开始：会话对象打上 harness，最终标识进索引；之前用临时标识发的通知不会让临时标识进索引
     pi.threads.push({ id: 'final-id', updatedAt: 1 })
     pi.notify('thread/status/changed', { threadId: 'temp-id', status: { type: 'idle' } })
     pi.notify('thread/started', {

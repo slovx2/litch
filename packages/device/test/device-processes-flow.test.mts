@@ -1,4 +1,4 @@
-// 流量控制（设计文档 03 第十节第 5 条）：按连接看发送的积压，过了线就不读进程的输出。
+// 流量控制：按连接看发送的积压，过了线就不读进程的输出。
 // 要一条真的会堵的连接，所以经真的套接字连：客户端停下不读，系统的缓冲满了之后积压就在设备这边。
 import assert from 'node:assert/strict'
 import { existsSync, rmSync } from 'node:fs'

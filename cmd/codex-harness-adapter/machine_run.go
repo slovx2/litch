@@ -276,7 +276,7 @@ func machineHelp(desktops []machineDesktop, problem error) string {
 }
 
 // 连不上时下一步怎么办。EPERM 是沙箱拦的：codex 的沙箱（macOS 的 seatbelt、Linux 的 seccomp）默认不许连 unix 套接字，
-// 实测只读和工作区可写两档都是这样（08 号设计 V1）。codex 认“operation not permitted”这几个字为沙箱拒绝，
+// 实测只读和工作区可写两档都是这样。codex 认“operation not permitted”这几个字为沙箱拒绝，
 // 原话照样打在上一行；这里明说要以不受沙箱限制的方式重跑，模型才会去申请提权
 func unreachableHint(err error) string {
 	switch {

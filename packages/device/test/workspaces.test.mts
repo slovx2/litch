@@ -1,4 +1,4 @@
-// 设备级的工作区、会话归属：聚合面上的 project/*、thread/metadata/update（设计文档 03 第 6.1 节）。
+// 设备级的工作区、会话归属：聚合面上的 project/*、thread/metadata/update。
 // 上游都是假的，看的是聚合面这一层自己的行为。分区与置顶、新建会话、列表筛选在 workspace-threads.test.mts。
 import assert from 'node:assert/strict'
 import test from 'node:test'

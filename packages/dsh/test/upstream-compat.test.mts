@@ -1,4 +1,4 @@
-// 与上游协议的兼容性（设计文档 03 第 15.4 节）：dsh 的入口。用例在 packages/shared/test/compat-suite.mts，这里只管起入口。
+// 与上游协议的兼容性：dsh 的入口。用例在 packages/shared/test/compat-suite.mts，这里只管起入口。
 // 要本机装着 dsh（CHA_DSH_CLI 或 PATH），模型是回环上的假模型，状态目录是临时的（client.mts 的 isolate）。
 
 import { mkdir, writeFile } from 'node:fs/promises'

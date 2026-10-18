@@ -1,4 +1,4 @@
-// 与上游协议的兼容性（设计文档 03 第 15.4 节）：Claude Code 的入口。
+// 与上游协议的兼容性：Claude Code 的入口。
 // 用例在 packages/shared/test/compat-suite.mts，这里只管起入口：适配器是一个真的子进程（标准输入输出上逐行的 JSON），
 // 后面是 CHA_CLAUDE_CLI 指定的隔离 CLI，模型是回环上的 Mock LLM，主目录是临时的。
 import { spawn } from 'node:child_process'

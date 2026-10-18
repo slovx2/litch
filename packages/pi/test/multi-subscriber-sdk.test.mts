@@ -8,7 +8,7 @@ import type { RpcPeer, WireMessage } from '../../shared/src/types.mjs'
 import { PiServer } from '../src/server.mjs'
 import { assertNotification, assertResponse, assertServerRequest } from './schema.mjs'
 
-// 真实 Pi SDK 加本地假模型，两条连接同看一个会话（设计文档 03 第八节 A6）。
+// 真实 Pi SDK 加本地假模型，两条连接同看一个会话。
 // 分发规则的细处在 multi-subscriber.test.mts 里对着服务对象测；这里看整轮过程。
 
 type Reply = { text?: string; tools?: Array<{ name: string; args: unknown }> }

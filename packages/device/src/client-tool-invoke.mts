@@ -1,9 +1,9 @@
-// 不经动态工具的客户端工具调用（clientTools 扩展的 litch/clientTool/invoke，08 号设计 2.2 节、第五节）。
+// 不经动态工具的客户端工具调用（clientTools 扩展的 litch/clientTool/invoke）。
 // 调用者是这台机器上的一个进程（适配器的 `machine` 子命令，短名 litch-machine），不是 Litch：
 // 它连上聚合面，不握手也行（握手要为它连一遍每个 harness 的运行时，白花一两秒），直接调 invoke。
 // 这里挑一条声明过这个命名空间的 Litch 连接，向它发服务端请求 litch/clientTool/call，应答原样交回调用者。
 //
-// 挑执行方（决 251）：
+// 挑执行方：
 //   1. 给了 desktop：只在主机名（或名字）对得上的连接里挑；
 //   2. 有会话号：发起这个会话当前回合的连接，否则订阅着这个会话、最早订阅的那条（和 item/tool/call 一个规矩）；
 //   3. 还挑不出：只有一条就交给它；不止一条回 ambiguous，说明里列出各台的主机名，让调用者指定；

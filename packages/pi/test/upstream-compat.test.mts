@@ -1,4 +1,4 @@
-// 与上游协议的兼容性（设计文档 03 第 15.4 节）：Pi 的入口。用例在 packages/shared/test/compat-suite.mts，这里只管起入口。
+// 与上游协议的兼容性：Pi 的入口。用例在 packages/shared/test/compat-suite.mts，这里只管起入口。
 // 引擎是真的 Pi SDK，模型是回环上的假模型（approval-harness.mts），审批开着。
 import type { RpcPeer } from '../../shared/src/types.mjs'
 import type { EntryScene, SceneName, TurnScript } from '../../shared/test/compat-scene.mjs'

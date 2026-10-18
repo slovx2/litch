@@ -8,8 +8,7 @@ import { deflateSync } from 'node:zlib'
 import { MockLLM } from './fixtures/mock-llm.mjs'
 import { ProtocolClient } from './fixtures/protocol-client.mjs'
 
-// 客户端工具（clientTools 扩展，protocol/extensions/client-tools.json）在真实 CLI 上的两件事
-// （设计文档 05 第五节 V0 ②）：
+// 客户端工具（clientTools 扩展，protocol/extensions/client-tools.json）在真实 CLI 上的两件事：
 //   - 动态工具的调用不经 Claude Code 的权限审批（和原生 codex 一样，执行方是客户端，要不要问用户由它定）；
 //   - 结果里的大图片原样交给模型：SDK 不截断、不落盘换成路径。
 

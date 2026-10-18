@@ -5,7 +5,7 @@ import { DshServer } from '../src/server.mjs'
 import { client, isolate } from './client.mjs'
 
 // config/read 报的默认（模型、强度、权限档 default_permissions）就是不带这几项新建会话时真的会用的。
-// 客户端的新建页照它显示（决 149）。dsh 给新会话的权限预设是它自己的默认预设（permissionPresets/catalog
+// 客户端的新建页照它显示，显示的就是会用的。dsh 给新会话的权限预设是它自己的默认预设（permissionPresets/catalog
 // 的 defaultPreset），模型和强度照 thread/start 的取法（DshServer.selection）。对着 dsh 0.2.0-rc.2。
 
 test('CONFIG-DEFAULT-001：config/read 的默认和不带设置新建的会话一致，改了默认模型、强度后也一致', {

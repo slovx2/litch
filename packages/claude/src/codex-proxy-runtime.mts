@@ -106,7 +106,7 @@ export class CodexProxyRuntime implements ClaudeRuntime {
 
       const proc = spawn(binary, args, {
         stdio: ['ignore', 'pipe', 'pipe'],
-        // 命令里调 litch-machine 时按它认会话（08 号设计 2.2 节）。codex 自己注入的 CODEX_THREAD_ID 是它内部的会话号，
+        // 命令里调 litch-machine 时按它认会话。codex 自己注入的 CODEX_THREAD_ID 是它内部的会话号，
         // 不是这个入口的，litch-machine 先认这一个
         env: { ...process.env, LITCH_THREAD_ID: context.threadId },
       })

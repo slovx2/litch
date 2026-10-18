@@ -350,11 +350,11 @@ export class ClientSession implements ClientToolPeer {
     raw: string,
   ): typeof HANDLED {
     const fields = isObject(frame.params) ? frame.params : null
-    // 新建会话带的工作区是设备层的，先摘下来，应答回来时再记（设计文档 03 第 6.1 节）
+    // 新建会话带的工作区是设备层的，先摘下来，应答回来时再记
     const { expectation, withhold } = fields
       ? this.host.workspaces.outgoing(method, fields)
       : { expectation: null, withhold: [] }
-    // harness 是聚合面的扩展参数，上游没声明认识它，不能带过去（第十五节）
+    // harness 是聚合面的扩展参数，上游没声明认识它，不能带过去
     const dropped = ['harness', ...withhold]
     let params = fields
     if (fields && dropped.some((key) => key in fields))
@@ -500,7 +500,7 @@ export class ClientSession implements ClientToolPeer {
   private describe(link: UpstreamLink): HarnessInfo {
     const seen = link.facts.userAgent !== null || link.facts.runtime !== null
     let unavailable: HarnessUnavailable | null = link.available ? null : link.failure
-    // 说明的两种语言版本是 deviceSettings 扩展的内容，只给声明过它的连接（设计文档 03 第十五节）
+    // 说明的两种语言版本是 deviceSettings 扩展的内容，只给声明过它的连接
     if (unavailable?.text && !this.declared.has(EXTENSION.deviceSettings))
       unavailable = { kind: unavailable.kind, message: unavailable.message }
     return describeHarness(
@@ -580,7 +580,7 @@ export class ClientSession implements ClientToolPeer {
 
   /**
    * 设备层自己产生的通知（工作区、归属、分区变了）。握手完成之前的不发：
-   * 客户端握手之后读到的就是最新的。extension 给了就只发给声明过它的连接（设计文档 03 第十五节）。
+   * 客户端握手之后读到的就是最新的。extension 给了就只发给声明过它的连接。
    */
   announce(method: string, params: unknown, extension?: string): void {
     if (this.state !== 'ready') return
@@ -589,7 +589,7 @@ export class ClientSession implements ClientToolPeer {
     this.send(JSON.stringify({ method, params }))
   }
 
-  /** 一个上游的状态变了：真的和上次报的不一样才通知客户端（设计文档 03 第 5.5 节） */
+  /** 一个上游的状态变了：真的和上次报的不一样才通知客户端 */
   private status(link: UpstreamLink): void {
     if (link.available) {
       this.host.catalog.update(link.harness, link.facts)
@@ -623,7 +623,7 @@ export class ClientSession implements ClientToolPeer {
     this.initializeParams = params
     this.clientToolNamespaces = clientToolNamespaces(params)
     this.desktop = this.clientToolNamespaces.size ? desktopOf(capabilities) : null
-    // 退订名单在路由层生效：被退订的通知直接不转发（设计文档 03 第 5.4 节）
+    // 退订名单在路由层生效：被退订的通知直接不转发
     this.optOut = new Set(strings(capabilities.optOutNotificationMethods))
     const { timing } = this.host
     for (const source of this.host.harnesses()) this.open(source)

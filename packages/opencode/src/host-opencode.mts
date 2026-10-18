@@ -7,7 +7,7 @@ import { isVersionAtLeast } from '../../shared/src/min-version.mjs'
 
 // OpenCode 本体不随适配器分发：用用户自己装的可执行文件。CHA_OPENCODE_CLI 可指定路径；
 // 不指定时先按 PATH 找 opencode，再找官方安装脚本的默认位置 ~/.opencode/bin/opencode。
-// 报错的原文是 Go 侧诊断认原因用的（设计文档 06 第 1.3 节），改了要同步告诉注册线：
+// 报错的原文是 Go 侧诊断认原因用的（cmd/codex-harness-adapter/diagnostics.go 按开头认），改了要两边一起改：
 // 没装：“CLI 不可执行或未找到”；版本低：“OpenCode CLI 版本不符”；读不到版本：“无法读取宿主 OpenCode CLI 版本”。
 export function hostOpencodeExecutable(env: NodeJS.ProcessEnv = process.env): string {
   const configured = env.CHA_OPENCODE_CLI?.trim()

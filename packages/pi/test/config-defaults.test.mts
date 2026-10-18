@@ -5,7 +5,7 @@ import test from 'node:test'
 import { approvalHarness } from './approval-harness.mjs'
 
 // config/read 报的默认（模型、强度、权限档 default_permissions）就是不带这几项新建会话时真的会用的。
-// 客户端的新建页照它显示（决 149）。Pi 只有一个权限档，审批开不开都是它；
+// 客户端的新建页照它显示，显示的就是会用的。Pi 只有一个权限档，审批开不开都是它；
 // 强度照 Pi 建会话时的取法：这个模型单独记的档、全局默认档、medium，再钳到模型支持的范围。
 
 /** 把夹具里的假模型改成能思考的，设置里写上 extra */

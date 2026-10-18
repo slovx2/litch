@@ -1,4 +1,4 @@
-// 设备级的分区与置顶、按工作区和分区筛会话列表（设计文档 03 第 6.1 节）。上游都是假的。
+// 设备级的分区与置顶、按工作区和分区筛会话列表。上游都是假的。
 // 工作区本身和会话归属在 workspaces.test.mts，带工作区新建、删除归档、重启在 workspace-lifecycle.test.mts。
 import assert from 'node:assert/strict'
 import test from 'node:test'

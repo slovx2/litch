@@ -1,4 +1,4 @@
-// `runtime/info` 里的设备信息和每个 harness 的声明（设计文档 03 第 6.4 节的前两部分；能力位和权限预设是后面的事）。
+// `runtime/info` 里的设备信息和每个 harness 的声明。
 import { readFileSync } from 'node:fs'
 import { homedir, hostname } from 'node:os'
 import { dirname, join } from 'node:path'

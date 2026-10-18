@@ -1,4 +1,4 @@
-// 与上游协议的兼容性（设计文档 03 第 15.4 节）：ACP 的入口，agent 是 test/fake-agent.mts。
+// 与上游协议的兼容性：ACP 的入口，agent 是 test/fake-agent.mts。
 // 用例在 packages/shared/test/compat-suite.mts，这里只管起入口。
 //
 // 回放夹具（protocol/compat/desktop-replay.json 的 expectations）和基线清单（protocol/compat/baseline.json）
