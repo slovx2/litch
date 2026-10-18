@@ -290,17 +290,19 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
   const spot = popped.getBoundingClientRect()
   // 末尾三项总是这三样。设备上能整理侧栏的话前面多出“置顶”和“移到项目…”：
   // 模拟核心里一定有；真实入口上看对面有没有这组方法、有没有别的项目。
-  // 设备声明了会话树的话还有“派一个子会话…”（模拟核心的本机声明了；真实入口看对面）
+  // 设备声明了会话树的话还有“派一个子会话…”，支持定时任务的话还有“为这个会话建定时任务”
+  // （模拟核心的本机两样都声明了；真实入口看对面）
   const spawnable = names.includes('派一个子会话…')
+  const schedulable = names.includes('为这个会话建定时任务')
   const organizing = names
     .slice(0, -3)
-    .filter((name) => name !== '派一个子会话…')
+    .filter((name) => name !== '派一个子会话…' && name !== '为这个会话建定时任务')
     .join('|')
   const contextMenu: SessionProbe['contextMenu'] = {
     opened:
       click.handled &&
       names.slice(-3).join('|') === '改名|归档|删除' &&
-      (real || spawnable) &&
+      (real || (spawnable && schedulable)) &&
       (real
         ? ['', '置顶', '置顶|移到项目…'].includes(organizing)
         : organizing === '置顶|移到项目…'),
@@ -555,7 +557,8 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
     Boolean(one('.crumb')?.textContent?.includes(main))
   fork.cut = Boolean(bubble(earlier)) && !bubble(later)
   fork.told = Boolean(actionToast()?.textContent?.includes('分叉'))
-  const backLink = () => one<HTMLButtonElement>('.forked-from .forked-link')
+  // 只认分叉来源那一条（data-source）：定时任务的说明条、会话树的父会话条也借用 forked-from 的样子
+  const backLink = () => one<HTMLButtonElement>('.forked-from[data-source] .forked-link')
   fork.marked = Boolean(backLink()?.textContent?.includes(main))
   const aside = '在岔出来的会话里说'
   await sayAndWait(aside)
@@ -571,7 +574,7 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
       ?.click()
   await until('原来的会话', () => bubble(later))
   await frame()
-  fork.wentBack = Boolean(back) && !one('.forked-from')
+  fork.wentBack = Boolean(back) && !one('.forked-from[data-source]')
   fork.sourceKept = turns() === turnsBefore && !bubble(aside)
 
   // ---- 七、回退到一条消息之前，改了重发 ----
