@@ -96,10 +96,14 @@ func machineMain(ctx context.Context, argv []string, io machineIO) int {
 			}
 			return machineExitFailed
 		}
-		fmt.Fprintln(io.stderr, err)
 		if ctx.Err() != nil {
+			// 多半是 harness 的命令工具到了超时（常见是 2 分钟）把它结束了，而卡片要等用户点，最长 10 分钟：只写一句 context canceled 模型看不懂
+			fmt.Fprintln(io.stderr, tr(
+				"这条命令在桌面端答复之前被结束了（比如命令工具的超时到了），这一次的确认已经撤回。等用户在 Litch 里点头可能要好几分钟：把命令工具的超时调长（比如 10 分钟）再试。",
+				"This command was stopped before the desktop answered (for example the shell tool's timeout ran out), so the approval request was withdrawn. The user may take several minutes to answer in Litch: give the shell tool a longer timeout (for example 10 minutes) and try again."))
 			return 130
 		}
+		fmt.Fprintln(io.stderr, err)
 		return machineExitFailed
 	}
 	var response machineResponse
@@ -276,13 +280,14 @@ func machineHelp(desktops []machineDesktop, problem error) string {
 }
 
 // 连不上时下一步怎么办。EPERM 是沙箱拦的：codex 的沙箱（macOS 的 seatbelt、Linux 的 seccomp）默认不许连 unix 套接字，
-// 实测只读和工作区可写两档都是这样。codex 认“operation not permitted”这几个字为沙箱拒绝，
+// 实测只读和工作区可写两档都是这样；Claude Code 的“项目内”“只读”两档套的是适配器照 codex 做的同一种沙箱，也连不上，
+// 而它没有提权这一说，只能请用户改成完全访问。codex 认“operation not permitted”这几个字为沙箱拒绝，
 // 原话照样打在上一行；这里明说要以不受沙箱限制的方式重跑，模型才会去申请提权
 func unreachableHint(err error) string {
 	switch {
 	case errors.Is(err, syscall.EPERM):
-		return tr("连接被沙箱拦下了：命令所在的沙箱不许连本机的 unix 套接字。请以不受沙箱限制的方式（申请提权）重新运行这条命令。",
-			"The connection was blocked by a sandbox that does not allow local unix sockets. Re-run this command outside the sandbox (request escalated permissions).")
+		return tr("连接被沙箱拦下了：命令所在的沙箱不许连本机的 unix 套接字。请以不受沙箱限制的方式重新运行这条命令：能申请提权就申请，不能就请用户把这个会话的权限改成完全访问。",
+			"The connection was blocked by a sandbox that does not allow local unix sockets. Re-run this command outside the sandbox: request escalated permissions if you can, otherwise ask the user to give this session full access.")
 	case errors.Is(err, syscall.EACCES):
 		return tr("没有权限连这个设备服务：它属于别的用户，或者套接字的权限不对。",
 			"No permission to connect to this device service: it belongs to another user, or the socket's permissions are wrong.")
