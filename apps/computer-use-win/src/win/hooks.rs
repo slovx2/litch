@@ -1,6 +1,8 @@
 // 低级键盘和鼠标钩子：专门一条线程装 WH_KEYBOARD_LL、WH_MOUSE_LL 并跑消息循环。
-// - 不带注入标记的 Esc：交给 activity::stop_all（本回合停掉正在操作的应用，通知主进程）；
-// - 不带注入标记的鼠标和键盘输入：记下时间和位置，动作前查“用户是不是正在动这个窗口”。
+// 区分事件靠 dwExtraInfo 里的标记（input::INJECTED_TAG），不看系统的注入标志：带标记的是助手自己发的，
+// 其余（物理输入，以及 Moonlight、RDP 一类工具转发进来的——它们带系统注入标志但没有我们的标记）都算用户输入。
+// - 用户发的 Esc：交给 activity::stop_all（本回合停掉正在操作的应用，通知主进程）；
+// - 用户发的鼠标和键盘输入：记下时间和位置，动作前查“用户是不是正在动这个窗口”。
 // 回调里只做记录，不做任何耗时的事，否则系统会在超时后摘掉钩子。Esc 的处理经线程消息转到循环里做。
 use super::system::log;
 use std::collections::VecDeque;
@@ -41,7 +43,8 @@ fn record(event: Physical) {
 unsafe extern "system" fn keyboard(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     if code == HC_ACTION as i32 {
         let info = &*(lparam.0 as *const KBDLLHOOKSTRUCT);
-        if info.flags.0 & LLKHF_INJECTED.0 == 0 {
+        // 只放过助手自己发的（带我们的标记）；物理按键和串流/远程软件转发进来的都算用户输入
+        if info.dwExtraInfo != super::input::INJECTED_TAG {
             record(Physical::Key { foreground: GetForegroundWindow().0 as isize, at: Instant::now() });
             let down = wparam.0 as u32 == WM_KEYDOWN || wparam.0 as u32 == WM_SYSKEYDOWN;
             if down && info.vkCode == VK_ESCAPE.0 as u32 {
@@ -55,8 +58,8 @@ unsafe extern "system" fn keyboard(code: i32, wparam: WPARAM, lparam: LPARAM) ->
 unsafe extern "system" fn mouse(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     if code == HC_ACTION as i32 {
         let info = &*(lparam.0 as *const MSLLHOOKSTRUCT);
-        // LLMHF_INJECTED = 1
-        if info.flags & 1 == 0 {
+        // 同上：只有带我们标记的才是助手自己发的，其余（物理、串流/远程转发）都算用户在动
+        if info.dwExtraInfo != super::input::INJECTED_TAG {
             let now = Instant::now();
             let is_move = wparam.0 as u32 == WM_MOUSEMOVE;
             let keep = !is_move
