@@ -5,7 +5,7 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
-## 未发布
+## 0.9.0
 
 - 新增 OpenCode 入口（实验性）：经你自己装的 OpenCode（>= 1.18.0）的 `opencode serve` 接入，会话和 OpenCode 自己共用。支持逐字输出、思考过程、插话、中断、命令与改文件的审批（拒绝可附说明）、提问题卡、待办当计划、回合差异、用量、技能与斜杠命令、计划模式、按消息分叉、回退（会连文件一起恢复）、压缩、图片。装了就启用，SSH 端口 7334（`--opencode-port`），`CHA_OPENCODE_CLI` 可指定路径。
 - 新增通用 ACP 入口（实验性）：说 ACP（Agent Client Protocol）的 agent 都能接进来，内置 Gemini CLI（`gemini --acp`）和 Qwen Code（`qwen --acp`）两个预设，另有一个自己填命令的 `acp` 入口（`CHA_ACP_CLI`、`CHA_ACP_ARGS`）。三个默认停用，在设备设置里打开；SSH 端口 7335 到 7337。
