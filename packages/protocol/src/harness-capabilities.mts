@@ -1,7 +1,7 @@
 // 一个 harness（引擎）的结构化声明：能做什么、有哪些权限预设、认识我们的哪些扩展；
 // 以及“拒绝时附说明”这项扩展（扩展名 declineWithNote）里和线上形状有关的名字。
 // 这里的东西都不是 codex 原有的。定义的原文在仓库根目录 protocol/extensions/runtime-info.json 和
-// decline-with-note.json，设计见 design/harness-client/03-adapter-device-service.md 第 6.4 节，规矩见第十五节。
+// decline-with-note.json。规矩：扩展只增不改，扩展内容只发给声明过的连接，没改过的官方桌面端要始终能连。
 //
 // 这个文件不引用别的文件：引擎（packages/claude、pi、dsh）、设备进程和客户端核心都直接引用它。
 //

@@ -1,6 +1,5 @@
 // 内置浏览器的工具定义（命名空间 litch_browser）：Litch 新建会话时放进 `thread/start.dynamicTools`，
-// 模型调用时由连着的 Litch 桌面端执行（apps/desktop/src/browser/）。设计见
-// design/harness-client/05-browser-and-computer-use.md 3.2。
+// 模型调用时由连着的 Litch 桌面端执行（apps/desktop/src/browser/）。
 //
 // 说明文字是写给模型看的，用英文；参数的形状和桌面端的执行器（apps/desktop/src/browser/args.mts）一一对应，
 // 改一边要改另一边。这个文件只引用 client-tools.mts 的类型。

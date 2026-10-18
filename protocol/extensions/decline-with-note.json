@@ -1,6 +1,6 @@
 {
   "extension": "declineWithNote",
-  "description": "拒绝审批时附一句说明。标准协议里命令和文件改动的“拒绝”只有一个词，带不了话；这项扩展加一种决定：拒绝，并把用户写的说明交给模型，让它知道为什么被拒绝。设计见 design/harness-client/03-adapter-device-service.md 第 6.4 节末尾和第十五节。类型在 packages/protocol/src/harness-capabilities.mts 和 extensions.mts（DeclineWithNoteDecision）。",
+  "description": "拒绝审批时附一句说明。标准协议里命令和文件改动的“拒绝”只有一个词，带不了话；这项扩展加一种决定：拒绝，并把用户写的说明交给模型，让它知道为什么被拒绝。类型在 packages/protocol/src/harness-capabilities.mts 和 extensions.mts（DeclineWithNoteDecision）。",
   "appliesTo": "每个 harness 自己的入口，以及经聚合面连到它的连接（聚合面把客户端的握手参数原样带给每个上游）。哪个 harness 支持，看它在 runtime/info 里报的 extensions 有没有 declineWithNote：现在 claude-code 支持；pi 在设置里打开了审批（harness.pi.approvals）时支持，关着时它不发审批，extensions 是空的；dsh 的审批裁决是封闭的几个值、拒绝的理由是固定的，带不了话；原生 codex 的拒绝也带不了话（聚合面上它的文件改动审批另有一处补充，见 SuppliedField）。",
   "declaration": {
     "description": "客户端握手时在 initialize 的 capabilities 里用我们自己的键列出认识的扩展名。",

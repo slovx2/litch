@@ -1,7 +1,7 @@
 {
   "extension": "deviceWorkspaces",
-  "description": "设备级的工作区与置顶。设备上的一个工作区下面并列着各个 harness 的会话，所以工作区、会话到工作区的归属、分区与置顶存在设备进程自己的库里，不存在任何引擎里。对外用的全是 Codex 协议里现成的方法和通知（project/*、thread/metadata/update、threadSection/*、thread/section/move、project/changed、thread/project/updated），形状和语义照引擎里现有的实现；协议里没有的只有两条通知（分区与置顶变了），是这个扩展加的。设计见 design/harness-client/03-adapter-device-service.md 第 6.1 节，类型在 packages/protocol/src/device.mts。",
-  "appliesTo": "只有聚合面。每个 harness 自己的入口上，这几组方法读写的仍然是那个引擎自己的项目存储，和聚合面上的互不相通（设计文档 03 第四节的做法甲）。",
+  "description": "设备级的工作区与置顶。设备上的一个工作区下面并列着各个 harness 的会话，所以工作区、会话到工作区的归属、分区与置顶存在设备进程自己的库里，不存在任何引擎里。对外用的全是 Codex 协议里现成的方法和通知（project/*、thread/metadata/update、threadSection/*、thread/section/move、project/changed、thread/project/updated），形状和语义照引擎里现有的实现；协议里没有的只有两条通知（分区与置顶变了），是这个扩展加的。类型在 packages/protocol/src/device.mts。",
+  "appliesTo": "只有聚合面。每个 harness 自己的入口上，这几组方法读写的仍然是那个引擎自己的项目存储，和聚合面上的互不相通：第一次启用时从各引擎导入一次，之后两边各管各的。",
   "declaration": {
     "description": "设备服务在 runtime/info 的 device.extensions 里列出 deviceWorkspaces，表示聚合面上这几组方法由设备层处理、可以用（没列的旧版设备服务对它们回“聚合面不支持”）。客户端握手时在 capabilities.litchExtensions 里声明 deviceWorkspaces，表示它认识下面两条通知。",
     "where": "initialize.params.capabilities.litchExtensions",

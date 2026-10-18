@@ -1,6 +1,6 @@
 // 协议包的入口。设备进程（packages/device）和客户端核心（packages/core）都从这里取类型。
-// codex.mts 是 Codex 原有的，extensions.mts 是我们加的，两边分开放
-// （设计文档 01 第五节规则 4、03 第十五节）。
+// codex.mts 是 Codex 原有的，extensions.mts 是我们加的，两边分开放，
+// 改上游的类型时不会碰到我们的扩展。
 
 // 客户端工具（clientTools 扩展）：谁能执行 litch_ 开头的动态工具、没人能执行时怎么回。不依赖别的文件
 export type * from './client-tools.mjs'

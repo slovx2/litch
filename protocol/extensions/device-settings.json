@@ -1,6 +1,6 @@
 {
   "extension": "deviceSettings",
-  "description": "设备配置接口：读写设备服务的设置、重启 harness、运行诊断、读日志末尾、取给官方 Codex 桌面端用的 ssh 配置片段。设置的结构由设备服务声明，客户端按声明画界面，不认识具体的设置项。设计见 design/harness-client/03-adapter-device-service.md 第十三节、第十五节。类型在 packages/protocol/src/device-settings.mts；runtime/info 里跟着多出来的不可用原因在 packages/protocol/src/device.mts 的 HarnessUnavailable 上。",
+  "description": "设备配置接口：读写设备服务的设置、重启 harness、运行诊断、读日志末尾、取给官方 Codex 桌面端用的 ssh 配置片段。设置的结构由设备服务声明，客户端按声明画界面，不认识具体的设置项。类型在 packages/protocol/src/device-settings.mts；runtime/info 里跟着多出来的不可用原因在 packages/protocol/src/device.mts 的 HarnessUnavailable 上。",
   "appliesTo": "只有聚合面，而且要这个设备服务是由带设置功能的适配器主进程拉起的：runtime/info 的 device.extensions 里列了 deviceSettings 才能用。每个 harness 自己的入口（给官方 Codex 桌面端用的兼容面）上没有这个扩展的任何内容。",
   "declaration": {
     "description": "方法由客户端主动调用，不要求声明。想收到设置变化的通知、想在不可用原因上拿到两种语言的说明，握手时在 capabilities.litchExtensions 里列上 deviceSettings。",

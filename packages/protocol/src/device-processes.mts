@@ -1,6 +1,6 @@
 // 可重连的终端（扩展名 deviceProcesses）：进程可以属于设备，而不是属于发起它的那条连接。
-// 这里的东西都不是 codex 原有的。定义的原文在仓库根目录 protocol/extensions/device-processes.json，
-// 设计见 design/harness-client/03-adapter-device-service.md 第 6.3 节，规矩见第十五节。
+// 这里的东西都不是 codex 原有的。定义的原文在仓库根目录 protocol/extensions/device-processes.json。
+// 规矩：扩展只增不改，扩展内容只发给声明过的连接，没改过的官方桌面端要始终能连。
 //
 // 这个文件不引用别的文件：设备进程（packages/device）和客户端核心（packages/core）都直接引用它。
 // 进程的输出和退出用的还是协议原有的 `process/outputDelta`、`process/exited`，写输入、改行列数、

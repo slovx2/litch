@@ -73,7 +73,7 @@ export async function runStandardFlow(
   assert.ok(plain, `${scene.entry} 要能演只说一句话的回合`)
   assert.equal((await client.completed(plain.id)).status, 'completed', '打断之后的回合')
 
-  // 计划模式，照官方桌面端的做法（research/codex-desktop-analysis-2026-10-12/04 第 2.6.4 节）：
+  // 计划模式，照官方桌面端的做法：
   // 计划模式的回合带着计划条目正常结束，入口不在回合里问要不要执行（在回合里问是 planConfirmation 扩展，
   // 没声明的连接上不问）；桌面端自己问，选了执行就把协作模式切回 default、发一个新回合，
   // 话是固定的一行加计划全文

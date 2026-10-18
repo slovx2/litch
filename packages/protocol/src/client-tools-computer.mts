@@ -1,6 +1,6 @@
 // Computer Use 的工具定义（命名空间 litch_computer），建会话时放进 `thread/start.dynamicTools`。
-// 执行方是 macOS 上的 Litch 桌面端（apps/desktop/src/computer-use/），设计见
-// design/harness-client/05-browser-and-computer-use.md 第 3.3 节。说明是写给模型看的，用英文。
+// 执行方是 macOS 上的 Litch 桌面端（apps/desktop/src/computer-use/）。
+// 说明是写给模型看的，用英文。
 //
 // 这个文件只引用 client-tools.mts，设备进程和核心也能直接引用它。
 

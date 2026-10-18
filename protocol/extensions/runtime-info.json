@@ -79,7 +79,7 @@
         "pattern": "^[a-f0-9]{64}$"
       },
       "displayName": {
-        "description": "结构化声明（下面五个字段）是后加的，都可选：没报的客户端按“不知道”处理，退回先调用、失败再降级。类型在 packages/protocol/src/harness-capabilities.mts，设计见 design/harness-client/03-adapter-device-service.md 第 6.4 节。displayName 是显示名",
+        "description": "结构化声明（下面五个字段）是后加的，都可选：没报的客户端按“不知道”处理，退回先调用、失败再降级。类型在 packages/protocol/src/harness-capabilities.mts。displayName 是显示名",
         "type": "string",
         "minLength": 1
       },

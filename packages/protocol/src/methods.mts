@@ -287,7 +287,7 @@ export interface ClientRequests {
   'fs/readFile': { params: FsReadFileParams; result: FsReadFileResponse }
   /** 跟着符号链接走到底之后是什么；`isSymlink` 说的是这个路径本身 */
   'fs/getMetadata': { params: FsGetMetadataParams; result: FsGetMetadataResponse }
-  // 以下四个是 litch_machine 的执行器写文件、建目录用的（08 号设计 2.4，core 的 device/machine/）。
+  // 以下四个是 litch_machine 的执行器写文件、建目录用的（core 的 device/machine/）。
   // 形状照上游 codex 0.157.1 的 v2/Fs*Params（都只回空对象）；适配器的实现在 packages/shared/src/filesystem-rpc.mts
   /** 整个写进去（已有的覆盖），父目录要已经在了。协议里没有“接在后面写” */
   'fs/writeFile': { params: { path: string; dataBase64: string }; result: Record<string, never> }
