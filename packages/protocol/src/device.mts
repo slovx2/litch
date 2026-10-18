@@ -64,6 +64,12 @@ export const EXTENSION = {
    * 声明时还要在 `capabilities.litchClientTools.namespaces` 里列出能执行哪些命名空间。
    */
   clientTools: 'clientTools',
+  /**
+   * 定时任务：任务存在设备上、由设备服务按时执行，客户端断开也照样跑；模型可以用 litch_tasks 工具建任务
+   * （device-tasks.mts、task-schedule.mts、client-tools-tasks.mts，定义在 protocol/extensions/device-tasks.json）。
+   * 设备信息的 `extensions` 里列了它才能用；声明了它的连接才会收到任务和运行的变化通知。
+   */
+  deviceTasks: 'deviceTasks',
 } as const
 
 export type ExtensionName = (typeof EXTENSION)[keyof typeof EXTENSION]

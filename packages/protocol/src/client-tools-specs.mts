@@ -3,6 +3,7 @@
 //   litch_browser   → client-tools-browser.mts（内置浏览器那条线提供）
 //   litch_computer  → client-tools-computer.mts（Computer Use 那条线提供）
 //   litch_machine   → client-tools-machine.mts（说明按会话生成，所以要给 MachineSpecContext）
+//   litch_tasks     → client-tools-tasks.mts（执行方是设备服务，带不带看设备的 deviceTasks 扩展）
 //   litch_echo      → 就在这个文件里，只给测试用
 // 合并时在下面 SPECS 里各加一行引用就接上了（见“合并时加在这里”那两行注释）。
 // 这个文件只引用 client-tools.mts 和各命名空间的定义，核心（packages/core）和桌面外壳都直接引用它。
@@ -11,6 +12,7 @@ import { CLIENT_TOOL_NAMESPACE, type ClientToolNamespaceSpec } from './client-to
 import { BROWSER_TOOLS } from './client-tools-browser.mjs'
 import { computerPlatform, computerToolsSpec } from './client-tools-computer.mjs'
 import { type MachineSpecContext, machineToolsSpec } from './client-tools-machine.mjs'
+import { TASKS_TOOLS } from './client-tools-tasks.mjs'
 
 /** echo 工具的参数 */
 export interface EchoArguments {
@@ -58,6 +60,7 @@ export const ECHO_TOOLS: ClientToolNamespaceSpec = {
 const SPECS: Record<string, ClientToolNamespaceSpec> = {
   [ECHO_TOOLS.name]: ECHO_TOOLS,
   [BROWSER_TOOLS.name]: BROWSER_TOOLS,
+  [TASKS_TOOLS.name]: TASKS_TOOLS,
 }
 
 /** 建会话时知道的、按会话生成定义要用的东西。没有就给 null，说明里不写具体的机器 */

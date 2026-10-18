@@ -139,6 +139,19 @@ import type {
   DeviceSettingsWriteResponse,
   DeviceSshConfigResponse,
 } from './device-settings.mjs'
+import type {
+  DeviceTaskChangedNotification,
+  DeviceTaskCreateParams,
+  DeviceTaskIdParams,
+  DeviceTaskListResponse,
+  DeviceTaskResponse,
+  DeviceTaskRunChangedNotification,
+  DeviceTaskRunNowResponse,
+  DeviceTaskRunsListParams,
+  DeviceTaskRunsListResponse,
+  DeviceTaskRunsMarkReadParams,
+  DeviceTaskUpdateParams,
+} from './device-tasks.mjs'
 import type { RuntimeInfoResponse } from './extensions.mjs'
 
 /**
@@ -277,6 +290,19 @@ export interface ClientRequests {
   'litch/process/detach': { params: DeviceProcessHandleParams; result: Record<string, never> }
   'litch/process/kill': { params: DeviceProcessKillParams; result: Record<string, never> }
   'litch/process/remove': { params: DeviceProcessHandleParams; result: Record<string, never> }
+  // 以下是定时任务（扩展 deviceTasks，见 device-tasks.mts）：只有聚合面有，
+  // 而且设备信息的 `extensions` 里列了 deviceTasks 才能用
+  'litch/task/list': { params: Record<string, never>; result: DeviceTaskListResponse }
+  'litch/task/create': { params: DeviceTaskCreateParams; result: DeviceTaskResponse }
+  /** revision 对不上回 taskConflict，错误里带最新的任务 */
+  'litch/task/update': { params: DeviceTaskUpdateParams; result: DeviceTaskResponse }
+  'litch/task/delete': { params: DeviceTaskIdParams; result: Record<string, never> }
+  'litch/task/runNow': { params: DeviceTaskIdParams; result: DeviceTaskRunNowResponse }
+  'litch/task/runs/list': { params: DeviceTaskRunsListParams; result: DeviceTaskRunsListResponse }
+  'litch/task/runs/markRead': {
+    params: DeviceTaskRunsMarkReadParams
+    result: Record<string, never>
+  }
   // 以下是文件面板用的：列目录、读文件、取元数据、模糊找文件。都是协议里现成的方法，哪种对面都有。
   // 聚合面上它们由设备进程自己处理（packages/device/src/routes.mts），不转给任何引擎，所以不带 `harness`，
   // 哪个 harness 掉线都不影响；单个 harness 的入口上是那个引擎进程在读；原生 codex 是它自己读。
@@ -355,6 +381,10 @@ export interface ServerNotifications {
   'fs/changed': FsChangedNotification
   /** 扩展，只发给握手时声明过 deviceProcesses 的连接：设备上属于设备的进程多了、少了、变了 */
   'litch/process/changed': DeviceProcessChangedNotification
+  /** 扩展，只发给握手时声明过 deviceTasks 的连接：任务多了、变了、没了 */
+  'litch/task/changed': DeviceTaskChangedNotification
+  /** 扩展，只发给握手时声明过 deviceTasks 的连接：一次运行开始了、结束了、标成看过了 */
+  'litch/task/run/changed': DeviceTaskRunChangedNotification
   // 以下只有订阅了会话（thread/resume、thread/start）的连接才收得到
   'turn/started': TurnStartedNotification
   'turn/completed': TurnCompletedNotification

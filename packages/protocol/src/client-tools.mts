@@ -18,6 +18,8 @@ export const CLIENT_TOOL_NAMESPACE = {
   computer: 'litch_computer',
   /** 操作机器上的命令和文件（第一期只有桌面端这台） */
   machine: 'litch_machine',
+  /** 定时任务。执行方是设备服务自己，不是桌面端（client-tools-tasks.mts、device-tasks.mts） */
+  tasks: 'litch_tasks',
   /** 只在测试里用：原样回参数，用来打通链路 */
   echo: 'litch_echo',
 } as const

@@ -12,6 +12,9 @@ export {
   declaredClientToolNamespaces,
   isClientToolNamespace,
 } from './client-tools.mjs'
+// litch_tasks 工具（模型建定时任务），执行方是设备服务
+export type * from './client-tools-tasks.mjs'
+export { TASKS_TOOLS } from './client-tools-tasks.mjs'
 export type * from './codex.mjs'
 export { CODEX_PROTOCOL_VERSION } from './codex.mjs'
 // 设备服务（聚合面）的扩展：device.mts 只取 harness-capabilities.mts 的类型，device-codex.mts 是它和 codex 类型拼出来的形状
@@ -53,6 +56,25 @@ export {
   DEVICE_SETTINGS_WRITE,
   DEVICE_SSH_CONFIG_READ,
 } from './device-settings.mjs'
+// 定时任务（deviceTasks 扩展）：任务、运行记录、方法和通知的名字。不依赖别的文件
+export type * from './device-tasks.mjs'
+export {
+  DEVICE_TASK_CHANGED,
+  DEVICE_TASK_CREATE,
+  DEVICE_TASK_DELETE,
+  DEVICE_TASK_ERROR_CODE,
+  DEVICE_TASK_LIST,
+  DEVICE_TASK_RUN_CHANGED,
+  DEVICE_TASK_RUN_NOW,
+  DEVICE_TASK_RUNS_LIST,
+  DEVICE_TASK_RUNS_MARK_READ,
+  DEVICE_TASK_UPDATE,
+  TASK_LIMIT,
+  TASK_NAME_MAX,
+  TASK_PROMPT_MAX,
+  TASK_RUN_ERROR,
+  TASK_RUN_SUMMARY_MAX,
+} from './device-tasks.mjs'
 export type * from './extensions.mjs'
 // 每个 harness 的结构化声明（能力位、权限预设）和“拒绝时附说明”：harness-capabilities.mts 不依赖别的文件
 export type * from './harness-capabilities.mjs'
@@ -76,3 +98,13 @@ export type {
   ServerRequests,
 } from './methods.mjs'
 export { isUnknownMethodError, RPC_ERROR } from './methods.mjs'
+// 定时任务的日程：校验、下一次、错过了几次。只用标准库
+export type * from './task-schedule.mjs'
+export {
+  countTaskRuns,
+  isTaskTimeZone,
+  localTaskTimeZone,
+  MIN_TASK_INTERVAL_MINUTES,
+  nextTaskRun,
+  validateTaskSchedule,
+} from './task-schedule.mjs'

@@ -1,0 +1,144 @@
+{
+  "extension": "deviceTasks",
+  "description": "定时任务：任务存在设备上，由设备服务按日程执行，客户端断开、桌面端退出都照样跑。到点后设备服务自己连上目标 harness，要么新建一个会话、要么在指定的已有会话里接着发一个回合，等回合结束记一条运行记录。客户端用 litch/task/* 列出、新建、修改、删除任务，立即运行一次，看运行记录；变化有通知。模型在会话里用 litch_tasks 动态工具做同样的事，这个工具由设备服务自己执行，不经过任何客户端。类型在 packages/protocol/src/device-tasks.mts，日程的算法在 task-schedule.mts，工具定义在 client-tools-tasks.mts。",
+  "appliesTo": "只有聚合面。每个 harness 自己的入口（给官方 Codex 桌面端用的兼容面）上没有这个扩展的任何内容；但设备服务替任务建的会话、发的回合是标准的会话和回合，在兼容面上也看得到。",
+  "declaration": {
+    "description": "设备服务在 runtime/info 的 device.extensions 里列出 deviceTasks，表示它支持。客户端握手时在 capabilities.litchExtensions 里声明 deviceTasks，这个扩展的方法和通知才对这条连接生效。litch_tasks 工具不看客户端的声明：设备列了 deviceTasks，客户端建会话时就可以把它放进 thread/start.dynamicTools。",
+    "where": "initialize.params.capabilities.litchExtensions",
+    "schema": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "contains": {
+        "const": "deviceTasks"
+      }
+    }
+  },
+  "undeclared": "没声明的连接上，线上内容和标准协议一致：litch/task/ 开头的方法回 extensionRequired（data.required 是 [\"deviceTasks\"]），收不到 litch/task/changed、litch/task/run/changed。任务照样按时跑，跑出来的会话、回合和通知照标准协议出现在它订阅了的会话上，会话级的通知（thread/started、thread/status/changed）照旧发给每条连接。",
+  "rules": [
+    "存储：任务和运行记录存在设备服务的状态目录里，和设备库分开、带迁移，设备库重建不影响它们。设备服务重启后照样在。",
+    "调度：设备服务按每个 active 任务的 nextRunAt 定时；醒来、启动、改了任务时都重新算。到点时如果错过了不止一个时间点（设备关机、睡眠、设备服务没在跑），只跑一次，coalesced 记下合并掉了几个；下一次从现在往后算。一次性任务错过了也补跑这一次，跑完是 completed。",
+    "同一个任务同时只有一次运行（queued 或 running）。到点时上一次还没结束，不另起，那个时间点算进上一次之后要跑的那一次的 coalesced；runNow 遇到这种情况回的是那一次，deduplicated 为 true。同一个时间点不会跑两次，设备服务重启也不会。",
+    "并发：整台设备同时 running 的运行有上限（设备设置里的一项，默认 2），到了上限的排着（queued），按 scheduledFor 先后开始。",
+    "执行 newThread：设备服务在 target.harness 上 thread/start（cwd、模型、权限照 target；workspaceId 不是 null 时归进那个工作区），给会话起名“任务名 · 计划时间”，再 turn/start 发提示词（强度照 target）。建出来的会话是普通会话，出现在 thread/list 里，客户端可以打开、接着聊。",
+    "执行 thread：设备服务恢复那个会话、在里面 turn/start。会话正在跑回合时排着等它结束（最多等 TASK_THREAD_WAIT，默认 30 分钟，超了这次失败）；会话没了这次失败（threadMissing），任务暂停。",
+    "发给模型的提示词前面加一段说明：这是定时任务的自动运行、任务名、计划时间和当前时间、合并了几次、没有人在看要尽量自己完成。原文照用户写的放在后面。",
+    "回合的时限：一次运行最长 2 小时，超了打断，记 timedOut。回合里的审批、提问照各引擎原有的做法（这一版不另做无人值守的审批策略）：Claude Code 会停着等有客户端连上来回答；别的引擎没有连接时按失败处理。",
+    "结果：回合结束后记 succeeded（回合 completed）或 failed，summary 是最后一条回答的开头。失败不让任务暂停，只记 lastError；之后成功一次清掉。设备服务在回合结束前退出，重启后去对应会话里查这个回合：查到结束了照实记，查不到记 interrupted。",
+    "未读：结束的运行 read 为 false，客户端打开它（或者它的会话）后调 litch/task/runs/markRead；任务上的 unreadRuns 跟着变。",
+    "通知：任务的任何字段变了（包括 nextRunAt、lastRun、unreadRuns）发 litch/task/changed；一次运行开始、结束、标成看过了发 litch/task/run/changed。发给每条声明过 deviceTasks 的连接，发起改动的那条也收。",
+    "litch_tasks 工具：设备列了 deviceTasks 时，客户端建会话可以带上它。设备服务替自己通往引擎的每条连接都声明能执行 litch_tasks，调用来了自己答，不转给客户端；所以没有桌面端连着、在定时任务自己的回合里也能用。create 的 target 不给是 this_thread：在发起调用的会话里接着发；new_thread 沿用这个会话的 harness、cwd、工作区和设置。建出来的任务 origin 是 tool。工具的结果是一段 JSON 文本（任务或任务列表），出错时是一句说明。",
+    "上限：一台设备最多 TASK_LIMIT 个任务；名字 1–120 字、提示词 1–100000 字；相邻两次运行至少隔 5 分钟。运行记录每个任务留最近 200 条。",
+    "删除任务时，正在跑的那一次不打断，跑完不再记录；它建出来的会话不删。",
+    "谁能连上聚合面谁就能管理这些任务，不另设权限：任务以这台设备上这个用户的身份运行。"
+  ],
+  "parts": [
+    {
+      "kind": "ClientRequest",
+      "method": "litch/task/list",
+      "params": {
+        "type": "object"
+      },
+      "response": {
+        "$ref": "#/definitions/TaskList"
+      },
+      "description": "全部任务，按建的先后。"
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/task/create",
+      "params": {
+        "$ref": "#/definitions/CreateParams"
+      },
+      "response": {
+        "$ref": "#/definitions/TaskResponse"
+      },
+      "description": "新建。字段不对回 invalidTask，target 不对回 invalidTarget，到了上限回 taskLimitReached。"
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/task/update",
+      "params": {
+        "$ref": "#/definitions/UpdateParams"
+      },
+      "response": {
+        "$ref": "#/definitions/TaskResponse"
+      },
+      "description": "只改给了的那几项。revision 对不上回 taskConflict（data.task 是最新的）。改了日程、时区或者从别的状态改回 active，nextRunAt 从现在往后重算。"
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/task/delete",
+      "params": {
+        "$ref": "#/definitions/IdParams"
+      },
+      "response": {
+        "type": "object"
+      },
+      "description": "删掉任务和它的运行记录。"
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/task/runNow",
+      "params": {
+        "$ref": "#/definitions/IdParams"
+      },
+      "response": {
+        "$ref": "#/definitions/RunNowResponse"
+      },
+      "description": "立即运行一次，不改日程。paused、completed 的任务也能。"
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/task/runs/list",
+      "params": {
+        "$ref": "#/definitions/RunsListParams"
+      },
+      "response": {
+        "$ref": "#/definitions/RunsListResponse"
+      },
+      "description": "运行记录，新的在前，分页。"
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/task/runs/markRead",
+      "params": {
+        "$ref": "#/definitions/MarkReadParams"
+      },
+      "response": {
+        "type": "object"
+      },
+      "description": "标成看过了。"
+    },
+    {
+      "kind": "ServerNotification",
+      "method": "litch/task/changed",
+      "params": {
+        "$ref": "#/definitions/TaskChanged"
+      }
+    },
+    {
+      "kind": "ServerNotification",
+      "method": "litch/task/run/changed",
+      "params": {
+        "type": "object",
+        "required": [
+          "run"
+        ],
+        "properties": {
+          "run": {
+            "$ref": "#/definitions/Run"
+          }
+        }
+      }
+    },
+    {
+      "kind": "Error",
+      "description": "原因在 error.data.litch：unknownTask（-32602）、taskConflict（-32600）、invalidTask（-32602）、invalidTarget（-32602）、taskLimitReached（-32061）。data 里可能带 taskId、task、field。"
+    }
+  ],
+  "definitions": {
+    "_note": "字段的完整定义以 packages/protocol/src/device-tasks.mts 为准，设备那条线把这里的 JSON Schema 补齐，测试按它校验线上内容。"
+  }
+}
