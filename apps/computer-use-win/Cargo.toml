@@ -1,4 +1,4 @@
-# Litch 在 Windows 上的 Computer Use 助手：主进程以子进程拉起，经标准输入输出说 JSON-RPC（09 号设计第 9.2 节）。
+# Litch 在 Windows 上的 Computer Use 助手：主进程以子进程拉起，经标准输入输出说 JSON-RPC（4 字节大端长度 + UTF-8 的 JSON-RPC 2.0）。
 # 依赖一律写死精确版本；纯逻辑的模块在任何平台都能编译和测试，用到系统接口的部分只在 Windows 上编译。
 # 自成一个 workspace：不进仓库根目录那个（那是适配器协议的 crate），Cargo.lock 放在这个目录里。
 [workspace]

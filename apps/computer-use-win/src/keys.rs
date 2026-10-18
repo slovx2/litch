@@ -1,7 +1,7 @@
 // 组合键的解析：“ctrl+shift+t”“Return”“alt+F4”→ Windows 虚拟键码加修饰键。
 // 键名沿用 macOS 助手的写法（名字不分大小写，下划线、连字符忽略），差别：
 //   - cmd/command 在 Windows 上就是 Ctrl（模型常按 Mac 习惯写 cmd+c）；
-//   - Windows 键（win、super、meta）一律拒绝，免得模型打开开始菜单、Win+R 一类（09 号 3.6、3.8 节）；
+//   - Windows 键（win、super、meta）一律拒绝，免得模型打开开始菜单、Win+R 一类；
 //   - Delete 是向前删除（Windows 键盘上的 Del），退格写 BackSpace。
 use crate::fail;
 use crate::wire::RpcResult;

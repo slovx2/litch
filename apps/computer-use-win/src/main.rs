@@ -1,6 +1,6 @@
-// Litch 的 Windows Computer Use 助手（09 号设计）。主进程 spawn `litch-computer-use.exe --parent-pid <主进程号>`，
+// Litch 的 Windows Computer Use 助手。主进程 spawn `litch-computer-use.exe --parent-pid <主进程号>`，
 // 连接就是标准输入输出（4 字节大端长度 + JSON-RPC），标准错误只写日志。
-// 编成 Windows 子系统：没有控制台窗口（W0 实测：默认终端是 Windows Terminal 时控制台程序会弹窗抢前台）。
+// 编成 Windows 子系统：没有控制台窗口（默认终端是 Windows Terminal 时，控制台程序会弹出终端窗口抢前台）。
 //
 // 纯逻辑的模块（帧、键名、坐标、名单、文字）在任何平台都能编译和跑测试；用到系统接口的在 win/ 下，只在 Windows 上编译。
 #![cfg_attr(windows, windows_subsystem = "windows")]

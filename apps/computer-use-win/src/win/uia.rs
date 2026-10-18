@@ -1,5 +1,5 @@
-// UI Automation：读界面树（09 号 3.7 节）和按元素的动作（3.8 节）。
-// 取树：一次 BuildUpdatedCache 取整棵子树（W0 实测比逐节点快 2–3 倍）；出错时退回 ControlView 的 TreeWalker
+// UI Automation：读界面树和按元素的动作。
+// 取树：一次 BuildUpdatedCache 取整棵子树（比逐节点取快）；出错时退回 ControlView 的 TreeWalker
 // 逐节点取、到上限截断。Chromium/Electron 被问到时才打开无障碍树，第一次取到的太小就等一下再取一次。
 use super::apps;
 use crate::fail;

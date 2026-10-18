@@ -1,4 +1,4 @@
-// 分发主进程来的 JSON-RPC 方法（09 号 9.2 节），在主线程上依次处理。
+// 分发主进程来的 JSON-RPC 方法，在主线程上依次处理。
 // 观察（listApps、getAppState）、动作（七个）、握手与诊断、回合结束、关闭。截图号对应的坐标映射存在这里，
 // 坐标动作据它换算并判 stale。
 use super::{activity, apps, capture, foreground, hooks, input, overlay, system, uia};
@@ -361,7 +361,7 @@ fn req_str(p: &Value, key: &str) -> RpcResult<String> {
     str_of(p, key).filter(|s| !s.is_empty()).ok_or_else(|| fail!(Invalid, "{key} is required"))
 }
 
-/// 截图号：主进程原样带回（决 7.1.9），字符串或数字都认
+/// 截图号：主进程把助手给的号原样带回，字符串或数字都认
 fn shot_id(p: &Value) -> RpcResult<String> {
     match p.get("screenshotId") {
         Some(Value::String(s)) if !s.is_empty() => Ok(s.clone()),

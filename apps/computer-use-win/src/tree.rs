@@ -1,4 +1,4 @@
-// 界面树的一个节点（09 号 9.2 节的 WinNode）。编号、差异、文字化在主进程的 ax-text.mts 里做，助手只给结构。
+// 界面树的一个节点（WinNode）。编号、差异、文字化在主进程里做，助手只给结构。
 use crate::geometry::Frame;
 use serde::Serialize;
 
