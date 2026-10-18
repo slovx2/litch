@@ -10,6 +10,8 @@ import { isSettingsSection, SettingsPage, type SettingsSection } from '../settin
 import { useUpdateToast } from '../settings/UpdateBlock.tsx'
 import { SideSlot } from '../side/SideSlot.tsx'
 import { Sidebar } from '../sidebar/Sidebar.tsx'
+import { TaskNotices } from '../tasks/TaskNotices.tsx'
+import { TasksPage } from '../tasks/TasksPage.tsx'
 import { TerminalSlot } from '../terminal/TerminalSlot.tsx'
 import { Transcript } from '../transcript/Transcript.tsx'
 import {
@@ -17,13 +19,15 @@ import {
   onNewSessionRequest,
   onOpenSessionRequest,
   onSettingsRequest,
+  onTasksRequest,
+  type TasksRoute,
 } from './actions.ts'
 import { useKey, useServices } from './services.tsx'
 import { TitleBar } from './TitleBar.tsx'
 import { Toasts } from './toasts.tsx'
 
-/** 占着对话区的那几页：已归档对话、设备、设置 */
-export type Page = 'archived' | 'devices' | 'settings'
+/** 占着对话区的那几页：已归档对话、设备、设置、定时任务 */
+export type Page = 'archived' | 'devices' | 'settings' | 'tasks'
 
 export interface Selection {
   deviceId: string
@@ -107,6 +111,27 @@ export function App() {
     openPage('devices')
   }, [openPage])
   const closePeek = useCallback(() => setPeek(null), [])
+  /** 定时任务那一页一打开去哪。seq 每次都变：在那一页里再要一次也重新进 */
+  const [tasksAt, setTasksAt] = useState<{ route: TasksRoute; seq: number }>({
+    route: { view: 'list' },
+    seq: 0,
+  })
+  const onPage = useCallback(
+    (next: Page) => {
+      if (next === 'tasks') setTasksAt((was) => ({ route: { view: 'list' }, seq: was.seq + 1 }))
+      openPage(next)
+    },
+    [openPage],
+  )
+  // 别处要去定时任务的某个地方（会话顶上那一条的“去看任务”、会话菜单的“为这个会话建定时任务”）
+  useEffect(
+    () =>
+      onTasksRequest((route) => {
+        setTasksAt((was) => ({ route, seq: was.seq + 1 }))
+        openPage('tasks')
+      }),
+    [openPage],
+  )
 
   /** 开一个新对话：建在眼前这个会话所在的工作区里；眼前没有会话就按默认的来 */
   const startNew = useCallback(() => {
@@ -198,11 +223,12 @@ export function App() {
         page={page}
         onSelect={select}
         onCompose={compose}
-        onPage={openPage}
+        onPage={onPage}
       />
       <div className="body">
         <main className="main">
           <Toasts />
+          <TaskNotices onOpen={select} />
           {page === 'archived' && peek ? (
             <ArchivedSession
               key={`${peek.deviceId}:${peek.sessionId}`}
@@ -217,6 +243,13 @@ export function App() {
               key={deviceAt?.seq ?? 0}
               initial={deviceAt?.deviceId ?? null}
               onClose={closePage}
+            />
+          ) : page === 'tasks' ? (
+            <TasksPage
+              key={tasksAt.seq}
+              initial={tasksAt.route}
+              onClose={closePage}
+              onOpenSession={select}
             />
           ) : page === 'settings' ? (
             <SettingsPage

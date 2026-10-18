@@ -27,6 +27,7 @@ import { duration } from '../app/format.ts'
 import { useKey, useServices } from '../app/services.tsx'
 import { Dock, Requests } from '../composer/Dock.tsx'
 import type { MessageKey, Translator } from '../i18n/index.ts'
+import { TaskNote } from '../tasks/TaskNote.tsx'
 import { ActionsProvider } from './actions.tsx'
 import { Activity, Notes } from './activity.tsx'
 import { FileLinksProvider, useSessionFileLinks } from './FileLinks.tsx'
@@ -327,6 +328,9 @@ export function Transcript({ deviceId, sessionId, footer, onOpen }: TranscriptPr
               <ActionsProvider value={actions}>
                 {turnIds && !failure ? (
                   <ForkedFrom deviceId={deviceId} sessionId={sessionId} onOpen={onOpen} />
+                ) : null}
+                {turnIds && !failure ? (
+                  <TaskNote deviceId={deviceId} sessionId={sessionId} />
                 ) : null}
                 {failure ? (
                   <div className="errbox">

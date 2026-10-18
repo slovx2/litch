@@ -1,4 +1,14 @@
 // 核心包的入口。界面和外壳只从这里引用。
+
+// 日程怎么算：界面的表单拿它预览“下一次”、先查时区（和设备进程用的是同一份）
+export {
+  isTaskTimeZone,
+  localTaskTimeZone,
+  MIN_TASK_INTERVAL_MINUTES,
+  nextTaskRun,
+  type TaskScheduleProblem,
+  validateTaskSchedule,
+} from '../../protocol/src/task-schedule.mjs'
 export { type Cancel, createCancel } from './channel/cancel.mjs'
 export { type CoreChannel, connectChannel, type TopicSink } from './channel/client.mjs'
 export { createPortPair } from './channel/memory-port.mjs'

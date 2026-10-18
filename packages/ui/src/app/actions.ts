@@ -62,3 +62,23 @@ export function onDeviceRequest(listener: (deviceId: string) => void): () => voi
     deviceListeners.delete(listener)
   }
 }
+
+/** 定时任务那一页里要去的地方：列表、某个任务的详情、新建（可以指定在哪个会话里接着发） */
+export type TasksRoute =
+  | { view: 'list' }
+  | { view: 'detail'; deviceId: string; taskId: string }
+  | { view: 'new'; deviceId: string | null; threadId: string | null }
+
+const taskListeners = new Set<(route: TasksRoute) => void>()
+
+/** 打开“定时任务”一页，到这个地方（会话顶上那一条的“去看任务”、会话菜单的“为这个会话建定时任务”） */
+export function requestTasks(route: TasksRoute): void {
+  for (const listener of taskListeners) listener(route)
+}
+
+export function onTasksRequest(listener: (route: TasksRoute) => void): () => void {
+  taskListeners.add(listener)
+  return () => {
+    taskListeners.delete(listener)
+  }
+}

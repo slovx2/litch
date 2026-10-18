@@ -41,6 +41,8 @@ import {
   LANGUAGE,
   LICENSE_TEXT,
   MENU,
+  NOTIFY,
+  NOTIFY_CLICK,
   OPEN_EXTERNAL,
   PICK_FOLDER,
   REQUEST_CORE_PORT,
@@ -75,6 +77,7 @@ import {
 } from './quit-terminals.mjs'
 import { runShots } from './shots.mjs'
 import { MOCK_MODES, runSmoke, SMOKE_MODES, type SmokeMode } from './smoke.mjs'
+import { parseTaskNotice, showTaskNotice } from './task-notice.mjs'
 import { createUpdater, type Updater, updatePlatform } from './updater.mjs'
 
 const here = fileURLToPath(new URL('.', import.meta.url))
@@ -346,6 +349,14 @@ ipcMain.on(OPEN_EXTERNAL, (event, url: unknown) => {
   }
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return
   void shell.openExternal(parsed.toString())
+})
+
+// 定时任务跑完了的系统通知：要不要发、说什么由界面定，这里只认界面自己的主框架发来的、形状对的那一条
+ipcMain.on(NOTIFY, (event, value: unknown) => {
+  const frame = event.senderFrame
+  if (!frame || frame !== event.sender.mainFrame || !isUiUrl(frame.url)) return
+  const notice = parseTaskNotice(value)
+  if (notice) showTaskNotice(notice, event.sender, NOTIFY_CLICK)
 })
 
 // 界面的外观是用户在界面里选的，存在界面那边：它启动时和每次改的时候报一声。
