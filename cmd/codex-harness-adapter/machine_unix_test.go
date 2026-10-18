@@ -210,6 +210,10 @@ func TestMachineUnreachableAndCancel(t *testing.T) {
 	if code != 130 {
 		t.Fatalf("取消：%d %q", code, stderr.String())
 	}
+	// 多半是命令工具的超时到了：要说清楚，叫模型把超时调长，不能只有一句 context canceled
+	if said := stderr.String(); !strings.Contains(said, "超时") && !strings.Contains(said, "timeout") {
+		t.Fatalf("取消时的说明：%q", said)
+	}
 	select {
 	case <-device.closed:
 	case <-time.After(2 * time.Second):

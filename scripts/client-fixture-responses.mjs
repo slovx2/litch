@@ -13,6 +13,7 @@
 import { readlinkSync, realpathSync, rmSync, statSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { delimiter, dirname, join, resolve } from 'node:path'
+import { machineResponses } from './client-fixture-machine.mjs'
 
 const pause = (ms) => new Promise((done) => setTimeout(done, ms))
 
@@ -163,6 +164,12 @@ export async function serveResponses(harness, path, raw, res, { serial, pace = 1
     return null
   }
   const body = parse(raw)
+  // 操作本机（litch_machine 和 litch-machine 命令）的那几句，见 client-fixture-machine.mjs
+  const machine = machineResponses(body, userText(body))
+  if (machine) {
+    await sendResponse(res, machine, serial)
+    return namespacesOf(body)
+  }
   const text = `${harness} 收到：${userText(body)}\n\n这是隔离设备里的假模型在回话，分成几段慢慢发，好让界面上看得到字是一点一点出来的。`
   await sendResponse(res, { text, pieces: 6, pace }, serial)
   return namespacesOf(body)
