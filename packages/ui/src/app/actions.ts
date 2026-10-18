@@ -48,3 +48,17 @@ export function onOpenSessionRequest(listener: (session: SessionRef) => void): (
     openListeners.delete(listener)
   }
 }
+
+const deviceListeners = new Set<(deviceId: string) => void>()
+
+/** 打开“设备”一页，直接进这台设备的详情（顶栏弹层里“不确认”那一行的“去设置”） */
+export function requestDevice(deviceId: string): void {
+  for (const listener of deviceListeners) listener(deviceId)
+}
+
+export function onDeviceRequest(listener: (deviceId: string) => void): () => void {
+  deviceListeners.add(listener)
+  return () => {
+    deviceListeners.delete(listener)
+  }
+}

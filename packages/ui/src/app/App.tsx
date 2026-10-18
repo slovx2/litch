@@ -12,7 +12,12 @@ import { SideSlot } from '../side/SideSlot.tsx'
 import { Sidebar } from '../sidebar/Sidebar.tsx'
 import { TerminalSlot } from '../terminal/TerminalSlot.tsx'
 import { Transcript } from '../transcript/Transcript.tsx'
-import { onNewSessionRequest, onOpenSessionRequest, onSettingsRequest } from './actions.ts'
+import {
+  onDeviceRequest,
+  onNewSessionRequest,
+  onOpenSessionRequest,
+  onSettingsRequest,
+} from './actions.ts'
 import { useKey, useServices } from './services.tsx'
 import { TitleBar } from './TitleBar.tsx'
 import { Toasts } from './toasts.tsx'
@@ -95,7 +100,12 @@ export function App() {
     [openPage],
   )
   const closePage = useCallback(() => openPage(null), [openPage])
-  const openDevices = useCallback(() => openPage('devices'), [openPage])
+  /** 别处要求直接进哪台设备的详情。seq 每次都变，同一台再要一次也重新进 */
+  const [deviceAt, setDeviceAt] = useState<{ deviceId: string; seq: number } | null>(null)
+  const openDevices = useCallback(() => {
+    setDeviceAt(null)
+    openPage('devices')
+  }, [openPage])
   const closePeek = useCallback(() => setPeek(null), [])
 
   /** 开一个新对话：建在眼前这个会话所在的工作区里；眼前没有会话就按默认的来 */
@@ -135,6 +145,16 @@ export function App() {
 
   // 别处要打开某个会话（浏览器的 show 留在别的会话上的提示，点“去看”）
   useEffect(() => onOpenSessionRequest(select), [select])
+
+  // 别处要直接进某台设备的详情（顶栏弹层里“不确认”那一行的“去设置”）
+  useEffect(
+    () =>
+      onDeviceRequest((deviceId) => {
+        setDeviceAt((was) => ({ deviceId, seq: (was?.seq ?? 0) + 1 }))
+        openPage('devices')
+      }),
+    [openPage],
+  )
 
   // Cmd/Ctrl+N，和输入框里的 /new，是同一件事
   useEffect(() => {
@@ -193,7 +213,11 @@ export function App() {
           ) : page === 'archived' ? (
             <ArchivedPage onClose={closePage} onOpen={setPeek} />
           ) : page === 'devices' ? (
-            <DevicesPage onClose={closePage} />
+            <DevicesPage
+              key={deviceAt?.seq ?? 0}
+              initial={deviceAt?.deviceId ?? null}
+              onClose={closePage}
+            />
           ) : page === 'settings' ? (
             <SettingsPage
               section={settingsAt}
