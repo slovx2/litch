@@ -90,6 +90,7 @@ contextBridge.exposeInMainWorld('litchUpdate', {
 // 界面那边的类型在 packages/ui/src/settings/computer-bridge.ts，改一边要改另一边。别的系统上没有这个对象，界面就不显示那一节
 if (process.platform === 'darwin' || process.platform === 'win32') {
   contextBridge.exposeInMainWorld('litchComputerUse', {
+    platform: process.platform,
     // launch：助手没在跑时要不要拉起它（设置页那一节要，设备详情里顺带看一眼不要）
     status: (launch: boolean) => ipcRenderer.invoke(COMPUTER_USE_STATUS, launch === true),
     openSettings: (pane: string) => ipcRenderer.invoke(COMPUTER_USE_OPEN_SETTINGS, pane),
