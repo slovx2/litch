@@ -272,10 +272,25 @@ impl Engine {
         let hwnd = apps::hwnd(win.hwnd);
         let text = req_str(p, "text")?;
         foreground::ensure(hwnd)?;
-        if let Some(reference) = str_of(p, "ref") {
-            let _ = uia::set_focus(&uia::find(hwnd, &reference)?);
+        let el = match str_of(p, "ref") {
+            Some(reference) => {
+                let el = uia::find(hwnd, &reference)?;
+                let _ = uia::set_focus(&el);
+                Some(el)
+            }
+            None => None,
+        };
+        let class = apps::class(hwnd);
+        // 有元素就用它的值变化确认粘贴已落下，再恢复剪贴板；没有就固定等
+        match &el {
+            Some(el) => {
+                let before = uia::snapshot_value(el);
+                let check = || uia::snapshot_value(el) != before;
+                let check: &dyn Fn() -> bool = &check;
+                input::enter_text(&text, &class, Some(check));
+            }
+            None => input::enter_text(&text, &class, None),
         }
-        input::enter_text(&text, &apps::class(hwnd));
         self.done()
     }
 
