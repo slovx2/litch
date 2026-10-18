@@ -35,6 +35,7 @@ import { askReply, installAskExtension } from './client-fixture-ask.mjs'
 import { browseReply } from './client-fixture-browse.mjs'
 import { computerReply } from './client-fixture-computer.mjs'
 import { echoReply, lastUserText } from './client-fixture-echo.mjs'
+import { machineReply } from './client-fixture-machine.mjs'
 import { streamReply } from './client-fixture-stream.mjs'
 
 /** 假的远程机器上适配器的替身名。客户端那边用 LITCH_REMOTE_ADAPTER 指过来 */
@@ -90,10 +91,11 @@ export async function prepareService({ repo, root, pace = 200 }) {
     requests++
     const said = lastUserText(body)
     appendFileSync(modelLog, `${JSON.stringify({ at: Date.now(), model: body.model, said })}\n`)
-    // 客户端工具（回声、浏览、操作应用）认得出自己那一次，排在提问前面：提问见到工具结果就当成是它的回答
+    // 客户端工具（回声、浏览、操作应用、操作本机）认得出自己那一次，排在提问前面：提问见到工具结果就当成是它的回答
     const reply = echoReply(body, said) ??
       browseReply(body, said) ??
       computerReply(body, said) ??
+      machineReply(body, said) ??
       askReply(body, said) ??
       streamReply(body, said) ?? {
         text: `收到：${said}\n\n这是假的远程机器上的假模型在回话，分成几段慢慢发，好让界面上看得到字是一点一点出来的。`,
