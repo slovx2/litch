@@ -2,7 +2,7 @@
 
 本项目将 Claude Code、Pi 等 harness 接入 Codex app-server 协议。仓库里还有建在它上面的桌面客户端 Litch（仓库也叫这个名字），见下面“客户端”一节。
 
-- 用中文写新增注释与维护文档。在当前分支工作，不创建 worktree。
+- 用中文写新增注释与维护文档。在当前分支工作。
 - `packages/claude`、`packages/pi`、`packages/dsh`（DeepSeek Harness，实验性）、`packages/opencode`（OpenCode，实验性，经用户安装的 `opencode serve` 的 v1 HTTP 接口与 `/global/event` 事件流）、`packages/acp`（通用 ACP 引擎，实验性，一份代码扮演 `gemini`、`qwen`、`acp` 三个标识，由命令行传 `CHA_ACP_AGENT` 指定，预设命令在 `packages/protocol/src/acp-agents.json`）是并列适配器；`packages/shared` 只承载共享能力。
 - Go 层认识哪些 harness 只写在 `cmd/codex-harness-adapter/harness_table.go` 的登记表里（入口、端口参数与默认端口、命令行变量、默认启用、装没装的检测都从它取）；加一个普通的 harness 只在表里加一行、再在 `harness-identity.json` 登记名字和徽标。建会话时带不带客户端工具（`dynamicTools`）看引擎在 `runtime/info` 的扩展里有没有报 `clientTools`。
 - `sshserver` 是通用 Go 库，不允许依赖 Tyrs Hand。`cmd/codex-harness-adapter` 是仅监听本机的 CLI。
