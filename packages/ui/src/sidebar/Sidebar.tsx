@@ -203,10 +203,10 @@ const SessionRow = memo(function SessionRow({
         },
       })
   }
-  // 会话树是设备层的事：设备连着、声明了就能派、能脱离，不用经过它所属的 harness
-  const tree = device?.connection === 'online' && device.sessionTree
-  if (tree) {
-    actions.push({ id: 'spawn', title: t('tree.spawnMenu') })
+  // 会话树是设备层的事：设备连着、声明了就能脱离，不用经过它所属的 harness；
+  // 派子会话要读父会话（带上下文时还要分叉它），它的 harness 得可用
+  if (device?.connection === 'online' && device.sessionTree) {
+    if (online) actions.push({ id: 'spawn', title: t('tree.spawnMenu') })
     if (summary.lineage)
       actions.push({
         id: 'detach',

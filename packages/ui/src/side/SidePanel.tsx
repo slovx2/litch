@@ -140,7 +140,7 @@ export function SidePanel({
               onClick={() => setSideTab(tab.id)}
             >
               <Icon name={tab.icon} small />
-              {t(tab.label)}
+              <span className="ell">{t(tab.label)}</span>
             </button>
           ))}
         </div>
