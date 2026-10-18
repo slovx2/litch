@@ -28,6 +28,7 @@ import { duration } from '../app/format.ts'
 import { useKey, useServices } from '../app/services.tsx'
 import { Dock, Requests } from '../composer/Dock.tsx'
 import type { MessageKey, Translator } from '../i18n/index.ts'
+import { TaskNote } from '../tasks/TaskNote.tsx'
 import { LineageBar } from '../tree/LineageBar.tsx'
 import { TreeCard } from '../tree/TreeCards.tsx'
 import { ActionsProvider } from './actions.tsx'
@@ -337,6 +338,9 @@ export function Transcript({ deviceId, sessionId, footer, onOpen }: TranscriptPr
                     <ForkedFrom deviceId={deviceId} sessionId={sessionId} onOpen={onOpen} />
                     <LineageBar deviceId={deviceId} sessionId={sessionId} onOpen={onOpen} />
                   </>
+                ) : null}
+                {turnIds && !failure ? (
+                  <TaskNote deviceId={deviceId} sessionId={sessionId} />
                 ) : null}
                 {failure ? (
                   <div className="errbox">

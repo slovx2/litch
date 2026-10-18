@@ -14,13 +14,14 @@ import {
 } from '@litch/core'
 import { type CSSProperties, memo, type ReactNode, useEffect, useRef, useState } from 'react'
 import type { Draft, Page, Selection } from '../app/App.tsx'
+import { requestTasks } from '../app/actions.ts'
 import { useT } from '../app/appearance.ts'
 import { useNow } from '../app/clock.ts'
 import { badgeOf, downHarness, downText, nameOf, wireStyle } from '../app/device.ts'
 import { reasonOf } from '../app/errors.ts'
 import { ago } from '../app/format.ts'
 import { useHoverCard } from '../app/HoverCard.tsx'
-import { Archive, Caret, Gear, Icon, Machine, Notice, Plus } from '../app/icons.tsx'
+import { Archive, Caret, Clock, Gear, Icon, Machine, Notice, Plus } from '../app/icons.tsx'
 import { useKey, useServices } from '../app/services.tsx'
 import { showToast } from '../app/toasts.tsx'
 import type { PlaceWish } from '../composer/new-place.ts'
@@ -68,6 +69,7 @@ const SessionRow = memo(function SessionRow({
   const summary = useKey<SessionSummary>(keys.summary(deviceId, sessionId))
   const device = useKey<DeviceView>(keys.device(deviceId))
   const workspaces = useKey<WorkspaceView[]>(keys.workspaces(deviceId)) ?? NO_WORKSPACES
+  const schedulable = useKey<boolean | null>(keys.tasksAvailable(deviceId)) === true
   const t = useT()
   const now = useNow()
   // 行上只有标题、徽标、时间；在哪个工作区、哪个目录、是不是置顶了这些在信息卡里
@@ -203,6 +205,8 @@ const SessionRow = memo(function SessionRow({
         },
       })
   }
+  // 为这个会话建定时任务：到点在这个会话里接着发。设备的服务要支持定时任务
+  if (online && schedulable) actions.push({ id: 'schedule', title: t('tasks.forSession') })
   // 会话树是设备层的事：设备连着、声明了就能脱离，不用经过它所属的 harness；
   // 派子会话要读父会话（带上下文时还要分叉它），它的 harness 得可用
   if (device?.connection === 'online' && device.sessionTree) {
@@ -238,7 +242,8 @@ const SessionRow = memo(function SessionRow({
     if (id === 'rename') {
       settled.current = false
       setNaming(t.text(summary.title))
-    } else if (id === 'spawn') setSpawning(true)
+    } else if (id === 'schedule') requestTasks({ view: 'new', deviceId, threadId: sessionId })
+    else if (id === 'spawn') setSpawning(true)
     else if (id === 'detach') {
       setFailure(null)
       channel.command('session.detach', { deviceId, sessionId }).catch(failed)
@@ -289,6 +294,7 @@ const SessionRow = memo(function SessionRow({
               <Icon name="folder" />
             </span>
           ) : null}
+          {summary.task ? <TaskMark kind={summary.task.kind} /> : null}
           {nested ? null : (
             <>
               <BrowserWants deviceId={deviceId} sessionId={sessionId} />
@@ -339,6 +345,17 @@ const SessionRow = memo(function SessionRow({
     </>
   )
 })
+
+/** 和定时任务有关的会话：标题后面一个小钟。是哪个任务、哪一次在会话顶上那一条里 */
+function TaskMark({ kind }: { kind: 'run' | 'target' }) {
+  const t = useT()
+  const said = t(kind === 'run' ? 'tasks.mark.run' : 'tasks.mark.target')
+  return (
+    <span className="task-mark" role="img" data-task-mark={kind} title={said} aria-label={said}>
+      <Icon name="clock" />
+    </span>
+  )
+}
 
 /**
  * 代理调 show 要给人看一个网页、用户当时没看着这个会话：标题后面一个小地球，打开这个会话就会显示那个网页
@@ -771,6 +788,32 @@ function CoreInfo() {
   )
 }
 
+/** 底下的“定时任务”：后面是各台设备上没看过的运行一共几条 */
+function TasksLink({ on, onOpen }: { on: boolean; onOpen(): void }) {
+  const unread = useKey<number>(keys.tasksUnread) ?? 0
+  const t = useT()
+  return (
+    <button
+      type="button"
+      className={on ? 'sb-link tasks on' : 'sb-link tasks'}
+      aria-current={on ? 'page' : undefined}
+      onClick={onOpen}
+    >
+      <Clock />
+      <span className="grow">{t('tasks.title')}</span>
+      {unread > 0 ? (
+        <span
+          className="sb-count"
+          data-unread={unread}
+          title={t('tasks.unread', { count: unread })}
+        >
+          {unread}
+        </span>
+      ) : null}
+    </button>
+  )
+}
+
 interface SidebarProps {
   selection: Selection | null
   draft: Draft | null
@@ -815,6 +858,7 @@ export function Sidebar(props: SidebarProps) {
         ))}
       </div>
       <div className="sb-foot">
+        <TasksLink on={page === 'tasks'} onOpen={() => onPage('tasks')} />
         <button
           type="button"
           className={page === 'devices' ? 'sb-link devices on' : 'sb-link devices'}

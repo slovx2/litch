@@ -235,6 +235,8 @@ export function projectSummary(
     unread: false,
     updatedAt: toMs(thread.updatedAt) ?? 0,
     cwd: thread.cwd,
+    // 和定时任务的关系由设备那一层按任务模块补上（device.mts 的 summaryOf）
+    task: null,
     lineage: projectLineage(thread),
   }
 }

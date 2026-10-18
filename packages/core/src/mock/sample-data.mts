@@ -226,6 +226,7 @@ const summaries = (
     pinned: false,
     section: null,
     placedAt: null,
+    task: null,
     lineage: null,
     ...extra,
   }))

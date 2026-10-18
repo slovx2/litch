@@ -163,6 +163,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
       pinned: false,
       section: null,
       placedAt: null,
+      task: null,
       lineage: {
         parentId: parent.sessionId,
         kind: options.kind,

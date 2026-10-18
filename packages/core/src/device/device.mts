@@ -102,6 +102,7 @@ import type { MachineFacts } from './machine/types.mjs'
 import { createManagement } from './manage.mjs'
 import { createOrganizer, looseDirectories, type Organizer } from './organize.mjs'
 import type { SnapshotStore } from './snapshot.mjs'
+import { createTasks, type Tasks } from './tasks.mjs'
 import type { TerminalNotesStore } from './terminal-launch.mjs'
 import { createTerminals, type Terminals } from './terminals.mjs'
 import {
@@ -265,6 +266,8 @@ export interface Device {
   readonly files: Files
   /** 这台设备上的差异：没提交的改动、暂存和还原（diffs.mts） */
   readonly diffs: Diffs
+  /** 这台设备上的定时任务：订阅、建、改、删、立即运行、运行记录（tasks.mts） */
+  readonly tasks: Tasks
   /** litch_machine 把这台设备当作一台能操作的机器时用的：它的连接 */
   readonly machineLink: MachineDeviceLink
   /** 现查这台设备的情况（主机名、系统、用户、主目录、shell），缓存一会儿。没连着时抛错 */
@@ -367,6 +370,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   let manageable = false
   /** 对面有没有可重连的终端（deviceProcesses 扩展）。认出来之前、对面不是设备服务时都是没有 */
   let reattachable = false
+  /** 对面支不支持定时任务（deviceTasks 扩展）。认出来之前、对面不是设备服务时都是不支持 */
+  let schedulable = false
   /**
    * 对面有没有会话树（sessionTree 扩展：Litch 子会话、提案、litch_sessions）。认出来之前、对面不是设备服务时都是没有；
    * 断开之后留着断开前知道的
@@ -501,6 +506,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         workspaceId: resolveWorkspace(thread, workspaces, pathTwin(platform)),
       }),
       unread: unread.has(thread.id),
+      task: tasks.mark(thread.id),
     }
     if (!asking.has(thread.id)) return summary
     return { ...summary, status: 'waiting', waitingFor: 'approval' }
@@ -1105,6 +1111,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         // 设置接口有没有，看它声明的扩展，不看版本号
         manageable = info.device.extensions?.includes(EXTENSION.deviceSettings) === true
         reattachable = info.device.extensions?.includes(EXTENSION.deviceProcesses) === true
+        schedulable = info.device.extensions?.includes(EXTENSION.deviceTasks) === true
         sessionTree = info.device.extensions?.includes(EXTENSION.sessionTree) === true
         // 在跑的是哪一份服务：握手时声明过才给，旧版的设备服务不报
         service = projectService(info.device.service)
@@ -1121,6 +1128,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         harnesses = [harnessFromRuntimeInfo(info)]
         manageable = false
         reattachable = false
+        schedulable = false
         sessionTree = false
         service = null
         home = null
@@ -1138,6 +1146,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       harnesses = [codexHarness(state.info)]
       manageable = false
       reattachable = false
+      schedulable = false
       sessionTree = false
       service = null
       home = null
@@ -1164,6 +1173,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     terminals.resync()
     files.resync()
     diffs.resync()
+    tasks.resync()
     await reconcile()
   }
 
@@ -1185,6 +1195,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       if (dropped) files.offline()
       if (dropped) diffs.offline()
       manage.offline()
+      tasks.offline()
     }
     switch (state.phase) {
       case 'idle':
@@ -1236,6 +1247,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         manage.changed(params as DeviceSettingsChangedNotification)
         return
       }
+      // 定时任务：一样和会话目录是两回事，任务模块自己对账、自己攒
+      if (tasks.notification(method, params)) return
       // 差异面板在设备上跑的命令结束了、它盯着的路径变了：先认它自己起的那些，剩下的进程通知才是终端的
       if (diffs.notification(method, params)) return
       // litch_machine 起的进程（执行器的、现查设备情况的）也不是终端的
@@ -1292,11 +1305,13 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       if (declared ? !declared.extensions.includes(EXTENSION.clientTools) : harness === 'dsh') {
         return null
       }
-      // litch_machine 的说明按会话生成：开头写这个会话在哪台、桌面端是哪台；litch_computer 的说明按桌面的平台挑
+      // litch_machine 的说明按会话生成：开头写这个会话在哪台、桌面端是哪台；litch_computer 的说明按桌面的平台挑。
+      // litch_tasks、litch_sessions 的执行方是设备服务自己：设备列了 deviceTasks、声明了会话树就各自带上，
+      // 和这台桌面能执行什么无关（握手时不声明它们，toolNamespaces 里也没有）
       return clientToolSpecs(
         [
           ...toolNamespaces(),
-          // litch_sessions 的执行方是设备进程：设备声明了会话树就带，不看这台桌面能执行什么
+          ...(schedulable ? [CLIENT_TOOL_NAMESPACE.tasks] : []),
           ...(sessionTree ? [CLIENT_TOOL_NAMESPACE.sessions] : []),
         ],
         {
@@ -1530,6 +1545,23 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     now: () => options.clock.now(),
   })
 
+  const tasks = createTasks({
+    deviceId: config.id,
+    online: () => online,
+    supported: () => schedulable,
+    request: (method, params, requestOptions) => link.request(method, params, requestOptions),
+    fail: (error) => fail(error),
+    marksChanged(threadIds) {
+      const ops: SidebarOp[] = []
+      for (const threadId of threadIds) {
+        const thread = threads.get(threadId)
+        if (thread) ops.push({ op: 'session.upsert', session: summaryOf(thread) })
+      }
+      if (ops.length > 0) hooks.sidebarOps(ops)
+    },
+    log,
+  })
+
   const manage = createManagement({
     deviceId: config.id,
     online: () => online,
@@ -1718,7 +1750,12 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       hooks.device(view())
     },
     refresh: () => (online ? reconcile() : Promise.resolve()),
-    openSession: (sessionId, sink) => live.open(sessionId, sink),
+    openSession(sessionId, sink) {
+      const close = live.open(sessionId, sink)
+      // 打开了任务跑出来的会话：里面跑完的运行算看过了
+      tasks.seen(sessionId)
+      return close
+    },
     async create(cwd, message, settings, harness, workspaceId) {
       // 聚合面上新建会话必须说建在哪个 harness 上；别的对面没有这个参数，不带
       const target = mode === 'full' ? pickHarness(harness) : null
@@ -1837,6 +1874,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     terminals,
     files,
     diffs,
+    tasks,
     machineLink,
     machineFacts,
     stopMachine: (response) => toolCalls.stopMachine(response),

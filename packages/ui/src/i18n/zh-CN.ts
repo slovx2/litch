@@ -1,8 +1,11 @@
 // 中文文案。这一份是“有哪些句子”的依据：键的集合以这里为准，别的语言必须一句不少。
 // 前半是界面自己的话，后半是核心要说的话（键和 packages/core/src/phrase.mts 一一对应）。
 import type { Entry } from './types.ts'
+import { zhTasks } from './zh-CN-tasks.ts'
 
 export const zhCN = {
+  // 定时任务的文案单独放一个文件（zh-CN-tasks.ts）
+  ...zhTasks,
   'title.location': '当前位置',
   'workspace.none': '无项目',
 
@@ -1477,6 +1480,10 @@ export const zhCN = {
   'session.agentReadOnly': '这是引擎自己派出的子代理，只能看，不能直接给它发消息。',
   'session.archived': '这个对话已经归档，只能看。恢复之后才能接着聊。',
   'session.queueFailed': '排着队的消息没发出去：{message}。再发一条时会重试。',
+  'tasks.unsupported': '这台设备的服务版本不支持定时任务。升级设备上的适配器之后就能用。',
+  'tasks.gone': '这个任务已经不在了（可能在别处删掉了）。',
+  'tasks.conflict': '这个任务刚在别处改过，已经换成最新的样子。看一眼再保存。',
+  'tasks.limit': '这台设备上的定时任务已经到了上限（200 个），先删掉一些再建。',
   'tool.failed': '工具返回了失败',
   'collab.source': '子代理',
   'collab.spawnAgent': '启动子代理',

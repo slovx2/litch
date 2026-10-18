@@ -101,6 +101,11 @@ export type PhraseKey =
   | 'diff.notWritable'
   | 'diff.conflicted'
   | 'diff.moved'
+  // 定时任务：这台设备的服务不支持、任务没了、别处先改过了、任务数到了上限
+  | 'tasks.unsupported'
+  | 'tasks.gone'
+  | 'tasks.conflict'
+  | 'tasks.limit'
   // 工具调用
   | 'tool.failed'
   | 'collab.source'

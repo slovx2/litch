@@ -7,6 +7,7 @@ import { BrowserSection } from './BrowserSection.tsx'
 import { ComputerSection } from './ComputerSection.tsx'
 import { computerBridge, computerIntro } from './computer-bridge.ts'
 import { LangSection, LookSection } from './Look.tsx'
+import { NotifySection } from './NotifySection.tsx'
 import { ShortcutsSection } from './Shortcuts.tsx'
 
 /**
@@ -19,6 +20,7 @@ export const SETTINGS_SECTIONS = [
   'devices',
   'browser',
   'computer',
+  'notify',
   'keys',
   'about',
 ] as const
@@ -37,6 +39,7 @@ const TITLES: Record<SettingsSection, MessageKey> = {
   devices: 'settings.group.devices',
   browser: 'settings.group.browser',
   computer: 'settings.group.computer',
+  notify: 'settings.group.notify',
   keys: 'settings.group.keys',
   about: 'settings.group.about',
 }
@@ -46,6 +49,7 @@ const INTROS: Record<SettingsSection, MessageKey> = {
   devices: 'settings.devices.intro',
   browser: 'settings.browser.intro',
   computer: 'settings.computer.intro',
+  notify: 'settings.notify.intro',
   keys: 'settings.keys.intro',
   about: 'settings.about.intro',
 }
@@ -132,6 +136,8 @@ export function SettingsPage({ section: asked, onSection, onClose, onDevices }: 
             <BrowserSection />
           ) : section === 'computer' ? (
             <ComputerSection onDevices={onDevices} />
+          ) : section === 'notify' ? (
+            <NotifySection />
           ) : section === 'keys' ? (
             <ShortcutsSection />
           ) : (

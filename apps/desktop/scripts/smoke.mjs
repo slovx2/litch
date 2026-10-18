@@ -6,6 +6,7 @@
 //   npm run check:full     完整模式（一台设备上多个 harness）：先对着模拟核心，再对着隔离的多 harness 设备
 //   npm run check:manage   设备与 harness 管理：先对着模拟核心，再对着带设置接口的隔离设备
 //   npm run check:sidebar  侧栏自己（对着模拟核心）：收起的项目和设备那一行上的汇总。check:full 里也有它
+//   npm run check:tasks    定时任务（对着模拟核心）：列表、新建、立即运行、去会话、会话顶上那一条
 //   npm run check:tree     会话树（对着模拟核心）：子会话的嵌套、派出与提案、注入的提示条、子代理的侧面板
 //   加 --packed            不用开发时的外壳，改成起装好的应用（先 npm run pack），验的是打包出来的那一份
 import { execFile, execFileSync, spawn } from 'node:child_process'
@@ -24,6 +25,7 @@ const repo = fileURLToPath(new URL('../../..', import.meta.url))
 // --scroll：对话区“不飘”的验收（对着模拟核心）；--scroll --entry：真实会话的滚动验收
 // --compose：输入区和请求卡片的验收（对着模拟核心）；--compose --entry：对着真实入口发消息
 // --sidebar：侧栏的验收（对着模拟核心）
+// --tasks：定时任务的验收（对着模拟核心）
 // --tree：会话树的验收（对着模拟核心，src/probe-tree.mts）
 // --remote：远程设备的验收，对着假的远程机器（回环上的用户态 sshd，后面接隔离入口）
 const usePacked = process.argv.includes('--packed')
@@ -50,7 +52,9 @@ const probe = useRemote
     ? 'full'
     : useManage
       ? 'manage'
-      : ['scroll', 'compose', 'sidebar', 'tree'].find((name) => process.argv.includes(`--${name}`))
+      : ['scroll', 'compose', 'sidebar', 'tasks', 'tree'].find((name) =>
+          process.argv.includes(`--${name}`),
+        )
 const mode = useRemote
   ? probe
   : useFull || useManage

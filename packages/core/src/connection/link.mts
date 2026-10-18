@@ -195,6 +195,8 @@ export function createLink(options: LinkOptions): Link {
                 // planConfirmation：声明了，Claude Code 和 Pi 的引擎在交计划时自己在回合里问要不要执行，
                 // 界面不再问（plan-ask.ts）；不声明的话它们和原生 codex 一样回合带着计划结束，由客户端来问
                 EXTENSION.planConfirmation,
+                // deviceTasks：声明了才收得到定时任务和运行的变化通知（litch/task/changed、litch/task/run/changed）
+                EXTENSION.deviceTasks,
                 // sessionTree：声明了，会话对象上才有 Litch 子会话的 litchLineage，才收得到父子关系、提案变了的通知
                 EXTENSION.sessionTree,
                 // clientTools：litch_ 开头的命名空间的工具调用交给声明了的连接执行（内置浏览器、Computer Use）

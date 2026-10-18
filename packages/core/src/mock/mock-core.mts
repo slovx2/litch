@@ -45,6 +45,7 @@ import { createMockFiles } from './mock-files.mjs'
 import { createMockMachine } from './mock-machine.mjs'
 import { createMockManagement } from './mock-manage.mjs'
 import { createMockService } from './mock-service.mjs'
+import { createMockTasks } from './mock-tasks.mjs'
 import { createMockTerminals } from './mock-terminals.mjs'
 import { createMockTree } from './mock-tree.mjs'
 import { type ClientToolDemo, clientAskRequest, clientToolCall } from './sample-client-tools.mjs'
@@ -72,6 +73,7 @@ import {
   sampleMachineAccess,
 } from './sample-machine.mjs'
 import { sampleRemoteService } from './sample-service.mjs'
+import { sampleTaskAnswer } from './sample-tasks.mjs'
 import { SAMPLE_TEXT, type SampleLang } from './sample-text.mjs'
 import { dumpCall, shotsCall } from './sample-tools.mjs'
 
@@ -1020,6 +1022,123 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     },
   })
 
+  // ---------- 定时任务（mock-tasks.mts） ----------
+  const tasks = createMockTasks({
+    clock,
+    stepMs: chunkMs,
+    lang,
+    devices: () => app.devices,
+    device: (deviceId) => app.devices.find((entry) => entry.id === deviceId),
+    hasSession: (deviceId, sessionId) =>
+      sidebars.get(deviceId)?.sessions.some((session) => session.id === sessionId) ?? false,
+    mark: (deviceId, sessionId, mark) => updateSummary(deviceId, sessionId, { task: mark }),
+    spawn(deviceId, init) {
+      const sidebar = sidebars.get(deviceId)
+      if (!sidebar) throw new ChannelError('notFound', `没有这台设备：${deviceId}`)
+      const summary: SessionSummary = {
+        id: `new${++seq}`,
+        workspaceId: init.workspaceId,
+        harness: init.harness,
+        title: init.title,
+        status: 'running',
+        waitingFor: null,
+        unread: false,
+        updatedAt: clock.now(),
+        cwd: init.cwd,
+        pinned: false,
+        section: null,
+        placedAt: null,
+        task: null,
+        lineage: null,
+      }
+      sidebar.sessions.push(summary)
+      emit(`sidebar:${deviceId}`, [{ op: 'session.upsert', session: summary }])
+      const view: SessionView = {
+        deviceId,
+        sessionId: summary.id,
+        title: summary.title,
+        harness: summary.harness,
+        cwd: summary.cwd,
+        live: true,
+        note: null,
+        turns: [],
+        items: {},
+        requests: [],
+        queued: [],
+        settings: sampleSettings(harnessOn(deviceId, init.harness)),
+        usage: null,
+        can: canOf(deviceId, summary.harness),
+        forkedFrom: null,
+        proposals: [],
+      }
+      sessions.set(sessionKey(view), view)
+      return summary.id
+    },
+    say(deviceId, sessionId, prompt, answer) {
+      const view = loadSession(deviceId, sessionId)
+      const turnId = `m${++seq}`
+      const userId = `${turnId}-u`
+      const itemIds = answer === null ? [userId] : [userId, `${turnId}-a`]
+      applySessionOps(view, [
+        {
+          op: 'turn.add',
+          turn: {
+            id: turnId,
+            status: 'running',
+            itemIds: [],
+            startedAt: clock.now(),
+            durationMs: null,
+            error: null,
+          },
+        },
+        {
+          op: 'item.add',
+          turnId,
+          item: localUserMessage(userId, outgoing(prompt), mentionsIn(view)),
+        },
+        ...(answer === null
+          ? []
+          : [
+              {
+                op: 'item.add',
+                turnId,
+                item: {
+                  id: itemIds[1] ?? '',
+                  kind: 'agentMessage',
+                  text: answer,
+                  phase: 'final',
+                  status: 'completed',
+                },
+              } satisfies SessionOp,
+            ]),
+        {
+          op: 'turn.status',
+          turnId,
+          status: answer === null ? 'failed' : 'completed',
+          durationMs: 3000,
+          ...(answer === null ? { error: sampleTaskAnswer(lang).failed } : {}),
+        },
+      ])
+      // 没人开着它：和真的一样标成未读
+      const watched = (sinks.get(sessionKey(view))?.size ?? 0) > 0
+      updateSummary(deviceId, sessionId, {
+        status: 'idle',
+        waitingFor: null,
+        updatedAt: clock.now(),
+        ...(watched ? {} : { unread: true }),
+      })
+    },
+  })
+  // 一开始就跟定时任务有关的示例会话：侧栏那几行带着记号
+  for (const [deviceId, view] of sidebars) {
+    const marks = tasks.marks(deviceId)
+    if (marks.size === 0) continue
+    view.sessions = view.sessions.map((session) => {
+      const mark = marks.get(session.id)
+      return mark ? { ...session, task: mark } : session
+    })
+  }
+
   // ---------- 设备服务是哪一份、换没换版本 ----------
   // ---------- 远程设备操作这台电脑（08 号） ----------
   const machine = createMockMachine({
@@ -1431,6 +1550,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       if (organized !== undefined) return organized
       const managed = manage.command(name, params)
       if (managed !== undefined) return managed
+      const scheduled = tasks.command(name, params)
+      if (scheduled !== undefined) return scheduled
       const typed = terminals.command(name, params)
       if (typed !== undefined) return typed
       const browsed = files.command(name, params, signal)
@@ -1597,6 +1718,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
           pinned: false,
           section: null,
           placedAt: null,
+          task: null,
           lineage: null,
         }
         sidebar.sessions.push(summary)
@@ -1945,6 +2067,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       if (topic.kind === 'diff') return diffs.subscribe(topic, sink)
       // 08 号：远程会话在这台电脑上的动静（mock-machine.mts）
       if (topic.kind === 'machine') return machine.subscribe(sink)
+      // 定时任务（mock-tasks.mts）
+      if (topic.kind === 'tasks') return tasks.subscribe(topic.deviceId, sink)
       const key = topicKey(topic)
       if (topic.kind === 'app') {
         sink.snapshot(app)
@@ -1955,6 +2079,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       } else {
         const view = loadSession(topic.deviceId, topic.sessionId)
         sink.snapshot(view)
+        // 打开了任务跑出来的会话：里面跑完的运行算看过了
+        tasks.seen(topic.deviceId, topic.sessionId)
         if (
           topic.deviceId === STREAM_SESSION.deviceId &&
           topic.sessionId === STREAM_SESSION.sessionId
