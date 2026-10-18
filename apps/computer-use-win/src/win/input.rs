@@ -7,7 +7,7 @@ use crate::geometry::{absolute, Rect};
 use crate::keys::{KeyCombo, VK_CONTROL};
 use crate::text::{self, Keystroke};
 use crate::wire::RpcResult;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use windows::Win32::UI::Input::KeyboardAndMouse::*;
 use windows::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN};
 
@@ -22,8 +22,12 @@ const BATCH: usize = 200;
 const TYPE_GAP_MS: u64 = 5;
 /// 'V' 的虚拟键码（Ctrl+V 粘贴用）
 const VK_V: u16 = 0x56;
-/// 发完 Ctrl+V 后等目标读走剪贴板再恢复原内容的时间
-const PASTE_SETTLE_MS: u64 = 200;
+/// 没有可轮询的元素时，发完 Ctrl+V 固定等多久再恢复剪贴板（目标异步读剪贴板，等太短会把要粘的内容抢回去）
+const PASTE_SETTLE_MS: u64 = 700;
+/// 有可轮询的元素时，最多等多久确认粘贴已落下
+const PASTE_CONFIRM_MAX_MS: u64 = 1000;
+/// 轮询元素值变化的间隔
+const PASTE_POLL_MS: u64 = 50;
 
 /// 虚拟桌面（所有显示器合起来）的矩形，物理像素
 pub fn desktop() -> Rect {
@@ -127,11 +131,12 @@ pub fn drag(from: (i32, i32), to: (i32, i32)) -> RpcResult<()> {
 
 /// 输入文字：普通窗口走剪贴板 + Ctrl+V（记事本这类 TSF 控件逐字发会吞字）；控制台类窗口的粘贴快捷键
 /// 不统一（旧控制台要右键、各家终端不一），所以照旧逐字发。粘贴不可用（打不开剪贴板、写回核对不一致）时退回逐字。
-pub fn enter_text(value: &str, window_class: &str) {
+/// `confirmed`：给了就用它判粘贴有没有落下（轮询元素值变化），用来决定何时恢复剪贴板；没给就固定等。
+pub fn enter_text(value: &str, window_class: &str, confirmed: Option<&dyn Fn() -> bool>) {
     if value.is_empty() {
         return;
     }
-    if is_console_class(window_class) || !paste_text(value) {
+    if is_console_class(window_class) || !paste_text(value, confirmed) {
         type_per_char(value);
     }
 }
@@ -147,9 +152,10 @@ fn is_console_class(class: &str) -> bool {
     )
 }
 
-/// 剪贴板 + Ctrl+V：存原内容 → 写入 → 读回核对 → 粘贴 → 等一下恢复原内容。成功回 true；
+/// 剪贴板 + Ctrl+V：存原内容 → 写入 → 读回核对 → 粘贴 → 等粘贴落下 → 恢复原内容。成功回 true；
 /// 打不开剪贴板或写回核对不一致时回 false（恢复原内容后由调用方退回逐字）。
-fn paste_text(value: &str) -> bool {
+/// 注意：粘贴期间剪贴板被临时占用（放的是要打的文字），落下后才会恢复成用户原来的内容。
+fn paste_text(value: &str, confirmed: Option<&dyn Fn() -> bool>) -> bool {
     let saved = clipboard::get_text();
     if !clipboard::set_text(value) {
         return false;
@@ -161,11 +167,28 @@ fn paste_text(value: &str) -> bool {
         return false;
     }
     press_key(&KeyCombo { modifiers: vec![VK_CONTROL], key: VK_V, extended: false }, 1);
-    std::thread::sleep(Duration::from_millis(PASTE_SETTLE_MS));
+    wait_until_pasted(confirmed);
     if let Some(prev) = saved {
         clipboard::set_text(&prev);
     }
     true
+}
+
+/// 等粘贴生效再恢复剪贴板：给了确认回调就轮询到它为真（最多 PASTE_CONFIRM_MAX_MS，目标异步读剪贴板，
+/// 恢复早了会把要粘的内容抢回去）；没给就固定等 PASTE_SETTLE_MS。
+fn wait_until_pasted(confirmed: Option<&dyn Fn() -> bool>) {
+    match confirmed {
+        Some(check) => {
+            let deadline = Instant::now() + Duration::from_millis(PASTE_CONFIRM_MAX_MS);
+            loop {
+                std::thread::sleep(Duration::from_millis(PASTE_POLL_MS));
+                if check() || Instant::now() >= deadline {
+                    break;
+                }
+            }
+        }
+        None => std::thread::sleep(Duration::from_millis(PASTE_SETTLE_MS)),
+    }
 }
 
 /// 一次一个键击逐字发：每个字符（或回车、Tab）单独一次 SendInput、中间留间隔。代理对的两个码元同一次发。

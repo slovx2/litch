@@ -351,6 +351,19 @@ pub fn set_focus(el: &IUIAutomationElement) -> RpcResult<()> {
     unsafe { el.SetFocus() }.map_err(|e| sys("focus the element", e))
 }
 
+/// 实时读元素的文本值（粘贴后确认“值变了没有”用）：优先 ValuePattern.CurrentValue，退回 CurrentName。
+/// 只为前后对比，读不到就回 None（对比不出变化，调用方会等满超时再恢复剪贴板）。
+pub fn snapshot_value(el: &IUIAutomationElement) -> Option<String> {
+    unsafe {
+        if let Ok(p) = el.GetCurrentPatternAs::<IUIAutomationValuePattern>(UIA_ValuePatternId) {
+            if let Some(v) = bstr(p.CurrentValue()) {
+                return Some(v);
+            }
+        }
+        bstr(el.CurrentName())
+    }
+}
+
 /// 用 UIA 模式“激活”元素：Invoke → 默认动作 → 选择 → 开合 → 勾选。都没有回 false，让调用方改真实点击
 pub fn activate(el: &IUIAutomationElement) -> RpcResult<bool> {
     unsafe {
