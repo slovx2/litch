@@ -418,7 +418,10 @@ try {
         const env = environmentOf(pid)
         assert.deepEqual(
           Object.keys(env).filter(
-            (name) => name.startsWith('LITCH_') || name === 'ELECTRON_RUN_AS_NODE',
+            // LITCH_DEVICE_SOCKET 是适配器有意交给运行时的（harness 跑的 litch-machine 命令靠它找设备服务）
+            (name) =>
+              (name.startsWith('LITCH_') && name !== 'LITCH_DEVICE_SOCKET') ||
+              name === 'ELECTRON_RUN_AS_NODE',
           ),
           [],
           `我们自己的变量漏给了进程 ${pid}`,
