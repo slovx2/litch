@@ -14,6 +14,7 @@ import { readlinkSync, realpathSync, rmSync, statSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { delimiter, dirname, join, resolve } from 'node:path'
 import { machineResponses } from './client-fixture-machine.mjs'
+import { sessionsResponses } from './client-fixture-sessions.mjs'
 
 const pause = (ms) => new Promise((done) => setTimeout(done, ms))
 
@@ -165,7 +166,8 @@ export async function serveResponses(harness, path, raw, res, { serial, pace = 1
   }
   const body = parse(raw)
   // 操作本机（litch_machine 和 litch-machine 命令）的那几句，见 client-fixture-machine.mjs
-  const machine = machineResponses(body, userText(body))
+  // 会话树（litch_sessions 和设备注入的唤醒）的那几句，见 client-fixture-sessions.mjs
+  const machine = sessionsResponses(body, userText(body)) ?? machineResponses(body, userText(body))
   if (machine) {
     await sendResponse(res, machine, serial)
     return namespacesOf(body)

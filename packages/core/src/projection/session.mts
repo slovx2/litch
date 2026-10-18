@@ -42,10 +42,17 @@ export const ALL_ABLE: SessionAbilities = {
 export const toMs = (value: number | null | undefined): number | null =>
   typeof value !== 'number' ? null : value > 1e11 ? value : value * 1000
 
-/** 会话的标题：起过名字就用名字，否则取开头那句话的第一行 */
-export function threadTitle(thread: Pick<Thread, 'name' | 'preview'>): Text {
+/**
+ * 会话的标题：起过名字就用名字；Litch 派出的子会话用派出时给的标题（它开头那句话是派出说明，
+ * dsh、OpenCode 在自己起好标题之前不留客户端设的名字）；否则取开头那句话的第一行
+ */
+export function threadTitle(
+  thread: Pick<Thread, 'name' | 'preview'> & SessionTreeThreadFields,
+): Text {
   const named = thread.name?.trim()
   if (named) return named
+  const given = lineageOf(thread.litchLineage)?.title.trim()
+  if (given) return given
   const line = (thread.preview ?? '')
     .split('\n')
     .map((part) => part.trim())

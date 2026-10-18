@@ -46,6 +46,15 @@ test('投影：开头是 <litch-session-event> 的用户消息拆成事件和正
     notes: [{ threadId: 'c1', title: '查依赖', status: 'completed', excerpt: '都不用升' }],
   })
 
+  // 回答里的换行在人读的那几行里压成一行，JSON 里留原文
+  const multi = formatSessionEvent({
+    kind: 'wake',
+    notes: [{ threadId: 'c2', title: '跑测试', status: 'failed', excerpt: '两个没过：\n- a\n- b' }],
+  })
+  assert.ok(multi.includes('- "跑测试" (c2) failed: 两个没过： - a - b\n'))
+  const back = projectItem(userText('u3', multi)) as UserMessageItem
+  assert.equal(back.event?.notes[0]?.excerpt, '两个没过：\n- a\n- b')
+
   const broken = projectItem(userText('u2', '<litch-session-event>{坏的</litch-session-event>你好'))
   assert.equal((broken as UserMessageItem).event, undefined)
   assert.ok((broken as UserMessageItem).text.includes('你好'))

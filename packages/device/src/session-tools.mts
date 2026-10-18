@@ -82,14 +82,15 @@ function summary(
   caller: string,
 ): SessionSummary {
   const id = String(thread.id)
+  const lineage = tree.store.parentOf(id)
   return {
     thread_id: id,
-    title: threadTitle(thread),
+    title: threadTitle(thread, lineage?.title),
     harness,
     cwd: typeof thread.cwd === 'string' ? thread.cwd : '',
     status: statusWord(tree, thread),
     updated_at: Number(thread.updatedAt) || 0,
-    parent_thread_id: tree.store.parentOf(id)?.parentThreadId ?? null,
+    parent_thread_id: lineage?.parentThreadId ?? null,
     mine: tree.store.descends(id, caller),
   }
 }

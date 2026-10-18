@@ -191,10 +191,11 @@ export function formatSessionEvent(event: SessionEvent): string {
     event.kind === 'wake'
       ? 'Sub-sessions you started have finished their turns. This message is from Litch, not typed by the user.'
       : 'Updates from sub-sessions you started (from Litch, not typed by the user).'
-  const lines = event.notes.map(
-    (note) =>
-      `- "${note.title}" (${note.threadId}) ${note.status}${note.excerpt ? `: ${note.excerpt}` : ''}`,
-  )
+  // 回答里的换行会把一条拆成几行、跟下一条混在一起，人读的这几行压成一行；原文在后面的 JSON 里
+  const lines = event.notes.map((note) => {
+    const excerpt = note.excerpt.replace(/\s+/g, ' ').trim()
+    return `- "${note.title}" (${note.threadId}) ${note.status}${excerpt ? `: ${excerpt}` : ''}`
+  })
   const tail =
     event.kind === 'wake'
       ? 'If the user’s request has steps these results unblock, continue; otherwise tell the user the outcome in one or two lines. Use litch_sessions.read for details. Do not answer requests that are waiting for the user inside a sub-session.'

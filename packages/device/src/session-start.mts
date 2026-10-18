@@ -86,10 +86,14 @@ export function tightened(
   return out
 }
 
-/** 会话给人看的名字：起过名的用名字，没有用预览（第一句话） */
-export function threadTitle(thread: Record<string, unknown> | null): string {
+/**
+ * 会话给人看的名字：起过名的用名字；没有的话，Litch 子会话用派出时给的标题 given（它的第一句话是派出说明），
+ * 别的用预览（第一句话）
+ */
+export function threadTitle(thread: Record<string, unknown> | null, given?: string): string {
   if (!thread) return ''
   if (typeof thread.name === 'string' && thread.name.trim()) return thread.name.trim()
+  if (given?.trim()) return given.trim()
   return typeof thread.preview === 'string' ? thread.preview.trim().slice(0, 80) : ''
 }
 
@@ -186,6 +190,12 @@ export async function startChild(
   if (!thread || typeof thread.id !== 'string') throw new Error(`${harness} 没有给回新会话`)
   const threadId = thread.id
   tree.noteSubscribed(harness, threadId)
+  // 不起名的话引擎拿第一条消息（派出说明）当标题，侧栏里一排子会话都是同一句开头
+  await link.request('thread/name/set', { threadId, name: title }).catch((error: unknown) => {
+    tree.host.log(
+      `子会话 ${threadId} 起名失败：${error instanceof Error ? error.message : String(error)}`,
+    )
+  })
   const { index, workspaces, store } = tree.host
   index.see({ id: threadId, updatedAt: thread.updatedAt, ephemeral: thread.ephemeral }, harness)
   const projectId = spec.projectId || workspaces.projectOf(parentId)
@@ -206,7 +216,11 @@ export async function startChild(
   tree.lineageChanged(threadId)
   const text = briefing(
     spec.kind,
-    { id: parentId, harness: parentHarness, title: threadTitle(parentThread) },
+    {
+      id: parentId,
+      harness: parentHarness,
+      title: threadTitle(parentThread, store.parentOf(parentId)?.title),
+    },
     title,
     spec.prompt,
   )
