@@ -5,11 +5,15 @@
 // 用户的话里带“操作应用”时：应用名取“应用：”后面那一段（没写就是 TextEdit），要打的字取“打字：”后面那一段
 // （没写就不打）。get_app_state → type_text（有字才打）→ get_app_state → 回话“操作结果：”加上这几次的结果。
 // 工具不在（会话不是 Litch 建的、这台桌面不是 macOS）时照实说一句。
+//
+// 话里带“脚本：”加一段 JSON 数组（[{"tool":"list_apps","args":{}}, …]）时，照顺序逐个调 litch_computer 的这些工具，
+// 不管中间失败与否，全部调完后回话“操作结果：”加上每次的结果。Windows 上的真机验收用它点名要验的工具。
 import { isUserTurn, piToolName } from './client-fixture-echo.mjs'
 
 export const COMPUTER_TRIGGER = /操作应用|use the app/i
 export const COMPUTER_HEARD = '操作结果：'
 export const COMPUTER_MISSING = '没有 litch_computer 这个工具'
+const SCRIPT_TRIGGER = /脚本：\s*(\[[\s\S]*\])/
 
 const NAMES = {
   state: piToolName('litch_computer', 'get_app_state'),
@@ -23,6 +27,8 @@ const textOf = (content) =>
 
 /** 这次请求要不要走“操作应用”这条路。要的话返回假模型该给的回复，不要就是 null */
 export function computerReply(body, lastUserText) {
+  const script = lastUserText.match(SCRIPT_TRIGGER)
+  if (script) return scriptReply(body, JSON.parse(script[1]))
   if (!COMPUTER_TRIGGER.test(lastUserText)) return null
   const messages = body.messages ?? []
   const userAt = messages.findLastIndex(isUserTurn)
@@ -50,5 +56,24 @@ export function computerReply(body, lastUserText) {
   if (nameOf(mine.at(-1)) === NAMES.type) {
     return { tools: [{ name: NAMES.state, args: { app } }] }
   }
+  return { text: `${COMPUTER_HEARD}\n${results.join('\n---\n')}`, pace: 20 }
+}
+
+/** “脚本：”那一路：已经调了几个就接着调下一个，调完了把结果全说出来 */
+function scriptReply(body, steps) {
+  const messages = body.messages ?? []
+  const since = messages.slice(messages.findLastIndex(isUserTurn) + 1)
+  const done = since.flatMap((message) => message.tool_calls ?? []).length
+  const next = steps[done]
+  if (next) {
+    const name = piToolName('litch_computer', next.tool)
+    if (!(body.tools ?? []).some((tool) => nameOf(tool) === name)) {
+      return { text: `${COMPUTER_MISSING}（${next.tool}）`, pace: 50 }
+    }
+    return { tools: [{ name, args: next.args ?? {} }] }
+  }
+  const results = since
+    .filter((message) => message.role === 'tool')
+    .map((message, at) => `[${steps[at]?.tool}] ${textOf(message.content)}`)
   return { text: `${COMPUTER_HEARD}\n${results.join('\n---\n')}`, pace: 20 }
 }
