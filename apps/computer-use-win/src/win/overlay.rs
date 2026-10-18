@@ -142,46 +142,60 @@ fn put(buf: &mut [u8], w: i32, x: i32, y: i32, b: u8, g: u8, r: u8) {
 }
 
 fn draw(hwnd: HWND, bounds: &Rect, text: &str) {
-    let (w, h) = (bounds.width().clamp(1, 6000), bounds.height().clamp(1, 6000));
+    let w = bounds.width().clamp(1, 6000);
+    let wh = bounds.height().clamp(1, 6000);
+    let banner_h = BANNER;
+    // 窗口上方有空间就把提示条画到窗口外、紧贴上沿（不挡标签页、标题按钮）；否则退回画在顶部内侧
+    let above = bounds.top >= banner_h;
+    let dib_h = if above { (wh + banner_h).min(6000) } else { wh };
+    let frame_top = if above { banner_h } else { 0 };
+    let origin_y = if above { bounds.top - banner_h } else { bounds.top };
+    // 提示条区域（上方时整条窗口宽；内侧时避开边框）
+    let (bx0, by0, bx1, by1) = if above {
+        (0, 0, w, banner_h)
+    } else {
+        let bh = banner_h.min(wh - 2 * BORDER).max(0);
+        (BORDER, BORDER, w - BORDER, BORDER + bh)
+    };
+    let banner_px = by1 - by0;
     unsafe {
         let mut info = BITMAPINFO::default();
         info.bmiHeader.biSize = std::mem::size_of::<BITMAPINFOHEADER>() as u32;
         info.bmiHeader.biWidth = w;
-        info.bmiHeader.biHeight = -h; // 顶向下
+        info.bmiHeader.biHeight = -dib_h; // 顶向下
         info.bmiHeader.biPlanes = 1;
         info.bmiHeader.biBitCount = 32;
         let mut bits: *mut core::ffi::c_void = std::ptr::null_mut();
         let Ok(bitmap) = CreateDIBSection(None, &info, DIB_RGB_COLORS, &mut bits, None, 0) else {
             return;
         };
-        let buf = std::slice::from_raw_parts_mut(bits as *mut u8, (w * h * 4) as usize);
+        let buf = std::slice::from_raw_parts_mut(bits as *mut u8, (w * dib_h * 4) as usize);
         buf.fill(0); // 全透明
 
-        // 边框：Litch 橙
+        // 边框：Litch 橙，画在窗口那一块（frame_top 起、高 wh）
         for t in 0..BORDER {
             for x in 0..w {
-                put(buf, w, x, t, 0, 120, 255);
-                put(buf, w, x, h - 1 - t, 0, 120, 255);
+                put(buf, w, x, frame_top + t, 0, 120, 255);
+                put(buf, w, x, frame_top + wh - 1 - t, 0, 120, 255);
             }
-            for y in 0..h {
+            for y in frame_top..(frame_top + wh) {
                 put(buf, w, t, y, 0, 120, 255);
                 put(buf, w, w - 1 - t, y, 0, 120, 255);
             }
         }
-        // 顶部提示条底色（深色，不透明）
-        let banner_h = BANNER.min(h - 2 * BORDER).max(0);
-        for y in BORDER..(BORDER + banner_h) {
-            for x in BORDER..(w - BORDER) {
+        // 提示条底色（深色，不透明）
+        for y in by0..by1 {
+            for x in bx0..bx1 {
                 put(buf, w, x, y, 22, 20, 20);
             }
         }
 
+        let dc = CreateCompatibleDC(None);
+        let old = SelectObject(dc, bitmap.into());
         // 提示条上的文字
-        if banner_h >= 14 {
-            let dc = CreateCompatibleDC(None);
-            let old = SelectObject(dc, bitmap.into());
+        if banner_px >= 14 {
             let font = CreateFontW(
-                banner_h - 12,
+                (banner_px - 12).max(8),
                 0,
                 0,
                 0,
@@ -199,12 +213,12 @@ fn draw(hwnd: HWND, bounds: &Rect, text: &str) {
             let old_font = SelectObject(dc, font.into());
             SetBkMode(dc, TRANSPARENT);
             SetTextColor(dc, COLORREF(0x00FFFFFF));
-            let mut rect = windows::Win32::Foundation::RECT { left: BORDER, top: BORDER, right: w - BORDER, bottom: BORDER + banner_h };
+            let mut rect = windows::Win32::Foundation::RECT { left: bx0, top: by0, right: bx1, bottom: by1 };
             let mut chars: Vec<u16> = text.encode_utf16().collect();
             DrawTextW(dc, &mut chars, &mut rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
             // GDI 把文字像素的 alpha 清成了 0，提示条整条强行设回不透明（底色和文字都该实心）
-            for y in BORDER..(BORDER + banner_h) {
-                for x in BORDER..(w - BORDER) {
+            for y in by0..by1 {
+                for x in bx0..bx1 {
                     let i = ((y * w + x) * 4 + 3) as usize;
                     if i < buf.len() {
                         buf[i] = 255;
@@ -213,26 +227,20 @@ fn draw(hwnd: HWND, bounds: &Rect, text: &str) {
             }
             SelectObject(dc, old_font);
             let _ = DeleteObject(font.into());
-            // UpdateLayeredWindow 读的是当前选进 dc 的那张位图，必须在把位图换出去之前贴
-            blit(hwnd, bounds, w, h, dc);
-            SelectObject(dc, old);
-            let _ = DeleteDC(dc);
-        } else {
-            let dc = CreateCompatibleDC(None);
-            let old = SelectObject(dc, bitmap.into());
-            blit(hwnd, bounds, w, h, dc);
-            SelectObject(dc, old);
-            let _ = DeleteDC(dc);
         }
+        // UpdateLayeredWindow 读的是当前选进 dc 的那张位图，必须在把位图换出去之前贴
+        blit(hwnd, bounds.left, origin_y, w, dib_h, dc);
+        SelectObject(dc, old);
+        let _ = DeleteDC(dc);
         let _ = DeleteObject(bitmap.into());
     }
 }
 
-unsafe fn blit(hwnd: HWND, bounds: &Rect, w: i32, h: i32, dc: HDC) {
-    if let Err(e) = SetWindowPos(hwnd, Some(HWND_TOPMOST), bounds.left, bounds.top, w, h, SWP_NOACTIVATE | SWP_SHOWWINDOW) {
+unsafe fn blit(hwnd: HWND, x: i32, y: i32, w: i32, h: i32, dc: HDC) {
+    if let Err(e) = SetWindowPos(hwnd, Some(HWND_TOPMOST), x, y, w, h, SWP_NOACTIVATE | SWP_SHOWWINDOW) {
         super::system::log(format!("提示窗口 SetWindowPos 失败：{e}（GetLastError {:?}）", GetLastError()));
     }
-    let dst = POINT { x: bounds.left, y: bounds.top };
+    let dst = POINT { x, y };
     let size = SIZE { cx: w, cy: h };
     let src = POINT { x: 0, y: 0 };
     let blend = BLENDFUNCTION { BlendOp: AC_SRC_OVER as u8, BlendFlags: 0, SourceConstantAlpha: 255, AlphaFormat: AC_SRC_ALPHA as u8 };

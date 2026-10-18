@@ -2,6 +2,7 @@
 pub mod activity;
 pub mod apps;
 pub mod capture;
+pub mod clipboard;
 pub mod engine;
 pub mod foreground;
 pub mod hooks;

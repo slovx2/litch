@@ -81,6 +81,7 @@ impl Engine {
             return Err(fail!(Unauthorized, "helper protocol is {}, host asked for {protocol}", crate::wire::PROTOCOL));
         }
         self.language = copy::language(str_of(p, "lang").as_deref());
+        activity::set_language(self.language);
         self.handshook = true;
         Ok(json!({
             "protocol": crate::wire::PROTOCOL,
@@ -274,7 +275,7 @@ impl Engine {
         if let Some(reference) = str_of(p, "ref") {
             let _ = uia::set_focus(&uia::find(hwnd, &reference)?);
         }
-        input::type_text(&text);
+        input::enter_text(&text, &apps::class(hwnd));
         self.done()
     }
 
