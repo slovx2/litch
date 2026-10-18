@@ -31,6 +31,7 @@ import type {
   TodoStep,
 } from '../model.mjs'
 import type { TerminalsAlive } from '../model-terminal.mjs'
+import type { SessionEventView } from '../model-tree.mjs'
 import { phrase } from '../phrase.mjs'
 import { projectItem } from '../projection/items.mjs'
 import { localUserMessage, outgoing } from '../projection/outgoing.mjs'
@@ -44,7 +45,9 @@ import { createMockFiles } from './mock-files.mjs'
 import { createMockMachine } from './mock-machine.mjs'
 import { createMockManagement } from './mock-manage.mjs'
 import { createMockService } from './mock-service.mjs'
+import { createMockTasks } from './mock-tasks.mjs'
 import { createMockTerminals } from './mock-terminals.mjs'
+import { createMockTree } from './mock-tree.mjs'
 import { type ClientToolDemo, clientAskRequest, clientToolCall } from './sample-client-tools.mjs'
 import { PI_PLAN_QUESTION, samplePlan } from './sample-compose.mjs'
 import {
@@ -70,6 +73,7 @@ import {
   sampleMachineAccess,
 } from './sample-machine.mjs'
 import { sampleRemoteService } from './sample-service.mjs'
+import { sampleTaskAnswer } from './sample-tasks.mjs'
 import { SAMPLE_TEXT, type SampleLang } from './sample-text.mjs'
 import { dumpCall, shotsCall } from './sample-tools.mjs'
 
@@ -348,7 +352,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
 
   const loadSession = (deviceId: string, sessionId: string): SessionView => {
     const key = `session:${deviceId}:${sessionId}`
-    let view = sessions.get(key)
+    let view = sessions.get(key) ?? tree.agentView(deviceId, sessionId)
     if (!view) {
       const summary = findSummary(deviceId, sessionId)
       const harness = harnessOn(deviceId, summary.harness)
@@ -414,7 +418,10 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     if (next) {
       applySessionOps(view, [{ op: 'queue.set', queued: view.queued.slice(1) }])
       startTurn(view, next)
+      return
     }
+    // 会话树：子会话的回报、唤醒父会话；子代理回来了父会话接着说
+    tree.ended(view, status)
   }
 
   /** 在一个进行中的回合里流出一段回答 */
@@ -446,9 +453,18 @@ export function createMockCore(options: MockCoreOptions): MockCore {
   const mentionsIn = (view: SessionView): boolean =>
     harnessOn(view.deviceId, view.harness)?.abilities?.mentions === true
 
-  const startTurn = (view: SessionView, message: OutgoingMessage) => {
+  /**
+   * 开一个回合，返回它的标识。event：注入在这条消息开头的那一段（会话树的回报、唤醒）；
+   * 不给的话，用户发的消息带上攒着的回报
+   */
+  const startTurn = (
+    view: SessionView,
+    message: OutgoingMessage,
+    event: SessionEventView | undefined = tree.notesFor(view),
+  ): string => {
     const turnId = `m${++seq}`
     const userId = `${turnId}-u`
+    const user = localUserMessage(userId, message, mentionsIn(view))
     applySessionOps(view, [
       {
         op: 'turn.add',
@@ -461,9 +477,10 @@ export function createMockCore(options: MockCoreOptions): MockCore {
           error: null,
         },
       },
-      { op: 'item.add', turnId, item: localUserMessage(userId, message, mentionsIn(view)) },
+      { op: 'item.add', turnId, item: event ? { ...user, event } : user },
     ])
     updateSummary(view.deviceId, view.sessionId, { status: 'running', updatedAt: clock.now() })
+    if (tree.claim(view, turnId, message)) return turnId
     // 这三样只是顺带演一出别处的动静，回合照常往下走
     if (EDITS_ELSEWHERE.test(message.text)) manage.editElsewhere(view.deviceId, view.harness)
     if (RACES_SETTINGS.test(message.text)) manage.raceNextWrite(view.deviceId, view.harness)
@@ -471,52 +488,52 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     if (ORGANIZES_ELSEWHERE.test(message.text)) organize.elsewhere(view.deviceId, view.sessionId)
     // 本机的设备服务换没换版本的几出（关键字在 mock-service.mts 开头）
     service.stage(view.deviceId, message.text)
-    if (DROPS_HARNESS.test(message.text) && dropHarness(view, turnId)) return
+    if (DROPS_HARNESS.test(message.text) && dropHarness(view, turnId)) return turnId
     if (ASKS_APPROVAL.test(message.text)) {
       askApproval(view, turnId)
-      return
+      return turnId
     }
     if (LISTS_TODOS.test(message.text)) {
       runTodos(view, turnId)
-      return
+      return turnId
     }
     if (ASKS_ONE.test(message.text)) {
       askQuestions(view, turnId, sampleQuestions([SAMPLE_TEXT[lang].singleQuestion], false))
-      return
+      return turnId
     }
     if (RUNS_A_WHILE.test(message.text)) {
       runAWhile(view, turnId)
-      return
+      return turnId
     }
     if (FLOODS.test(message.text) || BURSTS.test(message.text)) {
       flood(view, turnId, BURSTS.test(message.text) ? BURST_PER_TICK : FLOOD_PER_TICK)
-      return
+      return turnId
     }
     if (HUGE_TOOLS.test(message.text)) {
       hugeTools(view, turnId)
-      return
+      return turnId
     }
     machine.stage(view.deviceId, message.text)
     const machineDemo = MACHINE_ASKS.find(([pattern]) => pattern.test(message.text))?.[1]
     if (machineDemo) {
       askMachine(view, turnId, machineDemo)
-      return
+      return turnId
     }
     if (BROWSES.test(message.text) || USES_APP.test(message.text)) {
       askClientTool(view, turnId, BROWSES.test(message.text) ? 'site' : 'app')
-      return
+      return turnId
     }
     if (ASKS_QUESTIONS.test(message.text)) {
       askQuestions(view, turnId, sampleQuestions(SAMPLE_TEXT[lang].questions, true))
-      return
+      return turnId
     }
     if (view.settings.mode === 'plan') {
       planTurn(view, turnId)
-      return
+      return turnId
     }
     if (SHOWS_FILES.test(message.text)) {
       reply(view, turnId, SAMPLE_TEXT[lang].filesReply)
-      return
+      return turnId
     }
     if (EDITS_FILES.test(message.text)) {
       applySessionOps(view, [
@@ -538,9 +555,10 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         },
       ])
       reply(view, turnId, SAMPLE_TEXT[lang].editReply)
-      return
+      return turnId
     }
     replyHeard(view, turnId)
+    return turnId
   }
 
   /** 问着“要不要执行计划”的那些请求 */
@@ -1004,6 +1022,123 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     },
   })
 
+  // ---------- 定时任务（mock-tasks.mts） ----------
+  const tasks = createMockTasks({
+    clock,
+    stepMs: chunkMs,
+    lang,
+    devices: () => app.devices,
+    device: (deviceId) => app.devices.find((entry) => entry.id === deviceId),
+    hasSession: (deviceId, sessionId) =>
+      sidebars.get(deviceId)?.sessions.some((session) => session.id === sessionId) ?? false,
+    mark: (deviceId, sessionId, mark) => updateSummary(deviceId, sessionId, { task: mark }),
+    spawn(deviceId, init) {
+      const sidebar = sidebars.get(deviceId)
+      if (!sidebar) throw new ChannelError('notFound', `没有这台设备：${deviceId}`)
+      const summary: SessionSummary = {
+        id: `new${++seq}`,
+        workspaceId: init.workspaceId,
+        harness: init.harness,
+        title: init.title,
+        status: 'running',
+        waitingFor: null,
+        unread: false,
+        updatedAt: clock.now(),
+        cwd: init.cwd,
+        pinned: false,
+        section: null,
+        placedAt: null,
+        task: null,
+        lineage: null,
+      }
+      sidebar.sessions.push(summary)
+      emit(`sidebar:${deviceId}`, [{ op: 'session.upsert', session: summary }])
+      const view: SessionView = {
+        deviceId,
+        sessionId: summary.id,
+        title: summary.title,
+        harness: summary.harness,
+        cwd: summary.cwd,
+        live: true,
+        note: null,
+        turns: [],
+        items: {},
+        requests: [],
+        queued: [],
+        settings: sampleSettings(harnessOn(deviceId, init.harness)),
+        usage: null,
+        can: canOf(deviceId, summary.harness),
+        forkedFrom: null,
+        proposals: [],
+      }
+      sessions.set(sessionKey(view), view)
+      return summary.id
+    },
+    say(deviceId, sessionId, prompt, answer) {
+      const view = loadSession(deviceId, sessionId)
+      const turnId = `m${++seq}`
+      const userId = `${turnId}-u`
+      const itemIds = answer === null ? [userId] : [userId, `${turnId}-a`]
+      applySessionOps(view, [
+        {
+          op: 'turn.add',
+          turn: {
+            id: turnId,
+            status: 'running',
+            itemIds: [],
+            startedAt: clock.now(),
+            durationMs: null,
+            error: null,
+          },
+        },
+        {
+          op: 'item.add',
+          turnId,
+          item: localUserMessage(userId, outgoing(prompt), mentionsIn(view)),
+        },
+        ...(answer === null
+          ? []
+          : [
+              {
+                op: 'item.add',
+                turnId,
+                item: {
+                  id: itemIds[1] ?? '',
+                  kind: 'agentMessage',
+                  text: answer,
+                  phase: 'final',
+                  status: 'completed',
+                },
+              } satisfies SessionOp,
+            ]),
+        {
+          op: 'turn.status',
+          turnId,
+          status: answer === null ? 'failed' : 'completed',
+          durationMs: 3000,
+          ...(answer === null ? { error: sampleTaskAnswer(lang).failed } : {}),
+        },
+      ])
+      // 没人开着它：和真的一样标成未读
+      const watched = (sinks.get(sessionKey(view))?.size ?? 0) > 0
+      updateSummary(deviceId, sessionId, {
+        status: 'idle',
+        waitingFor: null,
+        updatedAt: clock.now(),
+        ...(watched ? {} : { unread: true }),
+      })
+    },
+  })
+  // 一开始就跟定时任务有关的示例会话：侧栏那几行带着记号
+  for (const [deviceId, view] of sidebars) {
+    const marks = tasks.marks(deviceId)
+    if (marks.size === 0) continue
+    view.sessions = view.sessions.map((session) => {
+      const mark = marks.get(session.id)
+      return mark ? { ...session, task: mark } : session
+    })
+  }
+
   // ---------- 设备服务是哪一份、换没换版本 ----------
   // ---------- 远程设备操作这台电脑（08 号） ----------
   const machine = createMockMachine({
@@ -1046,6 +1181,33 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     },
     emit: (deviceId, ops) => emit(`sidebar:${deviceId}`, ops),
     elsewhereName: SAMPLE_TEXT[lang].elsewhereWorkspace,
+  })
+
+  // 会话树：Litch 子会话、提案、回报与唤醒，引擎自己的子代理线程（mock-tree.mts）
+  const tree = createMockTree({
+    lang,
+    now: () => clock.now(),
+    setTimer: (run, ms) => clock.setTimer(run, ms),
+    summary: (deviceId, sessionId) =>
+      sidebars.get(deviceId)?.sessions.find((session) => session.id === sessionId),
+    summaries: (deviceId) => sidebars.get(deviceId)?.sessions ?? [],
+    addSummary(deviceId, summary) {
+      sidebars.get(deviceId)?.sessions.push(summary)
+      emit(`sidebar:${deviceId}`, [{ op: 'session.upsert', session: summary }])
+    },
+    updateSummary,
+    view: loadSession,
+    putView: (view) => sessions.set(sessionKey(view), view),
+    apply: applySessionOps,
+    startTurn: (view, message, event) => startTurn(view, message, event),
+    reply,
+    running: (view) => running(view) !== undefined,
+    treeOn: (deviceId) =>
+      app.devices.find((device) => device.id === deviceId)?.sessionTree === true,
+    harnesses: (deviceId) => app.devices.find((device) => device.id === deviceId)?.harnesses ?? [],
+    settings: (deviceId, harness) => sampleSettings(harnessOn(deviceId, harness)),
+    can: (deviceId, harness) => canOf(deviceId, harness),
+    nextId: (prefix) => `${prefix}${++seq}`,
   })
 
   /** 掉线的那些回合：harness 回来的时候收尾 */
@@ -1290,6 +1452,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         tools: { browser: true, computer: false },
         // 新加的远程设备：“操作这台电脑”默认关
         machine: sampleMachineAccess(''),
+        sessionTree: false,
       }
       app.devices.push(device)
       sidebars.set(device.id, { deviceId: device.id, workspaces: [], sessions: [], archived: null })
@@ -1387,6 +1550,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       if (organized !== undefined) return organized
       const managed = manage.command(name, params)
       if (managed !== undefined) return managed
+      const scheduled = tasks.command(name, params)
+      if (scheduled !== undefined) return scheduled
       const typed = terminals.command(name, params)
       if (typed !== undefined) return typed
       const browsed = files.command(name, params, signal)
@@ -1395,6 +1560,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       if (composed !== undefined) return composed
       const reviewed = diffs.command(name, params, signal)
       if (reviewed !== undefined) return reviewed
+      const nested = tree.command(name, params)
+      if (nested !== undefined) return nested
       if (name === 'session.markRead') {
         const { deviceId, sessionId } = params as { deviceId: string; sessionId: string }
         if (findSummary(deviceId, sessionId).unread)
@@ -1405,6 +1572,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         const { text, images, extras, ...where } = params as Commands['session.send']['params']
         const message = outgoing(text, images, extras)
         const view = reachView(where)
+        // 和真的核心一样：只读的会话（不接受直接输入的子代理、归档着的）发不了
+        if (!view.live) throw new ChannelError('rejected', '这个会话是只读的')
         if (running(view)) {
           applySessionOps(view, [
             { op: 'queue.set', queued: [...view.queued, { id: `q${++seq}`, ...message }] },
@@ -1549,6 +1718,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
           pinned: false,
           section: null,
           placedAt: null,
+          task: null,
+          lineage: null,
         }
         sidebar.sessions.push(summary)
         emit(`sidebar:${deviceId}`, [{ op: 'session.upsert', session: summary }])
@@ -1568,6 +1739,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
           usage: null,
           can: canOf(deviceId, summary.harness),
           forkedFrom: null,
+          proposals: [],
         }
         sessions.set(sessionKey(view), view)
         startTurn(view, message)
@@ -1791,10 +1963,11 @@ export function createMockCore(options: MockCoreOptions): MockCore {
           waitingFor: null,
           unread: false,
           updatedAt: clock.now(),
-          // 新会话不跟着原来的置顶、进分区
+          // 新会话不跟着原来的置顶、进分区，也不是谁的子会话
           pinned: false,
           section: null,
           placedAt: null,
+          lineage: null,
         }
         // 显示数据都是能写成 JSON 的，这样抄一份就和原来的互不相干了
         const copy = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T
@@ -1894,6 +2067,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       if (topic.kind === 'diff') return diffs.subscribe(topic, sink)
       // 08 号：远程会话在这台电脑上的动静（mock-machine.mts）
       if (topic.kind === 'machine') return machine.subscribe(sink)
+      // 定时任务（mock-tasks.mts）
+      if (topic.kind === 'tasks') return tasks.subscribe(topic.deviceId, sink)
       const key = topicKey(topic)
       if (topic.kind === 'app') {
         sink.snapshot(app)
@@ -1904,6 +2079,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       } else {
         const view = loadSession(topic.deviceId, topic.sessionId)
         sink.snapshot(view)
+        // 打开了任务跑出来的会话：里面跑完的运行算看过了
+        tasks.seen(topic.deviceId, topic.sessionId)
         if (
           topic.deviceId === STREAM_SESSION.deviceId &&
           topic.sessionId === STREAM_SESSION.sessionId

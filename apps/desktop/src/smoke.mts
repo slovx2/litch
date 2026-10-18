@@ -36,6 +36,7 @@
 // engines 对着由真的适配器主进程管着的三引擎隔离设备（真的 Claude Code、Pi、dsh，模型是假的），
 // 在界面里把三家各走一遍：建会话、审批、提问、技能、打断、读历史、计划、改文件、图片、分叉回退压缩，
 // 每一步三家的结果并排打出来（probe-engines*.mts）。由 scripts/check-engines.mjs 起。
+// tasks 对着模拟核心量定时任务：侧栏入口、按设备分开的列表、新建、立即运行、去会话、会话顶上那一条（probe-tasks.mts）。
 // first-turn 对着同一种隔离设备，只走主路径：每个真的 harness（含原生 codex）从界面新建会话、发头一句、收到回话
 // （probe-first-turn.mts）。由 scripts/check-first-turn.mjs 起。
 import { OUTPUT_KEEP, PART_CHARS } from '@litch/core'
@@ -80,9 +81,11 @@ import { judgeMockService, judgeService, mockServiceProbe, serviceProbe } from '
 import { judgeSession, sessionProbe } from './probe-session.mjs'
 import { runSettingsChecks, type SettingsMode } from './probe-settings-run.mjs'
 import { runSidebarChecks } from './probe-sidebar-run.mjs'
+import { judgeTasks, TASK_NAME, tasksProbe } from './probe-tasks.mjs'
 import { installTerminalKit } from './probe-terminal-kit.mjs'
 import { runTerminalChecks, type TerminalMode } from './probe-terminal-run.mjs'
 import { judgeTools, toolsProbe } from './probe-tools.mjs'
+import { runTreeChecks } from './probe-tree.mjs'
 import type { QuitOutcome } from './quit-terminals.mjs'
 
 type ProbeMode =
@@ -97,6 +100,8 @@ type ProbeMode =
   | 'manage'
   | 'manage-mock'
   | 'sidebar'
+  | 'tasks'
+  | 'tree'
   | 'engines'
   | 'first-turn'
   | TerminalMode
@@ -143,6 +148,8 @@ const PROBE_MODES: readonly string[] = [
   'manage',
   'manage-mock',
   'sidebar',
+  'tasks',
+  'tree',
   'engines',
   'first-turn',
   ...TERMINAL_MODES,
@@ -159,6 +166,8 @@ export const MOCK_MODES: readonly string[] = [
   'full-mock',
   'manage-mock',
   'sidebar',
+  'tasks',
+  'tree',
   'terminal',
   'files',
   'diff',
@@ -238,6 +247,11 @@ async function measure(
     return runFilesChecks(window, mode, hooks)
   }
   if (mode === 'sidebar') return runSidebarChecks(window, hooks)
+  if (mode === 'tasks') {
+    const result = await runInPage(window, tasksProbe, TASK_NAME)
+    return [result, judgeTasks(result, TASK_NAME)]
+  }
+  if (mode === 'tree') return runTreeChecks(window)
   if (mode === 'engines') return runEnginesChecks(window, hooks)
   if (mode === 'first-turn') return runFirstTurnChecks(window)
   if (mode === 'diff' || mode === 'diff-device' || mode === 'diff-entry') {

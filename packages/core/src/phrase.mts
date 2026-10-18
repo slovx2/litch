@@ -80,6 +80,8 @@ export type PhraseKey =
   // 会话
   | 'session.untitled'
   | 'session.readOnly'
+  // 引擎自己的子代理线程，对面说它不接受直接输入（canAcceptDirectInput 为假）：只能看
+  | 'session.agentReadOnly'
   | 'session.archived'
   | 'session.queueFailed'
   // 终端
@@ -99,6 +101,11 @@ export type PhraseKey =
   | 'diff.notWritable'
   | 'diff.conflicted'
   | 'diff.moved'
+  // 定时任务：这台设备的服务不支持、任务没了、别处先改过了、任务数到了上限
+  | 'tasks.unsupported'
+  | 'tasks.gone'
+  | 'tasks.conflict'
+  | 'tasks.limit'
   // 工具调用
   | 'tool.failed'
   | 'collab.source'

@@ -18,6 +18,8 @@ export interface ListContext {
   index: ThreadIndex
   workspaces: Workspaces
   timeoutMs: number
+  /** 给每一行会话对象挂上设备层另外的字段（声明了 sessionTree 的连接：litchLineage） */
+  decorate?(row: Record<string, unknown>): void
 }
 
 /**
@@ -112,7 +114,10 @@ export async function listThreads(context: ListContext, params: unknown): Promis
     for (const row of merged.data)
       context.index.see(row, String(row.harness), fields.archived === true)
   })
-  for (const row of merged.data) context.workspaces.decorate(row.id, row)
+  for (const row of merged.data) {
+    context.workspaces.decorate(row.id, row)
+    context.decorate?.(row)
+  }
   for (const harness of merged.excluded)
     skipped.push({
       harness,

@@ -76,10 +76,12 @@ export function TitleBar({
                 ? t('devices.title')
                 : page === 'settings'
                   ? t('settings.title')
-                  : selection
-                    ? 'Litch'
-                    : // 新建对话页，而一台设备都没有：说不出建在哪，只写这是哪一页
-                      t('newSession.title')}
+                  : page === 'tasks'
+                    ? t('tasks.title')
+                    : selection
+                      ? 'Litch'
+                      : // 新建对话页，而一台设备都没有：说不出建在哪，只写这是哪一页
+                        t('newSession.title')}
           </b>
         )}
       </nav>

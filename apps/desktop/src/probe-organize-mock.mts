@@ -395,7 +395,8 @@ export async function organizeMockProbe(): Promise<OrganizeMockProbe> {
   const declared: OrganizeMockProbe['declared'] = {
     hidden,
     shownOnOthers: claudeHasFork,
-    noDelete: seen.dshMenu === '置顶|移到项目…|改名|归档',
+    // 模拟核心的本机声明了会话树：能派子会话
+    noDelete: seen.dshMenu === '置顶|移到项目…|派一个子会话…|改名|归档',
     presetNotes: dsh.read.length === 3 && Boolean(dsh.read[0]?.startsWith('只读：不能改文件')),
     solePreset:
       pi.read.length === 1 &&

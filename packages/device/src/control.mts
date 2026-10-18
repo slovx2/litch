@@ -45,6 +45,10 @@ export interface ControlState {
    */
   processes?: Partial<ProcessLimits>
   /**
+   * 定时任务的两项设置（settings_tasks.go）：总开关、同时运行的上限。改了不重启设备进程，当场换
+   */
+  tasks?: { enabled?: unknown; maxConcurrent?: unknown }
+  /**
    * 主进程自己的来历（哪个版本、从哪份适配器起的、什么时候起的），服务启动时定下来就不变。
    * 声明了 deviceService 扩展的客户端在 runtime/info 里看得到（service-info.mts）。
    * 多出来的 options 是它启动时带的参数，只在本机用，不对客户端报。

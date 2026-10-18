@@ -1,11 +1,14 @@
 // 投影的第一步：协议条目 → 显示条目。纯函数，不碰连接，不碰状态。
 // 各种 harness 的差异在这里消化掉，界面拿到的条目和 harness 无关。
 // 对面的协议版本可能比我们的类型新，所以不认识的条目类型、缺的字段都有兜底，不抛错。
-import type {
-  FileUpdateChange,
-  ThreadItem,
-  UserInput,
-  WebSearchAction,
+import {
+  CLIENT_TOOL_NAMESPACE,
+  type FileUpdateChange,
+  parseSessionEvent,
+  SESSION_TOOL,
+  type ThreadItem,
+  type UserInput,
+  type WebSearchAction,
 } from '../../../protocol/src/index.mjs'
 import type {
   FileChangeEntry,
@@ -15,6 +18,7 @@ import type {
   ToolPart,
   UserMessageItem,
 } from '../model.mjs'
+import type { AgentRefView, AgentState, SessionEventView, SpawnedView } from '../model-tree.mjs'
 import { type Phrase, type PhraseKey, phrase } from '../phrase.mjs'
 import { capDiff } from '../text/diff.mjs'
 import { capOutput, utf8Length } from '../text/output-cap.mjs'
@@ -58,7 +62,97 @@ function userMessage(id: string, content: UserInput[]): UserMessageItem {
         break
     }
   }
-  return { id, kind: 'userMessage', text: texts.join('\n'), attachments }
+  const text = texts.join('\n')
+  // 设备进程注入在开头的子会话回报、唤醒：认出来单放，剩下的才是用户自己说的话
+  const { event, rest } = parseSessionEvent(text)
+  if (!event) return { id, kind: 'userMessage', text, attachments }
+  return { id, kind: 'userMessage', text: rest, attachments, event: sessionEvent(event) }
+}
+
+const NOTE_STATUS = new Set(['completed', 'failed', 'interrupted', 'needsUser'])
+
+/** 注入文字里那段 JSON 是对面写的：逐项核对，不合的那一条不要 */
+function sessionEvent(event: { kind: string; notes: unknown[] }): SessionEventView {
+  const notes = event.notes.flatMap((note) => {
+    if (typeof note !== 'object' || note === null) return []
+    const { threadId, title, status, excerpt } = note as Record<string, unknown>
+    if (typeof threadId !== 'string' || typeof status !== 'string' || !NOTE_STATUS.has(status))
+      return []
+    return [
+      {
+        threadId,
+        title: typeof title === 'string' ? title : '',
+        status: status as SessionEventView['notes'][number]['status'],
+        excerpt: typeof excerpt === 'string' ? excerpt : '',
+      },
+    ]
+  })
+  return { kind: event.kind === 'wake' ? 'wake' : 'notes', notes }
+}
+
+const AGENT_STATES = new Set<string>([
+  'pendingInit',
+  'running',
+  'interrupted',
+  'completed',
+  'errored',
+  'shutdown',
+  'notFound',
+])
+
+/** 子代理调用涉及的子线程：收到的那几个，加上状态表里另外报了的 */
+function agentRefs(
+  receivers: readonly string[] | null | undefined,
+  states:
+    | Record<string, { status?: string; message?: string | null } | undefined>
+    | null
+    | undefined,
+): AgentRefView[] {
+  const ids = [...(receivers ?? [])]
+  for (const id of Object.keys(states ?? {})) if (!ids.includes(id)) ids.push(id)
+  return ids
+    .filter((id) => typeof id === 'string' && id.length > 0)
+    .map((threadId) => {
+      const state = states?.[threadId]
+      return {
+        threadId,
+        state:
+          state?.status && AGENT_STATES.has(state.status) ? (state.status as AgentState) : null,
+        message: typeof state?.message === 'string' && state.message ? state.message : null,
+      }
+    })
+}
+
+/**
+ * litch_sessions.start 的条目：参数里的标题、harness，结果里起出来的子会话号或者提案号。
+ * 别的调用（list、read……）是 null，照普通的工具调用画
+ */
+function spawnedOf(
+  namespace: string | null | undefined,
+  tool: string,
+  args: unknown,
+  output: readonly { type: string; text?: string }[] | null | undefined,
+): SpawnedView | null {
+  if (namespace !== CLIENT_TOOL_NAMESPACE.sessions || tool !== SESSION_TOOL.start) return null
+  const given = (typeof args === 'object' && args !== null ? args : {}) as Record<string, unknown>
+  let threadId: string | null = null
+  let proposalId: string | null = null
+  for (const part of output ?? []) {
+    if (part.type !== 'inputText' || typeof part.text !== 'string') continue
+    try {
+      const result = JSON.parse(part.text) as Record<string, unknown>
+      if (typeof result.thread_id === 'string') threadId = result.thread_id
+      if (typeof result.proposal_id === 'string') proposalId = result.proposal_id
+    } catch {
+      // 失败的结果是一行说明，不是 JSON
+    }
+  }
+  return {
+    threadId,
+    proposalId,
+    title: typeof given.title === 'string' ? given.title : '',
+    harness: typeof given.harness === 'string' && given.harness ? given.harness : null,
+  }
 }
 
 /** 数一个补丁里加了几行、删了几行。只认以单个加号或减号开头的行，文件头不算 */
@@ -357,7 +451,9 @@ export function projectItem(item: ThreadItem, streaming = false): ItemView {
     case 'dynamicToolCall': {
       // 客户端工具的截图要看得见：头几张图片留着内容（keepImages）
       const output = resultParts(item.contentItems, null, true)
+      const spawned = spawnedOf(item.namespace, item.tool, item.arguments, item.contentItems)
       return toolCall(id, {
+        ...(spawned ? { spawned } : {}),
         source: item.namespace ?? null,
         tool: item.tool,
         input: textParts(showJson(item.arguments)),
@@ -385,6 +481,8 @@ export function projectItem(item: ThreadItem, streaming = false): ItemView {
         tool: collabTool(item.tool),
         input: textParts(item.prompt ?? ''),
         status: toolStatus(item.status),
+        // 涉及哪几个子线程、各自什么状态：界面据此画成能点开的卡片
+        agents: agentRefs(item.receiverThreadIds, item.agentsStates),
       })
     case 'webSearch':
       return { id, kind: 'webSearch', query: searchQuery(item.query, item.action) }

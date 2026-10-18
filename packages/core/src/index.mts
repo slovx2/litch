@@ -1,4 +1,14 @@
 // 核心包的入口。界面和外壳只从这里引用。
+
+// 日程怎么算：界面的表单拿它预览“下一次”、先查时区（和设备进程用的是同一份）
+export {
+  isTaskTimeZone,
+  localTaskTimeZone,
+  MIN_TASK_INTERVAL_MINUTES,
+  nextTaskRun,
+  type TaskScheduleProblem,
+  validateTaskSchedule,
+} from '../../protocol/src/task-schedule.mjs'
 export { type Cancel, createCancel } from './channel/cancel.mjs'
 export { type CoreChannel, connectChannel, type TopicSink } from './channel/client.mjs'
 export { createPortPair } from './channel/memory-port.mjs'
@@ -18,6 +28,7 @@ export {
   type ServerMessage,
   type SessionOp,
   type SidebarOp,
+  type TasksOp,
   type Topic,
   type TopicData,
   type TopicKind,
@@ -128,7 +139,9 @@ export type * from './model-files.mjs'
 export type * from './model-machine.mjs'
 export type * from './model-manage.mjs'
 export type * from './model-service.mjs'
+export type * from './model-tasks.mjs'
 export type * from './model-terminal.mjs'
+export type * from './model-tree.mjs'
 export {
   describeText,
   type Phrase,
@@ -143,6 +156,7 @@ export {
   type Block,
   type BlockInput,
   bucketItems,
+  cardOf,
 } from './projection/blocks.mjs'
 export {
   type FileRef,
@@ -214,9 +228,12 @@ export {
   type ManageSchema,
   PINNED,
   type Replica,
+  type SessionChildren,
   type SessionGroups,
   type SessionHarnesses,
   type SessionMeta,
+  type SessionNotes,
+  type TaskRunsPage,
   type TerminalGroups,
 } from './replica/replica.mjs'
 export {

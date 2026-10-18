@@ -289,12 +289,18 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
   const names = [...popped.querySelectorAll('.pick-opt')].map((entry) => entry.textContent)
   const spot = popped.getBoundingClientRect()
   // 末尾三项总是这三样。设备上能整理侧栏的话前面多出“置顶”和“移到项目…”：
-  // 模拟核心里一定有；真实入口上看对面有没有这组方法、有没有别的项目
-  const organizing = names.slice(0, -3).join('|')
+  // 模拟核心里一定有；真实入口上看对面有没有这组方法、有没有别的项目。
+  // 设备声明了会话树的话还有“派一个子会话…”（模拟核心的本机声明了；真实入口看对面）
+  const spawnable = names.includes('派一个子会话…')
+  const organizing = names
+    .slice(0, -3)
+    .filter((name) => name !== '派一个子会话…')
+    .join('|')
   const contextMenu: SessionProbe['contextMenu'] = {
     opened:
       click.handled &&
       names.slice(-3).join('|') === '改名|归档|删除' &&
+      (real || spawnable) &&
       (real
         ? ['', '置顶', '置顶|移到项目…'].includes(organizing)
         : organizing === '置顶|移到项目…'),

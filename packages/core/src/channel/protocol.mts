@@ -55,6 +55,7 @@ import type {
   SettingsWriteResult,
   SshConfigView,
 } from '../model-manage.mjs'
+import type { TaskDraft, TaskPatch, TaskRunView, TasksView, TaskView } from '../model-tasks.mjs'
 import type {
   TerminalHave,
   TerminalOp,
@@ -62,6 +63,7 @@ import type {
   TerminalsOp,
   TerminalsView,
 } from '../model-terminal.mjs'
+import type { AgentThreadView, LineageKind, SessionProposalView } from '../model-tree.mjs'
 import type { Phrase, Text } from '../phrase.mjs'
 import type { SkippingOutput } from '../text/output-cap.mjs'
 
@@ -98,6 +100,12 @@ export type Topic =
    * 顶栏标记一直订阅；什么都没有时两样都是空的
    */
   | { kind: 'machine' }
+  /**
+   * 一台设备上的定时任务（deviceTasks 扩展）。数据副本对每台设备一直订阅着：侧栏入口的未读合计、
+   * 会话上的“定时”记号、运行结束的系统通知都要它。设备没有这项扩展时快照里 available 是 false，
+   * 照样成立；没连上时给上次知道的（还没连上过是 null）。连上、重连之后再给一份快照
+   */
+  | { kind: 'tasks'; deviceId: string }
 
 export type TopicKind = Topic['kind']
 
@@ -110,6 +118,7 @@ export interface TopicData {
   terminal: TerminalStreamView
   diff: DiffView
   machine: MachineActivityView
+  tasks: TasksView
 }
 
 // ---------- 增量 ----------
@@ -158,6 +167,8 @@ export type SessionOp =
   | { op: 'session.usage'; usage: ContextUsage | null }
   /** 对面做不做得了的几件事变了（刚发现有一件它不认识） */
   | { op: 'session.can'; can: SessionAbilities }
+  /** 这个会话上等着用户点的子会话提案整份换掉（会话树） */
+  | { op: 'session.proposals'; proposals: SessionProposalView[] }
 
 /**
  * 设置现在的值整份换掉：这份东西不大，变得也少。
@@ -168,6 +179,17 @@ export type ManageOp = { op: 'settings.set'; snapshot: SettingsSnapshotView; key
 /** 差异的概况整份换掉：它不大，而且每次重新取，变的往往是其中好几处 */
 export type DiffOp = { op: 'diff.set'; view: DiffView }
 
+/**
+ * 定时任务的增量。任务整条换（它不大，变的往往是好几项：下一次、最近一次、未读数一起变）。
+ * run.upsert 是一次运行开始、结束、标成看过了：详情页开着的运行记录据此更新。
+ * finished 为真：这一条是核心看着这次运行结束的（连着的时候收到的通知），界面据此发系统通知；
+ * 对账时补上的、标成看过了的都是 false
+ */
+export type TasksOp =
+  | { op: 'task.upsert'; task: TaskView }
+  | { op: 'task.remove'; taskId: string }
+  | { op: 'run.upsert'; run: TaskRunView; finished: boolean }
+
 export interface TopicOp {
   app: AppOp
   sidebar: SidebarOp
@@ -177,6 +199,7 @@ export interface TopicOp {
   terminal: TerminalOp
   diff: DiffOp
   machine: MachineOp
+  tasks: TasksOp
 }
 
 // ---------- 命令 ----------
@@ -608,6 +631,92 @@ export interface Commands {
   }
   /** 差异模块在设备上起过多少次 git、概况取过多少遍。没有界面用它，是给验收量的 */
   'diff.requests': { params: { deviceId: string }; result: DiffRequests }
+  // ---------- 定时任务 ----------
+  // 都要设备列了 deviceTasks（TasksView.available），不然以 unsupported 结束；没连上以 offline 结束。
+  // 成了之后核心自己先把新的样子经 tasks 主题发出去，不等通知（通知再来是幂等的）。
+  // 设备回的错误换成：没有这个任务 notFound；字段不对 invalid（key 是哪个字段，比如 schedule.time、name）；
+  // 任务数到了上限 rejected（text 说明）
+  /** 建一个任务 */
+  'tasks.create': { params: { deviceId: string; task: TaskDraft }; result: { task: TaskView } }
+  /**
+   * 改一个任务。revision 是界面开始改的时候看到的那一版：别处先改过了以 conflict 结束，什么都没写，
+   * 最新的样子已经经订阅到了界面
+   */
+  'tasks.update': {
+    params: { deviceId: string; taskId: string; revision: number; patch: TaskPatch }
+    result: { task: TaskView }
+  }
+  /** 暂停（paused 为真）或者继续。不用带版本：按核心手里最新的那一版改，撞上别处的改动就再试一次 */
+  'tasks.pause': {
+    params: { deviceId: string; taskId: string; paused: boolean }
+    result: { task: TaskView }
+  }
+  /** 删掉任务和它的运行记录。正在跑的那一次不打断 */
+  'tasks.delete': { params: { deviceId: string; taskId: string }; result: Record<string, never> }
+  /** 立即运行一次，不影响日程。已经有一次在跑或在排队就不另起，回的是那一次（deduplicated 为真） */
+  'tasks.runNow': {
+    params: { deviceId: string; taskId: string }
+    result: { run: TaskRunView; deduplicated: boolean }
+  }
+  /**
+   * 运行记录的一页，新的在前。taskId 给 null 是全部任务的；cursor 是上一页的 nextCursor。
+   * 数据副本的 openTaskRuns、moreTaskRuns 用它，界面一般不直接调
+   */
+  'tasks.runs': {
+    params: { deviceId: string; taskId: string | null; cursor?: string | null; limit?: number }
+    result: { runs: TaskRunView[]; nextCursor: string | null }
+  }
+  /** 标成看过了。给 runIds 只标这几条；只给 taskId 标这个任务的全部 */
+  'tasks.markRead': {
+    params: { deviceId: string; taskId?: string; runIds?: string[] }
+    result: Record<string, never>
+  }
+  // ---------- 会话树 ----------
+  // 这一组要设备服务声明了会话树（DeviceView.sessionTree），没有时以 unsupported 结束（session.agents 除外）。
+  /**
+   * 在 parentId 这个会话下面派一个 Litch 子会话（设备上的 litch/session/start）。harness 不给是父会话的，
+   * kind 为 fork 时只能和父会话同一个 harness；workspaceId、cwd 不给跟父会话一样。
+   * 应答时子会话已经建好、第一段话已经发给它；侧栏里它嵌在父会话下面
+   */
+  'session.spawn': {
+    params: {
+      deviceId: string
+      parentId: string
+      harness?: string
+      model?: string
+      effort?: string
+      workspaceId?: string
+      cwd?: string
+      kind: LineageKind
+      title: string
+      prompt: string
+      wakeParent: boolean
+    }
+    result: { sessionId: string }
+  }
+  /** 把一个 Litch 子会话脱离成独立会话：去掉父子关系，会话本身不动 */
+  'session.detach': {
+    params: { deviceId: string; sessionId: string }
+    result: Record<string, never>
+  }
+  /** 用户点了提案上的“开始”：起这个子会话。应答时子会话已经建好 */
+  'session.proposal.accept': {
+    params: { deviceId: string; sessionId: string; proposalId: string }
+    result: { sessionId: string }
+  }
+  /** 用户点了提案上的“不要” */
+  'session.proposal.dismiss': {
+    params: { deviceId: string; sessionId: string; proposalId: string }
+    result: Record<string, never>
+  }
+  /**
+   * 这个会话下面引擎自己的子代理线程（thread/list 带 parentThreadId，只要直接的子女）。
+   * 不缓存，每次现问；对面不会按父会话查的以 unsupported 结束
+   */
+  'session.agents': {
+    params: { deviceId: string; sessionId: string }
+    result: { agents: AgentThreadView[] }
+  }
   /** 用户的 ssh 配置里有哪些主机 */
   'remote.discover': { params: Record<string, never>; result: { hosts: DiscoveredHost[] } }
   /** 添加之前先连过去看一眼对面有什么。不启动任何东西 */

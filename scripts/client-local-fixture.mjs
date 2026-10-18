@@ -88,6 +88,7 @@ import {
 import { FIXTURE_SKILL, piReply, sendCompletion } from './client-fixture-marks.mjs'
 import { codexSocketCleanup, serveResponses } from './client-fixture-responses.mjs'
 import { runReply } from './client-fixture-run.mjs'
+import { sessionsReply } from './client-fixture-sessions.mjs'
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -194,15 +195,18 @@ const model = createServer(async (req, res) => {
   // 三个引擎都在的时候 Pi 和另两家认同一套词（client-fixture-marks.mjs）；平时只认“跑个命令”和“问我”。
   // OpenCode（还有接 opencode acp 的 acp 入口）也说 OpenAI 兼容的这一种，地址带着它的标识（/opencode/v1、/acp/v1），
   // 回话开头写它自己的名字
-  const reply = threeEngines
-    ? piReply(id === 'opencode' || id === 'acp' ? id : 'pi', body, pace)
-    : (runReply(body, said) ??
-      browseReply(body, said) ??
-      computerReply(body, said) ??
-      askReply(body, said) ?? {
-        text: `收到：${said}\n\n这是隔离环境里的假模型在回话，分成几段慢慢发，好让界面上看得到字是一点一点出来的。`,
-        pace,
-      })
+  // 会话树（litch_sessions 和设备注入的唤醒）的那几句两种模式都认，见 client-fixture-sessions.mjs
+  const reply =
+    sessionsReply(body, said) ??
+    (threeEngines
+      ? piReply(id === 'opencode' || id === 'acp' ? id : 'pi', body, pace)
+      : (runReply(body, said) ??
+        browseReply(body, said) ??
+        computerReply(body, said) ??
+        askReply(body, said) ?? {
+          text: `收到：${said}\n\n这是隔离环境里的假模型在回话，分成几段慢慢发，好让界面上看得到字是一点一点出来的。`,
+          pace,
+        }))
   await sendCompletion(res, reply, { serial: requests, model: body.model })
 })
 // 不监听固定端口：让系统分配

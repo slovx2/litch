@@ -89,6 +89,8 @@ func describeBusy(reasons []busyReason) string {
 			parts = append(parts, fmt.Sprintf(tr("%s 有回合在跑（或者判断不了）", "%s has a turn in progress (or that cannot be determined)"), names))
 		case "deviceProcesses":
 			parts = append(parts, fmt.Sprintf(tr("有 %d 个属于设备的终端在跑", "%d device-owned terminal(s) are running"), reason.Count))
+		case "tasks":
+			parts = append(parts, fmt.Sprintf(tr("有 %d 次定时任务的运行在跑", "%d scheduled task run(s) are in progress"), reason.Count))
 		case "clients":
 			parts = append(parts, fmt.Sprintf(tr("有 %d 个客户端连着", "%d client(s) are connected"), reason.Count))
 		case "undetermined":

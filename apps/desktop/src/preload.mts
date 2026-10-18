@@ -14,6 +14,8 @@ import {
   CORE_PORT,
   LICENSE_TEXT,
   MENU,
+  NOTIFY,
+  NOTIFY_CLICK,
   OPEN_EXTERNAL,
   PICK_FOLDER,
   REQUEST_CORE_PORT,
@@ -62,6 +64,17 @@ contextBridge.exposeInMainWorld('litchShell', {
     ipcRenderer.on(MENU, listener)
     return () => {
       ipcRenderer.removeListener(MENU, listener)
+    }
+  },
+  // 定时任务跑完了的系统通知：界面拼好文字交过来；点了哪一条再告诉界面
+  notify: (notice: { id: string; title: string; body: string }) => ipcRenderer.send(NOTIFY, notice),
+  onNotifyClick(handler: (id: string) => void) {
+    const listener = (_event: unknown, id: unknown) => {
+      if (typeof id === 'string') handler(id)
+    }
+    ipcRenderer.on(NOTIFY_CLICK, listener)
+    return () => {
+      ipcRenderer.removeListener(NOTIFY_CLICK, listener)
     }
   },
 })

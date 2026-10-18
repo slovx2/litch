@@ -4,6 +4,8 @@
 // 会话对象经过这里时（应答里的、会话开始的通知里的），工作区、分区、置顶换成设备层的值：
 // 归属存在设备层，引擎自己那一份和聚合面互不相通。
 import { isClientToolNamespace } from '../../protocol/src/client-tools.mjs'
+import { EXTENSION } from '../../protocol/src/device.mjs'
+import type { DeviceTools } from './device-tools.mjs'
 import type { ThreadIndex } from './thread-index.mjs'
 import type { ForwardedRequest, UpstreamLink } from './upstream.mjs'
 import { DeviceError, type Frame, idKey, isObject, type RpcId, toRpcError } from './wire.mjs'
@@ -23,6 +25,19 @@ export interface RelayHost {
   log(line: string): void
   /** 原生 codex 的客户端工具调用交给设备进程挑执行方（client-tools.mts），这几处要告诉它 */
   clientTools: RelayClientTools
+  /** 由设备进程自己执行的命名空间：这类 item/tool/call 不管哪种上游都在这里拦下交给它（device-tools.mts） */
+  deviceTools: Pick<DeviceTools, 'has' | 'dispatch' | 'turnEnded'>
+  /** 会话树要看的几样（session-tree.mts） */
+  sessions: RelaySessions
+}
+
+export interface RelaySessions {
+  /** 这条连接发起的回合（turn/start 的应答回来了）：客户端发起的才算用户的回合 */
+  clientTurn(harness: string, turnId: string): void
+  /** 一个回合开始或结束了（turn/started、turn/completed 的参数） */
+  turnEvent(harness: string, method: string, params: Record<string, unknown>): void
+  /** 会话对象经过、这条连接声明了 sessionTree：挂上 litchLineage */
+  decorate(thread: Record<string, unknown>): void
 }
 
 /**
@@ -79,6 +94,8 @@ export class Relay {
   private readonly renamed = new Map<UpstreamLink, Map<string, RpcId>>()
   /** 转发出去、应答回来时还有事要做的请求，键是客户端的请求号 */
   private readonly tracked = new Map<string, Tracked>()
+  /** 转发出去的请求成功应答时要顺手做的事，键是客户端的请求号 */
+  private readonly afterwards = new Map<string, (result: unknown) => void>()
   private sequence = 0
 
   constructor(host: RelayHost) {
@@ -90,6 +107,11 @@ export class Relay {
     if (typeof frame.method !== 'string') this.response(link, frame, raw, request)
     else if (frame.id != null) this.serverRequest(link, frame, frame.id, raw)
     else this.notification(link, frame, frame.method, raw)
+  }
+
+  /** 这个请求（马上要转给上游）成功应答时调一下 work。失败、上游断开就不调了 */
+  after(id: RpcId, work: (result: unknown) => void): void {
+    this.afterwards.set(idKey(id), work)
   }
 
   /** 一个请求刚转给了上游，它的应答回来时设备层还有事要做 */
@@ -125,6 +147,7 @@ export class Relay {
   close(): void {
     for (const tracked of this.tracked.values()) this.settle(tracked)
     this.tracked.clear()
+    this.afterwards.clear()
   }
 
   /** 应答里有会话对象的（新建、恢复、读取、分叉……）：记下它属于谁，打上 harness，换上设备层的归属 */
@@ -141,6 +164,9 @@ export class Relay {
       this.settle(tracked)
     }
     const result = frame.result
+    const afterwards = key === null ? undefined : this.afterwards.get(key)
+    if (key !== null && afterwards) this.afterwards.delete(key)
+    if (afterwards && frame.error === undefined) afterwards(result)
     if (tracked && frame.error === undefined) this.fulfil(link, tracked, result)
     if (request && frame.error === undefined) this.clientToolsSaw(link, request.method, result)
     let changed = false
@@ -169,8 +195,10 @@ export class Relay {
     if (SUBSCRIBING.has(method) && typeof thread?.id === 'string')
       this.host.clientTools.subscribed(link, thread.id)
     const turn = isObject(result.turn) ? result.turn : null
-    if (method === 'turn/start' && typeof turn?.id === 'string')
+    if (method === 'turn/start' && typeof turn?.id === 'string') {
       this.host.clientTools.turnStarted(link, turn.id)
+      this.host.sessions.clientTurn(link.harness, turn.id)
+    }
   }
 
   /** 上游说成了：把设备层这边该记的记上 */
@@ -199,6 +227,7 @@ export class Relay {
     this.see(link, thread.id, thread)
     thread.harness = link.harness
     this.host.workspaces.decorate(thread.id, thread)
+    if (this.host.declares(EXTENSION.sessionTree)) this.host.sessions.decorate(thread)
     return true
   }
 
@@ -263,10 +292,12 @@ export class Relay {
     }
     if (method === 'turn/started' || method === 'turn/completed') {
       const turn = isObject(fields?.turn) ? fields.turn : null
-      if (typeof turn?.id === 'string' && method === 'turn/completed')
+      if (typeof turn?.id === 'string' && method === 'turn/completed') {
         this.host.clientTools.turnEnded(link, turn.id)
-      else if (typeof turn?.id === 'string' && threadId)
+        this.host.deviceTools.turnEnded(link.harness, turn.id)
+      } else if (typeof turn?.id === 'string' && threadId)
         this.host.clientTools.turnBegan(link, threadId, turn.id)
+      if (fields) this.host.sessions.turnEvent(link.harness, method, fields)
     }
     if (this.host.optedOut(method)) return
     // 带会话标识的通知原样转发；不带的（账号变化、MCP 状态、技能变化、限额等）加上是哪个 harness 发的
@@ -285,6 +316,20 @@ export class Relay {
   private serverRequest(link: UpstreamLink, frame: Frame, upstreamId: RpcId, raw: string): void {
     const fields = isObject(frame.params) ? frame.params : null
     const threadId = typeof fields?.threadId === 'string' ? fields.threadId : null
+    // 设备进程自己执行的命名空间（litch_sessions……）：哪种上游发来的都不转给客户端，在这里答。
+    // 原生 codex 发给每条订阅连接各一份，注册表并成一次；答复从收到这一份的上游连接回
+    if (
+      frame.method === 'item/tool/call' &&
+      fields &&
+      this.host.deviceTools.has(fields.namespace)
+    ) {
+      this.host.deviceTools.dispatch(link.harness, fields, (result) => {
+        if (!link.available) return false
+        link.reply(JSON.stringify({ id: upstreamId, result }))
+        return true
+      })
+      return
+    }
     // 原生 codex 发给每条订阅连接的客户端工具调用：由设备进程挑一条转（client-tools.mts）
     if (
       frame.method === 'item/tool/call' &&
@@ -341,6 +386,14 @@ export class Relay {
     )
   }
 
+  /** 这个 harness 发来的这条请求（上游的请求号）是不是转给了客户端、还在等它答 */
+  holds(harness: string, upstreamId: RpcId): boolean {
+    const key = idKey(upstreamId)
+    for (const entry of this.pending.values())
+      if (entry.link?.harness === harness && idKey(entry.upstreamId) === key) return true
+    return false
+  }
+
   /** 客户端对服务端请求的应答：送回发出请求的那个上游 */
   answer(frame: Frame, raw: string): void {
     const entry = this.pending.get(idKey(frame.id))
@@ -376,6 +429,7 @@ export class Relay {
         )
     }
     this.renamed.delete(link)
+    for (const request of forwarded) this.afterwards.delete(idKey(request.id))
     // 等不到应答了，设备层这边该记的也就不记了；扣着的会话开始通知照常放出去
     const held: Frame[] = []
     for (const [key, tracked] of this.tracked) {

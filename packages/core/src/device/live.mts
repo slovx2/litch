@@ -61,6 +61,7 @@ import {
   settleSteps,
   todoKey,
 } from '../projection/todo.mjs'
+import { projectProposals } from '../projection/tree.mjs'
 import {
   channelFailure,
   deviceFault,
@@ -114,6 +115,8 @@ export interface LiveHost {
   dynamicTools?(harness: HarnessId | null): unknown[] | null
   /** 对面给了这个回合到现在为止的差异（整份）。工作目录不是 git 仓库时，差异面板只有它可看 */
   turnDiff?(sessionId: string, turnId: string, diff: string): void
+  /** 设备服务声明了会话树（sessionTree）：载入会话时顺带取它上面等着的提案 */
+  sessionTree?(): boolean
   log(line: string): void
 }
 
@@ -181,6 +184,8 @@ export interface LiveSessions {
   rollback(sessionId: string, turnId: string): Promise<void>
   /** 让对面开始压缩上下文。受理了就返回 */
   compact(sessionId: string): Promise<void>
+  /** 用户答了一张提案（开始、不要）：先从开着的会话里拿掉，不等设备进程的通知 */
+  dropProposal(sessionId: string, proposalId: string): void
 }
 
 interface Waiting extends PendingRequest {
@@ -622,6 +627,12 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     'thread/reverted': (live) => {
       if (!live.reverting) load(live)
     },
+    // 会话树：这个会话上的提案变了（新提、开始、不要、过期），带的是现在全部等着的
+    'litch/sessionProposal/changed': (live, { proposals }) => {
+      emit(live, [
+        { op: 'session.proposals', proposals: projectProposals(proposals, host.clock.now()) },
+      ])
+    },
   }
 
   // ---------- 载入与释放 ----------
@@ -650,7 +661,11 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     try {
       const resumed = await host.request('thread/resume', { threadId: live.id }, options)
       const view = projectThread(resumed.thread, scope(resumed.thread))
-      return { ...view, settings: projectSettings(resumed, presetsOf(view.harness)) }
+      return {
+        ...view,
+        settings: projectSettings(resumed, presetsOf(view.harness)),
+        proposals: await proposalsOf(live.id, options),
+      }
     } catch (error) {
       // 只有对面明确说“订阅不了”才退回去只取历史；断线、超时照常报错。
       // 它所属的 harness 不可用也不是“订阅不了”：只读地取同样取不到，等它恢复再载入
@@ -669,6 +684,24 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
           ? phrase('session.heldElsewhere')
           : phrase('session.readOnly', { message: error.message }),
       }
+    }
+  }
+
+  /** 会话上等着的提案。设备没有会话树、问不到都当没有：提案不是看会话的必需品 */
+  const proposalsOf = async (
+    threadId: string,
+    options: RpcRequestOptions,
+  ): Promise<SessionView['proposals']> => {
+    if (!host.sessionTree?.()) return []
+    try {
+      const { proposals } = await host.request('litch/sessionProposal/list', { threadId }, options)
+      return projectProposals(proposals, host.clock.now())
+    } catch (error) {
+      if (error instanceof RpcError && !isHarnessDown(error)) {
+        host.log(`取会话 ${threadId} 的提案失败：${error.message}`)
+        return []
+      }
+      throw error
     }
   }
 
@@ -979,6 +1012,17 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       if (!live) return
       if (live.sinks.size === 0) sessions.delete(sessionId)
       else if (reachable(live)) load(live)
+    },
+
+    dropProposal(sessionId, proposalId) {
+      const live = sessions.get(sessionId)
+      if (!live?.view?.proposals.some((proposal) => proposal.id === proposalId)) return
+      emit(live, [
+        {
+          op: 'session.proposals',
+          proposals: live.view.proposals.filter((proposal) => proposal.id !== proposalId),
+        },
+      ])
     },
 
     notification(method, params) {

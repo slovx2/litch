@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { CLIENT_TOOL_NAMESPACE } from '../../protocol/src/client-tools.mjs'
 import { type Connection, openStage, type Stage } from './fixtures/in-process.mjs'
 
 // 客户端工具（clientTools 扩展，protocol/extensions/client-tools.json）的执行方怎么挑：
@@ -159,6 +160,33 @@ test('CLIENT-TOOLS-006：别的命名空间照旧：交给发起回合的连接�
     await desktop.answer(call, OK)
     assert.equal((await desktop.completed(turn.id)).status, 'completed')
     assert.equal(litch.requests('item/tool/call').length, 0)
+    assert.deepEqual(results, [OK])
+  })
+})
+
+test('CLIENT-TOOLS-007：litch_sessions 照同一套规矩：设备进程替上游连接声明了的收得到，只声明了浏览器的收不到', async () => {
+  await withStage('ct-sessions', async (stage) => {
+    const sessions = CLIENT_TOOL_NAMESPACE.sessions
+    // 设备进程转给入口的握手：官方桌面端那条只多了 litch_sessions，Litch 桌面端那条是浏览器加 litch_sessions
+    const official = await stage.connect('official', {
+      litchExtensions: ['clientTools'],
+      litchClientTools: { namespaces: [sessions] },
+    })
+    const browserOnly = await stage.connect('browser-only', OTHER)
+    const { thread } = await browserOnly.request('thread/start', { cwd: stage.directory })
+    await official.request('thread/resume', { threadId: thread.id })
+    const results: unknown[] = []
+    scriptCall(stage, sessions, results)
+    // 回合由只声明了浏览器的连接发起：它不能执行 litch_sessions，交给订阅着、声明了的那条
+    const { turn } = await browserOnly.request('turn/start', {
+      threadId: thread.id,
+      input: text('调'),
+    })
+    const call = await official.serverRequest('item/tool/call')
+    assert.equal(call.params.namespace, sessions)
+    await official.answer(call, OK)
+    assert.equal((await browserOnly.completed(turn.id)).status, 'completed')
+    assert.equal(browserOnly.requests('item/tool/call').length, 0)
     assert.deepEqual(results, [OK])
   })
 })

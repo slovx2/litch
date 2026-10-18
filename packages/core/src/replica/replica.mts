@@ -1,12 +1,14 @@
 // 界面这一侧的数据副本：订阅通道上的主题，把快照和增量落到按键的状态库里。
 // 它不含任何界面框架的代码，界面只需要把“订阅一个键”接到自己的渲染机制上。
 import type { CoreChannel } from '../channel/client.mjs'
-import type {
-  AppOp,
-  ChannelErrorShape,
-  ManageOp,
-  SessionOp,
-  SidebarOp,
+import {
+  type AppOp,
+  type ChannelErrorShape,
+  type ManageOp,
+  type SessionOp,
+  type SidebarOp,
+  type TasksOp,
+  toChannelError,
 } from '../channel/protocol.mjs'
 import type {
   AppView,
@@ -31,7 +33,9 @@ import type {
   SettingSpecView,
   SettingsSnapshotView,
 } from '../model-manage.mjs'
+import type { TaskRunView, TasksView, TaskView } from '../model-tasks.mjs'
 import type { TerminalInfo, TerminalsOp, TerminalsView } from '../model-terminal.mjs'
+import type { SessionNoteView, SessionProposalView } from '../model-tree.mjs'
 import type { Text } from '../phrase.mjs'
 import { changedKeys } from '../projection/manage.mjs'
 import { appendOutput, appendSkipping } from '../text/output-cap.mjs'
@@ -58,6 +62,11 @@ export const keys = {
   tallies: (deviceId: string) => `sidebar:${deviceId}:tallies`,
   /** SessionHarnesses：这台设备上每个会话属于哪个 harness。侧栏只看某个 harness 时按它挑会话 */
   harnessOf: (deviceId: string) => `sidebar:${deviceId}:harnessOf`,
+  /**
+   * SessionChildren：会话树里每个父会话下面的 Litch 子会话，按派出的先后。只有父会话也在列表里的才算
+   * （父会话归档了、删了的子会话照常单列）。groups 里照样有子会话，嵌不嵌由界面按这张表决定
+   */
+  children: (deviceId: string) => `sidebar:${deviceId}:children`,
   /** SessionSummary */
   summary: (deviceId: string, sessionId: string) => `summary:${deviceId}:${sessionId}`,
   /** SessionSummary[] | null：已归档的会话，最近动过的在前。null 或者没有这个键：还没取过 */
@@ -81,6 +90,13 @@ export const keys = {
   /** SessionSettings：下一个回合会用的模型、强度、权限预设 */
   settings: (deviceId: string, sessionId: string) => `session:${deviceId}:${sessionId}:settings`,
   usage: (deviceId: string, sessionId: string) => `session:${deviceId}:${sessionId}:usage`,
+  /** SessionProposalView[]：这个会话上等着用户点的子会话提案 */
+  proposals: (deviceId: string, sessionId: string) => `session:${deviceId}:${sessionId}:proposals`,
+  /**
+   * SessionNotes：这个会话收到过的子会话回报，每个子会话留最近的一条（对话里注入的 <litch-session-event>）。
+   * 派出子会话的那张卡片上的“最后一句回报”用它
+   */
+  notes: (deviceId: string, sessionId: string) => `session:${deviceId}:${sessionId}:notes`,
   /** ManageSchema：这台设备上有哪些设置。有这个键说明管理数据的快照已经到了 */
   manage: (deviceId: string) => `manage:${deviceId}:schema`,
   /** SettingsSnapshotView：设置现在的值、待重启的 harness、SSH 入口的状况 */
@@ -106,9 +122,30 @@ export const keys = {
   /** DiffView：一个根在一种范围下变了哪些文件。有这个键说明差异面板正开着它 */
   diff: (deviceId: string, root: string, scope: DiffScope, sessionId: string | null) =>
     `diff:${deviceId}:view:${scope}:${sessionId ?? ''}:${root}`,
+  /** boolean | null：这台设备的服务支不支持定时任务。null：还没连上过，不知道 */
+  tasksAvailable: (deviceId: string) => `tasks:${deviceId}:available`,
+  /** string[]：这台设备上的定时任务的标识，按建的先后 */
+  taskIds: (deviceId: string) => `tasks:${deviceId}:ids`,
+  /** TaskView */
+  task: (deviceId: string, taskId: string) => `tasks:${deviceId}:task:${taskId}`,
+  /** number：各台设备上没看过的运行一共有几条。侧栏的“定时任务”入口用它 */
+  tasksUnread: 'tasks:unread',
+  /** TaskRunsPage：一个任务的运行记录（openTaskRuns 打开着才有） */
+  taskRuns: (deviceId: string, taskId: string) => `tasks:${deviceId}:runs:${taskId}`,
   /** ChannelErrorShape：这个根的差异订阅不上（不认识的根之类） */
   diffError: (deviceId: string, root: string, scope: DiffScope, sessionId: string | null) =>
     `diff:${deviceId}:error:${scope}:${sessionId ?? ''}:${root}`,
+}
+
+/** 一个任务的运行记录（详情页那一列）：新的在前，往下翻页 */
+export interface TaskRunsPage {
+  runs: TaskRunView[]
+  /** 还有更早的就有它；没有了是 null */
+  nextCursor: string | null
+  /** 正在取（头一页，或者下一页） */
+  loading: boolean
+  /** 上一次没取到的原因。取到了就清掉 */
+  error: ChannelErrorShape | null
 }
 
 /** 工作区的标识 → 它下面的终端。不属于任何工作区的（设备主目录的那一组）归在 LOOSE 这个键下 */
@@ -181,6 +218,43 @@ export type GroupTallies = Record<string, Record<HarnessId, GroupTally>>
  */
 export type SessionHarnesses = Record<string, HarnessId>
 
+/** 父会话 → 它下面的 Litch 子会话（按派出的先后） */
+export type SessionChildren = Record<string, string[]>
+
+/** 子会话 → 父会话收到的它最近的一条回报 */
+export type SessionNotes = Record<string, SessionNoteView>
+
+/** 会话树：父会话也在列表里的子会话，按父会话归拢，组里按派出的先后排 */
+function childrenOf(sessions: Map<string, SessionSummary>): SessionChildren {
+  const children: SessionChildren = {}
+  const sorted = [...sessions.values()]
+    .filter((session) => session.lineage && sessions.has(session.lineage.parentId))
+    .sort(
+      (a, b) => (a.lineage?.createdAt ?? 0) - (b.lineage?.createdAt ?? 0) || (a.id < b.id ? -1 : 1),
+    )
+  for (const session of sorted) {
+    const parent = session.lineage?.parentId
+    // 自己挂在自己下面（对面给错了）不算
+    if (!parent || parent === session.id) continue
+    children[parent] ??= []
+    children[parent].push(session.id)
+  }
+  return children
+}
+
+/** 一批条目里注入的回报，并进已有的那张表：后到的盖掉先到的。没有新的返回原来那张 */
+function gatherNotes(before: SessionNotes, items: Iterable<ItemView>): SessionNotes {
+  let next = before
+  for (const item of items) {
+    if (item.kind !== 'userMessage' || !item.event) continue
+    for (const note of item.event.notes) {
+      if (next === before) next = { ...before }
+      next[note.threadId] = note
+    }
+  }
+  return next
+}
+
 export interface SessionMeta {
   title: Text
   harness: string
@@ -208,7 +282,23 @@ export interface Replica {
    * 打开一个根的差异概况：订阅它（keys.diff）。核心只在有人订阅的时候才去设备上取，
    * 所以面板不显示的时候要关掉。可以打开多次，全部关掉后才退订并清掉
    */
-  openDiff(deviceId: string, root: string, scope: DiffScope, sessionId: string | null): () => void
+  openDiff(
+    deviceId: string,
+    root: string,
+    scope: DiffScope,
+    sessionId: string | null,
+  ): () => void /**
+   * 打开一个任务的运行记录：取头一页放进 keys.taskRuns，之后运行的变化跟着改；重连之后重新取头一页。
+   * 可以打开多次，全部关掉后才清掉
+   */
+  openTaskRuns(deviceId: string, taskId: string): () => void
+  /** 接着取下一页（没有下一页、正在取的时候不做事） */
+  moreTaskRuns(deviceId: string, taskId: string): void
+  /**
+   * 一次运行刚结束（核心连着的时候看着它结束的）：桌面端据此发系统通知。返回取消函数。
+   * 对账补上的、断开期间结束的不算
+   */
+  onTaskRunFinished(listener: (run: TaskRunView, task: TaskView | undefined) => void): () => void
 }
 
 const byId = (a: { id: string }, b: { id: string }): number =>
@@ -314,6 +404,149 @@ export function createReplica(channel: CoreChannel): Replica {
   const managed = new Map<string, { count: number; stop(): void }>()
   const diffs = new Map<string, { count: number; stop(): void }>()
   const files = createFileTrees(channel, store)
+  /** 各台设备的定时任务的订阅，和每台设备上的任务（算未读合计、找任务名要用） */
+  const taskLists = new Map<string, { stop(): void; tasks: Map<string, TaskView> }>()
+  /** 打开着的运行记录：键是 keys.taskRuns，记着打开了几次、第几代（重连之后重新取头一页，旧的结果作废） */
+  const runPages = new Map<
+    string,
+    { count: number; deviceId: string; taskId: string; epoch: number }
+  >()
+  const finishedListeners = new Set<(run: TaskRunView, task: TaskView | undefined) => void>()
+
+  /** 各台设备上没看过的运行加起来。数没变就不换 */
+  const refreshTasksUnread = () => {
+    let total = 0
+    for (const entry of taskLists.values()) {
+      for (const task of entry.tasks.values()) total += task.unreadRuns
+    }
+    if (store.get<number>(keys.tasksUnread) !== total) store.set(keys.tasksUnread, total)
+  }
+
+  /** 去取一个任务的运行记录的一页。first：头一页（重来）；否则接着 nextCursor 往下 */
+  const loadRuns = (key: string, first: boolean) => {
+    const entry = runPages.get(key)
+    if (!entry) return
+    const page = store.get<TaskRunsPage>(key)
+    if (!first && (!page || page.loading || page.nextCursor === null)) return
+    if (first) entry.epoch++
+    const epoch = entry.epoch
+    const cursor = first ? null : (page?.nextCursor ?? null)
+    store.set(key, {
+      runs: page?.runs ?? [],
+      nextCursor: page?.nextCursor ?? null,
+      loading: true,
+      error: null,
+    } satisfies TaskRunsPage)
+    channel.command('tasks.runs', { deviceId: entry.deviceId, taskId: entry.taskId, cursor }).then(
+      (result) => {
+        const now = runPages.get(key)
+        if (now !== entry || now.epoch !== epoch) return
+        const before = store.get<TaskRunsPage>(key)
+        const kept = first ? [] : (before?.runs ?? [])
+        const seen = new Set(kept.map((run) => run.id))
+        store.set(key, {
+          runs: [...kept, ...result.runs.filter((run) => !seen.has(run.id))],
+          nextCursor: result.nextCursor,
+          loading: false,
+          error: null,
+        } satisfies TaskRunsPage)
+      },
+      (error: unknown) => {
+        const now = runPages.get(key)
+        if (now !== entry || now.epoch !== epoch) return
+        const before = store.get<TaskRunsPage>(key)
+        store.set(key, {
+          runs: before?.runs ?? [],
+          nextCursor: before?.nextCursor ?? null,
+          loading: false,
+          error: toChannelError(error).toShape(),
+        } satisfies TaskRunsPage)
+      },
+    )
+  }
+
+  /** 一次运行变了：开着的运行记录里有它就换掉，是新的就放到最前面 */
+  const applyRun = (deviceId: string, run: TaskRunView) => {
+    const key = keys.taskRuns(deviceId, run.taskId)
+    if (!runPages.has(key)) return
+    const page = store.get<TaskRunsPage>(key)
+    if (!page) return
+    const at = page.runs.findIndex((entry) => entry.id === run.id)
+    const runs = at < 0 ? [run, ...page.runs] : page.runs.with(at, run)
+    store.set(key, { ...page, runs })
+  }
+
+  const applyTasks = (deviceId: string, tasks: Map<string, TaskView>, op: TasksOp) => {
+    switch (op.op) {
+      case 'task.upsert': {
+        const had = tasks.has(op.task.id)
+        tasks.set(op.task.id, op.task)
+        store.set(keys.task(deviceId, op.task.id), op.task)
+        if (!had) store.set(keys.taskIds(deviceId), [...tasks.keys()])
+        return
+      }
+      case 'task.remove': {
+        if (!tasks.delete(op.taskId)) return
+        store.delete(keys.task(deviceId, op.taskId))
+        store.set(keys.taskIds(deviceId), [...tasks.keys()])
+        return
+      }
+      case 'run.upsert': {
+        applyRun(deviceId, op.run)
+        if (op.finished) {
+          const task = tasks.get(op.run.taskId)
+          for (const listener of [...finishedListeners]) listener(op.run, task)
+        }
+        return
+      }
+    }
+  }
+
+  const watchTasks = (deviceId: string) => {
+    if (taskLists.has(deviceId)) return
+    const tasks = new Map<string, TaskView>()
+    const stop = channel.subscribe(
+      { kind: 'tasks', deviceId },
+      {
+        snapshot(view: TasksView) {
+          store.batch(() => {
+            for (const id of tasks.keys()) {
+              if (!view.tasks.some((task) => task.id === id)) store.delete(keys.task(deviceId, id))
+            }
+            tasks.clear()
+            for (const task of view.tasks) {
+              tasks.set(task.id, task)
+              store.set(keys.task(deviceId, task.id), task)
+            }
+            store.set(keys.taskIds(deviceId), [...tasks.keys()])
+            store.set(keys.tasksAvailable(deviceId), view.available)
+            refreshTasksUnread()
+          })
+          // 重新对过账了：开着的运行记录重新取头一页（断开的这段时间里的变化通知没收到）
+          for (const [key, entry] of runPages) {
+            if (entry.deviceId === deviceId) loadRuns(key, true)
+          }
+        },
+        delta(ops) {
+          store.batch(() => {
+            for (const op of ops) applyTasks(deviceId, tasks, op)
+            refreshTasksUnread()
+          })
+        },
+      },
+    )
+    taskLists.set(deviceId, { stop, tasks })
+  }
+
+  const dropTasks = (deviceId: string) => {
+    const entry = taskLists.get(deviceId)
+    if (!entry) return
+    entry.stop()
+    taskLists.delete(deviceId)
+    for (const [key, page] of runPages) if (page.deviceId === deviceId) runPages.delete(key)
+    store.deletePrefix(`tasks:${deviceId}:`)
+    refreshTasksUnread()
+  }
 
   /** 换上一份新的设置值，并把动过的那些键的次数各加一 */
   const setSnapshot = (deviceId: string, snapshot: SettingsSnapshotView, touched: string[]) => {
@@ -374,6 +607,12 @@ export function createReplica(channel: CoreChannel): Replica {
     for (const session of sessions.values()) harnessOf[session.id] = session.harness
     const known = store.get<SessionHarnesses>(keys.harnessOf(deviceId))
     if (!known || !sameHarnesses(known, harnessOf)) store.set(keys.harnessOf(deviceId), harnessOf)
+    // 会话树：父子关系变了、会话多了少了才换
+    const children = childrenOf(sessions)
+    const nested = store.get<SessionChildren>(keys.children(deviceId))
+    if (!nested || JSON.stringify(nested) !== JSON.stringify(children)) {
+      store.set(keys.children(deviceId), children)
+    }
   }
 
   const applySidebar = (deviceId: string, sessions: Map<string, SessionSummary>, op: SidebarOp) => {
@@ -447,6 +686,7 @@ export function createReplica(channel: CoreChannel): Replica {
     terminalLists.get(deviceId)?.()
     terminalLists.delete(deviceId)
     store.deletePrefix(`terminals:${deviceId}:`)
+    dropTasks(deviceId)
   }
 
   /** 终端的列表：每个终端一个键，另有“每个工作区下有哪些标签”和“留在设备上的有哪些”两个汇总 */
@@ -514,6 +754,7 @@ export function createReplica(channel: CoreChannel): Replica {
       if (!ids.includes(op.device.id)) store.set(keys.devices, [...ids, op.device.id])
       watchSidebar(op.device.id)
       watchTerminals(op.device.id)
+      watchTasks(op.device.id)
       // 断了又连上：正看着的文件树重新对一遍（断着的时候取的都是“没连上”）
       if (before && before.connection !== 'online' && op.device.connection === 'online') {
         files.reconnected(op.device.id)
@@ -565,6 +806,10 @@ export function createReplica(channel: CoreChannel): Replica {
       }
       case 'item.add': {
         store.set(itemKey(op.item.id), op.item)
+        if (op.item.kind === 'userMessage' && op.item.event) {
+          const before = store.get<SessionNotes>(keys.notes(deviceId, sessionId)) ?? {}
+          store.set(keys.notes(deviceId, sessionId), gatherNotes(before, [op.item]))
+        }
         const turn = store.get<TurnView>(turnKey(op.turnId))
         if (turn && !turn.itemIds.includes(op.item.id)) {
           store.set(turnKey(op.turnId), { ...turn, itemIds: [...turn.itemIds, op.item.id] })
@@ -644,6 +889,9 @@ export function createReplica(channel: CoreChannel): Replica {
         if (meta) store.set(keys.session(deviceId, sessionId), { ...meta, can: op.can })
         return
       }
+      case 'session.proposals':
+        store.set(keys.proposals(deviceId, sessionId), op.proposals satisfies SessionProposalView[])
+        return
     }
   }
 
@@ -755,6 +1003,12 @@ export function createReplica(channel: CoreChannel): Replica {
                 store.set(keys.queued(deviceId, sessionId), view.queued)
                 store.set(keys.settings(deviceId, sessionId), view.settings)
                 store.set(keys.usage(deviceId, sessionId), view.usage)
+                store.set(keys.proposals(deviceId, sessionId), view.proposals)
+                // 按回合、条目的先后：同一个子会话后来的回报盖掉先前的
+                const ordered = view.turns.flatMap((turn) =>
+                  turn.itemIds.flatMap((id) => view.items[id] ?? []),
+                )
+                store.set(keys.notes(deviceId, sessionId), gatherNotes({}, ordered))
                 const meta: SessionMeta = {
                   title: view.title,
                   harness: view.harness,
@@ -795,6 +1049,38 @@ export function createReplica(channel: CoreChannel): Replica {
     },
 
     files,
+
+    openTaskRuns(deviceId, taskId) {
+      const key = keys.taskRuns(deviceId, taskId)
+      const existing = runPages.get(key)
+      if (existing) existing.count++
+      else {
+        runPages.set(key, { count: 1, deviceId, taskId, epoch: 0 })
+        loadRuns(key, true)
+      }
+      let released = false
+      return () => {
+        if (released) return
+        released = true
+        const entry = runPages.get(key)
+        if (!entry) return
+        entry.count--
+        if (entry.count > 0) return
+        runPages.delete(key)
+        store.delete(key)
+      }
+    },
+
+    moreTaskRuns(deviceId, taskId) {
+      loadRuns(keys.taskRuns(deviceId, taskId), false)
+    },
+
+    onTaskRunFinished(listener) {
+      finishedListeners.add(listener)
+      return () => {
+        finishedListeners.delete(listener)
+      }
+    },
 
     openDiff(deviceId, root, scope, sessionId) {
       const key = keys.diff(deviceId, root, scope, sessionId)

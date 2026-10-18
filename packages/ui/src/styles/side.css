@@ -48,6 +48,9 @@
   flex: 1 1 0;
 }
 .side-tab {
+  /* 面板很窄、标签又多的时候标签一起让：字截短，不把面板撑出去 */
+  flex: 0 1 auto;
+  min-width: 0;
   height: 26px;
   padding: 0 10px;
   display: inline-flex;

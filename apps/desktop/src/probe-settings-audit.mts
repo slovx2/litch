@@ -1,5 +1,5 @@
 // 设置页验收的第三段：六套组合（三种皮肤乘深浅）下，把以前没量过的几屏各过一遍——对话区、侧栏、审批卡片、
-// 已归档对话、设置页的五组——有没有横向溢出、有没有读不清的字（量法在 probe-settings-kit.mts 的 audit）。
+// 已归档对话、定时任务（列表、详情、表单）、设置页的各组——有没有横向溢出、有没有读不清的字（量法在 probe-settings-kit.mts 的 audit）。
 // 设备列表、新建对话页、提问向导、设备管理、终端、文件在各自的验收里量过，这里不重复。
 // 再加一段：缩放到最大和最小时，对话区和文件树（只画看得见的行的那种列表）对不对。
 import type { Audit, SettingsKit } from './probe-settings-kit.mjs'
@@ -15,6 +15,9 @@ export interface ScreensSeen {
   /** 量的时候审批卡片在不在、已归档的列表有几行（证明量的确实是那一屏） */
   cardShown: boolean
   archivedRows: number
+  /** 定时任务列表有几行、详情里的运行记录有几条 */
+  taskRows: number
+  taskRuns: number
 }
 
 export async function screensSeen(titles: { talk: string; waiting: string }): Promise<ScreensSeen> {
@@ -55,6 +58,23 @@ export async function screensSeen(titles: { talk: string; waiting: string }): Pr
   await sweep('已归档', ['.main'])
   one<HTMLButtonElement>('.arch-head .ibtn')?.click()
 
+  // 定时任务：列表；一个有几次运行（有失败、有成功）的任务的详情，运行记录取到了再量；新建表单
+  one<HTMLButtonElement>('.sb-link.tasks')?.click()
+  await until('定时任务列表', () => one('[data-tasks="list"]') && all('.tk-row').length > 0)
+  const taskRows = all('.tk-row').length
+  await sweep('定时任务', ['.main'])
+  one<HTMLButtonElement>('.tk-row[data-task="task-deps"] .tk-row-btn')?.click()
+  await until('定时任务的运行记录', () => all('.tk-run').length > 0)
+  const taskRuns = all('.tk-run').length
+  await sweep('定时任务·详情', ['.main'])
+  one<HTMLButtonElement>('[data-tasks="detail"] [data-act="back"]')?.click()
+  await until('回到定时任务列表', () => one('[data-act="new-task"]'))
+  one<HTMLButtonElement>('[data-act="new-task"]')?.click()
+  await until('新建定时任务的表单', () => one('.tk-form'))
+  await sweep('定时任务·表单', ['.main'])
+  one<HTMLButtonElement>('[data-tasks="form"] .arch-head .ibtn:last-child')?.click()
+  await until('关掉定时任务那一页', () => !one('[data-tasks]'))
+
   // 设置页的各组（照左边列出来的，Computer Use 只在 macOS 上有）：中文量一遍，英文（字更长）量一遍。
   // “关于”里点开一份许可再量；内置浏览器、Computer Use 等清单和权限取到了再量
   await kit.openSettings()
@@ -86,7 +106,7 @@ export async function screensSeen(titles: { talk: string; waiting: string }): Pr
   kit.look.set({ skin: before.skin, theme: before.theme, lang: before.lang })
   one<HTMLButtonElement>('.set-head .ibtn')?.click()
   await kit.settled()
-  return { rows, cardShown, archivedRows }
+  return { rows, cardShown, archivedRows, taskRows, taskRuns }
 }
 
 export interface ZoomLists {
