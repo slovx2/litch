@@ -9,8 +9,8 @@
 Litch aims to be a comfortable desktop client with a great remote-connection experience.
 
 - Direct SSH connections
-- Built-in browser + Computer Use (macOS only for now)
-- While the desktop is connected, remote devices can use its browser and Computer Use
+- Built-in browser + Computer Use (macOS and Windows)
+- While the desktop is connected, remote devices can use its browser and Computer Use, and, once you approve, run commands and read and write files on it
 
 ## Screenshots
 
@@ -37,7 +37,8 @@ The screenshots show demo data. Skin, light or dark, and language (中文 / Engl
 - **Remote connections.** Connect through your own ssh config and keys, with no port opened on either side; dropped connections reconnect by themselves and running turns are not lost.
 - **Multiple harnesses.** Claude Code, Pi, Codex, plus experimental DeepSeek Harness (DSH), OpenCode and ACP agents (Gemini CLI, Qwen Code and more), all in one window.
 - **Built-in browser.** Shared by you and the agent; the remote machine's localhost is forwarded over ssh.
-- **Computer Use (macOS).** The agent operates apps on your Mac, and each app needs your approval before the first action.
+- **Computer Use (macOS and Windows).** The agent operates apps on this computer, and each app needs your approval before the first action; a notice shows on screen while it works, and Esc stops it.
+- **Operate this computer.** Once you approve, agents on remote devices can run commands, read and write files, and copy files between the two machines on the desktop computer. Off by default, turned on per device.
 - **Panels for coding.** A terminal that survives a dropped connection, a file tree, and diff review.
 - **Android client.** Browse sessions, send messages, answer approvals and open terminals from your phone.
 
@@ -47,7 +48,8 @@ The screenshots show demo data. Skin, light or dark, and language (中文 / Engl
 |---|---|
 | Adapter `codex-harness-adapter` | Usable. Lets the Codex desktop app drive Claude Code, Pi and the experimental DSH, OpenCode and ACP agents directly; Litch also reaches all the harnesses on a machine through it. See [install and usage](ADAPTER.en.md) |
 | Desktop client Litch | Early development. Installers are available for macOS (Apple Silicon) and Windows (see Download below; the Windows build has not been fully tested), or run it from source. The app ships with its own copy of the adapter and gathers the harnesses installed on this machine under one device, Local. You can browse sessions, send messages (with images and attachments), queue, interrupt and steer, answer approvals and questions, and use plan mode, `/` commands and `@` to find files. When starting a session you pick the device, project and harness, and sessions from different harnesses in the same folder share one workspace. The side panel has a terminal, files and diff review. The Devices page can enable or disable a harness, change its settings, and show diagnostics and logs. It can also connect over SSH to the device service or native codex on a remote machine |
-| Built-in browser, Computer Use | Available since 0.8.0; Computer Use is macOS only. Agents on remote devices can use both capabilities of the desktop (the adapter there needs 0.8.0 or later) |
+| Built-in browser, Computer Use | Available since 0.8.0; Computer Use on macOS since 0.8.0 and on Windows since 0.10.0. Agents on remote devices can use both capabilities of the desktop (the adapter there needs 0.8.0 or later) |
+| Operate this computer | Available since 0.10.0; the desktop side is macOS only for now. Sessions on remote devices operate the desktop computer's commands and files once you approve; Codex, Claude Code and Pi sessions use the tools directly, other harnesses use the `litch-machine` command on that machine (the adapter there needs 0.10.0 or later) |
 | Android client | Available since 0.9.0, early version. Connects over SSH to remote machines with the adapter installed: browse sessions, send messages, answer approvals, open terminals |
 
 ## Download

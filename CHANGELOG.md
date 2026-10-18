@@ -5,6 +5,15 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
+## 0.10.0
+
+- Litch：Computer Use 有了 Windows 版（x64）。代理经 `litch_computer` 这组工具看 Windows 上应用的窗口（截图加 UI Automation 的界面树）、点击、打字、按键、滚动、设值、拖拽、选字。操作由随应用带的助手程序（`litch-computer-use.exe`）来做，不需要系统授权。每个会话第一次操作某个应用前要你批准，远程设备的会话没有“一直允许”；任务管理器、设置、控制面板、密码管理器、安全软件、登录与 UAC 提示、Litch 自己一律不许碰；浏览器、终端、资源管理器标成高风险。操作时目标窗口四周有橙色边框，上沿有“Litch 正在操作…… · 按 Esc 停止”的提示；按 Esc 本回合就停（经 Moonlight、远程桌面一类工具按的也算）；你在动鼠标或键盘时动作先等一等，桌面锁着时不动。设置 → Computer Use 里能看助手的状态、重启助手、管理始终允许的应用；Litch 以管理员身份运行或这台电脑关了 UAC 时会提醒你。打字走剪贴板粘贴（终端类窗口照旧逐字发），粘贴期间剪贴板临时被占用，粘完就恢复。
+- 新增“操作这台电脑”（`litch_machine`，桌面端目前只支持 macOS）：远程设备上的会话经你点头后在桌面这台电脑上跑命令、读写文件、在两台机器之间复制文件，卡片上写明来自哪台设备、哪个 harness、哪个会话。每台远程设备各有一个开关，默认关；确认方式三档（默认“每个会话确认一次”，执行写入和读取两类各记一次；另有“逐条确认”“不确认”），没有“一直允许”；访问范围三档（默认“禁止常用敏感位置”，如 SSH 钥匙、钥匙串、浏览器资料、邮件和信息；另有“全放开”“自定义”）。Codex、Claude Code、Pi 的会话直接用这组工具；其余 harness（DSH、OpenCode、ACP agent）用那台机器上的命令 `litch-machine`，等你点头可能要几分钟，命令工具的超时要调长。Codex 默认的沙箱、Claude Code 的“项目内”“只读”挡得住 `litch-machine`，这两家用工具就行，命令行被挡时改成完全访问。
+- 适配器：命令行多了 `machine` 子命令（短名 `litch-machine`，安装包的 `bin/` 下带着），经设备服务请连着的 Litch 执行；设备进程新增转交这类调用的扩展方法（`litch/clientTool/invoke`、`litch/clientTool/desktops`）。要用“操作这台电脑”的命令行，远程机器上的适配器要 0.10.0 或更新。
+- Claude Code、Pi 入口：动态工具命名空间的说明接在它第一个工具的说明前面。这两家没有命名空间这一层，以前浏览器、Computer Use 的总说明（包括安全规则）模型看不到。
+- Litch（Windows）：0.9.0 在 Windows 上连不上本机设备（设备进程不认命名管道，界面上一直是“本机的设备服务没能起来”），修好了。
+- Litch（Windows）：内置适配器的后台服务起 Pi 运行时、设备进程时不再弹出终端窗口（默认终端是 Windows Terminal 时以前会留下两个空的终端窗口），调命令行时也不再闪窗口。
+
 ## 0.9.0
 
 - 新增 OpenCode 入口（实验性）：经你自己装的 OpenCode（>= 1.18.0）的 `opencode serve` 接入，会话和 OpenCode 自己共用。支持逐字输出、思考过程、插话、中断、命令与改文件的审批（拒绝可附说明）、提问题卡、待办当计划、回合差异、用量、技能与斜杠命令、计划模式、按消息分叉、回退（会连文件一起恢复）、压缩、图片。装了就启用，SSH 端口 7334（`--opencode-port`），`CHA_OPENCODE_CLI` 可指定路径。
