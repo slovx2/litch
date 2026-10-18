@@ -1,6 +1,7 @@
 import { type DeviceView, keys, type SessionSummary, type WorkspaceView } from '@litch/core'
 import type { PlaceWish } from '../composer/new-place.ts'
 import { useNewHarness } from '../composer/remembered.ts'
+import { MachineMarker } from '../machine/MachineMarker.tsx'
 import { SideToggle } from '../side/SideSlot.tsx'
 import { SidebarToggle } from '../sidebar/SidebarFrame.tsx'
 import { TerminalToggle } from '../terminal/TerminalSlot.tsx'
@@ -82,6 +83,8 @@ export function TitleBar({
           </b>
         )}
       </nav>
+      {/* 远程设备在这台电脑上有动静时才出（08 号设计） */}
+      <MachineMarker />
       <TerminalToggle />
       <SideToggle />
     </header>
