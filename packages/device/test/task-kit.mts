@@ -53,7 +53,7 @@ export const taskErrorCode = (reason: string): number =>
 
 /**
  * 墙钟是真的时间加上一段可以拨的偏移；调度的定时器只在 advance 时到点。
- * 回合里的等待（task-run.mts）用的是真的定时器，时限按这里的墙钟算，所以拨钟也能让回合超时。
+ * 回合里的等待（engine-link.mts 的 runTurn）用的是真的定时器和真的时间，拨钟不会让回合超时。
  */
 export class FakeClock implements TaskClock {
   offset = 0

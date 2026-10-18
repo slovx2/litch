@@ -25,6 +25,7 @@ import {
   type TaskTarget,
 } from '../../protocol/src/device-tasks.mjs'
 import { localTaskTimeZone, nextTaskRun } from '../../protocol/src/task-schedule.mjs'
+import type { EngineLink } from './engine-link.mjs'
 import type { HarnessSource } from './session.mjs'
 import { openSideLink } from './side-link.mjs'
 import { DEFAULT_TASK_TIMING, type TaskTiming } from './task-run.mjs'
@@ -52,7 +53,7 @@ import {
   unknownTask,
 } from './task-validate.mjs'
 import type { ThreadIndex } from './thread-index.mjs'
-import { DeviceError, type Frame, isObject } from './wire.mjs'
+import { DeviceError, isObject } from './wire.mjs'
 import type { Workspaces } from './workspaces.mjs'
 
 /** 这个扩展的方法都在这个前缀下，由设备进程自己处理 */
@@ -71,8 +72,8 @@ export interface DeviceTasksOptions {
   timing?: Partial<TaskTiming>
   /** 定时器最长等多久就醒来看一眼墙钟（毫秒），见 task-scheduler.mts */
   maxTimerMs?: number
-  /** litch_tasks 的调用来自任务自己的内部连接时，交给它答 */
-  toolCall?(harness: string, frame: Frame, reply: (result: unknown) => void): void
+  /** 开一条内部连接（DeviceServer.openEngineLink）：跑任务、核对会话在不在 */
+  openEngineLink(harness: string): Promise<EngineLink>
 }
 
 const seconds = (ms: number): number => Math.floor(ms / 1000)
@@ -118,14 +119,12 @@ export class DeviceTasks {
       store,
       clock: this.clock,
       timing: this.timing,
-      version: options.version,
       maxTimerMs: options.maxTimerMs ?? MAX_TIMER_MS,
-      harnesses: () => options.harnesses(),
+      openEngineLink: (harness) => options.openEngineLink(harness),
       log: options.log,
       taskChanged: (id) => this.changed('updated', id),
       runChanged: (run) => this.runChanged(run),
       born: (harness, thread, workspaceId) => this.born(harness, thread, workspaceId),
-      toolCall: (harness, frame, reply) => options.toolCall?.(harness, frame, reply),
     })
   }
 

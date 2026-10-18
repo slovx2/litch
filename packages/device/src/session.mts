@@ -30,6 +30,7 @@ import type { ClientToolInvoker } from './client-tool-invoke.mjs'
 import type { ClientToolPeer, ClientToolRouter } from './client-tools.mjs'
 import type { ManagedHarness } from './control.mjs'
 import { DeviceCalls, type DeviceLayer } from './device-layer.mjs'
+import { type DeviceTools, declareDeviceTools } from './device-tools.mjs'
 import { describeHarness, type HarnessCatalog, REQUIRED_EXTENSIONS } from './harness-info.mjs'
 import { listThreads } from './list-threads.mjs'
 import { type DeviceManagement, MANAGEMENT_PREFIX } from './management.mjs'
@@ -37,7 +38,6 @@ import { dialectFor } from './native-codex.mjs'
 import { Relay } from './relay.mjs'
 import { classify } from './routes.mjs'
 import { describeDevice } from './service-info.mjs'
-import { declareTasksTool } from './task-link.mjs'
 import { DEVICE_TASK_PREFIX, type DeviceTasks } from './tasks.mjs'
 import type { ThreadIndex } from './thread-index.mjs'
 import { type ForwardedRequest, INTERNAL_ID_PREFIX, UpstreamLink } from './upstream.mjs'
@@ -111,6 +111,8 @@ export interface SessionHost {
   clientInvoke: ClientToolInvoker
   /** 定时任务（deviceTasks 扩展）。任务库打不开时是 null，设备上就没有这项扩展 */
   tasks: DeviceTasks | null
+  /** 由设备进程自己执行的命名空间（device-tools.mts） */
+  deviceTools: DeviceTools
 }
 
 /** 请求已经有着落：转给上游了（应答由上游来），或者已经自己答过了 */
@@ -167,6 +169,7 @@ export class ClientSession implements ClientToolPeer {
       workspaces: host.workspaces,
       startedHoldMs: host.timing.startedHoldMs,
       log: (line) => host.log(`${this.tag} ${line}`),
+      deviceTools: host.deviceTools,
       clientTools: {
         offer: (link, frame, upstreamId) => host.clientTools.offer(this, link, frame, upstreamId),
         device: (link, frame, upstreamId) => host.clientTools.device(link, frame, upstreamId),
@@ -229,6 +232,11 @@ export class ClientSession implements ClientToolPeer {
 
   withdrawClientTool(facingId: RpcId, threadId: string | null): void {
     this.relay.withdraw(facingId, threadId)
+  }
+
+  /** 这个 harness 发来的这条请求（上游的请求号）是不是转给了这条连接的客户端、还在等它答 */
+  holdsServerRequest(harness: string, requestId: RpcId): boolean {
+    return this.state !== 'closed' && this.relay.holds(harness, requestId)
   }
 
   upstream(harness: string): UpstreamLink | null {
@@ -553,10 +561,12 @@ export class ClientSession implements ClientToolPeer {
       // 对面是适配器的运行时还是原生的 codex：适配器主进程说了算，没有它管着的看启动配置
       dialect: dialectFor(source.managed ? source.managed.native : source.native),
       // 客户端声明的能力带给上游，包括它认识哪些扩展（原生 codex 不认识扩展键，握手时会摘掉）。
-      // 设备进程替这条连接声明能执行 litch_tasks：调用到了由设备进程自己答（relay.mts），引擎挑执行方时挑得中它
-      initializeParams: this.host.tasks
-        ? declareTasksTool(this.initializeParams)
-        : this.initializeParams,
+      // 设备进程替这条连接声明能执行它自己的那几个命名空间（litch_tasks……）：调用到了由设备进程自己答
+      // （relay.mts、device-tools.mts），引擎挑执行方时挑得中它
+      initializeParams: declareDeviceTools(
+        this.initializeParams,
+        this.host.deviceTools.namespaces(),
+      ),
       retryMs: timing.retryMs,
       handshakeTimeoutMs: timing.handshakeTimeoutMs,
       frame: (from, frame, raw, request) => this.relay.upstream(from, frame, raw, request),

@@ -10,8 +10,7 @@
 import { randomUUID } from 'node:crypto'
 import type { DeviceTaskRun } from '../../protocol/src/device-tasks.mjs'
 import { countTaskRuns, nextTaskRun } from '../../protocol/src/task-schedule.mjs'
-import type { HarnessSource } from './session.mjs'
-import type { EngineLink } from './task-link.mjs'
+import type { EngineLink } from './engine-link.mjs'
 import {
   executeRun,
   RunFailure,
@@ -21,7 +20,6 @@ import {
   type TaskTiming,
 } from './task-run.mjs'
 import { publicRun, type RunRow, type TaskRow, type TaskStore } from './task-store.mjs'
-import type { Frame } from './wire.mjs'
 
 /** 设置里的两项（Go 层 settings_tasks.go，经控制通道推来） */
 export interface TaskSettings {
@@ -61,15 +59,14 @@ export interface SchedulerHost {
   store: TaskStore
   clock: TaskClock
   timing: TaskTiming
-  version: string
   maxTimerMs: number
-  harnesses(): HarnessSource[]
+  /** 开一条内部连接（见 RunHost.openEngineLink） */
+  openEngineLink(harness: string): Promise<EngineLink>
   log(line: string): void
   /** 任务的字段变了（下一次运行时间、最近一次运行、未读数……） */
   taskChanged(taskId: string): void
   runChanged(run: DeviceTaskRun): void
   born(harness: string, thread: Record<string, unknown>, workspaceId: string | null): void
-  toolCall(harness: string, frame: Frame, reply: (result: unknown) => void): void
 }
 
 const seconds = (ms: number): number => Math.floor(ms / 1000)
@@ -94,8 +91,6 @@ export class TaskScheduler {
   private readonly executing = new Map<string, Promise<void>>()
   private closed = false
   private started = false
-  /** 正在用的内部连接：设备进程退出时一起关掉，等着的回合当场醒来（运行留着 running，下次起来去查） */
-  private readonly links = new Set<EngineLink>()
 
   constructor(host: SchedulerHost) {
     this.host = host
@@ -152,12 +147,11 @@ export class TaskScheduler {
     return { run, deduplicated: false }
   }
 
+  /** 不再排、不再记。正在用的内部连接由设备进程随后关掉（运行留着 running，下次起来去查） */
   close(): void {
     this.closed = true
     if (this.timer !== null) this.host.clock.clearTimer(this.timer)
     this.timer = null
-    for (const link of [...this.links]) link.close()
-    this.links.clear()
   }
 
   private newRun(
@@ -208,24 +202,18 @@ export class TaskScheduler {
     const { host } = this
     return {
       now: () => host.clock.now(),
-      version: host.version,
       timing: host.timing,
       log: host.log,
       progress: (run) => this.progress(run),
       born: host.born,
-      toolCall: host.toolCall,
-      hold: (link) => {
-        if (this.closed) link.close()
-        else this.links.add(link)
-        return () => this.links.delete(link)
-      },
+      openEngineLink: (harness) => host.openEngineLink(harness),
     }
   }
 
   private begin(run: RunRow): void {
     const task = this.host.store.task(run.taskId)
     if (!task) return
-    const work = executeRun(this.runHost(), () => this.host.harnesses(), task, publicRun(run)).then(
+    const work = executeRun(this.runHost(), task, publicRun(run)).then(
       (outcome) => this.finish(run.id, outcome),
       (error) => this.finish(run.id, failure(error)),
     )
@@ -235,7 +223,7 @@ export class TaskScheduler {
   /** 上一次设备进程退出时还在跑的：去会话里查结果，还在跑就接着等 */
   private recover(run: RunRow): void {
     this.host.log(`任务 ${run.taskId} 的运行 ${run.id} 上一次没有跑完，去会话里查结果`)
-    const work = recoverRun(this.runHost(), () => this.host.harnesses(), publicRun(run)).then(
+    const work = recoverRun(this.runHost(), publicRun(run)).then(
       (outcome) => this.finish(run.id, outcome),
       (error) => this.finish(run.id, failure(error)),
     )

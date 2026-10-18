@@ -1,4 +1,4 @@
-// 定时任务的一次运行怎么驱动引擎：开一条内部连接（task-link.mts）到目标 harness，
+// 定时任务的一次运行怎么驱动引擎：开一条内部连接（engine-link.mts）到目标 harness，
 // 新建会话（或者恢复已有的会话、等它空下来），发一个回合，等 turn/completed，取最后一条回答的开头。
 // 这里只管和引擎打交道；运行记录怎么存、什么时候开始、跑完任务怎么变，在 tasks.mts。
 import { existsSync, statSync } from 'node:fs'
@@ -11,11 +11,17 @@ import {
   type TaskError,
   type TaskRunErrorCode,
 } from '../../protocol/src/device-tasks.mjs'
-import { dialectFor } from './native-codex.mjs'
-import type { HarnessSource } from './session.mjs'
-import { type EngineLink, openEngineLink } from './task-link.mjs'
+import {
+  type EngineLink,
+  EngineUnavailable,
+  lastAnswerIn,
+  runTurn,
+  type TurnResult,
+  turnResult,
+  watchTurn,
+} from './engine-link.mjs'
 import type { TaskRow } from './task-store.mjs'
-import { type Frame, isObject, UpstreamRpcError } from './wire.mjs'
+import { isObject, UpstreamRpcError } from './wire.mjs'
 
 export interface TaskTiming {
   /** 一个回合最长跑多久，到点打断（毫秒） */
@@ -61,17 +67,17 @@ export class RunFailure extends Error {
 export interface RunHost {
   /** 现在的时间（毫秒） */
   now(): number
-  version: string
   timing: TaskTiming
   log(line: string): void
   /** 运行的进展：会话建好了、回合开始了。传进来的是改好的整份运行 */
   progress(run: DeviceTaskRun): void
   /** 新建出来的会话：登记进索引、归进工作区 */
   born(harness: string, thread: Record<string, unknown>, workspaceId: string | null): void
-  /** litch_tasks 的一次调用（来自这条内部连接） */
-  toolCall(harness: string, frame: Frame, reply: (result: unknown) => void): void
-  /** 开着的内部连接登记一下，设备进程退出时一起关掉。返回的函数在连接用完时调用 */
-  hold(link: EngineLink): () => void
+  /**
+   * 开一条内部连接（DeviceServer.openEngineLink，harness 正在起、暂时连不上时最多等 harnessWaitMs）。
+   * 开不了抛 EngineUnavailable。设备进程退出时它替我们关掉
+   */
+  openEngineLink(harness: string): Promise<EngineLink>
 }
 
 /** 给模型看的时间：任务时区里的 YYYY-MM-DD HH:MM */
@@ -118,70 +124,14 @@ export function taskPrompt(task: TaskRow, run: DeviceTaskRun, nowSeconds: number
 
 const message = (error: unknown): string => (error instanceof Error ? error.message : String(error))
 
-/** 这个 harness 现在能不能用。不能用抛 harnessUnavailable */
-export function usableSource(sources: HarnessSource[], harness: string): HarnessSource {
-  const source = sources.find((item) => item.id === harness)
-  if (!source)
-    throw new RunFailure('harnessUnavailable', `${harness} is not configured on this device`)
-  if (source.managed && source.managed.state !== 'running')
-    throw new RunFailure(
-      'harnessUnavailable',
-      `${harness} is not running (${source.managed.state})`,
-    )
-  return source
-}
-
-/**
- * 连上这个 harness。它正在起（适配器主进程刚把它拉起来，比如服务刚重启、错过的运行正要补跑）
- * 或者暂时连不上时，最多等 harnessWaitMs；停用了、没装、起不来的当场算 harnessUnavailable
- */
-export async function reachEngine(
-  sources: () => HarnessSource[],
-  harness: string,
-  host: Pick<RunHost, 'version' | 'timing' | 'toolCall' | 'now'>,
-  notification: (method: string, params: Record<string, unknown>) => void,
-  lost: () => void,
-): Promise<EngineLink> {
-  const deadline = host.now() + host.timing.harnessWaitMs
-  for (;;) {
-    const source = sources().find((item) => item.id === harness)
-    const starting = source?.managed?.state === 'starting'
-    if (!starting) {
-      const usable = usableSource(sources(), harness)
-      try {
-        return await connectEngine(usable, host, notification, lost)
-      } catch (error) {
-        if (host.now() >= deadline) throw error
-      }
-    } else if (host.now() >= deadline) usableSource(sources(), harness)
-    await new Promise((resolve) => setTimeout(resolve, 1000).unref())
-  }
-}
-
-/** 开一条内部连接。连不上、握手失败都算 harnessUnavailable */
-export async function connectEngine(
-  source: HarnessSource,
-  host: Pick<RunHost, 'version' | 'timing' | 'toolCall'>,
-  notification: (method: string, params: Record<string, unknown>) => void,
-  lost: () => void,
-): Promise<EngineLink> {
+/** 开内部连接；开不了的算 harnessUnavailable */
+async function reach(host: RunHost, harness: string): Promise<EngineLink> {
   try {
-    return await openEngineLink({
-      connect: source.connect,
-      dialect: dialectFor(source.managed ? source.managed.native : source.native),
-      version: host.version,
-      handshakeTimeoutMs: host.timing.handshakeTimeoutMs,
-      handlers: {
-        notification,
-        toolCall: (frame, reply) => host.toolCall(source.id, frame, reply),
-        lost,
-      },
-    })
+    return await host.openEngineLink(harness)
   } catch (error) {
-    throw new RunFailure(
-      'harnessUnavailable',
-      `could not connect to ${source.id}: ${message(error)}`,
-    )
+    if (error instanceof EngineUnavailable)
+      throw new RunFailure('harnessUnavailable', error.message)
+    throw error
   }
 }
 
@@ -190,103 +140,27 @@ function threadMissing(error: unknown): boolean {
   return error instanceof UpstreamRpcError
 }
 
-/** 一个回合在跑，等它的结果。条目和结束的通知都可能比 turn/start 的应答先到，先攒着 */
-class TurnWatch {
-  readonly threadId: string
-  turnId: string | null = null
-  /** 回合里最后一条完整的回答 */
-  lastAnswer: string | null = null
-  private readonly answers = new Map<string, string>()
-  private readonly ended = new Map<string, Record<string, unknown>>()
-  private waiter: ((turn: Record<string, unknown> | null) => void) | null = null
-  /** 会话从忙变闲（thread 目标等它空下来时用） */
-  idle: (() => void) | null = null
-
-  constructor(threadId: string) {
-    this.threadId = threadId
-  }
-
-  notification(method: string, params: Record<string, unknown>): void {
-    if (params.threadId !== this.threadId) return
-    if (method === 'item/completed') {
-      const item = isObject(params.item) ? params.item : null
-      if (item?.type === 'agentMessage' && typeof item.text === 'string' && item.text.trim())
-        this.answers.set(String(params.turnId ?? ''), item.text)
-    } else if (method === 'turn/completed') {
-      const turn = isObject(params.turn) ? params.turn : null
-      if (typeof turn?.id !== 'string') return
-      this.ended.set(turn.id, turn)
-      this.idle?.()
-      if (turn.id === this.turnId) this.waiter?.(turn)
-    } else if (method === 'thread/status/changed') {
-      const status = isObject(params.status) ? params.status : null
-      if (status && status.type !== 'active') this.idle?.()
-    }
-  }
-
-  /** 回合结束了没有（结束了给出 turn 对象） */
-  finished(): Record<string, unknown> | null {
-    return this.turnId === null ? null : (this.ended.get(this.turnId) ?? null)
-  }
-
-  /** 连接断了：正在等的立刻醒来 */
-  abort(): void {
-    this.waiter?.(null)
-    this.idle?.()
-  }
-
-  answer(): string | null {
-    return this.turnId === null ? null : (this.answers.get(this.turnId) ?? null)
-  }
-
-  wait(timeoutMs: number): Promise<Record<string, unknown> | null> {
-    const done = this.finished()
-    if (done) return Promise.resolve(done)
-    return new Promise((resolve) => {
-      const timer = setTimeout(
-        () => {
-          this.waiter = null
-          resolve(null)
-        },
-        Math.max(0, timeoutMs),
-      )
-      timer.unref()
-      this.waiter = (turn) => {
-        clearTimeout(timer)
-        this.waiter = null
-        resolve(turn)
-      }
-    })
-  }
-}
-
 export function summaryOf(text: string | null): string | null {
   if (!text) return null
   const trimmed = text.trim()
   return trimmed ? trimmed.slice(0, TASK_RUN_SUMMARY_MAX) : null
 }
 
-/** 一个回合在会话里的结果：在会话的回合里找最后一条回答 */
-export function answerIn(turn: Record<string, unknown>): string | null {
-  const items = Array.isArray(turn.items) ? turn.items : []
-  for (let at = items.length - 1; at >= 0; at--) {
-    const item = items[at]
-    if (isObject(item) && item.type === 'agentMessage' && typeof item.text === 'string')
-      if (item.text.trim()) return item.text
-  }
-  return null
-}
-
-/** 回合结束时的 turn 对象换成运行的结果 */
-export function outcomeOf(turn: Record<string, unknown>, answer: string | null): RunOutcome {
-  const summary = summaryOf(answer)
-  if (turn.status === 'completed') return { status: 'succeeded', summary, error: null }
-  const error = isObject(turn.error) ? turn.error : null
-  const detail = typeof error?.message === 'string' && error.message ? `: ${error.message}` : ''
+/** 回合的结果换成运行的结果 */
+export function outcomeOf(result: TurnResult): RunOutcome {
+  const summary = summaryOf(result.lastMessage)
+  if (result.status === 'completed') return { status: 'succeeded', summary, error: null }
+  if (result.status === 'timedOut')
+    return {
+      status: 'failed',
+      summary,
+      error: { code: 'timedOut', message: result.error ?? 'the turn timed out' },
+    }
+  const detail = result.error ? `: ${result.error}` : ''
   return {
     status: 'failed',
     summary,
-    error: { code: 'turnFailed', message: `the turn ended as ${String(turn.status)}${detail}` },
+    error: { code: 'turnFailed', message: `the turn ended as ${result.status}${detail}` },
   }
 }
 
@@ -304,13 +178,18 @@ const supportsClientTools = (link: EngineLink): boolean => {
   return Array.isArray(extensions) && extensions.includes(EXTENSION.clientTools)
 }
 
+/** 失败（不论哪种）都按 RunFailure 抛，丢了连接的算 internal */
+const lostOrRethrow = (error: unknown): never => {
+  if (error instanceof RunFailure) throw error
+  throw new RunFailure('internal', message(error))
+}
+
 /**
  * 跑一次。run 是排上的那一次（可能已经有会话：上一次设备进程在会话建好、回合还没发的时候退出了）。
  * 失败抛 RunFailure；回合跑完了（不论成败）返回结果。
  */
 export async function executeRun(
   host: RunHost,
-  sources: () => HarnessSource[],
   task: TaskRow,
   initial: DeviceTaskRun,
 ): Promise<RunOutcome> {
@@ -326,35 +205,18 @@ export async function executeRun(
     if (!directory || !existsSync(target.cwd))
       throw new RunFailure('cwdMissing', `the working directory ${target.cwd} does not exist`)
   }
-  let watch: TurnWatch | null = null
-  let lostLink = false
-  const link = await reachEngine(
-    sources,
-    run.harness,
-    host,
-    (method, params) => watch?.notification(method, params),
-    () => {
-      lostLink = true
-      watch?.abort()
-    },
-  )
-  const release = host.hold(link)
+  const link = await reach(host, run.harness)
   try {
-    const timeout = host.timing.requestTimeoutMs
     if (run.threadId === null && target.kind === 'newThread') {
-      const started = await link.call(
-        'thread/start',
-        {
-          cwd: target.cwd,
-          ...(target.settings.model ? { model: target.settings.model } : {}),
-          ...permissionParams(target.settings.permission, link),
-          // 任务自己的回合里模型也能管任务（litch_tasks 由设备进程执行）。别的客户端工具要桌面端，不带
-          ...(supportsClientTools(link) ? { dynamicTools: [TASKS_TOOLS] } : {}),
-          // 原生 codex 认这个来源（上游的 ThreadSource::Feature("automation")），适配器的引擎不认，不带
-          ...(link.dialect.clientToolsByDevice ? { threadSource: 'automation' } : {}),
-        },
-        timeout,
-      )
+      const started = await link.request('thread/start', {
+        cwd: target.cwd,
+        ...(target.settings.model ? { model: target.settings.model } : {}),
+        ...permissionParams(target.settings.permission, link),
+        // 任务自己的回合里模型也能管任务（litch_tasks 由设备进程执行）。别的客户端工具要桌面端，不带
+        ...(supportsClientTools(link) ? { dynamicTools: [TASKS_TOOLS] } : {}),
+        // 原生 codex 认这个来源（上游的 ThreadSource::Feature("automation")），适配器的引擎不认，不带
+        ...(link.native ? { threadSource: 'automation' } : {}),
+      })
       const thread = isObject(started) && isObject(started.thread) ? started.thread : null
       if (typeof thread?.id !== 'string')
         throw new RunFailure('internal', `${run.harness} did not return the new thread`)
@@ -363,18 +225,17 @@ export async function executeRun(
       host.progress(run)
       // 起名不是要紧的事：不支持、失败都照样往下跑
       await link
-        .call(
-          'thread/name/set',
-          { threadId: thread.id, name: threadName(task, run.scheduledFor) },
-          timeout,
-        )
+        .request('thread/name/set', {
+          threadId: thread.id,
+          name: threadName(task, run.scheduledFor),
+        })
         .catch((error) => host.log(`任务 ${task.id} 的会话没有起上名字：${message(error)}`))
     } else {
       const threadId = run.threadId ?? (target.kind === 'thread' ? target.threadId : null)
       if (threadId === null) throw new RunFailure('internal', 'the run has no thread')
       let resumed: unknown
       try {
-        resumed = await link.call('thread/resume', { threadId }, timeout)
+        resumed = await link.request('thread/resume', { threadId })
       } catch (error) {
         if (threadMissing(error))
           throw new RunFailure('threadMissing', `the thread ${threadId} is gone: ${message(error)}`)
@@ -387,139 +248,92 @@ export async function executeRun(
         run = { ...run, threadId }
         host.progress(run)
       }
-      watch = new TurnWatch(threadId)
       const status = isObject(thread.status) ? thread.status : null
-      if (status?.type === 'active') await waitIdle(host, link, watch, () => lostLink)
+      if (status?.type === 'active') await waitIdle(host, link, threadId)
     }
     const threadId = run.threadId as string
-    watch ??= new TurnWatch(threadId)
     const effort = target.kind === 'newThread' ? target.settings.effort : null
-    const started = await link.call(
-      'turn/start',
+    const result = await runTurn(
+      link,
       {
         threadId,
         input: [{ type: 'text', text: taskPrompt(task, run, Math.floor(host.now() / 1000)) }],
-        ...(effort ? { effort } : {}),
+        ...(effort ? { overrides: { effort } } : {}),
       },
-      timeout,
+      {
+        timeoutMs: host.timing.turnTimeoutMs,
+        interruptGraceMs: host.timing.interruptGraceMs,
+        onStarted: (turnId) => {
+          run = { ...run, turnId, status: 'running', startedAt: Math.floor(host.now() / 1000) }
+          host.progress(run)
+        },
+      },
     )
-    const turn = isObject(started) && isObject(started.turn) ? started.turn : null
-    if (typeof turn?.id !== 'string')
-      throw new RunFailure('internal', `${run.harness} did not start the turn`)
-    watch.turnId = turn.id
-    run = { ...run, turnId: turn.id, status: 'running', startedAt: Math.floor(host.now() / 1000) }
-    host.progress(run)
-    return await follow(host, link, watch, () => lostLink, host.timing.turnTimeoutMs)
+    if (result.status === 'timedOut') host.log(`任务 ${task.id} 的回合超过了时限，打断了`)
+    return outcomeOf(result)
+  } catch (error) {
+    return lostOrRethrow(error)
   } finally {
-    release()
     link.close()
   }
 }
 
 /** thread 目标：会话正在跑回合，等它空下来，最多等 threadWaitMs */
-async function waitIdle(
-  host: RunHost,
-  link: EngineLink,
-  watch: TurnWatch,
-  lost: () => boolean,
-): Promise<void> {
+async function waitIdle(host: RunHost, link: EngineLink, threadId: string): Promise<void> {
   const deadline = host.now() + host.timing.threadWaitMs
-  while (!lost()) {
-    const left = deadline - host.now()
-    if (left <= 0)
-      throw new RunFailure(
-        'internal',
-        `the thread stayed busy for ${Math.round(host.timing.threadWaitMs / 60000)} minutes`,
-      )
-    // 通知来了就醒；也隔一阵自己去看一眼，免得漏了通知一直等
-    await new Promise<void>((resolve) => {
-      const timer = setTimeout(resolve, Math.min(left, 30_000))
-      timer.unref()
-      watch.idle = () => {
-        clearTimeout(timer)
-        resolve()
-      }
-    })
-    watch.idle = null
-    const read = await link
-      .call(
-        'thread/read',
-        { threadId: watch.threadId, includeTurns: false },
-        host.timing.requestTimeoutMs,
-      )
-      .catch(() => null)
-    const thread = isObject(read) && isObject(read.thread) ? read.thread : null
-    const status = isObject(thread?.status) ? thread.status : null
-    if (status && status.type !== 'active') return
-  }
-  throw new RunFailure('internal', `the connection to the harness was lost`)
-}
-
-/**
- * 等回合结束。超时打断，记 timedOut。连接断了：回合可能还在引擎里跑，也可能随引擎一起没了，
- * 这一次按失败记。
- */
-export async function follow(
-  host: RunHost,
-  link: EngineLink,
-  watch: TurnWatch,
-  lost: () => boolean,
-  timeoutMs: number,
-): Promise<RunOutcome> {
-  const deadline = host.now() + timeoutMs
-  while (!lost()) {
-    const ended = await watch.wait(Math.min(deadline - host.now(), 60_000))
-    if (ended) return outcomeOf(ended, watch.answer() ?? (await readAnswer(host, link, watch)))
-    if (host.now() < deadline) continue
-    host.log(`回合 ${watch.turnId} 超过了时限，打断它`)
-    await link
-      .call(
-        'turn/interrupt',
-        { threadId: watch.threadId, turnId: watch.turnId },
-        host.timing.requestTimeoutMs,
-      )
-      .catch(() => null)
-    const after = await watch.wait(host.timing.interruptGraceMs)
-    return {
-      status: 'failed',
-      summary: summaryOf(after ? watch.answer() : null),
-      error: {
-        code: 'timedOut',
-        message: `the turn ran longer than ${Math.round(timeoutMs / 60000)} minutes and was interrupted`,
-      },
-    }
-  }
-  throw new RunFailure('internal', 'the connection to the harness was lost during the turn')
-}
-
-/** 通知里没见到回答（比如条目早于这条连接订阅之前就结束了）：读一遍会话 */
-async function readAnswer(
-  host: RunHost,
-  link: EngineLink,
-  watch: TurnWatch,
-): Promise<string | null> {
-  const read = await link
-    .call(
-      'thread/read',
-      { threadId: watch.threadId, includeTurns: true },
-      host.timing.requestTimeoutMs,
+  let wake: (() => void) | null = null
+  let lost: string | null = null
+  const stop = link.onNotification((method, params) => {
+    if (!isObject(params) || params.threadId !== threadId) return
+    const status = isObject(params.status) ? params.status : null
+    if (
+      method === 'turn/completed' ||
+      (method === 'thread/status/changed' && status?.type !== 'active')
     )
-    .catch(() => null)
-  const thread = isObject(read) && isObject(read.thread) ? read.thread : null
-  const turns = Array.isArray(thread?.turns) ? thread.turns : []
-  const turn = turns.find((item) => isObject(item) && item.id === watch.turnId)
-  return isObject(turn) ? answerIn(turn) : null
+      wake?.()
+  })
+  const unclose = link.onClose((reason) => {
+    lost = reason
+    wake?.()
+  })
+  try {
+    while (lost === null) {
+      const left = deadline - host.now()
+      if (left <= 0)
+        throw new RunFailure(
+          'internal',
+          `the thread stayed busy for ${Math.round(host.timing.threadWaitMs / 60000)} minutes`,
+        )
+      // 通知来了就醒；也隔一阵自己去看一眼，免得漏了通知一直等
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, Math.min(left, 30_000))
+        timer.unref()
+        wake = () => {
+          clearTimeout(timer)
+          resolve()
+        }
+      })
+      wake = null
+      if (lost !== null) break
+      const read = await link
+        .request('thread/read', { threadId, includeTurns: false })
+        .catch(() => null)
+      const thread = isObject(read) && isObject(read.thread) ? read.thread : null
+      const status = isObject(thread?.status) ? thread.status : null
+      if (status && status.type !== 'active') return
+    }
+    throw new RunFailure('internal', `the connection to the harness was lost: ${lost}`)
+  } finally {
+    stop()
+    unclose()
+  }
 }
 
 /**
  * 设备进程上一次在回合结束之前退出了：去会话里查这个回合。结束了照实记；还在跑就接着等（时限从它开始时算）；
  * 查不到记 interrupted。
  */
-export async function recoverRun(
-  host: RunHost,
-  sources: () => HarnessSource[],
-  run: DeviceTaskRun,
-): Promise<RunOutcome> {
+export async function recoverRun(host: RunHost, run: DeviceTaskRun): Promise<RunOutcome> {
   const interrupted = (why: string): RunOutcome => ({
     status: 'failed',
     summary: null,
@@ -529,44 +343,36 @@ export async function recoverRun(
     },
   })
   if (run.threadId === null || run.turnId === null) return interrupted('the turn was never started')
-  const watch = new TurnWatch(run.threadId)
-  watch.turnId = run.turnId
-  let lostLink = false
   let link: EngineLink
   try {
-    link = await reachEngine(
-      sources,
-      run.harness,
-      host,
-      (method, params) => watch.notification(method, params),
-      () => {
-        lostLink = true
-        watch.abort()
-      },
-    )
+    link = await host.openEngineLink(run.harness)
   } catch (error) {
     return interrupted(message(error))
   }
-  const release = host.hold(link)
+  const watch = watchTurn(link, run.threadId)
   try {
-    const timeout = host.timing.requestTimeoutMs
     const read = await link
-      .call('thread/read', { threadId: run.threadId, includeTurns: true }, timeout)
+      .request('thread/read', { threadId: run.threadId, includeTurns: true })
       .catch(() => null)
     const thread = isObject(read) && isObject(read.thread) ? read.thread : null
     const turns = Array.isArray(thread?.turns) ? thread.turns : []
     const turn = turns.find((item) => isObject(item) && item.id === run.turnId)
     if (!isObject(turn)) return interrupted('the turn could not be found in the thread')
-    if (turn.status !== 'inProgress') return outcomeOf(turn, answerIn(turn))
+    if (turn.status !== 'inProgress') return outcomeOf(turnResult(turn, lastAnswerIn(turn)))
     // 还在跑：订阅这个会话，接着等
-    await link.call('thread/resume', { threadId: run.threadId }, timeout)
+    await link.request('thread/resume', { threadId: run.threadId })
     const startedAt = (run.startedAt ?? Math.floor(host.now() / 1000)) * 1000
     const left = startedAt + host.timing.turnTimeoutMs - host.now()
-    return await follow(host, link, watch, () => lostLink, Math.max(left, 0))
+    return outcomeOf(
+      await watch.follow(run.turnId, {
+        timeoutMs: Math.max(left, 0),
+        interruptGraceMs: host.timing.interruptGraceMs,
+      }),
+    )
   } catch (error) {
     return interrupted(message(error))
   } finally {
-    release()
+    watch.dispose()
     link.close()
   }
 }

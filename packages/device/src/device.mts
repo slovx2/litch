@@ -9,10 +9,13 @@ import { ClientToolRouter } from './client-tools.mjs'
 import type { ControlChannel, ControlState } from './control.mjs'
 import { DeviceLayer } from './device-layer.mjs'
 import type { ProcessLimits } from './device-processes.mjs'
+import { type DeviceToolRegistry, DeviceTools } from './device-tools.mjs'
+import { connectEngineLink, type EngineLink, EngineUnavailable } from './engine-link.mjs'
 import type { FlowLimits } from './flow.mjs'
 import { deviceInfo, deviceVersion, HarnessCatalog } from './harness-info.mjs'
 import { WorkspaceImporter } from './importer.mjs'
 import { DeviceManagement } from './management.mjs'
+import { dialectFor } from './native-codex.mjs'
 import { hasActiveTurn } from './probe.mjs'
 import { ACTIVITY_METHOD, type DeviceActivity, serviceInfo } from './service-info.mjs'
 import {
@@ -26,7 +29,7 @@ import { openDeviceStore } from './store.mjs'
 import { DEFAULT_TASK_TIMING, type TaskTiming } from './task-run.mjs'
 import { DEFAULT_TASK_SETTINGS, type TaskClock, type TaskSettings } from './task-scheduler.mjs'
 import { DeviceTasks } from './tasks.mjs'
-import { TasksTool } from './tasks-tool.mjs'
+import { registerTasksTool } from './tasks-tool.mjs'
 import { ThreadIndex } from './thread-index.mjs'
 import { type Connector, isObject, type Wire, type WireHandlers } from './wire.mjs'
 import { Workspaces } from './workspaces.mjs'
@@ -58,6 +61,8 @@ export interface DeviceOptions {
   log?(line: string): void
   /** 定时任务的时钟和时限。只有测试会改 */
   tasks?: { clock?: TaskClock; timing?: Partial<TaskTiming>; maxTimerMs?: number }
+  /** 内部连接替引擎看着没人拿的请求：先等多久、隔多久再看（毫秒），见 engine-link.mts。只有测试会改 */
+  engineLinks?: { heldGraceMs?: number; heldRecheckMs?: number }
 }
 
 /**
@@ -106,6 +111,12 @@ export class DeviceServer {
   /** 定时任务。任务库打不开时是 null */
   private readonly tasks: DeviceTasks | null
   private tasksWait: NodeJS.Timeout | null = null
+  private readonly taskTiming: TaskTiming
+  /** 由设备进程自己执行的 litch_ 命名空间（litch_tasks……），见 device-tools.mts */
+  readonly deviceTools: DeviceToolRegistry
+  private readonly tools: DeviceTools
+  /** 设备进程自己开着的引擎连接：设备进程关的时候一起关 */
+  private readonly engineLinks = new Set<EngineLink>()
   /** 主进程给的名单里的 harness 怎么连，按套接字地址记着 */
   private readonly dialed = new Map<string, Connector>()
   /** 上一次发给客户端的设置快照（起步时是主进程给的第一份现状），用来判断是不是真的变了 */
@@ -136,14 +147,14 @@ export class DeviceServer {
     info.extensions.push(EXTENSION.deviceProcesses)
     const log = options.log ?? (() => {})
     const taskTiming = { ...DEFAULT_TASK_TIMING, ...options.tasks?.timing }
-    // litch_tasks 的调用（客户端连接对应的上游连接上、任务自己的内部连接上）都由它答
-    const tasksTool = new TasksTool({
+    this.taskTiming = taskTiming
+    this.tools = new DeviceTools(log)
+    this.deviceTools = this.tools
+    // litch_tasks 是第一个注册者：调用从哪条连接来都由设备进程答
+    registerTasksTool(this.deviceTools, {
       tasks: () => this.tasks,
-      harnesses: () => this.harnesses(),
       workspaces: this.workspaces,
-      version: this.version,
-      timing: taskTiming,
-      log,
+      openEngineLink: (harness) => this.openEngineLink(harness),
     })
     this.tasks = DeviceTasks.open({
       stateDir: options.stateDir,
@@ -156,7 +167,9 @@ export class DeviceServer {
       timing: taskTiming,
       ...(options.tasks?.clock ? { clock: options.tasks.clock } : {}),
       ...(options.tasks?.maxTimerMs ? { maxTimerMs: options.tasks.maxTimerMs } : {}),
-      toolCall: (harness, frame, reply) => tasksTool.answer(harness, frame, reply),
+      // harness 正在起（比如服务刚重启、错过的运行正要补跑）时等它一会儿
+      openEngineLink: (harness) =>
+        this.openEngineLink(harness, { waitMs: taskTiming.harnessWaitMs }),
     })
     // 定时任务：任务存在设备上，到点由设备进程自己连上 harness 去跑
     if (this.tasks) info.extensions.push(EXTENSION.deviceTasks)
@@ -179,7 +192,7 @@ export class DeviceServer {
     const router = new ClientToolRouter({
       graceMs: options.timing?.clientToolGraceMs ?? DEFAULT_TIMING.clientToolGraceMs,
       log,
-      device: (harness, frame, reply) => tasksTool.answer(harness, frame, reply),
+      deviceTools: this.tools,
     })
     this.host = {
       harnesses: () => this.harnesses(),
@@ -202,6 +215,7 @@ export class DeviceServer {
       clientTools: router,
       clientInvoke: new ClientToolInvoker({ router, index: this.index, log }),
       tasks: this.tasks,
+      deviceTools: this.tools,
       reachable: () => this.importer?.kick(),
       importing: () => {
         this.importer?.kick()
@@ -370,6 +384,57 @@ export class DeviceServer {
     }
   }
 
+  /**
+   * 设备进程自己开一条到某个 harness 的连接（不对应任何客户端连接），握手完成才返回。
+   * harness 没配、不在 running、连不上抛 EngineUnavailable（code 是 harnessUnavailable）。
+   * waitMs：它正在起、暂时连不上时最多等多久，默认不等。用完调 close；设备进程关的时候一起关掉
+   */
+  async openEngineLink(harness: string, options: { waitMs?: number } = {}): Promise<EngineLink> {
+    const deadline = Date.now() + (options.waitMs ?? 0)
+    for (;;) {
+      if (this.closed) throw new EngineUnavailable('the device service is shutting down')
+      const source = this.harnesses().find((item) => item.id === harness)
+      if (!source) throw new EngineUnavailable(`${harness} is not configured on this device`)
+      const state = source.managed?.state
+      if (state && state !== 'running' && state !== 'starting')
+        throw new EngineUnavailable(`${harness} is not running (${state})`)
+      let failure: EngineUnavailable | null = null
+      if (state === 'starting') failure = new EngineUnavailable(`${harness} is still starting`)
+      else
+        try {
+          return this.keep(
+            await connectEngineLink({
+              harness,
+              connect: source.connect,
+              dialect: dialectFor(source.managed ? source.managed.native : source.native),
+              version: this.version,
+              handshakeTimeoutMs: this.taskTiming.handshakeTimeoutMs,
+              requestTimeoutMs: this.taskTiming.requestTimeoutMs,
+              tools: this.tools,
+              ...this.options.engineLinks,
+              held: (from, requestId) =>
+                [...this.sessions].some((session) => session.holdsServerRequest(from, requestId)),
+            }),
+          )
+        } catch (error) {
+          failure =
+            error instanceof EngineUnavailable ? error : new EngineUnavailable(String(error))
+        }
+      if (Date.now() >= deadline) throw failure
+      await new Promise((resolve) => setTimeout(resolve, 1000).unref())
+    }
+  }
+
+  private keep(link: EngineLink): EngineLink {
+    if (this.closed) {
+      link.close()
+      throw new EngineUnavailable('the device service is shutting down')
+    }
+    this.engineLinks.add(link)
+    link.onClose(() => this.engineLinks.delete(link))
+    return link
+  }
+
   get connections(): number {
     return this.sessions.size
   }
@@ -386,9 +451,12 @@ export class DeviceServer {
       this.control.onState = null
       this.control.onAsk = null
     }
-    for (const session of [...this.sessions]) session.close()
     if (this.tasksWait) clearTimeout(this.tasksWait)
+    // 先停任务、关内部连接：等着的回合当场醒来，运行留着 running，下次起来去查
     this.tasks?.close()
+    this.tools.close()
+    for (const link of [...this.engineLinks]) link.close()
+    for (const session of [...this.sessions]) session.close()
     await this.importer?.close()
     await this.layer.close()
     this.db.close()

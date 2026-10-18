@@ -1,19 +1,18 @@
-// litch_tasks 工具（client-tools-tasks.mts）的执行方：设备进程自己。
-// 调用从哪来都到这里：客户端连接对应的上游连接（relay.mts 截下，原生 codex 的经 client-tools.mts 的路由）、
-// 任务自己的内部连接（task-link.mts）。原生 codex 把同一次调用发给每条订阅着会话的连接，
-// 这里按 harness + 会话 + callId 只答第一份，其余几份不答（答复从哪条连接回去都算数）。
+// litch_tasks 工具（client-tools-tasks.mts）的执行方：设备进程自己。注册进设备工具的注册表（device-tools.mts），
+// 调用从哪来、同一次调用的几份只答一份，都由注册表管；这里只管一次调用怎么做。
 // 结果是一段 JSON 文本；出错是 [litch:<kind>] 开头的一句英文说明（同 clientTools 扩展的失败答复）。
-import { type ClientToolCallResponse, clientToolFailure } from '../../protocol/src/client-tools.mjs'
+import {
+  CLIENT_TOOL_NAMESPACE,
+  type ClientToolCallResponse,
+  clientToolFailure,
+} from '../../protocol/src/client-tools.mjs'
 import type { TaskSessionSettings, TaskTarget } from '../../protocol/src/device-tasks.mjs'
-import type { HarnessSource } from './session.mjs'
-import { connectEngine, type TaskTiming } from './task-run.mjs'
+import type { DeviceToolCall, DeviceToolRegistry } from './device-tools.mjs'
+import type { EngineLink } from './engine-link.mjs'
 import { DeviceTaskError } from './task-validate.mjs'
 import type { DeviceTasks } from './tasks.mjs'
-import { type Frame, isObject } from './wire.mjs'
+import { isObject } from './wire.mjs'
 import type { Workspaces } from './workspaces.mjs'
-
-/** 答过的调用记多久（毫秒）。原生 codex 的几份前后只差几毫秒，恢复会话时补发的也在回合之内 */
-const REMEMBER_MS = 30 * 60 * 1000
 
 /** 沙箱类型到内置权限档（同客户端核心的 projectSettings） */
 const SANDBOX_PRESET: Record<string, string> = {
@@ -25,11 +24,15 @@ const SANDBOX_PRESET: Record<string, string> = {
 export interface TasksToolOptions {
   /** 任务模块。打不开任务库时是 null */
   tasks(): DeviceTasks | null
-  harnesses(): HarnessSource[]
   workspaces: Workspaces
-  version: string
-  timing: TaskTiming
-  log(line: string): void
+  /** 开一条内部连接（new_thread 要读发起调用的会话的设置） */
+  openEngineLink(harness: string): Promise<EngineLink>
+}
+
+/** 把 litch_tasks 注册进设备工具的注册表 */
+export function registerTasksTool(registry: DeviceToolRegistry, options: TasksToolOptions): void {
+  const tool = new TasksTool(options)
+  registry.register(CLIENT_TOOL_NAMESPACE.tasks, (call) => tool.handle(call))
 }
 
 const ok = (value: unknown): ClientToolCallResponse => ({
@@ -41,26 +44,13 @@ const text = (value: unknown): string | null => (typeof value === 'string' && va
 
 export class TasksTool {
   private readonly options: TasksToolOptions
-  private readonly answered = new Map<string, number>()
 
   constructor(options: TasksToolOptions) {
     this.options = options
   }
 
-  /** 一次 litch_tasks 调用。同一次调用的别的几份不答 */
-  answer(harness: string, frame: Frame, reply: (result: ClientToolCallResponse) => void): void {
-    const params = isObject(frame.params) ? frame.params : {}
-    const threadId = typeof params.threadId === 'string' ? params.threadId : ''
-    const callId = typeof params.callId === 'string' ? params.callId : String(frame.id)
-    const key = [harness, threadId, callId].join('\u0000')
-    const now = Date.now()
-    for (const [old, at] of this.answered) if (now - at > REMEMBER_MS) this.answered.delete(old)
-    if (this.answered.has(key)) return
-    this.answered.set(key, now)
-    const tool = typeof params.tool === 'string' ? params.tool : ''
-    this.execute(harness, threadId, tool, params.arguments).then(reply, (error) =>
-      reply(clientToolFailure('failed', `The task tool failed: ${String(error)}`)),
-    )
+  handle(call: DeviceToolCall): Promise<ClientToolCallResponse> {
+    return this.execute(call.harness, call.threadId, call.tool, call.arguments)
   }
 
   private async execute(
@@ -157,24 +147,16 @@ export class TasksTool {
     threadId: string,
   ): Promise<{ cwd: string | null; settings: TaskSessionSettings }> {
     const settings: TaskSessionSettings = { model: null, effort: null, permission: null }
-    const source = this.options.harnesses().find((item) => item.id === harness)
-    if (!source) return { cwd: null, settings }
-    const link = await connectEngine(
-      source,
-      {
-        version: this.options.version,
-        timing: this.options.timing,
-        // 原生 codex 会把还在等的这一次调用补发给恢复会话的连接：同一次调用，answer 认得出来，不再答
-        toolCall: () => {},
-      },
-      () => {},
-      () => {},
-    )
+    let link: EngineLink
     try {
-      const timeout = this.options.timing.requestTimeoutMs
-      const resumed = await link.call('thread/resume', { threadId }, timeout).catch(() => null)
-      const read =
-        resumed ?? (await link.call('thread/read', { threadId }, timeout).catch(() => null))
+      link = await this.options.openEngineLink(harness)
+    } catch {
+      return { cwd: null, settings }
+    }
+    // 原生 codex 会把还在等的这一次调用补发给恢复会话的连接：同一次调用，注册表认得出来，不再答
+    try {
+      const resumed = await link.request('thread/resume', { threadId }).catch(() => null)
+      const read = resumed ?? (await link.request('thread/read', { threadId }).catch(() => null))
       const response = isObject(read) ? read : {}
       const thread = isObject(response.thread) ? response.thread : {}
       settings.model = text(response.model)
