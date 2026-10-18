@@ -26,7 +26,7 @@ import { type InstalledBrowser, installBrowser } from './browser/install.mjs'
 import { createClientToolHost } from './client-tools/host.mjs'
 import { createExecutors } from './client-tools/registry.mjs'
 import { CLIENT_TOOL, type ClientToolToMain } from './client-tools/types.mjs'
-import { createComputerUse, locateHelperApp } from './computer-use/index.mjs'
+import { createComputerUse, locateHelper } from './computer-use/index.mjs'
 import { createComputerUseSettings, fakePermissions } from './computer-use/settings.mjs'
 import {
   ABOUT,
@@ -165,14 +165,16 @@ let quitting = false
  * 结果和要用户点头的卡片发回给现在的核心
  */
 /**
- * Computer Use（只有 macOS）：系统权限授给单独签名的助手应用，助手用到时才拉起（computer-use/index.mts）。
- * 界面语言变了告诉它（屏幕提示跟着换），退出前收掉
+ * Computer Use（macOS 和 Windows）：macOS 上系统权限授给单独签名的助手应用，Windows 上助手是 Litch 起的子进程；
+ * 都是用到时才拉起（computer-use/index.mts）。界面语言变了告诉它（屏幕提示跟着换），退出前收掉
  */
 const computerUse =
-  process.platform === 'darwin'
+  process.platform === 'darwin' || process.platform === 'win32'
     ? createComputerUse({
+        platform: process.platform,
         userData: app.getPath('userData'),
-        appPath: locateHelperApp({
+        helperPath: locateHelper({
+          platform: process.platform,
           packaged: app.isPackaged,
           resourcesPath: process.resourcesPath,
         }),
@@ -418,16 +420,19 @@ ipcMain.handle(PICK_FOLDER, async (event, options: unknown) => {
   return result.canceled ? null : (result.filePaths[0] ?? null)
 })
 
-// ---------- 设置页里 Computer Use 那一节（只在 macOS 上有，computer-use/settings.mts） ----------
+// ---------- 设置页里 Computer Use 那一节（macOS 和 Windows 上有，computer-use/settings.mts） ----------
 
 /**
- * 两项系统权限的状态、打开系统设置对应的那一页、重启助手、“始终允许”的清单。
- * 只接受界面自己的主框架发来的；预加载脚本也只在 macOS 上给界面这一组接口
+ * macOS：两项系统权限的状态、打开系统设置对应的那一页；Windows：助手的状态。两边都有重启助手、“始终允许”的清单。
+ * 只接受界面自己的主框架发来的；预加载脚本也只在这两个平台上给界面这一组接口
  */
 const computerUseSettings = computerUse
   ? createComputerUseSettings(
       {
+        platform: computerUse.platform,
         permissions: () => computerUse.permissions(),
+        helperInfo: (launch) => computerUse.helperInfo(launch),
+        lastError: () => computerUse.supervisor.lastError,
         running: () => computerUse.supervisor.connected !== null,
         openPermissionSettings: (pane) => computerUse.openPermissionSettings(pane),
         restartHelper: () => computerUse.restartHelper(),

@@ -4,7 +4,9 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { createServer, type Server, type Socket } from 'node:net'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
-import { classifyApp, FORBIDDEN_FOR_TEST } from '../policy.mjs'
+import { MacLauncher, type MacLauncherOptions } from '../launcher-mac.mjs'
+import { classifyApp } from '../policy.mjs'
+import { FORBIDDEN_FOR_TEST } from '../policy-mac.mjs'
 import { HelperSupervisor } from '../supervisor.mjs'
 import { encodeFrame, FrameReader, HELPER_PROTOCOL, HelperError, MAX_FRAME } from '../wire.mjs'
 
@@ -17,6 +19,12 @@ function tempDir(): string {
   const dir = mkdtempSync(join('/tmp', 'lcu-'))
   dirs.push(dir)
   return dir
+}
+
+/** macOS 的看护：启动器和看护分开之后，测试里还是一次给齐 */
+function macSupervisor(options: MacLauncherOptions & { lang(): string }): HelperSupervisor {
+  const { lang, ...launcher } = options
+  return new HelperSupervisor({ launcher: new MacLauncher(launcher), lang })
 }
 
 interface FakeOptions {
@@ -125,16 +133,25 @@ test('名单：助手底线名单里的每一项主进程这份都禁止；浏�
     'com.1password.1password',
     'com.bitwarden.desktop',
   ]) {
-    assert.equal(classifyApp({ bundleId: id, name: 'x' }), 'forbidden', id)
+    assert.equal(classifyApp({ platform: 'darwin', bundleId: id, name: 'x' }), 'forbidden', id)
   }
   assert.ok(FORBIDDEN_FOR_TEST.ids.size > 5)
-  assert.equal(classifyApp({ bundleId: 'com.google.Chrome.canary', name: 'Chrome' }), 'elevated')
-  assert.equal(classifyApp({ bundleId: 'com.apple.Terminal', name: 'Terminal' }), 'elevated')
   assert.equal(
-    classifyApp({ bundleId: 'com.example.vault', name: 'My Password Vault' }),
+    classifyApp({ platform: 'darwin', bundleId: 'com.google.Chrome.canary', name: 'Chrome' }),
+    'elevated',
+  )
+  assert.equal(
+    classifyApp({ platform: 'darwin', bundleId: 'com.apple.Terminal', name: 'Terminal' }),
+    'elevated',
+  )
+  assert.equal(
+    classifyApp({ platform: 'darwin', bundleId: 'com.example.vault', name: 'My Password Vault' }),
     'forbidden',
   )
-  assert.equal(classifyApp({ bundleId: 'com.apple.TextEdit', name: 'TextEdit' }), 'normal')
+  assert.equal(
+    classifyApp({ platform: 'darwin', bundleId: 'com.apple.TextEdit', name: 'TextEdit' }),
+    'normal',
+  )
 })
 
 test('拉起：带一次性令牌握手；崩溃后自己重拉', async () => {
@@ -142,7 +159,7 @@ test('拉起：带一次性令牌握手；崩溃后自己重拉', async () => {
   const socket = join(dir, 'helper.sock')
   const launches: Record<string, string>[] = []
   const fakes: FakeHelper[] = []
-  const supervisor = new HelperSupervisor({
+  const supervisor = macSupervisor({
     appPath: '/Apps/Litch Computer Use.app',
     directory: dir,
     version: '1.0.0',
@@ -198,7 +215,7 @@ test('在跑的助手版本不对：请它退出，再拉起自己的', async ()
   })
   await old.listen()
   let launched = 0
-  const supervisor = new HelperSupervisor({
+  const supervisor = macSupervisor({
     appPath: '/Apps/Litch Computer Use.app',
     directory: dir,
     version: '1.0.0',
@@ -232,7 +249,7 @@ test('在跑的助手不认这条连接（开发期令牌对不上）：按进�
   const { writeFileSync } = await import('node:fs')
   writeFileSync(join(dir, 'helper.pid'), '98765\n')
   const killed: number[] = []
-  const supervisor = new HelperSupervisor({
+  const supervisor = macSupervisor({
     appPath: '/Apps/x.app',
     directory: dir,
     version: null,
@@ -256,7 +273,7 @@ test('在跑的助手不认这条连接（开发期令牌对不上）：按进�
 })
 
 test('套接字路径太长：直接报错，不拉起', async () => {
-  const supervisor = new HelperSupervisor({
+  const supervisor = macSupervisor({
     appPath: '/x.app',
     directory: `/tmp/${'很长的目录'.repeat(10)}`,
     version: null,
