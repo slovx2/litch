@@ -232,16 +232,18 @@ export const SESSION_TOOLS: ClientToolNamespaceSpec = {
       inputSchema: {
         type: 'object',
         properties: {
+          // codex 交给模型时丢掉 maxItems、minimum、maximum（client-tools-specs.test.mts）：上限写进说明，模型才看得到
           thread_ids: {
             type: 'array',
             items: { type: 'string' },
             minItems: 1,
-            maxItems: SESSION_TOOL_LIMITS.waitThreadsMax,
+            description: `At most ${SESSION_TOOL_LIMITS.waitThreadsMax} sessions.`,
           },
           timeout_seconds: {
             type: 'integer',
             minimum: 1,
             maximum: SESSION_TOOL_LIMITS.waitSecondsMax,
+            description: `Seconds to wait, 1 to ${SESSION_TOOL_LIMITS.waitSecondsMax}.`,
           },
         },
         required: ['thread_ids'],
