@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 // 设备进程的入口。常驻，由 Go 层拉起；就绪后在标准输出打一行 LITCH_DEVICE_READY。
-import { existsSync } from 'node:fs'
-import { join } from 'node:path'
+import { createHash } from 'node:crypto'
+import { join, win32 } from 'node:path'
 import { setSharedLogger } from '../../shared/src/util.mjs'
 import { parseArgs, USAGE } from './args.mjs'
 import { SocketControl } from './control.mjs'
 import { DeviceServer } from './device.mjs'
 import { deviceVersion } from './harness-info.mjs'
 import { watchParent } from './parent-watch.mjs'
-import { listenUnix, parseUnixUrl, unixConnector } from './sockets.mjs'
+import { listenUnix, parseSocketUrl, socketExists, unixConnector } from './sockets.mjs'
 
 /** 就绪标记。Go 层和测试等的就是这一行 */
 const READY_LINE = 'LITCH_DEVICE_READY'
@@ -19,6 +19,18 @@ const READY_LINE = 'LITCH_DEVICE_READY'
  * 就没有设置功能，别的照常。
  */
 const CONTROL_SOCKET = 'ctl.sock'
+
+/**
+ * 控制通道的位置。Windows 上是命名管道，名字和 Go 层一样由状态目录算出来
+ * （hostplatform.ControlSocketPath：filepath.Clean 之后转小写，取 SHA-256）
+ */
+function controlSocketPath(stateDir: string): string {
+  if (process.platform !== 'win32') return join(stateDir, CONTROL_SOCKET)
+  let clean = win32.normalize(stateDir)
+  if (clean.length > 3 && clean.endsWith('\\')) clean = clean.slice(0, -1)
+  const digest = createHash('sha256').update(clean.toLowerCase()).digest('hex')
+  return `\\\\.\\pipe\\codex-harness-adapter-control-${digest}`
+}
 
 /** 就绪之前等主进程把各 harness 的状态送过来，最多等这么久：第一个连进来的客户端就能看到完整的名单 */
 const CONTROL_READY_MS = 2000
@@ -44,14 +56,14 @@ async function main(): Promise<void> {
     setSharedLogger((event, data) =>
       process.stderr.write(`[litch-device] ${event} ${JSON.stringify(data)}\n`),
     )
-  const controlPath = join(args.stateDir, CONTROL_SOCKET)
-  const control = existsSync(controlPath) ? new SocketControl(controlPath, log) : undefined
+  const controlPath = controlSocketPath(args.stateDir)
+  const control = socketExists(controlPath) ? new SocketControl(controlPath, log) : undefined
   const device = new DeviceServer({
     stateDir: args.stateDir,
     log,
     ...(args.processes ? { processes: args.processes } : {}),
     ...(control ? { control } : {}),
-    dial: (socket) => unixConnector(parseUnixUrl(socket, '运行时的套接字')),
+    dial: (socket) => unixConnector(parseSocketUrl(socket, '运行时的套接字')),
     upstreams: args.upstreams.map((upstream) => ({
       id: upstream.id,
       connect: unixConnector(upstream.path),
