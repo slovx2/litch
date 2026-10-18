@@ -5,7 +5,11 @@
   "declaration": {
     "description": "客户端握手时在 initialize 的 capabilities 里用我们自己的键列出认识的扩展名，同时用 litchClientTools 列出这条连接能执行的命名空间。只列了命名空间、没在 litchExtensions 里声明 clientTools 的，当作什么都执行不了。",
     "where": "initialize.params.capabilities.litchExtensions",
-    "schema": { "type": "array", "items": { "type": "string" }, "contains": { "const": "clientTools" } }
+    "schema": {
+      "type": "array",
+      "items": { "type": "string" },
+      "contains": { "const": "clientTools" }
+    }
   },
   "undeclared": "没声明的连接上线上内容和标准协议一致，只是收不到 litch_ 开头的命名空间的 item/tool/call：这类调用不会发给它，也不会因为它订阅着就等它答。别的命名空间的动态工具调用照各引擎原来的做法发（claude-code、pi 发给发起回合的连接，它不在了发给全部订阅者；原生 codex 发给全部订阅者），不看这项声明。",
   "rules": [
@@ -53,8 +57,7 @@
       "on": "runtime/info 的应答里每个 harness 的 extensions",
       "name": "clientTools",
       "description": "列了它表示经这个入口（或聚合面）连到这个 harness 时，litch_ 开头的命名空间的调用按本扩展挑执行方。没列的（dsh）别带这类工具建会话：带了也用不了。"
-    }
-,
+    },
     {
       "kind": "Method",
       "method": "litch/clientTool/invoke",
@@ -68,6 +71,22 @@
       "description": "设备进程发给按 litch/clientTool/invoke 挑出来的那条 Litch 连接，只发给声明了这个命名空间的连接，没声明的连接上不会出现。和 item/tool/call 的区别只是不一定来自某个回合（threadId、turnId 可以是 null）：执行方找不到会话时把卡片放进全局待处理。应答同 item/tool/call；执行方断开时设备进程替它回 failed。",
       "params": { "$ref": "#/definitions/DetachedCallParams" },
       "response": { "$ref": "#/definitions/ToolCallResponse" }
+    },
+    {
+      "kind": "Method",
+      "method": "litch/clientTool/desktops",
+      "description": "客户端（命令行）发给聚合面的请求：现在连着、握手时声明了任何一个 litch_ 命名空间的 Litch 连接，按连上的先后，各带握手时报的 desktop（没报的 hostname 是空字符串）和声明的命名空间。命令行的说明开头写桌面端的名字（决 252）、出 ambiguous 时提示可选的主机名，都用它。",
+      "response": { "$ref": "#/definitions/DesktopsResult" }
+    },
+    {
+      "kind": "Behavior",
+      "on": "litch/clientTool/invoke、litch/clientTool/desktops 之前的握手",
+      "description": "这两个方法不要求先 initialize：命令行只调一次就走，握手要为它连一遍每个 harness 的运行时。握手过的连接也能调。别的方法照旧要先握手。"
+    },
+    {
+      "kind": "Behavior",
+      "on": "撤回 litch/clientTool/call",
+      "description": "调用者断开时设备进程向执行方发 serverRequest/resolved（requestId 是 litch/clientTool/call 的请求号，threadId 是调用带的会话号，没有就是 null），卡片收掉；执行方之后再答会被丢掉。"
     }
   ],
   "machineParts": "下面 parts 里的 litch/clientTool/invoke、litch/clientTool/call 是 2026-10-18 为 litch_machine 加的（08 号设计第五节），让不支持动态工具的 harness 经设备上的命令也能用。",
@@ -100,6 +119,26 @@
         "arguments": true,
         "threadId": { "type": ["string", "null"] },
         "desktop": { "type": "string" }
+      }
+    },
+    "DesktopsResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["desktops"],
+      "properties": {
+        "desktops": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["hostname", "namespaces"],
+            "properties": {
+              "hostname": { "type": "string" },
+              "name": { "type": "string" },
+              "namespaces": { "type": "array", "items": { "type": "string", "pattern": "^litch_" } }
+            }
+          }
+        }
       }
     },
     "DetachedCallParams": {
@@ -158,7 +197,16 @@
       }
     },
     "FailureKind": {
-      "enum": ["noExecutor", "disabled", "permission", "declined", "invalid", "failed", "blocked", "ambiguous"]
+      "enum": [
+        "noExecutor",
+        "disabled",
+        "permission",
+        "declined",
+        "invalid",
+        "failed",
+        "blocked",
+        "ambiguous"
+      ]
     },
     "FailureResponse": {
       "type": "object",

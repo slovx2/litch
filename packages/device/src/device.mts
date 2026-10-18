@@ -4,6 +4,7 @@ import { mkdirSync } from 'node:fs'
 import type { DatabaseSync } from 'node:sqlite'
 import { EXTENSION } from '../../protocol/src/device.mjs'
 import type { DeviceSettingsSnapshot } from '../../protocol/src/device-settings.mjs'
+import { ClientToolInvoker } from './client-tool-invoke.mjs'
 import { ClientToolRouter } from './client-tools.mjs'
 import type { ControlChannel, ControlState } from './control.mjs'
 import { DeviceLayer } from './device-layer.mjs'
@@ -123,6 +124,10 @@ export class DeviceServer {
       this.control.onState = (state) => this.controlChanged(state)
       this.control.onAsk = (method) => this.asked(method)
     }
+    const router = new ClientToolRouter({
+      graceMs: options.timing?.clientToolGraceMs ?? DEFAULT_TIMING.clientToolGraceMs,
+      log,
+    })
     this.host = {
       harnesses: () => this.harnesses(),
       management: new DeviceManagement({
@@ -141,10 +146,8 @@ export class DeviceServer {
       timing: { ...DEFAULT_TIMING, ...options.timing },
       log,
       closed: (session) => this.sessions.delete(session),
-      clientTools: new ClientToolRouter({
-        graceMs: options.timing?.clientToolGraceMs ?? DEFAULT_TIMING.clientToolGraceMs,
-        log,
-      }),
+      clientTools: router,
+      clientInvoke: new ClientToolInvoker({ router, index: this.index, log }),
       reachable: () => this.importer?.kick(),
       importing: () => {
         this.importer?.kick()

@@ -56,6 +56,15 @@ test('终端：输出按块转出去，超了上限从开头丢；一整行命�
   assert.deepEqual(await terminals.waitForExit(shell), { exitCode: 3, signal: null })
   assert.equal(terminals.output(shell).output, 'a\n')
 
+  // 命令里的 LITCH_THREAD_ID 是这个会话的号，agent 给的同名变量不算数
+  const named = terminals.create({
+    sessionId: 'thread-7',
+    command: 'printf "[%s]" "$LITCH_THREAD_ID"',
+    env: [{ name: 'LITCH_THREAD_ID', value: 'other' }],
+  })
+  await terminals.waitForExit(named)
+  assert.equal(terminals.output(named).output, '[thread-7]')
+
   const long = terminals.create({ sessionId: 's', command: 'sleep 30' })
   const started = Date.now()
   await terminals.kill(long)

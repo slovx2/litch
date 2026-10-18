@@ -13,7 +13,7 @@
 //     哪怕它没订阅、没收到那一份；
 //   - 答了之后它不发 serverRequest/resolved（实测）；有连接恢复会话时，还在等的请求会补发给它；
 //   - turn/start 不会让发起的连接订阅会话（实测），所以“发起回合的连接”要设备进程自己记。
-import { clientToolFailure } from '../../protocol/src/client-tools.mjs'
+import { type ClientToolsDesktopInfo, clientToolFailure } from '../../protocol/src/client-tools.mjs'
 import {
   noClientToolExecutor,
   pickClientToolExecutor,
@@ -28,13 +28,15 @@ export interface ClientToolPeer {
   readonly ready: boolean
   /** 握手时声明能执行的命名空间。没声明 clientTools 扩展的是空的 */
   readonly clientToolNamespaces: ReadonlySet<string>
+  /** 握手时报的“我是哪台桌面端”（litchClientTools.desktop）。没报是 null */
+  readonly desktop: ClientToolsDesktopInfo | null
   /**
    * 把一次调用转给这条连接的客户端。frame 是上游发来的原样请求；客户端的答复交给 onAnswer。
    * 返回客户端看到的请求号（和这条连接上别的待答请求撞了时会换一个）
    */
   deliverClientTool(harness: string, frame: Frame, onAnswer: (reply: Frame) => void): RpcId
-  /** 这次调用了结了（不是它答的）：告诉客户端这个请求有结果了，卡片收掉 */
-  withdrawClientTool(facingId: RpcId, threadId: string): void
+  /** 这次调用了结了（不是它答的）：告诉客户端这个请求有结果了，卡片收掉。不来自会话的调用 threadId 是 null */
+  withdrawClientTool(facingId: RpcId, threadId: string | null): void
   /** 这条连接通往某个 harness 的上游连接 */
   upstream(harness: string): UpstreamLink | null
 }
@@ -84,6 +86,11 @@ export class ClientToolRouter {
    * 回合结束时清掉
    */
   private readonly done = new Map<string, { harness: string; turnId: string; request: string }>()
+  /**
+   * 会话正在跑的回合（turn/started 时记，turn/completed 时清）。键：会话；会话号各 harness 之间不重。
+   * 命令行的调用（litch/clientTool/invoke）只带会话号，按它找发起这个回合的连接（client-tool-invoke.mts）
+   */
+  private readonly running = new Map<string, { harness: string; turnId: string }>()
 
   constructor(options: ClientToolRouterOptions) {
     this.options = options
@@ -245,6 +252,54 @@ export class ClientToolRouter {
         this.byRequest.delete(entry.request)
       }
     this.starters.delete(harness + sep + turnId)
+    for (const [threadId, turn] of this.running)
+      if (turn.harness === harness && turn.turnId === turnId) this.running.delete(threadId)
+  }
+
+  /** 会话的一个回合开始了（turn/started 通知；每条订阅着的连接各收到一份，记一次就够） */
+  turnBegan(harness: string, threadId: string, turnId: string): void {
+    this.running.set(threadId, { harness, turnId })
+  }
+
+  /** 还连着、声明了这个命名空间的连接，按连上的先后。namespace 为 null：声明了任何一个的都算 */
+  executors(namespace: string | null): ClientToolPeer[] {
+    return [...this.peers].filter(
+      (peer) =>
+        peer.ready &&
+        (namespace === null
+          ? peer.clientToolNamespaces.size > 0
+          : peer.clientToolNamespaces.has(namespace)),
+    )
+  }
+
+  /**
+   * 按会话挑执行方（命令行调用用）：发起这个会话当前回合的连接，否则订阅着这个会话的连接里最早订阅的；
+   * 都得还连着、声明了这个命名空间。candidates 给了就只在其中挑。挑不出返回 null。
+   * turnId、harness 是知道的话这个会话当前的回合和所属的 harness（不论挑没挑出来）
+   */
+  executorForThread(
+    threadId: string,
+    namespace: string,
+    candidates: readonly ClientToolPeer[],
+  ): { peer: ClientToolPeer | null; harness: string | null; turnId: string | null } {
+    const turn = this.running.get(threadId) ?? null
+    const starter = turn ? (this.starters.get(turn.harness + sep + turn.turnId) ?? null) : null
+    const subscribers: ClientToolPeer[] = []
+    let harness = turn?.harness ?? null
+    for (const [key, list] of this.subscribers) {
+      const at = key.indexOf(sep)
+      if (key.slice(at + 1) !== threadId) continue
+      harness ??= key.slice(0, at)
+      for (const peer of list) if (!subscribers.includes(peer)) subscribers.push(peer)
+    }
+    const allowed = (peer: ClientToolPeer) => peer.ready && candidates.includes(peer)
+    const peer = pickClientToolExecutor(
+      namespace,
+      starter && allowed(starter) ? starter : null,
+      subscribers.filter(allowed),
+      (one) => one.clientToolNamespaces,
+    )
+    return { peer, harness, turnId: turn?.turnId ?? null }
   }
 
   /** 一条上游连接断了：它收到的那几份作废；一次调用再也没有路可以答的，就此了结 */

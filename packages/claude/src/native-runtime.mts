@@ -1166,6 +1166,9 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         CLAUDE_CODE_ENABLE_TASKS: '0',
         // 让 CLI 上报会话状态，用 idle 判断后台子代理与续跑是否全部结束。
         CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS: '1',
+        // 命令里调 litch-machine 时按它认会话（08 号设计 2.2 节）。CLI 一个会话一个进程，Bash 工具继承它；
+        // 追问子代理的回合跑在父线程的会话上，给的是父线程
+        LITCH_THREAD_ID: context.sessionThreadId ?? context.threadId,
       },
       ...runtimePermissionOptions(context, originalBashInputs),
       settings: {
