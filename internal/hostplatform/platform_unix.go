@@ -14,6 +14,7 @@ import (
 func Lock(file *os.File) error            { return syscall.Flock(int(file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB) }
 func Unlock(file *os.File)                { _ = syscall.Flock(int(file.Fd()), syscall.LOCK_UN) }
 func Prepare(cmd *exec.Cmd)               { cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true} }
+func Quiet(cmd *exec.Cmd)                 {}
 func Kill(cmd *exec.Cmd) error            { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
 func Terminate(cmd *exec.Cmd) error       { return syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM) }
 func Track(cmd *exec.Cmd) (func(), error) { return func() {}, nil }

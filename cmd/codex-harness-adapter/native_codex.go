@@ -182,6 +182,7 @@ func inspectCodex(ctx context.Context, c configuration) (path, version string, e
 	probeCtx, cancel := context.WithTimeout(ctx, codexVersionTimeout)
 	defer cancel()
 	command := exec.CommandContext(probeCtx, path, "--version")
+	hostplatform.Quiet(command)
 	command.Env = c.environment()
 	var output bytes.Buffer
 	command.Stdout, command.Stderr = &output, log

@@ -23,11 +23,22 @@ func Lock(file *os.File) error {
 func Unlock(file *os.File) {
 	_ = windows.UnlockFileEx(windows.Handle(file.Fd()), 0, 1, 0, &windows.Overlapped{})
 }
+
+// 常驻服务是脱离控制台起的（见 Detach），它起的控制台程序（node、codex）会各自新开一个控制台：
+// 默认终端是 Windows Terminal 时就是一个个弹到桌面上的终端窗口。CREATE_NO_WINDOW 给它们一个不显示的控制台，
+// 它们再起的控制台程序沿用这一个，也不弹窗。
 func Prepare(cmd *exec.Cmd) {
-	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: windows.CREATE_NEW_PROCESS_GROUP}
+	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: windows.CREATE_NEW_PROCESS_GROUP | windows.CREATE_NO_WINDOW}
+}
+
+// Quiet 给一次性的小命令（查版本、诊断、taskkill）用：不弹控制台窗口。
+func Quiet(cmd *exec.Cmd) {
+	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: windows.CREATE_NO_WINDOW}
 }
 func Kill(cmd *exec.Cmd) error {
-	return exec.Command("taskkill.exe", "/PID", strconv.Itoa(cmd.Process.Pid), "/T", "/F").Run()
+	kill := exec.Command("taskkill.exe", "/PID", strconv.Itoa(cmd.Process.Pid), "/T", "/F")
+	Quiet(kill)
+	return kill.Run()
 }
 func Terminate(cmd *exec.Cmd) error { return Kill(cmd) }
 

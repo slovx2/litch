@@ -115,6 +115,7 @@ func runDiagnostic(ctx context.Context, c configuration, flag string) ([]byte, e
 	probeCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	command := exec.CommandContext(probeCtx, c.node, c.adapter(), flag)
+	hostplatform.Quiet(command)
 	command.Env = c.environment()
 	var output, stderr bytes.Buffer
 	command.Stdout = io.MultiWriter(&output, log)

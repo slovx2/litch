@@ -83,7 +83,7 @@ const toolPort: ClientToolPort = {
 /** 跑一个很快的系统命令拿一行字；没有这个命令、出错都是空串 */
 function quick(command: string, args: string[]): string {
   try {
-    return execFileSync(command, args, { encoding: 'utf8', timeout: 2000 }).trim()
+    return execFileSync(command, args, { encoding: 'utf8', timeout: 2000, windowsHide: true }).trim()
   } catch {
     return ''
   }

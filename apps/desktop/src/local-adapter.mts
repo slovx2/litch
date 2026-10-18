@@ -204,10 +204,12 @@ function runCommand(
       return
     }
     // 服务会一直留着启动时的工作目录：给它用户的主目录，不要碰巧是应用当时所在的那个目录
+    // windowsHide：命令行是控制台程序，Windows 上不给的话每条命令都闪一个终端窗口
     const child = spawn(adapter.bin, args, {
       cwd: homedir(),
       env,
       stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
     })
     let stdout = ''
     let stderr = ''
