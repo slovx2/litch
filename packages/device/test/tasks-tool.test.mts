@@ -158,3 +158,38 @@ test('原生 codex：同一次 litch_tasks 调用发给每条订阅连接，设�
     await env.close()
   }
 })
+
+test('原生 codex 上的任务建会话：权限给预设和配套的审批策略，来源记 automation，带上 litch_tasks；codex 都认', async () => {
+  const env = codexRig()
+  try {
+    const client = await tasksClient(env)
+    const { task } = await client.call('litch/task/create', {
+      name: '巡检',
+      prompt: '看一眼。',
+      schedule: { type: 'interval', minutes: 60 },
+      target: {
+        kind: 'newThread',
+        harness: 'codex',
+        cwd: env.stateDir,
+        workspaceId: null,
+        settings: { model: null, effort: 'high', permission: ':workspace' },
+      },
+      status: 'paused',
+    })
+    await client.call('litch/task/runNow', { id: task.id })
+    await until('发了回合', () => env.codex.seen.some((item) => item.method === 'turn/start'))
+    const start = env.codex.seen.find((item) => item.method === 'thread/start')?.params
+    assert.equal(start.permissions, ':workspace')
+    assert.equal(start.approvalPolicy, 'on-request')
+    assert.equal(start.threadSource, 'automation')
+    assert.deepEqual(
+      start.dynamicTools.map((tool: any) => tool.name),
+      ['litch_tasks'],
+    )
+    const turn = env.codex.seen.find((item) => item.method === 'turn/start')?.params
+    assert.equal(turn.effort, 'high')
+  } finally {
+    // 收尾时 codexRig 核对 codex 没有悄悄丢掉的字段
+    await env.close()
+  }
+})

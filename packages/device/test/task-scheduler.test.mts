@@ -99,6 +99,11 @@ test('错过了好几个时间点只跑一次：计划时间是最近的那个�
     assert.equal(all.length, 1)
     assert.equal(all[0].coalesced, 2)
     // 排上、建好会话、开始、结束各有一条运行变化的通知，形状照扩展定义
+    await client.waitFor(
+      (frame) =>
+        frame.method === 'litch/task/run/changed' &&
+        (frame.params as any).run.status === 'succeeded',
+    )
     const changes = client.notifications.filter(
       (frame) => frame.method === 'litch/task/run/changed',
     )
