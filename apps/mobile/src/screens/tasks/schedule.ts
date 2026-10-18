@@ -131,14 +131,14 @@ export function readForm(form: ScheduleForm, minMinutes: number): ReadResult {
     max: number,
   ) => {
     const value = wholeIn(form[field], min, max)
-    return value === null ? bad(field, 'tasks.bad.number', { min, max }) : value
+    return value === null ? bad(field, 'timed.bad.number', { min, max }) : value
   }
   const clock = (field: 'time' | 'onceTime') =>
-    tidyTime(form[field]) ?? bad(field, 'tasks.bad.time')
+    tidyTime(form[field]) ?? bad(field, 'timed.bad.time')
   switch (form.type) {
     case 'once': {
       const date = tidyDate(form.date)
-      if (!date) return bad('date', 'tasks.bad.date')
+      if (!date) return bad('date', 'timed.bad.date')
       const time = clock('onceTime')
       if (typeof time !== 'string') return time
       return { ok: true, schedule: { type: 'once', at: `${date}T${time}` } }
@@ -153,7 +153,7 @@ export function readForm(form: ScheduleForm, minMinutes: number): ReadResult {
       if (typeof intervalHours !== 'number') return intervalHours
       const minute = number('minute', 0, 59)
       if (typeof minute !== 'number') return minute
-      if (!form.hourlyAllDays && form.days.length === 0) return bad('days', 'tasks.bad.days')
+      if (!form.hourlyAllDays && form.days.length === 0) return bad('days', 'timed.bad.days')
       const days = form.hourlyAllDays ? null : sortDays(form.days)
       return { ok: true, schedule: { type: 'hourly', intervalHours, minute, days } }
     }
@@ -164,7 +164,7 @@ export function readForm(form: ScheduleForm, minMinutes: number): ReadResult {
       return { ok: true, schedule: { type: form.type, time } }
     }
     case 'weekly': {
-      if (form.days.length === 0) return bad('days', 'tasks.bad.days')
+      if (form.days.length === 0) return bad('days', 'timed.bad.days')
       const time = clock('time')
       if (typeof time !== 'string') return time
       return { ok: true, schedule: { type: 'weekly', days: sortDays(form.days), time } }
@@ -201,13 +201,13 @@ export function tidyDate(text: string): string | null {
 }
 
 const DAY_KEY: Record<TaskWeekday, Key> = {
-  MO: 'tasks.day.MO',
-  TU: 'tasks.day.TU',
-  WE: 'tasks.day.WE',
-  TH: 'tasks.day.TH',
-  FR: 'tasks.day.FR',
-  SA: 'tasks.day.SA',
-  SU: 'tasks.day.SU',
+  MO: 'timed.day.MO',
+  TU: 'timed.day.TU',
+  WE: 'timed.day.WE',
+  TH: 'timed.day.TH',
+  FR: 'timed.day.FR',
+  SA: 'timed.day.SA',
+  SU: 'timed.day.SU',
 }
 
 export const dayName = (day: TaskWeekday, t: Translator): string => t(DAY_KEY[day])
@@ -215,10 +215,10 @@ export const dayName = (day: TaskWeekday, t: Translator): string => t(DAY_KEY[da
 /** 一串星期说成人话：周一到周五说“工作日”，七天都有说“每天”，其余逐个列出 */
 function daysText(days: TaskWeekday[], t: Translator): string {
   const sorted = sortDays(days)
-  if (sorted.length === 7) return t('tasks.sched.everyDay')
+  if (sorted.length === 7) return t('timed.sched.everyDay')
   if (sorted.length === 5 && WORKDAYS.every((day) => sorted.includes(day)))
-    return t('tasks.sched.workdays')
-  return sorted.map((day) => dayName(day, t)).join(t('tasks.sep'))
+    return t('timed.sched.workdays')
+  return sorted.map((day) => dayName(day, t)).join(t('timed.sep'))
 }
 
 /**
@@ -232,55 +232,55 @@ export function describeSchedule(
   t: Translator,
 ): string {
   const text = describeBare(schedule, t)
-  return timezone && timezone !== localZone ? t('tasks.sched.zone', { text, zone: timezone }) : text
+  return timezone && timezone !== localZone ? t('timed.sched.zone', { text, zone: timezone }) : text
 }
 
 function describeBare(schedule: TaskSchedule, t: Translator): string {
   switch (schedule.type) {
     case 'once':
-      return t('tasks.sched.once', { at: schedule.at.replace('T', ' ') })
+      return t('timed.sched.once', { at: schedule.at.replace('T', ' ') })
     case 'interval':
       return schedule.minutes % 60 === 0
-        ? t('tasks.sched.intervalHours', { count: schedule.minutes / 60 })
-        : t('tasks.sched.interval', { count: schedule.minutes })
+        ? t('timed.sched.intervalHours', { count: schedule.minutes / 60 })
+        : t('timed.sched.interval', { count: schedule.minutes })
     case 'hourly': {
       const every =
         schedule.intervalHours === 1
-          ? t('tasks.sched.hourly', { minute: pad(schedule.minute) })
-          : t('tasks.sched.hourlyN', {
+          ? t('timed.sched.hourly', { minute: pad(schedule.minute) })
+          : t('timed.sched.hourlyN', {
               count: schedule.intervalHours,
               minute: pad(schedule.minute),
             })
       return schedule.days === null || sortDays(schedule.days).length === 7
         ? every
-        : t('tasks.sched.onDays', { text: every, days: daysText(schedule.days, t) })
+        : t('timed.sched.onDays', { text: every, days: daysText(schedule.days, t) })
     }
     case 'daily':
-      return t('tasks.sched.daily', { time: schedule.time })
+      return t('timed.sched.daily', { time: schedule.time })
     case 'weekdays':
-      return t('tasks.sched.weekdays', { time: schedule.time })
+      return t('timed.sched.weekdays', { time: schedule.time })
     case 'weekly': {
       const days = sortDays(schedule.days)
-      if (days.length === 7) return t('tasks.sched.daily', { time: schedule.time })
+      if (days.length === 7) return t('timed.sched.daily', { time: schedule.time })
       if (days.length === 5 && WORKDAYS.every((day) => days.includes(day)))
-        return t('tasks.sched.weekdays', { time: schedule.time })
-      return t('tasks.sched.weekly', { days: daysText(days, t), time: schedule.time })
+        return t('timed.sched.weekdays', { time: schedule.time })
+      return t('timed.sched.weekly', { days: daysText(days, t), time: schedule.time })
     }
     case 'monthly':
       return schedule.day > 28
-        ? t('tasks.sched.monthlyLate', { day: schedule.day, time: schedule.time })
-        : t('tasks.sched.monthly', { day: schedule.day, time: schedule.time })
+        ? t('timed.sched.monthlyLate', { day: schedule.day, time: schedule.time })
+        : t('timed.sched.monthly', { day: schedule.day, time: schedule.time })
   }
 }
 
 const TYPE_KEY: Record<TaskScheduleType, Key> = {
-  once: 'tasks.type.once',
-  interval: 'tasks.type.interval',
-  hourly: 'tasks.type.hourly',
-  daily: 'tasks.type.daily',
-  weekdays: 'tasks.type.weekdays',
-  weekly: 'tasks.type.weekly',
-  monthly: 'tasks.type.monthly',
+  once: 'timed.type.once',
+  interval: 'timed.type.interval',
+  hourly: 'timed.type.hourly',
+  daily: 'timed.type.daily',
+  weekdays: 'timed.type.weekdays',
+  weekly: 'timed.type.weekly',
+  monthly: 'timed.type.monthly',
 }
 
 export const typeName = (type: TaskScheduleType, t: Translator): string => t(TYPE_KEY[type])

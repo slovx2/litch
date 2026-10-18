@@ -110,6 +110,17 @@ function SummaryLine({
           >
             {badgeOf(device, summary.harness)}
           </Text>
+          {summary.task ? (
+            <Text
+              testID={`${testID}:task`}
+              style={[
+                styles.badge,
+                { color: c.ink2, borderColor: c.line2, fontFamily: theme.font.mono },
+              ]}
+            >
+              ⏱ {t('timed.mark')}
+            </Text>
+          ) : null}
           {waiting ? (
             <Text style={[styles.pill, { color: c.invFg, backgroundColor: c.wait }]}>
               {waiting}

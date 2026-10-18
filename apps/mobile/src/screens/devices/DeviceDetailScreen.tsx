@@ -1,5 +1,5 @@
 // 设备详情：连接（状态、没连上的原因和该怎么办、重新连接、重新信任主机钥匙）、这台设备（改名、线色、主机、
-// 钥匙和公钥、主机指纹、对面是什么）、各 harness 的启停与设置（对面有设置接口时，manage 主题，ManageSection）、移除。
+// 钥匙和公钥、主机指纹、对面是什么）、定时任务（几个，点进这台设备的任务列表）、各 harness 的启停与设置（对面有设置接口时，manage 主题，ManageSection）、移除。
 import { type DeviceView, keys } from '@litch/core'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useState } from 'react'
@@ -26,6 +26,21 @@ function peerText(device: DeviceView, t: Translator): string {
   return device.mode === 'full'
     ? t('devices.peer.service', { count: device.harnesses.length }) + service
     : t('devices.peer.only', { name: device.harnesses[0]?.name ?? '' })
+}
+
+/** 这台设备上的定时任务：几个、几次没看；服务不支持时说一句 */
+function TasksLine({ deviceId, onPress }: { deviceId: string; onPress(): void }) {
+  const available = useKey<boolean | null>(keys.tasksAvailable(deviceId))
+  const ids = useKey<string[]>(keys.taskIds(deviceId)) ?? []
+  const t = useT()
+  return (
+    <Row
+      testID="detail:tasks"
+      title={t('timed.entry.count', { count: ids.length })}
+      detail={available === false ? t('timed.device.unsupported') : t('timed.entry.none')}
+      onPress={onPress}
+    />
+  )
 }
 
 export function DeviceDetailScreen({ route, navigation }: Props) {
@@ -142,6 +157,9 @@ export function DeviceDetailScreen({ route, navigation }: Props) {
             </View>
           </View>
         ) : null}
+
+        <SectionLabel>{t('timed.title')}</SectionLabel>
+        <TasksLine deviceId={deviceId} onPress={() => navigation.navigate('Tasks', { deviceId })} />
 
         <SectionLabel>{t('manage.harness.title')}</SectionLabel>
         {device.manageable && state === 'online' ? (

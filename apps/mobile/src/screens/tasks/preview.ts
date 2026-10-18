@@ -10,7 +10,7 @@ import {
 import { type FormProblem, readForm, type ScheduleForm } from './schedule'
 
 export type Preview =
-  /** 下一次在 at（Unix 秒） */
+  /** 下一次在 at（毫秒，和核心给界面的时间一样） */
   | { kind: 'next'; at: number; schedule: TaskSchedule }
   /** 合法，但以后不会再跑（一次性的时间已经过了） */
   | { kind: 'never'; schedule: TaskSchedule }
@@ -21,7 +21,8 @@ export type Preview =
   /** 协议的校验没过：英文的一句话（来自 validateTaskSchedule） */
   | { kind: 'invalid'; field: string; message: string }
 
-export function previewOf(form: ScheduleForm, timezone: string, nowSeconds: number): Preview {
+export function previewOf(form: ScheduleForm, timezone: string, nowMs: number): Preview {
+  const nowSeconds = Math.floor(nowMs / 1000)
   const read = readForm(form, MIN_TASK_INTERVAL_MINUTES)
   if (!read.ok) {
     const { ok: _ok, ...problem } = read
@@ -33,7 +34,7 @@ export function previewOf(form: ScheduleForm, timezone: string, nowSeconds: numb
     if (problem) return { kind: 'invalid', field: problem.field, message: problem.message }
     // 新建（或者改了日程）的锚点就是现在
     const at = nextTaskRun(schedule, timezone, nowSeconds, nowSeconds)
-    return at === null ? { kind: 'never', schedule } : { kind: 'next', at, schedule }
+    return at === null ? { kind: 'never', schedule } : { kind: 'next', at: at * 1000, schedule }
   } catch {
     return { kind: 'unknown', schedule }
   }

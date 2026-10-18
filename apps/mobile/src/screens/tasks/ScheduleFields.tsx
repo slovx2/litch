@@ -71,7 +71,7 @@ export function ScheduleFields({
   }
   const timeField = (field: 'time' | 'onceTime') => (
     <Field
-      label={t('tasks.field.time')}
+      label={t('timed.field.time')}
       value={form[field]}
       onChangeText={(text) => onChange({ [field]: text })}
       onEndEditing={tidy(field)}
@@ -120,7 +120,7 @@ export function ScheduleFields({
     case 'weekly':
       fields = (
         <>
-          <Text style={[styles.label, { color: c.ink2 }]}>{t('tasks.field.days')}</Text>
+          <Text style={[styles.label, { color: c.ink2 }]}>{t('timed.field.days')}</Text>
           {dayChips}
           {daysError ? <Text style={[styles.hint, { color: c.err }]}>{daysError}</Text> : null}
           {timeField('time')}
@@ -130,7 +130,7 @@ export function ScheduleFields({
     case 'monthly':
       fields = (
         <>
-          {numberField('monthDay', t('tasks.field.monthDay'), t('tasks.field.monthDay.note'))}
+          {numberField('monthDay', t('timed.field.monthDay'), t('timed.field.monthDay.note'))}
           {timeField('time')}
         </>
       )
@@ -138,10 +138,10 @@ export function ScheduleFields({
     case 'hourly':
       fields = (
         <>
-          {numberField('intervalHours', t('tasks.field.intervalHours'))}
-          {numberField('minute', t('tasks.field.minute'))}
+          {numberField('intervalHours', t('timed.field.intervalHours'))}
+          {numberField('minute', t('timed.field.minute'))}
           <View style={styles.switchRow}>
-            <Text style={[styles.switchText, { color: c.ink }]}>{t('tasks.field.allDays')}</Text>
+            <Text style={[styles.switchText, { color: c.ink }]}>{t('timed.field.allDays')}</Text>
             <Switch
               testID="task:allDays"
               value={form.hourlyAllDays}
@@ -154,13 +154,13 @@ export function ScheduleFields({
       )
       break
     case 'interval':
-      fields = numberField('minutes', t('tasks.field.minutes', { min: MIN_TASK_INTERVAL_MINUTES }))
+      fields = numberField('minutes', t('timed.field.minutes', { min: MIN_TASK_INTERVAL_MINUTES }))
       break
     case 'once':
       fields = (
         <>
           <Field
-            label={t('tasks.field.date')}
+            label={t('timed.field.date')}
             value={form.date}
             onChangeText={(text) => onChange({ date: text })}
             keyboardType="numbers-and-punctuation"
@@ -176,18 +176,18 @@ export function ScheduleFields({
 
   const previewText =
     preview.kind === 'next'
-      ? t('tasks.preview', { when: whenText(preview.at, now, t) })
+      ? t('timed.preview', { when: whenText(preview.at, now, t) })
       : preview.kind === 'never'
-        ? t('tasks.preview.never')
+        ? t('timed.preview.never')
         : preview.kind === 'invalid'
           ? preview.message
           : null
   const zones = zoneChoices(localZone, originalZone, timezone)
   const zoneLabel = (zone: string) =>
     zone === localZone
-      ? t('tasks.field.timezone.local', { zone })
+      ? t('timed.field.timezone.local', { zone })
       : zone === originalZone
-        ? t('tasks.field.timezone.device', { zone })
+        ? t('timed.field.timezone.device', { zone })
         : zone
   return (
     <View>
@@ -204,7 +204,7 @@ export function ScheduleFields({
       </View>
       <View style={[styles.pad, styles.fields]}>{fields}</View>
       <Row
-        title={t('tasks.field.timezone')}
+        title={t('timed.field.timezone')}
         detail={zoneLabel(timezone)}
         testID="task:timezone"
         onPress={() => setZonePicking(true)}
@@ -225,12 +225,12 @@ export function ScheduleFields({
       ) : null}
       <PickerSheet
         visible={zonePicking}
-        title={t('tasks.field.timezone')}
+        title={t('timed.field.timezone')}
         value={timezone}
         search={t('composer.modelSearch')}
         options={[
           ...zones.map((zone) => ({ id: zone, title: zoneLabel(zone) })),
-          { id: '', title: t('tasks.field.timezone.other') },
+          { id: '', title: t('timed.field.timezone.other') },
         ]}
         onPick={(zone) => {
           setZonePicking(false)
@@ -242,7 +242,7 @@ export function ScheduleFields({
       />
       <Prompt
         visible={zoneTyping}
-        title={t('tasks.field.timezone.prompt')}
+        title={t('timed.field.timezone.prompt')}
         initial={timezone}
         placeholder="Asia/Shanghai"
         submitLabel={t('form.confirm')}
@@ -251,7 +251,7 @@ export function ScheduleFields({
           if (zoneOk(name)) {
             setZoneError(null)
             onTimezone(name)
-          } else setZoneError(t('tasks.field.timezone.bad'))
+          } else setZoneError(t('timed.field.timezone.bad'))
         }}
         onClose={() => setZoneTyping(false)}
       />

@@ -2,6 +2,7 @@
 // 文案只用 tasks.* 的键：这里自己拿 messages/tasks.ts 拼一个翻译函数，不经 src/ui/i18n.ts（它要 React 和 expo）。
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import { zhCN as desktop } from '../../../packages/ui/src/i18n/zh-CN.ts'
 import {
   defaultForm,
   describeSchedule,
@@ -27,8 +28,12 @@ function tr(lang) {
 const zh = tr('zh-CN')
 const en = tr('en')
 
-test('中英文的键一样多', () => {
+test('中英文的键一样多；没有和桌面界面撞名的键（撞了会遮住那边的句子）', () => {
   assert.deepEqual(Object.keys(messages.en).sort(), Object.keys(messages.zhCN).sort())
+  assert.deepEqual(
+    Object.keys(messages.zhCN).filter((key) => key in desktop),
+    [],
+  )
 })
 
 test('时刻和日期的写法', () => {
@@ -110,7 +115,11 @@ test('日程的人话描述（中文）', () => {
     '每 3 小时，第 00 分（工作日）',
   )
   assert.equal(say({ type: 'once', at: '2026-10-20T09:30' }), '一次：2026-10-20 09:30')
-  assert.equal(say({ type: 'daily', time: '09:00' }, 'Asia/Shanghai'), '每天 09:00', '同一个时区不带')
+  assert.equal(
+    say({ type: 'daily', time: '09:00' }, 'Asia/Shanghai'),
+    '每天 09:00',
+    '同一个时区不带',
+  )
   assert.equal(
     say({ type: 'daily', time: '09:00' }, 'America/New_York'),
     '每天 09:00（America/New_York）',
@@ -120,7 +129,10 @@ test('日程的人话描述（中文）', () => {
 test('日程的人话描述（英文，单复数）', () => {
   const say = (schedule) => describeSchedule(schedule, null, 'UTC', en)
   assert.equal(say({ type: 'daily', time: '09:00' }), 'Daily at 09:00')
-  assert.equal(say({ type: 'weekly', days: ['MO', 'WE'], time: '09:00' }), 'Every Mon, Wed at 09:00')
+  assert.equal(
+    say({ type: 'weekly', days: ['MO', 'WE'], time: '09:00' }),
+    'Every Mon, Wed at 09:00',
+  )
   assert.equal(say({ type: 'interval', minutes: 60 }), 'Every hour')
   assert.equal(say({ type: 'interval', minutes: 5 }), 'Every 5 minutes')
   assert.equal(
@@ -132,13 +144,114 @@ test('日程的人话描述（英文，单复数）', () => {
 test('时间说成今天、明天、昨天、日期；不是今年的带年份', () => {
   // 2026-10-19 12:00 UTC
   const now = Date.UTC(2026, 9, 19, 12, 0)
-  const at = (ms) => Math.floor(ms / 1000)
-  const say = (ms) => whenText(at(ms), now, zh, 'UTC')
+  const say = (ms) => whenText(ms, now, zh, 'UTC')
   assert.equal(say(Date.UTC(2026, 9, 19, 9, 5)), '今天 09:05')
   assert.equal(say(Date.UTC(2026, 9, 20, 0, 0)), '明天 00:00')
   assert.equal(say(Date.UTC(2026, 9, 18, 23, 10)), '昨天 23:10')
   assert.equal(say(Date.UTC(2026, 9, 25, 9, 0)), '10-25 09:00')
   assert.equal(say(Date.UTC(2027, 0, 2, 9, 0)), '2027-01-02 09:00')
   // 换个时区：UTC 的 23:30 在上海已经是第二天
-  assert.equal(whenText(at(Date.UTC(2026, 9, 19, 23, 30)), now, zh, 'Asia/Shanghai'), '明天 07:30')
+  assert.equal(whenText(Date.UTC(2026, 9, 19, 23, 30), now, zh, 'Asia/Shanghai'), '明天 07:30')
+})
+
+const task = (over = {}) => ({
+  id: 't1',
+  deviceId: 'd1',
+  name: '日报',
+  prompt: '写日报',
+  schedule: { type: 'daily', time: '09:00' },
+  timezone: 'UTC',
+  status: 'active',
+  target: { kind: 'thread', harness: 'pi', threadId: 's1' },
+  origin: { kind: 'client' },
+  revision: 1,
+  createdAt: 0,
+  updatedAt: 0,
+  nextRunAt: null,
+  lastRunAt: null,
+  lastRun: null,
+  lastError: null,
+  unreadRuns: 0,
+  ...over,
+})
+const run = (over = {}) => ({
+  id: 'r1',
+  taskId: 't1',
+  deviceId: 'd1',
+  trigger: 'scheduled',
+  scheduledFor: 0,
+  coalesced: 0,
+  status: 'succeeded',
+  harness: 'pi',
+  threadId: 's1',
+  startedAt: null,
+  finishedAt: null,
+  summary: null,
+  error: null,
+  read: true,
+  ...over,
+})
+
+test('任务一行：日程、下一次或状态、最近一次、未读和记号', async () => {
+  const { taskLines } = await import('../src/screens/tasks/lines.ts')
+  const now = Date.UTC(2026, 9, 19, 12, 0)
+  const next = Date.UTC(2026, 9, 20, 9, 0)
+  const plain = taskLines(task({ nextRunAt: next }), now, 'UTC', zh)
+  assert.equal(plain.title, '日报')
+  assert.match(plain.detail, /^每天 09:00\n/)
+  assert.match(plain.detail, /下一次/)
+  assert.equal(plain.meta, undefined)
+  assert.equal(plain.mark, 'idle')
+
+  const busy = taskLines(
+    task({ lastRun: run({ status: 'running', startedAt: now }) }),
+    now,
+    'UTC',
+    zh,
+  )
+  assert.equal(busy.mark, 'running')
+  assert.match(busy.detail, /最近一次正在跑 今天 \d\d:\d\d/)
+
+  const failed = taskLines(
+    task({ unreadRuns: 2, lastError: { code: 'turnFailed', message: 'boom' } }),
+    now,
+    'UTC',
+    zh,
+  )
+  assert.equal(failed.mark, 'error')
+  assert.equal(failed.meta, '2 次没看')
+  assert.equal(taskLines(task({ unreadRuns: 1 }), now, 'UTC', zh).mark, 'unread')
+  assert.match(taskLines(task({ status: 'paused' }), now, 'UTC', zh).detail, /暂停了/)
+  assert.equal(taskLines(task({ status: 'completed' }), now, 'UTC', zh).mark, 'offline')
+})
+
+test('运行记录一行：状态、时间、触发、合并；错误优先于摘要', async () => {
+  const { runLines, errorText } = await import('../src/screens/tasks/lines.ts')
+  const now = Date.UTC(2026, 9, 19, 12, 0)
+  const ok = runLines(
+    run({ startedAt: Date.UTC(2026, 9, 19, 9, 0), coalesced: 3, summary: '写好了', read: false }),
+    now,
+    zh,
+  )
+  // 时间按手机所在的时区说，这里只看别的几段
+  assert.match(ok.title, /^成功 · .+ · 按日程 · 合并了 3 次错过的$/)
+  assert.equal(ok.detail, '写好了')
+  assert.equal(ok.mark, 'unread')
+  const bad = runLines(
+    run({
+      status: 'failed',
+      trigger: 'manual',
+      error: { code: 'cwdMissing', message: '' },
+      summary: 'x',
+    }),
+    now,
+    zh,
+  )
+  assert.match(bad.title, /手动运行/)
+  assert.equal(bad.detail, '工作目录不存在')
+  assert.equal(bad.mark, 'error')
+  assert.equal(
+    errorText({ code: 'internal', message: 'disk full' }, en),
+    'Internal error in the device service: disk full',
+  )
 })

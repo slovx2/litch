@@ -2,6 +2,7 @@
 // 点一行进这台设备的会话；右边的“⋯”和长按出菜单（详情、重新连接、改名、移除）。
 // 一行只订阅它自己的两个键（keys.device、keys.activity），不遍历会话。
 // 应用回到前台时，没连着的设备立刻重连一次（手机切到后台时连接常被系统掐掉，不等退避的下一拍）。
+// 设备列表上面一行是定时任务的入口（所有设备的任务、没看过的运行合计）。
 // 顶上有新版本时出更新的横条（UpdateBanner）；定时查更新也挂在这一页（首页一直在栈底）。
 import { type DeviceActivity, type DeviceView, keys } from '@litch/core'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
@@ -117,6 +118,22 @@ function DeviceRow({
   )
 }
 
+/** 定时任务的入口：所有设备上的任务在一页里，右边是没看过的运行一共几次 */
+function TasksEntry({ onPress }: { onPress(): void }) {
+  const unread = useKey<number>(keys.tasksUnread) ?? 0
+  const t = useT()
+  return (
+    <Row
+      testID="devices:tasks"
+      title={t('timed.entry')}
+      detail={unread > 0 ? t('timed.entry.unread', { count: unread }) : t('timed.entry.none')}
+      meta={unread > 0 ? String(unread) : undefined}
+      left={<StatusMark status={unread > 0 ? 'unread' : 'idle'} />}
+      onPress={onPress}
+    />
+  )
+}
+
 export function DevicesScreen({ navigation }: Props) {
   const t = useT()
   const channel = useChannel()
@@ -142,6 +159,9 @@ export function DevicesScreen({ navigation }: Props) {
       <FlatList
         data={ids}
         keyExtractor={(id) => id}
+        ListHeaderComponent={
+          ids.length > 0 ? <TasksEntry onPress={() => navigation.navigate('Tasks', {})} /> : null
+        }
         renderItem={({ item }) => (
           <DeviceRow
             deviceId={item}
