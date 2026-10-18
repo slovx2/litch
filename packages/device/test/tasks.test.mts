@@ -30,12 +30,12 @@ test('没声明 deviceTasks 的连接调任务方法回 extensionRequired，收�
     assertErrorData(failure.data)
     const declared = await tasksClient(target)
     await declared.call('litch/task/create', intervalTask(target.stateDir))
+    await declared.waitFor((frame) => frame.method === 'litch/task/changed')
     await settle()
     assert.equal(
       plain.notifications.some((frame) => String(frame.method).startsWith('litch/task/')),
       false,
     )
-    assert.ok(declared.notifications.some((frame) => frame.method === 'litch/task/changed'))
   } finally {
     await target.close()
   }
