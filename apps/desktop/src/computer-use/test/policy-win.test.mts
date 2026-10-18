@@ -28,9 +28,13 @@ test('助手那份 baseline.rs 在的话，里面列的 exe 这边都禁止', ()
   if (!root) return
   const file = join(root, '..', 'computer-use-win', 'src', 'baseline.rs')
   if (!existsSync(file)) return
-  const names = [...readFileSync(file, 'utf8').matchAll(/"([\w.-]+\.exe)"/gi)].map((match) =>
+  // 只看底线名单那一段（FORBIDDEN_EXES）；同一文件里的外壳名单是“不列为应用”，不是禁止
+  const block = /FORBIDDEN_EXES[^=]*=\s*&\[([\s\S]*?)\];/.exec(readFileSync(file, 'utf8'))?.[1]
+  assert.ok(block, 'baseline.rs 里找不到 FORBIDDEN_EXES')
+  const names = [...block.matchAll(/"([\w.-]+\.exe)"/gi)].map((match) =>
     (match[1] ?? '').toLowerCase(),
   )
+  assert.ok(names.length > 0, 'FORBIDDEN_EXES 是空的')
   for (const name of names) assert.equal(exe(name), 'forbidden', `baseline.rs 里的 ${name}`)
 })
 
