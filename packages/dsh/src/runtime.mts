@@ -1,5 +1,5 @@
 import { type ChildProcess, spawn } from 'node:child_process'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { cliCommand } from '../../shared/src/host-cli.mjs'
 import { sleep } from '../../shared/src/util.mjs'
@@ -36,6 +36,8 @@ export class DshRuntime {
   private readonly home: string
   private readonly handlers: RemoteHandlers
   private readonly timing: ExitTiming
+  // 补丁文件里另加的部分（客户端工具的插件，见 client-tools.mts），每次拉起前现取
+  private readonly extraPatch: () => Promise<string>
   private child: ChildProcess | null = null
   private starting: Promise<WebRemote> | null = null
   // 已经连上的那一条；没起、正在起、已经退出都是 null。
@@ -44,10 +46,16 @@ export class DshRuntime {
   // 正在收场的那个 dsh（见 dismiss）和它退出的那一刻；下一个要等它退干净才起。
   private leaving: { child: ChildProcess; exited: Promise<void> } | null = null
 
-  constructor(home: string, handlers: RemoteHandlers, timing: ExitTiming = EXIT_TIMING) {
+  constructor(
+    home: string,
+    handlers: RemoteHandlers,
+    timing: ExitTiming = EXIT_TIMING,
+    extraPatch: () => Promise<string> = async () => '',
+  ) {
     this.home = home
     this.handlers = handlers
     this.timing = timing
+    this.extraPatch = extraPatch
     process.once('exit', () => {
       this.child?.kill('SIGKILL')
       this.leaving?.child.kill('SIGKILL')
@@ -82,9 +90,13 @@ export class DshRuntime {
       console.error(`[dsh] 这个版本的 dsh 尚未验证，如遇异常：${compatibilityHint(host.version)}`)
     // 启动器选项（--patch）必须写在 profile 自己的选项之前。
     const args = ['--profile', 'web']
-    if (process.env.CHA_DSH_SESSION_LOG !== '1') {
+    const patchText =
+      (process.env.CHA_DSH_SESSION_LOG !== '1' ? SESSION_LOG_OFF : '') + (await this.extraPatch())
+    if (patchText) {
+      // 补丁里有客户端工具插件的连接令牌：只有属主读得到
       const patch = join(this.home, 'dsh.patch.yml')
-      writeFileSync(patch, SESSION_LOG_OFF, { mode: 0o600 })
+      writeFileSync(patch, patchText, { mode: 0o600 })
+      chmodSync(patch, 0o600)
       args.push('--patch', patch)
     }
     args.push('--no-open', '--port', '0')

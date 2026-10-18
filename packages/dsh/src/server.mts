@@ -1,5 +1,11 @@
 import { randomUUID } from 'node:crypto'
 import { appendFileSync } from 'node:fs'
+import { type ClientToolCallResponse, clientToolFailure } from '../../protocol/src/client-tools.mjs'
+import {
+  isClientToolNamespace,
+  noClientToolExecutor,
+  pickClientToolExecutor,
+} from '../../shared/src/client-tool-executor.mjs'
 import { FilesystemRpc } from '../../shared/src/filesystem-rpc.mjs'
 import { FuzzyFileSearch, FuzzySearchSessions } from '../../shared/src/fuzzy-session.mjs'
 import { ProcessRpc } from '../../shared/src/process-rpc.mjs'
@@ -14,12 +20,21 @@ import { ServerRequests } from '../../shared/src/server-requests.mjs'
 import type { RpcPeer, WireMessage } from '../../shared/src/types.mjs'
 import { sleep } from '../../shared/src/util.mjs'
 import { approve } from './approvals.mjs'
+import { ClientToolBridge, type DshClientTool, dshClientTools } from './client-tools.mjs'
 import { summary } from './envelope.mjs'
-import { type DshThread, type DshTurn, type Preset, Projection } from './projection.mjs'
+import {
+  type DshThread,
+  type DshTurn,
+  knownPreset,
+  type Preset,
+  Projection,
+  type ProjectionHooks,
+  type SubagentInfo,
+} from './projection.mjs'
 import { dispatch } from './protocol.mjs'
 import { ask, TURN_STOPPED } from './questions.mjs'
 import { RemoteError, type Waterfall, type WaterfallOutcome, type WebRemote } from './remote.mjs'
-import { DshRuntime } from './runtime.mjs'
+import { DshRuntime, EXIT_TIMING } from './runtime.mjs'
 import { DshSkills, isSkillsSession } from './skills.mjs'
 import { DshStore } from './store.mjs'
 import { echoContent, promptContent } from './turn.mjs'
@@ -34,6 +49,15 @@ const trace = (direction: 'in' | 'out', message: unknown) => {
 const EPHEMERAL_PREFIX = 'ephemeral-'
 // dsh 的 session/follow 对它没有的会话报的错误码（对着 dsh 0.2.0-rc.2 实测，用例在 foreign-thread.test.mts）
 const SESSION_NOT_FOUND = 'session/not-found'
+// 拿普通会话地址去跟随子代理的会话，dsh 报这个（要用派它的会话的地址）；子代理地址里的方式不对报后一个
+const AGENT_BUSY = 'session/agent-busy'
+const SUBAGENT_UNAUTHORIZED = 'subagent/unauthorized'
+// 子代理地址里的方式：要和子代理实际的方式对上，dsh 才让跟随（对着 0.2.0-rc.2 实测）
+const SUBAGENT_MODES = ['continuable', 'one-shot', 'unknown'] as const
+
+type SessionAddress =
+  | { kind: 'session'; sessionId: string }
+  | { kind: 'subagent'; parentSessionId: string; childSessionId: string; mode: string }
 
 export interface LiveThread {
   projection: Projection
@@ -44,6 +68,8 @@ export interface LiveThread {
   submitted: Map<string, DshTurn>
   // 最近一个回合的提示词交给 dsh 了没有：交到了、没交成都算完。打断和插话要等它（见 interrupt）。
   delivered: Promise<void>
+  // 哪条连接发起的哪个回合（客户端工具按它挑执行方）。dsh 自己开的回合（子代理结束后告诉模型）不在这里
+  starter: { peer: string; turn: DshTurn } | null
 }
 
 export class DshServer {
@@ -74,6 +100,12 @@ export class DshServer {
   private readonly requests = new ServerRequests((threadId, method, params) =>
     this.notify(threadId, method, params),
   )
+  // 每条连接握手时声明能执行的客户端工具命名空间（clientTools 扩展）
+  readonly toolNamespaces = new Map<string, ReadonlySet<string>>()
+  // 跑在 dsh 里的客户端工具插件和适配器之间的连接（client-tools.mts）
+  readonly bridge: ClientToolBridge
+  // 会话的客户端工具，摊平成交给 dsh 模型的样子（clientTools）
+  private readonly clientToolCache = new Map<string, DshClientTool[]>()
 
   constructor(home: string) {
     this.store = new DshStore(home)
@@ -91,11 +123,20 @@ export class DshServer {
       },
     })
     this.queue = new QueueStore(this.store.db)
-    this.runtime = new DshRuntime(home, {
-      waterfall: (frame, signal) => this.waterfall(frame, signal),
-      emit: () => {},
-      closed: (error) => this.runtimeClosed(error),
+    this.bridge = new ClientToolBridge({
+      tools: (id) => this.clientTools(id),
+      call: (id, callId, name, args, signal) => this.clientToolCall(id, callId, name, args, signal),
     })
+    this.runtime = new DshRuntime(
+      home,
+      {
+        waterfall: (frame, signal) => this.waterfall(frame, signal),
+        emit: () => {},
+        closed: (error) => this.runtimeClosed(error),
+      },
+      EXIT_TIMING,
+      () => this.bridge.patch(),
+    )
     this.skills = new DshSkills(home, this.runtime)
   }
 
@@ -282,9 +323,53 @@ export class DshServer {
     return loading
   }
 
+  // 打开一个会话。dsh 的子代理会话不能拿普通的会话地址跟随（它报 session/agent-busy），要用派它的会话的地址，
+  // 地址里的方式还得和子代理实际的方式对上（不对报 subagent/unauthorized）。不知道它是子代理的（清单是旧的）
+  // 先按普通会话试，被拒了再问一遍清单。
   private async open(id: string): Promise<LiveThread> {
     this.silent.delete(id)
     const remote = await this.remote()
+    try {
+      let parent = this.knownThread(id)?.parentThreadId ?? null
+      if (!parent) {
+        try {
+          return await this.follow(remote, id, { kind: 'session', sessionId: id })
+        } catch (error) {
+          if (!(error instanceof RemoteError && error.code === AGENT_BUSY)) throw error
+          await this.sessions()
+          parent = this.known.get(id)?.parentThreadId ?? null
+          if (!parent) throw error
+        }
+      }
+      // 知道是哪种的先按那种，不知道的先按 continuable（dsh 默认派的就是这种）
+      const known = this.subagentInfo(id)?.mode
+      let refused: unknown = null
+      for (const mode of new Set([known ?? 'continuable', ...SUBAGENT_MODES])) {
+        try {
+          return await this.follow(remote, id, {
+            kind: 'subagent',
+            parentSessionId: parent,
+            childSessionId: id,
+            mode,
+          })
+        } catch (error) {
+          if (!(error instanceof RemoteError && error.code === SUBAGENT_UNAUTHORIZED)) throw error
+          refused = error
+        }
+      }
+      throw refused
+    } catch (error: any) {
+      // dsh 没有这个会话：多半是别的 harness 的会话号（桌面端找会话在哪台机器上时每个入口都问），照上游答“这里没有”。
+      // 别的失败（连接断了这类）带着原话照旧报
+      if (error instanceof RemoteError && error.code === SESSION_NOT_FOUND)
+        throw new ThreadNotFound(id)
+      if (error instanceof ProtocolError) throw error
+      throw new ProtocolError(-32602, error?.message ?? '未知 dsh 会话')
+    }
+  }
+
+  // 跟随一个会话：先用快照回放历史，之后的落盘事件与实时增量转成协议通知。失败时原样交出 dsh 的错误（见 open）
+  private follow(remote: WebRemote, id: string, address: SessionAddress): Promise<LiveThread> {
     const notify = (method: string, params: any) => this.notify(id, method, params)
     return new Promise<LiveThread>((resolve, reject) => {
       let live: LiveThread | null = null
@@ -297,7 +382,7 @@ export class DshServer {
       const timer = setTimeout(() => mismatch('dsh 的 session/follow 没有返回会话快照'), 15000)
       const cancel = remote.open(
         'session/follow',
-        { request: { address: { kind: 'session', sessionId: id }, assistantStream: true } },
+        { request: { address, assistantStream: true } },
         (value) => {
           if (value?.type === 'snapshot' && Array.isArray(value.records)) {
             clearTimeout(timer)
@@ -307,11 +392,17 @@ export class DshServer {
                 value,
                 (owner, requestId) => this.recall(owner, requestId),
                 this.store.getMeta('display', id),
+                {
+                  clientTool: (name) =>
+                    this.clientTools(id).find((tool) => tool.name === name) ?? null,
+                  subagent: (child, info) => this.rememberSubagent(child, info),
+                },
               ),
               cancel: () => cancel(),
               preset: null,
               submitted: new Map(),
               delivered: Promise.resolve(),
+              starter: null,
             }
             live = opened
             const ready = () => {
@@ -337,16 +428,27 @@ export class DshServer {
           if (this.live.get(id) === live) this.live.delete(id)
           live?.projection.fail('dsh 会话流已中断', notify)
           live = null
-          // dsh 没有这个会话：多半是别的 harness 的会话号（桌面端找会话在哪台机器上时每个入口都问），照上游答“这里没有”。
-          // 别的失败（连接断了这类）带着原话照旧报
-          reject(
-            error instanceof RemoteError && error.code === SESSION_NOT_FOUND
-              ? new ThreadNotFound(id)
-              : new ProtocolError(-32602, error?.message ?? '未知 dsh 会话'),
-          )
+          reject(error ?? new Error('dsh 会话流已中断'))
         },
       )
     })
+  }
+
+  /** 一个子代理的情况（方式、标签）：见过派它的会话或者打开过它才知道，记在适配器库里 */
+  subagentInfo(threadId: string): SubagentInfo | null {
+    return this.live.get(threadId)?.projection.subagent ?? this.store.getMeta('subagent', threadId)
+  }
+
+  // 投影里见到了一个子代理的情况：记下来，列清单（canAcceptDirectInput、标签）和打开它（地址里的方式）时用。
+  // 派它的会话里的 catalog 和它自己的 descriptor 各报一次，后报的补上前面没有的
+  private rememberSubagent(threadId: string, info: SubagentInfo): void {
+    const saved: SubagentInfo | null = this.store.getMeta('subagent', threadId)
+    const merged: SubagentInfo = {
+      mode: info.mode ?? saved?.mode ?? null,
+      label: info.label ?? saved?.label ?? null,
+    }
+    if (JSON.stringify(saved) !== JSON.stringify(merged))
+      this.store.setMeta('subagent', threadId, merged)
   }
 
   // 客户端发来的输入原样记一份，按会话和提交标识（就是 dsh 那条用户消息上的 source.rpcId）。
@@ -408,6 +510,7 @@ export class DshServer {
       effort: values.effort,
       preset: values.preset ?? 'read-only',
       parentThreadId: null,
+      forkedFromId: null,
       ephemeral: true,
     }
     const live: LiveThread = {
@@ -416,6 +519,7 @@ export class DshServer {
       preset: values.preset,
       submitted: new Map(),
       delivered: Promise.resolve(),
+      starter: null,
     }
     this.ephemeral.set(thread.id, live)
     this.subscribe(peer, thread.id)
@@ -446,11 +550,13 @@ export class DshServer {
     if (params.outputSchema != null)
       throw new ProtocolError(-32602, 'dsh 入口暂不支持严格结构化输出')
     if (projection.active) throw new ProtocolError(-32009, '会话已有活动回合')
+    this.assertDirectInput(live)
     const threadId = projection.thread.id
     const notify = (method: string, value: any) => this.notify(threadId, method, value)
     this.subscribe(peer, threadId)
     const turn = projection.expect(notify)
     if (clientId) live.submitted.set(clientId, turn)
+    live.starter = { peer: peer.id, turn }
     const deliver = async () => {
       try {
         const content = await promptContent(params.input ?? [])
@@ -459,9 +565,7 @@ export class DshServer {
         // 提交标识落在 dsh 用户消息的 source.rpcId 上，回放时还原为条目的 clientId。
         const requestId = clientId ?? randomUUID()
         this.remember(threadId, requestId, params.input ?? [])
-        await remote.rpc('session/prompt', {
-          request: { requestId, sessionId: threadId, mode: 'queue', content },
-        })
+        await this.prompt(remote, live, requestId, 'queue', content)
       } catch (error) {
         if (projection.active === turn)
           projection.fail(error instanceof Error ? error.message : String(error), notify)
@@ -514,8 +618,49 @@ export class DshServer {
     return turn
   }
 
+  // 子代理只有后台可继续的能接着发消息（见 envelope 的 canAcceptDirectInput）
+  assertDirectInput(live: LiveThread): void {
+    const { thread } = live.projection
+    if (thread.parentThreadId && this.subagentInfo(thread.id)?.mode !== 'continuable')
+      throw new ProtocolError(
+        -32602,
+        'dsh 的这个子代理不能接着对话：只有后台跑、可继续的子代理收得到后续消息',
+      )
+  }
+
+  /**
+   * 把一句话交给 dsh。普通会话走 session/prompt；子代理的会话 dsh 不让直接发（session/agent-busy），
+   * 要经派它的会话的地址走 subagents/prompt。mode：queue 是排到下一个回合，steer 是并进正在跑的回合。
+   */
+  async prompt(
+    remote: WebRemote,
+    live: LiveThread,
+    requestId: string,
+    mode: 'queue' | 'steer',
+    content: any[],
+  ): Promise<void> {
+    const { thread } = live.projection
+    if (thread.parentThreadId)
+      await remote.rpc('subagents/prompt', {
+        request: {
+          requestId,
+          parentSessionId: thread.parentThreadId,
+          childSessionId: thread.id,
+          mode: 'continuable',
+          delivery: mode,
+          content,
+        },
+      })
+    else
+      await remote.rpc('session/prompt', {
+        request: { requestId, sessionId: thread.id, mode, content },
+      })
+  }
+
   async applySettings(remote: WebRemote, live: LiveThread, params: any): Promise<void> {
     const { thread } = live.projection
+    // 子代理的权限和模型是派它时定的，dsh 不让从它自己的会话里改：客户端带来的设置不管
+    if (thread.parentThreadId) return
     const preset = presetFromParams(params) ?? live.preset
     if (preset) live.preset = preset
     if (thread.ephemeral) {
@@ -555,6 +700,11 @@ export class DshServer {
     const live = this.live.get(id)
     const turn = live?.projection.active
     if (!live || !turn) return
+    if (live.projection.thread.parentThreadId && this.subagentInfo(id)?.mode !== 'continuable')
+      throw new ProtocolError(
+        -32602,
+        'dsh 不让单独打断这种子代理（跑完就结束的那种），请打断派它的会话',
+      )
     this.requests.reject((threadId) => threadId === id, TURN_STOPPED)
     // 回合是适配器先建的，提示词随后才交给 dsh（见 start）。dsh 的取消只停正在跑的回合：
     // 提示词还没到就发过去，它没有回合可停，回合随后照常跑完。所以等提示词交到了再取消，
@@ -562,7 +712,15 @@ export class DshServer {
     await live.delivered
     if (live.projection.active !== turn) return
     const remote = await this.remote()
-    await remote.rpc('session/cancel', { request: { sessionId: id } })
+    const { thread } = live.projection
+    // 子代理的会话 dsh 不让直接取消，要经派它的会话的地址（只认可继续的那种）
+    if (thread.parentThreadId)
+      await remote.rpc('subagents/interruptByParent', {
+        childSessionId: id,
+        parentSessionId: thread.parentThreadId,
+        mode: 'continuable',
+      })
+    else await remote.rpc('session/cancel', { request: { sessionId: id } })
     for (let waited = 0; waited < 10000 && live.projection.active === turn; waited += 50)
       await sleep(50)
     // dsh 迟迟没有回报结束时由适配器收尾。
@@ -571,6 +729,90 @@ export class DshServer {
         { type: 'turn/end', seq: -1, time: Date.now(), data: { reason: { kind: 'interrupted' } } },
         (method, params) => this.notify(id, method, params),
       )
+  }
+
+  /** 会话建时带的动态工具（thread/start.dynamicTools，记在适配器库里），摊平成交给 dsh 模型的样子 */
+  clientTools(threadId: string): DshClientTool[] {
+    let tools = this.clientToolCache.get(threadId)
+    if (!tools) {
+      // 记下的是建会话时核对过的，这里不会出错；万一库里的坏了，当作没有，不让会话打不开
+      try {
+        tools = dshClientTools(this.store.getMeta('dynamicTools', threadId))
+      } catch {
+        tools = []
+      }
+      this.clientToolCache.set(threadId, tools)
+    }
+    return tools
+  }
+
+  /** 建会话时记下它的动态工具（重启、恢复之后还在），交给 dsh 里的插件装上 */
+  async setClientTools(threadId: string, raw: unknown[]): Promise<void> {
+    this.store.setMeta('dynamicTools', threadId, raw)
+    this.clientToolCache.delete(threadId)
+    await this.bridge.install(threadId)
+  }
+
+  /**
+   * dsh 的模型调了会话的一个客户端工具（插件交回来的）：向客户端发标准的 item/tool/call，答复原样交回。
+   * litch_ 开头的命名空间照 clientTools 扩展的规矩挑执行方（shared/src/client-tool-executor.mts），挑不出来当场回
+   * noExecutor；别的命名空间照 Pi 入口的做法交给发起回合的连接，它不在了交给最早订阅的那条。
+   * 一次调用只发给一条连接，不补送给后来订阅的；执行方断开、回合被打断都按失败结束。
+   */
+  async clientToolCall(
+    threadId: string,
+    callId: string,
+    name: string,
+    args: unknown,
+    signal: AbortSignal,
+  ): Promise<ClientToolCallResponse> {
+    const tool = this.clientTools(threadId).find((one) => one.name === name)
+    if (!tool) return clientToolFailure('invalid', `这个会话没有 ${name} 这个工具。`)
+    const { namespace } = tool
+    const live = this.live.get(threadId)
+    const starting = live?.starter
+    // 发起这个回合的连接：回合还是它发起的那个、它还连着才算
+    const starter =
+      starting && live?.projection.active === starting.turn
+        ? (this.peers.get(starting.peer) ?? null)
+        : null
+    const subscribers = this.subscribers(threadId)
+    const litch = isClientToolNamespace(namespace)
+    const target = litch
+      ? pickClientToolExecutor(
+          namespace as string,
+          starter,
+          subscribers,
+          (peer) => this.toolNamespaces.get(peer.id) ?? new Set(),
+        )
+      : (starter ?? subscribers[0] ?? null)
+    if (!target)
+      return litch
+        ? noClientToolExecutor(namespace as string)
+        : clientToolFailure('noExecutor', '这个会话现在没有连着的客户端执行这个工具。')
+    const params = {
+      threadId,
+      turnId: live?.projection.active?.id ?? '',
+      callId,
+      namespace,
+      tool: tool.tool,
+      arguments: args ?? {},
+    }
+    try {
+      const result = await this.requests.send([target], threadId, 'item/tool/call', () => params, {
+        signal,
+        replayable: false,
+      })
+      if (typeof result?.success !== 'boolean' || !Array.isArray(result.contentItems))
+        return clientToolFailure('failed', '客户端的答复不符合协议，这次调用按失败处理。')
+      return result
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error)
+      return clientToolFailure(
+        'failed',
+        `这次调用没有完成（${reason}）。执行它的 Litch 断开了或者回合被打断了，不要反复重试。`,
+      )
+    }
   }
 
   private async waterfall(frame: Waterfall, signal: AbortSignal): Promise<WaterfallOutcome> {
@@ -594,6 +836,7 @@ export class DshServer {
 
   closePeer(peer: RpcPeer): void {
     this.peers.delete(peer.id)
+    this.toolNamespaces.delete(peer.id)
     this.files.closePeer(peer.id)
     this.processes.closePeer(peer.id)
     this.skills.closePeer(peer.id)
@@ -608,6 +851,7 @@ export class DshServer {
     this.requests.reject(() => true, '适配器正在关闭')
     this.skills.close()
     await this.runtime.close(signalled)
+    this.bridge.close()
     this.files.close()
     await this.processes.close()
     this.store.close()
@@ -642,8 +886,11 @@ function replay(
   snapshot: any,
   recall: (threadId: string, requestId: string) => any[] | null,
   shown: { preview: string; name: string | null; fallback: string | null } | null,
+  hooks: Omit<ProjectionHooks, 'recorded'>,
 ): Projection {
   const values = snapshot.projections?.values ?? {}
+  const header = snapshot.header ?? {}
+  const subagent = header.origin === 'subagent'
   const createdAt = Math.floor(Number(snapshot.header?.createdAt ?? Date.now()) / 1000)
   const thread: DshThread = {
     id,
@@ -654,16 +901,18 @@ function replay(
     updatedAt: createdAt,
     model: null,
     effort: null,
-    preset: values.permissions?.currentValue ?? 'workspace-write',
-    parentThreadId: snapshot.header?.parentSession ?? null,
+    preset: knownPreset(values.permissions?.currentValue) ?? 'workspace-write',
+    // 会话头里子代理和分叉出来的会话都有 parentSession，origin 是 subagent 的才是子代理
+    parentThreadId: subagent ? (header.parentSession ?? null) : null,
+    forkedFromId: subagent ? null : (header.parentSession ?? null),
     ephemeral: false,
   }
   // dsh 自己分叉出来的会话带着上一级的记录，那些用户消息的提交标识也是上一级的：自己名下没有的到上一级名下找。
-  const parent = thread.parentThreadId
-  const projection = new Projection(
-    thread,
-    (requestId) => recall(id, requestId) ?? (parent ? recall(parent, requestId) : null),
-  )
+  const parent = thread.forkedFromId
+  const projection = new Projection(thread, {
+    ...hooks,
+    recorded: (requestId) => recall(id, requestId) ?? (parent ? recall(parent, requestId) : null),
+  })
   projection.contextWindow = values.contextPressure?.contextWindow ?? null
   projection.titled = typeof values.title === 'string'
   // dsh 的快照只带末尾一段记录（它默认给最近 50 条消息）。会话长了，头一句话和早先的标题事件不在里面，
