@@ -3,7 +3,11 @@
 // 自己只管两件事：要重启一个 harness 之前，先看它有没有回合在跑；一次写入从头到尾只给客户端一个
 // 定下来的结果，途中的样子（先标成待重启、重新应用了再摘掉，SSH 入口没了又回来）不往外说。
 //
+// 给设备装 harness（扩展名 harnessInstall）的三个方法也在这个前缀下，同样只是转给主进程：装的事在 Go 那边做，
+// 进度由主进程推过来（control.mts 的 onInstall），设备进程转给声明了 harnessInstall 的连接（device.mts）。
+//
 // 密钥只出现在写入请求的参数里，这个文件不把任何参数写进日志。
+import { HARNESS_INSTALL_METHOD } from '../../protocol/src/device-harness-install.mjs'
 import {
   DEVICE_DIAGNOSTICS_RUN,
   DEVICE_HARNESS_RESTART,
@@ -53,7 +57,10 @@ export interface ManagementHost {
   log(line: string): void
 }
 
-/** 等主进程应答最多等多久。重新应用设置要等运行时有结果、SSH 入口定下来，诊断要把几个 harness 都查一遍 */
+/**
+ * 等主进程应答最多等多久。重新应用设置要等运行时有结果、SSH 入口定下来，诊断要把几个 harness 都查一遍；
+ * 查版本要逐个跑 `--version`（各两秒）、联网查最新版（五秒），几个一起查
+ */
 const WAIT = { quick: 30_000, apply: 100_000, diagnostics: 150_000 }
 
 interface WriteResult {
@@ -72,6 +79,8 @@ function translate(error: unknown): unknown {
       return new ManagementError('invalidSetting', text, key ? { key } : {})
     case 'unknownHarness':
       return new DeviceError('unknownHarness', text['zh-CN'], harness ? { harness } : {})
+    case 'busy':
+      return new ManagementError('harnessBusy', text, harness ? { harness } : {})
     case 'unavailable':
       return new ManagementError('settingsUnavailable', text)
     default:
@@ -109,6 +118,16 @@ export class DeviceManagement {
         )
       case DEVICE_SSH_CONFIG_READ:
         return this.ask('ssh.config', {}, WAIT.quick)
+      case HARNESS_INSTALL_METHOD.versions:
+        return this.ask('harness.versions', { latest: fields.latest === true }, WAIT.quick)
+      case HARNESS_INSTALL_METHOD.install:
+        return this.ask(
+          'harness.install',
+          { harness: fields.harness, version: fields.version },
+          WAIT.quick,
+        )
+      case HARNESS_INSTALL_METHOD.read:
+        return this.ask('harness.install.read', {}, WAIT.quick)
       default:
         return Promise.reject(
           new DeviceError('unsupported', `聚合面不支持 ${method}：设备配置接口里没有这个方法`, {

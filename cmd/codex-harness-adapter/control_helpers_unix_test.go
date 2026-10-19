@@ -29,6 +29,8 @@ type controlClient struct {
 	activity func() deviceActivity
 	// 被问过几次。
 	asked int
+	// 收到过的安装任务进度（{"method":"install"}），按到达的先后。
+	installs []installJob
 }
 
 type controlReply struct {
@@ -84,6 +86,11 @@ func dialControl(t *testing.T, cfg configuration) *controlClient {
 				var state controlState
 				if json.Unmarshal(frame.Params, &state) == nil {
 					client.states = append(client.states, state)
+				}
+			} else if frame.Method == "install" {
+				var job installJob
+				if json.Unmarshal(frame.Params, &job) == nil {
+					client.installs = append(client.installs, job)
 				}
 			} else if frame.ID != nil {
 				if reply, ok := client.waiting[*frame.ID]; ok {

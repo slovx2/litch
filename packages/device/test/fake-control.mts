@@ -34,6 +34,7 @@ export class FakeControl implements ControlChannel {
   state: ControlState | null = null
   onState: ((state: ControlState) => void) | null = null
   onAsk: ((method: string) => Promise<unknown>) | null = null
+  onInstall: ((job: unknown) => void) | null = null
   /** 主进程报的自己的来历。不给就像没有报 */
   service: ControlState['service'] | null = null
   /** 设备进程发来过的请求，按到达顺序 */
