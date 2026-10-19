@@ -3,6 +3,7 @@ package sshtransport
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -73,6 +74,15 @@ func parseSigner(privateKey, passphrase string) (ssh.Signer, error) {
 		return nil, kindf(kindKey, "OpenSSH 私钥或口令无效")
 	}
 	return signer, nil
+}
+
+// seedSigner 由 32 字节种子（base64url 无填充）还原 ed25519 钥匙。二维码里的一次性钥匙就是这么给的
+func seedSigner(seed string) (ssh.Signer, error) {
+	raw, err := base64.RawURLEncoding.DecodeString(strings.TrimSpace(seed))
+	if err != nil || len(raw) != ed25519.SeedSize {
+		return nil, kindf(kindKey, "一次性钥匙的种子不是 32 字节的 base64url")
+	}
+	return ssh.NewSignerFromKey(ed25519.NewKeyFromSeed(raw))
 }
 
 func marshalJSON(value any) (string, error) {

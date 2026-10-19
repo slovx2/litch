@@ -6,6 +6,8 @@ export type RootStackParamList = {
   Devices: undefined
   /** 加一台设备：填主机、端口、用户，生成或导入密钥，核对主机指纹 */
   AddDevice: undefined
+  /** 扫码添加：扫电脑上的配对二维码或者粘贴配对文本，确认后登记并添加。配对文本是秘密，不经路由传 */
+  PairDevice: undefined
   /** 一台设备的详情：连接信息、密钥、重连、去掉；harness 的启用和设置（设备有设置接口时） */
   DeviceDetail: { deviceId: string }
   /** 一台设备上的工作区和会话（相当于桌面端侧栏里这台设备的那一段），含已归档 */

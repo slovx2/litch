@@ -23,6 +23,8 @@ const (
 	kindKeyLocked = "keyLocked"
 	// 连接配置不对：主机、端口、用户没填对
 	kindInvalid = "invalid"
+	// 扫码绑定时登进去了，对面却没给出登记结果：没回一整行就退了、或者等满了时间
+	kindEnroll = "enroll"
 )
 
 type kindError struct {

@@ -18,6 +18,7 @@
 // Maestro 2.3.0（MAESTRO 指过去，或者在 PATH 里）；跑夹具的流程要先在仓库根目录 npm run build（适配器、Pi、设备进程）。
 // LITCH_E2E_ARTIFACTS=<目录>：Maestro 的调试输出（失败时的截图、日志）放到这里并留着（CI 上传用）；不给就放临时目录、跑完删掉。
 import { execFile, execFileSync, spawn, spawnSync } from 'node:child_process'
+import { createPrivateKey, createPublicKey, randomBytes } from 'node:crypto'
 import {
   appendFileSync,
   existsSync,
@@ -33,6 +34,7 @@ import { createServer } from 'node:http'
 import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { encodePairPayload } from '../../../packages/protocol/src/device-pairing.mts'
 
 const mobile = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const repo = resolve(mobile, '../..')
@@ -345,9 +347,11 @@ function prepareRepo(dir) {
  * 流程里 runScript 要的口（Maestro 在这台电脑上跑，连 127.0.0.1 就到这里）：
  *   POST /authorize        请求体是一行公钥，写进夹具 sshd 的 authorized_keys（演“用户在电脑上授权了手机的钥匙”）
  *   GET  /file?name=&text= 夹具的工作目录里这个文件有没有写出这段字（终端里敲的命令真跑了没有），最多等十秒
+ *   POST /pair、GET /pair/request、POST /pair/allow   扫码绑定，见 pairing()
  */
 async function startHelper(config) {
   const port = await freePort()
+  const pair = pairing(config)
   const fileHas = async (name, text) => {
     if (!/^[A-Za-z0-9._-]+$/.test(name)) return false
     for (let i = 0; i < 40; i++) {
@@ -362,6 +366,11 @@ async function startHelper(config) {
     req.on('data', (chunk) => (body += chunk))
     req.on('end', async () => {
       const url = new URL(req.url ?? '/', 'http://helper')
+      if (url.pathname.startsWith('/pair')) {
+        const answer = await pair(req.method, url.pathname)
+        res.writeHead(answer ? 200 : 404).end(answer ?? '')
+        return
+      }
       if (req.method === 'GET' && url.pathname === '/file') {
         const found = await fileHas(
           url.searchParams.get('name') ?? '',
@@ -386,6 +395,67 @@ async function startHelper(config) {
   await new Promise((done) => server.listen(port, '127.0.0.1', done))
   cleanups.push(() => new Promise((done) => server.close(done)))
   return `http://127.0.0.1:${port}`
+}
+
+/**
+ * 扫码绑定（电脑上那一头的替身）。真的设备进程合进来之前，一次性钥匙登进来跑的是 scripts/fake-pair-enroll.mjs：
+ *   POST /pair           出一张码：生成一次性钥匙，带强制命令的那一行追加进夹具 sshd 的 authorized_keys，回配对文本
+ *   GET  /pair/request   手机登记上来没有（最多等十秒），回假 pair-enroll 记下的 JSON（手机名、确认码、手机号）
+ *   POST /pair/allow     演“电脑上点了允许”
+ */
+function pairing(config) {
+  const dir = join(config.root, 'pair')
+  mkdirSync(dir, { recursive: true })
+  const keysFile = join(config.root, 'authorized_keys')
+  const fake = join(mobile, 'scripts/fake-pair-enroll.mjs')
+  let current = null
+  const sshString = (bytes) => {
+    const size = Buffer.alloc(4)
+    size.writeUInt32BE(bytes.length)
+    return Buffer.concat([size, bytes])
+  }
+  return async (method, path) => {
+    if (method === 'POST' && path === '/pair') {
+      const seed = randomBytes(32)
+      // ed25519 私钥的 PKCS#8 外壳加 32 字节种子
+      const privateKey = createPrivateKey({
+        key: Buffer.concat([Buffer.from('302e020100300506032b657004220420', 'hex'), seed]),
+        format: 'der',
+        type: 'pkcs8',
+      })
+      const raw = Buffer.from(createPublicKey(privateKey).export({ format: 'jwk' }).x, 'base64url')
+      const blob = Buffer.concat([sshString(Buffer.from('ssh-ed25519')), sshString(raw)])
+      current = randomBytes(12).toString('base64url')
+      const command = [process.execPath, fake, current, keysFile, dir].join(' ')
+      appendFileSync(
+        keysFile,
+        `restrict,command="${command}" ssh-ed25519 ${blob.toString('base64')} litch-pair:${current}\n`,
+      )
+      const hostType = readFileSync(join(config.root, 'host_key.pub'), 'utf8').split(' ')[0]
+      return encodePairPayload({
+        v: 1,
+        n: 'e2e-pair',
+        h: '127.0.0.1',
+        p: config.target.port,
+        u: config.target.user,
+        k: { t: hostType, f: config.target.hostFingerprint },
+        s: seed.toString('base64url'),
+        i: current,
+        e: Date.now() + 10 * 60 * 1000,
+      })
+    }
+    if (!current) return null
+    const request = join(dir, `${current}.request`)
+    if (method === 'GET' && path === '/pair/request') {
+      for (let i = 0; i < 40 && !existsSync(request); i++) await sleep(250)
+      return existsSync(request) ? readFileSync(request, 'utf8').trim() : null
+    }
+    if (method === 'POST' && path === '/pair/allow') {
+      writeFileSync(join(dir, `${current}.decision`), 'allow\n')
+      return 'ok'
+    }
+    return null
+  }
 }
 
 /**

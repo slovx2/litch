@@ -10,8 +10,11 @@ export type SshKind =
   | 'key'
   | 'keyLocked'
   | 'invalid'
+  /** 扫码绑定时登进去了，对面却没给出登记结果 */
+  | 'enroll'
 
-const KIND = /\[(unreachable|hostKeyUnknown|hostKeyChanged|auth|key|keyLocked|invalid)\] ([^\n]*)/
+const KIND =
+  /\[(unreachable|hostKeyUnknown|hostKeyChanged|auth|key|keyLocked|invalid|enroll)\] ([^\n]*)/
 
 export interface SshProblem {
   /** 认不出来的是 null，按连不到算 */

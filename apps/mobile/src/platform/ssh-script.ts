@@ -33,6 +33,12 @@ export interface ScriptNames {
   randomHex: () => string
 }
 
+/** Litch 桌面端的应用包里自带适配器的目录（scripts/stage-adapter.mjs 摆的布局）：装在系统的和用户自己的“应用程序”里 */
+const BUNDLED_ADAPTER_DIRS = [
+  '/Applications/Litch.app/Contents/Resources/adapter/bin',
+  '$HOME/Applications/Litch.app/Contents/Resources/adapter/bin',
+].join(':')
+
 const quote = (text: string): string => `'${text.replaceAll("'", `'\\''`)}'`
 
 /** 只许是一个不带空白和引号的命令名或路径 */
@@ -52,7 +58,9 @@ interface Quoted {
 function wrap(names: ScriptNames, inner: (quoted: Quoted) => string[]): RemoteScript {
   const marker = `litch-${names.randomHex()}`
   const body = [
-    'PATH="$PATH:${CODEX_INSTALL_DIR:+$CODEX_INSTALL_DIR:}$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin"',
+    // 最后两项是 macOS 上 Litch 桌面端自带的适配器：只装了桌面端、没装独立版的电脑（比如手机绑本机）也找得到。
+    // 放在最后，装了独立版的照旧用独立版；两份共用一个状态目录，设备服务已经在跑时 device-proxy 连的就是它
+    `PATH="$PATH:\${CODEX_INSTALL_DIR:+$CODEX_INSTALL_DIR:}$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:${BUNDLED_ADAPTER_DIRS}"`,
     'export PATH',
     ...inner({
       marker,

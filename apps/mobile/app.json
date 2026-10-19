@@ -17,6 +17,14 @@
     "plugins": [
       "./plugins/release-signing",
       [
+        "expo-camera",
+        {
+          "cameraPermission": "Litch uses the camera to scan the pairing QR code shown on your computer.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
+      ],
+      [
         "expo-build-properties",
         {
           "android": {

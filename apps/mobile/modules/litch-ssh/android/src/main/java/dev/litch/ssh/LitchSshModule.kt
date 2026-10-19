@@ -36,5 +36,17 @@ class LitchSshModule : Module() {
     AsyncFunction("inspectPrivateKey") { privateKey: String, passphrase: String ->
       Sshtransport.inspectPrivateKey(privateKey, passphrase)
     }
+
+    AsyncFunction("enrollPair") { target: String, line: String ->
+      Sshtransport.enrollPair(target, line)
+    }
+
+    AsyncFunction("pairConfirmCode") { pairId: String, publicKey: String ->
+      Sshtransport.pairConfirmCode(pairId, publicKey)
+    }
+
+    AsyncFunction("pairPhoneId") { publicKey: String ->
+      Sshtransport.pairPhoneID(publicKey)
+    }
   }
 }

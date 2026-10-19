@@ -13,12 +13,13 @@ import type { RootStackParamList } from '../../nav/routes'
 import { useChannel, useKey, useReplica } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Button, Empty, Row, StatusMark } from '../../ui/kit/controls'
-import { Confirm, Prompt, Sheet } from '../../ui/kit/overlays'
+import { Prompt, Sheet } from '../../ui/kit/overlays'
 import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
 import { useUpdateSchedule } from '../../update/use-update'
 import { reasonText, type ShownState, shownState } from './failure'
 import { forgetUnusedKey } from './forget'
+import { RemoveDevice } from './RemoveDevice'
 import { UpdateBanner } from './UpdateBanner'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Devices'>
@@ -238,15 +239,9 @@ export function DevicesScreen({ navigation }: Props) {
         }}
         onClose={() => setRenaming(null)}
       />
-      <Confirm
-        visible={removing !== null}
-        danger
-        title={t('devices.remove.title')}
-        detail={t('devices.remove.note')}
-        confirmLabel={t('devices.remove')}
-        onConfirm={() => {
-          if (!removing) return
-          const { id, target } = removing
+      <RemoveDevice
+        device={removing}
+        onRemove={({ id, target }) => {
           void channel
             .command('device.remove', { deviceId: id })
             .then(() => forgetUnusedKey(target))
