@@ -1,4 +1,4 @@
-// 派一个子会话（模型的 litch_sessions.start、用户的 litch/session/start、点了“开始”的提案都走这里）。
+// 派一个子会话（模型的 litch_sessions.start、用户的 litch/session/start、开始提案（acceptProposal）都走这里）。
 // fresh：在目标 harness 上 thread/start（目录缺省是父会话的），再 turn/start 发简报；fork：同 harness 的 thread/fork
 // 再 turn/start。审批策略、沙箱取父会话和请求值里更严的那个；模型、强度不限。建好后记父子关系、登记进会话索引
 // 和设备级工作区（跟父会话在同一个工作区，除非指定了别的），给每条客户端连接发 thread/started 和父子关系的通知。
@@ -11,7 +11,7 @@ import {
 } from '../../protocol/src/session-tree.mjs'
 import type { EngineLink } from './engine-link.mjs'
 import type { SessionTree } from './session-tree.mjs'
-import { isObject } from './wire.mjs'
+import { DeviceError, isObject } from './wire.mjs'
 
 export interface ChildSpec {
   /** 不给是父会话的 harness */
@@ -288,4 +288,62 @@ export async function startChild(
   })
   tree.host.log(`会话 ${parentId} 派出子会话 ${threadId}（${harness}，${spec.kind}，${origin}）`)
   return { threadId, harness }
+}
+
+/** 从提案开始时改的东西（用户在卡片上改了再开始）。不给的照提案；空字符串是清掉提案里的值、用缺省（父会话的） */
+export interface ProposalOverrides {
+  harness?: string
+  model?: string
+  effort?: string
+  cwd?: string
+  projectId?: string
+  kind?: SessionLineageKind
+  title?: string
+  prompt?: string
+  approvalPolicy?: unknown
+  sandbox?: unknown
+}
+
+/**
+ * 开始一个 pending 的提案：用户点“开始”（litch/sessionProposal/accept）和模型的 litch_sessions.accept 都走这里。
+ * 照提案（加上用户改的）派子会话，origin 是 proposal、带 proposalId，起好后提案标 started。
+ * 同一个提案正在开始时再来一次抛错；撤回、不要会等它起完（tree.accepting）
+ */
+export async function acceptProposal(
+  tree: SessionTree,
+  proposalId: string,
+  overrides: ProposalOverrides = {},
+): Promise<{ threadId: string; harness: string }> {
+  if (tree.accepting.has(proposalId))
+    throw new DeviceError('unsupported', `提案 ${proposalId} 正在开始`)
+  const proposal = tree.pendingProposal(proposalId)
+  const pick = (value: string | undefined, fallback: string | null) =>
+    value === undefined ? fallback : value || null
+  const started = startChild(
+    tree,
+    proposal.threadId,
+    {
+      harness: pick(overrides.harness, proposal.harness),
+      model: pick(overrides.model, proposal.model),
+      effort: overrides.effort || null,
+      cwd: pick(overrides.cwd, proposal.cwd),
+      projectId: overrides.projectId || null,
+      kind: overrides.kind ?? proposal.kind,
+      title: overrides.title ?? proposal.title,
+      prompt: overrides.prompt ?? proposal.prompt,
+      wakeParent: proposal.wakeParent,
+      approvalPolicy: overrides.approvalPolicy,
+      sandbox: overrides.sandbox,
+      proposalId: proposal.id,
+    },
+    'proposal',
+  )
+  tree.accepting.set(proposalId, started)
+  try {
+    const child = await started
+    tree.settleProposal(proposalId, 'started', child.threadId)
+    return child
+  } finally {
+    tree.accepting.delete(proposalId)
+  }
 }

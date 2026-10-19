@@ -9,7 +9,7 @@ import { codexRig } from './codex-kit.mjs'
 import { codexThread } from './fake-codex.mjs'
 import { failureOf, resultOf } from './fake-engine.mjs'
 import { assertRuntimeInfo, settle, TestClient } from './helpers.mjs'
-import { litch, parent, SESSIONS, text, treeRig, until } from './tree-kit.mjs'
+import { brief, litch, parent, SESSIONS, text, treeRig, until } from './tree-kit.mjs'
 
 async function family(env: ReturnType<typeof treeRig>) {
   const client = await litch(env)
@@ -18,7 +18,7 @@ async function family(env: ReturnType<typeof treeRig>) {
     (
       await env.pi.callTool(threadId, SESSIONS, 'start', {
         title: '子任务',
-        prompt: '做点事。',
+        prompt: brief('做点事。'),
         harness: 'claude-code',
         initiation: 'user_asked',
       })
@@ -130,7 +130,7 @@ test('SESSION-TOOLS-002：send、interrupt 只能对自己的子孙；别的会�
       (
         await env.claude.callTool(childId, SESSIONS, 'start', {
           title: '孙子',
-          prompt: '更细的活。',
+          prompt: brief('更细的活。'),
           initiation: 'propose',
         })
       )?.answer,

@@ -40,3 +40,61 @@ test('SESSION-STORE-001：第 1 版的库升上来：从提案开始过的子会
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
+test('SESSION-STORE-002：第 2 版的库升上来：提案多出了结时间、回合、调用三列，过期的旧提案按到期时间补上了结时间', () => {
+  const dir = tempDir()
+  try {
+    const old = new DatabaseSync(join(dir, 'sessions.sqlite'))
+    initializeStoreFormat(old)
+    old.exec(SESSION_MIGRATIONS[0] as string)
+    old.exec(SESSION_MIGRATIONS[1] as string)
+    old.exec('PRAGMA user_version=2')
+    old.exec(`INSERT INTO proposals(id, thread_id, title, prompt, kind, wake_parent, status, created_at, expires_at, started_thread_id)
+      VALUES('pr1', 'p1', '开始了', '做事', 'fresh', 1, 'started', 5, 99, 'c1'),
+            ('pr2', 'p1', '过期了', '做事', 'fresh', 1, 'expired', 6, 77, NULL),
+            ('pr3', 'p1', '还挂着', '做事', 'fresh', 1, 'pending', 7, 4000000000, NULL)`)
+    old.close()
+    const db = openSessionDatabase(dir)
+    assert.equal(db.prepare('PRAGMA user_version').get()?.user_version, SESSION_SCHEMA_VERSION)
+    const store = new SessionStore(db)
+    const of = (id: string) => {
+      const one = store.proposal(id)
+      return [one?.status, one?.settledAt, one?.turnId, one?.callId]
+    }
+    assert.deepEqual(of('pr1'), ['started', null, null, null])
+    assert.deepEqual(of('pr2'), ['expired', 77, null, null])
+    assert.deepEqual(of('pr3'), ['pending', null, null, null])
+    // 新提的带回合、调用；撤回入库、记了结时间；同一回合数得出来
+    store.addProposal({
+      id: 'pr4',
+      threadId: 'p1',
+      title: '新的',
+      prompt: '做事',
+      harness: null,
+      model: null,
+      cwd: null,
+      kind: 'fresh',
+      wakeParent: true,
+      createdAt: 8,
+      expiresAt: 4000000000,
+      turnId: 't1',
+      callId: 'call-1',
+    })
+    assert.equal(store.countInTurn('p1', 't1'), 1)
+    assert.ok(store.settleProposal('pr4', 'withdrawn', null))
+    assert.equal(store.settleProposal('pr4', 'dismissed', null), false, '了结过的不再改')
+    const withdrawn = store.proposal('pr4')
+    assert.deepEqual(
+      [withdrawn?.status, withdrawn?.turnId, withdrawn?.callId],
+      ['withdrawn', 't1', 'call-1'],
+    )
+    assert.ok((withdrawn?.settledAt ?? 0) > 1_000_000_000)
+    assert.deepEqual(
+      store.recent('p1', 2).map((one) => one.id),
+      ['pr4', 'pr3'],
+    )
+    db.close()
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})

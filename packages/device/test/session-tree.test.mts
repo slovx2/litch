@@ -6,6 +6,7 @@ import { parseSessionEvent } from '../../protocol/src/session-tree.mjs'
 import { failureOf, resultOf } from './fake-engine.mjs'
 import { settle } from './helpers.mjs'
 import {
+  brief,
   got,
   litch,
   parent,
@@ -36,7 +37,7 @@ test('SESSION-TREE-001：用户回合里模型派一个跨 harness 的子会话�
     const { threadId } = await parent(client)
     const call = await env.pi.callTool(threadId, SESSIONS, 'start', {
       title: '查一下构建为什么慢',
-      prompt: '在 /work/app 里跑一遍构建，找出最慢的三步。',
+      prompt: brief('在 /work/app 里跑一遍构建，找出最慢的三步。'),
       harness: 'claude-code',
       initiation: 'user_asked',
     })
@@ -54,12 +55,12 @@ test('SESSION-TREE-001：用户回合里模型派一个跨 harness 的子会话�
       ['litch_echo', SESSIONS],
     )
     // 第一条消息：谁派的、任务、做完怎么回报
-    const [brief] = env.claude.sent('turn/start')
-    assert.equal(brief.threadId, 'claude-code-t1')
-    assert.match(brief.input[0].text, new RegExp(threadId))
-    assert.match(brief.input[0].text, /Task: 查一下构建为什么慢/)
-    assert.match(brief.input[0].text, /找出最慢的三步/)
-    assert.match(brief.input[0].text, /passes the beginning of your final answer back/)
+    const [briefed] = env.claude.sent('turn/start')
+    assert.equal(briefed.threadId, 'claude-code-t1')
+    assert.match(briefed.input[0].text, new RegExp(threadId))
+    assert.match(briefed.input[0].text, /Task: 查一下构建为什么慢/)
+    assert.match(briefed.input[0].text, /找出最慢的三步/)
+    assert.match(briefed.input[0].text, /passes the beginning of your final answer back/)
     // 声明了 sessionTree 的连接：thread/started、父子关系的通知、列表和读取里都有 litchLineage
     const born = await startedOn(client, 'claude-code-t1')
     assert.equal(born.params.thread.harness, 'claude-code')
@@ -135,7 +136,7 @@ test('SESSION-TREE-003：不是用户发起的回合里说 user_asked 也只出�
     env.pi.selfTurn(threadId)
     const asked = await env.pi.callTool(threadId, SESSIONS, 'start', {
       title: '整理日志',
-      prompt: '把 logs 里的错误按类归一下。',
+      prompt: brief('把 logs 里的错误按类归一下。'),
       harness: 'claude-code',
       initiation: 'user_asked',
     })
@@ -148,7 +149,7 @@ test('SESSION-TREE-003：不是用户发起的回合里说 user_asked 也只出�
       (
         await env.pi.callTool(threadId, SESSIONS, 'start', {
           title: '再看看',
-          prompt: '随便看看。',
+          prompt: brief('随便看看。'),
         })
       )?.answer,
     )
@@ -214,7 +215,7 @@ test('SESSION-TREE-004：子会话一回合结束进父会话的队列；父会�
       (
         await env.pi.callTool(threadId, SESSIONS, 'start', {
           title: '跑测试',
-          prompt: '跑一遍测试。',
+          prompt: brief('跑一遍测试。'),
           harness: 'claude-code',
           initiation: 'user_asked',
         })
@@ -252,7 +253,7 @@ async function family(env: ReturnType<typeof treeRig>, wake = true) {
     (
       await env.pi.callTool(threadId, SESSIONS, 'start', {
         title: '子任务',
-        prompt: '做点事。',
+        prompt: brief('做点事。'),
         harness: 'claude-code',
         wake_parent: wake,
         initiation: 'user_asked',
@@ -317,7 +318,7 @@ test('SESSION-TREE-006：不要唤醒的子会话、用户自己在子会话里�
     env.pi.end(threadId)
     const other = await env.pi.callTool(threadId, SESSIONS, 'start', {
       title: '另一个',
-      prompt: '做点别的。',
+      prompt: brief('做点别的。'),
       harness: 'claude-code',
       initiation: 'propose',
     })
@@ -520,7 +521,7 @@ test('SESSION-TREE-013：目标 harness 收不到父会话那么严：用户回�
       (
         await env.pi.callTool(threadId, SESSIONS, 'start', {
           title: '没沙箱的',
-          prompt: '做点事。',
+          prompt: brief('做点事。'),
           harness: 'claude-code',
           initiation: 'user_asked',
         })
@@ -536,7 +537,7 @@ test('SESSION-TREE-013：目标 harness 收不到父会话那么严：用户回�
       (
         await env.pi.callTool(threadId, SESSIONS, 'start', {
           title: '同一家的',
-          prompt: '也做点事。',
+          prompt: brief('也做点事。'),
           initiation: 'user_asked',
         })
       )?.answer,

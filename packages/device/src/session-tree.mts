@@ -461,8 +461,14 @@ export class SessionTree {
 
   // ---------- 提案 ----------
 
+  /** 正在开始的提案（用户点了“开始”、模型调了 accept）：同一个提案只起一个，撤回、不要要等它起完 */
+  readonly accepting = new Map<string, Promise<{ threadId: string; harness: string }>>()
+
   propose(
-    fields: Omit<SessionProposal, 'id' | 'status' | 'createdAt' | 'expiresAt' | 'startedThreadId'>,
+    fields: Omit<
+      SessionProposal,
+      'id' | 'status' | 'createdAt' | 'expiresAt' | 'startedThreadId' | 'settledAt'
+    >,
   ): SessionProposal {
     const createdAt = now()
     const proposal = this.store.addProposal({
@@ -471,51 +477,67 @@ export class SessionTree {
       createdAt,
       expiresAt: createdAt + SESSION_TREE_LIMITS.proposalTtlSeconds,
     })
-    this.proposalsChanged(fields.threadId)
+    this.proposalsChanged(fields.threadId, [proposal])
     this.scheduleExpiry()
     return proposal
   }
 
-  /** 一个会话上 pending 的提案（先把到期的收掉） */
-  proposals(threadId: string): SessionProposal[] {
+  /**
+   * 一个会话上的提案（先把到期的收掉）。缺省只给 pending 的、先提的在前；
+   * includeSettled 时连了结的一起，新的在前，最多 proposalListMax 条
+   */
+  proposals(threadId: string, includeSettled = false): SessionProposal[] {
     this.expire()
-    return this.store.pending(threadId)
+    return includeSettled
+      ? this.store.recent(threadId, SESSION_TREE_LIMITS.proposalListMax)
+      : this.store.pending(threadId)
   }
 
-  /** 拿一个还 pending 的提案。没有、已经开始、不要了、过期了都抛错 */
-  pendingProposal(proposalId: string): SessionProposal {
+  /** 拿一个提案（先把到期的收掉）。没有是 null */
+  proposal(proposalId: string): SessionProposal | null {
     this.expire()
-    const proposal = this.store.proposal(proposalId)
+    return this.store.proposal(proposalId)
+  }
+
+  /** 拿一个还 pending 的提案。没有、已经开始、不要了、撤回了、过期了都抛错 */
+  pendingProposal(proposalId: string): SessionProposal {
+    const proposal = this.proposal(proposalId)
     if (!proposal) throw new DeviceError('unsupported', `没有提案 ${proposalId}`)
     if (proposal.status !== 'pending')
       throw new DeviceError('unsupported', `提案 ${proposalId} 已经${STATUS_WORD[proposal.status]}`)
     return proposal
   }
 
+  /** 了结一个 pending 的提案，通知声明过的连接。已经不是 pending 了返回 null */
   settleProposal(
     proposalId: string,
-    status: 'started' | 'dismissed',
+    status: 'started' | 'dismissed' | 'withdrawn',
     threadId: string | null,
-  ): void {
-    const proposal = this.store.proposal(proposalId)
-    if (proposal && this.store.settleProposal(proposalId, status, threadId))
-      this.proposalsChanged(proposal.threadId)
+  ): SessionProposal | null {
+    if (!this.store.settleProposal(proposalId, status, threadId)) return null
+    const settled = this.store.proposal(proposalId)
+    if (settled) this.proposalsChanged(settled.threadId, [settled])
+    return settled
   }
 
-  private proposalsChanged(threadId: string): void {
+  /** 提案变了：带上这个会话现在全部 pending 的，和刚变的那几条 */
+  private proposalsChanged(threadId: string, changed: SessionProposal[]): void {
     this.host.announce(
       SESSION_TREE_NOTIFICATION.proposalChanged,
-      { threadId, proposals: this.store.pending(threadId) },
+      { threadId, proposals: this.store.pending(threadId), changed },
       EXTENSION.sessionTree,
     )
   }
 
-  /** 到期的提案收掉，各自通知 */
+  /** 到期的提案收掉，按会话各通知一次 */
   private expire(): void {
-    const touched = new Set<string>()
-    for (const proposal of this.store.expiring(now()))
-      if (this.store.settleProposal(proposal.id, 'expired', null)) touched.add(proposal.threadId)
-    for (const threadId of touched) this.proposalsChanged(threadId)
+    const touched = new Map<string, SessionProposal[]>()
+    for (const proposal of this.store.expiring(now())) {
+      if (!this.store.settleProposal(proposal.id, 'expired', null)) continue
+      const settled = this.store.proposal(proposal.id) ?? proposal
+      touched.set(proposal.threadId, [...(touched.get(proposal.threadId) ?? []), settled])
+    }
+    for (const [threadId, changed] of touched) this.proposalsChanged(threadId, changed)
   }
 
   private scheduleExpiry(): void {

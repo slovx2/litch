@@ -1,7 +1,9 @@
 // litch_sessions：模型列出、读取这台设备上的会话，派子会话，给自己的子会话发消息、打断，等它们停下。
 // 执行方是设备进程（device-tools.mts 注册的一个命名空间），工具定义在 packages/protocol/src/client-tools-sessions.mts。
 // 读类（list、read、wait）能看这台设备上所有会话；写类（send、interrupt）只能作用于调用者自己的 Litch 子孙会话，
-// 别的一律 [litch:blocked]，引擎自己的子代理线程另外提示用引擎自己的工具。结果是一段 JSON 文字，失败第一行是 [litch:<kind>]。
+// 别的一律 [litch:blocked]，引擎自己的子代理线程另外提示用引擎自己的工具。提案类（start 出提案、accept、withdraw）
+// 只作用于调用者自己会话上的提案；提案的门槛（一回合几张、同标题、fresh 简报的长度）在 start 里查。
+// 结果是一段 JSON 文字，失败第一行是 [litch:<kind>]，后面是模型能照着改的一句话。
 import {
   type ClientToolCallResponse,
   type ClientToolFailureKind,
@@ -12,15 +14,24 @@ import {
   SESSION_TOOL_LIMITS,
   type SessionStatusWord,
   type SessionSummary,
+  type SessionsStartResult,
+  type SessionsWithdrawResult,
   type SessionTurnSummary,
 } from '../../protocol/src/client-tools-sessions.mjs'
 import {
   parseSessionEvent,
   SESSION_TREE_LIMITS,
   type SessionLineageKind,
+  type SessionProposal,
 } from '../../protocol/src/session-tree.mjs'
 import type { DeviceToolCall, DeviceToolHandler } from './device-tools.mjs'
-import { StartRefused, startChild, threadTitle, widerSandbox } from './session-start.mjs'
+import {
+  acceptProposal,
+  StartRefused,
+  startChild,
+  threadTitle,
+  widerSandbox,
+} from './session-start.mjs'
 import { lastAnswer, type SessionTree, trimText } from './session-tree.mjs'
 import { isObject } from './wire.mjs'
 
@@ -185,7 +196,31 @@ function found(tree: SessionTree, threadId: string, includeTurns = true) {
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
 
-async function start(tree: SessionTree, args: Record<string, unknown>, call: DeviceToolCall) {
+/** 标题比较时去掉全部空白、不分大小写 */
+const sameTitle = (title: string) => title.replace(/\s+/g, '').toLowerCase()
+
+/** 提案的门槛：一个回合最多几张；同一会话里还在等的提案不能同标题 */
+function gate(tree: SessionTree, call: DeviceToolCall, title: string): void {
+  const limit = SESSION_TOOL_LIMITS.proposalsPerTurn
+  if (call.turnId && tree.store.countInTurn(call.threadId, call.turnId) >= limit)
+    throw new Refused(
+      'blocked',
+      `You already proposed ${limit} cards in this turn, the most allowed. Do not propose more now; if other follow-ups are left, mention them in your reply.`,
+    )
+  const key = sameTitle(title)
+  const twin = tree.proposals(call.threadId).find((one) => sameTitle(one.title) === key)
+  if (twin)
+    throw new Refused(
+      'invalid',
+      `A proposal titled "${twin.title}" (proposal_id ${twin.id}) is still waiting for the user. Do not propose the same work twice. If the new one replaces it, give it a different title, then withdraw the old one with litch_sessions.withdraw.`,
+    )
+}
+
+async function start(
+  tree: SessionTree,
+  args: Record<string, unknown>,
+  call: DeviceToolCall,
+): Promise<SessionsStartResult> {
   const title = string(args, 'title', true)
   const prompt = string(args, 'prompt', true)
   const harness = string(args, 'harness')
@@ -209,6 +244,13 @@ async function start(tree: SessionTree, args: Record<string, unknown>, call: Dev
     throw new Refused('invalid', `There is no harness "${harness}" on this device.`)
   if (kind === 'fork' && harness && harness !== call.harness)
     throw new Refused('invalid', `fork only works within the same harness (${call.harness}).`)
+  // fresh 的子会话只知道这段简报：太短的不管直接起还是变成提案都拒绝
+  const length = [...prompt.trim()].length
+  if (kind === 'fresh' && length < SESSION_TOOL_LIMITS.freshPromptMinChars)
+    throw new Refused(
+      'invalid',
+      `prompt is too short (${length} characters): a fresh session knows nothing but this text, so it needs at least ${SESSION_TOOL_LIMITS.freshPromptMinChars}. State the task, the files or area, and what done looks like, then call start again.`,
+    )
   // 目标 harness 收不到父会话那么严（比如没有沙箱的 Pi）：模型派的一律变成提案，由用户看过再点
   const wider = await widerSandbox(tree, call.threadId, harness ?? call.harness).catch(() => null)
   // 只有用户亲手发起的这个回合里、模型说是用户要的，才直接起；别的一律变成提案
@@ -229,15 +271,20 @@ async function start(tree: SessionTree, args: Record<string, unknown>, call: Dev
       note: `Started sub-session ${child.threadId} on ${child.harness}. It runs on its own; ${wake ? 'you will be woken with its result as a <litch-session-event> message' : 'its result is attached to the next user message'}. Do not poll it.`,
     }
   }
+  // 门槛在上面的等待之后、提案落库之前同步查，同一回合里并发的几次 start 不会一起漏过去
+  const proposalTitle = title.trim().slice(0, 120)
+  gate(tree, call, proposalTitle)
   const proposal = tree.propose({
     threadId: call.threadId,
-    title: title.trim().slice(0, 120),
+    title: proposalTitle,
     prompt,
     harness: harness ?? null,
     model: model ?? null,
     cwd: cwd ?? null,
     kind,
     wakeParent: wake,
+    turnId: call.turnId || null,
+    callId: call.callId || null,
     ...(wider ? { widerSandbox: wider } : {}),
   })
   const why =
@@ -249,6 +296,104 @@ async function start(tree: SessionTree, args: Record<string, unknown>, call: Dev
   return {
     proposal_id: proposal.id,
     note: `${why}The user now sees a proposal card for "${proposal.title}". Nothing runs until they accept it; it expires in ${SESSION_TREE_LIMITS.proposalTtlSeconds / 86400} days. Do not do the work here as well.`,
+  }
+}
+
+/** 调用者自己的提案（挂在调用者这个会话上的）。没有这个提案、别人的都回给模型 */
+function ownProposal(tree: SessionTree, proposalId: string, call: DeviceToolCall): SessionProposal {
+  const proposal = tree.proposal(proposalId)
+  if (!proposal)
+    throw new Refused(
+      'invalid',
+      `There is no proposal ${proposalId}. Use the proposal_id returned by start.`,
+    )
+  if (proposal.threadId !== call.threadId)
+    throw new Refused(
+      'blocked',
+      `Proposal ${proposalId} belongs to another session; you can only act on proposals you made in this session.`,
+    )
+  return proposal
+}
+
+const settledWord: Record<Exclude<SessionProposal['status'], 'pending' | 'started'>, string> = {
+  dismissed: 'the user dismissed it',
+  withdrawn: 'it was withdrawn',
+  expired: 'it expired',
+}
+
+/** 用户在这个回合里让开始某张提案：按提案原样起（同用户点“开始”），只在用户亲手发起的回合里允许 */
+async function accept(
+  tree: SessionTree,
+  args: Record<string, unknown>,
+  call: DeviceToolCall,
+): Promise<SessionsStartResult> {
+  const proposalId = string(args, 'proposal_id', true)
+  if (!tree.isUserTurn(call.harness, call.turnId))
+    throw new Refused(
+      'blocked',
+      'This turn was not started by the user typing a message, so you cannot start proposals for them. Tell the user they can start it from the card.',
+    )
+  const proposal = ownProposal(tree, proposalId, call)
+  // 正在被用户点开始：等它起完，按已经开始了答
+  const running = tree.accepting.get(proposalId)
+  if (running) {
+    const child = await running.catch(() => null)
+    if (child)
+      return {
+        thread_id: child.threadId,
+        note: `The user already started this proposal as session ${child.threadId}. Do not start it again.`,
+      }
+  }
+  const current = tree.proposal(proposalId) ?? proposal
+  if (current.status === 'started' && current.startedThreadId)
+    return {
+      thread_id: current.startedThreadId,
+      note: `This proposal was already started as session ${current.startedThreadId}. Do not start it again.`,
+    }
+  if (current.status !== 'pending' && current.status !== 'started')
+    throw new Refused(
+      'invalid',
+      `Proposal ${proposalId} cannot be started: ${settledWord[current.status]}. If the user wants this work now, start it with litch_sessions.start (initiation "user_asked").`,
+    )
+  // 目标 harness 收不到父会话那么严：要用户在卡片上看过提醒自己点
+  if (current.widerSandbox)
+    throw new Refused(
+      'blocked',
+      `This proposal would run with a wider sandbox (${current.widerSandbox}) than this session, so only the user can start it, from the card. Tell them so.`,
+    )
+  const child = await acceptProposal(tree, proposalId)
+  return {
+    thread_id: child.threadId,
+    note: `Started sub-session ${child.threadId} on ${child.harness} from the proposal. It runs on its own; ${current.wakeParent ? 'you will be woken with its result as a <litch-session-event> message' : 'its result is attached to the next user message'}. Do not poll it.`,
+  }
+}
+
+/** 撤回自己的提案：pending 的标 withdrawn；已经开始、不要了、过期了的照实回，不报错 */
+async function withdraw(
+  tree: SessionTree,
+  args: Record<string, unknown>,
+  call: DeviceToolCall,
+): Promise<SessionsWithdrawResult> {
+  const proposalId = string(args, 'proposal_id', true)
+  ownProposal(tree, proposalId, call)
+  // 用户正在点开始：等它起完再看
+  await tree.accepting.get(proposalId)?.catch(() => null)
+  if (tree.proposal(proposalId)?.status === 'pending')
+    tree.settleProposal(proposalId, 'withdrawn', null)
+  const current = ownProposal(tree, proposalId, call)
+  switch (current.status) {
+    case 'started':
+      return {
+        status: 'started',
+        ...(current.startedThreadId ? { thread_id: current.startedThreadId } : {}),
+        note: `The user already started it${current.startedThreadId ? ` as session ${current.startedThreadId}` : ''}; it can no longer be withdrawn. If that work is no longer needed, tell the user.`,
+      }
+    case 'dismissed':
+      return { status: 'dismissed', note: 'The user already dismissed it. Nothing to do.' }
+    case 'expired':
+      return { status: 'expired', note: 'It already expired. Nothing to do.' }
+    default:
+      return { status: 'withdrawn', note: 'Withdrawn: the card now shows it as withdrawn.' }
   }
 }
 
@@ -391,6 +536,10 @@ export function sessionToolsHandler(tree: SessionTree): DeviceToolHandler {
           return ok(await read(tree, args, call))
         case SESSION_TOOL.start:
           return ok(await start(tree, args, call))
+        case SESSION_TOOL.accept:
+          return ok(await accept(tree, args, call))
+        case SESSION_TOOL.withdraw:
+          return ok(await withdraw(tree, args, call))
         case SESSION_TOOL.send:
           return ok(await send(tree, args, call))
         case SESSION_TOOL.wait:

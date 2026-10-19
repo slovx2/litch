@@ -81,6 +81,12 @@ const MIGRATIONS: readonly string[] = [
    UPDATE lineage SET proposal_id =
      (SELECT id FROM proposals WHERE proposals.started_thread_id = lineage.thread_id LIMIT 1);
    ALTER TABLE proposals ADD COLUMN wider_sandbox TEXT;`,
+  // 提案记下了结的时间、在父会话的哪个回合哪次工具调用里提的（对话流里的卡片画在那一条上）。
+  // 旧的已过期提案按到期时间补上了结时间，开始、不要的旧提案不知道是什么时候，留空
+  `ALTER TABLE proposals ADD COLUMN settled_at INTEGER;
+   ALTER TABLE proposals ADD COLUMN turn_id TEXT;
+   ALTER TABLE proposals ADD COLUMN call_id TEXT;
+   UPDATE proposals SET settled_at = expires_at WHERE status = 'expired';`,
 ]
 
 export const SESSION_SCHEMA_VERSION = MIGRATIONS.length
@@ -175,6 +181,9 @@ function proposalOf(row: Row): SessionProposal {
     createdAt: Number(row.created_at),
     expiresAt: Number(row.expires_at),
     startedThreadId: maybe(row.started_thread_id),
+    settledAt: row.settled_at == null ? null : Number(row.settled_at),
+    turnId: maybe(row.turn_id),
+    callId: maybe(row.call_id),
     ...(typeof row.wider_sandbox === 'string' ? { widerSandbox: row.wider_sandbox } : {}),
   }
 }
@@ -198,16 +207,20 @@ export class SessionStore {
       detach: prepare('UPDATE lineage SET detached_at=? WHERE thread_id=?'),
       reported: prepare('UPDATE lineage SET reported_turn=? WHERE thread_id=?'),
       addProposal: prepare(
-        `INSERT INTO proposals(id, thread_id, title, prompt, harness, model, cwd, kind, wake_parent, status, created_at, expires_at, wider_sandbox)
-         VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)`,
+        `INSERT INTO proposals(id, thread_id, title, prompt, harness, model, cwd, kind, wake_parent, status, created_at, expires_at, wider_sandbox, turn_id, call_id)
+         VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)`,
       ),
       proposal: prepare('SELECT * FROM proposals WHERE id=?'),
       pending: prepare(
         "SELECT * FROM proposals WHERE thread_id=? AND status='pending' ORDER BY created_at, rowid",
       ),
+      recent: prepare(
+        'SELECT * FROM proposals WHERE thread_id=? ORDER BY created_at DESC, rowid DESC LIMIT ?',
+      ),
+      inTurn: prepare('SELECT COUNT(*) AS n FROM proposals WHERE thread_id=? AND turn_id=?'),
       expiring: prepare("SELECT * FROM proposals WHERE status='pending' AND expires_at<=?"),
       settleProposal: prepare(
-        "UPDATE proposals SET status=?, started_thread_id=? WHERE id=? AND status='pending'",
+        "UPDATE proposals SET status=?, started_thread_id=?, settled_at=? WHERE id=? AND status='pending'",
       ),
       nextExpiry: prepare("SELECT MIN(expires_at) AS at FROM proposals WHERE status='pending'"),
       addNote: prepare(
@@ -329,7 +342,9 @@ export class SessionStore {
 
   // ---------- 提案 ----------
 
-  addProposal(proposal: Omit<SessionProposal, 'status' | 'startedThreadId'>): SessionProposal {
+  addProposal(
+    proposal: Omit<SessionProposal, 'status' | 'startedThreadId' | 'settledAt'>,
+  ): SessionProposal {
     this.run(
       'addProposal',
       proposal.id,
@@ -344,8 +359,17 @@ export class SessionStore {
       proposal.createdAt,
       proposal.expiresAt,
       proposal.widerSandbox ?? null,
+      proposal.turnId ?? null,
+      proposal.callId ?? null,
     )
-    return { ...proposal, status: 'pending', startedThreadId: null }
+    return {
+      ...proposal,
+      status: 'pending',
+      startedThreadId: null,
+      settledAt: null,
+      turnId: proposal.turnId ?? null,
+      callId: proposal.callId ?? null,
+    }
   }
 
   proposal(id: string): SessionProposal | null {
@@ -353,17 +377,28 @@ export class SessionStore {
     return row ? proposalOf(row) : null
   }
 
+  /** 一个会话上 pending 的提案，先提的在前 */
   pending(threadId: string): SessionProposal[] {
     return (this.statements.pending?.all(threadId) ?? []).map(proposalOf)
   }
 
-  /** 把一个 pending 的提案改成别的状态。已经不是 pending 了返回 false */
+  /** 一个会话上的提案，连了结的，新的在前，最多 limit 条 */
+  recent(threadId: string, limit: number): SessionProposal[] {
+    return (this.statements.recent?.all(threadId, limit) ?? []).map(proposalOf)
+  }
+
+  /** 这个会话在这个回合里提过几张提案（任何状态） */
+  countInTurn(threadId: string, turnId: string): number {
+    return Number(this.statements.inTurn?.get(threadId, turnId)?.n ?? 0)
+  }
+
+  /** 把一个 pending 的提案改成别的状态，记下了结的时间。已经不是 pending 了返回 false */
   settleProposal(
     id: string,
     status: SessionProposalStatus,
     startedThreadId: string | null,
   ): boolean {
-    const result = this.statements.settleProposal?.run(status, startedThreadId, id)
+    const result = this.statements.settleProposal?.run(status, startedThreadId, now(), id)
     return Number(result?.changes ?? 0) > 0
   }
 

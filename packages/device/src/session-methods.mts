@@ -4,12 +4,14 @@
 
 import { SESSION_TREE_METHOD, type SessionLineageKind } from '../../protocol/src/session-tree.mjs'
 import { ProtocolError, requiredString } from '../../shared/src/protocol-contract.mjs'
-import { StartRefused, startChild } from './session-start.mjs'
+import {
+  acceptProposal,
+  type ProposalOverrides,
+  StartRefused,
+  startChild,
+} from './session-start.mjs'
 import type { SessionTree } from './session-tree.mjs'
 import { DeviceError, isObject } from './wire.mjs'
-
-/** 正在起的提案：同一个提案点了两下只起一个 */
-const accepting = new WeakMap<SessionTree, Set<string>>()
 
 const optional = (value: unknown, name: string): string | undefined => {
   if (value == null) return undefined
@@ -22,11 +24,29 @@ function kindOf(value: unknown): SessionLineageKind {
   throw new ProtocolError(-32602, 'kind 只能是 fresh 或 fork')
 }
 
+/** 提案开始时改的东西。字符串项给空字符串是清掉提案里的值、用缺省；标题、简报给了就不能是空的 */
+function overridesOf(value: unknown): ProposalOverrides {
+  if (value == null) return {}
+  if (!isObject(value)) throw new ProtocolError(-32602, 'overrides 必须是对象')
+  const out: ProposalOverrides = {}
+  for (const name of ['harness', 'model', 'effort', 'cwd', 'projectId'] as const) {
+    const given = value[name]
+    if (given == null) continue
+    if (typeof given !== 'string') throw new ProtocolError(-32602, `overrides.${name} 必须是字符串`)
+    out[name] = given
+  }
+  if (value.kind != null) out.kind = kindOf(value.kind)
+  if (value.title != null) out.title = requiredString(value.title, 'overrides.title')
+  if (value.prompt != null) out.prompt = requiredString(value.prompt, 'overrides.prompt')
+  if (value.approvalPolicy != null) out.approvalPolicy = value.approvalPolicy
+  if (value.sandbox != null) out.sandbox = value.sandbox
+  return out
+}
+
 /** 派不出来的原因（StartRefused）按参数不对回给客户端 */
-async function start(...args: Parameters<typeof startChild>): Promise<{ threadId: string }> {
+async function refusedAsInvalid<T>(work: () => Promise<T>): Promise<T> {
   try {
-    const { threadId } = await startChild(...args)
-    return { threadId }
+    return await work()
   } catch (error) {
     if (error instanceof StartRefused) throw new ProtocolError(-32602, error.message)
     throw error
@@ -46,63 +66,50 @@ export async function sessionTreeCall(
   const fields = isObject(params) ? params : {}
   switch (method) {
     case SESSION_TREE_METHOD.start: {
-      if (typeof fields.wakeParent !== 'boolean')
+      const wakeParent = fields.wakeParent
+      if (typeof wakeParent !== 'boolean')
         throw new ProtocolError(-32602, 'wakeParent 必须是布尔值')
-      return start(
-        tree,
-        requiredString(fields.parentThreadId, 'parentThreadId'),
-        {
-          harness: optional(fields.harness, 'harness') ?? null,
-          model: optional(fields.model, 'model') ?? null,
-          effort: optional(fields.effort, 'effort') ?? null,
-          cwd: optional(fields.cwd, 'cwd') ?? null,
-          projectId: optional(fields.projectId, 'projectId') ?? null,
-          kind: kindOf(fields.kind),
-          title: requiredString(fields.title, 'title'),
-          prompt: requiredString(fields.prompt, 'prompt'),
-          wakeParent: fields.wakeParent,
-          approvalPolicy: fields.approvalPolicy,
-          sandbox: fields.sandbox,
-        },
-        'user',
+      const { threadId } = await refusedAsInvalid(() =>
+        startChild(
+          tree,
+          requiredString(fields.parentThreadId, 'parentThreadId'),
+          {
+            harness: optional(fields.harness, 'harness') ?? null,
+            model: optional(fields.model, 'model') ?? null,
+            effort: optional(fields.effort, 'effort') ?? null,
+            cwd: optional(fields.cwd, 'cwd') ?? null,
+            projectId: optional(fields.projectId, 'projectId') ?? null,
+            kind: kindOf(fields.kind),
+            title: requiredString(fields.title, 'title'),
+            prompt: requiredString(fields.prompt, 'prompt'),
+            wakeParent,
+            approvalPolicy: fields.approvalPolicy,
+            sandbox: fields.sandbox,
+          },
+          'user',
+        ),
       )
+      return { threadId }
     }
     case SESSION_TREE_METHOD.detach:
       tree.detach(requiredString(fields.threadId, 'threadId'))
       return {}
     case SESSION_TREE_METHOD.proposalList:
-      return { proposals: tree.proposals(requiredString(fields.threadId, 'threadId')) }
+      return {
+        proposals: tree.proposals(
+          requiredString(fields.threadId, 'threadId'),
+          fields.includeSettled === true,
+        ),
+      }
     case SESSION_TREE_METHOD.proposalAccept: {
       const id = requiredString(fields.proposalId, 'proposalId')
-      const busy = accepting.get(tree) ?? new Set<string>()
-      accepting.set(tree, busy)
-      if (busy.has(id)) throw new DeviceError('unsupported', `提案 ${id} 正在开始`)
-      const proposal = tree.pendingProposal(id)
-      busy.add(id)
-      try {
-        const started = await start(
-          tree,
-          proposal.threadId,
-          {
-            harness: proposal.harness,
-            model: proposal.model,
-            cwd: proposal.cwd,
-            kind: proposal.kind,
-            title: proposal.title,
-            prompt: proposal.prompt,
-            wakeParent: proposal.wakeParent,
-            proposalId: proposal.id,
-          },
-          'proposal',
-        )
-        tree.settleProposal(id, 'started', started.threadId)
-        return started
-      } finally {
-        busy.delete(id)
-      }
+      const overrides = overridesOf(fields.overrides)
+      const { threadId } = await refusedAsInvalid(() => acceptProposal(tree, id, overrides))
+      return { threadId }
     }
     case SESSION_TREE_METHOD.proposalDismiss: {
       const id = requiredString(fields.proposalId, 'proposalId')
+      if (tree.accepting.has(id)) throw new DeviceError('unsupported', `提案 ${id} 正在开始`)
       tree.pendingProposal(id)
       tree.settleProposal(id, 'dismissed', null)
       return {}
