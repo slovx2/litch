@@ -20,7 +20,7 @@ Exact flags: `scripts/litch tasks --help`.
   create a new task instead (and delete the old one, after asking).
 - `scripts/litch tasks pause` / `scripts/litch tasks resume` stop and restart firing on schedule.
 - `scripts/litch tasks run` runs a task now (not if a run of it is already going or queued).
-- `scripts/litch tasks delete` deletes a task. **Irreversible: ask first.** A run in progress is not
+- `scripts/litch tasks delete` deletes a task. **Irreversible: ask first**; the user then confirms in Litch. A run in progress is not
   interrupted, and sessions it created are kept.
 
 ## Fields

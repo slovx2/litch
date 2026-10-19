@@ -53,8 +53,16 @@ export type ConfigConfirmItem =
   | { kind: 'access'; device: string; access: 'open' }
   /** 内置浏览器“一直允许”加一个网站 */
   | { kind: 'site'; origin: string }
+  /** 撤不回的事（E7）：移除远程设备、撤掉手机钥匙、删定时任务、清内置浏览器数据、清“操作这台电脑”的记录。
+   * device 是设备的显示名（浏览器数据不属于哪台设备，是 null）；name 是被删的那样东西的名字，设备本身和整份数据是 null */
+  | {
+      kind: 'erase'
+      what: 'device' | 'phone' | 'task' | 'browserData' | 'machineLog'
+      device: string | null
+      name: string | null
+    }
 
-/** E6 的确认卡：哪个会话、哪个 harness 要做什么 */
+/** E6、E7 的确认卡：哪个会话、哪个 harness 要做什么 */
 export interface ConfigConfirmView {
   id: string
   /** 调用者所在的会话（本机设备上的）；命令行找不到会话是 null */

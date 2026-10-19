@@ -228,12 +228,13 @@ export const DEVICE_OPS: Record<string, OpSpec> = {
     args: [1, 1],
     usage: 'devices remove <device>',
     summary: {
-      zh: '移除远程设备（不可逆，先问过用户）',
-      en: 'Remove a remote device (irreversible; ask the user first)',
+      zh: '移除远程设备（撤不回，要用户在桌面端点允许）',
+      en: 'Remove a remote device (irreversible; the user allows it on the desktop)',
     },
     async run(ctx) {
       const device = await ctx.device(ctx.cmd.positionals[0])
       remoteOnly(ctx, device)
+      await ctx.confirm([{ kind: 'erase', what: 'device', device: ctx.nameOf(device), name: null }])
       await ctx.run('device.remove', { deviceId: device.id })
       return done(ctx)
     },
@@ -374,11 +375,14 @@ export const DEVICE_OPS: Record<string, OpSpec> = {
     args: [1, 1],
     usage: 'machine log-clear <device>',
     summary: {
-      zh: '清掉操作记录（不可逆，先问过用户）',
-      en: 'Clear the log (irreversible; ask the user first)',
+      zh: '清掉操作记录（撤不回，要用户在桌面端点允许）',
+      en: 'Clear the log (irreversible; the user allows it on the desktop)',
     },
     async run(ctx) {
       const device = await ctx.device(ctx.cmd.positionals[0])
+      await ctx.confirm([
+        { kind: 'erase', what: 'machineLog', device: ctx.nameOf(device), name: null },
+      ])
       await ctx.run('machine.log.clear', { deviceId: device.id })
       return done(ctx)
     },

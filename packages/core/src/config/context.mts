@@ -86,7 +86,7 @@ export interface OpContext {
   nameOf(device: DeviceView): string
   /** 设备服务的话按语言取 */
   said(value: Said | null | undefined): string
-  /** 放宽安全的事先弹确认卡：人点了允许才回，不然抛 declined */
+  /** 放宽安全、撤不回的事先弹确认卡：人点了允许才回，不然抛 declined */
   confirm(items: ConfigConfirmItem[]): Promise<void>
   /** 请界面做一件事 */
   ui(request: ConfigUiRequest): Promise<unknown>

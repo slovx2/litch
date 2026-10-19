@@ -59,9 +59,9 @@ computer" 0.10.0, session trees and scheduled tasks 0.11.0, phone pairing 0.12.0
   checked like a new device and the device reconnects.
 - `scripts/litch devices reconnect` drops and re-opens the connection (useful after the user fixed
   something on the remote side, or after upgrading the adapter there).
-- `scripts/litch devices remove` removes a remote device from Litch. **Irreversible: ask first.** It
-  only stops Litch from connecting; nothing on that machine is deleted (sessions, the adapter and its
-  service stay). Port forwards for the built-in browser and any "operate this computer" processes from
+- `scripts/litch devices remove` removes a remote device from Litch. **Irreversible: ask first**; the
+  user then confirms in Litch. It only stops Litch from connecting; nothing on that machine is deleted
+  (sessions, the adapter and its service stay). Port forwards for the built-in browser and any "operate this computer" processes from
   that device end.
 
 ## Connection behavior

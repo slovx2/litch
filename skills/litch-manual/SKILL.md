@@ -48,12 +48,15 @@ command is written `scripts/litch …`; always call it by its absolute path.
 3. **Irreversible actions need the user's explicit yes in this conversation first**, even when the
    user's request implies them: `scripts/litch devices remove`, `scripts/litch phones revoke`,
    `scripts/litch tasks delete`, `scripts/litch machine log-clear`, `scripts/litch browser clear-data`.
-   Say exactly what will be lost, wait for a clear yes, then run it.
-4. **Guarded actions wait for a click in the desktop app.** Actions that give agents more power
-   (`scripts/litch tools set` turning Computer Use or "operate this computer" on,
+   Say exactly what will be lost, wait for a clear yes, then run it. Litch then also shows a
+   confirmation card (rule 4) naming what will be deleted; nothing is deleted until the user clicks
+   Allow there.
+4. **Guarded and irreversible actions wait for a click in the desktop app.** Actions that give agents
+   more power (`scripts/litch tools set` turning Computer Use or "operate this computer" on,
    `scripts/litch machine set` loosening approval or access, `scripts/litch browser allow`) make Litch
-   show a confirmation card; the change only happens when the user clicks Allow there. Tell the user to
-   look at the Litch window. If they decline, accept it and do not retry in a loop.
+   show a confirmation card, and so do the irreversible actions in rule 3; the change only happens when
+   the user clicks Allow there. Tell the user to look at the Litch window. If they decline, accept it
+   and do not retry in a loop.
 5. **Prefer the narrowest change.** Turn on a capability for the one device that needs it, allow one
    site rather than many, keep "operate this computer" on its default approval unless the user asks.
 6. **Settings that restart a harness interrupt it.** Changing a harness's enabled flag, CLI path or
@@ -84,7 +87,7 @@ command: `scripts/litch harness restart`, `scripts/litch devices reconnect`, or 
 | E4 | Password logins, first-time host-key confirmation, creating or copying SSH keys when adding a remote device | Litch only adds targets that already log in without a password. Explain how to set that up (`references/devices.md`) and let the user do it |
 | E5 | Updating Litch itself (checking, downloading, restarting to update, the automatic-check switch) | Not part of this manual or the command. Tell the user it is in Settings → About → Updates |
 | E6 | Loosen security without the user seeing it | Guarded actions always show a confirmation card in Litch (rule 4) |
-| E7 | Irreversible changes without asking | Ask first (rule 3) |
+| E7 | Irreversible changes without asking | Ask first, then the user confirms in Litch (rules 3 and 4) |
 | E8 | Keyboard shortcuts | Not configurable in Litch; you can only tell the user what they are |
 | E9 | Settings of the Litch app on a phone | The desktop cannot reach them; tell the user where they are in the phone app |
 

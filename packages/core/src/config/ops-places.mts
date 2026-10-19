@@ -226,15 +226,24 @@ export const PLACE_OPS: Record<string, OpSpec> = {
     args: [2, 2],
     usage: 'phones revoke <device> <phone-id>',
     summary: {
-      zh: '撤掉一部手机的钥匙（不可逆，先问过用户）',
-      en: 'Revoke a phone key (irreversible; ask the user first)',
+      zh: '撤掉一部手机的钥匙（撤不回，要用户在桌面端点允许）',
+      en: 'Revoke a phone key (irreversible; the user allows it on the desktop)',
     },
     async run(ctx) {
       const device = await pairable(ctx)
-      await ctx.run('pairing.revoke', {
-        deviceId: device.id,
-        phoneId: ctx.cmd.positionals[1] ?? '',
-      })
+      const phoneId = ctx.cmd.positionals[1] ?? ''
+      const { phones } = await ctx.run('pairing.phones', { deviceId: device.id })
+      const phone = phones.find((entry) => entry.phoneId === phoneId)
+      if (!phone) {
+        throw new ConfigFailure(
+          'invalid',
+          ctx.say(`没有这部手机：${phoneId}。`, `No such phone: ${phoneId}.`),
+        )
+      }
+      await ctx.confirm([
+        { kind: 'erase', what: 'phone', device: ctx.nameOf(device), name: phone.name || phoneId },
+      ])
+      await ctx.run('pairing.revoke', { deviceId: device.id, phoneId })
       return done(ctx)
     },
   },
@@ -498,12 +507,15 @@ export const PLACE_OPS: Record<string, OpSpec> = {
     args: [2, 2],
     usage: 'tasks delete <device> <task>',
     summary: {
-      zh: '删掉任务和运行记录（不可逆，先问过用户）',
-      en: 'Delete a task and its runs (irreversible; ask the user first)',
+      zh: '删掉任务和运行记录（撤不回，要用户在桌面端点允许）',
+      en: 'Delete a task and its runs (irreversible; the user allows it on the desktop)',
     },
     async run(ctx) {
       const device = await ctx.device(ctx.cmd.positionals[0])
       const task = taskOf(ctx, await tasksOf(ctx, device.id), ctx.cmd.positionals[1])
+      await ctx.confirm([
+        { kind: 'erase', what: 'task', device: ctx.nameOf(device), name: task.name },
+      ])
       await ctx.run('tasks.delete', { deviceId: device.id, taskId: task.id })
       return done(ctx)
     },

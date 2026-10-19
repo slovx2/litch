@@ -50,7 +50,7 @@ blocked place shows a red card even if the session was already allowed.
   popover lists pending cards and running commands (End one, or Stop all).
 - `scripts/litch machine log <device>` shows the recent operations from that device (kept on this
   computer, up to 500 per device).
-- `scripts/litch machine log-clear <device>` clears that log. **Irreversible: ask first.**
+- `scripts/litch machine log-clear <device>` clears that log. **Irreversible: ask first**; the user then confirms in Litch.
 
 ## Common problems
 

@@ -1,6 +1,6 @@
 // litch config 在界面这一头（config 主题，14 号设计 3.3）：本机 harness 里的模型跑 `litch config …`，
 // 核心执行器把要界面做的事交给最近订阅的这个窗口（外观、语言、两个本地偏好、打开某一页、出码对话框），
-// 这里照做后用 config.reply 回话；放宽安全的那几项（E6）出确认卡，每个窗口都有，人点允许或拒绝用 config.confirm 回。
+// 这里照做后用 config.reply 回话；放宽安全的那几项（E6）和撤不回的那几项（E7）出确认卡，每个窗口都有，人点允许或拒绝用 config.confirm 回。
 // 卡片写清是哪个会话、哪个 harness、要做什么；两分钟没人理，核心那边当拒绝，卡片自己撤掉。
 import type {
   ConfigConfirmItem,
@@ -71,6 +71,11 @@ export function itemText(item: ConfigConfirmItem, t: Translator): string {
       return t('assist.confirm.access', { device: item.device })
     case 'site':
       return t('assist.confirm.site', { origin: item.origin })
+    case 'erase':
+      return t(`assist.confirm.erase.${item.what}`, {
+        device: item.device ?? '',
+        name: item.name ?? '',
+      })
   }
 }
 
@@ -99,11 +104,14 @@ function ConfirmCard({
     : harness
       ? t('assist.confirm.harness', { harness })
       : t('assist.confirm.unknown')
+  // 有撤不回的项（E7）时标题换成“删除”，并多一句撤不回
+  const erase = card.items.some((item) => item.kind === 'erase')
+  const title = t(erase ? 'assist.confirm.titleErase' : 'assist.confirm.title')
   return (
     <dialog
       ref={dialog}
       className="modal confirm assist-confirm"
-      aria-label={t('assist.confirm.title')}
+      aria-label={title}
       data-config-confirm={card.id}
       onCancel={(event) => {
         // Esc 等于拒绝
@@ -112,7 +120,7 @@ function ConfirmCard({
       }}
     >
       <div className="confirm-body">
-        <b>{t('assist.confirm.title')}</b>
+        <b>{title}</b>
         <span>{where}</span>
         <ul className="assist-items">
           {card.items.map((item) => (
@@ -122,6 +130,7 @@ function ConfirmCard({
           ))}
         </ul>
         <code className="mono assist-cmd">litch config {card.command}</code>
+        {erase && <b className="assist-erase">{t('assist.confirm.eraseNote')}</b>}
         <span className="dim">{t('assist.confirm.note')}</span>
         <div className="pick-ask-actions">
           <button

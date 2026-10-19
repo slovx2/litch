@@ -78,6 +78,15 @@ export const enOnboard: Record<keyof typeof zhOnboard, Entry> = {
   'assist.confirm.access':
     'Let {device} touch anything on this computer (no sensitive-place blocks)',
   'assist.confirm.site': 'Always allow {origin} in the built-in browser',
+  'assist.confirm.titleErase': 'Allow this deletion?',
+  'assist.confirm.erase.device':
+    'Remove the remote device {device} (its connection settings go too)',
+  'assist.confirm.erase.phone':
+    'Revoke the key of the phone “{name}” on {device}; it can no longer connect',
+  'assist.confirm.erase.task': 'Delete the scheduled task “{name}” on {device} and its runs',
+  'assist.confirm.erase.browserData': 'Clear all built-in browser data (sign-ins, cache and so on)',
+  'assist.confirm.erase.machineLog': 'Clear the log of {device} using this computer',
+  'assist.confirm.eraseNote': 'This cannot be undone.',
   'assist.confirm.note': 'If nobody answers within two minutes, it counts as declined.',
   'assist.confirm.allow': 'Allow',
   'assist.confirm.decline': 'Decline',

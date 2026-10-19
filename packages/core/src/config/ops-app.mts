@@ -255,10 +255,11 @@ export const APP_OPS: Record<string, OpSpec> = {
     args: [0, 0],
     usage: 'browser clear-data',
     summary: {
-      zh: '清除内置浏览器的浏览数据（不可逆，先问过用户）',
-      en: 'Clear built-in browser data (irreversible; ask the user first)',
+      zh: '清除内置浏览器的浏览数据（撤不回，要用户在桌面端点允许）',
+      en: 'Clear built-in browser data (irreversible; the user allows it on the desktop)',
     },
     async run(ctx) {
+      await ctx.confirm([{ kind: 'erase', what: 'browserData', device: null, name: null }])
       await ctx.main({ kind: 'browser.clearData' })
       return { text: ctx.say('清掉了。', 'Cleared.') }
     },

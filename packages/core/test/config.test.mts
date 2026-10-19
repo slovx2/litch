@@ -347,6 +347,78 @@ test('放宽安全（E6）：两分钟没人理算拒绝；一个窗口都没开
   assert.equal((await m.app()).devices.find((d) => d.id === 'local')?.tools.computer, false)
 })
 
+test('撤不回（E7）：删任务、撤手机、移除设备、清浏览器数据、清操作记录都先出确认卡；拒绝不动，允许才删', async () => {
+  const m = mock()
+  const win = m.window()
+  // 模拟的设备命令要等时钟走一步才应答：边推时钟边等，等到出卡或者有结果
+  const pump = async <T,>(
+    pending: Promise<T>,
+    until: () => boolean = () => false,
+  ): Promise<{ value: T } | null> => {
+    const box: { result: { value: T } | null } = { result: null }
+    void pending.then((value) => {
+      box.result = { value }
+    })
+    for (let round = 0; round < 200 && !box.result && !until(); round++) {
+      m.time.advance(20)
+      await flush()
+    }
+    return box.result
+  }
+  const run = async (argv: string[]) => {
+    const settled = await pump(m.run(argv))
+    assert.ok(settled, argv.join(' '))
+    return settled.value
+  }
+  const answer = async (argv: string[], allow: boolean) => {
+    const pending = m.run(argv)
+    await pump(pending, () => (win.seen.view?.confirms.length ?? 0) > 0)
+    const [card] = win.seen.view?.confirms ?? []
+    assert.ok(card, argv.join(' '))
+    await m.command('config.confirm', { id: card.id, allow })
+    const settled = await pump(pending)
+    assert.ok(settled, argv.join(' '))
+    return { card, result: settled.value }
+  }
+
+  const kept = await answer(['tasks', 'delete', 'local', 'task-deps'], false)
+  assert.equal(kept.result.ok, false)
+  assert.equal(kept.card.items[0]?.kind, 'erase')
+  assert.ok((await run(['tasks', 'list', 'local'])).text.includes('task-deps'))
+  const gone = await answer(['tasks', 'delete', 'local', 'task-deps'], true)
+  assert.ok(gone.result.ok)
+  const [task] = gone.card.items
+  assert.ok(task?.kind === 'erase' && task.what === 'task' && task.name)
+  assert.ok(!(await run(['tasks', 'list', 'local'])).text.includes('task-deps'))
+
+  // 不认识的手机不出卡，直接报错
+  const unknown = await run(['phones', 'revoke', 'build', 'ffff'])
+  assert.equal(unknown.ok, false)
+  assert.equal(win.seen.view?.confirms.length, 0)
+  const phone = await answer(['phones', 'revoke', 'build', 'a1b2c3d4e5f60718'], true)
+  assert.ok(phone.result.ok)
+  assert.equal(phone.card.items[0]?.kind === 'erase' && phone.card.items[0].name, 'Pixel 8')
+  assert.ok(!(await run(['phones', 'list', 'build'])).text.includes('a1b2c3d4e5f60718'))
+
+  for (const argv of [
+    ['browser', 'clear-data'],
+    ['machine', 'log-clear', 'local'],
+  ]) {
+    const { card } = await answer(argv, false)
+    assert.equal(card.items[0]?.kind, 'erase')
+  }
+
+  const device = await answer(['devices', 'remove', 'build'], true)
+  assert.ok(device.result.ok)
+  assert.deepEqual(device.card.items[0] && { ...device.card.items[0], device: null }, {
+    kind: 'erase',
+    what: 'device',
+    device: null,
+    name: null,
+  })
+  assert.ok(!(await m.app()).devices.some((d) => d.id === 'build'))
+})
+
 test('对话里“配置：…”：当成本机 harness 跑了一次，确认卡上写着是哪个会话', async () => {
   const m = mock()
   const win = m.window()

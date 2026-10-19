@@ -29,6 +29,10 @@ export interface OnboardProbe {
   card: string
   cardItems: string
   reply: string
+  /** 撤不回的那张卡（清内置浏览器数据）：标题、项、拒绝之后的回答 */
+  eraseTitle: string
+  eraseItems: string
+  eraseReply: string
   skin: string
   /** 设置页重新打开引导、再关掉 */
   reopened: string
@@ -139,6 +143,24 @@ export async function onboardProbe(): Promise<OnboardProbe> {
     const main = text(one('.main'))
     return main.includes('照你说的改好了') ? main : null
   })
+  // 撤不回的也出卡（E7）：点拒绝，什么都不删
+  await send('配置：browser clear-data')
+  const erase = await until('删除的确认卡', () => {
+    const element = one('[data-config-confirm]')
+    return element &&
+      element.getAttribute('data-config-confirm') !== dialog.getAttribute('data-config-confirm')
+      ? element
+      : null
+  })
+  const eraseTitle = text(one('.confirm-body > b', erase))
+  const eraseItems = all('[data-item]', erase)
+    .map((element) => element.dataset.item ?? '')
+    .join(',')
+  one<HTMLButtonElement>('[data-act="config-decline"]', erase)?.click()
+  const eraseReply = await until('拒绝之后的回答', () => {
+    const main = text(one('.main'))
+    return main.includes('browser clear-data') && main.includes('没做成') ? main : null
+  })
   // 界面那几项：换皮肤由这个窗口照做
   await send('配置：look set --skin human')
   const skin = await until('皮肤换成文艺', () =>
@@ -180,6 +202,9 @@ export async function onboardProbe(): Promise<OnboardProbe> {
     card,
     cardItems,
     reply: reply.slice(0, 200),
+    eraseTitle,
+    eraseItems,
+    eraseReply: eraseReply.slice(-200),
     skin,
     reopened,
     reclosed,
@@ -213,6 +238,9 @@ export function judgeOnboard(seen: OnboardProbe): string[] {
   )
   must(seen.cardItems === 'tool', `确认卡上的项不对：${seen.cardItems}`)
   must(seen.reply.includes('litch config tools set local --computer on'), '对话里没有那条命令')
+  must(seen.eraseTitle === '允许这次删除吗？', `删除卡的标题不对：“${seen.eraseTitle}”`)
+  must(seen.eraseItems === 'erase', `删除卡上的项不对：${seen.eraseItems}`)
+  must(seen.eraseReply.includes('没做成'), '拒绝之后对话里没说没做成')
   must(seen.skin === 'human', '换皮肤没照做')
   must(seen.reopened === 'assist', `设置页重新打开的引导不对：${seen.reopened}`)
   must(seen.reclosed, '重新打开的引导关不掉')

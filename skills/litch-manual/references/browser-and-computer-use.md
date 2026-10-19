@@ -44,8 +44,8 @@ Preferences (Settings → Built-in browser):
   Litch. Only do it when the user asked for that site.
 - `scripts/litch browser forget` removes one always-allowed site, or all of them (see `--help`).
 - `scripts/litch browser clear-data` clears cookies, sign-ins, site storage and cache of the built-in
-  browser. **Irreversible: ask first** (the user will be signed out of every site there). Always-allowed
-  sites are kept.
+  browser. **Irreversible: ask first**, then the user confirms in Litch (the user will be signed out
+  of every site there). Always-allowed sites are kept.
 
 ## Computer Use (macOS and Windows)
 

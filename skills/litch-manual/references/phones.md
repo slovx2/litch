@@ -13,7 +13,7 @@ later.
   change the address the phone will use (host, port, user; see `scripts/litch phones --help`); they only
   affect what goes into the QR code, not how the desktop connects.
 - `scripts/litch phones revoke <device> <phone>` removes that phone's key from the device.
-  **Irreversible: ask first**; the phone can no longer connect until paired again.
+  **Irreversible: ask first**, then the user confirms in Litch; the phone can no longer connect until paired again.
 
 ## What the user does (exception E2)
 
