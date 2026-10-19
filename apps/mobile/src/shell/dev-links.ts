@@ -9,6 +9,7 @@
 //   litch://seed?count=300[&device=…]              建一批会话（量会话列表的滑动，只在模拟核心里用）
 //   litch://terminal[?device=…&root=…&terminal=…&stats=1]  终端页（root 不给：夹具的工作目录，否则设备上第一个工作区的根）
 //   litch://diff[?device=…&root=…&scope=all|staged|unstaged&session=…]  差异页（root 同上）
+//   litch://hconfig?harness=<标识>[&device=…]    一个 harness 的详情设置
 //   litch://update?feed=<地址> | reset=1          换应用更新的清单（本机假清单，允许 http；src/update/override.ts）并马上查一次 | 换回正式的
 // 每个链接都可以带测量开关（src/experiment.ts）：render、seal、pace、freeze、tail、keyboard、markers，以及 probe=1|0。
 import { keys } from '@litch/core'
@@ -145,6 +146,13 @@ export function handleDevLink(url: string, services: Services | null): BootMode 
           sessionId: params.get('session'),
         })
       }
+      return null
+    }
+    case 'hconfig': {
+      const deviceId = deviceOf()
+      const harness = params.get('harness')
+      if (!deviceId) return 'later'
+      if (harness) navigationRef.navigate('HarnessSettings', { deviceId, harness })
       return null
     }
     case 'home':

@@ -10,6 +10,8 @@ export type RootStackParamList = {
   PairDevice: undefined
   /** 一台设备的详情：连接信息、密钥、重连、去掉；harness 的启用和设置（设备有设置接口时） */
   DeviceDetail: { deviceId: string }
+  /** 一台设备上一个 harness 的详情设置：配置、账号（登录、API key、provider）、MCP 与指令文件（只读）。name 是 harness 的名字，首帧就画 */
+  HarnessSettings: { deviceId: string; harness: string; name?: string }
   /** 一台设备上的工作区和会话（相当于桌面端侧栏里这台设备的那一段），含已归档 */
   Sessions: { deviceId: string }
   /** 新会话：选 harness、工作区或目录、模型和权限，写第一条消息。发出去之后换成详情页 */
