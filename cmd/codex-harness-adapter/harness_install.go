@@ -209,6 +209,9 @@ var versionProbeTimeout = 2 * time.Second
 type locatedCLI struct {
 	path      string
 	installer bool
+	// 设置或环境变量给的那一项指不到能跑的命令行，是绕开它找到的：harness 还会照那一项去找，
+	// 所以装完要把这里找到的写进设置里的命令行路径（设置排在环境变量前面）
+	overrides bool
 }
 
 // locateCLI 照 harness 自己找命令行的次序找：设置里的命令行路径（或它的环境变量），PATH 里的命令名，

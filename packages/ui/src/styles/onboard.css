@@ -251,7 +251,8 @@
 /* ---------- 设置页“配置助手”：手册装到了哪 ---------- */
 .assist-targets {
   margin: 0;
-  padding: 0;
+  /* 和上面设置行的左右内边距对齐（settings.css 的 .set-row），不贴着卡片边 */
+  padding: 4px 12px calc(var(--row-pad) + 2px);
   list-style: none;
   display: flex;
   flex-direction: column;

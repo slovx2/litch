@@ -26,6 +26,8 @@ type installRig struct {
 	mu               sync.Mutex
 	notices          []installJob
 	found            []locatedCLI
+	// 设置或环境变量给的命令行路径（configured），默认空
+	configured string
 }
 
 func writeScript(t *testing.T, path, body string) {
@@ -59,7 +61,7 @@ func newInstallRig(t *testing.T, registry string) *installRig {
 	rig.installer = newInstaller(ctx, installHooks{
 		source: versionSource{
 			environment: func(string) []string { return rig.env },
-			configured:  func(string) string { return "" },
+			configured:  func(string) string { rig.mu.Lock(); defer rig.mu.Unlock(); return rig.configured },
 			settings:    func() int { rig.mu.Lock(); defer rig.mu.Unlock(); return rig.settings },
 			registry:    registry,
 		},
@@ -186,6 +188,28 @@ EOF
 	}
 	if len(rig.found) != 1 || !rig.found[0].installer || rig.found[0].path != filepath.Join(rig.home, ".local", "bin", "claude") {
 		t.Fatalf("应在官方位置找到: %+v", rig.found)
+	}
+}
+
+// 原来给的命令行路径是坏的（指到不存在的文件，比如旧的设置、环境变量）：装完绕开它找，找到了标明要盖过它。
+func TestInstallScriptOverridesBrokenConfiguredPath(t *testing.T) {
+	rig := newInstallRig(t, "")
+	rig.configured = filepath.Join(rig.home, "gone", "claude")
+	writeScript(t, filepath.Join(rig.tools, "curl"), `cat <<'EOF'
+mkdir -p "$HOME/.local/bin"
+printf '#!/bin/sh\necho "%s (Claude Code)"\n' "$1" > "$HOME/.local/bin/claude"
+chmod +x "$HOME/.local/bin/claude"
+EOF
+`)
+	if err := os.Symlink("/bin/bash", filepath.Join(rig.tools, "bash")); err != nil {
+		t.Fatal(err)
+	}
+	last := rig.finished(t, rig.start(t, "claude-code", installTargetVerified))
+	if last.State != installSucceeded || *last.Installed != "2.1.282" {
+		t.Fatalf("应装成: %+v", last)
+	}
+	if len(rig.found) != 1 || !rig.found[0].overrides || rig.found[0].path != filepath.Join(rig.home, ".local", "bin", "claude") {
+		t.Fatalf("应绕开坏的路径、在官方位置找到并标明要盖过: %+v", rig.found)
 	}
 }
 

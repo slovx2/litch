@@ -43,7 +43,7 @@ func (s *controlServer) versionSource() versionSource {
 	}
 }
 
-// 装成以后：停用着的写成启用（装就是想用），命令行只在官方装法的位置找到时写进命令行路径，
+// 装成以后：停用着的写成启用（装就是想用），命令行只在官方装法的位置找到、或者原来给的那一项是坏的时写进命令行路径，
 // 然后照 harness.apply 重启它。它有回合在跑（或者判断不了）时不重启，新版下次重启生效。
 func (s *controlServer) afterInstall(ctx context.Context, id string, found locatedCLI) []string {
 	notes := []string{}
@@ -51,7 +51,7 @@ func (s *controlServer) afterInstall(ctx context.Context, id string, found locat
 	if enabled, state, _ := s.manager.wanted(id); !enabled && state == stateDisabled {
 		edits = append(edits, settingEdit{Key: enabledKey(id), Value: json.RawMessage("true")})
 	}
-	if found.installer && s.manager.base.settings.text(cliPathKey(id)) == "" {
+	if found.overrides || (found.installer && s.manager.base.settings.text(cliPathKey(id)) == "") {
 		value, _ := json.Marshal(found.path)
 		edits = append(edits, settingEdit{Key: cliPathKey(id), Value: value})
 	}

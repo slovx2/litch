@@ -20,7 +20,7 @@ import type {
   InstallJobView,
   InstallTopicView,
 } from '../model-install.mjs'
-import { engineOf, harnessIdOf } from './harness.mjs'
+import { engineOf } from './harness.mjs'
 
 export interface InstallHost {
   deviceId: string
@@ -56,9 +56,12 @@ export interface Install {
 /** 问版本最多等多久：带 latest 时设备要联网（它自己五秒超时），留些余量 */
 const VERSIONS_TIMEOUT_MS = 15_000
 
-/** 设备给的是适配器的引擎名，界面用的是 harness 的标识（和 HarnessView.id 一样），这里换过来 */
+/**
+ * 设备给的是适配器的引擎名（claude-code），聚合面的 HarnessView.id 也是它（harnessFromInfo 原样用），所以不换：
+ * 换成单入口模式的 claude 会和设备列着的那一项对不上，引导页、新建页里同一个 harness 出两行
+ */
 export const projectVersion = (info: HarnessVersionInfo): HarnessVersionView => ({
-  harness: harnessIdOf(info.harness),
+  harness: info.harness,
   installable: info.installable === true,
   method: info.method ?? null,
   installed: info.installed ?? null,
@@ -72,7 +75,7 @@ export const projectVersion = (info: HarnessVersionInfo): HarnessVersionView => 
 
 export const projectJob = (job: HarnessInstallJob): InstallJobView => ({
   job: job.job,
-  harness: harnessIdOf(job.harness),
+  harness: job.harness,
   version: job.version,
   resolved: job.resolved ?? null,
   state: job.state,

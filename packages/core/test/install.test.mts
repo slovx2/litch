@@ -141,21 +141,21 @@ test('握手声明 harnessInstall；设备列了它才能用，设备视图带 i
   assert.equal(bare.sent('litch/device/harness/versions').length, 0)
 })
 
-test('主题开着才问版本；引擎名换成界面的标识；latest 现查', async () => {
+test('主题开着才问版本；标识照设备给的引擎名（和聚合面的 HarnessView.id 一致）；latest 现查', async () => {
   const w = await started()
   assert.equal(w.sent('litch/device/harness/versions').length, 0, '没人看不问')
   const { seen } = w.watch()
   await settle()
   await settle()
   assert.equal(seen.view?.available, true)
-  assert.equal(seen.view?.versions?.[0]?.harness, 'claude')
+  assert.equal(seen.view?.versions?.[0]?.harness, 'claude-code')
   assert.equal(seen.view?.versions?.[0]?.latest, null)
   const { harnesses } = (await w.command('install.versions', { latest: true })) as {
     harnesses: { harness: string; latest: string | null }[]
   }
   assert.deepEqual(
     harnesses.map((entry) => [entry.harness, entry.latest]),
-    [['claude', '2.1.303']],
+    [['claude-code', '2.1.303']],
   )
   assert.deepEqual(w.sent('litch/device/harness/versions').at(-1), { latest: true })
   assert.equal(seen.view?.versions?.[0]?.latest, '2.1.303')
@@ -167,7 +167,7 @@ test('开始装：发的是引擎名；进度跟着通知走；结束后重新�
   await settle()
   await settle()
   const { job: id } = (await w.command('install.start', {
-    harness: 'claude',
+    harness: 'claude-code',
     version: 'verified',
   })) as { job: string }
   assert.equal(id, 'j1')
@@ -175,7 +175,7 @@ test('开始装：发的是引擎名；进度跟着通知走；结束后重新�
     { harness: 'claude-code', version: 'verified' },
   ])
   assert.equal(seen.view?.jobs[0]?.state, 'running')
-  assert.equal(seen.view?.jobs[0]?.harness, 'claude')
+  assert.equal(seen.view?.jobs[0]?.harness, 'claude-code')
 
   w.broadcast('litch/device/harness/install/changed', job({ log: ['Downloading…'] }))
   await settle()
@@ -216,7 +216,7 @@ test('断线重连：读任务补上状态；原来在跑、设备那边已经�
   const { seen } = w.watch()
   await settle()
   await settle()
-  await w.command('install.start', { harness: 'claude', version: 'latest' })
+  await w.command('install.start', { harness: 'claude-code', version: 'latest' })
   assert.equal(seen.view?.jobs[0]?.state, 'running')
   w.state.jobs = []
   w.peer.last().drop()

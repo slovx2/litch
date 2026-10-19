@@ -16,6 +16,8 @@ import { finishOnboarding, onboardingStep, useOnboardingState } from './state.ts
 
 /** 各 harness 的一句介绍。不认识的说一句通用的 */
 const INTROS: Record<string, MessageKey> = {
+  // 设备上的标识是 claude-code，模拟核心里是 claude
+  'claude-code': 'onboard.intro.claude',
   claude: 'onboard.intro.claude',
   codex: 'onboard.intro.codex',
   pi: 'onboard.intro.pi',
@@ -28,6 +30,7 @@ const INTROS: Record<string, MessageKey> = {
 
 /** 设备上没列、只在版本情况里出现的 harness 的名字 */
 const NAMES: Record<string, string> = {
+  'claude-code': 'Claude Code',
   claude: 'Claude Code',
   codex: 'Codex',
   pi: 'Pi',
@@ -96,13 +99,14 @@ function InstallStep({ device }: { device: DeviceView }) {
   const t = useT()
   const view = useInstall(device)
   const [checking, setChecking] = useState(false)
-  // 能装的时候列设备给的全部支持的；不能装的时候只有设备列着的那几个
+  // 能装的时候列设备给的全部支持的；不能装的时候只有设备列着的那几个。
+  // 自填命令的 ACP 没有官方装法，引导里不列（它要在设备设置里填命令，不是“装一个”）
   const ids = [
     ...new Set([
       ...(view?.versions ?? []).map((entry) => entry.harness),
       ...device.harnesses.map((entry) => entry.id),
     ]),
-  ]
+  ].filter((id) => id !== 'acp')
   /** 我装好了，重新检测：没起来的都重新探一次，版本也重新问 */
   const recheck = async () => {
     setChecking(true)

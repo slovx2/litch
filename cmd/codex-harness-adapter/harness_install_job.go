@@ -241,7 +241,14 @@ func (i *installer) run(job *installJob, install *installSpec, resolved string) 
 	}
 	// 装成了：重探版本（缓存作废），找不到命令行就算没装成
 	i.cache.forget(id)
-	found, ok := locateCLI(id, i.hooks.source.configured(id), env)
+	configured := i.hooks.source.configured(id)
+	found, ok := locateCLI(id, configured, env)
+	if !ok && strings.TrimSpace(configured) != "" {
+		// 给的那一项是坏的（旧的路径、指到不存在的文件）：照没给时的次序再找，找到了就让它盖过那一项
+		if found, ok = locateCLI(id, "", env); ok {
+			found.overrides = true
+		}
+	}
 	if !ok {
 		failure := both(
 			"安装命令跑完了，但找不到 %s 的命令行：它装到的目录可能不在 PATH 上。把那个目录加进 PATH，或者在设置里填它的命令行路径，然后点“重新检测”",
