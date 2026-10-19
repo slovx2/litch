@@ -42,7 +42,7 @@ test('dsh：没说过话的会话不进线程列表，适配器重启后 dsh 的
     assert.deepEqual(await ids(desktop), [spoken])
 
     await server.close()
-    await rm(join(dshHome(home), 'storages/session_projcache'), { recursive: true, force: true })
+    await rm(join(dshHome(), 'storages/session_projcache'), { recursive: true, force: true })
     server = new DshServer(home)
     const again = client(server)
     await again.call('initialize', { clientInfo: { name: 'test', version: '0' } })
@@ -75,8 +75,8 @@ test('dsh：没说过话的会话不进线程列表，适配器重启后 dsh 的
 // 回合结束、会话关掉和隔一阵时写缓存，都不等写完；回合刚结束 dsh 就收场时这几次可能一次都没落盘（机器忙时实测过，
 // ECHO-DSH-003 偶发失败就是这个），重启后它的清单把说过话的会话报成空白，适配器原先照单全收，会话就从列表里没了。
 // 用例把建好时的那一份缓存原样放回去来摆出这个局面，时序上是确定的。
-const cacheFile = (home: string, id: string) =>
-  join(dshHome(home), 'storages/session_projcache/sessions', `${id}.json`)
+const cacheFile = (id: string) =>
+  join(dshHome(), 'storages/session_projcache/sessions', `${id}.json`)
 
 test('dsh：投影缓存还停在会话刚建好时（说成没说过话），适配器重启后说过话的会话照列；真没说过话的不进，也不每次都问 dsh', {
   timeout: 180000,
@@ -96,7 +96,7 @@ test('dsh：投影缓存还停在会话刚建好时（说成没说过话），�
     // 会话建好时 dsh 记的那一份缓存（空白）
     let created = ''
     for (let waited = 0; !created && waited < 20000; waited += 20) {
-      created = await readFile(cacheFile(home, spoken), 'utf8').catch(() => '')
+      created = await readFile(cacheFile(spoken), 'utf8').catch(() => '')
       if (!created) await new Promise((resolve) => setTimeout(resolve, 20))
     }
     assert.equal(JSON.parse(created).record.rows.sessionListMetadata.val.blank, true, '前提')
@@ -107,7 +107,7 @@ test('dsh：投影缓存还停在会话刚建好时（说成没说过话），�
     await desktop.until('turn/completed', (params) => params.turn.id === turn.id)
 
     await server.close()
-    await writeFile(cacheFile(home, spoken), created)
+    await writeFile(cacheFile(spoken), created)
     server = new DshServer(home)
     const again = client(server)
     await again.call('initialize', { clientInfo: { name: 'test', version: '0' } })

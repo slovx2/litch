@@ -402,7 +402,7 @@ test('SKILL-DSH-004：问技能用的 dsh 会话一个目录只有一个，适�
     // dsh 的会话是懒落盘的：刚建出来只在它的进程里，请求结束后的检查点才写下去（实测几十毫秒），
     // 在那之前 dsh 被结束的话，重启后就没有这个会话。等它落了盘再重启，才量得到下面这件事。
     const landed = async () =>
-      (await readdir(join(dshHome(s.home), 'sessions'), { recursive: true }).catch(() => [])).some(
+      (await readdir(join(dshHome(), 'sessions'), { recursive: true }).catch(() => [])).some(
         (entry) => isSkillsSession(basename(dirname(entry))) && basename(entry) !== 'session.lock',
       )
     for (let waited = 0; !(await landed()); waited += 50) {

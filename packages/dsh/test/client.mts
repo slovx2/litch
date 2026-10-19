@@ -65,6 +65,7 @@ export function client(server: DshServer) {
       if (message.error)
         throw Object.assign(new Error(`${method}: ${message.error.message}`), {
           code: message.error.code,
+          data: message.error.data,
         })
       checked(() => assertResponse(method, message.result))
       return message.result
@@ -96,6 +97,8 @@ export async function isolate(script: MockBlock[][] | MockResponder): Promise<{
     DEEPSEEK_BASE_URL: model.url,
     DEEPSEEK_API_KEY: 'mock-not-a-real-key',
     DSH_AGENTS_HOME: join(root, 'agents-home'),
+    // dsh 自己的配置目录：入口默认用用户的 ~/.dsh，测试一律指进临时目录（位置和改用 ~/.dsh 之前一样，在 <home>/dsh-home）
+    DSH_HOME: join(root, 'home', 'dsh-home'),
   })
   return {
     root,

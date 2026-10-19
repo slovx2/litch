@@ -62,7 +62,8 @@ export const declaration: HarnessDeclaration = {
   // 所以不支持 declineWithNote，审批请求里也不列它。
   // litch_ 命名空间的动态工具只交给声明了 clientTools 的连接（server.mts 的 clientToolCall），
   // 工具经 dsh 里的插件交给模型（client-tools.mts）。
-  extensions: [EXTENSION.clientTools],
+  // harness 详情设置（harnessConfig）：配置项、provider 与登录、MCP、AGENTS.md 都读写 dsh 自己的配置（harness-config.mts）。
+  extensions: [EXTENSION.clientTools, EXTENSION.harnessConfig],
   features,
   // dsh 的沙箱只管写文件：三档都能读任何文件，也都不限制联网。
   permissionPresets: [

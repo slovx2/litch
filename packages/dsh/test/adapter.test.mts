@@ -69,6 +69,7 @@ test('dsh：线程列表、发消息、逐字流、提权审批、历史回放�
     DEEPSEEK_BASE_URL: model.url,
     DEEPSEEK_API_KEY: 'mock-not-a-real-key',
     DSH_AGENTS_HOME: join(root, 'agents-home'),
+    DSH_HOME: join(root, 'home', 'dsh-home'),
   })
   let server = new DshServer(join(root, 'home'))
   try {

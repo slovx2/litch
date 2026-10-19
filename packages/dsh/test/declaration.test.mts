@@ -90,8 +90,9 @@ test('dsh：runtime/info 带结构化声明，原有字段原样保留', { timeo
     )
     // 名字是产品自己的叫法（它的 --help 里自称 DeepSeek Harness，界面里用简称 DSH），dsh 是命令名
     assert.deepEqual([displayName, badge], ['DSH', 'DS'])
-    // dsh 的审批带不了话：不支持 declineWithNote。客户端工具经插件交给 dsh 的模型（client-tools.test.mts）
-    assert.deepEqual(extensions, [EXTENSION.clientTools])
+    // dsh 的审批带不了话：不支持 declineWithNote。客户端工具经插件交给 dsh 的模型（client-tools.test.mts），
+    // harness 详情设置读写 dsh 自己的配置（harness-config.test.mts）
+    assert.deepEqual(extensions, [EXTENSION.clientTools, EXTENSION.harnessConfig])
     assert.deepEqual(
       presets.map((preset) => [preset.id, preset.risk, preset.requiresConfirmation]),
       [

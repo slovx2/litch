@@ -125,6 +125,11 @@ export class WebRemote {
     return remote
   }
 
+  /** dsh 的 Web 入口在本机哪个端口：DeepSeek 账号登录的浏览器回调就回到这里（account/startSignIn 的 callbackOrigin） */
+  get port(): number {
+    return Number(new URL(this.origin).port)
+  }
+
   private incompatible(detail: string): RemoteError {
     return new RemoteError('incompatible', `${detail}。${compatibilityHint(this.version)}`)
   }
