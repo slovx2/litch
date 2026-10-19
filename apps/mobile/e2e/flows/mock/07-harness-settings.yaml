@@ -1,0 +1,105 @@
+# 模拟核心：harness 详情设置。设备详情里 Claude Code 的“详情设置” → 配置：改强度、保存 →
+# 账号：Console 登录走粘贴授权码 → API key（只认环境变量的）写进设备设置、顶上提示重启、就地重启 →
+# MCP、指令文件只能看
+appId: dev.litch.app
+name: mock-harness 详情设置
+tags: [mock]
+---
+- runFlow:
+    file: ../_shared/fresh.yaml
+    env:
+      MODE: mock
+      READY: device:local
+- extendedWaitUntil:
+    visible:
+      id: device:local:more
+    timeout: 15000
+- waitForAnimationToEnd:
+    timeout: 3000
+- tapOn:
+    id: device:local:more
+- tapOn:
+    id: menu:detail
+- scrollUntilVisible:
+    element:
+      id: harness:claude:settings
+- tapOn:
+    id: harness:claude:settings
+# 配置：强度改成高，底下出“保存”，存完说一句
+- extendedWaitUntil:
+    visible:
+      id: hc:tab:config
+    timeout: 15000
+- tapOn:
+    id: hc:key:effortLevel:high
+- tapOn:
+    id: hc:save
+- extendedWaitUntil:
+    visible:
+      id: hc:config:said
+    timeout: 10000
+# 账号：Console 粘贴授权码登录
+- tapOn:
+    id: hc:tab:accounts:pick
+- tapOn:
+    id: hc:provider:console:method:console
+- extendedWaitUntil:
+    visible:
+      id: hc:attempt:.*:code
+    timeout: 10000
+- tapOn:
+    id: hc:attempt:.*:code
+- inputText: abc#def
+- hideKeyboard
+- tapOn:
+    id: hc:attempt:.*:send
+- extendedWaitUntil:
+    visible:
+      id: hc:attempt:.*:done
+    timeout: 10000
+# API key：写进设备设置，要重启才生效
+- scrollUntilVisible:
+    element:
+      id: hc:provider:api-key:method:env
+- tapOn:
+    id: hc:provider:api-key:method:env
+- tapOn:
+    id: hc:provider:api-key:form:value
+- inputText: sk-e2e-1234
+- hideKeyboard
+- tapOn:
+    id: hc:provider:api-key:form:submit
+- extendedWaitUntil:
+    visible:
+      id: hc:provider:api-key:form:said
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      id: hc:restart
+    timeout: 10000
+- tapOn:
+    id: hc:restart:now
+# 模拟核心里本机的 Claude Code 有回合在跑：问一声要不要照样重启
+- extendedWaitUntil:
+    visible:
+      id: confirm:ok
+    timeout: 10000
+- tapOn:
+    id: confirm:ok
+- extendedWaitUntil:
+    notVisible:
+      id: hc:restart
+    timeout: 15000
+# MCP、指令文件：只能看
+- tapOn:
+    id: hc:tab:mcp:pick
+- extendedWaitUntil:
+    visible:
+      id: hc:readonly
+    timeout: 10000
+- tapOn:
+    id: hc:tab:instructions:pick
+- extendedWaitUntil:
+    visible:
+      id: hc:instr:path
+    timeout: 10000

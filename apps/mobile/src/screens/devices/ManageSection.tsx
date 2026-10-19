@@ -2,6 +2,8 @@
 // 每个 harness 一块：标题行是徽标、名字、版本、状态、启用开关（设备服务标了 role: 'enable' 的那一项，不认键名），
 // 点开是原因和它的各项设置；设备级的设置按分组各一块。改了的先记草稿，一块一个“保存”，一次写入全有或全无；
 // 别处先改过了（版本号对不上）就不写，换成最新的值并说明。要重启才生效的，标出待重启，由用户点“重启”。
+// 声明了 harnessConfig 的 harness 在“重启”旁边多一个“详情设置”，进它自己的页面（hconfig/）；
+// 设备支持（别的 harness 声明了）它却没有，说一句还不支持。
 import {
   type ChannelErrorShape,
   type DeviceView,
@@ -13,9 +15,12 @@ import {
   type SettingsSnapshotView,
   type SettingsWriteResult,
 } from '@litch/core'
+import { useNavigation } from '@react-navigation/native'
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { type ReactNode, useEffect, useState } from 'react'
 import { Pressable, StyleSheet, Switch, Text, View } from 'react-native'
 import { whyNot } from '../../../../../packages/ui/src/app/errors.ts'
+import type { RootStackParamList } from '../../nav/routes'
 import { useBusy, useChannel, useKey, useReplica } from '../../shell/services'
 import { type Translator, useT } from '../../ui/i18n'
 import { Button } from '../../ui/kit/controls'
@@ -175,21 +180,30 @@ function Block({
   )
 }
 
-/** 一个 harness 的标题行：启用开关（立刻写）、重启 */
+/** 详情设置的入口：它声明了就给按钮；设备支持（别的 harness 声明了）它却没有，说还不支持；设备整个不支持就没有 */
+function settingsEntry(device: DeviceView, harness: HarnessView): 'open' | 'unsupported' | null {
+  if (harness.configurable) return 'open'
+  return device.harnesses.some((entry) => entry.configurable) ? 'unsupported' : null
+}
+
+/** 一个 harness 的标题行：启用开关（立刻写）、重启、详情设置 */
 function HarnessHead({
   deviceId,
   harness,
   enable,
   snapshot,
+  entry,
 }: {
   deviceId: string
   harness: HarnessView
   enable: SettingSpecView | null
   snapshot: SettingsSnapshotView
+  entry: 'open' | 'unsupported' | null
 }) {
   const theme = useTheme()
   const t = useT()
   const channel = useChannel()
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const [writing, runWrite] = useBusy()
   const [restarting, runRestart] = useBusy()
   const [busyAsk, setBusyAsk] = useState(false)
@@ -272,7 +286,24 @@ function HarnessHead({
           testID={`harness:${harness.id}:restart`}
           onPress={() => void restart(false)}
         />
+        {entry === 'open' ? (
+          <Button
+            kind="plain"
+            label={t('hc.entry')}
+            testID={`harness:${harness.id}:settings`}
+            onPress={() =>
+              navigation.navigate('HarnessSettings', {
+                deviceId,
+                harness: harness.id,
+                name: harness.name,
+              })
+            }
+          />
+        ) : null}
       </View>
+      {entry === 'unsupported' ? (
+        <Text style={[styles.note, { color: theme.c.ink3 }]}>{t('hc.entry.unsupported')}</Text>
+      ) : null}
       {pending ? (
         <Text style={[styles.note, { color: theme.c.wait }]}>
           {t('manage.pending.note', { name: harness.name })}
@@ -364,6 +395,7 @@ export function ManageSection({ device }: { device: DeviceView }) {
                 harness={harness}
                 enable={enable}
                 snapshot={snapshot}
+                entry={settingsEntry(device, harness)}
               />
             }
           />
