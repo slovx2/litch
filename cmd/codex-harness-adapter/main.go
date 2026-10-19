@@ -436,7 +436,7 @@ func (c configuration) environment() []string {
 	for name, value := range values {
 		result = append(result, name+"="+value)
 	}
-	return result
+	return withFallbackCLI(c.harness, result)
 }
 
 func doctor(ctx context.Context, c configuration) error {

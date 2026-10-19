@@ -48,11 +48,9 @@ type installSpec struct {
 	verifiedKey string
 	// 适配器要求的最低版本；空串是没有要求。
 	minimum string
-	// 探测版本时在 PATH 里找的命令名（不带 Windows 的扩展名）。
+	// 探测版本时在 PATH 里找的命令名（不带 Windows 的扩展名）。官方装法放到 PATH 以外的位置记在登记表的
+	// fallbacks 里（比如 Claude 的 ~/.local/bin），引擎经 withFallbackCLI 拿到同一个路径。
 	commands []string
-	// 官方装法把命令行放在这里（相对用户主目录），而引擎自己不去这里找：装完只在这里找到时，
-	// 把它写进设置的“命令行路径”，harness 才起得来。
-	installedAt []string
 }
 
 // 测试里会换成别的系统。
@@ -65,7 +63,7 @@ var (
 		// 官方脚本的第一个参数就是目标版本（也认 stable、latest）
 		scriptArgs: func(version string) string { return version },
 		docsURL:    "https://code.claude.com/docs/en/setup", verifiedKey: "claudeCli", minimum: "2.1.282",
-		commands: []string{"claude"}, installedAt: []string{filepath.Join(".local", "bin", "claude")},
+		commands: []string{"claude"},
 	}
 	piInstall = &installSpec{
 		method: installNPM, windowsMethod: installNPM, npmPackage: "@earendil-works/pi-coding-agent",
@@ -205,17 +203,16 @@ func envHome(env []string) string { return envValue(env, "HOME", "USERPROFILE") 
 // 跑 `<命令> --version` 最多等这么久。
 var versionProbeTimeout = 2 * time.Second
 
-// 找到的命令行：在哪，是不是只在官方装法的位置（installedAt）找到的。
+// 找到的命令行在哪。
 type locatedCLI struct {
-	path      string
-	installer bool
+	path string
 	// 设置或环境变量给的那一项指不到能跑的命令行，是绕开它找到的：harness 还会照那一项去找，
 	// 所以装完要把这里找到的写进设置里的命令行路径（设置排在环境变量前面）
 	overrides bool
 }
 
 // locateCLI 照 harness 自己找命令行的次序找：设置里的命令行路径（或它的环境变量），PATH 里的命令名，
-// 登记表里引擎会去看的固定位置，最后是官方装法的位置。configured 是设置或环境变量给的那一项。
+// 登记表里的固定位置（引擎经 withFallbackCLI 拿到的也是它）。configured 是设置或环境变量给的那一项。
 func locateCLI(id, configured string, env []string) (locatedCLI, bool) {
 	spec := specOf(id)
 	install := spec.install
@@ -252,13 +249,6 @@ func locateCLI(id, configured string, env []string) (locatedCLI, bool) {
 	for _, fallback := range spec.fallbacks {
 		if path := look(fallback); path != "" {
 			return locatedCLI{path: path}, true
-		}
-	}
-	if install != nil {
-		for _, relative := range install.installedAt {
-			if path := look(relative); path != "" {
-				return locatedCLI{path: path, installer: true}, true
-			}
 		}
 	}
 	return locatedCLI{}, false

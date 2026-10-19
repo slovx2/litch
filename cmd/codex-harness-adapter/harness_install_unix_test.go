@@ -155,7 +155,7 @@ func TestInstallNPMSucceeds(t *testing.T) {
 	if !strings.Contains(log, "npm install -g @google/gemini-cli@0.10.0") || !strings.Contains(log, "CODEX_HOME=unset") || !strings.HasSuffix(log, "[litch] after gemini") {
 		t.Fatalf("日志不对（固定变量不该漏给安装命令，after 的话接在后面）:\n%s", log)
 	}
-	if len(rig.found) != 1 || rig.found[0].installer || rig.found[0].path != filepath.Join(rig.bin, "gemini") {
+	if len(rig.found) != 1 || rig.found[0].overrides || rig.found[0].path != filepath.Join(rig.bin, "gemini") {
 		t.Fatalf("交给 after 的命令行: %+v", rig.found)
 	}
 	jobs := rig.installer.jobs()
@@ -164,7 +164,7 @@ func TestInstallNPMSucceeds(t *testing.T) {
 	}
 }
 
-// Claude 的官方脚本：curl 取脚本、bash -s <版本> 跑；装到 ~/.local/bin（不在 PATH 上），交给 after 时标明是在官方位置找到的。
+// Claude 的官方脚本：curl 取脚本、bash -s <版本> 跑；装到 ~/.local/bin（不在 PATH 上），在登记表的固定位置找到，不用写设置。
 func TestInstallScriptSucceeds(t *testing.T) {
 	rig := newInstallRig(t, "")
 	writeScript(t, filepath.Join(rig.tools, "curl"), `echo "$*" > "$HOME/curl-args"
@@ -186,8 +186,8 @@ EOF
 	if data, _ := os.ReadFile(filepath.Join(rig.home, "curl-args")); strings.TrimSpace(string(data)) != "-fsSL https://claude.ai/install.sh" {
 		t.Fatalf("curl 的参数: %q", data)
 	}
-	if len(rig.found) != 1 || !rig.found[0].installer || rig.found[0].path != filepath.Join(rig.home, ".local", "bin", "claude") {
-		t.Fatalf("应在官方位置找到: %+v", rig.found)
+	if len(rig.found) != 1 || rig.found[0].overrides || rig.found[0].path != filepath.Join(rig.home, ".local", "bin", "claude") {
+		t.Fatalf("应在固定位置找到、不用盖过设置: %+v", rig.found)
 	}
 }
 

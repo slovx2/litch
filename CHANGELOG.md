@@ -19,6 +19,7 @@ versioning or publishing metadata.
 - Litch：配置助手。新建对话页标题下的“✦ 配置助手”打开一个本机的新对话，填好 `/litch-manual` 和“使用 Litch 产品手册帮我配置：”，用平常的话说要改什么，harness 里的模型照手册用 `litch config` 帮你改：设备与远程设备、工具开关、远程设备操作本机、设备设置与 harness 开关、手机绑定、项目、定时任务、外观与语言、内置浏览器、Computer Use、通知、诊断。放宽权限的改动（打开 Computer Use、远程设备操作本机、放宽审批、浏览器一直允许网站）在桌面端弹确认，人点允许才生效；扫码、系统权限、harness 的登录和安装、Litch 自身的更新不经它
 - Litch：产品手册技能 `litch-manual`。每次启动装进本机的 `~/.agents/skills/litch-manual`，并链到 Claude Code、Qwen Code 的技能目录（别人的同名目录不碰，配置目录不在就跳过）；设置页“配置助手”里能关掉、能看装到了哪里
 - 适配器：设备进程新增扩展 `harnessInstall`（`litch/device/harness/versions`、`install`、`install/read` 和进度通知），验证过的版本编进了命令行；命令行多了 `config`（`litch config` 的薄壳，把参数交给连着的 Litch 桌面端执行）
+- Claude Code 用官方脚本装在 `~/.local/bin`、这个目录又不在 PATH 上时（官方脚本会提示这一点），设备页原来报“没装”，现在适配器会在那里找到它（Windows 上是 `%USERPROFILE%\.local\bin`）
 
 ## 0.12.0
 

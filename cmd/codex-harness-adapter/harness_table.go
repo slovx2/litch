@@ -54,7 +54,13 @@ const acpAgentVariable = "CHA_ACP_AGENT"
 
 // 顺序就是报给客户端的顺序，也是全部启动时各入口的顺序。
 var harnessTable = []harnessSpec{
-	{id: "claude-code", pkg: "claude", portFlag: "claude-port", defaultPort: 7331, cliVariable: "CHA_CLAUDE_CLI", homeVariable: "CHA_CLAUDE_HOME", enable: enableAlways, install: claudeInstall},
+	{
+		id: "claude-code", pkg: "claude", portFlag: "claude-port", defaultPort: 7331, cliVariable: "CHA_CLAUDE_CLI", homeVariable: "CHA_CLAUDE_HOME",
+		// 官方安装脚本（install.sh、install.ps1）装在 ~/.local/bin，常常不在 PATH 上：PATH 里找不到时由命令行找到它、
+		// 经 CHA_CLAUDE_CLI 交给引擎（configuration.environment），引擎自己只看这个变量和 PATH
+		commands: []string{"claude"}, fallbacks: []string{filepath.Join(".local", "bin", "claude")}, enable: enableAlways,
+		install: claudeInstall,
+	},
 	{id: "pi", pkg: "pi", portFlag: "pi-port", defaultPort: 7332, cliVariable: "PI_CLI", homeVariable: "CHA_PI_HOME", enable: enableAlways, install: piInstall},
 	{
 		id: "dsh", pkg: "dsh", portFlag: "dsh-port", defaultPort: 7333, cliVariable: "CHA_DSH_CLI", homeVariable: "CHA_DSH_HOME",
@@ -136,6 +142,22 @@ func cliInstalled(c configuration, spec harnessSpec) bool {
 	if spec.cliVariable != "" && strings.TrimSpace(env[spec.cliVariable]) != "" {
 		return true
 	}
+	search := env["PATH"]
+	if search == "" {
+		search = env["Path"]
+	}
+	if commandOnPath(search, spec) != "" {
+		return true
+	}
+	home := env["HOME"]
+	if home == "" {
+		home = env["USERPROFILE"]
+	}
+	return fallbackCLI(home, spec) != ""
+}
+
+// PATH 里登记的命令名（Windows 上加 .exe、.cmd）找到的第一个，没有是空串。
+func commandOnPath(search string, spec harnessSpec) string {
 	names := []string{}
 	for _, command := range spec.commands {
 		if runtime.GOOS == "windows" {
@@ -143,31 +165,69 @@ func cliInstalled(c configuration, spec harnessSpec) bool {
 		}
 		names = append(names, command)
 	}
-	search := env["PATH"]
+	if len(names) == 0 {
+		return ""
+	}
+	return executableOnPath(search, names)
+}
+
+// withFallbackCLI：这个 harness 的命令行变量没给、PATH 里也没有它的命令，而登记的固定位置有能执行的，
+// 就把那个路径作为命令行变量补进给它的环境。引擎只按这个变量和 PATH 找命令行，不认这些固定位置；
+// 版本一览（locateCLI）读的也是同一个变量，两边找到的就是同一份。
+func withFallbackCLI(id string, env []string) []string {
+	spec := specOf(id)
+	if spec.native || spec.cliVariable == "" || len(spec.fallbacks) == 0 {
+		return env
+	}
+	values := map[string]string{}
+	for _, entry := range env {
+		name, value, _ := strings.Cut(entry, "=")
+		values[name] = value
+	}
+	if strings.TrimSpace(values[spec.cliVariable]) != "" {
+		return env
+	}
+	search := values["PATH"]
 	if search == "" {
-		search = env["Path"]
+		search = values["Path"]
 	}
-	if len(names) > 0 && executableOnPath(search, names) != "" {
-		return true
+	if commandOnPath(search, spec) != "" {
+		return env
 	}
-	home := env["HOME"]
+	home := values["HOME"]
 	if home == "" {
-		home = env["USERPROFILE"]
+		home = values["USERPROFILE"]
+	}
+	path := fallbackCLI(home, spec)
+	if path == "" {
+		return env
+	}
+	result := make([]string, 0, len(env)+1)
+	for _, entry := range env {
+		// 去掉原来那条空值的，免得同名变量出现两次
+		if name, _, _ := strings.Cut(entry, "="); name != spec.cliVariable {
+			result = append(result, entry)
+		}
+	}
+	return append(result, spec.cliVariable+"="+path)
+}
+
+// 登记的固定位置（相对主目录）里第一个能执行的命令行，没有是空串。Windows 上依次试 .exe、.cmd 和原名。
+func fallbackCLI(home string, spec harnessSpec) string {
+	if home == "" {
+		return ""
 	}
 	for _, fallback := range spec.fallbacks {
-		if home == "" {
-			break
-		}
 		path := filepath.Join(home, fallback)
 		variants := []string{filepath.Base(path)}
 		if runtime.GOOS == "windows" {
 			variants = append([]string{variants[0] + ".exe", variants[0] + ".cmd"}, variants...)
 		}
-		if executableOnPath(filepath.Dir(path), variants) != "" {
-			return true
+		if found := executableOnPath(filepath.Dir(path), variants); found != "" {
+			return found
 		}
 	}
-	return false
+	return ""
 }
 
 // 与适配器定位 dsh 的规则一致。测试里会换成假的。
