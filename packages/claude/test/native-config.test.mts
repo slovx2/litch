@@ -30,8 +30,9 @@ test('CONFIG-006：嵌套键、删除和显式热重载不改会话模型与计�
     })
     const oldModel = created.model
     const oldEffort = created.reasoningEffort
+    // “default”那一行表示不写、交给 CLI 自己的默认（settings.json 里删掉 model），挑一个具体的模型
     const alternate = (await client.request('model/list')).data.find(
-      (value: any) => value.id !== oldModel,
+      (value: any) => value.id !== oldModel && value.id !== 'default',
     ).id
     const edit = (keyPath: string, value: unknown) => ({ keyPath, value, mergeStrategy: 'replace' })
     await client.request('config/batchWrite', {

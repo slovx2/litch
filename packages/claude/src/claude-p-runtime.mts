@@ -2,6 +2,7 @@ import { type ChildProcess, execFileSync, spawn } from 'node:child_process'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { claudeChildEnv } from './claude-provider.mjs'
 import type { ClaudeRuntime, RuntimeHandlers, RuntimeTurnContext } from './types.mjs'
 
 export interface ClaudePRuntimeOptions {
@@ -124,7 +125,7 @@ export class ClaudePTranscriptRuntime implements ClaudeRuntime {
     const child = spawn(this.options.command, args, {
       cwd,
       // 命令里调 litch-machine 时按它认会话
-      env: { ...process.env, LITCH_THREAD_ID: threadId },
+      env: { ...claudeChildEnv(), LITCH_THREAD_ID: threadId },
       stdio: ['ignore', 'pipe', 'pipe'],
       detached: process.platform !== 'win32',
     })

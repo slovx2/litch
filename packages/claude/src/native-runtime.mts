@@ -44,6 +44,7 @@ if (!process.env.ANTHROPIC_BETAS) {
 import type { OnElicitation, Query } from '@anthropic-ai/claude-agent-sdk'
 import { type ApprovalPolicy, allowsApproval, toolApprovalFlow } from './approval-policy.mjs'
 import { deniedMessage } from './approval-request.mjs'
+import { claudeChildEnv } from './claude-provider.mjs'
 import { cliOutputFormat } from './cli-output-schema.mjs'
 import { clientToolCliNames, dynamicToolServer } from './dynamic-tools.mjs'
 import { goalToolServer, isGoalTool } from './goal-tools.mjs'
@@ -1030,7 +1031,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         tools: [],
         mcpServers: {},
         strictMcpConfig: true,
-        env: { ...process.env, ...hostClaudeEnvOverrides },
+        env: { ...claudeChildEnv(), ...hostClaudeEnvOverrides },
         stderr: (data: string) => process.stderr.write(data),
         spawnClaudeCodeProcess: nativeProcess.spawn.bind(nativeProcess),
       },
@@ -1157,7 +1158,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       settingSources: ['user', 'project', 'local'],
       // 失败后由持久化状态对账；禁止 CLI 自行重放可能已接收的模型请求。
       env: {
-        ...process.env,
+        ...claudeChildEnv(),
         ...hostClaudeEnvOverrides,
         ...sdkMcpStartupEnvironment(context.mcpServers),
         CLAUDE_CODE_MAX_RETRIES: '0',

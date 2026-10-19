@@ -37,6 +37,12 @@ import {
 import { buildInfo } from './build-info.mjs'
 import { listClaudeHooks } from './claude-capabilities.mjs'
 import {
+  migrateDefaultModel,
+  readSettingsDefaults,
+  writeSettingsDefaults,
+} from './claude-default-model.mjs'
+import { PROVIDER_CONFIG_KEY } from './claude-provider.mjs'
+import {
   applyConfigEdits,
   isConfigObject,
   readConfigFile,
@@ -46,6 +52,8 @@ import {
 import { dynamicToolResult } from './dynamic-tool-result.mjs'
 import { experimentalFeatureList, experimentalFeatureSet } from './experimental-features.mjs'
 import { GoalController } from './goal-controller.mjs'
+import { ClaudeHarnessConfig } from './harness-config.mjs'
+import { HarnessConfigError } from './harness-config-common.mjs'
 import { mergeMcpConfig, readMcpConfig } from './mcp.mjs'
 import { sdkMcpServers } from './mcp-config.mjs'
 import { elicitationParams, elicitationResponse } from './mcp-elicitation.mjs'
@@ -347,6 +355,33 @@ export class CodexClaudeAppServer {
   // every reconnect.
   private configOverrides: Record<string, unknown> = {}
   private readonly configPath = join(adapterHome(), 'config.json')
+  // harness 详情设置（litch/harness/*）：读写 Claude Code 自己的 settings.json、~/.claude.json、CLAUDE.md 与账号
+  private readonly harnessConfig = new ClaudeHarnessConfig({
+    broadcast: (method, params) => this.broadcastHarnessConfig(method, params),
+    modelOptions: () =>
+      allSelectableModelOptions().map((option) => ({
+        value: option.id,
+        title: { 'zh-CN': option.displayName, en: option.displayName },
+        ...(option.description
+          ? { description: { 'zh-CN': option.description, en: option.description } }
+          : {}),
+      })),
+    defaultsChanged: () => {
+      this.loadPersistedConfig()
+    },
+    mcpLogin: (name, complete) => {
+      const scope = this.mcpScope()
+      const config = sdkMcpServers(scope.servers)[name]
+      if (!config) throw new ProtocolError(-32602, '当前范围未配置指定 MCP 服务')
+      return this.mcpOAuth.login(
+        scope.source,
+        config,
+        { name, timeoutSecs: 600 },
+        HARNESS_CONFIG_PEER,
+        (result) => complete({ success: result.success, error: result.error }),
+      )
+    },
+  })
   private idleCheckHandler: (() => void) | null = null
   private stopped = false
   private readonly store: SessionStore
@@ -462,6 +497,7 @@ export class CodexClaudeAppServer {
     this.scheduledQueues.clear()
     this.permissionSessionGrants.clear()
     this.mcpOAuth.close()
+    this.harnessConfig.close()
     await this.mcp.close()
     this.filesystem.close()
     await this.processes.close()
@@ -564,6 +600,8 @@ export class CodexClaudeAppServer {
       this.sendResponse(peer, request.id, undefined, {
         code: error instanceof ProtocolError ? error.code : -32000,
         message: error instanceof Error ? error.message : String(error),
+        // harness 详情设置的错误带 data.litch（原因），客户端按它处理
+        ...(error instanceof HarnessConfigError ? { data: error.data } : {}),
       })
     } finally {
       if (locked) this.nativeMutations.delete(threadId as string)
@@ -576,6 +614,8 @@ export class CodexClaudeAppServer {
   private async dispatch(peer: RpcPeer, method: string, params: unknown): Promise<unknown> {
     if (params === null || typeof params !== 'object' || Array.isArray(params))
       throw new ProtocolError(-32602, 'params 必须是对象')
+    if (method.startsWith('litch/harness/'))
+      return this.harnessConfig.dispatch(method, asRecord(params))
     if (
       [
         'thread/start',
@@ -5541,7 +5581,7 @@ export class CodexClaudeAppServer {
   private publicConfigOverrides(): Record<string, unknown> {
     return Object.fromEntries(
       Object.entries(this.configOverrides).filter(
-        ([key]) => !isProviderLoopSelectionConfigKey(key),
+        ([key]) => !isProviderLoopSelectionConfigKey(key) && key !== PROVIDER_CONFIG_KEY,
       ),
     )
   }
@@ -5725,7 +5765,7 @@ export class CodexClaudeAppServer {
 
   private configWriteResponse(params: Record<string, unknown>, batch: boolean): unknown {
     validateConfigTarget(params, this.configPath)
-    const previous = readConfigFile(this.configPath)
+    const previous = this.persistedConfigValues()
     if (params.expectedVersion != null && params.expectedVersion !== previous.version)
       throw new ProtocolError(-32009, '配置已变化，请重新读取后提交')
     const next = applyConfigEdits(previous.values, params, batch)
@@ -5733,7 +5773,18 @@ export class CodexClaudeAppServer {
     // 运行中的工具不能在热重载过程中被悄悄扩大权限。
     if (params.reloadUserConfig === true && this.activeTurnByThread.size > 0)
       throw new ProtocolError(-32009, '有活动回合，不能热重载配置')
-    const version = writeConfigFile(this.configPath, next, previous.version)
+    // 默认模型与强度写进 settings.json，其余照旧写 config.json
+    const { model, model_reasoning_effort, ...rest } = next
+    const changedDefault = (key: string) =>
+      submissionHash(previous.values[key] ?? null) !== submissionHash(next[key] ?? null)
+    if (changedDefault('model') || changedDefault('model_reasoning_effort'))
+      writeSettingsDefaults({
+        ...(changedDefault('model') ? { model: (model as string | undefined) ?? null } : {}),
+        ...(changedDefault('model_reasoning_effort')
+          ? { effort: (model_reasoning_effort as string | undefined) ?? null }
+          : {}),
+      })
+    const version = writeConfigFile(this.configPath, rest, readConfigFile(this.configPath).version)
     this.loadPersistedConfig()
     if (params.reloadUserConfig === true) {
       const changed = (key: string) =>
@@ -6132,6 +6183,17 @@ export class CodexClaudeAppServer {
     this.deliver(peer, notification, peer)
   }
 
+  // harness 详情设置的通知只发给握手时在 capabilities.litchExtensions 里声明了 harnessConfig 的连接
+  private broadcastHarnessConfig(method: string, params: unknown): void {
+    if (this.stopped) return
+    for (const target of this.accountPeers)
+      if (
+        this.isConnected(target) &&
+        this.peerFeatures.get(target)?.extensions.has(EXTENSION.harnessConfig)
+      )
+        this.deliver(target, { method, params }, target)
+  }
+
   // 会话级的通知（新建、状态、改名、归档、取消归档、关闭、删除、回退、归属、附件、目标，清单是共用层的
   // BROADCAST_THREAD_NOTIFICATIONS）和上游一样发给每条握手过的连接：没订阅这个会话的客户端（官方桌面端的
   // 别的窗口、Litch 侧栏上别处在跑的会话）靠它们跟着变。订阅着它的连接（没人订阅时是引起这条通知的 origin）
@@ -6459,24 +6521,56 @@ export class CodexClaudeAppServer {
     }
   }
 
+  // 默认模型与强度以 Claude Code 的 settings.json 为准（model、effortLevel），config.json 里的旧值第一次读到时搬过去
   private loadPersistedConfig() {
-    const snapshot = readConfigFile(this.configPath)
+    let snapshot = readConfigFile(this.configPath)
     this.validateConfigValues(snapshot.values)
-    const { model, model_reasoning_effort, ...overrides } = snapshot.values
-    this.configModel =
-      typeof model === 'string' ? catalogModelId(model) : defaultSelectableModelId()
+    try {
+      if (migrateDefaultModel(this.configPath)) snapshot = readConfigFile(this.configPath)
+    } catch (error) {
+      // 搬不过去（settings.json 坏了之类）就先接着用 config.json 里的旧值，下次再搬
+      debugLog('config.migrateDefaultModel.failed', {
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+    const {
+      model: legacyModel,
+      model_reasoning_effort: legacyEffort,
+      ...overrides
+    } = snapshot.values
+    const defaults = readSettingsDefaults()
+    // settings.json 是和命令行共用的，里面的模型不一定是这个入口能用的（比如手填了别家的）：用不了就按没写处理
+    const model =
+      defaults.model !== null && isSelectableModel(defaults.model)
+        ? defaults.model
+        : typeof legacyModel === 'string'
+          ? legacyModel
+          : null
+    this.configModel = model === null ? defaultSelectableModelId() : catalogModelId(model)
     this.configReasoningEffort =
-      normalizeCodexReasoningEffort(
-        typeof model_reasoning_effort === 'string' ? model_reasoning_effort : null,
-      ) ??
+      defaults.effort ??
+      normalizeCodexReasoningEffort(typeof legacyEffort === 'string' ? legacyEffort : null) ??
       normalizeCodexReasoningEffort(process.env.CHA_CLAUDE_DEFAULT_EFFORT) ??
       'medium'
     this.configOverrides = overrides
     return snapshot
   }
+
+  // config/*Write 在它上面改：config.json 里的那些，加上 settings.json 里的默认模型与强度
+  private persistedConfigValues(): { values: Record<string, unknown>; version: string } {
+    const snapshot = this.loadPersistedConfig()
+    const values: Record<string, unknown> = { ...snapshot.values }
+    const defaults = readSettingsDefaults()
+    if (defaults.model !== null && isSelectableModel(defaults.model)) values.model = defaults.model
+    if (defaults.effort !== null) values.model_reasoning_effort = defaults.effort
+    return { values, version: snapshot.version }
+  }
 }
 
 import { sandboxCommand } from './command-sandbox.mjs'
+
+// 经 litch/harness/mcp/login 开的 MCP 授权不属于哪条连接：连接断开不撤销它，到时限自己结束
+const HARNESS_CONFIG_PEER = 'harness-config'
 
 // 线程没有连接订阅时的占位：通知无处可送，路由仍先看线程当前的订阅者。
 const DETACHED_PEER_PREFIX = 'detached:'
