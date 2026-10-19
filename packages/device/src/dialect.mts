@@ -3,6 +3,7 @@
 //   - 原生的 codex（native-codex.mts）：只说标准的 Codex 协议，不认识我们加的任何东西。
 // 两种上游在路由上完全一样（按会话归属、按 harness 参数转发，通知和服务端请求原样带回）；
 // 不一样的只有下面这几处，都收在这个接口后面，路由那几个文件不用知道对面是谁。
+import type { HarnessConfigTranslator, TranslatorContext } from './harness-config.mjs'
 import { isObject, type RpcError } from './wire.mjs'
 
 /** 握手之后向这个上游问一句 */
@@ -38,6 +39,11 @@ export interface UpstreamDialect {
    * 会把同一个调用发给所有订阅连接（client-tools.mts）。适配器的运行时自己挑，不用设
    */
   clientToolsByDevice?: boolean
+  /**
+   * harness 详情设置（harnessConfig 扩展）：这个上游不认识 `litch/harness/*`，由设备进程替它答。
+   * 每条客户端连接建一个翻译器。适配器的运行时自己实现这些方法，不用设（聚合面原样转过去）
+   */
+  harnessConfig?(context: TranslatorContext): HarnessConfigTranslator
 }
 
 /**

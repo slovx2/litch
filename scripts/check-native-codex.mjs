@@ -1,6 +1,7 @@
 // 对着这台机器上真的 codex 检查“原生 codex 接进聚合面”：
 // 真的适配器主进程（Go，现编到临时目录里）+ 真的设备进程 + PATH 里的 codex，客户端只连聚合面，
-// 在设置里把 Codex 打开，看它的声明，新建会话跑一个回合，再跑要审批的回合（命令的、文件改动的各一个），最后关掉。
+// 在设置里把 Codex 打开，看它的声明，新建会话跑一个回合，再跑要审批的回合（命令的、文件改动的各一个），
+// 再走一遍 harness 详情设置（配置项、provider 与登录、MCP、指令文件与统一模式），最后关掉。
 // CI 上没有 codex，自动化测试用的是假的 codex（packages/device/test/service-codex.test.mts）；这一条在本机跑。
 //
 // 用法：node scripts/check-native-codex.mjs（先 npm run build --prefix packages/device；需要本机有 go）
@@ -15,7 +16,15 @@
 // - 不连真实的适配器状态目录（~/.codex-harness-adapter）；Claude Code 和 Pi 的命令行指到不存在的路径，不会被拿去跑；
 // - 结束时按进程号收掉自己起的进程，删掉临时目录和 codex 在 /tmp/codex-daemon-<uid>/ 下给这个套接字留的文件。
 import { spawn, spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { WebSocket } from 'ws'
@@ -265,6 +274,167 @@ function run(args, env, timeoutMs = 120_000) {
   })
 }
 
+/**
+ * harness 详情设置（harnessConfig）：设备进程把 litch/harness/* 翻译成 codex 自己的 config/*、account/*、
+ * mcpServer/* 等。读写的都是隔离数据目录里的 config.toml；登录只验到拿到授权链接为止（回环之外连不出去，
+ * 设备码要问 auth.openai.com，这里验不了）
+ */
+async function checkHarnessConfig(client) {
+  const codexToml = join(dirs.codexHome, 'config.toml')
+  const CHANGED = 'litch/harness/config/changed'
+  const read = await client.call('litch/harness/config/read', { harness: 'codex' })
+  const keys = read.settings.map((spec) => spec.key)
+  expect(
+    typeof read.version === 'string' && read.values.model === 'fixture-gate',
+    `config/read 应读出 config.toml 里的 model：${JSON.stringify(read.values)}`,
+  )
+  expect(
+    ['model', 'model_reasoning_effort', 'approval_policy', 'sandbox_mode', 'web_search'].every(
+      (key) => keys.includes(key),
+    ),
+    `配置项不全：${JSON.stringify(keys)}`,
+  )
+  let mark = client.incoming.length
+  const written = await client.call('litch/harness/config/write', {
+    harness: 'codex',
+    edits: [
+      { key: 'model_reasoning_effort', value: 'high' },
+      { key: 'sandbox_workspace_write.network_access', value: true },
+    ],
+    expectedVersion: read.version,
+  })
+  await client.waitFor('配置变化的通知', (frame) => frame.method === CHANGED, mark)
+  const toml = readFileSync(codexToml, 'utf8')
+  expect(
+    toml.includes('model_reasoning_effort = "high"') &&
+      toml.includes('model_provider = "fixture"') &&
+      toml.includes('network_access = true'),
+    `config.toml 没写对：\n${toml}`,
+  )
+  const stale = await client
+    .call('litch/harness/config/write', {
+      harness: 'codex',
+      edits: [{ key: 'model_reasoning_effort', value: 'low' }],
+      expectedVersion: read.version,
+    })
+    .catch((error) => error)
+  expect(
+    stale.data?.litch === 'versionConflict',
+    `旧版本应回 versionConflict：${JSON.stringify(stale.data)}`,
+  )
+  await client.call('litch/harness/config/write', {
+    harness: 'codex',
+    edits: [
+      { key: 'model_reasoning_effort', value: null },
+      { key: 'sandbox_workspace_write.network_access', value: null },
+    ],
+    expectedVersion: written.version,
+  })
+  passed(
+    `配置项：${read.settings.length} 项、${read.groups.length} 组，写进 config.toml 只改那几个键，旧版本被拒`,
+  )
+
+  const providers = await client.call('litch/harness/providers/read', { harness: 'codex' })
+  const fixture = providers.providers.find((item) => item.id === 'fixture')
+  const openai = providers.providers.find((item) => item.id === 'openai')
+  expect(
+    fixture?.active && fixture.kind === 'custom',
+    `fixture 应是在用的自定义 provider：${JSON.stringify(fixture)}`,
+  )
+  expect(
+    openai?.methods.map((method) => method.id).join() === 'chatgpt,chatgptDeviceCode,apiKey',
+    `openai 的登录方式不对：${JSON.stringify(openai?.methods)}`,
+  )
+  await client.call('litch/harness/providers/upsert', {
+    harness: 'codex',
+    providerId: 'check-gw',
+    templateId: 'openaiCompatible',
+    definition: { name: 'Check GW', base_url: 'http://127.0.0.1:9/v1', env_key: 'CHECK_GW_KEY' },
+    expectedVersion: providers.version,
+  })
+  expect(
+    readFileSync(codexToml, 'utf8').includes('requires_openai_auth = false'),
+    '自定义 provider 应写 requires_openai_auth = false',
+  )
+  await client.call('litch/harness/providers/remove', { harness: 'codex', providerId: 'check-gw' })
+  expect(
+    !readFileSync(codexToml, 'utf8').includes('check-gw'),
+    '删掉的 provider 还在 config.toml 里',
+  )
+  mark = client.incoming.length
+  const login = await client.call('litch/harness/auth/start', {
+    harness: 'codex',
+    providerId: 'openai',
+    methodId: 'chatgpt',
+  })
+  expect(
+    login.step.kind === 'openUrl' &&
+      login.step.url.startsWith('https://auth.openai.com/') &&
+      Number.isInteger(login.step.callbackPort),
+    `ChatGPT 登录应给授权链接和回调端口：${JSON.stringify(login.step).slice(0, 300)}`,
+  )
+  await client.call('litch/harness/auth/cancel', { harness: 'codex', attemptId: login.attemptId })
+  passed(
+    `provider：在用的是 ${fixture.id}，自定义的增删写对了；ChatGPT 登录拿到授权链接，回调端口 ${login.step.callbackPort}（设备码要联网，这里没验）`,
+  )
+
+  const mcp = await client.call('litch/harness/mcp/read', { harness: 'codex' })
+  const upserted = await client.call('litch/harness/mcp/upsert', {
+    harness: 'codex',
+    server: {
+      name: 'check-echo',
+      transport: 'stdio',
+      enabled: false,
+      command: '/bin/echo',
+      args: ['hi'],
+    },
+    expectedVersion: mcp.version,
+  })
+  const listed = await client.call('litch/harness/mcp/read', { harness: 'codex' })
+  const echo = listed.servers.find((item) => item.name === 'check-echo')
+  expect(
+    echo?.command === '/bin/echo' && echo.status?.state === 'disabled',
+    `MCP 没写对：${JSON.stringify(echo)}`,
+  )
+  await client.call('litch/harness/mcp/remove', {
+    harness: 'codex',
+    name: 'check-echo',
+    expectedVersion: upserted.version,
+  })
+  passed('MCP：加一个 stdio 的服务、读回来、删掉')
+
+  // codex 握手时报的数据目录是解析过链接的（/tmp 在 macOS 上是 /private/tmp）
+  const agents = join(realpathSync(dirs.codexHome), 'AGENTS.md')
+  const instructions = await client.call('litch/harness/instructions/read', { harness: 'codex' })
+  expect(instructions.path === agents, `指令文件应是 $CODEX_HOME/AGENTS.md：${instructions.path}`)
+  await client.call('litch/harness/instructions/write', {
+    harness: 'codex',
+    content: '# 检查\n',
+    expectedHash: instructions.hash,
+  })
+  const claudeHome = join(dirs.userHome, '.claude')
+  mkdirSync(claudeHome, { recursive: true })
+  const claudeMd = join(claudeHome, 'CLAUDE.md')
+  writeFileSync(claudeMd, '原来的\n')
+  const unified = await client.call('litch/device/instructions/unify', {
+    sourcePath: agents,
+    content: '# 统一\n',
+    linkPaths: [claudeMd, join(dirs.userHome, '.dsh', 'AGENTS.md')],
+  })
+  expect(
+    unified.results.map((item) => item.outcome).join() === 'linked,skipped' &&
+      readFileSync(claudeMd, 'utf8') === '# 统一\n' &&
+      readFileSync(unified.results[0].backup, 'utf8') === '原来的\n',
+    `统一模式不对：${JSON.stringify(unified)}`,
+  )
+  const separated = await client.call('litch/device/instructions/separate', {
+    sourcePath: agents,
+    linkPaths: [claudeMd],
+  })
+  expect(separated.separated.length === 1, `退出统一模式不对：${JSON.stringify(separated)}`)
+  passed('指令文件：读写 $CODEX_HOME/AGENTS.md；统一模式换成软链、原文件备份，退出后换回副本')
+}
+
 async function main() {
   if (built.status !== 0)
     throw new Error(`适配器主进程没有编出来（需要本机有 go）：${built.stderr || built.error}`)
@@ -288,7 +458,7 @@ async function main() {
     capabilities: {
       experimentalApi: true,
       requestAttestation: false,
-      litchExtensions: ['harness', 'deviceSettings', 'declineWithNote'],
+      litchExtensions: ['harness', 'deviceSettings', 'declineWithNote', 'harnessConfig'],
     },
   })
   const codexInfo = async () =>
@@ -325,10 +495,10 @@ async function main() {
   expect(info.available && info.engine === 'codex', `应该可用：${JSON.stringify(info.unavailable)}`)
   expect(/^\d+\.\d+\.\d+/.test(info.version ?? ''), `版本没有认出来：${info.version}`)
   expect(info.features && info.permissionPresets?.length > 0, '声明里应有能力位和权限预设')
-  // 它不认识我们的扩展；只有客户端工具是设备进程替它挑执行方，所以报这一项
+  // 它不认识我们的扩展；客户端工具是设备进程替它挑执行方，harness 详情设置是设备进程替它翻译，所以报这两项
   expect(
-    JSON.stringify(info.extensions) === JSON.stringify(['clientTools']),
-    `扩展只应有设备进程替它做的 clientTools：${JSON.stringify(info.extensions)}`,
+    JSON.stringify(info.extensions) === JSON.stringify(['clientTools', 'harnessConfig']),
+    `扩展只应有设备进程替它做的 clientTools、harnessConfig：${JSON.stringify(info.extensions)}`,
   )
   passed(
     `启用后可用：${info.displayName} ${info.version}（${codex}），权限预设 ${info.permissionPresets.map((preset) => preset.id).join('、')}`,
@@ -498,6 +668,8 @@ async function main() {
     `参数不对应是它的原话：${JSON.stringify([invalid.code, invalid.message, invalid.data])}`,
   )
   passed(`不支持和别的错误分得开：${unsupported.message}｜${invalid.message.slice(0, 80)}`)
+
+  await checkHarnessConfig(client)
 
   // 客户端核心也走一遍：借用客户端的自检小工具（只用，不改它），让它直接连这个聚合面，
   // 用客户端自己的连接层握手、在 codex 上新建会话、跑一个回合

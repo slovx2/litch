@@ -19,6 +19,7 @@ import {
   DEVICE_SETTINGS_CHANGED,
   type DeviceSettingsChangedNotification,
 } from '../../protocol/src/device-settings.mjs'
+import type { HarnessConfigChangedNotification } from '../../protocol/src/harness-config.mjs'
 import { localTaskTimeZone } from '../../protocol/src/task-schedule.mjs'
 import { clientToolNamespaces } from '../../shared/src/client-tool-executor.mjs'
 import { ProtocolError, requiredString } from '../../shared/src/protocol-contract.mjs'
@@ -33,7 +34,15 @@ import type { ClientToolPeer, ClientToolRouter } from './client-tools.mjs'
 import type { ManagedHarness } from './control.mjs'
 import { DeviceCalls, type DeviceLayer } from './device-layer.mjs'
 import { type DeviceTools, declareDeviceTools } from './device-tools.mjs'
+import {
+  HarnessConfigError,
+  type HarnessConfigTranslator,
+  INSTRUCTIONS_METHODS,
+  isHarnessConfigMethod,
+  text,
+} from './harness-config.mjs'
 import { describeHarness, type HarnessCatalog, REQUIRED_EXTENSIONS } from './harness-info.mjs'
+import { instructionsCall } from './instructions.mjs'
 import { listThreads } from './list-threads.mjs'
 import { type DeviceManagement, MANAGEMENT_PREFIX } from './management.mjs'
 import { dialectFor } from './native-codex.mjs'
@@ -126,6 +135,10 @@ export interface SessionHost {
   sessionTreeOn(): boolean
   /** 扫码绑定手机（devicePairing）。设备进程没给配置时是 null */
   pairing: DevicePairing | null
+  /** harness 详情设置经设备进程的翻译改了配置：告诉所有声明过 harnessConfig 的连接 */
+  harnessConfigChanged(params: HarnessConfigChangedNotification): void
+  /** 设备设置里 `harness.<id>.env` 填了哪些变量名。没有设置功能时是空的 */
+  harnessEnvNames(harness: string): string[]
 }
 
 /** 请求已经有着落：转给上游了（应答由上游来），或者已经自己答过了 */
@@ -170,6 +183,8 @@ export class ClientSession implements ClientToolPeer {
   /** 每个 harness 上一次报给客户端的声明，用来判断状态是不是真的变了 */
   private readonly announced = new Map<string, string>()
   private readonly probes = new Map<string, Promise<string | null>>()
+  /** 替不认识 litch/harness/* 的上游（原生 codex）答这些方法的翻译器，每个 harness 一个，用到才建 */
+  private readonly translators = new Map<string, HarnessConfigTranslator>()
 
   constructor(host: SessionHost, wire: Wire) {
     this.host = host
@@ -183,6 +198,8 @@ export class ClientSession implements ClientToolPeer {
       startedHoldMs: host.timing.startedHoldMs,
       log: (line) => host.log(`${this.tag} ${line}`),
       deviceTools: host.deviceTools,
+      observe: (link, method, params) =>
+        this.translators.get(link.harness)?.notification(method, params),
       sessions: {
         clientTurn: (harness, turnId) => host.sessionTree.clientTurn(harness, turnId),
         turnEvent: (harness, method, params) => host.sessionTree.turnEvent(harness, method, params),
@@ -234,6 +251,8 @@ export class ClientSession implements ClientToolPeer {
     const greeted = this.state === 'ready'
     this.state = 'closed'
     for (const link of this.links.values()) link.stop()
+    for (const translator of this.translators.values()) translator.close()
+    this.translators.clear()
     this.relay.close()
     this.calls.close()
     this.host.clientTools.left(this)
@@ -329,6 +348,8 @@ export class ClientSession implements ClientToolPeer {
             method,
             frame.params,
           )
+        // 统一模式（harnessConfig）：只是文件操作，设备进程自己做，不经主进程
+        if (INSTRUCTIONS_METHODS.has(method)) return instructionsCall(method, frame.params)
         if (method.startsWith(MANAGEMENT_PREFIX))
           return this.host.management.call(method, frame.params)
         if (method.startsWith(DEVICE_TASK_PREFIX)) return this.tasks(method, frame.params)
@@ -353,6 +374,8 @@ export class ClientSession implements ClientToolPeer {
           frame.params,
         )
       case 'harness':
+        if (isHarnessConfigMethod(method))
+          return this.harnessConfig(route.harness, id, method, frame, raw)
         return this.forward(this.link(route.harness), id, method, frame, raw)
       case 'thread': {
         // 归属和置顶归设备层，别的字段还是要到会话所属的引擎：拆开来做
@@ -369,6 +392,50 @@ export class ClientSession implements ClientToolPeer {
     const link = this.links.get(harness)
     if (!link) throw new DeviceError('unknownHarness', `这台设备上没有配置 ${harness}`, { harness })
     return link
+  }
+
+  /**
+   * harness 详情设置的方法（litch/harness/*）。适配器的引擎自己实现，原样转过去；
+   * 原生 codex 不认识，交给设备进程替它整理的翻译器（native-codex.mts 的 dialect.harnessConfig）
+   */
+  private harnessConfig(
+    harness: string,
+    id: RpcId,
+    method: string,
+    frame: Frame,
+    raw: string,
+  ): unknown {
+    const link = this.link(harness)
+    if (!link.available)
+      throw new HarnessConfigError(
+        'unavailable',
+        harness,
+        text(
+          `${harness} 现在不可用：${link.failure.message}`,
+          `${harness} is not available right now`,
+        ),
+      )
+    const translator = this.translator(link)
+    if (!translator) return this.forward(link, id, method, frame, raw, true)
+    return translator.call(method, isObject(frame.params) ? frame.params : {})
+  }
+
+  private translator(link: UpstreamLink): HarnessConfigTranslator | null {
+    const known = this.translators.get(link.harness)
+    if (known) return known
+    const made = link.dialect.harnessConfig?.({
+      harness: link.harness,
+      ask: (method, params, timeoutMs) => this.query(link, method, params, timeoutMs),
+      home: () => link.facts.home ?? null,
+      envNames: () => this.host.harnessEnvNames(link.harness),
+      notify: (method, params) => {
+        if (this.declared.has(EXTENSION.harnessConfig)) this.announce(method, params)
+      },
+      changed: (part) => this.host.harnessConfigChanged({ harness: link.harness, part }),
+    })
+    if (!made) return null
+    this.translators.set(link.harness, made)
+    return made
   }
 
   /** 会话所属的上游。索引里有的立刻给出；没有的向各上游问一遍 */
@@ -389,12 +456,17 @@ export class ClientSession implements ClientToolPeer {
     )
   }
 
+  /**
+   * keepHarness：harness 参数也带过去。harnessConfig 的方法参数里本来就有它（引擎声明过这项扩展，认识它），
+   * 别的方法上它是聚合面的扩展参数，上游不认识
+   */
   private forward(
     link: UpstreamLink,
     id: RpcId,
     method: string,
     frame: Frame,
     raw: string,
+    keepHarness = false,
   ): typeof HANDLED {
     const fields = isObject(frame.params) ? frame.params : null
     // 新建会话带的工作区是设备层的，先摘下来，应答回来时再记
@@ -402,7 +474,7 @@ export class ClientSession implements ClientToolPeer {
       ? this.host.workspaces.outgoing(method, fields)
       : { expectation: null, withhold: [] }
     // harness 是聚合面的扩展参数，上游没声明认识它，不能带过去
-    const dropped = ['harness', ...withhold]
+    const dropped = keepHarness ? withhold : ['harness', ...withhold]
     let params = fields
     if (fields && dropped.some((key) => key in fields))
       params = Object.fromEntries(Object.entries(fields).filter(([key]) => !dropped.includes(key)))
@@ -433,10 +505,15 @@ export class ClientSession implements ClientToolPeer {
   }
 
   /** 设备层自己向一个上游问一句，等它的应答 */
-  private async query(link: UpstreamLink, method: string, params: unknown): Promise<unknown> {
+  private async query(
+    link: UpstreamLink,
+    method: string,
+    params: unknown,
+    timeoutMs = this.host.timing.probeTimeoutMs,
+  ): Promise<unknown> {
     if (!link.available) throw this.unavailable(link, method)
     try {
-      return await link.request(method, params, this.host.timing.probeTimeoutMs)
+      return await link.request(method, params, timeoutMs)
     } catch (error) {
       // 上游明确回的错误原样带给客户端（和转发的请求一样，它那种“话”里意思不一样的才换）；
       // 等的时候它断开了的，照“不可用”报

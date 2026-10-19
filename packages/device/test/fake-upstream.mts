@@ -60,10 +60,13 @@ function offsetPage<T>(rows: T[], params: any): { data: T[]; nextCursor: string 
 
 export class RpcFailure extends Error {
   readonly code: number
+  /** 错误里带的 data（真的 codex 写配置被拒时带 config_write_error_code）。不给就不带 */
+  readonly data: unknown
 
-  constructor(code: number, message: string) {
+  constructor(code: number, message: string, data?: unknown) {
     super(message)
     this.code = code
+    this.data = data
   }
 }
 
@@ -290,7 +293,11 @@ export class FakeUpstream {
       const failure = error as RpcFailure
       connection.send({
         id: frame.id,
-        error: { code: failure.code ?? -32603, message: failure.message },
+        error: {
+          code: failure.code ?? -32603,
+          message: failure.message,
+          ...(failure.data === undefined ? {} : { data: failure.data }),
+        },
       })
     }
   }

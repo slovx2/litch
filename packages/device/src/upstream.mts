@@ -24,6 +24,8 @@ export interface UpstreamFacts {
    * （native-codex.mts）。拿不到（旧版的适配器不认识这个方法）时是 null
    */
   runtime: Record<string, unknown> | null
+  /** 握手应答里的 codexHome：原生 codex 的数据目录（harness 详情设置读它的指令文件要用）。没有是 null */
+  home?: string | null
 }
 
 export interface ForwardedRequest {
@@ -233,6 +235,7 @@ export class UpstreamLink {
       this.facts = {
         userAgent: isObject(init) && typeof init.userAgent === 'string' ? init.userAgent : null,
         runtime,
+        home: isObject(init) && typeof init.codexHome === 'string' ? init.codexHome : null,
       }
       this.ready = true
       this.failures = 0
