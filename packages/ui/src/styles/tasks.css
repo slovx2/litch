@@ -333,6 +333,7 @@
   min-width: 0;
   display: flex;
   flex-wrap: wrap;
+  justify-content: flex-end;
   height: 12px;
   margin-left: -6px;
   overflow: hidden;

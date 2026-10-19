@@ -48,6 +48,8 @@ tags: [mock]
 - tapOn:
     id: task:prompt
 - inputText: say hi
+# 键盘开着时去点表单里的选项不一定点得上（CI 的模拟器上点了“每周”星期那一排却没出来），先收起来
+- hideKeyboard
 - tapOn:
     id: task:type:weekly
 - scrollUntilVisible:
@@ -62,6 +64,7 @@ tags: [mock]
     id: task:time
 - eraseText: 10
 - inputText: '08:30'
+- hideKeyboard
 - scrollUntilVisible:
     element:
       id: task:preview
