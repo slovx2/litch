@@ -43,18 +43,22 @@ tags: [mock]
     id: hc:tab:accounts:pick
 - tapOn:
     id: hc:provider:console:method:console
-- extendedWaitUntil:
-    visible:
+# 登录那一块出在卡片底下，屏幕小的模拟器上（流水线用的默认机型）要滚下去才看得见
+- scrollUntilVisible:
+    element:
       id: hc:attempt:.*:code
     timeout: 10000
 - tapOn:
     id: hc:attempt:.*:code
 - inputText: abc#def
 - hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: hc:attempt:.*:send
 - tapOn:
     id: hc:attempt:.*:send
-- extendedWaitUntil:
-    visible:
+- scrollUntilVisible:
+    element:
       id: hc:attempt:.*:done
     timeout: 10000
 # API key：写进设备设置，要重启才生效
@@ -67,15 +71,20 @@ tags: [mock]
     id: hc:provider:api-key:form:value
 - inputText: sk-e2e-1234
 - hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: hc:provider:api-key:form:submit
 - tapOn:
     id: hc:provider:api-key:form:submit
-- extendedWaitUntil:
-    visible:
+- scrollUntilVisible:
+    element:
       id: hc:provider:api-key:form:said
     timeout: 10000
-- extendedWaitUntil:
-    visible:
+# 要重启的提示在页面顶上
+- scrollUntilVisible:
+    element:
       id: hc:restart
+    direction: UP
     timeout: 10000
 - tapOn:
     id: hc:restart:now
