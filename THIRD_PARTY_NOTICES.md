@@ -3,6 +3,7 @@
 - macOS/Linux 伪终端使用 `github.com/creack/pty v1.1.24`，MIT，Copyright (c) 2011 Keith Rarick。
 - Windows ConPTY 使用 `github.com/UserExistsError/conpty v0.1.4`，MIT，Copyright (c) 2020 UserExistsError。
 - Windows 命名管道使用 `github.com/Microsoft/go-winio v0.6.2`，MIT，版权归 Microsoft Corporation。
+- 命令行 `pair` 在终端里画二维码使用 `rsc.io/qr v0.2.0`，BSD-3-Clause，Copyright (c) 2009 The Go Authors。
 
 - 基础适配器来自 https://github.com/fuergaosi233/claude-codex ，MIT，Copyright (c) 2026 fuergaosi233。原始许可证保留在 LICENSE。
 - SSH 通用代码来自 Tyrs Hand，MIT，Copyright (c) 2026 tyrs-hand contributors。源文件保留署名。
