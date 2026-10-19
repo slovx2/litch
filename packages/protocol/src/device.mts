@@ -77,6 +77,12 @@ export const EXTENSION = {
    * 声明了它的连接才会在会话对象上看到 litchLineage、收到相关通知。
    */
   sessionTree: 'sessionTree',
+  /**
+   * 扫码绑定手机：设备服务临时放行一把一次性钥匙，手机登进来登记自己的公钥（device-pairing.mts，
+   * 定义在 protocol/extensions/device-pairing.json）。设备信息的 `extensions` 里列了它，litch/pair/* 才能用；
+   * 声明了它的连接才会收到配对和已绑定手机的变化通知。
+   */
+  devicePairing: 'devicePairing',
 } as const
 
 export type ExtensionName = (typeof EXTENSION)[keyof typeof EXTENSION]

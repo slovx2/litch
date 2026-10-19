@@ -1,0 +1,34 @@
+{
+  "extension": "devicePairing",
+  "status": "初稿（2026-10-19 主线落的约定），设备侧线补齐 JSON Schema 和规则",
+  "description": "扫码绑定手机：出码的一方（桌面端经聚合面，或设备上的命令行 pair 直连 device.sock）让设备服务建一个配对，设备服务往当前用户的 authorized_keys 末尾追加一把一次性钥匙行（restrict、强制命令 pair-enroll <配对号>、expiry-time），把种子交给出码的一方。手机扫码后用这把钥匙 SSH 登录，sshd 只让它跑 pair-enroll；手机往标准输入写一行公钥和名字，设备服务通知出码的一方，允许后追加手机的钥匙行、删掉一次性钥匙行，pair-enroll 把结果写回标准输出。类型、二维码编解码、确认码算法在 packages/protocol/src/device-pairing.mts。",
+  "appliesTo": "只有聚合面。兼容面上没有这个扩展的任何内容。",
+  "declaration": {
+    "description": "设备服务在 runtime/info 的 device.extensions 里列出 devicePairing，表示支持。方法不要求握手时声明（命令行不握手）；通知 litch/pair/changed、litch/pair/phones/changed 只发给握手时在 capabilities.litchExtensions 里列了 devicePairing 的连接。",
+    "where": "initialize.params.capabilities.litchExtensions",
+    "schema": {
+      "type": "array",
+      "items": { "type": "string" },
+      "contains": { "const": "devicePairing" }
+    }
+  },
+  "undeclared": "没声明的连接收不到这两个通知，方法照样能调；命令行用 litch/pair/wait 长轮询代替通知。",
+  "methods": [
+    "litch/pair/start",
+    "litch/pair/cancel",
+    "litch/pair/decide",
+    "litch/pair/wait",
+    "litch/pair/enroll",
+    "litch/pair/phones",
+    "litch/pair/revoke"
+  ],
+  "notifications": ["litch/pair/changed", "litch/pair/phones/changed"],
+  "rules": [
+    "钥匙文件：当前用户的 ~/.ssh/authorized_keys（测试时由环境变量 LITCH_AUTHORIZED_KEYS 指定别的路径）。加锁；只在末尾追加、按行尾标记删行，其他字节不动；写临时文件再改名，文件 600、目录 700；是符号链接、不可写、属主不是当前用户时不改，报 keysFile。",
+    "一次性钥匙行：restrict,command=\"<适配器路径> pair-enroll <配对号>\",expiry-time=\"<UTC>\" ssh-ed25519 <公钥> litch-pair:<配对号>。expiry-time 只在 sshd 是 OpenSSH 8.2 及以上时加。pair-enroll 每次都向设备服务核对配对号，过期、用过、取消的一律拒绝，所以残留的行无害。",
+    "清理：配对 done、expired、cancelled、rejected 时删掉它的行；设备服务启动时删掉所有 litch-pair: 行（配对只存在内存里）。",
+    "手机钥匙行：ssh-ed25519 <公钥> litch-mobile:<手机号> <名字> <YYYY-MM-DD>，不加选项。名字去掉控制字符和空白以外的不可见字符，空格换成下划线，截到 PAIR_PHONE_NAME_MAX。同一个公钥已经在文件里就不重复写，回 ok。",
+    "一个配对号只接受一部手机：requested 期间别的登记回 used；拒绝或 2 分钟没表态，配对作废（rejected）。",
+    "pair-enroll 子命令：读标准输入的一行（最多 4 KB），调 litch/pair/enroll，把结果写成一行到标准输出后退出，退出码 0；连不上设备服务回 unavailable。"
+  ]
+}

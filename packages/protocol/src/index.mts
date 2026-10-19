@@ -31,6 +31,30 @@ export {
   THREAD_SECTIONS_CHANGED,
 } from './device.mjs'
 export type * from './device-codex.mjs'
+// 扫码绑定手机（devicePairing 扩展）：二维码内容的编解码、手机与 pair-enroll 之间的一行、方法和通知。不依赖别的文件
+export type * from './device-pairing.mjs'
+export {
+  base64UrlDecode,
+  DEVICE_PAIR_CANCEL,
+  DEVICE_PAIR_CHANGED,
+  DEVICE_PAIR_DECIDE,
+  DEVICE_PAIR_ENROLL,
+  DEVICE_PAIR_ERROR,
+  DEVICE_PAIR_PHONES,
+  DEVICE_PAIR_PHONES_CHANGED,
+  DEVICE_PAIR_REVOKE,
+  DEVICE_PAIR_START,
+  DEVICE_PAIR_WAIT,
+  decodePairPayload,
+  encodePairPayload,
+  PAIR_DECIDE_TIMEOUT_MS,
+  PAIR_ENROLL_ERROR,
+  PAIR_KEY_MARK,
+  PAIR_PAYLOAD_PREFIX,
+  PAIR_PHONE_NAME_MAX,
+  PAIR_TTL_MS,
+  PHONE_KEY_MARK,
+} from './device-pairing.mjs'
 // 可重连的终端（deviceProcesses 扩展）：属于设备的进程的列出、挂接、解除、结束、清除。不依赖别的文件
 export type * from './device-processes.mjs'
 export {

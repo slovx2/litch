@@ -55,6 +55,7 @@ import type {
   SettingsWriteResult,
   SshConfigView,
 } from '../model-manage.mjs'
+import type { PairingAddress, PairingView, PairPhone, PairStatus } from '../model-pairing.mjs'
 import type { TaskDraft, TaskPatch, TaskRunView, TasksView, TaskView } from '../model-tasks.mjs'
 import type {
   TerminalHave,
@@ -692,6 +693,28 @@ export interface Commands {
     params: { deviceId: string; taskId?: string; runIds?: string[] }
     result: Record<string, never>
   }
+  // ---------- 扫码绑定手机 ----------
+  // 都要设备列了 devicePairing，不然以 unsupported 结束；没连上以 offline 结束。失败的 key 见 PairingStartFailure。
+  /** 出码：设备上建配对、核对主机钥匙、自检，都过了才回。配对的状态变化经 pairing.status 回来 */
+  'pairing.start': { params: { deviceId: string }; result: { pairing: PairingView } }
+  /** 关掉对话框、换新码前：作废这个配对 */
+  'pairing.cancel': { params: { deviceId: string; pairId: string }; result: Record<string, never> }
+  /** 允许或拒绝正在登记的手机 */
+  'pairing.decide': {
+    params: { deviceId: string; pairId: string; allow: boolean }
+    result: { status: PairStatus }
+  }
+  /** 当前状态（对话框打开时先拿一次，之后跟通知） */
+  'pairing.status': { params: { deviceId: string; pairId: string }; result: { status: PairStatus } }
+  /** 记下这台设备给手机用的地址；null 是忘掉、回到原配置 */
+  'pairing.rememberAddress': {
+    params: { deviceId: string; address: PairingAddress | null }
+    result: Record<string, never>
+  }
+  /** 这台设备上已绑定的手机 */
+  'pairing.phones': { params: { deviceId: string }; result: { phones: PairPhone[] } }
+  /** 撤掉一部手机的钥匙行 */
+  'pairing.revoke': { params: { deviceId: string; phoneId: string }; result: Record<string, never> }
   // ---------- 会话树 ----------
   // 这一组要设备服务声明了会话树（DeviceView.sessionTree），没有时以 unsupported 结束（session.agents 除外）。
   /**

@@ -121,6 +121,20 @@ import type {
   ThreadSectionUpdatedNotification,
 } from './device.mjs'
 import type {
+  DevicePairChangedNotification,
+  DevicePairDecideParams,
+  DevicePairEnrollParams,
+  DevicePairEnrollResponse,
+  DevicePairIdParams,
+  DevicePairPhonesChangedNotification,
+  DevicePairPhonesResponse,
+  DevicePairRevokeParams,
+  DevicePairStartParams,
+  DevicePairStartResponse,
+  DevicePairWaitParams,
+  PairStatus,
+} from './device-pairing.mjs'
+import type {
   DeviceProcessAttachParams,
   DeviceProcessAttachResponse,
   DeviceProcessChangedNotification,
@@ -324,6 +338,15 @@ export interface ClientRequests {
     params: DeviceTaskRunsMarkReadParams
     result: Record<string, never>
   }
+  // 以下是扫码绑定手机（扩展 devicePairing，见 device-pairing.mts）：只有聚合面有，
+  // 设备信息的 `extensions` 里列了 devicePairing 才能用；不要求握手时声明（命令行直接连 device.sock 调）
+  'litch/pair/start': { params: DevicePairStartParams; result: DevicePairStartResponse }
+  'litch/pair/cancel': { params: DevicePairIdParams; result: Record<string, never> }
+  'litch/pair/decide': { params: DevicePairDecideParams; result: PairStatus }
+  'litch/pair/wait': { params: DevicePairWaitParams; result: PairStatus }
+  'litch/pair/enroll': { params: DevicePairEnrollParams; result: DevicePairEnrollResponse }
+  'litch/pair/phones': { params: Record<string, never>; result: DevicePairPhonesResponse }
+  'litch/pair/revoke': { params: DevicePairRevokeParams; result: Record<string, never> }
   // 以下是会话树（扩展 sessionTree，见 session-tree.mts）：只有聚合面有，
   // 而且设备信息的 `extensions` 里列了 sessionTree 才能用
   'litch/session/start': { params: SessionStartParams; result: SessionStartResponse }
@@ -419,6 +442,10 @@ export interface ServerNotifications {
   'litch/thread/lineage/updated': LineageUpdatedNotification
   /** 扩展，只发给握手时声明过 sessionTree 的连接：一个会话上的提案变了 */
   'litch/sessionProposal/changed': ProposalChangedNotification
+  /** 扩展，只发给握手时声明过 devicePairing 的连接：一个配对的状态变了 */
+  'litch/pair/changed': DevicePairChangedNotification
+  /** 扩展，只发给握手时声明过 devicePairing 的连接：已绑定的手机多了、少了 */
+  'litch/pair/phones/changed': DevicePairPhonesChangedNotification
   /** 扩展，只发给握手时声明过 deviceTasks 的连接：任务多了、变了、没了 */
   'litch/task/changed': DeviceTaskChangedNotification
   /** 扩展，只发给握手时声明过 deviceTasks 的连接：一次运行开始了、结束了、标成看过了 */
