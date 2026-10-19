@@ -1,6 +1,9 @@
 // `litch config` 的操作清单：桌面端核心的执行器（litch_config）必须正好实现这些，产品手册（skills/litch-manual）
 // 必须每个都讲到，两边各有检查对着它。加一个操作：先在这里加一行，再改执行器和手册。
 //
+// 只覆盖 Litch 自己的功能。装 harness、改系统设置这类系统行为 Agent 照官方做法自己做，这里不再包一层
+// （用户 2026-10-19：“harness安装本来就是属于系统行为，我们就不再额外包一层。其他能力也一样。只覆盖【Litch相关功能】”）。
+//
 // 这个文件不引用别的文件。
 
 export interface ConfigOp {
@@ -42,11 +45,9 @@ export const CONFIG_OPS: readonly ConfigOp[] = [
   { group: 'settings', action: 'set', write: true },
 
   { group: 'harness', action: 'list', write: false },
-  { group: 'harness', action: 'versions', write: false },
   { group: 'harness', action: 'enable', write: true },
   { group: 'harness', action: 'disable', write: true },
   { group: 'harness', action: 'restart', write: true },
-  { group: 'harness', action: 'install', write: true },
 
   { group: 'phones', action: 'list', write: false },
   { group: 'phones', action: 'pair', write: false },
@@ -74,7 +75,6 @@ export const CONFIG_OPS: readonly ConfigOp[] = [
   { group: 'browser', action: 'clear-data', write: true, irreversible: true },
 
   { group: 'computer', action: 'status', write: false },
-  { group: 'computer', action: 'open-settings', write: false },
   { group: 'computer', action: 'apps', write: false },
   { group: 'computer', action: 'forget', write: true },
 
