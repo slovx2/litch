@@ -4,8 +4,8 @@
 // 改了什么就给声明过扩展的连接发 litch/harness/config/changed；登录的进展发 litch/harness/auth/updated。
 
 import { createHash } from 'node:crypto'
-import { lstatSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { lstatSync, mkdirSync, readFileSync, readlinkSync, writeFileSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
 import {
   HARNESS_CONFIG_NOTIFICATION,
   type HarnessAuthStep,
@@ -47,7 +47,8 @@ function readInstructions(): HarnessInstructionsInfo {
   } catch {}
   let linkTarget: string | null = null
   try {
-    if (lstatSync(path).isSymbolicLink()) linkTarget = realpathSync(path)
+    // 照软链里写的、按它所在的目录解析，不再往下解析一层：和统一模式给的 sourcePath 对得上
+    if (lstatSync(path).isSymbolicLink()) linkTarget = resolve(dirname(path), readlinkSync(path))
   } catch {}
   return {
     path,

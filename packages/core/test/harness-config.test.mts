@@ -16,7 +16,7 @@ import {
   type HarnessConfigTopicView,
   type RemoteTarget,
 } from '../src/index.mjs'
-import { fakeDevice, harness } from './fake-device.mjs'
+import { fakeDevice, harness, infoOf } from './fake-device.mjs'
 import { fakeOpener, RpcFailure } from './fake-server.mjs'
 import { fakeSettings } from './fake-settings.mjs'
 import { fakeClock, settle } from './helpers.mjs'
@@ -352,6 +352,25 @@ test('env 方式：写进这个 harness 的环境变量表，别的密钥不带�
     w.command('harnessConfig.env.set', { harness: 'pi', name: '1bad', value: 'x' }),
     { code: 'invalid' },
   )
+})
+
+test('harness 自己重启回来（改了环境变量后设备顺手重启的也算）：开着的详情设置重读', async () => {
+  const w = await started()
+  const pi = w.watch('pi')
+  await drain()
+  assert.equal(pi.seen.view?.providers.data?.providers[0]?.auth.signedIn, false)
+  // 新的环境变量只有重启之后的引擎读得到
+  w.state.signedIn = true
+  const declaration = { extensions: ['harnessConfig'] }
+  const down = harness('pi', { declaration, down: { kind: 'starting', message: '正在启动' } })
+  w.broadcast('litch/harness/status/changed', { harness: 'pi', info: infoOf(down) })
+  await drain()
+  w.broadcast('litch/harness/status/changed', {
+    harness: 'pi',
+    info: infoOf(harness('pi', { declaration })),
+  })
+  await drain()
+  assert.equal(pi.seen.view?.providers.data?.providers[0]?.auth.signedIn, true)
 })
 
 test('统一模式：先读各份拿路径，把选中的写成真文件、其余改成软链；之后认得出是统一模式', async () => {

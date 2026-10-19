@@ -18,6 +18,9 @@ versioning or publishing metadata.
 - Litch：首次启动的引导。本机一个能用的 harness 都没有时先引导装一个；有了之后建议试试配置助手。只出一次，设置页“配置助手”里能重新打开
 - Litch：配置助手。新建对话页标题下的“✦ 配置助手”打开一个本机的新对话，填好 `/litch-manual` 和“使用 Litch 产品手册帮我配置：”，用平常的话说要改什么，harness 里的模型照手册用 `litch config` 帮你改：设备与远程设备、工具开关、远程设备操作本机、设备设置与 harness 开关、手机绑定、项目、定时任务、外观与语言、内置浏览器、Computer Use、通知、诊断。放宽权限的改动（打开 Computer Use、远程设备操作本机、放宽审批、浏览器一直允许网站）在桌面端弹确认，人点允许才生效；撤不回的（移除设备、撤掉手机、删定时任务、清内置浏览器数据、清操作记录）模型要先在对话里问过你，桌面端也再弹一次确认；扫码、系统权限、harness 的登录和安装、Litch 自身的更新不经它
 - Litch：产品手册技能 `litch-manual`。每次启动装进本机的 `~/.agents/skills/litch-manual`，并链到 Claude Code、Qwen Code 的技能目录（别人的同名目录不碰，配置目录不在就跳过）；设置页“配置助手”里能关掉、能看装到了哪里
+- Litch：harness 详情设置。设备页每个 harness 一个“详情设置”，读写的是 harness 自己的配置文件（和设备上的命令行共用）：配置项照官方桌面端（Codex 的审批、沙箱、网页搜索、实验特性、技能插件 hooks、记忆；Claude Code 的 `settings.json`；OpenCode、Pi、DSH 各自的设置），账号（浏览器授权、设备码、粘贴授权码、API key，多个 provider 可切换；Codex 登着 ChatGPT 也能用 API key 的 provider），MCP 服务，用户级指令文件（AGENTS.md、Claude Code 的 CLAUDE.md），以及“统一模式”：一份正文，其余 harness 的指令文件改成指向它的软链（原文件先备份）。远程设备上回调到设备本机的登录经 ssh 转发
+- DSH：改用用户自己的 `~/.dsh`（设了 `DSH_HOME` 用它），登录、密钥、模型、MCP 和用户自己开 dsh 共用；会话日志上传仍由 Litch 关掉
+- Claude Code、OpenCode、DSH：新建会话的默认模型改存在 harness 自己的配置里（原来存在适配器自己的文件）
 - 适配器：设备进程新增扩展 `harnessInstall`（`litch/device/harness/versions`、`install`、`install/read` 和进度通知），验证过的版本编进了命令行；命令行多了 `config`（`litch config` 的薄壳，把参数交给连着的 Litch 桌面端执行）
 - Claude Code 用官方脚本装在 `~/.local/bin`、这个目录又不在 PATH 上时（官方脚本会提示这一点），设备页原来报“没装”，现在适配器会在那里找到它（Windows 上是 `%USERPROFILE%\.local\bin`）
 

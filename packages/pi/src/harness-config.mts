@@ -2,7 +2,8 @@
 // 权威在 Pi 自己的文件里（<agent-dir>/settings.json、models.json、mcp.json、auth.json、AGENTS.md），
 // 和设备上的 pi 命令行共用；这里只是按协议的形状读写它们。配置项在 harness-settings.mts，
 // provider 与登录在 harness-providers.mts，MCP 在 harness-mcp.mts。
-import { lstat, mkdir, realpath, stat, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, readlink, stat, writeFile } from 'node:fs/promises'
+import { dirname, resolve } from 'node:path'
 import {
   HARNESS_CONFIG_METHOD,
   type HarnessInstructionsInfo,
@@ -104,7 +105,13 @@ async function instructionsRead(): Promise<HarnessInstructionsInfo> {
     exists: content !== undefined,
     content: content ?? '',
     hash: hashOf(content),
-    linkTarget: link?.isSymbolicLink() ? await realpath(path).catch(() => null) : null,
+    // 照软链里写的、按它所在的目录解析，不再往下解析一层：和统一模式给的 sourcePath 对得上
+    linkTarget: link?.isSymbolicLink()
+      ? await readlink(path).then(
+          (target) => resolve(dirname(path), target),
+          () => null,
+        )
+      : null,
     overriddenBy: (await isFile(override)) ? override : null,
   }
 }

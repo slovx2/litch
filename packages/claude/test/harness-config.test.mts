@@ -385,7 +385,8 @@ test('HC-CLAUDE-004：CLAUDE.md 读写带哈希，软链（统一模式）写到
     await symlink(source, join(claude, 'CLAUDE.md'))
     const linked = readClaudeInstructions()
     assert.equal(linked.content, 'shared\n')
-    assert.equal(linked.linkTarget, await import('node:fs').then((fs) => fs.realpathSync(source)))
+    // 照软链里写的报，不做 realpath（macOS 的临时目录在 /var 下，realpath 会变成 /private/var）
+    assert.equal(linked.linkTarget, source)
     writeClaudeInstructions({ content: 'shared v2\n', expectedHash: linked.hash })
     assert.ok((await lstat(join(claude, 'CLAUDE.md'))).isSymbolicLink())
     assert.equal(await readFile(source, 'utf8'), 'shared v2\n')

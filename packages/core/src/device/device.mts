@@ -981,6 +981,9 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     if (next.state === 'ready') {
       // 取目录时它被跳过了的话，就算我们这边一直当它可用，也要补取
       if (!wasReady || gaps.has(id)) void recover(id)
+      // 重新起来了（改了环境变量之后设备自己重启的也算）：详情设置里开着的那几块重读，
+      // 新的环境变量、配置这时才读得到
+      if (!wasReady && at >= 0) harnessConfig.restarted(id)
     } else if (wasReady) {
       composeCache.delete(id)
       live.harnessDown(id)

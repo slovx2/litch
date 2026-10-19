@@ -488,7 +488,10 @@ export interface HarnessInstructionsInfo {
   content: string
   /** 内容的哈希；不存在时是空串。写的时候作为 expectedHash 带回来 */
   hash: string
-  /** path 本身是软链时指向哪里（解析后的绝对路径），不是软链是 null */
+  /**
+   * path 本身是软链时指向哪里：软链里写的目标按它所在的目录解析成绝对路径，不再往下解析一层（不做 realpath，
+   * 不然 macOS 上 /var 会变成 /private/var，和统一模式给的 sourcePath 对不上）。不是软链是 null
+   */
   linkTarget: string | null
   /** 有更高优先级的文件盖住它（Codex 的 AGENTS.override.md 非空）：那个文件的路径 */
   overriddenBy: string | null

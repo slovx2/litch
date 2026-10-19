@@ -26,6 +26,16 @@ interface AccountsTabProps {
   view: HarnessConfigTopicView
 }
 
+/** 其余的 provider 不超过这么多时直接列出来，多了收进“连接其他 provider” */
+const OTHERS_INLINE = 6
+
+/** 一眼要看的：在用的、登录了的、自定义的、正在登录的；其余（内置但没登录的）默认收起 */
+const isPrimary = (provider: HcProvider, attempts: HarnessConfigTopicView['attempts']): boolean =>
+  provider.active ||
+  provider.auth.signedIn ||
+  provider.kind === 'custom' ||
+  attempts.some((one) => one.providerId === provider.id)
+
 /** 要先填点东西再开始的登录方式：API key（fields 只对它有意义）、环境变量。OAuth 要填的在后面的步骤里问 */
 const needsForm = (method: HcAuthMethod): boolean =>
   method.kind === 'env' || method.kind === 'apiKey'
@@ -37,6 +47,8 @@ export function AccountsTab({ device, harnessId, view }: AccountsTabProps) {
   const data = slot.data
   /** 正在新增（null 是新的）或改的自定义 provider */
   const [custom, setCustom] = useState<{ provider: HcProvider | null } | null>(null)
+  const [showOthers, setShowOthers] = useState(false)
+  const [filter, setFilter] = useState('')
   if (!data) {
     return (
       <SlotState
@@ -53,24 +65,66 @@ export function AccountsTab({ device, harnessId, view }: AccountsTabProps) {
       />
     )
   }
+  const card = (provider: HcProvider) => (
+    <ProviderCard
+      key={provider.id}
+      device={device}
+      harnessId={harnessId}
+      data={data}
+      provider={provider}
+      attempts={view.attempts.filter((one) => one.providerId === provider.id)}
+      onEdit={() => setCustom({ provider })}
+    />
+  )
+  const primary = data.providers.filter((one) => isPrimary(one, view.attempts))
+  const others = data.providers.filter((one) => !isPrimary(one, view.attempts))
+  const folded = others.length > OTHERS_INLINE
+  const needle = filter.trim().toLowerCase()
+  const shown = needle
+    ? others.filter((one) =>
+        [one.id, t.said(one.title)].some((name) => name.toLowerCase().includes(needle)),
+      )
+    : others
   return (
     <div className="hc-tab" data-hc-tab="accounts" data-version={data.version}>
       <p className="mng-sec-note">
         {t(data.switchable ? 'hc.accounts.note.switch' : 'hc.accounts.note')}
       </p>
       <div className="hc-cards">
-        {data.providers.map((provider) => (
-          <ProviderCard
-            key={provider.id}
-            device={device}
-            harnessId={harnessId}
-            data={data}
-            provider={provider}
-            attempts={view.attempts.filter((one) => one.providerId === provider.id)}
-            onEdit={() => setCustom({ provider })}
-          />
-        ))}
+        {primary.map(card)}
+        {folded ? null : others.map(card)}
       </div>
+      {folded ? (
+        <div className="hc-others" data-hc-others={showOthers ? 'open' : 'closed'}>
+          <button
+            type="button"
+            className="mini"
+            data-act="hc-provider-others"
+            aria-expanded={showOthers}
+            onClick={() => setShowOthers((open) => !open)}
+          >
+            {showOthers
+              ? t('hc.provider.othersHide')
+              : t('hc.provider.others', { count: others.length })}
+          </button>
+          {showOthers ? (
+            <>
+              <input
+                className="req-input"
+                data-hc-provider-filter
+                placeholder={t('hc.provider.filter')}
+                value={filter}
+                onChange={(event) => setFilter(event.target.value)}
+              />
+              {shown.length === 0 ? (
+                <p className="form-note">{t('hc.provider.filterNone')}</p>
+              ) : (
+                <div className="hc-cards">{shown.map(card)}</div>
+              )}
+            </>
+          ) : null}
+        </div>
+      ) : null}
       {data.templates.length > 0 ? (
         <div className="hc-actions">
           <button

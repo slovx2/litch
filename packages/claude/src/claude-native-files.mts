@@ -10,6 +10,7 @@ import {
   mkdirSync,
   openSync,
   readFileSync,
+  readlinkSync,
   realpathSync,
   renameSync,
   rmSync,
@@ -17,7 +18,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { homedir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 
 export function claudeConfigDir(env: NodeJS.ProcessEnv = process.env): string {
   return env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude')
@@ -127,7 +128,10 @@ export function writeJsonObject(path: string, value: Record<string, unknown>, mo
   writeTextFileAtomic(path, `${JSON.stringify(value, null, 2)}\n`, mode)
 }
 
-/** path 本身是软链时它指向哪里（解析后的绝对路径），不是软链是 null */
+/**
+ * path 本身是软链时它指向哪里：照软链里写的、按它所在的目录解析成绝对路径，不再往下解析一层
+ * （和统一模式给的 sourcePath 对得上）。不是软链是 null
+ */
 export function symlinkTarget(path: string): string | null {
   try {
     if (!lstatSync(path).isSymbolicLink()) return null
@@ -135,7 +139,7 @@ export function symlinkTarget(path: string): string | null {
     return null
   }
   try {
-    return realpathSync(path)
+    return resolve(dirname(path), readlinkSync(path))
   } catch {
     return null
   }

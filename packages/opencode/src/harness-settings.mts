@@ -1,5 +1,5 @@
-import { lstatSync, mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { lstatSync, mkdirSync, readlinkSync, rmSync, writeFileSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
 import { EXTENSION } from '../../protocol/src/device.mjs'
 import {
   HARNESS_CONFIG_METHOD,
@@ -321,7 +321,8 @@ export class HarnessSettings {
     const content = readText(path)
     let linkTarget: string | null = null
     try {
-      if (lstatSync(path).isSymbolicLink()) linkTarget = realpathSync(path)
+      // 照软链里写的、按它所在的目录解析，不再往下解析一层：和统一模式给的 sourcePath 对得上
+      if (lstatSync(path).isSymbolicLink()) linkTarget = resolve(dirname(path), readlinkSync(path))
     } catch {}
     // AGENTS.md 不在时 OpenCode 退回读 ~/.claude/CLAUDE.md（没被环境变量关掉的话）：如实报出实际生效的那份
     const claude = join(this.paths.home, '.claude', 'CLAUDE.md')
