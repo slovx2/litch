@@ -83,7 +83,7 @@ import { isAgentThread, parentOf, projectSummary, threadTitle } from '../project
 import { composeOptions, projectDefaults } from '../projection/settings.mjs'
 import type { SkillCatalog } from '../projection/skills.mjs'
 import { projectAgentThread } from '../projection/tree.mjs'
-import { pathTwin } from '../text/paths.mjs'
+import { pathTwin, samePath } from '../text/paths.mjs'
 import type { ToolHub } from '../tool-hub.mjs'
 import { collectThreads, type Listing, mergeListing } from './catalog.mjs'
 import { createComposeAids } from './compose.mjs'
@@ -1647,8 +1647,6 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     log,
   })
 
-  const sameDir = (a: string, b: string): boolean => a.replace(/\/+$/, '') === b.replace(/\/+$/, '')
-
   const terminals = createTerminals({
     deviceId: config.id,
     clock: options.clock,
@@ -1661,7 +1659,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     workspaceByRoot: (root) =>
       workspaces.find((workspace) => {
         const first = workspace.roots[0]
-        return first !== undefined && sameDir(first, root)
+        return first !== undefined && samePath(first, root)
       })?.id ?? null,
     request: (method, params, requestOptions) => link.request(method, params, requestOptions),
     fail: (error) => fail(error),
@@ -1681,10 +1679,10 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
 
   /** 认得的根：工作区的根，和会话的工作目录（不属于工作区的会话，面板以它的工作目录为根） */
   const knownRoot = (root: string): boolean => {
-    if (workspaces.some((workspace) => workspace.roots.some((entry) => sameDir(entry, root)))) {
+    if (workspaces.some((workspace) => workspace.roots.some((entry) => samePath(entry, root)))) {
       return true
     }
-    for (const thread of threads.values()) if (sameDir(thread.cwd, root)) return true
+    for (const thread of threads.values()) if (samePath(thread.cwd, root)) return true
     return false
   }
 

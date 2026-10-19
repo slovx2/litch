@@ -129,9 +129,12 @@ export { checkSnapshot, type DeviceSnapshot, type SnapshotStore } from './device
 export {
   checkNotes,
   LAUNCH_SCRIPT,
-  launchCommand,
+  type LaunchPlan,
+  launchPlan,
   type TerminalNotes,
   type TerminalNotesStore,
+  WINDOWS_DIRS_ENV,
+  WINDOWS_LAUNCH_SCRIPT,
 } from './device/terminal-launch.mjs'
 export {
   STREAM_LIMITS,
@@ -299,6 +302,7 @@ export {
   baseName,
   extensionOf,
   insideRoot,
+  isAbsolutePath,
   joinPath,
   normalizePath,
   noTwin,
@@ -307,6 +311,7 @@ export {
   pathTwin,
   privateTwin,
   relativeTo,
+  samePath,
   withinRoot,
 } from './text/paths.mjs'
 export { parseSpans, type SpanNode, spanText, splitSpanLines } from './text/spans.mjs'

@@ -201,7 +201,7 @@ export function flattenTree(
       return
     }
     let shown = 0
-    const prefix = dir === '/' ? '/' : `${dir}/`
+    const prefix = dir.endsWith('/') ? dir : `${dir}/`
     for (const entry of view.entries) {
       if (!showHidden && isHidden(entry.name)) continue
       shown++

@@ -29,7 +29,7 @@ import {
 } from '../projection/files.mjs'
 import {
   isAbsolutePath,
-  isWindowsPath,
+  isNetworkPath,
   joinPath,
   normalizePath,
   pathTwin,
@@ -132,8 +132,8 @@ export function createFiles(host: FilesHost): Files {
     if (typeof root !== 'string' || typeof path !== 'string' || !root || !path) {
       throw new ChannelError('rejected', '没有给路径', phrase('files.outside'))
     }
-    if (isWindowsPath(root)) {
-      throw new ChannelError('unsupported', 'Windows 上的路径还不支持', phrase('files.windows'))
+    if (isNetworkPath(root)) {
+      throw new ChannelError('unsupported', '网络共享上的目录还不支持', phrase('files.network'))
     }
     const base = normalizePath(root)
     if (!isAbsolutePath(base) || !host.knownRoot(base)) {

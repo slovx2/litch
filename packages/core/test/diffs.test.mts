@@ -68,6 +68,30 @@ test('全部没提交的：每种改动各是什么状态、增删多少行、�
   )
 })
 
+test('Windows 上的仓库：根写成反斜杠、大小写不一样也认，git 报的 C:/… 照样对得上', async (t) => {
+  const world = gitWorld({ platform: 'windows', drive: true })
+  t.after(world.cleanup)
+  world.put('a.txt', 'a\n')
+  world.git('add', '.')
+  world.git('commit', '-q', '-m', 'init')
+  world.put('a.txt', 'a\nb\n')
+  world.put('sub/new.txt', 'x\n')
+  const at = world.remoteRoot.replaceAll('/', '\\').replace(/^C:/, 'c:')
+  const view = await world.watch('all', 's1', at).settled()
+  assert.equal(view.phase, 'ready')
+  assert.equal(view.source, 'git')
+  assert.deepEqual(brief(view), [
+    ['a.txt', 'modified', 1, 0],
+    ['sub/new.txt', 'untracked', 1, 0],
+  ])
+  // 起 git 的目录、盯的目录都是理过的 C:/… 写法
+  assert.equal(world.sent('process/spawn')[0]?.cwd, world.remoteRoot)
+  assert.deepEqual(
+    world.sent('fs/watch').map((params) => params.path),
+    [`${world.remoteRoot}/.git`, world.remoteRoot],
+  )
+})
+
 test('已暂存的、没暂存的各是一个范围；没人看的范围不去取', async (t) => {
   const world = gitWorld()
   t.after(world.cleanup)

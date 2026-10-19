@@ -87,16 +87,15 @@ export type PhraseKey =
   | 'session.queueFailed'
   // 终端
   | 'terminal.limit'
-  | 'terminal.windows'
   | 'terminal.unsupported'
   | 'terminal.notRunning'
   | 'terminal.endOffline'
-  // 文件面板：路径不在工作区里、根不认识、对面不会、Windows 的路径还不支持
+  // 文件面板：路径不在工作区里、根不认识、对面不会、网络共享上的目录还不支持
   | 'files.outside'
   | 'files.unknownRoot'
   | 'files.unsupported'
   | 'files.searchUnsupported'
-  | 'files.windows'
+  | 'files.network'
   // 差异面板：目录不在了、这里不能暂存和还原、有冲突的文件不在这里处理、确认之后文件又变了
   | 'diff.rootMissing'
   | 'diff.notWritable'

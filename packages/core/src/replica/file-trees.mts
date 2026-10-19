@@ -170,7 +170,7 @@ export function createFileTrees(channel: CoreChannel, store: KeyedStore): FileTr
       out.push(dir)
       const view = tree.listings.get(dir)?.view
       if (!view) return
-      const prefix = dir === '/' ? '/' : `${dir}/`
+      const prefix = dir.endsWith('/') ? dir : `${dir}/`
       for (const entry of view.entries) {
         if (entry.kind !== 'dir') continue
         const path = prefix + entry.name

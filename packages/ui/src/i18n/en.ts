@@ -1598,7 +1598,6 @@ export const en: Record<MessageKey, Entry> = {
     'The device service on that machine started, but it couldn’t be reached.',
   'terminal.limit':
     'This device already has as many terminals running as it allows ({limit}). End some first.',
-  'terminal.windows': 'Terminals aren’t available on Windows devices yet.',
   'terminal.unsupported': 'The other side can’t open terminals.',
   'terminal.notRunning': 'This terminal isn’t running.',
   'terminal.endOffline':
@@ -1608,7 +1607,7 @@ export const en: Record<MessageKey, Entry> = {
     'This folder isn’t a project on this device, nor the working directory of any session.',
   'files.unsupported': 'The other side can’t list folders or read files.',
   'files.searchUnsupported': 'The other side can’t search for files. The tree still works.',
-  'files.windows': 'Files on Windows devices can’t be viewed yet.',
+  'files.network': 'Folders on network shares can’t be viewed yet.',
   'diff.rootMissing': 'This folder is no longer on the device.',
   'diff.notWritable': 'Staging and discarding aren’t available here.',
   'diff.conflicted': 'This file has merge conflicts. Resolve them in a terminal first.',

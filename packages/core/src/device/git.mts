@@ -19,6 +19,7 @@ import {
   type RawEntry,
   type StatusOutput,
 } from '../projection/git-output.mjs'
+import { isAbsolutePath } from '../text/paths.mjs'
 import { abortFailure, type Exec, type ExecResult } from './exec.mjs'
 import { lacksMethod } from './faults.mjs'
 
@@ -216,7 +217,8 @@ export function createGit(host: GitHost) {
         throw new GitFailure(result)
       }
       const [top = '', gitDir = '', prefix = ''] = result.stdout.split('\n')
-      if (!top.startsWith('/') || !gitDir.startsWith('/')) return { ok: false, why: 'notRepo' }
+      // Windows 上的 git 给的是 C:/… 这种写法
+      if (!isAbsolutePath(top) || !isAbsolutePath(gitDir)) return { ok: false, why: 'notRepo' }
       return { ok: true, facts: { top, gitDir, prefix } }
     },
 

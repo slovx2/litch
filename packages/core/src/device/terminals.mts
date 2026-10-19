@@ -35,11 +35,10 @@ import type {
 import { phrase } from '../phrase.mjs'
 import { base64Bytes, dropBase64Head } from '../text/bytes.mjs'
 import {
-  launchCommand,
+  launchPlan,
   makeTag,
   parseTag,
   randomHandle,
-  TERMINAL_ENV,
   type TerminalNotes,
   type TerminalNotesStore,
   usableDir,
@@ -580,16 +579,17 @@ export function createTerminals(host: TerminalsHost): Terminals {
     const mine = term.gen
     // 起的时候用的是这一刻要的大小。起的过程中界面可能又改了（量准了字宽、面板被拖了），那一次攒在 want 里
     const asked = term.want
+    const plan = launchPlan([term.cwd, term.root], host.platform())
     const result = await host.request(
       'process/spawn',
       {
-        command: launchCommand([term.cwd, term.root]),
+        command: plan.command,
         processHandle: term.handle,
         // 这里只要一个肯定在的目录：真正去哪由启动脚本在对面一个个试
         cwd: host.home() ?? '/',
         tty: true,
         size: asked,
-        env: TERMINAL_ENV,
+        env: plan.env,
         // 不给这两个 null 的话，协议默认 10 秒后结束进程、每路输出到 1 MiB 就不再读
         timeoutMs: null,
         outputBytesCap: null,
@@ -735,13 +735,6 @@ export function createTerminals(host: TerminalsHost): Terminals {
 
     async open(workspaceId, cwd, rows, cols) {
       if (!host.online()) throw offlineError()
-      if (host.platform() === 'windows') {
-        throw new ChannelError(
-          'unsupported',
-          'Windows 设备上还开不了终端',
-          phrase('terminal.windows'),
-        )
-      }
       const group = workspaceId && host.hasWorkspace(workspaceId) ? workspaceId : null
       const term = makeTerm({
         handle: randomHandle(host.random),

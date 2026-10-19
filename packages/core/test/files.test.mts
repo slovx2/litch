@@ -176,7 +176,7 @@ test('列目录：同时要同一层的只问对面一次；其中一个不等�
   assert.deepEqual(paths('fs/readDirectory'), [ROOT])
 })
 
-test('根之外的路径、不认识的根、Windows 的路径：当场拒掉，对面一条请求都没收到', async () => {
+test('根之外的路径、不认识的根、网络共享上的路径：当场拒掉，对面一条请求都没收到', async () => {
   const { command, list, read, search, peer } = await open()
   const before = peer.last().seen.length
   for (const path of [
@@ -199,10 +199,14 @@ test('根之外的路径、不认识的根、Windows 的路径：当场拒掉，
     const found = await failureOf(command('files.search', { deviceId: 'local', root, query: 'x' }))
     assert.deepEqual([found.code, found.text?.key], ['rejected', 'files.unknownRoot'], root)
   }
-  const windows = await failureOf(
-    command('files.list', { deviceId: 'local', root: 'C:\\work\\app', path: 'C:\\work\\app' }),
+  const share = await failureOf(
+    command('files.list', {
+      deviceId: 'local',
+      root: '\\\\server\\share\\app',
+      path: '\\\\server\\share\\app',
+    }),
   )
-  assert.deepEqual([windows.code, windows.text?.key], ['unsupported', 'files.windows'])
+  assert.deepEqual([share.code, share.text?.key], ['unsupported', 'files.network'])
   assert.equal((await search('')).matches.length, 0)
   assert.equal(peer.last().seen.length, before)
 })
@@ -249,6 +253,82 @@ test('macOS 上根的另一种写法（/private/tmp 和 /tmp）：路径换成�
       { path: `${root}/a.md`, relative: 'a.md', kind: 'file', indices: null },
     ])
   }
+})
+
+test('Windows 设备：盘符和反斜杠的路径理成 C:/… 去取，不分大小写地认根，出根的照样拦', async () => {
+  const cwd = 'C:\\Users\\me\\App'
+  const world = setup([thread({ id: 'a', cwd, turns: [] })], {
+    initialize: () => ({ ...INIT, platformOs: 'windows' }),
+    'project/list': () => ({
+      data: [project('p', 'repo', 'D:\\Work\\Repo\\')],
+      nextCursor: null,
+    }),
+    'fs/readDirectory': () => ({ entries: [file('a.ts'), dir('src')] }),
+    'fs/getMetadata': () => meta('file'),
+    'fs/readFile': () => ({ dataBase64: textToBase64('x\r\n') }),
+    fuzzyFileSearch: () => ({
+      files: [
+        {
+          root: 'C:/Users/me/App',
+          path: 'src\\main.ts',
+          match_type: 'file',
+          file_name: 'main.ts',
+          score: 9,
+          indices: null,
+        },
+      ],
+    }),
+  })
+  world.core.start()
+  await settle()
+  const view = (await world.command('files.list', {
+    deviceId: 'local',
+    root: 'c:/users/me/app',
+    path: 'C:\\Users\\me\\App\\src\\..\\src',
+  })) as DirectoryView
+  assert.equal(view.path, 'C:/users/me/app/src')
+  await world.command('files.list', {
+    deviceId: 'local',
+    root: 'D:\\Work\\Repo',
+    path: 'd:/work/repo',
+  })
+  assert.deepEqual(world.sent('fs/readDirectory'), [
+    { path: 'C:/users/me/app/src' },
+    { path: 'D:/Work/Repo' },
+  ])
+  const content = (await world.command('files.read', {
+    deviceId: 'local',
+    root: cwd,
+    path: 'C:\\USERS\\ME\\APP\\a.ts',
+  })) as FileContent
+  assert.equal(content.path, 'C:/Users/me/App/a.ts')
+  for (const path of [
+    'C:\\Users\\me\\App\\..\\secret.txt',
+    'C:\\Users\\me\\Apple\\a.ts',
+    'E:\\a.ts',
+  ]) {
+    const error = await failureOf(
+      world.command('files.read', { deviceId: 'local', root: cwd, path }),
+    )
+    assert.deepEqual([error.code, error.text?.key], ['rejected', 'files.outside'], path)
+  }
+  const unknown = await failureOf(
+    world.command('files.list', { deviceId: 'local', root: 'C:\\Users', path: 'C:\\Users' }),
+  )
+  assert.deepEqual([unknown.code, unknown.text?.key], ['rejected', 'files.unknownRoot'])
+  const found = (await world.command('files.search', {
+    deviceId: 'local',
+    root: cwd,
+    query: 'main',
+  })) as FileSearchView
+  assert.deepEqual(world.sent('fuzzyFileSearch')[0], {
+    query: 'main',
+    roots: ['C:/Users/me/App'],
+    cancellationToken: 'litch-files:C:/Users/me/App',
+  })
+  assert.deepEqual(found.matches, [
+    { path: 'C:/Users/me/App/src/main.ts', relative: 'src/main.ts', kind: 'file', indices: null },
+  ])
 })
 
 test('认得的根：会话的工作目录，和工作区的根（末尾带不带斜杠都算）', async () => {

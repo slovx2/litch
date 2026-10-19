@@ -8,6 +8,7 @@ import {
   extensionOf,
   flattenTree,
   insideRoot,
+  isAbsolutePath,
   joinPath,
   languageOf,
   MAX_ENTRIES,
@@ -20,6 +21,7 @@ import {
   projectDirectory,
   projectFile,
   relativeTo,
+  samePath,
   splitSpanLines,
   type TreeListing,
   textToBase64,
@@ -97,6 +99,48 @@ test('路径：macOS 上 /var、/tmp、/etc 和 /private 下的同名目录是�
   assert.equal(withinRoot(root, `${real}/a.txt`), null)
   assert.equal(insideRoot(root, `${real}/a.txt`, pathTwin('linux')), false)
   assert.equal(relativeTo(root, `${real}/a.txt`, noTwin), `${real}/a.txt`)
+})
+
+test('路径：Windows 的盘符开头的理成 C:/…，反斜杠当分隔符，盘符大写，.. 折不出盘符的根', () => {
+  assert.equal(normalizePath('c:\\Work\\App\\.\\src\\..\\README.md\\'), 'C:/Work/App/README.md')
+  assert.equal(normalizePath('C:/Work//App/'), 'C:/Work/App')
+  assert.equal(normalizePath('C:\\..\\..\\Windows'), 'C:/Windows')
+  assert.equal(normalizePath('D:'), 'D:/')
+  assert.equal(normalizePath('D:\\'), 'D:/')
+  // 不是盘符开头的照旧：反斜杠在 POSIX 上是名字里的字
+  assert.equal(normalizePath('/work/a\\b'), '/work/a\\b')
+  assert.equal(normalizePath('C:relative'), 'C:relative')
+  assert.equal(isAbsolutePath('C:\\a'), true)
+  assert.equal(isAbsolutePath('c:/a'), true)
+  assert.equal(isAbsolutePath('C:'), true)
+  assert.equal(isAbsolutePath('C:a'), false)
+  assert.equal(isAbsolutePath('src\\a.ts'), false)
+  assert.equal(joinPath('C:/Work/App', 'src\\a.ts'), 'C:/Work/App/src/a.ts')
+  assert.equal(joinPath('C:/Work/App', 'D:\\x'), 'D:/x')
+  assert.equal(joinPath('C:/', 'a'), 'C:/a')
+  assert.equal(samePath('C:\\Work\\App\\', 'c:/work/app'), true)
+  assert.equal(samePath('/work/App', '/work/app'), false)
+  assert.equal(samePath('/work/app/', '/work//app'), true)
+})
+
+test('路径：Windows 的根不分大小写，认出来的照根的写法；兄弟目录、别的盘不算；盘符的根和上一级', () => {
+  const root = 'C:/Users/Me/App'
+  assert.equal(withinRoot(root, 'c:/users/me/app/src/A.ts'), 'C:/Users/Me/App/src/A.ts')
+  assert.equal(withinRoot(root, 'C:/USERS/ME/APP'), root)
+  assert.equal(withinRoot(root, 'C:/Users/Me/Apple/a.ts'), null)
+  assert.equal(withinRoot(root, 'D:/Users/Me/App/a.ts'), null)
+  assert.equal(withinRoot(root, '/Users/Me/App/a.ts'), null)
+  assert.equal(relativeTo(root, 'c:/users/me/app/src/a.ts'), 'src/a.ts')
+  assert.equal(relativeTo(root, 'C:/users/me/APP'), '')
+  // POSIX 的根照旧分大小写
+  assert.equal(withinRoot('/work/App', '/work/app/a'), null)
+  assert.equal(withinRoot('C:/', 'c:/x/y'), 'C:/x/y')
+  assert.equal(relativeTo('C:/', 'C:/x/y'), 'x/y')
+  assert.equal(insideRoot('C:/', 'D:/x'), false)
+  assert.equal(parentPath('C:/a/b'), 'C:/a')
+  assert.equal(parentPath('C:/a'), 'C:/')
+  assert.equal(parentPath('C:/'), null)
+  assert.equal(baseName('C:/a/b.ts'), 'b.ts')
 })
 
 test('路径：文件名、上一级、扩展名', () => {

@@ -19,6 +19,7 @@ import {
   type DiffScope,
   type DiffView,
   RpcError,
+  samePath,
 } from '../src/index.mjs'
 import { fakeClock } from './helpers.mjs'
 
@@ -35,6 +36,11 @@ export interface GitWorldOptions {
   turnDiff?: boolean | null
   /** 对面报的系统（见 DiffsHost.platform）。不给是还不知道 */
   platform?: string
+  /**
+   * 装成 Windows 上的仓库：对面的路径是 C: 加上这台机器上的路径（C:/var/…），git 报的路径也换成这样。
+   * 发给对面的 C:/… 去掉盘符再在这台机器上用
+   */
+  drive?: boolean
 }
 
 /** 给仓库的 git 一份干净的环境：不读这台机器上用户自己的配置 */
@@ -66,6 +72,14 @@ export function gitWorld(options: GitWorldOptions = {}) {
     return { exitCode: result.status ?? -1, stdout: result.stdout }
   }
   if (!options.plain) git('init', '-q', '-b', 'main', '.')
+  /** 对面看到的仓库位置：装成 Windows 时是 C:/… */
+  const remoteRoot = options.drive ? `C:${root}` : root
+  /** 对面的路径换成这台机器上的 */
+  const local = (path: unknown): string =>
+    options.drive && typeof path === 'string' ? path.replace(/^C:/i, '') : (path as string)
+  /** 这台机器上的 git 给的路径换成对面的写法 */
+  const remote = (text: string): string =>
+    options.drive ? text.split(base).join(`C:${base}`) : text
 
   const time = fakeClock()
   const children = new Map<string, ChildProcess>()
@@ -75,7 +89,7 @@ export function gitWorld(options: GitWorldOptions = {}) {
   /** 让对面“没有 git”：起进程时回的是找不到程序 */
   const state = {
     gitMissing: false,
-    roots: new Set<string>([root]),
+    roots: new Set<string>([remoteRoot]),
     turnDiff: options.turnDiff,
     /** 每起一条命令叫一次：测试拿它卡在“命令刚发出去”的那一刻 */
     onSpawn: null as ((command: string[]) => void) | null,
@@ -92,7 +106,7 @@ export function gitWorld(options: GitWorldOptions = {}) {
       const program = state.gitMissing ? 'litch-no-such-git' : (command[0] ?? '')
       return new Promise((resolve, reject) => {
         const child = spawn(program, command.slice(1), {
-          cwd: params.cwd as string,
+          cwd: local(params.cwd),
           env: { ...GIT_ENV, ...(params.env as Record<string, string> | null) },
           stdio: ['ignore', 'pipe', 'pipe'],
         })
@@ -122,7 +136,7 @@ export function gitWorld(options: GitWorldOptions = {}) {
           diffs.notification('process/exited', {
             processHandle: handle,
             exitCode: code ?? (signal ? 137 : 1),
-            stdout: Buffer.concat(out.stdout).toString('utf8'),
+            stdout: remote(Buffer.concat(out.stdout).toString('utf8')),
             stderr: Buffer.concat(out.stderr).toString('utf8'),
             stdoutCapReached: capped.stdout,
             stderrCapReached: capped.stderr,
@@ -136,7 +150,7 @@ export function gitWorld(options: GitWorldOptions = {}) {
     }
     if (method === 'fs/getMetadata') {
       try {
-        const stat = statSync(params.path as string)
+        const stat = statSync(local(params.path))
         return {
           isDirectory: stat.isDirectory(),
           isFile: stat.isFile(),
@@ -166,7 +180,7 @@ export function gitWorld(options: GitWorldOptions = {}) {
     clock: time.clock,
     online: () => online,
     platform: () => options.platform ?? null,
-    knownRoot: (path) => state.roots.has(path),
+    knownRoot: (path) => [...state.roots].some((known) => samePath(known, path)),
     turnDiffDeclared: () => (state.turnDiff === undefined ? null : state.turnDiff),
     request: ((method: string, params: unknown) => request(method, params)) as never,
     fail: (error) => error as ChannelError,
@@ -175,7 +189,7 @@ export function gitWorld(options: GitWorldOptions = {}) {
   })
 
   /** 订阅概况，像界面那样把每次给的整份记下来 */
-  const watch = (scope: DiffScope = 'all', sessionId: string | null = 's1', at = root) => {
+  const watch = (scope: DiffScope = 'all', sessionId: string | null = 's1', at = remoteRoot) => {
     const views: DiffView[] = []
     const stop = diffs.open(at, scope, sessionId, {
       snapshot: (data) => views.push(data as DiffView),
@@ -209,6 +223,7 @@ export function gitWorld(options: GitWorldOptions = {}) {
   return {
     base,
     root,
+    remoteRoot,
     git,
     put,
     raw,

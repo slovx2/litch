@@ -8,6 +8,7 @@ import {
   type DiffScope,
   type DiffView,
   type FileDiff,
+  isAbsolutePath,
   keys,
   normalizePath,
   pathTwin,
@@ -180,7 +181,7 @@ function Diffs({
   useEffect(() => {
     if (!wanted || taken.current === wanted.nonce || !ready) return
     const full = normalizePath(wanted.path)
-    const path = full.startsWith('/') ? relativeTo(root, full, pathTwin(os)) : full
+    const path = isAbsolutePath(full) ? relativeTo(root, full, pathTwin(os)) : full
     if (!byPath.has(path)) {
       // 这种范围下没有它：回到“全部”再找一次
       if (scope !== 'all') {

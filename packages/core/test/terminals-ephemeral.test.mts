@@ -2,8 +2,9 @@
 // 用的是协议原有的 process/*，断线进程就没了：标签和内容留着，标成没了，可以在同一个标签里重开。
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import type { ChannelError } from '../src/index.mjs'
+import { type ChannelError, WINDOWS_DIRS_ENV, WINDOWS_LAUNCH_SCRIPT } from '../src/index.mjs'
 import { fakeProcesses } from './fake-processes.mjs'
+import { project } from './fixtures.mjs'
 import { settle } from './helpers.mjs'
 import {
   type TerminalWorld,
@@ -192,24 +193,48 @@ test('对面不会起进程：说清楚是不支持，不留下一个空标签',
   assert.equal(list.state.terminals.size, 0)
 })
 
-test('Windows 设备：这一版开不了，直接说明，不发请求', async () => {
+test('Windows 设备：用 PowerShell 开，脚本按 -EncodedCommand 编码，要试的目录走环境变量', async () => {
   const world: TerminalWorld = terminalWorld({
     extra: {
       'runtime/info': (params) => {
         const info = world.fake.handlers['runtime/info']?.(params) as {
           device: Record<string, unknown>
         }
-        return { ...info, device: { ...info.device, os: 'windows' } }
+        return { ...info, device: { ...info.device, os: 'windows', home: 'C:\\Users\\dev' } }
       },
+      'project/list': () => ({
+        data: [project('w1', '应用', 'C:\\work\\app')],
+        nextCursor: null,
+      }),
     },
   })
   await world.start()
-  const failure = await failureOf(
-    world.command('terminal.open', { workspaceId: null, rows: 24, cols: 80 }),
-  )
-  assert.equal(failure.code, 'unsupported')
-  assert.deepEqual(failure.text, { key: 'terminal.windows' })
-  assert.equal(world.sent('process/spawn').length, 0)
+  await world.open('w1', 'C:\\work\\app\\src')
+  await world.open(null)
+  const [spawn, home] = world.sent('process/spawn') as {
+    command: string[]
+    cwd: string
+    env: Record<string, string>
+    litchDevice: { tag: Record<string, unknown> }
+  }[]
+  assert.deepEqual(spawn?.command.slice(0, 4), [
+    'powershell.exe',
+    '-NoLogo',
+    '-NoExit',
+    '-EncodedCommand',
+  ])
+  const bytes = Uint8Array.from(atob(spawn?.command[4] ?? ''), (char) => char.charCodeAt(0))
+  assert.equal(new TextDecoder('utf-16le').decode(bytes), WINDOWS_LAUNCH_SCRIPT)
+  assert.equal(spawn?.cwd, 'C:\\Users\\dev')
+  assert.deepEqual(spawn?.env, {
+    TERM: 'xterm-256color',
+    COLORTERM: 'truecolor',
+    TERM_PROGRAM: 'Litch',
+    [WINDOWS_DIRS_ENV]: 'C:\\work\\app\\src\nC:\\work\\app',
+  })
+  assert.equal(spawn?.litchDevice.tag.cwd, 'C:\\work\\app\\src')
+  assert.equal(spawn?.litchDevice.tag.root, 'C:\\work\\app')
+  assert.equal(home?.env[WINDOWS_DIRS_ENV], '')
 })
 
 test('没连上的时候开不了；不认识的终端按“没有这个”报', async () => {

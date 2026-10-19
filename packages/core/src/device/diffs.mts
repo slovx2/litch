@@ -45,7 +45,7 @@ import { type PatchFile, parsePatch } from '../text/patch.mjs'
 import {
   insideRoot,
   isAbsolutePath,
-  isWindowsPath,
+  isNetworkPath,
   joinPath,
   normalizePath,
   pathTwin,
@@ -296,8 +296,8 @@ export function createDiffs(host: DiffsHost): Diffs {
     if (typeof root !== 'string' || !root) {
       throw new ChannelError('rejected', '没有给根目录', phrase('files.unknownRoot'))
     }
-    if (isWindowsPath(root)) {
-      throw new ChannelError('unsupported', 'Windows 上的路径还不支持', phrase('files.windows'))
+    if (isNetworkPath(root)) {
+      throw new ChannelError('unsupported', '网络共享上的目录还不支持', phrase('files.network'))
     }
     const base = normalizePath(root)
     if (!isAbsolutePath(base) || !host.knownRoot(base)) {
@@ -312,7 +312,7 @@ export function createDiffs(host: DiffsHost): Diffs {
       typeof path !== 'string' ||
       path === '' ||
       path.includes('\0') ||
-      path.startsWith('/') ||
+      isAbsolutePath(path) ||
       normalizePath(path) !== path ||
       path === '..' ||
       path.startsWith('../')
@@ -354,7 +354,7 @@ export function createDiffs(host: DiffsHost): Diffs {
    * harness 给的可能是根的另一种写法（macOS 上 Claude Code 给的是 /private/var/…，根是 /var/…），也算在里面
    */
   const turnPath = (root: string, path: string): string => {
-    if (!path.startsWith('/')) return path
+    if (!isAbsolutePath(path)) return path
     const inside = withinRoot(root, normalizePath(path), pathTwin(host.platform()))
     return inside !== null && inside !== root ? relativeTo(root, inside) : path
   }

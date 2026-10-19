@@ -1,5 +1,7 @@
 import { spawn } from 'node:child_process'
-import { basename, dirname } from 'node:path'
+import type { Dirent } from 'node:fs'
+import { readdir } from 'node:fs/promises'
+import { basename, dirname, join, normalize } from 'node:path'
 import { fuzzyPathMatch } from './fuzzy-search.mjs'
 import { ProtocolError } from './protocol-contract.mjs'
 import type { RpcPeer } from './types.mjs'
@@ -27,7 +29,13 @@ export interface FuzzyFileMatch {
 // rg 只列文件，目录由文件路径推导（原生还会列出空目录，此处不包含）。
 // 原生遍历对单个条目出错只跳过；rg/find 遇到不可读目录或符号链接循环会以非零状态结束，
 // 因此只要命令成功启动就采用其输出，命令不存在时才换下一个。
-function listing(command: string, args: string[], cwd: string): Promise<string | null> {
+// strict：退出码不是 0 也当没有（Windows 上 git ls-files 不在仓库里时）。
+function listing(
+  command: string,
+  args: string[],
+  cwd: string,
+  strict = false,
+): Promise<string | null> {
   return new Promise((resolve) => {
     const chunks: Buffer[] = []
     let settled = false
@@ -47,18 +55,69 @@ function listing(command: string, args: string[], cwd: string): Promise<string |
       debugLog('fuzzySearch.listFailed', { command, cwd, error: String(error) })
       finish(null)
     })
-    child.once('close', () => finish(Buffer.concat(chunks).toString('utf8')))
+    child.once('close', (code) =>
+      finish(strict && code !== 0 ? null : Buffer.concat(chunks).toString('utf8')),
+    )
   })
+}
+
+// Windows 上 find 是查文本的另一个程序，系统也不带 rg：rg 不在时，仓库里用 git 列（同样按 gitignore），
+// 不在仓库里就自己遍历（跳过 .git，不跟符号链接，最多 WALK_LIMIT 个文件）。给出的相对路径用反斜杠，和 rg 在 Windows 上一样。
+const WALK_LIMIT = 200_000
+
+async function walkFiles(root: string): Promise<string[]> {
+  const files: string[] = []
+  const pending = ['']
+  while (pending.length && files.length < WALK_LIMIT) {
+    const relative = pending.pop() ?? ''
+    let entries: Dirent[]
+    try {
+      entries = await readdir(join(root, relative), { withFileTypes: true })
+    } catch {
+      continue
+    }
+    for (const entry of entries) {
+      const path = relative ? join(relative, entry.name) : entry.name
+      if (entry.isDirectory()) {
+        if (entry.name !== '.git') pending.push(path)
+      } else if (entry.isFile() && files.length < WALK_LIMIT) files.push(path)
+    }
+  }
+  return files
+}
+
+/** Windows 上没有 rg 时列出根下的文件（相对路径）。导出给测试 */
+export async function windowsFiles(root: string): Promise<string[]> {
+  const tracked = await listing(
+    'git',
+    ['ls-files', '-z', '--cached', '--others', '--exclude-standard'],
+    root,
+    true,
+  )
+  if (tracked == null) return walkFiles(root)
+  return [
+    ...new Set(
+      tracked
+        .split('\0')
+        .filter(Boolean)
+        .map((path) => normalize(path)),
+    ),
+  ]
 }
 
 async function listEntries(root: string): Promise<IndexedEntry[]> {
   const rg = await listing('rg', ['--files', '--hidden', '--follow'], root)
-  const found = rg ?? (await listing('find', ['-L', '.', '-type', 'f'], root))
-  if (found == null) return []
-  const files = found
-    .split('\n')
-    .filter(Boolean)
-    .map((path) => (rg == null ? path.replace(/^\.\//, '') : path))
+  let files: string[]
+  if (rg != null) files = rg.split(/\r?\n/).filter(Boolean)
+  else if (process.platform === 'win32') files = await windowsFiles(root)
+  else {
+    const found = await listing('find', ['-L', '.', '-type', 'f'], root)
+    if (found == null) return []
+    files = found
+      .split('\n')
+      .filter(Boolean)
+      .map((path) => path.replace(/^\.\//, ''))
+  }
   const directories = new Set<string>()
   for (const file of files)
     for (

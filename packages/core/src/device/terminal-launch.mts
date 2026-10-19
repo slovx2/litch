@@ -3,7 +3,8 @@ import {
   DEVICE_PROCESS_TAG_MAX_BYTES,
   type DeviceProcessTag,
 } from '../../../protocol/src/index.mjs'
-import { encodeUtf8 } from '../text/bytes.mjs'
+import { encodeBase64, encodeUtf8 } from '../text/bytes.mjs'
+import { isAbsolutePath } from '../text/paths.mjs'
 
 /**
  * 在对面执行的启动脚本，交给 /bin/sh。客户端不知道对面用户用的是哪个 shell、哪些目录还在，所以都在对面定：
@@ -35,6 +36,38 @@ export const LAUNCH_SCRIPT = [
   'exec "$s" -l',
 ].join('\n')
 
+/** Windows 上要依次试的工作目录放在这个环境变量里，一行一个；启动脚本用完就删掉 */
+export const WINDOWS_DIRS_ENV = 'LITCH_TERMINAL_DIRS'
+
+/**
+ * Windows 上的启动脚本，交给 Windows PowerShell（每台 Windows 都有）：照常读用户的配置，然后进参数里给的目录，
+ * 依次试，都进不去就留在进程的工作目录（设备的主目录）；之后就是这个 PowerShell 本身（-NoExit）。
+ * 目录走环境变量，脚本里不放任何由客户端拼进去的内容；整段按 -EncodedCommand 的要求编码，不经命令行的引号转义。
+ * 只能用 ASCII 字符
+ */
+export const WINDOWS_LAUNCH_SCRIPT = [
+  '& {',
+  `  foreach ($d in ($env:${WINDOWS_DIRS_ENV} -split "\`n")) {`,
+  '    if ($d -and (Test-Path -LiteralPath $d -PathType Container -ErrorAction SilentlyContinue)) {',
+  '      Set-Location -LiteralPath $d -ErrorAction SilentlyContinue',
+  '      break',
+  '    }',
+  '  }',
+  '}',
+  `Remove-Item Env:${WINDOWS_DIRS_ENV} -ErrorAction SilentlyContinue`,
+].join('\n')
+
+/** -EncodedCommand 要的写法：UTF-16LE 的字节再 base64 */
+const encodedCommand = (script: string): string => {
+  const bytes = new Uint8Array(script.length * 2)
+  for (let at = 0; at < script.length; at++) {
+    const code = script.charCodeAt(at)
+    bytes[at * 2] = code & 0xff
+    bytes[at * 2 + 1] = code >> 8
+  }
+  return encodeBase64(bytes)
+}
+
 /** 带给终端里的程序的环境：终端类型、真彩色、是谁开的 */
 export const TERMINAL_ENV: Record<string, string> = {
   TERM: 'xterm-256color',
@@ -45,17 +78,44 @@ export const TERMINAL_ENV: Record<string, string> = {
 /** 路径最长收多少。再长的不带过去，也不记进标记：标记写成 JSON 之后有 4096 字节的上限 */
 const PATH_MAX = 1024
 
-/** 能交给对面当目录用的：绝对路径，里面没有控制字符，不太长。别的一律当没给 */
+/** 能交给对面当目录用的：绝对路径（斜杠开头，或者 Windows 的盘符开头），里面没有控制字符，不太长。别的一律当没给 */
 export function usableDir(value: unknown): string | null {
-  if (typeof value !== 'string' || !value.startsWith('/')) return null
+  if (typeof value !== 'string' || !isAbsolutePath(value)) return null
   if (value.length > PATH_MAX || /[\u0000-\u001f\u007f]/.test(value)) return null
   return value
 }
 
-/** 起一个终端的命令行。dirs 是要依次试的工作目录，不合用的自己滤掉 */
-export function launchCommand(dirs: readonly (string | null | undefined)[]): string[] {
+/** 起一个终端要发给对面的命令行和环境 */
+export interface LaunchPlan {
+  command: string[]
+  env: Record<string, string>
+}
+
+/**
+ * 起一个终端的命令行。dirs 是要依次试的工作目录，不合用的自己滤掉。
+ * os 是对面的系统（握手应答的 platformOs）：windows 用 PowerShell，别的（包括还不知道的）用 /bin/sh
+ */
+export function launchPlan(
+  dirs: readonly (string | null | undefined)[],
+  os: string | null,
+): LaunchPlan {
   const usable = dirs.map(usableDir).filter((dir): dir is string => dir !== null)
-  return ['/bin/sh', '-c', LAUNCH_SCRIPT, 'litch-terminal', ...usable]
+  if (os === 'windows') {
+    return {
+      command: [
+        'powershell.exe',
+        '-NoLogo',
+        '-NoExit',
+        '-EncodedCommand',
+        encodedCommand(WINDOWS_LAUNCH_SCRIPT),
+      ],
+      env: { ...TERMINAL_ENV, [WINDOWS_DIRS_ENV]: usable.join('\n') },
+    }
+  }
+  return {
+    command: ['/bin/sh', '-c', LAUNCH_SCRIPT, 'litch-terminal', ...usable],
+    env: { ...TERMINAL_ENV },
+  }
 }
 
 /**
