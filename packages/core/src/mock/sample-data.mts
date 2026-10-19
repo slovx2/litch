@@ -123,8 +123,16 @@ export function sampleApp(_lang: SampleLang, now: number): AppView {
       connection: 'online',
       mode: 'full',
       os: 'linux',
-      // 这台上的 Codex 是可用的：设备服务代它报的声明里没有我们的扩展，它的审批带不了说明
-      harnesses: [harness('claude'), harness('pi'), harness('dsh'), harness('codex')],
+      // 这台上的 Codex 是可用的：设备服务代它报的声明里没有我们的扩展，它的审批带不了说明。
+      // OpenCode 只在这台上有（详情设置的示例凑齐五家，mock-harness-config.mts）；
+      // 这台上的 dsh 是旧版，声明里还没有详情设置（设备支持、它不支持的样子）
+      harnesses: [
+        harness('claude'),
+        harness('pi'),
+        harness('dsh', { configurable: false }),
+        harness('codex'),
+        harness('opencode'),
+      ],
       stranded: [],
       note: null,
       failure: null,

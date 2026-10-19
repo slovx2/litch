@@ -56,7 +56,28 @@ function switchesOn(
   return switches.filter((spec) => snapshot.values[spec.key] === true).length
 }
 
-export function ManagePanel({ device }: { device: DeviceView }) {
+/**
+ * 一个 harness 的详情设置入口：它声明了就给按钮；设备支持（别的 harness 声明了）它却没有，说一句还不支持；
+ * 设备整个不支持就什么都不显示
+ */
+function settingsEntry(
+  device: DeviceView,
+  id: string,
+  onSettings: (harnessId: string) => void,
+): (() => void) | 'unsupported' | null {
+  if (device.harnesses.some((entry) => entry.id === id && entry.configurable))
+    return () => onSettings(id)
+  return device.harnesses.some((entry) => entry.configurable) ? 'unsupported' : null
+}
+
+export function ManagePanel({
+  device,
+  onSettings,
+}: {
+  device: DeviceView
+  /** 打开一个 harness 的详情设置 */
+  onSettings(harnessId: string): void
+}) {
   const { replica } = useServices()
   const t = useT()
   const deviceId = device.id
@@ -161,6 +182,7 @@ export function ManagePanel({ device }: { device: DeviceView }) {
               install={install}
               pending={snapshot.pendingRestart.includes(id)}
               forced={touched(specs)}
+              settings={settingsEntry(device, id, onSettings)}
               toggle={
                 lead ? (
                   <LeadSwitch

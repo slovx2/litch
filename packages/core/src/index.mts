@@ -32,6 +32,7 @@ export {
   type CommandName,
   type Commands,
   type DiffOp,
+  type HarnessConfigOp,
   type InstallOp,
   type ManageOp,
   type PairingOp,
@@ -110,6 +111,7 @@ export {
   harnessFromRuntimeInfo,
   isDeviceRuntime,
 } from './device/harness.mjs'
+export type { AuthForwardPlatform } from './device/harness-config.mjs'
 export {
   hostKeyTrusted,
   type PairingHostAddress,
@@ -166,6 +168,7 @@ export type * from './model-config.mjs'
 export type * from './model-diff.mjs'
 export { DIFF_SCOPES } from './model-diff.mjs'
 export type * from './model-files.mjs'
+export type * from './model-harness-config.mjs'
 export type * from './model-install.mjs'
 export type * from './model-machine.mjs'
 export type * from './model-manage.mjs'

@@ -463,6 +463,7 @@ test('离线时的侧栏：先摆上次留下的那份并标明是旧的；连�
         detail: null,
         down: null,
         abilities: null,
+        configurable: false,
       },
     ],
     workspaces: [],

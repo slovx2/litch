@@ -9,6 +9,7 @@
 //   npm run check:tasks    定时任务（对着模拟核心）：列表、新建、立即运行、去会话、会话顶上那一条
 //   npm run check:tree     会话树（对着模拟核心）：子会话的嵌套、派出与提案、注入的提示条、子代理的侧面板
 //   npm run check:onboard  上手功能（对着模拟核心的 fresh 开局）：首启引导两步、装 harness 成与不成、配置助手预填、litch config
+//   npm run check:harness-settings  harness 详情设置（对着模拟核心）：配置、冲突、各种登录、MCP、指令文件与统一模式
 //   加 --packed            不用开发时的外壳，改成起装好的应用（先 npm run pack），验的是打包出来的那一份
 import { execFile, execFileSync, spawn } from 'node:child_process'
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -29,6 +30,7 @@ const repo = fileURLToPath(new URL('../../..', import.meta.url))
 // --tasks：定时任务的验收（对着模拟核心）
 // --tree：会话树的验收（对着模拟核心，src/probe-tree.mts）
 // --onboard：上手功能的验收（对着模拟核心，本机一个 harness 都没装、首启引导打开，src/probe-onboard.mts）
+// --harness-settings：harness 详情设置的验收（对着模拟核心，src/probe-harness-settings.mts）
 // --remote：远程设备的验收，对着假的远程机器（回环上的用户态 sshd，后面接隔离入口）
 const usePacked = process.argv.includes('--packed')
 if (usePacked && !existsSync(packedBinary())) {
@@ -54,8 +56,8 @@ const probe = useRemote
     ? 'full'
     : useManage
       ? 'manage'
-      : ['scroll', 'compose', 'sidebar', 'tasks', 'tree', 'onboard'].find((name) =>
-          process.argv.includes(`--${name}`),
+      : ['scroll', 'compose', 'sidebar', 'tasks', 'tree', 'onboard', 'harness-settings'].find(
+          (name) => process.argv.includes(`--${name}`),
         )
 const mode = useRemote
   ? probe

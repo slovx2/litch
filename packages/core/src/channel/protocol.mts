@@ -39,6 +39,15 @@ import type {
 } from '../model-diff.mjs'
 import type { DirectoryView, FileContent, FileSearchView } from '../model-files.mjs'
 import type {
+  HarnessConfigTopicView,
+  HcEdit,
+  HcMcpServer,
+  HcPart,
+  HcValue,
+  InstructionsLinkResult,
+  InstructionsOverview,
+} from '../model-harness-config.mjs'
+import type {
   HarnessInstallTarget,
   HarnessVersionView,
   InstallTopicView,
@@ -132,6 +141,12 @@ export type Topic =
    */
   | { kind: 'install'; deviceId: string }
   /**
+   * 一台设备上一个 harness 的详情设置（harnessConfig 扩展）：配置项、账号与 provider、MCP、指令文件、进行中的登录。
+   * 详情设置页开着时才订阅，有人订阅核心才去读；别处改了（config/changed）重读那一块。
+   * 设备或 harness 不支持时快照里 supported 是 false，照样成立；没连上时给上次知道的。连上、重连之后再读一遍
+   */
+  | { kind: 'harnessConfig'; deviceId: string; harness: string }
+  /**
    * 配置 Litch（litch_config 执行器）要界面做的事和挂着的确认卡。要做的事只发给一个窗口（最近订阅的那个），
    * 确认卡每个窗口都有。应用的外框一直订阅着
    */
@@ -151,6 +166,7 @@ export interface TopicData {
   tasks: TasksView
   pairing: PairingTopicView
   install: InstallTopicView
+  harnessConfig: HarnessConfigTopicView
   config: ConfigTopicView
 }
 
@@ -234,6 +250,9 @@ export type PairingOp =
 /** 安装情况整份换：不大，一次变的往往是好几项（任务的日志、状态，接着版本也重新探测） */
 export type InstallOp = { op: 'install.set'; view: InstallTopicView }
 
+/** 详情设置整份换：一次变的往往是一整块（重读了 providers），按块拆增量不划算 */
+export type HarnessConfigOp = { op: 'hc.set'; view: HarnessConfigTopicView }
+
 export interface TopicOp {
   app: AppOp
   sidebar: SidebarOp
@@ -246,6 +265,7 @@ export interface TopicOp {
   tasks: TasksOp
   pairing: PairingOp
   install: InstallOp
+  harnessConfig: HarnessConfigOp
   config: ConfigTopicOp
 }
 
@@ -818,6 +838,137 @@ export interface Commands {
   'install.start': {
     params: { deviceId: string; harness: string; version: HarnessInstallTarget }
     result: { job: string }
+  }
+  // ---------- harness 详情设置 ----------
+  // 都要设备和这个 harness 都声明了 harnessConfig，不然以 unsupported 结束；没连上以 offline 结束。
+  // 带版本的写入，版本对不上以 conflict 结束：什么都没写，核心已经把那一块重读了、经订阅到了界面。
+  // 对面回的错误换成：值不对 invalid（key 是哪一项）；被锁住 rejected；没有这一项 notFound；
+  // 登录没成、harness 没装或没在跑都是 remote（said 是对面给的话）
+  /** 写若干配置项，全有或全无 */
+  'harnessConfig.write': {
+    params: {
+      deviceId: string
+      harness: string
+      edits: HcEdit[]
+      expectedVersion: string
+    }
+    result: { overriddenKeys: string[]; restartRequired: boolean }
+  }
+  /** 执行配置里列着的一个动作（清空记忆之类）。确认由界面先问 */
+  'harnessConfig.action': {
+    params: { deviceId: string; harness: string; actionId: string }
+    result: Record<string, never>
+  }
+  /** 手动重读。part 不给是全部 */
+  'harnessConfig.reload': {
+    params: { deviceId: string; harness: string; part?: HcPart }
+    result: Record<string, never>
+  }
+  /** 新增或改一个自定义 provider。密钥字段不给表示不改 */
+  'harnessConfig.providers.upsert': {
+    params: {
+      deviceId: string
+      harness: string
+      providerId: string
+      templateId: string
+      definition: Record<string, HcValue>
+      expectedVersion: string
+    }
+    result: { restartRequired: boolean }
+  }
+  'harnessConfig.providers.remove': {
+    params: { deviceId: string; harness: string; providerId: string }
+    result: { restartRequired: boolean }
+  }
+  /** 切换当前在用的 provider（providers 的 switchable 为真时才有） */
+  'harnessConfig.providers.activate': {
+    params: { deviceId: string; harness: string; providerId: string; expectedVersion: string }
+    result: { restartRequired: boolean }
+  }
+  /**
+   * 开始一次登录或设置 API key。应答时第一步已经在订阅里了（attempts）。
+   * env 方式不走这里，走 harnessConfig.env.set
+   */
+  'harnessConfig.auth.start': {
+    params: {
+      deviceId: string
+      harness: string
+      providerId: string
+      methodId: string
+      inputs?: Record<string, string>
+    }
+    result: { attemptId: string }
+  }
+  /** 交上一步要的东西（粘贴的授权码、表单）。下一步经订阅到 */
+  'harnessConfig.auth.continue': {
+    params: { deviceId: string; harness: string; attemptId: string; inputs: Record<string, string> }
+    result: Record<string, never>
+  }
+  /** 取消进行中的登录 */
+  'harnessConfig.auth.cancel': {
+    params: { deviceId: string; harness: string; attemptId: string }
+    result: Record<string, never>
+  }
+  /** 结束了的登录从订阅里拿掉（界面上点了“知道了”） */
+  'harnessConfig.auth.dismiss': {
+    params: { deviceId: string; harness: string; attemptId: string }
+    result: Record<string, never>
+  }
+  /** 登出、清掉这个 provider 的凭据 */
+  'harnessConfig.auth.logout': {
+    params: { deviceId: string; harness: string; providerId: string }
+    result: Record<string, never>
+  }
+  /**
+   * env 方式：把一个只认环境变量的密钥写进设备设置里这个 harness 的环境变量表（deviceSettings 的 env 类设置项，
+   * 当作密钥存），value 给 null 是去掉。harness 要重启才读得到：restartRequired 为真时界面提示重启
+   */
+  'harnessConfig.env.set': {
+    params: { deviceId: string; harness: string; name: string; value: string | null }
+    result: { restartRequired: boolean }
+  }
+  /** 新增或整条替换一个 MCP 服务。改名时给 previousName */
+  'harnessConfig.mcp.upsert': {
+    params: {
+      deviceId: string
+      harness: string
+      previousName?: string
+      server: HcMcpServer
+      expectedVersion: string
+    }
+    result: { restartRequired: boolean }
+  }
+  'harnessConfig.mcp.remove': {
+    params: { deviceId: string; harness: string; name: string; expectedVersion: string }
+    result: { restartRequired: boolean }
+  }
+  /** MCP 服务的 OAuth 登录。进展和 provider 的登录一样在 attempts 里 */
+  'harnessConfig.mcp.login': {
+    params: { deviceId: string; harness: string; name: string }
+    result: { attemptId: string }
+  }
+  /** 整个写进这个 harness 的用户级指令文件。expectedHash 是界面开始改时看到的 */
+  'harnessConfig.instructions.write': {
+    params: { deviceId: string; harness: string; content: string; expectedHash: string }
+    result: { hash: string }
+  }
+  /** 设备上各 harness 的指令文件一览，和现在是不是统一模式。不缓存，每次现读 */
+  'instructions.overview': {
+    params: { deviceId: string }
+    result: InstructionsOverview
+  }
+  /**
+   * 统一模式：把 content 写进 harness 那一份，其余读得到的各份备份后改成指向它的软链。
+   * 应答时各 harness 的指令文件都已经重读、经订阅到了界面
+   */
+  'instructions.unify': {
+    params: { deviceId: string; harness: string; content: string }
+    result: { results: InstructionsLinkResult[] }
+  }
+  /** 退出统一模式：指向那份真文件的软链换回各自的副本 */
+  'instructions.separate': {
+    params: { deviceId: string }
+    result: { separated: string[] }
   }
   // ---------- 配置 Litch（litch_config） ----------
   /** 界面做完了 config 主题里的一件事。ok 为假时 reason 是给模型看的一句（英文） */

@@ -62,6 +62,7 @@ import { entryProbe, judgeEntry } from './probe-entry.mjs'
 import { type FilesMode, runFilesChecks } from './probe-files-run.mjs'
 import { runFirstTurnChecks } from './probe-first-turn.mjs'
 import { fullProbe, judgeFull, judgeMockFull, mockFullProbe } from './probe-full.mjs'
+import { harnessSettingsProbe, judgeHarnessSettings } from './probe-harness-settings.mjs'
 import { homeProbe, judgeHome } from './probe-home.mjs'
 import { homeLook, judgeHomeLook } from './probe-home-look.mjs'
 import { homeMoreProbe, judgeHomeMore } from './probe-home-more.mjs'
@@ -104,6 +105,7 @@ type ProbeMode =
   | 'tasks'
   | 'tree'
   | 'onboard'
+  | 'harness-settings'
   | 'engines'
   | 'first-turn'
   | TerminalMode
@@ -153,6 +155,7 @@ const PROBE_MODES: readonly string[] = [
   'tasks',
   'tree',
   'onboard',
+  'harness-settings',
   'engines',
   'first-turn',
   ...TERMINAL_MODES,
@@ -172,6 +175,7 @@ export const MOCK_MODES: readonly string[] = [
   'tasks',
   'tree',
   'onboard',
+  'harness-settings',
   'terminal',
   'files',
   'diff',
@@ -259,6 +263,10 @@ async function measure(
   if (mode === 'onboard') {
     const result = await runInPage(window, onboardProbe)
     return [result, judgeOnboard(result)]
+  }
+  if (mode === 'harness-settings') {
+    const result = await runInPage(window, harnessSettingsProbe)
+    return [result, judgeHarnessSettings(result)]
   }
   if (mode === 'engines') return runEnginesChecks(window, hooks)
   if (mode === 'first-turn') return runFirstTurnChecks(window)

@@ -35,6 +35,8 @@ const DECLARED: Record<string, HarnessAbilities> = {
   // 原生 codex 的消息一开始就带着准的阶段值：最终回答一开始活动区就收。
   // 它的 mention 不是给文件用的：提到的文件写进正文
   codex: { ...ALL, finalOnStart: true, mentions: false },
+  // OpenCode：回退时连文件一起恢复
+  opencode: { ...ALL, rollbackRestoresFiles: true, turnDiff: false },
 }
 
 /** 声明了认识“拒绝并附说明”的 harness */
@@ -45,6 +47,7 @@ const KNOWN: Record<string, [name: string, badge: string, version: string]> = {
   pi: ['Pi', 'PI', '0.99.1'],
   dsh: ['dsh', 'DS', '0.2.0-rc.2'],
   codex: ['Codex', 'CX', '0.160.0'],
+  opencode: ['OpenCode', 'OC', '1.18.33'],
 }
 
 export interface SampleHarnessOptions {
@@ -52,6 +55,8 @@ export interface SampleHarnessOptions {
   down?: { kind: string; reason: PhraseKey; detail: Said }
   /** 有没有声明。直接连原生 codex 自己的入口时没有 */
   declared?: boolean
+  /** 声明里有没有 harnessConfig。不给时跟着 declared */
+  configurable?: boolean
 }
 
 export function sampleHarness(id: string, options: SampleHarnessOptions = {}): HarnessView {
@@ -67,6 +72,8 @@ export function sampleHarness(id: string, options: SampleHarnessOptions = {}): H
     detail: down ? down.detail : null,
     down: down ? down.kind : null,
     abilities: options.declared === false ? null : (DECLARED[id] ?? null),
+    // 详情设置：有声明的默认都有（mock-harness-config.mts）；直接连的原生 codex 没有
+    configurable: options.configurable ?? options.declared !== false,
   }
 }
 

@@ -6,6 +6,7 @@ import type { HostSink } from '../channel/server.mjs'
 import type { DeviceView, HarnessView } from '../model.mjs'
 import type {
   DiagnosticsView,
+  EnvEntryView,
   HarnessRestartResult,
   ManageView,
   SettingsWriteResult,
@@ -48,6 +49,16 @@ export interface MockManagement {
   addSetting(deviceId: string, harness: string): void
   /** 这个 harness 刚装好（mock-install.mts）：之后重启它回到的是可用的样子，不再是“没装” */
   installed(deviceId: string, harness: HarnessView): void
+  /**
+   * 详情设置的 env 方式（mock-harness-config.mts）：往这个 harness 的环境变量表里写一项密钥（value 是 null 是去掉）。
+   * 和界面保存一样走一次写入：没有回合在跑就顺手重启（restarted），有就等着（pending）
+   */
+  writeEnv(
+    deviceId: string,
+    harness: string,
+    name: string,
+    value: string | null,
+  ): { restarted: boolean; pending: boolean }
 }
 
 const NAMES: readonly string[] = [
@@ -310,6 +321,30 @@ export function createMockManagement(host: MockManageHost): MockManagement {
 
     installed(deviceId, harness) {
       origins.set(`${deviceId}:${harness.id}`, harness)
+    },
+
+    writeEnv(deviceId, harness, name, value) {
+      const view = viewOf(deviceId)
+      // 认的是这个 harness 的、环境变量表类型的那一项，不认键名
+      const spec = view.settings.find(
+        (one) =>
+          one.type === 'env' && one.scope.kind === 'harness' && one.scope.harness === harness,
+      )
+      if (!spec) throw new ChannelError('unsupported', '设备设置里没有这个 harness 的环境变量')
+      const current = view.snapshot.values[spec.key]
+      const table: EnvEntryView[] = (Array.isArray(current) ? current : [])
+        .filter((entry) => entry.name !== name)
+        .map((entry) => (entry.secret ? { name: entry.name, secret: true } : entry))
+      if (value !== null) table.push({ name, value, secret: true })
+      const result = write({
+        deviceId,
+        expectedVersion: view.snapshot.version,
+        edits: [{ key: spec.key, value: table }],
+      })
+      return {
+        restarted: result.restarted.includes(harness),
+        pending: result.pendingRestart.includes(harness),
+      }
     },
 
     addSetting(deviceId, harness) {

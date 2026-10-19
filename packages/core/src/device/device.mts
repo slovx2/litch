@@ -101,6 +101,11 @@ import {
   stampedHarness,
   termsOf,
 } from './harness.mjs'
+import {
+  type AuthForwardPlatform,
+  createHarnessConfig,
+  type HarnessConfig,
+} from './harness-config.mjs'
 import { createInstall, type Install } from './install.mjs'
 import { createLiveSessions } from './live.mjs'
 import type { MachineFacts } from './machine/types.mjs'
@@ -163,6 +168,8 @@ export interface DeviceOptions {
   machine?: DeviceMachine
   /** 扫码绑定手机要碰 ssh、文件、端口的那几样（外壳给）。不给就出不了码，已绑定的手机照样能看、能撤 */
   pairing?: PairingPlatform
+  /** harness 登录的回调要经 ssh 转到远程设备时用（外壳给）。不给就转不了，界面照实说 */
+  forward?: AuthForwardPlatform
   /**
    * litch_config：本机 harness 里跑的 litch config 经设备进程交过来的调用（核心的执行器，config/executor.mts）。
    * 只有本机设备给：握手时声明这个命名空间，但不放进建会话的 dynamicTools
@@ -288,6 +295,8 @@ export interface Device {
   readonly pairing: Pairing
   /** 这台设备上给 harness 安装：版本、安装任务（install.mts） */
   readonly install: Install
+  /** 这台设备上各 harness 的详情设置：配置项、账号与 provider、MCP、指令文件（harness-config.mts） */
+  readonly harnessConfig: HarnessConfig
   /** litch_machine 把这台设备当作一台能操作的机器时用的：它的连接 */
   readonly machineLink: MachineDeviceLink
   /** 现查这台设备的情况（主机名、系统、用户、主目录、shell），缓存一会儿。没连着时抛错 */
@@ -406,6 +415,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   let pairable = false
   /** 对面支不支持给 harness 安装（harnessInstall 扩展）。断开之后留着断开前知道的 */
   let installable = false
+  /** 对面支不支持 harness 详情设置（harnessConfig 扩展，设备那一级）。断开之后留着断开前知道的 */
+  let configurable = false
   /**
    * 对面在跑的那份设备服务的来历（deviceService 扩展）。对面不是设备服务、它没报，都是 null。
    * 断开之后留着断开前知道的，和 manageable 一样
@@ -946,6 +957,10 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     }
   }
 
+  /** 设备那一级没声明 harnessConfig 的，harness 自己声明了也不算 */
+  const withConfig = (harness: HarnessView): HarnessView =>
+    harness.configurable && !configurable ? { ...harness, configurable: false } : harness
+
   /** 记下（或者忘掉）一个 harness 的声明 */
   const remember = (id: HarnessId, declared: HarnessTerms | null) => {
     if (declared) terms.set(id, declared)
@@ -958,7 +973,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     info,
   }: ServerNotifications['litch/harness/status/changed']) => {
     if (mode !== 'full') return
-    const next = harnessFromInfo(info)
+    const next = withConfig(harnessFromInfo(info))
     remember(id, termsOf(info))
     const at = harnesses.findIndex((entry) => entry.id === id)
     const wasReady = harnesses[at]?.state === 'ready'
@@ -1179,7 +1194,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         const declares = info.device.extensions?.includes(EXTENSION.deviceWorkspaces) === true
         if (declares || mode !== 'full') hasProjects = null
         mode = 'full'
-        harnesses = info.harnesses.map(harnessFromInfo)
+        configurable = info.device.extensions?.includes(EXTENSION.harnessConfig) === true
+        harnesses = info.harnesses.map((entry) => withConfig(harnessFromInfo(entry)))
         for (const entry of info.harnesses) remember(entry.id, termsOf(entry))
         // 设置接口有没有，看它声明的扩展，不看版本号
         manageable = info.device.extensions?.includes(EXTENSION.deviceSettings) === true
@@ -1208,6 +1224,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         sessionTree = false
         pairable = false
         installable = false
+        configurable = false
         service = null
         home = null
         deviceHostname = null
@@ -1229,6 +1246,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       sessionTree = false
       pairable = false
       installable = false
+      configurable = false
       service = null
       home = null
     }
@@ -1257,6 +1275,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     tasks.resync()
     pairing.resync()
     install.resync()
+    harnessConfig.resync()
     await reconcile()
   }
 
@@ -1281,6 +1300,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       tasks.offline()
       pairing.offline()
       install.offline()
+      harnessConfig.offline()
     }
     switch (state.phase) {
       case 'idle':
@@ -1339,6 +1359,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       if (pairing.notification(method, params)) return
       // 给 harness 安装：任务的状态和日志
       if (install.notification(method, params)) return
+      // harness 详情设置：配置变了、登录有进展
+      if (harnessConfig.notification(method, params)) return
       // 差异面板在设备上跑的命令结束了、它盯着的路径变了：先认它自己起的那些，剩下的进程通知才是终端的
       if (diffs.notification(method, params)) return
       // litch_machine 起的进程（执行器的、现查设备情况的）也不是终端的
@@ -1678,6 +1700,25 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     log,
   })
 
+  const harnessConfig = createHarnessConfig({
+    deviceId: config.id,
+    target: () => config.target,
+    online: () => online,
+    deviceSupported: () => configurable,
+    harnessSupported: (harness) =>
+      mode === 'full' && harnesses.find((entry) => entry.id === harness)?.configurable === true,
+    configurable: () =>
+      mode === 'full'
+        ? harnesses.filter((entry) => entry.configurable).map((entry) => entry.id)
+        : [],
+    nameOf: (harness) => harnessName(harness),
+    forward: options.forward ?? null,
+    request: (method, params, requestOptions) => link.request(method, params, requestOptions),
+    fail: (error) => fail(error),
+    now: () => options.clock.now(),
+    log,
+  })
+
   const manage = createManagement({
     deviceId: config.id,
     online: () => online,
@@ -1981,7 +2022,12 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     },
     openManage: (sink) => manage.open(sink),
     writeSettings: (expectedVersion, edits) => manage.write(expectedVersion, edits),
-    restartHarness: (harness, force) => manage.restart(harness, force),
+    async restartHarness(harness, force) {
+      const result = await manage.restart(harness, force)
+      // 要重启才生效的设置用上了：详情设置那边的提示收起、数据重读
+      harnessConfig.restarted(harness)
+      return result
+    },
     runDiagnostics: (harness) => manage.diagnostics(harness),
     readLogs: (source, harness, maxBytes) => manage.logs(source, harness, maxBytes),
     readSshConfig: () => manage.sshConfig(),
@@ -1991,6 +2037,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     tasks,
     pairing,
     install,
+    harnessConfig,
     machineLink,
     machineFacts,
     stopMachine: (response) => toolCalls.stopMachine(response),

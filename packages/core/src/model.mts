@@ -49,6 +49,11 @@ export interface HarnessView {
   down: string | null
   /** 它事先声明的会什么、不会什么。没有声明的（原生 codex 自己的入口、旧版的适配器）是 null：那就试了才知道 */
   abilities: HarnessAbilities | null
+  /**
+   * 有没有详情设置（配置项、账号、MCP、指令文件）：设备和它自己的声明里都列了 harnessConfig。
+   * 设备声明了而它没有的，界面说“这个 harness 还不支持”
+   */
+  configurable: boolean
 }
 
 /**

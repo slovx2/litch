@@ -579,3 +579,30 @@ test('执行器：远程会话的 navigate 经转发打开、结果里说明；�
     forwarding.close()
   }
 })
+
+test('同号转发（登录的 OAuth 回调）：本机端口就是远端端口；被占了不换，直接报错', async () => {
+  fakeDir()
+  // “远端”的服务开在 ::1 上，本机的 127.0.0.1 上同一个端口空着，转发占得上
+  const server = createServer((req, res) => res.end(`callback ${req.url}`))
+  servers.push(server)
+  await new Promise<void>((done) => server.listen(0, '::1', done))
+  const remote = (server.address() as { port: number }).port
+  const forwarder = createForwarder({ targetOf: () => ALIAS, ssh: fakeSsh, samePort: true })
+  try {
+    assert.equal(await forwarder.open('build', '::1', remote), remote)
+    assert.match(await get(remote, '/auth/callback?code=x'), /callback \/auth\/callback\?code=x/)
+  } finally {
+    forwarder.close()
+  }
+  // 本机这个端口被占着：不换端口，报出来
+  const busy = await upstream()
+  const strict = createForwarder({ targetOf: () => ALIAS, ssh: fakeSsh, samePort: true })
+  try {
+    await assert.rejects(
+      strict.open('build', '::1', busy),
+      /local port \d+ on 127\.0\.0\.1 is in use/,
+    )
+  } finally {
+    strict.close()
+  }
+})

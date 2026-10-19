@@ -14,6 +14,7 @@ import {
   type DeviceConfig,
 } from './device/device.mjs'
 import { channelFailure } from './device/faults.mjs'
+import type { AuthForwardPlatform } from './device/harness-config.mjs'
 import { createMachineExecutor, type MachineExecutorOptions } from './device/machine/executor.mjs'
 import { SENSITIVE_PRESETS } from './device/machine/presets.mjs'
 import type { MachineExecutor, MachineFacts } from './device/machine/types.mjs'
@@ -63,6 +64,8 @@ export interface CoreOptions {
   machine?: CoreMachineOptions
   /** 扫码绑定手机要碰 ssh、文件、端口的那几样（外壳给）。不给就出不了码，已绑定的手机照样能看、能撤 */
   pairing?: PairingPlatform
+  /** harness 登录的回调经 ssh 转到远程设备（外壳给）。不给就转不了，要回调的登录在远程设备上做不成 */
+  forward?: AuthForwardPlatform
   /**
    * 配置 Litch（litch_config）：本机 harness 里跑的 litch config 交给这台桌面端执行。
    * 不给就不声明这个命名空间（测试、移动端）
@@ -226,6 +229,7 @@ export function createCore(options: CoreOptions): Core {
       tools: hub,
       toolSwitches: () => switchesOf(config.id),
       ...(options.pairing ? { pairing: options.pairing } : {}),
+      ...(options.forward ? { forward: options.forward } : {}),
       // litch config 只从本机的 harness 来：只有本机设备的连接声明它
       ...(options.config && config.kind === 'local'
         ? {
@@ -1066,6 +1070,148 @@ export function createCore(options: CoreOptions): Core {
           }
           return { job: await deviceOf(deviceId).install.start(String(harness), version) }
         }
+        // harness 详情设置。出错的原因详情设置模块自己已经换成给人看的了，原样过去
+        case 'harnessConfig.write': {
+          const p = params as Commands['harnessConfig.write']['params']
+          return deviceOf(p.deviceId).harnessConfig.write(
+            String(p.harness),
+            Array.isArray(p.edits) ? p.edits : [],
+            String(p.expectedVersion),
+          )
+        }
+        case 'harnessConfig.action': {
+          const p = params as Commands['harnessConfig.action']['params']
+          await deviceOf(p.deviceId).harnessConfig.action(String(p.harness), String(p.actionId))
+          return {}
+        }
+        case 'harnessConfig.reload': {
+          const p = params as Commands['harnessConfig.reload']['params']
+          await deviceOf(p.deviceId).harnessConfig.reload(String(p.harness), p.part)
+          return {}
+        }
+        case 'harnessConfig.providers.upsert': {
+          const p = params as Commands['harnessConfig.providers.upsert']['params']
+          return deviceOf(p.deviceId).harnessConfig.upsertProvider(
+            String(p.harness),
+            String(p.providerId),
+            String(p.templateId),
+            p.definition ?? {},
+            String(p.expectedVersion),
+          )
+        }
+        case 'harnessConfig.providers.remove': {
+          const p = params as Commands['harnessConfig.providers.remove']['params']
+          return deviceOf(p.deviceId).harnessConfig.removeProvider(
+            String(p.harness),
+            String(p.providerId),
+          )
+        }
+        case 'harnessConfig.providers.activate': {
+          const p = params as Commands['harnessConfig.providers.activate']['params']
+          return deviceOf(p.deviceId).harnessConfig.activateProvider(
+            String(p.harness),
+            String(p.providerId),
+            String(p.expectedVersion),
+          )
+        }
+        case 'harnessConfig.auth.start': {
+          const p = params as Commands['harnessConfig.auth.start']['params']
+          const attemptId = await deviceOf(p.deviceId).harnessConfig.startAuth(
+            String(p.harness),
+            String(p.providerId),
+            String(p.methodId),
+            p.inputs,
+          )
+          return { attemptId }
+        }
+        case 'harnessConfig.auth.continue': {
+          const p = params as Commands['harnessConfig.auth.continue']['params']
+          await deviceOf(p.deviceId).harnessConfig.continueAuth(
+            String(p.harness),
+            String(p.attemptId),
+            p.inputs ?? {},
+          )
+          return {}
+        }
+        case 'harnessConfig.auth.cancel': {
+          const p = params as Commands['harnessConfig.auth.cancel']['params']
+          await deviceOf(p.deviceId).harnessConfig.cancelAuth(
+            String(p.harness),
+            String(p.attemptId),
+          )
+          return {}
+        }
+        case 'harnessConfig.auth.dismiss': {
+          const p = params as Commands['harnessConfig.auth.dismiss']['params']
+          deviceOf(p.deviceId).harnessConfig.dismissAuth(String(p.harness), String(p.attemptId))
+          return {}
+        }
+        case 'harnessConfig.auth.logout': {
+          const p = params as Commands['harnessConfig.auth.logout']['params']
+          await deviceOf(p.deviceId).harnessConfig.logout(String(p.harness), String(p.providerId))
+          return {}
+        }
+        case 'harnessConfig.env.set': {
+          const p = params as Commands['harnessConfig.env.set']['params']
+          if (typeof p.name !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(p.name)) {
+            throw new ChannelError('invalid', '环境变量的名字不对', undefined, { key: 'name' })
+          }
+          return deviceOf(p.deviceId).harnessConfig.setEnv(
+            String(p.harness),
+            p.name,
+            typeof p.value === 'string' ? p.value : null,
+          )
+        }
+        case 'harnessConfig.mcp.upsert': {
+          const p = params as Commands['harnessConfig.mcp.upsert']['params']
+          return deviceOf(p.deviceId).harnessConfig.upsertMcp(
+            String(p.harness),
+            p.server,
+            p.previousName,
+            String(p.expectedVersion),
+          )
+        }
+        case 'harnessConfig.mcp.remove': {
+          const p = params as Commands['harnessConfig.mcp.remove']['params']
+          return deviceOf(p.deviceId).harnessConfig.removeMcp(
+            String(p.harness),
+            String(p.name),
+            String(p.expectedVersion),
+          )
+        }
+        case 'harnessConfig.mcp.login': {
+          const p = params as Commands['harnessConfig.mcp.login']['params']
+          const attemptId = await deviceOf(p.deviceId).harnessConfig.loginMcp(
+            String(p.harness),
+            String(p.name),
+          )
+          return { attemptId }
+        }
+        case 'harnessConfig.instructions.write': {
+          const p = params as Commands['harnessConfig.instructions.write']['params']
+          const hash = await deviceOf(p.deviceId).harnessConfig.writeInstructions(
+            String(p.harness),
+            String(p.content ?? ''),
+            String(p.expectedHash ?? ''),
+          )
+          return { hash }
+        }
+        case 'instructions.overview': {
+          const p = params as Commands['instructions.overview']['params']
+          return deviceOf(p.deviceId).harnessConfig.overview()
+        }
+        case 'instructions.unify': {
+          const p = params as Commands['instructions.unify']['params']
+          const results = await deviceOf(p.deviceId).harnessConfig.unify(
+            String(p.harness),
+            String(p.content ?? ''),
+          )
+          return { results }
+        }
+        case 'instructions.separate': {
+          const p = params as Commands['instructions.separate']['params']
+          return { separated: await deviceOf(p.deviceId).harnessConfig.separate() }
+        }
         // litch config：界面回话、确认卡、直接跑一次
         case 'config.reply': {
           const { id, ok, data, reason } = params as Commands['config.reply']['params']
@@ -1145,6 +1291,8 @@ export function createCore(options: CoreOptions): Core {
       if (topic.kind === 'tasks') return device.tasks.open(sink)
       if (topic.kind === 'pairing') return device.pairing.open(sink)
       if (topic.kind === 'install') return device.install.open(sink)
+      // harness 详情设置：设备不支持时 supported 是 false，照样成立
+      if (topic.kind === 'harnessConfig') return device.harnessConfig.open(topic.harness, sink)
       // 设备还没连上时订阅照样成立，连上之后才有快照
       return device.openSession(topic.sessionId, sink)
     },

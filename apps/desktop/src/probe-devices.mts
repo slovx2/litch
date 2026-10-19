@@ -1,6 +1,6 @@
 // 设备列表的验收，对着模拟核心：一行上只有一眼要看的那几样，整行就是进详情的入口；
 // 忙闲和最近活动跟着会话变；六套皮肤明暗组合下不横向溢出、字和底分得开；窗口缩到最窄也不溢出。
-// 模拟核心里有四台设备：本机（四个 harness，一个不可用）、build（三个 harness）、
+// 模拟核心里有四台设备：本机（四个 harness，一个不可用）、build（五个 harness）、
 // nas（只有一个 harness）、gpu（没连上）。发的话里带“审批”的回合会停下来等人，带“待办”的要跑好一会儿。
 // 和别的验收一样，devicesProbe、narrowDevicesProbe 会被原样送进页面里执行，不能引用函数外面的东西；
 // judgeDevices 在主进程里跑。
@@ -366,7 +366,8 @@ export function judgeDevices(
     probe.rows,
     [
       'local｜本机｜dev@macbook｜已连接｜4 个 harness｜CC PI DS CX*',
-      'build｜build-01｜dev@build-01｜已连接｜4 个 harness｜CC PI DS CX',
+      // build-01 上有五个：徽标只摆四个，多的记个数
+      'build｜build-01｜dev@build-01｜已连接｜5 个 harness｜CC PI DS CX +1',
       // 没有设备服务、只连着原生 codex 的远程设备：说“只有它”
       'nas｜nas｜admin@nas.lan｜已连接｜只有 Codex｜CX',
       'gpu｜gpu-box｜dev@gpu-box｜离线｜2 个 harness｜CC PI',
