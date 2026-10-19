@@ -10,43 +10,81 @@ import { WIRES } from './remote.mjs'
  */
 export const COLOR_KEY = 'litch.color'
 
+/** 置顶记在项目 metadata 的这个键上，值是 "1"；没置顶就没有这个键 */
+export const PINNED_KEY = 'litch.pinned'
+/** 放进了哪个组（自定义分区的标识）记在这个键上 */
+export const SECTION_KEY = 'litch.section'
+
 const isColor = (value: unknown): value is WireColor =>
   typeof value === 'string' && (WIRES as readonly string[]).includes(value)
 
-export function projectWorkspace(project: Project): WorkspaceView {
-  const color = project.metadata?.[COLOR_KEY]
+/** sections：现在有的组。记着的组不在里面（别处删了）就当没放进组 */
+export function projectWorkspace(project: Project, sections: ReadonlySet<string>): WorkspaceView {
+  const metadata = project.metadata ?? {}
+  const color = metadata[COLOR_KEY]
+  const section = metadata[SECTION_KEY]
+  const sectionId = typeof section === 'string' && sections.has(section) ? section : null
   return {
     id: project.id,
     name: project.name,
     roots: (project.roots ?? []).map((root) => root.path),
     // 不认识的值（别的版本写的）当没挑过
     color: isColor(color) ? color : null,
+    // 在组里就不算置顶（两样只能有一样，见 metadataPatch）
+    pinned: sectionId === null && metadata[PINNED_KEY] === '1',
+    sectionId,
   }
 }
 
 /** 设备上认得的绝对路径：以 / 开头，或者盘符加冒号再加斜杠。相对路径、~ 开头的对面一律不收 */
 export const isAbsolutePath = (path: string): boolean => /^(\/|[A-Za-z]:[\\/])/.test(path)
 
+/** 工作区上记在 metadata 里的那几样。没给的不动 */
+export interface WorkspaceMarks {
+  /** 颜色给 null 是去掉 */
+  color?: WireColor | null
+  pinned?: boolean
+  /** 组给 null 是拿出来 */
+  sectionId?: string | null
+}
+
 /**
- * 改工作区的名字、颜色时要发的 metadata。协议里这一项是整份替换，所以要带着原来的别的键一起发
- * （导入时记下的来源之类）。颜色给 null 是去掉。没有要改的返回 undefined：请求里不带这一项
+ * 改工作区的颜色、置顶、所在的组时要发的 metadata。协议里这一项是整份替换，所以要带着原来的别的键一起发
+ * （导入时记下的来源之类）。置顶和进组只能有一样：置顶就从组里拿出来，进组就取消置顶。
+ * 没有要改的返回 undefined：请求里不带这一项
  */
-export function colorPatch(
+export function metadataPatch(
   project: Pick<Project, 'metadata'>,
-  color: WireColor | null | undefined,
+  marks: WorkspaceMarks,
 ): Record<string, string> | undefined {
-  if (color === undefined) return undefined
+  const { color, pinned, sectionId } = marks
+  if (color === undefined && pinned === undefined && sectionId === undefined) return undefined
   const next: Record<string, string> = {}
   for (const [key, value] of Object.entries(project.metadata ?? {})) {
-    if (typeof value === 'string' && key !== COLOR_KEY) next[key] = value
+    if (typeof value === 'string') next[key] = value
   }
-  if (color !== null) next[COLOR_KEY] = color
+  if (color === null) delete next[COLOR_KEY]
+  else if (color !== undefined) next[COLOR_KEY] = color
+  if (pinned === true) {
+    next[PINNED_KEY] = '1'
+    delete next[SECTION_KEY]
+  } else if (pinned === false) delete next[PINNED_KEY]
+  if (sectionId === null) delete next[SECTION_KEY]
+  else if (sectionId !== undefined) {
+    next[SECTION_KEY] = sectionId
+    delete next[PINNED_KEY]
+  }
   return next
 }
 
 /** 按设备上定的顺序排 */
-export function projectWorkspaces(projects: Project[]): WorkspaceView[] {
-  return [...projects].sort((a, b) => a.position - b.position).map(projectWorkspace)
+export function projectWorkspaces(
+  projects: Project[],
+  sections: ReadonlySet<string> = new Set(),
+): WorkspaceView[] {
+  return [...projects]
+    .sort((a, b) => a.position - b.position)
+    .map((project) => projectWorkspace(project, sections))
 }
 
 const trimSeparators = (path: string): string => path.replace(/[\\/]+$/, '')

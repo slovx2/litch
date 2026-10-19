@@ -1,6 +1,6 @@
 // 一台设备上次留下的侧栏：存什么、读回来的东西怎么检查。存在哪由外壳定。
 import type { Thread } from '../../../protocol/src/index.mjs'
-import type { DeviceView, HarnessView, WorkspaceView } from '../model.mjs'
+import type { DeviceView, HarnessView, SectionView, WorkspaceView } from '../model.mjs'
 
 /**
  * 一台设备上次留下的侧栏：对面是哪种、有哪些 harness、有哪些工作区、有哪些会话（只有元数据，不带回合）。
@@ -11,6 +11,8 @@ export interface DeviceSnapshot {
   mode: DeviceView['mode']
   harnesses: HarnessView[]
   workspaces: WorkspaceView[]
+  /** 组（自定义分区） */
+  sections: SectionView[]
   threads: Thread[]
   /**
    * 标着未读的会话。未读是这台电脑自己记的（对面没有这回事），跟着侧栏一起存，重启之后还在。
@@ -31,7 +33,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 /** 检查读回来的快照。形状对不上的（包括以前的版本存的）当作没存过，不去猜 */
 export function checkSnapshot(value: unknown): DeviceSnapshot | null {
   if (!isRecord(value)) return null
-  const { mode, harnesses, workspaces, threads, unread } = value
+  const { mode, harnesses, workspaces, threads, unread, sections } = value
   if (mode !== 'full' && mode !== 'single') return null
   if (!Array.isArray(harnesses) || !Array.isArray(workspaces) || !Array.isArray(threads)) {
     return null
@@ -41,7 +43,13 @@ export function checkSnapshot(value: unknown): DeviceSnapshot | null {
   return {
     mode,
     harnesses: harnesses as HarnessView[],
-    workspaces: workspaces as WorkspaceView[],
+    // 上一版存的工作区上没有置顶和组：当作都没有
+    workspaces: (workspaces as WorkspaceView[]).map((entry) => ({
+      ...entry,
+      pinned: entry.pinned === true,
+      sectionId: typeof entry.sectionId === 'string' ? entry.sectionId : null,
+    })),
+    sections: Array.isArray(sections) ? (sections.filter(named) as SectionView[]) : [],
     threads: threads.filter(named) as Thread[],
     // 上一版存的快照里没有这一项：当作没有未读的，不为它把整份侧栏丢掉
     unread: Array.isArray(unread)

@@ -23,6 +23,7 @@ import {
   isUnknownMethodError,
   type Model,
   type ModelListResponse,
+  PINNED_SECTION_ID,
   type Project,
   type ProjectListResponse,
   SESSION_TREE_METHOD,
@@ -31,6 +32,7 @@ import {
   type SessionTreeThreadFields,
   type Thread,
   type ThreadListSkippedHarness,
+  type ThreadSectionListResponse,
 } from '../../../protocol/src/index.mjs'
 import { ChannelError, type Clock, type SidebarOp } from '../channel/protocol.mjs'
 import type { HostSink } from '../channel/server.mjs'
@@ -48,6 +50,7 @@ import type {
   HarnessView,
   OutgoingMessage,
   RemoteTarget,
+  SectionView,
   SessionDefaults,
   SessionSettings,
   SessionSummary,
@@ -398,6 +401,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   let workspaces: WorkspaceView[] = []
   /** 工作区在协议里的原样（项目）。改名字、换颜色时要拿它带着别的键一起发；上次留下的快照里没有 */
   let rawProjects: Project[] = []
+  /** 这台设备上的组（自定义分区，不含置顶），按建的先后 */
+  let sections: SectionView[] = []
   /**
    * 各个 harness 的声明里核心自己要用的部分（认识哪些扩展、有哪几档权限预设）。没有声明的不在里面。
    * 只在连着的时候有：断线重连、它掉线又回来之后重新记
@@ -420,6 +425,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     mode = remembered.mode
     harnesses = remembered.harnesses
     workspaces = remembered.workspaces
+    sections = remembered.sections
     for (const thread of remembered.threads) {
       threads.set(thread.id, { ...thread, turns: [], status: { type: 'notLoaded' } })
     }
@@ -532,6 +538,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   const sidebar = (): SidebarView => ({
     deviceId: config.id,
     workspaces,
+    sections,
     sessions: [...threads.values()].map(summaryOf),
     archived: archivedList(),
   })
@@ -612,6 +619,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
           mode,
           harnesses,
           workspaces,
+          sections,
           threads: [...threads.values()],
           unread: [...unread],
         })
@@ -778,6 +786,38 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       hasProjects = false
     }
     return all
+  }
+
+  /** 取组（自定义分区）的列表，置顶那个不算。对面没有项目这组方法时也不会有组 */
+  const loadSections = async (): Promise<SectionView[]> => {
+    if (hasProjects !== true) return []
+    const all: SectionView[] = []
+    let cursor: string | null = null
+    try {
+      for (let page = 0; page < MAX_PAGES; page++) {
+        const result: ThreadSectionListResponse = await link.request(
+          'threadSection/list',
+          cursor ? { cursor } : {},
+        )
+        for (const entry of result.data) {
+          if (entry.id !== PINNED_SECTION_ID) all.push({ id: entry.id, name: entry.name })
+        }
+        if (!result.nextCursor || result.nextCursor === cursor) break
+        cursor = result.nextCursor
+      }
+    } catch (error) {
+      // 有项目、没有分区这组方法的对面：当它没有组
+      if (!(error instanceof RpcError) || !isUnknownMethodError(error.code)) throw error
+      return []
+    }
+    return all
+  }
+
+  /** 换上新取的工作区和组。工作区上记着的组要对着组的列表认（workspaces.mts） */
+  const setWorkspaces = (projects: Project[], listed: SectionView[]) => {
+    sections = listed
+    workspaces = projectWorkspaces(projects, new Set(listed.map((entry) => entry.id)))
+    rawProjects = projects
   }
 
   /**
@@ -970,9 +1010,11 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     // 置顶、取消置顶，进了、出了、换了分区（别的连接做的也是从这里知道的）
     'litch/thread/section/updated': ({ threadId, section, sectionEnteredAt }) =>
       patchThread(threadId, { section, sectionEnteredAt }),
-    // 分区本身建了、改了、删了。这一版不管理分区：分区的名字跟着会话对象走，
-    // 里面的会话各自会有上面那条通知，这里没有要做的
-    'litch/threadSection/changed': () => {},
+    // 组本身建了、改了、删了：组的列表和工作区一起重新取（工作区上记着的组要对着它认）。
+    // 里面的会话各自会有上面那条通知
+    'litch/threadSection/changed': () => {
+      if (hasProjects === true) void refreshProjects()
+    },
     'litch/harness/status/changed': harnessChanged,
     // 会话树：一个会话的 Litch 父子关系建立了、脱离了。只发给声明了 sessionTree 的连接
     'litch/thread/lineage/updated': ({ threadId, lineage }) =>
@@ -997,13 +1039,13 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     hold()
     try {
       const projects = await loadProjects()
+      const listed = await loadSections()
       // 完整模式下这是各个 harness 合并后的列表；当时不可用的 harness 不在里面，它上次的会话留着
       const listing = await loadThreads()
       // 界面要过已归档的那张表：对账时一起重新取
       const shelved = archived ? await loadThreads(true) : null
       if (mine !== session) return
-      workspaces = projectWorkspaces(projects)
-      rawProjects = projects
+      setWorkspaces(projects, listed)
       setThreads(listing)
       if (shelved) setArchived(shelved)
       catalogError = null
@@ -1030,9 +1072,9 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     const mine = session
     try {
       const projects = await loadProjects()
+      const listed = await loadSections()
       if (mine !== session) return
-      workspaces = projectWorkspaces(projects)
-      rawProjects = projects
+      setWorkspaces(projects, listed)
       hooks.sidebar(sidebar())
       terminals.regroup()
       saveSoon()
@@ -1544,6 +1586,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     request: (method, params, requestOptions) => link.request(method, params, requestOptions),
     fail: (error) => fail(error),
     projects: () => rawProjects,
+    sections: () => sections,
     reload: () => refreshProjects(),
     thread: (sessionId) => threads.get(sessionId),
     put: (thread) => upsertThread(thread),

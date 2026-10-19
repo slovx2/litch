@@ -144,7 +144,9 @@ test('刚连上：认出对面，翻页取完全部会话，按工作区规则�
   )
 
   const side = latest()
-  assert.deepEqual(side?.workspaces, [{ id: 'p', name: 'app', roots: ['/work/app'], color: null }])
+  assert.deepEqual(side?.workspaces, [
+    { id: 'p', name: 'app', roots: ['/work/app'], color: null, pinned: false, sectionId: null },
+  ])
   assert.deepEqual(
     side?.sessions.map((entry) => [
       entry.id,

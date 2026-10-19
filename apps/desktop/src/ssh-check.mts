@@ -53,6 +53,7 @@ if (process.argv[2] === '--store') {
     mode: 'single',
     harnesses: [],
     workspaces: [],
+    sections: [],
     threads: [{ id: 't1' } as never],
     unread: [],
   })

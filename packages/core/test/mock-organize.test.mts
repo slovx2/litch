@@ -13,6 +13,7 @@ import {
   keys,
   LOOSE,
   PINNED,
+  type SectionView,
   type SessionGroups,
   type SessionSummary,
   type SessionView,
@@ -46,11 +47,14 @@ async function setup() {
     await frame()
     return result as unknown
   }
-  return { time, channel, store, groups, names, summary, frame, run }
+  const sections = (deviceId = 'local') => store.get<SectionView[]>(keys.sections(deviceId)) ?? []
+  const workspace = (id: string, deviceId = 'local') =>
+    store.get<WorkspaceView[]>(keys.workspaces(deviceId))?.find((entry) => entry.id === id)
+  return { time, channel, store, groups, names, summary, frame, run, sections, workspace }
 }
 
 test('置顶：从工作区那一组挪到置顶组，排在先置顶的后面；取消置顶回到原来的工作区', async () => {
-  const { groups, summary, run } = await setup()
+  const { groups, summary, run, sections } = await setup()
   assert.deepEqual(groups()[PINNED], ['p1', 'p2'])
   assert.ok(groups().docs?.includes('s6'))
 
@@ -63,11 +67,46 @@ test('置顶：从工作区那一组挪到置顶组，排在先置顶的后面�
   assert.deepEqual(groups()[PINNED], ['p2', 's6'])
   assert.ok(groups().litch?.includes('p1'))
 
-  // 自定义分区里的拿出来：回到它的工作区，分区空了就不再列
+  // 组里的拿出来：回到它的工作区，组里没有会话了，组还在（空的组也画出来，好往里拖）
   assert.deepEqual(groups()[groupOfSection('sec-later')], ['k1'])
   await run('session.place', { sessionId: 'k1', place: null })
   assert.equal(groups()[groupOfSection('sec-later')], undefined)
   assert.ok(groups().litch?.includes('k1'))
+  assert.deepEqual(
+    sections().map((entry) => entry.id),
+    ['sec-later'],
+  )
+})
+
+test('组：建一个空的、把会话和工作区放进去、改名、删掉之后都放出来', async () => {
+  const { groups, summary, run, sections, workspace } = await setup()
+  const { sectionId } = (await run('section.create', { name: '工作中' })) as { sectionId: string }
+  assert.deepEqual(
+    sections().map((entry) => entry.name),
+    ['稍后看', '工作中'],
+    '按建的先后，空的也在',
+  )
+  await run('session.place', { sessionId: 's1', place: { sectionId } })
+  assert.deepEqual(groups()[groupOfSection(sectionId)], ['s1'])
+  assert.equal(summary('s1')?.section?.name, '工作中')
+
+  // 工作区：置顶，再放进组（两样只能有一样）
+  await run('workspace.update', { workspaceId: 'docs', pinned: true })
+  assert.deepEqual([workspace('docs')?.pinned, workspace('docs')?.sectionId], [true, null])
+  await run('workspace.update', { workspaceId: 'docs', sectionId })
+  assert.deepEqual([workspace('docs')?.pinned, workspace('docs')?.sectionId], [false, sectionId])
+
+  await run('section.rename', { sectionId, name: '在做' })
+  assert.equal(summary('s1')?.section?.name, '在做')
+
+  await run('section.delete', { sectionId })
+  assert.deepEqual(
+    sections().map((entry) => entry.id),
+    ['sec-later'],
+  )
+  assert.equal(summary('s1')?.section, null)
+  assert.ok(groups().litch?.includes('s1'))
+  assert.equal(workspace('docs')?.sectionId, null)
 })
 
 test('工作区：加、改名换色、调顺序、删；候选目录来自没有归属的会话', async () => {

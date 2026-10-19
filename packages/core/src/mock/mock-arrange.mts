@@ -1,5 +1,5 @@
 // 模拟核心里“整理侧栏”那一组（真的那一份是 device/organize.mts）：工作区的增删改和排序，
-// 把会话移到别的工作区，置顶。
+// 把会话移到别的工作区，置顶，组的增删改和往里放东西。
 // 行为照着真的核心（device/organize.mts）：做完之后工作区那张表整份换掉，会话各改各的；
 // 另有一出“别的客户端也在整理这台设备”，给界面试“别处改了，这边不刷新也看得到”用。
 import { ChannelError, type Clock, type Commands, type SidebarOp } from '../channel/protocol.mjs'
@@ -7,6 +7,7 @@ import { WIRES } from '../device/remote.mjs'
 import { isAbsolutePath } from '../device/workspaces.mjs'
 import type {
   DeviceView,
+  SectionView,
   SessionSummary,
   SidebarView,
   WireColor,
@@ -70,6 +71,18 @@ export function createMockOrganize(host: MockOrganizeHost): MockOrganize {
     return name
   }
 
+  const sectionNamed = (value: unknown): string => {
+    const name = typeof value === 'string' ? value.trim() : ''
+    if (!name) throw new ChannelError('rejected', '组的名字不能是空的', phrase('fault.sectionName'))
+    return name
+  }
+
+  const sectionOf = (sidebar: SidebarView, sectionId: string): SectionView => {
+    const found = sidebar.sections.find((entry) => entry.id === sectionId)
+    if (!found) throw new ChannelError('notFound', '这个组已经不在了')
+    return found
+  }
+
   const colored = (value: unknown): WireColor | null => {
     if (value == null) return null
     if (!WIRES.includes(value as WireColor)) throw new ChannelError('rejected', '没有这种线色')
@@ -113,12 +126,13 @@ export function createMockOrganize(host: MockOrganizeHost): MockOrganize {
     command(name, params) {
       if (name === 'session.place') {
         const { deviceId, sessionId, place } = params as Commands['session.place']['params']
-        sidebarOf(deviceId)
+        const sidebar = sidebarOf(deviceId)
         const pinned = place === 'pinned'
+        const section = place && place !== 'pinned' ? sectionOf(sidebar, place.sectionId) : null
         patchSession(deviceId, sessionId, {
           pinned,
-          section: null,
-          placedAt: pinned ? host.clock.now() : null,
+          section,
+          placedAt: pinned || section ? host.clock.now() : null,
         })
         return {}
       }
@@ -149,6 +163,8 @@ export function createMockOrganize(host: MockOrganizeHost): MockOrganize {
           name: named(given),
           roots: [path],
           color: colored(color),
+          pinned: false,
+          sectionId: null,
         }
         return { workspaceId: addWorkspace(deviceId, sidebar, workspace) }
       }
@@ -158,13 +174,21 @@ export function createMockOrganize(host: MockOrganizeHost): MockOrganize {
           workspaceId,
           name: given,
           color,
+          pinned,
+          sectionId,
         } = params as Commands['workspace.update']['params']
         const sidebar = sidebarOf(deviceId)
         const before = workspaceOf(sidebar, workspaceId)
+        if (sectionId) sectionOf(sidebar, sectionId)
+        // 置顶和进组只能有一样，和真的一样（device/workspaces.mts 的 metadataPatch）
         const next: WorkspaceView = {
           ...before,
           ...(given === undefined ? {} : { name: named(given) }),
           ...(color === undefined ? {} : { color: colored(color) }),
+          ...(pinned === undefined ? {} : { pinned, ...(pinned ? { sectionId: null } : {}) }),
+          ...(sectionId === undefined
+            ? {}
+            : { sectionId, ...(sectionId ? { pinned: false } : {}) }),
         }
         sidebar.workspaces = sidebar.workspaces.map((entry) => (entry === before ? next : entry))
         host.replaced(deviceId)
@@ -189,6 +213,45 @@ export function createMockOrganize(host: MockOrganizeHost): MockOrganize {
         // 只删这条记录：里面的会话都还在，回到“没有工作区”那一组
         sidebar.sessions = sidebar.sessions.map((session) =>
           session.workspaceId === workspaceId ? { ...session, workspaceId: null } : session,
+        )
+        host.replaced(deviceId)
+        return {}
+      }
+      if (name === 'section.create') {
+        const { deviceId, name: given } = params as Commands['section.create']['params']
+        const sidebar = sidebarOf(deviceId)
+        const section: SectionView = { id: `sec${++seq}`, name: sectionNamed(given) }
+        sidebar.sections = [...sidebar.sections, section]
+        host.replaced(deviceId)
+        return { sectionId: section.id }
+      }
+      if (name === 'section.rename') {
+        const { deviceId, sectionId, name: given } = params as Commands['section.rename']['params']
+        const sidebar = sidebarOf(deviceId)
+        const renamed = { ...sectionOf(sidebar, sectionId), name: sectionNamed(given) }
+        sidebar.sections = sidebar.sections.map((entry) =>
+          entry.id === sectionId ? renamed : entry,
+        )
+        // 会话对象上带着组的名字，跟着变
+        sidebar.sessions = sidebar.sessions.map((session) =>
+          session.section?.id === sectionId ? { ...session, section: renamed } : session,
+        )
+        host.replaced(deviceId)
+        return {}
+      }
+      if (name === 'section.delete') {
+        const { deviceId, sectionId } = params as Commands['section.delete']['params']
+        const sidebar = sidebarOf(deviceId)
+        sectionOf(sidebar, sectionId)
+        sidebar.sections = sidebar.sections.filter((entry) => entry.id !== sectionId)
+        // 里面的会话、工作区都放出来
+        sidebar.sessions = sidebar.sessions.map((session) =>
+          session.section?.id === sectionId
+            ? { ...session, section: null, placedAt: null }
+            : session,
+        )
+        sidebar.workspaces = sidebar.workspaces.map((entry) =>
+          entry.sectionId === sectionId ? { ...entry, sectionId: null } : entry,
         )
         host.replaced(deviceId)
         return {}
@@ -224,6 +287,8 @@ export function createMockOrganize(host: MockOrganizeHost): MockOrganize {
             name: host.elsewhereName,
             roots: ['/srv/elsewhere'],
             color: 'orange',
+            pinned: false,
+            sectionId: null,
           })
         },
         Math.max(host.stepMs * 10, 1),

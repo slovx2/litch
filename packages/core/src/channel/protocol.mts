@@ -308,11 +308,11 @@ export interface Commands {
   // 这一组要对面有工作区这组方法（DeviceView.organizable）；没有时以 unsupported 结束。
   // 都是设备上的数据：别的连接看得到，别处改了这边也跟着变。
   /**
-   * 置顶（pinned），或者从置顶、从它所在的自定义分区里拿出来（null）。
+   * 置顶（pinned），放进一个组（{ sectionId }），或者从置顶、从它所在的组里拿出来（null）。
    * 会话所属的 harness 现在不可用时也能做。
    */
   'session.place': {
-    params: { deviceId: string; sessionId: string; place: 'pinned' | null }
+    params: { deviceId: string; sessionId: string; place: 'pinned' | { sectionId: string } | null }
     result: Record<string, never>
   }
   /** 把会话移到另一个工作区。只改它归在哪儿，工作目录和内容都不动 */
@@ -327,7 +327,16 @@ export interface Commands {
   }
   /** 改工作区的名字、颜色。没给的不动；颜色给 null 是去掉 */
   'workspace.update': {
-    params: { deviceId: string; workspaceId: string; name?: string; color?: WireColor | null }
+    params: {
+      deviceId: string
+      workspaceId: string
+      name?: string
+      color?: WireColor | null
+      /** 置顶。置顶了就从组里拿出来 */
+      pinned?: boolean
+      /** 放进这个组（放进去就取消置顶），null 是从组里拿出来 */
+      sectionId?: string | null
+    }
     result: Record<string, never>
   }
   /** 调工作区的顺序：挪到 before 这个工作区前面；null 是挪到最后 */
@@ -338,6 +347,18 @@ export interface Commands {
   /** 删掉工作区这条记录。里面的会话、磁盘上的目录都不动，会话回到“没有工作区”那一组 */
   'workspace.delete': {
     params: { deviceId: string; workspaceId: string }
+    result: Record<string, never>
+  }
+  /** 建一个组（协议里叫自定义分区）。建好是空的 */
+  'section.create': { params: { deviceId: string; name: string }; result: { sectionId: string } }
+  /** 给组改名 */
+  'section.rename': {
+    params: { deviceId: string; sectionId: string; name: string }
+    result: Record<string, never>
+  }
+  /** 删掉一个组。里面的会话、工作区都放出来，回到原来的地方，不删它们 */
+  'section.delete': {
+    params: { deviceId: string; sectionId: string }
     result: Record<string, never>
   }
   /**

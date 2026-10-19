@@ -11,6 +11,7 @@ import type {
   PermissionPreset,
   QuestionView,
   RequestView,
+  SectionView,
   SessionDefaults,
   SessionSettings,
   SessionStatus,
@@ -239,6 +240,12 @@ function sidebar(
   rows: Row[],
 ): SidebarView {
   const roots = new Map(workspaces.map(([id, , root]) => [id, root]))
+  const sessions = summaries(text, now, roots, rows)
+  // 组就是会话上出现过的那几个
+  const sections = new Map<string, SectionView>()
+  for (const session of sessions) {
+    if (session.section) sections.set(session.section.id, session.section)
+  }
   return {
     deviceId,
     workspaces: workspaces.map(([id, name, root, color]) => ({
@@ -246,8 +253,11 @@ function sidebar(
       name,
       roots: [root],
       color: color ?? null,
+      pinned: false,
+      sectionId: null,
     })),
-    sessions: summaries(text, now, roots, rows),
+    sections: [...sections.values()],
+    sessions,
     archived: null,
   }
 }

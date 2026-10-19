@@ -270,6 +270,7 @@ test('有 harness 没包含进来：它上次的会话留着，设备下面说�
     mode: 'full',
     harnesses: [],
     workspaces: [],
+    sections: [],
     threads: [
       // 上次留下的：cc 的一个会话当时还在跑，pi 的一个会话后来被删了
       owned('cc', thread({ id: 'c-old', status: { type: 'active', activeFlags: [] } })),
@@ -412,6 +413,7 @@ test('所属的 harness 不可用时打开会话：先等着，不报错；它�
     mode: 'full',
     harnesses: [],
     workspaces: [],
+    sections: [],
     threads: [owned('cc', thread({ id: 'c1' }))],
     unread: [],
   }

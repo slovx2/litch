@@ -1455,7 +1455,13 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         sessionTree: false,
       }
       app.devices.push(device)
-      sidebars.set(device.id, { deviceId: device.id, workspaces: [], sessions: [], archived: null })
+      sidebars.set(device.id, {
+        deviceId: device.id,
+        workspaces: [],
+        sections: [],
+        sessions: [],
+        archived: null,
+      })
       emitDevice(device)
       connectDevice(device.id, checked)
       return { deviceId: device.id }
@@ -1479,7 +1485,13 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       })
       if (!sameTarget(before.target, checked)) {
         // 换了一台机器：侧栏清空，重新连
-        const empty: SidebarView = { deviceId, workspaces: [], sessions: [], archived: null }
+        const empty: SidebarView = {
+          deviceId,
+          workspaces: [],
+          sections: [],
+          sessions: [],
+          archived: null,
+        }
         sidebars.set(deviceId, empty)
         for (const sink of sinks.get(`sidebar:${deviceId}`) ?? []) sink.snapshot(empty)
         patchDevice(deviceId, { stale: false, harnesses: [], organizable: false, service: null })

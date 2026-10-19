@@ -357,7 +357,7 @@ export interface MockFullProbe {
   downShown: string
   leftNote: string
   /**
-   * 不可用的 harness 的会话那一行看得出用不了。行尾的菜单里只剩“置顶”：那是设备上的记录，不经过 harness；
+   * 不可用的 harness 的会话那一行看得出用不了。行尾的菜单里只剩“置顶”“移到组”：那是设备上的记录，不经过 harness；
    * 要够得着它才做得了的（改名、归档、删除、换项目）都不出
    */
   downRows: number
@@ -537,8 +537,8 @@ export function judgeMockFull(probe: MockFullProbe): string[] {
   must(probe.leftNote.length > 0, '信息卡里没有说它的会话是上次留下的')
   must(probe.downRows >= 1, '不可用的 harness 的会话那一行看不出用不了')
   must(
-    probe.downRowMenu === '置顶',
-    `不可用的 harness 的会话那一行，菜单里该只剩“置顶”：${probe.downRowMenu}`,
+    probe.downRowMenu === '置顶|移到组…',
+    `不可用的 harness 的会话那一行，菜单里该只剩“置顶”“移到组”：${probe.downRowMenu}`,
   )
   must(
     probe.defaultHarness === 'Claude Code',

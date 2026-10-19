@@ -283,9 +283,16 @@ export interface WorkspaceView {
   roots: string[]
   /** 用户给它挑的颜色。没挑过是 null */
   color: WireColor | null
+  /** 置顶了：和置顶的会话排在一起，在各个组前面。在组里的不会同时置顶 */
+  pinned: boolean
+  /** 放进了哪个组（自定义分区）。没放、或者那个组已经删了是 null */
+  sectionId: string | null
 }
 
-/** 用户自己建的一个分区。只有里面有会话的时候界面才画它，所以它跟着会话的摘要走 */
+/**
+ * 用户自己建的一个组（协议里叫自定义分区）。里面可以放会话，也可以放工作区；
+ * 空的也画出来，好把东西拖进去
+ */
 export interface SectionView {
   id: string
   name: string
@@ -324,6 +331,8 @@ export interface SessionSummary {
 export interface SidebarView {
   deviceId: string
   workspaces: WorkspaceView[]
+  /** 这台设备上的组，按建的先后。不含置顶 */
+  sections: SectionView[]
   sessions: SessionSummary[]
   /** 已归档的会话，最近动过的在前。null：界面还没要过，核心没去取 */
   archived: SessionSummary[] | null

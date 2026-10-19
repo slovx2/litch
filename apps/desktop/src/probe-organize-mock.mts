@@ -187,7 +187,7 @@ export async function organizeMockProbe(): Promise<OrganizeMockProbe> {
   seen.groups = keys.join(' ')
   seen.pinned = titlesIn(':pinned').join('|')
   const sectionKey = keys.find((key) => key.startsWith(':section:')) ?? ''
-  const labelOf = (group: string) => text(one(`[data-group="${group}"] > .sec-label`, local()))
+  const labelOf = (group: string) => text(one(`[data-head="${group}"] .sec-label`, local()))
   const card = await hover(lineOf(P1) as Element, '置顶会话')
   const info = text(one('[data-session-info]', card.card))
   seen.sessionCard = info
@@ -226,7 +226,10 @@ export async function organizeMockProbe(): Promise<OrganizeMockProbe> {
   const sectionMenu = seen.sectionMenu.startsWith('移出“稍后看”|置顶|')
   one<HTMLButtonElement>('.pick-opt[data-action="unsection"]', sectionPop)?.click()
   await until('它回到项目里', () => groupOf(K1) === 'litch')
-  const unsectioned = !groupKeys().some((key) => key.startsWith(':section:'))
+  // 组空了也还在（空的组画出来，好往里拖），里面是一句提示
+  const unsectioned =
+    titlesIn(sectionKey).length === 0 &&
+    Boolean(one(`[data-group="${sectionKey}"] .band-empty`, local()))
   const S7 = '能力矩阵页改成从声明生成'
   const movePop = await choose(lineOf(S7), S7, 'move')
   const targets = await until('可以移去的项目', () => {
@@ -295,7 +298,8 @@ export async function organizeMockProbe(): Promise<OrganizeMockProbe> {
   const lastPop = await menuOf(workspaceLine('launchd'), '最后一个项目')
   seen.lastMenu = items(lastPop)
   const menuEnds =
-    seen.firstMenu === '改名与颜色…|下移|删除' && seen.lastMenu === '改名与颜色…|上移|删除'
+    seen.firstMenu === '改名与颜色…|置顶|移到组…|下移|删除' &&
+    seen.lastMenu === '改名与颜色…|置顶|移到组…|上移|删除'
   one<HTMLButtonElement>('.pick-opt[data-action="edit"]', lastPop)?.click()
   await until('改名与颜色的对话框', dialog)
   const nameField = await until('名字那一栏', () => one<HTMLInputElement>('#ws-name'))
@@ -396,7 +400,8 @@ export async function organizeMockProbe(): Promise<OrganizeMockProbe> {
     hidden,
     shownOnOthers: claudeHasFork,
     // 模拟核心的本机声明了会话树：能派子会话
-    noDelete: seen.dshMenu === '置顶|移到项目…|为这个会话建定时任务|派一个子会话…|改名|归档',
+    noDelete:
+      seen.dshMenu === '置顶|移到组…|移到项目…|为这个会话建定时任务|派一个子会话…|改名|归档',
     presetNotes: dsh.read.length === 3 && Boolean(dsh.read[0]?.startsWith('只读：不能改文件')),
     solePreset:
       pi.read.length === 1 &&

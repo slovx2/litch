@@ -65,7 +65,7 @@ export const en: Record<MessageKey, Entry> = {
   'sidebar.deviceMenu': 'Actions for this device',
   'info.workspace': 'Project',
   'info.place': 'Placed in',
-  'info.place.section': 'Section “{name}”',
+  'info.place.section': 'Group “{name}”',
   'session.pin': 'Pin',
   'session.unpin': 'Unpin',
   'session.unsection': 'Remove from “{name}”',
@@ -96,6 +96,29 @@ export const en: Record<MessageKey, Entry> = {
   'workspace.save': 'Save',
   'workspace.create': 'Add',
   'workspace.cancel': 'Cancel',
+  // Groups (custom sections in the protocol): hold conversations and projects
+  'section.menu': 'Actions for this group',
+  'section.add': 'New group…',
+  'section.add.title': 'New group',
+  'section.rename': 'Rename…',
+  'section.rename.title': 'Rename group',
+  'section.name': 'Name',
+  'section.name.hint':
+    'Then drag conversations or projects into it, or pick “Move to group” in their menus.',
+  'section.create': 'Create',
+  'section.delete': 'Delete group',
+  'section.delete.title': 'Delete group “{name}”?',
+  'section.delete.note':
+    'Only the group goes away. The conversations and projects in it go back where they were; nothing is deleted. Other clients connected to this device will see it gone too.',
+  'section.empty': 'Drag conversations or projects here',
+  'section.move': 'Move to group…',
+  'section.move.title': 'Move to which group',
+  'sidebar.pinned.drop': 'Drag here to pin',
+  'sidebar.focus': 'Open on its own',
+  'sidebar.focus.back': 'Back',
+  'workspace.pin': 'Pin',
+  'workspace.unpin': 'Unpin',
+  'workspace.ungroup': 'Remove from “{name}”',
   'permission.newOnly': 'This level can only be picked when starting a session',
   'permission.confirm.declared': 'Confirm once more before switching to this level.',
   'composer.steer.noImages':
@@ -1516,6 +1539,7 @@ export const en: Record<MessageKey, Entry> = {
   'fault.organizeUnsupported':
     'projects and pinning cannot be changed on this device: the other end does not offer them',
   'fault.workspaceName': 'a project needs a name',
+  'fault.sectionName': 'a group needs a name',
   'fault.workspaceRoot':
     'the folder must be a full path on the device, for example /home/me/project',
   'fault.workspaceGone': 'this project no longer exists. It may have been deleted elsewhere',

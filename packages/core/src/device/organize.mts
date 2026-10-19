@@ -1,5 +1,6 @@
-// 整理侧栏：工作区的增删改和排序，把会话移到别的工作区，置顶和取消置顶。
-// 用的都是 Codex 协议里现成的方法（project/*、thread/metadata/update、thread/section/move）。
+// 整理侧栏：工作区的增删改和排序，把会话移到别的工作区，置顶和取消置顶，组（自定义分区）的增删改和往里放东西。
+// 用的都是 Codex 协议里现成的方法（project/*、thread/metadata/update、threadSection/*、thread/section/move）。
+// 工作区的置顶、所在的组协议里没有，记在项目的 metadata 里（workspaces.mts 的 metadataPatch）。
 // 对面是设备服务时这些数据存在设备层、跨 harness；对面是单个入口时存在那个引擎自己那里。
 //
 // 规矩：
@@ -14,9 +15,9 @@ import {
 } from '../../../protocol/src/index.mjs'
 import { ChannelError } from '../channel/protocol.mjs'
 import type { RpcRequestOptions } from '../connection/rpc.mjs'
-import type { WireColor } from '../model.mjs'
+import type { SectionView, WireColor } from '../model.mjs'
 import { phrase } from '../phrase.mjs'
-import { colorPatch, isAbsolutePath } from './workspaces.mjs'
+import { isAbsolutePath, metadataPatch, type WorkspaceMarks } from './workspaces.mjs'
 
 export interface OrganizeHost {
   online(): boolean
@@ -31,7 +32,9 @@ export interface OrganizeHost {
   fail(error: unknown): ChannelError
   /** 现在的项目，协议里的原样 */
   projects(): readonly Project[]
-  /** 重新取一遍工作区，侧栏整份换掉 */
+  /** 现在的组 */
+  sections(): readonly SectionView[]
+  /** 重新取一遍工作区和组，侧栏整份换掉 */
   reload(): Promise<void>
   /** 会话目录里的这个会话。没有就是 undefined */
   thread(sessionId: string): Thread | undefined
@@ -43,20 +46,26 @@ export interface OrganizeHost {
 export interface Organizer {
   /** 加一个工作区：起个名字，指一个目录。返回它的标识 */
   createWorkspace(input: { name: string; root: string; color?: WireColor | null }): Promise<string>
-  /** 改名字、换颜色。没给的不动；颜色给 null 是去掉 */
-  updateWorkspace(
-    workspaceId: string,
-    patch: { name?: string; color?: WireColor | null },
-  ): Promise<void>
+  /** 改名字、换颜色、置顶、放进组或拿出来。没给的不动；颜色、组给 null 是去掉 */
+  updateWorkspace(workspaceId: string, patch: { name?: string } & WorkspaceMarks): Promise<void>
   /** 调顺序：挪到 before 这个工作区前面；null 是挪到最后 */
   moveWorkspace(workspaceId: string, before: string | null): Promise<void>
   /** 删掉这条记录。里面的会话、磁盘上的目录都不动 */
   deleteWorkspace(workspaceId: string): Promise<void>
   /** 把会话归到另一个工作区 */
   moveSession(sessionId: string, workspaceId: string): Promise<void>
-  /** 置顶（pinned），或者从置顶、从它所在的分区里拿出来（null） */
-  placeSession(sessionId: string, place: 'pinned' | null): Promise<void>
+  /** 置顶（pinned），放进一个组，或者从置顶、从它所在的组里拿出来（null） */
+  placeSession(sessionId: string, place: SessionPlace): Promise<void>
+  /** 建一个组。返回它的标识 */
+  createSection(name: string): Promise<string>
+  /** 给组改名 */
+  renameSection(sectionId: string, name: string): Promise<void>
+  /** 删掉一个组：里面的会话、工作区都放出来，不删它们 */
+  deleteSection(sectionId: string): Promise<void>
 }
+
+/** 会话放到哪：置顶、某个组，null 是从置顶、从组里拿出来 */
+export type SessionPlace = 'pinned' | { sectionId: string } | null
 
 const NAME_MAX = 200
 
@@ -90,6 +99,14 @@ export function createOrganizer(host: OrganizeHost): Organizer {
     return name
   }
 
+  const sectionNamed = (value: string): string => {
+    const name = value.trim()
+    if (!name || name.length > NAME_MAX) {
+      throw new ChannelError('rejected', '组的名字不能是空的', phrase('fault.sectionName'))
+    }
+    return name
+  }
+
   /** 要改的这个工作区的原样。这边没有（别处刚建的）就先重新取一遍；还没有就是已经不在了 */
   const find = async (workspaceId: string): Promise<Project> => {
     const known = () => host.projects().find((project) => project.id === workspaceId)
@@ -115,7 +132,7 @@ export function createOrganizer(host: OrganizeHost): Organizer {
           phrase('fault.workspaceRoot'),
         )
       }
-      const metadata = colorPatch({ metadata: {} }, color ?? undefined)
+      const metadata = color ? metadataPatch({ metadata: {} }, { color }) : undefined
       const { project } = await guarded(() =>
         host.request('project/create', {
           name: named(name),
@@ -133,7 +150,8 @@ export function createOrganizer(host: OrganizeHost): Organizer {
       ready()
       const project = await find(workspaceId)
       const name = patch.name === undefined ? undefined : named(patch.name)
-      const metadata = colorPatch(project, patch.color)
+      const { name: _name, ...marks } = patch
+      const metadata = metadataPatch(project, marks)
       if (name === undefined && metadata === undefined) return
       await guarded(() =>
         host.request('project/update', {
@@ -170,16 +188,42 @@ export function createOrganizer(host: OrganizeHost): Organizer {
 
     async placeSession(sessionId, place) {
       ready()
-      const sectionId = place === 'pinned' ? PINNED_SECTION_ID : null
+      const sectionId =
+        place === null ? null : place === 'pinned' ? PINNED_SECTION_ID : place.sectionId
       await guarded(() => host.request('thread/section/move', { threadId: sessionId, sectionId }))
       const thread = host.thread(sessionId)
       if (!thread) return
+      // 置顶那个分区的名字没人看；组的名字取这边知道的
+      const name = host.sections().find((entry) => entry.id === sectionId)?.name ?? ''
       host.put({
         ...thread,
-        // 置顶那个分区的名字没人看；别的分区这边不往里放
-        section: sectionId === null ? null : { id: sectionId, name: '', appearance: null },
+        section: sectionId === null ? null : { id: sectionId, name, appearance: null },
         sectionEnteredAt: sectionId === null ? null : Math.floor(host.now() / 1000),
       })
+    },
+
+    async createSection(name) {
+      ready()
+      const { section } = await guarded(() =>
+        host.request('threadSection/create', { name: sectionNamed(name) }),
+      )
+      await host.reload()
+      return section.id
+    },
+
+    async renameSection(sectionId, name) {
+      ready()
+      await guarded(() =>
+        host.request('threadSection/update', { sectionId, name: sectionNamed(name) }),
+      )
+      await host.reload()
+    },
+
+    async deleteSection(sectionId) {
+      ready()
+      await guarded(() => host.request('threadSection/delete', { sectionId }))
+      // 里面的会话由设备放出来（各有一条通知）；工作区上记着的组不用去改，组不在了就当没放（workspaces.mts）
+      await host.reload()
     },
   }
 }

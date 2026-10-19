@@ -74,8 +74,15 @@ test('完整模式：设备声明了设备级的工作区就去取；会话带�
   assert.equal(sent('project/list').length, 1)
   assert.equal(device()?.organizable, true)
   assert.deepEqual(side.workspaces, [
-    { id: 'app', name: 'app', roots: ['/work/app'], color: 'blue' },
-    { id: 'docs', name: 'docs', roots: ['/work/docs'], color: null },
+    { id: 'app', name: 'app', roots: ['/work/app'], color: 'blue', pinned: false, sectionId: null },
+    {
+      id: 'docs',
+      name: 'docs',
+      roots: ['/work/docs'],
+      color: null,
+      pinned: false,
+      sectionId: null,
+    },
   ])
   assert.deepEqual(
     [...side.sessions.values()]
@@ -267,12 +274,78 @@ test('别处改了：工作区、归属、置顶、分区的通知到了，侧�
     [false, null],
   )
 
-  // 分区本身的增删改：这一版不管理分区，认得这条通知、什么都不做
-  server.notify('litch/threadSection/changed', { sectionId: 'sec-9', changeType: 'deleted' })
+  // 别的连接建了一个组：组的列表和工作区一起重新取，空的组也在
+  fake.sections.push({ id: 'sec-9', name: '稍后看' })
+  const sectionLists = sent('threadSection/list').length
+  server.notify('litch/threadSection/changed', { sectionId: 'sec-9', changeType: 'created' })
   await settle()
   assert.ok(!logs.some((line) => line.includes('不处理的通知')))
+  assert.equal(sent('threadSection/list').length, sectionLists + 1)
+  assert.deepEqual(side.sections, [{ id: 'sec-9', name: '稍后看' }])
   // 这些都不引起重新取会话列表
   assert.equal(sent('thread/list').length, lists)
+})
+
+test('组：建、改名、删除；会话放进组；工作区置顶、放进组，两样只能有一样', async () => {
+  const { core, side, command, sent, fake } = setup((device) => {
+    organized(device)
+    const docs = device.projects.find((entry) => entry.id === 'docs')
+    if (docs) docs.metadata = { 'litch.import.sources': 'codex' }
+  })
+  core.start()
+  await settle()
+  assert.deepEqual(side.sections, [], '置顶那个不算组')
+
+  const noName = await failureOf(command('section.create', { name: ' ' }))
+  assert.deepEqual([noName.code, noName.text], ['rejected', { key: 'fault.sectionName' }])
+  const { sectionId } = (await command('section.create', { name: ' 稍后看 ' })) as {
+    sectionId: string
+  }
+  assert.deepEqual(sent('threadSection/create'), [{ name: '稍后看' }])
+  assert.deepEqual(side.sections, [{ id: sectionId, name: '稍后看' }], '建好是空的，也在列表里')
+
+  // 会话放进组：这边先改，名字取这边知道的
+  await command('session.place', { sessionId: 'c1', place: { sectionId } })
+  assert.deepEqual(sent('thread/section/move').at(-1), { threadId: 'c1', sectionId })
+  const placed = side.sessions.get('c1')
+  assert.deepEqual([placed?.pinned, placed?.section], [false, { id: sectionId, name: '稍后看' }])
+
+  // 工作区置顶，再放进组：放进组就取消置顶；metadata 带着原来的别的键
+  await command('workspace.update', { workspaceId: 'docs', pinned: true })
+  assert.deepEqual(sent('project/update').at(-1), {
+    projectId: 'docs',
+    metadata: { 'litch.import.sources': 'codex', 'litch.pinned': '1' },
+  })
+  assert.deepEqual(
+    side.workspaces.map((entry) => [entry.id, entry.pinned, entry.sectionId]),
+    [
+      ['app', false, null],
+      ['docs', true, null],
+    ],
+  )
+  await command('workspace.update', { workspaceId: 'docs', sectionId })
+  assert.deepEqual(sent('project/update').at(-1), {
+    projectId: 'docs',
+    metadata: { 'litch.import.sources': 'codex', 'litch.section': sectionId },
+  })
+  assert.deepEqual(
+    side.workspaces.find((entry) => entry.id === 'docs'),
+    { id: 'docs', name: 'docs', roots: ['/work/docs'], color: null, pinned: false, sectionId },
+  )
+
+  await command('section.rename', { sectionId, name: '以后再说' })
+  assert.deepEqual(sent('threadSection/update'), [{ sectionId, name: '以后再说' }])
+  assert.deepEqual(side.sections, [{ id: sectionId, name: '以后再说' }])
+
+  // 删组：里面的会话由设备放出来；工作区上记着的组不去改，组不在了就当没放
+  await command('section.delete', { sectionId })
+  assert.deepEqual(sent('threadSection/delete'), [{ sectionId }])
+  assert.deepEqual(side.sections, [])
+  assert.equal(side.workspaces.find((entry) => entry.id === 'docs')?.sectionId, null)
+  assert.equal(
+    fake.projects.find((entry) => entry.id === 'docs')?.metadata['litch.section'],
+    sectionId,
+  )
 })
 
 test('自己改完要取、通知到了也要取：前后脚的两次合成一趟，取到的是改动之后的', async () => {

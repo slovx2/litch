@@ -90,6 +90,8 @@ export interface FakeDevice {
   assigned: Map<string, string>
   /** 设备层记的分区：会话 → 所在的分区和进去的时间 */
   placed: Map<string, { id: string; name: string; at: number }>
+  /** 设备层的组（自定义分区），不含置顶 */
+  sections: { id: string; name: string }[]
   /** 列表认不认 parentThreadId。不认的（有的引擎）照样回全部会话 */
   byParent: boolean
 }
@@ -125,6 +127,7 @@ export function fakeDevice(harnesses: FakeHarness[]): {
     projects: [],
     assigned: new Map(),
     placed: new Map(),
+    sections: [],
     byParent: true,
   }
 
@@ -309,7 +312,40 @@ export function fakeDevice(harnesses: FakeHarness[]): {
       if (fields.sectionId === null) device.placed.delete(found.id)
       else if (fields.sectionId === PINNED_SECTION_ID) {
         device.placed.set(found.id, { id: PINNED_SECTION_ID, name: 'Pinned', at: 1_700_000_500 })
-      } else throw new RpcFailure(-32602, '未知分组')
+      } else {
+        const section = device.sections.find((entry) => entry.id === fields.sectionId)
+        if (!section) throw new RpcFailure(-32602, '未知分组')
+        device.placed.set(found.id, { ...section, at: 1_700_000_600 })
+      }
+      return {}
+    }),
+    // 置顶那个排在最前面，和设备层一样
+    'threadSection/list': organized('threadSection/list', () => ({
+      data: [
+        { id: PINNED_SECTION_ID, name: 'Pinned', appearance: null },
+        ...device.sections.map((entry) => ({ ...entry, appearance: null })),
+      ],
+      nextCursor: null,
+    })),
+    'threadSection/create': organized('threadSection/create', (fields) => {
+      const section = { id: `sec-${++device.threadSeq}`, name: String(fields.name) }
+      device.sections.push(section)
+      return { section: { ...section, appearance: null } }
+    }),
+    'threadSection/update': organized('threadSection/update', (fields) => {
+      const section = device.sections.find((entry) => entry.id === fields.sectionId)
+      if (!section) throw new RpcFailure(-32602, '未知分组')
+      section.name = String(fields.name)
+      for (const [threadId, place] of device.placed) {
+        if (place.id === section.id) device.placed.set(threadId, { ...place, name: section.name })
+      }
+      return { section: { ...section, appearance: null } }
+    }),
+    'threadSection/delete': organized('threadSection/delete', (fields) => {
+      device.sections = device.sections.filter((entry) => entry.id !== fields.sectionId)
+      for (const [threadId, place] of device.placed) {
+        if (place.id === fields.sectionId) device.placed.delete(threadId)
+      }
       return {}
     }),
     'thread/list': (params) => {

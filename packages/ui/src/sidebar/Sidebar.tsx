@@ -12,7 +12,17 @@ import {
   type SessionSummary,
   type WorkspaceView,
 } from '@litch/core'
-import { type CSSProperties, memo, type ReactNode, useEffect, useRef, useState } from 'react'
+import {
+  type CSSProperties,
+  type DragEvent,
+  memo,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react'
 import type { Draft, Page, Selection } from '../app/App.tsx'
 import { requestTasks } from '../app/actions.ts'
 import { useT } from '../app/appearance.ts'
@@ -21,7 +31,18 @@ import { badgeOf, downHarness, downText, nameOf, wireStyle } from '../app/device
 import { reasonOf } from '../app/errors.ts'
 import { ago } from '../app/format.ts'
 import { useHoverCard } from '../app/HoverCard.tsx'
-import { Archive, Caret, Clock, Gear, Icon, Machine, Notice, Plus } from '../app/icons.tsx'
+import {
+  Archive,
+  Back,
+  Caret,
+  Clock,
+  Forward,
+  Gear,
+  Icon,
+  Machine,
+  Notice,
+  Plus,
+} from '../app/icons.tsx'
 import { useKey, useServices } from '../app/services.tsx'
 import { showToast } from '../app/toasts.tsx'
 import type { PlaceWish } from '../composer/new-place.ts'
@@ -30,16 +51,40 @@ import { useBrowserWants } from '../side/browser/store.ts'
 import { SpawnDialog } from '../tree/SpawnDialog.tsx'
 import { offerUndo } from './archive-undo.ts'
 import { cwdMark } from './cwd.ts'
+import {
+  DRAG_TYPE,
+  type DragItem,
+  type DropTarget,
+  draggedItem,
+  dropCommands,
+  endDrag,
+  onDragChange,
+  startDrag,
+} from './drop.ts'
 import { keepSessions } from './filter.ts'
 import { HarnessFilter } from './HarnessFilter.tsx'
 import { DeviceInfo, SessionInfo, WorkspaceInfo } from './InfoCards.tsx'
 import { type RowAction, RowMenu, type RowMenuHandle } from './RowMenu.tsx'
+import { SectionDialog } from './SectionDialog.tsx'
 import { SidebarFrame } from './SidebarFrame.tsx'
 import { useSidebarHarnesses } from './state.ts'
 import { TallyMarks } from './TallyMarks.tsx'
 import { WorkspaceDialog } from './WorkspaceDialog.tsx'
 
 const NO_WORKSPACES: readonly WorkspaceView[] = []
+const NO_SECTIONS: readonly SectionView[] = []
+/** 菜单里“移到组”那一屏最后的“新建组…” */
+const NEW_SECTION = ':new'
+
+/** 现在正在拖的东西。拖起来、放下时叫醒订阅的组件 */
+const useDragging = (): DragItem | null => useSyncExternalStore(onDragChange, draggedItem)
+
+/** 拖起来：记下拖的是什么。dataTransfer 上只放个记号，好认出是侧栏里拖出来的 */
+function beginDrag(event: DragEvent, item: DragItem) {
+  event.dataTransfer.setData(DRAG_TYPE, item.id)
+  event.dataTransfer.effectAllowed = 'move'
+  startDrag(item)
+}
 
 interface RowProps {
   deviceId: string
@@ -69,6 +114,7 @@ const SessionRow = memo(function SessionRow({
   const summary = useKey<SessionSummary>(keys.summary(deviceId, sessionId))
   const device = useKey<DeviceView>(keys.device(deviceId))
   const workspaces = useKey<WorkspaceView[]>(keys.workspaces(deviceId)) ?? NO_WORKSPACES
+  const sections = useKey<SectionView[]>(keys.sections(deviceId)) ?? NO_SECTIONS
   const schedulable = useKey<boolean | null>(keys.tasksAvailable(deviceId)) === true
   const t = useT()
   const now = useNow()
@@ -87,6 +133,8 @@ const SessionRow = memo(function SessionRow({
   const [failure, setFailure] = useState<string | null>(null)
   /** 开着“派一个子会话”的对话框 */
   const [spawning, setSpawning] = useState(false)
+  /** 开着“新建组”的对话框：建好之后把这个会话放进去 */
+  const [grouping, setGrouping] = useState(false)
   const field = useRef<HTMLInputElement>(null)
   const menu = useRef<RowMenuHandle>(null)
   /** 这一次改名已经有了结果（提交或者放弃）。输入框消失时还会再报一次失焦，不能当成又提交一次 */
@@ -101,8 +149,8 @@ const SessionRow = memo(function SessionRow({
   if (!summary) return null
 
   const failed = (error: unknown) => setFailure(t('session.failed', { reason: reasonOf(error, t) }))
-  /** 置顶，或者从置顶、从它所在的分区里拿出来 */
-  const place = (to: 'pinned' | null) => {
+  /** 置顶、放进一个组，或者从置顶、从它所在的组里拿出来 */
+  const place = (to: 'pinned' | { sectionId: string } | null) => {
     setFailure(null)
     channel.command('session.place', { deviceId, sessionId, place: to }).catch(failed)
   }
@@ -190,6 +238,21 @@ const SessionRow = memo(function SessionRow({
         })
       actions.push({ id: 'pin', title: t('session.pin') })
     }
+    // 移到组：别的组，最后一项是新建一个
+    actions.push({
+      id: 'group',
+      title: t('section.move'),
+      choices: {
+        title: t('section.move.title'),
+        back: t('session.move.back'),
+        options: [
+          ...sections
+            .filter((entry) => entry.id !== summary.section?.id || summary.pinned)
+            .map((entry) => ({ id: entry.id, title: entry.name })),
+          { id: NEW_SECTION, title: t('section.add') },
+        ],
+      },
+    })
     if (online && elsewhere.length > 0)
       actions.push({
         id: 'move',
@@ -249,7 +312,10 @@ const SessionRow = memo(function SessionRow({
       channel.command('session.detach', { deviceId, sessionId }).catch(failed)
     } else if (id === 'pin') place('pinned')
     else if (id === 'unpin' || id === 'unsection') place(null)
-    else if (id === 'move') {
+    else if (id === 'group') {
+      if (choice === NEW_SECTION) setGrouping(true)
+      else if (choice) place({ sectionId: choice })
+    } else if (id === 'move') {
       if (choice) move(choice)
     } else run(id === 'archive' ? 'session.archive' : 'session.delete')
   }
@@ -260,6 +326,19 @@ const SessionRow = memo(function SessionRow({
         className="row-line"
         data-session={sessionId}
         data-parent={nested ? (summary.lineage?.parentId ?? '') : undefined}
+        // 能整理的设备上可以拖：拖进置顶、组，或者拖回自己的项目（Sidebar 里的落点）
+        draggable={organizable}
+        onDragStart={(event) =>
+          beginDrag(event, {
+            deviceId,
+            kind: 'session',
+            id: sessionId,
+            workspaceId: summary.workspaceId,
+            pinned: summary.pinned,
+            sectionId: summary.pinned ? null : (summary.section?.id ?? null),
+          })
+        }
+        onDragEnd={endDrag}
         {...info.area}
         onContextMenu={(event) => {
           // 一件能做的事都没有（没连着）就不出菜单；在已经弹出来的菜单里点右键也不管
@@ -334,6 +413,14 @@ const SessionRow = memo(function SessionRow({
         {info.card}
       </div>
       {failure ? <div className="row-err">{failure}</div> : null}
+      {grouping ? (
+        <SectionDialog
+          deviceId={deviceId}
+          section={null}
+          onCreated={(sectionId) => place({ sectionId })}
+          onClose={() => setGrouping(false)}
+        />
+      ) : null}
       {spawning ? (
         <SpawnDialog
           deviceId={deviceId}
@@ -380,6 +467,91 @@ interface GroupProps {
   draft: Draft | null
   onSelect(selection: Selection): void
   onCompose(draft: Draft): void
+  /** 正在单独查看这台设备上的哪一组（置顶、某个组、某个工作区，键和 SessionGroups 的一样）。null：照常显示 */
+  focus: string | null
+  /** 单独查看一组；null 是回到照常显示 */
+  onFocus(group: string | null): void
+}
+
+interface HeadProps {
+  /** 组的键（和 SessionGroups 的一样）。外框上的 data-head 用它，自检按它找 */
+  group: string
+  deviceId: string
+  /** 名字那一块：小箭头后面的东西 */
+  label: ReactNode
+  expanded: boolean
+  onToggle(): void
+  /** 名字后面的“单独查看”。正在单独查看时没有 */
+  onFocus?: (() => void) | undefined
+  /** 行尾的“新建会话” */
+  add?: ReactNode
+  /** 行尾的“更多” */
+  menu?: ReactNode
+  /** 信息卡：鼠标停在名字上浮出 */
+  card?: ReturnType<typeof useHoverCard> | undefined
+  /** 拖起这一行（工作区可以拖）。不给就不能拖 */
+  onDrag?: ((event: DragEvent) => void) | undefined
+  /** 是工作区那一行时是它的标识（外框上的 data-workspace，自检按它找） */
+  workspaceId?: string
+  /** 整行和名字按钮各加的样式名：工作区是 ws-line、ws-row，置顶和组是 sec-line、sec-row */
+  className: string
+  toggleClass: string
+}
+
+/**
+ * 工作区、置顶、组的那一行：小箭头和名字是收起、展开的按钮，名字后面紧跟“单独查看”，
+ * 收起时行尾汇总里面的状况。行上空白的地方点一下和点名字一样
+ */
+function HeadLine(props: HeadProps) {
+  const { group, deviceId, label, expanded, onToggle, onFocus, add, menu, card, onDrag } = props
+  const t = useT()
+  return (
+    // biome-ignore lint/a11y/noStaticElementInteractions lint/a11y/useKeyWithClickEvents: 空白处点一下和点名字一样，键盘走名字那个按钮
+    <div
+      className={`row-line head-line ${props.className}`}
+      data-head={group}
+      data-workspace={props.workspaceId}
+      draggable={onDrag !== undefined}
+      onDragStart={onDrag}
+      onDragEnd={onDrag ? endDrag : undefined}
+      onClick={(event) => {
+        if (event.target === event.currentTarget || (event.target as Element).matches('.head-fill'))
+          onToggle()
+      }}
+      {...card?.area}
+    >
+      <button
+        type="button"
+        className={`head-toggle ${props.toggleClass}`}
+        aria-expanded={expanded}
+        onClick={onToggle}
+        {...card?.anchor}
+      >
+        <Caret />
+        {label}
+      </button>
+      {onFocus ? (
+        <button
+          type="button"
+          className="ibtn row-focus"
+          title={t('sidebar.focus')}
+          aria-label={t('sidebar.focus')}
+          onClick={onFocus}
+        >
+          <Forward />
+        </button>
+      ) : null}
+      <span className="grow head-fill" />
+      {expanded ? null : (
+        <span className="head-tally">
+          <TallyMarks deviceId={deviceId} group={group} />
+        </span>
+      )}
+      {add}
+      {menu}
+      {card?.card}
+    </div>
+  )
 }
 
 interface WorkspaceHeadProps {
@@ -389,44 +561,63 @@ interface WorkspaceHeadProps {
   count: number
   expanded: boolean
   onToggle(): void
+  onFocus?: (() => void) | undefined
   /** 行尾的“新建会话” */
   add: ReactNode
-  /** 行尾的“更多”：改名与颜色、调顺序、删除。这台设备上整理不了就没有 */
+  /** 行尾的“更多”：改名与颜色、置顶、移到组、调顺序、删除。这台设备上整理不了就没有 */
   menu: ReactNode
 }
 
 /**
  * 工作区那一行：行上只有名字（挑过颜色的前面多一个色块），目录在信息卡里。
- * 收起的时候里面的会话都不画，行尾汇总一下里面有没有在等人的、在跑的、没看过的；展开着就不用，里面自己看得见
+ * 收起的时候里面的会话都不画，行尾汇总一下里面有没有在等人的、在跑的、没看过的；展开着就不用，里面自己看得见。
+ * 能整理的设备上可以拖：拖进置顶、组，或者拖到外面的工作区上排在它前面
  */
 function WorkspaceHead(props: WorkspaceHeadProps) {
-  const { workspace, device, count, expanded, onToggle, add, menu } = props
-  const info = useHoverCard(() => (
+  const { workspace, device, count, expanded, onToggle, onFocus, add, menu } = props
+  const card = useHoverCard(() => (
     <WorkspaceInfo workspace={workspace} device={device} count={count} />
   ))
   return (
-    <div className="row-line" data-workspace={workspace.id} {...info.area}>
-      <button
-        type="button"
-        className="ws-row"
-        aria-expanded={expanded}
-        onClick={onToggle}
-        {...info.anchor}
-      >
-        <Caret />
-        {workspace.color ? <i className="ws-dot" style={wireStyle(workspace.color)} /> : null}
-        <span className="name ell grow">{workspace.name}</span>
-        {expanded ? null : <TallyMarks deviceId={device.id} group={workspace.id} />}
-      </button>
-      {add}
-      {menu}
-      {info.card}
-    </div>
+    <HeadLine
+      group={workspace.id}
+      deviceId={device.id}
+      className="ws-line"
+      toggleClass="ws-row"
+      workspaceId={workspace.id}
+      label={
+        <>
+          {workspace.color ? <i className="ws-dot" style={wireStyle(workspace.color)} /> : null}
+          <span className="name ell">{workspace.name}</span>
+        </>
+      }
+      expanded={expanded}
+      onToggle={onToggle}
+      onFocus={onFocus}
+      add={add}
+      menu={menu}
+      card={card}
+      onDrag={
+        device.organizable
+          ? (event) =>
+              beginDrag(event, {
+                deviceId: device.id,
+                kind: 'workspace',
+                id: workspace.id,
+                workspaceId: workspace.id,
+                pinned: workspace.pinned,
+                sectionId: workspace.sectionId,
+              })
+          : undefined
+      }
+    />
   )
 }
 
 /** 一个工作区里先露出几个会话 */
 const FIRST_ROWS = 5
+/** 单独查看一组时先露出几个 */
+const FOCUS_ROWS = 50
 /** 点一次“展示更多”多露出几个 */
 const MORE_ROWS = 10
 const NO_IDS: readonly string[] = []
@@ -435,21 +626,38 @@ const NO_CHILDREN: SessionChildren = {}
 const MAX_DEPTH = 8
 /** 子会话每一层往里缩多少像素（和 tree.css 的 .tree-kids 一致） */
 const INDENT = 14
-const NO_SECTIONS: readonly SectionView[] = []
 
-function DeviceGroup({ deviceId, selection, draft, onSelect, onCompose }: GroupProps) {
+/** 一组放东西的地方（置顶、组、外面的工作区、无项目）在拖放时的样子：能放的时候高亮 */
+interface Zone {
+  onDragOver(event: DragEvent): void
+  onDragLeave(event: DragEvent): void
+  onDrop(event: DragEvent): void
+  'data-drop'?: 'on'
+}
+
+function DeviceGroup(props: GroupProps) {
+  const { deviceId, selection, draft, onSelect, onCompose, focus, onFocus } = props
   const { channel } = useServices()
   const device = useKey<DeviceView>(keys.device(deviceId))
-  const workspaces = useKey<WorkspaceView[]>(keys.workspaces(deviceId)) ?? []
+  const workspaces = useKey<WorkspaceView[]>(keys.workspaces(deviceId)) ?? NO_WORKSPACES
   const groups = useKey<SessionGroups>(keys.groups(deviceId)) ?? {}
   const sections = useKey<SectionView[]>(keys.sections(deviceId)) ?? NO_SECTIONS
   /** 开着的工作区对话框：添加（workspace 为 null），或者改某一个 */
   const [dialog, setDialog] = useState<{ workspace: WorkspaceView | null } | null>(null)
+  /** 开着的组对话框：新建（section 为 null，建好之后做 then），或者改名 */
+  const [sectionDialog, setSectionDialog] = useState<{
+    section: SectionView | null
+    then?: (sectionId: string) => void
+  } | null>(null)
+  /** 收起了的：设备（''）、工作区、置顶、组，键和 SessionGroups 的一样 */
   const [closed, setClosed] = useState<ReadonlySet<string>>(new Set())
-  /** 各个工作区点“展示更多”多露出来的个数。没点过的不在里面 */
+  /** 各组点“展示更多”多露出来的个数。没点过的不在里面 */
   const [extra, setExtra] = useState<Readonly<Record<string, number>>>({})
   /** 收起了子会话的父会话 */
   const [folded, setFolded] = useState<ReadonlySet<string>>(new Set())
+  /** 拖着东西停在哪一组上（能放的时候才记） */
+  const [over, setOver] = useState<string | null>(null)
+  const dragging = useDragging()
   /** 父会话 → 挂在它下面的子会话（只有父会话也在侧栏里的才在） */
   const children = useKey<SessionChildren>(keys.children(deviceId)) ?? NO_CHILDREN
   const pressing = useKey<string[]>(keys.pressing(deviceId)) ?? NO_IDS
@@ -459,6 +667,19 @@ function DeviceGroup({ deviceId, selection, draft, onSelect, onCompose }: GroupP
   const reconnect = useReconnect(deviceId)
   const t = useT()
   const info = useHoverCard(() => (device ? <DeviceInfo device={device} /> : null))
+  // 单独查看的那个组、工作区没了（别处删了）：回到照常显示
+  const gone =
+    focus !== null &&
+    focus !== PINNED &&
+    !sections.some((entry) => groupOfSection(entry.id) === focus) &&
+    !workspaces.some((entry) => entry.id === focus)
+  useEffect(() => {
+    if (gone) onFocus(null)
+  }, [gone, onFocus])
+  // 拖完了：落点的高亮去掉
+  useEffect(() => {
+    if (!dragging) setOver(null)
+  }, [dragging])
   if (!device) return null
   const picked = selection?.deviceId === deviceId ? selection.sessionId : null
   /** 非露出来不可的会话：正选中的那个，和停下来等人的那些。筛选筛不掉它们，“展示更多”也折不住它们 */
@@ -520,23 +741,23 @@ function DeviceGroup({ deviceId, selection, draft, onSelect, onCompose }: GroupP
       return next
     })
   /**
-   * 一个工作区（或“无工作区”）里的会话。多的时候只露出最近的几个，其余的收在“展示更多”后面，
+   * 一组里的会话。多的时候只露出最近的几个，其余的收在“展示更多”后面，
    * 点一次多露出一批。折在后面的也有非露出来不可的（见上面的 always）。
    */
-  const rows = (all: readonly string[], groupId: string) => {
+  const rows = (all: readonly string[], groupId: string, first = FIRST_ROWS) => {
     // 挂在父会话下面的不在组里单独占一行
     const list = all.filter((id) => !nested.has(id))
     const more = extra[groupId] ?? 0
-    let limit = FIRST_ROWS + more
+    let limit = first + more
     // 只剩一个没露出来，不值得为它多一个按钮
     if (list.length - limit <= 1) limit = list.length
     const visible = list.filter((id, index) => index < limit || always(id))
     const hidden = list.length - visible.length
-    const folded = more > 0 && list.length > FIRST_ROWS + 1
+    const shrinkable = more > 0 && list.length > first + 1
     return (
       <>
         {visible.map((sessionId) => tree(sessionId, 0))}
-        {hidden > 0 || folded ? (
+        {hidden > 0 || shrinkable ? (
           <div className="ss-more">
             {hidden > 0 ? (
               <>
@@ -552,7 +773,7 @@ function DeviceGroup({ deviceId, selection, draft, onSelect, onCompose }: GroupP
             ) : (
               <span className="grow" />
             )}
-            {folded ? (
+            {shrinkable ? (
               <button
                 type="button"
                 className="mini less"
@@ -609,7 +830,7 @@ function DeviceGroup({ deviceId, selection, draft, onSelect, onCompose }: GroupP
       </button>
     ) : null
 
-  /** 整理工作区的事没做成：出一条提示（行上没有地方说） */
+  /** 整理侧栏的事没做成：出一条提示（行上没有地方说） */
   const organize = (done: Promise<unknown>) => {
     done.catch((error: unknown) =>
       showToast({
@@ -620,12 +841,84 @@ function DeviceGroup({ deviceId, selection, draft, onSelect, onCompose }: GroupP
       }),
     )
   }
-  /** 工作区行尾的“更多”。这台设备上整理不了（没连着、对面没有这组功能）就没有 */
-  const workspaceMenu = (workspace: WorkspaceView, at: number) => {
+  /** 新建一个组，建好之后做 then（把会话、工作区放进去） */
+  const newSection = (then?: (sectionId: string) => void) =>
+    setSectionDialog(then ? { section: null, then } : { section: null })
+
+  /**
+   * 一处能放东西的地方。拖着的东西放得进来（drop.ts 说放下去有事可做）才接，接的时候高亮；
+   * 放不进来的不拦，让外面一层（工作区在组里时是那个组）去接
+   */
+  const zone = (key: string, target: DropTarget): Zone => ({
+    onDragOver(event) {
+      const item = draggedItem()
+      if (!item || !event.dataTransfer.types.includes(DRAG_TYPE)) return
+      if (dropCommands(item, target, deviceId).length === 0) return
+      event.preventDefault()
+      event.stopPropagation()
+      event.dataTransfer.dropEffect = 'move'
+      if (over !== key) setOver(key)
+    },
+    onDragLeave(event) {
+      if (event.currentTarget.contains(event.relatedTarget as Node | null)) return
+      setOver((at) => (at === key ? null : at))
+    },
+    onDrop(event) {
+      const item = draggedItem()
+      if (!item) return
+      const commands = dropCommands(item, target, deviceId)
+      if (commands.length === 0) return
+      event.preventDefault()
+      event.stopPropagation()
+      setOver(null)
+      endDrag()
+      organize(
+        (async () => {
+          // 一样一样来：先从组里拿出来，再挪位置
+          for (const { name, params } of commands) {
+            await channel.command(name, { deviceId, ...params } as never)
+          }
+        })(),
+      )
+    },
+    ...(over === key ? { 'data-drop': 'on' as const } : {}),
+  })
+
+  /** 和它在一处（同在置顶、同一个组、都在外面）的工作区，按设备上的顺序 */
+  const siblingsOf = (workspace: WorkspaceView) =>
+    workspaces.filter((entry) =>
+      workspace.pinned
+        ? entry.pinned
+        : workspace.sectionId
+          ? entry.sectionId === workspace.sectionId
+          : !entry.pinned && !entry.sectionId,
+    )
+  /** 工作区行尾的“更多”。这台设备上整理不了（没连着、对面没有这组方法）就没有 */
+  const workspaceMenu = (workspace: WorkspaceView) => {
     if (!device.organizable) return null
+    const siblings = siblingsOf(workspace)
+    const at = siblings.indexOf(workspace)
+    const home = sections.find((entry) => entry.id === workspace.sectionId)
     const actions: RowAction[] = [{ id: 'edit', title: t('workspace.edit') }]
+    if (home) actions.push({ id: 'ungroup', title: t('workspace.ungroup', { name: home.name }) })
+    else
+      actions.push({ id: 'pin', title: t(workspace.pinned ? 'workspace.unpin' : 'workspace.pin') })
+    actions.push({
+      id: 'group',
+      title: t('section.move'),
+      choices: {
+        title: t('section.move.title'),
+        back: t('session.move.back'),
+        options: [
+          ...sections
+            .filter((entry) => entry.id !== workspace.sectionId)
+            .map((entry) => ({ id: entry.id, title: entry.name })),
+          { id: NEW_SECTION, title: t('section.add') },
+        ],
+      },
+    })
     if (at > 0) actions.push({ id: 'up', title: t('workspace.up') })
-    if (at < workspaces.length - 1) actions.push({ id: 'down', title: t('workspace.down') })
+    if (at < siblings.length - 1) actions.push({ id: 'down', title: t('workspace.down') })
     actions.push({
       id: 'delete',
       title: t('workspace.delete'),
@@ -637,20 +930,270 @@ function DeviceGroup({ deviceId, selection, draft, onSelect, onCompose }: GroupP
       },
     })
     const target = { deviceId, workspaceId: workspace.id }
+    const regroup = (sectionId: string) =>
+      organize(channel.command('workspace.update', { ...target, sectionId }))
     return (
       <RowMenu
         label={t('workspace.menu')}
         actions={actions}
-        onAction={(id) => {
+        onAction={(id, choice) => {
           if (id === 'edit') setDialog({ workspace })
           else if (id === 'delete') organize(channel.command('workspace.delete', target))
-          else {
-            // 上移：挪到前一个的前面；下移：挪到后面第二个的前面，后面只剩一个就是挪到最后
-            const before = workspaces[id === 'up' ? at - 1 : at + 2]?.id ?? null
+          else if (id === 'pin') {
+            organize(channel.command('workspace.update', { ...target, pinned: !workspace.pinned }))
+          } else if (id === 'ungroup') {
+            organize(channel.command('workspace.update', { ...target, sectionId: null }))
+          } else if (id === 'group') {
+            if (choice === NEW_SECTION) newSection(regroup)
+            else if (choice) regroup(choice)
+          } else {
+            // 上移：挪到同一处前一个的前面；下移：挪到同一处后面第二个的前面，
+            // 后面只剩一个就挪到它在整张表里的下一个前面（没有就是最后）
+            const next = siblings[at + 1]
+            const before =
+              id === 'up'
+                ? (siblings[at - 1]?.id ?? null)
+                : (siblings[at + 2]?.id ??
+                  (next ? (workspaces[workspaces.indexOf(next) + 1]?.id ?? null) : null))
             organize(channel.command('workspace.move', { ...target, before }))
           }
         }}
       />
+    )
+  }
+
+  /** 只看某几个 harness 的时候，里面一个它们的会话都没有的工作区整块不出：留着一串空的工作区只是添乱 */
+  const showsWorkspace = (workspace: WorkspaceView) =>
+    filter.length === 0 || shown(workspace.id).length > 0
+  /**
+   * 一个工作区：那一行和它下面的会话。outside：不在置顶、组里，是放东西的地方
+   * （会话拖回自己的项目、别的工作区拖到它前面）
+   */
+  const workspaceBlock = (workspace: WorkspaceView, outside: boolean) => {
+    const expanded = !closed.has(workspace.id)
+    return (
+      <div
+        key={workspace.id}
+        data-group={workspace.id}
+        className="drop-zone"
+        {...(outside ? zone(workspace.id, { kind: 'workspace', workspaceId: workspace.id }) : {})}
+      >
+        <WorkspaceHead
+          workspace={workspace}
+          device={device}
+          count={groups[workspace.id]?.length ?? 0}
+          expanded={expanded}
+          onToggle={() => toggle(workspace.id)}
+          onFocus={() => onFocus(workspace.id)}
+          add={add(workspace.id)}
+          menu={workspaceMenu(workspace)}
+        />
+        {expanded ? rows(shown(workspace.id), workspace.id) : null}
+      </div>
+    )
+  }
+
+  const pinnedWorkspaces = workspaces.filter((entry) => entry.pinned && showsWorkspace(entry))
+  const sectionWorkspaces = (sectionId: string) =>
+    workspaces.filter((entry) => entry.sectionId === sectionId && showsWorkspace(entry))
+  const plainWorkspaces = workspaces.filter(
+    (entry) => !entry.pinned && !entry.sectionId && showsWorkspace(entry),
+  )
+  /** 拖着这台设备上能整理的东西：这时候空的置顶也露出来当落点 */
+  const draggingHere = dragging?.deviceId === deviceId
+
+  /** 组的“更多”：改名、新建一个组、删除 */
+  const sectionMenu = (section: SectionView) =>
+    device.organizable ? (
+      <RowMenu
+        label={t('section.menu')}
+        actions={[
+          { id: 'rename', title: t('section.rename') },
+          { id: 'add', title: t('section.add') },
+          {
+            id: 'delete',
+            title: t('section.delete'),
+            confirm: {
+              title: t('section.delete.title', { name: section.name }),
+              note: t('section.delete.note'),
+              yes: t('section.delete'),
+              no: t('workspace.cancel'),
+            },
+          },
+        ]}
+        onAction={(id) => {
+          if (id === 'rename') setSectionDialog({ section })
+          else if (id === 'add') newSection()
+          else organize(channel.command('section.delete', { deviceId, sectionId: section.id }))
+        }}
+      />
+    ) : null
+
+  /** 置顶、组里的东西：会话在前，工作区在后。都没有时一句提示（也是放东西的地方） */
+  const bandBody = (key: string, inside: WorkspaceView[], empty: string, first: number) => {
+    const list = shown(key)
+    if (list.length === 0 && inside.length === 0) return <div className="band-empty">{empty}</div>
+    return (
+      <>
+        {rows(list, key, first)}
+        {inside.map((workspace) => workspaceBlock(workspace, false))}
+      </>
+    )
+  }
+
+  /** 置顶或者一个组：那一行和里面的东西。整块都是放东西的地方 */
+  const band = (
+    key: string,
+    target: DropTarget,
+    title: ReactNode,
+    inside: WorkspaceView[],
+    empty: string,
+    menu: ReactNode,
+  ) => {
+    const expanded = !closed.has(key)
+    return (
+      <div key={key} data-group={key} className="drop-zone band" {...zone(key, target)}>
+        <HeadLine
+          group={key}
+          deviceId={deviceId}
+          className="sec-line"
+          toggleClass="sec-row"
+          label={<span className="sec-label name ell">{title}</span>}
+          expanded={expanded}
+          onToggle={() => toggle(key)}
+          onFocus={() => onFocus(key)}
+          menu={menu}
+        />
+        {expanded ? bandBody(key, inside, empty, FIRST_ROWS) : null}
+      </div>
+    )
+  }
+
+  /** 照常显示：置顶、各个组排在工作区前面，是用户特意拿出来的；里面的东西不再出现在外面 */
+  const everything = () => {
+    const pinnedShown =
+      shown(PINNED).length > 0 ||
+      pinnedWorkspaces.length > 0 ||
+      (draggingHere && filter.length === 0)
+    const bands = sections.flatMap((entry) => {
+      const key = groupOfSection(entry.id)
+      const inside = sectionWorkspaces(entry.id)
+      // 只看某几个 harness 的时候，里面没有它们的东西的组不出
+      if (filter.length > 0 && shown(key).length === 0 && inside.length === 0) return []
+      return [
+        band(
+          key,
+          { kind: 'section', sectionId: entry.id },
+          entry.name,
+          inside,
+          t('section.empty'),
+          sectionMenu(entry),
+        ),
+      ]
+    })
+    return (
+      <>
+        {pinnedShown
+          ? band(
+              PINNED,
+              { kind: 'pinned' },
+              t('sidebar.pinned'),
+              pinnedWorkspaces,
+              t('sidebar.pinned.drop'),
+              null,
+            )
+          : null}
+        {bands}
+        {plainWorkspaces.map((workspace) => workspaceBlock(workspace, true))}
+        {shown(LOOSE).length > 0 ? (
+          <div data-group={LOOSE} className="drop-zone" {...zone(LOOSE, { kind: 'loose' })}>
+            <div className="sec-label">{t('workspace.none')}</div>
+            {rows(shown(LOOSE), LOOSE)}
+          </div>
+        ) : null}
+      </>
+    )
+  }
+
+  /** 单独查看一组：只有它里面的东西，会话先露出多一些 */
+  const focused = (key: string) => {
+    if (key === PINNED) {
+      return (
+        <div data-group={PINNED} className="drop-zone band" {...zone(PINNED, { kind: 'pinned' })}>
+          {bandBody(PINNED, pinnedWorkspaces, t('sidebar.pinned.drop'), FOCUS_ROWS)}
+        </div>
+      )
+    }
+    const section = sections.find((entry) => groupOfSection(entry.id) === key)
+    if (section) {
+      return (
+        <div
+          data-group={key}
+          className="drop-zone band"
+          {...zone(key, { kind: 'section', sectionId: section.id })}
+        >
+          {bandBody(key, sectionWorkspaces(section.id), t('section.empty'), FOCUS_ROWS)}
+        </div>
+      )
+    }
+    return (
+      <div
+        data-group={key}
+        className="drop-zone"
+        {...zone(key, { kind: 'workspace', workspaceId: key })}
+      >
+        {rows(shown(key), key, FOCUS_ROWS)}
+      </div>
+    )
+  }
+  /** 单独查看时顶上那一行写的名字 */
+  const focusTitle = (key: string): string =>
+    key === PINNED
+      ? t('sidebar.pinned')
+      : (sections.find((entry) => groupOfSection(entry.id) === key)?.name ??
+        workspaces.find((entry) => entry.id === key)?.name ??
+        '')
+
+  const dialogs = (
+    <>
+      {dialog ? (
+        <WorkspaceDialog
+          deviceId={deviceId}
+          workspace={dialog.workspace}
+          onClose={() => setDialog(null)}
+        />
+      ) : null}
+      {sectionDialog ? (
+        <SectionDialog
+          deviceId={deviceId}
+          section={sectionDialog.section}
+          {...(sectionDialog.then ? { onCreated: sectionDialog.then } : {})}
+          onClose={() => setSectionDialog(null)}
+        />
+      ) : null}
+    </>
+  )
+
+  // 单独查看一组：顶上一行“返回”和它的名字，下面只有它里面的东西
+  if (focus !== null && !gone) {
+    return (
+      <section
+        className={offline ? 'dev-group focus off' : 'dev-group focus'}
+        data-device={deviceId}
+        data-focus={focus}
+        style={wireStyle(device.wire)}
+      >
+        <div className="row-line focus-bar">
+          <button type="button" className="focus-back" onClick={() => onFocus(null)}>
+            <Back />
+            <span>{t('sidebar.focus.back')}</span>
+          </button>
+          <span className="focus-title ell">{focusTitle(focus)}</span>
+          <span className="focus-device dim ell">{t.text(device.name)}</span>
+        </div>
+        {dialogs}
+        <div className="dev-body">{focused(focus)}</div>
+      </section>
     )
   }
 
@@ -688,19 +1231,19 @@ function DeviceGroup({ deviceId, selection, draft, onSelect, onCompose }: GroupP
         {device.organizable ? (
           <RowMenu
             label={t('sidebar.deviceMenu')}
-            actions={[{ id: 'addWorkspace', title: t('workspace.add') }]}
-            onAction={() => setDialog({ workspace: null })}
+            actions={[
+              { id: 'addWorkspace', title: t('workspace.add') },
+              { id: 'addSection', title: t('section.add') },
+            ]}
+            onAction={(id) => {
+              if (id === 'addSection') newSection()
+              else setDialog({ workspace: null })
+            }}
           />
         ) : null}
         {info.card}
       </div>
-      {dialog ? (
-        <WorkspaceDialog
-          deviceId={deviceId}
-          workspace={dialog.workspace}
-          onClose={() => setDialog(null)}
-        />
-      ) : null}
+      {dialogs}
       {open ? (
         <div className="dev-body">
           {device.failure ? (
@@ -713,53 +1256,11 @@ function DeviceGroup({ deviceId, selection, draft, onSelect, onCompose }: GroupP
           {device.stale && offline && Object.keys(groups).length > 0 ? (
             <div className="dev-note">{t('sidebar.stale')}</div>
           ) : null}
-          {/* 置顶的和各个分区排在工作区前面：是用户特意拿出来的。里面的会话不再出现在工作区里。
-              每一组的外框上写着它是哪一组（和数据副本里分组的键一样），自检按它找 */}
+          {/* 每一组的外框上写着它是哪一组（和数据副本里分组的键一样），自检按它找 */}
           {filter.length > 0 && Object.keys(groups).every((group) => shown(group).length === 0) ? (
             <div className="dev-none">{t('sidebar.filter.none')}</div>
           ) : null}
-          {shown(PINNED).length > 0 ? (
-            <div data-group={PINNED}>
-              <div className="sec-label">{t('sidebar.pinned')}</div>
-              {rows(shown(PINNED), PINNED)}
-            </div>
-          ) : null}
-          {sections.map((entry) => {
-            const group = groupOfSection(entry.id)
-            const list = shown(group)
-            return list.length > 0 ? (
-              <div key={entry.id} data-group={group}>
-                <div className="sec-label">{entry.name}</div>
-                {rows(list, group)}
-              </div>
-            ) : null
-          })}
-          {workspaces.map((workspace, at) => {
-            const list = shown(workspace.id)
-            // 只看某几个 harness 的时候，里面一个它们的会话都没有的工作区整行不出：留着一串空的工作区只是添乱
-            if (filter.length > 0 && list.length === 0) return null
-            const expanded = !closed.has(workspace.id)
-            return (
-              <div key={workspace.id} data-group={workspace.id}>
-                <WorkspaceHead
-                  workspace={workspace}
-                  device={device}
-                  count={groups[workspace.id]?.length ?? 0}
-                  expanded={expanded}
-                  onToggle={() => toggle(workspace.id)}
-                  add={add(workspace.id)}
-                  menu={workspaceMenu(workspace, at)}
-                />
-                {expanded ? rows(list, workspace.id) : null}
-              </div>
-            )
-          })}
-          {shown(LOOSE).length > 0 ? (
-            <div data-group={LOOSE}>
-              <div className="sec-label">{t('workspace.none')}</div>
-              {rows(shown(LOOSE), LOOSE)}
-            </div>
-          ) : null}
+          {everything()}
         </div>
       ) : null}
     </section>
@@ -829,8 +1330,26 @@ export function Sidebar(props: SidebarProps) {
   const { selection, draft, page, onSelect, onCompose, onPage } = props
   const deviceIds = useKey<string[]>(keys.devices) ?? []
   const t = useT()
+  /** 正在单独查看哪台设备上的哪一组（置顶、组、工作区）。null：照常显示全部 */
+  const [focus, setFocus] = useState<{ deviceId: string; group: string } | null>(null)
+  const focusOn = useCallback(
+    (deviceId: string) => (group: string | null) =>
+      setFocus(group === null ? null : { deviceId, group }),
+    [],
+  )
+  // 拖的东西放下了、松手了：落点的高亮收起来。被拖的那一行放下后可能已经换了地方（不在原处收不到 dragend），
+  // 所以在窗口上也收一次；落在侧栏的落点上时，落点自己先处理完了才轮到这里
+  useEffect(() => {
+    window.addEventListener('dragend', endDrag)
+    window.addEventListener('drop', endDrag)
+    return () => {
+      window.removeEventListener('dragend', endDrag)
+      window.removeEventListener('drop', endDrag)
+    }
+  }, [])
   // 没开着哪一页、也没选中会话：主区域里就是新建对话页
   const composing = page === null && selection === null
+  const shownIds = focus && deviceIds.includes(focus.deviceId) ? [focus.deviceId] : deviceIds
   return (
     <SidebarFrame label={t('sidebar.label')}>
       <div className="sb-top">
@@ -846,7 +1365,7 @@ export function Sidebar(props: SidebarProps) {
         <HarnessFilter />
       </div>
       <div className="sb-scroll">
-        {deviceIds.map((deviceId) => (
+        {shownIds.map((deviceId) => (
           <DeviceGroup
             key={deviceId}
             deviceId={deviceId}
@@ -854,6 +1373,8 @@ export function Sidebar(props: SidebarProps) {
             draft={draft}
             onSelect={onSelect}
             onCompose={onCompose}
+            focus={focus?.deviceId === deviceId ? focus.group : null}
+            onFocus={focusOn(deviceId)}
           />
         ))}
       </div>

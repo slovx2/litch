@@ -52,7 +52,7 @@ export const keys = {
   workspaces: (deviceId: string) => `sidebar:${deviceId}:workspaces`,
   /** SessionGroups：每个工作区下面的会话标识，已排好序。置顶的、在自定义分区里的各自单列一组 */
   groups: (deviceId: string) => `sidebar:${deviceId}:groups`,
-  /** SectionView[]：这台设备上现在有会话的自定义分区，按名字排。一个都没有就是空数组 */
+  /** SectionView[]：这台设备上的组（自定义分区），按建的先后，空的也在。一个都没有就是空数组 */
   sections: (deviceId: string) => `sidebar:${deviceId}:sections`,
   /** 这台设备上停下来等人审批或回答的会话。侧栏把会话折起来一部分时，这些不能折掉 */
   pressing: (deviceId: string) => `sidebar:${deviceId}:pressing`,
@@ -348,18 +348,27 @@ function settlePlaced(groups: SessionGroups, sessions: Map<string, SessionSummar
   }
 }
 
-/** 现在有会话的自定义分区。名字以最近放进去的那个会话带的为准（分区改了名，会话对象上的跟着变） */
-function sectionsOf(sessions: Iterable<SessionSummary>): SectionView[] {
+/**
+ * 组的列表：设备给的那一份，按建的先后。会话上带着、列表里还没有的组（别处刚建、列表还没重新取到）接在后面，
+ * 名字以最近放进去的那个会话带的为准，免得里面的会话没处画
+ */
+function sectionsOf(
+  listed: readonly SectionView[],
+  sessions: Iterable<SessionSummary>,
+): SectionView[] {
+  const known = new Set(listed.map((entry) => entry.id))
   const found = new Map<string, { section: SectionView; at: number }>()
   for (const session of sessions) {
-    if (session.pinned || !session.section) continue
+    if (session.pinned || !session.section || known.has(session.section.id)) continue
     const at = session.placedAt ?? 0
-    const known = found.get(session.section.id)
-    if (!known || at >= known.at) found.set(session.section.id, { section: session.section, at })
+    const seen = found.get(session.section.id)
+    if (!seen || at >= seen.at) found.set(session.section.id, { section: session.section, at })
   }
-  return [...found.values()]
-    .map((entry) => entry.section)
-    .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : byId(a, b)))
+  const extra = [...found.values()].map((entry) => ({
+    id: entry.section.id,
+    name: entry.section.name,
+  }))
+  return [...listed, ...extra.sort(byId)]
 }
 
 const sameGroups = (a: SessionGroups, b: SessionGroups): boolean =>
@@ -576,12 +585,16 @@ export function createReplica(channel: CoreChannel): Replica {
   }
 
   // 只有分组或顺序真的变了才换掉分组这个键，否则一个会话的状态变化会让整个列表重画
-  const refreshGroups = (deviceId: string, sessions: Map<string, SessionSummary>) => {
+  const refreshGroups = (
+    deviceId: string,
+    sessions: Map<string, SessionSummary>,
+    listed: readonly SectionView[],
+  ) => {
     const next = groupSessions(sessions.values())
     settlePlaced(next, sessions)
     const prev = store.get<SessionGroups>(keys.groups(deviceId))
     if (!prev || !sameGroups(prev, next)) store.set(keys.groups(deviceId), next)
-    const sections = sectionsOf(sessions.values())
+    const sections = sectionsOf(listed, sessions.values())
     const had = store.get<SectionView[]>(keys.sections(deviceId))
     if (!had || JSON.stringify(had) !== JSON.stringify(sections)) {
       store.set(keys.sections(deviceId), sections)
@@ -667,6 +680,8 @@ export function createReplica(channel: CoreChannel): Replica {
   const watchSidebar = (deviceId: string) => {
     if (sidebars.has(deviceId)) return
     const sessions = new Map<string, SessionSummary>()
+    /** 设备给的组的列表，跟着侧栏的快照换 */
+    let listed: readonly SectionView[] = []
     const stop = channel.subscribe(
       { kind: 'sidebar', deviceId },
       {
@@ -675,18 +690,19 @@ export function createReplica(channel: CoreChannel): Replica {
             for (const id of sessions.keys()) store.delete(keys.summary(deviceId, id))
             sessions.clear()
             store.set(keys.workspaces(deviceId), view.workspaces)
+            listed = view.sections
             store.set(keys.archived(deviceId), view.archived)
             for (const session of view.sessions) {
               sessions.set(session.id, session)
               store.set(keys.summary(deviceId, session.id), session)
             }
-            refreshGroups(deviceId, sessions)
+            refreshGroups(deviceId, sessions, listed)
           })
         },
         delta(ops) {
           store.batch(() => {
             for (const op of ops) applySidebar(deviceId, sessions, op)
-            refreshGroups(deviceId, sessions)
+            refreshGroups(deviceId, sessions, listed)
           })
         },
       },

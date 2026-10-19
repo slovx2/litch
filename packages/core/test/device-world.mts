@@ -102,6 +102,7 @@ export function deviceWorld(
   const side = {
     sessions: new Map<string, SessionSummary>(),
     workspaces: [] as SidebarView['workspaces'],
+    sections: [] as SidebarView['sections'],
     /** 侧栏整份换过几次 */
     snapshots: 0,
   }
@@ -112,6 +113,7 @@ export function deviceWorld(
         const view = data as SidebarView
         side.sessions = new Map(view.sessions.map((entry) => [entry.id, entry]))
         side.workspaces = view.workspaces
+        side.sections = view.sections
         side.snapshots++
       },
       delta(ops) {

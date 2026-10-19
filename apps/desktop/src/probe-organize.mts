@@ -20,7 +20,7 @@ export interface OrganizeProbe {
   /** 置顶、取消置顶 */
   pinned: boolean
   unpinned: boolean
-  /** 它的 harness 掉线的时候：菜单里只剩“置顶”，照样置得了；harness 回来之后还在置顶组里 */
+  /** 它的 harness 掉线的时候：菜单里只剩“置顶”“移到组”，照样置得了；harness 回来之后还在置顶组里 */
   downMenu: boolean
   pinnedWhileDown: boolean
   pinKept: boolean
@@ -181,7 +181,7 @@ export async function organizeProbe(second: string): Promise<OrganizeProbe> {
   await until('这一行显示成用不了', isDown)
   const downPop = await menuOf(lineOf(TIMEOUT), TIMEOUT)
   seen.downMenu = items(downPop)
-  const downMenu = seen.downMenu === '置顶'
+  const downMenu = seen.downMenu === '置顶|移到组…'
   one<HTMLButtonElement>('.pick-opt[data-action="pin"]', downPop)?.click()
   const pinnedWhileDown =
     Boolean(await until('掉线的时候置了顶', () => groupOf(TIMEOUT) === ':pinned')) && isDown()

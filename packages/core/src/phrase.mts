@@ -37,6 +37,7 @@ export type PhraseKey =
   | 'fault.workspaceName'
   | 'fault.workspaceRoot'
   | 'fault.workspaceGone'
+  | 'fault.sectionName'
   // 连接
   | 'connect.noEntry'
   // 本机内置的适配器：启动它的设备服务这一步，和没起来的几种原因

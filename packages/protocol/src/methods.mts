@@ -82,7 +82,13 @@ import type {
   ThreadRevertedNotification,
   ThreadRevertParams,
   ThreadRevertResponse,
+  ThreadSectionCreateParams,
+  ThreadSectionCreateResponse,
+  ThreadSectionDeleteParams,
+  ThreadSectionListParams,
+  ThreadSectionListResponse,
   ThreadSectionMoveParams,
+  ThreadSectionUpdateParams,
   ThreadSetNameParams,
   ThreadSettingsUpdatedNotification,
   ThreadStartedNotification,
@@ -244,6 +250,11 @@ export interface ClientRequests {
    * （PINNED_SECTION_ID）。聚合面上会话所属的 harness 不可用时也能做
    */
   'thread/section/move': { params: ThreadSectionMoveParams; result: Record<string, never> }
+  /** 分区：列出、新建、改名、删除。置顶那个分区排在列表最前面，不能改也不能删；删分区只是把里面的会话放出来 */
+  'threadSection/list': { params: ThreadSectionListParams; result: ThreadSectionListResponse }
+  'threadSection/create': { params: ThreadSectionCreateParams; result: ThreadSectionCreateResponse }
+  'threadSection/update': { params: ThreadSectionUpdateParams; result: ThreadSectionCreateResponse }
+  'threadSection/delete': { params: ThreadSectionDeleteParams; result: Record<string, never> }
   /**
    * 扩展。应答有两种形状：适配器的单个入口报它自己那个引擎（extensions.mts），
    * 设备服务的聚合面报设备和上面的各个 harness（device.mts）。原生 codex 不认识这个方法

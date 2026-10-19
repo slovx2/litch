@@ -379,7 +379,11 @@ export function createCore(options: CoreOptions): Core {
           const { deviceId, sessionId, place } = params as Commands['session.place']['params']
           await deviceOf(deviceId).organize.placeSession(
             sessionId,
-            place === 'pinned' ? place : null,
+            place === 'pinned'
+              ? place
+              : place && typeof place.sectionId === 'string'
+                ? { sectionId: place.sectionId }
+                : null,
           )
           return {}
         }
@@ -398,11 +402,15 @@ export function createCore(options: CoreOptions): Core {
           return { workspaceId }
         }
         case 'workspace.update': {
-          const { deviceId, workspaceId, name, color } =
+          const { deviceId, workspaceId, name, color, pinned, sectionId } =
             params as Commands['workspace.update']['params']
           await deviceOf(deviceId).organize.updateWorkspace(workspaceId, {
             ...(name === undefined ? {} : { name: String(name) }),
             ...(color === undefined ? {} : { color: color === null ? null : wireOf(color) }),
+            ...(pinned === undefined ? {} : { pinned: pinned === true }),
+            ...(sectionId === undefined
+              ? {}
+              : { sectionId: sectionId === null ? null : String(sectionId) }),
           })
           return {}
         }
@@ -414,6 +422,21 @@ export function createCore(options: CoreOptions): Core {
         case 'workspace.delete': {
           const { deviceId, workspaceId } = params as Commands['workspace.delete']['params']
           await deviceOf(deviceId).organize.deleteWorkspace(workspaceId)
+          return {}
+        }
+        case 'section.create': {
+          const { deviceId, name } = params as Commands['section.create']['params']
+          const sectionId = await deviceOf(deviceId).organize.createSection(String(name ?? ''))
+          return { sectionId }
+        }
+        case 'section.rename': {
+          const { deviceId, sectionId, name } = params as Commands['section.rename']['params']
+          await deviceOf(deviceId).organize.renameSection(sectionId, String(name ?? ''))
+          return {}
+        }
+        case 'section.delete': {
+          const { deviceId, sectionId } = params as Commands['section.delete']['params']
+          await deviceOf(deviceId).organize.deleteSection(sectionId)
           return {}
         }
         case 'workspace.candidates': {
