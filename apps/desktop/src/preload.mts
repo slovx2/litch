@@ -27,6 +27,7 @@ import {
   UPDATE_SET_AUTO,
   UPDATE_STATE,
 } from './ipc.mjs'
+import { MANUAL_SET_ENABLED, MANUAL_STATUS } from './manual-ipc.mjs'
 
 // 端口到了隔离环境里，要再转一手才能进到页面自己的环境
 ipcRenderer.on(CORE_PORT, (event) => {
@@ -112,3 +113,10 @@ if (process.platform === 'darwin' || process.platform === 'win32') {
     forgetApp: (bundleId: string) => ipcRenderer.invoke(COMPUTER_USE_FORGET_APP, bundleId),
   })
 }
+
+// 产品手册（manual-skill.mts）：设置页“配置助手”一节要的状态和“向本机的 harness 安装产品手册”的开关，
+// 配置助手按钮也从状态里取手册的目录。两个都回 ManualStatus（形状在 manual-ipc.mts，界面那边照抄一份）
+contextBridge.exposeInMainWorld('litchManual', {
+  status: () => ipcRenderer.invoke(MANUAL_STATUS),
+  setEnabled: (on: boolean) => ipcRenderer.invoke(MANUAL_SET_ENABLED, on === true),
+})
