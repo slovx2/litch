@@ -113,7 +113,7 @@ async function startInstance() {
     await mkdir(join(root, name), { recursive: true, mode: 0o700 })
   await writeFile(join(project, 'README.md'), 'dsh 打样验证项目\n')
   spawnSync('git', ['init', '--quiet', project])
-  // dsh 的家目录（适配器状态目录下的 dsh/dsh-home）里的补丁层：挂上诊断插件，dsh 自己的告警和标题请求的去向进运行日志
+  // dsh 的家目录（打样实例经 DSH_HOME 指到状态目录下的 dsh/dsh-home）里的补丁层：挂上诊断插件，dsh 自己的告警和标题请求的去向进运行日志
   const dshHome = join(root, 'state', 'dsh', 'dsh-home')
   await mkdir(dshHome, { recursive: true, mode: 0o700 })
   const diagnostics = fileURLToPath(new URL('./dsh-poc-diagnostics.mjs', import.meta.url))
@@ -142,6 +142,8 @@ async function startInstance() {
     DEEPSEEK_BASE_URL: model.url,
     DEEPSEEK_API_KEY: 'mock-not-a-real-key',
     DSH_AGENTS_HOME: join(root, 'agents'),
+    // 适配器起 dsh 时用的是用户的 DSH_HOME（没设是 ~/.dsh）：打样实例指回状态目录下这一份，诊断插件和会话检查照旧
+    DSH_HOME: dshHome,
     CHA_DSH_CLI: resolve(dshCli),
     CHA_DSH_TRACE: join(root, 'wire.jsonl'),
     // 回环之外的 HTTP(S) 一律走陷阱代理（dsh 启动时按这几个变量装全局代理，回环地址总是直连），见 startTrap

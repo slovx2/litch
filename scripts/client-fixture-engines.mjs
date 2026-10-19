@@ -25,7 +25,7 @@
 //                 自动更新、遥测、报错上报和别的非必要的联网都关着；
 //                 它自己的临时文件（贴进来的图片、后台任务的输出）默认写在 /tmp/claude-<用户号>/ 下面，
 //                 那是这台机器上所有 Claude Code 共用的地方：用 CLAUDE_CODE_TMPDIR 也指进夹具
-//   dsh           自己的配置目录（DSH_HOME）本来就由适配器定在状态目录下面，不用 ~/.dsh；
+//   dsh           自己的配置目录（DSH_HOME）没设时是主目录下的 .dsh，主目录在夹具里，所以不读真实的 ~/.dsh；
 //                 共用技能的目录 DSH_AGENTS_HOME 指进夹具，不读 ~/.agents；凭据是假的，模型地址是回环
 //   状态目录      三个引擎的都在 <状态目录>/<标识>/ 下，是适配器自己定死的
 import { spawnSync } from 'node:child_process'

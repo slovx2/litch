@@ -33,7 +33,7 @@
 //   它们的命令行路径、模型地址、配置目录预先写进 <状态目录>/device/settings.json，是各自 harness 的设置，
 //   排在登录 shell 给的环境前面，所以上面那两个“指到不存在的路径”的变量挡不住它们，别的隔离照旧；
 //   Claude Code 的配置目录在 <根>/claude、临时文件在 <根>/ct，dsh 共用技能的目录在 <根>/agents，
-//   它自己的配置目录由适配器定在 <状态目录>/dsh/dsh-home：都不出临时目录，不读 ~/.claude、~/.dsh、~/.agents；
+//   它自己的配置目录是夹具主目录下的 .dsh（没设 DSH_HOME 时 dsh 的取法）：都不出临时目录，不读 ~/.claude、~/.dsh、~/.agents；
 //   <根>/work/tri 是给三家共用的工作目录（一个 git 仓库，里面给三家各放了一份技能 fixture-notes）；
 //   macOS 上就绪行里给的是它和真实路径不一样的那种写法（/tmp/…，真实的是 /private/tmp/…，见 spelledApart）；
 //   假模型对三家认同一套词（client-fixture-anthropic.mjs 开头有全表），Pi 的回话这时开头带“pi 收到：”；

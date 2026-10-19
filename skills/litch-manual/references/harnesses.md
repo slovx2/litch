@@ -49,12 +49,25 @@ user. Litch has no command for it. Do it yourself with the user's OK, or give th
   command; the Devices page has the same as the harness's Restart button). If the harness was disabled,
   `scripts/litch harness enable <device> <id>`.
 
-**Signing in is the user's job** (exception E3). After installing, the user has to sign in or configure
-an API key in the harness's own CLI, in a terminal on that device (for example `codex login`, or
-starting `claude` and following its sign-in; Pi and OpenCode have their own provider setup). If the user
-hands you an API key for a harness, you may store it in that harness's environment on that device:
+**Signing in, API keys, providers and the harness's own settings** live on the Devices page: each
+harness row has a **Settings** button (详情设置) that opens four tabs, all reading and writing the
+harness's own config files on that device (shared with its CLI there):
+
+- **Config**: default model and effort, permissions, and the rest of what the harness's official app
+  offers (Codex: approval, sandbox, web search, features, skills/plugins/hooks, memories; Claude Code:
+  `~/.claude/settings.json`; OpenCode, Pi, DSH: their own settings). Some changes say they need a new
+  session or a restart; the page offers the restart.
+- **Accounts**: sign in (browser, device code, or pasting a code back), set an API key, add custom
+  providers, switch the active provider. Codex can stay signed in to ChatGPT while using an API-key
+  provider. OAuth credentials stay in the harness's own store; keys the harness only reads from
+  environment variables are kept in that harness's environment on the device (secret).
+- **MCP**: the harness's user-level MCP servers.
+- **Instructions**: the user-level `AGENTS.md` (Claude Code: `CLAUDE.md`). **Unified mode** writes one
+  copy and turns the other harnesses' files into symlinks to it (old files are backed up beside them).
+
+Guide the user there; signing in needs the user in a browser. If the user hands you an API key, you may
+still store it in that harness's environment on that device:
 `scripts/litch settings set <device> harness.<id>.env=…` (value syntax: `scripts/litch settings --help`).
-The variable names are the harness's own (for example `ANTHROPIC_API_KEY`); check its documentation.
 
 ## Enabling, disabling, restarting
 

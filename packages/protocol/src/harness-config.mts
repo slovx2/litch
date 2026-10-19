@@ -93,13 +93,14 @@ export type HarnessConfigErrorReason =
 
 export interface HarnessConfigErrorData {
   litch: HarnessConfigErrorReason
+  /** litch/device/instructions/* 不属于哪个 harness，这时是空串 */
   harness: string
   /** invalidValue、readOnly：哪一项 */
   key?: string
   message?: HarnessText
 }
 
-/** 所有 litch/harness/* 请求共有的参数 */
+/** 所有 litch/harness/* 请求共有的参数。设备进程转给引擎时 harness 原样带过去（引擎声明了这项扩展，认识它） */
 export interface HarnessParams {
   harness: string
 }
@@ -341,13 +342,15 @@ export interface HarnessProvidersUpsertParams extends HarnessParams {
   /** 新增时给新的 id（字母数字和 - _）；改已有的给原来的 */
   providerId: string
   templateId: string
-  /** 密钥字段不给表示不改 */
+  /** 密钥字段不给、或原样交回读到的 `{set}` 表示不改；给空串表示清掉 */
   definition: Record<string, HarnessSettingValue>
   expectedVersion: string
 }
 
 export interface HarnessProviderIdParams extends HarnessParams {
   providerId: string
+  /** providers/remove：和别的写操作一样可以带上 providers/read 的版本，对不上回 versionConflict；不带不查 */
+  expectedVersion?: string
 }
 
 export interface HarnessProvidersActivateParams extends HarnessProviderIdParams {
@@ -423,7 +426,10 @@ export interface HarnessMcpServer {
   command?: string
   args?: string[]
   cwd?: string
-  /** 环境变量；密钥类的值读到的是空串，secretKeys 里列出名字（写时不给这个名字表示不改） */
+  /**
+   * 环境变量。看着像密钥的值（env 和 headers 里都算）读到的是空串，名字列在 secretKeys 里；
+   * 写回时这个名字给空串或不给，表示保留原值；要删掉它，从 env / headers 里去掉这个名字，同时也不列进 secretKeys
+   */
   env?: Record<string, string>
   secretKeys?: string[]
   /** http、sse */
