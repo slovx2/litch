@@ -61,7 +61,7 @@ import {
   settleSteps,
   todoKey,
 } from '../projection/todo.mjs'
-import { projectProposals } from '../projection/tree.mjs'
+import { mergeProposals, projectProposals } from '../projection/tree.mjs'
 import {
   channelFailure,
   deviceFault,
@@ -184,8 +184,13 @@ export interface LiveSessions {
   rollback(sessionId: string, turnId: string): Promise<void>
   /** 让对面开始压缩上下文。受理了就返回 */
   compact(sessionId: string): Promise<void>
-  /** 用户答了一张提案（开始、不要）：先从开着的会话里拿掉，不等设备进程的通知 */
-  dropProposal(sessionId: string, proposalId: string): void
+  /** 用户答了一张提案（开始、不要）：开着的会话里先改成了结的样子，不等设备进程的通知 */
+  settleProposal(
+    sessionId: string,
+    proposalId: string,
+    status: 'started' | 'dismissed',
+    startedId: string | null,
+  ): void
 }
 
 interface Waiting extends PendingRequest {
@@ -627,11 +632,11 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     'thread/reverted': (live) => {
       if (!live.reverting) load(live)
     },
-    // 会话树：这个会话上的提案变了（新提、开始、不要、过期），带的是现在全部等着的
-    'litch/sessionProposal/changed': (live, { proposals }) => {
-      emit(live, [
-        { op: 'session.proposals', proposals: projectProposals(proposals, host.clock.now()) },
-      ])
+    // 会话树：这个会话上的提案变了（新提、开始、不要、撤回、过期），带着现在全部等着的和刚变的那几条
+    'litch/sessionProposal/changed': (live, { proposals, changed }) => {
+      if (!live.view) return
+      const merged = mergeProposals(live.view.proposals, proposals, changed ?? [], host.clock.now())
+      emit(live, [{ op: 'session.proposals', proposals: merged }])
     },
   }
 
@@ -687,14 +692,18 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     }
   }
 
-  /** 会话上等着的提案。设备没有会话树、问不到都当没有：提案不是看会话的必需品 */
+  /** 会话上的提案，连了结的一起。设备没有会话树、问不到都当没有：提案不是看会话的必需品 */
   const proposalsOf = async (
     threadId: string,
     options: RpcRequestOptions,
   ): Promise<SessionView['proposals']> => {
     if (!host.sessionTree?.()) return []
     try {
-      const { proposals } = await host.request('litch/sessionProposal/list', { threadId }, options)
+      const { proposals } = await host.request(
+        'litch/sessionProposal/list',
+        { threadId, includeSettled: true },
+        options,
+      )
       return projectProposals(proposals, host.clock.now())
     } catch (error) {
       if (error instanceof RpcError && !isHarnessDown(error)) {
@@ -1014,13 +1023,16 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       else if (reachable(live)) load(live)
     },
 
-    dropProposal(sessionId, proposalId) {
+    settleProposal(sessionId, proposalId, status, startedId) {
       const live = sessions.get(sessionId)
       if (!live?.view?.proposals.some((proposal) => proposal.id === proposalId)) return
+      const settledAt = host.clock.now()
       emit(live, [
         {
           op: 'session.proposals',
-          proposals: live.view.proposals.filter((proposal) => proposal.id !== proposalId),
+          proposals: live.view.proposals.map((proposal) =>
+            proposal.id === proposalId ? { ...proposal, status, settledAt, startedId } : proposal,
+          ),
         },
       ])
     },

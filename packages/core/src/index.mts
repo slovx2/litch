@@ -177,6 +177,7 @@ export type * from './model-service.mjs'
 export type * from './model-tasks.mjs'
 export type * from './model-terminal.mjs'
 export type * from './model-tree.mjs'
+export { proposalStatus } from './model-tree.mjs'
 export {
   describeText,
   type Phrase,

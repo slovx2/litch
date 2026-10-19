@@ -8,6 +8,17 @@ export interface TreeChild {
   reply: string
 }
 
+/** 提案的示例：比子会话多几样，凑齐卡片上要显示的东西 */
+export interface TreeProposal extends TreeChild {
+  /** 子会话的 harness、目录。不给是跟父会话一样 */
+  harness?: string
+  cwd?: string
+  /** 目标 harness 收不到父会话那么严时子会话会是的那一档（卡片上写明） */
+  widerSandbox?: 'read-only' | 'workspace-write' | 'danger-full-access'
+  /** 很快过期（演过期） */
+  short?: boolean
+}
+
 export interface TreeAgent {
   nickname: string
   role: string
@@ -25,9 +36,12 @@ export interface TreeText {
   spawnReply: string
   /** 两个子会话都停下之后，设备进程替父会话开的那个回合里父会话说的 */
   wakeReply: string
-  /** 说“提个子会话”时提的两个提案（第二个很快过期），和父会话的回话 */
-  proposals: [TreeChild, TreeChild]
+  /** 说“提个子会话”时提的三个提案（第二个很快过期，第三个在 Pi 上、沙箱收不紧），和父会话的回话 */
+  proposals: [TreeProposal, TreeProposal, TreeProposal]
   proposeReply: string
+  /** 说“撤回提案”时模型撤回最近一个还等着的提案，和它的回话；没有可撤回的时候的回话 */
+  withdrawReply: string
+  withdrawNone: string
   /** 说“用子代理”时引擎自己派出的两个子代理，和父会话等它们回来之后说的 */
   agents: [TreeAgent, TreeAgent]
   agentsReply: string
@@ -64,10 +78,22 @@ export const TREE_TEXT: Record<SampleLang, TreeText> = {
         title: '顺手清理旧分支',
         prompt: '列出已经合进 main 的本地分支，等我确认再删。',
         reply: '列出来了：3 个分支已经合进 main，等你确认。',
+        short: true,
+      },
+      {
+        title: '在 Pi 上跑一遍基准',
+        prompt:
+          '在 packages/core 下跑 npm run bench:router，每组 5 轮取中位，把流式通知的端到端延迟和 thread/list 往返的中位数与上次记录对比，写成一张小表；只量不改代码。',
+        reply: '基准跑完了：流式通知多 0.03 毫秒，thread/list 往返多 0.05 毫秒，和上次差不多。',
+        harness: 'pi',
+        cwd: '~/code/litch/packages/core',
+        widerSandbox: 'danger-full-access',
       },
     ],
     proposeReply:
-      '这两件事适合另开子会话去做，我各提了一个，你点“开始”就起；第二个只是顺手的事，一会儿就收掉。',
+      '这几件事适合另开子会话去做，我各提了一个，你点“开始”就起，也可以改了再开始；第二个只是顺手的事，一会儿就过期。',
+    withdrawReply: '那张卡片用不着了，我撤回了。',
+    withdrawNone: '现在没有等着的提案可撤回。',
     agents: [
       {
         nickname: 'Hubble',
@@ -121,10 +147,23 @@ export const TREE_TEXT: Record<SampleLang, TreeText> = {
         title: 'Clean up old branches',
         prompt: 'List the local branches already merged into main and wait for me before deleting.',
         reply: 'Listed: 3 branches are merged into main, waiting for your go-ahead.',
+        short: true,
+      },
+      {
+        title: 'Run the benchmark on Pi',
+        prompt:
+          'In packages/core run npm run bench:router, five rounds per group, take the median, and compare the streaming end-to-end latency and the thread/list round trip with the last recorded numbers in a small table. Measure only, change no code.',
+        reply:
+          'Benchmark done: streaming adds 0.03 ms and the thread/list round trip 0.05 ms, about the same as last time.',
+        harness: 'pi',
+        cwd: '~/code/litch/packages/core',
+        widerSandbox: 'danger-full-access',
       },
     ],
     proposeReply:
-      'These two fit better in their own sub-sessions. I proposed one for each; press Start to run it. The second is a small extra and goes away soon.',
+      'These fit better in their own sub-sessions. I proposed one for each; press Start to run one, or change it first. The second is a small extra and expires soon.',
+    withdrawReply: 'That card is no longer needed, so I withdrew it.',
+    withdrawNone: 'There is no waiting suggestion to withdraw.',
     agents: [
       {
         nickname: 'Hubble',

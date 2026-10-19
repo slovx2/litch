@@ -1,5 +1,5 @@
-/* 会话树：对话里的子会话卡片和子代理卡片、注入的回报提示条、提案卡片、子会话那一行、
-   侧栏里的嵌套、派子会话的对话框、侧面板的“子代理”标签。只用变量；三种皮肤的差别在文件末尾 */
+/* 会话树：对话里的子会话卡片、提案卡片（建议任务）和子代理卡片、注入的回报提示条、子会话那一行、
+   侧栏里的嵌套、派子会话的对话框、侧面板的“建议任务”“子代理”标签。只用变量；三种皮肤的差别在文件末尾 */
 
 /* ---------- 对话里的卡片 ---------- */
 .tree-card {
@@ -170,51 +170,240 @@ button.sev-title {
   white-space: nowrap;
 }
 
-/* ---------- 提案：和“要不要执行计划”同一个位置、同一种框 ---------- */
-.tree-proposal {
-  width: 100%;
-  max-width: 760px;
-  margin: 0 auto;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 12px;
-  padding: 8px 8px 8px 14px;
-  border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
-  border-radius: var(--r2);
-  background: var(--raised);
-  font-size: 12px;
-  line-height: 18px;
+/* ---------- 建议任务：对话流里的提案卡片（ProposalCard.tsx） ---------- */
+.prop-card {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line-2));
 }
-.tree-proposal-text {
-  flex: 1 1 260px;
-  min-width: 0;
+/* 了结了的退到后面：边框照常，字淡一些 */
+.prop-card:not([data-state="pending"]):not([data-state=""]) {
+  border-color: var(--line-2);
+}
+.prop-card:not([data-state="pending"]) .prop-title,
+.prop-card:not([data-state="pending"]) .prop-brief {
+  color: var(--ink-2);
+}
+.prop-body {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
+  padding: 8px 12px 10px;
+  min-width: 0;
 }
-.tree-proposal-head {
-  color: var(--ink-3);
+.prop-state {
+  flex: none;
+  font-size: 12px;
+  color: var(--ink-2);
 }
-.tree-proposal-text b {
+[data-state="pending"] > .prop-body .prop-state,
+.prop-row[data-state="pending"] .prop-state {
+  color: var(--accent);
+}
+.prop-title {
   font-size: 13px;
   font-weight: 600;
+  overflow-wrap: anywhere;
 }
-.tree-proposal-prompt {
+.prop-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.prop-meta .mono {
+  font-size: 11px;
+}
+.prop-cwd {
+  max-width: 100%;
+}
+.prop-brief {
+  margin-top: 2px;
   color: var(--ink-2);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.prop-brief[data-open="false"] {
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-.tree-proposal-meta {
+.prop-more {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  color: var(--accent);
+  cursor: pointer;
+}
+.prop-more:hover {
+  text-decoration: underline;
+}
+.prop-wider {
+  margin: 2px 0 0;
+}
+.prop-acts {
   display: flex;
-  align-items: center;
   flex-wrap: wrap;
   gap: 6px;
+  margin-top: 6px;
 }
-.tree-proposal .err {
-  color: var(--err);
+.prop-acts[data-small="true"] {
+  margin-top: 2px;
+}
+.prop-acts[data-small="true"] .btn {
+  height: 24px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+.prop-err {
+  margin: 4px 0 0;
+  font-size: 12px;
+}
+/* 开始了：下面一行是起出来的子会话，点了进去 */
+.prop-child {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 32px;
+  padding: 4px 12px;
+  border: 0;
+  border-top: 1px solid var(--line-1);
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.prop-child:hover:not(:disabled) {
+  background: var(--hover);
+}
+.prop-child:disabled {
+  cursor: default;
+  color: var(--ink-3);
+}
+/* 侧面板点了一条：对话里那张卡片（找不到时是那一行）闪一圈 */
+[data-flash] {
+  animation: prop-flash 1.6s ease-out;
+}
+@keyframes prop-flash {
+  0%,
+  40% {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  100% {
+    outline: 2px solid transparent;
+    outline-offset: 2px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-flash] {
+    animation: none;
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+}
+
+/* ---------- 侧面板的“建议任务”标签（ProposalsTab.tsx） ---------- */
+.props-tab {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px 0 16px;
+}
+.prop-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.prop-row {
+  padding: 6px 12px 8px;
+  border-bottom: 1px solid var(--line-1);
+}
+.prop-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 2px 4px;
+  margin: 0 -4px;
+  border: 0;
+  border-radius: var(--r1);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.prop-row-main:hover {
+  background: var(--hover);
+}
+.prop-row-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12px;
+}
+.prop-row-line b {
+  font-size: 13px;
+  font-weight: 600;
+}
+.prop-row:not([data-state="pending"]) .prop-row-line b {
+  font-weight: 500;
+  color: var(--ink-2);
+}
+.prop-empty {
+  padding: 12px;
+  font-size: 12px;
+}
+.prop-fold {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin-top: 8px;
+  padding: 6px 12px;
+  border: 0;
+  background: none;
+  color: var(--ink-3);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.prop-fold:hover {
+  color: var(--ink);
+}
+.prop-fold .caret-ic {
+  width: 10px;
+  height: 10px;
+}
+.prop-fold[aria-expanded="false"] .caret-ic {
+  transform: rotate(-90deg);
+}
+/* 标签上的角标：等着开始的个数 */
+.side-badge {
+  flex: none;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--accent-solid);
+  color: var(--on-accent);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 16px;
+  text-align: center;
 }
 
 /* ---------- 子会话最上面那一行（和“分叉自”同一种样子） ---------- */
@@ -298,6 +487,15 @@ button.sev-title {
 .spawn-kind label.off {
   color: var(--ink-3);
 }
+.spawn-pair {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.spawn-pair > .form-field {
+  flex: 1 1 160px;
+  min-width: 0;
+}
 .spawn-prompt {
   height: auto;
   min-height: 84px;
@@ -378,8 +576,15 @@ button.sev-title {
   border-top-style: dashed;
   border-top-color: var(--line-2);
 }
-[data-skin="retro"] .tree-proposal {
+[data-skin="retro"] .prop-card[data-state="pending"] {
   border-color: var(--accent);
+  box-shadow: 3px 3px 0 var(--accent);
+}
+[data-skin="retro"] .prop-child {
+  border-top-style: dashed;
+  border-top-color: var(--line-2);
+}
+[data-skin="retro"] .side-badge {
   border-radius: 0;
 }
 [data-skin="retro"] .tree-kids::before {
@@ -396,9 +601,14 @@ button.sev-title {
 [data-skin="human"] button.tree-card-main {
   border-radius: 14px;
 }
-[data-skin="human"] .tree-proposal {
-  padding: 10px 10px 10px 18px;
-  border-radius: 16px;
+[data-skin="human"] .prop-body {
+  padding: 10px 14px 12px;
+}
+[data-skin="human"] .prop-child {
+  border-radius: 0 0 14px 14px;
+}
+[data-skin="human"] .prop-row-main {
+  border-radius: 10px;
 }
 [data-skin="human"] .sev {
   border-style: solid;
@@ -410,14 +620,8 @@ button.sev-title {
   border-radius: 13px;
 }
 
-/* 提案开始了：派出卡片的类型后面跟一句“已开始” */
-.tree-card-started::before {
-  content: "·";
-  margin-right: 6px;
-}
-
-/* 目标 harness 收不到这个会话那么严：提案卡片、手动派子会话的弹窗上写明 */
-.tree-proposal-wider,
+/* 目标 harness 收不到这个会话那么严：提案卡片、派子会话的弹窗上写明 */
+.prop-wider,
 .spawn-wider {
   color: var(--wait);
   font-size: 12px;

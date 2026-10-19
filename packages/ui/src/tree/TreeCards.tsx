@@ -1,14 +1,13 @@
-// 对话里露在外面的两种卡片（核心的 cardOf 定哪些条目画成卡片）：
+// 对话里露在外面的几种卡片（核心的 cardOf 定哪些条目画成卡片）：
 // 派出的 Litch 子会话（litch_sessions.start）：标题、harness、现在怎样、最近一次回报，点一下跳过去；
+// 降成提案的 litch_sessions.start：建议任务的卡片（ProposalCard.tsx）；
 // 引擎自己启动的子代理（collabAgentToolCall）：每个子代理一行，谁、在做什么、怎样了，点一下在侧面板里看。
 import {
   type AgentRefView,
   type AgentState,
   type DeviceView,
   keys,
-  type ProposalStarts,
   type SessionNotes,
-  type SessionProposalView,
   type SessionSummary,
   type ToolCallItem,
 } from '@litch/core'
@@ -20,6 +19,7 @@ import { useKey } from '../app/services.tsx'
 import { useActions } from '../transcript/actions.tsx'
 import { type ItemRef, useItem } from '../transcript/messages.tsx'
 import { openAgent } from './agents.ts'
+import { ProposalCard } from './ProposalCard.tsx'
 import { useAgentList } from './useAgentList.ts'
 
 /** 侧栏行首那个状态点的画法：在跑、在等人、出错，别的不画 */
@@ -36,21 +36,17 @@ const AGENT_MARK: Record<AgentState, string> = {
   notFound: 'err',
 }
 
-/** 派出的一个子会话 */
+/** 派出的一个子会话（模型直接起的） */
 const SpawnCard = memo(function SpawnCard(ref: ItemRef) {
   const { deviceId, sessionId } = ref
   const item = useItem<ToolCallItem>(ref)
   const t = useT()
   const { open } = useActions()
   const spawned = item?.kind === 'toolCall' ? item.spawned : undefined
-  const starts = useKey<ProposalStarts>(keys.proposalStarts(deviceId))
-  // 提案：用户点了“开始”之后，起出来的子会话记着是哪个提案，卡片就当它是派出的那一个
-  const startedId = spawned?.proposalId ? starts?.[spawned.proposalId] : undefined
-  const childId = spawned?.threadId || startedId || ''
+  const childId = spawned?.threadId ?? ''
   const child = useKey<SessionSummary>(keys.summary(deviceId, childId))
   const device = useKey<DeviceView>(keys.device(deviceId))
   const notes = useKey<SessionNotes>(keys.notes(deviceId, sessionId))
-  const proposals = useKey<SessionProposalView[]>(keys.proposals(deviceId, sessionId))
   if (item?.kind !== 'toolCall' || !spawned) return null
   const note = childId ? notes?.[childId] : undefined
   const harness = child?.harness ?? spawned.harness
@@ -65,13 +61,7 @@ const SpawnCard = memo(function SpawnCard(ref: ItemRef) {
     state = t('tree.spawnFailed')
     mark = 'err'
   } else if (!childId) {
-    // 提案：还挂着就等人点；不要了、过期了都不再挂着（开始了的走下面，和直接派出的一样）
-    const pending = proposals?.some((entry) => entry.id === spawned.proposalId) === true
-    state = !spawned.proposalId
-      ? ''
-      : pending
-        ? t('tree.child.waitStart')
-        : t('tree.proposal.closed')
+    state = ''
   } else if (!child) {
     state = t('tree.child.gone')
   } else {
@@ -82,10 +72,7 @@ const SpawnCard = memo(function SpawnCard(ref: ItemRef) {
     <>
       <span className="tree-card-kind">
         <Icon name="agents" small />
-        {t(spawned.proposalId && !spawned.threadId ? 'tree.proposed' : 'tree.spawned')}
-        {startedId && !spawned.threadId ? (
-          <span className="tree-card-started">{t('tree.proposal.started')}</span>
-        ) : null}
+        {t('tree.spawned')}
       </span>
       <span className="tree-card-line">
         <i className={mark ? `st ${mark}` : 'st'} />
@@ -105,6 +92,7 @@ const SpawnCard = memo(function SpawnCard(ref: ItemRef) {
       className="tree-card"
       data-card="spawn"
       data-child={childId}
+      data-item={ref.itemId}
       data-anchor={`i:${ref.itemId}`}
     >
       {canOpen ? (
@@ -219,5 +207,8 @@ const AgentsCard = memo(function AgentsCard(ref: ItemRef) {
 export const TreeCard = memo(function TreeCard(ref: ItemRef) {
   const item = useItem<ToolCallItem>(ref)
   if (item?.kind !== 'toolCall') return null
+  // 降成提案、还没直接起出子会话的：建议任务的卡片
+  if (item.spawned?.proposalId && !item.spawned.threadId)
+    return <ProposalCard {...ref} item={item} />
   return item.spawned ? <SpawnCard {...ref} /> : <AgentsCard {...ref} />
 })

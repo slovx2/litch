@@ -11,6 +11,7 @@ import {
   connectChannel,
   createMockCore,
   createPortPair,
+  proposalStatus,
   reduceSession,
   type SessionOp,
   type SessionProposalView,
@@ -24,7 +25,7 @@ import {
 } from '../src/index.mjs'
 import { projectItem } from '../src/projection/items.mjs'
 import { projectLineage, projectThread } from '../src/projection/session.mjs'
-import { projectProposals } from '../src/projection/tree.mjs'
+import { mergeProposals, projectProposals } from '../src/projection/tree.mjs'
 import { deviceWorld, features } from './device-world.mjs'
 import { harness } from './fake-device.mjs'
 import { thread, turn, userText } from './fixtures.mjs'
@@ -93,7 +94,11 @@ test('投影：子代理调用带上每个子线程的状态；litch_sessions.st
     threadId: 'c9',
     proposalId: null,
     title: '查依赖',
+    prompt: '看看',
     harness: 'pi',
+    model: null,
+    cwd: null,
+    kind: 'fresh',
   })
 
   const proposed = projectItem({
@@ -179,7 +184,7 @@ test('投影：父子关系的时间换成毫秒；不接受直接输入的子�
   assert.equal(open.live, true)
 })
 
-test('投影：提案只留还在等、没过期的，按提出的先后排', () => {
+test('投影：提案连了结的一起留，按提出的先后排；还等着却过了期的算过期', () => {
   const base = {
     threadId: 'p',
     prompt: '做点事',
@@ -193,21 +198,81 @@ test('投影：提案只留还在等、没过期的，按提出的先后排', ()
   }
   const list = [
     { ...base, id: 'b', title: 'B', createdAt: 20, expiresAt: NOW / 1000 + 60 },
-    { ...base, id: 'a', title: 'A', createdAt: 10, expiresAt: NOW / 1000 + 60 },
+    {
+      ...base,
+      id: 'a',
+      title: 'A',
+      createdAt: 10,
+      expiresAt: NOW / 1000 + 60,
+      turnId: 't1',
+      callId: 'call1',
+      cwd: '/w/a',
+    },
     { ...base, id: 'old', title: '过期', createdAt: 5, expiresAt: NOW / 1000 - 1 },
     {
       ...base,
       id: 'done',
       title: '起了',
-      createdAt: 5,
+      createdAt: 6,
       expiresAt: NOW / 1000 + 60,
       status: 'started',
+      startedThreadId: 'c9',
+      settledAt: 7,
     },
+    { ...base, id: 'bad', title: '不认识', createdAt: 8, status: 'gone' },
   ] as unknown as SessionProposal[]
+  const views = projectProposals(list, NOW)
   assert.deepEqual(
-    projectProposals(list, NOW).map((entry) => entry.id),
-    ['a', 'b'],
+    views.map((entry) => [entry.id, entry.status]),
+    [
+      ['old', 'expired'],
+      ['done', 'started'],
+      ['a', 'pending'],
+      ['b', 'pending'],
+    ],
   )
+  assert.equal(views[0]?.settledAt, NOW - 1000)
+  assert.equal(views[1]?.startedId, 'c9')
+  assert.equal(views[1]?.settledAt, 7000)
+  assert.deepEqual([views[2]?.turnId, views[2]?.callId, views[2]?.cwd], ['t1', 'call1', '/w/a'])
+  // 等着的过了期，界面现算成过期
+  const pending = views[3]
+  assert.ok(pending)
+  assert.equal(proposalStatus(pending, NOW), 'pending')
+  assert.equal(proposalStatus(pending, NOW + 61_000), 'expired')
+})
+
+test('投影：提案变了的通知并进手上的：变了的、等着的盖掉旧的，不知去向的等着的拿掉，了结的留着', () => {
+  const raw = (id: string, status: string, createdAt: number) =>
+    ({
+      id,
+      threadId: 'p',
+      title: id,
+      prompt: '',
+      harness: null,
+      model: null,
+      cwd: null,
+      kind: 'fresh',
+      wakeParent: true,
+      status,
+      createdAt,
+      expiresAt: NOW / 1000 + 60,
+      startedThreadId: status === 'started' ? `c-${id}` : null,
+    }) as unknown as SessionProposal
+  const current = projectProposals(
+    [raw('old', 'dismissed', 1), raw('a', 'pending', 2), raw('b', 'pending', 3)],
+    NOW,
+  )
+  const merged = mergeProposals(current, [raw('c', 'pending', 4)], [raw('a', 'started', 2)], NOW)
+  assert.deepEqual(
+    merged.map((entry) => [entry.id, entry.status]),
+    [
+      ['old', 'dismissed'],
+      ['a', 'started'],
+      ['c', 'pending'],
+    ],
+  )
+  assert.equal(merged[1]?.startedId, 'c-a')
 })
 
 // —— 完整模式的设备 ——
@@ -499,63 +564,92 @@ test('设备：派子会话发 litch/session/start，起好的立刻进侧栏；
   assert.equal(world.side.sessions.get('c1')?.lineage, null)
 })
 
-test('设备：打开会话时取提案；变了的通知替换；开始、不要之后卡片收掉', async () => {
+test('设备：打开会话时连了结的一起取提案；变了的通知并进去；开始、不要之后记成了结', async () => {
   const world = treeWorld()
   world.core.start()
   await settle()
   const watched = watchSession(world.core, 'p')
   const proposals = (): SessionProposalView[] => watched.seen.view?.proposals ?? []
+  const states = () => proposals().map((entry) => [entry.id, entry.status])
   await settle()
   await settle()
-  assert.deepEqual(
-    proposals().map((entry) => entry.id),
-    ['pr1'],
-  )
+  assert.deepEqual(states(), [['pr1', 'pending']])
   assert.deepEqual(
     world.calls.find((entry) => entry.method === 'litch/sessionProposal/list')?.params,
-    { threadId: 'p' },
+    { threadId: 'p', includeSettled: true },
   )
 
+  const raw = {
+    threadId: 'p',
+    prompt: '列出来',
+    harness: null,
+    model: null,
+    cwd: null,
+    kind: 'fresh',
+    wakeParent: true,
+    createdAt: NOW / 1000 + 1,
+    expiresAt: NOW / 1000 + 3600,
+    startedThreadId: null,
+  }
+  // 模型撤回了 pr1、又提了 pr2：变了的那条带着状态，等着的只剩 pr2
   world.peer.last().notify('litch/sessionProposal/changed', {
     threadId: 'p',
-    proposals: [],
-  })
-  await settle()
-  assert.deepEqual(proposals(), [])
-
-  world.peer.last().notify('litch/sessionProposal/changed', {
-    threadId: 'p',
-    proposals: [
-      {
-        id: 'pr2',
-        threadId: 'p',
-        title: '清理分支',
-        prompt: '列出来',
-        harness: null,
-        model: null,
-        cwd: null,
-        kind: 'fresh',
-        wakeParent: true,
-        status: 'pending',
-        createdAt: NOW / 1000,
-        expiresAt: NOW / 1000 + 3600,
-        startedThreadId: null,
-      },
+    proposals: [{ ...raw, id: 'pr2', title: '清理分支', status: 'pending' }],
+    changed: [
+      { ...raw, id: 'pr1', title: '整理 CHANGELOG', status: 'withdrawn', createdAt: NOW / 1000 },
+      { ...raw, id: 'pr2', title: '清理分支', status: 'pending' },
     ],
   })
   await settle()
-  assert.deepEqual(
-    proposals().map((entry) => entry.title),
-    ['清理分支'],
-  )
+  assert.deepEqual(states(), [
+    ['pr1', 'withdrawn'],
+    ['pr2', 'pending'],
+  ])
+
   const { sessionId } = (await world.command('session.proposal.accept', {
     sessionId: 'p',
     proposalId: 'pr2',
+    overrides: { harness: 'dsh', title: '清理旧分支', sandbox: 'read-only' },
   })) as { sessionId: string }
   assert.equal(sessionId, 'c3')
+  assert.deepEqual(
+    world.calls.find((entry) => entry.method === 'litch/sessionProposal/accept')?.params,
+    {
+      proposalId: 'pr2',
+      overrides: {
+        harness: 'dsh',
+        title: '清理旧分支',
+        sandbox: 'read-only',
+        approvalPolicy: 'on-request',
+      },
+    },
+  )
   await settle()
-  assert.deepEqual(proposals(), [])
+  // 不等通知，卡片先写“已开始”、记着起出来的子会话
+  assert.deepEqual(states(), [
+    ['pr1', 'withdrawn'],
+    ['pr2', 'started'],
+  ])
+  assert.equal(proposals()[1]?.startedId, 'c3')
   assert.equal(world.side.sessions.get('c3')?.lineage?.parentId, 'p')
+  watched.close()
+})
+
+test('设备：没改的“开始”不带 overrides；“不要”记成不要了', async () => {
+  const world = treeWorld()
+  world.core.start()
+  await settle()
+  const watched = watchSession(world.core, 'p')
+  await settle()
+  await settle()
+  await world.command('session.proposal.accept', { sessionId: 'p', proposalId: 'pr1' })
+  assert.deepEqual(
+    world.calls.find((entry) => entry.method === 'litch/sessionProposal/accept')?.params,
+    { proposalId: 'pr1' },
+  )
+  await world.command('session.proposal.dismiss', { sessionId: 'p', proposalId: 'pr1' })
+  await settle()
+  assert.equal(watched.seen.view?.proposals[0]?.status, 'dismissed')
   watched.close()
 })
 
@@ -652,7 +746,7 @@ test('模拟：说“派子会话”派出两个子会话（侧栏里挂在父�
   assert.equal(wake?.text, '')
 })
 
-test('模拟：说“提个子会话”出两张提案；短的那张到点收掉；开始的起出子会话，不要的收掉', async () => {
+test('模拟：说“提个子会话”出三张提案；短的那张到点过期；开始（可改）的起出子会话，了结的留着', async () => {
   const world = mockWorld()
   await settle()
   const parent = world.watch('s6')
@@ -662,20 +756,39 @@ test('模拟：说“提个子会话”出两张提案；短的那张到点收�
     sessionId: 's6',
     text: '提个子会话',
   })
-  await world.until(() => (parent.view?.proposals.length ?? 0) === 2, '两张提案')
-  const [first] = parent.view?.proposals ?? []
-  assert.ok(first)
-  await world.until(() => (parent.view?.proposals.length ?? 0) === 1, '短的那张过期')
+  const list = () => parent.view?.proposals ?? []
+  await world.until(() => list().length === 3, '三张提案')
+  const [first, short, third] = list()
+  assert.ok(first && short && third)
+  // 对话里那几条 litch_sessions.start 就是提案的锚点
+  const calls = Object.values(parent.view?.items ?? {}).filter(
+    (item): item is ToolCallItem => item.kind === 'toolCall' && item.spawned !== undefined,
+  )
+  assert.deepEqual(
+    calls.map((item) => item.id).sort(),
+    list()
+      .map((entry) => entry.callId)
+      .sort(),
+  )
+  assert.equal(third.harness, 'pi')
+  assert.equal(third.widerSandbox, 'danger-full-access')
+  await world.until(() => list()[1]?.status === 'expired', '短的那张过期')
+
   const { sessionId } = (await world.channel.command('session.proposal.accept', {
     deviceId: 'local',
     sessionId: 's6',
     proposalId: first.id,
+    overrides: { title: '整理更新记录', harness: 'pi' },
   })) as { sessionId: string }
   await world.until(() => world.children('s6').some((entry) => entry.id === sessionId), '起出来了')
-  assert.deepEqual(parent.view?.proposals, [])
-  assert.equal(world.children('s6')[0]?.lineage?.origin, 'proposal')
+  const child = world.children('s6').find((entry) => entry.id === sessionId)
+  assert.equal(child?.lineage?.origin, 'proposal')
+  assert.equal(child?.title, '整理更新记录')
+  assert.equal(child?.harness, 'pi')
   // 子会话记着是哪个提案：对话里那张提案卡片据此显示“已开始”
-  assert.equal(world.children('s6')[0]?.lineage?.proposalId, first.id)
+  assert.equal(child?.lineage?.proposalId, first.id)
+  assert.equal(list()[0]?.status, 'started')
+  assert.equal(list()[0]?.startedId, sessionId)
 
   const gone = await failureOf(
     world.channel.command('session.proposal.dismiss', {
@@ -685,6 +798,44 @@ test('模拟：说“提个子会话”出两张提案；短的那张到点收�
     }),
   )
   assert.equal(gone.code, 'notFound')
+  await world.channel.command('session.proposal.dismiss', {
+    deviceId: 'local',
+    sessionId: 's6',
+    proposalId: third.id,
+  })
+  await world.until(() => list()[2]?.status === 'dismissed', '不要的那张记成不要了')
+  assert.deepEqual(
+    list().map((entry) => entry.status),
+    ['started', 'expired', 'dismissed'],
+  )
+})
+
+test('模拟：说“撤回提案”模型撤回最近一个还等着的提案；没有可撤回的照实说', async () => {
+  const world = mockWorld()
+  await settle()
+  const parent = world.watch('s6')
+  await settle()
+  const say = async (text: string) => {
+    const before = parent.view?.turns.length ?? 0
+    await world.channel.command('session.send', { deviceId: 'local', sessionId: 's6', text })
+    await world.until(
+      () =>
+        (parent.view?.turns.length ?? 0) > before &&
+        parent.view?.turns.at(-1)?.status === 'completed',
+      `“${text}”这一回合结束`,
+    )
+  }
+  await say('提个子会话')
+  await say('撤回提案')
+  const list = () => parent.view?.proposals ?? []
+  assert.deepEqual(
+    list().map((entry) => entry.status),
+    ['pending', 'pending', 'withdrawn'],
+  )
+  const withdrawCall = Object.values(parent.view?.items ?? {}).find(
+    (item) => item.kind === 'toolCall' && item.tool === 'withdraw',
+  )
+  assert.ok(withdrawCall, '对话里有撤回的那次调用')
 })
 
 test('模拟：说“用子代理”出子代理卡片；能打开子线程，不能输入的那个只能看；脱离后不再挂着', async () => {

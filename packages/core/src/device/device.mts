@@ -76,7 +76,12 @@ import type {
   ServiceUpgradeReport,
   ServiceUpgradeView,
 } from '../model-service.mjs'
-import type { AgentThreadView, LineageKind } from '../model-tree.mjs'
+import type {
+  AgentThreadView,
+  LineageKind,
+  ProposalOverrides,
+  SandboxLevel,
+} from '../model-tree.mjs'
 import { phrase, sameText, type Text } from '../phrase.mjs'
 import type { RequestChoice } from '../projection/requests.mjs'
 import { projectService, projectUpgrade } from '../projection/service.mjs'
@@ -307,8 +312,12 @@ export interface Device {
   spawn(request: SpawnRequest): Promise<string>
   /** 会话树：把子会话脱离成独立会话 */
   detach(sessionId: string): Promise<void>
-  /** 会话树：提案上点了“开始”，返回起出来的子会话 */
-  acceptProposal(sessionId: string, proposalId: string): Promise<string>
+  /** 会话树：提案上点了“开始”（overrides 是“改了再开始”改过的那几项），返回起出来的子会话 */
+  acceptProposal(
+    sessionId: string,
+    proposalId: string,
+    overrides?: ProposalOverrides,
+  ): Promise<string>
   /** 会话树：提案上点了“不要” */
   dismissProposal(sessionId: string, proposalId: string): Promise<void>
   /** 这个会话下面引擎自己的子代理线程（直接的子女） */
@@ -327,7 +336,14 @@ export interface SpawnRequest {
   title: string
   prompt: string
   wakeParent: boolean
+  sandbox?: SandboxLevel
 }
+
+/** 沙箱档配的审批策略（和内置的三档权限预设一样：完全访问不问，别的按需问） */
+const sandboxParams = (sandbox: SandboxLevel | undefined) =>
+  sandbox
+    ? { sandbox, approvalPolicy: sandbox === 'danger-full-access' ? 'never' : 'on-request' }
+    : {}
 
 // —— litch_machine：现查一台设备的情况（08 号 2.4 的 machines、说明开头那两句） ——
 
@@ -1860,16 +1876,15 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     if (!threads.has(threadId)) await fetchThread(threadId, true)
   }
 
+  /** 子会话归到哪个工作区：说了的照说的；没说的跟父会话一样（父会话在哪个工作区，由设备层的归属定） */
+  const projectOf = (parentId: string, workspaceId: string | undefined): string | undefined => {
+    if (hasProjects !== true) return undefined
+    return workspaceId || threads.get(parentId)?.projectId || undefined
+  }
+
   const spawn = async (request: SpawnRequest): Promise<string> => {
     treeOnly()
-    const parent = threads.get(request.parentId)
-    // 归到哪个工作区：说了的照说的；没说的跟父会话一样（父会话在哪个工作区，由设备层的归属定）
-    const projectId =
-      request.workspaceId && hasProjects === true
-        ? request.workspaceId
-        : parent?.projectId && hasProjects === true
-          ? parent.projectId
-          : undefined
+    const projectId = projectOf(request.parentId, request.workspaceId)
     const { threadId } = await guarded(() =>
       link.request(SESSION_TREE_METHOD.start, {
         parentThreadId: request.parentId,
@@ -1882,6 +1897,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         ...(request.effort ? { effort: request.effort } : {}),
         ...(request.cwd ? { cwd: request.cwd } : {}),
         ...(projectId ? { projectId } : {}),
+        ...sandboxParams(request.sandbox),
       }),
     )
     await adoptChild(threadId)
@@ -2051,19 +2067,30 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       // 对面成了之后会发父子关系变了的通知，不一定发给这条连接：这边先改
       patchThread(sessionId, { litchLineage: undefined })
     },
-    async acceptProposal(sessionId, proposalId) {
+    async acceptProposal(sessionId, proposalId, overrides) {
       treeOnly()
+      const { workspaceId, sandbox, ...rest } = overrides ?? {}
+      // 改了项目才带：没改的让设备进程照提案、照父会话定
+      const projectId = workspaceId ? projectOf(sessionId, workspaceId) : undefined
+      const changed = {
+        ...rest,
+        ...(projectId ? { projectId } : {}),
+        ...sandboxParams(sandbox),
+      }
       const { threadId } = await guarded(() =>
-        link.request(SESSION_TREE_METHOD.proposalAccept, { proposalId }),
+        link.request(SESSION_TREE_METHOD.proposalAccept, {
+          proposalId,
+          ...(Object.keys(changed).length > 0 ? { overrides: changed } : {}),
+        }),
       )
-      live.dropProposal(sessionId, proposalId)
+      live.settleProposal(sessionId, proposalId, 'started', threadId)
       await adoptChild(threadId)
       return threadId
     },
     async dismissProposal(sessionId, proposalId) {
       treeOnly()
       await guarded(() => link.request(SESSION_TREE_METHOD.proposalDismiss, { proposalId }))
-      live.dropProposal(sessionId, proposalId)
+      live.settleProposal(sessionId, proposalId, 'dismissed', null)
     },
     async agents(sessionId) {
       if (!online) throw new ChannelError('offline', '设备没有连上')

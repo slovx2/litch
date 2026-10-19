@@ -868,6 +868,9 @@ export interface SessionView {
    * 不是分叉出来的、对面不报的是 null；子代理会话照着上一级起的那一层不算
    */
   forkedFrom: string | null
-  /** 模型提的、还等着用户点的子会话提案（会话树）。排在输入框上面，和请求卡片同一处 */
+  /**
+   * 模型提的子会话提案（会话树的建议任务），等着的和了结的都在，先提的在前。
+   * 对话流里画在提出它的那次 litch_sessions.start 上，侧面板“建议任务”列全部
+   */
   proposals: SessionProposalView[]
 }

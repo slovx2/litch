@@ -41,10 +41,13 @@ export interface SideTabSpec {
   icon: IconName
   /** 标签的内容。用到的时候才装载，不在启动要读的那一包里 */
   Panel: LazyExoticComponent<ComponentType<SideTabProps>>
+  /** 标签上的角标（比如等着的个数）。没有就不画；跟着标签栏一直在，也是用到的时候才装载 */
+  Badge?: LazyExoticComponent<ComponentType<{ place: SidePlace }>>
 }
 
 export const FILES_TAB = 'files'
 export const DIFF_TAB = 'diff'
+export const PROPOSALS_TAB = 'proposals'
 
 export const SIDE_TABS: readonly SideTabSpec[] = [
   {
@@ -69,6 +72,18 @@ export const SIDE_TABS: readonly SideTabSpec[] = [
     icon: 'globe',
     Panel: lazy(() =>
       import('./browser/BrowserTab.tsx').then((module) => ({ default: module.BrowserTab })),
+    ),
+  },
+  {
+    // 模型提的建议任务（子会话提案）：等着的、了结的都在这里，点一条跳到对话里那张卡片
+    id: PROPOSALS_TAB,
+    label: 'side.tab.proposals',
+    icon: 'suggest',
+    Panel: lazy(() =>
+      import('../tree/ProposalsTab.tsx').then((module) => ({ default: module.ProposalsTab })),
+    ),
+    Badge: lazy(() =>
+      import('../tree/ProposalsBadge.tsx').then((module) => ({ default: module.ProposalsBadge })),
     ),
   },
   {

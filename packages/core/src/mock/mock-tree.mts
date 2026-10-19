@@ -3,7 +3,9 @@
 // - 对话里说“派子会话”（英文 spawn sub-sessions）：模型调两次 litch_sessions.start，派出两个子会话
 //   （一个在 Pi 上，一个和父会话同一个 harness），父会话回一句就停下；子会话各自跑完一回合，
 //   都停下之后替父会话开一个唤醒回合（<litch-session-event kind="wake">）；
-// - 说“提个子会话”（propose a sub-session）：模型提两个提案，第二个过一会儿就过期收掉，点“开始”才起；
+// - 说“提个子会话”（propose a sub-session）：模型提三个提案（建议任务），第二个过一会儿就过期，
+//   第三个在 Pi 上、沙箱收不紧；点“开始”（可以改了再开始）才起，点“不要”就了结；
+// - 说“撤回提案”（withdraw a proposal）：模型撤回最近一个还等着的提案；
 // - 说“用子代理”（use sub-agents）：引擎自己派两个子代理线程（不进侧栏），一个能直接输入、一个不能，
 //   它们回来之后父会话才接着说；
 // - 界面上手动派（session.spawn）、脱离（session.detach）、提案的开始和不要、列子代理（session.agents）。
@@ -22,6 +24,8 @@ import type {
   AgentThreadView,
   LineageKind,
   LineageOrigin,
+  ProposalOverrides,
+  SandboxLevel,
   SessionEventView,
   SessionNoteView,
   SessionProposalView,
@@ -34,6 +38,14 @@ import { TREE_TEXT, type TreeAgent } from './sample-tree.mjs'
 
 const SPAWNS = /派子会话|spawn sub-sessions/i
 const PROPOSES = /提个子会话|propose a sub-session/i
+const WITHDRAWS = /撤回提案|withdraw a proposal/i
+
+/** 沙箱档对应的内置权限预设（模拟的子会话用它显示权限） */
+const PRESET_OF: Record<SandboxLevel, string> = {
+  'read-only': ':read-only',
+  'workspace-write': ':workspace',
+  'danger-full-access': ':danger-full-access',
+}
 const USES_AGENTS = /用子代理|use sub-agents/i
 
 /** 第二个提案多久过期（按模拟的时钟）。真的是 7 天，这里要来得及看它收掉 */
@@ -202,19 +214,23 @@ export function createMockTree(host: MockTreeHost): MockTree {
     return summary.id
   }
 
-  /** 模型调了一次 litch_sessions.start：对话里那一条工具调用（经真的投影，界面画成派出卡片） */
-  const startCall = (
+  /**
+   * 模型调了一次 litch_sessions 的工具：对话里那一条工具调用（经真的投影，start 画成派出卡片或提案卡片）
+   */
+  const sessionsCall = (
     turnId: string,
     args: Record<string, unknown>,
     result: Record<string, unknown>,
+    tool: 'start' | 'withdraw' = 'start',
+    id = host.nextId('ls'),
   ): SessionOp => ({
     op: 'item.add',
     turnId,
     item: projectItem({
       type: 'dynamicToolCall',
-      id: host.nextId('ls'),
+      id,
       namespace: CLIENT_TOOL_NAMESPACE.sessions,
-      tool: 'start',
+      tool,
       arguments: args,
       status: 'completed',
       contentItems: [{ type: 'inputText', text: JSON.stringify(result) }],
@@ -238,7 +254,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
         reply: child.reply,
       })
       ops.push(
-        startCall(
+        sessionsCall(
           turnId,
           {
             title: child.title,
@@ -254,28 +270,52 @@ export function createMockTree(host: MockTreeHost): MockTree {
     host.reply(view, turnId, text.spawnReply)
   }
 
-  const proposalsOf = (view: SessionView): SessionProposalView[] => view.proposals
-
   const setProposals = (view: SessionView, proposals: SessionProposalView[]) =>
     host.apply(view, [{ op: 'session.proposals', proposals }])
+
+  /** 提案了结了（开始、不要、撤回、过期）：和设备进程一样记下状态和时间，留在列表里 */
+  const settle = (
+    view: SessionView,
+    id: string,
+    status: Exclude<SessionProposalView['status'], 'pending'>,
+    startedId: string | null = null,
+    settledAt = host.now(),
+  ) =>
+    setProposals(
+      view,
+      view.proposals.map((entry) =>
+        entry.id === id ? { ...entry, status, settledAt, startedId } : entry,
+      ),
+    )
+
+  /** 还等着、没过期的那一个 */
+  const waiting = (view: SessionView, id: string): SessionProposalView | undefined =>
+    view.proposals.find(
+      (entry) => entry.id === id && entry.status === 'pending' && entry.expiresAt > host.now(),
+    )
 
   const proposeDemo = (view: SessionView, turnId: string) => {
     const now = host.now()
     const made = text.proposals.map(
-      (proposal, index): SessionProposalView => ({
+      (sample, index): SessionProposalView => ({
         id: host.nextId('pr'),
-        title: proposal.title,
-        prompt: proposal.prompt,
-        harness: null,
+        title: sample.title,
+        prompt: sample.prompt,
+        harness: sample.harness ?? null,
         model: null,
+        cwd: sample.cwd ?? null,
         kind: 'fresh',
         wakeParent: true,
+        status: 'pending',
         createdAt: now + index,
-        expiresAt:
-          index === 0
-            ? now + SESSION_TREE_LIMITS.proposalTtlSeconds * 1000
-            : now + SHORT_PROPOSAL_MS,
-        widerSandbox: null,
+        expiresAt: sample.short
+          ? now + SHORT_PROPOSAL_MS
+          : now + SESSION_TREE_LIMITS.proposalTtlSeconds * 1000,
+        settledAt: null,
+        startedId: null,
+        turnId,
+        callId: host.nextId('ls'),
+        widerSandbox: sample.widerSandbox ?? null,
       }),
     )
     for (const [index, proposal] of made.entries()) {
@@ -284,25 +324,80 @@ export function createMockTree(host: MockTreeHost): MockTree {
     }
     host.apply(view, [
       ...made.map((proposal) =>
-        startCall(
+        sessionsCall(
           turnId,
-          { title: proposal.title, prompt: proposal.prompt, initiation: 'propose' },
+          {
+            title: proposal.title,
+            prompt: proposal.prompt,
+            initiation: 'propose',
+            ...(proposal.harness ? { harness: proposal.harness } : {}),
+            ...(proposal.cwd ? { cwd: proposal.cwd } : {}),
+          },
           { proposal_id: proposal.id, note: 'Proposed; waiting for the user.' },
+          'start',
+          proposal.callId ?? undefined,
         ),
       ),
-      { op: 'session.proposals', proposals: [...proposalsOf(view), ...made] },
+      { op: 'session.proposals', proposals: [...view.proposals, ...made] },
     ])
-    // 和设备进程一样：过期的那一刻发一次通知，界面上的卡片收掉
+    // 和设备进程一样：过期的那一刻记成过期、发一次通知
     for (const proposal of made) {
       host.setTimer(() => {
-        if (!view.proposals.some((entry) => entry.id === proposal.id)) return
-        setProposals(
-          view,
-          view.proposals.filter((entry) => entry.id !== proposal.id),
-        )
+        if (view.proposals.find((entry) => entry.id === proposal.id)?.status !== 'pending') return
+        settle(view, proposal.id, 'expired', null, proposal.expiresAt)
       }, proposal.expiresAt - now)
     }
     host.reply(view, turnId, text.proposeReply)
+  }
+
+  /** 模型撤回最近提的、还等着的那一个提案（litch_sessions.withdraw） */
+  const withdrawDemo = (view: SessionView, turnId: string) => {
+    const target = view.proposals.filter((entry) => waiting(view, entry.id) !== undefined).at(-1)
+    if (!target) {
+      host.reply(view, turnId, text.withdrawNone)
+      return
+    }
+    host.apply(view, [
+      sessionsCall(
+        turnId,
+        { proposal_id: target.id },
+        { status: 'withdrawn', note: 'Withdrawn.' },
+        'withdraw',
+      ),
+    ])
+    scripted.delete(`proposal:${target.id}`)
+    settle(view, target.id, 'withdrawn')
+    host.reply(view, turnId, text.withdrawReply)
+  }
+
+  /** 提案开始：照提案起子会话，改过的那几项照改的 */
+  const acceptProposal = (
+    view: SessionView,
+    proposal: SessionProposalView,
+    overrides: ProposalOverrides,
+  ): string => {
+    const reply = scripted.get(`proposal:${proposal.id}`) ?? null
+    const sessionId = startChild(view, {
+      title: overrides.title?.trim() || proposal.title,
+      prompt: overrides.prompt?.trim() || proposal.prompt,
+      harness: overrides.harness ?? proposal.harness,
+      kind: overrides.kind ?? proposal.kind,
+      origin: 'proposal',
+      wakeParent: proposal.wakeParent,
+      // 简报改过了，写好的那句回话就对不上了
+      reply: overrides.prompt ? null : reply,
+      settings: {
+        ...(overrides.model || proposal.model ? { model: overrides.model ?? proposal.model } : {}),
+        ...(overrides.effort ? { effort: overrides.effort } : {}),
+        ...(overrides.sandbox ? { permission: PRESET_OF[overrides.sandbox] } : {}),
+      },
+      ...(overrides.workspaceId ? { workspaceId: overrides.workspaceId } : {}),
+      ...(overrides.cwd || proposal.cwd ? { cwd: overrides.cwd ?? proposal.cwd ?? '' } : {}),
+      proposalId: proposal.id,
+    })
+    scripted.delete(`proposal:${proposal.id}`)
+    settle(view, proposal.id, 'started', sessionId)
+    return sessionId
   }
 
   /** 子代理调用的条目：经真的投影，界面画成能点开的卡片 */
@@ -480,6 +575,10 @@ export function createMockTree(host: MockTreeHost): MockTree {
         proposeDemo(view, turnId)
         return true
       }
+      if (WITHDRAWS.test(message.text)) {
+        withdrawDemo(view, turnId)
+        return true
+      }
       return false
     },
 
@@ -551,6 +650,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
           settings: {
             ...(rest.model ? { model: rest.model } : {}),
             ...(rest.effort ? { effort: rest.effort } : {}),
+            ...(rest.sandbox ? { permission: PRESET_OF[rest.sandbox] } : {}),
           },
           ...(rest.workspaceId ? { workspaceId: rest.workspaceId } : {}),
           ...(rest.cwd ? { cwd: rest.cwd } : {}),
@@ -566,32 +666,17 @@ export function createMockTree(host: MockTreeHost): MockTree {
         return {}
       }
       if (name === 'session.proposal.accept' || name === 'session.proposal.dismiss') {
-        const { deviceId, sessionId, proposalId } =
+        const { deviceId, sessionId, proposalId, overrides } =
           params as Commands['session.proposal.accept']['params']
         const view = host.view(deviceId, sessionId)
-        const proposal = view.proposals.find((entry) => entry.id === proposalId)
-        if (!proposal || proposal.expiresAt <= host.now()) {
-          throw new ChannelError('notFound', '这个提案已经不在了')
+        const proposal = waiting(view, proposalId)
+        if (!proposal) throw new ChannelError('notFound', '这个提案已经不在了')
+        if (name === 'session.proposal.dismiss') {
+          scripted.delete(`proposal:${proposalId}`)
+          settle(view, proposalId, 'dismissed')
+          return {}
         }
-        setProposals(
-          view,
-          view.proposals.filter((entry) => entry.id !== proposalId),
-        )
-        if (name === 'session.proposal.dismiss') return {}
-        const reply = scripted.get(`proposal:${proposalId}`) ?? null
-        scripted.delete(`proposal:${proposalId}`)
-        return {
-          sessionId: startChild(view, {
-            title: proposal.title,
-            prompt: proposal.prompt,
-            harness: proposal.harness,
-            kind: proposal.kind,
-            origin: 'proposal',
-            wakeParent: proposal.wakeParent,
-            reply,
-            proposalId,
-          }),
-        }
+        return { sessionId: acceptProposal(view, proposal, overrides ?? {}) }
       }
       if (name === 'session.agents') {
         const { deviceId, sessionId } = params as Commands['session.agents']['params']

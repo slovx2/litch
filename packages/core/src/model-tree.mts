@@ -28,7 +28,19 @@ export interface SessionLineageView {
   proposalId: string | null
 }
 
-/** 模型提的“要不要另起一个子会话”，用户点了才起。只有等着的才给界面 */
+/** 沙箱的三档，越往后越宽 */
+export type SandboxLevel = 'read-only' | 'workspace-write' | 'danger-full-access'
+
+/**
+ * 提案的状态：pending 等用户点；started 用户开始了；dismissed 用户不要了；withdrawn 模型自己撤回了；
+ * expired 到期没人点
+ */
+export type ProposalStatus = 'pending' | 'started' | 'dismissed' | 'withdrawn' | 'expired'
+
+/**
+ * 模型提的“要不要另起一个子会话”（建议任务），用户点了才起。等着的和了结的都给界面：
+ * 对话流里的卡片翻到老的也要写对状态，侧面板的“建议任务”列全部
+ */
 export interface SessionProposalView {
   id: string
   title: string
@@ -37,14 +49,45 @@ export interface SessionProposalView {
   /** 子会话的 harness。null 是跟父会话一样 */
   harness: HarnessId | null
   model: string | null
+  /** 子会话的目录。null 是跟父会话一样 */
+  cwd: string | null
   kind: LineageKind
   wakeParent: boolean
+  /** 投影那一刻的状态。pending 的到了 expiresAt 就算过期，界面用 proposalStatus 现算 */
+  status: ProposalStatus
   /** 毫秒 */
   createdAt: number
-  /** 到这个时间（毫秒）还没点就过期，界面按它收掉 */
+  /** 到这个时间（毫秒）还没点就过期 */
   expiresAt: number
+  /** 了结的时间（毫秒）；还等着是 null */
+  settledAt: number | null
+  /** 开始了：起出来的子会话。没开始、或者对面没说是 null */
+  startedId: string | null
+  /** 在父会话的哪个回合、哪次 litch_sessions.start 调用（条目的 id）里提的。旧提案没有是 null */
+  turnId: string | null
+  callId: string | null
   /** 目标 harness 收不到父会话那么严时，子会话实际会是的沙箱档；收得紧是 null。卡片上要写明 */
-  widerSandbox: 'read-only' | 'workspace-write' | 'danger-full-access' | null
+  widerSandbox: SandboxLevel | null
+}
+
+/** 这一刻提案算什么状态：等着的过了期就是过期了（设备进程到点也会发通知，界面不等它） */
+export const proposalStatus = (proposal: SessionProposalView, now: number): ProposalStatus =>
+  proposal.status === 'pending' && proposal.expiresAt <= now ? 'expired' : proposal.status
+
+/**
+ * 用户从提案开始时改的东西（“改了再开始”）。不给的照提案里的；沙箱照样收紧到不宽于父会话。
+ * 工作区是界面上的项目，核心按设备有没有项目换成对面的 projectId
+ */
+export interface ProposalOverrides {
+  harness?: HarnessId
+  model?: string
+  effort?: string
+  workspaceId?: string
+  cwd?: string
+  kind?: LineageKind
+  title?: string
+  prompt?: string
+  sandbox?: SandboxLevel
 }
 
 /** 注入给父会话的一条回报：哪个子会话、这一回合怎么结束的、最后一条回答的开头 */
@@ -90,8 +133,14 @@ export interface SpawnedView {
   proposalId: string | null
   /** 调用时给的标题 */
   title: string
+  /** 调用时给的第一段话（提案卡片在拿不到提案时照它画） */
+  prompt: string
   /** 调用时给的 harness，没给是 null（跟父会话一样） */
   harness: HarnessId | null
+  /** 调用时给的模型、目录，没给是 null */
+  model: string | null
+  cwd: string | null
+  kind: LineageKind
 }
 
 /** 引擎自己的一个子代理线程（thread/list 带 parentThreadId 列出来的） */

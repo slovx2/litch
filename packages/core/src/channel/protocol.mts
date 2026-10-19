@@ -85,7 +85,13 @@ import type {
   TerminalsOp,
   TerminalsView,
 } from '../model-terminal.mjs'
-import type { AgentThreadView, LineageKind, SessionProposalView } from '../model-tree.mjs'
+import type {
+  AgentThreadView,
+  LineageKind,
+  ProposalOverrides,
+  SandboxLevel,
+  SessionProposalView,
+} from '../model-tree.mjs'
 import type { Phrase, Text } from '../phrase.mjs'
 import type { SkippingOutput } from '../text/output-cap.mjs'
 
@@ -801,6 +807,8 @@ export interface Commands {
       title: string
       prompt: string
       wakeParent: boolean
+      /** 子会话的沙箱档（审批策略跟着配）。不给是跟父会话一样；给了也收紧到不宽于父会话 */
+      sandbox?: SandboxLevel
     }
     result: { sessionId: string }
   }
@@ -809,9 +817,16 @@ export interface Commands {
     params: { deviceId: string; sessionId: string }
     result: Record<string, never>
   }
-  /** 用户点了提案上的“开始”：起这个子会话。应答时子会话已经建好 */
+  /**
+   * 用户点了提案上的“开始”（或者“改了再开始”，带着改过的那几项）：起这个子会话。应答时子会话已经建好
+   */
   'session.proposal.accept': {
-    params: { deviceId: string; sessionId: string; proposalId: string }
+    params: {
+      deviceId: string
+      sessionId: string
+      proposalId: string
+      overrides?: ProposalOverrides
+    }
     result: { sessionId: string }
   }
   /** 用户点了提案上的“不要” */

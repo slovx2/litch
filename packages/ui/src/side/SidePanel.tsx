@@ -141,6 +141,11 @@ export function SidePanel({
             >
               <Icon name={tab.icon} small />
               <span className="ell">{t(tab.label)}</span>
+              {tab.Badge && place ? (
+                <Suspense fallback={null}>
+                  <tab.Badge place={place} />
+                </Suspense>
+              ) : null}
             </button>
           ))}
         </div>

@@ -1,0 +1,93 @@
+// 派子会话弹窗的表单：手动派（session.spawn）和提案的“改了再开始”（session.proposal.accept 带 overrides）
+// 共用一张表。这里只有纯函数：表单的初值、提交时发什么。弹窗本身在 SpawnDialog.tsx。
+import type {
+  HarnessId,
+  LineageKind,
+  ProposalOverrides,
+  SandboxLevel,
+  SessionProposalView,
+} from '@litch/core'
+
+/** 弹窗里填的东西。空串是“不改、照默认” */
+export interface SpawnFields {
+  harness: HarnessId
+  model: string
+  effort: string
+  workspaceId: string
+  cwd: string
+  kind: LineageKind
+  title: string
+  prompt: string
+  sandbox: SandboxLevel | ''
+  wake: boolean
+}
+
+/** 父会话里弹窗要用到的那几样 */
+export interface SpawnParent {
+  harness: HarnessId
+  workspaceId: string | null
+}
+
+/** 表单的初值：手动派的全是父会话的默认；提案的照提案预填 */
+export function fieldsFor(parent: SpawnParent, proposal: SessionProposalView | null): SpawnFields {
+  return {
+    harness: proposal?.harness ?? parent.harness,
+    model: proposal?.model ?? '',
+    effort: '',
+    workspaceId: parent.workspaceId ?? '',
+    cwd: proposal?.cwd ?? '',
+    kind: proposal?.kind ?? 'fresh',
+    title: proposal?.title ?? '',
+    prompt: proposal?.prompt ?? '',
+    sandbox: '',
+    wake: proposal?.wakeParent ?? true,
+  }
+}
+
+/** 带上下文只能同一个 harness：换了别的就是全新开始 */
+export const kindOf = (fields: SpawnFields, parent: SpawnParent): LineageKind =>
+  fields.harness === parent.harness ? fields.kind : 'fresh'
+
+/** 手动派：session.spawn 的参数（不含设备和父会话）。和父会话一样的不带 */
+export function spawnParams(fields: SpawnFields, parent: SpawnParent) {
+  const cwd = fields.cwd.trim()
+  return {
+    kind: kindOf(fields, parent),
+    title: fields.title.trim(),
+    prompt: fields.prompt.trim(),
+    wakeParent: fields.wake,
+    ...(fields.harness !== parent.harness ? { harness: fields.harness } : {}),
+    ...(fields.model ? { model: fields.model } : {}),
+    ...(fields.effort ? { effort: fields.effort } : {}),
+    ...(fields.workspaceId && fields.workspaceId !== parent.workspaceId
+      ? { workspaceId: fields.workspaceId }
+      : {}),
+    ...(cwd ? { cwd } : {}),
+    ...(fields.sandbox ? { sandbox: fields.sandbox } : {}),
+  }
+}
+
+/** 改了再开始：和提案不一样的那几项。什么都没改是空对象 */
+export function overridesOf(
+  fields: SpawnFields,
+  parent: SpawnParent,
+  proposal: SessionProposalView,
+): ProposalOverrides {
+  const overrides: ProposalOverrides = {}
+  if (fields.harness !== (proposal.harness ?? parent.harness)) overrides.harness = fields.harness
+  if (fields.model && fields.model !== proposal.model) overrides.model = fields.model
+  if (fields.effort) overrides.effort = fields.effort
+  if (fields.workspaceId && fields.workspaceId !== (parent.workspaceId ?? '')) {
+    overrides.workspaceId = fields.workspaceId
+  }
+  const cwd = fields.cwd.trim()
+  if (cwd && cwd !== (proposal.cwd ?? '')) overrides.cwd = cwd
+  const kind = kindOf(fields, parent)
+  if (kind !== proposal.kind) overrides.kind = kind
+  const title = fields.title.trim()
+  if (title && title !== proposal.title) overrides.title = title
+  const prompt = fields.prompt.trim()
+  if (prompt && prompt !== proposal.prompt.trim()) overrides.prompt = prompt
+  if (fields.sandbox) overrides.sandbox = fields.sandbox
+  return overrides
+}

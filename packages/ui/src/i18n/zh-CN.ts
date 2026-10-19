@@ -4,6 +4,7 @@ import type { Entry } from './types.ts'
 import { zhHconfig } from './zh-CN-hconfig.ts'
 import { zhOnboard } from './zh-CN-onboard.ts'
 import { zhPairing } from './zh-CN-pairing.ts'
+import { zhProposals } from './zh-CN-proposals.ts'
 import { zhTasks } from './zh-CN-tasks.ts'
 
 export const zhCN = {
@@ -15,6 +16,8 @@ export const zhCN = {
   ...zhOnboard,
   // harness 详情设置的文案也单独放（zh-CN-hconfig.ts）
   ...zhHconfig,
+  // 建议任务（提案卡片、侧面板的“建议任务”、改了再开始）的文案也单独放（zh-CN-proposals.ts）
+  ...zhProposals,
   'title.location': '当前位置',
   'workspace.none': '无项目',
 
@@ -1002,12 +1005,10 @@ export const zhCN = {
 
   // 会话树：派出的子会话、引擎自己的子代理、提案、回报
   'tree.spawned': '派出了子会话',
-  'tree.proposed': '提了一个子会话',
   'tree.spawning': '正在派出子会话…',
   'tree.spawnFailed': '没派出去',
   'tree.child.open': '打开这个子会话',
   'tree.child.gone': '不在侧栏里了',
-  'tree.child.waitStart': '等你点“开始”',
   'tree.child.report': '回报',
   'tree.status.running': '在跑',
   'tree.status.waiting': '在等人',
@@ -1030,16 +1031,6 @@ export const zhCN = {
   'tree.note.failed': '失败了',
   'tree.note.interrupted': '被打断',
   'tree.note.needsUser': '等人处理',
-  'tree.proposal.head': '要不要另起一个子会话？',
-  'tree.proposal.start': '开始',
-  'tree.proposal.dismiss': '不要',
-  'tree.proposal.fork': '带上下文',
-  'tree.proposal.fresh': '全新开始',
-  'tree.proposal.more': '还有 {n} 个提案',
-  'tree.proposal.failed': '没做成：{reason}',
-  'tree.proposal.closed': '提案已收起',
-  'tree.proposal.started': '已开始',
-  'tree.proposal.wider': '这个 harness 没有这么严的沙箱，开始后子会话是「{level}」',
   'tree.level.readOnly': '只读',
   'tree.level.workspace': '项目内',
   'tree.level.full': '完全访问',
@@ -1059,6 +1050,10 @@ export const zhCN = {
   'tree.dialog.harness': 'Harness',
   'tree.dialog.model': '模型',
   'tree.dialog.modelDefault': '默认',
+  'tree.dialog.effort': '强度',
+  'tree.dialog.cwd': '目录',
+  'tree.dialog.sandbox': '权限',
+  'tree.dialog.sandboxParent': '跟主会话一样',
   'tree.dialog.workspace': '项目',
   'tree.dialog.kind': '上下文',
   'tree.dialog.fresh': '全新开始',

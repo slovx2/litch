@@ -2,6 +2,7 @@
 import { enHconfig } from './en-hconfig.ts'
 import { enOnboard } from './en-onboard.ts'
 import { enPairing } from './en-pairing.ts'
+import { enProposals } from './en-proposals.ts'
 import { enTasks } from './en-tasks.ts'
 import type { Entry } from './types.ts'
 import type { MessageKey } from './zh-CN.ts'
@@ -14,6 +15,7 @@ export const en: Record<MessageKey, Entry> = {
   ...enPairing,
   ...enOnboard,
   ...enHconfig,
+  ...enProposals,
   'title.location': 'Location',
   'workspace.none': 'No project',
 
@@ -1074,12 +1076,10 @@ export const en: Record<MessageKey, Entry> = {
 
   // Session tree: sub-sessions, the engine's own subagents, proposals, reports
   'tree.spawned': 'Started a sub-session',
-  'tree.proposed': 'Proposed a sub-session',
   'tree.spawning': 'Starting a sub-session…',
   'tree.spawnFailed': 'Not started',
   'tree.child.open': 'Open this sub-session',
   'tree.child.gone': 'no longer in the sidebar',
-  'tree.child.waitStart': 'Waiting for you to press Start',
   'tree.child.report': 'Report',
   'tree.status.running': 'Running',
   'tree.status.waiting': 'Waiting for you',
@@ -1102,17 +1102,6 @@ export const en: Record<MessageKey, Entry> = {
   'tree.note.failed': 'failed',
   'tree.note.interrupted': 'interrupted',
   'tree.note.needsUser': 'needs you',
-  'tree.proposal.head': 'Start a separate sub-session?',
-  'tree.proposal.start': 'Start',
-  'tree.proposal.dismiss': 'Dismiss',
-  'tree.proposal.fork': 'With context',
-  'tree.proposal.fresh': 'Fresh',
-  'tree.proposal.more': ({ n }) => (n === 1 ? '1 more proposal' : `${n} more proposals`),
-  'tree.proposal.failed': 'Did not work: {reason}',
-  'tree.proposal.closed': 'Proposal closed',
-  'tree.proposal.started': 'started',
-  'tree.proposal.wider':
-    'This harness has no sandbox this strict; the sub-session will run with "{level}"',
   'tree.level.readOnly': 'Read only',
   'tree.level.workspace': 'In project',
   'tree.level.full': 'Full access',
@@ -1134,6 +1123,10 @@ export const en: Record<MessageKey, Entry> = {
   'tree.dialog.harness': 'Harness',
   'tree.dialog.model': 'Model',
   'tree.dialog.modelDefault': 'Default',
+  'tree.dialog.effort': 'Effort',
+  'tree.dialog.cwd': 'Folder',
+  'tree.dialog.sandbox': 'Permissions',
+  'tree.dialog.sandboxParent': 'Same as the main session',
   'tree.dialog.workspace': 'Project',
   'tree.dialog.kind': 'Context',
   'tree.dialog.fresh': 'Start fresh',

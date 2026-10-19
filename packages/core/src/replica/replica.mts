@@ -93,7 +93,7 @@ export const keys = {
   /** SessionSettings：下一个回合会用的模型、强度、权限预设 */
   settings: (deviceId: string, sessionId: string) => `session:${deviceId}:${sessionId}:settings`,
   usage: (deviceId: string, sessionId: string) => `session:${deviceId}:${sessionId}:usage`,
-  /** SessionProposalView[]：这个会话上等着用户点的子会话提案 */
+  /** SessionProposalView[]：这个会话上的子会话提案（建议任务），等着的和了结的都在 */
   proposals: (deviceId: string, sessionId: string) => `session:${deviceId}:${sessionId}:proposals`,
   /**
    * SessionNotes：这个会话收到过的子会话回报，每个子会话留最近的一条（对话里注入的 <litch-session-event>）。

@@ -3,7 +3,8 @@
 //   侧栏里子会话挂在父会话下面、能收起展开，子会话的行上只有状态点和名字；
 //   派出卡片点了跳到子会话，子会话最上面一行写着由谁派出、点了回去，能脱离成独立会话；
 //   注入的回报、唤醒画成系统提示条，不是用户的气泡，原文里的标签不露出来；
-//   提案卡片在输入框上面，“开始”起子会话、“不要”收掉、过期的自己收掉；
+//   提案卡片（建议任务）在对话流里：等着的有“开始”“改了再开始”“不要”，开始了的能点进子会话，
+//   过期了、撤回了的写着状态；侧面板的“建议任务”列全部，角标是等着的个数，点一条在对话里找到那张卡片；
 //   子代理卡片点了在侧面板里看子线程，不接受直接输入的没有输入框；子代理线程不进侧栏；
 //   三种皮肤、深浅两套下这几样东西不溢出。
 // 下面的 treeProbe、treeLooks 会被原样送进页面里执行，不能引用函数外面的东西。
@@ -29,11 +30,18 @@ export interface TreeSeen {
   dialogSpawned: boolean
   /** 它做完之后用户再说一句：回报是一条提示条，后面跟着用户自己的气泡 */
   notesBar: boolean
-  /** 提案：两张，写着还有一个；短的那张过期自己收掉；“开始”起出子会话；再提一次，“不要”收掉 */
+  /**
+   * 提案：对话流里三张等着的卡片，侧面板角标 3；短的那张到点写“过期了”；“开始”起出子会话、卡片写“已开始”
+   * 能点进去；“改了再开始”预填提案、提醒沙箱收不紧、改了标题再开始；再提一次，“不要”记成不要了；
+   * “撤回提案”记成撤回了；侧面板里等着的在上，点一条对话里那张卡片闪一下
+   */
   proposalShown: boolean
   proposalExpired: boolean
   proposalStarted: boolean
+  proposalEdited: boolean
   proposalDismissed: boolean
+  proposalWithdrawn: boolean
+  proposalPanel: boolean
   /** 子代理：卡片两行，点了在侧面板里看；不能直接输入的没有输入框，能的有；侧栏里没有子代理线程 */
   agentCard: boolean
   agentPanel: boolean
@@ -177,42 +185,104 @@ export async function treeProbe(): Promise<TreeSeen> {
   })
   await idle()
 
-  // —— 提案 ——
+  // —— 提案（建议任务） ——
+  const propCards = () => $$('.main [data-card="proposal"]')
+  const states = () => propCards().map((card) => card.dataset.state ?? '')
+  const badge = () => $('.side-tab[data-tab="proposals"] .side-badge')?.textContent ?? ''
+  if ($('.side')?.hidden !== false) $('.tb-side')?.click()
+  await until(() => $('.side')?.hidden === false)
+  $('.side-tab[data-tab="proposals"]')?.click()
   await say('提个子会话')
-  const proposalShown = await until(() =>
-    ($('.tree-proposal-meta')?.textContent ?? '').includes('还有 1 个提案'),
+  const proposalShown = await until(
+    () =>
+      states().join(',') === 'pending,pending,pending' &&
+      badge() === '3' &&
+      propCards().every((card) => card.querySelector('[data-act="start"]') !== null),
   )
-  seen.proposal = $('.tree-proposal')?.textContent ?? '没有'
+  seen.proposal = propCards()[2]?.textContent ?? '没有'
   // 第二张八秒后过期
   const proposalExpired = await until(
     () =>
-      $('.tree-proposal') !== null &&
-      !($('.tree-proposal-meta')?.textContent ?? '').includes('还有'),
+      states()[1] === 'expired' && badge() === '2' && !propCards()[1]?.querySelector('.prop-acts'),
     15000,
   )
+  seen.expired = states().join(',')
+  await idle()
   const before = kids().length
-  $('.tree-proposal [data-act="start"]')?.click()
-  // 对话里那张提案的卡片跟着写“已开始”，点得进起出来的子会话
+  propCards()[0]?.querySelector<HTMLElement>('[data-act="start"]')?.click()
   const proposalStarted = await until(
     () =>
-      $('.tree-proposal') === null &&
+      states()[0] === 'started' &&
       kids().length === before + 1 &&
-      $('[data-card="spawn"] .tree-card-started') !== null &&
-      $('[data-card="spawn"]:has(.tree-card-started) button.tree-card-main') !== null,
+      $('.main [data-card="proposal"][data-state="started"] button.prop-child:not(:disabled)') !==
+        null,
   )
   await idle()
-  // 起出来的子会话做完会唤醒父会话：等那一回合也过去
   await sleep(2500)
   await idle()
-  await say('提个子会话')
-  await until(() => $('.tree-proposal') !== null)
-  const left = kids().length
-  $('.tree-proposal [data-act="dismiss"]')?.click()
-  await sleep(300)
-  const proposalDismissed =
-    !($('.tree-proposal-meta')?.textContent ?? '').includes('还有') && kids().length === left
-  await until(() => $('.tree-proposal') === null, 12000)
+
+  // 改了再开始：第三张在 Pi 上，沙箱收不紧
+  propCards()[2]?.querySelector<HTMLElement>('[data-act="edit"]')?.click()
+  await until(() => $('.spawn-dialog[data-proposal]') !== null)
+  const filled =
+    $<HTMLSelectElement>('#spawn-harness')?.value === 'pi' &&
+    ($<HTMLInputElement>('#spawn-cwd')?.value ?? '') !== '' &&
+    $('.spawn-dialog .spawn-wider') !== null &&
+    $('.spawn-dialog .spawn-wake') === null
+  seen.edit = `${$<HTMLSelectElement>('#spawn-harness')?.value} ${$('.spawn-dialog .spawn-wider')?.textContent ?? '没有提醒'}`
+  const titleBox = $<HTMLInputElement>('#spawn-title')
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
+    titleBox,
+    '改过标题的基准',
+  )
+  titleBox?.dispatchEvent(new Event('input', { bubbles: true }))
+  await sleep(100)
+  $('.spawn-dialog button[type="submit"]')?.click()
+  const proposalEdited =
+    filled &&
+    (await until(
+      () =>
+        $('.spawn-dialog') === null &&
+        states()[2] === 'started' &&
+        kids().some((row) => (row.textContent ?? '').includes('改过标题的基准')),
+    ))
   await idle()
+  await sleep(2500)
+  await idle()
+
+  // 再提一次：“不要”记成不要了，“撤回提案”撤回最近一张还等着的
+  await say('提个子会话')
+  await until(() => propCards().length === 6)
+  await idle()
+  const left = kids().length
+  propCards()[3]?.querySelector<HTMLElement>('[data-act="dismiss"]')?.click()
+  const proposalDismissed = await until(() => states()[3] === 'dismissed' && kids().length === left)
+  await say('撤回提案')
+  const proposalWithdrawn = await until(() => states()[5] === 'withdrawn')
+  await idle()
+  seen.states = states().join(',')
+
+  // 侧面板：等着的在上，了结的在下；点一条，对话里那张卡片闪一下
+  const rows = $$('.side .prop-row')
+  const order = rows.map((entry) => entry.dataset.state ?? '')
+  // 短的那张这时可能也过期了：只看等着的都排在了结的前面
+  const ordered = order.every(
+    (state, index) => state !== 'pending' || order.slice(0, index).every((x) => x === 'pending'),
+  )
+  const picked = rows.at(-1)
+  picked?.querySelector<HTMLElement>('.prop-row-main')?.click()
+  const proposalPanel =
+    ordered &&
+    rows.length === 6 &&
+    (await until(
+      () =>
+        $(`.main [data-proposal="${picked?.dataset.proposal ?? ''}"]`)?.hasAttribute(
+          'data-flash',
+        ) === true,
+      2000,
+    ))
+  seen.panel = order.join(',')
+  $('.side [data-tool="hide"]')?.click()
 
   // —— 子代理 ——
   await say('用子代理看看')
@@ -275,7 +345,10 @@ export async function treeProbe(): Promise<TreeSeen> {
     proposalShown,
     proposalExpired,
     proposalStarted,
+    proposalEdited,
     proposalDismissed,
+    proposalWithdrawn,
+    proposalPanel,
     agentCard,
     agentPanel,
     agentMuted,
@@ -299,7 +372,7 @@ export async function treeLooks(parent: string): Promise<TreeLooks> {
   const root = document.documentElement
   const was = { skin: root.dataset.skin, theme: root.dataset.theme }
   const rows: TreeLooks['rows'] = []
-  const parts = ['.tree-card', '.sev', '.tree-kids .row-line', '.tree-fold']
+  const parts = ['.tree-card', '.prop-card', '.sev', '.tree-kids .row-line', '.tree-fold']
   for (const skin of ['retro', 'human', 'standard']) {
     for (const theme of ['light', 'dark']) {
       root.dataset.skin = skin
@@ -345,10 +418,13 @@ const LABELS: Record<Exclude<keyof TreeSeen, 'seen'>, string> = {
   dialogFork: '派子会话的对话框里换了 harness 就不能带上下文',
   dialogSpawned: '从菜单派出的子会话挂在父会话下面并被选中',
   notesBar: '回报附在下一条消息前面：提示条加用户自己的气泡',
-  proposalShown: '提案卡片出现，写着还有一个',
-  proposalExpired: '短的那张提案过期后自己收掉',
-  proposalStarted: '点“开始”起出子会话，卡片收掉，对话里的提案卡片写“已开始”、能点进去',
-  proposalDismissed: '点“不要”收掉，不起子会话',
+  proposalShown: '对话流里三张等着的提案卡片，侧面板角标 3',
+  proposalExpired: '短的那张提案到点写“过期了”、没有按钮，角标变 2',
+  proposalStarted: '点“开始”起出子会话，卡片写“已开始”、能点进去',
+  proposalEdited: '“改了再开始”照提案预填、提醒沙箱收不紧，改了标题再开始',
+  proposalDismissed: '点“不要”记成不要了，不起子会话',
+  proposalWithdrawn: '模型撤回的提案写“撤回了”',
+  proposalPanel: '侧面板等着的在上、了结的在下，点一条对话里那张卡片闪一下',
   agentCard: '子代理卡片列出两个子代理',
   agentPanel: '点子代理在侧面板里看它的对话',
   agentMuted: '不接受直接输入的子代理没有输入框',

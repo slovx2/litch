@@ -147,11 +147,17 @@ function spawnedOf(
       // 失败的结果是一行说明，不是 JSON
     }
   }
+  const word = (value: unknown): string | null =>
+    typeof value === 'string' && value ? value : null
   return {
     threadId,
     proposalId,
     title: typeof given.title === 'string' ? given.title : '',
-    harness: typeof given.harness === 'string' && given.harness ? given.harness : null,
+    prompt: typeof given.prompt === 'string' ? given.prompt : '',
+    harness: word(given.harness),
+    model: word(given.model),
+    cwd: word(given.cwd),
+    kind: given.kind === 'fork' ? 'fork' : 'fresh',
   }
 }
 
