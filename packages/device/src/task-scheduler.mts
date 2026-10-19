@@ -20,6 +20,7 @@ import {
   type TaskTiming,
 } from './task-run.mjs'
 import { publicRun, type RunRow, type TaskRow, type TaskStore } from './task-store.mjs'
+import type { TaskTurns } from './task-turns.mjs'
 
 /** 设置里的两项（Go 层 settings_tasks.go，经控制通道推来） */
 export interface TaskSettings {
@@ -67,6 +68,7 @@ export interface SchedulerHost {
   taskChanged(taskId: string): void
   runChanged(run: DeviceTaskRun): void
   born(harness: string, thread: Record<string, unknown>, workspaceId: string | null): void
+  turns: TaskTurns
 }
 
 const seconds = (ms: number): number => Math.floor(ms / 1000)
@@ -207,6 +209,7 @@ export class TaskScheduler {
       progress: (run) => this.progress(run),
       born: host.born,
       openEngineLink: (harness) => host.openEngineLink(harness),
+      turns: host.turns,
     }
   }
 

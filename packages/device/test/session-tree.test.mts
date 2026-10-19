@@ -472,3 +472,36 @@ test('SESSION-TREE-011：设备进程到子会话所在 harness 的连接断了�
     await env.close()
   }
 })
+
+test('SESSION-TREE-012：子会话上挂的定时任务跑出来的回合只进回报、不唤醒父会话', async () => {
+  const env = treeRig()
+  try {
+    const { threadId, childId } = await family(env)
+    env.claude.end(childId, 'completed', '派出时的那一回合')
+    env.pi.end(threadId)
+    await until(() => wakesOf(env, threadId).length === 1, '设备发的回合结束了要唤醒')
+    await until(() => env.pi.running(threadId), '唤醒回合在跑')
+    env.pi.end(threadId)
+    const tasks = env.connect()
+    await tasks.initialize(['harness', 'deviceTasks'])
+    const { task } = await tasks.call('litch/task/create', {
+      name: '看一眼子任务',
+      prompt: '定时看一眼。',
+      schedule: { type: 'interval', minutes: 60 },
+      timezone: 'Asia/Shanghai',
+      status: 'paused',
+      target: { kind: 'thread', harness: 'claude-code', threadId: childId },
+    })
+    await tasks.call('litch/task/runNow', { id: task.id })
+    await until(() => env.claude.running(childId), '任务的回合在子会话里跑')
+    env.claude.end(childId, 'completed', '任务跑完了')
+    const queued = () =>
+      env.device.sessionTree.store.notes(threadId).find((note) => note.excerpt === '任务跑完了')
+    await until(() => queued() !== undefined, '任务回合也回报')
+    assert.equal(queued()?.wake, false)
+    await settle(60)
+    assert.equal(wakesOf(env, threadId).length, 1, '任务回合不唤醒')
+  } finally {
+    await env.close()
+  }
+})

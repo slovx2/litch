@@ -21,6 +21,7 @@ import {
   watchTurn,
 } from './engine-link.mjs'
 import type { TaskRow } from './task-store.mjs'
+import type { TaskTurns } from './task-turns.mjs'
 import { isObject, UpstreamRpcError } from './wire.mjs'
 
 export interface TaskTiming {
@@ -78,6 +79,8 @@ export interface RunHost {
    * 开不了抛 EngineUnavailable。设备进程退出时它替我们关掉
    */
   openEngineLink(harness: string): Promise<EngineLink>
+  /** 记下任务发起的回合（会话树认出它们，不拿来唤醒父会话） */
+  turns: TaskTurns
 }
 
 /** 给模型看的时间：任务时区里的 YYYY-MM-DD HH:MM */
@@ -253,6 +256,7 @@ export async function executeRun(
     }
     const threadId = run.threadId as string
     const effort = target.kind === 'newThread' ? target.settings.effort : null
+    const sent = host.turns.starting(threadId)
     const result = await runTurn(
       link,
       {
@@ -264,11 +268,13 @@ export async function executeRun(
         timeoutMs: host.timing.turnTimeoutMs,
         interruptGraceMs: host.timing.interruptGraceMs,
         onStarted: (turnId) => {
+          host.turns.started(threadId, turnId)
+          sent()
           run = { ...run, turnId, status: 'running', startedAt: Math.floor(host.now() / 1000) }
           host.progress(run)
         },
       },
-    )
+    ).finally(sent)
     if (result.status === 'timedOut') host.log(`任务 ${task.id} 的回合超过了时限，打断了`)
     return outcomeOf(result)
   } catch (error) {
@@ -349,6 +355,7 @@ export async function recoverRun(host: RunHost, run: DeviceTaskRun): Promise<Run
   } catch (error) {
     return interrupted(message(error))
   }
+  host.turns.started(run.threadId, run.turnId)
   const watch = watchTurn(link, run.threadId)
   try {
     const read = await link

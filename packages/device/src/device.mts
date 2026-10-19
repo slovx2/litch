@@ -220,6 +220,7 @@ export class DeviceServer {
       },
       timeoutMs: options.timing?.listTimeoutMs ?? DEFAULT_TIMING.listTimeoutMs,
       needsUserMs: options.timing?.needsUserMs ?? DEFAULT_TIMING.needsUserMs,
+      taskTurn: (threadId, turnId) => this.tasks?.isTaskTurn(threadId, turnId) ?? false,
       log,
     })
     this.deviceTools.register(CLIENT_TOOL_NAMESPACE.sessions, sessionToolsHandler(this.sessionTree))

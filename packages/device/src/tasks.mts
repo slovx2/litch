@@ -38,6 +38,7 @@ import {
   type TaskSettings,
 } from './task-scheduler.mjs'
 import { openTaskDatabase, publicRun, type TaskRow, TaskStore } from './task-store.mjs'
+import { TaskTurns } from './task-turns.mjs'
 import {
   badTarget,
   checkSchedule,
@@ -97,6 +98,7 @@ export class DeviceTasks {
   private readonly scheduler: TaskScheduler
   private readonly clock: TaskClock
   private readonly timing: TaskTiming
+  private readonly turns = new TaskTurns()
   private begun = false
   private closed = false
 
@@ -125,7 +127,13 @@ export class DeviceTasks {
       taskChanged: (id) => this.changed('updated', id),
       runChanged: (run) => this.runChanged(run),
       born: (harness, thread, workspaceId) => this.born(harness, thread, workspaceId),
+      turns: this.turns,
     })
+  }
+
+  /** 这个回合是定时任务发起的（会话树用它决定子会话的回合要不要唤醒父会话） */
+  isTaskTurn(threadId: string, turnId: string): boolean {
+    return this.turns.has(threadId, turnId)
   }
 
   /**

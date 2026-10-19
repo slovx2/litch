@@ -43,6 +43,8 @@ export interface SessionTreeHost {
   timeoutMs: number
   /** 子会话里的审批、提问挂了这么久没人答，算它停下来在等用户 */
   needsUserMs: number
+  /** 这个回合是定时任务发起的：只进回报，不唤醒父会话 */
+  taskTurn(threadId: string, turnId: string): boolean
   log(line: string): void
 }
 
@@ -249,7 +251,7 @@ export class SessionTree {
       this.store.addNote(
         lineage.parentThreadId,
         { threadId, title: lineage.title, status: 'needsUser', excerpt: '' },
-        lineage.wakeParent,
+        lineage.wakeParent && !this.host.taskTurn(threadId, turnId),
       )
     }
     this.check(lineage.parentThreadId)
@@ -282,7 +284,12 @@ export class SessionTree {
     for (const listener of [...this.listeners]) listener(threadId)
     const lineage = this.store.parentOf(threadId)
     if (lineage && this.host.enabled() && this.store.markReported(threadId, turn.id))
-      void this.report(harness, threadId, turn, !userDriven).catch((error: unknown) =>
+      void this.report(
+        harness,
+        threadId,
+        turn,
+        !userDriven && !this.host.taskTurn(threadId, turn.id),
+      ).catch((error: unknown) =>
         this.host.log(`子会话 ${threadId} 的回报没取到：${String(error)}`),
       )
     // 父会话自己的回合结束了：它的子会话也许早就停了，看看要不要唤醒
