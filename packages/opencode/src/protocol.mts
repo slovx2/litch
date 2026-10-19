@@ -39,6 +39,7 @@ export async function dispatch(
   p: any,
 ): Promise<any> {
   if (method.startsWith('fs/')) return s.files.call(peer, method, p)
+  if (method.startsWith('litch/harness/')) return s.harness.dispatch(peer, method, p)
   if (method === 'command/exec' || method === 'process/spawn')
     return s.processes.start(peer, method === 'command/exec' ? 'command' : 'process', p)
   if (
@@ -179,7 +180,7 @@ export async function dispatch(
       const saved = s.store.getMeta('config', 'defaults') ?? {}
       return {
         config: {
-          model: saved.model ?? (await s.catalog.defaultModel()),
+          model: await s.catalog.defaultModel(),
           model_provider: 'opencode',
           model_reasoning_effort: saved.model_reasoning_effort ?? DEFAULT_EFFORT,
           approval_policy: saved.approval_policy ?? 'on-request',
@@ -194,7 +195,8 @@ export async function dispatch(
     }
     case 'config/value/write':
     case 'config/batchWrite': {
-      // 桌面端改默认模型与权限时写这里；默认值存在适配器元数据里，不动 OpenCode 自己的配置。
+      // 桌面端改默认模型与权限时写这里。默认模型写进 OpenCode 自己的全局配置（model），和命令行共用；
+      // 强度、权限档 OpenCode 的配置里没有对应的，仍存在适配器元数据里。
       const edits: any[] =
         method === 'config/batchWrite' ? (p.edits ?? []) : [{ keyPath: p.keyPath, value: p.value }]
       const allowed = ['model', 'model_reasoning_effort', 'approval_policy', 'sandbox_mode']
@@ -202,7 +204,12 @@ export async function dispatch(
         if (!allowed.includes(edit.keyPath))
           throw new ProtocolError(-32602, `OpenCode 入口不支持修改 ${edit.keyPath}`)
       const saved = s.store.getMeta('config', 'defaults') ?? {}
-      for (const edit of edits) saved[edit.keyPath] = edit.value
+      for (const edit of edits)
+        if (edit.keyPath === 'model')
+          await s.harness.writeModel(
+            typeof edit.value === 'string' && edit.value ? edit.value : null,
+          )
+        else saved[edit.keyPath] = edit.value
       s.store.setMeta('config', 'defaults', saved)
       return { status: 'ok', version: 'opencode', filePath: '', overriddenMetadata: null }
     }
@@ -248,7 +255,8 @@ async function startThread(s: OpencodeServer, peer: RpcPeer, p: any): Promise<an
     throw new ProtocolError(-32602, 'cwd 必须是绝对路径')
   const defaults = s.store.getMeta('config', 'defaults') ?? {}
   const base: ThreadSettings = {
-    model: p.model ?? p.config?.model ?? defaults.model ?? null,
+    // 没指定模型的会话跟着默认走（OpenCode 配置里的 model，见 Turns.selection）
+    model: p.model ?? p.config?.model ?? null,
     effort: p.effort ?? p.config?.model_reasoning_effort ?? defaults.model_reasoning_effort ?? null,
     preset:
       presetFromParams(p) ?? presetFromParams({ sandbox: defaults.sandbox_mode }) ?? ':workspace',

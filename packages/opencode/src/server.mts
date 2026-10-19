@@ -18,6 +18,8 @@ import { type OpencodeApi, OpencodeError } from './api.mjs'
 import { Asks } from './asks.mjs'
 import { Catalog } from './catalog.mjs'
 import { ClientTools } from './client-tools.mjs'
+import { HarnessSettings } from './harness-settings.mjs'
+import { HarnessError } from './harness-settings-shared.mjs'
 import {
   type OcThread,
   type OcTurn,
@@ -84,6 +86,7 @@ export class OpencodeServer {
   readonly asks: Asks
   readonly turns: Turns
   readonly clientTools: ClientTools
+  readonly harness: HarnessSettings
   // 各连接握手时声明认识的扩展：服务端主动给的扩展内容只发给声明过的连接
   readonly declared = new Map<string, Set<string>>()
   private readonly loading = new Map<string, Promise<LiveThread>>()
@@ -119,6 +122,7 @@ export class OpencodeServer {
     this.asks = new Asks(this)
     this.turns = new Turns(this)
     this.clientTools = new ClientTools(this)
+    this.harness = new HarnessSettings(this)
   }
 
   api(): Promise<OpencodeApi> {
@@ -164,7 +168,9 @@ export class OpencodeServer {
       // 会话不在这里不记：官方桌面端找置顶会话在哪台机器上时，拿别处的会话号向每个入口都问。
       if (!(error instanceof ThreadNotFound))
         console.error(`[opencode] ${message.method} 失败（${code}）: ${text}`)
-      peer.send({ jsonrpc: '2.0', id: message.id, error: { code, message: text } })
+      // harness 详情设置的错误带 data（litch 字段说是哪一类，见 harness-config.mts）
+      const data = error instanceof HarnessError ? { data: error.data } : {}
+      peer.send({ jsonrpc: '2.0', id: message.id, error: { code, message: text, ...data } })
     } finally {
       // 这次请求可能让这条连接订阅了某个会话：把还在等人回答的请求补送给它（照上游恢复会话后重放挂起的请求）。
       this.requests.replay((threadId) => this.subscribers(threadId))
@@ -418,6 +424,7 @@ export class OpencodeServer {
     if (payload.type === 'question.asked') return void this.asks.question(directory, props)
     if (['permission.replied', 'question.replied', 'question.rejected'].includes(payload.type))
       return void this.asks.answered(String(props.requestID))
+    if (payload.type?.startsWith('mcp.')) this.harness.event(payload)
     if (!sessionID) return
     const pending = this.buffered.get(sessionID)
     if (pending) {
@@ -452,11 +459,14 @@ export class OpencodeServer {
         projection.todos(props.todos, notify)
         break
       case 'session.status':
-        if (props.status?.type === 'idle') projection.idle(notify)
-        else if (props.status?.type === 'retry') projection.retry(props.status, notify)
+        if (props.status?.type === 'idle') {
+          projection.idle(notify)
+          this.harness.idle()
+        } else if (props.status?.type === 'retry') projection.retry(props.status, notify)
         break
       case 'session.idle':
         projection.idle(notify)
+        this.harness.idle()
         break
       case 'session.error':
         projection.error(props.error, notify)
