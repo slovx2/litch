@@ -20,6 +20,7 @@ import {
   clientToolFailure,
   isClientToolNamespace,
 } from '../../../protocol/src/client-tools.mjs'
+import { CONFIG_NAMESPACE, CONFIG_TOOL } from '../../../protocol/src/client-tools-config.mjs'
 import type { JsonRpcId } from '../../../protocol/src/index.mjs'
 import { createCancel } from '../channel/cancel.mjs'
 import type { AbortSignalLike, Clock } from '../channel/protocol.mjs'
@@ -59,6 +60,18 @@ export interface MachineCallInput {
   hold(): () => void
 }
 
+/**
+ * litch_config 的一次调用（只有命令行来的 litch/clientTool/call，不进 dynamicTools）。交给核心的执行器（config/executor.mts）。
+ * 不许抛错：出错也回 success:false 的答复
+ */
+export interface ConfigCallInput {
+  threadId: string | null
+  harness: string | null
+  arguments: unknown
+  /** 有确认卡挂着、在等长的事时调：停表。返回“不等了”，表从头算 */
+  hold(): () => void
+}
+
 /** 接线那一层（machine-wiring.mts 经设备转过来的） */
 export interface MachineCalls {
   /** 不许抛错：出错也回 success:false 的答复 */
@@ -73,6 +86,8 @@ export interface ToolCallsHost {
   hub: ToolHub
   /** litch_machine 的调用交给它。不给就是这台桌面执行不了，回 noExecutor */
   machine?: MachineCalls
+  /** litch_config 的调用交给它（只有本机设备有）。不给回 noExecutor */
+  config?(input: ConfigCallInput): Promise<ClientToolCallResponse>
   /** 调用来自哪台设备，交给执行器（远程设备的 Computer Use 没有“始终允许”，执行器按 kind 判断） */
   device(): ToolInvocation['device']
   /** 这台设备的开关里这个命名空间开着没有。没有开关的命名空间（测试用的 echo）一律算开着 */
@@ -285,29 +300,24 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
     })
   }
 
-  /** litch_machine：交给接线那一层。超时、撤回、打断、断线照样在这里管 */
-  const machineCall = (
-    input: Omit<MachineCallInput, 'signal' | 'hold'>,
+  /**
+   * 交给核心自己执行的调用（litch_machine、litch_config）：超时、撤回、打断、断线照样在这里管。
+   * work 拿到中止信号和停表的口子
+   */
+  const coreCall = (
+    meta: { threadId: string | null; turnId: string | null; machine: boolean; label: string },
     rpcId: string,
+    work: (signal: AbortSignalLike, hold: () => () => void) => Promise<ClientToolCallResponse>,
   ): Promise<unknown> => {
-    const machine = host.machine
-    if (!machine) {
-      return Promise.resolve(
-        clientToolFailure(
-          'noExecutor',
-          'The connected Litch desktop cannot run litch_machine tools for this device.',
-        ),
-      )
-    }
     const id = `${host.deviceId}:${++seq}`
     const cancel = createCancel()
     return new Promise<unknown>((resolve) => {
       const entry: Running = {
         id,
         rpcId,
-        threadId: input.threadId,
-        turnId: input.turnId,
-        machine: true,
+        threadId: meta.threadId,
+        turnId: meta.turnId,
+        machine: meta.machine,
         resolve,
         stop: () => cancel.abort(),
         stopTimer: null,
@@ -328,17 +338,71 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
           resume(entry)
         }
       }
-      machine.call({ ...input, signal: cancel.signal, hold }).then(
+      work(cancel.signal, hold).then(
         (response) => finish(entry, response),
         (error: unknown) => {
-          host.log(`litch_machine 调用 ${id} 出错：${String(error)}`)
+          host.log(`${meta.label} 调用 ${id} 出错：${String(error)}`)
           finish(entry, clientToolFailure('failed', 'The desktop failed to run this tool call.'))
         },
       )
     })
   }
 
-  /** 命令行调用（设备进程转来的 litch/clientTool/call）：只认 litch_machine */
+  /** litch_machine：交给接线那一层。超时、撤回、打断、断线照样在这里管 */
+  const machineCall = (
+    input: Omit<MachineCallInput, 'signal' | 'hold'>,
+    rpcId: string,
+  ): Promise<unknown> => {
+    const machine = host.machine
+    if (!machine) {
+      return Promise.resolve(
+        clientToolFailure(
+          'noExecutor',
+          'The connected Litch desktop cannot run litch_machine tools for this device.',
+        ),
+      )
+    }
+    return coreCall(
+      { threadId: input.threadId, turnId: input.turnId, machine: true, label: 'litch_machine' },
+      rpcId,
+      (signal, hold) => machine.call({ ...input, signal, hold }),
+    )
+  }
+
+  /** litch_config：交给核心的执行器。本机设备才有；命令行调用不一定有会话 */
+  const configCall = (
+    raw: Partial<ClientToolDetachedCallParams>,
+    rpcId: string,
+  ): Promise<unknown> => {
+    const config = host.config
+    if (!config) {
+      return Promise.resolve(
+        clientToolFailure(
+          'noExecutor',
+          'This Litch desktop connection does not run litch config (only the local device does).',
+        ),
+      )
+    }
+    if (raw.tool !== CONFIG_TOOL) {
+      return Promise.resolve(
+        clientToolFailure('invalid', `litch_config has only the ${CONFIG_TOOL} tool.`),
+      )
+    }
+    const threadId = raw.threadId ?? null
+    const harness =
+      typeof raw.harness === 'string'
+        ? raw.harness
+        : threadId
+          ? host.context(threadId).harness
+          : null
+    return coreCall(
+      { threadId, turnId: raw.turnId ?? null, machine: false, label: 'litch_config' },
+      rpcId,
+      (_signal, hold) => config({ threadId, harness, arguments: raw.arguments, hold }),
+    )
+  }
+
+  /** 命令行调用（设备进程转来的 litch/clientTool/call）：litch_machine、litch_config */
   const detachedCall = (params: unknown, rpcId: string): Promise<unknown> => {
     const raw = params as Partial<ClientToolDetachedCallParams> | null
     const nullable = (value: unknown) => value === null || typeof value === 'string'
@@ -352,11 +416,12 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
     ) {
       return Promise.resolve(clientToolFailure('invalid', 'Malformed litch/clientTool/call.'))
     }
+    if (raw.namespace === CONFIG_NAMESPACE) return configCall(raw, rpcId)
     if (raw.namespace !== CLIENT_TOOL_NAMESPACE.machine) {
       return Promise.resolve(
         clientToolFailure(
           'noExecutor',
-          `The Litch desktop runs only ${CLIENT_TOOL_NAMESPACE.machine} tools from the command line.`,
+          `The Litch desktop runs only ${CLIENT_TOOL_NAMESPACE.machine} and ${CONFIG_NAMESPACE} tools from the command line.`,
         ),
       )
     }

@@ -59,8 +59,8 @@ const hasComputerUse = (platform: string) => platform === 'darwin' || platform =
 /** 设置页左边的分组和标题：Computer Use 那一组只在 macOS 和 Windows 上有 */
 const sectionsOn = (platform: string) =>
   hasComputerUse(platform)
-    ? ['look', 'lang', 'devices', 'browser', 'computer', 'notify', 'keys', 'about']
-    : ['look', 'lang', 'devices', 'browser', 'notify', 'keys', 'about']
+    ? ['look', 'lang', 'devices', 'browser', 'computer', 'notify', 'assist', 'keys', 'about']
+    : ['look', 'lang', 'devices', 'browser', 'notify', 'assist', 'keys', 'about']
 const titlesOn = (platform: string, lang: 'zh-CN' | 'en' = 'zh-CN') => {
   const all =
     lang === 'en'
@@ -71,10 +71,11 @@ const titlesOn = (platform: string, lang: 'zh-CN' | 'en' = 'zh-CN') => {
           'Built-in browser',
           'Computer Use',
           'Notifications',
+          'Config assistant',
           'Shortcuts',
           'About',
         ]
-      : ['外观', '语言', '设备', '内置浏览器', 'Computer Use', '通知', '快捷键', '关于']
+      : ['外观', '语言', '设备', '内置浏览器', 'Computer Use', '通知', '配置助手', '快捷键', '关于']
   return hasComputerUse(platform) ? all : all.filter((title) => title !== 'Computer Use')
 }
 /** 只在没打包时才有的两项菜单，清单里不列（装好的应用里没有） */

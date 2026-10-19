@@ -7,6 +7,7 @@ import type {
   ClientToolCallResponse,
 } from '../../protocol/src/client-tools.mjs'
 import type { ClientAskView } from './model.mjs'
+import type { ConfigMainRequest, ConfigMainResult } from './model-config.mjs'
 import type { MachineAction } from './model-machine.mjs'
 
 /** 核心 ↔ 主进程的消息名 */
@@ -61,6 +62,8 @@ export type ToolToMain =
       turnId: string
     }
   | { type: typeof CLIENT_TOOL; op: 'notify'; notice: MachineNotice }
+  /** litch config 里属于主进程的一项（浏览器网站、Computer Use）。主进程用 configResult 回 */
+  | { type: typeof CLIENT_TOOL; op: 'config'; id: string; request: ConfigMainRequest }
 
 /** 主进程 → 核心 */
 export type ToolToCore =
@@ -68,6 +71,7 @@ export type ToolToCore =
   | { type: typeof CLIENT_TOOL; op: 'ask'; id: string; askId: string; ask: ClientAskView }
   | { type: typeof CLIENT_TOOL; op: 'askDone'; askId: string }
   | { type: typeof CLIENT_TOOL; op: 'namespaces'; namespaces: string[] }
+  | { type: typeof CLIENT_TOOL; op: 'configResult'; id: string; result: ConfigMainResult }
 
 /**
  * 外壳交给核心的那一头。核心只经它和主进程说话，不知道背后是工具进程的 parentPort 还是测试里的一个函数

@@ -168,7 +168,8 @@ export async function homeProbe(real: boolean): Promise<HomeProbe> {
   await until('新建对话页的提示语和输入框', () => home() && area())
   // 等一会儿再看：要是还会自动选中哪个会话，这时也该选上了
   await sleep(600)
-  const hero = text(home())
+  // 只读那句提示语，标题下的“配置助手”按钮不算
+  const hero = text(one('.new-hero h1'))
   const nothingPicked = !one('.ss-row.sel') && !one('.turn')
   const entryCurrent = one('.sb-link.new')?.getAttribute('aria-current') === 'page'
   const title = text(one('.crumb b'))

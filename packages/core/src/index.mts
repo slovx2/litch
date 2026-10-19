@@ -32,6 +32,7 @@ export {
   type CommandName,
   type Commands,
   type DiffOp,
+  type InstallOp,
   type ManageOp,
   type PairingOp,
   type Port,
@@ -76,7 +77,13 @@ export {
   type TransportOpener,
   toConnectError,
 } from './connection/transport.mjs'
-export { type Core, type CoreMachineOptions, type CoreOptions, createCore } from './core.mjs'
+export {
+  type Core,
+  type CoreConfigOptions,
+  type CoreMachineOptions,
+  type CoreOptions,
+  createCore,
+} from './core.mjs'
 export {
   createDevice,
   type Device,
@@ -155,9 +162,11 @@ export type { SampleLang } from './mock/sample-text.mjs'
 export type * from './model.mjs'
 export type * from './model-client-tools.mjs'
 export { CLIENT_TOOL } from './model-client-tools.mjs'
+export type * from './model-config.mjs'
 export type * from './model-diff.mjs'
 export { DIFF_SCOPES } from './model-diff.mjs'
 export type * from './model-files.mjs'
+export type * from './model-install.mjs'
 export type * from './model-machine.mjs'
 export type * from './model-manage.mjs'
 export type * from './model-pairing.mjs'

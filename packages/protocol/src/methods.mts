@@ -121,6 +121,14 @@ import type {
   ThreadSectionUpdatedNotification,
 } from './device.mjs'
 import type {
+  HarnessInstallChangedNotification,
+  HarnessInstallParams,
+  HarnessInstallReadResponse,
+  HarnessInstallResponse,
+  HarnessVersionsParams,
+  HarnessVersionsResponse,
+} from './device-harness-install.mjs'
+import type {
   DevicePairChangedNotification,
   DevicePairDecideParams,
   DevicePairEnrollParams,
@@ -347,6 +355,17 @@ export interface ClientRequests {
   'litch/pair/enroll': { params: DevicePairEnrollParams; result: DevicePairEnrollResponse }
   'litch/pair/phones': { params: Record<string, never>; result: DevicePairPhonesResponse }
   'litch/pair/revoke': { params: DevicePairRevokeParams; result: Record<string, never> }
+  // 以下是给设备装 harness（扩展 harnessInstall，见 device-harness-install.mts）：只有聚合面有，
+  // 设备信息的 `extensions` 里列了 harnessInstall 才能用
+  'litch/device/harness/versions': {
+    params: HarnessVersionsParams
+    result: HarnessVersionsResponse
+  }
+  'litch/device/harness/install': { params: HarnessInstallParams; result: HarnessInstallResponse }
+  'litch/device/harness/install/read': {
+    params: Record<string, never>
+    result: HarnessInstallReadResponse
+  }
   // 以下是会话树（扩展 sessionTree，见 session-tree.mts）：只有聚合面有，
   // 而且设备信息的 `extensions` 里列了 sessionTree 才能用
   'litch/session/start': { params: SessionStartParams; result: SessionStartResponse }
@@ -446,6 +465,8 @@ export interface ServerNotifications {
   'litch/pair/changed': DevicePairChangedNotification
   /** 扩展，只发给握手时声明过 devicePairing 的连接：已绑定的手机多了、少了 */
   'litch/pair/phones/changed': DevicePairPhonesChangedNotification
+  /** 扩展，只发给握手时声明过 harnessInstall 的连接：一个安装任务的状态或日志变了 */
+  'litch/device/harness/install/changed': HarnessInstallChangedNotification
   /** 扩展，只发给握手时声明过 deviceTasks 的连接：任务多了、变了、没了 */
   'litch/task/changed': DeviceTaskChangedNotification
   /** 扩展，只发给握手时声明过 deviceTasks 的连接：一次运行开始了、结束了、标成看过了 */

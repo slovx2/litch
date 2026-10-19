@@ -234,6 +234,11 @@ export interface DeviceView {
    * 单 harness 模式、旧版的设备服务都是 false；断开之后留着断开前知道的
    */
   pairing: boolean
+  /**
+   * 设备服务支持给 harness 安装（设备信息的 extensions 里列了 harnessInstall）：设备详情、新建页、首启引导里有安装按钮。
+   * 单 harness 模式、旧版的设备服务都是 false，界面退回原来的说明；断开之后留着断开前知道的
+   */
+  install: boolean
 }
 
 /** 设备设置页上“内置浏览器”“Computer Use”两个开关。默认浏览器开、Computer Use 关 */

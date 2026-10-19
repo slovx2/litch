@@ -46,6 +46,8 @@ export interface MockManagement {
   raceNextWrite(deviceId: string, harness: string): void
   /** 设备服务多了一项设置（相当于它升级了）：订阅着的重新拿到一份结构 */
   addSetting(deviceId: string, harness: string): void
+  /** 这个 harness 刚装好（mock-install.mts）：之后重启它回到的是可用的样子，不再是“没装” */
+  installed(deviceId: string, harness: HarnessView): void
 }
 
 const NAMES: readonly string[] = [
@@ -304,6 +306,10 @@ export function createMockManagement(host: MockManageHost): MockManagement {
 
     raceNextWrite(deviceId, harness) {
       if (host.device(deviceId)?.manageable) racing.set(deviceId, harness)
+    },
+
+    installed(deviceId, harness) {
+      origins.set(`${deviceId}:${harness.id}`, harness)
     },
 
     addSetting(deviceId, harness) {

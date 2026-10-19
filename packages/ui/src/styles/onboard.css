@@ -1,0 +1,270 @@
+/* 上手功能：harness 的安装那一行（install/InstallRow.tsx，设备页、新建页、引导共用）、新建页标题下的“配置助手”、
+   首启引导（onboarding/Onboarding.tsx，盖在主区域上）、litch config 的确认卡和设置页“配置助手”一组。只用皮肤的变量 */
+
+/* ---------- 安装那一行 ---------- */
+.inst-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 12px 8px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-2);
+}
+.inst-row.compact {
+  padding: 4px 0 0;
+}
+.inst-vers .mono {
+  font-size: 11px;
+}
+.inst-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.inst-offer {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.inst-row .mini,
+.inst-buttons .mini {
+  height: 22px;
+  padding: 0 7px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r1);
+  background: var(--raised);
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.inst-row .mini:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.inst-running {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.inst-now {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink);
+}
+.inst-log {
+  margin: 0;
+  max-height: 168px;
+  overflow: auto;
+  padding: 6px 8px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r1);
+  background: var(--sunken);
+  color: var(--ink-2);
+  font-size: 11px;
+  line-height: 16px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.inst-done {
+  color: var(--ok);
+}
+.inst-fallback {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--err) 30%, var(--line-2));
+  border-radius: var(--r2);
+  background: color-mix(in srgb, var(--err) 5%, transparent);
+}
+.inst-fail {
+  color: var(--err);
+}
+.inst-manual {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.inst-acts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.inst-docs {
+  color: var(--accent);
+  text-decoration: none;
+}
+.inst-docs:hover {
+  text-decoration: underline;
+}
+
+/* 新建页“没有可用的 harness”里的那一行：跟在说明后面 */
+.new-why-row .inst-row {
+  margin-top: 4px;
+}
+
+/* ---------- 新建页标题下的配置助手 ---------- */
+.new-assist {
+  margin-top: 10px;
+  padding: 3px 10px;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  cursor: pointer;
+}
+.new-assist:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ---------- 首启引导：盖在主区域上，侧栏照常能用 ---------- */
+.onb {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow: auto;
+  padding: 48px 24px 24px;
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+}
+.onb-card {
+  width: min(640px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px 24px 22px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r3);
+  background: var(--raised);
+  box-shadow: var(--shadow);
+}
+.onb-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.onb-steps {
+  display: flex;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.onb-steps [aria-current="step"] {
+  color: var(--accent);
+  font-weight: 600;
+}
+.onb-card h2 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 28px;
+  color: var(--ink);
+}
+.onb-lead,
+.onb-note {
+  margin: 0;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--ink-2);
+}
+.onb-note {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.onb-list,
+.onb-examples {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.onb-h {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  background: var(--panel);
+}
+.onb-h[data-state="ready"] {
+  border-color: color-mix(in srgb, var(--ok) 40%, var(--line-2));
+}
+.onb-h-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--ink);
+}
+.onb-h-intro,
+.onb-h-next {
+  margin: 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-2);
+}
+.onb-h .inst-docs {
+  font-size: 12px;
+}
+.onb-examples li {
+  padding: 6px 10px;
+  border-radius: var(--r2);
+  background: var(--sunken);
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.onb-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* ---------- litch config 的确认卡 ---------- */
+.assist-items {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--ink);
+}
+.assist-cmd {
+  display: block;
+  padding: 4px 8px;
+  border-radius: var(--r1);
+  background: var(--sunken);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+/* ---------- 设置页“配置助手”：手册装到了哪 ---------- */
+.assist-targets {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+.assist-targets li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.assist-targets code {
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}

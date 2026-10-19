@@ -201,6 +201,8 @@ export function createLink(options: LinkOptions): Link {
                 EXTENSION.sessionTree,
                 // devicePairing：声明了才收得到配对状态和已绑定手机的变化通知（litch/pair/changed、litch/pair/phones/changed）
                 EXTENSION.devicePairing,
+                // harnessInstall：声明了才收得到安装任务的进度通知（litch/device/harness/install/changed）
+                EXTENSION.harnessInstall,
                 // clientTools：litch_ 开头的命名空间的工具调用交给声明了的连接执行（内置浏览器、Computer Use）
                 ...(tools.length > 0 ? [EXTENSION.clientTools] : []),
               ],

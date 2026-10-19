@@ -17,6 +17,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useT } from '../../app/appearance.ts'
 import { whyNot } from '../../app/errors.ts'
 import { useKey, useServices } from '../../app/services.tsx'
+import { useInstall } from '../../install/useInstall.ts'
 import { Diagnostics, Logs } from './Diagnostics.tsx'
 import { adoptDrafts, useDrafts } from './drafts.ts'
 import { InheritedEnv } from './EnvEditor.tsx'
@@ -73,6 +74,8 @@ export function ManagePanel({ device }: { device: DeviceView }) {
   const revisions = useKey<ManageRevisions>(keys.manageRevisions(deviceId)) ?? NO_REVISIONS
   const error = useKey<ChannelErrorShape>(keys.manageError(deviceId))
   const { drafts, saving, failure } = useDrafts(deviceId)
+  /** 设备能装 harness 时：各 harness 的版本和安装任务（每一块标题行下那一行） */
+  const install = useInstall(device)
 
   // 这一页重新打开（或者重新订阅上）时，上次留下的草稿要对一遍：它们记的“被动过几次”是上一次订阅里的数。
   // 赶在画出来之前对完，免得那几栏先闪一下“被别处改过”
@@ -155,6 +158,7 @@ export function ManagePanel({ device }: { device: DeviceView }) {
               device={device}
               harnessId={id}
               harness={device.harnesses.find((entry) => entry.id === id)}
+              install={install}
               pending={snapshot.pendingRestart.includes(id)}
               forced={touched(specs)}
               toggle={

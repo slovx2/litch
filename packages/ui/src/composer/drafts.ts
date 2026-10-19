@@ -3,6 +3,7 @@
 // 草稿里的图片和别的附带项只在内存里记：切走再回来还在，重开应用就没了（图片太大，不往本地存储里放；
 // 附带项指着设备上的东西，隔了一次重开未必还在）。
 import type { ImageAttachment, MessageExtra } from '@litch/core'
+import { mergeExtras } from './extras.ts'
 
 const STORE_KEY = 'litch.drafts'
 /** 草稿最多留这么多个会话的，超出时丢掉最早写的 */
@@ -84,6 +85,43 @@ export function refillDraft(key: string, text: string, list: ImageAttachment[]):
   }
   saveDraft(key, joinDraft(text, loadDraft(key)))
   saveDraftImages(key, [...list, ...loadDraftImages(key)])
+}
+
+// ---------- 带预填地开新建页（配置助手按钮） ----------
+
+/** 开着的输入区：草稿的键 → 在它最前面放一句话、加几片附带项 */
+const prefillers = new Map<string, (lead: string, extras: MessageExtra[]) => void>()
+
+/** 输入区开着的时候登记自己，别处要带预填时找它。返回取消登记的函数 */
+export function onPrefill(
+  key: string,
+  prefill: (lead: string, extras: MessageExtra[]) => void,
+): () => void {
+  prefillers.set(key, prefill)
+  return () => {
+    if (prefillers.get(key) === prefill) prefillers.delete(key)
+  }
+}
+
+/**
+ * 预填的那句放在最前面，原来写的字直接接在后面（那句以冒号结尾，原来的字就是要配的东西）；
+ * 原来已经是这一句开头的不再加一遍
+ */
+export const leadDraft = (lead: string, draft: string): string =>
+  draft.startsWith(lead) ? draft : `${lead}${draft.trimStart()}`
+
+/**
+ * 在一个输入框最前面放一句话、加几片附带项（技能片），原来写的不丢。
+ * 输入区开着就直接放进去、光标落到末尾；没开着就写进草稿，下次打开时在。
+ */
+export function prefillDraft(key: string, lead: string, more: MessageExtra[]): void {
+  const prefill = prefillers.get(key)
+  if (prefill) {
+    prefill(lead, more)
+    return
+  }
+  saveDraft(key, leadDraft(lead, loadDraft(key)))
+  saveDraftExtras(key, mergeExtras(loadDraftExtras(key), more))
 }
 
 // ---------- 往输入框里加一样东西（文件面板的“加入对话”） ----------

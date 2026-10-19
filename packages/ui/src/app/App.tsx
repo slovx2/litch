@@ -2,10 +2,12 @@ import { keys, type SessionSummary } from '@litch/core'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArchivedPage } from '../archived/ArchivedPage.tsx'
 import { ArchivedSession } from '../archived/ArchivedSession.tsx'
+import { ConfigAgent } from '../assist/ConfigAgent.tsx'
 import { NewSession } from '../composer/NewSession.tsx'
 import type { PlaceWish } from '../composer/new-place.ts'
 import { useNewPlace } from '../composer/useNewPlace.ts'
 import { DevicesPage } from '../devices/DevicesPage.tsx'
+import { Onboarding } from '../onboarding/Onboarding.tsx'
 import { isSettingsSection, SettingsPage, type SettingsSection } from '../settings/SettingsPage.tsx'
 import { useUpdateToast } from '../settings/UpdateBlock.tsx'
 import { SideSlot } from '../side/SideSlot.tsx'
@@ -15,6 +17,7 @@ import { TasksPage } from '../tasks/TasksPage.tsx'
 import { TerminalSlot } from '../terminal/TerminalSlot.tsx'
 import { Transcript } from '../transcript/Transcript.tsx'
 import {
+  onAssistantRequest,
   onDeviceRequest,
   onNewSessionRequest,
   onOpenSessionRequest,
@@ -168,6 +171,18 @@ export function App() {
     }
   }, [openPage])
 
+  /** 第几次点配置助手：新建对话页看着它变了就往输入框里放好那一句 */
+  const [assist, setAssist] = useState(0)
+  // 配置助手（新建页标题下、设置页、首启引导）：到新建对话页，设备切到本机，harness 和模型照上次的不动
+  useEffect(
+    () =>
+      onAssistantRequest(() => {
+        setAssist((was) => was + 1)
+        compose({ deviceId: 'local' })
+      }),
+    [compose],
+  )
+
   // 别处要打开某个会话（浏览器的 show 留在别的会话上的提示，点“去看”）
   useEffect(() => onOpenSessionRequest(select), [select])
 
@@ -271,14 +286,19 @@ export function App() {
               onPlace={setWish}
               onCreated={select}
               onDevices={openDevices}
+              assist={assist}
             />
           )}
+          {/* 首启引导盖在主区域上，侧栏照常能用 */}
+          <Onboarding />
           {/* 终端面板一直在，收起只是不显示：里面的终端不跟着上面的内容换来换去 */}
           <TerminalSlot selection={selection} draft={draft} page={page} />
         </main>
         {/* 右边的侧面板（文件）：跟着眼前的会话走，收起只是不显示 */}
         <SideSlot selection={selection} draft={draft} page={page} />
       </div>
+      {/* litch config 要界面做的事、放宽安全的确认卡、执行器开的出码对话框 */}
+      <ConfigAgent />
     </div>
   )
 }

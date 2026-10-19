@@ -53,6 +53,9 @@ export interface SampleText {
   mockReply: string
   /** 发的话里带“跑一会儿”时，那条命令结束后一次给全的输出 */
   runOutput: string
+  /** 对话里“配置：…”跑完 litch config 之后的回答：成了、没成 */
+  configDone: string
+  configFailed: string
   /**
    * 发的话里带“看文件”时的回答：里面有几种写法的文件路径（行内代码、带行号、链接、正文里的），
    * 也有几样不该认成文件的。给界面试“对话里的路径可以点开”用
@@ -237,6 +240,8 @@ const zh: SampleText = {
     checkNames: ['冒烟测试', '端到端测试', '性能基准'],
   },
   runOutput: '共 42 项测试，全部通过\n',
+  configDone: '照你说的改好了，上面是 litch config 的输出。',
+  configFailed: '这一步没做成，原因在上面 litch config 的输出里。',
   mockReply: [
     '这是模拟核心的回答：你发的这条消息已经收到了。',
     '',
@@ -441,6 +446,8 @@ const en: SampleText = {
     checkNames: ['Smoke tests', 'End-to-end tests', 'Performance baseline'],
   },
   runOutput: '42 tests, all passed\n',
+  configDone: 'Done. The litch config output is above.',
+  configFailed: 'That did not go through; the litch config output above says why.',
   mockReply: [
     'This is the mock core answering: your message has arrived.',
     '',

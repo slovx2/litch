@@ -1,6 +1,7 @@
 // 远程设备没连上之后“该怎么办”：一步一步的说明，有的带一条可以复制去终端里运行的命令。
 // 只有逻辑，不引组件和样式，能直接被测试引用（packages/ui/test/device-guide.test.mjs）。
-// 这里只说明怎么办：不替用户在那台机器上装东西、升级、停服务。
+// 这里只说明怎么办：不替用户在那台机器上装适配器、升级、停服务。harness 本身可以按用户点的按钮由设备服务装
+// （设备列了 harnessInstall 时，见 install/），那条路不经这里；设备不支持时这里的说明照旧。
 import type { ConnectFailureView, RemoteTarget } from '@litch/core'
 import type { MessageKey } from '../i18n/index.ts'
 

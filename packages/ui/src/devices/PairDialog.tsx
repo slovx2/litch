@@ -42,6 +42,8 @@ const REMEMBER_MS = 600
 
 interface PairDialogProps {
   device: DeviceView
+  /** 地址里预填的几项（litch config 的 phones pair 带过来的）；没给的照设备给的 */
+  prefill?: { host?: string; port?: number; user?: string }
   onClose(): void
 }
 
@@ -51,6 +53,14 @@ const FIELD_LABEL: Record<AddressField, MessageKey> = {
   port: 'pairing.field.port',
   user: 'pairing.field.user',
 }
+
+/** 预填的几项盖在设备给的地址上 */
+const withPrefill = (draft: AddressDraft, prefill: PairDialogProps['prefill']): AddressDraft => ({
+  ...draft,
+  ...(prefill?.host ? { host: prefill.host } : {}),
+  ...(prefill?.port ? { port: String(prefill.port) } : {}),
+  ...(prefill?.user ? { user: prefill.user } : {}),
+})
 
 /** 二维码里的那段文字 */
 const payloadText = (pairing: PairingView, address: PairingAddress): string =>
@@ -76,7 +86,7 @@ function useSecond(): number {
   return now
 }
 
-export function PairDialog({ device, onClose }: PairDialogProps) {
+export function PairDialog({ device, prefill, onClose }: PairDialogProps) {
   const { channel, replica } = useServices()
   const t = useT()
   const deviceId = device.id
@@ -96,6 +106,8 @@ export function PairDialog({ device, onClose }: PairDialogProps) {
   /** 每出一次码换一个代号：回来的结果不是最近这一次的（换码换得快、对话框重开过）就作废它 */
   const generation = useRef(0)
   const now = useSecond()
+  /** 预填只用在第一张码上：之后换码不再盖掉用户改过的 */
+  const firstFill = useRef(prefill)
 
   // 开着的时候订阅这台设备的配对情况：状态一行跟着它走
   useEffect(() => replica.openPairing(deviceId), [replica, deviceId])
@@ -129,7 +141,7 @@ export function PairDialog({ device, onClose }: PairDialogProps) {
         }
         setPairing(next)
         setStarting(false)
-        setDraft((was) => was ?? draftOf(next.address))
+        setDraft((was) => was ?? withPrefill(draftOf(next.address), firstFill.current))
         if (remembered.current === null) remembered.current = next.address
       },
       (error: unknown) => {

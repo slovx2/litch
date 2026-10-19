@@ -10,6 +10,7 @@ import {
   type ToolInvocation,
   type ToolToCore,
 } from './model-client-tools.mjs'
+import type { ConfigMainRequest, ConfigMainResult } from './model-config.mjs'
 
 /** 一次调用在执行途中主进程报回来的事 */
 export interface ToolCallHandlers {
@@ -35,12 +36,21 @@ export interface ToolHub {
   turnEnded(deviceId: string, threadId: string, turnId: string): void
   /** 请主进程发一条系统通知（litch_machine 找不到会话的卡片，08 号 4.2）。没有外壳就不发 */
   notify(notice: MachineNotice): void
+  /** litch config 里属于主进程的一项。没有外壳、到点没回都回 ok:false */
+  config(request: ConfigMainRequest): Promise<ConfigMainResult>
 }
+
+/** 主进程做 litch config 的一项最多等多久（清除浏览数据要一会儿） */
+const CONFIG_TIMEOUT_MS = 30_000
 
 export function createToolHub(
   port: ClientToolPort | undefined,
   log: (line: string) => void,
+  setTimer?: (callback: () => void, delayMs: number) => () => void,
 ): ToolHub {
+  /** litch config 交给主进程、还没回的 */
+  const configs = new Map<string, (result: ConfigMainResult) => void>()
+  let configSeq = 0
   const calls = new Map<string, ToolCallHandlers>()
   /** 卡片的标识 → 哪一次调用的 */
   const asks = new Map<string, string>()
@@ -72,6 +82,13 @@ export function createToolHub(
         if (id === undefined) return
         asks.delete(message.askId)
         calls.get(id)?.askDone(message.askId)
+        return
+      }
+      case 'configResult': {
+        const settle = configs.get(message.id)
+        if (!settle) return
+        configs.delete(message.id)
+        settle(message.result)
         return
       }
       case 'namespaces':
@@ -111,6 +128,21 @@ export function createToolHub(
     },
     notify(notice) {
       port?.post({ type: CLIENT_TOOL, op: 'notify', notice })
+    },
+    config(request) {
+      if (!port) return Promise.resolve({ ok: false, reason: 'This Litch has no desktop shell.' })
+      const id = `cfg-${++configSeq}`
+      return new Promise<ConfigMainResult>((resolve) => {
+        const stop = setTimer?.(() => {
+          if (!configs.delete(id)) return
+          resolve({ ok: false, reason: 'The Litch desktop did not answer in time.' })
+        }, CONFIG_TIMEOUT_MS)
+        configs.set(id, (result) => {
+          stop?.()
+          resolve(result)
+        })
+        port.post({ type: CLIENT_TOOL, op: 'config', id, request })
+      })
     },
   }
 }

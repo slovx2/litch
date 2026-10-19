@@ -68,6 +68,7 @@ import { homeMoreProbe, judgeHomeMore } from './probe-home-more.mjs'
 import { manageProbe } from './probe-manage.mjs'
 import { judgeManage, judgeMockManage } from './probe-manage-judge.mjs'
 import { mockManageProbe } from './probe-manage-mock.mjs'
+import { judgeOnboard, onboardProbe } from './probe-onboard.mjs'
 import { judgeOrganize, organizeProbe } from './probe-organize.mjs'
 import { judgeOrganizeMock, organizeMockProbe, PICKED_FOLDER } from './probe-organize-mock.mjs'
 import { judgeOutput, outputProbe } from './probe-output.mjs'
@@ -102,6 +103,7 @@ type ProbeMode =
   | 'sidebar'
   | 'tasks'
   | 'tree'
+  | 'onboard'
   | 'engines'
   | 'first-turn'
   | TerminalMode
@@ -150,6 +152,7 @@ const PROBE_MODES: readonly string[] = [
   'sidebar',
   'tasks',
   'tree',
+  'onboard',
   'engines',
   'first-turn',
   ...TERMINAL_MODES,
@@ -168,6 +171,7 @@ export const MOCK_MODES: readonly string[] = [
   'sidebar',
   'tasks',
   'tree',
+  'onboard',
   'terminal',
   'files',
   'diff',
@@ -252,6 +256,10 @@ async function measure(
     return [result, judgeTasks(result, TASK_NAME)]
   }
   if (mode === 'tree') return runTreeChecks(window)
+  if (mode === 'onboard') {
+    const result = await runInPage(window, onboardProbe)
+    return [result, judgeOnboard(result)]
+  }
   if (mode === 'engines') return runEnginesChecks(window, hooks)
   if (mode === 'first-turn') return runFirstTurnChecks(window)
   if (mode === 'diff' || mode === 'diff-device' || mode === 'diff-entry') {

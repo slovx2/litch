@@ -42,6 +42,9 @@ const subscribe = (listener: () => void) => {
   }
 }
 
+/** 现在的值（litch config 读偏好时用，不在组件里） */
+export const linksInApp = (): boolean => linksInBrowser
+
 /** 设置页用：对话里的链接是不是用内置浏览器打开 */
 export const useLinksInBrowser = (): boolean =>
   useSyncExternalStore(subscribe, () => linksInBrowser)
