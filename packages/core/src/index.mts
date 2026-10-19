@@ -227,6 +227,7 @@ export {
   type ManageRevisions,
   type ManageSchema,
   PINNED,
+  type ProposalStarts,
   type Replica,
   type SessionChildren,
   type SessionGroups,

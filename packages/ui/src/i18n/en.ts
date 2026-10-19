@@ -1081,6 +1081,14 @@ export const en: Record<MessageKey, Entry> = {
   'tree.proposal.more': ({ n }) => (n === 1 ? '1 more proposal' : `${n} more proposals`),
   'tree.proposal.failed': 'Did not work: {reason}',
   'tree.proposal.closed': 'Proposal closed',
+  'tree.proposal.started': 'started',
+  'tree.proposal.wider':
+    'This harness has no sandbox this strict; the sub-session will run with "{level}"',
+  'tree.level.readOnly': 'Read only',
+  'tree.level.workspace': 'In project',
+  'tree.level.full': 'Full access',
+  'tree.spawn.wider':
+    '{harness} has no sandbox this strict; the sub-session will run with "{level}", wider than this session',
   'tree.lineage.before': 'Started from',
   'tree.lineage.after': 'as “{title}”',
   'tree.lineage.open': 'Back to the parent session',

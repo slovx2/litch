@@ -151,7 +151,7 @@ export function projectLineage(thread: Thread): SessionLineageView | null {
 
 export function lineageOf(raw: unknown): SessionLineageView | null {
   if (typeof raw !== 'object' || raw === null) return null
-  const { parentThreadId, kind, origin, title, wakeParent, createdAt } = raw as Record<
+  const { parentThreadId, kind, origin, title, wakeParent, createdAt, proposalId } = raw as Record<
     string,
     unknown
   >
@@ -163,6 +163,7 @@ export function lineageOf(raw: unknown): SessionLineageView | null {
     title: typeof title === 'string' ? title : '',
     wakeParent: wakeParent === true,
     createdAt: toMs(typeof createdAt === 'number' ? createdAt : null) ?? 0,
+    proposalId: typeof proposalId === 'string' && proposalId ? proposalId : null,
   }
 }
 

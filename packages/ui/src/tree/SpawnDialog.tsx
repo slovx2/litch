@@ -4,6 +4,7 @@ import {
   type DeviceView,
   keys,
   type LineageKind,
+  type SessionSettings,
   type SessionSummary,
   type WorkspaceView,
 } from '@litch/core'
@@ -12,6 +13,7 @@ import { useT } from '../app/appearance.ts'
 import { reasonOf } from '../app/errors.ts'
 import { useKey, useServices } from '../app/services.tsx'
 import { useComposeOptions } from '../composer/SettingsBar.tsx'
+import { SANDBOX_LEVEL, widerLevel } from './Proposals.tsx'
 
 interface SpawnDialogProps {
   deviceId: string
@@ -41,6 +43,12 @@ export function SpawnDialog({ deviceId, parent, onSpawned, onClose }: SpawnDialo
   const [failure, setFailure] = useState<string | null>(null)
   const options = useComposeOptions(deviceId, harness)
   const models = options?.models ?? []
+  // 目标 harness 收不到父会话那么严（比如没有沙箱的 Pi）：照常能派，写明子会话会更宽
+  const parentSettings = useKey<SessionSettings>(keys.settings(deviceId, parent.id))
+  const wider = widerLevel(
+    parentSettings?.permission,
+    (options?.permissions ?? []).map((preset) => preset.id),
+  )
   // 带上下文只能同一个 harness：换了别的就退回全新开始
   const sameHarness = harness === parent.harness
   const shownKind: LineageKind = sameHarness ? kind : 'fresh'
@@ -117,6 +125,14 @@ export function SpawnDialog({ deviceId, parent, onSpawned, onClose }: SpawnDialo
               ))}
             </select>
           </div>
+          {wider ? (
+            <p className="spawn-wider" data-wider={wider}>
+              {t('tree.spawn.wider', {
+                harness: ready.find((entry) => entry.id === harness)?.name ?? harness,
+                level: t(SANDBOX_LEVEL[wider]),
+              })}
+            </p>
+          ) : null}
           <div className="form-field spawn-row">
             <label className="form-label" htmlFor="spawn-model">
               {t('tree.dialog.model')}

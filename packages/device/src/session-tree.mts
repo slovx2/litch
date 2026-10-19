@@ -439,6 +439,7 @@ export class SessionTree {
       title: row.title,
       wakeParent: row.wakeParent,
       createdAt: row.createdAt,
+      ...(row.proposalId ? { proposalId: row.proposalId } : {}),
     }
   }
 

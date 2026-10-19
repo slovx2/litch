@@ -12,6 +12,36 @@ import { useKey, useServices } from '../app/services.tsx'
 
 const NONE: readonly SessionProposalView[] = []
 
+/** 沙箱档的名字（和三家内置的权限预设同名） */
+export const SANDBOX_LEVEL = {
+  'read-only': 'tree.level.readOnly',
+  'workspace-write': 'tree.level.workspace',
+  'danger-full-access': 'tree.level.full',
+} as const
+
+/** 三家内置的权限预设对应的沙箱档，越往后越严 */
+const PRESET_LEVEL: Record<string, keyof typeof SANDBOX_LEVEL> = {
+  ':danger-full-access': 'danger-full-access',
+  ':workspace': 'workspace-write',
+  ':read-only': 'read-only',
+}
+const LEVEL_RANK = { 'danger-full-access': 0, 'workspace-write': 1, 'read-only': 2 } as const
+
+/**
+ * 父会话现在的权限预设比目标 harness 给得到的每一档都严时，子会话实际会是的那一档（设备进程照同样的规矩算）。
+ * 收得紧、或者认不出预设（不是内置的那三档、父会话的设置还没取到）是 null
+ */
+export function widerLevel(
+  parentPermission: string | null | undefined,
+  targetPresets: readonly string[],
+): keyof typeof SANDBOX_LEVEL | null {
+  const mine = parentPermission ? PRESET_LEVEL[parentPermission] : undefined
+  const levels = targetPresets.flatMap((id) => PRESET_LEVEL[id] ?? [])
+  if (!mine || levels.length === 0) return null
+  const best = levels.reduce((a, b) => (LEVEL_RANK[b] > LEVEL_RANK[a] ? b : a))
+  return LEVEL_RANK[best] < LEVEL_RANK[mine] ? best : null
+}
+
 /** 还没过期的提案。到最早的那个过期的时刻重画一次 */
 function useLiveProposals(list: readonly SessionProposalView[]): readonly SessionProposalView[] {
   const [, redraw] = useState(0)
@@ -75,6 +105,11 @@ export function Proposals({ deviceId, sessionId }: { deviceId: string; sessionId
               <span className="dim">{t('tree.proposal.more', { n: live.length - 1 })}</span>
             ) : null}
           </span>
+          {proposal.widerSandbox ? (
+            <span className="tree-proposal-wider" data-wider={proposal.widerSandbox}>
+              {t('tree.proposal.wider', { level: t(SANDBOX_LEVEL[proposal.widerSandbox]) })}
+            </span>
+          ) : null}
           {said ? <span className="err">{said}</span> : null}
         </div>
         <div className="plan-ask-acts">

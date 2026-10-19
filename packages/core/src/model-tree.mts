@@ -24,6 +24,8 @@ export interface SessionLineageView {
   wakeParent: boolean
   /** 建立父子关系的时间，毫秒 */
   createdAt: number
+  /** 从哪个提案开始的（用户点了提案卡片上的“开始”）。不是从提案来的是 null */
+  proposalId: string | null
 }
 
 /** 模型提的“要不要另起一个子会话”，用户点了才起。只有等着的才给界面 */
@@ -41,6 +43,8 @@ export interface SessionProposalView {
   createdAt: number
   /** 到这个时间（毫秒）还没点就过期，界面按它收掉 */
   expiresAt: number
+  /** 目标 harness 收不到父会话那么严时，子会话实际会是的沙箱档；收得紧是 null。卡片上要写明 */
+  widerSandbox: 'read-only' | 'workspace-write' | 'danger-full-access' | null
 }
 
 /** 注入给父会话的一条回报：哪个子会话、这一回合怎么结束的、最后一条回答的开头 */

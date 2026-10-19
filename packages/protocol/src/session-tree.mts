@@ -36,6 +36,8 @@ export interface SessionLineage {
   wakeParent: boolean
   /** 建立父子关系的时间（秒） */
   createdAt: number
+  /** origin 是 proposal 时：从哪个提案开始的（派出它的那张提案卡片据此显示“已开始”、能跳过来） */
+  proposalId?: string
 }
 
 /** 会话对象上我们加的字段 */
@@ -66,6 +68,12 @@ export interface SessionProposal {
   expiresAt: number
   /** status 是 started 时，起出来的子会话 */
   startedThreadId: string | null
+  /**
+   * 目标 harness 收不到父会话那么严时（它声明的权限预设里最严的一档也比父会话的沙箱宽，比如没有沙箱的 Pi），
+   * 子会话实际会是的那一档沙箱：read-only、workspace-write、danger-full-access。收得紧时没有这个字段。
+   * 模型这样派出时一律变成提案，提案卡片上要写明
+   */
+  widerSandbox?: string
 }
 
 /** 上限（设备进程和界面按同一份） */

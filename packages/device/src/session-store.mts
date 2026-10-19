@@ -75,9 +75,18 @@ const MIGRATIONS: readonly string[] = [
      thread_id TEXT PRIMARY KEY,
      tools TEXT NOT NULL
    ) WITHOUT ROWID;`,
+  // 从提案开始的子会话记下是哪个提案（已经开始过的按提案上记的子会话补上）；
+  // 提案记下目标 harness 收不紧时子会话实际的沙箱
+  `ALTER TABLE lineage ADD COLUMN proposal_id TEXT;
+   UPDATE lineage SET proposal_id =
+     (SELECT id FROM proposals WHERE proposals.started_thread_id = lineage.thread_id LIMIT 1);
+   ALTER TABLE proposals ADD COLUMN wider_sandbox TEXT;`,
 ]
 
 export const SESSION_SCHEMA_VERSION = MIGRATIONS.length
+
+/** 测试里造旧版本的库用 */
+export const SESSION_MIGRATIONS = MIGRATIONS
 
 /** 库里的一条父子关系 */
 export interface LineageRow extends SessionLineage {
@@ -147,6 +156,7 @@ function lineageOf(row: Row): LineageRow {
     createdAt: Number(row.created_at),
     detachedAt: row.detached_at == null ? null : Number(row.detached_at),
     reportedTurn: maybe(row.reported_turn),
+    ...(typeof row.proposal_id === 'string' ? { proposalId: row.proposal_id } : {}),
   }
 }
 
@@ -165,6 +175,7 @@ function proposalOf(row: Row): SessionProposal {
     createdAt: Number(row.created_at),
     expiresAt: Number(row.expires_at),
     startedThreadId: maybe(row.started_thread_id),
+    ...(typeof row.wider_sandbox === 'string' ? { widerSandbox: row.wider_sandbox } : {}),
   }
 }
 
@@ -181,14 +192,14 @@ export class SessionStore {
     const prepare = (sql: string) => db.prepare(sql)
     this.statements = {
       addLineage: prepare(
-        `INSERT INTO lineage(thread_id, parent_thread_id, harness, kind, origin, title, prompt, wake_parent, created_at)
-         VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO lineage(thread_id, parent_thread_id, harness, kind, origin, title, prompt, wake_parent, created_at, proposal_id)
+         VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ),
       detach: prepare('UPDATE lineage SET detached_at=? WHERE thread_id=?'),
       reported: prepare('UPDATE lineage SET reported_turn=? WHERE thread_id=?'),
       addProposal: prepare(
-        `INSERT INTO proposals(id, thread_id, title, prompt, harness, model, cwd, kind, wake_parent, status, created_at, expires_at)
-         VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
+        `INSERT INTO proposals(id, thread_id, title, prompt, harness, model, cwd, kind, wake_parent, status, created_at, expires_at, wider_sandbox)
+         VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)`,
       ),
       proposal: prepare('SELECT * FROM proposals WHERE id=?'),
       pending: prepare(
@@ -292,6 +303,7 @@ export class SessionStore {
       row.prompt,
       row.wakeParent ? 1 : 0,
       row.createdAt,
+      row.proposalId ?? null,
     )
     this.lineage.set(row.threadId, full)
     return full
@@ -331,6 +343,7 @@ export class SessionStore {
       proposal.wakeParent ? 1 : 0,
       proposal.createdAt,
       proposal.expiresAt,
+      proposal.widerSandbox ?? null,
     )
     return { ...proposal, status: 'pending', startedThreadId: null }
   }

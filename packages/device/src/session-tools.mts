@@ -20,7 +20,7 @@ import {
   type SessionLineageKind,
 } from '../../protocol/src/session-tree.mjs'
 import type { DeviceToolCall, DeviceToolHandler } from './device-tools.mjs'
-import { StartRefused, startChild, threadTitle } from './session-start.mjs'
+import { StartRefused, startChild, threadTitle, widerSandbox } from './session-start.mjs'
 import { lastAnswer, type SessionTree, trimText } from './session-tree.mjs'
 import { isObject } from './wire.mjs'
 
@@ -209,8 +209,11 @@ async function start(tree: SessionTree, args: Record<string, unknown>, call: Dev
     throw new Refused('invalid', `There is no harness "${harness}" on this device.`)
   if (kind === 'fork' && harness && harness !== call.harness)
     throw new Refused('invalid', `fork only works within the same harness (${call.harness}).`)
+  // 目标 harness 收不到父会话那么严（比如没有沙箱的 Pi）：模型派的一律变成提案，由用户看过再点
+  const wider = await widerSandbox(tree, call.threadId, harness ?? call.harness).catch(() => null)
   // 只有用户亲手发起的这个回合里、模型说是用户要的，才直接起；别的一律变成提案
-  if (initiation === 'user_asked' && tree.isUserTurn(call.harness, call.turnId)) {
+  const userTurn = tree.isUserTurn(call.harness, call.turnId)
+  if (initiation === 'user_asked' && userTurn && wider === null) {
     const spec = {
       harness: harness ?? null,
       model: model ?? null,
@@ -235,11 +238,14 @@ async function start(tree: SessionTree, args: Record<string, unknown>, call: Dev
     cwd: cwd ?? null,
     kind,
     wakeParent: wake,
+    ...(wider ? { widerSandbox: wider } : {}),
   })
   const why =
-    initiation === 'user_asked'
-      ? 'This turn was not started by the user typing a message, so the request became a proposal. '
-      : ''
+    initiation !== 'user_asked'
+      ? ''
+      : !userTurn
+        ? 'This turn was not started by the user typing a message, so the request became a proposal. '
+        : `${harness ?? call.harness} cannot be sandboxed as tightly as this session (it would run with ${wider}), so the request became a proposal for the user to approve. `
   return {
     proposal_id: proposal.id,
     note: `${why}The user now sees a proposal card for "${proposal.title}". Nothing runs until they accept it; it expires in ${SESSION_TREE_LIMITS.proposalTtlSeconds / 86400} days. Do not do the work here as well.`,

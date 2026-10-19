@@ -6,6 +6,7 @@ import {
   type AgentState,
   type DeviceView,
   keys,
+  type ProposalStarts,
   type SessionNotes,
   type SessionProposalView,
   type SessionSummary,
@@ -42,7 +43,10 @@ const SpawnCard = memo(function SpawnCard(ref: ItemRef) {
   const t = useT()
   const { open } = useActions()
   const spawned = item?.kind === 'toolCall' ? item.spawned : undefined
-  const childId = spawned?.threadId ?? ''
+  const starts = useKey<ProposalStarts>(keys.proposalStarts(deviceId))
+  // 提案：用户点了“开始”之后，起出来的子会话记着是哪个提案，卡片就当它是派出的那一个
+  const startedId = spawned?.proposalId ? starts?.[spawned.proposalId] : undefined
+  const childId = spawned?.threadId || startedId || ''
   const child = useKey<SessionSummary>(keys.summary(deviceId, childId))
   const device = useKey<DeviceView>(keys.device(deviceId))
   const notes = useKey<SessionNotes>(keys.notes(deviceId, sessionId))
@@ -60,8 +64,8 @@ const SpawnCard = memo(function SpawnCard(ref: ItemRef) {
   } else if (failed) {
     state = t('tree.spawnFailed')
     mark = 'err'
-  } else if (!spawned.threadId) {
-    // 提案：还挂着就等人点；开始了、不要了、过期了都不再挂着（开始了的话起出来的子会话在侧栏里）
+  } else if (!childId) {
+    // 提案：还挂着就等人点；不要了、过期了都不再挂着（开始了的走下面，和直接派出的一样）
     const pending = proposals?.some((entry) => entry.id === spawned.proposalId) === true
     state = !spawned.proposalId
       ? ''
@@ -79,6 +83,9 @@ const SpawnCard = memo(function SpawnCard(ref: ItemRef) {
       <span className="tree-card-kind">
         <Icon name="agents" small />
         {t(spawned.proposalId && !spawned.threadId ? 'tree.proposed' : 'tree.spawned')}
+        {startedId && !spawned.threadId ? (
+          <span className="tree-card-started">{t('tree.proposal.started')}</span>
+        ) : null}
       </span>
       <span className="tree-card-line">
         <i className={mark ? `st ${mark}` : 'st'} />

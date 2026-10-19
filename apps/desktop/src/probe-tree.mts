@@ -192,8 +192,13 @@ export async function treeProbe(): Promise<TreeSeen> {
   )
   const before = kids().length
   $('.tree-proposal [data-act="start"]')?.click()
+  // 对话里那张提案的卡片跟着写“已开始”，点得进起出来的子会话
   const proposalStarted = await until(
-    () => $('.tree-proposal') === null && kids().length === before + 1,
+    () =>
+      $('.tree-proposal') === null &&
+      kids().length === before + 1 &&
+      $('[data-card="spawn"] .tree-card-started') !== null &&
+      $('[data-card="spawn"]:has(.tree-card-started) button.tree-card-main') !== null,
   )
   await idle()
   // 起出来的子会话做完会唤醒父会话：等那一回合也过去
@@ -342,7 +347,7 @@ const LABELS: Record<Exclude<keyof TreeSeen, 'seen'>, string> = {
   notesBar: '回报附在下一条消息前面：提示条加用户自己的气泡',
   proposalShown: '提案卡片出现，写着还有一个',
   proposalExpired: '短的那张提案过期后自己收掉',
-  proposalStarted: '点“开始”起出子会话，卡片收掉',
+  proposalStarted: '点“开始”起出子会话，卡片收掉，对话里的提案卡片写“已开始”、能点进去',
   proposalDismissed: '点“不要”收掉，不起子会话',
   agentCard: '子代理卡片列出两个子代理',
   agentPanel: '点子代理在侧面板里看它的对话',

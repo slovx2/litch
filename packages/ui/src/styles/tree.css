@@ -409,3 +409,16 @@ button.sev-title {
 [data-skin="human"] .agents-pick {
   border-radius: 13px;
 }
+
+/* 提案开始了：派出卡片的类型后面跟一句“已开始” */
+.tree-card-started::before {
+  content: "·";
+  margin-right: 6px;
+}
+
+/* 目标 harness 收不到这个会话那么严：提案卡片、手动派子会话的弹窗上写明 */
+.tree-proposal-wider,
+.spawn-wider {
+  color: var(--wait);
+  font-size: 12px;
+}

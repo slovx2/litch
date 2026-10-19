@@ -27,6 +27,12 @@ export function projectProposals(
       wakeParent: proposal.wakeParent === true,
       createdAt: toMs(proposal.createdAt) ?? 0,
       expiresAt,
+      widerSandbox:
+        proposal.widerSandbox === 'read-only' ||
+        proposal.widerSandbox === 'workspace-write' ||
+        proposal.widerSandbox === 'danger-full-access'
+          ? proposal.widerSandbox
+          : null,
     })
   }
   return kept.sort((a, b) => a.createdAt - b.createdAt)

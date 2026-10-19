@@ -131,6 +131,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
       settings?: Partial<SessionSettings>
       workspaceId?: string
       cwd?: string
+      proposalId?: string
     },
   ): string => {
     const { deviceId } = parent
@@ -171,6 +172,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
         title: options.title,
         wakeParent: options.wakeParent,
         createdAt: now,
+        proposalId: options.proposalId ?? null,
       },
     }
     host.addSummary(deviceId, summary)
@@ -273,6 +275,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
           index === 0
             ? now + SESSION_TREE_LIMITS.proposalTtlSeconds * 1000
             : now + SHORT_PROPOSAL_MS,
+        widerSandbox: null,
       }),
     )
     for (const [index, proposal] of made.entries()) {
@@ -586,6 +589,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
             origin: 'proposal',
             wakeParent: proposal.wakeParent,
             reply,
+            proposalId,
           }),
         }
       }

@@ -505,3 +505,55 @@ test('SESSION-TREE-012：子会话上挂的定时任务跑出来的回合只进�
     await env.close()
   }
 })
+
+test('SESSION-TREE-013：目标 harness 收不到父会话那么严：用户回合里说 user_asked 也变成提案，带 widerSandbox；接受后子会话的 litchLineage 带 proposalId', async () => {
+  const env = treeRig()
+  try {
+    // claude-code 这边只声明“完全访问”一档（像没有沙箱的 Pi），父会话（pi）报的是 workspaceWrite
+    env.claude.declaration = {
+      extensions: ['clientTools'],
+      permissionPresets: [{ id: ':danger-full-access' }],
+    }
+    const client = await litch(env)
+    const { threadId } = await parent(client)
+    const asked = resultOf(
+      (
+        await env.pi.callTool(threadId, SESSIONS, 'start', {
+          title: '没沙箱的',
+          prompt: '做点事。',
+          harness: 'claude-code',
+          initiation: 'user_asked',
+        })
+      )?.answer,
+    )
+    assert.ok(asked.proposal_id)
+    assert.match(asked.note, /cannot be sandboxed as tightly as this session/)
+    assert.equal(env.claude.sent('thread/start').length, 0, '没起任何东西')
+    const listed = await client.call('litch/sessionProposal/list', { threadId })
+    assert.equal(listed.proposals[0].widerSandbox, 'danger-full-access')
+    // 同 harness（pi 没声明预设，当作收得紧）照常直接起，提案上也没有 widerSandbox
+    const same = resultOf(
+      (
+        await env.pi.callTool(threadId, SESSIONS, 'start', {
+          title: '同一家的',
+          prompt: '也做点事。',
+          initiation: 'user_asked',
+        })
+      )?.answer,
+    )
+    assert.ok(same.thread_id)
+    // 用户点了开始：照常起，子会话记着是哪个提案
+    const { threadId: childId } = await client.call('litch/sessionProposal/accept', {
+      proposalId: asked.proposal_id,
+    })
+    const born = await startedOn(client, childId)
+    assert.equal(born.params.thread.litchLineage.origin, 'proposal')
+    assert.equal(born.params.thread.litchLineage.proposalId, asked.proposal_id)
+    const read = await client.call('thread/read', { threadId: childId })
+    assert.equal(read.thread.litchLineage.proposalId, asked.proposal_id)
+    const direct = await client.call('thread/read', { threadId: same.thread_id })
+    assert.equal(direct.thread.litchLineage.proposalId, undefined, '不是从提案开始的没有')
+  } finally {
+    await env.close()
+  }
+})

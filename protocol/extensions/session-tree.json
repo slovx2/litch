@@ -11,7 +11,8 @@
   "rules": [
     "父子关系只在 Litch 子会话之间。写类工具（send、interrupt）只能作用于调用者自己的 Litch 子孙会话，对别的会话回 [litch:blocked]，说明里让模型请用户自己去做；对引擎原生子线程回 [litch:blocked]，说明里让模型用引擎自己的子代理工具。",
     "start 的 initiation 为 user_asked 时，设备进程核对这个回合是客户端用 turn/start 带着用户输入发起的（不是唤醒、不是引擎自行续跑）；不是就降成提案。提案 7 天过期。",
-    "子会话的审批策略、沙箱不宽于父会话：给了更宽的就收紧到父会话的那一档。模型、强度不限。",
+    "子会话的审批策略、沙箱不宽于父会话：给了更宽的就收紧到父会话的那一档。模型、强度不限。目标 harness 在 runtime/info 里声明的权限预设中最严的一档也比父会话的沙箱宽时（收不紧），模型发起的 start 一律变成提案，提案上带 widerSandbox；用户点了开始、或者用户自己在界面上派的照常起。",
+    "从提案开始的子会话，litchLineage 上带 proposalId。",
     "fork 只能同 harness，用目标引擎的 thread/fork；跨 harness 只能 fresh。",
     "子会话一回合结束：取最后一条回答的前 SESSION_TREE_LIMITS.noteChars 个字，等父会话下一个由用户发起的回合时，包成 kind=notes 的 <litch-session-event> 放在用户消息前面。",
     "唤醒：父会话空闲、它的直接子会话都停下、它自己没有待处理的请求、而且至少有一个子会话的 wakeParent 为真时，设备进程替父会话发一个 turn/start，内容是 kind=wake 的 <litch-session-event>。上一条用户消息之后最多唤醒 SESSION_TREE_LIMITS.wakesPerUserMessage 次。没有客户端连着时不唤醒，等有连接上来再查一遍。",

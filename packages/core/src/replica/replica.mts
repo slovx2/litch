@@ -67,6 +67,8 @@ export const keys = {
    * （父会话归档了、删了的子会话照常单列）。groups 里照样有子会话，嵌不嵌由界面按这张表决定
    */
   children: (deviceId: string) => `sidebar:${deviceId}:children`,
+  /** ProposalStarts：提案 → 从它开始的子会话（在列表里的） */
+  proposalStarts: (deviceId: string) => `sidebar:${deviceId}:proposalStarts`,
   /** SessionSummary */
   summary: (deviceId: string, sessionId: string) => `summary:${deviceId}:${sessionId}`,
   /** SessionSummary[] | null：已归档的会话，最近动过的在前。null 或者没有这个键：还没取过 */
@@ -221,6 +223,9 @@ export type SessionHarnesses = Record<string, HarnessId>
 /** 父会话 → 它下面的 Litch 子会话（按派出的先后） */
 export type SessionChildren = Record<string, string[]>
 
+/** 提案 → 从它开始的子会话。对话里那张提案卡片据此显示“已开始”、能跳过去 */
+export type ProposalStarts = Record<string, string>
+
 /** 子会话 → 父会话收到的它最近的一条回报 */
 export type SessionNotes = Record<string, SessionNoteView>
 
@@ -240,6 +245,14 @@ function childrenOf(sessions: Map<string, SessionSummary>): SessionChildren {
     children[parent].push(session.id)
   }
   return children
+}
+
+/** 列表里从提案开始的子会话，按提案归拢 */
+function startsOf(sessions: Map<string, SessionSummary>): ProposalStarts {
+  const starts: ProposalStarts = {}
+  for (const session of sessions.values())
+    if (session.lineage?.proposalId) starts[session.lineage.proposalId] = session.id
+  return starts
 }
 
 /** 一批条目里注入的回报，并进已有的那张表：后到的盖掉先到的。没有新的返回原来那张 */
@@ -612,6 +625,11 @@ export function createReplica(channel: CoreChannel): Replica {
     const nested = store.get<SessionChildren>(keys.children(deviceId))
     if (!nested || JSON.stringify(nested) !== JSON.stringify(children)) {
       store.set(keys.children(deviceId), children)
+    }
+    const starts = startsOf(sessions)
+    const started = store.get<ProposalStarts>(keys.proposalStarts(deviceId))
+    if (!started || JSON.stringify(started) !== JSON.stringify(starts)) {
+      store.set(keys.proposalStarts(deviceId), starts)
     }
   }
 

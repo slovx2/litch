@@ -28,6 +28,8 @@ export interface ChildSpec {
   wakeParent: boolean
   approvalPolicy?: unknown
   sandbox?: unknown
+  /** 从哪个提案开始的（用户点了提案上的“开始”） */
+  proposalId?: string | null
 }
 
 /** 派不出来：说明是给人（或模型）看的 */
@@ -63,6 +65,60 @@ const SANDBOX_RANK: Record<string, number> = {
   'danger-full-access': 0,
   'workspace-write': 1,
   'read-only': 2,
+}
+
+/** 权限预设的标识对应的沙箱（shared/src/harness-declaration.mts 的 PRESET） */
+const PRESET_SANDBOX: Record<string, string> = {
+  ':read-only': 'read-only',
+  ':workspace': 'workspace-write',
+  ':danger-full-access': 'danger-full-access',
+}
+
+/**
+ * 这个 harness 最严给得到哪一档沙箱：看它在 runtime/info 里声明的权限预设。
+ * 没声明预设的（原生 codex，照协议的沙箱参数办）、一个都不认识的是 null，当作哪档都给得了
+ */
+function strictestSandbox(link: EngineLink): string | null {
+  const presets = link.runtime?.permissionPresets
+  if (!Array.isArray(presets)) return null
+  let best: string | null = null
+  for (const preset of presets) {
+    const mode =
+      isObject(preset) && typeof preset.id === 'string' ? PRESET_SANDBOX[preset.id] : null
+    if (mode && (best === null || (SANDBOX_RANK[mode] ?? 0) > (SANDBOX_RANK[best] ?? 0)))
+      best = mode
+  }
+  return best
+}
+
+/**
+ * 派到 harness 上的子会话会不会比父会话宽：父会话的沙箱比目标 harness 最严的那一档还严（比如父会话“项目内”，
+ * 目标是没有沙箱的 Pi）。宽的话返回子会话实际会是的那一档，收得紧（或者判断不了）是 null
+ */
+export async function widerSandbox(
+  tree: SessionTree,
+  parentId: string,
+  harness: string,
+): Promise<string | null> {
+  const parentHarness = await tree.owner(parentId)
+  const { config } = await parentSettings(tree, parentId, parentHarness)
+  const theirs = sandboxMode(config?.sandbox)
+  const link = await tree.link(harness)
+  const best = strictestSandbox(link)
+  if (theirs === null || best === null) return null
+  return (SANDBOX_RANK[best] ?? 0) < (SANDBOX_RANK[theirs] ?? 0) ? best : null
+}
+
+/** 父会话现在的设置（审批策略、沙箱、目录）：恢复一下就拿得到，顺带让设备进程的连接订阅它 */
+async function parentSettings(
+  tree: SessionTree,
+  parentId: string,
+  parentHarness: string,
+): Promise<{ link: EngineLink; config: Record<string, unknown> | null }> {
+  const link = await tree.link(parentHarness)
+  const resumed = await link.request('thread/resume', { threadId: parentId })
+  tree.noteSubscribed(parentHarness, parentId)
+  return { link, config: isObject(resumed) ? resumed : null }
 }
 
 /** 子会话的审批策略、沙箱：不宽于父会话。父会话报不出来的那一项照请求的给（都没有就不带，用引擎的缺省） */
@@ -160,11 +216,11 @@ export async function startChild(
       `This session already has ${live.length} sub-sessions running (the limit is ${SESSION_TREE_LIMITS.liveChildren}). Wait for one to finish first.`,
     )
   if (spec.projectId) tree.host.workspaces.requireProject(spec.projectId)
-  // 父会话现在的设置（审批策略、沙箱、目录）：恢复一下就拿得到，顺带让设备进程的连接订阅它
-  const parentLink = await tree.link(parentHarness)
-  const resumed = await parentLink.request('thread/resume', { threadId: parentId })
-  tree.noteSubscribed(parentHarness, parentId)
-  const parentConfig = isObject(resumed) ? resumed : null
+  const { link: parentLink, config: parentConfig } = await parentSettings(
+    tree,
+    parentId,
+    parentHarness,
+  )
   const parentThread = isObject(parentConfig?.thread) ? parentConfig.thread : null
   const permissions = tightened(parentConfig, spec)
   const link = harness === parentHarness ? parentLink : await tree.link(harness)
@@ -210,6 +266,7 @@ export async function startChild(
     prompt: spec.prompt,
     wakeParent: spec.wakeParent,
     createdAt: Math.floor(Date.now() / 1000),
+    ...(spec.proposalId ? { proposalId: spec.proposalId } : {}),
   })
   if (tools) store.setTools(threadId, tools)
   tree.host.threadStarted(harness, { ...thread })

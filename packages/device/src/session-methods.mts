@@ -91,6 +91,7 @@ export async function sessionTreeCall(
             title: proposal.title,
             prompt: proposal.prompt,
             wakeParent: proposal.wakeParent,
+            proposalId: proposal.id,
           },
           'proposal',
         )

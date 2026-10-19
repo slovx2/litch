@@ -146,8 +146,25 @@ test('投影：父子关系的时间换成毫秒；不接受直接输入的子�
     title: '查依赖',
     wakeParent: true,
     createdAt: 1_700_000_100_000,
+    proposalId: null,
   })
   assert.equal(projectLineage(thread({ id: 'x' })), null)
+  // 从提案开始的子会话带着提案号
+  const started = projectLineage(
+    thread({
+      id: 'c2',
+      litchLineage: {
+        parentThreadId: 'p',
+        kind: 'fresh',
+        origin: 'proposal',
+        title: '整理',
+        wakeParent: true,
+        createdAt: 1,
+        proposalId: 'pr1',
+      },
+    } as never),
+  )
+  assert.equal(started?.proposalId, 'pr1')
 
   const mute = projectThread(
     thread({ id: 'a1', parentThreadId: 'p', canAcceptDirectInput: false }),
@@ -657,6 +674,8 @@ test('模拟：说“提个子会话”出两张提案；短的那张到点收�
   await world.until(() => world.children('s6').some((entry) => entry.id === sessionId), '起出来了')
   assert.deepEqual(parent.view?.proposals, [])
   assert.equal(world.children('s6')[0]?.lineage?.origin, 'proposal')
+  // 子会话记着是哪个提案：对话里那张提案卡片据此显示“已开始”
+  assert.equal(world.children('s6')[0]?.lineage?.proposalId, first.id)
 
   const gone = await failureOf(
     world.channel.command('session.proposal.dismiss', {
