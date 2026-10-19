@@ -20,6 +20,7 @@ import {
   models as modelChoices,
   planMode,
 } from './catalog.mjs'
+import { dynamicToolSpecs } from './client-tools.mjs'
 import { envelope, PROFILE, settings } from './envelope.mjs'
 import type { AcpServer } from './server.mjs'
 import { runtimeInfo, versions } from './versions.mjs'
@@ -113,6 +114,7 @@ export async function dispatch(s: AcpServer, peer: RpcPeer, method: string, p: a
   switch (method) {
     case 'initialize':
       applyNotificationOptOut(peer, p)
+      s.clientTools.declare(peer, p)
       return {
         userAgent: codexUserAgent(
           typeof p.clientInfo?.name === 'string' ? p.clientInfo.name : 'codex-app',
@@ -264,7 +266,9 @@ async function threads(s: AcpServer, peer: RpcPeer, method: string, p: any): Pro
       }
       // 项目不在就不建会话：建好了才发现，会在 agent 那边留下一个没人要的空会话
       if (p.projectId) s.projects.read(p.projectId)
-      const live = await s.create(cwd)
+      // 动态工具先校验，不合规矩的不建会话
+      dynamicToolSpecs(p.dynamicTools)
+      const live = await s.create(cwd, p.dynamicTools)
       const { thread } = live.projection
       s.subscribe(peer, thread.id)
       // 桌面可能带着别的引擎的模型名新建；允许回退时不认识的值不管，用 agent 的默认

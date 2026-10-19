@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
-import { mkdir, mkdtemp, realpath, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
@@ -8,13 +8,17 @@ import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { AcpServer } from '../src/server.mjs'
 import { client, text } from './client.mjs'
+import { startFakeGemini } from './fake-gemini.mjs'
 import { startFakeOpenAi } from './fake-openai.mjs'
 
 // 对着真的 agent 冒烟，默认跳过，手动开：
 //   LITCH_SMOKE_OPENCODE=<opencode 的路径>  起 `opencode acp`，模型是回环上的假 OpenAI 兼容模型（fake-openai.mts），
 //                                          HOME 和 XDG 目录都是临时的，不碰用户自己的 opencode 数据
-//   LITCH_SMOKE_GEMINI=<gemini 的路径>      只做 --runtime-info（initialize 级别的握手），绝不发提示词（会花钱）
-// 两边都把 HTTP(S) 代理指向回环上一个没人听的端口：万一 agent 想往外连，连不出去。
+//                                          （含经 MCP 桥调客户端工具）
+//   LITCH_SMOKE_GEMINI=<gemini 的路径>      一条只做 --runtime-info（initialize 级别的握手）；另一条经 MCP 桥调客户端工具，
+//                                          模型是回环上的假 Gemini API（fake-gemini.mts，假的密钥），不发真实请求
+// 都把 HTTP(S) 代理指向回环上一个没人听的端口：万一 agent 想往外连，连不出去。Gemini CLI 调假模型的那条除外
+//（它不看 NO_PROXY），见那条的说明。
 
 const run = promisify(execFile)
 const ADAPTER = fileURLToPath(new URL('../src/adapter.mjs', import.meta.url))
@@ -43,6 +47,24 @@ async function sandbox(): Promise<{ root: string; cwd: string; env: NodeJS.Proce
     },
   }
 }
+
+// 客户端工具的冒烟用的动态工具：一个回声
+const ECHO_TOOLS = [
+  {
+    type: 'namespace',
+    name: 'litch_echo',
+    description: '测试用的回声。',
+    instructions: '要回声时调 litch_echo。',
+    tools: [
+      {
+        type: 'function',
+        name: 'echo',
+        description: '原样回参数',
+        inputSchema: { type: 'object', properties: { text: { type: 'string' } } },
+      },
+    ],
+  },
+]
 
 const opencode = process.env.LITCH_SMOKE_OPENCODE
 test('冒烟：真的 opencode acp，回环上的假模型', { skip: !opencode, timeout: 180_000 }, async () => {
@@ -118,6 +140,42 @@ test('冒烟：真的 opencode acp，回环上的假模型', { skip: !opencode, 
 
     const listed = await desktop.call('thread/list', {})
     assert.ok(listed.data.some((entry: any) => entry.id === thread.id))
+
+    // 客户端工具：另一条声明了 litch_echo 的连接建带动态工具的会话，模型经 MCP 桥调回声
+    const litch = client(server)
+    await litch.call('initialize', {
+      clientInfo: { name: 'litch', version: '0' },
+      capabilities: {
+        litchExtensions: ['clientTools'],
+        litchClientTools: { namespaces: ['litch_echo'] },
+      },
+    })
+    litch.onRequest((request) =>
+      request.method === 'item/tool/call'
+        ? {
+            success: true,
+            contentItems: [{ type: 'inputText', text: `回声：${request.params.arguments.text}` }],
+          }
+        : { decision: 'accept' },
+    )
+    const tooled = await litch.call('thread/start', { cwd: box.cwd, dynamicTools: ECHO_TOOLS })
+    const third = await litch.call('turn/start', {
+      threadId: tooled.thread.id,
+      input: text('echo-tool please'),
+    })
+    const echoed = (await litch.until('turn/completed', (p) => p.turn.id === third.turn.id)).turn
+    assert.equal(echoed.status, 'completed', JSON.stringify(echoed.error))
+    const call = litch.requests.find((r) => r.method === 'item/tool/call')
+    assert.ok(call, JSON.stringify(echoed.items))
+    assert.deepEqual(call.params.arguments, { text: '冒烟' })
+    const dynamic = echoed.items.filter((item: any) => item.type === 'dynamicToolCall')
+    assert.equal(dynamic.length, 1, JSON.stringify(echoed.items))
+    assert.equal(dynamic[0].id, call.params.callId)
+    assert.equal(dynamic[0].success, true)
+    const sent = JSON.stringify(model.requests.at(-1)?.messages ?? [])
+    assert.ok(sent.includes('回声：冒烟'), '工具结果交回了模型')
+    // 命名空间的 instructions 到了模型面前（OpenCode 把 MCP 的 instructions 放进系统提示）
+    assert.ok(sent.includes('要回声时调 litch_echo'), '系统提示里有 instructions')
   } finally {
     await server.close()
     await model.close()
@@ -145,6 +203,86 @@ test('冒烟：真的 gemini --acp，只握手', { skip: !gemini, timeout: 120_0
     assert.equal(info.engine, 'gemini')
     assert.notEqual(info.cliBuild, 'unknown')
   } finally {
+    await rm(box.root, { recursive: true, force: true })
+  }
+})
+
+// 客户端工具（经 MCP 桥）：真的 gemini --acp，模型是回环上的假 Gemini API（fake-gemini.mts），
+// 不用登录、不发真实请求、不花钱。也用 LITCH_SMOKE_GEMINI 开
+test('冒烟：真的 gemini --acp 经 MCP 桥调客户端工具，假模型', {
+  skip: !gemini,
+  timeout: 180_000,
+}, async () => {
+  const box = await sandbox()
+  // Gemini CLI 0.38 给模型的名字是 mcp_litch_echo_echo
+  const model = await startFakeGemini((name) => /litch_+echo_echo$/.test(name), { text: '冒烟' })
+  await mkdir(join(box.root, '.gemini'), { recursive: true })
+  await writeFile(
+    join(box.root, '.gemini', 'settings.json'),
+    JSON.stringify({
+      security: { auth: { selectedType: 'gemini-api-key' } },
+      privacy: { usageStatisticsEnabled: false },
+      general: { disableAutoUpdate: true, disableUpdateNag: true },
+    }),
+  )
+  // 不设代理：Gemini CLI 不看 NO_PROXY，设了连回环上的假模型也走代理。外连靠假的密钥和关掉的统计挡着
+  const { HTTP_PROXY, HTTPS_PROXY, http_proxy, https_proxy, ...direct } = box.env
+  const server = new AcpServer(join(box.root, 'home'), {
+    ...direct,
+    PATH: `${process.execPath.replace(/\/node$/, '')}:${box.env.PATH}`,
+    CHA_ACP_AGENT: 'gemini',
+    CHA_GEMINI_CLI: gemini,
+    GEMINI_CLI_NO_RELAUNCH: 'true',
+    GEMINI_API_KEY: 'fake-key',
+    GOOGLE_GEMINI_BASE_URL: model.url,
+  })
+  const desktop = client(server)
+  try {
+    await desktop.call('initialize', {
+      clientInfo: { name: 'litch', version: '0' },
+      capabilities: {
+        litchExtensions: ['clientTools'],
+        litchClientTools: { namespaces: ['litch_echo'] },
+      },
+    })
+    desktop.onRequest((request) =>
+      request.method === 'item/tool/call'
+        ? {
+            success: true,
+            contentItems: [{ type: 'inputText', text: `回声：${request.params.arguments.text}` }],
+          }
+        : { decision: 'accept' },
+    )
+    const { thread } = await desktop.call('thread/start', {
+      cwd: box.cwd,
+      dynamicTools: ECHO_TOOLS,
+    })
+    const { turn: started } = await desktop.call('turn/start', {
+      threadId: thread.id,
+      input: text('调一下回声'),
+    })
+    const done = (await desktop.until('turn/completed', (p) => p.turn.id === started.id)).turn
+    const call = desktop.requests.find((r) => r.method === 'item/tool/call')
+    assert.ok(call, '收到了 item/tool/call')
+    assert.deepEqual(
+      { namespace: call.params.namespace, tool: call.params.tool, args: call.params.arguments },
+      { namespace: 'litch_echo', tool: 'echo', args: { text: '冒烟' } },
+    )
+    const tools = done.items.filter((item: any) => item.type === 'dynamicToolCall')
+    assert.equal(tools.length, 1)
+    assert.equal(tools[0].id, call.params.callId)
+    assert.equal(tools[0].success, true)
+    // 用户那里没有审批卡（Gemini CLI 对 MCP 工具要问权限，入口替它允许了这一次）
+    assert.ok(!desktop.requests.some((r) => /requestApproval$/.test(r.method)))
+    // 工具结果交回了模型
+    const answered = JSON.stringify(model.requests.at(-1)?.contents ?? [])
+    assert.ok(answered.includes('回声：冒烟'), answered.slice(-500))
+    // 命名空间的 instructions 到了模型面前（Gemini CLI 把 MCP 的 instructions 拼进系统提示）
+    const system = JSON.stringify(model.requests[0]?.systemInstruction ?? '')
+    assert.ok(system.includes('要回声时调 litch_echo'), '系统提示里有 instructions')
+  } finally {
+    await server.close()
+    await model.close()
     await rm(box.root, { recursive: true, force: true })
   }
 })

@@ -2,6 +2,8 @@
 //
 // ACP 的更新里没有回合：一次 session/prompt 从发出到应答是一个回合，由适配器建（begin）、按应答的
 // stopReason 收尾（finish）。回放时没有 prompt，用户的话（user_message_chunk）开始一个新回合。
+
+import { canonical, type DynamicToolSpec } from './client-tools.mjs'
 import {
   blockText,
   contentText,
@@ -53,6 +55,23 @@ interface ToolState {
   declined: boolean
   /** 经 fs/write_text_file 写的、挂在这个调用上的改动（按路径） */
   writes: Map<string, any>
+  /** 动态工具的条目已经对上了一次 MCP 调用（client-tools.mts），不再给别的调用认领 */
+  claimed: boolean
+}
+
+/** 动态工具的条目，照上游的 dynamicToolCall（和别的入口一样） */
+function dynamicItem(id: string, spec: DynamicToolSpec, args: unknown): any {
+  return {
+    type: 'dynamicToolCall',
+    id,
+    namespace: spec.namespace,
+    tool: spec.tool,
+    arguments: args ?? {},
+    status: 'inProgress',
+    contentItems: null,
+    success: null,
+    durationMs: null,
+  }
 }
 
 type Breakdown = {
@@ -357,13 +376,30 @@ export class Projection {
       const turn = this.active
       if (!turn) return
       this.closeCurrent(notify, false)
-      const item = toolItem(`${turn.id}:tool:${id}`, update, this.thread.cwd, this.server)
-      state = { item, turn, startedMs: Date.now(), declined: false, writes: new Map() }
+      const itemId = `${turn.id}:tool:${id}`
+      const spec = this.dynamicTool(update)
+      const item = spec
+        ? dynamicItem(itemId, spec, update.rawInput)
+        : toolItem(itemId, update, this.thread.cwd, this.server)
+      state = {
+        item,
+        turn,
+        startedMs: Date.now(),
+        declined: false,
+        writes: new Map(),
+        claimed: false,
+      }
       this.tools.set(id, state)
       this.put(turn, item, false, notify)
+      this.toolAdded()
     }
     this.mergeTool(state, update, notify)
   }
+
+  /** 认出会话的动态工具（AcpServer 设，见 client-tools.mts 的 matchDynamicTool） */
+  dynamicTool: (toolCall: any) => DynamicToolSpec | null = () => null
+  /** 有了新的工具条目（AcpServer 设）：等着认领的 MCP 调用再找一遍 */
+  toolAdded: () => void = () => {}
 
   /** harness 标识：MCP 条目的 server 记成它（AcpServer 设） */
   server = 'acp'
@@ -376,6 +412,8 @@ export class Projection {
     if (item.status !== 'inProgress') return
     if (typeof update.title === 'string' && item.type === 'mcpToolCall') item.tool = update.title
     if (update.rawInput !== undefined && item.type === 'mcpToolCall')
+      item.arguments = update.rawInput
+    if (update.rawInput !== undefined && item.type === 'dynamicToolCall' && !state.claimed)
       item.arguments = update.rawInput
     if (item.type === 'commandExecution') {
       if (typeof update.rawInput?.command === 'string') item.command = update.rawInput.command
@@ -398,6 +436,12 @@ export class Projection {
       }
     } else if (item.type === 'fileChange') {
       if (!item.changes.length) item.changes = [...state.writes.values()]
+    } else if (item.type === 'dynamicToolCall') {
+      // 正常是 MCP 调用答完时就收了尾（finishDynamic）；到这里的是没调到我们这里就结束的（agent 取消了、出错了）
+      const text = contentText(update.content)
+      item.success = !failed
+      item.contentItems = text ? [{ type: 'inputText', text }] : []
+      item.durationMs = Math.max(0, Date.now() - state.startedMs)
     } else {
       item.result = mcpResult(update)
       item.error = failed ? { message: contentText(update.content) || '工具调用失败' } : null
@@ -464,6 +508,81 @@ export class Projection {
     if (known?.turn !== this.active) this.toolUpdate({ ...update, status: 'pending' }, notify)
     else this.mergeTool(known, { ...update, status: undefined }, notify)
     return this.tools.get(update.toolCallId)
+  }
+
+  /**
+   * 一次动态工具的 MCP 调用进来了：在这一回合里找 agent 为它报的那条 tool_call，找到了就是这次调用的条目
+   *（条目号就是交给执行方的 callId）。先找认出是这个工具的；再找没认出、但参数一样的普通工具条目
+   *（Gemini CLI 在参数里有字符串 command 时拿命令当标题），找到的改画成 dynamicToolCall。都按报的先后取最早的。
+   * 认领时把参数换成 MCP 调用带来的那份（有的 agent 不报参数），条目变了重发一次 item/started。没有返回 null。
+   */
+  claimDynamic(spec: DynamicToolSpec, args: unknown, notify: Notify): any | null {
+    const turn = this.active
+    if (!turn) return null
+    const open = [...this.tools.values()].filter(
+      (state) => state.turn === turn && !state.claimed && state.item.status === 'inProgress',
+    )
+    const wanted = canonical(args)
+    const command = (args as any)?.command
+    const state =
+      open.find(
+        ({ item }) =>
+          item.type === 'dynamicToolCall' &&
+          item.namespace === spec.namespace &&
+          item.tool === spec.tool,
+      ) ??
+      open.find(
+        ({ item }) =>
+          item.type === 'mcpToolCall' &&
+          ((wanted !== '{}' && canonical(item.arguments) === wanted) ||
+            (typeof command === 'string' && command !== '' && item.tool === command)),
+      )
+    if (!state) return null
+    state.claimed = true
+    const before = JSON.stringify(state.item)
+    if (state.item.type !== 'dynamicToolCall') {
+      const index = turn.items.indexOf(state.item)
+      state.item = dynamicItem(state.item.id, spec, args)
+      if (index >= 0) turn.items[index] = state.item
+    } else state.item.arguments = args ?? {}
+    if (JSON.stringify(state.item) !== before)
+      notify('item/started', { turnId: turn.id, item: state.item })
+    return state.item
+  }
+
+  /** 认领不到 agent 报的 tool_call：这次调用另起一个条目。没有回合时返回 null */
+  addDynamic(spec: DynamicToolSpec, args: unknown, notify: Notify): any | null {
+    const turn = this.active
+    if (!turn) return null
+    this.closeCurrent(notify, false)
+    const item = dynamicItem(this.nextId(turn, 'litch'), spec, args)
+    this.tools.set(`litch:${item.id}`, {
+      item,
+      turn,
+      startedMs: Date.now(),
+      declined: false,
+      writes: new Map(),
+      claimed: true,
+    })
+    this.put(turn, item, false, notify)
+    return item
+  }
+
+  /** 动态工具的调用答完了：条目照执行方的答复收尾（agent 之后报的完成不再改它） */
+  finishDynamic(
+    item: any,
+    response: { success: boolean; contentItems: any[] },
+    durationMs: number,
+    notify: Notify,
+  ): void {
+    if (item.status !== 'inProgress') return
+    const state = [...this.tools.values()].find((entry) => entry.item === item)
+    if (!state) return
+    item.status = response.success ? 'completed' : 'failed'
+    item.success = response.success
+    item.contentItems = response.contentItems
+    item.durationMs = durationMs
+    notify('item/completed', { turnId: state.turn.id, item })
   }
 
   /**
@@ -564,6 +683,7 @@ export class Projection {
           : 'failed'
       if (state.item.type === 'fileChange' && !state.item.changes.length)
         state.item.changes = [...state.writes.values()]
+      if (state.item.type === 'dynamicToolCall') state.item.success ??= false
       notify('item/completed', { turnId: turn.id, item: state.item })
     }
     turn.completedAt = Math.floor(time / 1000)

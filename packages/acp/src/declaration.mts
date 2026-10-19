@@ -2,6 +2,8 @@
 // 和别的引擎不同，这里的声明不是写死的：接的是哪个 agent、它在 initialize 里报了什么能力，
 // 决定我们能做到什么（agent 没有 loadSession 就回放不了历史、没有 fork 就分不了叉）。
 // 每一位说的是“经这个适配器、对着这个 agent 实际做得到”，test/declaration.test.mts 守着声明和行为一致。
+
+import { EXTENSION } from '../../protocol/src/device.mjs'
 import type {
   HarnessDeclaration,
   HarnessFeatures,
@@ -132,7 +134,9 @@ export function declarationFor(id: AcpAgentId, caps: AgentCapabilities | null): 
     // 名字和徽标不在这里写：和设置里这一组的标题是同一个出处
     ...HARNESS_IDENTITY[id],
     // 审批的选项是 agent 给的那几个，带不了用户写的说明：不支持 declineWithNote。
-    extensions: [],
+    // 动态工具经按会话挂的 MCP 桥交给 agent（ACP 要求每个 agent 都收 stdio 的 MCP 服务），
+    // litch_ 命名空间的调用照 clientTools 的规矩挑执行方（client-tools.mts）。
+    extensions: [EXTENSION.clientTools],
     features: featuresOf(caps),
     permissionPresets: [
       { ...builtinPreset(PRESET.fullAccess, PRESET_TEXT, switching), requiresConfirmation: false },

@@ -5,6 +5,9 @@
 //   FAKE_ACP_CAPS         agentCapabilities 整个换成这一份 JSON
 //   FAKE_ACP_IGNORE_EOF=1 标准输入关了也不退（收场要发信号才走）
 //   FAKE_ACP_IGNORE_TERM=1 收到结束信号也不退（只能强杀）
+// 建会话、接回会话时带了 stdio 的 MCP 服务就起起来，握手、列工具（记一行 { mcp: … } 到 FAKE_ACP_LOG），
+// 回合里按“tool…”那几句调它的工具（见 callTool）。
+import { type ChildProcess, spawn } from 'node:child_process'
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { createInterface } from 'node:readline'
 
@@ -90,6 +93,79 @@ const request = (method: string, params: object): Promise<any> => {
   return new Promise((resolve, reject) =>
     waiting.set(id, (message) => (message.error ? reject(message.error) : resolve(message.result))),
   )
+}
+
+// ---------- MCP（会话挂的 stdio 服务） ----------
+
+interface McpClient {
+  name: string
+  child: ChildProcess
+  request(method: string, params: object): Promise<any>
+  tools: any[]
+  instructions: string | null
+}
+
+/** 会话号 → 它挂着的 MCP 服务（每次建会话、接回会话换一批，旧的关掉） */
+const mcp = new Map<string, McpClient[]>()
+
+async function connectMcp(server: any): Promise<McpClient> {
+  const env = { ...process.env }
+  for (const entry of server.env ?? []) env[entry.name] = entry.value
+  const child = spawn(server.command, server.args ?? [], {
+    env,
+    stdio: ['pipe', 'pipe', 'inherit'],
+  })
+  let id = 0
+  const pending = new Map<number, (message: any) => void>()
+  createInterface({ input: child.stdout as any }).on('line', (line) => {
+    if (!line.trim()) return
+    const message = JSON.parse(line)
+    if (message.id !== undefined && message.method === undefined) {
+      pending.get(message.id)?.(message)
+      pending.delete(message.id)
+    }
+  })
+  const request = (method: string, params: object) => {
+    const current = ++id
+    child.stdin?.write(`${JSON.stringify({ jsonrpc: '2.0', id: current, method, params })}\n`)
+    return new Promise<any>((resolve, reject) =>
+      pending.set(current, (message) =>
+        message.error ? reject(message.error) : resolve(message.result),
+      ),
+    )
+  }
+  const hello = await request('initialize', {
+    protocolVersion: '2025-06-18',
+    capabilities: {},
+    clientInfo: { name: 'fake-acp', version: '9.9.9' },
+  })
+  child.stdin?.write(`${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' })}\n`)
+  const { tools } = await request('tools/list', {})
+  return {
+    name: server.name,
+    child,
+    request,
+    tools,
+    instructions: typeof hello?.instructions === 'string' ? hello.instructions : null,
+  }
+}
+
+/** 照参数里的 mcpServers 把会话的 MCP 服务换成新的一批 */
+async function mountMcp(sessionId: string, servers: unknown): Promise<void> {
+  for (const old of mcp.get(sessionId) ?? []) old.child.kill()
+  const list = Array.isArray(servers) ? servers.filter((server) => server?.command) : []
+  const clients = await Promise.all(list.map(connectMcp))
+  mcp.set(sessionId, clients)
+  log({
+    mcp: {
+      sessionId,
+      servers: clients.map((client) => ({
+        name: client.name,
+        instructions: client.instructions,
+        tools: client.tools.map((tool: any) => tool.name),
+      })),
+    },
+  })
 }
 
 // 每个会话正在跑的提示词：取消时让它以 cancelled 收尾
@@ -324,6 +400,74 @@ async function prompt(params: any): Promise<object> {
       await sleep(20)
       process.exit(3)
       break
+    case 'tool': {
+      // tool <报法> <MCP 工具名> <JSON 参数>：调会话挂的 MCP 服务的工具。报法照几家 agent 的样子：
+      //   gemini  调之前报 tool_call，标题“<工具> (litch MCP Server)”，不带参数
+      //   ask     先问权限（标题同上），允许了才调
+      //   command 标题是参数里的 command（Gemini CLI 的做法），不带参数
+      //   raw     标题认不出，带原始参数
+      //   late    先调，过一会儿才报 tool_call（标题同 gemini）
+      //   silent  不报 tool_call
+      const [style, name, ...json] = rest
+      const args = json.length ? JSON.parse(json.join(' ')) : {}
+      const client = (mcp.get(sessionId) ?? []).find((one) =>
+        one.tools.some((tool: any) => tool.name === name),
+      )
+      if (!client) {
+        say(`没有工具 ${name}`)
+        break
+      }
+      const toolCallId = `call-${name}`
+      const title =
+        style === 'command'
+          ? String(args.command)
+          : style === 'raw'
+            ? '做一件事'
+            : `${name} (${client.name} MCP Server)`
+      const reported = {
+        sessionUpdate: 'tool_call',
+        toolCallId,
+        title,
+        kind: 'other',
+        status: 'in_progress',
+        ...(style === 'raw' ? { rawInput: args } : {}),
+      }
+      if (style === 'ask') {
+        const kind = await permit(sessionId, {
+          toolCallId,
+          title,
+          kind: 'other',
+          status: 'pending',
+        })
+        if (!kind.startsWith('allow')) {
+          notify(sessionId, { sessionUpdate: 'tool_call_update', toolCallId, status: 'failed' })
+          say('没让调')
+          break
+        }
+      } else if (style !== 'silent' && style !== 'late') notify(sessionId, reported)
+      const called = client.request('tools/call', {
+        name,
+        arguments: args,
+        _meta: { progressToken: 1 },
+      })
+      if (style === 'late') setTimeout(() => notify(sessionId, reported), 100)
+      const result = await called.catch((error) => ({
+        isError: true,
+        content: [{ type: 'text', text: `MCP 出错：${error.message}` }],
+      }))
+      const resultText = (result.content ?? [])
+        .map((part: any) => (part.type === 'text' ? part.text : `[${part.type}]`))
+        .join('')
+      if (style !== 'silent')
+        notify(sessionId, {
+          sessionUpdate: 'tool_call_update',
+          toolCallId,
+          status: result.isError ? 'failed' : 'completed',
+          content: [{ type: 'content', content: { type: 'text', text: resultText } }],
+        })
+      say(`结果：${resultText}`)
+      break
+    }
     case 'title':
       current.title = 'Fake 标题'
       notify(sessionId, {
@@ -360,10 +504,12 @@ async function handle(method: string, params: any): Promise<unknown> {
       }
     case 'session/new': {
       const created = create(String(params?.cwd ?? '/'))
+      await mountMcp(created.sessionId, params?.mcpServers)
       return { sessionId: created.sessionId, ...settings(created) }
     }
     case 'session/load': {
       const found = session(params)
+      await mountMcp(found.sessionId, params?.mcpServers)
       for (const entry of found.history)
         notify(found.sessionId, {
           sessionUpdate: entry.role === 'user' ? 'user_message_chunk' : 'agent_message_chunk',
@@ -371,8 +517,11 @@ async function handle(method: string, params: any): Promise<unknown> {
         })
       return settings(found)
     }
-    case 'session/resume':
-      return settings(session(params))
+    case 'session/resume': {
+      const found = session(params)
+      await mountMcp(found.sessionId, params?.mcpServers)
+      return settings(found)
+    }
     case 'session/list':
       return {
         sessions: [...sessions.values()]
@@ -389,6 +538,7 @@ async function handle(method: string, params: any): Promise<unknown> {
       const forked = create(source.cwd)
       forked.history = structuredClone(source.history)
       persist()
+      await mountMcp(forked.sessionId, params?.mcpServers)
       return { sessionId: forked.sessionId, ...settings(forked) }
     }
     case 'session/set_config_option': {

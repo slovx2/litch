@@ -2,7 +2,8 @@ import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 
 // 回环上的假 OpenAI 兼容模型（/v1/chat/completions，流式）：冒烟测试拿它给真的 agent 当模型，不发真实请求。
-// 怎么答：上一条是工具结果的，说一句“命令跑完了”；用户的话里有 run-tool 的，调一次 bash；别的说一句“冒烟好了”。
+// 怎么答：上一条是工具结果的，说一句“命令跑完了”；用户的话里有 run-tool 的，调一次 bash；有 echo-tool 的，
+// 调一次名字以 echo_echo 结尾的工具（经 MCP 桥挂上的 Litch 回声，参数 { text: '冒烟' }）；别的说一句“冒烟好了”。
 export interface FakeOpenAi {
   url: string
   /** 收到的请求体 */
@@ -55,7 +56,29 @@ export async function startFakeOpenAi(): Promise<FakeOpenAi> {
       const last = messages.at(-1)
       const lastUser = [...messages].reverse().find((message) => message?.role === 'user')
       response.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' })
-      if (last?.role !== 'tool' && textOf(lastUser).includes('run-tool') && parsed.tools?.length) {
+      const echo = (parsed.tools ?? [])
+        .map((tool: any) => String(tool?.function?.name ?? ''))
+        .find((name: string) => name.endsWith('echo_echo'))
+      if (last?.role !== 'tool' && textOf(lastUser).includes('echo-tool') && echo) {
+        response.write(chunk({ role: 'assistant', content: '' }))
+        response.write(
+          chunk({
+            tool_calls: [
+              {
+                index: 0,
+                id: 'call_fake_echo',
+                type: 'function',
+                function: { name: echo, arguments: JSON.stringify({ text: '冒烟' }) },
+              },
+            ],
+          }),
+        )
+        response.write(chunk({}, 'tool_calls'))
+      } else if (
+        last?.role !== 'tool' &&
+        textOf(lastUser).includes('run-tool') &&
+        parsed.tools?.length
+      ) {
         response.write(chunk({ role: 'assistant', content: '' }))
         response.write(
           chunk({
