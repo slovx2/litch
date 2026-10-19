@@ -93,6 +93,12 @@ export interface ClientToolNamespaceSpec {
   name: string
   description: string
   tools: ClientToolFunctionSpec[]
+  /**
+   * 挂上这个命名空间时要加进系统提示（或开发者指令）的一段话：什么时候该用这些工具。工具说明里放不下、
+   * 又要模型每回合都记着的规矩写在这里。引擎能加就加在自己的系统提示末尾（不覆盖用户自己的指令），
+   * 加不了的忽略；原生 codex 不认这个字段，设备进程转发前摘掉、并进 developerInstructions。
+   */
+  instructions?: string
 }
 
 /** 失败答复的原因分类，放在文字的开头一行里给人和模型看，也方便测试认 */

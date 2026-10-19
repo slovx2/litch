@@ -613,6 +613,7 @@ const STATUS_WORD: Record<SessionProposal['status'], string> = {
   pending: '在等用户',
   started: '开始了',
   dismissed: '被用户拒绝了',
+  withdrawn: '撤回了',
   expired: '过期了',
 }
 

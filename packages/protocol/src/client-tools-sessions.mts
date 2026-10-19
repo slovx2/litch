@@ -15,6 +15,10 @@ export const SESSION_TOOL = {
   send: 'send',
   wait: 'wait',
   interrupt: 'interrupt',
+  /** 用户在最新一条消息里让开始某张提案卡片（“开始第二个”） */
+  accept: 'accept',
+  /** 撤回自己提的、用户还没开始的提案 */
+  withdraw: 'withdraw',
 } as const
 
 export type SessionToolName = (typeof SESSION_TOOL)[keyof typeof SESSION_TOOL]
@@ -33,6 +37,10 @@ export const SESSION_TOOL_LIMITS = {
   waitSecondsMax: 120,
   /** send 的消息、start 的 prompt 最多多少字 */
   messageChars: 32_000,
+  /** 一个回合里最多提几张提案（规则里写平时三张，计划拆分时四张） */
+  proposalsPerTurn: 4,
+  /** fresh 的提案、直接起的 fresh 子会话，简报至少多少字：子会话只知道这一段 */
+  freshPromptMinChars: 80,
 } as const
 
 // —— 参数（执行器收到后自己校验，不信任这里） ——
@@ -73,6 +81,14 @@ export interface SessionsStartArguments {
    * 不是就降成提案）；propose（缺省）：出一张提案卡片，用户点了才起
    */
   initiation?: 'user_asked' | 'propose'
+}
+
+export interface SessionsAcceptArguments {
+  proposal_id: string
+}
+
+export interface SessionsWithdrawArguments {
+  proposal_id: string
 }
 
 export interface SessionsSendArguments {
@@ -135,19 +151,45 @@ export interface SessionsStartResult {
   note: string
 }
 
+/** withdraw 的结果：撤回了，或者已经不能撤回（用户已开始、已不要、已过期） */
+export interface SessionsWithdrawResult {
+  status: 'withdrawn' | 'started' | 'dismissed' | 'expired'
+  /** status 是 started 时起出来的子会话 */
+  thread_id?: string
+  note: string
+}
+
 export interface SessionsWaitResult {
   /** 到点还没停的也在里面，status 是 running */
   sessions: (SessionSummary & { last_answer: string | null })[]
   timed_out: boolean
 }
 
+/**
+ * 建议任务（提案卡片）的规矩：挂上 litch_sessions 时加进系统提示（命名空间的 instructions）。
+ * 工具说明里只有一句话，模型不会主动提；什么时候该提、提几张、提了之后怎么办写在这里。
+ */
+export const SESSION_PROPOSAL_RULES = [
+  'Suggested tasks (Litch). You can suggest work for its own session with litch_sessions.start (initiation "propose"): the user sees a card in this conversation and nothing runs until they start it from the card, possibly with another harness, model or folder.',
+  '- Keep small things here: a question, a quick read, one edit, a few tool calls. A card is for real work that can run on its own.',
+  '- Suggest a card for independent work you notice while working (out of scope for this request, a fix spotted in passing) and for the follow-up your own answer recommends, even when this turn only answered a question.',
+  '- When your reply says some work is a follow-up, belongs in a separate change, or is for later, and it is worth doing, propose it before you end the turn instead of only asking "want me to...?" in prose: the card is how you ask.',
+  '- A task the user just asked you to do is not a suggestion: do it here, or start it with initiation "user_asked" if they asked for a separate session.',
+  "- When a plan has two or more steps that are real work and fully independent (no step needs another's result or touches the same files), you may say which step you take here and propose one card for each of the others, then start yours right away.",
+  `- One card per independent piece, at most three per turn (four when splitting a plan), never the same piece twice, never work you are about to do yourself. Before ending a turn, check once whether such a follow-up is left.`,
+  '- The prompt is everything a fresh session will know: the task, the files or area, and what done looks like, in your own words.',
+  '- If the user tells you to start a card ("start the second one"), call litch_sessions.accept with its proposal_id. If a card went stale (done here after all, no longer needed, replaced by a better one), withdraw it with litch_sessions.withdraw; propose the replacement first.',
+].join('\n')
+
 const THREAD_ID = { type: 'string', description: 'Session id (thread id) from list or start.' }
+const PROPOSAL_ID = { type: 'string', description: 'proposal_id returned by start.' }
 
 export const SESSION_TOOLS: ClientToolNamespaceSpec = {
   type: 'namespace',
   name: CLIENT_TOOL_NAMESPACE.sessions,
   description:
-    'Litch sessions on this device. A sub-session is a full, separate session the user can open and talk to; use it for independent work the user also wants to follow, or work that needs another harness, model or folder. For quick lookups inside this task, use your own subagents instead. Results of your sub-sessions arrive later as a <litch-session-event> message; do not poll. You can only send to or interrupt your own sub-sessions. Never answer approvals or questions waiting inside a sub-session: only the user can.',
+    'Litch sessions on this device. A sub-session is a full, separate session the user can open and talk to; use it for independent work the user also wants to follow, or work that needs another harness, model or folder. For quick lookups inside this task, use your own subagents instead. Real follow-up work you would otherwise only mention belongs in a proposal card (start with initiation "propose"). Results of your sub-sessions arrive later as a <litch-session-event> message; do not poll. You can only send to or interrupt your own sub-sessions. Never answer approvals or questions waiting inside a sub-session: only the user can.',
+  instructions: SESSION_PROPOSAL_RULES,
   tools: [
     {
       type: 'function',
@@ -187,8 +229,7 @@ export const SESSION_TOOLS: ClientToolNamespaceSpec = {
     {
       type: 'function',
       name: SESSION_TOOL.start,
-      description:
-        'Start a sub-session. Only use initiation "user_asked" when the user asked for it in their latest message; otherwise the user gets a proposal card and nothing runs until they accept. The prompt is all a fresh sub-session knows: state the task, the files, and what done looks like.',
+      description: `Start a sub-session, or propose one. Only use initiation "user_asked" when the user asked for it in their latest message; otherwise the user gets a proposal card in this conversation and nothing runs until they start it (at most ${SESSION_TOOL_LIMITS.proposalsPerTurn} proposals per turn). The prompt is all a fresh sub-session knows: state the task, the files, and what done looks like (at least ${SESSION_TOOL_LIMITS.freshPromptMinChars} characters).`,
       inputSchema: {
         type: 'object',
         properties: {
@@ -247,6 +288,30 @@ export const SESSION_TOOLS: ClientToolNamespaceSpec = {
           },
         },
         required: ['thread_ids'],
+        additionalProperties: false,
+      },
+    },
+    {
+      type: 'function',
+      name: SESSION_TOOL.accept,
+      description:
+        'Start one of your proposal cards because the user told you to in their latest message (for example "start the second one"). Refused on turns the user did not start.',
+      inputSchema: {
+        type: 'object',
+        properties: { proposal_id: PROPOSAL_ID },
+        required: ['proposal_id'],
+        additionalProperties: false,
+      },
+    },
+    {
+      type: 'function',
+      name: SESSION_TOOL.withdraw,
+      description:
+        'Withdraw a proposal card of yours that the user has not started: it was done here after all, is no longer needed, or you proposed a better one. If the user already started, dismissed it or it expired, the result says so; do not retry.',
+      inputSchema: {
+        type: 'object',
+        properties: { proposal_id: PROPOSAL_ID },
+        required: ['proposal_id'],
         additionalProperties: false,
       },
     },

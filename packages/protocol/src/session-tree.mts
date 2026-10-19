@@ -46,7 +46,14 @@ export interface SessionTreeThreadFields {
 }
 
 /** 提案的状态 */
-export type SessionProposalStatus = 'pending' | 'started' | 'dismissed' | 'expired'
+export type SessionProposalStatus =
+  | 'pending'
+  | 'started'
+  /** 用户点了“不要” */
+  | 'dismissed'
+  /** 模型自己撤回了（litch_sessions.withdraw） */
+  | 'withdrawn'
+  | 'expired'
 
 /** 模型提的“要不要另起一个子会话”，用户点了才起 */
 export interface SessionProposal {
@@ -68,6 +75,14 @@ export interface SessionProposal {
   expiresAt: number
   /** status 是 started 时，起出来的子会话 */
   startedThreadId: string | null
+  /** 了结（开始、不要、撤回、过期）的时间（秒）；pending 时是 null。旧设备进程不带 */
+  settledAt?: number | null
+  /**
+   * 提案是在父会话的哪个回合、哪次工具调用里提的（litch_sessions.start 那一条的 item id）：
+   * 对话流里的卡片画在那一条上，侧面板的“建议任务”点了跳到那里。旧提案、拿不到时是 null，旧设备进程不带
+   */
+  turnId?: string | null
+  callId?: string | null
   /**
    * 目标 harness 收不到父会话那么严时（它声明的权限预设里最严的一档也比父会话的沙箱宽，比如没有沙箱的 Pi），
    * 子会话实际会是的那一档沙箱：read-only、workspace-write、danger-full-access。收得紧时没有这个字段。
@@ -86,6 +101,8 @@ export const SESSION_TREE_LIMITS = {
   wakesPerUserMessage: 10,
   /** 一个会话同时最多有几个没结束的子会话（直接子女） */
   liveChildren: 8,
+  /** includeSettled 时最多列几条 */
+  proposalListMax: 100,
 } as const
 
 // —— 客户端发起的方法（只在设备信息的 extensions 里列了 sessionTree 时可用） ——
@@ -95,9 +112,9 @@ export const SESSION_TREE_METHOD = {
   start: 'litch/session/start',
   /** 把一个子会话脱离成独立会话（去掉父子关系，会话本身不动）。应答空对象 */
   detach: 'litch/session/detach',
-  /** 一个会话上的提案（只列 pending 的）。应答 SessionProposalListResponse */
+  /** 一个会话上的提案（缺省只列 pending 的，includeSettled 连了结的一起）。应答 SessionProposalListResponse */
   proposalList: 'litch/sessionProposal/list',
-  /** 用户点“开始”。应答 SessionStartResponse */
+  /** 用户点“开始”（可以改 harness、模型、目录、简报等再开始）。参数 SessionProposalAcceptParams，应答 SessionStartResponse */
   proposalAccept: 'litch/sessionProposal/accept',
   /** 用户点“不要”。应答空对象 */
   proposalDismiss: 'litch/sessionProposal/dismiss',
@@ -106,7 +123,7 @@ export const SESSION_TREE_METHOD = {
 export const SESSION_TREE_NOTIFICATION = {
   /** 一个会话的父子关系变了（建立、脱离）。lineage 为 null 是没有父会话了 */
   lineageUpdated: 'litch/thread/lineage/updated',
-  /** 一个会话上的提案变了（新提、开始、不要、过期）。带的是这个会话现在全部 pending 的提案 */
+  /** 一个会话上的提案变了（新提、开始、不要、撤回、过期）。带这个会话现在全部 pending 的提案，和刚变的那几条 */
   proposalChanged: 'litch/sessionProposal/changed',
 } as const
 
@@ -142,6 +159,8 @@ export interface SessionDetachParams {
 
 export interface SessionProposalListParams {
   threadId: string
+  /** 连了结的一起列（新的在前，最多 proposalListMax 条） */
+  includeSettled?: boolean
 }
 
 export interface SessionProposalListResponse {
@@ -152,6 +171,25 @@ export interface SessionProposalIdParams {
   proposalId: string
 }
 
+/** 用户从卡片开始时改的东西。不给的照提案里的；和 litch/session/start 一样，沙箱收紧到不宽于父会话 */
+export interface SessionProposalOverrides {
+  harness?: string
+  model?: string
+  effort?: string
+  cwd?: string
+  projectId?: string
+  /** 改成 fork 时 harness 必须和父会话相同 */
+  kind?: SessionLineageKind
+  title?: string
+  prompt?: string
+  approvalPolicy?: string
+  sandbox?: string
+}
+
+export interface SessionProposalAcceptParams extends SessionProposalIdParams {
+  overrides?: SessionProposalOverrides
+}
+
 export interface LineageUpdatedNotification {
   threadId: string
   lineage: SessionLineage | null
@@ -160,6 +198,8 @@ export interface LineageUpdatedNotification {
 export interface ProposalChangedNotification {
   threadId: string
   proposals: SessionProposal[]
+  /** 这次变了的那几条（任何状态）。旧设备进程不带 */
+  changed?: SessionProposal[]
 }
 
 // —— 设备进程注入给父会话的文字 ——
