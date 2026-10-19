@@ -11,6 +11,7 @@ Litch aims to be a comfortable desktop client with a great remote-connection exp
 - Direct SSH connections
 - Built-in browser + Computer Use (macOS and Windows)
 - While the desktop is connected, remote devices can use its browser and Computer Use, and, once you approve, run commands and read and write files on it
+- Session trees (spawn sub-sessions, report back and wake the parent) and scheduled tasks (run on the device on schedule, even with the desktop closed)
 
 ## Screenshots
 
@@ -39,6 +40,8 @@ The screenshots show demo data. Skin, light or dark, and language (中文 / Engl
 - **Built-in browser.** Shared by you and the agent; the remote machine's localhost is forwarded over ssh.
 - **Computer Use (macOS and Windows).** The agent operates apps on this computer, and each app needs your approval before the first action; a notice shows on screen while it works, and Esc stops it.
 - **Operate this computer.** Once you approve, agents on remote devices can run commands, read and write files, and copy files between the two machines on the desktop computer. Off by default, turned on per device.
+- **Session trees.** A session can spawn sub-sessions on any harness, shown nested under it; when a sub-session finishes it reports back, and the parent is woken to carry on when needed.
+- **Scheduled tasks.** Tasks live on the device and the device runs them on schedule, even while the desktop is closed or disconnected; each run starts a new session or continues an existing one.
 - **Panels for coding.** A terminal that survives a dropped connection, a file tree, and diff review.
 - **Android client.** Browse sessions, send messages, answer approvals and open terminals from your phone.
 
@@ -50,7 +53,9 @@ The screenshots show demo data. Skin, light or dark, and language (中文 / Engl
 | Desktop client Litch | Early development. Installers are available for macOS (Apple Silicon) and Windows (see Download below; the Windows build has not been fully tested), or run it from source. The app ships with its own copy of the adapter and gathers the harnesses installed on this machine under one device, Local. You can browse sessions, send messages (with images and attachments), queue, interrupt and steer, answer approvals and questions, and use plan mode, `/` commands and `@` to find files. When starting a session you pick the device, project and harness, and sessions from different harnesses in the same folder share one workspace. The side panel has a terminal, files and diff review. The Devices page can enable or disable a harness, change its settings, and show diagnostics and logs. It can also connect over SSH to the device service or native codex on a remote machine |
 | Built-in browser, Computer Use | Available since 0.8.0; Computer Use on macOS since 0.8.0 and on Windows since 0.10.0. Agents on remote devices can use both capabilities of the desktop (the adapter there needs 0.8.0 or later) |
 | Operate this computer | Available since 0.10.0; the desktop side is macOS only for now. Sessions on remote devices operate the desktop computer's commands and files once you approve; Codex, Claude Code and Pi sessions use the tools directly, other harnesses use the `litch-machine` command on that machine (the adapter there needs 0.10.0 or later) |
-| Android client | Available since 0.9.0, early version. Connects over SSH to remote machines with the adapter installed: browse sessions, send messages, answer approvals, open terminals |
+| Android client | Available since 0.9.0, early version. Connects over SSH to remote machines with the adapter installed: browse sessions, send messages, answer approvals, open terminals; manages scheduled tasks since 0.11.0 |
+| Session trees | Available since 0.11.0. The model spawns sub-sessions and reads and writes its own sub-sessions through `litch_sessions`, and you can spawn them by hand in the UI. Available in Codex, Claude Code, Pi, dsh and OpenCode sessions; ACP agent sessions cannot spawn but can be sub-sessions (the adapter on that machine needs 0.11.0 or later) |
+| Scheduled tasks | Available since 0.11.0. Schedules follow the device's time zone, and the model can create tasks through `litch_tasks`; manage them from the desktop or the Android client (the adapter on that machine needs 0.11.0 or later) |
 
 ## Download
 
