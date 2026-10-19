@@ -55,7 +55,13 @@ import type {
   SettingsWriteResult,
   SshConfigView,
 } from '../model-manage.mjs'
-import type { PairingAddress, PairingView, PairPhone, PairStatus } from '../model-pairing.mjs'
+import type {
+  PairingAddress,
+  PairingTopicView,
+  PairingView,
+  PairPhone,
+  PairStatus,
+} from '../model-pairing.mjs'
 import type { TaskDraft, TaskPatch, TaskRunView, TasksView, TaskView } from '../model-tasks.mjs'
 import type {
   TerminalHave,
@@ -107,6 +113,12 @@ export type Topic =
    * 照样成立；没连上时给上次知道的（还没连上过是 null）。连上、重连之后再给一份快照
    */
   | { kind: 'tasks'; deviceId: string }
+  /**
+   * 一台设备上扫码绑定手机的情况（devicePairing 扩展）：已绑定的手机，和这台桌面端开出来的配对现在走到哪了。
+   * 设备详情、出码对话框开着时才订阅。设备没有这项扩展时快照里 available 是 false，照样成立；
+   * 没连上时给上次知道的（还没连上过是 null）。连上、重连之后再给一份快照
+   */
+  | { kind: 'pairing'; deviceId: string }
 
 export type TopicKind = Topic['kind']
 
@@ -120,6 +132,7 @@ export interface TopicData {
   diff: DiffView
   machine: MachineActivityView
   tasks: TasksView
+  pairing: PairingTopicView
 }
 
 // ---------- 增量 ----------
@@ -191,6 +204,14 @@ export type TasksOp =
   | { op: 'task.remove'; taskId: string }
   | { op: 'run.upsert'; run: TaskRunView; finished: boolean }
 
+/**
+ * 扫码绑定手机的增量。已绑定的手机整份换（不长，变得也少）；
+ * 一个配对的状态整条换（只有这台桌面端开出来的配对才有，别处开的不发）
+ */
+export type PairingOp =
+  | { op: 'phones.set'; phones: PairPhone[] }
+  | { op: 'pair.status'; status: PairStatus }
+
 export interface TopicOp {
   app: AppOp
   sidebar: SidebarOp
@@ -201,6 +222,7 @@ export interface TopicOp {
   diff: DiffOp
   machine: MachineOp
   tasks: TasksOp
+  pairing: PairingOp
 }
 
 // ---------- 命令 ----------

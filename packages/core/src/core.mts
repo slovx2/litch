@@ -15,13 +15,16 @@ import { channelFailure } from './device/faults.mjs'
 import { createMachineExecutor, type MachineExecutorOptions } from './device/machine/executor.mjs'
 import { SENSITIVE_PRESETS } from './device/machine/presets.mjs'
 import type { MachineExecutor, MachineFacts } from './device/machine/types.mjs'
+import type { PairingPlatform } from './device/pairing.mjs'
 import {
+  checkPairingAddress,
   checkTarget,
   cleanDeniedPaths,
   type DeviceStore,
   defaultName,
   hostLabel,
   type RemotePlatform,
+  type SavedDevices,
   type SavedRemote,
   sameTarget,
   WIRES,
@@ -56,6 +59,8 @@ export interface CoreOptions {
    * 远程设备上的会话操作这台电脑（litch_machine）。不给就不声明这个命名空间（测试、没有外壳的核心）
    */
   machine?: CoreMachineOptions
+  /** 扫码绑定手机要碰 ssh、文件、端口的那几样（外壳给）。不给就出不了码，已绑定的手机照样能看、能撤 */
+  pairing?: PairingPlatform
   log?(line: string): void
 }
 
@@ -64,6 +69,15 @@ export interface CoreMachineOptions {
   desktop: MachineFacts
   /** 造执行器。不给就用真的（device/machine/executor.mts）；测试里换成假的 */
   executor?(options: MachineExecutorOptions): MachineExecutor
+}
+
+/** 去掉一台设备记下的“给手机用的地址” */
+const withoutPairing = (saved: SavedDevices, deviceId: string): SavedDevices => {
+  if (!saved.pairing?.[deviceId]) return saved
+  const pairing = { ...saved.pairing }
+  delete pairing[deviceId]
+  const { pairing: _, ...rest } = saved
+  return Object.keys(pairing).length > 0 ? { ...rest, pairing } : rest
 }
 
 const APPROVALS: readonly MachineApproval[] = ['session', 'each', 'never']
@@ -179,6 +193,7 @@ export function createCore(options: CoreOptions): Core {
       ...(store?.terminals ? { terminalNotes: store.terminals(config.id) } : {}),
       tools: hub,
       toolSwitches: () => switchesOf(config.id),
+      ...(options.pairing ? { pairing: options.pairing } : {}),
       // 只有远程设备有“操作这台电脑”
       ...(wiring && desktopInfo && config.kind === 'ssh'
         ? {
@@ -638,6 +653,8 @@ export function createCore(options: CoreOptions): Core {
             ...saved,
             remotes: saved.remotes.map((entry) => (entry.id === deviceId ? next : entry)),
           }
+          // 换了一台机器：给手机用的地址是对着原来那台改的，不要了
+          if (moved) saved = withoutPairing(saved, deviceId)
           persist()
           if (!moved) {
             device.update({ name: next.name, wire: next.wire })
@@ -745,11 +762,15 @@ export function createCore(options: CoreOptions): Core {
           delete tools[deviceId]
           const machine = { ...(saved.machine ?? {}) }
           delete machine[deviceId]
+          // 给手机用的地址也不留
+          const pairing = { ...(saved.pairing ?? {}) }
+          delete pairing[deviceId]
           saved = {
             localWire: saved.localWire,
             remotes: saved.remotes.filter((entry) => entry.id !== deviceId),
             ...(Object.keys(tools).length > 0 ? { tools } : {}),
             ...(Object.keys(machine).length > 0 ? { machine } : {}),
+            ...(Object.keys(pairing).length > 0 ? { pairing } : {}),
           }
           persist()
           devices.delete(deviceId)
@@ -940,6 +961,58 @@ export function createCore(options: CoreOptions): Core {
           await deviceOf(deviceId).tasks.markRead(taskId, runIds)
           return {}
         }
+        case 'pairing.start': {
+          const { deviceId } = params as Commands['pairing.start']['params']
+          const started = await deviceOf(deviceId).pairing.start()
+          const remembered = saved.pairing?.[deviceId]
+          return {
+            pairing: {
+              deviceId,
+              pairId: started.pairId,
+              seed: started.seed,
+              expiresAt: started.expiresAt,
+              hostKey: started.hostKey,
+              address: remembered ? { ...remembered } : { ...started.original },
+              original: started.original,
+            },
+          }
+        }
+        case 'pairing.cancel': {
+          const { deviceId, pairId } = params as Commands['pairing.cancel']['params']
+          await deviceOf(deviceId).pairing.cancel(pairId)
+          return {}
+        }
+        case 'pairing.decide': {
+          const { deviceId, pairId, allow } = params as Commands['pairing.decide']['params']
+          return { status: await deviceOf(deviceId).pairing.decide(pairId, allow === true) }
+        }
+        case 'pairing.status': {
+          const { deviceId, pairId } = params as Commands['pairing.status']['params']
+          return { status: await deviceOf(deviceId).pairing.status(pairId) }
+        }
+        case 'pairing.rememberAddress': {
+          const { deviceId, address } = params as Commands['pairing.rememberAddress']['params']
+          deviceOf(deviceId)
+          if (address === null) {
+            saved = withoutPairing(saved, deviceId)
+          } else {
+            const checked = checkPairingAddress(address)
+            if (!checked)
+              throw new ChannelError('invalid', '给手机的地址不对', undefined, { key: 'address' })
+            saved = { ...saved, pairing: { ...(saved.pairing ?? {}), [deviceId]: checked } }
+          }
+          persist()
+          return {}
+        }
+        case 'pairing.phones': {
+          const { deviceId } = params as Commands['pairing.phones']['params']
+          return { phones: await deviceOf(deviceId).pairing.phones() }
+        }
+        case 'pairing.revoke': {
+          const { deviceId, phoneId } = params as Commands['pairing.revoke']['params']
+          await deviceOf(deviceId).pairing.revoke(phoneId)
+          return {}
+        }
         case 'device.refresh':
           try {
             await deviceOf((params as { deviceId: string }).deviceId).refresh()
@@ -989,6 +1062,7 @@ export function createCore(options: CoreOptions): Core {
       }
       // 定时任务：设备没连上时给上次知道的，不支持时 available 是 false
       if (topic.kind === 'tasks') return device.tasks.open(sink)
+      if (topic.kind === 'pairing') return device.pairing.open(sink)
       // 设备还没连上时订阅照样成立，连上之后才有快照
       return device.openSession(topic.sessionId, sink)
     },

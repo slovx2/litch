@@ -26,6 +26,8 @@ await build({
     'ssh-check': 'src/ssh-check.mts',
     'adapter-check': 'src/adapter-check.mts',
     'tools-check': 'src/client-tools/check.mts',
+    // 扫码绑定手机在外壳这一头的自检（scripts/check-pair.mjs）
+    'pair-check': 'src/pair-check.mts',
   },
   outdir: 'dist',
   format: 'esm',

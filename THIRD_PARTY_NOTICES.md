@@ -17,6 +17,7 @@
 - 代码高亮 `highlight.js`，BSD-3-Clause，Copyright (c) 2006 Ivan Sagalaev。
 - Markdown 解析 `marked`，MIT，Copyright (c) MarkedJS、Christopher Jeffrey。
 - WebSocket `ws`，MIT，Copyright (c) Einar Otto Stangvik、Arnout Kazemier、Luigi Pinca 及贡献者。
+- 二维码生成 `uqr`（扫码绑定手机的出码对话框用），MIT，Copyright (c) Project Nayuki、Anthony Fu。
 - 字体 IBM Plex Mono、JetBrains Mono、Literata、Sometype Mono，SIL Open Font License 1.1，版权分别归 IBM Corp.、The JetBrains Mono Project Authors、The Literata Project Authors、The Sometype Mono Project Authors；经 `@fontsource/*` 的包取得。
 - 外壳是 Electron，MIT，Copyright (c) Electron contributors、GitHub Inc.；它带着的 Chromium、Node.js 等组件的许可在应用里的 `LICENSES.chromium.html`。
 - 应用图标和品牌标志是本项目自己的（`apps/desktop/assets/brand/`）。

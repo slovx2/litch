@@ -229,6 +229,11 @@ export interface DeviceView {
    * 单 harness 模式、旧版的设备服务、设置里关了“会话编排”的都是 false；断开之后留着断开前知道的
    */
   sessionTree: boolean
+  /**
+   * 设备服务支持扫码绑定手机（设备信息的 extensions 里列了 devicePairing）：设备详情、侧栏的设备菜单里有“在手机上使用…”。
+   * 单 harness 模式、旧版的设备服务都是 false；断开之后留着断开前知道的
+   */
+  pairing: boolean
 }
 
 /** 设备设置页上“内置浏览器”“Computer Use”两个开关。默认浏览器开、Computer Use 关 */

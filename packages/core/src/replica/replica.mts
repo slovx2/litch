@@ -33,6 +33,7 @@ import type {
   SettingSpecView,
   SettingsSnapshotView,
 } from '../model-manage.mjs'
+import type { PairingTopicView } from '../model-pairing.mjs'
 import type { TaskRunView, TasksView, TaskView } from '../model-tasks.mjs'
 import type { TerminalInfo, TerminalsOp, TerminalsView } from '../model-terminal.mjs'
 import type { SessionNoteView, SessionProposalView } from '../model-tree.mjs'
@@ -137,6 +138,8 @@ export const keys = {
   /** ChannelErrorShape：这个根的差异订阅不上（不认识的根之类） */
   diffError: (deviceId: string, root: string, scope: DiffScope, sessionId: string | null) =>
     `diff:${deviceId}:error:${scope}:${sessionId ?? ''}:${root}`,
+  /** PairingTopicView：一台设备上已绑定的手机和这台桌面端开出来的配对。openPairing 开着才有 */
+  pairing: (deviceId: string) => `pairing:${deviceId}`,
 }
 
 /** 一个任务的运行记录（详情页那一列）：新的在前，往下翻页 */
@@ -308,6 +311,11 @@ export interface Replica {
   /** 接着取下一页（没有下一页、正在取的时候不做事） */
   moreTaskRuns(deviceId: string, taskId: string): void
   /**
+   * 打开一台设备的扫码绑定情况：订阅它（keys.pairing）。核心在有人订阅时才去取已绑定的手机。
+   * 可以打开多次，全部关掉后才退订并清掉
+   */
+  openPairing(deviceId: string): () => void
+  /**
    * 一次运行刚结束（核心连着的时候看着它结束的）：桌面端据此发系统通知。返回取消函数。
    * 对账补上的、断开期间结束的不算
    */
@@ -425,6 +433,7 @@ export function createReplica(channel: CoreChannel): Replica {
   const opened = new Map<string, { count: number; stop(): void }>()
   const managed = new Map<string, { count: number; stop(): void }>()
   const diffs = new Map<string, { count: number; stop(): void }>()
+  const pairings = new Map<string, { count: number; stop(): void }>()
   const files = createFileTrees(channel, store)
   /** 各台设备的定时任务的订阅，和每台设备上的任务（算未读合计、找任务名要用） */
   const taskLists = new Map<string, { stop(): void; tasks: Map<string, TaskView> }>()
@@ -1113,6 +1122,49 @@ export function createReplica(channel: CoreChannel): Replica {
       finishedListeners.add(listener)
       return () => {
         finishedListeners.delete(listener)
+      }
+    },
+
+    openPairing(deviceId) {
+      const key = keys.pairing(deviceId)
+      const existing = pairings.get(key)
+      if (existing) {
+        existing.count++
+      } else {
+        const stop = channel.subscribe(
+          { kind: 'pairing', deviceId },
+          {
+            snapshot(view: PairingTopicView) {
+              store.set(key, view)
+            },
+            delta(ops) {
+              const was = store.get<PairingTopicView>(key)
+              if (!was) return
+              let next = was
+              for (const op of ops) {
+                if (op.op === 'phones.set') next = { ...next, phones: op.phones }
+                else {
+                  const others = next.pairs.filter((pair) => pair.pairId !== op.status.pairId)
+                  next = { ...next, pairs: [...others, op.status] }
+                }
+              }
+              store.set(key, next)
+            },
+          },
+        )
+        pairings.set(key, { count: 1, stop })
+      }
+      let released = false
+      return () => {
+        if (released) return
+        released = true
+        const entry = pairings.get(key)
+        if (!entry) return
+        entry.count--
+        if (entry.count > 0) return
+        entry.stop()
+        pairings.delete(key)
+        store.delete(key)
       }
     },
 

@@ -4,6 +4,7 @@ import { type AbortSignalLike, ChannelError } from '../channel/protocol.mjs'
 import type { TransportOpener } from '../connection/transport.mjs'
 import type { DiscoveredHost, RemoteCheck, RemoteTarget, WireColor } from '../model.mjs'
 import type { MachineAccessMode, MachineApproval, MachineLogEntry } from '../model-machine.mjs'
+import type { PairingAddress } from '../model-pairing.mjs'
 import type { SnapshotStore } from './device.mjs'
 import type { TerminalNotesStore } from './terminal-launch.mjs'
 
@@ -39,6 +40,11 @@ export interface SavedDevices {
    * 没改过的不记，按默认来（每个会话确认一次、禁止常用敏感位置）
    */
   machine?: Record<string, SavedMachineSettings>
+  /**
+   * 各台设备（本机是 local）出码时给手机用的地址，用户在出码对话框里改过才有。
+   * 只用来预填给手机的那一份，不动这台设备自己的连接配置
+   */
+  pairing?: Record<string, PairingAddress>
 }
 
 export interface SavedToolSwitches {
@@ -199,12 +205,48 @@ export function checkSaved(value: unknown): SavedDevices {
       if (Object.keys(kept).length > 0) machine[id] = kept
     }
   }
+  const pairing: Record<string, PairingAddress> = {}
+  const rawPairing = raw.pairing
+  if (typeof rawPairing === 'object' && rawPairing !== null && !Array.isArray(rawPairing)) {
+    for (const [id, value] of Object.entries(rawPairing as Record<string, unknown>)) {
+      if (id !== 'local' && !remotes.some((remote) => remote.id === id)) continue
+      const address = checkPairingAddress(value)
+      if (address) pairing[id] = address
+    }
+  }
   return {
     localWire: wireOf(raw.localWire),
     remotes,
     ...(Object.keys(tools).length > 0 ? { tools } : {}),
     ...(Object.keys(machine).length > 0 ? { machine } : {}),
+    ...(Object.keys(pairing).length > 0 ? { pairing } : {}),
   }
+}
+
+/** 给手机的别名最长多少字 */
+export const PAIRING_NAME_MAX = 64
+
+/**
+ * 检查一份给手机用的地址，整理好返回；不合规矩的是 null。
+ * 主机名和用户名会被手机原样拿去连 ssh：不许有空白和控制字符，不许以减号开头
+ */
+export function checkPairingAddress(value: unknown): PairingAddress | null {
+  if (typeof value !== 'object' || value === null) return null
+  const raw = value as Record<string, unknown>
+  const word = (input: unknown, max: number): string | null => {
+    if (typeof input !== 'string') return null
+    const text = input.trim()
+    if (!text || text.length > max || text.startsWith('-')) return null
+    return /[\s\u0000-\u001f\u007f]/.test(text) ? null : text
+  }
+  const name =
+    typeof raw.name === 'string' ? raw.name.trim().replace(/[\u0000-\u001f\u007f]/g, '') : ''
+  const host = word(raw.host, 255)
+  const user = word(raw.user, 64)
+  const port = typeof raw.port === 'number' ? raw.port : Number.NaN
+  if (!name || name.length > PAIRING_NAME_MAX || !host || host.includes('@') || !user) return null
+  if (!Number.isInteger(port) || port < 1 || port > 65535) return null
+  return { name, host, port, user }
 }
 
 const APPROVALS: readonly MachineApproval[] = ['session', 'each', 'never']
