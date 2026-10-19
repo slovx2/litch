@@ -80,10 +80,6 @@ export const CONFIG_OPS: readonly ConfigOp[] = [
 
   { group: 'notify', action: 'task-success', write: true },
 
-  { group: 'update', action: 'status', write: false },
-  { group: 'update', action: 'check', write: false },
-  { group: 'update', action: 'auto', write: true },
-
   { group: 'diagnose', action: 'run', write: false },
   { group: 'diagnose', action: 'logs', write: false },
   { group: 'diagnose', action: 'ssh-config', write: false },
