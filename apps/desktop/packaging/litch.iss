@@ -7,7 +7,10 @@
 ;   IconFile    安装程序自己的图标（assets\icon.ico）
 ;
 ; 只给当前用户装，不要管理员权限：默认装到 %LOCALAPPDATA%\Programs\Litch，开始菜单里放一个快捷方式。
-; 安装界面只有英文：Inno Setup 自带的语言里没有简体中文（那份在“非官方”里，不随它安装）。应用本身照系统语言显示。
+; 安装界面有英文和简体中文，照系统的界面语言选（不弹选语言的对话框），别的语言的系统上是英文。
+; 简体中文的文案 ChineseSimplified.isl 是同目录下的一份：Inno Setup 6.7.1 自带的语言里没有它，
+; 取自 https://github.com/kira-96/Inno-Setup-Chinese-Simplified-Translation （MIT，许可全文在 ChineseSimplified.isl.LICENSE）。
+; 应用本身照系统语言显示。
 ; 应用目录整个装进去，其中 resources\computer-use\litch-computer-use.exe 是 Computer Use 的助手
 ; （scripts/pack.mjs 放进去的，make-installer.mjs 编之前核对过它在）。
 ; 升级、卸载时，内置适配器的常驻服务要是还在跑，它的文件被占着，安装程序会照 Windows 的“重启管理器”
@@ -42,9 +45,14 @@ UninstallDisplayName=Litch
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
+; 照系统的界面语言选，不弹对话框；升级时也不沿用上一次装的语言（以前的安装包只有英文，沿用的话一直是英文）
+ShowLanguageDialog=no
+LanguageDetectionMethod=uilanguage
+UsePreviousLanguage=no
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
+Name: "chinesesimplified"; MessagesFile: "ChineseSimplified.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked

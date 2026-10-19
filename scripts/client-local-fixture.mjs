@@ -51,6 +51,20 @@
 // 交给装好的应用（把 env 里的每一项原样带上）：
 //   open -n -a <Litch.app> --env LITCH_ADAPTER_HOME=… --env LITCH_PROFILE=… --env SHELL=…
 //
+// Windows 上没有登录 shell 可问（应用不问，服务拿到的就是应用自己的环境），所以不写假 shell，
+// 就绪行里的 env 直接是启动应用要用的整个环境（envComplete 是 true），不能并到自己的环境上，要整个换掉：
+//   PATH 只有夹具自己的空目录、系统目录（System32、Windows、Wbem、Windows PowerShell、OpenSSH）、
+//   跑夹具的这份 Node 所在的目录、Git 的 cmd 目录（找得到的话）；
+//   HOME、USERPROFILE（连同 HOMEDRIVE、HOMEPATH）、TEMP、TMP、APPDATA、LOCALAPPDATA 指进临时目录；
+//   系统的那几个（SystemRoot、ComSpec、PATHEXT、ProgramFiles 之类，见 WINDOWS_PASSED）照这台机器的原样带上，
+//   别的一个不带。Claude Code 的 Bash 要的 Git Bash 经它自己的设置 CLAUDE_CODE_GIT_BASH_PATH 给，不进 PATH。
+// 结束时用适配器自己的 device-stop --home <状态目录> 停服务（不按进程号发信号），再按命令行里有没有这个状态目录
+// 查一遍剩下的进程，有就强行结束并报错。--packed 时适配器取装好的应用里的那一份：
+//   --app <Litch.exe>   装好的应用在哪，默认 %LOCALAPPDATA%\Programs\Litch\Litch.exe（安装程序的默认位置）
+//   --launch            就绪后用 env 起这个应用（-- 之后的参数原样交给它，比如 --remote-debugging-port=9222）；
+//                       结束夹具时先把它连同子进程一起结束。只在 Windows 上用，macOS 照旧用 open
+// 结束夹具：控制台里 Ctrl+C；从别处（ssh、计划任务）起的，请求一次就绪行里的 stopUrl（回环上，比如 curl -X POST）。
+//
 // 工作区里 Go 层或设备进程正被改到一半、暂存不出来时，用已提交版本的导出副本来暂存（不建 worktree、不切分支）：
 //   git archive HEAD cmd internal sshserver go.mod go.sum package.json packages/protocol/identity.go \
 //     packages/protocol/src/harness-identity.json protocol/versions.go protocol/versions.json | tar -x -C <临时目录>
@@ -58,22 +72,21 @@
 //   npm run stage:adapter --prefix apps/desktop -- --go-from <临时目录>
 // 设备进程同理：导出 packages/device、packages/shared、packages/protocol、tsconfig.json、package.json，
 // 把根目录的 node_modules 用符号链接接过去，在副本里 tsc -p packages/device，再加 --device-from <副本>/packages/device。
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import {
-  accessSync,
   appendFileSync,
   chmodSync,
-  constants,
   existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from 'node:fs'
 import { createServer } from 'node:http'
-import { tmpdir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { homedir, tmpdir } from 'node:os'
+import { basename, delimiter, dirname, join, parse, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { serveAnthropic } from './client-fixture-anthropic.mjs'
 import { askReply, installAskExtension } from './client-fixture-ask.mjs'
@@ -82,7 +95,9 @@ import { computerReply } from './client-fixture-computer.mjs'
 import { lastUserText } from './client-fixture-echo.mjs'
 import {
   engineIds,
+  gitForWindows,
   prepareWorkDirectory,
+  refuseHarnessOnPath,
   spelledApart,
   wantedEngines,
   writeEngineSettings,
@@ -99,6 +114,18 @@ const option = (name) => {
   return at > 0 ? process.argv[at + 1] : undefined
 }
 const packed = process.argv.includes('--packed')
+const WINDOWS = process.platform === 'win32'
+/** Windows 上的可执行文件带 .exe */
+const EXE = WINDOWS ? '.exe' : ''
+const launch = process.argv.includes('--launch')
+/** -- 之后的参数：--launch 时原样交给应用 */
+const appArgs = process.argv.includes('--')
+  ? process.argv.slice(process.argv.indexOf('--') + 1)
+  : []
+if (launch && !WINDOWS) {
+  console.error('--launch 只在 Windows 上用；macOS 上照旧用 open -n -a 把 env 带给应用')
+  process.exit(1)
+}
 const pace = Number(option('--pace') ?? 200)
 /** 带 --engines 时除了 Pi 还要起哪几个引擎（各自隔离的命令行）。没带就都是 null */
 const engines = wantedEngines()
@@ -118,38 +145,66 @@ const stagedAdapter = join(repo, 'apps/desktop/out/adapter')
 const adapterRoot = packed
   ? null
   : resolve(option('--adapter') ?? process.env.LITCH_ADAPTER_ROOT ?? stagedAdapter)
-if (adapterRoot && !existsSync(join(adapterRoot, 'bin', 'codex-harness-adapter'))) {
+if (adapterRoot && !existsSync(join(adapterRoot, 'bin', `codex-harness-adapter${EXE}`))) {
   console.error(
     `${adapterRoot} 里没有适配器。先运行 npm run client:stage:adapter，或用 --adapter 指到一份暂存好的目录`,
   )
   process.exit(1)
 }
-
-/** 假登录 shell 给出的 PATH 里的系统目录 */
-const SYSTEM_PATH = ['/usr/bin', '/bin', '/usr/sbin', '/sbin']
-// 原生 codex、OpenCode 装了就默认启用，所以它们也不能在这里；经 ACP 接的 agent 一样
-const HARNESS_COMMANDS = ['claude', 'pi', 'dsh', 'codex', 'opencode', 'gemini', 'qwen']
-for (const directory of SYSTEM_PATH) {
-  for (const name of HARNESS_COMMANDS) {
-    try {
-      accessSync(join(directory, name), constants.X_OK)
-    } catch {
-      continue
-    }
-    // 隔离靠的就是“这几个目录里找不到 harness”。找得到的话不能往下走
-    console.error(`${directory} 里有一个 ${name}，这台机器上隔离不成立，不启动`)
-    process.exit(1)
-  }
+/** Windows 上装好的应用（--app，默认是安装程序装到的位置）。停服务用它带着的适配器，--launch 时起的是它 */
+const app = WINDOWS
+  ? resolve(
+      option('--app') ??
+        join(
+          process.env.LOCALAPPDATA ?? join(homedir(), 'AppData', 'Local'),
+          'Programs',
+          'Litch',
+          'Litch.exe',
+        ),
+    )
+  : null
+/** Windows 上停服务用的命令行：暂存的那一份，或者装好的应用里的那一份 */
+const adapterBin = WINDOWS
+  ? adapterRoot
+    ? join(adapterRoot, 'bin', 'codex-harness-adapter.exe')
+    : join(dirname(app), 'resources', 'adapter', 'bin', 'codex-harness-adapter.exe')
+  : null
+if (WINDOWS && (packed || launch) && !existsSync(packed ? adapterBin : app)) {
+  console.error(`${packed ? adapterBin : app} 不在：装好 Litch，或用 --app 指到装好的 Litch.exe`)
+  process.exit(1)
 }
+
+/**
+ * 交给服务的 PATH 里除了夹具自己的空目录还有哪些：假登录 shell 给的系统目录；
+ * Windows 上是系统目录加上跑夹具的这份 Node 和 Git（命令行、钩子、Git Bash 都要它们）
+ */
+const systemRoot = process.env.SystemRoot ?? 'C:\\Windows'
+const SYSTEM_PATH = WINDOWS
+  ? [
+      join(systemRoot, 'System32'),
+      systemRoot,
+      join(systemRoot, 'System32', 'Wbem'),
+      join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0'),
+      join(systemRoot, 'System32', 'OpenSSH'),
+      dirname(process.execPath),
+      ...(gitForWindows() ? [gitForWindows().dir] : []),
+    ]
+  : ['/usr/bin', '/bin', '/usr/sbin', '/sbin']
+// 隔离靠的就是“这几个目录里找不到 harness”（原生 codex、OpenCode 装了就默认启用，经 ACP 接的 agent 一样）。
+// 找得到的话不能往下走
+refuseHarnessOnPath(SYSTEM_PATH)
 
 // 状态目录的名字里特意带一个空格和一个汉字：用户的主目录可能就是这样（带空格的全名、中文的用户名），
 // 状态目录默认在它下面，这条链路上每一段（命令行、设备进程、引擎、客户端）都得受得了
 const STATE_NAME = 'h 检'
 // 套接字路径有长度上限（macOS 104 字节，命令行卡在 100）：最长的一条是 <根>/<状态目录>/claude-code/runtime.sock。
-// 系统给的临时目录太长就退到 /tmp
+// 系统给的临时目录太长就退到 /tmp。Windows 上（上限 108 字节）没有可退的地方；系统给的可能是 8.3 短名
+// （C:\\Users\\ADMINI~1\\…），换成长名，免得服务报的路径和这里的对不上
 const longestSocket = (base) =>
   Buffer.byteLength(join(base, 'll-XXXXXX', STATE_NAME, 'claude-code', 'runtime.sock'))
-const base = [tmpdir(), '/tmp'].find((directory) => longestSocket(directory) <= 96)
+const base = (WINDOWS ? [realpathSync.native(tmpdir())] : [tmpdir(), '/tmp']).find(
+  (directory) => longestSocket(directory) <= 96,
+)
 if (!base) {
   console.error('找不到路径够短的临时目录，套接字建不出来')
   process.exit(1)
@@ -165,6 +220,10 @@ const dirs = {
   profile: join(root, 'profile'),
   app: join(root, 'work/app'),
   ...(threeEngines ? { tri: join(root, 'work/tri') } : {}),
+  // Windows 上的 APPDATA、LOCALAPPDATA
+  ...(WINDOWS
+    ? { roaming: join(root, 'appdata', 'Roaming'), local: join(root, 'appdata', 'Local') }
+    : {}),
 }
 for (const directory of [home, ...Object.values(dirs)]) mkdirSync(directory, { recursive: true })
 chmodSync(home, 0o700)
@@ -174,6 +233,12 @@ chmodSync(home, 0o700)
 const modelLog = join(root, 'model.jsonl')
 let requests = 0
 const model = createServer(async (req, res) => {
+  // 就绪行里的 stopUrl：结束夹具
+  if (req.url === '/fixture/stop') {
+    res.end('stopping\n')
+    void cleanup(0)
+    return
+  }
   const chunks = []
   for await (const chunk of req) chunks.push(chunk)
   const raw = Buffer.concat(chunks)
@@ -252,9 +317,12 @@ if (threeEngines) {
 
 // ---------- 假的登录 shell 和环境文件 ----------
 /** 服务该拿到的 PATH：夹具自己的目录（空的）加系统目录 */
-const loginPath = [dirs.bin, ...SYSTEM_PATH].join(':')
-/** 只有假登录 shell 会导出的记号：服务的环境里有它，才说明登录 shell 的结果真的交到了 */
-const mark = { name: 'LOCAL_FIXTURE_LOGIN', value: root.slice(root.lastIndexOf('/') + 1) }
+const loginPath = [dirs.bin, ...SYSTEM_PATH].join(delimiter)
+/**
+ * 只有假登录 shell 会导出的记号：服务的环境里有它，才说明登录 shell 的结果真的交到了。
+ * Windows 上它在就绪行的 env 里，说明的是服务拿到的确实是那一份环境
+ */
+const mark = { name: 'LOCAL_FIXTURE_LOGIN', value: basename(root) }
 /** 环境文件里也写一份的那几样，见开头 */
 const pinned = {
   // 故意指到一个不存在的文件：有这个变量，引擎就不去 PATH 里找 claude，claude-code 这个入口报“没装”
@@ -284,23 +352,76 @@ const isolated = {
   CHA_QWEN_CLI: '',
   CHA_ACP_CLI: '',
   [mark.name]: mark.value,
+  // Windows 上程序找主目录、临时目录、应用数据看的是这几个
+  ...(WINDOWS
+    ? {
+        USERPROFILE: dirs.userHome,
+        HOMEDRIVE: parse(dirs.userHome).root.replace(/\\$/, ''),
+        HOMEPATH: dirs.userHome.slice(parse(dirs.userHome).root.length - 1),
+        TEMP: dirs.temp,
+        TMP: dirs.temp,
+        APPDATA: dirs.roaming,
+        LOCALAPPDATA: dirs.local,
+      }
+    : {}),
 }
+/**
+ * Windows 上照这台机器的原样带给应用的系统变量：少了它们有的程序起不来（SystemRoot、ComSpec），
+ * 有的找不到东西（PATHEXT、ProgramFiles：Pi 和 dsh 按它找 Git Bash、PowerShell 7）。别的一个不带
+ */
+const WINDOWS_PASSED = [
+  'SystemRoot',
+  'SystemDrive',
+  'windir',
+  'ComSpec',
+  'PATHEXT',
+  'OS',
+  'PROCESSOR_ARCHITECTURE',
+  'PROCESSOR_IDENTIFIER',
+  'PROCESSOR_LEVEL',
+  'PROCESSOR_REVISION',
+  'NUMBER_OF_PROCESSORS',
+  'ProgramFiles',
+  'ProgramFiles(x86)',
+  'ProgramW6432',
+  'CommonProgramFiles',
+  'CommonProgramFiles(x86)',
+  'CommonProgramW6432',
+  'ProgramData',
+  'ALLUSERSPROFILE',
+  'PUBLIC',
+  'COMPUTERNAME',
+  'USERNAME',
+  'USERDOMAIN',
+]
+/** Windows 上启动应用要用的整个环境（不带 LITCH_ 那几个，见下面的 ready） */
+const windowsEnv = WINDOWS
+  ? {
+      ...Object.fromEntries(
+        WINDOWS_PASSED.filter((name) => process.env[name]).map((name) => [name, process.env[name]]),
+      ),
+      ...isolated,
+    }
+  : null
 const quote = (value) => `'${value.replaceAll("'", `'\\''`)}'`
 // 名字得是 login-env.mts 认得的（zsh），内容是我们自己写的：不读这台机器上任何真的 shell 配置。
-// 服务之后会把 SHELL 当成用户的 shell 用，所以别的调用方式也接得住：一律换成带着这份环境的 /bin/sh
-const shell = join(dirs.shell, 'zsh')
-writeFileSync(
-  shell,
-  [
-    '#!/bin/sh',
-    '# 由 scripts/client-local-fixture.mjs 写出，只给隔离环境用',
-    ...Object.entries(isolated).map(([name, value]) => `${name}=${quote(value)}; export ${name}`),
-    'if [ "$1" = "-ilc" ]; then exec /bin/sh -c "$2"; fi',
-    'exec /bin/sh "$@"',
-    '',
-  ].join('\n'),
-)
-chmodSync(shell, 0o755)
+// 服务之后会把 SHELL 当成用户的 shell 用，所以别的调用方式也接得住：一律换成带着这份环境的 /bin/sh。
+// Windows 上不写（应用不问登录 shell）
+const shell = WINDOWS ? null : join(dirs.shell, 'zsh')
+if (shell) {
+  writeFileSync(
+    shell,
+    [
+      '#!/bin/sh',
+      '# 由 scripts/client-local-fixture.mjs 写出，只给隔离环境用',
+      ...Object.entries(isolated).map(([name, value]) => `${name}=${quote(value)}; export ${name}`),
+      'if [ "$1" = "-ilc" ]; then exec /bin/sh -c "$2"; fi',
+      'exec /bin/sh "$@"',
+      '',
+    ].join('\n'),
+  )
+  chmodSync(shell, 0o755)
+}
 writeFileSync(
   join(home, 'env'),
   `# 由 scripts/client-local-fixture.mjs 写出\n${Object.entries(pinned)
@@ -331,6 +452,7 @@ const signal = (pid, name) => {
  * （监听的套接字在状态目录里）。认的是这次随机生成的临时路径，不是程序的名字，碰不到别的服务
  */
 function serviceProcesses() {
+  if (WINDOWS) return windowsServiceProcesses()
   // 给 ps 一个 UTF-8 的区域设置：不给的话命令行里的汉字会被它写成转义，下面按状态目录的路径就认不出来了
   const output = execFileSync('/bin/ps', ['-axww', '-o', 'pid=,command='], {
     encoding: 'utf8',
@@ -349,8 +471,94 @@ const waitGone = async (pids, ms) => {
   for (let waited = 0; waited < ms && pids.some(alive); waited += 50) await sleep(50)
   return pids.filter(alive)
 }
+/**
+ * Windows 上的全部进程：进程号、父进程号、命令行。PowerShell 的输出按 UTF-8 写（不然状态目录名里的汉字会变成问号），
+ * 脚本经 -EncodedCommand 传，不经过任何一层引号；它的进度条写在标准错误里（CLIXML），不要
+ */
+function windowsProcesses() {
+  const script = [
+    '[Console]::OutputEncoding = [Text.Encoding]::UTF8',
+    "$ProgressPreference = 'SilentlyContinue'",
+    'Get-CimInstance Win32_Process | ForEach-Object { "$($_.ProcessId)`t$($_.ParentProcessId)`t$($_.CommandLine)" }',
+  ].join('\n')
+  const output = execFileSync(
+    join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
+    [
+      '-NoProfile',
+      '-NonInteractive',
+      '-EncodedCommand',
+      Buffer.from(script, 'utf16le').toString('base64'),
+    ],
+    {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      windowsHide: true,
+      maxBuffer: 64 * 1024 * 1024,
+    },
+  )
+  return output
+    .split(/\r?\n/)
+    .map((line) => /^(\d+)\t(\d+)\t(.*)$/.exec(line))
+    .filter((match) => match && match[1] !== String(process.pid))
+    .map((match) => ({ pid: Number(match[1]), parent: Number(match[2]), command: match[3] }))
+}
+/**
+ * Windows 上属于这个夹具的进程：命令行里有临时目录的（device-start、start 带着 --home <状态目录>，
+ * --launch 起的应用的子进程带着 <根>/profile），加上它们起的子孙。运行时经命名管道监听，命令行里没有状态目录，
+ * 只能按父子关系认
+ */
+function windowsServiceProcesses() {
+  const all = windowsProcesses()
+  const found = new Map(
+    all.filter(({ command }) => command.includes(root)).map((entry) => [entry.pid, entry]),
+  )
+  for (let grew = true; grew; ) {
+    grew = false
+    for (const entry of all) {
+      if (found.has(entry.pid) || !found.has(entry.parent)) continue
+      found.set(entry.pid, entry)
+      grew = true
+    }
+  }
+  return [...found.values()]
+}
+/** Windows 上强行结束一个进程；tree 时连同它起的子进程 */
+const kill = (pid, tree = false) =>
+  spawnSync(
+    join(systemRoot, 'System32', 'taskkill.exe'),
+    ['/F', ...(tree ? ['/T'] : []), '/PID', String(pid)],
+    { stdio: 'ignore', windowsHide: true },
+  )
+/**
+ * Windows 上请服务自己停：适配器的 device-stop --home（经控制通道请它停，等它退出，没在运行也算成功）。
+ * 还剩的进程（它没收干净）连同子进程强行结束。返回这个状态目录上原来有的进程号
+ */
+async function stopWindowsService() {
+  const pids = serviceProcesses().map((entry) => entry.pid)
+  const done = spawnSync(adapterBin, ['device-stop', '--home', home], {
+    env: windowsEnv,
+    encoding: 'utf8',
+    timeout: 100_000,
+    windowsHide: true,
+  })
+  if (done.status !== 0) {
+    console.error(
+      `device-stop 没停成（退出码 ${done.status ?? done.error}）：${(done.stderr || done.stdout || '').trim()}`,
+    )
+  }
+  // 被结束的应用剩下的子进程（渲染、GPU 那几个）自己会退，等一会儿再看
+  let left = serviceProcesses()
+  for (let waited = 0; waited < 5000 && left.length > 0; waited += 500) {
+    await sleep(500)
+    left = serviceProcesses()
+  }
+  for (const { pid } of left) kill(pid, true)
+  if (left.length > 0) await sleep(1000)
+  return pids
+}
 /** 把这个状态目录上的服务停掉，等它退干净。返回停掉的进程号 */
 async function stopService() {
+  if (WINDOWS) return stopWindowsService()
   const found = serviceProcesses()
   if (found.length === 0) return []
   const pids = found.map((entry) => entry.pid)
@@ -374,12 +582,20 @@ async function stopService() {
   return pids
 }
 
+/** --launch 起的应用 */
+let launched = null
 let cleaning = false
 async function cleanup(code) {
   if (cleaning) return
   cleaning = true
   // 原生 codex 在 /tmp/codex-daemon-<uid>/ 下留的套接字和锁：趁它还在跑先认下来，服务停了再删
   const removeCodexSocket = codexSocketCleanup(join(home, 'codex', 'runtime.sock'))
+  // --launch 起的应用先结束，免得它见服务停了又拉起来。只结束它自己：服务（device-start 和它起的）
+  // 在 Windows 上是它的子孙，连着一起强杀就不是平稳停下了，下面由 device-stop 来停
+  if (launched && launched.exitCode === null) {
+    kill(launched.pid)
+    console.error(`已结束起的应用（进程号 ${launched.pid}）`)
+  }
   try {
     const stopped = await stopService()
     if (stopped.length > 0)
@@ -401,16 +617,21 @@ async function cleanup(code) {
   rmSync(root, { recursive: true, force: true })
   process.exit(code)
 }
-for (const name of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(name, () => void cleanup(0))
+for (const name of ['SIGINT', 'SIGTERM', 'SIGHUP', ...(WINDOWS ? ['SIGBREAK'] : [])])
+  process.on(name, () => void cleanup(0))
 
 const ready = {
-  /** 启动应用或小工具要带的全部环境变量 */
+  /** 启动应用或小工具要带的全部环境变量。Windows 上是整个环境（envComplete），别的系统上是要并进去的那几个 */
   env: {
+    ...windowsEnv,
     ...(adapterRoot ? { LITCH_ADAPTER_ROOT: adapterRoot } : {}),
     LITCH_ADAPTER_HOME: home,
     LITCH_PROFILE: dirs.profile,
-    SHELL: shell,
+    ...(shell ? { SHELL: shell } : {}),
   },
+  envComplete: WINDOWS,
+  /** 请求一次就结束夹具（停服务、清理），给从 ssh、计划任务里起的、按不了 Ctrl+C 的时候用 */
+  stopUrl: `${modelOrigin}/fixture/stop`,
   root,
   home,
   /** 聚合面会在哪。连哪里仍以 device-start 报的为准，这里只是给人看 */
@@ -419,7 +640,10 @@ const ready = {
   harness: 'pi',
   model: 'gate/gate',
   cwd: dirs.app,
-  /** 假登录 shell 交给服务的 PATH、主目录和记号，还有 claude 被指到的那个不存在的路径，自检拿来对 */
+  /**
+   * 假登录 shell（Windows 上是 env 本身）交给服务的 PATH、主目录和记号，还有 claude 被指到的那个不存在的路径，
+   * 自检拿来对
+   */
   login: { path: loginPath, home: dirs.userHome, mark, claude: pinned.CHA_CLAUDE_CLI },
   modelUrl,
   modelLog,
@@ -429,4 +653,10 @@ const ready = {
     : {}),
 }
 console.log(`LITCH_LOCAL_FIXTURE ${JSON.stringify(ready)}`)
+if (launch) {
+  // 整个环境换成 env：Windows 上应用不问登录 shell，它自己的环境就是服务的环境
+  launched = spawn(app, appArgs, { env: ready.env, detached: true, stdio: 'ignore' })
+  launched.on('error', (error) => console.error(`起应用失败：${error.message}`))
+  console.log(`已起应用 ${app}（进程号 ${launched.pid}）`)
+}
 console.log('隔离环境已就绪，按 Ctrl+C 结束：会停掉这个状态目录上的服务并清理。')

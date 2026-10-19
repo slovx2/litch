@@ -29,8 +29,8 @@
 //                 共用技能的目录 DSH_AGENTS_HOME 指进夹具，不读 ~/.agents；凭据是假的，模型地址是回环
 //   状态目录      三个引擎的都在 <状态目录>/<标识>/ 下，是适配器自己定死的
 import { spawnSync } from 'node:child_process'
-import { accessSync, constants, mkdirSync, realpathSync, writeFileSync } from 'node:fs'
-import { basename, dirname, join } from 'node:path'
+import { accessSync, constants, existsSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs'
+import { basename, delimiter, dirname, join } from 'node:path'
 import { FIXTURE_SKILL, skillFile } from './client-fixture-marks.mjs'
 import { codexConfig } from './client-fixture-responses.mjs'
 
@@ -48,6 +48,10 @@ const ACP_HARNESSES = ['gemini', 'qwen', 'acp']
 
 /** 回环上连不通的地址：npm 源和代理都指到这里，OpenCode 想往外连（装插件包之类）一律连不出去 */
 const DEAD_END = 'http://127.0.0.1:9'
+
+const WINDOWS = process.platform === 'win32'
+/** Windows 上按名字找命令时会试的后缀（PATHEXT 里常见的那几个，加上 PowerShell 认的 .ps1 和不带后缀的） */
+const WINDOWS_SUFFIXES = ['', '.exe', '.cmd', '.bat', '.com', '.ps1']
 
 /**
  * 读开关。返回要起的那几个引擎的命令行：{ claude: 路径或 null, dsh: 路径或 null }。
@@ -78,7 +82,8 @@ export function wantedEngines(argv = process.argv, env = process.env) {
       console.error(`${variable} 指的不是一个可执行的文件：${cli}`)
       process.exit(1)
     }
-    if (name === 'acp' && basename(cli) !== 'opencode') {
+    // Windows 上是 opencode.exe
+    if (name === 'acp' && basename(cli).replace(/\.exe$/i, '') !== 'opencode') {
       // 别的 agent 的模型和配置目录夹具不会配，起起来就可能去用这台机器上的真凭据
       console.error(`${variable} 只能指一份 opencode（夹具只会给 OpenCode 配假模型）：${cli}`)
       process.exit(1)
@@ -170,6 +175,10 @@ export function writeEngineSettings({ home, root, modelUrl, engines }) {
       // 名字短：它在这下面建套接字，路径有长度上限
       plain('CLAUDE_CODE_TMPDIR', join(root, 'ct')),
       plain('CHA_CLAUDE_RUNTIME', 'agent-sdk-sidecar'),
+      // Windows 上 Claude Code 的 Bash 要 Git Bash：夹具交给服务的 PATH 里只有 Git 的 cmd 目录，它自己找不到
+      ...(WINDOWS && gitForWindows()?.bash
+        ? [plain('CLAUDE_CODE_GIT_BASH_PATH', gitForWindows().bash)]
+        : []),
       plain('CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC', '1'),
       plain('DISABLE_AUTOUPDATER', '1'),
       plain('DISABLE_TELEMETRY', '1'),
@@ -235,15 +244,48 @@ export function refuseHarnessOnPath(directories) {
   for (const directory of directories) {
     // 装了就默认启用的（dsh、OpenCode、原生 codex）和经 ACP 接的几个 agent 也都不能在
     for (const name of ['claude', 'pi', 'dsh', 'codex', 'opencode', 'gemini', 'qwen']) {
-      try {
-        accessSync(join(directory, name), constants.X_OK)
-      } catch {
-        continue
-      }
-      console.error(`${directory} 里有一个 ${name}，交给服务的 PATH 里不能有它：隔离不成立，不启动`)
+      // Windows 上按名字找命令时还要试各种后缀（npm 装的是 .cmd 和 .ps1，原生的是 .exe）；那里没有执行位，在就算
+      const found = WINDOWS
+        ? WINDOWS_SUFFIXES.map((suffix) => `${name}${suffix}`).find((file) =>
+            existsSync(join(directory, file)),
+          )
+        : executable(join(directory, name)) && name
+      if (!found) continue
+      console.error(
+        `${directory} 里有一个 ${found}，交给服务的 PATH 里不能有它：隔离不成立，不启动`,
+      )
       process.exit(1)
     }
   }
+}
+
+const executable = (file) => {
+  try {
+    accessSync(file, constants.X_OK)
+    return true
+  } catch {
+    return false
+  }
+}
+
+let gitFound
+/**
+ * Windows 上的 Git：从跑夹具的这个进程的 PATH 里找 git.exe。返回它所在的目录（一般是 Git\cmd，
+ * 只放 git 自己，没有 bash 和别的 Unix 工具）和 Git Bash 的位置（Git\bin\bash.exe，没有就是 null）。
+ * 找不到 git 是 null。别的系统不用它
+ */
+export function gitForWindows() {
+  if (gitFound !== undefined) return gitFound
+  gitFound = null
+  for (const directory of (process.env.PATH ?? '').split(delimiter).filter(Boolean)) {
+    if (!existsSync(join(directory, 'git.exe'))) continue
+    // Git\cmd、Git\bin、Git\mingw64\bin 都可能放着 git.exe，Git Bash 在安装目录的 bin 下面
+    const top = directory.replace(/[\\/](?:cmd|bin|mingw64[\\/]bin)[\\/]?$/i, '')
+    const bash = join(top, 'bin', 'bash.exe')
+    gitFound = { dir: directory, bash: existsSync(bash) ? bash : null }
+    break
+  }
+  return gitFound
 }
 
 /**
@@ -265,9 +307,12 @@ export function prepareWorkDirectory(cwd, engines) {
           PATH: process.env.PATH,
           HOME: dirname(cwd),
           GIT_CONFIG_NOSYSTEM: '1',
-          GIT_CONFIG_GLOBAL: '/dev/null',
+          // Windows 上没有 /dev/null，对应的是 NUL
+          GIT_CONFIG_GLOBAL: WINDOWS ? 'NUL' : '/dev/null',
           GIT_CEILING_DIRECTORIES: dirname(cwd),
           GIT_TERMINAL_PROMPT: '0',
+          // Windows 上的程序少了它有的会起不来
+          ...(WINDOWS ? { SystemRoot: process.env.SystemRoot } : {}),
         },
       },
     )

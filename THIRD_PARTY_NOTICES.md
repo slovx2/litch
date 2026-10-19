@@ -23,4 +23,9 @@
 - 外壳是 Electron，MIT，Copyright (c) Electron contributors、GitHub Inc.；它带着的 Chromium、Node.js 等组件的许可在应用里的 `LICENSES.chromium.html`。
 - 应用图标和品牌标志是本项目自己的（`apps/desktop/assets/brand/`）。
 
+Windows 的安装程序里另有这两样（不在应用里）：
+
+- 由 Inno Setup 6.7.1 编出，Inno Setup License，Copyright (C) 1997-2026 Jordan Russell、Portions Copyright (C) 2000-2026 Martijn Laan，https://jrsoftware.org/ 。
+- 安装向导的简体中文文案 `apps/desktop/packaging/ChineseSimplified.isl` 来自 https://github.com/kira-96/Inno-Setup-Chinese-Simplified-Translation （提交 1ff90ac），MIT，Copyright (c) 2019 - 2020 kirakira；原样收录，许可全文在同目录的 `ChineseSimplified.isl.LICENSE`。
+
 运行包保留 node_modules 内的许可证。源码仓库不提交 node_modules、引擎二进制或用户凭据。

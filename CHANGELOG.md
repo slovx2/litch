@@ -12,6 +12,8 @@ versioning or publishing metadata.
 - Windows 桌面端不再提供“操作这台电脑”（`litch_machine`）：它的脚本只有 macOS、Linux 的写法，原来开关照出、每次调用都失败
 - Windows：Claude Code 的“只读”“项目内”两档照实写明跑不了命令（Windows 上没有沙箱），要跑命令选完全访问或用 WSL2
 - Windows：管理员账号不能扫码绑定手机时，设备页说明原因和手动加钥匙的办法（原来说“服务版本太旧，请升级”）
+- Windows：安装向导有简体中文了，照系统的界面语言选（原来只有英文）
+- Windows：终端、文件、差异和 `@` 找文件能用了（原来在 Windows 设备上整块关着）。终端开的是 Windows PowerShell，进项目目录，Ctrl+C 能打断命令；路径认盘符和反斜杠、不分大小写；没装 rg 的机器上找文件改用 `git ls-files`，不在仓库里时自己遍历（原来落到系统的 `find.exe`，一个都找不到）。网络共享上的目录还看不了
 
 ## 0.12.0
 
