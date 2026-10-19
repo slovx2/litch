@@ -1,7 +1,8 @@
-# 扫码添加（粘贴配对文本这条路）：电脑上出码（入口脚本的小口替身，一次性钥匙登进来跑假的 pair-enroll）→
-# 加设备页点“扫码添加”→ 粘贴配对文本 → 确认页只读地显示别名和地址 → 添加：手机显示的确认码和“电脑上”的一样 →
-# 电脑上允许 → 不弹首次连接的指纹确认，直接用手机自己的钥匙检查、添加，进到会话列表 →
-# 回首页移除这台设备（勾着“同时撤掉钥匙”；核心的 pairing.phones 没实现时会提示没撤掉，点“知道了”照样移除）
+# 扫码添加（粘贴配对文本这条路），整条链是真的：入口脚本替桌面端调夹具设备服务的 litch/pair/start 出码 →
+# 加设备页点“扫码添加”→ 粘贴配对文本 → 确认页只读地显示别名和地址 → 添加：一次性钥匙登进夹具 sshd 跑真的 pair-enroll，
+# 手机显示的确认码和设备服务给出码一方的一样 → 入口脚本调 litch/pair/decide 允许 → 不弹首次连接的指纹确认，
+# 直接用手机自己的钥匙检查、添加，进到会话列表；设备服务列出这部手机、钥匙文件里多了它那一行 →
+# 回首页移除这台设备（勾着“同时撤掉钥匙”）：手机那一行没了，设备服务也查不到它
 appId: dev.litch.app
 name: fixture-扫码添加
 tags: [fixture]
@@ -74,6 +75,9 @@ tags: [fixture]
     visible:
       text: .*e2e-pair.*
     timeout: 30000
+- runScript:
+    file: ../_shared/pair-phones.js
+- assertTrue: ${output.phones == 1 && output.keyLines == 1}
 - tapOn:
     id: device:.*:more
 - tapOn:
@@ -84,19 +88,15 @@ tags: [fixture]
     timeout: 10000
 - tapOn:
     id: confirm:ok
-# 撤钥匙那一步做完，勾选框所在的确认框才关：要么提示没撤掉，要么已经移除了
+# 撤钥匙那一步做完，勾选框所在的确认框才关；撤成了就不出提示，直接移除
 - extendedWaitUntil:
     notVisible:
       id: remove:revoke
     timeout: 30000
-- runFlow:
-    when:
-      visible:
-        id: remove:notice
-    commands:
-      - tapOn:
-          id: remove:ok
 - extendedWaitUntil:
     visible:
       id: devices:empty:add
     timeout: 30000
+- runScript:
+    file: ../_shared/pair-phones.js
+- assertTrue: ${output.phones == 0 && output.keyLines == 0}
