@@ -4,6 +4,7 @@
 //   话里带的词   Claude Code                            dsh
 //   跑个命令     Bash                                   bash，并申请放宽沙箱（dsh 只在这时来问）
 //   改个文件     Bash（和 Pi 同一条命令）                 bash
+//   （Windows 上 dsh 跑命令的工具叫 pwsh，命令换成 PowerShell 的写法；Claude Code 的 Bash 在 Windows 上走 Git Bash，命令不变）
 //   写个文件     Write                                  write
 //   问我         AskUserQuestion，一次两道题             ask_user_question，一次两道题
 //   问一句       AskUserQuestion，一道题                 ask_user_question，一道题
@@ -19,7 +20,13 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { ASK_QUESTIONS, ASK_TRIGGER } from './client-fixture-ask.mjs'
-import { EDIT_APPENDED, EDIT_COMMAND, EDIT_CREATED, EDIT_TRIGGER } from './client-fixture-edit.mjs'
+import {
+  EDIT_APPENDED,
+  EDIT_COMMAND,
+  EDIT_COMMAND_PWSH,
+  EDIT_CREATED,
+  EDIT_TRIGGER,
+} from './client-fixture-edit.mjs'
 import { machineAnthropic } from './client-fixture-machine.mjs'
 import {
   ONE_TRIGGER,
@@ -33,7 +40,7 @@ import {
   writtenFile,
 } from './client-fixture-marks.mjs'
 import { FIXTURE_PLAN, PLAN_TRIGGER } from './client-fixture-plan.mjs'
-import { RUN_COMMAND, RUN_TRIGGER } from './client-fixture-run.mjs'
+import { RUN_COMMAND, RUN_COMMAND_PWSH, RUN_TRIGGER } from './client-fixture-run.mjs'
 import { sessionsAnthropic } from './client-fixture-sessions.mjs'
 
 /** 两家各自的工具名。没有的是 null */
@@ -97,12 +104,14 @@ function lastResult(messages) {
 
 /**
  * Claude Code 的写文件工具要完整的路径：会话的工作目录在它给模型的环境说明里。
- * 那段说明放在哪跟模型有关（系统提示里、头一条用户消息里、往来中间的 system 消息里），所以整个请求里找
+ * 那段说明放在哪跟模型有关（系统提示里、头一条用户消息里、往来中间的 system 消息里），所以整个请求里找。
+ * 找的是整个请求序列化之后的原文：换行成了 \n 两个字，反斜杠成了 \\ 两个（Windows 的路径 C:\Users\… 就是这样），
+ * 所以一路认到引号或者 \n 为止，中间成对的反斜杠还原成一个
  */
 function workingDirectory(body) {
   const said = JSON.stringify([body.system ?? '', body.messages ?? []])
-  const found = /(?:Primary working|Working) directory: ([^\\\n"]+)/.exec(said)
-  return found?.[1]?.trim() ?? ''
+  const found = /(?:Primary working|Working) directory: ((?:[^\\\n"]|\\\\)+)/.exec(said)
+  return found?.[1]?.replaceAll('\\\\', '\\').trim() ?? ''
 }
 
 /** 起标题的请求里用户的头一句话，最多四十个字。认不出来就给一个固定的 */
@@ -140,10 +149,13 @@ export function anthropicReply(harness, body, pace) {
   // 会话树（litch_sessions 和设备注入的唤醒）的那几句，见 client-fixture-sessions.mjs
   const sessions = sessionsAnthropic(body, said)
   if (sessions) return sessions
+  // Windows 上 dsh 给的跑命令的工具是 pwsh（参数和 bash 一样），命令要换成 PowerShell 的写法
+  const pwsh = harness === 'dsh' && !offered.has(tools.shell) && offered.has('pwsh')
+  const shell = pwsh ? 'pwsh' : tools.shell
   // 一句话里有好几个词时认最后出现的那个：被打断的回合留下的话，会和新的一句并在同一条消息里
   const marks = [
-    [RUN_TRIGGER, 'run', tools.shell],
-    [EDIT_TRIGGER, 'edit', tools.shell],
+    [RUN_TRIGGER, 'run', shell],
+    [EDIT_TRIGGER, 'edit', shell],
     [WRITE_TRIGGER, 'write', tools.write],
     [ONE_TRIGGER, 'one', tools.ask],
     [ASK_TRIGGER, 'ask', tools.ask],
@@ -156,8 +168,11 @@ export function anthropicReply(harness, body, pace) {
   const { mark, tool } = marks[0] ?? {}
   if (mark && step === 0) {
     if (mark === 'run' || mark === 'edit') {
+      const commands = pwsh
+        ? { run: RUN_COMMAND_PWSH, edit: EDIT_COMMAND_PWSH }
+        : { run: RUN_COMMAND, edit: EDIT_COMMAND }
       const input = {
-        command: mark === 'run' ? RUN_COMMAND : EDIT_COMMAND,
+        command: commands[mark],
         description: '隔离环境里的固定命令',
         // dsh 只在模型申请放宽沙箱时来问
         ...(harness === 'dsh' && mark === 'run'
@@ -172,7 +187,9 @@ export function anthropicReply(harness, body, pace) {
     if (mark === 'write') {
       const base = harness === 'claude-code' ? workingDirectory(body) : ''
       const file = writtenFile(harness)
-      const path = base ? `${base.replace(/\/$/, '')}/${file}` : file
+      // Windows 上的工作目录是 C:\…，接着用反斜杠
+      const slash = /^[A-Za-z]:\\/.test(base) ? '\\' : '/'
+      const path = base ? `${base.replace(/[\\/]$/, '')}${slash}${file}` : file
       return [{ tool, input: { file_path: path, content: WRITE_BODY } }]
     }
     if (mark === 'plan') return [{ text: FIXTURE_PLAN }, { tool, input: {} }]

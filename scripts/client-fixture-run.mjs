@@ -16,6 +16,8 @@ export const RUN_TRIGGER = /跑个命令|run a command/i
 /** 跑的命令：在工作目录里留一个文件，验收可以据此确认它到底跑没跑 */
 export const RUN_MARK = 'fixture-ran.txt'
 export const RUN_COMMAND = `echo fixture-ran-$((6*7)) | tee ${RUN_MARK}`
+/** 同一条命令的 PowerShell 写法：Windows 上 dsh 跑命令的工具是 pwsh，不是 bash */
+export const RUN_COMMAND_PWSH = `Write-Output "fixture-ran-$(6*7)" | Tee-Object ${RUN_MARK}`
 
 const textOf = (content) =>
   typeof content === 'string' ? content : (content ?? []).map((part) => part.text ?? '').join('')

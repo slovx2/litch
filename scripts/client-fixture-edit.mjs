@@ -14,6 +14,8 @@ export const EDIT_TRIGGER = /改个文件|edit a file/i
 export const EDIT_APPENDED = 'agent-notes.txt'
 export const EDIT_CREATED = 'agent-new.ts'
 export const EDIT_COMMAND = `echo "agent edit" >> ${EDIT_APPENDED} && echo "export const fresh = true" > ${EDIT_CREATED}`
+/** 同样的改动，PowerShell 写法（Windows 上 dsh 的 pwsh） */
+export const EDIT_COMMAND_PWSH = `Add-Content ${EDIT_APPENDED} "agent edit"; Set-Content ${EDIT_CREATED} "export const fresh = true"`
 
 const nameOf = (tool) => tool?.function?.name ?? tool?.name
 
