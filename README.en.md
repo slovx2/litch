@@ -12,6 +12,7 @@ Litch aims to be a comfortable desktop client with a great remote-connection exp
 - Built-in browser + Computer Use (macOS and Windows)
 - While the desktop is connected, remote devices can use its browser and Computer Use, and, once you approve, run commands and read and write files on it
 - Session trees (spawn sub-sessions, report back and wake the parent) and scheduled tasks (run on the device on schedule, even with the desktop closed)
+- Scan a QR code to add a device the desktop already connects to onto your phone, with no SSH key setup on the phone
 
 ## Screenshots
 
@@ -42,6 +43,7 @@ The screenshots show demo data. Skin, light or dark, and language (中文 / Engl
 - **Operate this computer.** Once you approve, agents on remote devices can run commands, read and write files, and copy files between the two machines on the desktop computer. Off by default, turned on per device.
 - **Session trees.** A session can spawn sub-sessions on any harness, shown nested under it; when a sub-session finishes it reports back, and the parent is woken to carry on when needed.
 - **Scheduled tasks.** Tasks live on the device and the device runs them on schedule, even while the desktop is closed or disconnected; each run starts a new session or continues an existing one.
+- **Pair a phone by QR code.** The desktop (or `litch pair` on that machine) shows a QR code; the phone scans it, creates its own key and enrolls it on that machine, and you confirm a matching code on the computer. The computer's keys never leave it, and each phone can be revoked on its own.
 - **Panels for coding.** A terminal that survives a dropped connection, a file tree, and diff review.
 - **Android client.** Browse sessions, send messages, answer approvals and open terminals from your phone.
 
@@ -56,6 +58,7 @@ The screenshots show demo data. Skin, light or dark, and language (中文 / Engl
 | Android client | Available since 0.9.0, early version. Connects over SSH to remote machines with the adapter installed: browse sessions, send messages, answer approvals, open terminals; manages scheduled tasks since 0.11.0 |
 | Session trees | Available since 0.11.0. The model spawns sub-sessions and reads and writes its own sub-sessions through `litch_sessions`, and you can spawn them by hand in the UI. Available in Codex, Claude Code, Pi, dsh and OpenCode sessions; ACP agent sessions cannot spawn but can be sub-sessions (the adapter on that machine needs 0.11.0 or later) |
 | Scheduled tasks | Available since 0.11.0. Schedules follow the device's time zone, and the model can create tasks through `litch_tasks`; manage them from the desktop or the Android client (the adapter on that machine needs 0.11.0 or later) |
+| Pair a phone by QR code | Available since 0.12.0. Add the device in the Android client by scanning; you can change the address the phone uses before showing the code (the phone must reach it directly; jump hosts are not supported). For this computer itself, turn on the system SSH server first (Remote Login on macOS). The adapter on that machine needs 0.12.0 or later; Windows devices are not fully tested |
 
 ## Download
 
