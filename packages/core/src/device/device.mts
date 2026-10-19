@@ -373,7 +373,12 @@ type DirectoryMethod = Exclude<
     | `litch/thread/${string}`
     | `litch/threadSection/${string}`
   >,
-  'thread/tokenUsage/updated' | 'thread/reverted' | 'thread/settings/updated'
+  | 'thread/tokenUsage/updated'
+  | 'thread/reverted'
+  | 'thread/settings/updated'
+  // harness 详情设置的通知不归会话目录（harness-config.mts）
+  | 'litch/harness/config/changed'
+  | 'litch/harness/auth/updated'
 >
 type Routes = { [M in DirectoryMethod]: (params: ServerNotifications[M]) => void }
 

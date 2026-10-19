@@ -114,6 +114,13 @@ export type * from './extensions.mjs'
 // 每个 harness 的结构化声明（能力位、权限预设）和“拒绝时附说明”：harness-capabilities.mts 不依赖别的文件
 export type * from './harness-capabilities.mjs'
 export { DECLINE_NOTE_MAX_LENGTH, DECLINE_WITH_NOTE_DECISION } from './harness-capabilities.mjs'
+// harness 详情设置（harnessConfig 扩展）：配置项、账号与 provider、MCP、指令文件。不依赖别的文件
+export type * from './harness-config.mjs'
+export {
+  HARNESS_CONFIG_ERROR_CODE,
+  HARNESS_CONFIG_METHOD,
+  HARNESS_CONFIG_NOTIFICATION,
+} from './harness-config.mjs'
 export type {
   JsonRpcError,
   JsonRpcId,

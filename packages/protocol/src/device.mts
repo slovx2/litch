@@ -89,6 +89,13 @@ export const EXTENSION = {
    * litch/device/harness/versions、install、install/read 才能用；声明了它的连接才会收到安装进度的通知。
    */
   harnessInstall: 'harnessInstall',
+  /**
+   * harness 详情设置：每个 harness 的配置项、账号与 provider、MCP、用户级指令文件，读写的是 harness 自己的原生配置
+   * （harness-config.mts，定义在 protocol/extensions/harness-config.json）。设备信息的 `extensions` 里列了它，
+   * 设备进程才认 litch/device/instructions/* 并替原生 codex 翻译 litch/harness/*；别的 harness 支不支持看它声明里的
+   * `extensions`。声明了它的连接才会收到配置变化和登录进展的通知。
+   */
+  harnessConfig: 'harnessConfig',
 } as const
 
 export type ExtensionName = (typeof EXTENSION)[keyof typeof EXTENSION]

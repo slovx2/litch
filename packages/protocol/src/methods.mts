@@ -182,6 +182,37 @@ import type {
 } from './device-tasks.mjs'
 import type { RuntimeInfoResponse } from './extensions.mjs'
 import type {
+  DeviceInstructionsSeparateParams,
+  DeviceInstructionsSeparateResponse,
+  DeviceInstructionsUnifyParams,
+  DeviceInstructionsUnifyResponse,
+  HarnessAuthAttemptParams,
+  HarnessAuthContinueParams,
+  HarnessAuthStartParams,
+  HarnessAuthStartResponse,
+  HarnessAuthStep,
+  HarnessAuthUpdatedNotification,
+  HarnessConfigActionParams,
+  HarnessConfigChangedNotification,
+  HarnessConfigReadResponse,
+  HarnessConfigWriteParams,
+  HarnessConfigWriteResponse,
+  HarnessInstructionsInfo,
+  HarnessInstructionsWriteParams,
+  HarnessInstructionsWriteResponse,
+  HarnessMcpNameParams,
+  HarnessMcpReadResponse,
+  HarnessMcpRemoveParams,
+  HarnessMcpUpsertParams,
+  HarnessMcpWriteResponse,
+  HarnessParams,
+  HarnessProviderIdParams,
+  HarnessProvidersActivateParams,
+  HarnessProvidersReadResponse,
+  HarnessProvidersUpsertParams,
+  HarnessProvidersWriteResponse,
+} from './harness-config.mjs'
+import type {
   LineageUpdatedNotification,
   ProposalChangedNotification,
   SessionDetachParams,
@@ -366,6 +397,51 @@ export interface ClientRequests {
     params: Record<string, never>
     result: HarnessInstallReadResponse
   }
+  // 以下是 harness 详情设置（扩展 harnessConfig，见 harness-config.mts）：都带 harness 参数，转给那个引擎；
+  // 原生 codex 由设备进程翻译。litch/device/instructions/* 由设备进程自己处理
+  'litch/harness/config/read': { params: HarnessParams; result: HarnessConfigReadResponse }
+  'litch/harness/config/write': {
+    params: HarnessConfigWriteParams
+    result: HarnessConfigWriteResponse
+  }
+  'litch/harness/config/action': {
+    params: HarnessConfigActionParams
+    result: Record<string, never>
+  }
+  'litch/harness/providers/read': { params: HarnessParams; result: HarnessProvidersReadResponse }
+  'litch/harness/providers/upsert': {
+    params: HarnessProvidersUpsertParams
+    result: HarnessProvidersWriteResponse
+  }
+  'litch/harness/providers/remove': {
+    params: HarnessProviderIdParams
+    result: HarnessProvidersWriteResponse
+  }
+  'litch/harness/providers/activate': {
+    params: HarnessProvidersActivateParams
+    result: HarnessProvidersWriteResponse
+  }
+  'litch/harness/auth/start': { params: HarnessAuthStartParams; result: HarnessAuthStartResponse }
+  'litch/harness/auth/continue': { params: HarnessAuthContinueParams; result: HarnessAuthStep }
+  'litch/harness/auth/cancel': { params: HarnessAuthAttemptParams; result: Record<string, never> }
+  'litch/harness/auth/logout': { params: HarnessProviderIdParams; result: Record<string, never> }
+  'litch/harness/mcp/read': { params: HarnessParams; result: HarnessMcpReadResponse }
+  'litch/harness/mcp/upsert': { params: HarnessMcpUpsertParams; result: HarnessMcpWriteResponse }
+  'litch/harness/mcp/remove': { params: HarnessMcpRemoveParams; result: HarnessMcpWriteResponse }
+  'litch/harness/mcp/login': { params: HarnessMcpNameParams; result: HarnessAuthStartResponse }
+  'litch/harness/instructions/read': { params: HarnessParams; result: HarnessInstructionsInfo }
+  'litch/harness/instructions/write': {
+    params: HarnessInstructionsWriteParams
+    result: HarnessInstructionsWriteResponse
+  }
+  'litch/device/instructions/unify': {
+    params: DeviceInstructionsUnifyParams
+    result: DeviceInstructionsUnifyResponse
+  }
+  'litch/device/instructions/separate': {
+    params: DeviceInstructionsSeparateParams
+    result: DeviceInstructionsSeparateResponse
+  }
   // 以下是会话树（扩展 sessionTree，见 session-tree.mts）：只有聚合面有，
   // 而且设备信息的 `extensions` 里列了 sessionTree 才能用
   'litch/session/start': { params: SessionStartParams; result: SessionStartResponse }
@@ -467,6 +543,8 @@ export interface ServerNotifications {
   'litch/pair/phones/changed': DevicePairPhonesChangedNotification
   /** 扩展，只发给握手时声明过 harnessInstall 的连接：一个安装任务的状态或日志变了 */
   'litch/device/harness/install/changed': HarnessInstallChangedNotification
+  'litch/harness/config/changed': HarnessConfigChangedNotification
+  'litch/harness/auth/updated': HarnessAuthUpdatedNotification
   /** 扩展，只发给握手时声明过 deviceTasks 的连接：任务多了、变了、没了 */
   'litch/task/changed': DeviceTaskChangedNotification
   /** 扩展，只发给握手时声明过 deviceTasks 的连接：一次运行开始了、结束了、标成看过了 */

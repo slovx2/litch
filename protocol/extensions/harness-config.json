@@ -1,0 +1,16 @@
+{
+  "extension": "harnessConfig",
+  "status": "草案（2026-10-19 主线落的约定；设备进程线补齐 JSON Schema、规则和兼容性测试）",
+  "description": "harness 详情设置：每台设备上每个 harness 的配置项、账号与 provider、MCP 服务、用户级指令文件。读写的是 harness 自己的原生配置（和设备上的命令行共用）。litch/harness/* 带 harness 参数，聚合面转给那个引擎；原生 codex 由设备进程翻译成它自己的 config/*、account/*、mcpServer/*、fs/*。litch/device/instructions/* 由设备进程自己处理（统一模式：一份正文、其余改成软链）。类型在 packages/protocol/src/harness-config.mts。",
+  "appliesTo": "只有聚合面。runtime/info 的 device.extensions 里列了 harnessConfig，设备进程才认 litch/device/instructions/* 并替原生 codex 翻译；别的 harness 支不支持，看它声明（HarnessDeclaration）的 extensions 里有没有 harnessConfig。每个 harness 自己的入口（兼容面）上没有这个扩展的任何内容。",
+  "declaration": {
+    "description": "方法由客户端主动调用，不要求声明。想收到 litch/harness/config/changed 和 litch/harness/auth/updated，握手时在 capabilities.litchExtensions 里列上 harnessConfig。",
+    "where": "initialize.params.capabilities.litchExtensions",
+    "schema": {
+      "type": "array",
+      "items": { "type": "string" },
+      "contains": { "const": "harnessConfig" }
+    }
+  },
+  "undeclared": "没声明的连接收不到这两个通知，方法照样能调；登录的进展要靠再调 providers/read 才知道。"
+}
