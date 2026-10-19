@@ -53,7 +53,7 @@ OpenCode 本体不随适配器分发：适配器使用用户自己安装的 `ope
 - **模型和强度：**
   - `model/list` 列的是 OpenCode 已连上的提供方的模型，标识是 `提供方/模型`。
   - 强度是模型的 variant，另加一个 `default`（不指定 variant）。
-  - 默认模型是 OpenCode 配置里的 `model`，没有就用它报的默认。
+  - 默认模型是 OpenCode 配置里的 `model`，没有就用它报的默认。桌面端改默认模型（`config/batchWrite` 的 `model`）写的也是 OpenCode 的全局配置；早先存在适配器元数据里的默认模型，启动时迁进去一次（原生配置里没写的才写）。强度、权限档 OpenCode 的配置里没有对应的，仍存在适配器元数据里。
 - **计划模式：** 用 OpenCode 的 `plan` 代理。
 - **技能（`skills/list`）：** 问的是 OpenCode：`/skill` 加 `/command`，后者是自定义命令、MCP 提示词。点名技能的消息经 `/command` 执行，其余文字作参数。
 - **分叉、回退、压缩、删除：**
@@ -73,6 +73,16 @@ OpenCode 本体不随适配器分发：适配器使用用户自己安装的 `ope
   - 设备侧队列（`thread/queue/*` 的写操作）等没有接的方法答 -32601。
 - **收场：** 先请 serve 收拾各目录实例（`/global/dispose`），再发结束信号，到点强杀。入口被强杀时，serve 旁边有一个极小的 sh 看着：入口一没，它就结束 serve。
 
+## 详情设置（扩展 `harnessConfig`）
+
+声明里报 `harnessConfig`，`litch/harness/*` 读写的都是 OpenCode 自己的东西（`src/harness-settings*.mts`）：
+
+- **配置项**：全局配置（`$XDG_CONFIG_HOME/opencode/` 下的 `opencode.jsonc`、`opencode.json`、`config.json`，三个合起来读，写第一个存在的，都没有就建 `opencode.jsonc`，和 OpenCode 自己一样）。有默认模型、小模型、默认代理、权限（整体一档和按工具）、按 provider 隐藏的模型（`provider.<id>.blacklist`）、分享、自动更新、快照、子代理层数，以及停用的 provider、额外的指令文件、完整的 `permission`。按路径改原文（`jsonc-parser`），注释、认不出的键都留着。
+- **让 serve 重读**：serve 把全局配置缓存着，只有它自己的 `PATCH /global/config` 改出变化时才重读，并收拾全部目录实例（跑着的回合会停）。所以先把 `$schema` 的值临时改掉写进去，再 PATCH 回原值：缓存作废，OpenCode 顺带校验整份配置，不收的整个退回、文件恢复原样。适配器这边有回合在跑时只写文件，等都闲下来再重读。`.json` 文件里有注释时没法这么做（PATCH 会把它整个重新排版），只写文件，回 `restartRequired`。
+- **provider 与登录**：走 serve 的 v1 接口（`/provider`、`/provider/auth`、`/provider/:id/oauth/*`、`/auth/:id`）。API key 和 OAuth 凭据都在 OpenCode 自己的 `auth.json`；OAuth 照它给的方式：`auto` 的给授权链接（回调到设备本机端口的带上 `callbackPort`）或设备码，再挂着 `/oauth/callback` 等它完成，经 `litch/harness/auth/updated` 通知；`code` 的给链接加粘贴框。自定义 provider 是 OpenAI 兼容的一种，字段照官方桌面端。provider 认的环境变量列成 `env` 方式。没有“当前 provider”（`switchable` 为假）。新版桌面端用的 `/api/integration/*` 在 1.18.33 的 serve 上列不出东西，没用。
+- **MCP**：全局配置的 `mcp.<名字>`（`local` 对 stdio，`remote` 对 http）。名字里像密钥的环境变量读回来是空串。OAuth 用 `/mcp/:name/auth/authenticate`：OpenCode 在设备上开浏览器、在设备的回调端口等；开不了浏览器时它发 `mcp.browser.open.failed`，这时把链接交给客户端。
+- **指令文件**：`AGENTS.md`（`OPENCODE_CONFIG_DIR` 优先，否则全局配置目录）。它不在时 OpenCode 退回读 `~/.claude/CLAUDE.md`，`overriddenBy` 报的就是它。写的时候不换掉软链（统一模式）。
+
 ## 版本
 
 对用户安装的 OpenCode 只设下限（`src/versions.mts` 的 `opencodeMinimum`，当前 `1.18.0`）。它与 `protocol/versions.json` 的登记一致，有测试核对。实际验证过的版本记在 `opencodeVerified`（当前 `1.18.33`），不参与放行。启动未验证的版本时，运行日志里提示一次。接口不在时（404），报错带上当前版本和这份清单。
@@ -91,7 +101,7 @@ OpenCode 本体不随适配器分发：适配器使用用户自己安装的 `ope
 | `CHA_OPENCODE_HOME` | 适配器状态目录，默认 `~/.codex-harness-adapter/opencode` |
 | `CHA_OPENCODE_TRACE=<文件>` | 调试用，逐行记录与客户端往来的协议消息 |
 
-模型的密钥、提供方配置都在用户自己的 OpenCode 配置里，适配器不读也不改。
+模型的密钥、提供方配置都在用户自己的 OpenCode 配置里；适配器只经详情设置（见上）按用户的操作去读写。
 
 ## 验证
 
@@ -117,7 +127,6 @@ npm test                                          # 在本目录：构建后跑�
 - 历史分页；
 - 设备侧消息队列；
 - MCP 服务的征询（`mcpServer/elicitation/request`）；
-- MCP 管理；
 - 技能的开关与额外目录；
 - `thread/timeline/list`。
 

@@ -5,7 +5,9 @@
 //   runtime/info 里 opencode、acp 可用，gemini、qwen 是“已停用”（不跑它们的回合：真的 agent 会花钱）；
 //   opencode：新建会话跑一个回合、回话对得上；一次命令审批批准（命令真的跑了、审批对得上命令条目），
 //             一次拒绝（条目是 declined、命令没跑）；会话列表里有它，读回来几个回合都在；
-//   acp：新建会话跑一个回合、回话对得上，会话列表里有它。
+//   acp：新建会话跑一个回合、回话对得上，会话列表里有它；
+//   详情设置（harnessConfig）：经聚合面读 OpenCode 的配置项、写一项再读回、读 provider 并用假 key 连上再断开、
+//             读指令文件，文件都落在夹具的临时目录里。设备进程还不转 litch/harness/* 时说明后跳过这一段。
 // 不进流水线（流水线上没有 opencode），在本机跑。
 //
 // 用法：npm run client:check:opencode
@@ -236,7 +238,7 @@ async function main() {
     capabilities: {
       experimentalApi: true,
       requestAttestation: false,
-      litchExtensions: ['harness', 'deviceSettings', 'declineWithNote'],
+      litchExtensions: ['harness', 'deviceSettings', 'declineWithNote', 'harnessConfig'],
     },
   })
   client.notify('initialized')
@@ -358,8 +360,54 @@ async function main() {
     'acp 的会话不在会话列表里',
   )
   passed('acp（opencode acp）新建会话并跑完一个回合，回话对得上，会话列表里有它')
+  await checkHarnessConfig(client, fixtureInfo.root)
   client.close()
   return fixtureInfo.root
+}
+
+// 详情设置经聚合面转给 OpenCode 引擎：读写的是夹具里 OpenCode 自己的配置和凭据
+async function checkHarnessConfig(client, fixtureRoot) {
+  const H = { harness: 'opencode' }
+  let read
+  try {
+    read = await client.call('litch/harness/config/read', H)
+  } catch (error) {
+    if (/-32601|不支持|not found|unknown method/i.test(error.message)) {
+      console.log(`- 跳过详情设置：设备进程还不转 litch/harness/*（${error.message}）`)
+      return
+    }
+    throw error
+  }
+  const model = read.settings.find((entry) => entry.key === 'model')
+  expect(model?.options?.length > 0, `默认模型应当列出可选的模型：${JSON.stringify(model)}`)
+  const settingsFile = read.files.find((file) => file.role === 'settings')?.path ?? ''
+  expect(settingsFile.startsWith(fixtureRoot), `配置文件应当在夹具目录里：${settingsFile}`)
+  const written = await client.call('litch/harness/config/write', {
+    ...H,
+    expectedVersion: read.version,
+    edits: [{ key: 'share', value: 'manual' }],
+  })
+  const reread = await client.call('litch/harness/config/read', H)
+  expect(reread.version === written.version, '写完读回来的版本号应当一样')
+  expect(reread.values.share === 'manual', `share 应当是 manual：${reread.values.share}`)
+  const providers = await client.call('litch/harness/providers/read', H)
+  const anthropic = providers.providers.find((entry) => entry.id === 'anthropic')
+  const method = anthropic?.methods.find((entry) => entry.kind === 'apiKey')
+  expect(method, 'anthropic 应当能填 API key')
+  const login = await client.call('litch/harness/auth/start', {
+    ...H,
+    providerId: 'anthropic',
+    methodId: method.id,
+    inputs: { key: 'sk-ant-fake-not-a-real-key-0000' },
+  })
+  expect(login.step.kind === 'done', `填 key 应当直接成功：${JSON.stringify(login.step)}`)
+  await client.call('litch/harness/auth/logout', { ...H, providerId: 'anthropic' })
+  const instructions = await client.call('litch/harness/instructions/read', H)
+  expect(
+    instructions.path.startsWith(fixtureRoot),
+    `指令文件应当在夹具目录里：${instructions.path}`,
+  )
+  passed('详情设置：配置项读写、假 key 连上再断开、指令文件，都落在夹具目录里')
 }
 
 let failure = null

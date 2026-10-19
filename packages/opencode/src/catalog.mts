@@ -61,12 +61,21 @@ export class Catalog {
       )
   }
 
-  /** OpenCode 新会话会用的模型：配置里写的 model，没写的是头一个已连上的提供方的默认模型 */
+  /** 配置、凭据改过了：下次重新问 */
+  invalidate(): void {
+    this.snapshot = null
+  }
+
+  /**
+   * OpenCode 新会话会用的模型：配置里写的 model（serve 合起来的那份，含环境变量给的几层），
+   * 没写的是头一个已连上的提供方的默认模型。全局配置刚改、serve 要等回合都停了才重读的那一阵，用文件里新写的
+   *（harness-settings.mts 的 pendingModel）。
+   */
   private preferred(snapshot: Snapshot): string | null {
     const listed = new Set(
       this.connected(snapshot).map(({ provider, model }) => `${provider.id}/${model.id}`),
     )
-    const configured = snapshot.config?.model
+    const configured = this.server.harness.pendingModel() ?? snapshot.config?.model
     if (typeof configured === 'string' && listed.has(configured)) return configured
     for (const id of snapshot.providers?.connected ?? []) {
       const model = snapshot.providers?.default?.[id]

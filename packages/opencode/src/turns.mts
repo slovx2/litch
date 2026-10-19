@@ -32,11 +32,10 @@ export class Turns {
     this.server = server
   }
 
-  /** 这个会话下一轮用的模型和强度：会话自己选的，没选的是存下的默认，再没有就是 OpenCode 的默认模型 */
+  /** 这个会话下一轮用的模型和强度：会话自己选的，没选的是 OpenCode 配置里的默认模型（再没有是它自己挑的） */
   async selection(live: LiveThread): Promise<{ model: string | null; effort: string | null }> {
     const defaults = this.server.store.getMeta('config', 'defaults') ?? {}
-    const model =
-      live.settings.model ?? defaults.model ?? (await this.server.catalog.defaultModel())
+    const model = live.settings.model ?? (await this.server.catalog.defaultModel())
     const effort = live.settings.effort ?? defaults.model_reasoning_effort ?? DEFAULT_EFFORT
     return { model, effort }
   }

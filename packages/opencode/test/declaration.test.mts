@@ -61,7 +61,7 @@ test('OpenCode：runtime/info 带结构化声明', { skip, timeout: 60000 }, asy
       declaration,
     )
     assert.deepEqual([displayName, badge], ['OpenCode', 'OC'])
-    assert.deepEqual(extensions, ['declineWithNote', 'clientTools'])
+    assert.deepEqual(extensions, ['declineWithNote', 'clientTools', 'harnessConfig'])
     assert.deepEqual(
       presets.map((preset) => [
         preset.id,

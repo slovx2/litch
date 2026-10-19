@@ -61,7 +61,8 @@ export const declaration: HarnessDeclaration = {
   ...HARNESS_IDENTITY.opencode,
   // 拒绝时附的说明经 OpenCode 的权限应答交给模型，模型接着干（approvals.mts）。
   // 动态工具经适配器的 MCP 服务交给 OpenCode，litch_ 命名空间的调用照 clientTools 的规矩挑执行方（client-tools.mts）。
-  extensions: [EXTENSION.declineWithNote, EXTENSION.clientTools],
+  // 详情设置（模型、权限、provider 与登录、MCP、AGENTS.md）读写 OpenCode 自己的配置和凭据（harness-settings.mts）。
+  extensions: [EXTENSION.declineWithNote, EXTENSION.clientTools, EXTENSION.harnessConfig],
   features,
   // OpenCode 没有沙箱：三档的差别只在给不给工具、问不问。
   permissionPresets: [
