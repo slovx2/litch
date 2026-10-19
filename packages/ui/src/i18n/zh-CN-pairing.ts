@@ -75,5 +75,7 @@ export const zhPairing = {
   'phones.failed': '没做成：{reason}',
   'phones.upgrade':
     '这台设备上的服务版本不支持扫码绑定手机。升级设备上的适配器之后，这里就能出码、管理绑定的手机。',
+  'phones.windowsAdmin':
+    'Windows 上的管理员账号暂时不能扫码绑定手机：OpenSSH 对管理员账号只认 administrators_authorized_keys，改它要管理员权限。可以手动把手机的公钥加进那个文件。',
   'phones.offline': '设备没连上，连上之后才看得到绑定了哪些手机。',
 } satisfies Record<string, Entry>

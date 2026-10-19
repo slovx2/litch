@@ -79,5 +79,7 @@ export const enPairing: Record<keyof typeof zhPairing, Entry> = {
   'phones.failed': 'Didn’t work: {reason}',
   'phones.upgrade':
     'The service on this device doesn’t support phone pairing. After updating the adapter on it you can make codes and manage phones here.',
+  'phones.windowsAdmin':
+    'Phone pairing isn’t available for an administrator account on Windows yet: OpenSSH only reads administrators_authorized_keys for administrators, and changing it needs admin rights. You can add the phone’s public key to that file by hand.',
   'phones.offline': 'The device isn’t connected. Its phones show up once it is.',
 }

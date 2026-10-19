@@ -5,6 +5,14 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
+## 未发布
+
+- Windows：npm 装的 OpenCode 现在认得出来（原来只找 `bin/opencode`，包里是 `bin/opencode.exe`，设备页一直显示不可用）
+- Windows：DSH 跑命令的工具叫 `pwsh`，原来审批卡片和对话里只写工具名，现在和 `bash` 一样显示要跑的命令
+- Windows 桌面端不再提供“操作这台电脑”（`litch_machine`）：它的脚本只有 macOS、Linux 的写法，原来开关照出、每次调用都失败
+- Windows：Claude Code 的“只读”“项目内”两档照实写明跑不了命令（Windows 上没有沙箱），要跑命令选完全访问或用 WSL2
+- Windows：管理员账号不能扫码绑定手机时，设备页说明原因和手动加钥匙的办法（原来说“服务版本太旧，请升级”）
+
 ## 0.12.0
 
 - Litch：扫码把远程设备绑到手机上。桌面端设备详情的“手机”一栏点“在手机上使用…”出二维码，安卓客户端在“添加设备”里扫码（或粘贴配对文本）就能加上，不用在手机上配 SSH 钥匙。过程：那台机器的设备服务在 `~/.ssh/authorized_keys` 末尾临时放行一把一次性钥匙（只能用来登记，10 分钟过期，用一次作废），手机用它登录后登记自己新生成的钥匙；电脑上显示手机名和 6 位确认码，和手机上的一样再点允许。二维码里带着主机指纹，手机直接钉住，不再弹“首次连接请确认指纹”。电脑的钥匙不离开电脑；每部手机一行钥匙，在设备详情的“已绑定的手机”里能单独撤销，手机上删设备时也可以顺带撤掉

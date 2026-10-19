@@ -10,6 +10,20 @@ import { useKey, useServices } from '../app/services.tsx'
 import { showToast } from '../app/toasts.tsx'
 import { PairDialog } from './PairDialog.tsx'
 
+/** 从这一版起设备服务支持扫码绑定手机 */
+const PAIRING_SINCE = [0, 12, 0]
+
+/** version 不低于 since（只比主、次、修订号）。认不出是 false */
+function atLeast(version: string | undefined, since: number[]): boolean {
+  const parts = /^(\d+)\.(\d+)\.(\d+)/
+    .exec(version ?? '')
+    ?.slice(1)
+    .map(Number)
+  if (!parts) return false
+  for (let i = 0; i < 3; i++) if (parts[i] !== since[i]) return (parts[i] ?? 0) > (since[i] ?? 0)
+  return true
+}
+
 export function PhonesSection({ device }: { device: DeviceView }) {
   const { replica } = useServices()
   const t = useT()
@@ -28,12 +42,20 @@ export function PhonesSection({ device }: { device: DeviceView }) {
   if (!supported) {
     // 连着、对面是设备服务，只是版本太旧：说一句。只有 codex 的、没连上过的不说
     if (!online || device.mode !== 'full') return null
+    // 0.12.0 起的设备服务都会扫码绑定，只有 Windows 的管理员账号不行（OpenSSH 只认 administrators_authorized_keys）
+    const windowsAdmin = device.os === 'windows' && atLeast(device.service?.version, PAIRING_SINCE)
     return (
-      <section className="mng-sec" data-sec="phones" data-phones="upgrade">
+      <section
+        className="mng-sec"
+        data-sec="phones"
+        data-phones={windowsAdmin ? 'windows-admin' : 'upgrade'}
+      >
         <div className="mng-sec-head">
           <h2>{t('phones.title')}</h2>
         </div>
-        <div className="devp-note">{t('phones.upgrade')}</div>
+        <div className="devp-note">
+          {t(windowsAdmin ? 'phones.windowsAdmin' : 'phones.upgrade')}
+        </div>
       </section>
     )
   }

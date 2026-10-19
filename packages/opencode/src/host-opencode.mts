@@ -13,7 +13,8 @@ export function hostOpencodeExecutable(env: NodeJS.ProcessEnv = process.env): st
   const configured = env.CHA_OPENCODE_CLI?.trim()
   const command = configured || 'opencode'
   try {
-    return resolveHostCli(command, 'opencode-ai', 'bin/opencode', env)
+    // 第三个参数只在 Windows 上用：npm 装的是 .bin\opencode.cmd，真正的程序是包里的 bin\opencode.exe
+    return resolveHostCli(command, 'opencode-ai', 'bin/opencode.exe', env)
   } catch {}
   if (!configured) {
     const fallback = join(env.HOME || homedir(), '.opencode', 'bin', 'opencode')

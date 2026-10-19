@@ -47,21 +47,37 @@ const features: HarnessFeatures = {
 // 权限档随回合开始时的会话设置定下来：两个回合之间可以换，回合进行中改的要到下一个回合才起作用。
 const switching = { switchInSession: true, switchDuringTurn: false }
 
+// Windows 原生宿主没有系统沙箱：只读和项目内两档跑不了命令（command-sandbox.mts 当场拒绝），说明照实写
+const windows = process.platform === 'win32'
+
 const permissionPresets: PermissionPreset[] = [
   builtinPreset(
     PRESET.readOnly,
-    {
-      'zh-CN': '只能看：可以读文件、搜索，在只读且断网的沙箱里运行命令；不能改文件，也不能联网',
-      en: 'Look only: can read files, search, and run commands in a read-only sandbox with no network. Cannot change files or go online',
-    },
+    windows
+      ? {
+          'zh-CN':
+            '只能看：可以读文件、搜索；不能改文件，也不能运行命令（Windows 上没有沙箱，要跑命令请选完全访问，或在 WSL2 里用）',
+          en: 'Look only: can read files and search. Cannot change files or run commands (Windows has no sandbox; choose full access to run commands, or use WSL2)',
+        }
+      : {
+          'zh-CN': '只能看：可以读文件、搜索，在只读且断网的沙箱里运行命令；不能改文件，也不能联网',
+          en: 'Look only: can read files, search, and run commands in a read-only sandbox with no network. Cannot change files or go online',
+        },
     switching,
   ),
   builtinPreset(
     PRESET.workspace,
-    {
-      'zh-CN': '可以改项目里的文件、运行命令，动手之前先问你；命令在只能写项目、断网的沙箱里运行',
-      en: 'Can change files in the project and run commands, asking you first. Commands run in a sandbox that can only write to the project and has no network',
-    },
+    windows
+      ? {
+          'zh-CN':
+            '可以改项目里的文件，动手之前先问你；不能运行命令（Windows 上没有沙箱，要跑命令请选完全访问，或在 WSL2 里用）',
+          en: 'Can change files in the project, asking you first. Cannot run commands (Windows has no sandbox; choose full access to run commands, or use WSL2)',
+        }
+      : {
+          'zh-CN':
+            '可以改项目里的文件、运行命令，动手之前先问你；命令在只能写项目、断网的沙箱里运行',
+          en: 'Can change files in the project and run commands, asking you first. Commands run in a sandbox that can only write to the project and has no network',
+        },
     switching,
   ),
   builtinPreset(

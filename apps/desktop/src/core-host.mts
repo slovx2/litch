@@ -145,7 +145,8 @@ function createHost(): Core | MockCore {
     log: (line) => console.error(`[core] ${line}`),
     remote: { opener: sshOpener, discover: discoverHosts, check: checkRemote },
     clientTools: toolPort,
-    machine: { desktop },
+    // 操作这台电脑（litch_machine）的脚本只有 POSIX 的写法：Windows 的桌面端不提供，远程设备上就没有这个工具和开关
+    ...(process.platform === 'win32' ? {} : { machine: { desktop } }),
     // 扫码绑定手机：一次性私钥的临时文件放在用户数据目录下；本机给手机看的名字用电脑名称
     pairing: desktopPairing({ dataDir, localName: () => desktop.name }),
     ...(dataDir ? { store: fileDeviceStore(dataDir) } : {}),

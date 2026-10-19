@@ -87,7 +87,7 @@ const COLLAB_TOOLS: Record<string, string> = {
   list_agents: 'listAgents',
 }
 
-function toolItem(
+export function toolItem(
   id: string,
   name: string,
   args: any,
@@ -138,7 +138,8 @@ function toolItem(
       agentsStates: {},
     }
   }
-  if (name === 'bash')
+  // Windows 上 dsh 跑命令的工具叫 pwsh，参数和 bash 一样
+  if (name === 'bash' || name === 'pwsh')
     return {
       type: 'commandExecution',
       id,
