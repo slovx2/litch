@@ -9,6 +9,7 @@ import * as app from './messages/app'
 import * as compose from './messages/compose'
 import * as detail from './messages/detail'
 import * as devices from './messages/devices'
+import * as pairing from './messages/pairing'
 import * as sessions from './messages/sessions'
 import * as tasks from './messages/tasks'
 import * as tools from './messages/tools'
@@ -19,6 +20,7 @@ export type { Lang } from '../../../../packages/ui/src/i18n/index.ts'
 const zhCN = {
   ...app.zhCN,
   ...devices.zhCN,
+  ...pairing.zhCN,
   ...sessions.zhCN,
   ...detail.zhCN,
   ...compose.zhCN,
@@ -30,6 +32,7 @@ type MobileKey = keyof typeof zhCN
 const en: Record<MobileKey, Entry> = {
   ...app.en,
   ...devices.en,
+  ...pairing.en,
   ...sessions.en,
   ...detail.en,
   ...compose.en,

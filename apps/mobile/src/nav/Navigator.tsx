@@ -6,6 +6,7 @@ import { DetailScreen } from '../detail/DetailScreen'
 import { AddDeviceScreen } from '../screens/devices/AddDeviceScreen'
 import { DeviceDetailScreen } from '../screens/devices/DeviceDetailScreen'
 import { DevicesScreen } from '../screens/devices/DevicesScreen'
+import { PairDeviceScreen } from '../screens/devices/PairDeviceScreen'
 import { FilesScreen } from '../screens/files/FilesScreen'
 import { NewSessionScreen } from '../screens/new-session/NewSessionScreen'
 import { SessionsScreen } from '../screens/sessions/SessionsScreen'
@@ -32,6 +33,7 @@ export function Navigator() {
     >
       <Stack.Screen name="Devices" component={DevicesScreen} />
       <Stack.Screen name="AddDevice" component={AddDeviceScreen} />
+      <Stack.Screen name="PairDevice" component={PairDeviceScreen} />
       <Stack.Screen name="DeviceDetail" component={DeviceDetailScreen} />
       <Stack.Screen name="Sessions" component={SessionsScreen} />
       <Stack.Screen name="NewSession" component={NewSessionScreen} />

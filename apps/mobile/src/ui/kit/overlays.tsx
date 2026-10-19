@@ -91,7 +91,7 @@ export function Sheet({
   )
 }
 
-function Dialog({
+export function Dialog({
   visible,
   onClose,
   children,

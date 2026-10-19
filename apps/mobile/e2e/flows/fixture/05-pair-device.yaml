@@ -1,0 +1,102 @@
+# 扫码添加（粘贴配对文本这条路）：电脑上出码（入口脚本的小口替身，一次性钥匙登进来跑假的 pair-enroll）→
+# 加设备页点“扫码添加”→ 粘贴配对文本 → 确认页只读地显示别名和地址 → 添加：手机显示的确认码和“电脑上”的一样 →
+# 电脑上允许 → 不弹首次连接的指纹确认，直接用手机自己的钥匙检查、添加，进到会话列表 →
+# 回首页移除这台设备（勾着“同时撤掉钥匙”；核心的 pairing.phones 没实现时会提示没撤掉，点“知道了”照样移除）
+appId: dev.litch.app
+name: fixture-扫码添加
+tags: [fixture]
+---
+- runFlow:
+    file: ../_shared/fresh.yaml
+    env:
+      MODE: stored
+      READY: devices:empty:add
+- openLink: litch://remote?adapter=${ADAPTER}&env=LITCH_FX_MODE=${FX_MODE}
+- tapOn:
+    id: devices:empty:add
+- extendedWaitUntil:
+    visible:
+      id: add:pair
+    timeout: 10000
+- tapOn:
+    id: add:pair
+- extendedWaitUntil:
+    visible:
+      id: pair:paste
+    timeout: 10000
+- runScript:
+    file: ../_shared/pair-start.js
+- assertTrue: ${output.pairText.length > 0}
+- scrollUntilVisible:
+    element:
+      id: pair:paste
+    direction: DOWN
+    centerElement: true
+- waitForAnimationToEnd
+- tapOn:
+    id: pair:paste
+- inputText: ${output.pairText}
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: pair:paste:go
+    direction: DOWN
+    centerElement: true
+- waitForAnimationToEnd
+- tapOn:
+    id: pair:paste:go
+- extendedWaitUntil:
+    visible:
+      text: e2e-pair
+    timeout: 10000
+- assertVisible:
+    text: 127.0.0.1
+- tapOn:
+    id: pair:add
+- extendedWaitUntil:
+    visible:
+      id: pair:code
+    timeout: 30000
+- runScript:
+    file: ../_shared/pair-request.js
+- assertVisible:
+    text: ${output.code}
+- runScript:
+    file: ../_shared/pair-allow.js
+- assertTrue: ${output.allowed}
+- extendedWaitUntil:
+    visible:
+      id: sessions
+    timeout: 90000
+- tapOn:
+    id: header:back
+- extendedWaitUntil:
+    visible:
+      text: .*e2e-pair.*
+    timeout: 30000
+- tapOn:
+    id: device:.*:more
+- tapOn:
+    id: menu:remove
+- extendedWaitUntil:
+    visible:
+      id: remove:revoke
+    timeout: 10000
+- tapOn:
+    id: confirm:ok
+# 撤钥匙那一步做完，勾选框所在的确认框才关：要么提示没撤掉，要么已经移除了
+- extendedWaitUntil:
+    notVisible:
+      id: remove:revoke
+    timeout: 30000
+- runFlow:
+    when:
+      visible:
+        id: remove:notice
+    commands:
+      - tapOn:
+          id: remove:ok
+- extendedWaitUntil:
+    visible:
+      id: devices:empty:add
+    timeout: 30000

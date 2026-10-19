@@ -10,13 +10,14 @@ import { knownHost } from '../../platform/known-hosts'
 import { useChannel, useKey } from '../../shell/services'
 import { type Translator, useT } from '../../ui/i18n'
 import { Button, Empty, Row, SectionLabel } from '../../ui/kit/controls'
-import { Confirm, Prompt } from '../../ui/kit/overlays'
+import { Prompt } from '../../ui/kit/overlays'
 import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
 import { shownState } from './failure'
 import { forgetUnusedKey } from './forget'
 import { HarnessList, ManageSection } from './ManageSection'
 import { FailureCard, InfoLine, PublicKeyCard, useHostTrust, WirePicker } from './parts'
+import { RemoveDevice } from './RemoveDevice'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'DeviceDetail'>
 
@@ -194,16 +195,13 @@ export function DeviceDetailScreen({ route, navigation }: Props) {
         onSubmit={(name) => run(channel.command('device.update', { deviceId, name }))}
         onClose={() => setRenaming(false)}
       />
-      <Confirm
-        visible={removing}
-        danger
-        title={t('devices.remove.title')}
-        detail={t('devices.remove.note')}
-        confirmLabel={t('devices.remove')}
-        onConfirm={() => {
-          const was = device.target
+      <RemoveDevice
+        device={removing ? device : null}
+        onRemove={(was) => {
           navigation.popToTop()
-          void channel.command('device.remove', { deviceId }).then(() => forgetUnusedKey(was))
+          void channel
+            .command('device.remove', { deviceId })
+            .then(() => forgetUnusedKey(was.target))
         }}
         onClose={() => setRemoving(false)}
       />

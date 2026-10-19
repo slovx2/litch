@@ -1,4 +1,4 @@
-// 加设备：填主机、端口、用户 → 选一把钥匙（生成新的，或者导入已有的私钥；公钥可以复制去那台机器上授权）
+// 加设备：最上面是“扫码添加”（PairDeviceScreen，电脑上已经加过这台设备时最省事），下面是手动添加：填主机、端口、用户 → 选一把钥匙（生成新的，或者导入已有的私钥；公钥可以复制去那台机器上授权）
 // → “连上去看看”：先读主机钥匙的指纹、没信任过就问一声，再经核心看一眼对面有什么（remote.check，不启动任何东西）
 // → 添加。添加之后核心就开始连，页面换成这台设备的会话。
 import type { RemoteCheck, RemoteTarget } from '@litch/core'
@@ -126,6 +126,15 @@ export function AddDeviceScreen({ navigation }: Props) {
   return (
     <Screen title={t('add.title')} testID="add-device">
       <KeyboardAwareScrollView keyboardShouldPersistTaps="handled" bottomOffset={24}>
+        <SectionLabel>{t('pair.entry')}</SectionLabel>
+        <View style={styles.form}>
+          <Text style={[styles.note, { color: theme.c.ink3 }]}>{t('pair.entry.hint')}</Text>
+          <Button
+            label={t('pair.entry')}
+            testID="add:pair"
+            onPress={() => navigation.navigate('PairDevice')}
+          />
+        </View>
         <SectionLabel>{t('devices.where')}</SectionLabel>
         <View style={styles.form}>
           <Field

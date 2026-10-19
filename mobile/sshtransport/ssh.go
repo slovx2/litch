@@ -25,6 +25,10 @@ type Target struct {
 	PrivateKey      string `json:"privateKey"`
 	Passphrase      string `json:"passphrase"`
 	HostFingerprint string `json:"hostFingerprint"`
+	// 扫码绑定时的一次性钥匙：ed25519 私钥的 32 字节种子（base64url 无填充）。给了就用它，不看 PrivateKey
+	Seed string `json:"seed"`
+	// 只协商这一种主机钥匙（二维码里的类型，例如 ssh-ed25519）。空的就按 x/crypto 的默认
+	HostKeyType string `json:"hostKeyType"`
 	// 每个会话上设的环境变量。只有对面的 sshd 放行（AcceptEnv）的才生效；测试夹具靠它区分情形
 	Env map[string]string `json:"env"`
 }
@@ -95,7 +99,12 @@ func connectSSH(ctx context.Context, target Target) (*ssh.Client, error) {
 	if expected == "" {
 		return nil, kindf(kindHostKeyUnknown, "尚未确认 SSH 主机 SHA-256 指纹")
 	}
-	signer, err := parseSigner(target.PrivateKey, target.Passphrase)
+	var signer ssh.Signer
+	if target.Seed != "" {
+		signer, err = seedSigner(target.Seed)
+	} else {
+		signer, err = parseSigner(target.PrivateKey, target.Passphrase)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -103,6 +112,13 @@ func connectSSH(ctx context.Context, target Target) (*ssh.Client, error) {
 		User:            target.User,
 		Auth:            []ssh.AuthMethod{ssh.PublicKeys(signer)},
 		HostKeyCallback: pinnedHostKeyCallback(expected),
+	}
+	if target.HostKeyType != "" {
+		algorithms, err := hostKeyAlgorithms(target.HostKeyType)
+		if err != nil {
+			return nil, err
+		}
+		config.HostKeyAlgorithms = algorithms
 	}
 	connection, err := (&net.Dialer{Timeout: 12 * time.Second}).DialContext(ctx, "tcp", address)
 	if err != nil {
@@ -178,6 +194,18 @@ func pinnedHostKeyCallback(expected string) ssh.HostKeyCallback {
 		}
 		return nil
 	}
+}
+
+// hostKeyAlgorithms 把主机钥匙的类型换成握手时要协商的算法。RSA 钥匙的类型叫 ssh-rsa，
+// 签名算法却有三种：新版 sshd 默认不再接受 SHA-1 的 ssh-rsa，所以只给 SHA-2 的两种
+func hostKeyAlgorithms(keyType string) ([]string, error) {
+	switch keyType {
+	case ssh.KeyAlgoED25519, ssh.KeyAlgoECDSA256, ssh.KeyAlgoECDSA384, ssh.KeyAlgoECDSA521:
+		return []string{keyType}, nil
+	case ssh.KeyAlgoRSA:
+		return []string{ssh.KeyAlgoRSASHA512, ssh.KeyAlgoRSASHA256}, nil
+	}
+	return nil, kindf(kindInvalid, "不支持的主机钥匙类型: %s", keyType)
 }
 
 func sshAddress(host string, port int) (string, error) {

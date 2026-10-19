@@ -10,6 +10,10 @@ export interface SshTarget {
   passphrase: string
   /** SHA256:… 的写法 */
   hostFingerprint: string
+  /** 扫码绑定的一次性钥匙：ed25519 的 32 字节种子（base64url）。给了就不看 privateKey */
+  seed?: string
+  /** 只协商这一种主机钥匙（例如 ssh-ed25519） */
+  hostKeyType?: string
   /** 每个会话上设的环境变量（对面 sshd 放行的才生效） */
   env?: Record<string, string>
 }
@@ -53,6 +57,9 @@ interface Native {
   closeStream(id: string): Promise<void>
   generateEd25519Key(): Promise<string>
   inspectPrivateKey(privateKey: string, passphrase: string): Promise<string>
+  enrollPair(target: string, line: string): Promise<string>
+  pairConfirmCode(pairId: string, publicKey: string): Promise<string>
+  pairPhoneId(publicKey: string): Promise<string>
 }
 
 const native = requireNativeModule<Native>('LitchSsh')
@@ -82,4 +89,11 @@ export const ssh = {
   async inspectPrivateKey(privateKey: string, passphrase: string): Promise<KeyDescription> {
     return JSON.parse(await native.inspectPrivateKey(privateKey, passphrase)) as KeyDescription
   },
+  /** 扫码绑定：用一次性钥匙登进去，往 pair-enroll 的标准输入写一行，返回它写回的那一行（最多等 3 分钟） */
+  enrollPair: (target: SshTarget, line: string): Promise<string> =>
+    native.enrollPair(JSON.stringify(target), line),
+  /** 6 位确认码，和电脑上显示的那个比对 */
+  pairConfirmCode: (pairId: string, publicKey: string) => native.pairConfirmCode(pairId, publicKey),
+  /** 这部手机在对面钥匙行里的编号 */
+  pairPhoneId: (publicKey: string) => native.pairPhoneId(publicKey),
 }

@@ -111,6 +111,22 @@ test('探测：适配器的服务在跑；两样都在时先认适配器', async
   assert.equal(found.running, true)
 })
 
+test('探测：只装了 Litch 桌面端（适配器在应用包里），先认它而不是原生 codex', async () => {
+  const bundled = join(home, 'Applications/Litch.app/Contents/Resources/adapter/bin')
+  mkdirSync(bundled, { recursive: true })
+  const stand = adapter({ running: true })[names.adapter]
+  writeFileSync(join(bundled, names.adapter), `#!/bin/sh\n${stand}\n`)
+  chmodSync(join(bundled, names.adapter), 0o755)
+  try {
+    tools({ [names.codex]: 'echo "codex-cli 0.130.0"' })
+    const found = await probe(config, names, live)
+    assert.equal(found.peer, 'service')
+    assert.equal(found.running, true)
+  } finally {
+    rmSync(join(home, 'Applications'), { recursive: true, force: true })
+  }
+})
+
 test('探测：只有原生 codex；版本太低的说清楚是哪一版', async () => {
   tools({ [names.codex]: 'echo "codex-cli 0.130.0-alpha.2"' })
   assert.equal((await probe(config, names, live)).peer, 'codex')
