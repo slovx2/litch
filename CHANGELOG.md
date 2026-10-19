@@ -14,6 +14,11 @@ versioning or publishing metadata.
 - Windows：管理员账号不能扫码绑定手机时，设备页说明原因和手动加钥匙的办法（原来说“服务版本太旧，请升级”）
 - Windows：安装向导有简体中文了，照系统的界面语言选（原来只有英文）
 - Windows：终端、文件、差异和 `@` 找文件能用了（原来在 Windows 设备上整块关着）。终端开的是 Windows PowerShell，进项目目录，Ctrl+C 能打断命令；路径认盘符和反斜杠、不分大小写；没装 rg 的机器上找文件改用 `git ls-files`，不在仓库里时自己遍历（原来落到系统的 `find.exe`，一个都找不到）。网络共享上的目录还看不了
+- Litch：给设备一键装 harness。设备页每个 harness 一行版本（已装、Litch 验证过的、最新），没装的按官方方式装（Claude Code、OpenCode 用官方脚本，Codex、Pi、DSH、Gemini CLI、Qwen Code 用 `npm install -g`），默认装验证过的版本，也能选最新版，装了的有新版时一键更新；装好自动启用并重启它。装不上时说明原因，给出官方命令和安装说明的链接。远程设备一样能装（要那台机器上的适配器是这一版或更新）。Litch 不提权、不用 sudo，也不主动降级
+- Litch：首次启动的引导。本机一个能用的 harness 都没有时先引导装一个；有了之后建议试试配置助手。只出一次，设置页“配置助手”里能重新打开
+- Litch：配置助手。新建对话页标题下的“✦ 配置助手”打开一个本机的新对话，填好 `/litch-manual` 和“使用 Litch 产品手册帮我配置：”，用平常的话说要改什么，harness 里的模型照手册用 `litch config` 帮你改：设备与远程设备、工具开关、远程设备操作本机、设备设置与 harness 开关、手机绑定、项目、定时任务、外观与语言、内置浏览器、Computer Use、通知、诊断。放宽权限的改动（打开 Computer Use、远程设备操作本机、放宽审批、浏览器一直允许网站）在桌面端弹确认，人点允许才生效；扫码、系统权限、harness 的登录和安装、Litch 自身的更新不经它
+- Litch：产品手册技能 `litch-manual`。每次启动装进本机的 `~/.agents/skills/litch-manual`，并链到 Claude Code、Qwen Code 的技能目录（别人的同名目录不碰，配置目录不在就跳过）；设置页“配置助手”里能关掉、能看装到了哪里
+- 适配器：设备进程新增扩展 `harnessInstall`（`litch/device/harness/versions`、`install`、`install/read` 和进度通知），验证过的版本编进了命令行；命令行多了 `config`（`litch config` 的薄壳，把参数交给连着的 Litch 桌面端执行）
 
 ## 0.12.0
 
