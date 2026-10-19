@@ -203,6 +203,9 @@ export function createLink(options: LinkOptions): Link {
                 EXTENSION.devicePairing,
                 // harnessInstall：声明了才收得到安装任务的进度通知（litch/device/harness/install/changed）
                 EXTENSION.harnessInstall,
+                // harnessConfig：声明了才收得到 harness 详情设置的变化和登录进展的通知
+                // （litch/harness/config/changed、litch/harness/auth/updated）
+                EXTENSION.harnessConfig,
                 // clientTools：litch_ 开头的命名空间的工具调用交给声明了的连接执行（内置浏览器、Computer Use）
                 ...(tools.length > 0 ? [EXTENSION.clientTools] : []),
               ],

@@ -80,6 +80,11 @@ export interface ForwarderOptions {
   ssh?: string
   /** 记住本机端口的文件：应用重开之后同一个远端端口还用原来的本机端口（来源不变）。不给就只记在内存里 */
   portsFile?: string
+  /**
+   * 本机端口必须和远端端口同号：harness 登录时的 OAuth 回调地址写死了 localhost 的端口，浏览器回调到这台电脑的
+   * 那个端口，要原样转到设备上。被占了不换，直接报错
+   */
+  samePort?: boolean
   readyMs?: number
   idleMs?: number
   sweepMs?: number
@@ -308,6 +313,11 @@ export function createForwarder(options: ForwarderOptions): Forwarder {
       let last: Error | null = null
       for (let attempt = 0; attempt < BIND_ATTEMPTS; attempt++) {
         const remembered = ports.get(entry.key)
+        if (options.samePort) {
+          const port = await tryPort(entry.remotePort)
+          if (!port) throw new ForwardError(`local port ${entry.remotePort} on 127.0.0.1 is in use`)
+          return await launch(entry, target, port)
+        }
         const port =
           (attempt === 0 && remembered ? await tryPort(remembered) : null) ?? (await tryPort(0))
         if (!port) throw new ForwardError('no free local port on 127.0.0.1')

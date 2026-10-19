@@ -1,15 +1,16 @@
 // 对面是谁、上面有哪些 harness。
 // 完整模式里 harness 的名字和状态由设备服务声明；对面只是一个普通的 Codex 服务时没有这份声明，
 // 只能靠握手应答和适配器已有的 runtime/info 扩展来认，所以这里有一张已知引擎的表。
-import type {
-  PermissionPreset as DeclaredPreset,
-  DeviceRuntimeInfo,
-  HarnessDeclaration,
-  HarnessFeatures,
-  HarnessInfo,
-  InitializeResponse,
-  RuntimeInfoResponse,
-  Thread,
+import {
+  type PermissionPreset as DeclaredPreset,
+  type DeviceRuntimeInfo,
+  EXTENSION,
+  type HarnessDeclaration,
+  type HarnessFeatures,
+  type HarnessInfo,
+  type InitializeResponse,
+  type RuntimeInfoResponse,
+  type Thread,
 } from '../../../protocol/src/index.mjs'
 import type { HarnessAbilities, HarnessId, HarnessView, PermissionPreset } from '../model.mjs'
 import { type PhraseKey, phrase } from '../phrase.mjs'
@@ -126,6 +127,8 @@ export function harnessFromRuntimeInfo(info: RuntimeInfoResponse): HarnessView {
     detail: null,
     down: null,
     abilities: abilitiesOf(info.features, id),
+    // 详情设置只走聚合面
+    configurable: false,
   }
 }
 
@@ -142,6 +145,7 @@ export function codexHarness(init: InitializeResponse): HarnessView {
     down: null,
     // 原生 codex 自己的入口报不了声明：它会什么试了才知道
     abilities: null,
+    configurable: false,
   }
 }
 
@@ -190,6 +194,8 @@ export function harnessFromInfo(info: HarnessInfo): HarnessView {
     detail: down?.text ? bilingual(down.text) : down?.message || null,
     down: down?.kind ?? null,
     abilities: abilitiesOf(info.features, info.id),
+    // 它自己声明了；设备那一级声明了没有由设备去并（device.mts）
+    configurable: listed(info.extensions).includes(EXTENSION.harnessConfig),
   }
 }
 

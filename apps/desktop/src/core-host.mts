@@ -3,6 +3,7 @@
 import { execFileSync } from 'node:child_process'
 import { arch, homedir, hostname, release, userInfo } from 'node:os'
 import {
+  type AuthForwardPlatform,
   type ClientToolPort,
   type Clock,
   type Core,
@@ -11,6 +12,7 @@ import {
   type MockCore,
   type Port,
   phrase,
+  type RemoteTarget,
   serveChannel,
   type ToolToCore,
   type ToolToMain,
@@ -21,6 +23,7 @@ import { fileDeviceStore } from './device-store.mjs'
 import { ATTACH, LANGUAGE, TERMINALS } from './ipc.mjs'
 import { type AdapterLang, localDevice, upgradeReport } from './local-adapter.mjs'
 import { desktopPairing } from './pairing.mjs'
+import { createForwarder } from './ssh/forward.mjs'
 import { discoverHosts } from './ssh/hosts.mjs'
 import { checkRemote, sshOpener } from './transport-ssh.mjs'
 
@@ -123,6 +126,27 @@ function desktopFacts() {
   }
 }
 
+/**
+ * harness 登录的 OAuth 回调转发：远程设备上的 harness 让浏览器回调到 localhost 的某个端口，浏览器开在这台电脑上，
+ * 所以把这台电脑的同一个端口经 ssh -L 转到设备上。设备的 ssh 目标由核心每次给；登录一般几分钟内完成，闲半小时撤掉
+ */
+function authForward(): AuthForwardPlatform {
+  const targets = new Map<string, RemoteTarget>()
+  const forwarder = createForwarder({
+    targetOf: (deviceId) => targets.get(deviceId) ?? null,
+    samePort: true,
+    idleMs: 30 * 60_000,
+    log: (line) => console.error(`[auth-forward] ${line}`),
+  })
+  process.once('exit', () => forwarder.close())
+  return {
+    async open(deviceId, target, port) {
+      targets.set(deviceId, target)
+      await forwarder.open(deviceId, 'localhost', port)
+    },
+  }
+}
+
 function createHost(): Core | MockCore {
   // LITCH_MOCK=1：不连任何设备，用示例数据。界面开发和不带入口的自检用
   // 示例数据用哪种语言由主进程定（LITCH_LANG），和界面的语言对上
@@ -147,6 +171,7 @@ function createHost(): Core | MockCore {
     log: (line) => console.error(`[core] ${line}`),
     remote: { opener: sshOpener, discover: discoverHosts, check: checkRemote },
     clientTools: toolPort,
+    forward: authForward(),
     // 操作这台电脑（litch_machine）的脚本只有 POSIX 的写法：Windows 的桌面端不提供，远程设备上就没有这个工具和开关
     ...(process.platform === 'win32' ? {} : { machine: { desktop } }),
     // 扫码绑定手机：一次性私钥的临时文件放在用户数据目录下；本机给手机看的名字用电脑名称

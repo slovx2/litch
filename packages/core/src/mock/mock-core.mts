@@ -43,6 +43,7 @@ import { createMockCompose } from './mock-compose.mjs'
 import { createMockConfig, RUNS_CONFIG } from './mock-config.mjs'
 import { createMockDiffs } from './mock-diffs.mjs'
 import { createMockFiles } from './mock-files.mjs'
+import { createMockHarnessConfig } from './mock-harness-config.mjs'
 import { createMockInstall } from './mock-install.mjs'
 import { createMockMachine } from './mock-machine.mjs'
 import { createMockManagement } from './mock-manage.mjs'
@@ -247,6 +248,14 @@ const DROPS_HARNESS = /掉线|go offline/i
 const EDITS_ELSEWHERE = /别处改设置|settings elsewhere/i
 const RACES_SETTINGS = /抢先改设置|race the settings/i
 const ADDS_SETTING = /加一项设置|add a setting/i
+
+/**
+ * harness 详情设置的两出别处的动静（mock-harness-config.mts）：
+ * - 别处改配置：等这台设备上有 harness 的详情设置开着之后过一会儿，别处改了一项配置，这边收到通知；
+ * - 抢先改配置：别处抢先改了，通知没到——这边下一次带版本的保存会冲突、重读
+ */
+const EDITS_CONFIG_ELSEWHERE = /别处改配置|config elsewhere/i
+const RACES_CONFIG = /抢先改配置|race the config/i
 
 /** 把文本切成 2 到 6 个字的小块，模拟模型一点点吐字。scale 是倍数：英文一个词好几个字母，块要大一些 */
 export function chunkText(text: string, scale = 1): string[] {
@@ -517,6 +526,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     if (EDITS_ELSEWHERE.test(message.text)) manage.editElsewhere(view.deviceId, view.harness)
     if (RACES_SETTINGS.test(message.text)) manage.raceNextWrite(view.deviceId, view.harness)
     if (ADDS_SETTING.test(message.text)) manage.addSetting(view.deviceId, view.harness)
+    if (EDITS_CONFIG_ELSEWHERE.test(message.text)) harnessConfig.editElsewhere(view.deviceId)
+    if (RACES_CONFIG.test(message.text)) harnessConfig.raceNextWrite(view.deviceId)
     if (ORGANIZES_ELSEWHERE.test(message.text)) organize.elsewhere(view.deviceId, view.sessionId)
     // 本机的设备服务换没换版本的几出（关键字在 mock-service.mts 开头）
     service.stage(view.deviceId, message.text)
@@ -1068,7 +1079,10 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     stepMs: chunkMs,
     devices: () => app.devices,
     device: (deviceId) => app.devices.find((entry) => entry.id === deviceId),
-    setHarness: (deviceId, harnessId, patch) => setHarness(deviceId, harnessId, patch),
+    setHarness: (deviceId, harnessId, patch) => {
+      setHarness(deviceId, harnessId, patch)
+      harnessConfig.harnessChanged(deviceId, harnessId)
+    },
     busy: (deviceId, harnessId) => engaged(deviceId, harnessId).length > 0,
     // 强行重启：这个 harness 上在跑的回合都记成中断，等着的请求一并作废
     interrupt(deviceId, harnessId) {
@@ -1122,6 +1136,14 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       patchDevice(deviceId, { harnesses, stranded: strandedOf(deviceId, harnesses) })
       manage.installed(deviceId, ready)
     },
+  })
+
+  // ---------- harness 详情设置（mock-harness-config.mts） ----------
+  const harnessConfig = createMockHarnessConfig({
+    clock,
+    stepMs: chunkMs,
+    device: (deviceId) => app.devices.find((entry) => entry.id === deviceId),
+    writeEnv: (deviceId, harness, name, value) => manage.writeEnv(deviceId, harness, name, value),
   })
 
   // ---------- litch config（mock-config.mts） ----------
@@ -1674,7 +1696,19 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       const organized = organize.command(name, params)
       if (organized !== undefined) return organized
       const managed = manage.command(name, params)
-      if (managed !== undefined) return managed
+      if (managed !== undefined) {
+        // 重启过的 harness：详情设置那边要重启才生效的用上
+        if (name === 'device.harness.restart') {
+          const { deviceId, harness } = params as { deviceId: string; harness: string }
+          return managed.then((result) => {
+            harnessConfig.restarted(deviceId, harness)
+            return result
+          })
+        }
+        return managed
+      }
+      const tuned = harnessConfig.command(name, params)
+      if (tuned !== undefined) return tuned
       const scheduled = tasks.command(name, params)
       if (scheduled !== undefined) return scheduled
       const paired = pairing.command(name, params)
@@ -2204,6 +2238,9 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       if (topic.kind === 'pairing') return pairing.subscribe(topic.deviceId, sink)
       // 给设备装 harness（mock-install.mts）、litch config（mock-config.mts）
       if (topic.kind === 'install') return install.subscribe(topic.deviceId, sink)
+      if (topic.kind === 'harnessConfig') {
+        return harnessConfig.subscribe(topic.deviceId, topic.harness, sink)
+      }
       if (topic.kind === 'config') return config.subscribe(sink)
       const key = topicKey(topic)
       if (topic.kind === 'app') {

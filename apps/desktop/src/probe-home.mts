@@ -445,10 +445,10 @@ export function judgeHome(probe: HomeProbe, real: boolean): string[] {
     ) {
       failed.push(`换了设备，项目的清单没有跟着换：${localSpaces}；${buildSpaces}；${nasSpaces}`)
     }
-    // 本机上的 Codex 没装：列着，选不了；另一台上四个都能选；第三台只有一个，不出选择器
+    // 本机上的 Codex 没装：列着，选不了；另一台上五个都能选；第三台只有一个，不出选择器
     if (
       localHarness !== 'Claude Code|Pi|dsh|Codex' ||
-      buildHarness !== 'Claude Code|Pi|dsh|Codex' ||
+      buildHarness !== 'Claude Code|Pi|dsh|Codex|OpenCode' ||
       nasHarness !== '（没有）'
     ) {
       failed.push(

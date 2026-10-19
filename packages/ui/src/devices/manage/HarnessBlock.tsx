@@ -32,11 +32,13 @@ interface HarnessBlockProps {
   forced: boolean
   /** 标题行上的开关。设备服务没有给哪一项标“启用开关”的角色就没有 */
   toggle: ReactNode
+  /** 详情设置：打开它；'unsupported' 是设备支持而这个 harness 还不支持；null 是设备不支持，不提 */
+  settings: (() => void) | 'unsupported' | null
   children: ReactNode
 }
 
 export function HarnessBlock(props: HarnessBlockProps) {
-  const { device, harnessId, harness, install, pending, forced, toggle, children } = props
+  const { device, harnessId, harness, install, pending, forced, toggle, settings, children } = props
   const { channel } = useServices()
   const t = useT()
   const fold = useFold(forced)
@@ -125,6 +127,17 @@ export function HarnessBlock(props: HarnessBlockProps) {
           </span>
         ) : null}
         {toggle}
+        {typeof settings === 'function' ? (
+          <button
+            type="button"
+            className="btn"
+            data-act="harness-settings"
+            title={t('hc.entry.note', { name })}
+            onClick={settings}
+          >
+            {t('hc.entry')}
+          </button>
+        ) : null}
         {harness ? (
           <button
             type="button"
@@ -147,6 +160,11 @@ export function HarnessBlock(props: HarnessBlockProps) {
             </div>
           ) : null}
           {pending ? <div className="mng-h-note">{t('manage.pending.note', { name })}</div> : null}
+          {settings === 'unsupported' ? (
+            <div className="mng-h-note dim" data-hc-unsupported>
+              {t('hc.entry.unsupported')}
+            </div>
+          ) : null}
           <div className="mng-rows">{children}</div>
         </div>
       ) : null}

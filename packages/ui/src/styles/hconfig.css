@@ -1,0 +1,274 @@
+/* harness 详情设置：标签、重启提示、配置分组、provider 卡片、登录的每一步、MCP、指令文件编辑器、统一模式。
+   沿用设备详情（manage.css）的行、节、保存条；这里只补它没有的。只用皮肤的变量。 */
+.hc-where {
+  font-size: 12px;
+  font-weight: 400;
+}
+.hc-tabs {
+  align-self: flex-start;
+  margin: 4px 0 12px;
+}
+.hc-tab {
+  display: flex;
+  flex-direction: column;
+}
+.hc-tab > .mng-sec-note {
+  padding-bottom: 10px;
+}
+
+/* 有改动要重启才生效：一直在顶上 */
+.hc-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--wait) 55%, transparent);
+  border-radius: var(--r2);
+  background: color-mix(in srgb, var(--wait) 9%, transparent);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+/* 配置：一组一节，节里一张卡片，卡片后面是这一组的动作 */
+.hc-group > .mng-h {
+  overflow: hidden;
+}
+.hc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding-top: 8px;
+}
+.hc-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.hc-files {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  padding: 12px 0 4px;
+}
+.hc-files code {
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.hc-over {
+  color: var(--wait);
+}
+.mng-row-ctl .req-input.wrong,
+.hc .req-input.wrong {
+  border-color: var(--err);
+}
+.hc-area,
+.mng-row-ctl .req-input.hc-area {
+  width: 100%;
+  height: auto;
+  min-height: 60px;
+  padding: 6px 8px;
+  font-size: 12px;
+  line-height: 18px;
+  resize: vertical;
+}
+
+/* 账号：一个 provider 一张卡 */
+.hc-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.hc-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  background: var(--raised);
+}
+.hc-card.active {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.hc-card-head,
+.hc-card-acts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  min-width: 0;
+}
+.hc-card-head b {
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+.hc-def {
+  margin: 0;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 2px 12px;
+  font-size: 12px;
+  line-height: 18px;
+}
+.hc-def > div {
+  display: contents;
+}
+.hc-def dt {
+  color: var(--ink-3);
+}
+.hc-def dd {
+  margin: 0;
+  min-width: 0;
+}
+
+/* 一次登录走到哪一步 */
+.hc-attempt {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r1);
+  background: var(--sunken);
+  font-size: 12px;
+  line-height: 18px;
+}
+.mng-row > .hc-attempt {
+  grid-column: 1 / -1;
+}
+.hc-attempt-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.hc-attempt-head b {
+  font-size: 12px;
+  font-weight: 600;
+}
+.hc-auth-url,
+.hc-auth-code {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.hc-auth-url code {
+  flex: 1 1 200px;
+  min-width: 0;
+  padding: 4px 6px;
+  border: 1px solid var(--line-1);
+  border-radius: var(--r1);
+  background: var(--panel);
+  font-size: 11px;
+}
+.hc-auth-code code {
+  padding: 4px 12px;
+  border: 1px dashed var(--line-3);
+  border-radius: var(--r1);
+  background: var(--panel);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+}
+.hc-auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.hc-auth-acts {
+  display: flex;
+  justify-content: flex-end;
+}
+.hc-auth-result.ok {
+  color: var(--ok);
+}
+.hc-auth-result.err,
+.hc .form-note.err {
+  color: var(--err);
+}
+
+/* 对话框里的表单 */
+.modal.hc-dialog.wide {
+  width: min(720px, calc(100vw - 48px));
+}
+.hc-dialog-body .form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.hc-dialog-body .req-input {
+  width: 100%;
+}
+.hc-dialog-body .mini {
+  align-self: flex-start;
+}
+.hc-env-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) auto auto;
+  align-items: center;
+  gap: 6px;
+}
+.hc-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* MCP：一个服务一行 */
+.hc-mcp .mng-row-head {
+  flex-wrap: wrap;
+}
+.hc-mcp code.form-note {
+  display: block;
+}
+
+/* 指令文件 */
+.hc-editor {
+  width: 100%;
+  min-height: 280px;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 18px;
+  resize: vertical;
+  tab-size: 2;
+}
+.hc-dialog .hc-editor {
+  min-height: 200px;
+}
+.hc-unify-state {
+  margin: 0;
+  padding: 6px 8px;
+  border-radius: var(--r1);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+.hc-files-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  line-height: 18px;
+}
+.hc-files-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+  min-width: 0;
+}
+.hc-files-list code {
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}

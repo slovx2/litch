@@ -7,7 +7,7 @@
 // 对面没有设置接口（只有 codex 的机器、旧版的设备服务）时只有上面这一节，不摆空的管理区。
 // 远程设备还说一句对面是哪一种：设备服务，还是只有 codex；只有 codex 的给出装设备服务的办法。
 import { type DeviceView, keys, WIRES, type WireColor } from '@litch/core'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { viaOf, wireStyle } from '../app/device.ts'
 import { reasonOf } from '../app/errors.ts'
@@ -16,6 +16,7 @@ import { useKey, useServices } from '../app/services.tsx'
 import { AddDevice } from './AddDevice.tsx'
 import { INSTALL_SERVICE } from './guide.ts'
 import { HarnessList } from './HarnessList.tsx'
+import { HarnessSettingsPage } from './hconfig/HarnessSettingsPage.tsx'
 import { ManagePanel } from './manage/ManagePanel.tsx'
 import { PhonesSection } from './PhonesSection.tsx'
 import { ServiceSection } from './ServiceSection.tsx'
@@ -43,6 +44,9 @@ export function DeviceDetail({ deviceId, onBack, onClose }: DeviceDetailProps) {
   const [editing, setEditing] = useState(false)
   /** 改名、换线色、移除没做成的原因 */
   const [failure, setFailure] = useState<string | null>(null)
+  /** 开着哪个 harness 的详情设置（盖住设备详情的一页） */
+  const [settingsOf, setSettingsOf] = useState<string | null>(null)
+  const closeSettings = useCallback(() => setSettingsOf(null), [])
   const field = useRef<HTMLInputElement>(null)
   /** 这一次改名已经有了结果（提交或者放弃）。输入框消失时还会再报一次失焦，不能当成又提交一次 */
   const settled = useRef(true)
@@ -60,8 +64,10 @@ export function DeviceDetail({ deviceId, onBack, onClose }: DeviceDetailProps) {
     if (gone) onBack()
   }, [gone, onBack])
 
-  // Esc 回到设备列表。开着确认框的时候 Esc 归确认框
+  // Esc 回到设备列表。开着确认框的时候 Esc 归确认框，开着详情设置时归那一页
+  const sub = settingsOf !== null
   useEffect(() => {
+    if (sub) return
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || event.defaultPrevented) return
       if (document.querySelector('dialog[open]')) return
@@ -70,9 +76,19 @@ export function DeviceDetail({ deviceId, onBack, onClose }: DeviceDetailProps) {
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [onBack])
+  }, [onBack, sub])
 
   if (!device) return null
+  if (settingsOf !== null) {
+    return (
+      <HarnessSettingsPage
+        device={device}
+        harnessId={settingsOf}
+        onBack={closeSettings}
+        onClose={onClose}
+      />
+    )
+  }
   const online = device.connection === 'online'
   const managed = device.manageable && online
   /** 改名、改连接、移除只对加进来的远程设备有：本机就是这台电脑，只能换线色 */
@@ -312,7 +328,7 @@ export function DeviceDetail({ deviceId, onBack, onClose }: DeviceDetailProps) {
           <ServiceSection device={device} />
           <PhonesSection device={device} />
           {managed ? (
-            <ManagePanel device={device} />
+            <ManagePanel device={device} onSettings={setSettingsOf} />
           ) : device.manageable ? (
             <div className="mng-state" data-manage-state="offline">
               {t('manage.offline')}
