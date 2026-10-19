@@ -3,7 +3,7 @@ package main
 // pair：用户 ssh 进这台机器后运行，不用桌面端就能把它绑到手机上。设备服务没在跑先拉起来；
 // 调 litch/pair/start 拿一次性钥匙，在终端里画二维码、打印配对文本；用 litch/pair/wait 长轮询，
 // 有手机来登记时打印手机名和确认码、问 y/N，按回答调 litch/pair/decide。Ctrl-C 调 litch/pair/cancel 删掉一次性钥匙行。
-// 二维码过期了自动换一张新的（和桌面端一样，决 292），最多换 pairMaxRenewals 次，免得没人管的终端一直挂着。
+// 标准输入关了（没人能回 y）也取消。二维码过期了自动换一张新的（和桌面端一样，决 292），最多换 pairMaxRenewals 次，免得没人管的终端一直挂着。
 
 import (
 	"bufio"
@@ -15,8 +15,10 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -46,6 +48,9 @@ type pairOptions struct {
 }
 
 func runPair(ctx context.Context, argv []string) error {
+	// 经 ssh 在终端里跑时，断开连接来的是 SIGHUP：和 Ctrl-C 一样取消，删掉一次性钥匙行
+	ctx, stop := signal.NotifyContext(ctx, syscall.SIGHUP)
+	defer stop()
 	code := pairMain(ctx, argv, pairIO{
 		stdin: os.Stdin, stdout: os.Stdout, stderr: os.Stderr, env: os.Getenv,
 		ensure:  ensurePairDevice,
