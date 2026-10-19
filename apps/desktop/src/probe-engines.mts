@@ -130,8 +130,13 @@ export async function enginesStart(spec: EngineSpec, place: EnginesPlace): Promi
   await until('新建会话的页面', () => one('.new-hero'))
   await until('选 harness 的选择器', () => one('.pick[data-kind="harness"] .pick-btn'))
   await kit.pick('harness', spec.id)
-  // 底栏的选项是按 harness 问来的：等它换成这个 harness 的那一份
-  await files.seen(() => one('.dock .pick[data-kind="model"]'), 15_000)
+  // 底栏的选项是按 harness 问来的：等它换成这个 harness 的那一份（问来之前底栏是空的）。
+  // 不能只等模型的选择器：ACP 的 agent 建过会话才报模型，从没建过会话的入口上没有它，干等到时限
+  //（首回合验收里 ACP 那一家原先因此固定多出约 15 秒）。权限的选择器每家都有
+  await files.seen(
+    () => one('.dock .pick[data-kind="model"], .dock .pick[data-kind="permission"]'),
+    15_000,
+  )
   await frame()
   const harness = await kit.picker('harness')
   const model = await kit.picker('model')
