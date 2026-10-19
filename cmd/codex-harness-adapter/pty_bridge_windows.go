@@ -17,8 +17,13 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+var procSetConsoleCtrlHandler = windows.NewLazySystemDLL("kernel32.dll").NewProc("SetConsoleCtrlHandler")
+
 // 与 POSIX PTY 桥（pty_bridge_unix.go，协议写在那里）采用同一 JSON 字节协议，终端由原生 ConPTY 提供。
 func runPtyBridge(args []string) int {
+	// 清掉继承来的“忽略 Ctrl+C”：服务是带 CREATE_NEW_PROCESS_GROUP 起的（hostplatform），这个标记一路传给子孙进程，
+	// 不清的话终端里的程序收不到 Ctrl+C，打不断。桥自己不挂在伪终端上，伪终端里的 Ctrl+C 到不了它
+	_, _, _ = procSetConsoleCtrlHandler.Call(0, 0)
 	flags := flag.NewFlagSet("pty-bridge", flag.ContinueOnError)
 	rows, cols := flags.Int("rows", 24, "行数"), flags.Int("cols", 80, "列数")
 	var mutex sync.Mutex
