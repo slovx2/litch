@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // 设备进程的入口。常驻，由 Go 层拉起；就绪后在标准输出打一行 LITCH_DEVICE_READY。
 import { createHash } from 'node:crypto'
-import { join, win32 } from 'node:path'
+import { dirname, join, win32 } from 'node:path'
 import { adapterCliPath } from '../../shared/src/adapter-cli.mjs'
 import { setSharedLogger } from '../../shared/src/util.mjs'
 import { parseArgs, USAGE } from './args.mjs'
@@ -42,12 +42,13 @@ function controlSocketPath(stateDir: string): string {
 }
 
 /** 扫码绑定手机要的这台机器的配置：钥匙文件和主机钥匙目录可以用环境变量换（测试用，见 pair-host.mts） */
-function pairingConfig(): PairingConfig {
+function pairingConfig(stateDir: string): PairingConfig {
   const hostKeysDir = defaultHostKeysDir()
   return {
     keysFile: defaultAuthorizedKeys(),
     hostKeys: () => readHostKeys(hostKeysDir),
     adapterCli: adapterCliPath(),
+    adapterHome: dirname(stateDir),
     // OpenSSH for Windows 的管理员账号只认 administrators_authorized_keys，改它要管理员权限，第一版不支持
     unsupported:
       process.platform === 'win32' && windowsAdmin()
@@ -88,7 +89,7 @@ async function main(): Promise<void> {
     log,
     ...(args.processes ? { processes: args.processes } : {}),
     ...(control ? { control } : {}),
-    pairing: pairingConfig(),
+    pairing: pairingConfig(args.stateDir),
     dial: (socket) => unixConnector(parseSocketUrl(socket, '运行时的套接字')),
     upstreams: args.upstreams.map((upstream) => ({
       id: upstream.id,

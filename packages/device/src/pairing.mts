@@ -81,6 +81,8 @@ export interface PairingConfig {
   hostKeys(): PairHostKey[]
   /** 适配器命令行的路径，一次性钥匙行的强制命令用它。拿不到是空的，这时不支持配对 */
   adapterCli: string
+  /** 适配器的状态目录（设备进程的 --state 的上一级），强制命令带着它找设备服务 */
+  adapterHome: string
   /** 不支持配对的原因（Windows 的管理员账号）。支持是 null */
   unsupported: string | null
   sshdVersion(): Promise<SshdVersion | null>
@@ -160,6 +162,7 @@ export class DevicePairing {
     if (!this.config.adapterCli) return '找不到适配器的命令行，一次性钥匙行没有强制命令可写'
     // 换行之类会把一行钥匙拆成几行
     if (/\p{Cc}/u.test(this.config.adapterCli)) return '适配器命令行的路径里有控制字符'
+    if (/\p{Cc}/u.test(this.config.adapterHome)) return '适配器状态目录的路径里有控制字符'
     return null
   }
 
@@ -208,7 +211,7 @@ export class DevicePairing {
     const id = newPairId()
     const key = newOneTimeKey()
     const expiresAt = this.clock.now() + PAIR_TTL_MS
-    const command = enrollCommand(this.config.adapterCli, id, this.windows)
+    const command = enrollCommand(this.config.adapterCli, id, this.windows, this.config.adapterHome)
     try {
       this.keys.append(oneTimeLine(id, key.publicKeyLine, command, expiryTime(version, expiresAt)))
     } catch (error) {

@@ -1,9 +1,10 @@
 // 真 sshd 端到端测试里代替适配器命令行的 pair-enroll 子命令（那一份是 Go 写的，归命令行那条线）：
-// 用法 pair-enroll-stand-in.mjs <设备套接字> pair-enroll <配对号>。
+// 用法 pair-enroll-stand-in.mjs <设备套接字> pair-enroll --home <目录> <配对号>（--home 不看，套接字由第一个参数给）。
 // 读标准输入的一行，调 litch/pair/enroll，把结果写成一行到标准输出后退出；连不上回 unavailable。
 import { unixConnector } from '../src/sockets.mjs'
 
-const [socket, verb, pairId] = process.argv.slice(2)
+const [socket, verb, ...rest] = process.argv.slice(2)
+const pairId = rest.at(-1)
 
 function finish(output: unknown): void {
   process.stdout.write(`${JSON.stringify(output)}\n`, () => process.exit(0))

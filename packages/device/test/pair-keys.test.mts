@@ -87,19 +87,27 @@ test('钥匙行的样子：强制命令按 shell 引好，选项值里的双引�
     oneTimeLine(
       'Ab3dEf6hIj9kLm2n',
       key,
-      enrollCommand('/opt/x/litch', 'Ab3dEf6hIj9kLm2n', false),
+      enrollCommand('/opt/x/litch', 'Ab3dEf6hIj9kLm2n', false, '/home/u/.codex-harness-adapter'),
       '20261019101000Z',
     ),
-    `restrict,command="'/opt/x/litch' pair-enroll Ab3dEf6hIj9kLm2n",expiry-time="20261019101000Z" ${key} litch-pair:Ab3dEf6hIj9kLm2n`,
+    `restrict,command="'/opt/x/litch' pair-enroll --home '/home/u/.codex-harness-adapter' Ab3dEf6hIj9kLm2n",expiry-time="20261019101000Z" ${key} litch-pair:Ab3dEf6hIj9kLm2n`,
   )
   assert.equal(
     oneTimeLine('Ab3dEf6hIj9kLm2n', key, 'c', null),
     `restrict,command="c" ${key} litch-pair:Ab3dEf6hIj9kLm2n`,
   )
-  assert.equal(enrollCommand("/a b/it's", 'X', false), `'/a b/it'\\''s' pair-enroll X`)
   assert.equal(
-    oneTimeLine('X', key, enrollCommand('C:\\Program Files\\litch.exe', 'X', true), null),
-    `restrict,command="\\"C:\\Program Files\\litch.exe\\" pair-enroll X" ${key} litch-pair:X`,
+    enrollCommand("/a b/it's", 'X', false, "/h o/me's"),
+    `'/a b/it'\\''s' pair-enroll --home '/h o/me'\\''s' X`,
+  )
+  assert.equal(
+    oneTimeLine(
+      'X',
+      key,
+      enrollCommand('C:\\Program Files\\litch.exe', 'X', true, 'C:\\Users\\u\\.cha'),
+      null,
+    ),
+    `restrict,command="\\"C:\\Program Files\\litch.exe\\" pair-enroll --home \\"C:\\Users\\u\\.cha\\" X" ${key} litch-pair:X`,
   )
   assert.ok(isPairLine(`... litch-pair:Ab3dEf6hIj9kLm2n\r`, 'Ab3dEf6hIj9kLm2n'))
   assert.ok(!isPairLine('... litch-pair:Ab3dEf6hIj9kLm2nX', 'Ab3dEf6hIj9kLm2n'))

@@ -90,6 +90,7 @@ export function pairConfig(place: PairPlace, more: Partial<PairingConfig> = {}):
     keysFile: place.keysFile,
     hostKeys: () => readHostKeys(place.hostKeysDir),
     adapterCli: '/opt/litch/bin/codex-harness-adapter',
+    adapterHome: '/home/tester/.codex-harness-adapter',
     unsupported: null,
     sshdVersion: async () => [9, 9],
     hostname: 'test-host',

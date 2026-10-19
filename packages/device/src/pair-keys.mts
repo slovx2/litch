@@ -139,10 +139,13 @@ export function oneTimeLine(
   return `${options.join(',')} ${publicKeyLine} ${PAIR_KEY_MARK}${pairId}`
 }
 
-/** 强制命令：适配器命令行的 pair-enroll 子命令。路径按登录 shell 的规矩引起来 */
-export function enrollCommand(cli: string, pairId: string, windows: boolean): string {
-  const quoted = windows ? `"${cli}"` : `'${cli.replaceAll("'", `'\\''`)}'`
-  return `${quoted} pair-enroll ${pairId}`
+/**
+ * 强制命令：适配器命令行的 pair-enroll 子命令。路径按登录 shell 的规矩引起来。
+ * home 是适配器的状态目录：sshd 给强制命令的环境里没有 LITCH_DEVICE_SOCKET，不带它就只会去找默认的那个
+ */
+export function enrollCommand(cli: string, pairId: string, windows: boolean, home: string): string {
+  const quote = (value: string) => (windows ? `"${value}"` : `'${value.replaceAll("'", `'\\''`)}'`)
+  return `${quote(cli)} pair-enroll --home ${quote(home)} ${pairId}`
 }
 
 /** 手机行：不加选项，和普通 ssh 钥匙一样。日期是 UTC 的 YYYY-MM-DD */

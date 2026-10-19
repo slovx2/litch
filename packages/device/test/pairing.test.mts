@@ -94,7 +94,7 @@ test('start 写一次性钥匙行，回种子、主机钥匙、主机名和用�
     assert.match(
       lines[0] ?? '',
       new RegExp(
-        `^restrict,command="'/opt/litch/bin/codex-harness-adapter' pair-enroll ${started.pairId}",expiry-time="\\d{14}Z" ssh-ed25519 \\S+ litch-pair:${started.pairId}$`,
+        `^restrict,command="'/opt/litch/bin/codex-harness-adapter' pair-enroll --home '/home/tester/.codex-harness-adapter' ${started.pairId}",expiry-time="\\d{14}Z" ssh-ed25519 \\S+ litch-pair:${started.pairId}$`,
       ),
     )
     assert.deepEqual(r.sent, [

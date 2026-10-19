@@ -81,6 +81,7 @@ test('真 sshd：一次性钥匙只能登记，登记后手机钥匙能登录，
           keysFile,
           hostKeys: () => readHostKeys(hostKeysDir),
           adapterCli: cli,
+          adapterHome: root,
           unsupported: null,
           sshdVersion: () => detectSshdVersion(),
         },
@@ -191,7 +192,7 @@ test('真 sshd：一次性钥匙只能登记，登记后手机钥匙能登录，
     // 残留的行：过期的被 sshd 拒；没过期的能登进去，但设备服务不认这个配对号，登记回 expired
     const stale = newOneTimeKey()
     const fresh = newOneTimeKey()
-    const command = (id: string) => `${q(cli)} pair-enroll ${id}`
+    const command = (id: string) => `${q(cli)} pair-enroll --home ${q(root)} ${id}`
     writeFileSync(
       keysFile,
       `${oneTimeLine('STALESTALESTALE1', stale.publicKeyLine, command('STALESTALESTALE1'), '20200101000000Z')}\n` +
