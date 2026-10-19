@@ -104,15 +104,26 @@ func pairSelfCheck(ctx context.Context, sshPath, dir string, start pairStartResp
 	var stdout, stderr bytes.Buffer
 	command.Stdout, command.Stderr = &stdout, &stderr
 	runErr := command.Run()
-	line, _ := bufio.NewReader(&stdout).ReadString('\n')
-	var output pairEnrollOutput
-	if json.Unmarshal([]byte(strings.TrimSpace(line)), &output) == nil && (output.OK || output.Error != "") {
-		if output.OK && output.Probe {
+	// 回话是第一行带布尔 ok 的 JSON 对象；前面可能有登录 shell 的启动文件打出来的字，跳过
+	scanner := bufio.NewScanner(&stdout)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		var output struct {
+			OK      *bool  `json:"ok"`
+			Probe   bool   `json:"probe"`
+			Error   string `json:"error"`
+			Message string `json:"message"`
+		}
+		if !strings.HasPrefix(line, "{") || json.Unmarshal([]byte(line), &output) != nil || output.OK == nil {
+			continue
+		}
+		if *output.OK && output.Probe {
 			return nil
 		}
-		if !output.OK {
+		if !*output.OK {
 			return fmt.Errorf("%s: %s", output.Error, output.Message)
 		}
+		break
 	}
 	said := strings.TrimSpace(stderr.String())
 	if said == "" && runErr != nil {

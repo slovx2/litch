@@ -470,7 +470,8 @@ func readLog(t *testing.T, logs, name string) string {
 }
 
 func TestPairSelfCheck(t *testing.T) {
-	sshPath, logs := fakeSSH(t, `echo '{"ok":true,"probe":true}'`)
+	// 登录 shell 的启动文件打出来的字排在回话前面，要跳过
+	sshPath, logs := fakeSSH(t, `echo 'Welcome to the test machine.'; echo '{"motd":1}'; echo '{"ok":true,"probe":true}'`)
 	run := startPairRun(t, &fakePairing{}, func() (string, error) { return sshPath, nil }, "--port", "2222")
 	run.polled(t, 1)
 	if output := run.stdout.String(); !strings.Contains(output, "自检通过") {

@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -26,10 +27,12 @@ const enrollCommand = "pair-enroll"
 // 等回话最多等多久：对面等电脑上表态最多 2 分钟，再留出连接和写钥匙文件的时间。变量是为了测试能调短
 var enrollTimeout = 3 * time.Minute
 
-// 回话那一行最长多少字节，超过就不认
+// 标准输出最多读多少字节来找回话那一行，超过就不认
 const enrollLineMax = 64 * 1024
 
-// EnrollPair 用 target（一般带 Seed 和 HostKeyType）连上去，往标准输入写 line（自动补换行），返回标准输出的第一行（去掉换行）。
+// EnrollPair 用 target（一般带 Seed 和 HostKeyType）连上去，往标准输入写 line（自动补换行），返回回话那一行（去掉换行）。
+// 回话那一行是标准输出里第一行带布尔 ok 的 JSON 对象：sshd 经登录 shell 跑强制命令，shell 的启动文件（.bashrc 之类）
+// 打出来的字会排在它前面，要跳过。
 // 对面没回一整行就退出、等满 enrollTimeout 都算 [enroll] 种类的失败；连不上、指纹不对、钥匙不被接受照旧是原来的种类
 func EnrollPair(targetJSON, line string) (string, error) {
 	target, err := parseTarget(targetJSON)
@@ -78,7 +81,7 @@ func EnrollPair(targetJSON, line string) (string, error) {
 	}
 	answered := make(chan answer, 1)
 	go func() {
-		text, err := readLine(stdout)
+		text, err := readResult(stdout)
 		answered <- answer{text, err}
 	}()
 	select {
@@ -94,7 +97,11 @@ func EnrollPair(targetJSON, line string) (string, error) {
 		} else if errors.As(waitErr, &exit) {
 			code = exit.ExitStatus()
 		}
-		return "", kindf(kindEnroll, "对面没有给出登记结果（退出码 %d）: %s", code, strings.TrimSpace(tail(stderr.String(), 2000)))
+		detail := strings.TrimSpace(tail(stderr.String(), 2000))
+		if detail == "" {
+			detail = got.err.Error()
+		}
+		return "", kindf(kindEnroll, "对面没有给出登记结果（退出码 %d）: %s", code, detail)
 	case reason := <-lost:
 		return "", kindf(kindUnreachable, "等登记结果时连接断了: %s", reason)
 	case <-ctx.Done():
@@ -102,17 +109,36 @@ func EnrollPair(targetJSON, line string) (string, error) {
 	}
 }
 
-// readLine 读到第一个换行为止，太长或者没读到换行就结束都算错
-func readLine(reader io.Reader) (string, error) {
-	buffered := bufio.NewReaderSize(io.LimitReader(reader, enrollLineMax+1), 4096)
-	text, err := buffered.ReadString('\n')
-	if err != nil {
-		if errors.Is(err, io.EOF) {
-			return "", errors.New("没读到一整行")
+// readResult 一行一行读，跳过不是回话的（登录 shell 打出来的字），返回第一行带布尔 ok 的 JSON 对象。
+// 读满 enrollLineMax 或者读到头都没有就算错，错误里带上读到的末尾，界面当详情显示
+func readResult(reader io.Reader) (string, error) {
+	buffered := bufio.NewReaderSize(io.LimitReader(reader, enrollLineMax), 4096)
+	var seen strings.Builder
+	for {
+		text, err := buffered.ReadString('\n')
+		line := strings.TrimSpace(text)
+		if isEnrollResult(line) && (err == nil || errors.Is(err, io.EOF)) {
+			return line, nil
 		}
-		return "", err
+		seen.WriteString(text)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return "", fmt.Errorf("没读到登记结果: %s", strings.TrimSpace(tail(seen.String(), 2000)))
+			}
+			return "", err
+		}
 	}
-	return strings.TrimRight(text, "\r\n"), nil
+}
+
+// isEnrollResult：是不是 pair-enroll 回的那一行（JSON 对象，ok 是布尔）
+func isEnrollResult(line string) bool {
+	if !strings.HasPrefix(line, "{") {
+		return false
+	}
+	var probe struct {
+		OK *bool `json:"ok"`
+	}
+	return json.Unmarshal([]byte(line), &probe) == nil && probe.OK != nil
 }
 
 // PairConfirmCode 是两边各自算出来比对的 6 位确认码：

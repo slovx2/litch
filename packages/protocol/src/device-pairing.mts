@@ -141,7 +141,11 @@ export type PairEnrollInput =
       name: string
     }
 
-/** pair-enroll 写回标准输出的一行，写完就退出 */
+/**
+ * pair-enroll 写回标准输出的一行，写完就退出。
+ * 读的一方（手机、自检）要跳过它前面的行：sshd 经登录 shell 跑强制命令，shell 的启动文件（比如 Linux 上的 .bashrc）
+ * 打出来的字会排在前面。回话是第一行带布尔 ok 的 JSON 对象
+ */
 export type PairEnrollOutput =
   | { ok: true; probe?: boolean; phoneId?: string }
   | { ok: false; error: PairEnrollError; message: string }

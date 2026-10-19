@@ -247,3 +247,22 @@ func TestEnrollPairTimesOut(t *testing.T) {
 	_, err := EnrollPair(server.target(t, seed, ssh.KeyAlgoED25519, ssh.FingerprintSHA256(server.ed25519)), "{}")
 	expectKind(t, err, kindEnroll)
 }
+
+// 登录 shell 的启动文件打出来的字排在回话前面：跳过它们，取第一行带布尔 ok 的 JSON 对象
+func TestReadResultSkipsShellNoise(t *testing.T) {
+	text := "Welcome to the test machine.\n{\"motd\":1}\n{\"ok\":false,\"error\":\"rejected\",\"message\":\"电脑上拒绝了\"}\n"
+	line, err := readResult(strings.NewReader(text))
+	if err != nil || line != `{"ok":false,"error":"rejected","message":"电脑上拒绝了"}` {
+		t.Fatalf("readResult = %q, %v", line, err)
+	}
+	// 最后一行没有换行也认
+	line, err = readResult(strings.NewReader("noise\n{\"ok\":true,\"phoneId\":\"cec3a3912e6e882d\"}"))
+	if err != nil || !strings.Contains(line, `"phoneId"`) {
+		t.Fatalf("没换行的结尾 = %q, %v", line, err)
+	}
+	// 只有杂字：错误里带上读到的东西，界面当详情
+	_, err = readResult(strings.NewReader("Welcome to the test machine.\n"))
+	if err == nil || !strings.Contains(err.Error(), "Welcome to the test machine.") {
+		t.Fatalf("只有杂字应当报错并带上原话，得到 %v", err)
+	}
+}
