@@ -5,7 +5,8 @@
 //   2. 对照 packages/protocol/src/config-ops.mts：每个操作在手册里都以 `scripts/litch <组> <动作>` 的样子出现过；
 //      手册里写成这个样子的，组和动作都得存在（多讲了不存在的操作也报）。
 //   3. SKILL.md 里提到的 references/*.md 都在，references 下的每一份 SKILL.md 都提到了。
-//   4. 两个命令壳里留着 {{ADAPTER}}（安装时换成适配器的绝对路径），litch 可执行，litch.cmd 是 CRLF。
+//   4. 两个命令壳里留着 {{ADAPTER}}（安装时换成适配器的绝对路径），litch 可执行。litch.cmd 在仓库里是 LF
+//      （git 会把 CRLF 改掉），安装时换成 CRLF（apps/desktop/src/manual-skill.mts）。
 //   5. 手册是要公开装到用户机器上的：不许出现工作区的路径和内部决策编号。
 //   6. references/harnesses.md 里写的“验证过的版本”和 protocol/versions.json 对得上（那边改了这边要跟）。
 //
@@ -185,7 +186,6 @@ function checkScripts(dir, errors) {
   if (!cmd.includes('"{{ADAPTER}}" config %*')) {
     errors.push('scripts/litch.cmd 里要有 "{{ADAPTER}}" config %*')
   }
-  if (cmd.replace(/\r\n/g, '').includes('\n')) errors.push('scripts/litch.cmd 要用 CRLF 换行')
 }
 
 /** 公开的手册里不该有的东西 */

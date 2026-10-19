@@ -194,7 +194,9 @@ function writeScripts(dir: string, adapterBin: string, platform: NodeJS.Platform
   chmodSync(shell, 0o755)
   const cmd = join(scripts, 'litch.cmd')
   const forCmd = platform === 'win32' ? adapterBin.replaceAll('/', '\\') : adapterBin
-  writeFileSync(cmd, readFileSync(cmd, 'utf8').replaceAll(ADAPTER_PLACEHOLDER, forCmd))
+  // 仓库里存的是 LF（git 会把 CRLF 改掉），cmd.exe 要 CRLF：写的时候换
+  const batch = readFileSync(cmd, 'utf8').replaceAll(ADAPTER_PLACEHOLDER, forCmd)
+  writeFileSync(cmd, batch.replace(/\r?\n/g, '\r\n'))
 }
 
 /** 临时目录放在 ~/.agents 下面（和技能目录同一个文件系统，换名字是一步），不放进任何 harness 扫的目录里 */
