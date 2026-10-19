@@ -36,11 +36,13 @@ import {
   dropDraft,
   insertIntoDraft,
   joinDraft,
+  leadDraft,
   loadDraft,
   loadDraftExtras,
   loadDraftImages,
   mentionText,
   onMention,
+  onPrefill,
   onRefill,
   saveDraft,
   saveDraftExtras,
@@ -156,6 +158,22 @@ export function Composer(props: ComposerProps) {
         recalling.current = null
         setText((current) => joinDraft(back, current))
         setImages((current) => [...attached, ...current].slice(0, MAX_IMAGES))
+        requestAnimationFrame(() => {
+          const area = input.current
+          if (!area) return
+          area.focus()
+          area.setSelectionRange(area.value.length, area.value.length)
+        })
+      }),
+    [draftKey],
+  )
+  // 带预填地开过来（配置助手按钮）：那句放在最前面、原来的字接在后面，技能片加上，光标落到末尾
+  useEffect(
+    () =>
+      onPrefill(draftKey, (lead, more) => {
+        recalling.current = null
+        setText((current) => leadDraft(lead, current))
+        if (more.length > 0) setExtras((current) => mergeExtras(current, more))
         requestAnimationFrame(() => {
           const area = input.current
           if (!area) return

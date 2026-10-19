@@ -4,6 +4,7 @@
 // 这是“主进程不在数据路径上”的一处例外：浏览器视图和 Computer Use 助手都只能由主进程管。
 // 传的只有这一次调用的参数和结果，不传会话内容。
 
+import type { ConfigMainRequest, ConfigMainResult } from '@litch/core'
 import type {
   ClientToolCallParams,
   ClientToolCallResponse,
@@ -103,6 +104,8 @@ export type ClientToolToMain =
       turnId: string
     }
   | { type: typeof CLIENT_TOOL; op: 'notify'; notice: MachineNotice }
+  /** litch config 里属于主进程的一项（内置浏览器的网站、Computer Use），做完回 configResult（config-main.mts） */
+  | { type: typeof CLIENT_TOOL; op: 'config'; id: string; request: ConfigMainRequest }
 
 /** 主进程 → 核心 */
 export type ClientToolToCore =
@@ -111,3 +114,4 @@ export type ClientToolToCore =
   | { type: typeof CLIENT_TOOL; op: 'askDone'; askId: string }
   /** 主进程启动时告诉核心：这台桌面能执行哪些命名空间（握手时照这个声明） */
   | { type: typeof CLIENT_TOOL; op: 'namespaces'; namespaces: string[] }
+  | { type: typeof CLIENT_TOOL; op: 'configResult'; id: string; result: ConfigMainResult }

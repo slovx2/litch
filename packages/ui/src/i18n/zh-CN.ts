@@ -1,6 +1,7 @@
 // 中文文案。这一份是“有哪些句子”的依据：键的集合以这里为准，别的语言必须一句不少。
 // 前半是界面自己的话，后半是核心要说的话（键和 packages/core/src/phrase.mts 一一对应）。
 import type { Entry } from './types.ts'
+import { zhOnboard } from './zh-CN-onboard.ts'
 import { zhPairing } from './zh-CN-pairing.ts'
 import { zhTasks } from './zh-CN-tasks.ts'
 
@@ -9,6 +10,8 @@ export const zhCN = {
   ...zhTasks,
   // 扫码绑定手机的文案也单独放（zh-CN-pairing.ts）
   ...zhPairing,
+  // 上手功能（装 harness、首启引导、配置助手）的文案也单独放（zh-CN-onboard.ts）
+  ...zhOnboard,
   'title.location': '当前位置',
   'workspace.none': '无项目',
 

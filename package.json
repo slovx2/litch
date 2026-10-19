@@ -94,6 +94,7 @@
     "client:check:full": "npm run build --prefix packages/ui && npm run check:full --prefix apps/desktop",
     "client:check:manage": "npm run build --prefix packages/ui && npm run check:manage --prefix apps/desktop",
     "client:check:tasks": "npm run build --prefix packages/ui && npm run check:tasks --prefix apps/desktop",
+    "client:check:onboard": "npm run build --prefix packages/ui && npm run check:onboard --prefix apps/desktop",
     "client:check:tree": "npm run build --prefix packages/ui && npm run check:tree --prefix apps/desktop",
     "client:check:terminal": "npm run build --prefix packages/ui && npm run check:terminal --prefix apps/desktop",
     "client:check:files": "npm run build --prefix packages/ui && npm run check:files --prefix apps/desktop",

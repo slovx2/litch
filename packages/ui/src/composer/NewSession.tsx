@@ -13,10 +13,14 @@ import {
 } from '@litch/core'
 import { useEffect, useState } from 'react'
 import type { Draft, Selection } from '../app/App.tsx'
+import { requestAssistant } from '../app/actions.ts'
 import { useT } from '../app/appearance.ts'
 import { nameOf, nextStep, wireStyle } from '../app/device.ts'
 import { useKey, useServices } from '../app/services.tsx'
+import { useAssistant, warmManualDir } from '../assist/useAssistant.ts'
 import { FailureNote, shownState, useReconnect } from '../devices/status.tsx'
+import { InstallRow } from '../install/InstallRow.tsx'
+import { useInstall } from '../install/useInstall.ts'
 import { WorkspaceDialog } from '../sidebar/WorkspaceDialog.tsx'
 import { UserAttachments } from '../transcript/messages.tsx'
 import { Composer } from './Composer.tsx'
@@ -41,6 +45,8 @@ interface NewSessionProps {
   onCreated(selection: Selection): void
   /** 打开“设备”一页 */
   onDevices(): void
+  /** 第几次点配置助手（0 是没点过）：变了就往输入框里放好那一句（useAssistant.ts） */
+  assist: number
 }
 
 /** 等会话的内容到了界面这一侧再切过去，免得切换的那一下气泡闪没了。最多等这么久 */
@@ -167,9 +173,13 @@ function DeviceDown({ device }: { device: DeviceView }) {
   return device.note ? <div>{t.text(device.note)}</div> : null
 }
 
-/** 设备连着，可上面一个可用的 harness 都没有：每个 harness 是怎么回事、下一步做什么 */
+/**
+ * 设备连着，可上面一个可用的 harness 都没有：每个 harness 是怎么回事、下一步做什么。
+ * 设备能装 harness 时，没装的那几项直接带安装按钮（和设备页同一个组件）
+ */
 function HarnessesDown({ device }: { device: DeviceView }) {
   const t = useT()
+  const install = useInstall(device)
   return device.harnesses.map((entry) => (
     <div key={entry.id} className="new-why-row" data-harness={entry.id}>
       <span className="chip off">{entry.badge}</span>
@@ -179,6 +189,15 @@ function HarnessesDown({ device }: { device: DeviceView }) {
           reason: entry.reason ? t.text(entry.reason) : t(`harness.state.${entry.state}`),
           next: nextStep(entry, t),
         })}
+        {entry.state === 'unavailable' ? (
+          <InstallRow
+            device={device}
+            harnessId={entry.id}
+            view={install}
+            name={entry.name}
+            compact
+          />
+        ) : null}
       </span>
     </div>
   ))
@@ -190,7 +209,7 @@ function HarnessesDown({ device }: { device: DeviceView }) {
  * 先写第一条消息，发出去的那一刻才真的建：消息立刻显示在对话的位置上，不等会话建好；
  * 没建成就把文字还回输入框。
  */
-export function NewSession({ draft, onPlace, onCreated, onDevices }: NewSessionProps) {
+export function NewSession({ draft, onPlace, onCreated, onDevices, assist }: NewSessionProps) {
   const deviceId = draft?.deviceId ?? ''
   const workspaceId = draft?.workspaceId ?? null
   const { channel, replica } = useServices()
@@ -216,6 +235,9 @@ export function NewSession({ draft, onPlace, onCreated, onDevices }: NewSessionP
   const [pending, setPending] = useState<UserMessageItem | null>(null)
 
   const cwd = workspace?.roots[0] ?? null
+  // 配置助手：点了之后设备切到本机，这里放好那一句（有手册的技能就带技能片）
+  useAssistant(assist, { device, harness, cwd }, 'new')
+  useEffect(warmManualDir, [])
   /** 对面不带设置新建会话时会用的。还在问是 undefined，问不到是 null */
   const defaults = useNewSessionDefaults(deviceId, harness?.id, cwd)
   // 还在问的时候底栏先不出选择器：先按清单猜一个、问回来再换掉的话，底栏会跳一下，
@@ -361,6 +383,15 @@ export function NewSession({ draft, onPlace, onCreated, onDevices }: NewSessionP
       {pending === null ? (
         <div className="new-hero">
           <h1>{t('newSession.hero')}</h1>
+          <button
+            type="button"
+            className="new-assist"
+            data-act="assistant"
+            title={t('assist.button.note')}
+            onClick={requestAssistant}
+          >
+            {t('assist.button')}
+          </button>
         </div>
       ) : (
         <div className="tr-scroll">

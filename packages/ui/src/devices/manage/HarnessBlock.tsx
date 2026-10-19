@@ -1,7 +1,7 @@
 // 一个 harness 占一块，平时只有一行：它是谁、现在什么状态、开没开、能不能重启。
 // 点开才是用不了的原因、它自己的那些设置和各自的说明。里面有没保存的改动时一定开着，不把问题藏在收起的块里。
 // “启用”也只是按声明画出来的一项，界面不认它的键：标题行上的开关是设备服务标了“启用开关”角色的那一项（见 ManagePanel）。
-import type { DeviceView, HarnessView } from '@litch/core'
+import type { DeviceView, HarnessView, InstallTopicView } from '@litch/core'
 import { type ReactNode, useId, useState } from 'react'
 import { useT } from '../../app/appearance.ts'
 import { Confirm } from '../../app/Confirm.tsx'
@@ -9,6 +9,7 @@ import { whyNot } from '../../app/errors.ts'
 import { Fold, useFold } from '../../app/Fold.tsx'
 import { useServices } from '../../app/services.tsx'
 import { showToast } from '../../app/toasts.tsx'
+import { InstallRow } from '../../install/InstallRow.tsx'
 import { HarnessWhy } from '../HarnessList.tsx'
 
 const STATE_CLASS: Record<HarnessView['state'], string> = {
@@ -23,6 +24,8 @@ interface HarnessBlockProps {
   /** 设置里提到了、设备却没有声明的 harness，只知道它的标识 */
   harnessId: string
   harness: HarnessView | undefined
+  /** 设备能装 harness 时的版本和安装任务：标题行下多一行版本和按钮。不能装是 undefined */
+  install: InstallTopicView | undefined
   /** 改过的设置还没用上，等着重启 */
   pending: boolean
   /** 它的设置里有没保存的改动：这一块一定开着 */
@@ -33,7 +36,7 @@ interface HarnessBlockProps {
 }
 
 export function HarnessBlock(props: HarnessBlockProps) {
-  const { device, harnessId, harness, pending, forced, toggle, children } = props
+  const { device, harnessId, harness, install, pending, forced, toggle, children } = props
   const { channel } = useServices()
   const t = useT()
   const fold = useFold(forced)
@@ -135,6 +138,7 @@ export function HarnessBlock(props: HarnessBlockProps) {
           </button>
         ) : null}
       </header>
+      <InstallRow device={device} harnessId={harnessId} view={install} name={name} />
       {fold.open ? (
         <div id={bodyId} className="mng-h-body">
           {harness && !ready ? (

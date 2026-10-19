@@ -31,6 +31,7 @@
     "check:full": "npm run build && node scripts/smoke.mjs --full --mock && node scripts/smoke.mjs --sidebar && node scripts/smoke.mjs --full",
     "check:sidebar": "npm run build && node scripts/smoke.mjs --sidebar",
     "check:tasks": "npm run build && node scripts/smoke.mjs --tasks",
+    "check:onboard": "npm run build && node scripts/smoke.mjs --onboard",
     "check:tree": "npm run build && node scripts/smoke.mjs --tree",
     "check:manage": "npm run build && node scripts/smoke.mjs --manage --mock && node scripts/smoke.mjs --manage",
     "check:terminal": "npm run build && node scripts/check-terminal.mjs",

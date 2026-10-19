@@ -1,5 +1,5 @@
 // 离得远的组件请应用外框办的事：开一个新对话（输入框里的 `/new`，和 Cmd/Ctrl+N 是同一个动作）、
-// 打开设置页的某一组（设备详情里“去设置里看看”）、打开某个会话（提示上的“去看”）。
+// 打开设置页的某一组（设备详情里“去设置里看看”）、打开某个会话（提示上的“去看”）、打开配置助手。
 // 外框（App.tsx）听着，别处只管提出来。
 const listeners = new Set<() => void>()
 
@@ -80,5 +80,22 @@ export function onTasksRequest(listener: (route: TasksRoute) => void): () => voi
   taskListeners.add(listener)
   return () => {
     taskListeners.delete(listener)
+  }
+}
+
+const assistantListeners = new Set<() => void>()
+
+/**
+ * 打开配置助手：到新建对话页、设备切到本机（手册只装在本机），harness 和模型照上次的不动，
+ * 输入框里放好“使用 Litch 产品手册帮我配置：”（有技能就带技能片），原来写的接在后面
+ */
+export function requestAssistant(): void {
+  for (const listener of assistantListeners) listener()
+}
+
+export function onAssistantRequest(listener: () => void): () => void {
+  assistantListeners.add(listener)
+  return () => {
+    assistantListeners.delete(listener)
   }
 }

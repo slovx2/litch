@@ -134,6 +134,8 @@ function createHost(): Core | MockCore {
       version,
       lang: process.env.LITCH_LANG === 'en' ? 'en' : 'zh-CN',
       ...(pairTtlMs > 0 ? { pairTtlMs } : {}),
+      // fresh：本机一个 harness 都没装（试首启引导、一键安装）
+      ...(process.env.LITCH_MOCK_SCENE === 'fresh' ? { scene: 'fresh' as const } : {}),
     })
   }
   // 设备配置和侧栏快照放在用户数据目录里，目录由主进程告诉我们
@@ -149,6 +151,8 @@ function createHost(): Core | MockCore {
     ...(process.platform === 'win32' ? {} : { machine: { desktop } }),
     // 扫码绑定手机：一次性私钥的临时文件放在用户数据目录下；本机给手机看的名字用电脑名称
     pairing: desktopPairing({ dataDir, localName: () => desktop.name }),
+    // 本机 harness 里的 litch config（产品手册的配置命令）交给这台桌面端执行；没给语言时按界面的
+    config: { lang: () => adapterLang },
     ...(dataDir ? { store: fileDeviceStore(dataDir) } : {}),
     devices: [
       {

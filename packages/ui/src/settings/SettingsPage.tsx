@@ -3,6 +3,7 @@ import { useT } from '../app/appearance.ts'
 import { Close } from '../app/icons.tsx'
 import type { MessageKey } from '../i18n/index.ts'
 import { AboutSection } from './About.tsx'
+import { AssistSection } from './AssistSection.tsx'
 import { BrowserSection } from './BrowserSection.tsx'
 import { ComputerSection } from './ComputerSection.tsx'
 import { computerBridge, computerIntro } from './computer-bridge.ts'
@@ -21,6 +22,7 @@ export const SETTINGS_SECTIONS = [
   'browser',
   'computer',
   'notify',
+  'assist',
   'keys',
   'about',
 ] as const
@@ -40,6 +42,7 @@ const TITLES: Record<SettingsSection, MessageKey> = {
   browser: 'settings.group.browser',
   computer: 'settings.group.computer',
   notify: 'settings.group.notify',
+  assist: 'settings.group.assist',
   keys: 'settings.group.keys',
   about: 'settings.group.about',
 }
@@ -50,6 +53,7 @@ const INTROS: Record<SettingsSection, MessageKey> = {
   browser: 'settings.browser.intro',
   computer: 'settings.computer.intro',
   notify: 'settings.notify.intro',
+  assist: 'settings.assist.intro',
   keys: 'settings.keys.intro',
   about: 'settings.about.intro',
 }
@@ -138,6 +142,8 @@ export function SettingsPage({ section: asked, onSection, onClose, onDevices }: 
             <ComputerSection onDevices={onDevices} />
           ) : section === 'notify' ? (
             <NotifySection />
+          ) : section === 'assist' ? (
+            <AssistSection />
           ) : section === 'keys' ? (
             <ShortcutsSection />
           ) : (

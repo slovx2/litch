@@ -30,6 +30,7 @@ import { createExecutors } from './client-tools/registry.mjs'
 import { CLIENT_TOOL, type ClientToolToMain } from './client-tools/types.mjs'
 import { createComputerUse, locateHelper } from './computer-use/index.mjs'
 import { createComputerUseSettings, fakePermissions } from './computer-use/settings.mjs'
+import { createConfigMain } from './config-main.mjs'
 import {
   ABOUT,
   ATTACH,
@@ -176,6 +177,9 @@ function serveUi(request: Request): Response | Promise<Response> {
 /** 界面的地址。params 是外观上的临时指定（语言、皮肤、明暗），界面优先用它，但不会记下来 */
 export function uiUrl(params: Record<string, string>): string {
   const url = new URL(devUrl ?? `${UI_ORIGIN}/index.html`)
+  // 自检和截图用的是临时的用户数据目录，每次都像第一次启动：首启引导一律不出，
+  // 只有专门验它的那一项（LITCH_ONBOARDING=1）让它出
+  if (smoke && process.env.LITCH_ONBOARDING !== '1') url.searchParams.set('onboarding', 'off')
   for (const [name, value] of Object.entries(params)) url.searchParams.set(name, value)
   return url.toString()
 }
@@ -258,6 +262,15 @@ function startCore(): void {
           if (window.isMinimized()) window.restore()
           window.show()
           window.focus()
+        })
+        return
+      }
+      // litch config 里属于主进程的一项（config-main.mts）：做完把结果交回核心
+      if (tool.op === 'config') {
+        void configMain(tool.request).then((result) => {
+          if (core === child) {
+            child.postMessage({ type: CLIENT_TOOL, op: 'configResult', id: tool.id, result })
+          }
         })
         return
       }
@@ -493,6 +506,9 @@ const computerUseSettings = computerUse
       fakePermissions(process.env.LITCH_COMPUTER_USE_PERMISSIONS ?? (smoke ? 'none' : undefined)),
     )
   : null
+
+/** litch config 里只有主进程做得了的几项：内置浏览器的网站和数据、Computer Use（config-main.mts） */
+const configMain = createConfigMain({ browser: () => browser, computer: computerUseSettings })
 const fromUi = (event: Electron.IpcMainInvokeEvent): boolean => {
   const frame = event.senderFrame
   return !!frame && frame === event.sender.mainFrame && isUiUrl(frame.url)

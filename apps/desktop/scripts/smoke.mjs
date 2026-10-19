@@ -8,6 +8,7 @@
 //   npm run check:sidebar  侧栏自己（对着模拟核心）：收起的项目和设备那一行上的汇总。check:full 里也有它
 //   npm run check:tasks    定时任务（对着模拟核心）：列表、新建、立即运行、去会话、会话顶上那一条
 //   npm run check:tree     会话树（对着模拟核心）：子会话的嵌套、派出与提案、注入的提示条、子代理的侧面板
+//   npm run check:onboard  上手功能（对着模拟核心的 fresh 开局）：首启引导两步、装 harness 成与不成、配置助手预填、litch config
 //   加 --packed            不用开发时的外壳，改成起装好的应用（先 npm run pack），验的是打包出来的那一份
 import { execFile, execFileSync, spawn } from 'node:child_process'
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -27,6 +28,7 @@ const repo = fileURLToPath(new URL('../../..', import.meta.url))
 // --sidebar：侧栏的验收（对着模拟核心）
 // --tasks：定时任务的验收（对着模拟核心）
 // --tree：会话树的验收（对着模拟核心，src/probe-tree.mts）
+// --onboard：上手功能的验收（对着模拟核心，本机一个 harness 都没装、首启引导打开，src/probe-onboard.mts）
 // --remote：远程设备的验收，对着假的远程机器（回环上的用户态 sshd，后面接隔离入口）
 const usePacked = process.argv.includes('--packed')
 if (usePacked && !existsSync(packedBinary())) {
@@ -52,7 +54,7 @@ const probe = useRemote
     ? 'full'
     : useManage
       ? 'manage'
-      : ['scroll', 'compose', 'sidebar', 'tasks', 'tree'].find((name) =>
+      : ['scroll', 'compose', 'sidebar', 'tasks', 'tree', 'onboard'].find((name) =>
           process.argv.includes(`--${name}`),
         )
 const mode = useRemote
@@ -244,6 +246,8 @@ const child = spawn(usePacked ? packedBinary() : electron, usePacked ? [] : [app
     ...process.env,
     LITCH_SMOKE: mode,
     LITCH_PROFILE: profile,
+    // 上手功能：本机一个 harness 都没装的开局，首启引导照第一次启动那样出
+    ...(probe === 'onboard' ? { LITCH_MOCK_SCENE: 'fresh', LITCH_ONBOARDING: '1' } : {}),
     ...(fixture ? { LITCH_ENTRY: fixture.entry } : {}),
     // 本机设备直接连聚合面的套接字
     ...(device ? { LITCH_ENTRY: device.socket } : {}),
