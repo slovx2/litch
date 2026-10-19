@@ -200,6 +200,13 @@ try {
   const growFlag = join(root, 'grow.installed')
 
   keygen(join(root, 'host_key'), 'litch-test-host')
+  // 扫码绑定手机：设备服务按 sshd 的规矩读 ssh_host_*_key.pub 报主机钥匙，这里放一份夹具 sshd 用的那把
+  // （LITCH_SSH_HOST_KEYS_DIR 指过来，见 client-ssh-fixture-service.mjs），不读这台电脑的 /etc/ssh
+  mkdirSync(join(root, 'host-keys'))
+  writeFileSync(
+    join(root, 'host-keys', 'ssh_host_ed25519_key.pub'),
+    readFileSync(join(root, 'host_key.pub')),
+  )
   keygen(join(root, 'client_key'), 'litch-test-client')
   // 另一把没被授权的钥匙，用来验认证失败
   keygen(join(root, 'other_key'), 'litch-test-other')
