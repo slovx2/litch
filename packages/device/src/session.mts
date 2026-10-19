@@ -14,6 +14,7 @@ import {
   type HarnessInfo,
   type HarnessUnavailable,
 } from '../../protocol/src/device.mjs'
+import { DEVICE_PAIR_ERROR } from '../../protocol/src/device-pairing.mjs'
 import {
   DEVICE_SETTINGS_CHANGED,
   type DeviceSettingsChangedNotification,
@@ -36,6 +37,7 @@ import { describeHarness, type HarnessCatalog, REQUIRED_EXTENSIONS } from './har
 import { listThreads } from './list-threads.mjs'
 import { type DeviceManagement, MANAGEMENT_PREFIX } from './management.mjs'
 import { dialectFor } from './native-codex.mjs'
+import { type DevicePairing, PAIR_PREFIX, PairingError } from './pairing.mjs'
 import { Relay } from './relay.mjs'
 import { classify } from './routes.mjs'
 import { describeDevice } from './service-info.mjs'
@@ -122,6 +124,8 @@ export interface SessionHost {
   sessionTree: SessionTree
   /** 设置里“会话编排”开着 */
   sessionTreeOn(): boolean
+  /** 扫码绑定手机（devicePairing）。设备进程没给配置时是 null */
+  pairing: DevicePairing | null
 }
 
 /** 请求已经有着落：转给上游了（应答由上游来），或者已经自己答过了 */
@@ -305,6 +309,12 @@ export class ClientSession implements ClientToolPeer {
         if ('error' in outcome) throw new UpstreamRpcError(outcome.error)
         return outcome.result
       })
+    // 扫码绑定手机的方法也不用握手：设备上的命令行 pair、pair-enroll 直接连 device.sock 调
+    if (method.startsWith(PAIR_PREFIX) && this.state !== 'closed') {
+      if (!this.host.pairing)
+        throw new PairingError(DEVICE_PAIR_ERROR.unsupported, '这台设备不支持扫码绑定手机')
+      return this.host.pairing.call(method, frame.params)
+    }
     if (this.state !== 'ready') throw new ProtocolError(-32600, 'Not initialized')
     if (typeof id === 'string' && id.startsWith(INTERNAL_ID_PREFIX))
       throw new ProtocolError(-32600, `请求号不能以 ${INTERNAL_ID_PREFIX} 开头`)

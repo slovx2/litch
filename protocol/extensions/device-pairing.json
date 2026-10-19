@@ -1,6 +1,6 @@
 {
   "extension": "devicePairing",
-  "status": "初稿（2026-10-19 主线落的约定），设备侧线补齐 JSON Schema 和规则",
+  "status": "已定（2026-10-19 主线落的约定，设备侧线补齐 JSON Schema 和规则）",
   "description": "扫码绑定手机：出码的一方（桌面端经聚合面，或设备上的命令行 pair 直连 device.sock）让设备服务建一个配对，设备服务往当前用户的 authorized_keys 末尾追加一把一次性钥匙行（restrict、强制命令 pair-enroll <配对号>、expiry-time），把种子交给出码的一方。手机扫码后用这把钥匙 SSH 登录，sshd 只让它跑 pair-enroll；手机往标准输入写一行公钥和名字，设备服务通知出码的一方，允许后追加手机的钥匙行、删掉一次性钥匙行，pair-enroll 把结果写回标准输出。类型、二维码编解码、确认码算法在 packages/protocol/src/device-pairing.mts。",
   "appliesTo": "只有聚合面。兼容面上没有这个扩展的任何内容。",
   "declaration": {
@@ -8,27 +8,535 @@
     "where": "initialize.params.capabilities.litchExtensions",
     "schema": {
       "type": "array",
-      "items": { "type": "string" },
-      "contains": { "const": "devicePairing" }
+      "items": {
+        "type": "string"
+      },
+      "contains": {
+        "const": "devicePairing"
+      }
     }
   },
   "undeclared": "没声明的连接收不到这两个通知，方法照样能调；命令行用 litch/pair/wait 长轮询代替通知。",
-  "methods": [
-    "litch/pair/start",
-    "litch/pair/cancel",
-    "litch/pair/decide",
-    "litch/pair/wait",
-    "litch/pair/enroll",
-    "litch/pair/phones",
-    "litch/pair/revoke"
-  ],
-  "notifications": ["litch/pair/changed", "litch/pair/phones/changed"],
   "rules": [
-    "钥匙文件：当前用户的 ~/.ssh/authorized_keys（测试时由环境变量 LITCH_AUTHORIZED_KEYS 指定别的路径）。加锁；只在末尾追加、按行尾标记删行，其他字节不动；写临时文件再改名，文件 600、目录 700；是符号链接、不可写、属主不是当前用户时不改，报 keysFile。",
-    "一次性钥匙行：restrict,command=\"<适配器路径> pair-enroll <配对号>\",expiry-time=\"<UTC>\" ssh-ed25519 <公钥> litch-pair:<配对号>。expiry-time 只在 sshd 是 OpenSSH 8.2 及以上时加。pair-enroll 每次都向设备服务核对配对号，过期、用过、取消的一律拒绝，所以残留的行无害。",
-    "清理：配对 done、expired、cancelled、rejected 时删掉它的行；设备服务启动时删掉所有 litch-pair: 行（配对只存在内存里）。",
-    "手机钥匙行：ssh-ed25519 <公钥> litch-mobile:<手机号> <名字> <YYYY-MM-DD>，不加选项。名字去掉控制字符和空白以外的不可见字符，空格换成下划线，截到 PAIR_PHONE_NAME_MAX。同一个公钥已经在文件里就不重复写，回 ok。",
-    "一个配对号只接受一部手机：requested 期间别的登记回 used；拒绝或 2 分钟没表态，配对作废（rejected）。",
+    "支持与否：设备服务启动时拿到了配置（钥匙文件、主机钥匙目录）、找得到适配器命令行（命令行经环境变量 CHA_ADAPTER_CLI 交过来；没人交时从设备包的位置往上找 bin/codex-harness-adapter），而且不是 Windows 的管理员账号（whoami /groups 里有 S-1-5-32-544；判断不了按是算），runtime/info 的 device.extensions 才列 devicePairing。不支持时 litch/pair/* 一律回 unsupported。",
+    "钥匙文件：当前用户的 ~/.ssh/authorized_keys；环境变量 LITCH_AUTHORIZED_KEYS 给了就用它（测试用）。主机钥匙从 /etc/ssh 读（Windows 是 %ProgramData%\\ssh），环境变量 LITCH_SSH_HOST_KEYS_DIR 给了就用它（测试用）。",
+    "改钥匙文件：先不加锁按原内容算一遍，不用改就什么都不碰（不建锁文件、不写）；要改时检查、加锁（同目录的 <文件名>.litch-lock，用 O_EXCL 建，超过 10 秒的算死锁删掉，最多等 3 秒），重读、只在末尾追加（原文件最后没有换行先补一个）或整行删掉带标记的行，其他字节不动；写同目录的临时文件（600）、fsync，改名前原文件被别的程序改过就重来（最多 3 次），再改名。目录不存在时建成 700，已有的目录不改权限。文件是符号链接、不是普通文件、属主不是当前用户、没有属主写权限（多半由配置管理工具管着）、不可写时不改，报 keysFile。Windows 上不看属主和权限位。",
+    "一次性钥匙行：restrict,command=\"<命令>\",expiry-time=\"<时间>\" ssh-ed25519 <公钥> litch-pair:<配对号>。命令是 '<适配器路径>' pair-enroll <配对号>（路径用单引号按 sh 的规矩引；Windows 用双引号），选项值里的双引号写成 \\\"。配对号是 16 个字母数字。",
+    "expiry-time：sshd 的版本先问 sshd 自己（/usr/sbin/sshd 等常见位置跑 -V，老版不认 -V 但打出的用法说明里带版本），找不到再看 ssh -V。OpenSSH 9.1 及以上写带 Z 的 UTC 时间 YYYYMMDDHHMMSSZ，正好是过期时间；8.2 到 9.0 只认 sshd 所在时区的本地时间，写设备进程的本地时间再加一天（两边时区可能不同，宁晚不早）；低于 8.2 或认不出版本就不加。这一项只是兜底：pair-enroll 每次都向设备服务核对，过期、用过、取消的一律拒绝，所以残留的行无害。",
+    "状态：start 后是 waiting；手机登记（enroll）后 requested；出码的一方允许后 done，拒绝后 rejected；requested 后 PAIR_DECIDE_TIMEOUT_MS（2 分钟）没表态也是 rejected（手机收到 timeout）；cancel 后 cancelled（手机收到 expired）。到了 expiresAt 只作废还在 waiting 的（expired）；已经 requested 的等表态或 2 分钟超时，不因为二维码到期中断。done、expired、cancelled、rejected 都是终态，终态的配对再记 10 分钟（wait、decide 还问得到最后的状态），之后回 unknownPair。",
+    "清理：配对进终态时删掉它的一次性钥匙行；设备服务启动时删掉所有 litch-pair: 行（配对只存在内存里）；设备服务关闭时还没结束的配对都按 cancelled 处理并删行。删不掉只记日志。",
+    "enroll：一直挂着，直到出结果才回；不抛错，结果都写成 PairEnrollOutput。input 不是 {v:1,…} 回 invalid；probe 为 true 时配对在 waiting 或 requested 就回 {ok:true,probe:true}，否则回 expired，不消耗、不通知。公钥不是 \"ssh-ed25519 <base64>\"（二进制要正好是 ed25519 的 51 字节）或名字不是字符串回 invalid，不消耗配对。配对不认识、expired、cancelled 回 expired；requested、done、rejected 回 used。成功回 {ok:true, phoneId}。",
+    "decide：配对不在 requested 回 notRequested。允许时追加手机行再结束配对；写失败时配对按 cancelled 结束（手机收到 keysFile），decide 回 keysFile。",
+    "wait：since 和当前状态不同就立刻回当前状态，否则等到状态变了，最多 30 秒，到时回当前状态。",
+    "手机钥匙行：ssh-ed25519 <公钥> litch-mobile:<手机号> <名字> <YYYY-MM-DD（UTC）>，不加选项。名字去掉控制字符和不可见的格式字符，空白换成下划线（连续的并成一个），截到 PAIR_PHONE_NAME_MAX 个 UTF-16 码元（不切开代理对），清完是空的用 phone。同一个公钥已经在文件里（任何一行，包括用户手动加的）就不重复写，照样回 ok。",
+    "phones：列出带 litch-mobile:<16 位小写十六进制> 标记、钥匙是 ed25519 的行，同一个手机号只列第一行。revoke 删掉带这个手机号的所有行，一行都没有回 unknownPhone。done 和 revoke 之后发 litch/pair/phones/changed（带全部列表）。",
+    "确认码、手机号、指纹的算法和测试向量见 device-pairing.mts。",
     "pair-enroll 子命令：读标准输入的一行（最多 4 KB），调 litch/pair/enroll，把结果写成一行到标准输出后退出，退出码 0；连不上设备服务回 unavailable。"
-  ]
+  ],
+  "parts": [
+    {
+      "kind": "ClientRequest",
+      "method": "litch/pair/start",
+      "params": {
+        "$ref": "#/definitions/Empty"
+      },
+      "response": {
+        "$ref": "#/definitions/StartResponse"
+      },
+      "description": "建配对，写一次性钥匙行。钥匙文件改不了回 keysFile，读不到主机钥匙回 noHostKey。"
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/pair/cancel",
+      "params": {
+        "$ref": "#/definitions/IdParams"
+      },
+      "response": {
+        "$ref": "#/definitions/Empty"
+      },
+      "description": "作废还没结束的配对（cancelled），删行；已经结束的什么都不做。"
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/pair/decide",
+      "params": {
+        "$ref": "#/definitions/DecideParams"
+      },
+      "response": {
+        "$ref": "#/definitions/PairStatus"
+      },
+      "description": "允许或拒绝正在登记的手机，回结束后的状态。"
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/pair/wait",
+      "params": {
+        "$ref": "#/definitions/WaitParams"
+      },
+      "response": {
+        "$ref": "#/definitions/PairStatus"
+      },
+      "description": "给不握手的命令行用的长轮询，最多 30 秒。"
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/pair/enroll",
+      "params": {
+        "$ref": "#/definitions/EnrollParams"
+      },
+      "response": {
+        "$ref": "#/definitions/EnrollOutput"
+      },
+      "description": "pair-enroll 子命令调的，挂着直到出结果。"
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/pair/phones",
+      "params": {
+        "$ref": "#/definitions/Empty"
+      },
+      "response": {
+        "$ref": "#/definitions/PhonesResponse"
+      },
+      "description": "已绑定的手机。"
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/pair/revoke",
+      "params": {
+        "$ref": "#/definitions/RevokeParams"
+      },
+      "response": {
+        "$ref": "#/definitions/Empty"
+      },
+      "description": "撤掉一部手机的钥匙行。"
+    },
+    {
+      "kind": "ServerNotification",
+      "method": "litch/pair/changed",
+      "params": {
+        "$ref": "#/definitions/PairStatus"
+      },
+      "description": "只发给声明了 devicePairing 的连接：配对的状态变了（含 start 后的 waiting）。"
+    },
+    {
+      "kind": "ServerNotification",
+      "method": "litch/pair/phones/changed",
+      "params": {
+        "$ref": "#/definitions/PhonesResponse"
+      },
+      "description": "只发给声明了 devicePairing 的连接：已绑定的手机多了、少了，带全部列表。"
+    },
+    {
+      "kind": "Error",
+      "description": "这个扩展自己回的错误在 error.data.reason 里带原因。参数的形状不对（allow 不是布尔、phoneId 不是 16 位小写十六进制）回 -32602、不带 data；pairId 不是 16 个字母数字的按 unknownPair。",
+      "data": {
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "properties": {
+          "reason": {
+            "enum": [
+              "unknownPair",
+              "unknownPhone",
+              "keysFile",
+              "noHostKey",
+              "unsupported",
+              "notRequested"
+            ]
+          }
+        }
+      },
+      "errors": [
+        {
+          "reason": "unknownPair",
+          "code": -32602,
+          "description": "没有这个配对（从没有过，或结束超过 10 分钟被忘掉了）"
+        },
+        {
+          "reason": "unknownPhone",
+          "code": -32000,
+          "description": "没有这部手机"
+        },
+        {
+          "reason": "keysFile",
+          "code": -32000,
+          "description": "authorized_keys 不能改，message 说为什么"
+        },
+        {
+          "reason": "noHostKey",
+          "code": -32000,
+          "description": "读不到主机钥匙"
+        },
+        {
+          "reason": "unsupported",
+          "code": -32000,
+          "description": "这台设备不支持（没配置、找不到适配器命令行、Windows 管理员账号）"
+        },
+        {
+          "reason": "notRequested",
+          "code": -32000,
+          "description": "decide 时配对不在 requested"
+        }
+      ]
+    }
+  ],
+  "definitions": {
+    "Empty": {
+      "type": "object"
+    },
+    "PairId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9]{16}$"
+    },
+    "PhoneId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{16}$"
+    },
+    "Fingerprint": {
+      "type": "string",
+      "pattern": "^SHA256:[A-Za-z0-9+/]{43}$"
+    },
+    "PairState": {
+      "enum": [
+        "waiting",
+        "requested",
+        "done",
+        "expired",
+        "cancelled",
+        "rejected"
+      ]
+    },
+    "HostKey": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "fingerprint",
+        "publicKey"
+      ],
+      "properties": {
+        "type": {
+          "type": "string"
+        },
+        "fingerprint": {
+          "$ref": "#/definitions/Fingerprint"
+        },
+        "publicKey": {
+          "type": "string",
+          "pattern": "^\\S+ [A-Za-z0-9+/]+={0,2}$"
+        }
+      }
+    },
+    "StartResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pairId",
+        "seed",
+        "expiresAt",
+        "hostKey",
+        "hostKeys",
+        "hostname",
+        "user"
+      ],
+      "properties": {
+        "pairId": {
+          "$ref": "#/definitions/PairId"
+        },
+        "seed": {
+          "description": "ed25519 私钥的 32 字节种子，base64url 无填充",
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{43}$"
+        },
+        "expiresAt": {
+          "type": "number"
+        },
+        "hostKey": {
+          "$ref": "#/definitions/HostKey"
+        },
+        "hostKeys": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/definitions/HostKey"
+          }
+        },
+        "hostname": {
+          "type": "string"
+        },
+        "user": {
+          "type": "string"
+        }
+      }
+    },
+    "PhoneRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "phoneId",
+        "name",
+        "fingerprint",
+        "code"
+      ],
+      "properties": {
+        "phoneId": {
+          "$ref": "#/definitions/PhoneId"
+        },
+        "name": {
+          "type": "string"
+        },
+        "fingerprint": {
+          "$ref": "#/definitions/Fingerprint"
+        },
+        "code": {
+          "type": "string",
+          "pattern": "^[0-9]{6}$"
+        }
+      }
+    },
+    "PairStatus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pairId",
+        "state",
+        "expiresAt",
+        "phone"
+      ],
+      "properties": {
+        "pairId": {
+          "$ref": "#/definitions/PairId"
+        },
+        "state": {
+          "$ref": "#/definitions/PairState"
+        },
+        "expiresAt": {
+          "type": "number"
+        },
+        "phone": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/definitions/PhoneRequest"
+            }
+          ],
+          "description": "requested、done 时有；拒绝、超时后也留着，给界面显示是哪部手机"
+        }
+      }
+    },
+    "Phone": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "phoneId",
+        "name",
+        "fingerprint",
+        "addedAt"
+      ],
+      "properties": {
+        "phoneId": {
+          "$ref": "#/definitions/PhoneId"
+        },
+        "name": {
+          "type": "string"
+        },
+        "fingerprint": {
+          "$ref": "#/definitions/Fingerprint"
+        },
+        "addedAt": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      }
+    },
+    "PhonesResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "data"
+      ],
+      "properties": {
+        "data": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Phone"
+          }
+        }
+      }
+    },
+    "IdParams": {
+      "type": "object",
+      "required": [
+        "pairId"
+      ],
+      "properties": {
+        "pairId": {
+          "$ref": "#/definitions/PairId"
+        }
+      }
+    },
+    "DecideParams": {
+      "type": "object",
+      "required": [
+        "pairId",
+        "allow"
+      ],
+      "properties": {
+        "pairId": {
+          "$ref": "#/definitions/PairId"
+        },
+        "allow": {
+          "type": "boolean"
+        }
+      }
+    },
+    "WaitParams": {
+      "type": "object",
+      "required": [
+        "pairId",
+        "since"
+      ],
+      "properties": {
+        "pairId": {
+          "$ref": "#/definitions/PairId"
+        },
+        "since": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/definitions/PairState"
+            }
+          ]
+        }
+      }
+    },
+    "EnrollInput": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "v",
+            "probe"
+          ],
+          "properties": {
+            "v": {
+              "const": 1
+            },
+            "probe": {
+              "const": true
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "v",
+            "publicKey",
+            "name"
+          ],
+          "properties": {
+            "v": {
+              "const": 1
+            },
+            "probe": {
+              "const": false
+            },
+            "publicKey": {
+              "type": "string",
+              "pattern": "^ssh-ed25519 [A-Za-z0-9+/]+={0,2}$"
+            },
+            "name": {
+              "type": "string"
+            }
+          }
+        }
+      ]
+    },
+    "EnrollParams": {
+      "type": "object",
+      "required": [
+        "pairId",
+        "input"
+      ],
+      "properties": {
+        "pairId": {
+          "type": "string"
+        },
+        "input": {
+          "$ref": "#/definitions/EnrollInput"
+        }
+      }
+    },
+    "EnrollOutput": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "ok"
+          ],
+          "properties": {
+            "ok": {
+              "const": true
+            },
+            "probe": {
+              "type": "boolean"
+            },
+            "phoneId": {
+              "$ref": "#/definitions/PhoneId"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "ok",
+            "error",
+            "message"
+          ],
+          "properties": {
+            "ok": {
+              "const": false
+            },
+            "error": {
+              "enum": [
+                "expired",
+                "used",
+                "rejected",
+                "timeout",
+                "invalid",
+                "keysFile",
+                "unavailable"
+              ]
+            },
+            "message": {
+              "type": "string"
+            }
+          }
+        }
+      ]
+    },
+    "RevokeParams": {
+      "type": "object",
+      "required": [
+        "phoneId"
+      ],
+      "properties": {
+        "phoneId": {
+          "$ref": "#/definitions/PhoneId"
+        }
+      }
+    }
+  }
 }

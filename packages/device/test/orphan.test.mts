@@ -34,7 +34,11 @@ test('拉起它的进程被强杀：设备进程自己退出，并把聚合面�
     })
     setInterval(() => {}, 1000)
   `
-  const parent = spawn(process.execPath, ['-e', script], { stdio: ['ignore', 'pipe', 'inherit'] })
+  const parent = spawn(process.execPath, ['-e', script], {
+    // 设备进程起来时会清钥匙文件里的一次性配对钥匙行：指到临时目录里，不碰这台机器真的 ~/.ssh
+    env: { ...process.env, LITCH_AUTHORIZED_KEYS: join(root, 'authorized_keys') },
+    stdio: ['ignore', 'pipe', 'inherit'],
+  })
   let device = 0
   try {
     device = await new Promise<number>((resolve, reject) => {

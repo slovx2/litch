@@ -17,6 +17,7 @@ import { deviceInfo, deviceVersion, HarnessCatalog } from './harness-info.mjs'
 import { WorkspaceImporter } from './importer.mjs'
 import { DeviceManagement } from './management.mjs'
 import { dialectFor } from './native-codex.mjs'
+import { DevicePairing, type PairingConfig } from './pairing.mjs'
 import { hasActiveTurn } from './probe.mjs'
 import { ACTIVITY_METHOD, type DeviceActivity, serviceInfo } from './service-info.mjs'
 import {
@@ -67,6 +68,11 @@ export interface DeviceOptions {
   tasks?: { clock?: TaskClock; timing?: Partial<TaskTiming>; maxTimerMs?: number }
   /** 内部连接替引擎看着没人拿的请求：先等多久、隔多久再看（毫秒），见 engine-link.mts。只有测试会改 */
   engineLinks?: { heldGraceMs?: number; heldRecheckMs?: number }
+  /**
+   * 扫码绑定手机（devicePairing）：钥匙文件、主机钥匙、适配器命令行在哪。main.mts 按这台机器给；
+   * 不给就没有这项扩展，也不碰任何钥匙文件（和配对无关的测试都不给）
+   */
+  pairing?: PairingConfig
 }
 
 /**
@@ -142,6 +148,8 @@ export class DeviceServer {
   readonly sessionTree: SessionTree
   /** 上一次看到的“会话编排”开关，变了才动 */
   private orchestrating: boolean
+  /** 扫码绑定手机。没给配置时是 null */
+  private readonly pairing: DevicePairing | null
 
   constructor(options: DeviceOptions) {
     mkdirSync(options.stateDir, { recursive: true, mode: 0o700 })
@@ -162,6 +170,14 @@ export class DeviceServer {
     // 可重连的终端：进程可以属于设备
     info.extensions.push(EXTENSION.deviceProcesses)
     const log = options.log ?? (() => {})
+    // 扫码绑定手机：一起来就清掉上次留下的一次性钥匙行；拿不到适配器命令行、Windows 管理员账号时不列这项扩展
+    this.pairing = options.pairing
+      ? new DevicePairing(options.pairing, {
+          announce: (method, params, extension) => this.announce(method, params, extension),
+          log,
+        })
+      : null
+    if (this.pairing?.available) info.extensions.push(EXTENSION.devicePairing)
     const taskTiming = { ...DEFAULT_TASK_TIMING, ...options.tasks?.timing }
     this.taskTiming = taskTiming
     this.deviceTools = new DeviceTools(log)
@@ -252,6 +268,7 @@ export class DeviceServer {
       deviceTools: this.deviceTools,
       sessionTree: this.sessionTree,
       sessionTreeOn: () => this.sessionTreeOn(),
+      pairing: this.pairing,
       reachable: () => this.importer?.kick(),
       importing: () => {
         this.importer?.kick()
@@ -507,6 +524,7 @@ export class DeviceServer {
     if (this.tasksWait) clearTimeout(this.tasksWait)
     // 先停任务、关内部连接：等着的回合当场醒来，运行留着 running，下次起来去查
     this.tasks?.close()
+    this.pairing?.close()
     for (const link of [...this.engineLinks]) link.close()
     for (const session of [...this.sessions]) session.close()
     this.sessionTree.close()

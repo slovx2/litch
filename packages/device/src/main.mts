@@ -2,11 +2,20 @@
 // 设备进程的入口。常驻，由 Go 层拉起；就绪后在标准输出打一行 LITCH_DEVICE_READY。
 import { createHash } from 'node:crypto'
 import { join, win32 } from 'node:path'
+import { adapterCliPath } from '../../shared/src/adapter-cli.mjs'
 import { setSharedLogger } from '../../shared/src/util.mjs'
 import { parseArgs, USAGE } from './args.mjs'
 import { SocketControl } from './control.mjs'
 import { DeviceServer } from './device.mjs'
 import { deviceVersion } from './harness-info.mjs'
+import {
+  defaultAuthorizedKeys,
+  defaultHostKeysDir,
+  detectSshdVersion,
+  readHostKeys,
+  windowsAdmin,
+} from './pair-host.mjs'
+import type { PairingConfig } from './pairing.mjs'
 import { watchParent } from './parent-watch.mjs'
 import { listenUnix, parseSocketUrl, socketExists, unixConnector } from './sockets.mjs'
 
@@ -30,6 +39,22 @@ function controlSocketPath(stateDir: string): string {
   if (clean.length > 3 && clean.endsWith('\\')) clean = clean.slice(0, -1)
   const digest = createHash('sha256').update(clean.toLowerCase()).digest('hex')
   return `\\\\.\\pipe\\codex-harness-adapter-control-${digest}`
+}
+
+/** 扫码绑定手机要的这台机器的配置：钥匙文件和主机钥匙目录可以用环境变量换（测试用，见 pair-host.mts） */
+function pairingConfig(): PairingConfig {
+  const hostKeysDir = defaultHostKeysDir()
+  return {
+    keysFile: defaultAuthorizedKeys(),
+    hostKeys: () => readHostKeys(hostKeysDir),
+    adapterCli: adapterCliPath(),
+    // OpenSSH for Windows 的管理员账号只认 administrators_authorized_keys，改它要管理员权限，第一版不支持
+    unsupported:
+      process.platform === 'win32' && windowsAdmin()
+        ? 'Windows 的管理员账号的钥匙在 administrators_authorized_keys 里，请手动添加'
+        : null,
+    sshdVersion: () => detectSshdVersion(),
+  }
 }
 
 /** 就绪之前等主进程把各 harness 的状态送过来，最多等这么久：第一个连进来的客户端就能看到完整的名单 */
@@ -63,6 +88,7 @@ async function main(): Promise<void> {
     log,
     ...(args.processes ? { processes: args.processes } : {}),
     ...(control ? { control } : {}),
+    pairing: pairingConfig(),
     dial: (socket) => unixConnector(parseSocketUrl(socket, '运行时的套接字')),
     upstreams: args.upstreams.map((upstream) => ({
       id: upstream.id,
