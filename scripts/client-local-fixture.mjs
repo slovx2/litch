@@ -52,7 +52,9 @@
 //   open -n -a <Litch.app> --env LITCH_ADAPTER_HOME=… --env LITCH_PROFILE=… --env SHELL=…
 //
 // 工作区里 Go 层或设备进程正被改到一半、暂存不出来时，用已提交版本的导出副本来暂存（不建 worktree、不切分支）：
-//   git archive HEAD cmd internal sshserver go.mod go.sum package.json | tar -x -C <临时目录>
+//   git archive HEAD cmd internal sshserver go.mod go.sum package.json packages/protocol/identity.go \
+//     packages/protocol/src/harness-identity.json protocol/versions.go protocol/versions.json | tar -x -C <临时目录>
+//   （后四个是 Go 编进命令行的数据：harness 的名字和徽标、验证过的版本）
 //   npm run stage:adapter --prefix apps/desktop -- --go-from <临时目录>
 // 设备进程同理：导出 packages/device、packages/shared、packages/protocol、tsconfig.json、package.json，
 // 把根目录的 node_modules 用符号链接接过去，在副本里 tsc -p packages/device，再加 --device-from <副本>/packages/device。

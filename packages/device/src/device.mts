@@ -4,6 +4,7 @@ import { mkdirSync } from 'node:fs'
 import type { DatabaseSync } from 'node:sqlite'
 import { CLIENT_TOOL_NAMESPACE } from '../../protocol/src/client-tools.mjs'
 import { EXTENSION } from '../../protocol/src/device.mjs'
+import { HARNESS_INSTALL_NOTIFICATION } from '../../protocol/src/device-harness-install.mjs'
 import type { DeviceSettingsSnapshot } from '../../protocol/src/device-settings.mjs'
 import { ClientToolInvoker } from './client-tool-invoke.mjs'
 import { ClientToolRouter } from './client-tools.mjs'
@@ -167,6 +168,8 @@ export class DeviceServer {
     if (this.control) info.extensions.push(EXTENSION.deviceSettings)
     // 服务的来历也是主进程给的：有它在管，声明过的客户端才问得到“在跑的是哪一份”
     if (this.control) info.extensions.push(EXTENSION.deviceService)
+    // 给设备装 harness：装的事在主进程里做（登记表、用户的环境、装完重启它），也是有它在管才有
+    if (this.control) info.extensions.push(EXTENSION.harnessInstall)
     // 可重连的终端：进程可以属于设备
     info.extensions.push(EXTENSION.deviceProcesses)
     const log = options.log ?? (() => {})
@@ -219,6 +222,9 @@ export class DeviceServer {
       }
       this.control.onState = (state) => this.controlChanged(state)
       this.control.onAsk = (method) => this.asked(method)
+      // 安装任务的进度：只发给握手时声明了 harnessInstall 的连接
+      this.control.onInstall = (job) =>
+        this.announce(HARNESS_INSTALL_NOTIFICATION.changed, job, EXTENSION.harnessInstall)
     }
     this.sessionsDb = openSessionDatabase(options.stateDir)
     this.orchestrating = this.sessionTreeOn()

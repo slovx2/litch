@@ -26,6 +26,7 @@ import (
 //   设备进程 → 这里   {"id":N,"method":"settings.read","params":{…}}
 //   这里 → 设备进程   {"id":N,"result":{…}} 或 {"id":N,"error":{"reason":"…","text":{…},…}}
 //   这里 → 设备进程   {"method":"state","params":{"keys":[…],"harnesses":[…],"snapshot":{…},"service":{…}}}（连上时一次，之后每变一次一条）
+//   这里 → 设备进程   {"method":"install","params":{…}}（安装任务开始、日志长了、结束，见 control_install.go）
 //   这里 → 设备进程   {"ask":N,"method":"activity"}（这一层反过来问设备进程，现在只有“忙不忙”这一件）
 //   设备进程 → 这里   {"reply":N,"result":{…}} 或 {"reply":N,"error":"…"}
 //
@@ -52,7 +53,7 @@ type controlRequest struct {
 }
 
 // 请求没做成的原因。reason：conflict（版本号对不上）、invalid（键或者值不对）、
-// unknownHarness、failed（别的）。
+// unknownHarness、busy（这台设备已经有安装任务在跑）、failed（别的）。
 type controlError struct {
 	Reason   string            `json:"reason"`
 	Text     bilingual         `json:"text"`
@@ -87,6 +88,10 @@ type controlServer struct {
 	// 问了设备进程、还在等它答的事（control_service.go）。
 	asks    map[int]*pendingAsk
 	nextAsk int
+	// 给设备装 harness（control_install.go）。进度排在 installQueue 里，由 pump 按先后发。
+	installs     *installer
+	installQueue []installJob
+	installDirty chan struct{}
 }
 
 // 只有拿着设备锁的进程可以调用：遗留的套接字由它清掉。
@@ -103,8 +108,9 @@ func openControlServer(ctx context.Context, c configuration, manager *harnessMan
 		return nil, err
 	}
 	server := &controlServer{c: c, manager: manager, path: path, listener: listener, peers: map[net.Conn]*sync.Mutex{}, dirty: make(chan struct{}, 1),
-		facts: facts, shutdown: shutdown, asks: map[int]*pendingAsk{}}
+		facts: facts, shutdown: shutdown, asks: map[int]*pendingAsk{}, installDirty: make(chan struct{}, 1)}
 	server.ctx, server.stop = context.WithCancel(ctx)
+	server.installs = server.newInstaller()
 	manager.changed = server.broadcast
 	server.done.Add(2)
 	go server.accept()
@@ -117,6 +123,8 @@ func (s *controlServer) close() {
 		return
 	}
 	s.stop()
+	// 正在装的任务随服务停下（连它起的进程一起），等它收完尾
+	s.installs.wait()
 	_ = s.listener.Close()
 	s.mu.Lock()
 	for connection := range s.peers {
@@ -156,6 +164,9 @@ func (s *controlServer) pump() {
 		select {
 		case <-s.ctx.Done():
 			return
+		case <-s.installDirty:
+			s.flushInstalls()
+			continue
 		case <-s.dirty:
 		}
 		s.publish()
@@ -341,6 +352,29 @@ func (s *controlServer) handle(method string, params json.RawMessage) (any, *con
 		return s.logTail(request)
 	case "ssh.config":
 		return s.sshConfig(), nil
+	case "harness.versions":
+		var request struct {
+			Latest bool `json:"latest"`
+		}
+		if failure := decodeControlParams(params, &request); failure != nil {
+			return nil, failure
+		}
+		return map[string]any{"harnesses": s.installs.cache.versions(s.ctx, s.versionSource(), request.Latest)}, nil
+	case "harness.install":
+		var request struct {
+			Harness string `json:"harness"`
+			Version string `json:"version"`
+		}
+		if failure := decodeControlParams(params, &request); failure != nil {
+			return nil, failure
+		}
+		job, failure := s.installs.start(request.Harness, request.Version)
+		if failure != nil {
+			return nil, failure
+		}
+		return map[string]any{"job": job}, nil
+	case "harness.install.read":
+		return map[string]any{"jobs": s.installs.jobs()}, nil
 	}
 	return nil, &controlError{Reason: "failed", Text: both("不认识的控制命令 %s", "Unknown control command %s").with(method)}
 }

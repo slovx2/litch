@@ -74,6 +74,16 @@ func (s *settingsStore) lookup(key string) (json.RawMessage, bool) {
 	return raw, ok
 }
 
+// 现在的版本号。每写入一次加一；查版本的缓存据此知道设置变没变。
+func (s *settingsStore) currentVersion() int {
+	if s == nil {
+		return 0
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.version
+}
+
 func (s *settingsStore) boolean(key string, fallback bool) bool {
 	var value bool
 	if raw, ok := s.lookup(key); ok && json.Unmarshal(raw, &value) == nil {

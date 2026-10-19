@@ -1,0 +1,305 @@
+{
+  "extension": "harnessInstall",
+  "status": "已定（2026-10-19 主线落的约定，适配器与设备进程线补齐 JSON Schema 和规则）",
+  "description": "给设备装 harness：查各 harness 装的版本、我们验证过的版本、最低版本、最新版本，按官方的方式（官方脚本或 npm 全局安装）在设备上以当前用户身份装验证版或最新版。装的动作在适配器的 Go 主进程里跑（登记表、用户的环境、装完启用并重启那个 harness），设备进程只经控制通道转发。类型在 packages/protocol/src/device-harness-install.mts。",
+  "appliesTo": "只有聚合面，而且要这个设备服务是由适配器主进程拉起的：runtime/info 的 device.extensions 里列了 harnessInstall 才能用（和 deviceSettings 同一个条件）。每个 harness 自己的入口（兼容面）上没有这个扩展的任何内容。",
+  "declaration": {
+    "description": "方法由客户端主动调用，要先握手，不要求声明（和 deviceSettings 的方法一样）。想收到安装进度的通知，握手时在 capabilities.litchExtensions 里列上 harnessInstall。",
+    "where": "initialize.params.capabilities.litchExtensions",
+    "schema": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "contains": {
+        "const": "harnessInstall"
+      }
+    }
+  },
+  "undeclared": "没声明的连接收不到 litch/device/harness/install/changed，方法照样能调；要知道进度就隔一会儿调一次 litch/device/harness/install/read。设备服务没有适配器主进程在管时（device.extensions 里没有 harnessInstall），这些方法回 settingsUnavailable。",
+  "rules": [
+    "官方装法（适配器登记表 cmd/codex-harness-adapter/harness_install.go）：claude-code 是 `curl -fsSL https://claude.ai/install.sh | bash -s <版本>`（Windows 是 PowerShell 跑 install.ps1，参数同样是版本）；opencode 是 `curl -fsSL https://opencode.ai/install | bash -s -- --version <版本>`（Windows 是 npm 的 opencode-ai）；codex、pi、dsh、gemini、qwen 是 `npm install -g <包>@<版本>`，包名依次是 @openai/codex、@earendil-works/pi-coding-agent、@deepseek-ai/dsh、@google/gemini-cli、@qwen-code/qwen-code。acp（自填命令）不可装；原生 Codex 在 Windows 上不可装（Windows 上还接不进来）。脚本在类 Unix 系统上用 `bash -c 'set -o pipefail; <命令>'` 跑，下载失败也算失败。",
+    "验证版：编进适配器的 protocol/versions.json，claude-code 取 claudeCli，codex 取 codexVerified 的最后一个，pi 取 piCli，dsh 取 dshVerified 的最后一个，opencode 取 opencodeVerified 的最后一个；gemini、qwen 没有记录（verified 为 null，只能装最新版，界面标“未验证”）。minimum 是适配器的下限：Claude 2.1.282、Codex 0.157.1、Pi 0.99.1、dsh 0.2.0-rc.2、OpenCode 1.18.0，其余为 null。",
+    "已装版本：不依赖运行时。按 harness 自己找命令行的次序找：设置里的命令行路径（或它的环境变量，只写了命令名时在 PATH 里找），PATH 里的命令名（Windows 上带 .exe、.cmd），引擎会看的固定位置（~/.opencode/bin/opencode），官方装法的位置（~/.local/bin/claude）。找到就跑 `<命令> --version`，两秒超时，取输出里的第一个版本号。结果缓存到下次安装或设置的版本号变化。",
+    "最新版：只在 versions 带 latest:true 时现查，直接 HTTPS GET <注册表>/<包>/latest 取 version（claude-code 问 @anthropic-ai/claude-code，opencode 问 opencode-ai），五秒超时，不依赖本机有 npm。注册表默认 https://registry.npmjs.org，环境变量 LITCH_NPM_REGISTRY 给了就用它（测试用；读适配器常驻服务的进程环境，再看状态目录的 env 文件）。不带 latest 时给上次查到的结果（含上次的 latestError），没查过是 null。版本号只认 x.y.z[-预发布][+构建]，注册表给的不像样也算查不到。",
+    "装：install 立刻回 {job}，进度看通知或 install/read。同一台设备同一时刻只跑一个安装任务（npm 的全局目录并发写会坏），已有任务在跑时回 harnessBusy，data.harness 是正在装的那个。version 是 verified 而这个 harness 没有验证版时回 invalidSetting（-32602）。harness 不认识回 harness 扩展的 unknownHarness；不可装回 deviceActionFailed。",
+    "跑命令：以当前用户的身份、用 harness 起的时候看到的那份环境（设置里给它的环境变量 > 启动服务的进程环境 > 状态目录的 env 文件，去掉适配器给运行时的固定变量），工作目录是用户主目录；不提权、不用 sudo。先在 PATH 里找命令要用的程序（npm；bash 和 curl；Windows 上的 powershell），找不到直接失败。最长 10 分钟，到了连它起的子进程一起停掉。",
+    "日志：标准输出和标准错误合在一起，按换行和回车切行，丢掉空行，一行最长 2000 字节，只留末尾 200 行。通知节流：状态变了（开始、版本定下来、结束）马上发，日志在长时最多每半秒发一次，每次都是整个任务的现状。",
+    "失败原因（failure，两种语言）：命令要用的程序找不到（npm 不在 PATH 上单独说）；查最新版失败；日志里有 EACCES、EPERM、permission denied 等按权限不够说（并给不用 sudo 的办法）；有 ENOTFOUND、ETIMEDOUT、Could not resolve host、curl 的网络错误码等按网络不通说；超时；设备服务中途停了；别的照实说退出码。命令成功了但按上面的次序找不到命令行，或 --version 取不出版本号，也算失败。",
+    "装成以后：重新探测版本（installed）；这个 harness 若是停用的（设置里关着、默认不启用而没打开），写 harness.<id>.enabled = true；命令行只在官方装法的位置找到（不在 PATH 上、引擎自己也不去找）而设置里没填命令行路径时，把它写进 harness.<id>.cliPath；然后照 litch/device/harness/restart 重启它，有回合在跑（或者判断不了）时不重启，留一行日志说明新版下次重启生效。这几步的结果以 [litch] 开头记进日志，任务随后才变成 succeeded。写设置会照常发 litch/device/settings/changed，状态变化照常发 litch/harness/status/changed。",
+    "不主动降级：已装的版本比验证版新时界面不提示降级；装哪一版由调用方选（verified 或 latest），设备服务不替它判断。",
+    "任务只在设备服务的内存里：install/read 给每个 harness 最近一次的任务，按开始的先后。设备服务重启后都没了；中途重启的那次任务不会有结束通知，客户端重连后看不到它，应重新探测版本决定显示什么。"
+  ],
+  "parts": [
+    {
+      "kind": "ClientRequest",
+      "method": "litch/device/harness/versions",
+      "description": "各 harness 的版本情况，顺序同 runtime/info 的 harnesses。带 latest:true 时现查最新版（联网，五秒超时），几个 harness 一起查。",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "latest": {
+            "type": "boolean",
+            "description": "要不要现查最新版"
+          }
+        }
+      },
+      "response": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["harnesses"],
+        "properties": {
+          "harnesses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/HarnessVersionInfo"
+            }
+          }
+        }
+      }
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/device/harness/install",
+      "description": "开始装一个 harness。应答只带任务号，进度看通知或 install/read。",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["harness", "version"],
+        "properties": {
+          "harness": {
+            "type": "string"
+          },
+          "version": {
+            "$ref": "#/definitions/HarnessInstallTarget"
+          }
+        }
+      },
+      "response": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["job"],
+        "properties": {
+          "job": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/device/harness/install/read",
+      "description": "每个 harness 最近一次的安装任务（含正在跑的那个），按开始的先后。重连后补状态用。",
+      "params": {
+        "type": "object"
+      },
+      "response": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["jobs"],
+        "properties": {
+          "jobs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/HarnessInstallJob"
+            }
+          }
+        }
+      }
+    },
+    {
+      "kind": "ServerNotification",
+      "method": "litch/device/harness/install/changed",
+      "description": "安装任务的状态或日志变了，带整个任务的现状。只发给握手时声明了 harnessInstall 的连接；一个连接都没有时不攒着。",
+      "params": {
+        "$ref": "#/definitions/HarnessInstallJob"
+      }
+    },
+    {
+      "kind": "Error",
+      "description": "和 deviceSettings 共用一套错误：原因在 error.data.litch，说明的两种语言版本在 error.data.text（error.message 是中文那一份）。harness 不认识时回 harness 扩展的 unknownHarness。",
+      "data": {
+        "type": "object",
+        "required": ["litch"],
+        "properties": {
+          "litch": {
+            "enum": ["settingsUnavailable", "invalidSetting", "harnessBusy", "deviceActionFailed"]
+          },
+          "text": {
+            "$ref": "#/definitions/InstallText"
+          },
+          "harness": {
+            "type": "string"
+          }
+        }
+      },
+      "errors": [
+        {
+          "litch": "settingsUnavailable",
+          "code": -32052,
+          "description": "没有适配器主进程在管这个设备服务，或者和它的控制通道断了、它没有应答"
+        },
+        {
+          "litch": "invalidSetting",
+          "code": -32602,
+          "description": "参数不对：version 不是 verified 或 latest，或者要装验证版而这个 harness 没有验证版"
+        },
+        {
+          "litch": "harnessBusy",
+          "code": -32054,
+          "description": "这台设备已经有安装任务在跑；data.harness 是正在装的那个"
+        },
+        {
+          "litch": "deviceActionFailed",
+          "code": -32055,
+          "description": "这个 harness 在这个系统上不能由 Litch 装"
+        }
+      ]
+    }
+  ],
+  "definitions": {
+    "InstallText": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["zh-CN", "en"],
+      "properties": {
+        "zh-CN": {
+          "type": "string"
+        },
+        "en": {
+          "type": "string"
+        }
+      }
+    },
+    "HarnessInstallMethod": {
+      "enum": ["script", "npm"]
+    },
+    "HarnessInstallTarget": {
+      "enum": ["verified", "latest"]
+    },
+    "HarnessVersionInfo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "harness",
+        "installable",
+        "method",
+        "installed",
+        "minimum",
+        "verified",
+        "latest",
+        "docsUrl",
+        "manual"
+      ],
+      "properties": {
+        "harness": {
+          "type": "string",
+          "description": "harness 标识"
+        },
+        "installable": {
+          "type": "boolean",
+          "description": "能不能由 Litch 装。自填命令的 acp、这个系统上没有官方方式的（Windows 上的原生 Codex）是 false"
+        },
+        "method": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/definitions/HarnessInstallMethod"
+            }
+          ],
+          "description": "这个系统上的官方装法；不能装时是 null"
+        },
+        "installed": {
+          "type": ["string", "null"],
+          "description": "探测到的已装版本；没装、探测不出是 null"
+        },
+        "minimum": {
+          "type": ["string", "null"],
+          "description": "适配器要求的最低版本；没有要求是 null"
+        },
+        "verified": {
+          "type": ["string", "null"],
+          "description": "我们验证过的版本（编进适配器的 protocol/versions.json）；没有记录是 null"
+        },
+        "latest": {
+          "type": ["string", "null"],
+          "description": "最新版；没查、查不到是 null"
+        },
+        "latestError": {
+          "$ref": "#/definitions/InstallText",
+          "description": "上次查最新版失败的原因"
+        },
+        "docsUrl": {
+          "type": "string",
+          "description": "官方安装说明的地址"
+        },
+        "manual": {
+          "type": "string",
+          "description": "给人复制的官方安装命令（装验证版的那条；没有验证版时装最新版）；不能装时是空串"
+        }
+      }
+    },
+    "HarnessInstallJob": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "job",
+        "harness",
+        "version",
+        "resolved",
+        "state",
+        "command",
+        "log",
+        "startedAt",
+        "endedAt"
+      ],
+      "properties": {
+        "job": {
+          "type": "string"
+        },
+        "harness": {
+          "type": "string"
+        },
+        "version": {
+          "$ref": "#/definitions/HarnessInstallTarget"
+        },
+        "resolved": {
+          "type": ["string", "null"],
+          "description": "实际要装的版本号；装最新版时开始后先查注册表，查到之前是 null"
+        },
+        "state": {
+          "enum": ["running", "succeeded", "failed"]
+        },
+        "command": {
+          "type": "string",
+          "description": "真正跑的那条命令（给人看的写法）；版本还没定下来时是空串"
+        },
+        "log": {
+          "type": "array",
+          "maxItems": 200,
+          "items": {
+            "type": "string"
+          },
+          "description": "命令输出的末尾，最多 200 行（回车覆盖的进度行也按行切开）；装成之后的几步（写了哪些设置、重启了没有）以 [litch] 开头接在后面"
+        },
+        "startedAt": {
+          "type": "integer"
+        },
+        "endedAt": {
+          "type": ["integer", "null"]
+        },
+        "installed": {
+          "type": ["string", "null"],
+          "description": "装成后重新探测到的版本，只在 succeeded 时有"
+        },
+        "failure": {
+          "$ref": "#/definitions/InstallText",
+          "description": "失败的原因一句话，只在 failed 时有"
+        }
+      }
+    }
+  }
+}

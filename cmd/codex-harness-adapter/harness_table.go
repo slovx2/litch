@@ -8,7 +8,8 @@ import (
 
 // 这台设备上受管的全部 harness 的登记表。加一个 harness：在 harnessTable 里加一行，
 // 再在 packages/protocol/src/harness-identity.json 里登记它的名字和徽标。
-// 端口参数、--harness 的取值、帮助文字、默认启用、入口路径、固定的环境变量、设置项、诊断里的提示都从这张表取。
+// 端口参数、--harness 的取值、帮助文字、默认启用、入口路径、固定的环境变量、设置项、诊断里的提示都从这张表取；
+// 能由 Litch 装的再挂上官方装法（install，harness_install.go）。
 
 // 设置里没写过“是否启用”、也没有用 --harness 只选一个时，这个 harness 起不起。
 const (
@@ -44,6 +45,8 @@ type harnessSpec struct {
 	needsCLI bool
 	// 原生 codex：不是适配器的引擎，没有 SSH 入口，环境不加固定变量（native_codex.go）。
 	native bool
+	// 官方装法、验证版、最低版本（harness_install.go）。nil 是不能由 Litch 装（自填命令的 acp）。
+	install *installSpec
 }
 
 // 通用 ACP 引擎从这个变量知道自己这次扮演哪个标识（gemini、qwen、acp 共用一个引擎包）。
@@ -51,21 +54,22 @@ const acpAgentVariable = "CHA_ACP_AGENT"
 
 // 顺序就是报给客户端的顺序，也是全部启动时各入口的顺序。
 var harnessTable = []harnessSpec{
-	{id: "claude-code", pkg: "claude", portFlag: "claude-port", defaultPort: 7331, cliVariable: "CHA_CLAUDE_CLI", homeVariable: "CHA_CLAUDE_HOME", enable: enableAlways},
-	{id: "pi", pkg: "pi", portFlag: "pi-port", defaultPort: 7332, cliVariable: "PI_CLI", homeVariable: "CHA_PI_HOME", enable: enableAlways},
+	{id: "claude-code", pkg: "claude", portFlag: "claude-port", defaultPort: 7331, cliVariable: "CHA_CLAUDE_CLI", homeVariable: "CHA_CLAUDE_HOME", enable: enableAlways, install: claudeInstall},
+	{id: "pi", pkg: "pi", portFlag: "pi-port", defaultPort: 7332, cliVariable: "PI_CLI", homeVariable: "CHA_PI_HOME", enable: enableAlways, install: piInstall},
 	{
 		id: "dsh", pkg: "dsh", portFlag: "dsh-port", defaultPort: 7333, cliVariable: "CHA_DSH_CLI", homeVariable: "CHA_DSH_HOME",
-		commands: []string{"dsh"}, enable: enableWhenInstalled, experimental: true,
+		commands: []string{"dsh"}, enable: enableWhenInstalled, experimental: true, install: dshInstall,
 	},
 	{
 		id: "opencode", pkg: "opencode", portFlag: "opencode-port", defaultPort: 7334, cliVariable: "CHA_OPENCODE_CLI", homeVariable: "CHA_OPENCODE_HOME",
 		// 官方安装脚本装在 ~/.opencode/bin，不一定进了 PATH（引擎找命令行的次序与此相同）
 		commands: []string{"opencode"}, fallbacks: []string{filepath.Join(".opencode", "bin", "opencode")}, enable: enableWhenInstalled,
+		install: opencodeInstall,
 	},
-	{id: "gemini", pkg: "acp", portFlag: "gemini-port", defaultPort: 7335, cliVariable: "CHA_GEMINI_CLI", homeVariable: "CHA_GEMINI_HOME", enable: enableOptIn, acp: true},
-	{id: "qwen", pkg: "acp", portFlag: "qwen-port", defaultPort: 7336, cliVariable: "CHA_QWEN_CLI", homeVariable: "CHA_QWEN_HOME", enable: enableOptIn, acp: true},
+	{id: "gemini", pkg: "acp", portFlag: "gemini-port", defaultPort: 7335, cliVariable: "CHA_GEMINI_CLI", homeVariable: "CHA_GEMINI_HOME", enable: enableOptIn, acp: true, install: geminiInstall},
+	{id: "qwen", pkg: "acp", portFlag: "qwen-port", defaultPort: 7336, cliVariable: "CHA_QWEN_CLI", homeVariable: "CHA_QWEN_HOME", enable: enableOptIn, acp: true, install: qwenInstall},
 	{id: "acp", pkg: "acp", portFlag: "acp-port", defaultPort: 7337, cliVariable: "CHA_ACP_CLI", homeVariable: "CHA_ACP_HOME", enable: enableOptIn, acp: true, needsCLI: true},
-	{id: nativeCodex, commands: []string{"codex"}, enable: enableWhenInstalled, native: true},
+	{id: nativeCodex, commands: []string{"codex"}, enable: enableWhenInstalled, native: true, install: codexInstall},
 }
 
 func harnessByID(id string) (harnessSpec, bool) {

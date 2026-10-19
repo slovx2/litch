@@ -7,6 +7,7 @@
 //   设备进程 → 主进程   {"id":N,"method":"settings.read","params":{…}}
 //   主进程 → 设备进程   {"id":N,"result":{…}} 或 {"id":N,"error":{"reason":"…","text":{…},…}}
 //   主进程 → 设备进程   {"method":"state","params":{…}}（连上时一次，之后每变一次一条）
+//   主进程 → 设备进程   {"method":"install","params":{…}}（给设备装 harness 的任务变了：开始、日志长了、结束）
 // 主进程也有要问设备进程的事（现在只有一件：忙不忙，device-stop --if-idle 停服务之前要看）：
 //   主进程 → 设备进程   {"ask":N,"method":"activity"}
 //   设备进程 → 主进程   {"reply":N,"result":{…}} 或 {"reply":N,"error":"…"}
@@ -57,8 +58,11 @@ export interface ControlState {
 }
 
 export interface ControlFailureDetail {
-  /** unavailable 是这一头自己判断的：通道没连上，或者等应答的时候断了、超时了 */
-  reason: 'conflict' | 'invalid' | 'unknownHarness' | 'failed' | 'unavailable'
+  /**
+   * unavailable 是这一头自己判断的：通道没连上，或者等应答的时候断了、超时了。
+   * busy：这台设备已经有安装任务在跑（harness 是正在装的那个）
+   */
+  reason: 'conflict' | 'invalid' | 'unknownHarness' | 'busy' | 'failed' | 'unavailable'
   text: LocalizedText
   key?: string
   harness?: string
@@ -81,6 +85,8 @@ export interface ControlChannel {
   onState: ((state: ControlState) => void) | null
   /** 主进程来问一件事时调用，给出的就是回答；抛出来的、没有人接的，都按答不上回给它 */
   onAsk: ((method: string) => Promise<unknown>) | null
+  /** 安装任务变了（HarnessInstallJob，原样转给声明了 harnessInstall 的客户端） */
+  onInstall: ((job: unknown) => void) | null
   request(method: string, params: unknown, timeoutMs: number): Promise<unknown>
   close(): void
 }
@@ -99,6 +105,7 @@ export class SocketControl implements ControlChannel {
   state: ControlState | null = null
   onState: ((state: ControlState) => void) | null = null
   onAsk: ((method: string) => Promise<unknown>) | null = null
+  onInstall: ((job: unknown) => void) | null = null
   private readonly path: string
   private readonly log: (line: string) => void
   private readonly retryMs: number
@@ -229,6 +236,10 @@ export class SocketControl implements ControlChannel {
       this.state = frame.params as unknown as ControlState
       this.arrived()
       this.onState?.(this.state)
+      return
+    }
+    if (frame.method === 'install' && isObject(frame.params)) {
+      this.onInstall?.(frame.params)
       return
     }
     if (typeof frame.ask === 'number') {
