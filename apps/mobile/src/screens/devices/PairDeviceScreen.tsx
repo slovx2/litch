@@ -37,7 +37,7 @@ type Phase =
   | { kind: 'failed'; payload: PairPayload; problem: PairProblem; detail: string | null }
 
 /** 相机那一块：要权限、扫到配对文本就交出去。别的二维码不理 */
-function Scanner({ onText }: { onText(text: string): void }) {
+function Scanner({ onText }: { onText(text: string): boolean }) {
   const t = useT()
   const theme = useTheme()
   const [permission, request] = useCameraPermissions()
@@ -74,8 +74,8 @@ function Scanner({ onText }: { onText(text: string): void }) {
         barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
         onBarcodeScanned={({ data }) => {
           if (taken.current || !looksLikePair(data)) return
-          taken.current = true
-          onText(data)
+          // 前缀对了内容却坏了（拍糊了不至于，多半是别的版本出的码）：不算数，接着扫
+          taken.current = onText(data)
         }}
       />
     </View>
@@ -139,9 +139,17 @@ export function PairDeviceScreen({ navigation }: Props) {
       setPhase({ kind: 'failed', payload, problem: result.problem, detail: result.detail })
       return
     }
-    // 自己的钥匙没连上时去设备详情：那里有原因和重试；连上了直接进会话
-    if (result.checked) navigation.replace('Sessions', { deviceId: result.deviceId })
-    else navigation.replace('DeviceDetail', { deviceId: result.deviceId })
+    // 自己的钥匙没连上时去设备详情：那里有原因和重试；连上了直接进会话。
+    // 加设备页和这一页都不留在栈里：从那里返回就回到首页
+    navigation.reset({
+      index: 1,
+      routes: [
+        { name: 'Devices' },
+        result.checked
+          ? { name: 'Sessions', params: { deviceId: result.deviceId } }
+          : { name: 'DeviceDetail', params: { deviceId: result.deviceId } },
+      ],
+    })
   }
 
   const again = () => {
@@ -155,7 +163,7 @@ export function PairDeviceScreen({ navigation }: Props) {
       <KeyboardAwareScrollView keyboardShouldPersistTaps="handled" bottomOffset={24}>
         {phase.kind === 'scan' ? (
           <>
-            <Scanner onText={(text) => void take(text)} />
+            <Scanner onText={take} />
             <SectionLabel>{t('pair.paste')}</SectionLabel>
             <View style={styles.form}>
               <Field
