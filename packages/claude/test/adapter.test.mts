@@ -684,6 +684,8 @@ test('model/list follows the native Claude catalog with Codex-safe reasoning eff
       ...isolatedEnv,
       CODEX_HOME: home,
       CHA_CLAUDE_HOME: join(home, 'codex-harness-adapter'),
+      // 默认模型写在 Claude 的 settings.json 里：用用例自己的配置目录，不和同文件的别的用例共用
+      CLAUDE_CONFIG_DIR: join(home, 'claude'),
       CHA_CLAUDE_MOCK: '1',
       CHA_CLAUDE_MODELS: '',
       CHA_CLAUDE_MODEL_ALIASES: '',
@@ -939,6 +941,8 @@ test('config writes persist across adapter restarts', async () => {
         ...isolatedEnv,
         CODEX_HOME: home,
         CHA_CLAUDE_HOME: join(home, 'codex-harness-adapter'),
+        // 默认模型写在 Claude 的 settings.json 里：用用例自己的配置目录，不和同文件的别的用例共用
+        CLAUDE_CONFIG_DIR: join(home, 'claude'),
         CHA_CLAUDE_MOCK: '1',
         CHA_CLAUDE_DEFAULT_MODEL: 'opus',
         CHA_CLAUDE_DEFAULT_EFFORT: 'high',
@@ -968,6 +972,8 @@ test('config writes persist across adapter restarts', async () => {
         ...isolatedEnv,
         CODEX_HOME: home,
         CHA_CLAUDE_HOME: join(home, 'codex-harness-adapter'),
+        // 默认模型写在 Claude 的 settings.json 里：用用例自己的配置目录，不和同文件的别的用例共用
+        CLAUDE_CONFIG_DIR: join(home, 'claude'),
         CHA_CLAUDE_MOCK: '1',
         CHA_CLAUDE_DEFAULT_MODEL: 'opus',
         CHA_CLAUDE_DEFAULT_EFFORT: 'high',
@@ -6731,6 +6737,8 @@ test('thread/start 允许回退时，不可用的客户端默认模型换成已�
       ...isolatedEnv,
       CODEX_HOME: home,
       CHA_CLAUDE_HOME: join(home, 'codex-harness-adapter'),
+      // 旧的默认模型启动时搬进 Claude 的 settings.json：用用例自己的配置目录
+      CLAUDE_CONFIG_DIR: join(home, 'claude'),
       CHA_CLAUDE_MOCK: '1',
       CHA_CLAUDE_MODELS: '',
       NODE_NO_WARNINGS: '1',

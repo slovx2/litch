@@ -68,7 +68,12 @@ test('DECL-001：runtime/info 带结构化声明，原有字段原样保留', as
       declared,
     )
     assert.deepEqual([displayName, badge], ['Claude Code', 'CC'])
-    assert.deepEqual(extensions, ['declineWithNote', 'planConfirmation', 'clientTools'])
+    assert.deepEqual(extensions, [
+      'declineWithNote',
+      'planConfirmation',
+      'clientTools',
+      'harnessConfig',
+    ])
     assert.deepEqual(
       presets.map((preset) => [preset.id, preset.risk, preset.requiresConfirmation]),
       [

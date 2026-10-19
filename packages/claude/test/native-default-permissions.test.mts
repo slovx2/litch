@@ -37,8 +37,9 @@ test('CONFIG-DEFAULT-001：config/read 的默认模型、强度、权限档和�
     await client.request('config/batchWrite', { edits: [edit('approval_policy', 'on-request')] })
     await check(null)
     // 模型和强度改了，新会话跟着
+    // “default”那一行表示不写、交给 CLI 自己的默认（settings.json 里删掉 model），挑一个具体的模型
     const other = (await client.request('model/list')).data.find(
-      (entry: any) => !entry.isDefault,
+      (entry: any) => !entry.isDefault && entry.id !== 'default',
     ).id
     await client.request('config/batchWrite', {
       edits: [

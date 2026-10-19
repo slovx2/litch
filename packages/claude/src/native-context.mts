@@ -1,5 +1,6 @@
 import { isDeepStrictEqual } from 'node:util'
 import type { Options, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
+import { claudeChildEnv } from './claude-provider.mjs'
 import { hostClaudeEnvOverrides, hostClaudeExecutable } from './host-claude.mjs'
 import type { NativeProcess } from './native-process.mjs'
 import { ProtocolError } from './protocol-contract.mjs'
@@ -147,7 +148,7 @@ export async function appendNativeContext(
     persistSession: true,
     ...(exists ? { resume: context.sessionId } : { sessionId: context.sessionId }),
     env: {
-      ...process.env,
+      ...claudeChildEnv(),
       ...hostClaudeEnvOverrides,
       CLAUDE_CODE_MAX_RETRIES: '0',
       CLAUDE_CODE_DISABLE_NONSTREAMING_FALLBACK: '1',

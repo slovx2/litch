@@ -102,8 +102,14 @@ export function harnessDeclaration(runtime: RuntimeBackendType): HarnessDeclarat
   return {
     ...identity,
     // 计划确认（ExitPlanMode）只对声明了 planConfirmation 的连接在回合里问（native-runtime.mts）；
-    // litch_ 命名空间的动态工具只交给声明了 clientTools 的连接（server.mts 的 clientToolExecutor）
-    extensions: [EXTENSION.declineWithNote, EXTENSION.planConfirmation, EXTENSION.clientTools],
+    // litch_ 命名空间的动态工具只交给声明了 clientTools 的连接（server.mts 的 clientToolExecutor）；
+    // harness 详情设置（litch/harness/*）读写 Claude Code 自己的配置与账号（harness-config.mts）
+    extensions: [
+      EXTENSION.declineWithNote,
+      EXTENSION.planConfirmation,
+      EXTENSION.clientTools,
+      EXTENSION.harnessConfig,
+    ],
     features,
     permissionPresets,
   }
