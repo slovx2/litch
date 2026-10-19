@@ -67,7 +67,7 @@ function isDirectory(path: string): boolean {
 // 来源范围按文件落在哪个目录里归，dsh 的清单不带这一项。它默认找技能的几处里，项目的两处算仓库的，
 // 用户的两处算用户的；归不进这四处的（dsh 自带的、插件带的、它的设置里另加的目录）算系统的。
 // dsh 给的路径是解开符号链接之后的，所以拿各目录下每一项的真实位置去对，不按路径的开头比。
-function scopesAt(cwd: string, home: string): Map<string, Scope> {
+function scopesAt(cwd: string): Map<string, Scope> {
   // 项目根照 dsh 的规矩：往上第一个带 .git 的目录，一直没有就是工作目录自己
   let project = cwd
   for (let directory = cwd; ; directory = dirname(directory)) {
@@ -81,7 +81,7 @@ function scopesAt(cwd: string, home: string): Map<string, Scope> {
   const roots: Array<[string, Scope]> = [
     [join(project, '.dsh/skills'), 'repo'],
     [join(project, '.agents/skills'), 'repo'],
-    [join(dshHome(home), 'skills'), 'user'],
+    [join(dshHome(), 'skills'), 'user'],
     [join(agents, 'skills'), 'user'],
   ]
   const scopes = new Map<string, Scope>()
@@ -103,7 +103,6 @@ function scopesAt(cwd: string, home: string): Map<string, Scope> {
 }
 
 export class DshSkills {
-  private readonly home: string
   private readonly runtime: DshRuntime
   // 问过技能的连接和它问的那几个目录：清单变了只通知它们。
   private readonly observers = new Map<string, Observer>()
@@ -111,8 +110,7 @@ export class DshSkills {
   private readonly timer: NodeJS.Timeout
   private polling = false
 
-  constructor(home: string, runtime: DshRuntime) {
-    this.home = home
+  constructor(runtime: DshRuntime) {
     this.runtime = runtime
     this.timer = setInterval(() => void this.poll(), POLL_MS)
     this.timer.unref()
@@ -196,7 +194,7 @@ export class DshSkills {
   private catalog(cwd: string, seen: Seen): Catalog {
     if ('gone' in seen)
       return { cwd, skills: [], errors: [{ path: cwd, message: '工作目录不存在或不是目录' }] }
-    const scopes = scopesAt(resolve(cwd), this.home)
+    const scopes = scopesAt(resolve(cwd))
     const catalog: Catalog = { cwd, skills: [], errors: [] }
     for (const { name, description, path } of seen.skills) {
       // 不是文件的技能（插件在内存里注册的）dsh 不给位置；协议里位置是必填的，编不出来，如实说列不进

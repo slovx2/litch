@@ -4,7 +4,7 @@
 
 ## 接入方式
 
-dsh 本体不随适配器分发：适配器使用用户自己安装的 `dsh`，默认从 PATH 查找，`CHA_DSH_CLI` 可指定路径。它看护一个长驻的 `dsh --profile web --no-open --port 0` 子进程，经 Web Remote 接口（HTTP 一元调用加 WebSocket 流）驱动全部会话：
+dsh 本体不随适配器分发：适配器使用用户自己安装的 `dsh`，默认从 PATH 查找，`CHA_DSH_CLI` 可指定路径。它看护一个长驻的 `dsh --profile web --no-open --port 0` 子进程，经 Web Remote 接口（HTTP 一元调用加 WebSocket 流）驱动全部会话。dsh 的配置目录（`DSH_HOME`）就是用户自己的那一份：用户设了 `DSH_HOME` 用它，没设是 `~/.dsh`。登录、密钥、模型、MCP、技能、会话都和用户自己开 dsh（Web、桌面端用的也是 `web` 这个 profile）共用；同一个会话两边同时写时由 dsh 自己的会话锁挡住。会话日志上传仍由起 dsh 时的 `--patch` 关掉，不写进这个目录：
 
 - 历史只存在 dsh 自己的会话存储里，适配器每次从 `session/follow` 的快照回放，不另存一份；适配器数据库只放归档标记、项目归属等界面元数据，和客户端发来的输入的原样（见下一条）。
 - 回给客户端的用户消息是它发来的样子。dsh 的会话记录里图片只有它另存的附件号（收图时可能缩小、转码过），所以适配器把每次发来的输入原样记一份（适配器数据库里，按会话和提交标识，就是 dsh 那条用户消息上的 `rpcId`），实时回显和重读历史时用户消息的内容就是它；dsh 自己分叉出来的会话带着原来的提交标识，到上一级会话名下也找得到。这一份没有时（库丢了、升级之前发的消息）照 dsh 的记录来：图片按附件号从 dsh 取回（`session/attachment`），一律成了带地址的图片，本地文件的路径没有了。技能也是这样回出一项技能，库丢了时是交给 dsh 的那一句“/名字”（不照字去认：会把用户自己写的“/名字”也当成技能）。预览取用户自己写的字。没打开的会话预览和名字出自 dsh 的会话清单，那里是照交给 dsh 的那一句截的，名字分不出是不是兜底标题，还可能是旧的，所以会话打开着时适配器把该报的预览和名字记一份，列清单时照它报。
@@ -12,7 +12,7 @@ dsh 本体不随适配器分发：适配器使用用户自己安装的 `dsh`，�
 - dsh 只在模型申请沙箱提权时询问，裁决只有"允许这一次"和"拒绝"；对应 Codex 的命令审批与文件改动审批。
 - 模型调 dsh 的提问工具（`ask_user_question`）时，dsh 转来问用户（`user-questions/request`），适配器转成 `item/tool/requestUserInput` 发给会话的订阅连接，先答的生效，答案交回 dsh、由它写成工具结果给模型；工具调用本身是一个动态工具条目（`dynamicToolCall`，和 Claude 入口一样），结束时每道题一行答案。dsh 的题都能自己写一段，所以都标 `isOther`；协议的题上没有多选的标记，多选题到客户端和单选题一个样子。问不成（没有连着的客户端、拿着请求的连接都断了、客户端回了错误）交回 dsh，模型拿到“没有人应答”的报错，回合接着走；回合被打断时不替用户答，dsh 撤回提问，模型那边记的是“用户回答之前就中止了”。
 - 权限三档与 Codex 一一对应（`read-only`、`workspace-write`、`danger-full-access`），切换时向会话执行 `/permission`。
-- 会话的模型和强度问的是 dsh：选过的、上一次请求用过的它记着；两样都没有的新会话到发请求时用它当时的默认（模型目录里的默认项），`thread/start`、`thread/resume` 的应答里报的就是这个，和 `model/list` 里 `isDefault` 的那一项一致。dsh 的默认不是固定的：在任何会话里选一次模型，它都把那一个存成新的默认。
+- 会话的模型和强度问的是 dsh：选过的、上一次请求用过的它记着；两样都没有的新会话到发请求时用它当时的默认（模型目录里的默认项，就是 dsh 设置里的 `agent-default-model`），`thread/start`、`thread/resume` 的应答里报的就是这个，和 `model/list` 里 `isDefault` 的那一项一致。dsh 的默认不是固定的：在任何会话里选一次模型，它都把那一个存成新的默认。`config/read` 报的、`config/value/write` 和 `config/batchWrite` 写的默认模型、强度、权限预设（`sandbox_mode` 对应 `permission.defaultPreset`）都是 dsh 自己的设置，适配器不另存。
 - 临时线程（`thread/start` 带 `ephemeral: true`，桌面端生成标题、摘要时用）只存在于适配器内存里：dsh 没有不落盘的会话，也没有删除会话的接口，所以不为它建 dsh 会话；回包带 `ephemeral: true`，不进线程列表，无人订阅即卸载。
 - dsh 没有结构化输出：临时线程上带 `outputSchema` 的回合不经模型，以空结果正常结束，客户端按"没有结果"走自己的回退；临时线程上的普通回合和普通线程上带 `outputSchema` 的回合如实拒绝。
 - 线程标题用 dsh 自己生成的（`session/title` 转成 `thread/name/updated`），它的兜底标题（模型标题出来之前先顶着的、头一句开头的几个词，点了技能的是“/名字”打头）不算：不当名字、不通知，没有名字的会话客户端显示预览。dsh 把改名视为用户标题并钉住、之后不再自动生成，所以在 dsh 起过标题之前收到的 `thread/name/set`（桌面端会在首条消息发出前把消息原文写回）只当临时名，不转给 dsh；起过标题之后的改名才写进 dsh。
@@ -23,7 +23,8 @@ dsh 本体不随适配器分发：适配器使用用户自己安装的 `dsh`，�
 - dsh 没有对应物的方法（`mcpServerStatus/list`、`app/installed`、`plugin/installed`、`marketplace/add`）答复 -32004"不适用"，与 Claude 入口同一做法；`thread/goal/get` 如实回报没有目标。
 - 客户端工具（Litch 的 clientTools 扩展：内置浏览器、Computer Use、`litch_machine`、`litch_sessions`、`litch_tasks` 等）：`thread/start.dynamicTools` 记在适配器库里（重启、恢复会话之后还在），经适配器插进 dsh 的一个 cordis 插件交给模型（`src/plugin.mts`，起 dsh 时用 `--patch` 加载，不改 dsh 本体）。插件给每个会话注册只对它可见的工具，模型看到的名字是 `<命名空间>__<工具名>`，命名空间的说明接在它第一个工具的说明前面；模型调用时插件经回环 TCP 连接（端口和一次性令牌写在只有属主读得到的补丁文件里）交回适配器，适配器照 `protocol/extensions/client-tools.json` 的规矩挑执行方、发标准的 `item/tool/call`，答复里的图片存进 dsh 的附件再交给模型。条目是动态工具条目（`dynamicToolCall`）；重读历史时结果只有文字，图片在 dsh 的记录里只剩附件号。dsh 的子代理看不到这些工具（dsh 的按会话注册不会传给子代理）。
 - 子代理：dsh 的 `subagent`、`subagent_fork` 映射成子代理条目（`collabAgentToolCall`，`spawnAgent`），接收方是子代理的会话号（派它的会话里的 `subagent/catalog` 事件给的）；`send_message`、`interrupt_agent`、`list_agents` 也是子代理条目。子代理的会话（会话头 `origin` 是 `subagent`）是独立线程，带 `parentThreadId`，`thread/list` 默认不列；dsh 只让按派它的会话的地址跟随它（普通地址报 `session/agent-busy`），地址里的方式（`continuable`、`one-shot`）还得对上。后台可继续的子代理能在它自己的线程里接着发消息、插话、打断（`subagents/prompt`、`subagents/interruptByParent`），跑完就结束的 `canAcceptDirectInput` 为假，发消息如实拒绝；子代理的权限和模型是派它时定的，客户端带来的设置不管。dsh 自己分叉出来的会话也带上一级的会话号，但没有 `origin`：记成 `forkedFromId`，照普通会话列出来。
-- 技能清单（`skills/list`）问的是 dsh 自己（Web Remote 的 `skills/list`），适配器不另扫目录：列出来的就是用户能用 `/名字` 点名的那些。dsh 的这个接口按会话问，所以每个工作目录配一个只用来问技能的 dsh 会话（会话号 `session-skills-` 开头，由目录定），从不发消息、不进线程列表；dsh 没有删除会话的接口，它建了就一直在。来源范围是按文件所在的目录归的（项目的 `.dsh/skills`、`.agents/skills` 算仓库的，`<DSH_HOME>/skills`、`~/.agents/skills` 算用户的，其余算系统的）。dsh 不往远程客户端推技能变化，适配器每两秒问一遍，变了给问过清单的连接发 `skills/changed`。别的程序改了技能文件，dsh 要等系统的文件事件才知道，系统忙时会迟，这期间清单是旧的，`forceReload` 也不能让它重扫。dsh 没有逐项的开关，`enabled` 恒为真，`skills/config/write`、`skills/extraRoots/set` 不支持。消息里的技能输入化成单独一行的 `/名字`，由 dsh 展开；回显和重读历史里它仍是一项技能。注意 `DSH_HOME` 是适配器自己的那一份，用户放在 `~/.dsh/skills` 里的技能读不到。
+- 技能清单（`skills/list`）问的是 dsh 自己（Web Remote 的 `skills/list`），适配器不另扫目录：列出来的就是用户能用 `/名字` 点名的那些。dsh 的这个接口按会话问，所以每个工作目录配一个只用来问技能的 dsh 会话（会话号 `session-skills-` 开头，由目录定），从不发消息、不进线程列表；dsh 没有删除会话的接口，它建了就一直在。来源范围是按文件所在的目录归的（项目的 `.dsh/skills`、`.agents/skills` 算仓库的，`<DSH_HOME>/skills`、`~/.agents/skills` 算用户的，其余算系统的）。dsh 不往远程客户端推技能变化，适配器每两秒问一遍，变了给问过清单的连接发 `skills/changed`。别的程序改了技能文件，dsh 要等系统的文件事件才知道，系统忙时会迟，这期间清单是旧的，`forceReload` 也不能让它重扫。dsh 没有逐项的开关，`enabled` 恒为真，`skills/config/write`、`skills/extraRoots/set` 不支持。消息里的技能输入化成单独一行的 `/名字`，由 dsh 展开；回显和重读历史里它仍是一项技能。
+- harness 详情设置（Litch 的 harnessConfig 扩展，`litch/harness/*`，`src/harness-config.mts`）读写的都是 dsh 自己的配置，照它官方 Web、桌面端的设置页：配置项（默认模型与强度、默认权限预设、联网搜索、子代理、终端、内置插件启停，会话日志上传只读显示“由 Litch 关闭”）经 `settings/*`、`pluginManager/setPluginEnabled`，落在 `$DSH_HOME/profiles/web/cordis.patch.yml`；provider 是 DeepSeek 官方接口、DeepSeek 账号、pi-ai 自带的第三方和用户声明的自定义网关（`llm-pi-ai`），key 经 `credentials/*` 存在 `$DSH_HOME/.credentials.yaml`，“在用的 provider”就是默认模型所属的那一家；DeepSeek 账号登录走 `account/startSignIn`，浏览器授权后回调到 dsh 的 Web 入口（`127.0.0.1:<端口>/oauth/callback`，应答里的 `callbackPort`，远程设备上由客户端经 `ssh -L` 转发）；MCP 是补丁文件里 `@deepseek-ai/dsh-mcp-client` 的 `insert` 行，dsh 的设置接口不管这种行，适配器用 yaml 的文档模型直接改，注释、别的行和 `!!js` 表达式原样留着；指令文件是 `$DSH_HOME/AGENTS.md`。
 
 ## 版本
 
@@ -40,12 +41,13 @@ bin/codex-harness-adapter start --harness dsh         # 只启动 dsh 入口
 bin/codex-harness-adapter start                       # 全部启动：检测到本机装有 dsh 才带上 dsh 入口
 ```
 
-默认 SSH 端口 7333（全部启动时用 `--dsh-port` 修改），主机别名 `codex-harness-adapter-dsh`。全部启动时 dsh 是实验阶段的特例：没装 dsh（`PATH` 里没有且未设置 `CHA_DSH_CLI`）就不出现、不告警；装了但版本低于下限或启动失败时与另外两个入口一样只告警。`DEEPSEEK_API_KEY` 只从启动环境继承（或写在 `<home>/env`），适配器不读取 `~/.dsh` 下的登录态；没有密钥时回合以 dsh 的原始报错结束。
+默认 SSH 端口 7333（全部启动时用 `--dsh-port` 修改），主机别名 `codex-harness-adapter-dsh`。全部启动时 dsh 是实验阶段的特例：没装 dsh（`PATH` 里没有且未设置 `CHA_DSH_CLI`）就不出现、不告警；装了但版本低于下限或启动失败时与另外两个入口一样只告警。密钥和登录态是 dsh 自己的（`DSH_HOME` 下的 `.credentials.yaml`，或启动环境里的 `DEEPSEEK_API_KEY`），没有时回合以 dsh 的原始报错结束。
 
 | 变量 | 作用 |
 | --- | --- |
 | `CHA_DSH_CLI` | 用户安装的 dsh 可执行文件；不设置时从 PATH 查找 `dsh` |
-| `CHA_DSH_HOME` | 适配器状态目录（CLI 启动时自动设为 `<home>/dsh`）；dsh 的 `DSH_HOME` 固定在其下的 `dsh-home` |
+| `CHA_DSH_HOME` | 适配器状态目录（CLI 启动时自动设为 `<home>/dsh`），放归档标记、项目归属等界面元数据 |
+| `DSH_HOME` | dsh 自己的配置目录，照 dsh 的取法：设了用它（只有空白的当没设），没设是 `~/.dsh` |
 | `CHA_DSH_SESSION_LOG=1` | 保留 dsh 默认的会话日志上传；不设置时适配器启动的 dsh 一律关闭上传 |
 | `CHA_DSH_TRACE=<文件>` | 调试用，逐行记录与客户端往来的协议消息 |
 | `DSH_TELEMETRY_DISABLED` | 未设置时置为 `1` |
@@ -59,8 +61,8 @@ npm run test:dsh-ssh                     # 隔离实例经真实 SSH 走一遍�
 node scripts/dsh-poc-serve.mjs --gui     # 同一实例常驻，写入 ~/.ssh/config.d/cha-dsh-poc 供桌面端连接
 ```
 
-测试与隔离实例都使用假密钥、临时目录和回环 mock 模型，不读取个人配置；隔离实例发往回环之外的 HTTP(S) 请求都会走到一个陷阱代理，验收要求一次也没有（以前用的 sandbox-exec 回环沙箱在 macOS 14 上会偶发拒掉回环连接，见 `scripts/dsh-poc-serve.mjs` 的 `startTrap`）。测试需要本机已安装 dsh，没有时直接失败而不是跳过，因此不并入根目录的 `npm test`；CI 的 `dsh` 任务按 `protocol/versions.json` 的 `dshMinimum` 把 dsh 装到临时前缀后运行。
+测试与隔离实例都使用假密钥、临时目录（`DSH_HOME` 一律指进去，不碰 `~/.dsh`）和回环 mock 模型，不读取个人配置；DeepSeek 账号登录对着回环上的假平台走完（`test/harness-config.test.mts`）；隔离实例发往回环之外的 HTTP(S) 请求都会走到一个陷阱代理，验收要求一次也没有（以前用的 sandbox-exec 回环沙箱在 macOS 14 上会偶发拒掉回环连接，见 `scripts/dsh-poc-serve.mjs` 的 `startTrap`）。测试需要本机已安装 dsh，没有时直接失败而不是跳过，因此不并入根目录的 `npm test`；CI 的 `dsh` 任务按 `protocol/versions.json` 的 `dshMinimum` 把 dsh 装到临时前缀后运行。
 
 ## 尚未覆盖
 
-历史分页（快照之外更早的记录）、计划模式（dsh 只能用 `/plan` 命令打开，适配器不发；模型自己调 `exit_plan_mode` 只会得到“只在计划模式里可用”的报错，这个工具 dsh 不让单独关）、分叉与回滚、压缩、MCP 管理、技能的开关与额外目录、`thread/timeline/list`。结构化输出也不支持（见上）。只在 macOS 上验证过；真实桌面界面已在 ChatGPT.app 26.1007 上用回环 mock 模型验证过，真实 DeepSeek 端点尚未经适配器端到端验证。
+历史分页（快照之外更早的记录）、计划模式（dsh 只能用 `/plan` 命令打开，适配器不发；模型自己调 `exit_plan_mode` 只会得到“只在计划模式里可用”的报错，这个工具 dsh 不让单独关）、分叉与回滚、压缩、MCP 的连接状态（`mcpServerStatus/list`）、技能的开关与额外目录、`thread/timeline/list`。结构化输出也不支持（见上）。只在 macOS 上验证过；真实桌面界面已在 ChatGPT.app 26.1007 上用回环 mock 模型验证过，真实 DeepSeek 端点尚未经适配器端到端验证。

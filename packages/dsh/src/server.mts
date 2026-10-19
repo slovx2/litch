@@ -22,6 +22,7 @@ import { sleep } from '../../shared/src/util.mjs'
 import { approve } from './approvals.mjs'
 import { ClientToolBridge, type DshClientTool, dshClientTools } from './client-tools.mjs'
 import { summary } from './envelope.mjs'
+import { DshHarnessConfig } from './harness-config.mjs'
 import {
   type DshThread,
   type DshTurn,
@@ -87,6 +88,8 @@ export class DshServer {
   readonly ephemeral = new Map<string, LiveThread>()
   readonly runtime: DshRuntime
   readonly skills: DshSkills
+  // harness 详情设置（harnessConfig 扩展）
+  readonly harnessConfig: DshHarnessConfig
   private readonly loading = new Map<string, Promise<LiveThread>>()
   private readonly locks = new Map<string, Promise<unknown>>()
   // dsh 现有的会话，最近一次问来的（见 sessions）：会话标识 → 摘要。
@@ -102,6 +105,8 @@ export class DshServer {
   )
   // 每条连接握手时声明能执行的客户端工具命名空间（clientTools 扩展）
   readonly toolNamespaces = new Map<string, ReadonlySet<string>>()
+  // 握手时声明了 harnessConfig 扩展的连接：配置变化、登录进展的通知只发给它们（harness-config.mts）
+  readonly configPeers = new Set<string>()
   // 跑在 dsh 里的客户端工具插件和适配器之间的连接（client-tools.mts）
   readonly bridge: ClientToolBridge
   // 会话的客户端工具，摊平成交给 dsh 模型的样子（clientTools）
@@ -137,7 +142,11 @@ export class DshServer {
       EXIT_TIMING,
       () => this.bridge.patch(),
     )
-    this.skills = new DshSkills(home, this.runtime)
+    this.skills = new DshSkills(this.runtime)
+    this.harnessConfig = new DshHarnessConfig({
+      remote: () => this.remote(),
+      notifyConfig: (method, params) => this.notifyConfig(method, params),
+    })
   }
 
   remote(): Promise<WebRemote> {
@@ -248,7 +257,13 @@ export class DshServer {
       //（官方桌面端找置顶会话在哪台机器上时，拿别处的会话号向每个入口都问，隔一会儿又问一遍）。
       if (!(error instanceof ThreadNotFound))
         console.error(`[dsh] ${message.method} 失败（${code}）: ${text}`)
-      peer.send({ jsonrpc: '2.0', id: message.id, error: { code, message: text } })
+      // 带着 data 的（harnessConfig 的错误，见 harness-config.mts）原样带上
+      const data = (error as { data?: unknown } | null)?.data
+      peer.send({
+        jsonrpc: '2.0',
+        id: message.id,
+        error: data === undefined ? { code, message: text } : { code, message: text, data },
+      })
     } finally {
       // 这次请求可能让这条连接订阅了某个会话：应答发出之后，把还在等人回答的请求补送给它，
       // 先后与原生“恢复会话后重放挂起的请求”一致。
@@ -285,6 +300,11 @@ export class DshServer {
     for (const peer of this.peers.values())
       if (everyone || (threadId !== null && this.subscriptions.get(threadId)?.has(peer.id)))
         peer.send({ method, params: threadId ? { threadId, ...params } : params })
+  }
+
+  /** 发给声明了 harnessConfig 扩展的连接（litch/harness/config/changed、litch/harness/auth/updated） */
+  notifyConfig(method: string, params: unknown): void {
+    for (const id of this.configPeers) this.peers.get(id)?.send({ method, params })
   }
 
   /** 订阅着这个线程、还连着的连接，按订阅的先后 */
@@ -837,6 +857,7 @@ export class DshServer {
   closePeer(peer: RpcPeer): void {
     this.peers.delete(peer.id)
     this.toolNamespaces.delete(peer.id)
+    this.configPeers.delete(peer.id)
     this.files.closePeer(peer.id)
     this.processes.closePeer(peer.id)
     this.skills.closePeer(peer.id)
@@ -850,6 +871,7 @@ export class DshServer {
   async close(signalled = false): Promise<void> {
     this.requests.reject(() => true, '适配器正在关闭')
     this.skills.close()
+    this.harnessConfig.close()
     await this.runtime.close(signalled)
     this.bridge.close()
     this.files.close()

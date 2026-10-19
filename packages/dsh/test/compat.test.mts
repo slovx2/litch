@@ -103,6 +103,7 @@ test('接口与预期不符时报错带上当前与已验证的 dsh 版本；dsh
     DEEPSEEK_BASE_URL: 'http://127.0.0.1:9/anthropic',
     DEEPSEEK_API_KEY: 'mock-not-a-real-key',
     DSH_AGENTS_HOME: join(root, 'agents-home'),
+    DSH_HOME: join(root, 'home', 'dsh-home'),
   })
   const runtime = new DshRuntime(join(root, 'home'), {
     waterfall: async () => ({ kind: 'next' }),
@@ -206,6 +207,7 @@ test('未验证的新版本 dsh 放行并提示', { timeout: 60000 }, async () =
     DEEPSEEK_BASE_URL: 'http://127.0.0.1:9/anthropic',
     DEEPSEEK_API_KEY: 'mock-not-a-real-key',
     DSH_AGENTS_HOME: join(root, 'agents-home'),
+    DSH_HOME: join(root, 'home', 'dsh-home'),
   })
   const logged: string[] = []
   const original = console.error

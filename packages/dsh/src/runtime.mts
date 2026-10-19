@@ -1,6 +1,7 @@
 import { type ChildProcess, spawn } from 'node:child_process'
 import { chmodSync, mkdirSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { homedir } from 'node:os'
+import { join, resolve } from 'node:path'
 import { cliCommand } from '../../shared/src/host-cli.mjs'
 import { sleep } from '../../shared/src/util.mjs'
 import { type RemoteHandlers, WebRemote } from './remote.mjs'
@@ -10,8 +11,21 @@ import { compatibilityHint, detectHostDsh, type HostDsh } from './versions.mjs'
 const SESSION_LOG_OFF = '- id: session-log-deepseek\n  config:\n    enabled: false\n'
 const redact = (text: string) => text.replace(/token=[\w-]+/g, 'token=<已隐去>')
 
-/** dsh 自己的配置目录（DSH_HOME）：固定在适配器状态目录下面，不用用户的 ~/.dsh */
-export const dshHome = (home: string): string => join(home, 'dsh-home')
+/**
+ * dsh 自己的配置目录（DSH_HOME）：和用户自己用 dsh 时是同一份，登录、密钥、模型、MCP、会话都共用。
+ * 用户设了 DSH_HOME 就用它（只有空白的当没设，和 dsh 自己的取法一样），没设是 ~/.dsh。
+ * 会话日志上传照旧由起 dsh 时的 --patch 关掉（SESSION_LOG_OFF），不写进这个目录。
+ */
+export const dshHome = (): string => {
+  const configured = process.env.DSH_HOME?.trim()
+  return configured ? resolve(configured) : join(homedir(), '.dsh')
+}
+
+/** Litch 起的 dsh 用的 profile：和 dsh 官方的 Web、桌面端是同一个，设置、MCP 都落在它的补丁文件里 */
+export const DSH_PROFILE = 'web'
+
+/** 会话日志上传是不是被 Litch 关着（CHA_DSH_SESSION_LOG=1 时照 dsh 的默认） */
+export const sessionLogForcedOff = (): boolean => process.env.CHA_DSH_SESSION_LOG !== '1'
 
 // 关 dsh 只有发结束信号这一条路，它的 Web Remote 接口里没有“请收尾退出”的请求。它收到信号后有序收尾
 //（没落盘的事件在这时落盘），平时不到 0.1 秒，系统的文件监视关得慢时要几秒；它给自己的上限是 5 秒，到点自己退出。
@@ -80,18 +94,17 @@ export class DshRuntime {
     // 上一个还在收场的话等它退干净：不让两个 dsh 同时用同一份状态目录。
     await this.leaving?.exited
     if (this.closing) throw new Error('适配器正在关闭')
-    const nativeHome = dshHome(this.home)
+    // 用户的 DSH_HOME 由 dsh 自己建（照它的权限），这里只建适配器自己的工作目录
+    const nativeHome = dshHome()
     const workdir = join(this.home, 'dsh-runtime')
-    for (const directory of [nativeHome, workdir])
-      mkdirSync(directory, { recursive: true, mode: 0o700 })
+    mkdirSync(workdir, { recursive: true, mode: 0o700 })
     const host = detectHostDsh()
     this.host = host
     if (!host.verified)
       console.error(`[dsh] 这个版本的 dsh 尚未验证，如遇异常：${compatibilityHint(host.version)}`)
     // 启动器选项（--patch）必须写在 profile 自己的选项之前。
-    const args = ['--profile', 'web']
-    const patchText =
-      (process.env.CHA_DSH_SESSION_LOG !== '1' ? SESSION_LOG_OFF : '') + (await this.extraPatch())
+    const args = ['--profile', DSH_PROFILE]
+    const patchText = (sessionLogForcedOff() ? SESSION_LOG_OFF : '') + (await this.extraPatch())
     if (patchText) {
       // 补丁里有客户端工具插件的连接令牌：只有属主读得到
       const patch = join(this.home, 'dsh.patch.yml')

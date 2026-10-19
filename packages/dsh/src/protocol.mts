@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { isAbsolute } from 'node:path'
+import { EXTENSION, EXTENSIONS_CAPABILITY } from '../../protocol/src/device.mjs'
 import { clientToolNamespaces } from '../../shared/src/client-tool-executor.mjs'
 import { gitDiffToRemote } from '../../shared/src/git-diff-remote.mjs'
 import { applyNotificationOptOut } from '../../shared/src/notification-opt-out.mjs'
@@ -16,6 +17,7 @@ import { PINNED_SECTION, PINNED_SECTION_ID } from '../../shared/src/thread-secti
 import type { RpcPeer } from '../../shared/src/types.mjs'
 import { dshClientTools } from './client-tools.mjs'
 import { envelope, PROFILE, settings, summary } from './envelope.mjs'
+import { describeSettings, fromRemote, mutateSettings, type PathOp } from './harness-common.mjs'
 import type { Preset } from './projection.mjs'
 import { type DshServer, presetFromParams } from './server.mjs'
 import { promptContent } from './turn.mjs'
@@ -80,7 +82,68 @@ async function defaultPermissions(s: DshServer): Promise<string | null> {
   return Object.hasOwn(PROFILE, preset) ? PROFILE[preset as Preset] : null
 }
 
+// 官方桌面端写默认设置的几个键（config/value/write、config/batchWrite）落到 dsh 自己的设置上：
+// 模型和强度是 agent-default-model，沙箱是默认权限预设（permission.defaultPreset，三个内置预设的名字和 sandbox_mode
+// 的取值一样）。审批策略在 dsh 里跟着预设走（只有完全访问那一档不问），单独写不了。
+const DEFAULT_KEYS = ['model', 'model_reasoning_effort', 'approval_policy', 'sandbox_mode']
+const approvalOf = (preset: string | null) =>
+  preset === 'danger-full-access' ? 'never' : 'on-request'
+
+async function writeDefaults(s: DshServer, edits: any[]): Promise<void> {
+  for (const edit of edits)
+    if (!DEFAULT_KEYS.includes(edit.keyPath))
+      throw new ProtocolError(-32602, `dsh 入口不支持修改 ${edit.keyPath}`)
+  const remote = await s.remote()
+  const { namespaces } = await describeSettings(remote)
+  const defaults = namespaces.get('agent-default-model')
+  const preset = namespaces.get('permission')
+  const model: PathOp[] = []
+  const permission: PathOp[] = []
+  for (const { keyPath, value } of edits) {
+    if (keyPath === 'model') {
+      const slash = typeof value === 'string' ? value.indexOf('/') : -1
+      if (slash < 1) throw new ProtocolError(-32602, '模型格式必须为 provider/model')
+      model.push(
+        { op: 'set', path: ['provider'], value: value.slice(0, slash) },
+        { op: 'set', path: ['model'], value: value.slice(slash + 1) },
+      )
+    } else if (keyPath === 'model_reasoning_effort')
+      model.push(
+        value == null
+          ? { op: 'unset', path: ['reasoningEffort'] }
+          : { op: 'set', path: ['reasoningEffort'], value },
+      )
+    else if (keyPath === 'sandbox_mode') {
+      if (!Object.hasOwn(PROFILE, value))
+        throw new ProtocolError(-32602, `dsh 没有 ${value} 这个权限预设`)
+      permission.push({ op: 'set', path: ['defaultPreset'], value })
+    } else if (value !== approvalOf(preset?.value?.defaultPreset ?? null))
+      throw new ProtocolError(
+        -32602,
+        'dsh 的审批跟着权限预设走，单独改不了；改 sandbox_mode 换预设',
+      )
+  }
+  // provider、model 是必填的：用户层还没写过、这次只改强度时，把现在生效的那一对一起写上
+  if (
+    model.length &&
+    defaults?.user?.provider === undefined &&
+    !model.some((op) => op.path[0] === 'provider')
+  )
+    model.unshift(
+      { op: 'set', path: ['provider'], value: defaults?.value?.provider },
+      { op: 'set', path: ['model'], value: defaults?.value?.model },
+    )
+  try {
+    if (model.length) await mutateSettings(remote, 'agent-default-model', model, defaults?.revision)
+    if (permission.length) await mutateSettings(remote, 'permission', permission, preset?.revision)
+  } catch (error) {
+    throw new ProtocolError(-32603, fromRemote(error).message)
+  }
+}
+
 export async function dispatch(s: DshServer, peer: RpcPeer, method: string, p: any): Promise<any> {
+  // harness 详情设置（harnessConfig 扩展）：litch/device/instructions/* 是设备进程自己的，不会到这里
+  if (method.startsWith('litch/harness/')) return s.harnessConfig.handle(method, p)
   if (method.startsWith('fs/')) return s.files.call(peer, method, p)
   if (method === 'command/exec' || method === 'process/spawn')
     return s.processes.start(peer, method === 'command/exec' ? 'command' : 'process', p)
@@ -116,6 +179,12 @@ export async function dispatch(s: DshServer, peer: RpcPeer, method: string, p: a
       applyNotificationOptOut(peer, p)
       // 这条连接能执行哪些客户端工具命名空间（clientTools 扩展），挑执行方时看
       s.toolNamespaces.set(peer.id, clientToolNamespaces(p))
+      // 声明了 harnessConfig 的才收配置变化、登录进展的通知
+      if (
+        Array.isArray(p.capabilities?.[EXTENSIONS_CAPABILITY]) &&
+        p.capabilities[EXTENSIONS_CAPABILITY].includes(EXTENSION.harnessConfig)
+      )
+        s.configPeers.add(peer.id)
       return {
         userAgent: codexUserAgent(
           typeof p.clientInfo?.name === 'string' ? p.clientInfo.name : 'codex-app',
@@ -212,22 +281,20 @@ export async function dispatch(s: DshServer, peer: RpcPeer, method: string, p: a
     case 'model/list':
       return { data: await models(s), nextCursor: null }
     case 'config/read': {
-      const saved = s.store.getMeta('config', 'defaults') ?? {}
-      // 不带设置新建的会话会用的（客户端的新建页照它显示）：模型和强度照 thread/start 的取法，存下的默认，
-      // 没存的是 dsh 模型目录里的默认（DshServer.selection）；权限档是 dsh 给新会话的默认预设
-      const { model, effort } = await s.selection({
-        ephemeral: false,
-        model: saved.model ?? null,
-        effort: saved.model_reasoning_effort ?? null,
-      })
+      // 不带设置新建的会话会用的（客户端的新建页照它显示）：模型和强度是 dsh 自己的默认
+      //（agent-default-model，就是模型目录里的 default，DshServer.selection），权限档是 dsh 给新会话的默认预设
+      const { model, effort } = await s.selection({ ephemeral: false, model: null, effort: null })
+      const permissions = await defaultPermissions(s)
+      const preset = (Object.entries(PROFILE).find(([, id]) => id === permissions)?.[0] ??
+        null) as Preset | null
       return {
         config: {
           model,
           model_provider: 'dsh',
           model_reasoning_effort: effort,
-          approval_policy: saved.approval_policy ?? 'on-request',
-          sandbox_mode: saved.sandbox_mode ?? 'workspace-write',
-          default_permissions: await defaultPermissions(s),
+          approval_policy: approvalOf(preset),
+          sandbox_mode: preset ?? 'workspace-write',
+          default_permissions: permissions,
           features: {},
           model_providers: { dsh: { name: 'DSH', requires_openai_auth: false } },
         },
@@ -237,16 +304,11 @@ export async function dispatch(s: DshServer, peer: RpcPeer, method: string, p: a
     }
     case 'config/value/write':
     case 'config/batchWrite': {
-      // 桌面端改默认模型与权限时写这里；默认值存在适配器元数据里，不动 dsh 原生配置。
-      const edits: any[] =
-        method === 'config/batchWrite' ? (p.edits ?? []) : [{ keyPath: p.keyPath, value: p.value }]
-      const allowed = ['model', 'model_reasoning_effort', 'approval_policy', 'sandbox_mode']
-      for (const edit of edits)
-        if (!allowed.includes(edit.keyPath))
-          throw new ProtocolError(-32602, `dsh 入口（打样阶段）不支持修改 ${edit.keyPath}`)
-      const saved = s.store.getMeta('config', 'defaults') ?? {}
-      for (const edit of edits) saved[edit.keyPath] = edit.value
-      s.store.setMeta('config', 'defaults', saved)
+      // 桌面端改默认模型与权限时写这里：写进 dsh 自己的设置（和用户在 dsh 里改的是同一份）
+      await writeDefaults(
+        s,
+        method === 'config/batchWrite' ? (p.edits ?? []) : [{ keyPath: p.keyPath, value: p.value }],
+      )
       return { status: 'ok', version: 'dsh', filePath: '', overriddenMetadata: null }
     }
     case 'thread/start': {
@@ -256,8 +318,7 @@ export async function dispatch(s: DshServer, peer: RpcPeer, method: string, p: a
       if (p.ephemeral === true) {
         // 临时线程不建 dsh 会话；模型只用于回报，按目录核对，允许回退时改用默认模型。
         const catalog = await models(s)
-        const defaults = s.store.getMeta('config', 'defaults') ?? {}
-        const requested = p.model ?? p.config?.model ?? defaults.model ?? null
+        const requested = p.model ?? p.config?.model ?? null
         const known = catalog.find((model) => model.id === requested)
         if (requested && !known && !p.allowProviderModelFallback)
           throw new ProtocolError(-32602, `dsh 没有模型 ${requested}`)
@@ -288,10 +349,10 @@ export async function dispatch(s: DshServer, peer: RpcPeer, method: string, p: a
       // 动态工具记到会话上，交给 dsh 里的插件装好再回应答：客户端拿到应答就可能发第一句话
       if (clientTools.length) await s.setClientTools(thread.id, p.dynamicTools)
       live.preset = presetFromParams(p)
-      const saved = s.store.getMeta('config', 'defaults') ?? {}
+      // 没带的用 dsh 自己的默认（新会话本来就用它），不用另设
       const selection = {
-        model: p.model ?? p.config?.model ?? saved.model,
-        effort: p.effort ?? p.config?.model_reasoning_effort ?? saved.model_reasoning_effort,
+        model: p.model ?? p.config?.model,
+        effort: p.effort ?? p.config?.model_reasoning_effort,
       }
       // 桌面可能带着别的引擎的模型名新建线程；允许回退时改用 dsh 默认模型。
       await s.applySettings(remote, live, selection).catch((error) => {
