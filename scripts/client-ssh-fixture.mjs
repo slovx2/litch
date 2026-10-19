@@ -349,6 +349,16 @@ try {
     ].join('\n'),
   )
 
+  // OpenSSH 9.8 起 sshd 默认按来源地址记罚分（PerSourcePenalties）：认证失败几次之后一段时间里直接断开回环上的新连接，
+  // 而自检要故意试几次登不进去的钥匙（比如扫码绑定的端到端）。认这个选项的版本关掉它，不认的版本本来就没有
+  try {
+    execFileSync(sshd, ['-t', '-f', join(root, 'sshd_config'), '-o', 'PerSourcePenalties=no'], {
+      stdio: 'ignore',
+    })
+    writeFileSync(join(root, 'sshd_config'), 'PerSourcePenalties no\n', { flag: 'a' })
+  } catch {
+    // 这个 sshd 没有这一项
+  }
   sshdChild = spawn(sshd, ['-D', '-e', '-f', join(root, 'sshd_config')], {
     stdio: ['ignore', 'ignore', 'pipe'],
   })

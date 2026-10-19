@@ -409,13 +409,21 @@ func TestPairCtrlCCancels(t *testing.T) {
 	}
 }
 
-func TestPairStdinClosedMeansNo(t *testing.T) {
-	run := startPairRun(t, &fakePairing{}, nil)
-	run.polled(t, 1)
-	run.request(t)
-	_ = run.stdin.Close()
-	if code := run.exit(t); code != pairExitFailed || len(run.fake.decisions) != 1 || run.fake.decisions[0] {
-		t.Fatalf("退出码 %d，decide %v", code, run.fake.decisions)
+func TestPairStdinClosedCancels(t *testing.T) {
+	// 等扫码时、正在问 y/N 时标准输入关了，都取消这次配对
+	for _, requested := range []bool{false, true} {
+		run := startPairRun(t, &fakePairing{}, nil)
+		run.polled(t, 1)
+		if requested {
+			run.request(t)
+		}
+		_ = run.stdin.Close()
+		if code := run.exit(t); code != pairExitFailed || len(run.fake.decisions) != 0 || len(run.fake.cancels) != 1 {
+			t.Fatalf("退出码 %d，decide %v，cancel %v", code, run.fake.decisions, run.fake.cancels)
+		}
+		if !strings.Contains(run.stdout.String(), "标准输入已经关了") {
+			t.Fatalf("没说为什么：\n%s", run.stdout)
+		}
 	}
 }
 

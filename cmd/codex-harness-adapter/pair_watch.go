@@ -60,7 +60,7 @@ type pairUpdate struct {
 	err    error
 }
 
-// watch 等这个配对有结果，返回 done、expired、rejected、cancelled、interrupted 或 failed
+// watch 等这个配对有结果，返回 done、expired、rejected、cancelled、interrupted、closed（标准输入关了）或 failed
 func (s *pairSession) watch(ctx context.Context, start pairStartResponse) string {
 	out := s.pio.stdout
 	pollCtx, stopPoll := context.WithCancel(ctx)
@@ -127,16 +127,19 @@ func (s *pairSession) watch(ctx context.Context, start pairStartResponse) string
 				return "cancelled"
 			}
 		case line, open := <-s.lines:
+			// 标准输入关了（经 ssh 跑、没有终端时断开连接也是这样）：再没人能回 y，取消掉，不让一次性钥匙行留到过期
 			if !open {
-				s.lines = nil
+				if current == "requested" {
+					fmt.Fprintln(out)
+				}
+				fmt.Fprintln(out, tr("标准输入已经关了，没人能确认，取消这次配对。", "Standard input is closed and nobody can confirm; cancelling this pairing."))
+				s.cancel(start.PairID)
+				return "closed"
 			}
 			if current != "requested" {
 				continue
 			}
-			allow := open && isYes(line)
-			if !open {
-				fmt.Fprintln(out, tr("\n标准输入已经关了，按拒绝处理。", "\nStandard input is closed; treating it as a no."))
-			}
+			allow := isYes(line)
 			if err := s.decide(ctx, start.PairID, allow); err != nil {
 				if ctx.Err() != nil {
 					continue
