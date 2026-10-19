@@ -83,6 +83,12 @@ export const EXTENSION = {
    * 声明了它的连接才会收到配对和已绑定手机的变化通知。
    */
   devicePairing: 'devicePairing',
+  /**
+   * 给设备装 harness：查已装、验证过的、最新的版本，按官方方式装验证版或最新版（device-harness-install.mts，
+   * 定义在 protocol/extensions/harness-install.json）。设备信息的 `extensions` 里列了它，
+   * litch/device/harness/versions、install、install/read 才能用；声明了它的连接才会收到安装进度的通知。
+   */
+  harnessInstall: 'harnessInstall',
 } as const
 
 export type ExtensionName = (typeof EXTENSION)[keyof typeof EXTENSION]

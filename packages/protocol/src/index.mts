@@ -12,6 +12,9 @@ export {
   declaredClientToolNamespaces,
   isClientToolNamespace,
 } from './client-tools.mjs'
+// 配置 Litch（litch_config）：命令行经 invoke 交给桌面端核心的参数形状。不依赖别的文件
+export type * from './client-tools-config.mjs'
+export { CONFIG_NAMESPACE, CONFIG_TOOL } from './client-tools-config.mjs'
 export type * from './client-tools-sessions.mjs'
 export { SESSION_TOOL, SESSION_TOOL_LIMITS, SESSION_TOOLS } from './client-tools-sessions.mjs'
 // litch_tasks 工具（模型建定时任务），执行方是设备服务
@@ -31,6 +34,9 @@ export {
   THREAD_SECTIONS_CHANGED,
 } from './device.mjs'
 export type * from './device-codex.mjs'
+// 给设备装 harness（harnessInstall 扩展）：版本、安装任务、方法和通知。不依赖别的文件
+export type * from './device-harness-install.mjs'
+export { HARNESS_INSTALL_METHOD, HARNESS_INSTALL_NOTIFICATION } from './device-harness-install.mjs'
 // 扫码绑定手机（devicePairing 扩展）：二维码内容的编解码、手机与 pair-enroll 之间的一行、方法和通知。不依赖别的文件
 export type * from './device-pairing.mjs'
 export {
