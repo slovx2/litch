@@ -24,6 +24,7 @@ const extensions = await load(new URL('./extensions/index.js', sdkUrl))
 export const {
   createAgentSession,
   createEventBus,
+  DefaultPackageManager,
   DefaultResourceLoader,
   getAgentDir,
   loadSkills,
@@ -36,6 +37,7 @@ export const builtInExtensions = extensions.builtInExtensions
 const missing = Object.entries({
   createAgentSession,
   createEventBus,
+  DefaultPackageManager,
   DefaultResourceLoader,
   getAgentDir,
   loadSkills,
@@ -49,6 +51,7 @@ const missing = Object.entries({
   .filter(([, value]) => value === undefined)
   .map(([name]) => name)
 if (missing.length) throw incompatible(`缺少 ${missing.join('、')}`)
+export type DefaultPackageManager = PiSdk.DefaultPackageManager
 export type DefaultResourceLoader = PiSdk.DefaultResourceLoader
 export type SessionManager = PiSdk.SessionManager
 export type SettingsManager = PiSdk.SettingsManager

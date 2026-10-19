@@ -59,6 +59,8 @@ async function main(): Promise<void> {
   if (listen === 'off') return
   // 加载用户安装的 Pi 可能失败；放在入口内部，错误只输出可操作的提示，--version 也不依赖 Pi。
   const { PiServer } = await import('./server.mjs')
+  // 照 Pi 命令行把设置里的 httpProxy 补进环境变量（环境里已有的不动）
+  ;(await import('./http-proxy.mjs')).applyHttpProxy()
   // 问不问用户在这里定下：环境变量由命令行那一层按设置 harness.pi.approvals 给出，改了要重启运行时。
   const server = new PiServer(
     resolve(process.env.CHA_PI_HOME ?? join(homedir(), '.codex-harness-adapter/pi')),

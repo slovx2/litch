@@ -189,8 +189,8 @@ test('Pi：runtime/info 带结构化声明，原有字段原样保留', { timeou
       declaration,
     )
     assert.deepEqual([displayName, badge], ['Pi', 'PI'])
-    // 没打开审批时不发审批，扩展只有计划确认（交了计划之后的那一问只对声明了的连接问）和客户端工具。
-    assert.deepEqual(extensions, ['planConfirmation', 'clientTools'])
+    // 没打开审批时不发审批，扩展只有计划确认（交了计划之后的那一问只对声明了的连接问）、客户端工具和详情设置。
+    assert.deepEqual(extensions, ['planConfirmation', 'clientTools', 'harnessConfig'])
     assert.deepEqual(features.approvals, { kinds: [], uncovered: [] })
     // 只有一档，没得选：不用确认，也不能切换。
     assert.deepEqual(

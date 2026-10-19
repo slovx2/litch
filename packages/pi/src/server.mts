@@ -148,6 +148,8 @@ export class PiServer {
         error: {
           code: error instanceof ProtocolError ? error.code : -32603,
           message: error instanceof Error ? error.message : String(error),
+          // 扩展约定的错误带 data（harnessConfig 的 HarnessConfigError）
+          ...(error instanceof ProtocolError && 'data' in error ? { data: error.data } : {}),
         },
       })
     } finally {
@@ -333,6 +335,11 @@ export class PiServer {
     for (const peer of this.peers.values())
       if (everyone || (threadId !== null && this.subscriptions.get(threadId)?.has(peer.id)))
         peer.send({ method, params: threadId ? { threadId, ...params } : params })
+  }
+  /** 扩展的通知（不属于哪个会话）：只发给握手时声明了这个扩展的连接 */
+  notifyExtension(extension: string, method: string, params: any): void {
+    for (const peer of this.peers.values())
+      if (this.declared.get(peer.id)?.has(extension)) peer.send({ method, params })
   }
   call(
     peer: RpcPeer | undefined,
