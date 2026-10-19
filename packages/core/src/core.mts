@@ -4,6 +4,8 @@ import { clientToolFailure } from '../../protocol/src/client-tools.mjs'
 import type { ClientInfo } from '../../protocol/src/index.mjs'
 import { ChannelError, type Clock, type Commands } from './channel/protocol.mjs'
 import type { CoreHost, HostSink } from './channel/server.mjs'
+import { createConfigBridge } from './config/bridge.mjs'
+import { type ConfigExecutor, createConfigExecutor } from './config/executor.mjs'
 import { ConnectError } from './connection/transport.mjs'
 import {
   createDevice,
@@ -61,7 +63,17 @@ export interface CoreOptions {
   machine?: CoreMachineOptions
   /** 扫码绑定手机要碰 ssh、文件、端口的那几样（外壳给）。不给就出不了码，已绑定的手机照样能看、能撤 */
   pairing?: PairingPlatform
+  /**
+   * 配置 Litch（litch_config）：本机 harness 里跑的 litch config 交给这台桌面端执行。
+   * 不给就不声明这个命名空间（测试、移动端）
+   */
+  config?: CoreConfigOptions
   log?(line: string): void
+}
+
+export interface CoreConfigOptions {
+  /** 界面现在的语言（命令行没说语言时帮助按它说） */
+  lang(): 'zh-CN' | 'en'
 }
 
 export interface CoreMachineOptions {
@@ -114,7 +126,27 @@ export function createCore(options: CoreOptions): Core {
   const { remote, store } = options
   let saved = store?.load() ?? { localWire: null, remotes: [] }
   let started = false
-  const hub = createToolHub(options.clientTools, (line) => options.log?.(line))
+  const hub = createToolHub(
+    options.clientTools,
+    (line) => options.log?.(line),
+    options.clock.setTimer,
+  )
+  // —— litch_config：本机 harness 里的 litch config ——
+  const configBridge = createConfigBridge(options.clock)
+  let configExecutor: ConfigExecutor | null = null
+  /** 执行器经核心自己的两个入口（命令、订阅）做事：和界面点按钮走同一条路 */
+  const executor = (): ConfigExecutor => {
+    configExecutor ??= createConfigExecutor({
+      core: host,
+      clock: options.clock,
+      version: options.version,
+      lang: () => options.config?.lang() ?? 'en',
+      bridge: configBridge,
+      main: (request) => hub.config(request),
+      log: (line) => options.log?.(line),
+    })
+    return configExecutor
+  }
   /** 一台设备的两个开关现在是什么：改过的按改的，没改过的按默认 */
   const switchesOf = (deviceId: string) => {
     const kept = saved.tools?.[deviceId] ?? {}
@@ -194,6 +226,15 @@ export function createCore(options: CoreOptions): Core {
       tools: hub,
       toolSwitches: () => switchesOf(config.id),
       ...(options.pairing ? { pairing: options.pairing } : {}),
+      // litch config 只从本机的 harness 来：只有本机设备的连接声明它
+      ...(options.config && config.kind === 'local'
+        ? {
+            config: (input) => executor().run(input.arguments, input),
+            ...(desktopInfo
+              ? { desktop: { hostname: desktopInfo.hostname, name: desktopInfo.name } }
+              : {}),
+          }
+        : {}),
       // 只有远程设备有“操作这台电脑”
       ...(wiring && desktopInfo && config.kind === 'ssh'
         ? {
@@ -295,7 +336,7 @@ export function createCore(options: CoreOptions): Core {
     return value as WireColor
   }
 
-  return {
+  const host: Core = {
     start() {
       started = true
       for (const device of devices.values()) device.start()
@@ -1013,6 +1054,44 @@ export function createCore(options: CoreOptions): Core {
           await deviceOf(deviceId).pairing.revoke(phoneId)
           return {}
         }
+        // 给设备装 harness。出错的原因安装模块自己已经换成给人看的了，原样过去
+        case 'install.versions': {
+          const { deviceId, latest } = params as Commands['install.versions']['params']
+          return { harnesses: await deviceOf(deviceId).install.versions(latest === true) }
+        }
+        case 'install.start': {
+          const { deviceId, harness, version } = params as Commands['install.start']['params']
+          if (version !== 'verified' && version !== 'latest') {
+            throw new ChannelError('invalid', '只能装验证版或最新版')
+          }
+          return { job: await deviceOf(deviceId).install.start(String(harness), version) }
+        }
+        // litch config：界面回话、确认卡、直接跑一次
+        case 'config.reply': {
+          const { id, ok, data, reason } = params as Commands['config.reply']['params']
+          if (!configBridge.reply(String(id), ok === true, data, reason ?? null)) {
+            throw new ChannelError('notFound', '这件事已经不等了')
+          }
+          return {}
+        }
+        case 'config.confirm': {
+          const { id, allow } = params as Commands['config.confirm']['params']
+          if (!configBridge.answer(String(id), allow === true)) {
+            throw new ChannelError('notFound', '这张卡片已经不在了')
+          }
+          return {}
+        }
+        case 'config.run': {
+          const { argv, json, lang } = params as Commands['config.run']['params']
+          const response = await executor().run(
+            { argv, json: json === true, lang: lang ?? null },
+            { threadId: null, harness: null, hold: () => () => {} },
+          )
+          const text = response.contentItems
+            .map((item) => (item.type === 'inputText' ? item.text : ''))
+            .join('\n')
+          return { ok: response.success, text }
+        }
         case 'device.refresh':
           try {
             await deviceOf((params as { deviceId: string }).deviceId).refresh()
@@ -1040,6 +1119,8 @@ export function createCore(options: CoreOptions): Core {
         sink.snapshot({ running: [], pending: [] })
         return () => {}
       }
+      // litch config 要界面做的事、确认卡
+      if (topic.kind === 'config') return configBridge.subscribe(sink)
       const device = deviceOf(topic.deviceId)
       if (topic.kind === 'sidebar') {
         sink.snapshot(device.sidebar)
@@ -1063,8 +1144,10 @@ export function createCore(options: CoreOptions): Core {
       // 定时任务：设备没连上时给上次知道的，不支持时 available 是 false
       if (topic.kind === 'tasks') return device.tasks.open(sink)
       if (topic.kind === 'pairing') return device.pairing.open(sink)
+      if (topic.kind === 'install') return device.install.open(sink)
       // 设备还没连上时订阅照样成立，连上之后才有快照
       return device.openSession(topic.sessionId, sink)
     },
   }
+  return host
 }

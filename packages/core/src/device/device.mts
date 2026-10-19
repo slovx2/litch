@@ -12,6 +12,7 @@ import type {
   ClientToolCallResponse,
   ClientToolsDesktopInfo,
 } from '../../../protocol/src/client-tools.mjs'
+import { CONFIG_NAMESPACE } from '../../../protocol/src/client-tools-config.mjs'
 import type { MachineSpecContext } from '../../../protocol/src/client-tools-machine.mjs'
 import { clientToolSpecs } from '../../../protocol/src/client-tools-specs.mjs'
 import {
@@ -100,6 +101,7 @@ import {
   stampedHarness,
   termsOf,
 } from './harness.mjs'
+import { createInstall, type Install } from './install.mjs'
 import { createLiveSessions } from './live.mjs'
 import type { MachineFacts } from './machine/types.mjs'
 import { createManagement } from './manage.mjs'
@@ -110,6 +112,7 @@ import { createTasks, type Tasks } from './tasks.mjs'
 import type { TerminalNotesStore } from './terminal-launch.mjs'
 import { createTerminals, type Terminals } from './terminals.mjs'
 import {
+  type ConfigCallInput,
   clientAskOptions,
   createToolCalls,
   type MachineCallInput,
@@ -160,6 +163,13 @@ export interface DeviceOptions {
   machine?: DeviceMachine
   /** 扫码绑定手机要碰 ssh、文件、端口的那几样（外壳给）。不给就出不了码，已绑定的手机照样能看、能撤 */
   pairing?: PairingPlatform
+  /**
+   * litch_config：本机 harness 里跑的 litch config 经设备进程交过来的调用（核心的执行器，config/executor.mts）。
+   * 只有本机设备给：握手时声明这个命名空间，但不放进建会话的 dynamicTools
+   */
+  config?(input: ConfigCallInput): Promise<ClientToolCallResponse>
+  /** 握手时报的这台桌面端（本机设备声明 litch_config 时用；远程设备的在 machine.desktop 里） */
+  desktop?: ClientToolsDesktopInfo
   log?(line: string): void
 }
 
@@ -276,6 +286,8 @@ export interface Device {
   readonly tasks: Tasks
   /** 这台设备上的扫码绑定手机：出码、确认、已绑定的手机（pairing.mts） */
   readonly pairing: Pairing
+  /** 这台设备上给 harness 安装：版本、安装任务（install.mts） */
+  readonly install: Install
   /** litch_machine 把这台设备当作一台能操作的机器时用的：它的连接 */
   readonly machineLink: MachineDeviceLink
   /** 现查这台设备的情况（主机名、系统、用户、主目录、shell），缓存一会儿。没连着时抛错 */
@@ -387,6 +399,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   let sessionTree = false
   /** 对面支不支持扫码绑定手机（devicePairing 扩展）。断开之后留着断开前知道的 */
   let pairable = false
+  /** 对面支不支持给 harness 安装（harnessInstall 扩展）。断开之后留着断开前知道的 */
+  let installable = false
   /**
    * 对面在跑的那份设备服务的来历（deviceService 扩展）。对面不是设备服务、它没报，都是 null。
    * 断开之后留着断开前知道的，和 manageable 一样
@@ -483,6 +497,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     machine: options.machine?.view() ?? null,
     sessionTree,
     pairing: pairable,
+    install: installable,
   })
 
   /** 设置页上的两个开关：这台桌面执行不了的那一项是 null，不出开关 */
@@ -1167,6 +1182,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         schedulable = info.device.extensions?.includes(EXTENSION.deviceTasks) === true
         sessionTree = info.device.extensions?.includes(EXTENSION.sessionTree) === true
         pairable = info.device.extensions?.includes(EXTENSION.devicePairing) === true
+        installable = info.device.extensions?.includes(EXTENSION.harnessInstall) === true
         // 在跑的是哪一份服务：握手时声明过才给，旧版的设备服务不报
         service = projectService(info.device.service)
         serviceDue =
@@ -1186,6 +1202,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         schedulable = false
         sessionTree = false
         pairable = false
+        installable = false
         service = null
         home = null
         deviceHostname = null
@@ -1206,6 +1223,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       schedulable = false
       sessionTree = false
       pairable = false
+      installable = false
       service = null
       home = null
     }
@@ -1233,6 +1251,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     diffs.resync()
     tasks.resync()
     pairing.resync()
+    install.resync()
     await reconcile()
   }
 
@@ -1256,6 +1275,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       manage.offline()
       tasks.offline()
       pairing.offline()
+      install.offline()
     }
     switch (state.phase) {
       case 'idle':
@@ -1290,9 +1310,10 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     open: config.open,
     clock: options.clock,
     clientInfo: options.clientInfo,
-    clientTools: () => toolNamespaces(),
+    // 握手时声明的：建会话时带的那些，加上只走命令行的 litch_config（本机设备才有）
+    clientTools: () => [...toolNamespaces(), ...(options.config ? [CONFIG_NAMESPACE] : [])],
     clientToolsDesktop: () => {
-      const desktop = options.machine?.desktop
+      const desktop = options.machine?.desktop ?? (options.config ? options.desktop : undefined)
       return desktop ? { hostname: desktop.hostname, name: desktop.name ?? desktop.hostname } : null
     },
     state: onState,
@@ -1311,6 +1332,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       if (tasks.notification(method, params)) return
       // 扫码绑定手机：配对的状态、已绑定的手机
       if (pairing.notification(method, params)) return
+      // 给 harness 安装：任务的状态和日志
+      if (install.notification(method, params)) return
       // 差异面板在设备上跑的命令结束了、它盯着的路径变了：先认它自己起的那些，剩下的进程通知才是终端的
       if (diffs.notification(method, params)) return
       // litch_machine 起的进程（执行器的、现查设备情况的）也不是终端的
@@ -1398,6 +1421,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       answer: () => {},
       turnEnded: () => {},
       notify: () => {},
+      config: async () => ({ ok: false, reason: 'no desktop shell' }),
     },
     device: (): ToolInvocation['device'] => ({
       id: config.id,
@@ -1421,6 +1445,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     },
     showAsk: (place: ToolAskPlace, answer) => askInSession(place, (picked) => answer(picked)),
     ...(options.machine ? { machine: machineCalls(options.machine) } : {}),
+    ...(options.config ? { config: options.config } : {}),
     log,
   })
 
@@ -1633,6 +1658,16 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     online: () => online,
     supported: () => pairable,
     platform: options.pairing ?? null,
+    request: (method, params, requestOptions) => link.request(method, params, requestOptions),
+    fail: (error) => fail(error),
+    log,
+  })
+
+  const install = createInstall({
+    deviceId: config.id,
+    now: () => options.clock.now(),
+    online: () => online,
+    supported: () => installable,
     request: (method, params, requestOptions) => link.request(method, params, requestOptions),
     fail: (error) => fail(error),
     log,
@@ -1950,6 +1985,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     diffs,
     tasks,
     pairing,
+    install,
     machineLink,
     machineFacts,
     stopMachine: (response) => toolCalls.stopMachine(response),

@@ -99,6 +99,13 @@ const KNOWN: Record<string, { id: string; name: string; badge: string }> = {
   acp: { id: 'acp', name: 'ACP', badge: 'AC' },
 }
 
+/** 适配器的引擎名（claude-code）→ 界面里 harness 的标识（claude）。不认识的原样 */
+export const harnessIdOf = (engine: string): string => KNOWN[engine]?.id ?? engine
+
+/** 反过来：界面里 harness 的标识 → 适配器的引擎名（给设备发安装请求时用） */
+export const engineOf = (id: string): string =>
+  Object.entries(KNOWN).find(([, known]) => known.id === id)?.[0] ?? id
+
 const VERSION = /\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?/
 
 const firstVersion = (text: string | null | undefined): string | null =>

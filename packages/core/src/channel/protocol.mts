@@ -28,6 +28,7 @@ import type {
   WireColor,
   WorkspaceView,
 } from '../model.mjs'
+import type { ConfigTopicOp, ConfigTopicView } from '../model-config.mjs'
 import type {
   DiffBundle,
   DiffRequests,
@@ -37,6 +38,11 @@ import type {
   FileDiff,
 } from '../model-diff.mjs'
 import type { DirectoryView, FileContent, FileSearchView } from '../model-files.mjs'
+import type {
+  HarnessInstallTarget,
+  HarnessVersionView,
+  InstallTopicView,
+} from '../model-install.mjs'
 import type {
   MachineAccessMode,
   MachineActivityView,
@@ -119,6 +125,17 @@ export type Topic =
    * 没连上时给上次知道的（还没连上过是 null）。连上、重连之后再给一份快照
    */
   | { kind: 'pairing'; deviceId: string }
+  /**
+   * 一台设备上给 harness 安装的情况（harnessInstall 扩展）：各 harness 的版本、在跑和刚结束的安装任务。
+   * 设备详情、新建页“没有可用的 harness”、首启引导开着时才订阅，有人订阅核心才去问版本。
+   * 设备没有这项扩展时快照里 available 是 false，照样成立；没连上时给上次知道的。连上、重连之后再给一份快照
+   */
+  | { kind: 'install'; deviceId: string }
+  /**
+   * 配置 Litch（litch_config 执行器）要界面做的事和挂着的确认卡。要做的事只发给一个窗口（最近订阅的那个），
+   * 确认卡每个窗口都有。应用的外框一直订阅着
+   */
+  | { kind: 'config' }
 
 export type TopicKind = Topic['kind']
 
@@ -133,6 +150,8 @@ export interface TopicData {
   machine: MachineActivityView
   tasks: TasksView
   pairing: PairingTopicView
+  install: InstallTopicView
+  config: ConfigTopicView
 }
 
 // ---------- 增量 ----------
@@ -212,6 +231,9 @@ export type PairingOp =
   | { op: 'phones.set'; phones: PairPhone[] }
   | { op: 'pair.status'; status: PairStatus }
 
+/** 安装情况整份换：不大，一次变的往往是好几项（任务的日志、状态，接着版本也重新探测） */
+export type InstallOp = { op: 'install.set'; view: InstallTopicView }
+
 export interface TopicOp {
   app: AppOp
   sidebar: SidebarOp
@@ -223,6 +245,8 @@ export interface TopicOp {
   machine: MachineOp
   tasks: TasksOp
   pairing: PairingOp
+  install: InstallOp
+  config: ConfigTopicOp
 }
 
 // ---------- 命令 ----------
@@ -782,6 +806,34 @@ export interface Commands {
   'session.agents': {
     params: { deviceId: string; sessionId: string }
     result: { agents: AgentThreadView[] }
+  }
+  // ---------- 给设备装 harness ----------
+  // 都要设备列了 harnessInstall，不然以 unsupported 结束；没连上以 offline 结束。
+  /** 问各 harness 的版本。latest：现查最新版（设备联网，五秒超时）。问到的同时进 install 主题 */
+  'install.versions': {
+    params: { deviceId: string; latest?: boolean }
+    result: { harnesses: HarnessVersionView[] }
+  }
+  /** 开始装一个 harness：验证版或最新版。应答只带任务号，进度看 install 主题。同一台设备上已有任务在跑时设备拒绝 */
+  'install.start': {
+    params: { deviceId: string; harness: string; version: HarnessInstallTarget }
+    result: { job: string }
+  }
+  // ---------- 配置 Litch（litch_config） ----------
+  /** 界面做完了 config 主题里的一件事。ok 为假时 reason 是给模型看的一句（英文） */
+  'config.reply': {
+    params: { id: string; ok: boolean; data?: unknown; reason?: string }
+    result: Record<string, never>
+  }
+  /** 确认卡上点了允许或拒绝 */
+  'config.confirm': { params: { id: string; allow: boolean }; result: Record<string, never> }
+  /**
+   * 直接跑一次 litch config（和本机 harness 里的命令行走同一个执行器，放宽安全的那几项照样弹确认卡）。
+   * 给验收和调试用；结果是给模型读的那段字
+   */
+  'config.run': {
+    params: { argv: string[]; json?: boolean; lang?: 'zh-CN' | 'en' | null }
+    result: { ok: boolean; text: string }
   }
   /** 用户的 ssh 配置里有哪些主机 */
   'remote.discover': { params: Record<string, never>; result: { hosts: DiscoveredHost[] } }
