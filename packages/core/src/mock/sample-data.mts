@@ -110,6 +110,8 @@ export function sampleApp(_lang: SampleLang, now: number): AppView {
       sessionTree: true,
       // 扫码绑定手机：出码之后过几秒“手机”来登记（mock-pairing.mts）
       pairing: true,
+      // 给 harness 安装：版本、安装进度、失败回退（mock-install.mts）
+      install: true,
     },
     {
       id: 'build',
@@ -137,6 +139,7 @@ export function sampleApp(_lang: SampleLang, now: number): AppView {
       machine: sampleMachineAccess('build'),
       sessionTree: true,
       pairing: true,
+      install: true,
     },
     {
       id: 'nas',
@@ -165,6 +168,7 @@ export function sampleApp(_lang: SampleLang, now: number): AppView {
       // 只有原生 codex：没有设备服务，也就没有会话树
       sessionTree: false,
       pairing: false,
+      install: false,
     },
     {
       id: 'gpu',
@@ -200,6 +204,7 @@ export function sampleApp(_lang: SampleLang, now: number): AppView {
       sessionTree: true,
       // 断开之前知道它支持；现在连不上，出不了码
       pairing: true,
+      install: true,
     },
   ]
   return { devices }

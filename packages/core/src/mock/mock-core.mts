@@ -40,8 +40,10 @@ import { reduceSession } from '../projection/reduce.mjs'
 import { settleSteps, todoKey } from '../projection/todo.mjs'
 import { createMockOrganize } from './mock-arrange.mjs'
 import { createMockCompose } from './mock-compose.mjs'
+import { createMockConfig, RUNS_CONFIG } from './mock-config.mjs'
 import { createMockDiffs } from './mock-diffs.mjs'
 import { createMockFiles } from './mock-files.mjs'
+import { createMockInstall } from './mock-install.mjs'
 import { createMockMachine } from './mock-machine.mjs'
 import { createMockManagement } from './mock-manage.mjs'
 import { createMockPairing } from './mock-pairing.mjs'
@@ -87,6 +89,11 @@ export interface MockCoreOptions {
   lang?: SampleLang
   /** 扫码绑定手机的码多久作废，默认和真的一样十分钟（验收里试“到期自动换码”时调短） */
   pairTtlMs?: number
+  /**
+   * 演哪一种开局。fresh：刚装好 Litch 的电脑，本机一个 harness 都没装（试首启引导、一键安装）。
+   * 不给是平常那一套示例
+   */
+  scene?: 'fresh'
 }
 
 const topicKey = (topic: Extract<Topic, { kind: 'app' | 'sidebar' | 'session' }>): string =>
@@ -105,6 +112,27 @@ const ASKS_APPROVAL = /审批|approval/i
  * 有声明的 harness 不走这里：照它的声明，不会的入口界面一开始就不出。
  */
 const MOCK_LACKS: Record<string, readonly SessionAbility[]> = { codex: ['fork', 'compact'] }
+
+/**
+ * 开局 fresh：刚装好 Litch 的电脑，本机的 harness 一个都没装（首启引导的第一步“先装一个”）。
+ * 远程设备照旧：引导只看本机
+ */
+const freshLocal = (app: AppView): void => {
+  const local = app.devices.find((device) => device.kind === 'local')
+  if (!local) return
+  local.harnesses = local.harnesses.map((harness) =>
+    sampleHarness(harness.id, {
+      down: {
+        kind: 'notInstalled',
+        reason: 'harness.notInstalled',
+        detail: {
+          'zh-CN': `在 PATH 和常见的安装位置里都没有找到 ${harness.name}`,
+          en: `${harness.name} was not found on PATH or in the usual install locations`,
+        },
+      },
+    }),
+  )
+}
 
 /**
  * 发的话里带这些字样时，演一出“别的客户端整理了这台设备的侧栏”：过一会儿这个会话被置顶了，
@@ -243,6 +271,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
   const chunkMs = options.chunkMs ?? 60
   const lang = options.lang ?? 'zh-CN'
   const app: AppView = sampleApp(lang, clock.now())
+  if (options.scene === 'fresh') freshLocal(app)
   const sidebars = new Map<string, SidebarView>(
     sampleSidebars(clock.now(), lang).map((view) => [view.deviceId, view]),
   )
@@ -516,6 +545,11 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       hugeTools(view, turnId)
       return turnId
     }
+    const configLine = RUNS_CONFIG.exec(message.text)?.[1]
+    if (configLine !== undefined && view.deviceId === 'local') {
+      runConfig(view, turnId, configLine)
+      return turnId
+    }
     machine.stage(view.deviceId, message.text)
     const machineDemo = MACHINE_ASKS.find(([pattern]) => pattern.test(message.text))?.[1]
     if (machineDemo) {
@@ -632,6 +666,43 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       replyHeard(view, turnId)
     }
     replies.set(sessionKey(view), clock.setTimer(finish, RUN_MS))
+  }
+
+  /**
+   * 回合里跑一次 litch config（见 RUNS_CONFIG）：和本机 harness 里的模型跑命令行一样交给执行器，
+   * 放宽安全的那几项照样等确认卡。结果写进命令的输出，再照常回话
+   */
+  const runConfig = (view: SessionView, turnId: string, line: string) => {
+    const startedAt = clock.now()
+    const item = {
+      id: runKey(turnId),
+      kind: 'command',
+      command: `litch config ${line}`.trim(),
+      cwd: view.cwd,
+      output: '',
+      elided: null,
+      exitCode: null,
+      durationMs: null,
+      startedAt,
+      status: 'inProgress',
+    } satisfies ItemView
+    applySessionOps(view, [{ op: 'item.add', turnId, item }])
+    void config.run(line, { threadId: view.sessionId, harness: view.harness }).then((result) => {
+      applySessionOps(view, [
+        {
+          op: 'item.add',
+          turnId,
+          item: {
+            ...item,
+            output: result.text,
+            exitCode: result.ok ? 0 : 1,
+            durationMs: clock.now() - startedAt,
+            status: result.ok ? 'completed' : 'failed',
+          },
+        },
+      ])
+      reply(view, turnId, SAMPLE_TEXT[lang][result.ok ? 'configDone' : 'configFailed'])
+    })
   }
 
   /**
@@ -1034,6 +1105,33 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     device: (deviceId) => app.devices.find((entry) => entry.id === deviceId),
   })
 
+  // ---------- 给设备装 harness（mock-install.mts） ----------
+  const install = createMockInstall({
+    clock,
+    stepMs: chunkMs,
+    device: (deviceId) => app.devices.find((entry) => entry.id === deviceId),
+    installed(deviceId, harness, version) {
+      const device = app.devices.find((entry) => entry.id === deviceId)
+      if (!device) return
+      // 和真的一样：装好就重探，停用的顺手启用（决 302），然后它就是可用的
+      const ready: HarnessView = { ...sampleHarness(harness), version }
+      const had = device.harnesses.some((entry) => entry.id === harness)
+      const harnesses = had
+        ? device.harnesses.map((entry) => (entry.id === harness ? ready : entry))
+        : [...device.harnesses, ready]
+      patchDevice(deviceId, { harnesses, stranded: strandedOf(deviceId, harnesses) })
+      manage.installed(deviceId, ready)
+    },
+  })
+
+  // ---------- litch config（mock-config.mts） ----------
+  const config = createMockConfig({
+    clock,
+    version: options.version ?? '0.0.0',
+    lang,
+    core: () => core,
+  })
+
   // ---------- 定时任务（mock-tasks.mts） ----------
   const tasks = createMockTasks({
     clock,
@@ -1180,6 +1278,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     delayMs: chunkMs * 3,
     lang,
     device: (deviceId) => app.devices.find((entry) => entry.id === deviceId),
+    manual: options.scene === 'fresh',
   })
 
   const organize = createMockOrganize({
@@ -1466,6 +1565,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         machine: sampleMachineAccess(''),
         sessionTree: false,
         pairing: false,
+        install: false,
       }
       app.devices.push(device)
       sidebars.set(device.id, {
@@ -1557,7 +1657,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     return undefined
   }
 
-  return {
+  const core: MockCore = {
     terminalsAlive: () => terminals.alive(),
     async endTerminals() {
       terminals.endAll()
@@ -1579,6 +1679,10 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       if (scheduled !== undefined) return scheduled
       const paired = pairing.command(name, params)
       if (paired !== undefined) return paired
+      const installing = install.command(name, params)
+      if (installing !== undefined) return installing
+      const configured = config.command(name, params)
+      if (configured !== undefined) return configured
       const typed = terminals.command(name, params)
       if (typed !== undefined) return typed
       const browsed = files.command(name, params, signal)
@@ -2098,6 +2202,9 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       if (topic.kind === 'tasks') return tasks.subscribe(topic.deviceId, sink)
       // 扫码绑定手机（mock-pairing.mts）
       if (topic.kind === 'pairing') return pairing.subscribe(topic.deviceId, sink)
+      // 给设备装 harness（mock-install.mts）、litch config（mock-config.mts）
+      if (topic.kind === 'install') return install.subscribe(topic.deviceId, sink)
+      if (topic.kind === 'config') return config.subscribe(sink)
       const key = topicKey(topic)
       if (topic.kind === 'app') {
         sink.snapshot(app)
@@ -2133,4 +2240,5 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       }
     },
   }
+  return core
 }

@@ -15,7 +15,15 @@ export interface MockComposeHost {
   delayMs: number
   lang: SampleLang
   device(deviceId: string): DeviceView | undefined
+  /**
+   * 本机的 harness 装着产品手册（litch-manual 技能）：技能单子里多这一项，配置助手按钮会放它的技能片。
+   * 平常的示例里没有（看“没有技能就把手册的路径写进正文”那一种），开局 fresh 里有
+   */
+  manual?: boolean
 }
+
+/** 产品手册在本机的位置（真的那一份由桌面端装进 ~/.agents/skills） */
+const MANUAL_SKILL = '/home/dev/.agents/skills/litch-manual/SKILL.md'
 
 export interface MockCompose {
   /** 是这一组的命令就做掉并返回结果；不是返回 undefined */
@@ -78,8 +86,23 @@ export function createMockCompose(host: MockComposeHost): MockCompose {
           throw new ChannelError('remote', SKILLS_FAILED[lang])
         }
         const skipped = deviceId === FLAKY.deviceId && cwd === FLAKY.cwd
+        const manual =
+          host.manual && deviceId === 'local'
+            ? [
+                {
+                  name: 'litch-manual',
+                  title: 'litch-manual',
+                  note:
+                    lang === 'en'
+                      ? 'Litch product manual and configuration assistant'
+                      : 'Litch 产品手册与配置助手',
+                  path: MANUAL_SKILL,
+                  scope: 'user' as const,
+                },
+              ]
+            : []
         return {
-          skills: sampleSkills(harness.id, lang, cwd ?? null),
+          skills: [...sampleSkills(harness.id, lang, cwd ?? null), ...manual],
           problems: skipped ? [SKILLS_SKIPPED[lang]] : [],
         }
       })
