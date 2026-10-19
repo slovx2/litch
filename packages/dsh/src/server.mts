@@ -422,6 +422,15 @@ export class DshServer {
                   clientTool: (name) =>
                     this.clientTools(id).find((tool) => tool.name === name) ?? null,
                   subagent: (child, info) => this.rememberSubagent(child, info),
+                  pin: (name) => {
+                    this.remote()
+                      .then((remote) =>
+                        remote.rpc('session/rename', { request: { sessionId: id, title: name } }),
+                      )
+                      .catch((error: unknown) =>
+                        console.error(`[dsh] 给会话 ${id} 钉标题失败：${String(error)}`),
+                      )
+                  },
                 },
               ),
               cancel: () => cancel(),

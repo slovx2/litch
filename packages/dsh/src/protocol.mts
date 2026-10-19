@@ -457,6 +457,7 @@ export async function dispatch(s: DshServer, peer: RpcPeer, method: string, p: a
       // 写回）：不调用 dsh 的改名。dsh 把改名视为用户标题并钉住，之后不再自动生成，模型起的标题就出不来了。
       if (projection.thread.ephemeral || !projection.titled) {
         projection.thread.name = name
+        projection.wanted = name
         s.notify(p.threadId, 'thread/name/updated', { threadName: name })
         return {}
       }

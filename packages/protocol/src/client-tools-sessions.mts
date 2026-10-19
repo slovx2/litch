@@ -170,15 +170,17 @@ export interface SessionsWaitResult {
  * 工具说明里只有一句话，模型不会主动提；什么时候该提、提几张、提了之后怎么办写在这里。
  */
 export const SESSION_PROPOSAL_RULES = [
-  'Suggested tasks (Litch). You can suggest work for its own session with litch_sessions.start (initiation "propose"): the user sees a card in this conversation and nothing runs until they start it from the card, possibly with another harness, model or folder.',
-  '- Keep small things here: a question, a quick read, one edit, a few tool calls. A card is for real work that can run on its own.',
-  '- Suggest a card for independent work you notice while working (out of scope for this request, a fix spotted in passing) and for the follow-up your own answer recommends, even when this turn only answered a question.',
-  '- When your reply says some work is a follow-up, belongs in a separate change, or is for later, and it is worth doing, propose it before you end the turn instead of only asking "want me to...?" in prose: the card is how you ask.',
-  '- A task the user just asked you to do is not a suggestion: do it here, or start it with initiation "user_asked" if they asked for a separate session.',
-  "- When a plan has two or more steps that are real work and fully independent (no step needs another's result or touches the same files), you may say which step you take here and propose one card for each of the others, then start yours right away.",
-  `- One card per independent piece, at most three per turn (four when splitting a plan), never the same piece twice, never work you are about to do yourself. Before ending a turn, check once whether such a follow-up is left.`,
-  '- The prompt is everything a fresh session will know: the task, the files or area, and what done looks like, in your own words.',
-  '- If the user tells you to start a card ("start the second one"), call litch_sessions.accept with its proposal_id. If a card went stale (done here after all, no longer needed, replaced by a better one), withdraw it with litch_sessions.withdraw; propose the replacement first.',
+  'Suggested tasks (Litch). You can hand work to its own session as a suggested-task card: call litch_sessions.start with initiation "propose". The user sees the card in this conversation and starts it with one click, possibly on another harness, model or folder; nothing runs until then.',
+  'When to propose (call the tool, do not just talk about it):',
+  '- Your reply recommends next steps, lists remaining work, or calls something a follow-up, a separate change or "for later", and a step is real work that can run on its own: propose one card per such step in this same turn, before you finish. This holds even when the turn only answered a question or wrote some text.',
+  '- Do not end with "Want me to ...?", "I can also ...", or "Shall I break this into tasks?" for that kind of work: the cards are how you offer it. Mention the cards in one line instead.',
+  '- You notice independent or out-of-scope work while doing the task (a bug spotted in passing): propose it.',
+  "- A plan has two or more fully independent steps that are real work (none needs another's result or touches the same files): say which one you take here, propose the others, then start yours right away.",
+  'Not a card: small things (a quick question, a read, one small edit), which stay here; a task the user just asked you to do, which you do here, or start with initiation "user_asked" if they asked for a separate session; anything that first needs the user\'s decision, which you ask about, proposing the parts that do not depend on it.',
+  `Limits: one card per independent piece, at most three per turn (four when splitting a plan), never the same piece twice, never work you are about to do yourself.`,
+  'The prompt is everything a fresh session will know: the task, the files or area, and what done looks like, in your own words.',
+  'Before you end every turn, check once: did my reply name follow-up work that should be a card? If so, propose it now.',
+  'If the user tells you to start a card ("start the second one"), call litch_sessions.accept with its proposal_id. If a card went stale (done here after all, no longer needed, replaced by a better one), withdraw it with litch_sessions.withdraw; propose the replacement first.',
 ].join('\n')
 
 const THREAD_ID = { type: 'string', description: 'Session id (thread id) from list or start.' }

@@ -36,6 +36,8 @@ export interface ProjectionHooks {
   clientTool?: (name: string) => { namespace: string | null; tool: string } | null
   // 见到了一个子代理的情况（派出去的、自己就是子代理的）
   subagent?: (threadId: string, info: SubagentInfo) => void
+  // 把客户端在 dsh 起标题之前给的名字钉成 dsh 的用户标题（session/rename，见 Projection.wanted）
+  pin?: (name: string) => void
 }
 export interface DshTurn {
   id: string
@@ -272,6 +274,9 @@ export class Projection {
   // dsh 那边算数的名字：它的模型起的、用户改的。它的兜底标题不算（见 title），最近的一个记在 fallback。
   named: string | null = null
   fallback: string | null = null
+  // dsh 起标题之前客户端写来的名字（thread/name/set）。官方桌面端在首条消息前写回的是消息原文，那只是临时名；
+  // 和头一句话不一样的是有意起的名字（比如设备进程给派出的子会话起的），dsh 的第一个标题来时钉住它，不让模型标题盖掉
+  wanted: string | null = null
   // 选了模型、还没有哪一次请求用上（见 requested）。
   private chosen = false
   private expected = false
@@ -441,6 +446,15 @@ export class Projection {
   // 另两种是模型起的和用户改的，照旧是名字。
   private title(data: any, notify: Notify): void {
     this.titled = true
+    const wanted = this.wanted
+    this.wanted = null
+    const preview = this.thread.preview.trim()
+    if (wanted && data.source?.kind !== 'user' && !(preview && preview.startsWith(wanted.trim()))) {
+      this.thread.name = wanted
+      notify('thread/name/updated', { threadName: wanted })
+      this.hooks.pin?.(wanted)
+      return
+    }
     if (typeof data.title !== 'string') return
     if (data.source?.kind === 'fallback') {
       this.fallback = data.title
