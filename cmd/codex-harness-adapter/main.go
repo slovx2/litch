@@ -102,6 +102,7 @@ func usage() string {
 			"SSH 入口: --ssh=on|off（默认 on）；off 时不启动给 Codex 桌面端的内置 SSH 服务，不占端口\n"+
 			"给 Litch 客户端: version 打印版本号；device-start 让常驻服务在后台运行（已在运行就直接成功）；device-proxy 把标准输入输出接到聚合面\n"+
 			"操作用户的 Litch 桌面端: machine（短名 litch-machine）经设备服务请连着的 Litch 执行命令、读写文件，详见 litch-machine --help\n"+
+			"绑到手机: pair 在终端里画二维码，手机扫码后登记自己的钥匙（不用桌面端），详见 pair --help；pair-enroll 是配对时一次性钥匙的强制命令，不直接用\n"+
 			"停掉常驻服务: device-stop 请它平稳停下并等它退出（没在运行也算成功）；加 --if-idle 时，有回合或终端在跑、有客户端连着就不停，并说明是哪一种\n"+
 			"环境文件: <home>/env，每行 KEY=VALUE，前台和后台服务启动都会读取\n"+
 			"输出语言: 跟随系统语言；用 CHA_LANG=zh-CN 或 CHA_LANG=en 指定，可写在环境文件里\n"+
@@ -118,6 +119,7 @@ func usage() string {
 			"SSH entries: --ssh=on|off (default on); off starts none of the built-in SSH servers for the Codex desktop app and takes no port\n"+
 			"For the Litch client: version prints the version; device-start keeps the service running in the background (succeeds at once if it already is); device-proxy connects stdin and stdout to the aggregate endpoint\n"+
 			"Operating the user's Litch desktop: machine (short name litch-machine) asks the connected Litch to run commands and read or write files through the device service; see litch-machine --help\n"+
+			"Pairing a phone: pair draws a QR code in the terminal and the phone enrolls a key of its own (no desktop needed); see pair --help. pair-enroll is the forced command of the one-time pairing key, not for direct use\n"+
 			"Stopping the service: device-stop asks it to shut down cleanly and waits for it to exit (succeeds when nothing is running); with --if-idle it leaves the service alone while a turn or a terminal is running or a client is connected, and says which\n"+
 			"Environment file: <home>/env, one KEY=VALUE per line, read by foreground runs and by the background service\n"+
 			"Output language: follows the system language; set CHA_LANG=zh-CN or CHA_LANG=en to choose, in the environment file if you like\n"+
@@ -138,6 +140,12 @@ func run(ctx context.Context, args []string) error {
 	}
 	if args[0] == "machine" {
 		return runMachine(ctx, args[1:])
+	}
+	if args[0] == "pair" {
+		return runPair(ctx, args[1:])
+	}
+	if args[0] == "pair-enroll" {
+		return runPairEnroll(ctx, args[1:])
 	}
 	command := args[0]
 	switch command {

@@ -37,7 +37,16 @@ func startFakeDevice(t *testing.T) *fakeDevice {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-	device := &fakeDevice{socket: filepath.Join(dir, "device.sock"), closed: make(chan struct{}, 4)}
+	return startFakeDeviceAt(t, filepath.Join(dir, "device.sock"))
+}
+
+// 在指定的套接字路径上起假的设备服务（上级目录不存在就建）
+func startFakeDeviceAt(t *testing.T, socket string) *fakeDevice {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(socket), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	device := &fakeDevice{socket: socket, closed: make(chan struct{}, 4)}
 	listener, err := net.Listen("unix", device.socket)
 	if err != nil {
 		t.Fatal(err)
