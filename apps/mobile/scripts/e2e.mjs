@@ -18,7 +18,6 @@
 // Maestro 2.3.0（MAESTRO 指过去，或者在 PATH 里）；跑夹具的流程要先在仓库根目录 npm run build（适配器、Pi、设备进程）。
 // LITCH_E2E_ARTIFACTS=<目录>：Maestro 的调试输出（失败时的截图、日志）放到这里并留着（CI 上传用）；不给就放临时目录、跑完删掉。
 import { execFile, execFileSync, spawn, spawnSync } from 'node:child_process'
-import { createPrivateKey, createPublicKey, randomBytes } from 'node:crypto'
 import {
   appendFileSync,
   existsSync,
@@ -35,6 +34,7 @@ import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { encodePairPayload } from '../../../packages/protocol/src/device-pairing.mts'
+import { deviceRpc } from './device-rpc.mjs'
 
 const mobile = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const repo = resolve(mobile, '../..')
@@ -347,7 +347,7 @@ function prepareRepo(dir) {
  * 流程里 runScript 要的口（Maestro 在这台电脑上跑，连 127.0.0.1 就到这里）：
  *   POST /authorize        请求体是一行公钥，写进夹具 sshd 的 authorized_keys（演“用户在电脑上授权了手机的钥匙”）
  *   GET  /file?name=&text= 夹具的工作目录里这个文件有没有写出这段字（终端里敲的命令真跑了没有），最多等十秒
- *   POST /pair、GET /pair/request、POST /pair/allow   扫码绑定，见 pairing()
+ *   /pair、/pair/request、/pair/allow、/pair/phones   扫码绑定，见 pairing()
  */
 async function startHelper(config) {
   const port = await freePort()
@@ -367,7 +367,10 @@ async function startHelper(config) {
     req.on('end', async () => {
       const url = new URL(req.url ?? '/', 'http://helper')
       if (url.pathname.startsWith('/pair')) {
-        const answer = await pair(req.method, url.pathname)
+        const answer = await pair(req.method, url.pathname).catch((error) => {
+          log(`扫码绑定的小口出错：${error.message}`)
+          return null
+        })
         res.writeHead(answer ? 200 : 404).end(answer ?? '')
         return
       }
@@ -398,61 +401,78 @@ async function startHelper(config) {
 }
 
 /**
- * 扫码绑定（电脑上那一头的替身）。真的设备进程合进来之前，一次性钥匙登进来跑的是 scripts/fake-pair-enroll.mjs：
- *   POST /pair           出一张码：生成一次性钥匙，带强制命令的那一行追加进夹具 sshd 的 authorized_keys，回配对文本
- *   GET  /pair/request   手机登记上来没有（最多等十秒），回假 pair-enroll 记下的 JSON（手机名、确认码、手机号）
- *   POST /pair/allow     演“电脑上点了允许”
+ * 扫码绑定，替桌面端那一头调夹具里装了适配器的那台（svc）的设备服务。一次性钥匙登进来跑的是真的 pair-enroll：
+ *   POST /pair           出一张码：经 ssh 让设备服务常驻（device-start），调 litch/pair/start，配上手机要连的地址，回配对文本
+ *   GET  /pair/request   等手机登记上来（litch/pair/wait 到 requested），回那条请求（手机名、确认码、手机号）
+ *   POST /pair/allow     演“电脑上点了允许”（litch/pair/decide）
+ *   GET  /pair/phones    设备服务列出的已绑定手机有几部（litch/pair/phones），钥匙文件里手机的钥匙行有几行
  */
 function pairing(config) {
-  const dir = join(config.root, 'pair')
-  mkdirSync(dir, { recursive: true })
   const keysFile = join(config.root, 'authorized_keys')
-  const fake = join(mobile, 'scripts/fake-pair-enroll.mjs')
+  let rpc = null
   let current = null
-  const sshString = (bytes) => {
-    const size = Buffer.alloc(4)
-    size.writeUInt32BE(bytes.length)
-    return Buffer.concat([size, bytes])
+  const service = async () => {
+    if (rpc) return rpc
+    // 和手机的启动脚本一样经登录 shell 跑：适配器只在那里才进 PATH
+    const said = execFileSync(
+      'ssh',
+      ['-F', join(config.root, 'ssh_config'), '-o', 'BatchMode=yes', 'litch-fx-svc', 'exec sh'],
+      {
+        input: `exec "$SHELL" -l -i -c '${config.adapter} device-start --ssh=off'\n`,
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'ignore'],
+        timeout: 60_000,
+      },
+    )
+    const ready = said
+      .split('\n')
+      .filter((line) => line.startsWith('{'))
+      .map((line) => JSON.parse(line))
+      .find((line) => line.ready === true)
+    if (!ready) throw new Error(`设备服务没起来：${said.slice(-2000)}`)
+    rpc = await deviceRpc(ready.socket)
+    cleanups.push(() => rpc?.close())
+    return rpc
   }
+  const keyLines = () =>
+    readFileSync(keysFile, 'utf8')
+      .split('\n')
+      .filter((row) => row.includes(' litch-mobile:')).length
   return async (method, path) => {
+    const device = await service()
     if (method === 'POST' && path === '/pair') {
-      const seed = randomBytes(32)
-      // ed25519 私钥的 PKCS#8 外壳加 32 字节种子
-      const privateKey = createPrivateKey({
-        key: Buffer.concat([Buffer.from('302e020100300506032b657004220420', 'hex'), seed]),
-        format: 'der',
-        type: 'pkcs8',
-      })
-      const raw = Buffer.from(createPublicKey(privateKey).export({ format: 'jwk' }).x, 'base64url')
-      const blob = Buffer.concat([sshString(Buffer.from('ssh-ed25519')), sshString(raw)])
-      current = randomBytes(12).toString('base64url')
-      const command = [process.execPath, fake, current, keysFile, dir].join(' ')
-      appendFileSync(
-        keysFile,
-        `restrict,command="${command}" ssh-ed25519 ${blob.toString('base64')} litch-pair:${current}\n`,
-      )
-      const hostType = readFileSync(join(config.root, 'host_key.pub'), 'utf8').split(' ')[0]
+      const start = await device.call('litch/pair/start', {})
+      current = start.pairId
       return encodePairPayload({
         v: 1,
         n: 'e2e-pair',
         h: '127.0.0.1',
         p: config.target.port,
         u: config.target.user,
-        k: { t: hostType, f: config.target.hostFingerprint },
-        s: seed.toString('base64url'),
-        i: current,
-        e: Date.now() + 10 * 60 * 1000,
+        k: { t: start.hostKey.type, f: start.hostKey.fingerprint },
+        s: start.seed,
+        i: start.pairId,
+        e: start.expiresAt,
       })
     }
+    if (method === 'GET' && path === '/pair/phones') {
+      const { data } = await device.call('litch/pair/phones', {})
+      return JSON.stringify({ phones: data.length, keyLines: keyLines() })
+    }
     if (!current) return null
-    const request = join(dir, `${current}.request`)
     if (method === 'GET' && path === '/pair/request') {
-      for (let i = 0; i < 40 && !existsSync(request); i++) await sleep(250)
-      return existsSync(request) ? readFileSync(request, 'utf8').trim() : null
+      let since = null
+      for (let i = 0; i < 4; i++) {
+        const status = await device.call('litch/pair/wait', { pairId: current, since }, 40_000)
+        if (status.state === 'requested') return JSON.stringify(status.phone)
+        if (status.state !== 'waiting') return null
+        since = status.state
+      }
+      return null
     }
     if (method === 'POST' && path === '/pair/allow') {
-      writeFileSync(join(dir, `${current}.decision`), 'allow\n')
-      return 'ok'
+      const status = await device.call('litch/pair/decide', { pairId: current, allow: true })
+      return status.state === 'done' ? 'ok' : null
     }
     return null
   }
