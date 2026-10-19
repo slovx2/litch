@@ -23,6 +23,9 @@ export { TASKS_TOOLS } from './client-tools-tasks.mjs'
 export type * from './codex.mjs'
 export { CODEX_PROTOCOL_VERSION } from './codex.mjs'
 // 设备服务（聚合面）的扩展：device.mts 只取 harness-capabilities.mts 的类型，device-codex.mts 是它和 codex 类型拼出来的形状
+// `litch config` 的操作清单（执行器和产品手册都对着它）。不依赖别的文件
+export type * from './config-ops.mjs'
+export { CONFIG_OPS, configOpName } from './config-ops.mjs'
 export type * from './device.mjs'
 export {
   DEVICE_ERROR_CODE,
