@@ -106,12 +106,17 @@ func withoutAggregate(harness, detail string) error {
 }
 
 func deviceStart(ctx context.Context, c configuration) error {
+	return deviceStartTo(ctx, c, os.Stdout)
+}
+
+// deviceStartTo 和 device-start 一样，只是那一行 JSON 写到 out：pair、pair-enroll 借它拉起服务时不要这一行。
+func deviceStartTo(ctx context.Context, c configuration, out io.Writer) error {
 	if runtime.GOOS != "windows" && len(c.deviceSocket()) > 100 {
 		return errors.New(tr("状态路径过长，无法创建聚合面的 Unix socket；请使用较短的 --home", "the state path is too long for the aggregate endpoint's Unix socket; use a shorter --home"))
 	}
 	deadline := time.Now().Add(deviceStartTimeout)
 	// 第一遍只看不写：有别人的服务在跑就用它或者让路，不往这个状态目录里放任何东西。
-	if settled, err := attachToRunningService(ctx, c, deadline); settled {
+	if settled, err := attachToRunningService(ctx, c, deadline, out); settled {
 		return err
 	}
 	// 这里起要自己拉起了。同一个状态目录上的 device-start 排队，免得两边各起一份。
@@ -133,21 +138,21 @@ func deviceStart(ctx context.Context, c configuration) error {
 	}
 	defer hostplatform.Unlock(queue)
 	// 排队期间别人可能已经把服务拉起来了，再看一遍。
-	if settled, err := attachToRunningService(ctx, c, deadline); settled {
+	if settled, err := attachToRunningService(ctx, c, deadline, out); settled {
 		return err
 	}
-	return launchService(ctx, c, deadline)
+	return launchService(ctx, c, deadline, out)
 }
 
 // 已经有服务在这个状态目录上时在这里了结：聚合面能连就成功；新版服务还在起就等它；
 // 旧版服务（没有聚合面）就让调用方去提示升级。返回 false 表示这里没有服务，可以自己拉起。
-func attachToRunningService(ctx context.Context, c configuration, deadline time.Time) (bool, error) {
+func attachToRunningService(ctx context.Context, c configuration, deadline time.Time, out io.Writer) (bool, error) {
 	if canDial(c.deviceSocket()) {
-		return true, printDeviceStartResult(c, false, 0)
+		return true, printDeviceStartResult(out, c, false, 0)
 	}
 	if deviceLockHeld(c) {
 		// 等的那份服务中途退出了就接着往下看，当作这里没有新版服务。
-		if err := awaitAggregate(ctx, c, deadline, nil); !errors.Is(err, errServiceGone) {
+		if err := awaitAggregate(ctx, c, deadline, nil, out); !errors.Is(err, errServiceGone) {
 			return true, err
 		}
 	}
@@ -169,7 +174,7 @@ func pause(ctx context.Context, deadline time.Time, duration time.Duration) erro
 	}
 }
 
-func printDeviceStartResult(c configuration, started bool, pid int) error {
+func printDeviceStartResult(out io.Writer, c configuration, started bool, pid int) error {
 	result := deviceStartResult{Ready: true, Started: started, Socket: c.deviceSocket(), PID: pid, CLI: describeCLI(c)}
 	// 进程号和来历从服务报的状况里取。锁没人拿着时那份状况可能是旧的，不采信；
 	// 自己拉起的那一份，状况里的进程号还要对得上（对不上说明拿着锁的另有其人）。
@@ -178,7 +183,7 @@ func printDeviceStartResult(c configuration, started bool, pid int) error {
 			result.PID, result.Service = status.PID, status.Service
 		}
 	}
-	encoder := json.NewEncoder(os.Stdout)
+	encoder := json.NewEncoder(out)
 	encoder.SetEscapeHTML(false)
 	return encoder.Encode(result)
 }
@@ -222,7 +227,7 @@ func (s *launchedService) output() string {
 var errServiceGone = errors.New("service gone")
 
 // 等聚合面能连。service 是这次调用自己拉起的服务；等的是别人的服务时为 nil。
-func awaitAggregate(ctx context.Context, c configuration, deadline time.Time, service *launchedService) error {
+func awaitAggregate(ctx context.Context, c configuration, deadline time.Time, service *launchedService, out io.Writer) error {
 	fail := func(message string) error {
 		if service == nil {
 			return fmt.Errorf(tr("%s；设备进程的日志在 %s", "%s; the device process log is %s"), message, c.deviceLog())
@@ -237,9 +242,9 @@ func awaitAggregate(ctx context.Context, c configuration, deadline time.Time, se
 	for {
 		if canDial(c.deviceSocket()) {
 			if service != nil {
-				return printDeviceStartResult(c, true, service.process.Pid)
+				return printDeviceStartResult(out, c, true, service.process.Pid)
 			}
-			return printDeviceStartResult(c, false, 0)
+			return printDeviceStartResult(out, c, false, 0)
 		}
 		status, known := readServiceStatus(c)
 		if known && status.State == "unavailable" {
@@ -279,7 +284,7 @@ func awaitAggregate(ctx context.Context, c configuration, deadline time.Time, se
 }
 
 // 以脱离当前会话的方式拉起常驻的 start，等聚合面能连。
-func launchService(ctx context.Context, c configuration, deadline time.Time) error {
+func launchService(ctx context.Context, c configuration, deadline time.Time, out io.Writer) error {
 	node := c.node
 	if strings.ContainsRune(node, filepath.Separator) || strings.Contains(node, "/") {
 		// 常驻服务换了工作目录，相对路径要先落成绝对的；指向的还是同一个 Node。
@@ -321,7 +326,7 @@ func launchService(ctx context.Context, c configuration, deadline time.Time) err
 	}
 	service.process = process.Process
 	go func() { _ = process.Wait(); close(service.exited) }()
-	return awaitAggregate(ctx, c, deadline, service)
+	return awaitAggregate(ctx, c, deadline, service, out)
 }
 
 // device-proxy：把标准输入输出接到聚合面，只做字节转发。标准输出里只有对面来的字节。
