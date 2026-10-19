@@ -69,3 +69,45 @@ export const ADAPTER_DIALECT: UpstreamDialect = {
   rejection: () => null,
   serverRequest: () => false,
 }
+
+/** 带 dynamicTools 的方法。上游只有 thread/start 收它；恢复、分叉真带了也照样处理（上游悄悄丢掉） */
+const DYNAMIC_TOOL_METHODS = new Set(['thread/start', 'thread/resume', 'thread/fork'])
+
+/**
+ * 原生 codex 转发前（clientTools 扩展，protocol/extensions/client-tools.json）：动态工具的命名空间上带的
+ * instructions 摘掉，拼进 developerInstructions 的末尾，用户自己给的在前。不改返回 null。
+ *
+ * 依据（上游 rust-v0.162.0-alpha.20 源码）：
+ *   - DynamicToolNamespaceSpec 没标 deny_unknown_fields，多出来的字段不报错、悄悄丢掉，到不了模型；
+ *   - 开发者指令不随会话持久化：thread/start、thread/resume、thread/fork 的 developerInstructions 都只是这一次
+ *     装载的配置覆盖（没给就回落到 config.toml），只在头一个回合的初始上下文里放一次，作为一条开发者消息记进
+ *     会话历史，恢复、分叉时随历史回来，之后的回合不再重放；压缩后重建上下文时才按当时的配置再放一次。
+ * 所以只在客户端发的 developerInstructions 里还没有这段规则时才拼：客户端恢复时把同一份（已经含着规则的）
+ * 再带回来，不会叠两份。
+ */
+export function foldToolInstructions(
+  method: string,
+  params: Record<string, unknown>,
+): Record<string, unknown> | null {
+  if (!DYNAMIC_TOOL_METHODS.has(method) || !Array.isArray(params.dynamicTools)) return null
+  let stripped = false
+  const sections: string[] = []
+  const dynamicTools = params.dynamicTools.map((spec) => {
+    if (!isObject(spec) || spec.type !== 'namespace' || !('instructions' in spec)) return spec
+    const { instructions, ...rest } = spec
+    stripped = true
+    const text = typeof instructions === 'string' ? instructions.trim() : ''
+    const section = text ? `# Tool instructions: ${String(spec.name)}\n${text}` : ''
+    if (section && !sections.includes(section)) sections.push(section)
+    return rest
+  })
+  if (!stripped) return null
+  const given = typeof params.developerInstructions === 'string' ? params.developerInstructions : ''
+  const missing = sections.filter((section) => !given.includes(section))
+  const developerInstructions = [given.trimEnd(), ...missing].filter(Boolean).join('\n\n')
+  return {
+    ...params,
+    dynamicTools,
+    ...(developerInstructions ? { developerInstructions } : {}),
+  }
+}

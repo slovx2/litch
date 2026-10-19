@@ -5,11 +5,11 @@
 // 这个文件由 dsh 自己的 Node 直接加载，所以只引用 Node 自带的模块，不引用适配器的别的文件，也不引用 dsh 的包
 // （插件文件的位置解析不到 dsh 的依赖）：工具定义按 dsh 的 ToolDefinition 形状直接写，不经 defineTool。
 // 对着 dsh 0.2.0-rc.2 写的：agent/created、agent.ctx.tools.register（只对这个会话可见）、ctx.agents、
-// ctx.get('attachments').saveImage。
+// ctx.get('attachments').saveImage、agent.ctx.systemPrompt.section（同样只对这个会话可见）。
 import { connect, type Socket } from 'node:net'
 
 export const name = 'litch-client-tools'
-export const inject = ['tools', 'agents']
+export const inject = ['tools', 'agents', 'systemPrompt']
 
 interface Config {
   host: string
@@ -30,6 +30,10 @@ interface Installed {
 const RETRY_MS = 1000
 // 问工具清单等多久：agent 建好时 dsh 等着这一步，适配器卡住了也不能让会话起不来
 const TOOLS_TIMEOUT_MS = 5000
+// 命名空间带的规则（instructions）进系统提示的那一节：排在 dsh 自己的各节之后（它最靠后的
+// DEPLOYMENT_PERSONA_SUFFIX 是 10200），用户自己的 AGENTS.md 照旧在
+const INSTRUCTIONS_SECTION = 'litch-client-tools:instructions'
+const INSTRUCTIONS_ORDER = 10_300
 
 // 工具结果交给 dsh 的规范值：内容块原样放着，render 时交出去。
 // dsh 只接受它的 JSON Schema 子集（type/oneOf/properties/required/additionalProperties/items/enum/const）
@@ -39,6 +43,9 @@ const OUTPUT_SCHEMA = {
   required: ['content'],
   additionalProperties: false,
 }
+
+const textOrNull = (value: unknown): string | null =>
+  typeof value === 'string' && value ? value : null
 
 export function apply(ctx: any, config: Config): void {
   let socket: Socket | null = null
@@ -84,8 +91,13 @@ export function apply(ctx: any, config: Config): void {
     return { id, reply }
   }
 
-  // 装上（或换掉）一个会话的工具。版本不比装着的新的不动：晚到的旧清单不盖新的
-  const install = (agent: any, version: number, tools: Tool[]): void => {
+  // 装上（或换掉）一个会话的工具和规则。版本不比装着的新的不动：晚到的旧清单不盖新的
+  const install = (
+    agent: any,
+    version: number,
+    tools: Tool[],
+    instructions: string | null,
+  ): void => {
     const current = installed.get(agent)
     if (current && current.version >= version) return
     current?.dispose()
@@ -110,6 +122,19 @@ export function apply(ctx: any, config: Config): void {
         ctx.logger?.warn?.(`litch-client-tools: ${tool.name} 没有装上：${String(error)}`)
       }
     }
+    if (instructions)
+      try {
+        disposers.push(
+          agent.ctx.systemPrompt.section({
+            name: INSTRUCTIONS_SECTION,
+            order: INSTRUCTIONS_ORDER,
+            interpolate: false,
+            text: instructions,
+          }),
+        )
+      } catch (error) {
+        ctx.logger?.warn?.(`litch-client-tools: 规则没有放进系统提示：${String(error)}`)
+      }
     installed.set(agent, {
       version,
       dispose: () => {
@@ -130,7 +155,8 @@ export function apply(ctx: any, config: Config): void {
       { type: 'tools', sessionId: String(agent.session.id) },
       TOOLS_TIMEOUT_MS,
     ).reply.catch(() => null)
-    if (reply && Array.isArray(reply.tools)) install(agent, Number(reply.version) || 0, reply.tools)
+    if (reply && Array.isArray(reply.tools))
+      install(agent, Number(reply.version) || 0, reply.tools, textOrNull(reply.instructions))
   }
 
   const call = async (owner: string, toolName: string, args: unknown, exec: any): Promise<any> => {
@@ -227,7 +253,12 @@ export function apply(ctx: any, config: Config): void {
         } else if (message.type === 'install') {
           const agent = ctx.agents.get(String(message.sessionId))
           if (agent && Array.isArray(message.tools))
-            install(agent, Number(message.version) || 0, message.tools)
+            install(
+              agent,
+              Number(message.version) || 0,
+              message.tools,
+              textOrNull(message.instructions),
+            )
           send({ type: 'ack', id: message.id })
         }
       }

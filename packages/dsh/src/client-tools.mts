@@ -11,9 +11,10 @@
 //                 tools {id, sessionId}              这个会话该有哪些工具（会话的 agent 建好时问，连上时把现有的都问一遍）
 //                 call {id, sessionId, callId, name, arguments}   模型调了一个
 //                 cancel {id}                        dsh 那边取消了这次调用（回合被打断）
-//   适配器 → 插件  reply {id, ...}                    上面 tools、call 的应答
-//                 install {id, sessionId, version, tools}  建会话时推过去（会话的 agent 在 session/create 时就建好了，
-//                                                          那时问到的是空的）；插件装好回 ack {id}
+//   适配器 → 插件  reply {id, ...}                    上面 tools、call 的应答（tools 的应答带 version、tools、instructions）
+//                 install {id, sessionId, version, tools, instructions}  建会话时推过去（会话的 agent 在 session/create
+//                                                          时就建好了，那时问到的是空的）；插件装好回 ack {id}
+// instructions 是命名空间带的规则拼成的一段（没有是 null），插件把它作为只对这个会话可见的一节放进系统提示的末尾。
 // 工具清单带版本号：插件只认更新的那份，晚到的旧应答不会把刚推过去的盖掉。
 import { randomBytes } from 'node:crypto'
 import { createServer, type Server, type Socket } from 'node:net'
@@ -86,12 +87,32 @@ export function dshClientTools(raw: unknown): DshClientTool[] {
   return tools
 }
 
+/**
+ * 命名空间带的 instructions（clientTools 扩展）：挂上这个命名空间时要加进系统提示的一段话。按出现的先后，
+ * 同一段话只放一次；一段都没有是 null。形状在建会话时已经由 dshClientTools 核对过，这里只挑认得的
+ */
+export function dshToolInstructions(raw: unknown): string | null {
+  if (!Array.isArray(raw)) return null
+  const sections: string[] = []
+  const seen = new Set<string>()
+  for (const spec of raw as any[]) {
+    if (spec?.type !== 'namespace' || typeof spec.instructions !== 'string') continue
+    const text = spec.instructions.trim()
+    if (!text || seen.has(text)) continue
+    seen.add(text)
+    sections.push(`# Tool instructions: ${String(spec.name)}\n${text}`)
+  }
+  return sections.length ? sections.join('\n\n') : null
+}
+
 /** 插件文件的位置（构建产物里和本文件在同一目录） */
 export const PLUGIN_PATH = fileURLToPath(new URL('./plugin.mjs', import.meta.url))
 
 export interface BridgeHandlers {
   /** 这个会话现在该有的工具 */
   tools(sessionId: string): DshClientTool[]
+  /** 这个会话的工具带的规则，进系统提示；没有是 null */
+  instructions(sessionId: string): string | null
   /** 模型调了一个工具。signal 在 dsh 那边取消时中止 */
   call(
     sessionId: string,
@@ -172,6 +193,7 @@ export class ClientToolBridge {
         sessionId,
         version,
         tools: this.handlers.tools(sessionId),
+        instructions: this.handlers.instructions(sessionId),
       })
     })
   }
@@ -223,6 +245,7 @@ export class ClientToolBridge {
         id: message.id,
         version: this.versions.get(sessionId) ?? 0,
         tools: this.handlers.tools(sessionId),
+        instructions: this.handlers.instructions(sessionId),
       })
     } else if (message.type === 'ack') this.acks.get(String(message.id))?.()
     else if (message.type === 'cancel') this.calls.get(String(message.id))?.abort()

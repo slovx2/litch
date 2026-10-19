@@ -16,6 +16,24 @@ export interface ClientTool {
  */
 export const toolDescription = (tool: ClientTool): string =>
   `[${tool.namespace ?? 'functions'}.${tool.name}] ${tool.namespaceDescription ? `${tool.namespaceDescription}\n\n` : ''}${tool.description ?? ''}`
+/**
+ * 命名空间带的 instructions（clientTools 扩展，protocol/extensions/client-tools.json）：挂上这个命名空间时
+ * 要加进系统提示的一段话。Pi 经资源装载的 appendSystemPromptOverride 接在追加提示的最后
+ * （用户自己的 APPEND_SYSTEM.md 之后，见 runtime.mts）。按出现的先后，同一段话只放一次；一段都没有是 null
+ */
+export function clientToolInstructions(raw: unknown[]): string | null {
+  const sections: string[] = []
+  const seen = new Set<string>()
+  for (const value of raw) {
+    const spec = value as any
+    if (spec?.type !== 'namespace' || typeof spec.instructions !== 'string') continue
+    const text = spec.instructions.trim()
+    if (!text || seen.has(text)) continue
+    seen.add(text)
+    sections.push(`# Tool instructions: ${String(spec.name)}\n${text}`)
+  }
+  return sections.length ? sections.join('\n\n') : null
+}
 export function clientTools(raw: unknown[]): Array<ClientTool & { piName: string }> {
   const tools: ClientTool[] = []
   for (const value of raw) {

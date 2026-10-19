@@ -22,6 +22,10 @@ import type { LiveThread, OpencodeServer } from './server.mjs'
 // 没有用 OpenCode 插件的 tool()：插件的工具在目录实例建起来时就定了，不能按会话不同，
 // 而 litch_machine、litch_computer 的说明是按会话（所在设备、桌面平台）生成的。
 //
+// 命名空间带的 instructions（挂上时要加进系统提示的规则）放在这个 MCP 服务 initialize 应答的 instructions 里：
+// OpenCode 把连着的 MCP 服务的说明拼进系统提示（<mcp_instructions>，在用户的 AGENTS.md 之后），只拼会话的权限规则
+// 没把它的工具全禁掉的那些，所以只有这个会话看得到自己的（发命令开的回合也一样）；子代理的会话看不到。
+//
 // 模型调用时 OpenCode 经 MCP 的 tools/call 找到这里：照 client-tools.json 挑执行方（发起回合的连接，
 // 否则最早订阅的声明了的连接，都没有当场回 noExecutor），向它发标准的 item/tool/call，答复转成 MCP 的结果
 // （图片成为 OpenCode 的附件，交给模型）。MCP 工具 OpenCode 要先问权限：放开的那条规则是“允许”，
@@ -99,6 +103,24 @@ export function dynamicToolSpecs(raw: unknown): DynamicToolSpec[] {
     names.add(mcpName)
     return { ...spec, mcpName }
   })
+}
+
+/**
+ * 命名空间带的 instructions：按出现的先后，同一段话只放一次；一段都没有是 null。形状在建会话时已经由
+ * dynamicToolSpecs 核对过，这里只挑认得的
+ */
+export function toolInstructions(raw: unknown): string | null {
+  if (!Array.isArray(raw)) return null
+  const sections: string[] = []
+  const seen = new Set<string>()
+  for (const spec of raw as any[]) {
+    if (spec?.type !== 'namespace' || typeof spec.instructions !== 'string') continue
+    const text = spec.instructions.trim()
+    if (!text || seen.has(text)) continue
+    seen.add(text)
+    sections.push(`# Tool instructions: ${String(spec.name)}\n${text}`)
+  }
+  return sections.length ? sections.join('\n\n') : null
 }
 
 /**
@@ -353,12 +375,15 @@ export class ClientTools {
   private answer(threadId: string, message: any): unknown {
     const ok = (result: unknown) => ({ jsonrpc: '2.0', id: message.id, result })
     switch (message.method) {
-      case 'initialize':
+      case 'initialize': {
+        const instructions = toolInstructions(this.server.store.getMeta('dynamicTools', threadId))
         return ok({
           protocolVersion: message.params?.protocolVersion ?? '2025-06-18',
           capabilities: { tools: {} },
           serverInfo: { name: 'litch', version: '1.0.0' },
+          ...(instructions ? { instructions } : {}),
         })
+      }
       case 'ping':
         return ok({})
       case 'tools/list':

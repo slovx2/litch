@@ -59,6 +59,13 @@
       "description": "列了它表示经这个入口（或聚合面）连到这个 harness 时，litch_ 开头的命名空间的调用按本扩展挑执行方。没列的（acp）别带这类工具建会话：带了也用不了。"
     },
     {
+      "kind": "Field",
+      "on": "thread/start 的 dynamicTools 里 type 为 namespace 的一项",
+      "name": "instructions",
+      "description": "可选的字符串：挂上这个命名空间时要加进系统提示（或开发者指令）的一段话，写什么时候该用这些工具、用了之后怎么办这类工具说明里放不下、又要模型每回合都记着的规矩（比如 litch_sessions 的建议任务规则）。标准协议里没有这个字段，任何前缀的命名空间都可以带。引擎入口各自送到模型面前，都拼在用户自己的指令之后、不覆盖它们，每段前面加一行 `# Tool instructions: <命名空间>`，同一段话只放一次，前后空白去掉，空的不放：claude-code 拼在系统提示末尾（项目、开发者指令和性格提示之后，持续目标的说明之前），新建、恢复、分叉出来的会话和 CLI 进程重起之后都在，追问子代理的回合用父会话的那一份；pi 经资源装载接在追加提示的最后（用户的 APPEND_SYSTEM.md 之后）；dsh 由插进 dsh 的插件作为只对这个会话可见的一节放在系统提示的最后（dsh 把用户的 AGENTS.md 放在消息里）；opencode 放在这个会话的回环 MCP 服务 initialize 应答的 instructions 里，OpenCode 把它拼进系统提示的 <mcp_instructions>（用户的 AGENTS.md 之后），只有这个会话自己看得到，发命令开的回合也有，子代理的会话没有；经聚合面的原生 codex 不认这个字段（上游不报错、悄悄丢掉），设备进程转发 thread/start 前把它从每个命名空间上摘掉，拼在 developerInstructions 的末尾（客户端给的在前；已经含着同一段的不再拼），codex 把开发者指令放进会话头一个回合的初始上下文、记进会话历史，恢复、分叉时随历史回来。开发者指令上游不随会话持久化：恢复时客户端不带开发者指令的话，会话压缩之后重建的上下文里就没有这段规则了（和用户自己的开发者指令一样）。直连原生 codex（不经聚合面）时这个字段不送到模型面前。",
+      "schema": { "type": "string" }
+    },
+    {
       "kind": "Method",
       "method": "litch/clientTool/invoke",
       "description": "客户端发给聚合面（设备进程）的请求。调用者是这台机器上的一个进程（适配器的 machine 子命令，短名 litch-machine），不是 Litch，不必声明 clientTools；套接字只有属主能连，不另做认证。设备进程按 threadId 找发起那个回合的、声明了这个命名空间的 Litch 连接；找不到会话时只有一条声明了的就交给它，不止一条回 ambiguous（说明里列出各台的 desktop.hostname）；给了 desktop 就只交给主机名对得上的那条；一条都没有回 noExecutor。交出去用 litch/clientTool/call；调用者断开时设备进程撤回那次调用（serverRequest/resolved）。应答就是执行方的应答。",

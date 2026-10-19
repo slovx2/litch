@@ -24,6 +24,25 @@ export interface DynamicTool {
 export const toolDescription = (tool: DynamicTool): string =>
   `[${tool.namespace ?? 'functions'}.${tool.name}] ${tool.namespaceDescription ? `${tool.namespaceDescription}\n\n` : ''}${tool.description}`
 
+/**
+ * 命名空间带的 instructions（clientTools 扩展，protocol/extensions/client-tools.json）：挂上这个命名空间时
+ * 要加进系统提示的一段话，拼在会话系统提示的末尾（用户自己的指令之后）。按出现的先后，同一段话只放一次；
+ * 一段都没有是 null。形状不对的定义在建会话时已经拒了，这里只挑认得的
+ */
+export function dynamicToolInstructions(raw: unknown[] | undefined): string | null {
+  const sections: string[] = []
+  const seen = new Set<string>()
+  for (const spec of raw ?? []) {
+    const fields = spec && typeof spec === 'object' ? (spec as Record<string, unknown>) : {}
+    if (fields.type !== 'namespace' || typeof fields.instructions !== 'string') continue
+    const text = fields.instructions.trim()
+    if (!text || seen.has(text)) continue
+    seen.add(text)
+    sections.push(`# Tool instructions: ${String(fields.name)}\n${text}`)
+  }
+  return sections.length ? sections.join('\n\n') : null
+}
+
 /** 动态工具交给 CLI 的那个进程内 MCP 服务的名字 */
 export const DYNAMIC_TOOL_SERVER = 'codex_harness_adapter'
 

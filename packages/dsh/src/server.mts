@@ -20,7 +20,12 @@ import { ServerRequests } from '../../shared/src/server-requests.mjs'
 import type { RpcPeer, WireMessage } from '../../shared/src/types.mjs'
 import { sleep } from '../../shared/src/util.mjs'
 import { approve } from './approvals.mjs'
-import { ClientToolBridge, type DshClientTool, dshClientTools } from './client-tools.mjs'
+import {
+  ClientToolBridge,
+  type DshClientTool,
+  dshClientTools,
+  dshToolInstructions,
+} from './client-tools.mjs'
 import { summary } from './envelope.mjs'
 import { DshHarnessConfig } from './harness-config.mjs'
 import {
@@ -130,6 +135,7 @@ export class DshServer {
     this.queue = new QueueStore(this.store.db)
     this.bridge = new ClientToolBridge({
       tools: (id) => this.clientTools(id),
+      instructions: (id) => dshToolInstructions(this.store.getMeta('dynamicTools', id)),
       call: (id, callId, name, args, signal) => this.clientToolCall(id, callId, name, args, signal),
     })
     this.runtime = new DshRuntime(

@@ -50,6 +50,7 @@ import {
   writeConfigFile,
 } from './config-store.mjs'
 import { dynamicToolResult } from './dynamic-tool-result.mjs'
+import { dynamicToolInstructions } from './dynamic-tools.mjs'
 import { experimentalFeatureList, experimentalFeatureSet } from './experimental-features.mjs'
 import { GoalController } from './goal-controller.mjs'
 import { ClaudeHarnessConfig } from './harness-config.mjs'
@@ -3515,10 +3516,18 @@ export class CodexClaudeAppServer {
     if (injecting !== null && !relay)
       this.rememberInjectedInstructions(thread.id, { text: injecting, turnId: turn.id })
     const rawTurnModel = relay ? relay.parent.model : stringOr(params.model, thread.model)
+    // 命名空间带的 instructions 拼在用户自己的指令之后、目标说明之前：它跟着会话的工具走、不随回合变，
+    // 目标说明要留在最末尾（native-session.mts 的 stableAddendum 按末尾认它）。追问回合用父会话的工具，
+    // 和父会话的普通回合一致，才命中提示缓存
     if (turnPurpose === 'normal')
       systemPromptAddendum =
-        [systemPromptAddendum, this.goals.context(runtimeThread.id)].filter(Boolean).join('\n\n') ||
-        null
+        [
+          systemPromptAddendum,
+          dynamicToolInstructions(this.store.threadSettings(runtimeThread.id).dynamicTools),
+          this.goals.context(runtimeThread.id),
+        ]
+          .filter(Boolean)
+          .join('\n\n') || null
     const isCodexThread = false
     const resolvedModel = isCodexThread
       ? rawTurnModel

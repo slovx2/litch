@@ -12,6 +12,7 @@ import type { ToolCallAsk, ToolCallBlock } from './approvals.mjs'
 import {
   type ClientTool,
   clientToolContent,
+  clientToolInstructions,
   clientTools,
   toolDescription,
 } from './dynamic-tools.mjs'
@@ -132,11 +133,17 @@ export async function openSession(
       })
     },
   }
+  // 动态工具的命名空间带的规则接在追加提示的最后：用户自己的 APPEND_SYSTEM.md（项目的、全局的）照旧在前面。
+  // 会话每次装载都按记下的工具重算，恢复、分叉出来的会话（带着原会话的工具）一样有
+  const toolInstructions = clientToolInstructions(thread.dynamicTools)
   const loader = new DefaultResourceLoader({
     cwd: thread.cwd,
     agentDir,
     settingsManager,
     eventBus,
+    ...(toolInstructions
+      ? { appendSystemPromptOverride: (base: string[]) => [...base, toolInstructions] }
+      : {}),
     additionalExtensionPaths: managed,
     extensionFactories: [...builtInExtensions, compaction, ...approvals],
     extensionsOverride(base) {

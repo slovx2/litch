@@ -25,7 +25,13 @@ import type {
 import { HARNESS_IDENTITY } from '../../protocol/src/harness-identity.mjs'
 import { builtinPreset, PRESET } from '../../shared/src/harness-declaration.mjs'
 import { CodexHarnessConfig } from './codex-harness-config.mjs'
-import { ADAPTER_DIALECT, type Ask, type UpstreamDialect, withoutOptOut } from './dialect.mjs'
+import {
+  ADAPTER_DIALECT,
+  type Ask,
+  foldToolInstructions,
+  type UpstreamDialect,
+  withoutOptOut,
+} from './dialect.mjs'
 import { isObject } from './wire.mjs'
 
 /** 声明里报的引擎名 */
@@ -219,12 +225,17 @@ export const NATIVE_CODEX_DIALECT: UpstreamDialect = {
     }
   },
 
-  /** 选了内置的权限档、又没有另外指定审批策略的：把这一档配套的审批策略带上 */
-  outgoing(method, params) {
-    if (!PRESET_METHODS.has(method) || params.approvalPolicy != null) return null
+  /**
+   * 动态工具的命名空间带的规则（instructions）它不认，摘下来并进开发者指令（dialect.mts 的 foldToolInstructions）；
+   * 选了内置的权限档、又没有另外指定审批策略的：把这一档配套的审批策略带上
+   */
+  outgoing(method, given) {
+    const folded = foldToolInstructions(method, given)
+    const params = folded ?? given
+    if (!PRESET_METHODS.has(method) || params.approvalPolicy != null) return folded
     const approvalPolicy =
       typeof params.permissions === 'string' ? PRESET_APPROVAL[params.permissions] : undefined
-    return approvalPolicy === undefined ? null : { ...params, approvalPolicy }
+    return approvalPolicy === undefined ? folded : { ...params, approvalPolicy }
   },
 
   /**
