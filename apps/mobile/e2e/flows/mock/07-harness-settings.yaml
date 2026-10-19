@@ -67,6 +67,10 @@ tags: [mock]
       id: hc:provider:api-key:method:env
 - tapOn:
     id: hc:provider:api-key:method:env
+- scrollUntilVisible:
+    element:
+      id: hc:provider:api-key:form:value
+    timeout: 10000
 - tapOn:
     id: hc:provider:api-key:form:value
 - inputText: sk-e2e-1234
@@ -102,13 +106,13 @@ tags: [mock]
 # MCP、指令文件：只能看
 - tapOn:
     id: hc:tab:mcp:pick
-- extendedWaitUntil:
-    visible:
+- scrollUntilVisible:
+    element:
       id: hc:readonly
     timeout: 10000
 - tapOn:
     id: hc:tab:instructions:pick
-- extendedWaitUntil:
-    visible:
+- scrollUntilVisible:
+    element:
       id: hc:instr:path
     timeout: 10000
