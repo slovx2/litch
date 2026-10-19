@@ -101,14 +101,20 @@ export function dynamicToolSpecs(raw: unknown): DynamicToolSpec[] {
   })
 }
 
-/** 各命名空间的 instructions，按出现的先后用空行隔开；一个都没有是空串 */
+/**
+ * 各命名空间的 instructions，按出现的先后用空行隔开，每段前一行 `# Tool instructions: <命名空间>`
+ * （和别家入口同一种格式），同一段只放一次；一个都没有是空串
+ */
 export function toolInstructions(raw: unknown): string {
   if (!Array.isArray(raw)) return ''
-  return raw
-    .filter((value: any) => value?.type === 'namespace' && typeof value.instructions === 'string')
-    .map((value: any) => (value.instructions as string).trim())
-    .filter(Boolean)
-    .join('\n\n')
+  const sections: string[] = []
+  for (const value of raw as any[]) {
+    if (value?.type !== 'namespace' || typeof value.instructions !== 'string') continue
+    const text = value.instructions.trim()
+    const section = text ? `# Tool instructions: ${String(value.name)}\n${text}` : ''
+    if (section && !sections.includes(section)) sections.push(section)
+  }
+  return sections.join('\n\n')
 }
 
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')

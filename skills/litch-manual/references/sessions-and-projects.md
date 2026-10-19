@@ -39,7 +39,7 @@ explain it:
   devices: text files only), context meter with Compact context.
 - **Side panel**: Files (tree, search, read-only viewer, add a file to the conversation), Diff (all /
   staged / unstaged, stage, unstage, discard, comment on lines; comments go with the next message),
-  Browser, Subagents.
+  Browser, Suggested tasks, Subagents.
 - **Terminal**: per project; "Put away, keep it running on the device" keeps a terminal alive and
   "Terminals on the device" brings it back. Limits are device settings (`device-settings.md`).
 - **Session menu**: pin, move to group or project, rename, archive (undo available), delete (permanent),
@@ -56,11 +56,18 @@ woken to continue.
   or carry over the parent's context, which needs the parent's harness), title, first message, and
   "Wake the main session when done". If the chosen harness cannot give the same sandbox as the parent,
   the dialog warns that the sub-session will be looser.
-- **By the model**: in Codex, Claude Code, Pi, DSH and OpenCode sessions the model has `litch_sessions`
-  tools: list and read sessions on the device, start sub-sessions, send to and interrupt its own
-  sub-sessions, wait for them. When the user did not ask for a sub-session in that turn, it appears as a
-  proposal card (Start / Dismiss) instead of starting directly. ACP sessions cannot start sub-sessions
-  but can be one.
+- **By the model**: in sessions of every harness (Codex, Claude Code, Pi, DSH, OpenCode, Gemini CLI,
+  Qwen Code, ACP) the model has `litch_sessions` tools: list and read sessions on the device, start
+  sub-sessions, send to and interrupt its own sub-sessions, wait for them. When the user did not ask for
+  a sub-session in that turn, it becomes a suggested task instead of starting directly.
+- **Suggested tasks**: the model is told to suggest real follow-up work (something it noticed, the next
+  step its answer recommends, independent steps of a plan) as a card instead of only mentioning it. The
+  card sits in the conversation at the point it was suggested and shows its state (waiting, started,
+  dismissed, withdrawn by the model, expired after 7 days). Buttons: Start, Edit and start (change the
+  harness, model, effort, project, folder, fresh or with context, title, brief, permissions), Dismiss.
+  The side panel's **Suggested tasks** tab lists every card of the current session, with a badge for
+  the waiting ones; clicking one scrolls to it. You can also tell the model "start the second one", and
+  it withdraws cards that went stale. At most four cards per turn.
 - **Reports and waking**: when a sub-session finishes a turn, the start of its last answer is handed to
   the parent ("Reports from sub-sessions"). When the parent is idle and its sub-sessions have stopped,
   the parent is woken to continue (limited per user message). Nothing is woken while no client is

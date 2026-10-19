@@ -41,7 +41,7 @@ running until its turns finish; Litch never stops it by itself.
 **Built-in browser or Computer Use calls fail.** Check the device's switches
 (`scripts/litch tools set`, `browser-and-computer-use.md`) and, for Computer Use,
 `scripts/litch computer status` for missing macOS permissions. Calls from sessions not started in Litch,
-from ACP agents, or while no Litch desktop is connected, fail by design.
+or while no Litch desktop is connected, fail by design.
 
 **Sub-sessions or scheduled tasks are missing.** The device may have them switched off
 (`sessions.enabled`, `tasks.enabled`) or the remote adapter is older than 0.11.0.

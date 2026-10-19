@@ -55,7 +55,7 @@ test('带上下文只能同 harness：换了别的就是全新开始', () => {
   assert.equal(kindOf(fieldsFor(parent, proposal), parent), 'fork')
 })
 
-test('改了再开始：什么都没改是空的；改了的才带，换 harness 连带改成全新开始', () => {
+test('改了再开始：什么都没改是空的；改了的才带，换 harness 连带改成全新开始、没另选模型时清掉提案的模型', () => {
   assert.deepEqual(overridesOf(fieldsFor(parent, proposal), parent, proposal), {})
   const fields = {
     ...fieldsFor(parent, proposal),
@@ -70,6 +70,7 @@ test('改了再开始：什么都没改是空的；改了的才带，换 harness
   }
   assert.deepEqual(overridesOf(fields, parent, proposal), {
     harness: 'pi',
+    model: '',
     effort: 'high',
     workspaceId: 'infra',
     cwd: '/w/infra',

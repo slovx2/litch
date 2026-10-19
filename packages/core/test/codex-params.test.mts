@@ -24,8 +24,11 @@ import { watchSession } from './wire.mjs'
 // 1x1 的 PNG
 const PNG =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
-const NAMESPACES = Object.values(CLIENT_TOOL_NAMESPACE)
-/** 主进程那一头：能执行全部命名空间（浏览器、Computer Use，和测试用的回声） */
+// litch_sessions、litch_tasks 的执行方是设备服务，主进程从不声明它们（核心按设备信息另外带）
+const NAMESPACES = Object.values(CLIENT_TOOL_NAMESPACE).filter(
+  (name) => name !== CLIENT_TOOL_NAMESPACE.sessions && name !== CLIENT_TOOL_NAMESPACE.tasks,
+)
+/** 主进程那一头：能执行的命名空间（浏览器、Computer Use，和测试用的回声） */
 const tools: ClientToolPort = { namespaces: () => NAMESPACES, post() {}, listen() {} }
 
 /** 设备进程替原生 codex 报的声明（扩展、能力位、权限预设），和真的一样 */

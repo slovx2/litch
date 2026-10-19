@@ -103,7 +103,8 @@ test('声明 clientTools；带动态工具的会话挂上 litch 的 MCP 服务�
     assert.deepEqual(mounted.at(-1).servers, [
       {
         name: 'litch',
-        instructions: '要回声时调 litch_echo。\n\n用户要定时做事时用 litch_tasks。',
+        instructions:
+          '# Tool instructions: litch_echo\n要回声时调 litch_echo。\n\n# Tool instructions: litch_tasks\n用户要定时做事时用 litch_tasks。',
         tools: ['echo_echo', 'echo_run', 'tasks_list'],
       },
     ])

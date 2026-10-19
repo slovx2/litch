@@ -1,7 +1,7 @@
 {
   "extension": "clientTools",
   "description": "客户端工具：模型调用的工具由连着的 Litch 桌面端执行（内置浏览器、Computer Use）。走的是协议原有的动态工具：建会话时 thread/start.dynamicTools 带上命名空间形式的工具清单，模型调用时引擎向客户端发 item/tool/call，客户端执行后答复。标准协议里这个请求发给谁由各引擎自己定（原生 codex 发给订阅着会话的全部连接，谁先答算谁的），可这类工具只有 Litch 桌面端执行得了，官方桌面端、移动端收到了也只能干等或者乱答。这项扩展加的只是“谁能执行、交给谁、没人能执行时怎么回”：客户端握手时声明自己能执行哪些命名空间，litch_ 开头的命名空间的调用只交给声明过的一条连接，没有就当场回失败，不让回合干等。工具本身的定义（参数、结果）不在这里，在 packages/protocol/src/client-tools-browser.mts、client-tools-computer.mts。类型在 packages/protocol/src/client-tools.mts。",
-  "appliesTo": "每个 harness 自己的入口，以及经聚合面连到它的连接（聚合面把客户端的握手参数原样带给适配器的运行时）。claude-code、pi 的入口自己按这里的规矩挑执行方；原生 codex 不认识这项扩展（握手时 litchExtensions、litchClientTools 都不带给它），它照旧发给所有订阅者，由设备进程拦下来再挑，所以经聚合面连到它时也成立，直连它时不成立。哪个 harness 支持，看它在 runtime/info 里报的 extensions 有没有 clientTools：现在 claude-code、pi、dsh、opencode，以及经聚合面的原生 codex；acp 的入口不报，不支持。dsh 的入口经插进 dsh 的插件按会话注册工具，opencode 的入口经运行时挂到 opencode serve 上的回环 MCP 服务按会话放行，对外的规矩和别家一样。",
+  "appliesTo": "每个 harness 自己的入口，以及经聚合面连到它的连接（聚合面把客户端的握手参数原样带给适配器的运行时）。claude-code、pi 的入口自己按这里的规矩挑执行方；原生 codex 不认识这项扩展（握手时 litchExtensions、litchClientTools 都不带给它），它照旧发给所有订阅者，由设备进程拦下来再挑，所以经聚合面连到它时也成立，直连它时不成立。哪个 harness 支持，看它在 runtime/info 里报的 extensions 有没有 clientTools：现在 claude-code、pi、dsh、opencode、acp，以及经聚合面的原生 codex。dsh 的入口经插进 dsh 的插件按会话注册工具，opencode 的入口经运行时挂到 opencode serve 上的回环 MCP 服务按会话放行，acp 的入口在 session/new 等的 mcpServers 里按会话给 agent 挂一个 stdio 的 MCP 桥（服务名 litch），对外的规矩和别家一样。",
   "declaration": {
     "description": "客户端握手时在 initialize 的 capabilities 里用我们自己的键列出认识的扩展名，同时用 litchClientTools 列出这条连接能执行的命名空间。只列了命名空间、没在 litchExtensions 里声明 clientTools 的，当作什么都执行不了。",
     "where": "initialize.params.capabilities.litchExtensions",
@@ -56,7 +56,7 @@
       "kind": "Field",
       "on": "runtime/info 的应答里每个 harness 的 extensions",
       "name": "clientTools",
-      "description": "列了它表示经这个入口（或聚合面）连到这个 harness 时，litch_ 开头的命名空间的调用按本扩展挑执行方。没列的（acp）别带这类工具建会话：带了也用不了。"
+      "description": "列了它表示经这个入口（或聚合面）连到这个 harness 时，litch_ 开头的命名空间的调用按本扩展挑执行方。没列的别带这类工具建会话：带了也用不了。"
     },
     {
       "kind": "Field",

@@ -2,7 +2,7 @@
 // 真实窗口验收用它走一遍派子会话、回报、唤醒、提案，模型是回环上的假模型，不花真模型的钱。
 //
 // 用户的话（一回合一次调用，工具结果回来后把结果原样说出来）：
-//   会话：<工具> <JSON 参数>   要在行首（子会话的派出说明会引用父会话的标题，别再触发一次），调 litch_sessions.<工具>，比如 会话：start {"title":"查日志","prompt":"你好","initiation":"user_asked"}
+//   会话：<工具> <JSON 参数>   要在行首（子会话的派出说明会引用父会话的标题，别再触发一次），调 litch_sessions.<工具>，比如 会话：start {"title":"查日志","prompt":"<至少 80 字的简报>","initiation":"user_asked"}（fresh 的简报少于 80 字会被设备进程拒绝）
 //   任务：<工具> <JSON 参数>   同样的做法调 litch_tasks.<工具>（定时任务，设备执行），比如 任务：create {"name":"日报","prompt":"总结","schedule":{"type":"interval","minutes":5}}
 //   浏览器：<工具> <JSON 参数> 同样的做法调 litch_browser.<工具>（只认 navigate、snapshot），比如 浏览器：navigate {"url":"about:blank"}，
 //                              用来在 dsh、OpenCode 上验桌面端执行的客户端工具（client-fixture-browse.mjs 只认 Pi 的工具名）
@@ -25,10 +25,12 @@ const SPACES = {
     marks: {
       list: 'List sessions on this device',
       read: 'Read a session’s status and its last few turns',
-      start: 'Start a sub-session.',
+      start: 'Start a sub-session, or propose one.',
       send: 'Send a message to one of your sub-sessions',
       wait: 'Wait until the given sessions stop',
       interrupt: 'Interrupt the running turn of one of your sub-sessions',
+      accept: 'Start one of your proposal cards because the user told you to',
+      withdraw: 'Withdraw a proposal card of yours',
     },
   },
   任务: {

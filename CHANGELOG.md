@@ -5,6 +5,13 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
+## 未发布
+
+- Litch：建议任务。模型会把值得单独做的后续工作（做事中途发现的、自己回答里建议的下一步、计划里能各自独立做的几步）提成卡片，不再只在回答里问一句“要不要我…”。卡片在对话里提出它的那个位置，写着状态（等你开始、已开始、不要了、模型撤回了、7 天没点过期了）；可以直接开始、改了再开始（harness、模型、强度、项目、目录、全新还是带上下文、标题、简报、权限都能改）或不要。侧面板新增“建议任务”标签，列当前会话的全部卡片，标签上的数字是等着的张数，点一条滚到对话里那张。也可以直接对模型说“开始第二个”；过时的卡片模型会自己撤回。模型一回合最多提四张，简报太短、同名重复的不收。输入框上方原来的提案条去掉了
+- Litch：Gemini CLI、Qwen Code 和自填命令的 ACP agent 的会话也有 Litch 的工具了：内置浏览器、Computer Use、操作这台电脑、子会话与建议任务、定时任务（经按会话挂给 agent 的 MCP 服务 `litch`）
+- 手动派子会话的弹窗多了强度、目录、权限三项
+- 适配器：命名空间可带 `instructions`（挂上时进系统提示的规矩），六家入口都送到模型面前；`litch_sessions` 新增 `accept`、`withdraw`，提案记下提出它的回合和调用、了结时间，`litch/sessionProposal/list` 可带了结的，`accept` 可带 `overrides`，`litch/sessionProposal/changed` 带刚变的那几条
+
 ## 0.13.0
 
 - Windows：npm 装的 OpenCode 现在认得出来（原来只找 `bin/opencode`，包里是 `bin/opencode.exe`，设备页一直显示不可用）

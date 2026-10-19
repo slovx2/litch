@@ -1,7 +1,7 @@
 # Built-in browser and Computer Use
 
 Both are capabilities of the Litch **desktop app** that agents can use: models in sessions started from
-Litch (Codex, Claude Code, Pi, DSH, OpenCode; not ACP agents) get `litch_browser` and
+Litch (Codex, Claude Code, Pi, DSH, OpenCode, Gemini CLI, Qwen Code, ACP) get `litch_browser` and
 `litch_computer` tools. Sessions on remote devices use the desktop's browser and Computer Use too,
 while the desktop is connected (remote adapter 0.8.0 or later).
 

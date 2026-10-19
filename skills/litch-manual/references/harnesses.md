@@ -13,9 +13,8 @@
 | `qwen` | Qwen Code | Over ACP; off by default |
 | `acp` | ACP | Any agent that speaks the Agent Client Protocol; off by default, needs its command in `harness.acp.cliPath` |
 
-Litch never bundles a harness. Each device uses what is installed on it. Feature support differs: ACP
-sessions cannot start sub-sessions and do not get the browser, Computer Use or "operate this computer"
-tools; plan mode exists only where the harness supports it.
+Litch never bundles a harness. Each device uses what is installed on it. Feature support differs: plan
+mode exists only where the harness supports it.
 
 ## Seeing what is there
 

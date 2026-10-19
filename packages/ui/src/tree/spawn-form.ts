@@ -74,8 +74,11 @@ export function overridesOf(
   proposal: SessionProposalView,
 ): ProposalOverrides {
   const overrides: ProposalOverrides = {}
-  if (fields.harness !== (proposal.harness ?? parent.harness)) overrides.harness = fields.harness
+  const harnessChanged = fields.harness !== (proposal.harness ?? parent.harness)
+  if (harnessChanged) overrides.harness = fields.harness
   if (fields.model && fields.model !== proposal.model) overrides.model = fields.model
+  // 换了 harness 又没另选模型：提案原来的模型多半是别家的，空字符串让设备进程清掉、用缺省
+  else if (!fields.model && harnessChanged && proposal.model) overrides.model = ''
   if (fields.effort) overrides.effort = fields.effort
   if (fields.workspaceId && fields.workspaceId !== (parent.workspaceId ?? '')) {
     overrides.workspaceId = fields.workspaceId
