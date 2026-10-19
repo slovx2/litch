@@ -291,7 +291,7 @@ async function request(pair, phone, name) {
     'pair 打的确认码和按约定算的不一样',
   )
   // 设备进程把名字里的空白换成下划线（写进钥匙行注释的也是这个名字）
-  assert.match(pair.out, new RegExp(`手机“${name.replaceAll(' ', '_')}”请求绑定`))
+  assert.match(pair.out, new RegExp(`手机“${name}”请求绑定`))
   await pair.expect(/\[y\/N\]/)
   // 包一层：直接返回的话 await 会一直等到登记有结果，而结果要等这边回了 y 或 n 才有
   return { enrolling }
@@ -310,7 +310,7 @@ const steps = {
       { ok: true, phoneId: phoneIdOf(phone.publicKey) },
       `手机收到的：${stderr}`,
     )
-    await pair.expect(/已绑定手机“Pixel_8”/)
+    await pair.expect(/已绑定手机“Pixel 8”/)
     assert.equal(await pair.exit(), 0)
     assert.ok(
       loginWorks(phone, phone.own),
@@ -323,7 +323,7 @@ const steps = {
     )
     const keys = readFileSync(keysFile, 'utf8')
     assert.ok(
-      keys.includes(`${phone.publicKey} litch-mobile:${phoneIdOf(phone.publicKey)} Pixel_8 `),
+      keys.includes(`${phone.publicKey} litch-mobile:${phoneIdOf(phone.publicKey)} Pixel 8 `),
       keys,
     )
     assert.equal(pairLines().length, 0)

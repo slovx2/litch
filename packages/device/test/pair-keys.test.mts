@@ -122,17 +122,17 @@ test('手机行：名字清洗、日期、解析回来', () => {
   const id = phoneIdOf(parsed.blob)
   const now = Date.parse('2026-10-19T23:30:00Z')
   const line = phoneLine(key, id, ' Pixel 8\tPro\u200b\u0007 ', now)
-  assert.equal(line, `${key} litch-mobile:${id} Pixel_8_Pro 2026-10-19`)
+  assert.equal(line, `${key} litch-mobile:${id} Pixel 8 Pro 2026-10-19`)
   assert.deepEqual(parsePhoneLine(line), {
     phoneId: id,
-    name: 'Pixel_8_Pro',
+    name: 'Pixel 8 Pro',
     fingerprint: fingerprintOf(parsed.blob),
     addedAt: Date.parse('2026-10-19T00:00:00Z'),
   })
   assert.equal(parsePhoneLine(`${key} me@laptop`), null)
   assert.ok(hasKey(`from="1.2.3.4" ${key} me`, key.split(' ')[1] ?? ''))
   assert.equal(cleanPhoneName('\u0000\u202e'), 'phone')
-  assert.equal(cleanPhoneName('小米 15'), '小米_15')
+  assert.equal(cleanPhoneName('小米  15'), '小米 15')
   const long = cleanPhoneName(`${'a'.repeat(PAIR_PHONE_NAME_MAX - 1)}😀`)
   assert.equal(long, 'a'.repeat(PAIR_PHONE_NAME_MAX - 1))
 })

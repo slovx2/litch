@@ -142,7 +142,7 @@ test('登记、允许：追加手机行、删一次性钥匙行，enroll 回 ok�
     assert.ok(blob)
     const phoneId = phoneIdOf(blob)
     assert.equal(status.phone?.code, confirmCodeOf(pairId, key))
-    assert.equal(status.phone?.name, 'Pixel_8')
+    assert.equal(status.phone?.name, 'Pixel 8')
     assert.equal(status.phone?.phoneId, phoneId)
     const decided: PairStatus = await r.call('litch/pair/decide', { pairId, allow: true })
     assert.equal(decided.state, 'done')
@@ -150,7 +150,7 @@ test('登记、允许：追加手机行、删一次性钥匙行，enroll 回 ok�
     const today = new Date(r.clock.now()).toISOString().slice(0, 10)
     assert.equal(
       r.keys(),
-      `ssh-ed25519 AAAAmine me@laptop\n${key} litch-mobile:${phoneId} Pixel_8 ${today}\n`,
+      `ssh-ed25519 AAAAmine me@laptop\n${key} litch-mobile:${phoneId} Pixel 8 ${today}\n`,
     )
     const phones = await r.call('litch/pair/phones')
     assert.equal(phones.data.length, 1)

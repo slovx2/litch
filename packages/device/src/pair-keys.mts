@@ -108,8 +108,8 @@ export function isPhoneId(value: unknown): value is string {
 export function cleanPhoneName(name: string): string {
   let cleaned = name
     .replace(/[\p{Cc}\p{Cf}\p{Co}\p{Cn}\p{Zl}\p{Zp}]/gu, (char) => (/\s/.test(char) ? ' ' : ''))
+    .replace(/\s+/gu, ' ')
     .trim()
-    .replace(/\s+/gu, '_')
   if (cleaned.length > PAIR_PHONE_NAME_MAX) {
     cleaned = cleaned.slice(0, PAIR_PHONE_NAME_MAX)
     // 截在代理对中间时把落单的高位去掉
@@ -185,11 +185,14 @@ export function parsePhoneLine(line: string): PhoneLineInfo | null {
   if (!isPhoneId(phoneId)) return null
   const parsed = parseEd25519Line(`${ED25519} ${tokens[at - 1]}`)
   if (!parsed) return null
-  const date = tokens[at + 2]
-  const addedAt = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? Date.parse(`${date}T00:00:00Z`) : NaN
+  // 名字可以带空格：手机号和行尾日期之间的都是名字
+  const rest = tokens.slice(at + 1)
+  const last = rest[rest.length - 1]
+  const dated = last !== undefined && /^\d{4}-\d{2}-\d{2}$/.test(last)
+  const addedAt = dated ? Date.parse(`${last}T00:00:00Z`) : NaN
   return {
     phoneId,
-    name: tokens[at + 1] ?? '',
+    name: (dated ? rest.slice(0, -1) : rest).join(' '),
     fingerprint: fingerprintOf(parsed.blob),
     addedAt: Number.isNaN(addedAt) ? null : addedAt,
   }
