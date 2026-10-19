@@ -20,7 +20,7 @@
 
 /** 一次配对的有效期：从 start 起算，过了就作废、删掉一次性钥匙行 */
 export const PAIR_TTL_MS = 10 * 60 * 1000
-/** 手机登记后等出码的一方允许的最长时间，过了按拒绝处理（配对本身还在有效期里的话回到等扫码） */
+/** 手机登记后等出码的一方允许的最长时间，过了按拒绝处理：配对作废（rejected），手机收到 timeout */
 export const PAIR_DECIDE_TIMEOUT_MS = 2 * 60 * 1000
 /** 手机名最长多少个字（UTF-16 码元）；设备进程去掉控制字符、截断 */
 export const PAIR_PHONE_NAME_MAX = 64

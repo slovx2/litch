@@ -35,7 +35,11 @@ async function launch(root: string): Promise<{ parent: ChildProcess; device: num
     })
     setInterval(() => {}, 1000)
   `
-  const parent = spawn(process.execPath, ['-e', script], { stdio: ['ignore', 'pipe', 'inherit'] })
+  const parent = spawn(process.execPath, ['-e', script], {
+    // 设备进程起来时会清钥匙文件里的一次性配对钥匙行：指到临时目录里，不碰这台机器真的 ~/.ssh
+    env: { ...process.env, LITCH_AUTHORIZED_KEYS: join(root, 'authorized_keys') },
+    stdio: ['ignore', 'pipe', 'inherit'],
+  })
   const device = await new Promise<number>((resolve, reject) => {
     let seen = ''
     const timer = setTimeout(() => reject(new Error('设备进程 30 秒没有就绪')), 30_000)
