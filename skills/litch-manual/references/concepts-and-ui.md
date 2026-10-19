@@ -80,9 +80,18 @@ together with a save bar. See `devices.md` and `device-settings.md`.
 Sections in order: **Appearance** (skin, theme, density, zoom), **Language**, **Devices** (a shortcut
 to the Devices page), **Built-in browser** (links, always-allowed sites, clear browsing data),
 **Computer Use** (macOS and Windows only: permissions or helper status, always-allowed apps),
-**Notifications** (scheduled tasks), **Shortcuts** (read-only list), **About** (version, updates,
-licenses). Litch may also have a section for this manual (the switch that installs it into local
-harnesses).
+**Notifications** (scheduled tasks), **Config assistant** (section id `assist`: the switch that
+installs this manual into local harnesses and where it went, "Open config assistant", "Show the
+welcome guide again"), **Shortcuts** (read-only list), **About** (version, updates, licenses).
+
+### Welcome guide and config assistant
+
+On first launch Litch shows a two-step welcome guide over the main area: if no harness on this
+computer is usable it lists the supported harnesses with one-click install buttons and links to the
+official instructions; once one works it suggests the config assistant. The **Config assistant**
+button under the new-session title (also in Settings → Config assistant) opens the new-session page on
+this computer with `/litch-manual` and "Use the Litch manual to help me configure: " filled in; the
+user finishes the sentence and sends it to the harness they picked.
 
 ### Scheduled tasks
 
