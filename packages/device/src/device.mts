@@ -6,6 +6,7 @@ import { CLIENT_TOOL_NAMESPACE } from '../../protocol/src/client-tools.mjs'
 import { EXTENSION } from '../../protocol/src/device.mjs'
 import { HARNESS_INSTALL_NOTIFICATION } from '../../protocol/src/device-harness-install.mjs'
 import type { DeviceSettingsSnapshot } from '../../protocol/src/device-settings.mjs'
+import { HARNESS_CONFIG_NOTIFICATION } from '../../protocol/src/harness-config.mjs'
 import { ClientToolInvoker } from './client-tool-invoke.mjs'
 import { ClientToolRouter } from './client-tools.mjs'
 import type { ControlChannel, ControlState } from './control.mjs'
@@ -172,6 +173,9 @@ export class DeviceServer {
     if (this.control) info.extensions.push(EXTENSION.harnessInstall)
     // 可重连的终端：进程可以属于设备
     info.extensions.push(EXTENSION.deviceProcesses)
+    // harness 详情设置：统一模式（只是文件操作）由设备进程做，原生 codex 的 litch/harness/* 由设备进程替它翻译。
+    // 各引擎自己支不支持看它们各自的声明
+    info.extensions.push(EXTENSION.harnessConfig)
     const log = options.log ?? (() => {})
     // 扫码绑定手机：一起来就清掉上次留下的一次性钥匙行；拿不到适配器命令行、Windows 管理员账号时不列这项扩展
     this.pairing = options.pairing
@@ -275,6 +279,9 @@ export class DeviceServer {
       sessionTree: this.sessionTree,
       sessionTreeOn: () => this.sessionTreeOn(),
       pairing: this.pairing,
+      harnessConfigChanged: (params) =>
+        this.announce(HARNESS_CONFIG_NOTIFICATION.changed, params, EXTENSION.harnessConfig),
+      harnessEnvNames: (harness) => this.harnessEnvNames(harness),
       reachable: () => this.importer?.kick(),
       importing: () => {
         this.importer?.kick()
@@ -346,6 +353,13 @@ export class DeviceServer {
       this.dialed.set(socket, connect)
     }
     return connect
+  }
+
+  /** 设备设置里 `harness.<id>.env` 填了哪些变量名（值是密钥的读不到，名字够了） */
+  private harnessEnvNames(harness: string): string[] {
+    const entries = this.control?.state?.snapshot.values[`harness.${harness}.env`]
+    if (!Array.isArray(entries)) return []
+    return entries.flatMap((entry) => (typeof entry?.name === 'string' ? [entry.name] : []))
   }
 
   /** 设置里“会话编排”开着没有。没有设置功能（没有主进程在管）时按开着算 */

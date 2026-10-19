@@ -24,6 +24,7 @@ import type {
 } from '../../protocol/src/harness-capabilities.mjs'
 import { HARNESS_IDENTITY } from '../../protocol/src/harness-identity.mjs'
 import { builtinPreset, PRESET } from '../../shared/src/harness-declaration.mjs'
+import { CodexHarnessConfig } from './codex-harness-config.mjs'
 import { ADAPTER_DIALECT, type Ask, type UpstreamDialect, withoutOptOut } from './dialect.mjs'
 import { isObject } from './wire.mjs'
 
@@ -197,13 +198,17 @@ export const NATIVE_CODEX_DIALECT: UpstreamDialect = {
   // 它把动态工具的调用发给所有订阅连接（实测），litch_ 命名空间的由设备进程挑执行方
   clientToolsByDevice: true,
 
+  // 它不认识 litch/harness/*：设备进程翻译成它自己的 config/*、account/*、mcpServer/* 等
+  harnessConfig: (context) => new CodexHarnessConfig(context),
+
   async describe(initialized, ask) {
     const version = isObject(initialized) ? codexVersion(initialized.userAgent) : null
     const declaration: Required<HarnessDeclaration> = {
       ...HARNESS_IDENTITY.codex,
       // 它不认识我们的任何扩展。“拒绝时附说明”也没有：它的拒绝带不了话。
-      // 客户端工具是设备进程替它做的（client-tools.mts），经聚合面连到它时成立
-      extensions: [EXTENSION.clientTools],
+      // 客户端工具是设备进程替它做的（client-tools.mts），经聚合面连到它时成立；
+      // harness 详情设置也是设备进程替它翻译的（codex-harness-config.mts）
+      extensions: [EXTENSION.clientTools, EXTENSION.harnessConfig],
       features: codexFeatures(),
       permissionPresets: await allowedPresets(ask),
     }

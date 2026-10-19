@@ -6,6 +6,7 @@
 import { isClientToolNamespace } from '../../protocol/src/client-tools.mjs'
 import { EXTENSION } from '../../protocol/src/device.mjs'
 import type { DeviceTools } from './device-tools.mjs'
+import { isHarnessConfigNotification } from './harness-config.mjs'
 import type { ThreadIndex } from './thread-index.mjs'
 import type { ForwardedRequest, UpstreamLink } from './upstream.mjs'
 import { DeviceError, type Frame, idKey, isObject, type RpcId, toRpcError } from './wire.mjs'
@@ -27,6 +28,8 @@ export interface RelayHost {
   clientTools: RelayClientTools
   /** 由设备进程自己执行的命名空间：这类 item/tool/call 不管哪种上游都在这里拦下交给它（device-tools.mts） */
   deviceTools: Pick<DeviceTools, 'has' | 'dispatch' | 'turnEnded'>
+  /** 上游的每条通知都给看一眼（替原生 codex 翻译 harness 详情设置的，要从里面看登录的结果）。只看不改 */
+  observe(link: UpstreamLink, method: string, params: Record<string, unknown>): void
   /** 会话树要看的几样（session-tree.mts） */
   sessions: RelaySessions
 }
@@ -299,6 +302,9 @@ export class Relay {
         this.host.clientTools.turnBegan(link, threadId, turn.id)
       if (fields) this.host.sessions.turnEvent(link.harness, method, fields)
     }
+    if (fields) this.host.observe(link, method, fields)
+    // harness 详情设置的通知（引擎发的配置变了、登录有进展）只给声明过这项扩展的连接
+    if (isHarnessConfigNotification(method) && !this.host.declares(EXTENSION.harnessConfig)) return
     if (this.host.optedOut(method)) return
     // 带会话标识的通知原样转发；不带的（账号变化、MCP 状态、技能变化、限额等）加上是哪个 harness 发的
     if (threadId === null) {

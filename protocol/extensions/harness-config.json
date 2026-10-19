@@ -1,6 +1,6 @@
 {
   "extension": "harnessConfig",
-  "status": "草案（2026-10-19 主线落的约定；设备进程线补齐 JSON Schema、规则和兼容性测试）",
+  "status": "已定（2026-10-19 主线落的约定，设备进程线补齐 JSON Schema、规则和兼容性测试）",
   "description": "harness 详情设置：每台设备上每个 harness 的配置项、账号与 provider、MCP 服务、用户级指令文件。读写的是 harness 自己的原生配置（和设备上的命令行共用）。litch/harness/* 带 harness 参数，聚合面转给那个引擎；原生 codex 由设备进程翻译成它自己的 config/*、account/*、mcpServer/*、fs/*。litch/device/instructions/* 由设备进程自己处理（统一模式：一份正文、其余改成软链）。类型在 packages/protocol/src/harness-config.mts。",
   "appliesTo": "只有聚合面。runtime/info 的 device.extensions 里列了 harnessConfig，设备进程才认 litch/device/instructions/* 并替原生 codex 翻译；别的 harness 支不支持，看它声明（HarnessDeclaration）的 extensions 里有没有 harnessConfig。每个 harness 自己的入口（兼容面）上没有这个扩展的任何内容。",
   "declaration": {
@@ -8,9 +8,1454 @@
     "where": "initialize.params.capabilities.litchExtensions",
     "schema": {
       "type": "array",
-      "items": { "type": "string" },
-      "contains": { "const": "harnessConfig" }
+      "items": {
+        "type": "string"
+      },
+      "contains": {
+        "const": "harnessConfig"
+      }
     }
   },
-  "undeclared": "没声明的连接收不到这两个通知，方法照样能调；登录的进展要靠再调 providers/read 才知道。"
+  "undeclared": "没声明的连接收不到这两个通知，方法照样能调；登录的进展要靠再调 providers/read 才知道。",
+  "rules": [
+    "路由：litch/harness/* 都带 harness 参数，聚合面按它转给那个 harness 的引擎，harness 参数原样带过去（别的方法上它会被摘掉）；那个 harness 现在连不上时聚合面直接回 unavailable，不转；harness 不在这台设备上回 harness 扩展的 unknownHarness。litch/device/instructions/* 由设备进程自己做。",
+    "通知：litch/harness/config/changed、litch/harness/auth/updated 只发给握手时在 capabilities.litchExtensions 里列了 harnessConfig 的连接，引擎发来的也在聚合面上按这一条拦；没声明的连接、官方桌面端、每个 harness 自己的入口上线上内容和以前逐字段相同。通知受 optOutNotificationMethods 约束。",
+    "版本：config/read、providers/read、mcp/read 的 version 是不透明的字符串，写的时候原样带回。同一个 harness 的这几块落在同一个文件上时可以是同一个版本（原生 codex 三块都是 config.toml 用户层的版本），改了其中一块，另外两块的旧版本也就作废了。",
+    "原生配置为准：读写的是 harness 自己的配置文件，和设备上的命令行共用；只改要改的键，文件里认不出的内容和注释原样保留。values 里只有原生配置里写了的项，没写的界面显示 default。",
+    "生效：effect 为 harness 的项被改了，写入应答的 restartRequired 为 true，客户端提示后调 deviceSettings 的 litch/device/harness/restart（引擎自己不重启自己）；provider 的 env 方式写的是设备设置，本来就要重启。",
+    "密钥：OAuth 的凭据留在 harness 自己的存储（钥匙串、各家 auth.json）。API key 官方有地方存的经 auth/start 交给 harness 存；只认环境变量的（methods 里 kind 为 env，envName 是变量名）客户端直接写设备设置的 harness.<id>.env，不经 auth/*，这里也读不回它的值，providers/read 只按设备设置里有没有这个变量名报 signedIn。",
+    "登录的进展：openUrl、deviceCode 之后的结果经 auth/updated 告诉发起这次登录的那条连接；成了以后 litch/harness/config/changed（part 为 providers，MCP 的是 mcp）告诉所有声明过的连接。callbackPort 不为 null 时授权完会回调到设备上这个端口，设备不是本机时客户端要先把本机同一端口经 ssh -L 转发到设备（只有桌面端做）。",
+    "原生 codex（设备进程翻译，依据开源 codex rust-v0.162.0-alpha.20 与 codex 0.160.0 实测）：配置项的键就是 config.toml 的键路径，段里有点、斜杠的加引号（hooks.state.\"<hook 的 key>\".enabled）；两个例外是技能 skills.\"<SKILL.md 的路径>\"（写走 skills/config/write，codex 才会清它的技能缓存）和 hooks.state.\"<key>\".trusted（写成 trusted_hash = hook 现在的 currentHash，false 是删掉）。写一律用 config/batchWrite 带 filePath（用户层的 config.toml）和 expectedVersion，不写 profiles.*。实验特性只列 beta 阶段的，写 features.<名字>，effect 为 harness。记忆是 features.memories 和 memories.*，清空是动作 memory.reset（memory/reset）。",
+    "原生 codex 的 provider：openai（ChatGPT 浏览器登录 chatgpt、设备码 chatgptDeviceCode、API key apiKey，凭据由 codex 存；按 requirements 的 allowedLoginMethods 筛）、ollama、lmstudio 是自带的；自定义的是 model_providers.<id>，模板 openaiCompatible（name、base_url、wire_api、env_key、env_key_instructions、requires_openai_auth），写定义时 requires_openai_auth 默认 false、wire_api 默认 responses，ChatGPT 的登录不动，两者并存。切换写 model_provider，切到不存在的 provider 回 notFound（codex 会因此读不了配置）；删掉在用的那个时一并删掉 model_provider。codex 同一时刻只有一次登录，新开的会让进行中的那次以失败结束（也会有 auth/updated）。在用的 provider 不用 OpenAI 登录时 codex 的 account/read 不报账号，这时 openai 的状态从 auth.json 里看类型和邮箱，凭据存在钥匙串里时报不知道（signedIn false，带 detail）。",
+    "原生 codex 的 MCP：mcp_servers.<名字>，有 command 的是 stdio、有 url 的是 http（codex 没有 sse）；名字只能用字母、数字和 - _。改完调 config/mcpServer/reload，不用重启。状态来自 mcpServerStatus/list（最多等 8 秒，等不到是 null）：没开是 disabled，authStatus 为 notLoggedIn 是 needsAuth，有 toolsError 是 failed。mcp/login 是 mcpServer/oauth/login，回调端口从授权链接的 redirect_uri 取。",
+    "原生 codex 的指令文件：$CODEX_HOME/AGENTS.md（codexHome 来自它的握手应答），设备进程直接读写；同一目录的 AGENTS.override.md 不是空的时 codex 用它，overriddenBy 是它的路径。",
+    "统一模式：source 写成真文件（它原来是软链的先删掉链接）；linkPaths 里父目录不存在的 skipped，已经指向 source 的软链 linked、backup 为 null，已有的文件（或指向别处的软链）先改名备份到原文件旁边的 <原名>.litch-backup-<本地时间 YYYYMMDD-HHMMSS>（同一秒撞名再加 -1、-2），再建指向 source 的软链（绝对路径）；建不了（Windows 没有权限：EPERM、EACCES 等）写一份副本、outcome 为 copied。是目录的回 invalidValue。退出统一模式只换指向 source 的软链。这两个方法回的错误里 harness 是空串。"
+  ],
+  "parts": [
+    {
+      "kind": "ClientRequest",
+      "method": "litch/harness/config/read",
+      "description": "读这个 harness 的配置项：分组、每一项的结构、原生配置里写了的值、被更高一层盖住的、动作、版本、落在哪些文件上。结构每次现读（模型列表、实验特性、技能等是动态的）。",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "harness": {
+            "type": "string"
+          }
+        },
+        "required": ["harness"]
+      },
+      "response": {
+        "$ref": "#/definitions/HarnessConfigReadResponse"
+      }
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/harness/config/write",
+      "description": "写若干项，要么全写要么全不写。expectedVersion 对不上回 versionConflict；没有这一项回 notFound；锁住的回 readOnly；值不对回 invalidValue（data.key 是哪一项）。value 为 null 是删掉这个键回到默认。",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "harness": {
+            "type": "string"
+          },
+          "edits": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/definitions/HarnessConfigEdit"
+            }
+          },
+          "expectedVersion": {
+            "type": "string"
+          }
+        },
+        "required": ["harness", "edits", "expectedVersion"]
+      },
+      "response": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "version": {
+            "type": "string"
+          },
+          "overriddenKeys": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "restartRequired": {
+            "type": "boolean"
+          }
+        },
+        "required": ["version", "overriddenKeys", "restartRequired"]
+      }
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/harness/config/action",
+      "description": "执行 config/read 的 actions 里列的一个动作。要确认的（confirm 不为 null）由客户端先问用户。没有这个动作回 notFound。",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "harness": {
+            "type": "string"
+          },
+          "actionId": {
+            "type": "string"
+          }
+        },
+        "required": ["harness", "actionId"]
+      },
+      "response": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      }
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/harness/providers/read",
+      "description": "列 provider：每个的登录状态、能用的登录方式、是不是当前在用的；自定义 provider 的模板。",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "harness": {
+            "type": "string"
+          }
+        },
+        "required": ["harness"]
+      },
+      "response": {
+        "$ref": "#/definitions/HarnessProvidersReadResponse"
+      }
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/harness/providers/upsert",
+      "description": "新增或整条替换一个自定义 provider。definition 的字段照所用模板的声明，模板以外的原有字段保留；密钥字段不给表示不改。",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "harness": {
+            "type": "string"
+          },
+          "providerId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$"
+          },
+          "templateId": {
+            "type": "string"
+          },
+          "definition": {
+            "type": "object"
+          },
+          "expectedVersion": {
+            "type": "string"
+          }
+        },
+        "required": ["harness", "providerId", "templateId", "definition", "expectedVersion"]
+      },
+      "response": {
+        "$ref": "#/definitions/HarnessProvidersWriteResponse"
+      }
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/harness/providers/remove",
+      "description": "删掉一个自定义 provider。删的正是在用的那个时 harness 退回它的默认 provider。",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "harness": {
+            "type": "string"
+          },
+          "providerId": {
+            "type": "string"
+          }
+        },
+        "required": ["harness", "providerId"]
+      },
+      "response": {
+        "$ref": "#/definitions/HarnessProvidersWriteResponse"
+      }
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/harness/providers/activate",
+      "description": "切换当前在用的 provider（providers/read 的 switchable 为 true 才有）。没有这个 provider 回 notFound；管理员固定了 provider 回 readOnly。",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "harness": {
+            "type": "string"
+          },
+          "providerId": {
+            "type": "string"
+          },
+          "expectedVersion": {
+            "type": "string"
+          }
+        },
+        "required": ["harness", "providerId", "expectedVersion"]
+      },
+      "response": {
+        "$ref": "#/definitions/HarnessProvidersWriteResponse"
+      }
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/harness/auth/start",
+      "description": "开始一次登录或设置 API key。应答是第一步，之后的进展经 auth/updated 通知给发起它的连接。env 方式不经这里（客户端直接写设备设置的 harness.<id>.env），调了回 invalidValue。",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "harness": {
+            "type": "string"
+          },
+          "providerId": {
+            "type": "string"
+          },
+          "methodId": {
+            "type": "string"
+          },
+          "inputs": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["harness", "providerId", "methodId"]
+      },
+      "response": {
+        "$ref": "#/definitions/HarnessAuthStartResponse"
+      }
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/harness/auth/continue",
+      "description": "交上一步 prompt 要的东西（粘贴的授权码、表单）。应答是下一步。没有这次登录回 notFound；这一步不要输入回 invalidValue。",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "harness": {
+            "type": "string"
+          },
+          "attemptId": {
+            "type": "string"
+          },
+          "inputs": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["harness", "attemptId", "inputs"]
+      },
+      "response": {
+        "$ref": "#/definitions/HarnessAuthStartResponse"
+      }
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/harness/auth/cancel",
+      "description": "取消进行中的登录。没有这次登录回 notFound。",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "harness": {
+            "type": "string"
+          },
+          "attemptId": {
+            "type": "string"
+          }
+        },
+        "required": ["harness", "attemptId"]
+      },
+      "response": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      }
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/harness/auth/logout",
+      "description": "登出或清掉这个 provider 的凭据（canLogout 为 true 才有）。",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "harness": {
+            "type": "string"
+          },
+          "providerId": {
+            "type": "string"
+          }
+        },
+        "required": ["harness", "providerId"]
+      },
+      "response": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      }
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/harness/mcp/read",
+      "description": "列用户级的 MCP 服务、各自的连接状态（不知道是 null）、支持的传输、extra 里能有的字段。",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "harness": {
+            "type": "string"
+          }
+        },
+        "required": ["harness"]
+      },
+      "response": {
+        "$ref": "#/definitions/HarnessMcpReadResponse"
+      }
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/harness/mcp/upsert",
+      "description": "新增或整条替换一个 MCP 服务。改名时 previousName 给原来的名字。env 里 secretKeys 列了名字、值没给或是空串的保留原值。",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "harness": {
+            "type": "string"
+          },
+          "previousName": {
+            "type": "string"
+          },
+          "server": {
+            "$ref": "#/definitions/HarnessMcpServer"
+          },
+          "expectedVersion": {
+            "type": "string"
+          }
+        },
+        "required": ["harness", "server", "expectedVersion"]
+      },
+      "response": {
+        "$ref": "#/definitions/HarnessMcpWriteResponse"
+      }
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/harness/mcp/remove",
+      "description": "删掉一个 MCP 服务。",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "harness": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "expectedVersion": {
+            "type": "string"
+          }
+        },
+        "required": ["harness", "name", "expectedVersion"]
+      },
+      "response": {
+        "$ref": "#/definitions/HarnessMcpWriteResponse"
+      }
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/harness/mcp/login",
+      "description": "MCP 服务的 OAuth 登录。应答和通知的形状同 auth/*（通知里带 mcpServer，不带 providerId）。",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "harness": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": ["harness", "name"]
+      },
+      "response": {
+        "$ref": "#/definitions/HarnessAuthStartResponse"
+      }
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/harness/instructions/read",
+      "description": "读这个 harness 的用户级指令文件。",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "harness": {
+            "type": "string"
+          }
+        },
+        "required": ["harness"]
+      },
+      "response": {
+        "$ref": "#/definitions/HarnessInstructionsInfo"
+      }
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/harness/instructions/write",
+      "description": "整个写进去。expectedHash 是读到时的 hash（文件不存在时是空串），对不上回 versionConflict。路径是软链时写到它指向的文件，软链不动。",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "harness": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "expectedHash": {
+            "type": "string"
+          }
+        },
+        "required": ["harness", "content", "expectedHash"]
+      },
+      "response": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "hash": {
+            "type": "string"
+          }
+        },
+        "required": ["hash"]
+      }
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/device/instructions/unify",
+      "description": "统一模式：content 写进 sourcePath（真文件），linkPaths 里每个已有的文件（不是已经指向 sourcePath 的软链）先备份再换成指向 sourcePath 的软链；父目录不存在的跳过；建软链失败的写副本。路径都要是绝对路径、文件名是 AGENTS.md 或 CLAUDE.md，不是的回 invalidValue。",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "sourcePath": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "linkPaths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["sourcePath", "content", "linkPaths"]
+      },
+      "response": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/DeviceInstructionsLinkResult"
+            }
+          }
+        },
+        "required": ["results"]
+      }
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/device/instructions/separate",
+      "description": "退出统一模式：linkPaths 里指向 sourcePath 的软链换成 sourcePath 当前内容的副本，别的不动。",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "sourcePath": {
+            "type": "string"
+          },
+          "linkPaths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["sourcePath", "linkPaths"]
+      },
+      "response": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "separated": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["separated"]
+      }
+    },
+    {
+      "kind": "ServerNotification",
+      "method": "litch/harness/config/changed",
+      "description": "某个 harness 的配置、provider、MCP 或指令文件经这套接口被改了，别的连接该重读。发给所有声明了 harnessConfig 的连接，发起改动的那条也收。不保证覆盖命令行或手改文件的改动。",
+      "params": {
+        "$ref": "#/definitions/HarnessConfigChangedNotification"
+      }
+    },
+    {
+      "kind": "ServerNotification",
+      "method": "litch/harness/auth/updated",
+      "description": "一次登录（auth/start 或 mcp/login 开的）有了新进展。只发给发起它的那条连接，而且要它声明了 harnessConfig。",
+      "params": {
+        "$ref": "#/definitions/HarnessAuthUpdatedNotification"
+      }
+    },
+    {
+      "kind": "Error",
+      "description": "这个扩展自己回的错误：JSON-RPC 的 code 一律是 -32000，原因在 error.data.litch，给人看的两种语言在 error.data.message。harness 参数指的 harness 不在这台设备上时回 harness 扩展的 unknownHarness。上游 harness 自己回的别的错误原样带回。",
+      "data": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "litch": {
+            "enum": [
+              "versionConflict",
+              "readOnly",
+              "invalidValue",
+              "notFound",
+              "authFailed",
+              "unavailable"
+            ]
+          },
+          "harness": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "message": {
+            "$ref": "#/definitions/HarnessText"
+          }
+        },
+        "required": ["litch", "harness"]
+      },
+      "errors": [
+        {
+          "litch": "versionConflict",
+          "code": -32000,
+          "description": "expectedVersion / expectedHash 对不上：重读再改"
+        },
+        {
+          "litch": "readOnly",
+          "code": -32000,
+          "description": "这一项被更高一层（管理员、requirements）锁住了，或者 harness 不允许写（data.key 是哪一项）"
+        },
+        {
+          "litch": "invalidValue",
+          "code": -32000,
+          "description": "值或参数不合法（data.key 是哪一项）"
+        },
+        {
+          "litch": "notFound",
+          "code": -32000,
+          "description": "没有这个键、provider、MCP 服务、动作或登录"
+        },
+        {
+          "litch": "authFailed",
+          "code": -32000,
+          "description": "登录失败、被取消、超时"
+        },
+        {
+          "litch": "unavailable",
+          "code": -32000,
+          "description": "这个 harness 没装、没在跑，或者没连上，读不了它的配置"
+        }
+      ]
+    }
+  ],
+  "definitions": {
+    "HarnessText": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "zh-CN": {
+          "type": "string"
+        },
+        "en": {
+          "type": "string"
+        }
+      },
+      "required": ["zh-CN", "en"]
+    },
+    "HarnessParams": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "harness": {
+          "type": "string"
+        }
+      },
+      "required": ["harness"]
+    },
+    "HarnessSettingType": {
+      "enum": [
+        "boolean",
+        "integer",
+        "number",
+        "string",
+        "text",
+        "enum",
+        "stringList",
+        "path",
+        "secret",
+        "json"
+      ]
+    },
+    "HarnessSettingEffect": {
+      "enum": ["none", "newSession", "harness"]
+    },
+    "HarnessSettingOption": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "type": "string"
+        },
+        "title": {
+          "$ref": "#/definitions/HarnessText"
+        },
+        "description": {
+          "$ref": "#/definitions/HarnessText"
+        }
+      },
+      "required": ["value", "title"]
+    },
+    "HarnessSettingValue": {
+      "description": "boolean、数字、字符串、字符串数组、密钥读到的 {set}、json 类型的对象或数组",
+      "type": ["boolean", "number", "string", "array", "object"]
+    },
+    "HarnessSettingSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "group": {
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/definitions/HarnessSettingType"
+        },
+        "title": {
+          "$ref": "#/definitions/HarnessText"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/HarnessText"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "default": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/HarnessSettingValue"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "effect": {
+          "$ref": "#/definitions/HarnessSettingEffect"
+        },
+        "clearable": {
+          "type": "boolean"
+        },
+        "readOnly": {
+          "type": "boolean"
+        },
+        "readOnlyReason": {
+          "$ref": "#/definitions/HarnessText"
+        },
+        "minimum": {
+          "type": "number"
+        },
+        "maximum": {
+          "type": "number"
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/HarnessSettingOption"
+          }
+        },
+        "allowCustom": {
+          "type": "boolean"
+        },
+        "placeholder": {
+          "type": "string"
+        }
+      },
+      "required": ["key", "group", "type", "title", "description", "default", "effect"]
+    },
+    "HarnessSettingGroup": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "$ref": "#/definitions/HarnessText"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/HarnessText"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["id", "title", "description"]
+    },
+    "HarnessConfigAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "group": {
+          "type": "string"
+        },
+        "title": {
+          "$ref": "#/definitions/HarnessText"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/HarnessText"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "confirm": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/HarnessText"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "danger": {
+          "type": "boolean"
+        }
+      },
+      "required": ["id", "group", "title", "description", "confirm"]
+    },
+    "HarnessConfigFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "role": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": ["role", "path"]
+    },
+    "HarnessConfigReadResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "groups": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/HarnessSettingGroup"
+          }
+        },
+        "settings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/HarnessSettingSpec"
+          }
+        },
+        "values": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/HarnessSettingValue"
+          }
+        },
+        "overridden": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "value": {
+                "$ref": "#/definitions/HarnessSettingValue"
+              },
+              "by": {
+                "$ref": "#/definitions/HarnessText"
+              }
+            },
+            "required": ["value", "by"]
+          }
+        },
+        "actions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/HarnessConfigAction"
+          }
+        },
+        "version": {
+          "type": "string"
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/HarnessConfigFile"
+          }
+        }
+      },
+      "required": ["groups", "settings", "values", "actions", "version", "files"]
+    },
+    "HarnessConfigEdit": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/HarnessSettingValue"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["key", "value"]
+    },
+    "HarnessAuthMethodKind": {
+      "enum": ["oauthBrowser", "oauthDeviceCode", "oauthPaste", "apiKey", "env"]
+    },
+    "HarnessAuthField": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "$ref": "#/definitions/HarnessText"
+        },
+        "secret": {
+          "type": "boolean"
+        },
+        "optional": {
+          "type": "boolean"
+        },
+        "placeholder": {
+          "type": "string"
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/HarnessSettingOption"
+          }
+        }
+      },
+      "required": ["id", "title", "secret"]
+    },
+    "HarnessAuthMethod": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/definitions/HarnessAuthMethodKind"
+        },
+        "title": {
+          "$ref": "#/definitions/HarnessText"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/HarnessText"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/HarnessAuthField"
+          }
+        },
+        "envName": {
+          "type": "string"
+        },
+        "effect": {
+          "$ref": "#/definitions/HarnessSettingEffect"
+        }
+      },
+      "required": ["id", "kind", "title", "description"]
+    },
+    "HarnessProviderAuthState": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "signedIn": {
+          "type": "boolean"
+        },
+        "kind": {
+          "enum": ["oauth", "apiKey", "env", "none"]
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "detail": {
+          "$ref": "#/definitions/HarnessText"
+        }
+      },
+      "required": ["signedIn", "kind", "label"]
+    },
+    "HarnessProvider": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "$ref": "#/definitions/HarnessText"
+        },
+        "kind": {
+          "enum": ["builtin", "custom"]
+        },
+        "auth": {
+          "$ref": "#/definitions/HarnessProviderAuthState"
+        },
+        "methods": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/HarnessAuthMethod"
+          }
+        },
+        "active": {
+          "type": "boolean"
+        },
+        "definition": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/HarnessSettingValue"
+          }
+        },
+        "templateId": {
+          "type": "string"
+        },
+        "canLogout": {
+          "type": "boolean"
+        }
+      },
+      "required": ["id", "title", "kind", "auth", "methods", "active", "canLogout"]
+    },
+    "HarnessProviderTemplate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "$ref": "#/definitions/HarnessText"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/HarnessText"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/HarnessSettingSpec"
+          }
+        }
+      },
+      "required": ["id", "title", "description", "fields"]
+    },
+    "HarnessProvidersReadResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "providers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/HarnessProvider"
+          }
+        },
+        "switchable": {
+          "type": "boolean"
+        },
+        "templates": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/HarnessProviderTemplate"
+          }
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": ["providers", "switchable", "templates", "version"]
+    },
+    "HarnessProvidersWriteResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "type": "string"
+        },
+        "restartRequired": {
+          "type": "boolean"
+        }
+      },
+      "required": ["version", "restartRequired"]
+    },
+    "HarnessAuthStep": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "openUrl"
+            },
+            "url": {
+              "type": "string"
+            },
+            "callbackPort": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 65535
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "message": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/HarnessText"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "prompt": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/HarnessAuthField"
+              }
+            }
+          },
+          "required": ["kind", "url", "callbackPort", "message"]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "deviceCode"
+            },
+            "url": {
+              "type": "string"
+            },
+            "userCode": {
+              "type": "string"
+            },
+            "message": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/HarnessText"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": ["kind", "url", "userCode", "message"]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "prompt"
+            },
+            "fields": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/HarnessAuthField"
+              }
+            },
+            "message": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/HarnessText"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": ["kind", "fields", "message"]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "done"
+            },
+            "auth": {
+              "$ref": "#/definitions/HarnessProviderAuthState"
+            }
+          },
+          "required": ["kind", "auth"]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "failed"
+            },
+            "message": {
+              "$ref": "#/definitions/HarnessText"
+            }
+          },
+          "required": ["kind", "message"]
+        }
+      ]
+    },
+    "HarnessAuthStartResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "attemptId": {
+          "type": "string"
+        },
+        "step": {
+          "$ref": "#/definitions/HarnessAuthStep"
+        }
+      },
+      "required": ["attemptId", "step"]
+    },
+    "HarnessMcpTransport": {
+      "enum": ["stdio", "http", "sse"]
+    },
+    "HarnessMcpServer": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "transport": {
+          "$ref": "#/definitions/HarnessMcpTransport"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "command": {
+          "type": "string"
+        },
+        "args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "secretKeys": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "url": {
+          "type": "string"
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "bearerTokenEnvVar": {
+          "type": "string"
+        },
+        "extra": {
+          "type": "object"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "state": {
+                  "enum": ["connected", "failed", "needsAuth", "disabled", "unknown"]
+                },
+                "message": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": ["state", "message"]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["name", "transport", "enabled"]
+    },
+    "HarnessMcpReadResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "servers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/HarnessMcpServer"
+          }
+        },
+        "transports": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/HarnessMcpTransport"
+          }
+        },
+        "oauth": {
+          "type": "boolean"
+        },
+        "extraFields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/HarnessSettingSpec"
+          }
+        },
+        "version": {
+          "type": "string"
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/HarnessConfigFile"
+          }
+        }
+      },
+      "required": ["servers", "transports", "oauth", "extraFields", "version", "files"]
+    },
+    "HarnessMcpWriteResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "type": "string"
+        },
+        "restartRequired": {
+          "type": "boolean"
+        }
+      },
+      "required": ["version", "restartRequired"]
+    },
+    "HarnessInstructionsInfo": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "fileName": {
+          "enum": ["AGENTS.md", "CLAUDE.md"]
+        },
+        "exists": {
+          "type": "boolean"
+        },
+        "content": {
+          "type": "string"
+        },
+        "hash": {
+          "type": "string"
+        },
+        "linkTarget": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "overriddenBy": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["path", "fileName", "exists", "content", "hash", "linkTarget", "overriddenBy"]
+    },
+    "DeviceInstructionsLinkResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "outcome": {
+          "enum": ["linked", "copied", "skipped"]
+        },
+        "backup": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["path", "outcome", "backup"]
+    },
+    "HarnessConfigChangedNotification": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "harness": {
+          "type": "string"
+        },
+        "part": {
+          "enum": ["config", "providers", "mcp", "instructions"]
+        }
+      },
+      "required": ["harness", "part"]
+    },
+    "HarnessAuthUpdatedNotification": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "harness": {
+          "type": "string"
+        },
+        "attemptId": {
+          "type": "string"
+        },
+        "providerId": {
+          "type": "string"
+        },
+        "mcpServer": {
+          "type": "string"
+        },
+        "step": {
+          "$ref": "#/definitions/HarnessAuthStep"
+        }
+      },
+      "required": ["harness", "attemptId", "step"]
+    }
+  }
 }

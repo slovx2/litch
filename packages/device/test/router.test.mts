@@ -32,7 +32,14 @@ test('握手：没声明 harness 扩展的被拒绝并说明原因，声明了�
     assert.deepEqual(refused.data, {
       litch: 'extensionRequired',
       required: ['harness'],
-      supported: ['harness', 'deviceWorkspaces', 'deviceProcesses', 'deviceTasks', 'sessionTree'],
+      supported: [
+        'harness',
+        'deviceWorkspaces',
+        'deviceProcesses',
+        'harnessConfig',
+        'deviceTasks',
+        'sessionTree',
+      ],
     })
     assertErrorData(refused.data)
     // 被拒绝的连接没有连任何上游，也还是未初始化
@@ -135,6 +142,7 @@ test('runtime/info：设备信息和每个 harness 的状态，形状和扩展�
       'harness',
       'deviceWorkspaces',
       'deviceProcesses',
+      'harnessConfig',
       'deviceTasks',
       'sessionTree',
     ])
