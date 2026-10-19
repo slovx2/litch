@@ -1,0 +1,112 @@
+# Concepts and a tour of the UI
+
+## Concepts
+
+- **Device.** A machine Litch talks to. **Local** (中文「本机」) is this computer; Litch ships its own copy of
+  the adapter and starts a background *device service* for it. A **remote device** is another machine
+  reached over SSH that has the Litch adapter (the device service) installed, or only the Codex CLI.
+  Every device has a name, an id and a **wire color** (英文界面 "Color", 中文「线色」) that tints the
+  window when you work on it. See `devices.md`.
+- **Harness.** A coding agent that runs on a device: Claude Code, Codex, Pi, DSH (DeepSeek Harness),
+  OpenCode, Gemini CLI, Qwen Code, or a custom ACP agent. Litch does not bundle harnesses; it uses the
+  ones installed on each device, with their own sign-in and models. Each harness on each device can be
+  Ready, Unavailable (with a reason) or Disabled. See `harnesses.md`.
+- **Device service.** The adapter's resident process on a device. It gathers every harness on that
+  machine behind one connection, keeps terminals and scheduled tasks running when no client is
+  connected, and stores the device's settings (`device-settings.md`). It keeps running after Litch quits.
+- **Project** (中文「项目」). A folder on a device. Sessions of any harness in the same folder share the
+  project. Sessions can also live outside any project ("No project").
+- **Session** (also "conversation"; 中文「会话」「对话」). One conversation with one harness on one
+  device. Sessions can be forked, rolled back, archived, and can have **sub-sessions** (a session tree).
+  See `sessions-and-projects.md`.
+- **Group** (中文「组」). A sidebar folder you create on a device to collect sessions and projects.
+- **Skin.** The look of the whole app: **Retro** (default), **Literary** (internal name `human`,
+  中文「文艺」) and **Standard**, each in light or dark. See `appearance-and-preferences.md`.
+
+## Layout
+
+- **Title bar** (top): sidebar toggle, a breadcrumb "device / project / session" with the harness badge,
+  and on the right: the remote-activity marker (only when remote devices are running commands on this
+  computer or waiting for approval, see `operate-this-computer.md`), the terminal toggle and the side
+  panel toggle. The bar takes the current device's wire color.
+- **Sidebar** (left): **New session** button and a harness filter at the top; then one block per device
+  (device row with status, then Pinned, Groups, Projects, and "No project" sessions); at the bottom
+  **Scheduled tasks**, **Devices**, **Archived sessions** and **Settings**. Right-click or the "more"
+  button on a device, project or session row opens its menu (add project, new group, use on phone;
+  rename, pin, move, delete; schedule a task, start a sub-session, archive, delete).
+- **Main area**: the new-session page, a session, or one of the pages (Devices, Settings, Scheduled
+  tasks, Archived sessions).
+- **Side panel** (right) with tabs **Files**, **Diff**, **Browser**, **Subagents**. It follows the
+  current session's device and project.
+- **Terminal panel** (below the conversation). Terminals belong to a project and keep running on the
+  device when the connection drops.
+
+Open a page for the user with `scripts/litch open` (the argument is the page: `settings`,
+`settings/<section>`, `device <device>`, `tasks`, `new`; see `scripts/litch open --help`). This only
+changes what the window shows.
+
+## Pages
+
+### New session
+
+The default page. A prompt box with, below it, pickers for **Device** and **Project** (last item: Add
+project…), and in the composer bar: harness picker (only when more than one harness is ready), Model,
+Reasoning effort, Permissions (Read only / In project / Full access, or the harness's own presets) and
+the Plan switch where supported. The session is created when the first message is sent. Litch
+remembers the last device, project, harness and per-harness model/effort/permissions. When nothing can
+be started (no device, device offline, no ready harness) the page says why with an "Open Devices"
+button.
+
+### Session
+
+The transcript (messages, activity, to-dos, plans, file changes that open in the Diff tab), cards above
+the composer (approvals, questions, forms, browser and Computer Use approvals, "operate this computer"
+approvals, plan confirmation, sub-session proposals), and the composer. Details in
+`sessions-and-projects.md`.
+
+### Devices
+
+A list of devices (status, harnesses, activity) with **Add device**. A device's detail page has, from
+top to bottom: **This device** (reconnect, rename, edit connection, remove, wire color),
+**Use this computer** (built-in browser, Computer Use, and for remote devices "Operate this computer"),
+**Device service** (version, how it was started), **Phones** (paired phones, "Use on phone…"), and the
+management area: **Harnesses** (per-harness enable switch, restart, CLI path, environment variables),
+**SSH entries for the Codex desktop app**, **Reconnectable terminals**, **Scheduled tasks**,
+**Session orchestration**, **Diagnostics** and **Logs**. Changes in the management area are saved
+together with a save bar. See `devices.md` and `device-settings.md`.
+
+### Settings
+
+Sections in order: **Appearance** (skin, theme, density, zoom), **Language**, **Devices** (a shortcut
+to the Devices page), **Built-in browser** (links, always-allowed sites, clear browsing data),
+**Computer Use** (macOS and Windows only: permissions or helper status, always-allowed apps),
+**Notifications** (scheduled tasks), **Shortcuts** (read-only list), **About** (version, updates,
+licenses). Litch may also have a section for this manual (the switch that installs it into local
+harnesses).
+
+### Scheduled tasks
+
+Tasks grouped by device, **New task**, a detail view with runs. See `scheduled-tasks.md`.
+
+### Archived sessions
+
+Archived sessions per device: Restore, Open (read-only), Delete.
+
+## Status overview
+
+`scripts/litch status` prints devices and their connection state, harnesses and versions per device,
+tool switches, the number of paired phones, the app version, language and look. Run it first in every
+configuration conversation.
+
+## Keyboard shortcuts
+
+Shortcuts cannot be changed. The full list is in Settings → Shortcuts. The common ones (Mod is Cmd on
+macOS, Ctrl elsewhere): Mod+, settings; Mod+N new session; Mod+Shift+B sidebar; Ctrl+` terminal (also on
+macOS); Mod+Alt+B side panel; Mod+= / Mod+- / Mod+0 zoom; Enter send, Shift+Enter new line; in approval
+cards Enter approves and Esc declines; Esc leaves the Devices, Archived and Settings pages.
+
+## Composer commands
+
+Typing `/` in the composer lists built-in commands (`/new`, `/compact`, `/plan`, `/model`, `/effort`,
+`/permissions`, `/terminal`) and the harness's skills (this manual appears as `/litch-manual` in
+harnesses that list it). `@` searches files in the session's working folder.

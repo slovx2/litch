@@ -7,8 +7,10 @@
 //   别的照旧从仓库取。做法见 scripts/client-local-fixture.mjs 开头。
 //
 // 目录里有什么、怎么暂存出来的，在仓库根目录的 scripts/adapter-stage.mjs：独立发布包用的是同一份实现，
-// 两边的布局一样。这里只管桌面应用这一头的事：默认放在哪、目录名的规矩、旧的那份能不能清掉。
-import { existsSync, readdirSync, rmSync, statSync } from 'node:fs'
+// 两边的布局一样。这里只管桌面应用这一头的事：默认放在哪、目录名的规矩、旧的那份能不能清掉，
+// 以及只有桌面应用带的产品手册（skills/litch-manual，放在 skills/ 下；主进程启动时把它装进本机的 harness，
+// 见 src/manual-skill.mts）。独立发布包不带它：手册只装本机。
+import { cpSync, existsSync, readdirSync, rmSync, statSync } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { megabytes, STAGED_ENTRIES, stageAdapterTree } from '../../../scripts/adapter-stage.mjs'
@@ -17,6 +19,10 @@ import { OUT_DIR } from './packed.mjs'
 
 /** 默认的暂存位置。打包器按目录名把它放进应用，所以名字必须是 adapter */
 export const ADAPTER_STAGE = join(OUT_DIR, 'adapter')
+/** 产品手册的源，暂存到 <暂存目录>/skills/litch-manual */
+const MANUAL_SOURCE = fileURLToPath(new URL('../../../skills/litch-manual', import.meta.url))
+/** 暂存目录最外面一层的名字：适配器的那些，加上手册的 skills */
+const ENTRIES = [...STAGED_ENTRIES, 'skills']
 
 /** 这个位置能不能清空了重来：不存在、空的，或者看着就是上一次暂存出来的 */
 function assertDisposable(out) {
@@ -25,7 +31,7 @@ function assertDisposable(out) {
   if (!statSync(out).isDirectory()) throw new Error(`${out} 不是目录`)
   const entries = readdirSync(out)
   if (entries.length === 0) return
-  const strange = entries.filter((name) => !STAGED_ENTRIES.includes(name))
+  const strange = entries.filter((name) => !ENTRIES.includes(name))
   // 仓库根目录也长这样，单独挡住
   if (strange.length > 0 || existsSync(join(out, '.git')) || existsSync(join(out, 'cmd'))) {
     throw new Error(`${out} 里有不认识的东西（${strange.join('、')}），不敢清空。换一个位置`)
@@ -47,7 +53,11 @@ export async function stageAdapter({
   assertDisposable(target)
   rmSync(target, { recursive: true, force: true })
   try {
-    return await stageAdapterTree(target, { platform, arch, goFrom, deviceFrom })
+    const result = await stageAdapterTree(target, { platform, arch, goFrom, deviceFrom })
+    const manual = join(target, 'skills', 'litch-manual')
+    cpSync(MANUAL_SOURCE, manual, { recursive: true, filter: (src) => !src.endsWith('.DS_Store') })
+    if (!existsSync(join(manual, 'SKILL.md'))) throw new Error(`产品手册没有暂存成：${manual}`)
+    return result
   } catch (error) {
     // 半成品不留着，免得被当成一份完整的适配器拿去用
     rmSync(target, { recursive: true, force: true })

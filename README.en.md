@@ -72,6 +72,8 @@ Get it from the [releases page](https://github.com/slovx2/litch/releases/latest)
 
 The app ships with its own copy of the adapter and, when opened, gathers the Claude Code, Pi, DSH, OpenCode and codex installed on this machine under the device named Local; install and sign in to those harnesses separately. There is no installer for Intel Macs yet; run it from source there.
 
+It also installs a skill, the Litch manual (`litch-manual`, source in [`skills/litch-manual`](skills/litch-manual)), into the harnesses on this machine (`~/.agents/skills`, linked into `~/.claude/skills` and others), so an agent can explain Litch and change its settings through the `litch config` command; turn this off in Settings.
+
 ## Run from source
 
 Requires Node.js 24.

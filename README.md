@@ -72,6 +72,8 @@ Litch 致力于打造舒适的桌面客户端 + 远程连接体验。
 
 应用自带一份适配器，打开就把本机上装了的 Claude Code、Pi、DSH、OpenCode 和 codex 收在“本机”这台设备下；这些 harness 本身要另外装好并登录。Intel 芯片的 Mac 暂时没有安装包，可以从源码运行。
 
+它还会把一个技能“Litch 产品手册”（`litch-manual`，源文件在 [`skills/litch-manual`](skills/litch-manual)）装进本机的 harness（放在 `~/.agents/skills`，并链到 `~/.claude/skills` 等处），Agent 能照着它讲解 Litch、用 `litch config` 命令改设置；不想要可以在设置里关掉。
+
 ## 从源码运行
 
 需要 Node.js 24。

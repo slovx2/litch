@@ -3,6 +3,7 @@
 // 唯一的例外是客户端工具（内置浏览器、Computer Use）：核心把模型的工具调用交给这里登记的执行器（client-tools/），
 // 经手的只有那一次调用的参数和结果。
 import { spawn } from 'node:child_process'
+import { homedir } from 'node:os'
 import { isAbsolute, join, normalize, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { UPDATE_FEED_URL, type UpdateState } from '@litch/core'
@@ -56,6 +57,7 @@ import {
   UPDATE_STATE,
 } from './ipc.mjs'
 import { bundledAdapter, defaultAdapterHome, serviceEnv, stopIdleDevice } from './local-adapter.mjs'
+import { loginEnvironment } from './login-env.mjs'
 import {
   backdropOf,
   DEFAULT_LOOK,
@@ -66,6 +68,8 @@ import {
   type ShellLook,
   writeLook,
 } from './look.mjs'
+import { MANUAL_SET_ENABLED, MANUAL_STATUS } from './manual-ipc.mjs'
+import { createManualSkill } from './manual-skill.mjs'
 import { installMenu, type MenuLang } from './menu.mjs'
 import { readPreferences, writePreference } from './preferences.mjs'
 import {
@@ -132,6 +136,26 @@ const adapterRoot =
     : (process.env.LITCH_ADAPTER_ROOT ??
       (app.isPackaged ? join(process.resourcesPath, 'adapter') : ''))
 const UI_ORIGIN = 'app://ui'
+/**
+ * 产品手册（manual-skill.mts）：启动时装进本机各 harness 的技能目录。源文件在装好的应用里随内置适配器放在
+ * adapter/skills 下（scripts/stage-adapter.mjs），开发时直接用仓库里的。自检和截图不装：它们不许碰用户的主目录
+ */
+const manualSkill = createManualSkill({
+  dataDir: app.getPath('userData'),
+  version: app.getVersion(),
+  source:
+    smoke || !adapterRoot
+      ? null
+      : app.isPackaged
+        ? join(adapterRoot, 'skills', 'litch-manual')
+        : normalize(join(here, '../../../skills/litch-manual')),
+  adapterBin: smoke || !adapterRoot ? null : bundledAdapter(adapterRoot).bin,
+  ...(smoke ? { reason: 'Self-check runs do not install the manual' } : {}),
+  platform: process.platform,
+  home: homedir(),
+  environment: () => loginEnvironment(),
+  log: (line) => console.error(`[manual] ${line}`),
+})
 
 // 界面从自己的协议加载，不用 file://：这样它有一个正常的来源，内容安全策略里的 'self' 才成立，
 // 页面也碰不到安装目录之外的文件。这一句必须在应用就绪之前执行。
@@ -489,6 +513,12 @@ ipcMain.handle(COMPUTER_USE_FORGET_APP, (event, bundleId: unknown) =>
   fromUi(event) && computerUseSettings ? computerUseSettings.forgetApp(bundleId) : false,
 )
 
+// 产品手册：设置页“配置助手”一节的状态和开关（manual-skill.mts，形状在 manual-ipc.mts）
+ipcMain.handle(MANUAL_STATUS, (event) => (fromUi(event) ? manualSkill.status() : null))
+ipcMain.handle(MANUAL_SET_ENABLED, (event, on: unknown) =>
+  fromUi(event) && typeof on === 'boolean' ? manualSkill.setEnabled(on) : null,
+)
+
 // ---------- 应用自己的更新（updater.mts） ----------
 
 /**
@@ -774,6 +804,8 @@ if (!smoke && !app.requestSingleInstanceLock()) {
     browser = installBrowser({ isUiUrl, userData: app.getPath('userData') })
     clientTools.add(browser.executor)
     startCore()
+    // 产品手册装进本机的 harness：在后台做，不挡窗口
+    manualSkill.start()
     updater = createAppUpdater()
     updater?.start()
     // 菜单里的“检查更新…”要等更新器建出来才放

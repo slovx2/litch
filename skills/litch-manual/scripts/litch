@@ -1,0 +1,5 @@
+#!/bin/sh
+# Litch 的配置命令：把参数原样交给 Litch 自带适配器的 config 子命令，由正在运行的 Litch 桌面端执行。
+# Litch configuration command: hands its arguments to the bundled adapter's `config` subcommand, which
+# forwards them to the running Litch desktop app. Litch rewrites the path below every time it starts.
+exec "{{ADAPTER}}" config "$@"
