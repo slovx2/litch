@@ -108,6 +108,8 @@ export function sampleApp(_lang: SampleLang, now: number): AppView {
       machine: null,
       // 会话树：对话里说“派子会话”“提个子会话”“用子代理”各演一出（mock-tree.mts）
       sessionTree: true,
+      // 扫码绑定手机：出码之后过几秒“手机”来登记（mock-pairing.mts）
+      pairing: true,
     },
     {
       id: 'build',
@@ -134,6 +136,7 @@ export function sampleApp(_lang: SampleLang, now: number): AppView {
       // 08 号：远程设备“操作这台电脑”。示例里只有 build-01 开着
       machine: sampleMachineAccess('build'),
       sessionTree: true,
+      pairing: true,
     },
     {
       id: 'nas',
@@ -161,6 +164,7 @@ export function sampleApp(_lang: SampleLang, now: number): AppView {
       machine: sampleMachineAccess('nas'),
       // 只有原生 codex：没有设备服务，也就没有会话树
       sessionTree: false,
+      pairing: false,
     },
     {
       id: 'gpu',
@@ -194,6 +198,8 @@ export function sampleApp(_lang: SampleLang, now: number): AppView {
       tools: { browser: true, computer: false },
       machine: sampleMachineAccess('gpu'),
       sessionTree: true,
+      // 断开之前知道它支持；现在连不上，出不了码
+      pairing: true,
     },
   ]
   return { devices }

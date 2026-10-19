@@ -1,0 +1,179 @@
+/* 扫码绑定手机：出码对话框（devices/PairDialog.tsx）和设备详情里的“手机”一节（devices/PhonesSection.tsx）。
+   只用皮肤的变量；二维码一律白底黑块（--qr-paper、--qr-ink），不跟明暗走 */
+
+.modal.pair-dialog {
+  width: min(760px, calc(100vw - 48px));
+}
+
+/* 左边是码，右边是地址和状态；窄了上下摆 */
+.pair-main {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+.pair-code {
+  flex: none;
+  width: 248px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.pair-side {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+@media (max-width: 720px) {
+  .pair-main {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .pair-code {
+    align-self: center;
+  }
+}
+
+.qr {
+  display: block;
+  width: 248px;
+  height: 248px;
+  border-radius: var(--r2);
+  box-shadow: 0 0 0 1px var(--line-2);
+}
+.qr .qr-paper {
+  fill: var(--qr-paper);
+}
+.qr .qr-ink {
+  fill: var(--qr-ink);
+}
+/* 还没出来、作废了、地址没改对：一块空的底，占着位置，旁边的东西不跳 */
+.qr-empty {
+  background: var(--sunken);
+}
+.pair-timer {
+  min-height: 18px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-3);
+  text-align: center;
+}
+
+.pair-address {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  gap: 8px 12px;
+}
+.pair-address > legend {
+  padding: 0;
+  margin-bottom: 8px;
+}
+.pair-address > .modal-note {
+  grid-column: 1 / -1;
+}
+/* 一栏：标题在左、输入框在右，和网格的两列对齐 */
+.pair-field {
+  display: contents;
+}
+.pair-field-label {
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.pair-field .req-input[aria-invalid="true"] {
+  box-shadow: 0 0 0 1px var(--err);
+}
+.pair-original {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.pair-original > .ell {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.pair-state {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--r2);
+  background: var(--sunken);
+}
+.pair-line {
+  font-size: 13px;
+  line-height: 20px;
+}
+.pair-line.ok {
+  color: var(--ok);
+}
+.pair-confirm {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 12px;
+}
+.pair-digits {
+  font-size: 24px;
+  line-height: 32px;
+  letter-spacing: 0.08em;
+  color: var(--ink);
+}
+.pair-acts {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.pair-warn {
+  color: var(--wait);
+}
+.pair-fail .cfail-text b {
+  font-weight: 600;
+}
+
+/* 设备详情里的“手机”一节 */
+.phone-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+.phone-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-block: var(--row-pad);
+  border-bottom: 1px solid var(--line-1);
+}
+.phone-row:last-child {
+  border-bottom: 0;
+}
+.phone-main,
+.phone-ask {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--row-h);
+  min-width: 0;
+}
+.phone-name {
+  min-width: 0;
+  font-size: 13px;
+}
+.phone-date {
+  font-size: 12px;
+  color: var(--ink-3);
+  white-space: nowrap;
+}

@@ -20,6 +20,7 @@ import { CLIENT_TOOL, type ClientToolToCore, type ClientToolToMain } from './cli
 import { fileDeviceStore } from './device-store.mjs'
 import { ATTACH, LANGUAGE, TERMINALS } from './ipc.mjs'
 import { type AdapterLang, localDevice, upgradeReport } from './local-adapter.mjs'
+import { desktopPairing } from './pairing.mjs'
 import { discoverHosts } from './ssh/hosts.mjs'
 import { checkRemote, sshOpener } from './transport-ssh.mjs'
 
@@ -126,21 +127,27 @@ function createHost(): Core | MockCore {
   // LITCH_MOCK=1：不连任何设备，用示例数据。界面开发和不带入口的自检用
   // 示例数据用哪种语言由主进程定（LITCH_LANG），和界面的语言对上
   if (process.env.LITCH_MOCK === '1') {
+    // 扫码绑定手机的码多久作废：自检里试“到期自动换码”时调短，平时和真的一样
+    const pairTtlMs = Number(process.env.LITCH_MOCK_PAIR_TTL_MS)
     return createMockCore({
       clock,
       version,
       lang: process.env.LITCH_LANG === 'en' ? 'en' : 'zh-CN',
+      ...(pairTtlMs > 0 ? { pairTtlMs } : {}),
     })
   }
   // 设备配置和侧栏快照放在用户数据目录里，目录由主进程告诉我们
   const dataDir = process.env.LITCH_DATA_DIR
+  const desktop = desktopFacts()
   const core = createCore({
     clock,
     version,
     log: (line) => console.error(`[core] ${line}`),
     remote: { opener: sshOpener, discover: discoverHosts, check: checkRemote },
     clientTools: toolPort,
-    machine: { desktop: desktopFacts() },
+    machine: { desktop },
+    // 扫码绑定手机：一次性私钥的临时文件放在用户数据目录下；本机给手机看的名字用电脑名称
+    pairing: desktopPairing({ dataDir, localName: () => desktop.name }),
     ...(dataDir ? { store: fileDeviceStore(dataDir) } : {}),
     devices: [
       {

@@ -46,6 +46,7 @@ import {
 import { useKey, useServices } from '../app/services.tsx'
 import { showToast } from '../app/toasts.tsx'
 import type { PlaceWish } from '../composer/new-place.ts'
+import { PairDialog } from '../devices/PairDialog.tsx'
 import { FailureNote, shownState, useReconnect } from '../devices/status.tsx'
 import { useBrowserWants } from '../side/browser/store.ts'
 import { SpawnDialog } from '../tree/SpawnDialog.tsx'
@@ -657,6 +658,10 @@ function DeviceGroup(props: GroupProps) {
   const [folded, setFolded] = useState<ReadonlySet<string>>(new Set())
   /** 拖着东西停在哪一组上（能放的时候才记） */
   const [over, setOver] = useState<string | null>(null)
+  /** 开着“在手机上使用…”的出码对话框 */
+  const [pairing, setPairing] = useState(false)
+  /** 设备那一行的菜单：行尾的按钮和右键是同一份 */
+  const deviceMenu = useRef<RowMenuHandle>(null)
   const dragging = useDragging()
   /** 父会话 → 挂在它下面的子会话（只有父会话也在侧栏里的才在） */
   const children = useKey<SessionChildren>(keys.children(deviceId)) ?? NO_CHILDREN
@@ -1171,8 +1176,21 @@ function DeviceGroup(props: GroupProps) {
           onClose={() => setSectionDialog(null)}
         />
       ) : null}
+      {pairing ? <PairDialog device={device} onClose={() => setPairing(false)} /> : null}
     </>
   )
+  /** 设备那一行的菜单：能整理的加项目、加组；支持扫码绑定、连着的“在手机上使用…” */
+  const deviceActions: RowAction[] = [
+    ...(device.organizable
+      ? [
+          { id: 'addWorkspace', title: t('workspace.add') },
+          { id: 'addSection', title: t('section.add') },
+        ]
+      : []),
+    ...(device.pairing && device.connection === 'online'
+      ? [{ id: 'pair', title: t('pairing.use') }]
+      : []),
+  ]
 
   // 单独查看一组：顶上一行“返回”和它的名字，下面只有它里面的东西
   if (focus !== null && !gone) {
@@ -1203,7 +1221,21 @@ function DeviceGroup(props: GroupProps) {
       data-device={deviceId}
       style={wireStyle(device.wire)}
     >
-      <div className="row-line" {...info.area}>
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: 右键出的菜单和行尾“更多”按钮是同一份，键盘走那个按钮 */}
+      <div
+        className="row-line"
+        {...info.area}
+        onContextMenu={(event) => {
+          if (deviceActions.length === 0 || (event.target as Element).closest('.pick-pop')) return
+          event.preventDefault()
+          const box = event.currentTarget.getBoundingClientRect()
+          const keyed = event.clientX === 0 && event.clientY === 0
+          deviceMenu.current?.openAt(
+            keyed ? box.left + 24 : event.clientX,
+            keyed ? box.bottom : event.clientY,
+          )
+        }}
+      >
         <button
           type="button"
           className="dev-row"
@@ -1228,15 +1260,14 @@ function DeviceGroup(props: GroupProps) {
           ) : null}
         </button>
         {add(null)}
-        {device.organizable ? (
+        {deviceActions.length > 0 ? (
           <RowMenu
+            handle={deviceMenu}
             label={t('sidebar.deviceMenu')}
-            actions={[
-              { id: 'addWorkspace', title: t('workspace.add') },
-              { id: 'addSection', title: t('section.add') },
-            ]}
+            actions={deviceActions}
             onAction={(id) => {
-              if (id === 'addSection') newSection()
+              if (id === 'pair') setPairing(true)
+              else if (id === 'addSection') newSection()
               else setDialog({ workspace: null })
             }}
           />

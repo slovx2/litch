@@ -1,4 +1,5 @@
 // 英文文案。键必须和 zh-CN.ts 完全一致，多一句少一句都编译不过。
+import { enPairing } from './en-pairing.ts'
 import { enTasks } from './en-tasks.ts'
 import type { Entry } from './types.ts'
 import type { MessageKey } from './zh-CN.ts'
@@ -8,6 +9,7 @@ const plural = (n: string | number | undefined, one: string, many: string) =>
 
 export const en: Record<MessageKey, Entry> = {
   ...enTasks,
+  ...enPairing,
   'title.location': 'Location',
   'workspace.none': 'No project',
 

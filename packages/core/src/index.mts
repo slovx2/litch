@@ -1,5 +1,14 @@
 // 核心包的入口。界面和外壳只从这里引用。
 
+// 扫码绑定手机：界面拼二维码文本、外壳造一次性私钥文件要用（和设备进程、手机用的是同一份）
+export {
+  base64UrlDecode,
+  decodePairPayload,
+  encodePairPayload,
+  PAIR_PAYLOAD_PREFIX,
+  PAIR_TTL_MS,
+  type PairPayload,
+} from '../../protocol/src/device-pairing.mjs'
 // 日程怎么算：界面的表单拿它预览“下一次”、先查时区（和设备进程用的是同一份）
 export {
   isTaskTimeZone,
@@ -24,6 +33,7 @@ export {
   type Commands,
   type DiffOp,
   type ManageOp,
+  type PairingOp,
   type Port,
   type ServerMessage,
   type SessionOp,
@@ -94,12 +104,21 @@ export {
   isDeviceRuntime,
 } from './device/harness.mjs'
 export {
+  hostKeyTrusted,
+  type PairingHostAddress,
+  type PairingPlatform,
+  type PairSelfTestInput,
+  type PairSelfTestResult,
+} from './device/pairing.mjs'
+export {
+  checkPairingAddress,
   checkSaved,
   checkTarget,
   type DeviceStore,
   defaultName,
   hostLabel,
   type MachineLogStore,
+  PAIRING_NAME_MAX,
   type RemotePlatform,
   type SavedDevices,
   type SavedRemote,

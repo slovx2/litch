@@ -47,3 +47,14 @@ export type PairingStartFailure =
   | 'sshOff'
   | 'unsupported'
   | 'offline'
+
+/** pairing 主题的快照：一台设备上已绑定的手机，和这台桌面端开出来、还没作废的配对 */
+export interface PairingTopicView {
+  deviceId: string
+  /** 设备支不支持扫码绑定（设备服务列了 devicePairing）。还没连上过是 null */
+  available: boolean | null
+  /** 已绑定的手机。还没取到（没连上、不支持、正在取）是 null */
+  phones: PairPhone[] | null
+  /** 这台桌面端开出来的配对，各自现在的状态（作废了的也留着，直到界面不再订阅） */
+  pairs: PairStatus[]
+}

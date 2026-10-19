@@ -44,6 +44,7 @@ import { createMockDiffs } from './mock-diffs.mjs'
 import { createMockFiles } from './mock-files.mjs'
 import { createMockMachine } from './mock-machine.mjs'
 import { createMockManagement } from './mock-manage.mjs'
+import { createMockPairing } from './mock-pairing.mjs'
 import { createMockService } from './mock-service.mjs'
 import { createMockTasks } from './mock-tasks.mjs'
 import { createMockTerminals } from './mock-terminals.mjs'
@@ -84,6 +85,8 @@ export interface MockCoreOptions {
   chunkMs?: number
   /** 示例数据用哪种语言，默认中文 */
   lang?: SampleLang
+  /** 扫码绑定手机的码多久作废，默认和真的一样十分钟（验收里试“到期自动换码”时调短） */
+  pairTtlMs?: number
 }
 
 const topicKey = (topic: Extract<Topic, { kind: 'app' | 'sidebar' | 'session' }>): string =>
@@ -1022,6 +1025,15 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     },
   })
 
+  // ---------- 扫码绑定手机（mock-pairing.mts） ----------
+  const pairing = createMockPairing({
+    clock,
+    stepMs: chunkMs,
+    ...(options.pairTtlMs ? { ttlMs: options.pairTtlMs } : {}),
+    lang,
+    device: (deviceId) => app.devices.find((entry) => entry.id === deviceId),
+  })
+
   // ---------- 定时任务（mock-tasks.mts） ----------
   const tasks = createMockTasks({
     clock,
@@ -1453,6 +1465,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         // 新加的远程设备：“操作这台电脑”默认关
         machine: sampleMachineAccess(''),
         sessionTree: false,
+        pairing: false,
       }
       app.devices.push(device)
       sidebars.set(device.id, {
@@ -1564,6 +1577,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       if (managed !== undefined) return managed
       const scheduled = tasks.command(name, params)
       if (scheduled !== undefined) return scheduled
+      const paired = pairing.command(name, params)
+      if (paired !== undefined) return paired
       const typed = terminals.command(name, params)
       if (typed !== undefined) return typed
       const browsed = files.command(name, params, signal)
@@ -2081,6 +2096,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       if (topic.kind === 'machine') return machine.subscribe(sink)
       // 定时任务（mock-tasks.mts）
       if (topic.kind === 'tasks') return tasks.subscribe(topic.deviceId, sink)
+      // 扫码绑定手机（mock-pairing.mts）
+      if (topic.kind === 'pairing') return pairing.subscribe(topic.deviceId, sink)
       const key = topicKey(topic)
       if (topic.kind === 'app') {
         sink.snapshot(app)

@@ -219,6 +219,9 @@ export async function prepareService({ repo, root, engines = {}, pace = 200 }) {
     CHA_ACP_CLI: join(root, 'no-acp'),
     // 自检按中文的原话判断
     CHA_LANG: 'zh-CN',
+    // 扫码绑定手机：设备服务改的钥匙文件就是夹具 sshd 认的那一份（sshd_config 的 AuthorizedKeysFile），
+    // 不碰这台电脑真的 ~/.ssh/authorized_keys
+    LITCH_AUTHORIZED_KEYS: join(root, 'authorized_keys'),
   }
   /** node：device-start 拉起服务时用哪个 Node。真的独立包自带一份，这里用起夹具的这一份 */
   const wrapper = (node) =>

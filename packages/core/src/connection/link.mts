@@ -199,6 +199,8 @@ export function createLink(options: LinkOptions): Link {
                 EXTENSION.deviceTasks,
                 // sessionTree：声明了，会话对象上才有 Litch 子会话的 litchLineage，才收得到父子关系、提案变了的通知
                 EXTENSION.sessionTree,
+                // devicePairing：声明了才收得到配对状态和已绑定手机的变化通知（litch/pair/changed、litch/pair/phones/changed）
+                EXTENSION.devicePairing,
                 // clientTools：litch_ 开头的命名空间的工具调用交给声明了的连接执行（内置浏览器、Computer Use）
                 ...(tools.length > 0 ? [EXTENSION.clientTools] : []),
               ],
