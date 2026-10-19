@@ -16,6 +16,7 @@ import { PINNED_SECTION_ID } from '../../shared/src/thread-sections.mjs'
 import type { RpcPeer } from '../../shared/src/types.mjs'
 import { startCompaction } from './compaction.mjs'
 import { clientTools } from './dynamic-tools.mjs'
+import { harnessConfigRequest } from './harness-config.mjs'
 import { metadataRequest } from './metadata.mjs'
 import { sessionDirectory } from './native-files.mjs'
 import { inputRecord, projectHistory, textContent } from './projection.mjs'
@@ -48,6 +49,8 @@ export async function dispatch(s: PiServer, peer: RpcPeer, method: string, p: an
       /write|writeStdin/.test(method) ? 'write' : /resize/.test(method) ? 'resize' : 'kill',
       p,
     )
+  // harness 详情设置（harnessConfig 扩展）：配置项、账号与 provider、MCP、指令文件
+  if (method.startsWith('litch/harness/')) return harnessConfigRequest(s, peer, method, p)
   if (method.startsWith('project/'))
     return projectRequest(
       s.projects,
@@ -556,7 +559,7 @@ export async function dispatch(s: PiServer, peer: RpcPeer, method: string, p: an
     case 'config/mcpServer/reload':
       throw new ProtocolError(
         -32601,
-        'Pi 原生 MCP 由官方扩展管理；当前 SDK 未公开客户端管理接口，请使用 Pi 原生配置。模型仍可调用原生 MCP 工具。',
+        'Pi 原生 MCP 由官方扩展管理，没有 codex 的这套接口；增删和登录走 harness 详情设置（litch/harness/mcp/*）。模型仍可调用原生 MCP 工具。',
       )
     default:
       throw new ProtocolError(-32601, `Pi 不支持 ${method}`)
