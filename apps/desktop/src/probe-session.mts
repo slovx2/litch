@@ -288,7 +288,7 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
   await frame()
   const names = [...popped.querySelectorAll('.pick-opt')].map((entry) => entry.textContent)
   const spot = popped.getBoundingClientRect()
-  // 末尾三项总是这三样。设备上能整理侧栏的话前面多出“置顶”和“移到项目…”：
+  // 末尾三项总是这三样。设备上能整理侧栏的话前面多出“置顶”“移到组…”和“移到项目…”：
   // 模拟核心里一定有；真实入口上看对面有没有这组方法、有没有别的项目。
   // 设备声明了会话树的话还有“派一个子会话…”，支持定时任务的话还有“为这个会话建定时任务”
   // （模拟核心的本机两样都声明了；真实入口看对面）
@@ -304,8 +304,8 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
       names.slice(-3).join('|') === '改名|归档|删除' &&
       (real || (spawnable && schedulable)) &&
       (real
-        ? ['', '置顶', '置顶|移到项目…'].includes(organizing)
-        : organizing === '置顶|移到项目…'),
+        ? ['', '置顶|移到组…', '置顶|移到组…|移到项目…'].includes(organizing)
+        : organizing === '置顶|移到组…|移到项目…'),
     atPointer: Math.abs(spot.left - click.x) < 2 && Math.abs(spot.top - click.y) < 2,
     focused: popped.contains(document.activeElement),
     closed: false,
