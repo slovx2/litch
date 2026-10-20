@@ -152,6 +152,7 @@ test('SUBMIT-003：真实 SDK 追加指令、并发提交、重复请求与冲�
       const text = JSON.stringify(request.messages)
       assert.match(text, /ORIGINAL_INPUT/)
       assert.equal(text.split('STEER_INPUT').length - 1, 1, '重试不能重复输入模型')
+      assert.equal(text.split('CONCURRENT_INPUT').length - 1, 1)
       return [{ type: 'text', text: 'AFTER_STEER' }]
     })
     const params = {
@@ -162,7 +163,13 @@ test('SUBMIT-003：真实 SDK 追加指令、并发提交、重复请求与冲�
     const { turn } = await client.request('turn/start', params)
     await entered.promise
     assert.equal((await client.request('turn/start', params)).turn.id, turn.id)
-    await client.raw('turn/start', { ...params, clientUserMessageId: 'concurrent' }, -32009)
+    // 回合进行中另一条 turn/start 和上游 codex 一样并进这个回合（start_or_steer），回执是同一个回合号
+    const concurrent = await client.request('turn/start', {
+      ...params,
+      clientUserMessageId: 'concurrent',
+      input: [{ type: 'text', text: 'CONCURRENT_INPUT' }],
+    })
+    assert.equal(concurrent.turn.id, turn.id)
     const steer = {
       threadId: thread.id,
       expectedTurnId: turn.id,
@@ -186,6 +193,7 @@ test('SUBMIT-003：真实 SDK 追加指令、并发提交、重复请求与冲�
     assert.equal(history.thread.turns.length, 1)
     const items = history.thread.turns[0].items
     assert.equal(items.filter((item: any) => item.clientId === 'steer-message').length, 1)
+    assert.equal(items.filter((item: any) => item.clientId === 'concurrent').length, 1)
     assert.equal(
       items.filter((item: any) => item.type === 'agentMessage').at(-1).text,
       'AFTER_STEER',

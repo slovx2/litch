@@ -11,12 +11,8 @@ import { homedir } from 'node:os'
 import { join, relative } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 
-// Extended cache TTL for 1-hour prompt caching
-if (!process.env.ANTHROPIC_BETAS) {
-  process.env.ANTHROPIC_BETAS = 'extended-cache-ttl-2025-04-11'
-} else if (!process.env.ANTHROPIC_BETAS.includes('extended-cache-ttl-2025-04-11')) {
-  process.env.ANTHROPIC_BETAS = `${process.env.ANTHROPIC_BETAS},extended-cache-ttl-2025-04-11`
-}
+// 1 小时提示缓存的 beta（CHA_CLAUDE_EXTENDED_CACHE_TTL=0 时不补），CLI 继承这个进程的环境
+applyExtendedCacheTtlBeta()
 
 // In-process Claude runtime — replaces the Python sidecar entirely. Talks to
 // @anthropic-ai/claude-agent-sdk directly so we get a single process boundary
@@ -47,6 +43,7 @@ import { deniedMessage } from './approval-request.mjs'
 import { claudeChildEnv } from './claude-provider.mjs'
 import { settingsEnvValue } from './claude-setting-layers.mjs'
 import { cliOutputFormat } from './cli-output-schema.mjs'
+import { type CodexErrorInfo, codexErrorInfoFor, TurnFailure } from './codex-error-info.mjs'
 import {
   contextTokens,
   contextWindowOf,
@@ -88,6 +85,7 @@ import { permissionToolServer } from './permission-tools.mjs'
 import { ProtocolError, submissionHash } from './protocol-contract.mjs'
 import { type NativeRateLimitInfo, rateLimitCredentialScope } from './rate-limits.mjs'
 import {
+  applyExtendedCacheTtlBeta,
   claudePlansLocation,
   claudeSettingSources,
   claudeThreadIdHeaderEnv,
@@ -246,12 +244,15 @@ interface PendingTurn {
   backgroundAgents: Map<string, string>
   // 各子代理最近一段正文，后台子代理结束时作为它的结果。
   subagentText: Map<string, string>
+  // 主会话最近一条 API 出错的助手消息上 CLI 归的类（SDKAssistantMessageError），回合失败时拼 codexErrorInfo
+  apiErrorCategory: string | null
 }
 
 interface PendingTurnResult {
   success: boolean
   resultText: string | null
   claudeSessionId: string | null
+  codexErrorInfo?: CodexErrorInfo | null
 }
 
 interface WorkflowTaskState {
@@ -432,6 +433,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       planHandoff: false,
       backgroundAgents: new Map(),
       subagentText: new Map(),
+      apiErrorCategory: null,
     }
     this.turns.set(context.turnId, pending)
     session.context = context
@@ -1291,10 +1293,6 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     if (resume) opts.resume = resume
     if (resume && context.forkSession) opts.forkSession = true
 
-    // Ensure extended cache TTL is explicitly requested
-    if (!process.env.ANTHROPIC_BETAS) {
-      process.env.ANTHROPIC_BETAS = 'extended-cache-ttl-2025-04-11'
-    }
     if (context.addDirs && context.addDirs.length > 0) opts.additionalDirectories = context.addDirs
     if (context.allowedTools && context.allowedTools.length > 0)
       opts.allowedTools = context.allowedTools
@@ -1824,6 +1822,8 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         await this.handleStreamEvent(pending, message)
         break
       case 'assistant':
+        if (typeof message.error === 'string' && message.parent_tool_use_id == null)
+          pending.apiErrorCategory = message.error
         await this.handleAssistant(pending, message)
         break
       case 'user':
@@ -2739,11 +2739,17 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         success: deferred.success,
         result: deferred.resultText,
         claudeSessionId: deferred.claudeSessionId,
+        ...(deferred.codexErrorInfo ? { codexErrorInfo: deferred.codexErrorInfo } : {}),
       })
       if (deferred.success) {
         pending.resolve()
       } else {
-        pending.reject(new Error(deferred.resultText ?? 'Claude turn failed'))
+        pending.reject(
+          new TurnFailure(
+            deferred.resultText ?? 'Claude turn failed',
+            deferred.codexErrorInfo ?? null,
+          ),
+        )
       }
     } catch (err) {
       pending.reject(err instanceof Error ? err : new Error(String(err)))
@@ -2851,7 +2857,18 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     // SDK 的格式工具通过 result.structured_output 返回数据，不能丢弃后用输入合成答案。
     if (success && structuredText)
       await pending.handlers.onEvent({ type: 'text_delta', delta: structuredText })
-    pending.deferredResult = { success, resultText, claudeSessionId }
+    pending.deferredResult = {
+      success,
+      resultText,
+      claudeSessionId,
+      codexErrorInfo: success
+        ? null
+        : codexErrorInfoFor({
+            status: message.api_error_status as number | null | undefined,
+            category: pending.apiErrorCategory,
+            text: resultText,
+          }),
+    }
     if (!success) await this.stopWorkflowTasks(pending)
     await this.finishDeferredResult(pending)
   }

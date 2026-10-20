@@ -37,6 +37,7 @@ export interface RuntimeConfig {
     settingSources: ClaudeSettingSource[]
     plansLocation: ClaudePlansLocation
     threadIdHeader: boolean
+    extendedCacheTtl: boolean
   }
 }
 
@@ -112,6 +113,31 @@ export function claudeThreadIdHeaderEnv(
   return { ANTHROPIC_CUSTOM_HEADERS: [...kept, `thread-id: ${threadId}`].join('\n') }
 }
 
+/** 1 小时提示缓存的 beta 名 */
+export const EXTENDED_CACHE_TTL_BETA = 'extended-cache-ttl-2025-04-11'
+
+/**
+ * CHA_CLAUDE_EXTENDED_CACHE_TTL：默认开，入口往 ANTHROPIC_BETAS 补上 1 小时缓存的 beta，CLI 发的 anthropic-beta 多这一项。
+ * 设成 0 时不补，CLI 发的 beta 头和直接跑 CLI 时一样（用户自己在 ANTHROPIC_BETAS 里写的照旧）
+ */
+export function claudeExtendedCacheTtl(env: NodeJS.ProcessEnv = process.env): boolean {
+  const raw = env.CHA_CLAUDE_EXTENDED_CACHE_TTL?.trim().toLowerCase()
+  if (!raw || raw === '1' || raw === 'true' || raw === 'on' || raw === 'yes') return true
+  if (raw === '0' || raw === 'false' || raw === 'off' || raw === 'no') return false
+  throw new Error(
+    `CHA_CLAUDE_EXTENDED_CACHE_TTL 无效：${env.CHA_CLAUDE_EXTENDED_CACHE_TTL}（只能是 1 或 0）`,
+  )
+}
+
+/** 开关开着时把 1 小时缓存的 beta 补进 ANTHROPIC_BETAS（已有的保留）；关着时不动 */
+export function applyExtendedCacheTtlBeta(env: NodeJS.ProcessEnv = process.env): void {
+  if (!claudeExtendedCacheTtl(env)) return
+  const betas = env.ANTHROPIC_BETAS
+  if (!betas) env.ANTHROPIC_BETAS = EXTENDED_CACHE_TTL_BETA
+  else if (!betas.includes(EXTENDED_CACHE_TTL_BETA))
+    env.ANTHROPIC_BETAS = `${betas},${EXTENDED_CACHE_TTL_BETA}`
+}
+
 export function resolveRuntimeConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig {
   const explicit = normalizeRuntimeType(
     env.CHA_CLAUDE_RUNTIME_TYPE ?? env.CHA_CLAUDE_RUNTIME ?? env.CHA_CLAUDE_BACKEND,
@@ -152,6 +178,7 @@ export function resolveRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runt
       settingSources: claudeSettingSources(env),
       plansLocation: claudePlansLocation(env),
       threadIdHeader: claudeThreadIdHeader(env),
+      extendedCacheTtl: claudeExtendedCacheTtl(env),
     },
   }
 }

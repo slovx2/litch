@@ -44,6 +44,7 @@ import {
 } from './claude-default-model.mjs'
 import { PROVIDER_CONFIG_KEY } from './claude-provider.mjs'
 import { cliConfigLayer, mergeConfigLayers, requestConfigLayer } from './cli-config.mjs'
+import { TurnFailure, turnErrorOf } from './codex-error-info.mjs'
 import {
   applyConfigEdits,
   isConfigObject,
@@ -2724,9 +2725,19 @@ export class CodexClaudeAppServer {
     })
   }
 
-  // 用户发消息时 CLI 正好在自己续跑：用户并不知道有回合在跑，不能让这次提交失败。
-  // 把消息并进那个回合（CLI 会接着处理它），返回的就是那个回合。
-  private async joinSpontaneousTurn(
+  /** 插进回合的话交给运行时的文字：选中的 Skill 正文在前（同 turn/start），其余照旧 */
+  private inputPrompt(threadId: string, input: UserInput[]): string {
+    const cwd = this.store.getThread(threadId)?.cwd ?? process.cwd()
+    const skills = this.skills.expandSkillInputs(cwd, input)
+    return withSkillInstructions(skills.instructions, textFromInput(skills.rest))
+  }
+
+  // 有活动回合时 turn/start 和上游一样并进那个回合（上游 start_or_steer：相当于 steer，回执里是那个回合），
+  // CLI 自己续跑的回合（用户不知道有回合在跑）也是这样。不并的：追问子代理的回合（插的话到不了子代理）、
+  // 审查和手动压缩的回合（上游同样不许插话）、带 outputSchema 的（上游要求和活动回合的一致），这几种照旧拒绝。
+  // 回合正在收尾、运行时不再收插话时，等它收尾完按普通回合开始（上游这时也是新开一个回合）。
+  // 这次 turn/start 里的模型、权限等设置不跟着改（并入的回合沿用它开始时的设置）。
+  private async joinActiveTurn(
     peer: RpcPeer,
     threadId: string,
     params: Record<string, unknown>,
@@ -2734,12 +2745,21 @@ export class CodexClaudeAppServer {
     hash: string,
   ): Promise<TurnRecord | null> {
     const turnId = this.activeTurnByThread.get(threadId)
-    if (!turnId || !this.spontaneousTurns.has(turnId) || this.interruptingByThread.has(threadId))
+    if (!turnId || this.interruptingByThread.has(threadId)) return null
+    if (this.relayParentByChild.has(threadId) || params.outputSchema != null) return null
+    const active = this.store.getTurn(turnId)
+    if (active?.status !== 'inProgress') return null
+    const first = active.items[0]?.type
+    if (first === 'contextCompaction' || active.items.some((i) => i.type === 'enteredReviewMode'))
       return null
-    if (this.store.getTurn(turnId)?.status !== 'inProgress') return null
     const input = Array.isArray(params.input) ? (params.input as UserInput[]) : []
     if (extractImageInputs(input).images.length > 0)
-      throw new ProtocolError(-32009, '会话正在处理后台命令的结果，带图片的消息请稍后再发')
+      throw new ProtocolError(
+        -32009,
+        this.spontaneousTurns.has(turnId)
+          ? '会话正在处理后台命令的结果，带图片的消息请稍后再发'
+          : '回合正在进行，带图片的消息不能并进去，请等回合结束后再发',
+      )
     const startup = this.runtimeReadyByTurn.get(turnId)
     if (startup && !(await startup.ready)) return null
     if (this.activeTurnByThread.get(threadId) !== turnId) return null
@@ -2751,7 +2771,7 @@ export class CodexClaudeAppServer {
     }
     // 先送进去再落库：送不进去时这条消息不能留下“已提交”的记录。
     try {
-      await this.runtime.steer(threadId, textFromInput(input))
+      await this.runtime.steer(threadId, this.inputPrompt(threadId, input))
     } catch (error) {
       if (!(error instanceof ProtocolError) || error.code !== -32009) throw error
       // 那一轮刚好结束：等它收尾完，按普通回合提交。
@@ -2782,11 +2802,12 @@ export class CodexClaudeAppServer {
     const current = this.store.getTurn(turn.id)
     if (current && current.status !== 'inProgress') return
     this.finishGoal(threadId, turn.id, 'failed')
-    const completed = this.store.completeTurn(turn.id, 'failed', { message: error.message }) ?? turn
+    const turnError = turnErrorOf(error)
+    const completed = this.store.completeTurn(turn.id, 'failed', turnError) ?? turn
     this.pendingInteractions.cancelThread(threadId)
     this.notify(peer, {
       method: 'error',
-      params: { threadId, turnId: turn.id, willRetry: false, error: { message: error.message } },
+      params: { threadId, turnId: turn.id, willRetry: false, error: turnError },
     })
     this.notify(peer, {
       method: 'turn/completed',
@@ -3181,7 +3202,7 @@ export class CodexClaudeAppServer {
     }
     const merged = queuedId
       ? null
-      : await this.joinSpontaneousTurn(peer, threadId, params, messageId, hash)
+      : await this.joinActiveTurn(peer, threadId, params, messageId, hash)
     if (merged) return { turn: this.toLifecycleTurn(merged) }
     if (
       this.activeTurnByThread.has(threadId) ||
@@ -3208,10 +3229,13 @@ export class CodexClaudeAppServer {
     // images into a Claude SDK multimodal user message; here we also append
     // an `imageView` ThreadItem per image so the App's transcript shows them
     // inline next to the user message instead of losing them.
-    const { textPrompt, images } = extractImageInputs(input)
-    const prompt = textPrompt || textFromInput(input)
-    const workflowCommand = parseWorkflowCommand(prompt)
     if (typeof params.cwd === 'string' && params.cwd.length > 0) thread.cwd = params.cwd
+    // 选中的 Skill 按上游的方式把正文交给模型（见 SkillsRpc.expandSkillInputs）；标题、工作流命令仍按用户写的话认
+    const skills = this.skills.expandSkillInputs(thread.cwd, input)
+    const { textPrompt, images } = extractImageInputs(skills.rest)
+    const userPrompt = textPrompt || textFromInput(skills.rest)
+    const workflowCommand = parseWorkflowCommand(userPrompt)
+    const prompt = withSkillInstructions(skills.instructions, userPrompt)
     const model = modelFromParams(params, thread.model)
     const reasoningEffort = reasoningEffortFromParams(params, thread.reasoningEffort)
     const permissionProfileId = permissionProfileIdFromParams(params)
@@ -3236,8 +3260,9 @@ export class CodexClaudeAppServer {
       if (requestedSandbox) thread.sandboxMode = requestedSandbox
     }
     this.store.upsertThread(thread)
-    if (!thread.preview && prompt) {
-      thread.preview = prompt.slice(0, 200)
+    const preview = userPrompt || textFromInput(input)
+    if (!thread.preview && preview) {
+      thread.preview = preview.slice(0, 200)
       thread.updatedAt = nowSeconds()
       this.store.upsertThread(thread)
     }
@@ -4785,7 +4810,11 @@ export class CodexClaudeAppServer {
                 this.store.updateClaudeSessionId(thread.id, event.claudeSessionId)
               }
             }
-            if (!event.success) throw new Error(event.result ?? 'Claude turn failed')
+            if (!event.success)
+              throw new TurnFailure(
+                event.result ?? 'Claude turn failed',
+                event.codexErrorInfo ?? null,
+              )
           }
           if (event.type === 'error') {
             throw new Error(event.message)
@@ -5645,7 +5674,7 @@ export class CodexClaudeAppServer {
     if (this.activeTurnByThread.get(threadId) !== activeTurnId)
       throw new ProtocolError(-32009, '回合已终结')
     const input = Array.isArray(params.input) ? (params.input as UserInput[]) : []
-    const prompt = textFromInput(input)
+    const prompt = this.inputPrompt(threadId, input)
     // 插的话留在回合里（thread/read），送进去之后和上游一样发给全部订阅者（上游在交给模型时发这条用户消息）
     const item: ThreadItem = {
       type: 'userMessage',
@@ -6964,6 +6993,11 @@ import { sandboxCommand } from './command-sandbox.mjs'
 const HARNESS_CONFIG_PEER = 'harness-config'
 
 // 线程没有连接订阅时的占位：通知无处可送，路由仍先看线程当前的订阅者。
+/** 选中的 Skill 正文放在这一轮的话前面（上游把 SkillInstructions 作为单独的用户片段放在用户消息之前） */
+function withSkillInstructions(instructions: string[], prompt: string): string {
+  return [...instructions, prompt].filter(Boolean).join('\n\n')
+}
+
 const DETACHED_PEER_PREFIX = 'detached:'
 
 function detachedPeer(threadId: string): RpcPeer {

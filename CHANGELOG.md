@@ -26,6 +26,10 @@ versioning or publishing metadata.
 - Claude Code：适配器自己连的 MCP 服务按会话跨回合复用连接，第二个回合起不再重起 stdio 服务、不再和 HTTP 服务重新握手（先 ping 一次确认还通）。配置或工作目录变了就重建；会话归档、删除、卸载、回退、客户端全都断开、适配器停止时关掉；没人用的连接默认留 10 分钟、整个适配器最多 8 条（`CHA_CLAUDE_MCP_IDLE_MINUTES`、`CHA_CLAUDE_MCP_IDLE_CONNECTIONS`，设成 `0` 回到每回合重连）。有状态的 stdio 服务（浏览器类等）因此在同一个会话里跨回合保留状态；回合被打断、请求被取消或超时过、重新登录过 OAuth 的连接不留
   - 影响：适配器的 Claude Code 入口不再自带原来那段“Codex 桌面展示风格”提示。升级前建的会话（Litch 里的也一样）恢复后没有任何呈现提示，回答可能更像终端里的风格；新建的会话才有 Litch 这段。这段话跟着会话存：Litch 建的会话在官方桌面端打开，模型照样被告知回答显示在 Litch 里
   - OpenCode 上只有在会话还带着别的 Litch 工具时这段话才送得到（桌面端建的会话总带着）；经聚合面转给原生 Codex 的建会话、恢复、分叉请求里如果有不带工具的命名空间，设备进程整个去掉，免得上游拒绝整个请求
+- Claude Code：模型接口出错时回合的错误带上 `codexErrorInfo`，按上游 codex 的种类归：过载（529）是 `serverOverloaded`，429 是 `responseTooManyFailedAttempts`，余额用完是 `usageLimitExceeded`，上下文超长是 `contextWindowExceeded`，鉴权失败是 `unauthorized`，500 是 `internalServerError`，其余带状态码的是 `httpConnectionFailed`；客户端按这个做容量重试不用认错误文字
+- Claude Code：回合进行中再发 `turn/start` 时，和上游 codex 一样并进正在跑的回合（相当于 `turn/steer`），回执里是那个回合的号，不再回 `-32009`；带图片的、追问子代理的、审查和手动压缩的、带 `outputSchema` 的回合照旧拒绝，这次请求里的模型、权限等设置不跟着改
+- Claude Code：输入里选的 Skill（`{type: "skill"}`）照上游 codex 把 SKILL.md 正文作为 `<skill>` 片段放在这一轮的话前面交给模型，`turn/start`、`turn/steer` 都是；原来拼成跟在话后面的 “/名字”，技能不在开头时 CLI 不展开，正文到不了模型。关掉的技能什么都不给；不在技能清单里的（比如 CLI 插件带的）照旧转成 “/名字”
+- Claude Code：新增开关 `CHA_CLAUDE_EXTENDED_CACHE_TTL`，默认 `1`，和原来一样往 `ANTHROPIC_BETAS` 补 `extended-cache-ttl-2025-04-11`；设成 `0` 时不补，CLI 发的 `anthropic-beta` 和直接跑 CLI 时一样，给不想多转一个 beta 的计费代理用。请求体里的 `cache_control.ttl` 不是入口写的：订阅登录时 CLI 自己写 `1h` 并自己带上这个 beta，API key 时不写，关掉不会出现缺 beta 的请求。认不出的值启动就报错
 
 ## 0.14.0
 

@@ -361,7 +361,7 @@ test('SKILLS-005：子目录会话中原生继承的项目 Skill 可列出并禁
   }
 })
 
-test('SKILLS-006：输入里选的技能带着正文、带着图片发出去，真实 CLI 都会展开', {
+test('SKILLS-006：输入里选的技能带着正文、带着图片发出去，正文都交给模型', {
   timeout: 90_000,
 }, async () => {
   const home = await realpath(await mkdtemp('/tmp/native-skills-input-'))
@@ -405,14 +405,13 @@ test('SKILLS-006：输入里选的技能带着正文、带着图片发出去，�
     return JSON.stringify(model.requests.at(-1)?.messages)
   }
   try {
-    // 展开了的技能，正文在交给模型的消息里（技能清单里只有描述）。不用 assert.match：失败时不把整个请求打出来
+    // 选了的技能，正文在交给模型的消息里（技能清单里只有描述）。不用 assert.match：失败时不把整个请求打出来
     const expanded = (messages: string) => messages.includes('INPUT_SKILL_BODY')
-    // 技能和正文是用换行连的：CLI 认名字认到空白为止，换行也算，正文成了技能的参数
     const withText = await send([skill, text('看一下 这次改动')])
     assert.ok(expanded(withText), '带正文时技能没有展开')
     assert.ok(withText.includes('看一下 这次改动'))
     assert.ok(expanded(await send([skill])), '只有技能时没有展开')
-    // 带图片时发的是内容块：技能排在图片前面的话 CLI 不展开
+    // 带图片时发的是内容块
     const withImage = await send([
       skill,
       text('看一下 这张图'),
@@ -427,6 +426,103 @@ test('SKILLS-006：输入里选的技能带着正文、带着图片发出去，�
     )
     // 没选技能的不受影响
     assert.ok(!expanded(await send([text('看一下 这次改动')])))
+  } finally {
+    await client.close()
+    await model.close()
+    await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
+  }
+})
+
+test('SKILLS-007：选的技能不论排在哪、来自额外目录还是插话，正文都按上游的 <skill> 片段交给模型；关掉的不给，清单外的照旧', {
+  timeout: 90_000,
+}, async () => {
+  const home = await realpath(await mkdtemp('/tmp/native-skills-inject-'))
+  const cwd = join(home, 'project')
+  await mkdir(cwd)
+  const root = join(home, 'extra')
+  const path = join(root, 'extra-input', 'SKILL.md')
+  await mkdir(join(root, 'extra-input'), { recursive: true })
+  await writeFile(
+    path,
+    '---\nname: extra-input\ndescription: EXTRA_INPUT_DESCRIPTION\n---\nEXTRA_INPUT_BODY\n',
+  )
+  const skill = { type: 'skill', name: 'extra-input', path }
+  const text = (value: string) => ({ type: 'text', text: value, text_elements: [] })
+  const model = new MockLLM()
+  const client = await ProtocolClient.start(home, await model.start())
+  const newThread = async (): Promise<string> =>
+    (
+      await client.request('thread/start', {
+        cwd,
+        approvalPolicy: 'never',
+        sandbox: 'danger-full-access',
+      })
+    ).thread.id
+  const send = async (input: unknown[]): Promise<string> => {
+    const threadId = await newThread()
+    model.enqueue(() => [{ type: 'text', text: 'INJECT_OK' }])
+    const { turn } = await client.request('turn/start', { threadId, input })
+    const completed = await client.completed(turn.id)
+    assert.equal(completed.status, 'completed', JSON.stringify(completed.error))
+    model.assertConsumed()
+    const read = await client.request('thread/read', { threadId, includeTurns: true })
+    assert.deepEqual(read.thread.turns[0].items[0].content, input, '记录里是用户原样的输入')
+    return JSON.stringify(model.requests.at(-1)?.messages)
+  }
+  try {
+    await client.request('skills/extraRoots/set', { extraRoots: [root] })
+    // 技能排在话后面（WakeQora、Litch 的输入框都这么发）：CLI 不认，以前正文到不了模型
+    const after = await send([text('按 Skill 执行'), skill])
+    assert.ok(after.includes('EXTRA_INPUT_BODY'), '技能在后面时正文没交给模型')
+    assert.ok(after.includes(`<skill>\\n<name>extra-input</name>\\n<path>${path}</path>`))
+    assert.ok(after.includes('按 Skill 执行'))
+    // 路径里本身有 /extra-input，认的是以前那样跟在话后面的一行
+    assert.ok(!after.includes('执行\\n/extra-input'), '不再拼“/名字”')
+    // 清单外的技能（比如 CLI 插件带的）照旧转成“/名字”交给 CLI
+    const unknown = await send([
+      text('按 Skill 执行'),
+      { type: 'skill', name: 'not-in-catalog', path: join(home, 'missing', 'SKILL.md') },
+    ])
+    assert.ok(unknown.includes('/not-in-catalog'))
+    // 插话里选的技能也交给模型
+    const threadId = await newThread()
+    let arrived!: () => void
+    const firstArrived = new Promise<void>((resolve) => {
+      arrived = resolve
+    })
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    model.enqueue(async () => {
+      arrived()
+      await gate
+      return [{ type: 'text', text: 'FIRST' }]
+    })
+    model.enqueue((request) => {
+      const messages = JSON.stringify(request.messages)
+      assert.ok(messages.includes('EXTRA_INPUT_BODY'), '插话里的技能正文没交给模型')
+      assert.ok(messages.includes('STEER_WITH_SKILL'))
+      return [{ type: 'text', text: 'SECOND' }]
+    })
+    const { turn } = await client.request('turn/start', {
+      threadId,
+      input: [text('FIRST_INPUT')],
+    })
+    await firstArrived
+    await client.request('turn/steer', {
+      threadId,
+      expectedTurnId: turn.id,
+      input: [text('STEER_WITH_SKILL'), skill],
+    })
+    release()
+    assert.equal((await client.completed(turn.id)).status, 'completed')
+    model.assertConsumed()
+    // 关掉的技能和上游一样什么都不给
+    await client.request('skills/config/write', { path, enabled: false })
+    const disabled = await send([text('按 Skill 执行'), skill])
+    assert.ok(!disabled.includes('EXTRA_INPUT_BODY'))
+    assert.ok(!disabled.includes('执行\\n/extra-input'))
   } finally {
     await client.close()
     await model.close()

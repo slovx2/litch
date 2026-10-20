@@ -1,4 +1,4 @@
-import { statSync } from 'node:fs'
+import { readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { ProtocolError } from './protocol-contract.mjs'
 import { claudeSettingSources } from './runtime-config.mjs'
@@ -21,7 +21,8 @@ import {
   skillRuled,
 } from './skill-config.mjs'
 import { SkillRoots } from './skill-roots.mjs'
-import type { RpcPeer } from './types.mjs'
+import type { RpcPeer, UserInput } from './types.mjs'
+import { adapterHome } from './util.mjs'
 
 interface SkillObserver {
   peer: RpcPeer
@@ -125,6 +126,60 @@ export class SkillsRpc {
       else if (ruled && overrides[skill.name] !== 'off') overrides[skill.name] = 'on'
     }
     return overrides
+  }
+
+  /**
+   * 回合输入里选中的 Skill（`{type: 'skill', name, path}`）照上游 codex 交给模型：按 path 找到技能清单里已启用的那个，
+   * 读出 SKILL.md 整份，拼成 `<skill><name>…</name><path>…</path>正文</skill>`（上游 ext/skills 的 SkillInstructions），
+   * 放在这一轮的话前面；不再变成跟在话后面的 “/名字”（CLI 只认开头的斜杠命令，放在后面不展开）。
+   * 清单里有但关掉了的，和上游一样什么都不给。清单里没有的（比如 CLI 插件带的技能）原样留着，照旧转成 “/名字” 交给 CLI。
+   */
+  expandSkillInputs(
+    cwd: string,
+    input: UserInput[],
+  ): { rest: UserInput[]; instructions: string[] } {
+    if (!input.some((item) => item?.type === 'skill')) return { rest: input, instructions: [] }
+    const known = new Map<string, { name: string; path: string; enabled: boolean }>()
+    for (const skill of this.catalog(cwd).skills) {
+      try {
+        known.set(canonicalSkillKey(skill.path), skill)
+      } catch {}
+    }
+    const rest: UserInput[] = []
+    const instructions: string[] = []
+    const seen = new Set<string>()
+    for (const item of input) {
+      const path = item?.type === 'skill' ? (item as { path?: unknown }).path : undefined
+      if (typeof path !== 'string') {
+        rest.push(item)
+        continue
+      }
+      let key: string
+      try {
+        key = canonicalSkillKey(path)
+      } catch {
+        rest.push(item)
+        continue
+      }
+      const skill = known.get(key)
+      if (!skill) {
+        rest.push(item)
+        continue
+      }
+      if (!skill.enabled || seen.has(key)) continue
+      seen.add(key)
+      let contents: string
+      try {
+        contents = readFileSync(skill.path, 'utf8')
+      } catch {
+        rest.push(item)
+        continue
+      }
+      instructions.push(
+        `<skill>\n<name>${skill.name}</name>\n<path>${skill.path}</path>\n${contents}\n</skill>`,
+      )
+    }
+    return { rest, instructions }
   }
 
   closePeer(id: string): void {
