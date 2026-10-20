@@ -78,7 +78,7 @@ together with a save bar. See `devices.md` and `device-settings.md`.
 ### Settings
 
 Sections in order: **Appearance** (skin, theme, density, zoom), **Language**, **Devices** (a shortcut
-to the Devices page), **Built-in browser** (links, trust all sites and the blocklist, always-allowed sites, clear browsing data),
+to the Devices page), **Built-in browser** (links, import from another browser, trust all sites and the blocklist, always-allowed sites, saved passwords, clear browsing data),
 **Computer Use** (macOS and Windows only: permissions or helper status, always-allowed apps),
 **Notifications** (scheduled tasks), **Config assistant** (section id `assist`: the switch that
 installs this manual into local harnesses and where it went, "Open config assistant", "Show the

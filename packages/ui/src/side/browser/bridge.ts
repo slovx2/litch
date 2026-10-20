@@ -134,6 +134,101 @@ export interface BrowserBridge {
   onPolicy(handler: (policy: BrowserSitePolicy) => void): () => void
   /** 已保存的密码（设置页用） */
   passwords: BrowserPasswordsBridge
+  /** 从别的浏览器导入。外壳的主进程旧、还没有这一块时没有 */
+  import?: BrowserImportBridge
+}
+
+// ---------- 从别的浏览器导入（主进程 apps/desktop/src/browser-import/types.mts，改一边改另一边） ----------
+// 界面只拿到来源、资料名、条数和状态，拿不到 Cookie 的值和密码。
+
+/** 认得的来源 */
+export type BrowserId = 'chrome' | 'edge' | 'brave' | 'arc' | 'chromium' | 'vivaldi' | 'firefox'
+
+export type ImportKind = 'cookies' | 'passwords'
+
+export interface ImportProfile {
+  /** Chromium 系是资料目录名（Default、Profile 1），Firefox 是 profiles.ini 里的 Path */
+  id: string
+  name: string
+  account?: string
+  isDefault: boolean
+  /** 这份资料里有哪几类数据 */
+  has: Record<ImportKind, boolean>
+}
+
+export interface ImportSource {
+  browser: BrowserId
+  /** 产品名，不翻译 */
+  name: string
+  /** 读取器在这台机器上能读的 */
+  kinds: ImportKind[]
+  /** 读之前系统会弹授权框（Mac 的钥匙串） */
+  promptsSystemAuth: boolean
+  /** Windows 上要管理员同意才能读 Cookie 和密码 */
+  needsElevation: boolean
+  profiles: ImportProfile[]
+}
+
+export interface ImportRequest {
+  browser: BrowserId
+  profileId: string
+  kinds: ImportKind[]
+  /** 只导这些网站（含子域）的 Cookie；不给是全部。小写、无前导点 */
+  cookieDomains?: string[]
+  allowElevated: boolean
+}
+
+/** 读取器报的状态，加上 skipped（前面一类被取消了，这一类没轮上） */
+export type ImportKindStatus =
+  | 'ok'
+  | 'partial'
+  | 'missing'
+  | 'locked'
+  | 'denied'
+  | 'needs-elevation'
+  | 'unsupported'
+  | 'cancelled'
+  | 'failed'
+  | 'skipped'
+
+export interface ImportKindOutcome {
+  status: ImportKindStatus
+  /** 来源里一共多少条 */
+  discovered: number
+  imported: number
+  skippedExisting: number
+  skippedInvalid: number
+  failed: number
+  /** 英文的一句话，界面按 status 出自己的说法，这句只放进“详情” */
+  error?: string
+}
+
+export interface ImportOutcome {
+  /** 资料已不在、另一个导入正在进行等整体性的失败 */
+  error?: 'profile-gone' | 'busy'
+  kinds: Partial<Record<ImportKind, ImportKindOutcome>>
+}
+
+export interface ImportProgress {
+  kind: ImportKind
+  phase: 'reading' | 'writing' | 'done'
+}
+
+/** 导过没有、横幅关过没有，毫秒 */
+export interface ImportState {
+  lastImportAt?: number
+  bannerDismissedAt?: number
+}
+
+export interface BrowserImportBridge {
+  /** 这台电脑上找得到的来源和资料 */
+  sources(): Promise<ImportSource[]>
+  /** 一次只一个导入；做完（含取消、失败）才回 */
+  start(request: ImportRequest): Promise<ImportOutcome>
+  cancel(): Promise<void>
+  onProgress(listener: (progress: ImportProgress) => void): () => void
+  state(): Promise<ImportState>
+  dismissBanner(): Promise<void>
 }
 
 declare global {
@@ -148,3 +243,6 @@ export const browserBridge = (): BrowserBridge | undefined =>
 
 /** 会话的键 */
 export const ownerKey = (owner: BrowserOwner): string => `${owner.deviceId}\u0000${owner.threadId}`
+
+/** 外壳给的导入接口。没有外壳、主进程还没有这一块时没有 */
+export const importBridge = (): BrowserImportBridge | undefined => browserBridge()?.import

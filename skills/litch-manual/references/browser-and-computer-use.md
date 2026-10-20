@@ -42,6 +42,47 @@ their next call.
   port over SSH to this computer automatically (loopback only) and rewrites the address. Apps that
   hard-code `localhost:3000` in OAuth callbacks or CORS lists may not match the forwarded port.
 
+### Importing from another browser
+
+A one-time import into the built-in browser from **Google Chrome, Microsoft Edge, Brave, Arc,
+Chromium, Vivaldi or Firefox** on this computer (macOS and Windows; not Safari, not Linux). It is not a
+sync: to bring in newer data, import again. There is no command for it and agents cannot start it
+(exception E10); tell the user where to click:
+
+- Settings → Built-in browser → **Import from another browser** → "Import…";
+- the Browser tab's menu (**···** at the right of the address bar) → "Import cookies and passwords…";
+- a banner at the top of the Browser tab, shown until the user imports once or clicks "Not now".
+
+In the dialog the user picks the browser and profile, then what to import: **Cookies** (site
+sign-ins) and **Saved passwords**, both on by default. A kind that cannot be read on this computer, or
+that the profile does not have, is greyed out with the reason.
+"Only import cookies for these sites" limits cookies to listed domains (subdomains included).
+
+Before importing:
+
+- Quit the source browser completely (also from the background). While it is open its files are in
+  use and the result says so; quit it and click "Try again".
+- macOS asks once for permission to use the browser's key in the Keychain; the user must choose Allow
+  (exception E1). If they denied it, "Try again" asks again.
+- On Windows some browsers need administrator consent to read cookies and passwords: the user ticks
+  "Allow reading cookies and passwords as administrator" and approves the UAC prompt (E1). Without it
+  nothing can be imported from that browser.
+
+The result lists each kind with how many were imported, already there, invalid and failed. Nothing
+already in Litch is overwritten (same site, name and path for cookies; same site and user name for
+passwords). Invalid means expired or malformed cookies, or password entries that are not for a
+website (Android apps). The import itself never shows cookie values or passwords to agents or in the
+Litch window; only counts.
+
+### Saved passwords
+
+Passwords (imported, or saved after signing in) are kept in Litch's own store, encrypted with the
+system's secure storage, and filled in automatically in the built-in browser: in the user's tabs and
+in agent tabs too, so an agent can sign in to a site the user has a saved password for. When the user
+signs in to a site with a password Litch does not have yet, the Browser tab offers to save it.
+Settings → Built-in browser → **Saved passwords** lists them by site and user name: search, delete
+one, delete all. Passwords cannot be shown or copied. "Clear browsing data" keeps them.
+
 Preferences (Settings → Built-in browser):
 
 - `scripts/litch browser links` sets whether links in conversations open in the built-in browser
@@ -59,7 +100,7 @@ Preferences (Settings → Built-in browser):
   **Guarded**: the user confirms in Litch.
 - `scripts/litch browser clear-data` clears cookies, sign-ins, site storage and cache of the built-in
   browser. **Irreversible: ask first**, then the user confirms in Litch (the user will be signed out
-  of every site there). Always-allowed sites are kept.
+  of every site there). Always-allowed sites and saved passwords are kept.
 
 ## Computer Use (macOS and Windows)
 

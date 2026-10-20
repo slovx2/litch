@@ -9,8 +9,10 @@
 //                                          用户标签的自动填充和代理读不到密码（src/probe-browser-autofill.mts）：窗口显示在屏幕上，
 //                                          原生菜单换成桩；再加 --manual 弹真的菜单，等人去点（打出要点的屏幕坐标）。
 //                                          safeStorage 在钥匙串里建的“Litch Autofill Probe Safe Storage”跑完删掉
+//   node scripts/check-browser.mjs --import 从别的浏览器导入：真的界面（先构建 packages/ui）、真的导入管线，
+//                                          读取器是假的、来源是临时目录里自造的样本（LITCH_BROWSER_IMPORT_FAKE）
 import { spawn, spawnSync } from 'node:child_process'
-import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -21,14 +23,17 @@ const require = createRequire(import.meta.url)
 const electron = require('electron')
 const appDir = fileURLToPath(new URL('..', import.meta.url))
 const v0 = process.argv.includes('--v0')
-const ui = process.argv.includes('--ui')
+const imports = process.argv.includes('--import')
+const ui = process.argv.includes('--ui') || imports
 const autofill = process.argv.includes('--autofill')
 const entry = v0
   ? 'src/probe-browser-v0.mts'
-  : ui
-    ? 'src/probe-browser-ui.mts'
-    : autofill
-      ? 'src/probe-browser-autofill.mts'
+  : imports
+    ? 'src/probe-browser-import.mts'
+    : ui
+      ? 'src/probe-browser-ui.mts'
+      : autofill
+        ? 'src/probe-browser-autofill.mts'
       : 'src/probe-browser.mts'
 const uiRoot = fileURLToPath(new URL('../../../packages/ui/dist', import.meta.url))
 if (ui && !existsSync(join(uiRoot, 'index.html'))) {
@@ -91,6 +96,11 @@ const env = {
 }
 if (process.argv.includes('--shown')) env.LITCH_V0_SHOWN = '1'
 if (process.argv.includes('--manual')) env.LITCH_AUTOFILL_MANUAL = '1'
+// 导入的样本：空目录交给主进程，它自己摆一套（browser-import/test/sample.mts），跑完随临时目录删掉
+if (imports) {
+  env.LITCH_BROWSER_IMPORT_FAKE = join(work, 'samples')
+  mkdirSync(env.LITCH_BROWSER_IMPORT_FAKE)
+}
 delete env.ELECTRON_RUN_AS_NODE
 
 const child = spawn(electron, [outfile], { env, stdio: ['ignore', 'pipe', 'pipe'] })
