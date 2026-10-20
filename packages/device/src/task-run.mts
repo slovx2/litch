@@ -3,7 +3,7 @@
 // 这里只管和引擎打交道；运行记录怎么存、什么时候开始、跑完任务怎么变，在 tasks.mts。
 import { existsSync, statSync } from 'node:fs'
 import { isAbsolute } from 'node:path'
-import { presentationSpec } from '../../protocol/src/client-tools-presentation.mjs'
+import { PRESENTATION_SPEC } from '../../protocol/src/client-tools-presentation.mjs'
 import { TASKS_TOOLS } from '../../protocol/src/client-tools-tasks.mjs'
 import { EXTENSION } from '../../protocol/src/device.mjs'
 import {
@@ -128,10 +128,9 @@ export function taskPrompt(task: TaskRow, run: DeviceTaskRun, nowSeconds: number
 
 const message = (error: unknown): string => (error instanceof Error ? error.message : String(error))
 
-/** 任务新建会话时带的动态工具 */
-function taskTools(harness: string): unknown[] {
-  const presentation = presentationSpec(harness)
-  return presentation ? [TASKS_TOOLS, presentation] : [TASKS_TOOLS]
+/** 任务新建会话时带的动态工具。原生 codex 不带呈现风格（按设备侧的 link.native 认，client-tools-presentation.mts） */
+function taskTools(link: EngineLink): unknown[] {
+  return link.native ? [TASKS_TOOLS] : [TASKS_TOOLS, PRESENTATION_SPEC]
 }
 
 /** 开内部连接；开不了的算 harnessUnavailable */
@@ -224,7 +223,7 @@ export async function executeRun(
         ...permissionParams(target.settings.permission, link),
         // 任务自己的回合里模型也能管任务（litch_tasks 由设备进程执行）。别的客户端工具要桌面端，不带。
         // 任务的会话也在 Litch 里看，带上呈现风格（原生 codex 不带，client-tools-presentation.mts）
-        ...(supportsClientTools(link) ? { dynamicTools: taskTools(run.harness) } : {}),
+        ...(supportsClientTools(link) ? { dynamicTools: taskTools(link) } : {}),
         // 原生 codex 认这个来源（上游的 ThreadSource::Feature("automation")），适配器的引擎不认，不带
         ...(link.native ? { threadSource: 'automation' } : {}),
       })

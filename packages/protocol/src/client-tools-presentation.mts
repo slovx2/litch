@@ -5,6 +5,9 @@
 // 命名空间 litch_presentation。这样不用另开协议字段，各引擎已有的落点都能用上，新建、恢复、分叉、子会话也都跟着走；
 // claude-code 只在普通回合拼命名空间的 instructions，带 outputSchema 的回合（标题、摘要这类结构化回答）不带。
 // 内容不随会话、回合变，同一会话的系统提示前缀稳定，提示缓存照样命中。
+// 它跟着会话存在引擎里：Litch 建的会话之后在官方桌面端打开，模型照样被告知回答显示在 Litch 里（可以接受：
+// 讲的是 Markdown、Mermaid 和对话式风格，官方桌面端也渲染得了）。反过来，这次改动之前建的会话恢复时不会补上：
+// 各引擎只在 thread/start 收 dynamicTools（照上游的语义），补上要改五家引擎，也是兼容旧数据的代码。
 //
 // 这个文件只引用 client-tools.mts：设备进程（派子会话、跑定时任务）和客户端核心（建会话）都直接引用它。
 import type { ClientToolNamespaceSpec } from './client-tools.mjs'
@@ -38,7 +41,7 @@ export const PRESENTATION_SPEC: ClientToolNamespaceSpec = {
 }
 
 /**
- * 在这个 harness 上建会话时要不要带呈现风格，要带就给定义，不带是 null。
+ * 客户端核心建会话时要不要带呈现风格（按 harness 名字认），要带就给定义，不带是 null。设备进程按 link.native 认。
  * 原生 codex 不带：它自己的提示词和官方桌面端用的是同一份，Litch 照官方桌面端的样子用它，不另加呈现指令
  * （上游也不收没有工具的命名空间）。不知道建在哪个 harness 上的也不带，免得交给原生 codex 被拒。
  */

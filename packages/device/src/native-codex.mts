@@ -31,6 +31,7 @@ import {
   type Ask,
   foldToolInstructions,
   type UpstreamDialect,
+  withoutEmptyNamespaces,
   withoutOptOut,
 } from './dialect.mjs'
 import { isObject } from './wire.mjs'
@@ -230,11 +231,13 @@ export const NATIVE_CODEX_DIALECT: UpstreamDialect = {
   },
 
   /**
+   * 一个工具都没有的命名空间它不收，整个去掉（dialect.mts 的 withoutEmptyNamespaces）；
    * 动态工具的命名空间带的规则（instructions）它不认，摘下来并进开发者指令（dialect.mts 的 foldToolInstructions）；
    * 选了内置的权限档、又没有另外指定审批策略的：把这一档配套的审批策略带上
    */
   outgoing(method, given) {
-    const folded = foldToolInstructions(method, given)
+    const trimmed = withoutEmptyNamespaces(method, given)
+    const folded = foldToolInstructions(method, trimmed ?? given) ?? trimmed
     const params = folded ?? given
     if (!PRESET_METHODS.has(method) || params.approvalPolicy != null) return folded
     const approvalPolicy =

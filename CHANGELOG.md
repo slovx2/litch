@@ -8,6 +8,8 @@ versioning or publishing metadata.
 ## 未发布
 
 - Litch：回答的呈现风格由 Litch 自己给。Litch 建的会话（含子会话、定时任务的会话）告诉模型回答显示在 Litch 里、能渲染 Markdown 和 Mermaid 图，要对话式地回答而不是终端式；用户自己的指令优先。经命名空间 `instructions` 送进系统提示（新的 `litch_presentation`：不带工具、只带 instructions），Claude Code 只在普通回合放、带 `outputSchema` 的回合不放；原生 Codex 不带。官方桌面端直连各 harness 的入口时没有这段
+  - 影响：适配器的 Claude Code 入口不再自带原来那段“Codex 桌面展示风格”提示。升级前建的会话（Litch 里的也一样）恢复后没有任何呈现提示，回答可能更像终端里的风格；新建的会话才有 Litch 这段。这段话跟着会话存：Litch 建的会话在官方桌面端打开，模型照样被告知回答显示在 Litch 里
+  - OpenCode 上只有在会话还带着别的 Litch 工具时这段话才送得到（桌面端建的会话总带着）；经聚合面转给原生 Codex 的建会话、恢复、分叉请求里如果有不带工具的命名空间，设备进程整个去掉，免得上游拒绝整个请求
 
 ## 0.14.0
 

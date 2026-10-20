@@ -112,6 +112,30 @@ export const ADAPTER_DIALECT: UpstreamDialect = {
 /** 带 dynamicTools 的方法。上游只有 thread/start 收它；恢复、分叉真带了也照样处理（上游悄悄丢掉） */
 const DYNAMIC_TOOL_METHODS = new Set(['thread/start', 'thread/resume', 'thread/fork'])
 
+/** 一个工具都没有的命名空间（比如只带 instructions 的 litch_presentation） */
+export const isEmptyNamespace = (spec: unknown): boolean =>
+  isObject(spec) &&
+  spec.type === 'namespace' &&
+  Array.isArray(spec.tools) &&
+  spec.tools.length === 0
+
+/**
+ * 原生 codex 转发前：去掉一个工具都没有的命名空间，连同它带的 instructions。上游 validate_dynamic_tools
+ * 对这种命名空间直接报错（must contain at least one tool），带上一个整个 thread/start 都会失败；
+ * 它的 instructions 也不并进开发者指令：Litch 只把这种命名空间（呈现风格）给不是原生 codex 的 harness。
+ * 不改返回 null
+ */
+export function withoutEmptyNamespaces(
+  method: string,
+  params: Record<string, unknown>,
+): Record<string, unknown> | null {
+  if (!DYNAMIC_TOOL_METHODS.has(method) || !Array.isArray(params.dynamicTools)) return null
+  if (!params.dynamicTools.some(isEmptyNamespace)) return null
+  const dynamicTools = params.dynamicTools.filter((spec) => !isEmptyNamespace(spec))
+  const { dynamicTools: _all, ...rest } = params
+  return dynamicTools.length ? { ...rest, dynamicTools } : rest
+}
+
 /**
  * 原生 codex 转发前（clientTools 扩展，protocol/extensions/client-tools.json）：动态工具的命名空间上带的
  * instructions 摘掉，拼进 developerInstructions 的末尾，用户自己给的在前。不改返回 null。

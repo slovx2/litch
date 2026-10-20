@@ -4,7 +4,7 @@
 // 和设备级工作区（跟父会话在同一个工作区，除非指定了别的），给每条客户端连接发 thread/started 和父子关系的通知。
 import {
   isPresentationSpec,
-  presentationSpec,
+  PRESENTATION_SPEC,
 } from '../../protocol/src/client-tools-presentation.mjs'
 import { SESSION_TOOL_LIMITS, SESSION_TOOLS } from '../../protocol/src/client-tools-sessions.mjs'
 import { EXTENSION } from '../../protocol/src/device.mjs'
@@ -200,15 +200,14 @@ export function briefing(
 function childTools(tree: SessionTree, parentId: string, link: EngineLink): unknown[] | null {
   const extensions = Array.isArray(link.runtime?.extensions) ? link.runtime.extensions : []
   if (!extensions.includes(EXTENSION.clientTools)) return null
-  // 呈现风格看子会话建在哪个 harness 上（原生 codex 不带），不照搬父会话的
+  // 呈现风格看子会话建在哪个 harness 上（原生 codex 不带，按设备侧的 link.native 认），不照搬父会话的
   const inherited = (tree.store.tools(parentId) ?? []).filter(
     (spec) => !isPresentationSpec(spec) && (!isObject(spec) || spec.name !== SESSION_TOOLS.name),
   )
-  const presentation = presentationSpec(link.harness)
   return [
     ...inherited,
     ...(tree.host.enabled() ? [SESSION_TOOLS] : []),
-    ...(presentation ? [presentation] : []),
+    ...(link.native ? [] : [PRESENTATION_SPEC]),
   ]
 }
 

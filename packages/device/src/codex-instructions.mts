@@ -16,7 +16,7 @@
 // 每次恢复、分叉都带上整段是安全的（实测）：恢复不马上重放；会话还装载着时 codex 忽略这个参数；压缩后只放一次，不叠加。
 // 只管经设备服务的原生 codex：直连 codex 的用法没有设备进程替它记。
 import { SESSION_TOOLS } from '../../protocol/src/client-tools-sessions.mjs'
-import type { Ask } from './dialect.mjs'
+import { type Ask, isEmptyNamespace } from './dialect.mjs'
 import { isObject } from './wire.mjs'
 
 /** 一个会话记下的：客户端给的开发者指令（没给是 null）、带规则的命名空间（建会话那时的原文）、目录 */
@@ -57,12 +57,13 @@ const METHODS = new Set(['thread/start', 'thread/resume', 'thread/fork'])
 export const instructionSection = (name: string, instructions: string): string =>
   `# Tool instructions: ${name}\n${instructions.trim()}`
 
-/** 动态工具里带规则的命名空间 */
+/** 动态工具里带规则的命名空间。一个工具都没有的不算：转发前整个去掉（dialect.mts 的 withoutEmptyNamespaces） */
 function ruledNamespaces(tools: unknown): ThreadInstructions['namespaces'] {
   if (!Array.isArray(tools)) return []
   const out: ThreadInstructions['namespaces'] = []
   for (const spec of tools) {
     if (!isObject(spec) || spec.type !== 'namespace' || typeof spec.name !== 'string') continue
+    if (isEmptyNamespace(spec)) continue
     const text = typeof spec.instructions === 'string' ? spec.instructions.trim() : ''
     if (text && !out.some((one) => one.name === spec.name))
       out.push({ name: spec.name, instructions: text })

@@ -130,6 +130,30 @@ test('声明 clientTools；带动态工具的会话挂上 litch 的 MCP 服务�
   }
 })
 
+test('只带 Litch 的呈现风格（不带工具的命名空间）的会话也挂 litch 的 MCP 服务：工具清单是空的，instructions 交给 agent', async () => {
+  const s = await scene()
+  try {
+    const desktop = await litch(s)
+    const { thread } = await desktop.call('thread/start', {
+      cwd: s.cwd,
+      dynamicTools: [PRESENTATION_SPEC],
+    })
+    const news = (await s.received()).filter((m) => m.method === 'session/new')
+    assert.equal(news.at(-1).params.mcpServers[0]?.name, 'litch')
+    const mounted = (await mounts(s)).filter((entry) => entry.sessionId === thread.id)
+    assert.deepEqual(mounted.at(-1).servers, [
+      {
+        name: 'litch',
+        instructions: `# Tool instructions: litch_presentation\n${PRESENTATION_RULES}`,
+        tools: [],
+      },
+    ])
+    assert.deepEqual([...violations], [])
+  } finally {
+    await dispose(s)
+  }
+})
+
 test('调用往返：发 item/tool/call 给声明了的连接，条目号就是 callId，结果交回 agent', async () => {
   const s = await scene()
   try {
