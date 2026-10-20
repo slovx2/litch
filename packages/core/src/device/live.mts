@@ -37,6 +37,7 @@ import type {
   TurnView,
 } from '../model.mjs'
 import type { ToolAnswer } from '../model-client-tools.mjs'
+import type { AgentThreadView } from '../model-tree.mjs'
 import { phrase } from '../phrase.mjs'
 import { projectFileChange, projectItem } from '../projection/items.mjs'
 import { bodyOf, localUserMessage, outgoing, toInput } from '../projection/outgoing.mjs'
@@ -117,6 +118,8 @@ export interface LiveHost {
   turnDiff?(sessionId: string, turnId: string, diff: string): void
   /** 设备服务声明了会话树（sessionTree）：载入会话时顺带取它上面等着的提案 */
   sessionTree?(): boolean
+  /** 设备记着的这个会话的子代理（载入会话时放进快照，之后的变化经 setAgents 来） */
+  agentsOf?(sessionId: string): AgentThreadView[]
   log(line: string): void
 }
 
@@ -191,6 +194,8 @@ export interface LiveSessions {
     status: 'started' | 'dismissed',
     startedId: string | null,
   ): void
+  /** 这个会话的子代理列表变了（设备记着的子线程和它们的回合）：开着的话交给界面 */
+  setAgents(sessionId: string, agents: AgentThreadView[]): void
 }
 
 interface Waiting extends PendingRequest {
@@ -735,6 +740,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
           // 重新载入时对面不一定再报一遍，先留着上一次的
           usage: view.usage ?? live.view?.usage ?? null,
           can: abilities(view.harness),
+          agents: host.agentsOf?.(live.id) ?? [],
         }
         const kept = todos.get(live.id)
         if (kept) placeTodos(live.view, kept)
@@ -1021,6 +1027,14 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       if (!live) return
       if (live.sinks.size === 0) sessions.delete(sessionId)
       else if (reachable(live)) load(live)
+    },
+
+    setAgents(sessionId, agents) {
+      const live = sessions.get(sessionId)
+      if (!live?.view) return
+      // 列表常常整份重来一遍（对账、问列表），没变的不发
+      if (JSON.stringify(live.view.agents) === JSON.stringify(agents)) return
+      emit(live, [{ op: 'session.agents', agents }])
     },
 
     settleProposal(sessionId, proposalId, status, startedId) {

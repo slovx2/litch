@@ -137,6 +137,7 @@ export function projectThread(
     can: { ...ALL_ABLE },
     forkedFrom: forkedFrom(thread),
     proposals: [],
+    agents: [],
   }
 }
 

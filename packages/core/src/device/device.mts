@@ -34,6 +34,7 @@ import {
   type Thread,
   type ThreadListSkippedHarness,
   type ThreadSectionListResponse,
+  type Turn,
 } from '../../../protocol/src/index.mjs'
 import { ChannelError, type Clock, type SidebarOp } from '../channel/protocol.mjs'
 import type { HostSink } from '../channel/server.mjs'
@@ -88,9 +89,9 @@ import { projectService, projectUpgrade } from '../projection/service.mjs'
 import { isAgentThread, parentOf, projectSummary, threadTitle } from '../projection/session.mjs'
 import { composeOptions, projectDefaults } from '../projection/settings.mjs'
 import type { SkillCatalog } from '../projection/skills.mjs'
-import { projectAgentThread } from '../projection/tree.mjs'
 import { pathTwin, samePath } from '../text/paths.mjs'
 import type { ToolHub } from '../tool-hub.mjs'
+import { createAgentThreads } from './agents.mjs'
 import { collectThreads, type Listing, mergeListing } from './catalog.mjs'
 import { createComposeAids } from './compose.mjs'
 import { createDiffs, type Diffs } from './diffs.mjs'
@@ -702,9 +703,12 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   /**
    * 见过的引擎自己的子代理线程（parentThreadId、来历是由别的线程派出）：不进侧栏。原生 codex 的子线程跑起来时
    * 会把状态通知发给每条连接，不认出来的话它会被当成“别处建的会话”要来放进侧栏，过一会儿对账又没了。
-   * 记下它的会话对象（只用来答“这是不是子代理”），删掉了就忘掉
+   * 记下它的会话对象和最近的一个回合（答“这是不是子代理”，给父会话一份带状态的子代理列表），删掉了就忘掉。
+   * 列表变了就交给开着的父会话（session.agents）
    */
-  const agentThreads = new Map<string, Thread>()
+  const agentThreads = createAgentThreads((parentId) =>
+    live.setAgents(parentId, agentThreads.list(parentId)),
+  )
 
   const upsertThread = (thread: Thread) => {
     if (thread.ephemeral) {
@@ -712,7 +716,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       return
     }
     if (isAgentThread(thread)) {
-      agentThreads.set(thread.id, { ...thread, turns: [] })
+      agentThreads.put(thread)
       return
     }
     unspoken.delete(thread.id)
@@ -741,7 +745,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   }
 
   const removeThread = (threadId: string) => {
-    agentThreads.delete(threadId)
+    agentThreads.forget(threadId)
     unread.delete(threadId)
     unspoken.delete(threadId)
     live.forget(threadId)
@@ -805,9 +809,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     patch: Partial<Thread> & { litchLineage?: SessionTreeThreadFields['litchLineage'] | undefined },
   ) => {
     if (transient.has(threadId)) return
-    const agent = agentThreads.get(threadId)
-    if (agent) {
-      agentThreads.set(threadId, { ...agent, ...patch })
+    if (agentThreads.has(threadId)) {
+      agentThreads.patch(threadId, patch)
       return
     }
     const thread = threads.get(threadId)
@@ -917,7 +920,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     threads.clear()
     for (const [id, thread] of next) {
       // 列表里混进来的子代理线程（不按上游的默认排除它们的入口）也不进侧栏
-      if (isAgentThread(thread)) agentThreads.set(id, thread)
+      if (isAgentThread(thread)) agentThreads.put(thread)
       else threads.set(id, thread)
     }
     // 设备上已经没有了的会话，未读也不留
@@ -1088,7 +1091,12 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     if (handler) {
       handler(params as never)
     } else if (live.notification(method, params)) {
-      // 会话里的事，已经交给打开着的那个会话了
+      // 会话里的事，已经交给打开着的那个会话了。子代理线程的回合开始、结束另记一份：
+      // 父会话的子代理列表照它写状态，子线程自己开没开着都一样
+      if (method === 'turn/started' || method === 'turn/completed') {
+        const { threadId, turn } = params as { threadId: string; turn: Turn }
+        if (agentThreads.has(threadId)) agentThreads.turn(threadId, turn)
+      }
     } else if (!unknownNotes.has(method)) {
       // 不认识的通知只记一次就丢掉，绝不因此刷新整张表
       unknownNotes.add(method)
@@ -1412,6 +1420,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       harnesses.find((entry) => entry.id === id)?.abilities ?? null,
     terms: (id) => terms.get(id) ?? null,
     shelved: (sessionId) => archived?.has(sessionId) ?? false,
+    agentsOf: (sessionId) => agentThreads.list(sessionId),
     request: (method, params, requestOptions) => link.request(method, params, requestOptions),
     touched(sessionId, said) {
       const thread = threads.get(sessionId)
@@ -2107,8 +2116,29 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       )
       // 不认识 parentThreadId 的引擎会把全部会话都回来：只留父会话确实是它的
       const own = listing.threads.filter((thread) => parentOf(thread) === sessionId)
-      for (const thread of own) agentThreads.set(thread.id, { ...thread, turns: [] })
-      return own.map(projectAgentThread).sort((a, b) => b.updatedAt - a.updatedAt)
+      for (const thread of own) agentThreads.put(thread)
+      // 列表里不带回合：还不知道最近一个回合的，问一下（不带条目）。问不到的（旧版的入口）就不知道，
+      // 状态退回到对话里协作条目报的
+      await Promise.all(
+        own
+          .filter((thread) => !agentThreads.knowsTurn(thread.id))
+          .map(async (thread) => {
+            const since = agentThreads.stamp(thread.id)
+            try {
+              const page = await link.request('thread/turns/list', {
+                threadId: thread.id,
+                limit: 1,
+                sortDirection: 'desc',
+                itemsView: 'notLoaded',
+              })
+              const last = page.data[0]
+              if (last) agentThreads.settle(thread.id, last, since)
+            } catch (error) {
+              log(`取子代理 ${thread.id} 最近的回合失败：${String(error)}`)
+            }
+          }),
+      )
+      return agentThreads.list(sessionId)
     },
   }
 }

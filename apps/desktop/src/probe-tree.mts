@@ -7,7 +7,8 @@
 //   过期了、撤回了的写着状态；侧面板的“建议任务”列全部，角标是等着的个数，点一条在对话里找到那张卡片；
 //   收尾（wrap_up）带的建议照顺序一张一张、被拒的只一行原因，空的收尾不画；开始了的卡片写实际的 harness；
 //   没调收尾时设备进程的提醒画成一行轻字，不是用户的气泡；
-//   子代理卡片点了在侧面板里看子线程，不接受直接输入的没有输入框；子代理线程不进侧栏；
+//   子代理在对话流里一个一行（完成、已停止、失败以子线程为准），点了在侧面板里看子线程，失败的有红框写原话，
+//   不接受直接输入的没有输入框；子代理线程不进侧栏；
 //   三种皮肤、深浅两套下这几样东西不溢出。
 // 下面的 treeProbe、treeLooks 会被原样送进页面里执行，不能引用函数外面的东西。
 import type { BrowserWindow } from 'electron'
@@ -53,9 +54,16 @@ export interface TreeSeen {
   wrapQuiet: boolean
   wrapActual: boolean
   remindBar: boolean
-  /** 子代理：卡片两行，点了在侧面板里看；不能直接输入的没有输入框，能的有；侧栏里没有子代理线程 */
+  /**
+   * 子代理：对话流里每个子代理一行小条（不摊开任务说明），最后写着完成、已停止、失败（派出的条目报的一直是“在跑”，
+   * 状态以子线程为准）；复古皮肤里状态写在方括号里；点了在侧面板里看，列表三行带状态，失败的那个有红框写着原话；
+   * 不能直接输入的没有输入框，能的有；侧栏里没有子代理线程
+   */
   agentCard: boolean
+  agentStates: boolean
+  agentBracket: boolean
   agentPanel: boolean
+  agentFail: boolean
   agentMuted: boolean
   agentOpen: boolean
   agentsHidden: boolean
@@ -357,23 +365,44 @@ export async function treeProbe(): Promise<TreeSeen> {
 
   // —— 子代理 ——
   await say('用子代理看看')
+  const rowsOf = () => $$('.main .agents-rows[data-card="agents"] .agent-row')
   const agentCard = await until(
-    () => $$('.main .tree-card[data-card="agents"] .tree-agent').length === 2,
+    () =>
+      rowsOf().length === 3 &&
+      rowsOf().every((row) => row.querySelector('.agent-st') !== null) &&
+      // 任务说明不摊开：行上只有一句描述
+      !($('.main .agents-rows[data-card="agents"]')?.textContent ?? '').includes('入口文件的路径'),
   )
-  await until(() =>
-    $$('.main .tree-card[data-card="agents"] .tree-card-state').every(
-      (state) => state.textContent === '做完了',
-    ),
+  const agentStates = await until(
+    () =>
+      rowsOf()
+        .map((row) => row.dataset.state)
+        .join(',') === 'completed,stopped,failed',
+    12000,
   )
-  const agents = $$('.main .tree-card[data-card="agents"] .tree-agent')
+  const agents = rowsOf()
   const ids = agents.map((entry) => entry.dataset.agent ?? '')
   seen.agents = agents.map((entry) => entry.textContent ?? '').join(' | ')
-  agents[1]?.click()
+  const mark = agents[0]?.querySelector('.agent-st')
+  const bracket = mark ? getComputedStyle(mark, '::before').content : ''
+  const agentBracket = document.documentElement.dataset.skin !== 'retro' || bracket === '"["'
+  seen.bracket = `${document.documentElement.dataset.skin ?? ''} ${bracket}`
+  agents[2]?.click()
   const agentPanel = await until(
     () =>
       $('.side')?.hidden === false &&
-      $(`.side .agents-view[data-agent="${ids[1]}"] .tr .turn`) !== null,
+      $$('.side .agents-pick').length === 3 &&
+      $(`.side .agents-pick[data-agent="${ids[2]}"]`)?.getAttribute('aria-selected') === 'true' &&
+      $(`.side .agents-view[data-agent="${ids[2]}"] .tr .turn`) !== null,
   )
+  const agentFail = await until(() =>
+    ($(`.side .agents-view[data-agent="${ids[2]}"] .agents-fail`)?.textContent ?? '').includes(
+      'PreToolUse:Agent hook error',
+    ),
+  )
+  seen.fail = $('.side .agents-fail')?.textContent ?? '没有'
+  $(`.side .agents-pick[data-agent="${ids[1]}"]`)?.click()
+  await until(() => $(`.side .agents-view[data-agent="${ids[1]}"] .tr .turn`) !== null)
   const agentMuted =
     $('.side .agents-view .dock textarea') === null &&
     ($('.side .agents-view .cmp.off')?.textContent ?? '') !== ''
@@ -425,7 +454,10 @@ export async function treeProbe(): Promise<TreeSeen> {
     wrapActual,
     remindBar,
     agentCard,
+    agentStates,
+    agentBracket,
     agentPanel,
+    agentFail,
     agentMuted,
     agentOpen,
     agentsHidden,
@@ -449,6 +481,7 @@ export async function treeLooks(parent: string): Promise<TreeLooks> {
   const rows: TreeLooks['rows'] = []
   const parts = [
     '.tree-card',
+    '.agent-row',
     '.prop-card',
     '.prop-refused',
     '.sev',
@@ -511,8 +544,11 @@ const LABELS: Record<Exclude<keyof TreeSeen, 'seen'>, string> = {
   wrapQuiet: '空的收尾不画：撤回的那个回合只有一个活动块',
   wrapActual: '“改了再开始”能改完成后唤醒；换了 harness 开始后卡片写实际的 harness',
   remindBar: '没调收尾的提醒是一行轻字、没有用户气泡，后面跟着补的那张卡片',
-  agentCard: '子代理卡片列出两个子代理',
-  agentPanel: '点子代理在侧面板里看它的对话',
+  agentCard: '对话流里三个子代理各一行小条，不摊开任务说明',
+  agentStates: '子代理行最后写着完成、已停止、失败（以子线程为准）',
+  agentBracket: '复古皮肤里子代理的状态写在方括号里',
+  agentPanel: '点子代理在侧面板里看它：列表三行，选中的是它，下面是它的对话',
+  agentFail: '失败的子代理有红框写着 harness 的原话',
   agentMuted: '不接受直接输入的子代理没有输入框',
   agentOpen: '接受直接输入的子代理有输入框',
   agentsHidden: '子代理线程不进侧栏',

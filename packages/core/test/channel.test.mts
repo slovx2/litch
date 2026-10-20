@@ -35,6 +35,7 @@ function emptySession(): SessionView {
     can: { ...ALL_ABLE },
     forkedFrom: null,
     proposals: [],
+    agents: [],
   }
 }
 

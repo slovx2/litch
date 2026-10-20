@@ -1,11 +1,13 @@
 // 对话里露在外面的几种卡片（核心的 cardOf 定哪些条目画成卡片）：
 // 派出的 Litch 子会话（litch_sessions.start）：标题、harness、现在怎样、最近一次回报，点一下跳过去；
 // 降成提案的 litch_sessions.start、带了建议的收尾（litch_sessions.wrap_up）：建议任务的卡片（ProposalCard.tsx）；
-// 引擎自己启动的子代理（collabAgentToolCall）：每个子代理一行，谁、在做什么、怎样了，点一下在侧面板里看。
+// 引擎自己启动的子代理（collabAgentToolCall）：每个子代理一行小条（类型、描述、用时、状态），点一下在右侧“子代理”页里看。
 import {
   type AgentRefView,
-  type AgentState,
+  type AgentRunState,
+  type AgentThreadView,
   type DeviceView,
+  firstSentence,
   keys,
   type SessionNotes,
   type SessionSummary,
@@ -18,6 +20,7 @@ import { Icon } from '../app/icons.tsx'
 import { useKey } from '../app/services.tsx'
 import { useActions } from '../transcript/actions.tsx'
 import { type ItemRef, useItem } from '../transcript/messages.tsx'
+import { AgentStatus, AgentTime, useAgentStates } from './agent-view.tsx'
 import { openAgent } from './agents.ts'
 import { ProposalCard, WrapUpCards } from './ProposalCard.tsx'
 import { useAgentList } from './useAgentList.ts'
@@ -25,16 +28,6 @@ import { useAgentList } from './useAgentList.ts'
 /** 侧栏行首那个状态点的画法：在跑、在等人、出错，别的不画 */
 export const markOf = (status: SessionSummary['status'] | undefined): string =>
   status === 'running' ? 'run' : status === 'waiting' ? 'wait' : status === 'error' ? 'err' : ''
-
-const AGENT_MARK: Record<AgentState, string> = {
-  pendingInit: 'run',
-  running: 'run',
-  interrupted: '',
-  completed: '',
-  errored: 'err',
-  shutdown: '',
-  notFound: 'err',
-}
 
 /** 派出的一个子会话（模型直接起的） */
 const SpawnCard = memo(function SpawnCard(ref: ItemRef) {
@@ -117,91 +110,130 @@ const SpawnCard = memo(function SpawnCard(ref: ItemRef) {
   )
 })
 
-/** 一个子代理那一行 */
-function AgentLine({
+/** 鼠标停在子代理那一行上时给的提示：任务说明的前几行 */
+const TIP_LINES = 4
+const TIP_CHARS = 280
+
+function tipOf(prompt: string): string | undefined {
+  const lines = prompt.split('\n').filter((line) => line.trim().length > 0)
+  let tip = lines.slice(0, TIP_LINES).join('\n')
+  if (Array.from(tip).length > TIP_CHARS) tip = `${Array.from(tip).slice(0, TIP_CHARS).join('')}…`
+  else if (lines.length > TIP_LINES) tip = `${tip}\n…`
+  return tip || undefined
+}
+
+/**
+ * 子代理在对话流里的一行：类型、一句话描述、用时、状态，点了在右侧“子代理”页里看它。
+ * 不摊开任务说明，鼠标停一下给前几行
+ */
+function AgentRow({
   deviceId,
   parentId,
-  agent,
+  threadId,
+  thread,
+  state,
+  fallback,
   index,
-  nickname,
-  role,
 }: {
   deviceId: string
   parentId: string
-  agent: AgentRefView
+  /** 还不知道子线程是谁（刚开始派）是 null，这时不能点 */
+  threadId: string | null
+  thread: AgentThreadView | undefined
+  state: AgentRunState
+  /** 条目里的任务说明：子线程那边没有描述、没有任务时用它 */
+  fallback: string
   index: number
-  nickname: string | null
-  role: string | null
 }) {
   const t = useT()
-  const mark = agent.state ? AGENT_MARK[agent.state] : ''
+  const prompt = thread?.prompt || fallback
+  const description =
+    thread?.description ||
+    firstSentence(fallback) ||
+    thread?.nickname ||
+    t('tree.agent.unnamed', { n: index + 1 })
+  const body = (
+    <>
+      <Icon name="agents" small />
+      {thread?.role ? <span className="agent-kind">{thread.role}</span> : null}
+      <span className="agent-desc ell">{description}</span>
+      <span className="agent-meta">
+        <AgentTime thread={thread} />
+        <AgentStatus state={state} />
+      </span>
+    </>
+  )
+  if (!threadId)
+    return (
+      <div className="agent-row" data-state={state} title={tipOf(prompt)}>
+        {body}
+      </div>
+    )
   return (
-    <li>
-      <button
-        type="button"
-        className="tree-agent"
-        data-agent={agent.threadId}
-        title={t('tree.agent.open')}
-        onClick={() => openAgent(deviceId, parentId, agent.threadId)}
-      >
-        <i className={mark ? `st ${mark}` : 'st'} />
-        <b className="tree-agent-name">{nickname ?? t('tree.agent.unnamed', { n: index + 1 })}</b>
-        {role ? <span className="tree-agent-role">{role}</span> : null}
-        <span className="tree-agent-msg ell grow">{agent.message ?? ''}</span>
-        <span className="tree-card-state">
-          {t(agent.state ? `tree.agent.${agent.state}` : 'tree.agent.unknown')}
-        </span>
-      </button>
-    </li>
+    <button
+      type="button"
+      className="agent-row"
+      data-agent={threadId}
+      data-state={state}
+      title={[tipOf(prompt), t('tree.agent.open')].filter(Boolean).join('\n\n')}
+      onClick={() => openAgent(deviceId, parentId, threadId)}
+    >
+      {body}
+      <span className="agent-go" aria-hidden="true">
+        ›
+      </span>
+    </button>
   )
 }
 
-/** 启动子代理的那一次调用 */
+/** 启动子代理的那一次调用：每个子代理一行，并行派出的排在一起 */
 const AgentsCard = memo(function AgentsCard(ref: ItemRef) {
   const { deviceId, sessionId } = ref
   const item = useItem<ToolCallItem>(ref)
   const t = useT()
-  const agents = item?.kind === 'toolCall' ? (item.agents ?? []) : []
-  // 子代理的状态变了再问一次列表：新起的子代理那时才有昵称
-  const stamp = agents.map((agent) => `${agent.threadId}=${agent.state ?? ''}`).join(',')
-  const list = useAgentList(deviceId, sessionId, stamp, agents.length > 0)
+  const agents = item?.kind === 'toolCall' ? (item.agents ?? NO_AGENTS) : NO_AGENTS
+  // 父会话的子代理列表（第一次在这里问；之后核心跟着子线程的回合推来）
+  useAgentList(deviceId, sessionId, '', agents.length > 0)
+  const states = useAgentStates(ref, agents)
   if (item?.kind !== 'toolCall') return null
   const prompt = item.input.flatMap((part) => (part.kind === 'text' ? [part.text] : [])).join('\n')
   return (
-    <div className="tree-card" data-card="agents" data-anchor={`i:${ref.itemId}`}>
-      <div className="tree-card-main">
-        <span className="tree-card-kind">
-          {item.status === 'inProgress' && agents.length === 0 ? (
-            <i className="st run" />
-          ) : (
-            <Icon name="agents" small />
-          )}
-          {agents.length > 0 ? t('tree.agents.title', { n: agents.length }) : t.text(item.tool)}
-          {item.status === 'failed' ? <span className="minus">{t('status.failed')}</span> : null}
-        </span>
-        {prompt ? <span className="tree-card-text">{prompt}</span> : null}
-      </div>
-      {agents.length === 0 ? null : (
-        <ul className="tree-agents">
-          {agents.map((agent, index) => {
-            const known = list?.find((entry) => entry.id === agent.threadId)
-            return (
-              <AgentLine
-                key={agent.threadId}
-                deviceId={deviceId}
-                parentId={sessionId}
-                agent={agent}
-                index={index}
-                nickname={known?.nickname ?? null}
-                role={known?.role ?? null}
-              />
-            )
-          })}
-        </ul>
+    <div className="agents-rows" data-card="agents" data-anchor={`i:${ref.itemId}`}>
+      {agents.length === 0 ? (
+        // 刚开始派、还不知道是谁；或者没派出去
+        <div
+          className="agent-row"
+          data-state={item.status === 'failed' ? 'failed' : 'queued'}
+          title={tipOf(prompt)}
+        >
+          <Icon name="agents" small />
+          <span className="agent-desc ell">
+            {firstSentence(prompt) ||
+              t(item.status === 'failed' ? 'tree.agent.spawnFailed' : 'tree.agent.spawning')}
+          </span>
+          <span className="agent-meta">
+            <AgentStatus state={item.status === 'failed' ? 'failed' : 'queued'} />
+          </span>
+        </div>
+      ) : (
+        states.map((entry, index) => (
+          <AgentRow
+            key={entry.ref.threadId}
+            deviceId={deviceId}
+            parentId={sessionId}
+            threadId={entry.ref.threadId}
+            thread={entry.thread}
+            state={entry.state}
+            fallback={prompt}
+            index={index}
+          />
+        ))
       )}
     </div>
   )
 })
+
+const NO_AGENTS: AgentRefView[] = []
 
 /** 对话里的一张卡片：按条目里带的是哪一种来画 */
 export const TreeCard = memo(function TreeCard(ref: ItemRef) {

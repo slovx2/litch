@@ -84,6 +84,7 @@ test('声明到了界面看得到的地方：harness 上带着它会什么；没
     remove: false,
     finalOnStart: false,
     turnDiff: false,
+    stopAgent: false,
   })
   assert.equal(abilities.codex?.fork, true)
   assert.equal(abilities.old, null)

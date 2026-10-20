@@ -234,6 +234,12 @@ function isWorkflowToolName(value: string): boolean {
   return name === 'workflow' || name === 'workflows'
 }
 
+// 子代理失败的原因：CLI 给 Agent 工具的错误结果（去掉包装之后）就是原话；一个字都没有时才写一句兜底的
+function subagentFailure(text: string): string {
+  const reason = text.trim()
+  return reason || 'Subagent failed without a reason.'
+}
+
 function subagentWatchdogTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
   const raw = env.CHA_CLAUDE_SUBAGENT_TIMEOUT_MS?.trim()
   if (!raw) return DEFAULT_SUBAGENT_WATCHDOG_MS
@@ -258,6 +264,9 @@ interface SubagentContext {
   subType: string | null
   // 子代理过程在子线程里的投影；工作流聚合出的代理没有过程可投影。
   projection: SubagentProjection | null
+  // 派出它的那个 spawnAgent 条目（结束时的样子）。子代理结束时以同一个标识再发一次 item/completed，
+  // 带上它最后的状态：官方桌面端按条目标识原地换掉，Litch 也一样
+  spawnItem: ThreadItem
 }
 
 interface ActiveSubagentState {
@@ -3899,6 +3908,11 @@ export class CodexClaudeAppServer {
             // 昵称定下后不再改：桌面的标签页取子线程出现时的名字，列表行取之后读到的
             // 名字，中途改名两处就对不上。CLI 给的代理 ID 另存，见 saveSubagentId。
             const promptText = String(event.input.prompt ?? event.input.description ?? '')
+            // Agent 工具的一句话描述（终端里括号里的那句）：当作子线程的名字，客户端拿它作子代理的标题
+            const description =
+              typeof event.input.description === 'string' && event.input.description.trim()
+                ? event.input.description.trim()
+                : null
             const subType =
               typeof event.input.subagent_type === 'string' ? event.input.subagent_type : null
             const subagentModel =
@@ -3917,7 +3931,7 @@ export class CodexClaudeAppServer {
               sectionEnteredAt: null,
               sectionPosition: null,
               preview: promptText.slice(0, 200),
-              name: null,
+              name: description,
               archived: false,
               cwd: thread.cwd,
               model: subagentModel,
@@ -4065,6 +4079,7 @@ export class CodexClaudeAppServer {
               agentPath,
               prompt: promptText,
               subType,
+              spawnItem: spawnEnd,
               projection: new SubagentProjection(
                 {
                   appendItem: (item) => void this.store.appendItem(childTurn.id, item),
@@ -4130,13 +4145,15 @@ export class CodexClaudeAppServer {
             const parsed =
               subagentStructuredResult(event.structured) ?? parseSubagentTrailer(rawResultText)
             const resultText = parsed.cleanText
+            // 失败时 CLI 给的结果就是原因（钩子拒绝、子代理类型不存在……），原话写进子线程回合的 error
+            const failure = event.isError ? subagentFailure(resultText) : null
 
             const childTurn = this.completeSubagentChildTurn(
               peer,
               ctx,
               resultText,
               event.isError ? 'failed' : 'completed',
-              event.isError ? { message: 'subagent failed' } : null,
+              failure ? { message: failure } : null,
               parsed.usage?.durationMs ?? null,
             )
             recordRunEvent('subagent.completed', {
@@ -4202,6 +4219,8 @@ export class CodexClaudeAppServer {
               })
             }
 
+            this.resettleSpawnItem(peer, thread.id, turn.id, ctx, agentStatus, failure)
+
             // Stage 2 close — wait (end). Re-emits the same waitItemId.
             const waitEnd: ThreadItem = {
               type: 'collabAgentToolCall',
@@ -4213,7 +4232,7 @@ export class CodexClaudeAppServer {
               prompt: null,
               model: null,
               reasoningEffort: null,
-              agentsStates: { [ctx.childThreadId]: { status: agentStatus, message: null } },
+              agentsStates: { [ctx.childThreadId]: { status: agentStatus, message: failure } },
             }
             this.store.updateItemAndMoveToEnd(turn.id, ctx.waitItemId, () => waitEnd)
             this.notify(peer, {
@@ -4258,7 +4277,7 @@ export class CodexClaudeAppServer {
               const closeEnd: ThreadItem = {
                 ...closeBegin,
                 status: collabStatus,
-                agentsStates: { [ctx.childThreadId]: { status: agentStatus, message: null } },
+                agentsStates: { [ctx.childThreadId]: { status: agentStatus, message: failure } },
               }
               this.store.updateItem(turn.id, closeId, () => closeEnd)
               this.notify(peer, {
@@ -4902,7 +4921,7 @@ export class CodexClaudeAppServer {
     peer: RpcPeer,
     context: SubagentContext,
     resultText: string,
-    status: 'completed' | 'failed',
+    status: 'completed' | 'failed' | 'interrupted',
     error: unknown | null,
     durationMs: number | null = null,
   ): TurnRecord {
@@ -4929,8 +4948,10 @@ export class CodexClaudeAppServer {
     }
 
     // 过程投影里最后一段正文若就是结果，已原地标为最终回答，不再重复写一条。
-    // 没有结果文字时不写空的回答条目（上游读历史时也跳过空的回答）；失败的原因在回合的 error 上。
-    if (!context.projection?.finish(resultText, status === 'failed') && resultText) {
+    // 没有结果文字时不写空的回答条目（上游读历史时也跳过空的回答）；失败的原因只在回合的 error 上，
+    // 不再另写成一段回答（那样原因和出错框是分开的两处）。
+    const ended = status !== 'completed'
+    if (!context.projection?.finish(resultText, ended) && resultText && !ended) {
       const agentItemId = newId()
       const startedItem: ThreadItem = {
         type: 'agentMessage',
@@ -5057,6 +5078,30 @@ export class CodexClaudeAppServer {
     )
   }
 
+  // 子代理结束了：派出它的 spawnAgent 条目以同一个标识再发一次 item/completed，带上它最后的状态
+  // （上游的 V2 也只在派出时报一次“在跑”；客户端照子线程算状态，这里只是让条目本身也对）。
+  // 落库时原地换掉、不挪位置：读历史时它还在原处，状态是最后的
+  private resettleSpawnItem(
+    peer: RpcPeer,
+    threadId: string,
+    turnId: string,
+    context: SubagentContext,
+    status: 'completed' | 'errored' | 'interrupted',
+    message: string | null,
+  ): void {
+    if (context.spawnItem.type !== 'collabAgentToolCall') return
+    const item: ThreadItem = {
+      ...context.spawnItem,
+      agentsStates: { [context.childThreadId]: { status, message } },
+    }
+    context.spawnItem = item
+    this.store.updateItem(turnId, item.id, () => item)
+    this.notify(peer, {
+      method: 'item/completed',
+      params: { threadId, turnId, item, completedAtMs: nowMillis() },
+    })
+  }
+
   private supportsCompletedSubagentActivity(peer: RpcPeer): boolean {
     if (process.env.CHA_CLAUDE_SUBAGENT_COMPLETED === '1') return true
     if (process.env.CHA_CLAUDE_SUBAGENT_COMPLETED === '0') return false
@@ -5075,6 +5120,8 @@ export class CodexClaudeAppServer {
     return { aware: aware > 0, legacy: aware < targets.length }
   }
 
+  // 父回合结束时还没交回结果的子代理。stopped：是用户打断了父回合，子代理跟着被停掉，
+  // 子线程的回合记成被打断（不是出错，error 留空，和上游打断回合一样）；否则记成失败，原因是 failureMessage
   private finalizeOrphanedSubagents(
     peer: RpcPeer,
     thread: ThreadRecord,
@@ -5082,6 +5129,7 @@ export class CodexClaudeAppServer {
     contexts: Map<string, SubagentContext>,
     active: Set<string>,
     failureMessage = 'Subagent ended without a terminal task result.',
+    stopped = false,
   ): void {
     for (const toolUseId of Array.from(active)) {
       const context = contexts.get(toolUseId)
@@ -5089,32 +5137,39 @@ export class CodexClaudeAppServer {
       contexts.delete(toolUseId)
       if (!context) continue
 
-      const message = failureMessage
-      const childTurn = this.completeSubagentChildTurn(peer, context, message, 'failed', {
-        message,
-      })
+      const message = stopped ? null : failureMessage
+      const agentStatus = stopped ? 'interrupted' : 'errored'
+      const childTurn = this.completeSubagentChildTurn(
+        peer,
+        context,
+        message ?? '',
+        stopped ? 'interrupted' : 'failed',
+        message ? { message } : null,
+      )
       recordRunEvent('subagent.completed', {
         parentThreadId: thread.id,
         parentTurnId: turn.id,
         childThreadId: context.childThreadId,
         childTurnId: childTurn.id,
-        status: 'failed',
+        status: childTurn.status,
         agentRole: context.subType ?? 'general-purpose',
       })
 
       this.emitSubagentActivity(peer, thread.id, turn.id, context, 'interrupted')
+      this.resettleSpawnItem(peer, thread.id, turn.id, context, agentStatus, message)
 
       const waitEnd: ThreadItem = {
         type: 'collabAgentToolCall',
         id: context.waitItemId,
         tool: 'wait',
-        status: 'failed',
+        // 用户打断的：等待本身没出错，是等的那个被停掉了
+        status: stopped ? 'completed' : 'failed',
         senderThreadId: thread.id,
         receiverThreadIds: [context.childThreadId],
         prompt: null,
         model: null,
         reasoningEffort: null,
-        agentsStates: { [context.childThreadId]: { status: 'errored', message } },
+        agentsStates: { [context.childThreadId]: { status: agentStatus, message } },
       }
       this.store.updateItemAndMoveToEnd(turn.id, context.waitItemId, () => waitEnd)
       this.notify(peer, {
@@ -5153,7 +5208,7 @@ export class CodexClaudeAppServer {
         const closeEnd: ThreadItem = {
           ...closeBegin,
           status: 'failed',
-          agentsStates: { [context.childThreadId]: { status: 'errored', message } },
+          agentsStates: { [context.childThreadId]: { status: agentStatus, message } },
         }
         this.store.updateItem(turn.id, closeId, () => closeEnd)
         this.notify(peer, {
@@ -5272,6 +5327,8 @@ export class CodexClaudeAppServer {
             subagents.turn,
             subagents.contexts,
             subagents.active,
+            undefined,
+            true,
           )
           this.subagentStateByTurn.delete(turnId)
         }

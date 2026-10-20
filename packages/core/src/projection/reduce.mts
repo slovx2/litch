@@ -99,5 +99,8 @@ export function reduceSession(view: SessionView, op: SessionOp): void {
     case 'session.proposals':
       view.proposals = copyValue(op.proposals)
       return
+    case 'session.agents':
+      view.agents = copyValue(op.agents)
+      return
   }
 }

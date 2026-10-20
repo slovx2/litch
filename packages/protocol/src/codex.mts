@@ -124,6 +124,8 @@ export type { ThreadStartResponse } from '../../../protocol/codex-app-server/0.1
 export type { ThreadStatus } from '../../../protocol/codex-app-server/0.157.1/typescript/v2/ThreadStatus'
 export type { ThreadStatusChangedNotification } from '../../../protocol/codex-app-server/0.157.1/typescript/v2/ThreadStatusChangedNotification'
 export type { ThreadTokenUsageUpdatedNotification } from '../../../protocol/codex-app-server/0.157.1/typescript/v2/ThreadTokenUsageUpdatedNotification'
+export type { ThreadTurnsListParams } from '../../../protocol/codex-app-server/0.157.1/typescript/v2/ThreadTurnsListParams'
+export type { ThreadTurnsListResponse } from '../../../protocol/codex-app-server/0.157.1/typescript/v2/ThreadTurnsListResponse'
 export type { ThreadUnarchivedNotification } from '../../../protocol/codex-app-server/0.157.1/typescript/v2/ThreadUnarchivedNotification'
 export type { ThreadUnarchiveParams } from '../../../protocol/codex-app-server/0.157.1/typescript/v2/ThreadUnarchiveParams'
 export type { ThreadUnarchiveResponse } from '../../../protocol/codex-app-server/0.157.1/typescript/v2/ThreadUnarchiveResponse'

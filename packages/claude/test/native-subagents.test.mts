@@ -554,6 +554,18 @@ test('SUBAGENT-006：后台子代理运行期间中断，父子回合都结束�
     assert.ok(Date.now() - interruptedAt < 10_000, '中断不应等后台子代理跑完')
     const [childThread] = await childThreads(client, thread.id)
     assert.notEqual(childThread.turns.at(-1).status, 'inProgress', '子线程回合不能悬着')
+    // 用户打断了父回合：子代理是被停掉的，不是出错
+    assert.equal(childThread.turns.at(-1).status, 'interrupted')
+    assert.equal(childThread.turns.at(-1).error, null)
+    const parentSpawn = client.trace
+      .filter(
+        (message) =>
+          message.method === 'item/completed' &&
+          message.params.item.type === 'collabAgentToolCall' &&
+          message.params.item.tool === 'spawnAgent',
+      )
+      .at(-1)?.params.item
+    assert.equal(parentSpawn?.agentsStates[childThread.id]?.status, 'interrupted')
     assert.ok(!agentTexts(childThread).join('\n').includes('CHILD_DONE'))
     // 中断后同一会话还能继续。
     model.enqueue(async () => [{ type: 'text', text: 'AFTER_INTERRUPT_OK' }])
@@ -845,6 +857,128 @@ test('SUBAGENT-011：子代理先于父会话收尾结束时，追问照常完�
       JSON.stringify(model.requests.at(-1)?.messages).includes('CHILD_FOLLOWUP_ANSWER'),
       '父会话应知道子代理追问的结果',
     )
+    model.assertConsumed()
+  } finally {
+    await client.close()
+    await model.close()
+    await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
+  }
+})
+
+// 父会话里协作条目的 item/completed，按到达的先后
+const collabCompletions = (client: ProtocolClient, threadId: string, tool: string) =>
+  client.trace
+    .filter(
+      (message) =>
+        message.method === 'item/completed' &&
+        message.params.threadId === threadId &&
+        message.params.item.type === 'collabAgentToolCall' &&
+        message.params.item.tool === tool,
+    )
+    .map((message) => message.params.item)
+
+test('SUBAGENT-012：子代理做完后派出的条目再完成一次、带上完成；子线程的名字是 Agent 工具的 description', {
+  timeout: 120_000,
+}, async () => {
+  const home = await mkdtemp(join(tmpdir(), 'native-subagent-done-'))
+  await writeFile(join(home, 'a.txt'), 'probe-file-content: 42\n')
+  const model = new MockLLM()
+  const client = await ProtocolClient.start(home, await model.start())
+  try {
+    const { thread } = await client.request('thread/start', {
+      cwd: home,
+      sandbox: 'danger-full-access',
+      approvalPolicy: 'never',
+    })
+    for (let index = 0; index < 4; index++) model.enqueue(subagentRouter(home, 'foreground'))
+    const { turn } = await client.request('turn/start', {
+      threadId: thread.id,
+      input: [{ type: 'text', text: 'SUBAGENT_MAIN 请派子代理读取 a.txt' }],
+    })
+    await assertCompleted(client, model, turn.id)
+    const [child] = await childThreads(client, thread.id)
+    assert.ok(child, '应创建子线程')
+    assert.equal(child.name, '读取探针文件')
+    assert.equal(child.turns.at(-1).status, 'completed')
+    const spawns = collabCompletions(client, thread.id, 'spawnAgent')
+    assert.deepEqual(
+      spawns.map((item) => [item.id, item.status, item.agentsStates[child.id]?.status]),
+      [
+        [spawns[0]?.id, 'completed', 'running'],
+        [spawns[0]?.id, 'completed', 'completed'],
+      ],
+    )
+    // 读历史：派出的那一条在原处，状态是最后的
+    const parent = (
+      await client.request('thread/read', { threadId: thread.id, includeTurns: true })
+    ).thread
+    const stored = parent.turns[0].items.filter((item: any) => item.type === 'collabAgentToolCall')
+    assert.deepEqual(
+      stored.map((item: any) => [item.tool, item.agentsStates[child.id]?.status]),
+      [
+        ['spawnAgent', 'completed'],
+        ['wait', 'completed'],
+      ],
+    )
+    model.assertConsumed()
+  } finally {
+    await client.close()
+    await model.close()
+    await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
+  }
+})
+
+test('SUBAGENT-013：子代理被钩子拦下时，失败原因是 CLI 给的原话（不是写死的一句），只在回合的 error 上', {
+  timeout: 120_000,
+}, async () => {
+  const home = await mkdtemp(join(tmpdir(), 'native-subagent-fail-'))
+  await mkdir(join(home, '.claude'), { recursive: true })
+  // 用户自己的 PreToolUse 钩子拒绝 Agent：退出码 2，标准错误里写原因（CLI 照这个拒绝执行）
+  await writeFile(
+    join(home, '.claude', 'settings.json'),
+    JSON.stringify({
+      hooks: {
+        PreToolUse: [
+          {
+            matcher: 'Agent',
+            hooks: [
+              { type: 'command', command: 'echo "AGENT_BLOCKED_BY_TEST 不许派" >&2; exit 2' },
+            ],
+          },
+        ],
+      },
+    }),
+  )
+  const model = new MockLLM()
+  const client = await ProtocolClient.start(home, await model.start())
+  try {
+    const { thread } = await client.request('thread/start', {
+      cwd: home,
+      sandbox: 'danger-full-access',
+      approvalPolicy: 'never',
+    })
+    // 父会话：派子代理，拿到失败的工具结果后收尾
+    for (let index = 0; index < 2; index++) model.enqueue(subagentRouter(home, 'foreground'))
+    const { turn } = await client.request('turn/start', {
+      threadId: thread.id,
+      input: [{ type: 'text', text: 'SUBAGENT_MAIN 请派子代理读取 a.txt' }],
+    })
+    await assertCompleted(client, model, turn.id)
+    const [child] = await childThreads(client, thread.id)
+    assert.ok(child, '应创建子线程')
+    const last = child.turns.at(-1)
+    assert.equal(last.status, 'failed')
+    assert.match(last.error?.message ?? '', /AGENT_BLOCKED_BY_TEST 不许派/)
+    assert.notEqual(last.error?.message, 'subagent failed')
+    // 原因不再另写成子线程里的一段回答
+    assert.deepEqual(agentTexts(child), [])
+    const spawns = collabCompletions(client, thread.id, 'spawnAgent')
+    const final = spawns.at(-1)?.agentsStates[child.id]
+    assert.equal(final?.status, 'errored')
+    assert.match(final?.message ?? '', /AGENT_BLOCKED_BY_TEST/)
+    const wait = collabCompletions(client, thread.id, 'wait').at(-1)
+    assert.equal(wait?.status, 'failed')
+    assert.equal(wait?.agentsStates[child.id]?.status, 'errored')
     model.assertConsumed()
   } finally {
     await client.close()

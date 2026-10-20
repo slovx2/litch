@@ -66,42 +66,6 @@ button.tree-card-main:hover {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-.tree-agents {
-  margin: 0;
-  padding: 0 0 4px;
-  list-style: none;
-  border-top: 1px solid var(--line-1);
-}
-.tree-agent {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  min-height: 30px;
-  padding: 4px 12px;
-  border: 0;
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-.tree-agent:hover {
-  background: var(--hover);
-}
-.tree-agent-name {
-  flex: none;
-  font-weight: 600;
-}
-.tree-agent-role {
-  flex: none;
-  font: 11px / 1 var(--mono);
-  color: var(--ink-3);
-}
-.tree-agent-msg {
-  color: var(--ink-2);
-  font-size: 12px;
-}
 .tree-chips {
   display: flex;
   flex-wrap: wrap;
@@ -543,7 +507,96 @@ button.sev-title {
   font: inherit;
 }
 
-/* ---------- 侧面板的“子代理”标签 ---------- */
+/* ---------- 子代理：对话流里的一行、状态、侧面板的“子代理”标签 ---------- */
+/* 状态：记号加文字。进行中带闪烁的记号（.st.run），复古皮肤写成方括号 */
+.agent-st {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  padding: 0 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 16px;
+  white-space: nowrap;
+  color: var(--ink-2);
+  background: var(--hover);
+}
+.agent-st .st {
+  width: 10px;
+  height: 10px;
+}
+.agent-st[data-state="running"] {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+}
+.agent-st[data-state="completed"] {
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 13%, transparent);
+}
+.agent-st[data-state="failed"] {
+  color: var(--err);
+  background: color-mix(in srgb, var(--err) 13%, transparent);
+}
+.agent-time {
+  font: 11px / 1 var(--mono);
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+/* 对话流里：每个子代理一行小条，并行派出的排在一起 */
+.agents-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.agent-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 30px;
+  padding: 0 8px 0 6px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r1);
+  background: var(--raised);
+  color: inherit;
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+}
+button.agent-row {
+  cursor: pointer;
+}
+button.agent-row:hover {
+  border-color: var(--line-3);
+}
+.agent-row > .ic {
+  flex: none;
+  color: var(--ink-3);
+}
+.agent-kind {
+  flex: none;
+  font: 11px / 1 var(--mono);
+  color: var(--ink-3);
+}
+.agent-desc {
+  min-width: 0;
+  color: var(--ink);
+}
+.agent-meta {
+  margin-left: auto;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.agent-go {
+  flex: none;
+  color: var(--ink-3);
+}
+
+/* 侧面板的“子代理”标签：上面竖排的列表（最多露 5 行，多了自己滚），下面是选中的那一个 */
 .agents-tab {
   flex: 1 1 0;
   min-height: 0;
@@ -552,46 +605,170 @@ button.sev-title {
 }
 .agents-list {
   flex: none;
+  max-height: calc(5 * 31px + 8px);
+  overflow-y: auto;
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--line-1);
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px;
+  border-bottom: 1px solid var(--line-2);
+  scrollbar-width: thin;
 }
 .agents-pick {
   display: flex;
   align-items: center;
-  gap: 6px;
-  height: 26px;
+  gap: 8px;
+  flex: none;
+  height: 30px;
   padding: 0 8px;
-  border: 1px solid var(--line-2);
+  border: 0;
   border-radius: var(--r1);
   background: none;
-  font-size: 12px;
   color: var(--ink-2);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
   cursor: pointer;
 }
 .agents-pick:hover {
   background: var(--hover);
 }
 .agents-pick[aria-selected="true"] {
-  border-color: var(--accent);
+  background: var(--hover);
   color: var(--ink);
+  box-shadow: inset 2px 0 0 var(--accent);
 }
-/* 子代理的对话：和主区一样，对话区能伸能缩，下面是输入区（或者“只能看”的说明） */
+.agents-pick .agent-kind {
+  width: 54px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.agents-pick .agent-desc {
+  color: inherit;
+}
+/* 选中的那一个：上面是标题、元信息、任务和失败的原因，下面是它的对话（能伸能缩，下面是输入区或“只能看”的说明） */
 .agents-view {
   flex: 1 1 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
 }
-.agents-view .tr {
-  padding: 14px 14px 10px;
+.agents-head {
+  flex: none;
+  max-height: 50%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px 4px;
+  scrollbar-width: thin;
 }
-.agents-view .dock {
+.agents-title {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.agents-title h3 {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.agents-title .agent-st {
+  margin-top: 3px;
+}
+.agents-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font: 11px / 1.5 var(--mono);
+  color: var(--ink-3);
+}
+.agents-meta b {
+  font-weight: 400;
+  color: var(--ink-2);
+}
+.agents-task {
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  background: var(--sunken);
+}
+.agents-task-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--line-1);
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.agents-task-text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  padding: 8px 10px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--ink-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.agents-task[data-open="true"] .agents-task-text {
+  display: block;
+}
+.agents-task-more {
+  display: block;
+  margin: 0 10px 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  color: var(--accent);
+  cursor: pointer;
+}
+.agents-fail {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--err) 55%, transparent);
+  border-radius: var(--r2);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+.agents-fail b {
+  color: var(--err);
+  font-weight: 600;
+}
+.agents-fail span {
+  color: var(--ink-2);
+  font: 12px / 1.55 var(--mono);
+  overflow-wrap: anywhere;
+}
+.agents-transcript {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+/* 派给它的任务已经写在上面了，对话开头那条同样的用户消息不再画；失败的原因在上面的红框里，回合末尾的出错框不再画 */
+.agents-view[data-task] .agents-transcript section.turn:first-of-type > .umsg:first-child,
+.agents-view[data-state="failed"] .agents-transcript section.turn:last-of-type > .errbox {
+  display: none;
+}
+.agents-transcript .tr {
+  padding: 10px 14px 10px;
+}
+.agents-transcript .dock {
   padding: 0 12px 12px;
 }
-.agents-view .req-slot {
+.agents-transcript .req-slot {
   padding: 0 12px 8px;
 }
 
@@ -602,16 +779,14 @@ button.sev-title {
 }
 
 /* ---------- 皮肤 ---------- */
-[data-skin="retro"] .tree-card,
-[data-skin="retro"] .agents-pick {
+[data-skin="retro"] .tree-card {
   border-radius: 0;
   border-color: var(--line-3);
 }
 [data-skin="retro"] .tree-card {
   box-shadow: 3px 3px 0 var(--line-3);
 }
-[data-skin="retro"] .tree-card-report,
-[data-skin="retro"] .tree-agents {
+[data-skin="retro"] .tree-card-report {
   border-top-style: dashed;
   border-top-color: var(--line-2);
 }
@@ -628,10 +803,6 @@ button.sev-title {
 }
 [data-skin="retro"] .tree-kids::before {
   border-left-style: dashed;
-}
-[data-skin="retro"] .agents-pick[aria-selected="true"] {
-  background: var(--inv-bg);
-  color: var(--inv-fg);
 }
 [data-skin="human"] .tree-card {
   border-radius: 14px;
@@ -661,9 +832,6 @@ button.sev-title {
 }
 [data-skin="human"] .prop-refused {
   border-radius: 14px;
-}
-[data-skin="human"] .agents-pick {
-  border-radius: 13px;
 }
 
 /* 目标 harness 收不到这个会话那么严：提案卡片、派子会话的弹窗上写明 */

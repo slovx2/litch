@@ -60,6 +60,10 @@ const PRESET_OF: Record<SandboxLevel, string> = {
 }
 const USES_AGENTS = /用子代理|use sub-agents/i
 
+/** 演示里失败的子代理过多久失败、只剩要停掉的子代理时父会话过多久停掉它（按模拟的时钟） */
+const AGENT_FAIL_MS = 600
+const AGENT_STOP_MS = 2500
+
 /** 第二个提案多久过期（按模拟的时钟）。真的是 7 天，这里要来得及看它收掉 */
 const SHORT_PROPOSAL_MS = 8000
 
@@ -85,6 +89,10 @@ export interface MockTreeHost {
   reply(view: SessionView, turnId: string, text: string, tail?: () => SessionOp[]): void
   /** 加上这几条就结束回合（没有回答的回合：提醒之后只补调收尾） */
   finish(view: SessionView, turnId: string, ops: SessionOp[]): void
+  /** 回合失败，error 是给人看的原因 */
+  fail(view: SessionView, turnId: string, error: string): void
+  /** 回合还在跑的话打断它（和用户点停止一样收尾） */
+  stop(view: SessionView, turnId: string): void
   running(view: SessionView): boolean
   /** 这台设备有没有会话树（DeviceView.sessionTree） */
   treeOn(deviceId: string): boolean
@@ -102,7 +110,8 @@ interface AgentEntry {
   itemId: string
   spec: TreeAgent
   view: SessionView
-  done: boolean
+  /** 结束了的话是怎么结束的；还在跑是 null */
+  done: 'completed' | 'interrupted' | 'failed' | null
 }
 
 export interface MockTree {
@@ -129,6 +138,8 @@ export function createMockTree(host: MockTreeHost): MockTree {
   const scripted = new Map<string, string>()
   /** 引擎自己的子代理线程 */
   const agents = new Map<string, AgentEntry>()
+  /** 回合开始时不回话的子代理（演示里失败的、要停掉的） */
+  const held = new Set<string>()
   /** 这一回合模型没调收尾的会话：回合结束后替它开一个提醒的回合 */
   const unwrapped = new Set<string>()
 
@@ -223,6 +234,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
       can: host.can(deviceId, harness),
       forkedFrom: null,
       proposals: [],
+      agents: [],
     }
     host.putView(view)
     if (options.reply) scripted.set(sameKey(deviceId, summary.id), options.reply)
@@ -482,7 +494,17 @@ export function createMockTree(host: MockTreeHost): MockTree {
     return sessionId
   }
 
-  /** 子代理调用的条目：经真的投影，界面画成能点开的卡片 */
+  /** 子代理结束的方式 → 协作条目里报的状态 */
+  const AGENT_DONE = {
+    completed: 'completed',
+    interrupted: 'interrupted',
+    failed: 'errored',
+  } as const
+
+  /**
+   * 子代理调用的条目：经真的投影，界面画成一行一行的子代理。和真的 Claude 入口一样，派出的那一条结束时
+   * 报的是“在跑”，之后不回写；子代理的状态以子线程自己的回合为准（session.agents），等待那一条报最后的状态
+   */
   const collabItem = (
     id: string,
     tool: 'spawnAgent' | 'wait',
@@ -496,20 +518,71 @@ export function createMockTree(host: MockTreeHost): MockTree {
       tool,
       status,
       senderThreadId: parentId,
-      receiverThreadIds: entries.map((entry) => entry.view.sessionId),
+      receiverThreadIds:
+        status === 'inProgress' && tool === 'spawnAgent'
+          ? []
+          : entries.map((entry) => entry.view.sessionId),
       prompt: tool === 'spawnAgent' ? text.agentsPrompt : null,
       model: null,
       reasoningEffort: null,
-      agentsStates: Object.fromEntries(
-        entries.map((entry) => [
-          entry.view.sessionId,
-          {
-            status: entry.done ? 'completed' : 'running',
-            message: entry.done ? entry.spec.reply : null,
-          },
-        ]),
-      ),
+      agentsStates:
+        status === 'inProgress'
+          ? {}
+          : Object.fromEntries(
+              entries.map((entry) => [
+                entry.view.sessionId,
+                {
+                  status: entry.done ? AGENT_DONE[entry.done] : 'running',
+                  message:
+                    entry.done === 'completed'
+                      ? entry.spec.reply
+                      : entry.done === 'failed'
+                        ? (entry.spec.error ?? null)
+                        : null,
+                },
+              ]),
+            ),
     } as never)
+
+  /** 父会话的子代理列表（真的核心从设备记着的子线程和它们的回合算出来） */
+  const agentList = (deviceId: string, parentId: string): AgentThreadView[] =>
+    [...agents.values()]
+      .filter((entry) => entry.deviceId === deviceId && entry.parentId === parentId)
+      .map((entry) => {
+        const turn = entry.view.turns.at(-1)
+        return {
+          id: entry.view.sessionId,
+          parentId,
+          nickname: entry.spec.nickname,
+          role: entry.spec.role,
+          description: entry.spec.description,
+          prompt: entry.spec.prompt,
+          status: host.running(entry.view) ? 'running' : 'idle',
+          turn: turn
+            ? {
+                state:
+                  turn.status === 'running'
+                    ? 'running'
+                    : turn.status === 'failed'
+                      ? 'failed'
+                      : turn.status === 'interrupted'
+                        ? 'stopped'
+                        : 'completed',
+                startedAt: turn.startedAt,
+                durationMs: turn.status === 'running' ? null : turn.durationMs,
+                error: turn.error,
+              }
+            : null,
+          canInput: entry.spec.canInput,
+          updatedAt: turn?.startedAt ?? host.now(),
+        } satisfies AgentThreadView
+      })
+
+  /** 子代理开始、结束了：父会话的子代理列表整份换掉 */
+  const pushAgents = (deviceId: string, parentId: string) =>
+    host.apply(host.view(deviceId, parentId), [
+      { op: 'session.agents', agents: agentList(deviceId, parentId) },
+    ])
 
   const agentsDemo = (view: SessionView, turnId: string) => {
     const itemId = host.nextId('ca')
@@ -518,7 +591,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
       const agent: SessionView = {
         deviceId: view.deviceId,
         sessionId: id,
-        title: spec.nickname,
+        title: spec.description,
         harness: view.harness,
         cwd: view.cwd,
         // 不接受直接输入的子代理只能看（真的核心照 canAcceptDirectInput 这样投影）
@@ -533,6 +606,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
         can: host.can(view.deviceId, view.harness),
         forkedFrom: null,
         proposals: [],
+        agents: [],
       }
       const entry: AgentEntry = {
         deviceId: view.deviceId,
@@ -541,7 +615,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
         itemId,
         spec,
         view: agent,
-        done: false,
+        done: null,
       }
       agents.set(sameKey(view.deviceId, id), entry)
       host.putView(agent)
@@ -555,44 +629,59 @@ export function createMockTree(host: MockTreeHost): MockTree {
       },
     ])
     for (const entry of made) {
-      scripted.set(sameKey(entry.deviceId, entry.view.sessionId), entry.spec.reply)
-      host.startTurn(entry.view, outgoing(entry.spec.prompt))
+      const key = sameKey(entry.deviceId, entry.view.sessionId)
+      // 完成的回一句话；失败的、要停掉的回合开始时不回话（claim 认下就不往下走）
+      if (entry.spec.outcome === 'completed') scripted.set(key, entry.spec.reply)
+      else held.add(key)
+      const childTurn = host.startTurn(entry.view, outgoing(entry.spec.prompt))
+      // 一开始就被拦下：过一小会儿失败，原因是 harness 的原话。stopped 的一直在跑，等别的都回来之后由父会话停掉
+      if (entry.spec.outcome === 'failed')
+        host.setTimer(() => host.fail(entry.view, childTurn, entry.spec.error ?? ''), AGENT_FAIL_MS)
     }
+    host.apply(view, [
+      {
+        op: 'item.add',
+        turnId,
+        item: collabItem(itemId, 'spawnAgent', 'completed', made, view.sessionId),
+      },
+    ])
+    pushAgents(view.deviceId, view.sessionId)
   }
 
-  /** 父会话的一个子代理回来了：更新那张卡片；都回来了，父会话接着说 */
-  const agentDone = (entry: AgentEntry) => {
-    entry.done = true
-    const siblings = [...agents.values()].filter(
+  /** 同一次派出的子代理 */
+  const siblingsOf = (entry: AgentEntry) =>
+    [...agents.values()].filter(
       (other) => other.itemId === entry.itemId && other.deviceId === entry.deviceId,
     )
+
+  /**
+   * 父会话的一个子代理结束了：更新列表；只剩要停掉的那几个在跑时，过一会儿父会话停掉它们；
+   * 都停下了，父会话报一次等待的结果，接着说
+   */
+  const agentDone = (entry: AgentEntry, status: 'completed' | 'interrupted' | 'failed') => {
+    entry.done = status
+    pushAgents(entry.deviceId, entry.parentId)
+    const siblings = siblingsOf(entry)
+    const left = siblings.filter((other) => !other.done)
+    if (left.length > 0) {
+      if (left.every((other) => other.spec.outcome === 'stopped'))
+        host.setTimer(() => {
+          for (const other of left) {
+            const turn = other.view.turns.at(-1)
+            if (turn) host.stop(other.view, turn.id)
+          }
+        }, AGENT_STOP_MS)
+      return
+    }
     const parent = host.view(entry.deviceId, entry.parentId)
-    const allDone = siblings.every((other) => other.done)
-    const ops: SessionOp[] = [
+    host.apply(parent, [
       {
         op: 'item.add',
         turnId: entry.turnId,
-        item: collabItem(
-          entry.itemId,
-          'spawnAgent',
-          allDone ? 'completed' : 'inProgress',
-          siblings,
-          entry.parentId,
-        ),
-      },
-    ]
-    if (allDone) {
-      ops.push({
-        op: 'item.add',
-        turnId: entry.turnId,
         item: collabItem(host.nextId('cw'), 'wait', 'completed', siblings, entry.parentId),
-      })
-    }
-    host.apply(parent, ops)
-    if (
-      allDone &&
-      parent.turns.some((turn) => turn.id === entry.turnId && turn.status === 'running')
-    )
+      },
+    ])
+    if (parent.turns.some((turn) => turn.id === entry.turnId && turn.status === 'running'))
       host.reply(parent, entry.turnId, text.agentsReply)
   }
 
@@ -645,6 +734,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
         )
         return true
       }
+      if (held.delete(key)) return true
       const script = scripted.get(key)
       if (script !== undefined) {
         scripted.delete(key)
@@ -684,7 +774,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
       const { deviceId, sessionId } = view
       const agent = agents.get(sameKey(deviceId, sessionId))
       if (agent) {
-        if (!agent.done) agentDone(agent)
+        if (!agent.done) agentDone(agent, status)
         return
       }
       const summary = host.summary(deviceId, sessionId)
@@ -783,18 +873,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
       }
       if (name === 'session.agents') {
         const { deviceId, sessionId } = params as Commands['session.agents']['params']
-        const list: AgentThreadView[] = [...agents.values()]
-          .filter((entry) => entry.deviceId === deviceId && entry.parentId === sessionId)
-          .map((entry) => ({
-            id: entry.view.sessionId,
-            nickname: entry.spec.nickname,
-            role: entry.spec.role,
-            title: entry.spec.prompt,
-            status: host.running(entry.view) ? 'running' : 'idle',
-            canInput: entry.spec.canInput,
-            updatedAt: entry.view.turns.at(-1)?.startedAt ?? host.now(),
-          }))
-        return { agents: list }
+        return { agents: agentList(deviceId, sessionId) }
       }
       return undefined
     },
