@@ -5,7 +5,7 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
-## 未发布
+## 0.14.0
 
 - Litch 内置浏览器：能从别的浏览器导入 Cookie 和已保存的密码（Chrome、Edge、Brave、Arc、Chromium、Vivaldi、Firefox，macOS 和 Windows）。设置页“内置浏览器”、浏览器面板的菜单和第一次打开面板时的横幅都能进；选来源和资料、勾类别、可只导某些网站的 Cookie，逐类报导入、已存在、无效、失败的条数。已有的不覆盖，一次性导入不同步。Mac 上读 Chrome 系会弹钥匙串授权；Windows 上新版 Chrome 系的应用绑定数据这一版导不了
 - Litch 内置浏览器：加了密码库。密码用系统的安全存储加密，只给用户自己开的标签填（点登录框出候选，选中才填，非 https 不填）；登录后提示保存、更新或这个网站永不；设置页能列、搜、删，看不到明文。代理开的标签不填密码：代理要登录时调 `litch_browser` 的 `request_sign_in`，这个标签对代理冻结，浏览器面板出卡片请人登录，交还前清空密码框，代理只知道登录完了还是取消了；读页工具遮住密码框的值
