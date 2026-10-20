@@ -4,6 +4,13 @@ import { sandboxCommand } from './command-sandbox.mjs'
 import { clientToolCliNames } from './dynamic-tools.mjs'
 import { isGoalTool } from './goal-tools.mjs'
 import { activePermissionRoots, permissionToolName } from './permission-grants.mjs'
+import {
+  type FileSystemRules,
+  normalizedPath,
+  pathAccess,
+  readOnlyRules,
+  withWritableRoots,
+} from './permission-profiles.mjs'
 import { defaultSandboxPolicy, type RuntimeSandboxPolicy } from './sandbox-policy.mjs'
 import type { RuntimeTurnContext } from './types.mjs'
 
@@ -77,6 +84,7 @@ export function sandboxedBashInput(context: RuntimeTurnContext, input: Record<st
     { sandboxPolicy: policy },
     context.cwd,
     context.planMode ? [] : activePermissionRoots(context.permissionGrants),
+    context.fileSystem && context.planMode ? readOnlyRules(context.fileSystem) : context.fileSystem,
   )
   const quote = (value: string) => "'" + value.replaceAll("'", "'\"'\"'") + "'"
   return { ...input, command: command.map(quote).join(' '), dangerouslyDisableSandbox: false }
@@ -115,6 +123,55 @@ function resolvedTarget(path: string): string {
   }
 }
 
+// 按路径读文件、列目录、搜文件的工具，和它们给路径的参数
+const readPathKeys: Record<string, string[]> = {
+  Read: ['file_path'],
+  NotebookRead: ['notebook_path'],
+  NotebookEdit: ['notebook_path'],
+  Write: ['file_path'],
+  Edit: ['file_path'],
+  MultiEdit: ['file_path'],
+  LS: ['path'],
+  Glob: ['path'],
+  Grep: ['path'],
+}
+
+// 禁读检查：目标本身（按字面路径和真实路径各算一次）落在 deny 里就拒绝；Glob、Grep 是在一个目录下
+// 往下搜，搜索范围里只要有禁读的目录也拒绝（CLI 自己执行搜索，没法把结果里的禁读路径滤掉）
+function deniedRead(
+  rules: FileSystemRules,
+  cwd: string,
+  name: string,
+  input: Record<string, unknown>,
+): string | null {
+  const keys = readPathKeys[name]
+  if (!keys) return null
+  const search = name === 'Glob' || name === 'Grep'
+  const targets = keys
+    .map((key) => input[key])
+    .filter((value): value is string => typeof value === 'string' && value.length > 0)
+  if (search && targets.length === 0) targets.push('.')
+  // Glob 的 pattern 写成绝对路径时，搜索范围是它开头不带通配符的那一段
+  if (name === 'Glob' && typeof input.pattern === 'string' && isAbsolute(input.pattern)) {
+    const parts = input.pattern.split('/')
+    const first = parts.findIndex((part) => /[*?[\]{}]/.test(part))
+    targets.push(first < 0 ? input.pattern : parts.slice(0, first).join('/') || '/')
+  }
+  for (const target of targets) {
+    const logical = resolve(cwd, target)
+    const real = normalizedPath(logical)
+    if (pathAccess(rules, logical) === 'deny' || pathAccess(rules, real) === 'deny')
+      return '当前权限档位禁止读取该路径'
+    if (search) {
+      const hidden = rules.entries.find(
+        (entry) => entry.access === 'deny' && entry.path !== real && inside(real, entry.path),
+      )
+      if (hidden) return `搜索范围包含禁止读取的 ${hidden.path}，请换一个不含它的目录`
+    }
+  }
+  return null
+}
+
 // 放在 PreToolUse，避免 SDK 自带 allow 规则或 acceptEdits 绕过 canUseTool。
 export function deniedTool(
   context: RuntimeTurnContext,
@@ -135,6 +192,10 @@ export function deniedTool(
   )
     return '当前策略禁止工具访问网络'
   if (name === 'Bash' && typeof input.command !== 'string') return '命令必须是字符串'
+  if (context.fileSystem) {
+    const reason = deniedRead(context.fileSystem, context.cwd, name, input)
+    if (reason) return reason
+  }
   if (context.planMode || (context.sandboxMode === 'read-only' && !fileTools.has(name)))
     return readTools.has(name) || name === 'Bash'
       ? null
@@ -145,7 +206,13 @@ export function deniedTool(
     const target = input.file_path ?? input.notebook_path
     if (typeof target !== 'string') return '文件工具缺少目标路径'
     const path = resolvedTarget(resolve(context.cwd, target))
-    if (!writableRoots(context).some((root) => inside(root, path))) return '文件路径超出授权目录'
+    const writable = context.fileSystem
+      ? pathAccess(
+          withWritableRoots(context.fileSystem, activePermissionRoots(context.permissionGrants)),
+          path,
+        ) === 'write'
+      : writableRoots(context).some((root) => inside(root, path))
+    if (!writable) return '文件路径超出授权目录'
   }
   return null
 }

@@ -1,5 +1,9 @@
 import { ProtocolError } from '../../shared/src/protocol-contract.mjs'
 import { isApprovalPolicy } from './approval-policy.mjs'
+import {
+  isCustomPermissionProfile,
+  type PermissionProfileSnapshot,
+} from './permission-profiles.mjs'
 import { parseSandboxPolicy, type RuntimeSandboxPolicy } from './sandbox-policy.mjs'
 
 export {
@@ -14,6 +18,8 @@ export {
 
 export interface ThreadRuntimeSettings {
   sandboxPolicy?: RuntimeSandboxPolicy
+  // 选了配置里自定义的权限档位（permissions.<名字>）时，选的那一刻合并好的档位；sandboxPolicy 是它的旧式投影
+  permissionProfile?: PermissionProfileSnapshot
   planMode?: boolean
   historyMode?: 'legacy' | 'paginated'
   dynamicTools?: unknown[]
@@ -37,7 +43,11 @@ export function rejectForeignModel(model: unknown): void {
     throw new ProtocolError(-32602, 'Claude 入口不支持 Codex 模型或跨引擎会话')
 }
 
-export function validateRuntimePermissions(params: Record<string, unknown>): void {
+// permissions：配置里的 `permissions` 表（config.json 叠上 `-c`），里面定义的档位名也认
+export function validateRuntimePermissions(
+  params: Record<string, unknown>,
+  permissions?: unknown,
+): void {
   if (params.permissions != null && (params.sandbox != null || params.sandboxPolicy != null))
     throw new ProtocolError(-32602, '权限档位不能与沙箱策略同时设置')
   if (params.sandbox != null && params.sandboxPolicy != null)
@@ -50,9 +60,20 @@ export function validateRuntimePermissions(params: Record<string, unknown>): voi
   if (
     params.permissions != null &&
     (typeof params.permissions !== 'string' ||
-      ![':read-only', ':workspace', ':danger-full-access'].includes(params.permissions))
+      (![':read-only', ':workspace', ':danger-full-access'].includes(params.permissions) &&
+        !isCustomPermissionProfile(permissions, params.permissions)))
   )
     throw new ProtocolError(-32602, '未知权限配置')
+  // 只有自定义档位用它（对应档位里的 `:workspace_roots`）；内置档位照旧不看
+  if (
+    isCustomPermissionProfile(permissions, params.permissions) &&
+    params.runtimeWorkspaceRoots != null &&
+    (!Array.isArray(params.runtimeWorkspaceRoots) ||
+      params.runtimeWorkspaceRoots.some(
+        (root) => typeof root !== 'string' || !root.startsWith('/') || root.includes('\0'),
+      ))
+  )
+    throw new ProtocolError(-32602, 'runtimeWorkspaceRoots 必须是绝对路径数组')
   if (
     params.sandbox != null &&
     (typeof params.sandbox !== 'string' ||

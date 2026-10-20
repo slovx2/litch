@@ -1,5 +1,12 @@
-import { realpathSync } from 'node:fs'
-import { isAbsolute } from 'node:path'
+import { existsSync, realpathSync, statSync } from 'node:fs'
+import { dirname, isAbsolute, sep } from 'node:path'
+import {
+  type FileAccess,
+  type FileSystemRule,
+  type FileSystemRules,
+  pathAccess,
+  withWritableRoots,
+} from './permission-profiles.mjs'
 import { ProtocolError } from './protocol-contract.mjs'
 
 // 独立 command/exec 不经过 SDK 工具权限检查，必须在进程创建前应用操作系统沙箱。
@@ -9,6 +16,8 @@ export function sandboxCommand(
   params: Record<string, unknown>,
   defaultRoot = process.cwd(),
   extraWriteRoots: readonly string[] = [],
+  // 自定义权限档位的规则（permission-profiles.mts）：给了就按它挂载，不再看 sandboxPolicy 里的可写目录
+  fileSystem?: FileSystemRules,
 ): string[] {
   if (params.permissionProfile != null && params.sandboxPolicy != null)
     throw new ProtocolError(-32602, 'permissionProfile 与 sandboxPolicy 不能同时使用')
@@ -38,7 +47,8 @@ export function sandboxCommand(
     if (policy[key] != null && typeof policy[key] !== 'boolean')
       throw new ProtocolError(-32602, `${key} 必须为布尔值`)
   const roots: string[] = []
-  if (policy.type === 'workspaceWrite') {
+  // 有档位规则时可写目录全由规则定（工作目录、临时目录都在规则里），不再按 sandboxPolicy 补
+  if (policy.type === 'workspaceWrite' && !fileSystem) {
     if (policy.writableRoots != null && !Array.isArray(policy.writableRoots))
       throw new ProtocolError(-32602, 'writableRoots 必须是绝对路径数组')
     // 工作目录不能隐式扩大服务器的工作区授权；额外写入位置必须显式列出。
@@ -57,6 +67,25 @@ export function sandboxCommand(
     if (!isAbsolute(root)) throw new ProtocolError(-32602, '额外授权必须是绝对路径')
     if (realpathSync(root) !== root) throw new ProtocolError(-32602, '额外授权路径已变化，禁止执行')
     roots.push(root)
+  }
+  if (fileSystem) {
+    const rules = withWritableRoots(fileSystem, extraWriteRoots)
+    const network = policy.networkAccess === true
+    if (process.platform === 'darwin')
+      return ['/usr/bin/sandbox-exec', '-p', seatbeltProfile(rules, network), ...command]
+    if (process.platform === 'linux')
+      return [
+        'bwrap',
+        '--die-with-parent',
+        '--new-session',
+        ...bwrapFileSystemArgs(rules),
+        ...(network ? [] : ['--unshare-net']),
+        '--chdir',
+        cwd,
+        '--',
+        ...command,
+      ]
+    throw new ProtocolError(-32004, '此宿主没有可用的 command 沙箱')
   }
   if (process.platform === 'darwin') {
     const profile = [
@@ -90,4 +119,102 @@ export function sandboxCommand(
     ]
   }
   throw new ProtocolError(-32004, '此宿主没有可用的 command 沙箱')
+}
+
+function depth(path: string): number {
+  return path === '/' ? 0 : path.split(sep).length - 1
+}
+
+// 要真正挂载的条目：按深度从浅到深，和上一级条目给的访问一样的省掉；不存在的路径挂不上，跳过
+// （不存在的禁读路径之后被建出来也不会被盖住，文件类工具那边仍按规则拒绝）
+function mountedRules(rules: FileSystemRules): { root: FileAccess; entries: FileSystemRule[] } {
+  const sorted = rules.entries
+    .filter((entry) => entry.path !== '/' && existsSync(entry.path))
+    .sort((a, b) => depth(a.path) - depth(b.path) || a.path.localeCompare(b.path))
+  const root = pathAccess(rules, '/')
+  const entries = sorted.filter((entry) => {
+    const above = { ...rules, entries: rules.entries.filter((other) => other.path !== entry.path) }
+    return pathAccess(above, entry.path) !== entry.access
+  })
+  return { root, entries }
+}
+
+// 挂载条目里离 path 最近的上级条目
+function parentEntry(entries: FileSystemRule[], path: string): FileSystemRule | undefined {
+  let best: FileSystemRule | undefined
+  for (const entry of entries)
+    if (path.startsWith(entry.path + sep) && (!best || entry.path.length > best.path.length))
+      best = entry
+  return best
+}
+
+// bwrap：根按 `:root` 只读或可写挂上；禁读的目录盖一层空 tmpfs（里面要挂回的子目录先建好挂载点，
+// 有要挂回的给 111 只许穿过、没有的给 000），文件用 /dev/null 盖住；可读、可写的子目录按真实路径挂回。
+// 挂回的都挂完以后再把各层 tmpfs 改成只读，免得沙箱里的进程在里面建文件
+export function bwrapFileSystemArgs(rules: FileSystemRules): string[] {
+  const { root, entries } = mountedRules(rules)
+  const args = [
+    root === 'write' ? '--bind' : '--ro-bind',
+    '/',
+    '/',
+    '--dev',
+    '/dev',
+    '--proc',
+    '/proc',
+  ]
+  const masked: string[] = []
+  for (const entry of entries) {
+    if (entry.access === 'deny') {
+      if (!statSync(entry.path).isDirectory()) {
+        args.push('--ro-bind', '/dev/null', entry.path)
+        continue
+      }
+      const reopened = entries.filter(
+        (other) => other.access !== 'deny' && parentEntry(entries, other.path) === entry,
+      )
+      args.push('--perms', reopened.length > 0 ? '111' : '000', '--tmpfs', entry.path)
+      const dirs = new Set<string>()
+      for (const child of reopened) {
+        // 文件的挂载点由 bwrap 挂载时自己建，这里只建它所在的目录
+        const target = statSync(child.path).isDirectory() ? child.path : dirname(child.path)
+        const parts = target
+          .slice(entry.path.length + 1)
+          .split(sep)
+          .filter(Boolean)
+        for (let index = 1; index <= parts.length; index += 1)
+          dirs.add([entry.path, ...parts.slice(0, index)].join(sep))
+      }
+      for (const dir of dirs) args.push('--dir', dir)
+      masked.push(entry.path)
+    } else args.push(entry.access === 'write' ? '--bind' : '--ro-bind', entry.path, entry.path)
+  }
+  for (const path of masked) args.push('--remount-ro', path)
+  return args
+}
+
+// sandbox-exec：同一操作命中多条规则时后写的为准，所以按深度从浅到深写，最深的条目说了算
+export function seatbeltProfile(rules: FileSystemRules, network: boolean): string {
+  const { root, entries } = mountedRules(rules)
+  const subpath = (path: string) => `(subpath ${JSON.stringify(path)})`
+  return [
+    '(version 1)',
+    '(allow default)',
+    ...(root === 'write'
+      ? []
+      : [
+          '(deny file-write*)',
+          '(allow file-write* (literal "/dev/null") (literal "/dev/tty") (regex #"^/dev/ttys[0-9]+$"))',
+        ]),
+    ...entries.flatMap((entry) =>
+      entry.access === 'write'
+        ? [`(allow file-read* file-write* ${subpath(entry.path)})`]
+        : entry.access === 'read'
+          ? [
+              `(allow file-read* ${subpath(entry.path)})`,
+              `(deny file-write* ${subpath(entry.path)})`,
+            ]
+          : [`(deny file-read* file-write* ${subpath(entry.path)})`],
+    ),
+    ...(network ? [] : ['(deny network*)']),
+  ].join('\n')
 }

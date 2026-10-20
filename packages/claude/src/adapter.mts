@@ -10,6 +10,7 @@ import {
   startWebSocketTransport,
 } from '../../shared/src/transports.mjs'
 import { buildInfo } from './build-info.mjs'
+import { buildCliConfigLayer, cliConfigArgs, setCliConfigLayer } from './cli-config.mjs'
 import { sandboxCommand } from './command-sandbox.mjs'
 import { createRuntime } from './runtime-factory.mjs'
 import { CodexClaudeAppServer } from './server.mjs'
@@ -80,6 +81,8 @@ async function main(): Promise<void> {
     return
   }
 
+  // codex 风格的 `-c key=<TOML 值>`，叠在 config.json 上（cli-config.mts）
+  setCliConfigLayer(buildCliConfigLayer(cliConfigArgs(args)))
   const listen = getArg(args, '--listen') ?? 'stdio://'
   if (listen === 'off') return
   const isUnixDaemon = listen.startsWith('unix://')
@@ -287,7 +290,7 @@ function processIsAlive(pid: number): boolean {
 
 function usage(code: number): never {
   const text = `Usage:
-  codex-harness-adapter app-server --listen stdio://
+  codex-harness-adapter app-server --listen stdio:// [-c key=<TOML 值>]...
   codex-harness-adapter app-server --listen unix://
   codex-harness-adapter app-server --listen ws://127.0.0.1:8788
   codex-harness-adapter app-server proxy [--sock PATH]

@@ -9,6 +9,12 @@ import { homedir, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import type { ApprovalPolicy } from './approval-policy.mjs'
+import {
+  customPermissionProfileList,
+  isCustomPermissionProfile,
+  profileSandboxMode,
+  resolvePermissionProfile,
+} from './permission-profiles.mjs'
 import { ProtocolError, pageRecords, submissionHash } from './protocol-contract.mjs'
 import { defaultSandboxPolicy } from './sandbox-policy.mjs'
 
@@ -468,9 +474,19 @@ export function hasLegacyPermissionParams(params: Record<string, unknown>): bool
   )
 }
 
-export function permissionProfilePolicy(value: unknown): PermissionProfilePolicy | null {
+// permissions：配置里的 `permissions` 表。那里定义的档位按条目算出旧式沙箱模式（permission-profiles.mts）
+export function permissionProfilePolicy(
+  value: unknown,
+  permissions?: unknown,
+): PermissionProfilePolicy | null {
   const id = normalizePermissionProfileId(value)
   if (!id) return null
+  if (isCustomPermissionProfile(permissions, id))
+    return {
+      id,
+      approvalPolicy: null,
+      sandboxMode: profileSandboxMode(resolvePermissionProfile(permissions, id)),
+    }
   switch (id) {
     case ':read-only':
       return { id, approvalPolicy: 'on-request', sandboxMode: 'read-only' }
@@ -658,13 +674,17 @@ export function sandboxEnvelope(mode: string | null, cwd: string): unknown {
   return defaultSandboxPolicy(mode, cwd)
 }
 
-export function permissionProfileList(params: Record<string, unknown>): unknown {
+export function permissionProfileList(
+  params: Record<string, unknown>,
+  permissions?: unknown,
+): unknown {
   if (params.cwd != null && (typeof params.cwd !== 'string' || !params.cwd.trim()))
     throw new ProtocolError(-32602, 'cwd 必须是非空字符串')
-  const profiles = [
+  const profiles: Array<{ id: string; description: string | null; allowed: boolean }> = [
     { id: ':read-only', description: null, allowed: true },
     { id: ':workspace', description: null, allowed: true },
     { id: ':danger-full-access', description: null, allowed: true },
+    ...customPermissionProfileList(permissions),
   ]
   const { data, nextCursor } = pageRecords(
     profiles,

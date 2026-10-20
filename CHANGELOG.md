@@ -5,6 +5,11 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
+## 未发布
+
+- Claude Code：`app-server` 接受 codex 风格的 `-c key=<TOML 值>`，认 `approval_policy`、`sandbox_mode`、`default_permissions`、`developer_instructions`、`permissions.*`、`mcp_servers.*`，其余键记日志后忽略；这一层叠在 `config.json` 上，不写回
+- Claude Code：支持配置里自定义的权限档位（`permissions.<名字>`：`extends` 内置档位、`filesystem` 的 read / write / deny 与子路径、`network.enabled`，判定照 codex 取最深的条目），`thread/start`、`turn/start` 等认档位名和 `runtimeWorkspaceRoots`，`default_permissions` 管不带权限的新会话，`permissionProfile/list` 列出它们。禁读同时作用于命令沙箱（macOS 的 sandbox-exec、Linux 的 bwrap 用空 tmpfs 盖住再挂回放开的子目录）和 Read、Glob、Grep、LS 等文件类工具。不用 `-c`、不选自定义档位时行为不变
+
 ## 0.14.0
 
 - Litch：选中回答里的文字加评论。桌面端在助手的话（含过程里的说明、代码块、表格）里选字，选区上方出“评论”“复制”；手机端长按回答出“评论这条回答”，在只读全文页里选一段。评论加到输入框上面，一条消息最多十条，能改、删、定位原文，只有评论也能发；发出去时写成正文开头的 `<litch-comments>`，对话里画成编号的评论卡片

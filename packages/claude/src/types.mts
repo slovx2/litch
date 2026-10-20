@@ -276,6 +276,8 @@ export interface RuntimeTurnContext {
   goalTools?: boolean
   trackGoalTools?: boolean
   sandboxPolicy?: RuntimeSandboxPolicy
+  // 自定义权限档位落到具体路径上的规则（permission-profiles.mts）；有它时文件类工具与命令沙箱都按它判
+  fileSystem?: import('./permission-profiles.mjs').FileSystemRules
   dynamicTools?: unknown[]
   threadId: string
   turnId: string

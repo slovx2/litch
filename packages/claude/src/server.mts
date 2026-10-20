@@ -43,6 +43,7 @@ import {
   writeSettingsDefaults,
 } from './claude-default-model.mjs'
 import { PROVIDER_CONFIG_KEY } from './claude-provider.mjs'
+import { cliConfigLayer, mergeConfigLayers } from './cli-config.mjs'
 import {
   applyConfigEdits,
   isConfigObject,
@@ -77,6 +78,13 @@ import {
   parsePermissionGrant,
   permissionToolName,
 } from './permission-grants.mjs'
+import {
+  applyPermissionProfile,
+  compileFileSystemRules,
+  defaultPermissionsId,
+  profileSandboxMode,
+  validatePermissionsConfig,
+} from './permission-profiles.mjs'
 import {
   historyHeadCursors,
   isForeignModel,
@@ -639,7 +647,7 @@ export class CodexClaudeAppServer {
         'thread/metadata/update',
       ].includes(method)
     )
-      validateRuntimePermissions(asRecord(params))
+      validateRuntimePermissions(asRecord(params), this.configOverrides.permissions)
     // 允许回退的 thread/start 由 threadStart 换成本运行时的默认模型，临时的 thread/fork 由 threadFork
     // 换成源会话的模型，不能先按外部模型拒绝。
     const substitutesModel =
@@ -971,7 +979,7 @@ export class CodexClaudeAppServer {
           (id) => this.subscribers.has(id) && this.store.getThread(id) != null,
         )
       case 'permissionProfile/list':
-        return permissionProfileList(asRecord(params))
+        return permissionProfileList(asRecord(params), this.configOverrides.permissions)
       case 'experimentalFeature/enablement/set':
         return experimentalFeatureSet(asRecord(params))
       case 'collaborationMode/list':
@@ -1133,8 +1141,17 @@ export class CodexClaudeAppServer {
         ? this.configModel
         : catalogModelId(requestedModel)
     const reasoningEffort = reasoningEffortFromParams(params, this.configReasoningEffort)
-    const permissionProfileId = permissionProfileIdFromParams(params)
-    const permissionProfile = permissionProfilePolicy(permissionProfileId)
+    const requestedProfileId = permissionProfileIdFromParams(params)
+    // 请求里没选权限（也没给旧式沙箱）时用配置的 default_permissions，审批策略仍按请求、配置的顺序取
+    const permissionProfileId =
+      requestedProfileId ??
+      (params.sandbox != null || params.sandboxPolicy != null
+        ? null
+        : defaultPermissionsId(this.configOverrides))
+    const permissionProfile = permissionProfilePolicy(
+      permissionProfileId,
+      this.configOverrides.permissions,
+    )
     const selectedProviderLoop = resolveProviderLoopSelection(this.providerLoopSelectionInput())
     const isTitleOrHelper =
       params.ephemeral === true ||
@@ -1164,8 +1181,9 @@ export class CodexClaudeAppServer {
       status: { type: 'idle' },
       approvalPolicy:
         normalizeApprovalPolicy(params.approvalPolicy) ??
-        permissionProfile?.approvalPolicy ??
+        (requestedProfileId ? permissionProfile?.approvalPolicy : null) ??
         normalizeApprovalPolicy(this.configOverrides.approval_policy) ??
+        permissionProfile?.approvalPolicy ??
         'on-request',
       sandboxMode:
         permissionProfile?.sandboxMode ??
@@ -1232,7 +1250,10 @@ export class CodexClaudeAppServer {
     const model = rawModel ? normalizeSelectableModelId(rawModel, thread.model) : null
     const reasoningEffort = reasoningEffortFromParams(params, null)
     const permissionProfileId = permissionProfileIdFromParams(params)
-    const permissionProfile = permissionProfilePolicy(permissionProfileId)
+    const permissionProfile = permissionProfilePolicy(
+      permissionProfileId,
+      this.configOverrides.permissions,
+    )
     if (model) {
       // runtimeBackend is pinned at thread/start. Refuse cross-backend
       // model changes on resume — the conversation history wouldn't carry
@@ -1360,10 +1381,15 @@ export class CodexClaudeAppServer {
       approvalPolicy:
         params.approvalPolicy != null
           ? normalizeApprovalPolicy(params.approvalPolicy)
-          : (permissionProfilePolicy(permissionProfileIdFromParams(params))?.approvalPolicy ??
-            parent.approvalPolicy),
+          : (permissionProfilePolicy(
+              permissionProfileIdFromParams(params),
+              this.configOverrides.permissions,
+            )?.approvalPolicy ?? parent.approvalPolicy),
       sandboxMode:
-        permissionProfilePolicy(permissionProfileIdFromParams(params))?.sandboxMode ??
+        permissionProfilePolicy(
+          permissionProfileIdFromParams(params),
+          this.configOverrides.permissions,
+        )?.sandboxMode ??
         sandboxFromTurnParams(params) ??
         parent.sandboxMode,
       permissionProfileId:
@@ -1764,6 +1790,13 @@ export class CodexClaudeAppServer {
       params,
       cwd,
       settings.sandboxPolicy ?? defaultSandboxPolicy(thread.sandboxMode, cwd),
+    )
+    applyPermissionProfile(
+      settings,
+      params,
+      thread.permissionProfileId,
+      cwd,
+      this.configOverrides.permissions,
     )
     const mode = asRecord(params.collaborationMode).mode
     if (mode === 'plan' || mode === 'default') settings.planMode = mode === 'plan'
@@ -2202,7 +2235,10 @@ export class CodexClaudeAppServer {
     }
     if (reasoningEffort) thread.reasoningEffort = reasoningEffort
     const permissionProfileId = permissionProfileIdFromParams(params)
-    const permissionProfile = permissionProfilePolicy(permissionProfileId)
+    const permissionProfile = permissionProfilePolicy(
+      permissionProfileId,
+      this.configOverrides.permissions,
+    )
     if (permissionProfileId) thread.permissionProfileId = permissionProfileId
     else if (hasLegacyPermissionParams(params)) thread.permissionProfileId = null
     if (permissionProfile?.approvalPolicy) thread.approvalPolicy = permissionProfile.approvalPolicy
@@ -2290,7 +2326,10 @@ export class CodexClaudeAppServer {
       thread.developerInstructions = nullIfEmpty(developerInstructions)
 
     const permissionProfileId = permissionProfileIdFromParams(params)
-    const permissionProfile = permissionProfilePolicy(permissionProfileId)
+    const permissionProfile = permissionProfilePolicy(
+      permissionProfileId,
+      this.configOverrides.permissions,
+    )
     if (permissionProfileId) thread.permissionProfileId = permissionProfileId
     else if (hasLegacyPermissionParams(params)) thread.permissionProfileId = null
     if (permissionProfile?.approvalPolicy) thread.approvalPolicy = permissionProfile.approvalPolicy
@@ -2313,7 +2352,7 @@ export class CodexClaudeAppServer {
   private threadSettingsNotification(thread: ThreadRecord): { method: string; params: unknown } {
     const threadId = thread.id
     const activePermissionProfileId = threadPermissionProfileId(
-      thread.permissionProfileId,
+      this.store.threadSettings(threadId).permissionProfile?.id ?? thread.permissionProfileId,
       thread.approvalPolicy,
       thread.sandboxMode,
     )
@@ -3118,7 +3157,10 @@ export class CodexClaudeAppServer {
     const model = modelFromParams(params, thread.model)
     const reasoningEffort = reasoningEffortFromParams(params, thread.reasoningEffort)
     const permissionProfileId = permissionProfileIdFromParams(params)
-    const permissionProfile = permissionProfilePolicy(permissionProfileId)
+    const permissionProfile = permissionProfilePolicy(
+      permissionProfileId,
+      this.configOverrides.permissions,
+    )
     if (model) thread.model = catalogModelId(model)
     if (reasoningEffort) thread.reasoningEffort = reasoningEffort
     if (permissionProfileId) {
@@ -3475,13 +3517,21 @@ export class CodexClaudeAppServer {
     // the thread-level setting captured at start/resume. turn/start ships a
     // sandboxPolicy struct (e.g. {type:"dangerFullAccess"}); thread/start uses
     // the simpler sandbox string. Both are honoured.
-    const permissionProfile = permissionProfilePolicy(permissionProfileIdFromParams(params))
+    const permissionProfile = permissionProfilePolicy(
+      permissionProfileIdFromParams(params),
+      this.configOverrides.permissions,
+    )
     const approvalPolicy =
       (params.approvalPolicy != null ? normalizeApprovalPolicy(params.approvalPolicy) : null) ??
       permissionProfile?.approvalPolicy ??
       thread.approvalPolicy
     const sandboxMode =
-      permissionProfile?.sandboxMode ?? sandboxFromTurnParams(params) ?? thread.sandboxMode
+      (turnSettings.permissionProfile
+        ? profileSandboxMode(turnSettings.permissionProfile.profile)
+        : null) ??
+      permissionProfile?.sandboxMode ??
+      sandboxFromTurnParams(params) ??
+      thread.sandboxMode
     // Per-turn instruction overrides: Codex App may resend its instruction
     // panel state when the user toggles personality mid-thread. Falls back to
     // whatever was captured at thread/start.
@@ -3687,6 +3737,14 @@ export class CodexClaudeAppServer {
         approvalPolicy,
         sandboxMode,
         sandboxPolicy: turnSettings.sandboxPolicy ?? defaultSandboxPolicy(sandboxMode, thread.cwd),
+        ...(turnSettings.permissionProfile
+          ? {
+              fileSystem: compileFileSystemRules(
+                turnSettings.permissionProfile,
+                relay ? relay.parent.cwd : stringOr(params.cwd, thread.cwd),
+              ),
+            }
+          : {}),
         systemPromptAddendum,
         planMode,
         planConfirmation: this.asksPlanConfirmation(peer, thread.id),
@@ -5696,11 +5754,13 @@ export class CodexClaudeAppServer {
         sandbox_workspace_write: this.configOverrides.sandbox_workspace_write ?? null,
         // 不带权限设置新建的会话会用哪个预设（上游 Config 摊平的 default_permissions，客户端的新建页照它显示）：
         // 照 thread/start 的取法从配置里的两项凑，凑不成预设时是 null，和建出来的会话报的一致
-        default_permissions: threadPermissionProfileId(
-          null,
-          normalizeApprovalPolicy(this.configOverrides.approval_policy) ?? 'on-request',
-          normalizeSandboxMode(this.configOverrides.sandbox_mode) ?? 'workspace-write',
-        ),
+        default_permissions:
+          defaultPermissionsId(this.configOverrides) ??
+          threadPermissionProfileId(
+            null,
+            normalizeApprovalPolicy(this.configOverrides.approval_policy) ?? 'on-request',
+            normalizeSandboxMode(this.configOverrides.sandbox_mode) ?? 'workspace-write',
+          ),
         forced_chatgpt_workspace_id: null,
         forced_login_method: null,
         web_search: this.configOverrides.web_search ?? 'disabled',
@@ -6002,7 +6062,11 @@ export class CodexClaudeAppServer {
             typeof next.developer_instructions === 'string' ? next.developer_instructions : null
         this.store.upsertThread(thread)
         const settings = this.store.threadSettings(id)
-        if (changed('sandbox_mode') || changed('sandbox_workspace_write'))
+        if (changed('sandbox_mode')) delete settings.permissionProfile
+        if (
+          (changed('sandbox_mode') || changed('sandbox_workspace_write')) &&
+          !settings.permissionProfile
+        )
           settings.sandboxPolicy = this.configSandboxPolicy(thread.sandboxMode, thread.cwd)
         this.store.saveThreadSettings(id, settings)
         const peer = this.subscribers.first(id)
@@ -6037,6 +6101,7 @@ export class CodexClaudeAppServer {
       if (values[key] != null && typeof values[key] !== 'string')
         throw new ProtocolError(-32602, key + ' 必须是字符串')
     if (values.mcp_servers != null) sdkMcpServers(values.mcp_servers)
+    validatePermissionsConfig(values)
     if (values.sandbox_workspace_write != null) {
       if (!isConfigObject(values.sandbox_workspace_write))
         throw new ProtocolError(-32602, 'sandbox_workspace_write 必须是对象')
@@ -6141,8 +6206,9 @@ export class CodexClaudeAppServer {
   }
 
   private threadEnvelope(thread: ThreadRecord, turns: TurnRecord[] = []): unknown {
+    const profileSnapshot = this.store.threadSettings(thread.id).permissionProfile
     const activePermissionProfileId = threadPermissionProfileId(
-      thread.permissionProfileId,
+      profileSnapshot?.id ?? thread.permissionProfileId,
       thread.approvalPolicy,
       thread.sandboxMode,
     )
@@ -6152,7 +6218,7 @@ export class CodexClaudeAppServer {
       modelProvider: thread.modelProvider,
       serviceTier: null,
       cwd: thread.cwd,
-      runtimeWorkspaceRoots: [thread.cwd],
+      runtimeWorkspaceRoots: profileSnapshot?.runtimeWorkspaceRoots ?? [thread.cwd],
       instructionSources: [],
       approvalPolicy: thread.approvalPolicy ?? 'never',
       approvalsReviewer: 'user',
@@ -6779,7 +6845,11 @@ export class CodexClaudeAppServer {
       normalizeCodexReasoningEffort(typeof legacyEffort === 'string' ? legacyEffort : null) ??
       normalizeCodexReasoningEffort(process.env.CHA_CLAUDE_DEFAULT_EFFORT) ??
       'medium'
-    this.configOverrides = overrides
+    // `app-server -c` 给的那一层叠在 config.json 上（cli-config.mts），只在内存里
+    this.configOverrides = mergeConfigLayers(overrides, cliConfigLayer())
+    // MCP 服务到用的时候才查（mcpScope），一个服务配错不至于让整个进程起不来
+    const { mcp_servers: _, ...checked } = this.configOverrides
+    this.validateConfigValues(checked)
     return snapshot
   }
 

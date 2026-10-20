@@ -153,6 +153,44 @@ export CHA_CLAUDE_ALLOWED_TOOLS="Read,Glob,Grep"
 export CHA_CLAUDE_ADD_DIRS="/repo/shared,/repo/docs"
 ```
 
+## Codex 风格的 `-c` 与权限档位
+
+Claude 入口的 `app-server` 和 `codex app-server` 一样接受 `-c key=<TOML 值>`（也可写 `--config key=…`、`--config=key=…`），可以给多次：
+
+```sh
+node packages/claude/dist/claude/src/adapter.mjs app-server --listen stdio:// \
+  -c approval_policy='"never"' \
+  -c default_permissions='"saas"' \
+  -c permissions.saas.extends='":workspace"' \
+  -c 'permissions.saas.filesystem={ "/workspaces" = "deny", "/workspaces/u1" = "write", "/home/u1/.codex" = "read" }' \
+  -c 'permissions.saas.network={ enabled = true }'
+```
+
+- 键按 `.` 拆成路径，值按 TOML 解析，解析不了就当字符串（与 codex 相同）。同一个键给多次，后面的为准。
+- 只认这几个键：`approval_policy`、`sandbox_mode`、`default_permissions`、`developer_instructions`、`permissions.*`、`mcp_servers.*`。别的键（`model_provider`、`features.*` 之类 codex 专有的）不报错，记进调试日志（`config.cliOverride.ignored`）后忽略。
+- 优先级：`-c` > 状态目录的 `config.json`（客户端经 `config/value/write` 写的）> 内置默认。`-c` 这一层只在内存里，不写回 `config.json`；表按键合并（`-c mcp_servers.a=…` 不会冲掉 `config.json` 里的 `mcp_servers.b`），其余整个替换。`mcp_servers` 之下还有 `~/.claude.json` 的 `mcpServers` 与 `CHA_CLAUDE_MCP_SERVERS`，它们排在 `config.json` 和 `-c` 前面。
+- 写错了（档位继承成环、继承 `:danger-full-access`、`default_permissions` 指向没定义的档位、条目格式不对）进程直接起不来，错误打在标准错误上。
+
+### 自定义权限档位
+
+`permissions.<名字>` 的写法和判定照 codex（以 `rust-v0.163.0` 为准，与 `rust-v0.155.1` 一致）：
+
+- `extends`：继承别的档位；内置档位里只能继承 `:read-only`（`:root` 可读）和 `:workspace`（`:root` 可读，工作区根、`/tmp`、`$TMPDIR` 可写）。子档位的条目覆盖父档位的同名条目。名字不能以 `:` 开头。
+- `filesystem`：键是绝对路径、`~/...`，或特殊路径 `:root`、`:workspace_roots`、`:tmpdir`、`:slash_tmp`；值是 `read`、`write`、`deny`（`none` 同 `deny`），或者“子路径 → 访问”的表（`":workspace_roots" = { "." = "write", docs = "read" }`，子路径不能含 `.`、`..`）。read、write 只接受精确路径或结尾的 `/**`。不认识的特殊路径忽略。
+- 判定：命中的条目里最深的为准，同样深时 `deny` > `write` > `read`。所以可以整个目录 `deny`，再把里面的子目录放回 `read` 或 `write`。
+- `workspace_roots`（`{ "/路径" = true }`）和请求里的 `runtimeWorkspaceRoots` 一起组成 `:workspace_roots`；请求没给 `runtimeWorkspaceRoots` 时是会话的工作目录。
+- `network.enabled`：命令能不能联网。`network` 下其余的键（代理、域名名单等）不生效。
+- `thread/start`、`turn/start`、`thread/resume`、`thread/fork`、`thread/settings/update` 的 `permissions` 可以填这里定义的名字，没定义的名字照旧回 `-32602`；`default_permissions` 管不带权限也不带旧式 `sandbox` 的新会话。会话记下选中那一刻的档位，之后改配置不影响已有会话，除非请求里再选一次。`permissionProfile/list` 会列出这些档位。
+
+同一份规则同时管两处：模型的 `Bash` 命令（macOS 用 `sandbox-exec`，Linux 用 `bwrap`：禁读的目录盖一层空 tmpfs，再把其中放回的子目录挂回）和文件类工具（`Read`、`Glob`、`Grep`、`LS`、`NotebookRead` 查禁读，`Write`、`Edit`、`MultiEdit`、`NotebookEdit` 查可写）。`Glob`、`Grep` 的搜索范围里只要有禁读的目录就整个拒绝，请模型换一个不含它的目录。
+
+和 codex 不一样的地方：
+
+- `deny` 的 glob 条目（如 `"/srv/**/*.env" = "deny"`）还不支持，写了选档位时报错；不继承 `:root` 可读、靠 `:minimal` 只读一部分目录的档位也还不支持。
+- Linux 上禁读目录里放回 `read` 的子目录也会挂回（codex 0.163.0 的 bwrap 只挂回可写的，只读的子目录在命令里看不到，它的文件工具却能读）。
+- 不存在的禁读路径不会预先盖住；之后在可写目录里建出来的，命令能读到，文件类工具仍按规则拒绝。
+- `:workspace` 下工作区根里 `.git`、`.agents`、`.codex` 的只读保护照旧不做；内置档位不看 `runtimeWorkspaceRoots`，与之前一样。
+
 ## Worktree isolation
 
 ```bash
