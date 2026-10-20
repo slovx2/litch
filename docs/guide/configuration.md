@@ -156,13 +156,18 @@ export CHA_CLAUDE_ADD_DIRS="/repo/shared,/repo/docs"
 适配器自己连的 MCP 服务（会话配置、配置覆盖、用户级 `.claude.json` 里的）按会话跨回合复用连接：
 第二个回合不再重起 stdio 服务、不再和 HTTP 服务重新握手，只先 ping 一次确认还通。服务配置
 （含引用的环境变量、请求头）或工作目录变了就重建；会话归档、删除、卸载、回退时关掉，
-没人用的连接空闲超时或超出条数上限时也关掉。回合被打断时还有请求在途的连接不留，下个回合重新连。
+没人用的连接空闲超时、超出条数上限或客户端全都断开时也关掉。回合被打断时还有请求在途的连接、
+请求被取消或超时过的连接、重新登录过 OAuth 的服务的连接都不留，下个回合重新连。
+
+行为上的变化：有状态的 stdio 服务（浏览器自动化这一类）以前每个回合重起、状态清空，现在同一个会话里
+跨回合保留状态（开着的页面、登录状态等），和原生 Codex 一样；要回到每回合重起，把下面的分钟数设成 `0`。
 
 ```bash
-# 没人用的 MCP 连接留多久（分钟，可以带小数），默认 10；0 表示不复用，每个回合重新连。
+# 没人用的 MCP 连接留多久（分钟，可以带小数），默认 10，最长约 35791（24.8 天，再大按这个算）；0 表示不复用，每个回合重新连。
 export CHA_CLAUDE_MCP_IDLE_MINUTES=10
-# 最多留几条没人用的 MCP 连接（一个会话的一个服务算一条），超出时先关最久没用的，默认 16；0 也表示不复用。
-export CHA_CLAUDE_MCP_IDLE_CONNECTIONS=16
+# 整个适配器最多留几条没人用的 MCP 连接（一个会话的一个服务算一条；stdio 服务一条就是一个子进程），
+# 超出时先关最久没用的，默认 8；0 也表示不复用。
+export CHA_CLAUDE_MCP_IDLE_CONNECTIONS=8
 ```
 
 
@@ -280,8 +285,8 @@ export CHA_CLAUDE_NODE="/absolute/path/to/node"
 | `CHA_CLAUDE_MODELS` | Codex App model picker list. |
 | `CHA_CLAUDE_MODEL_ALIASES` / `_EFFORT_ALIASES` | Id remapping. |
 | `CHA_CLAUDE_MCP_SERVERS` | MCP server config (JSON or file path). |
-| `CHA_CLAUDE_MCP_IDLE_MINUTES` | 适配器自己连的 MCP 服务跨回合复用：没人用的连接留多久（分钟），默认 `10`；`0` 表示不复用，每个回合重新连。 |
-| `CHA_CLAUDE_MCP_IDLE_CONNECTIONS` | 最多留几条没人用的 MCP 连接（一个会话的一个服务算一条），超出时先关最久没用的，默认 `16`；`0` 也表示不复用。 |
+| `CHA_CLAUDE_MCP_IDLE_MINUTES` | 适配器自己连的 MCP 服务跨回合复用：没人用的连接留多久（分钟），默认 `10`，最长约 `35791`；`0` 表示不复用，每个回合重新连。有状态的 stdio 服务因此跨回合保留状态。 |
+| `CHA_CLAUDE_MCP_IDLE_CONNECTIONS` | 整个适配器最多留几条没人用的 MCP 连接（一个会话的一个服务算一条），超出时先关最久没用的，默认 `8`；`0` 也表示不复用。 |
 | `CHA_CLAUDE_ALLOWED_TOOLS` | Pre-approved tools. |
 | `CHA_CLAUDE_ADD_DIRS` | Extra directories exposed to Claude. |
 | `CHA_CLAUDE_AUTO_WORKTREE` / `_WORKTREE_ROOT` | Per-thread worktree isolation. |

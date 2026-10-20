@@ -316,6 +316,10 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     await this.mcpPool.closeThread(threadId)
   }
 
+  closeIdleMcp(): Promise<void> {
+    return this.mcpPool.closeIdle()
+  }
+
   async runTurn(context: RuntimeTurnContext, handlers: RuntimeHandlers): Promise<void> {
     const key = context.sessionThreadId ?? context.threadId
     const existing = this.sessions.get(key)

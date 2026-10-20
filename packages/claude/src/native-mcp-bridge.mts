@@ -11,6 +11,7 @@ import {
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js'
 import { sdkMcpServers, sdkMcpStartupEnvironment } from './mcp-config.mjs'
+import { mcpOAuthManager } from './mcp-oauth.mjs'
 import { McpConnection, McpLease, type NativeMcpPool } from './native-mcp-pool.mjs'
 import { submissionHash } from './protocol-contract.mjs'
 import type { RuntimeHandlers } from './types.mjs'
@@ -42,9 +43,16 @@ export class NativeMcpBridge {
     const servers = Object.entries(sdkMcpServers(raw)).map(([name, config]) => ({
       name,
       config,
-      fingerprint: submissionHash({ cwd, source, config }),
+      fingerprint: submissionHash({
+        cwd,
+        source,
+        config,
+        login:
+          config.type === 'stdio' ? null : mcpOAuthManager().loginGeneration(source, name, config),
+      }),
     }))
     const started = Date.now()
+    this.pool?.reopen(this.thread)
     this.pool?.retain(this.thread, new Set(servers.map(({ name }) => name)))
     // 池里能复用的先一起 ping：几个服务的往返叠在一起，不按个数累加。没 ping 通的已经关掉
     const pooled = await Promise.allSettled(
@@ -128,7 +136,7 @@ export class NativeMcpBridge {
     } finally {
       if (!healthy) await pool.release(connection, false)
     }
-    return connection
+    return healthy ? connection : null
   }
 
   // 交给 CLI 的那一份：请求都挂在这次租约上，进程收场时还没完的一起取消。

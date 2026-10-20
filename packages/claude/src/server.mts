@@ -491,6 +491,8 @@ export class CodexClaudeAppServer {
 
   // 所有连接都断开后，看管后台命令的进程再留一段时间；期间有连接回来就继续留。
   private armDetachedReap(): void {
+    // 留着的 MCP 连接（含 stdio 服务的子进程）没人用的现在就关，不等空闲超时
+    if (!this.stopped && this.accountPeers.size === 0) void this.runtime.closeIdleMcp?.()
     const linger = detachedLingerMs()
     if (this.stopped || this.detachedReapTimer || linger <= 0 || this.accountPeers.size > 0) return
     if ((this.runtime.liveSessions?.().length ?? 0) === 0) return
