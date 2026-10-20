@@ -190,6 +190,16 @@ test('HISTORY-002：真实工具大输出、全量与摘要视图、双向分页
         }),
         { data: inTurn.slice(0, 2) },
       )
+      assert.equal(
+        (
+          await client.raw(
+            'thread/items/read',
+            { threadId: 'no-such-thread', turnId: anchorTurn, itemIds: ['x'] },
+            -32602,
+          )
+        ).error.message,
+        'thread not found: no-such-thread',
+      )
       for (const itemIds of [[], Array.from({ length: 101 }, (_, index) => String(index))])
         await client.raw('thread/items/read', { threadId, turnId: anchorTurn, itemIds }, -32600)
       const first = await client.request('thread/items/list', { threadId, limit: 2 })

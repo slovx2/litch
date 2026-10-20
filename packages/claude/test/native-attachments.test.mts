@@ -111,7 +111,24 @@ test('ATTACHMENT-002：真实回合附件幂等、分页隔离、通知及删除
       await client.request('thread/attachmentOwner/list', { ...ownerQuery, archived: true }),
       { data: [], nextCursor: null },
     )
-    for (const params of [{ attachmentType: 'source' }, { ...ownerQuery, archived: 'no' }])
+    // 页大小照上游钳在 1 到 100；游标只认同一组条件（归档筛选不同就不认）
+    const clamped = await client.request('thread/attachmentOwner/list', { ...ownerQuery, limit: 0 })
+    assert.deepEqual(clamped.data, owners.data.slice(0, 1))
+    assert.ok(clamped.nextCursor)
+    assert.deepEqual(
+      (await client.request('thread/attachmentOwner/list', { ...ownerQuery, limit: 5000 })).data,
+      owners.data,
+    )
+    await client.raw(
+      'thread/attachmentOwner/list',
+      { ...ownerQuery, archived: false, cursor: clamped.nextCursor },
+      -32602,
+    )
+    for (const params of [
+      { attachmentType: 'source' },
+      { ...ownerQuery, archived: 'no' },
+      { ...ownerQuery, limit: -1 },
+    ])
       await client.raw('thread/attachmentOwner/list', params, -32602)
     const full = await client.request('thread/attachment/list', { threadId })
     assert.equal(full.nextCursor, null)

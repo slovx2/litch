@@ -32,7 +32,8 @@ const nativeCodex = "codex"
 // 用户装的 codex 至少要这个版本。只设下限，更高的都收。依据：
 //   - 客户端和设备进程用到的方法与字段、设备进程替它整理的能力声明里的每一位，都是对着这一版的结构定义和
 //     上游源码核对的；更早的版本没有核对过。仓库的协议类型后来升到了 protocol/versions.json 的 codexProtocol，
-//     那次升级上游只增不减，用到的方法与字段这一版都有，所以下限没跟着升。
+//     那次升级上游的方法只增不减，删改的几处类型（插件扩展、namespaceTools）这里都不用，
+//     用到的方法与字段这一版都有，所以下限没跟着升。
 //   - 用到的方法在这一版都有。按上游的稳定版标签，其中出现得最晚的几样是：项目（project/*，0.149.0 起）、
 //     按回合回退和设备侧队列（thread/revert、thread/queue/*，0.148.0 起）、分区与置顶（threadSection/*、
 //     thread/section/move，0.147.0 起）、分叉时指定回合（lastTurnId，0.143.0 起）、权限档（permissionProfile/list、

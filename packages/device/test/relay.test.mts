@@ -312,3 +312,38 @@ test('上游一开始就连不上：设备照常提供服务，等它起来了�
     await env.close()
   }
 })
+
+test('thread/list 的 excludedThreadIds 由设备层合并后统一筛：不转给上游，先排除再凑满一页，超过 100 个拒绝', async () => {
+  const pi = new FakeUpstream('pi', [
+    { id: 'p1', updatedAt: 9 },
+    { id: 'p2', updatedAt: 7 },
+    { id: 'p3', updatedAt: 5 },
+  ])
+  const claude = new FakeUpstream('claude-code', [
+    { id: 'c1', updatedAt: 8 },
+    { id: 'c2', updatedAt: 6 },
+  ])
+  const env = rig({ pi, 'claude-code': claude })
+  try {
+    const client = env.connect()
+    await client.initialize()
+    const ids = (page: any) => page.data.map((thread: any) => thread.id)
+    const first = await client.call('thread/list', { limit: 2, excludedThreadIds: ['p1', 'c1'] })
+    assert.deepEqual(ids(first), ['p2', 'c2'])
+    const second = await client.call('thread/list', {
+      limit: 2,
+      excludedThreadIds: ['p1', 'c1'],
+      cursor: first.nextCursor,
+    })
+    assert.deepEqual(ids(second), ['p3'])
+    assert.equal(second.nextCursor, null)
+    for (const upstream of [pi, claude])
+      for (const frame of upstream.seen.filter((frame) => frame.method === 'thread/list'))
+        assert.equal('excludedThreadIds' in frame.params, false, '不转给上游')
+    const many = Array.from({ length: 101 }, (_, index) => `t-${index}`)
+    assert.equal((await client.fails('thread/list', { excludedThreadIds: many })).code, -32602)
+    assert.equal((await client.fails('thread/list', { excludedThreadIds: [''] })).code, -32602)
+  } finally {
+    await env.close()
+  }
+})

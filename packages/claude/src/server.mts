@@ -845,6 +845,7 @@ export class CodexClaudeAppServer {
       case 'thread/items/list':
         return this.threadItemsList(asRecord(params))
       case 'thread/items/read':
+        await this.nativeHistory(asRecord(params).threadId)
         return this.threadItemsRead(asRecord(params))
       case 'thread/delete': {
         const threadId = requiredString(asRecord(params).threadId, 'threadId')
@@ -1656,7 +1657,8 @@ export class CodexClaudeAppServer {
       sortKey,
       modelProviders,
       searchTerm: typeof params.searchTerm === 'string' ? params.searchTerm : null,
-      excludedThreadIds: excludedThreadIds as string[],
+      // 排好序再进游标的散列：同一组排除换个顺序还是同一个查询
+      excludedThreadIds: [...(excludedThreadIds as string[])].sort(),
     }
     const pagination = catalogPagination(params, submissionHash(filters))
     const found = this.store.listThreads({
@@ -1804,7 +1806,7 @@ export class CodexClaudeAppServer {
       ids.some((id) => typeof id !== 'string')
     )
       throw new ProtocolError(-32600, 'itemIds must contain 1 to 100 IDs')
-    if (!this.store.getThread(threadId)) throw new ProtocolError(-32602, '未知会话')
+    if (!this.store.getThread(threadId)) throw new ThreadNotFound(threadId)
     const wanted = new Set(ids as string[])
     const turn = this.store.listTurns(threadId).find((candidate) => candidate.id === turnId)
     return {

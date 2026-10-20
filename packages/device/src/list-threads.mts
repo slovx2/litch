@@ -24,7 +24,8 @@ export interface ListContext {
 
 /**
  * 不交给上游的参数：游标、页大小和排序由聚合面自己定，harness 是聚合面的扩展参数，
- * 工作区、分区、置顶（isPinned 不在协议里，是适配器的引擎多认的）由设备层来筛
+ * 工作区、分区、置顶（isPinned 不在协议里，是适配器的引擎多认的）由设备层来筛；
+ * excludedThreadIds（0.163.0 起）也由这里筛：别的入口和更早的原生 codex 不认它
  */
 const OWN_PARAMS = new Set([
   'cursor',
@@ -35,6 +36,7 @@ const OWN_PARAMS = new Set([
   'projectId',
   'sectionId',
   'isPinned',
+  'excludedThreadIds',
 ])
 
 function source(link: UpstreamLink, timeoutMs: number): ListSource {
@@ -70,6 +72,13 @@ export async function listThreads(context: ListContext, params: unknown): Promis
     throw new ProtocolError(-32602, 'limit 必须在 1 到 1000 之间')
   if (fields.cursor != null && typeof fields.cursor !== 'string')
     throw new ProtocolError(-32602, 'cursor 必须是字符串')
+  // 照上游：最多 100 个，不合法就拒绝，不截断
+  const excludedIds = fields.excludedThreadIds ?? []
+  if (!Array.isArray(excludedIds) || excludedIds.length > 100)
+    throw new ProtocolError(-32602, 'excludedThreadIds accepts at most 100 entries')
+  if (excludedIds.some((id) => typeof id !== 'string' || !id.trim()))
+    throw new ProtocolError(-32602, 'excludedThreadIds 的每一项必须是非空字符串')
+  const excluded = new Set(excludedIds as string[])
 
   let candidates = context.links
   if (typeof fields.harness === 'string' && fields.harness)
@@ -107,7 +116,9 @@ export async function listThreads(context: ListContext, params: unknown): Promis
     limit,
     cursor: typeof fields.cursor === 'string' ? fields.cursor : null,
     filters: Object.fromEntries(Object.entries(fields).filter(([key]) => !OWN_PARAMS.has(key))),
-    ...(filter ? { accept: (row) => filter.accept(row.id) } : {}),
+    ...(filter || excluded.size > 0
+      ? { accept: (row) => !excluded.has(row.id) && (filter?.accept(row.id) ?? true) }
+      : {}),
   })
   context.index.batch(() => {
     // 列表是按归没归档查的，所以这一页的会话归没归档是知道的

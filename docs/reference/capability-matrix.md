@@ -88,8 +88,21 @@ The adapter advertises codex app-server protocol **v2 @ 0.163.0** (via
 `codex app-server generate-json-schema --experimental` and
 `generate-ts --experimental`.
 
-0.157.1 → 0.163.0 上游只增不减（`ModelProviderCapabilitiesReadResponse.namespaceTools`
-被删，各入口不再发）。新方法与字段的处理：
+0.157.1 → 0.163.0 上游的方法只增不减，类型上有几处删改，对我们的影响：
+
+- 删了 `ModelProviderCapabilitiesReadResponse.namespaceTools`：各入口不再发（严格校验会把它算多出字段）。
+- 删了 `PluginSummary.extensions` 和 `PluginEntrypoint`、`PluginExtensions`、`PluginIcon`、`PluginQuickAction`、
+  `PluginQuickActionTarget`、`PluginSearchProvider`、`PluginSearchProviderCall`、`PluginSettings` 这几个类型：
+  各入口的插件列表本来就是空的，客户端也不读，不受影响。
+- `SkillMetadata.path`、`SkillSummary.path` 从 `AbsolutePathBuf` 改成 `LegacyAppPathString`：线上仍是字符串，
+  各入口照旧给绝对路径。
+- 枚举加宽：`MessagePhase` 多了 `partial_answer`，`CodexErrorInfo` 多了 `flexUnavailable`、`tooManyDenials`
+  并放开成任意字符串或对象，`PlanType`、`RealtimeVoice` 加了值。各入口不发这些新值；
+  客户端核心对认不出的阶段值和错误类别本来就有兜底。
+- 新加的必填字段一个没有；`Turn.rootTurnId` 在生成的 TypeScript 类型里是必填（`string | null`），
+  JSON Schema 里可省，客户端代码里构造 `Turn` 时要写上。
+
+新方法与字段的处理：
 
 - `thread/items/list` 的游标可以是回合里的一个条目（`{type: "item", itemId}`），已支持；
   `thread/items/read`（实验性）已支持。

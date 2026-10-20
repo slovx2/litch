@@ -106,6 +106,7 @@ export function pageRecords<T>(
 type HistoryTurn<I extends { id: string } = { id: string }> = { id: string; items: I[] }
 
 // 条目游标是线程级的：桌面拿 thread/resume 给的同一个头部游标，逐个回合带 turnId 取条目。
+// 不给方向时照上游按升序（pageRecords 自己的默认是降序，那是给回合列表的）。
 export function pageThreadItems<I extends { id: string }>(
   threadId: string,
   turns: HistoryTurn<I>[],
@@ -133,7 +134,7 @@ export function pageThreadItems<I extends { id: string }>(
   }
   return pageRecords(
     entries,
-    { ...params, cursor },
+    { ...params, sortDirection: params.sortDirection ?? 'asc', cursor },
     scope,
     identity,
     (entry) => !params.turnId || entry.turnId === params.turnId,

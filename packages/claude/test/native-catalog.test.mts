@@ -131,6 +131,22 @@ test('HISTORY-003：同时间戳会话分页不漏项，已加载列表游标前
       new Set(threads.slice(5).map((thread) => thread.id)),
     )
     assert.equal(kept.nextCursor, null)
+    // 同一组排除换个顺序是同一个查询：游标照样认
+    const paged = await client.request('thread/list', {
+      cwd: home,
+      limit: 1,
+      excludedThreadIds: excluded,
+    })
+    const rest = await client.request('thread/list', {
+      cwd: home,
+      limit: 5,
+      excludedThreadIds: [...excluded].reverse(),
+      cursor: paged.nextCursor,
+    })
+    assert.deepEqual(
+      new Set([...paged.data, ...rest.data].map((thread: any) => thread.id)),
+      new Set(threads.slice(5).map((thread) => thread.id)),
+    )
     await client.raw(
       'thread/list',
       { excludedThreadIds: Array.from({ length: 101 }, (_, index) => `t-${index}`) },
