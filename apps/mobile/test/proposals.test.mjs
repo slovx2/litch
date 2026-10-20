@@ -98,6 +98,11 @@ test('哪条调用画成几张卡：收尾按 callId 对上几张；start 按提
     ['p1', 'p2'],
   )
   assert.deepEqual(cardsOf(call('w2', 'wrap_up'), list), [], '没带建议的收尾：不画')
+  // 真设备上条目键是“回合号:条目号”，提案记的是协议里的条目号
+  assert.deepEqual(
+    cardsOf(call('t1:w', 'wrap_up'), list).map((entry) => entry.id),
+    ['p1', 'p2'],
+  )
   const spawned = { proposalId: 'p9', threadId: null, title: 'x', prompt: 'y' }
   assert.deepEqual(cardsOf(call('s9', 'start', { spawned }), list), [null])
   assert.equal(

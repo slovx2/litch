@@ -120,7 +120,11 @@ export function revealProposal(proposal: SessionProposalView): boolean {
   if (!scope) return false
   const card =
     scope.querySelector(`[data-proposal="${CSS.escape(proposal.id)}"]`) ??
-    (proposal.callId ? scope.querySelector(`[data-item="${CSS.escape(proposal.callId)}"]`) : null)
+    (proposal.callId
+      ? scope.querySelector(
+          `[data-item="${CSS.escape(proposal.callId)}"], [data-item$=":${CSS.escape(proposal.callId)}"]`,
+        )
+      : null)
   if (!card) return false
   const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches
   card.scrollIntoView({ block: 'center', behavior: still ? 'auto' : 'smooth' })

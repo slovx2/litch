@@ -37,6 +37,10 @@ test('对上提案：结果回来了按提案号；调用还在等时按 callId�
   assert.equal(findOffer(list, 'call-x', null)?.id, 'b')
   assert.equal(findOffer(list, 'call-x', 'c')?.id, 'c')
   assert.equal(findOffer(list, 'call-none', null), undefined)
+  // 真设备上界面的条目键是“回合号:条目号”，提案记的是协议里的条目号
+  assert.equal(findOffer(list, 't1:call-x', null)?.id, 'b')
+  assert.equal(findOffer(list, 'local:1:call-x', null)?.id, 'b')
+  assert.equal(findOffer(list, 't1:xcall-x', null), undefined)
   assert.equal(findOffer(undefined, 'call-x', null), undefined)
 })
 

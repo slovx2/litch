@@ -4,7 +4,8 @@ import type { OfferChoice, ProposalStatus, SessionProposalView } from '@litch/co
 
 /**
  * 那次 litch_sessions.start（initiation offer）对上的提案：结果回来了按提案号找；
- * 调用还在等用户选（没有结果）时按提出它的调用（callId 就是这一条的条目 id）找
+ * 调用还在等用户选（没有结果）时按提出它的调用找：提案记的是协议里的条目号，界面的条目键是“回合号:条目号”
+ *（同核心的 proposedBy；这里是纯函数，单测直接跑 .ts，不从核心取值）
  */
 export function findOffer(
   list: readonly SessionProposalView[] | undefined,
@@ -12,7 +13,12 @@ export function findOffer(
   proposalId: string | null,
 ): SessionProposalView | undefined {
   return list?.find((entry) =>
-    proposalId ? entry.id === proposalId : entry.offer && entry.callId === itemId,
+    proposalId
+      ? entry.id === proposalId
+      : entry.offer &&
+        entry.callId !== null &&
+        entry.callId !== '' &&
+        (itemId === entry.callId || itemId.endsWith(`:${entry.callId}`)),
   )
 }
 

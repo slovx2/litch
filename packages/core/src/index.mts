@@ -184,6 +184,7 @@ export {
   proposalOpen,
   proposalShape,
   proposalStatus,
+  proposedBy,
 } from './model-tree.mjs'
 export {
   describeText,

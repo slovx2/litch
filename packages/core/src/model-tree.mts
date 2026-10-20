@@ -81,6 +81,14 @@ export interface SessionProposalView {
   widerSandbox: SandboxLevel | null
 }
 
+/**
+ * 提案是不是那一条调用提的：提案记的 callId 是协议里的条目号，界面里的条目键是“回合号:条目号”（itemKey）
+ */
+export const proposedBy = (proposal: { callId: string | null }, itemKey: string): boolean =>
+  proposal.callId !== null &&
+  proposal.callId !== '' &&
+  (itemKey === proposal.callId || itemKey.endsWith(`:${proposal.callId}`))
+
 /** 这一刻提案算什么状态：等着的过了期就是过期了（设备进程到点也会发通知，界面不等它） */
 export const proposalStatus = (proposal: SessionProposalView, now: number): ProposalStatus =>
   proposal.status === 'pending' && proposal.expiresAt <= now ? 'expired' : proposal.status

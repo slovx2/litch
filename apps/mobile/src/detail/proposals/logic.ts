@@ -6,6 +6,7 @@ import {
   type ProposalOverrides,
   type ProposalStatus,
   proposalStatus,
+  proposedBy,
   type SessionEventView,
   type SessionProposalView,
   type ToolCallItem,
@@ -61,9 +62,9 @@ export function cardsOf(
   item: ToolCallItem,
   proposals: readonly SessionProposalView[],
 ): (SessionProposalView | null)[] | null {
-  if (isWrapUp(item)) return proposals.filter((proposal) => proposal.callId === item.id)
+  if (isWrapUp(item)) return proposals.filter((proposal) => proposedBy(proposal, item.id))
   if (!item.spawned) return null
-  const byCall = proposals.find((proposal) => proposal.callId === item.id) ?? null
+  const byCall = proposals.find((proposal) => proposedBy(proposal, item.id)) ?? null
   const proposalId = item.spawned.proposalId
   if (!proposalId) return byCall || isOfferCall(item) ? [byCall] : null
   return [proposals.find((proposal) => proposal.id === proposalId) ?? byCall]

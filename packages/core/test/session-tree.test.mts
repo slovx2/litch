@@ -18,6 +18,7 @@ import {
   proposalOpen,
   proposalShape,
   proposalStatus,
+  proposedBy,
   quietOf,
   reduceSession,
   type SessionOp,
@@ -1566,4 +1567,13 @@ test('模拟：没有会话树的设备不能派', async () => {
     }),
   )
   assert.equal(failure.code, 'unsupported')
+})
+
+test('提案是不是那一条调用提的：条目键是“回合号:条目号”，提案记协议里的条目号', () => {
+  assert.equal(proposedBy({ callId: 'call_1' }, 't1:call_1'), true)
+  assert.equal(proposedBy({ callId: 'call_1' }, 'local:1:call_1'), true)
+  assert.equal(proposedBy({ callId: 'call_1' }, 'call_1'), true)
+  assert.equal(proposedBy({ callId: 'call_1' }, 't1:xcall_1'), false)
+  assert.equal(proposedBy({ callId: null }, 't1:'), false)
+  assert.equal(proposedBy({ callId: '' }, 't1:'), false)
 })
