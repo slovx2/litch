@@ -245,8 +245,15 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
     await until('审批卡片消失', () => !one('.req'))
     const turn = () => all('.turn').at(-1)
     const heard = Boolean(await until('对面听到了说明', () => turn()?.textContent?.includes(why)))
+    // 步骤组默认收着（回合结束后整段过程也收起来），“已拒绝”在那条命令上，点开才看得到
     const declined = Boolean(
-      await until('那条命令标成已拒绝', () => turn()?.textContent?.includes('已拒绝')),
+      await until('那条命令标成已拒绝', () => {
+        for (const head of turn()?.querySelectorAll<HTMLElement>(
+          '.proc-head[aria-expanded="false"], .steps-head[aria-expanded="false"]',
+        ) ?? [])
+          head.click()
+        return turn()?.textContent?.includes('已拒绝')
+      }),
     )
     await until('这个回合结束', () => !running() && area(), 60_000)
     declineNote = { offered, focused, imeKept, escKept, emptyKept, heard, declined }
@@ -283,6 +290,14 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
     await frame()
   }
   await until(`侧栏里的“${other}”`, () => rowOf(other))
+  // 回合结束时整段过程收起，对话区随后还要滚一下把位置对上；弹在鼠标处的菜单碰上滚动就收起，等停稳了再点右键
+  let moved = performance.now()
+  const mark = () => {
+    moved = performance.now()
+  }
+  window.addEventListener('scroll', mark, true)
+  await until('页面停止滚动', () => performance.now() - moved > 300)
+  window.removeEventListener('scroll', mark, true)
   const click = rightClick(other)
   const popped = await until('右键菜单', menu)
   await frame()

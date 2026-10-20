@@ -50,6 +50,8 @@ export async function enginesApproval(
   await kit.send(words)
   const shown = await kit.cardOrEnd()
   const card = shown ? kit.readCard(shown) : null
+  // 进行中的步骤组默认收着，那条命令要点开才画出来
+  if (shown) await kit.unfold()
   const pending = shown
     ? text(kit.sub(kit.turns().at(-1), '.item-head .meta [data-state="waiting"]'))
     : ''
