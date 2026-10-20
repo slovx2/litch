@@ -41,6 +41,31 @@ export interface BrowserSitePolicy {
   blocked: string[]
 }
 
+/** 设置页里一条已保存的密码：只有站点、用户名、来源、时间，从不带密码 */
+export interface BrowserSavedPassword {
+  id: string
+  /** 站点的源，`https://accounts.example.com` */
+  origin: string
+  username: string
+  /** 从哪儿导进来的，比如 `chrome:Default` */
+  source: string
+  /** 毫秒 */
+  createdAt: number
+  /** 毫秒：最近一次在内置浏览器里填过；没填过不给 */
+  lastUsedAt?: number
+}
+
+/** 已保存的密码：只能列、删，看不到明文 */
+export interface BrowserPasswordsBridge {
+  list(): Promise<BrowserSavedPassword[]>
+  /** 删一条，回删没删到 */
+  remove(id: string): Promise<boolean>
+  /** 全删，回删了几条 */
+  removeAll(): Promise<number>
+  /** 密码库变了（导入了、别处删了） */
+  onChanged(handler: () => void): () => void
+}
+
 export interface BrowserBridge {
   /** 这个窗口里、这块矩形（页面里的 CSS 像素）上显示哪个标签。都给 null 就是什么都不显示 */
   place(
@@ -73,6 +98,8 @@ export interface BrowserBridge {
   unblock(host: string | null): Promise<BrowserSitePolicy | null>
   /** 开关或黑名单在别处改了（审批卡片上、litch config） */
   onPolicy(handler: (policy: BrowserSitePolicy) => void): () => void
+  /** 已保存的密码（设置页用） */
+  passwords: BrowserPasswordsBridge
 }
 
 declare global {

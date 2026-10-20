@@ -5,6 +5,13 @@ import { type AxNode, capLines, diffLines, formatAxTree } from './ax.mjs'
 import type { Tool } from './executor.mjs'
 import type { BrowserPage } from './model.mjs'
 import { blockedByDialog, guarded, imageSize, pageLine, sleep, within } from './page-ops.mjs'
+import {
+  COLLECT_PASSWORDS,
+  fieldNodes,
+  isPasswordNode,
+  maskAxNodes,
+  redactSecrets,
+} from './passwords/mask.mjs'
 
 interface FrameTree {
   frame: { id: string; url: string; name?: string }
@@ -20,6 +27,49 @@ async function ready(call: Parameters<Tool>[0], page: BrowserPage) {
   return null
 }
 
+/**
+ * 一个框架的无障碍树，密码框的值遮住（passwords/mask.mts）。是不是密码框问 DOM；问不到的、又带着值的，
+ * 也当密码框遮住
+ */
+async function maskedTree(page: BrowserPage, nodes: AxNode[]): Promise<AxNode[]> {
+  const ids = fieldNodes(nodes)
+  if (ids.length === 0) return nodes
+  const valued = new Set(
+    nodes
+      .filter((node) => node.value?.value !== undefined && node.value.value !== '')
+      .map((node) => node.backendDOMNodeId),
+  )
+  const secret = new Set<number>()
+  await Promise.all(
+    ids.map(async (backendNodeId) => {
+      try {
+        const { node } = await page.cdp<{ node: { nodeName?: string; attributes?: string[] } }>(
+          'DOM.describeNode',
+          { backendNodeId },
+        )
+        if (isPasswordNode(node)) secret.add(backendNodeId)
+      } catch {
+        if (valued.has(backendNodeId)) secret.add(backendNodeId)
+      }
+    }),
+  )
+  return maskAxNodes(nodes, secret)
+}
+
+/** 页面里密码框现在的值（主文档、同源子框架），evaluate 的结果里要替掉。取不到就是没有 */
+async function passwordValues(page: BrowserPage): Promise<unknown[]> {
+  try {
+    const found = await page.cdp<{ result: { value?: unknown } }>('Runtime.evaluate', {
+      expression: COLLECT_PASSWORDS,
+      returnByValue: true,
+      timeout: 2000,
+    })
+    return Array.isArray(found.result.value) ? found.result.value : []
+  } catch {
+    return []
+  }
+}
+
 export const snapshot: Tool = async (call) => {
   const page = call.pick()
   const stop = await ready(call, page)
@@ -27,7 +77,10 @@ export const snapshot: Tool = async (call) => {
   const state = call.state(page)
   const { frameTree } = await page.cdp<{ frameTree: FrameTree }>('Page.getFrameTree')
   const lines = formatAxTree(
-    (await page.cdp<{ nodes: AxNode[] }>('Accessibility.getFullAXTree')).nodes,
+    await maskedTree(
+      page,
+      (await page.cdp<{ nodes: AxNode[] }>('Accessibility.getFullAXTree')).nodes,
+    ),
     state.book,
   )
   // 子框架逐个取：同一个进程里的能取到；跨站的框架在别的进程里，取不到就说一声
@@ -38,7 +91,7 @@ export const snapshot: Tool = async (call) => {
         const { nodes } = await page.cdp<{ nodes: AxNode[] }>('Accessibility.getFullAXTree', {
           frameId: child.frame.id,
         })
-        lines.push(...formatAxTree(nodes, state.book, depth + 1))
+        lines.push(...formatAxTree(await maskedTree(page, nodes), state.book, depth + 1))
       } catch {
         lines.push(
           `${'  '.repeat(depth + 1)}- (content of this cross-site frame is not available; use screenshot and x/y)`,
@@ -150,6 +203,8 @@ export const evaluate: Tool = async (call) => {
   const stop = await ready(call, page)
   if (stop) return stop.refusal
   const expression = str(call.args, 'expression', true)
+  // 跑之前、跑之后各收一次密码框的值：脚本可能先读出来再把框清空
+  const before = await passwordValues(page)
   const raced = await guarded(
     page,
     within(
@@ -166,15 +221,18 @@ export const evaluate: Tool = async (call) => {
   )
   if ('dialog' in raced) return call.done(page, 'The expression opened a dialog.')
   const reply = raced.value
+  const secrets = [...before, ...(await passwordValues(page))]
   if (reply.exceptionDetails) {
     const detail =
       reply.exceptionDetails.exception?.description ?? reply.exceptionDetails.text ?? 'error'
-    return call.done(page, `The expression threw: ${detail}`)
+    return call.done(page, `The expression threw: ${redactSecrets(detail, secrets)}`)
   }
-  const value =
+  const raw =
     reply.result.type === 'undefined'
       ? 'undefined'
       : (JSON.stringify(reply.result.value) ?? String(reply.result.description))
+  // 密码框的值不交给模型
+  const value = redactSecrets(raw, secrets)
   const text =
     value.length > EVAL_MAX
       ? `${value.slice(0, EVAL_MAX)}… (cut, ${value.length} characters)`

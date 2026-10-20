@@ -3,6 +3,11 @@ import { BACKDROPS, type ShellLook } from './look.mjs'
 import type { AboutSeen, ColdSeen, KeyRow } from './probe-settings-about.mjs'
 import type { ScreensSeen, ZoomLists } from './probe-settings-audit.mjs'
 import type { ControlsSeen, PageSeen, PreviewSeen } from './probe-settings-page.mjs'
+import {
+  judgePasswords,
+  type PasswordsRemoved,
+  type PasswordsSeen,
+} from './probe-settings-passwords.mjs'
 import { judgeTools, type ToolsSeen } from './probe-settings-tools.mjs'
 import type { PersistSeen, TurnSeen } from './probe-settings-turn.mjs'
 import type { SizeSeen } from './probe-terminal-size.mjs'
@@ -46,6 +51,7 @@ export interface FirstSeen {
   menuKeys: MenuKey[]
   about: AboutSeen
   tools: ToolsSeen
+  passwords: { seen: PasswordsSeen; removed: PasswordsRemoved }
   turn: TurnSeen
   screens: ScreensSeen
   zooms: ZoomSeen[]
@@ -212,6 +218,7 @@ export function judgeFirst(
   // ---- 快捷键、关于 ----
   failed.push(...judgeKeys(seen.keys, seen.menuKeys, platform))
   failed.push(...judgeTools(seen.tools, platform))
+  failed.push(...judgePasswords(seen.passwords.seen, seen.passwords.removed))
   same(about.name, 'Litch', '关于里的名字')
   same(about.version, hooks.version, '关于里的版本')
   must(about.versionLine.includes(hooks.version), `版本那一行没有写版本：“${about.versionLine}”`)

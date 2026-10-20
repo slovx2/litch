@@ -15,6 +15,7 @@ import {
   browserBridge,
 } from '../side/browser/bridge.ts'
 import { setLinksInBrowser, useLinksInBrowser } from '../side/browser/links.ts'
+import { SavedPasswords } from './SavedPasswords.tsx'
 import { dayOf, listPhase, siteLabel, sortSites } from './tools-logic.ts'
 
 export function BrowserSection() {
@@ -32,6 +33,7 @@ export function BrowserSection() {
       <LinkSwitch />
       <TrustAll bridge={bridge} />
       <SavedSites bridge={bridge} />
+      <SavedPasswords bridge={bridge} />
       <BrowsingData bridge={bridge} />
     </>
   )

@@ -20,6 +20,12 @@ import {
   BROWSER_TRUST_ALL,
   BROWSER_UNBLOCK,
 } from './ipc.mjs'
+import {
+  PASSWORDS_CHANGED,
+  PASSWORDS_LIST,
+  PASSWORDS_REMOVE,
+  PASSWORDS_REMOVE_ALL,
+} from './passwords/ipc.mjs'
 
 const listen = (channel: string, handler: (payload: unknown) => void) => {
   const listener = (_event: unknown, payload: unknown) => handler(payload)
@@ -51,5 +57,12 @@ export function browserBridge() {
     block: (site: string) => ipcRenderer.invoke(BROWSER_BLOCK, site),
     unblock: (host: string | null) => ipcRenderer.invoke(BROWSER_UNBLOCK, host),
     onPolicy: (handler: (policy: unknown) => void) => listen(BROWSER_POLICY_CHANGED, handler),
+    // 设置页“已保存的密码”：列表只有站点、用户名、来源、时间，从不带密码
+    passwords: {
+      list: () => ipcRenderer.invoke(PASSWORDS_LIST),
+      remove: (id: string) => ipcRenderer.invoke(PASSWORDS_REMOVE, id),
+      removeAll: () => ipcRenderer.invoke(PASSWORDS_REMOVE_ALL),
+      onChanged: (handler: () => void) => listen(PASSWORDS_CHANGED, () => handler()),
+    },
   }
 }
