@@ -31,6 +31,7 @@ const notice = (id) => ({ id, kind: 'notice', label: '压缩了上下文', detai
 function viewOf(turns, items) {
   return {
     forkedFrom: null,
+    proposals: [],
     turns: turns.map((turn) => ({
       startedAt: null,
       durationMs: null,

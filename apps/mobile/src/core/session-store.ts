@@ -6,7 +6,14 @@
 // - 正在流式的那条回答（切成的各块）和它下面的状态行单独作为“尾巴”交出去（splitTail 打开时）。尾巴每帧都在变，
 //   列表的数据却不动：列表不用每帧重渲染、重算布局，只有正在长的那一块重画。
 //   尾巴放在倒置列表的表头里（最底下），长高时上面的行跟着一起被顶上去，和原生的普通布局一样，同一帧完成。
-import type { CoreChannel, SessionOp, SessionView, TurnStatus, UserMessageItem } from '@litch/core'
+import type {
+  CoreChannel,
+  SessionOp,
+  SessionProposalView,
+  SessionView,
+  TurnStatus,
+  UserMessageItem,
+} from '@litch/core'
 import { reduceSession } from '@litch/core'
 import { experiment } from '../experiment'
 import { noteOpenStage, noteWork } from '../probe'
@@ -91,6 +98,13 @@ export class SessionStore {
   private meta: SessionMeta | null = null
   private readonly metaListeners = new Set<() => void>()
   private metaDirty = false
+  /**
+   * 这个会话上的全部提案（建议任务）。手机上会话只经这里订阅、核心的数据副本不开会话，副本里的 keys.proposals 是空的，
+   * 列表页、“改了再开始”从这里取。快照还没到是 undefined
+   */
+  private proposals: readonly SessionProposalView[] | undefined = undefined
+  private readonly proposalListeners = new Set<() => void>()
+  private proposalsDirty = false
   private readonly builder = new RowBuilder()
   private readonly listeners = new Set<() => void>()
   private readonly itemTurn = new Map<string, string>()
@@ -121,6 +135,7 @@ export class SessionStore {
             for (const id of turn.itemIds) this.itemTurn.set(id, turn.id)
           this.dirty = 'all'
           this.metaDirty = true
+          this.proposalsDirty = true
           this.schedule()
         },
         delta: (ops) => {
@@ -200,6 +215,13 @@ export class SessionStore {
   /** 快照还没到时是 null */
   readonly getMeta = (): SessionMeta | null => this.meta
 
+  readonly subscribeProposals = (listener: () => void): (() => void) => {
+    this.proposalListeners.add(listener)
+    return () => this.proposalListeners.delete(listener)
+  }
+
+  readonly getProposals = (): readonly SessionProposalView[] | undefined => this.proposals
+
   /** 尾巴单独交出去（贴底时）还是并回列表（往上翻着看时：列表要靠数据变化来保持可见位置） */
   setSplitTail(split: boolean): void {
     if (this.split === split) return
@@ -209,6 +231,7 @@ export class SessionStore {
 
   private apply(view: SessionView, op: SessionOp): void {
     this.stats.ops++
+    const before = op.op === 'session.proposals' ? view.proposals : null
     reduceSession(view, op)
     const mark = (turnId: string | undefined) => {
       if (turnId && this.dirty !== 'all') this.dirty.add(turnId)
@@ -237,6 +260,15 @@ export class SessionStore {
       case 'item.appendOutput':
       case 'item.status':
         mark(this.itemTurn.get(op.itemId))
+        return
+      case 'session.proposals':
+        // 提案变了（新提、开始、不要、撤回、过期）：画着它们的那几个回合重算。
+        // 没记着提在哪次调用里的旧提案只能按提案号去找 start 那一条，不知道在哪个回合，全部重算
+        for (const proposal of [...(before ?? []), ...op.proposals]) {
+          if (!proposal.callId) this.dirty = 'all'
+          else mark(this.itemTurn.get(proposal.callId))
+        }
+        this.proposalsDirty = true
         return
       default:
         // 会话层面的状态（排队、设置、用量、请求、能不能发）：不进行，换一份 meta
@@ -310,6 +342,11 @@ export class SessionStore {
         lastTurn: lastTurnOf(view),
       }
       for (const listener of this.metaListeners) listener()
+    }
+    if (this.proposalsDirty) {
+      this.proposalsDirty = false
+      this.proposals = view.proposals
+      for (const listener of this.proposalListeners) listener()
     }
     noteWork('emit', performance.now() - emitted)
   }

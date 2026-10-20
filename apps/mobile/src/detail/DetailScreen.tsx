@@ -12,6 +12,7 @@ import { whyNot } from '../../../../packages/ui/src/app/errors.ts'
 import { acquireStore, releaseStore } from '../core/store-cache'
 import { experiment } from '../experiment'
 import type { RootStackParamList } from '../nav/routes'
+import { ProposalsStrip } from '../screens/proposals/ProposalsStrip'
 import { SessionTaskStrip } from '../screens/tasks/SessionTaskStrip'
 import { useChannel, useKey } from '../shell/services'
 import { useT } from '../ui/i18n'
@@ -115,6 +116,16 @@ export function DetailScreen({ route, navigation }: Props) {
           },
         ]
       : []),
+    ...(device?.sessionTree
+      ? [
+          {
+            label: t('proposals.menu'),
+            testID: 'detail:menu:proposals',
+            onPress: () =>
+              navigation.navigate('Proposals', { deviceId, sessionId, title: shownTitle }),
+          },
+        ]
+      : []),
     ...(abilities?.rename === false
       ? []
       : [
@@ -157,6 +168,9 @@ export function DetailScreen({ route, navigation }: Props) {
       {/* 键盘升起时整块往上平移，移出去的那一截裁在标题栏下沿，不压到状态栏上 */}
       <View style={styles.clip}>
         <SessionTaskStrip deviceId={deviceId} mark={summary?.task} />
+        {device?.sessionTree ? (
+          <ProposalsStrip deviceId={deviceId} sessionId={sessionId} title={shownTitle} />
+        ) : null}
         {error ? (
           <Text
             testID="detail:error"

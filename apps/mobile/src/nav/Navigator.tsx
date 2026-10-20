@@ -10,6 +10,8 @@ import { HarnessSettingsScreen } from '../screens/devices/hconfig/HarnessSetting
 import { PairDeviceScreen } from '../screens/devices/PairDeviceScreen'
 import { FilesScreen } from '../screens/files/FilesScreen'
 import { NewSessionScreen } from '../screens/new-session/NewSessionScreen'
+import { ProposalStartScreen } from '../screens/proposals/ProposalStartScreen'
+import { ProposalsScreen } from '../screens/proposals/ProposalsScreen'
 import { SessionsScreen } from '../screens/sessions/SessionsScreen'
 import { SettingsScreen } from '../screens/settings/SettingsScreen'
 import { TaskDetailScreen } from '../screens/tasks/TaskDetailScreen'
@@ -40,6 +42,8 @@ export function Navigator() {
       <Stack.Screen name="Sessions" component={SessionsScreen} />
       <Stack.Screen name="NewSession" component={NewSessionScreen} />
       <Stack.Screen name="Detail" component={DetailScreen} />
+      <Stack.Screen name="Proposals" component={ProposalsScreen} />
+      <Stack.Screen name="ProposalStart" component={ProposalStartScreen} />
       <Stack.Screen name="Terminal" component={TerminalScreen} />
       <Stack.Screen name="Diff" component={DiffScreen} />
       <Stack.Screen name="Files" component={FilesScreen} />

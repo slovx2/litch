@@ -10,7 +10,10 @@ import type {
   FileChangeItem,
   ItemView,
   NoticeItem,
+  SessionNoteView,
+  SessionProposalView,
   SessionView,
+  SpawnedView,
   Text,
   TodoStep,
   ToolCallItem,
@@ -18,6 +21,7 @@ import type {
   UserAttachment,
   WebSearchItem,
 } from '@litch/core'
+import { cardsOf, eventKind } from '../detail/proposals/logic'
 import { type ChunkState, chunkText, emptyChunks } from './blocks'
 
 export type StepItem = CommandItem | FileChangeItem | ToolCallItem | WebSearchItem | NoticeItem
@@ -29,6 +33,29 @@ export type Row =
   /** 会话最上面一行：从哪个会话分叉出来的 */
   | { type: 'forked'; key: string; from: string }
   | { type: 'user'; key: string; turnId: string; text: string; attachments: UserAttachment[] }
+  /**
+   * 设备进程注入在用户消息开头的那一段（<litch-session-event>）：子会话的回报、唤醒、没调收尾时的提醒。
+   * 画成一条轻的提示，不画成用户说的话
+   */
+  | {
+      type: 'event'
+      key: string
+      turnId: string
+      kind: 'notes' | 'wake' | 'remind'
+      notes: SessionNoteView[]
+    }
+  /**
+   * 一张提案卡（建议任务）：收尾调用带的一条建议，或者 litch_sessions.start 降成的提案。一条调用几张卡就几行。
+   * proposal 为 null：start 的结果里有提案号、列表里还没有它，照调用时给的（spawned）画
+   */
+  | {
+      type: 'proposal'
+      key: string
+      turnId: string
+      itemId: string
+      proposal: SessionProposalView | null
+      spawned: SpawnedView | null
+    }
   /**
    * 回答或计划的一块。open：这一块还在长；live：这条回答还在流式（它的块都算，哪怕最后一块刚好封了口）；
    * plan：计划条目，first 的那一块上面写“计划”
@@ -149,6 +176,24 @@ export class RowBuilder {
     for (const itemId of turn.itemIds) {
       const item = view.items[itemId]
       if (!item) continue
+      const cards = item.kind === 'toolCall' ? cardsOf(item, view.proposals) : null
+      if (cards && item.kind === 'toolCall') {
+        // 没带建议的收尾不画，也不把前后两段过程拆开
+        if (cards.length === 0) continue
+        flush()
+        for (const proposal of cards)
+          out.push(
+            this.keep({
+              type: 'proposal',
+              key: `${item.id}:${proposal?.id ?? 'call'}`,
+              turnId: turn.id,
+              itemId: item.id,
+              proposal,
+              spawned: item.spawned ?? null,
+            }),
+          )
+        continue
+      }
       if (isStep(item)) {
         group.push(item)
         continue
@@ -156,15 +201,27 @@ export class RowBuilder {
       flush()
       switch (item.kind) {
         case 'userMessage':
-          out.push(
-            this.keep({
-              type: 'user',
-              key: item.id,
-              turnId: turn.id,
-              text: item.text,
-              attachments: item.attachments,
-            }),
-          )
+          if (item.event)
+            out.push(
+              this.keep({
+                type: 'event',
+                key: `${item.id}:event`,
+                turnId: turn.id,
+                kind: eventKind(item.event),
+                notes: item.event.notes,
+              }),
+            )
+          // 唤醒、提醒的回合没有用户自己说的话：只有上面那条提示
+          if (item.text || item.attachments.length > 0 || !item.event)
+            out.push(
+              this.keep({
+                type: 'user',
+                key: item.id,
+                turnId: turn.id,
+                text: item.text,
+                attachments: item.attachments,
+              }),
+            )
           break
         case 'agentMessage':
           out.push(

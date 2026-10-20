@@ -8,7 +8,9 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { FlashList, type FlashListRef, type ListRenderItem } from '@shopify/flash-list'
 import {
   forwardRef,
+  type RefObject,
   useCallback,
+  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -36,6 +38,9 @@ import {
 } from './cells'
 import { type TranscriptActions, TranscriptContext, useFileScope } from './context'
 import { isWebUrl, parseFileHref } from './links'
+import { EventCell } from './proposals/EventCell'
+import { flash, takeReveal, useRevealWaiting } from './proposals/hooks'
+import { ProposalCell } from './proposals/ProposalCell'
 import { GroupCell, StepCell } from './steps'
 import { colors } from './theme'
 import { Flash, ImageViewer, TurnMenu } from './turn-menu'
@@ -53,6 +58,10 @@ function renderRow(row: Row) {
       return <ForkedCell row={row} />
     case 'user':
       return <UserCell row={row} />
+    case 'event':
+      return <EventCell row={row} />
+    case 'proposal':
+      return <ProposalCell row={row} />
     case 'md':
       return <MarkdownCell row={row} />
     case 'reasoning':
@@ -168,7 +177,7 @@ function useActions(store: SessionStore) {
       <Flash text={flash} onDone={clearFlash} />
     </>
   )
-  return { value, overlays, background: c.raised }
+  return { value, overlays, background: c.raised, say: setFlash }
 }
 
 /** 一次多给列表多少行更早的历史（T6）。核心给的是整个会话，分页只在界面这层：一进来只排最近的这些 */
@@ -202,6 +211,7 @@ export function Transcript({ store, bottomOffset, markers }: Props) {
   }, [more, limit])
   const [pinned, setPinned] = useState(true)
   const actions = useActions(store)
+  useReveal(store, listRef, snapshot.rows, limit, setLimit, actions.say)
   const renderItem = useCallback<ListRenderItem<Row>>(({ item }) => renderRow(item), [])
   const ScrollComponent = useMemo(
     () =>
@@ -262,6 +272,46 @@ export function Transcript({ store, bottomOffset, markers }: Props) {
       </View>
     </TranscriptContext.Provider>
   )
+}
+
+/**
+ * 建议任务列表里点了一条、回到这里：在对话里找到那张卡片，滚到屏幕中间、描一圈。
+ * 在还没排出来的更早的历史里就先多排几页；对话里没有（调用没留下来）就不滚
+ */
+function useReveal(
+  store: SessionStore,
+  listRef: RefObject<FlashListRef<Row> | null>,
+  all: Row[],
+  limit: number,
+  setLimit: (limit: number) => void,
+  say: (text: string) => void,
+) {
+  const t = useT()
+  const waiting = useRevealWaiting(store.deviceId, store.sessionId)
+  const [target, setTarget] = useState<string | null>(null)
+  useEffect(() => {
+    if (waiting) setTarget(takeReveal(store.deviceId, store.sessionId))
+  }, [waiting, store])
+  useEffect(() => {
+    if (!target) return
+    const index = all.findIndex(
+      (row) =>
+        row.type === 'proposal' &&
+        (row.proposal?.id === target || row.spawned?.proposalId === target),
+    )
+    if (index < 0) {
+      say(t('proposals.notInChat'))
+      setTarget(null)
+      return
+    }
+    if (index >= limit) {
+      setLimit(index + PAGE)
+      return
+    }
+    listRef.current?.scrollToIndex({ index, viewPosition: 0.5, animated: true })
+    flash(target)
+    setTarget(null)
+  }, [target, all, limit, setLimit, listRef, say, t])
 }
 
 const keyOf = (row: Row) => row.key
