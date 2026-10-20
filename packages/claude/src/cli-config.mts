@@ -91,10 +91,14 @@ function applyOverride(root: ConfigTable, key: string, value: unknown): void {
   current[segments.at(-1) as string] = value
 }
 
-// thread/start 等请求里的 `config`（codex 的 request_overrides）：键同样可以带 `.`，值已经是 JSON，
-// 不过白名单（用到哪个键由用的地方自己取），叠在进程级配置上面
-export function requestConfigLayer(config: Record<string, unknown> | undefined): ConfigTable {
-  const root: ConfigTable = {}
+// thread/start 等请求里的 `config`（codex 的 request_overrides）：codex 把它们接在 `-c` 后面当同一串覆盖用
+// （app-server 的 config_manager.rs），键可以带 `.`，每条整个替换它指到的那一项。结果是线程的 SessionFlags 层，
+// 再叠到 config.json 上
+export function sessionConfigLayer(
+  base: ConfigTable,
+  config: Record<string, unknown> | undefined,
+): ConfigTable {
+  const root = structuredClone(base)
   for (const [key, value] of Object.entries(config ?? {}))
     if (!key.split('.').some((segment) => unsafeKeys.has(segment)))
       applyOverride(root, key, plain(value))

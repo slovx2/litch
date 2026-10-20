@@ -529,3 +529,58 @@ test('SKILLS-007：选的技能不论排在哪、来自额外目录还是插话�
     await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
   }
 })
+
+// 线程 config 的 skills（codex 的 SessionFlags 层）：真实 CLI 里按会话关掉指定的 Skill 和 Claude Code 自带的 Skill
+test('SKILLS-008：线程 config 的 skills 按会话关掉 Skill，别的会话不受影响', {
+  timeout: 90_000,
+}, async () => {
+  const home = await realpath(await mkdtemp('/tmp/native-skills-thread-'))
+  const cwd = join(home, 'project')
+  const effect = join(cwd, 'thread-effect.txt')
+  const path = await writeSkill(join(cwd, '.claude', 'skills'), 'thread-fixture', effect)
+  const model = new MockLLM()
+  const client = await ProtocolClient.start(home, await model.start())
+  // 自带的 Skill 关掉时，Skill 工具调用它就是错误结果
+  const bundled = async (threadId: string, id: string): Promise<boolean> => {
+    let failed = false
+    model.enqueue(() => [{ type: 'tool_use', id, name: 'Skill', input: { skill: 'simplify' } }])
+    model.enqueue((request) => {
+      failed = toolResult(request, id).is_error === true
+      return [{ type: 'text', text: 'done' }]
+    })
+    const { turn } = await client.request('turn/start', {
+      threadId,
+      input: [{ type: 'text', text: 'Invoke the bundled skill.' }],
+    })
+    assert.equal((await client.completed(turn.id)).status, 'completed')
+    return failed
+  }
+  try {
+    const start = (config?: Record<string, unknown>) =>
+      client.request('thread/start', {
+        cwd,
+        approvalPolicy: 'never',
+        sandbox: 'danger-full-access',
+        ...(config ? { config } : {}),
+      })
+    const scoped = await start({
+      skills: { config: [{ path, enabled: false }], bundled: { enabled: false } },
+    })
+    await invokeSkill(client, model, scoped.thread.id, 'thread-fixture', false, 'toolu_scoped')
+    await assert.rejects(access(effect), '线程里关掉的 Skill 不执行')
+    assert.equal(await bundled(scoped.thread.id, 'toolu_bundled_off'), true, '自带的 Skill 关掉了')
+    const plain = await start()
+    await invokeSkill(client, model, plain.thread.id, 'thread-fixture', true, 'toolu_plain')
+    assert.equal(await readFile(effect, 'utf8'), 'NATIVE_SKILL_EXECUTED\n')
+    assert.equal(
+      await bundled(plain.thread.id, 'toolu_bundled_on'),
+      false,
+      '别的会话照常有自带的 Skill',
+    )
+    model.assertConsumed()
+  } finally {
+    await client.close()
+    await model.close()
+    await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
+  }
+})

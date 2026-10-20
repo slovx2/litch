@@ -299,6 +299,8 @@ export interface RuntimeTurnContext {
   allowedTools: string[] | null
   addDirs: string[]
   skillOverrides?: Record<string, 'on' | 'off'>
+  // 配置的 skills.bundled.enabled = false：Claude Code 自带的 Skill 整个关掉（它的 disableBundledSkills）
+  disableBundledSkills?: boolean
   outputFormat: unknown | null
   approvalPolicy: ApprovalPolicy | null
   sandboxMode: string | null

@@ -247,7 +247,7 @@ node packages/claude/dist/claude/src/adapter.mjs app-server --listen stdio:// \
 
 ### Bash 命令的环境变量
 
-`shell_environment_policy` 照 codex（`rust-v0.163.0`）管模型 `Bash` 命令（含子代理的）拿到的环境变量，可以放在 `-c`、`config.json`，也可以放在 `thread/start` 的 `config` 里（键可以写成 `shell_environment_policy.set.PATH` 这样带点的）。线程的这一层叠在进程级上面，表按键合并，`set` 里的变量逐个覆盖。
+`shell_environment_policy` 照 codex（`rust-v0.163.0`）管模型 `Bash` 命令（含子代理的）拿到的环境变量，可以放在 `-c`、`config.json`，也可以放在 `thread/start` 的 `config` 里（键可以写成 `shell_environment_policy.set.PATH` 这样带点的）。照 codex，线程的 `config` 接在 `-c` 后面当覆盖：整张 `shell_environment_policy` 表给的就换掉 `-c` 那张，带点的键只换那一项；这一层再按表逐键叠到 `config.json` 上。
 
 - `inherit`：`all`（默认，全继承）、`core`（只留 `PATH`、`SHELL`、`TMPDIR`、`TEMP`、`TMP`、`HOME`、`LANG`、`LC_ALL`、`LC_CTYPE`、`LOGNAME`、`USER`）、`none`。
 - `ignore_default_excludes`：默认 `true`；写 `false` 时去掉名字含 `KEY`、`SECRET`、`TOKEN` 的变量。
@@ -264,6 +264,8 @@ node packages/claude/dist/claude/src/adapter.mjs app-server --listen stdio:// \
 Claude Code 的 Skill 开关照 codex 存在配置的 `skills.config` 里：一串 `{ path = "<SKILL.md 的绝对路径>", enabled = false }` 或 `{ name = "<名字>", enabled = true }`，按顺序套，后面的为准；`-c skills.config=…` 接在 `config.json` 那一串后面。`skills/config/write` 和 `config/batchWrite` 写的是同一处（`skills/config/write` 关就改掉同一个选择器的那条或追加，开就删掉那条；只靠 Claude Code 自己 `settings.json` 的 `skillOverrides` 关着的，留一条开的盖过它）。
 
 Claude Code 自己的开关只认名字，所以按路径关掉同名 Skill 里的一个时：`skills/extraRoots/set` 加进来的额外目录里的 Skill 不链给 Claude Code，同名的别的 Skill 照常可用；用户目录、项目目录里的同名 Skill 只要有一个关着，这个名字整个关掉（`skills/list` 里照样按路径报开关）。原来存在状态目录 `skills.json` 里的开关不再读，要重新设一次。
+
+`thread/start`、`thread/resume` 等请求的 `config` 里也可以给 `skills`，照 codex 只对这个会话生效：它接在 `-c` 后面当覆盖（整张 `skills` 表给的就换掉 `-c` 那张，`skills.config` 这样带点的键只换那一项），这一层的 `skills.config` 接在 `config.json` 那一串后面。`skills.bundled.enabled = false` 关掉 Claude Code 自带的 Skill（它的 `disableBundledSkills`）。会话级的开关只能按名字交给 Claude Code：额外目录的链接是整个进程共用的，只按进程级的规则藏，所以会话里打开一个进程级关掉的额外目录 Skill 不生效，会话里按路径关掉的同名 Skill 整个名字关。`skills/list` 不带会话（codex 也不带），列的是进程级的开关。
 
 ## Worktree isolation
 

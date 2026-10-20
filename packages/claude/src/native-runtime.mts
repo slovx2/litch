@@ -1269,6 +1269,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         // Skill 的内联 shell 不经过 Bash hook；受限会话只能通过常规工具执行命令。
         ...(needsStrictSkillShell(context) ? { disableSkillShellExecution: true } : {}),
         ...(context.skillOverrides ? { skillOverrides: context.skillOverrides } : {}),
+        ...(context.disableBundledSkills ? { disableBundledSkills: true } : {}),
         ...(threadHeader.ANTHROPIC_CUSTOM_HEADERS ? { env: threadHeader } : {}),
       },
       disallowedTools: ['CronCreate', 'CronDelete', 'CronList', 'ScheduleWakeup'],

@@ -272,19 +272,85 @@ test('PROFILE-PROTO-006：shell_environment_policy 照 codex 叠 -c 与线程 co
           'shell_environment_policy.set.PATH': '/opt/bin',
         },
       })
+      // codex 把线程 config 接在 -c 后面当覆盖：整张表给的就整张换掉 -c 那张，带点的键只改那一项
       const context = await captureTurn(stage, client, { threadId: scoped.thread.id })
       assert.deepEqual(context.shellEnvironment, {
         inherit: 'core',
         ignoreDefaultExcludes: true,
-        exclude: ['BROWSER_MCP_*'],
-        set: { TMPDIR: '/srv/tmp', CLI_TOKEN: 'c', PATH: '/opt/bin' },
+        exclude: [],
+        set: { CLI_TOKEN: 'c', PATH: '/opt/bin' },
         includeOnly: [],
       })
+      const dotted = await client.request('thread/start', {
+        cwd: stage.directory,
+        config: { 'shell_environment_policy.set.EXTRA': 'x' },
+      })
+      const added = await captureTurn(stage, client, { threadId: dotted.thread.id })
+      assert.deepEqual(added.shellEnvironment?.exclude, ['BROWSER_MCP_*'])
+      assert.deepEqual(added.shellEnvironment?.set, { TMPDIR: '/srv/tmp', EXTRA: 'x' })
       const bad = await client.raw('thread/start', {
         cwd: stage.directory,
         config: { shell_environment_policy: { inherit: 'some' } },
       })
       assert.equal(bad.error?.code, -32602)
+    },
+  )
+})
+
+// 线程 config 里的 skills（codex 的 SessionFlags 层）：按会话给 CLI 的 skillOverrides、disableBundledSkills
+test('PROFILE-PROTO-007：线程 config 的 skills 按会话生效，盖过 -c 的', async () => {
+  await withProfiles(
+    'profile-thread-skills',
+    () => ['skills.config=[{ name = "alpha", enabled = false }]'],
+    async (stage) => {
+      for (const name of ['alpha', 'beta']) {
+        const dir = join(stage.directory, '.claude', 'skills', name)
+        mkdirSync(dir, { recursive: true })
+        writeFileSync(join(dir, 'SKILL.md'), `---\nname: ${name}\ndescription: d\n---\nBODY\n`)
+      }
+      const beta = join(stage.directory, '.claude', 'skills', 'beta', 'SKILL.md')
+      const client = await stage.connect('client')
+      const plain = await client.request('thread/start', { cwd: stage.directory })
+      const base = await captureTurn(stage, client, { threadId: plain.thread.id })
+      assert.deepEqual({ ...base.skillOverrides }, { alpha: 'off' })
+      assert.equal(base.disableBundledSkills, undefined)
+      // 整张 skills 表换掉 -c 的：alpha 回到开着，beta 按路径关，自带的关掉
+      const scoped = await client.request('thread/start', {
+        cwd: stage.directory,
+        config: {
+          skills: { config: [{ path: beta, enabled: false }], bundled: { enabled: false } },
+        },
+      })
+      const context = await captureTurn(stage, client, { threadId: scoped.thread.id })
+      assert.deepEqual({ ...context.skillOverrides }, { beta: 'off' })
+      assert.equal(context.disableBundledSkills, true)
+      // 恢复时给的 config 同样记下
+      await client.request('thread/resume', {
+        threadId: plain.thread.id,
+        config: { 'skills.config': [{ name: 'beta', enabled: false }] },
+      })
+      const resumed = await captureTurn(stage, client, { threadId: plain.thread.id })
+      assert.deepEqual({ ...resumed.skillOverrides }, { beta: 'off' })
+      // 进程级的 skills/list 不受线程 config 影响（codex 的 skills/list 也不带线程）
+      const listed = (await client.request('skills/list', { cwds: [stage.directory] })).data[0]
+      assert.deepEqual(
+        listed.skills.map((skill: { name: string; enabled: boolean }) => [
+          skill.name,
+          skill.enabled,
+        ]),
+        [
+          ['alpha', false],
+          ['beta', true],
+        ],
+      )
+      for (const config of [
+        { skills: 'x' },
+        { skills: { bundled: { enabled: 'no' } } },
+        { 'skills.config': [{ path: 'relative', enabled: false }] },
+      ]) {
+        const bad = await client.raw('thread/start', { cwd: stage.directory, config })
+        assert.equal(bad.error?.code, -32602, JSON.stringify(config))
+      }
     },
   )
 })

@@ -43,7 +43,7 @@ import {
   writeSettingsDefaults,
 } from './claude-default-model.mjs'
 import { PROVIDER_CONFIG_KEY } from './claude-provider.mjs'
-import { cliConfigLayer, mergeConfigLayers, requestConfigLayer } from './cli-config.mjs'
+import { cliConfigLayer, mergeConfigLayers, sessionConfigLayer } from './cli-config.mjs'
 import { TurnFailure, turnErrorOf } from './codex-error-info.mjs'
 import {
   applyConfigEdits,
@@ -368,10 +368,9 @@ export class CodexClaudeAppServer {
   private readonly filesystem = new FilesystemRpc()
   private readonly mcp = new McpRpc()
   // Skill 开关的规则：config.json 的 skills.config 在前，`-c` 的接在后面（skill-config.mts）
-  private readonly skills = new SkillsRpc(() =>
-    layeredSkillRules([this.persistedSkillConfig, asRecord(cliConfigLayer().skills).config]),
-  )
-  private persistedSkillConfig: unknown = null
+  private readonly skills = new SkillsRpc((threadConfig) => this.skillRulesFor(threadConfig))
+  // config.json 里的配置（不含 `-c`）
+  private persistedOverrides: Record<string, unknown> = {}
   private readonly mcpOAuth = mcpOAuthManager()
   private elicitationCounts = new Map<string, number>()
   private configModel = defaultSelectableModelId()
@@ -1874,6 +1873,13 @@ export class CodexClaudeAppServer {
       settings.config = asRecord(params.config)
       // 写错了当场报，不等到跑命令
       this.shellEnvironmentPolicy(settings.config)
+      const skills = this.threadConfigView(settings.config).session.skills
+      if (skills != null && !isConfigObject(skills))
+        throw new ProtocolError(-32602, 'config.skills 必须是表')
+      const bundled = asRecord(skills).bundled
+      if (bundled != null && (!isConfigObject(bundled) || typeof bundled.enabled !== 'boolean'))
+        throw new ProtocolError(-32602, 'config.skills.bundled.enabled 必须是布尔值')
+      skillRules(asRecord(skills).config)
     }
     this.store.saveThreadSettings(threadId, settings)
   }
@@ -2736,7 +2742,11 @@ export class CodexClaudeAppServer {
   /** 插进回合的话交给运行时的文字：选中的 Skill 正文在前（同 turn/start），其余照旧 */
   private inputPrompt(threadId: string, input: UserInput[]): string {
     const cwd = this.store.getThread(threadId)?.cwd ?? process.cwd()
-    const skills = this.skills.expandSkillInputs(cwd, input)
+    const skills = this.skills.expandSkillInputs(
+      cwd,
+      input,
+      this.store.threadSettings(threadId).config,
+    )
     return withSkillInstructions(skills.instructions, textFromInput(skills.rest))
   }
 
@@ -3126,7 +3136,13 @@ export class CodexClaudeAppServer {
         mcpServers: null,
         allowedTools: ['Read', 'Glob', 'Grep'],
         addDirs: [],
-        skillOverrides: this.skills.runtimeOverrides(thread.cwd),
+        skillOverrides: this.skills.runtimeOverrides(
+          thread.cwd,
+          this.store.threadSettings(thread.id).config,
+        ),
+        ...(this.bundledSkillsDisabled(this.store.threadSettings(thread.id).config)
+          ? { disableBundledSkills: true }
+          : {}),
         outputFormat: null,
         approvalPolicy: 'never',
         sandboxMode: 'read-only',
@@ -3239,7 +3255,11 @@ export class CodexClaudeAppServer {
     // inline next to the user message instead of losing them.
     if (typeof params.cwd === 'string' && params.cwd.length > 0) thread.cwd = params.cwd
     // 选中的 Skill 按上游的方式把正文交给模型（见 SkillsRpc.expandSkillInputs）；标题、工作流命令仍按用户写的话认
-    const skills = this.skills.expandSkillInputs(thread.cwd, input)
+    const skills = this.skills.expandSkillInputs(
+      thread.cwd,
+      input,
+      params.config != null ? asRecord(params.config) : this.store.threadSettings(thread.id).config,
+    )
     const { textPrompt, images } = extractImageInputs(skills.rest)
     const userPrompt = textPrompt || textFromInput(skills.rest)
     const workflowCommand = parseWorkflowCommand(userPrompt)
@@ -3856,7 +3876,14 @@ export class CodexClaudeAppServer {
         dynamicTools: this.store.threadSettings(runtimeThread.id).dynamicTools ?? [],
         allowedTools: defaultAllowedTools(),
         addDirs: stringListFromEnv('CHA_CLAUDE_ADD_DIRS', []),
-        skillOverrides: this.skills.runtimeOverrides(stringOr(params.cwd, thread.cwd)),
+        // 线程 config 里的 skills 按会话生效；追问回合跑在父会话的 CLI 里，用父会话的
+        skillOverrides: this.skills.runtimeOverrides(
+          stringOr(params.cwd, thread.cwd),
+          (parentSettings ?? turnSettings).config,
+        ),
+        ...(this.bundledSkillsDisabled((parentSettings ?? turnSettings).config)
+          ? { disableBundledSkills: true }
+          : {}),
         outputFormat: claudeOutputFormat(params.outputSchema),
         approvalPolicy,
         sandboxMode,
@@ -6234,13 +6261,36 @@ export class CodexClaudeAppServer {
     }
   }
 
+  // 线程的有效配置：config.json 上叠线程的 SessionFlags 层（`-c` 后面接线程的 config，见 cli-config.mts）
+  private threadConfigView(threadConfig: Record<string, unknown> | undefined): {
+    session: Record<string, unknown>
+    effective: Record<string, unknown>
+  } {
+    const session = sessionConfigLayer(cliConfigLayer(), threadConfig)
+    return { session, effective: mergeConfigLayers(this.persistedOverrides, session) }
+  }
+
   private shellEnvironmentPolicy(
     threadConfig: Record<string, unknown> | undefined,
   ): ShellEnvironmentPolicy | null {
     return resolveShellEnvironmentPolicy(
-      mergeConfigLayers(this.configOverrides, requestConfigLayer(threadConfig))
-        .shell_environment_policy,
+      this.threadConfigView(threadConfig).effective.shell_environment_policy,
     )
+  }
+
+  // Skill 开关规则：config.json 那一串在前，SessionFlags 层（`-c` 加线程 config）的接在后面（codex 的
+  // skill_config_rules_from_stack）
+  private skillRulesFor(threadConfig?: Record<string, unknown>) {
+    return layeredSkillRules([
+      asRecord(this.persistedOverrides.skills).config,
+      asRecord(this.threadConfigView(threadConfig).session.skills).config,
+    ])
+  }
+
+  // `skills.bundled.enabled = false`：Claude Code 自带的 Skill 整个关掉（它的 disableBundledSkills 设置）
+  private bundledSkillsDisabled(threadConfig?: Record<string, unknown>): boolean {
+    const skills = asRecord(this.threadConfigView(threadConfig).effective.skills)
+    return asRecord(skills.bundled).enabled === false
   }
 
   private validateConfigValues(values: Record<string, unknown>): void {
@@ -7016,7 +7066,7 @@ export class CodexClaudeAppServer {
       'medium'
     // `app-server -c` 给的那一层叠在 config.json 上（cli-config.mts），只在内存里
     this.configOverrides = mergeConfigLayers(overrides, cliConfigLayer())
-    this.persistedSkillConfig = asRecord(overrides.skills).config
+    this.persistedOverrides = overrides
     // MCP 服务到用的时候才查（mcpScope），一个服务配错不至于让整个进程起不来
     const { mcp_servers: _, ...checked } = this.configOverrides
     this.validateConfigValues(checked)

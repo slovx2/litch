@@ -43,6 +43,7 @@ export function sessionFingerprint(context: RuntimeTurnContext): string {
     addDirs: context.addDirs,
     allowedTools: context.allowedTools,
     skillOverrides: context.skillOverrides ?? null,
+    disableBundledSkills: context.disableBundledSkills === true,
     outputFormat: context.outputFormat ?? null,
     mcpServers: context.mcpServers ?? null,
     mcpConfigSource: context.mcpConfigSource ?? null,

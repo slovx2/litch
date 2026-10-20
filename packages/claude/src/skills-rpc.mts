@@ -34,11 +34,12 @@ interface SkillObserver {
 export class SkillsRpc {
   private readonly roots = new SkillRoots()
   private extraRoots: string[] = []
-  private readonly rules: () => SkillRule[]
+  // 不给线程 config 是进程级的规则（config.json 加 `-c`），给了是那个线程的
+  private readonly rules: (threadConfig?: Record<string, unknown>) => SkillRule[]
   private observers = new Map<string, SkillObserver>()
   private readonly timer: NodeJS.Timeout
 
-  constructor(rules: () => SkillRule[]) {
+  constructor(rules: (threadConfig?: Record<string, unknown>) => SkillRule[]) {
     this.rules = rules
     this.timer = setInterval(() => this.poll(), 250)
     this.timer.unref()
@@ -113,12 +114,16 @@ export class SkillsRpc {
 
   // 给 CLI 的开关（它只认名字）：额外目录里被关掉的 Skill 直接不链给它；剩下 CLI 看得到的同名 Skill 里
   // 只要有一个关着就整个名字关（宁可少给），都开着且有规则管过就明确开（盖过 Claude Code 自己设置里的关）
-  runtimeOverrides(cwd: string): Record<string, 'on' | 'off'> {
+  // 线程 config 里的规则只能经名字生效：链接是整个进程共用的，只按进程级规则藏
+  runtimeOverrides(
+    cwd: string,
+    threadConfig?: Record<string, unknown>,
+  ): Record<string, 'on' | 'off'> {
     this.syncLinks()
-    const rules = this.rules()
+    const rules = this.rules(threadConfig)
     const overrides: Record<string, 'on' | 'off'> = Object.create(null)
     const hidden = this.hiddenSkills(this.extraRoots)
-    for (const skill of this.catalog(cwd).skills) {
+    for (const skill of this.catalog(cwd, threadConfig).skills) {
       const key = canonicalSkillKey(skill.path)
       if (hidden.has(key)) continue
       const ruled = skillRuled(rules, { name: skill.name, key })
@@ -137,10 +142,11 @@ export class SkillsRpc {
   expandSkillInputs(
     cwd: string,
     input: UserInput[],
+    threadConfig?: Record<string, unknown>,
   ): { rest: UserInput[]; instructions: string[] } {
     if (!input.some((item) => item?.type === 'skill')) return { rest: input, instructions: [] }
     const known = new Map<string, { name: string; path: string; enabled: boolean }>()
-    for (const skill of this.catalog(cwd).skills) {
+    for (const skill of this.catalog(cwd, threadConfig).skills) {
       try {
         known.set(canonicalSkillKey(skill.path), skill)
       } catch {}
@@ -194,7 +200,7 @@ export class SkillsRpc {
     this.roots.close()
   }
 
-  private catalog(cwd: string): SkillCatalog {
+  private catalog(cwd: string, threadConfig?: Record<string, unknown>): SkillCatalog {
     // 用户级、项目级的技能目录只在 CHA_CLAUDE_SETTING_SOURCES 选了那一层时才有，和 CLI 读的一致
     const layers = claudeSettingSources()
     const sources = [
@@ -219,7 +225,7 @@ export class SkillsRpc {
     }
     let rules: SkillRule[] = []
     try {
-      rules = this.rules()
+      rules = this.rules(threadConfig)
     } catch (error) {
       catalog.errors.push({ path: cwd, message: String(error) })
     }
