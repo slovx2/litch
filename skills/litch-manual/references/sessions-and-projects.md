@@ -67,12 +67,22 @@ woken to continue.
   harness, model, effort, project, folder, fresh or with context, title, brief, permissions), Dismiss.
   The side panel's **Suggested tasks** tab lists every card of the current session, with a badge for
   the waiting ones; clicking one scrolls to it. You can also tell the model "start the second one", and
-  it withdraws cards that went stale. At most four cards per turn. The model ends every turn with a
+  it withdraws cards that went stale. At most three cards it raises on its own per turn (independent
+  steps of an agreed plan count separately), four in all. The model ends every turn with a
   wrap-up call that carries its suggestions (an empty one when there are none); when a turn the user
   started ends without it, Litch starts one short reminder turn (a light line "Reminded the model to
   wrap up"). The reminder is the device setting `sessions.wrapUpReminder` (on by default). Started cards
   show the harness and folder the sub-session actually got. The mobile app shows the same cards and a
   per-session list (the "N suggested tasks waiting for you" bar at the top of a conversation, or the menu).
+- **New task or here**: when the user asks for something unrelated to the current session, the model
+  first shows a card with only a title and two buttons, "New session" and "Do it here". New session: the
+  model writes the brief and the sub-session starts. Do it here: the model does it in this session.
+  Sending a new message instead of choosing counts as "Do it here". Requests that build on the session
+  (corrections, follow-ups, the next iteration, going ahead with what was just suggested) get no card.
+- **Hand-off**: when an unrelated message arrives while the model is in the middle of a task, it hands the
+  task and its remaining plan to a forked sub-session (a "Handed off to a forked session" card, started
+  at once, waking the parent when done) and answers the new message here. The fork starts before the
+  current turn, so work done in that turn reaches it only through the remaining plan.
 - **Reports and waking**: when a sub-session finishes a turn, the start of its last answer is handed to
   the parent ("Reports from sub-sessions"). When the parent is idle and its sub-sessions have stopped,
   the parent is woken to continue (limited per user message). Litch decides this, not the model: sub-
