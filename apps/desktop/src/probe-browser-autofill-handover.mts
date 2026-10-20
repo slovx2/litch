@@ -2,7 +2,8 @@
 // 1. 执行过脚本、交出去之前没能重新打开（测试页第二次 GET 回 204，不换文档）：不交给人，关掉标签，卡片变成“标签已关掉”；
 // 2. 回合打断时先清一遍框，再重新打开；重新打开不成同上，不解冻；
 // 3. 交接期间网页开的弹窗、弹窗里再开的弹窗都开成用户的标签、代理看不到；交出去的标签被关掉时一并关掉；
-// 4. 回合打断之后回合结束、代理的标签被关掉：“代理已收回”的卡片随标签撤掉，不留指向不存在的标签的卡片。
+// 4. 回合打断之后回合结束、代理的标签被关掉：“代理已收回”的卡片随标签撤掉，不留指向不存在的标签的卡片；
+// 5. 交接期间后退、前进不可用（面板按钮灰、宿主不执行），同一个标签再请一次只回“已在等”、不动这一次交接。
 import { ipcMain } from 'electron'
 import type { ClientToolCallResponse } from '../../../packages/protocol/src/client-tools.mjs'
 import type { createElectronHost } from './browser/electron-host.mjs'
@@ -144,6 +145,29 @@ export async function checkHandoverFailures(options: {
       signIns.list().length === 0,
     { closedOutcome, pages: host.pages().map((one) => one.id), list: signIns.list() },
   )
+
+  // 5. 后退、前进不可用；同一个标签再请一次被拒（已冻结时执行器先拒；前后脚进来的回“已在等”，见单测）
+  const backTab = await openTab('/login')
+  await call('navigate', { url: `${pageOrigin}/login?second` })
+  const backPage = host.page(backTab)
+  const asking = call('request_sign_in', { reason: 'Need access.' })
+  await waitFor(() => signIns.list()[0]?.state === 'waiting')
+  const frozenInfo = backPage?.info()
+  host.userNavigate(backTab, 'back')
+  await sleep(800)
+  const again = textOf(await call('request_sign_in', { reason: 'Again.' }))
+  check(
+    '交接期间后退、前进不可用，宿主也不执行；再请一次只回“已在等”，卡片还是原来那张',
+    frozenInfo?.canGoBack === false &&
+      !!backPage?.info().url.endsWith('/login?second') &&
+      /already waiting for the user|is signing in on this tab/.test(again) &&
+      signIns.list().length === 1 &&
+      signIns.list()[0]?.reason === 'Need access.',
+    { frozenInfo, url: backPage?.info().url, again, list: signIns.list() },
+  )
+  signIns.answer(signIns.list()[0]?.id ?? '', 'cancel')
+  await asking
+  check('交接结束后退又能用了', backPage?.info().canGoBack === true)
 
   // 4. 回合打断之后回合结束关掉代理的标签：“代理已收回”的卡片随标签撤掉
   await openTab('/login')

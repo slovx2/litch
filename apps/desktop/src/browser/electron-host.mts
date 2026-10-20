@@ -9,7 +9,7 @@
 import { type BrowserWindow, session } from 'electron'
 import { createTab, HIDDEN_BOUNDS, type HostTab, PARTITION } from './electron-tab.mjs'
 import type { BrowserHost, BrowserPage, OpenOptions, TabInfo, TabKind, TabOwner } from './model.mjs'
-import { handoverOf, notePopup } from './passwords/tabs.mjs'
+import { handoverOf, isHandedOver, notePopup } from './passwords/tabs.mjs'
 
 /** 界面报来的矩形（界面页面里的 CSS 像素） */
 export interface Rect {
@@ -208,6 +208,8 @@ export function createElectronHost(): ElectronBrowserHost {
       const tab = tabs.get(id)
       if (!tab) return
       const contents = tab.view.webContents
+      // 交给人登录期间不许后退、前进（往返缓存会恢复代理执行过脚本的旧文档）；面板上的按钮也是灰的
+      if ((to === 'back' || to === 'forward') && isHandedOver(contents.id)) return
       if (to === 'back') contents.navigationHistory.goBack()
       else if (to === 'forward') contents.navigationHistory.goForward()
       else if (to === 'reload') contents.reload()

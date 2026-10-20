@@ -195,6 +195,8 @@ export function createHandover(options: { host: BrowserHost; signIns: SignIns })
     async request(page, ask, signal): Promise<SignInOutcome> {
       const contents = contentsOf(page.id)
       if (!contents) return 'closed'
+      // 已经交给人了（同一个标签前后脚两次调用）：不动那一次交接的任何状态
+      if (frozen.has(page.id)) return 'busy'
       const contentsId = contents.id
       const owner = page.info().owner
       watch(page.id, contents)
@@ -202,6 +204,8 @@ export function createHandover(options: { host: BrowserHost; signIns: SignIns })
       frozen.add(page.id)
       setHandedOver(contentsId, true)
       ;(page as HostTab).release?.()
+      // 面板上的后退、前进按钮跟着变灰（electron-tab.mts 的 info）
+      ;(page as HostTab).handoverChanged?.()
       /** 人答了之后先停掉键盘输入：清框到解冻之间再输的不留下 */
       const holdKeys = (event: Electron.Event) => event.preventDefault()
       const unfreeze = () => {
@@ -209,7 +213,10 @@ export function createHandover(options: { host: BrowserHost; signIns: SignIns })
           contents.removeListener('before-input-event', holdKeys)
           forget(page)
           setHandedOver(contentsId, false)
+          ;(page as HostTab).handoverChanged?.()
         }
+        // 收尾到解冻之间网页又开的弹窗也关掉（先撤掉交出去的标记，之后开的不再记进来）
+        closePopups(contentsId)
         frozen.delete(page.id)
       }
       /** 标签已经没了（人关的、回合结束关的）：卡片、弹窗随它撤掉 */
@@ -255,8 +262,8 @@ export function createHandover(options: { host: BrowserHost; signIns: SignIns })
         reason: ask.reason,
       })
       if (!begun) {
-        unfreeze()
-        return 'aborted'
+        // 这个标签已经有一张在等的卡片（不该有，冻结名单先挡住了）：不解冻，按打不开处理，关掉标签
+        return fail()
       }
       const since = Date.now()
       // 卡片上的来源跟着这个标签的导航走

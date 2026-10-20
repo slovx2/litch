@@ -5,6 +5,8 @@ import { str } from './args.mjs'
 import type { Tool } from './executor.mjs'
 
 const MAX_TEXT = 200
+const BUSY =
+  'A sign-in request for this tab is already waiting for the user. Wait for it to finish; do not request it again.'
 
 const clip = (text: string) => (text.length > MAX_TEXT ? `${text.slice(0, MAX_TEXT)}…` : text)
 
@@ -19,12 +21,15 @@ export const requestSignIn: Tool = async (call) => {
   }
   const stop = await call.admitPage(page)
   if (stop) return stop
+  // 同一个标签已经交给人了（两次调用前后脚进来）：直接回，不动那一次交接
+  if (handover.active(page.id)) return call.done(null, BUSY)
   const reason = clip(str(call.args, 'reason', true).trim())
   const site = clip(str(call.args, 'site')?.trim() || hostOf(page.info().url))
   // 等人这段不算调用超时
   const release = call.context.hold?.()
   try {
     const outcome = await handover.request(page, { site, reason }, call.context.signal)
+    if (outcome === 'busy') return call.done(null, BUSY)
     const state = call.state(page)
     state.lastSnapshot = null
     switch (outcome) {
