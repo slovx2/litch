@@ -2,6 +2,7 @@
 // 界面只能经它报矩形、开关标签、导航；拿不到视图本身，也拿不到 Electron 的事件对象。
 // 类型在界面那边另有一份（packages/ui/src/side/browser/bridge.ts），改一边要改另一边。
 import { ipcRenderer } from 'electron'
+import { importBridge } from '../browser-import/bridge.mjs'
 import {
   BROWSER_BLOCK,
   BROWSER_CLEAR_DATA,
@@ -75,5 +76,7 @@ export function browserBridge() {
       onPrompts: (handler: (prompts: unknown) => void) =>
         listen(PASSWORDS_PROMPTS_CHANGED, handler),
     },
+    // 从别的浏览器导入（browser-import/bridge.mts）
+    import: importBridge(),
   }
 }
