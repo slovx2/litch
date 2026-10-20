@@ -14,6 +14,8 @@ import {
   connectChannel,
   createMockCore,
   createPortPair,
+  proposalAsksUser,
+  proposalOpen,
   proposalShape,
   proposalStatus,
   quietOf,
@@ -101,8 +103,10 @@ test('投影：子代理调用带上每个子线程的状态；litch_sessions.st
     durationMs: 3,
   } as never) as ToolCallItem
   assert.deepEqual(started.spawned, {
+    via: 'start',
     threadId: 'c9',
     proposalId: null,
+    choice: null,
     title: '查依赖',
     prompt: '看看',
     harness: 'pi',
@@ -124,6 +128,73 @@ test('投影：子代理调用带上每个子线程的状态；litch_sessions.st
   } as never) as ToolCallItem
   assert.equal(proposed.spawned?.proposalId, 'pr1')
   assert.equal(proposed.spawned?.threadId, null)
+  assert.equal(proposed.spawned?.via, 'start')
+
+  // offer 卡：调用还在等用户选，没有结果；选了之后结果里有提案号和选择
+  const offerArgs = { title: '加导出按钮', initiation: 'offer' }
+  const waitingOffer = projectItem({
+    type: 'dynamicToolCall',
+    id: 'd4',
+    namespace: 'litch_sessions',
+    tool: 'start',
+    arguments: offerArgs,
+    status: 'inProgress',
+    contentItems: null,
+    success: null,
+    durationMs: null,
+  } as never) as ToolCallItem
+  assert.deepEqual(
+    [waitingOffer.spawned?.via, waitingOffer.spawned?.proposalId, waitingOffer.spawned?.choice],
+    ['offer', null, null],
+  )
+  assert.equal(waitingOffer.spawned?.prompt, '')
+  assert.equal(cardPlace(waitingOffer), 'outside')
+  const answered = projectItem({
+    type: 'dynamicToolCall',
+    id: 'd4',
+    namespace: 'litch_sessions',
+    tool: 'start',
+    arguments: offerArgs,
+    status: 'completed',
+    contentItems: [
+      {
+        type: 'inputText',
+        text: JSON.stringify({ proposal_id: 'pr7', choice: 'session', note: 'accept it' }),
+      },
+    ],
+    success: true,
+    durationMs: 9000,
+  } as never) as ToolCallItem
+  assert.deepEqual(
+    [answered.spawned?.via, answered.spawned?.proposalId, answered.spawned?.choice],
+    ['offer', 'pr7', 'session'],
+  )
+
+  // hand_off：交给分叉会话，结果里的 thread_id 是子会话，剩下的计划当简报
+  const handed = projectItem({
+    type: 'dynamicToolCall',
+    id: 'd5',
+    namespace: 'litch_sessions',
+    tool: 'hand_off',
+    arguments: { title: '整理排序', remaining_plan: '1. 换成稳定排序\n2. 补单测' },
+    status: 'completed',
+    contentItems: [{ type: 'inputText', text: JSON.stringify({ thread_id: 'c8', note: 'ok' }) }],
+    success: true,
+    durationMs: 3,
+  } as never) as ToolCallItem
+  assert.deepEqual(handed.spawned, {
+    via: 'handOff',
+    threadId: 'c8',
+    proposalId: null,
+    choice: null,
+    title: '整理排序',
+    prompt: '1. 换成稳定排序\n2. 补单测',
+    harness: null,
+    model: null,
+    cwd: null,
+    kind: 'fork',
+  })
+  assert.equal(cardPlace(handed), 'outside')
 
   // 别的工具不带
   const other = projectItem({
@@ -304,6 +375,65 @@ test('投影：提案变了的通知并进手上的：变了的、等着的盖�
   assert.equal(merged[1]?.startedId, 'c-a')
 })
 
+test('投影：offer 卡的三种状态和标记；等选的、等补简报的不过期，通知里没列也留着', () => {
+  const raw = (id: string, status: string, createdAt: number, offer = true) =>
+    ({
+      id,
+      threadId: 'p',
+      title: id,
+      prompt: '',
+      harness: null,
+      model: null,
+      cwd: null,
+      kind: 'fresh',
+      wakeParent: true,
+      status,
+      offer,
+      createdAt,
+      expiresAt: NOW / 1000 - 1,
+      startedThreadId: null,
+      callId: `call-${id}`,
+    }) as unknown as SessionProposal
+  const views = projectProposals(
+    [
+      raw('o1', 'offered', 1),
+      raw('o2', 'chosen', 2),
+      raw('o3', 'here', 3),
+      raw('p1', 'pending', 4, false),
+    ],
+    NOW,
+  )
+  assert.deepEqual(
+    views.map((entry) => [entry.id, entry.status, entry.offer]),
+    [
+      ['o1', 'offered', true],
+      ['o2', 'chosen', true],
+      ['o3', 'here', true],
+      ['p1', 'expired', false],
+    ],
+  )
+  assert.deepEqual(
+    views.map((entry) => [proposalAsksUser(entry.status), proposalOpen(entry.status)]),
+    [
+      [true, true],
+      [false, true],
+      [false, false],
+      [false, false],
+    ],
+  )
+  // 通知里“全部等着的”只列 pending 的：offer 卡没变就不在里面，照样留着
+  const merged = mergeProposals(views, [], [raw('o3', 'here', 3)], NOW)
+  assert.deepEqual(
+    merged.map((entry) => [entry.id, entry.status]),
+    [
+      ['o1', 'offered'],
+      ['o2', 'chosen'],
+      ['o3', 'here'],
+      ['p1', 'expired'],
+    ],
+  )
+})
+
 // —— 完整模式的设备 ——
 
 const lineageOf = (parent: string, title: string) => ({
@@ -393,6 +523,7 @@ function treeWorld(options: { tree?: boolean } = {}) {
         return { threadId: 'c3' }
       },
       'litch/sessionProposal/dismiss': record('litch/sessionProposal/dismiss', {}),
+      'litch/sessionProposal/answer': record('litch/sessionProposal/answer', {}),
     },
   })
   return { ...world, calls, codex }
@@ -880,6 +1011,41 @@ test('设备：没改的“开始”不带 overrides；“不要”记成不要�
   watched.close()
 })
 
+test('设备：offer 卡上选“新会话”先记成等补简报（不起子会话），选“在这里做”记成在这里做', async () => {
+  const world = treeWorld()
+  world.core.start()
+  await settle()
+  const watched = watchSession(world.core, 'p')
+  await settle()
+  await settle()
+  await world.command('session.proposal.answer', {
+    sessionId: 'p',
+    proposalId: 'pr1',
+    choice: 'session',
+  })
+  assert.deepEqual(
+    world.calls.find((entry) => entry.method === 'litch/sessionProposal/answer')?.params,
+    { proposalId: 'pr1', choice: 'session' },
+  )
+  await settle()
+  const first = watched.seen.view?.proposals[0]
+  assert.deepEqual([first?.status, first?.settledAt, first?.startedId], ['chosen', null, null])
+  assert.equal(
+    world.calls.some((entry) => entry.method === 'litch/sessionProposal/accept'),
+    false,
+  )
+  await world.command('session.proposal.answer', {
+    sessionId: 'p',
+    proposalId: 'pr1',
+    choice: 'here',
+  })
+  await settle()
+  const second = watched.seen.view?.proposals[0]
+  assert.equal(second?.status, 'here')
+  assert.ok(second?.settledAt)
+  watched.close()
+})
+
 // —— 模拟核心里的演示 ——
 
 function mockWorld() {
@@ -1063,6 +1229,112 @@ test('模拟：说“撤回提案”模型撤回最近一个还等着的提案�
     (item) => item.kind === 'toolCall' && item.tool === 'withdraw',
   )
   assert.ok(withdrawCall, '对话里有撤回的那次调用')
+})
+
+test('模拟：说“新任务”出 offer 卡、调用等着；选新会话模型补简报起出子会话，选在这里做模型在这里回答', async () => {
+  const world = mockWorld()
+  await settle()
+  const parent = world.watch('s6')
+  await settle()
+  const offerCall = () =>
+    Object.values(parent.view?.items ?? {}).findLast(
+      (item): item is ToolCallItem => item.kind === 'toolCall' && item.spawned?.via === 'offer',
+    )
+  const list = () => parent.view?.proposals ?? []
+  const ask = async () => {
+    const before = list().length
+    await world.channel.command('session.send', {
+      deviceId: 'local',
+      sessionId: 's6',
+      text: '新任务：给设置页加个导出按钮',
+    })
+    await world.until(() => list().length === before + 1, '出了一张 offer 卡')
+    const offer = list().at(-1)
+    assert.ok(offer)
+    assert.deepEqual([offer.status, offer.offer, offer.prompt], ['offered', true, ''])
+    // 调用还在等：没有结果，卡片按 callId 对上提案
+    const call = offerCall()
+    assert.equal(call?.status, 'inProgress')
+    assert.equal(call?.spawned?.proposalId, null)
+    assert.equal(offer.callId, call?.id)
+    assert.equal(parent.view?.turns.at(-1)?.status, 'running')
+    return offer
+  }
+  const first = await ask()
+  await world.channel.command('session.proposal.answer', {
+    deviceId: 'local',
+    sessionId: 's6',
+    proposalId: first.id,
+    choice: 'session',
+  })
+  await world.until(() => list().at(-1)?.status === 'chosen', '选了新会话，等模型补简报')
+  assert.deepEqual(
+    [offerCall()?.spawned?.proposalId, offerCall()?.spawned?.choice],
+    [first.id, 'session'],
+  )
+  await world.until(() => list().at(-1)?.status === 'started', '补上简报、起了子会话')
+  const started = list().at(-1)
+  assert.ok(started?.prompt, '简报补上了')
+  const child = world.children('s6').find((entry) => entry.id === started?.startedId)
+  assert.equal(child?.lineage?.proposalId, first.id)
+  await world.until(
+    () => parent.view?.turns.at(-1)?.status === 'completed',
+    '父会话回一句、回合结束',
+  )
+  // 选过了不能再选
+  await assert.rejects(
+    world.channel.command('session.proposal.answer', {
+      deviceId: 'local',
+      sessionId: 's6',
+      proposalId: first.id,
+      choice: 'here',
+    }),
+  )
+
+  const second = await ask()
+  await world.channel.command('session.proposal.answer', {
+    deviceId: 'local',
+    sessionId: 's6',
+    proposalId: second.id,
+    choice: 'here',
+  })
+  await world.until(() => parent.view?.turns.at(-1)?.status === 'completed', '在这里回答完')
+  assert.equal(list().at(-1)?.status, 'here')
+  assert.equal(offerCall()?.spawned?.choice, 'here')
+
+  // 没选就停了回合：算在这里做
+  const third = await ask()
+  await world.channel.command('session.interrupt', { deviceId: 'local', sessionId: 's6' })
+  await world.until(() => list().at(-1)?.status === 'here', '停了回合算在这里做')
+  assert.equal(list().at(-1)?.id, third.id)
+})
+
+test('模拟：说“交接”模型把手上的任务交给分叉会话（不出卡，立刻起），再回答新消息', async () => {
+  const world = mockWorld()
+  await settle()
+  const parent = world.watch('s6')
+  await settle()
+  const before = world.children('s6').length
+  const turns = parent.view?.turns.length ?? 0
+  await world.channel.command('session.send', {
+    deviceId: 'local',
+    sessionId: 's6',
+    text: '先交接一下，回答我另一个问题',
+  })
+  await world.until(
+    () =>
+      (parent.view?.turns.length ?? 0) > turns && parent.view?.turns.at(-1)?.status === 'completed',
+    '回合结束',
+  )
+  const handed = Object.values(parent.view?.items ?? {}).find(
+    (item): item is ToolCallItem => item.kind === 'toolCall' && item.spawned?.via === 'handOff',
+  )
+  assert.ok(handed?.spawned?.threadId, '对话里有交接那一条，带着分叉会话')
+  const kids = world.children('s6')
+  assert.equal(kids.length, before + 1)
+  const fork = kids.find((entry) => entry.id === handed.spawned?.threadId)
+  assert.equal(fork?.lineage?.kind, 'fork')
+  assert.equal(parent.view?.proposals.length, 0, '交接不出卡')
 })
 
 test('模拟：说“收尾建议”回答完调收尾带三条建议：两条成了提案（callId 是那次调用），一条被拒；别的几出调空的收尾', async () => {

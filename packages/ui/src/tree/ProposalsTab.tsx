@@ -1,11 +1,13 @@
-// 侧面板的“建议任务”标签：眼前这个会话里模型提的全部提案。等着的在上，每条能开始、改了再开始、不要；
-// 了结的（开始了、不要了、撤回了、过期了）在下面，可以收起来。点一条在对话流里找到那张卡片、滚过去闪一下；
+// 侧面板的“建议任务”标签：眼前这个会话里模型提的全部提案。没了结的在上：等开始的提案能开始、改了再开始、不要，
+// 等选的 offer 卡能选“新会话”“在这里做”，选了新会话、等模型补简报的只写状态；
+// 了结的（开始了、在这里做、不要了、撤回了、过期了）在下面，可以收起来。点一条在对话流里找到那张卡片、滚过去闪一下；
 // 对话里找不到（还没载入、调用没留下）就只让这一行闪一下。标签上的角标是等着的个数（ProposalsBadge.tsx）。
 // 开始了的那行写实际起出来的子会话的 harness 和目录（proposalShape），不是提案原本的。
 import {
   type DeviceView,
   keys,
   type ProposalStarts,
+  type ProposalStatus,
   proposalShape,
   proposalStatus,
   type SessionProposalView,
@@ -17,6 +19,7 @@ import { badgeOf, nameOf } from '../app/device.ts'
 import { Caret } from '../app/icons.tsx'
 import { useKey } from '../app/services.tsx'
 import type { SideTabProps } from '../side/tabs.ts'
+import { OfferActs } from './OfferCard.tsx'
 import { ProposalActs } from './ProposalCard.tsx'
 import {
   arrange,
@@ -26,6 +29,11 @@ import {
   useProposalClock,
   useProposalList,
 } from './proposals.ts'
+
+/** offer 卡还没有简报时第二行写什么：等选的写那一问，选了的写选了什么 */
+const OFFER_LINE: Partial<
+  Record<ProposalStatus, 'proposal.offer.briefing' | 'proposal.offer.doneHere'>
+> = { chosen: 'proposal.offer.briefing', here: 'proposal.offer.doneHere' }
 
 function ProposalRow({
   deviceId,
@@ -49,7 +57,12 @@ function ProposalRow({
   const shape = proposalShape(proposal, child, fallbackHarness)
   const harness = shape.harness
   return (
-    <li className="prop-row" data-proposal={proposal.id} data-state={status}>
+    <li
+      className="prop-row"
+      data-proposal={proposal.id}
+      data-state={status}
+      data-offer={proposal.offer || undefined}
+    >
       <button
         type="button"
         className="prop-row-main"
@@ -73,6 +86,8 @@ function ProposalRow({
             <span className="ell grow mono prop-cwd" data-actual title={shape.cwd}>
               {shape.cwd}
             </span>
+          ) : proposal.offer && !proposal.prompt ? (
+            <span className="ell grow">{t(OFFER_LINE[status] ?? 'proposal.offer.ask')}</span>
           ) : (
             <span className="ell grow">{proposal.prompt}</span>
           )}
@@ -80,6 +95,9 @@ function ProposalRow({
       </button>
       {status === 'pending' ? (
         <ProposalActs deviceId={deviceId} sessionId={sessionId} proposal={proposal} small />
+      ) : null}
+      {status === 'offered' ? (
+        <OfferActs deviceId={deviceId} sessionId={sessionId} proposal={proposal} small />
       ) : null}
     </li>
   )

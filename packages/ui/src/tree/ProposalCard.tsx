@@ -123,6 +123,31 @@ function ProposalMeta({ deviceId, shape }: { deviceId: string; shape: ProposalSh
   )
 }
 
+/** 简报：长的先折成三行，能展开。offer 卡补上简报之后也用 */
+export function Brief({ prompt }: { prompt: string }) {
+  const t = useT()
+  const [unfolded, setUnfolded] = useState(false)
+  if (!prompt) return null
+  const long = prompt.length > LONG_BRIEF || prompt.split('\n').length > 3
+  return (
+    <>
+      <div className="prop-brief" data-open={unfolded || !long}>
+        {prompt}
+      </div>
+      {long ? (
+        <button
+          type="button"
+          className="prop-more"
+          aria-expanded={unfolded}
+          onClick={() => setUnfolded(!unfolded)}
+        >
+          {t(unfolded ? 'proposal.brief.less' : 'proposal.brief.more')}
+        </button>
+      ) : null}
+    </>
+  )
+}
+
 /** 卡片照着画的那一份：调用时给的（start 的参数、收尾里的一条建议），拿不到提案时就照它 */
 type ProposalSeed = Pick<
   SessionProposalView,
@@ -147,7 +172,6 @@ function ProposalView({
   anchor?: string
 }) {
   const t = useT()
-  const { open } = useActions()
   const list = useProposalList(deviceId, sessionId)
   const now = useProposalClock(list)
   const proposal = proposalId ? list?.find((entry) => entry.id === proposalId) : undefined
@@ -155,8 +179,6 @@ function ProposalView({
   const parent = useKey<SessionSummary>(keys.summary(deviceId, sessionId))
   const childId = proposal?.startedId ?? (proposalId ? starts?.[proposalId] : undefined) ?? ''
   const child = useKey<SessionSummary>(keys.summary(deviceId, childId))
-  const device = useKey<DeviceView>(keys.device(deviceId))
-  const [unfolded, setUnfolded] = useState(false)
   // 列表里没有这一张（对面没给、或者还没取到）：照调用时给的画，开始了的看侧栏
   const status = proposal
     ? proposalStatus(proposal, now)
@@ -172,7 +194,6 @@ function ProposalView({
     status === 'started' ? child : null,
     parent?.harness ?? null,
   )
-  const long = prompt.length > LONG_BRIEF || prompt.split('\n').length > 3
   const pending = status === 'pending' && proposal !== undefined
   return (
     <div
@@ -195,21 +216,7 @@ function ProposalView({
         </span>
         <b className="prop-title">{title}</b>
         <ProposalMeta deviceId={deviceId} shape={shape} />
-        {prompt ? (
-          <div className="prop-brief" data-open={unfolded || !long}>
-            {prompt}
-          </div>
-        ) : null}
-        {long ? (
-          <button
-            type="button"
-            className="prop-more"
-            aria-expanded={unfolded}
-            onClick={() => setUnfolded(!unfolded)}
-          >
-            {t(unfolded ? 'proposal.brief.less' : 'proposal.brief.more')}
-          </button>
-        ) : null}
+        <Brief prompt={prompt} />
         {pending && proposal.widerSandbox ? (
           <p className="prop-wider" data-wider={proposal.widerSandbox}>
             {t('proposal.wider', { level: t(SANDBOX_LEVEL[proposal.widerSandbox]) })}
@@ -220,29 +227,47 @@ function ProposalView({
         ) : null}
       </div>
       {status === 'started' && childId ? (
-        <button
-          type="button"
-          className="prop-child"
-          data-child={childId}
-          disabled={!child || !open}
-          title={t('tree.child.open')}
-          onClick={() => open?.({ deviceId, sessionId: childId })}
-        >
-          <i className={`st ${markOf(child?.status)}`} />
-          <span className="ell grow">
-            {child ? t.text(child.title) || title : t('tree.child.gone')}
-          </span>
-          {child ? (
-            <span className="chip" title={nameOf(device, child.harness)}>
-              {badgeOf(device, child.harness)}
-            </span>
-          ) : null}
-          {child ? (
-            <span className="tree-card-state">{t(`tree.status.${child.status}`)}</span>
-          ) : null}
-        </button>
+        <StartedChild deviceId={deviceId} childId={childId} title={title} />
       ) : null}
     </div>
+  )
+}
+
+/** 开始了的卡片下面那一行：起出来的子会话，点了进去。offer 卡也用 */
+export function StartedChild({
+  deviceId,
+  childId,
+  title,
+}: {
+  deviceId: string
+  childId: string
+  /** 子会话不在侧栏、没有标题时写的 */
+  title: string
+}) {
+  const t = useT()
+  const { open } = useActions()
+  const child = useKey<SessionSummary>(keys.summary(deviceId, childId))
+  const device = useKey<DeviceView>(keys.device(deviceId))
+  return (
+    <button
+      type="button"
+      className="prop-child"
+      data-child={childId}
+      disabled={!child || !open}
+      title={t('tree.child.open')}
+      onClick={() => open?.({ deviceId, sessionId: childId })}
+    >
+      <i className={`st ${markOf(child?.status)}`} />
+      <span className="ell grow">
+        {child ? t.text(child.title) || title : t('tree.child.gone')}
+      </span>
+      {child ? (
+        <span className="chip" title={nameOf(device, child.harness)}>
+          {badgeOf(device, child.harness)}
+        </span>
+      ) : null}
+      {child ? <span className="tree-card-state">{t(`tree.status.${child.status}`)}</span> : null}
+    </button>
   )
 }
 

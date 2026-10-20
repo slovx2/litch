@@ -80,6 +80,7 @@ import type {
 import type {
   AgentThreadView,
   LineageKind,
+  OfferChoice,
   ProposalOverrides,
   SandboxLevel,
 } from '../model-tree.mjs'
@@ -321,6 +322,8 @@ export interface Device {
   ): Promise<string>
   /** 会话树：提案上点了“不要” */
   dismissProposal(sessionId: string, proposalId: string): Promise<void>
+  /** 用户在 offer 卡上选了“新会话”（session）或“在这里做”（here） */
+  answerProposal(sessionId: string, proposalId: string, choice: OfferChoice): Promise<void>
   /** 这个会话下面引擎自己的子代理线程（直接的子女） */
   agents(sessionId: string): Promise<AgentThreadView[]>
 }
@@ -2100,6 +2103,11 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       treeOnly()
       await guarded(() => link.request(SESSION_TREE_METHOD.proposalDismiss, { proposalId }))
       live.settleProposal(sessionId, proposalId, 'dismissed', null)
+    },
+    async answerProposal(sessionId, proposalId, choice) {
+      treeOnly()
+      await guarded(() => link.request(SESSION_TREE_METHOD.proposalAnswer, { proposalId, choice }))
+      live.settleProposal(sessionId, proposalId, choice === 'session' ? 'chosen' : 'here', null)
     },
     async agents(sessionId) {
       if (!online) throw new ChannelError('offline', '设备没有连上')

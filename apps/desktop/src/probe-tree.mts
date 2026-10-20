@@ -7,6 +7,8 @@
 //   过期了、撤回了的写着状态；侧面板的“建议任务”列全部，角标是等着的个数，点一条在对话里找到那张卡片；
 //   收尾（wrap_up）带的建议照顺序一张一张、被拒的只一行原因，空的收尾不画；开始了的卡片写实际的 harness；
 //   没调收尾时设备进程的提醒画成一行轻字，不是用户的气泡；
+//   “新任务”出 offer 卡（“新会话 / 在这里做”），选新会话等模型补简报再写“已开始”、下面一行是子会话，
+//   选在这里做写“在这里做”；侧面板里也有这一行和两个按钮；“交接”画成交给了分叉会话的卡，能点开；
 //   子代理在对话流里一个一行（完成、已停止、失败以子线程为准），点了在侧面板里看子线程，失败的有红框写原话，
 //   不接受直接输入的没有输入框；子代理线程不进侧栏；
 //   三种皮肤、深浅两套下这几样东西不溢出。
@@ -54,6 +56,16 @@ export interface TreeSeen {
   wrapQuiet: boolean
   wrapActual: boolean
   remindBar: boolean
+  /**
+   * offer 卡：对话流里一张“新会话 / 在这里做”的卡写着等你选，侧面板有这一行和两个按钮、角标算上它；
+   * 选新会话先写等模型补简报，再写已开始、下面一行是起出来的子会话（侧栏里多一个）；
+   * 再出一张，在侧面板里点在这里做，卡上写在这里做、不起子会话
+   */
+  offerShown: boolean
+  offerStarted: boolean
+  offerHere: boolean
+  /** 交接：一张“交给了分叉会话”的卡，带着起出来的子会话（侧栏里挂在父会话下），能点开 */
+  handOffCard: boolean
   /**
    * 子代理：对话流里每个子代理一行小条（不摊开任务说明），最后写着完成、已停止、失败（派出的条目报的一直是“在跑”，
    * 状态以子线程为准）；复古皮肤里状态写在方括号里；点了在侧面板里看，列表三行带状态，失败的那个有红框写着原话；
@@ -361,6 +373,84 @@ export async function treeProbe(): Promise<TreeSeen> {
   })
   seen.remind = $('.main .sev[data-event="remind"]')?.textContent ?? '没有'
   await idle()
+
+  // —— offer 卡：新会话 ——
+  const offerCard = () => $$('.main [data-card="offer"]').at(-1)
+  const offerKids = kids().length
+  await say('新任务：给设置页加导出按钮')
+  const offerShown = await until(() => {
+    const card = offerCard()
+    return (
+      card?.dataset.state === 'offered' &&
+      card.querySelector('[data-act="session"]') !== null &&
+      card.querySelector('[data-act="here"]') !== null &&
+      card.querySelector('.prop-ask') !== null &&
+      $('.side .prop-row[data-offer][data-state="offered"] [data-act="session"]') !== null &&
+      ($('.side .side-badge')?.textContent ?? '') !== ''
+    )
+  })
+  seen.offer = offerCard()?.textContent ?? '没有'
+  offerCard()?.querySelector<HTMLElement>('[data-act="session"]')?.click()
+  const chosen = await until(() => {
+    const state = offerCard()?.dataset.state
+    return state === 'chosen' || state === 'started'
+  })
+  const offerStarted =
+    chosen &&
+    (await until(() => {
+      const card = offerCard()
+      const child = card?.querySelector<HTMLElement>('.prop-child')?.dataset.child ?? ''
+      return (
+        card?.dataset.state === 'started' &&
+        child !== '' &&
+        card.querySelector('.prop-brief') !== null &&
+        kids().length === offerKids + 1 &&
+        $(`.row-line[data-session="${child}"]`) !== null
+      )
+    }))
+  seen.offerStarted = `${offerCard()?.dataset.state} ${offerCard()?.textContent ?? ''}`
+  await idle()
+  await sleep(2500)
+  await idle()
+
+  // —— offer 卡：在这里做（在侧面板里点） ——
+  const offersBefore = $$('.main [data-card="offer"]').length
+  await say('另一个新任务：整理日志')
+  await until(
+    () =>
+      $$('.main [data-card="offer"]').length === offersBefore + 1 &&
+      $('.side .prop-row[data-state="offered"] [data-act="here"]') !== null,
+  )
+  const hereKids = kids().length
+  $('.side .prop-row[data-state="offered"] [data-act="here"]')?.click()
+  const offerHere = await until(
+    () =>
+      offerCard()?.dataset.state === 'here' &&
+      offerCard()?.querySelector('[data-act]') === null &&
+      $('.side .prop-row[data-state="offered"]') === null &&
+      $('.side .prop-row[data-state="here"]') !== null,
+  )
+  await idle()
+  const hereNoChild = kids().length === hereKids
+  seen.offerHere = `${offerCard()?.dataset.state} ${kids().length - hereKids} 个新子会话`
+
+  // —— 交接 ——
+  const handKids = kids().length
+  await say('先交接手上的活，再回答我一个问题')
+  const handOffCard = await until(() => {
+    const card = $$('.main [data-card="hand-off"]').at(-1)
+    const child = card?.dataset.child ?? ''
+    return (
+      child !== '' &&
+      card?.querySelector('button.tree-card-main') !== null &&
+      kids().length === handKids + 1 &&
+      $(`.row-line[data-session="${child}"]`) !== null
+    )
+  })
+  seen.handOff = $$('.main [data-card="hand-off"]').at(-1)?.textContent ?? '没有'
+  await idle()
+  await sleep(2500)
+  await idle()
   $('.side [data-tool="hide"]')?.click()
 
   // —— 子代理 ——
@@ -453,6 +543,10 @@ export async function treeProbe(): Promise<TreeSeen> {
     wrapQuiet,
     wrapActual,
     remindBar,
+    offerShown,
+    offerStarted,
+    offerHere: offerHere && hereNoChild,
+    handOffCard,
     agentCard,
     agentStates,
     agentBracket,
@@ -550,6 +644,11 @@ const LABELS: Record<Exclude<keyof TreeSeen, 'seen'>, string> = {
   wrapQuiet: '空的收尾不画：撤回的那个回合只有一个活动块',
   wrapActual: '“改了再开始”能改完成后唤醒；换了 harness 开始后卡片写实际的 harness',
   remindBar: '没调收尾的提醒是一行轻字、没有用户气泡，后面跟着补的那张卡片',
+  offerShown: '“新任务”出 offer 卡：等你选、两个按钮，侧面板有这一行和按钮、角标算上它',
+  offerStarted:
+    'offer 卡选新会话：先等模型补简报，再写已开始、带简报，下面一行是侧栏里新多的子会话',
+  offerHere: '侧面板里点“在这里做”：卡上写在这里做、按钮没了，不起子会话',
+  handOffCard: '“交接”画成交给了分叉会话的卡，能点开，子会话挂在父会话下',
   agentCard: '对话流里三个子代理各一行小条，不摊开任务说明',
   agentStates: '子代理行最后写着完成、已停止、失败（以子线程为准）',
   agentBracket: '复古皮肤里子代理的状态写在方括号里',

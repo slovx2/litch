@@ -177,7 +177,14 @@ export type * from './model-service.mjs'
 export type * from './model-tasks.mjs'
 export type * from './model-terminal.mjs'
 export type * from './model-tree.mjs'
-export { AGENT_RUN_STATE, agentSettled, proposalShape, proposalStatus } from './model-tree.mjs'
+export {
+  AGENT_RUN_STATE,
+  agentSettled,
+  proposalAsksUser,
+  proposalOpen,
+  proposalShape,
+  proposalStatus,
+} from './model-tree.mjs'
 export {
   describeText,
   type Phrase,

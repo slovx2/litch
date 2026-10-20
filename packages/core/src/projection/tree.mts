@@ -16,6 +16,9 @@ import { parentOf, sessionStatus, toMs } from './session.mjs'
 
 const STATUSES: ReadonlySet<string> = new Set<ProposalStatus>([
   'pending',
+  'offered',
+  'chosen',
+  'here',
   'started',
   'dismissed',
   'withdrawn',
@@ -50,6 +53,7 @@ export function projectProposal(
     cwd: word(proposal.cwd),
     kind: proposal.kind === 'fork' ? 'fork' : 'fresh',
     wakeParent: proposal.wakeParent === true,
+    offer: proposal.offer === true,
     status: lapsed ? 'expired' : proposal.status,
     createdAt: toMs(proposal.createdAt) ?? 0,
     expiresAt,
@@ -75,7 +79,8 @@ export function projectProposals(
 
 /**
  * 提案变了的通知并进手上的那一份：changed 里的（任何状态）和 pending 里的（现在全部等着的）盖掉旧的；
- * 手上记着等着、通知里却既不在等着的里面也不在变了的里面的，不知道成了什么，拿掉（重新载入时再列出来）
+ * 手上记着等着、通知里却既不在等着的里面也不在变了的里面的，不知道成了什么，拿掉（重新载入时再列出来）。
+ * offer 卡的 offered、chosen 不按这一条拿：通知里“全部等着的”只保证有 pending 的，它们变了一定在 changed 里
  */
 export function mergeProposals(
   current: readonly SessionProposalView[],

@@ -11,6 +11,11 @@
 // - 说“忘了收尾”（forget the wrap-up）：模型回答完没调收尾，设备进程替它再开一个回合提醒
 //   （<litch-session-event kind="remind">），模型在那个回合里补调收尾、带一条建议；
 // - 会话树的其余几出（派子会话、唤醒、提案、撤回）回答完都调一次空的收尾，界面上不画；
+// - 说“新任务”（new task）：模型调 litch_sessions.start（initiation offer，只带标题），出“新会话 / 在这里做”的卡，
+//   调用一直等着；选新会话：过一会儿模型用 accept 补上简报，起子会话，父会话回一句；选在这里做：模型在这里回答；
+//   没选就停掉回合也算在这里做；
+// - 说“交接”（hand off）：模型把手上做到一半的任务交给一个分叉会话（litch_sessions.hand_off，立刻起、不出卡），
+//   再回答这条新消息；
 // - 说“用子代理”（use sub-agents）：引擎自己派两个子代理线程（不进侧栏），一个能直接输入、一个不能，
 //   它们回来之后父会话才接着说；
 // - 界面上手动派（session.spawn）、脱离（session.detach）、提案的开始和不要、列子代理（session.agents）。
@@ -51,6 +56,11 @@ const PROPOSES = /提个子会话|propose a sub-session/i
 const WITHDRAWS = /撤回提案|withdraw a proposal/i
 const WRAPS = /收尾建议|suggest follow-ups/i
 const FORGETS = /忘了收尾|forget the wrap-up/i
+const OFFERS = /新任务|new task/i
+const HANDS = /交接|hand off/i
+
+/** offer 卡上选了新会话之后，模型过多久补上简报（按模拟的时钟） */
+const BRIEF_MS = 900
 
 /** 沙箱档对应的内置权限预设（模拟的子会话用它显示权限） */
 const PRESET_OF: Record<SandboxLevel, string> = {
@@ -117,6 +127,8 @@ interface AgentEntry {
 export interface MockTree {
   /** 这条消息是不是会话树的一出：是的话由这里接着演，返回 true */
   claim(view: SessionView, turnId: string, message: OutgoingMessage): boolean
+  /** 一个回合停了（排着的消息接着发之前）：等着选的 offer 卡当在这里做（和设备进程一样） */
+  turnStopped(view: SessionView): void
   /** 一个回合结束了：子会话的话记一条回报，看要不要唤醒父会话；子代理的话看父会话能不能接着说 */
   ended(view: SessionView, status: 'completed' | 'interrupted' | 'failed'): void
   /** 用户发的一条消息：攒着的回报附在它前面，唤醒的次数从头算 */
@@ -249,8 +261,9 @@ export function createMockTree(host: MockTreeHost): MockTree {
   const sessionsCall = (
     turnId: string,
     args: Record<string, unknown>,
-    result: Record<string, unknown>,
-    tool: 'start' | 'withdraw' | 'wrap_up' = 'start',
+    /** null：调用还在等（offer 卡等用户选） */
+    result: Record<string, unknown> | null,
+    tool: 'start' | 'withdraw' | 'wrap_up' | 'accept' | 'hand_off' = 'start',
     id = host.nextId('ls'),
   ): SessionOp => ({
     op: 'item.add',
@@ -261,10 +274,10 @@ export function createMockTree(host: MockTreeHost): MockTree {
       namespace: CLIENT_TOOL_NAMESPACE.sessions,
       tool,
       arguments: args,
-      status: 'completed',
-      contentItems: [{ type: 'inputText', text: JSON.stringify(result) }],
-      success: true,
-      durationMs: 40,
+      status: result ? 'completed' : 'inProgress',
+      contentItems: result ? [{ type: 'inputText', text: JSON.stringify(result) }] : null,
+      success: result ? true : null,
+      durationMs: result ? 40 : null,
     } as never),
   })
 
@@ -302,13 +315,16 @@ export function createMockTree(host: MockTreeHost): MockTree {
   const setProposals = (view: SessionView, proposals: SessionProposalView[]) =>
     host.apply(view, [{ op: 'session.proposals', proposals }])
 
-  /** 提案了结了（开始、不要、撤回、过期）：和设备进程一样记下状态和时间，留在列表里 */
+  /**
+   * 提案了结了（开始、不要、撤回、过期，offer 卡上选了）：和设备进程一样记下状态和时间，留在列表里。
+   * offer 卡选了新会话（chosen）还没了结，不记时间
+   */
   const settle = (
     view: SessionView,
     id: string,
     status: Exclude<SessionProposalView['status'], 'pending'>,
     startedId: string | null = null,
-    settledAt = host.now(),
+    settledAt: number | null = status === 'chosen' ? null : host.now(),
   ) =>
     setProposals(
       view,
@@ -339,6 +355,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
       cwd: sample.cwd ?? null,
       kind: 'fresh',
       wakeParent: true,
+      offer: false,
       status: 'pending',
       createdAt,
       expiresAt: sample.short
@@ -463,6 +480,127 @@ export function createMockTree(host: MockTreeHost): MockTree {
     scripted.delete(`proposal:${target.id}`)
     settle(view, target.id, 'withdrawn')
     host.reply(view, turnId, text.withdrawReply, emptyWrapUp(turnId))
+  }
+
+  /** 等着用户选的 offer 卡：提案号 → 提出它的会话、回合、那次 start 调用 */
+  const offers = new Map<string, { view: SessionView; turnId: string; callId: string }>()
+
+  /** 模型出一张 offer 卡（只带标题），那次 start 调用一直等着，回合也不结束 */
+  const offerDemo = (view: SessionView, turnId: string) => {
+    const callId = host.nextId('ls')
+    const now = host.now()
+    const proposal: SessionProposalView = {
+      id: host.nextId('pr'),
+      title: text.offer.title,
+      prompt: '',
+      harness: null,
+      model: null,
+      cwd: null,
+      kind: 'fresh',
+      wakeParent: true,
+      offer: true,
+      status: 'offered',
+      createdAt: now,
+      expiresAt: now + SESSION_TREE_LIMITS.proposalTtlSeconds * 1000,
+      settledAt: null,
+      startedId: null,
+      turnId,
+      callId,
+      widerSandbox: null,
+    }
+    offers.set(proposal.id, { view, turnId, callId })
+    host.apply(view, [
+      sessionsCall(turnId, { title: proposal.title, initiation: 'offer' }, null, 'start', callId),
+      { op: 'session.proposals', proposals: [...view.proposals, proposal] },
+    ])
+  }
+
+  /**
+   * offer 卡有了答复：等着的那次 start 调用拿到结果。选了新会话，过一会儿模型用 accept 补上简报、起子会话；
+   * 选了在这里做（或者没选就停了回合），模型在这里接着做
+   */
+  const answerOffer = (proposalId: string, choice: 'session' | 'here', stopped = false) => {
+    const offer = offers.get(proposalId)
+    if (!offer) return
+    offers.delete(proposalId)
+    const { view, turnId, callId } = offer
+    const note =
+      choice === 'session'
+        ? 'The user chose a new session. Call accept with this proposal_id and the full brief.'
+        : 'The user chose to do it here. Do the task in this session.'
+    settle(view, proposalId, choice === 'session' ? 'chosen' : 'here')
+    host.apply(view, [
+      sessionsCall(
+        turnId,
+        { title: text.offer.title, initiation: 'offer' },
+        { proposal_id: proposalId, choice, note },
+        'start',
+        callId,
+      ),
+    ])
+    if (stopped) return
+    if (choice === 'here') {
+      host.reply(view, turnId, text.offerHereReply, emptyWrapUp(turnId))
+      return
+    }
+    host.setTimer(() => {
+      if (!host.running(view)) return
+      const sessionId = startChild(view, {
+        title: text.offer.title,
+        prompt: text.offer.prompt,
+        harness: null,
+        kind: 'fresh',
+        origin: 'proposal',
+        wakeParent: true,
+        reply: text.offer.reply,
+        proposalId,
+      })
+      setProposals(
+        view,
+        view.proposals.map((entry) =>
+          entry.id === proposalId
+            ? {
+                ...entry,
+                prompt: text.offer.prompt,
+                status: 'started',
+                settledAt: host.now(),
+                startedId: sessionId,
+              }
+            : entry,
+        ),
+      )
+      host.apply(view, [
+        sessionsCall(
+          turnId,
+          { proposal_id: proposalId, prompt: text.offer.prompt },
+          { thread_id: sessionId, note: 'Started.' },
+          'accept',
+        ),
+      ])
+      host.reply(view, turnId, text.offerStartedReply, emptyWrapUp(turnId))
+    }, BRIEF_MS)
+  }
+
+  /** 模型把做到一半的任务交给一个分叉会话（立刻起，不出卡），再回答这条新消息 */
+  const handOffDemo = (view: SessionView, turnId: string) => {
+    const sessionId = startChild(view, {
+      title: text.handOff.title,
+      prompt: text.handOff.prompt,
+      harness: view.harness,
+      kind: 'fork',
+      origin: 'model',
+      wakeParent: true,
+      reply: text.handOff.reply,
+    })
+    host.apply(view, [
+      sessionsCall(
+        turnId,
+        { title: text.handOff.title, remaining_plan: text.handOff.prompt },
+        { thread_id: sessionId, note: 'Handed off; the forked session is running.' },
+        'hand_off',
+      ),
+    ])
+    host.reply(view, turnId, text.handOffReply, emptyWrapUp(turnId))
   }
 
   /** 提案开始：照提案起子会话，改过的那几项照改的 */
@@ -768,7 +906,20 @@ export function createMockTree(host: MockTreeHost): MockTree {
         forgetDemo(view, turnId)
         return true
       }
+      if (OFFERS.test(message.text)) {
+        offerDemo(view, turnId)
+        return true
+      }
+      if (HANDS.test(message.text)) {
+        handOffDemo(view, turnId)
+        return true
+      }
       return false
+    },
+
+    turnStopped(view) {
+      for (const [proposalId, offer] of offers)
+        if (offer.view === view) answerOffer(proposalId, 'here', true)
     },
 
     ended(view, status) {
@@ -871,6 +1022,16 @@ export function createMockTree(host: MockTreeHost): MockTree {
           return {}
         }
         return { sessionId: acceptProposal(view, proposal, overrides ?? {}) }
+      }
+      if (name === 'session.proposal.answer') {
+        const { deviceId, sessionId, proposalId, choice } =
+          params as Commands['session.proposal.answer']['params']
+        const view = host.view(deviceId, sessionId)
+        const proposal = view.proposals.find((entry) => entry.id === proposalId)
+        if (proposal?.status !== 'offered' || !offers.has(proposalId))
+          throw new ChannelError('notFound', '这张卡已经选过了')
+        answerOffer(proposalId, choice)
+        return {}
       }
       if (name === 'session.agents') {
         const { deviceId, sessionId } = params as Commands['session.agents']['params']

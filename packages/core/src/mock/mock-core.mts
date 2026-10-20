@@ -467,6 +467,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       updatedAt: clock.now(),
     })
     diffs.turnEnded(view.deviceId, view.sessionId)
+    tree.turnStopped(view)
     const next = view.queued[0]
     if (next) {
       applySessionOps(view, [{ op: 'queue.set', queued: view.queued.slice(1) }])

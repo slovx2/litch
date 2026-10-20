@@ -2,8 +2,10 @@
 // 侧面板点一条时在对话流里找到那张卡片。卡片在 ProposalCard.tsx，侧面板的标签在 ProposalsTab.tsx。
 import {
   keys,
+  type OfferChoice,
   type ProposalOverrides,
   type ProposalStatus,
+  proposalOpen,
   proposalStatus,
   type SessionProposalView,
 } from '@litch/core'
@@ -41,14 +43,17 @@ export function useProposalClock(list: readonly SessionProposalView[] | undefine
   return now
 }
 
-/** 侧面板的排法：等着的在上（先提的在前），了结的在下（刚了结的在前） */
+/**
+ * 侧面板的排法：没了结的在上（等开始的提案、等选的 offer 卡、选了新会话等模型补简报的，先提的在前），
+ * 了结的在下（刚了结的在前）
+ */
 export function arrange(
   list: readonly SessionProposalView[],
   now: number,
 ): { pending: SessionProposalView[]; settled: SessionProposalView[] } {
-  const pending = list.filter((proposal) => proposalStatus(proposal, now) === 'pending')
+  const pending = list.filter((proposal) => proposalOpen(proposalStatus(proposal, now)))
   const settled = list
-    .filter((proposal) => proposalStatus(proposal, now) !== 'pending')
+    .filter((proposal) => !proposalOpen(proposalStatus(proposal, now)))
     .sort(
       (a, b) =>
         (b.settledAt ?? b.expiresAt) - (a.settledAt ?? a.expiresAt) || b.createdAt - a.createdAt,
@@ -59,13 +64,16 @@ export function arrange(
 /** 每种状态的那句话 */
 export const STATUS_TEXT = {
   pending: 'proposal.state.pending',
+  offered: 'proposal.state.offered',
+  chosen: 'proposal.state.chosen',
+  here: 'proposal.state.here',
   started: 'proposal.state.started',
   dismissed: 'proposal.state.dismissed',
   withdrawn: 'proposal.state.withdrawn',
   expired: 'proposal.state.expired',
 } as const satisfies Record<ProposalStatus, string>
 
-/** 一张提案上的“开始”“不要”：发出去、等着、没做成的原因 */
+/** 一张提案上的“开始”“不要”，offer 卡上的“新会话”“在这里做”：发出去、等着、没做成的原因 */
 export function useProposalAct(deviceId: string, sessionId: string, proposalId: string) {
   const { channel } = useServices()
   const t = useT()
@@ -92,6 +100,8 @@ export function useProposalAct(deviceId: string, sessionId: string, proposalId: 
       ),
     dismiss: () =>
       run(channel.command('session.proposal.dismiss', { deviceId, sessionId, proposalId })),
+    answer: (choice: OfferChoice) =>
+      run(channel.command('session.proposal.answer', { deviceId, sessionId, proposalId, choice })),
   }
 }
 

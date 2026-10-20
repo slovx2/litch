@@ -187,11 +187,14 @@ export interface LiveSessions {
   rollback(sessionId: string, turnId: string): Promise<void>
   /** 让对面开始压缩上下文。受理了就返回 */
   compact(sessionId: string): Promise<void>
-  /** 用户答了一张提案（开始、不要）：开着的会话里先改成了结的样子，不等设备进程的通知 */
+  /**
+   * 用户答了一张提案（开始、不要，offer 卡上选新会话、在这里做）：开着的会话里先改成答过的样子，
+   * 不等设备进程的通知。chosen 还没了结（等模型补简报），不记了结的时间
+   */
   settleProposal(
     sessionId: string,
     proposalId: string,
-    status: 'started' | 'dismissed',
+    status: 'started' | 'dismissed' | 'chosen' | 'here',
     startedId: string | null,
   ): void
   /** 这个会话的子代理列表变了（设备记着的子线程和它们的回合）：开着的话交给界面 */
@@ -1056,7 +1059,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     settleProposal(sessionId, proposalId, status, startedId) {
       const live = sessions.get(sessionId)
       if (!live?.view?.proposals.some((proposal) => proposal.id === proposalId)) return
-      const settledAt = host.clock.now()
+      const settledAt = status === 'chosen' ? null : host.clock.now()
       emit(live, [
         {
           op: 'session.proposals',
