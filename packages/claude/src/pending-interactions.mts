@@ -123,6 +123,32 @@ export class PendingInteractions {
     }
   }
 
+  // 这条连接已经拿着的、这个线程的可重送请求。
+  heldBy(peerId: string, threadId: string): string[] {
+    const ids: string[] = []
+    for (const entry of this.pending.values())
+      if (entry.threadId === threadId && entry.holders.has(peerId) && replayable(entry))
+        ids.push(entry.id)
+    return ids
+  }
+
+  // 同一条连接恢复线程时把它已经拿着的请求再发一次（同一个请求号）。上游恢复时不管这条连接
+  // 收没收到过，都把线程里挂着的请求重发给它（outgoing_message.rs 的
+  // replay_requests_to_connection_for_thread）；客户端换了逻辑通道、底下还是同一条连接时靠这个找回提问。
+  // 还没拿到的连接不走这里，由 reroute 补送。
+  resend(peer: RpcPeer, ids: string[]): void {
+    for (const id of ids) {
+      const entry = this.pending.get(id)
+      if (!entry?.holders.has(peer.id)) continue
+      try {
+        const params = entry.paramsFor ? entry.paramsFor(peer) : entry.params
+        peer.send({ jsonrpc: '2.0', id: entry.id, method: entry.method, params })
+      } catch (error) {
+        entry.finish(undefined, error instanceof Error ? error : new Error(String(error)))
+      }
+    }
+  }
+
   // 连接断开：只摘掉它自己。决定类请求别的连接还拿着就继续等，一条都不剩就回到“没人可送”，
   // 等下一个订阅者；不能再送的按失败结束。
   dropPeer(peerId: string): void {

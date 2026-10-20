@@ -1330,6 +1330,8 @@ export class CodexClaudeAppServer {
       threadSource: thread.threadSource,
       ephemeral: thread.ephemeral,
     })
+    // 这条连接已经拿着的提问、审批：应答和用量回放之后再发一次，见 PendingInteractions.resend。
+    const held = this.pendingInteractions.heldBy(peer.id, threadId)
     this.subscribers.add(threadId, peer)
     // 恢复时主动回显持久化的计划与审批设置，客户端不能按本地默认值猜测。
     // 回显是给恢复它的这条连接的；这次恢复没有改动设置时，不去打扰已经在看这个线程的别的连接。
@@ -1347,6 +1349,7 @@ export class CodexClaudeAppServer {
           params: { threadId, ...usage },
         }),
       )
+    if (held.length > 0) setImmediate(() => this.pendingInteractions.resend(peer, held))
     return {
       ...asRecord(
         this.threadEnvelope(
@@ -2061,7 +2064,10 @@ export class CodexClaudeAppServer {
     if (!thread) throw new ProtocolError(-32602, '未知会话')
     if (thread.runtimeBackend !== 'claude')
       throw new ProtocolError(-32004, 'Claude 入口不能追加其他引擎的会话上下文')
-    const content = parseContextItems(params.items)
+    const messages = parseContextItems(params.items).map((message) => ({
+      ...message,
+      uuid: newId(),
+    }))
     if (!this.runtime.appendContext)
       throw new ProtocolError(-32004, '当前运行时不支持真实上下文追加')
     const turns = this.store.listTurns(threadId)
@@ -2071,7 +2077,8 @@ export class CodexClaudeAppServer {
       turns.some((turn) => turn.status === 'inProgress')
     )
       throw new ProtocolError(-32009, '活动或尚未确认的会话不能追加上下文')
-    // 所有 items 先完整校验，再作为单条有序原生消息追加，避免多项半批落盘。
+    // 所有 items 先完整校验，相邻同角色的合成一条原生消息，整批在一次 CLI 输入里追加；
+    // 落盘对账按每条的 uuid（见 persistedContextBoundary）。照上游不生成回合、不发通知。
     this.store.beginContextInjection(
       {
         threadId,
@@ -2080,7 +2087,7 @@ export class CodexClaudeAppServer {
         sessionId: thread.claudeSessionId ?? newId(),
         existingSession: !!thread.claudeSessionId,
         messageId: newId(),
-        content,
+        messages,
       },
       turns.at(-1)?.id ?? null,
     )
@@ -4963,6 +4970,7 @@ export class CodexClaudeAppServer {
               turn.id,
               item.id,
               event.questions,
+              planMode,
             )
             if (!turnIsActive()) return { answers: {} }
             const contentItems = userInputAnswersAsContent(event.questions, answers)
@@ -5545,10 +5553,13 @@ export class CodexClaudeAppServer {
     turnId: string,
     itemId: string,
     questions: UserInputQuestion[],
+    planMode: boolean,
   ): Promise<UserInputAnswers> {
     const requestId = newId()
     // 题目原样发出去：选项之外能不能自己说，看题目上的 isOther，这里不往选项里补东西。
-    const params = { threadId, turnId, itemId, isBlocking: true, questions }
+    // isBlocking 照上游（core/src/tools/handlers/request_user_input.rs）：只有计划模式是 true；
+    // 只是给客户端展示用的标记，两种都一直等到有人回答
+    const params = { threadId, turnId, itemId, isBlocking: planMode, questions }
     const response = await this.sendServerRequest(
       peer,
       'item/tool/requestUserInput',

@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto'
+import { setTimeout as delay } from 'node:timers/promises'
 import { isDeepStrictEqual } from 'node:util'
 import type { Options, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import { claudeChildEnv } from './claude-provider.mjs'
@@ -21,14 +23,22 @@ export type ContextBlock =
 
 type ImageMediaType = 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'
 
+// 一条原生消息：相邻同角色的注入条目合成一条，按原顺序追加。
+export interface ContextMessage {
+  uuid: string
+  role: 'user' | 'assistant'
+  content: ContextBlock[]
+}
+
 export interface ContextInjection {
   threadId: string
   cwd: string
   model: string | null
   sessionId: string
   existingSession: boolean
+  // 这一批的编号（适配器库里的键），不是原生消息的 uuid
   messageId: string
-  content: ContextBlock[]
+  messages: ContextMessage[]
 }
 
 function record(value: unknown): Record<string, unknown> {
@@ -42,20 +52,38 @@ function keys(value: Record<string, unknown>, allowed: string[]): void {
     throw new ProtocolError(-32602, '注入包含无法无损保留的字段')
 }
 
-// SDK 仅公开 user 追加入口；不能把助手、工具或多模态内容摘要成另一种角色。
-export function parseContextItems(items: unknown): ContextBlock[] {
+// 上游收任意 Responses 条目，原样进模型上下文（不进 thread/read 的历史，也不发通知）。Claude 这边只收
+// 能原样落进原生会话的两种：user 消息（文字、图片）和 assistant 消息（文字）；工具调用、推理、
+// developer 消息等不能换成另一种角色去冒充，直接拒绝。
+export function parseContextItems(items: unknown): Array<Omit<ContextMessage, 'uuid'>> {
   if (!Array.isArray(items) || items.length === 0)
     throw new ProtocolError(-32602, 'items 必须是非空数组')
-  const content: ContextBlock[] = []
+  const messages: Array<Omit<ContextMessage, 'uuid'>> = []
   for (const value of items) {
     const item = record(value)
     keys(item, ['type', 'role', 'content'])
-    if (item.type !== 'message' || item.role !== 'user')
-      throw new ProtocolError(-32602, 'Claude 仅支持追加 user message')
+    if (item.type !== 'message' || (item.role !== 'user' && item.role !== 'assistant'))
+      throw new ProtocolError(-32602, 'Claude 仅支持追加 user、assistant message')
     if (!Array.isArray(item.content) || item.content.length === 0)
       throw new ProtocolError(-32602, 'message.content 必须是非空数组')
+    const role = item.role
+    let last = messages.at(-1)
+    if (last?.role !== role) {
+      last = { role, content: [] }
+      messages.push(last)
+    }
+    const content = last.content
     for (const raw of item.content) {
       const block = record(raw)
+      if (role === 'assistant') {
+        if (block.type !== 'output_text')
+          throw new ProtocolError(-32602, 'Claude 注入的 assistant message 仅支持 output_text')
+        keys(block, ['type', 'text'])
+        if (typeof block.text !== 'string' || block.text.length === 0)
+          throw new ProtocolError(-32602, 'output_text.text 必须是非空字符串')
+        content.push({ type: 'text', text: block.text })
+        continue
+      }
       if (block.type === 'input_text') {
         keys(block, ['type', 'text'])
         if (typeof block.text !== 'string' || block.text.length === 0)
@@ -99,25 +127,107 @@ export function parseContextItems(items: unknown): ContextBlock[] {
       content.push({ type: 'image', source: { type: 'url', url: block.image_url } })
     }
   }
-  return content
+  return messages
 }
 
-// 注入的消息是否已经写进原生历史；已写入时返回当前历史的末尾边界。
+// 注入的消息已经有几条写进了原生历史，以及当前历史的末尾边界。分批送时只会是开头连续的几条，
+// 恢复时从下一条接着送；内容对不上或者顺序乱了不重放。
+export async function persistedContext(
+  sdk: typeof import('@anthropic-ai/claude-agent-sdk'),
+  context: ContextInjection,
+): Promise<{ count: number; boundary: string | null }> {
+  const history = await sdk.getSessionMessages(context.sessionId, { dir: context.cwd })
+  const persisted = context.messages.map((expected) =>
+    history.find((entry) => entry.uuid === expected.uuid),
+  )
+  persisted.forEach((message, index) => {
+    if (!message) return
+    const expected = context.messages[index] as ContextMessage
+    const payload = message.message as Record<string, unknown>
+    if (
+      message.type !== expected.role ||
+      payload.role !== expected.role ||
+      !isDeepStrictEqual(payload.content, expected.content)
+    )
+      throw new ProtocolError(-32000, '原生注入 UUID 的持久内容不一致，禁止重放')
+  })
+  const missing = persisted.findIndex((message) => !message)
+  const count = missing === -1 ? persisted.length : missing
+  if (persisted.slice(count).some(Boolean))
+    throw new ProtocolError(-32000, '原生注入的落盘顺序不对，禁止重放')
+  return { count, boundary: history.at(-1)?.uuid ?? null }
+}
+
+// 整批都写进原生历史时返回当前历史的末尾边界，否则返回 null。
 export async function persistedContextBoundary(
   sdk: typeof import('@anthropic-ai/claude-agent-sdk'),
   context: ContextInjection,
 ): Promise<string | null> {
-  const messages = await sdk.getSessionMessages(context.sessionId, { dir: context.cwd })
-  const message = messages.find((entry) => entry.uuid === context.messageId)
-  if (!message) return null
-  const payload = message.message as Record<string, unknown>
-  if (
-    message.type !== 'user' ||
-    payload.role !== 'user' ||
-    !isDeepStrictEqual(payload.content, context.content)
-  )
-    throw new ProtocolError(-32000, '原生注入 UUID 的持久内容不一致，禁止重放')
-  return messages.at(-1)?.uuid ?? null
+  const { count, boundary } = await persistedContext(sdk, context)
+  return count === context.messages.length ? boundary : null
+}
+
+type Uuid = `${string}-${string}-${string}-${string}-${string}`
+
+// 送给 CLI 的输入帧，分成先后几批。user 是不触发模型请求的追加（shouldQuery: false）；assistant 是
+// CLI 输入流认的回放帧，一读到就收进会话，要等下一条 user 才一起落盘。所以：
+// - user 后面还有 assistant 时，这条 user 自成一批，等它落盘再送下一批，不然它会排到 assistant 后面；
+// - 最后一条是 assistant 时补一条空内容的 user：空的那条不落盘，只让前面的落下去。
+// SDK 的类型只写了 user 帧，assistant 帧按 CLI 的输入格式给。from 是已经落盘的条数，从下一条送起。
+export function contextFrameBatches(context: ContextInjection, from = 0): SDKUserMessage[][] {
+  const user = (uuid: string, content: ContextBlock[]): SDKUserMessage => ({
+    type: 'user',
+    uuid: uuid as Uuid,
+    message: { role: 'user', content },
+    parent_tool_use_id: null,
+    shouldQuery: false,
+    client_composed: true,
+  })
+  const messages = context.messages.slice(from)
+  const batches: SDKUserMessage[][] = [[]]
+  messages.forEach((message, index) => {
+    const batch = batches.at(-1) as SDKUserMessage[]
+    if (message.role === 'user') {
+      batch.push(user(message.uuid, message.content))
+      if (index < messages.length - 1) batches.push([])
+      return
+    }
+    batch.push({
+      type: 'assistant',
+      uuid: message.uuid,
+      session_id: context.sessionId,
+      parent_tool_use_id: null,
+      message: {
+        id: `msg_${message.uuid.replaceAll('-', '')}`,
+        type: 'message',
+        role: 'assistant',
+        model: context.model ?? 'unknown',
+        content: message.content,
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: { input_tokens: 0, output_tokens: 0 },
+      },
+    } as unknown as SDKUserMessage)
+  })
+  if (messages.at(-1)?.role === 'assistant') batches.at(-1)?.push(user(randomUUID(), []))
+  return batches
+}
+
+// 等某条注入的消息写进原生历史。
+export async function nativeMessagePersisted(
+  sdk: typeof import('@anthropic-ai/claude-agent-sdk'),
+  context: ContextInjection,
+  uuid: string | undefined,
+  signal?: AbortSignal,
+): Promise<void> {
+  const deadline = Date.now() + 5_000
+  while (Date.now() < deadline) {
+    signal?.throwIfAborted()
+    const history = await sdk.getSessionMessages(context.sessionId, { dir: context.cwd })
+    if (history.some((entry) => entry.uuid === uuid)) return
+    await delay(50, undefined, signal ? { signal } : undefined)
+  }
+  throw new ProtocolError(-32000, '原生历史未持久化注入 UUID，不能返回成功')
 }
 
 export async function appendNativeContext(
@@ -127,9 +237,9 @@ export async function appendNativeContext(
   nativeProcess: NativeProcess,
 ): Promise<{ boundary: string }> {
   const inspect = (): Promise<string | null> => persistedContextBoundary(sdk, context)
-  const persisted = await inspect()
+  const done = await persistedContext(sdk, context)
   abort.signal.throwIfAborted()
-  if (persisted) return { boundary: persisted }
+  if (done.count === context.messages.length && done.boundary) return { boundary: done.boundary }
   const exists = await sdk.getSessionInfo(context.sessionId, { dir: context.cwd })
   if (context.existingSession && !exists)
     throw new ProtocolError(-32000, '原生会话缺失，不能丢弃历史后追加上下文')
@@ -157,13 +267,11 @@ export async function appendNativeContext(
     spawnClaudeCodeProcess: nativeProcess.spawn.bind(nativeProcess),
   }
   const prompt = (async function* (): AsyncGenerator<SDKUserMessage> {
-    yield {
-      type: 'user',
-      uuid: context.messageId as `${string}-${string}-${string}-${string}-${string}`,
-      message: { role: 'user', content: context.content },
-      parent_tool_use_id: null,
-      shouldQuery: false,
-      client_composed: true,
+    let previous: SDKUserMessage[] | undefined
+    for (const batch of contextFrameBatches(context, done.count)) {
+      if (previous) await nativeMessagePersisted(sdk, context, previous.at(-1)?.uuid, abort.signal)
+      yield* batch
+      previous = batch
     }
   })()
   let success = false
