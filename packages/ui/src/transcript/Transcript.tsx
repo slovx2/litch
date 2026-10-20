@@ -32,13 +32,14 @@ import { useKey, useServices } from '../app/services.tsx'
 import { Dock, Requests } from '../composer/Dock.tsx'
 import type { MessageKey, Translator } from '../i18n/index.ts'
 import { TaskNote } from '../tasks/TaskNote.tsx'
+import { useAgentsUnfinished } from '../tree/agent-view.tsx'
 import { LineageBar } from '../tree/LineageBar.tsx'
 import { TreeCard } from '../tree/TreeCards.tsx'
 import { ActionsProvider } from './actions.tsx'
 import { Notes } from './activity.tsx'
 import { FileLinksProvider, useSessionFileLinks } from './FileLinks.tsx'
 import { AgentAnswer, PlanCard, UserMessage } from './messages.tsx'
-import { ProcessHead, ProcessParts, useAgentsRunning } from './process.tsx'
+import { ProcessHead, ProcessParts } from './process.tsx'
 import { PinProvider, useTranscriptScroll } from './scroll.ts'
 import { TurnTouch, touchTurn, useToggle, useTurnTouched } from './state.ts'
 import { TodoCard } from './Todo.tsx'
@@ -54,8 +55,6 @@ interface TurnBlocks {
   answerId: string | undefined
   /** 整段过程里所有条目的标识 */
   processIds: string[]
-  /** 过程里启动子代理的那几条 */
-  agentIds: string[]
 }
 
 /**
@@ -72,12 +71,10 @@ function useBlocks(
   // biome-ignore lint/correctness/useExhaustiveDependencies: status 变了就是要重算
   return useMemo(() => {
     const inputs = []
-    const agentIds: string[] = []
     for (const id of itemIds) {
       const item = store.get<ItemView>(keys.item(deviceId, sessionId, id))
       if (!item) continue
       const place = cardPlace(item)
-      if (place === 'inline') agentIds.push(id)
       inputs.push(
         item.kind === 'agentMessage'
           ? { id, kind: item.kind, phase: item.phase }
@@ -97,7 +94,6 @@ function useBlocks(
       processIds: blocks.flatMap((block) =>
         block.type === 'process' ? processItemIds(block.parts) : [],
       ),
-      agentIds,
     }
   }, [store, deviceId, sessionId, itemIds, status])
 }
@@ -173,15 +169,11 @@ const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { 
   const ref = useMemo(() => ({ deviceId, sessionId }), [deviceId, sessionId])
   const sessionKey = `${deviceId}:${sessionId}`
   const running = turn?.status === 'running'
-  const { blocks, answerId, processIds, agentIds } = useBlocks(
-    ref,
-    turn?.itemIds ?? [],
-    turn?.status,
-  )
+  const { blocks, answerId, processIds } = useBlocks(ref, turn?.itemIds ?? [], turn?.status)
   const settled = useSettled(ref, running, answerId, meta?.can.finalOnStart === true)
   const touched = useTurnTouched(sessionKey, turnId)
-  // 回合里还有没做完的子代理时不自动收（接口见 process.tsx）
-  const agentsRunning = useAgentsRunning(ref, agentIds)
+  // 回合里还有没做完的子代理时不自动收（状态以子线程为准，见 tree/agent-view.tsx）
+  const agentsRunning = useAgentsUnfinished(deviceId, sessionId, turnId)
   const [open, setOpen] = useToggle(
     sessionKey,
     `p:${turnId}`,

@@ -638,17 +638,17 @@ test('分块：不画的条目不占块、不算进步骤；回合只剩提示�
     ]),
     [{ type: 'notes', key: 'n', itemIds: ['n'] }],
   )
-  // 提醒收尾的回合：模型顺口说的话收进活动，带建议的收尾照样是卡片
+  // 提醒收尾的回合：模型顺口说的话收进过程（当说明段，不算最终回答），带建议的收尾照样是卡片
   assert.deepEqual(
     bucketItems([
       { id: 'u', kind: 'userMessage', remind: true },
-      { id: 'w', kind: 'toolCall', card: true },
+      { id: 'w', kind: 'toolCall', card: 'outside' },
       { id: 'a', kind: 'agentMessage', phase: 'final' },
     ]),
     [
       { type: 'user', itemId: 'u' },
       { type: 'card', itemId: 'w' },
-      { type: 'activity', key: 'a', itemIds: ['a'] },
+      { type: 'process', key: 'a', parts: [{ type: 'note', itemId: 'a' }] },
     ],
   )
 })

@@ -2,8 +2,11 @@
 // 一个回合画成：用户消息 → 过程 → 最终回答。过程按时间排三种东西：说明段（助手的中间说明，和回答同一套正文样式）、
 // 步骤组（两段说明之间连续的工具调用、思考、提示，收成一行汇总）、启动子代理的那一行。
 // 计划、待办、派出的子会话和提案卡片露在过程外面，位置不变。回合结束后整段过程再收成一行。
+
 import type { ItemView } from '../model.mjs'
+import type { AgentThreadView } from '../model-tree.mjs'
 import type { Text } from '../phrase.mjs'
+import { agentRunState, agentStatesOf } from './tree.mjs'
 
 /** 分块只需要知道条目的标识和种类；助手消息还要知道它是过程说明还是回答 */
 export interface BlockInput {
@@ -342,12 +345,15 @@ export interface ProcessTally {
   failed: number
   /** 被拒的步骤数 */
   declined: number
-  /** 失败的子代理数（按条目里记的状态；子线程的实时状态由界面另外接） */
+  /** 失败的子代理数：以子线程为准（agentRunState），没给子代理列表时按条目里报的状态算 */
   agentsFailed: number
 }
 
-/** 整段过程的汇总，给回合结束后收成的那一行用 */
-export function processTally(items: ItemView[]): ProcessTally {
+/** 整段过程的汇总，给回合结束后收成的那一行用。threads 是父会话的子代理列表（keys.agents） */
+export function processTally(
+  items: ItemView[],
+  threads?: readonly AgentThreadView[] | null,
+): ProcessTally {
   const tally: ProcessTally = {
     notes: 0,
     steps: 0,
@@ -357,15 +363,17 @@ export function processTally(items: ItemView[]): ProcessTally {
     agentsFailed: 0,
   }
   const steps: ItemView[] = []
+  const reported = agentStatesOf(items)
   for (const item of items) {
     if (item.kind === 'agentMessage') {
       tally.notes++
     } else if (cardPlace(item) === 'inline' && item.kind === 'toolCall') {
       const agents = item.agents ?? []
       tally.agents += Math.max(1, agents.length)
-      tally.agentsFailed += agents.filter(
-        (agent) => agent.state === 'errored' || agent.state === 'notFound',
-      ).length
+      tally.agentsFailed += agents.filter((agent) => {
+        const thread = threads?.find((entry) => entry.id === agent.threadId)
+        return agentRunState(thread, reported.get(agent.threadId), agent.state) === 'failed'
+      }).length
     } else {
       steps.push(item)
     }

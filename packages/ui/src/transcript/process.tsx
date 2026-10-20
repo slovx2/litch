@@ -7,6 +7,7 @@ import { useT } from '../app/appearance.ts'
 import { duration } from '../app/format.ts'
 import { Caret } from '../app/icons.tsx'
 import { useKeys } from '../app/services.tsx'
+import { useAgents } from '../tree/agent-view.tsx'
 import { TreeCard } from '../tree/TreeCards.tsx'
 import { Steps } from './activity.tsx'
 import { AgentAnswer } from './messages.tsx'
@@ -30,15 +31,6 @@ export const ProcessParts = memo(function ProcessParts({
     return <Steps key={part.key} {...ref} groupKey={part.key} itemIds={part.itemIds} live={live} />
   })
 })
-
-/**
- * 回合里还有没做完的子代理吗：有就不自动收起整段过程（照 Codex）。
- * agentItemIds 是这个回合里启动子代理的那几条。
- * 子代理的状态以子线程为准的推导在另一条线上做，主线合并时在这里接上；现在一律当作都做完了
- */
-export function useAgentsRunning(_ref: SessionRef, _agentItemIds: string[]): boolean {
-  return false
-}
 
 interface ProcessHeadProps extends SessionRef {
   turn: TurnView
@@ -65,9 +57,15 @@ export const ProcessHead = memo(function ProcessHead({
     [deviceId, sessionId, itemIds],
   )
   const values = useKeys<ItemView>(itemKeys)
+  // 失败的子代理以子线程为准，不看派出时那份快照
+  const agents = useAgents(deviceId, sessionId)
   const tally = useMemo(
-    () => processTally(values.filter((value): value is ItemView => value !== undefined)),
-    [values],
+    () =>
+      processTally(
+        values.filter((value): value is ItemView => value !== undefined),
+        agents,
+      ),
+    [values, agents],
   )
   const ended = turn.status === 'failed' || turn.status === 'interrupted' ? turn.status : null
   const time = turn.status !== 'running' && turn.durationMs ? duration(turn.durationMs, t) : null
