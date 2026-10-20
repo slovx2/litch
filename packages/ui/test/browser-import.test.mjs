@@ -1,0 +1,437 @@
+// “从浏览器导入”对话框里不靠浏览器就能测的那几块（src/settings/browser-import-logic.ts）：哪些来源、资料、类别能选；
+// 默认勾哪几类；网站名单怎么认；拼出来的请求；进度只往前走；结果归纳成哪一句、能不能重试；对话框的阶段怎么换；
+// 横幅出不出；两种语言的文案键齐全。
+// 跑法：npm run test --prefix packages/ui（Node 直接读 .ts，不用先构建）。
+import assert from 'node:assert/strict'
+import { test } from 'node:test'
+
+const logic = await import('../src/settings/browser-import-logic.ts')
+const {
+  advance,
+  defaultKinds,
+  defaultProfile,
+  domainOf,
+  draftFor,
+  importStep,
+  initialDraft,
+  kindLook,
+  kindReport,
+  mergeOutcome,
+  orderSources,
+  parseDomains,
+  pickedKinds,
+  reportOf,
+  requestOf,
+  retryRequest,
+  showBanner,
+  sourceBlock,
+  stagesOf,
+  wantsElevation,
+  wantsSystemAuth,
+} = logic
+const { translator } = await import('../src/i18n/index.ts')
+
+const has = (cookies, passwords, history) => ({ cookies, passwords, history })
+const profile = (id, patch = {}) => ({
+  id,
+  name: id,
+  isDefault: false,
+  has: has(true, true, true),
+  ...patch,
+})
+const chrome = {
+  browser: 'chrome',
+  name: 'Google Chrome',
+  kinds: ['cookies', 'passwords', 'history'],
+  promptsSystemAuth: true,
+  needsElevation: false,
+  profiles: [
+    profile('Profile 1'),
+    profile('Default', { isDefault: true, account: 'me@example.com' }),
+  ],
+}
+const firefox = {
+  browser: 'firefox',
+  name: 'Firefox',
+  kinds: ['history'],
+  promptsSystemAuth: false,
+  needsElevation: false,
+  profiles: [profile('abc.default-release', { isDefault: true, has: has(true, true, true) })],
+}
+const edgeEmpty = {
+  browser: 'edge',
+  name: 'Microsoft Edge',
+  kinds: ['cookies', 'passwords', 'history'],
+  promptsSystemAuth: false,
+  needsElevation: true,
+  profiles: [],
+}
+const braveNothing = {
+  browser: 'brave',
+  name: 'Brave',
+  kinds: ['cookies'],
+  promptsSystemAuth: false,
+  needsElevation: false,
+  profiles: [profile('Default', { isDefault: true, has: has(false, true, true) })],
+}
+
+const counts = (patch = {}) => ({
+  status: 'ok',
+  discovered: 10,
+  imported: 10,
+  skippedExisting: 0,
+  skippedInvalid: 0,
+  failed: 0,
+  ...patch,
+})
+
+test('一类能不能勾：读取器读不了的、资料里没有的各有原因', () => {
+  const [ffProfile] = firefox.profiles
+  assert.equal(kindLook(firefox, ffProfile, 'history'), 'ok')
+  assert.equal(kindLook(firefox, ffProfile, 'cookies'), 'unsupported')
+  assert.equal(kindLook(braveNothing, braveNothing.profiles[0], 'cookies'), 'missing')
+  assert.equal(kindLook(chrome, undefined, 'cookies'), 'missing')
+})
+
+test('来源选不了的原因；能选的排在前面，其余照原顺序', () => {
+  assert.equal(sourceBlock(chrome), null)
+  assert.equal(sourceBlock(edgeEmpty), 'noProfiles')
+  assert.equal(sourceBlock(braveNothing), 'nothing')
+  const order = orderSources([edgeEmpty, chrome, braveNothing, firefox]).map((one) => one.browser)
+  assert.deepEqual(order, ['chrome', 'firefox', 'edge', 'brave'])
+})
+
+test('默认资料是浏览器自己的默认那份；默认勾 Cookie 和密码，浏览记录不勾', () => {
+  assert.equal(defaultProfile(chrome).id, 'Default')
+  // 默认那份导不了：用第一份能导的
+  const odd = {
+    ...chrome,
+    profiles: [
+      profile('Default', { isDefault: true, has: has(false, false, false) }),
+      profile('Work'),
+    ],
+  }
+  assert.equal(defaultProfile(odd).id, 'Work')
+  assert.deepEqual(defaultKinds(chrome, chrome.profiles[1]), has(true, true, false))
+  // 读取器不支持的不勾
+  assert.deepEqual(defaultKinds(firefox, firefox.profiles[0]), has(false, false, false))
+})
+
+test('表单初值、换来源时类别回到默认、名单和管理员同意留着', () => {
+  assert.equal(initialDraft([edgeEmpty, braveNothing]), null)
+  const draft = initialDraft([edgeEmpty, firefox, chrome])
+  assert.equal(draft.browser, 'firefox')
+  assert.equal(draft.profileId, 'abc.default-release')
+  const edited = { ...draft, onlyDomains: true, domainsText: 'github.com', allowElevated: true }
+  const next = draftFor(chrome, undefined, edited)
+  assert.equal(next.browser, 'chrome')
+  assert.equal(next.profileId, 'Default')
+  assert.deepEqual(next.kinds, has(true, true, false))
+  assert.equal(next.onlyDomains, true)
+  assert.equal(next.domainsText, 'github.com')
+  assert.equal(next.allowElevated, true)
+  // 指定的资料选得了就用它
+  assert.equal(draftFor(chrome, 'Profile 1').profileId, 'Profile 1')
+  assert.equal(draftFor(chrome, 'nope').profileId, 'Default')
+})
+
+test('网站名单：网址取主机，前导点、*.、端口、路径不要，大小写统一，重复的只留一个', () => {
+  assert.equal(domainOf('https://Accounts.Example.com/login?x=1'), 'accounts.example.com')
+  assert.equal(domainOf('.example.com'), 'example.com')
+  assert.equal(domainOf('*.example.com'), 'example.com')
+  assert.equal(domainOf('example.com:8443/path'), 'example.com')
+  assert.equal(domainOf('example.com.'), 'example.com')
+  assert.equal(domainOf('localhost'), 'localhost')
+  assert.equal(domainOf('127.0.0.1'), '127.0.0.1')
+  assert.equal(domainOf('例子.测试'), 'xn--fsqu00a.xn--0zwm56d')
+  assert.equal(domainOf(''), null)
+  assert.equal(domainOf('a_b.com'), null)
+  assert.equal(domainOf('-bad.com'), null)
+  assert.equal(domainOf('http://'), null)
+  assert.deepEqual(parseDomains(' github.com, GitHub.com\nexample.org；foo_bar  .x.dev，'), {
+    domains: ['github.com', 'example.org', 'x.dev'],
+    bad: ['foo_bar'],
+  })
+  assert.deepEqual(parseDomains('  '), { domains: [], bad: [] })
+})
+
+test('提示：系统授权、管理员同意只在勾了 Cookie 或密码时出', () => {
+  assert.equal(wantsSystemAuth(chrome, ['history']), false)
+  assert.equal(wantsSystemAuth(chrome, ['passwords']), true)
+  assert.equal(wantsSystemAuth(firefox, ['cookies']), false)
+  const edge = { ...edgeEmpty, profiles: [profile('Default')] }
+  assert.equal(wantsElevation(edge, ['cookies', 'history']), true)
+  assert.equal(wantsElevation(edge, ['history']), false)
+  assert.equal(wantsElevation(chrome, ['cookies']), false)
+})
+
+test('拼请求：只带勾了又能导的；名单只在勾了 Cookie 时用；管理员同意只在要的时候发', () => {
+  const edge = { ...edgeEmpty, profiles: [profile('Default', { isDefault: true })] }
+  const sources = [chrome, firefox, edge]
+  const draft = draftFor(chrome, undefined)
+  assert.deepEqual(requestOf(sources, draft), {
+    request: {
+      browser: 'chrome',
+      profileId: 'Default',
+      kinds: ['cookies', 'passwords'],
+      allowElevated: false,
+    },
+  })
+  // 勾了管理员同意，但这个来源不要：不发 true
+  assert.equal(requestOf(sources, { ...draft, allowElevated: true }).request.allowElevated, false)
+  const edgeDraft = { ...draftFor(edge, undefined), allowElevated: true }
+  assert.equal(requestOf(sources, edgeDraft).request.allowElevated, true)
+  assert.equal(
+    requestOf(sources, { ...edgeDraft, kinds: has(false, false, true) }).request.allowElevated,
+    false,
+  )
+  // 一类都没勾
+  assert.deepEqual(requestOf(sources, { ...draft, kinds: has(false, false, false) }), {
+    problem: 'noKinds',
+  })
+  // 勾了读不了的那一类不算
+  const ff = { ...draftFor(firefox, undefined), kinds: has(true, true, false) }
+  assert.deepEqual(pickedKinds(sources, ff), [])
+  assert.equal(requestOf(sources, ff).problem, 'noKinds')
+  // 名单
+  const only = { ...draft, onlyDomains: true }
+  assert.deepEqual(requestOf(sources, { ...only, domainsText: '' }), { problem: 'noDomains' })
+  assert.deepEqual(requestOf(sources, { ...only, domainsText: 'ok.com, b@d' }), {
+    problem: 'badDomains',
+    bad: ['b@d'],
+  })
+  assert.deepEqual(
+    requestOf(sources, { ...only, domainsText: 'https://GitHub.com/x' }).request.cookieDomains,
+    ['github.com'],
+  )
+  // 没勾 Cookie 时名单不发、写错了也不拦
+  const noCookies = { ...only, domainsText: 'b@d', kinds: has(false, true, false) }
+  const built = requestOf(sources, noCookies)
+  assert.equal(built.request.cookieDomains, undefined)
+  // 来源或资料不在了
+  assert.deepEqual(requestOf(sources, { ...draft, profileId: 'gone' }), { problem: 'noSource' })
+})
+
+test('进度只往前走，不是这次要导的类别不理', () => {
+  let stages = stagesOf(['cookies', 'history'])
+  assert.deepEqual(stages, { cookies: 'waiting', history: 'waiting' })
+  stages = advance(stages, { kind: 'cookies', phase: 'writing' })
+  stages = advance(stages, { kind: 'cookies', phase: 'reading' })
+  assert.equal(stages.cookies, 'writing')
+  const same = advance(stages, { kind: 'passwords', phase: 'done' })
+  assert.equal(same, stages)
+  stages = advance(stages, { kind: 'history', phase: 'done' })
+  assert.deepEqual(stages, { cookies: 'writing', history: 'done' })
+})
+
+test('一类的结果：每种状态的语气、说法、能不能重试', () => {
+  const look = (patch) => {
+    const line = kindReport('cookies', counts(patch))
+    return [line.tone, line.say, line.retry]
+  }
+  assert.deepEqual(look({}), ['ok', 'bimport.status.ok', null])
+  assert.deepEqual(look({ failed: 2 }), ['warn', 'bimport.status.okFailed', null])
+  assert.deepEqual(look({ discovered: 0, imported: 0 }), ['quiet', 'bimport.status.empty', null])
+  assert.deepEqual(look({ status: 'partial', failed: 3 }), ['warn', 'bimport.status.partial', null])
+  assert.deepEqual(look({ status: 'missing' }), ['quiet', 'bimport.status.missing', null])
+  assert.deepEqual(look({ status: 'locked' }), ['err', 'bimport.status.locked', 'again'])
+  assert.deepEqual(look({ status: 'denied' }), ['err', 'bimport.status.denied', 'again'])
+  assert.deepEqual(look({ status: 'needs-elevation' }), [
+    'err',
+    'bimport.status.needsElevation',
+    'elevate',
+  ])
+  assert.deepEqual(look({ status: 'unsupported' }), ['quiet', 'bimport.status.unsupported', null])
+  assert.deepEqual(look({ status: 'cancelled' }), ['quiet', 'bimport.status.cancelled', null])
+  assert.deepEqual(look({ status: 'failed' }), ['err', 'bimport.status.failed', 'again'])
+  assert.deepEqual(look({ status: 'skipped' }), ['quiet', 'bimport.status.skipped', null])
+  // 主进程没报这一类：当没成，能重试
+  const lost = kindReport('history', undefined)
+  assert.equal(lost.status, 'failed')
+  assert.equal(lost.retry, 'again')
+  // 英文原话只放进详情
+  assert.equal(kindReport('cookies', counts({ status: 'failed', error: 'disk' })).error, 'disk')
+  assert.equal('error' in kindReport('cookies', counts()), false)
+})
+
+test('整次的结果：全成、部分成、都没成、停了、资料不在、另一个在导', () => {
+  const kinds = ['cookies', 'passwords', 'history']
+  const of = (record, error) => reportOf(kinds, { ...(error ? { error } : {}), kinds: record })
+  const all = { cookies: counts(), passwords: counts(), history: counts() }
+  assert.equal(of(all).overall, 'ok')
+  assert.equal(of(all).say, 'bimport.overall.ok')
+  // 没数据的不拖累：一类成、一类没有
+  assert.equal(of({ ...all, history: counts({ status: 'missing' }) }).overall, 'ok')
+  assert.equal(of({ ...all, cookies: counts({ failed: 1 }) }).overall, 'partial')
+  const mixed = of({ ...all, cookies: counts({ status: 'locked' }) })
+  assert.equal(mixed.overall, 'partial')
+  assert.deepEqual(mixed.again, ['cookies'])
+  const bad = of({
+    cookies: counts({ status: 'locked' }),
+    passwords: counts({ status: 'needs-elevation' }),
+    history: counts({ status: 'missing' }),
+  })
+  assert.equal(bad.overall, 'failed')
+  assert.deepEqual(bad.again, ['cookies'])
+  assert.deepEqual(bad.elevate, ['passwords'])
+  const stopped = of({
+    cookies: counts(),
+    passwords: counts({ status: 'cancelled' }),
+    history: counts({ status: 'skipped' }),
+  })
+  assert.equal(stopped.overall, 'cancelled')
+  // 整体性的失败：不列逐类
+  const gone = of({}, 'profile-gone')
+  assert.equal(gone.overall, 'profile-gone')
+  assert.equal(gone.say, 'bimport.overall.profileGone')
+  assert.deepEqual(gone.kinds, [])
+  assert.equal(of({}, 'busy').overall, 'busy')
+  // 按固定的先后列，只列这次要导的和主进程报了的
+  const two = reportOf(['history', 'cookies'], { kinds: { cookies: counts(), history: counts() } })
+  assert.deepEqual(
+    two.kinds.map((line) => line.kind),
+    ['cookies', 'history'],
+  )
+})
+
+test('重试：照原样能重试的几类，勾了管理员同意再加要提权的；网站名单从最初的请求取', () => {
+  const origin = {
+    browser: 'edge',
+    profileId: 'Default',
+    kinds: ['cookies', 'passwords', 'history'],
+    cookieDomains: ['github.com'],
+    allowElevated: false,
+  }
+  const report = reportOf(origin.kinds, {
+    kinds: {
+      cookies: counts({ status: 'needs-elevation' }),
+      passwords: counts({ status: 'locked' }),
+      history: counts(),
+    },
+  })
+  assert.deepEqual(retryRequest(origin, report, false), {
+    browser: 'edge',
+    profileId: 'Default',
+    kinds: ['passwords'],
+    allowElevated: false,
+  })
+  assert.deepEqual(retryRequest(origin, report, true), {
+    browser: 'edge',
+    profileId: 'Default',
+    kinds: ['cookies', 'passwords'],
+    cookieDomains: ['github.com'],
+    allowElevated: true,
+  })
+  const onlyElevate = reportOf(['cookies'], {
+    kinds: { cookies: counts({ status: 'needs-elevation' }) },
+  })
+  assert.equal(retryRequest(origin, onlyElevate, false), null)
+  const fine = reportOf(['cookies'], { kinds: { cookies: counts() } })
+  assert.equal(retryRequest(origin, fine, true), null)
+})
+
+test('重试的结果并进上一次的；整体性的失败以这一次为准', () => {
+  const first = { kinds: { cookies: counts({ status: 'locked' }), history: counts() } }
+  const merged = mergeOutcome(first, { kinds: { cookies: counts({ imported: 4 }) } })
+  assert.equal(merged.kinds.cookies.imported, 4)
+  assert.equal(merged.kinds.history.status, 'ok')
+  assert.deepEqual(mergeOutcome(first, { error: 'busy', kinds: {} }), { error: 'busy', kinds: {} })
+  assert.deepEqual(mergeOutcome(undefined, first), first)
+})
+
+test('对话框的阶段：找来源 → 选 → 导 → 结果 → 重试 → 结果；迟到的进度、不合阶段的事不理', () => {
+  const request = {
+    browser: 'chrome',
+    profileId: 'Default',
+    kinds: ['cookies', 'passwords'],
+    allowElevated: false,
+  }
+  let step = { name: 'loading' }
+  assert.equal(importStep(step, { type: 'start', request }), step)
+  step = importStep(step, { type: 'loaded', sources: [edgeEmpty, chrome] })
+  assert.equal(step.name, 'pick')
+  assert.deepEqual(
+    step.sources.map((one) => one.browser),
+    ['chrome', 'edge'],
+  )
+  assert.equal(logic.canClose(step), true)
+  step = importStep(step, { type: 'start', request })
+  assert.equal(step.name, 'running')
+  assert.equal(logic.canClose(step), false)
+  step = importStep(step, { type: 'progress', progress: { kind: 'cookies', phase: 'reading' } })
+  assert.equal(step.stages.cookies, 'reading')
+  // 正在导的时候不重新找来源
+  assert.equal(importStep(step, { type: 'load' }), step)
+  step = importStep(step, { type: 'stop' })
+  assert.equal(step.stopping, true)
+  step = importStep(step, {
+    type: 'finished',
+    outcome: { kinds: { cookies: counts({ status: 'locked' }), passwords: counts() } },
+  })
+  assert.equal(step.name, 'done')
+  assert.equal(step.origin, request)
+  const late = importStep(step, {
+    type: 'progress',
+    progress: { kind: 'cookies', phase: 'done' },
+  })
+  assert.equal(late, step)
+  const retry = { ...request, kinds: ['cookies'] }
+  step = importStep(step, { type: 'retry', request: retry })
+  assert.equal(step.name, 'running')
+  assert.deepEqual(step.stages, { cookies: 'waiting' })
+  assert.equal(step.origin, request)
+  step = importStep(step, { type: 'finished', outcome: { kinds: { cookies: counts() } } })
+  assert.equal(reportOf(step.origin.kinds, step.outcome).overall, 'ok')
+  // 回去重新选
+  step = importStep(step, { type: 'back' })
+  assert.equal(step.name, 'pick')
+  // 开始不了（接口出错）
+  step = importStep(step, { type: 'start', request })
+  step = importStep(step, { type: 'startFailed', reason: 'x' })
+  assert.deepEqual(step.name, 'startFailed')
+  assert.equal(importStep(step, { type: 'back' }).name, 'pick')
+  // 找来源失败、重新找
+  let load = importStep({ name: 'loading' }, { type: 'loadFailed', reason: 'boom' })
+  assert.deepEqual(load, { name: 'loadFailed', reason: 'boom' })
+  load = importStep(load, { type: 'load' })
+  assert.deepEqual(load, { name: 'loading' })
+})
+
+test('横幅：状态取到了、从没导过、没关过才出', () => {
+  assert.equal(showBanner(null), false)
+  assert.equal(showBanner({}), true)
+  assert.equal(showBanner({ lastImportAt: 1 }), false)
+  assert.equal(showBanner({ bannerDismissedAt: 1 }), false)
+})
+
+test('两种语言都有逻辑里用到的每一句，带名字的句子填得上', async () => {
+  const { zhBimport } = await import('../src/i18n/zh-CN-bimport.ts')
+  const { enBimport } = await import('../src/i18n/en-bimport.ts')
+  assert.deepEqual(Object.keys(enBimport).sort(), Object.keys(zhBimport).sort())
+  const used = [
+    ...Object.values(logic.BLOCK_TEXT),
+    ...Object.values(logic.LOOK_TEXT),
+    ...Object.values(logic.PROBLEM_TEXT),
+    ...Object.values(logic.STAGE_TEXT),
+    ...Object.values(logic.OVERALL_TEXT),
+    'bimport.status.ok',
+    'bimport.status.okFailed',
+    'bimport.status.empty',
+    'bimport.status.partial',
+    'bimport.status.missing',
+    'bimport.status.locked',
+    'bimport.status.denied',
+    'bimport.status.needsElevation',
+    'bimport.status.unsupported',
+    'bimport.status.cancelled',
+    'bimport.status.failed',
+    'bimport.status.skipped',
+  ]
+  for (const key of used) assert.ok(key in zhBimport, key)
+  for (const lang of ['zh-CN', 'en']) {
+    const t = translator(lang)
+    assert.match(t('bimport.status.locked', { name: 'Google Chrome' }), /Google Chrome/)
+    assert.match(t('bimport.count.imported', { n: 12 }), /12/)
+    assert.doesNotMatch(t('bimport.hint.close', { name: 'Firefox' }), /\{name\}/)
+  }
+})

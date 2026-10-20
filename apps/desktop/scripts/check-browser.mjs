@@ -5,8 +5,10 @@
 //   node scripts/check-browser.mjs --ui     浏览器面板：真的界面（先构建 packages/ui）对着页面里的模拟核心，
 //                                          量矩形、叠上去、收起摘下、浮层撤下、show 打开面板
 //   加 --shown                             V0 那一项改成窗口透明度 0、不接鼠标地显示（对照窗口在屏幕上的情形）
+//   node scripts/check-browser.mjs --import 从别的浏览器导入：真的界面（先构建 packages/ui）、真的导入管线，
+//                                          读取器是假的、来源是临时目录里自造的样本（LITCH_BROWSER_IMPORT_FAKE）
 import { spawn } from 'node:child_process'
-import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -17,12 +19,15 @@ const require = createRequire(import.meta.url)
 const electron = require('electron')
 const appDir = fileURLToPath(new URL('..', import.meta.url))
 const v0 = process.argv.includes('--v0')
-const ui = process.argv.includes('--ui')
+const imports = process.argv.includes('--import')
+const ui = process.argv.includes('--ui') || imports
 const entry = v0
   ? 'src/probe-browser-v0.mts'
-  : ui
-    ? 'src/probe-browser-ui.mts'
-    : 'src/probe-browser.mts'
+  : imports
+    ? 'src/probe-browser-import.mts'
+    : ui
+      ? 'src/probe-browser-ui.mts'
+      : 'src/probe-browser.mts'
 const uiRoot = fileURLToPath(new URL('../../../packages/ui/dist', import.meta.url))
 if (ui && !existsSync(join(uiRoot, 'index.html'))) {
   console.error('没有界面的构建产物，先 npm run build --prefix packages/ui')
@@ -70,6 +75,11 @@ const env = {
   LITCH_PROBE_PRELOAD: preload,
 }
 if (process.argv.includes('--shown')) env.LITCH_V0_SHOWN = '1'
+// 导入的样本：空目录交给主进程，它自己摆一套（browser-import/test/sample.mts），跑完随临时目录删掉
+if (imports) {
+  env.LITCH_BROWSER_IMPORT_FAKE = join(work, 'samples')
+  mkdirSync(env.LITCH_BROWSER_IMPORT_FAKE)
+}
 delete env.ELECTRON_RUN_AS_NODE
 
 const child = spawn(electron, [outfile], { env, stdio: ['ignore', 'pipe', 'pipe'] })

@@ -5,6 +5,7 @@
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { useT } from '../../app/appearance.ts'
 import { Back, Close, Forward, Icon, Plus, Stop } from '../../app/icons.tsx'
+import { useBrowserImport } from '../../settings/BrowserImportEntry.tsx'
 import type { SideTabProps } from '../tabs.ts'
 import { type BrowserBridge, type BrowserTabInfo, browserBridge, ownerKey } from './bridge.ts'
 import { usePlacement } from './place.ts'
@@ -44,6 +45,8 @@ function BrowserPane({
   const currentId = chooseTab(mine, chosen[key], wanted[key])
   const current = mine.find((tab) => tab.id === currentId)
   const view = useRef<HTMLDivElement>(null)
+  // 从别的浏览器导入：工具栏上的菜单、工具栏下面的横幅、对话框
+  const imports = useBrowserImport(bridge)
   usePlacement(bridge, shown ? (currentId ?? null) : null, view)
 
   // 地址栏：没在改的时候跟着网页走，正在改的时候不被网页的跳转冲掉
@@ -186,11 +189,14 @@ function BrowserPane({
         >
           <ExternalGlyph />
         </button>
+        {imports.menu}
       </form>
+      {imports.banner}
       {current?.agentActive && <div className="bw-agent-bar">{t('browser.agentBar')}</div>}
       <div className="bw-view" ref={view}>
         {!current && <div className="bw-empty dim">{t('browser.empty')}</div>}
       </div>
+      {imports.dialog}
     </div>
   )
 }

@@ -1,6 +1,7 @@
 // 中文文案。这一份是“有哪些句子”的依据：键的集合以这里为准，别的语言必须一句不少。
 // 前半是界面自己的话，后半是核心要说的话（键和 packages/core/src/phrase.mts 一一对应）。
 import type { Entry } from './types.ts'
+import { zhBimport } from './zh-CN-bimport.ts'
 import { zhHconfig } from './zh-CN-hconfig.ts'
 import { zhOnboard } from './zh-CN-onboard.ts'
 import { zhPairing } from './zh-CN-pairing.ts'
@@ -18,6 +19,8 @@ export const zhCN = {
   ...zhHconfig,
   // 建议任务（提案卡片、侧面板的“建议任务”、改了再开始）的文案也单独放（zh-CN-proposals.ts）
   ...zhProposals,
+  // 内置浏览器从别的浏览器导入的文案也单独放（zh-CN-bimport.ts）
+  ...zhBimport,
   'title.location': '当前位置',
   'workspace.none': '无项目',
 

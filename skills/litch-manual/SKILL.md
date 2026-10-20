@@ -91,6 +91,7 @@ command: `scripts/litch harness restart`, `scripts/litch devices reconnect`, or 
 | E7 | Irreversible changes without asking | Ask first, then the user confirms in Litch (rules 3 and 4) |
 | E8 | Keyboard shortcuts | Not configurable in Litch; you can only tell the user what they are |
 | E9 | Settings of the Litch app on a phone | The desktop cannot reach them; tell the user where they are in the phone app |
+| E10 | Import cookies, passwords or history from another browser; see or copy saved passwords | There is no command. Tell the user where to click: Settings → Built-in browser → Import from another browser, or the Browser tab's menu (`references/browser-and-computer-use.md`). Saved passwords cannot be shown or copied at all |
 
 When you hit one of these, say plainly which step the user has to do, where, and what happens after.
 

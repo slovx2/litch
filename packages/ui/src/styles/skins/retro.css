@@ -517,3 +517,15 @@
   rx: 0;
   ry: 0;
 }
+/* 从别的浏览器导入（styles/browser-import.css）：逐类的框是实线、行间虚线；面板上的横幅不垫底色、下边一道虚线 */
+[data-skin="retro"] .bimp-lines {
+  border-color: var(--line-3);
+}
+[data-skin="retro"] .bimp-line + .bimp-line {
+  border-top-style: dashed;
+  border-top-color: var(--line-2);
+}
+[data-skin="retro"] .bimp-banner {
+  background: none;
+  border-bottom: 1px dashed var(--line-2);
+}
