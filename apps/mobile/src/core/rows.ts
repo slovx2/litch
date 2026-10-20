@@ -173,9 +173,13 @@ export class RowBuilder {
       }
       this.pushGroup(out, turn, steps)
     }
+    const first = turn.itemIds[0] ? view.items[turn.itemIds[0]] : undefined
+    // 提醒收尾的回合只是补调一次收尾：模型顺口说的“好的”不画（手机上回答没有折叠处），建议的卡片照样画
+    const remind = first?.kind === 'userMessage' && first.event?.kind === 'remind'
     for (const itemId of turn.itemIds) {
       const item = view.items[itemId]
       if (!item) continue
+      if (remind && item.kind === 'agentMessage') continue
       const cards = item.kind === 'toolCall' ? cardsOf(item, view.proposals) : null
       if (cards && item.kind === 'toolCall') {
         // 没带建议的收尾不画，也不把前后两段过程拆开

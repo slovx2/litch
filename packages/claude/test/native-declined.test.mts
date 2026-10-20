@@ -58,7 +58,9 @@ async function declinedTurn(
       .filter((x) => x.method === method && x.params.turnId === turn.id)
       .map((x) => x.params)
   const started = ofTurn('item/started').map((params) => params.item)
-  const tool = started.find((item: any) => item.type !== 'agentMessage')
+  const tool = started.find(
+    (item: any) => item.type !== 'agentMessage' && item.type !== 'userMessage',
+  )
   assert.ok(tool, '被拒绝的调用也有条目')
   const completed = ofTurn('item/completed')
     .map((params) => params.item)
