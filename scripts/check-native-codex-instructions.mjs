@@ -64,8 +64,8 @@ for (const directory of Object.values(dirs)) mkdirSync(directory, { recursive: t
 const runtimeSocket = join(dirs.adapterHome, 'codex', 'runtime.sock')
 const deviceSocket = join(dirs.adapterHome, 'device', 'device.sock')
 
-// 认标记：规则的头一句、config.toml 那段里的记号
-const RULES_MARK = 'Suggested tasks (Litch).'
+// 认标记：规则的头一句（从构建产物里取，规则改写了也跟着变）、config.toml 那段里的记号
+const RULES_MARK = SESSION_TOOLS.instructions.split('. ')[0]
 const CONFIG_MARK = 'CFG_MARK_7Q'
 
 // ---------- 假模型：记下每次请求里两个标记各出现几次，压缩请求回一段摘要 ----------
