@@ -62,11 +62,13 @@ function useBlocks({ deviceId, sessionId }: SessionRef, itemIds: string[]): Turn
       inputs.push(
         item.kind === 'agentMessage'
           ? { id, kind: item.kind, phase: item.phase }
-          : cardOf(item)
-            ? { id, kind: item.kind, card: true }
-            : quietOf(item)
-              ? { id, kind: item.kind, quiet: true }
-              : { id, kind: item.kind },
+          : item.kind === 'userMessage' && item.event?.kind === 'remind'
+            ? { id, kind: item.kind, remind: true }
+            : cardOf(item)
+              ? { id, kind: item.kind, card: true }
+              : quietOf(item)
+                ? { id, kind: item.kind, quiet: true }
+                : { id, kind: item.kind },
       )
     }
     return { blocks: bucketItems(inputs), kinds }

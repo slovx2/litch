@@ -12,6 +12,8 @@ export interface BlockInput {
   card?: boolean
   /** 不画的条目（quietOf）：空的收尾调用。不占块，也不算进活动的步数 */
   quiet?: boolean
+  /** 设备进程提醒收尾的那条用户消息（event.kind 是 remind）：这个回合里模型说的话都收进活动块 */
+  remind?: boolean
 }
 
 export type Block =
@@ -29,6 +31,8 @@ export type Block =
 export function bucketItems(items: BlockInput[]): Block[] {
   const blocks: Block[] = []
   const shown = items.filter((item) => item.quiet !== true)
+  // 提醒收尾的回合只是补调一次收尾，模型顺口说的“好的”不算回答：收进活动块，建议的卡片照样露在外面
+  const remind = shown[0]?.kind === 'userMessage' && shown[0].remind === true
   for (const item of shown) {
     if (item.kind === 'userMessage') {
       blocks.push({ type: 'user', itemId: item.id })
@@ -39,7 +43,7 @@ export function bucketItems(items: BlockInput[]): Block[] {
     } else if (item.kind === 'todo') {
       // 待办进度一直露在外面，不跟着活动区收起来
       blocks.push({ type: 'todo', itemId: item.id })
-    } else if (item.kind === 'agentMessage' && item.phase !== 'commentary') {
+    } else if (item.kind === 'agentMessage' && item.phase !== 'commentary' && !remind) {
       // 分不清阶段的（unknown）按回答显示：宁可多露出一段文字，也不能把回答藏进折叠里
       blocks.push({ type: 'answer', itemId: item.id })
     } else {

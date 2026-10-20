@@ -635,6 +635,19 @@ test('分块：不画的条目不占块、不算进活动；回合只剩说明�
     ]),
     [{ type: 'notes', key: 'n', itemIds: ['n'] }],
   )
+  // 提醒收尾的回合：模型顺口说的话收进活动，带建议的收尾照样是卡片
+  assert.deepEqual(
+    bucketItems([
+      { id: 'u', kind: 'userMessage', remind: true },
+      { id: 'w', kind: 'toolCall', card: true },
+      { id: 'a', kind: 'agentMessage', phase: 'final' },
+    ]),
+    [
+      { type: 'user', itemId: 'u' },
+      { type: 'card', itemId: 'w' },
+      { type: 'activity', key: 'a', itemIds: ['a'] },
+    ],
+  )
 })
 
 test('提案卡片写什么：开始了、子会话在侧栏里的写实际的 harness、目录、方式；别的写提案的，没给的跟父会话', () => {
