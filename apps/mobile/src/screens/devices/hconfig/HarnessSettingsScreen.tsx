@@ -1,5 +1,6 @@
 // 一台设备上一个 harness 的详情设置（15 号设计，决 317）：从设备详情里那个 harness 的“详情设置”进来。
-// 四块各占一个标签：配置（能改）、账号（登录、API key、切换 provider、自定义 provider）、MCP 和指令文件（只能看）。
+// 四块各占一个标签：配置（能改）、账号（登录、API key、切换 provider、自定义 provider）、MCP 和指令文件（只能看）；
+// 配置里说有模型清单（modelCatalog）的 harness 多一个“模型”标签（能改）。
 // 内容全按对面的声明画，界面不认识哪一项是干什么的。改过要重启才生效的，顶上一直提示，可以就地重启。
 // 开着这一页才订阅（harnessConfig 主题），核心这时才去设备上读。
 import type { DeviceView } from '@litch/core'
@@ -18,12 +19,13 @@ import { useTheme } from '../../../ui/theme'
 import { AccountsTab } from './AccountsTab'
 import { ConfigTab } from './ConfigTab'
 import { pageState } from './logic'
+import { ModelsTab } from './ModelsTab'
 import { Note, SaidNote, useHarnessConfig, useSaid } from './parts'
 import { InstructionsTab, McpTab } from './ReadOnlyTabs'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'HarnessSettings'>
-type Tab = 'config' | 'accounts' | 'mcp' | 'instructions'
-const TABS: readonly Tab[] = ['config', 'accounts', 'mcp', 'instructions']
+type Tab = 'config' | 'accounts' | 'models' | 'mcp' | 'instructions'
+const TABS: readonly Tab[] = ['config', 'accounts', 'models', 'mcp', 'instructions']
 
 export function HarnessSettingsScreen({ route }: Props) {
   const { deviceId, harness: harnessId } = route.params
@@ -38,15 +40,20 @@ export function HarnessSettingsScreen({ route }: Props) {
     harnessId
   const state = pageState(view)
   const ready = state === 'ready' && view !== undefined && view !== 'error' ? view : null
+  const tabs = TABS.filter((one) => one !== 'models' || ready?.config.data?.modelCatalog === true)
+  // 模型标签没了（重读后说没有了）：回到配置
+  const shown: Tab = tabs.includes(tab) ? tab : 'config'
 
   let body = null
   if (ready) {
     body =
-      tab === 'config' ? (
+      shown === 'config' ? (
         <ConfigTab deviceId={deviceId} harnessId={harnessId} slot={ready.config} />
-      ) : tab === 'accounts' ? (
+      ) : shown === 'accounts' ? (
         <AccountsTab deviceId={deviceId} harnessId={harnessId} view={ready} />
-      ) : tab === 'mcp' ? (
+      ) : shown === 'models' ? (
+        <ModelsTab deviceId={deviceId} harnessId={harnessId} name={name} slot={ready.models} />
+      ) : shown === 'mcp' ? (
         <McpTab deviceId={deviceId} harnessId={harnessId} slot={ready.mcp} />
       ) : (
         <InstructionsTab deviceId={deviceId} harnessId={harnessId} slot={ready.instructions} />
@@ -84,11 +91,11 @@ export function HarnessSettingsScreen({ route }: Props) {
               { borderBottomColor: theme.c.line1, backgroundColor: theme.c.panel },
             ]}
           >
-            {TABS.map((one) => (
+            {tabs.map((one) => (
               <Chip
                 key={one}
                 label={t(`hc.tab.${one}`)}
-                on={tab === one}
+                on={shown === one}
                 testID={`hc:tab:${one}:pick`}
                 onPress={() => setTab(one)}
               />
