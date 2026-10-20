@@ -284,3 +284,108 @@
   font-size: 11px;
   overflow-wrap: anywhere;
 }
+
+/* 模型清单：一项一行，右边是上下移、改、删；对话框里挑底稿的单子 */
+.hc-models-head {
+  border-top: 0;
+  padding-top: 4px;
+}
+.hc-models .mng-sec-head h2 {
+  flex: 0 1 auto;
+}
+.hc-locked {
+  color: var(--wait);
+}
+.hc-model .mng-row-title {
+  min-width: 0;
+}
+.hc-model-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+  min-width: 0;
+}
+.hc-model-line code {
+  min-width: 0;
+  max-width: 100%;
+  font-size: 11px;
+}
+.hc-model-line .err {
+  color: var(--err);
+}
+.hc-model-acts {
+  align-self: center;
+  gap: 4px;
+}
+.hc-model-acts .ibtn:disabled {
+  opacity: 0.35;
+}
+.hc-window {
+  font-variant-numeric: tabular-nums;
+}
+@container devp (max-width: 470px) {
+  .hc-model {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .hc-model-acts {
+    justify-content: flex-start;
+  }
+}
+.hc-bases {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.hc-base-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 232px;
+  overflow-y: auto;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r1);
+  background: var(--panel);
+}
+.hc-base-opt {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 8px;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 18px;
+}
+.hc-base-opt + .hc-base-opt {
+  border-top: 1px solid var(--line-1);
+}
+.hc-base-opt[data-picked="true"] {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.hc-base-opt input {
+  margin: 3px 0 0;
+  flex: none;
+}
+.hc-base-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.hc-base-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.hc-base-name b {
+  min-width: 0;
+  font-weight: 600;
+}
+.hc-base-text code {
+  font-size: 11px;
+}
+.hc-dialog-body .hc-window-input {
+  max-width: 220px;
+}
+.hc-dialog-body .seg {
+  align-self: flex-start;
+}

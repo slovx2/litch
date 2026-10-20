@@ -8,6 +8,9 @@ import type {
   HarnessInstructionsInfo,
   HarnessMcpReadResponse,
   HarnessMcpServer,
+  HarnessModelBase,
+  HarnessModelEntry,
+  HarnessModelsReadResponse,
   HarnessProvider,
   HarnessProvidersReadResponse,
   HarnessSettingOption,
@@ -26,6 +29,9 @@ import type {
   HcMcpServer,
   HcMcpTransport,
   HcMcpView,
+  HcModelBase,
+  HcModelEntry,
+  HcModelsView,
   HcOption,
   HcProvider,
   HcProvidersView,
@@ -137,6 +143,7 @@ export function projectConfig(raw: HarnessConfigReadResponse): HcConfigView {
     ),
     version: String(raw?.version ?? ''),
     files: files(raw?.files),
+    modelCatalog: raw?.modelCatalog === true,
   }
 }
 
@@ -337,4 +344,60 @@ export function projectInstructions(raw: HarnessInstructionsInfo): HcInstruction
     linkTarget: str(raw?.linkTarget),
     overriddenBy: str(raw?.overriddenBy),
   }
+}
+
+/** 上下文窗口只认正整数，别的当没给 */
+const windowOf = (value: unknown): number | null =>
+  typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : null
+
+function modelEntry(raw: HarnessModelEntry): HcModelEntry | null {
+  if (!isRecord(raw) || typeof raw.id !== 'string' || !raw.id) return null
+  return {
+    id: raw.id,
+    displayName: str(raw.displayName) || null,
+    contextWindow: windowOf(raw.contextWindow),
+    base: str(raw.base) || raw.id,
+  }
+}
+
+function modelBase(raw: HarnessModelBase): HcModelBase | null {
+  if (!isRecord(raw) || typeof raw.id !== 'string' || !raw.id) return null
+  return {
+    id: raw.id,
+    displayName: str(raw.displayName) || raw.id,
+    contextWindow: windowOf(raw.contextWindow),
+    description: str(raw.description) || null,
+  }
+}
+
+/** 同一个 id 只留头一个（清单里模型名唯一，底稿也按 id 找） */
+const unique = <T extends { id: string }>(items: T[]): T[] => {
+  const seen = new Set<string>()
+  return items.filter((item) => !seen.has(item.id) && seen.add(item.id))
+}
+
+export function projectModels(raw: HarnessModelsReadResponse): HcModelsView {
+  const custom = raw?.custom === true
+  return {
+    custom,
+    entries: custom
+      ? unique(list<HarnessModelEntry>(raw?.entries).flatMap((entry) => modelEntry(entry) ?? []))
+      : [],
+    bases: unique(list<HarnessModelBase>(raw?.bases).flatMap((entry) => modelBase(entry) ?? [])),
+    path: str(raw?.path) || null,
+    version: String(raw?.version ?? ''),
+    effect: effectOf(raw?.effect),
+    note: textOrNull(raw?.note),
+    readOnlyReason: textOrNull(raw?.readOnlyReason),
+  }
+}
+
+/** 界面交回来的清单 → 协议的形状：显示名去掉首尾空白，空的当没给 */
+export function outgoingModels(entries: readonly HcModelEntry[]): HarnessModelEntry[] {
+  return entries.map((entry) => ({
+    id: entry.id.trim(),
+    displayName: entry.displayName?.trim() || null,
+    contextWindow: windowOf(entry.contextWindow),
+    base: entry.base,
+  }))
 }

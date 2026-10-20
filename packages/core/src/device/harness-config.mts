@@ -1,6 +1,7 @@
 // 一台设备上各 harness 的详情设置（协议扩展 harnessConfig，15 号设计）在客户端这一头的样子。
 // 权威在 harness 自己的原生配置里，读写由设备上的引擎（原生 codex 由设备进程翻译）做；核心只是转运：
 // - 每个 harness 一份数据，harnessConfig 主题开着（详情设置页）才去读；四块各读各的，谁读不成不耽误别的；
+//   config 读回来说有模型清单（modelCatalog）才接着读第五块 models，没有就让它空着；
 // - 别处改了（litch/harness/config/changed）重读那一块并记一次“被动过”，自己刚写的那一下引出来的不算；
 // - 带版本的写入撞上版本冲突：重读那一块，以 conflict 结束，界面留着用户的改动再确认；
 // - 登录（auth/start、mcp/login）的每一步记在 attempts 里，后来的进展跟着 litch/harness/auth/updated；
@@ -30,6 +31,8 @@ import type {
   HcInstructionsView,
   HcMcpServer,
   HcMcpView,
+  HcModelEntry,
+  HcModelsView,
   HcPart,
   HcProvidersView,
   HcSlot,
@@ -40,9 +43,11 @@ import type {
 import type { EnvEntryView } from '../model-manage.mjs'
 import {
   outgoingMcp,
+  outgoingModels,
   projectConfig,
   projectInstructions,
   projectMcp,
+  projectModels,
   projectProviders,
   projectStep,
 } from '../projection/harness-config.mjs'
@@ -134,12 +139,20 @@ export interface HarnessConfig {
   ): Promise<{ restartRequired: boolean }>
   loginMcp(harness: string, name: string): Promise<string>
   writeInstructions(harness: string, content: string, expectedHash: string): Promise<string>
+  /** 整份写模型清单；entries 为 null 是回到 harness 自带的模型目录（不能是空数组） */
+  writeModels(
+    harness: string,
+    entries: readonly HcModelEntry[] | null,
+    expectedVersion: string,
+  ): Promise<{ restartRequired: boolean }>
   overview(): Promise<InstructionsOverview>
   unify(harness: string, content: string): Promise<InstructionsLinkResult[]>
   separate(): Promise<string[]>
 }
 
-const PARTS: readonly HcPart[] = ['config', 'providers', 'mcp', 'instructions']
+const PARTS: readonly HcPart[] = ['config', 'providers', 'mcp', 'instructions', 'models']
+/** 打开、重连、重启后直接读的四块；models 跟在 config 后面读（要先知道有没有模型清单） */
+const BASIC: readonly HcPart[] = ['config', 'providers', 'mcp', 'instructions']
 /** 自己写完多久之内到的“变了”的通知算是自己引出来的 */
 const OWN_ECHO_MS = 2_000
 /** 登录、写入都可能要对面跑一阵（起命令行、写钥匙串），默认的三十秒不够 */
@@ -155,7 +168,10 @@ interface Entry {
     providers: HcSlot<HcProvidersView>
     mcp: HcSlot<HcMcpView>
     instructions: HcSlot<HcInstructionsView>
+    models: HcSlot<HcModelsView>
   }
+  /** 下一次 config 读完要不要接着重读 models（整个重读时为真；平常只在 models 还没读过时才接着读） */
+  withModels: boolean
   /** 每一块正在读的那一趟，和“读的途中又说要读”（再读一遍） */
   reading: Partial<Record<HcPart, boolean>>
   again: Partial<Record<HcPart, boolean>>
@@ -210,7 +226,9 @@ export function createHarnessConfig(host: HarnessConfigHost): HarnessConfig {
           providers: emptySlot(),
           mcp: emptySlot(),
           instructions: emptySlot(),
+          models: emptySlot(),
         },
+        withModels: false,
         reading: {},
         again: {},
         writing: {},
@@ -234,6 +252,7 @@ export function createHarnessConfig(host: HarnessConfigHost): HarnessConfig {
     providers: { ...entry.slots.providers },
     mcp: { ...entry.slots.mcp },
     instructions: { ...entry.slots.instructions },
+    models: { ...entry.slots.models },
     attempts: [...entry.attempts.values()].map((attempt) => ({
       ...attempt,
       forward: attempt.forward ? { ...attempt.forward } : null,
@@ -259,6 +278,11 @@ export function createHarnessConfig(host: HarnessConfigHost): HarnessConfig {
   /** 读一块。正在读的时候又要读：读完再读一遍（中间那次变化可能没赶上） */
   const load = async (entry: Entry, part: HcPart): Promise<void> => {
     if (!host.online() || !supported(entry.harness)) return
+    if (part === 'models' && entry.slots.config.data?.modelCatalog !== true) {
+      // 还不知道有没有（config 没读到）或者没有：读 config，有的话它读完接着读 models
+      entry.withModels = true
+      return load(entry, 'config')
+    }
     if (entry.reading[part]) {
       entry.again[part] = true
       return
@@ -272,7 +296,13 @@ export function createHarnessConfig(host: HarnessConfigHost): HarnessConfig {
     try {
       if (part === 'config') {
         const raw = await host.request(HARNESS_CONFIG_METHOD.configRead, params)
-        if (mine === epoch) entry.slots.config.data = projectConfig(raw)
+        if (mine === epoch) {
+          entry.slots.config.data = projectConfig(raw)
+          followModels(entry)
+        }
+      } else if (part === 'models') {
+        const raw = await host.request(HARNESS_CONFIG_METHOD.modelsRead, params)
+        if (mine === epoch) entry.slots.models.data = projectModels(raw)
       } else if (part === 'providers') {
         const raw = await host.request(HARNESS_CONFIG_METHOD.providersRead, params)
         if (mine === epoch) entry.slots.providers.data = projectProviders(raw)
@@ -302,9 +332,25 @@ export function createHarnessConfig(host: HarnessConfigHost): HarnessConfig {
     }
   }
 
+  /** config 刚读到：有模型清单就接着读 models（整个重读、或者还没读过时）；没有就清空那一块 */
+  const followModels = (entry: Entry) => {
+    const models = entry.slots.models
+    if (entry.slots.config.data?.modelCatalog !== true) {
+      entry.withModels = false
+      models.data = null
+      models.error = null
+      return
+    }
+    if (entry.withModels || (models.data === null && !entry.reading.models)) {
+      entry.withModels = false
+      void load(entry, 'models')
+    }
+  }
+
   const loadAll = (entry: Entry) => {
     entry.stale = false
-    for (const part of PARTS) void load(entry, part)
+    entry.withModels = true
+    for (const part of BASIC) void load(entry, part)
   }
 
   /** 写一块：成了之后重读那一块；版本冲突也重读，再以 conflict 结束 */
@@ -452,7 +498,7 @@ export function createHarnessConfig(host: HarnessConfigHost): HarnessConfig {
       const first = entry.sinks.size === 0
       entry.sinks.add(sink)
       sink.snapshot(view(entry))
-      if ((first && entry.stale) || PARTS.every((part) => entry.slots[part].data === null)) {
+      if ((first && entry.stale) || BASIC.every((part) => entry.slots[part].data === null)) {
         if (host.online()) loadAll(entry)
       }
       return () => {
@@ -585,7 +631,8 @@ export function createHarnessConfig(host: HarnessConfigHost): HarnessConfig {
     async reload(harness, part) {
       reachable(harness)
       const entry = entryOf(harness)
-      await Promise.all((part ? [part] : PARTS).map((one) => load(entry, one)))
+      if (!part) entry.withModels = true
+      await Promise.all((part ? [part] : BASIC).map((one) => load(entry, one)))
     },
 
     async upsertProvider(harness, providerId, templateId, definition, expectedVersion) {
@@ -747,6 +794,25 @@ export function createHarnessConfig(host: HarnessConfigHost): HarnessConfig {
       // 统一模式下写的是同一份：别的 harness 开着的也重读
       reloadInstructions()
       return String(result?.hash ?? '')
+    },
+
+    async writeModels(harness, entries, expectedVersion) {
+      if (entries !== null && entries.length === 0) {
+        throw new ChannelError('invalid', '模型清单不能是空的；要用自带的目录请恢复')
+      }
+      const result = await writing(harness, 'models', () =>
+        host.request(
+          HARNESS_CONFIG_METHOD.modelsWrite,
+          {
+            harness,
+            entries: entries === null ? null : outgoingModels(entries),
+            expectedVersion,
+          },
+          { timeoutMs: WAIT_MS },
+        ),
+      )
+      needsRestart(harness, result?.restartRequired === true)
+      return { restartRequired: result?.restartRequired === true }
     },
 
     overview,
