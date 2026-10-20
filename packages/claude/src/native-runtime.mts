@@ -52,7 +52,7 @@ import {
   mergeRequestUsage,
   type RequestUsage,
 } from './context-usage.mjs'
-import { clientToolCliNames, dynamicToolServer } from './dynamic-tools.mjs'
+import { dynamicToolCliNames, dynamicToolServer } from './dynamic-tools.mjs'
 import { goalToolServer, isGoalTool } from './goal-tools.mjs'
 import { hostClaudeEnvOverrides, hostClaudeExecutable } from './host-claude.mjs'
 import { jsonSchemaValidator } from './json-schema.mjs'
@@ -1450,9 +1450,9 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         return options.agentID
           ? { behavior: 'deny', message: '子代理不能修改父会话目标' }
           : { behavior: 'allow', updatedInput: input }
-      // 客户端工具（clientTools 扩展）不在这里问：执行方是客户端，要不要问用户由它定，
+      // 动态工具一律不在这里问：执行方是客户端，要不要问用户由它定，
       // 和原生 codex 对动态工具的做法一样
-      if (clientToolCliNames(context.dynamicTools).has(toolName))
+      if (dynamicToolCliNames(context.dynamicTools).has(toolName))
         return { behavior: 'allow', updatedInput: input }
 
       // 用 SDK 正式的 updatedInput 返回答案，不能伪装成工具拒绝。

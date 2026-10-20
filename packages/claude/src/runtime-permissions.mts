@@ -1,7 +1,7 @@
 import { realpathSync } from 'node:fs'
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 import { sandboxCommand } from './command-sandbox.mjs'
-import { clientToolCliNames } from './dynamic-tools.mjs'
+import { dynamicToolCliNames } from './dynamic-tools.mjs'
 import { isGoalTool } from './goal-tools.mjs'
 import { activePermissionRoots, permissionToolName } from './permission-grants.mjs'
 import { defaultSandboxPolicy, type RuntimeSandboxPolicy } from './sandbox-policy.mjs'
@@ -126,8 +126,8 @@ export function deniedTool(
   if (isStructuredOutput(context, name)) return null
   if (context.goalTools && isGoalTool(name)) return null
   if (context.permissionTools && name === permissionToolName) return null
-  // 客户端工具由客户端执行，不归这边的沙箱和计划模式管（dynamic-tools.mts 的 clientToolCliNames）
-  if (clientToolCliNames(context.dynamicTools).has(name)) return null
+  // 动态工具由客户端执行，不归这边的沙箱和计划模式管（dynamic-tools.mts 的 dynamicToolCliNames）
+  if (dynamicToolCliNames(context.dynamicTools).has(name)) return null
   const policy = policyFor(context)
   if (
     ['WebFetch', 'WebSearch'].includes(name) &&

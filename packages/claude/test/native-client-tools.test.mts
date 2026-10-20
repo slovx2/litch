@@ -8,8 +8,9 @@ import { deflateSync } from 'node:zlib'
 import { MockLLM } from './fixtures/mock-llm.mjs'
 import { ProtocolClient } from './fixtures/protocol-client.mjs'
 
-// 客户端工具（clientTools 扩展，protocol/extensions/client-tools.json）在真实 CLI 上的两件事：
-//   - 动态工具的调用不经 Claude Code 的权限审批（和原生 codex 一样，执行方是客户端，要不要问用户由它定）；
+// 动态工具（含 clientTools 扩展的客户端工具，protocol/extensions/client-tools.json）在真实 CLI 上的两件事：
+//   - 动态工具的调用一律不经 Claude Code 的权限审批、不按沙箱拦（和原生 codex 一样，执行方是客户端，
+//     要不要问用户由它定），不分是不是 litch_ 命名空间；
 //   - 结果里的大图片原样交给模型：SDK 不截断、不落盘换成路径。
 
 const ECHO_TOOLS = [
@@ -156,46 +157,61 @@ for (const [label, settings] of [
     }
   })
 
-test('CLIENT-TOOLS-CC-003：别的命名空间的动态工具照旧走审批（按需审批时先问）', {
-  timeout: 100_000,
-}, async () => {
-  const home = await mkdtemp(join(tmpdir(), 'native-client-tools-other-'))
-  const model = new MockLLM()
-  const client = await ProtocolClient.start(home, await model.start(), false, 'api-key', {}, null)
-  try {
-    const asked: string[] = []
-    client.onServerRequest = async (method) => {
-      asked.push(method)
-      return method === 'item/tool/call'
-        ? { success: true, contentItems: [{ type: 'inputText', text: 'ECHO hi' }] }
-        : { decision: 'accept' }
+const ECHO_FUNCTION = (ECHO_TOOLS[0] as { tools: unknown[] }).tools[0]
+for (const [label, settings, dynamicTools] of [
+  [
+    '从不审批、工作区可写，别的命名空间',
+    { approvalPolicy: 'never', sandbox: 'workspace-write' },
+    [{ ...ECHO_TOOLS[0], name: 'fixture_tools' }],
+  ],
+  [
+    '从不审批、工作区可写，不带命名空间',
+    { approvalPolicy: 'never', sandbox: 'workspace-write' },
+    [ECHO_FUNCTION],
+  ],
+  [
+    '按需审批、工作区可写，别的命名空间',
+    { approvalPolicy: 'on-request', sandbox: 'workspace-write' },
+    [{ ...ECHO_TOOLS[0], name: 'fixture_tools' }],
+  ],
+] as const)
+  test(`CLIENT-TOOLS-CC-003：${label}时动态工具同样不经审批、不按沙箱拦，直接交给客户端`, {
+    timeout: 100_000,
+  }, async () => {
+    const home = await mkdtemp(join(tmpdir(), 'native-client-tools-other-'))
+    const model = new MockLLM()
+    const client = await ProtocolClient.start(home, await model.start(), false, 'api-key', {}, null)
+    try {
+      const asked: string[] = []
+      client.onServerRequest = async (method) => {
+        asked.push(method)
+        return method === 'item/tool/call'
+          ? { success: true, contentItems: [{ type: 'inputText', text: 'ECHO hi' }] }
+          : { decision: 'decline' }
+      }
+      model.enqueue(callEcho)
+      model.enqueue((request) => {
+        assert.match(JSON.stringify(lastToolResult(request)), /ECHO hi/)
+        return [{ type: 'text', text: 'DONE' }]
+      })
+      const { thread } = await client.request('thread/start', {
+        cwd: home,
+        ...settings,
+        dynamicTools,
+      })
+      const { turn } = await client.request('turn/start', {
+        threadId: thread.id,
+        input: [{ type: 'text', text: '调用工具' }],
+      })
+      assert.equal((await client.completed(turn.id)).status, 'completed')
+      assert.deepEqual(asked, ['item/tool/call'], '只有工具调用，没有审批')
+      model.assertConsumed()
+    } finally {
+      await client.close()
+      await model.close()
+      await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
     }
-    model.enqueue(callEcho)
-    model.enqueue((request) => {
-      assert.match(JSON.stringify(lastToolResult(request)), /ECHO hi/)
-      return [{ type: 'text', text: 'DONE' }]
-    })
-    const { thread } = await client.request('thread/start', {
-      cwd: home,
-      approvalPolicy: 'on-request',
-      sandbox: 'workspace-write',
-      dynamicTools: [{ ...ECHO_TOOLS[0], name: 'fixture_tools' }],
-    })
-    const { turn } = await client.request('turn/start', {
-      threadId: thread.id,
-      input: [{ type: 'text', text: '调用工具' }],
-    })
-    assert.equal((await client.completed(turn.id)).status, 'completed')
-    assert.equal(asked.length, 2, JSON.stringify(asked))
-    assert.notEqual(asked[0], 'item/tool/call', '先问审批')
-    assert.equal(asked[1], 'item/tool/call')
-    model.assertConsumed()
-  } finally {
-    await client.close()
-    await model.close()
-    await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
-  }
-})
+  })
 
 /** 模型收到的图片块解出来的宽高（PNG 读 IHDR，JPEG 读 SOF） */
 function imageSize(data: Buffer): string {

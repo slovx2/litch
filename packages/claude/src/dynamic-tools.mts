@@ -2,7 +2,6 @@ import { createHash } from 'node:crypto'
 import { createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
 import type { ValidateFunction } from 'ajv'
-import { isClientToolNamespace } from '../../shared/src/client-tool-executor.mjs'
 import { dynamicToolResult } from './dynamic-tool-result.mjs'
 import { jsonSchemaValidator } from './json-schema.mjs'
 import { ProtocolError, requiredString } from './protocol-contract.mjs'
@@ -54,27 +53,35 @@ export function dynamicToolName(namespace: string | null | undefined, name: stri
     .slice(0, 40)}`
 }
 
-const clientToolNames = new WeakMap<unknown[], ReadonlySet<string>>()
+const dynamicCliNames = new WeakMap<unknown[], ReadonlySet<string>>()
 
 /**
- * 会话的动态工具里，客户端工具命名空间（`litch_` 开头，clientTools 扩展）的那些在 CLI 里的完整工具名
- * （`mcp__codex_harness_adapter__t_…`）。这些工具由客户端执行，要不要问用户由执行方决定，
- * 所以不受 Claude Code 这边的沙箱和审批管（和原生 codex 一样：它对动态工具不审批、不按沙箱拦）。
+ * 会话全部动态工具在 CLI 里的完整工具名（`mcp__codex_harness_adapter__t_…`）。动态工具由客户端执行，
+ * 要不要问用户由执行方决定，所以不受 Claude Code 这边的沙箱、审批和计划模式管
+ * （和原生 codex 一样：它对动态工具不审批、不按沙箱拦）。
  */
-export function clientToolCliNames(raw: unknown[] | undefined): ReadonlySet<string> {
+export function dynamicToolCliNames(raw: unknown[] | undefined): ReadonlySet<string> {
   if (!raw?.length) return new Set()
-  const cached = clientToolNames.get(raw)
+  const cached = dynamicCliNames.get(raw)
   if (cached) return cached
   const names = new Set<string>()
+  const add = (namespace: string | null | undefined, tool: unknown) => {
+    const name = tool && typeof tool === 'object' ? (tool as Record<string, unknown>).name : null
+    if (typeof name === 'string')
+      names.add(`mcp__${DYNAMIC_TOOL_SERVER}__${dynamicToolName(namespace, name)}`)
+  }
   for (const spec of raw) {
     const fields = spec && typeof spec === 'object' ? (spec as Record<string, unknown>) : {}
-    if (fields.type !== 'namespace' || typeof fields.name !== 'string') continue
-    if (!isClientToolNamespace(fields.name) || !Array.isArray(fields.tools)) continue
-    for (const tool of fields.tools)
-      if (tool && typeof tool.name === 'string')
-        names.add(`mcp__${DYNAMIC_TOOL_SERVER}__${dynamicToolName(fields.name, tool.name)}`)
+    // 和 dynamicToolServer 取名一致：function 定义上带的 namespace 也算进名字
+    if (fields.type === 'function') add(fields.namespace as string | undefined, fields)
+    else if (
+      fields.type === 'namespace' &&
+      typeof fields.name === 'string' &&
+      Array.isArray(fields.tools)
+    )
+      for (const tool of fields.tools) add(fields.name, tool)
   }
-  clientToolNames.set(raw, names)
+  dynamicCliNames.set(raw, names)
   return names
 }
 
