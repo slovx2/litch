@@ -1,9 +1,11 @@
 import { realpathSync } from 'node:fs'
-import { dirname, isAbsolute, relative, resolve, sep } from 'node:path'
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { claudeConfigDir } from './claude-native-files.mjs'
 import { sandboxCommand } from './command-sandbox.mjs'
 import { dynamicToolCliNames } from './dynamic-tools.mjs'
 import { isGoalTool } from './goal-tools.mjs'
 import { activePermissionRoots, permissionToolName } from './permission-grants.mjs'
+import { claudePlansLocation } from './runtime-config.mjs'
 import { defaultSandboxPolicy, type RuntimeSandboxPolicy } from './sandbox-policy.mjs'
 import type { RuntimeTurnContext } from './types.mjs'
 
@@ -83,6 +85,8 @@ export function sandboxedBashInput(context: RuntimeTurnContext, input: Record<st
 }
 
 export function planDirectory(context: RuntimeTurnContext): string {
+  // 放 CLI 自己的默认位置（CHA_CLAUDE_PLANS_LOCATION=config）时是配置目录下的 plans，各会话的计划文件名不同
+  if (claudePlansLocation() === 'config') return join(claudeConfigDir(), 'plans')
   // SDK plansDirectory 只接受项目内目录；每个线程仍有独立的计划命名空间。
   return resolve(context.cwd, '.claude', 'plans', 'codex-harness-adapter', context.threadId)
 }
@@ -94,6 +98,9 @@ export function isPlanFile(
 ): boolean {
   if (!context.planMode || !fileTools.has(name) || typeof input.file_path !== 'string') return false
   const root = resolvedTarget(planDirectory(context))
+  const target = resolvedTarget(resolve(context.cwd, input.file_path))
+  // 配置目录下的 plans 是各会话共用的，只豁免直接放在里面的文件
+  if (claudePlansLocation() === 'config') return dirname(target) === root
   const rootWithinProject = relative(resolvedTarget(context.cwd), root)
   if (
     rootWithinProject === '..' ||
@@ -101,7 +108,7 @@ export function isPlanFile(
     isAbsolute(rootWithinProject)
   )
     return false
-  const child = relative(root, resolvedTarget(resolve(context.cwd, input.file_path)))
+  const child = relative(root, target)
   return child.length > 0 && child !== '..' && !child.startsWith(`..${sep}`) && !isAbsolute(child)
 }
 
