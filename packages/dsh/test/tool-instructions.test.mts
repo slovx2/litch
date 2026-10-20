@@ -2,9 +2,13 @@ import assert from 'node:assert/strict'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import test from 'node:test'
+import {
+  PRESENTATION_RULES,
+  PRESENTATION_SPEC,
+} from '../../protocol/src/client-tools-presentation.mjs'
 import { ECHO_TOOLS } from '../../protocol/src/client-tools-specs.mjs'
 import { EXTENSION, EXTENSIONS_CAPABILITY } from '../../protocol/src/device.mjs'
-import { dshToolInstructions } from '../src/client-tools.mjs'
+import { dshClientTools, dshToolInstructions } from '../src/client-tools.mjs'
 import { DshServer } from '../src/server.mjs'
 import { client, isolate, violations } from './client.mjs'
 
@@ -87,4 +91,15 @@ test('dsh 的规则：同一段只放一次，没有就是 null', () => {
   )
   assert.equal(dshToolInstructions([ECHO_TOOLS]), null)
   assert.equal(dshToolInstructions(undefined), null)
+})
+
+test('dsh：Litch 的呈现风格（不带工具的命名空间）只进规则那一节、排在工具的规则后面，不注册工具', () => {
+  assert.equal(
+    dshToolInstructions([TOOLS[0], PRESENTATION_SPEC]),
+    `# Tool instructions: litch_echo\n${RULES}\n\n# Tool instructions: litch_presentation\n${PRESENTATION_RULES}`,
+  )
+  assert.deepEqual(
+    dshClientTools([ECHO_TOOLS, PRESENTATION_SPEC]).map((tool) => tool.namespace),
+    ['litch_echo'],
+  )
 })

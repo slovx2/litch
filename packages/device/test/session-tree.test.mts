@@ -2,6 +2,11 @@
 // 父子关系挂在会话对象上、回报与唤醒及上限、提案、脱离、没声明的连接看不到扩展内容。上游是假引擎（fake-engine.mts）。
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import {
+  PRESENTATION_NAMESPACE,
+  PRESENTATION_SPEC,
+  presentationSpec,
+} from '../../protocol/src/client-tools-presentation.mjs'
 import { parseSessionEvent } from '../../protocol/src/session-tree.mjs'
 import { briefing } from '../src/session-start.mjs'
 import { failureOf, resultOf } from './fake-engine.mjs'
@@ -9,6 +14,7 @@ import { settle } from './helpers.mjs'
 import {
   BACKGROUND,
   brief,
+  ECHO_SPEC,
   got,
   litch,
   parent,
@@ -47,14 +53,15 @@ test('SESSION-TREE-001：用户回合里模型派一个跨 harness 的子会话�
     const result = resultOf(call.answer)
     assert.equal(result.thread_id, 'claude-code-t1')
     assert.match(result.note, /Started sub-session/)
-    // 建子会话：目录跟父会话，审批和沙箱照父会话，客户端给父会话带的工具照样带上，再加 litch_sessions
+    // 建子会话：目录跟父会话，审批和沙箱照父会话，客户端给父会话带的工具照样带上，再加 litch_sessions，
+    // 最后是呈现风格（看子会话的 harness 带不带，client-tools-presentation.mts）
     const [started] = env.claude.sent('thread/start')
     assert.equal(started.cwd, '/work/app')
     assert.equal(started.approvalPolicy, 'on-request')
     assert.equal(started.sandbox, 'workspace-write')
     assert.deepEqual(
       started.dynamicTools.map((spec: any) => spec.name),
-      ['litch_echo', SESSIONS],
+      ['litch_echo', SESSIONS, PRESENTATION_NAMESPACE],
     )
     // 第一条消息：谁派的、任务、做完怎么回报
     const [briefed] = env.claude.sent('turn/start')
@@ -491,10 +498,10 @@ test('SESSION-TREE-010：用户在界面上派子会话（litch/session/start）
     assert.equal(read.thread.projectId, project.project.id)
     assert.equal(read.thread.litchLineage.origin, 'user')
     assert.equal(read.thread.litchLineage.wakeParent, false)
-    // 没给工具的父会话：子会话只带 litch_sessions
+    // 没给工具的父会话：子会话只带 litch_sessions 和呈现风格
     assert.deepEqual(
       started.dynamicTools.map((spec: any) => spec.name),
-      [SESSIONS],
+      [SESSIONS, PRESENTATION_NAMESPACE],
     )
   } finally {
     await env.close()
@@ -607,6 +614,41 @@ test('SESSION-TREE-013：目标 harness 收不到父会话那么严：用户回�
     assert.equal(read.thread.litchLineage.proposalId, asked.proposal_id)
     const direct = await client.call('thread/read', { threadId: same.thread_id })
     assert.equal(direct.thread.litchLineage.proposalId, undefined, '不是从提案开始的没有')
+  } finally {
+    await env.close()
+  }
+})
+
+test('SESSION-TREE-014：父会话带着呈现风格派子会话：子会话也带、只有一份、排在最后；原生 codex 上的不带', async () => {
+  const env = treeRig()
+  try {
+    const client = await litch(env)
+    const started = await client.call('thread/start', {
+      harness: 'pi',
+      cwd: '/work/app',
+      dynamicTools: [ECHO_SPEC, PRESENTATION_SPEC],
+    })
+    const threadId = started.thread.id as string
+    await client.call('turn/start', { threadId, input: text('帮我派一个子会话') })
+    const call = await env.pi.callTool(threadId, SESSIONS, 'start', {
+      title: '另开一个',
+      ...brief('在 /work/app 里看看测试。'),
+      harness: 'claude-code',
+      initiation: 'user_asked',
+    })
+    assert.ok(call)
+    assert.equal(resultOf(call.answer).thread_id, 'claude-code-t1')
+    const [child] = env.claude.sent('thread/start')
+    assert.deepEqual(
+      child.dynamicTools.map((spec: any) => spec.name),
+      ['litch_echo', SESSIONS, PRESENTATION_NAMESPACE],
+    )
+    assert.deepEqual(child.dynamicTools.at(-1), PRESENTATION_SPEC)
+    // 建在哪个 harness 上决定带不带：原生 codex 和不知道的不带
+    assert.equal(presentationSpec('codex'), null)
+    assert.equal(presentationSpec(null), null)
+    for (const harness of ['claude-code', 'pi', 'dsh', 'opencode', 'gemini', 'acp'])
+      assert.equal(presentationSpec(harness), PRESENTATION_SPEC, harness)
   } finally {
     await env.close()
   }

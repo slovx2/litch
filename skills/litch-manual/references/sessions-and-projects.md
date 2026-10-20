@@ -45,6 +45,11 @@ explain it:
 - **Session menu**: pin, move to group or project, rename, archive (undo available), delete (permanent),
   schedule a task for this session, start a sub-session, detach a sub-session.
 - **Archived sessions** page: restore, open read-only, delete.
+- **Reply style**: sessions that Litch starts (including sub-sessions and scheduled tasks) tell the model
+  that replies appear in Litch, which renders Markdown and Mermaid diagrams, and to answer
+  conversationally rather than like a terminal. Codex sessions do not get this (Codex keeps its own
+  style, as in the official Codex app). The user's own instructions take precedence. It is fixed when a session is created; sessions started outside
+  Litch (for example in the official Codex app) do not have it. There is no setting to turn it off.
 
 ## Session trees (sub-sessions)
 

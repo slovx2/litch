@@ -193,6 +193,7 @@ test('建会话：设备既列了 deviceTasks 又声明了会话树，litch_task
     [
       ['namespace', 'litch_tasks'],
       ['namespace', 'litch_sessions'],
+      ['namespace', 'litch_presentation'],
     ],
   )
 })
@@ -205,7 +206,10 @@ test('建会话：设备列了 deviceTasks 就带上 litch_tasks（这台桌面�
   const start = w.sent('thread/start').at(-1) as { dynamicTools?: { name: string; type: string }[] }
   assert.deepEqual(
     start.dynamicTools?.map((entry) => [entry.type, entry.name]),
-    [['namespace', 'litch_tasks']],
+    [
+      ['namespace', 'litch_tasks'],
+      ['namespace', 'litch_presentation'],
+    ],
   )
   // 握手时没有声明能执行它：执行方是设备
   const init = w.peer.last().seen.find((entry) => entry.method === 'initialize')?.params as {

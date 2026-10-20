@@ -2,6 +2,8 @@
 // 设备开关、交给主进程、卡片、超时、回合结束和打断、连接断开、引擎撤回请求。对着假对端和假的主进程跑。
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import type { ClientToolNamespaceSpec } from '../../protocol/src/client-tools.mjs'
+import { PRESENTATION_RULES } from '../../protocol/src/client-tools-presentation.mjs'
 import type { JsonRpcMessage, Thread, ThreadItem } from '../../protocol/src/index.mjs'
 import {
   CALL_TIMEOUT_MS,
@@ -212,9 +214,13 @@ test('建会话：带上这台桌面能执行的那几份工具定义（不看�
   const start = world.peer.last().seen.find((entry) => entry.method === 'thread/start')
   assert.ok(start)
   const tools = (start.params as { dynamicTools?: { name: string; type: string }[] }).dynamicTools
+  // 最后是呈现风格（不带工具的命名空间，client-tools-presentation.mts）
   assert.deepEqual(
     tools?.map((entry) => [entry.type, entry.name]),
-    [['namespace', 'litch_echo']],
+    [
+      ['namespace', 'litch_echo'],
+      ['namespace', 'litch_presentation'],
+    ],
   )
 
   const dsh = setup({ engine: 'dsh' })
@@ -248,7 +254,38 @@ test('建会话：带上这台桌面能执行的那几份工具定义（不看�
   await none.command('session.create', { deviceId: 'local', cwd: '/work', text: '你好' })
   const bare = none.peer.last().seen.find((entry) => entry.method === 'thread/start')
   assert.ok(bare)
-  assert.equal((bare.params as { dynamicTools?: unknown }).dynamicTools, undefined)
+  // 这台桌面什么都执行不了：只剩呈现风格
+  assert.deepEqual(
+    (bare.params as { dynamicTools?: { name: string }[] }).dynamicTools?.map((entry) => entry.name),
+    ['litch_presentation'],
+  )
+})
+
+test('建会话：呈现风格（litch_presentation，不带工具、只带 instructions）排在最后；原生 codex 不带', async () => {
+  for (const [engine, expected] of [
+    ['claude-code', ['litch_echo', 'litch_presentation']],
+    ['opencode', ['litch_echo', 'litch_presentation']],
+    ['codex', ['litch_echo']],
+  ] as const) {
+    const world = setup({ namespaces: ['litch_echo'], engine, extensions: ['clientTools'] })
+    world.core.start()
+    await settle()
+    await world.command('session.create', { deviceId: 'local', cwd: '/work', text: '你好' })
+    const start = world.peer.last().seen.find((entry) => entry.method === 'thread/start')
+    assert.ok(start)
+    const tools = (start.params as { dynamicTools?: ClientToolNamespaceSpec[] }).dynamicTools
+    assert.deepEqual(
+      tools?.map((entry) => entry.name),
+      expected,
+      engine,
+    )
+    const presentation = tools?.find((entry) => entry.name === 'litch_presentation')
+    if (!presentation) continue
+    assert.deepEqual(presentation.tools, [])
+    assert.equal(presentation.instructions, PRESENTATION_RULES)
+    assert.match(presentation.instructions ?? '', /appear in Litch/)
+    assert.match(presentation.instructions ?? '', /Mermaid/)
+  }
 })
 
 test('调用：别的命名空间回“方法不存在”；litch_ 的交给主进程，带着设备、harness、工作目录，结果原样回给引擎', async () => {

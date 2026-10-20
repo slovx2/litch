@@ -5,6 +5,10 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
+## 未发布
+
+- Litch：回答的呈现风格由 Litch 自己给。Litch 建的会话（含子会话、定时任务的会话）告诉模型回答显示在 Litch 里、能渲染 Markdown 和 Mermaid 图，要对话式地回答而不是终端式；用户自己的指令优先。经命名空间 `instructions` 送进系统提示（新的 `litch_presentation`：不带工具、只带 instructions），Claude Code 只在普通回合放、带 `outputSchema` 的回合不放；原生 Codex 不带。官方桌面端直连各 harness 的入口时没有这段
+
 ## 0.14.0
 
 - Litch：选中回答里的文字加评论。桌面端在助手的话（含过程里的说明、代码块、表格）里选字，选区上方出“评论”“复制”；手机端长按回答出“评论这条回答”，在只读全文页里选一段。评论加到输入框上面，一条消息最多十条，能改、删、定位原文，只有评论也能发；发出去时写成正文开头的 `<litch-comments>`，对话里画成编号的评论卡片
