@@ -199,8 +199,13 @@ export function TargetFields({
               <span className="form-label">{t('tasks.form.settings')}</span>
               <div className="tk-settings">
                 <SettingsBar
-                  options={{ ...options, plan: false }}
-                  settings={{ ...form.settings, mode: null }}
+                  // 定时任务的设置里没有速度和计划模式：这两样不出选择器
+                  options={{
+                    ...options,
+                    plan: false,
+                    models: options.models.map((entry) => ({ ...entry, speeds: [] })),
+                  }}
+                  settings={{ ...form.settings, speed: null, mode: null }}
                   fresh
                   onChange={(patch) =>
                     onChange({

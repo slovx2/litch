@@ -424,27 +424,30 @@ export const SAMPLE_OPTIONS: ComposeOptions = {
     {
       id: 'claude-sonnet-5-5',
       title: 'Sonnet 5.5',
-      note: '',
       efforts: ['low', 'medium', 'high'].map((id) => ({ id, note: '' })),
       defaultEffort: 'medium',
+      speeds: [],
+      defaultSpeed: null,
       isDefault: true,
       acceptsImages: true,
     },
     {
       id: 'claude-opus-5-5',
       title: 'Opus 5.5',
-      note: '',
       efforts: ['low', 'medium', 'high', 'xhigh'].map((id) => ({ id, note: '' })),
       defaultEffort: 'high',
+      speeds: [],
+      defaultSpeed: null,
       isDefault: false,
       acceptsImages: true,
     },
     {
       id: 'claude-haiku-5-5',
       title: 'Haiku 5.5',
-      note: '',
       efforts: [],
       defaultEffort: null,
+      speeds: [],
+      defaultSpeed: null,
       isDefault: false,
       acceptsImages: true,
     },
@@ -456,17 +459,22 @@ export const SAMPLE_OPTIONS: ComposeOptions = {
 /** 各个 harness 的模型清单。权限预设不在这里：那要看它在这台设备上有没有声明（见 sampleOptions） */
 type ModelList = Pick<ComposeOptions, 'models'>
 
+/** 原生 codex 的快速档（真的 model/list 里就是这样：标识 priority，名字 Fast） */
+const FAST = { id: 'priority', title: 'Fast', note: '1.5x speed, increased usage' }
+
 const sampleModel = (
   id: string,
   title: string,
   efforts: string[],
   isDefault = false,
+  speed: { defaultSpeed: string | null } | null = null,
 ): ComposeOptions['models'][number] => ({
   id,
   title,
-  note: '',
   efforts: efforts.map((effort) => ({ id: effort, note: '' })),
   defaultEffort: efforts.includes('medium') ? 'medium' : (efforts[0] ?? null),
+  speeds: speed ? [FAST] : [],
+  defaultSpeed: speed?.defaultSpeed ?? null,
   isDefault,
   acceptsImages: true,
 })
@@ -485,12 +493,17 @@ const OTHER_OPTIONS: Record<string, ModelList> = {
   dsh: {
     models: [sampleModel('deepseek-chat', 'DeepSeek Chat', [], true)],
   },
-  // codex 的清单长：选择器顶上会出筛选框（选项 8 个起才出）
+  // codex 的清单长：选择器顶上会出筛选框（选项 8 个起才出）。前三个能换速度，
+  // 其中 GPT-5.5 默认就是快速（真的 model/list 里有这样的模型），mini 没有速度可选
   codex: {
     models: [
-      sampleModel('gpt-5.5-codex', 'GPT-5.5 Codex', ['low', 'medium', 'high'], true),
+      sampleModel('gpt-5.5-codex', 'GPT-5.5 Codex', ['low', 'medium', 'high'], true, {
+        defaultSpeed: null,
+      }),
       sampleModel('gpt-5.5-mini', 'GPT-5.5 mini', ['low', 'medium']),
-      sampleModel('gpt-5.5', 'GPT-5.5', ['low', 'medium', 'high']),
+      sampleModel('gpt-5.5', 'GPT-5.5', ['low', 'medium', 'high'], false, {
+        defaultSpeed: 'priority',
+      }),
       sampleModel('gpt-5.4-codex', 'GPT-5.4 Codex', ['low', 'medium', 'high']),
       sampleModel('gpt-5.4', 'GPT-5.4', ['low', 'medium', 'high']),
       sampleModel('gpt-5.4-mini', 'GPT-5.4 mini', ['low', 'medium']),
@@ -528,6 +541,7 @@ export function sampleSettings(harness: HarnessView | undefined): SessionSetting
   return {
     model: model?.id ?? null,
     effort: harness?.id === 'codex' ? null : (model?.defaultEffort ?? null),
+    speed: null,
     permission: preset?.id ?? null,
     mode: plan ? 'default' : null,
   }
@@ -535,8 +549,8 @@ export function sampleSettings(harness: HarnessView | undefined): SessionSetting
 
 /** 不带设置新建会话时用的：就是 sampleSettings 里那几项（模拟的新会话一开始就是它） */
 export function sampleDefaults(harness: HarnessView | undefined): SessionDefaults {
-  const { model, effort, permission } = sampleSettings(harness)
-  return { model, effort, permission }
+  const { model, effort, speed, permission } = sampleSettings(harness)
+  return { model, effort, speed, permission }
 }
 
 export const STREAM_SESSION = {

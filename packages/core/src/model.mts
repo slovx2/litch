@@ -798,13 +798,26 @@ export interface ModelOption {
   /** 发给对面的模型标识 */
   id: string
   title: string
-  note: string
   /** 空的：这个模型没有强度的概念，界面不显示强度控件 */
   efforts: EffortOption[]
   defaultEffort: string | null
+  /**
+   * 这个模型能换的速度档（Codex 的 service tier，比如快速是 priority）。标准速度不在里面，界面自己补那一档。
+   * 空的：没有速度可选，界面不显示速度控件
+   */
+  speeds: SpeedOption[]
+  /** 没选过速度时这个模型用的那一档。null 是标准速度 */
+  defaultSpeed: string | null
   isDefault: boolean
   /** 这个模型收不收图片 */
   acceptsImages: boolean
+}
+
+/** 一档速度：发给对面的标识，和对面给的名字、说明 */
+export interface SpeedOption {
+  id: string
+  title: string
+  note: string
 }
 
 /**
@@ -833,10 +846,12 @@ export interface ComposeOptions {
 /** 协作模式：default 是照常干活，plan 是先出计划 */
 export type SessionMode = 'default' | 'plan'
 
-/** 会话用的模型、强度、权限预设、协作模式。null：对面没说，或者是预设之外的组合 */
+/** 会话用的模型、强度、速度、权限预设、协作模式。null：对面没说，或者是预设之外的组合 */
 export interface SessionSettings {
   model: string | null
   effort: string | null
+  /** 速度档的标识，标准速度是 STANDARD_SPEED。null：没选过，用模型自己的默认档 */
+  speed: string | null
   permission: string | null
   mode: SessionMode | null
 }
@@ -848,6 +863,7 @@ export interface SessionSettings {
 export interface SessionDefaults {
   model: string | null
   effort: string | null
+  speed: string | null
   permission: string | null
 }
 

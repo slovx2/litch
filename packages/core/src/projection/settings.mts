@@ -1,4 +1,4 @@
-// 会话的设置（模型、强度、权限预设）和可选项：协议里的形状 → 界面用的形状，以及反过来怎么发给对面。
+// 会话的设置（模型、强度、速度、权限预设）和可选项：协议里的形状 → 界面用的形状，以及反过来怎么发给对面。
 import type {
   AskForApproval,
   Config,
@@ -46,6 +46,7 @@ const SANDBOX_PRESET: Record<string, string> = {
 export interface SettingsSource {
   model?: string | null
   reasoningEffort?: string | null
+  serviceTier?: string | null
   /** 协议里是对象，有的引擎直接给标识 */
   activePermissionProfile?: { id: string } | string | null
   sandbox?: SandboxPolicy | null
@@ -56,6 +57,7 @@ export interface SettingsSource {
 export const NO_SETTINGS: SessionSettings = {
   model: null,
   effort: null,
+  speed: null,
   permission: null,
   mode: null,
 }
@@ -82,6 +84,7 @@ export function projectSettings(
   return {
     model: source.model || null,
     effort: source.reasoningEffort || null,
+    speed: source.serviceTier || null,
     permission: has(named) ? named : has(guessed) ? guessed : null,
     mode: projectMode(source.collaborationMode?.mode),
   }
@@ -93,12 +96,17 @@ export function projectModels(models: Model[]): ModelOption[] {
     .map((model) => ({
       id: model.model,
       title: model.displayName || model.model,
-      note: model.description,
       efforts: model.supportedReasoningEfforts.map((option) => ({
         id: option.reasoningEffort,
         note: option.description,
       })),
       defaultEffort: model.defaultReasoningEffort || null,
+      speeds: model.serviceTiers.map((tier) => ({
+        id: tier.id,
+        title: tier.name || tier.id,
+        note: tier.description,
+      })),
+      defaultSpeed: model.defaultServiceTier || null,
       isDefault: model.isDefault,
       // 老一些的服务端不报这一项，按收图片算：真不收的话对面会在回合里报错
       acceptsImages: model.inputModalities?.includes('image') ?? true,
@@ -126,7 +134,26 @@ export const composeOptions = (
 export const shownEffort = (effort: string | null, model: ModelOption | undefined): string | null =>
   effort ?? model?.defaultEffort ?? null
 
+/**
+ * 显式选标准速度时发的值（上游 protocol/src/config_types.rs 的 SERVICE_TIER_DEFAULT_REQUEST_VALUE）。
+ * 不能用“不发”或 null 表示标准：那样用的是模型自己的默认档，有的模型默认就是快速（model/list 的 defaultServiceTier）
+ */
+export const STANDARD_SPEED = 'default'
+
+/**
+ * 底栏上显示哪一档速度。对面报了就是它；报的是 null 时用的是模型自己的默认档，模型也没有默认档就是标准。
+ * 依据（原生 codex 0.160.0 实测）：没选过速度时 thread/start 报的是 null，选了标准报 "default"，选了快速报 "priority"
+ */
+export const shownSpeed = (speed: string | null, model: ModelOption | undefined): string =>
+  speed ?? model?.defaultSpeed ?? STANDARD_SPEED
+
 const text = (value: unknown): string | null => (typeof value === 'string' && value ? value : null)
+
+/** 配置里的速度写成界面认的标识：上游还认老写法 fast，就是 priority（ServiceTier::from_request_value） */
+const speedOf = (value: unknown): string | null => {
+  const said = text(value)
+  return said === 'fast' ? 'priority' : said
+}
 
 /** 两处都没说默认权限档时上游用的那一档 */
 const FALLBACK_PERMISSION = ':workspace'
@@ -137,13 +164,14 @@ const FALLBACK_PERMISSION = ':workspace'
  *   见 tui 的 managed_new_thread_defaults.rs）优先，然后是配置里的 model、model_reasoning_effort。
  * - 权限档：requirements.defaultPermissions，然后是配置里的 default_permissions（Config 摊平出来的一项）；
  *   两处都没说、:workspace 又许用（allowedPermissionProfiles 没给，或者给了而它是 true）时是 :workspace。
+ * - 速度：管理方下发的，然后是配置里的 service_tier。都没写是 null，用模型自己的默认档。
  * config 是 null（对面不认识 config/read）时不知道，全是 null。
  */
 export function projectDefaults(
   requirements: ConfigRequirements | null,
   config: Config | null,
 ): SessionDefaults {
-  if (!config) return { model: null, effort: null, permission: null }
+  if (!config) return { model: null, effort: null, speed: null, permission: null }
   const managed = requirements?.models?.newThread ?? null
   const allowed = requirements?.allowedPermissionProfiles
   const fallback =
@@ -151,6 +179,7 @@ export function projectDefaults(
   return {
     model: text(managed?.model) ?? text(config.model),
     effort: text(managed?.modelReasoningEffort) ?? text(config.model_reasoning_effort),
+    speed: speedOf(managed?.serviceTier) ?? speedOf(config.service_tier),
     permission:
       text(requirements?.defaultPermissions) ?? text(config.default_permissions) ?? fallback,
   }
@@ -162,6 +191,8 @@ export function projectDefaults(
  * - 模型：选了的；没选是对面的默认（不在清单里也照样是它，会话就用它）；对面没说是清单里标了默认的，再没有是第一个。
  * - 强度：选了的、对面默认的，得是这个模型有的那一档；都不是就是这个模型自己的默认档。
  *   不在清单里的模型不知道它有哪几档，选了的、默认的照用。
+ * - 速度：选了的、对面默认的，得是标准或者这个模型有的那一档；都不是就是 null（不发，用模型自己的默认档）。
+ *   不在清单里的模型不知道它有哪几档，不发。
  * - 权限档：选了的，然后是对面默认的，得是这个 harness 有的那一档；都不是就是 null（不显示哪一档，也不发）。
  */
 export function newSessionSettings(
@@ -177,10 +208,14 @@ export function newSessionSettings(
   const fits = (effort: string | null | undefined): effort is string =>
     Boolean(effort) && (!option || option.efforts.some((entry) => entry.id === effort))
   const effort = [picks.effort, defaults?.effort].find(fits) ?? option?.defaultEffort ?? null
+  const offered = (speed: string | null | undefined): speed is string =>
+    Boolean(option?.speeds.length) &&
+    (speed === STANDARD_SPEED || Boolean(option?.speeds.some((entry) => entry.id === speed)))
+  const speed = [picks.speed, defaults?.speed].find(offered) ?? null
   const has = (id: string | null | undefined): id is string =>
     Boolean(id) && options.permissions.some((preset) => preset.id === id)
   const permission = [picks.permission, defaults?.permission].find(has) ?? null
-  return { model, effort, permission }
+  return { model, effort, speed, permission }
 }
 
 /** 内置预设只切文件权限，审批策略要一起给，不然会沿用上一档的 */
@@ -188,7 +223,10 @@ const approvalFor = (preset: string): AskForApproval =>
   preset === ':danger-full-access' ? 'never' : 'on-request'
 
 type TurnOverrides = Partial<
-  Pick<TurnStartParams, 'model' | 'effort' | 'permissions' | 'approvalPolicy' | 'collaborationMode'>
+  Pick<
+    TurnStartParams,
+    'model' | 'effort' | 'serviceTier' | 'permissions' | 'approvalPolicy' | 'collaborationMode'
+  >
 >
 
 /**
@@ -204,6 +242,7 @@ export function turnOverrides(
   const overrides: TurnOverrides = {}
   if (pending.model) overrides.model = pending.model
   if (pending.effort) overrides.effort = pending.effort
+  if (pending.speed) overrides.serviceTier = pending.speed
   if (pending.permission) {
     overrides.permissions = pending.permission
     if (!declared) overrides.approvalPolicy = approvalFor(pending.permission)
@@ -230,7 +269,7 @@ export function settingsDiff(
   actual: SessionSettings,
 ): Partial<SessionSettings> {
   const diff: Partial<SessionSettings> = {}
-  for (const key of ['model', 'effort', 'permission'] as const) {
+  for (const key of ['model', 'effort', 'speed', 'permission'] as const) {
     const value = wanted[key]
     if (value && value !== actual[key]) diff[key] = value
   }

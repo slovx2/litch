@@ -1,4 +1,4 @@
-// 输入区底下一排：模型、强度、权限预设、计划模式，和上下文用了多少。可选值全部来自设备，这里只管显示和交回改动
+// 输入区底下一排：模型、强度、速度、权限预设、计划模式，和上下文用了多少。可选值全部来自设备，这里只管显示和交回改动
 // （会话里走 session.configure，从下一个回合起生效；新建会话页记着，建会话时一起发）。
 // 规矩照桌面端（packages/ui/src/composer/SettingsBar.tsx）：换模型时没有现在那一档强度就换成它的默认档；
 // 会话建好之后换不了的那几档权限只在新建时能选；声明了要确认的那一档切过去之前先问一句。
@@ -7,7 +7,9 @@ import {
   type ContextUsage,
   type PermissionPreset,
   type SessionSettings,
+  STANDARD_SPEED,
   shownEffort,
+  shownSpeed,
 } from '@litch/core'
 import { useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text } from 'react-native'
@@ -17,7 +19,10 @@ import { useTheme } from '../../ui/theme'
 import { effortTitle, permissionText } from './labels'
 import { type PickerOption, PickerSheet } from './PickerSheet'
 
-type Open = 'model' | 'effort' | 'permission' | null
+type Open = 'model' | 'effort' | 'speed' | 'permission' | null
+
+/** 快速档在原生 codex 里的标识（上游 ServiceTier::Fast 发的是 priority，老写法是 fast）：按界面的语言叫它 */
+const FAST_SPEEDS = new Set(['priority', 'fast'])
 
 function Chip({
   label,
@@ -89,6 +94,24 @@ export function SettingsBar({
   }
   const model = options.models.find((entry) => entry.id === settings.model)
   const effort = model ? shownEffort(settings.effort, model) : null
+  // 没选过的时候用的是模型自己的默认档（有的模型默认就是快速）
+  const speed = model && model.speeds.length > 0 ? shownSpeed(settings.speed, model) : null
+  // 标准不在对面给的清单里：明着选它要发 default，不然用的是模型的默认档
+  const speedOptions: PickerOption[] = model
+    ? [
+        {
+          id: STANDARD_SPEED,
+          title: t('composer.speed.standard'),
+          note: t('composer.speed.standard.note'),
+        },
+        ...model.speeds.map((entry) =>
+          FAST_SPEEDS.has(entry.id)
+            ? { id: entry.id, title: t('composer.speed.fast'), note: t('composer.speed.fast.note') }
+            : { id: entry.id, title: entry.title, note: entry.note || null },
+        ),
+      ]
+    : []
+  const speedTitle = speedOptions.find((entry) => entry.id === speed)?.title ?? speed
   // 只有一档的（没得选）：它就是现在这一档，对面没说也这样显示
   const sole = options.permissions.length === 1 ? options.permissions[0]?.id : undefined
   const permission = settings.permission ?? sole ?? null
@@ -141,6 +164,13 @@ export function SettingsBar({
             onPress={() => setOpen('effort')}
           />
         ) : null}
+        {speed !== null ? (
+          <Chip
+            testID="settings:speed"
+            label={`${speedTitle} ▾`}
+            onPress={() => setOpen('speed')}
+          />
+        ) : null}
         {options.permissions.length > 0 ? (
           <Chip
             testID="settings:permission"
@@ -167,11 +197,8 @@ export function SettingsBar({
         title={t('composer.model')}
         value={settings.model}
         search={t('composer.modelSearch')}
-        options={options.models.map((entry) => ({
-          id: entry.id,
-          title: entry.title,
-          note: entry.note || null,
-        }))}
+        // 只列名字，不带简介：清单长的时候一眼找得到（所有 harness 一样）
+        options={options.models.map((entry) => ({ id: entry.id, title: entry.title }))}
         onPick={pickModel}
         onClose={() => setOpen(null)}
       />
@@ -185,6 +212,14 @@ export function SettingsBar({
           note: entry.note || null,
         }))}
         onPick={(id) => onChange({ effort: id })}
+        onClose={() => setOpen(null)}
+      />
+      <PickerSheet
+        visible={open === 'speed'}
+        title={t('composer.speed')}
+        value={speed}
+        options={speedOptions}
+        onPick={(id) => onChange({ speed: id })}
         onClose={() => setOpen(null)}
       />
       <PickerSheet

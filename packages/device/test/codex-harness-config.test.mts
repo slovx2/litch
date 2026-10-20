@@ -51,7 +51,16 @@ test('config/read：分组、动态的模型和强度、实验特性只列 beta�
       effort.options.map((item: any) => item.value),
       ['low', 'high'],
     )
-    assert.ok(keys.includes('service_tier'))
+    // 速度：标准要自己补一项（写 default），模型给的快速档按两种语言说；模型没有默认档时默认是标准
+    const speed = read.settings.find((spec: any) => spec.key === 'service_tier')
+    assert.deepEqual(
+      speed.options.map((item: any) => [item.value, item.title['zh-CN']]),
+      [
+        ['default', '标准'],
+        ['priority', '快速'],
+      ],
+    )
+    assert.equal(speed.default, 'default')
     assert.ok(keys.includes('features.shiny'))
     assert.ok(!keys.includes('features.shell_tool'), '稳定的特性不列')
     assert.equal(read.settings.find((spec: any) => spec.key === 'features.shiny').effect, 'harness')

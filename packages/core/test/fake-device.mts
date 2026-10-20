@@ -63,6 +63,8 @@ export function model(id: string, fields: Partial<Model> = {}): Model {
     supportedReasoningEfforts: [],
     defaultReasoningEffort: 'medium',
     inputModalities: ['text'],
+    serviceTiers: [],
+    defaultServiceTier: null,
     ...fields,
   } as Model
 }

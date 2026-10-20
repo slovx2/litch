@@ -646,7 +646,13 @@ export function Composer(props: ComposerProps) {
   )
 }
 
-const NO_SETTINGS: SessionSettings = { model: null, effort: null, permission: null, mode: null }
+const NO_SETTINGS: SessionSettings = {
+  model: null,
+  effort: null,
+  speed: null,
+  permission: null,
+  mode: null,
+}
 const NO_QUEUE: QueuedMessage[] = []
 
 interface SessionComposerProps {

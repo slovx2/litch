@@ -30,7 +30,7 @@ function emptySession(): SessionView {
     items: {},
     requests: [],
     queued: [],
-    settings: { model: null, effort: null, permission: null, mode: null },
+    settings: { model: null, effort: null, speed: null, permission: null, mode: null },
     usage: null,
     can: { ...ALL_ABLE },
     forkedFrom: null,

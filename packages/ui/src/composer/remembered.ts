@@ -116,6 +116,8 @@ export function recallPicks(deviceId: string, harness: string, options: ComposeO
   // 强度得是记下的那个模型有的一档。没记模型的话用哪个模型要看对面的默认，留到 newSessionSettings 去对
   if (last.effort && (!model || model.efforts.some((effort) => effort.id === last.effort)))
     picks.effort = last.effort
+  // 速度同样留给 newSessionSettings 去对：得是标准或者那个模型有的那一档
+  if (last.speed) picks.speed = last.speed
   if (options.permissions.some((preset) => preset.id === last.permission) && last.permission)
     picks.permission = last.permission
   return picks
