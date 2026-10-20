@@ -106,16 +106,20 @@ export interface BrowserSignInRequest {
   deviceId: string
   threadId: string
   tabId: string
-  /** 代理说的要登录什么 */
+  /** 外壳取到的这个标签现在的真实来源，随导航更新；不是网页的是空的 */
+  origin: string
+  /** 代理说的要登录什么（只作附注） */
   site: string
-  /** 代理说的为什么 */
+  /** 代理说的为什么（只作附注） */
   reason: string
+  /** waiting：等人登录；withdrawn：代理不等了，标签已重新打开，提醒人别再在这里输入 */
+  state: 'waiting' | 'withdrawn'
   /** 毫秒 */
   at: number
 }
 
-/** done：人登录完、交还给代理；cancel：不登录了 */
-export type BrowserSignInAnswer = 'done' | 'cancel'
+/** done：人登录完、交还给代理；cancel：不登录了；dismiss：“代理已收回”看过了 */
+export type BrowserSignInAnswer = 'done' | 'cancel' | 'dismiss'
 
 export interface BrowserSignInBridge {
   /** 现在挂着的 */

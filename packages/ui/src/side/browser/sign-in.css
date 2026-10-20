@@ -20,9 +20,19 @@
   overflow-wrap: anywhere;
 }
 
-.bw-signin-reason,
+.bw-signin-origin {
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.bw-signin-claim,
 .bw-signin-note {
   color: var(--ink-2);
+}
+
+.bw-signin.withdrawn strong {
+  color: var(--err);
 }
 
 .bw-signin-acts {

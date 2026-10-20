@@ -12,6 +12,7 @@ import {
   type SignInOutcome,
 } from '../executor.mjs'
 import type { BrowserHost, BrowserPage, DialogInfo, TabKind, TabOwner } from '../model.mjs'
+import { type DomNode, hasClosedShadowFields } from '../passwords/dom-tree.mjs'
 import { createSignIns } from '../passwords/signin.mjs'
 import { createSiteBook } from '../sites.mjs'
 
@@ -78,10 +79,16 @@ function fakeHandover() {
   const asked: Array<{ site: string; reason: string }> = []
   const handover: BrowserHandover = {
     active: (tabId) => frozen.has(tabId),
+    hides: (tabId) => frozen.has(tabId),
     markScripted: (tabId) => void scripted.push(tabId),
     async request(page, ask, signal): Promise<SignInOutcome> {
       asked.push(ask)
-      const begun = signIns.begin({ owner: page.info().owner, tabId: page.id, ...ask })
+      const begun = signIns.begin({
+        owner: page.info().owner,
+        tabId: page.id,
+        origin: new URL(page.info().url).origin,
+        ...ask,
+      })
       if (!begun) return 'aborted'
       frozen.add(page.id)
       try {
@@ -172,8 +179,14 @@ test('交给人：卡片只给界面，代理对这个标签的调用一律被�
     assert.equal(reply.success, false, tool)
     assert.ok(textOf(reply).includes(SIGNING_IN), `${tool}: ${textOf(reply)}`)
   }
-  // 开新标签不碰这个标签，照常
-  assert.equal((await run('tabs', { action: 'list' })).success, true)
+  // tabs list 里只给占位，不给地址和标题；带 tabId 的 show 也拒
+  const listed = textOf(await run('tabs', { action: 'list' }))
+  assert.match(listed, /"signingIn": true/)
+  assert.equal(listed.includes('localhost:3000'), false)
+  assert.equal(listed.includes('Sign in'), false)
+  const shown = await run('show', { tabId: 't1' })
+  assert.equal(shown.success, false)
+  assert.ok(textOf(shown).includes(SIGNING_IN))
 
   assert.equal(signIns.answer(card?.id ?? '', 'done'), true)
   const reply = await pending
@@ -210,26 +223,93 @@ test('人点取消：告诉代理别换别的办法登录；回合打断：卡�
   assert.equal(after.success, true, textOf(after))
 })
 
-test('登记：同一个标签一次一张，答过的、撤掉的再答不算', () => {
+test('登记：同一个标签一次一张在等；来源跟着导航换；答过的、撤掉的再答不算', () => {
   const signIns = createSignIns({ now: () => 5 })
   const pushed: unknown[] = []
   signIns.onChange((list) => pushed.push(list))
   const owner = { deviceId: 'local', threadId: 'a' }
-  const one = signIns.begin({ owner, tabId: 't1', site: 's', reason: 'r' })
+  const input = { owner, tabId: 't1', origin: 'https://a.example', site: 's', reason: 'r' }
+  const one = signIns.begin(input)
   assert.ok(one)
-  assert.equal(signIns.begin({ owner, tabId: 't1', site: 's', reason: 'r' }), null)
-  assert.equal(signIns.active('t1'), true)
+  assert.equal(signIns.begin(input), null)
   assert.deepEqual(signIns.list()[0], {
     id: one.id,
     deviceId: 'local',
     threadId: 'a',
     tabId: 't1',
+    origin: 'https://a.example',
     site: 's',
     reason: 'r',
+    state: 'waiting',
     at: 5,
   })
+  signIns.setOrigin(one.id, 'https://sso.example')
+  assert.equal(signIns.list()[0]?.origin, 'https://sso.example')
+  // 在等的卡片不认“知道了”
+  assert.equal(signIns.answer(one.id, 'dismiss'), false)
   signIns.end(one.id)
   assert.equal(signIns.answer(one.id, 'done'), false)
-  assert.equal(signIns.active('t1'), false)
-  assert.equal(pushed.length, 2)
+  assert.deepEqual(signIns.list(), [])
+  assert.equal(pushed.length, 3)
+})
+
+test('代理不等了：卡片变成“代理已收回”，留着等人点知道了，到点也撤；标签没了一起撤', async () => {
+  const timers: Array<() => void> = []
+  const signIns = createSignIns({ schedule: (run) => void timers.push(run) })
+  const owner = { deviceId: 'local', threadId: 'a' }
+  const input = { owner, tabId: 't1', origin: 'https://a.example', site: 's', reason: 'r' }
+  const one = signIns.begin(input)
+  assert.ok(one)
+  let settled = false
+  void one.answered.then(() => {
+    settled = true
+  })
+  signIns.withdraw(one.id)
+  assert.equal(signIns.list()[0]?.state, 'withdrawn')
+  // 收回了的卡片点“完成”“取消”不算，代理那头也不会收到
+  assert.equal(signIns.answer(one.id, 'done'), false)
+  assert.equal(signIns.answer(one.id, 'dismiss'), true)
+  await settle()
+  assert.equal(settled, false)
+  assert.deepEqual(signIns.list(), [])
+
+  const two = signIns.begin(input)
+  assert.ok(two)
+  signIns.withdraw(two.id)
+  timers.at(-1)?.()
+  assert.deepEqual(signIns.list(), [])
+
+  const three = signIns.begin(input)
+  assert.ok(three)
+  signIns.tabGone('t1')
+  assert.deepEqual(signIns.list(), [])
+})
+
+test('封闭的影子树里有输入框：算清不到（重新打开）；开放的、普通的不算', () => {
+  const page = (shadow: string, field = 'INPUT'): DomNode => ({
+    nodeName: '#document',
+    children: [
+      {
+        nodeName: 'HTML',
+        children: [
+          {
+            nodeName: 'DIV',
+            shadowRoots: [
+              {
+                nodeName: '#document-fragment',
+                shadowRootType: shadow,
+                children: [{ nodeName: field }],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  })
+  assert.equal(hasClosedShadowFields(page('closed')), true)
+  assert.equal(hasClosedShadowFields(page('closed', 'textarea')), true)
+  assert.equal(hasClosedShadowFields(page('open')), false)
+  assert.equal(hasClosedShadowFields(page('closed', 'SPAN')), false)
+  // 同进程子框架里的封闭影子树
+  assert.equal(hasClosedShadowFields({ nodeName: 'IFRAME', contentDocument: page('closed') }), true)
 })

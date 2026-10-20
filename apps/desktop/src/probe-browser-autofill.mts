@@ -22,7 +22,7 @@ import { PASSWORDS_PROMPTS_CHANGED } from './browser/passwords/ipc.mjs'
 import { createSignIns } from './browser/passwords/signin.mjs'
 import { autofillTab } from './browser/passwords/tabs.mjs'
 import { createSiteBook } from './browser/sites.mjs'
-import { checkAgentSignIn } from './probe-browser-autofill-agent.mjs'
+import { checkAgentSignIn, SHADOW } from './probe-browser-autofill-agent.mjs'
 import { CHANGE, checkCaptures, FORGED, STEP2 } from './probe-browser-autofill-capture.mjs'
 
 const manual = process.env.LITCH_AUTOFILL_MANUAL === '1'
@@ -45,6 +45,8 @@ const LOGIN = (frameUrl: string) => `<!doctype html><title>Sign in</title>
 <form id="f" method="post" action="/welcome" style="margin:20px"><input id="user" type="email" autocomplete="username" style="display:block;width:240px;height:28px">
 <input id="pass" type="password" style="display:block;width:240px;height:28px;margin-top:8px"><button>Sign in</button></form>
 <iframe id="sub" src="${frameUrl}" style="width:420px;height:160px;border:1px solid #888;margin:20px"></iframe>
+<input id="otp" type="text" style="display:block;width:120px;height:24px;margin:0 20px">
+<iframe id="doc" srcdoc="<input id=p type=password>" style="width:300px;height:40px;margin:0 20px"></iframe>
 <script>
 window.__events = []
 for (const id of ['user', 'pass']) document.getElementById(id).addEventListener('input', () => __events.push(id))
@@ -100,7 +102,9 @@ void app.whenReady().then(async () => {
         ? CHANGE
         : path.startsWith('/forged')
           ? FORGED
-          : LOGIN(frameUrl),
+          : path.startsWith('/shadow')
+            ? SHADOW
+            : LOGIN(frameUrl),
   )
   const pageUrl = `http://127.0.0.1:${mainSite.port}/login`
   const pageOrigin = `http://127.0.0.1:${mainSite.port}`
@@ -288,6 +292,7 @@ void app.whenReady().then(async () => {
     signIns,
     pageUrl,
     pageOrigin,
+    frameOrigin,
     pushedPrompts,
     popups,
     setPick: (index) => {

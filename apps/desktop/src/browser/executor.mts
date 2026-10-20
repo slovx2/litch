@@ -79,6 +79,8 @@ export type SignInOutcome = 'done' | 'cancel' | 'closed' | 'aborted'
 export interface BrowserHandover {
   /** 这个标签现在在不在人手里 */
   active(tabId: string): boolean
+  /** tabs list、show 里要藏起来的标签：在人手里的，和交接期间网页开出来的弹窗 */
+  hides(tabId: string): boolean
   /** 代理在这个标签当前的文档里执行过脚本（evaluate）：交给人之前要重新载入 */
   markScripted(tabId: string): void
   /** 交给人，等人交还或取消（signal 中止时回 aborted）。交还前清空各框架里密码框的值 */

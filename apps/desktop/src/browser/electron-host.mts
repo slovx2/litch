@@ -5,9 +5,11 @@
 // 和 setVisible(false) 反而不行（截图超时、点击丢失）。摘下来的页面算“看不见”，rAF 停着，所以代理在用时关掉
 // 后台节流（electron-tab.mts 的 setAgentActive），这时页面算看得见、rAF 照跑。截图一律用 CDP，
 // 不用 capturePage（关了节流的摘下视图上它会超时）。
+
 import { type BrowserWindow, session } from 'electron'
 import { createTab, HIDDEN_BOUNDS, type HostTab, PARTITION } from './electron-tab.mjs'
 import type { BrowserHost, BrowserPage, OpenOptions, TabInfo, TabKind, TabOwner } from './model.mjs'
+import { isHandedOver, notePopup } from './passwords/tabs.mjs'
 
 /** 界面报来的矩形（界面页面里的 CSS 像素） */
 export interface Rect {
@@ -110,7 +112,10 @@ export function createElectronHost(): ElectronBrowserHost {
           )
           return
         }
-        const next = open(from.owner, from.kind)
+        // 交给人登录的标签开的弹窗（单点登录常用）：开成用户的标签，代理碰不到，交接结束时一并处理
+        const handed = isHandedOver(from.view.webContents.id)
+        const next = open(from.owner, handed ? 'user' : from.kind)
+        if (handed) notePopup(from.view.webContents.id, next.id)
         const rewritten = rewrite(from, url)
         if (rewritten) {
           rewritten.then(
@@ -121,7 +126,7 @@ export function createElectronHost(): ElectronBrowserHost {
               ),
           )
         } else void next.load(url, 30_000)
-        from.notice(`The page opened ${url} in a new tab ${next.id}.`)
+        if (!handed) from.notice(`The page opened ${url} in a new tab ${next.id}.`)
       },
     })
     tabs.set(id, tab)

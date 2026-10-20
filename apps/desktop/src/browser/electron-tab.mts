@@ -102,6 +102,8 @@ export function createTab(
   let rewrite: { done: Promise<void>; error: string | null } | null = null
 
   const addNotice = (text: string) => {
+    // 交给人登录的这段时间里的事（弹窗地址、对话框、跳转）不留给代理
+    if (isHandedOver(contents.id)) return
     notices.push(text)
     if (notices.length > NOTICES_KEEP) notices = notices.slice(-NOTICES_KEEP)
   }
@@ -306,6 +308,8 @@ export function createTab(
     }
   })
   contents.on('console-message', (event) => {
+    // 交给人登录的这段时间里网页打的东西（可能带着人输的字）不收
+    if (isHandedOver(contents.id)) return
     const level =
       event.level === 'warning' || event.level === 'error' || event.level === 'debug'
         ? event.level

@@ -1,7 +1,7 @@
 // 标签和导航：tabs、navigate、show。
 import { clientToolFailure } from '../../../../packages/protocol/src/client-tools.mjs'
 import { BadArgs, bool, oneOf, str } from './args.mjs'
-import type { Call, Tool } from './executor.mjs'
+import { type Call, SIGNING_IN, type Tool } from './executor.mjs'
 import type { BrowserPage } from './model.mjs'
 import { pageLine } from './page-ops.mjs'
 import { sessionKey } from './sites.mjs'
@@ -74,6 +74,16 @@ export const tabs: Tool = async (call) => {
       .filter((page) => sameSession(call, page))
       .map((page) => {
         const info = page.info()
+        // 人正在登录的标签、交接期间开出来的弹窗：只给占位，不给地址和标题
+        if (call.handover?.hides(info.id)) {
+          return {
+            tabId: info.id,
+            owner: info.kind === 'agent' ? 'you' : 'user',
+            current: page === current,
+            signingIn: true,
+            note: 'The user is signing in here; its address and title are hidden until request_sign_in returns.',
+          }
+        }
         return {
           tabId: info.id,
           owner: info.kind === 'agent' ? 'you' : 'user',
@@ -151,6 +161,7 @@ export const show: Tool = async (call) => {
     // 用户自己的标签也可以拿出来给用户看
     page = call.host.page(tabId)
     if (!page || !sameSession(call, page)) throw new BadArgs(`no tab ${tabId} in this conversation`)
+    if (call.handover?.hides(page.id)) return clientToolFailure('failed', SIGNING_IN)
   } else page = call.pickMaybe()
   if (!page) throw new BadArgs('no tab to show; call `navigate` first')
   call.host.show(page.id)

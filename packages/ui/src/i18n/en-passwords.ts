@@ -38,7 +38,13 @@ export const enPasswords: Record<keyof typeof zhPasswords, Entry> = {
   'browser.save.unavailable':
     "The password for {user} on {site} can't be saved: the system keychain isn't available on this computer, and Litch doesn't store unencrypted passwords.",
   'browser.save.close': 'OK',
-  'browser.signIn.title': 'The agent asks you to sign in to {site}',
+  'browser.signIn.title': 'The agent asks you to sign in to this site',
+  'browser.signIn.noOrigin': '(this page is not a website)',
+  'browser.signIn.claim': 'The agent says: {site} · {reason}',
+  'browser.signIn.withdrawn': 'The agent withdrew its sign-in request',
+  'browser.signIn.withdrawnNote':
+    'This tab was reloaded. Do not type passwords here anymore: the agent can read the page when it uses this tab again.',
+  'browser.signIn.dismiss': 'OK',
   'browser.signIn.note':
     'Sign in on the page below yourself (saved passwords work here), then click "Done, hand back". The agent cannot touch this tab meanwhile; password fields are cleared before it gets the tab back, and it never sees what you typed.',
   'browser.signIn.done': 'Done, hand back',
