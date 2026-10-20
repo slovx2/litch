@@ -30,6 +30,7 @@ import { type Phrase, type PhraseKey, phrase } from '../phrase.mjs'
 import { capDiff } from '../text/diff.mjs'
 import { capOutput, utf8Length } from '../text/output-cap.mjs'
 import { blob, capParts } from '../text/tool-cap.mjs'
+import { projectQuestions } from './asks.mjs'
 
 const baseName = (path: string): string => path.split(/[\\/]/).pop() || path
 
@@ -515,7 +516,9 @@ export function projectItem(item: ThreadItem, streaming = false): ItemView {
   switch (item.type) {
     case 'userMessage':
       return userMessage(id, item.content)
-    case 'agentMessage':
+    case 'agentMessage': {
+      // 题目标识用协议条目自己的标识：显示条目的标识可能是本机另起的
+      const questions = projectQuestions(item.id, item.questions)
       return {
         id,
         kind: 'agentMessage',
@@ -527,7 +530,10 @@ export function projectItem(item: ThreadItem, streaming = false): ItemView {
               ? 'commentary'
               : 'unknown',
         status: open,
+        ...(item.delivery === 'async' ? { delivery: 'async' as const } : {}),
+        ...(questions ? { questions } : {}),
       }
+    }
     case 'reasoning': {
       const summary = (item.summary ?? []).join('\n\n')
       return {

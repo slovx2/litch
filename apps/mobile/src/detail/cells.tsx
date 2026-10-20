@@ -1,7 +1,7 @@
 // 对话区的各种行（过程那几种在 steps.tsx）。每个单元格按行对象 memo：行对象没换（rows.ts 的 keep）就不重画。
 // 文字一律不可选：安卓上文本选择的监听在滚动时占主线程；复制走长按回合的菜单（长按用户消息、回答，或点状态行的“⋯”）。
 // 颜色、字号只从主题取。会长高的东西（流式的那一块）之外，行的高度在内容不变时不变。
-import { type FileScope, keys, type SessionSummary } from '@litch/core'
+import { type FileScope, keys, parseAskReply, type SessionSummary } from '@litch/core'
 import { memo, useState } from 'react'
 import {
   Image,
@@ -19,6 +19,7 @@ import { noteWork } from '../probe'
 import { useKey } from '../shell/services'
 import { useT } from '../ui/i18n'
 import { type Palette, useTheme } from '../ui/theme'
+import { AskCell, AskReplyText, useAsks } from './asks/AskCell'
 import { useTranscript } from './context'
 import { linkify } from './links'
 import { labelMermaid } from './mermaid'
@@ -36,6 +37,8 @@ export const UserCell = memo(function UserCell({ row }: Props<'user'>) {
   const { turnMenu, viewImage } = useTranscript()
   const images = row.attachments.filter((each) => each.kind === 'image' && each.url)
   const others = row.attachments.filter((each) => !(each.kind === 'image' && each.url))
+  // 答模型边干活边问的题时发的那一段：画成题目和回答
+  const replies = parseAskReply(row.text)
   return (
     <View style={styles.userWrap}>
       <Pressable
@@ -83,7 +86,9 @@ export const UserCell = memo(function UserCell({ row }: Props<'user'>) {
             ))}
           </View>
         ) : null}
-        {row.text ? (
+        {replies ? (
+          <AskReplyText replies={replies} />
+        ) : row.text ? (
           <Text style={[styles.userText, { color: c.ink, fontSize: font.size.body }]}>
             {row.text}
           </Text>
@@ -136,7 +141,14 @@ function markdownStyleOf(c: Palette, mono: string): MarkdownStyle {
  */
 const frozen = new WeakMap<Row, { width: number; height: number }>()
 
+/** 一块回答或计划。带题的助手消息（模型边干活边问）画成问题卡片（asks/AskCell.tsx） */
 export const MarkdownCell = memo(function MarkdownCell({ row }: Props<'md'>) {
+  const questions = useAsks(row.itemId)
+  if (questions) return <AskCell itemId={row.itemId} first={row.first} questions={questions} />
+  return <MarkdownBody row={row} />
+})
+
+const MarkdownBody = memo(function MarkdownBody({ row }: Props<'md'>) {
   noteWork('mdCell', 0, row.text.length)
   const { c, font } = useTheme()
   const t = useT()

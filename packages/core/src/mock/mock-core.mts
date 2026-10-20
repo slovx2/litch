@@ -176,6 +176,13 @@ const ASKS_ONE = /问一句|ask one/i
 const RUNS_A_WHILE = /跑一会儿|run a while/i
 /** “跑一会儿”那条命令跑多久。按真的时间走，不跟着出字的快慢变：界面上的秒数要来得及跳 */
 const RUN_MS = 2400
+/**
+ * 发的话里带“边做边问”时，回合里先来一条带题的助手消息（codex 的 request_user_input_async：
+ * 工具当场回“收到”，模型不停下来），接着跑一条命令，ASK_RUN_MS 之后结束、照常回话。
+ * 给界面试对话里的问题卡片用：回合还在跑的时候答，答复直接插进这个回合
+ */
+const ASKS_WHILE_WORKING = /边做边问|ask while working/i
+const ASK_RUN_MS = 8000
 /** “跑一会儿”那条命令的条目标识 */
 const runKey = (turnId: string): string => `${turnId}-w`
 
@@ -564,6 +571,26 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       runAWhile(view, turnId)
       return turnId
     }
+    if (ASKS_WHILE_WORKING.test(message.text)) {
+      const asks = SAMPLE_TEXT[lang].asyncAsks
+      const item: ThreadItem = {
+        type: 'agentMessage',
+        id: `${turnId}-ask`,
+        // 正文和真的 codex 一样：题目，下面每个选项一行
+        text: asks
+          .map((ask) =>
+            [ask.title, ...(ask.options ?? []).map((option) => `- ${option}`)].join('\n'),
+          )
+          .join('\n\n'),
+        phase: 'final_answer',
+        memoryCitation: null,
+        delivery: 'async',
+        questions: asks,
+      }
+      applySessionOps(view, [{ op: 'item.add', turnId, item: projectItem(item) }])
+      runAWhile(view, turnId, ASK_RUN_MS)
+      return turnId
+    }
     if (FLOODS.test(message.text) || BURSTS.test(message.text)) {
       flood(view, turnId, BURSTS.test(message.text) ? BURST_PER_TICK : FLOOD_PER_TICK)
       return turnId
@@ -665,7 +692,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
   }
 
   /** 回合里跑一条不出输出的命令，过一会儿结束（这时输出一次给全），再照常回话 */
-  const runAWhile = (view: SessionView, turnId: string) => {
+  const runAWhile = (view: SessionView, turnId: string, ms = RUN_MS) => {
     const startedAt = clock.now()
     const item = {
       id: runKey(turnId),
@@ -696,7 +723,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       ])
       replyHeard(view, turnId)
     }
-    replies.set(sessionKey(view), clock.setTimer(finish, RUN_MS))
+    replies.set(sessionKey(view), clock.setTimer(finish, ms))
   }
 
   /**
@@ -1764,12 +1791,27 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         return {}
       }
       if (name === 'session.send') {
-        const { text, images, extras, ...where } = params as Commands['session.send']['params']
+        const { text, images, extras, now, ...where } = params as Commands['session.send']['params']
         const message = outgoing(text, images, extras)
         const view = reachView(where)
         // 和真的核心一样：只读的会话（不接受直接输入的子代理、归档着的）发不了
         if (!view.live) throw new ChannelError('rejected', '这个会话是只读的')
-        if (running(view)) {
+        const turn = running(view)
+        // 和真的核心一样：要求直接插进去、插得进去的不排队（插不进去的照常排着）
+        if (
+          now &&
+          turn &&
+          view.can.steer &&
+          (view.can.steerImages || message.images.length === 0)
+        ) {
+          applySessionOps(view, [
+            {
+              op: 'item.add',
+              turnId: turn.id,
+              item: localUserMessage(`s${++seq}`, message, mentionsIn(view)),
+            },
+          ])
+        } else if (turn) {
           applySessionOps(view, [
             { op: 'queue.set', queued: [...view.queued, { id: `q${++seq}`, ...message }] },
           ])

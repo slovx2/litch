@@ -14,7 +14,7 @@ export interface BlockInput {
   kind: ItemView['kind']
   phase?: 'commentary' | 'final' | 'unknown'
   /**
-   * 画成卡片的条目（cardOf）：outside 露在过程外面（派出的子会话、提案）；
+   * 画成卡片的条目（cardOf）：outside 露在过程外面（派出的子会话、提案、带题的助手消息）；
    * inline 排进过程里它所在的位置（启动子代理那一行），整段过程收起时跟着收
    */
   card?: 'outside' | 'inline'
@@ -39,7 +39,7 @@ export type Block =
   | { type: 'answer'; itemId: string }
   | { type: 'plan'; itemId: string }
   | { type: 'todo'; itemId: string }
-  /** 派出的子会话、提案（含收尾带的建议）：一直露在外面 */
+  /** 派出的子会话、提案（含收尾带的建议）、带题的助手消息：一直露在外面 */
   | { type: 'card'; itemId: string }
   /**
    * 一段过程。中间夹着露在外面的块时会分成几段，回合收起时几段一起收成一行。
@@ -54,7 +54,10 @@ export type Block =
  * 回合里最后一条助手消息的阶段分不清（unknown）就取它；最后一条是过程说明就没有最终回答（中断了的回合常这样）
  */
 export function answerOf(items: BlockInput[]): string | undefined {
-  const messages = items.filter((item) => item.kind === 'agentMessage' && item.quiet !== true)
+  // 画成卡片的助手消息（带题的）不算回答：模型问完还在接着干活
+  const messages = items.filter(
+    (item) => item.kind === 'agentMessage' && item.quiet !== true && item.card === undefined,
+  )
   const final = messages.findLast((item) => item.phase === 'final')
   if (final) return final.id
   const last = messages.at(-1)
@@ -150,15 +153,19 @@ export function quietOf(item: ItemView): boolean {
 
 /**
  * 这个条目要不要画成卡片：litch_sessions.start（派出的子会话或提案）、带了建议的收尾（每条一张提案），
- * 和启动子代理的那次调用（点开看子线程）。等待、发输入这些别的子代理调用还是步骤组里的一行。
+ * 启动子代理的那次调用（点开看子线程），和带题的助手消息。等待、发输入这些别的子代理调用还是步骤组里的一行。
  * 判断只看条目开始时就有的东西（对话区只在条目增减时重新分块），条目后来更新也不会从卡片变成一行
  */
 export function cardOf(item: ItemView): boolean {
   return cardPlace(item) !== null
 }
 
-/** 卡片放在哪：启动子代理那一行排进过程里（inline），别的露在过程外面（outside）；不是卡片是 null */
+/**
+ * 卡片放在哪：启动子代理那一行排进过程里（inline），别的露在过程外面（outside）；不是卡片是 null。
+ * 带题的助手消息（模型边干活边问）也露在外面：过程收起来时不能把要人回答的题一起收掉
+ */
 export function cardPlace(item: ItemView): 'outside' | 'inline' | null {
+  if (item.kind === 'agentMessage') return item.questions ? 'outside' : null
   if (item.kind !== 'toolCall') return null
   if (item.spawned) return 'outside'
   if (item.wrapUp) return item.wrapUp.suggestions.length > 0 ? 'outside' : null

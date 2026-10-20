@@ -13,6 +13,7 @@
 import { readlinkSync, realpathSync, rmSync, statSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { delimiter, dirname, join, resolve } from 'node:path'
+import { askResponses } from './client-fixture-codex-ask.mjs'
 import { machineResponses } from './client-fixture-machine.mjs'
 import { sessionsResponses } from './client-fixture-sessions.mjs'
 
@@ -101,10 +102,13 @@ export const namespacesOf = (body) =>
   (body.tools ?? []).filter((entry) => entry?.type === 'namespace').map((entry) => entry.name)
 
 /**
- * 按 Responses 的流式事件发一次回复。reply 是 { text, pieces?, pace? }（一段文字，分 pieces 段、每段停 pace 毫秒），
+ * 按 Responses 的流式事件发一次回复。reply 是 { text, pieces?, pace?, delay? }（一段文字，分 pieces 段、每段停 pace 毫秒，
+ * 给了 delay 先停这么久），
  * 或者 { call: { name, arguments, namespace? } }（一次函数调用）。serial 拿来编标识
  */
 export async function sendResponse(res, reply, serial) {
+  // delay：先停这么久再回（模型还在想，回合一直在跑）
+  if (reply.delay) await pause(reply.delay)
   res.writeHead(200, { 'content-type': 'text/event-stream' })
   const emit = (event) => res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`)
   const id = `resp_${serial}`
@@ -167,7 +171,11 @@ export async function serveResponses(harness, path, raw, res, { serial, pace = 1
   const body = parse(raw)
   // 操作本机（litch_machine 和 litch-machine 命令）的那几句，见 client-fixture-machine.mjs
   // 会话树（litch_sessions 和设备注入的唤醒）的那几句，见 client-fixture-sessions.mjs
-  const machine = sessionsResponses(body, userText(body)) ?? machineResponses(body, userText(body))
+  // 边做边问（request_user_input_async）的那几句，见 client-fixture-codex-ask.mjs
+  const machine =
+    sessionsResponses(body, userText(body)) ??
+    machineResponses(body, userText(body)) ??
+    askResponses(body, userText(body))
   if (machine) {
     await sendResponse(res, machine, serial)
     return namespacesOf(body)

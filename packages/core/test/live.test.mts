@@ -1285,3 +1285,79 @@ test('表单：MCP 服务的征询排进请求里；填的值原样带回去，�
   })
   assert.deepEqual(session.seen.view?.requests, [])
 })
+
+/** codex 的 request_user_input_async 出的那种助手消息：带 delivery: async 和题目 */
+const asking = (id: string): ThreadItem => ({
+  type: 'agentMessage',
+  id,
+  text: '跳过联网的测试吗？\n- 跳过\n- 照常跑',
+  phase: 'final_answer',
+  memoryCitation: null,
+  delivery: 'async',
+  questions: [
+    { title: '跳过联网的测试吗？', options: ['跳过', '照常跑'] },
+    { title: '结果发到哪？', options: null },
+  ],
+})
+
+test('边做边问：历史和实时的助手消息都带上题目，题目标识用协议条目的标识', async () => {
+  const history = turn('t1', [userText('u1', '跑测试'), asking('call_old')], {
+    status: 'completed',
+  })
+  const { core, peer } = setup([thread({ id: 'a', turns: [history] })])
+  core.start()
+  await settle()
+  const session = watch(core)
+  await settle()
+  const asks = () =>
+    Object.values(session.seen.view?.items ?? {}).flatMap((item) =>
+      item.kind === 'agentMessage' && item.questions ? [item] : [],
+    )
+  const [old] = asks()
+  assert.equal(old?.delivery, 'async')
+  assert.deepEqual(old?.questions, [
+    {
+      id: JSON.stringify(['request_user_input_async', 'call_old', 0]),
+      title: '跳过联网的测试吗？',
+      options: ['跳过', '照常跑'],
+    },
+    {
+      id: JSON.stringify(['request_user_input_async', 'call_old', 1]),
+      title: '结果发到哪？',
+      options: [],
+    },
+  ])
+
+  const base = { threadId: 'a', turnId: 'srv-9' }
+  peer.last().notify('turn/started', { threadId: 'a', turn: started('srv-9') })
+  peer.last().notify('item/started', { ...base, item: asking('call_new'), startedAtMs: 0 })
+  peer.last().notify('item/completed', { ...base, item: asking('call_new'), completedAtMs: 0 })
+  await settle()
+  assert.equal(asks().length, 2)
+  assert.equal(
+    asks()[1]?.questions?.[0]?.id,
+    JSON.stringify(['request_user_input_async', 'call_new', 0]),
+  )
+})
+
+test('边做边问：答复要求直接插进正在进行的回合；插不进去就照常排着，不算没发成', async () => {
+  const { core, world, command, sent } = setup()
+  core.start()
+  await settle()
+  const session = watch(core)
+  await settle()
+  await command('session.send', { ...where, text: '一' })
+  await command('session.send', { ...where, text: '答复', now: true })
+  assert.equal(sent('turn/steer').length, 1)
+  assert.equal(session.seen.view?.queued.length, 0)
+  assert.deepEqual(session.texts(), [['一', '答复']])
+
+  world.steerFailure = new RpcFailure(-32009, '指定回合与活动回合不一致')
+  await command('session.send', { ...where, text: '再答', now: true })
+  await settle()
+  assert.deepEqual(
+    session.seen.view?.queued.map((entry) => entry.text),
+    ['再答'],
+  )
+  assert.deepEqual(session.texts(), [['一', '答复']])
+})

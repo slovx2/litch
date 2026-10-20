@@ -9,7 +9,8 @@
 //                      OpenCode 配模型，所以这里只认 opencode（参数取 CHA_ACP_ARGS，没给就是 acp，即 opencode acp）
 //   CHA_CODEX_CLI      --engines 里写了 codex 才要：隔离的原生 codex（流水线上可以是 npm 装的精确版本
 //                      @openai/codex@0.160.0 的 bin/codex.js）。数据目录 CODEX_HOME 在夹具里，模型是回环上的假接口
-//                      （Responses 形态，client-fixture-responses.mjs），不碰 ~/.codex。没要时在设置里明写停用
+//                      （Responses 形态，client-fixture-responses.mjs），不碰 ~/.codex。没要时在设置里明写停用。
+//                      再带 LITCH_FIXTURE_CODEX_ASK=1 时假模型会“边做边问”（client-fixture-codex-ask.mjs）
 // 没要的新 harness（OpenCode，经 ACP 接的 Gemini CLI、Qwen Code、acp）在设置里明写停用，免得哪一层漏了隔离时
 // 它们去找用户自己装的那一份。
 // 要了却没给、给的不是可执行文件：报错退出，不悄悄少起一个。没要的照旧报“没装”。
@@ -31,6 +32,7 @@
 import { spawnSync } from 'node:child_process'
 import { accessSync, constants, existsSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs'
 import { basename, delimiter, dirname, join } from 'node:path'
+import { askCatalog } from './client-fixture-codex-ask.mjs'
 import { FIXTURE_SKILL, skillFile } from './client-fixture-marks.mjs'
 import { codexConfig } from './client-fixture-responses.mjs'
 
@@ -238,12 +240,22 @@ export function writeEngineSettings({ home, root, modelUrl, engines }) {
     // 它想往外连的（插件市场、更新检查）一律走连不通的代理
     const codexHome = join(root, 'cx')
     mkdirSync(codexHome, { recursive: true })
-    writeFileSync(join(codexHome, 'config.toml'), codexConfig(`${modelUrl}/codex/v1`))
+    const codexPath = `${dirname(process.execPath)}:/usr/bin:/bin:/usr/sbin:/sbin`
+    // 要验“边做边问”时（LITCH_FIXTURE_CODEX_ASK=1）假模型换一份声明了异步提问的模型目录（client-fixture-codex-ask.mjs）
+    const catalog =
+      process.env.LITCH_FIXTURE_CODEX_ASK === '1'
+        ? `${askCatalog(engines.codex, codexHome, {
+            HOME: join(root, 'home'),
+            CODEX_HOME: codexHome,
+            PATH: codexPath,
+          })}\n`
+        : ''
+    writeFileSync(join(codexHome, 'config.toml'), catalog + codexConfig(`${modelUrl}/codex/v1`))
     values['harness.codex.cliPath'] = engines.codex
     values['harness.codex.env'] = [
       plain('CODEX_HOME', codexHome),
       // npm 装的 codex 是个 node 脚本（#!/usr/bin/env node），隔离的登录 shell 给的 PATH 里没有 node：补上跑夹具的这份
-      plain('PATH', `${dirname(process.execPath)}:/usr/bin:/bin:/usr/sbin:/sbin`),
+      plain('PATH', codexPath),
       ...['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'http_proxy', 'https_proxy', 'all_proxy'].map(
         (name) => plain(name, DEAD_END),
       ),

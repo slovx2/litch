@@ -1,0 +1,90 @@
+/* 模型边干活边问的题（transcript/AskCard.tsx）：和计划卡片一样的外框，题目一题一段，
+   选项和输入框用输入区提问卡片的那一套（.opt、.req-input），答过、过去了的只留文字 */
+.ask {
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  background: var(--raised);
+}
+.ask[data-state="open"] {
+  border-color: var(--line-3);
+}
+.ask-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line-1);
+  font-weight: 500;
+}
+.ask-state {
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 400;
+}
+.ask-q {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+}
+.ask-q + .ask-q {
+  border-top: 1px solid var(--line-1);
+}
+.ask-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.ask-input {
+  min-width: 0;
+}
+.ask-answer {
+  padding-left: 10px;
+  border-left: 2px solid var(--accent);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.ask-answer[data-skipped="true"] {
+  border-left-color: var(--line-2);
+  color: var(--ink-2);
+}
+.ask-options {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--ink-2);
+}
+.ask-hint {
+  margin: 0;
+  padding: 0 12px 10px;
+  color: var(--ink-2);
+  font-size: 12px;
+}
+.ask-hint.err {
+  color: var(--err);
+}
+.ask-acts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px 12px;
+}
+.ask-note {
+  min-width: 0;
+  color: var(--ink-2);
+  font-size: 12px;
+}
+/* 用户答复的那条消息：先一行小字“回答了问题”，每题是引着的题目加回答 */
+.ask-reply {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ask-reply-kind {
+  color: var(--ink-2);
+  font-size: 12px;
+}
+.ask-reply-q {
+  padding-left: 8px;
+  border-left: 2px solid var(--line-2);
+  color: var(--ink-2);
+}

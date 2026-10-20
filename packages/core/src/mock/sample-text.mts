@@ -53,6 +53,8 @@ export interface SampleText {
   mockReply: string
   /** 发的话里带“跑一会儿”时，那条命令结束后一次给全的输出 */
   runOutput: string
+  /** 发的话里带“边做边问”时，模型边跑命令边问的题（codex 的 request_user_input_async）：一道有选项，一道只能自己写 */
+  asyncAsks: { title: string; options: string[] | null }[]
   /** 对话里“配置：…”跑完 litch config 之后的回答：成了、没成 */
   configDone: string
   configFailed: string
@@ -243,6 +245,13 @@ const zh: SampleText = {
     checkNames: ['冒烟测试', '端到端测试', '性能基准'],
   },
   runOutput: '共 42 项测试，全部通过\n',
+  asyncAsks: [
+    {
+      title: '测试里有 3 项依赖网络。这次先跳过它们，还是照常全跑？',
+      options: ['先跳过，回头单独跑', '照常全跑'],
+    },
+    { title: '跑完之后结果发到哪个频道？', options: null },
+  ],
   configDone: '照你说的改好了，上面是 litch config 的输出。',
   configFailed: '这一步没做成，原因在上面 litch config 的输出里。',
   mockReply: [
@@ -468,6 +477,13 @@ const en: SampleText = {
     checkNames: ['Smoke tests', 'End-to-end tests', 'Performance baseline'],
   },
   runOutput: '42 tests, all passed\n',
+  asyncAsks: [
+    {
+      title: 'Three tests need the network. Skip them this time, or run everything?',
+      options: ['Skip them for now', 'Run everything'],
+    },
+    { title: 'Which channel should the results go to?', options: null },
+  ],
   configDone: 'Done. The litch config output is above.',
   configFailed: 'That did not go through; the litch config output above says why.',
   mockReply: [
