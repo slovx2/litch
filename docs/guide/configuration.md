@@ -252,6 +252,8 @@ node packages/claude/dist/claude/src/adapter.mjs app-server --listen stdio:// \
 
 命令由 Claude Code 起，入口拿不到它的环境，所以配了规则时，入口把命令包进一个 bash，先按规则删、改变量，再跑原命令。因此：`set` 的值出现在这个 bash 的命令行里，同 uid 的沙箱外进程能从 `/proc` 读到，和读环境变量一样；在 Claude Code 2.1.282 上实测，会话记录里存的仍是模型写的原命令，不带这些值。另外，包了之后命令里的 `cd` 不再带到下一条命令。规则等于默认时命令原样不动。`command/exec`、MCP 服务、钩子不受它管。
 
+规则只改命令的环境，Claude Code 自己的环境（模型凭据、被 `exclude` 挡在命令外面的令牌）不动。为了不让模型绕过去读它：配了规则或选了自定义档位的会话里，Linux 上的文件类工具不碰 `/proc`（`Read /proc/self/environ` 能读到 Claude Code 的整份环境，经工作区里的链接也一样），搜索范围含 `/proc` 的也拒绝；Skill 的内联 shell 不经过这层改写，这类会话里关掉。命令在沙箱里只看得到自己 PID 命名空间的 `/proc`，看不到 Claude Code 进程。
+
 ### Skill 开关
 
 Claude Code 的 Skill 开关照 codex 存在配置的 `skills.config` 里：一串 `{ path = "<SKILL.md 的绝对路径>", enabled = false }` 或 `{ name = "<名字>", enabled = true }`，按顺序套，后面的为准；`-c skills.config=…` 接在 `config.json` 那一串后面。`skills/config/write` 和 `config/batchWrite` 写的是同一处（`skills/config/write` 关就改掉同一个选择器的那条或追加，开就删掉那条；只靠 Claude Code 自己 `settings.json` 的 `skillOverrides` 关着的，留一条开的盖过它）。

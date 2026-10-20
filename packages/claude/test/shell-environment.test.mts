@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import test from 'node:test'
-import { sandboxedBashInput } from '../src/runtime-permissions.mjs'
+import { needsStrictSkillShell } from '../src/native-session.mjs'
+import { deniedTool, sandboxedBashInput } from '../src/runtime-permissions.mjs'
 import {
   resolveShellEnvironmentPolicy,
   type ShellEnvironmentPolicy,
@@ -138,4 +139,26 @@ test('SHELL-ENV-003：套沙箱时先组环境再进沙箱，完全访问也照�
     assert.equal(env.CLI_TOKEN, 'c', mode)
     assert.equal(env.FOO_TOKEN, undefined, mode)
   }
+})
+
+test('SHELL-ENV-004：配了规则的会话，文件类工具读不到 /proc（CLI 自己的环境在那里），Skill 内联 shell 也关掉', () => {
+  const context = {
+    threadId: 't',
+    cwd: process.cwd(),
+    sandboxMode: 'danger-full-access',
+    approvalPolicy: 'never',
+    shellEnvironment: resolveShellEnvironmentPolicy({ exclude: ['BROWSER_*'] }),
+  } as unknown as RuntimeTurnContext
+  assert.equal(needsStrictSkillShell(context), true)
+  const denied = (name: string, input: Record<string, unknown>) => deniedTool(context, name, input)
+  if (process.platform === 'linux') {
+    assert.match(String(denied('Read', { file_path: '/proc/self/environ' })), /禁止读取/)
+    assert.match(String(denied('Read', { file_path: `/proc/${process.pid}/environ` })), /禁止读取/)
+    assert.match(String(denied('Grep', { pattern: 'TOKEN', path: '/' })), /搜索范围包含/)
+  } else assert.equal(denied('Read', { file_path: '/proc/self/environ' }), null)
+  assert.equal(denied('Read', { file_path: '/etc/hosts' }), null)
+  // 没配规则、也没选自定义档位的会话照旧
+  const plain = { ...context, shellEnvironment: undefined } as unknown as RuntimeTurnContext
+  assert.equal(deniedTool(plain, 'Read', { file_path: '/proc/self/environ' }), null)
+  assert.equal(needsStrictSkillShell(plain), false)
 })

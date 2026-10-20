@@ -1,6 +1,14 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
@@ -419,15 +427,30 @@ test('PROFILE-REAL-001：真实 CLI 里 Read 和 Bash 都按档位禁读，自�
       cwd: own,
       permissions: 'saas',
       approvalPolicy: 'never',
-      config: { shell_environment_policy: { inherit: 'core', set: { CLI_TOKEN: 'scoped' } } },
+      config: {
+        shell_environment_policy: {
+          inherit: 'core',
+          set: { CLI_TOKEN: 'scoped', TMPDIR: join(own, 'tmp') },
+        },
+      },
     })
     current = scoped.thread.id
     const env = await call(
       'Bash',
-      { command: 'echo "T=$CLI_TOKEN A=${ANTHROPIC_BASE_URL:-none} L=${LITCH_THREAD_ID:+yes}"' },
+      {
+        command:
+          'echo "T=$CLI_TOKEN A=${ANTHROPIC_BASE_URL:-none} L=${LITCH_THREAD_ID:+yes} D=$TMPDIR"',
+      },
       true,
     )
-    assert.match(env, /T=scoped A=none L=yes/)
+    assert.ok(env.includes(`T=scoped A=none L=yes D=${join(own, 'tmp')}`), env)
+    // CLI 自己的环境（模型凭据等）在 /proc/self/environ，文件类工具不许读（只有 Linux 有 /proc）
+    if (process.platform === 'linux') {
+      // 直接给 /proc/self/environ，CLI 自己也拦（当成设备文件）；经工作区里的链接绕过它的检查，由入口拦
+      await call('Read', { file_path: '/proc/self/environ' }, false)
+      symlinkSync('/proc/self/environ', join(own, 'env-link'))
+      assert.match(await call('Read', { file_path: join(own, 'env-link') }, false), /禁止读取/)
+    }
   } finally {
     await client.close()
     await model.close()

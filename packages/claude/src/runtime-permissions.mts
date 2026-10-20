@@ -207,6 +207,21 @@ function deniedRead(
   return null
 }
 
+// 文件类工具在 CLI 进程里跑，Read `/proc/self/environ` 读到的是 CLI 自己的整份环境（模型的凭据、
+// shell_environment_policy 挡在命令外面的令牌），`/proc/<pid>/` 下还有别的进程的。用了自定义档位或
+// shell_environment_policy 的会话，文件类工具一律不碰 /proc（搜索范围含 /proc 的也拒绝）；命令在沙箱里
+// 只看得到自己 PID 命名空间的 /proc，不受这条影响
+function fileToolRules(context: RuntimeTurnContext): FileSystemRules | null {
+  if (process.platform !== 'linux' || (!context.fileSystem && !context.shellEnvironment))
+    return context.fileSystem ?? null
+  const base = context.fileSystem ?? {
+    entries: [{ path: '/', access: 'read' as const }],
+    networkAccess: false,
+    workspaceRoots: [],
+  }
+  return { ...base, entries: [...base.entries, { path: '/proc', access: 'deny' }] }
+}
+
 // 放在 PreToolUse，避免 SDK 自带 allow 规则或 acceptEdits 绕过 canUseTool。
 export function deniedTool(
   context: RuntimeTurnContext,
@@ -227,8 +242,9 @@ export function deniedTool(
   )
     return '当前策略禁止工具访问网络'
   if (name === 'Bash' && typeof input.command !== 'string') return '命令必须是字符串'
-  if (context.fileSystem) {
-    const reason = deniedRead(context.fileSystem, context.cwd, name, input)
+  const readRules = fileToolRules(context)
+  if (readRules) {
+    const reason = deniedRead(readRules, context.cwd, name, input)
     if (reason) return reason
   }
   if (context.planMode || (context.sandboxMode === 'read-only' && !fileTools.has(name)))

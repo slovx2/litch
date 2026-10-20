@@ -23,7 +23,9 @@ export function needsStrictSkillShell(context: RuntimeTurnContext): boolean {
   return (
     context.planMode ||
     context.sandboxMode !== 'danger-full-access' ||
-    context.approvalPolicy !== 'never'
+    context.approvalPolicy !== 'never' ||
+    // Skill 的内联 shell 不经过 Bash 的改写，组不了 shell_environment_policy 的环境
+    context.shellEnvironment != null
   )
 }
 
