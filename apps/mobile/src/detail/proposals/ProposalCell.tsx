@@ -2,6 +2,8 @@
 // 标题、harness / 模型 / 目录、简报（长的折起来，点了展开）、状态（等你开始、已开始、不要了、撤回了、过期了），
 // 沙箱收不紧时的提醒；等着的有“开始”“改了再开始”“不要”。已开始的下面一行是实际起出来的子会话
 // （它的 harness 和目录照子会话本身写，不照提案），点了进去。列表页点一条回来时这张描一圈。
+// offer 卡（start 带 initiation offer，用户这条消息是和会话无关的新任务）：只有标题和一句说明，
+// 等你选时有“新会话”“在这里做”；选了之后写等模型补简报、已开始（下面一行同上）、在这里做。
 import {
   type DeviceView,
   keys,
@@ -12,36 +14,48 @@ import {
 import { memo, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { SANDBOX_LEVEL } from '../../../../../packages/ui/src/tree/sandbox.ts'
-import { badgeOf, titleOf } from '../../screens/sessions/rows'
+import { badgeOf } from '../../screens/sessions/rows'
 import { useKey } from '../../shell/services'
 import { useT } from '../../ui/i18n'
-import { StatusMark } from '../../ui/kit/controls'
 import { useTheme } from '../../ui/theme'
 import type { Props } from '../cells'
 import { useTranscript } from '../context'
+import { ChildLine } from './ChildLine'
 import { useFlashed, useProposalClock } from './hooks'
-import { isLongBrief, STATUS_TEXT } from './logic'
-import { ProposalActs } from './ProposalActs'
+import { isLongBrief, isOfferStatus, needsUser, STATUS_TEXT } from './logic'
+import { OfferActs, ProposalActs } from './ProposalActs'
 
-const MARK = { running: 'running', waiting: 'waiting', error: 'error', idle: 'idle' } as const
+/** offer 卡上那句说明，按状态（已开始的不写，下面是子会话那一行） */
+const OFFER_NOTE = {
+  offered: 'proposals.offer.ask',
+  chosen: 'proposals.offer.chosen',
+  here: 'proposals.offer.here.note',
+} as const
 
 export const ProposalCell = memo(function ProposalCell({ row }: Props<'proposal'>) {
   const theme = useTheme()
   const { c, font } = theme
   const t = useT()
-  const { deviceId, sessionId, openSession } = useTranscript()
+  const { deviceId, sessionId } = useTranscript()
   const { proposal, spawned } = row
   const proposalId = proposal?.id ?? spawned?.proposalId ?? ''
   const device = useKey<DeviceView>(keys.device(deviceId))
   const parent = useKey<SessionSummary>(keys.summary(deviceId, sessionId))
   const starts = useKey<ProposalStarts>(keys.proposalStarts(deviceId))
   const childId = proposal?.startedId ?? starts?.[proposalId] ?? ''
-  const child = useKey<SessionSummary>(keys.summary(deviceId, childId))
   const now = useProposalClock([proposal])
   const lit = useFlashed(proposalId || undefined)
   const [unfolded, setUnfolded] = useState(false)
-  // 列表里还没有这一张：开始了的看侧栏里谁记着从它开始，否则说不清
-  const status = proposal ? proposalStatus(proposal, now) : childId ? 'started' : null
+  // 列表里还没有这一张：开始了的看侧栏里谁记着从它开始；offer 的调用还没有结果（还在等你选），当作等你选；
+  // 否则说不清
+  const status = proposal
+    ? proposalStatus(proposal, now)
+    : childId
+      ? 'started'
+      : row.offer && !spawned?.proposalId
+        ? 'offered'
+        : null
+  const offer = row.offer || (status !== null && isOfferStatus(status))
   const title = proposal?.title ?? spawned?.title ?? ''
   const prompt = proposal?.prompt ?? spawned?.prompt ?? ''
   const harness = proposal?.harness ?? spawned?.harness ?? parent?.harness ?? null
@@ -49,7 +63,14 @@ export const ProposalCell = memo(function ProposalCell({ row }: Props<'proposal'
   const cwd = proposal?.cwd ?? spawned?.cwd ?? null
   const kind = proposal?.kind ?? spawned?.kind ?? 'fresh'
   const long = isLongBrief(prompt)
+  // offer 卡在模型补上简报之前只有标题：不写 harness 那一行
+  const shaped = !offer || prompt !== ''
   const waiting = status === 'pending' && proposal !== null
+  const choosing = status === 'offered' && proposal !== null
+  const note =
+    offer && status !== null && status in OFFER_NOTE
+      ? OFFER_NOTE[status as keyof typeof OFFER_NOTE]
+      : null
   const nameOf = (id: string) => device?.harnesses.find((entry) => entry.id === id)?.name ?? id
   const meta = [
     harness ? nameOf(harness) : null,
@@ -63,7 +84,7 @@ export const ProposalCell = memo(function ProposalCell({ row }: Props<'proposal'
       style={[
         styles.card,
         {
-          borderColor: lit ? c.accent : waiting ? c.line3 : c.line2,
+          borderColor: lit ? c.accent : waiting || choosing ? c.line3 : c.line2,
           borderWidth: lit ? 2 : 1,
           backgroundColor: c.raised,
         },
@@ -72,14 +93,14 @@ export const ProposalCell = memo(function ProposalCell({ row }: Props<'proposal'
       <View style={styles.body}>
         <View style={styles.head}>
           <Text style={[styles.kind, { color: c.ink3, fontFamily: font.mono }]}>
-            ◇ {t('proposal.kind')}
+            ◇ {t(offer ? 'proposals.offer.kind' : 'proposal.kind')}
           </Text>
           {status ? (
             <Text
               testID={`proposal:${proposalId}:state`}
               style={[
                 styles.state,
-                { color: status === 'pending' ? c.wait : c.ink3, fontFamily: font.mono },
+                { color: needsUser(status) ? c.wait : c.ink3, fontFamily: font.mono },
               ]}
             >
               {t(STATUS_TEXT[status])}
@@ -87,18 +108,31 @@ export const ProposalCell = memo(function ProposalCell({ row }: Props<'proposal'
           ) : null}
         </View>
         <Text style={[styles.title, { color: c.ink, fontSize: font.size.body }]}>{title}</Text>
-        <View style={styles.meta}>
-          {harness ? (
-            <Text
-              style={[styles.badge, { color: c.ink2, borderColor: c.line2, fontFamily: font.mono }]}
-            >
-              {badgeOf(device, harness)}
-            </Text>
-          ) : null}
-          <Text style={[styles.metaText, { color: c.ink2 }]} numberOfLines={2}>
-            {meta.join(' · ')}
+        {note ? (
+          <Text
+            testID={`proposal:${proposalId}:note`}
+            style={[styles.note, { color: c.ink2, fontSize: font.size.meta }]}
+          >
+            {t(note)}
           </Text>
-        </View>
+        ) : null}
+        {shaped ? (
+          <View style={styles.meta}>
+            {harness ? (
+              <Text
+                style={[
+                  styles.badge,
+                  { color: c.ink2, borderColor: c.line2, fontFamily: font.mono },
+                ]}
+              >
+                {badgeOf(device, harness)}
+              </Text>
+            ) : null}
+            <Text style={[styles.metaText, { color: c.ink2 }]} numberOfLines={2}>
+              {meta.join(' · ')}
+            </Text>
+          </View>
+        ) : null}
         {prompt ? (
           <Pressable
             disabled={!long}
@@ -128,41 +162,12 @@ export const ProposalCell = memo(function ProposalCell({ row }: Props<'proposal'
         {waiting ? (
           <ProposalActs deviceId={deviceId} sessionId={sessionId} proposalId={proposalId} />
         ) : null}
+        {choosing ? (
+          <OfferActs deviceId={deviceId} sessionId={sessionId} proposalId={proposalId} />
+        ) : null}
       </View>
       {status === 'started' && childId ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityHint={t('tree.child.open')}
-          disabled={!child}
-          onPress={() => openSession(childId)}
-          testID={`proposal:${proposalId}:child`}
-          style={({ pressed }) => [
-            styles.child,
-            { borderTopColor: c.line1, backgroundColor: pressed ? c.press : 'transparent' },
-          ]}
-        >
-          {child ? (
-            <>
-              <StatusMark status={MARK[child.status]} />
-              <View style={styles.childText}>
-                <Text numberOfLines={1} style={{ color: c.ink, fontSize: font.size.meta + 1 }}>
-                  {titleOf(child, t) || title}
-                </Text>
-                <Text
-                  numberOfLines={1}
-                  style={[styles.childMeta, { color: c.ink3, fontFamily: font.mono }]}
-                >
-                  {[nameOf(child.harness), child.cwd].filter(Boolean).join(' · ')}
-                </Text>
-              </View>
-              <Text style={[styles.childState, { color: c.ink3 }]}>
-                {t(`tree.status.${child.status}`)} ›
-              </Text>
-            </>
-          ) : (
-            <Text style={{ color: c.ink3, fontSize: font.size.meta }}>{t('tree.child.gone')}</Text>
-          )}
-        </Pressable>
+        <ChildLine childId={childId} fallback={title} testID={`proposal:${proposalId}:child`} />
       ) : null}
     </View>
   )
@@ -181,15 +186,5 @@ const styles = StyleSheet.create({
   brief: { lineHeight: 19 },
   more: { marginTop: 2 },
   wider: { lineHeight: 19 },
-  child: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  childText: { flex: 1, minWidth: 0 },
-  childMeta: { fontSize: 11, marginTop: 2 },
-  childState: { fontSize: 12 },
+  note: { lineHeight: 19 },
 })

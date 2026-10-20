@@ -1,5 +1,5 @@
 // 一张等着的提案上的“开始”“改了再开始”“不要”三个按钮，和没做成时的那句话。对话里的卡片和建议任务列表共用。
-// “改了再开始”是单独一页（src/screens/proposals/ProposalStartScreen.tsx）。
+// offer 卡的“新会话”“在这里做”在下面的 OfferActs。“改了再开始”是单独一页（src/screens/proposals/ProposalStartScreen.tsx）。
 import { type DeviceView, keys, type SessionSummary } from '@litch/core'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
@@ -66,3 +66,45 @@ const styles = StyleSheet.create({
   acts: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
   failure: { lineHeight: 19 },
 })
+
+/** offer 卡上的“新会话”“在这里做”（模型那次调用一直等着这个选择），和没做成时的那句话 */
+export function OfferActs({
+  deviceId,
+  sessionId,
+  proposalId,
+}: {
+  deviceId: string
+  sessionId: string
+  proposalId: string
+}) {
+  const { c, font } = useTheme()
+  const t = useT()
+  const device = useKey<DeviceView>(keys.device(deviceId))
+  const act = useProposalAct(deviceId, sessionId, proposalId)
+  const off = act.busy || device?.connection !== 'online'
+  return (
+    <>
+      <View style={styles.acts}>
+        <Button
+          label={t('proposals.offer.session')}
+          disabled={off}
+          busy={act.busy}
+          onPress={() => act.answer('session')}
+          testID={`proposal:${proposalId}:session`}
+        />
+        <Button
+          kind="plain"
+          label={t('proposals.offer.here')}
+          disabled={off}
+          onPress={() => act.answer('here')}
+          testID={`proposal:${proposalId}:here`}
+        />
+      </View>
+      {act.failure ? (
+        <Text style={[styles.failure, { color: c.err, fontSize: font.size.meta }]}>
+          {act.failure}
+        </Text>
+      ) : null}
+    </>
+  )
+}

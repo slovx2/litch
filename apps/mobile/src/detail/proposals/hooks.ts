@@ -1,4 +1,4 @@
-// 建议任务的几样共用的东西：取列表、到点重画、开始和不要、从列表回到对话里那张卡片（滚过去、闪一下）。
+// 建议任务的几样共用的东西：取列表、到点重画、开始和不要、offer 卡上的选择、从列表回到对话里那张卡片（滚过去、闪一下）。
 // 卡片在 ProposalCell.tsx，列表页在 src/screens/proposals/ProposalsScreen.tsx。
 import type { SessionProposalView } from '@litch/core'
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
@@ -53,7 +53,16 @@ export function useProposalClock(
   return now
 }
 
-/** 一张提案上的“开始”“不要”：发出去、等着、没做成的原因 */
+/**
+ * offer 卡上的选择：session 新会话（模型接着补简报开起来），here 在这里做。
+ * 核心的 session.proposal.answer 还没合进来（乙4 在加），先照约好的名字和参数直接发；合并后删掉这个类型、去掉转换
+ */
+type AnswerCommand = (
+  name: 'session.proposal.answer',
+  params: { deviceId: string; sessionId: string; proposalId: string; choice: 'session' | 'here' },
+) => Promise<Record<string, never>>
+
+/** 一张提案上的“开始”“不要”、offer 卡上的“新会话”“在这里做”：发出去、等着、没做成的原因 */
 export function useProposalAct(deviceId: string, sessionId: string, proposalId: string) {
   const channel = useChannel()
   const t = useT()
@@ -80,6 +89,15 @@ export function useProposalAct(deviceId: string, sessionId: string, proposalId: 
       ),
     dismiss: () =>
       run(channel.command('session.proposal.dismiss', { deviceId, sessionId, proposalId })),
+    answer: (choice: 'session' | 'here') =>
+      run(
+        (channel.command as unknown as AnswerCommand).call(channel, 'session.proposal.answer', {
+          deviceId,
+          sessionId,
+          proposalId,
+          choice,
+        }),
+      ),
   }
 }
 

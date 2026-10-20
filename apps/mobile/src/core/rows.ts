@@ -21,7 +21,7 @@ import type {
   UserAttachment,
   WebSearchItem,
 } from '@litch/core'
-import { cardsOf, eventKind } from '../detail/proposals/logic'
+import { cardsOf, eventKind, handOffOf, isOfferCall } from '../detail/proposals/logic'
 import { type ChunkState, chunkText, emptyChunks } from './blocks'
 
 export type StepItem = CommandItem | FileChangeItem | ToolCallItem | WebSearchItem | NoticeItem
@@ -46,7 +46,8 @@ export type Row =
     }
   /**
    * 一张提案卡（建议任务）：收尾调用带的一条建议，或者 litch_sessions.start 降成的提案。一条调用几张卡就几行。
-   * proposal 为 null：start 的结果里有提案号、列表里还没有它，照调用时给的（spawned）画
+   * proposal 为 null：start 的结果里有提案号、列表里还没有它，照调用时给的（spawned）画。
+   * offer：start 带 initiation offer 的那张（“新会话 / 在这里做”）
    */
   | {
       type: 'proposal'
@@ -55,6 +56,20 @@ export type Row =
       itemId: string
       proposal: SessionProposalView | null
       spawned: SpawnedView | null
+      offer: boolean
+    }
+  /**
+   * litch_sessions.hand_off：做到一半的任务交给了分叉会话。threadId 是起出来的那个，还没有结果是 null。
+   * running：调用还没完
+   */
+  | {
+      type: 'handoff'
+      key: string
+      turnId: string
+      itemId: string
+      title: string
+      threadId: string | null
+      running: boolean
     }
   /**
    * 回答或计划的一块。open：这一块还在长；live：这条回答还在流式（它的块都算，哪怕最后一块刚好封了口）；
@@ -194,8 +209,25 @@ export class RowBuilder {
               itemId: item.id,
               proposal,
               spawned: item.spawned ?? null,
+              offer: isOfferCall(item),
             }),
           )
+        continue
+      }
+      const handOff = item.kind === 'toolCall' ? handOffOf(item) : null
+      if (handOff && item.kind === 'toolCall') {
+        flush()
+        out.push(
+          this.keep({
+            type: 'handoff',
+            key: `${item.id}:handoff`,
+            turnId: turn.id,
+            itemId: item.id,
+            title: handOff.title,
+            threadId: handOff.threadId,
+            running: item.status === 'inProgress',
+          }),
+        )
         continue
       }
       if (isStep(item)) {
