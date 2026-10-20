@@ -31,6 +31,7 @@ import { duration } from '../app/format.ts'
 import { useKey, useServices } from '../app/services.tsx'
 import { Dock, Requests } from '../composer/Dock.tsx'
 import type { MessageKey, Translator } from '../i18n/index.ts'
+import { useRailHasTodo } from '../rail/rail-state.ts'
 import { TaskNote } from '../tasks/TaskNote.tsx'
 import { useAgentsUnfinished } from '../tree/agent-view.tsx'
 import { LineageBar } from '../tree/LineageBar.tsx'
@@ -172,6 +173,8 @@ const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { 
   const { blocks, answerId, processIds } = useBlocks(ref, turn?.itemIds ?? [], turn?.status)
   const settled = useSettled(ref, running, answerId, meta?.can.finalOnStart === true)
   const touched = useTurnTouched(sessionKey, turnId)
+  // 待办在右边的信息栏里时，对话里不再画一遍
+  const todoInRail = useRailHasTodo(sessionKey)
   // 回合里还有没做完的子代理时不自动收（状态以子线程为准，见 tree/agent-view.tsx）
   const agentsRunning = useAgentsUnfinished(deviceId, sessionId, turnId)
   const [open, setOpen] = useToggle(
@@ -207,7 +210,9 @@ const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { 
           if (block.type === 'plan')
             return <PlanCard key={block.itemId} {...ref} itemId={block.itemId} />
           if (block.type === 'todo')
-            return <TodoCard key={block.itemId} {...ref} itemId={block.itemId} />
+            return todoInRail ? null : (
+              <TodoCard key={block.itemId} {...ref} itemId={block.itemId} />
+            )
           if (block.type === 'card')
             return <TreeCard key={block.itemId} {...ref} itemId={block.itemId} />
           if (block.type === 'notes')

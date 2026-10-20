@@ -8,6 +8,7 @@ import type { PlaceWish } from '../composer/new-place.ts'
 import { useNewPlace } from '../composer/useNewPlace.ts'
 import { DevicesPage } from '../devices/DevicesPage.tsx'
 import { Onboarding } from '../onboarding/Onboarding.tsx'
+import { InfoRail } from '../rail/InfoRail.tsx'
 import { isSettingsSection, SettingsPage, type SettingsSection } from '../settings/SettingsPage.tsx'
 import { useUpdateToast } from '../settings/UpdateBlock.tsx'
 import { SideSlot } from '../side/SideSlot.tsx'
@@ -294,6 +295,14 @@ export function App() {
           {/* 终端面板一直在，收起只是不显示：里面的终端不跟着上面的内容换来换去 */}
           <TerminalSlot selection={selection} draft={draft} page={page} />
         </main>
+        {/* 右边常驻的信息栏（待办等）：有内容才出来，排在对话和侧面板之间 */}
+        {selection && !page ? (
+          <InfoRail
+            key={`${selection.deviceId}:${selection.sessionId}`}
+            deviceId={selection.deviceId}
+            sessionId={selection.sessionId}
+          />
+        ) : null}
         {/* 右边的侧面板（文件）：跟着眼前的会话走，收起只是不显示 */}
         <SideSlot selection={selection} draft={draft} page={page} />
       </div>

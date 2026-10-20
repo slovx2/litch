@@ -942,6 +942,7 @@ export const zhCN = {
   'context.compact': '压缩上下文',
   'context.compactNote': '把之前的对话总结一遍，腾出上下文',
   'context.compactFailed': '没压缩成：{reason}',
+  'rail.label': '会话信息',
   'todo.title': '待办',
   'todo.count': '已完成 {done}/{total}',
   'todo.now': '正在做第 {index} 项',

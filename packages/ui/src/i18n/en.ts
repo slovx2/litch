@@ -1013,6 +1013,7 @@ export const en: Record<MessageKey, Entry> = {
   'context.compact': 'Compact context',
   'context.compactNote': 'Summarise the conversation so far to free up context',
   'context.compactFailed': 'Could not compact: {reason}',
+  'rail.label': 'Session info',
   'todo.title': 'To-do',
   'todo.count': '{done}/{total} done',
   'todo.now': 'on step {index}',

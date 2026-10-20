@@ -154,7 +154,8 @@
   line-height: 21px;
 }
 [data-skin="human"] .plan,
-[data-skin="human"] .todo {
+[data-skin="human"] .todo,
+[data-skin="human"] .rail-card {
   border-color: var(--line-1);
   box-shadow: var(--soft-sm);
 }
