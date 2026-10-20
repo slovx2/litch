@@ -28,13 +28,17 @@ export const enPasswords: Record<keyof typeof zhPasswords, Entry> = {
   'settings.browser.never.empty': 'No sites are excluded.',
   'settings.browser.never.at': 'added {day}',
   'browser.save.ask': 'Save the password for {user} on {site}?',
-  'browser.save.askNoUser': 'Save the password for {site}?',
   'browser.save.update': 'Update the password for {user} on {site}?',
-  'browser.save.updateNoUser': 'Update the password for {site}?',
   'browser.save.yes': 'Save',
   'browser.save.no': 'Not now',
   'browser.save.updateYes': 'Update',
   'browser.save.updateNo': 'Not now',
   'browser.save.never': 'Never for this site',
   'browser.save.more': ({ count }) => (Number(count) === 1 ? '1 more' : `${count} more`),
+  'browser.save.unavailable':
+    "The password for {user} on {site} can't be saved: the system keychain isn't available on this computer, and Litch doesn't store unencrypted passwords.",
+  'browser.save.close': 'OK',
+  'browser.save.failed': 'Not saved: {reason}',
+  'browser.save.fileFailed':
+    "Not saved: the saved passwords file can't be read or written right now. The prompt stays so you can try again.",
 }

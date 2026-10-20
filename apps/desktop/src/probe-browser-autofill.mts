@@ -22,6 +22,7 @@ import { PASSWORDS_PROMPTS_CHANGED } from './browser/passwords/ipc.mjs'
 import { autofillTab } from './browser/passwords/tabs.mjs'
 import { createSiteBook } from './browser/sites.mjs'
 import type { ClientToolInvocation } from './client-tools/types.mjs'
+import { CHANGE, checkCaptures, FORGED, STEP2 } from './probe-browser-autofill-capture.mjs'
 
 const manual = process.env.LITCH_AUTOFILL_MANUAL === '1'
 // 钥匙串里那把钥匙按应用名起名：用测试专用的名字，不碰 Litch 自己的
@@ -56,8 +57,8 @@ window.__forge = () => {
 }
 </script>`
 
-const FRAME = `<!doctype html><form style="margin:10px"><input id="user" type="text" style="width:200px;height:24px">
-<input id="pass" type="password" style="width:200px;height:24px"></form>`
+const FRAME = `<!doctype html><form action="/frame-done" style="margin:10px"><input id="user" name="u" type="text" style="width:200px;height:24px">
+<input id="pass" name="p" type="password" style="width:200px;height:24px"><button id="go">Go</button></form>`
 
 function serve(body: (path: string) => string): Promise<{ server: Server; port: number }> {
   return new Promise((resolve) => {
@@ -91,7 +92,15 @@ void app.whenReady().then(async () => {
   // 自动的那一遍子框架和主页面同站不同源（端口不同）：合成的输入事件只进主框架所在的进程，跨站的子框架
   // 在别的进程里收不到（实测）。手动的那一遍用 localhost，跨站、在别的进程里，真人去点
   const frameUrl = `http://${manual ? 'localhost' : '127.0.0.1'}:${frameSite.port}/frame`
-  const mainSite = await serve(() => LOGIN(frameUrl))
+  const mainSite = await serve((path) =>
+    path.startsWith('/step2')
+      ? STEP2
+      : path.startsWith('/change')
+        ? CHANGE
+        : path.startsWith('/forged')
+          ? FORGED
+          : LOGIN(frameUrl),
+  )
   const pageUrl = `http://127.0.0.1:${mainSite.port}/login`
   const pageOrigin = `http://127.0.0.1:${mainSite.port}`
   const frameOrigin = new URL(frameUrl).origin
@@ -145,7 +154,7 @@ void app.whenReady().then(async () => {
 
   check('用户标签挂了预加载', autofillTab(contents.id)?.kind === 'user')
   check(
-    '网页看不到预加载的任何东西',
+    '网页看不到预加载暴露的任何东西（全局变量、require、process）',
     JSON.stringify(await main('window.__exposed')) ===
       JSON.stringify(['undefined', 'undefined', 'undefined']),
     await main('window.__exposed'),
@@ -256,6 +265,10 @@ void app.whenReady().then(async () => {
     )
     const mainAfter = (await values()) as string[]
     check('子框架的密码没进主页面', mainAfter[1] === 'bob-pass-2', mainAfter)
+
+    // 认登录提交：两步登录、改密码、只在子框架里登录、网页造的提交（probe-browser-autofill-capture.mts）
+    pick = null
+    await checkCaptures({ window, host, owner, pageOrigin, frameOrigin, pushedPrompts, check })
   }
 
   // 代理的标签：代理用 click 点用户名框，候选画在网页里（封闭的影子树），代理在快照里看得到、点中一条才填；
@@ -330,6 +343,23 @@ void app.whenReady().then(async () => {
     (await inAgent(
       `(() => { const host = document.querySelector('litch-autofill'); return !!host && host.shadowRoot === null && !document.documentElement.innerText.includes('bob@example.com') })()`,
     )) === true,
+  )
+  // 网页看得出宿主元素在（这一条是实情，不是要的），但 window.find、全选之后的选区都读不到用户名和标题
+  const seen = (await inAgent(
+    `(() => {
+      document.activeElement?.blur()
+      const found = ['bob@example.com', 'ann@example.com', 'Litch'].filter((word) => { getSelection().removeAllRanges(); return window.find(word) })
+      getSelection().removeAllRanges()
+      document.execCommand('selectAll')
+      const selected = getSelection().toString()
+      getSelection().removeAllRanges()
+      return { found, selected: /bob@example|ann@example|Litch/.test(selected), host: !!document.querySelector('litch-autofill') }
+    })()`,
+  )) as { found: string[]; selected: boolean; host: boolean } | undefined
+  check(
+    '网页的 window.find、全选的 getSelection 读不到候选里的字',
+    !!seen && seen.found.length === 0 && !seen.selected && seen.host,
+    seen,
   )
   check(
     '工具结果里提示代理去点候选',

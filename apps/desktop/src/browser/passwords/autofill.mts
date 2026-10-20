@@ -5,7 +5,8 @@
 // 候选怎么给：
 // - 用户的标签：主进程的原生菜单。菜单不在网页的 DOM 里，网页脚本既读不到候选的用户名、也点不到它；
 //   菜单顶上写明是 Litch 的，免得和网页自己画的东西混淆。
-// - 代理的标签：代理看不到原生菜单，所以把用户名交给预加载，画在网页里一个封闭的影子树里（网页脚本读不进去），
+// - 代理的标签：代理看不到原生菜单，所以把用户名交给预加载，画在网页里一个封闭的影子树里（网页看得出那个元素
+//   在不在、多大，读不到里面的用户名，见 preload.mts 的 showOverlay），
 //   代理在快照里看得到、用 click 点中一条；预加载只认受信任的点击（网页自己造的点击不算），报回“第几条”，
 //   主进程只认它先前给这个框架的那一份。
 // 两种都一样：点选之前密码不离开主进程，点选之后只送进那一个框架的隔离环境，由预加载填进框里。
@@ -19,6 +20,7 @@ import {
   type MenuItemConstructorOptions,
   type WebContents,
   WebContentsView,
+  webFrameMain,
 } from 'electron'
 import { type AutofillBroker, createAutofillBroker, type FrameRef } from './broker.mjs'
 import {
@@ -151,15 +153,19 @@ export function installAutofill(store: PasswordStore, prompts: SavePrompts): Aut
   /** 网页里画过候选的代理标签（销毁时丢掉它的候选） */
   const inlineTabs = new Set<number>()
 
-  /** 保存提示要等这个标签导航完成：第一次有它的登录提交时接上它的导航事件 */
+  /** 保存提示要等提交的那个框架（或整个标签）导航完成：第一次有它的登录提交时接上它的导航事件 */
   const watch = (contents: WebContents) => {
     const id = contents.id
     if (watched.has(id)) return
     watched.add(id)
-    contents.on('did-navigate', () => prompts.navigated(id, false))
-    contents.on('did-navigate-in-page', (_event, _url, isMainFrame) => {
-      if (isMainFrame) prompts.navigated(id, true)
-    })
+    const nodeOf = (isMainFrame: boolean, processId: number, routingId: number) =>
+      isMainFrame ? null : (webFrameMain.fromId(processId, routingId)?.frameTreeNodeId ?? -1)
+    contents.on('did-frame-navigate', (_event, _url, _code, _status, isMainFrame, pid, rid) =>
+      prompts.navigated(id, { frame: nodeOf(isMainFrame, pid, rid), inPage: false }),
+    )
+    contents.on('did-navigate-in-page', (_event, _url, isMainFrame, pid, rid) =>
+      prompts.navigated(id, { frame: nodeOf(isMainFrame, pid, rid), inPage: true }),
+    )
     contents.on('did-stop-loading', () => prompts.loaded(id))
     contents.once('destroyed', () => {
       watched.delete(id)
@@ -207,10 +213,23 @@ export function installAutofill(store: PasswordStore, prompts: SavePrompts): Aut
     const frame = frameRefOf(event)
     if (!tab || !frame?.alive()) return
     const origin = fillableOrigin(frame.origin())
-    const { username, password } = (payload ?? {}) as { username?: unknown; password?: unknown }
-    if (!origin || typeof username !== 'string' || typeof password !== 'string') return
+    const { username, password, current, step } = (payload ?? {}) as Record<string, unknown>
+    if (!origin || typeof username !== 'string') return
     watch(event.sender)
-    prompts.capture(event.sender.id, tab.info(), origin, username, password)
+    // 两步登录的第一步：只有用户名
+    if (step === true) {
+      prompts.step(event.sender.id, origin, username)
+      return
+    }
+    if (typeof password !== 'string') return
+    const sender = event.senderFrame
+    prompts.capture(event.sender.id, tab.info(), {
+      origin,
+      frame: sender?.parent ? sender.frameTreeNodeId : null,
+      username,
+      password,
+      ...(typeof current === 'string' && current !== '' ? { current } : {}),
+    })
   })
   return broker
 }

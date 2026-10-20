@@ -1,5 +1,5 @@
-// 认登录表单：给预加载用的几条 DOM 规则。跑在用户标签的隔离环境里，只读 DOM、不改 DOM（不加属性、不插元素），
-// 网页看不出来有它。
+// 认登录表单：给预加载用的几条 DOM 规则。跑在标签的隔离环境里，这里只读 DOM、不改 DOM（不加属性、不插元素）；
+// 往网页里加东西的只有代理标签里画候选的那一处（preload.mts 的 showOverlay，网页看得出它在不在）。
 //
 // 登录框是这几种：
 // - 密码框（type=password），注册用的 autocomplete="new-password" 除外；
@@ -82,4 +82,65 @@ export function fillInput(input: HTMLInputElement, value: string): void {
   input.value = value
   input.dispatchEvent(new Event('input', { bubbles: true, composed: true }))
   input.dispatchEvent(new Event('change', { bubbles: true }))
+}
+
+const USERNAME_NAME = /user|email|login|account|identifier/i
+
+/** 像不像用户名框（不管看不看得见）：写明 autocomplete 是 username、email 的，email 类型的，名字或编号像的 */
+function looksLikeUsername(input: HTMLInputElement): boolean {
+  if (input.type === 'password') return false
+  const tokens = tokensOf(input)
+  if (tokens.includes('username') || tokens.includes('email')) return true
+  if (input.type === 'email') return true
+  if (!isTextual(input) && input.type !== 'hidden') return false
+  return USERNAME_NAME.test(input.name) || USERNAME_NAME.test(input.id)
+}
+
+/** 一次提交里的登录信息：用户名、（新）密码、改密码表单里的当前密码 */
+export interface Submission {
+  username: string
+  password: string
+  current?: string
+}
+
+/**
+ * 一次提交（表单里，没有表单就是整个文档）交上去的是什么：
+ * - 有值的密码框不止一个：写了 autocomplete="new-password" 的是新密码，别的是当前密码；没写的，两个一样的是
+ *   新密码加确认，不一样的是当前、新（三个是当前、新、确认）；
+ * - 用户名先找密码框前面看得见的那个，没有就找藏起来的（两步登录的第二页、改密码表单常把它藏着）；
+ * - 没有有值的密码框：回 null（是不是两步登录的第一步看 stepUsername）
+ */
+export function submissionOf(root: ParentNode): Submission | null {
+  const inputs = Array.from(root.querySelectorAll('input'))
+  const filled = inputs.filter((one) => one.type === 'password' && one.value !== '' && usable(one))
+  const first = filled[0]
+  if (!first) return null
+  const marked = filled.filter((one) => tokensOf(one).includes('new-password'))
+  let password = first
+  let current: string | undefined
+  if (marked[0]) {
+    password = marked[0]
+    current = filled.find((one) => !marked.includes(one))?.value
+  } else if (filled.length >= 2 && filled[1]) {
+    const same = filled.length === 2 && first.value === filled[1].value
+    if (!same) {
+      current = first.value
+      password = filled[1]
+    }
+  }
+  const shown = loginFieldsOf(first)?.username?.value ?? ''
+  const hidden = inputs.find((one) => one.value !== '' && looksLikeUsername(one))?.value ?? ''
+  return {
+    username: shown || hidden,
+    password: password.value,
+    ...(current && current !== password.value ? { current } : {}),
+  }
+}
+
+/** 两步登录的第一步：没有密码框、只有一个有值的看得见的用户名框；回它的值，不是就回空的 */
+export function stepUsername(root: ParentNode): string {
+  const inputs = Array.from(root.querySelectorAll('input'))
+  if (inputs.some((one) => one.type === 'password')) return ''
+  const names = inputs.filter((one) => one.value !== '' && usable(one) && looksLikeUsername(one))
+  return names.length === 1 && names[0] ? names[0].value : ''
 }

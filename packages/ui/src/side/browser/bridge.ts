@@ -71,8 +71,8 @@ export interface BrowserSavePrompt {
   tabId: string
   origin: string
   username: string
-  /** save：没存过这个用户名；update：存过，但密码不一样 */
-  kind: 'save' | 'update'
+  /** save：没存过这个用户名；update：存过，但密码不一样；unavailable：系统钥匙串不可用，存不了（只能关掉） */
+  kind: 'save' | 'update' | 'unavailable'
   /** 毫秒 */
   at: number
 }
@@ -94,7 +94,7 @@ export interface BrowserPasswordsBridge {
   allowSite(origin: string): Promise<boolean>
   /** 现在挂着的保存提示 */
   prompts(): Promise<BrowserSavePrompt[]>
-  /** 答一条，回答没答到（已经没了） */
+  /** 答一条，回答没答到（已经没了）；写库失败时抛（code 是 file-unavailable 的是密码库文件读写不了），提示留着 */
   answer(id: string, answer: BrowserSaveAnswer): Promise<boolean>
   /** 保存提示变了，带着现在所有的 */
   onPrompts(handler: (prompts: BrowserSavePrompt[]) => void): () => void
