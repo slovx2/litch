@@ -53,6 +53,9 @@ export const ADAPTER = 'litch-fx-adapter'
 /** 状态目录在主目录下面的名字，和真的一样 */
 const STATE = '.codex-harness-adapter'
 
+/** 夹具预先备好的设备设置在主目录下的哪里，见 prepareService 里写设置的那段 */
+const SEED = '.litch-fixture-seed'
+
 const q = (text) => `'${text.replaceAll("'", `'\\''`)}'`
 
 /** 一个主目录下最长的那条套接字路径有多长：命令行卡在 100 字节，系统的上限是 104 */
@@ -88,6 +91,8 @@ export async function prepareService({ repo, root, engines = {}, pace = 200 }) {
     mkdirSync(directory, { recursive: true })
   }
   const stateOf = (home) => join(home, STATE)
+  /** 夹具预先备好的设备设置放在这里（<这里>/device/settings.json），device-start 时才放进状态目录 */
+  const seedOf = (home) => join(home, SEED)
 
   // ---------- 假模型：把收到的那句话带回来，分几段慢慢发 ----------
   const modelLog = join(root, 'model.jsonl')
@@ -195,17 +200,19 @@ export async function prepareService({ repo, root, engines = {}, pace = 200 }) {
     JSON.stringify({ defaultProvider: 'gate', defaultModel: 'gate', retry: { enabled: false } }),
   )
   installAskExtension(agent)
-  // --engines 要的几家：设置在服务起来之前写进 svc 那个状态目录，服务一起来就照着起。
-  // 不要引擎时也写夹具都要有的那几项（提醒收尾缺省关，见 client-fixture-engines.mjs）；path 那份同样
+  // --engines 要的几家：设置在服务起来之前写好，服务一起来就照着起。
+  // 不要引擎时也写夹具都要有的那几项（提醒收尾缺省关，见 client-fixture-engines.mjs）；path 那份同样。
+  // 先写在主目录里的 SEED 下，不直接写进状态目录：自检要看“添加之前看一眼”之后状态目录还不存在。
+  // 包装脚本在 device-start 时才把它放进状态目录（状态目录里已经有设置文件就不动）
   if (Object.values(engines).some(Boolean)) {
     writeEngineSettings({
-      home: stateOf(homes.svc),
+      home: seedOf(homes.svc),
       root,
       modelUrl: `http://127.0.0.1:${model.address().port}`,
       engines,
     })
-  } else writeDeviceSettings(stateOf(homes.svc), fixtureDeviceSettings())
-  writeDeviceSettings(stateOf(homes.path), fixtureDeviceSettings())
+  } else writeDeviceSettings(seedOf(homes.svc), fixtureDeviceSettings())
+  writeDeviceSettings(seedOf(homes.path), fixtureDeviceSettings())
 
   // ---------- 适配器的包装脚本 ----------
   /** 服务和它跑的命令拿到的环境：只有这几样是指死的，主目录跟着登录时的那一个 */
@@ -237,7 +244,15 @@ export async function prepareService({ repo, root, engines = {}, pace = 200 }) {
       '# 由 scripts/client-ssh-fixture-service.mjs 写出，只给假的远程机器用',
       ...Object.entries(pinned).map(([name, value]) => `${name}=${q(value)}; export ${name}`),
       'case "$1" in',
-      `  device-start) shift; exec ${q(cli)} device-start --node ${q(node)} "$@" ;;`,
+      '  device-start)',
+      '    shift',
+      // 夹具备好的设备设置：这时才放进（默认的）状态目录，只有属主可读写；已经有设置文件就不动
+      `    seed="$HOME"/${q(`${SEED}/device/settings.json`)}`,
+      `    device="$HOME"/${q(`${STATE}/device`)}`,
+      '    if [ -f "$seed" ] && [ ! -e "$device/settings.json" ]; then',
+      '      (umask 077 && mkdir -p "$device" && cp "$seed" "$device/settings.json") || exit 1',
+      '    fi',
+      `    exec ${q(cli)} device-start --node ${q(node)} "$@" ;;`,
       'esac',
       `exec ${q(cli)} "$@"`,
       '',
