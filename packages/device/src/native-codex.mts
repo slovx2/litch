@@ -25,6 +25,7 @@ import type {
 import { HARNESS_IDENTITY } from '../../protocol/src/harness-identity.mjs'
 import { builtinPreset, PRESET } from '../../shared/src/harness-declaration.mjs'
 import { CodexHarnessConfig } from './codex-harness-config.mjs'
+import { prepareInstructions } from './codex-instructions.mjs'
 import {
   ADAPTER_DIALECT,
   type Ask,
@@ -206,6 +207,9 @@ export const NATIVE_CODEX_DIALECT: UpstreamDialect = {
 
   // 它不认识 litch/harness/*：设备进程翻译成它自己的 config/*、account/*、mcpServer/* 等
   harnessConfig: (context) => new CodexHarnessConfig(context),
+
+  // 它不保存开发者指令：建会话、恢复、分叉之前由设备进程补齐（codex-instructions.mts）
+  instructions: prepareInstructions,
 
   async describe(initialized, ask) {
     const version = isObject(initialized) ? codexVersion(initialized.userAgent) : null

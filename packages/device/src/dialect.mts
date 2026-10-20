@@ -3,6 +3,7 @@
 //   - 原生的 codex（native-codex.mts）：只说标准的 Codex 协议，不认识我们加的任何东西。
 // 两种上游在路由上完全一样（按会话归属、按 harness 参数转发，通知和服务端请求原样带回）；
 // 不一样的只有下面这几处，都收在这个接口后面，路由那几个文件不用知道对面是谁。
+import type { InstructionContext, PreparedInstructions } from './codex-instructions.mjs'
 import type { HarnessConfigTranslator, TranslatorContext } from './harness-config.mjs'
 import { isObject, type RpcError } from './wire.mjs'
 
@@ -44,6 +45,15 @@ export interface UpstreamDialect {
    * 每条客户端连接建一个翻译器。适配器的运行时自己实现这些方法，不用设（聚合面原样转过去）
    */
   harnessConfig?(context: TranslatorContext): HarnessConfigTranslator
+  /**
+   * 建会话、恢复、分叉之前补齐开发者指令（codex-instructions.mts）：要补的返回补好的参数（异步，可能要先问上游），
+   * 不用补的返回 null，照常同步转发。只有原生 codex 设：适配器的运行时自己把规则拼进系统提示
+   */
+  instructions?(
+    method: string,
+    params: Record<string, unknown>,
+    context: InstructionContext,
+  ): Promise<PreparedInstructions> | null
 }
 
 /**
@@ -83,7 +93,8 @@ const DYNAMIC_TOOL_METHODS = new Set(['thread/start', 'thread/resume', 'thread/f
  *     装载的配置覆盖（没给就回落到 config.toml），只在头一个回合的初始上下文里放一次，作为一条开发者消息记进
  *     会话历史，恢复、分叉时随历史回来，之后的回合不再重放；压缩后重建上下文时才按当时的配置再放一次。
  * 所以只在客户端发的 developerInstructions 里还没有这段规则时才拼：客户端恢复时把同一份（已经含着规则的）
- * 再带回来，不会叠两份。
+ * 再带回来，不会叠两份。经设备进程转给原生 codex 的建会话、恢复、分叉先走 codex-instructions.mts
+ * （底子取 config.toml、按会话记下、恢复分叉时补回），规则已经摘掉，到这里不再动。
  */
 export function foldToolInstructions(
   method: string,

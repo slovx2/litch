@@ -467,7 +467,7 @@ export class ClientSession implements ClientToolPeer {
     frame: Frame,
     raw: string,
     keepHarness = false,
-  ): typeof HANDLED {
+  ): typeof HANDLED | Promise<typeof HANDLED> {
     const fields = isObject(frame.params) ? frame.params : null
     // 新建会话带的工作区是设备层的，先摘下来，应答回来时再记
     const { expectation, withhold } = fields
@@ -483,25 +483,47 @@ export class ClientSession implements ClientToolPeer {
       const input = this.host.sessionTree.beforeUserTurn(params.threadId, params.input)
       if (input) params = { ...params, input }
     }
+    // 应答回来之后要记的（一个请求只有一个 after）
+    const afterwards: ((result: unknown) => void)[] = []
     // 建会话时带的动态工具记下来：设备进程替这个会话派子会话时照样带上
     if (method === 'thread/start' && Array.isArray(params?.dynamicTools)) {
       const tools = params.dynamicTools as unknown[]
-      this.relay.after(id, (result) => {
+      afterwards.push((result) => {
         const thread = isObject(result) ? result.thread : null
         if (isObject(thread) && typeof thread.id === 'string')
           this.host.sessionTree.store.setTools(thread.id, tools)
       })
     }
-    // 这个上游的“话”里要另外带的参数（原生 codex：选了权限预设时配套的审批策略）
-    if (params) params = link.dialect.outgoing(method, params) ?? params
-    const text = params === fields ? raw : JSON.stringify({ ...frame, params })
-    if (!link.forward(id, method, text)) throw this.unavailable(link, method)
-    // 退订不等应答：之后到的客户端工具调用不再按订阅者挑给它
-    if (method === 'thread/unsubscribe')
-      if (typeof fields?.threadId === 'string')
-        this.host.clientTools.unsubscribed(this, link.harness, fields.threadId)
-    if (expectation) this.relay.expect(link, id, expectation)
-    return HANDLED
+    const send = (ready: Record<string, unknown> | null): typeof HANDLED => {
+      if (afterwards.length)
+        this.relay.after(id, (result) => {
+          for (const work of afterwards) work(result)
+        })
+      // 这个上游的“话”里要另外带的参数（原生 codex：选了权限预设时配套的审批策略）
+      let outgoing = ready
+      if (outgoing) outgoing = link.dialect.outgoing(method, outgoing) ?? outgoing
+      const text = outgoing === fields ? raw : JSON.stringify({ ...frame, params: outgoing })
+      if (!link.forward(id, method, text)) throw this.unavailable(link, method)
+      // 退订不等应答：之后到的客户端工具调用不再按订阅者挑给它
+      if (method === 'thread/unsubscribe')
+        if (typeof fields?.threadId === 'string')
+          this.host.clientTools.unsubscribed(this, link.harness, fields.threadId)
+      if (expectation) this.relay.expect(link, id, expectation)
+      return HANDLED
+    }
+    // 原生 codex 建会话、恢复、分叉：先补齐开发者指令（可能要先问它一句 config/read），再转（codex-instructions.mts）
+    const prepared = params
+      ? link.dialect.instructions?.(method, params, {
+          ask: (asked, given) => this.query(link, asked, given),
+          store: this.host.sessionTree.store,
+          log: (line) => this.host.log(`${this.tag} ${line}`),
+        })
+      : null
+    if (!prepared) return send(params)
+    return prepared.then(({ params: ready, remember }) => {
+      afterwards.push(remember)
+      return send(ready)
+    })
   }
 
   /** 设备层自己向一个上游问一句，等它的应答 */
