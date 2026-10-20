@@ -256,10 +256,13 @@ export class ClientTools {
     this.declared.delete(peerId)
   }
 
-  /** thread/start 带来的动态工具记到会话上（适配器重启、会话接回后还在）；不合规矩的抛错 */
+  /**
+   * thread/start 带来的动态工具记到会话上（适配器重启、会话接回后还在）；不合规矩的抛错。
+   * 只有不带工具的命名空间（比如 Litch 的呈现风格 litch_presentation）也记：它的 instructions 要经 MCP 服务交给 agent
+   */
   remember(threadId: string, raw: unknown): void {
     const specs = dynamicToolSpecs(raw)
-    if (!specs.length) return
+    if (!specs.length && !toolInstructions(raw)) return
     this.host.store.setMeta('dynamicTools', threadId, raw)
     this.cache.set(threadId, specs)
   }
@@ -293,7 +296,8 @@ export class ClientTools {
   }
 
   /**
-   * 给一次 session/new、load、resume、fork 准备 mcpServers：raw 是要挂的动态工具（没有就是空的，不挂）。
+   * 给一次 session/new、load、resume、fork 准备 mcpServers：raw 是要挂的动态工具（没有工具也没有 instructions 就不挂；
+   * 只有 instructions 的照挂，工具清单是空的。桥是这个会话独有的，别的会话看不到）。
    * 会话号已知的（接回）直接记上；不知道的（新建、分叉）返回桥的标识，agent 应答之后用 bind 补上。
    */
   async mount(
@@ -301,7 +305,7 @@ export class ClientTools {
     raw: unknown,
   ): Promise<{ servers: StdioMcpServer[]; key: string | null }> {
     const specs = dynamicToolSpecs(raw)
-    if (!specs.length) return { servers: [], key: null }
+    if (!specs.length && !toolInstructions(raw)) return { servers: [], key: null }
     const path = await this.listen()
     const key = (threadId && this.keys.get(threadId)) || randomUUID()
     this.bridges.set(key, { threadId, specs, instructions: toolInstructions(raw) })

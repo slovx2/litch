@@ -2,10 +2,14 @@
 // 适配器的运行时原样拿到这个字段（入口自己拼进系统提示）。
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import {
+  PRESENTATION_RULES,
+  PRESENTATION_SPEC,
+} from '../../protocol/src/client-tools-presentation.mjs'
 import { SESSION_PROPOSAL_RULES, SESSION_TOOLS } from '../../protocol/src/client-tools-sessions.mjs'
 import { ECHO_TOOLS } from '../../protocol/src/client-tools-specs.mjs'
 import { codexVerdict } from '../../shared/test/codex-params.mjs'
-import { ADAPTER_DIALECT, foldToolInstructions } from '../src/dialect.mjs'
+import { ADAPTER_DIALECT, foldToolInstructions, withoutEmptyNamespaces } from '../src/dialect.mjs'
 import { codexRig, sentTo } from './codex-kit.mjs'
 import { codexThread } from './fake-codex.mjs'
 
@@ -107,6 +111,94 @@ test('DIALECT-004：经聚合面建原生 codex 的会话，到它手里的是�
     const [toPi] = sentTo(env.pi, 'thread/start')
     assert.equal(toPi.developerInstructions, USER)
     assert.equal(toPi.dynamicTools[0].instructions, SESSION_PROPOSAL_RULES)
+  } finally {
+    await env.close()
+  }
+})
+
+test('DIALECT-005：没有工具的命名空间（呈现风格）转给原生 codex 前整个去掉，instructions 不并进开发者指令；只剩它时不带 dynamicTools', () => {
+  const params = { cwd: '/w', dynamicTools: [ECHO_TOOLS, PRESENTATION_SPEC] }
+  assert.deepEqual(withoutEmptyNamespaces('thread/start', params), {
+    cwd: '/w',
+    dynamicTools: [ECHO_TOOLS],
+  })
+  assert.deepEqual(withoutEmptyNamespaces('thread/fork', { dynamicTools: [PRESENTATION_SPEC] }), {})
+  assert.equal(withoutEmptyNamespaces('thread/start', { dynamicTools: [ECHO_TOOLS] }), null)
+  assert.equal(withoutEmptyNamespaces('turn/start', params), null)
+})
+
+test('DIALECT-006：经聚合面建原生 codex 的会话误带了呈现风格：codex 收到的没有空命名空间、开发者指令里没有这段，它收、不丢字段；适配器的运行时原样拿到', async () => {
+  const env = codexRig()
+  try {
+    const client = env.connect()
+    await client.initialize(['harness', 'clientTools'], {
+      litchClientTools: { namespaces: ['litch_echo'] },
+    })
+    await client.call('thread/start', {
+      harness: 'codex',
+      cwd: '/work/codex',
+      permissions: ':workspace',
+      developerInstructions: USER,
+      dynamicTools: [ECHO_TOOLS, SESSION_TOOLS, PRESENTATION_SPEC],
+    })
+    const [seen] = sentTo(env.codex, 'thread/start')
+    assert.deepEqual(
+      seen.dynamicTools.map((spec: any) => spec.name),
+      ['litch_echo', 'litch_sessions'],
+    )
+    assert.equal(seen.developerInstructions, `${USER}\n\n${RULES}`)
+    assert.equal(seen.developerInstructions.includes(PRESENTATION_RULES), false)
+    assert.deepEqual(codexVerdict('thread/start', seen), { rejects: [], ignored: [] })
+
+    // 只有呈现风格：dynamicTools 整个不带
+    await client.call('thread/start', {
+      harness: 'codex',
+      cwd: '/work/codex',
+      dynamicTools: [PRESENTATION_SPEC],
+    })
+    const alone = sentTo(env.codex, 'thread/start').at(-1)
+    assert.equal('dynamicTools' in alone, false)
+    assert.deepEqual(codexVerdict('thread/start', alone), { rejects: [], ignored: [] })
+
+    await client.call('thread/start', {
+      harness: 'pi',
+      cwd: '/work/pi',
+      dynamicTools: [PRESENTATION_SPEC],
+    })
+    assert.deepEqual(sentTo(env.pi, 'thread/start')[0].dynamicTools, [PRESENTATION_SPEC])
+  } finally {
+    await env.close()
+  }
+})
+
+test('DIALECT-007：父会话带着呈现风格，设备进程派到原生 codex 上的子会话不带（按 link.native 认）；派到适配器运行时上的带见 SESSION-TREE-014', async () => {
+  const env = codexRig()
+  try {
+    const client = env.connect()
+    await client.initialize(['harness', 'deviceWorkspaces', 'sessionTree', 'clientTools'], {
+      litchClientTools: { namespaces: ['litch_echo'] },
+    })
+    const created = await client.call('thread/start', {
+      harness: 'pi',
+      cwd: '/work/pi',
+      dynamicTools: [ECHO_TOOLS, PRESENTATION_SPEC],
+    })
+    const parentThreadId = created.thread.id
+    await client.call('litch/session/start', {
+      parentThreadId,
+      harness: 'codex',
+      kind: 'fresh',
+      title: '派到 codex',
+      prompt: '看看 README。',
+      background: 'x'.repeat(100),
+      wakeParent: false,
+    })
+    const toCodex = sentTo(env.codex, 'thread/start').at(-1)
+    assert.deepEqual(
+      toCodex.dynamicTools.map((spec: any) => spec.name),
+      ['litch_echo', 'litch_sessions'],
+    )
+    assert.deepEqual(codexVerdict('thread/start', toCodex), { rejects: [], ignored: [] })
   } finally {
     await env.close()
   }

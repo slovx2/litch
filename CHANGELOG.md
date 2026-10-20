@@ -22,6 +22,8 @@ versioning or publishing metadata.
 - Claude Code 行为变化：Linux 上 Bash 命令的 bwrap 沙箱另起 PID 命名空间（`--unshare-pid`，照 codex），命令里看不到宿主的其他进程，这一条不选自定义档位也生效；`config.json` 里已经写了 `default_permissions` 的，新会话的沙箱模式从此按它来（原来这个键不认）；`config.json` 里的 `permissions` 形状不对时进程起不来（原来不看这个键）
 - Claude Code：回合正在收尾、不再收插话时，`turn/steer` 回错误的同时不再把这句话留在回合记录里，同一个消息号重试也不会被当成已经收下（上游同样拒绝往收尾中的回合里插话）
 - Claude Code：适配器自己连的 MCP 服务按会话跨回合复用连接，第二个回合起不再重起 stdio 服务、不再和 HTTP 服务重新握手（先 ping 一次确认还通）。配置或工作目录变了就重建；会话归档、删除、卸载、回退、客户端全都断开、适配器停止时关掉；没人用的连接默认留 10 分钟、整个适配器最多 8 条（`CHA_CLAUDE_MCP_IDLE_MINUTES`、`CHA_CLAUDE_MCP_IDLE_CONNECTIONS`，设成 `0` 回到每回合重连）。有状态的 stdio 服务（浏览器类等）因此在同一个会话里跨回合保留状态；回合被打断、请求被取消或超时过、重新登录过 OAuth 的连接不留
+  - 影响：适配器的 Claude Code 入口不再自带原来那段“Codex 桌面展示风格”提示。升级前建的会话（Litch 里的也一样）恢复后没有任何呈现提示，回答可能更像终端里的风格；新建的会话才有 Litch 这段。这段话跟着会话存：Litch 建的会话在官方桌面端打开，模型照样被告知回答显示在 Litch 里
+  - OpenCode 上只有在会话还带着别的 Litch 工具时这段话才送得到（桌面端建的会话总带着）；经聚合面转给原生 Codex 的建会话、恢复、分叉请求里如果有不带工具的命名空间，设备进程整个去掉，免得上游拒绝整个请求
 
 ## 0.14.0
 
