@@ -5,6 +5,10 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
+## 未发布
+
+- Claude Code：适配器自己连的 MCP 服务按会话跨回合复用连接，第二个回合起不再重起 stdio 服务、不再和 HTTP 服务重新握手（先 ping 一次确认还通）。配置或工作目录变了就重建；会话归档、删除、卸载、回退、适配器停止时关掉；没人用的连接默认留 10 分钟、最多 16 条（`CHA_CLAUDE_MCP_IDLE_MINUTES`、`CHA_CLAUDE_MCP_IDLE_CONNECTIONS`，设成 `0` 回到每回合重连）。MCP 服务进程里的状态因此会跨回合留着；回合被打断时还有请求在途的连接不留
+
 ## 0.14.0
 
 - Litch：选中回答里的文字加评论。桌面端在助手的话（含过程里的说明、代码块、表格）里选字，选区上方出“评论”“复制”；手机端长按回答出“评论这条回答”，在只读全文页里选一段。评论加到输入框上面，一条消息最多十条，能改、删、定位原文，只有评论也能发；发出去时写成正文开头的 `<litch-comments>`，对话里画成编号的评论卡片

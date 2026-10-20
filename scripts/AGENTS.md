@@ -59,6 +59,15 @@ plain `.mjs` / shell.
   the process guard that relays the CLI's stdio, and the CLI itself, each from
   the moment the model starts streaming to the end of the turn. Same
   `--cpu-prof` / `bench-delta-hot.mjs` workflow. Manual only, not part of CI.
+- `bench-mcp-reuse.mjs` — measures what reusing the Claude entry's MCP
+  connections across turns saves: the same turns (each calls a tool of one
+  stdio and one Streamable HTTP server, both in the thread config) run with
+  reuse and with `CHA_CLAUDE_MCP_IDLE_MINUTES=0`, and it reports the per-turn
+  MCP preparation time from the entry's debug log (`native.mcp.prepared`),
+  the time to the turn's first model request, and how many times each server
+  was started or handshaken. `--latency` delays every HTTP request,
+  `--stdio-delay` delays the stdio server's first answer. Needs a build and
+  `CHA_CLAUDE_CLI`. Manual only, not part of CI.
 - `build-cli.mjs` — builds the Go CLI into `bin/`. Fails loudly when `go` is
   missing (it does not skip): engine and device tests need the CLI for the
   pty bridge.

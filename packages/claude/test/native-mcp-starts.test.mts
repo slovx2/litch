@@ -81,7 +81,7 @@ const toolResults = (request: any): any[] =>
     .flatMap((message: any) => (Array.isArray(message.content) ? message.content : []))
     .filter((block: any) => block.type === 'tool_result')
 
-test('MCP-022：用户级配置里的 stdio 服务每个回合只起一份（适配器桥接的那一份），Claude Code 不再自己连一份', {
+test('MCP-022：用户级配置里的 stdio 服务只起一份（适配器桥接的那一份，第二个回合接着用），Claude Code 不再自己连一份', {
   timeout: 60_000,
 }, async () => {
   await withStage(async ({ client, model, cwd, counted, solo }) => {
@@ -108,11 +108,11 @@ test('MCP-022：用户级配置里的 stdio 服务每个回合只起一份（适
       })
       model.enqueue(async (request) => {
         assert.equal(toolResults(request).length, 2 * round)
-        // 回合进行中：这个回合起的只有桥接的那一份，工具调用落在它身上
-        const running = (await counted()).slice(round)
+        // 回合进行中：探测之后只起过桥接的那一份，第二个回合接着用它（CLI 进程每回合换一个，连接留着）
+        const running = (await counted()).slice(1)
         assert.deepEqual(
           running.map(({ client, called, closed }) => ({ client, called, closed })),
-          [{ client: ADAPTER, called: ['echo'], closed: false }],
+          [{ client: ADAPTER, called: Array(round).fill('echo'), closed: false }],
         )
         return [{ type: 'text', text: 'STARTS_DONE' }]
       })
@@ -122,11 +122,11 @@ test('MCP-022：用户级配置里的 stdio 服务每个回合只起一份（适
       })
       assert.equal((await client.completed(turn.id)).status, 'completed')
     }
-    // 两个回合下来：探测一份、每个回合一份，没有一份是 Claude Code 连的
+    // 两个回合下来：探测一份、回合共用一份，没有一份是 Claude Code 连的
     const all = await counted()
     assert.deepEqual(
       all.map((server) => server.client),
-      [ADAPTER, ADAPTER, ADAPTER],
+      [ADAPTER, ADAPTER],
     )
     // 只有 CLI 知道的那个服务不受影响：每个回合由 Claude Code 自己连一份
     assert.deepEqual(
