@@ -10,6 +10,7 @@ import type {
   HcInstructionsView,
   HcMcpServer,
   HcMcpView,
+  HcModelsView,
   HcOption,
   HcProvider,
   HcProvidersView,
@@ -30,6 +31,8 @@ export interface SampleHc {
   providers: HcProvidersView
   mcp: HcMcpView
   instructions: HcInstructionsView
+  /** 模型清单（只有 Codex 有；config 的 modelCatalog 跟着它） */
+  models?: HcModelsView
   /** 配置项里密钥类的原文：键 → 值 */
   secrets: Record<string, string>
 }
@@ -215,5 +218,6 @@ export function configOf(
     actions: rest.actions ?? [],
     version: 'v1',
     files: rest.files ?? [],
+    modelCatalog: false,
   }
 }

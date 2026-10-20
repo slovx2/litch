@@ -20,6 +20,7 @@ export const enHconfig: Record<keyof typeof zhHconfig, Entry> = {
   'hc.tab.accounts': 'Accounts',
   'hc.tab.mcp': 'MCP',
   'hc.tab.instructions': 'Instructions',
+  'hc.tab.models': 'Models',
   'hc.restart.note': 'Some changes take effect after {name} restarts.',
   'hc.restart.now': 'Restart now',
   'hc.edit': 'Edit',
@@ -171,4 +172,73 @@ export const enHconfig: Record<keyof typeof zhHconfig, Entry> = {
     `Unified; ${plural(count, 'file points', 'files point')} to the base`,
   'hc.unify.separated': ({ count }) =>
     `Left unified mode; ${plural(count, 'file is', 'files are')} separate copies again`,
+
+  'hc.models.state.builtin': "Using {name}'s built-in model catalog",
+  'hc.models.state.custom': 'Using a custom model list',
+  'hc.models.builtin.note':
+    'The model picker lists the models that come with {name}. To use different model names (for example through your own gateway), or change display names or context sizes, switch to a custom list.',
+  'hc.models.custom.note':
+    "The model picker only lists the models in this list; other models from {name}'s catalog are hidden. Each entry either uses a built-in model as is, or takes one as a template with its own model name, display name or context size.",
+  'hc.models.pathLater': 'Will be saved to:',
+  'hc.models.locked': 'Cannot be changed right now: {reason}',
+  'hc.models.start': 'Customize',
+  'hc.models.start.note':
+    'Starts with the whole built-in catalog; then remove what you do not need and add your own.',
+  'hc.models.bases': ({ count }) => `Built-in models (${count})`,
+  'hc.models.bases.note': 'These are what the model picker offers now.',
+  'hc.models.list': ({ count }) => `Model list (${count})`,
+  'hc.models.list.note':
+    'The order here is the order in the model picker. Models not in the list do not appear in the model picker.',
+  'hc.models.empty': 'The list is empty. Keep at least one model.',
+  'hc.models.add': 'Add model',
+  'hc.models.edit': 'Edit {id}',
+  'hc.models.up': 'Move up',
+  'hc.models.down': 'Move down',
+  'hc.models.asIs': 'Uses {base} as is',
+  'hc.models.basedOn': 'Based on {base}',
+  'hc.models.baseGone': 'Template {base} is no longer in the built-in catalog',
+  'hc.models.window.full': 'Context window: {count} tokens',
+  'hc.models.restore': 'Restore {name} catalog',
+  'hc.models.restore.title': "Go back to {name}'s built-in catalog?",
+  'hc.models.restore.note':
+    "The custom list stops being used and the model picker shows {name}'s own models again. Models you added are dropped. Restart {name} to apply.",
+  'hc.models.restore.yes': 'Restore',
+  'hc.models.restored': "Restored {name}'s built-in catalog",
+  'hc.models.restored.restart': "Restored {name}'s built-in catalog. Takes effect after a restart",
+  'hc.models.saved': ({ count }) => `Model list saved (${plural(count, 'model', 'models')})`,
+  'hc.models.saved.restart': 'Model list saved. Takes effect after a restart',
+  'hc.models.save.start': ({ count }) =>
+    `Switch to a custom list (${plural(count, 'model', 'models')})`,
+  'hc.models.save.changed': 'The model list has changes',
+  'hc.models.save.note':
+    'Saving replaces the whole list; after a restart the model picker shows exactly these.',
+  'hc.models.save.empty': 'Keep at least one model. To use the built-in catalog, choose Restore.',
+  'hc.models.moved':
+    'The model list was changed elsewhere while you were editing. Start over from the latest, or keep yours (saving replaces the other changes).',
+  'hc.models.conflict':
+    'The model list was changed elsewhere before saving, so nothing was written. Review the latest and save again.',
+  'hc.models.dialog.add': 'Add to list',
+  'hc.models.dialog.apply': 'Done',
+  'hc.models.base': 'Template',
+  'hc.models.base.filter': 'Filter by name',
+  'hc.models.base.none': 'No matching models',
+  'hc.models.base.taken': 'In the list',
+  'hc.models.mode': 'How to use it',
+  'hc.models.mode.same': 'Use as is',
+  'hc.models.mode.custom': 'Customize from it',
+  'hc.models.mode.same.note': 'Exactly the same as {base} in the built-in catalog.',
+  'hc.models.mode.custom.note': 'Everything else follows {base}; only the fields below change.',
+  'hc.models.id': 'Model name',
+  'hc.models.id.note': 'The name sent to the model service. Must be unique in the list.',
+  'hc.models.displayName': 'Display name',
+  'hc.models.displayName.note': "Shown in the model picker. Leave empty to use the template's.",
+  'hc.models.window': 'Context window',
+  'hc.models.window.note':
+    "A whole number, or a short form like 200K or 1M. Leave empty to use the template's ({value}).",
+  'hc.models.window.noteNone':
+    "A whole number, or a short form like 200K or 1M. Leave empty to use the template's.",
+  'hc.models.bad.base': 'Pick a template first',
+  'hc.models.bad.id': 'Enter a model name',
+  'hc.models.bad.taken': '{id} is already in the list',
+  'hc.models.bad.window': 'Enter a positive whole number, or a short form like 200K or 1M',
 }

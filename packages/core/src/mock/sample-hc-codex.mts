@@ -1,5 +1,6 @@
 // 模拟核心里 Codex 的详情设置示例：照官方桌面端的那几组（15 号设计 2.1）。
 // ChatGPT 登录和一个只认环境变量的自定义 provider 并存；浏览器登录要回调到设备上的 1455 端口。
+import type { HcModelBase, HcModelsView } from '../model-harness-config.mjs'
 import {
   configOf,
   GROUPS,
@@ -347,6 +348,7 @@ export function sampleCodex({ home, remote }: SampleHome): SampleHc {
       canLogout: false,
     },
   )
+  config.modelCatalog = true
   return {
     config,
     providers: {
@@ -418,12 +420,53 @@ export function sampleCodex({ home, remote }: SampleHome): SampleHc {
       version: 'm1',
       files: [{ role: 'settings', path: `${codexHome}/config.toml` }],
     },
+    models: models(codexHome),
     instructions: instructions(
       `${codexHome}/AGENTS.md`,
       '# 个人约定\n\n- 用中文回答。\n- 改代码之前先读相关的测试。\n',
       remote ? `${codexHome}/AGENTS.override.md` : null,
     ),
     secrets: {},
+  }
+}
+
+/** Codex 自带的模型目录（示例）。顺序就是选择器里的顺序 */
+const CODEX_BASES: HcModelBase[] = [
+  base('gpt-5.5', 'GPT-5.5', 400_000, 'Latest frontier model for coding and agentic work.'),
+  base('gpt-5.5-mini', 'GPT-5.5 mini', 400_000, 'Faster and cheaper; good for everyday tasks.'),
+  base('gpt-5.4-codex', 'GPT-5.4 Codex', 272_000, 'Tuned for long-running coding sessions.'),
+  base('gpt-5.4', 'GPT-5.4', 272_000, null),
+  base('gpt-5.4-mini', 'GPT-5.4 mini', 272_000, null),
+  base('o5-pro', 'o5 pro', 200_000, 'Deep reasoning; slow and expensive.'),
+  base('gpt-4.1', 'GPT-4.1', 1_047_576, 'Older model with a 1M context window.'),
+  base('codex-mini-latest', 'codex-mini', 200_000, null),
+]
+
+function base(
+  id: string,
+  displayName: string,
+  contextWindow: number | null,
+  description: string | null,
+): HcModelBase {
+  return { id, displayName, contextWindow, description }
+}
+
+/**
+ * 模型清单：开始时用自带目录（试“开始自定义”和后面的整个流程）。别处改了、被锁住由模拟核心按关键字演
+ */
+function models(codexHome: string): HcModelsView {
+  return {
+    custom: false,
+    entries: [],
+    bases: CODEX_BASES.map((one) => ({ ...one })),
+    path: `${codexHome}/litch-models.json`,
+    version: 'c1',
+    effect: 'harness',
+    note: t(
+      '自带目录来自这台设备上装的 Codex，升级 Codex 后可能会变',
+      'The built-in catalog comes from the Codex installed on this device and may change after an upgrade',
+    ),
+    readOnlyReason: null,
   }
 }
 

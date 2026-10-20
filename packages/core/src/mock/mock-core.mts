@@ -256,6 +256,13 @@ const ADDS_SETTING = /加一项设置|add a setting/i
  */
 const EDITS_CONFIG_ELSEWHERE = /别处改配置|config elsewhere/i
 const RACES_CONFIG = /抢先改配置|race the config/i
+/**
+ * 模型清单的两出（只对有模型清单的 Codex）：
+ * - 别处改模型清单：过一会儿别处改了这台设备上 Codex 的模型清单，这边收到通知（有草稿时提示“被别处改过”）；
+ * - 锁住模型清单：管理员把清单锁住了（再说一次解开），界面只能看
+ */
+const EDITS_MODELS_ELSEWHERE = /别处改模型清单|models elsewhere/i
+const LOCKS_MODELS = /锁住模型清单|lock the model list/i
 
 /** 把文本切成 2 到 6 个字的小块，模拟模型一点点吐字。scale 是倍数：英文一个词好几个字母，块要大一些 */
 export function chunkText(text: string, scale = 1): string[] {
@@ -529,6 +536,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     if (ADDS_SETTING.test(message.text)) manage.addSetting(view.deviceId, view.harness)
     if (EDITS_CONFIG_ELSEWHERE.test(message.text)) harnessConfig.editElsewhere(view.deviceId)
     if (RACES_CONFIG.test(message.text)) harnessConfig.raceNextWrite(view.deviceId)
+    if (EDITS_MODELS_ELSEWHERE.test(message.text)) harnessConfig.modelsElsewhere(view.deviceId)
+    if (LOCKS_MODELS.test(message.text)) harnessConfig.lockModels(view.deviceId)
     if (ORGANIZES_ELSEWHERE.test(message.text)) organize.elsewhere(view.deviceId, view.sessionId)
     // 本机的设备服务换没换版本的几出（关键字在 mock-service.mts 开头）
     service.stage(view.deviceId, message.text)

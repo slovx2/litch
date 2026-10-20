@@ -123,6 +123,8 @@ export const Forward = glyph('M6.5 3.5L11 8l-4.5 4.5')
 export const Notice = glyph('M8 2.5l5.5 10.5h-11zM8 6.5v3M8 11.2v.3')
 /** 收到下面去：朝下的尖角 */
 export const Down = glyph('M3.5 6l4.5 4.5L12.5 6')
+/** 向上：和 Down 相反 */
+export const Up = glyph('M3.5 10l4.5-4.5 4.5 4.5')
 /** 更多：横着三个点 */
 export const More = glyph('M3.5 8h1M7.5 8h1M11.5 8h1')
 /** 计划：三行清单，每行前面一个点 */

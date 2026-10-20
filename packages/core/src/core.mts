@@ -1198,6 +1198,14 @@ export function createCore(options: CoreOptions): Core {
           )
           return { hash }
         }
+        case 'harnessConfig.models.write': {
+          const p = params as Commands['harnessConfig.models.write']['params']
+          return deviceOf(p.deviceId).harnessConfig.writeModels(
+            String(p.harness),
+            Array.isArray(p.entries) ? p.entries : null,
+            String(p.expectedVersion ?? ''),
+          )
+        }
         case 'instructions.overview': {
           const p = params as Commands['instructions.overview']['params']
           return deviceOf(p.deviceId).harnessConfig.overview()
