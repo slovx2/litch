@@ -958,7 +958,6 @@ export class CodexClaudeAppServer {
         return this.modelList(asRecord(params))
       case 'modelProvider/capabilities/read':
         return {
-          namespaceTools: true,
           imageGeneration: false,
           // Claude Code SDK ships a WebSearch tool. Default to advertising it
           // so Codex App shows the search affordance; CHA_CLAUDE_WEBSEARCH=0

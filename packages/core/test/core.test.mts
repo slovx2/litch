@@ -42,7 +42,7 @@ function setup(world: Partial<World> = {}) {
       state.engine
         ? {
             engine: state.engine,
-            protocolVersion: '0.157.1',
+            protocolVersion: '0.163.0',
             cliBuild: '0.99.1',
             capabilities: [],
             releaseReady: true,

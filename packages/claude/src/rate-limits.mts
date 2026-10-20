@@ -179,7 +179,7 @@ export class AccountRateLimits {
         info.utilization < 0
       )
         continue
-      // 固定 0.157.1 JSON schema 要求 int32；四舍五入，不把超过 100% 的真实值钳为 100。
+      // 固定协议快照的 JSON schema 要求 int32；四舍五入，不把超过 100% 的真实值钳为 100。
       const usedPercent = Math.round(info.utilization * 100)
       if (usedPercent > 2147483647) continue
       const window: RateLimitWindow = {

@@ -45,7 +45,7 @@ func TestDoctorShowsResultAndKeepsDetailsInLog(t *testing.T) {
 	cfg := testConfiguration(t)
 	writeStartFixture(t, cfg)
 	fixture := `console.error('ExperimentalWarning: SQLite INTERNAL_DETAIL');
-if (process.argv.includes('--runtime-info')) console.log(JSON.stringify({engine:'pi',protocolVersion:'0.157.1',nodeVersion:process.versions.node,releaseReady:false,cliSha256:'INTERNAL_DETAIL'}));
+if (process.argv.includes('--runtime-info')) console.log(JSON.stringify({engine:'pi',protocolVersion:'0.163.0',nodeVersion:process.versions.node,releaseReady:false,cliSha256:'INTERNAL_DETAIL'}));
 else console.log('pty-self-check ok');`
 	if err := os.WriteFile(cfg.adapter(), []byte(fixture), 0o600); err != nil {
 		t.Fatal(err)
@@ -71,7 +71,7 @@ func TestDiagnosticFailuresRemainActionable(t *testing.T) {
 		{"old-cli", `console.error('需要用户安装的 Pi CLI >= 0.99.1 INTERNAL_DETAIL'); process.exit(1);`, "最低稳定版本"},
 		{"old-dsh", `console.error('宿主 dsh CLI 版本不符: 需要 >= 0.2.0-rc.2，实际 0.1.5 INTERNAL_DETAIL'); process.exit(1);`, "DSH 版本低于"},
 		{"broken-dsh", `console.error('无法读取宿主 dsh CLI 版本: /opt/dsh INTERNAL_DETAIL'); process.exit(1);`, "dsh --version"},
-		{"old-node", `console.error('INTERNAL_DETAIL'); console.log(JSON.stringify({engine:'pi',protocolVersion:'0.157.1',nodeVersion:'22.23.1'}));`, "Node.js 版本过低"},
+		{"old-node", `console.error('INTERNAL_DETAIL'); console.log(JSON.stringify({engine:'pi',protocolVersion:'0.163.0',nodeVersion:'22.23.1'}));`, "Node.js 版本过低"},
 		{"sandbox", `console.error('Claude 沙箱依赖不可用: bwrap INTERNAL_DETAIL'); process.exit(1);`, "沙箱依赖不可用"},
 	} {
 		t.Run(scenario.name, func(t *testing.T) {

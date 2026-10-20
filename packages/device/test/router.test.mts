@@ -67,7 +67,7 @@ test('握手：没声明 harness 扩展的被拒绝并说明原因，声明了�
       'userAgent',
     ])
     assert.equal(result.codexHome, env.stateDir)
-    assert.match(result.userAgent, /^device-test\/0\.157\.1 .*codex-harness-adapter-device/)
+    assert.match(result.userAgent, /^device-test\/0\.163\.0 .*codex-harness-adapter-device/)
     // 握手应答是客户端收到的第一帧
     assert.equal(JSON.parse(client.raw[0] ?? '{}').result?.userAgent, result.userAgent)
     // 客户端声明的能力带给了上游，包括它认识哪些扩展；退订名单不带，那是聚合面自己拦的。
@@ -137,7 +137,7 @@ test('runtime/info：设备信息和每个 harness 的状态，形状和扩展�
     const info = await client.call('runtime/info', {})
     assertRuntimeInfo(info)
     assert.equal(info.device.version, '9.9.9')
-    assert.equal(info.device.protocolVersion, '0.157.1')
+    assert.equal(info.device.protocolVersion, '0.163.0')
     assert.deepEqual(info.device.extensions, [
       'harness',
       'deviceWorkspaces',

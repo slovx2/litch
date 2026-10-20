@@ -107,7 +107,7 @@ func TestForegroundSSHAndCleanup(t *testing.T) {
 		t.Fatal(err)
 	}
 	fixture := `import net from 'node:net';
-if (process.argv.includes('--runtime-info')) console.log(JSON.stringify({engine:'pi',protocolVersion:'0.157.1',nodeVersion:process.versions.node}));
+if (process.argv.includes('--runtime-info')) console.log(JSON.stringify({engine:'pi',protocolVersion:'0.163.0',nodeVersion:process.versions.node}));
 else { const socket=process.argv.at(-1).slice(7); net.createServer(c=>{c.on('error',()=>{});c.end('runtime-proxy')}).listen(socket); }
 `
 	if err := os.WriteFile(cfg.adapter(), []byte(fixture), 0o600); err != nil {
@@ -145,7 +145,7 @@ else { const socket=process.argv.at(-1).slice(7); net.createServer(c=>{c.on('err
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = client.Close() })
-	for command, want := range map[string]string{"codex --version": "codex-cli 0.157.1 (codex-harness-adapter-pi)\n", "codex app-server proxy": "runtime-proxy"} {
+	for command, want := range map[string]string{"codex --version": "codex-cli 0.163.0 (codex-harness-adapter-pi)\n", "codex app-server proxy": "runtime-proxy"} {
 		session, err := client.NewSession()
 		if err != nil {
 			t.Fatal(err)

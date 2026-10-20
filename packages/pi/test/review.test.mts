@@ -21,7 +21,7 @@ test('Desktop initialize 与 CLI 探测均报告固定 Codex 协议版本，Pi �
   })
   assertResponse('initialize', response)
   const reported = response.userAgent.match(/^[^/]+\/([^ ]+)/)?.[1]
-  assert.equal(reported, '0.157.1')
+  assert.equal(reported, '0.163.0')
   assert.match(response.userAgent, /\) codex-harness-adapter-pi \(codex-app; desktop-test\)$/)
   const cli = execFileSync(
     process.execPath,

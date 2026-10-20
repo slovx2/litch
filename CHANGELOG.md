@@ -5,6 +5,11 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
+## 未发布
+
+- 适配器：Codex 协议基线从 0.157.1 升到 0.163.0（`codexProtocol`、快照、方法表、`runtime/info` 和 `codex --version` 报的版本），CI 和“一键安装”的验证版 codex 改成 0.163.0；作为 harness 接进来的 codex 下限仍是 0.157.1
+- 适配器：`modelProvider/capabilities/read` 不再带 0.163.0 删掉的 `namespaceTools`（六家入口）
+
 ## 0.14.0
 
 - Litch：选中回答里的文字加评论。桌面端在助手的话（含过程里的说明、代码块、表格）里选字，选区上方出“评论”“复制”；手机端长按回答出“评论这条回答”，在只读全文页里选一段。评论加到输入框上面，一条消息最多十条，能改、删、定位原文，只有评论也能发；发出去时写成正文开头的 `<litch-comments>`，对话里画成编号的评论卡片

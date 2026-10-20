@@ -1,4 +1,4 @@
-// 与固定的 Codex 0.157.1 AskForApproval wire schema 一致。
+// 与仓库固定的 Codex 协议快照（protocol/versions.json 的 codexProtocol）里 AskForApproval 的 wire schema 一致。
 export const approvalFlows = [
   'sandbox_approval',
   'rules',

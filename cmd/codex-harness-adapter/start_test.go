@@ -168,7 +168,7 @@ func writeStartFixture(t *testing.T, entry configuration) {
 		t.Fatal(err)
 	}
 	fixture := fmt.Sprintf(`import net from 'node:net';
-if (process.argv.includes('--runtime-info')) console.log(JSON.stringify({engine:%q,protocolVersion:'0.157.1',nodeVersion:process.versions.node}));
+if (process.argv.includes('--runtime-info')) console.log(JSON.stringify({engine:%q,protocolVersion:'0.163.0',nodeVersion:process.versions.node}));
 else { net.createServer(c=>{c.on('error',()=>{});c.end('runtime-proxy')}).listen(process.argv.at(-1).slice(7)); }
 `, entry.harness)
 	if err := os.WriteFile(entry.adapter(), []byte(fixture), 0o600); err != nil {

@@ -142,7 +142,7 @@ test('启动参数：写法照计划，上游保持出现的顺序', () => {
 
 test('harness 的名字和版本取自上游自己报的，标识只在没有别的可用时才用', () => {
   const pi = { engine: 'pi', cliBuild: '0.99.1' }
-  assert.deepEqual(describeHarness('pi', { userAgent: 'x/0.157.1', runtime: pi }, null), {
+  assert.deepEqual(describeHarness('pi', { userAgent: 'x/0.163.0', runtime: pi }, null), {
     id: 'pi',
     displayName: 'Pi',
     badge: 'PI',
@@ -190,7 +190,7 @@ test('harness 的名字和版本取自上游自己报的，标识只在没有别
   const claude = describeHarness(
     'claude-code',
     {
-      userAgent: 'x/0.157.1',
+      userAgent: 'x/0.163.0',
       runtime: { engine: 'claude-code', cliBuild: '2.1.282 (Claude Code)' },
     },
     null,

@@ -27,7 +27,7 @@
         ]
       },
       "protocolVersion": {
-        "const": "0.157.1"
+        "const": "0.163.0"
       },
       "cliBuild": {
         "type": "string",

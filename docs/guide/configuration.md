@@ -181,7 +181,7 @@ export CHA_CLAUDE_NODE="/absolute/path/to/node"
 | --- | --- |
 | `CHA_CLAUDE_ADAPTER` | 仅 shim：`packages/claude/dist/claude/src/adapter.mjs` 路径。 |
 | `CHA_CLAUDE_NODE` | 仅 shim：shim 启动的 Node。本地入口用 `--node`。 |
-| `CHA_CLAUDE_COMPAT_VERSION` | Codex app-server version advertised (default `0.157.1`); separate from minimum CLI versions. |
+| `CHA_CLAUDE_COMPAT_VERSION` | Codex app-server version advertised (default `0.163.0`); separate from minimum CLI versions. |
 | `CHA_CLAUDE_VERSION_SUFFIX` | Tag after the version to distinguish the adapter from real codex (default `codex-harness-adapter`; set `""` to behave exactly like upstream codex). |
 | `CODEX_REAL` | 仅 shim：处理非 app-server 命令和 `codex` 直通的真实 Codex CLI。 |
 | `CHA_CLAUDE_CLI` | 宿主 Claude Code 可执行文件，默认从 PATH 查找 claude。运行时诊断接受 CLI >= 2.1.282 的稳定版，配置仍由原生 CLAUDE_CONFIG_DIR 提供。 |

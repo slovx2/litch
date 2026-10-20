@@ -41,6 +41,7 @@ export function thread(fields: Partial<Thread> & { id: string }): Thread {
 export function turn(id: string, items: ThreadItem[], fields: Partial<Turn> = {}): Turn {
   return {
     id,
+    rootTurnId: null,
     items,
     itemsView: 'full',
     status: 'completed',
