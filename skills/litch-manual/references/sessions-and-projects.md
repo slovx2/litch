@@ -67,10 +67,17 @@ woken to continue.
   harness, model, effort, project, folder, fresh or with context, title, brief, permissions), Dismiss.
   The side panel's **Suggested tasks** tab lists every card of the current session, with a badge for
   the waiting ones; clicking one scrolls to it. You can also tell the model "start the second one", and
-  it withdraws cards that went stale. At most four cards per turn.
+  it withdraws cards that went stale. At most four cards per turn. The model ends every turn with a
+  wrap-up call that carries its suggestions (an empty one when there are none); when a turn the user
+  started ends without it, Litch starts one short reminder turn (a light line "Reminded the model to
+  wrap up"). The reminder is the device setting `sessions.wrapUpReminder` (on by default). Started cards
+  show the harness and folder the sub-session actually got. The mobile app shows the same cards and a
+  per-session list (the "N suggested tasks waiting for you" bar at the top of a conversation, or the menu).
 - **Reports and waking**: when a sub-session finishes a turn, the start of its last answer is handed to
   the parent ("Reports from sub-sessions"). When the parent is idle and its sub-sessions have stopped,
-  the parent is woken to continue (limited per user message). Nothing is woken while no client is
+  the parent is woken to continue (limited per user message). Litch decides this, not the model: sub-
+  sessions the model started or suggested always wake the parent; when you start one yourself (spawn
+  dialog, Edit and start) you can turn "Wake the main session when done" off. Nothing is woken while no client is
   connected; it happens when one connects. Turns run by scheduled tasks report but do not wake.
 - **Detach as a standalone session** (session menu or the "Started from …" bar at the top of a
   sub-session) cuts the link.
