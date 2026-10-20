@@ -291,6 +291,8 @@ export interface Commands {
   /**
    * 发一条消息，可以带图片和别的东西（extras：技能）；带着这些时文字可以是空的。
    * 没有回合在进行就立刻开始一个回合，否则排队。
+   * now：有回合在进行时不排队，直接插进这个回合（答模型边干活边问的题就是这样，和官方客户端一样）；
+   * 插不进去（对面不会、带着图）就照常排着，等这个回合结束再发。
    * 应答表示“已经受理”（回合开始了，或者排上了队）；出错时界面要把文字和带的东西还给用户。
    */
   'session.send': {
@@ -300,6 +302,7 @@ export interface Commands {
       text: string
       images?: ImageAttachment[]
       extras?: MessageExtra[]
+      now?: boolean
     }
     result: Record<string, never>
   }

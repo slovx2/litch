@@ -44,6 +44,7 @@ import { app, type BrowserWindow } from 'electron'
 import { activityProbe, judgeActivity } from './probe-activity.mjs'
 import { cardRoomProbe, cardsProbe, judgeCards } from './probe-cards.mjs'
 import { composeProbe, judgeCompose } from './probe-compose.mjs'
+import { askProbe, judgeAsk } from './probe-compose-ask.mjs'
 import { type AttachLook, attachLook, attachProbe, judgeAttach } from './probe-compose-attach.mjs'
 import { runComposeFilesChecks } from './probe-compose-files.mjs'
 import { judgeMention, mentionProbe } from './probe-compose-mention.mjs'
@@ -400,6 +401,8 @@ async function measure(
   const attach = await runInPage(window, attachProbe, real)
   const [files, filesFailed] = await runComposeFilesChecks(window, real)
   const mention = await runInPage(window, mentionProbe, real)
+  // 模型边干活边问的题（只对着模拟核心）：对话里的问题卡片
+  const ask = await runInPage(window, askProbe, real)
   let slashLooks: { wide: SlashLook; narrow: SlashLook } | null = null
   let attachLooks: { wide: AttachLook; narrow: AttachLook } | null = null
   let mentionLooks: { wide: SlashLook; narrow: SlashLook } | null = null
@@ -434,6 +437,7 @@ async function measure(
       files,
       mention,
       mentionLooks,
+      ask,
     },
     [
       ...homeFailed,
@@ -446,6 +450,7 @@ async function measure(
       ...judgeAttach(attach, real, attachLooks),
       ...filesFailed,
       ...judgeMention(mention, real),
+      ...judgeAsk(ask),
       ...judgeSheetLook('找文件的单子', mentionLooks),
     ],
   ]

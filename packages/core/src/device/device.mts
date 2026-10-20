@@ -265,7 +265,8 @@ export interface Device {
   newSessionDefaults(harness: HarnessId | undefined, cwd: string | null): Promise<SessionDefaults>
   /** 这个 harness 在 cwd 这个工作目录下能用的技能。它带不了技能、对面不认识这个方法时抛 unsupported */
   skills(harness: HarnessId | undefined, cwd: string | null): Promise<SkillCatalog>
-  send(sessionId: string, message: OutgoingMessage): Promise<void>
+  /** now：有回合在进行时直接插进去，插不进去就照常排队 */
+  send(sessionId: string, message: OutgoingMessage, now?: boolean): Promise<void>
   steer(sessionId: string, messageId: string): Promise<void>
   interrupt(sessionId: string): Promise<void>
   unqueue(sessionId: string, messageId: string): void
@@ -2034,7 +2035,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       return projectDefaults(requirements, config)
     },
     skills: (harness, cwd) => aids.skills(harness, cwd),
-    send: (sessionId, message) => live.send(sessionId, message),
+    send: (sessionId, message, now) => live.send(sessionId, message, now),
     steer: (sessionId, messageId) => live.steer(sessionId, messageId),
     interrupt: (sessionId) => live.interrupt(sessionId),
     unqueue: (sessionId, messageId) => live.unqueue(sessionId, messageId),

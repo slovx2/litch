@@ -175,7 +175,8 @@ export interface LiveSessions {
   configure(sessionId: string, settings: Partial<SessionSettings>): void
   /** 执行计划：退出计划模式，并以 text 这句话发起一个回合。回合还在进行的时候做不了 */
   implementPlan(sessionId: string, text: string): Promise<void>
-  send(sessionId: string, message: OutgoingMessage): Promise<void>
+  /** now：有回合在进行时直接插进去（引导），插不进去就照常排队 */
+  send(sessionId: string, message: OutgoingMessage, now?: boolean): Promise<void>
   /** 把一条排着队的消息现在就插进正在进行的回合里 */
   steer(sessionId: string, messageId: string): Promise<void>
   interrupt(sessionId: string): Promise<void>
@@ -964,7 +965,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     return live as Live & { view: SessionView }
   }
 
-  return {
+  const sessionsApi: LiveSessions = {
     open(sessionId, sink) {
       let live = sessions.get(sessionId)
       if (!live) {
@@ -1225,14 +1226,17 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       await startTurn(live, outgoing(text), `plan:${host.clock.now()}-${++localSeq}`)
     },
 
-    async send(sessionId, message) {
+    async send(sessionId, message, now) {
       const live = need(sessionId)
       if (!live.view.live) throw new ChannelError('rejected', '这个会话是只读的')
       mustReach(live)
       if (isRunning(live.view) || live.queued.length > 0) {
-        live.queued = [...live.queued, { id: `q${++localSeq}`, ...message }]
+        const id = `q${++localSeq}`
+        live.queued = [...live.queued, { id, ...message }]
         emit(live, [{ op: 'queue.set', queued: live.queued }])
         pump(live)
+        // 插不进去时 steer 已经把它放回了队列：消息照常排着，等这个回合结束再发，不算没发成
+        if (now && isRunning(live.view)) await sessionsApi.steer(sessionId, id).catch(() => {})
         return
       }
       await startTurn(live, message)
@@ -1406,4 +1410,5 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       host.touched(live.id)
     },
   }
+  return sessionsApi
 }

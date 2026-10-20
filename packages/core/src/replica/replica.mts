@@ -38,6 +38,7 @@ import type { TaskRunView, TasksView, TaskView } from '../model-tasks.mjs'
 import type { TerminalInfo, TerminalsOp, TerminalsView } from '../model-terminal.mjs'
 import type { AgentThreadView, SessionNoteView, SessionProposalView } from '../model-tree.mjs'
 import type { Text } from '../phrase.mjs'
+import { type AskAnswers, gatherAnswers, parseAskReply } from '../projection/asks.mjs'
 import { changedKeys } from '../projection/manage.mjs'
 import { appendOutput, appendSkipping } from '../text/output-cap.mjs'
 import { createFileTrees, type FileTrees, fileKeys } from './file-trees.mjs'
@@ -108,6 +109,11 @@ export const keys = {
    * 派出子会话的那张卡片上的“最后一句回报”用它
    */
   notes: (deviceId: string, sessionId: string) => `session:${deviceId}:${sessionId}:notes`,
+  /**
+   * AskAnswers：这个会话里收到过的答复（模型边干活边问的题，projection/asks.mts），题目标识 → 答了什么。
+   * 带题的那张卡片据此显示“已答”
+   */
+  answers: (deviceId: string, sessionId: string) => `session:${deviceId}:${sessionId}:answers`,
   /** ManageSchema：这台设备上有哪些设置。有这个键说明管理数据的快照已经到了 */
   manage: (deviceId: string) => `manage:${deviceId}:schema`,
   /** SettingsSnapshotView：设置现在的值、待重启的 harness、SSH 入口的状况 */
@@ -881,6 +887,11 @@ export function createReplica(channel: CoreChannel): Replica {
           const before = store.get<SessionNotes>(keys.notes(deviceId, sessionId)) ?? {}
           store.set(keys.notes(deviceId, sessionId), gatherNotes(before, [op.item]))
         }
+        if (op.item.kind === 'userMessage') {
+          const before = store.get<AskAnswers>(keys.answers(deviceId, sessionId)) ?? {}
+          const next = gatherAnswers(before, [op.item])
+          if (next !== before) store.set(keys.answers(deviceId, sessionId), next)
+        }
         const turn = store.get<TurnView>(turnKey(op.turnId))
         if (turn && !turn.itemIds.includes(op.item.id)) {
           store.set(turnKey(op.turnId), { ...turn, itemIds: [...turn.itemIds, op.item.id] })
@@ -917,7 +928,18 @@ export function createReplica(channel: CoreChannel): Replica {
             itemIds: turn.itemIds.filter((id) => id !== op.itemId),
           })
         }
+        const removed = store.get<ItemView>(itemKey(op.itemId))
         store.delete(itemKey(op.itemId))
+        // 拿掉的是一份答复（插话没插成，退回了队列）：答复表照剩下的条目重算
+        if (removed?.kind === 'userMessage' && parseAskReply(removed.text)) {
+          const turnIds = store.get<string[]>(keys.turnIds(deviceId, sessionId)) ?? []
+          const left = turnIds.flatMap((turnId) =>
+            (store.get<TurnView>(turnKey(turnId))?.itemIds ?? []).flatMap(
+              (id) => store.get<ItemView>(itemKey(id)) ?? [],
+            ),
+          )
+          store.set(keys.answers(deviceId, sessionId), gatherAnswers({}, left))
+        }
         return
       }
       case 'item.status': {
@@ -1084,6 +1106,7 @@ export function createReplica(channel: CoreChannel): Replica {
                   turn.itemIds.flatMap((id) => view.items[id] ?? []),
                 )
                 store.set(keys.notes(deviceId, sessionId), gatherNotes({}, ordered))
+                store.set(keys.answers(deviceId, sessionId), gatherAnswers({}, ordered))
                 const meta: SessionMeta = {
                   title: view.title,
                   harness: view.harness,

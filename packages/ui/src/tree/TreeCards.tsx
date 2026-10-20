@@ -1,8 +1,10 @@
 // 对话里露在外面的几种卡片（核心的 cardOf 定哪些条目画成卡片）：
 // 派出的 Litch 子会话（litch_sessions.start）：标题、harness、现在怎样、最近一次回报，点一下跳过去；
 // 降成提案的 litch_sessions.start、带了建议的收尾（litch_sessions.wrap_up）：建议任务的卡片（ProposalCard.tsx）；
-// 引擎自己启动的子代理（collabAgentToolCall）：每个子代理一行小条（类型、描述、用时、状态），点一下在右侧“子代理”页里看。
+// 引擎自己启动的子代理（collabAgentToolCall）：每个子代理一行小条（类型、描述、用时、状态），点一下在右侧“子代理”页里看；
+// 带题的助手消息（模型边干活边问）：问题卡片（transcript/AskCard.tsx）。
 import {
+  type AgentMessageItem,
   type AgentRefView,
   type AgentRunState,
   type AgentThreadView,
@@ -18,6 +20,7 @@ import { useT } from '../app/appearance.ts'
 import { badgeOf, nameOf } from '../app/device.ts'
 import { Icon } from '../app/icons.tsx'
 import { useKey } from '../app/services.tsx'
+import { AskCard } from '../transcript/AskCard.tsx'
 import { useActions } from '../transcript/actions.tsx'
 import { type ItemRef, useItem } from '../transcript/messages.tsx'
 import { AgentStatus, AgentTime, useAgentStates } from './agent-view.tsx'
@@ -237,7 +240,9 @@ const NO_AGENTS: AgentRefView[] = []
 
 /** 对话里的一张卡片：按条目里带的是哪一种来画 */
 export const TreeCard = memo(function TreeCard(ref: ItemRef) {
-  const item = useItem<ToolCallItem>(ref)
+  const item = useItem<ToolCallItem | AgentMessageItem>(ref)
+  // 带题的助手消息（模型边干活边问）
+  if (item?.kind === 'agentMessage') return <AskCard {...ref} />
   if (item?.kind !== 'toolCall') return null
   if (item.wrapUp) return <WrapUpCards {...ref} item={item} />
   // 降成提案、还没直接起出子会话的：建议任务的卡片

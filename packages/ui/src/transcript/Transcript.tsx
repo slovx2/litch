@@ -78,7 +78,7 @@ function useBlocks(
       const place = cardPlace(item)
       inputs.push(
         item.kind === 'agentMessage'
-          ? { id, kind: item.kind, phase: item.phase }
+          ? { id, kind: item.kind, phase: item.phase, ...(place ? { card: place } : {}) }
           : item.kind === 'userMessage' && item.event?.kind === 'remind'
             ? { id, kind: item.kind, remind: true }
             : place

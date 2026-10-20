@@ -7,6 +7,8 @@
 //   列表的数据却不动：列表不用每帧重渲染、重算布局，只有正在长的那一块重画。
 //   尾巴放在倒置列表的表头里（最底下），长高时上面的行跟着一起被顶上去，和原生的普通布局一样，同一帧完成。
 import type {
+  AgentMessageItem,
+  AskAnswers,
   CoreChannel,
   SessionOp,
   SessionProposalView,
@@ -14,7 +16,7 @@ import type {
   TurnStatus,
   UserMessageItem,
 } from '@litch/core'
-import { reduceSession } from '@litch/core'
+import { gatherAnswers, parseAskReply, reduceSession } from '@litch/core'
 import { experiment } from '../experiment'
 import { noteOpenStage, noteWork } from '../probe'
 import { type Row, RowBuilder } from './rows'
@@ -105,6 +107,10 @@ export class SessionStore {
   private proposals: readonly SessionProposalView[] | undefined = undefined
   private readonly proposalListeners = new Set<() => void>()
   private proposalsDirty = false
+  /** 这个会话里收到过的答复（模型边干活边问的题）：题目标识 → 答了什么。问题卡片据此显示“已答” */
+  private answers: AskAnswers = {}
+  private readonly answerListeners = new Set<() => void>()
+  private answersDirty = false
   private readonly builder = new RowBuilder()
   private readonly listeners = new Set<() => void>()
   private readonly itemTurn = new Map<string, string>()
@@ -136,6 +142,7 @@ export class SessionStore {
           this.dirty = 'all'
           this.metaDirty = true
           this.proposalsDirty = true
+          this.recountAnswers(data)
           this.schedule()
         },
         delta: (ops) => {
@@ -181,6 +188,15 @@ export class SessionStore {
   /** 一个条目是什么种类。条目的种类定了就不变，现取就行 */
   readonly kindOf = (itemId: string): string | undefined => this.view?.items[itemId]?.kind
 
+  /** 一条助手消息上带的题（模型边干活边问）。题目在条目一开始就有、不再变，现取就行；不是带题的消息是 undefined */
+  readonly questionsOf = (itemId: string): AgentMessageItem['questions'] => {
+    const item = this.view?.items[itemId]
+    return item?.kind === 'agentMessage' ? item.questions : undefined
+  }
+
+  /** 一个条目在哪个回合里 */
+  readonly turnOf = (itemId: string): string | undefined => this.itemTurn.get(itemId)
+
   /** 这一回合最后一条回答的全文（行里只有切出来的一块）；没有回答时是计划 */
   answerText(turnId: string): string | null {
     const turn = this.view?.turns.find((each) => each.id === turnId)
@@ -222,6 +238,20 @@ export class SessionStore {
 
   readonly getProposals = (): readonly SessionProposalView[] | undefined => this.proposals
 
+  readonly subscribeAnswers = (listener: () => void): (() => void) => {
+    this.answerListeners.add(listener)
+    return () => this.answerListeners.delete(listener)
+  }
+
+  readonly getAnswers = (): AskAnswers => this.answers
+
+  /** 答复表照会话里现有的条目重算 */
+  private recountAnswers(view: SessionView): void {
+    const ordered = view.turns.flatMap((turn) => turn.itemIds.flatMap((id) => view.items[id] ?? []))
+    this.answers = gatherAnswers({}, ordered)
+    this.answersDirty = true
+  }
+
   /** 尾巴单独交出去（贴底时）还是并回列表（往上翻着看时：列表要靠数据变化来保持可见位置） */
   setSplitTail(split: boolean): void {
     if (this.split === split) return
@@ -232,6 +262,7 @@ export class SessionStore {
   private apply(view: SessionView, op: SessionOp): void {
     this.stats.ops++
     const before = op.op === 'session.proposals' ? view.proposals : null
+    const removed = op.op === 'item.remove' ? view.items[op.itemId] : undefined
     reduceSession(view, op)
     const mark = (turnId: string | undefined) => {
       if (turnId && this.dirty !== 'all') this.dirty.add(turnId)
@@ -249,12 +280,21 @@ export class SessionStore {
         // 回合开始、结束改变“有回合在跑”
         this.metaDirty = true
         return
-      case 'item.add':
+      case 'item.add': {
         this.itemTurn.set(op.item.id, op.turnId)
         mark(op.turnId)
+        const answers = gatherAnswers(this.answers, [op.item])
+        if (answers !== this.answers) {
+          this.answers = answers
+          this.answersDirty = true
+        }
         return
+      }
       case 'item.remove':
         mark(op.turnId)
+        // 拿掉的是一份答复（插话没插成，退回了队列）：答复表照剩下的条目重算
+        if (removed?.kind === 'userMessage' && parseAskReply(removed.text))
+          this.recountAnswers(view)
         return
       case 'item.appendText':
       case 'item.appendOutput':
@@ -347,6 +387,10 @@ export class SessionStore {
       this.proposalsDirty = false
       this.proposals = view.proposals
       for (const listener of this.proposalListeners) listener()
+    }
+    if (this.answersDirty) {
+      this.answersDirty = false
+      for (const listener of this.answerListeners) listener()
     }
     noteWork('emit', performance.now() - emitted)
   }

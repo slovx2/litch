@@ -375,10 +375,10 @@ export function createCore(options: CoreOptions): Core {
           return {}
         }
         case 'session.send': {
-          const { deviceId, sessionId, text, images, extras } =
+          const { deviceId, sessionId, text, images, extras, now } =
             params as Commands['session.send']['params']
           try {
-            await deviceOf(deviceId).send(sessionId, outgoing(text, images, extras))
+            await deviceOf(deviceId).send(sessionId, outgoing(text, images, extras), now === true)
           } catch (error) {
             throw toChannelFailure(error)
           }

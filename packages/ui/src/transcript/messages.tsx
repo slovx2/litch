@@ -5,6 +5,7 @@ import {
   type ItemView,
   keys,
   type PlanItem,
+  parseAskReply,
   type UserAttachment,
   type UserMessageItem,
 } from '@litch/core'
@@ -13,6 +14,7 @@ import { useT } from '../app/appearance.ts'
 import { ImageViewer } from '../app/ImageViewer.tsx'
 import { useKey } from '../app/services.tsx'
 import { SessionEventBar } from '../tree/EventBar.tsx'
+import { AskReplyBody } from './AskCard.tsx'
 import { Markdown } from './Markdown.tsx'
 import { usePin } from './scroll.ts'
 import { useSmoothText, useToggle } from './state.ts'
@@ -89,6 +91,8 @@ export const UserMessage = memo(function UserMessage({ turnId, ...ref }: UserMes
   const pin = usePin()
   const t = useT()
   const text = item?.kind === 'userMessage' ? item.text : ''
+  // 答模型边干活边问的题时发的那一段：画成题目和回答
+  const replies = parseAskReply(text)
 
   // 是不是超过了 20 行，要画出来才知道，而且跟宽度有关：盯着这块文字的尺寸，变了就重新量
   const hasText = text !== ''
@@ -110,7 +114,9 @@ export const UserMessage = memo(function UserMessage({ turnId, ...ref }: UserMes
   const message = (
     <div className="umsg" data-anchor={`u:${ref.itemId}`} ref={bubble}>
       <UserAttachments attachments={item.attachments} />
-      {text ? (
+      {replies ? (
+        <AskReplyBody replies={replies} />
+      ) : text ? (
         <div className={open ? 'umsg-text' : 'umsg-text clamp'} ref={body}>
           {text}
         </div>

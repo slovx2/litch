@@ -457,6 +457,22 @@ export interface AgentMessageItem {
   /** unknown：这个 harness 分不清过程说明和最终回答 */
   phase: 'commentary' | 'final' | 'unknown'
   status: ItemStatus
+  /** 回合中途单独送到用户面前的消息（codex 的 delivery: async）：模型不停下来，接着干活 */
+  delivery?: 'async'
+  /**
+   * 模型边干活边问的问题（codex 的 request_user_input_async），一题一项，按显示顺序。
+   * 只有带了题目的才有这一项；答复是下一条用户消息（projection/asks.mts）
+   */
+  questions?: AskQuestion[]
+}
+
+/** 助手消息里带的一道题 */
+export interface AskQuestion {
+  /** 答复时用的题目标识：[工具名, 协议条目的标识, 第几题] 写成的 JSON，和官方客户端的写法一样 */
+  id: string
+  title: string
+  /** 建议的回答，按显示顺序；没有就是只能自己写 */
+  options: string[]
 }
 
 export interface ReasoningItem {

@@ -1,4 +1,5 @@
 // 英文文案。键必须和 zh-CN.ts 完全一致，多一句少一句都编译不过。
+import { enAsks } from './en-asks.ts'
 import { enHconfig } from './en-hconfig.ts'
 import { enOnboard } from './en-onboard.ts'
 import { enPairing } from './en-pairing.ts'
@@ -12,6 +13,7 @@ const plural = (n: string | number | undefined, one: string, many: string) =>
 
 export const en: Record<MessageKey, Entry> = {
   ...enTasks,
+  ...enAsks,
   ...enPairing,
   ...enOnboard,
   ...enHconfig,
