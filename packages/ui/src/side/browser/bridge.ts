@@ -83,7 +83,7 @@ export interface BrowserBridge {
 /** 认得的来源 */
 export type BrowserId = 'chrome' | 'edge' | 'brave' | 'arc' | 'chromium' | 'vivaldi' | 'firefox'
 
-export type ImportKind = 'cookies' | 'passwords' | 'history'
+export type ImportKind = 'cookies' | 'passwords'
 
 export interface ImportProfile {
   /** Chromium 系是资料目录名（Default、Profile 1），Firefox 是 profiles.ini 里的 Path */
@@ -99,7 +99,7 @@ export interface ImportSource {
   browser: BrowserId
   /** 产品名，不翻译 */
   name: string
-  /** 读取器在这台机器上能读的（浏览记录总能读） */
+  /** 读取器在这台机器上能读的 */
   kinds: ImportKind[]
   /** 读之前系统会弹授权框（Mac 的钥匙串） */
   promptsSystemAuth: boolean

@@ -5,7 +5,7 @@ import type { zhBimport } from './zh-CN-bimport.ts'
 export const enBimport: Record<keyof typeof zhBimport, Entry> = {
   'bimport.entry.title': 'Import from another browser',
   'bimport.entry.note':
-    'Bring cookies (site sign-ins), saved passwords and history from Chrome, Edge, Firefox and others into the built-in browser. A one-time import, not a sync.',
+    'Bring cookies (site sign-ins), and saved passwords from Chrome, Edge, Firefox and others into the built-in browser. A one-time import, not a sync.',
   'bimport.entry.button': 'Import…',
   'bimport.entry.last': 'Last imported on {day}',
   'bimport.menu': 'Browser menu',
@@ -30,9 +30,7 @@ export const enBimport: Record<keyof typeof zhBimport, Entry> = {
   'bimport.kind.cookies.note': 'Site sign-ins, so you don’t have to sign in again',
   'bimport.kind.passwords': 'Saved passwords',
   'bimport.kind.passwords.note':
-    'Kept in Litch’s own password store and filled only in pages you open yourself',
-  'bimport.kind.history': 'History',
-  'bimport.kind.history.note': 'The last 90 days, suggested as you type in the address bar',
+    'Kept in Litch’s own password store and filled in by the built-in browser',
   'bimport.look.unsupported': 'Can’t be read on this computer yet',
   'bimport.look.missing': 'Not in this profile',
   'bimport.domains': 'Only import cookies for these sites',
@@ -47,7 +45,7 @@ export const enBimport: Record<keyof typeof zhBimport, Entry> = {
     'Your system will ask for permission when reading cookies and passwords; allow it to import them.',
   'bimport.elevate': 'Allow reading cookies and passwords as administrator',
   'bimport.elevate.note':
-    'Reading {name}’s cookies and passwords on this computer needs administrator consent; Windows will show a User Account Control prompt. Without it those two are skipped.',
+    'Reading {name}’s cookies and passwords on this computer needs administrator consent; Windows will show a User Account Control prompt. Without it they can’t be imported.',
   'bimport.problem.noSource': 'Choose a browser first',
   'bimport.problem.noKinds': 'Choose at least one',
   'bimport.problem.noDomains':

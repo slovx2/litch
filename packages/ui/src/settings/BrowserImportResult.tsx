@@ -15,7 +15,6 @@ import {
 export const KIND_TEXT: Record<ImportKind, MessageKey> = {
   cookies: 'bimport.kind.cookies',
   passwords: 'bimport.kind.passwords',
-  history: 'bimport.kind.history',
 }
 
 /** 逐类进度：等待、正在读取、正在写入、完成 */

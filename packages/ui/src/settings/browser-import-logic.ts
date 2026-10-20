@@ -15,10 +15,10 @@ import type {
   ImportState,
 } from '../side/browser/bridge.ts'
 
-/** 三类，按显示的先后 */
-export const KINDS: readonly ImportKind[] = ['cookies', 'passwords', 'history']
+/** 两类，按显示的先后 */
+export const KINDS: readonly ImportKind[] = ['cookies', 'passwords']
 
-/** 受保护的两类：读它们才会弹系统授权、才要管理员同意 */
+/** 能导的两类都受保护：读它们才会弹系统授权、才要管理员同意 */
 const guarded = (kind: ImportKind): boolean => kind === 'cookies' || kind === 'passwords'
 
 // ---------- 选来源、资料、类别 ----------
@@ -76,7 +76,7 @@ export function defaultProfile(source: ImportSource): ImportProfile | undefined 
   return usable.find((profile) => profile.isDefault) ?? usable[0]
 }
 
-/** 默认勾选：Cookie、密码开，浏览记录关；能导的才勾 */
+/** 默认勾选：Cookie、密码都开；能导的才勾 */
 export function defaultKinds(
   source: ImportSource,
   profile: ImportProfile | undefined,
@@ -85,7 +85,6 @@ export function defaultKinds(
   return {
     cookies: can.includes('cookies'),
     passwords: can.includes('passwords'),
-    history: false,
   }
 }
 

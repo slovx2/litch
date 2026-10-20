@@ -57,7 +57,6 @@ import '../styles/browser-import.css'
 const KIND_NOTE: Record<ImportKind, MessageKey> = {
   cookies: 'bimport.kind.cookies.note',
   passwords: 'bimport.kind.passwords.note',
-  history: 'bimport.kind.history.note',
 }
 
 interface DialogProps {

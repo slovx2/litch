@@ -223,11 +223,11 @@ void app.whenReady().then(async () => {
     }))()`)
     seen.defaultForm = form
     check(
-      '默认选 Chrome，Cookie 和密码勾上、浏览记录不勾',
+      '默认选 Chrome，Cookie 和密码都勾上，没有浏览记录那一项',
       form.source === 'chrome' &&
         form.kinds.cookies === true &&
         form.kinds.passwords === true &&
-        form.kinds.history === false,
+        !('history' in form.kinds),
       form,
     )
     const before = await cookieCount()

@@ -7,7 +7,7 @@ export const zhBimport = {
   // 入口
   'bimport.entry.title': '从浏览器导入',
   'bimport.entry.note':
-    '把 Chrome、Edge、Firefox 等浏览器里的 Cookie（网站的登录状态）、已保存的密码和浏览记录导进内置浏览器。一次性导入，不会持续同步。',
+    '把 Chrome、Edge、Firefox 等浏览器里的 Cookie（网站的登录状态）、已保存的密码导进内置浏览器。一次性导入，不会持续同步。',
   'bimport.entry.button': '导入…',
   'bimport.entry.last': '上次导入在 {day}',
   'bimport.menu': '浏览器菜单',
@@ -31,9 +31,7 @@ export const zhBimport = {
   'bimport.kind.cookies': 'Cookie',
   'bimport.kind.cookies.note': '网站的登录状态，导进来之后不用重新登录',
   'bimport.kind.passwords': '已保存的密码',
-  'bimport.kind.passwords.note': '存进 Litch 自己的密码库，只在你自己打开的网页里自动填充',
-  'bimport.kind.history': '浏览记录',
-  'bimport.kind.history.note': '最近 90 天的，地址栏输入时会联想',
+  'bimport.kind.passwords.note': '存进 Litch 自己的密码库，在内置浏览器里自动填充',
   'bimport.look.unsupported': '这台电脑上还读不了',
   'bimport.look.missing': '这份资料里没有',
   'bimport.domains': '只导这些网站的 Cookie',
@@ -46,7 +44,7 @@ export const zhBimport = {
   'bimport.hint.systemAuth': '读 Cookie 和密码时系统会弹出授权框，允许之后才导得进来。',
   'bimport.elevate': '允许用管理员权限读取 Cookie 和密码',
   'bimport.elevate.note':
-    '这台电脑上读 {name} 的 Cookie 和密码要管理员同意，勾选后 Windows 会弹出用户账户控制询问。不勾也行，这两类会跳过。',
+    '这台电脑上读 {name} 的 Cookie 和密码要管理员同意，勾选后 Windows 会弹出用户账户控制询问。不勾就导不进来。',
   'bimport.problem.noSource': '先选一个来源',
   'bimport.problem.noKinds': '至少选一类',
   'bimport.problem.noDomains': '至少写一个网站，或者取消“只导这些网站的 Cookie”',

@@ -54,8 +54,8 @@ sync: to bring in newer data, import again. There is no command for it and agent
 - a banner at the top of the Browser tab, shown until the user imports once or clicks "Not now".
 
 In the dialog the user picks the browser and profile, then what to import: **Cookies** (site
-sign-ins) and **Saved passwords** are on by default, **History** (the last 90 days) is off. Kinds that
-cannot be read on this computer, or that the profile does not have, are greyed out with the reason.
+sign-ins) and **Saved passwords**, both on by default. A kind that cannot be read on this computer, or
+that the profile does not have, is greyed out with the reason.
 "Only import cookies for these sites" limits cookies to listed domains (subdomains included).
 
 Before importing:
@@ -66,27 +66,22 @@ Before importing:
   (exception E1). If they denied it, "Try again" asks again.
 - On Windows some browsers need administrator consent to read cookies and passwords: the user ticks
   "Allow reading cookies and passwords as administrator" and approves the UAC prompt (E1). Without it
-  those two kinds are skipped and history still imports.
+  nothing can be imported from that browser.
 
 The result lists each kind with how many were imported, already there, invalid and failed. Nothing
 already in Litch is overwritten (same site, name and path for cookies; same site and user name for
-passwords). Invalid means expired or malformed cookies, password entries that are not for a website
-(Android apps), history older than 90 days. Cookie values and passwords never reach agents or the
-Litch window; only counts do.
+passwords). Invalid means expired or malformed cookies, or password entries that are not for a
+website (Android apps). The import itself never shows cookie values or passwords to agents or in the
+Litch window; only counts.
 
 ### Saved passwords
 
-Imported passwords are kept in Litch's own store, encrypted with the system's secure storage. They
-are filled in only in tabs the user opened, never in agent tabs, and only after the user picks an
-entry; agents reading a page never see password fields. Settings → Built-in browser → **Saved
-passwords** lists them by site and user name: search, delete one, delete all. Passwords cannot be
-shown or copied, and Litch does not yet offer to save new ones. "Clear browsing data" keeps them.
-
-### History
-
-The built-in browser keeps the pages visited in all tabs (http and https), agent tabs included and
-marked as such, for 90 days. Typing in the address bar suggests from history. The history page lets
-the user search it, delete one entry or delete all of it; "Clear browsing data" clears history too.
+Passwords (imported, or saved after signing in) are kept in Litch's own store, encrypted with the
+system's secure storage, and filled in automatically in the built-in browser: in the user's tabs and
+in agent tabs too, so an agent can sign in to a site the user has a saved password for. When the user
+signs in to a site with a password Litch does not have yet, the Browser tab offers to save it.
+Settings → Built-in browser → **Saved passwords** lists them by site and user name: search, delete
+one, delete all. Passwords cannot be shown or copied. "Clear browsing data" keeps them.
 
 Preferences (Settings → Built-in browser):
 
@@ -103,9 +98,9 @@ Preferences (Settings → Built-in browser):
   subdomains are included).
 - `scripts/litch browser unblock` removes one site from the blocklist, or clears it (see `--help`).
   **Guarded**: the user confirms in Litch.
-- `scripts/litch browser clear-data` clears cookies, sign-ins, site storage, cache and history of the
-  built-in browser. **Irreversible: ask first**, then the user confirms in Litch (the user will be
-  signed out of every site there). Always-allowed sites and saved passwords are kept.
+- `scripts/litch browser clear-data` clears cookies, sign-ins, site storage and cache of the built-in
+  browser. **Irreversible: ask first**, then the user confirms in Litch (the user will be signed out
+  of every site there). Always-allowed sites and saved passwords are kept.
 
 ## Computer Use (macOS and Windows)
 

@@ -31,18 +31,18 @@ const {
 } = logic
 const { translator } = await import('../src/i18n/index.ts')
 
-const has = (cookies, passwords, history) => ({ cookies, passwords, history })
+const has = (cookies, passwords) => ({ cookies, passwords })
 const profile = (id, patch = {}) => ({
   id,
   name: id,
   isDefault: false,
-  has: has(true, true, true),
+  has: has(true, true),
   ...patch,
 })
 const chrome = {
   browser: 'chrome',
   name: 'Google Chrome',
-  kinds: ['cookies', 'passwords', 'history'],
+  kinds: ['cookies', 'passwords'],
   promptsSystemAuth: true,
   needsElevation: false,
   profiles: [
@@ -53,15 +53,15 @@ const chrome = {
 const firefox = {
   browser: 'firefox',
   name: 'Firefox',
-  kinds: ['history'],
+  kinds: ['cookies'],
   promptsSystemAuth: false,
   needsElevation: false,
-  profiles: [profile('abc.default-release', { isDefault: true, has: has(true, true, true) })],
+  profiles: [profile('abc.default-release', { isDefault: true, has: has(true, true) })],
 }
 const edgeEmpty = {
   browser: 'edge',
   name: 'Microsoft Edge',
-  kinds: ['cookies', 'passwords', 'history'],
+  kinds: ['cookies', 'passwords'],
   promptsSystemAuth: false,
   needsElevation: true,
   profiles: [],
@@ -72,7 +72,7 @@ const braveNothing = {
   kinds: ['cookies'],
   promptsSystemAuth: false,
   needsElevation: false,
-  profiles: [profile('Default', { isDefault: true, has: has(false, true, true) })],
+  profiles: [profile('Default', { isDefault: true, has: has(false, true) })],
 }
 
 const counts = (patch = {}) => ({
@@ -87,8 +87,8 @@ const counts = (patch = {}) => ({
 
 test('一类能不能勾：读取器读不了的、资料里没有的各有原因', () => {
   const [ffProfile] = firefox.profiles
-  assert.equal(kindLook(firefox, ffProfile, 'history'), 'ok')
-  assert.equal(kindLook(firefox, ffProfile, 'cookies'), 'unsupported')
+  assert.equal(kindLook(firefox, ffProfile, 'cookies'), 'ok')
+  assert.equal(kindLook(firefox, ffProfile, 'passwords'), 'unsupported')
   assert.equal(kindLook(braveNothing, braveNothing.profiles[0], 'cookies'), 'missing')
   assert.equal(kindLook(chrome, undefined, 'cookies'), 'missing')
 })
@@ -101,20 +101,18 @@ test('来源选不了的原因；能选的排在前面，其余照原顺序', ()
   assert.deepEqual(order, ['chrome', 'firefox', 'edge', 'brave'])
 })
 
-test('默认资料是浏览器自己的默认那份；默认勾 Cookie 和密码，浏览记录不勾', () => {
+test('默认资料是浏览器自己的默认那份；默认勾 Cookie 和密码', () => {
   assert.equal(defaultProfile(chrome).id, 'Default')
   // 默认那份导不了：用第一份能导的
   const odd = {
     ...chrome,
-    profiles: [
-      profile('Default', { isDefault: true, has: has(false, false, false) }),
-      profile('Work'),
-    ],
+    profiles: [profile('Default', { isDefault: true, has: has(false, false) }), profile('Work')],
   }
   assert.equal(defaultProfile(odd).id, 'Work')
-  assert.deepEqual(defaultKinds(chrome, chrome.profiles[1]), has(true, true, false))
+  assert.deepEqual(defaultKinds(chrome, chrome.profiles[1]), has(true, true))
   // 读取器不支持的不勾
-  assert.deepEqual(defaultKinds(firefox, firefox.profiles[0]), has(false, false, false))
+  assert.deepEqual(defaultKinds(firefox, firefox.profiles[0]), has(true, false))
+  assert.deepEqual(Object.keys(defaultKinds(chrome, chrome.profiles[1])), ['cookies', 'passwords'])
 })
 
 test('表单初值、换来源时类别回到默认、名单和管理员同意留着', () => {
@@ -126,7 +124,7 @@ test('表单初值、换来源时类别回到默认、名单和管理员同意�
   const next = draftFor(chrome, undefined, edited)
   assert.equal(next.browser, 'chrome')
   assert.equal(next.profileId, 'Default')
-  assert.deepEqual(next.kinds, has(true, true, false))
+  assert.deepEqual(next.kinds, has(true, true))
   assert.equal(next.onlyDomains, true)
   assert.equal(next.domainsText, 'github.com')
   assert.equal(next.allowElevated, true)
@@ -156,12 +154,12 @@ test('网站名单：网址取主机，前导点、*.、端口、路径不要，
 })
 
 test('提示：系统授权、管理员同意只在勾了 Cookie 或密码时出', () => {
-  assert.equal(wantsSystemAuth(chrome, ['history']), false)
+  assert.equal(wantsSystemAuth(chrome, []), false)
   assert.equal(wantsSystemAuth(chrome, ['passwords']), true)
   assert.equal(wantsSystemAuth(firefox, ['cookies']), false)
   const edge = { ...edgeEmpty, profiles: [profile('Default')] }
-  assert.equal(wantsElevation(edge, ['cookies', 'history']), true)
-  assert.equal(wantsElevation(edge, ['history']), false)
+  assert.equal(wantsElevation(edge, ['cookies']), true)
+  assert.equal(wantsElevation(edge, []), false)
   assert.equal(wantsElevation(chrome, ['cookies']), false)
 })
 
@@ -181,16 +179,12 @@ test('拼请求：只带勾了又能导的；名单只在勾了 Cookie 时用；
   assert.equal(requestOf(sources, { ...draft, allowElevated: true }).request.allowElevated, false)
   const edgeDraft = { ...draftFor(edge, undefined), allowElevated: true }
   assert.equal(requestOf(sources, edgeDraft).request.allowElevated, true)
-  assert.equal(
-    requestOf(sources, { ...edgeDraft, kinds: has(false, false, true) }).request.allowElevated,
-    false,
-  )
   // 一类都没勾
-  assert.deepEqual(requestOf(sources, { ...draft, kinds: has(false, false, false) }), {
+  assert.deepEqual(requestOf(sources, { ...draft, kinds: has(false, false) }), {
     problem: 'noKinds',
   })
   // 勾了读不了的那一类不算
-  const ff = { ...draftFor(firefox, undefined), kinds: has(true, true, false) }
+  const ff = { ...draftFor(firefox, undefined), kinds: has(false, true) }
   assert.deepEqual(pickedKinds(sources, ff), [])
   assert.equal(requestOf(sources, ff).problem, 'noKinds')
   // 名单
@@ -205,7 +199,7 @@ test('拼请求：只带勾了又能导的；名单只在勾了 Cookie 时用；
     ['github.com'],
   )
   // 没勾 Cookie 时名单不发、写错了也不拦
-  const noCookies = { ...only, domainsText: 'b@d', kinds: has(false, true, false) }
+  const noCookies = { ...only, domainsText: 'b@d', kinds: has(false, true) }
   const built = requestOf(sources, noCookies)
   assert.equal(built.request.cookieDomains, undefined)
   // 来源或资料不在了
@@ -213,15 +207,15 @@ test('拼请求：只带勾了又能导的；名单只在勾了 Cookie 时用；
 })
 
 test('进度只往前走，不是这次要导的类别不理', () => {
-  let stages = stagesOf(['cookies', 'history'])
-  assert.deepEqual(stages, { cookies: 'waiting', history: 'waiting' })
-  stages = advance(stages, { kind: 'cookies', phase: 'writing' })
-  stages = advance(stages, { kind: 'cookies', phase: 'reading' })
-  assert.equal(stages.cookies, 'writing')
-  const same = advance(stages, { kind: 'passwords', phase: 'done' })
+  let stages = stagesOf(['passwords'])
+  assert.deepEqual(stages, { passwords: 'waiting' })
+  stages = advance(stages, { kind: 'passwords', phase: 'writing' })
+  stages = advance(stages, { kind: 'passwords', phase: 'reading' })
+  assert.equal(stages.passwords, 'writing')
+  const same = advance(stages, { kind: 'cookies', phase: 'done' })
   assert.equal(same, stages)
-  stages = advance(stages, { kind: 'history', phase: 'done' })
-  assert.deepEqual(stages, { cookies: 'writing', history: 'done' })
+  stages = advance(stages, { kind: 'passwords', phase: 'done' })
+  assert.deepEqual(stages, { passwords: 'done' })
 })
 
 test('一类的结果：每种状态的语气、说法、能不能重试', () => {
@@ -246,7 +240,7 @@ test('一类的结果：每种状态的语气、说法、能不能重试', () =>
   assert.deepEqual(look({ status: 'failed' }), ['err', 'bimport.status.failed', 'again'])
   assert.deepEqual(look({ status: 'skipped' }), ['quiet', 'bimport.status.skipped', null])
   // 主进程没报这一类：当没成，能重试
-  const lost = kindReport('history', undefined)
+  const lost = kindReport('passwords', undefined)
   assert.equal(lost.status, 'failed')
   assert.equal(lost.retry, 'again')
   // 英文原话只放进详情
@@ -255,13 +249,13 @@ test('一类的结果：每种状态的语气、说法、能不能重试', () =>
 })
 
 test('整次的结果：全成、部分成、都没成、停了、资料不在、另一个在导', () => {
-  const kinds = ['cookies', 'passwords', 'history']
+  const kinds = ['cookies', 'passwords']
   const of = (record, error) => reportOf(kinds, { ...(error ? { error } : {}), kinds: record })
-  const all = { cookies: counts(), passwords: counts(), history: counts() }
+  const all = { cookies: counts(), passwords: counts() }
   assert.equal(of(all).overall, 'ok')
   assert.equal(of(all).say, 'bimport.overall.ok')
   // 没数据的不拖累：一类成、一类没有
-  assert.equal(of({ ...all, history: counts({ status: 'missing' }) }).overall, 'ok')
+  assert.equal(of({ ...all, passwords: counts({ status: 'missing' }) }).overall, 'ok')
   assert.equal(of({ ...all, cookies: counts({ failed: 1 }) }).overall, 'partial')
   const mixed = of({ ...all, cookies: counts({ status: 'locked' }) })
   assert.equal(mixed.overall, 'partial')
@@ -269,15 +263,13 @@ test('整次的结果：全成、部分成、都没成、停了、资料不在�
   const bad = of({
     cookies: counts({ status: 'locked' }),
     passwords: counts({ status: 'needs-elevation' }),
-    history: counts({ status: 'missing' }),
   })
   assert.equal(bad.overall, 'failed')
   assert.deepEqual(bad.again, ['cookies'])
   assert.deepEqual(bad.elevate, ['passwords'])
   const stopped = of({
-    cookies: counts(),
-    passwords: counts({ status: 'cancelled' }),
-    history: counts({ status: 'skipped' }),
+    cookies: counts({ status: 'cancelled' }),
+    passwords: counts({ status: 'skipped' }),
   })
   assert.equal(stopped.overall, 'cancelled')
   // 整体性的失败：不列逐类
@@ -287,10 +279,16 @@ test('整次的结果：全成、部分成、都没成、停了、资料不在�
   assert.deepEqual(gone.kinds, [])
   assert.equal(of({}, 'busy').overall, 'busy')
   // 按固定的先后列，只列这次要导的和主进程报了的
-  const two = reportOf(['history', 'cookies'], { kinds: { cookies: counts(), history: counts() } })
+  const two = reportOf(['passwords', 'cookies'], {
+    kinds: { cookies: counts(), passwords: counts() },
+  })
   assert.deepEqual(
     two.kinds.map((line) => line.kind),
-    ['cookies', 'history'],
+    ['cookies', 'passwords'],
+  )
+  assert.deepEqual(
+    reportOf(['passwords'], { kinds: { passwords: counts() } }).kinds.map((line) => line.kind),
+    ['passwords'],
   )
 })
 
@@ -298,7 +296,7 @@ test('重试：照原样能重试的几类，勾了管理员同意再加要提�
   const origin = {
     browser: 'edge',
     profileId: 'Default',
-    kinds: ['cookies', 'passwords', 'history'],
+    kinds: ['cookies', 'passwords'],
     cookieDomains: ['github.com'],
     allowElevated: false,
   }
@@ -306,7 +304,6 @@ test('重试：照原样能重试的几类，勾了管理员同意再加要提�
     kinds: {
       cookies: counts({ status: 'needs-elevation' }),
       passwords: counts({ status: 'locked' }),
-      history: counts(),
     },
   })
   assert.deepEqual(retryRequest(origin, report, false), {
@@ -331,10 +328,10 @@ test('重试：照原样能重试的几类，勾了管理员同意再加要提�
 })
 
 test('重试的结果并进上一次的；整体性的失败以这一次为准', () => {
-  const first = { kinds: { cookies: counts({ status: 'locked' }), history: counts() } }
+  const first = { kinds: { cookies: counts({ status: 'locked' }), passwords: counts() } }
   const merged = mergeOutcome(first, { kinds: { cookies: counts({ imported: 4 }) } })
   assert.equal(merged.kinds.cookies.imported, 4)
-  assert.equal(merged.kinds.history.status, 'ok')
+  assert.equal(merged.kinds.passwords.status, 'ok')
   assert.deepEqual(mergeOutcome(first, { error: 'busy', kinds: {} }), { error: 'busy', kinds: {} })
   assert.deepEqual(mergeOutcome(undefined, first), first)
 })
