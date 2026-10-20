@@ -2,8 +2,12 @@ import assert from 'node:assert/strict'
 import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import test from 'node:test'
+import {
+  PRESENTATION_RULES,
+  PRESENTATION_SPEC,
+} from '../../protocol/src/client-tools-presentation.mjs'
 import type { RpcPeer } from '../../shared/src/types.mjs'
-import { clientToolInstructions } from '../src/dynamic-tools.mjs'
+import { clientToolInstructions, clientTools } from '../src/dynamic-tools.mjs'
 import { PiServer } from '../src/server.mjs'
 import { approvalHarness, pause } from './approval-harness.mjs'
 
@@ -108,4 +112,15 @@ test('TOOL-INSTRUCTIONS-PI-002：同一段 instructions 只放一次，没有就
   )
   assert.equal(clientToolInstructions([{ ...TOOLS[0], instructions: ' ' }]), null)
   assert.equal(clientToolInstructions([]), null)
+})
+
+test('TOOL-INSTRUCTIONS-PI-003：Litch 的呈现风格（不带工具的命名空间）排在工具的规则后面，不多出工具', () => {
+  assert.equal(
+    clientToolInstructions([TOOLS[0], PRESENTATION_SPEC]),
+    `# Tool instructions: litch_echo\n${RULES}\n\n# Tool instructions: litch_presentation\n${PRESENTATION_RULES}`,
+  )
+  assert.deepEqual(
+    clientTools([TOOLS[0], PRESENTATION_SPEC]).map((tool) => tool.namespace),
+    ['litch_echo'],
+  )
 })

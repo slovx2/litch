@@ -14,6 +14,7 @@ import type {
 } from '../../../protocol/src/client-tools.mjs'
 import { CONFIG_NAMESPACE } from '../../../protocol/src/client-tools-config.mjs'
 import type { MachineSpecContext } from '../../../protocol/src/client-tools-machine.mjs'
+import { presentationSpec } from '../../../protocol/src/client-tools-presentation.mjs'
 import { clientToolSpecs } from '../../../protocol/src/client-tools-specs.mjs'
 import {
   CLIENT_TOOL_NAMESPACE,
@@ -1453,18 +1454,23 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       }
       // litch_machine 的说明按会话生成：开头写这个会话在哪台、桌面端是哪台；litch_computer 的说明按桌面的平台挑。
       // litch_tasks、litch_sessions 的执行方是设备服务自己：设备列了 deviceTasks、声明了会话树就各自带上，
-      // 和这台桌面能执行什么无关（握手时不声明它们，toolNamespaces 里也没有）
-      return clientToolSpecs(
-        [
-          ...toolNamespaces(),
-          ...(schedulable ? [CLIENT_TOOL_NAMESPACE.tasks] : []),
-          ...(sessionTree ? [CLIENT_TOOL_NAMESPACE.sessions] : []),
-        ],
-        {
-          machine: machineSpec(),
-          desktopPlatform: options.tools?.platform?.() ?? null,
-        },
-      )
+      // 和这台桌面能执行什么无关（握手时不声明它们，toolNamespaces 里也没有）。
+      // 最后是呈现风格（不带工具，只有 instructions；原生 codex 不带，client-tools-presentation.mts）
+      const presentation = presentationSpec(harness)
+      return [
+        ...clientToolSpecs(
+          [
+            ...toolNamespaces(),
+            ...(schedulable ? [CLIENT_TOOL_NAMESPACE.tasks] : []),
+            ...(sessionTree ? [CLIENT_TOOL_NAMESPACE.sessions] : []),
+          ],
+          {
+            machine: machineSpec(),
+            desktopPlatform: options.tools?.platform?.() ?? null,
+          },
+        ),
+        ...(presentation ? [presentation] : []),
+      ]
     },
     sessionTree: () => sessionTree,
     turnDiff: (sessionId, turnId, diff) => diffs.turnDiff(sessionId, turnId, diff),

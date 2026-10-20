@@ -14,6 +14,7 @@ versioning or publishing metadata.
 - Claude Code：去掉入口给普通回合加的“Codex 桌面展示风格”系统提示（对话风格、Mermaid 等），适配器不再维护呈现类指令；需要的客户端自己经开发者指令给
 - Claude Code：新增三个开关，默认都和原来一样：`CHA_CLAUDE_SETTING_SOURCES` 选读哪几层 Claude Code 设置（只给 `user` 时工作区的 `.claude/settings*.json`、`CLAUDE.md`、`.mcp.json` 都不读）；`CHA_CLAUDE_PLANS_LOCATION=config` 把计划文件放到 Claude Code 自己的配置目录，工作区里不留 `.claude/plans`；`CHA_CLAUDE_THREAD_ID_HEADER=1` 让模型请求带 `thread-id` 头，给按线程计费的代理用。认不出的值启动就报错
 - Claude Code：Linux 上不再要求装 `socat`。原来入口启动时会查它，可适配器早就关了 SDK 自带的沙箱，受限命令只经自己的 bwrap 包装器，用不到 socat
+- Litch：回答的呈现风格由 Litch 自己给。Litch 建的会话（含子会话、定时任务的会话）告诉模型回答显示在 Litch 里、能渲染 Markdown 和 Mermaid 图，要对话式地回答而不是终端式；用户自己的指令优先。经命名空间 `instructions` 送进系统提示（新的 `litch_presentation`：不带工具、只带 instructions），Claude Code 只在普通回合放、带 `outputSchema` 的回合不放；原生 Codex 不带。官方桌面端直连各 harness 的入口时没有这段
 
 ## 0.14.0
 

@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import {
+  PRESENTATION_RULES,
+  PRESENTATION_SPEC,
+} from '../../protocol/src/client-tools-presentation.mjs'
 import { ECHO_TOOLS } from '../../protocol/src/client-tools-specs.mjs'
-import { toolInstructions } from '../src/client-tools.mjs'
+import { dynamicToolSpecs, toolInstructions } from '../src/client-tools.mjs'
 import { client, isolate, skip, text, violations } from './client.mjs'
 import { scripted } from './mock-model.mjs'
 
@@ -77,4 +81,15 @@ test('OpenCode 的规则：同一段只放一次，没有就是 null', () => {
   )
   assert.equal(toolInstructions([ECHO_TOOLS]), null)
   assert.equal(toolInstructions(undefined), null)
+})
+
+test('OpenCode：Litch 的呈现风格（不带工具的命名空间）进 MCP 服务的 instructions、排在工具的规则后面，不多出工具', () => {
+  assert.equal(
+    toolInstructions([TOOLS[0], PRESENTATION_SPEC]),
+    `# Tool instructions: litch_echo\n${RULES}\n\n# Tool instructions: litch_presentation\n${PRESENTATION_RULES}`,
+  )
+  assert.deepEqual(
+    dynamicToolSpecs([ECHO_TOOLS, PRESENTATION_SPEC]).map((spec) => spec.namespace),
+    ['litch_echo'],
+  )
 })

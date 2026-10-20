@@ -18,7 +18,7 @@ import {
 } from '../src/index.mjs'
 import { fakeOpener, type Handler, RpcFailure } from './fake-server.mjs'
 import { agentText, thread, turn, userText } from './fixtures.mjs'
-import { fakeClock, settle } from './helpers.mjs'
+import { fakeClock, settle, withoutTools } from './helpers.mjs'
 import { watchSession } from './wire.mjs'
 
 const never = { aborted: false, addEventListener() {} }
@@ -878,7 +878,14 @@ test('新建会话：建好就发第一条，侧栏立刻有它；带不进建�
     settings: { model: 'gate/plain', effort: 'high' },
   })) as { sessionId: string }
   assert.equal(sessionId, 'new-0')
-  assert.deepEqual(sent('thread/start'), [{ cwd: '/work/app', model: 'gate/plain' }])
+  assert.deepEqual(withoutTools(sent('thread/start')), [{ cwd: '/work/app', model: 'gate/plain' }])
+  // 这台桌面什么工具都执行不了：只带呈现风格
+  assert.deepEqual(
+    (sent('thread/start')[0] as { dynamicTools?: { name: string }[] }).dynamicTools?.map(
+      (spec) => spec.name,
+    ),
+    ['litch_presentation'],
+  )
   const first = sent('turn/start')[0] as Record<string, unknown>
   assert.equal(first.threadId, 'new-0')
   // 模型建会话时已经给了，对面也认了，回合里不再带；强度建会话时带不了
@@ -914,7 +921,7 @@ test('新建会话：第一条没发出去就算没建成，不留下空会话',
   )
   assert.equal(sent('thread/unsubscribe').length, 1)
   // 不属于任何工作区：工作目录交给对面定
-  assert.deepEqual(sent('thread/start'), [{ cwd: null }])
+  assert.deepEqual(withoutTools(sent('thread/start')), [{ cwd: null }])
 })
 
 test('原生 codex 没配强度：建会话、载入时报的强度是 null，底栏显示模型默认的那一档；权限照它报的', async () => {
@@ -936,7 +943,7 @@ test('原生 codex 没配强度：建会话、载入时报的强度是 null，�
     settings: {},
   })) as { sessionId: string }
   // 什么都没选：建会话和第一个回合都不带强度和权限，用的是 codex 自己的
-  assert.deepEqual(sent('thread/start'), [{ cwd: '/work/app' }])
+  assert.deepEqual(withoutTools(sent('thread/start')), [{ cwd: '/work/app' }])
   assert.equal('effort' in (sent('turn/start')[0] as object), false)
   const session = watch(core, sessionId)
   await settle()

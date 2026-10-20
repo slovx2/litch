@@ -435,13 +435,24 @@ test('建会话：远程会话带上 litch_machine，说明开头写这个会话
     /"Song 的 MacBook" \(songs-mbp, macOS 26\.5 arm64\) is the user's desktop/,
   )
   assert.ok(spec.description.length <= 1024)
-  // 整份参数过得了原生 codex 对 thread/start 的校验（命名空间说明的上限就在这里面）
-  assert.deepEqual(codexRejects('thread/start', start.params), [])
+  // 整份参数过得了原生 codex 对 thread/start 的校验（命名空间说明的上限就在这里面）。
+  // 呈现风格只给不是原生 codex 的 harness（这里是 pi），原生 codex 不收没有工具的命名空间，核对时去掉
+  assert.deepEqual(
+    codexRejects('thread/start', {
+      ...(start.params as object),
+      dynamicTools: tools?.filter((entry) => entry.name !== 'litch_presentation'),
+    }),
+    [],
+  )
 
   await command('session.create', { deviceId: 'local', cwd: '/work', text: '你好' })
   const mine = local.last().seen.find((entry) => entry.method === 'thread/start')
   assert.ok(mine)
-  assert.equal((mine.params as { dynamicTools?: unknown }).dynamicTools, undefined)
+  // 本机会话只有呈现风格（client-tools-presentation.mts）
+  assert.deepEqual(
+    (mine.params as { dynamicTools?: { name: string }[] }).dynamicTools?.map((entry) => entry.name),
+    ['litch_presentation'],
+  )
 })
 
 test('机器：desktop 是外壳给的这台桌面端，session 是会话所在设备现查的；本机设备的连接在 desktop 背后', async () => {

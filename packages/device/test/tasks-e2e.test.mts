@@ -12,6 +12,7 @@ import type { AddressInfo } from 'node:net'
 import { dirname, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import test from 'node:test'
+import { PRESENTATION_RULES } from '../../protocol/src/client-tools-presentation.mjs'
 import { TASKS_TOOLS } from '../../protocol/src/client-tools-tasks.mjs'
 import { DeviceServer } from '../src/device.mjs'
 import { unixConnector } from '../src/sockets.mjs'
@@ -57,12 +58,15 @@ function reply(body: any): { text?: string; tool?: { name: string; args: unknown
   return { text: '好的。' }
 }
 
-function serveModel(): Promise<Server> {
+/** 回环上的假模型。bodies 是收到的每次请求 */
+function serveModel(): Promise<Server & { bodies: any[] }> {
   let serial = 0
+  const bodies: any[] = []
   const server = createServer(async (request, response) => {
     const chunks: Buffer[] = []
     for await (const chunk of request) chunks.push(chunk as Buffer)
     const body = JSON.parse(Buffer.concat(chunks).toString() || '{}')
+    bodies.push(body)
     const answer = reply(body)
     const base = {
       id: `mock_${++serial}`,
@@ -93,7 +97,9 @@ function serveModel(): Promise<Server> {
     })
     response.end('data: [DONE]\n\n')
   })
-  return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve(server)))
+  return new Promise((resolve) =>
+    server.listen(0, '127.0.0.1', () => resolve(Object.assign(server, { bodies }))),
+  )
 }
 
 /** 起一份隔离的 Pi 运行时：自己的状态目录、配置目录，模型打到回环上的假模型 */
@@ -221,6 +227,17 @@ test('端到端（Pi）：没有客户端连着时到点跑出会话，模型在
     // 模型调了 litch_tasks.list，设备答的是这台设备上的任务
     assert.match(String(stored?.summary), /^工具答复：\{"tasks":\[\{"id":"/)
     assert.ok(String(stored?.summary).includes(task.id))
+    // 任务建的会话带着 Litch 的呈现风格：Pi 拼在系统提示末尾，只有一份
+    const system = JSON.stringify(
+      (model.bodies[0]?.messages ?? []).filter(
+        (message: any) => message.role === 'system' || message.role === 'developer',
+      ),
+    )
+    assert.equal(
+      system.split(JSON.stringify(PRESENTATION_RULES).slice(1, -1)).length - 1,
+      1,
+      system,
+    )
 
     const later = new TestClient(device)
     await later.initialize(DECLARED)
