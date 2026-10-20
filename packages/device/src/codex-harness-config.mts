@@ -1,6 +1,7 @@
 // 替原生 codex 答 harness 详情设置（litch/harness/*）：它不认识这些方法，设备进程翻译成它自己的
 // config/*、account/*、mcpServer/*、skills/*、memory/* 再把结果整理成约定的形状。各部分在：
-// 配置项 codex-settings*.mts，provider 与账号 codex-providers*.mts，MCP codex-mcp.mts，读写配置的底层 codex-config-io.mts。
+// 配置项 codex-settings*.mts，provider 与账号 codex-providers*.mts，MCP codex-mcp.mts，模型清单 codex-models.mts，
+// 读写配置的底层 codex-config-io.mts。
 // 指令文件是 $CODEX_HOME/AGENTS.md，设备进程和 codex 在同一台机器上，直接读写（要看它是不是软链，codex 的 fs/* 给不了）；
 // 同一目录下的 AGENTS.override.md 不是空的时 codex 读它不读 AGENTS.md（上游 project_doc），报在 overriddenBy 里。
 //
@@ -18,6 +19,7 @@ import {
 } from '../../protocol/src/harness-config.mjs'
 import type { Ask } from './codex-config-io.mjs'
 import { readCodexMcp, removeCodexMcp, upsertCodexMcp } from './codex-mcp.mjs'
+import { type ModelsContext, readCodexModels, writeCodexModels } from './codex-models.mjs'
 import { METHOD, OPENAI, openaiAuth, readCodexProviders } from './codex-providers.mjs'
 import {
   activateCodexProvider,
@@ -130,6 +132,10 @@ export class CodexHarnessConfig implements HarnessConfigTranslator {
             params.expectedHash,
           ),
         )
+      case M.modelsRead:
+        return readCodexModels(this.models())
+      case M.modelsWrite:
+        return this.changing('models', writeCodexModels(this.models(), params))
       default:
         throw new HarnessConfigError(
           'notFound',
@@ -141,12 +147,21 @@ export class CodexHarnessConfig implements HarnessConfigTranslator {
 
   /** 写成了就告诉各条连接这一块变了 */
   private async changing<T>(
-    part: 'config' | 'providers' | 'mcp' | 'instructions',
+    part: 'config' | 'providers' | 'mcp' | 'instructions' | 'models',
     work: Promise<T>,
   ): Promise<T> {
     const result = await work
     this.context.changed(part)
     return result
+  }
+
+  private models(): ModelsContext {
+    return {
+      ask: this.ask,
+      harness: this.harness,
+      home: this.home(),
+      bundledCatalog: () => this.context.bundledCatalog(),
+    }
   }
 
   private async instructionsRead() {

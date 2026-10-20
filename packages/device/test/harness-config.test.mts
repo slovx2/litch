@@ -4,13 +4,26 @@
 // 原生 codex 的各项翻译在 codex-harness-config.test.mts，统一模式在 instructions.test.mts。
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import {
+  HARNESS_CONFIG_METHOD,
+  HARNESS_CONFIG_NOTIFICATION,
+} from '../../protocol/src/harness-config.mjs'
 import { codexRig, sentTo } from './codex-kit.mjs'
 import { installConfig } from './fake-codex-config.mjs'
-import { AUTH_UPDATED, assertHcError, assertHcNotification, CHANGED } from './hc-kit.mjs'
+import { AUTH_UPDATED, assertHcError, assertHcNotification, CHANGED, HC } from './hc-kit.mjs'
 import { assertRuntimeInfo, settle } from './helpers.mjs'
 
 const DECLARED = ['harness', 'deviceSettings', 'harnessConfig']
 const PLAIN = ['harness', 'deviceSettings']
+
+test('harness-config.json 列了约定里的每个方法和通知', () => {
+  const listed = new Set(HC.parts.map((part: any) => part.method))
+  for (const method of [
+    ...Object.values(HARNESS_CONFIG_METHOD),
+    ...Object.values(HARNESS_CONFIG_NOTIFICATION),
+  ])
+    assert.ok(listed.has(method), `harness-config.json 里没有 ${method}`)
+})
 
 test('runtime/info：设备的扩展里有 harnessConfig；原生 codex 的声明里也有（设备进程替它翻译）', async () => {
   const env = codexRig()

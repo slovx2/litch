@@ -29,6 +29,8 @@
     "原生 codex 的 provider：openai（ChatGPT 浏览器登录 chatgpt、设备码 chatgptDeviceCode、API key apiKey，凭据由 codex 存；按 requirements 的 allowedLoginMethods 筛）、ollama、lmstudio 是自带的；自定义的是 model_providers.<id>，模板 openaiCompatible（name、base_url、wire_api、env_key、env_key_instructions、requires_openai_auth），写定义时 requires_openai_auth 默认 false、wire_api 默认 responses，ChatGPT 的登录不动，两者并存。切换写 model_provider，切到不存在的 provider 回 notFound（codex 会因此读不了配置）；删掉在用的那个时一并删掉 model_provider。codex 同一时刻只有一次登录，新开的会让进行中的那次以失败结束（也会有 auth/updated）。在用的 provider 不用 OpenAI 登录时 codex 的 account/read 不报账号，这时 openai 的状态从 auth.json 里看类型和邮箱，凭据存在钥匙串里时报不知道（signedIn false，带 detail）。",
     "原生 codex 的 MCP：mcp_servers.<名字>，有 command 的是 stdio、有 url 的是 http（codex 没有 sse）；名字只能用字母、数字和 - _。改完调 config/mcpServer/reload，不用重启。状态来自 mcpServerStatus/list（最多等 8 秒，等不到是 null）：没开是 disabled，authStatus 为 notLoggedIn 是 needsAuth，有 toolsError 是 failed。mcp/login 是 mcpServer/oauth/login，回调端口从授权链接的 redirect_uri 取。",
     "原生 codex 的指令文件：$CODEX_HOME/AGENTS.md（codexHome 来自它的握手应答），设备进程直接读写；同一目录的 AGENTS.override.md 不是空的时 codex 用它，overriddenBy 是它的路径。",
+    "原生 codex 的模型清单：config.toml 的 model_catalog_json 指向一个 JSON 文件（{\"models\":[ModelInfo…]}），codex 启动时读，读到就整份替换它自己的模型目录，所以 effect 为 harness、写入后 restartRequired 为 true。Litch 管的清单是 $CODEX_HOME/litch-models.json，用户层的 model_catalog_json 指向它（config/batchWrite 带 filePath 和 expectedVersion）。每一项是完整的 ModelInfo：拷 base 那个模型的全部字段，改 slug、display_name；改了上下文时 context_window 换成新值、max_context_window 比它小时抬到它、去掉 auto_compact_token_limit（codex 按新窗口的 90% 算）；visibility 一律 list、priority 照清单顺序；base 和 id 不同时记在这一项的 litch_base 里。bases 是这个 codex 自带的目录（设备的主进程用同一个可执行文件跑 codex debug models --bundled）里选单看得到的模型，按 codex 的顺序，加上清单已经用到的和清单文件里有、自带目录里没有的。model_catalog_json 指向别的文件（用户自己配的）时照样列出，写的时候写到 Litch 的文件并改指向，原文件不动；requirements 定了 model_catalog_json 时 readOnlyReason 不为 null、写回 readOnly。entries 为 null 是删掉 model_catalog_json，Litch 的文件留着。version 是 config.toml 用户层的版本加清单文件内容的哈希。默认模型不在清单里时 note 里提醒。全局的 model_context_window、model_auto_compact_token_limit（下限 1000）、model_auto_compact_token_limit_scope 是配置项（上下文组），盖过每个模型自己的设置，新会话生效。",
+    "没有模型清单的 harness（config/read 没有 modelCatalog 或为 false）：models/* 由聚合面统一回 unavailable，引擎自己回的“不认识这个方法”（-32601，或者这个扩展的 notFound）都换成它。",
     "统一模式：source 写成真文件（它原来是软链的先删掉链接）；linkPaths 里父目录不存在的 skipped，已经指向 source 的软链 linked、backup 为 null，已有的文件（或指向别处的软链）先改名备份到原文件旁边的 <原名>.litch-backup-<本地时间 YYYYMMDD-HHMMSS>（同一秒撞名再加 -1、-2），再建指向 source 的软链（绝对路径）；建不了（Windows 没有权限：EPERM、EACCES 等）写一份副本、outcome 为 copied。是目录的回 invalidValue。退出统一模式只换指向 source 的软链。这两个方法回的错误里 harness 是空串。"
   ],
   "parts": [
@@ -455,6 +457,58 @@
     },
     {
       "kind": "ClientRequest",
+      "method": "litch/harness/models/read",
+      "description": "读这个 harness 的自定义模型清单。只有 config/read 的 modelCatalog 为 true 的 harness 有；别的回 unavailable。",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "harness": {
+            "type": "string"
+          }
+        },
+        "required": ["harness"]
+      },
+      "response": {
+        "$ref": "#/definitions/HarnessModelsReadResponse"
+      }
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/harness/models/write",
+      "description": "整份写入模型清单。entries 为 null 是不用自定义清单、回到 harness 自己的模型目录；空数组、id 为空或重复、base 不在 bases 里、contextWindow 不是正整数回 invalidValue（key 指明哪一项，如 entries[1].base）。expectedVersion 对不上回 versionConflict，被管理员锁住回 readOnly。",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "harness": {
+            "type": "string"
+          },
+          "entries": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/HarnessModelEntry"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "expectedVersion": {
+            "type": "string"
+          }
+        },
+        "required": ["harness", "entries", "expectedVersion"]
+      },
+      "response": {
+        "$ref": "#/definitions/HarnessModelsWriteResponse"
+      }
+    },
+    {
+      "kind": "ClientRequest",
       "method": "litch/device/instructions/unify",
       "description": "统一模式：content 写进 sourcePath（真文件），linkPaths 里每个已有的文件（不是已经指向 sourcePath 的软链）先备份再换成指向 sourcePath 的软链；父目录不存在的跳过；建软链失败的写副本。路径都要是绝对路径、文件名是 AGENTS.md 或 CLAUDE.md，不是的回 invalidValue。",
       "params": {
@@ -527,7 +581,7 @@
     {
       "kind": "ServerNotification",
       "method": "litch/harness/config/changed",
-      "description": "某个 harness 的配置、provider、MCP 或指令文件经这套接口被改了，别的连接该重读。发给所有声明了 harnessConfig 的连接，发起改动的那条也收。不保证覆盖命令行或手改文件的改动。",
+      "description": "某个 harness 的配置、provider、MCP、指令文件或模型清单经这套接口被改了，别的连接该重读。发给所有声明了 harnessConfig 的连接，发起改动的那条也收。不保证覆盖命令行或手改文件的改动。",
       "params": {
         "$ref": "#/definitions/HarnessConfigChangedNotification"
       }
@@ -860,6 +914,10 @@
           "items": {
             "$ref": "#/definitions/HarnessConfigFile"
           }
+        },
+        "modelCatalog": {
+          "type": "boolean",
+          "description": "这个 harness 有没有模型清单（litch/harness/models/*）。没有这个字段当 false"
         }
       },
       "required": ["groups", "settings", "values", "actions", "version", "files"]
@@ -1430,7 +1488,7 @@
           "type": "string"
         },
         "part": {
-          "enum": ["config", "providers", "mcp", "instructions"]
+          "enum": ["config", "providers", "mcp", "instructions", "models"]
         }
       },
       "required": ["harness", "part"]
@@ -1456,6 +1514,160 @@
         }
       },
       "required": ["harness", "attemptId", "step"]
+    },
+    "HarnessModelEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "模型清单里的一项",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "发给模型服务的模型名（codex 的 slug），清单里唯一"
+        },
+        "displayName": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "contextWindow": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "base": {
+          "type": "string",
+          "description": "照着哪个模型的其余设置（bases 里的 id）；和 id 相同表示原样用那个模型"
+        }
+      },
+      "required": ["id", "displayName", "contextWindow", "base"]
+    },
+    "HarnessModelBase": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "contextWindow": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["id", "displayName", "contextWindow", "description"]
+    },
+    "HarnessModelsReadResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "custom": {
+          "type": "boolean",
+          "description": "在用自定义清单；false 时 harness 用它自己的模型目录，entries 是空的"
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/HarnessModelEntry"
+          }
+        },
+        "bases": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/HarnessModelBase"
+          },
+          "description": "可以照着的模型，顺序就是显示的顺序"
+        },
+        "path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "version": {
+          "type": "string"
+        },
+        "effect": {
+          "$ref": "#/definitions/HarnessSettingEffect"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/HarnessText"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "readOnlyReason": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/HarnessText"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "custom",
+        "entries",
+        "bases",
+        "path",
+        "version",
+        "effect",
+        "note",
+        "readOnlyReason"
+      ]
+    },
+    "HarnessModelsWriteResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "type": "string"
+        },
+        "restartRequired": {
+          "type": "boolean"
+        }
+      },
+      "required": ["version", "restartRequired"]
     }
   }
 }

@@ -139,6 +139,8 @@ export interface SessionHost {
   harnessConfigChanged(params: HarnessConfigChangedNotification): void
   /** 设备设置里 `harness.<id>.env` 填了哪些变量名。没有设置功能时是空的 */
   harnessEnvNames(harness: string): string[]
+  /** 原生 codex 自带的模型目录（主进程跑 `codex debug models --bundled`，控制命令 codex.models）。没有主进程时抛错 */
+  codexCatalog(): Promise<unknown>
 }
 
 /** 请求已经有着落：转给上游了（应答由上游来），或者已经自己答过了 */
@@ -428,6 +430,7 @@ export class ClientSession implements ClientToolPeer {
       ask: (method, params, timeoutMs) => this.query(link, method, params, timeoutMs),
       home: () => link.facts.home ?? null,
       envNames: () => this.host.harnessEnvNames(link.harness),
+      bundledCatalog: () => this.host.codexCatalog(),
       notify: (method, params) => {
         if (this.declared.has(EXTENSION.harnessConfig)) this.announce(method, params)
       },
