@@ -7,6 +7,7 @@
 // scroll-entry 对着真实入口量真实会话的滚动；compose 和 compose-entry 量输入区：发送、排队、
 // 打断、草稿和请求卡片，后面接着量会话操作（附说明的拒绝、撤销归档、右键菜单、看已归档的对话、
 // 待办、分叉、回退、压缩）。量的办法在 probe-scroll.mts、probe-entry.mts、probe-compose.mts、probe-session.mts。
+// compose（只对着模拟核心）最后量选中回答加评论（probe-comments.mts）。
 // compose 这两种最前面先量新建对话页（probe-home.mts，模拟核心上再量它的样子：probe-home-look.mts），
 // 最后量请求卡片和输入框并存（probe-cards.mts：平常大小、最小的窗口、模拟核心上再开着终端面板）。
 // remote 对着假的远程机器量远程设备：添加、经 ssh 连上、断线自己连回来、分阶段的失败、
@@ -43,6 +44,12 @@ import { OUTPUT_KEEP, PART_CHARS } from '@litch/core'
 import { app, type BrowserWindow } from 'electron'
 import { activityProbe, judgeActivity } from './probe-activity.mjs'
 import { cardRoomProbe, cardsProbe, judgeCards } from './probe-cards.mjs'
+import {
+  COMMENT_SESSION,
+  commentsProbe,
+  commentsReloaded,
+  judgeComments,
+} from './probe-comments.mjs'
 import { composeProbe, judgeCompose } from './probe-compose.mjs'
 import { type AttachLook, attachLook, attachProbe, judgeAttach } from './probe-compose-attach.mjs'
 import { runComposeFilesChecks } from './probe-compose-files.mjs'
@@ -416,6 +423,16 @@ async function measure(
     attachLooks = { wide: wideAttach, narrow: narrowAttach }
     mentionLooks = { wide: wideMention, narrow: narrowMention }
   }
+  // 选中回答加评论排最后，只对着模拟核心量：要它按评论逐条回应。量完重新加载页面，看留下的草稿还在不在
+  let comments: object | null = null
+  const commentsFailed: string[] = []
+  if (!real) {
+    const probe = await runInPage(window, commentsProbe, COMMENT_SESSION)
+    await hooks.load({ lang: 'zh-CN' })
+    const reloaded = await runInPage(window, commentsReloaded, COMMENT_SESSION)
+    comments = { probe, reloaded }
+    commentsFailed.push(...judgeComments(probe, reloaded))
+  }
   return [
     {
       home,
@@ -434,6 +451,7 @@ async function measure(
       files,
       mention,
       mentionLooks,
+      comments,
     },
     [
       ...homeFailed,
@@ -447,6 +465,7 @@ async function measure(
       ...filesFailed,
       ...judgeMention(mention, real),
       ...judgeSheetLook('找文件的单子', mentionLooks),
+      ...commentsFailed,
     ],
   ]
 }

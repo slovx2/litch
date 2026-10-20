@@ -139,3 +139,5 @@ export const Clip = glyph(
 export const Snippet = glyph('M3.5 2.5h9v11h-9zM5.5 5.5h5M5.5 8h5M5.5 10.5h3')
 /** 技能：一颗四角的星 */
 export const Spark = glyph('M8 2.5l1.4 4.1 4.1 1.4-4.1 1.4L8 13.5 6.6 9.4 2.5 8l4.1-1.4z')
+/** 评论：一个对话气泡 */
+export const Bubble = glyph('M2.5 3.5h11v7.5h-6l-3 2.5v-2.5h-2zM5 6.5h6M5 8.5h4')

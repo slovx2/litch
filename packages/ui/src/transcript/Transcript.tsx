@@ -38,6 +38,8 @@ import { LineageBar } from '../tree/LineageBar.tsx'
 import { TreeCard } from '../tree/TreeCards.tsx'
 import { ActionsProvider } from './actions.tsx'
 import { Notes } from './activity.tsx'
+import { CiteScope } from './comments/Cite.tsx'
+import { CommentLayer } from './comments/Layer.tsx'
 import { FileLinksProvider, useSessionFileLinks } from './FileLinks.tsx'
 import { AgentAnswer, PlanCard, UserMessage } from './messages.tsx'
 import { ProcessHead, ProcessParts } from './process.tsx'
@@ -186,6 +188,14 @@ const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { 
   if (!turn) return null
   // 告一段落之后，第一段过程的开头是收起整段过程的那一行；没告一段落时没有这一行，过程照常摊开
   const firstProcess = blocks.findIndex((block) => block.type === 'process')
+  // 每一块前面最近的那条用户消息：它带着评论的话，回答里的 [N] 指向它的评论（comments/Cite.tsx）
+  const userBefore = blocks.map(
+    (_, index) =>
+      blocks.findLast(
+        (block, at): block is Extract<Block, { type: 'user' }> =>
+          at < index && block.type === 'user',
+      )?.itemId,
+  )
   // 分叉、回退挂在回合开头的那条用户消息上。回合结束了、会话能发消息、设备连着、它所属的 harness 可用才出
   const actable =
     !running &&
@@ -206,7 +216,11 @@ const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { 
               />
             )
           if (block.type === 'answer')
-            return <AgentAnswer key={block.itemId} {...ref} itemId={block.itemId} />
+            return (
+              <CiteScope key={block.itemId} {...ref} userId={userBefore[index]}>
+                <AgentAnswer {...ref} itemId={block.itemId} />
+              </CiteScope>
+            )
           if (block.type === 'plan')
             return <PlanCard key={block.itemId} {...ref} itemId={block.itemId} />
           if (block.type === 'todo')
@@ -233,7 +247,9 @@ const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { 
               ) : null}
               {settled && !open ? null : (
                 <div className="proc-body">
-                  <ProcessParts {...ref} parts={block.parts} live={running} />
+                  <CiteScope {...ref} userId={userBefore[index]}>
+                    <ProcessParts {...ref} parts={block.parts} live={running} />
+                  </CiteScope>
                 </div>
               )}
             </div>
@@ -348,6 +364,11 @@ export function Transcript({ deviceId, sessionId, footer, onOpen }: TranscriptPr
           <PinProvider value={scroll.pin}>
             <FileLinksProvider value={fileLinks}>
               <ActionsProvider value={actions}>
+                {/* 选字加评论、原文上的标记。只读地看（已归档）时不加。排在最前面：它不占地方，
+                  放在回合后面的话 .turn:last-child 就认不出最后一个回合了 */}
+                {turnIds && !failure && !footer ? (
+                  <CommentLayer deviceId={deviceId} sessionId={sessionId} />
+                ) : null}
                 {turnIds && !failure ? (
                   <>
                     <ForkedFrom deviceId={deviceId} sessionId={sessionId} onOpen={onOpen} />

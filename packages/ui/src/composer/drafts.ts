@@ -204,3 +204,98 @@ export function saveDraftExtras(key: string, list: MessageExtra[]): void {
   if (list.length > 0) extras.set(key, list)
   else extras.delete(key)
 }
+
+// ---------- 评论（选中回答里的一段加的） ----------
+// 和打的字一样按会话存进本地存储：切走再回来、重开应用都还在。输入框上面的片、原文上的标记都从这里取。
+
+/** 还没发出去的一条评论 */
+export interface DraftComment {
+  /** 界面里认它用的，不发出去 */
+  id: string
+  /** 原文所在的助手条目 */
+  itemId: string
+  /** 选中的原文 */
+  quote: string
+  /** 用户写的评论，可以是空的 */
+  note: string
+  /** 原文在那条回答里的起止（按 transcript/comments/text-range.ts 的数法）。标原文用，对不上就不标 */
+  start: number
+  end: number
+  /** 起止之间的那段字（同一种数法），用来核对位置还对不对 */
+  raw: string
+}
+
+const COMMENTS_KEY = 'litch.drafts.comments'
+const NO_COMMENTS: DraftComment[] = []
+
+let commentCache: Map<string, DraftComment[]> | null = null
+const commentListeners = new Set<() => void>()
+
+const isComment = (value: unknown): value is DraftComment => {
+  const entry = value as DraftComment
+  return (
+    typeof entry?.id === 'string' &&
+    typeof entry.itemId === 'string' &&
+    typeof entry.quote === 'string' &&
+    typeof entry.note === 'string' &&
+    typeof entry.start === 'number' &&
+    typeof entry.end === 'number' &&
+    typeof entry.raw === 'string'
+  )
+}
+
+function allComments(): Map<string, DraftComment[]> {
+  if (commentCache) return commentCache
+  commentCache = new Map()
+  try {
+    const raw = localStorage.getItem(COMMENTS_KEY)
+    const parsed: unknown = raw ? JSON.parse(raw) : null
+    if (Array.isArray(parsed)) {
+      for (const entry of parsed) {
+        if (!Array.isArray(entry) || typeof entry[0] !== 'string' || !Array.isArray(entry[1]))
+          continue
+        const list = (entry[1] as unknown[]).filter(isComment)
+        if (list.length > 0) commentCache.set(entry[0], list)
+      }
+    }
+  } catch {
+    // 读不出来就当没有
+  }
+  return commentCache
+}
+
+export const loadDraftComments = (key: string): DraftComment[] =>
+  allComments().get(key) ?? NO_COMMENTS
+
+/** 换掉一个会话的全部评论。存进本地存储，告诉在看的组件 */
+export function saveDraftComments(key: string, list: DraftComment[]): void {
+  const drafts = allComments()
+  // 删了再放，最近写的排在最后
+  drafts.delete(key)
+  if (list.length > 0) drafts.set(key, list)
+  while (drafts.size > LIMIT) {
+    const oldest = drafts.keys().next().value
+    if (oldest === undefined) break
+    drafts.delete(oldest)
+  }
+  try {
+    localStorage.setItem(COMMENTS_KEY, JSON.stringify([...drafts]))
+  } catch {
+    // 存不进去不影响这次使用
+  }
+  for (const listener of commentListeners) listener()
+}
+
+/** 盯着评论的变化。返回取消的函数 */
+export function onDraftComments(listener: () => void): () => void {
+  commentListeners.add(listener)
+  return () => {
+    commentListeners.delete(listener)
+  }
+}
+
+/** 改一个会话里的评论：给现在的，返回新的 */
+export const editDraftComments = (
+  key: string,
+  edit: (list: DraftComment[]) => DraftComment[],
+): void => saveDraftComments(key, edit(loadDraftComments(key)))

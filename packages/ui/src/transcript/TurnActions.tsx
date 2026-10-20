@@ -8,8 +8,11 @@ import { whyNot } from '../app/errors.ts'
 import { Fork, Rewind } from '../app/icons.tsx'
 import { useKey, useServices } from '../app/services.tsx'
 import { showToast } from '../app/toasts.tsx'
-import { refillDraft } from '../composer/drafts.ts'
+import { editDraftComments, refillDraft } from '../composer/drafts.ts'
 import { useActions } from './actions.tsx'
+import { commentsOf } from './comments/Cite.tsx'
+import { findOrigin } from './comments/locate.ts'
+import { MAX_COMMENTS, newCommentId } from './comments/model.ts'
 
 interface TurnActionsProps {
   deviceId: string
@@ -62,15 +65,32 @@ export function TurnActions({ deviceId, sessionId, turnId, itemId }: TurnActions
     if (working) return
     // 回退之后这条消息就不在了：先把它的内容拿在手里，回退成了放回输入框给用户改
     const item = replica.store.get<ItemView>(keys.item(deviceId, sessionId, itemId))
+    // 带着评论的：评论放回输入框上面（原文在哪条回答里要趁回退之前找），打的字放回输入框
+    const said = item?.kind === 'userMessage' ? commentsOf(item.text) : null
+    const comments = (said?.comments ?? []).map((comment) => ({
+      id: newCommentId(),
+      itemId:
+        findOrigin(replica.store, { deviceId, sessionId, quote: comment.quote, before: itemId })
+          ?.itemId ?? itemId,
+      quote: comment.quote,
+      note: comment.note,
+      start: 0,
+      end: comment.quote.length,
+      raw: comment.quote,
+    }))
     setWorking(true)
     channel
       .command('session.rollback', { deviceId, sessionId, turnId })
       .then(
         () => {
           if (item?.kind !== 'userMessage') return
+          const key = `${deviceId}:${sessionId}`
+          if (comments.length > 0) {
+            editDraftComments(key, (list) => [...comments, ...list].slice(0, MAX_COMMENTS))
+          }
           refillDraft(
-            `${deviceId}:${sessionId}`,
-            item.text,
+            key,
+            said ? said.rest : item.text,
             item.attachments.flatMap((attachment) =>
               attachment.kind === 'image' && attachment.url
                 ? [{ url: attachment.url, name: attachment.label }]

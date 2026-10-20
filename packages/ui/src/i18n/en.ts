@@ -1,4 +1,5 @@
 // 英文文案。键必须和 zh-CN.ts 完全一致，多一句少一句都编译不过。
+import { enComments } from './en-comments.ts'
 import { enHconfig } from './en-hconfig.ts'
 import { enOnboard } from './en-onboard.ts'
 import { enPairing } from './en-pairing.ts'
@@ -16,6 +17,7 @@ export const en: Record<MessageKey, Entry> = {
   ...enOnboard,
   ...enHconfig,
   ...enProposals,
+  ...enComments,
   'title.location': 'Location',
   'workspace.none': 'No project',
 

@@ -23,6 +23,17 @@ export function useToggle(
   fallback: boolean,
 ): [open: boolean, set: (next: boolean) => void] {
   const [picked, setPicked] = useState<boolean | undefined>(() => toggles.get(sessionKey)?.get(id))
+  // 别处替它开（跳到收起的过程里的一段原文）
+  useEffect(() => {
+    const key = toggleKey(sessionKey, id)
+    const listener = (changed: string) => {
+      if (changed === key) setPicked(toggles.get(sessionKey)?.get(id))
+    }
+    toggleListeners.add(listener)
+    return () => {
+      toggleListeners.delete(listener)
+    }
+  }, [sessionKey, id])
   const set = useCallback(
     (next: boolean) => {
       let map = toggles.get(sessionKey)
@@ -36,6 +47,21 @@ export function useToggle(
     [sessionKey, id],
   )
   return [picked ?? fallback, set]
+}
+
+const toggleListeners = new Set<(key: string) => void>()
+const toggleKey = (sessionKey: string, id: string) => `${sessionKey}\n${id}`
+
+/** 从外面替一个可折叠的东西定开没开：和用户点了一样，正画着的那个跟着变 */
+export function setToggle(sessionKey: string, id: string, next: boolean): void {
+  let map = toggles.get(sessionKey)
+  if (!map) {
+    map = new Map()
+    toggles.set(sessionKey, map)
+  }
+  map.set(id, next)
+  const key = toggleKey(sessionKey, id)
+  for (const listener of toggleListeners) listener(key)
 }
 
 // ---------- 回合里手动展开过没有 ----------

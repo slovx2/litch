@@ -1,11 +1,14 @@
 // 输入区里随消息带的东西（图片之外的）：一个个小片，每片能拿掉。
 // 片上只放一眼要看的（记号、名字）；带着的文字那一片能点开，浮层里看开头一段，能放回正文、能拿掉；
 // 提到的文件只是一个路径，鼠标移上去看得到完整的。
+// 选中回答加的评论每条一片，排在最前面（CommentChip）。
 import type { MessageExtra } from '@litch/core'
-import type { ReactNode } from 'react'
+import { type ReactNode, useRef, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { Close, Icon, Snippet, Spark } from '../app/icons.tsx'
 import { usePopover } from '../app/popover.ts'
+import { CommentEditor } from '../transcript/comments/Editor.tsx'
+import type { DraftComment } from './drafts.ts'
 import { extraLabel, lineCount } from './extras.ts'
 
 type TextExtra = Extract<MessageExtra, { kind: 'text' }>
@@ -156,6 +159,76 @@ function TextChip({ extra, label, children, onRemove, onInline }: TextChipProps)
           </div>
         ) : null}
       </div>
+    </li>
+  )
+}
+
+interface CommentChipProps {
+  comment: DraftComment
+  /** 第几条（从 1 开始），回答里的 [N] 指的就是它 */
+  n: number
+  onSave(note: string): void
+  onRemove(): void
+  /** 只把这一条直接发出去 */
+  onSend(note: string): void
+  /** 滚到原文、闪一下。不在已有的会话里（新建页）不给 */
+  onLocate?: (() => void) | undefined
+}
+
+/** 一条评论：编号、引用的开头、评论的开头。点开在片旁边弹编辑框（改、删、定位原文），× 删掉 */
+export function CommentChip({ comment, n, onSave, onRemove, onSend, onLocate }: CommentChipProps) {
+  const t = useT()
+  const [open, setOpen] = useState(false)
+  const chip = useRef<HTMLLIElement>(null)
+  const quote = comment.quote.replace(/\s+/g, ' ')
+  const note = comment.note.trim().replace(/\s+/g, ' ')
+  return (
+    <li className="cmp-chip cmt-chip" data-kind="comment" data-comment={comment.id} ref={chip}>
+      <button
+        type="button"
+        className="cmp-chip-open"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        title={note ? `${quote}\n— ${note}` : quote}
+        onClick={() => setOpen(!open)}
+      >
+        <span className="cmt-chip-n">{n}</span>
+        <span className="cmt-chip-quote">{quote}</span>
+        {note ? <span className="cmt-chip-note">{note}</span> : null}
+      </button>
+      <button
+        type="button"
+        className="cmp-chip-x"
+        title={t('comment.remove', { n })}
+        aria-label={t('comment.remove', { n })}
+        onClick={onRemove}
+      >
+        <Close />
+      </button>
+      {open ? (
+        <CommentEditor
+          mode="edit"
+          quote={comment.quote}
+          note={comment.note}
+          side="above"
+          anchor={() => chip.current?.getBoundingClientRect() ?? null}
+          owner={() => chip.current}
+          onCancel={() => setOpen(false)}
+          onSave={(next) => {
+            setOpen(false)
+            onSave(next)
+          }}
+          onDelete={() => {
+            setOpen(false)
+            onRemove()
+          }}
+          onSend={(next) => {
+            setOpen(false)
+            onSend(next)
+          }}
+          {...(onLocate ? { onLocate } : {})}
+        />
+      ) : null}
     </li>
   )
 }

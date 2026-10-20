@@ -413,3 +413,28 @@
 [data-skin="human"] :is(.agents-task, .agents-fail) {
   border-radius: 14px;
 }
+
+/* 选中回答加评论：浮层、编辑框、悬停卡片和别的浮层一样圆、用柔和的影子；编号是小圆点 */
+[data-skin="human"] :is(.cmt-pop, .cmt-edit, .cmt-peek) {
+  border-radius: 14px;
+  box-shadow: var(--soft);
+}
+[data-skin="human"] .cmt-pop button {
+  border-radius: 10px;
+}
+[data-skin="human"] :is(.cmt-badge, .ucmt-n, .cmt-chip-n) {
+  min-width: 17px;
+  height: 17px;
+  border-radius: 9px;
+  font-family: var(--ui);
+}
+[data-skin="human"] .ucmt-btn {
+  border-radius: 12px;
+}
+[data-skin="human"] .cmt-cite {
+  border-radius: 9px;
+  font-family: var(--ui);
+}
+[data-skin="human"] .cmt-edit-text {
+  border-radius: 10px;
+}

@@ -30,13 +30,23 @@ import { Clip, Close, Send, Stop } from '../app/icons.tsx'
 import { useKey, useServices } from '../app/services.tsx'
 import { notesKey, takeNotes, withNotes } from '../diff/annotations.ts'
 import { noteWords, PendingNotes } from '../diff/Notes.tsx'
-import { ExtraChip, useExtraLabel } from './Chips.tsx'
+import { commentsOf } from '../transcript/comments/Cite.tsx'
+import { revealOrigin } from '../transcript/comments/locate.ts'
+import {
+  commentExtra,
+  removeComment,
+  sendComment,
+  updateComment,
+  useDraftComments,
+} from '../transcript/comments/model.ts'
+import { CommentChip, ExtraChip, useExtraLabel } from './Chips.tsx'
 import { type Compaction, ContextMeter } from './ContextMeter.tsx'
 import {
   dropDraft,
   insertIntoDraft,
   joinDraft,
   leadDraft,
+  loadDraftComments as loadComments,
   loadDraft,
   loadDraftExtras,
   loadDraftImages,
@@ -45,6 +55,7 @@ import {
   onPrefill,
   onRefill,
   saveDraft,
+  saveDraftComments,
   saveDraftExtras,
   saveDraftImages,
 } from './drafts.ts'
@@ -72,6 +83,8 @@ import { useSuggest } from './useSuggest.tsx'
 
 interface ComposerProps {
   deviceId: string
+  /** 已有的会话才给：评论的片能直接发出去、能定位原文 */
+  sessionId?: string
   /** 消息发给这台设备上的哪个 harness：底栏能选什么按它取。还不知道就不给 */
   harness?: string | undefined
   /** 草稿按这个键存 */
@@ -119,9 +132,13 @@ const MAX_HEIGHT = 220
 
 /** 输入区：多行输入、图片、附带项、草稿、发送／排队／停止、排队托盘、底栏。往哪发由用它的一方决定 */
 export function Composer(props: ComposerProps) {
-  const { deviceId, draftKey, blocked, running, queued, onSend, onStop, onUnqueue } = props
+  const { deviceId, sessionId, draftKey, blocked, running, queued, onSend, onStop, onUnqueue } =
+    props
   const { failure, onSteer } = props
   const t = useT()
+  const { channel, replica } = useServices()
+  /** 选中回答加的评论：按会话存在 drafts.ts 里，对话区也在看（原文上的标记） */
+  const comments = useDraftComments(draftKey)
   const labelOf = useExtraLabel()
   const [text, setText] = useState(() => loadDraft(draftKey))
   const [images, setImages] = useState(() => loadDraftImages(draftKey))
@@ -236,7 +253,8 @@ export function Composer(props: ComposerProps) {
   const noImages = declared?.images === false
   const imagesRefused =
     images.length > 0 && (noImages || (model !== undefined && !model.acceptsImages))
-  const filled = text.trim().length > 0 || images.length > 0 || extras.length > 0
+  const filled =
+    text.trim().length > 0 || images.length > 0 || extras.length > 0 || comments.length > 0
   const ready = filled && !blocked && !busy && !imagesRefused
 
   const suggest = useSuggest({
@@ -295,7 +313,7 @@ export function Composer(props: ComposerProps) {
       readFiles(others, {
         local,
         pathOf: (file) => window.litchShell?.pathOf(file) ?? '',
-        room: EXTRAS_LIMIT - extras.length,
+        room: EXTRAS_LIMIT - extras.length - comments.length,
       }),
     ]).then(([shots, rest]) => {
       if (shots && shots.images.length > 0) {
@@ -318,25 +336,29 @@ export function Composer(props: ComposerProps) {
     const content = text.trim()
     const attached = images
     const carried = extras
-    if (!content && attached.length === 0 && carried.length === 0) return
+    const commented = comments
+    if (!content && attached.length === 0 && carried.length === 0 && commented.length === 0) return
     // 先清空：消息已经显示在对话里了。没发成功再把文字、图片和附带项还回来
     recalling.current = null
     setText('')
     setImages([])
     setExtras([])
     dropDraft(draftKey)
+    saveDraftComments(draftKey, [])
     setError(null)
     setBusy(true)
-    onSend(content, attached, carried)
+    // 评论排在最前面（核心并进正文时也是写在最前面）
+    onSend(content, attached, [...commented.map(commentExtra), ...carried])
       .catch((reason: unknown) => {
         setText((current) => (current && content ? `${content}\n${current}` : content || current))
         setImages((current) => [...attached, ...current].slice(0, MAX_IMAGES))
         setExtras((current) => mergeExtras(carried, current))
+        saveDraftComments(draftKey, [...commented, ...loadComments(draftKey)])
         const why = reasonOf(reason, t)
         setError(failure ? failure(why) : t('composer.failed', { reason: why }))
       })
       .finally(() => setBusy(false))
-  }, [onSend, failure, draftKey, text, images, extras, t])
+  }, [onSend, failure, draftKey, text, images, extras, comments, t])
 
   const stop = () => {
     setError(null)
@@ -514,8 +536,34 @@ export function Composer(props: ComposerProps) {
         onDrop={onDrop}
       >
         {suggest.popup}
-        {images.length > 0 || extras.length > 0 ? (
+        {images.length > 0 || extras.length > 0 || comments.length > 0 ? (
           <ul className="cmp-atts" aria-label={t('composer.attached')}>
+            {comments.map((comment, index) => (
+              <CommentChip
+                key={comment.id}
+                comment={comment}
+                n={index + 1}
+                onSave={(note) => updateComment(draftKey, comment.id, note)}
+                onRemove={() => {
+                  removeComment(draftKey, comment.id)
+                  input.current?.focus()
+                }}
+                onSend={(note) => {
+                  if (!sessionId) return
+                  removeComment(draftKey, comment.id)
+                  const one = { ...comment, note }
+                  sendComment(channel, deviceId, sessionId, one).catch((reason: unknown) => {
+                    saveDraftComments(draftKey, [one, ...loadComments(draftKey)])
+                    setError(t('composer.failed', { reason: reasonOf(reason, t) }))
+                  })
+                }}
+                onLocate={
+                  sessionId
+                    ? () => void revealOrigin(replica.store, { deviceId, sessionId, ...comment })
+                    : undefined
+                }
+              />
+            ))}
             {extras.map((extra, index) => (
               <ExtraChip
                 // biome-ignore lint/suspicious/noArrayIndexKey: 贴进来的文字没有自己的标识，同一段可以带两遍
@@ -709,9 +757,12 @@ export function SessionComposer({ deviceId, sessionId, blocked }: SessionCompose
       const turn = store.get<TurnView>(keys.turn(deviceId, sessionId, turnId))
       for (const itemId of turn?.itemIds ?? []) {
         const item = store.get<ItemView>(keys.item(deviceId, sessionId, itemId))
-        if (item?.kind !== 'userMessage' || !item.text.trim()) continue
+        // 带评论的只算打的字（评论那一段不是用户自己写的）
+        const said = commentsOf(item?.kind === 'userMessage' ? item.text : '')?.rest
+        const words = said ?? (item?.kind === 'userMessage' ? item.text : '')
+        if (!words.trim()) continue
         // 连着发了两遍一样的只算一条
-        if (sent[sent.length - 1] !== item.text) sent.push(item.text)
+        if (sent[sent.length - 1] !== words) sent.push(words)
       }
     }
     return sent
@@ -719,6 +770,7 @@ export function SessionComposer({ deviceId, sessionId, blocked }: SessionCompose
   return (
     <Composer
       deviceId={deviceId}
+      sessionId={sessionId}
       harness={meta?.harness}
       draftKey={`${deviceId}:${sessionId}`}
       cwd={meta?.cwd ?? null}
