@@ -1,0 +1,180 @@
+# 模拟核心：模型清单（Codex 的详情设置里“模型”那一页）。build-01 上的 Codex 开始时用自带目录。
+# 先在 build-01 上发一句“race the config”（“抢先改配置”的英文说法，安卓上 Maestro 打不了中文：别处抢先改了、
+# 通知没到，下一次带版本的保存会冲突）→
+# 设备详情里 Codex 的“详情设置”→ 模型：开始自定义（导入整份自带目录）→ 点一行删掉 o5 pro、把 GPT-5.4 往上挪 →
+# 新增一项以 GPT-5.5 为底稿、换模型名和上下文 → 保存撞上冲突（草稿留着）→ 再存一次成了、顶上提示重启 →
+# 恢复自带目录（界面里确认）。CI 的默认机型屏幕小：点和等的元素都先滚到看得见
+appId: dev.litch.app
+name: mock-模型清单
+tags: [mock]
+---
+- runFlow:
+    file: ../_shared/fresh.yaml
+    env:
+      MODE: mock
+      READY: device:build
+# 别处抢先改了模型清单，通知没到
+- tapOn:
+    id: device:build
+- tapOn:
+    id: sessions:new
+- extendedWaitUntil:
+    visible:
+      id: new-input
+    timeout: 15000
+- tapOn:
+    id: new-input
+- inputText: race the config
+- tapOn:
+    id: new-send
+- extendedWaitUntil:
+    visible:
+      id: detail
+    timeout: 15000
+- tapOn:
+    id: header:back
+- tapOn:
+    id: header:back
+# 设备详情里 Codex 的“详情设置”
+- extendedWaitUntil:
+    visible:
+      id: device:build:more
+    timeout: 15000
+- waitForAnimationToEnd:
+    timeout: 3000
+- tapOn:
+    id: device:build:more
+- tapOn:
+    id: menu:detail
+- scrollUntilVisible:
+    element:
+      id: harness:codex:settings
+- tapOn:
+    id: harness:codex:settings
+- extendedWaitUntil:
+    visible:
+      id: hc:tab:config
+    timeout: 15000
+- tapOn:
+    id: hc:tab:models:pick
+- extendedWaitUntil:
+    visible:
+      id: hc:models:state:builtin
+    timeout: 10000
+# 开始自定义：自带目录整份进了清单
+- scrollUntilVisible:
+    element:
+      id: hc:models:start
+- tapOn:
+    id: hc:models:start
+- extendedWaitUntil:
+    visible:
+      id: hc:models:saveBar
+    timeout: 5000
+# 点一行出动作单：删掉 o5 pro
+- scrollUntilVisible:
+    element:
+      id: hc:model:o5-pro
+- tapOn:
+    id: hc:model:o5-pro
+- tapOn:
+    id: hc:model:remove
+- assertNotVisible:
+    id: hc:model:o5-pro
+# GPT-5.4 往上挪一格
+- scrollUntilVisible:
+    element:
+      id: hc:model:gpt-5.4
+- tapOn:
+    id: hc:model:gpt-5.4
+- tapOn:
+    id: hc:model:up
+# 新增：以 GPT-5.5 为底稿，换模型名和上下文
+- scrollUntilVisible:
+    element:
+      id: hc:models:add
+- tapOn:
+    id: hc:models:add
+- extendedWaitUntil:
+    visible:
+      id: hc:modelForm
+    timeout: 5000
+- scrollUntilVisible:
+    element:
+      id: hc:modelForm:base:gpt-5.5
+    direction: UP
+- tapOn:
+    id: hc:modelForm:base:gpt-5.5
+- scrollUntilVisible:
+    element:
+      id: hc:modelForm:mode:custom
+- tapOn:
+    id: hc:modelForm:mode:custom
+- scrollUntilVisible:
+    element:
+      id: hc:modelForm:id
+- tapOn:
+    id: hc:modelForm:id
+- eraseText: 20
+- inputText: team-long
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: hc:modelForm:window
+- tapOn:
+    id: hc:modelForm:window
+- inputText: 1M
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: hc:modelForm:done
+- tapOn:
+    id: hc:modelForm:done
+- scrollUntilVisible:
+    element:
+      id: hc:model:team-long
+    timeout: 10000
+# 保存：别处抢先改过，冲突，草稿留着
+- tapOn:
+    id: hc:models:save
+- extendedWaitUntil:
+    visible:
+      id: hc:models:failure
+    timeout: 10000
+- assertVisible:
+    id: hc:model:team-long
+# 再存一次（核心已经重读到最新的版本）
+- tapOn:
+    id: hc:models:save
+- extendedWaitUntil:
+    notVisible:
+      id: hc:models:saveBar
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: hc:models:state:custom
+    direction: UP
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: hc:restart
+    direction: UP
+    timeout: 10000
+# 恢复自带目录：界面里确认
+- scrollUntilVisible:
+    element:
+      id: hc:models:restore
+    timeout: 10000
+- tapOn:
+    id: hc:models:restore
+- extendedWaitUntil:
+    visible:
+      id: confirm:ok
+    timeout: 5000
+- tapOn:
+    id: confirm:ok
+- scrollUntilVisible:
+    element:
+      id: hc:models:state:builtin
+    direction: UP
+    timeout: 10000
