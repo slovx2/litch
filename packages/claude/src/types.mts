@@ -530,6 +530,8 @@ export interface ClaudeRuntime {
   // 仍有 CLI 进程存活的线程。
   liveSessions?(): string[]
   closeSession?(threadId: string, reason: string): Promise<void>
+  // 客户端全都断开时：关掉跨回合留着、眼下没人用的 MCP 连接
+  closeIdleMcp?(): Promise<void>
   // 删掉 CLI 写下的一份会话记录（连同它的子代理记录）：临时会话卸载时用。找不到就报错。
   deleteSession?(sessionId: string, cwd: string): Promise<void>
   listBackgroundShells?(threadId: string): RuntimeBackgroundShell[]

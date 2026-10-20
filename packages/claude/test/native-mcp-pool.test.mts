@@ -36,15 +36,17 @@ async function eventually(check: () => Promise<boolean>): Promise<void> {
 }
 
 test('MCP-024：配置项的缺省值与非法值', () => {
-  assert.deepEqual(mcpPoolLimits({}), { idleMs: 600_000, maxIdle: 16 })
+  assert.deepEqual(mcpPoolLimits({}), { idleMs: 600_000, maxIdle: 8 })
   assert.deepEqual(
     mcpPoolLimits({ CHA_CLAUDE_MCP_IDLE_MINUTES: '0.5', CHA_CLAUDE_MCP_IDLE_CONNECTIONS: '3' }),
     { idleMs: 30_000, maxIdle: 3 },
   )
   assert.deepEqual(
     mcpPoolLimits({ CHA_CLAUDE_MCP_IDLE_MINUTES: '-1', CHA_CLAUDE_MCP_IDLE_CONNECTIONS: 'x' }),
-    { idleMs: 600_000, maxIdle: 16 },
+    { idleMs: 600_000, maxIdle: 8 },
   )
+  // setTimeout 等不了更久：截到 2^31-1 毫秒
+  assert.equal(mcpPoolLimits({ CHA_CLAUDE_MCP_IDLE_MINUTES: '40000' }).idleMs, 2_147_483_647)
   assert.equal(new NativeMcpPool({ idleMs: 0, maxIdle: 16 }).enabled, false)
   assert.equal(new NativeMcpPool({ idleMs: 1_000, maxIdle: 0 }).enabled, false)
 })

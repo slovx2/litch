@@ -6,6 +6,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import test from 'node:test'
+import { Daemon } from './fixtures/daemon.mjs'
 import { deferred } from './fixtures/deferred.mjs'
 import { countedServers, countServer } from './fixtures/mcp-count.mjs'
 import { MockLLM } from './fixtures/mock-llm.mjs'
@@ -304,4 +305,51 @@ test('MCP-024：回合在征询挂着时被打断，那条连接关掉、不回�
       [[pids[1], { name: '乙' }]],
     )
   })
+})
+
+test('MCP-024：守护进程上的客户端全都断开后，留着的连接（stdio 服务的子进程）马上关掉，不等空闲超时', {
+  timeout: 90_000,
+}, async () => {
+  const home = await mkdtemp(join(tmpdir(), 'mcp-reuse-detach-'))
+  const cwd = join(home, 'project')
+  const log = join(home, 'counted.jsonl')
+  await mkdir(cwd)
+  const model = new MockLLM()
+  const daemon = await Daemon.start(home, await model.start())
+  try {
+    const client = await daemon.connect('first', {
+      optOutNotificationMethods: [STARTUP],
+    })
+    const { thread } = await client.request('thread/start', {
+      cwd,
+      approvalPolicy: 'never',
+      sandbox: 'danger-full-access',
+      config: { mcp_servers: { counted: countServer(log) } },
+    })
+    model.enqueue(() => [
+      { type: 'tool_use', id: 'toolu_1', name: 'mcp__counted__echo', input: {} },
+    ])
+    model.enqueue(() => [{ type: 'text', text: 'DONE' }])
+    const { turn } = await client.request('turn/start', {
+      threadId: thread.id,
+      input: [{ type: 'text', text: '调一次 echo' }],
+    })
+    assert.equal((await client.completed(turn.id)).status, 'completed')
+    model.assertConsumed()
+    assert.deepEqual(shape(await countedServers(log)), [{ called: ['echo'], closed: false }])
+    await client.disconnect()
+    assert.deepEqual(
+      shape(
+        await eventually(
+          () => countedServers(log),
+          (all) => all[0]?.closed === true,
+        ),
+      ),
+      [{ called: ['echo'], closed: true }],
+    )
+  } finally {
+    await daemon.close()
+    await model.close()
+    await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
+  }
 })

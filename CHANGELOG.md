@@ -7,7 +7,7 @@ versioning or publishing metadata.
 
 ## 未发布
 
-- Claude Code：适配器自己连的 MCP 服务按会话跨回合复用连接，第二个回合起不再重起 stdio 服务、不再和 HTTP 服务重新握手（先 ping 一次确认还通）。配置或工作目录变了就重建；会话归档、删除、卸载、回退、适配器停止时关掉；没人用的连接默认留 10 分钟、最多 16 条（`CHA_CLAUDE_MCP_IDLE_MINUTES`、`CHA_CLAUDE_MCP_IDLE_CONNECTIONS`，设成 `0` 回到每回合重连）。MCP 服务进程里的状态因此会跨回合留着；回合被打断时还有请求在途的连接不留
+- Claude Code：适配器自己连的 MCP 服务按会话跨回合复用连接，第二个回合起不再重起 stdio 服务、不再和 HTTP 服务重新握手（先 ping 一次确认还通）。配置或工作目录变了就重建；会话归档、删除、卸载、回退、客户端全都断开、适配器停止时关掉；没人用的连接默认留 10 分钟、整个适配器最多 8 条（`CHA_CLAUDE_MCP_IDLE_MINUTES`、`CHA_CLAUDE_MCP_IDLE_CONNECTIONS`，设成 `0` 回到每回合重连）。有状态的 stdio 服务（浏览器类等）因此在同一个会话里跨回合保留状态；回合被打断、请求被取消或超时过、重新登录过 OAuth 的连接不留
 
 ## 0.14.0
 

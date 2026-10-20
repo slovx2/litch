@@ -89,8 +89,10 @@ export class McpConnection {
   private readonly lifetime = new AbortController()
   private lease: McpLease | null = null
   private closing: Promise<void> | null = null
-  // 服务声明了 tools.listChanged 时才缓存工具清单，收到变更通知就作废。
+  // 工具清单只在 stdio 服务声明了 tools.listChanged 时缓存，收到变更通知就作废：通知和应答走同一条管道，
+  // 收得到。HTTP 的通知走另开的 GET 流，服务可以不支持，断了也不重连（maxRetries 为 0），所以不缓存。
   private toolList: ListToolsResult | null = null
+  private stdio = false
   private toolGeneration = 0
   closed = false
   // OAuth 失效之类：这条连接上后面的请求也会失败，不回池。
@@ -161,6 +163,7 @@ export class McpConnection {
     lease.signal.addEventListener('abort', cancel, { once: true })
     try {
       lease.signal.throwIfAborted()
+      this.stdio = config.type === 'stdio'
       const signal = AbortSignal.any([lease.signal, this.lifetime.signal])
       const transport = mcpTransport(config, cwd, this.lifetime.signal, source, this.name, () => {
         this.broken = true
@@ -188,6 +191,7 @@ export class McpConnection {
     options: RequestOptions,
   ): Promise<ListToolsResult> {
     const cacheable =
+      this.stdio &&
       this.client.getServerCapabilities()?.tools?.listChanged === true &&
       params?.cursor === undefined
     if (cacheable && this.toolList) return this.toolList
@@ -283,7 +287,9 @@ export interface McpPoolLimits {
 }
 
 const DEFAULT_IDLE_MINUTES = 10
-const DEFAULT_MAX_IDLE = 16
+const DEFAULT_MAX_IDLE = 8
+// setTimeout 最多等 2^31-1 毫秒（约 24.8 天），再长会溢出成立即触发
+const MAX_IDLE_MS = 2_147_483_647
 
 export function mcpPoolLimits(env: NodeJS.ProcessEnv = process.env): McpPoolLimits {
   const number = (raw: string | undefined, fallback: number): number => {
@@ -292,7 +298,10 @@ export function mcpPoolLimits(env: NodeJS.ProcessEnv = process.env): McpPoolLimi
     return Number.isFinite(value) && value >= 0 ? value : fallback
   }
   return {
-    idleMs: number(env.CHA_CLAUDE_MCP_IDLE_MINUTES, DEFAULT_IDLE_MINUTES) * 60_000,
+    idleMs: Math.min(
+      number(env.CHA_CLAUDE_MCP_IDLE_MINUTES, DEFAULT_IDLE_MINUTES) * 60_000,
+      MAX_IDLE_MS,
+    ),
     maxIdle: Math.floor(number(env.CHA_CLAUDE_MCP_IDLE_CONNECTIONS, DEFAULT_MAX_IDLE)),
   }
 }
@@ -311,6 +320,9 @@ interface Slot {
 export class NativeMcpPool {
   private readonly limits: McpPoolLimits
   private readonly slots = new Map<string, Slot>()
+  // closeThread 之后的线程：它还在连的、还在用的连接都不进池，直到这个线程下一次准备连接（reopen）。
+  // 不然线程正在起进程时被关，连好的连接会落进一个已经关掉的线程的格子里，等到空闲超时才关。
+  private readonly closedThreads = new Set<string>()
   private closed = false
 
   constructor(limits: McpPoolLimits = mcpPoolLimits()) {
@@ -323,10 +335,15 @@ export class NativeMcpPool {
 
   // 拿一条配置对得上、没人用的连接；拿到的要么 adopt 回来（复用失败时由 release 关掉），要么 release。
   take(thread: string, name: string, fingerprint: string): McpConnection | null {
+    if (this.closedThreads.has(thread)) return null
     const key = slotKey(thread, name)
     const slot = this.slots.get(key)
     if (!slot || slot.taken) return null
-    if (slot.connection.fingerprint !== fingerprint || slot.connection.closed) {
+    if (
+      slot.connection.fingerprint !== fingerprint ||
+      slot.connection.closed ||
+      slot.connection.broken
+    ) {
       void this.drop(key, slot)
       return null
     }
@@ -337,7 +354,7 @@ export class NativeMcpPool {
 
   // 新连上的连接放进格子，用完 release 时才可能留下。
   adopt(thread: string, name: string, connection: McpConnection): void {
-    if (!this.enabled || connection.closed) return
+    if (!this.enabled || connection.closed || this.closedThreads.has(thread)) return
     const key = slotKey(thread, name)
     const previous = this.slots.get(key)
     if (previous?.connection === connection) return
@@ -369,6 +386,11 @@ export class NativeMcpPool {
     return Promise.resolve()
   }
 
+  // 线程又要用连接了（新的 CLI 进程开始准备），撤掉 closeThread 留下的标记。
+  reopen(thread: string): void {
+    this.closedThreads.delete(thread)
+  }
+
   // 线程的服务配置里已经没有的那几个，空闲着的直接关掉。
   retain(thread: string, names: ReadonlySet<string>): void {
     for (const [key, slot] of this.slots)
@@ -378,9 +400,21 @@ export class NativeMcpPool {
 
   // 线程不再用了（归档、删除、卸载、回退、客户端都断开）：空闲的现在关，正被用的用完就关。
   closeThread(thread: string): Promise<void> {
+    this.closedThreads.add(thread)
     const pending: Promise<void>[] = []
     for (const [key, slot] of this.slots) {
       if (slot.thread !== thread) continue
+      if (slot.taken) this.forget(key, slot)
+      else pending.push(this.drop(key, slot))
+    }
+    return Promise.all(pending).then(() => {})
+  }
+
+  // 客户端全都断开了：没人用的连接现在就关；正被用的照旧跟着它的进程走，用完就关、不再回池
+  // （断开时回合常常刚结束、CLI 进程还在收场，连接还没放回来）。
+  closeIdle(): Promise<void> {
+    const pending: Promise<void>[] = []
+    for (const [key, slot] of this.slots) {
       if (slot.taken) this.forget(key, slot)
       else pending.push(this.drop(key, slot))
     }

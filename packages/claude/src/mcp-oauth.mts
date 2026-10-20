@@ -36,6 +36,9 @@ export class McpOAuthManager {
   private readonly store: OAuthCredentialStore
   private readonly pending = new Map<string, PendingOAuth>()
   private readonly refreshing = new Map<string, Promise<OAuthCredential>>()
+  // 每个服务登录成功过几次（只在内存里）。跨回合复用的 MCP 连接把它算进配置指纹：
+  // 换了账号重新登录后，旧连接带着旧账号的会话（Mcp-Session-Id）不能配上新令牌接着用。
+  private readonly logins = new Map<string, number>()
   closed = false
 
   constructor(home: string) {
@@ -167,6 +170,7 @@ export class McpOAuthManager {
         abort.signal.throwIfAborted()
         if (request.socket.destroyed) throw new Error()
         this.store.write(provider.record)
+        this.noteLogin(binding)
         respond(200, 'MCP 授权完成，可以关闭此页面。')
         pending.finish(true)
       } catch {
@@ -202,6 +206,15 @@ export class McpOAuthManager {
       pending.finish(false, 'OAuth 发现或登录初始化失败')
       throw new ProtocolError(-32001, 'OAuth 发现或登录初始化失败')
     }
+  }
+
+  loginGeneration(source: string, name: string, config: Record<string, unknown>): number {
+    return this.logins.get(this.store.key(oauthBinding(source, name, config))) ?? 0
+  }
+
+  noteLogin(binding: OAuthBinding): void {
+    const key = this.store.key(binding)
+    this.logins.set(key, (this.logins.get(key) ?? 0) + 1)
   }
 
   status(source: string, name: string, config: Record<string, unknown>): 'oAuth' | 'notLoggedIn' {
