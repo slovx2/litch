@@ -1319,7 +1319,11 @@ export class CodexClaudeAppServer {
     const parent = this.store.getThread(parentId)
     if (!parent) throw new Error(`unknown thread: ${parentId}`)
     const position = forkPositionFromParams(params)
-    if (this.activeTurnByThread.has(parentId)) throw new ProtocolError(-32009, '活动会话不能分叉')
+    // 照上游：截在某一回合之前（beforeTurnId）时，有回合在跑也能分叉，带走的都是已经结束的回合。
+    // 原生记录还在被 CLI 写，分叉只截到最后一个保留回合的消息边界，那之前的行早已落盘；
+    // SDK 逐行解析、跳过解析不了的行，写了一半的末行读不进来。其余位置照旧要求会话空闲。
+    if (this.activeTurnByThread.has(parentId) && position?.kind !== 'before')
+      throw new ProtocolError(-32009, '活动会话不能分叉')
     // 位置参数（lastTurnId / beforeTurnId）决定带走哪些回合；源线程的回合、原生会话和进程都不动。
     const parentTurns = this.store.listTurns(parentId)
     const retained = forkRetainedTurns(parentTurns, position)

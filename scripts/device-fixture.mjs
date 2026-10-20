@@ -60,6 +60,7 @@ import { fileURLToPath } from 'node:url'
 import { WebSocket } from 'ws'
 import { serveAnthropic } from './client-fixture-anthropic.mjs'
 import { installAskExtension } from './client-fixture-ask.mjs'
+import { lastUserText } from './client-fixture-echo.mjs'
 import {
   engineIds,
   fixtureDeviceSettings,
@@ -73,6 +74,7 @@ import {
 } from './client-fixture-engines.mjs'
 import { FIXTURE_SKILL, piReply, sendCompletion } from './client-fixture-marks.mjs'
 import { codexSocketCleanup, serveResponses } from './client-fixture-responses.mjs'
+import { sessionsReply } from './client-fixture-sessions.mjs'
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 /** 由真的适配器主进程来管运行时和设备进程 */
@@ -218,8 +220,12 @@ const model = createServer(async (req, res) => {
   const body = JSON.parse(raw.toString() || '{}')
   const spec = HARNESSES.find((item) => item.id === id)
   requests++
-  // 会话造完之后 Pi 这一路怎么回在 client-fixture-marks.mjs：话里带哪个词就做哪件事，都没有就把话带回来
-  const reply = spec?.replies.shift() ?? (paced ? piReply(id, body) : { text: '好的。' })
+  // 会话造完之后 Pi 这一路怎么回在 client-fixture-marks.mjs：话里带哪个词就做哪件事，都没有就把话带回来。
+  // 会话树（litch_sessions 和设备注入的唤醒）的那几句先认，见 client-fixture-sessions.mjs
+  const said = lastUserText(body)
+  const reply =
+    spec?.replies.shift() ??
+    (paced ? (sessionsReply(body, said) ?? piReply(id, body)) : { text: '好的。' })
   await sendCompletion(res, reply, { serial: requests, model: body.model })
 })
 await new Promise((done) => model.listen(0, '127.0.0.1', done))

@@ -643,8 +643,14 @@ async function nativeMutation(s: PiServer, peer: RpcPeer, method: string, p: any
     p.lastTurnId === s.active.get(thread.id)?.turn.id
   )
     throw new ProtocolError(-32602, 'lastTurnId 所指回合仍在进行中')
-  if (s.active.has(thread.id)) throw new ProtocolError(-32009, '活动会话不能执行此操作')
-  const live = await s.load(thread, peer, true),
+  // 照上游：截在某一回合之前（beforeTurnId）的分叉，有回合在跑也能做，带走的都是已经结束的回合。
+  // 执行会话正在跑，不能按刷新的路子载入（磁盘和内存对不上会把它换掉）：直接拿它的会话管理器，
+  // 只读它的条目找切点；新会话从磁盘上的记录文件另开一份来截，写了一半的末行解析不了会被跳过。
+  const forkWhileActive = method === 'thread/fork' && p.beforeTurnId != null
+  if (s.active.has(thread.id) && !forkWhileActive)
+    throw new ProtocolError(-32009, '活动会话不能执行此操作')
+  const cached = s.active.has(thread.id) ? s.sessions.get(thread.id) : undefined
+  const live = cached ?? (await s.load(thread, peer, true)),
     session = live.session
   if (method === 'thread/delete') {
     await live.dispose()

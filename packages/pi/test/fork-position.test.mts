@@ -371,18 +371,33 @@ test('Pi 分叉位置：参数校验、空分叉、进行中、失败与被打�
     const untouched = await fork({ beforeTurnId: t1 })
     assert.deepEqual(untouched.turns, [])
 
-    // 回合进行中：lastTurnId 指向它是无效参数；其余分叉沿用“活动会话不能变更”的限制。
+    // 回合进行中：lastTurnId 指向它是无效参数；照上游，截在它（或更早的回合）之前可以分叉，
+    // 只带走已经结束的回合；其余分叉、回退沿用“活动会话不能变更”的限制。
     const running = hold()
     const active = await h.startTurn(source.id, '进行中的一轮')
     await running.reached
     assert.equal(await code({ threadId: source.id, lastTurnId: active }), -32602)
     assert.equal(await code({ threadId: source.id, lastTurnId: t1, beforeTurnId: active }), -32602)
-    assert.equal(await code({ threadId: source.id, beforeTurnId: active }), -32009)
     assert.equal(await code({ threadId: source.id, lastTurnId: t1 }), -32009)
     assert.equal(await code({ threadId: source.id }), -32009)
+    assert.equal(
+      (await h.call('thread/rollback', { threadId: source.id, numTurns: 1 })).error?.code,
+      -32009,
+    )
+    const atActive = await fork({ beforeTurnId: active })
+    assert.deepEqual(atActive.turns, sourceTurns)
+    assert.deepEqual((await fork({ beforeTurnId: t4 })).turns, sourceTurns.slice(0, 3))
+    assert.deepEqual(await h.read(atActive.id), sourceTurns)
+    // 源会话照跑：回合照常结束，源会话的历史里有这一轮。
     running.release()
     assert.equal((await h.completed(active)).status, 'completed')
+    assert.deepEqual(userTexts(await h.read(source.id)).at(-1), '进行中的一轮')
     assert.deepEqual((await fork({ beforeTurnId: active })).turns, sourceTurns)
+    // 分叉接着聊：模型上下文里没有分叉时还在跑的那一轮。
+    await h.runTurn(atActive.id, '分叉里的一句')
+    assert.ok(!h.sentUserTexts().includes('进行中的一轮'))
+    assert.deepEqual(userTexts(await h.read(atActive.id)).slice(-1), ['分叉里的一句'])
+    assert.equal((await h.read(atActive.id)).length, sourceTurns.length + 1)
 
     // 重启后空分叉仍可读取（还没有任何消息的那个没有原生文件），有消息的那个只有自己的一轮。
     await h.restart()
