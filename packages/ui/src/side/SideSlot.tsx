@@ -1,7 +1,7 @@
 // 侧面板接进应用的那一小段：面板挂在哪（眼前的会话在哪台设备的哪个工作区）、开合的快捷键和应用菜单，
 // 以及标题栏上的开合按钮。应用外壳（App.tsx、TitleBar.tsx）里只放这两个组件。
 import { keys, type SessionSummary, type WorkspaceView } from '@litch/core'
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { Draft, Selection } from '../app/App.tsx'
 import { requestOpenSession } from '../app/actions.ts'
 import { useT } from '../app/appearance.ts'
@@ -10,7 +10,7 @@ import { useKey, useServices } from '../app/services.tsx'
 import { dismissToast, showToast } from '../app/toasts.tsx'
 import { ownerKey } from './browser/bridge.ts'
 import { BROWSER_TAB, onPendingShow, setViewing } from './browser/store.ts'
-import { showSideTab, toggleSide, useSide } from './side.ts'
+import { setSideView, showSideTab, toggleSide, useSide, viewKey } from './side.ts'
 import type { SidePlace } from './tabs.ts'
 
 // 面板第一次打开之前，它不在启动要读的那一包里
@@ -58,9 +58,19 @@ export function SideSlot({
   page: string | null
 }) {
   const place = usePlace(selection, draft)
-  const { open } = useSide()
-  /** 应用启动时面板是不是就开着（上次没收）。是的话那一次不算“人打开的” */
-  const startedOpen = useRef(open)
+  // 面板开没开按会话记：眼前换了会话，先换成那个会话自己的开合（在别的效果之前，浏览器的 show 要在它上面打开）
+  const view =
+    page !== null
+      ? ''
+      : selection
+        ? viewKey(selection.deviceId, selection.sessionId)
+        : draft
+          ? viewKey(draft.deviceId, null)
+          : ''
+  useLayoutEffect(() => setSideView(view), [view])
+  const { open, raised } = useSide()
+  /** 这之前人打开过几次面板：之后又打开了才抢焦点 */
+  const startedOpen = useRef(raised)
   /** 面板打开过没有：打开过就一直留在页面里，收起只是不显示 */
   const [loaded, setLoaded] = useState(open)
   useEffect(() => {
