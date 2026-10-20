@@ -10,7 +10,7 @@
 //   Brave          “Default”：读之前等 4 秒（给取消用），Cookie 20 条
 //   Vivaldi        “Default”：资料目录里什么都没有
 //   Firefox        “default-release”（默认）：Cookie 2 条、密码 1 条（读坏 1 条，partial）
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { chromiumRoots, firefoxRoots, type ImportEnv, sampleEnv } from '../browsers.mjs'
 import type { ImportedCookie, ImportedPassword } from '../protected-types.mjs'
@@ -248,8 +248,14 @@ export function writeSample(
   return env
 }
 
-/** 样本模式用：目录里还没有样本（没有标记文件）就摆一套，有了就原样用（验收时可以手改） */
+/**
+ * 样本模式用：目录里有样本（有标记文件）就原样用（验收时可以手改）；目录不在或是空的就摆一套；
+ * 目录不空、又没有标记文件的，多半是指错了地方（比如真的主目录），抛错、一个文件都不写
+ */
 export function ensureSample(dir: string, platform: NodeJS.Platform = process.platform): ImportEnv {
   if (existsSync(join(dir, SAMPLE_MARKER))) return sampleEnv(dir, platform)
+  if (existsSync(dir) && readdirSync(dir).length > 0) {
+    throw new Error('refusing to write a browser import sample into a non-empty directory')
+  }
   return writeSample(dir, platform)
 }

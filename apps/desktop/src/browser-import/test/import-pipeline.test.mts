@@ -473,3 +473,207 @@ test('导过没有：成功的类别记时间，横幅关掉记时间，都存�
     bannerDismissedAt: NOW,
   })
 })
+
+test('审核 1：只导某些网站却一个都认不出时，Cookie 这一类拒掉，绝不退化成全导；密码照常', async (t) => {
+  const { importer, calls, jar } = setup(t)
+  const outcome = await importer.start(chrome({ cookieDomains: ['not a domain', '..'] }))
+  assert.equal(outcome.kinds.cookies?.status, 'failed')
+  assert.equal(outcome.kinds.cookies?.error, 'None of the requested cookie domains is valid.')
+  assert.equal(outcome.kinds.passwords?.status, 'ok')
+  // 读取器只被要了密码
+  assert.deepEqual(calls[0]?.kinds, ['passwords'])
+  assert.equal(jar.cookies.length, 0)
+  // 只要 Cookie 时读取器根本不被调
+  const only = await importer.start(chrome({ kinds: ['cookies'], cookieDomains: [' '] }))
+  assert.equal(only.kinds.cookies?.status, 'failed')
+  assert.equal(calls.length, 1)
+})
+
+test('审核 2：读取器报 partial 但 failed 是 0（库级失败只给了 error），最终也不报 ok', async (t) => {
+  const { importer } = setup(t, {
+    fake: {
+      data: () => ({
+        cookies: {
+          status: 'partial',
+          error: 'The account cookie store could not be read.',
+          items: [
+            {
+              host: 'a.example',
+              name: 'x',
+              value: 'v1',
+              path: '/',
+              secure: true,
+              httpOnly: false,
+              sameSite: 'lax',
+            },
+          ],
+        },
+        passwords: { status: 'partial', error: 'Account passwords are unavailable.', items: [] },
+      }),
+    },
+  })
+  const outcome = await importer.start(chrome())
+  assert.deepEqual(
+    [outcome.kinds.cookies?.status, outcome.kinds.cookies?.imported, outcome.kinds.cookies?.failed],
+    ['partial', 1, 0],
+  )
+  assert.equal(outcome.kinds.cookies?.error, 'The account cookie store could not be read.')
+  assert.equal(outcome.kinds.passwords?.status, 'partial')
+})
+
+test('审核 4：记“导过”写盘失败、Cookie 落盘失败，结果照常返回，错误进 error', async (t) => {
+  const jar = memoryJar()
+  jar.flush = async () => {
+    throw new Error('disk full')
+  }
+  const book = createImportStateBook(null)
+  const { importer } = setup(t, {
+    cookies: jar,
+    state: {
+      ...book,
+      imported: () => {
+        throw new Error('EACCES')
+      },
+      dismissBanner: () => {
+        throw new Error('EACCES')
+      },
+    },
+  })
+  const outcome = await importer.start(chrome())
+  assert.equal(outcome.kinds.cookies?.status, 'ok')
+  assert.equal(outcome.kinds.cookies?.imported, 4)
+  assert.match(outcome.kinds.cookies?.error ?? '', /could not be flushed to disk/)
+  assert.match(outcome.kinds.cookies?.error ?? '', /Could not record the import time\.$/)
+  assert.equal(outcome.kinds.passwords?.imported, 2)
+  assert.equal(outcome.kinds.passwords?.error, 'Could not record the import time.')
+  // 关横幅存不下来也不抛
+  importer.dismissBanner()
+})
+
+test('审核 5：读的时候取消、读取器没理 signal 照常交了结果：两类都是 cancelled，什么都不写', async (t) => {
+  let importer: ReturnType<typeof setup>['importer'] | null = null
+  const fake = createFakeReader()
+  const context = setup(t, {
+    reader: {
+      capabilities: defaultFakeCapabilities,
+      read: async (input) => {
+        const result = await fake.read({ ...input, signal: new AbortController().signal })
+        importer?.cancel()
+        return result
+      },
+    },
+  })
+  importer = context.importer
+  const outcome = await importer.start(chrome())
+  assert.equal(outcome.kinds.cookies?.status, 'cancelled')
+  assert.equal(outcome.kinds.passwords?.status, 'cancelled')
+  assert.equal(context.jar.cookies.length, 0)
+  assert.deepEqual(context.passwords.saved, [])
+})
+
+test('审核 6：一条都没进去（导入和已存在都是 0）不记“导过”，横幅照出', async (t) => {
+  const { importer } = setup(t, {
+    fake: {
+      data: () => ({
+        cookies: {
+          items: [
+            {
+              host: 'a.example',
+              name: 'old',
+              value: 'v',
+              path: '/',
+              secure: true,
+              httpOnly: false,
+              sameSite: 'lax',
+              expires: 1,
+            },
+          ],
+        },
+        passwords: { items: [] },
+      }),
+    },
+  })
+  const outcome = await importer.start(chrome())
+  assert.deepEqual(
+    [outcome.kinds.cookies?.status, outcome.kinds.cookies?.skippedInvalid],
+    ['ok', 1],
+  )
+  assert.equal(outcome.kinds.passwords?.status, 'ok')
+  assert.deepEqual(importer.state(), {})
+})
+
+test('审核 7：读取器交来的不合约时按那一类 failed 或逐条无效，不整体崩', async (t) => {
+  const shapes: unknown[] = [
+    { cookies: { status: 'ok', items: 'nope' }, passwords: 'nope' },
+    { cookies: { status: 'weird', items: [] }, passwords: { status: 'ok' } },
+    null,
+  ]
+  for (const shape of shapes) {
+    const { importer } = setup(t, {
+      reader: { capabilities: defaultFakeCapabilities, read: async () => shape as never },
+    })
+    const outcome = await importer.start(chrome())
+    assert.equal(outcome.kinds.cookies?.status, 'failed', JSON.stringify(shape))
+    assert.equal(outcome.kinds.passwords?.status, 'failed', JSON.stringify(shape))
+  }
+  // 条目里有坏的：只算那几条无效，好的照导；数字不对的按条目补
+  const { importer, jar, passwords } = setup(t, {
+    reader: {
+      capabilities: defaultFakeCapabilities,
+      read: async () =>
+        ({
+          cookies: {
+            status: 'ok',
+            discovered: 'many',
+            failed: -3,
+            items: [
+              null,
+              { host: 5, name: 'a', value: 'b' },
+              {
+                host: 'ok.example',
+                name: 'a',
+                value: 'b',
+                path: '/',
+                secure: true,
+                httpOnly: false,
+                sameSite: 'lax',
+              },
+            ],
+          },
+          passwords: {
+            status: 'ok',
+            items: [
+              null,
+              { origin: 5 },
+              {
+                origin: 'https://ok.example',
+                username: 'u',
+                password: 'p4ss-word',
+                store: 'profile',
+              },
+            ],
+          },
+        }) as never,
+    },
+  })
+  const outcome = await importer.start(chrome({ cookieDomains: ['ok.example'] }))
+  assert.deepEqual(
+    [
+      outcome.kinds.cookies?.status,
+      outcome.kinds.cookies?.discovered,
+      outcome.kinds.cookies?.imported,
+      outcome.kinds.cookies?.skippedInvalid,
+    ],
+    ['ok', 3, 1, 2],
+  )
+  assert.deepEqual(
+    [
+      outcome.kinds.passwords?.status,
+      outcome.kinds.passwords?.imported,
+      outcome.kinds.passwords?.skippedInvalid,
+    ],
+    ['ok', 1, 2],
+  )
+  assert.equal(jar.cookies.length, 1)
+  assert.equal(passwords.saved.length, 1)
+})

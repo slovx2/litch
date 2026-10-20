@@ -14,6 +14,7 @@ import type {
   ProtectedKindResult,
   ProtectedReader,
   ProtectedReadResult,
+  ProtectedStatus,
 } from './protected-types.mjs'
 import type { ImportCounts, PasswordSink } from './sinks.mjs'
 import type { ImportStateBook } from './state.mjs'
@@ -84,46 +85,64 @@ const notRead = (
   return outcome
 }
 
-/** 读到了、写过了的一类：按失败条数定 ok、partial、failed */
+/**
+ * 读到了、写过了的一类：按失败条数定 ok、partial、failed。reader 是读取器报的状态（ok 或 partial），
+ * 最终的不能比它好：读取器报 partial 时哪怕 failed 是 0（库级的失败只给了 error）也不报 ok
+ */
 function finished(
   discovered: number,
   counts: ImportCounts,
-  options: { cancelled?: boolean; error?: string | undefined },
+  options: { cancelled?: boolean; error?: string | undefined; reader?: ProtectedStatus },
 ): ImportKindOutcome {
   const handled = counts.imported + counts.skippedExisting + counts.skippedInvalid
-  const status = options.cancelled
+  const computed = options.cancelled
     ? 'cancelled'
     : counts.failed === 0
       ? 'ok'
       : handled > 0
         ? 'partial'
         : 'failed'
+  const status = computed === 'ok' && options.reader === 'partial' ? 'partial' : computed
   const outcome: ImportKindOutcome = { ...counts, status, discovered }
   if (options.error) outcome.error = options.error
   return outcome
 }
 
-/** 规范化“只导这些网站的 Cookie”：小写、去掉前导和末尾的点，网址取主机名，认不出的丢掉；空的当没给 */
-export function normalizeDomains(list: readonly string[] | undefined): string[] | undefined {
-  if (!list) return undefined
-  const out = new Set<string>()
-  for (const raw of list.slice(0, 1000)) {
-    if (typeof raw !== 'string') continue
-    let text = raw.trim().toLowerCase()
-    if (text.includes('://')) {
-      try {
-        text = new URL(text).hostname
-      } catch {
-        continue
-      }
-    }
-    text = text.replace(/^\.+/, '').replace(/\.+$/, '')
-    if (/^[a-z0-9_-]+(\.[a-z0-9_-]+)*$/.test(text)) out.add(text)
+const DOMAIN = /^[a-z0-9_-]+(\.[a-z0-9_-]+)*$/
+
+/** 人写的一个网站：网址取主机名；URL 顺带转小写、把国际化域名转成 punycode（Cookie 库里存的就是它）；认不出是 null */
+function domainOf(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null
+  const text = raw.trim().replace(/^\*\./, '')
+  if (text === '') return null
+  let host: string
+  try {
+    host = new URL(text.includes('://') ? text : `http://${text}`).hostname
+  } catch {
+    return null
   }
-  return out.size > 0 ? [...out] : undefined
+  host = host.replace(/^\.+/, '').replace(/\.+$/, '')
+  return DOMAIN.test(host) ? host : null
 }
 
-export const domainMatches = (host: string, domains: readonly string[]): boolean => {
+/**
+ * 规范化“只导这些网站的 Cookie”。没给或给了空数组是 undefined（全部）；
+ * 给了却一个都认不出是 null：这一类直接拒，绝不退化成全导
+ */
+export function normalizeDomains(
+  list: readonly unknown[] | undefined,
+): string[] | undefined | null {
+  if (!list || list.length === 0) return undefined
+  const out = new Set<string>()
+  for (const raw of list.slice(0, 1000)) {
+    const host = domainOf(raw)
+    if (host) out.add(host)
+  }
+  return out.size > 0 ? [...out] : null
+}
+
+export const domainMatches = (host: unknown, domains: readonly string[]): boolean => {
+  if (typeof host !== 'string') return false
   const bare = host.trim().toLowerCase().replace(/^\./, '')
   return domains.some((domain) => bare === domain || bare.endsWith(`.${domain}`))
 }
@@ -140,10 +159,56 @@ const isWebUrl = (text: unknown): boolean => {
 
 /** 密码交给密码库之前的筛选：非网页的（安卓应用等）、没有密码的算“无效跳过” */
 const validPassword = (item: ImportedPassword): boolean =>
+  !!item &&
+  typeof item === 'object' &&
   isWebUrl(item.origin) &&
   typeof item.username === 'string' &&
   typeof item.password === 'string' &&
   item.password !== ''
+
+const READER_STATUSES: readonly ProtectedStatus[] = [
+  'ok',
+  'partial',
+  'missing',
+  'locked',
+  'denied',
+  'needs-elevation',
+  'unsupported',
+  'cancelled',
+  'failed',
+]
+
+const count = (value: unknown): number | undefined =>
+  typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.floor(value) : undefined
+
+/**
+ * 读取器交来的一类结果按合约整理一遍：不是对象、状态不认识、读成了却没有条目数组的，算不合约（null）；
+ * 数字不对的按条目补上，error 不是字符串的丢掉
+ */
+function saneResult<T>(raw: unknown): ProtectedKindResult<T> | null {
+  if (!raw || typeof raw !== 'object') return null
+  const result = raw as Record<string, unknown>
+  const status = READER_STATUSES.find((item) => item === result.status)
+  if (!status) return null
+  const read = status === 'ok' || status === 'partial'
+  if (read && !Array.isArray(result.items)) return null
+  const items = read ? (result.items as T[]) : []
+  const failed = count(result.failed) ?? 0
+  const out: ProtectedKindResult<T> = {
+    status,
+    discovered: count(result.discovered) ?? items.length + failed,
+    items,
+    failed,
+  }
+  if (typeof result.error === 'string') out.error = result.error
+  return out
+}
+
+/** 读取器交来的条目数组（不合约的当没有），收明文用 */
+const itemsOf = (raw: unknown): unknown[] =>
+  raw && typeof raw === 'object' && Array.isArray((raw as { items?: unknown }).items)
+    ? (raw as { items: unknown[] }).items
+    : []
 
 function safeCapabilities(reader: ProtectedReader, source: FoundSource): ProtectedCapabilities {
   try {
@@ -198,19 +263,25 @@ export function createImporter(options: ImporterOptions): Importer {
       if (!available.has(kind)) kinds[kind] = notRead('unsupported')
     }
 
+    // “只导这些网站”给了却一个都认不出：Cookie 这一类直接拒，绝不退化成全导
+    const cookieDomains = normalizeDomains(request.cookieDomains)
+    let readable: ProtectedKind[] = wanted.filter((kind) => available.has(kind))
+    if (cookieDomains === null && readable.includes('cookies')) {
+      kinds.cookies = notRead('failed', 0, 'None of the requested cookie domains is valid.')
+      readable = readable.filter((kind) => kind !== 'cookies')
+    }
+
     // Cookie 和密码一次读：Mac 上只弹一次钥匙串
-    const protectedKinds: ProtectedKind[] = wanted.filter((kind) => available.has(kind))
-    let read: ProtectedReadResult = {}
-    if (protectedKinds.length > 0) {
-      for (const kind of protectedKinds) progress({ kind, phase: 'reading' })
-      const cookieDomains = normalizeDomains(request.cookieDomains)
+    if (readable.length > 0) {
+      for (const kind of readable) progress({ kind, phase: 'reading' })
+      let read: ProtectedReadResult = {}
       try {
         read = await options.reader.read({
           browser: source.browser,
           family: source.family,
           root: source.root,
           profileDir: profile.dir,
-          kinds: protectedKinds,
+          kinds: readable,
           ...(cookieDomains ? { cookieDomains } : {}),
           allowElevated: request.allowElevated === true,
           signal,
@@ -219,44 +290,75 @@ export function createImporter(options: ImporterOptions): Importer {
         // 读取器约定不抛；万一抛了，异常里可能有什么都不知道，一概不往外传
         read = {}
       }
-      for (const item of read.cookies?.items ?? []) if (item.value) secrets.add(item.value)
-      for (const item of read.passwords?.items ?? []) if (item.password) secrets.add(item.password)
-
-      if (protectedKinds.includes('cookies')) {
-        kinds.cookies = await importCookies(read.cookies, cookieDomains, signal, secrets, progress)
+      // 读的时候就取消了（读取器没理 signal、照常交了结果也算）
+      const cancelledWhileReading = signal.aborted
+      const raw = (read && typeof read === 'object' ? read : {}) as Record<string, unknown>
+      for (const item of itemsOf(raw.cookies)) {
+        const value = (item as { value?: unknown } | null)?.value
+        if (typeof value === 'string' && value) secrets.add(value)
       }
-      if (protectedKinds.includes('passwords')) {
-        kinds.passwords = await importPasswords(read.passwords, tag, signal, secrets, progress)
+      for (const item of itemsOf(raw.passwords)) {
+        const password = (item as { password?: unknown } | null)?.password
+        if (typeof password === 'string' && password) secrets.add(password)
+      }
+
+      if (readable.includes('cookies')) {
+        kinds.cookies = await guarded('cookies', progress, () =>
+          importCookies(raw.cookies, cookieDomains ?? undefined, signal, secrets, progress),
+        )
+      }
+      if (readable.includes('passwords')) {
+        kinds.passwords = await guarded('passwords', progress, () =>
+          importPasswords(raw.passwords, tag, signal, cancelledWhileReading, secrets, progress),
+        )
       }
       // 明文用完就丢（读取器交来的数组要是冻住了清不掉，就只丢引用）
-      try {
-        if (read.cookies) read.cookies.items.length = 0
-        if (read.passwords) read.passwords.items.length = 0
-      } catch {}
-      read = {}
+      for (const items of [itemsOf(raw.cookies), itemsOf(raw.passwords)]) {
+        try {
+          items.length = 0
+        } catch {}
+      }
     }
 
     secrets.clear()
     return { kinds }
   }
 
+  /** 一类导入里出了没料到的错（读取器交来的东西不合约等）：这一类 failed，别的照常 */
+  async function guarded(
+    kind: ImportKind,
+    progress: (progress: ImportProgress) => void,
+    work: () => Promise<ImportKindOutcome>,
+  ): Promise<ImportKindOutcome> {
+    try {
+      return await work()
+    } catch {
+      progress({ kind, phase: 'done' })
+      return notRead('failed', 0, 'Unexpected error while importing.')
+    }
+  }
+
   async function importCookies(
-    result: ProtectedKindResult<ImportedCookie> | undefined,
+    raw: unknown,
     domains: string[] | undefined,
     signal: AbortSignal,
     secrets: ReadonlySet<string>,
     progress: (progress: ImportProgress) => void,
   ): Promise<ImportKindOutcome> {
     try {
-      if (!result) return notRead('failed', 0, 'The reader returned no result.')
+      if (raw === undefined) return notRead('failed', 0, 'The reader returned no result.')
+      const result = saneResult<ImportedCookie>(raw)
+      if (!result) return notRead('failed', 0, 'The reader returned a malformed result.')
       const error = scrub(result.error, secrets)
       if (result.status !== 'ok' && result.status !== 'partial') {
         return notRead(result.status, result.discovered, error)
       }
       if (signal.aborted) return notRead('cancelled', result.discovered, error)
-      // 读取器该按域名筛过；再筛一遍，筛掉的不算数
+      // 读取器该按域名筛过；再筛一遍，筛掉的不算数（主机不是字符串的留着，写的时候算无效）
       const items = domains
-        ? result.items.filter((item) => domainMatches(item.host, domains))
+        ? result.items.filter(
+            (item) => typeof item?.host !== 'string' || domainMatches(item.host, domains),
+          )
         : result.items
       const discovered = Math.max(0, result.discovered - (result.items.length - items.length))
       progress({ kind: 'cookies', phase: 'writing' })
@@ -266,12 +368,13 @@ export function createImporter(options: ImporterOptions): Importer {
       } catch {
         return notRead('failed', discovered, 'Could not write to the built-in browser.')
       }
-      const { partitioned, cancelled, ...counts } = written
+      const { partitioned, cancelled, flushFailed, ...counts } = written
       return finished(
         discovered,
         { ...counts, failed: counts.failed + result.failed },
         {
           cancelled,
+          reader: result.status,
           error: joinErrors(
             error,
             partitioned > 0
@@ -280,6 +383,7 @@ export function createImporter(options: ImporterOptions): Importer {
             counts.failed > 0
               ? `${counts.failed} cookie(s) were rejected by the built-in browser.`
               : undefined,
+            flushFailed ? 'Cookies were written but could not be flushed to disk.' : undefined,
           ),
         },
       )
@@ -289,22 +393,27 @@ export function createImporter(options: ImporterOptions): Importer {
   }
 
   async function importPasswords(
-    result: ProtectedKindResult<ImportedPassword> | undefined,
+    raw: unknown,
     tag: string,
     signal: AbortSignal,
+    cancelledWhileReading: boolean,
     secrets: ReadonlySet<string>,
     progress: (progress: ImportProgress) => void,
   ): Promise<ImportKindOutcome> {
     try {
       const sink = options.passwords
-      if (!result) return notRead('failed', 0, 'The reader returned no result.')
+      if (raw === undefined) return notRead('failed', 0, 'The reader returned no result.')
+      const result = saneResult<ImportedPassword>(raw)
+      if (!result) return notRead('failed', 0, 'The reader returned a malformed result.')
       const error = scrub(result.error, secrets)
       if (result.status !== 'ok' && result.status !== 'partial') {
         return notRead(result.status, result.discovered, error)
       }
       if (!sink) return notRead('unsupported', result.discovered, error)
-      // 写 Cookie 的时候取消了：密码读到了但没轮上写
-      if (signal.aborted) return notRead('skipped', result.discovered, error)
+      // 读的时候取消的是 cancelled；写 Cookie 的时候取消的，密码读到了但没轮上写，是 skipped
+      if (signal.aborted) {
+        return notRead(cancelledWhileReading ? 'cancelled' : 'skipped', result.discovered, error)
+      }
       const valid = result.items.filter(validPassword)
       const invalid = result.items.length - valid.length
       progress({ kind: 'passwords', phase: 'writing' })
@@ -313,11 +422,11 @@ export function createImporter(options: ImporterOptions): Importer {
         counts = valid.length > 0 ? await sink.importMany(valid, tag) : EMPTY_COUNTS
       } catch (sinkError) {
         const message = scrub(sinkError instanceof Error ? sinkError.message : undefined, secrets)
-        counts = { ...EMPTY_COUNTS, failed: valid.length }
         return finished(
           result.discovered,
-          { ...counts, failed: counts.failed + result.failed, skippedInvalid: invalid },
+          { ...EMPTY_COUNTS, failed: valid.length + result.failed, skippedInvalid: invalid },
           {
+            reader: result.status,
             error: joinErrors(error, message ?? 'The password store failed.'),
           },
         )
@@ -331,7 +440,7 @@ export function createImporter(options: ImporterOptions): Importer {
           skippedInvalid: counts.skippedInvalid + invalid,
           failed: counts.failed + result.failed,
         },
-        { error },
+        { reader: result.status, error },
       )
     } finally {
       progress({ kind: 'passwords', phase: 'done' })
@@ -369,13 +478,24 @@ export function createImporter(options: ImporterOptions): Importer {
           }
         }
         const outcome = await run(request, found, controller.signal, progress)
-        // 算“导过”：全成了，或者部分成了而且确实有东西进去（导入的、本来就有的）
+        // 算“导过”：成了（ok 或 partial），而且确实有东西在里面了（导入的、本来就有的）；一条都没进去的不算，横幅照出
         const succeeded = IMPORT_KINDS.filter((kind) => {
           const item = outcome.kinds[kind]
-          if (item?.status === 'ok') return true
-          return item?.status === 'partial' && item.imported + item.skippedExisting > 0
+          if (item?.status !== 'ok' && item?.status !== 'partial') return false
+          return item.imported + item.skippedExisting > 0
         })
-        options.state.imported(succeeded, now())
+        try {
+          options.state.imported(succeeded, now())
+        } catch {
+          // 记不下来不影响这次导入的结果，只说一句
+          log('could not save the import state')
+          for (const kind of succeeded) {
+            const item = outcome.kinds[kind]
+            if (!item) continue
+            const error = joinErrors(item.error, 'Could not record the import time.')
+            if (error) item.error = error
+          }
+        }
         log(
           `import ${request.browser}: ${Object.entries(outcome.kinds)
             .map(
@@ -395,7 +515,12 @@ export function createImporter(options: ImporterOptions): Importer {
     running: () => current !== null,
     state: () => options.state.state(),
     dismissBanner() {
-      options.state.dismissBanner(now())
+      try {
+        options.state.dismissBanner(now())
+      } catch {
+        // 存不下来：这次运行里照样算关了（状态簿先改内存再存盘）
+        log('could not save the banner state')
+      }
     },
   }
 }

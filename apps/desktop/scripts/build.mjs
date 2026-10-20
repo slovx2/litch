@@ -28,6 +28,8 @@ await build({
     'tools-check': 'src/client-tools/check.mts',
     // 扫码绑定手机在外壳这一头的自检（scripts/check-pair.mjs）
     'pair-check': 'src/pair-check.mts',
+    // 内置浏览器导入的样本模式（假读取器、样本资料）：只在没打包时由主进程按路径加载，打包不带它
+    'browser-import-fake': 'src/browser-import/fake-mode.mts',
   },
   outdir: 'dist',
   format: 'esm',
