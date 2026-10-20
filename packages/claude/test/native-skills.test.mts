@@ -133,7 +133,7 @@ test('SKILLS-001：原生 Skill 禁用不执行内联命令，启用及重启状
     )
     await invokeSkill(client, model, thread.id, 'fixture', true, 'toolu_reenabled')
     assert.equal(await readFile(effect, 'utf8'), 'NATIVE_SKILL_EXECUTED\nNATIVE_SKILL_EXECUTED\n')
-    const state = join(home, 'adapter', 'skills.json')
+    const state = join(home, 'adapter', 'config.json')
     assert.equal((await stat(state)).mode & 0o777, 0o600)
     await rename(state, state + '.backup')
     await mkdir(state)

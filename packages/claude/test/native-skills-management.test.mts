@@ -67,11 +67,14 @@ test('SKILLS-004：真实目录、原生设置、名称选择、失效通知及�
       (await list()).skills.every((skill: any) => skill.enabled),
       true,
     )
-    await client.raw('skills/config/write', { path, enabled: false }, -32602)
+    // 按路径关一个同名 Skill 只关它自己（codex 的 skills.config 语义），不再因为同名报错
+    await client.request('skills/config/write', { path, enabled: false })
+    const mixed = (await list()).skills
+    assert.equal(mixed.find((skill: any) => skill.path === path).enabled, false)
     assert.equal(
-      (await list()).skills.every((skill: any) => skill.enabled),
+      mixed.find((skill: any) => skill.path === userPath).enabled,
       true,
-      '同名相反权限不能误改另一个来源',
+      '同名的另一个来源不受牵连',
     )
     await client.request('skills/config/write', { name: 'shared-name', enabled: false })
     await client.request('skills/config/write', { path, enabled: false })
@@ -88,7 +91,6 @@ test('SKILLS-004：真实目录、原生设置、名称选择、失效通知及�
       { enabled: false },
       { path, name: 'shared-name', enabled: false },
       { name: '', enabled: false },
-      { name: '__proto__', enabled: false },
       { path: 'relative', enabled: false },
     ])
       await client.raw('skills/config/write', params, -32602)
@@ -140,6 +142,49 @@ test('SKILLS-004：真实目录、原生设置、名称选择、失效通知及�
     }
     await client.request('skills/extraRoots/set', { extraRoots: [extra, extra] })
     assert.equal((await list()).skills.filter((skill: any) => skill.path === extraPath).length, 1)
+    // config/batchWrite 写 skills.config（codex 的写法）和 skills/config/write 是同一处：按路径关掉额外目录里的
+    // Skill，原生加载器就看不到它（不链进去），列表照样列出、标成关着
+    const link = join(home, 'claude', 'skills', 'extra-skill')
+    await access(link)
+    await client.request('config/batchWrite', {
+      edits: [
+        {
+          keyPath: 'skills.config',
+          value: [{ path: extraPath, enabled: false }],
+          mergeStrategy: 'replace',
+        },
+      ],
+      reloadUserConfig: true,
+    })
+    assert.equal(
+      (await list()).skills.find((skill: any) => skill.path === extraPath).enabled,
+      false,
+    )
+    const { thread: probe } = await client.request('thread/start', { cwd })
+    assert.ok(probe.id)
+    await client.request('skills/config/write', { name: 'shared-name', enabled: false })
+    const config = JSON.parse(await readFile(join(home, 'adapter', 'config.json'), 'utf8'))
+    assert.deepEqual(config.overrides.skills.config, [
+      { path: extraPath, enabled: false },
+      { name: 'shared-name', enabled: false },
+    ])
+    await assert.rejects(access(link), '关掉的额外 Skill 不链给原生加载器')
+    await client.request('skills/config/write', { path: extraPath, enabled: true })
+    await access(link)
+    assert.equal((await list()).skills.find((skill: any) => skill.path === extraPath).enabled, true)
+    await client.raw(
+      'config/batchWrite',
+      {
+        edits: [
+          {
+            keyPath: 'skills.config',
+            value: [{ path: 'relative', enabled: false }],
+            mergeStrategy: 'replace',
+          },
+        ],
+      },
+      -32602,
+    )
     const conflicting = join(home, 'conflicting')
     await manifest(conflicting, 'user-name', 'conflicting')
     await client.raw('skills/extraRoots/set', { extraRoots: [conflicting] }, -32602)

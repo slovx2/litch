@@ -2,7 +2,7 @@ import { lstatSync, mkdirSync, readlinkSync, type Stats, symlinkSync, unlinkSync
 import { basename, dirname, join, resolve } from 'node:path'
 import { readConfigFile, writeConfigFile } from './config-store.mjs'
 import { ProtocolError } from './protocol-contract.mjs'
-import { nativeSkillHome, scanSkillRoot } from './skill-catalog.mjs'
+import { canonicalSkillKey, nativeSkillHome, scanSkillRoot } from './skill-catalog.mjs'
 import { adapterHome } from './util.mjs'
 
 interface SkillLink {
@@ -23,12 +23,15 @@ export class SkillRoots {
     if (stored != null) writeConfigFile(this.ledger, { links: [] }, null)
   }
 
-  sync(roots: string[]): void {
+  // hidden：被开关关掉的 Skill（SKILL.md 的真实路径），不链给原生加载器，CLI 就看不到它，
+  // 同名的别的 Skill 不受牵连（CLI 自己的开关只认名字）
+  sync(roots: string[], hidden: ReadonlySet<string> = new Set()): void {
     const desired = new Map<string, SkillLink>()
     for (const root of roots) {
       const found = scanSkillRoot(root, 'user')
       if (found.errors.length) throw new Error(found.errors[0]!.message)
       for (const skill of found.skills) {
+        if (hidden.has(canonicalSkillKey(skill.path))) continue
         const target = dirname(skill.path)
         // 原生 CLI 用目录名补全没有 name 的 Skill，链接必须保留该名称。
         const path = join(this.directory, basename(target))

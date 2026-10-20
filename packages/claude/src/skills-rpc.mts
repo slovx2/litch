@@ -1,6 +1,5 @@
 import { statSync } from 'node:fs'
 import { join } from 'node:path'
-import { readConfigFile, writeConfigFile } from './config-store.mjs'
 import { ProtocolError } from './protocol-contract.mjs'
 import { claudeSettingSources } from './runtime-config.mjs'
 import {
@@ -12,33 +11,34 @@ import {
   type SkillCatalog,
   scanSkillRoot,
   skillFingerprint,
-  skillManifest,
 } from './skill-catalog.mjs'
+import {
+  type SkillRule,
+  type SkillSelector,
+  setSkillRule,
+  skillEnabled,
+  skillPathKey,
+  skillRuled,
+} from './skill-config.mjs'
 import { SkillRoots } from './skill-roots.mjs'
 import type { RpcPeer } from './types.mjs'
-import { adapterHome } from './util.mjs'
 
-interface SkillState {
-  byPath: Record<string, boolean>
-  byName: Record<string, boolean>
-}
 interface SkillObserver {
   peer: RpcPeer
   cwds: string[]
   fingerprint: string
 }
 
+// Skill 开关的规则在配置里（skill-config.mts），由服务按 config.json 加 `-c` 给出
 export class SkillsRpc {
-  private readonly path = join(adapterHome(), 'skills.json')
   private readonly roots = new SkillRoots()
   private extraRoots: string[] = []
-  private state: SkillState
+  private readonly rules: () => SkillRule[]
   private observers = new Map<string, SkillObserver>()
   private readonly timer: NodeJS.Timeout
 
-  constructor() {
-    const stored = readConfigFile(this.path).values
-    this.state = { byPath: this.flags(stored.byPath), byName: this.flags(stored.byName) }
+  constructor(rules: () => SkillRule[]) {
+    this.rules = rules
     this.timer = setInterval(() => this.poll(), 250)
     this.timer.unref()
   }
@@ -60,46 +60,38 @@ export class SkillsRpc {
     return { data }
   }
 
-  write(params: Record<string, unknown>, cwd: string): { effectiveEnabled: boolean } {
+  // skills/config/write：改的是配置里的 `skills.config`（与 config/batchWrite 同一处），save 落盘并重读配置
+  write(
+    params: Record<string, unknown>,
+    cwd: string,
+    current: unknown,
+    save: (rules: SkillRule[]) => void,
+  ): { effectiveEnabled: boolean } {
     if (typeof params.enabled !== 'boolean') throw new ProtocolError(-32602, 'enabled 必须是布尔值')
     const hasPath = params.path != null
-    const hasName = params.name != null
-    if (hasPath === hasName) throw new ProtocolError(-32602, '必须且只能提供 path 或 name')
-    const next = structuredClone(this.state)
-    let effectiveEnabled: boolean
-    if (hasPath) {
-      const path = absoluteSkillPath(params.path, 'path')
-      const skill = skillManifest(path, 'user')
-      const key = canonicalSkillKey(path)
-      next.byPath[key] = params.enabled
-      effectiveEnabled = params.enabled
-      // 同名来源可在不同 cwd 生效，但一次原生会话不能给同名 Skill 相反权限。
-      this.assertNamePolicy(this.catalog(cwd, next))
-      if (!skill.name) throw new ProtocolError(-32602, '技能缺少名称')
-    } else {
-      if (
-        typeof params.name !== 'string' ||
-        !params.name.trim() ||
-        ['__proto__', 'constructor', 'prototype'].includes(params.name)
-      )
-        throw new ProtocolError(-32602, 'name 必须是有效技能名称')
-      next.byName[params.name] = params.enabled
-      // 名称选择器是显式的统一设置，清除该名称已知路径的旧覆盖。
-      for (const path of Object.keys(next.byPath)) {
-        try {
-          if (skillManifest(path, 'user').name === params.name) delete next.byPath[path]
-        } catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
-        }
-      }
-      const matches = this.catalog(cwd, next).skills.filter((skill) => skill.name === params.name)
-      effectiveEnabled = matches.length ? matches.every((skill) => skill.enabled) : params.enabled
-    }
-    if (JSON.stringify(next) === JSON.stringify(this.state)) return { effectiveEnabled }
-    writeConfigFile(this.path, { ...next }, null)
-    this.state = next
+    if (hasPath === (params.name != null))
+      throw new ProtocolError(-32602, '必须且只能提供 path 或 name')
+    let selector: SkillSelector
+    if (hasPath) selector = { path: absoluteSkillPath(params.path, 'path') }
+    else if (typeof params.name === 'string' && params.name.trim())
+      selector = { name: params.name.trim() }
+    else throw new ProtocolError(-32602, 'name 必须是有效技能名称')
+    const matching = this.catalog(cwd).skills.filter((skill) =>
+      'path' in selector
+        ? canonicalSkillKey(skill.path) === skillPathKey(selector.path)
+        : skill.name === selector.name,
+    )
+    const native = this.nativeOverrides(cwd)
+    // 删掉“开”的那条之后，只靠 Claude Code 自己的设置关着的（没有规则管它）还得留一条“开”
+    const stillDisabled = (rules: SkillRule[]) =>
+      matching.some((skill) => {
+        const key = canonicalSkillKey(skill.path)
+        return native[skill.name] === 'off' && !skillRuled(rules, { name: skill.name, key })
+      })
+    save(setSkillRule(current, selector, params.enabled, stillDisabled))
+    this.syncLinks()
     this.invalidate()
-    return { effectiveEnabled }
+    return { effectiveEnabled: params.enabled }
   }
 
   setRoots(params: Record<string, unknown>): Record<string, never> {
@@ -111,25 +103,26 @@ export class SkillsRpc {
     ]
     for (const root of roots)
       if (!statSync(root).isDirectory()) throw new ProtocolError(-32602, '额外技能根必须是目录')
-    this.roots.sync(roots)
+    this.roots.sync(roots, this.hiddenSkills(roots))
     if (JSON.stringify(roots) === JSON.stringify(this.extraRoots)) return {}
     this.extraRoots = roots
     this.invalidate()
     return {}
   }
 
+  // 给 CLI 的开关（它只认名字）：额外目录里被关掉的 Skill 直接不链给它；剩下 CLI 看得到的同名 Skill 里
+  // 只要有一个关着就整个名字关（宁可少给），都开着且有规则管过就明确开（盖过 Claude Code 自己设置里的关）
   runtimeOverrides(cwd: string): Record<string, 'on' | 'off'> {
-    this.roots.sync(this.extraRoots)
+    this.syncLinks()
+    const rules = this.rules()
     const overrides: Record<string, 'on' | 'off'> = Object.create(null)
-    for (const [name, enabled] of Object.entries(this.state.byName))
-      overrides[name] = enabled ? 'on' : 'off'
-    if (!Object.keys(this.state.byPath).length) return overrides
-    const catalog = this.catalog(cwd)
-    this.assertNamePolicy(catalog)
-    for (const skill of catalog.skills) {
+    const hidden = this.hiddenSkills(this.extraRoots)
+    for (const skill of this.catalog(cwd).skills) {
       const key = canonicalSkillKey(skill.path)
-      if (Object.hasOwn(this.state.byPath, key))
-        overrides[skill.name] = skill.enabled ? 'on' : 'off'
+      if (hidden.has(key)) continue
+      const ruled = skillRuled(rules, { name: skill.name, key })
+      if (!skill.enabled) overrides[skill.name] = 'off'
+      else if (ruled && overrides[skill.name] !== 'off') overrides[skill.name] = 'on'
     }
     return overrides
   }
@@ -146,7 +139,7 @@ export class SkillsRpc {
     this.roots.close()
   }
 
-  private catalog(cwd: string, state = this.state): SkillCatalog {
+  private catalog(cwd: string): SkillCatalog {
     // 用户级、项目级的技能目录只在 CHA_CLAUDE_SETTING_SOURCES 选了那一层时才有，和 CLI 读的一致
     const layers = claudeSettingSources()
     const sources = [
@@ -169,6 +162,12 @@ export class SkillsRpc {
     } catch (error) {
       catalog.errors.push({ path: cwd, message: String(error) })
     }
+    let rules: SkillRule[] = []
+    try {
+      rules = this.rules()
+    } catch (error) {
+      catalog.errors.push({ path: cwd, message: String(error) })
+    }
     const seen = new Set<string>()
     for (const source of sources)
       for (const skill of source.skills) {
@@ -181,37 +180,35 @@ export class SkillsRpc {
         }
         if (seen.has(key)) continue
         seen.add(key)
-        skill.enabled =
-          state.byPath[key] ?? state.byName[skill.name] ?? native[skill.name] !== 'off'
+        skill.enabled = skillEnabled(rules, { name: skill.name, key }, native[skill.name] !== 'off')
         catalog.skills.push(skill)
       }
     return catalog
   }
 
-  private assertNamePolicy(catalog: SkillCatalog): void {
-    const states = new Map<string, boolean>()
-    for (const skill of catalog.skills) {
-      if (states.has(skill.name) && states.get(skill.name) !== skill.enabled)
-        throw new ProtocolError(
-          -32602,
-          '同名 Skill 存在冲突开关，请使用 name 统一配置：' + skill.name,
-        )
-      states.set(skill.name, skill.enabled)
-    }
+  // 额外目录里被规则关掉的 Skill（只看规则；Claude Code 自己设置里的开关由 CLI 自己按名字处理）
+  private hiddenSkills(roots: readonly string[]): Set<string> {
+    const rules = this.rules()
+    const hidden = new Set<string>()
+    if (rules.length === 0) return hidden
+    for (const root of roots)
+      for (const skill of scanSkillRoot(root, 'user').skills) {
+        const key = canonicalSkillKey(skill.path)
+        if (!skillEnabled(rules, { name: skill.name, key }, true)) hidden.add(key)
+      }
+    return hidden
   }
 
-  private flags(value: unknown): Record<string, boolean> {
-    if (value == null) return Object.create(null)
-    if (
-      typeof value !== 'object' ||
-      Array.isArray(value) ||
-      Object.entries(value).some(
-        ([key, enabled]) =>
-          typeof enabled !== 'boolean' || ['__proto__', 'constructor', 'prototype'].includes(key),
-      )
-    )
-      throw new Error('技能状态文件格式无效')
-    return Object.assign(Object.create(null), value) as Record<string, boolean>
+  private syncLinks(): void {
+    this.roots.sync(this.extraRoots, this.hiddenSkills(this.extraRoots))
+  }
+
+  private nativeOverrides(cwd: string): Record<string, string> {
+    try {
+      return nativeSkillOverrides(cwd)
+    } catch {
+      return {}
+    }
   }
 
   private fingerprint(catalogs: SkillCatalog[]): string {

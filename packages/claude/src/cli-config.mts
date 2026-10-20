@@ -15,7 +15,7 @@ const scalarKeys = new Set([
   'default_permissions',
   'developer_instructions',
 ])
-const tableKeys = new Set(['permissions', 'mcp_servers', 'shell_environment_policy'])
+const tableKeys = new Set(['permissions', 'mcp_servers', 'shell_environment_policy', 'skills'])
 
 let layer: ConfigTable = {}
 

@@ -169,6 +169,7 @@ import {
   userInputAnswersAsContent,
 } from './server-helpers.mjs'
 import { resolveShellEnvironmentPolicy, type ShellEnvironmentPolicy } from './shell-environment.mjs'
+import { layeredSkillRules, skillRules } from './skill-config.mjs'
 import { SkillsRpc } from './skills-rpc.mjs'
 import { PINNED_SECTION_ID, type SessionStore } from './store.mjs'
 import {
@@ -364,7 +365,11 @@ export class CodexClaudeAppServer {
   private readonly processes = new ProcessRpc(sandboxCommand)
   private readonly filesystem = new FilesystemRpc()
   private readonly mcp = new McpRpc()
-  private readonly skills = new SkillsRpc()
+  // Skill 开关的规则：config.json 的 skills.config 在前，`-c` 的接在后面（skill-config.mts）
+  private readonly skills = new SkillsRpc(() =>
+    layeredSkillRules([this.persistedSkillConfig, asRecord(cliConfigLayer().skills).config]),
+  )
+  private persistedSkillConfig: unknown = null
   private readonly mcpOAuth = mcpOAuthManager()
   private elicitationCounts = new Map<string, number>()
   private configModel = defaultSelectableModelId()
@@ -1030,7 +1035,20 @@ export class CodexClaudeAppServer {
         return { authPolicy: 'ON_USE', appsNeedingAuth: [] }
       case 'skills/config/write':
         if (this.hasActiveTurns()) throw new ProtocolError(-32009, '活动回合期间不能修改技能开关')
-        return this.skills.write(asRecord(params), this.skillsCwd(peer))
+        return this.skills.write(
+          asRecord(params),
+          this.skillsCwd(peer),
+          asRecord(this.persistedConfigValues().values.skills).config,
+          (rules) =>
+            this.configWriteResponse(
+              {
+                keyPath: 'skills.config',
+                value: rules.length > 0 ? rules : null,
+                mergeStrategy: 'replace',
+              },
+              false,
+            ),
+        )
       case 'plugin/share/list':
         return { data: [] }
       // Stub the three RPC methods Codex App may call but our dispatcher
@@ -6174,6 +6192,9 @@ export class CodexClaudeAppServer {
     resolveShellEnvironmentPolicy(
       mergeConfigLayers(values, cliConfigLayer()).shell_environment_policy,
     )
+    if (values.skills != null && !isConfigObject(values.skills))
+      throw new ProtocolError(-32602, 'skills 必须是表')
+    skillRules(asRecord(values.skills).config)
     if (values.sandbox_workspace_write != null) {
       if (!isConfigObject(values.sandbox_workspace_write))
         throw new ProtocolError(-32602, 'sandbox_workspace_write 必须是对象')
@@ -6919,6 +6940,7 @@ export class CodexClaudeAppServer {
       'medium'
     // `app-server -c` 给的那一层叠在 config.json 上（cli-config.mts），只在内存里
     this.configOverrides = mergeConfigLayers(overrides, cliConfigLayer())
+    this.persistedSkillConfig = asRecord(overrides.skills).config
     // MCP 服务到用的时候才查（mcpScope），一个服务配错不至于让整个进程起不来
     const { mcp_servers: _, ...checked } = this.configOverrides
     this.validateConfigValues(checked)

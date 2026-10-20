@@ -208,7 +208,7 @@ node packages/claude/dist/claude/src/adapter.mjs app-server --listen stdio:// \
 ```
 
 - 键按 `.` 拆成路径，值按 TOML 解析，解析不了就当字符串（与 codex 相同）。同一个键给多次，后面的为准。
-- 只认这几个键：`approval_policy`、`sandbox_mode`、`default_permissions`、`developer_instructions`、`permissions.*`、`mcp_servers.*`、`shell_environment_policy.*`。别的键（`model_provider`、`features.*` 之类 codex 专有的）不报错，记进调试日志（`config.cliOverride.ignored`）后忽略。
+- 只认这几个键：`approval_policy`、`sandbox_mode`、`default_permissions`、`developer_instructions`、`permissions.*`、`mcp_servers.*`、`shell_environment_policy.*`、`skills.*`。别的键（`model_provider`、`features.*` 之类 codex 专有的）不报错，记进调试日志（`config.cliOverride.ignored`）后忽略。
 - 优先级：`-c` > 状态目录的 `config.json`（客户端经 `config/value/write` 写的）> 内置默认。`-c` 这一层只在内存里，不写回 `config.json`；表按键合并（`-c mcp_servers.a=…` 不会冲掉 `config.json` 里的 `mcp_servers.b`），其余整个替换。`mcp_servers` 之下还有 `~/.claude.json` 的 `mcpServers` 与 `CHA_CLAUDE_MCP_SERVERS`，它们排在 `config.json` 和 `-c` 前面。
 - 写错了（档位继承成环、继承 `:danger-full-access`、`default_permissions` 指向没定义的档位、条目格式不对、TOML 写坏了被当成字符串）进程直接起不来，错误打在标准错误上。`config.json` 里的 `permissions` 形状不对也一样。
 - 键里任何一段是 `__proto__`、`constructor`、`prototype` 的整条忽略。
@@ -251,6 +251,12 @@ node packages/claude/dist/claude/src/adapter.mjs app-server --listen stdio:// \
 - 顺序同 codex：按 `inherit` 取底，然后默认排除、`exclude`、`set`、`include_only`。`LITCH_THREAD_ID` 总是留着。写错了（未知的键、`inherit` 取值不对之类）回 `-32602`，写在 `-c` 或 `config.json` 里则进程起不来。
 
 命令由 Claude Code 起，入口拿不到它的环境，所以配了规则时，入口把命令包进一个 bash，先按规则删、改变量，再跑原命令。因此：`set` 的值出现在这个 bash 的命令行里，同 uid 的沙箱外进程能从 `/proc` 读到，和读环境变量一样；在 Claude Code 2.1.282 上实测，会话记录里存的仍是模型写的原命令，不带这些值。另外，包了之后命令里的 `cd` 不再带到下一条命令。规则等于默认时命令原样不动。`command/exec`、MCP 服务、钩子不受它管。
+
+### Skill 开关
+
+Claude Code 的 Skill 开关照 codex 存在配置的 `skills.config` 里：一串 `{ path = "<SKILL.md 的绝对路径>", enabled = false }` 或 `{ name = "<名字>", enabled = true }`，按顺序套，后面的为准；`-c skills.config=…` 接在 `config.json` 那一串后面。`skills/config/write` 和 `config/batchWrite` 写的是同一处（`skills/config/write` 关就改掉同一个选择器的那条或追加，开就删掉那条；只靠 Claude Code 自己 `settings.json` 的 `skillOverrides` 关着的，留一条开的盖过它）。
+
+Claude Code 自己的开关只认名字，所以按路径关掉同名 Skill 里的一个时：`skills/extraRoots/set` 加进来的额外目录里的 Skill 不链给 Claude Code，同名的别的 Skill 照常可用；用户目录、项目目录里的同名 Skill 只要有一个关着，这个名字整个关掉（`skills/list` 里照样按路径报开关）。原来存在状态目录 `skills.json` 里的开关不再读，要重新设一次。
 
 ## Worktree isolation
 
