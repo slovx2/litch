@@ -10,6 +10,7 @@
   "undeclared": "没声明的连接上：会话对象上没有 litchLineage，收不到 litch/thread/lineage/updated、litch/sessionProposal/changed；litch/session/*、litch/sessionProposal/* 照样能调（客户端发起的方法）。子会话在它们眼里是普通会话；设备注入给父会话的回报与唤醒是一段包在 <litch-session-event> 里的文字，它们按普通的用户消息显示。",
   "rules": [
     "父子关系只在 Litch 子会话之间。写类工具（send、interrupt）只能作用于调用者自己的 Litch 子孙会话，对别的会话回 [litch:blocked]，说明里让模型请用户自己去做；对引擎原生子线程回 [litch:blocked]，说明里让模型用引擎自己的子代理工具。",
+    "子会话停下后唤不唤醒父会话由 Litch 定，不交给模型：模型调 start 直接起的子会话、start 和 wrap_up 落下的提案，wakeParent 一律为真（模型给了 wake_parent 也不认）。用户在界面上派（litch/session/start 的 wakeParent）、从卡片开始（overrides.wakeParent）时按用户选的。",
     "start 的 initiation 为 user_asked 时，设备进程核对这个回合是客户端用 turn/start 带着用户输入发起的（不是唤醒、不是引擎自行续跑）；不是就降成提案。提案 7 天过期。",
     "提案的门槛（模型的 start 和 wrap_up 的每条建议）：同一个会话在同一个回合里最多提 SESSION_TOOL_LIMITS.proposalsPerTurn 张（start 和 wrap_up 提的合起来算，撤回了的也算；提醒回合连同它替之提醒的那个用户回合算一个回合）；同一个会话里还在等用户的提案不能同标题（去掉全部空白、不分大小写比较）；kind 为 fresh 的，不管直接起还是变成提案，prompt 去掉首尾空白后的显示宽度（textWidth：汉字、假名、谚文、全角符号这类等宽字符算 2，其余算 1）小于 SESSION_TOOL_LIMITS.freshPromptMinWidth 一律拒绝，拒绝的说明里写明汉字算 2。start 的拒绝回 [litch:blocked]（回合里提满了）或 [litch:invalid]（同标题、简报太短），说明写成模型能照着改的一句话；wrap_up 的见下一条。用户在界面上派、从卡片开始时不查这些。",
     "litch_sessions.wrap_up：模型每回合最后必须调一次，参数 suggestions 是这一回合的建议任务（没有就是空数组）。每条建议按 start（initiation 为 propose）的同一套门槛和规矩落一张提案（wakeParent 为真，turnId 是这个回合，callId 是这次 wrap_up 调用），一次 wrap_up 可以出好几张，按给的先后一条一条查（前面落下的算进后面的门槛）。结果是 SessionsWrapUpResult：suggestions 和给的一一对应，收了的带 proposal_id，没收的带 refused（模型能照着改的一句话），其余照收；空列表也是成功。suggestions 不是数组时整个调用回 [litch:invalid]，不算调过。在哪种回合里调都照常建提案（用户回合、唤醒回合、提醒回合、定时任务的回合）。",

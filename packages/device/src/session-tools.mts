@@ -268,7 +268,6 @@ function proposeOne(
   tree: SessionTree,
   call: DeviceToolCall,
   spec: Spec,
-  wakeParent: boolean,
   wider: string | null,
 ): SessionProposal {
   const title = spec.title.trim().slice(0, 120)
@@ -281,7 +280,8 @@ function proposeOne(
     model: spec.model ?? null,
     cwd: spec.cwd ?? null,
     kind: spec.kind,
-    wakeParent,
+    // 子会话停下后唤不唤醒由 Litch 定，不交给模型：模型派的、提的一律唤醒（用户从卡片开始时可以改）
+    wakeParent: true,
     turnId: call.turnId || null,
     callId: call.callId || null,
     ...(wider ? { widerSandbox: wider } : {}),
@@ -296,8 +296,6 @@ async function start(
   call: DeviceToolCall,
 ): Promise<SessionsStartResult> {
   const spec = specOf(args, call, tree)
-  const wake = args.wake_parent ?? true
-  if (typeof wake !== 'boolean') throw new Refused('invalid', 'wake_parent must be a boolean.')
   const initiation = string(args, 'initiation') ?? 'propose'
   if (initiation !== 'user_asked' && initiation !== 'propose')
     throw new Refused('invalid', 'initiation must be user_asked or propose.')
@@ -316,16 +314,16 @@ async function start(
         kind: spec.kind,
         title: spec.title,
         prompt: spec.prompt,
-        wakeParent: wake,
+        wakeParent: true,
       },
       'model',
     )
     return {
       thread_id: child.threadId,
-      note: `Started sub-session ${child.threadId} on ${child.harness}. It runs on its own; ${wake ? 'you will be woken with its result as a <litch-session-event> message' : 'its result is attached to the next user message'}. Do not poll it.`,
+      note: `Started sub-session ${child.threadId} on ${child.harness}. It runs on its own; you will be woken with its result as a <litch-session-event> message. Do not poll it.`,
     }
   }
-  const proposal = proposeOne(tree, call, spec, wake, wider)
+  const proposal = proposeOne(tree, call, spec, wider)
   const why =
     initiation !== 'user_asked'
       ? ''
@@ -362,7 +360,7 @@ async function wrapUp(
       if (!isObject(one))
         throw new Refused('invalid', 'Each suggestion must be an object with title and prompt.')
       const spec = specOf(one, call, tree)
-      const proposal = proposeOne(tree, call, spec, true, await widerFor(tree, call, spec))
+      const proposal = proposeOne(tree, call, spec, await widerFor(tree, call, spec))
       suggestions.push({ title: proposal.title, proposal_id: proposal.id })
     } catch (error) {
       suggestions.push({ title, refused: messageOf(error) })
