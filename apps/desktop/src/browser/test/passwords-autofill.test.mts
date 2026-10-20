@@ -1,5 +1,5 @@
-// 自动填充在主进程里的判断（broker.mts）：只认登记过的标签、只按框架的真实源、非 https 不填、
-// 点选时框架跳走了不填、密码只送给发起的那一个框架；代理标签里网页上的候选只认先前给过的那一份、用一次作废。
+// 自动填充在主进程里的判断（broker.mts）：只认人手里的标签（代理自己在用的不给、交给人登录的给）、
+// 只按框架的真实源、非 https 不填、点选时框架跳走了或交还给代理了不填、密码只送给发起的那一个框架。
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { createAutofillBroker, type FillMessage, type FrameRef } from '../passwords/broker.mjs'
@@ -34,7 +34,7 @@ function setup() {
       },
     },
   })
-  return { broker, revealed }
+  return { broker, revealed, kinds }
 }
 
 let frames = 0
@@ -72,7 +72,6 @@ test('没登记过的标签没有候选、不填', () => {
   const { broker, revealed } = setup()
   const stranger = frame(9, 'https://bank.example')
   assert.equal(broker.offerFor(stranger.ref), null)
-  assert.equal(broker.offerInline(stranger.ref), null)
   const offer = broker.offerFor(frame(1, 'https://bank.example').ref)
   assert.ok(offer)
   // 拿别的标签的候选去它里面填也不行
@@ -81,41 +80,23 @@ test('没登记过的标签没有候选、不填', () => {
   assert.deepEqual(revealed, [])
 })
 
-test('代理的标签：网页上的候选只有用户名，点中一条才填，只认先前给这个框架的那一份、用一次作废', () => {
-  const { broker, revealed } = setup()
+test('代理自己在用的标签没有候选、不填；交给人登录时有，交还之后点选也不填', () => {
+  const { broker, revealed, kinds } = setup()
   const agent = frame(2, 'https://bank.example')
-  // 没给过就点：不填
-  assert.equal(broker.pickInline(agent.ref, 0), false)
-  assert.deepEqual(broker.offerInline(agent.ref), ['ann', 'bob'])
+  assert.equal(broker.offerFor(agent.ref), null)
+  // 交给人登录：按用户的标签对待（tabs.mts 的 autofillKind）
+  kinds.set(2, 'user')
+  const offer = broker.offerFor(agent.ref)
+  assert.deepEqual(offer?.usernames, ['ann', 'bob'])
+  assert.ok(offer)
+  // 菜单开着的时候交还给代理了：不填
+  kinds.set(2, 'agent')
+  assert.equal(broker.fill(agent.ref, offer, 0), false)
+  assert.deepEqual(agent.sent, [])
   assert.deepEqual(revealed, [])
-  // 同一个标签里别的框架报来的不认
-  const other = frame(2, 'https://bank.example')
-  assert.equal(broker.pickInline(other.ref, 0), false)
-  assert.equal(broker.pickInline(agent.ref, 0), true)
+  kinds.set(2, 'user')
+  assert.equal(broker.fill(agent.ref, offer, 0), true)
   assert.deepEqual(agent.sent, [{ username: 'ann', password: 'bank-secret' }])
-  // 用过了：再点不填
-  assert.equal(broker.pickInline(agent.ref, 1), false)
-  // 给了之后框架跳去了别的源：不填
-  assert.ok(broker.offerInline(agent.ref))
-  agent.state.origin = 'https://evil.example'
-  assert.equal(broker.pickInline(agent.ref, 0), false)
-  assert.deepEqual(revealed, ['p1'])
-})
-
-test('用户的标签不走网页上的候选（走原生菜单）', () => {
-  const { broker } = setup()
-  const user = frame(1, 'https://bank.example')
-  assert.equal(broker.offerInline(user.ref), null)
-  assert.equal(broker.pickInline(user.ref, 0), false)
-  assert.deepEqual(user.sent, [])
-})
-
-test('标签没了：丢掉它网页上的候选', () => {
-  const { broker } = setup()
-  const agent = frame(2, 'https://bank.example')
-  assert.ok(broker.offerInline(agent.ref))
-  broker.forgetTab(2)
-  assert.equal(broker.pickInline(agent.ref, 0), false)
 })
 
 test('非 https 不填，本机回环的 http 除外', () => {

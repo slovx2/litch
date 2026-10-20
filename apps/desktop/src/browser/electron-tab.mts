@@ -4,6 +4,7 @@
 // 它碰不到界面，也拿不到通往核心的端口（那个端口只给界面自己的主框架，见 main.mts 的 REQUEST_CORE_PORT）。
 import { type Event, WebContentsView } from 'electron'
 import { CdpRefused, isAllowedCdp } from './cdp-allow.mjs'
+import { SIGNING_IN } from './executor.mjs'
 import { failurePage } from './forwarding.mjs'
 import type {
   BrowserPage,
@@ -14,7 +15,7 @@ import type {
   TabKind,
   TabOwner,
 } from './model.mjs'
-import { autofillPreferences, registerAutofillTab } from './passwords/tabs.mjs'
+import { autofillPreferences, isHandedOver, registerAutofillTab } from './passwords/tabs.mjs'
 import { BLANK, isOpenable } from './url.mjs'
 
 /** 共用的持久分区：登录一次，各个会话的代理都能用 */
@@ -83,11 +84,7 @@ export function createTab(
       ...autofillPreferences(),
     },
   })
-  registerAutofillTab(view.webContents, {
-    kind,
-    info: () => tab.info(),
-    notice: (text) => addNotice(text),
-  })
+  registerAutofillTab(view.webContents, { kind, info: () => tab.info() })
   view.setBackgroundColor('#ffffff')
   // 没显示在面板里的视图也要有大小：0×0 的页面截不了图、点不到东西（见 electron-host.mts 开头）
   view.setBounds(HIDDEN_BOUNDS)
@@ -150,6 +147,8 @@ export function createTab(
 
   const send = async <T,>(method: string, params?: Record<string, unknown>): Promise<T> => {
     if (!isAllowedCdp(method)) throw new CdpRefused(method)
+    // 交给人登录的这段时间里一条 CDP 都不发（输入、读页、脚本），只认人真的在面板里的操作
+    if (isHandedOver(contents.id)) throw new Error(SIGNING_IN)
     await attach()
     if (method === 'Page.captureScreenshot' && highlightTimer) {
       // 截图里不要代理点哪里的那个框

@@ -296,6 +296,17 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
           drop()
           resume(entry)
         },
+        hold(held) {
+          if (running.get(id) !== entry) return
+          if (held) {
+            entry.holds++
+            entry.stopTimer?.()
+            entry.stopTimer = null
+          } else if (entry.holds > 0) {
+            entry.holds--
+            resume(entry)
+          }
+        },
       })
     })
   }

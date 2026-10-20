@@ -5,7 +5,7 @@ import type { Entry } from './types.ts'
 export const zhPasswords = {
   'settings.browser.passwords': '已保存的密码',
   'settings.browser.passwords.note':
-    '点登录框可以选一条填上，模型开的标签里模型也能选；模型读不到密码框里的字，也看不到保存提示。这里看不到、也复制不了密码',
+    '点登录框可以选一条填上。模型从不替你填：要登录时它会把标签交给你。模型读不到密码框里的字，也看不到保存提示。这里看不到、也复制不了密码',
   'settings.browser.passwords.empty': '还没有保存的密码。可以从别的浏览器导入。',
   'settings.browser.passwords.search': '搜索站点或用户名',
   'settings.browser.passwords.none': '没有对得上的。',
@@ -35,6 +35,12 @@ export const zhPasswords = {
   'browser.save.unavailable':
     '在 {site} 上登录的 {user} 没法保存：这台电脑的系统钥匙串现在用不了，Litch 不存没加密的密码。',
   'browser.save.close': '知道了',
+  'browser.signIn.title': '代理请你登录 {site}',
+  'browser.signIn.note':
+    '在下面的网页里自己登录（可以用已保存的密码），好了点“完成，交还”。这段时间代理碰不了这个标签；交还前会清空密码框，代理看不到你输入的内容。',
+  'browser.signIn.done': '完成，交还',
+  'browser.signIn.cancel': '取消',
+  'browser.signIn.show': '切到那个标签',
   'browser.save.failed': '没存上：{reason}',
   'browser.save.fileFailed': '没存上：密码库文件现在读写不了，提示先留着，可以再试。',
 } satisfies Record<string, Entry>

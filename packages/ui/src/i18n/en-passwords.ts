@@ -5,7 +5,7 @@ import type { zhPasswords } from './zh-CN-passwords.ts'
 export const enPasswords: Record<keyof typeof zhPasswords, Entry> = {
   'settings.browser.passwords': 'Saved passwords',
   'settings.browser.passwords.note':
-    'Click a sign-in field to fill one of these; in tabs the model opened, the model can pick one too. The model cannot read password fields or see save prompts. Passwords cannot be shown or copied here',
+    'Click a sign-in field to fill one of these. The model never fills them: when it needs you signed in, it hands the tab to you. The model cannot read password fields or see save prompts. Passwords cannot be shown or copied here',
   'settings.browser.passwords.empty':
     'No saved passwords yet. You can import them from another browser.',
   'settings.browser.passwords.search': 'Search sites or usernames',
@@ -38,6 +38,12 @@ export const enPasswords: Record<keyof typeof zhPasswords, Entry> = {
   'browser.save.unavailable':
     "The password for {user} on {site} can't be saved: the system keychain isn't available on this computer, and Litch doesn't store unencrypted passwords.",
   'browser.save.close': 'OK',
+  'browser.signIn.title': 'The agent asks you to sign in to {site}',
+  'browser.signIn.note':
+    'Sign in on the page below yourself (saved passwords work here), then click "Done, hand back". The agent cannot touch this tab meanwhile; password fields are cleared before it gets the tab back, and it never sees what you typed.',
+  'browser.signIn.done': 'Done, hand back',
+  'browser.signIn.cancel': 'Cancel',
+  'browser.signIn.show': 'Show that tab',
   'browser.save.failed': 'Not saved: {reason}',
   'browser.save.fileFailed':
     "Not saved: the saved passwords file can't be read or written right now. The prompt stays so you can try again.",

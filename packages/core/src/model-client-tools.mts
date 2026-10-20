@@ -70,6 +70,8 @@ export type ToolToCore =
   | { type: typeof CLIENT_TOOL; op: 'result'; id: string; response: ClientToolCallResponse }
   | { type: typeof CLIENT_TOOL; op: 'ask'; id: string; askId: string; ask: ClientAskView }
   | { type: typeof CLIENT_TOOL; op: 'askDone'; askId: string }
+  /** 执行器在等人（不出对话里的卡片，比如内置浏览器把标签交给人登录）：held 为真时停表，为假时表从头算 */
+  | { type: typeof CLIENT_TOOL; op: 'hold'; id: string; held: boolean }
   | { type: typeof CLIENT_TOOL; op: 'namespaces'; namespaces: string[] }
   | { type: typeof CLIENT_TOOL; op: 'configResult'; id: string; result: ConfigMainResult }
 

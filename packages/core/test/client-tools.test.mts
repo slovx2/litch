@@ -450,6 +450,28 @@ test('超时：到点取消并回 failed；卡片挂着的时候停表', async (
   assert.deepEqual(main?.of('cancel'), [{ type: CLIENT_TOOL, op: 'cancel', id }])
 })
 
+test('执行器在别处等人（hold）：停表，不等了表从头算', async () => {
+  const { core, main, call, time } = setup()
+  core.start()
+  await settle()
+  const first = call({})
+  await settle()
+  const id = main?.of('call')[0]?.invocation.id ?? ''
+  main?.reply({ op: 'hold', id, held: true })
+  await settle()
+  time.advance(CALL_TIMEOUT_MS * 3)
+  await settle()
+  assert.equal(main?.of('cancel').length, 0)
+  main?.reply({ op: 'hold', id, held: false })
+  time.advance(CALL_TIMEOUT_MS - 1)
+  await settle()
+  assert.equal(main?.of('cancel').length, 0)
+  time.advance(1)
+  const timedOut = resultOf(await first)
+  assert.match(timedOut?.contentItems[0]?.text ?? '', /^\[litch:failed\]/)
+  assert.deepEqual(main?.of('cancel'), [{ type: CLIENT_TOOL, op: 'cancel', id }])
+})
+
 test('回合结束：正在执行的取消、卡片撤掉并回 null，执行过调用的回合告诉主进程收尾；没调用过的回合不报', async () => {
   const { core, main, call, peer } = setup()
   core.start()

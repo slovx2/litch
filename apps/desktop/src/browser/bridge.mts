@@ -30,6 +30,9 @@ import {
   PASSWORDS_PROMPTS_CHANGED,
   PASSWORDS_REMOVE,
   PASSWORDS_REMOVE_ALL,
+  SIGNIN_ANSWER,
+  SIGNIN_CHANGED,
+  SIGNIN_LIST,
 } from './passwords/ipc.mjs'
 
 const listen = (channel: string, handler: (payload: unknown) => void) => {
@@ -80,6 +83,12 @@ export function browserBridge() {
       },
       onPrompts: (handler: (prompts: unknown) => void) =>
         listen(PASSWORDS_PROMPTS_CHANGED, handler),
+    },
+    // 代理请人登录（request_sign_in）：列、答“完成，交还”或“取消”
+    signIn: {
+      list: () => ipcRenderer.invoke(SIGNIN_LIST),
+      answer: (id: string, answer: string) => ipcRenderer.invoke(SIGNIN_ANSWER, { id, answer }),
+      onChanged: (handler: (requests: unknown) => void) => listen(SIGNIN_CHANGED, handler),
     },
   }
 }

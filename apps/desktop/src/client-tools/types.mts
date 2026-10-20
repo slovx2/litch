@@ -62,6 +62,11 @@ export interface ClientToolContext {
   signal: AbortSignal
   /** 在这个会话的对话里出一张卡片等用户答复；被取消时回 null */
   ask(ask: ClientToolAsk): Promise<ClientToolAnswer | null>
+  /**
+   * 在别处等人（不出对话里的卡片，比如内置浏览器把标签交给人登录）：核心停表，等人的这段不算超时。
+   * 回“不等了”的函数，表从头算；调用结束时自动不等
+   */
+  hold?(): () => void
 }
 
 /** 一个命名空间的执行器，由主进程登记 */
@@ -112,6 +117,8 @@ export type ClientToolToCore =
   | { type: typeof CLIENT_TOOL; op: 'result'; id: string; response: ClientToolCallResponse }
   | { type: typeof CLIENT_TOOL; op: 'ask'; id: string; askId: string; ask: ClientToolAsk }
   | { type: typeof CLIENT_TOOL; op: 'askDone'; askId: string }
+  /** 执行器在别处等人：held 为真时核心停表，为假时表从头算（ClientToolContext.hold） */
+  | { type: typeof CLIENT_TOOL; op: 'hold'; id: string; held: boolean }
   /** 主进程启动时告诉核心：这台桌面能执行哪些命名空间（握手时照这个声明） */
   | { type: typeof CLIENT_TOOL; op: 'namespaces'; namespaces: string[] }
   | { type: typeof CLIENT_TOOL; op: 'configResult'; id: string; result: ConfigMainResult }

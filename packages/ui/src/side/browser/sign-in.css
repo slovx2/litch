@@ -1,0 +1,32 @@
+/* 浏览器面板上“代理请你登录”的卡片：工具栏下面、网页上面一条，比保存提示醒目一点，按钮靠右，窄了换行 */
+.bw-signin {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line-1);
+  background: var(--bar);
+  font-size: 12px;
+}
+
+.bw-signin-text {
+  flex: 1 1 220px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-wrap: anywhere;
+}
+
+.bw-signin-reason,
+.bw-signin-note {
+  color: var(--ink-2);
+}
+
+.bw-signin-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}

@@ -100,6 +100,32 @@ export interface BrowserPasswordsBridge {
   onPrompts(handler: (prompts: BrowserSavePrompt[]) => void): () => void
 }
 
+/** 代理请人登录（request_sign_in）：面板上的卡片，里面没有人输入的东西 */
+export interface BrowserSignInRequest {
+  id: string
+  deviceId: string
+  threadId: string
+  tabId: string
+  /** 代理说的要登录什么 */
+  site: string
+  /** 代理说的为什么 */
+  reason: string
+  /** 毫秒 */
+  at: number
+}
+
+/** done：人登录完、交还给代理；cancel：不登录了 */
+export type BrowserSignInAnswer = 'done' | 'cancel'
+
+export interface BrowserSignInBridge {
+  /** 现在挂着的 */
+  list(): Promise<BrowserSignInRequest[]>
+  /** 答一条，回答没答到（已经没了） */
+  answer(id: string, answer: BrowserSignInAnswer): Promise<boolean>
+  /** 变了，带着现在所有的 */
+  onChanged(handler: (requests: BrowserSignInRequest[]) => void): () => void
+}
+
 export interface BrowserBridge {
   /** 这个窗口里、这块矩形（页面里的 CSS 像素）上显示哪个标签。都给 null 就是什么都不显示 */
   place(
@@ -134,6 +160,8 @@ export interface BrowserBridge {
   onPolicy(handler: (policy: BrowserSitePolicy) => void): () => void
   /** 已保存的密码（设置页用） */
   passwords: BrowserPasswordsBridge
+  /** 代理请人登录的卡片（浏览器面板用） */
+  signIn: BrowserSignInBridge
 }
 
 declare global {
