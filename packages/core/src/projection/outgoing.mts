@@ -8,6 +8,7 @@ import type {
   UserAttachment,
   UserMessageItem,
 } from '../model.mjs'
+import { type CommentExtra, commentsBlock, MAX_COMMENTS } from './comments.mjs'
 import { isInlineImage } from './items.mjs'
 
 /** 一条消息最多带几张图。再多的话一帧就太大了（服务端一帧的上限是 100 MiB） */
@@ -42,6 +43,17 @@ function checkExtra(extra: MessageExtra): MessageExtra {
   if (extra?.kind === 'file' && short(extra.name) && short(extra.path)) {
     return { kind: 'file', name: extra.name, path: extra.path }
   }
+  if (
+    extra?.kind === 'comment' &&
+    short(extra.itemId) &&
+    typeof extra.quote === 'string' &&
+    extra.quote.trim() !== '' &&
+    extra.quote.length <= MAX_EXTRA_TEXT &&
+    typeof extra.note === 'string' &&
+    extra.note.length <= MAX_EXTRA_TEXT
+  ) {
+    return { kind: 'comment', itemId: extra.itemId, quote: extra.quote, note: extra.note }
+  }
   throw new ChannelError('rejected', '消息带的东西不对')
 }
 
@@ -50,7 +62,7 @@ export const textOf = (extra: Extract<MessageExtra, { kind: 'text' }>): string =
   extra.name === null ? extra.text : `${extra.name}:\n${extra.text}`
 
 /**
- * 真正发出去的正文：打的字在前，带着的几段文字依次跟在后面，中间空一行。
+ * 真正发出去的正文：评论那一段在最前面，然后是打的字，带着的几段文字依次跟在后面，中间空一行。
  * 协议里没有“文本附件”，对面收到的就是这样一整段，和把那几段直接贴进输入框是一回事。
  * mentions 是这个 harness 收不收指向文件的 mention：不收的话，提到的文件的路径也写进正文，一行一个，排在最后
  */
@@ -58,7 +70,8 @@ export function bodyOf(
   { text, extras }: Pick<OutgoingMessage, 'text' | 'extras'>,
   mentions: boolean,
 ): string {
-  const parts = [text.trim() ? text : '']
+  const comments = extras.filter((extra): extra is CommentExtra => extra.kind === 'comment')
+  const parts = [commentsBlock(comments), text.trim() ? text : '']
   for (const extra of extras) if (extra.kind === 'text') parts.push(textOf(extra))
   if (!mentions) {
     const paths = extras.flatMap((extra) => (extra.kind === 'file' ? [extra.path] : []))
@@ -79,6 +92,9 @@ export function outgoing(
   }
   if (extras.length > MAX_EXTRAS) throw new ChannelError('rejected', '带的东西太多了')
   const checked = extras.map(checkExtra)
+  if (checked.filter((extra) => extra.kind === 'comment').length > MAX_COMMENTS) {
+    throw new ChannelError('rejected', '评论太多了')
+  }
   if (!text.trim() && images.length === 0 && checked.length === 0) {
     throw new ChannelError('rejected', '消息是空的')
   }
@@ -107,7 +123,7 @@ export function toInput(message: OutgoingMessage, mentions: boolean): UserInput[
 
 /**
  * 附带项在对话里显示成什么。顺序和发出去的输入一致，对面回显时落在同样的位置上。
- * 带着的文字已经并进正文了，不另外显示；提到的文件也一样，除非它是用 mention 带过去的
+ * 带着的文字、评论已经并进正文了，不另外显示；提到的文件也一样，除非它是用 mention 带过去的
  */
 const shown = (extras: MessageExtra[], mentions: boolean): UserAttachment[] => [
   ...extras.flatMap((extra): UserAttachment[] =>

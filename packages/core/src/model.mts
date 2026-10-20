@@ -417,6 +417,11 @@ export type MessageExtra =
   | { kind: 'text'; name: string | null; text: string }
   /** 提到的一个文件或目录。path 是 harness 那台机器上的路径：绝对的，或者相对会话的工作目录 */
   | { kind: 'file'; name: string; path: string }
+  /**
+   * 选中回答里的一段文字加的评论。quote 是选中的原文，note 是用户写的评论（可以是空的），
+   * itemId 是那段原文所在的助手条目。发出去时写成正文开头的一段（见 projection/comments.mts）
+   */
+  | { kind: 'comment'; itemId: string; quote: string; note: string }
 
 /** 要发出去的一条消息 */
 export interface OutgoingMessage {
