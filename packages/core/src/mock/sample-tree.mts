@@ -27,10 +27,18 @@ export interface TreeSuggestion extends TreeProposal {
 export interface TreeAgent {
   nickname: string
   role: string
+  /** 一句话描述（子线程的名字，真的 Claude 入口放的是 Agent 工具的 description） */
+  description: string
   prompt: string
   reply: string
   /** 能不能在它里面直接输入（canAcceptDirectInput） */
   canInput: boolean
+  /**
+   * 怎么结束：completed 回一句话就完成；failed 一开始就失败（error 是失败的原话）；
+   * stopped 一直在跑，别的都回来之后父会话停掉它（用户也可以在子代理页上停）
+   */
+  outcome: 'completed' | 'failed' | 'stopped'
+  error?: string
 }
 
 export interface TreeText {
@@ -53,8 +61,8 @@ export interface TreeText {
   /** 说“忘了收尾”时没调收尾的回答，和设备进程提醒之后模型补的那一条建议 */
   forgetReply: string
   remindSuggestion: TreeSuggestion
-  /** 说“用子代理”时引擎自己派出的两个子代理，和父会话等它们回来之后说的 */
-  agents: [TreeAgent, TreeAgent]
+  /** 说“用子代理”时引擎自己派出的三个子代理（完成、停掉、失败各一个），和父会话等它们回来之后说的 */
+  agents: [TreeAgent, TreeAgent, TreeAgent]
   agentsReply: string
   /** 子代理调用的提示 */
   agentsPrompt: string
@@ -141,19 +149,36 @@ export const TREE_TEXT: Record<SampleLang, TreeText> = {
       {
         nickname: 'Hubble',
         role: 'explorer',
-        prompt: '把仓库的目录结构走一遍，说说每个包是干什么的。',
+        description: '走一遍仓库的目录结构',
+        prompt:
+          '把仓库的目录结构走一遍，说说每个包是干什么的。只读，不要改文件；每个包一两句话，给出入口文件的路径。',
         reply: '走完了：packages 下面是协议、核心、界面和各个引擎的入口，apps 下面是桌面和移动端。',
         canInput: true,
+        outcome: 'completed',
       },
       {
         nickname: 'Gauss',
         role: 'worker',
-        prompt: '找出 core 里重复的工具函数。',
-        reply: '找到 3 处重复：路径拼接两处、时间换算一处，已经列在回答里。',
+        description: '找出 core 里重复的工具函数',
+        prompt: '找出 core 里重复的工具函数，列出每一处的路径和行号，说明哪一份该留下。',
+        reply: '',
         canInput: false,
+        outcome: 'stopped',
+      },
+      {
+        nickname: 'Noether',
+        role: 'explorer',
+        description: '对照 OpenCode 的 task 子会话',
+        prompt:
+          '只读调研 OpenCode 的 task 工具：子会话怎么建、父子关系存在哪、界面上怎么显示状态。',
+        reply: '',
+        canInput: false,
+        outcome: 'failed',
+        error: 'PreToolUse:Agent hook error: 原生工具意图未能确认落盘或回合已取消，禁止执行。',
       },
     ],
-    agentsReply: '两个子代理都回来了：Hubble 看完了目录结构，Gauss 把重复的代码列出来了。',
+    agentsReply:
+      '子代理都停下了：Hubble 看完了目录结构；Gauss 跑得太久，我停掉了它；Noether 没能启动，原因在它的页上。',
     agentsPrompt: '分头看看仓库的结构和重复代码',
   },
   en: {
@@ -244,21 +269,39 @@ export const TREE_TEXT: Record<SampleLang, TreeText> = {
       {
         nickname: 'Hubble',
         role: 'explorer',
-        prompt: 'Walk the repository layout and say what each package does.',
+        description: 'Walk the repository layout',
+        prompt:
+          'Walk the repository layout and say what each package does. Read only, change nothing; a sentence or two per package with its entry file.',
         reply:
           'Done: packages holds the protocol, the core, the UI and each engine entry; apps holds desktop and mobile.',
         canInput: true,
+        outcome: 'completed',
       },
       {
         nickname: 'Gauss',
         role: 'worker',
-        prompt: 'Find duplicated helpers in core.',
-        reply: 'Found 3 duplicates: two path joins and one time conversion, listed in my answer.',
+        description: 'Find duplicated helpers in core',
+        prompt:
+          'Find duplicated helpers in core: list each one with its path and line, and say which copy should stay.',
+        reply: '',
         canInput: false,
+        outcome: 'stopped',
+      },
+      {
+        nickname: 'Noether',
+        role: 'explorer',
+        description: "Compare OpenCode's task sub-sessions",
+        prompt:
+          "Research OpenCode's task tool, read only: how sub-sessions are created, where the parent link is stored, how the UI shows their state.",
+        reply: '',
+        canInput: false,
+        outcome: 'failed',
+        error:
+          'PreToolUse:Agent hook error: the native tool intent could not be confirmed on disk, or the turn was cancelled.',
       },
     ],
     agentsReply:
-      'Both sub-agents are back: Hubble mapped the layout and Gauss listed the duplicated code.',
+      'The sub-agents have stopped: Hubble mapped the layout; Gauss ran too long, so I stopped it; Noether failed to start, the reason is on its page.',
     agentsPrompt: 'Split up: look at the repository layout and at duplicated code',
   },
 }

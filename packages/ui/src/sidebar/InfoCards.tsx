@@ -1,5 +1,6 @@
 // 侧栏里设备行、工作区行、会话行的信息卡：行上只留一眼要看的，主机、路径这些细节鼠标停上去才看得到。
 import {
+  agentRunState,
   type DeviceView,
   keys,
   pathTwin,
@@ -210,10 +211,10 @@ function TreeFacts({ summary, device }: { summary: SessionSummary; device: Devic
           <dd className="info-agents">
             {agents.slice(0, AGENTS_SHOWN).map((agent, index) => (
               <span key={agent.id} className="info-agent" data-agent={agent.id}>
-                {agent.nickname ?? t('tree.agent.unnamed', { n: index + 1 })}
+                {agent.description || agent.nickname || t('tree.agent.unnamed', { n: index + 1 })}
                 {agent.role ? ` (${agent.role})` : ''}
                 {' · '}
-                {t(`tree.status.${agent.status}`)}
+                {t(`tree.agent.state.${agentRunState(agent, null, null)}`)}
               </span>
             ))}
             {agents.length > AGENTS_SHOWN ? (

@@ -912,5 +912,6 @@ export function sampleSession(
     can: { ...ALL_ABLE },
     forkedFrom: null,
     proposals: [],
+    agents: [],
   }
 }

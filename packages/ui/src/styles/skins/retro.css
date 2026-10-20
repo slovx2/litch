@@ -459,3 +459,41 @@
   --syn-type: var(--L, #6f5300) var(--D, var(--wire-yellow));
   --syn-meta: var(--L, #74482c) var(--D, var(--wire-brown));
 }
+
+/* 子代理：状态写成方括号里的字（[完成]、[进行中]），不要底色和记号；行是直角，停上去出一道硬阴影；
+   列表里选中的那一行反白 */
+[data-skin="retro"] .agent-st[data-state] {
+  gap: 0;
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  font-family: var(--mono);
+}
+[data-skin="retro"] .agent-st::before {
+  content: "[";
+}
+[data-skin="retro"] .agent-st::after {
+  content: "]";
+}
+[data-skin="retro"] .agent-st .st {
+  display: none;
+}
+[data-skin="retro"] .agent-row {
+  border-radius: 0;
+  border-color: var(--line-3);
+}
+[data-skin="retro"] button.agent-row:hover {
+  box-shadow: 3px 3px 0 var(--line-3);
+}
+[data-skin="retro"] :is(.agents-pick, .agents-task, .agents-fail) {
+  border-radius: 0;
+}
+[data-skin="retro"] .agents-pick[aria-selected="true"] {
+  background: var(--inv-bg);
+  color: var(--inv-fg);
+  box-shadow: none;
+  --ink-3: var(--inv-fg-2);
+  --accent: var(--inv-fg);
+  --ok: var(--inv-fg);
+  --err: var(--inv-fg);
+}

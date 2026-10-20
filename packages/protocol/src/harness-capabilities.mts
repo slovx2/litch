@@ -90,6 +90,11 @@ export interface HarnessFeatures {
   /** 会话改名（`thread/name/set`） */
   rename: boolean
   agentMessagePhase: AgentMessagePhaseSupport
+  /**
+   * 对引擎自己派出的子代理线程发 `turn/interrupt`，只停掉这一个子代理、父会话的回合照常
+   * （客户端子代理页上的“停止”）。后加的位，没报就是不会
+   */
+  stopAgent?: boolean
 }
 
 export type PermissionRisk = 'low' | 'medium' | 'high'

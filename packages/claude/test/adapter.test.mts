@@ -3306,6 +3306,7 @@ test('Task subagent emits the canonical activity lifecycle and leaves wait as th
     const subagentActivityStarted = new Map<string, any>()
     const subagentActivities: any[] = []
     const parentCompletedOrder: string[] = []
+    const spawnCompletions: any[] = []
     for (let i = 0; i < 300; i += 1) {
       const message = await reader.next()
       if (message.id === 50) liveChildRead = message.result.thread
@@ -3358,6 +3359,7 @@ test('Task subagent emits the canonical activity lifecycle and leaves wait as th
           const bucket = (collabByTool[item.tool] ??= {})
           bucket.completed = item
           parentCompletedOrder.push(`collab:${item.tool}`)
+          if (item.tool === 'spawnAgent') spawnCompletions.push(item)
         }
       }
       if (message.method === 'item/agentMessage/delta') {
@@ -3484,7 +3486,20 @@ test('Task subagent emits the canonical activity lifecycle and leaves wait as th
     assert.match(childTurnCompleted.items[0].text, /subagent final summary/)
     // After spawnAgent ends the subagent is now running; wait/completed is the
     // terminal display snapshot after the activity completion event.
-    assert.equal(spawnEnd.agentsStates[childThreadId]!.status, 'running')
+    // 子代理结束时派出的那一条以同一个标识再完成一次，带上最后的状态，排在等待那一条之前
+    assert.deepEqual(
+      spawnCompletions.map((item) => [item.id, item.agentsStates[childThreadId]?.status]),
+      [
+        [collabByTool.spawnAgent!.started!.id, 'running'],
+        [collabByTool.spawnAgent!.started!.id, 'completed'],
+      ],
+    )
+    assert.ok(
+      parentCompletedOrder.lastIndexOf('collab:spawnAgent') <
+        parentCompletedOrder.indexOf('collab:wait'),
+      'wait/completed stays the final parent item',
+    )
+    assert.equal(spawnEnd.agentsStates[childThreadId]!.status, 'completed')
     assert.equal(collabByTool.wait!.started!.receiverThreadIds[0], childThreadId)
     assert.equal(collabByTool.wait!.completed!.agentsStates[childThreadId]!.status, 'completed')
     // collabAgentToolCall.model carries the SDK model the subagent runs on,

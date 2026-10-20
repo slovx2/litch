@@ -391,3 +391,19 @@
 [data-skin="human"] :is(.code, .fv-code, .dp) {
   --syn-type: var(--L, #86690f) var(--D, var(--wire-yellow));
 }
+
+/* 子代理：行和状态都是圆的 */
+[data-skin="human"] .agent-row {
+  border-radius: 10px;
+  border-color: var(--line-1);
+  box-shadow: var(--soft-sm);
+}
+[data-skin="human"] .agent-st {
+  border-radius: 999px;
+}
+[data-skin="human"] .agents-pick {
+  border-radius: 10px;
+}
+[data-skin="human"] :is(.agents-task, .agents-fail) {
+  border-radius: 14px;
+}

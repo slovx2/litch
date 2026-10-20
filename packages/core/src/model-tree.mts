@@ -157,6 +157,38 @@ export type AgentState =
   | 'shutdown'
   | 'notFound'
 
+/**
+ * 子代理在界面上的五种状态：排队、进行中、完成、失败、已停止。对话流里的那一行、子代理页的列表和标题、
+ * 侧栏的信息卡都用这一个（取值的先后见 projection/tree.mts 的 agentRunState）
+ */
+export type AgentRunState = 'queued' | 'running' | 'completed' | 'failed' | 'stopped'
+
+/** 协议的 CollabAgentStatus 归到五种里的哪一种 */
+export const AGENT_RUN_STATE: Record<AgentState, AgentRunState> = {
+  pendingInit: 'queued',
+  running: 'running',
+  completed: 'completed',
+  errored: 'failed',
+  notFound: 'failed',
+  interrupted: 'stopped',
+  shutdown: 'stopped',
+}
+
+/** 做完了的三种（完成、失败、已停止）：不会再变了，除非又给它派了活 */
+export const agentSettled = (state: AgentRunState): boolean =>
+  state === 'completed' || state === 'failed' || state === 'stopped'
+
+/** 子代理线程自己最近的一个回合：在跑、完成、失败、被打断 */
+export interface AgentTurnView {
+  state: Exclude<AgentRunState, 'queued'>
+  /** 开始的时间，毫秒。对面没给是 null */
+  startedAt: number | null
+  /** 用了多久，毫秒。还在跑、对面没给是 null（在跑的按 startedAt 走表） */
+  durationMs: number | null
+  /** 失败时对面给的原话。没失败、没给是 null */
+  error: string | null
+}
+
 /** 子代理调用（collabAgentToolCall）涉及的一个子线程 */
 export interface AgentRefView {
   threadId: string
@@ -207,15 +239,24 @@ export interface WrapUpView {
   suggestions: WrapUpSuggestionView[]
 }
 
-/** 引擎自己的一个子代理线程（thread/list 带 parentThreadId 列出来的） */
+/** 引擎自己的一个子代理线程（thread/list 带 parentThreadId 列出来的，之后跟着通知变） */
 export interface AgentThreadView {
   id: string
-  /** 引擎给的昵称、角色。没有是 null */
+  /** 父会话 */
+  parentId: string
+  /** 引擎给的昵称（Claude 的是 agent-xxxxxxxxxxxx）、角色（Claude 的 subagent_type）。没有是 null */
   nickname: string | null
   role: string | null
-  /** 第一句话或名字 */
-  title: string
+  /**
+   * 一句话描述：对面给子线程起的名字（Claude 入口放的是 Agent 工具的 description），没有的取任务说明的
+   * 第一句，截到 40 字上下。都没有是空的
+   */
+  description: string
+  /** 派给它的任务（会话对象上的第一句话；对面截过的就是截过的）。不知道是空的 */
+  prompt: string
   status: SessionStatus
+  /** 它最近的一个回合。还没有回合、对面没给是 null */
+  turn: AgentTurnView | null
   /** 能不能在它里面直接输入。没载入的对面说不知道，是 null */
   canInput: boolean | null
   /** 毫秒 */

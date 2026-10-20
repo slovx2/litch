@@ -56,6 +56,7 @@ export function abilitiesOf(
     remove: features.delete === true,
     finalOnStart: features.agentMessagePhase === 'onStart',
     turnDiff: features.turnDiff === true,
+    stopAgent: features.stopAgent === true,
   }
 }
 

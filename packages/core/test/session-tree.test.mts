@@ -5,6 +5,8 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { formatSessionEvent, type SessionProposal } from '../../protocol/src/index.mjs'
 import {
+  agentRunState,
+  agentsUnfinished,
   bucketItems,
   type ChannelError,
   cardOf,
@@ -1107,22 +1109,22 @@ test('模拟：说“用子代理”出子代理卡片；能打开子线程，�
   await world.until(
     () =>
       Object.values(parent.view?.items ?? {}).some(
-        (item) => item.kind === 'toolCall' && (item.agents?.length ?? 0) === 2,
+        (item) => item.kind === 'toolCall' && (item.agents?.length ?? 0) === 3,
       ),
     '子代理卡片',
   )
   const card = Object.values(parent.view?.items ?? {}).find(
-    (item): item is ToolCallItem => item.kind === 'toolCall' && (item.agents?.length ?? 0) === 2,
+    (item): item is ToolCallItem => item.kind === 'toolCall' && (item.agents?.length ?? 0) === 3,
   )
   const ids = card?.agents?.map((entry) => entry.threadId) ?? []
-  assert.equal(ids.length, 2)
+  assert.equal(ids.length, 3)
   // 子代理线程不进侧栏
   assert.ok(!(world.sidebar.view?.sessions ?? []).some((entry) => ids.includes(entry.id)))
   const views = ids.map((id) => world.watch(id))
   await world.until(() => views.every((view) => view.view !== null), '子线程打开了')
   assert.deepEqual(
     views.map((view) => view.view?.live),
-    [true, false],
+    [true, false, false],
   )
   const muted = await failureOf(
     world.channel.command('session.send', {
@@ -1138,7 +1140,7 @@ test('模拟：说“用子代理”出子代理卡片；能打开子线程，�
   })) as { agents: { id: string; canInput: boolean | null }[] }
   assert.deepEqual(
     agents.map((entry) => entry.canInput),
-    [true, false],
+    [true, false, false],
   )
 
   // 派一个、脱离它
@@ -1153,6 +1155,66 @@ test('模拟：说“用子代理”出子代理卡片；能打开子线程，�
   await world.until(() => world.children('s6').some((entry) => entry.id === sessionId), '派出来了')
   await world.channel.command('session.detach', { deviceId: 'local', sessionId })
   await world.until(() => !world.children('s6').some((entry) => entry.id === sessionId), '脱离了')
+})
+
+test('模拟：子代理一个完成、一个被父会话停掉、一个失败；派出的条目不回写，状态以子线程为准', async () => {
+  const world = mockWorld()
+  await settle()
+  const parent = world.watch('s6')
+  await settle()
+  await world.channel.command('session.send', {
+    deviceId: 'local',
+    sessionId: 's6',
+    text: '用子代理看看',
+  })
+  const spawn = () =>
+    Object.values(parent.view?.items ?? {}).find(
+      (item): item is ToolCallItem => item.kind === 'toolCall' && (item.agents?.length ?? 0) === 3,
+    )
+  await world.until(() => spawn() !== undefined, '派出了三个')
+  // 要停掉的那个一开始一直在跑（完成的那个在测试的时钟下可能当场就回完了）
+  assert.equal(agentRunState(parent.view?.agents[1], null, null), 'running')
+  await world.until(
+    () => (parent.view?.agents ?? []).every((entry) => entry.turn?.state !== 'running'),
+    '都停下了',
+  )
+  const states = (parent.view?.agents ?? []).map((entry) => [
+    entry.description,
+    agentRunState(entry, null, 'running'),
+  ])
+  assert.deepEqual(states, [
+    ['走一遍仓库的目录结构', 'completed'],
+    ['找出 core 里重复的工具函数', 'stopped'],
+    ['对照 OpenCode 的 task 子会话', 'failed'],
+  ])
+  const failed = parent.view?.agents[2]
+  assert.match(failed?.turn?.error ?? '', /PreToolUse:Agent hook error/)
+  // 和真的 Claude 入口（改之前）、原生 codex 一样：派出的那一条一直报“在跑”，最后的状态在等待那一条上
+  assert.deepEqual(
+    spawn()?.agents?.map((entry) => entry.state),
+    ['running', 'running', 'running'],
+  )
+  const wait = Object.values(parent.view?.items ?? {}).find(
+    (item): item is ToolCallItem =>
+      item.kind === 'toolCall' && typeof item.tool === 'object' && item.tool.key === 'collab.wait',
+  )
+  assert.deepEqual(
+    wait?.agents?.map((entry) => entry.state),
+    ['completed', 'interrupted', 'errored'],
+  )
+  const turnId = parent.view?.turns.at(-1)?.id ?? ''
+  await world.until(
+    () => parent.view?.turns.find((entry) => entry.id === turnId)?.status === 'completed',
+    '父会话接着说完了',
+  )
+  const items = parent.view?.turns.find((entry) => entry.id === turnId)?.itemIds ?? []
+  assert.equal(
+    agentsUnfinished(
+      items.map((id) => parent.view?.items[id]),
+      parent.view?.agents,
+    ),
+    false,
+  )
 })
 
 test('模拟：没有会话树的设备不能派', async () => {

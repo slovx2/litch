@@ -423,7 +423,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     view: SessionView,
     turnId: string,
     itemId: string | null,
-    status: 'completed' | 'interrupted',
+    status: 'completed' | 'interrupted' | 'failed',
+    error: string | null = null,
   ) => {
     replies.delete(sessionKey(view))
     const turn = view.turns.find((entry) => entry.id === turnId)
@@ -447,6 +448,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         turnId,
         status,
         durationMs: clock.now() - (turn?.startedAt ?? clock.now()),
+        ...(error ? { error } : {}),
       },
     ])
     updateSummary(view.deviceId, view.sessionId, {
@@ -1203,6 +1205,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         can: canOf(deviceId, summary.harness),
         forkedFrom: null,
         proposals: [],
+        agents: [],
       }
       sessions.set(sessionKey(view), view)
       return summary.id
@@ -1338,6 +1341,10 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     finish(view, turnId, ops) {
       applySessionOps(view, ops)
       endTurn(view, turnId, null, 'completed')
+    },
+    fail: (view, turnId, error) => endTurn(view, turnId, null, 'failed', error),
+    stop(view, turnId) {
+      if (running(view)?.id === turnId) endTurn(view, turnId, null, 'interrupted')
     },
     running: (view) => running(view) !== undefined,
     treeOn: (deviceId) =>
@@ -1910,6 +1917,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
           can: canOf(deviceId, summary.harness),
           forkedFrom: null,
           proposals: [],
+          agents: [],
         }
         sessions.set(sessionKey(view), view)
         startTurn(view, message)
