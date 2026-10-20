@@ -162,7 +162,15 @@ void app.whenReady().then(async () => {
     check('show 之后网页又叠上去', attached())
 
     // 登录之后面板上的保存提示（probe-browser-save-prompt.mts）
-    await checkSavePrompt({ window, browser, tabId: tab?.id ?? '', page, until, check, shot })
+    const savePrompt = await checkSavePrompt({
+      window,
+      browser,
+      tabId: tab?.id ?? '',
+      page,
+      until,
+      check,
+      shot,
+    })
 
     // 在标签上关掉
     await page(`document.querySelector('.bw-tab .ibtn').click()`)
@@ -172,6 +180,7 @@ void app.whenReady().then(async () => {
       browser.host.list().length === 0 &&
         (await until("document.querySelectorAll('.bw-tab').length === 0")),
     )
+    await savePrompt.afterClose()
 
     // show 的是别的会话的网页：不把人从眼前拽走，侧栏那一行出记号、出提示，切过去才打开面板
     await page(`document.querySelector('.side button[data-tool="hide"]')?.click()`)

@@ -1,8 +1,9 @@
 // 密码库：加解密（假加密器换掉 safeStorage）、去重、无效的跳过、加密器不可用时拒绝存、列表不带密码、
-// 按源取明文、读不懂的文件挪开。
+// 按源取明文、读不懂的文件挪开（挪不开、读不了的不盖掉）、写失败不留临时文件。
 import assert from 'node:assert/strict'
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto'
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -19,6 +20,7 @@ import {
   createPasswordStore,
   type PasswordCipher,
   PasswordEncryptionUnavailable,
+  PasswordFileUnavailable,
   passwordsFile,
 } from '../passwords/store.mjs'
 import type { ImportedPassword } from '../passwords/types.mjs'
@@ -238,6 +240,68 @@ test('读不懂的文件挪到一边，不在上面接着写', async () => {
     assert.ok(names.some((name) => name.startsWith('passwords.json.broken-')))
     assert.equal(store.list().length, 1)
   } finally {
+    done()
+  }
+})
+
+test('读不了（权限）不当损坏：不挪、不写，抛给人看的错误，能读了再接着用', async () => {
+  const { dir, file, done } = setup()
+  try {
+    const store = createPasswordStore({ file, cipher: testCipher() })
+    mkdirSync(join(dir, 'browser'))
+    writeFileSync(file, '{"version":1,"entries":[]}\n')
+    chmodSync(file, 0o000)
+    assert.throws(() => store.list(), PasswordFileUnavailable)
+    await assert.rejects(store.importMany([item()], 'chrome:Default'), PasswordFileUnavailable)
+    // 只读的地方当没有，不抛
+    assert.deepEqual(store.candidates('https://accounts.example.com'), [])
+    assert.equal(store.isNever('https://accounts.example.com'), false)
+    assert.deepEqual(readdirSync(join(dir, 'browser')), ['passwords.json'])
+    chmodSync(file, 0o600)
+    assert.deepEqual(store.list(), [])
+    await store.importMany([item()], 'chrome:Default')
+    assert.equal(store.list().length, 1)
+  } finally {
+    chmodSync(join(dir, 'browser'), 0o700)
+    done()
+  }
+})
+
+test('读不懂又挪不开：不把它当空的盖掉，下次再试', async () => {
+  const { dir, file, done } = setup()
+  const folder = join(dir, 'browser')
+  try {
+    const store = createPasswordStore({ file, cipher: testCipher() })
+    mkdirSync(folder)
+    writeFileSync(file, '{oops')
+    chmodSync(folder, 0o500)
+    assert.throws(() => store.list(), PasswordFileUnavailable)
+    await assert.rejects(store.importMany([item()], 'chrome:Default'), PasswordFileUnavailable)
+    assert.equal(readFileSync(file, 'utf8'), '{oops')
+    chmodSync(folder, 0o700)
+    assert.deepEqual(store.list(), [])
+    assert.ok(readdirSync(folder).some((name) => name.startsWith('passwords.json.broken-')))
+  } finally {
+    chmodSync(folder, 0o700)
+    done()
+  }
+})
+
+test('写文件失败：不留临时文件，库里还是原来的', async () => {
+  const { dir, file, store, done } = setup()
+  const folder = join(dir, 'browser')
+  try {
+    await store.importMany([item()], 'chrome:Default')
+    chmodSync(folder, 0o500)
+    const counts = await store.importMany([item({ username: 'bob' })], 'chrome:Default')
+    assert.equal(counts.failed, 1)
+    assert.throws(() => store.removeAll())
+    assert.equal(store.list().length, 1)
+    chmodSync(folder, 0o700)
+    assert.deepEqual(readdirSync(folder), ['passwords.json'])
+    assert.equal(JSON.parse(readFileSync(file, 'utf8')).entries.length, 1)
+  } finally {
+    chmodSync(folder, 0o700)
     done()
   }
 })

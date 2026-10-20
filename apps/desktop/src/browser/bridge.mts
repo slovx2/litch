@@ -72,7 +72,13 @@ export function browserBridge() {
       never: () => ipcRenderer.invoke(PASSWORDS_NEVER),
       allowSite: (origin: string) => ipcRenderer.invoke(PASSWORDS_ALLOW_SITE, origin),
       prompts: () => ipcRenderer.invoke(PASSWORDS_PROMPTS),
-      answer: (id: string, answer: string) => ipcRenderer.invoke(PASSWORDS_ANSWER, { id, answer }),
+      // 写库失败时主进程回 { error }：在这里抛成错误，界面按“没做成”说
+      answer: async (id: string, answer: string) => {
+        const reply: unknown = await ipcRenderer.invoke(PASSWORDS_ANSWER, { id, answer })
+        const { error, code } = (reply ?? {}) as { error?: unknown; code?: unknown }
+        if (typeof error === 'string') throw Object.assign(new Error(error), { code })
+        return reply === true
+      },
       onPrompts: (handler: (prompts: unknown) => void) =>
         listen(PASSWORDS_PROMPTS_CHANGED, handler),
     },

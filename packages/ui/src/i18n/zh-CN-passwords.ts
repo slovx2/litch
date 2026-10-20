@@ -25,13 +25,16 @@ export const zhPasswords = {
   'settings.browser.never.empty': '没有从不保存密码的网站。',
   'settings.browser.never.at': '{day} 加入',
   'browser.save.ask': '要保存 {site} 上 {user} 的密码吗？',
-  'browser.save.askNoUser': '要保存 {site} 的密码吗？',
   'browser.save.update': '要更新 {site} 上 {user} 的密码吗？',
-  'browser.save.updateNoUser': '要更新 {site} 的密码吗？',
   'browser.save.yes': '保存',
   'browser.save.no': '不保存',
   'browser.save.updateYes': '更新',
   'browser.save.updateNo': '不更新',
   'browser.save.never': '这个网站永不',
   'browser.save.more': '还有 {count} 条',
+  'browser.save.unavailable':
+    '在 {site} 上登录的 {user} 没法保存：这台电脑的系统钥匙串现在用不了，Litch 不存没加密的密码。',
+  'browser.save.close': '知道了',
+  'browser.save.failed': '没存上：{reason}',
+  'browser.save.fileFailed': '没存上：密码库文件现在读写不了，提示先留着，可以再试。',
 } satisfies Record<string, Entry>

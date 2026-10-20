@@ -70,7 +70,16 @@ export function installPasswords(options: {
     if (!options.fromUi(event)) return false
     const { id, answer } = (payload ?? {}) as { id?: unknown; answer?: unknown }
     if (typeof id !== 'string' || !ANSWERS.includes(answer as PromptAnswer)) return false
-    return prompts.answer(id, answer as PromptAnswer)
+    // 写库失败：提示留着，把原因（给人看的，没有明文）交回界面，桥那头抛成错误
+    try {
+      return prompts.answer(id, answer as PromptAnswer)
+    } catch (error) {
+      const code = (error as { code?: unknown } | null)?.code
+      return {
+        error: error instanceof Error ? error.message : String(error),
+        ...(typeof code === 'string' ? { code } : {}),
+      }
+    }
   })
   return store
 }

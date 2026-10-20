@@ -22,6 +22,12 @@
   color: var(--ink-2);
 }
 
+.bw-save-err {
+  display: block;
+  margin-top: 2px;
+  color: var(--err);
+}
+
 .bw-save-acts {
   display: flex;
   flex-wrap: wrap;

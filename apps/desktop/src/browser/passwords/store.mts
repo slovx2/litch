@@ -5,7 +5,7 @@
 // 这里不引 electron：加密器从外面给，单元测试用假的（test/passwords-store.test.mts）。
 // 明文只在 importMany 的参数和 reveal 的返回值里经过，不进日志、不进异常信息、不留在这个模块里。
 import { randomUUID } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { normalizeOrigin } from './origin.mjs'
 import type { ImportCounts, ImportedPassword, PasswordSink } from './types.mjs'
@@ -86,6 +86,18 @@ export class PasswordEncryptionUnavailable extends Error {
   }
 }
 
+/**
+ * 密码库文件这次用不了：读不了（权限、磁盘出错），或者读不懂又挪不开。这时不读也不写（免得盖掉原文件），
+ * 下次再用到时重试。message 是给人看的说明，不含明文
+ */
+export class PasswordFileUnavailable extends Error {
+  readonly code = 'file-unavailable'
+  constructor(reason: string) {
+    super(`The saved passwords file could not be used (${reason}), so nothing was changed.`)
+    this.name = 'PasswordFileUnavailable'
+  }
+}
+
 export interface PasswordStore extends PasswordSink {
   /** 设置页的列表 */
   list(): SavedPassword[]
@@ -104,6 +116,8 @@ export interface PasswordStore extends PasswordSink {
   onChange(listener: () => void): () => void
   /** 登录时提交的这一组和库里比（要解开同源同用户名的那一条） */
   compare(origin: string, username: string, password: string): PasswordMatch
+  /** 这个源上密码是这个的那一条的用户名（改密码表单只给了当前密码时用）；没有、不止一条都回 null */
+  usernameFor(origin: string, password: string): string | null
   /** 加密一个密码给保存提示暂存；加密器不可用回 null */
   seal(password: string): string | null
   /** 用户在保存提示上点了保存：新的加一条，已有同源同用户名的换掉密码 */
@@ -166,15 +180,32 @@ export function createPasswordStore(options: {
   let entries: StoredEntry[] | null = null
   let never: NeverSite[] = []
 
+  /**
+   * 读进来。没有文件就是空的；读不了（权限、磁盘出错）不当损坏，抛 PasswordFileUnavailable、下次再读；
+   * 读得了但读不懂的挪到一边留着再从空的开始，挪不开也抛（不在它上面接着写，免得把还能救的东西盖掉）
+   */
   const load = (): StoredEntry[] => {
     if (entries) return entries
-    if (!existsSync(file)) {
-      entries = []
-      return entries
-    }
+    let text: string
     try {
-      const parsed = JSON.parse(readFileSync(file, 'utf8')) as Partial<StoredFile>
-      if (!Array.isArray(parsed.entries)) throw new Error('no entries')
+      text = readFileSync(file, 'utf8')
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        entries = []
+        never = []
+        return entries
+      }
+      const code = (error as NodeJS.ErrnoException).code ?? 'read error'
+      log(`passwords file could not be read: ${code}`)
+      throw new PasswordFileUnavailable(code)
+    }
+    let parsed: Partial<StoredFile> | null = null
+    try {
+      parsed = JSON.parse(text) as Partial<StoredFile>
+    } catch {
+      parsed = null
+    }
+    if (parsed && Array.isArray(parsed.entries)) {
       entries = parsed.entries.filter(isEntry)
       never = Array.isArray(parsed.never)
         ? parsed.never.filter(
@@ -182,26 +213,41 @@ export function createPasswordStore(options: {
               !!one && typeof one.origin === 'string' && typeof one.at === 'number',
           )
         : []
-    } catch {
-      // 读不懂的文件挪到一边留着，不在它上面接着写（免得把还能救的东西盖掉）
-      const aside = `${file}.broken-${now()}`
-      try {
-        renameSync(file, aside)
-        log(`passwords file was unreadable and moved to ${aside}`)
-      } catch {
-        log('passwords file was unreadable')
-      }
-      entries = []
+      return entries
     }
+    const aside = `${file}.broken-${now()}`
+    try {
+      renameSync(file, aside)
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code ?? 'rename error'
+      log(`passwords file was unreadable and could not be moved aside: ${code}`)
+      throw new PasswordFileUnavailable(`unreadable, ${code}`)
+    }
+    log(`passwords file was unreadable and moved to ${aside}`)
+    entries = []
+    never = []
     return entries
+  }
+  /** 只读的地方用：文件用不了就当没有（自动填充、保存提示里不该因为它出错） */
+  const peek = (): StoredEntry[] => {
+    try {
+      return load()
+    } catch {
+      return []
+    }
   }
 
   const save = (next: StoredEntry[], nextNever: NeverSite[] = never) => {
     mkdirSync(dirname(file), { recursive: true, mode: 0o700 })
     const temp = `${file}.${process.pid}.tmp`
     const body: StoredFile = { version: 1, entries: next, never: nextNever }
-    writeFileSync(temp, `${JSON.stringify(body, null, 2)}\n`, { mode: 0o600 })
-    renameSync(temp, file)
+    try {
+      writeFileSync(temp, `${JSON.stringify(body, null, 2)}\n`, { mode: 0o600 })
+      renameSync(temp, file)
+    } catch (error) {
+      rmSync(temp, { force: true })
+      throw error
+    }
     entries = next
     never = nextNever
     for (const listener of listeners) listener()
@@ -308,13 +354,13 @@ export function createPasswordStore(options: {
       return count
     },
     candidates(origin) {
-      return load()
+      return peek()
         .filter((entry) => entry.origin === origin)
         .sort((a, b) => (b.lastUsedAt ?? b.createdAt) - (a.lastUsedAt ?? a.createdAt))
         .map((entry) => ({ id: entry.id, username: entry.username }))
     },
     reveal(id, origin) {
-      const current = load()
+      const current = peek()
       const entry = current.find((one) => one.id === id)
       if (!entry || entry.origin !== origin) return null
       let password: string
@@ -336,7 +382,7 @@ export function createPasswordStore(options: {
       return () => listeners.delete(listener)
     },
     compare(origin, username, password) {
-      const entry = load().find((one) => one.origin === origin && one.username === username)
+      const entry = peek().find((one) => one.origin === origin && one.username === username)
       if (!entry) return 'none'
       try {
         return cipher.decrypt(entry.password) === password ? 'same' : 'different'
@@ -344,6 +390,17 @@ export function createPasswordStore(options: {
         // 解不开的旧条目：当作不一样，让用户决定要不要换掉
         return 'different'
       }
+    },
+    usernameFor(origin, password) {
+      const hits = peek().filter((one) => {
+        if (one.origin !== origin) return false
+        try {
+          return cipher.decrypt(one.password) === password
+        } catch {
+          return false
+        }
+      })
+      return hits.length === 1 && hits[0] ? hits[0].username : null
     },
     seal(password) {
       if (!cipher.available()) return null
@@ -381,7 +438,7 @@ export function createPasswordStore(options: {
       return [...never]
     },
     isNever(origin) {
-      load()
+      peek()
       return never.some((one) => one.origin === origin)
     },
     addNever(origin) {
