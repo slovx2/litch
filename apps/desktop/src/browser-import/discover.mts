@@ -162,7 +162,7 @@ export function firefoxProfiles(root: string): FoundProfile[] {
   for (const [name, values] of ini) {
     if (name.startsWith('Install') && values.Default) installDefaults.add(values.Default)
   }
-  const profiles: FoundProfile[] = []
+  const profiles: (FoundProfile & { marked: boolean })[] = []
   const seen = new Set<string>()
   for (const [name, values] of ini) {
     if (!name.startsWith('Profile') || !values.Path || seen.has(values.Path)) continue
@@ -172,13 +172,20 @@ export function firefoxProfiles(root: string): FoundProfile[] {
     profiles.push({
       id: values.Path,
       name: text(values.Name) ?? values.Path,
-      isDefault:
-        installDefaults.size > 0 ? installDefaults.has(values.Path) : values.Default === '1',
+      isDefault: false,
+      marked: values.Default === '1',
       dir,
       has: hasKinds('firefox', dir),
     })
   }
-  return sortProfiles(profiles)
+  // 只留一个默认：装了几份 Firefox 时各安装的默认里，优先 [Profile…] 也标了 Default=1 的，再按 profiles.ini 里的先后
+  const candidates =
+    installDefaults.size > 0
+      ? profiles.filter((profile) => installDefaults.has(profile.id))
+      : profiles.filter((profile) => profile.marked)
+  const chosen = candidates.find((profile) => profile.marked) ?? candidates[0]
+  if (chosen) chosen.isDefault = true
+  return sortProfiles(profiles.map(({ marked: _marked, ...profile }) => profile))
 }
 
 /** 默认的排最前，其余按名字 */

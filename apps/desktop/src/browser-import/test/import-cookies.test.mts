@@ -52,6 +52,17 @@ test('Cookie 校验：合规的、不合规的、过期的、分区的', () => {
     assert.equal(reason(fields), 'invalid', JSON.stringify(fields))
   }
   assert.equal(reason({ partitionTopSite: 'https://example.com' }), 'partitioned')
+  // __Http- 要 Secure 加 HttpOnly；__Host-Http- 再加 __Host- 的要求
+  assert.equal(reason({ name: '__Http-id', httpOnly: true }), 'ok')
+  assert.equal(reason({ name: '__http-id' }), 'invalid')
+  assert.equal(reason({ name: '__Http-id', httpOnly: true, secure: false }), 'invalid')
+  assert.equal(reason({ name: '__Host-Http-id', httpOnly: true }), 'ok')
+  assert.equal(reason({ name: '__Host-Http-id' }), 'invalid')
+  assert.equal(reason({ name: '__Host-Http-id', httpOnly: true, host: '.example.com' }), 'invalid')
+  // 不合约的条目只算这一条无效，不崩
+  assert.equal(checkCookie(null as never, NOW).ok, false)
+  assert.equal(reason({ host: 5 as never }), 'invalid')
+  assert.equal(reason({ name: undefined as never }), 'invalid')
 })
 
 test('Cookie 写入的参数：网址、domain、过期时间', () => {
@@ -86,7 +97,14 @@ test('Cookie 写入的参数：网址、domain、过期时间', () => {
 test('只导这些网站：规范化与匹配', () => {
   assert.equal(normalizeDomains(undefined), undefined)
   assert.equal(normalizeDomains([]), undefined)
-  assert.equal(normalizeDomains([' ', '..', 'a b']), undefined)
+  // 给了却一个都认不出：null（这一类要拒，绝不当成全导）
+  assert.equal(normalizeDomains([' ', '..', 'a b', '[::1]']), null)
+  assert.deepEqual(normalizeDomains(['bad one', 'ok.example']), ['ok.example'])
+  // 国际化域名转成 punycode；*. 开头的当成那个域名
+  assert.deepEqual(normalizeDomains(['例子.测试', '*.Example.com']), [
+    'xn--fsqu00a.xn--0zwm56d',
+    'example.com',
+  ])
   assert.deepEqual(
     normalizeDomains(['.Example.com.', 'https://Docs.Example.org:8443/x?y', 'example.com']),
     ['example.com', 'docs.example.org'],

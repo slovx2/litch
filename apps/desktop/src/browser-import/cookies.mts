@@ -56,8 +56,10 @@ export function existingKey(cookie: ExistingCookie): string {
 
 /** 校验一条，合规的换成写入的参数。nowSec：现在，Unix 秒 */
 export function checkCookie(cookie: ImportedCookie, nowSec: number): CookieCheck {
-  if (cookie.partitionTopSite) return { ok: false, reason: 'partitioned' }
   const invalid = { ok: false, reason: 'invalid' } as const
+  // 读取器交来的不合约（不是对象）也只算这一条无效
+  if (!cookie || typeof cookie !== 'object') return invalid
+  if (cookie.partitionTopSite) return { ok: false, reason: 'partitioned' }
   const { name, value } = cookie
   if (typeof name !== 'string' || typeof value !== 'string') return invalid
   if (CTL_OR_SEMI.test(name) || name.includes('=') || CTL_OR_SEMI.test(value)) return invalid
@@ -73,9 +75,14 @@ export function checkCookie(cookie: ImportedCookie, nowSec: number): CookieCheck
   if (!path.startsWith('/') || path.length > MAX_PATH || CTL_OR_SEMI.test(path)) return invalid
 
   const secure = cookie.secure === true
+  const httpOnly = cookie.httpOnly === true
+  // 前缀规则（照 Chromium，不分大小写）：__Secure- 要 Secure；__Host- 还要只给这台主机、路径是 /；
+  // __Http- 要 Secure 加 HttpOnly；__Host-Http- 是两者都要
   const lower = name.toLowerCase()
   if (lower.startsWith('__secure-') && !secure) return invalid
   if (lower.startsWith('__host-') && !(secure && hostOnly && path === '/')) return invalid
+  if (lower.startsWith('__http-') && !(secure && httpOnly)) return invalid
+  if (lower.startsWith('__host-http-') && !httpOnly) return invalid
   // SameSite=None 必须带 Secure，否则 Chromium 不收
   if (cookie.sameSite === 'no_restriction' && !secure) return invalid
   const sameSite = ['unspecified', 'no_restriction', 'lax', 'strict'].includes(cookie.sameSite)
@@ -93,7 +100,7 @@ export function checkCookie(cookie: ImportedCookie, nowSec: number): CookieCheck
     value,
     path,
     secure,
-    httpOnly: cookie.httpOnly === true,
+    httpOnly,
     sameSite,
   }
   // 会话 Cookie 不给过期时间：照样导，重启后丢，和来源一致
@@ -107,6 +114,8 @@ export interface CookieWriteResult extends ImportCounts {
   /** 其中因为是分区 Cookie 跳过的（算在 skippedInvalid 里） */
   partitioned: number
   cancelled: boolean
+  /** 写进去了，但落盘失败（Electron 之后还会自己落盘，这次重启前退出可能丢） */
+  flushFailed: boolean
 }
 
 /** 逐条写入：已有的不覆盖；写的途中取消就停，已写的留着（照样落盘） */
@@ -122,6 +131,7 @@ export async function writeCookies(
     failed: 0,
     partitioned: 0,
     cancelled: false,
+    flushFailed: false,
   }
   const nowSec = options.now / 1000
   const existing = new Set((await jar.list()).map(existingKey))
@@ -151,7 +161,14 @@ export async function writeCookies(
       }
     }
   } finally {
-    if (result.imported > 0) await jar.flush()
+    if (result.imported > 0) {
+      try {
+        await jar.flush()
+      } catch {
+        // 已写的照样算数，只在结果里说一句
+        result.flushFailed = true
+      }
+    }
   }
   return result
 }

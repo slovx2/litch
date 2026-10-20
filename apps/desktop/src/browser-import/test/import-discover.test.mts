@@ -1,12 +1,27 @@
 // 发现：Mac、Windows 两套路径（假的主目录、LOCALAPPDATA、APPDATA），资料名和默认资料、各类有没有、拼不出根目录外面的路径。
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { firefoxRoots, sampleEnv } from '../browsers.mjs'
-import { discoverSources, findProfile } from '../discover.mjs'
-import { sampleChromiumRoot, writeChromium, writeFirefox, writeSample } from './sample.mjs'
+import { discoverSources, findProfile, firefoxProfiles } from '../discover.mjs'
+import {
+  ensureSample,
+  SAMPLE_MARKER,
+  sampleChromiumRoot,
+  writeChromium,
+  writeFirefox,
+  writeSample,
+} from './sample.mjs'
 
 const scratch = (t: { after(fn: () => void): void }) => {
   const dir = mkdtempSync(join(tmpdir(), 'litch-import-discover-'))
@@ -146,4 +161,55 @@ test('导入前按浏览器和资料标识重新找；资料没了就找不到',
   assert.equal(findProfile(env, 'arc', 'Default'), null)
   rmSync(join(sampleChromiumRoot(env, 'chrome'), 'Profile 1'), { recursive: true })
   assert.equal(findProfile(env, 'chrome', 'Profile 1'), null)
+})
+
+test('Firefox 装了几份时只留一个默认资料', (t) => {
+  const dir = scratch(t)
+  for (const name of ['a', 'b', 'c']) mkdirSync(join(dir, 'Profiles', name), { recursive: true })
+  const write = (marked?: string) =>
+    writeFileSync(
+      join(dir, 'profiles.ini'),
+      [
+        '[Install1111]',
+        'Default=Profiles/a',
+        '[Install2222]',
+        'Default=Profiles/b',
+        ...['a', 'b', 'c'].flatMap((name) => [
+          `[Profile-${name}]`,
+          `Name=${name}`,
+          'IsRelative=1',
+          `Path=Profiles/${name}`,
+          ...(name === marked ? ['Default=1'] : []),
+        ]),
+      ].join('\n'),
+    )
+  write()
+  const defaults = (list: ReturnType<typeof firefoxProfiles>) =>
+    list.filter((profile) => profile.isDefault).map((profile) => profile.name)
+  // 按 profiles.ini 里的先后
+  assert.deepEqual(defaults(firefoxProfiles(dir)), ['a'])
+  // [Profile…] 也标了 Default=1 的优先
+  write('b')
+  assert.deepEqual(defaults(firefoxProfiles(dir)), ['b'])
+})
+
+test('样本模式：目录不空又没有样本标记时不写；空目录、不存在的目录、已有样本的照常', (t) => {
+  const dir = scratch(t)
+  const busy = join(dir, 'home')
+  mkdirSync(join(busy, 'Documents'), { recursive: true })
+  assert.throws(() => ensureSample(busy, 'darwin'), /non-empty/)
+  assert.deepEqual(readdirSync(busy), ['Documents'])
+
+  const fresh = join(dir, 'fresh')
+  ensureSample(fresh, 'darwin')
+  assert.ok(existsSync(join(fresh, SAMPLE_MARKER)))
+  const empty = join(dir, 'empty')
+  mkdirSync(empty)
+  ensureSample(empty, 'darwin')
+  assert.ok(existsSync(join(empty, SAMPLE_MARKER)))
+  // 已有样本：原样用，手改的不被覆盖
+  const local = join(sampleChromiumRoot(sampleEnv(fresh, 'darwin'), 'chrome'), 'Local State')
+  writeFileSync(local, '{}')
+  ensureSample(fresh, 'darwin')
+  assert.equal(readFileSync(local, 'utf8'), '{}')
 })
