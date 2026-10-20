@@ -169,15 +169,46 @@ ipcRenderer.on(AUTOFILL_FILL, (_event, message: unknown) => {
   const { username, password } = message as { username?: unknown; password?: unknown }
   if (typeof username !== 'string' || typeof password !== 'string') return
   if (fields.username && usable(fields.username)) fillInput(fields.username, username)
-  if (fields.password && usable(fields.password)) fillInput(fields.password, password)
+  if (fields.password && usable(fields.password)) {
+    fillInput(fields.password, password)
+    // 填进去的是已保存的密码：之后框成了 text（人点了“显示密码”）也照样算密码框
+    wasSecret.add(fields.password)
+  }
 })
 
-// 交还代理之前：清空这个框架里所有密码框（连同开放的影子树里的），清完回一声
+// 交还代理之前要清的框：当过密码框的（人点了“显示密码”之后成了 text 的也算），和人输过字的
+/** 有人（受信任的事件）碰过时是密码框的框 */
+const wasSecret = new WeakSet<HTMLInputElement | HTMLTextAreaElement>()
+/** 框 → 人最近一次往里输字的时间 */
+const typedAt = new WeakMap<HTMLInputElement | HTMLTextAreaElement, number>()
+const SECRET_TOKENS = /(^|\s)(current-password|new-password|one-time-code)(\s|$)/i
+const isSecret = (field: HTMLInputElement | HTMLTextAreaElement) =>
+  field instanceof HTMLInputElement &&
+  (field.type === 'password' || SECRET_TOKENS.test(String(field.autocomplete || '')))
+const noteField = (event: Event, typed: boolean) => {
+  if (!event.isTrusted) return
+  const target = targetOf(event)
+  if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLTextAreaElement)) return
+  if (isSecret(target)) wasSecret.add(target)
+  if (typed) typedAt.set(target, Date.now())
+}
+window.addEventListener('focusin', (event) => noteField(event, false), true)
+window.addEventListener('input', (event) => noteField(event, true), true)
+
+// 交还代理之前：清空这个框架里（连同开放的影子树里）该清的框，清完回一声、报清了几个。
+// since 是交给人的时刻：那之后人输过字的框都清
 ipcRenderer.on(AUTOFILL_CLEAR, (_event, message: unknown) => {
-  const token = (message as { token?: unknown } | null)?.token
+  const { token, since } = (message ?? {}) as { token?: unknown; since?: unknown }
+  const from = typeof since === 'number' ? since : Number.POSITIVE_INFINITY
+  let cleared = 0
   const clear = (root: Document | ShadowRoot) => {
-    for (const input of Array.from(root.querySelectorAll('input'))) {
-      if (input.type === 'password' && input.value !== '') fillInput(input, '')
+    for (const field of Array.from(root.querySelectorAll('input, textarea'))) {
+      if (!(field instanceof HTMLInputElement) && !(field instanceof HTMLTextAreaElement)) continue
+      if (field.value === '') continue
+      if (isSecret(field) || wasSecret.has(field) || (typedAt.get(field) ?? 0) >= from) {
+        fillInput(field, '')
+        cleared++
+      }
     }
     for (const element of Array.from(root.querySelectorAll('*'))) {
       if (element.shadowRoot) clear(element.shadowRoot)
@@ -186,6 +217,6 @@ ipcRenderer.on(AUTOFILL_CLEAR, (_event, message: unknown) => {
   try {
     clear(document)
   } finally {
-    ipcRenderer.send(AUTOFILL_CLEARED, { token })
+    ipcRenderer.send(AUTOFILL_CLEARED, { token, cleared })
   }
 })

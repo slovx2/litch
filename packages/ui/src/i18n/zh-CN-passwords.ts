@@ -35,7 +35,13 @@ export const zhPasswords = {
   'browser.save.unavailable':
     '在 {site} 上登录的 {user} 没法保存：这台电脑的系统钥匙串现在用不了，Litch 不存没加密的密码。',
   'browser.save.close': '知道了',
-  'browser.signIn.title': '代理请你登录 {site}',
+  'browser.signIn.title': '代理请你登录这个网站',
+  'browser.signIn.noOrigin': '（这一页不是网站）',
+  'browser.signIn.claim': '代理说：{site} · {reason}',
+  'browser.signIn.withdrawn': '代理已收回登录请求',
+  'browser.signIn.withdrawnNote':
+    '这个标签已重新打开。别再在这里输入密码：代理接着用这个标签时看得到页面上的内容。',
+  'browser.signIn.dismiss': '知道了',
   'browser.signIn.note':
     '在下面的网页里自己登录（可以用已保存的密码），好了点“完成，交还”。这段时间代理碰不了这个标签；交还前会清空密码框，代理看不到你输入的内容。',
   'browser.signIn.done': '完成，交还',

@@ -44,7 +44,7 @@ const LOGIN_TREE: AxNode[] = [
   { nodeId: '5', parentId: '1', role: { value: 'button' }, name: { value: 'Sign in' } },
 ]
 
-test('认密码框：看 DOM 节点的 type 属性', () => {
+test('认密码框：看 DOM 节点的 type 和 autocomplete', () => {
   assert.equal(isPasswordNode({ nodeName: 'INPUT', attributes: ['type', 'password'] }), true)
   assert.equal(
     isPasswordNode({ nodeName: 'input', attributes: ['id', 'x', 'TYPE', ' Password '] }),
@@ -53,6 +53,16 @@ test('认密码框：看 DOM 节点的 type 属性', () => {
   assert.equal(isPasswordNode({ nodeName: 'INPUT', attributes: ['type', 'text'] }), false)
   assert.equal(isPasswordNode({ nodeName: 'INPUT', attributes: [] }), false)
   assert.equal(isPasswordNode({ nodeName: 'DIV', attributes: ['type', 'password'] }), false)
+  // 人点了“显示密码”成了 text，但 autocomplete 写着是密码、验证码的也算
+  for (const token of ['current-password', 'new-password', 'section-x one-time-code'])
+    assert.equal(
+      isPasswordNode({ nodeName: 'INPUT', attributes: ['type', 'text', 'autocomplete', token] }),
+      true,
+    )
+  assert.equal(
+    isPasswordNode({ nodeName: 'INPUT', attributes: ['type', 'text', 'autocomplete', 'username'] }),
+    false,
+  )
   assert.deepEqual(fieldNodes(LOGIN_TREE), [12, 11])
 })
 
@@ -93,6 +103,9 @@ test('type 之后读框里的值：密码框只回遮罩', () => {
     plain.type = 'email'
     plain.value = 'ann@example.com'
     assert.equal(read.call(plain), 'ann@example.com')
+    // 显示出来的密码（type 成了 text，autocomplete 还写着）照样遮
+    const shown = Object.assign(new FakeInput(), { type: 'text', autocomplete: 'current-password' })
+    assert.equal(read.call(shown), MASKED)
   } finally {
     scope.HTMLInputElement = before
   }

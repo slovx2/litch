@@ -19,6 +19,8 @@ export interface AutofillTab {
 const tabs = new Map<number, AutofillTab>()
 /** 交给人登录、还没交还的代理标签（passwords/handover.mts 管） */
 const handedOver = new Set<number>()
+/** 交给人登录期间网页开的弹窗（开成用户的标签）：开它的标签的 webContents 编号 → 弹窗的标签编号 */
+const popups = new Map<number, Set<string>>()
 
 /**
  * 标签多出来的网页设置。nodeIntegrationInSubFrames 在开了沙箱的视图上只是让预加载也在子框架里跑，
@@ -54,3 +56,21 @@ export function setHandedOver(contentsId: number, on: boolean): void {
 }
 
 export const isHandedOver = (contentsId: number): boolean => handedOver.has(contentsId)
+
+/** 交给人登录的标签开了一个弹窗（electron-host.mts 开成了用户的标签）：记下，交接结束时一并处理 */
+export function notePopup(openerContentsId: number, tabId: string): void {
+  let set = popups.get(openerContentsId)
+  if (!set) popups.set(openerContentsId, (set = new Set()))
+  set.add(tabId)
+}
+
+/** 交接结束：取走这个标签交出去期间开的弹窗 */
+export function takePopups(openerContentsId: number): string[] {
+  const set = popups.get(openerContentsId)
+  popups.delete(openerContentsId)
+  return set ? [...set] : []
+}
+
+/** 这个标签是不是某次交接里开出来的弹窗 */
+export const isHandoverPopup = (tabId: string): boolean =>
+  [...popups.values()].some((set) => set.has(tabId))

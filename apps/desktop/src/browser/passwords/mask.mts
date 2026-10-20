@@ -1,10 +1,18 @@
 // 代理读不到密码框里的值：litch_browser 的读页工具（snapshot 的无障碍树、type 之后回报的框里的值、
 // evaluate 的结果）在交给模型之前经过这里。纯函数，单元测试在 test/passwords-mask.test.mts。
 //
-// 能挡住的：密码框（input type=password）的值不出现在快照里，type 不回报它，evaluate 的结果里原样出现的
+// “密码框”指 type=password 的框，以及 autocomplete 写明 current-password、new-password、one-time-code 的框
+// （人点了“显示密码”之后框成了 text，这类网页多半写着 autocomplete）。
+// 能挡住的：密码框的值不出现在快照里，type 不回报它，evaluate 的结果里原样出现的
 // 密码框的值（含 JSON 转义过的写法）换成遮罩。挡不住的：脚本故意把值变换之后再交回来（编码、拆字）；
 // 但代理的标签从不自动填充，那里密码框里的字只会是有人当场输进去的。
 import type { AxNode } from '../ax.mjs'
+
+/** autocomplete 里有这几个词的框按密码框对待 */
+const SECRET_TOKENS = ['current-password', 'new-password', 'one-time-code']
+
+/** 页面里的脚本用的同一条规则：el 是不是密码框 */
+const SECRET_JS = `((el) => el instanceof HTMLInputElement && (el.type === 'password' || /(^|\\s)(current-password|new-password|one-time-code)(\\s|$)/i.test(String(el.autocomplete || ''))))`
 
 /** 遮住的值显示成这个 */
 export const MASKED = '••••••'
@@ -34,9 +42,11 @@ export function isPasswordNode(node: { nodeName?: string; attributes?: string[] 
   if ((node.nodeName ?? '').toUpperCase() !== 'INPUT') return false
   const attributes = node.attributes ?? []
   for (let i = 0; i + 1 < attributes.length; i += 2) {
-    if ((attributes[i] ?? '').toLowerCase() === 'type') {
-      return (attributes[i + 1] ?? '').trim().toLowerCase() === 'password'
-    }
+    const name = (attributes[i] ?? '').toLowerCase()
+    const value = (attributes[i + 1] ?? '').trim().toLowerCase()
+    if (name === 'type' && value === 'password') return true
+    if (name === 'autocomplete' && value.split(/\s+/).some((one) => SECRET_TOKENS.includes(one)))
+      return true
   }
   return false
 }
@@ -61,7 +71,7 @@ export const COLLECT_PASSWORDS = `(() => {
   const out = []
   const walk = (root) => {
     for (const el of root.querySelectorAll('*')) {
-      if (el instanceof HTMLInputElement && el.type === 'password' && el.value) out.push(el.value)
+      if (${SECRET_JS}(el) && el.value) out.push(el.value)
       if (el.shadowRoot) walk(el.shadowRoot)
       if (el.tagName === 'IFRAME' || el.tagName === 'FRAME') {
         try { if (el.contentDocument) walk(el.contentDocument) } catch {}
@@ -91,6 +101,6 @@ export function redactSecrets(text: string, secrets: readonly unknown[]): string
 
 /** type 之后读框里的值用的函数：密码框只回遮罩 */
 export const READ_FIELD_VALUE = `function () {
-  if (this instanceof HTMLInputElement && this.type === 'password') return this.value ? ${JSON.stringify(MASKED)} : ''
+  if (${SECRET_JS}(this)) return this.value ? ${JSON.stringify(MASKED)} : ''
   return 'value' in this ? String(this.value) : (this.innerText || '')
 }`

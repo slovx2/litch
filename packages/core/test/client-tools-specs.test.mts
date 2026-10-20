@@ -68,3 +68,15 @@ test('litch_computer 的说明按桌面的平台出：Windows 那份也过得了
   })
   assert.equal(other?.description, mac.description)
 })
+
+test('litch_browser 的命名空间说明不超过 1024 个字（codex 的上限；安全规则加句子时最容易超）', () => {
+  const browser = specs.find((spec) => spec.name === CLIENT_TOOL_NAMESPACE.browser)
+  assert.ok(browser)
+  assert.ok(
+    browser.description.length <= 1024,
+    `litch_browser 的说明有 ${browser.description.length} 个字`,
+  )
+  // 要登录就交给人的那一条在里面
+  assert.match(browser.description, /request_sign_in/)
+  assert.ok(browser.tools.some((tool) => tool.name === 'request_sign_in'))
+})

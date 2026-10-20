@@ -78,7 +78,7 @@ export function loginFieldsOf(target: EventTarget | null): LoginFields | null {
  * 填一个框：用原生的 value 写进去，再发 input 和 change，好让网页的框架（React 之类）知道值变了。
  * 隔离环境里拿到的是原生的 setter，网页改过的 value 属性碰不到这里
  */
-export function fillInput(input: HTMLInputElement, value: string): void {
+export function fillInput(input: HTMLInputElement | HTMLTextAreaElement, value: string): void {
   input.value = value
   input.dispatchEvent(new Event('input', { bubbles: true, composed: true }))
   input.dispatchEvent(new Event('change', { bubbles: true }))
