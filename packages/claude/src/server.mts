@@ -3556,7 +3556,7 @@ export class CodexClaudeAppServer {
       (params.approvalPolicy != null ? normalizeApprovalPolicy(params.approvalPolicy) : null) ??
       permissionProfile?.approvalPolicy ??
       thread.approvalPolicy
-    const sandboxMode =
+    let sandboxMode =
       (turnSettings.permissionProfile
         ? profileSandboxMode(turnSettings.permissionProfile.profile)
         : null) ??
@@ -3618,6 +3618,11 @@ export class CodexClaudeAppServer {
     // 追问回合跑在父会话上：系统提示、模型、工具面都与父线程的普通回合一致，
     // 才能命中父会话的提示缓存；子线程只负责展示被恢复的子代理的输出。
     const relay = turnPurpose === 'normal' ? this.subagentRelay(thread) : null
+    // 子代理追问是在父会话的 CLI 里跑的一轮：父会话选着自定义档位时，档位和沙箱策略照父会话现在的
+    const parentSettings = relay ? this.store.threadSettings(relay.parent.id) : null
+    const permissionSettings = parentSettings?.permissionProfile ? parentSettings : turnSettings
+    if (permissionSettings.permissionProfile)
+      sandboxMode = profileSandboxMode(permissionSettings.permissionProfile.profile)
     if (relay) {
       systemPromptAddendum = buildSystemPromptAddendum({
         baseInstructions: relay.parent.baseInstructions,
@@ -3762,11 +3767,12 @@ export class CodexClaudeAppServer {
         outputFormat: claudeOutputFormat(params.outputSchema),
         approvalPolicy,
         sandboxMode,
-        sandboxPolicy: turnSettings.sandboxPolicy ?? defaultSandboxPolicy(sandboxMode, thread.cwd),
-        ...(turnSettings.permissionProfile
+        sandboxPolicy:
+          permissionSettings.sandboxPolicy ?? defaultSandboxPolicy(sandboxMode, thread.cwd),
+        ...(permissionSettings.permissionProfile
           ? {
               fileSystem: compileFileSystemRules(
-                turnSettings.permissionProfile,
+                permissionSettings.permissionProfile,
                 relay ? relay.parent.cwd : stringOr(params.cwd, thread.cwd),
               ),
             }
@@ -4081,6 +4087,14 @@ export class CodexClaudeAppServer {
               codexSessionId: null,
             }
             this.store.upsertThread(childThread)
+            // 子代理在父会话的 CLI 里跑，权限档就是父会话的：快照跟着记到子线程上（报给客户端的也一致）
+            const parentProfile = this.store.threadSettings(thread.id)
+            if (parentProfile.permissionProfile) {
+              const childSettings = this.store.threadSettings(childThreadId)
+              childSettings.permissionProfile = parentProfile.permissionProfile
+              if (parentProfile.sandboxPolicy) childSettings.sandboxPolicy = parentProfile.sandboxPolicy
+              this.store.saveThreadSettings(childThreadId, childSettings)
+            }
             // Child notifications must follow the current parent peer. This
             // matters after unix-daemon reconnects, when the old peer is gone
             // before the child publishes its response.

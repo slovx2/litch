@@ -176,6 +176,65 @@ test('PROFILE-PROTO-003：没给 -c 时与原来一样，自定义档位名照�
   )
 })
 
+// 子代理追问是在父会话的 CLI 里跑的一轮：禁读规则必须照父会话的档位，不能按子线程自己的空设置退回旧沙箱
+test('PROFILE-PROTO-005：子代理追问回合带着父会话的档位和禁读', async () => {
+  await withProfiles('profile-subagent', saasOverrides, async (stage, root) => {
+    const { own } = layout(root)
+    const client = await stage.connect('client')
+    const started = await client.request('thread/start', { cwd: own, permissions: 'saas' })
+    stage.script = async (_context, handlers) => {
+      await handlers.onEvent({ type: 'session', claudeSessionId: 'parent-session' })
+      await handlers.onEvent({
+        type: 'tool_use',
+        toolUseId: 'task-1',
+        toolName: 'Task',
+        input: { description: '查一查', prompt: 'investigate' },
+      })
+      await new Promise((resolve) => setTimeout(resolve, 30))
+      await handlers.onEvent({
+        type: 'tool_result',
+        toolUseId: 'task-1',
+        content: "查完了\nagentId: deadbeefcafef00d (use SendMessage with to: 'deadbeefcafef00d')",
+      })
+      await handlers.onEvent({ type: 'completed', success: true, result: '汇总' })
+    }
+    const { turn } = await client.request('turn/start', {
+      threadId: started.thread.id,
+      input: text('派一个子代理'),
+    })
+    assert.equal((await client.completed(turn.id)).status, 'completed')
+    const child = client.trace.find(
+      (message) =>
+        message.method === 'thread/started' && message.params.thread.threadSource === 'subagent',
+    )?.params.thread
+    assert.ok(child, '子线程已建')
+    const resumed = await client.request('thread/resume', { threadId: child.id })
+    assert.equal(resumed.permissions, 'saas', '子线程报的档位与父会话一致')
+    // 追问回合要真的经 SendMessage 转交出去才算完成
+    let context: RuntimeTurnContext | undefined
+    stage.script = async (captured, handlers) => {
+      context = captured
+      await handlers.onEvent({
+        type: 'tool_use',
+        toolUseId: 'send-1',
+        toolName: 'SendMessage',
+        input: { to: 'deadbeefcafef00d', message: '再查一下' },
+      })
+      await handlers.onEvent({ type: 'tool_result', toolUseId: 'send-1', content: '已送达' })
+      await handlers.onEvent({ type: 'completed', success: true, result: '好' })
+    }
+    const relayed = await client.request('turn/start', { threadId: child.id, input: text('再查一下') })
+    assert.equal((await client.completed(relayed.turn.id)).status, 'completed')
+    assert.ok(context?.subagentRelay, '这是一轮追问')
+    assert.equal(context.sandboxMode, 'workspace-write')
+    assert.ok(context.fileSystem)
+    assert.match(
+      String(deniedTool(context, 'Read', { file_path: join(root, 'ws/B/secret') })),
+      /禁止读取/,
+    )
+  })
+})
+
 // 起一个真的适配器进程（模拟运行时），命令行带 -c，读一次 config/read
 async function adapterWith(
   args: string[],
