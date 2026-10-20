@@ -6,6 +6,7 @@ import { createContext, useContext } from 'react'
 import { type Lang, type MessageKey, translate } from '../../../../packages/ui/src/i18n/index.ts'
 import type { Args, Entry } from '../../../../packages/ui/src/i18n/types.ts'
 import * as app from './messages/app'
+import * as comments from './messages/comments'
 import * as compose from './messages/compose'
 import * as detail from './messages/detail'
 import * as devices from './messages/devices'
@@ -28,6 +29,7 @@ const zhCN = {
   ...sessions.zhCN,
   ...detail.zhCN,
   ...compose.zhCN,
+  ...comments.zhCN,
   ...tools.zhCN,
   ...tasks.zhCN,
   ...update.zhCN,
@@ -42,6 +44,7 @@ const en: Record<MobileKey, Entry> = {
   ...sessions.en,
   ...detail.en,
   ...compose.en,
+  ...comments.en,
   ...tools.en,
   ...tasks.en,
   ...update.en,

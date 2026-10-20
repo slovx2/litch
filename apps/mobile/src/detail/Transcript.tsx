@@ -36,6 +36,7 @@ import {
   TodoCell,
   UserCell,
 } from './cells'
+import { useCommentJump } from './comments/context'
 import { type TranscriptActions, TranscriptContext, useFileScope } from './context'
 import { isWebUrl, parseFileHref } from './links'
 import { EventCell } from './proposals/EventCell'
@@ -215,6 +216,7 @@ export function Transcript({ store, bottomOffset, markers }: Props) {
   const [pinned, setPinned] = useState(true)
   const actions = useActions(store)
   useReveal(store, listRef, snapshot.rows, limit, setLimit, actions.say)
+  useCommentJump(listRef, snapshot.rows, limit, setLimit)
   const renderItem = useCallback<ListRenderItem<Row>>(({ item }) => renderRow(item), [])
   const ScrollComponent = useMemo(
     () =>

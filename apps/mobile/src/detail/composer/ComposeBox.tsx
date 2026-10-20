@@ -1,30 +1,46 @@
 // 输入框那一块：要带的图片、多行输入框、加图片和发送（排队、停止）两个按钮，底下一排设置条（由外面给）。
 // 会话详情和新建会话页共用；发去哪、发成功没有由外面定，这里只管写、清空、没发成时还回来。
 // 草稿按会话记（drafts.ts）：文字落盘，图片只在内存里。回车在手机上是换行，发送只靠按钮。
-import type { ImageAttachment } from '@litch/core'
-import { type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from 'react'
+// 选中回答加的评论也是草稿的一部分（落盘），一条一片排在最上面；只有评论、没打字也能发。
+import { type CommentExtra, type ImageAttachment, MAX_COMMENTS } from '@litch/core'
+import {
+  type ReactNode,
+  type RefObject,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react'
 import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { whyNot } from '../../../../../packages/ui/src/app/errors.ts'
 import { useT } from '../../ui/i18n'
 import { useTheme } from '../../ui/theme'
+import { CommentChips } from '../comments/CommentChips'
 import { colors } from '../theme'
 import {
   dropDraft,
   flushDrafts,
   loadDraft,
+  loadDraftComments,
   loadDraftImages,
   saveDraft,
+  saveDraftComments,
   saveDraftImages,
+  subscribeDraftComments,
 } from './drafts'
 import { MAX_IMAGE_MB, MAX_IMAGES, pickImages, REFUSAL_TEXT } from './images'
 
 export interface Draft {
   text: string
   images: ImageAttachment[]
+  /** 选中回答加的评论，按加的先后 */
+  comments: CommentExtra[]
   setText(text: string): void
   setImages(update: (current: ImageAttachment[]) => ImageAttachment[]): void
-  /** 把一段话和几张图放回输入框（没发出去的、从队列里拿回来改的），接在现有的后面 */
-  refill(text: string, images: ImageAttachment[]): void
+  setComments(list: CommentExtra[]): void
+  /** 把一段话、几张图和评论放回输入框（没发出去的、从队列里拿回来改的），接在现有的后面 */
+  refill(text: string, images: ImageAttachment[], comments?: CommentExtra[]): void
   clear(): void
 }
 
@@ -44,6 +60,8 @@ export function useDraft(key: string): Draft {
   useEffect(() => {
     saveDraftImages(key, current.images)
   }, [key, current.images])
+  // 评论另有一份，对话区的全文页也会往里加：订阅着
+  const comments = useSyncExternalStore(subscribeDraftComments, () => loadDraftComments(key))
   // 离开页面时把攒着的草稿写进文件
   useEffect(() => () => flushDrafts(), [])
   const setText = useCallback((text: string) => setState((s) => ({ ...s, text })), [])
@@ -52,18 +70,33 @@ export function useDraft(key: string): Draft {
       setState((s) => ({ ...s, images: update(s.images) })),
     [],
   )
-  const refill = useCallback((text: string, images: ImageAttachment[]) => {
-    setState((s) => ({
-      ...s,
-      text: s.text && text ? `${text}\n${s.text}` : text || s.text,
-      images: [...images, ...s.images].slice(0, MAX_IMAGES),
-    }))
-  }, [])
+  const setComments = useCallback((list: CommentExtra[]) => saveDraftComments(key, list), [key])
+  const refill = useCallback(
+    (text: string, images: ImageAttachment[], back: CommentExtra[] = []) => {
+      if (back.length)
+        saveDraftComments(key, [...back, ...loadDraftComments(key)].slice(0, MAX_COMMENTS))
+      setState((s) => ({
+        ...s,
+        text: s.text && text ? `${text}\n${s.text}` : text || s.text,
+        images: [...images, ...s.images].slice(0, MAX_IMAGES),
+      }))
+    },
+    [key],
+  )
   const clear = useCallback(() => {
     dropDraft(key)
     setState((s) => ({ ...s, text: '', images: [] }))
   }, [key])
-  return { text: current.text, images: current.images, setText, setImages, refill, clear }
+  return {
+    text: current.text,
+    images: current.images,
+    comments,
+    setText,
+    setImages,
+    setComments,
+    refill,
+    clear,
+  }
 }
 
 export function ComposeBox({
@@ -98,8 +131,8 @@ export function ComposeBox({
   /** 输入框下面一排：设置条 */
   bar?: ReactNode
   markers?: boolean
-  /** 发出去。出错时把文字、图片还回输入框，并给外面一个说法 */
-  onSend(text: string, images: ImageAttachment[]): Promise<void>
+  /** 发出去。出错时把文字、图片、评论还回输入框，并给外面一个说法 */
+  onSend(text: string, images: ImageAttachment[], comments: CommentExtra[]): Promise<void>
   onStop?(): void
   onError(message: string | null): void
   testID?: string
@@ -110,7 +143,8 @@ export function ComposeBox({
   const [sending, setSending] = useState(false)
   const own = useRef<TextInput>(null)
   const input = inputRef ?? own
-  const filled = draft.text.trim().length > 0 || draft.images.length > 0
+  const filled =
+    draft.text.trim().length > 0 || draft.images.length > 0 || draft.comments.length > 0
   const mode = filled ? (running ? 'queue' : 'send') : running && onStop ? 'stop' : 'send'
 
   const send = () => {
@@ -120,7 +154,8 @@ export function ComposeBox({
     }
     const text = draft.text.trim()
     const images = draft.images
-    if ((!text && images.length === 0) || blocked || sending) return
+    const comments = draft.comments
+    if ((!text && images.length === 0 && comments.length === 0) || blocked || sending) return
     if (images.length > 0 && imagesOff) {
       onError(imagesOff)
       return
@@ -129,9 +164,9 @@ export function ComposeBox({
     draft.clear()
     onError(null)
     setSending(true)
-    onSend(text, images)
+    onSend(text, images, comments)
       .catch((reason: unknown) => {
-        draft.refill(text, images)
+        draft.refill(text, images, comments)
         onError(t('composer.failed', { reason: whyNot(reason, t) }))
       })
       .finally(() => setSending(false))
@@ -169,6 +204,7 @@ export function ComposeBox({
     >
       {markers ? <View style={styles.mark} /> : null}
       {top}
+      <CommentChips comments={draft.comments} onChange={draft.setComments} testID={testID} />
       {note ? (
         <Text
           testID={`${testID}-note`}

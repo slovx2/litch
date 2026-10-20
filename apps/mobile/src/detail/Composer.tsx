@@ -2,7 +2,14 @@
 // 一律从会话存储的 meta 订阅来（src/core/session-store.ts），不另开会话订阅。
 // 发消息走 session.send：没有回合在跑就开一个，在跑就由核心排队；排着的可以现在就插进去（steer）、拿回来改、拿掉。
 // 回合在跑而输入框是空的，按钮是“停止”（session.interrupt）。
-import { type DeviceView, type ImageAttachment, keys, type QueuedMessage } from '@litch/core'
+import {
+  type CommentExtra,
+  type DeviceView,
+  type ImageAttachment,
+  keys,
+  type MessageExtra,
+  type QueuedMessage,
+} from '@litch/core'
 import { type RefObject, useEffect, useState, useSyncExternalStore } from 'react'
 import type { TextInput } from 'react-native'
 import { whyNot } from '../../../../packages/ui/src/app/errors.ts'
@@ -37,7 +44,10 @@ export function Composer({
   const { refill } = draft
   // 对话区回退了一个回合：那条消息放回输入框（src/detail/refill.ts）
   useEffect(
-    () => onRefill(deviceId, sessionId, (message) => refill(message.text, message.images)),
+    () =>
+      onRefill(deviceId, sessionId, (message) =>
+        refill(message.text, message.images, message.comments),
+      ),
     [deviceId, sessionId, refill],
   )
 
@@ -66,8 +76,8 @@ export function Composer({
         ? t('composer.image.unsupported')
         : null
 
-  const send = async (text: string, images: ImageAttachment[]) => {
-    await channel.command('session.send', { deviceId, sessionId, text, images })
+  const send = async (text: string, images: ImageAttachment[], comments: CommentExtra[]) => {
+    await channel.command('session.send', { deviceId, sessionId, text, images, extras: comments })
   }
   const stop = () => {
     setError(null)
@@ -89,7 +99,7 @@ export function Composer({
     channel
       .command('session.unqueue', { deviceId, sessionId, messageId: message.id })
       .catch(() => {})
-    if (edit) draft.refill(message.text, message.images)
+    if (edit) draft.refill(message.text, message.images, commentsIn(message.extras))
   }
 
   return (
@@ -136,3 +146,6 @@ export function Composer({
     />
   )
 }
+
+const commentsIn = (extras: MessageExtra[]): CommentExtra[] =>
+  extras.filter((extra): extra is CommentExtra => extra.kind === 'comment')

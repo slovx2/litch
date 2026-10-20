@@ -20,6 +20,10 @@ import { Confirm, Prompt, Sheet } from '../ui/kit/overlays'
 import { Screen } from '../ui/kit/Screen'
 import { useTheme } from '../ui/theme'
 import { Composer } from './Composer'
+import { CommentOverlays } from './comments/CommentOverlays'
+import { CommentsContext } from './comments/context'
+import { CommentsHub } from './comments/hub'
+import { draftKey } from './composer/drafts'
 import { RequestSlot } from './requests/RequestSlot'
 import { Transcript } from './Transcript'
 
@@ -42,6 +46,11 @@ export function DetailScreen({ route, navigation }: Props) {
     [channel, deviceId, sessionId],
   )
   useEffect(() => () => releaseStore(store), [store])
+  // 选中回答加评论：对话区、菜单、输入框上的评论片共用一个（comments/hub.ts）
+  const comments = useMemo(
+    () => new CommentsHub(store, draftKey(deviceId, sessionId)),
+    [store, deviceId, sessionId],
+  )
   const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot)
   const meta = useSyncExternalStore(store.subscribeMeta, store.getMeta)
   const device = useKey<DeviceView>(keys.device(deviceId))
@@ -183,11 +192,15 @@ export function DetailScreen({ route, navigation }: Props) {
         {experiment.keyboard === 'sticky' ? (
           // 顶上移出去的那一截藏到标题栏后面（标题栏压在上面）
           <KeyboardStickyView offset={{ closed: 0, opened: insets.bottom }} style={styles.list}>
-            <Transcript store={store} bottomOffset={insets.bottom} markers={markers} />
+            <CommentsContext.Provider value={comments}>
+              <Transcript store={store} bottomOffset={insets.bottom} markers={markers} />
+            </CommentsContext.Provider>
           </KeyboardStickyView>
         ) : (
           <View style={styles.list}>
-            <Transcript store={store} bottomOffset={insets.bottom} markers={markers} />
+            <CommentsContext.Provider value={comments}>
+              <Transcript store={store} bottomOffset={insets.bottom} markers={markers} />
+            </CommentsContext.Provider>
           </View>
         )}
         <KeyboardStickyView offset={{ closed: 0, opened: insets.bottom }}>
@@ -196,10 +209,13 @@ export function DetailScreen({ route, navigation }: Props) {
             style={{ paddingBottom: insets.bottom, backgroundColor: c.panel }}
             onLayout={(event) => setComposerHeight(event.nativeEvent.layout.height)}
           >
-            <Composer store={store} markers={markers} inputRef={input} />
+            <CommentsContext.Provider value={comments}>
+              <Composer store={store} markers={markers} inputRef={input} />
+            </CommentsContext.Provider>
           </View>
         </KeyboardStickyView>
       </View>
+      <CommentOverlays hub={comments} />
       <Sheet visible={menu} title={shownTitle} actions={actions} onClose={() => setMenu(false)} />
       <Prompt
         visible={renaming}

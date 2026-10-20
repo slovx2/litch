@@ -1,11 +1,13 @@
 // 回退之后把那条消息放回输入框：对话区（回退的一方）和输入区（C2 的 Composer）之间只经这里说话。
 // 输入区按会话订阅（onRefill）；回退成了对话区交一条过来（refillDraft）。那时输入区还没订阅的，先存着，
 // 一订阅就交给它。同一个会话只留最后一条。
-import type { ImageAttachment } from '@litch/core'
+import type { CommentExtra, ImageAttachment } from '@litch/core'
 
 export interface RefillMessage {
   text: string
   images: ImageAttachment[]
+  /** 那条消息带的评论（从正文开头认回来的），放回输入框上面 */
+  comments?: CommentExtra[]
 }
 
 type Listener = (message: RefillMessage) => void

@@ -66,7 +66,13 @@ export function QueueTray({
       </Text>
       {queued.map((message, index) => {
         const stuck = !steerImages && message.images.length > 0
-        const text = message.text || t('composer.imageCount', { n: message.images.length })
+        const notes = message.extras.filter((extra) => extra.kind === 'comment').length
+        // 只带评论的那条没有字：写几条评论
+        const text =
+          message.text ||
+          (notes
+            ? t('comment.count', { n: notes })
+            : t('composer.imageCount', { n: message.images.length }))
         return (
           <View key={message.id} style={styles.row} testID={`queue:${index}`}>
             <Text numberOfLines={2} style={[styles.text, { color: c.ink2 }]}>
