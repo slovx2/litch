@@ -1438,8 +1438,9 @@ export class CodexClaudeAppServer {
     if (!this.native) return
     const baseline = !this.native.scanned
     let added: string[]
+    let moved: string[]
     try {
-      added = await this.native.refresh(announce)
+      ;({ added, moved } = await this.native.refresh(announce))
     } catch (error) {
       debugLog('native.sessions.refreshFailed', { error: String(error) })
       return
@@ -1461,6 +1462,25 @@ export class CodexClaudeAppServer {
         )
     }
     if (added.length > 0) debugLog('native.sessions.imported', { count: added.length })
+    // 登记过的会话在 Claude 桌面端的父会话变了：声明了 nativeLineage 的连接再收一次这个会话（客户端按标识换掉），
+    // 没声明的连接看不到这个字段，不用打扰。列表时扫到的也发：别的连接没在列表
+    if (!baseline)
+      for (const threadId of moved) {
+        const thread = this.store.getThread(threadId)
+        // 归档了的不在列表里，发了反而让客户端把它当成新会话放回侧栏
+        if (!thread || thread.ephemeral || thread.archived) continue
+        const params = this.withNativeLineage(null, { thread: this.toThread(thread, []) })
+        for (const target of this.accountPeers)
+          if (
+            this.isConnected(target) &&
+            this.peerFeatures.get(target)?.extensions.has(EXTENSION.nativeLineage)
+          )
+            this.deliver(
+              target,
+              { method: 'thread/started', params: structuredClone(params) },
+              target,
+            )
+      }
   }
 
   /**
@@ -6395,16 +6415,20 @@ export class CodexClaudeAppServer {
 
   /**
    * 声明了 nativeLineage 的连接：导进来的会话里认得出是别的应用派出来的（native-lineage.mts），
-   * 应答里的会话对象（thread、列表的每一项）带上 litchNativeLineage。没声明的原样给
+   * 应答里的会话对象（thread、列表的每一项）带上 litchNativeLineage。没声明的原样给；
+   * peer 是 null 时不看声明（调用的地方已经挑好了连接）
    */
-  private withNativeLineage<T>(peer: RpcPeer, result: T): T {
-    if (!this.peerFeatures.get(peer)?.extensions.has(EXTENSION.nativeLineage)) return result
+  private withNativeLineage<T>(peer: RpcPeer | null, result: T): T {
+    if (peer && !this.peerFeatures.get(peer)?.extensions.has(EXTENSION.nativeLineage)) return result
     const known = this.store.nativeLineage()
     const mark = (value: unknown) => {
       if (!value || typeof value !== 'object') return
       const thread = value as Record<string, unknown>
-      const app = typeof thread.id === 'string' ? known.get(thread.id) : undefined
-      if (app) thread.litchNativeLineage = { app }
+      if (typeof thread.id !== 'string') return
+      // 父会话只从 Claude 桌面端的数据里来：开头认不出（分叉、交接出来的）但桌面端记了父会话的，也算它派出来的
+      const parentThreadId = this.native?.parentOf(thread.id)
+      const app = known.get(thread.id) ?? (parentThreadId ? 'claude-desktop' : undefined)
+      if (app) thread.litchNativeLineage = parentThreadId ? { app, parentThreadId } : { app }
     }
     const body = result && typeof result === 'object' ? (result as Record<string, unknown>) : {}
     if (Array.isArray(body.data)) for (const thread of body.data) mark(thread)

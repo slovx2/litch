@@ -16,6 +16,7 @@ import {
   type ManageRevisions,
   type ManageSchema,
   PINNED,
+  type SessionChildren,
   type SessionGroups,
   type SessionHarnesses,
   type SessionMeta,
@@ -71,6 +72,8 @@ test('启动后：设备、工作区、分组都在，分组按最近更新排�
   // 别的应用派出来的会话单独列着：侧栏按“更多”里的开关决定藏不藏
   assert.deepEqual(store.get(keys.nativeChildren('local')), ['cd1'])
   assert.deepEqual(store.get(keys.nativeChildren('build')), [])
+  // 认得出父会话的挂在父会话下面（和 Litch 自己的子会话在同一张表里）
+  assert.deepEqual(store.get<SessionChildren>(keys.children('local'))?.s1, ['cd1'])
 })
 
 test('每台设备的忙闲汇总：几个在跑、几个在等人、最近一次动静；会话的状态变了它跟着变', async () => {

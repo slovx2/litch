@@ -155,8 +155,16 @@ export function projectLineage(thread: Thread): SessionLineageView | null {
 export function projectNativeLineage(thread: Thread): NativeLineageView | null {
   const raw: unknown = (thread as Thread & { litchNativeLineage?: unknown }).litchNativeLineage
   if (typeof raw !== 'object' || raw === null) return null
-  const { app } = raw as Record<string, unknown>
-  return typeof app === 'string' && app ? { app } : null
+  const { app, parentThreadId } = raw as Record<string, unknown>
+  if (typeof app !== 'string' || !app) return null
+  return {
+    app,
+    parentId:
+      typeof parentThreadId === 'string' && parentThreadId && parentThreadId !== thread.id
+        ? parentThreadId
+        : null,
+    createdAt: toMs(thread.createdAt) ?? 0,
+  }
 }
 
 export function lineageOf(raw: unknown): SessionLineageView | null {

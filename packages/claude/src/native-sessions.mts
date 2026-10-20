@@ -6,10 +6,13 @@
 // - 列表时（refresh）只登记会话本身：名字、第一句话、目录、时间。历史在会话第一次被读、被恢复、
 //   要往里发消息时才画（history），原生记录变了（命令行里又说了几句）再接着画后面的。
 // - 原生记录不归适配器管：删掉导进来的会话只是不再导入，原生记录不动；改名只改库里的。
+// - Claude 桌面端派出的会话：开头认一次（native-lineage.mts），父会话每次扫描时按桌面端的数据目录重算
+//   （desktop-lineage.mts，读不到就是没有父会话）。CHA_CLAUDE_DESKTOP_DATA 指定桌面端的数据目录，给 0 不读。
 // - CHA_CLAUDE_NATIVE_SESSIONS=0 关掉整件事。
 
 import type { NativeLineageApp } from '../../protocol/src/native-lineage.mjs'
 import { claudeConfigDir } from './claude-native-files.mjs'
+import { DesktopLineage } from './desktop-lineage.mjs'
 import { type NativeMessage, projectNativeHistory } from './native-history.mjs'
 import { findNativeRecords, readNativeLineage } from './native-lineage.mjs'
 import type { SessionStore } from './store.mjs'
@@ -34,10 +37,16 @@ export interface NativeSessionSource {
   messages(sessionId: string, cwd: string): Promise<NativeMessage[]>
   /** 这几个会话各是不是别的应用派出来的（native-lineage.mts）。读不到的也给一个结果（null） */
   lineage(sessionIds: readonly string[]): Promise<Map<string, NativeLineageApp | null>>
+  /**
+   * Claude 桌面端记的父子关系（desktop-lineage.mts）：子会话的会话号 → 父会话用过的会话号（眼下的在前）。
+   * 每次扫描都问一遍（桌面端那边会变：新派出的、脱离的）。读不到的给空的
+   */
+  desktopParents(): Promise<Map<string, readonly string[]>>
 }
 
 export function sdkNativeSessionSource(): NativeSessionSource {
   const sdk = () => import('@anthropic-ai/claude-agent-sdk')
+  const desktop = new DesktopLineage()
   return {
     list: async () => (await sdk()).listSessions({ includeProgrammatic: false }),
     info: async (sessionId, cwd) => (await sdk()).getSessionInfo(sessionId, { dir: cwd }),
@@ -52,6 +61,7 @@ export function sdkNativeSessionSource(): NativeSessionSource {
         }),
       )
     },
+    desktopParents: async () => desktop.refresh(),
   }
 }
 
@@ -90,11 +100,26 @@ export interface NativeSessionsHost {
 /** 列表时两次扫描至少隔这么久；中间来的列表用上一次的结果 */
 const REFRESH_GAP_MS = 2000
 
+/** 一次扫描的结果 */
+export interface NativeRefresh {
+  /** 新登记的会话 */
+  added: string[]
+  /** 已经登记过、这次父会话变了的会话（桌面端新记了、脱离了，父会话刚导进来、没了） */
+  moved: string[]
+}
+
+const NOTHING: NativeRefresh = { added: [], moved: [] }
+
 export class NativeSessions {
   private lastRefresh = 0
+  /**
+   * 导进来的会话 → 它在 Claude 桌面端的父会话（这个入口里的会话标识）。只放在内存里，每次扫描按桌面端的数据重算：
+   * 那边随时会变，读不到就是没有父会话
+   */
+  private parents = new Map<string, string>()
   /** 扫完过一遍了：之后再扫到的新会话才是“刚在别处开的” */
   scanned = false
-  private refreshing: Promise<string[]> | null = null
+  private refreshing: Promise<NativeRefresh> | null = null
   /** 正在画历史的会话：同一个会话同时来几次，搭同一趟 */
   private readonly drawing = new Map<string, Promise<void>>()
 
@@ -104,14 +129,14 @@ export class NativeSessions {
     this.host = host
   }
 
-  /** 扫一遍本机的原生会话，新的登记进库，登记过的更新名字和时间。回新登记的会话标识 */
-  refresh(force = false): Promise<string[]> {
+  /** 扫一遍本机的原生会话，新的登记进库，登记过的更新名字和时间。回新登记的、父会话变了的会话标识 */
+  refresh(force = false): Promise<NativeRefresh> {
     if (this.refreshing) return this.refreshing
-    if (!force && Date.now() - this.lastRefresh < REFRESH_GAP_MS) return Promise.resolve([])
+    if (!force && Date.now() - this.lastRefresh < REFRESH_GAP_MS) return Promise.resolve(NOTHING)
     const run = this.scan()
-      .then((added) => {
+      .then((result) => {
         this.scanned = true
-        return added
+        return result
       })
       .finally(() => {
         this.lastRefresh = Date.now()
@@ -121,7 +146,7 @@ export class NativeSessions {
     return run
   }
 
-  private async scan(): Promise<string[]> {
+  private async scan(): Promise<NativeRefresh> {
     const { store, source } = this.host
     const infos = await source.list()
     const known = store.nativeSessions()
@@ -156,7 +181,62 @@ export class NativeSessions {
         store.upsertThread({ ...thread, name, updatedAt: Math.max(updatedAt, thread.updatedAt) })
     }
     await this.recognize()
-    return added
+    const fresh = new Set(added)
+    const moved = (await this.locate()).filter((id) => !fresh.has(id))
+    return { added, moved }
+  }
+
+  /** 导进来的会话在 Claude 桌面端的父会话（这个入口里的会话标识）。没有、认不出的是 undefined */
+  parentOf(threadId: string): string | undefined {
+    return this.parents.get(threadId)
+  }
+
+  /**
+   * 按 Claude 桌面端记的父子关系重算导进来的会话挂在谁下面（desktop-lineage.mts）。父会话得也是这个入口里的会话
+   * （导进来过、没删掉）；父会话用过几个会话号的，取导进来过的里面最新的那个。回父会话变了的会话
+   */
+  private async locate(): Promise<string[]> {
+    const { store, source } = this.host
+    let found: Map<string, readonly string[]>
+    try {
+      found = await source.desktopParents()
+    } catch {
+      found = new Map()
+    }
+    const known = store.nativeSessions()
+    const threadOf = (sessionId: string): string | undefined => {
+      const record = known.get(sessionId)
+      if (!record || record.origin === 'dismissed') return undefined
+      return store.getThread(record.threadId) ? record.threadId : undefined
+    }
+    const next = new Map<string, string>()
+    for (const [childId, candidates] of found) {
+      const record = known.get(childId)
+      if (!record || record.origin !== 'imported') continue
+      const child = threadOf(childId)
+      if (!child) continue
+      for (const candidate of candidates) {
+        const parent = threadOf(candidate)
+        if (!parent || parent === child) continue
+        next.set(child, parent)
+        break
+      }
+    }
+    // 桌面端的数据要是绕成了圈，侧栏里这一圈谁都不在顶层、全看不见：圈上的都不挂
+    for (const start of [...next.keys()]) {
+      const path = new Set<string>()
+      let at: string | undefined = start
+      while (at !== undefined && !path.has(at)) {
+        path.add(at)
+        at = next.get(at)
+      }
+      if (at === start) for (const id of path) next.delete(id)
+    }
+    const moved = [...new Set([...this.parents.keys(), ...next.keys()])].filter(
+      (id) => this.parents.get(id) !== next.get(id),
+    )
+    this.parents = next
+    return moved
   }
 
   /**

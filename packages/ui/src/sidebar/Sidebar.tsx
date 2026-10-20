@@ -327,7 +327,9 @@ const SessionRow = memo(function SessionRow({
       <div
         className="row-line"
         data-session={sessionId}
-        data-parent={nested ? (summary.lineage?.parentId ?? '') : undefined}
+        data-parent={
+          nested ? (summary.lineage?.parentId ?? summary.nativeLineage?.parentId ?? '') : undefined
+        }
         // 能整理的设备上可以拖：拖进置顶、组，或者拖回自己的项目（Sidebar 里的落点）
         draggable={organizable}
         onDragStart={(event) =>

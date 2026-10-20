@@ -1170,6 +1170,8 @@ export const en: Record<MessageKey, Entry> = {
   'tree.lineage.after': 'as “{title}”',
   'tree.lineage.open': 'Back to the parent session',
   'tree.lineage.unknown': 'a session that is not in the sidebar',
+  'tree.lineage.claudeDesktop': 'in the Claude desktop app',
+  'tree.lineage.otherApp': 'in another app',
   'tree.detach': 'Detach as a standalone session',
   'tree.detach.title': 'Detach as a standalone session?',
   'tree.detach.note':
@@ -1209,6 +1211,8 @@ export const en: Record<MessageKey, Entry> = {
   'info.lineage.user': 'by you',
   'info.lineage.proposal': 'from a proposal',
   'info.lineage.wake': 'Wakes the parent when done',
+  'info.lineage.claudeDesktop': 'Started in the Claude desktop app',
+  'info.lineage.otherApp': 'Started in another app',
   'side.tab.agents': 'Subagents',
   'agents.none': 'Click a subagent in the conversation to see what it is doing here.',
   'agents.list': 'Subagents of this session',

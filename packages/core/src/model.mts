@@ -347,7 +347,7 @@ export interface SessionSummary {
   lineage: SessionLineageView | null
   /**
    * 别的应用（比如 Claude 桌面端）从另一个会话派出来的原生会话（nativeLineage 扩展）。
-   * 侧栏默认不显示它们，“更多”菜单里能打开。不是的、认不出的是 null
+   * 侧栏默认不显示它们，“更多”菜单里能打开；认得出父会话的挂在父会话下面。不是的、认不出的是 null
    */
   nativeLineage: NativeLineageView | null
 }
@@ -355,6 +355,13 @@ export interface SessionSummary {
 /** 派出这个原生会话的应用。app 是对面报的原样，认不认识由界面定 */
 export interface NativeLineageView {
   app: string
+  /**
+   * 父会话（同一台设备上的会话标识）。认不出是哪一个的是 null。
+   * 只是显示用的父子关系：不能从父会话发消息、打断，不唤醒、不回报（那些是 Litch 自己的会话树）
+   */
+  parentId: string | null
+  /** 会话建的时间，毫秒。挂在父会话下面时按它排 */
+  createdAt: number
 }
 
 export interface SidebarView {

@@ -168,7 +168,11 @@ const AGENTS_SHOWN = 5
 function TreeFacts({ summary, device }: { summary: SessionSummary; device: DeviceView }) {
   const t = useT()
   const lineage = summary.lineage
-  const parent = useKey<SessionSummary>(keys.summary(device.id, lineage?.parentId ?? ''))
+  // 别的应用派出、认得出父会话的：只写父会话和哪个应用派的
+  const native = lineage ? null : summary.nativeLineage
+  const parent = useKey<SessionSummary>(
+    keys.summary(device.id, lineage?.parentId ?? native?.parentId ?? ''),
+  )
   const children = useKey<SessionChildren>(keys.children(device.id))
   const kids = children?.[summary.id]?.length ?? 0
   // 子代理只有完整模式的设备问得到（按父会话列）；卡片出来的时候问一次，几秒内不重复问
@@ -195,6 +199,23 @@ function TreeFacts({ summary, device }: { summary: SessionSummary; device: Devic
               {lineage.wakeParent ? (
                 <span className="info-cwd">{t('info.lineage.wake')}</span>
               ) : null}
+            </dd>
+          </div>
+        </>
+      ) : native?.parentId ? (
+        <>
+          <div>
+            <dt>{t('info.parent')}</dt>
+            <dd>{parent ? t.text(parent.title) : t('tree.lineage.unknown')}</dd>
+          </div>
+          <div>
+            <dt>{t('info.lineage')}</dt>
+            <dd>
+              {t(
+                native.app === 'claude-desktop'
+                  ? 'info.lineage.claudeDesktop'
+                  : 'info.lineage.otherApp',
+              )}
             </dd>
           </div>
         </>

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { appendFile, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { appendFile, mkdir, mkdtemp, rm, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
@@ -392,4 +392,105 @@ test('NAT-007：认得出 Claude 桌面端派出的会话，只给声明了 nati
       [[LATER, undefined]],
     )
   })
+})
+
+test('NAT-008：Claude 桌面端记了父会话的挂上 parentThreadId；脱离过的、父会话没导进来的、格式坏的不挂；后来变了按连接再发一次', async () => {
+  await rm(join(config, 'projects'), { recursive: true, force: true })
+  await writeSessions()
+  // 假的桌面端数据目录：<目录>/claude-code-sessions/<账号>/<组织>/local_*.json
+  const desktop = await mkdtemp(join(tmpdir(), 'native-desktop-'))
+  const sessions = join(desktop, 'claude-code-sessions', 'acct', 'org')
+  await mkdir(sessions, { recursive: true })
+  const meta = (local: string, fields: Record<string, unknown>) =>
+    writeFile(join(sessions, `${local}.json`), JSON.stringify({ sessionId: local, ...fields }))
+  const from = (local: string) => ({ sessionId: local, taskId: 't', title: '派出', name: 'x' })
+  const id = (n: number) => `3b5c5b0e-0d2a-4a8e-9a3f-0000000001${String(n).padStart(2, '0')}`
+  const PARENT = id(1)
+  const CHILD = id(2)
+  const HANDOFF = id(3)
+  const DETACHED = id(4)
+  const ORPHAN = id(5)
+  const BROKEN = id(6)
+  const GONE = id(9)
+  /** 桌面端里用户自己开的会话（也是分叉、交接出来的会话开头的样子）：话里没有派出的那句开头 */
+  const plainDesktop = (session: string, uuid: string, text: string) =>
+    entry(session, 'claude-desktop', 'user', uuid, null, text) +
+    entry(session, 'claude-desktop', 'assistant', `${uuid}a`, uuid, [{ type: 'text', text: '好' }])
+  await writeFile(join(projectDir, `${PARENT}.jsonl`), plainDesktop(PARENT, 'p1', '父会话'))
+  await writeFile(join(projectDir, `${CHILD}.jsonl`), desktopChild(CHILD, 'c1', '派出来的'))
+  await writeFile(join(projectDir, `${HANDOFF}.jsonl`), plainDesktop(HANDOFF, 'h1', '交接出来的'))
+  await writeFile(join(projectDir, `${DETACHED}.jsonl`), desktopChild(DETACHED, 'd1', '脱离了'))
+  await writeFile(join(projectDir, `${ORPHAN}.jsonl`), desktopChild(ORPHAN, 'o1', '父没导进来'))
+  await writeFile(join(projectDir, `${BROKEN}.jsonl`), desktopChild(BROKEN, 'b1', '文件坏了'))
+  await meta('local_p', { cliSessionId: PARENT })
+  await meta('local_c', { cliSessionId: CHILD, spawnedFrom: from('local_p') })
+  await meta('local_h', { cliSessionId: HANDOFF, spawnedFrom: from('local_p') })
+  await meta('local_d', {
+    cliSessionId: DETACHED,
+    spawnedFrom: from('local_p'),
+    lineageDetached: true,
+  })
+  // 父会话在桌面端有，但它的原生会话没导进来（这里根本没有记录）
+  await meta('local_g', { cliSessionId: GONE })
+  await meta('local_o', { cliSessionId: ORPHAN, spawnedFrom: from('local_g') })
+  await writeFile(join(sessions, 'local_b.json'), `{"cliSessionId":"${BROKEN}","spawnedFrom":`)
+
+  const before = process.env.CHA_CLAUDE_DESKTOP_DATA
+  process.env.CHA_CLAUDE_DESKTOP_DATA = desktop
+  try {
+    await withStage('native-parent', async (stage) => {
+      const litch = await stage.connect('litch', { litchExtensions: ['nativeLineage'] })
+      const plain = await stage.connect('plain')
+      const lineageOf = (data: Array<{ id: string; litchNativeLineage?: unknown }>) =>
+        Object.fromEntries(data.map((thread) => [thread.id, thread.litchNativeLineage ?? null]))
+      const desktopApp = { app: 'claude-desktop' }
+      assert.deepEqual(lineageOf((await litch.request('thread/list', {})).data), {
+        [PARENT]: null,
+        [CHILD]: { ...desktopApp, parentThreadId: PARENT },
+        // 开头认不出，但桌面端记了父会话：也算派出来的
+        [HANDOFF]: { ...desktopApp, parentThreadId: PARENT },
+        [DETACHED]: desktopApp,
+        [ORPHAN]: desktopApp,
+        [BROKEN]: desktopApp,
+        [CLI]: null,
+      })
+      const bare = lineageOf((await plain.request('thread/list', {})).data)
+      assert.ok(
+        Object.values(bare).every((value) => value === null),
+        '没声明的连接上没有这个字段',
+      )
+      const read = await litch.request('thread/read', { threadId: CHILD, includeTurns: false })
+      assert.deepEqual(read.thread.litchNativeLineage, { ...desktopApp, parentThreadId: PARENT })
+
+      // 用户在桌面端让它脱离了：下一次扫描时声明了的连接再收一次这个会话，没声明的不打扰
+      const tick = () =>
+        (
+          stage.server as unknown as { refreshNative(announce: boolean): Promise<void> }
+        ).refreshNative(true)
+      await meta('local_c', {
+        cliSessionId: CHILD,
+        spawnedFrom: from('local_p'),
+        lineageDetached: true,
+      })
+      await utimes(join(sessions, 'local_c.json'), new Date(), new Date(Date.now() + 5000))
+      await tick()
+      const started = litch.notifications('thread/started').map((message) => message.params.thread)
+      assert.deepEqual(
+        started.map((thread) => [thread.id, thread.litchNativeLineage]),
+        [[CHILD, desktopApp]],
+      )
+      assert.deepEqual(plain.notifications('thread/started'), [])
+
+      // 整个数据目录没了（桌面端卸了）：都不挂，照常列
+      await rm(desktop, { recursive: true, force: true })
+      await tick()
+      const after = lineageOf((await litch.request('thread/list', {})).data)
+      assert.deepEqual(after[HANDOFF], null, '开头认不出、桌面端也没记的回到普通会话')
+      assert.deepEqual(after[CHILD], desktopApp)
+    })
+  } finally {
+    if (before === undefined) delete process.env.CHA_CLAUDE_DESKTOP_DATA
+    else process.env.CHA_CLAUDE_DESKTOP_DATA = before
+    await rm(desktop, { recursive: true, force: true })
+  }
 })

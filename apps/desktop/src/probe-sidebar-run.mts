@@ -14,7 +14,7 @@ import { dragTo, frameSeen, keysSeen, sidebarBecame, sidePanel } from './probe-s
 import { hideNow, hideSeen, reloadSeen } from './probe-sidebar-hide.mjs'
 import { type FrameChecks, judgeFrame } from './probe-sidebar-judge.mjs'
 import { installSidebarKit, type SidebarKit } from './probe-sidebar-kit.mjs'
-import { judgeNative, NATIVE_TITLE, nativeSeen } from './probe-sidebar-native.mjs'
+import { judgeNative, NATIVE_PARENT, NATIVE_TITLE, nativeSeen } from './probe-sidebar-native.mjs'
 import type { SmokeHooks } from './smoke.mjs'
 
 /** 模拟核心里用的那个会话（示例数据里的标题）：本机、docs-site 项目，闲着的 */
@@ -195,7 +195,7 @@ async function run(window: BrowserWindow, hooks: SmokeHooks): Promise<readonly [
       ...judgeFrame({ ...frame, reload }),
       ...judgeFilter(filter, kept, SESSION),
       ...judgeCwd(cwd),
-      ...judgeNative(native),
+      ...judgeNative(native, NATIVE_PARENT),
     ],
   ]
 }
