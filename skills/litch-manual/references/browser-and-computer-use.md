@@ -78,20 +78,38 @@ never shows cookie values or passwords to agents or in the Litch window; only co
 ### Saved passwords
 
 Passwords (imported, or saved after signing in) are kept in Litch's own store, encrypted with the
-system's secure storage. Nothing is filled in by itself: clicking a sign-in field shows the saved
-accounts for that site, and the password goes in only after one is picked. In tabs an agent opened,
-the agent picks a suggestion the same way; it cannot read password fields or see save prompts.
-Pages that are not https are never filled (localhost and other loopback addresses are the
-exception).
+system's secure storage. Nothing is filled in by itself: in a tab the user opened, clicking a sign-in
+field shows the saved accounts for that site, and the password goes in only after the user picks one.
+Pages that are not https are never filled (localhost and other loopback addresses are the exception).
+Tabs an agent opened show no suggestions and are never filled.
 
-After the user signs in with a password Litch does not have, the Browser tab asks: **Save**, **Not
+After a sign-in with a password Litch does not have, the Browser tab asks the user: **Save**, **Not
 now** or **Never for this site**. If Litch already has that user name for the site with a different
-password, it offers to **Update** it instead.
+password, it offers to **Update** it instead. This also happens when an agent typed and submitted the
+form; only the user answers, nothing is saved automatically.
 
 Settings → Built-in browser → **Saved passwords** lists them by site and user name: search, delete
 one, delete all. Below it, **Never save passwords for** lists the sites marked "Never for this site";
 removing one makes Litch ask again there. Passwords cannot be shown or copied. "Clear browsing data"
 keeps them.
+
+### When an agent needs the user signed in
+
+Agents never ask for passwords, one-time codes or other secrets in the chat and never type them. When
+a page needs signing in, the agent hands the tab to the user (`litch_browser` → `request_sign_in`,
+with the site and a short reason):
+
+- The Browser panel shows a card "The agent asks you to sign in to …" with **Done, hand back** and
+  **Cancel** (and "Show that tab").
+- The user signs in on that page themselves; saved passwords work there like in their own tabs.
+  Until they answer, the agent cannot touch that tab. If the agent had run scripts on that page, it is
+  reloaded first.
+- Before the tab goes back, password fields are cleared. The agent only learns whether the user
+  signed in or cancelled, never what was entered. There is no time limit; interrupting the turn also
+  ends it.
+
+If the user asks you (as the agent) to sign in somewhere, use `request_sign_in` rather than asking
+for their password.
 
 Preferences (Settings → Built-in browser):
 
