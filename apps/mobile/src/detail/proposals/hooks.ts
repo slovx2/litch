@@ -81,9 +81,7 @@ export function useProposalAct(deviceId: string, sessionId: string, proposalId: 
     dismiss: () =>
       run(channel.command('session.proposal.dismiss', { deviceId, sessionId, proposalId })),
     answer: (choice: 'session' | 'here') =>
-      run(
-        channel.command('session.proposal.answer', { deviceId, sessionId, proposalId, choice }),
-      ),
+      run(channel.command('session.proposal.answer', { deviceId, sessionId, proposalId, choice })),
   }
 }
 
