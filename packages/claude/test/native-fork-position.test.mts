@@ -96,7 +96,7 @@ test('FORK-001：分叉位置决定带走的回合、原生历史和按回合存
     const first = await run(thread.id, 'FORK_R1_INPUT')
     model.enqueue(() => [{ type: 'text', text: 'FORK_R2_ANSWER' }])
     const second = await run(thread.id, 'FORK_R2_INPUT')
-    // 第三轮进行中：活动会话不能分叉，带不带位置都一样。
+    // 第三轮进行中：不截在某一回合之前的分叉都不行（截在之前的见 FORK-004）。
     model.enqueue(async () => {
       entered.resolve()
       await release.promise
@@ -109,7 +109,7 @@ test('FORK-001：分叉位置决定带走的回合、原生历史和按回合存
     const third = running.turn.id as string
     await entered.promise
     await client.raw('thread/fork', { threadId: thread.id, lastTurnId: first }, -32009)
-    await client.raw('thread/fork', { threadId: thread.id, beforeTurnId: third }, -32009)
+    await client.raw('thread/fork', { threadId: thread.id }, -32009)
     release.resolve()
     assert.equal((await client.completed(third)).status, 'completed')
 
@@ -482,5 +482,134 @@ test('FORK-003：源线程留着进程和后台命令时按位置分叉，进程
     scene.model.assertConsumed()
   } finally {
     await disposeScene(scene)
+  }
+})
+
+test('FORK-004：回合正在跑时截在它（或更早的回合）之前分叉，只带走已结束的回合，源回合照常跑完', {
+  timeout: 180_000,
+}, async () => {
+  const home = await mkdtemp(join(tmpdir(), 'native-fork-active-'))
+  const model = new MockLLM()
+  const client = await ProtocolClient.start(home, await model.start())
+  const db = new DatabaseSync(join(home, 'adapter', 'state.sqlite'))
+  const entered = deferred()
+  const release = deferred()
+  try {
+    const { thread } = await client.request('thread/start', {
+      cwd: home,
+      approvalPolicy: 'never',
+      sandbox: 'danger-full-access',
+    })
+    const run = async (threadId: string, input: string) => {
+      const { turn } = await client.request('turn/start', {
+        threadId,
+        input: [{ type: 'text', text: input }],
+      })
+      assert.equal((await client.completed(turn.id)).status, 'completed')
+      return turn.id as string
+    }
+    model.enqueue(() => [{ type: 'text', text: 'ACTIVE_R1_ANSWER' }])
+    const first = await run(thread.id, 'ACTIVE_R1_INPUT')
+    model.enqueue(() => [{ type: 'text', text: 'ACTIVE_R2_ANSWER' }])
+    const second = await run(thread.id, 'ACTIVE_R2_INPUT')
+    // 第三轮先调一次工具（原生记录里已经写进了这一轮的用户消息、工具调用和结果），再停在下一次模型请求上。
+    model.enqueue(() => [
+      {
+        type: 'tool_use',
+        id: 'toolu_fork_active',
+        name: 'Bash',
+        input: { command: 'echo ACTIVE_R3_TOOL', description: 'echo' },
+      },
+    ])
+    model.enqueue(async () => {
+      entered.resolve()
+      await release.promise
+      return [{ type: 'text', text: 'ACTIVE_R3_ANSWER' }]
+    })
+    const third = (
+      await client.request('turn/start', {
+        threadId: thread.id,
+        input: [{ type: 'text', text: 'ACTIVE_R3_INPUT' }],
+      })
+    ).turn.id as string
+    await entered.promise
+    // 进行中的那一轮还在往库里写，只比对线程行和已经结束的回合。
+    const settled = () => {
+      const now = stored(db, thread.id)
+      return {
+        thread: now.thread,
+        turns: now.turns.slice(0, 2),
+        boundaries: now.boundaries.slice(0, 2),
+      }
+    }
+    const sourceBefore = settled()
+
+    // 不截在某一回合之前的、回退、压缩照旧拒绝。
+    await client.raw('thread/fork', { threadId: thread.id }, -32009)
+    await client.raw('thread/fork', { threadId: thread.id, lastTurnId: second }, -32009)
+    await client.raw('thread/fork', { threadId: thread.id, lastTurnId: third }, -32009)
+    await client.raw('thread/rollback', { threadId: thread.id, numTurns: 1 }, -32009)
+
+    // 截在进行中的这一轮之前：前两轮都在，这一轮的任何东西都不在。
+    const atCurrent = await client.request('thread/fork', {
+      threadId: thread.id,
+      beforeTurnId: third,
+    })
+    const atCurrentId = atCurrent.thread.id as string
+    assert.deepEqual(userTexts(atCurrent.thread.turns), ['ACTIVE_R1_INPUT', 'ACTIVE_R2_INPUT'])
+    assert.ok(atCurrent.thread.turns.every((turn: any) => turn.status === 'completed'))
+    assert.equal(atCurrent.thread.status.type, 'idle')
+    assert.equal(stored(db, atCurrentId).boundaries.length, 2)
+    // 截在更早的回合之前同样可以。
+    const atFirst = await client.request('thread/fork', {
+      threadId: thread.id,
+      beforeTurnId: second,
+      excludeTurns: true,
+    })
+    const atFirstId = atFirst.thread.id as string
+    assert.deepEqual(userTexts((await readThread(client, atFirstId)).turns), ['ACTIVE_R1_INPUT'])
+
+    // 源会话不受影响：还在跑，库里的东西没动，放行后这一轮照常结束。
+    assert.equal((await readThread(client, thread.id)).status.type, 'active')
+    assert.deepEqual(settled(), sourceBefore)
+    release.resolve()
+    assert.equal((await client.completed(third)).status, 'completed')
+    assert.deepEqual(userTexts((await readThread(client, thread.id)).turns), [
+      'ACTIVE_R1_INPUT',
+      'ACTIVE_R2_INPUT',
+      'ACTIVE_R3_INPUT',
+    ])
+
+    // 分叉接着聊：原生历史里只有带过去的回合，进行中那一轮的输入、工具调用和回答一个字都没有。
+    model.enqueue((request) => {
+      const history = JSON.stringify(request.messages)
+      assert.match(history, /ACTIVE_R1_ANSWER/)
+      assert.match(history, /ACTIVE_R2_ANSWER/)
+      assert.doesNotMatch(history, /ACTIVE_R3_|toolu_fork_active/)
+      return [{ type: 'text', text: 'ACTIVE_FORK_ANSWER' }]
+    })
+    await run(atCurrentId, 'ACTIVE_FORK_INPUT')
+    model.enqueue((request) => {
+      const history = JSON.stringify(request.messages)
+      assert.match(history, /ACTIVE_R1_ANSWER/)
+      assert.doesNotMatch(history, /ACTIVE_R2_|ACTIVE_R3_|toolu_fork_active/)
+      return [{ type: 'text', text: 'ACTIVE_FIRST_FORK_ANSWER' }]
+    })
+    await run(atFirstId, 'ACTIVE_FIRST_FORK_INPUT')
+    // 源会话接着聊，三轮都在，分叉里的不在。
+    model.enqueue((request) => {
+      const history = JSON.stringify(request.messages)
+      assert.match(history, /ACTIVE_R3_ANSWER/)
+      assert.doesNotMatch(history, /ACTIVE_FORK_|ACTIVE_FIRST_FORK_/)
+      return [{ type: 'text', text: 'ACTIVE_R4_ANSWER' }]
+    })
+    await run(thread.id, 'ACTIVE_R4_INPUT')
+    model.assertConsumed()
+  } finally {
+    release.resolve()
+    db.close()
+    await client.close()
+    await model.close()
+    await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
   }
 })

@@ -8,7 +8,8 @@ import { splitModel } from './catalog.mjs'
 import { envelope, settings } from './envelope.mjs'
 import type { LiveThread, OpencodeServer } from './server.mjs'
 
-// 改动会话本身的几个方法：分叉、回退、删除、压缩、用户自己跑命令。都要求会话没有进行中的回合。
+// 改动会话本身的几个方法：分叉、回退、删除、压缩、用户自己跑命令。都要求会话没有进行中的回合，
+// 只有截在某一回合之前的分叉例外（见 fork）。
 
 const busy = () => new ProtocolError(-32009, '活动会话不能执行此操作')
 
@@ -24,7 +25,8 @@ export async function threadMutation(
   const { projection } = live
   if (method === 'thread/fork' && p.lastTurnId != null && p.lastTurnId === projection.active?.id)
     throw new ProtocolError(-32602, 'lastTurnId 所指回合仍在进行中')
-  if (projection.active) throw busy()
+  // 照上游：截在某一回合之前（beforeTurnId）的分叉，有回合在跑也能做，带走的都是已经结束的回合。
+  if (projection.active && !(method === 'thread/fork' && p.beforeTurnId != null)) throw busy()
   if (method === 'thread/fork') return fork(s, peer, live, p)
   if (method === 'thread/revert' || method === 'thread/rollback') return revert(s, live, method, p)
   const id = projection.thread.id
@@ -68,8 +70,11 @@ export async function threadMutation(
 // 分叉：OpenCode 的 fork 复制某条消息之前（不含）的消息到一个新会话。lastTurnId 保留到那一轮（含），
 // 就是从下一轮的那条用户消息切；beforeTurnId 从那一轮起都不要，就是从它切（回合号就是那条用户消息的消息号）。
 // 新会话里的消息号是新的、先后不变：适配器记下的输入和插话标记按先后对过去，回显照旧是客户端发来的样子。
+// 有回合在跑时（只会是 beforeTurnId）：OpenCode 的 fork 读的是存下的消息，不看会话忙不忙，切点之前的消息
+// 都是已经结束的回合的，进行中那一轮的消息（含插话）都在切点上或之后。切点就是进行中那一轮的用户消息时，
+// 先等提示词交给 OpenCode：找不到切点时 fork 会整份复制，不靠这个兜底。
 async function fork(s: OpencodeServer, peer: RpcPeer, live: LiveThread, p: any): Promise<any> {
-  const { thread, turns } = live.projection
+  const { thread, turns, active } = live.projection
   const anchor = p.lastTurnId ?? p.beforeTurnId
   let cut: string | undefined
   if (anchor != null) {
@@ -77,6 +82,7 @@ async function fork(s: OpencodeServer, peer: RpcPeer, live: LiveThread, p: any):
     if (index < 0) throw new ProtocolError(-32602, '分叉位置的回合不在该会话当前的历史里')
     cut = turns[p.lastTurnId != null ? index + 1 : index]?.id
   }
+  if (active && cut === active.id) await live.delivered
   // 临时分叉（官方桌面端起描述用的）照上游不落盘：建在适配器内存里，没有 OpenCode 会话
   if (p.ephemeral === true) {
     const ephemeral = s.openEphemeral(peer, thread.cwd, { ...live.settings })

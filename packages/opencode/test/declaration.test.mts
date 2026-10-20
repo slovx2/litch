@@ -301,6 +301,72 @@ test('OpenCode：分叉、回退（连文件一起恢复）、按个数回退、
   assert.deepEqual([...violations], [])
 })
 
+test('OpenCode：回合正在跑时截在它（或更早的回合）之前分叉，只带走已结束的回合，源回合照常跑完', {
+  skip,
+  timeout: 180000,
+}, async () => {
+  const s = await scene(
+    scripted({
+      ONE: [[{ type: 'text', chunks: ['一'] }]],
+      TWO: [[{ type: 'text', chunks: ['二'] }]],
+      // 进行中的一轮先改一次文件，再慢慢说话：分叉时 OpenCode 里已经存着这一轮的用户消息和工具调用
+      RUNNING: [[edit('v0', 'v1')], slow('RUNNING').RUNNING![0]!],
+      FOLLOW: [[{ type: 'text', chunks: ['接着'] }]],
+    }),
+    { files: { 'a.txt': 'v0\n' } },
+  )
+  try {
+    const { desktop } = s
+    const { thread } = await desktop.call('thread/start', { cwd: s.cwd })
+    const threadId = thread.id
+    const one = await run(s, threadId, text('ONE'))
+    const two = await run(s, threadId, text('TWO'))
+    const { turn } = await desktop.call('turn/start', { threadId, input: text('RUNNING 第三轮') })
+    await desktop.until('item/agentMessage/delta', (p) => p.turnId === turn.id, 60000)
+    const busy = (params: object) =>
+      assert.rejects(
+        desktop.call('thread/fork', { threadId, ...params }),
+        (error: any) => error.code === -32009,
+      )
+    // 不截在某一回合之前的分叉、回退照旧拒绝
+    await busy({})
+    await busy({ lastTurnId: two.id })
+    await assert.rejects(
+      desktop.call('thread/rollback', { threadId, numTurns: 1 }),
+      (error: any) => error.code === -32009,
+    )
+    const firstTexts = (turns: any[]) => turns.map((t: any) => t.items[0].content[0].text)
+    const atRunning = await desktop.call('thread/fork', { threadId, beforeTurnId: turn.id })
+    assert.deepEqual(firstTexts(atRunning.thread.turns), ['ONE', 'TWO'])
+    assert.ok(atRunning.thread.turns.every((t: any) => t.status === 'completed'))
+    const atTwo = await desktop.call('thread/fork', { threadId, beforeTurnId: two.id })
+    assert.deepEqual(firstTexts(atTwo.thread.turns), ['ONE'])
+    // 源回合照常跑完，源会话三轮都在
+    const done = (await desktop.until('turn/completed', (p) => p.turn.id === turn.id, 60000)).turn
+    assert.equal(done.status, 'completed')
+    const source = await desktop.call('thread/read', { threadId, includeTurns: true })
+    assert.deepEqual(
+      source.thread.turns.map((t: any) => t.id),
+      [one.id, two.id, turn.id],
+    )
+    // 分叉接着聊：重读还是两轮，模型收到的历史里没有进行中那一轮的任何东西
+    const reread = await desktop.call('thread/read', {
+      threadId: atRunning.thread.id,
+      includeTurns: true,
+    })
+    assert.deepEqual(firstTexts(reread.thread.turns), ['ONE', 'TWO'])
+    await run(s, atRunning.thread.id, text('FOLLOW'))
+    const messages = lastAsk(s).messages
+    const asked = JSON.stringify(messages)
+    assert.ok(asked.includes('ONE') && asked.includes('TWO'))
+    assert.ok(!asked.includes('RUNNING'), asked)
+    assert.ok(!messages.some((m: any) => m.role === 'tool' || m.tool_calls?.length), asked)
+  } finally {
+    await s.restore()
+  }
+  assert.deepEqual([...violations], [])
+})
+
 test('OpenCode：只读档拿不到改文件和命令工具，完全访问档来问的一律放行，计划模式出计划条目', {
   skip,
   timeout: 180000,
