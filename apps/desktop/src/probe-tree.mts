@@ -476,6 +476,12 @@ export async function treeLooks(parent: string): Promise<TreeLooks> {
   const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms))
   document.querySelector<HTMLElement>(`.row-line[data-session="${parent}"] .ss-row`)?.click()
   await sleep(600)
+  // 回合结束后整段过程收成一行，子代理那一行在过程里跟着收起：先把收起的过程都点开
+  for (const head of document.querySelectorAll<HTMLElement>(
+    '.main .proc-head[aria-expanded="false"]',
+  ))
+    head.click()
+  await sleep(200)
   const root = document.documentElement
   const was = { skin: root.dataset.skin, theme: root.dataset.theme }
   const rows: TreeLooks['rows'] = []
