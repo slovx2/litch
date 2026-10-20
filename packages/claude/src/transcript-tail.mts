@@ -285,3 +285,43 @@ async function isFile(path: string): Promise<boolean> {
     throw error
   }
 }
+
+/**
+ * 模型的回复还在不在流。CLI 一条回复里的工具调用是边流边执行的：一个 tool_use 块流完就开始执行、
+ * 触发 PreToolUse 钩子，但这个块那一行要等后面的块流完（或者整条回复结束）才写进会话记录。
+ * 后面的块流得久时（几个子代理接连派出，每个的任务说明都很长），钩子要一直等到这条回复流完，
+ * 不能只等固定的几秒。来源按 parent_tool_use_id 分（主会话是空串，子代理各是派它的那次调用）。
+ */
+export class ModelStreamWatch {
+  /** 开始了还没结束的回复的来源 */
+  private readonly open = new Set<string>()
+  /** 最近一条回复流完（或者回合结束）的时刻 */
+  private endedAt = 0
+
+  observe(message: Record<string, unknown>): void {
+    if (message.type === 'result') {
+      // 回合结束：流断了没收到 message_stop 的也算完了
+      if (this.open.size > 0) this.endedAt = Date.now()
+      this.open.clear()
+      return
+    }
+    if (message.type !== 'stream_event') return
+    const type = (message.event as Record<string, unknown> | undefined)?.type
+    const source = typeof message.parent_tool_use_id === 'string' ? message.parent_tool_use_id : ''
+    if (type === 'message_start') this.open.add(source)
+    else if (type === 'message_stop') {
+      this.open.delete(source)
+      this.endedAt = Date.now()
+    }
+  }
+
+  /** 有回复正在流 */
+  get streaming(): boolean {
+    return this.open.size > 0
+  }
+
+  /** 最近一条回复流完的时刻（毫秒） */
+  get lastEnded(): number {
+    return this.endedAt
+  }
+}

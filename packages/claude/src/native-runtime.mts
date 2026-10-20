@@ -88,7 +88,7 @@ import {
   runtimePermissionOptions,
   sandboxedBashInput,
 } from './runtime-permissions.mjs'
-import { ToolIntentTranscripts } from './transcript-tail.mjs'
+import { ModelStreamWatch, ToolIntentTranscripts } from './transcript-tail.mjs'
 import type { RuntimeTurnSettings } from './turn-settings.mjs'
 import type {
   ClaudeRuntime,
@@ -146,6 +146,8 @@ interface NativeSession {
   abort: AbortController
   mcp: NativeMcpBridge
   process: NativeProcess
+  // 模型的回复还在不在流：工具意图确认的钩子按它决定等多久
+  stream: ModelStreamWatch
   shells: BackgroundShellState
   // 出现在 background_tasks_changed 里的任务（任意类型）。它们结束后 CLI 会自己再跑一轮。
   backgroundTasks: Set<string>
@@ -253,6 +255,10 @@ const WORKFLOW_TERMINAL_FLUSH_TIMEOUT_MS = 500
 // 没有回合也没有后台命令的进程多留这么久再退出，避免刚停掉命令就来了新回合。
 const IDLE_REAP_MS = 2_000
 const SPONTANEOUS_ATTACH_TIMEOUT_MS = 10_000
+// 工具意图确认：钩子来了、或者回复流完之后，会话记录里那一行最多再等这么久
+const TOOL_INTENT_GRACE_MS = 3_000
+// 回复一直在流时最多等这么久（一条回复里后面的块流了十分钟也算异常）
+const TOOL_INTENT_LIMIT_MS = 10 * 60_000
 const WORKFLOW_JOURNAL_SETTLE_TIMEOUT_MS = 3_000
 
 export class NativeClaudeRuntime implements ClaudeRuntime {
@@ -547,7 +553,8 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         },
       })
       const liveHandlers = this.liveHandlers(current)
-      const options = this.buildOptions(sdk, live, abort, current)
+      const stream = new ModelStreamWatch()
+      const options = this.buildOptions(sdk, live, abort, current, stream)
       options.spawnClaudeCodeProcess = nativeProcess.spawn.bind(nativeProcess)
       options.mcpServers = await mcp.connect(
         context.mcpServers,
@@ -577,6 +584,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         abort,
         mcp,
         process: nativeProcess,
+        stream,
         shells: {
           live: new Map(),
           taskToolUse: new Map(),
@@ -1144,6 +1152,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     context: RuntimeTurnContext,
     abort: AbortController,
     current: () => Promise<PendingTurn | null>,
+    stream: ModelStreamWatch = new ModelStreamWatch(),
   ): Record<string, unknown> {
     const originalBashInputs: OriginalBashInputs = new Map()
     const reservedGoalTools = new Set<string>()
@@ -1214,11 +1223,19 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     const permissionHooks = opts.hooks as { PreToolUse: Array<{ hooks: unknown[] }> }
     // 工具执行之前确认这次调用已经写进会话记录（入口重启、恢复时以它为准，工具不会被执行两次）。
     // 每份记录只读新增的部分，不随会话变长，见 transcript-tail.mts。
+    // 等多久：CLI 边流边执行，这一块那一行要等同一条回复后面的块流完才写，所以回复还在流就一直等，
+    // 流完（或者钩子刚来）之后再等几秒；流一直不完也有个上限，免得工具永远挂着。
     const transcripts = new ToolIntentTranscripts()
+    const waiting = (since: number): boolean => {
+      const now = Date.now()
+      if (now < since + TOOL_INTENT_GRACE_MS || now < stream.lastEnded + TOOL_INTENT_GRACE_MS)
+        return true
+      return stream.streaming && now < since + TOOL_INTENT_LIMIT_MS
+    }
     permissionHooks.PreToolUse.push({
       hooks: [
         async (event: Record<string, unknown>, toolUseId: string) => {
-          const deadline = Date.now() + 3_000
+          const since = Date.now()
           let failure: unknown = '超时'
           try {
             do {
@@ -1238,7 +1255,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
                 return {}
               }
               await delay(25, undefined, { signal: abort.signal })
-            } while (Date.now() < deadline)
+            } while (waiting(since))
           } catch (error) {
             // Hook 抛错只会被 CLI 记录，必须显式 deny 才能阻止工具。
             failure = error
@@ -1248,6 +1265,8 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
               toolUseId,
               tool: String(event.tool_name),
               error: String(failure),
+              waitedMs: Date.now() - since,
+              streaming: stream.streaming,
             })
           return {
             hookSpecificOutput: {
@@ -1619,6 +1638,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
 
   // 属于进程而不属于某个回合的状态：后台任务、会话状态、会话 ID。没有回合时也要跟。
   private observe(session: NativeSession, message: Record<string, unknown>): void {
+    session.stream.observe(message)
     if (
       session.notificationAt != null &&
       isMainToolResult(message) &&

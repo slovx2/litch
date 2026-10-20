@@ -13,6 +13,7 @@ versioning or publishing metadata.
 - 手动派子会话的弹窗多了强度、目录、权限三项
 - DSH：派到 DSH 上的子会话不再在第一回合后被改成简报开头的那句话，保留派出时起的名字
 - 适配器：命名空间可带 `instructions`（挂上时进系统提示的规矩），六家入口都送到模型面前；`litch_sessions` 新增 `accept`、`withdraw`、收尾工具 `wrap_up`（用户发起的回合没调时设备进程开一个 `remind` 回合，设置键 `sessions.wrapUpReminder`），`start` 去掉 `wake_parent`，提案记下提出它的回合和调用、了结时间，`litch/sessionProposal/list` 可带了结的，`accept` 可带 `overrides`，`litch/sessionProposal/changed` 带刚变的那几条
+- Claude Code：一条回复里接连派几个子代理（或接连调几个工具，后一个的参数很长、要流好几秒）时，前面那几个不再被“原生工具意图未能确认落盘”拒掉、3 秒就失败。确认落盘的钩子原来只等 3 秒，现在回复还在流就一直等，流完再等 3 秒
 
 ## 0.13.0
 
