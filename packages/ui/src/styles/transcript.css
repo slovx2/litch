@@ -227,7 +227,7 @@
   color: var(--ink-2);
 }
 .proc-head .sep {
-  color: var(--line-3);
+  color: var(--ink-3);
   margin: 0 6px 0 0;
 }
 .proc-head .bad,
