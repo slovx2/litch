@@ -31,9 +31,27 @@ export async function roomSeen(
 ): Promise<RoomSeen> {
   const kit = (window as unknown as { __filesKit: FilesKit }).__filesKit
   const { until, one, frame } = kit
+  // 侧面板开没开按会话记（新建对话页按设备记），没开过的切过来是收着的：用快捷键（⌥⌘B）打开。
+  // 这几个函数是整个送进页面里跑的，用不了模块里的别的函数，所以写在里面
+  const openSide = async () => {
+    if (kit.sideOpen()) return
+    // 开合的快捷键 150 毫秒里只认一次，和上一次按隔开
+    await kit.sleep(220)
+    document.body.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: '∫',
+        code: 'KeyB',
+        altKey: true,
+        metaKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    )
+  }
   await kit.seen(() => window.innerWidth === inner && window.innerHeight === innerHeight, 5000)
   await kit.openSession(waiting)
   await until('请求卡片', () => one('.req'), 30_000)
+  await openSide()
   await until('面板跟到了这个会话', () => kit.sideOpen() && kit.rows().length > 0)
   for (let count = 0; count < 4; count++) await frame()
 
@@ -106,6 +124,8 @@ export async function roomSeen(
     new KeyboardEvent('keydown', { key: 'n', metaKey: true, bubbles: true, cancelable: true }),
   )
   await until('新建对话页', () => one('.new-hero'))
+  await openSide()
+  await until('新建对话页上面板开着', () => kit.sideOpen())
   for (let count = 0; count < 4; count++) await frame()
   const newPageFaults = faultsOf(null)
   return {
@@ -141,6 +161,23 @@ export async function newPageSeen(args: {
 }): Promise<NewPageSeen> {
   const kit = (window as unknown as { __filesKit: FilesKit }).__filesKit
   const { until, one, all, text, frame } = kit
+  // 侧面板开没开按会话记（新建对话页按设备记），没开过的切过来是收着的：用快捷键（⌥⌘B）打开。
+  // 这几个函数是整个送进页面里跑的，用不了模块里的别的函数，所以写在里面
+  const openSide = async () => {
+    if (kit.sideOpen()) return
+    // 开合的快捷键 150 毫秒里只认一次，和上一次按隔开
+    await kit.sleep(220)
+    document.body.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: '∫',
+        code: 'KeyB',
+        altKey: true,
+        metaKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    )
+  }
   const placeNow = () => {
     const panel = kit.side()
     return `${panel?.dataset.device}/${panel?.dataset.workspace}｜${kit.root()}`
@@ -162,6 +199,7 @@ export async function newPageSeen(args: {
     new KeyboardEvent('keydown', { key: 'n', metaKey: true, bubbles: true, cancelable: true }),
   )
   await until('新建对话页', () => one('.new-hero'))
+  await openSide()
   await until('面板还挂着', () => kit.sideOpen() && kit.rows().length > 0)
   const start = placeNow()
   const startRows = kit.rows().length

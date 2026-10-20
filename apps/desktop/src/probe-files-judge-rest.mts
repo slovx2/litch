@@ -279,10 +279,12 @@ function judgeShell(shell: ShellSeen): string[] {
     restored.mode === wide.mode && restored.side === wide.side,
     `窗口放回原来的大小，面板没有回到原来的宽度：${say(restored)}（原来 ${say(wide)}）`,
   )
-  // 让位只是画得窄，记下来的宽度不改
+  // 让位只是画得窄，记下来的宽度不改（记录里还有各会话开没开面板，中间开过面板的会话会变，不比）
+  const widthOf = (saved: string) => (JSON.parse(saved || '{}') as { width?: number }).width
   must(
-    wide.saved === narrow.saved && wide.saved === restored.saved,
-    `窗口变窄的时候记下来的宽度被改了：${narrow.saved}（原来 ${wide.saved}）`,
+    widthOf(wide.saved) === widthOf(narrow.saved) &&
+      widthOf(wide.saved) === widthOf(restored.saved),
+    `窗口变窄的时候记下来的宽度被改了：${narrow.saved}、${restored.saved}（原来 ${wide.saved}）`,
   )
   // ---- 新建对话页 ----
   must(

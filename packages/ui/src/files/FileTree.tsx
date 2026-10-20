@@ -138,9 +138,23 @@ export function FileTree({
   useLayoutEffect(() => {
     const element = scroller.current
     if (!element || rows.length === 0 || restored.current === uiKey) return
-    restored.current = uiKey
-    element.scrollTop = treeScrollOf(uiKey)
-    sync()
+    const restore = () => {
+      restored.current = uiKey
+      element.scrollTop = treeScrollOf(uiKey)
+      sync()
+    }
+    if (element.clientHeight > 0) {
+      restore()
+      return
+    }
+    // 面板收着（侧面板开合按会话记，切到没开过的会话时它不显示）：这时设滚动不起作用，等它露出来再滚
+    const observer = new ResizeObserver(() => {
+      if (element.clientHeight === 0 || restored.current === uiKey) return
+      observer.disconnect()
+      restore()
+    })
+    observer.observe(element)
+    return () => observer.disconnect()
   }, [scroller, sync, uiKey, rows.length])
 
   // 要露出来的路径（从对话里、从找文件的结果里点开的）：把它上面的各级目录展开，取到了就滚到它那一行
