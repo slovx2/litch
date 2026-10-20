@@ -133,7 +133,7 @@ test('progress, tools and final Markdown remain separate in streaming and replay
     .map((message) => message.params.item)
   assert.deepEqual(
     completedItems.map((item) => item.type),
-    ['agentMessage', 'mcpToolCall', 'agentMessage'],
+    ['userMessage', 'agentMessage', 'mcpToolCall', 'agentMessage'],
   )
   assert.equal(new Set(completedItems.map((item) => item.id)).size, completedItems.length)
   assert.deepEqual(replay.items, turn.items)
@@ -435,6 +435,12 @@ test('Hook 原生 ID 去重并保持唯一终态，未收到结果的运行明�
   )
 })
 
+/** 回答这一侧完成的条目（用户消息照上游也作为条目发出来，不算在内） */
+const answerCompleted = (messages: any[]) =>
+  messages.filter(
+    (message) => message.method === 'item/completed' && message.params.item.type !== 'userMessage',
+  )
+
 test('failed partial messages are completed as commentary, never final answers', async () => {
   const { messages, turn } = await present(
     emit([
@@ -444,7 +450,7 @@ test('failed partial messages are completed as commentary, never final answers',
   )
   assert.equal(turn.status, 'failed')
   assert.equal(assistantItems(turn.items)[0]?.phase, 'commentary')
-  assert.equal(messages.filter((message) => message.method === 'item/completed').length, 1)
+  assert.equal(answerCompleted(messages).length, 1)
 })
 
 test('plan output retains its native plan item and complete Markdown', async () => {
@@ -461,5 +467,5 @@ test('plan output retains its native plan item and complete Markdown', async () 
   assert.equal(plans.length, 1)
   assert.equal(plans[0]?.text, '## Plan\n\n1. Inspect\n2. Implement')
   assert.equal(assistantItems(turn.items).length, 0)
-  assert.equal(messages.filter((message) => message.method === 'item/completed').length, 1)
+  assert.equal(answerCompleted(messages).length, 1)
 })

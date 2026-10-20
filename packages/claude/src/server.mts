@@ -2586,6 +2586,7 @@ export class CodexClaudeAppServer {
   // 用户发消息时 CLI 正好在自己续跑：用户并不知道有回合在跑，不能让这次提交失败。
   // 把消息并进那个回合（CLI 会接着处理它），返回的就是那个回合。
   private async joinSpontaneousTurn(
+    peer: RpcPeer,
     threadId: string,
     params: Record<string, unknown>,
     messageId: string | null,
@@ -2617,7 +2618,22 @@ export class CodexClaudeAppServer {
       return null
     }
     this.store.saveSteeredMessage(turnId, item, messageId, hash)
+    this.sendInputItem(peer, threadId, turnId, item)
     return this.store.getTurn(turnId)
+  }
+
+  // 回合的输入条目（用户消息、上传的图片）和上游一样发给会话的全部订阅者（item/started、item/completed，用户消息带
+  // clientId）：别的连接开的回合（设备进程开的唤醒、提醒，手机上发的话）正看着这个会话的客户端也能实时看到；
+  // 发起方按 clientId 认出自己先显示的那条。
+  private sendInputItem(peer: RpcPeer, threadId: string, turnId: string, item: ThreadItem): void {
+    this.notify(peer, {
+      method: 'item/started',
+      params: { threadId, turnId, item, startedAtMs: nowMillis() },
+    })
+    this.notify(peer, {
+      method: 'item/completed',
+      params: { threadId, turnId, item, completedAtMs: nowMillis() },
+    })
   }
 
   private failTurn(peer: RpcPeer, threadId: string, turn: TurnRecord, error: Error): void {
@@ -3023,7 +3039,7 @@ export class CodexClaudeAppServer {
     }
     const merged = queuedId
       ? null
-      : await this.joinSpontaneousTurn(threadId, params, messageId, hash)
+      : await this.joinSpontaneousTurn(peer, threadId, params, messageId, hash)
     if (merged) return { turn: this.toLifecycleTurn(merged) }
     if (
       this.activeTurnByThread.has(threadId) ||
@@ -3095,9 +3111,7 @@ export class CodexClaudeAppServer {
         imageItems.push({ type: 'imageView', id: newId(), path: img.displayPath })
       }
     }
-    // imageView items are retained on the turn for history (thread/read) and, in
-    // contrast to the userMessage, surfaced live through the item/* event stream
-    // so the App's transcript shows the uploaded image inline during the turn.
+    // imageView 条目和用户消息一样留在回合里（thread/read），也实时发出去，界面在回合进行中就能显示上传的图片
     initialItems.push(...imageItems)
     // Note: we used to short-circuit Codex App's title-generation turn with a
     // local regex-derived title to avoid prompt leakage into the parent thread.
@@ -3134,27 +3148,7 @@ export class CodexClaudeAppServer {
 
     setImmediate(() => {
       this.notify(peer, { method: 'turn/started', params: { threadId, turn: publicTurn } })
-      if (queuedId) {
-        const item = initialItems[0]!
-        this.notify(peer, {
-          method: 'item/started',
-          params: { threadId, turnId, item, startedAtMs: nowMillis() },
-        })
-        this.notify(peer, {
-          method: 'item/completed',
-          params: { threadId, turnId, item, completedAtMs: nowMillis() },
-        })
-      }
-      for (const item of imageItems) {
-        this.notify(peer, {
-          method: 'item/started',
-          params: { threadId, turnId, item, startedAtMs: nowMillis() },
-        })
-        this.notify(peer, {
-          method: 'item/completed',
-          params: { threadId, turnId, item, completedAtMs: nowMillis() },
-        })
-      }
+      for (const item of initialItems) this.sendInputItem(peer, threadId, turnId, item)
       if (params.outputSchema == null && workflowCommand?.type === 'list') {
         this.completeWorkflowListTurn(peer, thread, turn)
         return
@@ -5323,7 +5317,7 @@ export class CodexClaudeAppServer {
     return { status: applied ? 'applied' : 'targetUnavailable' }
   }
 
-  private async turnSteer(_peer: RpcPeer, params: Record<string, unknown>): Promise<unknown> {
+  private async turnSteer(peer: RpcPeer, params: Record<string, unknown>): Promise<unknown> {
     const threadId = requiredString(params.threadId, 'threadId')
     const expectedTurnId = requiredString(params.expectedTurnId, 'expectedTurnId')
     if (!this.store.getThread(threadId)) throw new ProtocolError(-32602, '会话不存在')
@@ -5357,11 +5351,7 @@ export class CodexClaudeAppServer {
       throw new ProtocolError(-32009, '回合已终结')
     const input = Array.isArray(params.input) ? (params.input as UserInput[]) : []
     const prompt = textFromInput(input)
-    // The steered message is retained on the turn for history (thread/read), but
-    // — like a normal turn's user message — it is NOT surfaced as a userMessage
-    // item/started+item/completed event. The real app-server's turn_steer just
-    // feeds the input into the core (steer_input) and EventMsg::UserMessage is
-    // unhandled in the live stream, so no userMessage item event is emitted.
+    // 插的话留在回合里（thread/read），送进去之后和上游一样发给全部订阅者（上游在交给模型时发这条用户消息）
     const item: ThreadItem = {
       type: 'userMessage',
       id: newId(),
@@ -5370,6 +5360,7 @@ export class CodexClaudeAppServer {
     }
     this.store.saveSteeredMessage(activeTurnId, item, messageId, hash)
     await this.runtime.steer(threadId, prompt)
+    this.sendInputItem(peer, threadId, activeTurnId, item)
     return { turnId: activeTurnId }
   }
 

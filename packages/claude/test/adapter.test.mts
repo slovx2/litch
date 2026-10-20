@@ -395,7 +395,11 @@ test('primary turn lifecycle keeps lightweight notLoaded envelopes', async () =>
       json({
         id: 3,
         method: 'turn/start',
-        params: { threadId, input: [{ type: 'text', text: 'hello', text_elements: [] }] },
+        params: {
+          threadId,
+          clientUserMessageId: 'client-message-1',
+          input: [{ type: 'text', text: 'hello', text_elements: [] }],
+        },
       }),
     )
     const turnStart = await reader.nextResponse(3)
@@ -404,7 +408,7 @@ test('primary turn lifecycle keeps lightweight notLoaded envelopes', async () =>
 
     let started = null
     let completed = null
-    let userMessageItemEvent = false
+    const userMessageEvents: any[] = []
     for (let i = 0; i < 500; i += 1) {
       const message = await reader.next()
       if (message.method === 'turn/started') started = message.params.turn
@@ -412,7 +416,7 @@ test('primary turn lifecycle keeps lightweight notLoaded envelopes', async () =>
         (message.method === 'item/started' || message.method === 'item/completed') &&
         message.params.item?.type === 'userMessage'
       ) {
-        userMessageItemEvent = true
+        userMessageEvents.push(message)
       }
       if (message.method === 'turn/completed') {
         completed = message.params.turn
@@ -428,8 +432,19 @@ test('primary turn lifecycle keeps lightweight notLoaded envelopes', async () =>
     // Lifecycle turn envelopes must not carry non-schema fields.
     assert.ok(!('apiDurationMs' in completed), 'Turn schema has no apiDurationMs')
     assert.ok(!('costUsd' in completed), 'Turn schema has no costUsd')
-    // The real app-server does not emit a userMessage item event during a turn.
-    assert.equal(userMessageItemEvent, false, 'userMessage must not be emitted as an item event')
+    // 和上游一样：用户消息作为条目发出来（开始、完成各一次），带着客户端给的 clientId
+    assert.deepEqual(
+      userMessageEvents.map((message) => message.method),
+      ['item/started', 'item/completed'],
+    )
+    for (const message of userMessageEvents) {
+      assert.equal(message.params.turnId, turnStart.result.turn.id)
+      assert.equal(message.params.item.clientId, 'client-message-1')
+      assert.deepEqual(message.params.item.content, [
+        { type: 'text', text: 'hello', text_elements: [] },
+      ])
+    }
+    assert.equal(userMessageEvents[0].params.item.id, userMessageEvents[1].params.item.id)
   } finally {
     proc.kill()
     await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 80 })
@@ -4501,6 +4516,108 @@ test('turn/steer appends user input to an active Claude turn', async () => {
       ),
       true,
     )
+  } finally {
+    proc.kill()
+    await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 80 })
+  }
+})
+
+// 和上游一样：谁开的回合、谁插的话，用户消息都作为条目发给会话的全部订阅者，带着发起方给的 clientId。
+// 别的连接（设备进程开的唤醒、提醒回合，手机上发的话）开的回合，正看着这个会话的客户端因此能实时看到那条用户消息
+test('user messages of turn/start and turn/steer reach every subscriber live, with clientId', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'codex-harness-adapter-test-'))
+  const sock = join(tmpdir(), `ccx-test-${randomUUID().slice(0, 8)}.sock`)
+  const proc = spawn(process.execPath, [adapter, 'app-server', '--listen', `unix://${sock}`], {
+    stdio: ['ignore', 'ignore', 'pipe'],
+    env: {
+      ...isolatedEnv,
+      CODEX_HOME: home,
+      CHA_CLAUDE_HOME: join(home, 'codex-harness-adapter'),
+      CHA_CLAUDE_MOCK: '1',
+      NODE_NO_WARNINGS: '1',
+    },
+  })
+  const open = async () => {
+    const ws = new WebSocket('ws://localhost/', {
+      createConnection: (() => net.createConnection(sock)) as typeof net.createConnection,
+    })
+    const frames: any[] = []
+    ws.on('message', (data) => frames.push(JSON.parse(String(data))))
+    const reader = new WebSocketJsonReader(ws)
+    await once(ws, 'open')
+    return { ws, reader, frames }
+  }
+  const userEvents = (frames: any[], clientId: string) =>
+    frames.filter(
+      (frame) =>
+        (frame.method === 'item/started' || frame.method === 'item/completed') &&
+        frame.params.item?.type === 'userMessage' &&
+        frame.params.item.clientId === clientId,
+    )
+  try {
+    await waitForStderr(proc, /listening on/)
+    const a = await open()
+    const b = await open()
+    a.ws.send(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'thread/start', params: {} }))
+    const threadId = (await a.reader.nextResponse(1)).result.thread.id
+    b.ws.send(
+      JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'thread/resume', params: { threadId } }),
+    )
+    await b.reader.nextResponse(1)
+
+    a.ws.send(
+      JSON.stringify({
+        jsonrpc: '2.0',
+        id: 2,
+        method: 'turn/start',
+        params: {
+          threadId,
+          clientUserMessageId: 'start-1',
+          input: [{ type: 'text', text: 'slow turn for steering', text_elements: [] }],
+        },
+      }),
+    )
+    const turnId = (await a.reader.nextResponse(2)).result.turn.id
+    a.ws.send(
+      JSON.stringify({
+        jsonrpc: '2.0',
+        id: 3,
+        method: 'turn/steer',
+        params: {
+          threadId,
+          expectedTurnId: turnId,
+          clientUserMessageId: 'steer-1',
+          input: [{ type: 'text', text: 'steered input', text_elements: [] }],
+        },
+      }),
+    )
+    assert.equal((await a.reader.nextResponse(3)).result.turnId, turnId)
+    for (let i = 0; i < 500; i += 1) {
+      const message = await b.reader.next()
+      if (message.method === 'turn/completed') break
+    }
+
+    for (const [who, frames] of [
+      ['A', a.frames],
+      ['B', b.frames],
+    ] as const) {
+      for (const [clientId, text] of [
+        ['start-1', 'slow turn for steering'],
+        ['steer-1', 'steered input'],
+      ] as const) {
+        const events = userEvents(frames, clientId)
+        assert.deepEqual(
+          events.map((frame) => frame.method),
+          ['item/started', 'item/completed'],
+          `${who} 收到 ${clientId} 的开始、完成各一次`,
+        )
+        assert.equal(events[0].params.item.id, events[1].params.item.id)
+        assert.equal(events[0].params.turnId, turnId)
+        assert.equal(events[0].params.item.content[0].text, text)
+      }
+    }
+    a.ws.close()
+    b.ws.close()
   } finally {
     proc.kill()
     await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 80 })

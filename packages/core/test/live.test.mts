@@ -1,7 +1,13 @@
 // 打开着的会话：发送、实时更新、排队、打断、审批与提问。对着假对端跑，不连任何真的东西。
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import type { JsonRpcMessage, Thread, ThreadItem, Turn } from '../../protocol/src/index.mjs'
+import {
+  formatSessionEvent,
+  type JsonRpcMessage,
+  type Thread,
+  type ThreadItem,
+  type Turn,
+} from '../../protocol/src/index.mjs'
 import {
   type ComposeOptions,
   createCore,
@@ -220,6 +226,51 @@ test('发送：消息立刻显示；对面给的回合、回显的消息、流�
   assert.equal(session.seen.view?.turns[0]?.status, 'completed')
   assert.equal(session.seen.view?.turns[0]?.durationMs, 1200)
   assert.equal(statusOf(session.seen.view, answerId), 'completed')
+})
+
+test('别的连接开的回合（设备进程的提醒、手机上发的话）：用户消息实时出来，开始、完成各一次不多出一条；之后本机发的照样落在自己那条上', async () => {
+  const { core, peer, command } = setup()
+  core.start()
+  await settle()
+  const session = watch(core)
+  await settle()
+
+  const server = peer.last()
+  const remind = formatSessionEvent({ kind: 'remind', notes: [] })
+  const base = { threadId: 'a', turnId: 'srv-r' }
+  server.notify('turn/started', { threadId: 'a', turn: started('srv-r') })
+  server.notify('item/started', { ...base, item: userText('u-r', remind), startedAtMs: 0 })
+  server.notify('item/completed', { ...base, item: userText('u-r', remind), completedAtMs: 0 })
+  server.notify('item/started', { ...base, item: userText('u-p', '手机上说的'), startedAtMs: 0 })
+  server.notify('item/completed', {
+    ...base,
+    item: { ...userText('u-p', '手机上说的'), clientId: 'phone-1' },
+    completedAtMs: 0,
+  })
+  await settle()
+  const view = session.seen.view
+  assert.equal(view?.turns.length, 1)
+  const [first, second] = (view?.turns[0]?.itemIds ?? []).map((id) => view?.items[id])
+  assert.equal(view?.turns[0]?.itemIds.length, 2)
+  assert.equal(first?.kind, 'userMessage')
+  assert.deepEqual(first?.kind === 'userMessage' ? first.event : null, {
+    kind: 'remind',
+    notes: [],
+  })
+  assert.equal(second && 'text' in second ? second.text : null, '手机上说的')
+  server.notify('turn/completed', { threadId: 'a', turn: finished('srv-r') })
+  await settle()
+
+  // 本机再发一句：对面回显的那条落在先显示出来的那条上
+  await command('session.send', { ...where, text: '桌面上说的' })
+  await settle()
+  const mine = { threadId: 'a', turnId: 'srv-1' }
+  server.notify('turn/started', { threadId: 'a', turn: started('srv-1') })
+  server.notify('item/started', { ...mine, item: userText('u1', '桌面上说的'), startedAtMs: 0 })
+  server.notify('item/completed', { ...mine, item: userText('u1', '桌面上说的'), completedAtMs: 0 })
+  await settle()
+  assert.deepEqual(session.texts().at(-1), ['桌面上说的'])
+  assert.equal(session.seen.view?.turns.length, 2)
 })
 
 test('发送失败：先显示出来的那一轮撤掉，命令报错（界面据此把文字还给用户）', async () => {

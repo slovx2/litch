@@ -215,6 +215,29 @@ export async function runDesktopReplay(
     if (step.await === 'turn/completed') pending?.release?.()
   }
 
+  // 官方桌面端按 clientId 认出自己先显示出来的那条用户消息（和上游一样，用户消息作为条目发回来）：
+  // 带了 clientUserMessageId 的回合，这条用户消息的开始、完成各来一次、是同一个条目，带着那个标识。
+  // 多出一个条目号，桌面端就显示两条
+  for (const step of fixture.steps) {
+    const clientId = (step.params as { clientUserMessageId?: unknown } | undefined)
+      ?.clientUserMessageId
+    const id = step.id ?? step.method
+    if (step.method !== 'turn/start' || typeof clientId !== 'string') continue
+    if (!report.succeeded.includes(id)) continue
+    const echoed = client.received.filter(
+      (message) =>
+        (message.method === 'item/started' || message.method === 'item/completed') &&
+        message.params?.item?.type === 'userMessage' &&
+        message.params.item.clientId === clientId,
+    )
+    const methods = echoed.map((message) => message.method).join('、')
+    const items = new Set(echoed.map((message) => message.params.item.id))
+    if (methods !== 'item/started、item/completed' || items.size !== 1)
+      wrong.push(
+        `${id} 的用户消息应当带着 clientId 发回来，开始、完成各一次、同一个条目，实际是：${methods || '没有'}（${items.size} 个条目）`,
+      )
+  }
+
   // 握手时退订了的通知，上游是不发的
   const optedOut = new Set(fixture.client.capabilities.optOutNotificationMethods as string[])
   for (const message of client.received)
