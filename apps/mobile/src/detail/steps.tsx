@@ -49,7 +49,7 @@ export const GroupCell = memo(function GroupCell({ row }: Props<'group'>) {
           }}
           numberOfLines={1}
         >
-          {row.expanded ? '▾' : '▸'} {t('activity.title')} · {steps}
+          {row.expanded ? '▾' : '▸'} {t('detail.activity')} · {steps}
           {tail}
         </Text>
       </Pressable>
