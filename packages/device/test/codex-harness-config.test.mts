@@ -76,7 +76,7 @@ test('config/read：分组、动态的模型和强度、实验特性只列 beta�
     })
     assert.deepEqual(
       read.groups.map((group: any) => group.id),
-      ['defaults', 'permissions', 'behavior', 'features', 'tools', 'memory'],
+      ['defaults', 'context', 'permissions', 'behavior', 'features', 'tools', 'memory'],
     )
     assert.deepEqual(
       read.actions.map((action: any) => action.id),

@@ -375,6 +375,8 @@ func (s *controlServer) handle(method string, params json.RawMessage) (any, *con
 		return map[string]any{"job": job}, nil
 	case "harness.install.read":
 		return map[string]any{"jobs": s.installs.jobs()}, nil
+	case "codex.models":
+		return s.codexModels()
 	}
 	return nil, &controlError{Reason: "failed", Text: both("不认识的控制命令 %s", "Unknown control command %s").with(method)}
 }

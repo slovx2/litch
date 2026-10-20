@@ -74,6 +74,11 @@ export interface TranslatorContext {
   home(): string | null
   /** 设备设置里 `harness.<id>.env` 填了哪些变量名（只要名字，值是密钥读不到） */
   envNames(): string[]
+  /**
+   * codex 自带的模型目录：`{executable, catalog}`，catalog 是 `codex debug models --bundled` 印出的 ModelsResponse。
+   * 由主进程用起 app-server 的那个可执行文件和环境跑（控制命令 codex.models）。问不到抛错
+   */
+  bundledCatalog(): Promise<unknown>
   /** 发给这条连接（声明过 harnessConfig 才发） */
   notify(method: string, params: unknown): void
   /** 经这套接口改了配置：告诉所有声明过 harnessConfig 的连接，发起的这条也收 */

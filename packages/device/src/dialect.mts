@@ -3,7 +3,13 @@
 //   - 原生的 codex（native-codex.mts）：只说标准的 Codex 协议，不认识我们加的任何东西。
 // 两种上游在路由上完全一样（按会话归属、按 harness 参数转发，通知和服务端请求原样带回）；
 // 不一样的只有下面这几处，都收在这个接口后面，路由那几个文件不用知道对面是谁。
-import type { HarnessConfigTranslator, TranslatorContext } from './harness-config.mjs'
+import { HARNESS_CONFIG_METHOD } from '../../protocol/src/harness-config.mjs'
+import {
+  HarnessConfigError,
+  type HarnessConfigTranslator,
+  type TranslatorContext,
+  text,
+} from './harness-config.mjs'
 import { isObject, type RpcError } from './wire.mjs'
 
 /** 握手之后向这个上游问一句 */
@@ -56,6 +62,29 @@ export function withoutOptOut(given: unknown): unknown {
   return { ...given, capabilities }
 }
 
+const MODEL_METHODS = new Set<string>([
+  HARNESS_CONFIG_METHOD.modelsRead,
+  HARNESS_CONFIG_METHOD.modelsWrite,
+])
+
+/**
+ * 模型清单（litch/harness/models/*）只有 config/read 报了 modelCatalog 的 harness 有。没实现的引擎各回各的
+ * “不认识”：Claude、Pi 是 -32601，dsh 是这个扩展的 notFound。统一换成这个扩展的 unavailable，客户端一种认法
+ */
+export function noModelCatalog(harness: string, method: string, error: RpcError): RpcError | null {
+  if (!MODEL_METHODS.has(method)) return null
+  const unknown =
+    error.code === -32601 ||
+    (error.code === -32000 && isObject(error.data) && error.data.litch === 'notFound')
+  if (!unknown) return null
+  const replaced = new HarnessConfigError(
+    'unavailable',
+    harness,
+    text(`${harness} 没有模型清单`, `${harness} has no model list`),
+  )
+  return { code: replaced.code, message: replaced.message, data: replaced.data }
+}
+
 /** 适配器的运行时：握手参数除了退订名单都带过去，声明问它自己要，别的什么都不用改 */
 export const ADAPTER_DIALECT: UpstreamDialect = {
   initializeParams: withoutOptOut,
@@ -66,7 +95,7 @@ export const ADAPTER_DIALECT: UpstreamDialect = {
       () => null,
     ),
   outgoing: () => null,
-  rejection: () => null,
+  rejection: noModelCatalog,
   serverRequest: () => false,
 }
 

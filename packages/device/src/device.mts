@@ -84,6 +84,8 @@ export interface DeviceOptions {
  * 总开关关着的话，刚起来就不该把错过的补跑了
  */
 const TASK_SETTINGS_WAIT_MS = 10_000
+/** 主进程跑一次 `codex debug models --bundled` 最多等多久（它那边自己等 20 秒） */
+const CODEX_CATALOG_TIMEOUT_MS = 30_000
 
 /** 主进程推来的定时任务设置（settings_tasks.go）。没有、不成样子的项用默认值 */
 export function taskSettings(state: ControlState | null): TaskSettings {
@@ -294,6 +296,10 @@ export class DeviceServer {
       harnessConfigChanged: (params) =>
         this.announce(HARNESS_CONFIG_NOTIFICATION.changed, params, EXTENSION.harnessConfig),
       harnessEnvNames: (harness) => this.harnessEnvNames(harness),
+      codexCatalog: () =>
+        this.control
+          ? this.control.request('codex.models', {}, CODEX_CATALOG_TIMEOUT_MS)
+          : Promise.reject(new Error('没有主进程，问不到 codex 自带的模型目录')),
       reachable: () => this.importer?.kick(),
       importing: () => {
         this.importer?.kick()
