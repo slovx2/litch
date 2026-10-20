@@ -76,8 +76,6 @@ export interface SessionsStartArguments {
   cwd?: string
   /** 缺省 fresh。fork 带上这个会话的全部上下文，只能同 harness */
   kind?: SessionLineageKind
-  /** 子会话停下后叫醒这个会话，缺省 true */
-  wake_parent?: boolean
   /**
    * user_asked：用户在这个回合里亲口要求起这个会话，直接起（设备进程还要核对这个回合确实是用户发起的，
    * 不是就降成提案）；propose（缺省）：出一张提案卡片，用户点了才起
@@ -288,10 +286,6 @@ export const SESSION_TOOLS: ClientToolNamespaceSpec = {
             type: 'string',
             enum: ['fresh', 'fork'],
             description: 'fork copies this whole conversation (same harness only). Default fresh.',
-          },
-          wake_parent: {
-            type: 'boolean',
-            description: 'Wake this session when the sub-session stops. Default true.',
           },
           initiation: { type: 'string', enum: ['user_asked', 'propose'] },
         },
