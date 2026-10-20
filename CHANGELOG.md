@@ -17,7 +17,8 @@ versioning or publishing metadata.
 - Litch：回答的呈现风格由 Litch 自己给。Litch 建的会话（含子会话、定时任务的会话）告诉模型回答显示在 Litch 里、能渲染 Markdown 和 Mermaid 图，要对话式地回答而不是终端式；用户自己的指令优先。经命名空间 `instructions` 送进系统提示（新的 `litch_presentation`：不带工具、只带 instructions），Claude Code 只在普通回合放、带 `outputSchema` 的回合不放；原生 Codex 不带。官方桌面端直连各 harness 的入口时没有这段
 - Claude Code：适配器自己连的 MCP 服务按会话跨回合复用连接，第二个回合起不再重起 stdio 服务、不再和 HTTP 服务重新握手（先 ping 一次确认还通）。配置或工作目录变了就重建；会话归档、删除、卸载、回退、适配器停止时关掉；没人用的连接默认留 10 分钟、最多 16 条（`CHA_CLAUDE_MCP_IDLE_MINUTES`、`CHA_CLAUDE_MCP_IDLE_CONNECTIONS`，设成 `0` 回到每回合重连）。MCP 服务进程里的状态因此会跨回合留着；回合被打断时还有请求在途的连接不留
 - Claude Code：`app-server` 接受 codex 风格的 `-c key=<TOML 值>`，认 `approval_policy`、`sandbox_mode`、`default_permissions`、`developer_instructions`、`permissions.*`、`mcp_servers.*`，其余键记日志后忽略；这一层叠在 `config.json` 上，不写回
-- Claude Code：支持配置里自定义的权限档位（`permissions.<名字>`：`extends` 内置档位、`filesystem` 的 read / write / deny 与子路径、`network.enabled`，判定照 codex 取最深的条目），`thread/start`、`turn/start` 等认档位名和 `runtimeWorkspaceRoots`，`default_permissions` 管不带权限的新会话，`permissionProfile/list` 列出它们。禁读同时作用于命令沙箱（macOS 的 sandbox-exec、Linux 的 bwrap 用空 tmpfs 盖住再挂回放开的子目录）和 Read、Glob、Grep、LS 等文件类工具。不用 `-c`、不选自定义档位时行为不变
+- Claude Code：支持配置里自定义的权限档位（`permissions.<名字>`：`extends` 内置档位、`filesystem` 的 read / write / deny 与子路径、`network.enabled`，判定照 codex 取最深的条目），`thread/start`、`turn/start` 等认档位名和 `runtimeWorkspaceRoots`，`default_permissions` 管不带权限的新会话，`permissionProfile/list` 列出它们。禁读同时作用于命令沙箱（macOS 的 sandbox-exec、Linux 的 bwrap 用空 tmpfs 盖住再挂回放开的子目录）和 Read、Glob、Grep、LS 等文件类工具。可写目录下的 `.git`、`.agents`、`.codex`、`.aws` 默认只读（照 codex），不存在的禁读路径也受管，大小写变体按磁盘上的真实路径判定。子代理线程和在子线程里追问的回合沿用父会话的档位。MCP 工具、动态工具、`Monitor` 等自己带命令的工具和 `command/exec` 不受档位管
+- Claude Code 行为变化：Linux 上 Bash 命令的 bwrap 沙箱另起 PID 命名空间（`--unshare-pid`，照 codex），命令里看不到宿主的其他进程，这一条不选自定义档位也生效；`config.json` 里已经写了 `default_permissions` 的，新会话的沙箱模式从此按它来（原来这个键不认）；`config.json` 里的 `permissions` 形状不对时进程起不来（原来不看这个键）
 
 ## 0.14.0
 

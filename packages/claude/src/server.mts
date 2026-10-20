@@ -4092,7 +4092,8 @@ export class CodexClaudeAppServer {
             if (parentProfile.permissionProfile) {
               const childSettings = this.store.threadSettings(childThreadId)
               childSettings.permissionProfile = parentProfile.permissionProfile
-              if (parentProfile.sandboxPolicy) childSettings.sandboxPolicy = parentProfile.sandboxPolicy
+              if (parentProfile.sandboxPolicy)
+                childSettings.sandboxPolicy = parentProfile.sandboxPolicy
               this.store.saveThreadSettings(childThreadId, childSettings)
             }
             // Child notifications must follow the current parent peer. This
@@ -6141,7 +6142,8 @@ export class CodexClaudeAppServer {
       if (values[key] != null && typeof values[key] !== 'string')
         throw new ProtocolError(-32602, key + ' 必须是字符串')
     if (values.mcp_servers != null) sdkMcpServers(values.mcp_servers)
-    validatePermissionsConfig(values)
+    // 档位按叠上 `-c` 之后的有效配置查：config.json 里可以引用只在 `-c` 里定义的档位名
+    validatePermissionsConfig(mergeConfigLayers(values, cliConfigLayer()))
     if (values.sandbox_workspace_write != null) {
       if (!isConfigObject(values.sandbox_workspace_write))
         throw new ProtocolError(-32602, 'sandbox_workspace_write 必须是对象')

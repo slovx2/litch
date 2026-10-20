@@ -10,7 +10,7 @@
 //   （codex-rs/protocol/src/permissions.rs 的 resolve_access）。
 // 规则只有这一份：命令的操作系统沙箱（command-sandbox.mts）和文件类工具的检查（runtime-permissions.mts）
 // 都从 compileFileSystemRules 的结果来。
-import { realpathSync, statSync } from 'node:fs'
+import { lstatSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { isConfigObject } from './config-store.mjs'
@@ -277,10 +277,11 @@ function parseEntries(profile: ResolvedPermissionProfile): SymbolicEntry[] {
   return entries
 }
 
-// 存在的部分取真实路径，不存在的尾巴照原样接上（与 runtime-permissions.mts 的 resolvedTarget 相同）
+// 存在的部分取真实路径，不存在的尾巴照原样接上。要用 native 版：JS 版不纠正大小写，macOS 默认的
+// 卷不分大小写，`ws/secret` 与规则里的 `ws/Secret` 是同一个目录，字面却对不上
 export function normalizedPath(path: string): string {
   try {
-    return realpathSync(path)
+    return realpathSync.native(path)
   } catch {
     const parent = dirname(path)
     if (parent === path) return path
@@ -341,7 +342,7 @@ export function compileFileSystemRules(
         byPath.set(normalized, entry.access)
     }
   const rules: FileSystemRules = {
-    entries: [...byPath].map(([path, access]) => ({ path, access })),
+    entries: protectMetadata(byPath),
     networkAccess: snapshot.profile.networkEnabled === true,
     workspaceRoots,
   }
@@ -351,15 +352,67 @@ export function compileFileSystemRules(
   return rules
 }
 
+// 可写目录下这几个顶层目录默认只读（codex 的 PROTECTED_METADATA_PATH_NAMES、metadata_write_denial）：
+// .git 的钩子、.codex 和 .agents 的配置、.aws 的凭据助手都会被沙箱外的程序拿去执行。档位里给这个路径
+// 写了条目（哪种访问都算）就照档位；它下面更深的 write 条目照旧可写。不存在的也保护，免得被建出来。
+// .git 是指向别处的文件（worktree、子模块）时，指向的 gitdir 一并只读
+const PROTECTED_METADATA_NAMES = ['.git', '.agents', '.codex', '.aws']
+
+function protectMetadata(byPath: ReadonlyMap<string, FileAccess>): FileSystemRule[] {
+  const entries = [...byPath].map(([path, access]) => ({ path, access }))
+  const before: FileSystemRules = { entries, networkAccess: false, workspaceRoots: [] }
+  const added = new Map<string, FileAccess>()
+  for (const { path: root, access } of entries) {
+    if (access !== 'write' || root === '/') continue
+    for (const name of PROTECTED_METADATA_NAMES) {
+      const logical = join(root, name)
+      const targets = new Set([logical, normalizedPath(logical)])
+      if (name === '.git') {
+        const gitdir = pointedGitdir(logical)
+        if (gitdir) targets.add(gitdir)
+      }
+      for (const path of targets)
+        if (!byPath.has(path) && pathAccess(before, path) === 'write') added.set(path, 'read')
+    }
+  }
+  return [...entries, ...[...added].map(([path, access]) => ({ path, access }))]
+}
+
+// `.git` 文件里的 `gitdir: <路径>`（相对路径相对于 .git 所在目录）
+function pointedGitdir(dotGit: string): string | null {
+  try {
+    if (!lstatSync(dotGit).isFile()) return null
+    const match = /^gitdir:\s*(.+?)\s*$/m.exec(readFileSync(dotGit, 'utf8'))
+    return match?.[1] ? normalizedPath(resolve(dirname(dotGit), match[1])) : null
+  } catch {
+    return null
+  }
+}
+
 function within(root: string, path: string): boolean {
   return root === '/' || path === root || path.startsWith(root + sep)
+}
+
+// 不存在的那段路径取不到真实大小写：macOS、Windows 默认不分大小写，deny 条目按不分大小写比，
+// 宁可多拦（分大小写的卷上只会多拦大小写不同的同名路径）；放行的条目仍按字面比
+const foldDeny = process.platform === 'darwin' || process.platform === 'win32'
+
+function matches(entry: FileSystemRule, path: string): boolean {
+  if (within(entry.path, path)) return true
+  return foldDeny && entry.access === 'deny' && within(entry.path.toLowerCase(), path.toLowerCase())
 }
 
 // path 要已经规范化（normalizedPath）；最深的命中条目为准，一条都不命中是 deny
 export function pathAccess(rules: FileSystemRules, path: string): FileAccess {
   let best: FileSystemRule | null = null
   for (const entry of rules.entries)
-    if (within(entry.path, path) && (!best || entry.path.length > best.path.length)) best = entry
+    if (
+      matches(entry, path) &&
+      (!best ||
+        entry.path.length > best.path.length ||
+        (entry.path.length === best.path.length && entry.access === 'deny'))
+    )
+      best = entry
   return best?.access ?? 'deny'
 }
 
@@ -388,7 +441,7 @@ export function withWritableRoots(
     const path = normalizedPath(root)
     if (entries.get(path) !== 'deny') entries.set(path, 'write')
   }
-  return { ...rules, entries: [...entries].map(([path, access]) => ({ path, access })) }
+  return { ...rules, entries: protectMetadata(entries) }
 }
 
 // 协议里给客户端看的旧式沙箱策略（thread/start 的 sandbox、thread/settings/updated 的 sandboxPolicy）

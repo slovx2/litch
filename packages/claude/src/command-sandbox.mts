@@ -1,9 +1,10 @@
 import { existsSync, realpathSync, statSync } from 'node:fs'
-import { dirname, isAbsolute, sep } from 'node:path'
+import { basename, dirname, isAbsolute, sep } from 'node:path'
 import {
   type FileAccess,
   type FileSystemRule,
   type FileSystemRules,
+  normalizedPath,
   pathAccess,
   withWritableRoots,
 } from './permission-profiles.mjs'
@@ -73,18 +74,22 @@ export function sandboxCommand(
     const network = policy.networkAccess === true
     if (process.platform === 'darwin')
       return ['/usr/bin/sandbox-exec', '-p', seatbeltProfile(rules, network), ...command]
-    if (process.platform === 'linux')
-      return [
+    if (process.platform === 'linux') {
+      const { args, placeholders } = bwrapFileSystemArgs(rules)
+      const bwrap = [
         'bwrap',
         '--die-with-parent',
         '--new-session',
-        ...bwrapFileSystemArgs(rules),
+        '--unshare-pid',
+        ...args,
         ...(network ? [] : ['--unshare-net']),
         '--chdir',
         cwd,
         '--',
         ...command,
       ]
+      return placeholders.length > 0 ? withPlaceholderCleanup(bwrap, placeholders) : bwrap
+    }
     throw new ProtocolError(-32004, '此宿主没有可用的 command 沙箱')
   }
   if (process.platform === 'darwin') {
@@ -103,6 +108,8 @@ export function sandboxCommand(
       'bwrap',
       '--die-with-parent',
       '--new-session',
+      // 新的 PID 命名空间（照 codex）：不然 setuid 的 bwrap 下能经 /proc/<宿主进程>/root/ 绕过挂载
+      '--unshare-pid',
       '--ro-bind',
       '/',
       '/',
@@ -125,11 +132,11 @@ function depth(path: string): number {
   return path === '/' ? 0 : path.split(sep).length - 1
 }
 
-// 要真正挂载的条目：按深度从浅到深，和上一级条目给的访问一样的省掉；不存在的路径挂不上，跳过
-// （不存在的禁读路径之后被建出来也不会被盖住，文件类工具那边仍按规则拒绝）
-function mountedRules(rules: FileSystemRules): { root: FileAccess; entries: FileSystemRule[] } {
+// 要写进沙箱的条目：按深度从浅到深，和上一级条目给的访问一样的省掉。sandbox-exec 的规则不要求路径存在，
+// 全都写；bwrap 只能挂存在的路径，不存在的另外处理（bwrapFileSystemArgs）
+function effectiveRules(rules: FileSystemRules): { root: FileAccess; entries: FileSystemRule[] } {
   const sorted = rules.entries
-    .filter((entry) => entry.path !== '/' && existsSync(entry.path))
+    .filter((entry) => entry.path !== '/')
     .sort((a, b) => depth(a.path) - depth(b.path) || a.path.localeCompare(b.path))
   const root = pathAccess(rules, '/')
   const entries = sorted.filter((entry) => {
@@ -148,11 +155,29 @@ function parentEntry(entries: FileSystemRule[], path: string): FileSystemRule | 
   return best
 }
 
+// 路径里第一个不存在的那一级（codex 的 find_first_non_existent_component）
+function firstMissing(path: string): string | null {
+  let current = '/'
+  for (const part of path.split(sep).filter(Boolean)) {
+    current = current === '/' ? `/${part}` : `${current}${sep}${part}`
+    if (!existsSync(current)) return current
+  }
+  return null
+}
+
+const METADATA_NAMES = new Set(['.git', '.agents', '.codex', '.aws'])
+
 // bwrap：根按 `:root` 只读或可写挂上；禁读的目录盖一层空 tmpfs（里面要挂回的子目录先建好挂载点，
 // 有要挂回的给 111 只许穿过、没有的给 000），文件用 /dev/null 盖住；可读、可写的子目录按真实路径挂回。
-// 挂回的都挂完以后再把各层 tmpfs 改成只读，免得沙箱里的进程在里面建文件
-export function bwrapFileSystemArgs(rules: FileSystemRules): string[] {
-  const { root, entries } = mountedRules(rules)
+// 挂回的都挂完以后再把各层 tmpfs 改成只读，免得沙箱里的进程在里面建文件。
+// 不存在的禁读、只读路径照 codex：落在可写范围里时，在第一个不存在的那一级放占位（元数据目录放只读的
+// 空目录，其余放 /dev/null），沙箱里就建不出它。占位是 bwrap 在宿主上建的挂载点，命令结束后要删掉
+export function bwrapFileSystemArgs(rules: FileSystemRules): {
+  args: string[]
+  placeholders: string[]
+} {
+  const { root, entries: all } = effectiveRules(rules)
+  const entries = all.filter((entry) => existsSync(entry.path))
   const args = [
     root === 'write' ? '--bind' : '--ro-bind',
     '/',
@@ -188,13 +213,43 @@ export function bwrapFileSystemArgs(rules: FileSystemRules): string[] {
       masked.push(entry.path)
     } else args.push(entry.access === 'write' ? '--bind' : '--ro-bind', entry.path, entry.path)
   }
+  const placeholders = new Set<string>()
+  const workspaceRoots = new Set(rules.workspaceRoots.map(normalizedPath))
+  for (const entry of all) {
+    if (entry.access === 'write' || existsSync(entry.path)) continue
+    const missing = firstMissing(entry.path)
+    if (!missing || placeholders.has(missing) || pathAccess(rules, dirname(missing)) !== 'write')
+      continue
+    const metadata =
+      entry.access === 'read' && missing === entry.path && METADATA_NAMES.has(basename(missing))
+    // 元数据目录照 codex 只在工作区根下面放占位（/tmp 之类的可写目录下不每条命令都建一遍），
+    // 别处不存在的元数据目录靠文件类工具的检查拦
+    if (metadata && !workspaceRoots.has(dirname(missing))) continue
+    placeholders.add(missing)
+    if (metadata) args.push('--perms', '555', '--tmpfs', missing, '--remount-ro', missing)
+    else args.push('--ro-bind', '/dev/null', missing)
+  }
   for (const path of masked) args.push('--remount-ro', path)
-  return args
+  return { args, placeholders: [...placeholders] }
 }
 
-// sandbox-exec：同一操作命中多条规则时后写的为准，所以按深度从浅到深写，最深的条目说了算
+// 命令结束后删掉 bwrap 在宿主上建的占位：只删空目录和空文件，命令的退出码照原样带出来
+function withPlaceholderCleanup(bwrap: string[], placeholders: string[]): string[] {
+  const quote = (value: string) => "'" + value.replaceAll("'", "'\"'\"'") + "'"
+  const cleanup = placeholders
+    .map(
+      (path) =>
+        `if [ -d ${quote(path)} ]; then rmdir ${quote(path)} 2>/dev/null; ` +
+        `elif [ -f ${quote(path)} ] && [ ! -s ${quote(path)} ]; then rm -f ${quote(path)}; fi`,
+    )
+    .join('; ')
+  return ['/bin/sh', '-c', `"$@"; status=$?; ${cleanup}; exit $status`, 'sh', ...bwrap]
+}
+
+// sandbox-exec：同一操作命中多条规则时后写的为准，所以按深度从浅到深写，最深的条目说了算。
+// 不存在的路径也写进去：之后被建出来同样受管
 export function seatbeltProfile(rules: FileSystemRules, network: boolean): string {
-  const { root, entries } = mountedRules(rules)
+  const { root, entries } = effectiveRules(rules)
   const subpath = (path: string) => `(subpath ${JSON.stringify(path)})`
   return [
     '(version 1)',

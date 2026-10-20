@@ -58,17 +58,25 @@ export function parseCliOverride(raw: string): [string, unknown] {
   return [key, value]
 }
 
+// 这几个键写进普通对象会改到原型上，键里任何一段是它们都整条忽略
+const unsafeKeys = new Set(['__proto__', 'constructor', 'prototype'])
+
 // smol-toml 给的表没有原型，换成普通对象，和 config.json 读出来的一样
 function plain(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(plain)
   if (isConfigObject(value))
-    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, plain(item)]))
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([key]) => !unsafeKeys.has(key))
+        .map(([key, item]) => [key, plain(item)]),
+    )
   return value
 }
 
 function accepted(key: string): boolean {
-  const [head] = key.split('.')
-  return scalarKeys.has(key) || tableKeys.has(head as string)
+  const segments = key.split('.')
+  if (segments.some((segment) => unsafeKeys.has(segment))) return false
+  return scalarKeys.has(key) || tableKeys.has(segments[0] as string)
 }
 
 // 一条覆盖写进树里：沿途不是表的换成表，最后一段整个替换
@@ -99,6 +107,7 @@ export function buildCliConfigLayer(rawOverrides: readonly string[]): ConfigTabl
 export function mergeConfigLayers(base: ConfigTable, overlay: ConfigTable): ConfigTable {
   const merged: ConfigTable = { ...base }
   for (const [key, value] of Object.entries(overlay)) {
+    if (unsafeKeys.has(key)) continue
     const existing = merged[key]
     merged[key] =
       isConfigObject(existing) && isConfigObject(value) ? mergeConfigLayers(existing, value) : value

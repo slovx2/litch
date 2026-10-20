@@ -1,6 +1,14 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
@@ -18,6 +26,7 @@ import {
   pathAccess,
   profileSandboxMode,
   resolvePermissionProfile,
+  validatePermissionsConfig,
 } from '../src/permission-profiles.mjs'
 import { deniedTool } from '../src/runtime-permissions.mjs'
 import type { RuntimeTurnContext } from '../src/types.mjs'
@@ -61,6 +70,22 @@ test('PROFILE-001：-c 照 codex 解析，只收白名单里的键，后给的�
     { '/a/b c': 'read', '/d': 'write' },
   ])
   assert.throws(() => parseCliOverride('novalue'), /缺少“=”/)
+  // 写坏了的表（TOML 解析失败）同样当字符串收下，到校验档位时报错，不会悄悄当成空档位
+  const broken = buildCliConfigLayer(['permissions.p.filesystem={ "/srv" = "deny"'])
+  assert.deepEqual(broken, { permissions: { p: { filesystem: '{ "/srv" = "deny' } } })
+  assert.throws(
+    () => validatePermissionsConfig({ ...broken, default_permissions: 'p' }),
+    /-c|filesystem|档位/,
+  )
+  // 键里带 __proto__ 之类的段整条忽略，值里的也丢掉，都不会改到原型上
+  const polluted = buildCliConfigLayer([
+    'permissions.__proto__.polluted=true',
+    'mcp_servers.constructor.prototype.x=1',
+    'permissions.p={ __proto__ = { polluted = true }, extends = ":workspace" }',
+  ])
+  assert.deepEqual(polluted, { permissions: { p: { extends: ':workspace' } } })
+  assert.equal(({} as Record<string, unknown>).polluted, undefined)
+  assert.equal(Object.getPrototypeOf(mergeConfigLayers({}, polluted)), Object.prototype)
   const layer = buildCliConfigLayer([
     'approval_policy="on-request"',
     'approval_policy="never"',
@@ -295,10 +320,79 @@ test('PROFILE-004：文件类工具按同一份规则查读写，搜索范围里
   }
 })
 
+// 卷不分大小写时（macOS 默认）字面不同的路径是同一个目录
+function caseInsensitive(dir: string): boolean {
+  try {
+    return realpathSync.native(dir.toUpperCase()) === dir
+  } catch {
+    return false
+  }
+}
+
+test('PROFILE-007：大小写变体、不存在的禁读路径、Glob 的 ..、可写目录下的元数据目录', () => {
+  const root = scratch('profile-edges')
+  try {
+    const own = join(root, 'ws/A')
+    mkdirSync(join(own, 'Secret'), { recursive: true })
+    mkdirSync(join(own, '.git/hooks'), { recursive: true })
+    mkdirSync(join(own, 'open/.codex'), { recursive: true })
+    writeFileSync(join(own, 'Secret/k.txt'), 'k')
+    const rules = compile(
+      {
+        s: {
+          extends: ':workspace',
+          filesystem: {
+            [join(own, 'Secret')]: 'deny',
+            [join(own, 'future')]: 'deny',
+            [join(own, 'open')]: 'write',
+            [join(own, 'open/.codex')]: 'write',
+          },
+        },
+      },
+      's',
+      own,
+      [own],
+    )
+    const ctx = context(own, rules)
+    const denied = (name: string, input: Record<string, unknown>) => deniedTool(ctx, name, input)
+    if (caseInsensitive(own)) {
+      assert.match(String(denied('Read', { file_path: join(own, 'secret/k.txt') })), /禁止读取/)
+      assert.match(String(denied('LS', { path: join(own, 'SECRET') })), /禁止读取/)
+      assert.match(String(denied('Write', { file_path: join(own, 'SECRET/new.txt') })), /禁止读取/)
+      // 不存在的禁读路径换个大小写也拦
+      assert.match(String(denied('Write', { file_path: join(own, 'FUTURE/x') })), /禁止读取/)
+    }
+    // 不存在的禁读路径：读、写、建在它下面都拦
+    assert.match(String(denied('Read', { file_path: join(own, 'future') })), /禁止读取/)
+    assert.match(String(denied('Write', { file_path: join(own, 'future/x.txt') })), /禁止读取/)
+    // Glob 的 pattern 带 .. 就不算搜索范围了，直接拒绝
+    assert.match(String(denied('Glob', { pattern: '../**/k.txt' })), /不能带 \.\./)
+    assert.match(String(denied('Glob', { pattern: 'a/../../B/*' })), /不能带 \.\./)
+    assert.equal(denied('Glob', { pattern: '**/*.txt', path: join(own, 'open') }), null)
+    // 可写目录下的 .git、.agents、.codex、.aws 只读，不存在的也一样；档位明确给了 write 的照档位
+    for (const path of [
+      '.git/hooks/pre-commit',
+      '.agents/skills/x.md',
+      '.codex/config.toml',
+      '.aws/config',
+    ])
+      assert.match(String(denied('Write', { file_path: join(own, path) })), /超出授权目录/, path)
+    assert.equal(denied('Read', { file_path: join(own, '.git/HEAD') }), null)
+    assert.equal(denied('Write', { file_path: join(own, 'open/.codex/config.toml') }), null)
+    assert.match(
+      String(denied('Write', { file_path: join(own, 'open/.git/config') })),
+      /超出授权目录/,
+    )
+    assert.equal(denied('Write', { file_path: join(own, 'gitignore/.git-not') }), null)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
 // 典型的 SaaS 档位：整个用户数据根禁读，放回自己的工作区（可写）和自己 codex home 里的一小块（只读）
 function saasLayout(root: string): { own: string; rules: FileSystemRules } {
   const own = join(root, 'ws/A')
-  for (const dir of ['ws/A/private', 'ws/B', 'home/A/.codex', 'cfg'])
+  for (const dir of ['ws/A/private', 'ws/A/.git', 'ws/B', 'home/A/.codex', 'cfg'])
     mkdirSync(join(root, dir), { recursive: true })
   writeFileSync(join(own, 'a.txt'), 'a')
   writeFileSync(join(root, 'ws/B/secret'), 'b')
@@ -315,6 +409,8 @@ function saasLayout(root: string): { own: string; rules: FileSystemRules } {
           [join(root, 'home')]: 'deny',
           [join(root, 'home/A/.codex')]: 'read',
           [join(own, 'private')]: 'deny',
+          // 还不存在的禁读路径
+          [join(own, 'future')]: 'deny',
         },
       },
     },
@@ -336,7 +432,20 @@ const SANDBOX_CASES: Array<[string, (root: string) => string, boolean]> = [
   ['工作区里再禁的子目录', () => 'ls private', false],
   ['写自己的工作区', () => 'echo x > new.txt && cat new.txt', true],
   ['写用户数据根', (root) => `echo x > ${root}/ws/top`, false],
+  ['大小写不同的禁读目录', () => 'ls PRIVATE', false],
+  ['建出不存在的禁读路径', () => 'mkdir future', false],
+  ['写不存在的禁读路径', () => 'echo x > future', false],
+  ['改 .git', () => 'echo x > .git/config', false],
+  ['建 .codex', () => 'mkdir .codex', false],
+  ['建 .agents', () => 'mkdir -p .agents/skills', false],
+  ['别的点目录照常写', () => 'mkdir -p .cache && echo x > .cache/y', true],
 ]
+
+// 跑完沙箱，宿主上不留占位，也没被建出来
+function assertNoLeftovers(own: string): void {
+  for (const name of ['future', '.codex', '.agents'])
+    assert.equal(existsSync(join(own, name)), false, `${name} 不该留在宿主上`)
+}
 
 test('PROFILE-005：macOS 的 sandbox-exec 按同一份规则禁读、挂回', {
   skip: process.platform !== 'darwin',
@@ -356,6 +465,7 @@ test('PROFILE-005：macOS 的 sandbox-exec 按同一份规则禁读、挂回', {
       const result = spawnSync(bin as string, args, { cwd: own, encoding: 'utf8' })
       assert.equal(result.status === 0, allowed, `${name}：${result.stderr}`)
     }
+    assertNoLeftovers(own)
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
@@ -382,7 +492,7 @@ test('PROFILE-006：bwrap 用空 tmpfs 盖住禁读目录、建好挂载点再�
         missing,
       ).length > 1,
     )
-    const args = bwrapFileSystemArgs(rules)
+    const { args, placeholders } = bwrapFileSystemArgs(rules)
     const at = (...needle: string[]) =>
       args.findIndex((_, index) => needle.every((part, offset) => args[index + offset] === part))
     assert.deepEqual(args.slice(0, 7), ['--ro-bind', '/', '/', '--dev', '/dev', '--proc', '/proc'])
@@ -400,6 +510,14 @@ test('PROFILE-006：bwrap 用空 tmpfs 盖住禁读目录、建好挂载点再�
     const lastMount = Math.max(at('--bind', own, own), at('--tmpfs', join(own, 'private')))
     assert.ok(at('--remount-ro', ws) > lastMount)
     assert.ok(at('--remount-ro', home) > lastMount)
+    // 已有的 .git 只读挂回；不存在的禁读路径放 /dev/null 占位，工作区根下不存在的元数据目录放只读空目录
+    assert.ok(at('--ro-bind', join(own, '.git'), join(own, '.git')) > at('--bind', own, own))
+    assert.ok(at('--ro-bind', '/dev/null', join(own, 'future')) > at('--bind', own, own))
+    assert.ok(at('--perms', '555', '--tmpfs', join(own, '.codex'), '--remount-ro') > 0)
+    assert.deepEqual(
+      [...placeholders].sort(),
+      ['.agents', '.aws', '.codex', 'future'].map((name) => join(own, name)).sort(),
+    )
     if (!bwrapUsable()) return
     for (const [name, command, allowed] of SANDBOX_CASES) {
       const [bin, ...rest] = sandboxCommand(
@@ -413,6 +531,7 @@ test('PROFILE-006：bwrap 用空 tmpfs 盖住禁读目录、建好挂载点再�
       const result = spawnSync(bin as string, rest, { cwd: own, encoding: 'utf8' })
       assert.equal(result.status === 0, allowed, `${name}：${result.stderr}`)
     }
+    assertNoLeftovers(own)
   } finally {
     rmSync(root, { recursive: true, force: true })
   }

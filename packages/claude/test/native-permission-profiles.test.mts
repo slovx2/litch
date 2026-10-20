@@ -223,7 +223,10 @@ test('PROFILE-PROTO-005：子代理追问回合带着父会话的档位和禁读
       await handlers.onEvent({ type: 'tool_result', toolUseId: 'send-1', content: '已送达' })
       await handlers.onEvent({ type: 'completed', success: true, result: '好' })
     }
-    const relayed = await client.request('turn/start', { threadId: child.id, input: text('再查一下') })
+    const relayed = await client.request('turn/start', {
+      threadId: child.id,
+      input: text('再查一下'),
+    })
     assert.equal((await client.completed(relayed.turn.id)).status, 'completed')
     assert.ok(context?.subagentRelay, '这是一轮追问')
     assert.equal(context.sandboxMode, 'workspace-write')

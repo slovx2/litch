@@ -200,7 +200,9 @@ node packages/claude/dist/claude/src/adapter.mjs app-server --listen stdio:// \
 - 键按 `.` 拆成路径，值按 TOML 解析，解析不了就当字符串（与 codex 相同）。同一个键给多次，后面的为准。
 - 只认这几个键：`approval_policy`、`sandbox_mode`、`default_permissions`、`developer_instructions`、`permissions.*`、`mcp_servers.*`。别的键（`model_provider`、`features.*` 之类 codex 专有的）不报错，记进调试日志（`config.cliOverride.ignored`）后忽略。
 - 优先级：`-c` > 状态目录的 `config.json`（客户端经 `config/value/write` 写的）> 内置默认。`-c` 这一层只在内存里，不写回 `config.json`；表按键合并（`-c mcp_servers.a=…` 不会冲掉 `config.json` 里的 `mcp_servers.b`），其余整个替换。`mcp_servers` 之下还有 `~/.claude.json` 的 `mcpServers` 与 `CHA_CLAUDE_MCP_SERVERS`，它们排在 `config.json` 和 `-c` 前面。
-- 写错了（档位继承成环、继承 `:danger-full-access`、`default_permissions` 指向没定义的档位、条目格式不对）进程直接起不来，错误打在标准错误上。
+- 写错了（档位继承成环、继承 `:danger-full-access`、`default_permissions` 指向没定义的档位、条目格式不对、TOML 写坏了被当成字符串）进程直接起不来，错误打在标准错误上。`config.json` 里的 `permissions` 形状不对也一样。
+- 键里任何一段是 `__proto__`、`constructor`、`prototype` 的整条忽略。
+- `config/value/write` 写进 `config.json` 的值按叠上 `-c` 之后的有效配置校验，所以 `default_permissions` 可以写只在 `-c` 里定义的档位名。
 
 ### 自定义权限档位
 
@@ -213,14 +215,20 @@ node packages/claude/dist/claude/src/adapter.mjs app-server --listen stdio:// \
 - `network.enabled`：命令能不能联网。`network` 下其余的键（代理、域名名单等）不生效。
 - `thread/start`、`turn/start`、`thread/resume`、`thread/fork`、`thread/settings/update` 的 `permissions` 可以填这里定义的名字，没定义的名字照旧回 `-32602`；`default_permissions` 管不带权限也不带旧式 `sandbox` 的新会话。会话记下选中那一刻的档位，之后改配置不影响已有会话，除非请求里再选一次。`permissionProfile/list` 会列出这些档位。
 
-同一份规则同时管两处：模型的 `Bash` 命令（macOS 用 `sandbox-exec`，Linux 用 `bwrap`：禁读的目录盖一层空 tmpfs，再把其中放回的子目录挂回）和文件类工具（`Read`、`Glob`、`Grep`、`LS`、`NotebookRead` 查禁读，`Write`、`Edit`、`MultiEdit`、`NotebookEdit` 查可写）。`Glob`、`Grep` 的搜索范围里只要有禁读的目录就整个拒绝，请模型换一个不含它的目录。
+同一份规则同时管两处：模型的 `Bash` 命令（macOS 用 `sandbox-exec`，Linux 用 `bwrap`：禁读的目录盖一层空 tmpfs，再把其中放回的子目录挂回；照 codex 另起 PID 命名空间）和文件类工具（`Read`、`Glob`、`Grep`、`LS`、`NotebookRead` 查禁读，`Write`、`Edit`、`MultiEdit`、`NotebookEdit` 查可写）。`Glob`、`Grep` 的搜索范围里只要有禁读的目录就整个拒绝，请模型换一个不含它的目录；`Glob` 的 pattern 带 `..` 段也拒绝。
+
+- 路径先取真实路径再判定，大小写也按磁盘上的真实写法纠正（macOS 默认的卷不分大小写）；还不存在的那一段取不到真实写法，在 macOS 上 `deny` 条目按不分大小写比。
+- 不存在的禁读路径照样受管：`sandbox-exec` 的规则不要求路径存在；`bwrap` 照 codex，在可写范围里对第一个不存在的那一级挂一个 `/dev/null` 占位，命令里建不出它，命令结束后删掉占位（只删空文件、空目录）。
+- 可写目录下的 `.git`、`.agents`、`.codex`、`.aws` 默认只读（codex 的 `metadata_write_denial`），不存在的也不许建；`.git` 是指向别处的文件时，指向的 gitdir 一并只读。档位里给这个路径写了条目就照档位，比如 `"/ws/u1/.codex" = "write"`。Linux 上不存在的元数据目录只在工作区根下面放占位（只读的空目录），`/tmp` 之类别的可写目录下的靠文件类工具拦。
+
+不受档位管的（这些照旧只看审批策略和各自的设置）：MCP 服务的工具、动态工具（客户端注册的）、`Monitor` 之类自己带命令的工具、Claude Code 的钩子、`command/exec`（客户端直接起的命令，照旧按请求里的 `sandboxPolicy`）。
 
 和 codex 不一样的地方：
 
 - `deny` 的 glob 条目（如 `"/srv/**/*.env" = "deny"`）还不支持，写了选档位时报错；不继承 `:root` 可读、靠 `:minimal` 只读一部分目录的档位也还不支持。
 - Linux 上禁读目录里放回 `read` 的子目录也会挂回（codex 0.163.0 的 bwrap 只挂回可写的，只读的子目录在命令里看不到，它的文件工具却能读）。
-- 不存在的禁读路径不会预先盖住；之后在可写目录里建出来的，命令能读到，文件类工具仍按规则拒绝。
-- `:workspace` 下工作区根里 `.git`、`.agents`、`.codex` 的只读保护照旧不做；内置档位不看 `runtimeWorkspaceRoots`，与之前一样。
+- 并发的两条 `Bash` 命令共用同一个占位时，先结束的那条会删掉占位，另一条在剩下的时间里能建出那个路径（codex 有占位登记表，这里没有）。
+- 内置档位（`:workspace` 等）不做元数据目录保护、不看 `runtimeWorkspaceRoots`，与之前一样。
 
 ## Worktree isolation
 

@@ -1,4 +1,3 @@
-import { realpathSync } from 'node:fs'
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { claudeConfigDir } from './claude-native-files.mjs'
 import { sandboxCommand } from './command-sandbox.mjs'
@@ -67,7 +66,7 @@ function writableRoots(context: RuntimeTurnContext): string[] {
     ...activePermissionRoots(context.permissionGrants),
     ...(policy.excludeSlashTmp ? [] : ['/tmp']),
     ...(policy.excludeTmpdirEnvVar || !process.env.TMPDIR ? [] : [process.env.TMPDIR]),
-  ].map(resolvedTarget)
+  ].map(normalizedPath)
 }
 
 function inside(root: string, target: string): boolean {
@@ -105,11 +104,11 @@ export function isPlanFile(
   input: Record<string, unknown>,
 ): boolean {
   if (!context.planMode || !fileTools.has(name) || typeof input.file_path !== 'string') return false
-  const root = resolvedTarget(planDirectory(context))
-  const target = resolvedTarget(resolve(context.cwd, input.file_path))
+  const root = normalizedPath(planDirectory(context))
+  const target = normalizedPath(resolve(context.cwd, input.file_path))
   // 配置目录下的 plans 是各会话共用的，只豁免直接放在里面的文件
   if (claudePlansLocation() === 'config') return dirname(target) === root
-  const rootWithinProject = relative(resolvedTarget(context.cwd), root)
+  const rootWithinProject = relative(normalizedPath(context.cwd), root)
   if (
     rootWithinProject === '..' ||
     rootWithinProject.startsWith(`..${sep}`) ||
@@ -118,16 +117,6 @@ export function isPlanFile(
     return false
   const child = relative(root, target)
   return child.length > 0 && child !== '..' && !child.startsWith(`..${sep}`) && !isAbsolute(child)
-}
-
-function resolvedTarget(path: string): string {
-  try {
-    return realpathSync(path)
-  } catch {
-    const parent = dirname(path)
-    if (parent === path) return path
-    return resolve(resolvedTarget(parent), relative(parent, path))
-  }
 }
 
 // 按路径读文件、列目录、搜文件的工具，和它们给路径的参数
@@ -158,6 +147,13 @@ function deniedRead(
     .map((key) => input[key])
     .filter((value): value is string => typeof value === 'string' && value.length > 0)
   if (search && targets.length === 0) targets.push('.')
+  // pattern 里带 `..` 能搜到 path 之外，搜索范围就算不准了，直接拒绝
+  if (
+    name === 'Glob' &&
+    typeof input.pattern === 'string' &&
+    input.pattern.split(/[\\/]/).includes('..')
+  )
+    return '当前权限档位下 Glob 的 pattern 不能带 ..'
   // Glob 的 pattern 写成绝对路径时，搜索范围是它开头不带通配符的那一段
   if (name === 'Glob' && typeof input.pattern === 'string' && isAbsolute(input.pattern)) {
     const parts = input.pattern.split('/')
@@ -212,7 +208,7 @@ export function deniedTool(
   if (context.sandboxMode !== 'danger-full-access' && fileTools.has(name)) {
     const target = input.file_path ?? input.notebook_path
     if (typeof target !== 'string') return '文件工具缺少目标路径'
-    const path = resolvedTarget(resolve(context.cwd, target))
+    const path = normalizedPath(resolve(context.cwd, target))
     const writable = context.fileSystem
       ? pathAccess(
           withWritableRoots(context.fileSystem, activePermissionRoots(context.permissionGrants)),
