@@ -33,6 +33,7 @@ const proposal = (id, extra = {}) => ({
   id,
   title: `任务 ${id}`,
   prompt: `简报 ${id}`,
+  background: `背景 ${id}`,
   harness: null,
   model: null,
   cwd: null,
