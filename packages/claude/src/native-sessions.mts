@@ -8,7 +8,10 @@
 // - 原生记录不归适配器管：删掉导进来的会话只是不再导入，原生记录不动；改名只改库里的。
 // - CHA_CLAUDE_NATIVE_SESSIONS=0 关掉整件事。
 
+import type { NativeLineageApp } from '../../protocol/src/native-lineage.mjs'
+import { claudeConfigDir } from './claude-native-files.mjs'
 import { type NativeMessage, projectNativeHistory } from './native-history.mjs'
+import { findNativeRecords, readNativeLineage } from './native-lineage.mjs'
 import type { SessionStore } from './store.mjs'
 import type { ThreadRecord } from './types.mjs'
 
@@ -29,6 +32,8 @@ export interface NativeSessionSource {
   list(): Promise<NativeSessionInfo[]>
   info(sessionId: string, cwd: string): Promise<NativeSessionInfo | undefined>
   messages(sessionId: string, cwd: string): Promise<NativeMessage[]>
+  /** 这几个会话各是不是别的应用派出来的（native-lineage.mts）。读不到的也给一个结果（null） */
+  lineage(sessionIds: readonly string[]): Promise<Map<string, NativeLineageApp | null>>
 }
 
 export function sdkNativeSessionSource(): NativeSessionSource {
@@ -38,6 +43,15 @@ export function sdkNativeSessionSource(): NativeSessionSource {
     info: async (sessionId, cwd) => (await sdk()).getSessionInfo(sessionId, { dir: cwd }),
     messages: async (sessionId, cwd) =>
       (await (await sdk()).getSessionMessages(sessionId, { dir: cwd })) as NativeMessage[],
+    lineage: async (sessionIds) => {
+      const paths = findNativeRecords(claudeConfigDir(), sessionIds)
+      return new Map(
+        sessionIds.map((id) => {
+          const path = paths.get(id)
+          return [id, path ? readNativeLineage(path) : null]
+        }),
+      )
+    },
   }
 }
 
@@ -141,7 +155,28 @@ export class NativeSessions {
       if (updatedAt > thread.updatedAt || name !== thread.name)
         store.upsertThread({ ...thread, name, updatedAt: Math.max(updatedAt, thread.updatedAt) })
     }
+    await this.recognize()
     return added
+  }
+
+  /**
+   * 导进来的会话里还没认过的：认一遍是不是别的应用派出来的，结果记进库（每个只认一次）。
+   * 有这一步之前导进来的会话也在这里补认。认不出来不影响导入
+   */
+  private async recognize(): Promise<void> {
+    const { store, source } = this.host
+    const checked = store.nativeLineage()
+    const pending = [...store.nativeSessions()]
+      .filter(([id, record]) => record.origin === 'imported' && !checked.has(id))
+      .map(([id]) => id)
+    if (pending.length === 0) return
+    let found: Map<string, NativeLineageApp | null>
+    try {
+      found = await source.lineage(pending)
+    } catch {
+      return
+    }
+    for (const id of pending) store.saveNativeLineage(id, found.get(id) ?? null)
   }
 
   /**

@@ -42,6 +42,7 @@ import type {
   HarnessConfigTopicView,
   HcEdit,
   HcMcpServer,
+  HcModelEntry,
   HcPart,
   HcValue,
   InstructionsLinkResult,
@@ -968,6 +969,20 @@ export interface Commands {
   'harnessConfig.instructions.write': {
     params: { deviceId: string; harness: string; content: string; expectedHash: string }
     result: { hash: string }
+  }
+  /**
+   * 整份写模型清单（config 的 modelCatalog 为真的 harness 才有）。顺序就是模型选择里的顺序；
+   * entries 给 null 是不用自定义清单、回到 harness 自带的模型目录，空数组以 invalid 结束。
+   * restartRequired 为真时订阅里的 restartRequired 也已经是真的，界面照“需要重启”提示
+   */
+  'harnessConfig.models.write': {
+    params: {
+      deviceId: string
+      harness: string
+      entries: HcModelEntry[] | null
+      expectedVersion: string
+    }
+    result: { restartRequired: boolean }
   }
   /** 设备上各 harness 的指令文件一览，和现在是不是统一模式。不缓存，每次现读 */
   'instructions.overview': {

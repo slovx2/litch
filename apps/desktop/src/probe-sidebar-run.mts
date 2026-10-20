@@ -14,6 +14,7 @@ import { dragTo, frameSeen, keysSeen, sidebarBecame, sidePanel } from './probe-s
 import { hideNow, hideSeen, reloadSeen } from './probe-sidebar-hide.mjs'
 import { type FrameChecks, judgeFrame } from './probe-sidebar-judge.mjs'
 import { installSidebarKit, type SidebarKit } from './probe-sidebar-kit.mjs'
+import { judgeNative, NATIVE_TITLE, nativeSeen } from './probe-sidebar-native.mjs'
 import type { SmokeHooks } from './smoke.mjs'
 
 /** 模拟核心里用的那个会话（示例数据里的标题）：本机、docs-site 项目，闲着的 */
@@ -170,6 +171,7 @@ async function run(window: BrowserWindow, hooks: SmokeHooks): Promise<readonly [
   const frame = await frameChecks(window, hooks)
   const filter = await inPage(window, filterSeen, SESSION)
   const cwd = await inPage(window, cwdSeen)
+  const native = await inPage(window, nativeSeen, NATIVE_TITLE)
 
   // 只看着 Pi、侧栏收着的时候把核心杀掉：外壳会把它重新拉起来、让窗口重新加载，和应用重开差不多
   await inPage(window, filterTo, 'pi')
@@ -187,12 +189,13 @@ async function run(window: BrowserWindow, hooks: SmokeHooks): Promise<readonly [
   const shots = process.env.LITCH_SIDEBAR_SHOTS
   if (shots) await shoot(window, shots)
   return [
-    { tally, frame: { ...frame, reload }, filter, kept, cwd },
+    { tally, frame: { ...frame, reload }, filter, kept, cwd, native },
     [
       ...judgeTally(tally),
       ...judgeFrame({ ...frame, reload }),
       ...judgeFilter(filter, kept, SESSION),
       ...judgeCwd(cwd),
+      ...judgeNative(native),
     ],
   ]
 }

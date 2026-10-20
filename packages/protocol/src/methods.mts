@@ -207,6 +207,9 @@ import type {
   HarnessMcpRemoveParams,
   HarnessMcpUpsertParams,
   HarnessMcpWriteResponse,
+  HarnessModelsReadResponse,
+  HarnessModelsWriteParams,
+  HarnessModelsWriteResponse,
   HarnessParams,
   HarnessProviderIdParams,
   HarnessProvidersActivateParams,
@@ -437,6 +440,11 @@ export interface ClientRequests {
   'litch/harness/instructions/write': {
     params: HarnessInstructionsWriteParams
     result: HarnessInstructionsWriteResponse
+  }
+  'litch/harness/models/read': { params: HarnessParams; result: HarnessModelsReadResponse }
+  'litch/harness/models/write': {
+    params: HarnessModelsWriteParams
+    result: HarnessModelsWriteResponse
   }
   'litch/device/instructions/unify': {
     params: DeviceInstructionsUnifyParams

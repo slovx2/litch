@@ -154,7 +154,8 @@ export function HarnessBlock(props: HarnessBlockProps) {
       <InstallRow device={device} harnessId={harnessId} view={install} name={name} />
       {fold.open ? (
         <div id={bodyId} className="mng-h-body">
-          {harness && !ready ? (
+          {/* 停用了的：开关就在标题行上，不用再解释 */}
+          {harness && !ready && harness.state !== 'disabled' ? (
             <div className="mng-h-why">
               <HarnessWhy harness={harness} />
             </div>

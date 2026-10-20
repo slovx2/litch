@@ -96,6 +96,12 @@ export const EXTENSION = {
    * `extensions`。声明了它的连接才会收到配置变化和登录进展的通知。
    */
   harnessConfig: 'harnessConfig',
+  /**
+   * 别的应用派出的子会话：harness 自己的原生会话里，有的是别的应用（比如 Claude 桌面端）从另一个会话派出来的。
+   * 会话对象上带 `litchNativeLineage` 说明是哪个应用派的（native-lineage.mts，定义在
+   * protocol/extensions/native-lineage.json）。声明了它的连接才会在会话对象上看到这个字段。
+   */
+  nativeLineage: 'nativeLineage',
 } as const
 
 export type ExtensionName = (typeof EXTENSION)[keyof typeof EXTENSION]

@@ -1,5 +1,6 @@
 // 一台设备上一个 harness 的详情设置（15 号设计）：从设备详情里那个 harness 的标题行进来。
-// 四块各占一个标签：配置（按对面声明的分组摆配置项和动作）、账号（provider、登录、API key）、MCP、指令文件。
+// 四块各占一个标签：配置（按对面声明的分组摆配置项和动作）、账号（provider、登录、API key）、MCP、指令文件；
+// 配置里说有模型清单（modelCatalog）的 harness 多一个“模型”标签。
 // 内容全按对面的声明画，界面不认识哪一项是干什么的。改过要重启才生效的，顶上一直提示，可以就地重启。
 // 开着这一页才订阅（harnessConfig 主题），核心这时才去设备上读。
 import type { DeviceView, HarnessConfigTopicView } from '@litch/core'
@@ -14,9 +15,10 @@ import { AccountsTab } from './AccountsTab.tsx'
 import { ConfigTab } from './ConfigTab.tsx'
 import { InstructionsTab } from './InstructionsTab.tsx'
 import { McpTab } from './McpTab.tsx'
+import { ModelsTab } from './ModelsTab.tsx'
 
-type Tab = 'config' | 'accounts' | 'mcp' | 'instructions'
-const TABS: readonly Tab[] = ['config', 'accounts', 'mcp', 'instructions']
+type Tab = 'config' | 'accounts' | 'models' | 'mcp' | 'instructions'
+const TABS: readonly Tab[] = ['config', 'accounts', 'models', 'mcp', 'instructions']
 
 /** 订阅这个 harness 的详情设置。订不上（设备没了）是 'error' */
 export function useHarnessConfig(
@@ -71,6 +73,10 @@ export function HarnessSettingsPage({ device, harnessId, onBack, onClose }: Page
   }, [onBack])
 
   const ready = view !== undefined && view !== 'error' && view.supported === true
+  const catalog = ready && view.config.data?.modelCatalog === true
+  const tabs = TABS.filter((one) => one !== 'models' || catalog)
+  // 模型标签没了（重读后说没有了）：回到配置
+  const shown: Tab = tabs.includes(tab) ? tab : 'config'
   let body = null
   if (view === undefined) {
     body = (
@@ -134,23 +140,25 @@ export function HarnessSettingsPage({ device, harnessId, onBack, onClose }: Page
                 ) : null}
                 {/* biome-ignore lint/a11y/useSemanticElements: 分段按钮，不用 fieldset */}
                 <div className="seg hc-tabs" role="group" aria-label={t('hc.title', { name })}>
-                  {TABS.map((one) => (
+                  {tabs.map((one) => (
                     <button
                       key={one}
                       type="button"
                       data-tab={one}
-                      aria-pressed={tab === one}
+                      aria-pressed={shown === one}
                       onClick={() => setTab(one)}
                     >
                       {t(`hc.tab.${one}`)}
                     </button>
                   ))}
                 </div>
-                {tab === 'config' ? (
+                {shown === 'config' ? (
                   <ConfigTab device={device} harnessId={harnessId} slot={view.config} />
-                ) : tab === 'accounts' ? (
+                ) : shown === 'accounts' ? (
                   <AccountsTab device={device} harnessId={harnessId} view={view} />
-                ) : tab === 'mcp' ? (
+                ) : shown === 'models' ? (
+                  <ModelsTab device={device} harnessId={harnessId} name={name} slot={view.models} />
+                ) : shown === 'mcp' ? (
                   <McpTab device={device} harnessId={harnessId} view={view} />
                 ) : (
                   <InstructionsTab device={device} harnessId={harnessId} slot={view.instructions} />

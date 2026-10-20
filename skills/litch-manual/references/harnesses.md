@@ -49,17 +49,23 @@ user. Litch has no command for it. Do it yourself with the user's OK, or give th
   `scripts/litch harness enable <device> <id>`.
 
 **Signing in, API keys, providers and the harness's own settings** live on the Devices page: each
-harness row has a **Settings** button (详情设置) that opens four tabs, all reading and writing the
+harness row has a **Settings** button (详情设置) that opens these tabs, all reading and writing the
 harness's own config files on that device (shared with its CLI there):
 
 - **Config**: default model and effort, permissions, and the rest of what the harness's official app
   offers (Codex: approval, sandbox, web search, features, skills/plugins/hooks, memories; Claude Code:
-  `~/.claude/settings.json`; OpenCode, Pi, DSH: their own settings). Some changes say they need a new
-  session or a restart; the page offers the restart.
+  `~/.claude/settings.json`, including models, context window, telemetry and OpenTelemetry export;
+  OpenCode, Pi, DSH: their own settings). Codex also has a global context window and auto-compact
+  limit that apply to every model. Some changes say they need a new session or a restart; the page
+  offers the restart.
 - **Accounts**: sign in (browser, device code, or pasting a code back), set an API key, add custom
   providers, switch the active provider. Codex can stay signed in to ChatGPT while using an API-key
   provider. OAuth credentials stay in the harness's own store; keys the harness only reads from
   environment variables are kept in that harness's environment on the device (secret).
+- **Models** (Codex only): a custom model list that replaces Codex's built-in catalog in its model
+  picker. Each entry either uses a built-in model as is, or is based on one with a new model name,
+  display name or context window (everything else is copied from the base). Models not in the list
+  disappear from the picker; "restore" goes back to the built-in catalog. Takes effect after a restart.
 - **MCP**: the harness's user-level MCP servers.
 - **Instructions**: the user-level `AGENTS.md` (Claude Code: `CLAUDE.md`). **Unified mode** writes one
   copy and turns the other harnesses' files into symlinks to it (old files are backed up beside them).

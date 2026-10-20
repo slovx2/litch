@@ -2319,7 +2319,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       }
       const backgroundTaskId = isError
         ? null
-        : this.backgroundTaskFor(pending, toolUseId, structured)
+        : this.backgroundTaskFor(pending, toolUseId, structured, bodyContent)
       // Even if this was a subagent we still emit its tool_result so the
       // server's subagent state machine closes the collabAgentToolCall.
       await pending.handlers.onEvent({
@@ -2338,18 +2338,24 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     }
   }
 
-  // 这条工具结果是不是后台命令的启动回执。以结构化结果为准；一条消息带多个结果时
-  // 没有结构化结果，退回到任务启动时记下的对应关系。
+  // 这条工具结果是不是后台命令的启动回执。以结构化结果为准：有结构化结果却没带
+  // backgroundTaskId，就是在前台跑完的（前台命令跑久了 CLI 也发 task_started，好让人中途转到后台，
+  // 所以光有任务启动时记下的对应关系不算数）。一条消息带多个结果时没有结构化结果，
+  // 退回到那个对应关系，但回执的正文里得提到这个任务的标识。
   private backgroundTaskFor(
     pending: PendingTurn,
     toolUseId: string,
     structured: unknown,
+    content: unknown,
   ): string | null {
     const shells = pending.session?.shells
     if (!shells?.bashCommand.has(toolUseId)) return null
     const reported = (structured as { backgroundTaskId?: unknown } | undefined)?.backgroundTaskId
     if (typeof reported === 'string' && reported) return reported
-    for (const [taskId, owner] of shells.taskToolUse) if (owner === toolUseId) return taskId
+    if (structured !== undefined) return null
+    const text = typeof content === 'string' ? content : JSON.stringify(content ?? '')
+    for (const [taskId, owner] of shells.taskToolUse)
+      if (owner === toolUseId && text.includes(taskId)) return taskId
     return null
   }
 

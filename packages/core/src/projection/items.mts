@@ -479,6 +479,20 @@ function toolCall(
 }
 
 /**
+ * 回合结束时还标着 inProgress 的条目，按回合的结局收尾（对面漏发了“完成”，不能一直显示在跑）。
+ * 回合正常结束算完成，打断或失败算失败。命令不管：后台命令跨回合跑，结束时对面再补完成；
+ * 派子代理的调用也不管：子代理可能还在跑，它的状态以子线程为准。没什么要改的返回 null。
+ */
+export function settledItem(item: ItemView, turnCompleted: boolean): ItemView | null {
+  if (!('status' in item) || item.status !== 'inProgress') return null
+  if (item.kind === 'agentMessage' || item.kind === 'reasoning')
+    return { ...item, status: 'completed' }
+  if (item.kind === 'fileChange' || (item.kind === 'toolCall' && item.agents === undefined))
+    return { ...item, status: turnCompleted ? 'completed' : 'failed' }
+  return null
+}
+
+/**
  * 一个协议条目对应一个显示条目，标识不变。
  * streaming 表示这个条目所在的回合还在进行：助手消息和推理本身不带状态，要靠它判断。
  */

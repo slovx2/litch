@@ -1,4 +1,4 @@
-// 侧栏自己的状态：开没开、多宽、是不是只看某几个 harness 的会话。
+// 侧栏自己的状态：开没开、多宽、是不是只看某几个 harness 的会话、显不显示别的应用派出来的子会话。
 // 记在这台电脑的界面里（litch.sidebar），和外观、终端面板、侧面板一样不经核心。
 // 这个文件不碰页面上的元素，只管数和存取：窗口窄的时候侧栏最宽能画多宽也在这里，好单独测。
 import { useSyncExternalStore } from 'react'
@@ -9,6 +9,11 @@ export interface SidebarState {
   width: number
   /** 只看哪几个 harness 的会话（它们的标识，按挑的先后）。空的：都看 */
   harnesses: readonly string[]
+  /**
+   * 显不显示别的应用派出来的会话（Claude 桌面端起的 Claude Code 子会话，核心的 keys.nativeChildren）。
+   * 默认不显示：它们是别处一个会话的分支，单独摆在侧栏里没有主会话包着，只是添乱
+   */
+  nativeChildren: boolean
 }
 
 const NONE: readonly string[] = []
@@ -42,10 +47,11 @@ function readSaved(): SidebarState {
       harnesses: Array.isArray(parsed.harnesses)
         ? [...new Set(parsed.harnesses.filter((id) => typeof id === 'string' && id !== ''))]
         : NONE,
+      nativeChildren: parsed.nativeChildren === true,
     }
   } catch {
-    // 读不到就用默认的：开着，默认宽度，都看
-    return { open: true, width: SIDEBAR_DEFAULT, harnesses: NONE }
+    // 读不到就用默认的：开着，默认宽度，都看，不显示别的应用派出来的
+    return { open: true, width: SIDEBAR_DEFAULT, harnesses: NONE, nativeChildren: false }
   }
 }
 
@@ -86,6 +92,14 @@ export function setSidebarHarnesses(harnesses: readonly string[]): void {
     next.length === sidebar.harnesses.length &&
     next.every((id, index) => id === sidebar.harnesses[index])
   if (!same) publish({ ...sidebar, harnesses: next.length === 0 ? NONE : next })
+}
+
+/** 只要“显不显示别的应用派出来的会话”这一项 */
+export const useSidebarNativeChildren = (): boolean =>
+  useSyncExternalStore(subscribe, () => sidebar.nativeChildren)
+
+export function setSidebarNativeChildren(show: boolean): void {
+  if (sidebar.nativeChildren !== show) publish({ ...sidebar, nativeChildren: show })
 }
 
 export function setSidebarOpen(open: boolean): void {

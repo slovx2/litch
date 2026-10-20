@@ -53,7 +53,8 @@ test('启动后：设备、工作区、分组都在，分组按最近更新排�
   assert.equal(store.get<DeviceView>(keys.device('gpu'))?.connection, 'reconnecting')
   const groups = store.get<SessionGroups>(keys.groups('local'))
   assert.deepEqual(groups, {
-    litch: ['s1', 's2', 's3', 's4', 's5'],
+    // cd1 是 Claude 桌面端派出来的：分组里照样有，侧栏默认藏着（keys.nativeChildren）
+    litch: ['s1', 's2', 's3', 's4', 'cd1', 's5'],
     docs: ['s7', 's6', 's8', 'd1', 'd2', 'd3', 'd4', 'd5', 'd6', 'd7', 'd8', 'd9'],
     [LOOSE]: ['s9'],
     // 置顶的、在自定义分区里的各自单列，不再出现在工作区里。组里按放进去的先后排
@@ -67,6 +68,9 @@ test('启动后：设备、工作区、分组都在，分组按最近更新排�
   assert.deepEqual(store.get(keys.pressing('local')), ['s2'])
   assert.deepEqual(store.get(keys.pressing('build')), ['b1'])
   assert.deepEqual(store.get(keys.pressing('nas')), [])
+  // 别的应用派出来的会话单独列着：侧栏按“更多”里的开关决定藏不藏
+  assert.deepEqual(store.get(keys.nativeChildren('local')), ['cd1'])
+  assert.deepEqual(store.get(keys.nativeChildren('build')), [])
 })
 
 test('每台设备的忙闲汇总：几个在跑、几个在等人、最近一次动静；会话的状态变了它跟着变', async () => {
@@ -177,7 +181,7 @@ test('每个会话属于哪个 harness：一张表，会话多了少了才换', 
     b5: 'claude',
     b6: 'codex',
   })
-  assert.equal(Object.keys(harnessOf('local') ?? {}).length, 21)
+  assert.equal(Object.keys(harnessOf('local') ?? {}).length, 22)
   assert.deepEqual(harnessOf('nas'), { n1: 'codex' })
 
   // 会话的状态、标题变了不动这张表
@@ -193,7 +197,7 @@ test('每个会话属于哪个 harness：一张表，会话多了少了才换', 
   time.advance(16)
   await settle()
   assert.equal(harnessOf('local')?.s8, undefined)
-  assert.equal(Object.keys(harnessOf('local') ?? {}).length, 20)
+  assert.equal(Object.keys(harnessOf('local') ?? {}).length, 21)
   assert.equal(seen.n, 1)
 })
 

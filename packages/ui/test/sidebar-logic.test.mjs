@@ -129,38 +129,51 @@ test('侧栏的状态：没记过就是开着、默认宽度；改了就记下�
     open: true,
     width: state.SIDEBAR_DEFAULT,
     harnesses: [],
+    nativeChildren: false,
   })
   state.setSidebarWidth(356.4)
-  assert.deepEqual(saved(), { open: true, width: 356, harnesses: [] })
+  assert.deepEqual(saved(), { open: true, width: 356, harnesses: [], nativeChildren: false })
   // 存的是想要的宽度，夹在最窄和最宽之间
   state.setSidebarWidth(5000)
   assert.equal(state.sidebarNow().width, state.SIDEBAR_MAX)
   state.setSidebarWidth(1)
   assert.equal(state.sidebarNow().width, state.SIDEBAR_MIN)
   state.setSidebarOpen(false)
-  assert.deepEqual(saved(), { open: false, width: state.SIDEBAR_MIN, harnesses: [] })
+  assert.deepEqual(saved(), {
+    open: false,
+    width: state.SIDEBAR_MIN,
+    harnesses: [],
+    nativeChildren: false,
+  })
   // 只看哪几个 harness 也记在这一份里，重复的只留一个；取消就是记回“都看”
   state.setSidebarHarnesses(['pi', 'claude', 'pi'])
   assert.deepEqual(saved(), {
     open: false,
     width: state.SIDEBAR_MIN,
     harnesses: ['pi', 'claude'],
+    nativeChildren: false,
   })
   state.setSidebarHarnesses([])
   assert.deepEqual(saved().harnesses, [])
+  // 显不显示别的应用派出来的会话：默认不显示，打开、关上都记下来
+  state.setSidebarNativeChildren(true)
+  assert.equal(saved().nativeChildren, true)
+  state.setSidebarNativeChildren(false)
+  assert.equal(saved().nativeChildren, false)
 })
 
 test('侧栏的状态：记着的照记着的来，离谱的宽度拉回范围里；同一次按键来两回只算一回', async () => {
   stored.clear()
   stored.set(
     'litch.sidebar',
-    JSON.stringify({ open: false, width: 9999, harnesses: ['codex', 'pi'] }),
+    JSON.stringify({ open: false, width: 9999, harnesses: ['codex', 'pi'], nativeChildren: true }),
   )
   const state = await import('../src/sidebar/state.ts?remembered')
   assert.deepEqual(state.sidebarNow(), {
     open: false,
     width: state.SIDEBAR_MAX,
     harnesses: ['codex', 'pi'],
+    nativeChildren: true,
   })
   state.toggleSidebar()
   // 应用菜单的快捷键和页面自己的按键各来一次：第二次不算
@@ -176,6 +189,7 @@ test('侧栏的状态：记着的照记着的来，离谱的宽度拉回范围�
     open: true,
     width: broken.SIDEBAR_DEFAULT,
     harnesses: [],
+    nativeChildren: false,
   })
   // 记着的不是数组：当成没在筛；数组里不是字符串的、空的丢掉
   stored.set('litch.sidebar', JSON.stringify({ harnesses: 'pi' }))
@@ -184,13 +198,16 @@ test('侧栏的状态：记着的照记着的来，离谱的宽度拉回范围�
   stored.set('litch.sidebar', JSON.stringify({ harnesses: [3, '', 'pi'] }))
   const mixed = await import('../src/sidebar/state.ts?mixed')
   assert.deepEqual(mixed.sidebarNow().harnesses, ['pi'])
+  // 记着的不是 true 就是不显示
+  stored.set('litch.sidebar', JSON.stringify({ nativeChildren: 'yes' }))
+  const loose = await import('../src/sidebar/state.ts?loose')
+  assert.equal(loose.sidebarNow().nativeChildren, false)
 })
 
 // ---------- 只看某几个 harness 的会话 ----------
 
-const { describeHarness, harnessChoices, keepSessions, toggleHarness } = await import(
-  '../src/sidebar/filter.ts'
-)
+const { describeHarness, dropNativeChildren, harnessChoices, keepSessions, toggleHarness } =
+  await import('../src/sidebar/filter.ts')
 
 const harness = (id, name, badge) => ({ id, name, badge })
 const device = (connection, ...harnesses) => ({ connection, harnesses })
@@ -238,6 +255,18 @@ test('筛选：一组里只留挑中的 harness 的会话，先后不变；正�
   assert.deepEqual(keepSessions(ids, ['pi'], undefined, always), ['s2', 's4'])
   // 挑了两个
   assert.deepEqual(keepSessions(ids, ['pi', 'codex'], harnessOf, never), ['s3', 's4', 's5'])
+})
+
+test('派出来的会话：藏着的时候一组里去掉它们，先后不变；正选中的、等人的照样留着', () => {
+  const ids = ['s1', 'n1', 's2', 'n2']
+  const never = () => false
+  assert.equal(dropNativeChildren(ids, [], never), ids)
+  assert.deepEqual(dropNativeChildren(ids, ['n1', 'n2', 'x9'], never), ['s1', 's2'])
+  assert.deepEqual(
+    dropNativeChildren(ids, ['n1', 'n2'], (id) => id === 'n2'),
+    ['s1', 's2', 'n2'],
+  )
+  assert.deepEqual(dropNativeChildren(undefined, ['n1'], never), [])
 })
 
 test('筛选：点一下挑上或去掉；能挑的全挑上了就是都看', () => {

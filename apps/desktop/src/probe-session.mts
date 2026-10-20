@@ -246,7 +246,8 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
     const turn = () => all('.turn').at(-1)
     const heard = Boolean(await until('对面听到了说明', () => turn()?.textContent?.includes(why)))
     const declined = Boolean(
-      await until('那条命令标成已拒绝', () => turn()?.textContent?.includes('已拒绝')),
+      // 命令收在步骤组里时，组的汇总行（或回合结束后整段过程那一行）上写“N 条被拒”
+      await until('那条命令标成已拒绝', () => /已拒绝|\d+ 条被拒/.test(turn()?.textContent ?? '')),
     )
     await until('这个回合结束', () => !running() && area(), 60_000)
     declineNote = { offered, focused, imeKept, escKept, emptyKept, heard, declined }

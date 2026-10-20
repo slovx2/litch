@@ -29,6 +29,14 @@ const GROUPS: HarnessSettingGroup[] = [
     title: text('默认', 'Defaults'),
     description: text('新建会话时用的模型和强度', 'Model and effort for new sessions'),
   },
+  {
+    id: 'context',
+    title: text('上下文', 'Context'),
+    description: text(
+      '对所有模型生效，盖过每个模型自己的设置（包括模型清单里改的）',
+      'Applies to every model and overrides each model’s own settings, including the model list',
+    ),
+  },
   { id: 'permissions', title: text('权限与沙箱', 'Permissions & sandbox'), description: null },
   { id: 'behavior', title: text('行为与输出', 'Behavior & output'), description: null },
   {
@@ -216,6 +224,67 @@ function defaultsSpecs(snapshot: CodexSnapshot, models: Record<string, unknown>[
       })),
     })
   return specs
+}
+
+/**
+ * 全局的上下文设置：config.toml 顶层的三个键（上游 config_toml.rs，0.160 与 0.162 都有）。
+ * codex 给每个会话算模型参数时把它们盖在模型自己的设置上（models-manager 的 with_config_overrides）：
+ *   - model_context_window 换掉模型的上下文窗口，但不超过模型的 max_context_window；
+ *   - model_auto_compact_token_limit 换掉模型的自动压缩门槛，用的时候再压到上下文窗口的 90% 以内（ModelInfo::auto_compact_token_limit）；
+ *   - model_auto_compact_token_limit_scope：门槛按整个上下文算（total，默认），还是只算压缩后带过来的那段之后新长的（body_after_prefix）。
+ * 配置是建会话时读的，新开的会话就用新值。下限是我们定的：几百个 token 的窗口连系统提示都放不下
+ */
+const MIN_TOKENS = 1000
+
+function contextSpecs(): Spec[] {
+  return [
+    {
+      key: 'model_context_window',
+      group: 'context',
+      type: 'integer',
+      title: text('上下文窗口（token）', 'Context window (tokens)'),
+      description: text(
+        '模型一次最多能看多少 token。填了就盖过每个模型自己的上下文窗口，所有模型都用这个数，但不会超过模型允许的上限。不填用各模型自己的。',
+        'How many tokens the model can see at once. When set, it overrides every model’s own context window, capped at what each model allows. Leave empty to use each model’s own.',
+      ),
+      default: null,
+      effect: 'newSession',
+      minimum: MIN_TOKENS,
+    },
+    {
+      key: 'model_auto_compact_token_limit',
+      group: 'context',
+      type: 'integer',
+      title: text('自动压缩门槛（token）', 'Auto-compact threshold (tokens)'),
+      description: text(
+        '会话用到这么多 token 时自动压缩历史。填了就盖过每个模型自己的门槛，所有模型都用这个数；不会超过上下文窗口的 90%。不填是上下文窗口的 90%。',
+        'Compact the conversation automatically once it uses this many tokens. When set, it overrides every model’s own threshold; it never exceeds 90% of the context window. Leave empty for 90% of the context window.',
+      ),
+      default: null,
+      effect: 'newSession',
+      minimum: MIN_TOKENS,
+    },
+    {
+      ...enumSpec(
+        'model_auto_compact_token_limit_scope',
+        'context',
+        ['自动压缩怎么算', 'Auto-compact counts'],
+        [
+          option('total', '整个上下文', 'The whole context'),
+          option(
+            'body_after_prefix',
+            '只算上次压缩后新增的',
+            'Only what grew since the last compaction',
+          ),
+        ],
+        'total',
+      ),
+      description: text(
+        '自动压缩门槛对比的是整个上下文，还是上次压缩后带过来的内容之后新增的部分',
+        'Whether the threshold is compared with the whole context, or only with what was added after the carried-over part of the last compaction',
+      ),
+    },
+  ]
 }
 
 function permissionSpecs(snapshot: CodexSnapshot): Spec[] {
@@ -499,6 +568,7 @@ export async function readCodexSettings(
   ])
   const specs: Spec[] = [
     ...defaultsSpecs(snapshot, catalog.models),
+    ...contextSpecs(),
     ...permissionSpecs(snapshot),
     ...behaviorSpecs(snapshot),
     ...featureSpecs(catalog, snapshot),
@@ -533,6 +603,8 @@ export async function readCodexSettings(
       actions: ACTIONS,
       version: snapshot.version,
       files,
+      // 模型清单由设备进程替它做（codex-models.mts）
+      modelCatalog: true,
     },
   }
 }

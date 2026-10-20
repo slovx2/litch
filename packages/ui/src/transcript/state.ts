@@ -91,6 +91,10 @@ const CATCH_UP_MS = 250
 const reducedMotion = () =>
   typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
 
+// 窗口在后台（最小化、被别的窗口整个挡住、在别的桌面）时浏览器不跑动画帧：
+// 放字要是靠它，就停在第一批上，回合结束了还画着光标。这时没人在看，直接全显示
+const hidden = () => typeof document !== 'undefined' && document.hidden
+
 /**
  * 返回现在该显示的那一段文本，以及是不是还没放完。
  * 组件第一次出现时已经有的文本直接全显示（历史消息、打开时已经流了一半的回答），之后新到的才匀速放出。
@@ -103,11 +107,14 @@ export function useSmoothText(target: string): { text: string; revealing: boolea
 
   useEffect(() => {
     const current = state.current
-    if (current.frame || current.shown >= target.length) return
-    if (reducedMotion()) {
+    if (current.shown >= target.length) return
+    if (reducedMotion() || hidden()) {
+      cancelAnimationFrame(current.frame)
+      current.frame = 0
       setShown(target.length)
       return
     }
+    if (current.frame) return
     current.last = performance.now()
     const step = (now: number) => {
       const backlog = current.target.length - current.shown
@@ -129,13 +136,22 @@ export function useSmoothText(target: string): { text: string; revealing: boolea
     current.frame = requestAnimationFrame(step)
   }, [target])
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    // 放到一半窗口进了后台：排着的那一帧不会来，直接放完
+    const onHide = () => {
+      const current = state.current
+      if (!hidden() || current.shown >= current.target.length) return
+      cancelAnimationFrame(current.frame)
+      current.frame = 0
+      setShown(current.target.length)
+    }
+    document.addEventListener('visibilitychange', onHide)
+    return () => {
+      document.removeEventListener('visibilitychange', onHide)
       cancelAnimationFrame(state.current.frame)
       state.current.frame = 0
-    },
-    [],
-  )
+    }
+  }, [])
 
   // 文本被整个换掉、变短了的情况（重新取了一遍会话）：直接跟上
   const length = Math.min(shown, target.length)

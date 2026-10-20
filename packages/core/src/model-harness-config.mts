@@ -3,7 +3,7 @@
 // 结构都是对面声明的，核心不认识哪一项是干什么的，只做转运和校形；形状和协议的差不多是一对一的，差别是：
 // - 给人看的字一律是两种语言的 Bilingual（对面给的 HarnessText 同形），可选的都补成 null；
 // - 列表、布尔这些可能缺的都补上默认值，界面不用再判断“有没有给”；
-// - 每一块（config、providers、mcp、instructions）各自有“正在读、读不成、被别处改过几次”。
+// - 每一块（config、providers、mcp、instructions，有模型清单的 harness 还有 models）各自有“正在读、读不成、被别处改过几次”。
 import type { ChannelErrorShape } from './channel/protocol.mjs'
 import type { Bilingual } from './model.mjs'
 
@@ -88,6 +88,8 @@ export interface HcConfigView {
   actions: HcAction[]
   version: string
   files: HcFile[]
+  /** 这个 harness 有模型清单（models 那一块）。没有时 models 那一块一直是空的 */
+  modelCatalog: boolean
 }
 
 /** 一次写入的一项。value 是 null：删掉这个键回到默认 */
@@ -261,6 +263,45 @@ export interface InstructionsLinkResult {
   backup: string | null
 }
 
+// ---------- 模型清单 ----------
+
+/**
+ * 清单里的一项。base 和 id 相同：原样用 harness 自带目录里的那个模型；不同：以 base 为底稿，
+ * 只换模型名（id，发给模型服务的名字）、显示名、上下文窗口，其余照 base
+ */
+export interface HcModelEntry {
+  id: string
+  /** null 用底稿的显示名 */
+  displayName: string | null
+  /** 上下文窗口（token）；null 照底稿的 */
+  contextWindow: number | null
+  base: string
+}
+
+/** 可以照着的模型（harness 自带的目录里的一个） */
+export interface HcModelBase {
+  id: string
+  displayName: string
+  contextWindow: number | null
+  /** 对面给的原话，不翻译 */
+  description: string | null
+}
+
+export interface HcModelsView {
+  /** 在用自定义清单；false 时用 harness 自带的目录，entries 是空的 */
+  custom: boolean
+  /** 顺序就是模型选择里的顺序 */
+  entries: HcModelEntry[]
+  bases: HcModelBase[]
+  /** 清单存在哪个文件；还没有时是会写到的地方，说不出是 null */
+  path: string | null
+  version: string
+  effect: HcEffect
+  note: Bilingual | null
+  /** 被更高一层锁住、不能写的原因；能写是 null */
+  readOnlyReason: Bilingual | null
+}
+
 // ---------- 主题 ----------
 
 /** 一块数据：读到的、正在读、读不成的原因、被别处改过（收到变化通知后重读）几次 */
@@ -272,7 +313,7 @@ export interface HcSlot<T> {
   revision: number
 }
 
-export type HcPart = 'config' | 'providers' | 'mcp' | 'instructions'
+export type HcPart = 'config' | 'providers' | 'mcp' | 'instructions' | 'models'
 
 /**
  * harnessConfig 主题的快照：一台设备上一个 harness 的详情设置。
@@ -286,6 +327,8 @@ export interface HarnessConfigTopicView {
   providers: HcSlot<HcProvidersView>
   mcp: HcSlot<HcMcpView>
   instructions: HcSlot<HcInstructionsView>
+  /** 模型清单。config 的 modelCatalog 为真才去读，不然一直是空的 */
+  models: HcSlot<HcModelsView>
   /** 这个 harness 进行中、刚结束的登录 */
   attempts: HcAttempt[]
   /** 经这里改过要重启才生效的东西，还没重启：界面提示并给“重启” */

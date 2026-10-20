@@ -1,0 +1,25 @@
+{
+  "extension": "nativeLineage",
+  "description": "别的应用派出的子会话：harness 自己的原生会话里，有的是别的应用从另一个会话派出来的（比如 Claude 桌面端用 start_session 起的会话）。它们在原生记录里是普通的独立会话，入口照常导进来、照常出现在 thread/list 里；入口认得出是派出来的，就在会话对象上带 litchNativeLineage。和 sessionTree 不是一回事：那是 Litch 自己派的子会话，父子关系存在设备进程里。类型在 packages/protocol/src/native-lineage.mts。",
+  "appliesTo": "claude-code 入口（导入本机原生会话的那一部分）。聚合面原样转发会话对象，不加也不删这个字段。",
+  "declaration": {
+    "description": "客户端握手时在 capabilities.litchExtensions 里声明 nativeLineage，表示它认识会话对象上的 litchNativeLineage。聚合面把客户端的 capabilities 原样带给每个上游，入口按这条连接的声明决定带不带。",
+    "where": "initialize.params.capabilities.litchExtensions",
+    "schema": { "type": "array", "items": { "type": "string" }, "contains": { "const": "nativeLineage" } }
+  },
+  "undeclared": "没声明的连接上会话对象上没有 litchNativeLineage，这些会话是普通会话（官方 Codex 桌面端连兼容面时就是这样）。",
+  "rules": [
+    "claude-code 入口认 Claude 桌面端派出的会话只看原生记录本身：记录的第一行 entrypoint 是 claude-desktop，而且第一条不是 isMeta 的用户消息里有桌面端写在派出简报前面的那句固定开头（“Background (from the session that started this one)”）。都满足才带 app 为 claude-desktop。不读 Claude 桌面端自己的数据目录。",
+    "认不出父会话是哪一个时不带 parentThreadId。用户在别处分叉、交接出来的会话（开头是复制过来的原对话）认不出，按普通会话处理。",
+    "每个原生会话只认一次，结果记在入口自己的库里；读不到记录、记录格式不对的当作不是派出来的，不报错。",
+    "只是标记，不改会话的任何行为：能打开、能接着聊、能归档，和别的导入会话一样。"
+  ],
+  "parts": [
+    {
+      "kind": "ThreadField",
+      "name": "litchNativeLineage",
+      "on": "thread/list、thread/read、thread/resume、thread/started 等会话对象",
+      "description": "只发给声明了 nativeLineage 的连接，只在认得出是别的应用派出来的会话上有。形状见 native-lineage.mts 的 NativeLineage。"
+    }
+  ]
+}

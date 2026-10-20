@@ -63,6 +63,10 @@ export const en: Record<MessageKey, Entry> = {
   'sidebar.filter.join': ', ',
   'sidebar.filter.clear': 'Clear the filter and show all',
   'sidebar.filter.none': 'No sessions match the filter',
+  'sidebar.more': 'More',
+  'sidebar.more.nativeChildren': 'Show Claude Code sub-sessions',
+  'sidebar.more.nativeChildren.note':
+    'Sessions started from another session in the Claude desktop app',
   // ---- Sidebar: a session working somewhere other than the project root ----
   'session.cwd.sub': 'Working in a subfolder of this project: {path}',
   'session.cwd.away': 'Working outside this project’s folders: {path}',
@@ -142,7 +146,7 @@ export const en: Record<MessageKey, Entry> = {
     'Nothing to do: it will retry by itself. If it keeps failing, restart it on the Devices page.',
   'harness.next.disconnected': 'Nothing to do: it is reconnecting.',
   'harness.next.starting': 'Give it a moment. It will be usable once it is up.',
-  'harness.next.disabled': 'Turn it back on in this device’s settings on the Devices page.',
+  'harness.next.disabled': 'Turn it back on in the device settings.',
   'harness.next.notInstalled':
     'Install its command-line tool on this device, then restart it on the Devices page. If it lives somewhere else, set its path in settings.',
   'harness.next.versionTooLow':

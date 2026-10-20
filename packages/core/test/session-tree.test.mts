@@ -29,7 +29,12 @@ import {
   type UserMessageItem,
 } from '../src/index.mjs'
 import { projectItem } from '../src/projection/items.mjs'
-import { projectLineage, projectThread } from '../src/projection/session.mjs'
+import {
+  projectLineage,
+  projectNativeLineage,
+  projectSummary,
+  projectThread,
+} from '../src/projection/session.mjs'
 import { mergeProposals, projectProposals } from '../src/projection/tree.mjs'
 import { deviceWorld, features } from './device-world.mjs'
 import { harness } from './fake-device.mjs'
@@ -187,6 +192,25 @@ test('投影：父子关系的时间换成毫秒；不接受直接输入的子�
     { deviceId: 'local', harness: 'codex' },
   )
   assert.equal(open.live, true)
+})
+
+test('投影：别的应用派出来的会话带着是谁派的；没有的、形状不对的是 null', () => {
+  assert.deepEqual(
+    projectNativeLineage(
+      thread({ id: 'n', litchNativeLineage: { app: 'claude-desktop' } } as never),
+    ),
+    { app: 'claude-desktop' },
+  )
+  assert.equal(projectNativeLineage(thread({ id: 'x' })), null)
+  assert.equal(
+    projectNativeLineage(thread({ id: 'y', litchNativeLineage: { app: 3 } } as never)),
+    null,
+  )
+  const summary = projectSummary(
+    thread({ id: 'n', litchNativeLineage: { app: 'claude-desktop' } } as never),
+    { harness: 'claude', workspaceId: null },
+  )
+  assert.equal(summary.nativeLineage?.app, 'claude-desktop')
 })
 
 test('投影：提案连了结的一起留，按提出的先后排；还等着却过了期的算过期', () => {

@@ -1,8 +1,9 @@
 // 模拟核心的 harness 详情设置（15 号设计）：每台设备每个 harness 一份示例（sample-hc-*.mts），
 // 行为照真的设备和核心：带版本的写入对不上就以 conflict 结束并重读、改了要重启的提示重启、
 // 登录的每一步（浏览器回调、设备码、粘贴码、API key）、只认环境变量的密钥写进设备设置、MCP 增删改和 OAuth、
-// 指令文件与统一模式（一份真文件、其余软链）。
-// 别的客户端的动静由模拟核心按对话里的关键字来演：“别处改配置”（改了并发来通知）、“抢先改配置”（下次保存冲突）。
+// 指令文件与统一模式（一份真文件、其余软链）、Codex 的模型清单（整份写入、改了要重启）。
+// 别的客户端的动静由模拟核心按对话里的关键字来演：“别处改配置”（改了并发来通知）、“抢先改配置”（下次保存冲突），
+// “别处改模型清单”（改了模型清单并发来通知）、“锁住模型清单”（管理员锁住、再说一次解开）。
 // 登录怎么算成：浏览器那一步过一会儿自己成（当作用户在浏览器里点了同意）；设备码同样；
 // 粘贴码填 bad 算失败，别的算成；API key 不以 sk- 或 token 开头算失败。
 import {
@@ -58,6 +59,10 @@ export interface MockHarnessConfig {
   editElsewhere(deviceId: string): void
   /** 别的客户端抢先改了，通知没到：这台设备上下一次带版本的写入冲突 */
   raceNextWrite(deviceId: string): void
+  /** 别的客户端过一会儿改了这台设备上 Codex 的模型清单，改完发通知 */
+  modelsElsewhere(deviceId: string): void
+  /** 这台设备上 Codex 的模型清单被管理员锁住（已经锁着就解开） */
+  lockModels(deviceId: string): void
   /** 设备上这个 harness 的状态变了（重启中、起来了）：开着的页面跟着重读（读不到的原因、或者又读得到了） */
   harnessChanged(deviceId: string, harness: string): void
 }
@@ -100,6 +105,9 @@ interface State {
 
 const HAS_KEY = /^(sk-|token|tvly-)/
 
+/** 带版本的几块 */
+type Versioned = 'config' | 'providers' | 'mcp' | 'models'
+
 export function createMockHarnessConfig(host: MockHarnessConfigHost): MockHarnessConfig {
   const { clock } = host
   const states = new Map<string, State>()
@@ -132,7 +140,7 @@ export function createMockHarnessConfig(host: MockHarnessConfigHost): MockHarnes
         harness,
         sample,
         sinks: new Set(),
-        revision: { config: 0, providers: 0, mcp: 0, instructions: 0 },
+        revision: { config: 0, providers: 0, mcp: 0, instructions: 0, models: 0 },
         attempts: new Map(),
         restartRequired: false,
         envPending: new Map(),
@@ -214,6 +222,9 @@ export function createMockHarnessConfig(host: MockHarnessConfigHost): MockHarnes
       providers: slot('providers', copyValue(providers)),
       mcp: slot('mcp', copyValue(state.sample.mcp)),
       instructions: slot('instructions', instructionsOf(state)),
+      models: state.sample.models
+        ? slot('models', copyValue(state.sample.models))
+        : { data: null, loading: false, error: null, revision: 0 },
       attempts: [...state.attempts.values()].map((one) => copyValue(one)),
       restartRequired: state.restartRequired,
     }
@@ -234,7 +245,7 @@ export function createMockHarnessConfig(host: MockHarnessConfigHost): MockHarnes
   }
 
   /** 带版本的写入：对不上（或者被“抢先改了”）就冲突 */
-  const checkVersion = (state: State, part: 'config' | 'providers' | 'mcp', expected: string) => {
+  const checkVersion = (state: State, part: Versioned, expected: string) => {
     const failed = running(state)
     if (failed) throw failed
     const current =
@@ -242,7 +253,9 @@ export function createMockHarnessConfig(host: MockHarnessConfigHost): MockHarnes
         ? state.sample.config.version
         : part === 'providers'
           ? state.sample.providers.version
-          : state.sample.mcp.version
+          : part === 'models'
+            ? (state.sample.models?.version ?? '')
+            : state.sample.mcp.version
     if (racing.has(state.deviceId)) {
       racing.delete(state.deviceId)
       bump(state, part)
@@ -256,13 +269,15 @@ export function createMockHarnessConfig(host: MockHarnessConfigHost): MockHarnes
     }
   }
 
-  const bump = (state: State, part: 'config' | 'providers' | 'mcp') => {
+  const bump = (state: State, part: Versioned) => {
     const next = (version: string) =>
       `${version.replace(/\d+$/, '')}${Number(version.match(/\d+$/)?.[0] ?? 0) + 1}`
     if (part === 'config') state.sample.config.version = next(state.sample.config.version)
     else if (part === 'providers')
       state.sample.providers.version = next(state.sample.providers.version)
-    else state.sample.mcp.version = next(state.sample.mcp.version)
+    else if (part === 'models') {
+      if (state.sample.models) state.sample.models.version = next(state.sample.models.version)
+    } else state.sample.mcp.version = next(state.sample.mcp.version)
   }
 
   // ---------- 登录 ----------
@@ -514,6 +529,49 @@ export function createMockHarnessConfig(host: MockHarnessConfigHost): MockHarnes
         publish(state)
       }
     }, 30)
+  }
+
+  /**
+   * 别处改模型清单：等这台设备上 Codex 的详情设置开着之后过几秒再改（留时间让人先动手改出草稿），改完发通知。
+   * 不拖时间（stepMs 为 0，测试里）时马上改
+   */
+  const modelsPending = new Set<string>()
+  const armModels = (deviceId: string) => {
+    const state = codexOn(deviceId)
+    if (!state || state.sinks.size === 0 || !modelsPending.has(deviceId)) return
+    modelsPending.delete(deviceId)
+    clock.setTimer(
+      () => {
+        const models = state.sample.models
+        if (!models) return
+        // 自定义着的：头两项换个位置；还在用自带目录的：改成只留自带目录的头三项
+        if (models.custom && models.entries.length > 1) {
+          const [first, second, ...rest] = models.entries
+          models.entries = [second, first, ...rest].filter((one) => one !== undefined)
+        } else {
+          models.custom = true
+          models.entries = models.bases.slice(0, 3).map((one) => ({
+            id: one.id,
+            displayName: null,
+            contextWindow: null,
+            base: one.id,
+          }))
+        }
+        bump(state, 'models')
+        state.revision.models++
+        publish(state)
+      },
+      host.stepMs === 0 ? 1 : 4000,
+    )
+  }
+
+  /** 这台设备上的 Codex（详情设置读得到时） */
+  const codexOn = (deviceId: string): State | undefined => {
+    try {
+      return reach(deviceId, 'codex')
+    } catch {
+      return undefined
+    }
   }
 
   const of = (params: unknown) => {
@@ -814,6 +872,54 @@ export function createMockHarnessConfig(host: MockHarnessConfigHost): MockHarnes
       touchInstructions(state.deviceId, state.harness)
       return { hash: hashOf(p.content) }
     },
+    'harnessConfig.models.write': (params) => {
+      const p = params as Commands['harnessConfig.models.write']['params']
+      const state = of(p)
+      const models = state.sample.models
+      if (!models) throw new ChannelError('unsupported', '这个 harness 没有模型清单')
+      checkVersion(state, 'models', p.expectedVersion)
+      if (models.readOnlyReason) {
+        const said = models.readOnlyReason
+        throw new ChannelError('rejected', said['zh-CN'], undefined, { said })
+      }
+      if (p.entries === null) {
+        models.custom = false
+        models.entries = []
+      } else {
+        const bad = (zh: string, en: string, key: string) => {
+          const said = t(zh, en)
+          return new ChannelError('invalid', said['zh-CN'], undefined, { said, key })
+        }
+        if (p.entries.length === 0) {
+          throw bad('清单不能是空的', 'The list cannot be empty', 'entries')
+        }
+        const seen = new Set<string>()
+        for (const entry of p.entries) {
+          if (!entry.id.trim()) throw bad('模型名不能是空的', 'The model name is empty', 'id')
+          if (seen.has(entry.id)) {
+            throw bad(`模型名 ${entry.id} 重复了`, `Model name ${entry.id} is repeated`, 'id')
+          }
+          seen.add(entry.id)
+          if (!models.bases.some((one) => one.id === entry.base)) {
+            throw bad(`没有 ${entry.base} 这个模型`, `There is no model ${entry.base}`, 'base')
+          }
+          const window = entry.contextWindow
+          if (window !== null && !(Number.isInteger(window) && window > 0)) {
+            throw bad(
+              '上下文窗口要是正整数',
+              'The context window must be a positive integer',
+              'contextWindow',
+            )
+          }
+        }
+        models.custom = true
+        models.entries = copyValue(p.entries)
+      }
+      bump(state, 'models')
+      state.restartRequired = true
+      publish(state)
+      return { restartRequired: true }
+    },
     'instructions.overview': (params) =>
       overview(String((params as { deviceId: string }).deviceId)),
     'instructions.unify': (params) => {
@@ -842,6 +948,7 @@ export function createMockHarnessConfig(host: MockHarnessConfigHost): MockHarnes
           providers: empty,
           mcp: empty,
           instructions: empty,
+          models: empty,
           attempts: [],
           restartRequired: false,
         } satisfies HarnessConfigTopicView)
@@ -851,6 +958,7 @@ export function createMockHarnessConfig(host: MockHarnessConfigHost): MockHarnes
       state.sinks.add(sink)
       sink.snapshot(view(state))
       arm(deviceId)
+      armModels(deviceId)
       return () => {
         state.sinks.delete(sink)
       }
@@ -885,6 +993,24 @@ export function createMockHarnessConfig(host: MockHarnessConfigHost): MockHarnes
 
     raceNextWrite(deviceId) {
       racing.add(deviceId)
+    },
+
+    modelsElsewhere(deviceId) {
+      modelsPending.add(deviceId)
+      armModels(deviceId)
+    },
+
+    lockModels(deviceId) {
+      const models = codexOn(deviceId)?.sample.models
+      if (!models) return
+      models.readOnlyReason = models.readOnlyReason
+        ? null
+        : t(
+            '管理员的 requirements.toml 固定了 model_catalog_json',
+            'model_catalog_json is pinned by your admin in requirements.toml',
+          )
+      const state = codexOn(deviceId)
+      if (state) publish(state)
     },
 
     harnessChanged(deviceId, harness) {

@@ -7,6 +7,8 @@ import type {
   HarnessAuthStep,
   HarnessConfigReadResponse,
   HarnessInstructionsInfo,
+  HarnessModelEntry,
+  HarnessModelsReadResponse,
   HarnessProvidersReadResponse,
 } from '../../protocol/src/harness-config.mjs'
 import {
@@ -89,6 +91,10 @@ function world(options: { deviceExtension?: boolean; target?: RemoteTarget | nul
     model: 'a',
     signedIn: false,
     conflictNext: false,
+    /** pi 有没有模型清单 */
+    catalog: false,
+    models: null as HarnessModelEntry[] | null,
+    modelsVersion: 'c1',
     links: new Map<string, string | null>([
       ['pi', null],
       ['claude-code', null],
@@ -97,7 +103,42 @@ function world(options: { deviceExtension?: boolean; target?: RemoteTarget | nul
   const peer = fakeOpener({
     ...fake.handlers,
     ...settings.handlers,
-    'litch/harness/config/read': () => CONFIG(state.version, state.model),
+    'litch/harness/config/read': (params) => ({
+      ...CONFIG(state.version, state.model),
+      ...((params as { harness: string }).harness === 'pi' && state.catalog
+        ? { modelCatalog: true }
+        : {}),
+    }),
+    'litch/harness/models/read': (): HarnessModelsReadResponse => ({
+      custom: state.models !== null,
+      entries: state.models ?? [],
+      bases: [
+        { id: 'gpt-5.5', displayName: 'GPT-5.5', contextWindow: 400_000, description: null },
+        { id: 'gpt-5.5-mini', displayName: 'GPT-5.5 mini', contextWindow: null, description: 'x' },
+        // 坏的一项丢掉，重复的只留头一个
+        { id: '', displayName: 'bad', contextWindow: 1, description: null },
+        { id: 'gpt-5.5', displayName: 'again', contextWindow: 1, description: null },
+      ],
+      path: '/home/dev/.codex/litch-models.json',
+      version: state.modelsVersion,
+      effect: 'harness',
+      note: null,
+      readOnlyReason: null,
+    }),
+    'litch/harness/models/write': (params) => {
+      const { expectedVersion, entries } = params as {
+        expectedVersion: string
+        entries: HarnessModelEntry[] | null
+      }
+      if (state.conflictNext || expectedVersion !== state.modelsVersion) {
+        state.conflictNext = false
+        state.modelsVersion = 'c9'
+        throw new RpcFailure(-32000, 'conflict', { litch: 'versionConflict', harness: 'pi' })
+      }
+      state.models = entries
+      state.modelsVersion = `${state.modelsVersion}x`
+      return { version: state.modelsVersion, restartRequired: true }
+    },
     'litch/harness/config/write': (params) => {
       const { expectedVersion, edits } = params as {
         expectedVersion: string
@@ -394,4 +435,135 @@ test('统一模式：先读各份拿路径，把选中的写成真文件、其�
     unified: { sourcePath: string; harness: string | null } | null
   }
   assert.deepEqual(overview.unified, { sourcePath: '/home/dev/.pi/AGENTS.md', harness: 'pi' })
+})
+
+test('没有模型清单的 harness 不读 models，那一块一直空着', async () => {
+  const w = await started()
+  const pi = w.watch('pi')
+  await drain()
+  assert.equal(pi.seen.view?.config.data?.modelCatalog, false)
+  assert.equal(pi.seen.view?.models.data, null)
+  assert.equal(w.sent('litch/harness/models/read').length, 0)
+  // 别处说 models 变了：先重读 config 看有没有，还是没有就不读
+  w.broadcast('litch/harness/config/changed', { harness: 'pi', part: 'models' })
+  await drain()
+  assert.equal(w.sent('litch/harness/models/read').length, 0)
+})
+
+test('模型清单：config 说有才接着读；整份写、要重启；自己写的回声不算，别处改了记一次', async () => {
+  const w = world()
+  w.state.catalog = true
+  w.core.start()
+  await drain()
+  const pi = w.watch('pi')
+  await drain()
+  const models = () => pi.seen.view?.models
+  assert.equal(pi.seen.view?.config.data?.modelCatalog, true)
+  assert.equal(models()?.data?.custom, false)
+  assert.deepEqual(
+    models()?.data?.bases.map((one) => [one.id, one.displayName, one.contextWindow]),
+    [
+      ['gpt-5.5', 'GPT-5.5', 400_000],
+      ['gpt-5.5-mini', 'GPT-5.5 mini', null],
+    ],
+  )
+  assert.equal(models()?.data?.effect, 'harness')
+  // config 又变了：models 已经读过，不跟着重读
+  w.broadcast('litch/harness/config/changed', { harness: 'pi', part: 'config' })
+  await drain()
+  assert.equal(w.sent('litch/harness/models/read').length, 1)
+
+  // 空清单不发出去
+  await assert.rejects(
+    w.command('harnessConfig.models.write', { harness: 'pi', entries: [], expectedVersion: 'c1' }),
+    { code: 'invalid' },
+  )
+  assert.equal(w.sent('litch/harness/models/write').length, 0)
+
+  const result = (await w.command('harnessConfig.models.write', {
+    harness: 'pi',
+    entries: [
+      { id: 'gpt-5.5', displayName: null, contextWindow: null, base: 'gpt-5.5' },
+      { id: ' team/long ', displayName: '  长上下文 ', contextWindow: 1_000_000, base: 'gpt-5.5' },
+    ],
+    expectedVersion: 'c1',
+  })) as { restartRequired: boolean }
+  assert.equal(result.restartRequired, true)
+  assert.deepEqual(w.sent('litch/harness/models/write')[0]?.entries, [
+    { id: 'gpt-5.5', displayName: null, contextWindow: null, base: 'gpt-5.5' },
+    { id: 'team/long', displayName: '长上下文', contextWindow: 1_000_000, base: 'gpt-5.5' },
+  ])
+  w.broadcast('litch/harness/config/changed', { harness: 'pi', part: 'models' })
+  await drain()
+  assert.equal(models()?.data?.custom, true)
+  assert.equal(models()?.data?.entries[1]?.id, 'team/long')
+  assert.equal(models()?.data?.version, 'c1x')
+  assert.equal(models()?.revision, 0, '自己写的那一下不算被别处改过')
+  assert.equal(pi.seen.view?.restartRequired, true)
+  // 几块共用一个文件时设备把别的几块也报成变了：那是自己写引出来的，重读但不记成别处改过
+  const configRevision = pi.seen.view?.config.revision
+  w.broadcast('litch/harness/config/changed', { harness: 'pi', part: 'config' })
+  await drain()
+  assert.equal(pi.seen.view?.config.revision, configRevision)
+
+  // 过了回声的时间，别处改的才算
+  w.time.advance(5_000)
+  w.state.models = null
+  w.broadcast('litch/harness/config/changed', { harness: 'pi', part: 'models' })
+  await drain()
+  assert.equal(models()?.revision, 1)
+  assert.equal(models()?.data?.custom, false)
+  assert.deepEqual(models()?.data?.entries, [])
+
+  // 恢复自带目录：entries 原样是 null
+  await w.command('harnessConfig.models.write', {
+    harness: 'pi',
+    entries: null,
+    expectedVersion: models()?.data?.version,
+  })
+  assert.equal(w.sent('litch/harness/models/write').at(-1)?.entries, null)
+})
+
+test('模型清单：版本冲突重读那一块；没人看时的变化标脏，重启后重读', async () => {
+  const w = world()
+  w.state.catalog = true
+  w.core.start()
+  await drain()
+  const pi = w.watch('pi')
+  await drain()
+  w.state.conflictNext = true
+  await assert.rejects(
+    w.command('harnessConfig.models.write', {
+      harness: 'pi',
+      entries: [{ id: 'x', displayName: null, contextWindow: null, base: 'gpt-5.5' }],
+      expectedVersion: 'c1',
+    }),
+    { code: 'conflict' },
+  )
+  await drain()
+  assert.equal(pi.seen.view?.models.data?.version, 'c9')
+
+  // 没人看着：通知只标脏，下次打开整个重读（models 跟着 config 读）
+  pi.close()
+  const before = w.sent('litch/harness/models/read').length
+  w.state.models = [{ id: 'y', displayName: null, contextWindow: null, base: 'gpt-5.5' }]
+  w.broadcast('litch/harness/config/changed', { harness: 'pi', part: 'models' })
+  await drain()
+  assert.equal(w.sent('litch/harness/models/read').length, before)
+  const again = w.watch('pi')
+  await drain()
+  assert.equal(w.sent('litch/harness/models/read').length, before + 1)
+  assert.equal(again.seen.view?.models.data?.entries[0]?.id, 'y')
+
+  // harness 重启回来：models 也重读
+  const declaration = { extensions: ['harnessConfig'] }
+  const down = harness('pi', { declaration, down: { kind: 'starting', message: '正在启动' } })
+  w.broadcast('litch/harness/status/changed', { harness: 'pi', info: infoOf(down) })
+  await drain()
+  w.broadcast('litch/harness/status/changed', {
+    harness: 'pi',
+    info: infoOf(harness('pi', { declaration })),
+  })
+  await drain()
+  assert.equal(w.sent('litch/harness/models/read').length, before + 2)
 })

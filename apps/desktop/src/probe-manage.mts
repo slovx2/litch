@@ -195,7 +195,8 @@ export async function manageProbe(): Promise<ManageProbe> {
   const harnesses = all('[data-harness-block]').map(
     (item) => `${item.dataset.harnessBlock}:${item.dataset.state}`,
   )
-  const downReasons = all('[data-harness-block]:not([data-state="ready"])').map((item) =>
+  // 停用了的不写原因（开关就在标题行上），只看一时用不了的
+  const downReasons = all('[data-harness-block][data-state="unavailable"]').map((item) =>
     text(one('.mng-h-why', item)),
   )
   const leads = all('[data-harness-block]').map(
