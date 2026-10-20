@@ -41,7 +41,7 @@ if (!process.env.ANTHROPIC_BETAS) {
 //
 // CLI 来自宿主安装；Worker 仍通过独立 CLAUDE_CONFIG_DIR 提供配置和认证。
 
-import type { OnElicitation, Query } from '@anthropic-ai/claude-agent-sdk'
+import type { OnElicitation, Query, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import { type ApprovalPolicy, allowsApproval, toolApprovalFlow } from './approval-policy.mjs'
 import { deniedMessage } from './approval-request.mjs'
 import { claudeChildEnv } from './claude-provider.mjs'
@@ -61,6 +61,9 @@ import { sdkMcpStartupEnvironment } from './mcp-config.mjs'
 import {
   appendNativeContext,
   type ContextInjection,
+  contextFrameBatches,
+  nativeMessagePersisted,
+  persistedContext,
   persistedContextBoundary,
 } from './native-context.mjs'
 import { cliDeniedServers, NativeMcpBridge } from './native-mcp-bridge.mjs'
@@ -904,7 +907,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     }
   }
 
-  // 进程还活着：直接送一条不触发模型请求的用户消息，不另起进程抢同一个会话文件。
+  // 进程还活着：直接送不触发模型请求的输入帧（见 contextFrameBatches），不另起进程抢同一个会话文件。
   private async appendToSession(
     session: NativeSession,
     context: ContextInjection,
@@ -914,24 +917,19 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     if (context.sessionId !== session.sessionId)
       throw new ProtocolError(-32000, '原生会话与存活的 Claude 进程不一致，不能追加上下文')
     const sdk = await this.loadSdk()
-    const persisted = await persistedContextBoundary(sdk, context)
-    if (persisted) return { boundary: persisted }
-    session.input.send({
-      type: 'user',
-      uuid: context.messageId as `${string}-${string}-${string}-${string}-${string}`,
-      message: { role: 'user', content: context.content },
-      parent_tool_use_id: null,
-      shouldQuery: false,
-      client_composed: true,
-    })
-    const deadline = Date.now() + 5_000
-    while (Date.now() < deadline) {
-      const boundary = await persistedContextBoundary(sdk, context)
-      if (boundary) return { boundary }
-      if (session.closing) break
-      await delay(50)
+    const done = await persistedContext(sdk, context)
+    if (done.count === context.messages.length && done.boundary) return { boundary: done.boundary }
+    let previous: SDKUserMessage[] | undefined
+    for (const batch of contextFrameBatches(context, done.count)) {
+      if (previous) await nativeMessagePersisted(sdk, context, previous.at(-1)?.uuid)
+      for (const frame of batch) session.input.send(frame)
+      previous = batch
     }
-    throw new ProtocolError(-32000, '原生历史未持久化注入 UUID，不能返回成功')
+    // 最后一条落盘了整批才算完；中途看会是“只写进了一部分”
+    await nativeMessagePersisted(sdk, context, context.messages.at(-1)?.uuid)
+    const boundary = await persistedContextBoundary(sdk, context)
+    if (!boundary) throw new ProtocolError(-32000, '原生历史未持久化注入 UUID，不能返回成功')
+    return { boundary }
   }
 
   async updateTurnSettings(

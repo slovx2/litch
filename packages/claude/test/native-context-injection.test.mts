@@ -70,11 +70,13 @@ test('CONTEXT-009：图片精度偏好不阻断正文和图片追加，重启后
     const [injection] = entries(db)
     assert.ok(injection)
     assert.equal(injection.committed, 1)
+    // 四条 user 条目合成一条原生消息
+    assert.equal(injection.context.messages.length, 1)
     const persisted = (await nativeMessages(home, injection.context.sessionId)).filter(
-      (message) => message.uuid === injection.context.messageId,
+      (message) => message.uuid === injection.context.messages[0]!.uuid,
     )
     assert.equal(persisted.length, 1)
-    assert.deepEqual(persisted[0].message.content, injection.context.content)
+    assert.deepEqual(persisted[0].message.content, injection.context.messages[0]!.content)
     assert.equal(persisted[0].message.content.length, 8, '正文和图片必须全部保留')
     for (const invalid of [false, 1, 'unknown']) {
       await client.raw(
@@ -191,9 +193,10 @@ test('CONTEXT-004：真实原生追加零模型调用，文图重启入模，分
     const [injection] = entries(db)
     assert.equal(injection!.committed, 1)
     const history = await nativeMessages(home, injection!.context.sessionId)
-    const persisted = history.filter((message) => message.uuid === injection!.context.messageId)
+    const [message] = injection!.context.messages
+    const persisted = history.filter((entry) => entry.uuid === message!.uuid)
     assert.equal(persisted.length, 1)
-    assert.deepEqual(persisted[0].message.content, injection!.context.content)
+    assert.deepEqual(persisted[0].message.content, message!.content)
     assert.deepEqual(
       persisted[0].message.content.map((block: any) => block.type),
       ['text', 'text', 'image'],
@@ -287,9 +290,12 @@ test('CONTEXT-005：原生追加整批校验、活动互斥及提交失败重启
         {
           type: 'message',
           role: 'assistant',
-          content: [{ type: 'output_text', text: 'FAKE_ASSISTANT' }],
+          content: [{ type: 'input_image', image_url: `data:image/png;base64,${png}` }],
         },
       ],
+      // 工具调用、developer 消息不能换成别的角色冒充
+      [{ type: 'function_call', name: 'shell', arguments: '{}', call_id: 'call-1' }],
+      [{ type: 'message', role: 'developer', content: [{ type: 'input_text', text: 'dev' }] }],
       [
         {
           type: 'message',
@@ -361,10 +367,11 @@ test('CONTEXT-005：原生追加整批校验、活动互斥及提交失败重启
       null,
     )
     const before = await nativeMessages(home, pending!.context.sessionId)
-    assert.equal(before.filter((message) => message.uuid === pending!.context.messageId).length, 1)
+    const [native] = pending!.context.messages
+    assert.equal(before.filter((message) => message.uuid === native!.uuid).length, 1)
     assert.deepEqual(
-      before.find((message) => message.uuid === pending!.context.messageId).message.content,
-      pending!.context.content,
+      before.find((message) => message.uuid === native!.uuid).message.content,
+      native!.content,
     )
     assert.deepEqual((await client.request('thread/read', { threadId })).thread.turns, [])
     assert.equal(model.requests.length, 0)
@@ -373,7 +380,10 @@ test('CONTEXT-005：原生追加整批校验、活动互斥及提交失败重启
     client = await ProtocolClient.start(home, endpoint)
     // 只破坏适配器 journal 来验完整内容对账；不伪造或改写原生历史。
     db.prepare('UPDATE context_injections SET context_json=? WHERE message_id=?').run(
-      JSON.stringify({ ...pending!.context, content: [{ type: 'text', text: 'MISMATCH' }] }),
+      JSON.stringify({
+        ...pending!.context,
+        messages: [{ ...native, content: [{ type: 'text', text: 'MISMATCH' }] }],
+      }),
       pending!.context.messageId,
     )
     const mismatch = await client.raw('thread/resume', { threadId }, -32000)
@@ -425,6 +435,104 @@ test('CONTEXT-005：原生追加整批校验、活动互斥及提交失败重启
     model.assertConsumed()
   } finally {
     releaseModel?.()
+    db.close()
+    await client.close()
+    await model.close()
+    await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
+  }
+})
+
+test('CONTEXT-010：注入 assistant 消息（项目开场白）照上游进下一回合的模型上下文，不进历史读取、不发通知', {
+  timeout: 120_000,
+}, async () => {
+  const home = await mkdtemp(join(tmpdir(), 'native-context-assistant-'))
+  const model = new MockLLM()
+  const endpoint = await model.start()
+  let client = await ProtocolClient.start(home, endpoint)
+  const db = new DatabaseSync(join(home, 'adapter', 'state.sqlite'), { readOnly: true })
+  const assistantItem = (text: string) => ({
+    type: 'message',
+    role: 'assistant',
+    content: [{ type: 'output_text', text }],
+  })
+  // 模型这次看到的消息，按先后摊成 [角色, 文字]
+  const said = (request: any): Array<[string, string]> =>
+    request.messages.flatMap((message: any) =>
+      (Array.isArray(message.content) ? message.content : [{ type: 'text', text: message.content }])
+        .filter((block: any) => block.type === 'text')
+        .map((block: any) => [message.role, block.text]),
+    )
+  const at = (lines: Array<[string, string]>, role: string, mark: string) =>
+    lines.findIndex(([who, text]) => who === role && text.includes(mark))
+  try {
+    const { thread } = await client.request('thread/start', { cwd: home })
+    const threadId = thread.id
+    model.enqueue(() => [{ type: 'text', text: 'FIRST_REPLY_6310' }])
+    await startTurn(client, threadId, 'FIRST_TURN_6310')
+    const before = client.trace.length
+    await client.request('thread/inject_items', {
+      threadId,
+      items: [assistantItem('INJECT-MARK-3 项目开场白')],
+    })
+    assert.equal(model.requests.length, 1, '追加上下文不能触发模型')
+    assert.equal(
+      client.trace.slice(before).some((entry) => entry.method && entry.direction !== 'client'),
+      false,
+      '照上游注入不发通知',
+    )
+    const [injection] = entries(db)
+    assert.equal(injection!.committed, 1)
+    const native = (await nativeMessages(home, injection!.context.sessionId)).filter(
+      (entry) => entry.uuid === injection!.context.messages[0]!.uuid,
+    )
+    assert.equal(native.length, 1)
+    assert.equal(native[0].type, 'assistant')
+    assert.deepEqual(native[0].message.content, [
+      { type: 'text', text: 'INJECT-MARK-3 项目开场白' },
+    ])
+    const hidden = async (turns: number) => {
+      const read = await client.request('thread/read', { threadId, includeTurns: true })
+      assert.equal(read.thread.turns.length, turns)
+      assert.doesNotMatch(JSON.stringify(read), /INJECT-MARK/)
+      const items = await client.request('thread/items/list', { threadId })
+      assert.doesNotMatch(JSON.stringify(items), /INJECT-MARK/)
+    }
+    await hidden(1)
+    model.enqueue((request) => {
+      const lines = said(request)
+      const injected = at(lines, 'assistant', 'INJECT-MARK-3')
+      assert.ok(injected > at(lines, 'assistant', 'FIRST_REPLY_6310'), JSON.stringify(lines))
+      assert.ok(at(lines, 'user', 'SECOND_TURN_6310') > injected, JSON.stringify(lines))
+      return [{ type: 'text', text: 'SECOND_REPLY_6310' }]
+    })
+    await startTurn(client, threadId, 'SECOND_TURN_6310')
+    await hidden(2)
+    // 一批里角色交替：按原顺序各成一条
+    await client.request('thread/inject_items', {
+      threadId,
+      items: [textItem('INJECT-MARK-U 补充'), assistantItem('INJECT-MARK-A 收到补充')],
+    })
+    assert.equal(entries(db).at(-1)!.context.messages.length, 2)
+    await client.close()
+    client = await ProtocolClient.start(home, endpoint)
+    await client.request('thread/resume', { threadId })
+    model.enqueue((request) => {
+      const lines = said(request)
+      const user = at(lines, 'user', 'INJECT-MARK-U')
+      const assistant = at(lines, 'assistant', 'INJECT-MARK-A')
+      assert.ok(user > at(lines, 'assistant', 'SECOND_REPLY_6310'), JSON.stringify(lines))
+      assert.ok(assistant > user, JSON.stringify(lines))
+      assert.ok(at(lines, 'user', 'THIRD_TURN_6310') > assistant, JSON.stringify(lines))
+      assert.equal(lines.filter(([, text]) => text.includes('INJECT-MARK-3')).length, 1)
+      // 注入以 assistant 收尾，会话末尾没有悬着的 user，CLI 恢复时不补占位回答
+      assert.doesNotMatch(JSON.stringify(request.messages), /No response requested/)
+      return [{ type: 'text', text: 'THIRD_REPLY_6310' }]
+    })
+    await startTurn(client, threadId, 'THIRD_TURN_6310')
+    await hidden(3)
+    assert.equal(model.requests.length, 3)
+    model.assertConsumed()
+  } finally {
     db.close()
     await client.close()
     await model.close()

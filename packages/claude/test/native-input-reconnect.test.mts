@@ -129,7 +129,7 @@ test('INPUT-RECONNECT-003：同一条连接再 thread/resume（客户端换了�
     const responseAt = after.findIndex(
       (message) => message.method === undefined && message.result?.thread,
     )
-    const replayAt = after.findIndex((message) => message === replay)
+    const replayAt = after.indexOf(replay)
     assert.ok(
       responseAt >= 0 && replayAt > responseAt,
       JSON.stringify(after.map((m) => m.method ?? m.id)),

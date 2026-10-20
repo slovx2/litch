@@ -2040,7 +2040,10 @@ export class CodexClaudeAppServer {
     if (!thread) throw new ProtocolError(-32602, '未知会话')
     if (thread.runtimeBackend !== 'claude')
       throw new ProtocolError(-32004, 'Claude 入口不能追加其他引擎的会话上下文')
-    const content = parseContextItems(params.items)
+    const messages = parseContextItems(params.items).map((message) => ({
+      ...message,
+      uuid: newId(),
+    }))
     if (!this.runtime.appendContext)
       throw new ProtocolError(-32004, '当前运行时不支持真实上下文追加')
     const turns = this.store.listTurns(threadId)
@@ -2050,7 +2053,8 @@ export class CodexClaudeAppServer {
       turns.some((turn) => turn.status === 'inProgress')
     )
       throw new ProtocolError(-32009, '活动或尚未确认的会话不能追加上下文')
-    // 所有 items 先完整校验，再作为单条有序原生消息追加，避免多项半批落盘。
+    // 所有 items 先完整校验，相邻同角色的合成一条原生消息，整批在一次 CLI 输入里追加；
+    // 落盘对账按每条的 uuid（见 persistedContextBoundary）。照上游不生成回合、不发通知。
     this.store.beginContextInjection(
       {
         threadId,
@@ -2059,7 +2063,7 @@ export class CodexClaudeAppServer {
         sessionId: thread.claudeSessionId ?? newId(),
         existingSession: !!thread.claudeSessionId,
         messageId: newId(),
-        content,
+        messages,
       },
       turns.at(-1)?.id ?? null,
     )

@@ -64,7 +64,7 @@ for (const operation of ['archive', 'rollback', 'delete'] as const)
     }
   })
 
-test('后台命令存活期间追加上下文：不请求模型，下一回合带上，进程不变', {
+test('后台命令存活期间追加上下文（user 加 assistant）：不请求模型，下一回合按原顺序带上，进程不变', {
   timeout: 90_000,
 }, async () => {
   const scene = await startScene('native-bg-inject')
@@ -79,6 +79,11 @@ test('后台命令存活期间追加上下文：不请求模型，下一回合�
           type: 'message',
           role: 'user',
           content: [{ type: 'input_text', text: 'INJECTED_CONTEXT_MARKER' }],
+        },
+        {
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: 'INJECTED_ASSISTANT_MARKER' }],
         },
       ],
     })
@@ -95,7 +100,15 @@ test('后台命令存活期间追加上下文：不请求模型，下一回合�
     )
 
     scene.model.enqueue((request) => {
-      assert.match(JSON.stringify(request.messages), /INJECTED_CONTEXT_MARKER/)
+      // 存活的进程里同样按原顺序追加：user 在前，assistant 在后
+      const text = JSON.stringify(request.messages)
+      assert.match(text, /INJECTED_CONTEXT_MARKER[\s\S]*INJECTED_ASSISTANT_MARKER/)
+      const assistant = request.messages.find(
+        (message: any) =>
+          message.role === 'assistant' &&
+          JSON.stringify(message).includes('INJECTED_ASSISTANT_MARKER'),
+      )
+      assert.ok(assistant, text)
       return [{ type: 'text', text: '看到了追加的上下文' }]
     })
     assert.equal((await runTurn(scene, '下一回合')).status, 'completed')
