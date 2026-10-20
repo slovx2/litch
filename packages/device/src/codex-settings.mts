@@ -206,22 +206,35 @@ function defaultsSpecs(snapshot: CodexSnapshot, models: Record<string, unknown>[
       })),
     },
   ]
+  // 标准不在模型给的那几档里，要自己补一项：写 default 是明着选标准（上游 SERVICE_TIER_DEFAULT_REQUEST_VALUE）。
+  // 不写时用的是模型自己的默认档，有的模型默认就是快速，所以“不选”不等于标准
   if (tiers.length)
     specs.push({
       key: 'service_tier',
       group: 'defaults',
       type: 'enum',
       title: text('速度', 'Speed'),
-      description: text('不选是标准速度', 'Leave empty for the standard tier'),
-      default: typeof current?.defaultServiceTier === 'string' ? current.defaultServiceTier : null,
+      description: text(
+        '配置里没写时用这个模型自己的默认档，有的模型默认就是快速',
+        'When unset, the model’s own default applies, which is Fast on some models',
+      ),
+      default:
+        typeof current?.defaultServiceTier === 'string' ? current.defaultServiceTier : 'default',
       effect: 'newSession',
-      options: tiers.map((tier) => ({
-        value: String(tier.id),
-        title: text(String(tier.name ?? tier.id), String(tier.name ?? tier.id)),
-        ...(typeof tier.description === 'string'
-          ? { description: text(tier.description, tier.description) }
-          : {}),
-      })),
+      options: [
+        { value: 'default', title: text('标准', 'Standard') },
+        ...tiers.map((tier) => ({
+          value: String(tier.id),
+          // 快速档（上游 ServiceTier::Fast 发的是 priority）按两种语言说；别的档用它给的名字
+          title:
+            tier.id === 'priority'
+              ? text('快速', 'Fast')
+              : text(String(tier.name ?? tier.id), String(tier.name ?? tier.id)),
+          ...(typeof tier.description === 'string'
+            ? { description: text(tier.description, tier.description) }
+            : {}),
+        })),
+      ],
     })
   return specs
 }

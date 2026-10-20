@@ -185,7 +185,7 @@ test('归并：增量带来的对象拷一份再放进视图，之后视图怎�
     items: {},
     requests: [],
     queued: [],
-    settings: { model: null, effort: null, permission: null, mode: null },
+    settings: { model: null, effort: null, speed: null, permission: null, mode: null },
     usage: null,
     can: { ...ALL_ABLE },
     forkedFrom: null,

@@ -1203,7 +1203,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
 
     configure(sessionId, settings) {
       const live = need(sessionId)
-      for (const key of ['model', 'effort', 'permission'] as const) {
+      for (const key of ['model', 'effort', 'speed', 'permission'] as const) {
         const value = settings[key]
         if (value) live.pending[key] = value
       }

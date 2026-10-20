@@ -8,8 +8,15 @@ import {
   newSessionSettings,
   projectDefaults,
   type SessionDefaults,
+  STANDARD_SPEED,
+  shownSpeed,
 } from '../src/index.mjs'
-import { BUILTIN_PERMISSIONS } from '../src/projection/settings.mjs'
+import {
+  BUILTIN_PERMISSIONS,
+  projectSettings,
+  settingsDiff,
+  turnOverrides,
+} from '../src/projection/settings.mjs'
 import { deviceWorld } from './device-world.mjs'
 import { harness, model } from './fake-device.mjs'
 import { RpcFailure } from './fake-server.mjs'
@@ -31,7 +38,12 @@ test('默认：权限档照上游的顺序取，管理方的、配置的，都�
   const listed = requirements({ allowedPermissionProfiles: { ':workspace': true } })
   assert.equal(projectDefaults(listed, config({})).permission, ':workspace')
   // 对面不认识 config/read：什么都不知道，也不兜底
-  assert.deepEqual(projectDefaults(null, null), { model: null, effort: null, permission: null })
+  assert.deepEqual(projectDefaults(null, null), {
+    model: null,
+    effort: null,
+    speed: null,
+    permission: null,
+  })
 })
 
 test('默认：模型和强度是配置里的，管理方下发了新会话默认时以它为准', () => {
@@ -39,6 +51,7 @@ test('默认：模型和强度是配置里的，管理方下发了新会话默�
   assert.deepEqual(projectDefaults(null, configured), {
     model: 'gpt-5.5',
     effort: 'xhigh',
+    speed: null,
     permission: ':workspace',
   })
   const managed = requirements({
@@ -51,17 +64,28 @@ test('默认：模型和强度是配置里的，管理方下发了新会话默�
   )
 })
 
+test('默认：速度是配置里的 service_tier（老写法 fast 就是 priority），管理方下发了以它为准', () => {
+  assert.equal(projectDefaults(null, config({ service_tier: 'default' })).speed, 'default')
+  assert.equal(projectDefaults(null, config({ service_tier: 'fast' })).speed, 'priority')
+  const managed = requirements({
+    models: { newThread: { model: null, modelReasoningEffort: null, serviceTier: 'priority' } },
+  })
+  assert.equal(projectDefaults(managed, config({ service_tier: 'default' })).speed, 'priority')
+})
+
 const option = (
   id: string,
   efforts: string[],
   defaultEffort: string | null,
   isDefault = false,
+  defaultSpeed: string | null = null,
 ) => ({
   id,
   title: id,
-  note: '',
   efforts: efforts.map((effort) => ({ id: effort, note: effort })),
   defaultEffort,
+  speeds: [{ id: 'priority', title: 'Fast', note: '' }],
+  defaultSpeed,
   isDefault,
   acceptsImages: true,
 })
@@ -69,7 +93,8 @@ const option = (
 const options: ComposeOptions = {
   models: [
     option('gpt-6.1-sol', ['low', 'medium', 'high'], 'medium', true),
-    option('gpt-5.5', ['low', 'medium', 'high', 'xhigh'], 'high'),
+    option('gpt-5.5', ['low', 'medium', 'high', 'xhigh'], 'high', false, 'priority'),
+    { ...option('gpt-mini', ['low'], 'low'), speeds: [] },
   ],
   permissions: [...BUILTIN_PERMISSIONS],
   plan: false,
@@ -78,6 +103,7 @@ const options: ComposeOptions = {
 const defaults = (fields: Partial<SessionDefaults>): SessionDefaults => ({
   model: null,
   effort: null,
+  speed: null,
   permission: null,
   ...fields,
 })
@@ -90,7 +116,12 @@ test('新建页：没选的时候显示对面不带设置新建会用的，不�
     options,
   )
   // 配置没写强度：这个模型自己的默认档
-  assert.deepEqual(seen, { model: 'gpt-5.5', effort: 'high', permission: ':workspace' })
+  assert.deepEqual(seen, {
+    model: 'gpt-5.5',
+    effort: 'high',
+    speed: null,
+    permission: ':workspace',
+  })
   // 配置写了强度、这个模型有这一档：用它
   assert.equal(
     newSessionSettings({}, defaults({ model: 'gpt-5.5', effort: 'xhigh' }), options).effort,
@@ -100,12 +131,14 @@ test('新建页：没选的时候显示对面不带设置新建会用的，不�
   assert.deepEqual(newSessionSettings({}, defaults({ model: 'gpt-4.1', effort: 'low' }), options), {
     model: 'gpt-4.1',
     effort: 'low',
+    speed: null,
     permission: null,
   })
   // 还没问到对面的默认：照清单里标了默认的猜
   assert.deepEqual(newSessionSettings({}, null, options), {
     model: 'gpt-6.1-sol',
     effort: 'medium',
+    speed: null,
     permission: null,
   })
 })
@@ -115,15 +148,49 @@ test('新建页：选了的优先；换了模型时配置的强度这个模型�
   assert.deepEqual(newSessionSettings({ model: 'gpt-6.1-sol' }, configured, options), {
     model: 'gpt-6.1-sol',
     effort: 'medium',
+    speed: null,
     permission: ':workspace',
   })
   assert.deepEqual(
     newSessionSettings({ effort: 'low', permission: ':read-only' }, configured, options),
-    { model: 'gpt-5.5', effort: 'low', permission: ':read-only' },
+    { model: 'gpt-5.5', effort: 'low', speed: null, permission: ':read-only' },
   )
   // 对面默认的权限档这个 harness 没有：不显示哪一档
   const declared = { ...options, permissions: BUILTIN_PERMISSIONS.slice(2) }
   assert.equal(newSessionSettings({}, configured, declared).permission, null)
+})
+
+test('新建页的速度：选了的、配置的得是标准或这个模型有的那一档，不然不发；显示时没选的是模型自己的默认档', () => {
+  // 选了标准：发 default（不发的话 gpt-5.5 用的是它默认的快速）
+  assert.equal(newSessionSettings({ speed: STANDARD_SPEED }, null, options).speed, 'default')
+  assert.equal(
+    newSessionSettings({ model: 'gpt-5.5', speed: 'priority' }, null, options).speed,
+    'priority',
+  )
+  // 配置里写了速度：没选的时候用它
+  assert.equal(newSessionSettings({}, defaults({ speed: 'priority' }), options).speed, 'priority')
+  // 这个模型没有速度可选、或者没有这一档：不发
+  assert.equal(
+    newSessionSettings({ model: 'gpt-mini', speed: 'priority' }, null, options).speed,
+    null,
+  )
+  assert.equal(newSessionSettings({ speed: 'flex' }, null, options).speed, null)
+  // 显示：报了就是它，没报是模型的默认档，模型也没有默认档是标准
+  const [sol, five] = options.models
+  assert.equal(shownSpeed(null, five), 'priority')
+  assert.equal(shownSpeed(null, sol), STANDARD_SPEED)
+  assert.equal(shownSpeed(STANDARD_SPEED, five), STANDARD_SPEED)
+})
+
+test('速度：选了的写成 turn/start 的 serviceTier，标准也要明着发；对面报的速度读回来', () => {
+  assert.deepEqual(turnOverrides({ speed: STANDARD_SPEED }), { serviceTier: 'default' })
+  assert.deepEqual(turnOverrides({ speed: 'priority' }), { serviceTier: 'priority' })
+  assert.deepEqual(turnOverrides({}), {})
+  assert.equal(projectSettings({ serviceTier: 'priority' }).speed, 'priority')
+  assert.equal(projectSettings({ serviceTier: null }).speed, null)
+  const actual = { ...projectSettings({ serviceTier: 'default' }) }
+  assert.deepEqual(settingsDiff({ speed: 'priority' }, actual), { speed: 'priority' })
+  assert.deepEqual(settingsDiff({ speed: 'default' }, actual), {})
 })
 
 test('设备：新会话的默认问的是那个 harness，带着工作目录；对面不认识 config/read 时全是 null', async () => {
@@ -155,13 +222,14 @@ test('设备：新会话的默认问的是那个 harness，带着工作目录；
   await settle()
   assert.deepEqual(
     await command('device.newSessionDefaults', { harness: 'cc', cwd: '/home/dev/app' }),
-    { model: 'claude-opus', effort: 'high', permission: ':read-only' },
+    { model: 'claude-opus', effort: 'high', speed: null, permission: ':read-only' },
   )
   assert.deepEqual(sent('config/read').at(-1), { harness: 'cc', cwd: '/home/dev/app' })
   assert.deepEqual(sent('configRequirements/read').at(-1), { harness: 'cc' })
   assert.deepEqual(await command('device.newSessionDefaults', { harness: 'old', cwd: null }), {
     model: null,
     effort: null,
+    speed: null,
     permission: null,
   })
 })

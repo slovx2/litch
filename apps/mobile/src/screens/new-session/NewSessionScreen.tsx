@@ -79,6 +79,7 @@ export function NewSessionScreen({ navigation, route }: Props) {
   const shown: SessionSettings = {
     model: settled?.model ?? null,
     effort: settled?.effort ?? null,
+    speed: settled?.speed ?? null,
     permission: settled?.permission ?? null,
     mode: options?.plan ? (mine.mode ?? 'default') : null,
   }

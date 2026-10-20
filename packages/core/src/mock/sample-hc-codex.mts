@@ -49,10 +49,7 @@ export function sampleCodex({ home, remote }: SampleHome): SampleHc {
     }),
     spec('service_tier', 'defaults', 'enum', t('速度', 'Speed'), {
       default: 'default',
-      options: [
-        opt('default', '标准', 'Standard'),
-        opt('fast', '快速（更贵）', 'Fast (costs more)'),
-      ],
+      options: [opt('default', '标准', 'Standard'), opt('priority', '快速', 'Fast')],
     }),
     spec('approval_policy', 'permissions', 'enum', t('审批策略', 'Approval policy'), {
       default: 'on-request',

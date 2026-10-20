@@ -251,6 +251,7 @@ export function NewSession({ draft, onPlace, onCreated, onDevices, assist }: New
   const shown: SessionSettings = {
     model: settled?.model ?? null,
     effort: settled?.effort ?? null,
+    speed: settled?.speed ?? null,
     permission: settled?.permission ?? null,
     // 计划模式只管眼前这一个新对话，不记到下一次；这个 harness 不会的话没有这个开关
     mode: options?.plan ? (own.mode ?? 'default') : null,

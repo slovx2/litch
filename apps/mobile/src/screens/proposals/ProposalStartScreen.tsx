@@ -166,7 +166,7 @@ function StartForm({
           options: [
             { id: '', title: t('tree.dialog.modelDefault') },
             ...(fields.model && !model ? [{ id: fields.model, title: fields.model }] : []),
-            ...models.map((entry) => ({ id: entry.id, title: entry.title, note: entry.note })),
+            ...models.map((entry) => ({ id: entry.id, title: entry.title })),
           ],
         }
       case 'effort':

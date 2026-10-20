@@ -5,7 +5,9 @@ import {
   type PermissionPreset,
   type SessionDefaults,
   type SessionSettings,
+  STANDARD_SPEED,
   shownEffort,
+  shownSpeed,
 } from '@litch/core'
 import { useEffect, useState } from 'react'
 import { useT } from '../app/appearance.ts'
@@ -102,7 +104,10 @@ interface SettingsBarProps {
   onChange(patch: Partial<SessionSettings>): void
 }
 
-/** 输入区底栏：模型、强度、权限预设、计划模式。可选值全部来自设备，这里只管显示 */
+/** 快速档在原生 codex 里的标识（上游 ServiceTier::Fast 的 request_value，老写法是 fast）：界面按自己的语言叫它 */
+const FAST_SPEEDS = new Set(['priority', 'fast'])
+
+/** 输入区底栏：模型、强度、速度、权限预设、计划模式。可选值全部来自设备，这里只管显示 */
 export function SettingsBar({ options, settings, fresh, onChange }: SettingsBarProps) {
   const t = useT()
   if (!options) return null
@@ -154,11 +159,8 @@ export function SettingsBar({ options, settings, fresh, onChange }: SettingsBarP
           kind="model"
           label={t('composer.model')}
           value={settings.model}
-          options={options.models.map((entry) => ({
-            id: entry.id,
-            title: entry.title,
-            ...(entry.note ? { note: entry.note } : {}),
-          }))}
+          // 只列名字，不带简介：清单长的时候一眼找得到（所有 harness 一样）
+          options={options.models.map((entry) => ({ id: entry.id, title: entry.title }))}
           onPick={pickModel}
           search={t('composer.modelSearch')}
         />
@@ -178,6 +180,33 @@ export function SettingsBar({ options, settings, fresh, onChange }: SettingsBarP
             }
           })}
           onPick={(effort) => onChange({ effort })}
+        />
+      ) : null}
+      {model && model.speeds.length > 0 ? (
+        <Picker
+          kind="speed"
+          label={t('composer.speed')}
+          // 没选过的时候用的是模型自己的默认档（有的模型默认就是快速），显示那一档
+          value={shownSpeed(settings.speed, model)}
+          options={[
+            // 标准不在对面给的清单里：明着选它要发 default，不然用的是模型的默认档
+            {
+              id: STANDARD_SPEED,
+              title: t('composer.speed.standard'),
+              note: t('composer.speed.standard.note'),
+            },
+            // 快速档按界面的语言说；别的档（对面自定的）用它给的名字和说明
+            ...model.speeds.map((speed) =>
+              FAST_SPEEDS.has(speed.id)
+                ? {
+                    id: speed.id,
+                    title: t('composer.speed.fast'),
+                    note: t('composer.speed.fast.note'),
+                  }
+                : { id: speed.id, title: speed.title, ...(speed.note ? { note: speed.note } : {}) },
+            ),
+          ]}
+          onPick={(speed) => onChange({ speed })}
         />
       ) : null}
       {options.permissions.length > 0 ? (

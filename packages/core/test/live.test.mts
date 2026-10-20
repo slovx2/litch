@@ -46,7 +46,12 @@ function setup(threads: Thread[] = [thread({ id: 'a', turns: [] })]) {
       sandbox: { type: 'workspaceWrite' },
     },
     models: [
-      model('gate/small', { isDefault: true, efforts: ['low', 'high'] }),
+      model('gate/small', {
+        isDefault: true,
+        efforts: ['low', 'high'],
+        tiers: ['priority'],
+        defaultTier: 'priority',
+      }),
       model('gate/plain', { efforts: [] }),
       model('gate/secret', { hidden: true }),
     ],
@@ -165,7 +170,13 @@ const watch = watchSession
 /** 协议里的一个模型，只填界面用得到的字段 */
 function model(
   id: string,
-  fields: { isDefault?: boolean; hidden?: boolean; efforts?: string[] } = {},
+  fields: {
+    isDefault?: boolean
+    hidden?: boolean
+    efforts?: string[]
+    tiers?: string[]
+    defaultTier?: string
+  } = {},
 ): object {
   return {
     id,
@@ -179,6 +190,12 @@ function model(
       description: '',
     })),
     defaultReasoningEffort: fields.efforts?.[0] ?? '',
+    serviceTiers: (fields.tiers ?? []).map((tier) => ({
+      id: tier,
+      name: tier.toUpperCase(),
+      description: `${tier} 档`,
+    })),
+    defaultServiceTier: fields.defaultTier ?? null,
   }
 }
 
@@ -798,19 +815,21 @@ test('设置：对面报的显示出来；改了之后跟着下一个回合发�
   assert.deepEqual(session.seen.view?.settings, {
     model: 'gate/small',
     effort: 'low',
+    speed: null,
     permission: ':workspace',
     mode: null,
   })
 
   await command('session.configure', {
     ...where,
-    settings: { effort: 'high', permission: ':danger-full-access' },
+    settings: { effort: 'high', speed: 'default', permission: ':danger-full-access' },
   })
   await settle()
   // 改了马上显示成新的，不等发出去
   assert.deepEqual(session.seen.view?.settings, {
     model: 'gate/small',
     effort: 'high',
+    speed: 'default',
     permission: ':danger-full-access',
     mode: null,
   })
@@ -819,6 +838,8 @@ test('设置：对面报的显示出来；改了之后跟着下一个回合发�
   await command('session.send', { ...where, text: '一' })
   const first = sent('turn/start')[0] as Record<string, unknown>
   assert.equal(first.effort, 'high')
+  // 标准速度明着发 default：不发的话用的是模型自己的默认档（这个模型默认是快速）
+  assert.equal(first.serviceTier, 'default')
   assert.equal(first.permissions, ':danger-full-access')
   // 内置预设只管文件权限，审批策略要一起给
   assert.equal(first.approvalPolicy, 'never')
@@ -875,6 +896,7 @@ test('新建会话：建好就发第一条，侧栏立刻有它；带不进建�
   assert.deepEqual(session.seen.view?.settings, {
     model: 'gate/plain',
     effort: 'high',
+    speed: null,
     permission: ':workspace',
     mode: null,
   })
@@ -922,6 +944,7 @@ test('原生 codex 没配强度：建会话、载入时报的强度是 null，�
   assert.deepEqual(settings, {
     model: 'gate/small',
     effort: null,
+    speed: null,
     permission: ':read-only',
     mode: null,
   })
@@ -945,6 +968,14 @@ test('可选项：隐藏的模型不列，没有强度档的模型强度是空�
     [
       ['gate/small', ['low', 'high']],
       ['gate/plain', []],
+    ],
+  )
+  // 速度：对面给的那几档（标准不在里面，界面自己补）和模型默认的那一档；没有速度可选的是空的
+  assert.deepEqual(
+    options.models.map((entry) => [entry.id, entry.speeds, entry.defaultSpeed]),
+    [
+      ['gate/small', [{ id: 'priority', title: 'PRIORITY', note: 'priority 档' }], 'priority'],
+      ['gate/plain', [], null],
     ],
   )
   assert.equal(options.models[0]?.isDefault, true)

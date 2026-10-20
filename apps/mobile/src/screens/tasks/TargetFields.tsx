@@ -64,6 +64,7 @@ export function useTargetModel(deviceId: string, form: TaskForm): TargetModel {
     shown: {
       model: settled?.model ?? form.settings.model,
       effort: settled?.effort ?? form.settings.effort,
+      speed: null,
       permission: settled?.permission ?? form.settings.permission,
       mode: null,
     },
@@ -203,10 +204,19 @@ export function TargetFields({
           <View style={styles.bar}>
             <SettingsBar
               fresh
-              options={model.options ? { ...model.options, plan: false } : null}
+              // 定时任务的设置里没有速度和计划模式：这两样不出选择器
+              options={
+                model.options
+                  ? {
+                      ...model.options,
+                      plan: false,
+                      models: model.options.models.map((entry) => ({ ...entry, speeds: [] })),
+                    }
+                  : null
+              }
               settings={model.shown}
               onChange={(patch) => {
-                const { mode: _mode, ...rest } = patch
+                const { mode: _mode, speed: _speed, ...rest } = patch
                 onChange({ settings: { ...form.settings, ...rest } })
               }}
             />
