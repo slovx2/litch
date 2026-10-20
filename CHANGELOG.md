@@ -14,6 +14,9 @@ versioning or publishing metadata.
 - DSH：派到 DSH 上的子会话不再在第一回合后被改成简报开头的那句话，保留派出时起的名字
 - 适配器：命名空间可带 `instructions`（挂上时进系统提示的规矩），六家入口都送到模型面前；`litch_sessions` 新增 `accept`、`withdraw`、收尾工具 `wrap_up`（用户发起的回合没调时设备进程开一个 `remind` 回合，设置键 `sessions.wrapUpReminder`），`start` 去掉 `wake_parent`，提案记下提出它的回合和调用、了结时间，`litch/sessionProposal/list` 可带了结的，`accept` 可带 `overrides`，`litch/sessionProposal/changed` 带刚变的那几条
 - Claude Code：一条回复里接连派几个子代理（或接连调几个工具，后一个的参数很长、要流好几秒）时，前面那几个不再被“原生工具意图未能确认落盘”拒掉、3 秒就失败。确认落盘的钩子原来只等 3 秒，现在回复还在流就一直等，流完再等 3 秒
+- Claude Code：上下文用量有了。用量环原来一直是空的（没报窗口大小），现在窗口取模型的上下文窗口，占用取最近一次模型请求的（原来是整个回合各次请求的累加，一个回合调十次工具就把缓存算了十遍），每次请求结束就更新、不等回合结束；子代理的用量只进累计、不改父会话的占用；自动压缩后马上换成压缩后的数
+- Claude Code：会话会自动起名了。读 Claude Code 自己起的标题（会话记录里的 ai-title）当会话名；宿主环境设了 `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`、CLI 不自己起时请它照第一句话现起一个；用户改过名的不动
+- Litch：回答里的 mermaid 代码块画成图（第一次遇到时才装载 mermaid 12.1.0，严格模式），块头能切“图 / 源码”、复制、放大查看（滚轮缩放、拖动平移）；颜色、字体跟皮肤和明暗走；还在往外流时先显示源码，写错了画不出来时退回源码并写出错误的第一行。手机端照旧显示源码，块前多一行“mermaid · 图在桌面端看”
 
 ## 0.13.0
 

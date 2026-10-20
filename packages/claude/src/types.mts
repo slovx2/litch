@@ -305,6 +305,8 @@ export interface RuntimeTurnContext {
   // 模型交计划（ExitPlanMode）时入口自己问要不要执行：发起回合的连接握手时声明了 planConfirmation
   // 扩展才问。不问时回合带着计划停下，由客户端在回合结束后自己问（官方桌面端的做法）。
   planConfirmation?: boolean
+  // 会话还没有名字：CLI 不会自己起标题时（宿主环境关了，或者是续接的会话），请它照这句话（会话的第一句话）起一个
+  sessionTitle?: string
   // Multimodal input attached to the turn. localImage gets read + base64
   // encoded; image (URL) is passed through as-is. Sidecar reshapes the
   // Claude SDK query into a multimodal user message when this is non-empty.
@@ -331,7 +333,8 @@ export type RuntimeEvent =
   // 模型交了计划、入口不问（见 planConfirmation）：计划条目到此为止，回合随后停下。
   // plan 是 CLI 交来的计划全文（计划文件的内容），没有时是 null。
   | { type: 'plan_handoff'; plan: string | null }
-  | { type: 'context_compacted'; messageId: string }
+  // 压缩后上下文里还剩多少（compact_boundary 的 compact_metadata.post_tokens），CLI 没报是 null
+  | { type: 'context_compacted'; messageId: string; postTokens?: number | null }
   | { type: 'native_boundary'; messageId: string }
   | { type: 'session'; claudeSessionId: string }
   // 这一轮里 CLI 连着哪些 MCP 服务（配置里的原名）。拆 MCP 工具名时拿它对服务名。
@@ -371,7 +374,10 @@ export type RuntimeEvent =
       questions: UserInputQuestion[]
     }
   | { type: 'notice'; level: 'info' | 'warning' | 'error'; message: string }
-  | { type: 'usage'; usage: Record<string, unknown> }
+  // 回合累计的用量（只加进 total）；contextWindow 是主模型的上下文窗口，不知道是 null
+  | { type: 'usage'; usage: Record<string, unknown>; contextWindow?: number | null }
+  // 一次模型请求结束：现在上下文里有多少（换掉 last）。agentToolUseId 不为空的是那个子代理自己的请求
+  | { type: 'context_usage'; usage: Record<string, unknown>; agentToolUseId: string | null }
   | { type: 'goal_usage'; messageId: string; usage: Record<string, unknown> }
   | { type: 'goal_limit'; usageLimited: boolean }
   | {
@@ -537,6 +543,8 @@ export interface ClaudeRuntime {
     context: import('./native-context.mjs').ContextInjection,
   ): Promise<{ boundary: string }>
   forkSession?(sessionId: string, cwd: string, upToMessageId?: string): Promise<NativeSessionFork>
+  // CLI 给这个会话起的标题（用户改的名优先，其次 CLI 起的），没有是 null
+  sessionTitle?(sessionId: string, cwd: string): Promise<string | null>
   runTurn(context: RuntimeTurnContext, handlers: RuntimeHandlers): Promise<void>
   steer(threadId: string, prompt: string): Promise<void>
   interrupt(threadId: string): Promise<void>

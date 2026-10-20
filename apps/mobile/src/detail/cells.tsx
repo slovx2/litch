@@ -21,6 +21,7 @@ import { useT } from '../ui/i18n'
 import { type Palette, useTheme } from '../ui/theme'
 import { useTranscript } from './context'
 import { linkify } from './links'
+import { labelMermaid } from './mermaid'
 
 export type Props<T extends Row['type']> = { row: Extract<Row, { type: T }> }
 
@@ -151,7 +152,7 @@ export const MarkdownCell = memo(function MarkdownCell({ row }: Props<'md'>) {
           frozen.set(row, { width, height: event.nativeEvent.layout.height })
           setFrozenAt(Date.now())
         }
-  const markdown = linkedText(row, scope)
+  const markdown = labelMermaid(linkedText(row, scope), t('mermaid.onDesktop'))
   const body =
     experiment.render === 'plain' ? (
       <Text style={{ fontSize: 15, lineHeight: 22, color: c.ink }}>{row.text}</Text>

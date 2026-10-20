@@ -2607,16 +2607,23 @@ test('Claude token usage maps to thread/tokenUsage/updated notifications', async
     assert.ok(!('apiDurationMs' in completedTurn))
     assert.ok(!('numTurns' in completedTurn))
     assert.ok(!('costUsd' in completedTurn))
-    // input_tokens 100 + cache_creation 5 = 105 input; cache_read 10; output 40.
+    // 占用（last）是最后一次请求的：input 30 + cache_creation 5 = 35 input; cache_read 10; output 15.
     assert.deepEqual(tokenUsage.tokenUsage.last, {
+      inputTokens: 35,
+      cachedInputTokens: 10,
+      outputTokens: 15,
+      reasoningOutputTokens: 0,
+      totalTokens: 60,
+    })
+    // 累计（total）是整个回合的：input_tokens 100 + cache_creation 5 = 105 input; cache_read 10; output 40.
+    assert.deepEqual(tokenUsage.tokenUsage.total, {
       inputTokens: 105,
       cachedInputTokens: 10,
       outputTokens: 40,
       reasoningOutputTokens: 0,
       totalTokens: 155,
     })
-    assert.deepEqual(tokenUsage.tokenUsage.total, tokenUsage.tokenUsage.last)
-    assert.equal(tokenUsage.tokenUsage.modelContextWindow, null)
+    assert.equal(tokenUsage.tokenUsage.modelContextWindow, 200_000)
   } finally {
     proc.kill()
     await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 80 })

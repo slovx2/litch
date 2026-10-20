@@ -178,6 +178,80 @@
   color: var(--err);
 }
 
+/* mermaid 图：块头左边是语言和画不出来时的原因，右边是“图 / 源码”、复制、放大 */
+.mmd .code-head {
+  justify-content: flex-start;
+  gap: 8px;
+}
+.mmd-lang {
+  flex: none;
+}
+.mmd-err {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--err);
+}
+.mmd-tools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  margin-left: auto;
+}
+.mmd-seg button {
+  height: 20px;
+  padding: 0 8px;
+  font-size: 11px;
+}
+.mmd-fig {
+  display: flex;
+  justify-content: center;
+  padding: 12px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.mmd-fig svg {
+  max-width: 100%;
+  height: auto;
+}
+/* 放大查看：图按本来的大小画在左上角，由脚本整体平移缩放 */
+.mmd-viewer[open] {
+  display: block;
+  padding: 0;
+  overflow: hidden;
+  cursor: grab;
+}
+.mmd-viewer[open]:active {
+  cursor: grabbing;
+}
+.mmd-stage {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  background: var(--sunken);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+}
+.mmd-stage svg {
+  display: block;
+}
+.mmd-hint {
+  position: fixed;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 10px;
+  font: 11px / 16px var(--mono);
+  color: var(--ink-2);
+  background: var(--raised);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  pointer-events: none;
+}
+
 /* 输出中的光标：画在最后一块的结尾 */
 .md.live > :is(p, h1, h2, h3, h4, h5, h6):last-child::after,
 .md.live > :is(ul, ol):last-child > li:last-child::after,

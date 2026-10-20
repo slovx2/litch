@@ -3,6 +3,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { isDeepStrictEqual } from 'node:util'
 import { EXTENSION } from '../../protocol/src/device.mjs'
 import { catalogPagination } from '../../shared/src/catalog-pagination.mjs'
 import {
@@ -316,6 +317,8 @@ export class CodexClaudeAppServer {
   private scheduledGoals = new Map<string, string>()
   private scheduledQueues = new Map<string, string>()
   private goalUsageLimited = new Set<string>()
+  // 自动起名已经看过几次（每个回合结束看一次，最多三次）；用户改过名的记成 Infinity，不再动
+  private titleChecks = new Map<string, number>()
   private get goals(): GoalController {
     return new GoalController(this.store)
   }
@@ -1762,6 +1765,7 @@ export class CodexClaudeAppServer {
     const threadId = requiredString(params.threadId, 'threadId')
     if (!this.store.getThread(threadId)) throw new ProtocolError(-32602, '未知会话')
     const name = params.name == null ? null : String(params.name)
+    this.titleChecks.set(threadId, Number.POSITIVE_INFINITY)
     this.store.updateThreadName(threadId, name)
     this.notifyThread(threadId, {
       method: 'thread/name/updated',
@@ -2964,6 +2968,7 @@ export class CodexClaudeAppServer {
           if (event.type === 'context_compacted') {
             compacted = true
             if (event.messageId) this.store.saveNativeBoundary(turnId, event.messageId)
+            this.compactedUsage(peer, thread.id, turnId, event.postTokens)
           }
           if (event.type === 'text_delta' && event.delta) {
             if (!agent.id) {
@@ -3660,6 +3665,9 @@ export class CodexClaudeAppServer {
         systemPromptAddendum,
         planMode,
         planConfirmation: this.asksPlanConfirmation(peer, thread.id),
+        ...(turnPurpose === 'normal' && this.wantsSessionTitle(thread.id)
+          ? { sessionTitle: thread.preview }
+          : {}),
         imageInputs: Array.isArray(params._imageInputs)
           ? (params._imageInputs as ImageInput[])
           : [],
@@ -3845,8 +3853,10 @@ export class CodexClaudeAppServer {
             return
           }
           // CLI 自己压缩了上下文：之前放在用户消息前面的指令压进了摘要，下个回合再放一次
-          if (event.type === 'context_compacted')
+          if (event.type === 'context_compacted') {
             this.rememberInjectedInstructions(runtimeThread.id, null)
+            this.compactedUsage(peer, thread.id, turn.id, event.postTokens)
+          }
           if (event.type === 'session') {
             this.store.updateClaudeSessionId(thread.id, event.claudeSessionId)
             return
@@ -4198,11 +4208,17 @@ export class CodexClaudeAppServer {
                 outputTokens: parsed.usage.totalTokens,
                 reasoningOutputTokens: 0,
               }
+              // 子线程的占用是它最后一次请求的（运行时按请求报过就有）；窗口先借父线程的
+              const childStored = this.store.threadUsage(ctx.childThreadId)?.tokenUsage
               const childUsage: ThreadTokenUsage = {
                 total: breakdown,
-                last: breakdown,
-                modelContextWindow: null,
+                last: childStored?.last ?? breakdown,
+                modelContextWindow:
+                  childStored?.modelContextWindow ??
+                  this.store.threadUsage(thread.id)?.tokenUsage.modelContextWindow ??
+                  null,
               }
+              this.store.saveThreadUsage(ctx.childThreadId, childTurn.id, childUsage)
               this.notify(peer, {
                 method: 'thread/tokenUsage/updated',
                 params: {
@@ -4211,11 +4227,14 @@ export class CodexClaudeAppServer {
                   tokenUsage: childUsage,
                 },
               })
+              // 父线程只加进累计，不改它的占用
               this.recordTokenUsage(peer, thread.id, turn.id, {
-                input_tokens: 0,
-                output_tokens: parsed.usage.totalTokens,
-                cache_read_input_tokens: 0,
-                cache_creation_input_tokens: 0,
+                add: {
+                  input_tokens: 0,
+                  output_tokens: parsed.usage.totalTokens,
+                  cache_read_input_tokens: 0,
+                  cache_creation_input_tokens: 0,
+                },
               })
             }
 
@@ -4529,7 +4548,25 @@ export class CodexClaudeAppServer {
             return
           }
           if (event.type === 'usage') {
-            this.recordTokenUsage(peer, thread.id, turn.id, event.usage)
+            this.recordTokenUsage(peer, thread.id, turn.id, {
+              add: event.usage,
+              window: event.contextWindow ?? null,
+            })
+            return
+          }
+          if (event.type === 'context_usage') {
+            const last = tokenBreakdownFromClaudeUsage(event.usage)
+            if (!event.agentToolUseId) {
+              this.recordTokenUsage(peer, thread.id, turn.id, { last })
+              return
+            }
+            // 子代理自己的请求：记在它的子线程上，窗口先借父线程的
+            const ctx = subagentContexts.get(event.agentToolUseId)
+            if (ctx)
+              this.recordTokenUsage(peer, ctx.childThreadId, ctx.childTurnId, {
+                last,
+                window: this.store.threadUsage(thread.id)?.tokenUsage.modelContextWindow ?? null,
+              })
             return
           }
           if (event.type === 'goal_usage') {
@@ -4914,6 +4951,47 @@ export class CodexClaudeAppServer {
     this.notify(peer, {
       method: 'turn/completed',
       params: { threadId: thread.id, turn: this.toLifecycleTurn(completed) },
+    })
+    void this.adoptSessionTitle(thread.id)
+  }
+
+  // 这个会话还要不要自动起名：Claude 会话、还没有名字、用户没改过名，只看前三个回合
+  private wantsSessionTitle(threadId: string): boolean {
+    if ((this.titleChecks.get(threadId) ?? 0) >= 3 || !this.runtime.sessionTitle) return false
+    const thread = this.store.getThread(threadId)
+    return Boolean(
+      thread &&
+        !thread.name &&
+        !thread.ephemeral &&
+        thread.threadSource !== 'subagent' &&
+        thread.runtimeBackend === 'claude',
+    )
+  }
+
+  // Claude 会话的名字：CLI 起的标题写在会话记录里（ai-title），读出来当会话名。
+  // 标题是异步起的，可能晚一两个回合才写进去，所以前三个回合结束时各看一次；用户改过名的不动。
+  private async adoptSessionTitle(threadId: string): Promise<void> {
+    if (!this.wantsSessionTitle(threadId)) return
+    const thread = this.store.getThread(threadId)
+    if (!thread?.claudeSessionId) return
+    this.titleChecks.set(threadId, (this.titleChecks.get(threadId) ?? 0) + 1)
+    let title: string | null | undefined
+    try {
+      title = await this.runtime.sessionTitle?.(thread.claudeSessionId, thread.cwd)
+    } catch (error) {
+      debugLog('thread.title.failed', { threadId, error: String(error) })
+      return
+    }
+    // 和第一句话一样的不算起了名（侧栏本来就显示第一句话）
+    if (!title || title === thread.preview.trim() || this.stopped) return
+    // 等的时候用户改了名，或者会话没了
+    if (this.titleChecks.get(threadId) === Number.POSITIVE_INFINITY) return
+    if (this.store.getThread(threadId)?.name !== null) return
+    this.titleChecks.set(threadId, Number.POSITIVE_INFINITY)
+    this.store.updateThreadName(threadId, title)
+    this.notifyThread(threadId, {
+      method: 'thread/name/updated',
+      params: { threadId, threadName: title },
     })
   }
 
@@ -5750,32 +5828,61 @@ export class CodexClaudeAppServer {
         this.notify(peer, { method: 'account/rateLimits/updated', params: { rateLimits } })
   }
 
-  // Accumulates Claude Agent SDK token usage per thread and pushes a
-  // `thread/tokenUsage/updated` notification so the Codex App can render real
-  // consumption instead of leaving the meter blank.
+  // 记下一个线程的用量并发 `thread/tokenUsage/updated`。三样各管各的：add 只加进累计（total），
+  // last 是现在上下文里有多少（最近一次模型请求的用量），window 是主模型的上下文窗口。
+  // 没给的那几样沿用上次存下的，窗口跟着线程存，恢复、分叉时一起带上。
   private recordTokenUsage(
     peer: RpcPeer,
     threadId: string,
     turnId: string,
-    usage: Record<string, unknown>,
+    change: {
+      add?: Record<string, unknown>
+      last?: TokenUsageBreakdown
+      window?: number | null
+    },
   ): void {
-    const last = tokenBreakdownFromClaudeUsage(usage)
-    if (last.totalTokens === 0) return
-    const prior = this.store.threadUsage(threadId)?.tokenUsage.total ?? emptyTokenBreakdown()
-    const total: TokenUsageBreakdown = {
-      totalTokens: prior.totalTokens + last.totalTokens,
-      inputTokens: prior.inputTokens + last.inputTokens,
-      cachedInputTokens: prior.cachedInputTokens + last.cachedInputTokens,
-      outputTokens: prior.outputTokens + last.outputTokens,
-      reasoningOutputTokens: prior.reasoningOutputTokens + last.reasoningOutputTokens,
-    }
-    const tokenUsage: ThreadTokenUsage = { total, last, modelContextWindow: null }
+    const added = change.add ? tokenBreakdownFromClaudeUsage(change.add) : null
+    const stored = this.store.threadUsage(threadId)?.tokenUsage
+    const prior = stored?.total ?? emptyTokenBreakdown()
+    const total: TokenUsageBreakdown = added
+      ? {
+          totalTokens: prior.totalTokens + added.totalTokens,
+          inputTokens: prior.inputTokens + added.inputTokens,
+          cachedInputTokens: prior.cachedInputTokens + added.cachedInputTokens,
+          outputTokens: prior.outputTokens + added.outputTokens,
+          reasoningOutputTokens: prior.reasoningOutputTokens + added.reasoningOutputTokens,
+        }
+      : prior
+    const last = change.last ?? stored?.last ?? emptyTokenBreakdown()
+    const modelContextWindow = change.window ?? stored?.modelContextWindow ?? null
+    if (
+      stored &&
+      total === prior &&
+      isDeepStrictEqual(last, stored.last) &&
+      modelContextWindow === stored.modelContextWindow
+    )
+      return
+    if (!stored && total.totalTokens === 0 && last.totalTokens === 0) return
+    const tokenUsage: ThreadTokenUsage = { total, last, modelContextWindow }
     this.store.saveThreadUsage(threadId, turnId, tokenUsage)
     this.notify(peer, {
       method: 'thread/tokenUsage/updated',
       params: { threadId, turnId, tokenUsage },
     })
     // token usage 不能推算账户配额；只有原生 rate_limit_event 更新限额快照。
+  }
+
+  // 压缩之后上下文里只剩摘要：占用换成 CLI 报的压缩后的词元数，不等下一次请求
+  private compactedUsage(
+    peer: RpcPeer,
+    threadId: string,
+    turnId: string,
+    postTokens: number | null | undefined,
+  ): void {
+    if (typeof postTokens !== 'number' || postTokens <= 0) return
+    this.recordTokenUsage(peer, threadId, turnId, {
+      last: { ...emptyTokenBreakdown(), totalTokens: postTokens, inputTokens: postTokens },
+    })
   }
 
   private marketplaceAdd(params: Record<string, unknown>): unknown {
