@@ -30,6 +30,11 @@ export interface ChildSpec {
   sandbox?: unknown
   /** 从哪个提案开始的（用户点了提案上的“开始”） */
   proposalId?: string | null
+  /**
+   * 交接（litch_sessions.hand_off）：fork 分叉到这个回合之前（不带它，免得子会话看到那条无关的新消息），
+   * 第一条消息说明它接手的是父会话做到一半的任务，prompt 是剩下的计划
+   */
+  handOffBefore?: string | null
 }
 
 /** 派不出来：说明是给人（或模型）看的 */
@@ -153,16 +158,21 @@ export function threadTitle(thread: Record<string, unknown> | null, given?: stri
   return typeof thread.preview === 'string' ? thread.preview.trim().slice(0, 80) : ''
 }
 
-/** 子会话收到的第一条消息：由哪个会话派出、任务是什么、做完怎么回报 */
+/**
+ * 子会话收到的第一条消息：由哪个会话派出、任务是什么、做完怎么回报。
+ * handOff：交接出来的分叉，说明它接手的是父会话做到一半的任务，prompt 是剩下的计划
+ */
 export function briefing(
   kind: SessionLineageKind,
   parent: { id: string; harness: string; title: string },
   title: string,
   prompt: string,
+  handOff = false,
 ): string {
   const who = `"${parent.title || parent.id}" (${parent.id}, ${parent.harness})`
-  const head =
-    kind === 'fork'
+  const head = handOff
+    ? `[Litch] You are taking over a task that ${who} was in the middle of: a new, unrelated user message arrived there, so it handed this task to you and went on to answer that message. You have the conversation above, up to the turn before that message; finish the task here as a separate sub-session.`
+    : kind === 'fork'
       ? `[Litch] This session is a fork of ${who}: you have that conversation above, but you are now a separate sub-session and the original goes on without you.`
       : `[Litch] Another session on this device started this one: ${who}. You cannot see that conversation; the user can open this session and talk to you directly.`
   return [
@@ -170,7 +180,7 @@ export function briefing(
     '',
     `Task: ${title}`,
     '',
-    prompt,
+    handOff ? `Remaining plan:\n${prompt}` : prompt,
     '',
     'When you are done, end your turn with a short summary of the result and anything left open: Litch passes the beginning of your final answer back to the session that started you. If you need a decision, ask the user here; that session cannot answer for them.',
   ].join('\n')
@@ -233,6 +243,7 @@ export async function startChild(
     spec.kind === 'fork'
       ? await link.request('thread/fork', {
           threadId: parentId,
+          ...(spec.handOffBefore ? { beforeTurnId: spec.handOffBefore } : {}),
           ...(spec.model ? { model: spec.model } : {}),
           ...permissions,
         })
@@ -280,6 +291,7 @@ export async function startChild(
     },
     title,
     spec.prompt,
+    Boolean(spec.handOffBefore),
   )
   await link.request('turn/start', {
     threadId,
@@ -309,16 +321,18 @@ export interface ProposalOverrides {
 /**
  * 开始一个 pending 的提案：用户点“开始”（litch/sessionProposal/accept）和模型的 litch_sessions.accept 都走这里。
  * 照提案（加上用户改的）派子会话，origin 是 proposal、带 proposalId，起好后提案标 started。
+ * from 是 chosen 时开始的是用户选了新会话的 offer 卡（模型补的简报在 overrides 里）。
  * 同一个提案正在开始时再来一次抛错；撤回、不要会等它起完（tree.accepting）
  */
 export async function acceptProposal(
   tree: SessionTree,
   proposalId: string,
   overrides: ProposalOverrides = {},
+  from: 'pending' | 'chosen' = 'pending',
 ): Promise<{ threadId: string; harness: string }> {
   if (tree.accepting.has(proposalId))
     throw new DeviceError('unsupported', `提案 ${proposalId} 正在开始`)
-  const proposal = tree.pendingProposal(proposalId)
+  const proposal = tree.pendingProposal(proposalId, from)
   const pick = (value: string | undefined, fallback: string | null) =>
     value === undefined ? fallback : value || null
   const started = startChild(
@@ -343,7 +357,7 @@ export async function acceptProposal(
   tree.accepting.set(proposalId, started)
   try {
     const child = await started
-    tree.settleProposal(proposalId, 'started', child.threadId)
+    tree.settleProposal(proposalId, 'started', child.threadId, [from])
     return child
   } finally {
     tree.accepting.delete(proposalId)

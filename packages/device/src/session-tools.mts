@@ -4,6 +4,8 @@
 // 别的一律 [litch:blocked]，引擎自己的子代理线程另外提示用引擎自己的工具。提案类（start 出提案、accept、withdraw）
 // 只作用于调用者自己会话上的提案；提案的门槛（一回合几张、同标题、fresh 简报的显示宽度）在 start 和 wrap_up 里查。
 // wrap_up 是每回合收尾必调的：每条建议成一张提案，调没调记在会话树里（没调的用户回合结束后设备进程开回合提醒）。
+// start 的 initiation offer 只带标题落一张 offer 卡，调用一直等到用户选（或者又发了话、回合结束）；选了新会话的，
+// 模型再用 accept 带上简报开起来。hand_off 把做到一半的任务交给一个分叉到这个回合之前的子会话，立刻开始。
 // 结果是一段 JSON 文字，失败第一行是 [litch:<kind>]，后面是模型能照着改的一句话。
 import {
   type ClientToolCallResponse,
@@ -15,6 +17,7 @@ import {
   SESSION_TOOL_LIMITS,
   type SessionStatusWord,
   type SessionSummary,
+  type SessionsHandOffResult,
   type SessionsStartResult,
   type SessionsWithdrawResult,
   type SessionsWrapUpResult,
@@ -35,7 +38,7 @@ import {
   threadTitle,
   widerSandbox,
 } from './session-start.mjs'
-import { lastAnswer, type SessionTree, trimText } from './session-tree.mjs'
+import { lastAnswer, type OfferOutcome, type SessionTree, trimText } from './session-tree.mjs'
 import { isObject } from './wire.mjs'
 
 /** 参数不对、对象不对：直接回给模型的失败 */
@@ -229,25 +232,36 @@ interface Spec {
   kind: SessionLineageKind
 }
 
+/** 子会话起在哪：harness、模型、目录、fresh 还是 fork。harness 要在这台设备上，fork 只能同 harness */
+function targetOf(
+  args: Record<string, unknown>,
+  call: DeviceToolCall,
+  tree: SessionTree,
+): Omit<Spec, 'title' | 'prompt'> {
+  const harness = string(args, 'harness')
+  const model = string(args, 'model')
+  const cwd = string(args, 'cwd')
+  const kind = string(args, 'kind') ?? 'fresh'
+  if (kind !== 'fresh' && kind !== 'fork')
+    throw new Refused('invalid', 'kind must be fresh or fork.')
+  if (harness && !tree.host.harnesses().some((source) => source.id === harness))
+    throw new Refused('invalid', `There is no harness "${harness}" on this device.`)
+  if (kind === 'fork' && harness && harness !== call.harness)
+    throw new Refused('invalid', `fork only works within the same harness (${call.harness}).`)
+  return { harness, model, cwd, kind }
+}
+
 /** 读一条 start 或建议的参数并查一遍：标题、简报、harness、fork 只能同 harness、fresh 简报的宽度 */
 function specOf(args: Record<string, unknown>, call: DeviceToolCall, tree: SessionTree): Spec {
   const title = string(args, 'title', true)
   const prompt = string(args, 'prompt', true)
-  const harness = string(args, 'harness')
-  const model = string(args, 'model')
-  const cwd = string(args, 'cwd')
-  const given = string(args, 'kind') ?? 'fresh'
-  if (given !== 'fresh' && given !== 'fork')
-    throw new Refused('invalid', 'kind must be fresh or fork.')
+  const target = targetOf(args, call, tree)
+  const given = target.kind
   if (prompt.length > SESSION_TOOL_LIMITS.messageChars)
     throw new Refused(
       'invalid',
       `prompt is longer than ${SESSION_TOOL_LIMITS.messageChars} characters.`,
     )
-  if (harness && !tree.host.harnesses().some((source) => source.id === harness))
-    throw new Refused('invalid', `There is no harness "${harness}" on this device.`)
-  if (given === 'fork' && harness && harness !== call.harness)
-    throw new Refused('invalid', `fork only works within the same harness (${call.harness}).`)
   // fresh 的子会话只知道这段简报：太短的不管直接起还是变成提案都拒绝。按显示宽度算，汉字这类等宽字符算 2
   const width = textWidth(prompt.trim())
   const least = SESSION_TOOL_LIMITS.freshPromptMinWidth
@@ -256,7 +270,7 @@ function specOf(args: Record<string, unknown>, call: DeviceToolCall, tree: Sessi
       'invalid',
       `prompt is too short (width ${width}; each CJK or other full-width character counts as 2, everything else as 1): a fresh session knows nothing but this text, so it needs a width of at least ${least} (about ${least / 2} Chinese characters or ${least} English letters). State the task, the files or area, and what done looks like, then try again.`,
     )
-  return { title, prompt, harness, model, cwd, kind: given }
+  return { title, prompt, ...target }
 }
 
 /** 目标 harness 收不到父会话那么严时子会话实际会是的那一档沙箱；收得紧、判断不了是 null */
@@ -294,11 +308,13 @@ async function start(
   tree: SessionTree,
   args: Record<string, unknown>,
   call: DeviceToolCall,
+  signal: AbortSignal,
 ): Promise<SessionsStartResult> {
-  const spec = specOf(args, call, tree)
   const initiation = string(args, 'initiation') ?? 'propose'
+  if (initiation === 'offer') return offer(tree, args, call, signal)
   if (initiation !== 'user_asked' && initiation !== 'propose')
-    throw new Refused('invalid', 'initiation must be user_asked or propose.')
+    throw new Refused('invalid', 'initiation must be user_asked, propose or offer.')
+  const spec = specOf(args, call, tree)
   // 目标 harness 收不到父会话那么严（比如没有沙箱的 Pi）：模型派的一律变成提案，由用户看过再点
   const wider = await widerFor(tree, call, spec)
   // 只有用户亲手发起的这个回合里、模型说是用户要的，才直接起；别的一律变成提案
@@ -333,6 +349,68 @@ async function start(
   return {
     proposal_id: proposal.id,
     note: `${why}The user now sees a proposal card for "${proposal.title}". Nothing runs until they accept it; ${EXPIRES}. Do not do the work here as well.`,
+  }
+}
+
+/**
+ * offer：用户这条消息是和这个会话无关的新任务。只带标题落一张 offer 卡（offered，算进一回合几张的门槛），
+ * 调用一直等到它了结：用户选了（新会话 / 在这里做）、用户又发了话、回合被打断或结束。只在用户亲手发起的回合里收。
+ * harness、model、cwd、kind 给了的话记在卡上，模型 accept 补简报时没给的照它们
+ */
+async function offer(
+  tree: SessionTree,
+  args: Record<string, unknown>,
+  call: DeviceToolCall,
+  signal: AbortSignal,
+): Promise<SessionsStartResult> {
+  const title = string(args, 'title', true).trim().slice(0, 120)
+  if (args.prompt !== undefined && args.prompt !== null)
+    throw new Refused(
+      'invalid',
+      'An offer takes the title only. Call start again with initiation "offer" and no prompt; if the user chooses a new session, you pass the brief to accept.',
+    )
+  const target = targetOf(args, call, tree)
+  if (!tree.isUserTurn(call.harness, call.turnId))
+    throw new Refused(
+      'blocked',
+      'An offer is only for a new task in a message the user just typed, and this turn was not started that way. Do the work here, or suggest it with wrap_up.',
+    )
+  gate(tree, call, title)
+  const proposal = tree.propose({
+    threadId: call.threadId,
+    title,
+    prompt: '',
+    harness: target.harness ?? null,
+    model: target.model ?? null,
+    cwd: target.cwd ?? null,
+    kind: target.kind,
+    wakeParent: true,
+    turnId: call.turnId || null,
+    callId: call.callId || null,
+    offer: true,
+  })
+  const outcome = await tree.waitOffer(proposal, signal)
+  return {
+    proposal_id: proposal.id,
+    choice: outcome.choice,
+    note: offerNote(proposal, outcome),
+  }
+}
+
+/** offer 了结之后给模型的那句话：接下来怎么做 */
+function offerNote(proposal: SessionProposal, outcome: OfferOutcome): string {
+  const title = `"${proposal.title}"`
+  if (outcome.choice === 'session')
+    return `The user chose a new session for ${title}. Now call litch_sessions.accept with proposal_id ${proposal.id} and the full brief in prompt: the task, the files or area, and what done looks like (a fresh session knows nothing else; a width of at least ${SESSION_TOOL_LIMITS.freshPromptMinWidth}, each CJK character counts as 2). Add harness, model, cwd or kind only if they should differ from this session. Do not do the work here.`
+  switch (outcome.reason) {
+    case 'spoke':
+      return `The user sent a new message instead of choosing, which counts as doing ${title} here. Read their new message and go on in this session; do not start a session for it.`
+    case 'interrupted':
+      return `The user interrupted the turn instead of choosing; ${title} now counts as done here. Stop and wait for the user.`
+    case 'ended':
+      return `The turn ended before the user chose; ${title} now counts as done here.`
+    default:
+      return `The user chose to do ${title} here. Do it in this session now; do not start a session for it.`
   }
 }
 
@@ -412,19 +490,32 @@ const settledWord: Record<Exclude<SessionProposal['status'], 'pending' | 'starte
   expired: 'it expired',
 }
 
-/** 用户在这个回合里让开始某张提案：按提案原样起（同用户点“开始”），只在用户亲手发起的回合里允许 */
+/** accept 里只有开始 offer 卡时才给的简报字段 */
+const BRIEF_FIELDS = ['prompt', 'title', 'harness', 'model', 'cwd', 'kind'] as const
+
+/**
+ * 用户在这个回合里让开始某张提案：按提案原样起（同用户点“开始”），只在用户亲手发起的回合里允许。
+ * 自己的 offer 卡走 acceptOffer（用户选了新会话，模型补简报开起来）
+ */
 async function accept(
   tree: SessionTree,
   args: Record<string, unknown>,
   call: DeviceToolCall,
 ): Promise<SessionsStartResult> {
   const proposalId = string(args, 'proposal_id', true)
+  const mine = tree.proposal(proposalId)
+  if (mine?.offer && mine.threadId === call.threadId) return acceptOffer(tree, args, call, mine)
   if (!tree.isUserTurn(call.harness, call.turnId))
     throw new Refused(
       'blocked',
       'This turn was not started by the user typing a message, so you cannot start proposals for them. Tell the user they can start it from the card.',
     )
   const proposal = ownProposal(tree, proposalId, call)
+  if (BRIEF_FIELDS.some((name) => args[name] !== undefined && args[name] !== null))
+    throw new Refused(
+      'invalid',
+      `prompt, title, harness, model, cwd and kind are only for an offer the user answered with "New session"; proposal ${proposalId} starts as it was proposed. Call accept again with proposal_id only.`,
+    )
   // 正在被用户点开始：等它起完，按已经开始了答
   const running = tree.accepting.get(proposalId)
   if (running) {
@@ -459,6 +550,85 @@ async function accept(
   }
 }
 
+/**
+ * 开始一张自己的 offer 卡：用户选了新会话（chosen），模型补上简报。必须带 prompt，fresh 照简报宽度门槛查；
+ * title、harness、model、cwd、kind 不给的照卡上的。不要求用户发起的回合（用户在卡上选新会话就是同意）。
+ * 目标 harness 收不到这个会话那么严的不起（没有卡片让用户看过再点）
+ */
+async function acceptOffer(
+  tree: SessionTree,
+  args: Record<string, unknown>,
+  call: DeviceToolCall,
+  proposal: SessionProposal,
+): Promise<SessionsStartResult> {
+  switch (proposal.status) {
+    case 'chosen':
+      break
+    case 'offered':
+      throw new Refused(
+        'invalid',
+        `The user has not chosen yet for proposal ${proposal.id}. Wait for the result of your start call.`,
+      )
+    case 'here':
+      throw new Refused(
+        'invalid',
+        `For proposal ${proposal.id} the user chose to do it here (or went on talking). Do the work in this session; do not start a session for it.`,
+      )
+    case 'started':
+      return {
+        ...(proposal.startedThreadId ? { thread_id: proposal.startedThreadId } : {}),
+        note: `This offer was already started${proposal.startedThreadId ? ` as session ${proposal.startedThreadId}` : ''}. Do not start it again.`,
+      }
+    default:
+      throw new Refused(
+        'invalid',
+        `Proposal ${proposal.id} cannot be started: it was ${proposal.status}.`,
+      )
+  }
+  const prompt = args.prompt
+  if (typeof prompt !== 'string' || !prompt.trim())
+    throw new Refused(
+      'invalid',
+      `prompt is required: the user chose a new session for "${proposal.title}", so pass the full brief in prompt (the task, the files or area, what done looks like).`,
+    )
+  const spec = specOf(
+    {
+      title: args.title ?? proposal.title,
+      prompt,
+      harness: args.harness ?? proposal.harness,
+      model: args.model ?? proposal.model,
+      cwd: args.cwd ?? proposal.cwd,
+      kind: args.kind ?? proposal.kind,
+    },
+    call,
+    tree,
+  )
+  const wider = await widerFor(tree, call, spec)
+  if (wider)
+    throw new Refused(
+      'blocked',
+      `${spec.harness ?? call.harness} cannot be sandboxed as tightly as this session (it would run with ${wider}), so you cannot start this offer there. Call accept again on another harness (leave harness out for this session's), or tell the user.`,
+    )
+  const child = await acceptProposal(
+    tree,
+    proposal.id,
+    {
+      title: spec.title,
+      prompt: spec.prompt,
+      // 空字符串是用缺省（这个会话的）
+      harness: spec.harness ?? '',
+      model: spec.model ?? '',
+      cwd: spec.cwd ?? '',
+      kind: spec.kind,
+    },
+    'chosen',
+  )
+  return {
+    thread_id: child.threadId,
+    note: `Started sub-session ${child.threadId} on ${child.harness} for "${spec.title.trim()}". It runs on its own; you will be woken with its result as a <litch-session-event> message. Do not do that work here, and do not poll it.`,
+  }
+}
+
 /** 撤回自己的提案：pending 的标 withdrawn；已经开始、不要了、过期了的照实回，不报错 */
 async function withdraw(
   tree: SessionTree,
@@ -466,11 +636,23 @@ async function withdraw(
   call: DeviceToolCall,
 ): Promise<SessionsWithdrawResult> {
   const proposalId = string(args, 'proposal_id', true)
-  ownProposal(tree, proposalId, call)
+  const found = ownProposal(tree, proposalId, call)
+  // offer 卡：还在等用户选的不能撤回；用户选了在这里做的已经没有卡了；选了新会话、还没开始的可以撤回
+  if (found.status === 'offered')
+    throw new Refused(
+      'invalid',
+      `Proposal ${proposalId} is an offer still waiting for the user's choice; it cannot be withdrawn.`,
+    )
+  if (found.status === 'here')
+    throw new Refused(
+      'invalid',
+      `For proposal ${proposalId} the user chose to do it here; there is no card to withdraw.`,
+    )
   // 用户正在点开始：等它起完再看
   await tree.accepting.get(proposalId)?.catch(() => null)
-  if (tree.proposal(proposalId)?.status === 'pending')
-    tree.settleProposal(proposalId, 'withdrawn', null)
+  const status = tree.proposal(proposalId)?.status
+  if (status === 'pending' || status === 'chosen')
+    tree.settleProposal(proposalId, 'withdrawn', null, ['pending', 'chosen'])
   const current = ownProposal(tree, proposalId, call)
   switch (current.status) {
     case 'started':
@@ -485,6 +667,48 @@ async function withdraw(
       return { status: 'expired', note: 'It already expired. Nothing to do.' }
     default:
       return { status: 'withdrawn', note: 'Withdrawn: the card now shows it as withdrawn.' }
+  }
+}
+
+/**
+ * 交接：做到一半来了一条无关的新消息，把手上的任务交给一个分叉会话（分叉到这个回合之前，不带这条新消息），
+ * 第一条消息是剩下的计划，立刻开始，停下后唤醒这个会话。不出卡；只在用户亲手发起的回合里允许
+ */
+async function handOff(
+  tree: SessionTree,
+  args: Record<string, unknown>,
+  call: DeviceToolCall,
+): Promise<SessionsHandOffResult> {
+  const title = string(args, 'title', true)
+  const plan = string(args, 'remaining_plan', true)
+  if (plan.length > SESSION_TOOL_LIMITS.messageChars)
+    throw new Refused(
+      'invalid',
+      `remaining_plan is longer than ${SESSION_TOOL_LIMITS.messageChars} characters; shorten it and point to files instead.`,
+    )
+  if (!tree.isUserTurn(call.harness, call.turnId))
+    throw new Refused(
+      'blocked',
+      'hand_off is for when the user sends a new, unrelated message while you are working, and this turn was not started by the user typing a message. Keep working here.',
+    )
+  let child: { threadId: string; harness: string }
+  try {
+    child = await startChild(
+      tree,
+      call.threadId,
+      { kind: 'fork', title, prompt: plan, wakeParent: true, handOffBefore: call.turnId },
+      'model',
+    )
+  } catch (error) {
+    if (error instanceof StartRefused) throw error
+    throw new Refused(
+      'failed',
+      `Could not hand off: ${messageOf(error)}. Keep the task here: answer the new message first, then go back to it.`,
+    )
+  }
+  return {
+    thread_id: child.threadId,
+    note: `Handed "${title.trim()}" off to session ${child.threadId}: a fork of this conversation up to the previous turn, with the remaining plan. It starts now; you will be woken with its result as a <litch-session-event> message. Stop that task here (do not continue it or poll it) and answer the user's new message.`,
   }
 }
 
@@ -626,13 +850,15 @@ export function sessionToolsHandler(tree: SessionTree): DeviceToolHandler {
         case SESSION_TOOL.read:
           return ok(await read(tree, args, call))
         case SESSION_TOOL.start:
-          return ok(await start(tree, args, call))
+          return ok(await start(tree, args, call, signal))
         case SESSION_TOOL.accept:
           return ok(await accept(tree, args, call))
         case SESSION_TOOL.withdraw:
           return ok(await withdraw(tree, args, call))
         case SESSION_TOOL.wrapUp:
           return ok(await wrapUp(tree, args, call))
+        case SESSION_TOOL.handOff:
+          return ok(await handOff(tree, args, call))
         case SESSION_TOOL.send:
           return ok(await send(tree, args, call))
         case SESSION_TOOL.wait:

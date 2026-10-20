@@ -8,6 +8,10 @@
 //                              用来在 dsh、OpenCode 上验桌面端执行的客户端工具（client-fixture-browse.mjs 只认 Pi 的工具名）
 //   收尾：<JSON>               要在行首，调 litch_sessions.wrap_up：JSON 是 {"suggestions":[…]}，或者直接写那个数组，比如
 //                              收尾：[{"title":"补测试","prompt":"<够宽的简报>"}]；结果回来后回一句“收尾结果：”加结果原文
+//   新任务：<标题>             要在行首，调 litch_sessions.start（initiation offer，只带标题），等用户在卡上选：选了新会话就调 accept
+//                              带一段够宽的简报，结果回来后回一句“已开新会话：”加结果原文；选了在这里做（或者没选就又发了话、
+//                              回合结束了）回一句“在这里做：<标题>”
+//   交接：<标题>               要在行首，调 litch_sessions.hand_off（剩下的计划是一段写死的话），结果回来后回一句“已交接：”加结果原文
 // 设备进程注入的唤醒（<litch-session-event kind="wake">）：回一句“收到子会话的结果：<几条>”，不调工具。
 // 设备进程注入的提醒收尾（<litch-session-event kind="remind">）：调一次 wrap_up（空列表），结果回来后回一句“已收尾”。
 // 平时的回合不调 wrap_up（夹具的设备设置里提醒收尾缺省关，见 client-fixture-engines.mjs 的 fixtureDeviceSettings）。
@@ -24,6 +28,11 @@ export const SESSIONS_WOKEN = '收到子会话的结果：'
 export const WRAP_UP_TRIGGER = /^收尾：\s*([[{][\s\S]*)$/m
 export const WRAP_UP_HEARD = '收尾结果：'
 export const REMIND_DONE = '已收尾'
+export const OFFER_TRIGGER = /^新任务：\s*(.+)$/m
+export const OFFER_STARTED = '已开新会话：'
+export const OFFER_HERE = '在这里做：'
+export const HAND_OFF_TRIGGER = /^交接：\s*(.+)$/m
+export const HAND_OFF_HEARD = '已交接：'
 const WAKE = /<litch-session-event kind="wake">([\s\S]*?)<\/litch-session-event>/
 const REMIND = /<litch-session-event kind="remind">/
 
@@ -33,13 +42,14 @@ const SPACES = {
     marks: {
       list: 'List sessions on this device',
       read: 'Read a session’s status and its last few turns',
-      start: 'Start a sub-session, or propose one.',
+      start: 'Start a sub-session, propose one, or offer a new session.',
       send: 'Send a message to one of your sub-sessions',
       wait: 'Wait until the given sessions stop',
       interrupt: 'Interrupt the running turn of one of your sub-sessions',
-      accept: 'Start one of your proposal cards because the user told you to',
+      accept: 'Start one of your cards:',
       withdraw: 'Withdraw a proposal card of yours',
       wrap_up: 'Call this exactly once at the end of every turn',
+      hand_off: 'Move the task you are in the middle of into its own session',
     },
   },
   任务: {
@@ -103,6 +113,22 @@ export function sessionsStep(said, { nameOf, results }) {
       }
     return { call: { namespace: 'litch_sessions', name, args } }
   }
+  const offered = said.match(OFFER_TRIGGER)
+  if (offered) return offerStep(offered[1].trim(), { nameOf, results })
+  const handed = said.match(HAND_OFF_TRIGGER)
+  if (handed) {
+    if (results.length > 0) return { text: `${HAND_OFF_HEARD}\n${results[0]}` }
+    const name = nameOf(SPACES.会话, 'hand_off')
+    if (!name) return { text: '没有 litch_sessions 这个工具' }
+    const title = handed[1].trim()
+    return {
+      call: {
+        namespace: 'litch_sessions',
+        name,
+        args: { title, remaining_plan: `${title}：还剩把改动补完、跑一遍检查，${HAND_OFF_PLAN}` },
+      },
+    }
+  }
   const tool = said.match(SESSIONS_TRIGGER)
   if (!tool) return null
   if (results.length > 0) return { text: `${SESSIONS_HEARD}\n${results.join('\n---\n')}` }
@@ -115,6 +141,39 @@ export function sessionsStep(said, { nameOf, results }) {
     return { call: { namespace: space.namespace, name, args: tool[3] ? JSON.parse(tool[3]) : {} } }
   } catch {
     return { text: `参数不是 JSON：${tool[3]}` }
+  }
+}
+
+/** 交接时剩下的计划、选了新会话时补的简报共用的后半段：够设备进程的简报宽度门槛（汉字算 2，至少 80） */
+const HAND_OFF_PLAN =
+  '相关文件都在这个项目里，先读一遍 README 和目录结构再动手；做完的标准是改动能通过已有的检查，结束时用两三句话说明改了什么、怎么验证的、还剩什么没做。'
+
+/** 新任务：先出 offer 卡等用户选；选了新会话再 accept 补简报 */
+function offerStep(title, { nameOf, results }) {
+  if (results.length === 0) {
+    const name = nameOf(SPACES.会话, 'start')
+    if (!name) return { text: '没有 litch_sessions 这个工具' }
+    return { call: { namespace: 'litch_sessions', name, args: { title, initiation: 'offer' } } }
+  }
+  if (results.length > 1) return { text: `${OFFER_STARTED}\n${results[1]}` }
+  let answered = null
+  try {
+    answered = JSON.parse(results[0])
+  } catch {
+    // 失败的结果是 [litch:<kind>] 开头的一句话，不是 JSON
+  }
+  if (answered?.choice !== 'session') return { text: `${OFFER_HERE}${title}\n${results[0]}` }
+  const name = nameOf(SPACES.会话, 'accept')
+  if (!name) return { text: '没有 litch_sessions.accept 这个工具' }
+  return {
+    call: {
+      namespace: 'litch_sessions',
+      name,
+      args: {
+        proposal_id: answered.proposal_id,
+        prompt: `新会话的任务是${title}。${HAND_OFF_PLAN}`,
+      },
+    },
   }
 }
 

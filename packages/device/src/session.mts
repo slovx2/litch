@@ -349,6 +349,7 @@ export class ClientSession implements ClientToolPeer {
             this.host.sessionTreeOn(),
             method,
             frame.params,
+            this.declared.has(EXTENSION.sessionTree),
           )
         // 统一模式（harnessConfig）：只是文件操作，设备进程自己做，不经主进程
         if (INSTRUCTIONS_METHODS.has(method)) return instructionsCall(method, frame.params)
@@ -486,6 +487,11 @@ export class ClientSession implements ClientToolPeer {
       const input = this.host.sessionTree.beforeUserTurn(params.threadId, params.input)
       if (input) params = { ...params, input }
     }
+    // 回合里插话、打断：模型在等用户选的 offer 卡当作在这里做
+    if (params && method === 'turn/steer' && typeof params.threadId === 'string')
+      this.host.sessionTree.userSpoke(params.threadId)
+    if (params && method === 'turn/interrupt' && typeof params.threadId === 'string')
+      this.host.sessionTree.interrupted(params.threadId)
     // 应答回来之后要记的（一个请求只有一个 after）
     const afterwards: ((result: unknown) => void)[] = []
     // 建会话时带的动态工具记下来：设备进程替这个会话派子会话时照样带上
