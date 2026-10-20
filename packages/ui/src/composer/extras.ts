@@ -35,12 +35,19 @@ export function pasteVerdict(text: string): 'inline' | 'attach' | 'long' {
 }
 
 /** 一片上写什么。技能是它叫出来时的样子（斜杠加名字）；没有名字的文字（贴进来的）由界面按语言另说，这里给 null */
-export const extraLabel = (extra: MessageExtra): string | null =>
-  extra.kind === 'skill' ? `/${extra.name}` : extra.name
+export const extraLabel = (extra: MessageExtra): string | null => {
+  if (extra.kind === 'skill') return `/${extra.name}`
+  if (extra.kind === 'comment') return extra.quote
+  return extra.name
+}
 
 /** 是不是同一样东西 */
 export const sameExtra = (a: MessageExtra, b: MessageExtra): boolean => {
   if (a.kind === 'text') return b.kind === 'text' && a.name === b.name && a.text === b.text
+  if (a.kind === 'comment') {
+    return b.kind === 'comment' && a.itemId === b.itemId && a.quote === b.quote && a.note === b.note
+  }
+  if (b.kind === 'text' || b.kind === 'comment') return false
   return b.kind === a.kind && a.path === b.path
 }
 

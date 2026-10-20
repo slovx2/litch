@@ -217,6 +217,15 @@ export {
   toolKind,
 } from './projection/blocks.mjs'
 export {
+  type CommentExtra,
+  clipQuote,
+  MAX_COMMENTS,
+  MAX_QUOTE,
+  type ParsedComment,
+  type ParsedComments,
+  parseComments,
+} from './projection/comments.mjs'
+export {
   type FileRef,
   type FileRefMode,
   type FileRefSpan,
