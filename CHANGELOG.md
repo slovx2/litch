@@ -14,6 +14,10 @@ versioning or publishing metadata.
 - DSH：派到 DSH 上的子会话不再在第一回合后被改成简报开头的那句话，保留派出时起的名字
 - 适配器：命名空间可带 `instructions`（挂上时进系统提示的规矩），六家入口都送到模型面前；`litch_sessions` 新增 `accept`、`withdraw`、收尾工具 `wrap_up`（用户发起的回合没调时设备进程开一个 `remind` 回合，设置键 `sessions.wrapUpReminder`），`start` 去掉 `wake_parent`，提案记下提出它的回合和调用、了结时间，`litch/sessionProposal/list` 可带了结的，`accept` 可带 `overrides`，`litch/sessionProposal/changed` 带刚变的那几条
 
+- Litch：harness 详情设置补了模型与上下文。Claude Code 多了“模型”（可选的模型、opus/sonnet/haiku/fable 别名对应的型号、子代理用的模型、按模型的设置）、“上下文窗口”（关闭 1M 上下文、自动压缩窗口、提前压缩的百分比、单次输出上限）、“遥测与上报”（关掉使用统计、错误报告、非必要的网络请求、问卷和 /feedback）、“OpenTelemetry 上报”（开关、导出方式、协议、地址、请求头当密钥只写不读回、导出间隔、是否记下提示词和工具详情）几组，写在 `settings.json` 和它的 `env` 里，本来就配了的照样读得出来。Codex 多了“上下文”一组（全局的上下文窗口、自动压缩门槛和算法，盖过每个模型自己的），以及“模型”标签页：自定义模型清单代替 Codex 自带的模型目录，每一项原样用一个自带模型，或者以它为底稿改模型名、显示名、上下文窗口（其余照底稿），能排序、删减、恢复自带目录，重启 Codex 生效；清单写在 `~/.codex/litch-models.json`，`config.toml` 的 `model_catalog_json` 指向它
+- 原生 Codex：在详情设置里先存了配置、再存 provider、MCP 或模型清单时不再报“在别处被改过”（这几块共用 `config.toml` 的版本）
+- 适配器：harnessConfig 扩展加 `litch/harness/models/read`、`write`（`config/read` 的 `modelCatalog` 标明有没有），`config/changed` 的 `part` 多一种 `models`；控制命令 `codex.models` 用起 app-server 的那个 codex 导出它自带的模型目录
+
 ## 0.13.0
 
 - Windows：npm 装的 OpenCode 现在认得出来（原来只找 `bin/opencode`，包里是 `bin/opencode.exe`，设备页一直显示不可用）
