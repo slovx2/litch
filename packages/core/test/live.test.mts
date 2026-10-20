@@ -228,6 +228,84 @@ test('发送：消息立刻显示；对面给的回合、回显的消息、流�
   assert.equal(statusOf(session.seen.view, answerId), 'completed')
 })
 
+test('回合结束时对面漏了“完成”的条目：回答和思考算完成，工具调用按回合结局收尾；命令、派子代理的调用不动', async () => {
+  const { core, peer, command } = setup()
+  core.start()
+  await settle()
+  const session = watch(core)
+  await settle()
+  await command('session.send', { ...where, text: '跑一下' })
+  await settle()
+  const server = peer.last()
+  const base = { threadId: 'a', turnId: 'srv-1' }
+  server.notify('turn/started', { threadId: 'a', turn: started('srv-1') })
+  const items: ThreadItem[] = [
+    agentText('m1', '先看看'),
+    { type: 'reasoning', id: 'r1', summary: ['想'], content: [] },
+    {
+      type: 'mcpToolCall',
+      id: 't1',
+      server: 'docs',
+      tool: 'search',
+      status: 'inProgress',
+      arguments: {},
+      result: null,
+      error: null,
+      durationMs: null,
+    },
+    {
+      type: 'commandExecution',
+      id: 'c1',
+      command: 'sleep 600',
+      cwd: '/w',
+      processId: null,
+      source: 'agent',
+      status: 'inProgress',
+      commandActions: [],
+      aggregatedOutput: null,
+      exitCode: null,
+      durationMs: null,
+    },
+    {
+      type: 'collabAgentToolCall',
+      id: 'g1',
+      tool: 'spawnAgent',
+      status: 'inProgress',
+      senderThreadId: 'a',
+      receiverThreadIds: ['child'],
+      prompt: '查一下',
+      model: null,
+      reasoningEffort: null,
+      agentsStates: { child: { status: 'running', message: null } },
+    },
+  ] as ThreadItem[]
+  for (const item of items) server.notify('item/started', { ...base, item, startedAtMs: 0 })
+  await settle()
+  const ids = session.seen.view?.turns[0]?.itemIds ?? []
+  const byKind = (kind: string) =>
+    ids.find((id) => (session.seen.view?.items[id] as { kind?: string })?.kind === kind) ?? ''
+  const tool = ids.find(
+    (id) => (session.seen.view?.items[id] as { tool?: string })?.tool === 'search',
+  )
+  const spawn = ids.find(
+    (id) => (session.seen.view?.items[id] as { agents?: unknown })?.agents !== undefined,
+  )
+  for (const id of [byKind('agentMessage'), byKind('reasoning'), tool, byKind('command'), spawn])
+    assert.equal(statusOf(session.seen.view, id ?? ''), 'inProgress')
+
+  server.notify('turn/completed', {
+    threadId: 'a',
+    turn: finished('srv-1', { status: 'interrupted' }),
+  })
+  await settle()
+  assert.equal(statusOf(session.seen.view, byKind('agentMessage')), 'completed')
+  assert.equal(statusOf(session.seen.view, byKind('reasoning')), 'completed')
+  assert.equal(statusOf(session.seen.view, tool ?? ''), 'failed')
+  // 后台命令跨回合跑，结束时对面再补完成；子代理的状态以子线程为准
+  assert.equal(statusOf(session.seen.view, byKind('command')), 'inProgress')
+  assert.equal(statusOf(session.seen.view, spawn ?? ''), 'inProgress')
+})
+
 test('别的连接开的回合（设备进程的提醒、手机上发的话）：用户消息实时出来，开始、完成各一次不多出一条；之后本机发的照样落在自己那条上', async () => {
   const { core, peer, command } = setup()
   core.start()

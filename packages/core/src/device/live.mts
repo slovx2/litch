@@ -39,7 +39,7 @@ import type {
 import type { ToolAnswer } from '../model-client-tools.mjs'
 import type { AgentThreadView } from '../model-tree.mjs'
 import { phrase } from '../phrase.mjs'
-import { projectFileChange, projectItem } from '../projection/items.mjs'
+import { projectFileChange, projectItem, settledItem } from '../projection/items.mjs'
 import { bodyOf, localUserMessage, outgoing, toInput } from '../projection/outgoing.mjs'
 import { reduceSession } from '../projection/reduce.mjs'
 import {
@@ -517,6 +517,21 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     emit(live, [...ops, { op: 'queue.set', queued: live.queued }])
   }
 
+  /** 回合结束了：对面没发“完成”的条目按回合的结局收尾，免得一直显示在跑（见 settledItem） */
+  const settleItems = (live: Live, turnId: string, completed: boolean) => {
+    const viewId = viewTurn(live, turnId)
+    const view = live.view
+    const turn = view?.turns.find((entry) => entry.id === viewId)
+    if (!view || !turn) return
+    const ops: SessionOp[] = []
+    for (const itemId of turn.itemIds) {
+      const current = view.items[itemId]
+      const item = current ? settledItem(current, completed) : null
+      if (item) ops.push({ op: 'item.add', turnId: viewId, item })
+    }
+    if (ops.length > 0) emit(live, ops)
+  }
+
   /** 回合结束了：待办里还标着“正在做”的步骤改回“还没做” */
   const settleTodo = (live: Live, turnId: string) => {
     const viewId = viewTurn(live, turnId)
@@ -581,6 +596,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     'turn/started': (live, { turn }) => putTurn(live, turn),
     'turn/completed': (live, { turn }) => {
       putTurn(live, turn)
+      settleItems(live, turn.id, turn.status === 'completed')
       settleTodo(live, turn.id)
       settleSteered(live, viewTurn(live, turn.id), turn.status === 'completed')
       // 回合结束时还没答的请求已经没有意义了
