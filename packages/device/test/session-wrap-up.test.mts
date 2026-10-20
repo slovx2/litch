@@ -91,7 +91,7 @@ test('WRAP-UP-001：一次 wrap_up 出几张提案，callId 是这次调用、tu
     // 空列表
     const empty = resultOf(await wrapUp(env, threadId, []))
     assert.deepEqual(empty.suggestions, [])
-    assert.match(empty.note, /Nothing suggested.*stop now/)
+    assert.match(empty.note, /Nothing suggested.*without writing any more text/)
     // suggestions 不是数组：整个调用不收
     const bad = await env.pi.callTool(threadId, SESSIONS, 'wrap_up', {})
     assert.equal(failureOf(bad?.answer), 'invalid')

@@ -376,7 +376,7 @@ async function wrapUp(
         : 'No card was made.',
     refused > 0
       ? `${refused} suggestion${refused > 1 ? 's were' : ' was'} refused (see refused). If you can fix them, call wrap_up again with only the fixed ones; otherwise mention that work in one line.`
-      : 'Your turn is wrapped up: stop now.',
+      : 'Your turn is wrapped up: end it now without writing any more text.',
   ]
   return { suggestions, note: parts.join(' ') }
 }
