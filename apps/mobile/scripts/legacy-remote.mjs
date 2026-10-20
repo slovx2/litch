@@ -20,7 +20,7 @@ if (tool === 'worker') {
       JSON.stringify({
         workerId: 'litch-mobile-fixture',
         engine: 'pi',
-        protocolVersion: '0.157.1',
+        protocolVersion: '0.163.0',
         status: 'running',
         capabilities: [],
         releaseReady: true,
@@ -28,7 +28,7 @@ if (tool === 'worker') {
     )
   } else fail(`替身不认识这个用法：${args.join(' ')}`)
 } else if (args[0] === '--version') {
-  console.log('codex-cli 0.157.1')
+  console.log('codex-cli 0.163.0')
 } else if (args[0] === 'app-server' && args[1] === 'daemon') {
   process.exit(0)
 } else if (args[0] === 'app-server' && args[1] === 'proxy') {

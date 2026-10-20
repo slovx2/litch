@@ -74,10 +74,10 @@ const SAMPLES: readonly Sample[] = [
     harness: 'codex',
     method: 'npm',
     minimum: '0.157.1',
-    verified: '0.160.0',
+    verified: '0.163.0',
     latest: '0.164.1',
     docsUrl: 'https://github.com/openai/codex',
-    manual: 'npm install -g @openai/codex@0.160.0',
+    manual: 'npm install -g @openai/codex@0.163.0',
     fails: true,
   },
   {

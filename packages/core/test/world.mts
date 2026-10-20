@@ -14,7 +14,7 @@ export const where = { deviceId: 'local', sessionId: 'a' }
 /** 适配器的一个入口对 runtime/info 的应答。fields 是另外带的：结构化的声明之类 */
 export const runtimeInfo = (fields: Record<string, unknown> = {}) => ({
   engine: 'pi',
-  protocolVersion: '0.157.1',
+  protocolVersion: '0.163.0',
   cliBuild: '0.99.1',
   capabilities: [],
   releaseReady: true,

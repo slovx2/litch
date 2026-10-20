@@ -1,4 +1,4 @@
-export const CODEX_PROTOCOL_VERSION = '0.157.1'
+export const CODEX_PROTOCOL_VERSION = '0.163.0'
 
 export function platformFamily(): string {
   return process.platform === 'win32' ? 'windows' : 'unix'

@@ -70,7 +70,7 @@ export const processErrorCode = (reason: string): number =>
 const upstream = (name: string): object => ({
   ...JSON.parse(
     readFileSync(
-      join(REPO, `protocol/codex-app-server/0.157.1/json-schema/v2/${name}.json`),
+      join(REPO, `protocol/codex-app-server/0.163.0/json-schema/v2/${name}.json`),
       'utf8',
     ),
   ),

@@ -76,7 +76,11 @@ export class McpRpc {
 
   async statuses(scope: McpScope, params: Record<string, unknown>, callbacks: McpCallbacks) {
     const configured = sdkMcpServers(scope.servers)
-    const names = Object.keys(configured).sort()
+    // serverName（0.163.0 起）只看这一个服务，没配就是空列表（照上游）
+    const only = params.serverName == null ? null : String(params.serverName)
+    const names = Object.keys(configured)
+      .filter((name) => only === null || name === only)
+      .sort()
     const detail = params.detail ?? 'full'
     if (!['full', 'toolsAndAuthOnly'].includes(String(detail)))
       throw new ProtocolError(-32602, 'MCP 状态 detail 无效')
@@ -84,7 +88,7 @@ export class McpRpc {
     if (typeof limit !== 'number' || !Number.isSafeInteger(limit) || limit < 1 || limit > 1000)
       throw new ProtocolError(-32602, 'MCP 状态 limit 必须在 1 到 1000 之间')
     const key = createHash('sha256')
-      .update(JSON.stringify([scope.threadId, scope.servers, detail]))
+      .update(JSON.stringify([scope.threadId, scope.servers, detail, only]))
       .digest('hex')
     let offset = 0
     if (params.cursor != null) {

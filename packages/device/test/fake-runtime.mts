@@ -20,7 +20,7 @@ const CLI_VARIABLE: Record<string, string> = {
   dsh: 'CHA_DSH_CLI',
 }
 
-const PROTOCOL = '0.157.1'
+const PROTOCOL = '0.163.0'
 
 function serve(engine: string, socket: string): void {
   const directory = dirname(socket)

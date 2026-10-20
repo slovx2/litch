@@ -300,7 +300,7 @@ test('工作区：macOS 上会话的工作目录是根的另一种写法（/priv
 test('单 harness：认得 runtime/info 的是适配器的入口，不认得的按 codex', () => {
   const pi = harnessFromRuntimeInfo({
     engine: 'pi',
-    protocolVersion: '0.157.1',
+    protocolVersion: '0.163.0',
     cliBuild: '0.99.1',
     capabilities: [],
     releaseReady: true,
@@ -308,7 +308,7 @@ test('单 harness：认得 runtime/info 的是适配器的入口，不认得的�
   assert.deepEqual([pi.id, pi.name, pi.badge, pi.version], ['pi', 'Pi', 'PI', '0.99.1'])
   const claude = harnessFromRuntimeInfo({
     engine: 'claude-code',
-    protocolVersion: '0.157.1',
+    protocolVersion: '0.163.0',
     cliBuild: '2.1.282 (Claude Code)',
     capabilities: [],
     releaseReady: true,

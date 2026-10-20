@@ -1,11 +1,17 @@
 # Protocol coverage
 
+协议基线是 Codex app-server **0.163.0**（`protocol/versions.json` 的 `codexProtocol`，快照在
+`protocol/codex-app-server/0.163.0/`）；0.157.1 → 0.163.0 的变化与各入口的处理见
+[Capability matrix](/reference/capability-matrix#protocol-version)。
+
 Implemented as real remote/runtime behavior:
 
 - **Transports** — stdio, WebSocket, Unix-socket daemon, and `app-server proxy`
   raw stdio forwarding.
-- **Thread lifecycle** — start, resume, fork, list, read, turns list, name,
-  archive/unarchive, unsubscribe, interrupt.
+- **Thread lifecycle** — start, resume, fork, list (with `excludedThreadIds`),
+  read, turns list, items list (opaque or item-anchor cursors), items read, name,
+  archive/unarchive, unsubscribe, interrupt, attachments and attachment-owner
+  lookup.
 - **Claude runtime** — query, session resume/fork, partial text streaming,
   interrupt, MCP config, allowed tools, add dirs, file checkpointing.
 - **Approval bridge** — `Bash` → command approval; `Edit` / `Write` /

@@ -50,7 +50,7 @@ func TestInstallTable(t *testing.T) {
 		}
 	}
 	// 数组取最后一个，字符串原样
-	if baseline.Verified("codexVerified") != "0.160.0" || baseline.Verified("claudeCli") != "2.1.282" || baseline.Verified("nope") != "" {
+	if baseline.Verified("codexVerified") != "0.163.0" || baseline.Verified("claudeCli") != "2.1.282" || baseline.Verified("nope") != "" {
 		t.Fatalf("versions.json 读得不对: %q %q", baseline.Verified("codexVerified"), baseline.Verified("claudeCli"))
 	}
 }

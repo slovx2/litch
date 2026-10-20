@@ -11,8 +11,8 @@ fi
 ADAPTER="${CHA_CLAUDE_ADAPTER:-/opt/codex-harness-adapter/packages/claude/dist/claude/src/adapter.mjs}"
 NODE_BIN="${CHA_CLAUDE_NODE:-node}"
 # Keep the reported version in sync with codexCompatVersion() in src/util.mts —
-# both default to 0.157.1 and honour CHA_CLAUDE_COMPAT_VERSION.
-COMPAT_VERSION="${CHA_CLAUDE_COMPAT_VERSION:-${CODEX_SHIM_COMPAT_VERSION:-0.157.1}}"
+# both default to 0.163.0 and honour CHA_CLAUDE_COMPAT_VERSION.
+COMPAT_VERSION="${CHA_CLAUDE_COMPAT_VERSION:-${CODEX_SHIM_COMPAT_VERSION:-0.163.0}}"
 # Distinguishing suffix (see codexVersionSuffix() in src/util.mts). The `-`
 # form (not `:-`) means CHA_CLAUDE_VERSION_SUFFIX="" disables it.
 VERSION_SUFFIX="${CHA_CLAUDE_VERSION_SUFFIX-codex-harness-adapter}"

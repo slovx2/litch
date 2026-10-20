@@ -135,7 +135,7 @@ export class FakeUpstream {
       initialize: () => ({
         // 适配器的运行时在这里报的是协议版本；原生 codex 报的是它自己的版本
         userAgent: engine
-          ? `fake/0.157.1 (test; test) ${engine}`
+          ? `fake/0.163.0 (test; test) ${engine}`
           : 'codex_cli_rs/9.8.7 (test; test)',
         codexHome: '/fake/home',
         platformFamily: 'unix',
@@ -145,7 +145,7 @@ export class FakeUpstream {
         if (this.engine === null) throw new RpcFailure(-32600, 'Invalid request')
         return {
           engine: this.engine,
-          protocolVersion: '0.157.1',
+          protocolVersion: '0.163.0',
           cliBuild: this.version,
           capabilities: [],
           releaseReady: false,

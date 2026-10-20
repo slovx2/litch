@@ -167,7 +167,7 @@ import {
   SubagentProjection,
   subagentRelayPrompt,
 } from './subagent-projection.mjs'
-import { threadAttachmentRequest } from './thread-attachments.mjs'
+import { threadAttachmentOwnerList, threadAttachmentRequest } from './thread-attachments.mjs'
 import { forkPositionFromParams, forkRetainedTurns } from './thread-fork.mjs'
 import type { ThreadGoal } from './thread-goals.mjs'
 import { patchGitInfo } from './thread-metadata.mjs'
@@ -825,6 +825,8 @@ export class CodexClaudeAppServer {
             }),
           )
         })
+      case 'thread/attachmentOwner/list':
+        return threadAttachmentOwnerList(this.store, asRecord(params))
       case 'thread/turns/list':
         await this.nativeHistory(asRecord(params).threadId)
         return this.threadTurnsList(asRecord(params))
@@ -832,6 +834,8 @@ export class CodexClaudeAppServer {
         return threadTimelineList(this.store, asRecord(params))
       case 'thread/items/list':
         return this.threadItemsList(asRecord(params))
+      case 'thread/items/read':
+        return this.threadItemsRead(asRecord(params))
       case 'thread/delete': {
         const threadId = requiredString(asRecord(params).threadId, 'threadId')
         if (!this.store.getThread(threadId)) throw new ProtocolError(-32602, '未知会话')
@@ -958,7 +962,6 @@ export class CodexClaudeAppServer {
         return this.modelList(asRecord(params))
       case 'modelProvider/capabilities/read':
         return {
-          namespaceTools: true,
           imageGeneration: false,
           // Claude Code SDK ships a WebSearch tool. Default to advertising it
           // so Codex App shows the search affordance; CHA_CLAUDE_WEBSEARCH=0
@@ -1590,6 +1593,11 @@ export class CodexClaudeAppServer {
     const modelProviders = Array.isArray(params.modelProviders)
       ? params.modelProviders.filter((value): value is string => typeof value === 'string')
       : []
+    // 0.163.0 起：最多 100 个，不合法就拒绝，不截断（照上游）
+    const excludedThreadIds = params.excludedThreadIds ?? []
+    if (!Array.isArray(excludedThreadIds) || excludedThreadIds.length > 100)
+      throw new ProtocolError(-32602, 'excludedThreadIds accepts at most 100 entries')
+    for (const id of excludedThreadIds) requiredString(id, 'excludedThreadIds 的每一项')
     const filters = {
       archived: (params.archived as boolean | null | undefined) ?? null,
       projectId:
@@ -1620,6 +1628,7 @@ export class CodexClaudeAppServer {
       sortKey,
       modelProviders,
       searchTerm: typeof params.searchTerm === 'string' ? params.searchTerm : null,
+      excludedThreadIds: excludedThreadIds as string[],
     }
     const pagination = catalogPagination(params, submissionHash(filters))
     const found = this.store.listThreads({
@@ -1753,6 +1762,28 @@ export class CodexClaudeAppServer {
       ...params,
       sortDirection: params.sortDirection ?? 'asc',
     })
+  }
+
+  // thread/items/read（0.163.0 起，实验性）：按条目号取一个回合里的条目，按存储顺序给，找不到的跳过。
+  private threadItemsRead(params: Record<string, unknown>): unknown {
+    const threadId = requiredString(params.threadId, 'threadId')
+    const turnId = requiredString(params.turnId, 'turnId')
+    const ids = params.itemIds
+    if (
+      !Array.isArray(ids) ||
+      ids.length < 1 ||
+      ids.length > 100 ||
+      ids.some((id) => typeof id !== 'string')
+    )
+      throw new ProtocolError(-32600, 'itemIds must contain 1 to 100 IDs')
+    if (!this.store.getThread(threadId)) throw new ProtocolError(-32602, '未知会话')
+    const wanted = new Set(ids as string[])
+    const turn = this.store.listTurns(threadId).find((candidate) => candidate.id === turnId)
+    return {
+      data: (turn?.items ?? [])
+        .filter((item) => wanted.has(item.id))
+        .map((item) => ({ turnId, item })),
+    }
   }
 
   private saveRuntimeSettings(threadId: string, params: Record<string, unknown>): void {

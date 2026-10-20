@@ -117,7 +117,7 @@ export async function dispatch(s: PiServer, peer: RpcPeer, method: string, p: an
     case 'configRequirements/read':
       return { requirements: null }
     case 'modelProvider/capabilities/read':
-      return { namespaceTools: true, imageGeneration: false, webSearch: false }
+      return { imageGeneration: false, webSearch: false }
     case 'app/list':
     case 'hooks/list':
     case 'experimentalFeature/list':

@@ -59,7 +59,7 @@ function setup(threads: Thread[] = [thread({ id: 'a', turns: [] })]) {
   const handlers: Record<string, Handler> = {
     'runtime/info': () => ({
       engine: 'pi',
-      protocolVersion: '0.157.1',
+      protocolVersion: '0.163.0',
       cliBuild: '0.99.1',
       capabilities: [],
       releaseReady: true,

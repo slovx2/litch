@@ -111,11 +111,31 @@ export function pageThreadItems<I extends { id: string }>(
   turns: HistoryTurn<I>[],
   params: Record<string, unknown>,
 ) {
+  const scope = `items:${threadId}`
+  const identity = (entry: { turnId: string; item: I }) => `${entry.turnId}:${entry.item.id}`
+  const entries = turns.flatMap((turn) => turn.items.map((item) => ({ turnId: turn.id, item })))
+  let cursor = params.cursor
+  // 0.163.0 起游标还可以是回合里的一个条目（{type: 'item', itemId}），不含它本身：
+  // 升序给它之后的，降序给它之前的。话术照上游。
+  if (cursor != null && typeof cursor === 'object') {
+    const anchor = cursor as Record<string, unknown>
+    if (anchor.type !== 'item' || typeof anchor.itemId !== 'string')
+      throw new ProtocolError(-32602, '历史游标无效或已失效')
+    if (typeof params.turnId !== 'string' || !params.turnId)
+      throw new ProtocolError(-32602, 'turnId is required when cursor is an item anchor')
+    const id = `${params.turnId}:${anchor.itemId}`
+    if (!entries.some((entry) => identity(entry) === id))
+      throw new ProtocolError(
+        -32602,
+        'cursor.itemId does not identify an item in the requested history scope',
+      )
+    cursor = Buffer.from(JSON.stringify({ scope, id, inclusive: false })).toString('base64url')
+  }
   return pageRecords(
-    turns.flatMap((turn) => turn.items.map((item) => ({ turnId: turn.id, item }))),
-    params,
-    `items:${threadId}`,
-    (entry) => `${entry.turnId}:${entry.item.id}`,
+    entries,
+    { ...params, cursor },
+    scope,
+    identity,
     (entry) => !params.turnId || entry.turnId === params.turnId,
   )
 }

@@ -26,7 +26,7 @@ export function threadTimelineList(store: SessionStore, params: Record<string, u
     records.push({ key, entry: { ...entry, position: records.length } })
   }
   for (const turn of store.listTurns(threadId)) {
-    // 0.157.1 官方 TS/实际 wire 使用驼峰，JSON Schema 的回合边界却使用下划线。
+    // 0.157.1 到 0.163.0 的官方 TS/实际 wire 都使用驼峰，JSON Schema 的回合边界却使用下划线。
     // 同时输出同源字段，兼容两种消费者；不修改官方 schema 或原生 wire。
     const boundary = {
       turnId: turn.id,
