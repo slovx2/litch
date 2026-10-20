@@ -19,6 +19,8 @@ export interface ToolCallHandlers {
   ask(askId: string, ask: ClientAskView): void
   /** 那张卡片不用了（执行器不等了）：撤掉，不用回 */
   askDone(askId: string): void
+  /** 执行器在别处等人（held 为真）或者不等了（为假）：等人的时候不计时 */
+  hold?(held: boolean): void
 }
 
 export interface ToolHub {
@@ -84,6 +86,9 @@ export function createToolHub(
         calls.get(id)?.askDone(message.askId)
         return
       }
+      case 'hold':
+        calls.get(message.id)?.hold?.(message.held)
+        return
       case 'configResult': {
         const settle = configs.get(message.id)
         if (!settle) return

@@ -35,7 +35,9 @@ import {
   BROWSER_UNBLOCK,
 } from './ipc.mjs'
 import type { TabOwner } from './model.mjs'
+import { createHandover } from './passwords/handover.mjs'
 import { installPasswords } from './passwords/install.mjs'
+import { createSignIns } from './passwords/signin.mjs'
 import type { PasswordStore } from './passwords/store.mjs'
 import {
   createSiteBook,
@@ -135,11 +137,14 @@ export function installBrowser(options: {
   })
   host.setNavigationRewrite((page, url) => forwarding.rewrite(page, url))
   app.on('will-quit', () => forwarding.close())
+  // 代理把标签交给人登录（request_sign_in）：卡片推给界面在 installPasswords 里接
+  const signIns = createSignIns()
   const executor = createBrowserExecutor({
     host,
     sites,
     resolveUrl: forwarding.resolveUrl,
     describeUrl: forwarding.describeUrl,
+    handover: createHandover({ host, signIns }),
   })
 
   const fromUi = (event: IpcMainEvent | IpcMainInvokeEvent): boolean => {
@@ -263,7 +268,7 @@ export function installBrowser(options: {
     return settings.policy()
   })
   // 已保存的密码：设置页的列、删，用户标签的自动填充（passwords/install.mts）。清除浏览数据不碰它
-  const passwords = installPasswords({ userData: options.userData, fromUi, broadcast })
+  const passwords = installPasswords({ userData: options.userData, fromUi, broadcast, signIns })
   ipcMain.handle(BROWSER_CLEAR_DATA, async (event) => {
     if (!fromUi(event)) return false
     await settings.clearData()

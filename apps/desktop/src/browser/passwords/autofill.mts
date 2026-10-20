@@ -2,14 +2,10 @@
 // 送进发起的框架；收登录提交，交给保存提示（prompts.mts）。判断都在 broker.mts 和 prompts.mts，
 // 这里只把 Electron 的东西包成它们要的样子。
 //
-// 候选怎么给：
-// - 用户的标签：主进程的原生菜单。菜单不在网页的 DOM 里，网页脚本既读不到候选的用户名、也点不到它；
-//   菜单顶上写明是 Litch 的，免得和网页自己画的东西混淆。
-// - 代理的标签：代理看不到原生菜单，所以把用户名交给预加载，画在网页里一个封闭的影子树里（网页看得出那个元素
-//   在不在、多大，读不到里面的用户名，见 preload.mts 的 showOverlay），
-//   代理在快照里看得到、用 click 点中一条；预加载只认受信任的点击（网页自己造的点击不算），报回“第几条”，
-//   主进程只认它先前给这个框架的那一份。
-// 两种都一样：点选之前密码不离开主进程，点选之后只送进那一个框架的隔离环境，由预加载填进框里。
+// 候选只给人手里的标签（用户自己开的，和交给人登录还没交还的代理标签），用主进程的原生菜单：菜单不在网页的
+// DOM 里，网页脚本既读不到候选的用户名、也点不到它；菜单顶上写明是 Litch 的，免得和网页自己画的东西混淆。
+// 点选之前密码不离开主进程，点选之后只送进那一个框架的隔离环境，由预加载填进框里。
+// 代理自己在用的标签不出候选：代理要登录就用 request_sign_in 交给人（handover.mts）。
 import {
   app,
   BrowserWindow,
@@ -23,17 +19,11 @@ import {
   webFrameMain,
 } from 'electron'
 import { type AutofillBroker, createAutofillBroker, type FrameRef } from './broker.mjs'
-import {
-  AUTOFILL_CAPTURE,
-  AUTOFILL_FILL,
-  AUTOFILL_OFFER,
-  AUTOFILL_PICK,
-  AUTOFILL_QUERY,
-} from './ipc.mjs'
+import { AUTOFILL_CAPTURE, AUTOFILL_FILL, AUTOFILL_OFFER, AUTOFILL_QUERY } from './ipc.mjs'
 import { fillableOrigin } from './origin.mjs'
 import type { SavePrompts } from './prompts.mjs'
 import type { PasswordStore } from './store.mjs'
-import { autofillTab } from './tabs.mjs'
+import { autofillKind, autofillTab } from './tabs.mjs'
 
 /** 菜单里一条用户名最长显示这么多字 */
 const LABEL_MAX = 80
@@ -44,10 +34,6 @@ const WORDS = {
 }
 
 const words = () => WORDS[app.getLocale().startsWith('zh') ? 'zh-CN' : 'en']
-
-/** 网页里画出候选时给代理的那句提示（下一次工具结果里带上） */
-const AGENT_NOTICE =
-  'Litch listed saved sign-ins under the focused field ("Litch saved passwords"). Take a snapshot and click a username there to fill the form; the password itself is never shown to you.'
 
 function frameRefOf(event: IpcMainEvent | IpcMainInvokeEvent): FrameRef | null {
   const frame = event.senderFrame
@@ -142,16 +128,11 @@ function popMenu(
 }
 
 export function installAutofill(store: PasswordStore, prompts: SavePrompts): AutofillBroker {
-  const broker = createAutofillBroker({
-    store,
-    kindOf: (contentsId) => autofillTab(contentsId)?.kind ?? null,
-  })
+  const broker = createAutofillBroker({ store, kindOf: autofillKind })
   /** 菜单开着的标签：开着时再来的请求不理 */
   const open = new Set<number>()
   /** 已经接上导航事件的标签 */
   const watched = new Set<number>()
-  /** 网页里画过候选的代理标签（销毁时丢掉它的候选） */
-  const inlineTabs = new Set<number>()
 
   /** 保存提示要等提交的那个框架（或整个标签）导航完成：第一次有它的登录提交时接上它的导航事件 */
   const watch = (contents: WebContents) => {
@@ -180,32 +161,11 @@ export function installAutofill(store: PasswordStore, prompts: SavePrompts): Aut
   })
 
   ipcMain.handle(AUTOFILL_OFFER, (event, payload: unknown) => {
-    const tab = autofillTab(event.sender.id)
     const frame = frameRefOf(event)
-    if (!tab || !frame) return null
-    if (tab.kind === 'user') {
-      popMenu(broker, event, frame, payload, open)
-      return null
-    }
-    const usernames = broker.offerInline(frame)
-    if (!usernames) return null
-    const id = event.sender.id
-    if (!inlineTabs.has(id)) {
-      inlineTabs.add(id)
-      event.sender.once('destroyed', () => {
-        inlineTabs.delete(id)
-        broker.forgetTab(id)
-      })
-    }
-    tab.notice(AGENT_NOTICE)
-    return { usernames }
-  })
-
-  ipcMain.on(AUTOFILL_PICK, (event, payload: unknown) => {
-    const frame = frameRefOf(event)
-    const index = (payload as { index?: unknown } | null)?.index
-    if (!frame || typeof index !== 'number' || !Number.isInteger(index)) return
-    broker.pickInline(frame, index)
+    // 只有人手里的标签弹菜单（broker 里还会再核一遍）
+    if (!frame || autofillKind(event.sender.id) !== 'user') return null
+    popMenu(broker, event, frame, payload, open)
+    return null
   })
 
   ipcMain.on(AUTOFILL_CAPTURE, (event, payload: unknown) => {

@@ -1,7 +1,9 @@
-// 把密码库装进主进程：safeStorage 做加密器、建库、接上设置页的消息、自动填充和登录后的保存提示。
+// 把密码库装进主进程：safeStorage 做加密器、建库、接上设置页的消息、自动填充、登录后的保存提示，
+// 以及代理请人登录的卡片（handover.mts）。
 // browser/install.mts 调一次，拿回来的库交给导入管线（它的 importMany 就是 PasswordSink）。
 import { type IpcMainEvent, type IpcMainInvokeEvent, ipcMain, safeStorage } from 'electron'
 import { installAutofill } from './autofill.mjs'
+import { installSignInIpc } from './handover.mjs'
 import {
   PASSWORDS_ALLOW_SITE,
   PASSWORDS_ANSWER,
@@ -14,6 +16,7 @@ import {
   PASSWORDS_REMOVE_ALL,
 } from './ipc.mjs'
 import { createSavePrompts, type PromptAnswer } from './prompts.mjs'
+import type { SignIns } from './signin.mjs'
 import {
   createPasswordStore,
   type PasswordCipher,
@@ -42,6 +45,8 @@ export function installPasswords(options: {
   fromUi(event: IpcMainEvent | IpcMainInvokeEvent): boolean
   /** 推给所有窗口 */
   broadcast(channel: string, payload: unknown): void
+  /** 代理请人登录的登记（handover.mts 用的那一份）：卡片推给界面、界面答。不给就不接 */
+  signIns?: SignIns
 }): PasswordStore {
   const store = createPasswordStore({
     file: passwordsFile(options.userData),
@@ -53,6 +58,7 @@ export function installPasswords(options: {
   const prompts = createSavePrompts({ store })
   prompts.onChange((list) => options.broadcast(PASSWORDS_PROMPTS_CHANGED, list))
   installAutofill(store, prompts)
+  if (options.signIns) installSignInIpc({ ...options, signIns: options.signIns })
 
   ipcMain.handle(PASSWORDS_LIST, (event) => (options.fromUi(event) ? store.list() : []))
   ipcMain.handle(PASSWORDS_REMOVE, (event, id: unknown) => {

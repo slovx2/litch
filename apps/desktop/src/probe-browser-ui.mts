@@ -11,6 +11,7 @@ import { installBrowser } from './browser/install.mjs'
 import { checkLinks } from './probe-browser-links.mjs'
 import { startPages } from './probe-browser-pages.mjs'
 import { checkSavePrompt } from './probe-browser-save-prompt.mjs'
+import { checkSignInCard } from './probe-browser-sign-in.mjs'
 
 // 保存提示那一段会用到 safeStorage：钥匙串里那把钥匙按应用名起名，用测试专用的（check-browser.mjs 跑完删掉）
 app.setName('Litch Autofill Probe')
@@ -171,6 +172,18 @@ void app.whenReady().then(async () => {
       check,
       shot,
     })
+    // 代理请人登录的卡片（probe-browser-sign-in.mts）
+    if (tab) {
+      await checkSignInCard({
+        browser,
+        owner: tab.owner,
+        url: `${pages.local}/form`,
+        page,
+        until,
+        check,
+        shot,
+      })
+    }
 
     // 在标签上关掉
     await page(`document.querySelector('.bw-tab .ibtn').click()`)

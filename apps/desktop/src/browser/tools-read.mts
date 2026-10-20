@@ -203,6 +203,8 @@ export const evaluate: Tool = async (call) => {
   const stop = await ready(call, page)
   if (stop) return stop.refusal
   const expression = str(call.args, 'expression', true)
+  // 代理的脚本进了这个文档：之后交给人登录前要重新载入，丢掉它可能留下的监听
+  call.handover?.markScripted(page.id)
   // 跑之前、跑之后各收一次密码框的值：脚本可能先读出来再把框清空
   const before = await passwordValues(page)
   const raced = await guarded(

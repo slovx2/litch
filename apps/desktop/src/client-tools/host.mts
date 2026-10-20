@@ -91,6 +91,16 @@ export function createClientToolHost(
           post({ type: CLIENT_TOOL, op: 'ask', id, askId, ask })
         })
       },
+      hold() {
+        if (signal.aborted || running.get(id) !== entry) return () => {}
+        post({ type: CLIENT_TOOL, op: 'hold', id, held: true })
+        let held = true
+        return () => {
+          if (!held) return
+          held = false
+          if (running.get(id) === entry) post({ type: CLIENT_TOOL, op: 'hold', id, held: false })
+        }
+      },
     }
     let response: ClientToolCallResponse
     try {

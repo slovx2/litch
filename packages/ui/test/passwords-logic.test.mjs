@@ -94,3 +94,28 @@ test('面板上的保存提示：只出这个会话的，新的在前', () => {
   )
   assert.deepEqual(promptsFor(all, { deviceId: 'local', threadId: '' }), [])
 })
+
+const { signInsFor } = await import('../src/side/browser/sign-in-logic.ts')
+
+test('代理请你登录：只出这个会话的，眼前这个标签的排最前，其余新的在前', () => {
+  const card = (id, threadId, tabId, at) => ({
+    id,
+    deviceId: 'local',
+    threadId,
+    tabId,
+    site: 'Demo',
+    reason: 'r',
+    at,
+  })
+  const all = [card('a', 's1', 't1', 1), card('b', 's1', 't2', 3), card('c', 's2', 't3', 9)]
+  const owner = { deviceId: 'local', threadId: 's1' }
+  assert.deepEqual(
+    signInsFor(all, owner, 't1').map((one) => one.id),
+    ['a', 'b'],
+  )
+  assert.deepEqual(
+    signInsFor(all, owner, null).map((one) => one.id),
+    ['b', 'a'],
+  )
+  assert.deepEqual(signInsFor(all, { deviceId: 'other', threadId: 's1' }, null), [])
+})

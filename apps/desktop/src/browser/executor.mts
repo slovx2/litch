@@ -63,9 +63,35 @@ export interface Call {
   done(page: BrowserPage | null, text: string, images?: string[]): ClientToolCallResponse
   /** 查一个本机文件（上传用） */
   statFile(path: string): { file: boolean; size: number } | null
+  /** 交给人登录；没装（测试的宿主）是 null */
+  handover: BrowserHandover | null
 }
 
 export type Tool = (call: Call) => Promise<ClientToolCallResponse>
+
+/** 交给人登录（request_sign_in）的结果 */
+export type SignInOutcome = 'done' | 'cancel' | 'closed' | 'aborted'
+
+/**
+ * 把代理的标签交给人登录（passwords/handover.mts 是真的那一份）。交出去的这段时间里，代理对这个标签的
+ * 一切工具调用都被拒绝
+ */
+export interface BrowserHandover {
+  /** 这个标签现在在不在人手里 */
+  active(tabId: string): boolean
+  /** 代理在这个标签当前的文档里执行过脚本（evaluate）：交给人之前要重新载入 */
+  markScripted(tabId: string): void
+  /** 交给人，等人交还或取消（signal 中止时回 aborted）。交还前清空各框架里密码框的值 */
+  request(
+    page: BrowserPage,
+    ask: { site: string; reason: string },
+    signal: AbortSignal,
+  ): Promise<SignInOutcome>
+}
+
+/** 交给人登录的标签上，代理的调用一律回这一句 */
+export const SIGNING_IN =
+  'The user is signing in on this tab. Wait for `request_sign_in` to return before using it again.'
 
 export interface BrowserExecutorOptions {
   host: BrowserHost
@@ -77,7 +103,11 @@ export interface BrowserExecutorOptions {
   /** 转发出来的地址给模型的说明（每次答复里，页面在这种地址上时带一句）。不给就没有 */
   describeUrl?: (url: string, device: ClientToolDevice) => string | null
   statFile?: (path: string) => { file: boolean; size: number } | null
+  handover?: BrowserHandover
 }
+
+/** 标签在人手里 */
+class SigningIn extends Error {}
 
 const defaultStat = (path: string) => {
   try {
@@ -162,6 +192,7 @@ export function createBrowserExecutor(options: BrowserExecutorOptions): BrowserE
           `tab ${page.id} belongs to the user; you can only operate tabs you opened. Open the same address with \`navigate\` (newTab: true) instead.`,
         )
       }
+      if (options.handover?.active(page.id)) throw new SigningIn()
       if (!used.has(page)) {
         used.add(page)
         page.setAgentActive(true)
@@ -285,6 +316,7 @@ export function createBrowserExecutor(options: BrowserExecutorOptions): BrowserE
         return { success: true, contentItems }
       },
       statFile,
+      handover: options.handover ?? null,
     }
 
     try {
@@ -301,6 +333,7 @@ export function createBrowserExecutor(options: BrowserExecutorOptions): BrowserE
       })
       return await Promise.race([tool(kit), cancelled])
     } catch (error) {
+      if (error instanceof SigningIn) return clientToolFailure('failed', SIGNING_IN)
       if (error instanceof BadArgs) return clientToolFailure('invalid', error.message)
       if (error instanceof CdpRefused) return clientToolFailure('failed', error.message)
       if (context.signal.aborted) return clientToolFailure('failed', 'the call was cancelled')
