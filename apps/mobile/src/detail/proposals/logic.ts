@@ -85,23 +85,16 @@ export const STATUS_TEXT = {
   expired: 'proposal.state.expired',
 } as const satisfies Record<ProposalStatus, string>
 
-/** “改了再开始”发的改动：桌面那份算的几项，加上“完成后唤醒”改了没有。什么都没改是空对象 */
+/** “改了再开始”发的改动：和桌面同一份算法（含“完成后唤醒”）。什么都没改是空对象 */
 export function overridesFor(
   fields: SpawnFields,
   parent: SpawnParent,
   proposal: SessionProposalView,
-): ProposalOverrides & { wakeParent?: boolean } {
-  const overrides: ProposalOverrides & { wakeParent?: boolean } = overridesOf(
-    fields,
-    parent,
-    proposal,
-  )
-  if (fields.wake !== proposal.wakeParent) overrides.wakeParent = fields.wake
-  return overrides
+): ProposalOverrides {
+  return overridesOf(fields, parent, proposal)
 }
 
-/** 注入的会话事件是哪一种：remind 不带回报（一条回报都没有的就是它），notes 带回报，wake 是唤醒回合 */
-export function eventKind(event: SessionEventView): 'notes' | 'wake' | 'remind' {
-  if (event.kind === 'wake') return 'wake'
-  return event.notes.length === 0 ? 'remind' : 'notes'
+/** 注入的会话事件是哪一种：notes 带回报，wake 是唤醒回合，remind 是提醒收尾 */
+export function eventKind(event: SessionEventView): SessionEventView['kind'] {
+  return event.kind
 }

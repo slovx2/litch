@@ -128,13 +128,12 @@ test('对话里的行：收尾的每条建议一张卡、排在过程组后面�
 })
 
 test('注入的会话事件：提醒、唤醒只画提示不画用户消息；回报加上用户自己的话两样都画', () => {
-  const remind = { kind: 'notes', notes: [] }
+  const remind = { kind: 'remind', notes: [] }
   const notes = {
     kind: 'notes',
     notes: [{ threadId: 'c', title: '子', status: 'completed', excerpt: '好了' }],
   }
   assert.equal(eventKind(remind), 'remind')
-  assert.equal(eventKind({ kind: 'remind', notes: [] }), 'remind')
   assert.equal(eventKind({ kind: 'wake', notes: notes.notes }), 'wake')
   assert.equal(eventKind(notes), 'notes')
   const only = new RowBuilder().build(viewOf(['u'], [user('u', '', remind)]), 'all')
