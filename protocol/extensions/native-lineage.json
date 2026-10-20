@@ -9,8 +9,11 @@
   },
   "undeclared": "没声明的连接上会话对象上没有 litchNativeLineage，这些会话是普通会话（官方 Codex 桌面端连兼容面时就是这样）。",
   "rules": [
-    "claude-code 入口认 Claude 桌面端派出的会话只看原生记录本身：记录的第一行 entrypoint 是 claude-desktop，而且第一条不是 isMeta 的用户消息里有桌面端写在派出简报前面的那句固定开头（“Background (from the session that started this one)”）。都满足才带 app 为 claude-desktop。不读 Claude 桌面端自己的数据目录。",
-    "认不出父会话是哪一个时不带 parentThreadId。用户在别处分叉、交接出来的会话（开头是复制过来的原对话）认不出，按普通会话处理。",
+    "claude-code 入口认 Claude 桌面端派出的会话只看原生记录本身：记录的第一行 entrypoint 是 claude-desktop，而且第一条不是 isMeta 的用户消息里有桌面端写在派出简报前面的那句固定开头（“Background (from the session that started this one)”）。都满足才带 app 为 claude-desktop。",
+    "父会话从 Claude 桌面端自己的数据目录里认（macOS 的 ~/Library/Application Support/Claude、Windows 的 %APPDATA%\\Claude 等，下面 claude-code-sessions/<账号>/<组织>/local_*.json）：按 cliSessionId（和 priorCliSessionIds）对到原生会话，spawnedFrom.sessionId 指到父会话的文件，再取父会话的 cliSessionId；lineageDetached 为真的不挂。只读，不写桌面端的任何文件。",
+    "parentThreadId 是同一个入口里的会话标识，父会话得也导进来过、没删掉；父会话换过会话号的，取导进来过的里面最新的一个。认不出、父会话没导进来、桌面端的目录不在或文件格式不对时不带 parentThreadId，不报错。开头认不出（用户在桌面端分叉、交接出来的）但桌面端记了父会话的，也带 app 为 claude-desktop 和 parentThreadId。",
+    "父会话是每次扫描原生会话时按桌面端的数据重算的，不记进库；已经列出去的会话的父会话变了（桌面端新记了、脱离了，父会话刚导进来、没了），给声明了的连接再发一次这个会话的 thread/started（客户端按标识换掉），没声明的连接不发。",
+    "parentThreadId 只是显示用的父子关系：客户端把它挂在父会话下面，不能经它向子会话发消息、打断，子会话做完不唤醒、不回报父会话（那些是 sessionTree 的事）。",
     "每个原生会话只认一次，结果记在入口自己的库里；读不到记录、记录格式不对的当作不是派出来的，不报错。",
     "只是标记，不改会话的任何行为：能打开、能接着聊、能归档，和别的导入会话一样。"
   ],
@@ -19,7 +22,7 @@
       "kind": "ThreadField",
       "name": "litchNativeLineage",
       "on": "thread/list、thread/read、thread/resume、thread/started 等会话对象",
-      "description": "只发给声明了 nativeLineage 的连接，只在认得出是别的应用派出来的会话上有。形状见 native-lineage.mts 的 NativeLineage。"
+      "description": "只发给声明了 nativeLineage 的连接，只在认得出是别的应用派出来的会话上有；认得出父会话时带 parentThreadId。形状见 native-lineage.mts 的 NativeLineage。"
     }
   ]
 }

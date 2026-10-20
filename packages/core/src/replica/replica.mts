@@ -64,7 +64,8 @@ export const keys = {
   /** SessionHarnesses：这台设备上每个会话属于哪个 harness。侧栏只看某个 harness 时按它挑会话 */
   harnessOf: (deviceId: string) => `sidebar:${deviceId}:harnessOf`,
   /**
-   * SessionChildren：会话树里每个父会话下面的 Litch 子会话，按派出的先后。只有父会话也在列表里的才算
+   * SessionChildren：会话树里每个父会话下面的子会话，按派出的先后。Litch 自己派的（lineage）和
+   * 别的应用派的、认得出父会话的（nativeLineage.parentId）都在里面。只有父会话也在列表里的才算
    * （父会话归档了、删了的子会话照常单列）。groups 里照样有子会话，嵌不嵌由界面按这张表决定
    */
   children: (deviceId: string) => `sidebar:${deviceId}:children`,
@@ -230,7 +231,7 @@ export type GroupTallies = Record<string, Record<HarnessId, GroupTally>>
  */
 export type SessionHarnesses = Record<string, HarnessId>
 
-/** 父会话 → 它下面的 Litch 子会话（按派出的先后） */
+/** 父会话 → 它下面的子会话（按派出的先后） */
 export type SessionChildren = Record<string, string[]>
 
 /** 提案 → 从它开始的子会话。对话里那张提案卡片据此显示“已开始”、能跳过去 */
@@ -239,21 +240,32 @@ export type ProposalStarts = Record<string, string>
 /** 子会话 → 父会话收到的它最近的一条回报 */
 export type SessionNotes = Record<string, SessionNoteView>
 
+/**
+ * 子会话挂在谁下面：Litch 自己的父子关系优先，其次是别的应用记的（只是显示用）。
+ * 都没有、自己挂在自己下面（对面给错了）的是 null
+ */
+function parentOf(session: SessionSummary): { id: string; createdAt: number } | null {
+  const own = session.lineage
+  if (own)
+    return own.parentId !== session.id ? { id: own.parentId, createdAt: own.createdAt } : null
+  const native = session.nativeLineage
+  return native?.parentId && native.parentId !== session.id
+    ? { id: native.parentId, createdAt: native.createdAt }
+    : null
+}
+
 /** 会话树：父会话也在列表里的子会话，按父会话归拢，组里按派出的先后排 */
 function childrenOf(sessions: Map<string, SessionSummary>): SessionChildren {
   const children: SessionChildren = {}
   const sorted = [...sessions.values()]
-    .filter((session) => session.lineage && sessions.has(session.lineage.parentId))
+    .flatMap((session) => {
+      const parent = parentOf(session)
+      return parent && sessions.has(parent.id) ? [{ session, parent }] : []
+    })
     .sort(
-      (a, b) => (a.lineage?.createdAt ?? 0) - (b.lineage?.createdAt ?? 0) || (a.id < b.id ? -1 : 1),
+      (a, b) => a.parent.createdAt - b.parent.createdAt || (a.session.id < b.session.id ? -1 : 1),
     )
-  for (const session of sorted) {
-    const parent = session.lineage?.parentId
-    // 自己挂在自己下面（对面给错了）不算
-    if (!parent || parent === session.id) continue
-    children[parent] ??= []
-    children[parent].push(session.id)
-  }
+  for (const { session, parent } of sorted) (children[parent.id] ??= []).push(session.id)
   return children
 }
 

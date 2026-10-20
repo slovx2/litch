@@ -266,13 +266,30 @@ test('投影：父子关系的时间换成毫秒；不接受直接输入的子�
   assert.equal(open.live, true)
 })
 
-test('投影：别的应用派出来的会话带着是谁派的；没有的、形状不对的是 null', () => {
+test('投影：别的应用派出来的会话带着是谁派的、父会话；没有的、形状不对的是 null', () => {
   assert.deepEqual(
     projectNativeLineage(
-      thread({ id: 'n', litchNativeLineage: { app: 'claude-desktop' } } as never),
+      thread({ id: 'n', createdAt: 100, litchNativeLineage: { app: 'claude-desktop' } } as never),
     ),
-    { app: 'claude-desktop' },
+    { app: 'claude-desktop', parentId: null, createdAt: 100_000 },
   )
+  assert.equal(
+    projectNativeLineage(
+      thread({
+        id: 'n',
+        litchNativeLineage: { app: 'claude-desktop', parentThreadId: 'p' },
+      } as never),
+    )?.parentId,
+    'p',
+  )
+  // 自己挂在自己下面、父会话不是字符串的：当认不出父会话
+  for (const parentThreadId of ['n', 7, ''])
+    assert.equal(
+      projectNativeLineage(
+        thread({ id: 'n', litchNativeLineage: { app: 'claude-desktop', parentThreadId } } as never),
+      )?.parentId,
+      null,
+    )
   assert.equal(projectNativeLineage(thread({ id: 'x' })), null)
   assert.equal(
     projectNativeLineage(thread({ id: 'y', litchNativeLineage: { app: 3 } } as never)),
