@@ -100,6 +100,21 @@ if (process.argv.includes('--manual')) env.LITCH_AUTOFILL_MANUAL = '1'
 if (imports) {
   env.LITCH_BROWSER_IMPORT_FAKE = join(work, 'samples')
   mkdirSync(env.LITCH_BROWSER_IMPORT_FAKE)
+  // 假读取器和样本单独打一份：主进程按自己产物旁边的 browser-import-fake.mjs 加载，自检的产物在 work 里
+  await build({
+    entryPoints: ['src/browser-import/fake-mode.mts'],
+    absWorkingDir: appDir,
+    outfile: join(work, 'browser-import-fake.mjs'),
+    bundle: true,
+    platform: 'node',
+    target: 'node22',
+    format: 'esm',
+    external: ['electron'],
+    logLevel: 'warning',
+    banner: {
+      js: "import { createRequire as __litchCreateRequire } from 'node:module'; const require = __litchCreateRequire(import.meta.url);",
+    },
+  })
 }
 delete env.ELECTRON_RUN_AS_NODE
 
