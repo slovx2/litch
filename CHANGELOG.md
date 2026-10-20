@@ -8,6 +8,7 @@ versioning or publishing metadata.
 ## 未发布
 
 - Claude Code：动态工具（`dynamicTools`）一律直接交给客户端执行，不再走 Claude Code 这边的审批和沙箱，和原生 codex 一样；原来只有 `litch_` 开头的命名空间这样，别的命名空间和不带命名空间的工具按会话的审批策略先问、按沙箱拦
+- Claude Code：去掉入口给普通回合加的“Codex 桌面展示风格”系统提示（对话风格、Mermaid 等），适配器不再维护呈现类指令；需要的客户端自己经开发者指令给
 
 ## 0.14.0
 
