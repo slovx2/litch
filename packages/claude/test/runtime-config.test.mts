@@ -2641,14 +2641,13 @@ test('native SDK keeps changed and cleared system instructions live on resume', 
   }
 })
 
-test('native SDK sends desktop presentation guidance on fresh and resumed turns', () => {
+test('native SDK sends the system prompt addendum on fresh and resumed turns', () => {
   const runtime = new NativeClaudeRuntime()
   const buildOptions = Reflect.get(runtime, 'buildOptions')
   const append = buildSystemPromptAddendum({
     baseInstructions: 'Answer in Chinese.',
     developerInstructions: null,
     personality: null,
-    desktopPresentation: true,
   })
   assert.ok(append)
   for (const claudeSessionId of [null, 'sdk-session']) {
@@ -2664,7 +2663,6 @@ test('native SDK sends desktop presentation guidance on fresh and resumed turns'
       snapshot: false,
       append,
     })
-    assert.match(options.systemPrompt.append, /fenced Mermaid diagrams/)
     assert.match(options.systemPrompt.append, /Answer in Chinese\./)
   }
 })

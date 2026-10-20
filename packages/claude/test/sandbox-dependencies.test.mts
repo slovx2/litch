@@ -2,8 +2,8 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { validateSandboxDependencies } from '../src/sandbox-dependencies.mjs'
 
-test('Linux 缺少 socat 或 bwrap 时构建探测必须失败，不报告完整权限可用', () => {
-  for (const missing of ['bwrap', 'socat']) {
+test('Linux 缺少 bwrap 时构建探测必须失败，不报告完整权限可用；不再要求 socat', () => {
+  for (const missing of ['bwrap']) {
     const seen: string[] = []
     assert.throws(
       () =>
@@ -19,7 +19,7 @@ test('Linux 缺少 socat 或 bwrap 时构建探测必须失败，不报告完整
   validateSandboxDependencies('linux', (command) => {
     seen.push(command)
   })
-  assert.deepEqual(seen, ['bwrap', 'socat'])
+  assert.deepEqual(seen, ['bwrap'])
   assert.doesNotThrow(() => validateSandboxDependencies('win32', () => {}))
   assert.throws(() => validateSandboxDependencies('freebsd', () => {}), /暂不支持/)
 })

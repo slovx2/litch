@@ -52,7 +52,7 @@ import {
   mergeRequestUsage,
   type RequestUsage,
 } from './context-usage.mjs'
-import { clientToolCliNames, dynamicToolServer } from './dynamic-tools.mjs'
+import { dynamicToolCliNames, dynamicToolServer } from './dynamic-tools.mjs'
 import { goalToolServer, isGoalTool } from './goal-tools.mjs'
 import { hostClaudeEnvOverrides, hostClaudeExecutable } from './host-claude.mjs'
 import { jsonSchemaValidator } from './json-schema.mjs'
@@ -85,6 +85,11 @@ import { mergePermissionOverlay, permissionToolName } from './permission-grants.
 import { permissionToolServer } from './permission-tools.mjs'
 import { ProtocolError, submissionHash } from './protocol-contract.mjs'
 import { type NativeRateLimitInfo, rateLimitCredentialScope } from './rate-limits.mjs'
+import {
+  claudePlansLocation,
+  claudeSettingSources,
+  claudeThreadIdHeaderEnv,
+} from './runtime-config.mjs'
 import {
   deniedTool,
   isFileEditTool,
@@ -1204,6 +1209,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
   ): Record<string, unknown> {
     const originalBashInputs: OriginalBashInputs = new Map()
     const reservedGoalTools = new Set<string>()
+    const childEnv = claudeChildEnv()
     const opts: Record<string, unknown> = {
       abortController: abort,
       pathToClaudeCodeExecutable: hostClaudeExecutable(),
@@ -1212,10 +1218,10 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       // 子代理的正文与思考也带父工具调用 ID 转发，用于投影到子线程。
       forwardSubagentText: true,
       cwd: context.cwd,
-      settingSources: ['user', 'project', 'local'],
+      settingSources: claudeSettingSources(),
       // 失败后由持久化状态对账；禁止 CLI 自行重放可能已接收的模型请求。
       env: {
-        ...claudeChildEnv(),
+        ...childEnv,
         ...hostClaudeEnvOverrides,
         ...sdkMcpStartupEnvironment(context.mcpServers),
         CLAUDE_CODE_MAX_RETRIES: '0',
@@ -1228,10 +1234,14 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         // 命令里调 litch-machine 时按它认会话。CLI 一个会话一个进程，Bash 工具继承它；
         // 追问子代理的回合跑在父线程的会话上，给的是父线程
         LITCH_THREAD_ID: context.sessionThreadId ?? context.threadId,
+        ...claudeThreadIdHeaderEnv(childEnv, context.sessionThreadId ?? context.threadId),
       },
       ...runtimePermissionOptions(context, originalBashInputs),
       settings: {
-        plansDirectory: relative(context.cwd, planDirectory(context)),
+        // 放 CLI 自己的默认位置时不传，传了项目外的目录 CLI 会报错
+        ...(claudePlansLocation() === 'workspace'
+          ? { plansDirectory: relative(context.cwd, planDirectory(context)) }
+          : {}),
         // Skill 的内联 shell 不经过 Bash hook；受限会话只能通过常规工具执行命令。
         ...(needsStrictSkillShell(context) ? { disableSkillShellExecution: true } : {}),
         ...(context.skillOverrides ? { skillOverrides: context.skillOverrides } : {}),
@@ -1450,9 +1460,9 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         return options.agentID
           ? { behavior: 'deny', message: '子代理不能修改父会话目标' }
           : { behavior: 'allow', updatedInput: input }
-      // 客户端工具（clientTools 扩展）不在这里问：执行方是客户端，要不要问用户由它定，
+      // 动态工具一律不在这里问：执行方是客户端，要不要问用户由它定，
       // 和原生 codex 对动态工具的做法一样
-      if (clientToolCliNames(context.dynamicTools).has(toolName))
+      if (dynamicToolCliNames(context.dynamicTools).has(toolName))
         return { behavior: 'allow', updatedInput: input }
 
       // 用 SDK 正式的 updatedInput 返回答案，不能伪装成工具拒绝。

@@ -10,6 +10,10 @@ versioning or publishing metadata.
 - 适配器：Codex 协议基线从 0.157.1 升到 0.163.0（`codexProtocol`、快照、方法表、`runtime/info` 和 `codex --version` 报的版本），CI 和“一键安装”的验证版 codex 改成 0.163.0；作为 harness 接进来的 codex 下限仍是 0.157.1
 - 适配器：`modelProvider/capabilities/read` 不再带 0.163.0 删掉的 `namespaceTools`（六家入口）
 - Claude Code：支持 0.163.0 新增的 `thread/items/read`、`thread/attachmentOwner/list`，`thread/items/list` 的游标可以是回合里的一个条目（`{type: "item", itemId}`，Pi、DSH、OpenCode、ACP 的入口同样支持），`thread/list` 支持 `excludedThreadIds`，`mcpServerStatus/list` 支持 `serverName`；`mcpServer/oauth/login` 的应答和完成通知带同一个 `loginId`
+- Claude Code：动态工具（`dynamicTools`）一律直接交给客户端执行，不再走 Claude Code 这边的审批和沙箱，和原生 codex 一样；原来只有 `litch_` 开头的命名空间这样，别的命名空间和不带命名空间的工具按会话的审批策略先问、按沙箱拦
+- Claude Code：去掉入口给普通回合加的“Codex 桌面展示风格”系统提示（对话风格、Mermaid 等），适配器不再维护呈现类指令；需要的客户端自己经开发者指令给
+- Claude Code：新增三个开关，默认都和原来一样：`CHA_CLAUDE_SETTING_SOURCES` 选读哪几层 Claude Code 设置（只给 `user` 时工作区的 `.claude/settings*.json`、`CLAUDE.md`、`.mcp.json` 都不读）；`CHA_CLAUDE_PLANS_LOCATION=config` 把计划文件放到 Claude Code 自己的配置目录，工作区里不留 `.claude/plans`；`CHA_CLAUDE_THREAD_ID_HEADER=1` 让模型请求带 `thread-id` 头，给按线程计费的代理用。认不出的值启动就报错
+- Claude Code：Linux 上不再要求装 `socat`。原来入口启动时会查它，可适配器早就关了 SDK 自带的沙箱，受限命令只经自己的 bwrap 包装器，用不到 socat
 
 ## 0.14.0
 

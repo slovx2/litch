@@ -14,33 +14,21 @@ const noInstructions = {
   personality: null,
 }
 
-test('desktop presentation guidance works without project instructions and stays opt-in', () => {
+test('系统提示附加段只含项目、开发者指令和个性，适配器不带任何呈现类指令', () => {
   assert.equal(buildSystemPromptAddendum(noInstructions), null)
-  const prompt = buildSystemPromptAddendum({ ...noInstructions, desktopPresentation: true })
-  assert.ok(prompt)
-  assert.match(prompt, /Codex desktop.*rich Markdown and fenced Mermaid diagrams/)
-  assert.match(prompt, /Skip diagrams for trivial replies/)
-  assert.match(prompt, /text-only preference/)
-  assert.match(prompt, /not automatically executable artifacts/)
-})
-
-test('desktop guidance preserves project, developer and personality instructions', () => {
-  const input = {
+  const prompt = buildSystemPromptAddendum({
     baseInstructions: '  Explain in Chinese.  ',
     developerInstructions: '  Use plain text when requested.  ',
     personality: 'pragmatic',
-  }
-  const existing = buildSystemPromptAddendum(input)
-  const desktop = buildSystemPromptAddendum({ ...input, desktopPresentation: true })
-  assert.ok(existing)
-  assert.ok(desktop)
-  assert.ok(desktop.endsWith(existing))
-  assert.match(existing, /# Project instructions\nExplain in Chinese\./)
-  assert.match(existing, /# Developer instructions\nUse plain text when requested\./)
-  assert.match(existing, /Personality: pragmatic/)
+  })
+  assert.ok(prompt)
+  assert.match(prompt, /^# Project instructions\nExplain in Chinese\./)
+  assert.match(prompt, /# Developer instructions\nUse plain text when requested\./)
+  assert.match(prompt, /Personality: pragmatic/)
+  assert.doesNotMatch(prompt, /Mermaid|Codex desktop|presentation/i)
 })
 
-test('server scopes desktop guidance to normal turns and preserves fork prompt prefixes', async () => {
+test('普通回合和带 outputSchema 的回合用同一份附加段，分叉保留父会话的前缀', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'claude-desktop-prompt-'))
   const previousHome = process.env.CHA_CLAUDE_HOME
   process.env.CHA_CLAUDE_HOME = directory
@@ -109,10 +97,7 @@ test('server scopes desktop guidance to normal turns and preserves fork prompt p
     })
     const normal = await turn(thread.id)
     assert.equal(normal.purpose, 'normal')
-    assert.equal(
-      normal.systemPromptAddendum,
-      buildSystemPromptAddendum({ ...instructions, desktopPresentation: true }),
-    )
+    assert.equal(normal.systemPromptAddendum, buildSystemPromptAddendum(instructions))
 
     const summary = await turn(thread.id, {
       outputSchema: { type: 'object', properties: { summary: { type: 'string' } } },

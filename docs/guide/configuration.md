@@ -153,6 +153,24 @@ export CHA_CLAUDE_ALLOWED_TOOLS="Read,Glob,Grep"
 export CHA_CLAUDE_ADD_DIRS="/repo/shared,/repo/docs"
 ```
 
+## Claude Code 自己的设置、计划文件与请求头
+
+```bash
+# 起 CLI 时读哪几层 Claude Code 设置（逗号分隔：user、project、local），默认三层都读。
+# 只给 user 时工作区里的 .claude/settings*.json（hooks、env 等）、CLAUDE.md、.mcp.json 都不读。
+export CHA_CLAUDE_SETTING_SOURCES="user"
+
+# 计划模式的计划文件放哪：workspace（默认，<工作区>/.claude/plans/codex-harness-adapter/<线程号>/）
+# 或 config（Claude Code 自己的默认位置 <CLAUDE_CONFIG_DIR 或 ~/.claude>/plans/，工作区里不留东西）。
+export CHA_CLAUDE_PLANS_LOCATION="config"
+
+# 设成 1 时 CLI 发的每个模型请求带 thread-id: <线程号>（合进 ANTHROPIC_CUSTOM_HEADERS，原有的头保留）。
+# 默认关，关着时一个多余的头都不发；给按线程计费的代理用，代理转发上游前要自己剥掉。
+export CHA_CLAUDE_THREAD_ID_HEADER=1
+```
+
+三项给了认不出的值时入口启动就报错。
+
 ## Worktree isolation
 
 ```bash
@@ -201,6 +219,9 @@ export CHA_CLAUDE_NODE="/absolute/path/to/node"
 | `CHA_CLAUDE_ALLOWED_TOOLS` | Pre-approved tools. |
 | `CHA_CLAUDE_ADD_DIRS` | Extra directories exposed to Claude. |
 | `CHA_CLAUDE_AUTO_WORKTREE` / `_WORKTREE_ROOT` | Per-thread worktree isolation. |
+| `CHA_CLAUDE_SETTING_SOURCES` | 起 CLI 时读哪几层 Claude Code 设置，逗号分隔的 `user`、`project`、`local`，默认三层都读；认不出的值启动报错。 |
+| `CHA_CLAUDE_PLANS_LOCATION` | 计划文件放哪：`workspace`（默认，工作区里每个线程一个目录）或 `config`（`<CLAUDE_CONFIG_DIR 或 ~/.claude>/plans/`）。CLI 只认项目内的 `plansDirectory`，所以不能指定任意目录。 |
+| `CHA_CLAUDE_THREAD_ID_HEADER` | 设成 `1` 时模型请求带 `thread-id: <线程号>`（合进 `ANTHROPIC_CUSTOM_HEADERS`），不带回合号；默认关。 |
 | `CHA_CLAUDE_IDLE_EXIT_MS` | 仅 shim：守护进程空闲退出；本地入口固定为 `0`。还有 Claude 进程在看管后台命令时不算空闲。 |
 | `CHA_CLAUDE_KEEP_ALIVE_SESSIONS` | 同时保留后台命令的 Claude 会话数上限，默认 `8`。回合结束时还有后台命令在跑，该会话的 Claude 进程就留下（每个约占 120–220 MB 内存）；超出上限的会话不保留，后台命令随回合结束而停止并有提示。设为 `0` 关闭保留。 |
 | `CHA_CLAUDE_KEEP_ALIVE_DETACHED_MINUTES` | 全部客户端断开后，留着的 Claude 进程再保留多少分钟，默认 `30`；期间有客户端连回来就继续保留。`0` 表示一直保留。有回合在进行的进程不回收，包括停在等待用户确认上的回合。 |

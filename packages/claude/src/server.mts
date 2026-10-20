@@ -3526,7 +3526,6 @@ export class CodexClaudeAppServer {
       (typeof params.personality === 'string' ? normalizePersonality(params.personality) : null) ??
       thread.personality
     const turnPurpose = params.outputSchema == null ? 'normal' : 'summary'
-    const desktopPresentation = turnPurpose === 'normal' && thread.runtimeBackend !== 'codex'
     // If this is a forked side-conversation (sidechat) that has different
     // developerInstructions from its parent, appending them to systemPromptAddendum
     // would mutate the system prompt prefix and invalidate the prefix KV cache
@@ -3546,7 +3545,6 @@ export class CodexClaudeAppServer {
           baseInstructions: parentThread?.baseInstructions ?? baseInstructions,
           developerInstructions: parentDev,
           personality: parentThread?.personality ?? personality,
-          desktopPresentation,
         })
         if (!this.instructionsInjected(thread.id, developerInstructions)) {
           effectivePrompt = `<side-conversation-instructions>\n${developerInstructions}\n</side-conversation-instructions>\n\n${prompt}`
@@ -3557,7 +3555,6 @@ export class CodexClaudeAppServer {
           baseInstructions,
           developerInstructions,
           personality,
-          desktopPresentation,
         })
       }
     } else {
@@ -3565,7 +3562,6 @@ export class CodexClaudeAppServer {
         baseInstructions,
         developerInstructions,
         personality,
-        desktopPresentation,
       })
     }
 
@@ -3577,7 +3573,6 @@ export class CodexClaudeAppServer {
         baseInstructions: relay.parent.baseInstructions,
         developerInstructions: relay.parent.developerInstructions,
         personality: relay.parent.personality,
-        desktopPresentation,
       })
       effectivePrompt = subagentRelayPrompt(relay.agentId, prompt)
     }
