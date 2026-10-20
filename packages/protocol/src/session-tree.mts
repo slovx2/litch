@@ -48,6 +48,12 @@ export interface SessionTreeThreadFields {
 /** 提案的状态 */
 export type SessionProposalStatus =
   | 'pending'
+  /** offer 卡：等用户选“新会话”还是“在这里做”（模型那次 start 调用一直等着） */
+  | 'offered'
+  /** offer 卡上用户选了新会话，等模型用 accept 补上简报开起来 */
+  | 'chosen'
+  /** offer 卡上用户选了在这里做（或者没选就又发了话、回合被打断） */
+  | 'here'
   | 'started'
   /** 用户点了“不要” */
   | 'dismissed'
@@ -70,6 +76,8 @@ export interface SessionProposal {
   kind: SessionLineageKind
   wakeParent: boolean
   status: SessionProposalStatus
+  /** offer 卡（litch_sessions.start 的 initiation offer）：只有标题，prompt 是空的，直到模型补上简报。旧设备进程不带 */
+  offer?: boolean
   createdAt: number
   /** 到这个时间（秒）还没点就过期 */
   expiresAt: number
@@ -118,6 +126,8 @@ export const SESSION_TREE_METHOD = {
   proposalAccept: 'litch/sessionProposal/accept',
   /** 用户点“不要”。应答空对象 */
   proposalDismiss: 'litch/sessionProposal/dismiss',
+  /** 用户在 offer 卡上选“新会话”或“在这里做”。参数 SessionProposalAnswerParams，应答空对象 */
+  proposalAnswer: 'litch/sessionProposal/answer',
 } as const
 
 export const SESSION_TREE_NOTIFICATION = {
@@ -186,6 +196,11 @@ export interface SessionProposalOverrides {
   sandbox?: string
   /** 子会话停下后要不要唤醒父会话 */
   wakeParent?: boolean
+}
+
+export interface SessionProposalAnswerParams extends SessionProposalIdParams {
+  /** session：新会话（模型接着补简报开起来）；here：在这里做 */
+  choice: 'session' | 'here'
 }
 
 export interface SessionProposalAcceptParams extends SessionProposalIdParams {

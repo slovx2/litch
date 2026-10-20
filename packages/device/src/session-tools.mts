@@ -404,6 +404,9 @@ function ownProposal(tree: SessionTree, proposalId: string, call: DeviceToolCall
 }
 
 const settledWord: Record<Exclude<SessionProposal['status'], 'pending' | 'started'>, string> = {
+  offered: 'it is an offer waiting for the user to choose',
+  chosen: 'the user chose a new session for it; start it with accept and the brief',
+  here: 'the user chose to do it here',
   dismissed: 'the user dismissed it',
   withdrawn: 'it was withdrawn',
   expired: 'it expired',

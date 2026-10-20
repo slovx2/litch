@@ -35,7 +35,15 @@ export type SandboxLevel = 'read-only' | 'workspace-write' | 'danger-full-access
  * 提案的状态：pending 等用户点；started 用户开始了；dismissed 用户不要了；withdrawn 模型自己撤回了；
  * expired 到期没人点
  */
-export type ProposalStatus = 'pending' | 'started' | 'dismissed' | 'withdrawn' | 'expired'
+export type ProposalStatus =
+  | 'pending'
+  | 'offered'
+  | 'chosen'
+  | 'here'
+  | 'started'
+  | 'dismissed'
+  | 'withdrawn'
+  | 'expired'
 
 /**
  * 模型提的“要不要另起一个子会话”（建议任务），用户点了才起。等着的和了结的都给界面：

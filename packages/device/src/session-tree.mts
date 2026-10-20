@@ -731,6 +731,9 @@ export class SessionTree {
 
 const STATUS_WORD: Record<SessionProposal['status'], string> = {
   pending: '在等用户',
+  offered: '在等用户选新会话还是在这里做',
+  chosen: '用户选了新会话、等模型补简报',
+  here: '用户选了在这里做',
   started: '开始了',
   dismissed: '被用户拒绝了',
   withdrawn: '撤回了',
