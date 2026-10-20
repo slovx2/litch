@@ -69,8 +69,8 @@ export interface Call {
 
 export type Tool = (call: Call) => Promise<ClientToolCallResponse>
 
-/** 交给人登录（request_sign_in）的结果 */
-export type SignInOutcome = 'done' | 'cancel' | 'closed' | 'aborted'
+/** 交给人登录（request_sign_in）的结果。failed：没能安全地重新载入，标签已关掉 */
+export type SignInOutcome = 'done' | 'cancel' | 'closed' | 'aborted' | 'failed'
 
 /**
  * 把代理的标签交给人登录（passwords/handover.mts 是真的那一份）。交出去的这段时间里，代理对这个标签的

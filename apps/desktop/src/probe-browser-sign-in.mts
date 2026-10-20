@@ -1,7 +1,11 @@
 // 浏览器面板上“代理请你登录”的卡片（probe-browser-ui.mts 的一段）：眼前会话里代理开一个标签、调 request_sign_in，
 // 面板上出卡片（站点、原因、“完成，交还”“取消”），点“完成，交还”之后调用回“登录完了”、卡片没了；
 // 再调一次点“取消”，回“取消了”；再调一次打断回合，卡片变成“代理已收回”，点“知道了”才没。
+// 再让一个执行过脚本的标签交出去之前重新打开不成（自带的小服务第二次 GET 回 204）：卡片是“标签已关掉”，
+// 没有“显示”“完成”，点“知道了”才没。
 // 最后关掉代理的标签，不影响后面几段。
+import { createServer } from 'node:http'
+import type { AddressInfo } from 'node:net'
 import type { ClientToolCallResponse } from '../../../packages/protocol/src/client-tools.mjs'
 import type { InstalledBrowser } from './browser/install.mjs'
 import type { TabOwner } from './browser/model.mjs'
@@ -91,6 +95,41 @@ export async function checkSignInCard(options: {
   await shot('sign-in-withdrawn')
   await page(`document.querySelector('.bw-signin [data-act="sign-in-dismiss"]').click()`)
   check('登录卡片：点“知道了”就没了', await until("!document.querySelector('.bw-signin')"))
+
+  // 重新打开不成：标签关掉，卡片是“标签已关掉”，不指向标签
+  let served = false
+  const server = createServer((request, response) => {
+    request.resume()
+    if (served) {
+      response.writeHead(204)
+      response.end()
+      return
+    }
+    served = true
+    response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+    response.end('<!doctype html><title>Once</title><input type="password">')
+  })
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+  const port = (server.address() as AddressInfo).port
+  await call('navigate', { url: `http://127.0.0.1:${port}/once`, newTab: true })
+  await call('evaluate', { expression: '1' })
+  const failed = textOf(await call('request_sign_in', { reason: 'Need access.' }))
+  server.close()
+  check(
+    '登录卡片：重新打开不成时标签关掉，卡片是“标签已关掉”，没有“显示”“完成”',
+    /could not be reloaded safely/.test(failed) &&
+      (await until(
+        `document.querySelector('.bw-signin')?.dataset.state === 'closed' && !document.querySelector('.bw-signin [data-act="sign-in-show"]') && !document.querySelector('.bw-signin [data-act="sign-in-done"]')`,
+        10_000,
+      )),
+    { failed, card: await page("document.querySelector('.bw-signin')?.outerHTML ?? null") },
+  )
+  await shot('sign-in-closed')
+  await page(`document.querySelector('.bw-signin [data-act="sign-in-dismiss"]').click()`)
+  check(
+    '登录卡片：“标签已关掉”点“知道了”就没了',
+    await until("!document.querySelector('.bw-signin')"),
+  )
 
   for (const tab of browser.host.list()) {
     if (tab.kind === 'agent') browser.host.close(tab.id)

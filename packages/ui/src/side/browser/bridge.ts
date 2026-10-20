@@ -112,8 +112,11 @@ export interface BrowserSignInRequest {
   site: string
   /** 代理说的为什么（只作附注） */
   reason: string
-  /** waiting：等人登录；withdrawn：代理不等了，标签已重新打开，提醒人别再在这里输入 */
-  state: 'waiting' | 'withdrawn'
+  /**
+   * waiting：等人登录；withdrawn：代理不等了，标签已重新打开，提醒人别再在这里输入；
+   * closed：没能安全地重新打开，标签已关掉，卡片不再指向标签
+   */
+  state: 'waiting' | 'withdrawn' | 'closed'
   /** 毫秒 */
   at: number
 }

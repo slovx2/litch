@@ -3,13 +3,18 @@
 //    控制台和提示不收（electron-tab.mts），自动填充按用户的标签对待（原生菜单，能用已保存的密码），
 //    网页开的弹窗开成用户的标签（electron-host.mts，单点登录常用），代理同样碰不到；
 // 2. 代理在这个标签里执行过脚本（evaluate，不管是不是当前文档，往返缓存会把旧文档恢复回来）就重新打开一次：
-//    冻结之后才做，中间不留空档；用 GET 打开当前地址，免得把 POST 的结果页再提交一次；
+//    冻结之后才做，中间不留空档；用 GET 打开当前地址，免得把 POST 的结果页再提交一次；网页装的 beforeunload 拦不住；
+//    打不开（没换成新文档）就不交给人，关掉这个标签，留一张“标签已关掉”的卡片说明；
 // 3. 打开浏览器面板、切到这个标签，面板上出“代理请你登录”的卡片（signin.mts），醒目的是主进程取到的真实来源，
 //    随导航更新；代理填的站点名和原因只作附注；
-// 4. 等人点“完成，交还”或“取消”；没人在看就一直等。标签关了就撤掉卡片；
+// 4. 等人点“完成，交还”或“取消”；没人在看就一直等。标签关了就撤掉卡片、关掉交接期间开的弹窗（弹窗里再开的也算）；
 // 5. 人答了：请标签里每个框架的预加载清空当过密码框的和人输过字的框。有框架没回、或者有预加载够不着的框
-//    （封闭的影子树里的）时不照样交还，改成重新打开这一页；交接期间开的弹窗关掉；控制台和提示清空；然后解冻；
-// 6. 代理不等了（回合打断、结束、断线）：不悄悄交还。重新打开这一页、关掉弹窗，卡片变成“代理已收回，别再在这里输入”。
+//    （封闭的影子树里的）时不照样交还，改成重新打开这一页，打不开就关掉标签；交接期间开的弹窗关掉；
+//    人答了之后键盘输入先停掉，清框到解冻之间再输的不留下；控制台和提示清空；然后解冻。
+//    残余风险：网页自己把密码框的值抄进别的框（两个框式的“显示密码”），抄进的框人没在里面输过字，清不到；
+//    代理执行过脚本的会先重新打开，剩下的是网页本身的行为，和人在用户标签里用同一个网页一样；
+// 6. 代理不等了（回合打断、结束、断线）：不悄悄交还。关掉弹窗、先清一遍框、再重新打开这一页（打不开同上，关掉标签），
+//    卡片变成“代理已收回，别再在这里输入”；之后标签被关掉（比如回合结束关代理的标签）卡片随它撤掉。
 // 给代理的结果只说是哪一种，不带人输入的任何东西。
 import { type IpcMainEvent, type IpcMainInvokeEvent, ipcMain, type WebContents } from 'electron'
 import type { HostTab } from '../electron-tab.mjs'
@@ -107,29 +112,43 @@ async function unreachableFields(contents: WebContents): Promise<boolean> {
   }
 }
 
-/** 换一个新文档：GET 打开当前地址（不重复提交 POST）；没换成就重新载入。回换成了没有 */
+/**
+ * 换一个新文档，回换成了没有。网页的用 GET 打开当前地址：不重复提交 POST，没换成也不退回重新载入；
+ * 别的（about:blank 之类，没有 POST）重新载入。网页装的 beforeunload 拦不住（will-prevent-unload 放行），
+ * 不然代理用脚本装一个就能让这一页一直不换、把它的监听留过整个交接
+ */
 async function refresh(page: BrowserPage, contents: WebContents): Promise<boolean> {
+  if (contents.isDestroyed()) return false
   let navigated = false
   const on = () => {
     navigated = true
   }
+  const allow = (event: Electron.Event) => event.preventDefault()
   contents.on('did-navigate', on)
+  contents.on('will-prevent-unload', allow)
   try {
     const url = contents.getURL()
     if (originOf(url)) await page.load(url, RELOAD_MS)
-    if (!navigated && !contents.isDestroyed()) await page.history('reload', RELOAD_MS)
-    return navigated
+    else await page.history('reload', RELOAD_MS)
+    return navigated && !contents.isDestroyed()
+  } catch {
+    return false
   } finally {
-    if (!contents.isDestroyed()) contents.removeListener('did-navigate', on)
+    if (!contents.isDestroyed()) {
+      contents.removeListener('did-navigate', on)
+      contents.removeListener('will-prevent-unload', allow)
+    }
   }
 }
 
 export function createHandover(options: { host: BrowserHost; signIns: SignIns }): BrowserHandover {
   const { host, signIns } = options
-  /** 冻结着的标签（从冻结到解冻） */
+  /** 冻结着的标签（从冻结到解冻，或到关掉） */
   const frozen = new Set<string>()
   /** 代理执行过脚本、还没重新打开过的标签 */
   const scripted = new Set<string>()
+  /** 已经挂上“销毁时收拾”的标签 */
+  const watched = new WeakSet<WebContents>()
 
   const contentsOf = (tabId: string): WebContents | null => {
     const page = host.page(tabId) as HostTab | undefined
@@ -137,9 +156,25 @@ export function createHandover(options: { host: BrowserHost; signIns: SignIns })
     return contents && !contents.isDestroyed() ? contents : null
   }
 
-  /** 交接期间开的弹窗关掉 */
-  const closePopups = (contents: WebContents) => {
-    for (const id of takePopups(contents.id)) host.close(id)
+  /** 交接期间开的弹窗（连弹窗里再开的）关掉 */
+  const closePopups = (contentsId: number) => {
+    for (const id of takePopups(contentsId)) host.close(id)
+  }
+
+  /**
+   * 标签销毁时收拾它留下的：执行过脚本的标记、冻结、弹窗、卡片（“代理已收回”的随标签撤掉，
+   * 不留一张“显示”按钮指向不存在的标签的卡片；“标签已关掉”的留着）
+   */
+  const watch = (tabId: string, contents: WebContents) => {
+    if (watched.has(contents)) return
+    watched.add(contents)
+    const contentsId = contents.id
+    contents.once('destroyed', () => {
+      scripted.delete(tabId)
+      frozen.delete(tabId)
+      closePopups(contentsId)
+      signIns.tabGone(tabId)
+    })
   }
 
   /** 解冻前：冻结期间攒下的控制台和提示不给代理 */
@@ -152,38 +187,68 @@ export function createHandover(options: { host: BrowserHost; signIns: SignIns })
     active: (tabId) => frozen.has(tabId),
     hides: (tabId) => frozen.has(tabId) || isHandoverPopup(tabId),
     markScripted(tabId) {
+      const contents = contentsOf(tabId)
+      if (!contents) return
+      watch(tabId, contents)
       scripted.add(tabId)
     },
     async request(page, ask, signal): Promise<SignInOutcome> {
       const contents = contentsOf(page.id)
       if (!contents) return 'closed'
+      const contentsId = contents.id
+      const owner = page.info().owner
+      watch(page.id, contents)
       // 先冻结，再重新打开：中间不留代理能动手的空档
       frozen.add(page.id)
-      setHandedOver(contents.id, true)
+      setHandedOver(contentsId, true)
       ;(page as HostTab).release?.()
+      /** 人答了之后先停掉键盘输入：清框到解冻之间再输的不留下 */
+      const holdKeys = (event: Electron.Event) => event.preventDefault()
       const unfreeze = () => {
         if (!contents.isDestroyed()) {
+          contents.removeListener('before-input-event', holdKeys)
           forget(page)
-          setHandedOver(contents.id, false)
+          setHandedOver(contentsId, false)
         }
         frozen.delete(page.id)
       }
-      try {
-        if (scripted.has(page.id) && (await refresh(page, contents))) scripted.delete(page.id)
-      } catch {
-        // 打不开也接着交给人：脚本留下的东西最多是在这一页上
-      }
-      if (contents.isDestroyed()) {
+      /** 标签已经没了（人关的、回合结束关的）：卡片、弹窗随它撤掉 */
+      const gone = (): SignInOutcome => {
+        signIns.tabGone(page.id)
+        closePopups(contentsId)
         frozen.delete(page.id)
         return 'closed'
       }
+      /**
+       * 没能安全地换成新文档：不交给人、不解冻，关掉这个标签（冻结到关掉为止），卡片说明为什么。
+       * 标签在这中间没了就按没了算
+       */
+      const fail = (): SignInOutcome => {
+        if (contents.isDestroyed()) return gone()
+        signIns.closed({
+          owner,
+          tabId: page.id,
+          origin: originOf(contents.getURL()),
+          site: ask.site,
+          reason: ask.reason,
+        })
+        closePopups(contentsId)
+        host.close(page.id)
+        frozen.delete(page.id)
+        return 'failed'
+      }
+      if (scripted.has(page.id)) {
+        if (!(await refresh(page, contents))) return fail()
+        scripted.delete(page.id)
+      }
+      if (contents.isDestroyed()) return gone()
       if (signal.aborted) {
-        closePopups(contents)
+        closePopups(contentsId)
         unfreeze()
         return 'aborted'
       }
       const begun = signIns.begin({
-        owner: page.info().owner,
+        owner,
         tabId: page.id,
         origin: originOf(contents.getURL()),
         site: ask.site,
@@ -219,30 +284,25 @@ export function createHandover(options: { host: BrowserHost; signIns: SignIns })
           contents.removeListener('did-navigate-in-page', follow)
         }
       }
-      if (outcome === 'closed' || contents.isDestroyed()) {
-        signIns.tabGone(page.id)
-        takePopups(contents.id)
-        frozen.delete(page.id)
-        return 'closed'
-      }
-      closePopups(contents)
+      if (outcome === 'closed' || contents.isDestroyed()) return gone()
+      contents.on('before-input-event', holdKeys)
+      closePopups(contentsId)
       if (outcome === 'aborted') {
-        // 代理不等了：不悄悄交还。卡片变成“代理已收回”，这一页重新打开，丢掉人输到一半的东西
+        // 代理不等了：不悄悄交还。卡片变成“代理已收回”；先清一遍框，再重新打开这一页，丢掉人输到一半的东西
         signIns.withdraw(begun.id)
-        await refresh(page, contents).catch(() => false)
+        await clearFrames(contents, since)
+        if (!(await refresh(page, contents))) return fail()
         unfreeze()
         return 'aborted'
       }
       signIns.end(begun.id)
-      // 清框：有框架没回、有预加载够不着的框，就重新打开这一页
+      // 清框：有框架没回、有预加载够不着的框，就重新打开这一页；打不开就关掉标签
       const cleared = await clearFrames(contents, since)
-      if (!contents.isDestroyed() && (!cleared || (await unreachableFields(contents)))) {
-        await refresh(page, contents).catch(() => false)
+      if (contents.isDestroyed()) return gone()
+      if (!cleared || (await unreachableFields(contents))) {
+        if (!(await refresh(page, contents))) return fail()
       }
-      if (contents.isDestroyed()) {
-        frozen.delete(page.id)
-        return 'closed'
-      }
+      if (contents.isDestroyed()) return gone()
       unfreeze()
       return outcome
     },

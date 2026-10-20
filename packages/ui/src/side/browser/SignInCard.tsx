@@ -2,7 +2,7 @@
 // 网页和代理都看不到。醒目的是外壳取到的真实来源（随导航更新），代理说的站点名和原因只作附注。
 // 人在网页里自己登录（能用已保存的密码），点“完成，交还”或“取消”之后代理才接着做；这段时间代理碰不了这个标签。
 // 交还之前外壳会清空密码框，代理只知道人点了哪个。代理不等了（回合打断、结束）时卡片变成“代理已收回”，
-// 提醒别再在这里输入，点“知道了”才没。
+// 提醒别再在这里输入，点“知道了”才没；这一页没能安全地重新打开时标签被关掉，卡片变成“标签已关掉”，不再有“显示”。
 import { useEffect, useMemo, useState } from 'react'
 import { useT } from '../../app/appearance.ts'
 import type {
@@ -55,7 +55,7 @@ export function SignInCard({
       .catch(() => false)
       .finally(() => setBusy(false))
   }
-  const elsewhere = request.tabId !== currentTabId
+  const elsewhere = request.tabId !== currentTabId && request.state !== 'closed'
   const show = elsewhere ? (
     <button
       type="button"
@@ -80,18 +80,21 @@ export function SignInCard({
       })}
     </span>
   )
-  if (request.state === 'withdrawn') {
+  if (request.state !== 'waiting') {
+    const closed = request.state === 'closed'
     return (
       <div
         className="bw-signin withdrawn"
         role="alert"
         data-sign-in={request.id}
-        data-state="withdrawn"
+        data-state={request.state}
       >
         <div className="bw-signin-text">
-          <strong>{t('browser.signIn.withdrawn')}</strong>
+          <strong>{t(closed ? 'browser.signIn.closed' : 'browser.signIn.withdrawn')}</strong>
           {origin}
-          <span className="bw-signin-note">{t('browser.signIn.withdrawnNote')}</span>
+          <span className="bw-signin-note">
+            {t(closed ? 'browser.signIn.closedNote' : 'browser.signIn.withdrawnNote')}
+          </span>
         </div>
         <span className="bw-signin-acts">
           {show}

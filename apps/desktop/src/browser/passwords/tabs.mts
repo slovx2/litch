@@ -72,5 +72,18 @@ export function takePopups(openerContentsId: number): string[] {
 }
 
 /** 这个标签是不是某次交接里开出来的弹窗 */
-export const isHandoverPopup = (tabId: string): boolean =>
-  [...popups.values()].some((set) => set.has(tabId))
+export const isHandoverPopup = (tabId: string): boolean => popupRoot(tabId) !== null
+
+/** 交接里开出来的弹窗属于哪一次交接（交出去的那个标签的 webContents 编号）；不是这样的弹窗是 null */
+export function popupRoot(tabId: string): number | null {
+  for (const [opener, set] of popups) if (set.has(tabId)) return opener
+  return null
+}
+
+/**
+ * 网页开弹窗时，新标签要不要算进某次交接：开它的是交出去的标签，或者是交接里开出来的弹窗（弹窗里再开弹窗），
+ * 都记在同一次交接下，回那个交出去的标签的 webContents 编号；都不是回 null
+ */
+export function handoverOf(openerContentsId: number, openerTabId: string): number | null {
+  return handedOver.has(openerContentsId) ? openerContentsId : popupRoot(openerTabId)
+}

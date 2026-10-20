@@ -107,10 +107,14 @@ export async function checkAgentSignIn(options: {
     { popups: popups.slice(before), after },
   )
 
-  // 代理塞一个监听，再请人登录：先重新载入
+  // 代理塞一个监听和一个 beforeunload（evaluate 带用户手势，挡得住离开），再请人登录：照样先重新载入
   await run('evaluate', {
-    expression: `(window.__agentSpy = [], document.addEventListener('input', (e) => window.__agentSpy.push(e.target.value), true), 1)`,
+    expression: `(window.__agentSpy = [], document.addEventListener('input', (e) => window.__agentSpy.push(e.target.value), true), window.addEventListener('beforeunload', (e) => { e.preventDefault(); e.returnValue = '' }), 1)`,
   })
+  check(
+    '代理装的 beforeunload 挡得住离开（页面有过用户手势）',
+    (await page('navigator.userActivation.hasBeenActive')) === true,
+  )
   const pending = call('request_sign_in', { site: 'Demo site', reason: 'To check your dashboard.' })
   check(
     '出了“代理请你登录”的卡片',
@@ -127,7 +131,7 @@ export async function checkAgentSignIn(options: {
     card,
   )
   check(
-    '交给人之前重新载入了：代理塞的监听没了',
+    '交给人之前重新载入了：代理塞的监听和 beforeunload 没拦住，监听没了',
     (await page('typeof window.__agentSpy')) === 'undefined',
   )
 
