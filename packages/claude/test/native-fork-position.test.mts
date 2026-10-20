@@ -38,6 +38,12 @@ const withoutId = (turns: any[]) => turns.map(({ id: _id, ...rest }) => rest)
 const readThread = async (client: ProtocolClient, threadId: string) =>
   (await client.request('thread/read', { threadId, includeTurns: true })).thread
 
+// 测试自己另开一个连接读适配器的库。库是回滚日志模式，适配器提交的那几毫秒里别的连接读不了；
+// node:sqlite 默认不等锁，读正好撞上就直接报 database is locked（进行中的回合随时在写）。
+// 和适配器自己的连接一样等锁放开再读。
+const openState = (home: string) =>
+  new DatabaseSync(join(home, 'adapter', 'state.sqlite'), { timeout: 5_000 })
+
 // 一个线程落库的全部内容：线程行、回合、原生消息边界和用量。
 function stored(db: DatabaseSync, threadId: string) {
   return {
@@ -60,7 +66,7 @@ test('FORK-001：分叉位置决定带走的回合、原生历史和按回合存
   const model = new MockLLM()
   const url = await model.start()
   let client = await ProtocolClient.start(home, url)
-  const db = new DatabaseSync(join(home, 'adapter', 'state.sqlite'))
+  const db = openState(home)
   const entered = deferred()
   const release = deferred()
   try {
@@ -297,7 +303,7 @@ test('FORK-002：失败、被打断的回合作为分叉位置；保留到的回
   const home = await mkdtemp(join(tmpdir(), 'native-fork-edge-'))
   const model = new MockLLM()
   const client = await ProtocolClient.start(home, await model.start())
-  const db = new DatabaseSync(join(home, 'adapter', 'state.sqlite'))
+  const db = openState(home)
   const held = deferred()
   try {
     const { thread } = await client.request('thread/start', {
@@ -491,7 +497,7 @@ test('FORK-004：回合正在跑时截在它（或更早的回合）之前分叉
   const home = await mkdtemp(join(tmpdir(), 'native-fork-active-'))
   const model = new MockLLM()
   const client = await ProtocolClient.start(home, await model.start())
-  const db = new DatabaseSync(join(home, 'adapter', 'state.sqlite'))
+  const db = openState(home)
   const entered = deferred()
   const release = deferred()
   try {
