@@ -1,9 +1,14 @@
-// 自动填充在主进程里的接线：收用户标签预加载的消息，按 senderFrame 的真实源找候选，弹原生菜单，
-// 用户点选了才把那一条送进发起的框架。判断都在 broker.mts，这里只把 Electron 的东西包成它要的样子。
+// 自动填充和保存提示在主进程里的接线：收预加载的消息，按 senderFrame 的真实源找候选、给候选，点选了才把那一条
+// 送进发起的框架；收登录提交，交给保存提示（prompts.mts）。判断都在 broker.mts 和 prompts.mts，
+// 这里只把 Electron 的东西包成它们要的样子。
 //
-// 候选为什么用原生菜单：菜单是主进程画的，不在网页的 DOM 里，网页脚本既读不到候选的用户名、也点不到它
-// （网页只能在自己的 webContents 里造事件）。用户点选之前密码不离开主进程，点选之后只送进那一个框架的
-// 隔离环境，由预加载填进框里。菜单顶上写明是 Litch 的，免得和网页自己画的东西混淆。
+// 候选怎么给：
+// - 用户的标签：主进程的原生菜单。菜单不在网页的 DOM 里，网页脚本既读不到候选的用户名、也点不到它；
+//   菜单顶上写明是 Litch 的，免得和网页自己画的东西混淆。
+// - 代理的标签：代理看不到原生菜单，所以把用户名交给预加载，画在网页里一个封闭的影子树里（网页脚本读不进去），
+//   代理在快照里看得到、用 click 点中一条；预加载只认受信任的点击（网页自己造的点击不算），报回“第几条”，
+//   主进程只认它先前给这个框架的那一份。
+// 两种都一样：点选之前密码不离开主进程，点选之后只送进那一个框架的隔离环境，由预加载填进框里。
 import {
   app,
   BrowserWindow,
@@ -16,9 +21,17 @@ import {
   WebContentsView,
 } from 'electron'
 import { type AutofillBroker, createAutofillBroker, type FrameRef } from './broker.mjs'
-import { AUTOFILL_FILL, AUTOFILL_OFFER, AUTOFILL_QUERY } from './ipc.mjs'
+import {
+  AUTOFILL_CAPTURE,
+  AUTOFILL_FILL,
+  AUTOFILL_OFFER,
+  AUTOFILL_PICK,
+  AUTOFILL_QUERY,
+} from './ipc.mjs'
+import { fillableOrigin } from './origin.mjs'
+import type { SavePrompts } from './prompts.mjs'
 import type { PasswordStore } from './store.mjs'
-import { isAutofillTab } from './tabs.mjs'
+import { autofillTab } from './tabs.mjs'
 
 /** 菜单里一条用户名最长显示这么多字 */
 const LABEL_MAX = 80
@@ -29,6 +42,10 @@ const WORDS = {
 }
 
 const words = () => WORDS[app.getLocale().startsWith('zh') ? 'zh-CN' : 'en']
+
+/** 网页里画出候选时给代理的那句提示（下一次工具结果里带上） */
+const AGENT_NOTICE =
+  'Litch listed saved sign-ins under the focused field ("Litch saved passwords"). Take a snapshot and click a username there to fill the form; the password itself is never shown to you.'
 
 function frameRefOf(event: IpcMainEvent | IpcMainInvokeEvent): FrameRef | null {
   const frame = event.senderFrame
@@ -42,6 +59,7 @@ function frameRefOf(event: IpcMainEvent | IpcMainInvokeEvent): FrameRef | null {
   }
   return {
     contentsId: event.sender.id,
+    key: `${event.sender.id}:${frame.processId}:${frame.routingId}`,
     origin: () => (alive() ? frame.origin : ''),
     alive,
     send: (message) => {
@@ -67,7 +85,7 @@ const finite = (value: unknown): value is number =>
 
 /** 主框架里的框：菜单出在框的左下角；子框架里的算不出在窗口里的位置，出在鼠标那里 */
 function anchorOf(
-  event: IpcMainEvent,
+  event: IpcMainInvokeEvent,
   bounds: { x: number; y: number; width: number; height: number },
   payload: unknown,
 ): { x: number; y: number } | null {
@@ -83,10 +101,71 @@ function anchorOf(
   }
 }
 
-export function installAutofill(store: PasswordStore): AutofillBroker {
-  const broker = createAutofillBroker({ store, isUserTab: isAutofillTab })
+/** 用户的标签：弹原生菜单 */
+function popMenu(
+  broker: AutofillBroker,
+  event: IpcMainInvokeEvent,
+  frame: FrameRef,
+  payload: unknown,
+  open: Set<number>,
+) {
+  const contents = event.sender
+  if (open.has(contents.id)) return
+  const offer = broker.offerFor(frame)
+  const place = offer ? placeOf(contents) : null
+  if (!offer || !place) return
+  const said = words()
+  const items: MenuItemConstructorOptions[] = [
+    { label: said.title, enabled: false },
+    { type: 'separator' },
+    ...offer.usernames.map((username, index) => ({
+      label:
+        username === ''
+          ? said.empty
+          : username.length > LABEL_MAX
+            ? `${username.slice(0, LABEL_MAX)}…`
+            : username,
+      click: () => {
+        broker.fill(frame, offer, index)
+      },
+    })),
+  ]
+  const anchor = anchorOf(event, place.bounds, payload)
+  open.add(contents.id)
+  Menu.buildFromTemplate(items).popup({
+    window: place.window,
+    ...(anchor ?? {}),
+    callback: () => open.delete(contents.id),
+  })
+}
+
+export function installAutofill(store: PasswordStore, prompts: SavePrompts): AutofillBroker {
+  const broker = createAutofillBroker({
+    store,
+    kindOf: (contentsId) => autofillTab(contentsId)?.kind ?? null,
+  })
   /** 菜单开着的标签：开着时再来的请求不理 */
   const open = new Set<number>()
+  /** 已经接上导航事件的标签 */
+  const watched = new Set<number>()
+  /** 网页里画过候选的代理标签（销毁时丢掉它的候选） */
+  const inlineTabs = new Set<number>()
+
+  /** 保存提示要等这个标签导航完成：第一次有它的登录提交时接上它的导航事件 */
+  const watch = (contents: WebContents) => {
+    const id = contents.id
+    if (watched.has(id)) return
+    watched.add(id)
+    contents.on('did-navigate', () => prompts.navigated(id, false))
+    contents.on('did-navigate-in-page', (_event, _url, isMainFrame) => {
+      if (isMainFrame) prompts.navigated(id, true)
+    })
+    contents.on('did-stop-loading', () => prompts.loaded(id))
+    contents.once('destroyed', () => {
+      watched.delete(id)
+      prompts.tabGone(id)
+    })
+  }
 
   ipcMain.handle(AUTOFILL_QUERY, (event) => {
     const frame = frameRefOf(event)
@@ -94,37 +173,44 @@ export function installAutofill(store: PasswordStore): AutofillBroker {
     return { usernames: offer?.usernames ?? [] }
   })
 
-  ipcMain.on(AUTOFILL_OFFER, (event, payload: unknown) => {
-    const contents = event.sender
-    if (open.has(contents.id)) return
+  ipcMain.handle(AUTOFILL_OFFER, (event, payload: unknown) => {
+    const tab = autofillTab(event.sender.id)
     const frame = frameRefOf(event)
-    const offer = frame ? broker.offerFor(frame) : null
-    if (!frame || !offer) return
-    const place = placeOf(contents)
-    if (!place) return
-    const said = words()
-    const items: MenuItemConstructorOptions[] = [
-      { label: said.title, enabled: false },
-      { type: 'separator' },
-      ...offer.usernames.map((username, index) => ({
-        label:
-          username === ''
-            ? said.empty
-            : username.length > LABEL_MAX
-              ? `${username.slice(0, LABEL_MAX)}…`
-              : username,
-        click: () => {
-          broker.fill(frame, offer, index)
-        },
-      })),
-    ]
-    const anchor = anchorOf(event, place.bounds, payload)
-    open.add(contents.id)
-    Menu.buildFromTemplate(items).popup({
-      window: place.window,
-      ...(anchor ?? {}),
-      callback: () => open.delete(contents.id),
-    })
+    if (!tab || !frame) return null
+    if (tab.kind === 'user') {
+      popMenu(broker, event, frame, payload, open)
+      return null
+    }
+    const usernames = broker.offerInline(frame)
+    if (!usernames) return null
+    const id = event.sender.id
+    if (!inlineTabs.has(id)) {
+      inlineTabs.add(id)
+      event.sender.once('destroyed', () => {
+        inlineTabs.delete(id)
+        broker.forgetTab(id)
+      })
+    }
+    tab.notice(AGENT_NOTICE)
+    return { usernames }
+  })
+
+  ipcMain.on(AUTOFILL_PICK, (event, payload: unknown) => {
+    const frame = frameRefOf(event)
+    const index = (payload as { index?: unknown } | null)?.index
+    if (!frame || typeof index !== 'number' || !Number.isInteger(index)) return
+    broker.pickInline(frame, index)
+  })
+
+  ipcMain.on(AUTOFILL_CAPTURE, (event, payload: unknown) => {
+    const tab = autofillTab(event.sender.id)
+    const frame = frameRefOf(event)
+    if (!tab || !frame?.alive()) return
+    const origin = fillableOrigin(frame.origin())
+    const { username, password } = (payload ?? {}) as { username?: unknown; password?: unknown }
+    if (!origin || typeof username !== 'string' || typeof password !== 'string') return
+    watch(event.sender)
+    prompts.capture(event.sender.id, tab.info(), origin, username, password)
   })
   return broker
 }

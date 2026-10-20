@@ -1,6 +1,9 @@
 // 设置页“已保存的密码”用到的判断：排序、搜索、来源怎么写。纯函数，单独测（test/passwords-logic.test.mjs）。
-import type { BrowserSavedPassword } from '../side/browser/bridge.ts'
+import type { BrowserNeverSite, BrowserSavedPassword } from '../side/browser/bridge.ts'
 import { siteLabel } from './tools-logic.ts'
+
+/** 在内置浏览器里点了“保存”存下来的，来源记成这个（外壳的 passwords/prompts.mts 的 SAVED_SOURCE） */
+export const SAVED_HERE = 'litch'
 
 /** 来源标识前半段（浏览器）对应的产品名，不翻译 */
 const BROWSERS: Record<string, string> = {
@@ -43,4 +46,9 @@ export function sourceLabel(source: string): string {
   if (!name) return source
   const profile = source.slice(at + 1)
   return profile ? `${name} · ${profile}` : name
+}
+
+/** 从不保存的网站：最近加的在前 */
+export function sortNever(list: readonly BrowserNeverSite[]): BrowserNeverSite[] {
+  return [...list].sort((a, b) => b.at - a.at || a.origin.localeCompare(b.origin))
 }

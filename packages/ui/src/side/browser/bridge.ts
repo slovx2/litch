@@ -55,15 +55,49 @@ export interface BrowserSavedPassword {
   lastUsedAt?: number
 }
 
-/** 已保存的密码：只能列、删，看不到明文 */
+/** “这个网站永不保存”的一条 */
+export interface BrowserNeverSite {
+  origin: string
+  /** 毫秒 */
+  at: number
+}
+
+/** 登录之后的保存提示：没有密码，只给人看 */
+export interface BrowserSavePrompt {
+  id: string
+  /** 哪个会话的哪个标签里登录的 */
+  deviceId: string
+  threadId: string
+  tabId: string
+  origin: string
+  username: string
+  /** save：没存过这个用户名；update：存过，但密码不一样 */
+  kind: 'save' | 'update'
+  /** 毫秒 */
+  at: number
+}
+
+export type BrowserSaveAnswer = 'save' | 'dismiss' | 'never'
+
+/** 已保存的密码和保存提示：只能列、删、答，看不到明文 */
 export interface BrowserPasswordsBridge {
   list(): Promise<BrowserSavedPassword[]>
   /** 删一条，回删没删到 */
   remove(id: string): Promise<boolean>
-  /** 全删，回删了几条 */
+  /** 全删，回删了几条（不动“永不保存”的名单） */
   removeAll(): Promise<number>
-  /** 密码库变了（导入了、别处删了） */
+  /** 密码库变了（导入了、保存了、别处删了、永不名单变了） */
   onChanged(handler: () => void): () => void
+  /** “这个网站永不保存”的名单 */
+  never(): Promise<BrowserNeverSite[]>
+  /** 从名单里去掉，回去没去掉 */
+  allowSite(origin: string): Promise<boolean>
+  /** 现在挂着的保存提示 */
+  prompts(): Promise<BrowserSavePrompt[]>
+  /** 答一条，回答没答到（已经没了） */
+  answer(id: string, answer: BrowserSaveAnswer): Promise<boolean>
+  /** 保存提示变了，带着现在所有的 */
+  onPrompts(handler: (prompts: BrowserSavePrompt[]) => void): () => void
 }
 
 export interface BrowserBridge {

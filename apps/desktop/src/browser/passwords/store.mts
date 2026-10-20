@@ -58,10 +58,22 @@ interface StoredEntry {
   lastUsedAt?: number
 }
 
+/** “这个网站永不保存”的一条 */
+export interface NeverSite {
+  origin: string
+  /** 毫秒 */
+  at: number
+}
+
 interface StoredFile {
   version: 1
   entries: StoredEntry[]
+  /** 用户在保存提示上点了“这个网站永不”的 */
+  never?: NeverSite[]
 }
+
+/** 一个源上一组用户名和密码跟库里比：没有这个用户名、密码一样、密码不一样 */
+export type PasswordMatch = 'none' | 'same' | 'different'
 
 /** 加密器不可用：拒绝存。导入管线接住它，把这一类报成失败，message 就是给人看的说明 */
 export class PasswordEncryptionUnavailable extends Error {
@@ -88,8 +100,25 @@ export interface PasswordStore extends PasswordSink {
    * 取到了顺手记一笔最近使用的时间
    */
   reveal(id: string, origin: string): { username: string; password: string } | null
-  /** 库变了（导入、删除）时通知，回取消的函数 */
+  /** 库变了（导入、保存、删除、永不名单）时通知，回取消的函数 */
   onChange(listener: () => void): () => void
+  /** 登录时提交的这一组和库里比（要解开同源同用户名的那一条） */
+  compare(origin: string, username: string, password: string): PasswordMatch
+  /** 加密一个密码给保存提示暂存；加密器不可用回 null */
+  seal(password: string): string | null
+  /** 用户在保存提示上点了保存：新的加一条，已有同源同用户名的换掉密码 */
+  putSealed(entry: {
+    origin: string
+    username: string
+    sealed: string
+    source: string
+  }): 'saved' | 'updated'
+  /** “这个网站永不保存”的名单 */
+  neverSites(): NeverSite[]
+  isNever(origin: string): boolean
+  addNever(origin: string): void
+  /** 从名单里去掉，回去没去掉 */
+  removeNever(origin: string): boolean
 }
 
 export const passwordsFile = (userData: string): string =>
@@ -135,6 +164,7 @@ export function createPasswordStore(options: {
   const log = options.log ?? (() => {})
   const listeners = new Set<() => void>()
   let entries: StoredEntry[] | null = null
+  let never: NeverSite[] = []
 
   const load = (): StoredEntry[] => {
     if (entries) return entries
@@ -146,6 +176,12 @@ export function createPasswordStore(options: {
       const parsed = JSON.parse(readFileSync(file, 'utf8')) as Partial<StoredFile>
       if (!Array.isArray(parsed.entries)) throw new Error('no entries')
       entries = parsed.entries.filter(isEntry)
+      never = Array.isArray(parsed.never)
+        ? parsed.never.filter(
+            (one): one is NeverSite =>
+              !!one && typeof one.origin === 'string' && typeof one.at === 'number',
+          )
+        : []
     } catch {
       // 读不懂的文件挪到一边留着，不在它上面接着写（免得把还能救的东西盖掉）
       const aside = `${file}.broken-${now()}`
@@ -160,13 +196,14 @@ export function createPasswordStore(options: {
     return entries
   }
 
-  const save = (next: StoredEntry[]) => {
+  const save = (next: StoredEntry[], nextNever: NeverSite[] = never) => {
     mkdirSync(dirname(file), { recursive: true, mode: 0o700 })
     const temp = `${file}.${process.pid}.tmp`
-    const body: StoredFile = { version: 1, entries: next }
+    const body: StoredFile = { version: 1, entries: next, never: nextNever }
     writeFileSync(temp, `${JSON.stringify(body, null, 2)}\n`, { mode: 0o600 })
     renameSync(temp, file)
     entries = next
+    never = nextNever
     for (const listener of listeners) listener()
   }
 
@@ -297,6 +334,67 @@ export function createPasswordStore(options: {
     onChange(listener) {
       listeners.add(listener)
       return () => listeners.delete(listener)
+    },
+    compare(origin, username, password) {
+      const entry = load().find((one) => one.origin === origin && one.username === username)
+      if (!entry) return 'none'
+      try {
+        return cipher.decrypt(entry.password) === password ? 'same' : 'different'
+      } catch {
+        // 解不开的旧条目：当作不一样，让用户决定要不要换掉
+        return 'different'
+      }
+    },
+    seal(password) {
+      if (!cipher.available()) return null
+      try {
+        return cipher.encrypt(password)
+      } catch {
+        return null
+      }
+    },
+    putSealed({ origin, username, sealed, source }) {
+      const current = load()
+      const at = now()
+      const existing = current.find((one) => one.origin === origin && one.username === username)
+      if (existing) {
+        save(current.map((one) => (one === existing ? { ...one, password: sealed } : one)))
+        return 'updated'
+      }
+      save([
+        ...current,
+        {
+          id: randomUUID(),
+          origin,
+          username,
+          password: sealed,
+          source,
+          store: 'profile',
+          createdAt: at,
+          importedAt: at,
+        },
+      ])
+      return 'saved'
+    },
+    neverSites() {
+      load()
+      return [...never]
+    },
+    isNever(origin) {
+      load()
+      return never.some((one) => one.origin === origin)
+    },
+    addNever(origin) {
+      const current = load()
+      if (never.some((one) => one.origin === origin)) return
+      save(current, [...never, { origin, at: now() }])
+    },
+    removeNever(origin) {
+      const current = load()
+      const next = never.filter((one) => one.origin !== origin)
+      if (next.length === never.length) return false
+      save(current, next)
+      return true
     },
   }
 }

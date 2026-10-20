@@ -1,4 +1,4 @@
-// 自动填充和“代理读不到密码”的真实窗口自检（scripts/check-browser.mjs --autofill 打包后起）：
+// 自动填充、“代理读不到密码”、登录后的保存提示的真实窗口自检（scripts/check-browser.mjs --autofill 打包后起）：
 // 真的宿主、真的自动填充预加载和主进程接线、真的 safeStorage（应用名改成测试专用的，钥匙串里那一条用完由
 // check-browser.mjs 删掉），窗口显示在屏幕上。测试登录页在回环上：主页面 http://127.0.0.1:A，里面嵌一个
 // 跨源子框架（端口 B），各有一个登录表单。
@@ -18,7 +18,8 @@ import { createElectronHost } from './browser/electron-host.mjs'
 import type { HostTab } from './browser/electron-tab.mjs'
 import { createBrowserExecutor } from './browser/executor.mjs'
 import { installPasswords } from './browser/passwords/install.mjs'
-import { isAutofillTab } from './browser/passwords/tabs.mjs'
+import { PASSWORDS_PROMPTS_CHANGED } from './browser/passwords/ipc.mjs'
+import { autofillTab } from './browser/passwords/tabs.mjs'
 import { createSiteBook } from './browser/sites.mjs'
 import type { ClientToolInvocation } from './client-tools/types.mjs'
 
@@ -39,7 +40,7 @@ const check = (name: string, ok: boolean, detail?: unknown) => {
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 const LOGIN = (frameUrl: string) => `<!doctype html><title>Sign in</title>
-<form id="f" style="margin:20px"><input id="user" type="email" autocomplete="username" style="display:block;width:240px;height:28px">
+<form id="f" method="post" action="/welcome" style="margin:20px"><input id="user" type="email" autocomplete="username" style="display:block;width:240px;height:28px">
 <input id="pass" type="password" style="display:block;width:240px;height:28px;margin-top:8px"><button>Sign in</button></form>
 <iframe id="sub" src="${frameUrl}" style="width:420px;height:160px;border:1px solid #888;margin:20px"></iframe>
 <script>
@@ -61,8 +62,16 @@ const FRAME = `<!doctype html><form style="margin:10px"><input id="user" type="t
 function serve(body: (path: string) => string): Promise<{ server: Server; port: number }> {
   return new Promise((resolve) => {
     const server = createServer((request, response) => {
-      response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
-      response.end(body(request.url ?? '/'))
+      // 登录表单提交（POST）：读完请求、回一页“登进来了”，算一次导航完成
+      request.resume()
+      request.on('end', () => {
+        response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+        response.end(
+          request.method === 'POST'
+            ? '<!doctype html><title>Welcome</title><p>Signed in</p>'
+            : body(request.url ?? '/'),
+        )
+      })
     })
     server.listen(0, '127.0.0.1', () =>
       resolve({ server, port: (server.address() as AddressInfo).port }),
@@ -88,7 +97,15 @@ void app.whenReady().then(async () => {
   const frameOrigin = new URL(frameUrl).origin
 
   const work = mkdtempSync(join(tmpdir(), 'litch-autofill-probe-'))
-  const passwords = installPasswords({ userData: work, fromUi: () => false, broadcast: () => {} })
+  // 推给界面的保存提示记下来（这里没有界面）
+  const pushedPrompts: unknown[] = []
+  const passwords = installPasswords({
+    userData: work,
+    fromUi: () => false,
+    broadcast: (channel, payload) => {
+      if (channel === PASSWORDS_PROMPTS_CHANGED) pushedPrompts.push(payload)
+    },
+  })
   const seeded = await passwords.importMany(
     [
       { origin: pageOrigin, username: 'ann@example.com', password: 'ann-pass-1', store: 'profile' },
@@ -126,7 +143,7 @@ void app.whenReady().then(async () => {
   const main = (code: string) => contents.executeJavaScript(code)
   const sub = () => contents.mainFrame.frames[0]
 
-  check('用户标签挂了预加载', isAutofillTab(contents.id))
+  check('用户标签挂了预加载', autofillTab(contents.id)?.kind === 'user')
   check(
     '网页看不到预加载的任何东西',
     JSON.stringify(await main('window.__exposed')) ===
@@ -241,11 +258,15 @@ void app.whenReady().then(async () => {
     check('子框架的密码没进主页面', mainAfter[1] === 'bob-pass-2', mainAfter)
   }
 
-  // 代理的标签：没有预加载，点了也不弹；读页工具读不到密码框里的值
+  // 代理的标签：代理用 click 点用户名框，候选画在网页里（封闭的影子树），代理在快照里看得到、点中一条才填；
+  // 工具结果里从不出现密码；代理输入新的用户名密码再点登录，导航完成后只给界面推一条保存提示
   const sites = createSiteBook(join(work, 'sites.json'))
   const executor = createBrowserExecutor({ host, sites, resolveUrl: (url) => url })
   let seq = 0
-  const run = (tool: string, args: Record<string, unknown> = {}) => {
+  const results: string[] = []
+  const textOf = (reply: ClientToolCallResponse) =>
+    reply.contentItems.map((item) => (item.type === 'inputText' ? item.text : '')).join('\n')
+  const run = async (tool: string, args: Record<string, unknown> = {}) => {
     const invocation: ClientToolInvocation = {
       id: `call-${++seq}`,
       threadId: 'thread-a',
@@ -258,56 +279,118 @@ void app.whenReady().then(async () => {
       harness: 'pi',
       cwd: null,
     }
-    return executor.call(invocation, {
-      signal: new AbortController().signal,
-      ask: async () => null,
-    })
+    const text = textOf(
+      await executor.call(invocation, {
+        signal: new AbortController().signal,
+        ask: async () => null,
+      }),
+    )
+    results.push(text)
+    return text
   }
-  const textOf = (reply: ClientToolCallResponse) =>
-    reply.contentItems.map((item) => (item.type === 'inputText' ? item.text : '')).join('\n')
+  const refOf = (snapshot: string, pattern: RegExp) =>
+    /\[ref=(e\d+)\]/.exec(snapshot.split('\n').find((line) => pattern.test(line)) ?? '')?.[1] ?? ''
   await run('navigate', { url: pageUrl, newTab: true })
   const agentTab = host.pages().find((page) => page.info().kind === 'agent') as HostTab | undefined
   const agentContents = agentTab?.view.webContents
-  check('代理的标签没有预加载', !!agentContents && !isAutofillTab(agentContents.id))
-  const before = popups.length
-  if (agentContents && !manual) {
-    host.place(window, agentTab?.id ?? null, {
-      x: 0,
-      y: 0,
-      width: width ?? 900,
-      height: height ?? 640,
-    })
-    agentContents.sendInputEvent({
-      type: 'mouseDown',
-      x: 140,
-      y: 34,
-      button: 'left',
-      clickCount: 1,
-    })
-    agentContents.sendInputEvent({ type: 'mouseUp', x: 140, y: 34, button: 'left', clickCount: 1 })
-    await sleep(600)
-    check('代理的标签点了不弹菜单', popups.length === before, popups)
-  }
-  const snap = textOf(await run('snapshot'))
-  const passRef = /textbox[^\n]*\[ref=(e\d+)\]/g
-  const refs = [...snap.matchAll(passRef)].map((match) => match[1])
-  // 第二个文字框是密码框：代理自己往里打字
-  const typed = textOf(await run('type', { ref: refs[1], text: 'agent-typed-secret' }))
-  check('type 不回报密码框的值', !typed.includes('agent-typed-secret'), typed)
-  const snapAfter = textOf(await run('snapshot'))
-  check('快照里遮住密码框', !snapAfter.includes('agent-typed-secret'), snapAfter)
-  const evaluated = textOf(
-    await run('evaluate', {
-      expression: `({ a: document.querySelector('#pass').value, b: [...document.querySelectorAll('input')].map((one) => one.value) })`,
-    }),
+  check(
+    '代理的标签也挂了预加载',
+    !!agentContents && autofillTab(agentContents.id)?.kind === 'agent',
   )
-  check('evaluate 的结果里替掉密码框的值', !evaluated.includes('agent-typed-secret'), evaluated)
-  const cleared = textOf(
-    await run('evaluate', {
-      expression: `(() => { const one = document.querySelector('#pass'); const v = one.value; one.value = ''; return v })()`,
-    }),
+  host.place(window, agentTab?.id ?? null, {
+    x: 0,
+    y: 0,
+    width: width ?? 900,
+    height: height ?? 640,
+  })
+  const inAgent = (code: string) => agentContents?.executeJavaScript(code)
+
+  // 网页自己造的事件画不出候选
+  await inAgent('window.__forge()')
+  await sleep(800)
+  check(
+    '网页造的事件在代理的标签里也弄不出候选',
+    !(await inAgent(`!!document.querySelector('litch-autofill')`)),
   )
-  check('先读再清空也替掉', !cleared.includes('agent-typed-secret'), cleared)
+  await inAgent('document.activeElement.blur()')
+
+  const first = await run('snapshot')
+  await run('click', { ref: refOf(first, /textbox/) })
+  await sleep(600)
+  const listed = await run('snapshot')
+  check(
+    '代理点了用户名框，快照里看得到 Litch 的候选（只有用户名）',
+    /Litch (saved passwords|已保存的密码)/.test(listed) &&
+      /button "ann@example.com"/.test(listed) &&
+      /button "bob@example.com"/.test(listed),
+    listed,
+  )
+  check(
+    '网页脚本读不进候选',
+    (await inAgent(
+      `(() => { const host = document.querySelector('litch-autofill'); return !!host && host.shadowRoot === null && !document.documentElement.innerText.includes('bob@example.com') })()`,
+    )) === true,
+  )
+  check(
+    '工具结果里提示代理去点候选',
+    results.some((text) => text.includes('Litch listed saved sign-ins')),
+    results,
+  )
+  await run('click', { ref: refOf(listed, /button "bob@example\.com"/) })
+  await sleep(600)
+  const agentFilled = await inAgent('[user.value, pass.value]')
+  check(
+    '代理点中一条之后填上',
+    JSON.stringify(agentFilled) === JSON.stringify(['bob@example.com', 'bob-pass-2']),
+    agentFilled,
+  )
+
+  // 读页工具读不到密码框里的值
+  const snapAfter = await run('snapshot')
+  check(
+    '快照里遮住密码框',
+    !snapAfter.includes('bob-pass-2') && /textbox[^\n]*••••••/.test(snapAfter),
+    snapAfter,
+  )
+  const evaluated = await run('evaluate', {
+    expression: `({ a: document.querySelector('#pass').value, b: [...document.querySelectorAll('input')].map((one) => one.value) })`,
+  })
+  check('evaluate 的结果里替掉密码框的值', !evaluated.includes('bob-pass-2'), evaluated)
+  const cleared = await run('evaluate', {
+    expression: `(() => { const one = document.querySelector('#pass'); const v = one.value; one.value = ''; return v })()`,
+  })
+  check('先读再清空也替掉', !cleared.includes('bob-pass-2'), cleared)
+
+  // 代理输入新的一组再点登录：导航完成后推一条“保存”提示，里面没有密码
+  const fresh = await run('snapshot')
+  const boxes = [...fresh.matchAll(/textbox[^\n]*\[ref=(e\d+)\]/g)].map((match) => match[1])
+  await run('type', { ref: boxes[0], text: 'carol@example.com', clear: true })
+  const typed = await run('type', { ref: boxes[1], text: 'carol-pass-9', clear: true })
+  check('type 不回报密码框的值', !typed.includes('carol-pass-9'), typed)
+  await run('click', { ref: refOf(fresh, /button "Sign in"/) })
+  await agentTab?.waitForLoad(10_000, new AbortController().signal)
+  await sleep(800)
+  const latest = pushedPrompts.at(-1) as Array<Record<string, unknown>> | undefined
+  check(
+    '登录导航完成后给界面推了一条保存提示',
+    !!latest &&
+      latest.length === 1 &&
+      latest[0]?.kind === 'save' &&
+      latest[0]?.username === 'carol@example.com' &&
+      latest[0]?.origin === pageOrigin &&
+      latest[0]?.tabId === agentTab?.id,
+    pushedPrompts,
+  )
+  check('保存提示里没有密码', !JSON.stringify(pushedPrompts).includes('carol-pass-9'))
+  check('没人答之前没有存', passwords.list().length === 4, passwords.list().length)
+  check(
+    '工具结果里从不出现密码、也不提保存提示',
+    results.every(
+      (text) =>
+        !/bob-pass-2|ann-pass-1|carol-pass-9/.test(text) && !/save (this )?password/i.test(text),
+    ),
+    results,
+  )
 
   // 清除浏览数据不碰密码
   await host.clearData()

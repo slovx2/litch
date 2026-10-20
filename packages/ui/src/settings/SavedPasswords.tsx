@@ -6,8 +6,19 @@ import { useT } from '../app/appearance.ts'
 import { Confirm } from '../app/Confirm.tsx'
 import { reasonOf } from '../app/errors.ts'
 import { showToast } from '../app/toasts.tsx'
-import type { BrowserBridge, BrowserSavedPassword } from '../side/browser/bridge.ts'
-import { filterPasswords, sortPasswords, sourceLabel } from './passwords-logic.ts'
+import type {
+  BrowserBridge,
+  BrowserNeverSite,
+  BrowserPasswordsBridge,
+  BrowserSavedPassword,
+} from '../side/browser/bridge.ts'
+import {
+  filterPasswords,
+  SAVED_HERE,
+  sortNever,
+  sortPasswords,
+  sourceLabel,
+} from './passwords-logic.ts'
 import { dayOf, listPhase, siteLabel } from './tools-logic.ts'
 
 export function SavedPasswords({ bridge }: { bridge: BrowserBridge }) {
@@ -114,7 +125,10 @@ export function SavedPasswords({ bridge }: { bridge: BrowserBridge }) {
                   </span>
                   <span className="tool-when">
                     {t('settings.browser.passwords.from', {
-                      source: sourceLabel(one.source),
+                      source:
+                        one.source === SAVED_HERE
+                          ? t('settings.browser.passwords.saved')
+                          : sourceLabel(one.source),
                       day: dayOf(one.createdAt),
                     })}
                   </span>
@@ -149,6 +163,7 @@ export function SavedPasswords({ bridge }: { bridge: BrowserBridge }) {
           </div>
         </>
       )}
+      <NeverSites passwords={passwords} />
       {asking ? (
         <Confirm
           title={t('settings.browser.passwords.removeAll.title')}
@@ -160,5 +175,76 @@ export function SavedPasswords({ bridge }: { bridge: BrowserBridge }) {
         />
       ) : null}
     </section>
+  )
+}
+
+/** 从不保存密码的网站：保存提示上点了“这个网站永不”的。删一项之后在那个网站登录又会问 */
+function NeverSites({ passwords }: { passwords: BrowserPasswordsBridge }) {
+  const t = useT()
+  /** null：在取 */
+  const [sites, setSites] = useState<BrowserNeverSite[] | null>(null)
+  const [failure, setFailure] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const load = useCallback(
+    () =>
+      passwords.never().then(
+        (next) => {
+          setSites(sortNever(next))
+          setFailure(null)
+        },
+        (error: unknown) => setFailure(reasonOf(error, t)),
+      ),
+    [passwords, t],
+  )
+  useEffect(() => {
+    void load()
+    return passwords.onChanged(() => void load())
+  }, [passwords, load])
+
+  const allow = (origin: string) => {
+    setBusy(true)
+    passwords
+      .allowSite(origin)
+      .then(load, (error: unknown) => setFailure(reasonOf(error, t)))
+      .finally(() => setBusy(false))
+  }
+
+  const phase = listPhase(sites, failure !== null && sites === null)
+  return (
+    <div data-never={phase}>
+      <h4 className="set-sub">
+        {t('settings.browser.never')}
+        <span>{t('settings.browser.never.note')}</span>
+      </h4>
+      {phase === 'loading' ? null : phase === 'failed' ? (
+        <p className="set-para err" role="alert">
+          {t('settings.browser.failed', { reason: failure ?? '' })}
+        </p>
+      ) : phase === 'empty' ? (
+        <p className="set-para">{t('settings.browser.never.empty')}</p>
+      ) : (
+        <div className="set-rows">
+          {(sites ?? []).map((site) => (
+            <div key={site.origin} className="set-row tool-row" data-never-site={site.origin}>
+              <span className="tool-name" title={site.origin}>
+                {siteLabel(site.origin)}
+              </span>
+              <span className="tool-when">
+                {t('settings.browser.never.at', { day: dayOf(site.at) })}
+              </span>
+              <button
+                type="button"
+                className="mini"
+                data-act="allow-password-site"
+                disabled={busy}
+                onClick={() => allow(site.origin)}
+              >
+                {t('settings.browser.forget')}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }

@@ -5,7 +5,7 @@ import type { Entry } from './types.ts'
 export const zhPasswords = {
   'settings.browser.passwords': '已保存的密码',
   'settings.browser.passwords.note':
-    '在你自己开的标签里点登录框，可以选一条填上；模型开的标签不填，模型也读不到密码框里的字。这里看不到、也复制不了密码',
+    '点登录框可以选一条填上，模型开的标签里模型也能选；模型读不到密码框里的字，也看不到保存提示。这里看不到、也复制不了密码',
   'settings.browser.passwords.empty': '还没有保存的密码。可以从别的浏览器导入。',
   'settings.browser.passwords.search': '搜索站点或用户名',
   'settings.browser.passwords.none': '没有对得上的。',
@@ -18,4 +18,20 @@ export const zhPasswords = {
     '内置浏览器里保存的 {count} 条密码都会删掉，找不回来。别的浏览器里的不受影响。',
   'settings.browser.passwords.removeAll.yes': '全部删除',
   'settings.browser.passwords.removed': '已删除 {count} 条密码',
+  'settings.browser.passwords.saved': '在内置浏览器里保存',
+  'settings.browser.never': '从不保存密码的网站',
+  'settings.browser.never.note':
+    '在保存提示上点了“这个网站永不”的；删掉之后，在这个网站登录又会问你',
+  'settings.browser.never.empty': '没有从不保存密码的网站。',
+  'settings.browser.never.at': '{day} 加入',
+  'browser.save.ask': '要保存 {site} 上 {user} 的密码吗？',
+  'browser.save.askNoUser': '要保存 {site} 的密码吗？',
+  'browser.save.update': '要更新 {site} 上 {user} 的密码吗？',
+  'browser.save.updateNoUser': '要更新 {site} 的密码吗？',
+  'browser.save.yes': '保存',
+  'browser.save.no': '不保存',
+  'browser.save.updateYes': '更新',
+  'browser.save.updateNo': '不更新',
+  'browser.save.never': '这个网站永不',
+  'browser.save.more': '还有 {count} 条',
 } satisfies Record<string, Entry>

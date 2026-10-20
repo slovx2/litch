@@ -5,7 +5,7 @@ import type { zhPasswords } from './zh-CN-passwords.ts'
 export const enPasswords: Record<keyof typeof zhPasswords, Entry> = {
   'settings.browser.passwords': 'Saved passwords',
   'settings.browser.passwords.note':
-    'Click a sign-in field in a tab you opened yourself to fill one of these. Tabs the model opened are never filled, and the model cannot read password fields. Passwords cannot be shown or copied here',
+    'Click a sign-in field to fill one of these; in tabs the model opened, the model can pick one too. The model cannot read password fields or see save prompts. Passwords cannot be shown or copied here',
   'settings.browser.passwords.empty':
     'No saved passwords yet. You can import them from another browser.',
   'settings.browser.passwords.search': 'Search sites or usernames',
@@ -21,4 +21,20 @@ export const enPasswords: Record<keyof typeof zhPasswords, Entry> = {
   'settings.browser.passwords.removeAll.yes': 'Delete all',
   'settings.browser.passwords.removed': ({ count }) =>
     Number(count) === 1 ? 'Deleted 1 password' : `Deleted ${count} passwords`,
+  'settings.browser.passwords.saved': 'Saved in the Litch browser',
+  'settings.browser.never': 'Never save passwords for',
+  'settings.browser.never.note':
+    'Sites where you chose “Never for this site”; remove one to be asked again when you sign in there',
+  'settings.browser.never.empty': 'No sites are excluded.',
+  'settings.browser.never.at': 'added {day}',
+  'browser.save.ask': 'Save the password for {user} on {site}?',
+  'browser.save.askNoUser': 'Save the password for {site}?',
+  'browser.save.update': 'Update the password for {user} on {site}?',
+  'browser.save.updateNoUser': 'Update the password for {site}?',
+  'browser.save.yes': 'Save',
+  'browser.save.no': 'Not now',
+  'browser.save.updateYes': 'Update',
+  'browser.save.updateNo': 'Not now',
+  'browser.save.never': 'Never for this site',
+  'browser.save.more': ({ count }) => (Number(count) === 1 ? '1 more' : `${count} more`),
 }

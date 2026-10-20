@@ -110,8 +110,8 @@ const limit = setTimeout(() => child.kill('SIGKILL'), 240_000)
 const code = await new Promise((resolve) => child.on('exit', (exitCode) => resolve(exitCode)))
 clearTimeout(limit)
 rmSync(work, { recursive: true, force: true })
-// 自动填充那一项用的 safeStorage 在 macOS 钥匙串里留下的那把钥匙（按自检的应用名起的名，不是 Litch 的）
-if (autofill && process.platform === 'darwin') {
+// 自动填充、面板（保存提示）两项用的 safeStorage 在 macOS 钥匙串里留下的那把钥匙（按自检的应用名起的名，不是 Litch 的）
+if ((autofill || ui) && process.platform === 'darwin') {
   spawnSync('security', [
     'delete-generic-password',
     '-s',

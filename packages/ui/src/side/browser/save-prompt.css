@@ -1,0 +1,29 @@
+/* 浏览器面板上的保存提示：工具栏下面、网页上面一条，按钮靠右，窄了换行 */
+.bw-save {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line-1);
+  background: var(--bar);
+  font-size: 12px;
+}
+
+.bw-save-text {
+  flex: 1 1 200px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.bw-save-more {
+  margin-left: 8px;
+  color: var(--ink-2);
+}
+
+.bw-save-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}

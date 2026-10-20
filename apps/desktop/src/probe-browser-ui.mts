@@ -10,7 +10,10 @@ import type { HostTab } from './browser/electron-tab.mjs'
 import { installBrowser } from './browser/install.mjs'
 import { checkLinks } from './probe-browser-links.mjs'
 import { startPages } from './probe-browser-pages.mjs'
+import { checkSavePrompt } from './probe-browser-save-prompt.mjs'
 
+// 保存提示那一段会用到 safeStorage：钥匙串里那把钥匙按应用名起名，用测试专用的（check-browser.mjs 跑完删掉）
+app.setName('Litch Autofill Probe')
 if (process.env.LITCH_PROFILE) app.setPath('userData', process.env.LITCH_PROFILE)
 const uiRoot = normalize(process.env.LITCH_UI_ROOT ?? '')
 const preload = process.env.LITCH_PROBE_PRELOAD ?? ''
@@ -157,6 +160,9 @@ void app.whenReady().then(async () => {
     check('show 打开面板', await until("document.querySelector('.side:not([hidden]) .bw-view')"))
     await pause(400)
     check('show 之后网页又叠上去', attached())
+
+    // 登录之后面板上的保存提示（probe-browser-save-prompt.mts）
+    await checkSavePrompt({ window, browser, tabId: tab?.id ?? '', page, until, check, shot })
 
     // 在标签上关掉
     await page(`document.querySelector('.bw-tab .ibtn').click()`)
