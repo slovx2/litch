@@ -1,6 +1,12 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
+import type {
+  ImportedCookie,
+  ImportedPassword,
+  ProtectedKindResult,
+  ProtectedReadInput,
+} from '../protected-types.mjs'
 import {
   decryptLogin,
   decryptPbe,
@@ -11,7 +17,6 @@ import {
 import { checkpoint, ReadFault, Records } from './result.mjs'
 import { blob, cookieFilter, count, hasTable, origin, rows, sameSite, text, time } from './rows.mjs'
 import type { Snapshot } from './snapshot.mjs'
-import type { ImportedCookie, ImportedPassword, ProtectedKindResult, ProtectedReadInput } from '../protected-types.mjs'
 
 function partition(attributes: string): string | undefined {
   const params = new URLSearchParams(attributes.replace(/^\^/, ''))

@@ -3,8 +3,8 @@ import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
-import type { SystemSecrets } from '../chromium-crypto.mjs'
 import type { ProtectedReadInput } from '../../protected-types.mjs'
+import type { SystemSecrets } from '../chromium-crypto.mjs'
 
 export const safeStorage = 'sample safe storage'
 export const winKey = Buffer.alloc(32, 0x27)

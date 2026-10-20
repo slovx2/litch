@@ -1,6 +1,12 @@
 import { createHash, timingSafeEqual } from 'node:crypto'
 import { join } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
+import type {
+  ImportedCookie,
+  ImportedPassword,
+  ProtectedKindResult,
+  ProtectedReadInput,
+} from '../protected-types.mjs'
 import type { ChromiumCrypto } from './chromium-crypto.mjs'
 import { checkCancelled, checkpoint, ReadFault, Records } from './result.mjs'
 import {
@@ -15,7 +21,6 @@ import {
   unixChrome,
 } from './rows.mjs'
 import type { Snapshot } from './snapshot.mjs'
-import type { ImportedCookie, ImportedPassword, ProtectedKindResult, ProtectedReadInput } from '../protected-types.mjs'
 
 export async function chromiumCookies(
   input: ProtectedReadInput,

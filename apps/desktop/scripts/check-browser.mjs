@@ -34,7 +34,7 @@ const entry = v0
       ? 'src/probe-browser-ui.mts'
       : autofill
         ? 'src/probe-browser-autofill.mts'
-      : 'src/probe-browser.mts'
+        : 'src/probe-browser.mts'
 const uiRoot = fileURLToPath(new URL('../../../packages/ui/dist', import.meta.url))
 if (ui && !existsSync(join(uiRoot, 'index.html'))) {
   console.error('没有界面的构建产物，先 npm run build --prefix packages/ui')

@@ -15,8 +15,8 @@ import {
   browserBridge,
 } from '../side/browser/bridge.ts'
 import { setLinksInBrowser, useLinksInBrowser } from '../side/browser/links.ts'
-import { SavedPasswords } from './SavedPasswords.tsx'
 import { BrowserImportRow } from './BrowserImportEntry.tsx'
+import { SavedPasswords } from './SavedPasswords.tsx'
 import { dayOf, listPhase, siteLabel, sortSites } from './tools-logic.ts'
 
 export function BrowserSection() {

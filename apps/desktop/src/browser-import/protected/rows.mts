@@ -1,6 +1,6 @@
 import type { DatabaseSync, SQLInputValue, SQLOutputValue } from 'node:sqlite'
-import { ReadFault } from './result.mjs'
 import type { ImportedCookie } from '../protected-types.mjs'
+import { ReadFault } from './result.mjs'
 
 export type Row = Record<string, SQLOutputValue>
 export function text(value: unknown): string {

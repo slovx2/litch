@@ -1,11 +1,11 @@
 import { createDecipheriv, pbkdf2Sync } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import type { ProtectedReadInput } from '../protected-types.mjs'
+import type { BrowserId } from '../types.mjs'
 import { powershell, type RunCommand, runCommand } from './process.mjs'
 import { checkCancelled, ReadFault } from './result.mjs'
 import type { Snapshot } from './snapshot.mjs'
-import type { ProtectedReadInput } from '../protected-types.mjs'
-import type { BrowserId } from '../types.mjs'
 
 const SERVICES: Partial<Record<BrowserId, string>> = {
   chrome: 'Chrome Safe Storage',

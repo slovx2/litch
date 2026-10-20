@@ -1,10 +1,15 @@
+import type {
+  ProtectedKind,
+  ProtectedReader,
+  ProtectedReadResult,
+  ProtectedStatus,
+} from '../protected-types.mjs'
+import type { BrowserId } from '../types.mjs'
 import { chromiumCookies, chromiumPasswords } from './chromium.mjs'
 import { ChromiumCrypto, type SystemSecrets, systemSecrets } from './chromium-crypto.mjs'
 import { firefoxCookies, firefoxPasswords } from './firefox.mjs'
 import { checkCancelled, failure, faultStatus, ReadFault } from './result.mjs'
 import { Snapshot, validateDirectories } from './snapshot.mjs'
-import type { ProtectedKind, ProtectedReader, ProtectedReadResult, ProtectedStatus } from '../protected-types.mjs'
-import type { BrowserId } from '../types.mjs'
 
 const BROWSERS = new Set<BrowserId>([
   'chrome',

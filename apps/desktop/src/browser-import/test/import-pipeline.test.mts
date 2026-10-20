@@ -8,7 +8,6 @@ import { test } from 'node:test'
 import type { ImportEnv } from '../browsers.mjs'
 import type { CookieJar, CookieSetDetails, ExistingCookie } from '../cookies.mjs'
 import { createImporter, type ImporterOptions } from '../pipeline.mjs'
-import { createProtectedReader } from '../protected/index.mjs'
 import type { ProtectedReader, ProtectedReadInput } from '../protected-types.mjs'
 import { createImportStateBook, importStateFile } from '../state.mjs'
 import type { ImportProgress, ImportRequest } from '../types.mjs'
@@ -263,8 +262,20 @@ test('要管理员同意：没勾就是 needs-elevation，勾了才读', async (
   assert.equal(calls[1]?.allowElevated, true)
 })
 
+/** 这个平台上什么都读不了的读取器 */
+const readsNothing: ProtectedReader = {
+  capabilities: () => ({ promptsSystemAuth: false, needsElevation: false, kinds: [] }),
+  read: async (input) =>
+    Object.fromEntries(
+      input.kinds.map((kind) => [
+        kind,
+        { status: 'unsupported', discovered: 0, items: [], failed: 0 },
+      ]),
+    ),
+}
+
 test('读取器读不了、库没接上的类别报 unsupported；来源列表据此报能导的类别', async (t) => {
-  const { importer, env } = setup(t, { reader: createProtectedReader() })
+  const { importer, env } = setup(t, { reader: readsNothing })
   const outcome = await importer.start(chrome())
   assert.equal(outcome.kinds.cookies?.status, 'unsupported')
   assert.equal(outcome.kinds.passwords?.status, 'unsupported')

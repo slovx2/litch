@@ -4,10 +4,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { test } from 'node:test'
+import type { BrowserId } from '../../types.mjs'
 import { createProtectedReader } from '../index.mjs'
 import { readerForPlatform } from '../reader.mjs'
 import { ReadFault } from '../result.mjs'
-import type { BrowserId } from '../../types.mjs'
 import {
   addCookie,
   chromeCookies,
