@@ -13,6 +13,9 @@
 // 设置里提醒开着，设备进程替它再开一个 kind=remind 的回合。提醒回合、唤醒回合、定时任务的回合都不是用户发起的，
 // 不会再引出提醒，所以一条用户消息之后最多一次。提醒和唤醒排在同一条检查队列里（check），先提醒、后唤醒：
 // 会话有回合在跑时谁都不发，那个回合结束时再查一遍；提醒发出之前用户又说了话、或者别的回合里调了 wrap_up，提醒作废。
+// offer 卡（litch_sessions.start 的 initiation offer）：模型那次调用一直等着（offers），用户在卡上选了（answerOffer）、
+// 又发了话（turn/start、turn/steer）、打断了回合、回合结束了，都让它了结；选了新会话的（chosen）等模型 accept 补简报，
+// 回合结束还没补的当作在这里做。设备进程重启时上一次还在等的一律当作在这里做。
 import { randomUUID } from 'node:crypto'
 import { CLIENT_TOOL_NAMESPACE } from '../../protocol/src/client-tools.mjs'
 import { EXTENSION } from '../../protocol/src/device.mjs'
@@ -81,6 +84,19 @@ const ENDED_LIMIT = 10_000
 /** 设备进程到某个 harness 的连接断了之后，隔多久重开（毫秒），一次比一次久 */
 const REWATCH_MS = [1000, 2000, 5000, 10_000, 30_000]
 
+/** offer 卡怎么了结的：用户选的（answered）、用户没选又发了话（spoke）、回合被打断（interrupted）、回合结束了（ended） */
+export interface OfferOutcome {
+  choice: 'session' | 'here'
+  reason: 'answered' | 'spoke' | 'interrupted' | 'ended'
+}
+
+/** 一张在等用户选的 offer 卡：那次 start 调用在等它 */
+interface OfferWait {
+  threadId: string
+  turnId: string
+  resolve: (outcome: OfferOutcome) => void
+}
+
 export class SessionTree {
   readonly host: SessionTreeHost
   private readonly links = new Map<string, Promise<EngineLink>>()
@@ -110,12 +126,17 @@ export class SessionTree {
   /** 每个父会话的唤醒检查排成一条，免得一次结束触发两个唤醒 */
   private readonly checks = new Map<string, Promise<void>>()
   private readonly timers = new Set<NodeJS.Timeout>()
+  /** 在等用户选的 offer 卡：提案 → 等它的那次调用 */
+  private readonly offers = new Map<string, OfferWait>()
   private expiry: NodeJS.Timeout | null = null
   private recovered = false
   private closed = false
 
   constructor(host: SessionTreeHost) {
     this.host = host
+    // 上一次设备进程里还在等的 offer 卡：等它的那次调用跟着进程没了，模型那边已经拿到失败，当作在这里做
+    const settled = host.store.settleOffers()
+    if (settled > 0) host.log(`上一次还在等的 ${settled} 张 offer 卡当作在这里做了结`)
     this.scheduleExpiry()
   }
 
@@ -295,6 +316,7 @@ export class SessionTree {
     this.waiting.delete(threadId)
     const userDriven = this.clientTurns.delete(`${harness}\u0000${turn.id}`)
     const wrapped = this.wrapped.delete(key)
+    this.offersEnded(threadId, turn.id)
     this.noteRemind(threadId, turn, userDriven, wrapped)
     for (const listener of [...this.listeners]) listener(threadId)
     const lineage = this.store.parentOf(threadId)
@@ -492,6 +514,7 @@ export class SessionTree {
    * 包成 kind=notes 的一段放在用户消息前面一起交给引擎，返回新的输入。没有要附的返回 null。
    */
   beforeUserTurn(threadId: string, input: unknown): unknown[] | null {
+    this.userSpoke(threadId)
     if (this.store.wakes(threadId) > 0) this.store.setWakes(threadId, 0)
     // 用户又说话了：上一回合没发出去的提醒不用了，这一回合结束时再看
     this.reminders.delete(threadId)
@@ -597,25 +620,112 @@ export class SessionTree {
     return this.store.proposal(proposalId)
   }
 
-  /** 拿一个还 pending 的提案。没有、已经开始、不要了、撤回了、过期了都抛错 */
-  pendingProposal(proposalId: string): SessionProposal {
+  /**
+   * 拿一个状态是 status 的提案（缺省 pending；模型给 offer 卡补简报开始时是 chosen）。
+   * 没有、状态不对（已经开始、不要了、撤回了、过期了……）都抛错
+   */
+  pendingProposal(proposalId: string, status: Status = 'pending'): SessionProposal {
     const proposal = this.proposal(proposalId)
     if (!proposal) throw new DeviceError('unsupported', `没有提案 ${proposalId}`)
-    if (proposal.status !== 'pending')
-      throw new DeviceError('unsupported', `提案 ${proposalId} 已经${STATUS_WORD[proposal.status]}`)
+    if (proposal.status !== status)
+      throw new DeviceError('unsupported', `提案 ${proposalId} ${STATUS_WORD[proposal.status]}`)
     return proposal
   }
 
-  /** 了结一个 pending 的提案，通知声明过的连接。已经不是 pending 了返回 null */
+  /** 把提案从 from（缺省 pending）里的状态改成 status，通知声明过的连接。已经不在 from 里了返回 null */
   settleProposal(
     proposalId: string,
-    status: 'started' | 'dismissed' | 'withdrawn',
+    status: Status,
     threadId: string | null,
+    from: readonly Status[] = ['pending'],
   ): SessionProposal | null {
-    if (!this.store.settleProposal(proposalId, status, threadId)) return null
+    if (!this.store.moveProposal(proposalId, from, status, threadId)) return null
     const settled = this.store.proposal(proposalId)
     if (settled) this.proposalsChanged(settled.threadId, [settled])
     return settled
+  }
+
+  // ---------- offer 卡 ----------
+
+  /**
+   * 等一张刚落下的 offer 卡（offered）了结。signal 作废（回合结束、设备进程要关）时当作在这里做；
+   * 设备进程在关的时候不再改库，重启时统一了结（构造函数）
+   */
+  waitOffer(proposal: SessionProposal, signal: AbortSignal): Promise<OfferOutcome> {
+    return new Promise((resolve) => {
+      const aborted = () => this.offerHere(proposal.id, 'ended')
+      this.offers.set(proposal.id, {
+        threadId: proposal.threadId,
+        turnId: proposal.turnId ?? '',
+        resolve: (outcome) => {
+          signal.removeEventListener('abort', aborted)
+          resolve(outcome)
+        },
+      })
+      if (signal.aborted) aborted()
+      else signal.addEventListener('abort', aborted, { once: true })
+    })
+  }
+
+  /**
+   * 用户在 offer 卡上选了（litch/sessionProposal/answer）：session 改成 chosen（等模型补简报），here 了结成 here，
+   * 在等的那次调用拿到选择。不是 offer 卡、已经选过（或者别的原因了结了）的抛错
+   */
+  answerOffer(proposalId: string, choice: 'session' | 'here'): void {
+    const proposal = this.proposal(proposalId)
+    if (!proposal) throw new DeviceError('unsupported', `没有提案 ${proposalId}`)
+    if (!proposal.offer)
+      throw new DeviceError('unsupported', `提案 ${proposalId} 不是“新会话 / 在这里做”的卡`)
+    if (proposal.status !== 'offered')
+      throw new DeviceError('unsupported', `提案 ${proposalId} ${STATUS_WORD[proposal.status]}`)
+    const wait = this.offers.get(proposalId)
+    if (!wait) {
+      // 等它的那次调用已经不在了（按说不会：落卡和开始等是同一步）。当作在这里做了结，免得卡一直挂着
+      this.settleProposal(proposalId, 'here', null, ['offered'])
+      throw new DeviceError('unsupported', `提案 ${proposalId} 那次调用已经结束了`)
+    }
+    const status = choice === 'session' ? 'chosen' : 'here'
+    if (!this.settleProposal(proposalId, status, null, ['offered']))
+      throw new DeviceError('unsupported', `提案 ${proposalId} 已经了结了`)
+    this.offers.delete(proposalId)
+    wait.resolve({ choice, reason: 'answered' })
+  }
+
+  /** 一张在等的 offer 卡不等了：当作在这里做（还没选的才改库），在等的那次调用拿到 here */
+  private offerHere(proposalId: string, reason: OfferOutcome['reason']): void {
+    const wait = this.offers.get(proposalId)
+    if (!wait) return
+    this.offers.delete(proposalId)
+    if (!this.closed) this.settleProposal(proposalId, 'here', null, ['offered'])
+    wait.resolve({ choice: 'here', reason })
+  }
+
+  /** 用户在这个会话里又发了话（turn/start、turn/steer）：在等的 offer 卡当作在这里做 */
+  userSpoke(threadId: string): void {
+    for (const [id, wait] of [...this.offers])
+      if (wait.threadId === threadId) this.offerHere(id, 'spoke')
+  }
+
+  /** 用户打断了这个会话的回合（turn/interrupt）：在等的 offer 卡当作在这里做 */
+  interrupted(threadId: string): void {
+    for (const [id, wait] of [...this.offers])
+      if (wait.threadId === threadId) this.offerHere(id, 'interrupted')
+  }
+
+  /**
+   * 一个回合结束了：这一回合里还在等用户选的 offer 卡当作在这里做；用户选了新会话、模型到回合结束都没补简报开起来的
+   * （chosen，正在开始的除外）也当作在这里做
+   */
+  private offersEnded(threadId: string, turnId: string): void {
+    for (const [id, wait] of [...this.offers])
+      if (wait.threadId === threadId && wait.turnId === turnId) this.offerHere(id, 'ended')
+    for (const proposal of this.store.pending(threadId))
+      if (
+        proposal.status === 'chosen' &&
+        proposal.turnId === turnId &&
+        !this.accepting.has(proposal.id)
+      )
+        this.settleProposal(proposal.id, 'here', null, ['chosen'])
   }
 
   /** 提案变了：带上这个会话现在全部 pending 的，和刚变的那几条 */
@@ -729,15 +839,18 @@ export class SessionTree {
   }
 }
 
-const STATUS_WORD: Record<SessionProposal['status'], string> = {
-  pending: '在等用户',
-  offered: '在等用户选新会话还是在这里做',
-  chosen: '用户选了新会话、等模型补简报',
-  here: '用户选了在这里做',
-  started: '开始了',
-  dismissed: '被用户拒绝了',
-  withdrawn: '撤回了',
-  expired: '过期了',
+type Status = SessionProposal['status']
+
+/** 提案状态不对时的说明（接在“提案 xxx ”后面） */
+const STATUS_WORD: Record<Status, string> = {
+  pending: '还在等用户点',
+  offered: '还在等用户选新会话还是在这里做',
+  chosen: '用户已经选了新会话、在等模型补简报',
+  here: '已经当作在这里做了结了',
+  started: '已经开始了',
+  dismissed: '已经被用户拒绝了',
+  withdrawn: '已经撤回了',
+  expired: '已经过期了',
 }
 
 /** 会话对象上的状态说它有回合在跑（等着用户答请求也算在跑） */

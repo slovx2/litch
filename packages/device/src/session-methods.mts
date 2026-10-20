@@ -1,6 +1,7 @@
-// 会话树里客户端发起的五个方法（litch/session/*、litch/sessionProposal/*，参数和应答见
+// 会话树里客户端发起的方法（litch/session/*、litch/sessionProposal/*，参数和应答见
 // packages/protocol/src/session-tree.mts）。只有聚合面有，由设备进程自己答，不转给引擎；
 // 设置里“会话编排”关着时一律回“不支持”（设备信息里这时也不列 sessionTree）。
+// 答 offer 卡（litch/sessionProposal/answer）只收握手时声明了 sessionTree 的连接：没声明的看不到 offer 卡。
 
 import { SESSION_TREE_METHOD, type SessionLineageKind } from '../../protocol/src/session-tree.mjs'
 import { ProtocolError, requiredString } from '../../shared/src/protocol-contract.mjs'
@@ -63,6 +64,7 @@ export async function sessionTreeCall(
   enabled: boolean,
   method: string,
   params: unknown,
+  declared: boolean,
 ): Promise<unknown> {
   if (!enabled)
     throw new DeviceError('unsupported', `这台设备的设置里关掉了会话编排，${method} 用不了`, {
@@ -117,6 +119,18 @@ export async function sessionTreeCall(
       if (tree.accepting.has(id)) throw new DeviceError('unsupported', `提案 ${id} 正在开始`)
       tree.pendingProposal(id)
       tree.settleProposal(id, 'dismissed', null)
+      return {}
+    }
+    case SESSION_TREE_METHOD.proposalAnswer: {
+      if (!declared)
+        throw new DeviceError('unsupported', `${method} 只给握手时声明了 sessionTree 的连接用`, {
+          method,
+        })
+      const id = requiredString(fields.proposalId, 'proposalId')
+      const choice = fields.choice
+      if (choice !== 'session' && choice !== 'here')
+        throw new ProtocolError(-32602, 'choice 只能是 session 或 here')
+      tree.answerOffer(id, choice)
       return {}
     }
     default:

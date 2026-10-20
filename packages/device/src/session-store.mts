@@ -96,6 +96,8 @@ const MIGRATIONS: readonly string[] = [
      namespaces TEXT NOT NULL,
      cwd TEXT
    ) WITHOUT ROWID;`,
+  // offer 卡（litch_sessions.start 的 initiation offer）：只带标题出“新会话 / 在这里做”的卡，状态从 offered 起
+  `ALTER TABLE proposals ADD COLUMN offer INTEGER NOT NULL DEFAULT 0;`,
 ]
 
 export const SESSION_SCHEMA_VERSION = MIGRATIONS.length
@@ -194,6 +196,7 @@ function proposalOf(row: Row): SessionProposal {
     turnId: maybe(row.turn_id),
     callId: maybe(row.call_id),
     ...(typeof row.wider_sandbox === 'string' ? { widerSandbox: row.wider_sandbox } : {}),
+    ...(row.offer === 1 ? { offer: true } : {}),
   }
 }
 
@@ -216,20 +219,24 @@ export class SessionStore {
       detach: prepare('UPDATE lineage SET detached_at=? WHERE thread_id=?'),
       reported: prepare('UPDATE lineage SET reported_turn=? WHERE thread_id=?'),
       addProposal: prepare(
-        `INSERT INTO proposals(id, thread_id, title, prompt, harness, model, cwd, kind, wake_parent, status, created_at, expires_at, wider_sandbox, turn_id, call_id)
-         VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)`,
+        `INSERT INTO proposals(id, thread_id, title, prompt, harness, model, cwd, kind, wake_parent, status, created_at, expires_at, wider_sandbox, turn_id, call_id, offer)
+         VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ),
       proposal: prepare('SELECT * FROM proposals WHERE id=?'),
+      // 还在等的：等用户点的卡、等用户选的 offer 卡、用户选了新会话等模型补简报的
       pending: prepare(
-        "SELECT * FROM proposals WHERE thread_id=? AND status='pending' ORDER BY created_at, rowid",
+        "SELECT * FROM proposals WHERE thread_id=? AND status IN ('pending', 'offered', 'chosen') ORDER BY created_at, rowid",
       ),
       recent: prepare(
         'SELECT * FROM proposals WHERE thread_id=? ORDER BY created_at DESC, rowid DESC LIMIT ?',
       ),
       inTurn: prepare('SELECT COUNT(*) AS n FROM proposals WHERE thread_id=? AND turn_id=?'),
       expiring: prepare("SELECT * FROM proposals WHERE status='pending' AND expires_at<=?"),
-      settleProposal: prepare(
-        "UPDATE proposals SET status=?, started_thread_id=?, settled_at=? WHERE id=? AND status='pending'",
+      moveProposal: prepare(
+        'UPDATE proposals SET status=?, started_thread_id=?, settled_at=? WHERE id=? AND status IN (SELECT value FROM json_each(?))',
+      ),
+      settleOffers: prepare(
+        "UPDATE proposals SET status='here', settled_at=? WHERE status IN ('offered', 'chosen')",
       ),
       nextExpiry: prepare("SELECT MIN(expires_at) AS at FROM proposals WHERE status='pending'"),
       addNote: prepare(
@@ -356,9 +363,11 @@ export class SessionStore {
 
   // ---------- 提案 ----------
 
+  /** 落一张提案：普通的从 pending 起，offer 卡从 offered 起 */
   addProposal(
     proposal: Omit<SessionProposal, 'status' | 'startedThreadId' | 'settledAt'>,
   ): SessionProposal {
+    const status: SessionProposalStatus = proposal.offer ? 'offered' : 'pending'
     this.run(
       'addProposal',
       proposal.id,
@@ -370,15 +379,17 @@ export class SessionStore {
       proposal.cwd,
       proposal.kind,
       proposal.wakeParent ? 1 : 0,
+      status,
       proposal.createdAt,
       proposal.expiresAt,
       proposal.widerSandbox ?? null,
       proposal.turnId ?? null,
       proposal.callId ?? null,
+      proposal.offer ? 1 : 0,
     )
     return {
       ...proposal,
-      status: 'pending',
+      status,
       startedThreadId: null,
       settledAt: null,
       turnId: proposal.turnId ?? null,
@@ -391,7 +402,7 @@ export class SessionStore {
     return row ? proposalOf(row) : null
   }
 
-  /** 一个会话上 pending 的提案，先提的在前 */
+  /** 一个会话上还在等的提案（pending、offered、chosen），先提的在前 */
   pending(threadId: string): SessionProposal[] {
     return (this.statements.pending?.all(threadId) ?? []).map(proposalOf)
   }
@@ -406,14 +417,40 @@ export class SessionStore {
     return Number(this.statements.inTurn?.get(threadId, turnId)?.n ?? 0)
   }
 
-  /** 把一个 pending 的提案改成别的状态，记下了结的时间。已经不是 pending 了返回 false */
+  /**
+   * 把一个提案从 from 里的某个状态改成 status。改成 chosen（用户选了新会话、还没了结）时不记了结时间，
+   * 别的记下。已经不在 from 里了返回 false
+   */
+  moveProposal(
+    id: string,
+    from: readonly SessionProposalStatus[],
+    status: SessionProposalStatus,
+    startedThreadId: string | null,
+  ): boolean {
+    const settledAt = status === 'chosen' ? null : now()
+    const result = this.statements.moveProposal?.run(
+      status,
+      startedThreadId,
+      settledAt,
+      id,
+      JSON.stringify(from),
+    )
+    return Number(result?.changes ?? 0) > 0
+  }
+
+  /** 把一个 pending 的提案了结（开始、不要、撤回、过期）。已经不是 pending 了返回 false */
   settleProposal(
     id: string,
     status: SessionProposalStatus,
     startedThreadId: string | null,
   ): boolean {
-    const result = this.statements.settleProposal?.run(status, startedThreadId, now(), id)
-    return Number(result?.changes ?? 0) > 0
+    return this.moveProposal(id, ['pending'], status, startedThreadId)
+  }
+
+  /** 设备进程重启：上一次还在等的 offer 卡（offered、chosen）那次调用已经没了，一律当作在这里做了结 */
+  settleOffers(): number {
+    const result = this.statements.settleOffers?.run(now())
+    return Number(result?.changes ?? 0)
   }
 
   /** 到点了还 pending 的提案 */
