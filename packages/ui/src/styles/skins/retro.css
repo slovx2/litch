@@ -91,6 +91,10 @@
   --wait: var(--inv-fg);
   --err: var(--inv-fg);
 }
+/* 改名时那一行也是反白的：输入框不另铺底色，字和边框跟着反过来的墨色走（否则深色字压在深色底上看不见） */
+[data-skin="retro"] .ss-row.sel .ss-name {
+  background: transparent;
+}
 
 /* 状态记号：闪烁的光标块、?、*、! */
 [data-skin="retro"] .st.run::before {
