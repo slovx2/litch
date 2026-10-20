@@ -33,7 +33,8 @@ export type SandboxLevel = 'read-only' | 'workspace-write' | 'danger-full-access
 
 /**
  * 提案的状态：pending 等用户点；started 用户开始了；dismissed 用户不要了；withdrawn 模型自己撤回了；
- * expired 到期没人点
+ * expired 到期没人点。offer 卡（“新会话 / 在这里做”）另有三种：offered 等用户选；chosen 用户选了新会话、
+ * 等模型补简报（补上了就是 started）；here 用户选了在这里做（或者没选就又发了话、回合被打断、回合结束）
  */
 export type ProposalStatus =
   | 'pending'
@@ -61,6 +62,8 @@ export interface SessionProposalView {
   cwd: string | null
   kind: LineageKind
   wakeParent: boolean
+  /** offer 卡（litch_sessions.start 的 initiation offer）：只有标题，prompt 是空的，直到模型补上简报 */
+  offer: boolean
   /** 投影那一刻的状态。pending 的到了 expiresAt 就算过期，界面用 proposalStatus 现算 */
   status: ProposalStatus
   /** 毫秒 */
@@ -81,6 +84,17 @@ export interface SessionProposalView {
 /** 这一刻提案算什么状态：等着的过了期就是过期了（设备进程到点也会发通知，界面不等它） */
 export const proposalStatus = (proposal: SessionProposalView, now: number): ProposalStatus =>
   proposal.status === 'pending' && proposal.expiresAt <= now ? 'expired' : proposal.status
+
+/** 等着用户动手的：普通提案等开始，offer 卡等用户选。角标数的是这些 */
+export const proposalAsksUser = (status: ProposalStatus): boolean =>
+  status === 'pending' || status === 'offered'
+
+/** 还没了结的：等用户的，加上用户选了新会话、等模型补简报的。侧面板排在上面 */
+export const proposalOpen = (status: ProposalStatus): boolean =>
+  proposalAsksUser(status) || status === 'chosen'
+
+/** offer 卡上用户的选择：session 新会话，here 在这里做 */
+export type OfferChoice = 'session' | 'here'
 
 /** 提案卡片、侧面板那一行上写的 harness、模型、目录、方式 */
 export interface ProposalShape {
@@ -205,15 +219,25 @@ export interface AgentRefView {
   message: string | null
 }
 
-/** litch_sessions.start 的结果：直接起了的子会话，或者降成了提案 */
+/**
+ * litch_sessions.start 的结果：直接起了的子会话，或者降成了提案，或者 offer 卡；
+ * 还有 litch_sessions.hand_off：把做到一半的任务交给的分叉会话
+ */
 export interface SpawnedView {
+  /**
+   * 哪种调用：start 普通的派出或提案；offer 是 start 的 initiation offer（“新会话 / 在这里做”的卡，
+   * 调用一直等到用户选，卡片按 callId 对上提案）；handOff 是 hand_off（立刻起的分叉会话，不出卡）
+   */
+  via: 'start' | 'offer' | 'handOff'
   /** 起出来的子会话。降成了提案、还没有结果的是 null */
   threadId: string | null
-  /** 降成了提案时的提案号 */
+  /** 降成了提案、出了 offer 卡时的提案号。offer 的调用要等用户选了才有结果，在那之前是 null */
   proposalId: string | null
+  /** offer 卡上用户选了什么（结果里的 choice）。还没选、别的调用是 null */
+  choice: OfferChoice | null
   /** 调用时给的标题 */
   title: string
-  /** 调用时给的第一段话（提案卡片在拿不到提案时照它画） */
+  /** 调用时给的第一段话（提案卡片在拿不到提案时照它画）；hand_off 是剩下的计划；offer 是空的 */
   prompt: string
   /** 调用时给的 harness，没给是 null（跟父会话一样） */
   harness: HarnessId | null

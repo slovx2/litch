@@ -88,6 +88,7 @@ import type {
 import type {
   AgentThreadView,
   LineageKind,
+  OfferChoice,
   ProposalOverrides,
   SandboxLevel,
   SessionProposalView,
@@ -834,6 +835,14 @@ export interface Commands {
   /** 用户点了提案上的“不要” */
   'session.proposal.dismiss': {
     params: { deviceId: string; sessionId: string; proposalId: string }
+    result: Record<string, never>
+  }
+  /**
+   * 用户在 offer 卡上选了“新会话”（session）或“在这里做”（here）。选了新会话不在这里起子会话：
+   * 等着的那次 start 调用拿到答复，模型接着用 accept 补上简报，设备进程才起
+   */
+  'session.proposal.answer': {
+    params: { deviceId: string; sessionId: string; proposalId: string; choice: OfferChoice }
     result: Record<string, never>
   }
   /**

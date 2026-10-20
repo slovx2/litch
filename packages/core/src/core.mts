@@ -638,6 +638,16 @@ export function createCore(options: CoreOptions): Core {
           }
           return {}
         }
+        case 'session.proposal.answer': {
+          const { deviceId, sessionId, proposalId, choice } =
+            params as Commands['session.proposal.answer']['params']
+          try {
+            await deviceOf(deviceId).answerProposal(sessionId, proposalId, choice)
+          } catch (error) {
+            throw toChannelFailure(error)
+          }
+          return {}
+        }
         case 'session.agents': {
           const { deviceId, sessionId } = params as Commands['session.agents']['params']
           try {

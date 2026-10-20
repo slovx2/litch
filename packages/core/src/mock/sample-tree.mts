@@ -66,6 +66,19 @@ export interface TreeText {
   agentsReply: string
   /** 子代理调用的提示 */
   agentsPrompt: string
+  /**
+   * 说“新任务”时模型出的 offer 卡（只带标题）：选了新会话，模型补的简报和子会话的回话、父会话的回话；
+   * 选了在这里做，模型在这里的回答
+   */
+  offer: TreeChild
+  offerStartedReply: string
+  offerHereReply: string
+  /**
+   * 说“交接”时：父会话手上做到一半的任务（标题、剩下的计划、分叉会话的回话），和父会话交出去之后
+   * 回答新消息的那段话
+   */
+  handOff: TreeChild
+  handOffReply: string
 }
 
 export const TREE_TEXT: Record<SampleLang, TreeText> = {
@@ -180,6 +193,22 @@ export const TREE_TEXT: Record<SampleLang, TreeText> = {
     agentsReply:
       '子代理都停下了：Hubble 看完了目录结构；Gauss 跑得太久，我停掉了它；Noether 没能启动，原因在它的页上。',
     agentsPrompt: '分头看看仓库的结构和重复代码',
+    offer: {
+      title: '给设置页加导出按钮',
+      prompt:
+        '在设置页的“诊断”一节加一个“导出”按钮，把当前设置导出成 JSON 文件。相关文件：packages/ui/src/settings/ 下的诊断那一节。做完的标准：点按钮能存下文件，内容和设置页显示的一致，中英文文案都有。',
+      reply: '导出按钮加好了：在诊断一节最下面，存下的 JSON 和设置页显示的一致，中英文文案都补了。',
+    },
+    offerStartedReply: '已经单开了一个会话去做设置页的导出按钮，做完它会回报到这里。',
+    offerHereReply: '好，就在这里做。先看一下设置页诊断那一节的结构，再加导出按钮。',
+    handOff: {
+      title: '整理会话列表的排序',
+      prompt:
+        '剩下的：1. 把 sidebar/sort.ts 里按时间排序的那一段换成稳定排序；2. 补上置顶的会话排在最前的单测；3. 跑 client:test:ui。做完的标准：排序单测全过，置顶不受更新时间影响。',
+      reply: '会话列表的排序整理完了：换成了稳定排序，置顶的单测补上了，client:test:ui 全过。',
+    },
+    handOffReply:
+      '手上整理排序的活交给了一个分叉会话接着做。你问的那个问题：日志在设置页的“诊断”里能导出。',
   },
   en: {
     briefHead:
@@ -303,5 +332,25 @@ export const TREE_TEXT: Record<SampleLang, TreeText> = {
     agentsReply:
       'The sub-agents have stopped: Hubble mapped the layout; Gauss ran too long, so I stopped it; Noether failed to start, the reason is on its page.',
     agentsPrompt: 'Split up: look at the repository layout and at duplicated code',
+    offer: {
+      title: 'Add an export button to settings',
+      prompt:
+        'Add an "Export" button to the Diagnostics section of the settings page that saves the current settings as a JSON file. Files: the Diagnostics section under packages/ui/src/settings/. Done when the button saves a file matching what the settings page shows, with both Chinese and English labels.',
+      reply:
+        'The export button is in: at the bottom of Diagnostics, the saved JSON matches the settings page, and both languages have labels.',
+    },
+    offerStartedReply:
+      'I started a separate session for the settings export button; it will report back here when done.',
+    offerHereReply:
+      'OK, doing it here. First a look at the Diagnostics section of the settings page, then the export button.',
+    handOff: {
+      title: 'Tidy up session list sorting',
+      prompt:
+        'Left to do: 1. replace the time sort in sidebar/sort.ts with a stable sort; 2. add a unit test that pinned sessions come first; 3. run client:test:ui. Done when the sorting tests pass and pinning ignores update time.',
+      reply:
+        'Session list sorting is done: stable sort, the pinned-first test added, client:test:ui passes.',
+    },
+    handOffReply:
+      'I handed the sorting work to a forked session to finish. As for your question: logs can be exported from Diagnostics in settings.',
   },
 }

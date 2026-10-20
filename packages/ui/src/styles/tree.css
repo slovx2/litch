@@ -138,12 +138,16 @@ button.sev-title {
 .prop-card {
   border-color: color-mix(in srgb, var(--accent) 45%, var(--line-2));
 }
-/* 了结了的退到后面：边框照常，字淡一些 */
-.prop-card:not([data-state="pending"]):not([data-state=""]) {
+/* 了结了的退到后面：边框照常，字淡一些。等用户的（提案等开始、offer 卡等选）、等模型补简报的不算了结 */
+.prop-card:not([data-state="pending"]):not([data-state="offered"]):not([data-state="chosen"]):not(
+  [data-state=""]
+) {
   border-color: var(--line-2);
 }
-.prop-card:not([data-state="pending"]) .prop-title,
-.prop-card:not([data-state="pending"]) .prop-brief {
+.prop-card:not([data-state="pending"]):not([data-state="offered"]):not([data-state="chosen"])
+  .prop-title,
+.prop-card:not([data-state="pending"]):not([data-state="offered"]):not([data-state="chosen"])
+  .prop-brief {
   color: var(--ink-2);
 }
 .prop-body {
@@ -159,8 +163,20 @@ button.sev-title {
   color: var(--ink-2);
 }
 [data-state="pending"] > .prop-body .prop-state,
-.prop-row[data-state="pending"] .prop-state {
+[data-state="offered"] > .prop-body .prop-state,
+.prop-row[data-state="pending"] .prop-state,
+.prop-row[data-state="offered"] .prop-state {
   color: var(--accent);
+}
+/* offer 卡上那一问，和选了之后的一句说明 */
+.prop-ask {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-2);
+}
+.prop-ask.dim {
+  color: var(--ink-3);
 }
 .prop-title {
   font-size: 13px;
@@ -361,7 +377,9 @@ button.sev-title {
   font-size: 13px;
   font-weight: 600;
 }
-.prop-row:not([data-state="pending"]) .prop-row-line b {
+.prop-row:not([data-state="pending"]):not([data-state="offered"]):not([data-state="chosen"])
+  .prop-row-line
+  b {
   font-weight: 500;
   color: var(--ink-2);
 }
@@ -790,7 +808,8 @@ button.agent-row:hover {
   border-top-style: dashed;
   border-top-color: var(--line-2);
 }
-[data-skin="retro"] .prop-card[data-state="pending"] {
+[data-skin="retro"] .prop-card[data-state="pending"],
+[data-skin="retro"] .prop-card[data-state="offered"] {
   border-color: var(--accent);
   box-shadow: 3px 3px 0 var(--accent);
 }

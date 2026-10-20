@@ -134,7 +134,8 @@ function agentRefs(
 const word = (value: unknown): string | null => (typeof value === 'string' && value ? value : null)
 
 /**
- * litch_sessions.start 的条目：参数里的标题、harness，结果里起出来的子会话号或者提案号。
+ * litch_sessions.start 的条目：参数里的标题、harness，结果里起出来的子会话号、提案号，offer 卡上用户的选择；
+ * litch_sessions.hand_off 的条目：标题、剩下的计划，结果里起出来的分叉会话。
  * 别的调用（list、read……）是 null，照普通的工具调用画
  */
 function spawnedOf(
@@ -143,24 +144,32 @@ function spawnedOf(
   args: unknown,
   output: readonly { type: string; text?: string }[] | null | undefined,
 ): SpawnedView | null {
-  if (namespace !== CLIENT_TOOL_NAMESPACE.sessions || tool !== SESSION_TOOL.start) return null
+  if (namespace !== CLIENT_TOOL_NAMESPACE.sessions) return null
+  if (tool !== SESSION_TOOL.start && tool !== SESSION_TOOL.handOff) return null
   const given = (typeof args === 'object' && args !== null ? args : {}) as Record<string, unknown>
-  let threadId: string | null = null
-  let proposalId: string | null = null
-  for (const part of output ?? []) {
-    if (part.type !== 'inputText' || typeof part.text !== 'string') continue
-    try {
-      const result = JSON.parse(part.text) as Record<string, unknown>
-      if (typeof result.thread_id === 'string') threadId = result.thread_id
-      if (typeof result.proposal_id === 'string') proposalId = result.proposal_id
-    } catch {
-      // 失败的结果是一行说明，不是 JSON
+  const result = resultJson(output)
+  const title = typeof given.title === 'string' ? given.title : ''
+  if (tool === SESSION_TOOL.handOff) {
+    return {
+      via: 'handOff',
+      threadId: word(result?.thread_id),
+      proposalId: null,
+      choice: null,
+      title,
+      prompt: typeof given.remaining_plan === 'string' ? given.remaining_plan : '',
+      harness: null,
+      model: null,
+      cwd: null,
+      kind: 'fork',
     }
   }
+  const choice = result?.choice
   return {
-    threadId,
-    proposalId,
-    title: typeof given.title === 'string' ? given.title : '',
+    via: given.initiation === 'offer' ? 'offer' : 'start',
+    threadId: word(result?.thread_id),
+    proposalId: word(result?.proposal_id),
+    choice: choice === 'session' || choice === 'here' ? choice : null,
+    title,
     prompt: typeof given.prompt === 'string' ? given.prompt : '',
     harness: word(given.harness),
     model: word(given.model),
