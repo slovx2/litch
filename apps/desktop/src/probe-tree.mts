@@ -293,12 +293,12 @@ export async function treeProbe(): Promise<TreeSeen> {
       2000,
     ))
   seen.panel = order.join(',')
-  // 撤回的那个回合：撤回调用一个活动块、回答，最后那次空的收尾不画（不会在回答后面再多一块）
+  // 撤回的那个回合：撤回调用一段过程、回答，最后那次空的收尾不画（不会在回答后面再多一块）
   const lastTurn = $$('.main section.turn').at(-1)
   const wrapQuiet =
-    lastTurn?.querySelectorAll('.act').length === 1 &&
+    lastTurn?.querySelectorAll('.proc').length === 1 &&
     lastTurn.querySelector('.wrap-cards') === null
-  seen.quiet = `${lastTurn?.querySelectorAll('.act').length ?? '没有'} 个活动块`
+  seen.quiet = `${lastTurn?.querySelectorAll('.proc').length ?? '没有'} 段过程`
 
   // —— 收尾带的建议 ——
   const wrapBox = () => $$('.main .wrap-cards').at(-1)

@@ -188,12 +188,25 @@ export {
   type Text,
 } from './phrase.mjs'
 export {
-  activitySettled,
+  answerOf,
   type Block,
   type BlockInput,
   bucketItems,
   cardOf,
+  cardPlace,
+  type ProcessPart,
+  type ProcessTally,
+  processFolded,
+  processItemIds,
+  processSettled,
+  processTally,
   quietOf,
+  type StepKind,
+  type StepsTally,
+  stepFailed,
+  stepKindOf,
+  stepsTally,
+  toolKind,
 } from './projection/blocks.mjs'
 export {
   type FileRef,

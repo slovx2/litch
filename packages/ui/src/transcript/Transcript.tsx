@@ -1,11 +1,13 @@
 import {
-  activitySettled,
   type Block,
   bucketItems,
-  cardOf,
+  cardPlace,
   type DeviceView,
   type ItemView,
   keys,
+  processFolded,
+  processItemIds,
+  processSettled,
   quietOf,
   type SessionMeta,
   type SessionSummary,
@@ -33,10 +35,12 @@ import { TaskNote } from '../tasks/TaskNote.tsx'
 import { LineageBar } from '../tree/LineageBar.tsx'
 import { TreeCard } from '../tree/TreeCards.tsx'
 import { ActionsProvider } from './actions.tsx'
-import { Activity, Notes } from './activity.tsx'
+import { Notes } from './activity.tsx'
 import { FileLinksProvider, useSessionFileLinks } from './FileLinks.tsx'
 import { AgentAnswer, PlanCard, UserMessage } from './messages.tsx'
+import { ProcessHead, ProcessParts, useAgentsRunning } from './process.tsx'
 import { PinProvider, useTranscriptScroll } from './scroll.ts'
+import { TurnTouch, touchTurn, useToggle, useTurnTouched } from './state.ts'
 import { TodoCard } from './Todo.tsx'
 
 interface SessionRef {
@@ -46,89 +50,77 @@ interface SessionRef {
 
 interface TurnBlocks {
   blocks: Block[]
-  kinds: Map<string, ItemView['kind']>
+  /** 最终回答那一条 */
+  answerId: string | undefined
+  /** 整段过程里所有条目的标识 */
+  processIds: string[]
+  /** 过程里启动子代理的那几条 */
+  agentIds: string[]
 }
 
-/** 把一个回合的条目分成块。条目的种类和阶段定了就不变，所以只在标识的列表变化时重算 */
-function useBlocks({ deviceId, sessionId }: SessionRef, itemIds: string[]): TurnBlocks {
+/**
+ * 把一个回合的条目分成块。条目的种类、卡片与否只看开始时就有的东西，所以只在标识的列表变化时重算；
+ * 助手消息的阶段要到写完才定（声明了 agentMessagePhase: onCompleted 的 harness），回合结束时再算一遍，
+ * 让最后认作最终回答的那一条落定
+ */
+function useBlocks(
+  { deviceId, sessionId }: SessionRef,
+  itemIds: string[],
+  status: TurnView['status'] | undefined,
+): TurnBlocks {
   const { store } = useServices().replica
+  // biome-ignore lint/correctness/useExhaustiveDependencies: status 变了就是要重算
   return useMemo(() => {
-    const kinds = new Map<string, ItemView['kind']>()
     const inputs = []
+    const agentIds: string[] = []
     for (const id of itemIds) {
       const item = store.get<ItemView>(keys.item(deviceId, sessionId, id))
       if (!item) continue
-      kinds.set(id, item.kind)
+      const place = cardPlace(item)
+      if (place === 'inline') agentIds.push(id)
       inputs.push(
         item.kind === 'agentMessage'
           ? { id, kind: item.kind, phase: item.phase }
-          : cardOf(item)
-            ? { id, kind: item.kind, card: true }
+          : place
+            ? { id, kind: item.kind, card: place }
             : quietOf(item)
               ? { id, kind: item.kind, quiet: true }
               : { id, kind: item.kind },
       )
     }
-    return { blocks: bucketItems(inputs), kinds }
-  }, [store, deviceId, sessionId, itemIds])
+    const blocks = bucketItems(inputs)
+    return {
+      blocks,
+      answerId: blocks.find((block) => block.type === 'answer')?.itemId,
+      processIds: blocks.flatMap((block) =>
+        block.type === 'process' ? processItemIds(block.parts) : [],
+      ),
+      agentIds,
+    }
+  }, [store, deviceId, sessionId, itemIds, status])
 }
 
 /**
- * 一个活动块该不该自动收起。要看它后面那些回答写完没有，所以订阅那几条回答；
- * 结果是个布尔值，回答的文字在变而结论没变时不会引起重画。
+ * 过程是不是告一段落了：回合结束，或者最终回答写完了（声明了一开始就知道的 harness，一开始就算）。
+ * 要看最终回答那一条，所以订阅它；结果是个布尔值，回答的文字在变而结论没变时不会引起重画
  */
 function useSettled(
   ref: SessionRef,
   running: boolean,
-  answerIds: string[],
+  answerId: string | undefined,
   finalOnStart: boolean,
 ): boolean {
   const { store } = useServices().replica
   const { deviceId, sessionId } = ref
+  const key = answerId ? keys.item(deviceId, sessionId, answerId) : null
   const subscribe = useCallback(
-    (listener: () => void) => {
-      const stops = answerIds.map((id) =>
-        store.subscribe(keys.item(deviceId, sessionId, id), listener),
-      )
-      return () => {
-        for (const stop of stops) stop()
-      }
-    },
-    [store, deviceId, sessionId, answerIds],
+    (listener: () => void) => (key ? store.subscribe(key, listener) : () => {}),
+    [store, key],
   )
-  return useSyncExternalStore(subscribe, () =>
-    activitySettled(
-      running,
-      answerIds.flatMap((id) => store.get<ItemView>(keys.item(deviceId, sessionId, id)) ?? []),
-      finalOnStart,
-    ),
-  )
-}
-
-interface ActivityBlockProps extends SessionRef {
-  block: Extract<Block, { type: 'activity' }>
-  kinds: Map<string, ItemView['kind']>
-  running: boolean
-  /** 这个块后面的回答 */
-  answersAfter: string[]
-  /** 这个会话的 harness 在最终回答一开始就知道它是最终回答：那时候就收，不等它写完 */
-  finalOnStart: boolean
-}
-
-function ActivityBlock({
-  block,
-  kinds,
-  running,
-  answersAfter,
-  finalOnStart,
-  ...ref
-}: ActivityBlockProps) {
-  const settled = useSettled(ref, running, answersAfter, finalOnStart)
-  const items = useMemo(
-    () => block.itemIds.map((itemId) => ({ itemId, kind: kinds.get(itemId) ?? 'notice' })),
-    [block.itemIds, kinds],
-  )
-  return <Activity {...ref} blockKey={block.key} items={items} settled={settled} />
+  return useSyncExternalStore(subscribe, () => {
+    const answer = key ? store.get<ItemView>(key) : undefined
+    return processSettled(running, answer ? [answer] : [], finalOnStart)
+  })
 }
 
 /** 一个回合画坏了不连累别的回合 */
@@ -176,18 +168,27 @@ const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { 
   const meta = useKey<SessionMeta>(keys.session(deviceId, sessionId))
   const device = useKey<DeviceView>(keys.device(deviceId))
   const t = useT()
-  const { blocks, kinds } = useBlocks({ deviceId, sessionId }, turn?.itemIds ?? [])
-  // 每个活动块后面有哪些回答。块没变时这些数组也不变，免得下面的订阅白白重建
-  const answersAfter = useMemo(
-    () =>
-      blocks.map((_, index) =>
-        blocks.slice(index + 1).flatMap((later) => (later.type === 'answer' ? [later.itemId] : [])),
-      ),
-    [blocks],
+  const ref = useMemo(() => ({ deviceId, sessionId }), [deviceId, sessionId])
+  const sessionKey = `${deviceId}:${sessionId}`
+  const running = turn?.status === 'running'
+  const { blocks, answerId, processIds, agentIds } = useBlocks(
+    ref,
+    turn?.itemIds ?? [],
+    turn?.status,
   )
+  const settled = useSettled(ref, running, answerId, meta?.can.finalOnStart === true)
+  const touched = useTurnTouched(sessionKey, turnId)
+  // 回合里还有没做完的子代理时不自动收（接口见 process.tsx）
+  const agentsRunning = useAgentsRunning(ref, agentIds)
+  const [open, setOpen] = useToggle(
+    sessionKey,
+    `p:${turnId}`,
+    !processFolded(settled, touched, agentsRunning),
+  )
+  const touch = useCallback(() => touchTurn(sessionKey, turnId), [sessionKey, turnId])
   if (!turn) return null
-  const running = turn.status === 'running'
-  const ref = { deviceId, sessionId }
+  // 告一段落之后，第一段过程的开头是收起整段过程的那一行；没告一段落时没有这一行，过程照常摊开
+  const firstProcess = blocks.findIndex((block) => block.type === 'process')
   // 分叉、回退挂在回合开头的那条用户消息上。回合结束了、会话能发消息、设备连着、它所属的 harness 可用才出
   const actable =
     !running &&
@@ -195,58 +196,70 @@ const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { 
     device?.connection === 'online' &&
     !downHarness(device, meta.harness)
   return (
-    <section className="turn">
-      {blocks.map((block, index) => {
-        if (block.type === 'user')
+    <TurnTouch.Provider value={touch}>
+      <section className="turn">
+        {blocks.map((block, index) => {
+          if (block.type === 'user')
+            return (
+              <UserMessage
+                key={block.itemId}
+                {...ref}
+                itemId={block.itemId}
+                turnId={actable && index === 0 ? turnId : undefined}
+              />
+            )
+          if (block.type === 'answer')
+            return <AgentAnswer key={block.itemId} {...ref} itemId={block.itemId} />
+          if (block.type === 'plan')
+            return <PlanCard key={block.itemId} {...ref} itemId={block.itemId} />
+          if (block.type === 'todo')
+            return <TodoCard key={block.itemId} {...ref} itemId={block.itemId} />
+          if (block.type === 'card')
+            return <TreeCard key={block.itemId} {...ref} itemId={block.itemId} />
+          if (block.type === 'notes')
+            return <Notes key={block.key} {...ref} itemIds={block.itemIds} />
+          // 收起时后面几段过程都不占地方，只留第一段开头的那一行
+          if (settled && !open && index !== firstProcess) return null
+          // 位置固定的几个子元素（收起那一行、过程本身），中间切换时下面的说明和步骤组不会被重建
           return (
-            <UserMessage
-              key={block.itemId}
-              {...ref}
-              itemId={block.itemId}
-              turnId={actable && index === 0 ? turnId : undefined}
-            />
+            <div key={block.key} className={settled ? 'proc' : 'proc live'}>
+              {settled && index === firstProcess ? (
+                <ProcessHead
+                  {...ref}
+                  turn={turn}
+                  itemIds={processIds}
+                  open={open}
+                  onToggle={setOpen}
+                />
+              ) : null}
+              {settled && !open ? null : (
+                <div className="proc-body">
+                  <ProcessParts {...ref} parts={block.parts} live={running} />
+                </div>
+              )}
+            </div>
           )
-        if (block.type === 'answer')
-          return <AgentAnswer key={block.itemId} {...ref} itemId={block.itemId} />
-        if (block.type === 'plan')
-          return <PlanCard key={block.itemId} {...ref} itemId={block.itemId} />
-        if (block.type === 'todo')
-          return <TodoCard key={block.itemId} {...ref} itemId={block.itemId} />
-        if (block.type === 'card')
-          return <TreeCard key={block.itemId} {...ref} itemId={block.itemId} />
-        if (block.type === 'notes')
-          return <Notes key={block.key} {...ref} itemIds={block.itemIds} />
-        return (
-          <ActivityBlock
-            key={block.key}
-            {...ref}
-            block={block}
-            kinds={kinds}
-            running={running}
-            finalOnStart={meta?.can.finalOnStart === true}
-            answersAfter={answersAfter[index] ?? []}
-          />
-        )
-      })}
-      {/* 回合级的出错框只给失败的回合（官方桌面端也是这样）：被打断的回合对面就算带了一句错误
+        })}
+        {/* 回合级的出错框只给失败的回合（官方桌面端也是这样）：被打断的回合对面就算带了一句错误
           （旧版 Claude Code 入口带过 interrupted），也只在结尾写“已中断”，不画红框 */}
-      {turn.status === 'failed' && turn.error ? (
-        <div className="errbox">
-          <span>{turn.error}</span>
-        </div>
-      ) : null}
-      {running ? (
-        <div className="running-line" data-anchor={`t:${turnId}`}>
-          <i className="st run" />
-          <span>{t('turn.working', { name: nameOf(device, meta?.harness ?? '') })}</span>
-        </div>
-      ) : (
-        <div className="turn-foot" data-anchor={`t:${turnId}`}>
-          <span>{turn.status === 'running' ? '' : t(TURN_END[turn.status])}</span>
-          {turn.durationMs === null ? null : <span>{duration(turn.durationMs, t)}</span>}
-        </div>
-      )}
-    </section>
+        {turn.status === 'failed' && turn.error ? (
+          <div className="errbox">
+            <span>{turn.error}</span>
+          </div>
+        ) : null}
+        {running ? (
+          <div className="running-line" data-anchor={`t:${turnId}`}>
+            <i className="st run" />
+            <span>{t('turn.working', { name: nameOf(device, meta?.harness ?? '') })}</span>
+          </div>
+        ) : (
+          <div className="turn-foot" data-anchor={`t:${turnId}`}>
+            <span>{turn.status === 'running' ? '' : t(TURN_END[turn.status])}</span>
+            {turn.durationMs === null ? null : <span>{duration(turn.durationMs, t)}</span>}
+          </div>
+        )}
+      </section>
+    </TurnTouch.Provider>
   )
 })
 

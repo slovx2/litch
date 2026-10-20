@@ -87,18 +87,14 @@ export async function outputProbe(expand = true, say = '狂打日志'): Promise<
       (entry) => text(one('.tgt', entry)) === COMMAND,
     ) as HTMLButtonElement | undefined
   await until('新的一轮', () => all('.turn').length > turnsBefore)
-  await until('那条狂打日志的命令', head)
-  // 活动块在回合进行中是开着的，最终回答一开始就会自己收起来；用户点过的以用户的为准。
-  // 打完之后还要看框里的样子，所以先替用户点一下“开着”：开着的先收再开
-  const act = await until('活动块', () =>
-    one<HTMLButtonElement>('.act-head', lastTurn() ?? undefined),
+  // 步骤组默认收着，回合进行中也不自己展开；打完之后还要看框里的样子，所以替用户点开那一组。
+  // 用户点开过，回合结束时整段过程也不自己收起来
+  const group = await until('那条命令所在的步骤组', () =>
+    one<HTMLButtonElement>('.steps-head', lastTurn() ?? undefined),
   )
-  if (act.getAttribute('aria-expanded') === 'true') {
-    act.click()
-    await frame()
-  }
-  act.click()
-  await until('活动块开着', () => act.getAttribute('aria-expanded') === 'true')
+  if (group.getAttribute('aria-expanded') !== 'true') group.click()
+  await until('步骤组开着', () => group.getAttribute('aria-expanded') === 'true')
+  await until('那条狂打日志的命令', head)
   // 还没有输出的命令那一行点不开，等头一段输出到了再点
   const ready = await until('那条命令有了输出', () => (head()?.disabled === false ? head() : null))
   const well = () => one('.item-detail .well', head()?.closest('.item') ?? undefined)

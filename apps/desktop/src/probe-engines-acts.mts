@@ -209,7 +209,7 @@ export async function enginesCompact(after: string): Promise<CompactSeen> {
   await frame()
   const seen = {
     ran,
-    folded: ran && Boolean(kit.sub(kit.turns().at(-1), '.act-head[aria-expanded="false"]')),
+    folded: ran && Boolean(kit.sub(kit.turns().at(-1), '.proc-head[aria-expanded="false"]')),
     turn: ran ? ((await kit.outline()).at(-1) ?? []) : [],
     foot: ran ? kit.foot() : '',
     told: all('.toast').map(text).join('｜'),

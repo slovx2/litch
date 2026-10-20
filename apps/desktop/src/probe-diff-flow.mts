@@ -42,7 +42,7 @@ export async function mockTurn(): Promise<TurnSeen> {
   const asked = await diff.asked()
   const turns = all('.turn').length
   await kit.say('改文件')
-  await until('对话里出了“改了文件”', () => one('.turn:last-child .item-head'), 20_000)
+  await until('对话里出了“改了文件”', () => one('.turn:last-child .steps-head'), 20_000)
   const duringTurn = { sameVersion: diff.version() === before, listed: drawn() }
   await turnDone(turns)
   await diff.settled(before)
@@ -51,8 +51,11 @@ export async function mockTurn(): Promise<TurnSeen> {
 
   // 从对话里去：点开那条“改了文件”，点它上面的入口
   const turn = one('.turn:last-child') as HTMLElement
-  one<HTMLElement>('.act-head[aria-expanded="false"]', turn)?.click()
-  const row = await until('活动区里那条改了文件', () =>
+  one<HTMLElement>('.proc-head[aria-expanded="false"]', turn)?.click()
+  ;(
+    await until('步骤组', () => one<HTMLElement>('.steps-head[aria-expanded="false"]', turn))
+  )?.click()
+  const row = await until('步骤组里那条改了文件', () =>
     one<HTMLElement>('.item-head:not(:disabled)', turn),
   )
   if (row.getAttribute('aria-expanded') !== 'true') row.click()
@@ -85,8 +88,11 @@ export async function mockTurn(): Promise<TurnSeen> {
 
   // 对话里太长不展开的那一处：有去差异面板的入口
   const lastTurn = one('.turn:last-child') as HTMLElement
-  one<HTMLElement>('.act-head[aria-expanded="false"]', lastTurn)?.click()
-  const item = await until('活动区里那条改了文件', () =>
+  one<HTMLElement>('.proc-head[aria-expanded="false"]', lastTurn)?.click()
+  ;(
+    await until('步骤组', () => one<HTMLElement>('.steps-head[aria-expanded="false"]', lastTurn))
+  )?.click()
+  const item = await until('步骤组里那条改了文件', () =>
     one<HTMLElement>('.item-head:not(:disabled)', lastTurn),
   )
   if (item.getAttribute('aria-expanded') !== 'true') item.click()

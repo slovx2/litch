@@ -151,16 +151,25 @@
   border: 1px solid var(--line-2);
   line-height: 16px;
 }
-[data-skin="retro"] .act-body,
 [data-skin="retro"] .plan,
 [data-skin="retro"] .todo,
 [data-skin="retro"] .code {
   border-color: var(--line-3);
 }
-[data-skin="retro"] .item + .item,
-[data-skin="retro"] .item-detail {
-  border-top-style: dashed;
-  border-top-color: var(--line-2);
+/* 过程区：点开的过程和步骤组左边那根线是虚线；条目详情方角 */
+[data-skin="retro"] .proc:not(.live) > .proc-body,
+[data-skin="retro"] .steps-body {
+  border-left-style: dashed;
+  border-left-color: var(--line-3);
+}
+[data-skin="retro"] .steps-body .item-detail {
+  border-radius: 0;
+  border-color: var(--line-2);
+}
+[data-skin="retro"] .proc-head,
+[data-skin="retro"] .steps-head {
+  border-radius: 0;
+  font-family: var(--mono);
 }
 [data-skin="retro"] .md code {
   background: none;
