@@ -8,7 +8,7 @@
 //     分几段慢慢发，界面上看得到字是一点一点出来的；
 //   - 收尾（codexSocketCleanup）：codex 的套接字是个链接，真的文件建在 /tmp/codex-daemon-<uid>/ 下，它退出时链接没了、
 //     旁边的锁还留着。
-// 事件的形状对着真的 codex（0.160.0）实测过。
+// 事件的形状对着真的 codex（0.160.0、0.163.0）实测过。
 
 import { readlinkSync, realpathSync, rmSync, statSync } from 'node:fs'
 import { createServer } from 'node:http'

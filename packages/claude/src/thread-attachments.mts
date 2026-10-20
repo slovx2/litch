@@ -20,7 +20,7 @@ export type AttachmentUpdate = {
 }
 
 // thread/attachmentOwner/list（0.163.0 起）：按附件身份反查会话，只看本入口的库。
-// archived 省略或为 null 时全给，false 只给没归档的，true 只给归档的（照上游）。
+// archived 省略或为 null 时全给，false 只给没归档的，true 只给归档的；页大小默认 25、钳在 1 到 100（都照上游）。
 export function threadAttachmentOwnerList(
   store: SessionStore,
   params: Record<string, unknown>,
@@ -29,22 +29,28 @@ export function threadAttachmentOwnerList(
   const identityKey = requiredString(params.identityKey, 'identityKey')
   if (params.archived != null && typeof params.archived !== 'boolean')
     throw new ProtocolError(-32602, 'archived 必须是布尔值')
+  const archived = (params.archived as boolean | null | undefined) ?? null
+  const requested = params.limit ?? 25
+  if (typeof requested !== 'number' || !Number.isInteger(requested) || requested < 0)
+    throw new ProtocolError(-32602, 'limit 必须是非负整数')
+  const limit = Math.min(Math.max(requested, 1), 100)
+  // 游标只认同一组查询条件：身份和归档筛选都算在内
   const page = catalogPagination(
-    { limit: params.limit, cursor: params.cursor },
-    `attachmentOwners:${attachmentType}:${identityKey}`,
+    { cursor: params.cursor },
+    `attachmentOwners:${JSON.stringify([attachmentType, identityKey, archived])}`,
   )
   const rows = store.listAttachmentOwners(
     attachmentType,
     identityKey,
-    (params.archived as boolean | null | undefined) ?? null,
-    page.limit + 1,
+    archived,
+    limit + 1,
     page.cursor,
   )
-  const data = rows.slice(0, page.limit)
+  const data = rows.slice(0, limit)
   const last = data.at(-1)
   return {
     data: data.map((row) => ({ threadId: row.threadId, archived: row.archived })),
-    nextCursor: rows.length > page.limit && last ? page.encode(last.createdAt, last.id) : null,
+    nextCursor: rows.length > limit && last ? page.encode(last.createdAt, last.id) : null,
   }
 }
 
