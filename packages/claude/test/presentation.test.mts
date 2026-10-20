@@ -453,7 +453,62 @@ test('failed partial messages are completed as commentary, never final answers',
   assert.equal(answerCompleted(messages).length, 1)
 })
 
-test('plan output retains its native plan item and complete Markdown', async () => {
+// 计划模式里计划从哪来（照上游 codex 0.163.0 的 plan 条目）：Claude CLI 让模型把计划写进计划文件再交
+// （plan_text、plan_handoff），回答里的 <proposed_plan> 块也算；其余说的话都是回答，最终文本完整。
+const PLAN_MARKDOWN = '## Plan\n\n1. Inspect\n2. Implement'
+const plansOf = (items: ThreadItem[]) =>
+  items
+    .filter((item) => item.type === 'plan')
+    .map((item) => (item.type === 'plan' ? item.text : ''))
+
+test('plan file content is the plan item with complete Markdown; the reply stays an answer', async () => {
+  const { turn, messages } = await present(
+    emit([
+      { type: 'plan_text', text: PLAN_MARKDOWN },
+      { type: 'message_boundary' },
+      { type: 'text_delta', delta: 'Plan is in the file.' },
+      { type: 'completed', success: true },
+    ]),
+    { planMode: true },
+  )
+  assert.deepEqual(plansOf(turn.items), [PLAN_MARKDOWN])
+  assert.deepEqual(
+    assistantItems(turn.items).map((item) => [item.text, item.phase]),
+    [['Plan is in the file.', 'final_answer']],
+  )
+  assert.equal(answerCompleted(messages).length, 2)
+})
+
+test('a plan handed in through ExitPlanMode becomes the plan item', async () => {
+  const { turn } = await present(
+    emit([
+      { type: 'plan_handoff', plan: PLAN_MARKDOWN },
+      { type: 'completed', success: true },
+    ]),
+    { planMode: true },
+  )
+  assert.deepEqual(plansOf(turn.items), [PLAN_MARKDOWN])
+  assert.equal(assistantItems(turn.items).length, 0)
+})
+
+test('a <proposed_plan> block in plan mode is the plan item, the words around it are the answer', async () => {
+  const { turn } = await present(
+    emit([
+      { type: 'message_boundary' },
+      { type: 'text_delta', delta: 'Here it is.\n<proposed_' },
+      { type: 'text_delta', delta: `plan>\n${PLAN_MARKDOWN}\n</proposed_plan>\nDone.` },
+      { type: 'completed', success: true },
+    ]),
+    { planMode: true },
+  )
+  assert.deepEqual(plansOf(turn.items), [`${PLAN_MARKDOWN}\n`])
+  assert.deepEqual(
+    assistantItems(turn.items).map((item) => item.text),
+    ['Here it is.\nDone.'],
+  )
+})
+
+test('plain replies in plan mode are answers with complete Markdown, not plan items', async () => {
   const { turn, messages } = await present(
     emit([
       { type: 'message_boundary' },
@@ -463,9 +518,10 @@ test('plan output retains its native plan item and complete Markdown', async () 
     ]),
     { planMode: true },
   )
-  const plans = turn.items.filter((item) => item.type === 'plan')
-  assert.equal(plans.length, 1)
-  assert.equal(plans[0]?.text, '## Plan\n\n1. Inspect\n2. Implement')
-  assert.equal(assistantItems(turn.items).length, 0)
+  assert.deepEqual(plansOf(turn.items), [])
+  assert.deepEqual(
+    assistantItems(turn.items).map((item) => [item.text, item.phase]),
+    [[PLAN_MARKDOWN, 'final_answer']],
+  )
   assert.equal(answerCompleted(messages).length, 1)
 })
