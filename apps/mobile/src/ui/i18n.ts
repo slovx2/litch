@@ -11,6 +11,7 @@ import * as detail from './messages/detail'
 import * as devices from './messages/devices'
 import * as hconfig from './messages/hconfig'
 import * as pairing from './messages/pairing'
+import * as proposals from './messages/proposals'
 import * as sessions from './messages/sessions'
 import * as tasks from './messages/tasks'
 import * as tools from './messages/tools'
@@ -23,6 +24,7 @@ const zhCN = {
   ...devices.zhCN,
   ...hconfig.zhCN,
   ...pairing.zhCN,
+  ...proposals.zhCN,
   ...sessions.zhCN,
   ...detail.zhCN,
   ...compose.zhCN,
@@ -36,6 +38,7 @@ const en: Record<MobileKey, Entry> = {
   ...devices.en,
   ...hconfig.en,
   ...pairing.en,
+  ...proposals.en,
   ...sessions.en,
   ...detail.en,
   ...compose.en,

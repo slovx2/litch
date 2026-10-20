@@ -5,26 +5,36 @@ import { connectChannel, createMockCore, createPortPair, serveChannel } from '@l
 globalThis.requestAnimationFrame ??= (callback) => setTimeout(() => callback(performance.now()), 16)
 globalThis.cancelAnimationFrame ??= (id) => clearTimeout(id)
 
-export const realClock = {
-  now: () => Date.now(),
-  setTimer(callback, delayMs) {
-    const timer = setTimeout(callback, delayMs)
-    return () => clearTimeout(timer)
-  },
-}
-
-/** 模拟核心加一对内存端口，和 src/shell/boot.ts 的 mock 装法一样。chunkMs 小一点让流式回答快点出完 */
+/**
+ * 模拟核心加一对内存端口，和 src/shell/boot.ts 的 mock 装法一样。chunkMs 小一点让流式回答快点出完。
+ * 模拟核心定的计时器关的时候一起清掉：提案七天后过期的那种不清，测试进程要等七天才退
+ */
 export function mockChannel({ chunkMs = 2, lang = 'zh-CN' } = {}) {
+  const timers = new Set()
+  const clock = {
+    now: () => Date.now(),
+    setTimer(callback, delayMs) {
+      const timer = setTimeout(() => {
+        timers.delete(timer)
+        callback()
+      }, delayMs)
+      timers.add(timer)
+      return () => {
+        clearTimeout(timer)
+        timers.delete(timer)
+      }
+    },
+  }
   const [uiPort, corePort] = createPortPair()
-  const unserve = serveChannel(corePort, createMockCore({ clock: realClock, chunkMs, lang }), {
-    clock: realClock,
-  })
+  const unserve = serveChannel(corePort, createMockCore({ clock, chunkMs, lang }), { clock })
   const channel = connectChannel(uiPort)
   return {
     channel,
     close() {
       channel.close()
       unserve()
+      for (const timer of timers) clearTimeout(timer)
+      timers.clear()
     },
   }
 }

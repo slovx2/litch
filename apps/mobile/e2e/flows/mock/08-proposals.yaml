@@ -1,0 +1,96 @@
+# 模拟核心：建议任务。新建会话说“提个子会话”→ 对话里三张提案卡、顶上“几个建议任务等你开始”→ 第一张点“不要”→
+# 第二张过一会儿过期 → 第三张（Pi，沙箱收不紧）“改了再开始”：改标题、关掉完成后唤醒、开始 → 回到对话，卡片下面是起出来的子会话 →
+# 菜单里的“建议任务”列表：三条都了结了，点一条回到对话里那张卡
+appId: dev.litch.app
+name: mock-建议任务
+tags: [mock]
+---
+- runFlow:
+    file: ../_shared/fresh.yaml
+    env:
+      MODE: mock
+      READY: device:local
+- tapOn:
+    id: device:local
+- tapOn:
+    id: sessions:new
+- extendedWaitUntil:
+    visible:
+      id: new-input
+    timeout: 15000
+- tapOn:
+    id: new-input
+- inputText: propose a sub-session
+- tapOn:
+    id: new-send
+- extendedWaitUntil:
+    visible:
+      id: detail:proposals
+    timeout: 20000
+- extendedWaitUntil:
+    visible:
+      id: proposal:.*:dismiss
+    timeout: 10000
+- tapOn:
+    id: proposal:.*:dismiss
+    index: 0
+# 那张卡片在屏幕上面一截：往回翻到看得见它的状态
+- scrollUntilVisible:
+    element:
+      text: (Dismissed|不要了)
+    direction: UP
+    timeout: 10000
+# 第二张八秒后过期（模拟核心里特意定得短）
+- extendedWaitUntil:
+    visible:
+      text: (Expired|过期了)
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      id: proposal:.*:edit
+    direction: DOWN
+    timeout: 10000
+- tapOn:
+    id: proposal:.*:edit
+- extendedWaitUntil:
+    visible:
+      id: proposal-start
+    timeout: 10000
+- assertVisible:
+    id: proposal-start:wider
+- tapOn:
+    id: proposal-start:title
+- eraseText: 80
+- inputText: e2e edited
+- hideKeyboard
+- tapOn:
+    id: proposal-start:wake
+- scrollUntilVisible:
+    element:
+      id: proposal-start:go
+    direction: DOWN
+- tapOn:
+    id: proposal-start:go
+- extendedWaitUntil:
+    visible:
+      id: proposal:.*:child
+    timeout: 15000
+- assertNotVisible:
+    id: detail:proposals
+- tapOn:
+    id: detail:menu
+- tapOn:
+    id: detail:menu:proposals
+- extendedWaitUntil:
+    visible:
+      id: proposals
+    timeout: 10000
+- assertVisible:
+    text: .*(Settled \(3\)|已了结（3）).*
+- tapOn:
+    id: proposals:reveal:.*
+    index: 0
+- extendedWaitUntil:
+    visible:
+      id: detail
+    timeout: 10000
