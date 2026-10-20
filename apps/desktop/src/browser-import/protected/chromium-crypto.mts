@@ -1,19 +1,11 @@
 import { createDecipheriv, pbkdf2Sync } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { readMacKeychain } from './mac-keychain.mjs'
 import { powershell, type RunCommand, runCommand } from './process.mjs'
 import { checkCancelled, ReadFault } from './result.mjs'
 import type { Snapshot } from './snapshot.mjs'
 import type { BrowserId, ProtectedReadInput } from './types.mjs'
-
-const SERVICES: Partial<Record<BrowserId, string>> = {
-  chrome: 'Chrome Safe Storage',
-  edge: 'Microsoft Edge Safe Storage',
-  brave: 'Brave Safe Storage',
-  arc: 'Arc Safe Storage',
-  chromium: 'Chromium Safe Storage',
-  vivaldi: 'Vivaldi Safe Storage',
-}
 
 export interface SystemSecrets {
   keychain(browser: BrowserId, signal: AbortSignal): Promise<Buffer>
@@ -22,37 +14,7 @@ export interface SystemSecrets {
 
 export function systemSecrets(run: RunCommand = runCommand): SystemSecrets {
   return {
-    async keychain(browser, signal) {
-      const service = SERVICES[browser]
-      if (!service) throw new ReadFault('unsupported')
-      const output = await run(
-        '/usr/bin/security',
-        ['find-generic-password', '-s', service, '-w'],
-        Buffer.alloc(0),
-        signal,
-      )
-      try {
-        if (output.code !== 0) {
-          // security 的退出码会截为 8 位；stderr 只拿来识别系统错误，绝不返回。
-          const message = output.stderr.toString('utf8')
-          if (
-            output.code === 128 ||
-            output.code === 36 ||
-            output.code === 51 ||
-            /(-128|-25293|-25308|denied|not allowed|cancel)/i.test(message)
-          )
-            throw new ReadFault('denied')
-          throw new ReadFault('failed')
-        }
-        // security 额外加一个换行，不能 trim 掉密钥本身的空白。
-        const end = output.stdout.at(-1) === 10 ? output.stdout.length - 1 : output.stdout.length
-        if (!end) throw new ReadFault('failed')
-        return Buffer.from(output.stdout.subarray(0, end))
-      } finally {
-        output.stdout.fill(0)
-        output.stderr.fill(0)
-      }
-    },
+    keychain: readMacKeychain,
     async unprotect(encrypted, signal) {
       const input = Buffer.from(encrypted.toString('base64'))
       const output = await powershell(

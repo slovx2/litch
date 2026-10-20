@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { systemSecrets } from '../chromium-crypto.mjs'
+import { readMacKeychain } from '../mac-keychain.mjs'
 import { runCommand } from '../process.mjs'
 import { faultStatus, ReadFault } from '../result.mjs'
 
@@ -40,30 +41,54 @@ test('子进程取消会结束子进程，spawn 失败不会抛出原始系统�
   )
 })
 
-test('钥匙串命令、服务名和系统拒绝映射；密钥空白不被 trim', async () => {
-  const api = systemSecrets(async (file, args, input) => {
-    assert.equal(file, '/usr/bin/security')
-    assert.deepEqual(args, ['find-generic-password', '-s', 'Microsoft Edge Safe Storage', '-w'])
-    assert.equal(input.length, 0)
-    return { code: 0, stdout: Buffer.from(' fixture key \n'), stderr: Buffer.alloc(0) }
+test('钥匙串以应用自身运行；环境隔离、原始字节保留、输出缓冲擦除', async () => {
+  const stdout = Buffer.from(' fixture\0key \n')
+  const stderr = Buffer.from('private error')
+  const result = await readMacKeychain('edge', new AbortController().signal, {
+    executable: '/Applications/Litch.app/Contents/MacOS/Litch',
+    directory: '/fixture/native',
+    run: async (file, args, input, _signal, options) => {
+      assert.equal(file, '/Applications/Litch.app/Contents/MacOS/Litch')
+      assert.equal(args.length, 1)
+      assert.ok(args[0]?.endsWith('keychain-helper.mjs'))
+      assert.equal(input.toString(), 'edge')
+      assert.equal(options?.env?.ELECTRON_RUN_AS_NODE, '1')
+      assert.ok(
+        Object.keys(options?.env ?? {}).every((key) =>
+          [
+            'ELECTRON_RUN_AS_NODE',
+            'HOME',
+            'USER',
+            'LOGNAME',
+            'TMPDIR',
+            'LANG',
+            'LC_ALL',
+            '__CF_USER_TEXT_ENCODING',
+          ].includes(key),
+        ),
+      )
+      return { code: 0, stdout, stderr }
+    },
   })
-  assert.equal(
-    (await api.keychain('edge', new AbortController().signal)).toString(),
-    ' fixture key ',
-  )
-  for (const [code, message] of [
-    [128, 'User canceled'],
-    [36, 'User interaction is not allowed.'],
-    [51, 'Authorization denied'],
+  assert.equal(result.toString(), ' fixture\0key \n')
+  assert.ok(stdout.every((byte) => byte === 0))
+  assert.ok(stderr.every((byte) => byte === 0))
+})
+
+test('钥匙串拒绝、不支持、失败只返回固定状态', async () => {
+  for (const [code, status] of [
+    [2, 'denied'],
+    [3, 'unsupported'],
+    [1, 'failed'],
+    [0, 'failed'],
   ] as const) {
-    const denied = systemSecrets(async () => ({
-      code,
-      stdout: Buffer.alloc(0),
-      stderr: Buffer.from(message),
-    }))
     await assert.rejects(
-      denied.keychain('chrome', new AbortController().signal),
-      (error) => error instanceof ReadFault && error.status === 'denied',
+      readMacKeychain('chrome', new AbortController().signal, {
+        executable: 'fixture',
+        directory: 'fixture',
+        run: async () => ({ code, stdout: Buffer.alloc(0), stderr: Buffer.from('private') }),
+      }),
+      (error) => error instanceof ReadFault && error.status === status,
     )
   }
 })

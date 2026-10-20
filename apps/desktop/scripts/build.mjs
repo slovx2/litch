@@ -2,8 +2,11 @@
 // 界面不在这里打包，它由 packages/ui 自己构建，外壳运行时从那边的产物目录里取。
 import { fileURLToPath } from 'node:url'
 import { build } from 'esbuild'
+import { buildKeychain } from '../src/browser-import/protected/native/build.mjs'
 
 const here = (path) => fileURLToPath(new URL(path, import.meta.url))
+
+buildKeychain()
 
 const common = {
   bundle: true,

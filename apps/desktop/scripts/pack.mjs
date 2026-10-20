@@ -36,6 +36,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { packager } from '@electron/packager'
 import { buildHelper } from '../../computer-use/build-app.mjs'
+import { NATIVE_DIRECTORY } from '../src/browser-import/protected/native/build.mjs'
 import { collectLicenses } from './licenses.mjs'
 import { NODE_VERSION } from './node-runtime.mjs'
 import { OUT_DIR } from './packed.mjs'
@@ -120,6 +121,13 @@ console.log(`许可文本：${bundled.length} 个第三方包`)
 
 // Windows 的助手。目录名就是它在应用资源目录里的名字
 const extraResource = [adapter.out, licenses]
+if (process.platform === 'darwin') {
+  const native = join(appDir, 'dist', NATIVE_DIRECTORY)
+  for (const file of ['keychain.node', 'keychain-helper.mjs']) {
+    if (!existsSync(join(native, file))) throw new Error(`缺少钥匙串桥 ${file}，请先构建桌面端。`)
+  }
+  extraResource.push(native)
+}
 const winHelperStage = join(OUT_DIR, WIN_HELPER_DIR)
 if (winHelper) {
   rmSync(winHelperStage, { recursive: true, force: true })

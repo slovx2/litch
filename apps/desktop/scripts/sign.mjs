@@ -8,6 +8,7 @@ import { execFileSync } from 'node:child_process'
 import { closeSync, existsSync, openSync, readdirSync, readSync } from 'node:fs'
 import { join } from 'node:path'
 import { HELPER_APP_NAME, signHelper } from '../../computer-use/build-app.mjs'
+import { NATIVE_DIRECTORY } from '../src/browser-import/protected/native/build.mjs'
 
 /** Mach-O 的文件头：64 位、32 位（两种字节序），和装着几种架构的胖文件 */
 const THIN = new Set(['cffaedfe', 'cefaedfe', 'feedfacf', 'feedface'])
@@ -49,6 +50,8 @@ const codesign = (...args) =>
 export function signAdHoc(appPath) {
   const adapter = join(appPath, 'Contents', 'Resources', 'adapter')
   const inner = machOFiles(adapter)
+  const keychain = join(appPath, 'Contents', 'Resources', NATIVE_DIRECTORY)
+  if (existsSync(keychain)) inner.push(...machOFiles(keychain))
   for (const file of inner) codesign('--force', '--sign', '-', file)
   // 打包器改了应用的名字和信息，原来那份签名对不上了：整个重新签一次，
   // 这样系统认得出它是“Litch”而不是“Electron”
