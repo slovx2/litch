@@ -1,5 +1,6 @@
-// 一个会话里的建议任务：模型提的全部提案。等着的在上（先提的在前），每条能开始、改了再开始、不要；
-// 了结的（开始了、不要了、撤回了、过期了）在下（刚了结的在前），可以收起来。点一条回到对话里那张卡片
+// 一个会话里的建议任务：模型提的全部提案。没了结的在上（先提的在前），每条能开始、改了再开始、不要，
+// offer 卡等你选的能选“新会话”“在这里做”，选了新会话等模型补简报的也在上面；
+// 了结的（开始了、在这里做、不要了、撤回了、过期了）在下（刚了结的在前），可以收起来。点一条回到对话里那张卡片
 // （对话区滚过去、描一圈，见 src/detail/proposals/hooks.ts 的 requestReveal）。
 // 从会话详情顶上那一条（有等着的时候）或者右上角菜单里的“建议任务”进来。
 import { type DeviceView, keys, proposalStatus, type SessionProposalView } from '@litch/core'
@@ -7,8 +8,8 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { requestReveal, useProposalClock, useProposalList } from '../../detail/proposals/hooks'
-import { arrange, STATUS_TEXT } from '../../detail/proposals/logic'
-import { ProposalActs } from '../../detail/proposals/ProposalActs'
+import { arrange, needsUser, STATUS_TEXT } from '../../detail/proposals/logic'
+import { OfferActs, ProposalActs } from '../../detail/proposals/ProposalActs'
 import type { RootStackParamList } from '../../nav/routes'
 import { useKey } from '../../shell/services'
 import { useT } from '../../ui/i18n'
@@ -120,7 +121,7 @@ function ProposalRow({
           <Text
             style={[
               styles.state,
-              { color: status === 'pending' ? c.wait : c.ink3, fontFamily: font.mono },
+              { color: needsUser(status) ? c.wait : c.ink3, fontFamily: font.mono },
             ]}
           >
             {t(STATUS_TEXT[status])}
@@ -135,13 +136,18 @@ function ProposalRow({
             </Text>
           ) : null}
           <Text numberOfLines={2} style={[styles.brief, { color: c.ink2 }]}>
-            {proposal.prompt}
+            {proposal.prompt || (status === 'offered' ? t('proposals.offer.ask') : '')}
           </Text>
         </View>
       </Pressable>
       {status === 'pending' ? (
         <View style={styles.acts}>
           <ProposalActs deviceId={deviceId} sessionId={sessionId} proposalId={proposal.id} />
+        </View>
+      ) : null}
+      {status === 'offered' ? (
+        <View style={styles.acts}>
+          <OfferActs deviceId={deviceId} sessionId={sessionId} proposalId={proposal.id} />
         </View>
       ) : null}
     </View>
