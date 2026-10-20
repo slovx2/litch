@@ -18,7 +18,7 @@ import {
   mergeConfigLayers,
   parseCliOverride,
 } from '../src/cli-config.mjs'
-import { bwrapFileSystemArgs, sandboxCommand } from '../src/command-sandbox.mjs'
+import { bwrapFileSystemArgs, procArgs, sandboxCommand } from '../src/command-sandbox.mjs'
 import {
   compileFileSystemRules,
   type FileSystemRules,
@@ -495,7 +495,18 @@ test('PROFILE-006：bwrap 用空 tmpfs 盖住禁读目录、建好挂载点再�
     const { args, placeholders } = bwrapFileSystemArgs(rules)
     const at = (...needle: string[]) =>
       args.findIndex((_, index) => needle.every((part, offset) => args[index + offset] === part))
-    assert.deepEqual(args.slice(0, 7), ['--ro-bind', '/', '/', '--dev', '/dev', '--proc', '/proc'])
+    const proc = procArgs()
+    assert.deepEqual(args.slice(0, 5 + proc.length), [
+      '--ro-bind',
+      '/',
+      '/',
+      '--dev',
+      '/dev',
+      ...proc,
+    ])
+    // 挂不了新 procfs 的容器里回落成空的只读 tmpfs，不回落成宿主的 /proc
+    assert.deepEqual(procArgs(false), ['--perms', '555', '--tmpfs', '/proc'])
+    assert.deepEqual(procArgs(true), ['--proc', '/proc'])
     const ws = join(root, 'ws')
     const home = join(root, 'home')
     // 有要挂回的给 111（只许穿过），没有的给 000

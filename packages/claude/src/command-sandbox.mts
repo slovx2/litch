@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process'
 import { existsSync, realpathSync, statSync } from 'node:fs'
 import { basename, dirname, isAbsolute, sep } from 'node:path'
 import {
@@ -115,8 +116,7 @@ export function sandboxCommand(
       '/',
       '--dev',
       '/dev',
-      '--proc',
-      '/proc',
+      ...procArgs(),
       ...(policy.networkAccess === true ? [] : ['--unshare-net']),
       ...[...new Set(roots)].flatMap((root) => ['--bind', root, root]),
       '--chdir',
@@ -126,6 +126,31 @@ export function sandboxCommand(
     ]
   }
   throw new ProtocolError(-32004, '此宿主没有可用的 command 沙箱')
+}
+
+// 沙箱里的 /proc：照 codex 先试挂新的 procfs（只看得到沙箱自己的 PID 命名空间）。Docker 默认遮住了 /proc 下的
+// 一些路径，用户命名空间里挂不了新的 procfs（bwrap 报 Can't mount proc），这时照 codex 先跑一次探测、按进程记住
+// 结果，回落成一层空的只读 tmpfs，不回落成宿主的 /proc：宿主 procfs 里别的沙箱、适配器进程的命令行都看得到
+// （environ、root、cwd 被用户命名空间的 ptrace 检查挡住，命令行挡不住）。代价是沙箱里没有 /proc：
+// ps、/dev/stdin、/dev/fd、bash 的进程替换用不了。容器加 `--security-opt systempaths=unconfined` 就能挂新的
+let procMountable: boolean | undefined
+
+export function procArgs(mountable = bwrapCanMountProc()): string[] {
+  return mountable ? ['--proc', '/proc'] : ['--perms', '555', '--tmpfs', '/proc']
+}
+
+function bwrapCanMountProc(): boolean {
+  if (process.platform !== 'linux') return true
+  if (procMountable !== undefined) return procMountable
+  const probe = spawnSync(
+    'bwrap',
+    ['--unshare-pid', '--ro-bind', '/', '/', '--dev', '/dev', '--proc', '/proc', '--', 'true'],
+    { encoding: 'utf8', timeout: 10_000 },
+  )
+  // bwrap 不在、别的原因起不来都不算：照常带 --proc，让真正的命令报真正的错
+  const stderr = String(probe.stderr ?? '')
+  procMountable = !(stderr.includes("Can't mount proc") && stderr.includes('/newroot/proc'))
+  return procMountable
 }
 
 function depth(path: string): number {
@@ -178,15 +203,7 @@ export function bwrapFileSystemArgs(rules: FileSystemRules): {
 } {
   const { root, entries: all } = effectiveRules(rules)
   const entries = all.filter((entry) => existsSync(entry.path))
-  const args = [
-    root === 'write' ? '--bind' : '--ro-bind',
-    '/',
-    '/',
-    '--dev',
-    '/dev',
-    '--proc',
-    '/proc',
-  ]
+  const args = [root === 'write' ? '--bind' : '--ro-bind', '/', '/', '--dev', '/dev', ...procArgs()]
   const masked: string[] = []
   for (const entry of entries) {
     if (entry.access === 'deny') {
