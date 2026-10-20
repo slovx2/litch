@@ -44,9 +44,8 @@ export const enBimport: Record<keyof typeof zhBimport, Entry> = {
     'macOS will ask whether Litch may use {name}’s key in your keychain when reading cookies and passwords. Choose Allow to import them; if you deny, you can try again.',
   'bimport.hint.systemAuth':
     'Your system will ask for permission when reading cookies and passwords; allow it to import them.',
-  'bimport.elevate': 'Allow reading cookies and passwords as administrator',
-  'bimport.elevate.note':
-    'Reading {name}’s cookies and passwords on this computer needs administrator consent; Windows will show a User Account Control prompt. Without it they can’t be imported.',
+  'bimport.hint.appBound':
+    'This version can’t import the protected part of recent {name} data on Windows (mostly cookies); the rest is imported as usual.',
   'bimport.problem.noSource': 'Choose a browser first',
   'bimport.problem.noKinds': 'Choose at least one',
   'bimport.problem.noDomains':
@@ -85,7 +84,7 @@ export const enBimport: Record<keyof typeof zhBimport, Entry> = {
     '{name} is still open and its files are in use. Quit it completely and try again.',
   'bimport.status.denied': 'Permission was denied. Choose Allow in the prompt when you try again.',
   'bimport.status.needsElevation':
-    'Needs administrator consent. Check “Allow reading cookies and passwords as administrator” below and try again.',
+    'This version can’t import protected data from recent Chromium-based browsers on Windows (mostly cookies); the rest is imported as usual.',
   'bimport.status.unsupported': 'Can’t be read on this computer yet',
   'bimport.status.cancelled': 'Stopped',
   'bimport.status.failed': 'Not imported',

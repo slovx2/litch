@@ -220,6 +220,7 @@ void app.whenReady().then(async () => {
     const form = await page(`(() => ({
       source: document.querySelector('${DIALOG} input[name="bimp-source"]:checked')?.value,
       kinds: Object.fromEntries([...document.querySelectorAll('${DIALOG} input[data-kind]')].map((i) => [i.dataset.kind, i.checked])),
+      elevate: !!document.querySelector('${DIALOG} [data-field="allow-elevated"]'),
     }))()`)
     seen.defaultForm = form
     check(
@@ -230,6 +231,8 @@ void app.whenReady().then(async () => {
         !('history' in form.kinds),
       form,
     )
+    // 这一版不提权读 Windows 上的应用绑定数据，对话框里没有管理员同意的勾
+    check('没有“允许用管理员权限读取”的勾', form.elevate === false, form)
     const before = await cookieCount()
     const first = await runImport()
     seen.first = first

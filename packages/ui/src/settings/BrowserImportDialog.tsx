@@ -22,18 +22,14 @@ import type {
   ImportRequest,
   ImportSource,
 } from '../side/browser/bridge.ts'
-import {
-  ElevateCheck,
-  ImportProgressView,
-  ImportResultView,
-  KIND_TEXT,
-} from './BrowserImportResult.tsx'
+import { ImportProgressView, ImportResultView, KIND_TEXT } from './BrowserImportResult.tsx'
 import {
   BLOCK_TEXT,
   canClose,
   chosenOf,
   type DraftProblem,
   draftFor,
+  hitsAppBound,
   type ImportDraft,
   type ImportStep,
   importStep,
@@ -51,7 +47,6 @@ import {
   requestOf,
   retryRequest,
   sourceBlock,
-  wantsElevation,
   wantsSystemAuth,
 } from './browser-import-logic.ts'
 import '../styles/browser-import.css'
@@ -73,8 +68,6 @@ export function BrowserImportDialog({ bridge, onClose }: DialogProps) {
   const [step, send] = useReducer(importStep, { name: 'loading' } satisfies ImportStep)
   const [draft, setDraft] = useState<ImportDraft | null>(null)
   const [problem, setProblem] = useState<{ key: DraftProblem; bad?: string[] } | null>(null)
-  /** 结果页上勾的“允许用管理员权限读取” */
-  const [consent, setConsent] = useState(false)
   const running = useRef(false)
   running.current = step.name === 'running'
 
@@ -141,7 +134,6 @@ export function BrowserImportDialog({ bridge, onClose }: DialogProps) {
 
   const run = (request: ImportRequest, retry: boolean) => {
     send(retry ? { type: 'retry', request } : { type: 'start', request })
-    setConsent(false)
     bridge.start(request).then(
       (raw) => {
         const outcome = parseOutcome(raw)
@@ -234,8 +226,6 @@ export function BrowserImportDialog({ bridge, onClose }: DialogProps) {
             origin={step.origin}
             outcome={step.outcome}
             stopped={step.stopped}
-            consent={consent}
-            onConsent={setConsent}
           />
         ) : (
           <div className="modal-body">
@@ -254,7 +244,6 @@ export function BrowserImportDialog({ bridge, onClose }: DialogProps) {
           }
           step={step}
           ready={step.name === 'pick' && draft !== null}
-          consent={consent}
           onClose={onClose}
           onReload={load}
           onStop={stop}
@@ -431,23 +420,13 @@ function PickForm({
           ) : null}
         </div>
       ) : null}
-      {source ? <PickHints source={source} kinds={picked} draft={draft} onChange={set} /> : null}
+      {source ? <PickHints source={source} kinds={picked} /> : null}
     </div>
   )
 }
 
-/** 动手前的提示：先退出来源浏览器；会弹系统授权；Windows 上要不要管理员同意 */
-function PickHints({
-  source,
-  kinds,
-  draft,
-  onChange,
-}: {
-  source: ImportSource
-  kinds: ImportKind[]
-  draft: ImportDraft
-  onChange(patch: Partial<ImportDraft>): void
-}) {
+/** 动手前的提示：先退出来源浏览器；会弹系统授权；Windows 上有一部分这一版导不了 */
+function PickHints({ source, kinds }: { source: ImportSource; kinds: ImportKind[] }) {
   const t = useT()
   const name = source.name
   return (
@@ -460,12 +439,8 @@ function PickHints({
             : t('bimport.hint.systemAuth')}
         </p>
       ) : null}
-      {wantsElevation(source, kinds) ? (
-        <ElevateCheck
-          name={name}
-          checked={draft.allowElevated}
-          onChange={(on) => onChange({ allowElevated: on })}
-        />
+      {hitsAppBound(source, kinds) ? (
+        <p data-hint="app-bound">{t('bimport.hint.appBound', { name })}</p>
       ) : null}
     </div>
   )
@@ -476,7 +451,6 @@ function DialogFoot({
   note,
   step,
   ready,
-  consent,
   onClose,
   onReload,
   onStop,
@@ -488,7 +462,6 @@ function DialogFoot({
   step: ImportStep
   /** 表单能交 */
   ready: boolean
-  consent: boolean
   onClose(): void
   onReload(): void
   onStop(): void
@@ -576,20 +549,18 @@ function DialogFoot({
           </>
         )
       } else {
-        const again = retryRequest(step.origin, report, consent)
-        const offers = report.again.length > 0 || report.elevate.length > 0
+        const again = retryRequest(step.origin, report)
         buttons = (
           <>
             <button type="button" className="btn ghost" data-act="bimp-back" onClick={onBack}>
               {t('bimport.again')}
             </button>
-            {offers ? (
+            {again ? (
               <button
                 type="button"
                 className="btn"
                 data-act="bimp-retry"
-                disabled={again === null}
-                onClick={() => again && onRetry(again)}
+                onClick={() => onRetry(again)}
               >
                 {t('bimport.retry')}
               </button>
