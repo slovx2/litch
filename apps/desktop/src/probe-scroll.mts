@@ -10,15 +10,15 @@ export interface ScrollProbe {
   /** 不在底部、回答在增长：视口里的一行在屏幕上挪了多少像素（应为 0） */
   freeSpread: number
   freeGrew: number
-  /** 不在底部时经历“回答定稿、活动区自动收起”：同一行挪了多少 */
+  /** 不在底部时经历“回答定稿、过程区自动收起”：同一行挪了多少 */
   finalizeFreeSpread: number
   /** 定稿前后，回答的第一块是不是同一个页面元素（没有整块换掉） */
   finalizeKeptNode: boolean
   /** 贴在底部时经历同样的过程：底边的距离变了多少 */
   finalizeFollowGapSpread: number
-  /** 这个过程里活动区确实从展开变成了收起 */
+  /** 这个过程里过程区确实从展开变成了收起 */
   activityCollapsed: boolean
-  /** 活动区和最终回答都在视口里（不在底部）时经历自动收起：回答的第一块挪了多少 */
+  /** 过程区和最终回答都在视口里（不在底部）时经历自动收起：回答的第一块挪了多少 */
   answerInView: boolean
   answerSpread: number
   answerCollapsed: boolean
@@ -146,21 +146,21 @@ export async function scrollProbe(): Promise<ScrollProbe> {
   const freeSpread = spread(free.values)
   const freeGrew = content().offsetHeight - before
 
-  // ---- 三、不在底部时经历定稿和活动区自动收起 ----
-  const wasOpen = Boolean(one('.turn:last-child .act-body'))
+  // ---- 三、不在底部时经历定稿和过程区自动收起 ----
+  const wasOpen = Boolean(one('.turn:last-child .proc-body'))
   await frames(500, free.sample, live)
   free.stop()
   // free.values 里前面是第二步的样本，合在一起算：从离开底部一直到定稿之后，这一行都不该动
   const finalizeFreeSpread = spread(free.values)
   const finalizeKeptNode = firstBlock?.isConnected === true
-  const activityCollapsed = wasOpen && !one('.turn:last-child .act-body')
+  const activityCollapsed = wasOpen && !one('.turn:last-child .proc-body')
 
-  // ---- 四、不在底部，但活动区和最终回答都在眼前：收起时回答不跳 ----
+  // ---- 四、不在底部，但过程区和最终回答都在眼前：收起时回答不跳 ----
   await openStreaming()
   // 重新打开时会回到上一步离开的位置，先回到底部
   one('.to-bottom')?.click()
   await frame()
-  // 等回答长出几行再往上滚一点：这样既离开了底部，活动区和回答的开头又都还在视口里
+  // 等回答长出几行再往上滚一点：这样既离开了底部，过程区和回答的开头又都还在视口里
   const answer = (await until('回答的第一块', () => live()?.firstElementChild)) as HTMLElement
   await until(
     '回答长出几行',
@@ -170,17 +170,17 @@ export async function scrollProbe(): Promise<ScrollProbe> {
   await frame()
   await frame()
   const view = scroller().getBoundingClientRect()
-  const head = one('.turn:last-child .act-head')?.getBoundingClientRect()
-  // 活动区的标题和回答的第一块都要在视口里，这一步量的才是想量的情形
+  const head = one('.turn:last-child .proc')?.getBoundingClientRect()
+  // 过程区的标题和回答的第一块都要在视口里，这一步量的才是想量的情形
   const answerInView =
-    Boolean(one('.turn:last-child .act-body')) &&
+    Boolean(one('.turn:last-child .proc-body')) &&
     (head?.top ?? -1) >= view.top &&
     answer.getBoundingClientRect().bottom <= view.bottom
   const seen = track(() => answer.getBoundingClientRect().top)
   await frames(500, seen.sample, live)
   seen.stop()
   const answerSpread = spread(seen.values)
-  const answerCollapsed = !one('.turn:last-child .act-body')
+  const answerCollapsed = !one('.turn:last-child .proc-body')
 
   // ---- 五、贴在底部时经历同样的过程 ----
   await openStreaming()
@@ -212,12 +212,13 @@ export async function scrollProbe(): Promise<ScrollProbe> {
   for (const position of [0, -160]) {
     scroller().scrollTop = position
     await frame()
-    await click(lastTurn().querySelector<HTMLElement>('.act-head'))
+    await click(lastTurn().querySelector<HTMLElement>('.proc-head'))
+    for (const group of lastTurn().querySelectorAll<HTMLElement>('.steps-head')) await click(group)
     for (const head of lastTurn().querySelectorAll<HTMLElement>('.item-head:not(:disabled)')) {
       await click(head)
       await click(head)
     }
-    await click(lastTurn().querySelector<HTMLElement>('.act-head'))
+    await click(lastTurn().querySelector<HTMLElement>('.proc-head'))
   }
 
   // ---- 七、切到别的会话再切回来 ----
@@ -366,13 +367,13 @@ export function judgeScroll(probe: ScrollProbe): string[] {
   within('离开底部后视口内容移动', probe.freeSpread, 1)
   within('定稿和自动收起时视口内容移动（离底）', probe.finalizeFreeSpread, 1)
   within('定稿和自动收起时底边移动（贴底）', probe.finalizeFollowGapSpread, 0.5)
-  within('活动区在眼前自动收起时最终回答移动', probe.answerSpread, 1)
-  if (!probe.answerInView) failed.push('量“回答不跳”时，活动区和回答没有同时在视口里')
-  if (!probe.answerCollapsed) failed.push('量“回答不跳”时，活动区没有自动收起')
+  within('过程区在眼前自动收起时最终回答移动', probe.answerSpread, 1)
+  if (!probe.answerInView) failed.push('量“回答不跳”时，过程区和回答没有同时在视口里')
+  if (!probe.answerCollapsed) failed.push('量“回答不跳”时，过程区没有自动收起')
   within('点开收起条目时被点的行移动', probe.toggleMaxShift, 1)
   within('切回会话后位置偏差', probe.restoreShift, 1)
   if (!probe.finalizeKeptNode) failed.push('定稿时回答的页面元素被整块换掉了')
-  if (!probe.activityCollapsed) failed.push('活动区没有自动收起')
+  if (!probe.activityCollapsed) failed.push('过程区没有自动收起')
   if (probe.toggles < 6) failed.push(`只成功点了 ${probe.toggles} 次条目`)
   if (!probe.toBottomShown) failed.push('离开底部后没有出现“回到底部”')
   if (!probe.toBottomWorks) failed.push('点“回到底部”没有回到底部')

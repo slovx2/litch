@@ -80,16 +80,24 @@ export async function toolsProbe(): Promise<ToolsProbe> {
 
   const lastTurn = () => all('.turn').at(-1) ?? null
   await until('这一轮开始', running, 10_000)
-  // 两次调用都完成、回话也说完：活动块这时已经自己收起来了
+  // 两次调用都完成、回话也说完：整段过程这时已经自己收起来了
   const completed = await until('这一轮结束', () => !running() && area(), 60_000).then(
     () => true,
     () => false,
   )
-  const act = await until('活动块', () =>
-    one<HTMLButtonElement>('.act-head', lastTurn() ?? undefined),
+  // 收起的过程点开，再把里面的步骤组都点开（回合没结束时没有收起的那一行，过程本来就摊着）
+  const proc = one<HTMLButtonElement>('.proc-head', lastTurn() ?? undefined)
+  if (proc && proc.getAttribute('aria-expanded') !== 'true') proc.click()
+  const groups = await until('步骤组', () => {
+    const found = all('.steps-head', lastTurn() ?? undefined)
+    return found.length > 0 ? found : null
+  })
+  for (const group of groups) if (group.getAttribute('aria-expanded') !== 'true') group.click()
+  await until('步骤组开着', () =>
+    all('.steps-head', lastTurn() ?? undefined).every(
+      (group) => group.getAttribute('aria-expanded') === 'true',
+    ),
   )
-  if (act.getAttribute('aria-expanded') !== 'true') act.click()
-  await until('活动块开着', () => act.getAttribute('aria-expanded') === 'true')
 
   /** 框里文字段的文字节点：不拼整段，免得量的这一下本身随结果涨 */
   const textNodes = (root: Element) => {

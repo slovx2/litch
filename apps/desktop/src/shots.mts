@@ -13,7 +13,7 @@ interface Shot {
   scene: Scene
 }
 
-/** 每种皮肤三张：对话全貌、活动区展开看差异、另一种明暗下正在输出 */
+/** 每种皮肤三张：对话全貌、过程展开看差异、另一种明暗下正在输出 */
 const SHOTS: Shot[] = [
   { name: 'retro-dark-chat', skin: 'retro', theme: 'dark', scene: 'chat' },
   { name: 'retro-dark-activity', skin: 'retro', theme: 'dark', scene: 'activity' },
@@ -48,7 +48,7 @@ async function arrange(scene: string): Promise<void> {
   await until('会话内容', () => one('.turn'))
 
   if (scene === 'stream') {
-    // 回答出到代码块的时候截：这时活动区还开着，光标在动
+    // 回答出到代码块的时候截：这时过程还摊着，光标在动
     await until('回答输出到代码块', () => one('.md.live .code'))
     await sleep(600)
     return
@@ -58,12 +58,14 @@ async function arrange(scene: string): Promise<void> {
   await sleep(300)
   if (scene === 'chat') return
 
-  // 活动区展开，再点开改文件的那一条看差异
+  // 收起的过程点开、步骤组展开，再点开改文件的那一条看差异
   const turn = one('.turn:last-child') as HTMLElement
-  turn.querySelector<HTMLElement>('.act-head')?.click()
-  await until('活动区展开', () => turn.querySelector('.act-body'))
-  const rows = [...turn.querySelectorAll<HTMLElement>('.item-head:not(:disabled)')]
-  rows[1]?.click()
+  turn.querySelector<HTMLElement>('.proc-head')?.click()
+  await until('过程展开', () => turn.querySelector('.steps-head'))
+  for (const group of turn.querySelectorAll<HTMLElement>('.steps-head')) group.click()
+  await until('步骤组展开', () => turn.querySelector('.steps-body'))
+  const rows = [...turn.querySelectorAll<HTMLElement>('.steps-body .item-head:not(:disabled)')]
+  rows[0]?.click()
   await until('差异画出来', () => turn.querySelector('.dl'))
   // 把这一回合的开头滚到视口上沿
   turn.scrollIntoView({ block: 'start' })

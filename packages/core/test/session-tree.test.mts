@@ -8,6 +8,7 @@ import {
   bucketItems,
   type ChannelError,
   cardOf,
+  cardPlace,
   connectChannel,
   createMockCore,
   createPortPair,
@@ -614,7 +615,7 @@ test('投影：设备进程的提醒（kind="remind"）拆成事件，没有用�
   assert.deepEqual(item.event, { kind: 'remind', notes: [] })
 })
 
-test('分块：不画的条目不占块、不算进活动；回合只剩说明时照旧直接露出来', () => {
+test('分块：不画的条目不占块、不算进步骤；回合只剩提示时照旧直接露出来', () => {
   assert.deepEqual(
     bucketItems([
       { id: 'u', kind: 'userMessage' },
@@ -624,7 +625,7 @@ test('分块：不画的条目不占块、不算进活动；回合只剩说明�
     ]),
     [
       { type: 'user', itemId: 'u' },
-      { type: 'activity', key: 'r', itemIds: ['r'] },
+      { type: 'process', key: 'r', parts: [{ type: 'steps', key: 'r', itemIds: ['r'] }] },
       { type: 'answer', itemId: 'a' },
     ],
   )
@@ -682,7 +683,7 @@ test('提案卡片写什么：开始了、子会话在侧栏里的写实际的 h
   })
 })
 
-test('分块：派出子会话、启动子代理（开始时还不知道子线程）画成露在外面的卡片；等待子代理还是活动里的一行', () => {
+test('分块：派出子会话、启动子代理（开始时还不知道子线程）画成卡片；等待子代理还是步骤组里的一行', () => {
   const spawn = projectItem({
     type: 'dynamicToolCall',
     id: 'd1',
@@ -711,18 +712,21 @@ test('分块：派出子会话、启动子代理（开始时还不知道子线�
   assert.equal(cardOf(collab('spawnAgent')), true)
   assert.equal(cardOf(collab('wait')), false)
   assert.equal(cardOf(projectItem(userText('u', 'hi'))), false)
+  assert.equal(cardPlace(spawn), 'outside')
+  assert.equal(cardPlace(collab('spawnAgent')), 'inline')
+  assert.equal(cardPlace(collab('wait')), null)
   assert.deepEqual(
     bucketItems([
       { id: 'u', kind: 'userMessage' },
       { id: 'r', kind: 'reasoning' },
-      { id: 'd1', kind: 'toolCall', card: true },
+      { id: 'd1', kind: 'toolCall', card: 'outside' },
       { id: 'w', kind: 'toolCall' },
     ]),
     [
       { type: 'user', itemId: 'u' },
-      { type: 'activity', key: 'r', itemIds: ['r'] },
+      { type: 'process', key: 'r', parts: [{ type: 'steps', key: 'r', itemIds: ['r'] }] },
       { type: 'card', itemId: 'd1' },
-      { type: 'activity', key: 'w', itemIds: ['w'] },
+      { type: 'process', key: 'w', parts: [{ type: 'steps', key: 'w', itemIds: ['w'] }] },
     ],
   )
 })

@@ -1,7 +1,6 @@
-// 活动区：推理、命令、改文件、工具调用这些过程性的条目。三级收纳：
-// 一行总结（整个活动块）→ 每个条目一行 → 条目的详情。每一级点一下展开。
+// 过程区里的步骤：推理、命令、改文件、工具调用这些过程性的条目。三级收纳：
+// 步骤组一行灰色的汇总（两段说明之间连续的条目）→ 每个条目一行 → 条目的详情。每一级点一下展开。
 import type {
-  AgentMessageItem,
   CommandItem,
   FileChangeItem,
   ItemView,
@@ -12,14 +11,14 @@ import type {
   ToolPart,
   WebSearchItem,
 } from '@litch/core'
-import { keys } from '@litch/core'
-import { Fragment, memo, type ReactNode, useRef, useState } from 'react'
+import { keys, stepKindOf, stepsTally } from '@litch/core'
+import { Fragment, memo, type ReactNode, useContext, useMemo, useRef, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { useElapsed } from '../app/clock.ts'
 import { duration, elapsed } from '../app/format.ts'
 import { ImageViewer } from '../app/ImageViewer.tsx'
 import { Caret, Icon, type IconName } from '../app/icons.tsx'
-import { useKey } from '../app/services.tsx'
+import { useKey, useKeys } from '../app/services.tsx'
 import { openDiffAt } from '../diff/state.ts'
 import { byteSize } from '../files/lines.ts'
 import type { Translator } from '../i18n/index.ts'
@@ -27,10 +26,10 @@ import { openAgent } from '../tree/agents.ts'
 import { commandLook, commandState } from './command-state.ts'
 import { Diff } from './Diff.tsx'
 import { ToolPath } from './FileLinks.tsx'
-import { Markdown } from './Markdown.tsx'
 import { type ItemRef, sessionKeyOf, useItem } from './messages.tsx'
 import { usePin } from './scroll.ts'
-import { useToggle } from './state.ts'
+import { seenSince, TurnTouch, useToggle } from './state.ts'
+import { nowOf, stepsSummary } from './steps-text.ts'
 
 interface RowProps {
   itemRef: ItemRef
@@ -44,11 +43,12 @@ interface RowProps {
   detail?: (() => ReactNode) | null
 }
 
-/** 活动区里的一行：动词、对象、右边的元信息；有详情时点一下展开 */
+/** 步骤组里的一行：动词、对象、右边的元信息；有详情时点一下展开 */
 function Row({ itemRef, icon, verb, target, meta, busy, detail }: RowProps) {
   const [open, setOpen] = useToggle(sessionKeyOf(itemRef), `i:${itemRef.itemId}`, false)
   const head = useRef<HTMLButtonElement | null>(null)
   const pin = usePin()
+  const touch = useContext(TurnTouch)
   return (
     <div className="item">
       <button
@@ -60,6 +60,7 @@ function Row({ itemRef, icon, verb, target, meta, busy, detail }: RowProps) {
         disabled={!detail}
         onClick={() => {
           pin(head.current)
+          if (!open) touch()
           setOpen(!open)
         }}
       >
@@ -414,7 +415,7 @@ const Notice = memo(function Notice(ref: ItemRef) {
   )
 })
 
-/** 只有说明的回合：说明直接露在外面，不带“活动”那一行折叠 */
+/** 只有提示的回合：提示直接露在外面，不收成汇总 */
 export const Notes = memo(function Notes({
   deviceId,
   sessionId,
@@ -425,7 +426,7 @@ export const Notes = memo(function Notes({
   itemIds: string[]
 }) {
   return (
-    <div className="act-body notes">
+    <div className="notes">
       {itemIds.map((itemId) => (
         <Notice key={itemId} deviceId={deviceId} sessionId={sessionId} itemId={itemId} />
       ))}
@@ -433,22 +434,7 @@ export const Notes = memo(function Notes({
   )
 })
 
-/** 夹在过程中间的说明文字（过程说明阶段的助手消息）：直接按正文画，不折叠 */
-const Commentary = memo(function Commentary(ref: ItemRef) {
-  const item = useItem<AgentMessageItem>(ref)
-  if (item?.kind !== 'agentMessage') return null
-  return (
-    <div className="item note">
-      <Markdown
-        text={item.text}
-        streaming={item.status === 'inProgress'}
-        anchor={`i:${ref.itemId}`}
-      />
-    </div>
-  )
-})
-
-function ActivityItem({ kind, ...ref }: ItemRef & { kind: ItemView['kind'] }) {
+function StepItem({ kind, ...ref }: ItemRef & { kind: ItemView['kind'] }) {
   switch (kind) {
     case 'reasoning':
       return <Reasoning {...ref} />
@@ -462,56 +448,117 @@ function ActivityItem({ kind, ...ref }: ItemRef & { kind: ItemView['kind'] }) {
       return <WebSearch {...ref} />
     case 'notice':
       return <Notice {...ref} />
-    case 'agentMessage':
-      return <Commentary {...ref} />
     default:
       return null
   }
 }
 
-interface ActivityProps {
-  deviceId: string
-  sessionId: string
-  /** 活动块的标识：组里第一个条目的标识 */
-  blockKey: string
-  items: { itemId: string; kind: ItemView['kind'] }[]
-  /** 该不该自动收起：回合结束了，或者后面已经有写完的最终回答 */
-  settled: boolean
+const running = (item: ItemView): boolean => 'status' in item && item.status === 'inProgress'
+
+/**
+ * 正在跑的那一条已经跑了多久。等批准的命令写“待审批”，不计时（等人的时间不算它跑的）。
+ * 单独一个组件：每秒重画的只有这几个字
+ */
+function NowTime({ item, deviceId, sessionId }: ItemRef & { item: ItemView }) {
+  const t = useT()
+  const pending = useKey<RequestView[]>(keys.requests(deviceId, sessionId))
+  const waiting =
+    pending?.some((request) => request.kind === 'approval' && request.itemId === item.id) === true
+  const since = seenSince(
+    `${deviceId}:${sessionId}:${item.id}`,
+    item.kind === 'command' ? item.startedAt : null,
+  )
+  const spent = useElapsed(waiting ? null : since)
+  if (waiting) return <span data-state="waiting">{t('command.waiting')}</span>
+  return spent === null || spent < 1000 ? null : <span data-elapsed="">{elapsed(spent, t)}</span>
 }
 
-/** 活动块：进行中展开，告一段落后收成一行，可以再点开。用户点过就以用户的为准 */
-export const Activity = memo(function Activity({
+interface StepsProps {
+  deviceId: string
+  sessionId: string
+  /** 组里第一个条目的标识 */
+  groupKey: string
+  itemIds: string[]
+  /** 回合还在跑：组里有在跑的条目时，汇总行换成“正在做什么” */
+  live: boolean
+}
+
+/**
+ * 步骤组：一行灰色的汇总，默认收着，正在跑的时候也不自动展开。
+ * 汇总写动作和个数；右边是失败、被拒的个数（红字）、改动行数、用时。正在跑时左边是运行记号，写当前这一条和计时
+ */
+export const Steps = memo(function Steps({
   deviceId,
   sessionId,
-  blockKey,
-  items,
-  settled,
-}: ActivityProps) {
-  const [open, setOpen] = useToggle(`${deviceId}:${sessionId}`, `g:${blockKey}`, !settled)
+  groupKey,
+  itemIds,
+  live,
+}: StepsProps) {
+  const sessionKey = sessionKeyOf({ deviceId, sessionId })
+  const [open, setOpen] = useToggle(sessionKey, `g:${groupKey}`, false)
+  const touch = useContext(TurnTouch)
   const head = useRef<HTMLButtonElement | null>(null)
   const pin = usePin()
   const t = useT()
+  const itemKeys = useMemo(
+    () => itemIds.map((itemId) => keys.item(deviceId, sessionId, itemId)),
+    [deviceId, sessionId, itemIds],
+  )
+  const values = useKeys<ItemView>(itemKeys)
+  const items = useMemo(
+    () => values.filter((value): value is ItemView => value !== undefined),
+    [values],
+  )
+  const tally = useMemo(() => stepsTally(items), [items])
+  const current = live ? items.findLast(running) : undefined
+  const now = current ? nowOf(current, stepKindOf(current), t) : null
   return (
-    <div className="act">
+    <div className="steps" data-running={current ? '' : undefined}>
       <button
         type="button"
-        className="act-head"
-        data-anchor={`g:${blockKey}`}
+        className="steps-head"
+        data-anchor={`g:${groupKey}`}
         ref={head}
         aria-expanded={open}
         onClick={() => {
           pin(head.current)
+          if (!open) touch()
           setOpen(!open)
         }}
       >
-        <Caret />
-        <span>{t('activity.title')}</span>
-        <span className="mono dim">{t('activity.steps', { n: items.length })}</span>
+        {now ? <i className="st run" /> : <Caret />}
+        <span className="sum">{now ? now.label : stepsSummary(tally, t)}</span>
+        {now?.target ? <span className="now ell">{now.target}</span> : null}
+        <span className="meta">
+          {tally.failed > 0 ? (
+            <span className="bad">{t('activity.failed', { n: tally.failed })}</span>
+          ) : null}
+          {tally.declined > 0 ? (
+            <span className="bad">{t('activity.declined', { n: tally.declined })}</span>
+          ) : null}
+          {now || tally.added + tally.removed === 0 ? null : (
+            <span>
+              <span className="plus">+{tally.added}</span>
+              <span className="minus">−{tally.removed}</span>
+            </span>
+          )}
+          {current ? (
+            <NowTime deviceId={deviceId} sessionId={sessionId} itemId={current.id} item={current} />
+          ) : tally.durationMs ? (
+            <span>{duration(tally.durationMs, t)}</span>
+          ) : null}
+        </span>
       </button>
       {open ? (
-        <div className="act-body">
+        <div className="steps-body">
           {items.map((item) => (
-            <ActivityItem key={item.itemId} deviceId={deviceId} sessionId={sessionId} {...item} />
+            <StepItem
+              key={item.id}
+              deviceId={deviceId}
+              sessionId={sessionId}
+              itemId={item.id}
+              kind={item.kind}
+            />
           ))}
         </div>
       ) : null}
