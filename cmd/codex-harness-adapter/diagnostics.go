@@ -171,7 +171,7 @@ func runDiagnostic(ctx context.Context, c configuration, flag string) ([]byte, e
 	case strings.Contains(stderr.String(), "需要 Node >="):
 		message = both("Node.js 版本过低，请安装适配器说明（ADAPTER.md）要求的最低稳定版本或更高版本", "Node.js is too old; install the minimum stable version listed in the adapter guide (ADAPTER.en.md) or newer")
 	case strings.Contains(stderr.String(), "沙箱依赖不可用"):
-		message = both("沙箱依赖不可用，请检查 Linux 的 bubblewrap、socat 或 macOS 的 sandbox-exec", "The sandbox dependencies are unavailable; check bubblewrap and socat on Linux, or sandbox-exec on macOS")
+		message = both("沙箱依赖不可用，请检查 Linux 的 bubblewrap 或 macOS 的 sandbox-exec", "The sandbox dependencies are unavailable; check bubblewrap on Linux, or sandbox-exec on macOS")
 	}
 	return nil, diagnosticFailure(c, kind, message)
 }

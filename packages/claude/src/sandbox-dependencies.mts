@@ -1,7 +1,8 @@
 import { execFileSync } from 'node:child_process'
 import { accessSync, constants } from 'node:fs'
 
-// SDK 的 Linux 文件/网络沙箱同时需要两个可执行文件；缺失时不能声称完整权限能力可用。
+// 受限命令经适配器自己的包装器进系统沙箱（Linux 用 bwrap，macOS 用 sandbox-exec），SDK 自带的沙箱是关着的；
+// 缺了就不能声称完整权限能力可用。
 export function validateSandboxDependencies(
   platform = process.platform,
   probe: (command: string, args: string[]) => void = (command, args) => {
@@ -13,10 +14,7 @@ export function validateSandboxDependencies(
   if (platform === 'win32') return
   const commands: Array<[string, string[]]> =
     platform === 'linux'
-      ? [
-          ['bwrap', ['--version']],
-          ['socat', ['-V']],
-        ]
+      ? [['bwrap', ['--version']]]
       : platform === 'darwin'
         ? [['/usr/bin/sandbox-exec', []]]
         : []
