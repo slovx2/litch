@@ -10,6 +10,7 @@ import {
   type KindStage,
   reportOf,
   STAGE_TEXT,
+  showsCounts,
 } from './browser-import-logic.ts'
 
 export const KIND_TEXT: Record<ImportKind, MessageKey> = {
@@ -56,17 +57,20 @@ export function ImportResultView({
   name,
   origin,
   outcome,
+  stopped,
   consent,
   onConsent,
 }: {
   name: string
   origin: ImportRequest
   outcome: ImportOutcome
+  /** 用户点过“停止导入” */
+  stopped: boolean
   consent: boolean
   onConsent(on: boolean): void
 }) {
   const t = useT()
-  const report = reportOf(origin.kinds, outcome)
+  const report = reportOf(origin.kinds, outcome, stopped)
   return (
     <div className="modal-body bimp-result" data-overall={report.overall}>
       <p className="bimp-lead" role="status" data-tone={toneOfOverall(report.overall)}>
@@ -87,7 +91,13 @@ export function ImportResultView({
 }
 
 const toneOfOverall = (overall: string) =>
-  overall === 'ok' ? 'ok' : overall === 'partial' || overall === 'cancelled' ? 'warn' : 'err'
+  overall === 'ok'
+    ? 'ok'
+    : overall === 'existing' || overall === 'nothing'
+      ? 'quiet'
+      : overall === 'partial' || overall === 'cancelled'
+        ? 'warn'
+        : 'err'
 
 function ResultLine({ line, name }: { line: KindReport; name: string }) {
   const t = useT()
@@ -98,7 +108,8 @@ function ResultLine({ line, name }: { line: KindReport; name: string }) {
     ['bimport.count.invalid', line.skippedInvalid],
     ['bimport.count.failed', line.failed],
   ]
-  const worked = line.tone === 'ok' || line.tone === 'warn'
+  // 停下的那一类也写：已经写进去的条数要看得到
+  const worked = showsCounts(line)
   return (
     <li
       className="bimp-line"

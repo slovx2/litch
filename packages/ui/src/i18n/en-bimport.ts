@@ -5,7 +5,7 @@ import type { zhBimport } from './zh-CN-bimport.ts'
 export const enBimport: Record<keyof typeof zhBimport, Entry> = {
   'bimport.entry.title': 'Import from another browser',
   'bimport.entry.note':
-    'Bring cookies (site sign-ins), and saved passwords from Chrome, Edge, Firefox and others into the built-in browser. A one-time import, not a sync.',
+    'Bring cookies (site sign-ins) and saved passwords from Chrome, Edge, Firefox and others into the built-in browser. A one-time import, not a sync.',
   'bimport.entry.button': 'Import…',
   'bimport.entry.last': 'Last imported on {day}',
   'bimport.menu': 'Browser menu',
@@ -20,6 +20,7 @@ export const enBimport: Record<keyof typeof zhBimport, Entry> = {
   'bimport.loadFailed': 'Couldn’t look: {reason}',
   'bimport.none':
     'No browser to import from was found on this computer. Supported: Google Chrome, Microsoft Edge, Brave, Arc, Chromium, Vivaldi and Firefox.',
+  'bimport.unusable': 'These browsers were found, but none has anything to import:',
   'bimport.source': 'From',
   'bimport.profile': 'Profile',
   'bimport.profile.default': '{name} (default)',
@@ -64,15 +65,21 @@ export const enBimport: Record<keyof typeof zhBimport, Entry> = {
 
   'bimport.overall.ok': 'Import complete',
   'bimport.overall.partial': 'Partly imported',
-  'bimport.overall.failed': 'Nothing was imported',
+  'bimport.overall.failed': 'The import didn’t succeed',
+  'bimport.overall.existing': 'Nothing new; all of it is already in Litch',
+  'bimport.overall.nothing': 'Nothing was imported',
   'bimport.overall.cancelled': 'Import stopped; what was already saved stays',
   'bimport.overall.profileGone':
     'This profile can no longer be found; the browser may have been uninstalled or the profile deleted. Look again and choose one.',
   'bimport.overall.busy': 'Another import is in progress. Try again when it finishes.',
   'bimport.status.ok': 'Done',
   'bimport.status.okFailed': 'Some items couldn’t be saved',
+  'bimport.status.allExisting': 'All already there',
+  'bimport.status.allInvalid': 'All invalid; nothing imported',
+  'bimport.status.storeUnavailable':
+    'The system’s secure storage isn’t available on this computer, so passwords can’t be saved',
   'bimport.status.empty': 'Nothing in the source',
-  'bimport.status.partial': 'Some items couldn’t be read; the rest were imported',
+  'bimport.status.partial': 'Some items weren’t imported',
   'bimport.status.missing': 'This profile has none',
   'bimport.status.locked':
     '{name} is still open and its files are in use. Quit it completely and try again.',
@@ -81,7 +88,7 @@ export const enBimport: Record<keyof typeof zhBimport, Entry> = {
     'Needs administrator consent. Check “Allow reading cookies and passwords as administrator” below and try again.',
   'bimport.status.unsupported': 'Can’t be read on this computer yet',
   'bimport.status.cancelled': 'Stopped',
-  'bimport.status.failed': 'Couldn’t be read; you can try again',
+  'bimport.status.failed': 'Not imported',
   'bimport.status.skipped': 'Not reached; the import stopped',
   'bimport.count.imported': '{n} imported',
   'bimport.count.existing': '{n} already there',
@@ -93,6 +100,7 @@ export const enBimport: Record<keyof typeof zhBimport, Entry> = {
   'bimport.again': 'Choose again',
   'bimport.rescan': 'Look again',
   'bimport.startFailed': 'Couldn’t start: {reason}',
+  'bimport.refused': 'Litch didn’t accept this import. Close the dialog and try again.',
   'bimport.close': 'Close',
   'bimport.done': 'Done',
 }

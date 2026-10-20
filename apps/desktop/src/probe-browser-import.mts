@@ -3,7 +3,7 @@
 // 启动脚本给 LITCH_BROWSER_IMPORT_FAKE=<临时目录>，主进程在那里摆一套自造的样本资料（browser-import/test/sample.mts），
 // 不碰这台电脑上任何真实浏览器的资料。用户数据目录是临时的，Cookie 写进的是它里面的内置浏览器分区。
 // 走一遍：浏览器面板的横幅和菜单 → 设置页“从浏览器导入” → 导入 Chrome 的默认资料、核对条数和分区里的 Cookie →
-// 再导一次都算“已存在” → 浏览器开着（locked）、授权被拒（denied）给“重试” → 导到一半停下。
+// 再导一次都算“已存在” → 浏览器开着（locked）、授权被拒（denied）给“重试” → 导入中连按两次 Esc 不关不停 → 导到一半停下。
 // 结果打一行 LITCH_BROWSER {ok, checks}；LITCH_BROWSER_SHOTS 给了目录时存几张截图。
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join, normalize, sep } from 'node:path'
@@ -265,6 +265,7 @@ void app.whenReady().then(async () => {
       { first: firstCookies, second: secondCookies },
     )
     check('再导一次分区里的 Cookie 没变多', (await cookieCount()) === after)
+    check('再导一次整体说“没有新的”，不说“导入完成”', second?.overall === 'existing', second)
     await click(`${DIALOG} [data-act="bimp-back"]`)
     await until(stepIs('pick'))
 
@@ -284,6 +285,34 @@ void app.whenReady().then(async () => {
     seen.denied = denied
     check('Edge 报系统授权被拒', line(denied, 'cookies')?.status === 'denied', denied)
     check('授权被拒时给“重试”', denied?.retry === true, denied)
+    await click(`${DIALOG} [data-act="bimp-back"]`)
+    await until(stepIs('pick'))
+
+    // ---------- 导入中连按两次 Esc：对话框不关、导入不停 ----------
+    // Chromium 第二次的 cancel 事件拦不住，对话框得自己重新打开（BrowserImportDialog.tsx 的 onClose）
+    check('选得上 Brave（读之前要等几秒）', await choose('brave'))
+    await click(`${DIALOG} [data-act="bimp-start"]`)
+    check('Brave 开始导了', await until(stepIs('running'), 3000))
+    window.webContents.focus()
+    for (let i = 0; i < 2; i++) {
+      window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' })
+      window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' })
+      await pause(120)
+    }
+    await pause(300)
+    check(
+      '导入中连按两次 Esc 对话框还开着、还在导',
+      await page(`${stepIs('running')} || ${stepIs('done')}`),
+      await page(`document.querySelector('dialog.bimp-dialog')?.dataset.step ?? 'gone'`),
+    )
+    check(
+      '对话框还是模态的',
+      await page(`!!document.querySelector('${DIALOG}')?.matches(':modal')`),
+    )
+    check('Esc 没把导入停下', await until(stepIs('done'), 30_000))
+    const escaped = await page(READ_RESULT)
+    seen.escaped = escaped
+    check('连按 Esc 之后的结果不是“已停止”', escaped?.overall !== 'cancelled', escaped)
     await click(`${DIALOG} [data-act="bimp-back"]`)
     await until(stepIs('pick'))
 

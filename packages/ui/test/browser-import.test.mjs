@@ -218,15 +218,39 @@ test('进度只往前走，不是这次要导的类别不理', () => {
   assert.deepEqual(stages, { passwords: 'done' })
 })
 
+// 主进程没读成的一类：条数全是 0（pipeline.mts 的 notRead）
+const none = (status, patch = {}) => counts({ status, discovered: 0, imported: 0, ...patch })
+
 test('一类的结果：每种状态的语气、说法、能不能重试', () => {
   const look = (patch) => {
     const line = kindReport('cookies', counts(patch))
     return [line.tone, line.say, line.retry]
   }
   assert.deepEqual(look({}), ['ok', 'bimport.status.ok', null])
-  assert.deepEqual(look({ failed: 2 }), ['warn', 'bimport.status.okFailed', null])
+  assert.deepEqual(look({ failed: 2 }), ['warn', 'bimport.status.okFailed', 'again'])
   assert.deepEqual(look({ discovered: 0, imported: 0 }), ['quiet', 'bimport.status.empty', null])
-  assert.deepEqual(look({ status: 'partial', failed: 3 }), ['warn', 'bimport.status.partial', null])
+  // 一条新的都没有：都已经有了、都无效
+  assert.deepEqual(look({ imported: 0, skippedExisting: 10 }), [
+    'quiet',
+    'bimport.status.allExisting',
+    null,
+  ])
+  assert.deepEqual(look({ imported: 0, skippedInvalid: 3 }), [
+    'warn',
+    'bimport.status.allInvalid',
+    null,
+  ])
+  // partial、failed 说法中性；读取器会报 partial 但 failed 是 0、只有一句 error
+  assert.deepEqual(look({ status: 'partial', failed: 3 }), [
+    'warn',
+    'bimport.status.partial',
+    'again',
+  ])
+  assert.deepEqual(look({ status: 'partial', failed: 0, error: 'x' }), [
+    'warn',
+    'bimport.status.partial',
+    'again',
+  ])
   assert.deepEqual(look({ status: 'missing' }), ['quiet', 'bimport.status.missing', null])
   assert.deepEqual(look({ status: 'locked' }), ['err', 'bimport.status.locked', 'again'])
   assert.deepEqual(look({ status: 'denied' }), ['err', 'bimport.status.denied', 'again'])
@@ -239,6 +263,19 @@ test('一类的结果：每种状态的语气、说法、能不能重试', () =>
   assert.deepEqual(look({ status: 'cancelled' }), ['quiet', 'bimport.status.cancelled', null])
   assert.deepEqual(look({ status: 'failed' }), ['err', 'bimport.status.failed', 'again'])
   assert.deepEqual(look({ status: 'skipped' }), ['quiet', 'bimport.status.skipped', null])
+  // 密码库用不了：重试也没用，不给重试（原话是 browser/passwords/store.mts 的那句）
+  const keystore =
+    'Saved passwords are encrypted with the system keystore, which is not available on this computer, so no passwords were stored.'
+  assert.equal(logic.storeUnavailable(keystore), true)
+  assert.equal(logic.storeUnavailable('Could not write to the built-in browser.'), false)
+  assert.equal(logic.storeUnavailable(undefined), false)
+  const store = kindReport('passwords', none('failed', { failed: 3, error: keystore }))
+  assert.deepEqual(
+    [store.tone, store.say, store.retry],
+    ['err', 'bimport.status.storeUnavailable', null],
+  )
+  const half = kindReport('passwords', counts({ status: 'partial', failed: 1, error: keystore }))
+  assert.equal(half.retry, null)
   // 主进程没报这一类：当没成，能重试
   const lost = kindReport('passwords', undefined)
   assert.equal(lost.status, 'failed')
@@ -246,32 +283,56 @@ test('一类的结果：每种状态的语气、说法、能不能重试', () =>
   // 英文原话只放进详情
   assert.equal(kindReport('cookies', counts({ status: 'failed', error: 'disk' })).error, 'disk')
   assert.equal('error' in kindReport('cookies', counts()), false)
+  // 条数：成了的、停下时写进去了的都写，没读成的不写
+  assert.equal(logic.showsCounts(kindReport('cookies', counts())), true)
+  assert.equal(
+    logic.showsCounts(kindReport('cookies', counts({ status: 'cancelled', imported: 4 }))),
+    true,
+  )
+  assert.equal(logic.showsCounts(kindReport('cookies', none('locked'))), false)
 })
 
-test('整次的结果：全成、部分成、都没成、停了、资料不在、另一个在导', () => {
+test('整次的结果：全成、部分成、都没成、没有新的、什么都没导、停了、资料不在、另一个在导', () => {
   const kinds = ['cookies', 'passwords']
-  const of = (record, error) => reportOf(kinds, { ...(error ? { error } : {}), kinds: record })
+  const of = (record, error, stopped) =>
+    reportOf(kinds, { ...(error ? { error } : {}), kinds: record }, stopped)
   const all = { cookies: counts(), passwords: counts() }
   assert.equal(of(all).overall, 'ok')
   assert.equal(of(all).say, 'bimport.overall.ok')
   // 没数据的不拖累：一类成、一类没有
-  assert.equal(of({ ...all, passwords: counts({ status: 'missing' }) }).overall, 'ok')
+  assert.equal(of({ ...all, passwords: none('missing') }).overall, 'ok')
   assert.equal(of({ ...all, cookies: counts({ failed: 1 }) }).overall, 'partial')
-  const mixed = of({ ...all, cookies: counts({ status: 'locked' }) })
+  const mixed = of({ ...all, cookies: none('locked') })
   assert.equal(mixed.overall, 'partial')
   assert.deepEqual(mixed.again, ['cookies'])
-  const bad = of({
-    cookies: counts({ status: 'locked' }),
-    passwords: counts({ status: 'needs-elevation' }),
-  })
+  const bad = of({ cookies: none('locked'), passwords: none('needs-elevation') })
   assert.equal(bad.overall, 'failed')
   assert.deepEqual(bad.again, ['cookies'])
   assert.deepEqual(bad.elevate, ['passwords'])
-  const stopped = of({
-    cookies: counts({ status: 'cancelled' }),
-    passwords: counts({ status: 'skipped' }),
+  // 一类都没导成，也没有出错的：不说“导入完成”
+  const empty = of({ cookies: none('missing'), passwords: none('unsupported') })
+  assert.equal(empty.overall, 'nothing')
+  assert.equal(empty.say, 'bimport.overall.nothing')
+  assert.equal(of({ cookies: none('ok'), passwords: none('missing') }).overall, 'nothing')
+  assert.equal(
+    of({ cookies: counts({ imported: 0, skippedInvalid: 5 }), passwords: none('missing') }).overall,
+    'nothing',
+  )
+  // 都已经有了
+  const again = of({
+    cookies: counts({ imported: 0, skippedExisting: 7 }),
+    passwords: counts({ imported: 0, skippedExisting: 2 }),
   })
-  assert.equal(stopped.overall, 'cancelled')
+  assert.equal(again.overall, 'existing')
+  assert.equal(again.say, 'bimport.overall.existing')
+  // 停下：有 cancelled 的、只有 skipped 的（停在两类之间）、用户点过停止的
+  assert.equal(
+    of({ cookies: counts({ status: 'cancelled', imported: 3 }), passwords: none('skipped') })
+      .overall,
+    'cancelled',
+  )
+  assert.equal(of({ cookies: counts(), passwords: none('skipped') }).overall, 'cancelled')
+  assert.equal(of(all, undefined, true).overall, 'cancelled')
   // 整体性的失败：不列逐类
   const gone = of({}, 'profile-gone')
   assert.equal(gone.overall, 'profile-gone')
@@ -290,6 +351,48 @@ test('整次的结果：全成、部分成、都没成、停了、资料不在�
     reportOf(['passwords'], { kinds: { passwords: counts() } }).kinds.map((line) => line.kind),
     ['passwords'],
   )
+})
+
+test('主进程的回答先过一遍：拒绝时的 null、{}、[]，认不出的类别和数', () => {
+  assert.equal(logic.parseOutcome(null), null)
+  assert.equal(logic.parseOutcome({}), null)
+  assert.equal(logic.parseOutcome('x'), null)
+  assert.deepEqual(logic.parseOutcome({ error: 'busy' }), { error: 'busy', kinds: {} })
+  assert.deepEqual(
+    logic.parseOutcome({
+      kinds: {
+        cookies: {
+          status: 'ok',
+          discovered: 3,
+          imported: 2.7,
+          skippedExisting: -1,
+          failed: 'x',
+          error: 'e',
+        },
+        passwords: { status: 'weird' },
+        history: { status: 'ok' },
+      },
+    }),
+    {
+      kinds: {
+        cookies: {
+          status: 'ok',
+          discovered: 3,
+          imported: 2,
+          skippedExisting: 0,
+          skippedInvalid: 0,
+          failed: 0,
+          error: 'e',
+        },
+      },
+    },
+  )
+  assert.deepEqual(logic.parseSources(null), [])
+  assert.deepEqual(logic.parseSources([chrome, { browser: 'x' }, null]), [chrome])
+  assert.deepEqual(logic.parseState(null), {})
+  assert.deepEqual(logic.parseState({ lastImportAt: 5, bannerDismissedAt: 'no' }), {
+    lastImportAt: 5,
+  })
 })
 
 test('重试：照原样能重试的几类，勾了管理员同意再加要提权的；网站名单从最初的请求取', () => {
@@ -367,6 +470,9 @@ test('对话框的阶段：找来源 → 选 → 导 → 结果 → 重试 → �
   })
   assert.equal(step.name, 'done')
   assert.equal(step.origin, request)
+  // 点过停止：结果页按停下了说
+  assert.equal(step.stopped, true)
+  assert.equal(reportOf(step.origin.kinds, step.outcome, step.stopped).overall, 'cancelled')
   const late = importStep(step, {
     type: 'progress',
     progress: { kind: 'cookies', phase: 'done' },
@@ -378,7 +484,9 @@ test('对话框的阶段：找来源 → 选 → 导 → 结果 → 重试 → �
   assert.deepEqual(step.stages, { cookies: 'waiting' })
   assert.equal(step.origin, request)
   step = importStep(step, { type: 'finished', outcome: { kinds: { cookies: counts() } } })
-  assert.equal(reportOf(step.origin.kinds, step.outcome).overall, 'ok')
+  // 重试没停：这一次按没停说
+  assert.equal(step.stopped, false)
+  assert.equal(reportOf(step.origin.kinds, step.outcome, step.stopped).overall, 'ok')
   // 回去重新选
   step = importStep(step, { type: 'back' })
   assert.equal(step.name, 'pick')
