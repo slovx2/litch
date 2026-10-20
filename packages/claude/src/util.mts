@@ -710,7 +710,13 @@ function redact(value: unknown, depth = 0): unknown {
   if (Array.isArray(value)) return value.slice(0, 40).map((entry) => redact(entry, depth + 1))
   const result: Record<string, unknown> = {}
   for (const [key, entry] of Object.entries(value as Record<string, unknown>).slice(0, 80)) {
-    if (/token|secret|password|api.?key|authorization|cookie/i.test(key)) {
+    // 按键名盖：授权码一类只认带 auth、verifier 的写法，单独的 code 不盖（退出码、错误码也叫 code），
+    // 登录方法的参数整段不记，见 summarizeRpcParams
+    if (
+      /token|secret|password|passphrase|api.?key|authorization|auth.?code|code.?verifier|credential|private.?key|cookie/i.test(
+        key,
+      )
+    ) {
       result[key] = '[redacted]'
     } else {
       result[key] = redact(entry, depth + 1)

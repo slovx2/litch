@@ -240,8 +240,34 @@ export function commandArray(value: unknown): string[] {
   return []
 }
 
+/**
+ * 参数里会带密钥、授权码的方法：登录（粘贴回来的授权码、API key、设备码）、provider 和 MCP 的写入
+ * （密钥字段、env、headers）、配置写入（env 里的值）。这些参数的值不进调试日志，只记标识和有哪些键；
+ * 按键名去盖（redact）盖不全，授权码的键就叫 code。
+ */
+const SECRET_PARAM_METHOD =
+  /^(litch\/harness\/(auth\/|mcp\/login$|providers\/upsert$|mcp\/upsert$|config\/write$)|account\/login\/|mcpServer\/oauth\/|config\/(value\/write|batchWrite)$)/
+const SECRET_PARAM_ID_KEYS = [
+  'harness',
+  'providerId',
+  'methodId',
+  'attemptId',
+  'loginId',
+  'templateId',
+  'name',
+  'previousName',
+  'type',
+] as const
+
 export function summarizeRpcParams(method: string, params: unknown): unknown {
   const rec = asRecord(params)
+  if (SECRET_PARAM_METHOD.test(method)) {
+    const summary: Record<string, unknown> = {}
+    for (const key of SECRET_PARAM_ID_KEYS)
+      if (typeof rec[key] === 'string') summary[key] = rec[key]
+    summary.paramKeys = Object.keys(rec)
+    return summary
+  }
   if (method === 'turn/start') {
     return {
       threadId: rec.threadId,
