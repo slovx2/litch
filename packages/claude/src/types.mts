@@ -1,5 +1,6 @@
 import type { ElicitationRequest, ElicitationResult } from '@anthropic-ai/claude-agent-sdk'
 import type { ApprovalPolicy } from './approval-policy.mjs'
+import type { CodexErrorInfo } from './codex-error-info.mjs'
 import type { RuntimeBackendType } from './runtime-config.mjs'
 import type { RuntimeSandboxPolicy } from './sandbox-policy.mjs'
 
@@ -402,7 +403,14 @@ export type RuntimeEvent =
       stderr: string
       output: string
     }
-  | { type: 'completed'; claudeSessionId?: string | null; result?: string | null; success: boolean }
+  | {
+      type: 'completed'
+      claudeSessionId?: string | null
+      result?: string | null
+      success: boolean
+      /** 失败时认出的模型接口错误种类（codex-error-info.mts），TurnError 带上 */
+      codexErrorInfo?: CodexErrorInfo | null
+    }
   | { type: 'error'; message: string }
 
 export type SubagentInnerEvent =

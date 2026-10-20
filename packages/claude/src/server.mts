@@ -44,6 +44,7 @@ import {
 } from './claude-default-model.mjs'
 import { PROVIDER_CONFIG_KEY } from './claude-provider.mjs'
 import { cliConfigLayer, mergeConfigLayers } from './cli-config.mjs'
+import { TurnFailure, turnErrorOf } from './codex-error-info.mjs'
 import {
   applyConfigEdits,
   isConfigObject,
@@ -2759,11 +2760,12 @@ export class CodexClaudeAppServer {
     const current = this.store.getTurn(turn.id)
     if (current && current.status !== 'inProgress') return
     this.finishGoal(threadId, turn.id, 'failed')
-    const completed = this.store.completeTurn(turn.id, 'failed', { message: error.message }) ?? turn
+    const turnError = turnErrorOf(error)
+    const completed = this.store.completeTurn(turn.id, 'failed', turnError) ?? turn
     this.pendingInteractions.cancelThread(threadId)
     this.notify(peer, {
       method: 'error',
-      params: { threadId, turnId: turn.id, willRetry: false, error: { message: error.message } },
+      params: { threadId, turnId: turn.id, willRetry: false, error: turnError },
     })
     this.notify(peer, {
       method: 'turn/completed',
@@ -4759,7 +4761,11 @@ export class CodexClaudeAppServer {
                 this.store.updateClaudeSessionId(thread.id, event.claudeSessionId)
               }
             }
-            if (!event.success) throw new Error(event.result ?? 'Claude turn failed')
+            if (!event.success)
+              throw new TurnFailure(
+                event.result ?? 'Claude turn failed',
+                event.codexErrorInfo ?? null,
+              )
           }
           if (event.type === 'error') {
             throw new Error(event.message)

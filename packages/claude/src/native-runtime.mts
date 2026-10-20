@@ -47,6 +47,7 @@ import { deniedMessage } from './approval-request.mjs'
 import { claudeChildEnv } from './claude-provider.mjs'
 import { settingsEnvValue } from './claude-setting-layers.mjs'
 import { cliOutputFormat } from './cli-output-schema.mjs'
+import { type CodexErrorInfo, codexErrorInfoFor, TurnFailure } from './codex-error-info.mjs'
 import {
   contextTokens,
   contextWindowOf,
@@ -246,12 +247,15 @@ interface PendingTurn {
   backgroundAgents: Map<string, string>
   // 各子代理最近一段正文，后台子代理结束时作为它的结果。
   subagentText: Map<string, string>
+  // 主会话最近一条 API 出错的助手消息上 CLI 归的类（SDKAssistantMessageError），回合失败时拼 codexErrorInfo
+  apiErrorCategory: string | null
 }
 
 interface PendingTurnResult {
   success: boolean
   resultText: string | null
   claudeSessionId: string | null
+  codexErrorInfo?: CodexErrorInfo | null
 }
 
 interface WorkflowTaskState {
@@ -432,6 +436,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       planHandoff: false,
       backgroundAgents: new Map(),
       subagentText: new Map(),
+      apiErrorCategory: null,
     }
     this.turns.set(context.turnId, pending)
     session.context = context
@@ -1824,6 +1829,8 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         await this.handleStreamEvent(pending, message)
         break
       case 'assistant':
+        if (typeof message.error === 'string' && message.parent_tool_use_id == null)
+          pending.apiErrorCategory = message.error
         await this.handleAssistant(pending, message)
         break
       case 'user':
@@ -2739,11 +2746,17 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         success: deferred.success,
         result: deferred.resultText,
         claudeSessionId: deferred.claudeSessionId,
+        ...(deferred.codexErrorInfo ? { codexErrorInfo: deferred.codexErrorInfo } : {}),
       })
       if (deferred.success) {
         pending.resolve()
       } else {
-        pending.reject(new Error(deferred.resultText ?? 'Claude turn failed'))
+        pending.reject(
+          new TurnFailure(
+            deferred.resultText ?? 'Claude turn failed',
+            deferred.codexErrorInfo ?? null,
+          ),
+        )
       }
     } catch (err) {
       pending.reject(err instanceof Error ? err : new Error(String(err)))
@@ -2851,7 +2864,18 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     // SDK 的格式工具通过 result.structured_output 返回数据，不能丢弃后用输入合成答案。
     if (success && structuredText)
       await pending.handlers.onEvent({ type: 'text_delta', delta: structuredText })
-    pending.deferredResult = { success, resultText, claudeSessionId }
+    pending.deferredResult = {
+      success,
+      resultText,
+      claudeSessionId,
+      codexErrorInfo: success
+        ? null
+        : codexErrorInfoFor({
+            status: message.api_error_status as number | null | undefined,
+            category: pending.apiErrorCategory,
+            text: resultText,
+          }),
+    }
     if (!success) await this.stopWorkflowTasks(pending)
     await this.finishDeferredResult(pending)
   }
