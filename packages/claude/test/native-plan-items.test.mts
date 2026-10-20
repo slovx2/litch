@@ -84,9 +84,8 @@ async function planTurn(
       .filter((x) => x.method === 'item/completed' && x.params.turnId === turn.id)
       .map((x) => x.params.item)
     const read = await client.request('thread/read', { threadId: thread.id, includeTurns: true })
-    const stored = read.thread.turns
-      .find((entry: any) => entry.id === turn.id)
-      .items.filter((item: any) => item.type !== 'userMessage')
+    // 用户消息照上游也实时发出来，所以实时收到的和存下的是同一组条目
+    const stored = read.thread.turns.find((entry: any) => entry.id === turn.id).items
     return { live, stored }
   } finally {
     await client.close()

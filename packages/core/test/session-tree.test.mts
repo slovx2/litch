@@ -5,9 +5,12 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { formatSessionEvent, type SessionProposal } from '../../protocol/src/index.mjs'
 import {
+  agentRunState,
+  agentsUnfinished,
   bucketItems,
   type ChannelError,
   cardOf,
+  cardPlace,
   connectChannel,
   createMockCore,
   createPortPair,
@@ -576,6 +579,28 @@ test('投影：收尾调用的每条建议按顺序对上结果里的提案或�
     ['pr1', 'pr2'],
   )
 
+  // 整个调用失败（设备进程不认 wrap_up、参数不对）：一张都没收，每条都写成没收下、原因是那句话
+  const failed = projectItem({
+    type: 'dynamicToolCall',
+    id: 'w4',
+    namespace: 'litch_sessions',
+    tool: 'wrap_up',
+    arguments: { suggestions: asked.slice(0, 2) },
+    status: 'failed',
+    contentItems: [
+      { type: 'inputText', text: '[litch:invalid] litch_sessions has no tool "wrap_up".' },
+    ],
+    success: false,
+    durationMs: 1,
+  } as never) as ToolCallItem
+  assert.deepEqual(
+    failed.wrapUp?.suggestions.map((entry) => [entry.proposalId, entry.refused]),
+    [
+      [null, '[litch:invalid] litch_sessions has no tool "wrap_up".'],
+      [null, '[litch:invalid] litch_sessions has no tool "wrap_up".'],
+    ],
+  )
+
   // 没有建议的收尾：不画，也不是卡片
   const empty = wrapUpItem('w3', [], { suggestions: [], note: '' })
   assert.deepEqual(empty.wrapUp, { suggestions: [] })
@@ -592,7 +617,7 @@ test('投影：设备进程的提醒（kind="remind"）拆成事件，没有用�
   assert.deepEqual(item.event, { kind: 'remind', notes: [] })
 })
 
-test('分块：不画的条目不占块、不算进活动；回合只剩说明时照旧直接露出来', () => {
+test('分块：不画的条目不占块、不算进步骤；回合只剩提示时照旧直接露出来', () => {
   assert.deepEqual(
     bucketItems([
       { id: 'u', kind: 'userMessage' },
@@ -602,7 +627,7 @@ test('分块：不画的条目不占块、不算进活动；回合只剩说明�
     ]),
     [
       { type: 'user', itemId: 'u' },
-      { type: 'activity', key: 'r', itemIds: ['r'] },
+      { type: 'process', key: 'r', parts: [{ type: 'steps', key: 'r', itemIds: ['r'] }] },
       { type: 'answer', itemId: 'a' },
     ],
   )
@@ -612,6 +637,19 @@ test('分块：不画的条目不占块、不算进活动；回合只剩说明�
       { id: 'w', kind: 'toolCall', quiet: true },
     ]),
     [{ type: 'notes', key: 'n', itemIds: ['n'] }],
+  )
+  // 提醒收尾的回合：模型顺口说的话收进过程（当说明段，不算最终回答），带建议的收尾照样是卡片
+  assert.deepEqual(
+    bucketItems([
+      { id: 'u', kind: 'userMessage', remind: true },
+      { id: 'w', kind: 'toolCall', card: 'outside' },
+      { id: 'a', kind: 'agentMessage', phase: 'final' },
+    ]),
+    [
+      { type: 'user', itemId: 'u' },
+      { type: 'card', itemId: 'w' },
+      { type: 'process', key: 'a', parts: [{ type: 'note', itemId: 'a' }] },
+    ],
   )
 })
 
@@ -647,7 +685,7 @@ test('提案卡片写什么：开始了、子会话在侧栏里的写实际的 h
   })
 })
 
-test('分块：派出子会话、启动子代理（开始时还不知道子线程）画成露在外面的卡片；等待子代理还是活动里的一行', () => {
+test('分块：派出子会话、启动子代理（开始时还不知道子线程）画成卡片；等待子代理还是步骤组里的一行', () => {
   const spawn = projectItem({
     type: 'dynamicToolCall',
     id: 'd1',
@@ -676,18 +714,21 @@ test('分块：派出子会话、启动子代理（开始时还不知道子线�
   assert.equal(cardOf(collab('spawnAgent')), true)
   assert.equal(cardOf(collab('wait')), false)
   assert.equal(cardOf(projectItem(userText('u', 'hi'))), false)
+  assert.equal(cardPlace(spawn), 'outside')
+  assert.equal(cardPlace(collab('spawnAgent')), 'inline')
+  assert.equal(cardPlace(collab('wait')), null)
   assert.deepEqual(
     bucketItems([
       { id: 'u', kind: 'userMessage' },
       { id: 'r', kind: 'reasoning' },
-      { id: 'd1', kind: 'toolCall', card: true },
+      { id: 'd1', kind: 'toolCall', card: 'outside' },
       { id: 'w', kind: 'toolCall' },
     ]),
     [
       { type: 'user', itemId: 'u' },
-      { type: 'activity', key: 'r', itemIds: ['r'] },
+      { type: 'process', key: 'r', parts: [{ type: 'steps', key: 'r', itemIds: ['r'] }] },
       { type: 'card', itemId: 'd1' },
-      { type: 'activity', key: 'w', itemIds: ['w'] },
+      { type: 'process', key: 'w', parts: [{ type: 'steps', key: 'w', itemIds: ['w'] }] },
     ],
   )
 })
@@ -1107,22 +1148,22 @@ test('模拟：说“用子代理”出子代理卡片；能打开子线程，�
   await world.until(
     () =>
       Object.values(parent.view?.items ?? {}).some(
-        (item) => item.kind === 'toolCall' && (item.agents?.length ?? 0) === 2,
+        (item) => item.kind === 'toolCall' && (item.agents?.length ?? 0) === 3,
       ),
     '子代理卡片',
   )
   const card = Object.values(parent.view?.items ?? {}).find(
-    (item): item is ToolCallItem => item.kind === 'toolCall' && (item.agents?.length ?? 0) === 2,
+    (item): item is ToolCallItem => item.kind === 'toolCall' && (item.agents?.length ?? 0) === 3,
   )
   const ids = card?.agents?.map((entry) => entry.threadId) ?? []
-  assert.equal(ids.length, 2)
+  assert.equal(ids.length, 3)
   // 子代理线程不进侧栏
   assert.ok(!(world.sidebar.view?.sessions ?? []).some((entry) => ids.includes(entry.id)))
   const views = ids.map((id) => world.watch(id))
   await world.until(() => views.every((view) => view.view !== null), '子线程打开了')
   assert.deepEqual(
     views.map((view) => view.view?.live),
-    [true, false],
+    [true, false, false],
   )
   const muted = await failureOf(
     world.channel.command('session.send', {
@@ -1138,7 +1179,7 @@ test('模拟：说“用子代理”出子代理卡片；能打开子线程，�
   })) as { agents: { id: string; canInput: boolean | null }[] }
   assert.deepEqual(
     agents.map((entry) => entry.canInput),
-    [true, false],
+    [true, false, false],
   )
 
   // 派一个、脱离它
@@ -1153,6 +1194,66 @@ test('模拟：说“用子代理”出子代理卡片；能打开子线程，�
   await world.until(() => world.children('s6').some((entry) => entry.id === sessionId), '派出来了')
   await world.channel.command('session.detach', { deviceId: 'local', sessionId })
   await world.until(() => !world.children('s6').some((entry) => entry.id === sessionId), '脱离了')
+})
+
+test('模拟：子代理一个完成、一个被父会话停掉、一个失败；派出的条目不回写，状态以子线程为准', async () => {
+  const world = mockWorld()
+  await settle()
+  const parent = world.watch('s6')
+  await settle()
+  await world.channel.command('session.send', {
+    deviceId: 'local',
+    sessionId: 's6',
+    text: '用子代理看看',
+  })
+  const spawn = () =>
+    Object.values(parent.view?.items ?? {}).find(
+      (item): item is ToolCallItem => item.kind === 'toolCall' && (item.agents?.length ?? 0) === 3,
+    )
+  await world.until(() => spawn() !== undefined, '派出了三个')
+  // 要停掉的那个一开始一直在跑（完成的那个在测试的时钟下可能当场就回完了）
+  assert.equal(agentRunState(parent.view?.agents[1], null, null), 'running')
+  await world.until(
+    () => (parent.view?.agents ?? []).every((entry) => entry.turn?.state !== 'running'),
+    '都停下了',
+  )
+  const states = (parent.view?.agents ?? []).map((entry) => [
+    entry.description,
+    agentRunState(entry, null, 'running'),
+  ])
+  assert.deepEqual(states, [
+    ['走一遍仓库的目录结构', 'completed'],
+    ['找出 core 里重复的工具函数', 'stopped'],
+    ['对照 OpenCode 的 task 子会话', 'failed'],
+  ])
+  const failed = parent.view?.agents[2]
+  assert.match(failed?.turn?.error ?? '', /PreToolUse:Agent hook error/)
+  // 和真的 Claude 入口（改之前）、原生 codex 一样：派出的那一条一直报“在跑”，最后的状态在等待那一条上
+  assert.deepEqual(
+    spawn()?.agents?.map((entry) => entry.state),
+    ['running', 'running', 'running'],
+  )
+  const wait = Object.values(parent.view?.items ?? {}).find(
+    (item): item is ToolCallItem =>
+      item.kind === 'toolCall' && typeof item.tool === 'object' && item.tool.key === 'collab.wait',
+  )
+  assert.deepEqual(
+    wait?.agents?.map((entry) => entry.state),
+    ['completed', 'interrupted', 'errored'],
+  )
+  const turnId = parent.view?.turns.at(-1)?.id ?? ''
+  await world.until(
+    () => parent.view?.turns.find((entry) => entry.id === turnId)?.status === 'completed',
+    '父会话接着说完了',
+  )
+  const items = parent.view?.turns.find((entry) => entry.id === turnId)?.itemIds ?? []
+  assert.equal(
+    agentsUnfinished(
+      items.map((id) => parent.view?.items[id]),
+      parent.view?.agents,
+    ),
+    false,
+  )
 })
 
 test('模拟：没有会话树的设备不能派', async () => {

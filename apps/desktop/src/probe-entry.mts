@@ -3,7 +3,7 @@
 // 会话是 scripts/client-fixture-seed.mjs 造的，这里按它们的名字去点。
 
 export interface EntryProbe {
-  /** 一个回合里有多少个活动条目被画出来（造了 120 次命令，加上别的） */
+  /** 一个回合里有多少个步骤条目被画出来（造了 120 次命令，加上别的） */
   manyRows: number
   /** 展开这一百多行之后来回滚动：帧间隔的中位数、95 分位、最大值（毫秒） */
   frameMedian: number
@@ -69,17 +69,24 @@ export async function entryProbe(): Promise<EntryProbe> {
     toggles++
   }
   const lastTurn = () => one('.turn:last-child') as HTMLElement
-  await click(lastTurn().querySelector<HTMLElement>('.act-head'))
+  await click(lastTurn().querySelector<HTMLElement>('.proc-head'))
+  for (const group of lastTurn().querySelectorAll<HTMLElement>('.steps-head')) await click(group)
   const change = lastTurn().querySelector<HTMLElement>('.item-head:not(:disabled)')
   await click(change)
   const diffLines = lastTurn().querySelectorAll('.dl').length
   await click(change)
-  await click(lastTurn().querySelector<HTMLElement>('.act-head'))
+  await click(lastTurn().querySelector<HTMLElement>('.proc-head'))
 
   // ---- 二、一个回合里一百多次工具调用：展开后来回滚 ----
   await open('逐个检查一百多个文件')
-  one('.act-head')?.click()
-  await until('展开的活动条目', () => document.querySelectorAll('.item').length > 100)
+  one('.proc-head[aria-expanded="false"]')?.click()
+  await until('点开的过程', () => one('.steps-head'))
+  for (const group of document.querySelectorAll<HTMLElement>(
+    '.steps-head[aria-expanded="false"]',
+  )) {
+    group.click()
+  }
+  await until('展开的步骤条目', () => document.querySelectorAll('.item').length > 100)
   const manyRows = document.querySelectorAll('.item').length
   const range = scroller().scrollHeight - scroller().clientHeight
   const stamps: number[] = []
@@ -136,7 +143,7 @@ export async function entryProbe(): Promise<EntryProbe> {
 /** slow：机器本身就慢（CI 的虚拟机没有显卡），帧间隔的标准放宽到三倍，只拦明显的退步 */
 export function judgeEntry(probe: EntryProbe, slow: boolean): string[] {
   const failed: string[] = []
-  if (probe.manyRows < 120) failed.push(`活动条目只画出 ${probe.manyRows} 个`)
+  if (probe.manyRows < 120) failed.push(`步骤条目只画出 ${probe.manyRows} 个`)
   // 一帧 16.7 毫秒。95 分位不超过两帧，最慢的一帧不超过 100 毫秒
   const scale = slow ? 3 : 1
   if (!(probe.frameP95 <= 34 * scale))

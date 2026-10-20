@@ -24,11 +24,13 @@ const ALL: HarnessAbilities = {
   remove: true,
   finalOnStart: false,
   turnDiff: true,
+  stopAgent: true,
 }
 
 const DECLARED: Record<string, HarnessAbilities> = {
   // 引导只把文字交给模型，图片到不了
-  claude: { ...ALL, steerImages: false },
+  // 子代理不能单独停（Claude 入口还不支持对子线程打断）
+  claude: { ...ALL, steerImages: false, stopAgent: false },
   // Pi 和 dsh 不发本回合的差异：工作目录不是 git 仓库时，差异面板在它们的会话里没有东西可看
   pi: { ...ALL, turnDiff: false },
   dsh: { ...ALL, fork: false, rollback: false, compact: false, remove: false, turnDiff: false },

@@ -88,10 +88,15 @@ test('WRAP-UP-001：一次 wrap_up 出几张提案，callId 是这次调用、tu
     assert.equal(env.device.sessionTree.store.proposal(other.proposal_id)?.callId, stored?.callId)
     assert.equal(env.device.sessionTree.store.proposal(other.proposal_id)?.harness, 'claude-code')
     assert.equal(stored?.wakeParent, true)
-    // 空列表
-    const empty = resultOf(await wrapUp(env, threadId, []))
+    // 同一回合收过尾又来一次空的：回错，让它别再调（有的模型被要求不写字时会一遍遍调空收尾）
+    const again = await wrapUp(env, threadId, [])
+    assert.equal(failureOf(again), 'invalid')
+    assert.match(again.result.contentItems[0].text, /already wrapped up/)
+    // 别的会话第一次收尾就是空列表：成功
+    const quiet = await withTools(client, '顺便问个小问题')
+    const empty = resultOf(await wrapUp(env, quiet, []))
     assert.deepEqual(empty.suggestions, [])
-    assert.match(empty.note, /Nothing suggested.*stop now/)
+    assert.match(empty.note, /Nothing suggested.*at most one short line/)
     // suggestions 不是数组：整个调用不收
     const bad = await env.pi.callTool(threadId, SESSIONS, 'wrap_up', {})
     assert.equal(failureOf(bad?.answer), 'invalid')

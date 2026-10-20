@@ -3,6 +3,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { isDeepStrictEqual } from 'node:util'
 import { EXTENSION } from '../../protocol/src/device.mjs'
 import { catalogPagination } from '../../shared/src/catalog-pagination.mjs'
 import {
@@ -234,6 +235,12 @@ function isWorkflowToolName(value: string): boolean {
   return name === 'workflow' || name === 'workflows'
 }
 
+// 子代理失败的原因：CLI 给 Agent 工具的错误结果（去掉包装之后）就是原话；一个字都没有时才写一句兜底的
+function subagentFailure(text: string): string {
+  const reason = text.trim()
+  return reason || 'Subagent failed without a reason.'
+}
+
 function subagentWatchdogTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
   const raw = env.CHA_CLAUDE_SUBAGENT_TIMEOUT_MS?.trim()
   if (!raw) return DEFAULT_SUBAGENT_WATCHDOG_MS
@@ -258,6 +265,9 @@ interface SubagentContext {
   subType: string | null
   // 子代理过程在子线程里的投影；工作流聚合出的代理没有过程可投影。
   projection: SubagentProjection | null
+  // 派出它的那个 spawnAgent 条目（结束时的样子）。子代理结束时以同一个标识再发一次 item/completed，
+  // 带上它最后的状态：官方桌面端按条目标识原地换掉，Litch 也一样
+  spawnItem: ThreadItem
 }
 
 interface ActiveSubagentState {
@@ -307,6 +317,8 @@ export class CodexClaudeAppServer {
   private scheduledGoals = new Map<string, string>()
   private scheduledQueues = new Map<string, string>()
   private goalUsageLimited = new Set<string>()
+  // 自动起名已经看过几次（每个回合结束看一次，最多三次）；用户改过名的记成 Infinity，不再动
+  private titleChecks = new Map<string, number>()
   private get goals(): GoalController {
     return new GoalController(this.store)
   }
@@ -1753,6 +1765,7 @@ export class CodexClaudeAppServer {
     const threadId = requiredString(params.threadId, 'threadId')
     if (!this.store.getThread(threadId)) throw new ProtocolError(-32602, '未知会话')
     const name = params.name == null ? null : String(params.name)
+    this.titleChecks.set(threadId, Number.POSITIVE_INFINITY)
     this.store.updateThreadName(threadId, name)
     this.notifyThread(threadId, {
       method: 'thread/name/updated',
@@ -2586,6 +2599,7 @@ export class CodexClaudeAppServer {
   // 用户发消息时 CLI 正好在自己续跑：用户并不知道有回合在跑，不能让这次提交失败。
   // 把消息并进那个回合（CLI 会接着处理它），返回的就是那个回合。
   private async joinSpontaneousTurn(
+    peer: RpcPeer,
     threadId: string,
     params: Record<string, unknown>,
     messageId: string | null,
@@ -2617,7 +2631,22 @@ export class CodexClaudeAppServer {
       return null
     }
     this.store.saveSteeredMessage(turnId, item, messageId, hash)
+    this.sendInputItem(peer, threadId, turnId, item)
     return this.store.getTurn(turnId)
+  }
+
+  // 回合的输入条目（用户消息、上传的图片）和上游一样发给会话的全部订阅者（item/started、item/completed，用户消息带
+  // clientId）：别的连接开的回合（设备进程开的唤醒、提醒，手机上发的话）正看着这个会话的客户端也能实时看到；
+  // 发起方按 clientId 认出自己先显示的那条。
+  private sendInputItem(peer: RpcPeer, threadId: string, turnId: string, item: ThreadItem): void {
+    this.notify(peer, {
+      method: 'item/started',
+      params: { threadId, turnId, item, startedAtMs: nowMillis() },
+    })
+    this.notify(peer, {
+      method: 'item/completed',
+      params: { threadId, turnId, item, completedAtMs: nowMillis() },
+    })
   }
 
   private failTurn(peer: RpcPeer, threadId: string, turn: TurnRecord, error: Error): void {
@@ -2955,6 +2984,7 @@ export class CodexClaudeAppServer {
           if (event.type === 'context_compacted') {
             compacted = true
             if (event.messageId) this.store.saveNativeBoundary(turnId, event.messageId)
+            this.compactedUsage(peer, thread.id, turnId, event.postTokens)
           }
           if (event.type === 'text_delta' && event.delta) {
             if (!agent.id) {
@@ -3023,7 +3053,7 @@ export class CodexClaudeAppServer {
     }
     const merged = queuedId
       ? null
-      : await this.joinSpontaneousTurn(threadId, params, messageId, hash)
+      : await this.joinSpontaneousTurn(peer, threadId, params, messageId, hash)
     if (merged) return { turn: this.toLifecycleTurn(merged) }
     if (
       this.activeTurnByThread.has(threadId) ||
@@ -3095,9 +3125,7 @@ export class CodexClaudeAppServer {
         imageItems.push({ type: 'imageView', id: newId(), path: img.displayPath })
       }
     }
-    // imageView items are retained on the turn for history (thread/read) and, in
-    // contrast to the userMessage, surfaced live through the item/* event stream
-    // so the App's transcript shows the uploaded image inline during the turn.
+    // imageView 条目和用户消息一样留在回合里（thread/read），也实时发出去，界面在回合进行中就能显示上传的图片
     initialItems.push(...imageItems)
     // Note: we used to short-circuit Codex App's title-generation turn with a
     // local regex-derived title to avoid prompt leakage into the parent thread.
@@ -3134,27 +3162,7 @@ export class CodexClaudeAppServer {
 
     setImmediate(() => {
       this.notify(peer, { method: 'turn/started', params: { threadId, turn: publicTurn } })
-      if (queuedId) {
-        const item = initialItems[0]!
-        this.notify(peer, {
-          method: 'item/started',
-          params: { threadId, turnId, item, startedAtMs: nowMillis() },
-        })
-        this.notify(peer, {
-          method: 'item/completed',
-          params: { threadId, turnId, item, completedAtMs: nowMillis() },
-        })
-      }
-      for (const item of imageItems) {
-        this.notify(peer, {
-          method: 'item/started',
-          params: { threadId, turnId, item, startedAtMs: nowMillis() },
-        })
-        this.notify(peer, {
-          method: 'item/completed',
-          params: { threadId, turnId, item, completedAtMs: nowMillis() },
-        })
-      }
+      for (const item of initialItems) this.sendInputItem(peer, threadId, turnId, item)
       if (params.outputSchema == null && workflowCommand?.type === 'list') {
         this.completeWorkflowListTurn(peer, thread, turn)
         return
@@ -3651,6 +3659,9 @@ export class CodexClaudeAppServer {
         systemPromptAddendum,
         planMode,
         planConfirmation: this.asksPlanConfirmation(peer, thread.id),
+        ...(turnPurpose === 'normal' && this.wantsSessionTitle(thread.id)
+          ? { sessionTitle: thread.preview }
+          : {}),
         imageInputs: Array.isArray(params._imageInputs)
           ? (params._imageInputs as ImageInput[])
           : [],
@@ -3836,8 +3847,10 @@ export class CodexClaudeAppServer {
             return
           }
           // CLI 自己压缩了上下文：之前放在用户消息前面的指令压进了摘要，下个回合再放一次
-          if (event.type === 'context_compacted')
+          if (event.type === 'context_compacted') {
             this.rememberInjectedInstructions(runtimeThread.id, null)
+            this.compactedUsage(peer, thread.id, turn.id, event.postTokens)
+          }
           if (event.type === 'session') {
             this.store.updateClaudeSessionId(thread.id, event.claudeSessionId)
             return
@@ -3899,6 +3912,11 @@ export class CodexClaudeAppServer {
             // 昵称定下后不再改：桌面的标签页取子线程出现时的名字，列表行取之后读到的
             // 名字，中途改名两处就对不上。CLI 给的代理 ID 另存，见 saveSubagentId。
             const promptText = String(event.input.prompt ?? event.input.description ?? '')
+            // Agent 工具的一句话描述（终端里括号里的那句）：当作子线程的名字，客户端拿它作子代理的标题
+            const description =
+              typeof event.input.description === 'string' && event.input.description.trim()
+                ? event.input.description.trim()
+                : null
             const subType =
               typeof event.input.subagent_type === 'string' ? event.input.subagent_type : null
             const subagentModel =
@@ -3917,7 +3935,7 @@ export class CodexClaudeAppServer {
               sectionEnteredAt: null,
               sectionPosition: null,
               preview: promptText.slice(0, 200),
-              name: null,
+              name: description,
               archived: false,
               cwd: thread.cwd,
               model: subagentModel,
@@ -4065,6 +4083,7 @@ export class CodexClaudeAppServer {
               agentPath,
               prompt: promptText,
               subType,
+              spawnItem: spawnEnd,
               projection: new SubagentProjection(
                 {
                   appendItem: (item) => void this.store.appendItem(childTurn.id, item),
@@ -4130,13 +4149,15 @@ export class CodexClaudeAppServer {
             const parsed =
               subagentStructuredResult(event.structured) ?? parseSubagentTrailer(rawResultText)
             const resultText = parsed.cleanText
+            // 失败时 CLI 给的结果就是原因（钩子拒绝、子代理类型不存在……），原话写进子线程回合的 error
+            const failure = event.isError ? subagentFailure(resultText) : null
 
             const childTurn = this.completeSubagentChildTurn(
               peer,
               ctx,
               resultText,
               event.isError ? 'failed' : 'completed',
-              event.isError ? { message: 'subagent failed' } : null,
+              failure ? { message: failure } : null,
               parsed.usage?.durationMs ?? null,
             )
             recordRunEvent('subagent.completed', {
@@ -4181,11 +4202,17 @@ export class CodexClaudeAppServer {
                 outputTokens: parsed.usage.totalTokens,
                 reasoningOutputTokens: 0,
               }
+              // 子线程的占用是它最后一次请求的（运行时按请求报过就有）；窗口先借父线程的
+              const childStored = this.store.threadUsage(ctx.childThreadId)?.tokenUsage
               const childUsage: ThreadTokenUsage = {
                 total: breakdown,
-                last: breakdown,
-                modelContextWindow: null,
+                last: childStored?.last ?? breakdown,
+                modelContextWindow:
+                  childStored?.modelContextWindow ??
+                  this.store.threadUsage(thread.id)?.tokenUsage.modelContextWindow ??
+                  null,
               }
+              this.store.saveThreadUsage(ctx.childThreadId, childTurn.id, childUsage)
               this.notify(peer, {
                 method: 'thread/tokenUsage/updated',
                 params: {
@@ -4194,13 +4221,18 @@ export class CodexClaudeAppServer {
                   tokenUsage: childUsage,
                 },
               })
+              // 父线程只加进累计，不改它的占用
               this.recordTokenUsage(peer, thread.id, turn.id, {
-                input_tokens: 0,
-                output_tokens: parsed.usage.totalTokens,
-                cache_read_input_tokens: 0,
-                cache_creation_input_tokens: 0,
+                add: {
+                  input_tokens: 0,
+                  output_tokens: parsed.usage.totalTokens,
+                  cache_read_input_tokens: 0,
+                  cache_creation_input_tokens: 0,
+                },
               })
             }
+
+            this.resettleSpawnItem(peer, thread.id, turn.id, ctx, agentStatus, failure)
 
             // Stage 2 close — wait (end). Re-emits the same waitItemId.
             const waitEnd: ThreadItem = {
@@ -4213,7 +4245,7 @@ export class CodexClaudeAppServer {
               prompt: null,
               model: null,
               reasoningEffort: null,
-              agentsStates: { [ctx.childThreadId]: { status: agentStatus, message: null } },
+              agentsStates: { [ctx.childThreadId]: { status: agentStatus, message: failure } },
             }
             this.store.updateItemAndMoveToEnd(turn.id, ctx.waitItemId, () => waitEnd)
             this.notify(peer, {
@@ -4258,7 +4290,7 @@ export class CodexClaudeAppServer {
               const closeEnd: ThreadItem = {
                 ...closeBegin,
                 status: collabStatus,
-                agentsStates: { [ctx.childThreadId]: { status: agentStatus, message: null } },
+                agentsStates: { [ctx.childThreadId]: { status: agentStatus, message: failure } },
               }
               this.store.updateItem(turn.id, closeId, () => closeEnd)
               this.notify(peer, {
@@ -4510,7 +4542,25 @@ export class CodexClaudeAppServer {
             return
           }
           if (event.type === 'usage') {
-            this.recordTokenUsage(peer, thread.id, turn.id, event.usage)
+            this.recordTokenUsage(peer, thread.id, turn.id, {
+              add: event.usage,
+              window: event.contextWindow ?? null,
+            })
+            return
+          }
+          if (event.type === 'context_usage') {
+            const last = tokenBreakdownFromClaudeUsage(event.usage)
+            if (!event.agentToolUseId) {
+              this.recordTokenUsage(peer, thread.id, turn.id, { last })
+              return
+            }
+            // 子代理自己的请求：记在它的子线程上，窗口先借父线程的
+            const ctx = subagentContexts.get(event.agentToolUseId)
+            if (ctx)
+              this.recordTokenUsage(peer, ctx.childThreadId, ctx.childTurnId, {
+                last,
+                window: this.store.threadUsage(thread.id)?.tokenUsage.modelContextWindow ?? null,
+              })
             return
           }
           if (event.type === 'goal_usage') {
@@ -4896,13 +4946,54 @@ export class CodexClaudeAppServer {
       method: 'turn/completed',
       params: { threadId: thread.id, turn: this.toLifecycleTurn(completed) },
     })
+    void this.adoptSessionTitle(thread.id)
+  }
+
+  // 这个会话还要不要自动起名：Claude 会话、还没有名字、用户没改过名，只看前三个回合
+  private wantsSessionTitle(threadId: string): boolean {
+    if ((this.titleChecks.get(threadId) ?? 0) >= 3 || !this.runtime.sessionTitle) return false
+    const thread = this.store.getThread(threadId)
+    return Boolean(
+      thread &&
+        !thread.name &&
+        !thread.ephemeral &&
+        thread.threadSource !== 'subagent' &&
+        thread.runtimeBackend === 'claude',
+    )
+  }
+
+  // Claude 会话的名字：CLI 起的标题写在会话记录里（ai-title），读出来当会话名。
+  // 标题是异步起的，可能晚一两个回合才写进去，所以前三个回合结束时各看一次；用户改过名的不动。
+  private async adoptSessionTitle(threadId: string): Promise<void> {
+    if (!this.wantsSessionTitle(threadId)) return
+    const thread = this.store.getThread(threadId)
+    if (!thread?.claudeSessionId) return
+    this.titleChecks.set(threadId, (this.titleChecks.get(threadId) ?? 0) + 1)
+    let title: string | null | undefined
+    try {
+      title = await this.runtime.sessionTitle?.(thread.claudeSessionId, thread.cwd)
+    } catch (error) {
+      debugLog('thread.title.failed', { threadId, error: String(error) })
+      return
+    }
+    // 和第一句话一样的不算起了名（侧栏本来就显示第一句话）
+    if (!title || title === thread.preview.trim() || this.stopped) return
+    // 等的时候用户改了名，或者会话没了
+    if (this.titleChecks.get(threadId) === Number.POSITIVE_INFINITY) return
+    if (this.store.getThread(threadId)?.name !== null) return
+    this.titleChecks.set(threadId, Number.POSITIVE_INFINITY)
+    this.store.updateThreadName(threadId, title)
+    this.notifyThread(threadId, {
+      method: 'thread/name/updated',
+      params: { threadId, threadName: title },
+    })
   }
 
   private completeSubagentChildTurn(
     peer: RpcPeer,
     context: SubagentContext,
     resultText: string,
-    status: 'completed' | 'failed',
+    status: 'completed' | 'failed' | 'interrupted',
     error: unknown | null,
     durationMs: number | null = null,
   ): TurnRecord {
@@ -4929,8 +5020,10 @@ export class CodexClaudeAppServer {
     }
 
     // 过程投影里最后一段正文若就是结果，已原地标为最终回答，不再重复写一条。
-    // 没有结果文字时不写空的回答条目（上游读历史时也跳过空的回答）；失败的原因在回合的 error 上。
-    if (!context.projection?.finish(resultText, status === 'failed') && resultText) {
+    // 没有结果文字时不写空的回答条目（上游读历史时也跳过空的回答）；失败的原因只在回合的 error 上，
+    // 不再另写成一段回答（那样原因和出错框是分开的两处）。
+    const ended = status !== 'completed'
+    if (!context.projection?.finish(resultText, ended) && resultText && !ended) {
       const agentItemId = newId()
       const startedItem: ThreadItem = {
         type: 'agentMessage',
@@ -5057,6 +5150,30 @@ export class CodexClaudeAppServer {
     )
   }
 
+  // 子代理结束了：派出它的 spawnAgent 条目以同一个标识再发一次 item/completed，带上它最后的状态
+  // （上游的 V2 也只在派出时报一次“在跑”；客户端照子线程算状态，这里只是让条目本身也对）。
+  // 落库时原地换掉、不挪位置：读历史时它还在原处，状态是最后的
+  private resettleSpawnItem(
+    peer: RpcPeer,
+    threadId: string,
+    turnId: string,
+    context: SubagentContext,
+    status: 'completed' | 'errored' | 'interrupted',
+    message: string | null,
+  ): void {
+    if (context.spawnItem.type !== 'collabAgentToolCall') return
+    const item: ThreadItem = {
+      ...context.spawnItem,
+      agentsStates: { [context.childThreadId]: { status, message } },
+    }
+    context.spawnItem = item
+    this.store.updateItem(turnId, item.id, () => item)
+    this.notify(peer, {
+      method: 'item/completed',
+      params: { threadId, turnId, item, completedAtMs: nowMillis() },
+    })
+  }
+
   private supportsCompletedSubagentActivity(peer: RpcPeer): boolean {
     if (process.env.CHA_CLAUDE_SUBAGENT_COMPLETED === '1') return true
     if (process.env.CHA_CLAUDE_SUBAGENT_COMPLETED === '0') return false
@@ -5075,6 +5192,8 @@ export class CodexClaudeAppServer {
     return { aware: aware > 0, legacy: aware < targets.length }
   }
 
+  // 父回合结束时还没交回结果的子代理。stopped：是用户打断了父回合，子代理跟着被停掉，
+  // 子线程的回合记成被打断（不是出错，error 留空，和上游打断回合一样）；否则记成失败，原因是 failureMessage
   private finalizeOrphanedSubagents(
     peer: RpcPeer,
     thread: ThreadRecord,
@@ -5082,6 +5201,7 @@ export class CodexClaudeAppServer {
     contexts: Map<string, SubagentContext>,
     active: Set<string>,
     failureMessage = 'Subagent ended without a terminal task result.',
+    stopped = false,
   ): void {
     for (const toolUseId of Array.from(active)) {
       const context = contexts.get(toolUseId)
@@ -5089,32 +5209,39 @@ export class CodexClaudeAppServer {
       contexts.delete(toolUseId)
       if (!context) continue
 
-      const message = failureMessage
-      const childTurn = this.completeSubagentChildTurn(peer, context, message, 'failed', {
-        message,
-      })
+      const message = stopped ? null : failureMessage
+      const agentStatus = stopped ? 'interrupted' : 'errored'
+      const childTurn = this.completeSubagentChildTurn(
+        peer,
+        context,
+        message ?? '',
+        stopped ? 'interrupted' : 'failed',
+        message ? { message } : null,
+      )
       recordRunEvent('subagent.completed', {
         parentThreadId: thread.id,
         parentTurnId: turn.id,
         childThreadId: context.childThreadId,
         childTurnId: childTurn.id,
-        status: 'failed',
+        status: childTurn.status,
         agentRole: context.subType ?? 'general-purpose',
       })
 
       this.emitSubagentActivity(peer, thread.id, turn.id, context, 'interrupted')
+      this.resettleSpawnItem(peer, thread.id, turn.id, context, agentStatus, message)
 
       const waitEnd: ThreadItem = {
         type: 'collabAgentToolCall',
         id: context.waitItemId,
         tool: 'wait',
-        status: 'failed',
+        // 用户打断的：等待本身没出错，是等的那个被停掉了
+        status: stopped ? 'completed' : 'failed',
         senderThreadId: thread.id,
         receiverThreadIds: [context.childThreadId],
         prompt: null,
         model: null,
         reasoningEffort: null,
-        agentsStates: { [context.childThreadId]: { status: 'errored', message } },
+        agentsStates: { [context.childThreadId]: { status: agentStatus, message } },
       }
       this.store.updateItemAndMoveToEnd(turn.id, context.waitItemId, () => waitEnd)
       this.notify(peer, {
@@ -5153,7 +5280,7 @@ export class CodexClaudeAppServer {
         const closeEnd: ThreadItem = {
           ...closeBegin,
           status: 'failed',
-          agentsStates: { [context.childThreadId]: { status: 'errored', message } },
+          agentsStates: { [context.childThreadId]: { status: agentStatus, message } },
         }
         this.store.updateItem(turn.id, closeId, () => closeEnd)
         this.notify(peer, {
@@ -5272,6 +5399,8 @@ export class CodexClaudeAppServer {
             subagents.turn,
             subagents.contexts,
             subagents.active,
+            undefined,
+            true,
           )
           this.subagentStateByTurn.delete(turnId)
         }
@@ -5323,7 +5452,7 @@ export class CodexClaudeAppServer {
     return { status: applied ? 'applied' : 'targetUnavailable' }
   }
 
-  private async turnSteer(_peer: RpcPeer, params: Record<string, unknown>): Promise<unknown> {
+  private async turnSteer(peer: RpcPeer, params: Record<string, unknown>): Promise<unknown> {
     const threadId = requiredString(params.threadId, 'threadId')
     const expectedTurnId = requiredString(params.expectedTurnId, 'expectedTurnId')
     if (!this.store.getThread(threadId)) throw new ProtocolError(-32602, '会话不存在')
@@ -5357,11 +5486,7 @@ export class CodexClaudeAppServer {
       throw new ProtocolError(-32009, '回合已终结')
     const input = Array.isArray(params.input) ? (params.input as UserInput[]) : []
     const prompt = textFromInput(input)
-    // The steered message is retained on the turn for history (thread/read), but
-    // — like a normal turn's user message — it is NOT surfaced as a userMessage
-    // item/started+item/completed event. The real app-server's turn_steer just
-    // feeds the input into the core (steer_input) and EventMsg::UserMessage is
-    // unhandled in the live stream, so no userMessage item event is emitted.
+    // 插的话留在回合里（thread/read），送进去之后和上游一样发给全部订阅者（上游在交给模型时发这条用户消息）
     const item: ThreadItem = {
       type: 'userMessage',
       id: newId(),
@@ -5370,6 +5495,7 @@ export class CodexClaudeAppServer {
     }
     this.store.saveSteeredMessage(activeTurnId, item, messageId, hash)
     await this.runtime.steer(threadId, prompt)
+    this.sendInputItem(peer, threadId, activeTurnId, item)
     return { turnId: activeTurnId }
   }
 
@@ -5693,32 +5819,61 @@ export class CodexClaudeAppServer {
         this.notify(peer, { method: 'account/rateLimits/updated', params: { rateLimits } })
   }
 
-  // Accumulates Claude Agent SDK token usage per thread and pushes a
-  // `thread/tokenUsage/updated` notification so the Codex App can render real
-  // consumption instead of leaving the meter blank.
+  // 记下一个线程的用量并发 `thread/tokenUsage/updated`。三样各管各的：add 只加进累计（total），
+  // last 是现在上下文里有多少（最近一次模型请求的用量），window 是主模型的上下文窗口。
+  // 没给的那几样沿用上次存下的，窗口跟着线程存，恢复、分叉时一起带上。
   private recordTokenUsage(
     peer: RpcPeer,
     threadId: string,
     turnId: string,
-    usage: Record<string, unknown>,
+    change: {
+      add?: Record<string, unknown>
+      last?: TokenUsageBreakdown
+      window?: number | null
+    },
   ): void {
-    const last = tokenBreakdownFromClaudeUsage(usage)
-    if (last.totalTokens === 0) return
-    const prior = this.store.threadUsage(threadId)?.tokenUsage.total ?? emptyTokenBreakdown()
-    const total: TokenUsageBreakdown = {
-      totalTokens: prior.totalTokens + last.totalTokens,
-      inputTokens: prior.inputTokens + last.inputTokens,
-      cachedInputTokens: prior.cachedInputTokens + last.cachedInputTokens,
-      outputTokens: prior.outputTokens + last.outputTokens,
-      reasoningOutputTokens: prior.reasoningOutputTokens + last.reasoningOutputTokens,
-    }
-    const tokenUsage: ThreadTokenUsage = { total, last, modelContextWindow: null }
+    const added = change.add ? tokenBreakdownFromClaudeUsage(change.add) : null
+    const stored = this.store.threadUsage(threadId)?.tokenUsage
+    const prior = stored?.total ?? emptyTokenBreakdown()
+    const total: TokenUsageBreakdown = added
+      ? {
+          totalTokens: prior.totalTokens + added.totalTokens,
+          inputTokens: prior.inputTokens + added.inputTokens,
+          cachedInputTokens: prior.cachedInputTokens + added.cachedInputTokens,
+          outputTokens: prior.outputTokens + added.outputTokens,
+          reasoningOutputTokens: prior.reasoningOutputTokens + added.reasoningOutputTokens,
+        }
+      : prior
+    const last = change.last ?? stored?.last ?? emptyTokenBreakdown()
+    const modelContextWindow = change.window ?? stored?.modelContextWindow ?? null
+    if (
+      stored &&
+      total === prior &&
+      isDeepStrictEqual(last, stored.last) &&
+      modelContextWindow === stored.modelContextWindow
+    )
+      return
+    if (!stored && total.totalTokens === 0 && last.totalTokens === 0) return
+    const tokenUsage: ThreadTokenUsage = { total, last, modelContextWindow }
     this.store.saveThreadUsage(threadId, turnId, tokenUsage)
     this.notify(peer, {
       method: 'thread/tokenUsage/updated',
       params: { threadId, turnId, tokenUsage },
     })
     // token usage 不能推算账户配额；只有原生 rate_limit_event 更新限额快照。
+  }
+
+  // 压缩之后上下文里只剩摘要：占用换成 CLI 报的压缩后的词元数，不等下一次请求
+  private compactedUsage(
+    peer: RpcPeer,
+    threadId: string,
+    turnId: string,
+    postTokens: number | null | undefined,
+  ): void {
+    if (typeof postTokens !== 'number' || postTokens <= 0) return
+    this.recordTokenUsage(peer, threadId, turnId, {
+      last: { ...emptyTokenBreakdown(), totalTokens: postTokens, inputTokens: postTokens },
+    })
   }
 
   private marketplaceAdd(params: Record<string, unknown>): unknown {

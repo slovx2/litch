@@ -62,7 +62,7 @@
 [data-skin="human"] :is(.chip, .md code) {
   border-radius: 5px;
 }
-[data-skin="human"] :is(.mention, .act-head, .mini) {
+[data-skin="human"] :is(.mention, .proc-head, .steps-head, .mini) {
   border-radius: 6px;
 }
 [data-skin="human"] .wire-sq {
@@ -130,10 +130,15 @@
   font-size: 15px;
   line-height: 26px;
 }
-[data-skin="human"] .act-body {
+[data-skin="human"] .steps-body .item-detail {
   border-color: var(--line-1);
+  border-radius: 8px;
   background: var(--raised);
   box-shadow: var(--soft-sm);
+}
+[data-skin="human"] .proc:not(.live) > .proc-body,
+[data-skin="human"] .steps-body {
+  border-left-color: var(--line-1);
 }
 [data-skin="human"] .think {
   margin: 10px 12px;
@@ -390,4 +395,20 @@
 /* 代码上色：类型用的黄线色压在浅色的代码底上对比度刚到 3，换深一档的同色相；深色下照旧用线色 */
 [data-skin="human"] :is(.code, .fv-code, .dp) {
   --syn-type: var(--L, #86690f) var(--D, var(--wire-yellow));
+}
+
+/* 子代理：行和状态都是圆的 */
+[data-skin="human"] .agent-row {
+  border-radius: 10px;
+  border-color: var(--line-1);
+  box-shadow: var(--soft-sm);
+}
+[data-skin="human"] .agent-st {
+  border-radius: 999px;
+}
+[data-skin="human"] .agents-pick {
+  border-radius: 10px;
+}
+[data-skin="human"] :is(.agents-task, .agents-fail) {
+  border-radius: 14px;
 }

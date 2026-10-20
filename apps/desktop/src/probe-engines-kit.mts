@@ -234,14 +234,16 @@ export function installEnginesKit(): boolean {
   }
   const unfold = async () => {
     for (let round = 0; round < 20; round++) {
-      const closed = all('.turn .act-head[aria-expanded="false"]')
+      const closed = all(
+        '.turn .proc-head[aria-expanded="false"], .turn .steps-head[aria-expanded="false"]',
+      )
       if (closed.length === 0) return
       for (const head of closed) head.click()
       await frame()
     }
-    throw new Error('对话里有收着的活动块点不开')
+    throw new Error('对话里有收着的过程或步骤组点不开')
   }
-  /** 一条活动右边的状态：耗时那一格不要 */
+  /** 一条步骤右边的状态：耗时那一格不要 */
   const stateOf = (item: Element) =>
     all('.item-head .meta > span', item)
       .map(text)
@@ -257,8 +259,20 @@ export function installEnginesKit(): boolean {
           )
           return [`用户：${[...carried, text(one('.umsg-text', block))].join(' ')}`]
         }
-        // 只有说明的回合（比如只有“上下文已压缩”那一条）说明直接露在外面，不带“活动”那一行
-        if (block.matches('.act, .notes')) {
+        // 过程：说明段、步骤组里的每一条、子代理那一行
+        if (block.matches('.proc')) {
+          return [...(one('.proc-body', block)?.children ?? [])].flatMap((part): string[] => {
+            if (part.matches('.md')) return [`说明：${text(part)}`]
+            if (part.matches('.steps')) {
+              return all('.item', part).map((item) =>
+                `${text(one('.verb', item))} ${text(one('.tgt', item))}｜${stateOf(item)}`.trim(),
+              )
+            }
+            return [`${part.className}：${text(part).slice(0, 80)}`]
+          })
+        }
+        // 只有提示的回合（比如只有“上下文已压缩”那一条）提示直接露在外面
+        if (block.matches('.notes')) {
           return all('.item', block).map((item) =>
             `${text(one('.verb', item))} ${text(one('.tgt', item))}｜${stateOf(item)}`.trim(),
           )

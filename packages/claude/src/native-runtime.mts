@@ -46,6 +46,12 @@ import { type ApprovalPolicy, allowsApproval, toolApprovalFlow } from './approva
 import { deniedMessage } from './approval-request.mjs'
 import { claudeChildEnv } from './claude-provider.mjs'
 import { cliOutputFormat } from './cli-output-schema.mjs'
+import {
+  contextTokens,
+  contextWindowOf,
+  mergeRequestUsage,
+  type RequestUsage,
+} from './context-usage.mjs'
 import { clientToolCliNames, dynamicToolServer } from './dynamic-tools.mjs'
 import { goalToolServer, isGoalTool } from './goal-tools.mjs'
 import { hostClaudeEnvOverrides, hostClaudeExecutable } from './host-claude.mjs'
@@ -88,7 +94,7 @@ import {
   runtimePermissionOptions,
   sandboxedBashInput,
 } from './runtime-permissions.mjs'
-import { ToolIntentTranscripts } from './transcript-tail.mjs'
+import { ModelStreamWatch, ToolIntentTranscripts } from './transcript-tail.mjs'
 import type { RuntimeTurnSettings } from './turn-settings.mjs'
 import type {
   ClaudeRuntime,
@@ -146,6 +152,8 @@ interface NativeSession {
   abort: AbortController
   mcp: NativeMcpBridge
   process: NativeProcess
+  // 模型的回复还在不在流：工具意图确认的钩子按它决定等多久
+  stream: ModelStreamWatch
   shells: BackgroundShellState
   // 出现在 background_tasks_changed 里的任务（任意类型）。它们结束后 CLI 会自己再跑一轮。
   backgroundTasks: Set<string>
@@ -170,6 +178,8 @@ interface NativeSession {
   kept: boolean
   closing: boolean
   closeReason: string
+  // 请 CLI 现起的会话标题，还没起完时进程先别退出（见 finishDeferredResult）
+  title: Promise<unknown> | null
   done: Promise<void>
 }
 
@@ -195,6 +205,10 @@ interface PendingTurn {
   assistantMessageId: string | null
   usageMessageIds: Map<string, string>
   usageByMessage: Map<string, Record<string, unknown>>
+  // 上下文占用：每一路（'' 是主会话，其余是子代理的 parent_tool_use_id）最近一次请求的用量
+  contextUsage: Map<string, RequestUsage>
+  // 最近一次顶层请求用的模型，结果里按它取上下文窗口
+  contextModel: string | null
   streamedBlocks: Map<number, { type: string; text: string }>
   // Subagent suppression — when a Task/Agent tool_use opens a subagent, all
   // nested tool_use / text / thinking events should be hidden from the App
@@ -253,6 +267,10 @@ const WORKFLOW_TERMINAL_FLUSH_TIMEOUT_MS = 500
 // 没有回合也没有后台命令的进程多留这么久再退出，避免刚停掉命令就来了新回合。
 const IDLE_REAP_MS = 2_000
 const SPONTANEOUS_ATTACH_TIMEOUT_MS = 10_000
+// 工具意图确认：钩子来了、或者回复流完之后，会话记录里那一行最多再等这么久
+const TOOL_INTENT_GRACE_MS = 3_000
+// 回复一直在流时最多等这么久（一条回复里后面的块流了十分钟也算异常）
+const TOOL_INTENT_LIMIT_MS = 10 * 60_000
 const WORKFLOW_JOURNAL_SETTLE_TIMEOUT_MS = 3_000
 
 export class NativeClaudeRuntime implements ClaudeRuntime {
@@ -382,6 +400,8 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       assistantMessageId: null,
       usageMessageIds: new Map(),
       usageByMessage: new Map(),
+      contextUsage: new Map(),
+      contextModel: null,
       streamedBlocks: new Map(),
       activeSubagents: new Set(),
       completedWorkflowTasks: new Set(),
@@ -431,6 +451,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
           if (context.purpose !== 'compact')
             session.applied.goalContext = context.goalContext ?? null
           session.input.send(userMessage(context, uuid, reminder))
+          this.requestTitle(session, context)
         }
         // 首条用户消息送入之后才放行回合内追加的指令，保证先后。
         ready(pending)
@@ -547,7 +568,8 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         },
       })
       const liveHandlers = this.liveHandlers(current)
-      const options = this.buildOptions(sdk, live, abort, current)
+      const stream = new ModelStreamWatch()
+      const options = this.buildOptions(sdk, live, abort, current, stream)
       options.spawnClaudeCodeProcess = nativeProcess.spawn.bind(nativeProcess)
       options.mcpServers = await mcp.connect(
         context.mcpServers,
@@ -577,6 +599,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         abort,
         mcp,
         process: nativeProcess,
+        stream,
         shells: {
           live: new Map(),
           taskToolUse: new Map(),
@@ -601,6 +624,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         kept: false,
         closing: false,
         closeReason: '',
+        title: null,
         done,
       }
       slot.session = session
@@ -612,6 +636,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       // room to attach image blocks alongside the text and the door is open
       // for mid-turn steer() calls.
       input.send(userMessage(context, null, null))
+      this.requestTitle(session, context)
     } catch (error) {
       // 进程没有进入消息循环，这里按同样的顺序收尾。
       ready(null)
@@ -929,6 +954,37 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     await sdk.deleteSession(sessionId, { dir: cwd })
   }
 
+  // CLI 给会话起的标题：SDK 读会话记录，用户改的名优先，其次 CLI 起的（ai-title）
+  async sessionTitle(sessionId: string, cwd: string): Promise<string | null> {
+    const sdk = await this.loadSdk()
+    const info = await sdk.getSessionInfo(sessionId, { dir: cwd })
+    return info?.customTitle?.trim() || null
+  }
+
+  // 会话还没有名字、CLI 又不会自己起的时候（宿主环境让它不起；续接的会话它也不起），
+  // 请这个进程照会话的第一句话起一个并写进会话记录，回合结束时由协议层读出来。
+  // 已经有标题的它直接给回来，不再请求模型；老版本的 CLI 不认这个请求，报错就算了。
+  private requestTitle(session: NativeSession, context: RuntimeTurnContext): void {
+    const description = context.sessionTitle?.trim()
+    if (!description || session.title) return
+    if (
+      context.claudeSessionId == null &&
+      !cliSkipsAutoTitle({ ...claudeChildEnv(), ...hostClaudeEnvOverrides })
+    )
+      return
+    // 运行时有这个方法，SDK 的类型声明里没写
+    const query = session.query as Query & {
+      generateSessionTitle?: (
+        description: string,
+        options: { persist: boolean },
+      ) => Promise<unknown>
+    }
+    if (typeof query.generateSessionTitle !== 'function') return
+    session.title = query.generateSessionTitle(description, { persist: true }).catch((error) => {
+      debugLog('native.session_title.failed', { threadId: session.key, error: String(error) })
+    })
+  }
+
   async interrupt(threadId: string): Promise<void> {
     // 回合还在等旧进程退出：让它不要再起新进程。
     const starting = this.starting.get(threadId)
@@ -1144,6 +1200,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     context: RuntimeTurnContext,
     abort: AbortController,
     current: () => Promise<PendingTurn | null>,
+    stream: ModelStreamWatch = new ModelStreamWatch(),
   ): Record<string, unknown> {
     const originalBashInputs: OriginalBashInputs = new Map()
     const reservedGoalTools = new Set<string>()
@@ -1214,11 +1271,19 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     const permissionHooks = opts.hooks as { PreToolUse: Array<{ hooks: unknown[] }> }
     // 工具执行之前确认这次调用已经写进会话记录（入口重启、恢复时以它为准，工具不会被执行两次）。
     // 每份记录只读新增的部分，不随会话变长，见 transcript-tail.mts。
+    // 等多久：CLI 边流边执行，这一块那一行要等同一条回复后面的块流完才写，所以回复还在流就一直等，
+    // 流完（或者钩子刚来）之后再等几秒；流一直不完也有个上限，免得工具永远挂着。
     const transcripts = new ToolIntentTranscripts()
+    const waiting = (since: number): boolean => {
+      const now = Date.now()
+      if (now < since + TOOL_INTENT_GRACE_MS || now < stream.lastEnded + TOOL_INTENT_GRACE_MS)
+        return true
+      return stream.streaming && now < since + TOOL_INTENT_LIMIT_MS
+    }
     permissionHooks.PreToolUse.push({
       hooks: [
         async (event: Record<string, unknown>, toolUseId: string) => {
-          const deadline = Date.now() + 3_000
+          const since = Date.now()
           let failure: unknown = '超时'
           try {
             do {
@@ -1238,7 +1303,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
                 return {}
               }
               await delay(25, undefined, { signal: abort.signal })
-            } while (Date.now() < deadline)
+            } while (waiting(since))
           } catch (error) {
             // Hook 抛错只会被 CLI 记录，必须显式 deny 才能阻止工具。
             failure = error
@@ -1248,6 +1313,8 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
               toolUseId,
               tool: String(event.tool_name),
               error: String(failure),
+              waitedMs: Date.now() - since,
+              streaming: stream.streaming,
             })
           return {
             hookSpecificOutput: {
@@ -1619,6 +1686,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
 
   // 属于进程而不属于某个回合的状态：后台任务、会话状态、会话 ID。没有回合时也要跟。
   private observe(session: NativeSession, message: Record<string, unknown>): void {
+    session.stream.observe(message)
     if (
       session.notificationAt != null &&
       isMainToolResult(message) &&
@@ -1790,9 +1858,11 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       return
     }
     if (subtype === 'compact_boundary') {
+      const meta = message.compact_metadata as Record<string, unknown> | undefined
       await pending.handlers.onEvent({
         type: 'context_compacted',
         messageId: String(message.uuid ?? ''),
+        postTokens: typeof meta?.post_tokens === 'number' ? meta.post_tokens : null,
       })
       return
     }
@@ -2033,9 +2103,12 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         pending.usageMessageIds.set(source, inner.id)
         pending.usageByMessage.set(inner.id, (inner.usage ?? {}) as Record<string, unknown>)
       }
+      if (!source && typeof inner?.model === 'string') pending.contextModel = inner.model
+      mergeRequestUsage(pending.contextUsage, source, inner?.id, inner?.usage)
     } else if (eventType === 'message_delta') {
       const id = pending.usageMessageIds.get(source)
       if (id) await this.goalUsage(pending, { id, usage: event.usage })
+      await this.contextUsage(pending, source, id, event.usage)
     }
     if (message.parent_tool_use_id || pending.activeSubagents.size > 0) return
     if (eventType === 'message_start') {
@@ -2120,6 +2193,14 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     if (!inner) return
     await this.goalUsage(pending, inner)
     const nestedMessage = Boolean(message.parent_tool_use_id)
+    if (!nestedMessage && typeof inner.model === 'string' && !inner.model.startsWith('<'))
+      pending.contextModel = inner.model
+    await this.contextUsage(
+      pending,
+      String(message.parent_tool_use_id ?? ''),
+      inner.id,
+      inner.usage,
+    )
     if (!nestedMessage && pending.activeSubagents.size === 0) {
       await this.beginAssistantMessage(pending, stringOrNull(inner.id))
     }
@@ -2600,6 +2681,9 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     pending.deferredResult = null
     this.detach(pending)
     const refusal = session && !force ? this.keepAlive(session) : null
+    // 进程要退出了：请它起的标题还没写进会话记录的话，等一会儿（标题用的是小模型，一般早就起完了）
+    if (session?.title && !force && refusal !== null)
+      await Promise.race([session.title, delay(TITLE_GRACE_MS)])
     if (session && (force || refusal !== null)) {
       // 进程不保留：让 CLI 自己收尾退出，runTurn 等它确认后才返回。
       session.closing = true
@@ -2710,10 +2794,11 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     }
     const claudeSessionId = message.session_id == null ? null : String(message.session_id)
     const usage = (message.usage as Record<string, unknown>) || {}
+    const contextWindow = contextWindowOf(message.modelUsage, pending.contextModel)
     // Push usage + metrics before completed so server can roll them into the
     // turn before emitting turn/completed.
-    if (Object.keys(usage).length > 0) {
-      await pending.handlers.onEvent({ type: 'usage', usage })
+    if (Object.keys(usage).length > 0 || contextWindow !== null) {
+      await pending.handlers.onEvent({ type: 'usage', usage, contextWindow })
     }
     await pending.handlers.onEvent({
       type: 'metrics',
@@ -2728,6 +2813,25 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     pending.deferredResult = { success, resultText, claudeSessionId }
     if (!success) await this.stopWorkflowTasks(pending)
     await this.finishDeferredResult(pending)
+  }
+
+  // 一次请求的用量来了（流式的结尾，或者一条助手消息）：并进这一路，占用变了就报
+  private async contextUsage(
+    pending: PendingTurn,
+    lane: string,
+    id: unknown,
+    usage: unknown,
+  ): Promise<void> {
+    const entry = mergeRequestUsage(pending.contextUsage, lane, id, usage)
+    if (!entry) return
+    const tokens = contextTokens(entry.usage)
+    if (tokens === 0 || tokens === entry.reported) return
+    entry.reported = tokens
+    await pending.handlers.onEvent({
+      type: 'context_usage',
+      usage: { ...entry.usage },
+      agentToolUseId: lane || null,
+    })
   }
 
   private async goalUsage(pending: PendingTurn, message: Record<string, unknown>): Promise<void> {
@@ -2876,6 +2980,15 @@ function numberOrNull(value: unknown): number | null {
 
 function stringOrNull(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null
+}
+
+const TITLE_GRACE_MS = 5_000
+
+// 这两个变量设了（不为空就算，CLI 不看值）CLI 就不自己起标题
+function cliSkipsAutoTitle(env: NodeJS.ProcessEnv): boolean {
+  return Boolean(
+    env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC || env.CLAUDE_CODE_DISABLE_TERMINAL_TITLE,
+  )
 }
 
 export function sdkResumeSessionId(value: string | null, _cwd?: string): string | null {

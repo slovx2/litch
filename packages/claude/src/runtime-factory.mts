@@ -92,6 +92,10 @@ class SelectableRuntime implements ClaudeRuntime {
     await this.runtimeFor(this.config.type).deleteSession?.(sessionId, cwd)
   }
 
+  async sessionTitle(sessionId: string, cwd: string): Promise<string | null> {
+    return (await this.runtimeFor(this.config.type).sessionTitle?.(sessionId, cwd)) ?? null
+  }
+
   async supportedModels(): Promise<NativeModelInfo[]> {
     const runtime = this.runtimeFor(this.config.type)
     if (!runtime.supportedModels) throw new Error('当前运行时不提供原生模型目录')

@@ -412,6 +412,17 @@ export class MockRuntime implements ClaudeRuntime {
     }
 
     if (/usage check/i.test(context.prompt)) {
+      // 回合里最后一次请求的用量（现在上下文里有多少），和整个回合的累计分开报
+      await handlers.onEvent({
+        type: 'context_usage',
+        usage: {
+          input_tokens: 30,
+          output_tokens: 15,
+          cache_read_input_tokens: 10,
+          cache_creation_input_tokens: 5,
+        },
+        agentToolUseId: null,
+      })
       await handlers.onEvent({
         type: 'usage',
         usage: {
@@ -420,6 +431,7 @@ export class MockRuntime implements ClaudeRuntime {
           cache_read_input_tokens: 10,
           cache_creation_input_tokens: 5,
         },
+        contextWindow: 200_000,
       })
       await handlers.onEvent({
         type: 'metrics',

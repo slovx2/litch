@@ -212,7 +212,7 @@ const compact: StepJudge = (id, _spec, raw, v) => {
   // 界面上多出一块空的，“上下文已压缩”那一条被收进“活动 1 步”里）
   v.check(
     !seen.turn.includes('回答：') && !seen.folded,
-    `压缩的那个回合是：${seen.turn.join('｜')}${seen.folded ? '（活动块收着）' : ''}`,
+    `压缩的那个回合是：${seen.turn.join('｜')}${seen.folded ? '（过程收着）' : ''}`,
   )
 }
 

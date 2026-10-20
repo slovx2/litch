@@ -257,7 +257,7 @@ export function formatSessionEvent(event: SessionEvent): string {
     event.kind === 'wake'
       ? 'If the user’s request has steps these results unblock, continue; otherwise tell the user the outcome in one or two lines. Use litch_sessions.read for details. Do not answer requests that are waiting for the user inside a sub-session.'
       : event.kind === 'remind'
-        ? 'Call litch_sessions.wrap_up now, with the suggested tasks your last reply implies or an empty list, then stop. Do not repeat or summarize your last reply.'
+        ? 'Call litch_sessions.wrap_up now, with the suggested tasks your last reply implies or an empty list, then end your turn with at most one short line. Do not repeat or summarize your last reply: the user already has it.'
         : 'Use litch_sessions.read for details.'
   return [
     `<${SESSION_EVENT_TAG} kind="${event.kind}">`,

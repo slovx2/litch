@@ -141,6 +141,9 @@ const freshLocal = (app: AppView): void => {
  */
 const ORGANIZES_ELSEWHERE = /别处整理|organize elsewhere/i
 
+/** 发的话里带这些字样时，回答里带一张 mermaid 图和一张画不出来的。给界面试画图、切源码、语法错时退回源码用 */
+const DRAWS = /画图|draw a diagram/i
+
 /** 发的话里带这些字样时，回答里带着几种写法的文件路径。给界面试“对话里的路径可以点开”用 */
 const SHOWS_FILES = /看文件|show files/i
 
@@ -430,7 +433,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     view: SessionView,
     turnId: string,
     itemId: string | null,
-    status: 'completed' | 'interrupted',
+    status: 'completed' | 'interrupted' | 'failed',
+    error: string | null = null,
   ) => {
     replies.delete(sessionKey(view))
     const turn = view.turns.find((entry) => entry.id === turnId)
@@ -454,6 +458,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         turnId,
         status,
         durationMs: clock.now() - (turn?.startedAt ?? clock.now()),
+        ...(error ? { error } : {}),
       },
     ])
     updateSummary(view.deviceId, view.sessionId, {
@@ -591,6 +596,10 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     }
     if (SHOWS_FILES.test(message.text)) {
       reply(view, turnId, SAMPLE_TEXT[lang].filesReply)
+      return turnId
+    }
+    if (DRAWS.test(message.text)) {
+      reply(view, turnId, SAMPLE_TEXT[lang].diagramReply)
       return turnId
     }
     if (EDITS_FILES.test(message.text)) {
@@ -1212,6 +1221,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         can: canOf(deviceId, summary.harness),
         forkedFrom: null,
         proposals: [],
+        agents: [],
       }
       sessions.set(sessionKey(view), view)
       return summary.id
@@ -1347,6 +1357,10 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     finish(view, turnId, ops) {
       applySessionOps(view, ops)
       endTurn(view, turnId, null, 'completed')
+    },
+    fail: (view, turnId, error) => endTurn(view, turnId, null, 'failed', error),
+    stop(view, turnId) {
+      if (running(view)?.id === turnId) endTurn(view, turnId, null, 'interrupted')
     },
     running: (view) => running(view) !== undefined,
     treeOn: (deviceId) =>
@@ -1919,6 +1933,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
           can: canOf(deviceId, summary.harness),
           forkedFrom: null,
           proposals: [],
+          agents: [],
         }
         sessions.set(sessionKey(view), view)
         startTurn(view, message)

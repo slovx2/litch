@@ -36,6 +36,7 @@ import {
 } from '../src/harness-config.mjs'
 import { HarnessConfigError } from '../src/harness-config-common.mjs'
 import { ClaudeProviders } from '../src/harness-providers.mjs'
+import { summarizeRpcParams } from '../src/server-helpers.mjs'
 import { requiredClaudeCli } from './fixtures/claude-cli.mjs'
 import { declaring } from './fixtures/extension-wire.mjs'
 import { OAuthMcpFixture } from './fixtures/mcp-oauth.mjs'
@@ -1079,4 +1080,79 @@ test('HC-CLAUDE-011：没声明 harnessConfig 的连接方法照样能调，收�
     await client.close()
     await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 80 })
   }
+})
+
+test('HC-CLAUDE-012：登录时粘贴的授权码不进调试日志（假 CLI）', {
+  timeout: 60_000,
+}, async () => {
+  const home = await mkdtemp(join(tmpdir(), 'harness-config-log-'))
+  const debugLog = join(home, 'debug.jsonl')
+  const client = await ProtocolClient.start(home, 'http://127.0.0.1:1', true, 'api-key', {
+    CHA_CLAUDE_CLI: await withFakeCli(home),
+    CHA_CLAUDE_DEBUG_LOG: debugLog,
+  })
+  const call = async (method: string, params: Record<string, unknown> = {}) => {
+    const response = await client.raw(method, { harness: 'claude-code', ...params })
+    if (response.error) throw new Error(JSON.stringify(response.error))
+    return response.result
+  }
+  try {
+    const started = await call('litch/harness/auth/start', {
+      providerId: 'anthropic',
+      methodId: 'claudeai',
+    })
+    assert.equal(started.step.kind, 'openUrl')
+    // 不完整的码（假 CLI 接着等）和最后认下的码都不能进日志
+    const retry = await call('litch/harness/auth/continue', {
+      attemptId: started.attemptId,
+      inputs: { code: 'leakcheck-7f3a9c' },
+    })
+    assert.equal(retry.kind, 'prompt')
+    const done = await call('litch/harness/auth/continue', {
+      attemptId: started.attemptId,
+      inputs: { code: 'good#state' },
+    })
+    assert.equal(done.kind, 'done')
+    // 日志攒到这一轮事件循环末尾才写：等到 auth/continue 的应答那一行出现
+    let log = ''
+    for (let waited = 0; waited < 5000; waited += 50) {
+      log = await readFile(debugLog, 'utf8').catch(() => '')
+      if (log.split('\n').filter((line) => line.includes('auth/continue')).length >= 4) break
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    }
+    const requests = log
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+      .filter((entry) => entry.event === 'rpc.request' && entry.method?.endsWith('/auth/continue'))
+    assert.equal(requests.length, 2, '两次 auth/continue 都记了')
+    assert.deepEqual(requests[0].params, {
+      harness: 'claude-code',
+      attemptId: started.attemptId,
+      paramKeys: ['harness', 'attemptId', 'inputs'],
+    })
+    assert.equal(log.includes('leakcheck-7f3a9c'), false)
+    assert.equal(log.includes('good#state'), false)
+  } finally {
+    await client.close()
+    await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 80 })
+  }
+})
+
+test('HC-CLAUDE-013：带密钥的写入方法在调试日志里只记标识和键名', () => {
+  const upsert = summarizeRpcParams('litch/harness/mcp/upsert', {
+    harness: 'claude-code',
+    server: { name: 'gh', transport: 'stdio', env: { GH_PAT: 'ghp_leak' } },
+    expectedVersion: 'v1',
+  })
+  assert.deepEqual(upsert, {
+    harness: 'claude-code',
+    paramKeys: ['harness', 'server', 'expectedVersion'],
+  })
+  const batch = summarizeRpcParams('config/batchWrite', {
+    edits: [{ keyPath: 'env', value: { MY_PAT: 'leak' } }],
+  })
+  assert.equal(JSON.stringify(batch).includes('leak'), false)
+  // 别的方法照旧
+  assert.deepEqual(summarizeRpcParams('thread/read', { threadId: 't1' }), { threadId: 't1' })
 })

@@ -7,6 +7,7 @@ import type { DeviceServiceView, ServiceUpgradeView } from './model-service.mjs'
 import type { SessionTaskMark } from './model-tasks.mjs'
 import type {
   AgentRefView,
+  AgentThreadView,
   SessionEventView,
   SessionLineageView,
   SessionProposalView,
@@ -93,6 +94,8 @@ export interface HarnessAbilities {
   finalOnStart: boolean
   /** 发不发本回合的差异。工作目录不是 git 仓库时，差异面板只能靠它 */
   turnDiff: boolean
+  /** 能单独停掉一个子代理（对子线程发 turn/interrupt）。子代理页上的“停止”按它出 */
+  stopAgent: boolean
 }
 
 /** 设备服务给的一段话的两种语言版本。核心不认识语言，原样交给界面，界面按当前的语言取 */
@@ -876,4 +879,9 @@ export interface SessionView {
    * 对话流里画在提出它的那次 litch_sessions.start 上，侧面板“建议任务”列全部
    */
   proposals: SessionProposalView[]
+  /**
+   * 引擎自己派出的子代理线程，带着各自的状态（子线程自己的回合）。对话流里子代理那一行、侧面板的“子代理”页
+   * 都按它写状态。设备还没列过、没有子代理是空的
+   */
+  agents: AgentThreadView[]
 }

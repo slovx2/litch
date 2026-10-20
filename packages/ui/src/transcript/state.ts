@@ -1,6 +1,13 @@
 // 对话区里只属于界面的两样状态：条目开没开，以及流式文字放到哪了。
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  createContext,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react'
 
 // ---------- 展开状态 ----------
 // 按会话、按条目标识记在内存里。组件卸载再回来（切走会话、以后的虚拟化）还是原来的样子。
@@ -29,6 +36,50 @@ export function useToggle(
     [sessionKey, id],
   )
   return [picked ?? fallback, set]
+}
+
+// ---------- 回合里手动展开过没有 ----------
+// 用户在一个回合里手动展开过某一组步骤或某一条，回合结束时就不自动把整段过程收起来（照 Codex）。
+// 按“会话 + 回合”记在内存里，和上面的展开状态一样，切走再回来还在。
+const touched = new Set<string>()
+const touchListeners = new Set<() => void>()
+
+const turnKey = (sessionKey: string, turnId: string) => `${sessionKey}\n${turnId}`
+
+/** 记下这个回合被手动展开过 */
+export function touchTurn(sessionKey: string, turnId: string): void {
+  const key = turnKey(sessionKey, turnId)
+  if (touched.has(key)) return
+  touched.add(key)
+  for (const listener of touchListeners) listener()
+}
+
+function subscribeTouch(listener: () => void): () => void {
+  touchListeners.add(listener)
+  return () => touchListeners.delete(listener)
+}
+
+/** 这个回合有没有被手动展开过 */
+export function useTurnTouched(sessionKey: string, turnId: string): boolean {
+  return useSyncExternalStore(subscribeTouch, () => touched.has(turnKey(sessionKey, turnId)))
+}
+
+/** 回合里的东西被手动展开时调它；不在回合里（比如子代理页）时什么都不做 */
+export const TurnTouch = createContext<() => void>(() => {})
+
+// ---------- 正在跑的那一条从什么时候开始 ----------
+// 命令有自己看着开始的时刻（startedAt）；工具调用、思考没有，就记下这边第一次看到它在跑的时刻
+const firstSeen = new Map<string, number>()
+
+/** 这一条从什么时候开始跑的（本机的钟）。给了 known 就用它 */
+export function seenSince(key: string, known: number | null): number {
+  if (known !== null) return known
+  let since = firstSeen.get(key)
+  if (since === undefined) {
+    since = Date.now()
+    firstSeen.set(key, since)
+  }
+  return since
 }
 
 // ---------- 匀速放出文字 ----------

@@ -1,4 +1,4 @@
-/* 对话区的骨架、用户消息、活动区。回答和输入区在 transcript-prose.css */
+/* 对话区的骨架、用户消息、过程区。回答和输入区在 transcript-prose.css */
 
 /* 反向列布局：滚动位置是“离底部多远”，内容在底部增长时浏览器自己保持贴底。
    关掉浏览器的滚动锚定，离开底部之后的补偿由 transcript/scroll.ts 自己算 */
@@ -190,34 +190,102 @@
   white-space: nowrap;
 }
 
-/* ---------- 活动区：一行总结 → 条目行 → 条目详情，三级收纳 ---------- */
-.act {
+/* ---------- 过程区（用户消息和最终回答之间）：说明是正文，步骤收成一行弱化的汇总 ---------- */
+.proc {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
 }
-.act-head {
+.proc-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+/* 告一段落之后点开的过程：左边一根细线，和前后的用户消息、最终回答分开 */
+.proc:not(.live) > .proc-body {
+  padding-left: 10px;
+  margin-left: 7px;
+  border-left: 1px solid var(--line-2);
+}
+/* 回合结束后整段过程收成的那一行 */
+.proc-head {
   display: flex;
   align-items: center;
   gap: 6px;
   height: 24px;
-  color: var(--ink-2);
-  font-size: 12px;
   align-self: flex-start;
+  max-width: 100%;
   padding: 0 6px 0 2px;
   border-radius: 3px;
-}
-.act-head:hover {
-  background: var(--hover);
-  color: var(--ink);
-}
-.act-body {
-  border: 1px solid var(--line-2);
-  border-radius: var(--r2);
+  color: var(--ink-3);
+  font-size: 12px;
+  white-space: nowrap;
   overflow: hidden;
 }
-.item + .item {
-  border-top: 1px solid var(--line-1);
+.proc-head:hover {
+  background: var(--hover);
+  color: var(--ink-2);
+}
+.proc-head .sep {
+  color: var(--line-3);
+  margin: 0 6px 0 0;
+}
+.proc-head .bad,
+.steps-head .bad {
+  color: var(--err);
+}
+/* 步骤组：两段说明之间连续的工具调用，一行汇总，展开后是逐条的行 */
+.steps {
+  display: flex;
+  flex-direction: column;
+}
+.steps-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 0 6px 0 2px;
+  border-radius: 3px;
+  color: var(--ink-3);
+  font-size: 12px;
+  text-align: left;
+  min-width: 0;
+}
+.steps-head:hover {
+  background: var(--hover);
+  color: var(--ink-2);
+}
+.steps-head .sum {
+  flex: none;
+  max-width: 70%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.steps[data-running] .sum {
+  color: var(--ink-2);
+}
+.steps-head .now {
+  color: var(--ink-2);
+  font: 11.5px / 1.4 var(--mono);
+  min-width: 0;
+}
+.steps-head .meta {
+  margin-left: auto;
+  font: 11px / 1 var(--mono);
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.steps-head > .st {
+  width: 12px;
+  height: 12px;
+}
+.steps-body {
+  margin: 4px 0 2px 7px;
+  padding-left: 8px;
+  border-left: 1px solid var(--line-2);
 }
 .item-head {
   display: flex;
@@ -252,11 +320,7 @@
   align-items: center;
   gap: 6px;
 }
-.item.note {
-  padding: 8px 12px;
-}
 .item-detail {
-  border-top: 1px solid var(--line-1);
   background: var(--sunken);
 }
 /* 固定高度的内滚框。也是反向列：输出增长时自己贴着底 */
@@ -327,6 +391,27 @@
 }
 .minus {
   color: var(--err);
+}
+/* 步骤组展开后的逐条行：比独立的行矮一点，详情缩进到图标后面 */
+.steps-body .item-head {
+  height: 26px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+.steps-body .item-detail {
+  border: 1px solid var(--line-1);
+  border-radius: var(--r1);
+  margin: 2px 0 6px 22px;
+  overflow: hidden;
+}
+/* 只有提示的回合：提示直接露在外面 */
+.notes .item-head {
+  height: 26px;
+  padding: 0 4px;
+  font-size: 12px;
+}
+.steps-head .meta .plus + .minus {
+  margin-left: 4px;
 }
 
 /* ---------- 文件改动 ---------- */

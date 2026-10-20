@@ -177,7 +177,7 @@ export type * from './model-service.mjs'
 export type * from './model-tasks.mjs'
 export type * from './model-terminal.mjs'
 export type * from './model-tree.mjs'
-export { proposalShape, proposalStatus } from './model-tree.mjs'
+export { AGENT_RUN_STATE, agentSettled, proposalShape, proposalStatus } from './model-tree.mjs'
 export {
   describeText,
   type Phrase,
@@ -188,12 +188,25 @@ export {
   type Text,
 } from './phrase.mjs'
 export {
-  activitySettled,
+  answerOf,
   type Block,
   type BlockInput,
   bucketItems,
   cardOf,
+  cardPlace,
+  type ProcessPart,
+  type ProcessTally,
+  processFolded,
+  processItemIds,
+  processSettled,
+  processTally,
   quietOf,
+  type StepKind,
+  type StepsTally,
+  stepFailed,
+  stepKindOf,
+  stepsTally,
+  toolKind,
 } from './projection/blocks.mjs'
 export {
   type FileRef,
@@ -251,6 +264,14 @@ export {
   threadTitle,
 } from './projection/session.mjs'
 export { newSessionSettings, projectDefaults, shownEffort } from './projection/settings.mjs'
+// 子代理的状态：对话流的那一行、子代理页、信息卡，和“这个回合里还有没做完的子代理”（回合收起的判定）
+export {
+  agentRunState,
+  agentStatesOf,
+  agentsUnfinished,
+  firstSentence,
+  isAgentSpawn,
+} from './projection/tree.mjs'
 export { type FileTrees, fileKeys } from './replica/file-trees.mjs'
 export { KeyedStore } from './replica/keyed-store.mjs'
 export {

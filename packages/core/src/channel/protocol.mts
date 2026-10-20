@@ -225,6 +225,8 @@ export type SessionOp =
   | { op: 'session.can'; can: SessionAbilities }
   /** 这个会话上等着用户点的子会话提案整份换掉（会话树） */
   | { op: 'session.proposals'; proposals: SessionProposalView[] }
+  /** 这个会话的子代理（引擎自己派出的子线程）整份换掉：派了新的，或者哪个的状态变了 */
+  | { op: 'session.agents'; agents: AgentThreadView[] }
 
 /**
  * 设置现在的值整份换掉：这份东西不大，变得也少。

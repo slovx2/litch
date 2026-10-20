@@ -96,6 +96,8 @@ import type {
   ThreadStartResponse,
   ThreadStatusChangedNotification,
   ThreadTokenUsageUpdatedNotification,
+  ThreadTurnsListParams,
+  ThreadTurnsListResponse,
   ThreadUnarchivedNotification,
   ThreadUnarchiveParams,
   ThreadUnarchiveResponse,
@@ -244,6 +246,8 @@ export interface ClientRequests {
     result: ThreadListResponse & { skippedHarnesses?: ThreadListSkippedHarness[] }
   }
   'thread/read': { params: ThreadReadParams; result: ThreadReadResponse }
+  /** 按页列一个会话的回合（默认新的在前）。子代理列表用它取每个子线程最近的一个回合，不带条目 */
+  'thread/turns/list': { params: ThreadTurnsListParams; result: ThreadTurnsListResponse }
   /** 载入一个会话并订阅它的事件。之后这条连接会收到它的回合、条目通知和待答复的请求 */
   'thread/resume': { params: ThreadResumeParams; result: ThreadResumeResponse }
   'thread/unsubscribe': { params: ThreadUnsubscribeParams; result: ThreadUnsubscribeResponse }

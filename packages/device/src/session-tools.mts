@@ -351,6 +351,12 @@ async function wrapUp(
       'invalid',
       'suggestions must be an array: the suggested tasks of this turn, or [] when there are none. Call wrap_up again.',
     )
+  // 已经收过尾又来一次空的：有的模型不写字就结束不了回合，被要求“别再写字”时会一遍遍调空收尾。回一个错，让它写一句就停
+  if (given.length === 0 && tree.isWrappedUp(call.threadId, call.turnId))
+    throw new Refused(
+      'invalid',
+      'This turn is already wrapped up. Do not call wrap_up again: end your turn now, with at most one short line.',
+    )
   tree.wrappedUp(call.threadId, call.turnId)
   const suggestions: SessionsWrapUpResult['suggestions'] = []
   // 一条一条来：前面落下的提案算进后面的门槛（一回合几张、同标题）
@@ -376,7 +382,7 @@ async function wrapUp(
         : 'No card was made.',
     refused > 0
       ? `${refused} suggestion${refused > 1 ? 's were' : ' was'} refused (see refused). If you can fix them, call wrap_up again with only the fixed ones; otherwise mention that work in one line.`
-      : 'Your turn is wrapped up: stop now.',
+      : 'Your turn is wrapped up: end it now, with at most one short line. Do not call wrap_up again.',
   ]
   return { suggestions, note: parts.join(' ') }
 }

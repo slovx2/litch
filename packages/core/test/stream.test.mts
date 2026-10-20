@@ -190,6 +190,7 @@ test('归并：增量带来的对象拷一份再放进视图，之后视图怎�
     can: { ...ALL_ABLE },
     forkedFrom: null,
     proposals: [],
+    agents: [],
   }
   const ops: SessionOp[] = [
     {

@@ -139,6 +139,16 @@ test('注入的会话事件：提醒、唤醒只画提示不画用户消息；�
   const only = new RowBuilder().build(viewOf(['u'], [user('u', '', remind)]), 'all')
   assert.deepEqual(types(only), ['event', 'status'])
   assert.equal(only[0].kind, 'remind')
+  // 提醒回合里模型顺口说的话不画
+  const said = {
+    id: 'a',
+    kind: 'agentMessage',
+    text: '好的。',
+    status: 'completed',
+    phase: 'final',
+  }
+  const acked = new RowBuilder().build(viewOf(['u', 'a'], [user('u', '', remind), said]), 'all')
+  assert.deepEqual(types(acked), ['event', 'status'])
   const both = new RowBuilder().build(viewOf(['u'], [user('u', '接着做', notes)]), 'all')
   assert.deepEqual(types(both), ['event', 'user', 'status'])
   assert.equal(both[0].notes[0].excerpt, '好了')

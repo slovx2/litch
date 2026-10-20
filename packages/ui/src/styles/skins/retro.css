@@ -91,6 +91,10 @@
   --wait: var(--inv-fg);
   --err: var(--inv-fg);
 }
+/* 改名时那一行也是反白的：输入框不另铺底色，字和边框跟着反过来的墨色走（否则深色字压在深色底上看不见） */
+[data-skin="retro"] .ss-row.sel .ss-name {
+  background: transparent;
+}
 
 /* 状态记号：闪烁的光标块、?、*、! */
 [data-skin="retro"] .st.run::before {
@@ -151,16 +155,25 @@
   border: 1px solid var(--line-2);
   line-height: 16px;
 }
-[data-skin="retro"] .act-body,
 [data-skin="retro"] .plan,
 [data-skin="retro"] .todo,
 [data-skin="retro"] .code {
   border-color: var(--line-3);
 }
-[data-skin="retro"] .item + .item,
-[data-skin="retro"] .item-detail {
-  border-top-style: dashed;
-  border-top-color: var(--line-2);
+/* 过程区：点开的过程和步骤组左边那根线是虚线；条目详情方角 */
+[data-skin="retro"] .proc:not(.live) > .proc-body,
+[data-skin="retro"] .steps-body {
+  border-left-style: dashed;
+  border-left-color: var(--line-3);
+}
+[data-skin="retro"] .steps-body .item-detail {
+  border-radius: 0;
+  border-color: var(--line-2);
+}
+[data-skin="retro"] .proc-head,
+[data-skin="retro"] .steps-head {
+  border-radius: 0;
+  font-family: var(--mono);
 }
 [data-skin="retro"] .md code {
   background: none;
@@ -458,4 +471,47 @@
   --syn-func: var(--L, #1f55b5) var(--D, var(--wire-blue));
   --syn-type: var(--L, #6f5300) var(--D, var(--wire-yellow));
   --syn-meta: var(--L, #74482c) var(--D, var(--wire-brown));
+}
+
+/* 子代理：状态写成方括号里的字（[完成]、[进行中]），不要底色和记号；行是直角，停上去出一道硬阴影；
+   列表里选中的那一行反白 */
+[data-skin="retro"] .agent-st[data-state] {
+  gap: 0;
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  font-family: var(--mono);
+}
+[data-skin="retro"] .agent-st::before {
+  content: "[";
+}
+[data-skin="retro"] .agent-st::after {
+  content: "]";
+}
+[data-skin="retro"] .agent-st .st {
+  display: none;
+}
+[data-skin="retro"] .agent-row {
+  border-radius: 0;
+  border-color: var(--line-3);
+}
+[data-skin="retro"] button.agent-row:hover {
+  box-shadow: 3px 3px 0 var(--line-3);
+}
+[data-skin="retro"] :is(.agents-pick, .agents-task, .agents-fail) {
+  border-radius: 0;
+}
+[data-skin="retro"] .agents-pick[aria-selected="true"] {
+  background: var(--inv-bg);
+  color: var(--inv-fg);
+  box-shadow: none;
+  --ink-3: var(--inv-fg-2);
+  --accent: var(--inv-fg);
+  --ok: var(--inv-fg);
+  --err: var(--inv-fg);
+}
+/* mermaid 图也是方角：方框节点、子图的框不带圆角（画图库自己画成路径的圆角形状不在此列） */
+[data-skin="retro"] :is(.mmd-fig, .mmd-stage) rect {
+  rx: 0;
+  ry: 0;
 }
