@@ -2702,6 +2702,13 @@ export class CodexClaudeAppServer {
     })
   }
 
+  /** 插进回合的话交给运行时的文字：选中的 Skill 正文在前（同 turn/start），其余照旧 */
+  private inputPrompt(threadId: string, input: UserInput[]): string {
+    const cwd = this.store.getThread(threadId)?.cwd ?? process.cwd()
+    const skills = this.skills.expandSkillInputs(cwd, input)
+    return withSkillInstructions(skills.instructions, textFromInput(skills.rest))
+  }
+
   // 有活动回合时 turn/start 和上游一样并进那个回合（上游 start_or_steer：相当于 steer，回执里是那个回合），
   // CLI 自己续跑的回合（用户不知道有回合在跑）也是这样。不并的：追问子代理的回合（插的话到不了子代理）、
   // 审查和手动压缩的回合（上游同样不许插话）、带 outputSchema 的（上游要求和活动回合的一致），这几种照旧拒绝。
@@ -2741,7 +2748,7 @@ export class CodexClaudeAppServer {
     }
     // 先送进去再落库：送不进去时这条消息不能留下“已提交”的记录。
     try {
-      await this.runtime.steer(threadId, textFromInput(input))
+      await this.runtime.steer(threadId, this.inputPrompt(threadId, input))
     } catch (error) {
       if (!(error instanceof ProtocolError) || error.code !== -32009) throw error
       // 那一轮刚好结束：等它收尾完，按普通回合提交。
@@ -3199,10 +3206,13 @@ export class CodexClaudeAppServer {
     // images into a Claude SDK multimodal user message; here we also append
     // an `imageView` ThreadItem per image so the App's transcript shows them
     // inline next to the user message instead of losing them.
-    const { textPrompt, images } = extractImageInputs(input)
-    const prompt = textPrompt || textFromInput(input)
-    const workflowCommand = parseWorkflowCommand(prompt)
     if (typeof params.cwd === 'string' && params.cwd.length > 0) thread.cwd = params.cwd
+    // 选中的 Skill 按上游的方式把正文交给模型（见 SkillsRpc.expandSkillInputs）；标题、工作流命令仍按用户写的话认
+    const skills = this.skills.expandSkillInputs(thread.cwd, input)
+    const { textPrompt, images } = extractImageInputs(skills.rest)
+    const userPrompt = textPrompt || textFromInput(skills.rest)
+    const workflowCommand = parseWorkflowCommand(userPrompt)
+    const prompt = withSkillInstructions(skills.instructions, userPrompt)
     const model = modelFromParams(params, thread.model)
     const reasoningEffort = reasoningEffortFromParams(params, thread.reasoningEffort)
     const permissionProfileId = permissionProfileIdFromParams(params)
@@ -3227,8 +3237,9 @@ export class CodexClaudeAppServer {
       if (requestedSandbox) thread.sandboxMode = requestedSandbox
     }
     this.store.upsertThread(thread)
-    if (!thread.preview && prompt) {
-      thread.preview = prompt.slice(0, 200)
+    const preview = userPrompt || textFromInput(input)
+    if (!thread.preview && preview) {
+      thread.preview = preview.slice(0, 200)
       thread.updatedAt = nowSeconds()
       this.store.upsertThread(thread)
     }
@@ -5637,7 +5648,7 @@ export class CodexClaudeAppServer {
     if (this.activeTurnByThread.get(threadId) !== activeTurnId)
       throw new ProtocolError(-32009, '回合已终结')
     const input = Array.isArray(params.input) ? (params.input as UserInput[]) : []
-    const prompt = textFromInput(input)
+    const prompt = this.inputPrompt(threadId, input)
     // 插的话留在回合里（thread/read），送进去之后和上游一样发给全部订阅者（上游在交给模型时发这条用户消息）
     const item: ThreadItem = {
       type: 'userMessage',
@@ -6940,6 +6951,11 @@ import { sandboxCommand } from './command-sandbox.mjs'
 const HARNESS_CONFIG_PEER = 'harness-config'
 
 // 线程没有连接订阅时的占位：通知无处可送，路由仍先看线程当前的订阅者。
+/** 选中的 Skill 正文放在这一轮的话前面（上游把 SkillInstructions 作为单独的用户片段放在用户消息之前） */
+function withSkillInstructions(instructions: string[], prompt: string): string {
+  return [...instructions, prompt].filter(Boolean).join('\n\n')
+}
+
 const DETACHED_PEER_PREFIX = 'detached:'
 
 function detachedPeer(threadId: string): RpcPeer {

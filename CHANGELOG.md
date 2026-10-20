@@ -26,6 +26,7 @@ versioning or publishing metadata.
   - OpenCode 上只有在会话还带着别的 Litch 工具时这段话才送得到（桌面端建的会话总带着）；经聚合面转给原生 Codex 的建会话、恢复、分叉请求里如果有不带工具的命名空间，设备进程整个去掉，免得上游拒绝整个请求
 - Claude Code：模型接口出错时回合的错误带上 `codexErrorInfo`，按上游 codex 的种类归：过载（529）是 `serverOverloaded`，429 是 `responseTooManyFailedAttempts`，余额用完是 `usageLimitExceeded`，上下文超长是 `contextWindowExceeded`，鉴权失败是 `unauthorized`，500 是 `internalServerError`，其余带状态码的是 `httpConnectionFailed`；客户端按这个做容量重试不用认错误文字
 - Claude Code：回合进行中再发 `turn/start` 时，和上游 codex 一样并进正在跑的回合（相当于 `turn/steer`），回执里是那个回合的号，不再回 `-32009`；带图片的、追问子代理的、审查和手动压缩的、带 `outputSchema` 的回合照旧拒绝，这次请求里的模型、权限等设置不跟着改
+- Claude Code：输入里选的 Skill（`{type: "skill"}`）照上游 codex 把 SKILL.md 正文作为 `<skill>` 片段放在这一轮的话前面交给模型，`turn/start`、`turn/steer` 都是；原来拼成跟在话后面的 “/名字”，技能不在开头时 CLI 不展开，正文到不了模型。关掉的技能什么都不给；不在技能清单里的（比如 CLI 插件带的）照旧转成 “/名字”
 
 ## 0.14.0
 
