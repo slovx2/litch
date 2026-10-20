@@ -2702,9 +2702,12 @@ export class CodexClaudeAppServer {
     })
   }
 
-  // 用户发消息时 CLI 正好在自己续跑：用户并不知道有回合在跑，不能让这次提交失败。
-  // 把消息并进那个回合（CLI 会接着处理它），返回的就是那个回合。
-  private async joinSpontaneousTurn(
+  // 有活动回合时 turn/start 和上游一样并进那个回合（上游 start_or_steer：相当于 steer，回执里是那个回合），
+  // CLI 自己续跑的回合（用户不知道有回合在跑）也是这样。不并的：追问子代理的回合（插的话到不了子代理）、
+  // 审查和手动压缩的回合（上游同样不许插话）、带 outputSchema 的（上游要求和活动回合的一致），这几种照旧拒绝。
+  // 回合正在收尾、运行时不再收插话时，等它收尾完按普通回合开始（上游这时也是新开一个回合）。
+  // 这次 turn/start 里的模型、权限等设置不跟着改（并入的回合沿用它开始时的设置）。
+  private async joinActiveTurn(
     peer: RpcPeer,
     threadId: string,
     params: Record<string, unknown>,
@@ -2712,12 +2715,21 @@ export class CodexClaudeAppServer {
     hash: string,
   ): Promise<TurnRecord | null> {
     const turnId = this.activeTurnByThread.get(threadId)
-    if (!turnId || !this.spontaneousTurns.has(turnId) || this.interruptingByThread.has(threadId))
+    if (!turnId || this.interruptingByThread.has(threadId)) return null
+    if (this.relayParentByChild.has(threadId) || params.outputSchema != null) return null
+    const active = this.store.getTurn(turnId)
+    if (active?.status !== 'inProgress') return null
+    const first = active.items[0]?.type
+    if (first === 'contextCompaction' || active.items.some((i) => i.type === 'enteredReviewMode'))
       return null
-    if (this.store.getTurn(turnId)?.status !== 'inProgress') return null
     const input = Array.isArray(params.input) ? (params.input as UserInput[]) : []
     if (extractImageInputs(input).images.length > 0)
-      throw new ProtocolError(-32009, '会话正在处理后台命令的结果，带图片的消息请稍后再发')
+      throw new ProtocolError(
+        -32009,
+        this.spontaneousTurns.has(turnId)
+          ? '会话正在处理后台命令的结果，带图片的消息请稍后再发'
+          : '回合正在进行，带图片的消息不能并进去，请等回合结束后再发',
+      )
     const startup = this.runtimeReadyByTurn.get(turnId)
     if (startup && !(await startup.ready)) return null
     if (this.activeTurnByThread.get(threadId) !== turnId) return null
@@ -3160,7 +3172,7 @@ export class CodexClaudeAppServer {
     }
     const merged = queuedId
       ? null
-      : await this.joinSpontaneousTurn(peer, threadId, params, messageId, hash)
+      : await this.joinActiveTurn(peer, threadId, params, messageId, hash)
     if (merged) return { turn: this.toLifecycleTurn(merged) }
     if (
       this.activeTurnByThread.has(threadId) ||
