@@ -1098,6 +1098,7 @@ export const en: Record<MessageKey, Entry> = {
   'tree.agent.unknown': '—',
   'tree.event.notes': 'Reports from sub-sessions',
   'tree.event.wake': 'All sub-sessions stopped, so this session was woken up',
+  'tree.event.remind': 'Reminded the model to wrap up: it skipped the wrap-up last turn',
   'tree.note.completed': 'done',
   'tree.note.failed': 'failed',
   'tree.note.interrupted': 'interrupted',

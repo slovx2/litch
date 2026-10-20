@@ -80,6 +80,14 @@ test('改了再开始：什么都没改是空的；改了的才带，换 harness
   })
 })
 
+test('改了再开始：“完成后唤醒主会话”照提案预填，改了才带 wakeParent', () => {
+  assert.equal(fieldsFor(parent, proposal).wake, proposal.wakeParent)
+  assert.deepEqual(
+    overridesOf({ ...fieldsFor(parent, proposal), wake: !proposal.wakeParent }, parent, proposal),
+    { wakeParent: !proposal.wakeParent },
+  )
+})
+
 test('手动派：和父会话一样的不带，填了的才带', () => {
   const fields = { ...fieldsFor(parent, null), prompt: ' 查一下链接 ', wake: false }
   assert.deepEqual(spawnParams(fields, parent), {

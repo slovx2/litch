@@ -5,6 +5,8 @@
 //   注入的回报、唤醒画成系统提示条，不是用户的气泡，原文里的标签不露出来；
 //   提案卡片（建议任务）在对话流里：等着的有“开始”“改了再开始”“不要”，开始了的能点进子会话，
 //   过期了、撤回了的写着状态；侧面板的“建议任务”列全部，角标是等着的个数，点一条在对话里找到那张卡片；
+//   收尾（wrap_up）带的建议照顺序一张一张、被拒的只一行原因，空的收尾不画；开始了的卡片写实际的 harness；
+//   没调收尾时设备进程的提醒画成一行轻字，不是用户的气泡；
 //   子代理卡片点了在侧面板里看子线程，不接受直接输入的没有输入框；子代理线程不进侧栏；
 //   三种皮肤、深浅两套下这几样东西不溢出。
 // 下面的 treeProbe、treeLooks 会被原样送进页面里执行，不能引用函数外面的东西。
@@ -42,6 +44,15 @@ export interface TreeSeen {
   proposalDismissed: boolean
   proposalWithdrawn: boolean
   proposalPanel: boolean
+  /**
+   * 收尾：一次调用两张等着的卡片加一行被拒的原因；空的收尾不画（撤回那个回合只有一个活动块）；
+   * “改了再开始”能改“完成后唤醒”，换了 harness 开始后卡片写实际起出来的那个；
+   * 没调收尾：提醒是一行轻字、没有用户气泡，后面跟着模型补的那张卡片
+   */
+  wrapShown: boolean
+  wrapQuiet: boolean
+  wrapActual: boolean
+  remindBar: boolean
   /** 子代理：卡片两行，点了在侧面板里看；不能直接输入的没有输入框，能的有；侧栏里没有子代理线程 */
   agentCard: boolean
   agentPanel: boolean
@@ -228,7 +239,7 @@ export async function treeProbe(): Promise<TreeSeen> {
     $<HTMLSelectElement>('#spawn-harness')?.value === 'pi' &&
     ($<HTMLInputElement>('#spawn-cwd')?.value ?? '') !== '' &&
     $('.spawn-dialog .spawn-wider') !== null &&
-    $('.spawn-dialog .spawn-wake') === null
+    $<HTMLInputElement>('.spawn-dialog .spawn-wake input')?.checked === true
   seen.edit = `${$<HTMLSelectElement>('#spawn-harness')?.value} ${$('.spawn-dialog .spawn-wider')?.textContent ?? '没有提醒'}`
   const titleBox = $<HTMLInputElement>('#spawn-title')
   Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
@@ -282,6 +293,66 @@ export async function treeProbe(): Promise<TreeSeen> {
       2000,
     ))
   seen.panel = order.join(',')
+  // 撤回的那个回合：撤回调用一个活动块、回答，最后那次空的收尾不画（不会在回答后面再多一块）
+  const lastTurn = $$('.main section.turn').at(-1)
+  const wrapQuiet =
+    lastTurn?.querySelectorAll('.act').length === 1 &&
+    lastTurn.querySelector('.wrap-cards') === null
+  seen.quiet = `${lastTurn?.querySelectorAll('.act').length ?? '没有'} 个活动块`
+
+  // —— 收尾带的建议 ——
+  const wrapBox = () => $$('.main .wrap-cards').at(-1)
+  await say('收尾建议')
+  const wrapShown = await until(() => {
+    const box = wrapBox()
+    const parts = [...(box?.children ?? [])].map((part) =>
+      part.classList.contains('prop-refused') ? 'refused' : (part as HTMLElement).dataset.state,
+    )
+    return parts.join(',') === 'pending,pending,refused'
+  })
+  seen.wrap = wrapBox()?.textContent ?? '没有'
+  await idle()
+  const firstWrap = () => wrapBox()?.querySelector<HTMLElement>('[data-card="proposal"]')
+  firstWrap()?.querySelector<HTMLElement>('[data-act="edit"]')?.click()
+  await until(() => $('.spawn-dialog[data-proposal]') !== null)
+  const harnessBox = $<HTMLSelectElement>('#spawn-harness')
+  if (harnessBox) {
+    harnessBox.value = 'pi'
+    harnessBox.dispatchEvent(new Event('change', { bubbles: true }))
+  }
+  $<HTMLInputElement>('.spawn-dialog .spawn-wake input')?.click()
+  await sleep(100)
+  const wakeOff = $<HTMLInputElement>('.spawn-dialog .spawn-wake input')?.checked === false
+  $('.spawn-dialog button[type="submit"]')?.click()
+  const wrapActual =
+    wakeOff &&
+    (await until(() => {
+      const card = firstWrap()
+      const meta = card?.querySelector<HTMLElement>('.prop-meta')
+      return (
+        card?.dataset.state === 'started' &&
+        meta?.dataset.actual === 'true' &&
+        meta.querySelector('[data-harness="pi"]') !== null
+      )
+    }))
+  seen.actual = firstWrap()?.querySelector('.prop-meta')?.textContent ?? '没有'
+  await idle()
+  await sleep(2500)
+  await idle()
+
+  // —— 没调收尾：提醒 ——
+  await say('忘了收尾')
+  const remindBar = await until(() => {
+    const bar = $('.main .sev[data-event="remind"]')
+    const turn = bar?.closest('section.turn')
+    return (
+      bar !== null &&
+      turn?.querySelector('.umsg') === null &&
+      turn.querySelectorAll('.wrap-cards [data-card="proposal"]').length === 1
+    )
+  })
+  seen.remind = $('.main .sev[data-event="remind"]')?.textContent ?? '没有'
+  await idle()
   $('.side [data-tool="hide"]')?.click()
 
   // —— 子代理 ——
@@ -349,6 +420,10 @@ export async function treeProbe(): Promise<TreeSeen> {
     proposalDismissed,
     proposalWithdrawn,
     proposalPanel,
+    wrapShown,
+    wrapQuiet,
+    wrapActual,
+    remindBar,
     agentCard,
     agentPanel,
     agentMuted,
@@ -372,7 +447,14 @@ export async function treeLooks(parent: string): Promise<TreeLooks> {
   const root = document.documentElement
   const was = { skin: root.dataset.skin, theme: root.dataset.theme }
   const rows: TreeLooks['rows'] = []
-  const parts = ['.tree-card', '.prop-card', '.sev', '.tree-kids .row-line', '.tree-fold']
+  const parts = [
+    '.tree-card',
+    '.prop-card',
+    '.prop-refused',
+    '.sev',
+    '.tree-kids .row-line',
+    '.tree-fold',
+  ]
   for (const skin of ['retro', 'human', 'standard']) {
     for (const theme of ['light', 'dark']) {
       root.dataset.skin = skin
@@ -425,6 +507,10 @@ const LABELS: Record<Exclude<keyof TreeSeen, 'seen'>, string> = {
   proposalDismissed: '点“不要”记成不要了，不起子会话',
   proposalWithdrawn: '模型撤回的提案写“撤回了”',
   proposalPanel: '侧面板等着的在上、了结的在下，点一条对话里那张卡片闪一下',
+  wrapShown: '收尾带的三条建议：两张等着的卡片加一行被拒的原因',
+  wrapQuiet: '空的收尾不画：撤回的那个回合只有一个活动块',
+  wrapActual: '“改了再开始”能改完成后唤醒；换了 harness 开始后卡片写实际的 harness',
+  remindBar: '没调收尾的提醒是一行轻字、没有用户气泡，后面跟着补的那张卡片',
   agentCard: '子代理卡片列出两个子代理',
   agentPanel: '点子代理在侧面板里看它的对话',
   agentMuted: '不接受直接输入的子代理没有输入框',

@@ -1,11 +1,18 @@
-// 设备进程注入给父会话的那段文字（<litch-session-event>）：子会话的回报、唤醒。
-// 核心已经把它从用户消息里拆出来了（UserMessageItem.event），这里画成一条系统提示，不画成用户说的话。
+// 设备进程注入给父会话的那段文字（<litch-session-event>）：子会话的回报、唤醒、没调收尾时的提醒。
+// 核心已经把它从用户消息里拆出来了（UserMessageItem.event），这里画成一条系统提示，不画成用户说的话；
+// 提醒没有回报，只是一行更轻的字。
 import type { SessionEventView, SessionNoteView, SessionSummary } from '@litch/core'
 import { keys } from '@litch/core'
 import { useT } from '../app/appearance.ts'
 import { Icon } from '../app/icons.tsx'
 import { useKey } from '../app/services.tsx'
 import { useActions } from '../transcript/actions.tsx'
+
+const HEAD_TEXT = {
+  notes: 'tree.event.notes',
+  wake: 'tree.event.wake',
+  remind: 'tree.event.remind',
+} as const satisfies Record<SessionEventView['kind'], string>
 
 const NOTE_MARK: Record<SessionNoteView['status'], string> = {
   completed: '',
@@ -56,7 +63,7 @@ export function SessionEventBar({
     <div className="sev" data-event={event.kind} data-anchor={anchor}>
       <div className="sev-head">
         <Icon name="info" small />
-        <span>{t(event.kind === 'wake' ? 'tree.event.wake' : 'tree.event.notes')}</span>
+        <span>{t(HEAD_TEXT[event.kind])}</span>
       </div>
       {event.notes.length > 0 ? (
         <ul className="sev-notes">

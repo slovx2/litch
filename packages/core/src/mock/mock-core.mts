@@ -465,8 +465,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     tree.ended(view, status)
   }
 
-  /** 在一个进行中的回合里流出一段回答 */
-  const reply = (view: SessionView, turnId: string, text: string) => {
+  /** 在一个进行中的回合里流出一段回答。tail：回答流完、回合结束之前再加的条目（会话树演示里的收尾调用） */
+  const reply = (view: SessionView, turnId: string, text: string, tail?: () => SessionOp[]) => {
     const itemId = `${turnId}-a${++seq}`
     applySessionOps(view, [
       {
@@ -481,6 +481,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       if (chunk)
         applySessionOps(view, [{ op: 'item.appendText', itemId, field: 'text', text: chunk }])
       if (chunks.length === 0) {
+        if (tail) applySessionOps(view, tail())
         endTurn(view, turnId, itemId, 'completed')
         return
       }
@@ -1334,6 +1335,10 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     apply: applySessionOps,
     startTurn: (view, message, event) => startTurn(view, message, event),
     reply,
+    finish(view, turnId, ops) {
+      applySessionOps(view, ops)
+      endTurn(view, turnId, null, 'completed')
+    },
     running: (view) => running(view) !== undefined,
     treeOn: (deviceId) =>
       app.devices.find((device) => device.id === deviceId)?.sessionTree === true,

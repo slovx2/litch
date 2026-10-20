@@ -92,5 +92,6 @@ export function overridesOf(
   const prompt = fields.prompt.trim()
   if (prompt && prompt !== proposal.prompt.trim()) overrides.prompt = prompt
   if (fields.sandbox) overrides.sandbox = fields.sandbox
+  if (fields.wake !== proposal.wakeParent) overrides.wakeParent = fields.wake
   return overrides
 }

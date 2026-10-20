@@ -290,6 +290,45 @@ button.sev-title {
   cursor: default;
   color: var(--ink-3);
 }
+/* 收尾带的建议：照建议的顺序一张接一张；没收下的那条在卡片的位置只占一行 */
+.wrap-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.prop-refused {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 4px 12px;
+  border: 1px dashed var(--line-2);
+  border-radius: var(--r2);
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-3);
+}
+.prop-refused-title {
+  flex: none;
+  max-width: 40%;
+  color: var(--ink-2);
+  font-weight: 600;
+}
+.prop-refused-why {
+  min-width: 0;
+}
+/* 开始了的写的是实际起出来的子会话：和提案原本的区分开，鼠标停上去有说明 */
+.prop-meta[data-actual="true"] {
+  cursor: help;
+}
+/* 没调收尾、设备进程替模型开的提醒回合：只一行轻字，没有回报 */
+.sev[data-event="remind"] {
+  padding: 2px 10px;
+  border-color: transparent;
+  color: var(--ink-3);
+}
+
 /* 侧面板点了一条：对话里那张卡片（找不到时是那一行）闪一圈 */
 [data-flash] {
   animation: prop-flash 1.6s ease-out;
@@ -615,6 +654,13 @@ button.sev-title {
   border-color: var(--line-1);
   border-radius: 14px;
   background: var(--hover);
+}
+[data-skin="human"] .sev[data-event="remind"] {
+  border-color: transparent;
+  background: none;
+}
+[data-skin="human"] .prop-refused {
+  border-radius: 14px;
 }
 [data-skin="human"] .agents-pick {
   border-radius: 13px;

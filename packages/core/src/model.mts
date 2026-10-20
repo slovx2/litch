@@ -11,6 +11,7 @@ import type {
   SessionLineageView,
   SessionProposalView,
   SpawnedView,
+  WrapUpView,
 } from './model-tree.mjs'
 import type { Phrase, Text } from './phrase.mjs'
 import type { DiffElision } from './text/diff.mjs'
@@ -535,6 +536,8 @@ export interface ToolCallItem {
   agents?: AgentRefView[]
   /** litch_sessions.start：派出的 Litch 子会话（或者降成的提案）。别的工具调用没有这一项 */
   spawned?: SpawnedView
+  /** litch_sessions.wrap_up：这一回合收尾时的建议任务（每条一张提案）。别的工具调用没有这一项 */
+  wrapUp?: WrapUpView
 }
 
 export interface PlanItem {

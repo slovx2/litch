@@ -19,6 +19,11 @@ export interface TreeProposal extends TreeChild {
   short?: boolean
 }
 
+/** 收尾（wrap_up）里的一条建议。refused：设备进程没收下它的原因（照设备进程的英文原话） */
+export interface TreeSuggestion extends TreeProposal {
+  refused?: string
+}
+
 export interface TreeAgent {
   nickname: string
   role: string
@@ -42,6 +47,12 @@ export interface TreeText {
   /** 说“撤回提案”时模型撤回最近一个还等着的提案，和它的回话；没有可撤回的时候的回话 */
   withdrawReply: string
   withdrawNone: string
+  /** 说“收尾建议”时回答完调收尾带的三条建议（第三条被拒），和回答 */
+  wrapUp: [TreeSuggestion, TreeSuggestion, TreeSuggestion]
+  wrapReply: string
+  /** 说“忘了收尾”时没调收尾的回答，和设备进程提醒之后模型补的那一条建议 */
+  forgetReply: string
+  remindSuggestion: TreeSuggestion
   /** 说“用子代理”时引擎自己派出的两个子代理，和父会话等它们回来之后说的 */
   agents: [TreeAgent, TreeAgent]
   agentsReply: string
@@ -94,6 +105,38 @@ export const TREE_TEXT: Record<SampleLang, TreeText> = {
       '这几件事适合另开子会话去做，我各提了一个，你点“开始”就起，也可以改了再开始；第二个只是顺手的事，一会儿就过期。',
     withdrawReply: '那张卡片用不着了，我撤回了。',
     withdrawNone: '现在没有等着的提案可撤回。',
+    wrapUp: [
+      {
+        title: '给解析器补模糊测试',
+        prompt:
+          '在 packages/protocol 下给 parseSessionEvent 加一组模糊测试：随机截断、乱插标签、超长 JSON，各跑一千次，确认不抛错、坏的整条当正文；只加测试，不改实现，跑通后报用例数。',
+        reply: '模糊测试加好了：三组各一千次，没有抛错，坏的都当正文了。',
+      },
+      {
+        title: '在 Pi 上对一遍文案',
+        prompt:
+          '把界面包 i18n 下 zh-CN-proposals.ts 和 en-proposals.ts 逐键对一遍：键要一一对应、占位符一致、英文不超过中文两倍长；列出对不上的键，只列不改。',
+        reply: '对完了：键都对得上，有 2 条英文偏长，列在回答里了。',
+        harness: 'pi',
+        cwd: '~/code/litch/packages/ui',
+      },
+      {
+        title: '看看',
+        prompt: '看看日志。',
+        reply: '',
+        refused:
+          'The prompt is too short for a fresh session (at least 80; a CJK character counts as 2).',
+      },
+    ],
+    wrapReply:
+      '改动做完了，测试都过了。还有两件能单独做的事，我放在下面的建议任务里了，你点“开始”就起。',
+    forgetReply: '好，按你说的改完了，构建和测试都过了。',
+    remindSuggestion: {
+      title: '更新产品手册',
+      prompt:
+        '把这次加的“完成后唤醒主会话”写进 skills/litch-manual 的建议任务一节：在哪改、改了有什么用、默认是什么；中英文各一段，只改手册。',
+      reply: '手册更新好了：建议任务一节加了一段，中英文都写了。',
+    },
     agents: [
       {
         nickname: 'Hubble',
@@ -164,6 +207,39 @@ export const TREE_TEXT: Record<SampleLang, TreeText> = {
       'These fit better in their own sub-sessions. I proposed one for each; press Start to run one, or change it first. The second is a small extra and expires soon.',
     withdrawReply: 'That card is no longer needed, so I withdrew it.',
     withdrawNone: 'There is no waiting suggestion to withdraw.',
+    wrapUp: [
+      {
+        title: 'Fuzz the event parser',
+        prompt:
+          'In packages/protocol add fuzz tests for parseSessionEvent: random truncation, stray tags, oversized JSON, a thousand runs each. Confirm it never throws and broken input stays plain text. Tests only, no implementation changes; report the case count.',
+        reply:
+          'Fuzz tests added: three groups of a thousand runs, no throws, broken input stays text.',
+      },
+      {
+        title: 'Check the copy on Pi',
+        prompt:
+          'Compare zh-CN-proposals.ts and en-proposals.ts under the UI package i18n key by key: same keys, same placeholders, English no longer than twice the Chinese. List the mismatches; change nothing.',
+        reply: 'Compared: all keys match; two English strings run long, listed in my answer.',
+        harness: 'pi',
+        cwd: '~/code/litch/packages/ui',
+      },
+      {
+        title: 'Look',
+        prompt: 'Look at the logs.',
+        reply: '',
+        refused:
+          'The prompt is too short for a fresh session (at least 80; a CJK character counts as 2).',
+      },
+    ],
+    wrapReply:
+      'The change is done and the tests pass. Two pieces can run on their own; they are in the suggested tasks below, press Start to run one.',
+    forgetReply: 'Done as you asked; the build and the tests pass.',
+    remindSuggestion: {
+      title: 'Update the product manual',
+      prompt:
+        'Describe the new "wake the main session when done" option in the suggested-tasks section of skills/litch-manual: where to change it, what it does, the default. One paragraph in each language; manual only.',
+      reply: 'Manual updated: one paragraph in the suggested-tasks section, in both languages.',
+    },
     agents: [
       {
         nickname: 'Hubble',

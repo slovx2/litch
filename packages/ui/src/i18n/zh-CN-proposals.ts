@@ -1,4 +1,5 @@
-// 建议任务（模型提的子会话提案）的中文文案：对话流里的提案卡片、侧面板的“建议任务”标签、“改了再开始”的弹窗。
+// 建议任务（模型提的子会话提案）的中文文案：对话流里的提案卡片（含收尾带的建议、被拒的那一行）、
+// 侧面板的“建议任务”标签、“改了再开始”的弹窗。
 // 并进 zh-CN.ts 的那一份里用（键的集合以那一份为准），英文在 en-proposals.ts。
 import type { Entry } from './types.ts'
 
@@ -20,6 +21,9 @@ export const zhProposals = {
   'proposal.state.withdrawn': '撤回了',
   'proposal.state.expired': '过期了',
   'proposal.state.unknown': '提案已收起',
+  'proposal.refused': '没收下：{reason}',
+  'proposal.refusedBare': '没收下',
+  'proposal.actual': '开始了：写的是实际起出来的子会话',
   'proposal.reveal': '在对话里找到这张卡片',
   'proposal.none': '这个对话里还没有建议任务',
   'proposal.nonePending': '没有等着开始的建议任务',

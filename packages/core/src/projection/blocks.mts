@@ -10,6 +10,8 @@ export interface BlockInput {
   phase?: 'commentary' | 'final' | 'unknown'
   /** 露在外面的卡片（cardOf）：派出子会话、启动子代理。不收进活动块 */
   card?: boolean
+  /** 不画的条目（quietOf）：空的收尾调用。不占块，也不算进活动的步数 */
+  quiet?: boolean
 }
 
 export type Block =
@@ -17,7 +19,7 @@ export type Block =
   | { type: 'answer'; itemId: string }
   | { type: 'plan'; itemId: string }
   | { type: 'todo'; itemId: string }
-  /** 派出的子会话、启动的子代理：一张能点开的卡片，一直露在外面（cardOf） */
+  /** 派出的子会话、提案（含收尾带的建议）、启动的子代理：一直露在外面（cardOf） */
   | { type: 'card'; itemId: string }
   /** key 是组里第一个条目的标识，组里再加条目它也不变 */
   | { type: 'activity'; key: string; itemIds: string[] }
@@ -26,7 +28,8 @@ export type Block =
 
 export function bucketItems(items: BlockInput[]): Block[] {
   const blocks: Block[] = []
-  for (const item of items) {
+  const shown = items.filter((item) => item.quiet !== true)
+  for (const item of shown) {
     if (item.kind === 'userMessage') {
       blocks.push({ type: 'user', itemId: item.id })
     } else if (item.kind === 'plan') {
@@ -48,7 +51,7 @@ export function bucketItems(items: BlockInput[]): Block[] {
   }
   // 回合里除了说明什么都没有：收起来就只剩“活动 1 步”，等于什么都没告诉用户
   const only = blocks.length === 1 ? blocks[0] : undefined
-  if (only?.type === 'activity' && items.every((item) => item.kind === 'notice'))
+  if (only?.type === 'activity' && shown.every((item) => item.kind === 'notice'))
     return [{ type: 'notes', key: only.key, itemIds: only.itemIds }]
   return blocks
 }
@@ -74,13 +77,24 @@ export function activitySettled(
 }
 
 /**
- * 这个条目要不要画成露在外面的卡片：litch_sessions.start（派出的子会话或提案），
+ * 这个条目画不画：模型每回合最后都要调一次收尾（litch_sessions.wrap_up），没带建议的那种什么都不画，
+ * 免得每个回合末尾多出一块。和 cardOf 一样只看条目开始时就有的东西（参数）
+ */
+export function quietOf(item: ItemView): boolean {
+  return (
+    item.kind === 'toolCall' && item.wrapUp !== undefined && item.wrapUp.suggestions.length === 0
+  )
+}
+
+/**
+ * 这个条目要不要画成露在外面的卡片：litch_sessions.start（派出的子会话或提案）、带了建议的收尾（每条一张提案），
  * 和启动子代理的那次调用（点开看子线程）。等待、发输入这些别的子代理调用还是活动里的一行。
  * 判断只看条目开始时就有的东西（对话区只在条目增减时重新分块），条目后来更新也不会从卡片变成一行
  */
 export function cardOf(item: ItemView): boolean {
   if (item.kind !== 'toolCall') return false
   if (item.spawned) return true
+  if (item.wrapUp) return item.wrapUp.suggestions.length > 0
   // 启动子代理刚开始时还不知道子线程是谁（上游开始的事件里没有），也画成卡片，等结束时填上
   return (
     item.agents !== undefined &&

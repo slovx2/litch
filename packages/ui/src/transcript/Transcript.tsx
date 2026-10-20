@@ -6,6 +6,7 @@ import {
   type DeviceView,
   type ItemView,
   keys,
+  quietOf,
   type SessionMeta,
   type SessionSummary,
   type Text,
@@ -63,7 +64,9 @@ function useBlocks({ deviceId, sessionId }: SessionRef, itemIds: string[]): Turn
           ? { id, kind: item.kind, phase: item.phase }
           : cardOf(item)
             ? { id, kind: item.kind, card: true }
-            : { id, kind: item.kind },
+            : quietOf(item)
+              ? { id, kind: item.kind, quiet: true }
+              : { id, kind: item.kind },
       )
     }
     return { blocks: bucketItems(inputs), kinds }

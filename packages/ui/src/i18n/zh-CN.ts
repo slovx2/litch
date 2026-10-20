@@ -1027,6 +1027,7 @@ export const zhCN = {
   'tree.agent.unknown': '—',
   'tree.event.notes': '子会话的回报',
   'tree.event.wake': '子会话都停下了，唤醒了这个会话',
+  'tree.event.remind': '提醒模型收尾：上一回合它没调收尾',
   'tree.note.completed': '做完了',
   'tree.note.failed': '失败了',
   'tree.note.interrupted': '被打断',
