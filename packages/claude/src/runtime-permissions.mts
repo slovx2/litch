@@ -5,6 +5,7 @@ import { sandboxCommand } from './command-sandbox.mjs'
 import { dynamicToolCliNames } from './dynamic-tools.mjs'
 import { isGoalTool } from './goal-tools.mjs'
 import { activePermissionRoots, permissionToolName } from './permission-grants.mjs'
+import { transcriptPlanSlug } from './plan-slug.mjs'
 import { claudePlansLocation } from './runtime-config.mjs'
 import { defaultSandboxPolicy, type RuntimeSandboxPolicy } from './sandbox-policy.mjs'
 import type { RuntimeTurnContext } from './types.mjs'
@@ -91,6 +92,28 @@ export function planDirectory(context: RuntimeTurnContext): string {
   return resolve(context.cwd, '.claude', 'plans', 'codex-harness-adapter', context.threadId)
 }
 
+/** 线程号 → 本会话 CLI 的计划文件（`<配置目录>/plans/<slug>.md`，解析过符号链接）。只在 config 模式下用 */
+const sessionPlanFiles = new Map<string, string>()
+
+/**
+ * config 模式下，计划模式里要写 `<配置目录>/plans/` 下的文件时，先从会话记录里认出本会话的 slug（plan-slug.mts），
+ * 记下本会话的计划文件，isPlanFile 只认这一个：别的会话、宿主 Claude Code 自己的计划文件，以及不是 `.md` 的，
+ * 都按普通文件走沙箱。PreToolUse 钩子在判定之前调用
+ */
+export async function notePlanFile(
+  context: RuntimeTurnContext,
+  name: string,
+  input: Record<string, unknown>,
+  transcriptPath: unknown,
+): Promise<void> {
+  if (claudePlansLocation() !== 'config' || !context.planMode || !fileTools.has(name)) return
+  if (typeof input.file_path !== 'string' || typeof transcriptPath !== 'string') return
+  const root = resolvedTarget(planDirectory(context))
+  if (dirname(resolvedTarget(resolve(context.cwd, input.file_path))) !== root) return
+  const slug = await transcriptPlanSlug(transcriptPath)
+  if (slug) sessionPlanFiles.set(context.threadId, join(root, `${slug}.md`))
+}
+
 export function isPlanFile(
   context: RuntimeTurnContext,
   name: string,
@@ -99,8 +122,8 @@ export function isPlanFile(
   if (!context.planMode || !fileTools.has(name) || typeof input.file_path !== 'string') return false
   const root = resolvedTarget(planDirectory(context))
   const target = resolvedTarget(resolve(context.cwd, input.file_path))
-  // 配置目录下的 plans 是各会话共用的，只豁免直接放在里面的文件
-  if (claudePlansLocation() === 'config') return dirname(target) === root
+  // 配置目录下的 plans 是各会话共用的，只豁免本会话 CLI 这次的那一个计划文件（notePlanFile 记下的）
+  if (claudePlansLocation() === 'config') return sessionPlanFiles.get(context.threadId) === target
   const rootWithinProject = relative(resolvedTarget(context.cwd), root)
   if (
     rootWithinProject === '..' ||
@@ -171,6 +194,12 @@ export function runtimePermissionOptions(
         {
           hooks: [
             async (event: Record<string, unknown>, toolUseId: string) => {
+              await notePlanFile(
+                context,
+                String(event.tool_name),
+                (event.tool_input ?? {}) as Record<string, unknown>,
+                event.transcript_path,
+              )
               const structuredOutput =
                 isStructuredOutput(context, String(event.tool_name)) ||
                 Boolean(context.goalTools && isGoalTool(String(event.tool_name))) ||

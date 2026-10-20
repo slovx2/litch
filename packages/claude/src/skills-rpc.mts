@@ -2,6 +2,7 @@ import { statSync } from 'node:fs'
 import { join } from 'node:path'
 import { readConfigFile, writeConfigFile } from './config-store.mjs'
 import { ProtocolError } from './protocol-contract.mjs'
+import { claudeSettingSources } from './runtime-config.mjs'
 import {
   absoluteSkillPath,
   canonicalSkillKey,
@@ -146,9 +147,13 @@ export class SkillsRpc {
   }
 
   private catalog(cwd: string, state = this.state): SkillCatalog {
+    // 用户级、项目级的技能目录只在 CHA_CLAUDE_SETTING_SOURCES 选了那一层时才有，和 CLI 读的一致
+    const layers = claudeSettingSources()
     const sources = [
-      scanSkillRoot(join(nativeSkillHome(), 'skills'), 'user', this.roots.paths()),
-      ...projectSkillDirectories(cwd).map((directory) =>
+      ...(layers.includes('user')
+        ? [scanSkillRoot(join(nativeSkillHome(), 'skills'), 'user', this.roots.paths())]
+        : []),
+      ...(layers.includes('project') ? projectSkillDirectories(cwd) : []).map((directory) =>
         scanSkillRoot(join(directory, '.claude', 'skills'), 'repo'),
       ),
       ...this.extraRoots.map((root) => scanSkillRoot(root, 'user')),

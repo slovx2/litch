@@ -142,78 +142,122 @@ test('SETTING-SOURCES-002：CHA_CLAUDE_SETTING_SOURCES 给了认不出的值时�
   }
 })
 
-test('PLANS-LOCATION-001：CHA_CLAUDE_PLANS_LOCATION=config 时计划文件放进 Claude Code 自己的配置目录，工作区里不留东西', {
-  timeout: 100_000,
-}, async () => {
-  const home = await mkdtemp(join(tmpdir(), 'native-plans-config-'))
-  const model = new MockLLM()
-  const workspace = join(home, 'ws')
-  await mkdir(workspace, { recursive: true })
-  const client = await ProtocolClient.start(home, await model.start(), false, 'api-key', {
-    CHA_CLAUDE_PLANS_LOCATION: 'config',
-  })
-  try {
-    let planPath = ''
-    model.enqueue(() => [{ type: 'tool_use', id: 'toolu_enter', name: 'EnterPlanMode', input: {} }])
-    model.enqueue((request) => {
-      const location = /create your plan at ([^\n]+?) using the Write tool/.exec(
-        promptText(request.messages),
-      )
-      assert.ok(location, 'CLI 必须向模型提供真实计划路径')
-      planPath = location[1]!
-      return [
-        {
-          type: 'tool_use',
-          id: 'toolu_plan_file',
-          name: 'Write',
-          input: { file_path: planPath, content: '# 可执行计划\n1. 写入结果' },
-        },
-      ]
-    })
-    model.enqueue((request) => {
-      assert.doesNotMatch(toolResultText(request, 'toolu_plan_file'), /超出|denied|拒绝/)
-      return [{ type: 'text', text: '请确认计划' }]
-    })
-    const { thread } = await client.request('thread/start', {
-      cwd: workspace,
-      approvalPolicy: 'never',
-      sandbox: 'workspace-write',
-    })
-    const { turn } = await client.request('turn/start', {
-      threadId: thread.id,
-      input: [{ type: 'text', text: '先进入计划模式' }],
-    })
-    assert.equal((await client.completed(turn.id)).status, 'completed')
-    model.assertConsumed()
-    assert.equal(await realpath(dirname(planPath)), join(await realpath(home), 'claude', 'plans'))
-    assert.match(await readFile(planPath, 'utf8'), /可执行计划/)
-    await assert.rejects(access(join(workspace, '.claude')), '工作区里不建 .claude')
-    assert.doesNotMatch(client.stderr, /plansDirectory must be within project root/)
-    const history = await client.request('thread/read', { threadId: thread.id, includeTurns: true })
-    assert.ok(
-      history.thread.turns[0].items.some(
-        (i: any) => i.type === 'plan' && i.text.includes('可执行计划'),
-      ),
-      '计划文本照样交给客户端',
+for (const sandbox of ['workspace-write', 'read-only'] as const)
+  test(`PLANS-LOCATION-001：CHA_CLAUDE_PLANS_LOCATION=config、${sandbox} 时计划文件放进 Claude Code 自己的配置目录，只豁免本会话的那一个`, {
+    timeout: 100_000,
+  }, async () => {
+    const home = await mkdtemp(join(tmpdir(), 'native-plans-config-'))
+    const model = new MockLLM()
+    const workspace = join(home, 'ws')
+    await mkdir(workspace, { recursive: true })
+    // 用户级设置里配的 plansDirectory 要被入口盖掉，不然 CLI 把计划写进工作区、和豁免的目录对不上
+    await mkdir(join(home, 'claude', 'plans'), { recursive: true })
+    await writeFile(
+      join(home, 'claude', 'settings.json'),
+      JSON.stringify({ plansDirectory: 'custom-plans' }),
     )
-  } finally {
-    await client.close()
-    await model.close()
-    await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
-  }
-})
+    // 别的会话（或宿主 Claude Code 自己）的计划文件
+    const foreign = join(home, 'claude', 'plans', 'foreign-plan.md')
+    await writeFile(foreign, 'FOREIGN\n')
+    const client = await ProtocolClient.start(home, await model.start(), false, 'api-key', {
+      CHA_CLAUDE_PLANS_LOCATION: 'config',
+    })
+    const failed = (request: ModelRequest, id: string): boolean =>
+      request.messages
+        .flatMap((m: any) => (Array.isArray(m.content) ? m.content : []))
+        .some((b: any) => b.type === 'tool_result' && b.tool_use_id === id && b.is_error === true)
+    const write = (id: string, file_path: string, content: string) => [
+      { type: 'tool_use', id, name: 'Write', input: { file_path, content } },
+    ]
+    try {
+      let planPath = ''
+      model.enqueue(() => [
+        { type: 'tool_use', id: 'toolu_enter', name: 'EnterPlanMode', input: {} },
+      ])
+      model.enqueue((request) => {
+        const location = /create your plan at ([^\n]+?) using the Write tool/.exec(
+          promptText(request.messages),
+        )
+        assert.ok(location, 'CLI 必须向模型提供真实计划路径')
+        planPath = location[1]!
+        return write('toolu_plan_file', planPath, '# 可执行计划\n1. 写入结果')
+      })
+      model.enqueue((request) => {
+        assert.equal(
+          failed(request, 'toolu_plan_file'),
+          false,
+          toolResultText(request, 'toolu_plan_file'),
+        )
+        return write('toolu_foreign', foreign, 'OVERWRITTEN')
+      })
+      model.enqueue((request) => {
+        assert.equal(failed(request, 'toolu_foreign'), true, '别的会话的计划文件不能写')
+        return write('toolu_not_md', planPath.replace(/\.md$/, '.txt'), 'NOT_MD')
+      })
+      model.enqueue((request) => {
+        assert.equal(failed(request, 'toolu_not_md'), true, '不是本会话计划文件的名字不能写')
+        return [{ type: 'text', text: '请确认计划' }]
+      })
+      const { thread } = await client.request('thread/start', {
+        cwd: workspace,
+        approvalPolicy: 'never',
+        sandbox,
+      })
+      const { turn } = await client.request('turn/start', {
+        threadId: thread.id,
+        input: [{ type: 'text', text: '先进入计划模式' }],
+      })
+      assert.equal((await client.completed(turn.id)).status, 'completed')
+      model.assertConsumed()
+      assert.equal(await realpath(dirname(planPath)), join(await realpath(home), 'claude', 'plans'))
+      assert.match(await readFile(planPath, 'utf8'), /可执行计划/)
+      assert.equal(await readFile(foreign, 'utf8'), 'FOREIGN\n')
+      await assert.rejects(access(planPath.replace(/\.md$/, '.txt')))
+      await assert.rejects(access(join(workspace, '.claude')), '工作区里不建 .claude')
+      await assert.rejects(
+        access(join(workspace, 'custom-plans')),
+        '用户设置里的 plansDirectory 被盖掉',
+      )
+      assert.doesNotMatch(client.stderr, /plansDirectory must be within project root/)
+      const history = await client.request('thread/read', {
+        threadId: thread.id,
+        includeTurns: true,
+      })
+      assert.ok(
+        history.thread.turns[0].items.some(
+          (i: any) => i.type === 'plan' && i.text.includes('可执行计划'),
+        ),
+        '计划文本照样交给客户端',
+      )
+    } finally {
+      await client.close()
+      await model.close()
+      await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
+    }
+  })
 
-for (const [label, enabled] of [
-  ['默认关', false],
-  ['开着', true],
+// 原有的自定义头放在两处：进程环境，或者 Claude Code 用户设置的 env（CLI 起来后拿它盖进程环境）
+for (const [label, enabled, where] of [
+  ['默认关', false, 'env'],
+  ['开着', true, 'env'],
+  ['默认关、自定义头配在设置的 env 里', false, 'settings'],
+  ['开着、自定义头配在设置的 env 里', true, 'settings'],
 ] as const)
   test(`THREAD-ID-HEADER-001：CHA_CLAUDE_THREAD_ID_HEADER ${label}时模型请求${enabled ? '带上线程号、保留原有的自定义头' : '不多带任何头'}`, {
     timeout: 100_000,
   }, async () => {
     const home = await mkdtemp(join(tmpdir(), 'native-thread-id-header-'))
     const model = new MockLLM()
+    const custom = 'x-user-header: keep\nthread-id: stale'
+    if (where === 'settings') {
+      await mkdir(join(home, 'claude'), { recursive: true })
+      await writeFile(
+        join(home, 'claude', 'settings.json'),
+        JSON.stringify({ env: { ANTHROPIC_CUSTOM_HEADERS: custom } }),
+      )
+    }
     const client = await ProtocolClient.start(home, await model.start(), false, 'api-key', {
-      ANTHROPIC_CUSTOM_HEADERS: 'x-user-header: keep\nthread-id: stale',
+      ...(where === 'env' ? { ANTHROPIC_CUSTOM_HEADERS: custom } : {}),
       ...(enabled ? { CHA_CLAUDE_THREAD_ID_HEADER: '1' } : {}),
     })
     try {

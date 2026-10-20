@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import type { SDKRateLimitInfo } from '@anthropic-ai/claude-agent-sdk'
+import { claudeSettingSources } from './runtime-config.mjs'
 
 const identityKeys =
   /^(ANTHROPIC_|CLAUDE_CODE_OAUTH_TOKEN$|CLAUDE_CODE_USE_|AWS_|GOOGLE_|AZURE_|CLOUD_ML_)/
@@ -37,11 +38,15 @@ export function rateLimitCredentialScope(cwd: string): string | null {
     directories.unshift(directory)
     if (directory === dirname(directory)) break
   }
+  // 只看 CHA_CLAUDE_SETTING_SOURCES 选中的几层，和 CLI 读的一致
+  const layers = claudeSettingSources()
   const paths = [
-    join(process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude'), 'settings.json'),
+    ...(layers.includes('user')
+      ? [join(process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude'), 'settings.json')]
+      : []),
     ...directories.flatMap((directory) => [
-      join(directory, '.claude', 'settings.json'),
-      join(directory, '.claude', 'settings.local.json'),
+      ...(layers.includes('project') ? [join(directory, '.claude', 'settings.json')] : []),
+      ...(layers.includes('local') ? [join(directory, '.claude', 'settings.local.json')] : []),
     ]),
   ]
   const constraints: Record<string, unknown> = {}

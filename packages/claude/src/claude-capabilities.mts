@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { isAbsolute, join } from 'node:path'
 import { ProtocolError } from './protocol-contract.mjs'
+import { claudeSettingSources } from './runtime-config.mjs'
 
 interface HookMetadata {
   readonly key: string
@@ -56,10 +57,16 @@ export function listClaudeHooks(
     },
   ]
   return roots.map((cwd) => {
+    // 只列 CHA_CLAUDE_SETTING_SOURCES 选中的几层里的钩子，和 CLI 读的一致
+    const layers = claudeSettingSources()
     const sources = [
-      ...userSources,
-      { path: join(cwd, '.claude', 'settings.json'), source: 'project' as const },
-      { path: join(cwd, '.claude', 'settings.local.json'), source: 'project' as const },
+      ...(layers.includes('user') ? userSources : []),
+      ...(layers.includes('project')
+        ? [{ path: join(cwd, '.claude', 'settings.json'), source: 'project' as const }]
+        : []),
+      ...(layers.includes('local')
+        ? [{ path: join(cwd, '.claude', 'settings.local.json'), source: 'project' as const }]
+        : []),
     ]
     const hooks: HookMetadata[] = []
     const warnings: string[] = []

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import test from 'node:test'
 import { deflateSync } from 'node:zlib'
 import { MockLLM } from './fixtures/mock-llm.mjs'
@@ -174,6 +174,16 @@ for (const [label, settings, dynamicTools] of [
     { approvalPolicy: 'on-request', sandbox: 'workspace-write' },
     [{ ...ECHO_TOOLS[0], name: 'fixture_tools' }],
   ],
+  [
+    '不信任、只读，别的命名空间',
+    { approvalPolicy: 'untrusted', sandbox: 'read-only' },
+    [{ ...ECHO_TOOLS[0], name: 'fixture_tools' }],
+  ],
+  [
+    '计划模式，不带命名空间',
+    { approvalPolicy: 'on-request', sandbox: 'workspace-write', planMode: true },
+    [ECHO_FUNCTION],
+  ],
 ] as const)
   test(`CLIENT-TOOLS-CC-003：${label}时动态工具同样不经审批、不按沙箱拦，直接交给客户端`, {
     timeout: 100_000,
@@ -194,14 +204,16 @@ for (const [label, settings, dynamicTools] of [
         assert.match(JSON.stringify(lastToolResult(request)), /ECHO hi/)
         return [{ type: 'text', text: 'DONE' }]
       })
+      const { planMode, ...threadSettings } = settings as typeof settings & { planMode?: boolean }
       const { thread } = await client.request('thread/start', {
         cwd: home,
-        ...settings,
+        ...threadSettings,
         dynamicTools,
       })
       const { turn } = await client.request('turn/start', {
         threadId: thread.id,
         input: [{ type: 'text', text: '调用工具' }],
+        ...(planMode ? { planMode: true } : {}),
       })
       assert.equal((await client.completed(turn.id)).status, 'completed')
       assert.deepEqual(asked, ['item/tool/call'], '只有工具调用，没有审批')
@@ -212,6 +224,123 @@ for (const [label, settings, dynamicTools] of [
       await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
     }
   })
+
+// 子代理（Agent 工具派出的）调动态工具同样直接交给客户端。按请求内容分父子：子代理的第一条消息带着派它时的 prompt
+test('CLIENT-TOOLS-CC-004：子代理调非 litch_ 的动态工具时同样不经审批，直接交给客户端', {
+  timeout: 120_000,
+}, async () => {
+  const home = await mkdtemp(join(tmpdir(), 'native-client-tools-subagent-'))
+  const model = new MockLLM()
+  const client = await ProtocolClient.start(home, await model.start(), false, 'api-key', {}, null)
+  try {
+    const asked: string[] = []
+    client.onServerRequest = async (method) => {
+      asked.push(method)
+      return method === 'item/tool/call'
+        ? { success: true, contentItems: [{ type: 'inputText', text: 'ECHO from child' }] }
+        : { decision: 'decline' }
+    }
+    let childSaw = ''
+    const route = (request: any) => {
+      const messages = (request.messages ?? []) as any[]
+      const child = JSON.stringify(messages[0]?.content ?? '').includes('CHILD_CALLS_TOOL')
+      const answered =
+        messages.at(-1)?.role === 'user' && JSON.stringify(messages.at(-1)).includes('tool_result')
+      if (child && !answered) return callEcho(request)
+      if (child) {
+        childSaw = JSON.stringify(lastToolResult(request))
+        return [{ type: 'text', text: 'CHILD_DONE' }]
+      }
+      if (!answered)
+        return [
+          {
+            type: 'tool_use',
+            id: 'toolu_agent',
+            name: 'Agent',
+            input: {
+              description: '调工具',
+              prompt: 'CHILD_CALLS_TOOL 调一下 echo 工具',
+              subagent_type: 'general-purpose',
+              run_in_background: false,
+            },
+          },
+        ]
+      return [{ type: 'text', text: 'MAIN_DONE' }]
+    }
+    for (let index = 0; index < 4; index++) model.enqueue(route)
+    const { thread } = await client.request('thread/start', {
+      cwd: home,
+      approvalPolicy: 'on-request',
+      sandbox: 'workspace-write',
+      dynamicTools: [{ ...ECHO_TOOLS[0], name: 'fixture_tools' }],
+    })
+    const { turn } = await client.request('turn/start', {
+      threadId: thread.id,
+      input: [{ type: 'text', text: '派个子代理调工具' }],
+    })
+    assert.equal((await client.completed(turn.id)).status, 'completed')
+    assert.match(childSaw, /ECHO from child/)
+    assert.deepEqual(asked, ['item/tool/call'], '只有工具调用，没有审批')
+    model.assertConsumed()
+  } finally {
+    await client.close()
+    await model.close()
+    await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
+  }
+})
+
+// 反向：用户自己配的 MCP 服务不是动态工具，按需审批时照旧先问；拒了就不执行
+test('CLIENT-TOOLS-CC-005：用户自己的 MCP 工具照旧走审批', { timeout: 100_000 }, async () => {
+  const home = await mkdtemp(join(tmpdir(), 'native-client-tools-mcp-'))
+  const model = new MockLLM()
+  const client = await ProtocolClient.start(home, await model.start(), false, 'api-key', {}, null)
+  try {
+    const asked: string[] = []
+    client.onServerRequest = async (method) => {
+      asked.push(method)
+      return method === 'mcpServer/elicitation/request'
+        ? { action: 'decline', content: null, _meta: null }
+        : { decision: 'decline' }
+    }
+    let result = ''
+    model.enqueue((request) => {
+      const name = 'mcp__fixture__echo'
+      assert.ok(request.tools.some((tool: any) => tool.name === name))
+      return [{ type: 'tool_use', id: 'toolu_mcp', name, input: { value: 'MCP_RAN' } }]
+    })
+    model.enqueue((request) => {
+      result = JSON.stringify(lastToolResult(request))
+      return [{ type: 'text', text: 'DONE' }]
+    })
+    const { thread } = await client.request('thread/start', {
+      cwd: home,
+      approvalPolicy: 'on-request',
+      sandbox: 'workspace-write',
+      dynamicTools: [{ ...ECHO_TOOLS[0], name: 'fixture_tools' }],
+      config: {
+        mcp_servers: {
+          fixture: {
+            command: process.execPath,
+            args: [resolve('packages/claude/test/fixtures/mcp-stdio-server.mjs')],
+          },
+        },
+      },
+    })
+    const { turn } = await client.request('turn/start', {
+      threadId: thread.id,
+      input: [{ type: 'text', text: '调用 MCP 工具' }],
+    })
+    assert.equal((await client.completed(turn.id)).status, 'completed')
+    assert.equal(asked.length, 1, JSON.stringify(asked))
+    assert.notEqual(asked[0], 'item/tool/call', '先问审批')
+    assert.doesNotMatch(result, /MCP_RAN/, '拒了就不执行')
+    model.assertConsumed()
+  } finally {
+    await client.close()
+    await model.close()
+    await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
+  }
+})
 
 /** 模型收到的图片块解出来的宽高（PNG 读 IHDR，JPEG 读 SOF） */
 function imageSize(data: Buffer): string {

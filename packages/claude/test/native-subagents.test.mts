@@ -986,3 +986,58 @@ test('SUBAGENT-013：子代理被钩子拦下时，失败原因是 CLI 给的原
     await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
   }
 })
+
+// 线程号请求头（CHA_CLAUDE_THREAD_ID_HEADER）：追问子代理的回合跑在父会话的 CLI 进程上，带的是父线程号
+test('SUBAGENT-014：开着线程号请求头时，父回合和子线程里的追问回合发的请求都带父线程号', {
+  timeout: 120_000,
+}, async () => {
+  const home = await mkdtemp(join(tmpdir(), 'native-subagent-thread-header-'))
+  await writeFile(join(home, 'a.txt'), 'probe-file-content: 42\n')
+  const model = new MockLLM()
+  const client = await ProtocolClient.start(home, await model.start(), false, 'api-key', {
+    CHA_CLAUDE_THREAD_ID_HEADER: '1',
+  })
+  const seen: unknown[] = []
+  const withHeader =
+    (step: (request: ModelRequest) => unknown) =>
+    (request: ModelRequest, headers: Record<string, unknown>) => {
+      seen.push(headers['thread-id'])
+      return step(request) as any
+    }
+  try {
+    const { thread } = await client.request('thread/start', {
+      cwd: home,
+      sandbox: 'danger-full-access',
+      approvalPolicy: 'never',
+    })
+    for (let index = 0; index < 4; index++)
+      model.enqueue(withHeader(subagentRouter(home, 'foreground')))
+    const first = await client.request('turn/start', {
+      threadId: thread.id,
+      input: [{ type: 'text', text: 'SUBAGENT_MAIN 请派子代理读取 a.txt' }],
+    })
+    await assertCompleted(client, model, first.turn.id)
+    const [child] = await childThreads(client, thread.id)
+    assert.ok(child, '应创建子线程')
+    await client.request('thread/resume', { threadId: child.id })
+    let parentAsked!: () => void
+    const afterParentAsked = new Promise<void>((resolve) => {
+      parentAsked = resolve
+    })
+    const followUp: FollowUp = { order: 'parent-first', parentAsked, afterParentAsked }
+    for (let index = 0; index < 4; index++)
+      model.enqueue(withHeader(subagentRouter(home, 'foreground', 0, followUp)))
+    const relay = await client.request('turn/start', {
+      threadId: child.id,
+      input: [{ type: 'text', text: 'CHILD_FOLLOWUP 刚才读到的数值是多少' }],
+    })
+    await assertCompleted(client, model, relay.turn.id)
+    model.assertConsumed()
+    assert.equal(seen.length, 8)
+    assert.deepEqual(new Set(seen), new Set([thread.id]), JSON.stringify(seen))
+  } finally {
+    await client.close()
+    await model.close()
+    await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
+  }
+})
