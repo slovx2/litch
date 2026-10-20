@@ -6,6 +6,8 @@ import test from 'node:test'
 import { listClaudeHooks } from '../src/claude-capabilities.mjs'
 import { settingsEnvValue } from '../src/claude-setting-layers.mjs'
 import {
+  applyExtendedCacheTtlBeta,
+  claudeExtendedCacheTtl,
   claudePlansLocation,
   claudeSettingSources,
   claudeThreadIdHeader,
@@ -39,6 +41,7 @@ test('CHA_CLAUDE_SETTING_SOURCES：默认三层都读，可只读其中几层，
     settingSources: ['user', 'project', 'local'],
     plansLocation: 'workspace',
     threadIdHeader: false,
+    extendedCacheTtl: true,
   })
 })
 
@@ -128,4 +131,31 @@ test('CHA_CLAUDE_SETTING_SOURCES 也管入口自己读的设置：钩子列表�
       else process.env[key] = value
     await rm(directory, { recursive: true, force: true })
   }
+})
+
+test('CHA_CLAUDE_EXTENDED_CACHE_TTL：默认开、补进原有的 beta；0 时不动 ANTHROPIC_BETAS；别的值报错', () => {
+  const beta = 'extended-cache-ttl-2025-04-11'
+  assert.equal(claudeExtendedCacheTtl({}), true)
+  assert.equal(claudeExtendedCacheTtl({ CHA_CLAUDE_EXTENDED_CACHE_TTL: '0' }), false)
+  assert.equal(claudeExtendedCacheTtl({ CHA_CLAUDE_EXTENDED_CACHE_TTL: '1' }), true)
+  assert.throws(
+    () => resolveRuntimeConfig({ CHA_CLAUDE_EXTENDED_CACHE_TTL: '1h' }),
+    /CHA_CLAUDE_EXTENDED_CACHE_TTL 无效/,
+  )
+  const empty: NodeJS.ProcessEnv = {}
+  applyExtendedCacheTtlBeta(empty)
+  assert.equal(empty.ANTHROPIC_BETAS, beta)
+  const user: NodeJS.ProcessEnv = { ANTHROPIC_BETAS: 'user-beta' }
+  applyExtendedCacheTtlBeta(user)
+  applyExtendedCacheTtlBeta(user)
+  assert.equal(user.ANTHROPIC_BETAS, `user-beta,${beta}`)
+  const off: NodeJS.ProcessEnv = {
+    CHA_CLAUDE_EXTENDED_CACHE_TTL: '0',
+    ANTHROPIC_BETAS: 'user-beta',
+  }
+  applyExtendedCacheTtlBeta(off)
+  assert.equal(off.ANTHROPIC_BETAS, 'user-beta')
+  const unset: NodeJS.ProcessEnv = { CHA_CLAUDE_EXTENDED_CACHE_TTL: '0' }
+  applyExtendedCacheTtlBeta(unset)
+  assert.equal(unset.ANTHROPIC_BETAS, undefined)
 })

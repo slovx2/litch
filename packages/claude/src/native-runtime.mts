@@ -11,12 +11,8 @@ import { homedir } from 'node:os'
 import { join, relative } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 
-// Extended cache TTL for 1-hour prompt caching
-if (!process.env.ANTHROPIC_BETAS) {
-  process.env.ANTHROPIC_BETAS = 'extended-cache-ttl-2025-04-11'
-} else if (!process.env.ANTHROPIC_BETAS.includes('extended-cache-ttl-2025-04-11')) {
-  process.env.ANTHROPIC_BETAS = `${process.env.ANTHROPIC_BETAS},extended-cache-ttl-2025-04-11`
-}
+// 1 小时提示缓存的 beta（CHA_CLAUDE_EXTENDED_CACHE_TTL=0 时不补），CLI 继承这个进程的环境
+applyExtendedCacheTtlBeta()
 
 // In-process Claude runtime — replaces the Python sidecar entirely. Talks to
 // @anthropic-ai/claude-agent-sdk directly so we get a single process boundary
@@ -89,6 +85,7 @@ import { permissionToolServer } from './permission-tools.mjs'
 import { ProtocolError, submissionHash } from './protocol-contract.mjs'
 import { type NativeRateLimitInfo, rateLimitCredentialScope } from './rate-limits.mjs'
 import {
+  applyExtendedCacheTtlBeta,
   claudePlansLocation,
   claudeSettingSources,
   claudeThreadIdHeaderEnv,
@@ -1296,10 +1293,6 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     if (resume) opts.resume = resume
     if (resume && context.forkSession) opts.forkSession = true
 
-    // Ensure extended cache TTL is explicitly requested
-    if (!process.env.ANTHROPIC_BETAS) {
-      process.env.ANTHROPIC_BETAS = 'extended-cache-ttl-2025-04-11'
-    }
     if (context.addDirs && context.addDirs.length > 0) opts.additionalDirectories = context.addDirs
     if (context.allowedTools && context.allowedTools.length > 0)
       opts.allowedTools = context.allowedTools
