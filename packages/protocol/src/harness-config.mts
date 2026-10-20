@@ -61,6 +61,11 @@ export const HARNESS_CONFIG_METHOD = {
   instructionsRead: 'litch/harness/instructions/read',
   /** 整个写进去。带 expectedHash，对不上回 versionConflict */
   instructionsWrite: 'litch/harness/instructions/write',
+  // ---- 模型清单 ----
+  /** 读这个 harness 的自定义模型清单（config/read 的 modelCatalog 为 true 才有） */
+  modelsRead: 'litch/harness/models/read',
+  /** 整份写入模型清单；entries 为 null 是不用自定义清单、回到 harness 自己的模型目录 */
+  modelsWrite: 'litch/harness/models/write',
   // ---- 设备进程自己处理的：统一模式 ----
   /** 把一份正文写进 source，其余各份备份后改成指向它的软链 */
   instructionsUnify: 'litch/device/instructions/unify',
@@ -221,6 +226,8 @@ export interface HarnessConfigReadResponse {
   /** 不透明的版本号（各文件内容的哈希之类），写的时候原样带回来 */
   version: string
   files: HarnessConfigFile[]
+  /** 这个 harness 有没有模型清单（litch/harness/models/*）。没有这个字段当 false */
+  modelCatalog?: boolean
 }
 
 export interface HarnessConfigEdit {
@@ -545,5 +552,59 @@ export interface DeviceInstructionsSeparateResponse {
 export interface HarnessConfigChangedNotification {
   harness: string
   /** 哪一块变了 */
-  part: 'config' | 'providers' | 'mcp' | 'instructions'
+  part: 'config' | 'providers' | 'mcp' | 'instructions' | 'models'
+}
+
+// ---- 模型清单 ----
+// 原生 codex：清单是 model_catalog_json 指向的 JSON 文件，整份替换 codex 自己的模型目录，codex 启动时才读。
+// 每个模型在 codex 里有很多字段；这里只让改模型名、显示名和上下文窗口，其余字段照 base 那个模型原样带过去。
+
+/** 模型清单里的一项 */
+export interface HarnessModelEntry {
+  /** 发给模型服务的模型名（codex 的 slug），清单里唯一 */
+  id: string
+  /** 显示名；null 用 base 的显示名（没有 base 时用 id） */
+  displayName: string | null
+  /** 上下文窗口（token）；null 照 base 的 */
+  contextWindow: number | null
+  /** 照着哪个模型的其余设置（bases 里的 id）；和 id 相同表示原样用那个模型 */
+  base: string
+}
+
+/** 可以照着的模型 */
+export interface HarnessModelBase {
+  id: string
+  displayName: string
+  contextWindow: number | null
+  description: string | null
+}
+
+export interface HarnessModelsReadResponse {
+  /** 在用自定义清单；false 时 harness 用它自己的模型目录，entries 是空的 */
+  custom: boolean
+  entries: HarnessModelEntry[]
+  /** 可以照着的模型（harness 自带的目录），顺序就是显示的顺序 */
+  bases: HarnessModelBase[]
+  /** 清单存在哪个文件；还没有时是会写到的地方 */
+  path: string | null
+  /** 不透明的版本号，写的时候原样带回来 */
+  version: string
+  /** 改了以后什么时候生效 */
+  effect: HarnessSettingEffect
+  /** 额外的说明（比如清单文件读不出来、被管理员的设置盖住了） */
+  note: HarnessText | null
+  /** 被更高一层锁住、不能写时给原因 */
+  readOnlyReason: HarnessText | null
+}
+
+export interface HarnessModelsWriteParams extends HarnessParams {
+  /** null 是不用自定义清单（回到 harness 自己的模型目录）；不能是空数组 */
+  entries: HarnessModelEntry[] | null
+  expectedVersion: string
+}
+
+export interface HarnessModelsWriteResponse {
+  version: string
+  /** effect 为 harness 时为 true，客户端提示后调 litch/device/harness/restart */
+  restartRequired: boolean
 }

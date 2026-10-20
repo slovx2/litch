@@ -504,7 +504,7 @@ export function createHarnessConfig(host: HarnessConfigHost): HarnessConfig {
         const note = params as HarnessConfigChangedNotification | null
         if (!note || typeof note.harness !== 'string') return true
         const entry = entries.get(note.harness)
-        const part = PARTS.includes(note.part) ? note.part : null
+        const part = (PARTS as readonly string[]).includes(note.part) ? (note.part as HcPart) : null
         if (!entry || !part) return true
         if (entry.sinks.size === 0) {
           entry.stale = true
