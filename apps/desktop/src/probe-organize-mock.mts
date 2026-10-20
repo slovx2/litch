@@ -420,7 +420,8 @@ export async function organizeMockProbe(): Promise<OrganizeMockProbe> {
       why?.dataset.down ?? '',
       text(one('.harness-reason', why ?? shown.card)),
       text(one('.harness-next', why ?? shown.card)),
-      text(one('.harness-said', why ?? shown.card)),
+      // 信息卡里设备的原话在原因的悬停提示里
+      one('.harness-reason', why ?? shown.card)?.title ?? '',
     ]
     await shown.close()
     return read

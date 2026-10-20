@@ -142,7 +142,7 @@ export const en: Record<MessageKey, Entry> = {
     'Nothing to do: it will retry by itself. If it keeps failing, restart it on the Devices page.',
   'harness.next.disconnected': 'Nothing to do: it is reconnecting.',
   'harness.next.starting': 'Give it a moment. It will be usable once it is up.',
-  'harness.next.disabled': 'Turn it back on in this device’s settings on the Devices page.',
+  'harness.next.disabled': 'Turn it back on in the device settings.',
   'harness.next.notInstalled':
     'Install its command-line tool on this device, then restart it on the Devices page. If it lives somewhere else, set its path in settings.',
   'harness.next.versionTooLow':

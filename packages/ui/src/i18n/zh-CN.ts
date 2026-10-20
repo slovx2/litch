@@ -138,7 +138,7 @@ export const zhCN = {
   'harness.next.handshakeFailed': '不用做什么，会自己再试。一直不行的话，到设备页重启它。',
   'harness.next.disconnected': '不用做什么，正在重连。',
   'harness.next.starting': '稍等一下，起来之后就能用。',
-  'harness.next.disabled': '到设备页这台设备的设置里把它重新启用。',
+  'harness.next.disabled': '在设备设置里重新启用。',
   'harness.next.notInstalled':
     '在这台设备上装好它的命令行，然后到设备页重启它；装在别的位置的话，在设置里填上路径。',
   'harness.next.versionTooLow': '在这台设备上把它的命令行升级，然后到设备页重启它。',

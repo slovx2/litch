@@ -259,7 +259,7 @@ export function judgeManage(probe: ManageProbe): string[] {
     ],
     '详情页上的 harness 和状态不对',
   )
-  const unusable = probe.harnesses.filter((entry) => !entry.endsWith(':ready')).length
+  const unusable = probe.harnesses.filter((entry) => entry.endsWith(':unavailable')).length
   must(
     probe.downReasons.length === unusable && probe.downReasons.every((reason) => reason.length > 0),
     `用不了的 harness 没有都写原因：${JSON.stringify(probe.downReasons)}`,

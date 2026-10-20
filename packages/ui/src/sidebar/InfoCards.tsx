@@ -39,7 +39,7 @@ export function DeviceInfo({ device }: { device: DeviceView }) {
         <div>
           <dt>{t('devices.harness')}</dt>
           <dd>
-            <HarnessList device={device} />
+            <HarnessList device={device} brief />
           </dd>
         </div>
         <TallyFact deviceId={device.id} group={null} />
@@ -117,7 +117,7 @@ export function SessionInfo({ summary, device, workspace }: SessionInfoProps) {
             <span className={down ? 'harness-entry down' : 'harness-entry'}>
               <span className={down ? 'chip off' : 'chip'}>{badgeOf(device, summary.harness)}</span>
               {nameOf(device, summary.harness)}
-              {down ? <HarnessWhy harness={down} /> : null}
+              {down ? <HarnessWhy harness={down} brief /> : null}
             </span>
           </dd>
         </div>

@@ -133,6 +133,24 @@ svg.ic.s14 {
   gap: 0 8px;
   color: var(--ink-3);
 }
+/* 停用了的：收在最后一行，前面一个“已停用”，整行淡一档，不逐个解释 */
+.harness-off {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 10px;
+  color: var(--ink-3);
+}
+.harness-off .harness-entry {
+  gap: 4px;
+}
+.harness-off .mono.dim {
+  display: none;
+}
+.harness-off-label {
+  font-size: 11px;
+}
 /* 它的会话还留在侧栏里：那些会话现在是怎么回事，再说一句 */
 .harness-left {
   flex-basis: 100%;
