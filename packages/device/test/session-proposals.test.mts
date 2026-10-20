@@ -240,7 +240,7 @@ test('SESSION-PROPOSALS-004：门槛：一回合最多几张（撤回的也算�
     const reused = await propose(env, threadId, '活 1')
     assert.ok(reused)
     // fresh 的简报太短：提案、直接起都拒绝；fork 不查
-    const short = 'x'.repeat(SESSION_TOOL_LIMITS.freshPromptMinChars - 1)
+    const short = 'x'.repeat(SESSION_TOOL_LIMITS.freshPromptMinWidth - 1)
     for (const initiation of ['propose', 'user_asked']) {
       const refused = await env.pi.callTool(threadId, SESSIONS, 'start', {
         title: `短的 ${initiation}`,
@@ -263,7 +263,7 @@ test('SESSION-PROPOSALS-004：门槛：一回合最多几张（撤回的也算�
     assert.ok(fork.thread_id)
     const enough = await env.pi.callTool(threadId, SESSIONS, 'start', {
       title: '刚好够',
-      prompt: '字'.repeat(SESSION_TOOL_LIMITS.freshPromptMinChars),
+      prompt: '字'.repeat(SESSION_TOOL_LIMITS.freshPromptMinWidth),
     })
     assert.ok(resultOf(enough?.answer).proposal_id)
   } finally {

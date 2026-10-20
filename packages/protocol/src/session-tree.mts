@@ -184,6 +184,8 @@ export interface SessionProposalOverrides {
   prompt?: string
   approvalPolicy?: string
   sandbox?: string
+  /** 子会话停下后要不要唤醒父会话 */
+  wakeParent?: boolean
 }
 
 export interface SessionProposalAcceptParams extends SessionProposalIdParams {
@@ -214,6 +216,11 @@ export type SessionEventKind =
   | 'notes'
   /** 子会话都停下了，设备进程替父会话开的回合 */
   | 'wake'
+  /**
+   * 用户发起的回合结束时模型没调 litch_sessions.wrap_up，设备进程替它再开的一个回合：提醒它收尾。
+   * notes 是空的；一条用户消息之后最多一次
+   */
+  | 'remind'
 
 /** 一条回报：哪个子会话、这一回合的结果开头 */
 export interface SessionEventNote {
@@ -238,7 +245,9 @@ export function formatSessionEvent(event: SessionEvent): string {
   const head =
     event.kind === 'wake'
       ? 'Sub-sessions you started have finished their turns. This message is from Litch, not typed by the user.'
-      : 'Updates from sub-sessions you started (from Litch, not typed by the user).'
+      : event.kind === 'remind'
+        ? 'You ended your last turn without calling litch_sessions.wrap_up. This message is from Litch, not typed by the user.'
+        : 'Updates from sub-sessions you started (from Litch, not typed by the user).'
   // 回答里的换行会把一条拆成几行、跟下一条混在一起，人读的这几行压成一行；原文在后面的 JSON 里
   const lines = event.notes.map((note) => {
     const excerpt = note.excerpt.replace(/\s+/g, ' ').trim()
@@ -247,7 +256,9 @@ export function formatSessionEvent(event: SessionEvent): string {
   const tail =
     event.kind === 'wake'
       ? 'If the user’s request has steps these results unblock, continue; otherwise tell the user the outcome in one or two lines. Use litch_sessions.read for details. Do not answer requests that are waiting for the user inside a sub-session.'
-      : 'Use litch_sessions.read for details.'
+      : event.kind === 'remind'
+        ? 'Call litch_sessions.wrap_up now, with the suggested tasks your last reply implies or an empty list, then stop. Do not repeat or summarize your last reply.'
+        : 'Use litch_sessions.read for details.'
   return [
     `<${SESSION_EVENT_TAG} kind="${event.kind}">`,
     head,
@@ -265,7 +276,7 @@ export function formatSessionEvent(event: SessionEvent): string {
  */
 export function parseSessionEvent(text: string): { event: SessionEvent | null; rest: string } {
   const pattern = new RegExp(
-    `^<${SESSION_EVENT_TAG} kind="(notes|wake)">\\n[\\s\\S]*?<!-- (\\{[\\s\\S]*?\\}) -->\\n</${SESSION_EVENT_TAG}>\\n?`,
+    `^<${SESSION_EVENT_TAG} kind="(notes|wake|remind)">\\n[\\s\\S]*?<!-- (\\{[\\s\\S]*?\\}) -->\\n</${SESSION_EVENT_TAG}>\\n?`,
   )
   const match = pattern.exec(text)
   if (!match) return { event: null, rest: text }

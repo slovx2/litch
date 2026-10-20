@@ -246,10 +246,10 @@ async function start(
     throw new Refused('invalid', `fork only works within the same harness (${call.harness}).`)
   // fresh 的子会话只知道这段简报：太短的不管直接起还是变成提案都拒绝
   const length = [...prompt.trim()].length
-  if (kind === 'fresh' && length < SESSION_TOOL_LIMITS.freshPromptMinChars)
+  if (kind === 'fresh' && length < SESSION_TOOL_LIMITS.freshPromptMinWidth)
     throw new Refused(
       'invalid',
-      `prompt is too short (${length} characters): a fresh session knows nothing but this text, so it needs at least ${SESSION_TOOL_LIMITS.freshPromptMinChars}. State the task, the files or area, and what done looks like, then call start again.`,
+      `prompt is too short (${length} characters): a fresh session knows nothing but this text, so it needs at least ${SESSION_TOOL_LIMITS.freshPromptMinWidth}. State the task, the files or area, and what done looks like, then call start again.`,
     )
   // 目标 harness 收不到父会话那么严（比如没有沙箱的 Pi）：模型派的一律变成提案，由用户看过再点
   const wider = await widerSandbox(tree, call.threadId, harness ?? call.harness).catch(() => null)
