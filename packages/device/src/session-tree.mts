@@ -321,6 +321,11 @@ export class SessionTree {
     this.reminders.delete(threadId)
   }
 
+  /** 这个回合里已经调过收尾了没有 */
+  isWrappedUp(threadId: string, turnId: string): boolean {
+    return turnId !== '' && this.wrapped.has(`${threadId}\u0000${turnId}`)
+  }
+
   /** 这个回合（连同它替之提醒的那个用户回合）里已经提了几张提案 */
   proposalsInTurn(threadId: string, turnId: string): number {
     const count = this.store.countInTurn(threadId, turnId)
