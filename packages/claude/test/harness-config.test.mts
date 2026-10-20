@@ -242,6 +242,176 @@ test('HC-CLAUDE-002：settings.json 是软链时写到它指向的文件', () =>
     assert.deepEqual(await readJson(real), { keep: 1, autoMemoryEnabled: false })
   }))
 
+test('HC-CLAUDE-012：遥测、模型、上下文窗口的项读写 settings.json 的 env，字符串换算对，别的键和顺序不动，密钥不回显', () =>
+  isolated(async ({ claude }) => {
+    const settingsPath = join(claude, 'settings.json')
+    // 照常见的本机配置造的：模型带 [1m]、按模型的强度、env 里关掉遥测和自动更新、调大压缩窗口
+    const original = {
+      model: 'opus[1m]',
+      modelSettings: { 'claude-opus-5-5': { effortLevel: 'high' } },
+      env: {
+        DISABLE_TELEMETRY: '1',
+        DO_NOT_TRACK: '1',
+        DISABLE_ERROR_REPORTING: '1',
+        DISABLE_AUTOUPDATER: '1',
+        CLAUDE_CODE_AUTO_COMPACT_WINDOW: '500000',
+        SOME_OTHER_VAR: 'keep me',
+        OTEL_EXPORTER_OTLP_HEADERS: 'Authorization=Bearer secret-token',
+      },
+      someFutureKey: { nested: true },
+    }
+    await writeFile(settingsPath, `${JSON.stringify(original, null, 2)}\n`)
+
+    const first = readClaudeConfig([])
+    const groups = first.groups.map((group) => group.id)
+    for (const id of ['models', 'context', 'telemetry', 'otel']) assert.ok(groups.includes(id), id)
+    const byKey = new Map(first.settings.map((item) => [item.key, item]))
+    for (const key of [
+      'availableModels',
+      'modelSettings',
+      'env.ANTHROPIC_DEFAULT_OPUS_MODEL',
+      'env.ANTHROPIC_DEFAULT_SONNET_MODEL',
+      'env.ANTHROPIC_DEFAULT_HAIKU_MODEL',
+      'env.ANTHROPIC_DEFAULT_FABLE_MODEL',
+      'env.CLAUDE_CODE_SUBAGENT_MODEL',
+      'env.CLAUDE_CODE_DISABLE_1M_CONTEXT',
+      'env.CLAUDE_CODE_AUTO_COMPACT_WINDOW',
+      'autoCompactWindow',
+      'env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE',
+      'env.CLAUDE_CODE_MAX_OUTPUT_TOKENS',
+      'env.DISABLE_TELEMETRY',
+      'env.DO_NOT_TRACK',
+      'env.DISABLE_ERROR_REPORTING',
+      'env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC',
+      'env.CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY',
+      'env.DISABLE_FEEDBACK_COMMAND',
+      'env.DISABLE_AUTOUPDATER',
+      'env.CLAUDE_CODE_ENABLE_TELEMETRY',
+      'env.OTEL_METRICS_EXPORTER',
+      'env.OTEL_LOGS_EXPORTER',
+      'env.OTEL_EXPORTER_OTLP_PROTOCOL',
+      'env.OTEL_EXPORTER_OTLP_ENDPOINT',
+      'env.OTEL_EXPORTER_OTLP_HEADERS',
+      'otelHeadersHelper',
+      'env.OTEL_METRIC_EXPORT_INTERVAL',
+      'env.OTEL_LOGS_EXPORT_INTERVAL',
+      'env.OTEL_LOG_USER_PROMPTS',
+      'env.OTEL_LOG_TOOL_DETAILS',
+    ]) {
+      const item = byKey.get(key)
+      assert.ok(item, key)
+      assert.ok(groups.includes(item.group), `${key} 的分组 ${item.group}`)
+      assert.equal(item.effect, 'newSession', key)
+    }
+    assert.equal(byKey.get('env.DISABLE_TELEMETRY')?.type, 'boolean')
+    assert.equal(byKey.get('env.CLAUDE_CODE_AUTO_COMPACT_WINDOW')?.type, 'integer')
+    assert.equal(byKey.get('env.OTEL_EXPORTER_OTLP_HEADERS')?.type, 'secret')
+
+    // 读：开关是布尔，窗口是整数，密钥只说有没有
+    assert.equal(first.values.model, 'opus[1m]')
+    assert.deepEqual(first.values.modelSettings, { 'claude-opus-5-5': { effortLevel: 'high' } })
+    assert.equal(first.values['env.DISABLE_TELEMETRY'], true)
+    assert.equal(first.values['env.DO_NOT_TRACK'], true)
+    assert.equal(first.values['env.DISABLE_ERROR_REPORTING'], true)
+    assert.equal(first.values['env.DISABLE_AUTOUPDATER'], true)
+    assert.equal(first.values['env.CLAUDE_CODE_AUTO_COMPACT_WINDOW'], 500000)
+    assert.equal(first.values['env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC'], undefined)
+    assert.equal(first.values['env.CLAUDE_CODE_DISABLE_1M_CONTEXT'], undefined)
+    assert.deepEqual(first.values['env.OTEL_EXPORTER_OTLP_HEADERS'], { set: true })
+    assert.ok(!JSON.stringify(first).includes('secret-token'))
+
+    // 改：在原位改值，删掉的键不留空串，新加的接在后面；没碰的键原样
+    const written = writeClaudeConfig(
+      [
+        { key: 'env.CLAUDE_CODE_AUTO_COMPACT_WINDOW', value: 400000 },
+        { key: 'env.DO_NOT_TRACK', value: false },
+        { key: 'env.CLAUDE_CODE_DISABLE_1M_CONTEXT', value: true },
+        { key: 'env.OTEL_EXPORTER_OTLP_HEADERS', value: '' },
+        { key: 'env.OTEL_METRICS_EXPORTER', value: 'otlp,console' },
+        { key: 'availableModels', value: ['opus', 'sonnet'] },
+        { key: 'modelSettings', value: { 'claude-opus-5-5': { effortLevel: 'xhigh' } } },
+      ],
+      first.version,
+      [],
+    )
+    assert.equal(written.restartRequired, false)
+    const saved = await readJson(settingsPath)
+    assert.deepEqual(Object.keys(saved), [
+      'model',
+      'modelSettings',
+      'env',
+      'someFutureKey',
+      'availableModels',
+    ])
+    assert.deepEqual(saved.env, {
+      DISABLE_TELEMETRY: '1',
+      DISABLE_ERROR_REPORTING: '1',
+      DISABLE_AUTOUPDATER: '1',
+      CLAUDE_CODE_AUTO_COMPACT_WINDOW: '400000',
+      SOME_OTHER_VAR: 'keep me',
+      OTEL_EXPORTER_OTLP_HEADERS: 'Authorization=Bearer secret-token',
+      CLAUDE_CODE_DISABLE_1M_CONTEXT: '1',
+      OTEL_METRICS_EXPORTER: 'otlp,console',
+    })
+    assert.equal(saved.model, 'opus[1m]')
+    assert.deepEqual(saved.modelSettings, { 'claude-opus-5-5': { effortLevel: 'xhigh' } })
+    assert.deepEqual(saved.someFutureKey, { nested: true })
+    assert.deepEqual(saved.availableModels, ['opus', 'sonnet'])
+
+    // 换密钥、关掉开关就删键；“0” 对只看有没有值的变量仍算开
+    const second = readClaudeConfig([])
+    assert.equal(second.version, written.version)
+    const cleared = writeClaudeConfig(
+      [
+        { key: 'env.OTEL_EXPORTER_OTLP_HEADERS', value: 'x-api-key=new' },
+        { key: 'env.DISABLE_TELEMETRY', value: false },
+        { key: 'env.DISABLE_ERROR_REPORTING', value: null },
+        { key: 'env.CLAUDE_CODE_AUTO_COMPACT_WINDOW', value: null },
+        { key: 'env.OTEL_METRICS_EXPORTER', value: null },
+      ],
+      second.version,
+      [],
+    )
+    const after = await readJson(settingsPath)
+    assert.deepEqual(after.env, {
+      DISABLE_AUTOUPDATER: '1',
+      SOME_OTHER_VAR: 'keep me',
+      OTEL_EXPORTER_OTLP_HEADERS: 'x-api-key=new',
+      CLAUDE_CODE_DISABLE_1M_CONTEXT: '1',
+    })
+    assert.equal(readClaudeConfig([]).version, cleared.version)
+
+    await writeFile(
+      settingsPath,
+      JSON.stringify({
+        env: { DISABLE_TELEMETRY: '0', DO_NOT_TRACK: '0', CLAUDE_CODE_MAX_OUTPUT_TOKENS: '64k' },
+      }),
+    )
+    const odd = readClaudeConfig([])
+    assert.equal(odd.values['env.DISABLE_TELEMETRY'], true)
+    assert.equal(odd.values['env.DO_NOT_TRACK'], false)
+    assert.equal(odd.values['env.CLAUDE_CODE_MAX_OUTPUT_TOKENS'], undefined)
+
+    // 范围和类型不对的整个拒绝
+    await rejectsWith(
+      () =>
+        writeClaudeConfig(
+          [{ key: 'env.CLAUDE_CODE_AUTO_COMPACT_WINDOW', value: 50000 }],
+          odd.version,
+          [],
+        ),
+      'invalidValue',
+    )
+    await rejectsWith(
+      () => writeClaudeConfig([{ key: 'env.DISABLE_TELEMETRY', value: '1' }], odd.version, []),
+      'invalidValue',
+    )
+    await rejectsWith(
+      () => writeClaudeConfig([{ key: 'otelHeadersHelper', value: '  ' }], odd.version, []),
+      'invalidValue',
+    )
+  }))
+
 test('HC-CLAUDE-003：用户级 MCP 读写 ~/.claude.json 的 mcpServers，文件其余部分和认不出的服务原样保留', () =>
   isolated(async ({ claude }) => {
     const path = join(claude, '.claude.json')

@@ -58,6 +58,15 @@ import { newId } from './util.mjs'
 const GROUPS: HarnessSettingGroup[] = [
   { id: 'defaults', title: text('默认模型与强度', 'Defaults'), description: null },
   {
+    id: 'models',
+    title: text('模型', 'Models'),
+    description: text(
+      '环境变量类的项写在 settings.json 的 env 里，会盖过设备设置里同名的环境变量。',
+      'Environment-variable items are written to the env block of settings.json and take precedence over the same variables in device settings.',
+    ),
+  },
+  { id: 'context', title: text('上下文窗口', 'Context window'), description: null },
+  {
     id: 'permissions',
     title: text('权限', 'Permissions'),
     description: text(
@@ -73,6 +82,22 @@ const GROUPS: HarnessSettingGroup[] = [
     description: text(
       'hooks 只读列出，要改请编辑 settings.json。',
       'Hooks are listed read-only; edit settings.json to change them.',
+    ),
+  },
+  {
+    id: 'telemetry',
+    title: text('遥测与上报', 'Telemetry and reporting'),
+    description: text(
+      '控制 Claude Code 发给 Anthropic 的使用统计、错误报告和反馈。写在 settings.json 的 env 里。',
+      'Controls the usage statistics, error reports and feedback Claude Code sends to Anthropic. Written to the env block of settings.json.',
+    ),
+  },
+  {
+    id: 'otel',
+    title: text('OpenTelemetry 上报', 'OpenTelemetry export'),
+    description: text(
+      '把用量指标和事件发到你自己的 OpenTelemetry 收集端，与发给 Anthropic 的遥测无关。',
+      'Sends usage metrics and events to your own OpenTelemetry collector. Separate from telemetry sent to Anthropic.',
     ),
   },
   { id: 'advanced', title: text('其他', 'Advanced'), description: null },
@@ -103,6 +128,320 @@ type SpecInput = Omit<HarnessSettingSpec, 'description' | 'default' | 'effect'> 
 function spec(input: SpecInput): HarnessSettingSpec {
   return { description: null, default: null, effect: 'newSession', ...input }
 }
+
+// ---------- settings.json 的 env 里的项 ----------
+// CLI 启动时把 settings.json 的 env 整个并进自己的环境（盖过启动时带进来的同名变量），之后才读这些变量，
+// 所以改了都是新开的会话才生效。env 里的值都是字符串，读写时按下面的写法换算：
+// - presence：CLI 只看有没有值，"0" 也算开（DISABLE_TELEMETRY 这几个）。开写 "1"，关就删掉这个键
+// - flag：CLI 只认 1/true/yes/on 为开。开写 "1"，关就删掉（不写 "0"，免得被只看有没有值的地方当成开）
+// - integer：十进制字符串；读到不是整数的写法（比如新版 CLI 认的 200k）不显示，原样留在文件里
+// - string：原样；写空串等于删掉
+// - secret：只写不读回，读到的是 {set}；写空串表示不改
+type EnvCodec = 'presence' | 'flag' | 'integer' | 'string' | 'secret'
+
+const ENV_CODECS = new Map<string, EnvCodec>()
+const TRUTHY = new Set(['1', 'true', 'yes', 'on'])
+
+type EnvSpecInput = Omit<SpecInput, 'key' | 'type'> & { type?: 'string' | 'enum' }
+
+function envSpec(name: string, codec: EnvCodec, input: EnvSpecInput): HarnessSettingSpec {
+  const key = `env.${name}`
+  ENV_CODECS.set(key, codec)
+  const flag = codec === 'presence' || codec === 'flag'
+  const type = codec === 'string' ? (input.type ?? 'string') : flag ? 'boolean' : codec // integer、secret
+  return spec({ ...(flag ? { default: false } : {}), ...input, key, type })
+}
+
+/** settings.json 里存的值换成给界面的值；undefined 表示当作没写 */
+function decodeValue(item: HarnessSettingSpec, raw: unknown): HarnessSettingValue | undefined {
+  if (raw === undefined) return undefined
+  if (item.key.startsWith('enabledPlugins.')) return raw !== false
+  const codec = ENV_CODECS.get(item.key)
+  if (!codec) return raw as HarnessSettingValue
+  if (typeof raw !== 'string') return undefined
+  switch (codec) {
+    case 'presence':
+      return raw !== ''
+    case 'flag':
+      return TRUTHY.has(raw.trim().toLowerCase())
+    case 'integer':
+      return /^[+-]?\d+$/.test(raw.trim()) ? Number(raw.trim()) : undefined
+    case 'secret':
+      return { set: raw !== '' }
+    default:
+      return raw
+  }
+}
+
+/** 校验过的值换成写进 settings.json 的值；undefined 表示删掉这个键 */
+function encodeValue(key: string, value: unknown): unknown {
+  const codec = ENV_CODECS.get(key)
+  if (!codec || value === undefined) return value
+  switch (codec) {
+    case 'presence':
+    case 'flag':
+      return value === true ? '1' : undefined
+    case 'integer':
+      return String(value)
+    default:
+      return value === '' ? undefined : value
+  }
+}
+
+// 别名（opus、sonnet、haiku、fable）实际指向哪个型号。Litch 只改写凭据和网关地址（ANTHROPIC_API_KEY、
+// ANTHROPIC_AUTH_TOKEN、ANTHROPIC_BASE_URL），不碰这几个，所以不会和 provider 的选择打架
+function aliasModelSpec(alias: string, name: string): HarnessSettingSpec {
+  const title = alias.charAt(0).toUpperCase() + alias.slice(1)
+  return envSpec(name, 'string', {
+    group: 'models',
+    title: text(`${title} 别名对应的模型`, `Model for the ${alias} alias`),
+    description: text(
+      `选 ${alias} 时实际用的模型 ID。走网关或第三方服务、型号名和官方不同时才需要填。`,
+      `Model ID used when ${alias} is selected. Only needed when a gateway or third-party provider uses different model names.`,
+    ),
+    placeholder: `claude-${alias}-…`,
+  })
+}
+
+const MODEL_SPECS: HarnessSettingSpec[] = [
+  spec({
+    key: 'availableModels',
+    group: 'models',
+    type: 'stringList',
+    title: text('可选的模型', 'Allowed models'),
+    description: text(
+      '只允许选这些模型，可写别名（opus 放行所有 Opus 版本）、版本前缀或完整型号。不写表示都能选；写成空列表就只剩默认模型。Litch 的模型列表也跟着它过滤。',
+      'Only these models can be selected: aliases (opus allows every Opus version), version prefixes or full model IDs. Unset allows all; an empty list leaves only the default model. Litch’s model list follows it too.',
+    ),
+  }),
+  aliasModelSpec('opus', 'ANTHROPIC_DEFAULT_OPUS_MODEL'),
+  aliasModelSpec('sonnet', 'ANTHROPIC_DEFAULT_SONNET_MODEL'),
+  aliasModelSpec('haiku', 'ANTHROPIC_DEFAULT_HAIKU_MODEL'),
+  aliasModelSpec('fable', 'ANTHROPIC_DEFAULT_FABLE_MODEL'),
+  envSpec('CLAUDE_CODE_SUBAGENT_MODEL', 'string', {
+    group: 'models',
+    title: text('子代理用的模型', 'Subagent model'),
+    description: text(
+      '没有自己指定模型的子代理用它；写 inherit 或不写表示跟主会话用同一个模型。',
+      'Used by subagents that do not specify a model. inherit or unset uses the main session’s model.',
+    ),
+    placeholder: 'sonnet',
+  }),
+  spec({
+    key: 'modelSettings',
+    group: 'models',
+    type: 'json',
+    title: text('按模型的设置', 'Per-model settings'),
+    description: text(
+      '键是模型名，值里可写 effortLevel（推理强度）、maxEffortLevel（强度上限）、autoCompactWindow（自动压缩窗口），例如 {"claude-opus-5-5": {"effortLevel": "high"}}。Litch 的会话按会话自己选的强度。',
+      'Keyed by model name; values may set effortLevel, maxEffortLevel and autoCompactWindow, e.g. {"claude-opus-5-5": {"effortLevel": "high"}}. Litch sessions use the effort chosen for the session.',
+    ),
+  }),
+]
+
+// 自动压缩窗口的范围（CLI 的设置说明：100000 到 1000000 个 token）
+const COMPACT_WINDOW = { minimum: 100_000, maximum: 1_000_000 }
+
+const CONTEXT_SPECS: HarnessSettingSpec[] = [
+  envSpec('CLAUDE_CODE_DISABLE_1M_CONTEXT', 'flag', {
+    group: 'context',
+    title: text('关闭 1M 上下文', 'Disable 1M context'),
+    description: text(
+      '模型名带 [1m] 后缀（例如 opus[1m]）才用 1M 上下文。开了这一项，模型列表里不再有 [1m] 的型号，上下文限在 200K。',
+      'A model uses 1M context only with the [1m] suffix (e.g. opus[1m]). When on, [1m] models are removed from the list and context is limited to 200K.',
+    ),
+  }),
+  envSpec('CLAUDE_CODE_AUTO_COMPACT_WINDOW', 'integer', {
+    group: 'context',
+    title: text('自动压缩窗口（环境变量）', 'Auto-compact window (env)'),
+    description: text(
+      '上下文用到多少 token 时自动压缩，100000 到 1000000，超过模型的窗口按模型的算。设了它，下面的“自动压缩窗口”和按模型的设置都不起作用。',
+      'Token count at which auto-compact kicks in, 100000 to 1000000, capped at the model window. When set, it overrides the auto-compact window below and per-model settings.',
+    ),
+    ...COMPACT_WINDOW,
+  }),
+  spec({
+    key: 'autoCompactWindow',
+    group: 'context',
+    type: 'integer',
+    title: text('自动压缩窗口', 'Auto-compact window'),
+    description: text(
+      '同上，写在设置里；按模型的设置（modelSettings）里写了的以那边为准。不写按模型自动定。',
+      'Same as above, as a setting; per-model settings (modelSettings) take precedence. Unset picks a window per model.',
+    ),
+    ...COMPACT_WINDOW,
+  }),
+  envSpec('CLAUDE_AUTOCOMPACT_PCT_OVERRIDE', 'integer', {
+    group: 'context',
+    title: text('提前压缩（百分比）', 'Compact earlier (percent)'),
+    description: text(
+      '用到自动压缩窗口的百分之几就压缩，1 到 100。只能让压缩来得更早，不能推迟。',
+      'Compact at this percentage (1–100) of the auto-compact window. Can only make compaction happen earlier.',
+    ),
+    minimum: 1,
+    maximum: 100,
+  }),
+  envSpec('CLAUDE_CODE_MAX_OUTPUT_TOKENS', 'integer', {
+    group: 'context',
+    title: text('单次输出上限（token）', 'Max output tokens'),
+    description: text(
+      '一次回答最多输出多少 token。默认值和上限因模型而异，超过上限按上限算；调大会让留给上下文的空间变小、更早压缩。',
+      'Maximum output tokens per request. Defaults and caps vary by model; values above the cap are lowered. Larger values leave less room before auto-compact.',
+    ),
+    minimum: 1,
+  }),
+]
+
+const TELEMETRY_SPECS: HarnessSettingSpec[] = [
+  envSpec('DISABLE_TELEMETRY', 'presence', {
+    group: 'telemetry',
+    title: text('关闭使用统计', 'Disable telemetry'),
+    description: text(
+      '不向 Anthropic 发使用统计，也不再弹会话质量问卷。',
+      'Stops sending usage statistics to Anthropic and turns off session quality surveys.',
+    ),
+  }),
+  envSpec('DO_NOT_TRACK', 'flag', {
+    group: 'telemetry',
+    title: text('请勿跟踪（DO_NOT_TRACK）', 'Do not track (DO_NOT_TRACK)'),
+    description: text(
+      '通用的隐私开关，Claude Code 按关闭使用统计处理。',
+      'A generic privacy opt-out; Claude Code treats it like disabling telemetry.',
+    ),
+  }),
+  envSpec('DISABLE_ERROR_REPORTING', 'presence', {
+    group: 'telemetry',
+    title: text('关闭错误报告', 'Disable error reporting'),
+    description: text(
+      '出错时不向 Anthropic 发错误报告。',
+      'Stops sending error reports to Anthropic.',
+    ),
+  }),
+  envSpec('CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC', 'presence', {
+    group: 'telemetry',
+    title: text('关闭所有非必要的网络请求', 'Disable nonessential traffic'),
+    description: text(
+      '一次关掉使用统计、错误报告、/feedback、自动更新、版本说明和特性开关的拉取。',
+      'Turns off telemetry, error reporting, /feedback, auto-updates, release notes and feature-flag fetching at once.',
+    ),
+  }),
+  envSpec('CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY', 'flag', {
+    group: 'telemetry',
+    title: text('关闭会话质量问卷', 'Disable feedback surveys'),
+    description: text(
+      '不再弹“Claude 做得怎么样？”的问卷。',
+      'Turns off the “How is Claude doing?” session quality surveys.',
+    ),
+  }),
+  envSpec('DISABLE_FEEDBACK_COMMAND', 'flag', {
+    group: 'telemetry',
+    title: text('关闭 /feedback 命令', 'Disable /feedback'),
+    description: text(
+      '不能再用 /feedback 向 Anthropic 提交反馈。',
+      'Turns off the /feedback command for sending feedback to Anthropic.',
+    ),
+  }),
+]
+
+const OTEL_SPECS: HarnessSettingSpec[] = [
+  envSpec('CLAUDE_CODE_ENABLE_TELEMETRY', 'flag', {
+    group: 'otel',
+    title: text('开启 OpenTelemetry 上报', 'Enable OpenTelemetry'),
+    description: text(
+      '开了以后才按下面的设置导出指标和事件。',
+      'Metrics and events are exported with the settings below only when this is on.',
+    ),
+  }),
+  envSpec('OTEL_METRICS_EXPORTER', 'string', {
+    group: 'otel',
+    type: 'enum',
+    title: text('指标导出方式', 'Metrics exporter'),
+    description: text(
+      '可以写多个，用逗号隔开，例如 otlp,console。',
+      'Several can be combined with commas, e.g. otlp,console.',
+    ),
+    options: [
+      { value: 'otlp', title: text('OTLP', 'OTLP') },
+      { value: 'prometheus', title: text('Prometheus', 'Prometheus') },
+      { value: 'console', title: text('打印到控制台', 'Console') },
+      { value: 'none', title: text('不导出', 'None') },
+    ],
+    allowCustom: true,
+  }),
+  envSpec('OTEL_LOGS_EXPORTER', 'string', {
+    group: 'otel',
+    type: 'enum',
+    title: text('事件导出方式', 'Events exporter'),
+    description: text('可以写多个，用逗号隔开。', 'Several can be combined with commas.'),
+    options: [
+      { value: 'otlp', title: text('OTLP', 'OTLP') },
+      { value: 'console', title: text('打印到控制台', 'Console') },
+      { value: 'none', title: text('不导出', 'None') },
+    ],
+    allowCustom: true,
+  }),
+  envSpec('OTEL_EXPORTER_OTLP_PROTOCOL', 'string', {
+    group: 'otel',
+    type: 'enum',
+    title: text('OTLP 协议', 'OTLP protocol'),
+    options: [
+      { value: 'grpc', title: text('gRPC', 'gRPC') },
+      { value: 'http/protobuf', title: text('HTTP（protobuf）', 'HTTP (protobuf)') },
+      { value: 'http/json', title: text('HTTP（JSON）', 'HTTP (JSON)') },
+    ],
+  }),
+  envSpec('OTEL_EXPORTER_OTLP_ENDPOINT', 'string', {
+    group: 'otel',
+    title: text('OTLP 地址', 'OTLP endpoint'),
+    placeholder: 'http://localhost:4317',
+  }),
+  envSpec('OTEL_EXPORTER_OTLP_HEADERS', 'secret', {
+    group: 'otel',
+    title: text('OTLP 请求头', 'OTLP headers'),
+    description: text(
+      '常用来放令牌，形如 Authorization=Bearer 令牌，多个用逗号隔开。只能写入，不会读回。',
+      'Usually carries a token, e.g. Authorization=Bearer token; separate several with commas. Write-only.',
+    ),
+  }),
+  spec({
+    key: 'otelHeadersHelper',
+    group: 'otel',
+    type: 'path',
+    title: text('请求头脚本', 'Headers helper script'),
+    description: text(
+      '设备上的一个脚本，输出 JSON 格式的请求头，适合会过期的令牌。',
+      'A script on the device that prints the headers as JSON, for tokens that expire.',
+    ),
+  }),
+  envSpec('OTEL_METRIC_EXPORT_INTERVAL', 'integer', {
+    group: 'otel',
+    title: text('指标导出间隔（毫秒）', 'Metrics export interval (ms)'),
+    default: 60_000,
+    minimum: 1,
+  }),
+  envSpec('OTEL_LOGS_EXPORT_INTERVAL', 'integer', {
+    group: 'otel',
+    title: text('事件导出间隔（毫秒）', 'Events export interval (ms)'),
+    default: 5_000,
+    minimum: 1,
+  }),
+  envSpec('OTEL_LOG_USER_PROMPTS', 'flag', {
+    group: 'otel',
+    title: text('事件里带上提示词原文', 'Include prompt text'),
+    description: text(
+      '关着时只记提示词的长度，原文显示为 <REDACTED>。',
+      'When off, only the prompt length is recorded and the text shows as <REDACTED>.',
+    ),
+  }),
+  envSpec('OTEL_LOG_TOOL_DETAILS', 'flag', {
+    group: 'otel',
+    title: text('事件里带上工具细节', 'Include tool details'),
+    description: text(
+      '记下工具调用的参数和出错信息，以及 MCP 服务和工具的名字。',
+      'Records tool call arguments and errors, plus MCP server and tool names.',
+    ),
+  }),
+]
 
 function staticSpecs(models: HarnessSettingOption[]): HarnessSettingSpec[] {
   return [
@@ -203,7 +542,7 @@ function staticSpecs(models: HarnessSettingOption[]): HarnessSettingSpec[] {
     }),
     spec({
       key: 'autoCompactEnabled',
-      group: 'behavior',
+      group: 'context',
       type: 'boolean',
       title: text('自动压缩上下文', 'Auto-compact'),
       description: text('上下文快满时自动压缩。', 'Compact automatically when context fills.'),
@@ -264,6 +603,18 @@ function staticSpecs(models: HarnessSettingOption[]): HarnessSettingSpec[] {
         { value: 'rc', title: text('候选', 'Release candidate') },
       ],
     }),
+    envSpec('DISABLE_AUTOUPDATER', 'flag', {
+      group: 'advanced',
+      title: text('关闭自动更新', 'Disable auto-updates'),
+      description: text(
+        '不在后台自动更新 Claude Code；手动运行 claude update 照样能更新，仍按上面的更新通道。',
+        'Stops background auto-updates. Running claude update by hand still works and follows the update channel above.',
+      ),
+    }),
+    ...MODEL_SPECS,
+    ...CONTEXT_SPECS,
+    ...TELEMETRY_SPECS,
+    ...OTEL_SPECS,
   ]
 }
 
@@ -383,14 +734,14 @@ export function readClaudeConfig(models: HarnessSettingOption[]): HarnessConfigR
   const overridden: Record<string, { value: HarnessSettingValue; by: HarnessText }> = {}
   for (const item of specs) {
     const path = parseKeyPath(item.key)!
-    const value = getAtPath(settings, path)
-    if (value !== undefined)
-      values[item.key] = (
-        item.key.startsWith('enabledPlugins.') ? value !== false : value
-      ) as HarnessSettingValue
+    const value = decodeValue(item, getAtPath(settings, path))
+    if (value !== undefined) values[item.key] = value
     const locked = getAtPath(managed, path)
     if (locked !== undefined)
-      overridden[item.key] = { value: locked as HarnessSettingValue, by: MANAGED }
+      overridden[item.key] = {
+        value: decodeValue(item, locked) ?? (locked as HarnessSettingValue),
+        by: MANAGED,
+      }
   }
   return {
     groups: GROUPS,
@@ -427,8 +778,12 @@ function validateValue(item: HarnessSettingSpec, value: unknown): unknown {
     }
     case 'string':
     case 'text':
+    case 'secret':
       if (typeof value !== 'string') invalid(key, '要是文字', 'must be a string')
       return value
+    case 'path':
+      if (typeof value !== 'string' || !value.trim()) invalid(key, '要填路径', 'must be a path')
+      return value.trim()
     case 'enum':
       if (typeof value !== 'string' || !value.trim())
         invalid(key, '要是非空的文字', 'must be a non-empty string')
@@ -500,6 +855,8 @@ export function writeClaudeConfig(
         key,
       )
     const raw = (edit as { value?: unknown }).value
+    // 密钥读不回来，界面上没改时会带空串回来：表示不动
+    if (item.type === 'secret' && raw === '') continue
     let value: unknown
     if (raw === null || raw === undefined) {
       if (item.clearable === false) invalid(key, '不能清掉', 'cannot be cleared')
@@ -507,7 +864,7 @@ export function writeClaudeConfig(
     } else value = validateValue(item, raw)
     if (key === 'model' && typeof value === 'string') value = settingsModelValue(value) ?? undefined
     if (key === 'model' || key === 'effortLevel') defaultsChanged = true
-    setAtPath(next, path, value)
+    setAtPath(next, path, encodeValue(key, value))
     if (getAtPath(managed, path) !== undefined) overriddenKeys.push(key)
   }
   let nextVersion = version
