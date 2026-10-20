@@ -13,6 +13,8 @@ export const enProposals: Record<keyof typeof zhProposals, Entry> = {
   'proposal.fork': 'With context',
   'proposal.brief.more': 'Show the whole brief',
   'proposal.brief.less': 'Show less',
+  'proposal.brief.background': 'Background',
+  'proposal.brief.task': 'Task',
   'proposal.wider':
     'This harness has no sandbox this strict; the sub-session will run with "{level}"',
   'proposal.state.pending': 'Waiting for you',

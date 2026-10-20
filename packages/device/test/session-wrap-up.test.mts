@@ -59,12 +59,12 @@ test('WRAP-UP-001：一次 wrap_up 出几张提案，callId 是这次调用、tu
     const threadId = await withTools(client)
     const turnId = env.pi.current(threadId)?.id
     const answer = await wrapUp(env, threadId, [
-      { title: '补集成测试', prompt: brief('补订单服务的集成测试。') },
-      { title: '太短', prompt: '修一下' },
-      { title: '换 harness', prompt: brief('整理文档。'), harness: 'claude-code' },
-      { title: '没有的 harness', prompt: brief('做点事。'), harness: 'nope' },
+      { title: '补集成测试', ...brief('补订单服务的集成测试。') },
+      { title: '太短', prompt: '修一下', background: '发版前' },
+      { title: '换 harness', ...brief('整理文档。'), harness: 'claude-code' },
+      { title: '没有的 harness', ...brief('做点事。'), harness: 'nope' },
       '不是对象',
-      { title: ' 补集成测试 ', prompt: brief('同一件事又提一遍。') },
+      { title: ' 补集成测试 ', ...brief('同一件事又提一遍。') },
       { title: '分叉', prompt: '接着做', kind: 'fork' },
     ])
     const result = resultOf(answer)
@@ -113,14 +113,13 @@ test('WRAP-UP-002：一回合的上限 start 和 wrap_up 合起来算', async ()
     const threadId = await withTools(client)
     for (const title of ['甲', '乙'])
       resultOf(
-        (await env.pi.callTool(threadId, SESSIONS, 'start', { title, prompt: brief(title) }))
-          ?.answer,
+        (await env.pi.callTool(threadId, SESSIONS, 'start', { title, ...brief(title) }))?.answer,
       )
     const result = resultOf(
       await wrapUp(
         env,
         threadId,
-        ['丙', '丁', '戊'].map((title) => ({ title, prompt: brief(title) })),
+        ['丙', '丁', '戊'].map((title) => ({ title, ...brief(title) })),
       ),
     )
     const made = result.suggestions.filter((one: any) => one.proposal_id)
@@ -129,7 +128,7 @@ test('WRAP-UP-002：一回合的上限 start 和 wrap_up 合起来算', async ()
     // 到上限之后 start 也不收
     const more = await env.pi.callTool(threadId, SESSIONS, 'start', {
       title: '己',
-      prompt: brief('己'),
+      ...brief('己'),
     })
     assert.equal(failureOf(more?.answer), 'blocked')
   } finally {
@@ -137,31 +136,40 @@ test('WRAP-UP-002：一回合的上限 start 和 wrap_up 合起来算', async ()
   }
 })
 
-test('WRAP-UP-003：fresh 简报按显示宽度算，汉字算 2', async () => {
+test('WRAP-UP-003：fresh 的背景按显示宽度算，汉字算 2；任务只要非空；fork 不要背景', async () => {
   const env = treeRig()
   try {
     const client = await litch(env)
     const threadId = await withTools(client)
-    const least = SESSION_TOOL_LIMITS.freshPromptMinWidth
+    const least = SESSION_TOOL_LIMITS.freshBackgroundMinWidth
     const chinese = '字'.repeat(least / 2)
     assert.equal(textWidth(chinese), least)
     const result = resultOf(
       await wrapUp(env, threadId, [
-        { title: '中文刚好够', prompt: chinese },
-        { title: '中文差一个', prompt: '字'.repeat(least / 2 - 1) },
-        { title: '英文刚好够', prompt: 'x'.repeat(least) },
-        { title: '英文差一个', prompt: `  ${'x'.repeat(least - 1)}  ` },
+        { title: '中文刚好够', prompt: '短任务', background: chinese },
+        { title: '中文差一个', prompt: '短任务', background: '字'.repeat(least / 2 - 1) },
+        { title: '英文刚好够', prompt: 'x', background: 'x'.repeat(least) },
+        { title: '英文差一个', prompt: 'x', background: `  ${'x'.repeat(least - 1)}  ` },
+        // 任务写得再长也顶不了背景
+        { title: '没有背景', prompt: '字'.repeat(least) },
+        { title: '分叉不要背景', prompt: '换个办法。', kind: 'fork' },
       ]),
     )
-    const [ok1, short1, ok2, short2] = result.suggestions
-    assert.ok(ok1.proposal_id && ok2.proposal_id)
+    const [ok1, short1, ok2, short2, missing, fork] = result.suggestions
+    assert.ok(ok1.proposal_id && ok2.proposal_id && fork.proposal_id)
     assert.match(short1.refused, /width 78; each CJK or other full-width character counts as 2/)
     assert.match(short1.refused, /about 40 Chinese characters/)
     assert.match(short2.refused, /width 79/, '首尾空白不算')
+    assert.match(missing.refused, /background is missing/)
+    const stored = env.device.sessionTree.store.proposal(ok1.proposal_id)
+    assert.equal(stored?.prompt, '短任务')
+    assert.equal(stored?.background, chinese)
+    assert.equal(env.device.sessionTree.store.proposal(fork.proposal_id)?.background, '')
     // start 同一套
     const refused = await env.pi.callTool(threadId, SESSIONS, 'start', {
       title: '直接起太短',
-      prompt: '字'.repeat(least / 2 - 1),
+      prompt: '任务',
+      background: '字'.repeat(least / 2 - 1),
       initiation: 'user_asked',
     })
     assert.equal(failureOf(refused?.answer), 'invalid')
@@ -179,8 +187,7 @@ test('WRAP-UP-004：用户回合正常结束、没调 wrap_up：开一个 kind=r
     const userTurn = env.pi.current(threadId)?.id as string
     for (const title of ['甲', '乙', '丙'])
       resultOf(
-        (await env.pi.callTool(threadId, SESSIONS, 'start', { title, prompt: brief(title) }))
-          ?.answer,
+        (await env.pi.callTool(threadId, SESSIONS, 'start', { title, ...brief(title) }))?.answer,
       )
     env.pi.end(threadId, 'completed', '做完了，还剩两件事')
     await until(() => injected(env, threadId, 'remind').length === 1, '开了提醒回合')
@@ -193,8 +200,8 @@ test('WRAP-UP-004：用户回合正常结束、没调 wrap_up：开一个 kind=r
     // 提醒回合里调 wrap_up：照常建提案；上限把那个用户回合里 start 提的三张也算上
     const result = resultOf(
       await wrapUp(env, threadId, [
-        { title: '丁', prompt: brief('丁') },
-        { title: '戊', prompt: brief('戊') },
+        { title: '丁', ...brief('丁') },
+        { title: '戊', ...brief('戊') },
       ]),
     )
     assert.ok(result.suggestions[0].proposal_id)
@@ -249,7 +256,7 @@ test('WRAP-UP-006：设置 sessions.wrapUpReminder 关掉不提醒，wrap_up 照
   try {
     const client = await litch(env)
     const threadId = await withTools(client)
-    const result = resultOf(await wrapUp(env, threadId, [{ title: '甲', prompt: brief('甲') }]))
+    const result = resultOf(await wrapUp(env, threadId, [{ title: '甲', ...brief('甲') }]))
     assert.ok(result.suggestions[0].proposal_id)
     env.pi.end(threadId)
     await client.call('turn/start', { threadId, input: text('不调收尾') })
@@ -285,7 +292,7 @@ test('WRAP-UP-007：同一时刻该提醒也该唤醒：先提醒，提醒回合
       (
         await env.pi.callTool(threadId, SESSIONS, 'start', {
           title: '子任务',
-          prompt: brief('做点事。'),
+          ...brief('做点事。'),
           harness: 'claude-code',
           initiation: 'user_asked',
         })
@@ -321,8 +328,8 @@ test('WRAP-UP-008：litch/sessionProposal/accept 的 overrides.wakeParent 改起
     const threadId = await withTools(client)
     const [one, two] = resultOf(
       await wrapUp(env, threadId, [
-        { title: '不唤醒', prompt: brief('不唤醒') },
-        { title: '照提案', prompt: brief('照提案') },
+        { title: '不唤醒', ...brief('不唤醒') },
+        { title: '照提案', ...brief('照提案') },
       ]),
     ).suggestions
     const bad = await client.fails('litch/sessionProposal/accept', {
@@ -417,7 +424,7 @@ test('WRAP-UP-011：唤不唤醒由 Litch 定：模型的 start（直接起、�
       (
         await env.pi.callTool(threadId, SESSIONS, 'start', {
           title: '直接起',
-          prompt: brief('直接起。'),
+          ...brief('直接起。'),
           harness: 'claude-code',
           initiation: 'user_asked',
           wake_parent: false,
@@ -430,7 +437,7 @@ test('WRAP-UP-011：唤不唤醒由 Litch 定：模型的 start（直接起、�
       (
         await env.pi.callTool(threadId, SESSIONS, 'start', {
           title: '提一张',
-          prompt: brief('提一张。'),
+          ...brief('提一张。'),
           wake_parent: 'no',
         })
       )?.answer,

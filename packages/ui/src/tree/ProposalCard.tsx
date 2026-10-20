@@ -123,15 +123,28 @@ function ProposalMeta({ deviceId, shape }: { deviceId: string; shape: ProposalSh
   )
 }
 
-/** 简报：长的先折成三行，能展开。offer 卡补上简报之后也用 */
-export function Brief({ prompt }: { prompt: string }) {
+/**
+ * 简报：折着时只写任务、长的折成三行；有背景的展开后分“背景”“任务”两段写全（子会话收到的也是先背景后任务）。
+ * offer 卡补上简报之后也用
+ */
+export function Brief({ prompt, background = '' }: { prompt: string; background?: string }) {
   const t = useT()
   const [unfolded, setUnfolded] = useState(false)
-  if (!prompt) return null
-  const long = prompt.length > LONG_BRIEF || prompt.split('\n').length > 3
+  const context = background.trim()
+  if (!prompt && !context) return null
+  const long = context !== '' || prompt.length > LONG_BRIEF || prompt.split('\n').length > 3
   return (
     <>
-      <div className="prop-brief" data-open={unfolded || !long}>
+      {unfolded && context ? (
+        <div className="prop-brief" data-open="true" data-part="background">
+          <span className="prop-brief-label">{t('proposal.brief.background')}</span>
+          {context}
+        </div>
+      ) : null}
+      <div className="prop-brief" data-open={unfolded || !long} data-part="task">
+        {unfolded && context ? (
+          <span className="prop-brief-label">{t('proposal.brief.task')}</span>
+        ) : null}
         {prompt}
       </div>
       {long ? (
@@ -151,7 +164,7 @@ export function Brief({ prompt }: { prompt: string }) {
 /** 卡片照着画的那一份：调用时给的（start 的参数、收尾里的一条建议），拿不到提案时就照它 */
 type ProposalSeed = Pick<
   SessionProposalView,
-  'title' | 'prompt' | 'harness' | 'model' | 'cwd' | 'kind'
+  'title' | 'prompt' | 'background' | 'harness' | 'model' | 'cwd' | 'kind'
 >
 
 /**
@@ -189,6 +202,7 @@ function ProposalView({
         : 'unknown'
   const title = proposal?.title ?? seed.title
   const prompt = proposal?.prompt ?? seed.prompt
+  const background = proposal ? proposal.background : seed.background
   const shape = proposalShape(
     proposal ?? seed,
     status === 'started' ? child : null,
@@ -216,7 +230,7 @@ function ProposalView({
         </span>
         <b className="prop-title">{title}</b>
         <ProposalMeta deviceId={deviceId} shape={shape} />
-        <Brief prompt={prompt} />
+        <Brief prompt={prompt} background={background} />
         {pending && proposal.widerSandbox ? (
           <p className="prop-wider" data-wider={proposal.widerSandbox}>
             {t('proposal.wider', { level: t(SANDBOX_LEVEL[proposal.widerSandbox]) })}

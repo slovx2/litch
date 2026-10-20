@@ -25,12 +25,12 @@ function kindOf(value: unknown): SessionLineageKind {
   throw new ProtocolError(-32602, 'kind 只能是 fresh 或 fork')
 }
 
-/** 提案开始时改的东西。字符串项给空字符串是清掉提案里的值、用缺省；标题、简报给了就不能是空的 */
+/** 提案开始时改的东西。字符串项给空字符串是清掉提案里的值、用缺省（背景是去掉）；标题、任务给了就不能是空的 */
 function overridesOf(value: unknown): ProposalOverrides {
   if (value == null) return {}
   if (!isObject(value)) throw new ProtocolError(-32602, 'overrides 必须是对象')
   const out: ProposalOverrides = {}
-  for (const name of ['harness', 'model', 'effort', 'cwd', 'projectId'] as const) {
+  for (const name of ['harness', 'model', 'effort', 'cwd', 'projectId', 'background'] as const) {
     const given = value[name]
     if (given == null) continue
     if (typeof given !== 'string') throw new ProtocolError(-32602, `overrides.${name} 必须是字符串`)
@@ -89,6 +89,7 @@ export async function sessionTreeCall(
             kind: kindOf(fields.kind),
             title: requiredString(fields.title, 'title'),
             prompt: requiredString(fields.prompt, 'prompt'),
+            background: optional(fields.background, 'background') ?? null,
             wakeParent,
             approvalPolicy: fields.approvalPolicy,
             sandbox: fields.sandbox,

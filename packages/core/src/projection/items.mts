@@ -157,6 +157,7 @@ function spawnedOf(
       choice: null,
       title,
       prompt: typeof given.remaining_plan === 'string' ? given.remaining_plan : '',
+      background: '',
       harness: null,
       model: null,
       cwd: null,
@@ -171,6 +172,8 @@ function spawnedOf(
     choice: choice === 'session' || choice === 'here' ? choice : null,
     title,
     prompt: typeof given.prompt === 'string' ? given.prompt : '',
+    background:
+      given.kind !== 'fork' && typeof given.background === 'string' ? given.background : '',
     harness: word(given.harness),
     model: word(given.model),
     cwd: word(given.cwd),
@@ -242,6 +245,7 @@ function wrapUpOf(
       {
         title,
         prompt: typeof raw.prompt === 'string' ? raw.prompt : '',
+        background: raw.kind !== 'fork' && typeof raw.background === 'string' ? raw.background : '',
         harness: word(raw.harness),
         model: word(raw.model),
         cwd: word(raw.cwd),

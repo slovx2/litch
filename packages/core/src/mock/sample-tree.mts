@@ -4,6 +4,8 @@ import type { SampleLang } from './sample-text.mjs'
 export interface TreeChild {
   title: string
   prompt: string
+  /** 任务之前的背景（模型给 fresh 子会话写的，给没看过父会话的人看） */
+  background?: string
   /** 子会话回的话（它这一回合最后的回答，回报取它的开头） */
   reply: string
 }
@@ -103,6 +105,8 @@ export const TREE_TEXT: Record<SampleLang, TreeText> = {
     proposals: [
       {
         title: '整理 CHANGELOG',
+        background:
+          '这一轮给建议任务加了“完成后唤醒主会话”的开关，改了设备进程和桌面端，测试都过了，还没发版。发版前要把用户看得到的变化记进 CHANGELOG。',
         prompt: '把这次的改动整理进 CHANGELOG 的“未发布”一节，中英文各一份。',
         reply: 'CHANGELOG 整理好了：未发布一节加了 5 条，中英文都写了。',
       },
@@ -129,6 +133,8 @@ export const TREE_TEXT: Record<SampleLang, TreeText> = {
     wrapUp: [
       {
         title: '给解析器补模糊测试',
+        background:
+          '刚改完 <litch-session-event> 的解析：标签里多了 kind 字段，坏的整条当正文。现有单测只覆盖了几种写死的坏输入，想再用随机输入确认不会抛错。',
         prompt:
           '在 packages/protocol 下给 parseSessionEvent 加一组模糊测试：随机截断、乱插标签、超长 JSON，各跑一千次，确认不抛错、坏的整条当正文；只加测试，不改实现，跑通后报用例数。',
         reply: '模糊测试加好了：三组各一千次，没有抛错，坏的都当正文了。',
@@ -146,7 +152,7 @@ export const TREE_TEXT: Record<SampleLang, TreeText> = {
         prompt: '看看日志。',
         reply: '',
         refused:
-          'The prompt is too short for a fresh session (at least 80; a CJK character counts as 2).',
+          'background is missing: a fresh session cannot see this conversation, so background needs a width of at least 80 (each CJK character counts as 2).',
       },
     ],
     wrapReply:
@@ -195,6 +201,8 @@ export const TREE_TEXT: Record<SampleLang, TreeText> = {
     agentsPrompt: '分头看看仓库的结构和重复代码',
     offer: {
       title: '给设置页加导出按钮',
+      background:
+        '用户想把一台机器上的 Litch 设置搬到另一台，现在只能手抄。先做导出，导入以后再说；诊断一节已经有“复制诊断信息”，导出按钮放它下面。',
       prompt:
         '在设置页的“诊断”一节加一个“导出”按钮，把当前设置导出成 JSON 文件。相关文件：packages/ui/src/settings/ 下的诊断那一节。做完的标准：点按钮能存下文件，内容和设置页显示的一致，中英文文案都有。',
       reply: '导出按钮加好了：在诊断一节最下面，存下的 JSON 和设置页显示的一致，中英文文案都补了。',
@@ -236,6 +244,8 @@ export const TREE_TEXT: Record<SampleLang, TreeText> = {
     proposals: [
       {
         title: 'Tidy the CHANGELOG',
+        background:
+          'This round added a "wake the main session when done" switch to suggested tasks, touching the device process and the desktop app; tests pass, nothing is released yet. User-visible changes go into the CHANGELOG before a release.',
         prompt:
           'Put this round of changes into the Unreleased section of the CHANGELOG, in both languages.',
         reply: 'CHANGELOG updated: 5 entries under Unreleased, in both languages.',
@@ -264,6 +274,8 @@ export const TREE_TEXT: Record<SampleLang, TreeText> = {
     wrapUp: [
       {
         title: 'Fuzz the event parser',
+        background:
+          'The <litch-session-event> parser was just changed: the tag gained a kind field, and broken input is kept as plain text. Unit tests cover only a few fixed bad inputs; random input should confirm it never throws.',
         prompt:
           'In packages/protocol add fuzz tests for parseSessionEvent: random truncation, stray tags, oversized JSON, a thousand runs each. Confirm it never throws and broken input stays plain text. Tests only, no implementation changes; report the case count.',
         reply:
@@ -282,7 +294,7 @@ export const TREE_TEXT: Record<SampleLang, TreeText> = {
         prompt: 'Look at the logs.',
         reply: '',
         refused:
-          'The prompt is too short for a fresh session (at least 80; a CJK character counts as 2).',
+          'background is missing: a fresh session cannot see this conversation, so background needs a width of at least 80 (each CJK character counts as 2).',
       },
     ],
     wrapReply:
@@ -334,6 +346,8 @@ export const TREE_TEXT: Record<SampleLang, TreeText> = {
     agentsPrompt: 'Split up: look at the repository layout and at duplicated code',
     offer: {
       title: 'Add an export button to settings',
+      background:
+        'The user wants to move Litch settings from one machine to another and today copies them by hand. Export comes first, import later; Diagnostics already has "Copy diagnostics", and the export button goes below it.',
       prompt:
         'Add an "Export" button to the Diagnostics section of the settings page that saves the current settings as a JSON file. Files: the Diagnostics section under packages/ui/src/settings/. Done when the button saves a file matching what the settings page shows, with both Chinese and English labels.',
       reply:

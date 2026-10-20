@@ -339,6 +339,8 @@ export interface SpawnRequest {
   kind: LineageKind
   title: string
   prompt: string
+  /** 任务之前的背景（全新开始时单成一段交给子会话；带上下文的不用）。空的不带 */
+  background?: string
   wakeParent: boolean
   sandbox?: SandboxLevel
 }
@@ -1904,6 +1906,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         title: request.title,
         prompt: request.prompt,
         wakeParent: request.wakeParent,
+        ...(request.background ? { background: request.background } : {}),
         ...(request.harness ? { harness: request.harness } : {}),
         ...(request.model ? { model: request.model } : {}),
         ...(request.effort ? { effort: request.effort } : {}),

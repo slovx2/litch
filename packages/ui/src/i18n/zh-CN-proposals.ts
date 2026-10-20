@@ -14,6 +14,8 @@ export const zhProposals = {
   'proposal.fork': '带上下文',
   'proposal.brief.more': '展开简报',
   'proposal.brief.less': '收起简报',
+  'proposal.brief.background': '背景',
+  'proposal.brief.task': '任务',
   'proposal.wider': '这个 harness 没有这么严的沙箱，开始后子会话是「{level}」',
   'proposal.state.pending': '等你开始',
   'proposal.state.started': '已开始',

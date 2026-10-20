@@ -810,6 +810,8 @@ export interface Commands {
       kind: LineageKind
       title: string
       prompt: string
+      /** 任务之前的背景（全新开始时才用）。可以不给 */
+      background?: string
       wakeParent: boolean
       /** 子会话的沙箱档（审批策略跟着配）。不给是跟父会话一样；给了也收紧到不宽于父会话 */
       sandbox?: SandboxLevel

@@ -18,6 +18,8 @@ export interface SpawnFields {
   kind: LineageKind
   title: string
   prompt: string
+  /** 任务之前的背景：全新开始时才发，带上下文的不发 */
+  background: string
   sandbox: SandboxLevel | ''
   wake: boolean
 }
@@ -39,6 +41,7 @@ export function fieldsFor(parent: SpawnParent, proposal: SessionProposalView | n
     kind: proposal?.kind ?? 'fresh',
     title: proposal?.title ?? '',
     prompt: proposal?.prompt ?? '',
+    background: proposal?.background ?? '',
     sandbox: '',
     wake: proposal?.wakeParent ?? true,
   }
@@ -51,10 +54,13 @@ export const kindOf = (fields: SpawnFields, parent: SpawnParent): LineageKind =>
 /** 手动派：session.spawn 的参数（不含设备和父会话）。和父会话一样的不带 */
 export function spawnParams(fields: SpawnFields, parent: SpawnParent) {
   const cwd = fields.cwd.trim()
+  const kind = kindOf(fields, parent)
+  const background = kind === 'fresh' ? fields.background.trim() : ''
   return {
-    kind: kindOf(fields, parent),
+    kind,
     title: fields.title.trim(),
     prompt: fields.prompt.trim(),
+    ...(background ? { background } : {}),
     wakeParent: fields.wake,
     ...(fields.harness !== parent.harness ? { harness: fields.harness } : {}),
     ...(fields.model ? { model: fields.model } : {}),
@@ -91,6 +97,10 @@ export function overridesOf(
   if (title && title !== proposal.title) overrides.title = title
   const prompt = fields.prompt.trim()
   if (prompt && prompt !== proposal.prompt.trim()) overrides.prompt = prompt
+  // 背景只有全新开始的才发；清空了是去掉（空字符串），带上下文的不动它（设备进程本来就不用）
+  const background = fields.background.trim()
+  if (kind === 'fresh' && background !== proposal.background.trim())
+    overrides.background = background
   if (fields.sandbox) overrides.sandbox = fields.sandbox
   if (fields.wake !== proposal.wakeParent) overrides.wakeParent = fields.wake
   return overrides

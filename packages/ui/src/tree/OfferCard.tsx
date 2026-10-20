@@ -113,7 +113,9 @@ export function OfferCard({ deviceId, sessionId, itemId, item }: ItemRef & { ite
           <p className="prop-ask dim">{t('proposal.offer.briefing')}</p>
         ) : null}
         {status === 'here' ? <p className="prop-ask dim">{t('proposal.offer.doneHere')}</p> : null}
-        {status === 'started' ? <Brief prompt={proposal?.prompt ?? ''} /> : null}
+        {status === 'started' ? (
+          <Brief prompt={proposal?.prompt ?? ''} background={proposal?.background ?? ''} />
+        ) : null}
         {status === 'offered' && proposal ? (
           <OfferActs deviceId={deviceId} sessionId={sessionId} proposal={proposal} />
         ) : null}

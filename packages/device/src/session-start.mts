@@ -24,7 +24,10 @@ export interface ChildSpec {
   projectId?: string | null
   kind: SessionLineageKind
   title: string
+  /** 任务 */
   prompt: string
+  /** 任务之前的背景（fresh 时单成一段放在任务前面；fork 不用）。不给、空串是没有 */
+  background?: string | null
   wakeParent: boolean
   approvalPolicy?: unknown
   sandbox?: unknown
@@ -159,8 +162,8 @@ export function threadTitle(thread: Record<string, unknown> | null, given?: stri
 }
 
 /**
- * 子会话收到的第一条消息：由哪个会话派出、任务是什么、做完怎么回报。
- * handOff：交接出来的分叉，说明它接手的是父会话做到一半的任务，prompt 是剩下的计划
+ * 子会话收到的第一条消息：由哪个会话派出、背景（fresh 且给了才有）、任务是什么、做完怎么回报。
+ * fork 带着整段对话，不放背景。handOff：交接出来的分叉，说明它接手的是父会话做到一半的任务，prompt 是剩下的计划
  */
 export function briefing(
   kind: SessionLineageKind,
@@ -168,6 +171,7 @@ export function briefing(
   title: string,
   prompt: string,
   handOff = false,
+  background = '',
 ): string {
   const who = `"${parent.title || parent.id}" (${parent.id}, ${parent.harness})`
   const head = handOff
@@ -175,9 +179,11 @@ export function briefing(
     : kind === 'fork'
       ? `[Litch] This session is a fork of ${who}: you have that conversation above, but you are now a separate sub-session and the original goes on without you.`
       : `[Litch] Another session on this device started this one: ${who}. You cannot see that conversation; the user can open this session and talk to you directly.`
+  const context = kind === 'fresh' && !handOff ? background.trim() : ''
   return [
     head,
     '',
+    ...(context ? [`Background:\n${context}`, ''] : []),
     `Task: ${title}`,
     '',
     handOff ? `Remaining plan:\n${prompt}` : prompt,
@@ -209,6 +215,11 @@ export async function startChild(
     throw new StartRefused(
       'invalid',
       `prompt is longer than ${SESSION_TOOL_LIMITS.messageChars} characters; shorten it and point to files instead.`,
+    )
+  if ((spec.background ?? '').length > SESSION_TOOL_LIMITS.messageChars)
+    throw new StartRefused(
+      'invalid',
+      `background is longer than ${SESSION_TOOL_LIMITS.messageChars} characters; shorten it and point to files instead.`,
     )
   const parentHarness = await tree.owner(parentId)
   const harness = spec.harness || parentHarness
@@ -292,6 +303,7 @@ export async function startChild(
     title,
     spec.prompt,
     Boolean(spec.handOffBefore),
+    spec.background ?? '',
   )
   await link.request('turn/start', {
     threadId,
@@ -312,6 +324,8 @@ export interface ProposalOverrides {
   kind?: SessionLineageKind
   title?: string
   prompt?: string
+  /** 空串是去掉提案里的背景 */
+  background?: string
   approvalPolicy?: unknown
   sandbox?: unknown
   /** 子会话停下后要不要唤醒父会话。不给照提案 */
@@ -347,6 +361,7 @@ export async function acceptProposal(
       kind: overrides.kind ?? proposal.kind,
       title: overrides.title ?? proposal.title,
       prompt: overrides.prompt ?? proposal.prompt,
+      background: overrides.background ?? proposal.background ?? '',
       wakeParent: overrides.wakeParent ?? proposal.wakeParent,
       approvalPolicy: overrides.approvalPolicy,
       sandbox: overrides.sandbox,

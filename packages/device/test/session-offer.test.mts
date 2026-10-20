@@ -10,6 +10,7 @@ import { SessionTree } from '../src/session-tree.mjs'
 import { failureOf, resultOf } from './fake-engine.mjs'
 import { tempDir } from './helpers.mjs'
 import {
+  BACKGROUND,
   brief,
   got,
   litch,
@@ -89,13 +90,20 @@ test('OFFER-001：用户选新会话：卡从 offered 到 chosen，调用回 cho
     // 答过的不能再答
     const twice = await client.fails('litch/sessionProposal/answer', { proposalId, choice: 'here' })
     assert.match(twice.message, /已经选了新会话/)
-    // accept：不带简报、简报太短都不收
+    // accept：不带任务、fresh 不带背景、背景太短都不收
     const bare = await env.pi.callTool(threadId, SESSIONS, 'accept', { proposal_id: proposalId })
     assert.equal(failureOf(bare?.answer), 'invalid')
     assert.match(bare?.answer.result.contentItems[0].text, /prompt is required/)
+    const noContext = await env.pi.callTool(threadId, SESSIONS, 'accept', {
+      proposal_id: proposalId,
+      prompt: '整理一下 scripts 下的发布脚本，合并重复的步骤，做完跑一遍 npm run check。',
+    })
+    assert.equal(failureOf(noContext?.answer), 'invalid')
+    assert.match(noContext?.answer.result.contentItems[0].text, /background is missing/)
     const short = await env.pi.callTool(threadId, SESSIONS, 'accept', {
       proposal_id: proposalId,
       prompt: '整理一下',
+      background: '发版前',
     })
     assert.equal(failureOf(short?.answer), 'invalid')
     assert.match(short?.answer.result.contentItems[0].text, /too short/)
@@ -104,7 +112,7 @@ test('OFFER-001：用户选新会话：卡从 offered 到 chosen，调用回 cho
       (
         await env.pi.callTool(threadId, SESSIONS, 'accept', {
           proposal_id: proposalId,
-          prompt: brief('整理 scripts 下的发布脚本。'),
+          ...brief('整理 scripts 下的发布脚本。'),
           title: '整理发布脚本（含说明）',
           harness: 'claude-code',
         })
@@ -119,6 +127,7 @@ test('OFFER-001：用户选新会话：卡从 offered 到 chosen，调用回 cho
     const [first] = env.claude.sent('turn/start')
     assert.match(first.input[0].text, /Task: 整理发布脚本（含说明）/)
     assert.match(first.input[0].text, /整理 scripts 下的发布脚本/)
+    assert.match(first.input[0].text, /\n\nBackground:\n这是 \/work\/app 的一轮整理/)
     const done = env.device.sessionTree.store.proposal(proposalId)
     assert.equal(done?.status, 'started')
     assert.equal(done?.startedThreadId, started.thread_id)
@@ -150,7 +159,7 @@ test('OFFER-002：用户选在这里做：卡了结成 here，调用回 choice=h
     assert.deepEqual(env.device.sessionTree.proposals(threadId), [], '了结了，不在等着的里面')
     const accept = await env.pi.callTool(threadId, SESSIONS, 'accept', {
       proposal_id: proposalId,
-      prompt: brief('查慢查询。'),
+      ...brief('查慢查询。'),
     })
     assert.equal(failureOf(accept?.answer), 'invalid')
     assert.match(accept?.answer.result.contentItems[0].text, /chose to do it here/)
@@ -238,26 +247,28 @@ test('OFFER-005：offer 只收用户发起的回合、只要标题、算进一�
   try {
     const client = await litch(env)
     const { threadId } = await parent(client)
-    // 带了 prompt：不收
-    const withPrompt = await env.pi.callTool(threadId, SESSIONS, 'start', {
-      title: '多带了简报',
-      prompt: brief('做点事。'),
-      initiation: 'offer',
-    })
-    assert.equal(failureOf(withPrompt?.answer), 'invalid')
-    assert.match(withPrompt?.answer.result.contentItems[0].text, /title only/)
+    // 带了 prompt、只带了 background：都不收
+    for (const extra of [brief('做点事。'), { background: BACKGROUND }]) {
+      const withBrief = await env.pi.callTool(threadId, SESSIONS, 'start', {
+        title: '多带了简报',
+        ...extra,
+        initiation: 'offer',
+      })
+      assert.equal(failureOf(withBrief?.answer), 'invalid')
+      assert.match(withBrief?.answer.result.contentItems[0].text, /title only/)
+    }
     // 普通提案的 accept 带简报字段：不收
     const normal = resultOf(
       (
         await env.pi.callTool(threadId, SESSIONS, 'start', {
           title: '普通提案',
-          prompt: brief('普通提案。'),
+          ...brief('普通提案。'),
         })
       )?.answer,
     )
     const extra = await env.pi.callTool(threadId, SESSIONS, 'accept', {
       proposal_id: normal.proposal_id,
-      prompt: brief('改一下简报。'),
+      ...brief('改一下简报。'),
     })
     assert.equal(failureOf(extra?.answer), 'invalid')
     assert.match(extra?.answer.result.contentItems[0].text, /only for an offer/)
@@ -313,7 +324,7 @@ test('OFFER-005：offer 只收用户发起的回合、只要标题、算进一�
     // 还在等用户选的：不能 accept、不能撤回
     const early = await env.pi.callTool(threadId, SESSIONS, 'accept', {
       proposal_id: 甲.proposalId,
-      prompt: brief('甲。'),
+      ...brief('甲。'),
     })
     assert.equal(failureOf(early?.answer), 'invalid')
     assert.match(early?.answer.result.contentItems[0].text, /has not chosen yet/)

@@ -67,8 +67,13 @@ export interface SessionProposal {
   /** 提案挂在哪个会话上（就是将来的父会话） */
   threadId: string
   title: string
-  /** 起子会话时发给它的第一段话 */
+  /** 起子会话时发给它的任务 */
   prompt: string
+  /**
+   * 任务之前的背景：给没看过父会话的人看的整体目标、到目前为止的决定和约束、这一块怎么接上。
+   * fresh 的模型提案都有；fork、用户在界面上派的、旧提案是空串。旧设备进程不带
+   */
+  background?: string
   /** 子会话的 harness。不给是父会话的 */
   harness: string | null
   model: string | null
@@ -150,8 +155,10 @@ export interface SessionStartParams {
   projectId?: string
   kind: SessionLineageKind
   title: string
-  /** 发给子会话的第一段话 */
+  /** 发给子会话的任务 */
   prompt: string
+  /** 任务之前的背景（fresh 时放在任务前面单成一段；fork 不用）。可以不给 */
+  background?: string
   wakeParent: boolean
   /** 审批策略、沙箱：给了也会被收紧到不宽于父会话 */
   approvalPolicy?: string
@@ -192,6 +199,8 @@ export interface SessionProposalOverrides {
   kind?: SessionLineageKind
   title?: string
   prompt?: string
+  /** 空字符串是去掉提案里的背景 */
+  background?: string
   approvalPolicy?: string
   sandbox?: string
   /** 子会话停下后要不要唤醒父会话 */

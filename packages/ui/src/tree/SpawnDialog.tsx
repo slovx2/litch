@@ -1,6 +1,6 @@
 // 派子会话的弹窗，两种用法共用一张表（表单的初值和提交的内容在 spawn-form.ts）：
 // - 从侧栏的会话菜单里“派一个子会话…”：挑 harness、模型、强度、项目、目录、权限，全新开始还是带上父会话的
-//   上下文（带上下文只能用父会话的 harness），写标题和第一段话，勾不勾“完成后唤醒主会话”；
+//   上下文（带上下文只能用父会话的 harness），写标题、任务和背景（全新开始时才有，可不填），勾不勾“完成后唤醒主会话”；
 // - 提案卡片上的“改了再开始”：照提案预填，都能改（含“完成后唤醒主会话”），确认后带着改过的那几项开始。
 // 派出去、开始都由设备进程做；沙箱收紧到不宽于父会话，目标 harness 收不紧时这里写明。
 import {
@@ -289,6 +289,21 @@ export function SpawnDialog({ deviceId, parent, proposal, onSpawned, onClose }: 
               onChange={(event) => set({ prompt: event.target.value })}
             />
           </div>
+          {shownKind === 'fresh' ? (
+            <div className="form-field">
+              <label className="form-label" htmlFor="spawn-background">
+                {t('tree.dialog.background')}
+              </label>
+              <textarea
+                id="spawn-background"
+                className="req-input spawn-prompt"
+                value={fields.background}
+                rows={proposal && fields.background ? 4 : 2}
+                placeholder={t('tree.dialog.backgroundHint')}
+                onChange={(event) => set({ background: event.target.value })}
+              />
+            </div>
+          ) : null}
           <label className="spawn-wake">
             <input
               type="checkbox"

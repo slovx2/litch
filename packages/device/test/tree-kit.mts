@@ -102,8 +102,9 @@ export async function startedOn(client: TestClient, threadId: string): Promise<a
   )
 }
 
-/** 补一段说明，让模型的 start 的 fresh 简报够 freshPromptMinWidth 字 */
-const BRIEF_TAIL =
-  '相关文件都在 /work/app 下面，先读一遍 README 和目录结构再动手。做完的标准：改动能通过已有的检查，结束时用两三句话说明改了什么、怎么验证的、还剩什么没做；需要用户拍板的事单独列出来，不要自己定。'
+/** 一段够宽的背景，让模型的 start 的 fresh 简报过 freshBackgroundMinWidth 的门槛 */
+export const BACKGROUND =
+  '这是 /work/app 的一轮整理：前面已经定了只动 src 下面、不改公开接口，相关文件先读一遍 README 和目录结构再动手；需要用户拍板的事单独列出来，不要自己定。'
 
-export const brief = (task: string) => `${task}${BRIEF_TAIL}`
+/** 简报的两段：任务（原样）和够宽的背景。用法是 ...brief('任务') */
+export const brief = (task: string) => ({ prompt: task, background: BACKGROUND })

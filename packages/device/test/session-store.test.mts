@@ -98,3 +98,51 @@ test('SESSION-STORE-002：第 2 版的库升上来：提案多出了结时间、
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
+test('SESSION-STORE-003：第 5 版的库升上来：提案多出背景一列，旧提案是空串；新提的背景存得进、读得回，重开库还在', () => {
+  const dir = tempDir()
+  try {
+    const old = new DatabaseSync(join(dir, 'sessions.sqlite'))
+    initializeStoreFormat(old)
+    for (const step of SESSION_MIGRATIONS.slice(0, 5)) old.exec(step)
+    old.exec('PRAGMA user_version=5')
+    old.exec(`INSERT INTO proposals(id, thread_id, title, prompt, kind, wake_parent, status, created_at, expires_at, started_thread_id)
+      VALUES('pr1', 'p1', '旧的', '做事', 'fresh', 1, 'pending', 5, 4000000000, NULL)`)
+    old.close()
+    const db = openSessionDatabase(dir)
+    assert.equal(db.prepare('PRAGMA user_version').get()?.user_version, SESSION_SCHEMA_VERSION)
+    const store = new SessionStore(db)
+    assert.equal(store.proposal('pr1')?.background, '')
+    const added = store.addProposal({
+      id: 'pr2',
+      threadId: 'p1',
+      title: '新的',
+      prompt: '补集成测试。',
+      background: '这一轮在给订单服务补测试，单测已经齐了。',
+      harness: null,
+      model: null,
+      cwd: null,
+      kind: 'fresh',
+      wakeParent: true,
+      createdAt: 8,
+      expiresAt: 4000000000,
+    })
+    assert.equal(added.background, '这一轮在给订单服务补测试，单测已经齐了。')
+    db.close()
+    const again = new SessionStore(openSessionDatabase(dir))
+    const back = again.proposal('pr2')
+    assert.deepEqual(
+      [back?.prompt, back?.background],
+      ['补集成测试。', '这一轮在给订单服务补测试，单测已经齐了。'],
+    )
+    assert.deepEqual(
+      again.pending('p1').map((one) => [one.id, one.background]),
+      [
+        ['pr1', ''],
+        ['pr2', '这一轮在给订单服务补测试，单测已经齐了。'],
+      ],
+    )
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})

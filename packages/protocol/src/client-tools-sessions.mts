@@ -39,14 +39,17 @@ export const SESSION_TOOL_LIMITS = {
   waitThreadsMax: 8,
   /** wait 最多等多少秒 */
   waitSecondsMax: 120,
-  /** send 的消息、start 的 prompt 最多多少字 */
+  /** send 的消息、start 的 prompt、background 各自最多多少字 */
   messageChars: 32_000,
   /** 一个回合里最多提几张提案（硬上限；规则里写主动提的三张，拆计划时四张） */
   proposalsPerTurn: 4,
   /** 规则里主动提的建议一回合最多几张（设备进程不单独查，照 proposalsPerTurn 拦） */
   proactivePerTurn: 3,
-  /** fresh 的提案、直接起的 fresh 子会话，简报至少多宽（textWidth：汉字等宽字符算 2）：子会话只知道这一段 */
-  freshPromptMinWidth: 80,
+  /**
+   * fresh 的提案、直接起的 fresh 子会话，background 至少多宽（textWidth：汉字等宽字符算 2）：子会话看不到父会话，
+   * 只知道背景和任务这两段，背景写短了它不知道这件事从哪来、做到哪了。prompt 只要非空
+   */
+  freshBackgroundMinWidth: 80,
 } as const
 
 // —— 参数（执行器收到后自己校验，不信任这里） ——
@@ -76,6 +79,11 @@ export interface SessionsStartArguments {
    * initiation 是 offer 时不给（只带标题先出卡，用户选了新会话再用 accept 补）
    */
   prompt?: string
+  /**
+   * fresh 时必填：给没看过这段对话的人看的背景（整体目标、到目前为止的决定和约束、这一块怎么接上）。
+   * fork 不看（子会话本来就带着整段对话）；offer 不给（accept 时补）
+   */
+  background?: string
   /** 不给是这个会话的 harness */
   harness?: string
   model?: string
@@ -96,6 +104,8 @@ export interface SessionsAcceptArguments {
   proposal_id: string
   /** 开始 offer 卡时补的简报（用户选了新会话之后）；别的卡不给，照提案里的 */
   prompt?: string
+  /** 同上，fresh 时必填 */
+  background?: string
   title?: string
   harness?: string
   model?: string
@@ -118,6 +128,8 @@ export interface SessionsWithdrawArguments {
 export interface SessionsSuggestion {
   title: string
   prompt: string
+  /** fresh 时必填，见 SessionsStartArguments.background */
+  background?: string
   harness?: string
   model?: string
   cwd?: string
@@ -256,7 +268,7 @@ export const SESSION_PROPOSAL_RULES = [
   "Not for a card: quick things (a question, a read, one edit, a handful of tool calls), which stay here; anything that first needs the user's decision, which you ask about, suggesting only the parts that do not depend on it.",
   'If a new user message about something unrelated arrives while you are in the middle of a task, hand that task off with litch_sessions.hand_off (a title and the remaining plan: steps, files, what done looks like), then answer the new message. A small correction is not that: just adjust. If the user said to keep working here, keep it here.',
   'End every turn by calling litch_sessions.wrap_up, as your last action, exactly once. Part of wrapping up is deciding, unasked, whether the request left real follow-up work that belongs in its own session: the next step the request implies, a piece you left or could not verify, the part that can run while the user reviews the rest, something the user set aside earlier, or a self-contained next task better started fresh than from a long history; never work unrelated to the request. Pass those in suggestions (skip ones you already proposed this turn), or an empty list. If you skip wrap_up, Litch reminds you in a new message.',
-  'Every brief is in your own words and is all a fresh session will know: the task, the files or area, and what done looks like. Follow-ups for a session you started go to it with litch_sessions.send, not to a new session.',
+  `A fresh session sees nothing of this conversation: it gets only the two parts of its brief, written in your own words for someone who has not read any of this. background: the overall goal, what has been decided or ruled out so far, the constraints to respect, and how this piece fits in (at least ${SESSION_TOOL_LIMITS.freshBackgroundMinWidth} wide; a CJK character counts as 2). prompt: the task itself, the files or area, and what done looks like. A fork already has this conversation, so it needs only the prompt. Follow-ups for a session you started go to it with litch_sessions.send, not to a new session.`,
   'Right before each litch_sessions.start or hand_off, write a bold title line and one sentence on what it will do.',
   'If the user tells you to start a card ("start the second one"), call litch_sessions.accept with its proposal_id. If a card went stale (done here after all, no longer needed, replaced by a better one), withdraw it with litch_sessions.withdraw; propose the replacement first.',
 ].join('\n')
@@ -309,7 +321,7 @@ export const SESSION_TOOLS: ClientToolNamespaceSpec = {
     {
       type: 'function',
       name: SESSION_TOOL.start,
-      description: `Start a sub-session, propose one, or offer a new session. initiation "user_asked": the user asked for separate work in their latest message; it starts now. "propose" (default): a card the user may start; nothing runs until they do (at most ${SESSION_TOOL_LIMITS.proposalsPerTurn} cards per turn). "offer": the user's latest message is a new task unrelated to this session; send the title only, as the only call in that message; the card asks the user "New session" or "Do it here" and the call waits for the answer, which tells you what to do next. The prompt is all a fresh sub-session knows: state the task, the files, and what done looks like (at least ${SESSION_TOOL_LIMITS.freshPromptMinWidth} characters; a CJK character counts as 2). To suggest work at the end of a turn, use wrap_up instead.`,
+      description: `Start a sub-session, propose one, or offer a new session. initiation "user_asked": the user asked for separate work in their latest message; it starts now. "propose" (default): a card the user may start; nothing runs until they do (at most ${SESSION_TOOL_LIMITS.proposalsPerTurn} cards per turn). "offer": the user's latest message is a new task unrelated to this session; send the title only, as the only call in that message; the card asks the user "New session" or "Do it here" and the call waits for the answer, which tells you what to do next. A fresh sub-session knows only background and prompt: background gives the context it cannot see (at least ${SESSION_TOOL_LIMITS.freshBackgroundMinWidth} wide; a CJK character counts as 2), prompt the task. To suggest work at the end of a turn, use wrap_up instead.`,
       inputSchema: {
         type: 'object',
         properties: {
@@ -317,7 +329,12 @@ export const SESSION_TOOLS: ClientToolNamespaceSpec = {
           prompt: {
             type: 'string',
             description:
-              'First message for the sub-session. Required unless initiation is "offer".',
+              'The task: what to do, the files or area, what done looks like. Required unless initiation is "offer".',
+          },
+          background: {
+            type: 'string',
+            description:
+              'Required for fresh (ignored for fork; not for "offer"): context for someone who has not seen this conversation: the overall goal, decisions and constraints so far, how this piece fits in.',
           },
           harness: { type: 'string', description: 'Default: this session’s harness.' },
           model: { type: 'string' },
@@ -387,7 +404,11 @@ export const SESSION_TOOLS: ClientToolNamespaceSpec = {
                 title: { type: 'string', description: 'Short title, under 60 characters.' },
                 prompt: {
                   type: 'string',
-                  description: `The brief: task, files or area, what done looks like (at least ${SESSION_TOOL_LIMITS.freshPromptMinWidth} characters for fresh; a CJK character counts as 2).`,
+                  description: 'The task: what to do, the files or area, what done looks like.',
+                },
+                background: {
+                  type: 'string',
+                  description: `Required for fresh (ignored for fork): context for someone who has not seen this conversation: the overall goal, decisions and constraints so far, how this piece fits in (at least ${SESSION_TOOL_LIMITS.freshBackgroundMinWidth} wide; a CJK character counts as 2).`,
                 },
                 harness: { type: 'string', description: 'Default: this session’s harness.' },
                 model: { type: 'string' },
@@ -412,7 +433,7 @@ export const SESSION_TOOLS: ClientToolNamespaceSpec = {
       type: 'function',
       name: SESSION_TOOL.accept,
       description:
-        'Start one of your cards: a proposal the user told you to start in their latest message (for example "start the second one"; refused on turns the user did not start), or an offer the user answered with "New session" (then pass the full brief: prompt, and harness, model, cwd, kind when they differ from this session).',
+        'Start one of your cards: a proposal the user told you to start in their latest message (for example "start the second one"; refused on turns the user did not start), or an offer the user answered with "New session" (then pass the full brief: background and prompt, and harness, model, cwd, kind when they differ from this session).',
       inputSchema: {
         type: 'object',
         properties: {
@@ -420,7 +441,12 @@ export const SESSION_TOOLS: ClientToolNamespaceSpec = {
           prompt: {
             type: 'string',
             description:
-              'Only for an answered offer: the brief (task, files or area, what done looks like).',
+              'Only for an answered offer: the task (what to do, files or area, what done looks like).',
+          },
+          background: {
+            type: 'string',
+            description:
+              'Only for an answered offer, required for fresh: context for someone who has not seen this conversation (overall goal, decisions and constraints so far, how this piece fits in).',
           },
           title: { type: 'string', description: 'Only for an answered offer: a better title.' },
           harness: { type: 'string' },

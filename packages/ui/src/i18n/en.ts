@@ -1197,8 +1197,11 @@ export const en: Record<MessageKey, Entry> = {
   'tree.dialog.fork': 'Carry over the parent session so far',
   'tree.dialog.forkOnly': "Carrying context needs the parent session's harness",
   'tree.dialog.name': 'Title',
-  'tree.dialog.nameHint': 'Optional; the start of the first message is used otherwise',
-  'tree.dialog.prompt': 'First message',
+  'tree.dialog.nameHint': 'Optional; the start of the task is used otherwise',
+  'tree.dialog.prompt': 'Task',
+  'tree.dialog.background': 'Background',
+  'tree.dialog.backgroundHint':
+    'The sub-session cannot see this one: the overall goal, decisions and constraints so far, how this piece fits in. Optional',
   'tree.dialog.wake': 'Wake the main session when done',
   'tree.dialog.start': 'Start',
   'tree.dialog.cancel': 'Cancel',

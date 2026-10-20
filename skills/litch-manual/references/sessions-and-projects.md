@@ -53,7 +53,8 @@ parent in the sidebar (up to 8 levels), their results come back to the parent, a
 woken to continue.
 
 - **By hand**: session menu → Start a sub-session… → harness, model, project, context ("Start fresh",
-  or carry over the parent's context, which needs the parent's harness), title, first message, and
+  or carry over the parent's context, which needs the parent's harness), title, task, background
+  (only for a fresh start, optional: what the sub-session cannot see of this conversation), and
   "Wake the main session when done". If the chosen harness cannot give the same sandbox as the parent,
   the dialog warns that the sub-session will be looser.
 - **By the model**: in sessions of every harness (Codex, Claude Code, Pi, DSH, OpenCode, Gemini CLI,
@@ -64,7 +65,10 @@ woken to continue.
   step its answer recommends, independent steps of a plan) as a card instead of only mentioning it. The
   card sits in the conversation at the point it was suggested and shows its state (waiting, started,
   dismissed, withdrawn by the model, expired after 7 days). Buttons: Start, Edit and start (change the
-  harness, model, effort, project, folder, fresh or with context, title, brief, permissions), Dismiss.
+  harness, model, effort, project, folder, fresh or with context, title, task, background,
+  permissions), Dismiss. A fresh card the model raises always carries a background (the overall goal,
+  decisions and constraints so far) next to the task; the sub-session gets it as its own section
+  before the task. Expand the brief on the card to read it.
   The side panel's **Suggested tasks** tab lists every card of the current session, with a badge for
   the waiting ones; clicking one scrolls to it. You can also tell the model "start the second one", and
   it withdraws cards that went stale. At most three cards it raises on its own per turn (independent

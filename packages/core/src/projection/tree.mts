@@ -48,6 +48,7 @@ export function projectProposal(
     id: proposal.id,
     title: typeof proposal.title === 'string' ? proposal.title : '',
     prompt: typeof proposal.prompt === 'string' ? proposal.prompt : '',
+    background: typeof proposal.background === 'string' ? proposal.background : '',
     harness: word(proposal.harness),
     model: word(proposal.model),
     cwd: word(proposal.cwd),

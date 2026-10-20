@@ -26,7 +26,7 @@ async function propose(env: TreeEnv, threadId: string, title: string, more = {})
   const answer = (
     await env.pi.callTool(threadId, SESSIONS, 'start', {
       title,
-      prompt: brief(title),
+      ...brief(title),
       ...more,
     })
   )?.answer
@@ -203,7 +203,7 @@ test('SESSION-PROPOSALS-004：门槛：一回合最多几张（撤回的也算�
     await env.pi.callTool(threadId, SESSIONS, 'withdraw', { proposal_id: ids[0] })
     const full = await env.pi.callTool(threadId, SESSIONS, 'start', {
       title: '再来一张',
-      prompt: brief('再来一张'),
+      ...brief('再来一张'),
     })
     assert.equal(failureOf(full?.answer), 'blocked')
     assert.match(full?.answer.result.contentItems[0].text, /mention them in your reply/)
@@ -212,7 +212,7 @@ test('SESSION-PROPOSALS-004：门槛：一回合最多几张（撤回的也算�
       (
         await env.pi.callTool(threadId, SESSIONS, 'start', {
           title: '用户要的',
-          prompt: brief('用户要的'),
+          ...brief('用户要的'),
           initiation: 'user_asked',
         })
       )?.answer,
@@ -222,34 +222,49 @@ test('SESSION-PROPOSALS-004：门槛：一回合最多几张（撤回的也算�
     await nextUserTurn(env, client, threadId)
     const twin = await env.pi.callTool(threadId, SESSIONS, 'start', {
       title: ' 活2 ',
-      prompt: brief('同一件'),
+      ...brief('同一件'),
     })
     assert.equal(failureOf(twin?.answer), 'invalid')
     assert.match(twin?.answer.result.contentItems[0].text, new RegExp(`${ids[1]}.*withdraw`))
     const upper = await env.pi.callTool(threadId, SESSIONS, 'start', {
       title: 'Fix  Build',
-      prompt: brief('a'),
+      ...brief('a'),
     })
     resultOf(upper?.answer)
     const lower = await env.pi.callTool(threadId, SESSIONS, 'start', {
       title: 'fix build',
-      prompt: brief('b'),
+      ...brief('b'),
     })
     assert.equal(failureOf(lower?.answer), 'invalid')
     // 撤回了的标题可以再用
     const reused = await propose(env, threadId, '活 1')
     assert.ok(reused)
-    // fresh 的简报太短：提案、直接起都拒绝；fork 不查
-    const short = 'x'.repeat(SESSION_TOOL_LIMITS.freshPromptMinWidth - 1)
+    // fresh 的背景太短、没给：提案、直接起都拒绝；fork 不查
+    const short = 'x'.repeat(SESSION_TOOL_LIMITS.freshBackgroundMinWidth - 1)
     for (const initiation of ['propose', 'user_asked']) {
       const refused = await env.pi.callTool(threadId, SESSIONS, 'start', {
         title: `短的 ${initiation}`,
-        prompt: `  ${short}  `,
+        prompt: '做点事。',
+        background: `  ${short}  `,
         initiation,
       })
       assert.equal(failureOf(refused?.answer), 'invalid', initiation)
       assert.match(refused?.answer.result.contentItems[0].text, /too short \(width 79;/)
+      const missing = await env.pi.callTool(threadId, SESSIONS, 'start', {
+        title: `没背景 ${initiation}`,
+        prompt: 'x'.repeat(SESSION_TOOL_LIMITS.freshBackgroundMinWidth * 2),
+        initiation,
+      })
+      assert.equal(failureOf(missing?.answer), 'invalid', initiation)
+      assert.match(missing?.answer.result.contentItems[0].text, /background is missing/)
     }
+    // 任务是空的照样拒（不看背景够不够）
+    const empty = await env.pi.callTool(threadId, SESSIONS, 'start', {
+      title: '空任务',
+      prompt: '   ',
+      background: '字'.repeat(SESSION_TOOL_LIMITS.freshBackgroundMinWidth),
+    })
+    assert.equal(failureOf(empty?.answer), 'invalid')
     const fork = resultOf(
       (
         await env.pi.callTool(threadId, SESSIONS, 'start', {
@@ -263,7 +278,8 @@ test('SESSION-PROPOSALS-004：门槛：一回合最多几张（撤回的也算�
     assert.ok(fork.thread_id)
     const enough = await env.pi.callTool(threadId, SESSIONS, 'start', {
       title: '刚好够',
-      prompt: '字'.repeat(SESSION_TOOL_LIMITS.freshPromptMinWidth),
+      prompt: '短任务',
+      background: '字'.repeat(SESSION_TOOL_LIMITS.freshBackgroundMinWidth / 2),
     })
     assert.ok(resultOf(enough?.answer).proposal_id)
   } finally {
@@ -399,6 +415,7 @@ test('SESSION-PROPOSALS-006：用户开始时可改 harness、模型、强度、
         cwd: '/work/other',
         title: '改过的标题',
         prompt: '改过的简报',
+        background: '改过的背景',
         approvalPolicy: 'never',
         sandbox: 'danger-full-access',
       },
@@ -412,6 +429,7 @@ test('SESSION-PROPOSALS-006：用户开始时可改 harness、模型、强度、
     assert.equal(first.effort, 'high')
     assert.match(first.input[0].text, /Task: 改过的标题/)
     assert.match(first.input[0].text, /改过的简报/)
+    assert.match(first.input[0].text, /Background:\n改过的背景\n\nTask: /)
     const child = await client.call('thread/read', { threadId: childId })
     assert.deepEqual(
       [
@@ -423,8 +441,22 @@ test('SESSION-PROPOSALS-006：用户开始时可改 harness、模型、强度、
     )
     // 不改的照提案：harness、模型都是提案里的
     const plainId = await propose(env, threadId, '照原样', { harness: 'claude-code', model: 'big' })
-    await client.call('litch/sessionProposal/accept', { proposalId: plainId })
+    const { threadId: plainChild } = await client.call('litch/sessionProposal/accept', {
+      proposalId: plainId,
+    })
     assert.equal(env.claude.sent('thread/start').at(-1).model, 'big')
+    const plainFirst = env.claude
+      .sent('turn/start')
+      .find((params) => params.threadId === plainChild)
+    assert.match(plainFirst.input[0].text, /Background:\n这是 \/work\/app 的一轮整理/, '背景照提案')
+    // 背景给空字符串：去掉提案里的背景
+    const clearId = await propose(env, threadId, '去掉背景', { harness: 'claude-code' })
+    const { threadId: cleared } = await client.call('litch/sessionProposal/accept', {
+      proposalId: clearId,
+      overrides: { background: '' },
+    })
+    const clearedFirst = env.claude.sent('turn/start').find((params) => params.threadId === cleared)
+    assert.doesNotMatch(clearedFirst.input[0].text, /Background:/)
     // 改成 fork、harness 同父会话：可以
     const forkId = await propose(env, threadId, '分叉开始', { harness: 'claude-code' })
     const { threadId: forked } = await client.call('litch/sessionProposal/accept', {

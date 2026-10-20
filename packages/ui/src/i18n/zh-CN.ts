@@ -1124,8 +1124,11 @@ export const zhCN = {
   'tree.dialog.fork': '带上父会话到现在的上下文',
   'tree.dialog.forkOnly': '带上下文只能用父会话的 harness',
   'tree.dialog.name': '标题',
-  'tree.dialog.nameHint': '可以不填，用第一段话的开头',
-  'tree.dialog.prompt': '第一段话',
+  'tree.dialog.nameHint': '可以不填，用任务的开头',
+  'tree.dialog.prompt': '任务',
+  'tree.dialog.background': '背景',
+  'tree.dialog.backgroundHint':
+    '子会话看不到这个会话：整体目标、到目前为止的决定和约束、这一块怎么接上。可以不填',
   'tree.dialog.wake': '完成后唤醒主会话',
   'tree.dialog.start': '派出',
   'tree.dialog.cancel': '取消',

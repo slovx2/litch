@@ -311,6 +311,17 @@ function StartForm({
             autoCorrect
             testID="proposal-start:prompt"
           />
+          {shownKind === 'fresh' ? (
+            <Field
+              label={t('tree.dialog.background')}
+              value={fields.background}
+              onChangeText={(background) => set({ background })}
+              placeholder={t('tree.dialog.backgroundHint')}
+              multiline
+              autoCorrect
+              testID="proposal-start:background"
+            />
+          ) : null}
         </View>
         <View style={styles.switchRow}>
           <Text style={[styles.switchText, { color: c.ink }]}>{t('tree.dialog.wake')}</Text>

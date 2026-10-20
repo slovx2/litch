@@ -161,11 +161,13 @@ export function createMockTree(host: MockTreeHost): MockTree {
     return fallback
   }
 
-  /** 父会话是谁、标题是什么，写进子会话的第一段话 */
-  const briefOf = (parent: SessionView, prompt: string): string => {
+  /** 父会话是谁、标题是什么，写进子会话的第一段话；有背景的先放背景再放任务 */
+  const briefOf = (parent: SessionView, prompt: string, background = ''): string => {
     const title = host.summary(parent.deviceId, parent.sessionId)?.title ?? parent.title
     const name = typeof title === 'string' ? title : parent.sessionId
-    return `${text.briefHead.replace('{parent}', name)}\n\n${prompt}`
+    const head = text.briefHead.replace('{parent}', name)
+    const context = background.trim()
+    return context ? `${head}\n\nBackground:\n${context}\n\n${prompt}` : `${head}\n\n${prompt}`
   }
 
   /** 起一个子会话：放进侧栏（带着父子关系），发第一段话 */
@@ -174,6 +176,8 @@ export function createMockTree(host: MockTreeHost): MockTree {
     options: {
       title: string
       prompt: string
+      /** 任务之前的背景（fresh 才放） */
+      background?: string
       harness: string | null
       kind: LineageKind
       origin: LineageOrigin
@@ -251,7 +255,8 @@ export function createMockTree(host: MockTreeHost): MockTree {
     }
     host.putView(view)
     if (options.reply) scripted.set(sameKey(deviceId, summary.id), options.reply)
-    host.startTurn(view, outgoing(briefOf(parent, options.prompt)))
+    const background = options.kind === 'fresh' ? (options.background ?? '') : ''
+    host.startTurn(view, outgoing(briefOf(parent, options.prompt, background)))
     return summary.id
   }
 
@@ -350,6 +355,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
       id: host.nextId('pr'),
       title: sample.title,
       prompt: sample.prompt,
+      background: sample.background ?? '',
       harness: sample.harness ?? null,
       model: null,
       cwd: sample.cwd ?? null,
@@ -406,6 +412,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
           suggestions: samples.map((sample) => ({
             title: sample.title,
             prompt: sample.prompt,
+            ...(sample.background ? { background: sample.background } : {}),
             ...(sample.harness ? { harness: sample.harness } : {}),
             ...(sample.cwd ? { cwd: sample.cwd } : {}),
           })),
@@ -441,6 +448,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
           {
             title: proposal.title,
             prompt: proposal.prompt,
+            ...(proposal.background ? { background: proposal.background } : {}),
             initiation: 'propose',
             ...(proposal.harness ? { harness: proposal.harness } : {}),
             ...(proposal.cwd ? { cwd: proposal.cwd } : {}),
@@ -493,6 +501,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
       id: host.nextId('pr'),
       title: text.offer.title,
       prompt: '',
+      background: '',
       harness: null,
       model: null,
       cwd: null,
@@ -548,6 +557,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
       const sessionId = startChild(view, {
         title: text.offer.title,
         prompt: text.offer.prompt,
+        background: text.offer.background ?? '',
         harness: null,
         kind: 'fresh',
         origin: 'proposal',
@@ -562,6 +572,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
             ? {
                 ...entry,
                 prompt: text.offer.prompt,
+                background: text.offer.background ?? '',
                 status: 'started',
                 settledAt: host.now(),
                 startedId: sessionId,
@@ -572,7 +583,11 @@ export function createMockTree(host: MockTreeHost): MockTree {
       host.apply(view, [
         sessionsCall(
           turnId,
-          { proposal_id: proposalId, prompt: text.offer.prompt },
+          {
+            proposal_id: proposalId,
+            prompt: text.offer.prompt,
+            ...(text.offer.background ? { background: text.offer.background } : {}),
+          },
           { thread_id: sessionId, note: 'Started.' },
           'accept',
         ),
@@ -613,12 +628,13 @@ export function createMockTree(host: MockTreeHost): MockTree {
     const sessionId = startChild(view, {
       title: overrides.title?.trim() || proposal.title,
       prompt: overrides.prompt?.trim() || proposal.prompt,
+      background: overrides.background ?? proposal.background,
       harness: overrides.harness ?? proposal.harness,
       kind: overrides.kind ?? proposal.kind,
       origin: 'proposal',
       wakeParent: overrides.wakeParent ?? proposal.wakeParent,
       // 简报改过了，写好的那句回话就对不上了
-      reply: overrides.prompt ? null : reply,
+      reply: overrides.prompt || overrides.background !== undefined ? null : reply,
       settings: {
         ...(overrides.model || proposal.model ? { model: overrides.model ?? proposal.model } : {}),
         ...(overrides.effort ? { effort: overrides.effort } : {}),
@@ -987,6 +1003,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
         const sessionId = startChild(parent, {
           title: rest.title.trim() || rest.prompt.split('\n')[0]?.slice(0, 40) || '…',
           prompt: rest.prompt,
+          ...(rest.background ? { background: rest.background } : {}),
           harness: rest.harness ?? null,
           kind: rest.kind,
           origin: 'user',

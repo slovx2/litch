@@ -226,6 +226,8 @@ function gate(tree: SessionTree, call: DeviceToolCall, title: string): void {
 interface Spec {
   title: string
   prompt: string
+  /** 任务之前的背景；fork 是空串（不记） */
+  background: string
   harness: string | undefined
   model: string | undefined
   cwd: string | undefined
@@ -237,7 +239,7 @@ function targetOf(
   args: Record<string, unknown>,
   call: DeviceToolCall,
   tree: SessionTree,
-): Omit<Spec, 'title' | 'prompt'> {
+): Omit<Spec, 'title' | 'prompt' | 'background'> {
   const harness = string(args, 'harness')
   const model = string(args, 'model')
   const cwd = string(args, 'cwd')
@@ -251,26 +253,34 @@ function targetOf(
   return { harness, model, cwd, kind }
 }
 
-/** 读一条 start 或建议的参数并查一遍：标题、简报、harness、fork 只能同 harness、fresh 简报的宽度 */
+/**
+ * 读一条 start 或建议的参数并查一遍：标题、任务、harness、fork 只能同 harness、fresh 背景的宽度。
+ * 任务只要非空；fork 带着整段对话，背景不查也不记
+ */
 function specOf(args: Record<string, unknown>, call: DeviceToolCall, tree: SessionTree): Spec {
   const title = string(args, 'title', true)
   const prompt = string(args, 'prompt', true)
   const target = targetOf(args, call, tree)
-  const given = target.kind
-  if (prompt.length > SESSION_TOOL_LIMITS.messageChars)
+  const fresh = target.kind === 'fresh'
+  const background = fresh ? (string(args, 'background') ?? '') : ''
+  for (const [name, value] of [
+    ['prompt', prompt],
+    ['background', background],
+  ] as const)
+    if (value.length > SESSION_TOOL_LIMITS.messageChars)
+      throw new Refused(
+        'invalid',
+        `${name} is longer than ${SESSION_TOOL_LIMITS.messageChars} characters; shorten it and point to files instead.`,
+      )
+  // fresh 的子会话看不到这个会话：背景太短的不管直接起还是变成提案都拒绝。按显示宽度算，汉字这类等宽字符算 2
+  const width = textWidth(background.trim())
+  const least = SESSION_TOOL_LIMITS.freshBackgroundMinWidth
+  if (fresh && width < least)
     throw new Refused(
       'invalid',
-      `prompt is longer than ${SESSION_TOOL_LIMITS.messageChars} characters.`,
+      `background is ${width === 0 ? 'missing' : `too short (width ${width}; each CJK or other full-width character counts as 2, everything else as 1)`}: a fresh session cannot see this conversation, so background needs a width of at least ${least} (about ${least / 2} Chinese characters or ${least} English letters). Write it for someone who has not read any of this: the overall goal, what has been decided or ruled out so far, the constraints, and how this piece fits in; keep the task itself in prompt. Then try again.`,
     )
-  // fresh 的子会话只知道这段简报：太短的不管直接起还是变成提案都拒绝。按显示宽度算，汉字这类等宽字符算 2
-  const width = textWidth(prompt.trim())
-  const least = SESSION_TOOL_LIMITS.freshPromptMinWidth
-  if (given === 'fresh' && width < least)
-    throw new Refused(
-      'invalid',
-      `prompt is too short (width ${width}; each CJK or other full-width character counts as 2, everything else as 1): a fresh session knows nothing but this text, so it needs a width of at least ${least} (about ${least / 2} Chinese characters or ${least} English letters). State the task, the files or area, and what done looks like, then try again.`,
-    )
-  return { title, prompt, ...target }
+  return { title, prompt, background, ...target }
 }
 
 /** 目标 harness 收不到父会话那么严时子会话实际会是的那一档沙箱；收得紧、判断不了是 null */
@@ -290,6 +300,7 @@ function proposeOne(
     threadId: call.threadId,
     title,
     prompt: spec.prompt,
+    background: spec.background,
     harness: spec.harness ?? null,
     model: spec.model ?? null,
     cwd: spec.cwd ?? null,
@@ -330,6 +341,7 @@ async function start(
         kind: spec.kind,
         title: spec.title,
         prompt: spec.prompt,
+        background: spec.background,
         wakeParent: true,
       },
       'model',
@@ -364,10 +376,13 @@ async function offer(
   signal: AbortSignal,
 ): Promise<SessionsStartResult> {
   const title = string(args, 'title', true).trim().slice(0, 120)
-  if (args.prompt !== undefined && args.prompt !== null)
+  if (
+    (args.prompt !== undefined && args.prompt !== null) ||
+    (args.background !== undefined && args.background !== null)
+  )
     throw new Refused(
       'invalid',
-      'An offer takes the title only. Call start again with initiation "offer" and no prompt; if the user chooses a new session, you pass the brief to accept.',
+      'An offer takes the title only. Call start again with initiation "offer" and no prompt or background; if the user chooses a new session, you pass the brief to accept.',
     )
   const target = targetOf(args, call, tree)
   if (!tree.isUserTurn(call.harness, call.turnId))
@@ -380,6 +395,7 @@ async function offer(
     threadId: call.threadId,
     title,
     prompt: '',
+    background: '',
     harness: target.harness ?? null,
     model: target.model ?? null,
     cwd: target.cwd ?? null,
@@ -401,7 +417,7 @@ async function offer(
 function offerNote(proposal: SessionProposal, outcome: OfferOutcome): string {
   const title = `"${proposal.title}"`
   if (outcome.choice === 'session')
-    return `The user chose a new session for ${title}. Now call litch_sessions.accept with proposal_id ${proposal.id} and the full brief in prompt: the task, the files or area, and what done looks like (a fresh session knows nothing else; a width of at least ${SESSION_TOOL_LIMITS.freshPromptMinWidth}, each CJK character counts as 2). Add harness, model, cwd or kind only if they should differ from this session. Do not do the work here.`
+    return `The user chose a new session for ${title}. Now call litch_sessions.accept with proposal_id ${proposal.id} and the full brief. A fresh session cannot see this conversation, so give it background (the overall goal, what has been decided so far, the constraints, how this fits in; a width of at least ${SESSION_TOOL_LIMITS.freshBackgroundMinWidth}, each CJK character counts as 2) and prompt (the task, the files or area, and what done looks like). Add harness, model, cwd or kind only if they should differ from this session. Do not do the work here.`
   switch (outcome.reason) {
     case 'spoke':
       return `The user sent a new message instead of choosing, which counts as doing ${title} here. Read their new message and go on in this session; do not start a session for it.`
@@ -442,7 +458,10 @@ async function wrapUp(
     const title = isObject(one) && typeof one.title === 'string' ? one.title.trim() : ''
     try {
       if (!isObject(one))
-        throw new Refused('invalid', 'Each suggestion must be an object with title and prompt.')
+        throw new Refused(
+          'invalid',
+          'Each suggestion must be an object with title, prompt and (for fresh) background.',
+        )
       const spec = specOf(one, call, tree)
       const proposal = proposeOne(tree, call, spec, await widerFor(tree, call, spec))
       suggestions.push({ title: proposal.title, proposal_id: proposal.id })
@@ -491,7 +510,7 @@ const settledWord: Record<Exclude<SessionProposal['status'], 'pending' | 'starte
 }
 
 /** accept 里只有开始 offer 卡时才给的简报字段 */
-const BRIEF_FIELDS = ['prompt', 'title', 'harness', 'model', 'cwd', 'kind'] as const
+const BRIEF_FIELDS = ['prompt', 'background', 'title', 'harness', 'model', 'cwd', 'kind'] as const
 
 /**
  * 用户在这个回合里让开始某张提案：按提案原样起（同用户点“开始”），只在用户亲手发起的回合里允许。
@@ -514,7 +533,7 @@ async function accept(
   if (BRIEF_FIELDS.some((name) => args[name] !== undefined && args[name] !== null))
     throw new Refused(
       'invalid',
-      `prompt, title, harness, model, cwd and kind are only for an offer the user answered with "New session"; proposal ${proposalId} starts as it was proposed. Call accept again with proposal_id only.`,
+      `prompt, background, title, harness, model, cwd and kind are only for an offer the user answered with "New session"; proposal ${proposalId} starts as it was proposed. Call accept again with proposal_id only.`,
     )
   // 正在被用户点开始：等它起完，按已经开始了答
   const running = tree.accepting.get(proposalId)
@@ -551,7 +570,7 @@ async function accept(
 }
 
 /**
- * 开始一张自己的 offer 卡：用户选了新会话（chosen），模型补上简报。必须带 prompt，fresh 照简报宽度门槛查；
+ * 开始一张自己的 offer 卡：用户选了新会话（chosen），模型补上简报。必须带 prompt，fresh 还要带够宽的 background；
  * title、harness、model、cwd、kind 不给的照卡上的。不要求用户发起的回合（用户在卡上选新会话就是同意）。
  * 目标 harness 收不到这个会话那么严的不起（没有卡片让用户看过再点）
  */
@@ -589,12 +608,13 @@ async function acceptOffer(
   if (typeof prompt !== 'string' || !prompt.trim())
     throw new Refused(
       'invalid',
-      `prompt is required: the user chose a new session for "${proposal.title}", so pass the full brief in prompt (the task, the files or area, what done looks like).`,
+      `prompt is required: the user chose a new session for "${proposal.title}", so pass the full brief: prompt (the task, the files or area, what done looks like) and, for fresh, background (the context it cannot see).`,
     )
   const spec = specOf(
     {
       title: args.title ?? proposal.title,
       prompt,
+      background: args.background,
       harness: args.harness ?? proposal.harness,
       model: args.model ?? proposal.model,
       cwd: args.cwd ?? proposal.cwd,
@@ -615,6 +635,7 @@ async function acceptOffer(
     {
       title: spec.title,
       prompt: spec.prompt,
+      background: spec.background,
       // 空字符串是用缺省（这个会话的）
       harness: spec.harness ?? '',
       model: spec.model ?? '',

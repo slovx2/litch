@@ -97,7 +97,7 @@ test('投影：子代理调用带上每个子线程的状态；litch_sessions.st
     id: 'd1',
     namespace: 'litch_sessions',
     tool: 'start',
-    arguments: { title: '查依赖', prompt: '看看', harness: 'pi' },
+    arguments: { title: '查依赖', prompt: '看看', background: '要发版了', harness: 'pi' },
     status: 'completed',
     contentItems: [{ type: 'inputText', text: JSON.stringify({ thread_id: 'c9', note: 'ok' }) }],
     success: true,
@@ -110,6 +110,7 @@ test('投影：子代理调用带上每个子线程的状态；litch_sessions.st
     choice: null,
     title: '查依赖',
     prompt: '看看',
+    background: '要发版了',
     harness: 'pi',
     model: null,
     cwd: null,
@@ -190,6 +191,7 @@ test('投影：子代理调用带上每个子线程的状态；litch_sessions.st
     choice: null,
     title: '整理排序',
     prompt: '1. 换成稳定排序\n2. 补单测',
+    background: '',
     harness: null,
     model: null,
     cwd: null,
@@ -325,6 +327,7 @@ test('投影：提案连了结的一起留，按提出的先后排；还等着�
       turnId: 't1',
       callId: 'call1',
       cwd: '/w/a',
+      background: '这一轮在提速',
     },
     { ...base, id: 'old', title: '过期', createdAt: 5, expiresAt: NOW / 1000 - 1 },
     {
@@ -353,6 +356,8 @@ test('投影：提案连了结的一起留，按提出的先后排；还等着�
   assert.equal(views[1]?.startedId, 'c9')
   assert.equal(views[1]?.settledAt, 7000)
   assert.deepEqual([views[2]?.turnId, views[2]?.callId, views[2]?.cwd], ['t1', 'call1', '/w/a'])
+  // 背景：给了的照给的，旧设备进程没带的是空串
+  assert.deepEqual([views[2]?.background, views[3]?.background], ['这一轮在提速', ''])
   // 等着的过了期，界面现算成过期
   const pending = views[3]
   assert.ok(pending)
@@ -680,8 +685,14 @@ const wrapUpItem = (id: string, suggestions: unknown[], result?: unknown) =>
 
 test('投影：收尾调用的每条建议按顺序对上结果里的提案或拒绝原因；空的不画，带建议的是卡片', () => {
   const asked = [
-    { title: '补测试', prompt: '给解析器补测试', harness: 'pi', cwd: '~/x' },
-    { title: '对文案', prompt: '逐键对一遍', kind: 'fork' },
+    {
+      title: '补测试',
+      prompt: '给解析器补测试',
+      background: '解析刚改过',
+      harness: 'pi',
+      cwd: '~/x',
+    },
+    { title: '对文案', prompt: '逐键对一遍', background: 'fork 不用', kind: 'fork' },
     { title: '看看', prompt: '看看' },
   ]
   // 还没有结果：都是 null；参数一开始就有，所以开始时就定了画成卡片
@@ -709,6 +720,7 @@ test('投影：收尾调用的每条建议按顺序对上结果里的提案或�
     {
       title: '补测试',
       prompt: '给解析器补测试',
+      background: '解析刚改过',
       harness: 'pi',
       model: null,
       cwd: '~/x',
@@ -719,6 +731,7 @@ test('投影：收尾调用的每条建议按顺序对上结果里的提案或�
     {
       title: '对文案',
       prompt: '逐键对一遍',
+      background: '',
       harness: null,
       model: null,
       cwd: null,
@@ -729,6 +742,7 @@ test('投影：收尾调用的每条建议按顺序对上结果里的提案或�
     {
       title: '看看',
       prompt: '看看',
+      background: '',
       harness: null,
       model: null,
       cwd: null,

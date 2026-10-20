@@ -3,9 +3,11 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { parseSessionEvent } from '../../protocol/src/session-tree.mjs'
+import { briefing } from '../src/session-start.mjs'
 import { failureOf, resultOf } from './fake-engine.mjs'
 import { settle } from './helpers.mjs'
 import {
+  BACKGROUND,
   brief,
   got,
   litch,
@@ -37,7 +39,7 @@ test('SESSION-TREE-001：用户回合里模型派一个跨 harness 的子会话�
     const { threadId } = await parent(client)
     const call = await env.pi.callTool(threadId, SESSIONS, 'start', {
       title: '查一下构建为什么慢',
-      prompt: brief('在 /work/app 里跑一遍构建，找出最慢的三步。'),
+      ...brief('在 /work/app 里跑一遍构建，找出最慢的三步。'),
       harness: 'claude-code',
       initiation: 'user_asked',
     })
@@ -60,6 +62,10 @@ test('SESSION-TREE-001：用户回合里模型派一个跨 harness 的子会话�
     assert.match(briefed.input[0].text, new RegExp(threadId))
     assert.match(briefed.input[0].text, /Task: 查一下构建为什么慢/)
     assert.match(briefed.input[0].text, /找出最慢的三步/)
+    // 背景单成一段，在任务前面
+    const first: string = briefed.input[0].text
+    assert.ok(first.indexOf(`Background:\n${BACKGROUND}`) > 0)
+    assert.ok(first.indexOf('Background:') < first.indexOf('Task: '))
     assert.match(briefed.input[0].text, /passes the beginning of your final answer back/)
     // 声明了 sessionTree 的连接：thread/started、父子关系的通知、列表和读取里都有 litchLineage
     const born = await startedOn(client, 'claude-code-t1')
@@ -91,6 +97,40 @@ test('SESSION-TREE-001：用户回合里模型派一个跨 harness 的子会话�
   } finally {
     await env.close()
   }
+})
+
+test('SESSION-TREE-BRIEF：fresh 的第一条消息分“背景 / 任务”两段，开头一句 [Litch]、结尾回报说明；没背景、fork、交接不放背景', () => {
+  const parent = { id: 'p1', harness: 'pi', title: '主会话' }
+  const tail = /\n\nWhen you are done, end your turn with a short summary/
+  const fresh = briefing(
+    'fresh',
+    parent,
+    '查构建',
+    '找出最慢的三步。',
+    false,
+    '  这一轮在提速 CI。  ',
+  )
+  const [head, background, task, rest] = fresh.split('\n\n')
+  assert.match(
+    head ?? '',
+    /^\[Litch\] Another session on this device started this one: "主会话" \(p1, pi\)/,
+  )
+  assert.equal(background, 'Background:\n这一轮在提速 CI。')
+  assert.equal(task, 'Task: 查构建')
+  assert.equal(rest, '找出最慢的三步。')
+  assert.match(fresh, tail)
+  // 没给背景：照旧，标题后面直接是任务
+  const plainBrief = briefing('fresh', parent, '查构建', '找出最慢的三步。')
+  assert.doesNotMatch(plainBrief, /Background:/)
+  assert.equal(plainBrief.split('\n\n')[1], 'Task: 查构建')
+  // fork 带着整段对话：给了背景也不放
+  const fork = briefing('fork', parent, '换个办法', '试试缓存。', false, '不该出现')
+  assert.match(fork, /^\[Litch\] This session is a fork of/)
+  assert.doesNotMatch(fork, /Background:|不该出现/)
+  assert.match(fork, tail)
+  const handOff = briefing('fork', parent, '接着做', '剩下两步。', true, '不该出现')
+  assert.match(handOff, /Remaining plan:\n剩下两步。/)
+  assert.doesNotMatch(handOff, /Background:|不该出现/)
 })
 
 test('SESSION-TREE-002：fork 用同 harness 的 thread/fork；跨 harness 的 fork、不认识的 harness、空标题都是参数不对', async () => {
@@ -136,7 +176,7 @@ test('SESSION-TREE-003：不是用户发起的回合里说 user_asked 也只出�
     env.pi.selfTurn(threadId)
     const asked = await env.pi.callTool(threadId, SESSIONS, 'start', {
       title: '整理日志',
-      prompt: brief('把 logs 里的错误按类归一下。'),
+      ...brief('把 logs 里的错误按类归一下。'),
       harness: 'claude-code',
       initiation: 'user_asked',
     })
@@ -149,7 +189,7 @@ test('SESSION-TREE-003：不是用户发起的回合里说 user_asked 也只出�
       (
         await env.pi.callTool(threadId, SESSIONS, 'start', {
           title: '再看看',
-          prompt: brief('随便看看。'),
+          ...brief('随便看看。'),
         })
       )?.answer,
     )
@@ -215,7 +255,7 @@ test('SESSION-TREE-004：子会话一回合结束进父会话的队列；父会�
       (
         await env.pi.callTool(threadId, SESSIONS, 'start', {
           title: '跑测试',
-          prompt: brief('跑一遍测试。'),
+          ...brief('跑一遍测试。'),
           harness: 'claude-code',
           initiation: 'user_asked',
         })
@@ -257,7 +297,7 @@ async function family(env: ReturnType<typeof treeRig>, wake = true) {
         (
           await env.pi.callTool(threadId, SESSIONS, 'start', {
             title: '子任务',
-            prompt: brief('做点事。'),
+            ...brief('做点事。'),
             harness: 'claude-code',
             initiation: 'user_asked',
           })
@@ -269,7 +309,7 @@ async function family(env: ReturnType<typeof treeRig>, wake = true) {
           harness: 'claude-code',
           kind: 'fresh',
           title: '子任务',
-          prompt: brief('做点事。'),
+          ...brief('做点事。'),
           wakeParent: false,
         })
       ).threadId as string)
@@ -331,7 +371,7 @@ test('SESSION-TREE-006：不要唤醒的子会话、用户自己在子会话里�
     env.pi.end(threadId)
     const other = await env.pi.callTool(threadId, SESSIONS, 'start', {
       title: '另一个',
-      prompt: brief('做点别的。'),
+      ...brief('做点别的。'),
       harness: 'claude-code',
       initiation: 'propose',
     })
@@ -534,7 +574,7 @@ test('SESSION-TREE-013：目标 harness 收不到父会话那么严：用户回�
       (
         await env.pi.callTool(threadId, SESSIONS, 'start', {
           title: '没沙箱的',
-          prompt: brief('做点事。'),
+          ...brief('做点事。'),
           harness: 'claude-code',
           initiation: 'user_asked',
         })
@@ -550,7 +590,7 @@ test('SESSION-TREE-013：目标 harness 收不到父会话那么严：用户回�
       (
         await env.pi.callTool(threadId, SESSIONS, 'start', {
           title: '同一家的',
-          prompt: brief('也做点事。'),
+          ...brief('也做点事。'),
           initiation: 'user_asked',
         })
       )?.answer,

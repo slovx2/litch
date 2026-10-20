@@ -98,6 +98,8 @@ const MIGRATIONS: readonly string[] = [
    ) WITHOUT ROWID;`,
   // offer 卡（litch_sessions.start 的 initiation offer）：只带标题出“新会话 / 在这里做”的卡，状态从 offered 起
   `ALTER TABLE proposals ADD COLUMN offer INTEGER NOT NULL DEFAULT 0;`,
+  // 提案的背景（litch_sessions 的 background）和任务（prompt）分开存，开始时分两段交给子会话。旧提案没有背景
+  `ALTER TABLE proposals ADD COLUMN background TEXT NOT NULL DEFAULT '';`,
 ]
 
 export const SESSION_SCHEMA_VERSION = MIGRATIONS.length
@@ -183,6 +185,7 @@ function proposalOf(row: Row): SessionProposal {
     threadId: text(row.thread_id),
     title: text(row.title),
     prompt: text(row.prompt),
+    background: text(row.background),
     harness: maybe(row.harness),
     model: maybe(row.model),
     cwd: maybe(row.cwd),
@@ -219,8 +222,8 @@ export class SessionStore {
       detach: prepare('UPDATE lineage SET detached_at=? WHERE thread_id=?'),
       reported: prepare('UPDATE lineage SET reported_turn=? WHERE thread_id=?'),
       addProposal: prepare(
-        `INSERT INTO proposals(id, thread_id, title, prompt, harness, model, cwd, kind, wake_parent, status, created_at, expires_at, wider_sandbox, turn_id, call_id, offer)
-         VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO proposals(id, thread_id, title, prompt, harness, model, cwd, kind, wake_parent, status, created_at, expires_at, wider_sandbox, turn_id, call_id, offer, background)
+         VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ),
       proposal: prepare('SELECT * FROM proposals WHERE id=?'),
       // 还在等的：等用户点的卡、等用户选的 offer 卡、用户选了新会话等模型补简报的
@@ -386,9 +389,11 @@ export class SessionStore {
       proposal.turnId ?? null,
       proposal.callId ?? null,
       proposal.offer ? 1 : 0,
+      proposal.background ?? '',
     )
     return {
       ...proposal,
+      background: proposal.background ?? '',
       status,
       startedThreadId: null,
       settledAt: null,

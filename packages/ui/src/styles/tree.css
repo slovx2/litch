@@ -206,6 +206,11 @@ button.sev-title {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+.prop-brief-label {
+  display: block;
+  color: var(--ink-3);
+  font-size: 11px;
+}
 .prop-brief[data-open="false"] {
   display: -webkit-box;
   -webkit-line-clamp: 3;

@@ -53,8 +53,10 @@ export type ProposalStatus =
 export interface SessionProposalView {
   id: string
   title: string
-  /** 起子会话时发给它的第一段话 */
+  /** 起子会话时发给它的任务 */
   prompt: string
+  /** 任务之前的背景（给没看过父会话的人看的整体目标、决定与约束）。fork、旧提案、对面没给是空的 */
+  background: string
   /** 子会话的 harness。null 是跟父会话一样 */
   harness: HarnessId | null
   model: string | null
@@ -154,6 +156,8 @@ export interface ProposalOverrides {
   kind?: LineageKind
   title?: string
   prompt?: string
+  /** 空串是去掉提案里的背景 */
+  background?: string
   sandbox?: SandboxLevel
   /** 子会话停下后要不要唤醒父会话。不给的照提案里的 */
   wakeParent?: boolean
@@ -245,8 +249,10 @@ export interface SpawnedView {
   choice: OfferChoice | null
   /** 调用时给的标题 */
   title: string
-  /** 调用时给的第一段话（提案卡片在拿不到提案时照它画）；hand_off 是剩下的计划；offer 是空的 */
+  /** 调用时给的任务（提案卡片在拿不到提案时照它画）；hand_off 是剩下的计划；offer 是空的 */
   prompt: string
+  /** 调用时给的背景；没给、fork、hand_off、offer 是空的 */
+  background: string
   /** 调用时给的 harness，没给是 null（跟父会话一样） */
   harness: HarnessId | null
   /** 调用时给的模型、目录，没给是 null */
@@ -259,6 +265,8 @@ export interface SpawnedView {
 export interface WrapUpSuggestionView {
   title: string
   prompt: string
+  /** 背景；没给、fork 是空的 */
+  background: string
   /** 没给是 null（跟父会话一样） */
   harness: HarnessId | null
   model: string | null
