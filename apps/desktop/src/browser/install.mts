@@ -11,6 +11,7 @@ import {
   ipcMain,
   shell,
 } from 'electron'
+import { installBrowserImport } from '../browser-import/install.mjs'
 import { fileDeviceStore } from '../device-store.mjs'
 import { createElectronHost, type ElectronBrowserHost, type Rect } from './electron-host.mjs'
 import { type BrowserExecutor, createBrowserExecutor } from './executor.mjs'
@@ -262,6 +263,9 @@ export function installBrowser(options: {
     await settings.clearData()
     return true
   })
+
+  // 从别的浏览器导入：window.litchBrowser.import 的几条消息（browser-import/install.mts）
+  installBrowserImport({ fromUi, userData: options.userData })
 
   return { executor, host, sites, settings, forwarding }
 }
