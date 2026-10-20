@@ -15,6 +15,7 @@ import {
   type HarnessAuthStartResponse,
   type HarnessAuthStep,
   type HarnessAuthUpdatedNotification,
+  type HarnessConfigChangedNotification,
   HARNESS_CONFIG_METHOD as M,
 } from '../../protocol/src/harness-config.mjs'
 import type { Ask } from './codex-config-io.mjs'
@@ -59,6 +60,10 @@ export function callbackPort(url: string): number | null {
     return null
   }
 }
+
+type Part = HarnessConfigChangedNotification['part']
+/** 落在 config.toml 用户层上的几块（见 announce） */
+const SHARED_PARTS: readonly Part[] = ['config', 'providers', 'mcp', 'models']
 
 export class CodexHarnessConfig implements HarnessConfigTranslator {
   private readonly context: TranslatorContext
@@ -145,13 +150,19 @@ export class CodexHarnessConfig implements HarnessConfigTranslator {
     }
   }
 
+  /**
+   * 告诉各条连接哪几块变了。配置、provider、MCP、模型清单落在同一份 config.toml 用户层上、共用一个版本：
+   * 改了其中一块，另外几块手里的旧版本也就作废了，所以一并告诉，让它们重读拿到新版本。指令文件是单独的文件。
+   */
+  private announce(part: Part): void {
+    for (const each of SHARED_PARTS.includes(part) ? SHARED_PARTS : [part])
+      this.context.changed(each)
+  }
+
   /** 写成了就告诉各条连接这一块变了 */
-  private async changing<T>(
-    part: 'config' | 'providers' | 'mcp' | 'instructions' | 'models',
-    work: Promise<T>,
-  ): Promise<T> {
+  private async changing<T>(part: Part, work: Promise<T>): Promise<T> {
     const result = await work
-    this.context.changed(part)
+    this.announce(part)
     return result
   }
 
@@ -246,7 +257,7 @@ export class CodexHarnessConfig implements HarnessConfigTranslator {
         if (!apiKey) throw this.invalid('要填 API key', 'An API key is required')
         await this.ask('account/login/start', { type: 'apiKey', apiKey })
         const auth = await openaiAuth(this.ask, this.context.home())
-        this.context.changed('providers')
+        this.announce('providers')
         return { attemptId: randomUUID(), step: { kind: 'done', auth } }
       }
       default:
@@ -290,7 +301,7 @@ export class CodexHarnessConfig implements HarnessConfigTranslator {
         'Only OpenAI has a sign-in to log out of',
       )
     await this.ask('account/logout', {})
-    this.context.changed('providers')
+    this.announce('providers')
     return {}
   }
 
@@ -344,7 +355,7 @@ export class CodexHarnessConfig implements HarnessConfigTranslator {
       }
       void openaiAuth(this.ask, this.context.home()).then((auth) => {
         this.report(loginId, attempt, { kind: 'done', auth })
-        this.context.changed('providers')
+        this.announce('providers')
       })
       return
     }
@@ -366,7 +377,7 @@ export class CodexHarnessConfig implements HarnessConfigTranslator {
               ),
             }
       this.report(attemptId, attempt, step)
-      if (params.success === true) this.context.changed('mcp')
+      if (params.success === true) this.announce('mcp')
     }
   }
 

@@ -500,6 +500,11 @@ test('模型清单：config 说有才接着读；整份写、要重启；自己�
   assert.equal(models()?.data?.version, 'c1x')
   assert.equal(models()?.revision, 0, '自己写的那一下不算被别处改过')
   assert.equal(pi.seen.view?.restartRequired, true)
+  // 几块共用一个文件时设备把别的几块也报成变了：那是自己写引出来的，重读但不记成别处改过
+  const configRevision = pi.seen.view?.config.revision
+  w.broadcast('litch/harness/config/changed', { harness: 'pi', part: 'config' })
+  await drain()
+  assert.equal(pi.seen.view?.config.revision, configRevision)
 
   // 过了回声的时间，别处改的才算
   w.time.advance(5_000)

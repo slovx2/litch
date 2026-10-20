@@ -180,8 +180,19 @@ test('models/write：生成完整的 ModelInfo、改指向、发通知；读回�
     assert.equal(old.auto_compact_token_limit, undefined, '改了窗口就去掉旧的压缩门槛')
     assert.equal(old.max_context_window, undefined)
     assert.ok(!('litch_base' in a))
-    const frame = await client.waitFor((item) => item.method === CHANGED)
+    const frame = await client.waitFor(
+      (item) =>
+        item.method === CHANGED &&
+        (item.params as { part?: string } | undefined)?.part === 'models',
+    )
     assert.deepEqual(frame.params, { harness: 'codex', part: 'models' })
+    // 配置、provider、MCP 和清单共用 config.toml 的版本：一并报变了，让它们重读拿新版本
+    for (const part of ['config', 'providers', 'mcp']) {
+      await client.waitFor(
+        (item) =>
+          item.method === CHANGED && (item.params as { part?: string } | undefined)?.part === part,
+      )
+    }
     await settle(50)
     assert.ok(!plain.raw.some((text) => text.includes(CHANGED)), '没声明的连接收不到')
 

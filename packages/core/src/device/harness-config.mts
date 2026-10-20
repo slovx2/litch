@@ -556,10 +556,14 @@ export function createHarnessConfig(host: HarnessConfigHost): HarnessConfig {
           entry.stale = true
           return true
         }
-        // 自己正在写、刚写完的那一下引出来的不算“被别处改过”
-        const own =
-          (entry.writing[part] ?? 0) > 0 ||
-          host.now() - (entry.wroteAt[part] ?? -Infinity) < OWN_ECHO_MS
+        // 自己正在写、刚写完的那一下引出来的不算“被别处改过”。看的是这个 harness 的每一块：
+        // 几块落在同一个文件上时（原生 codex 的 config.toml），写了其中一块，设备会把别的几块也报成变了，
+        // 那是让它们重读拿新版本，不是别处改了它们的内容
+        const own = PARTS.some(
+          (each) =>
+            (entry.writing[each] ?? 0) > 0 ||
+            host.now() - (entry.wroteAt[each] ?? -Infinity) < OWN_ECHO_MS,
+        )
         if (!own) entry.slots[part].revision++
         void load(entry, part)
         return true
