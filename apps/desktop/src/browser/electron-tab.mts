@@ -52,6 +52,8 @@ export interface HostTab extends BrowserPage {
   destroy(): void
   /** 加一条提示（被拦下的下载之类，宿主用） */
   notice(text: string): void
+  /** 交给人登录开始、结束（passwords/handover.mts）：样子跟着变（后退、前进不可用） */
+  handoverChanged(): void
 }
 
 /** 子框架不许去的协议：本机文件、界面自己的、浏览器内部页 */
@@ -351,8 +353,9 @@ export function createTab(
         url: contents.getURL() || BLANK,
         title: contents.getTitle(),
         loading: contents.isLoading(),
-        canGoBack: history.canGoBack(),
-        canGoForward: history.canGoForward(),
+        // 交给人登录期间不许后退、前进：往返缓存会把代理执行过脚本的旧文档原样恢复回来
+        canGoBack: !isHandedOver(contents.id) && history.canGoBack(),
+        canGoForward: !isHandedOver(contents.id) && history.canGoForward(),
         agentActive,
         keep: tab.keep,
       }
@@ -385,6 +388,9 @@ export function createTab(
       const taken = notices
       notices = []
       return taken
+    },
+    handoverChanged() {
+      hooks.changed()
     },
     setAgentActive(active) {
       if (agentActive === active) return

@@ -232,6 +232,24 @@ test('人点取消：告诉代理别换别的办法登录；回合打断：卡�
   assert.equal(after.success, true, textOf(after))
 })
 
+test('同一个标签前后脚两次请人登录：第二次直接回“已在等”，不动第一次的交接', async () => {
+  const { run, signIns, asked } = setup()
+  await run('navigate', { url: 'http://localhost:3000/login' })
+  const first = run('request_sign_in', { reason: 'One.' })
+  const second = run('request_sign_in', { reason: 'Two.' })
+  const busy = textOf(await second)
+  assert.match(busy, /already waiting for the user/)
+  assert.equal(asked.length, 1)
+  const [card] = signIns.list()
+  assert.equal(signIns.list().length, 1)
+  assert.equal(card?.state, 'waiting')
+  assert.equal(card?.reason, 'One.')
+  // 第一次的交接照常：人交还了才回
+  assert.ok(card)
+  signIns.answer(card.id, 'done')
+  assert.match(textOf(await first), /finished signing in/)
+})
+
 test('登记：同一个标签一次一张在等；来源跟着导航换；答过的、撤掉的再答不算', () => {
   const signIns = createSignIns({ now: () => 5 })
   const pushed: unknown[] = []
