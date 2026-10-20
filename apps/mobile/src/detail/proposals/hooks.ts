@@ -53,15 +53,6 @@ export function useProposalClock(
   return now
 }
 
-/**
- * offer 卡上的选择：session 新会话（模型接着补简报开起来），here 在这里做。
- * 核心的 session.proposal.answer 还没合进来（乙4 在加），先照约好的名字和参数直接发；合并后删掉这个类型、去掉转换
- */
-type AnswerCommand = (
-  name: 'session.proposal.answer',
-  params: { deviceId: string; sessionId: string; proposalId: string; choice: 'session' | 'here' },
-) => Promise<Record<string, never>>
-
 /** 一张提案上的“开始”“不要”、offer 卡上的“新会话”“在这里做”：发出去、等着、没做成的原因 */
 export function useProposalAct(deviceId: string, sessionId: string, proposalId: string) {
   const channel = useChannel()
@@ -91,12 +82,7 @@ export function useProposalAct(deviceId: string, sessionId: string, proposalId: 
       run(channel.command('session.proposal.dismiss', { deviceId, sessionId, proposalId })),
     answer: (choice: 'session' | 'here') =>
       run(
-        (channel.command as unknown as AnswerCommand).call(channel, 'session.proposal.answer', {
-          deviceId,
-          sessionId,
-          proposalId,
-          choice,
-        }),
+        channel.command('session.proposal.answer', { deviceId, sessionId, proposalId, choice }),
       ),
   }
 }
