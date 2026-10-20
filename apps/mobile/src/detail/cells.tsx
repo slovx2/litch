@@ -19,6 +19,10 @@ import { noteWork } from '../probe'
 import { useKey } from '../shell/services'
 import { useT } from '../ui/i18n'
 import { type Palette, useTheme } from '../ui/theme'
+import { CommentCards, commentsOfRow } from './comments/CommentCards'
+import { useComments, useFlashedRow } from './comments/context'
+import { notePressedAnswer } from './comments/hub'
+import { linkCommentRefs, parseCommentHref } from './comments/refs'
 import { useTranscript } from './context'
 import { linkify } from './links'
 import { labelMermaid } from './mermaid'
@@ -36,10 +40,17 @@ export const UserCell = memo(function UserCell({ row }: Props<'user'>) {
   const { turnMenu, viewImage } = useTranscript()
   const images = row.attachments.filter((each) => each.kind === 'image' && each.url)
   const others = row.attachments.filter((each) => !(each.kind === 'image' && each.url))
+  // 开头带评论的：评论画成卡片，下面才是打的字
+  const comments = commentsOfRow(row)
+  const text = comments ? comments.rest : row.text
+  const menu = () => {
+    notePressedAnswer(row.turnId, null)
+    turnMenu(row.turnId)
+  }
   return (
     <View style={styles.userWrap}>
       <Pressable
-        onLongPress={() => turnMenu(row.turnId)}
+        onLongPress={menu}
         style={({ pressed: down }) => [
           styles.userBubble,
           { backgroundColor: c.sunken, borderColor: c.line2 },
@@ -83,10 +94,11 @@ export const UserCell = memo(function UserCell({ row }: Props<'user'>) {
             ))}
           </View>
         ) : null}
-        {row.text ? (
-          <Text style={[styles.userText, { color: c.ink, fontSize: font.size.body }]}>
-            {row.text}
-          </Text>
+        {comments ? (
+          <CommentCards comments={comments.comments} turnId={row.turnId} onLongPress={menu} />
+        ) : null}
+        {text ? (
+          <Text style={[styles.userText, { color: c.ink, fontSize: font.size.body }]}>{text}</Text>
         ) : null}
       </Pressable>
     </View>
@@ -120,7 +132,11 @@ function markdownStyleOf(c: Palette, mono: string): MarkdownStyle {
     blockquote: { borderColor: c.line2, color: c.ink2 },
     link: { color: c.accent, underline: true },
     // 文件路径和网址一个颜色，只是不画下划线：改写前后字形一样（links.ts）
-    linkVariants: { '^litch-file:': { color: c.accent, underline: false } },
+    linkVariants: {
+      '^litch-file:': { color: c.accent, underline: false },
+      // 回答里指向评论的 [N]（comments/refs.ts）：一个小记号
+      '^litch-comment:': { color: c.accent, underline: false, backgroundColor: c.sel },
+    },
     table: { borderColor: c.line2, headerBackgroundColor: c.sunken, color: c.ink },
   } as MarkdownStyle
   styleCache.set(c, style)
@@ -141,6 +157,8 @@ export const MarkdownCell = memo(function MarkdownCell({ row }: Props<'md'>) {
   const { c, font } = useTheme()
   const t = useT()
   const { scope, openLink, turnMenu } = useTranscript()
+  const hub = useComments()
+  const flashed = useFlashedRow(row.key)
   const { width } = useWindowDimensions()
   const [, setFrozenAt] = useState(0)
   const known = frozen.get(row)
@@ -152,7 +170,16 @@ export const MarkdownCell = memo(function MarkdownCell({ row }: Props<'md'>) {
           frozen.set(row, { width, height: event.nativeEvent.layout.height })
           setFrozenAt(Date.now())
         }
-  const markdown = labelMermaid(linkedText(row, scope), t('mermaid.onDesktop'))
+  // 紧跟在带评论的用户消息之后、同一回合里的回答：[N] 画成能点的“评论 N”
+  const comments = hub && !row.plan ? hub.commentsOf(row.turnId) : null
+  const refs = comments ? { count: comments.comments.length, t } : null
+  const markdown = labelMermaid(linkedText(row, scope, refs), t('mermaid.onDesktop'))
+  const onLink = (url: string) => {
+    const index = parseCommentHref(url)
+    if (index === null) return openLink(url)
+    const comment = comments?.comments[index - 1]
+    if (comment) hub?.show({ comment, turnId: row.turnId })
+  }
   const body =
     experiment.render === 'plain' ? (
       <Text style={{ fontSize: 15, lineHeight: 22, color: c.ink }}>{row.text}</Text>
@@ -163,15 +190,23 @@ export const MarkdownCell = memo(function MarkdownCell({ row }: Props<'md'>) {
         markdownStyle={markdownStyleOf(c, font.mono)}
         selectable={false}
         streamingConfig={streamingConfig}
-        onLinkPress={(event) => openLink(event.url)}
+        onLinkPress={(event) => onLink(event.url)}
         containerStyle={height === null ? undefined : { height }}
         onLayout={freeze}
       />
     )
   return (
     <Pressable
-      onLongPress={() => turnMenu(row.turnId)}
-      style={[styles.md, row.plan ? [styles.plan, { borderLeftColor: c.line3 }] : null]}
+      onLongPress={() => {
+        notePressedAnswer(row.turnId, row.itemId)
+        turnMenu(row.turnId)
+      }}
+      style={[
+        styles.md,
+        row.plan ? [styles.plan, { borderLeftColor: c.line3 }] : null,
+        flashed ? { backgroundColor: c.sel } : null,
+      ]}
+      testID="answer"
     >
       {row.plan && row.first ? (
         <Text style={[styles.planTitle, { color: c.ink2, fontFamily: font.mono }]}>
@@ -186,13 +221,25 @@ export const MarkdownCell = memo(function MarkdownCell({ row }: Props<'md'>) {
 const streamingConfig = { tableMode: 'progressive', codeBlockMode: 'progressive' } as const
 
 /** 改写过链接的字，按行对象记着：滑回来的行、流式时没变的块不用再扫一遍 */
-const linked = new WeakMap<Row, { scope: FileScope | null; text: string }>()
+const linked = new WeakMap<
+  Row,
+  { scope: FileScope | null; count: number; lang: string; text: string }
+>()
 
-function linkedText(row: Extract<Row, { type: 'md' }>, scope: FileScope | null): string {
+/** refs：这一回合的用户消息带了几条评论（回答里的 [N] 改成记号，记号上的字随语言） */
+function linkedText(
+  row: Extract<Row, { type: 'md' }>,
+  scope: FileScope | null,
+  refs: { count: number; t: ReturnType<typeof useT> } | null,
+): string {
+  const count = refs?.count ?? 0
+  const lang = refs?.t.lang ?? ''
   const known = linked.get(row)
-  if (known?.scope === scope) return known.text
-  const text = linkify(row.text, scope)
-  linked.set(row, { scope, text })
+  if (known?.scope === scope && known.count === count && known.lang === lang) return known.text
+  // 先认路径和网址：它跳过已经有链接的行，评论的记号要后加
+  let text = linkify(row.text, scope)
+  if (refs) text = linkCommentRefs(text, count, (n) => refs.t('comment.ref', { n }))
+  linked.set(row, { scope, count, lang, text })
   return text
 }
 
@@ -257,7 +304,10 @@ export const StatusCell = memo(function StatusCell({ row }: Props<'status'>) {
           accessibilityRole="button"
           accessibilityLabel={t('detail.menu.more')}
           hitSlop={{ top: 10, bottom: 10, left: 14, right: 14 }}
-          onPress={() => turnMenu(row.turnId)}
+          onPress={() => {
+            notePressedAnswer(row.turnId, null)
+            turnMenu(row.turnId)
+          }}
           style={({ pressed: down }) => [styles.more, down ? pressed(c) : null]}
           testID="turn-menu"
         >

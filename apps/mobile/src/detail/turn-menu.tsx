@@ -1,5 +1,7 @@
 // 长按一个回合出来的菜单（复制、分叉、回退），看大图，和对话区底部一闪而过的提示。
 // 能不能分叉、回退照会话的声明：声明了不会的不出这一项；没声明的留着，对面说不认识了点了说为什么（照桌面端）。
+// 从一条回答上长按出来的，第一项是“评论这条回答”：打开全文页选一段加评论（comments/）。
+import { parseComments } from '@litch/core'
 import * as Clipboard from 'expo-clipboard'
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native'
@@ -8,6 +10,9 @@ import { useChannel } from '../shell/services'
 import { useT } from '../ui/i18n'
 import { Confirm, Sheet, type SheetAction } from '../ui/kit/overlays'
 import { useTheme } from '../ui/theme'
+import { useComments } from './comments/context'
+import { pressedAnswer } from './comments/hub'
+import { UNKNOWN_ITEM } from './comments/refs'
 import { refillDraft } from './refill'
 
 export const reasonOf = (error: unknown): string =>
@@ -32,6 +37,7 @@ export function TurnMenu({
   const channel = useChannel()
   const meta = useSyncExternalStore(store.subscribeMeta, store.getMeta)
   const [asking, setAsking] = useState<string | null>(null)
+  const comments = useComments()
   const { deviceId, sessionId } = store
   const declared = meta?.can.declared === true
   /** 现在做不了的原因。能做是 null */
@@ -39,6 +45,14 @@ export function TurnMenu({
     able === false ? t('ability.unsupported') : meta?.running ? t('turn.busy') : null
 
   const actions: SheetAction[] = []
+  const pressedItem = turnId ? pressedAnswer(turnId) : null
+  if (turnId && comments && pressedItem && store.kindOf(pressedItem) === 'agentMessage') {
+    actions.push({
+      label: t('comment.menu'),
+      testID: 'menu:comment',
+      onPress: () => comments.pick(pressedItem),
+    })
+  }
   if (turnId) {
     const user = store.userMessage(turnId)
     const answer = store.answerText(turnId)
@@ -89,11 +103,19 @@ export function TurnMenu({
     channel.command('session.rollback', { deviceId, sessionId, turnId }).then(
       () => {
         if (!user) return
+        // 带着评论的，评论放回输入框上面，正文只放打的字
+        const parsed = parseComments(user.text)
         refillDraft(deviceId, sessionId, {
-          text: user.text,
+          text: parsed ? parsed.rest : user.text,
           images: user.attachments.flatMap((each) =>
             each.kind === 'image' && each.url ? [{ url: each.url, name: each.label }] : [],
           ),
+          comments: (parsed?.comments ?? []).map(({ quote, note }) => ({
+            kind: 'comment',
+            itemId: UNKNOWN_ITEM,
+            quote,
+            note,
+          })),
         })
       },
       (error: unknown) => say(t('turn.rollback.failed', { reason: reasonOf(error) })),

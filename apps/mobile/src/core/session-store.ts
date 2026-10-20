@@ -193,6 +193,12 @@ export class SessionStore {
     return plan
   }
 
+  /** 一条回答的全文（加评论时选字用）。不是回答、或者已经不在了是 null */
+  itemText(itemId: string): string | null {
+    const item = this.view?.items[itemId]
+    return item?.kind === 'agentMessage' ? item.text : null
+  }
+
   readonly subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener)
     return () => this.listeners.delete(listener)
