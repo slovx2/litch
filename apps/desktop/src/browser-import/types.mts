@@ -18,7 +18,7 @@ export type BrowserId = (typeof BROWSER_IDS)[number]
 
 export type BrowserFamily = 'chromium' | 'firefox'
 
-export const IMPORT_KINDS = ['cookies', 'passwords', 'history'] as const
+export const IMPORT_KINDS = ['cookies', 'passwords'] as const
 export type ImportKind = (typeof IMPORT_KINDS)[number]
 
 export interface ImportProfile {
@@ -35,7 +35,7 @@ export interface ImportSource {
   browser: BrowserId
   /** 产品名，不翻译 */
   name: string
-  /** 读取器在这台机器上能读的（浏览记录总能读） */
+  /** 读取器在这台机器上能读的（密码还要密码库接上） */
   kinds: ImportKind[]
   promptsSystemAuth: boolean
   needsElevation: boolean
@@ -50,7 +50,7 @@ export interface ImportRequest {
   allowElevated: boolean
 }
 
-/** skipped：前面一类被取消了，这一类没轮上 */
+/** skipped：写 Cookie 的时候取消了，密码读到了但没轮上写 */
 export type ImportKindStatus = ProtectedStatus | 'skipped'
 
 export interface ImportKindOutcome extends ImportCounts {

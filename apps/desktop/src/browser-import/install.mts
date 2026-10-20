@@ -1,8 +1,8 @@
 // 把“从别的浏览器导入”装进主进程：建管线，接上界面的消息（window.litchBrowser.import）。
-// browser/install.mts 在装内置浏览器时调一次。密码库、浏览记录库接上之前，这两类在正式模式里报导不了。
+// browser/install.mts 在装内置浏览器时调一次。密码库接上之前，密码在正式模式里报导不了。
 //
 // LITCH_BROWSER_IMPORT_FAKE=<样本目录>：样本模式，给真实窗口验收用。目录当假的主目录（没有样本就摆一套，见 test/sample.mts），
-// 读取器换成假的（test/fake-reader.mts）；密码库、浏览记录库没交进来时用内存里的假库。Cookie 照样写进内置浏览器的分区，
+// 读取器换成假的（test/fake-reader.mts）；密码库没交进来时用内存里的假库。Cookie 照样写进内置浏览器的分区，
 // 所以验收要用隔离的用户数据目录（LITCH_PROFILE）。
 import type { IpcMainInvokeEvent } from 'electron'
 import { ipcMain } from 'electron'
@@ -19,10 +19,10 @@ import {
 import { createImporter, type Importer } from './pipeline.mjs'
 import { createProtectedReader } from './protected/index.mjs'
 import type { ProtectedReader } from './protected-types.mjs'
-import type { HistorySink, PasswordSink } from './sinks.mjs'
+import type { PasswordSink } from './sinks.mjs'
 import { createImportStateBook, importStateFile } from './state.mjs'
 import { createFakeReader } from './test/fake-reader.mjs'
-import { memoryHistorySink, memoryPasswordSink } from './test/fake-sinks.mjs'
+import { memoryPasswordSink } from './test/fake-sinks.mjs'
 import { ensureSample } from './test/sample.mjs'
 import { BROWSER_IDS, IMPORT_KINDS, type ImportRequest } from './types.mjs'
 
@@ -54,19 +54,16 @@ export function installBrowserImport(options: {
   fromUi(event: IpcMainInvokeEvent): boolean
   userData: string
   passwords?: PasswordSink
-  history?: HistorySink
 }): Importer {
   const fakeDir = process.env.LITCH_BROWSER_IMPORT_FAKE
   let env: () => ImportEnv = currentEnv
   let reader: ProtectedReader
   let passwords = options.passwords
-  let history = options.history
   if (fakeDir) {
     const sample = ensureSample(fakeDir)
     env = () => sample
     reader = createFakeReader()
     passwords ??= memoryPasswordSink()
-    history ??= memoryHistorySink()
     console.error(`[browser-import] sample mode: ${fakeDir}`)
   } else {
     reader = createProtectedReader()
@@ -76,7 +73,6 @@ export function installBrowserImport(options: {
     reader,
     cookies: electronCookieJar(),
     ...(passwords ? { passwords } : {}),
-    ...(history ? { history } : {}),
     state: createImportStateBook(importStateFile(options.userData)),
     log: (line) => console.error(`[browser-import] ${line}`),
   })

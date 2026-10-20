@@ -17,7 +17,7 @@ import {
   defaultFakeCapabilities,
   type FakeReaderOptions,
 } from './fake-reader.mjs'
-import { memoryHistorySink, memoryPasswordSink } from './fake-sinks.mjs'
+import { memoryPasswordSink } from './fake-sinks.mjs'
 import { writeSample } from './sample.mjs'
 
 const NOW = Date.UTC(2026, 9, 20, 12)
@@ -69,32 +69,30 @@ function setup(
   const logs: string[] = []
   const jar = (overrides.cookies as MemoryJar | undefined) ?? memoryJar()
   const passwords = memoryPasswordSink()
-  const history = memoryHistorySink(() => NOW)
   const userData = join(dir, 'userData')
   const importer = createImporter({
     env: () => env,
     reader: overrides.reader ?? createFakeReader({ calls, ...overrides.fake }),
     cookies: jar,
     passwords,
-    history,
     state: createImportStateBook(importStateFile(userData)),
     now: () => NOW,
     log: (line) => logs.push(line),
     ...overrides,
   })
-  return { dir, env, importer, jar, passwords, history, calls, logs, userData }
+  return { dir, env, importer, jar, passwords, calls, logs, userData }
 }
 
 const chrome = (fields: Partial<ImportRequest> = {}): ImportRequest => ({
   browser: 'chrome',
   profileId: 'Default',
-  kinds: ['cookies', 'passwords', 'history'],
+  kinds: ['cookies', 'passwords'],
   allowElevated: false,
   ...fields,
 })
 
 test('从 Chrome 导一次：逐类的条数，Cookie 按规矩写进去并落盘', async (t) => {
-  const { importer, jar, passwords, history, calls } = setup(t)
+  const { importer, jar, passwords, calls } = setup(t)
   const progress: ImportProgress[] = []
   const outcome = await importer.start(chrome(), (item) => progress.push(item))
   assert.deepEqual(outcome, {
@@ -110,14 +108,6 @@ test('从 Chrome 导一次：逐类的条数，Cookie 按规矩写进去并落�
           '1 partitioned cookie(s) skipped: the built-in browser cannot store partitioned cookies.',
       },
       passwords: {
-        status: 'ok',
-        discovered: 3,
-        imported: 2,
-        skippedExisting: 0,
-        skippedInvalid: 1,
-        failed: 0,
-      },
-      history: {
         status: 'ok',
         discovered: 3,
         imported: 2,
@@ -142,9 +132,6 @@ test('从 Chrome 导一次：逐类的条数，Cookie 按规矩写进去并落�
       'cookies:done',
       'passwords:writing',
       'passwords:done',
-      'history:reading',
-      'history:writing',
-      'history:done',
     ],
   )
   const byName = Object.fromEntries(jar.cookies.map((cookie) => [cookie.name, cookie]))
@@ -162,13 +149,6 @@ test('从 Chrome 导一次：逐类的条数，Cookie 按规矩写进去并落�
     [
       ['https://accounts.example.com', 'sample-user', 'chrome:Default'],
       ['https://shop.example.org', 'buyer', 'chrome:Default'],
-    ],
-  )
-  assert.deepEqual(
-    history.saved.map((item) => [item.url, item.source]),
-    [
-      ['https://docs.example.org/guide', 'chrome:Default'],
-      ['https://example.com/', 'chrome:Default'],
     ],
   )
 })
@@ -191,7 +171,6 @@ test('再导一次全是“已存在跳过”；内置浏览器里已有的 Cook
     {
       cookies: ['ok', 0, 4, 3],
       passwords: ['ok', 0, 2, 1],
-      history: ['ok', 0, 2, 1],
     },
   )
   // 没写进新的就不落盘
@@ -237,18 +216,16 @@ test('只导某些网站的 Cookie：规范化之后交给读取器，读取器�
   ])
 })
 
-test('读取器报的各种状态原样交给界面；浏览记录照样导', async (t) => {
+test('读取器报的各种状态原样交给界面', async (t) => {
   const { importer } = setup(t)
   const work = await importer.start(chrome({ profileId: 'Profile 1' }))
   assert.equal(work.kinds.cookies?.status, 'locked')
   assert.equal(work.kinds.cookies?.error, 'The Cookies database is in use.')
   assert.equal(work.kinds.passwords?.status, 'ok')
-  assert.equal(work.kinds.history?.status, 'ok')
 
   const edge = await importer.start(chrome({ browser: 'edge' }))
   assert.equal(edge.kinds.cookies?.status, 'denied')
   assert.equal(edge.kinds.passwords?.status, 'denied')
-  assert.equal(edge.kinds.history?.imported, 2)
 
   const firefox = await importer.start(
     chrome({ browser: 'firefox', profileId: 'Profiles/sample.default-release' }),
@@ -263,13 +240,12 @@ test('读取器报的各种状态原样交给界面；浏览记录照样导', as
     ],
     ['partial', 1, 1],
   )
-  assert.equal(firefox.kinds.history?.imported, 2)
 
-  // 资料里什么都没有：Cookie、密码 missing，浏览记录也是 missing
+  // 资料里什么都没有：Cookie、密码都是 missing
   const vivaldi = await importer.start(chrome({ browser: 'vivaldi' }))
   assert.deepEqual(
     Object.values(vivaldi.kinds).map((item) => item.status),
-    ['missing', 'missing', 'missing'],
+    ['missing', 'missing'],
   )
 })
 
@@ -292,8 +268,7 @@ test('读取器读不了、库没接上的类别报 unsupported；来源列表�
   const outcome = await importer.start(chrome())
   assert.equal(outcome.kinds.cookies?.status, 'unsupported')
   assert.equal(outcome.kinds.passwords?.status, 'unsupported')
-  assert.equal(outcome.kinds.history?.status, 'ok')
-  assert.deepEqual(importer.sources()[0]?.kinds, ['history'])
+  assert.deepEqual(importer.sources()[0]?.kinds, [])
 
   const bare = createImporter({
     env: () => env,
@@ -307,7 +282,6 @@ test('读取器读不了、库没接上的类别报 unsupported；来源列表�
   const result = await bare.start(chrome())
   assert.equal(result.kinds.cookies?.status, 'ok')
   assert.equal(result.kinds.passwords?.status, 'unsupported')
-  assert.equal(result.kinds.history?.status, 'unsupported')
 })
 
 test('来源列表：交给界面的东西里没有路径', async (t) => {
@@ -316,21 +290,11 @@ test('来源列表：交给界面的东西里没有路径', async (t) => {
   assert.deepEqual(
     sources.map((source) => [source.browser, source.name, source.kinds, source.promptsSystemAuth]),
     [
-      [
-        'chrome',
-        'Google Chrome',
-        ['cookies', 'passwords', 'history'],
-        process.platform === 'darwin',
-      ],
-      [
-        'edge',
-        'Microsoft Edge',
-        ['cookies', 'passwords', 'history'],
-        process.platform === 'darwin',
-      ],
-      ['brave', 'Brave', ['cookies', 'passwords', 'history'], process.platform === 'darwin'],
-      ['vivaldi', 'Vivaldi', ['cookies', 'passwords', 'history'], process.platform === 'darwin'],
-      ['firefox', 'Firefox', ['cookies', 'passwords', 'history'], false],
+      ['chrome', 'Google Chrome', ['cookies', 'passwords'], process.platform === 'darwin'],
+      ['edge', 'Microsoft Edge', ['cookies', 'passwords'], process.platform === 'darwin'],
+      ['brave', 'Brave', ['cookies', 'passwords'], process.platform === 'darwin'],
+      ['vivaldi', 'Vivaldi', ['cookies', 'passwords'], process.platform === 'darwin'],
+      ['firefox', 'Firefox', ['cookies', 'passwords'], false],
     ],
   )
   assert.deepEqual(sources[0]?.profiles[0], {
@@ -338,7 +302,7 @@ test('来源列表：交给界面的东西里没有路径', async (t) => {
     name: '个人',
     account: 'sample@example.com',
     isDefault: true,
-    has: { cookies: true, passwords: true, history: true },
+    has: { cookies: true, passwords: true },
   })
   assert.ok(!JSON.stringify(sources).includes(dir))
 })
@@ -356,22 +320,22 @@ test('资料已不在、请求不对：整体报 profile-gone', async (t) => {
   assert.equal(calls.length, 0)
 })
 
-test('一次只一个；读的时候取消：Cookie cancelled，没轮上的 skipped，再导就不忙了', async (t) => {
+test('一次只一个；读的时候取消：Cookie、密码都 cancelled，再导就不忙了', async (t) => {
   const { importer, jar } = setup(t)
-  const brave = chrome({ browser: 'brave', kinds: ['cookies', 'history'] })
+  const brave = chrome({ browser: 'brave' })
   const running = importer.start(brave)
   assert.equal(importer.running(), true)
   assert.deepEqual(await importer.start(chrome()), { error: 'busy', kinds: {} })
   importer.cancel()
   const outcome = await running
   assert.equal(outcome.kinds.cookies?.status, 'cancelled')
-  assert.equal(outcome.kinds.history?.status, 'skipped')
+  assert.equal(outcome.kinds.passwords?.status, 'cancelled')
   assert.equal(jar.cookies.length, 0)
   assert.equal(importer.running(), false)
-  assert.equal((await importer.start(chrome({ kinds: ['history'] }))).kinds.history?.status, 'ok')
+  assert.equal((await importer.start(chrome())).kinds.cookies?.status, 'ok')
 })
 
-test('写的时候取消：已写的留着并落盘，状态 cancelled', async (t) => {
+test('写 Cookie 的时候取消：已写的留着并落盘，Cookie cancelled，密码没轮上写是 skipped', async (t) => {
   let importer: ReturnType<typeof setup>['importer'] | null = null
   const jar = memoryJar()
   const set = jar.set
@@ -387,8 +351,8 @@ test('写的时候取消：已写的留着并落盘，状态 cancelled', async (
   assert.equal(outcome.kinds.cookies?.status, 'cancelled')
   assert.equal(outcome.kinds.cookies?.imported, 2)
   assert.equal(jar.flushes(), 1)
-  assert.equal(outcome.kinds.passwords?.status, 'cancelled')
-  assert.equal(outcome.kinds.history?.status, 'skipped')
+  assert.equal(outcome.kinds.passwords?.status, 'skipped')
+  assert.equal(outcome.kinds.passwords?.discovered, 3)
   assert.deepEqual(context.passwords.saved, [])
 })
 
@@ -408,11 +372,6 @@ test('写不进去的 Cookie 算失败；全失败是 failed；库出错整类 f
         throw new Error('safeStorage is not available')
       },
     },
-    history: {
-      importMany: async () => {
-        throw new Error('history store is closed')
-      },
-    },
   })
   const failed = await none.importer.start(
     chrome({ browser: 'firefox', profileId: 'Profiles/sample.default-release' }),
@@ -421,15 +380,6 @@ test('写不进去的 Cookie 算失败；全失败是 failed；库出错整类 f
   assert.deepEqual([failed.kinds.cookies?.status, failed.kinds.cookies?.failed], ['failed', 2])
   assert.equal(failed.kinds.passwords?.status, 'failed')
   assert.equal(failed.kinds.passwords?.error, 'safeStorage is not available')
-  // 浏览记录：有一条无效的算处理过，所以是部分成功
-  assert.deepEqual(
-    [
-      failed.kinds.history?.status,
-      failed.kinds.history?.failed,
-      failed.kinds.history?.skippedInvalid,
-    ],
-    ['partial', 2, 1],
-  )
   assert.deepEqual(none.importer.state(), {})
 })
 
@@ -445,7 +395,6 @@ test('读取器抛了：这一类 failed，异常不往外传', async (t) => {
   const outcome = await importer.start(chrome())
   assert.equal(outcome.kinds.cookies?.status, 'failed')
   assert.equal(outcome.kinds.passwords?.status, 'failed')
-  assert.equal(outcome.kinds.history?.status, 'ok')
   assert.ok(!JSON.stringify(outcome).includes('0123456789abcdef'))
 })
 
@@ -510,12 +459,15 @@ test('明文不出现在交给界面的结果和日志里，读取器的话里�
 test('导过没有：成功的类别记时间，横幅关掉记时间，都存盘', async (t) => {
   const { importer, userData } = setup(t)
   assert.deepEqual(importer.state(), {})
+  // Edge 的 Cookie、密码都被拒：不算导过
   await importer.start(chrome({ browser: 'edge' }))
-  // Edge 的 Cookie、密码都被拒，只有浏览记录成功
+  assert.deepEqual(importer.state(), {})
+  // 工作那份的 Cookie 被占着、密码导进去了：只记密码
+  await importer.start(chrome({ profileId: 'Profile 1' }))
   assert.deepEqual(importer.state(), { lastImportAt: NOW })
   importer.dismissBanner()
   const saved = JSON.parse(readFileSync(importStateFile(userData), 'utf8'))
-  assert.deepEqual(saved, { version: 1, kinds: { history: NOW }, bannerDismissedAt: NOW })
+  assert.deepEqual(saved, { version: 1, kinds: { passwords: NOW }, bannerDismissedAt: NOW })
   assert.deepEqual(createImportStateBook(importStateFile(userData)).state(), {
     lastImportAt: NOW,
     bannerDismissedAt: NOW,

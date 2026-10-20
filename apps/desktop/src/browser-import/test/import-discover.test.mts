@@ -40,17 +40,13 @@ for (const platform of ['darwin', 'win32'] as const) {
         ['Profile 1', '工作', false, undefined],
       ],
     )
-    assert.deepEqual(chrome.profiles[0]?.has, { cookies: true, passwords: true, history: true })
+    assert.deepEqual(chrome.profiles[0]?.has, { cookies: true, passwords: true })
     const vivaldi = sources.find((source) => source.browser === 'vivaldi')
-    assert.deepEqual(vivaldi?.profiles[0]?.has, {
-      cookies: false,
-      passwords: false,
-      history: false,
-    })
+    assert.deepEqual(vivaldi?.profiles[0]?.has, { cookies: false, passwords: false })
     const firefox = sources.find((source) => source.browser === 'firefox')
     assert.equal(firefox?.root, firefoxRoots(env)[0])
     assert.deepEqual(
-      firefox?.profiles.map((profile) => [profile.id, profile.isDefault, profile.has.history]),
+      firefox?.profiles.map((profile) => [profile.id, profile.isDefault, profile.has.cookies]),
       [
         ['Profiles/sample.default-release', true, true],
         ['Profiles/sample.default', false, false],
@@ -88,7 +84,7 @@ test('发现：Windows 上商店装的 Arc 和 Firefox 按包名前缀找', (t) 
   )
   writeFirefox(
     join(packages, 'Mozilla.Firefox_n80bbvh6b1yt2', 'LocalCache', 'Roaming', 'Mozilla', 'Firefox'),
-    [{ path: 'Profiles/x.default-release', name: 'store', isDefault: true, history: [] }],
+    [{ path: 'Profiles/x.default-release', name: 'store', isDefault: true }],
   )
   const sources = discoverSources(env)
   assert.deepEqual(

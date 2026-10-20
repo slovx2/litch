@@ -1,12 +1,11 @@
 // 导入管线：列来源、按请求导入一次、取消、记“导过没有”。不引 electron：Cookie 经 CookieJar 写，
-// 密码、浏览记录经 sinks.mts 的两个接口交出去，读 Cookie 和密码经读取器（protected-types.mts）。
+// 密码经 sinks.mts 的 PasswordSink 交出去，读 Cookie 和密码经读取器（protected-types.mts）。
 //
 // 明文（Cookie 的值、密码）只在 start 这一次调用的栈里：读取器交来、校验、写进去，之后就丢；不进日志，
 // 不进返回值（界面只拿到条数和状态），给人看的那句话里要是带着明文也换掉（scrub）。
 import { browserDef, type ImportEnv } from './browsers.mjs'
 import { type CookieJar, writeCookies } from './cookies.mjs'
 import { discoverSources, type FoundProfile, type FoundSource, findProfile } from './discover.mjs'
-import { readHistory } from './history.mjs'
 import type {
   ImportedCookie,
   ImportedPassword,
@@ -16,7 +15,7 @@ import type {
   ProtectedReader,
   ProtectedReadResult,
 } from './protected-types.mjs'
-import type { HistorySink, HistoryVisit, ImportCounts, PasswordSink } from './sinks.mjs'
+import type { ImportCounts, PasswordSink } from './sinks.mjs'
 import type { ImportStateBook } from './state.mjs'
 import {
   IMPORT_KINDS,
@@ -36,8 +35,6 @@ export interface ImporterOptions {
   cookies: CookieJar
   /** 没有就导不了密码（密码库还没接上） */
   passwords?: PasswordSink
-  /** 没有就导不了浏览记录 */
-  history?: HistorySink
   state: ImportStateBook
   now?: () => number
   /** 只记条数和状态 */
@@ -168,11 +165,9 @@ export function createImporter(options: ImporterOptions): Importer {
 
   /** 这个来源在这台机器上能导哪几类 */
   const kindsOf = (caps: ProtectedCapabilities): ImportKind[] =>
-    IMPORT_KINDS.filter((kind) => {
-      if (kind === 'cookies') return caps.kinds.includes('cookies')
-      if (kind === 'passwords') return caps.kinds.includes('passwords') && !!options.passwords
-      return !!options.history
-    })
+    IMPORT_KINDS.filter(
+      (kind) => caps.kinds.includes(kind) && (kind === 'cookies' || !!options.passwords),
+    )
 
   const toProfile = (profile: FoundProfile) => {
     const out: ImportSource['profiles'][number] = {
@@ -198,20 +193,13 @@ export function createImporter(options: ImporterOptions): Importer {
     const kinds: ImportOutcome['kinds'] = {}
     const tag = `${source.browser}:${profile.id}`
     const secrets = new Set<string>()
-    // 被取消之后，还没轮上的类别记 skipped
-    const skipRest = () => {
-      for (const kind of wanted) if (!kinds[kind]) kinds[kind] = notRead('skipped')
-    }
 
     for (const kind of wanted) {
       if (!available.has(kind)) kinds[kind] = notRead('unsupported')
     }
 
     // Cookie 和密码一次读：Mac 上只弹一次钥匙串
-    const protectedKinds = wanted.filter(
-      (kind): kind is ProtectedKind =>
-        (kind === 'cookies' || kind === 'passwords') && available.has(kind),
-    )
+    const protectedKinds: ProtectedKind[] = wanted.filter((kind) => available.has(kind))
     let read: ProtectedReadResult = {}
     if (protectedKinds.length > 0) {
       for (const kind of protectedKinds) progress({ kind, phase: 'reading' })
@@ -248,11 +236,6 @@ export function createImporter(options: ImporterOptions): Importer {
       read = {}
     }
 
-    if (wanted.includes('history') && available.has('history') && !kinds.history) {
-      if (signal.aborted) skipRest()
-      else kinds.history = await importHistory(source, profile, tag, signal, progress)
-    }
-    if (signal.aborted) skipRest()
     secrets.clear()
     return { kinds }
   }
@@ -319,9 +302,9 @@ export function createImporter(options: ImporterOptions): Importer {
       if (result.status !== 'ok' && result.status !== 'partial') {
         return notRead(result.status, result.discovered, error)
       }
-      if (signal.aborted || !sink) {
-        return notRead(signal.aborted ? 'cancelled' : 'unsupported', result.discovered, error)
-      }
+      if (!sink) return notRead('unsupported', result.discovered, error)
+      // 写 Cookie 的时候取消了：密码读到了但没轮上写
+      if (signal.aborted) return notRead('skipped', result.discovered, error)
       const valid = result.items.filter(validPassword)
       const invalid = result.items.length - valid.length
       progress({ kind: 'passwords', phase: 'writing' })
@@ -352,49 +335,6 @@ export function createImporter(options: ImporterOptions): Importer {
       )
     } finally {
       progress({ kind: 'passwords', phase: 'done' })
-    }
-  }
-
-  async function importHistory(
-    source: FoundSource,
-    profile: FoundProfile,
-    tag: string,
-    signal: AbortSignal,
-    progress: (progress: ImportProgress) => void,
-  ): Promise<ImportKindOutcome> {
-    const sink = options.history
-    if (!sink) return notRead('unsupported')
-    progress({ kind: 'history', phase: 'reading' })
-    try {
-      const read = await readHistory(source.family, profile.dir, { now: now(), signal })
-      if (read.status !== 'ok') return notRead(read.status, 0, read.error)
-      const valid: HistoryVisit[] = read.visits.filter((visit) => isWebUrl(visit.url))
-      const invalid = read.visits.length - valid.length
-      if (signal.aborted) return notRead('cancelled', read.visits.length)
-      progress({ kind: 'history', phase: 'writing' })
-      try {
-        const counts = valid.length > 0 ? await sink.importMany(valid, tag) : EMPTY_COUNTS
-        return finished(
-          read.visits.length,
-          {
-            ...counts,
-            skippedInvalid: counts.skippedInvalid + invalid,
-          },
-          {},
-        )
-      } catch (sinkError) {
-        return finished(
-          read.visits.length,
-          { ...EMPTY_COUNTS, skippedInvalid: invalid, failed: valid.length },
-          {
-            error:
-              (sinkError instanceof Error ? sinkError.message : undefined)?.slice(0, MAX_ERROR) ??
-              'The history store failed.',
-          },
-        )
-      }
-    } finally {
-      progress({ kind: 'history', phase: 'done' })
     }
   }
 

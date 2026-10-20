@@ -58,19 +58,17 @@ const FILES: Record<BrowserFamily, Record<ImportKind, string[][]>> = {
     cookies: [['Network', 'Cookies'], ['Cookies']],
     // 登录了账号的还有一份账号下的密码
     passwords: [['Login Data'], ['Login Data For Account']],
-    history: [['History']],
   },
   firefox: {
     cookies: [['cookies.sqlite']],
     passwords: [['logins.json']],
-    history: [['places.sqlite']],
   },
 }
 
 function hasKinds(family: BrowserFamily, dir: string): Record<ImportKind, boolean> {
   const files = FILES[family]
   const has = (kind: ImportKind) => files[kind].some((parts) => isFile(join(dir, ...parts)))
-  return { cookies: has('cookies'), passwords: has('passwords'), history: has('history') }
+  return { cookies: has('cookies'), passwords: has('passwords') }
 }
 
 /** 资料目录名要像 Chromium 起的名字：不许带路径分隔符或 `..`，免得拼出资料根目录外面的路径 */
