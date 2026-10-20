@@ -38,7 +38,7 @@ import { DEFAULT_TASK_SETTINGS, type TaskClock, type TaskSettings } from './task
 import { DeviceTasks } from './tasks.mjs'
 import { registerTasksTool } from './tasks-tool.mjs'
 import { ThreadIndex } from './thread-index.mjs'
-import { type Connector, DeviceError, isObject, type Wire, type WireHandlers } from './wire.mjs'
+import { type Connector, isObject, type Wire, type WireHandlers } from './wire.mjs'
 import { Workspaces } from './workspaces.mjs'
 
 export interface DeviceOptions {
