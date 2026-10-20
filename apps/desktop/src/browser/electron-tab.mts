@@ -1,5 +1,6 @@
 // 一个标签：一块 WebContentsView，加上它的调试器（CDP，经白名单）、控制台记录、对话框、提示。
-// 视图只由主进程持有：不带预加载脚本、开沙箱和上下文隔离、不开 Node，用共用的持久分区。
+// 视图只由主进程持有：开沙箱和上下文隔离、不开 Node，用共用的持久分区。预加载只有自动填充的那一个
+// （passwords/preload.mts，隔离环境里只听事件，不往网页暴露东西）。
 // 它碰不到界面，也拿不到通往核心的端口（那个端口只给界面自己的主框架，见 main.mts 的 REQUEST_CORE_PORT）。
 import { type Event, WebContentsView } from 'electron'
 import { CdpRefused, isAllowedCdp } from './cdp-allow.mjs'
@@ -13,6 +14,7 @@ import type {
   TabKind,
   TabOwner,
 } from './model.mjs'
+import { autofillPreferences, registerAutofillTab } from './passwords/tabs.mjs'
 import { BLANK, isOpenable } from './url.mjs'
 
 /** 共用的持久分区：登录一次，各个会话的代理都能用 */
@@ -77,7 +79,14 @@ export function createTab(
       // 代理开的标签不弹系统的对话框：对话框经 CDP 交给模型答（没挂调试器时自动关掉）。用户的照常弹
       disableDialogs: kind === 'agent',
       safeDialogs: true,
+      // 自动填充和保存提示的预加载（隔离环境、不往网页暴露东西），用户的、代理的标签都挂
+      ...autofillPreferences(),
     },
+  })
+  registerAutofillTab(view.webContents, {
+    kind,
+    info: () => tab.info(),
+    notice: (text) => addNotice(text),
   })
   view.setBackgroundColor('#ffffff')
   // 没显示在面板里的视图也要有大小：0×0 的页面截不了图、点不到东西（见 electron-host.mts 开头）

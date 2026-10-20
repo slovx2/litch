@@ -2,6 +2,7 @@
 import { enHconfig } from './en-hconfig.ts'
 import { enOnboard } from './en-onboard.ts'
 import { enPairing } from './en-pairing.ts'
+import { enPasswords } from './en-passwords.ts'
 import { enProposals } from './en-proposals.ts'
 import { enTasks } from './en-tasks.ts'
 import type { Entry } from './types.ts'
@@ -16,6 +17,7 @@ export const en: Record<MessageKey, Entry> = {
   ...enOnboard,
   ...enHconfig,
   ...enProposals,
+  ...enPasswords,
   'title.location': 'Location',
   'workspace.none': 'No project',
 
@@ -858,7 +860,7 @@ export const en: Record<MessageKey, Entry> = {
   'settings.browser.blocked.bad': 'Cannot read this site; write it like example.com',
   'settings.browser.data': 'Browsing data',
   'settings.browser.data.note':
-    'Cookies, sign-ins, site storage and cache. After clearing you will need to sign in again to sites you used in the built-in browser; always-allowed sites stay.',
+    'Cookies, sign-ins, site storage and cache. After clearing you will need to sign in again to sites you used in the built-in browser; always-allowed sites and saved passwords stay.',
   'settings.browser.clear': 'Clear browsing data…',
   'settings.browser.clear.title': 'Clear the built-in browser’s data?',
   'settings.browser.clear.note':

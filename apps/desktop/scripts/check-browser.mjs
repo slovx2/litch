@@ -5,7 +5,11 @@
 //   node scripts/check-browser.mjs --ui     浏览器面板：真的界面（先构建 packages/ui）对着页面里的模拟核心，
 //                                          量矩形、叠上去、收起摘下、浮层撤下、show 打开面板
 //   加 --shown                             V0 那一项改成窗口透明度 0、不接鼠标地显示（对照窗口在屏幕上的情形）
-import { spawn } from 'node:child_process'
+//   node scripts/check-browser.mjs --autofill
+//                                          用户标签的自动填充和代理读不到密码（src/probe-browser-autofill.mts）：窗口显示在屏幕上，
+//                                          原生菜单换成桩；再加 --manual 弹真的菜单，等人去点（打出要点的屏幕坐标）。
+//                                          safeStorage 在钥匙串里建的“Litch Autofill Probe Safe Storage”跑完删掉
+import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
@@ -18,11 +22,14 @@ const electron = require('electron')
 const appDir = fileURLToPath(new URL('..', import.meta.url))
 const v0 = process.argv.includes('--v0')
 const ui = process.argv.includes('--ui')
+const autofill = process.argv.includes('--autofill')
 const entry = v0
   ? 'src/probe-browser-v0.mts'
   : ui
     ? 'src/probe-browser-ui.mts'
-    : 'src/probe-browser.mts'
+    : autofill
+      ? 'src/probe-browser-autofill.mts'
+      : 'src/probe-browser.mts'
 const uiRoot = fileURLToPath(new URL('../../../packages/ui/dist', import.meta.url))
 if (ui && !existsSync(join(uiRoot, 'index.html'))) {
   console.error('没有界面的构建产物，先 npm run build --prefix packages/ui')
@@ -63,6 +70,19 @@ if (ui) {
   })
 }
 
+// 用户标签的自动填充预加载：宿主按主进程产物旁边的 autofill-preload.cjs 找，自检的产物在 work 里，放一份过去
+await build({
+  entryPoints: ['src/browser/passwords/preload.mts'],
+  absWorkingDir: appDir,
+  outfile: join(work, 'autofill-preload.cjs'),
+  bundle: true,
+  platform: 'node',
+  target: 'node22',
+  format: 'cjs',
+  external: ['electron'],
+  logLevel: 'warning',
+})
+
 const env = {
   ...process.env,
   LITCH_PROFILE: join(work, 'profile'),
@@ -70,12 +90,17 @@ const env = {
   LITCH_PROBE_PRELOAD: preload,
 }
 if (process.argv.includes('--shown')) env.LITCH_V0_SHOWN = '1'
+if (process.argv.includes('--manual')) env.LITCH_AUTOFILL_MANUAL = '1'
 delete env.ELECTRON_RUN_AS_NODE
 
 const child = spawn(electron, [outfile], { env, stdio: ['ignore', 'pipe', 'pipe'] })
 let output = ''
 child.stdout.on('data', (chunk) => {
   output += chunk
+  // 手动的那一项：要点的坐标马上打出来
+  for (const line of String(chunk).split('\n')) {
+    if (line.startsWith('LITCH_AUTOFILL_CLICK ')) console.log(line)
+  }
 })
 child.stderr.on('data', (chunk) => {
   output += chunk
@@ -85,6 +110,16 @@ const limit = setTimeout(() => child.kill('SIGKILL'), 240_000)
 const code = await new Promise((resolve) => child.on('exit', (exitCode) => resolve(exitCode)))
 clearTimeout(limit)
 rmSync(work, { recursive: true, force: true })
+// 自动填充、面板（保存提示）两项用的 safeStorage 在 macOS 钥匙串里留下的那把钥匙（按自检的应用名起的名，不是 Litch 的）
+if ((autofill || ui) && process.platform === 'darwin') {
+  spawnSync('security', [
+    'delete-generic-password',
+    '-s',
+    'Litch Autofill Probe Safe Storage',
+    '-a',
+    'Litch Autofill Probe Key',
+  ])
+}
 
 const line = output.split('\n').find((one) => one.startsWith(marker))
 if (!line) {

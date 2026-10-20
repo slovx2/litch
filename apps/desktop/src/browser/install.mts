@@ -34,6 +34,8 @@ import {
   BROWSER_UNBLOCK,
 } from './ipc.mjs'
 import type { TabOwner } from './model.mjs'
+import { installPasswords } from './passwords/install.mjs'
+import type { PasswordStore } from './passwords/store.mjs'
 import {
   createSiteBook,
   type SavedSite,
@@ -66,6 +68,8 @@ export interface InstalledBrowser {
   settings: BrowserSettings
   /** 远端 localhost 的端口转发 */
   forwarding: BrowserForwarding
+  /** 已保存的密码（导入管线写进来，用户标签自动填充） */
+  passwords: PasswordStore
 }
 
 /**
@@ -257,11 +261,13 @@ export function installBrowser(options: {
     settings.unblock(typeof site === 'string' ? site : undefined)
     return settings.policy()
   })
+  // 已保存的密码：设置页的列、删，用户标签的自动填充（passwords/install.mts）。清除浏览数据不碰它
+  const passwords = installPasswords({ userData: options.userData, fromUi, broadcast })
   ipcMain.handle(BROWSER_CLEAR_DATA, async (event) => {
     if (!fromUi(event)) return false
     await settings.clearData()
     return true
   })
 
-  return { executor, host, sites, settings, forwarding }
+  return { executor, host, sites, settings, forwarding, passwords }
 }

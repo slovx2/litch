@@ -41,6 +41,65 @@ export interface BrowserSitePolicy {
   blocked: string[]
 }
 
+/** 设置页里一条已保存的密码：只有站点、用户名、来源、时间，从不带密码 */
+export interface BrowserSavedPassword {
+  id: string
+  /** 站点的源，`https://accounts.example.com` */
+  origin: string
+  username: string
+  /** 从哪儿导进来的，比如 `chrome:Default` */
+  source: string
+  /** 毫秒 */
+  createdAt: number
+  /** 毫秒：最近一次在内置浏览器里填过；没填过不给 */
+  lastUsedAt?: number
+}
+
+/** “这个网站永不保存”的一条 */
+export interface BrowserNeverSite {
+  origin: string
+  /** 毫秒 */
+  at: number
+}
+
+/** 登录之后的保存提示：没有密码，只给人看 */
+export interface BrowserSavePrompt {
+  id: string
+  /** 哪个会话的哪个标签里登录的 */
+  deviceId: string
+  threadId: string
+  tabId: string
+  origin: string
+  username: string
+  /** save：没存过这个用户名；update：存过，但密码不一样 */
+  kind: 'save' | 'update'
+  /** 毫秒 */
+  at: number
+}
+
+export type BrowserSaveAnswer = 'save' | 'dismiss' | 'never'
+
+/** 已保存的密码和保存提示：只能列、删、答，看不到明文 */
+export interface BrowserPasswordsBridge {
+  list(): Promise<BrowserSavedPassword[]>
+  /** 删一条，回删没删到 */
+  remove(id: string): Promise<boolean>
+  /** 全删，回删了几条（不动“永不保存”的名单） */
+  removeAll(): Promise<number>
+  /** 密码库变了（导入了、保存了、别处删了、永不名单变了） */
+  onChanged(handler: () => void): () => void
+  /** “这个网站永不保存”的名单 */
+  never(): Promise<BrowserNeverSite[]>
+  /** 从名单里去掉，回去没去掉 */
+  allowSite(origin: string): Promise<boolean>
+  /** 现在挂着的保存提示 */
+  prompts(): Promise<BrowserSavePrompt[]>
+  /** 答一条，回答没答到（已经没了） */
+  answer(id: string, answer: BrowserSaveAnswer): Promise<boolean>
+  /** 保存提示变了，带着现在所有的 */
+  onPrompts(handler: (prompts: BrowserSavePrompt[]) => void): () => void
+}
+
 export interface BrowserBridge {
   /** 这个窗口里、这块矩形（页面里的 CSS 像素）上显示哪个标签。都给 null 就是什么都不显示 */
   place(
@@ -73,6 +132,8 @@ export interface BrowserBridge {
   unblock(host: string | null): Promise<BrowserSitePolicy | null>
   /** 开关或黑名单在别处改了（审批卡片上、litch config） */
   onPolicy(handler: (policy: BrowserSitePolicy) => void): () => void
+  /** 已保存的密码（设置页用） */
+  passwords: BrowserPasswordsBridge
 }
 
 declare global {

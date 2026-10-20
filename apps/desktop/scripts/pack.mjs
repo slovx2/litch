@@ -63,7 +63,7 @@ if (process.platform === 'win32') {
     console.warn('已设 LITCH_WITHOUT_COMPUTER_USE=1：这次打出来的应用里没有 Computer Use 的助手')
 }
 
-const shell = ['main.mjs', 'core-host.mjs', 'preload.cjs']
+const shell = ['main.mjs', 'core-host.mjs', 'preload.cjs', 'autofill-preload.cjs']
 for (const file of shell) {
   if (!existsSync(join(appDir, 'dist', file))) {
     console.error(`没有找到外壳的构建产物 dist/${file}，请先运行 npm run build`)

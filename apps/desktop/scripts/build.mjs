@@ -45,3 +45,11 @@ await build({
   outfile: 'dist/preload.cjs',
   format: 'cjs',
 })
+
+// 内置浏览器用户标签的自动填充预加载：同样跑在开了沙箱的渲染进程里（隔离环境），只认 CommonJS
+await build({
+  ...common,
+  entryPoints: ['src/browser/passwords/preload.mts'],
+  outfile: 'dist/autofill-preload.cjs',
+  format: 'cjs',
+})

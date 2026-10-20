@@ -20,6 +20,17 @@ import {
   BROWSER_TRUST_ALL,
   BROWSER_UNBLOCK,
 } from './ipc.mjs'
+import {
+  PASSWORDS_ALLOW_SITE,
+  PASSWORDS_ANSWER,
+  PASSWORDS_CHANGED,
+  PASSWORDS_LIST,
+  PASSWORDS_NEVER,
+  PASSWORDS_PROMPTS,
+  PASSWORDS_PROMPTS_CHANGED,
+  PASSWORDS_REMOVE,
+  PASSWORDS_REMOVE_ALL,
+} from './passwords/ipc.mjs'
 
 const listen = (channel: string, handler: (payload: unknown) => void) => {
   const listener = (_event: unknown, payload: unknown) => handler(payload)
@@ -51,5 +62,18 @@ export function browserBridge() {
     block: (site: string) => ipcRenderer.invoke(BROWSER_BLOCK, site),
     unblock: (host: string | null) => ipcRenderer.invoke(BROWSER_UNBLOCK, host),
     onPolicy: (handler: (policy: unknown) => void) => listen(BROWSER_POLICY_CHANGED, handler),
+    // 已保存的密码（设置页）和登录后的保存提示（浏览器面板）：都不带密码
+    passwords: {
+      list: () => ipcRenderer.invoke(PASSWORDS_LIST),
+      remove: (id: string) => ipcRenderer.invoke(PASSWORDS_REMOVE, id),
+      removeAll: () => ipcRenderer.invoke(PASSWORDS_REMOVE_ALL),
+      onChanged: (handler: () => void) => listen(PASSWORDS_CHANGED, () => handler()),
+      never: () => ipcRenderer.invoke(PASSWORDS_NEVER),
+      allowSite: (origin: string) => ipcRenderer.invoke(PASSWORDS_ALLOW_SITE, origin),
+      prompts: () => ipcRenderer.invoke(PASSWORDS_PROMPTS),
+      answer: (id: string, answer: string) => ipcRenderer.invoke(PASSWORDS_ANSWER, { id, answer }),
+      onPrompts: (handler: (prompts: unknown) => void) =>
+        listen(PASSWORDS_PROMPTS_CHANGED, handler),
+    },
   }
 }

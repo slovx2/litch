@@ -14,6 +14,7 @@ import {
   pointOf,
   settle,
 } from './page-ops.mjs'
+import { READ_FIELD_VALUE } from './passwords/mask.mjs'
 
 /** 上传的文件一个最大多少 */
 const UPLOAD_MAX_BYTES = 100 * 1024 * 1024
@@ -78,8 +79,6 @@ const PREPARE = `function (text, clear) {
   return { kind: 'field', ok: document.activeElement === this || this.contains(document.activeElement) }
 }`
 
-const READ_VALUE = `function () { return 'value' in this ? String(this.value) : (this.innerText || '') }`
-
 export const type: Tool = async (call) => {
   const page = call.pick()
   const stop = await ready(call, page)
@@ -140,7 +139,8 @@ export const type: Tool = async (call) => {
     if (objectId && !('dialog' in raced) && !submit) {
       const value = await page.cdp<{ result: { value?: unknown } }>('Runtime.callFunctionOn', {
         objectId,
-        functionDeclaration: READ_VALUE,
+        // 密码框只回遮罩，不把值交给模型
+        functionDeclaration: READ_FIELD_VALUE,
         returnByValue: true,
       })
       if (typeof value.result.value === 'string')

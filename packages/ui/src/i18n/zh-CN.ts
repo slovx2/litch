@@ -4,6 +4,7 @@ import type { Entry } from './types.ts'
 import { zhHconfig } from './zh-CN-hconfig.ts'
 import { zhOnboard } from './zh-CN-onboard.ts'
 import { zhPairing } from './zh-CN-pairing.ts'
+import { zhPasswords } from './zh-CN-passwords.ts'
 import { zhProposals } from './zh-CN-proposals.ts'
 import { zhTasks } from './zh-CN-tasks.ts'
 
@@ -18,6 +19,8 @@ export const zhCN = {
   ...zhHconfig,
   // 建议任务（提案卡片、侧面板的“建议任务”、改了再开始）的文案也单独放（zh-CN-proposals.ts）
   ...zhProposals,
+  // 内置浏览器“已保存的密码”的文案也单独放（zh-CN-passwords.ts）
+  ...zhPasswords,
   'title.location': '当前位置',
   'workspace.none': '无项目',
 
@@ -794,7 +797,7 @@ export const zhCN = {
   'settings.browser.blocked.bad': '认不出这个网站，写成 example.com 这样',
   'settings.browser.data': '浏览数据',
   'settings.browser.data.note':
-    'Cookie、登录状态、网站存下的数据和缓存。清除之后，在内置浏览器里登录过的网站都要重新登录；一直允许的网站不受影响。',
+    'Cookie、登录状态、网站存下的数据和缓存。清除之后，在内置浏览器里登录过的网站都要重新登录；一直允许的网站和已保存的密码不受影响。',
   'settings.browser.clear': '清除浏览数据…',
   'settings.browser.clear.title': '清除内置浏览器的浏览数据？',
   'settings.browser.clear.note':

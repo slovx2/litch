@@ -11,7 +11,7 @@
 // “关于”里的许可文本：装好的应用是从资源目录读的。这里用打包时的那个函数（scripts/licenses.mjs）现收一份到临时目录，
 // 经 LITCH_LICENSES_DIR 交给外壳，所以量到的是“真的许可目录到界面”这一整条路，只差打包器把目录放进应用那一步。
 import { spawn } from 'node:child_process'
-import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -46,6 +46,29 @@ const scratch = mkdtempSync(join(tmpdir(), 'litch-settings-'))
 const profile = join(scratch, 'profile')
 const licenses = join(scratch, 'licenses')
 mkdirSync(profile)
+// 内置浏览器已保存的密码：三条，加密那一栏是假的（设置页只列、搜、删，不解密）。
+// 和 src/probe-settings-passwords.mts 的 SEEDED_PASSWORDS、SEEDED_SEALED 对得上
+mkdirSync(join(profile, 'browser'))
+writeFileSync(
+  join(profile, 'browser', 'passwords.json'),
+  JSON.stringify({
+    version: 1,
+    entries: [
+      ['https://bank.example', 'ann@example.com'],
+      ['https://bank.example', 'bob@example.com'],
+      ['https://mail.example', 'carol'],
+    ].map(([origin, username], index) => ({
+      id: `seed-${index}`,
+      origin,
+      username,
+      password: 'U0VBTEVELU5PVC1BLVJFQUwtUEFTU1dPUkQ=',
+      source: 'chrome:Default',
+      store: 'profile',
+      createdAt: 1_760_000_000_000,
+      importedAt: 1_760_000_000_000,
+    })),
+  }),
+)
 // 和打包时一样：逐包的许可文本，加上本项目自己的两份
 const bundled = collectLicenses(licenses)
 for (const file of ['LICENSE', 'THIRD_PARTY_NOTICES.md']) {
