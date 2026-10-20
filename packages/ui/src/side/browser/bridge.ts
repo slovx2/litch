@@ -33,6 +33,14 @@ export interface BrowserSavedSite {
   at: number
 }
 
+/** 信任所有网站的开关和黑名单 */
+export interface BrowserSitePolicy {
+  /** 开着时代理打开网站一律不问，只有黑名单里的不许开 */
+  trustAll: boolean
+  /** 黑名单里的主机名（含子域名），排好序 */
+  blocked: string[]
+}
+
 export interface BrowserBridge {
   /** 这个窗口里、这块矩形（页面里的 CSS 像素）上显示哪个标签。都给 null 就是什么都不显示 */
   place(
@@ -56,6 +64,15 @@ export interface BrowserBridge {
   forgetSite(origin: string | null): Promise<number>
   /** 清除浏览数据（cookie、站点存储、缓存） */
   clearData(): Promise<boolean>
+  policy(): Promise<BrowserSitePolicy | null>
+  /** 开关信任所有网站，回新的样子 */
+  setTrustAll(on: boolean): Promise<BrowserSitePolicy | null>
+  /** 加一项黑名单（网址、域名都行，子域名一起算）；认不出是 null */
+  block(site: string): Promise<BrowserSitePolicy | null>
+  /** 去掉一项黑名单；给 null 全去掉 */
+  unblock(host: string | null): Promise<BrowserSitePolicy | null>
+  /** 开关或黑名单在别处改了（审批卡片上、litch config） */
+  onPolicy(handler: (policy: BrowserSitePolicy) => void): () => void
 }
 
 declare global {

@@ -16,6 +16,7 @@ import { createElectronHost, type ElectronBrowserHost, type Rect } from './elect
 import { type BrowserExecutor, createBrowserExecutor } from './executor.mjs'
 import { type BrowserForwarding, createBrowserForwarding } from './forwarding.mjs'
 import {
+  BROWSER_BLOCK,
   BROWSER_CLEAR_DATA,
   BROWSER_CLOSE,
   BROWSER_EXTERNAL,
@@ -23,14 +24,24 @@ import {
   BROWSER_NAVIGATE,
   BROWSER_OPEN,
   BROWSER_PLACE,
+  BROWSER_POLICY,
+  BROWSER_POLICY_CHANGED,
   BROWSER_SHOW,
   BROWSER_SITES,
   BROWSER_STATE,
   BROWSER_TABS,
+  BROWSER_TRUST_ALL,
+  BROWSER_UNBLOCK,
 } from './ipc.mjs'
 import type { TabOwner } from './model.mjs'
-import { createSiteBook, type SavedSite, type SiteBook, sitesFile } from './sites.mjs'
-import { BLANK, isOpenable, parseUrl, toAddress } from './url.mjs'
+import {
+  createSiteBook,
+  type SavedSite,
+  type SiteBook,
+  type SitePolicy,
+  sitesFile,
+} from './sites.mjs'
+import { BLANK, blockedHostOf, isOpenable, parseUrl, toAddress } from './url.mjs'
 
 export interface BrowserSettings {
   /** “一直允许”的网站 */
@@ -39,6 +50,13 @@ export interface BrowserSettings {
   forgetSite(origin?: string): number
   /** 清除浏览数据 */
   clearData(): Promise<void>
+  /** 信任所有网站的开关和黑名单 */
+  policy(): SitePolicy
+  setTrustAll(on: boolean): SitePolicy
+  /** 加一项黑名单（人写的网站）；认不出是 null */
+  block(site: string): SitePolicy | null
+  /** 去掉一项黑名单（人写的网站，认不出就当没有）；不给全去掉。回去掉了几项 */
+  unblock(site?: string): number
 }
 
 export interface InstalledBrowser {
@@ -187,15 +205,57 @@ export function installBrowser(options: {
   })
   ipcMain.handle(BROWSER_TABS, (event) => (fromUi(event) ? host.list() : []))
 
+  // 开关和黑名单在设置页、审批卡片、litch config 三处都能改：改了告诉所有窗口
+  const changed = () => {
+    const policy = sites.policy()
+    broadcast(BROWSER_POLICY_CHANGED, policy)
+    return policy
+  }
   const settings: BrowserSettings = {
     listSites: () => sites.saved(),
     forgetSite: (origin) => sites.forget(origin),
     clearData: () => host.clearData(),
+    policy: () => sites.policy(),
+    setTrustAll(on) {
+      sites.setTrustAll(on)
+      return changed()
+    },
+    block(site) {
+      const blocked = blockedHostOf(site)
+      if (!blocked) return null
+      sites.block(blocked)
+      return changed()
+    },
+    unblock(site) {
+      if (site === undefined) {
+        const removed = sites.unblock()
+        changed()
+        return removed
+      }
+      const blocked = blockedHostOf(site)
+      const removed = blocked ? sites.unblock(blocked) : 0
+      changed()
+      return removed
+    },
   }
   ipcMain.handle(BROWSER_SITES, (event) => (fromUi(event) ? settings.listSites() : []))
   ipcMain.handle(BROWSER_FORGET_SITE, (event, origin: unknown) => {
     if (!fromUi(event)) return 0
     return settings.forgetSite(typeof origin === 'string' ? origin : undefined)
+  })
+  ipcMain.handle(BROWSER_POLICY, (event) => (fromUi(event) ? settings.policy() : null))
+  ipcMain.handle(BROWSER_TRUST_ALL, (event, on: unknown) => {
+    if (!fromUi(event) || typeof on !== 'boolean') return null
+    return settings.setTrustAll(on)
+  })
+  ipcMain.handle(BROWSER_BLOCK, (event, site: unknown) => {
+    if (!fromUi(event) || typeof site !== 'string') return null
+    return settings.block(site)
+  })
+  ipcMain.handle(BROWSER_UNBLOCK, (event, site: unknown) => {
+    if (!fromUi(event)) return null
+    settings.unblock(typeof site === 'string' ? site : undefined)
+    return settings.policy()
   })
   ipcMain.handle(BROWSER_CLEAR_DATA, async (event) => {
     if (!fromUi(event)) return false

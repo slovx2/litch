@@ -329,6 +329,35 @@ test('放宽安全（E6）：确认卡写清是哪一项，每个窗口都看得
   assert.ok(!(await m.run(['browser', 'sites'])).text.includes('example.org'))
 })
 
+test('信任所有网站：打开要确认、关掉不用；黑名单加不用确认、去掉要确认', async () => {
+  const m = mock()
+  const a = m.window()
+  const on = m.run(['browser', 'trust', 'on'], { lang: 'en' })
+  await flush()
+  const [trust] = a.seen.view?.confirms ?? []
+  assert.deepEqual(trust?.items, [{ kind: 'trustAllSites' }])
+  await m.command('config.confirm', { id: trust?.id, allow: true })
+  assert.match((await on).text, /^Trust all sites: on/)
+
+  const added = await m.run(['browser', 'block', 'https://WWW.Bank.example/login'], { lang: 'en' })
+  assert.ok(added.ok)
+  assert.match(added.text, /Blocklist: www\.bank\.example/)
+  assert.equal((await m.run(['browser', 'block', 'not a site'], { lang: 'en' })).ok, false)
+  assert.equal(a.seen.view?.confirms.length, 0)
+
+  const removed = m.run(['browser', 'unblock', 'www.bank.example'], { lang: 'en' })
+  await flush()
+  const [unblock] = a.seen.view?.confirms ?? []
+  assert.deepEqual(unblock?.items, [{ kind: 'unblock', host: 'www.bank.example' }])
+  await m.command('config.confirm', { id: unblock?.id, allow: true })
+  assert.match((await removed).text, /Blocklist is empty/)
+
+  const off = await m.run(['browser', 'trust', 'off'], { lang: 'en' })
+  assert.match(off.text, /^Trust all sites: off/)
+  assert.equal(a.seen.view?.confirms.length, 0)
+  assert.match((await m.run(['browser', 'blocked'], { lang: 'en' })).text, /^Trust all sites: off/)
+})
+
 test('放宽安全（E6）：两分钟没人理算拒绝；一个窗口都没开着当场拒绝', async () => {
   const m = mock()
   const nobody = await m.run(['tools', 'set', 'local', '--computer', 'on'], { lang: 'en' })

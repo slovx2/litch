@@ -30,7 +30,14 @@ their next call.
   stop an agent in the browser, interrupt the turn. Downloads are cancelled; `file:` pages cannot be
   opened.
 - **Site approval**: local addresses (localhost, 127.0.0.1, `*.localhost`) are always allowed. Any
-  other site asks first with a card: Allow this turn / Allow for this session / Always allow / Decline.
+  other site asks first, once per origin (scheme, host and port), with a card: Allow this turn / Allow
+  for this session / Always allow / Trust all sites / Decline.
+- **Trust all sites**: while it is on, agents open any site without asking, except sites on the
+  blocklist, which are always refused (a blocklist entry covers the domain and its subdomains). It
+  applies to every session and device, including sessions on remote devices. When it is off, sites are
+  asked about one by one again and the blocklist does nothing. The card's "Trust all sites" turns it on
+  and allows the current site; Settings → Built-in browser → Site approval turns it off and edits the
+  blocklist.
 - **Remote localhost**: when a session on a remote device opens `localhost:<port>`, Litch forwards that
   port over SSH to this computer automatically (loopback only) and rewrites the address. Apps that
   hard-code `localhost:3000` in OAuth callbacks or CORS lists may not match the forwarded port.
@@ -43,6 +50,13 @@ Preferences (Settings → Built-in browser):
 - `scripts/litch browser allow` adds a site to the always-allowed list. **Guarded**: the user confirms in
   Litch. Only do it when the user asked for that site.
 - `scripts/litch browser forget` removes one always-allowed site, or all of them (see `--help`).
+- `scripts/litch browser trust on|off` turns "Trust all sites" on or off. Turning it on is **guarded**:
+  the user confirms in Litch. Only do it when the user asked for it.
+- `scripts/litch browser blocked` shows whether all sites are trusted, and the blocklist.
+- `scripts/litch browser block` adds a site to the blocklist (a domain like `example.com` or a URL;
+  subdomains are included).
+- `scripts/litch browser unblock` removes one site from the blocklist, or clears it (see `--help`).
+  **Guarded**: the user confirms in Litch.
 - `scripts/litch browser clear-data` clears cookies, sign-ins, site storage and cache of the built-in
   browser. **Irreversible: ask first**, then the user confirms in Litch (the user will be signed out
   of every site there). Always-allowed sites are kept.

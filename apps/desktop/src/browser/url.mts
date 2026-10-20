@@ -50,6 +50,25 @@ export function needsApproval(url: string): boolean {
 }
 
 /**
+ * 黑名单里的一项：人写的网站（https://www.example.com/a、example.com、*.example.com）变成小写的主机名。
+ * 认不出是 null
+ */
+export function blockedHostOf(input: string): string | null {
+  const text = input.trim().replace(/^\*\./, '')
+  if (!text || /\s/.test(text)) return null
+  const parsed = parseUrl(/^[a-z][a-z0-9+.-]*:\/\//i.test(text) ? text : `https://${text}`)
+  if (!parsed || (parsed.protocol !== 'http:' && parsed.protocol !== 'https:')) return null
+  const host = parsed.hostname.toLowerCase().replace(/\.$/, '')
+  return host || null
+}
+
+/** 主机名是不是落在黑名单的这一项里：本身，或者它的子域名 */
+export const hostMatches = (hostname: string, blocked: string): boolean => {
+  const host = hostname.toLowerCase().replace(/\.$/, '')
+  return host === blocked || host.endsWith(`.${blocked}`)
+}
+
+/**
  * 把人或模型给的一段字变成网址。已经带了协议的原样（能不能开另说）；
  * 像主机名的补上协议（本机地址补 http，别的补 https）；allowSearch 时别的拿去搜索，不然是 null。
  */

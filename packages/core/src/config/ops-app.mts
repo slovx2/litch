@@ -6,6 +6,7 @@ import type {
   ConfigComputerView,
   ConfigOpenPlace,
   ConfigPrefs,
+  ConfigSitePolicyView,
   ConfigSiteView,
 } from '../model-config.mjs'
 import { parseSwitch } from './argv.mjs'
@@ -41,6 +42,18 @@ const setPrefs = async (ctx: OpContext, patch: Partial<ConfigPrefs>) => {
 
 const bad = (ctx: OpContext, zh: string, en: string) =>
   new ConfigFailure('invalid', ctx.say(zh, en))
+
+/** 黑名单那一行：开关在前，后面是主机名 */
+const policyText = (ctx: OpContext, policy: ConfigSitePolicyView) =>
+  [
+    ctx.say(
+      `信任所有网站：${policy.trustAll ? '开' : '关'}`,
+      `Trust all sites: ${policy.trustAll ? 'on' : 'off'}`,
+    ),
+    policy.blocked.length > 0
+      ? ctx.say(`黑名单：${policy.blocked.join(', ')}`, `Blocklist: ${policy.blocked.join(', ')}`)
+      : ctx.say('黑名单是空的', 'Blocklist is empty'),
+  ].join('\n')
 
 /** 网站写法认成来源：https://example.com/x → https://example.com；不写协议的当 https */
 export function originOf(raw: string): string | null {
@@ -249,6 +262,73 @@ export const APP_OPS: Record<string, OpSpec> = {
       if (raw !== undefined && !origin) throw bad(ctx, '网站认不出', 'Cannot read the site')
       const removed = (await ctx.main({ kind: 'browser.forget', origin })) as number
       return { text: ctx.say(`去掉了 ${removed} 个。`, `Forgot ${removed}.`), data: { removed } }
+    },
+  },
+  'browser trust': {
+    args: [1, 1],
+    usage: 'browser trust on|off',
+    summary: {
+      zh: '内置浏览器信任所有网站、不再询问（黑名单里的除外；打开要用户在桌面端点允许）',
+      en: 'Trust all sites in the built-in browser without asking, except the blocklist (turning it on needs the user to allow it on the desktop)',
+    },
+    async run(ctx) {
+      const on = parseSwitch(ctx.cmd.positionals[0])
+      if (on === null) throw bad(ctx, '只能是 on 或 off', 'Use on or off')
+      if (on) await ctx.confirm([{ kind: 'trustAllSites' }])
+      const policy = (await ctx.main({ kind: 'browser.trust', on })) as ConfigSitePolicyView
+      return { text: policyText(ctx, policy), data: policy }
+    },
+  },
+  'browser blocked': {
+    args: [0, 0],
+    usage: 'browser blocked',
+    summary: {
+      zh: '信任所有网站的开关和黑名单',
+      en: 'Whether all sites are trusted, and the blocklist',
+    },
+    async run(ctx) {
+      const policy = (await ctx.main({ kind: 'browser.policy' })) as ConfigSitePolicyView
+      return { text: policyText(ctx, policy), data: policy }
+    },
+  },
+  'browser block': {
+    args: [1, 1],
+    usage: 'browser block <site>',
+    summary: {
+      zh: '把一个网站加进黑名单（子域名一起算；只在信任所有网站时起作用）',
+      en: 'Add a site to the blocklist (subdomains included; only matters while all sites are trusted)',
+    },
+    async run(ctx) {
+      const site = ctx.cmd.positionals[0] ?? ''
+      if (!originOf(site.replace(/^\s*\*\./, '')))
+        throw bad(ctx, '网站要写成 example.com 这样', 'Write the site like example.com')
+      const policy = (await ctx.main({ kind: 'browser.block', site })) as ConfigSitePolicyView
+      return { text: policyText(ctx, policy), data: policy }
+    },
+  },
+  'browser unblock': {
+    args: [0, 1],
+    flags: ['all'],
+    usage: 'browser unblock <site> | browser unblock --all',
+    summary: {
+      zh: '从黑名单里去掉网站（要用户在桌面端点允许）',
+      en: 'Remove sites from the blocklist (the user allows it on the desktop)',
+    },
+    async run(ctx) {
+      const all = ctx.cmd.flags.has('all')
+      const raw = ctx.cmd.positionals[0]
+      if (all === (raw !== undefined))
+        throw bad(ctx, '给一个网站，或者 --all。', 'Pass a site or --all.')
+      const host =
+        raw === undefined
+          ? null
+          : (originOf(raw.replace(/^\s*\*\./, ''))
+              ?.replace(/^https?:\/\//, '')
+              .replace(/:\d+$/, '') ?? null)
+      if (raw !== undefined && !host) throw bad(ctx, '网站认不出', 'Cannot read the site')
+      await ctx.confirm([{ kind: 'unblock', host }])
+      const policy = (await ctx.main({ kind: 'browser.unblock', host })) as ConfigSitePolicyView
+      return { text: policyText(ctx, policy), data: policy }
     },
   },
   'browser clear-data': {

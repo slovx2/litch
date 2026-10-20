@@ -53,7 +53,8 @@ command is written `scripts/litch …`; always call it by its absolute path.
    Allow there.
 4. **Guarded and irreversible actions wait for a click in the desktop app.** Actions that give agents
    more power (`scripts/litch tools set` turning Computer Use or "operate this computer" on,
-   `scripts/litch machine set` loosening approval or access, `scripts/litch browser allow`) make Litch
+   `scripts/litch machine set` loosening approval or access, `scripts/litch browser allow`,
+   `scripts/litch browser trust on`, `scripts/litch browser unblock`) make Litch
    show a confirmation card, and so do the irreversible actions in rule 3; the change only happens when
    the user clicks Allow there. Tell the user to look at the Litch window. If they decline, accept it
    and do not retry in a loop.

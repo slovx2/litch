@@ -71,6 +71,12 @@ export function itemText(item: ConfigConfirmItem, t: Translator): string {
       return t('assist.confirm.access', { device: item.device })
     case 'site':
       return t('assist.confirm.site', { origin: item.origin })
+    case 'trustAllSites':
+      return t('assist.confirm.trustAll')
+    case 'unblock':
+      return item.host === null
+        ? t('assist.confirm.unblockAll')
+        : t('assist.confirm.unblock', { host: item.host })
     case 'erase':
       return t(`assist.confirm.erase.${item.what}`, {
         device: item.device ?? '',

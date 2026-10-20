@@ -14,6 +14,20 @@ export interface ToolsSeen {
     confirmShown: boolean
     cancelKeptQuiet: boolean
     clearedToast: boolean
+    /** 信任所有网站：开之前、开之后的样子，开着时有没有黑名单 */
+    trustBefore: string
+    trustAfter: string
+    blocklistWhenOff: boolean
+    /** 写了一个带协议和大写的网址，加进去的那一行（主机名） */
+    blockedRow: string
+    /** 认不出的写法出了提示、没加进去 */
+    badRefused: boolean
+    /** 外壳那边记下来的（加完一项时） */
+    stored: { trustAll: boolean; blocked: string[] } | null
+    /** 删掉那一项后列表空了；关掉开关后黑名单收起、外壳那边也关了 */
+    removedEmpty: boolean
+    offHidden: boolean
+    storedOff: boolean
   }
   computer: {
     /** 权限那一块：ready、failed、idle、loading */
@@ -63,6 +77,55 @@ export async function toolsSeen(): Promise<ToolsSeen> {
   await until('确认框', () => one('dialog.confirm[open]'))
   one<HTMLButtonElement>('dialog.confirm[open] .confirm-yes')?.click()
   const clearedToast = await seen(() => text(one('.toasts')).includes('浏览数据已清除'), 10_000)
+
+  // ---- 信任所有网站和黑名单 ----
+  const bridge = (
+    window as unknown as {
+      litchBrowser: { policy(): Promise<{ trustAll: boolean; blocked: string[] } | null> }
+    }
+  ).litchBrowser
+  const trustBlock = await until('信任所有网站那一块取到', () => {
+    const block = one('.set-content [data-trust-all]')
+    return block && block.dataset.trustAll !== 'loading' ? block : null
+  })
+  const trustBefore = trustBlock.dataset.trustAll ?? ''
+  const blocklistWhenOff = Boolean(one('[data-field="blocked-site"]', trustBlock))
+  one<HTMLButtonElement>('[data-act="trust-all-sites"]', trustBlock)?.click()
+  await seen(() => one('.set-content [data-trust-all="on"]'), 3000)
+  const trustAfter = one('.set-content [data-trust-all]')?.dataset.trustAll ?? ''
+  const field = await until('黑名单的输入框', () =>
+    one<HTMLInputElement>('.set-content [data-field="blocked-site"]'),
+  )
+  const type = (value: string) => {
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+    setter?.call(field, value)
+    field.dispatchEvent(new Event('input', { bubbles: true }))
+  }
+  type('two words')
+  await seen(() => !one<HTMLButtonElement>('.set-content [data-act="block-site"]')?.disabled, 2000)
+  one<HTMLButtonElement>('.set-content [data-act="block-site"]')?.click()
+  const badRefused =
+    (await seen(() => field.getAttribute('aria-invalid') === 'true', 3000)) &&
+    !one('.set-content [data-blocked-site]')
+  type('https://WWW.Bank.example/login')
+  await seen(() => !one<HTMLButtonElement>('.set-content [data-act="block-site"]')?.disabled, 2000)
+  one<HTMLButtonElement>('.set-content [data-act="block-site"]')?.click()
+  await seen(() => one('.set-content [data-blocked-site]'), 3000)
+  const blockedRow = one('.set-content [data-blocked-site]')?.dataset.blockedSite ?? ''
+  const stored = await bridge.policy()
+  one<HTMLButtonElement>('.set-content [data-act="unblock-site"]')?.click()
+  const removedEmpty = await seen(
+    () => one('.set-content [data-blocked="0"]') && !one('.set-content [data-blocked-site]'),
+    3000,
+  )
+  one<HTMLButtonElement>('.set-content [data-act="trust-all-sites"]')?.click()
+  const offHidden = await seen(
+    () =>
+      one('.set-content [data-trust-all="off"]') &&
+      !one('.set-content [data-field="blocked-site"]'),
+    3000,
+  )
+  const storedOff = (await bridge.policy())?.trustAll === false
 
   // ---- Computer Use ----
   let computer: ToolsSeen['computer'] = null
@@ -150,7 +213,21 @@ export async function toolsSeen(): Promise<ToolsSeen> {
 
   return {
     computerBridge,
-    browser: { sites, confirmShown, cancelKeptQuiet, clearedToast },
+    browser: {
+      sites,
+      confirmShown,
+      cancelKeptQuiet,
+      clearedToast,
+      trustBefore,
+      trustAfter,
+      blocklistWhenOff,
+      blockedRow,
+      badRefused,
+      stored,
+      removedEmpty,
+      offHidden,
+      storedOff,
+    },
     computer,
     devices: { localHint, linkLands, remoteSaysThisMac },
   }
@@ -170,6 +247,20 @@ export function judgeTools(seen: ToolsSeen, platform: string): string[] {
   must(seen.browser.confirmShown, '点“清除浏览数据”没有先出确认框')
   must(seen.browser.cancelKeptQuiet, '确认框点了取消却清了，或者框没关')
   must(seen.browser.clearedToast, '确认清除之后没有出“浏览数据已清除”')
+  const browser = seen.browser
+  must(browser.trustBefore === 'off', `信任所有网站一开始不是关的：${browser.trustBefore}`)
+  must(!browser.blocklistWhenOff, '信任所有网站关着时就出了黑名单')
+  must(browser.trustAfter === 'on', `点了开关没有开：${browser.trustAfter}`)
+  must(browser.badRefused, '认不出的网站没有提示，或者加进去了')
+  must(browser.blockedRow === 'www.bank.example', `黑名单加进去的那一行不对：${browser.blockedRow}`)
+  must(
+    browser.stored?.trustAll === true &&
+      JSON.stringify(browser.stored.blocked) === '["www.bank.example"]',
+    `外壳那边记下来的不对：${JSON.stringify(browser.stored)}`,
+  )
+  must(browser.removedEmpty, '删掉黑名单那一项之后列表没空')
+  must(browser.offHidden, '关掉信任所有网站之后黑名单没收起')
+  must(browser.storedOff, '关掉之后外壳那边还开着')
   if (mac) {
     const computer = seen.computer
     must(computer, '设置页里没有 Computer Use 那一组')

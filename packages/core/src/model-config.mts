@@ -53,6 +53,10 @@ export type ConfigConfirmItem =
   | { kind: 'access'; device: string; access: 'open' }
   /** 内置浏览器“一直允许”加一个网站 */
   | { kind: 'site'; origin: string }
+  /** 内置浏览器信任所有网站、不再询问 */
+  | { kind: 'trustAllSites' }
+  /** 从内置浏览器的黑名单里去掉一项；host 是 null 是清空 */
+  | { kind: 'unblock'; host: string | null }
   /** 撤不回的事（E7）：移除远程设备、撤掉手机钥匙、删定时任务、清内置浏览器数据、清“操作这台电脑”的记录。
    * device 是设备的显示名（浏览器数据不属于哪台设备，是 null）；name 是被删的那样东西的名字，设备本身和整份数据是 null */
   | {
@@ -93,6 +97,13 @@ export type ConfigMainRequest =
   /** origin 给 null 是全删 */
   | { kind: 'browser.forget'; origin: string | null }
   | { kind: 'browser.clearData' }
+  /** 信任所有网站的开关和黑名单 */
+  | { kind: 'browser.policy' }
+  | { kind: 'browser.trust'; on: boolean }
+  /** site 是人写的网站，主进程认成主机名；认不出回失败 */
+  | { kind: 'browser.block'; site: string }
+  /** host 给 null 是清空 */
+  | { kind: 'browser.unblock'; host: string | null }
   | { kind: 'computer.status' }
   | { kind: 'computer.apps' }
   | { kind: 'computer.forget'; bundleId: string }
@@ -104,6 +115,12 @@ export type ConfigMainResult = { ok: true; data: unknown } | { ok: false; reason
 export interface ConfigSiteView {
   origin: string
   at: number
+}
+
+/** 内置浏览器信任所有网站的开关和黑名单（主机名，含子域名） */
+export interface ConfigSitePolicyView {
+  trustAll: boolean
+  blocked: string[]
 }
 
 /** Computer Use 的状态（主进程 computer-use/settings.mts 的 ComputerUseState 里执行器要的几样） */

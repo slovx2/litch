@@ -846,6 +846,16 @@ export const en: Record<MessageKey, Entry> = {
   'settings.browser.sites.at': 'Allowed {day}',
   'settings.browser.forget': 'Remove',
   'settings.browser.forgetAll': 'Remove all',
+  'settings.browser.trust': 'Site approval',
+  'settings.browser.trust.title': 'Trust all sites, never ask',
+  'settings.browser.trust.note':
+    'The model can open any site without asking you, except sites on the blocklist, which are never opened. Applies to all sessions and devices (including sessions on remote devices); when off, each site is asked about as usual and the blocklist does nothing',
+  'settings.browser.blocked': 'Blocklist',
+  'settings.browser.blocked.note': 'A domain or a URL; subdomains are included',
+  'settings.browser.blocked.placeholder': 'example.com',
+  'settings.browser.blocked.add': 'Add',
+  'settings.browser.blocked.empty': 'The blocklist is empty.',
+  'settings.browser.blocked.bad': 'Cannot read this site; write it like example.com',
   'settings.browser.data': 'Browsing data',
   'settings.browser.data.note':
     'Cookies, sign-ins, site storage and cache. After clearing you will need to sign in again to sites you used in the built-in browser; always-allowed sites stay.',
@@ -1423,6 +1433,10 @@ export const en: Record<MessageKey, Entry> = {
   'clientAsk.option.session': 'Allow for this session',
   'clientAsk.option.always': 'Always allow',
   'clientAsk.option.decline': 'Decline',
+  'clientAsk.option.trustAll': 'Trust all sites',
+  'clientAsk.trustAll.done':
+    'Trusting all sites; you will not be asked again. Turn it off or set a blocklist in Settings → Built-in browser',
+  'clientAsk.trustAll.failed': 'Could not turn it on: {reason}',
   'devices.tools': 'Use this computer',
   'devices.tools.note':
     "Whether sessions on this device may use these abilities of this computer. When one is off, the model's call fails right away and it is told to turn it on here.",

@@ -782,6 +782,16 @@ export const zhCN = {
   'settings.browser.sites.at': '{day} 允许',
   'settings.browser.forget': '删除',
   'settings.browser.forgetAll': '全部删除',
+  'settings.browser.trust': '网站审批',
+  'settings.browser.trust.title': '信任所有网站，不再询问',
+  'settings.browser.trust.note':
+    '模型打开任何网站都不再问你，只有黑名单里的一律不许打开。所有会话、所有设备（包括远程设备上的会话）都算；关掉后照常逐个网站询问，黑名单不起作用',
+  'settings.browser.blocked': '黑名单',
+  'settings.browser.blocked.note': '写域名或网址，子域名一起算',
+  'settings.browser.blocked.placeholder': 'example.com',
+  'settings.browser.blocked.add': '加入',
+  'settings.browser.blocked.empty': '黑名单是空的。',
+  'settings.browser.blocked.bad': '认不出这个网站，写成 example.com 这样',
   'settings.browser.data': '浏览数据',
   'settings.browser.data.note':
     'Cookie、登录状态、网站存下的数据和缓存。清除之后，在内置浏览器里登录过的网站都要重新登录；一直允许的网站不受影响。',
@@ -1341,6 +1351,9 @@ export const zhCN = {
   'clientAsk.option.session': '这个会话里都允许',
   'clientAsk.option.always': '一直允许',
   'clientAsk.option.decline': '拒绝',
+  'clientAsk.option.trustAll': '信任所有网站',
+  'clientAsk.trustAll.done': '已信任所有网站，不再询问。可在设置 → 内置浏览器里关掉或设黑名单',
+  'clientAsk.trustAll.failed': '没开成：{reason}',
   'devices.tools': '用这台电脑的能力',
   'devices.tools.note':
     '这台设备上的会话能不能用这台电脑上的这些能力。关着的时候模型调用会当场失败，它会被告知来这里打开。',

@@ -23,3 +23,13 @@ export const BROWSER_SITES = 'litch:browser:sites'
 export const BROWSER_FORGET_SITE = 'litch:browser:forget-site'
 /** 界面 → 主进程，等应答：清除浏览数据（cookie、站点存储、缓存） */
 export const BROWSER_CLEAR_DATA = 'litch:browser:clear-data'
+/** 界面 → 主进程，等应答：信任所有网站的开关和黑名单（设置页用） */
+export const BROWSER_POLICY = 'litch:browser:policy'
+/** 界面 → 主进程，等应答：开关信任所有网站（给 boolean），回新的开关和黑名单 */
+export const BROWSER_TRUST_ALL = 'litch:browser:trust-all'
+/** 界面 → 主进程，等应答：加一项黑名单（人写的网站），回新的开关和黑名单；认不出是 null */
+export const BROWSER_BLOCK = 'litch:browser:block'
+/** 界面 → 主进程，等应答：去掉一项黑名单（给 null 全去掉），回新的开关和黑名单 */
+export const BROWSER_UNBLOCK = 'litch:browser:unblock'
+/** 主进程 → 界面：开关或黑名单变了（卡片上点的、litch config 改的），带着新的 */
+export const BROWSER_POLICY_CHANGED = 'litch:browser:policy-changed'

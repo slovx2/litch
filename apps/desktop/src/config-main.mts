@@ -1,4 +1,4 @@
-// litch config 里只有主进程做得了的那几项（14 号设计 3.3）：内置浏览器“一直允许”的网站和浏览数据、
+// litch config 里只有主进程做得了的那几项（14 号设计 3.3）：内置浏览器“一直允许”的网站、信任所有网站和黑名单、浏览数据、
 // Computer Use 的状态和“始终允许”的应用。核心的执行器经 CLIENT_TOOL 的 config 消息交过来，这里做完回 configResult。
 // 和设置页上点按钮走的是同一份设置（browser/install.mts、computer-use/settings.mts），界面那边下次打开就是新的。
 import type {
@@ -27,7 +27,11 @@ export function createConfigMain(deps: ConfigMainDeps) {
         case 'browser.sites':
         case 'browser.allow':
         case 'browser.forget':
-        case 'browser.clearData': {
+        case 'browser.clearData':
+        case 'browser.policy':
+        case 'browser.trust':
+        case 'browser.block':
+        case 'browser.unblock': {
           const browser = deps.browser()
           if (!browser) return fail('The built-in browser is not ready yet.')
           if (request.kind === 'browser.sites') {
@@ -42,6 +46,21 @@ export function createConfigMain(deps: ConfigMainDeps) {
           }
           if (request.kind === 'browser.forget') {
             return { ok: true, data: browser.settings.forgetSite(request.origin ?? undefined) }
+          }
+          if (request.kind === 'browser.policy')
+            return { ok: true, data: browser.settings.policy() }
+          if (request.kind === 'browser.trust') {
+            return { ok: true, data: browser.settings.setTrustAll(request.on) }
+          }
+          if (request.kind === 'browser.block') {
+            const policy = browser.settings.block(request.site)
+            return policy
+              ? { ok: true, data: policy }
+              : fail(`Cannot read the site ${request.site}.`)
+          }
+          if (request.kind === 'browser.unblock') {
+            browser.settings.unblock(request.host ?? undefined)
+            return { ok: true, data: browser.settings.policy() }
           }
           await browser.settings.clearData()
           return { ok: true, data: null }

@@ -3,6 +3,7 @@
 // 类型在界面那边另有一份（packages/ui/src/side/browser/bridge.ts），改一边要改另一边。
 import { ipcRenderer } from 'electron'
 import {
+  BROWSER_BLOCK,
   BROWSER_CLEAR_DATA,
   BROWSER_CLOSE,
   BROWSER_EXTERNAL,
@@ -10,10 +11,14 @@ import {
   BROWSER_NAVIGATE,
   BROWSER_OPEN,
   BROWSER_PLACE,
+  BROWSER_POLICY,
+  BROWSER_POLICY_CHANGED,
   BROWSER_SHOW,
   BROWSER_SITES,
   BROWSER_STATE,
   BROWSER_TABS,
+  BROWSER_TRUST_ALL,
+  BROWSER_UNBLOCK,
 } from './ipc.mjs'
 
 const listen = (channel: string, handler: (payload: unknown) => void) => {
@@ -40,5 +45,11 @@ export function browserBridge() {
     sites: () => ipcRenderer.invoke(BROWSER_SITES),
     forgetSite: (origin: string | null) => ipcRenderer.invoke(BROWSER_FORGET_SITE, origin),
     clearData: () => ipcRenderer.invoke(BROWSER_CLEAR_DATA),
+    // 信任所有网站和黑名单：设置页、审批卡片上用
+    policy: () => ipcRenderer.invoke(BROWSER_POLICY),
+    setTrustAll: (on: boolean) => ipcRenderer.invoke(BROWSER_TRUST_ALL, on),
+    block: (site: string) => ipcRenderer.invoke(BROWSER_BLOCK, site),
+    unblock: (host: string | null) => ipcRenderer.invoke(BROWSER_UNBLOCK, host),
+    onPolicy: (handler: (policy: unknown) => void) => listen(BROWSER_POLICY_CHANGED, handler),
   }
 }

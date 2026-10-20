@@ -257,6 +257,30 @@ test('导航闸门：只放本机和已经允许的来源', async () => {
   assert.equal(host.gate(page, 'https://good.test/next'), false)
 })
 
+test('信任所有网站：不问，黑名单里的（含子域名）回拒绝，闸门同样拦', async () => {
+  const { run, host, asked, sites } = setup()
+  sites.setTrustAll(true)
+  sites.block('bank.test')
+  assert.equal((await run('navigate', { url: 'https://example.com/' })).success, true)
+  assert.equal((await run('navigate', { url: 'https://other.test/a' })).success, true)
+  assert.equal(asked.length, 0)
+  const refused = await run('navigate', { url: 'https://www.bank.test/login' })
+  assert.equal(refused.success, false)
+  assert.match(
+    text(refused),
+    /^\[litch:declined\] https:\/\/www\.bank\.test is on the user's blocklist/,
+  )
+  assert.equal(asked.length, 0)
+  const page = host.pages()[0] as BrowserPage
+  assert.equal(host.gate(page, 'https://anything.test/'), true)
+  assert.equal(host.gate(page, 'https://bank.test/'), false)
+  assert.equal(host.gate(page, 'https://notbank.test/'), true)
+  // 关掉之后照常问，黑名单不起作用
+  sites.setTrustAll(false)
+  assert.equal(host.gate(page, 'https://anything.test/'), false)
+  assert.equal(host.gate(page, 'https://bank.test/'), false)
+})
+
 test('只许动这个会话里代理自己的标签', async () => {
   const { run, host } = setup()
   const user = host.open({ deviceId: 'local', threadId: 'a' }, 'user')
