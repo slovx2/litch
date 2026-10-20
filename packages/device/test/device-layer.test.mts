@@ -24,11 +24,11 @@ function runtimeOn(path: string, engine: string) {
       if (!('id' in message)) return
       const result =
         message.method === 'initialize'
-          ? { userAgent: 'rt/0.157.1', codexHome: '/', platformFamily: 'unix', platformOs: 'test' }
+          ? { userAgent: 'rt/0.163.0', codexHome: '/', platformFamily: 'unix', platformOs: 'test' }
           : message.method === 'runtime/info'
             ? {
                 engine,
-                protocolVersion: '0.157.1',
+                protocolVersion: '0.163.0',
                 cliBuild: '3.2.1',
                 capabilities: [],
                 releaseReady: false,

@@ -7,6 +7,15 @@ versioning or publishing metadata.
 
 ## 未发布
 
+- 适配器：Codex 协议基线从 0.157.1 升到 0.163.0（`codexProtocol`、快照、方法表、`runtime/info` 和 `codex --version` 报的版本），CI 和“一键安装”的验证版 codex 改成 0.163.0；作为 harness 接进来的 codex 下限仍是 0.157.1
+- 适配器：`modelProvider/capabilities/read` 不再带 0.163.0 删掉的 `namespaceTools`（六家入口）
+- Claude Code：支持 0.163.0 新增的 `thread/items/read`、`thread/attachmentOwner/list`，`thread/items/list` 的游标可以是回合里的一个条目（`{type: "item", itemId}`，Pi、DSH、OpenCode、ACP 的入口同样支持），`thread/list` 支持 `excludedThreadIds`，`mcpServerStatus/list` 支持 `serverName`；`mcpServer/oauth/login` 的应答和完成通知带同一个 `loginId`
+- Claude Code：动态工具（`dynamicTools`）一律直接交给客户端执行，不再走 Claude Code 这边的审批和沙箱，和原生 codex 一样；原来只有 `litch_` 开头的命名空间这样，别的命名空间和不带命名空间的工具按会话的审批策略先问、按沙箱拦
+- Claude Code：去掉入口给普通回合加的“Codex 桌面展示风格”系统提示（对话风格、Mermaid 等），适配器不再维护呈现类指令；需要的客户端自己经开发者指令给
+- Claude Code：新增三个开关，默认都和原来一样：`CHA_CLAUDE_SETTING_SOURCES` 选读哪几层 Claude Code 设置（只给 `user` 时工作区的 `.claude/settings*.json`、`CLAUDE.md`、`.mcp.json` 都不读）；`CHA_CLAUDE_PLANS_LOCATION=config` 把计划文件放到 Claude Code 自己的配置目录，工作区里不留 `.claude/plans`；`CHA_CLAUDE_THREAD_ID_HEADER=1` 让模型请求带 `thread-id` 头，给按线程计费的代理用。认不出的值启动就报错
+- Claude Code：Linux 上不再要求装 `socat`。原来入口启动时会查它，可适配器早就关了 SDK 自带的沙箱，受限命令只经自己的 bwrap 包装器，用不到 socat
+- Litch：回答的呈现风格由 Litch 自己给。Litch 建的会话（含子会话、定时任务的会话）告诉模型回答显示在 Litch 里、能渲染 Markdown 和 Mermaid 图，要对话式地回答而不是终端式；用户自己的指令优先。经命名空间 `instructions` 送进系统提示（新的 `litch_presentation`：不带工具、只带 instructions），Claude Code 只在普通回合放、带 `outputSchema` 的回合不放；原生 Codex 不带。官方桌面端直连各 harness 的入口时没有这段
+- Claude Code：适配器自己连的 MCP 服务按会话跨回合复用连接，第二个回合起不再重起 stdio 服务、不再和 HTTP 服务重新握手（先 ping 一次确认还通）。配置或工作目录变了就重建；会话归档、删除、卸载、回退、适配器停止时关掉；没人用的连接默认留 10 分钟、最多 16 条（`CHA_CLAUDE_MCP_IDLE_MINUTES`、`CHA_CLAUDE_MCP_IDLE_CONNECTIONS`，设成 `0` 回到每回合重连）。MCP 服务进程里的状态因此会跨回合留着；回合被打断时还有请求在途的连接不留
 - Claude Code：`app-server` 接受 codex 风格的 `-c key=<TOML 值>`，认 `approval_policy`、`sandbox_mode`、`default_permissions`、`developer_instructions`、`permissions.*`、`mcp_servers.*`，其余键记日志后忽略；这一层叠在 `config.json` 上，不写回
 - Claude Code：支持配置里自定义的权限档位（`permissions.<名字>`：`extends` 内置档位、`filesystem` 的 read / write / deny 与子路径、`network.enabled`，判定照 codex 取最深的条目），`thread/start`、`turn/start` 等认档位名和 `runtimeWorkspaceRoots`，`default_permissions` 管不带权限的新会话，`permissionProfile/list` 列出它们。禁读同时作用于命令沙箱（macOS 的 sandbox-exec、Linux 的 bwrap 用空 tmpfs 盖住再挂回放开的子目录）和 Read、Glob、Grep、LS 等文件类工具。不用 `-c`、不选自定义档位时行为不变
 

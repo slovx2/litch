@@ -1,6 +1,6 @@
 # 发布验收范围
 
-当前发布线为开发预览版。客户端契约固定为 Codex app-server 0.157.1，
+当前发布线为开发预览版。客户端契约固定为 Codex app-server 0.163.0，
 `protocol/versions.json` 中的 `releaseReady` 保持 `false`，直到完成真实桌面验收。
 
 ## 平台与入口

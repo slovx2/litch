@@ -4,6 +4,7 @@ import { claudeChildEnv } from './claude-provider.mjs'
 import { hostClaudeEnvOverrides, hostClaudeExecutable } from './host-claude.mjs'
 import type { NativeProcess } from './native-process.mjs'
 import { ProtocolError } from './protocol-contract.mjs'
+import { claudeSettingSources } from './runtime-config.mjs'
 
 export type ContextBlock =
   | { type: 'text'; text: string }
@@ -138,7 +139,7 @@ export async function appendNativeContext(
     cwd: context.cwd,
     ...(context.model ? { model: context.model } : {}),
     abortController: abort,
-    settingSources: ['user', 'project', 'local'],
+    settingSources: claudeSettingSources(),
     settings: { disableAllHooks: true, disableSkillShellExecution: true },
     strictMcpConfig: true,
     mcpServers: {},

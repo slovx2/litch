@@ -1,6 +1,6 @@
 # 计划模式与审批映射
 
-基线：Codex 协议 0.157.1、Claude Agent SDK 0.3.282、宿主 CLI 2.1.282。
+基线：Codex 协议 0.163.0、Claude Agent SDK 0.3.282、宿主 CLI 2.1.282。
 
 ## 用户行为
 

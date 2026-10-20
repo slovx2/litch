@@ -232,7 +232,7 @@ export async function dispatch(s: DshServer, peer: RpcPeer, method: string, p: a
       return { requirements: null }
     case 'modelProvider/capabilities/read':
       // 命名空间形式的动态工具经插件交给 dsh 的模型（client-tools.mts）
-      return { namespaceTools: true, imageGeneration: false, webSearch: false }
+      return { imageGeneration: false, webSearch: false }
     case 'app/list':
     case 'hooks/list':
     case 'experimentalFeature/list':

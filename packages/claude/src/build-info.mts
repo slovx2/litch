@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
+import { CODEX_PROTOCOL_VERSION } from '../../shared/src/runtime-version.mjs'
 import { harnessDeclaration } from './harness-declaration.mjs'
 import { hostClaudeExecutable, hostClaudeVersion } from './host-claude.mjs'
 import { resolveRuntimeConfig } from './runtime-config.mjs'
@@ -17,7 +18,7 @@ function collectBuildInfo() {
   const cli = hostClaudeExecutable()
   return {
     engine: 'claude-code',
-    protocolVersion: '0.157.1',
+    protocolVersion: CODEX_PROTOCOL_VERSION,
     nodeVersion: process.versions.node,
     sdkVersion: sdk.version as string,
     cliBuild: hostClaudeVersion(cli, sdk.claudeCodeVersion),

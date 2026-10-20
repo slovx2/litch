@@ -1,6 +1,6 @@
 // 原生 codex 收不收一份参数：发给它的 thread/start、turn/start 逐条照上游的约束核对，返回它会拒绝或悄悄丢掉的地方。
 // 依据是上游 openai/codex 的 rust-v0.160.0-alpha.3（和本机实测用的 codex 0.160.0 最接近的标签），跟进上游时对一遍：
-//   - 形状：仓库固定的协议快照（protocol/codex-app-server/0.157.1）封闭之后校验（strict-schema.mts 的 seal）。
+//   - 形状：仓库固定的协议快照（protocol/codex-app-server/0.163.0）封闭之后校验（strict-schema.mts 的 seal）。
 //     上游不拒绝多出来的字段、只是悄悄丢掉，发了它不认识的字段等于没发，所以多出来的也算出入；
 //   - thread/start：app-server/src/request_processors/thread_processor.rs 的 thread_start
 //     （permissions 和 sandbox 不能同时给、projectId 不能是空的）和 validate_dynamic_tools（逐条抄）；

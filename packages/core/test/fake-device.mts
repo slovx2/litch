@@ -255,7 +255,7 @@ export function fakeDevice(harnesses: FakeHarness[]): {
         os: 'macos',
         home: '/home/dev',
         version: '0.6.0',
-        protocolVersion: '0.157.1',
+        protocolVersion: '0.163.0',
         extensions: device.extensions,
         ...(device.service === undefined ? {} : { service: device.service }),
       },

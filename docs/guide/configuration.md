@@ -153,6 +153,37 @@ export CHA_CLAUDE_ALLOWED_TOOLS="Read,Glob,Grep"
 export CHA_CLAUDE_ADD_DIRS="/repo/shared,/repo/docs"
 ```
 
+适配器自己连的 MCP 服务（会话配置、配置覆盖、用户级 `.claude.json` 里的）按会话跨回合复用连接：
+第二个回合不再重起 stdio 服务、不再和 HTTP 服务重新握手，只先 ping 一次确认还通。服务配置
+（含引用的环境变量、请求头）或工作目录变了就重建；会话归档、删除、卸载、回退时关掉，
+没人用的连接空闲超时或超出条数上限时也关掉。回合被打断时还有请求在途的连接不留，下个回合重新连。
+
+```bash
+# 没人用的 MCP 连接留多久（分钟，可以带小数），默认 10；0 表示不复用，每个回合重新连。
+export CHA_CLAUDE_MCP_IDLE_MINUTES=10
+# 最多留几条没人用的 MCP 连接（一个会话的一个服务算一条），超出时先关最久没用的，默认 16；0 也表示不复用。
+export CHA_CLAUDE_MCP_IDLE_CONNECTIONS=16
+```
+
+
+## Claude Code 自己的设置、计划文件与请求头
+
+```bash
+# 起 CLI 时读哪几层 Claude Code 设置（逗号分隔：user、project、local），默认三层都读。
+# 只给 user 时工作区里的 .claude/settings*.json（hooks、env 等）、CLAUDE.md、.mcp.json 都不读。
+export CHA_CLAUDE_SETTING_SOURCES="user"
+
+# 计划模式的计划文件放哪：workspace（默认，<工作区>/.claude/plans/codex-harness-adapter/<线程号>/）
+# 或 config（Claude Code 自己的默认位置 <CLAUDE_CONFIG_DIR 或 ~/.claude>/plans/，工作区里不留东西）。
+export CHA_CLAUDE_PLANS_LOCATION="config"
+
+# 设成 1 时 CLI 发的每个模型请求带 thread-id: <线程号>（合进 ANTHROPIC_CUSTOM_HEADERS，原有的头保留）。
+# 默认关，关着时一个多余的头都不发；给按线程计费的代理用，代理转发上游前要自己剥掉。
+export CHA_CLAUDE_THREAD_ID_HEADER=1
+```
+
+三项给了认不出的值时入口启动就报错。
+
 ## Codex 风格的 `-c` 与权限档位
 
 Claude 入口的 `app-server` 和 `codex app-server` 一样接受 `-c key=<TOML 值>`（也可写 `--config key=…`、`--config=key=…`），可以给多次：
@@ -219,7 +250,7 @@ export CHA_CLAUDE_NODE="/absolute/path/to/node"
 | --- | --- |
 | `CHA_CLAUDE_ADAPTER` | 仅 shim：`packages/claude/dist/claude/src/adapter.mjs` 路径。 |
 | `CHA_CLAUDE_NODE` | 仅 shim：shim 启动的 Node。本地入口用 `--node`。 |
-| `CHA_CLAUDE_COMPAT_VERSION` | Codex app-server version advertised (default `0.157.1`); separate from minimum CLI versions. |
+| `CHA_CLAUDE_COMPAT_VERSION` | Codex app-server version advertised (default `0.163.0`); separate from minimum CLI versions. |
 | `CHA_CLAUDE_VERSION_SUFFIX` | Tag after the version to distinguish the adapter from real codex (default `codex-harness-adapter`; set `""` to behave exactly like upstream codex). |
 | `CODEX_REAL` | 仅 shim：处理非 app-server 命令和 `codex` 直通的真实 Codex CLI。 |
 | `CHA_CLAUDE_CLI` | 宿主 Claude Code 可执行文件，默认从 PATH 查找 claude。运行时诊断接受 CLI >= 2.1.282 的稳定版，配置仍由原生 CLAUDE_CONFIG_DIR 提供。 |
@@ -236,9 +267,14 @@ export CHA_CLAUDE_NODE="/absolute/path/to/node"
 | `CHA_CLAUDE_MODELS` | Codex App model picker list. |
 | `CHA_CLAUDE_MODEL_ALIASES` / `_EFFORT_ALIASES` | Id remapping. |
 | `CHA_CLAUDE_MCP_SERVERS` | MCP server config (JSON or file path). |
+| `CHA_CLAUDE_MCP_IDLE_MINUTES` | 适配器自己连的 MCP 服务跨回合复用：没人用的连接留多久（分钟），默认 `10`；`0` 表示不复用，每个回合重新连。 |
+| `CHA_CLAUDE_MCP_IDLE_CONNECTIONS` | 最多留几条没人用的 MCP 连接（一个会话的一个服务算一条），超出时先关最久没用的，默认 `16`；`0` 也表示不复用。 |
 | `CHA_CLAUDE_ALLOWED_TOOLS` | Pre-approved tools. |
 | `CHA_CLAUDE_ADD_DIRS` | Extra directories exposed to Claude. |
 | `CHA_CLAUDE_AUTO_WORKTREE` / `_WORKTREE_ROOT` | Per-thread worktree isolation. |
+| `CHA_CLAUDE_SETTING_SOURCES` | 起 CLI 时读哪几层 Claude Code 设置，逗号分隔的 `user`、`project`、`local`，默认三层都读；认不出的值启动报错。 |
+| `CHA_CLAUDE_PLANS_LOCATION` | 计划文件放哪：`workspace`（默认，工作区里每个线程一个目录）或 `config`（`<CLAUDE_CONFIG_DIR 或 ~/.claude>/plans/`）。CLI 只认项目内的 `plansDirectory`，所以不能指定任意目录。 |
+| `CHA_CLAUDE_THREAD_ID_HEADER` | 设成 `1` 时模型请求带 `thread-id: <线程号>`（合进 `ANTHROPIC_CUSTOM_HEADERS`），不带回合号；默认关。 |
 | `CHA_CLAUDE_IDLE_EXIT_MS` | 仅 shim：守护进程空闲退出；本地入口固定为 `0`。还有 Claude 进程在看管后台命令时不算空闲。 |
 | `CHA_CLAUDE_KEEP_ALIVE_SESSIONS` | 同时保留后台命令的 Claude 会话数上限，默认 `8`。回合结束时还有后台命令在跑，该会话的 Claude 进程就留下（每个约占 120–220 MB 内存）；超出上限的会话不保留，后台命令随回合结束而停止并有提示。设为 `0` 关闭保留。 |
 | `CHA_CLAUDE_KEEP_ALIVE_DETACHED_MINUTES` | 全部客户端断开后，留着的 Claude 进程再保留多少分钟，默认 `30`；期间有客户端连回来就继续保留。`0` 表示一直保留。有回合在进行的进程不回收，包括停在等待用户确认上的回合。 |

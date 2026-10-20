@@ -259,7 +259,7 @@ import path from 'node:path';
 const cli = process.env[%q];
 if (process.argv.includes('--runtime-info')) {
   if (cli && !fs.existsSync(cli)) { console.error('Error: 宿主 CLI 不可执行或未找到: ' + cli + ' INTERNAL_DETAIL'); process.exit(1); }
-  console.log(JSON.stringify({engine:%q,protocolVersion:'0.157.1',nodeVersion:process.versions.node}));
+  console.log(JSON.stringify({engine:%q,protocolVersion:'0.163.0',nodeVersion:process.versions.node}));
 } else if (process.argv.includes('--pty-self-check')) {
   console.log('pty-self-check ok');
 } else {

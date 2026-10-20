@@ -14,7 +14,7 @@ import { deviceWorld } from './device-world.mjs'
 import { harness } from './fake-device.mjs'
 import { RpcFailure } from './fake-server.mjs'
 import { thread, turn } from './fixtures.mjs'
-import { fakeClock, settle } from './helpers.mjs'
+import { fakeClock, settle, withoutTools } from './helpers.mjs'
 import { watchSession } from './wire.mjs'
 import { setup, watch, where } from './world.mjs'
 
@@ -237,7 +237,7 @@ test('新建会话选了计划模式：建会话的请求里不带（协议里�
     text: '先出个计划',
     settings: { mode: 'plan' },
   })
-  assert.deepEqual(world.sent('thread/start'), [{ cwd: '/work/app' }])
+  assert.deepEqual(withoutTools(world.sent('thread/start')), [{ cwd: '/work/app' }])
   assert.deepEqual((world.sent('turn/start')[0] as Sent).collaborationMode, {
     mode: 'plan',
     settings: { model: 'gate/small', reasoning_effort: null, developer_instructions: null },

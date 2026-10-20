@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 export function protocolDirectory(): string {
   let directory = dirname(fileURLToPath(import.meta.url))
   while (directory !== dirname(directory)) {
-    const candidate = join(directory, 'protocol/codex-app-server/0.157.1/json-schema')
+    const candidate = join(directory, 'protocol/codex-app-server/0.163.0/json-schema')
     if (existsSync(candidate)) return candidate
     directory = dirname(directory)
   }

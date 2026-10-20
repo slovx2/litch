@@ -162,7 +162,7 @@ export async function dispatch(s: AcpServer, peer: RpcPeer, method: string, p: a
     case 'configRequirements/read':
       return { requirements: null }
     case 'modelProvider/capabilities/read':
-      return { namespaceTools: false, imageGeneration: false, webSearch: false }
+      return { imageGeneration: false, webSearch: false }
     case 'app/list':
     case 'hooks/list':
     case 'experimentalFeature/list':

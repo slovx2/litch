@@ -42,3 +42,10 @@ export function fakeClock(start = 1_700_000_000_000) {
 
 /** 等同线程端口把积压的消息送完 */
 export const settle = () => new Promise<void>((resolve) => setImmediate(resolve))
+
+/** 建会话的参数去掉 dynamicTools：呈现风格（litch_presentation）每个会话都带，和只看别的参数的用例无关 */
+export const withoutTools = (sent: unknown[]): unknown[] =>
+  sent.map((params) => {
+    const { dynamicTools: _tools, ...rest } = params as Record<string, unknown>
+    return rest
+  })

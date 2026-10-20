@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import test from 'node:test'
@@ -35,7 +35,12 @@ test('宿主 CLI 使用显式路径或 PATH，拒绝缺失和低于下限的版�
       [resolve('packages/claude/dist/claude/src/adapter.mjs'), '--runtime-info'],
       { env, encoding: 'utf8' },
     )
-    assert.equal(JSON.parse(output).cliBuild, '2.1.282 (Claude Code)')
+    // 版本三件套（runtime/info 回的是同一份）：对齐的 codex 协议版本、Agent SDK 版本、宿主 CLI 版本
+    const info = JSON.parse(output)
+    assert.equal(info.cliBuild, '2.1.282 (Claude Code)')
+    const versions = JSON.parse(await readFile(resolve('protocol/versions.json'), 'utf8'))
+    assert.equal(info.protocolVersion, versions.codexProtocol)
+    assert.equal(info.sdkVersion, versions.claudeAgentSdk)
     await writeFile(cli, '#!/bin/sh\nprintf "2.1.283 (Claude Code)\\n"\n', { mode: 0o700 })
     assert.equal(hostClaudeVersion(cli, '2.1.282'), '2.1.283 (Claude Code)')
     await writeFile(cli, '#!/bin/sh\nprintf "2.1.281 (Claude Code)\\n"\n', { mode: 0o700 })

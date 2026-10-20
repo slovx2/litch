@@ -16,7 +16,7 @@ codex-harness-adapter ssh-config
 
 ## 系统依赖
 
-- macOS/Linux：POSIX shell 和系统常用命令。Claude 在 Linux 上需要 bubblewrap、socat 和可用的用户命名空间；macOS 使用系统 sandbox-exec。
+- macOS/Linux：POSIX shell 和系统常用命令。Claude 在 Linux 上需要 bubblewrap 和可用的用户命名空间；macOS 使用系统 sandbox-exec。
 - Windows：Windows 10/11、Git for Windows；命令行 SSH 验证需要 OpenSSH Client。无需 WSL，可用 `CLAUDE_CODE_GIT_BASH_PATH` 指定 `bash.exe`。
 - Windows 上 Claude 命令执行需要显式选择“完全访问”；受限 Bash 会报错。需要操作系统沙箱时，在 WSL2 内按 Linux 方式运行。
 

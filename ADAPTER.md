@@ -37,7 +37,7 @@ curl -fsSL https://github.com/slovx2/litch/releases/latest/download/install.sh |
 
 重跑同一条命令就是升级；`sh -s -- --version <版本>` 装指定的版本（也用来退回旧版本），`sh -s -- --uninstall` 卸载（状态目录 `~/.codex-harness-adapter` 不动）。离线时把压缩包和 `codex-harness-adapter-SHA256SUMS.txt` 拷到机器上，用 `sh install.sh --from <压缩包>`。升级后，已在运行的服务还是旧版本，脚本不替你停它，会给出换上新版的两条命令：`codex-harness-adapter device-stop --if-idle`（只在服务闲着时才停：有回合在跑、有终端开着、有客户端连着都不停，并说明是哪一种），再 `codex-harness-adapter device-start`。服务用的不是默认状态目录时两条都带上同一个 `--home`。去掉 `--if-idle` 会直接停掉它，进行中的回合会被打断。0.5.1 及更早的服务不认识这条命令，那一次要等回合结束后手工结束进程。
 
-Claude Code 还需要 `bubblewrap`、`socat`。macOS（Apple Silicon）上不用 Homebrew 时也可以用这个脚本。
+Claude Code 还需要 `bubblewrap`。macOS（Apple Silicon）上不用 Homebrew 时也可以用这个脚本。
 
 ### 从源码启动
 

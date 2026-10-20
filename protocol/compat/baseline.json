@@ -1,5 +1,5 @@
 {
-  "note": "现有实现与上游结构（protocol/codex-app-server/0.157.1）的出入。各入口的 upstream-compat.test.mts 用不声明任何扩展的客户端回放官方桌面端的请求序列、再走一遍常用流程，服务端发来的每条消息都严格校验；实际的出入必须都在这里，这里的每一条也必须还在出现。这份清单只许变短：修掉一条就删一条；新加的扩展内容不许进来，要按连接的声明来发。where 的每一项是“消息类别 方法 位置”。",
+  "note": "现有实现与上游结构（protocol/codex-app-server/0.163.0）的出入。各入口的 upstream-compat.test.mts 用不声明任何扩展的客户端回放官方桌面端的请求序列、再走一遍常用流程，服务端发来的每条消息都严格校验；实际的出入必须都在这里，这里的每一条也必须还在出现。这份清单只许变短：修掉一条就删一条；新加的扩展内容不许进来，要按连接的声明来发。where 的每一项是“消息类别 方法 位置”。",
   "entries": {
     "claude": [
       {
@@ -30,7 +30,7 @@
       },
       {
         "problem": ["多出字段 permissionProfile", "多出字段 permissions"],
-        "reason": "应答顶层多带了权限档位的两种写法；上游 0.157.1 这几个应答里只有 activePermissionProfile、approvalPolicy 和 sandbox。",
+        "reason": "应答顶层多带了权限档位的两种写法；上游 0.163.0 这几个应答里只有 activePermissionProfile、approvalPolicy 和 sandbox。",
         "where": ["response thread/fork /", "response thread/resume /", "response thread/start /"]
       },
       {
@@ -67,7 +67,7 @@
       },
       {
         "problem": ["多出字段 turn_id", "多出字段 started_at"],
-        "reason": "时间线里回合边界的条目同时带驼峰和下划线两种写法的字段（有意的，照顾两种读法）；上游线上的是驼峰（见 protocol/schema-corrections/0.157.1.json）。",
+        "reason": "时间线里回合边界的条目同时带驼峰和下划线两种写法的字段（有意的，照顾两种读法）；上游线上的是驼峰（见 protocol/schema-corrections/0.163.0.json）。",
         "where": [
           "response thread/timeline/list /data/*<turnCompleted>",
           "response thread/timeline/list /data/*<turnStarted>"

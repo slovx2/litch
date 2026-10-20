@@ -144,6 +144,54 @@ test('HISTORY-002：真实工具大输出、全量与摘要视图、双向分页
           expected.filter((entry: any) => entry.turnId === turnId),
         )
       }
+      // 0.163.0：游标可以是回合里的一个条目（不含它本身），升序给之后的、降序给之前的，接着用返回的游标翻
+      const anchorTurn = turns[0]!
+      const inTurn = expected.filter((entry: any) => entry.turnId === anchorTurn)
+      assert.ok(inTurn.length >= 2)
+      for (const sortDirection of ['asc', 'desc']) {
+        const ordered = sortDirection === 'asc' ? inTurn : [...inTurn].reverse()
+        const anchored = await client.request('thread/items/list', {
+          threadId,
+          turnId: anchorTurn,
+          sortDirection,
+          limit: 1,
+          cursor: { type: 'item', itemId: ordered[0].item.id },
+        })
+        assert.deepEqual(anchored.data, ordered.slice(1, 2))
+        assert.deepEqual(
+          await pages(client, 'thread/items/list', {
+            threadId,
+            turnId: anchorTurn,
+            sortDirection,
+            cursor: { type: 'item', itemId: ordered[0].item.id },
+          }),
+          ordered.slice(1),
+        )
+      }
+      const anchorError = async (params: Record<string, unknown>, message: string) =>
+        assert.equal(
+          (await client.raw('thread/items/list', { threadId, ...params }, -32602)).error.message,
+          message,
+        )
+      await anchorError(
+        { cursor: { type: 'item', itemId: inTurn[0].item.id } },
+        'turnId is required when cursor is an item anchor',
+      )
+      await anchorError(
+        { turnId: anchorTurn, cursor: { type: 'item', itemId: 'missing' } },
+        'cursor.itemId does not identify an item in the requested history scope',
+      )
+      // thread/items/read（0.163.0，实验性）：按存储顺序给，找不到的跳过
+      assert.deepEqual(
+        await client.request('thread/items/read', {
+          threadId,
+          turnId: anchorTurn,
+          itemIds: [inTurn[1].item.id, 'missing', inTurn[0].item.id],
+        }),
+        { data: inTurn.slice(0, 2) },
+      )
+      for (const itemIds of [[], Array.from({ length: 101 }, (_, index) => String(index))])
+        await client.raw('thread/items/read', { threadId, turnId: anchorTurn, itemIds }, -32600)
       const first = await client.request('thread/items/list', { threadId, limit: 2 })
       const next = await client.request('thread/items/list', {
         threadId,

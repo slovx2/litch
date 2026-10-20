@@ -2,7 +2,11 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import test from 'node:test'
-import { dynamicToolSpecs, matchDynamicTool } from '../src/client-tools.mjs'
+import {
+  PRESENTATION_RULES,
+  PRESENTATION_SPEC,
+} from '../../protocol/src/client-tools-presentation.mjs'
+import { dynamicToolSpecs, matchDynamicTool, toolInstructions } from '../src/client-tools.mjs'
 import { AcpServer } from '../src/server.mjs'
 import { client, dispose, type Scene, scene, text, turn, violations } from './client.mjs'
 
@@ -342,4 +346,24 @@ test('认标题：几家 agent 写 MCP 工具的样子都认得，名字是别�
   assert.equal(name('echo_echo'), null)
   assert.equal(name('ls -la'), null)
   assert.equal(matchDynamicTool(specs, {}), null)
+})
+
+test('Litch 的呈现风格（不带工具的命名空间）进 MCP 服务的 instructions、排在工具的规则后面，不多出工具', () => {
+  const echo = {
+    type: 'namespace',
+    name: 'litch_echo',
+    description: 'echo',
+    instructions: 'ECHO-RULES',
+    tools: [
+      { type: 'function', name: 'echo', description: 'echo', inputSchema: { type: 'object' } },
+    ],
+  }
+  assert.equal(
+    toolInstructions([echo, PRESENTATION_SPEC]),
+    `# Tool instructions: litch_echo\nECHO-RULES\n\n# Tool instructions: litch_presentation\n${PRESENTATION_RULES}`,
+  )
+  assert.deepEqual(
+    dynamicToolSpecs([echo, PRESENTATION_SPEC]).map((spec) => spec.namespace),
+    ['litch_echo'],
+  )
 })

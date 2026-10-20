@@ -11,7 +11,7 @@ test('通知：带会话标识的原样转发，不带的加上 harness，会话
   // 握手一完成上游就主动推通知（Claude 引擎会推账号状态）：必须排在握手应答后面
   claude.handlers.initialize = (_params, connection) => {
     connection.send({ method: 'account/updated', params: { authMode: 'apikey', planType: null } })
-    return { userAgent: 'fake/0.157.1', codexHome: '/', platformFamily: 'unix', platformOs: 'test' }
+    return { userAgent: 'fake/0.163.0', codexHome: '/', platformFamily: 'unix', platformOs: 'test' }
   }
   const env = rig({ pi, 'claude-code': claude })
   try {

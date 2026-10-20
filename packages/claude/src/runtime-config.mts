@@ -32,6 +32,84 @@ export interface RuntimeConfig {
     resume: boolean
     stopTimeoutRetries: number
   }
+  /** 原生运行时（Agent SDK）的几个开关。原生运行时每次起 CLI 时按同一个函数现读，这里读一遍是为了启动时就把非法值报出来 */
+  native: {
+    settingSources: ClaudeSettingSource[]
+    plansLocation: ClaudePlansLocation
+    threadIdHeader: boolean
+  }
+}
+
+export type ClaudeSettingSource = 'user' | 'project' | 'local'
+const settingSourceNames: readonly ClaudeSettingSource[] = ['user', 'project', 'local']
+
+/**
+ * CHA_CLAUDE_SETTING_SOURCES：起 CLI 时读哪几层 Claude Code 自己的设置（SDK 的 settingSources），逗号分隔，
+ * 取值 user、project、local。没设或为空时三层都读（Claude Code 自己的默认）；只给 user 时工作区里的
+ * `.claude/settings*.json`、`CLAUDE.md`、`.mcp.json` 都不读。认不出的值直接报错，不默默退回默认
+ */
+export function claudeSettingSources(env: NodeJS.ProcessEnv = process.env): ClaudeSettingSource[] {
+  const raw = env.CHA_CLAUDE_SETTING_SOURCES?.trim()
+  if (!raw) return [...settingSourceNames]
+  const sources: ClaudeSettingSource[] = []
+  for (const part of raw.split(',')) {
+    const name = part.trim().toLowerCase() as ClaudeSettingSource
+    if (!settingSourceNames.includes(name) || sources.includes(name))
+      throw new Error(
+        `CHA_CLAUDE_SETTING_SOURCES 无效：${raw}（只能是 user、project、local，用逗号隔开、不重复）`,
+      )
+    sources.push(name)
+  }
+  return sources
+}
+
+export type ClaudePlansLocation = 'workspace' | 'config'
+
+/**
+ * CHA_CLAUDE_PLANS_LOCATION：计划模式的计划文件放在哪。workspace（默认）是工作区里每个线程一个目录
+ * （`<cwd>/.claude/plans/codex-harness-adapter/<线程号>/`）；config 是 Claude Code 自己的默认位置
+ * （`<CLAUDE_CONFIG_DIR 或 ~/.claude>/plans/`），工作区里不留东西。CLI 的 plansDirectory 只认项目内的目录，
+ * 给项目外的目录它会报错并退回自己的默认位置，所以没法指定任意目录
+ */
+export function claudePlansLocation(env: NodeJS.ProcessEnv = process.env): ClaudePlansLocation {
+  const raw = env.CHA_CLAUDE_PLANS_LOCATION?.trim().toLowerCase()
+  if (!raw || raw === 'workspace') return 'workspace'
+  if (raw === 'config') return 'config'
+  throw new Error(
+    `CHA_CLAUDE_PLANS_LOCATION 无效：${env.CHA_CLAUDE_PLANS_LOCATION}（只能是 workspace 或 config）`,
+  )
+}
+
+/**
+ * CHA_CLAUDE_THREAD_ID_HEADER：设成 1 时起 CLI 前把 `thread-id: <线程号>` 合进 ANTHROPIC_CUSTOM_HEADERS，
+ * CLI 发的每个模型请求都带上，给按线程计费的代理用（代理转发上游前要自己剥掉）。默认关，关着时一个多余的头都不加。
+ * 不带回合号：CLI 进程跨回合保活，起进程时定下的头分不出回合
+ */
+export function claudeThreadIdHeader(env: NodeJS.ProcessEnv = process.env): boolean {
+  const raw = env.CHA_CLAUDE_THREAD_ID_HEADER?.trim().toLowerCase()
+  if (!raw || raw === '0' || raw === 'false' || raw === 'off' || raw === 'no') return false
+  if (raw === '1' || raw === 'true' || raw === 'on' || raw === 'yes') return true
+  throw new Error(
+    `CHA_CLAUDE_THREAD_ID_HEADER 无效：${env.CHA_CLAUDE_THREAD_ID_HEADER}（只能是 1 或 0）`,
+  )
+}
+
+/**
+ * 开关开着时给 CLI 的环境补的那一项：CLI 把 ANTHROPIC_CUSTOM_HEADERS 按行拆，每行 `名字: 值`。
+ * 用户原有的自定义头原样保留，原有的 thread-id 行换成这个线程的；开关关着时是空对象
+ */
+export function claudeThreadIdHeaderEnv(
+  childEnv: NodeJS.ProcessEnv,
+  threadId: string,
+  env: NodeJS.ProcessEnv = process.env,
+): { ANTHROPIC_CUSTOM_HEADERS?: string } {
+  if (!claudeThreadIdHeader(env)) return {}
+  const kept = (childEnv.ANTHROPIC_CUSTOM_HEADERS ?? '').split(/\r?\n/).filter((line) => {
+    if (!line.trim()) return false
+    const colon = line.indexOf(':')
+    return colon < 0 || line.slice(0, colon).trim().toLowerCase() !== 'thread-id'
+  })
+  return { ANTHROPIC_CUSTOM_HEADERS: [...kept, `thread-id: ${threadId}`].join('\n') }
 }
 
 export function resolveRuntimeConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig {
@@ -69,6 +147,11 @@ export function resolveRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runt
       skipPermissions: envFlag(env.CHA_CLAUDE_CLAUDE_P_SKIP_PERMISSIONS, false),
       resume: envFlag(env.CHA_CLAUDE_CLAUDE_P_RESUME, false),
       stopTimeoutRetries: numericEnv(env.CHA_CLAUDE_CLAUDE_P_STOP_TIMEOUT_RETRIES, 1, 0, 5),
+    },
+    native: {
+      settingSources: claudeSettingSources(env),
+      plansLocation: claudePlansLocation(env),
+      threadIdHeader: claudeThreadIdHeader(env),
     },
   }
 }

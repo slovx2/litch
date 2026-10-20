@@ -90,7 +90,7 @@ env -i PATH="$node_dir:/usr/bin:/bin" HOME="$stage/home" CLAUDE_CONFIG_DIR="$sta
   CHA_CLAUDE_CLI="$host_cli" "$unpacked/bin/codex-harness-adapter-claude" --runtime-info
 env -i PATH="$node_dir:/usr/bin:/bin" HOME="$stage/home" "$unpacked/bin/codex-harness-adapter-claude" --pty-self-check
 (cd "$unpacked/lib" && env -i PATH="$unpacked/bin:$node_dir:/usr/bin:/bin" HOME="$stage/home" \
-  CODEX_SCHEMA_DIR="$project_root/protocol/codex-app-server/0.157.1/json-schema" \
+  CODEX_SCHEMA_DIR="$project_root/protocol/codex-app-server/0.163.0/json-schema" \
   CHA_CLAUDE_CLI="$host_cli" node --test \
   dist/claude/test/native-image-reference.test.mjs dist/claude/test/mcp-user-config.test.mjs)
 echo 'ARTIFACT PASS: 无原生 SDK 平台包，宿主 CLI 身份、解包启动、PTY、真实 SDK mock 回合'

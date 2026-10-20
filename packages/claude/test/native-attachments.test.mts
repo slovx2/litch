@@ -80,6 +80,39 @@ test('ATTACHMENT-002：真实回合附件幂等、分页隔离、通知及删除
     assert.equal(other.outcome, 'created')
     assert.notEqual(other.attachment.id, created.attachment.id)
     await client.notification('thread/attachment/updated', (p) => p.threadId === otherId)
+    // thread/attachmentOwner/list（0.163.0 起）：按身份反查，两个会话都挂着同一个身份，能逐页取完
+    const ownerQuery = { attachmentType: 'source', identityKey: 'same-key' }
+    const owners = await client.request('thread/attachmentOwner/list', ownerQuery)
+    assert.equal(owners.nextCursor, null)
+    assert.deepEqual(
+      new Set(owners.data.map((owner: any) => JSON.stringify(owner))),
+      new Set([threadId, otherId].map((id) => JSON.stringify({ threadId: id, archived: false }))),
+    )
+    const firstOwner = await client.request('thread/attachmentOwner/list', {
+      ...ownerQuery,
+      limit: 1,
+    })
+    assert.deepEqual(firstOwner.data, owners.data.slice(0, 1))
+    assert.deepEqual(
+      (
+        await client.request('thread/attachmentOwner/list', {
+          ...ownerQuery,
+          cursor: firstOwner.nextCursor,
+        })
+      ).data,
+      owners.data.slice(1),
+    )
+    assert.deepEqual(
+      (await client.request('thread/attachmentOwner/list', { ...ownerQuery, archived: false }))
+        .data,
+      owners.data,
+    )
+    assert.deepEqual(
+      await client.request('thread/attachmentOwner/list', { ...ownerQuery, archived: true }),
+      { data: [], nextCursor: null },
+    )
+    for (const params of [{ attachmentType: 'source' }, { ...ownerQuery, archived: 'no' }])
+      await client.raw('thread/attachmentOwner/list', params, -32602)
     const full = await client.request('thread/attachment/list', { threadId })
     assert.equal(full.nextCursor, null)
     assert.deepEqual(new Set(full.data.map((a: any) => a.id)), new Set(expected.map((a) => a.id)))

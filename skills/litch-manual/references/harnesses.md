@@ -29,7 +29,7 @@ user. Litch has no command for it. Do it yourself with the user's OK, or give th
 | Harness | Official install (pin a version where shown) | Litch verified | Minimum | Docs |
 |---|---|---|---|---|
 | Claude Code | `curl -fsSL https://claude.ai/install.sh \| bash -s 2.1.282` (Windows PowerShell: `irm https://claude.ai/install.ps1 \| iex`) | 2.1.282 | 2.1.282 | https://code.claude.com/docs/en/setup |
-| Codex | `npm install -g @openai/codex@0.160.0` | 0.160.0 | 0.157.1 | https://github.com/openai/codex |
+| Codex | `npm install -g @openai/codex@0.163.0` | 0.163.0 | 0.157.1 | https://github.com/openai/codex |
 | Pi | `npm install -g @earendil-works/pi-coding-agent@0.99.1` | 0.99.1 | 0.99.1 | https://github.com/earendil-works/pi |
 | DSH | `npm install -g @deepseek-ai/dsh@0.2.0-rc.2` | 0.2.0-rc.2 | 0.2.0-rc.2 | https://www.npmjs.com/package/@deepseek-ai/dsh |
 | OpenCode | `curl -fsSL https://opencode.ai/install \| bash -s -- --version 1.18.33` (Windows: `npm install -g opencode-ai@1.18.33`) | 1.18.33 | 1.18.0 | https://opencode.ai/docs |

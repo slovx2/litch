@@ -1,4 +1,4 @@
-import { randomBytes, timingSafeEqual } from 'node:crypto'
+import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import { createServer, type Server } from 'node:http'
 import { auth } from '@modelcontextprotocol/sdk/client/auth.js'
 import {
@@ -26,6 +26,8 @@ interface PendingOAuth {
 }
 type Completion = (result: {
   name: string
+  // 0.163.0 起应答和完成通知都带同一个 loginId，客户端靠它把两者对上
+  loginId: string
   success: boolean
   error: string | null
   threadId: string | null
@@ -48,7 +50,7 @@ export class McpOAuthManager {
     params: Record<string, unknown>,
     peerId: string,
     complete: Completion,
-  ): Promise<{ authorizationUrl: string }> {
+  ): Promise<{ authorizationUrl: string; loginId: string }> {
     if (this.closed) throw new ProtocolError(-32009, 'OAuth 管理器已关闭')
     const { name, scopes, timeoutSecs = 300 } = params
     if (
@@ -77,6 +79,7 @@ export class McpOAuthManager {
     if (this.pending.has(key) || this.refreshing.has(key))
       throw new ProtocolError(-32009, '该 MCP 服务正在授权或刷新')
     const abort = new AbortController()
+    const loginId = randomUUID()
     const state = randomBytes(32).toString('base64url')
     const path = '/oauth/callback/' + randomBytes(24).toString('base64url')
     let provider: StoredOAuthProvider | undefined
@@ -95,6 +98,7 @@ export class McpOAuthManager {
       pending.server.closeIdleConnections()
       complete({
         name,
+        loginId,
         success,
         error: error ?? null,
         threadId: typeof params.threadId === 'string' ? params.threadId : null,
@@ -197,7 +201,7 @@ export class McpOAuthManager {
       })
       abort.signal.throwIfAborted()
       if (result !== 'REDIRECT' || !provider.authorizationUrl) throw new Error()
-      return { authorizationUrl: provider.authorizationUrl }
+      return { authorizationUrl: provider.authorizationUrl, loginId }
     } catch {
       pending.finish(false, 'OAuth 发现或登录初始化失败')
       throw new ProtocolError(-32001, 'OAuth 发现或登录初始化失败')

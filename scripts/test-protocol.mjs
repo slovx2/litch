@@ -11,11 +11,11 @@ writeFileSync(
   JSON.stringify({ runId, startedAt: new Date().toISOString() }),
 )
 let schema =
-  process.env.CODEX_SCHEMA_DIR ?? resolve('protocol/codex-app-server/0.157.1/json-schema')
+  process.env.CODEX_SCHEMA_DIR ?? resolve('protocol/codex-app-server/0.163.0/json-schema')
 if (!existsSync(schema)) {
   const cli = process.env.CODEX_TEST_BIN ?? 'codex'
   const version = execFileSync(cli, ['--version'], { encoding: 'utf8' }).trim()
-  if (version !== 'codex-cli 0.157.1') throw new Error(`测试 CLI 版本错误: ${version}`)
+  if (version !== 'codex-cli 0.163.0') throw new Error(`测试 CLI 版本错误: ${version}`)
   schema = resolve(artifacts, 'schema')
   execFileSync(cli, ['app-server', 'generate-json-schema', '--experimental', '--out', schema])
 }

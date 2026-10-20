@@ -37,7 +37,7 @@ The release bundles its own Node, so the machine needs neither Node nor Go, and 
 
 Run the same command again to upgrade; `sh -s -- --version <version>` installs a specific version (also how you go back to an older one) and `sh -s -- --uninstall` removes the program (the state directory `~/.codex-harness-adapter` is left alone). Offline, copy the archive and `codex-harness-adapter-SHA256SUMS.txt` to the machine and run `sh install.sh --from <archive>`. After an upgrade, a service that is already running is still the old version. The script does not stop it for you; it prints the two commands that switch to the new one: `codex-harness-adapter device-stop --if-idle` (stops the service only when it is idle: it is left alone while a turn is running, a terminal is open or a client is connected, and tells you which), then `codex-harness-adapter device-start`. If the service uses a non-default state directory, pass the same `--home` to both. Without `--if-idle` the service is stopped right away and running turns are interrupted. Services from 0.5.1 and earlier do not understand this command; end that process by hand once, after its turns have finished.
 
-Claude Code also needs `bubblewrap` and `socat`. On macOS (Apple Silicon) the script works as an alternative to Homebrew.
+Claude Code also needs `bubblewrap`. On macOS (Apple Silicon) the script works as an alternative to Homebrew.
 
 ### Run from source
 
