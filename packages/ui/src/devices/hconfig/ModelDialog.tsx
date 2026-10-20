@@ -41,10 +41,14 @@ export function ModelDialog({ bases, entry, taken, onDone, onClose }: DialogProp
   const pick = (next: HcModelBase) => {
     // 自定义时模型名还是原底稿的名字（没改过）：跟着换
     const followId = form.mode === 'custom' && (form.id === '' || form.id === form.base)
-    set({ base: next.id, ...(followId ? { id: next.id } : {}) })
+    set({ base: next.id, ...(followId ? { id: taken.has(next.id) ? '' : next.id } : {}) })
   }
   const mode = (next: ModelForm['mode']) =>
-    set({ mode: next, ...(next === 'custom' && form.id === '' ? { id: form.base } : {}) })
+    // 底稿的名字已经在清单里时不填进去（一打开就报重名），留空让人自己起
+    set({
+      mode: next,
+      ...(next === 'custom' && form.id === '' && !taken.has(form.base) ? { id: form.base } : {}),
+    })
 
   const field = (key: string, label: string, control: ReactNode, note?: string) => (
     <div className="form-field" data-hc-field={key}>

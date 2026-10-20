@@ -83,7 +83,7 @@ test('表单：原样用不能和清单里重复；自定义要模型名、唯�
   assert.deepEqual(formOfEntry(null, bases, new Set(bases.map((one) => one.id))), {
     base: 'gpt-5.5',
     mode: 'custom',
-    id: 'gpt-5.5',
+    id: '',
     displayName: '',
     contextWindow: '',
   })

@@ -97,7 +97,8 @@ export function formOfEntry(
     return {
       base: (free ?? bases[0])?.id ?? '',
       mode: free ? 'same' : 'custom',
-      id: free ? '' : (bases[0]?.id ?? ''),
+      // 都在清单里了：只能以某个为底稿自定义，模型名留空（填底稿的名字会一打开就报重名）
+      id: '',
       displayName: '',
       contextWindow: '',
     }
