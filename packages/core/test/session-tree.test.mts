@@ -576,6 +576,28 @@ test('投影：收尾调用的每条建议按顺序对上结果里的提案或�
     ['pr1', 'pr2'],
   )
 
+  // 整个调用失败（设备进程不认 wrap_up、参数不对）：一张都没收，每条都写成没收下、原因是那句话
+  const failed = projectItem({
+    type: 'dynamicToolCall',
+    id: 'w4',
+    namespace: 'litch_sessions',
+    tool: 'wrap_up',
+    arguments: { suggestions: asked.slice(0, 2) },
+    status: 'failed',
+    contentItems: [
+      { type: 'inputText', text: '[litch:invalid] litch_sessions has no tool "wrap_up".' },
+    ],
+    success: false,
+    durationMs: 1,
+  } as never) as ToolCallItem
+  assert.deepEqual(
+    failed.wrapUp?.suggestions.map((entry) => [entry.proposalId, entry.refused]),
+    [
+      [null, '[litch:invalid] litch_sessions has no tool "wrap_up".'],
+      [null, '[litch:invalid] litch_sessions has no tool "wrap_up".'],
+    ],
+  )
+
   // 没有建议的收尾：不画，也不是卡片
   const empty = wrapUpItem('w3', [], { suggestions: [], note: '' })
   assert.deepEqual(empty.wrapUp, { suggestions: [] })

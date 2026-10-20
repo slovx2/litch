@@ -187,13 +187,15 @@ function resultJson(
 
 /**
  * litch_sessions.wrap_up 的条目：参数里的每条建议，按顺序对上结果里它成了哪张提案、或者为什么没收。
- * 结果按建议的顺序给；对不上（条数不一样、标题不一样）时按标题找还没用过的那一条。别的调用是 null
+ * 结果按建议的顺序给；对不上（条数不一样、标题不一样）时按标题找还没用过的那一条。
+ * 整个调用失败了（参数不对、设备进程不认这个工具）就一张都没收：每条都写成没收下，原因是失败结果里那句话。别的调用是 null
  */
 function wrapUpOf(
   namespace: string | null | undefined,
   tool: string,
   args: unknown,
   output: readonly { type: string; text?: string }[] | null | undefined,
+  failed: boolean,
 ): WrapUpView | null {
   if (namespace !== CLIENT_TOOL_NAMESPACE.sessions || tool !== SESSION_TOOL.wrapUp) return null
   const given = (typeof args === 'object' && args !== null ? args : {}) as Record<string, unknown>
@@ -202,6 +204,14 @@ function wrapUpOf(
   const results = (Array.isArray(answered) ? answered : []).map((entry) =>
     typeof entry === 'object' && entry !== null ? (entry as Record<string, unknown>) : {},
   )
+  const failure = failed
+    ? (output ?? [])
+        .map((part) =>
+          part.type === 'inputText' && typeof part.text === 'string' ? part.text : '',
+        )
+        .join('\n')
+        .trim()
+    : null
   const used = new Set<number>()
   const resultFor = (index: number, title: string): Record<string, unknown> | null => {
     const same = results[index]
@@ -227,8 +237,13 @@ function wrapUpOf(
         model: word(raw.model),
         cwd: word(raw.cwd),
         kind: raw.kind === 'fork' ? 'fork' : 'fresh',
-        proposalId: word(result?.proposal_id),
-        refused: result && !word(result.proposal_id) ? (word(result.refused) ?? '') : null,
+        proposalId: failure === null ? word(result?.proposal_id) : null,
+        refused:
+          failure !== null
+            ? failure
+            : result && !word(result.proposal_id)
+              ? (word(result.refused) ?? '')
+              : null,
       },
     ]
   })
@@ -532,7 +547,13 @@ export function projectItem(item: ThreadItem, streaming = false): ItemView {
       // 客户端工具的截图要看得见：头几张图片留着内容（keepImages）
       const output = resultParts(item.contentItems, null, true)
       const spawned = spawnedOf(item.namespace, item.tool, item.arguments, item.contentItems)
-      const wrapUp = wrapUpOf(item.namespace, item.tool, item.arguments, item.contentItems)
+      const wrapUp = wrapUpOf(
+        item.namespace,
+        item.tool,
+        item.arguments,
+        item.contentItems,
+        item.success === false,
+      )
       return toolCall(id, {
         ...(spawned ? { spawned } : {}),
         ...(wrapUp ? { wrapUp } : {}),
