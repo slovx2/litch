@@ -8,7 +8,7 @@
 // 人话前面 Claude 桌面端拼进去的 <system-reminder> 块去掉，只留人写的那部分。
 // 条目的标识由消息的 uuid 和块的位置拼成：同一份记录再画一遍，标识不变。
 import { toolItemWithResult } from './server-helpers.mjs'
-import { toolUseItem } from './tool-items.mjs'
+import { readImageView, toolUseItem } from './tool-items.mjs'
 import type { TurnRecord, UserInput } from './types.mjs'
 
 /** 记录里的一条消息：SDK 的 SessionMessage，加上它实际带着的时间和来源 */
@@ -139,6 +139,8 @@ export function projectNativeHistory(
         if (at === undefined || !item) continue
         open.delete(toolUseId)
         turn.items[at] = toolItemWithResult(item, block.content, block.is_error === true, null)
+        const image = readImageView(item, block.content, block.is_error === true, cwd)
+        if (image) turn.items.push(image)
       }
       const texts = blocks
         .filter((block) => block.type === 'text')
