@@ -24,6 +24,7 @@ import { autofillTab } from './browser/passwords/tabs.mjs'
 import { createSiteBook } from './browser/sites.mjs'
 import { checkAgentSignIn, SHADOW } from './probe-browser-autofill-agent.mjs'
 import { CHANGE, checkCaptures, FORGED, STEP2 } from './probe-browser-autofill-capture.mjs'
+import { checkHandoverFailures, ONCE } from './probe-browser-autofill-handover.mjs'
 
 const manual = process.env.LITCH_AUTOFILL_MANUAL === '1'
 // 钥匙串里那把钥匙按应用名起名：用测试专用的名字，不碰 Litch 自己的
@@ -63,18 +64,24 @@ window.__forge = () => {
 const FRAME = `<!doctype html><form action="/frame-done" style="margin:10px"><input id="user" name="u" type="text" style="width:200px;height:24px">
 <input id="pass" name="p" type="password" style="width:200px;height:24px"><button id="go">Go</button></form>`
 
-function serve(body: (path: string) => string): Promise<{ server: Server; port: number }> {
+/** body 回 null 的路径回 204（不换文档） */
+function serve(body: (path: string) => string | null): Promise<{ server: Server; port: number }> {
   return new Promise((resolve) => {
     const server = createServer((request, response) => {
       // 登录表单提交（POST）：读完请求、回一页“登进来了”，算一次导航完成
       request.resume()
       request.on('end', () => {
-        response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
-        response.end(
+        const page =
           request.method === 'POST'
             ? '<!doctype html><title>Welcome</title><p>Signed in</p>'
-            : body(request.url ?? '/'),
-        )
+            : body(request.url ?? '/')
+        if (page === null) {
+          response.writeHead(204)
+          response.end()
+          return
+        }
+        response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+        response.end(page)
       })
     })
     server.listen(0, '127.0.0.1', () =>
@@ -89,22 +96,31 @@ void app.whenReady().then(async () => {
       console.log(`LITCH_BROWSER ${JSON.stringify({ ok: false, checks, error: '超时' })}`)
       app.exit(1)
     },
-    manual ? 220_000 : 100_000,
+    manual ? 260_000 : 140_000,
   )
   const frameSite = await serve(() => FRAME)
   // 自动的那一遍子框架和主页面同站不同源（端口不同）：合成的输入事件只进主框架所在的进程，跨站的子框架
   // 在别的进程里收不到（实测）。手动的那一遍用 localhost，跨站、在别的进程里，真人去点
   const frameUrl = `http://${manual ? 'localhost' : '127.0.0.1'}:${frameSite.port}/frame`
+  // /once-*：第一次给一页，之后回 204（probe-browser-autofill-handover.mts 造“重新打开不成”）
+  const served = new Set<string>()
+  const once = (path: string) => {
+    if (served.has(path)) return null
+    served.add(path)
+    return ONCE
+  }
   const mainSite = await serve((path) =>
-    path.startsWith('/step2')
-      ? STEP2
-      : path.startsWith('/change')
-        ? CHANGE
-        : path.startsWith('/forged')
-          ? FORGED
-          : path.startsWith('/shadow')
-            ? SHADOW
-            : LOGIN(frameUrl),
+    path.startsWith('/once-')
+      ? once(path)
+      : path.startsWith('/step2')
+        ? STEP2
+        : path.startsWith('/change')
+          ? CHANGE
+          : path.startsWith('/forged')
+            ? FORGED
+            : path.startsWith('/shadow')
+              ? SHADOW
+              : LOGIN(frameUrl),
   )
   const pageUrl = `http://127.0.0.1:${mainSite.port}/login`
   const pageOrigin = `http://127.0.0.1:${mainSite.port}`
@@ -302,6 +318,8 @@ void app.whenReady().then(async () => {
     manual,
     check,
   })
+  // 交给人登录出岔子：重新打开不成、回合打断、弹窗里的弹窗、回合结束（probe-browser-autofill-handover.mts）
+  await checkHandoverFailures({ host, executor, signIns, pageOrigin, check })
 
   // 清除浏览数据不碰密码
   await host.clearData()

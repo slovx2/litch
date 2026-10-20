@@ -2,6 +2,7 @@
 // 长什么样、人答了什么。卡片只给界面（浏览器面板），不给代理；里面没有任何人输入的东西。
 // 卡片醒目的是主进程取到的真实来源（随导航更新），代理填的站点名和原因只作附注。
 // 代理不等了（回合打断、结束、断线）时卡片不悄悄消失：变成“代理已收回”，等人看到点“知道了”。
+// 这一页没能安全地重新载入、标签被关掉时，卡片变成“标签已关掉”，不再指向哪个标签，同样等人点“知道了”。
 // 不引 electron，单元测试在 test/passwords-signin.test.mts；真的交接（冻结、清框）在 handover.mts。
 import { randomUUID } from 'node:crypto'
 import type { TabOwner } from '../model.mjs'
@@ -19,16 +20,19 @@ export interface SignInRequest {
   site: string
   /** 代理说的为什么要登录，只作附注 */
   reason: string
-  /** waiting：等人登录；withdrawn：代理不等了，标签已重新载入，提醒人别再在这里输入 */
-  state: 'waiting' | 'withdrawn'
+  /**
+   * waiting：等人登录；withdrawn：代理不等了，标签已重新载入，提醒人别再在这里输入；
+   * closed：没能安全地重新载入，标签已关掉（交接期间输入的东西没有交给代理），卡片不再指向标签
+   */
+  state: 'waiting' | 'withdrawn' | 'closed'
   /** 毫秒 */
   at: number
 }
 
-/** done：人登录完、交还了；cancel：人不登录了；dismiss：“代理已收回”的卡片看过了 */
+/** done：人登录完、交还了；cancel：人不登录了；dismiss：“代理已收回”“标签已关掉”的卡片看过了 */
 export type SignInAnswer = 'done' | 'cancel' | 'dismiss'
 
-/** “代理已收回”的卡片没人点也只挂这么久 */
+/** “代理已收回”“标签已关掉”的卡片没人点也只挂这么久 */
 const WITHDRAWN_LIFE_MS = 10 * 60_000
 
 export interface SignIns {
@@ -48,7 +52,18 @@ export interface SignIns {
   end(id: string): void
   /** 代理不等了：卡片变成“代理已收回”，留着等人看 */
   withdraw(id: string): void
-  /** 标签没了：它的卡片都撤掉 */
+  /**
+   * 没能安全地重新载入、要关掉标签：这个标签原来的卡片撤掉，换一张“标签已关掉”的留着等人看
+   * （随后的 tabGone 不撤它）
+   */
+  closed(input: {
+    owner: TabOwner
+    tabId: string
+    origin: string
+    site: string
+    reason: string
+  }): void
+  /** 标签没了：它的卡片都撤掉（“标签已关掉”的除外） */
   tabGone(tabId: string): void
   list(): SignInRequest[]
   onChange(listener: (requests: SignInRequest[]) => void): () => void
@@ -77,6 +92,14 @@ export function createSignIns(
     const current = list()
     for (const listener of listeners) listener(current)
   }
+  /** 收回、关掉的卡片到点自己撤 */
+  const expire = (id: string, one: { request: SignInRequest }) =>
+    schedule(() => {
+      if (open.get(id) === one) {
+        open.delete(id)
+        changed()
+      }
+    }, WITHDRAWN_LIFE_MS)
   const waiting = (tabId: string) =>
     [...open.values()].some((one) => one.request.tabId === tabId && one.request.state === 'waiting')
 
@@ -116,7 +139,7 @@ export function createSignIns(
     answer(id, answer) {
       const one = open.get(id)
       if (!one) return false
-      if (one.request.state === 'withdrawn') {
+      if (one.request.state !== 'waiting') {
         if (answer !== 'dismiss') return false
       } else if (answer === 'dismiss') return false
       open.delete(id)
@@ -135,17 +158,33 @@ export function createSignIns(
       if (one?.request.state !== 'waiting') return
       one.request.state = 'withdrawn'
       changed()
-      schedule(() => {
-        if (open.get(id) === one) {
-          open.delete(id)
-          changed()
-        }
-      }, WITHDRAWN_LIFE_MS)
+      expire(id, one)
+    },
+    closed({ owner, tabId, origin, site, reason }) {
+      for (const [id, one] of open) if (one.request.tabId === tabId) open.delete(id)
+      const id = randomUUID()
+      const one = {
+        request: {
+          id,
+          deviceId: owner.deviceId,
+          threadId: owner.threadId,
+          tabId,
+          origin,
+          site,
+          reason,
+          state: 'closed' as const,
+          at: now(),
+        },
+        settle: () => {},
+      }
+      open.set(id, one)
+      changed()
+      expire(id, one)
     },
     tabGone(tabId) {
       let dropped = false
       for (const [id, one] of open) {
-        if (one.request.tabId === tabId) {
+        if (one.request.tabId === tabId && one.request.state !== 'closed') {
           open.delete(id)
           dropped = true
         }

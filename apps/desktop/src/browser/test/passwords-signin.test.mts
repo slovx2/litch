@@ -3,6 +3,7 @@
 // 导航、关掉）一律被拒；执行过脚本的标记交给交接的那一层；等人的时候停表；结果只说交还还是取消、不带输入。
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import type { WebContents } from 'electron'
 import type { ClientToolCallResponse } from '../../../../../packages/protocol/src/client-tools.mjs'
 import type { ClientToolInvocation } from '../../client-tools/types.mjs'
 import {
@@ -14,6 +15,14 @@ import {
 import type { BrowserHost, BrowserPage, DialogInfo, TabKind, TabOwner } from '../model.mjs'
 import { type DomNode, hasClosedShadowFields } from '../passwords/dom-tree.mjs'
 import { createSignIns } from '../passwords/signin.mjs'
+import {
+  handoverOf,
+  isHandoverPopup,
+  notePopup,
+  registerAutofillTab,
+  setHandedOver,
+  takePopups,
+} from '../passwords/tabs.mjs'
 import { createSiteBook } from '../sites.mjs'
 
 function fakeHost(): BrowserHost {
@@ -283,6 +292,52 @@ test('代理不等了：卡片变成“代理已收回”，留着等人点知�
   assert.ok(three)
   signIns.tabGone('t1')
   assert.deepEqual(signIns.list(), [])
+})
+
+test('没能安全地重新打开：原来的卡片换成“标签已关掉”，标签没了也留着，只能点知道了，到点也撤', () => {
+  const timers: Array<() => void> = []
+  const signIns = createSignIns({ schedule: (run) => void timers.push(run) })
+  const owner = { deviceId: 'local', threadId: 'a' }
+  const input = { owner, tabId: 't1', origin: 'https://a.example', site: 's', reason: 'r' }
+  const one = signIns.begin(input)
+  assert.ok(one)
+  signIns.withdraw(one.id)
+  signIns.closed(input)
+  const [card] = signIns.list()
+  assert.equal(signIns.list().length, 1)
+  assert.equal(card?.state, 'closed')
+  assert.equal(card?.origin, 'https://a.example')
+  // 随后标签被关掉：这一张不撤
+  signIns.tabGone('t1')
+  assert.equal(signIns.list().length, 1)
+  assert.ok(card)
+  assert.equal(signIns.answer(card.id, 'done'), false)
+  assert.equal(signIns.answer(card.id, 'cancel'), false)
+  assert.equal(signIns.answer(card.id, 'dismiss'), true)
+  assert.deepEqual(signIns.list(), [])
+  signIns.closed(input)
+  timers.at(-1)?.()
+  assert.deepEqual(signIns.list(), [])
+})
+
+test('交接里开的弹窗：弹窗里再开的也记在同一次交接下，取走时一并取走', () => {
+  const fake = (id: number) => ({ id, once() {} }) as unknown as WebContents
+  const info = () => ({}) as never
+  registerAutofillTab(fake(901), { kind: 'agent', info })
+  // 没交出去的标签开的弹窗不算
+  assert.equal(handoverOf(901, 'a1'), null)
+  setHandedOver(901, true)
+  assert.equal(handoverOf(901, 'a1'), 901)
+  notePopup(901, 'p1')
+  // p1 是用户的标签（webContents 902），没交出去，但它是这次交接里开的弹窗
+  assert.equal(handoverOf(902, 'p1'), 901)
+  notePopup(901, 'p2')
+  assert.equal(isHandoverPopup('p2'), true)
+  assert.equal(handoverOf(903, 'p3'), null)
+  setHandedOver(901, false)
+  assert.deepEqual(takePopups(901).sort(), ['p1', 'p2'])
+  assert.equal(isHandoverPopup('p1'), false)
+  assert.equal(handoverOf(902, 'p1'), null)
 })
 
 test('封闭的影子树里有输入框：算清不到（重新打开）；开放的、普通的不算', () => {

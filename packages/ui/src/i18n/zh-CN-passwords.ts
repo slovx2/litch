@@ -42,6 +42,9 @@ export const zhPasswords = {
   'browser.signIn.withdrawnNote':
     '这个标签已重新打开。别再在这里输入密码：代理接着用这个标签时看得到页面上的内容。',
   'browser.signIn.dismiss': '知道了',
+  'browser.signIn.closed': '登录用的标签已关掉',
+  'browser.signIn.closedNote':
+    '这一页没能安全地重新打开，Litch 关掉了这个标签。在里面输入的东西没有交给代理。',
   'browser.signIn.note':
     '在下面的网页里自己登录（可以用已保存的密码），好了点“完成，交还”。这段时间代理碰不了这个标签；交还前会清空密码框，代理看不到你输入的内容。',
   'browser.signIn.done': '完成，交还',

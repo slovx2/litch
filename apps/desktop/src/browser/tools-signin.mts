@@ -40,6 +40,11 @@ export const requestSignIn: Tool = async (call) => {
         )
       case 'closed':
         return call.done(null, `The tab was closed while the user was signing in to ${site}.`)
+      case 'failed':
+        return call.done(
+          null,
+          `The tab could not be reloaded safely around the sign-in handover for ${site}, so it was closed. Open the page again in a new tab; ask the user before requesting sign-in again.`,
+        )
       default:
         return call.done(null, 'The sign-in request was cancelled.')
     }

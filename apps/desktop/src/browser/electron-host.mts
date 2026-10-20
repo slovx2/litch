@@ -9,7 +9,7 @@
 import { type BrowserWindow, session } from 'electron'
 import { createTab, HIDDEN_BOUNDS, type HostTab, PARTITION } from './electron-tab.mjs'
 import type { BrowserHost, BrowserPage, OpenOptions, TabInfo, TabKind, TabOwner } from './model.mjs'
-import { isHandedOver, notePopup } from './passwords/tabs.mjs'
+import { handoverOf, notePopup } from './passwords/tabs.mjs'
 
 /** 界面报来的矩形（界面页面里的 CSS 像素） */
 export interface Rect {
@@ -113,9 +113,10 @@ export function createElectronHost(): ElectronBrowserHost {
           return
         }
         // 交给人登录的标签开的弹窗（单点登录常用）：开成用户的标签，代理碰不到，交接结束时一并处理
-        const handed = isHandedOver(from.view.webContents.id)
-        const next = open(from.owner, handed ? 'user' : from.kind)
-        if (handed) notePopup(from.view.webContents.id, next.id)
+        // 弹窗里再开的弹窗也记进同一次交接
+        const handover = handoverOf(from.view.webContents.id, from.id)
+        const next = open(from.owner, handover !== null ? 'user' : from.kind)
+        if (handover !== null) notePopup(handover, next.id)
         const rewritten = rewrite(from, url)
         if (rewritten) {
           rewritten.then(
@@ -126,7 +127,7 @@ export function createElectronHost(): ElectronBrowserHost {
               ),
           )
         } else void next.load(url, 30_000)
-        if (!handed) from.notice(`The page opened ${url} in a new tab ${next.id}.`)
+        if (handover === null) from.notice(`The page opened ${url} in a new tab ${next.id}.`)
       },
     })
     tabs.set(id, tab)

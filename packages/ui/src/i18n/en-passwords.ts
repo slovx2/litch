@@ -45,6 +45,9 @@ export const enPasswords: Record<keyof typeof zhPasswords, Entry> = {
   'browser.signIn.withdrawnNote':
     'This tab was reloaded. Do not type passwords here anymore: the agent can read the page when it uses this tab again.',
   'browser.signIn.dismiss': 'OK',
+  'browser.signIn.closed': 'The sign-in tab was closed',
+  'browser.signIn.closedNote':
+    'The page could not be reloaded safely, so Litch closed the tab. Nothing typed there was handed to the agent.',
   'browser.signIn.note':
     'Sign in on the page below yourself (saved passwords work here), then click "Done, hand back". The agent cannot touch this tab meanwhile; password fields are cleared before it gets the tab back, and it never sees what you typed.',
   'browser.signIn.done': 'Done, hand back',
