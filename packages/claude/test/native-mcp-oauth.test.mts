@@ -106,7 +106,11 @@ test('MCP-011：真实 SDK OAuth PKCE、并发刷新、重启与配置范围隔�
     const authorize = await fetch(authorization, { redirect: 'manual' })
     const callback = authorize.headers.get('location')!
     assert.equal((await fetch(callback)).status, 200)
-    assert.equal((await client.notification('mcpServer/oauthLogin/completed')).success, true)
+    const done = await client.notification('mcpServer/oauthLogin/completed')
+    assert.equal(done.success, true)
+    // 0.163.0 起应答和完成通知带同一个 loginId
+    assert.match(login.loginId, /^[0-9a-f-]{36}$/)
+    assert.equal(done.loginId, login.loginId)
     const replay = await fetch(callback).then(
       (r) => r.status,
       () => 0,

@@ -119,6 +119,23 @@ test('HISTORY-003：同时间戳会话分页不漏项，已加载列表游标前
       (await client.request('thread/list', { modelProviders: ['unrelated-provider'] })).data.length,
       0,
     )
+    // excludedThreadIds（0.163.0）：先排除再截取一页，超过 100 个拒绝
+    const excluded = threads.slice(0, 5).map((thread) => thread.id)
+    const kept = await client.request('thread/list', {
+      cwd: home,
+      limit: 3,
+      excludedThreadIds: excluded,
+    })
+    assert.deepEqual(
+      new Set(kept.data.map((thread: any) => thread.id)),
+      new Set(threads.slice(5).map((thread) => thread.id)),
+    )
+    assert.equal(kept.nextCursor, null)
+    await client.raw(
+      'thread/list',
+      { excludedThreadIds: Array.from({ length: 101 }, (_, index) => `t-${index}`) },
+      -32602,
+    )
     const first = await client.request('thread/list', {
       cwd: home,
       limit: 2,

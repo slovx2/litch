@@ -330,7 +330,6 @@
       "remoteControl/status/read": -32004,
       "gitDiffToRemote#不是仓库": -32600,
       "thread/search": -32601,
-      "thread/attachmentOwner/list": -32601,
       "memory/status": -32004
     },
     "pi": {

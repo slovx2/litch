@@ -9,6 +9,7 @@ versioning or publishing metadata.
 
 - 适配器：Codex 协议基线从 0.157.1 升到 0.163.0（`codexProtocol`、快照、方法表、`runtime/info` 和 `codex --version` 报的版本），CI 和“一键安装”的验证版 codex 改成 0.163.0；作为 harness 接进来的 codex 下限仍是 0.157.1
 - 适配器：`modelProvider/capabilities/read` 不再带 0.163.0 删掉的 `namespaceTools`（六家入口）
+- Claude Code：支持 0.163.0 新增的 `thread/items/read`、`thread/attachmentOwner/list`，`thread/items/list` 的游标可以是回合里的一个条目（`{type: "item", itemId}`，Pi、DSH、OpenCode、ACP 的入口同样支持），`thread/list` 支持 `excludedThreadIds`，`mcpServerStatus/list` 支持 `serverName`；`mcpServer/oauth/login` 的应答和完成通知带同一个 `loginId`
 
 ## 0.14.0
 

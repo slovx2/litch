@@ -553,6 +553,32 @@ export class SessionStore {
     return row?.id ?? null
   }
 
+  // thread/attachmentOwner/list：按附件身份反查持有它的会话。archived 为 null 时不分归档与否。
+  listAttachmentOwners(
+    attachmentType: string,
+    identityKey: string,
+    archived: boolean | null,
+    limit: number,
+    cursor: CatalogCursor | null,
+  ): Array<{ id: string; createdAt: number; threadId: string; archived: boolean }> {
+    const rows = this.db
+      .prepare(`
+      SELECT a.id AS id, a.created_at AS createdAt, a.thread_id AS threadId, t.archived AS archived
+      FROM thread_attachments a JOIN threads t ON t.id = a.thread_id
+      WHERE a.attachment_type=? AND a.identity_key=? ${archived == null ? '' : 'AND t.archived=?'}
+        ${cursor ? 'AND (a.created_at < ? OR (a.created_at = ? AND a.id < ?))' : ''}
+      ORDER BY a.created_at DESC, a.id DESC LIMIT ?
+    `)
+      .all(
+        attachmentType,
+        identityKey,
+        ...(archived == null ? [] : [archived ? 1 : 0]),
+        ...(cursor ? [cursor.value, cursor.value, cursor.id] : []),
+        limit,
+      ) as Array<{ id: string; createdAt: number; threadId: string; archived: number }>
+    return rows.map((row) => ({ ...row, archived: row.archived === 1 }))
+  }
+
   listThreads(
     options: {
       archived?: boolean | null
@@ -560,6 +586,8 @@ export class SessionStore {
       cursor?: CatalogCursor | null
       modelProviders?: string[]
       searchTerm?: string | null
+      // 先排除这些会话再截取一页（thread/list 的 excludedThreadIds，0.163.0 起）
+      excludedThreadIds?: string[]
       isPinned?: boolean | null
       cwd?: string | string[] | null
       includeEphemeral?: boolean
@@ -603,6 +631,10 @@ export class SessionStore {
     if (options.searchTerm) {
       where.push("instr(lower(COALESCE(NULLIF(t.name,''), t.preview)), lower(?)) > 0")
       args.push(options.searchTerm)
+    }
+    if (options.excludedThreadIds?.length) {
+      where.push(`t.id NOT IN (${options.excludedThreadIds.map(() => '?').join(',')})`)
+      args.push(...options.excludedThreadIds)
     }
     if (options.requirePreview) where.push("t.preview <> ''")
     if (options.isPinned != null) {

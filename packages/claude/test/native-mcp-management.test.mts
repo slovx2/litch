@@ -50,6 +50,17 @@ test('MCP-006：真实管理 RPC 分页、线程隔离、资源、元数据和�
     assert.equal(second.data[0].name, 'second')
     assert.equal(second.nextCursor, null)
     await client.raw('mcpServerStatus/list', { threadId: b, cursor: first.nextCursor }, -32602)
+    // serverName（0.163.0）：只列这一个，没配的是空列表
+    const only = await client.request('mcpServerStatus/list', { threadId: a, serverName: 'second' })
+    assert.deepEqual(
+      only.data.map((x: any) => x.name),
+      ['second'],
+    )
+    assert.equal(only.nextCursor, null)
+    assert.deepEqual(
+      (await client.request('mcpServerStatus/list', { threadId: a, serverName: 'none' })).data,
+      [],
+    )
     const resource = await client.request('mcpServer/resource/read', {
       threadId: b,
       server: 'first',
