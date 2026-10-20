@@ -278,6 +278,8 @@ export interface RuntimeTurnContext {
   sandboxPolicy?: RuntimeSandboxPolicy
   // 自定义权限档位落到具体路径上的规则（permission-profiles.mts）；有它时文件类工具与命令沙箱都按它判
   fileSystem?: import('./permission-profiles.mjs').FileSystemRules
+  // Bash 命令的环境变量规则（shell-environment.mts）；没配不带
+  shellEnvironment?: import('./shell-environment.mjs').ShellEnvironmentPolicy
   dynamicTools?: unknown[]
   threadId: string
   turnId: string

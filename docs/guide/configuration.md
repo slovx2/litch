@@ -208,7 +208,7 @@ node packages/claude/dist/claude/src/adapter.mjs app-server --listen stdio:// \
 ```
 
 - 键按 `.` 拆成路径，值按 TOML 解析，解析不了就当字符串（与 codex 相同）。同一个键给多次，后面的为准。
-- 只认这几个键：`approval_policy`、`sandbox_mode`、`default_permissions`、`developer_instructions`、`permissions.*`、`mcp_servers.*`。别的键（`model_provider`、`features.*` 之类 codex 专有的）不报错，记进调试日志（`config.cliOverride.ignored`）后忽略。
+- 只认这几个键：`approval_policy`、`sandbox_mode`、`default_permissions`、`developer_instructions`、`permissions.*`、`mcp_servers.*`、`shell_environment_policy.*`。别的键（`model_provider`、`features.*` 之类 codex 专有的）不报错，记进调试日志（`config.cliOverride.ignored`）后忽略。
 - 优先级：`-c` > 状态目录的 `config.json`（客户端经 `config/value/write` 写的）> 内置默认。`-c` 这一层只在内存里，不写回 `config.json`；表按键合并（`-c mcp_servers.a=…` 不会冲掉 `config.json` 里的 `mcp_servers.b`），其余整个替换。`mcp_servers` 之下还有 `~/.claude.json` 的 `mcpServers` 与 `CHA_CLAUDE_MCP_SERVERS`，它们排在 `config.json` 和 `-c` 前面。
 - 写错了（档位继承成环、继承 `:danger-full-access`、`default_permissions` 指向没定义的档位、条目格式不对、TOML 写坏了被当成字符串）进程直接起不来，错误打在标准错误上。`config.json` 里的 `permissions` 形状不对也一样。
 - 键里任何一段是 `__proto__`、`constructor`、`prototype` 的整条忽略。
@@ -239,6 +239,18 @@ node packages/claude/dist/claude/src/adapter.mjs app-server --listen stdio:// \
 - Linux 上禁读目录里放回 `read` 的子目录也会挂回（codex 0.163.0 的 bwrap 只挂回可写的，只读的子目录在命令里看不到，它的文件工具却能读）。
 - 并发的两条 `Bash` 命令共用同一个占位时，先结束的那条会删掉占位，另一条在剩下的时间里能建出那个路径（codex 有占位登记表，这里没有）。
 - 内置档位（`:workspace` 等）不做元数据目录保护、不看 `runtimeWorkspaceRoots`，与之前一样。
+
+### Bash 命令的环境变量
+
+`shell_environment_policy` 照 codex（`rust-v0.163.0`）管模型 `Bash` 命令（含子代理的）拿到的环境变量，可以放在 `-c`、`config.json`，也可以放在 `thread/start` 的 `config` 里（键可以写成 `shell_environment_policy.set.PATH` 这样带点的）。线程的这一层叠在进程级上面，表按键合并，`set` 里的变量逐个覆盖。
+
+- `inherit`：`all`（默认，全继承）、`core`（只留 `PATH`、`SHELL`、`TMPDIR`、`TEMP`、`TMP`、`HOME`、`LANG`、`LC_ALL`、`LC_CTYPE`、`LOGNAME`、`USER`）、`none`。
+- `ignore_default_excludes`：默认 `true`；写 `false` 时去掉名字含 `KEY`、`SECRET`、`TOKEN` 的变量。
+- `exclude`、`include_only`：变量名的通配符（`*`、`?`），不分大小写；也可以写成 `filters = { "模式" = "include" | "exclude" }`，但不能和这两个混用。
+- `set`：“变量名 → 值”，在 `exclude` 之后、`include_only` 之前生效。
+- 顺序同 codex：按 `inherit` 取底，然后默认排除、`exclude`、`set`、`include_only`。`LITCH_THREAD_ID` 总是留着。写错了（未知的键、`inherit` 取值不对之类）回 `-32602`，写在 `-c` 或 `config.json` 里则进程起不来。
+
+命令由 Claude Code 起，入口拿不到它的环境，所以配了规则时，入口把命令包进一个 bash，先按规则删、改变量，再跑原命令。因此：`set` 的值出现在这个 bash 的命令行里，同 uid 的沙箱外进程能从 `/proc` 读到，和读环境变量一样；在 Claude Code 2.1.282 上实测，会话记录里存的仍是模型写的原命令，不带这些值。另外，包了之后命令里的 `cd` 不再带到下一条命令。规则等于默认时命令原样不动。`command/exec`、MCP 服务、钩子不受它管。
 
 ## Worktree isolation
 

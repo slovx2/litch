@@ -14,6 +14,7 @@ import {
 import { transcriptPlanSlug } from './plan-slug.mjs'
 import { claudePlansLocation } from './runtime-config.mjs'
 import { defaultSandboxPolicy, type RuntimeSandboxPolicy } from './sandbox-policy.mjs'
+import { shellEnvironmentCommand } from './shell-environment.mjs'
 import type { RuntimeTurnContext } from './types.mjs'
 
 const readTools = new Set([
@@ -75,7 +76,15 @@ function inside(root: string, target: string): boolean {
   return child !== '..' && !child.startsWith(`..${sep}`) && !isAbsolute(child)
 }
 
-export function sandboxedBashInput(context: RuntimeTurnContext, input: Record<string, unknown>) {
+export function sandboxedBashInput(context: RuntimeTurnContext, original: Record<string, unknown>) {
+  // 先按 shell_environment_policy 组环境（shell-environment.mts），再套沙箱
+  const input =
+    context.shellEnvironment && typeof original.command === 'string'
+      ? {
+          ...original,
+          command: shellEnvironmentCommand(context.shellEnvironment, original.command),
+        }
+      : original
   const policy = context.planMode
     ? { type: 'readOnly' as const, networkAccess: false }
     : policyFor(context)

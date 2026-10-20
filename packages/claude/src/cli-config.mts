@@ -15,7 +15,7 @@ const scalarKeys = new Set([
   'default_permissions',
   'developer_instructions',
 ])
-const tableKeys = new Set(['permissions', 'mcp_servers'])
+const tableKeys = new Set(['permissions', 'mcp_servers', 'shell_environment_policy'])
 
 let layer: ConfigTable = {}
 
@@ -89,6 +89,16 @@ function applyOverride(root: ConfigTable, key: string, value: unknown): void {
     current = current[segment] as ConfigTable
   }
   current[segments.at(-1) as string] = value
+}
+
+// thread/start 等请求里的 `config`（codex 的 request_overrides）：键同样可以带 `.`，值已经是 JSON，
+// 不过白名单（用到哪个键由用的地方自己取），叠在进程级配置上面
+export function requestConfigLayer(config: Record<string, unknown> | undefined): ConfigTable {
+  const root: ConfigTable = {}
+  for (const [key, value] of Object.entries(config ?? {}))
+    if (!key.split('.').some((segment) => unsafeKeys.has(segment)))
+      applyOverride(root, key, plain(value))
+  return root
 }
 
 export function buildCliConfigLayer(rawOverrides: readonly string[]): ConfigTable {

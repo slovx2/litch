@@ -238,6 +238,49 @@ test('PROFILE-PROTO-005：子代理追问回合带着父会话的档位和禁读
   })
 })
 
+// shell_environment_policy：-c 给进程级的，线程的 config 叠在上面（表按键合并），回合拿到合并后的规则
+test('PROFILE-PROTO-006：shell_environment_policy 照 codex 叠 -c 与线程 config', async () => {
+  await withProfiles(
+    'profile-shell-env',
+    () => [
+      'shell_environment_policy.exclude=["BROWSER_MCP_*"]',
+      'shell_environment_policy.set.TMPDIR="/srv/tmp"',
+    ],
+    async (stage) => {
+      const client = await stage.connect('client')
+      const plain = await client.request('thread/start', { cwd: stage.directory })
+      const base = await captureTurn(stage, client, { threadId: plain.thread.id })
+      assert.deepEqual(base.shellEnvironment, {
+        inherit: 'all',
+        ignoreDefaultExcludes: true,
+        exclude: ['BROWSER_MCP_*'],
+        set: { TMPDIR: '/srv/tmp' },
+        includeOnly: [],
+      })
+      const scoped = await client.request('thread/start', {
+        cwd: stage.directory,
+        config: {
+          shell_environment_policy: { inherit: 'core', set: { CLI_TOKEN: 'c' } },
+          'shell_environment_policy.set.PATH': '/opt/bin',
+        },
+      })
+      const context = await captureTurn(stage, client, { threadId: scoped.thread.id })
+      assert.deepEqual(context.shellEnvironment, {
+        inherit: 'core',
+        ignoreDefaultExcludes: true,
+        exclude: ['BROWSER_MCP_*'],
+        set: { TMPDIR: '/srv/tmp', CLI_TOKEN: 'c', PATH: '/opt/bin' },
+        includeOnly: [],
+      })
+      const bad = await client.raw('thread/start', {
+        cwd: stage.directory,
+        config: { shell_environment_policy: { inherit: 'some' } },
+      })
+      assert.equal(bad.error?.code, -32602)
+    },
+  )
+})
+
 // 起一个真的适配器进程（模拟运行时），命令行带 -c，读一次 config/read
 async function adapterWith(
   args: string[],
@@ -336,6 +379,7 @@ test('PROFILE-REAL-001：真实 CLI 里 Read 和 Bash 都按档位禁读，自�
       runtimeWorkspaceRoots: [own],
     })
     let sequence = 0
+    let current = thread.id
     const call = async (name: string, input: Record<string, unknown>, allowed: boolean) => {
       const id = `toolu_profile_${sequence++}`
       let output = ''
@@ -354,7 +398,7 @@ test('PROFILE-REAL-001：真实 CLI 里 Read 和 Bash 都按档位禁读，自�
         return [{ type: 'text', text: '好' }]
       })
       const { turn } = await client.request('turn/start', {
-        threadId: thread.id,
+        threadId: current,
         input: text(`第 ${sequence} 步`),
         permissions: 'saas',
       })
@@ -370,6 +414,20 @@ test('PROFILE-REAL-001：真实 CLI 里 Read 和 Bash 都按档位禁读，自�
     assert.match(leaked, /Operation not permitted|Permission denied|No such file/)
     await call('Bash', { command: 'printf ok > made.txt' }, true)
     assert.equal(readFileSync(join(own, 'made.txt'), 'utf8'), 'ok')
+    // 线程 config 的 shell_environment_policy：只留基本变量加 set 的，CLI 自己的变量（模型地址等）不给命令
+    const scoped = await client.request('thread/start', {
+      cwd: own,
+      permissions: 'saas',
+      approvalPolicy: 'never',
+      config: { shell_environment_policy: { inherit: 'core', set: { CLI_TOKEN: 'scoped' } } },
+    })
+    current = scoped.thread.id
+    const env = await call(
+      'Bash',
+      { command: 'echo "T=$CLI_TOKEN A=${ANTHROPIC_BASE_URL:-none} L=${LITCH_THREAD_ID:+yes}"' },
+      true,
+    )
+    assert.match(env, /T=scoped A=none L=yes/)
   } finally {
     await client.close()
     await model.close()

@@ -43,7 +43,7 @@ import {
   writeSettingsDefaults,
 } from './claude-default-model.mjs'
 import { PROVIDER_CONFIG_KEY } from './claude-provider.mjs'
-import { cliConfigLayer, mergeConfigLayers } from './cli-config.mjs'
+import { cliConfigLayer, mergeConfigLayers, requestConfigLayer } from './cli-config.mjs'
 import {
   applyConfigEdits,
   isConfigObject,
@@ -168,6 +168,7 @@ import {
   toolResultText,
   userInputAnswersAsContent,
 } from './server-helpers.mjs'
+import { resolveShellEnvironmentPolicy, type ShellEnvironmentPolicy } from './shell-environment.mjs'
 import { SkillsRpc } from './skills-rpc.mjs'
 import { PINNED_SECTION_ID, type SessionStore } from './store.mjs'
 import {
@@ -1846,7 +1847,11 @@ export class CodexClaudeAppServer {
         throw new ProtocolError(-32602, 'dynamicTools 必须是数组')
       settings.dynamicTools = params.dynamicTools
     }
-    if (params.config != null) settings.config = asRecord(params.config)
+    if (params.config != null) {
+      settings.config = asRecord(params.config)
+      // 写错了当场报，不等到跑命令
+      this.shellEnvironmentPolicy(settings.config)
+    }
     this.store.saveThreadSettings(threadId, settings)
   }
 
@@ -3627,6 +3632,8 @@ export class CodexClaudeAppServer {
     const permissionSettings = parentSettings?.permissionProfile ? parentSettings : turnSettings
     if (permissionSettings.permissionProfile)
       sandboxMode = profileSandboxMode(permissionSettings.permissionProfile.profile)
+    // Bash 的环境变量规则：进程级配置（config.json 加 -c）上叠线程的 config；追问回合跑在父会话的 CLI 里，用父会话的
+    const shellEnvironment = this.shellEnvironmentPolicy((parentSettings ?? turnSettings).config)
     if (relay) {
       systemPromptAddendum = buildSystemPromptAddendum({
         baseInstructions: relay.parent.baseInstructions,
@@ -3773,6 +3780,7 @@ export class CodexClaudeAppServer {
         sandboxMode,
         sandboxPolicy:
           permissionSettings.sandboxPolicy ?? defaultSandboxPolicy(sandboxMode, thread.cwd),
+        ...(shellEnvironment ? { shellEnvironment } : {}),
         ...(permissionSettings.permissionProfile
           ? {
               fileSystem: compileFileSystemRules(
@@ -6132,6 +6140,15 @@ export class CodexClaudeAppServer {
     }
   }
 
+  private shellEnvironmentPolicy(
+    threadConfig: Record<string, unknown> | undefined,
+  ): ShellEnvironmentPolicy | null {
+    return resolveShellEnvironmentPolicy(
+      mergeConfigLayers(this.configOverrides, requestConfigLayer(threadConfig))
+        .shell_environment_policy,
+    )
+  }
+
   private validateConfigValues(values: Record<string, unknown>): void {
     validateRuntimePermissions({
       approvalPolicy: values.approval_policy,
@@ -6154,6 +6171,9 @@ export class CodexClaudeAppServer {
     if (values.mcp_servers != null) sdkMcpServers(values.mcp_servers)
     // 档位按叠上 `-c` 之后的有效配置查：config.json 里可以引用只在 `-c` 里定义的档位名
     validatePermissionsConfig(mergeConfigLayers(values, cliConfigLayer()))
+    resolveShellEnvironmentPolicy(
+      mergeConfigLayers(values, cliConfigLayer()).shell_environment_policy,
+    )
     if (values.sandbox_workspace_write != null) {
       if (!isConfigObject(values.sandbox_workspace_write))
         throw new ProtocolError(-32602, 'sandbox_workspace_write 必须是对象')
