@@ -1,9 +1,12 @@
 // 侧面板的“建议任务”标签：眼前这个会话里模型提的全部提案。等着的在上，每条能开始、改了再开始、不要；
 // 了结的（开始了、不要了、撤回了、过期了）在下面，可以收起来。点一条在对话流里找到那张卡片、滚过去闪一下；
 // 对话里找不到（还没载入、调用没留下）就只让这一行闪一下。标签上的角标是等着的个数（ProposalsBadge.tsx）。
+// 开始了的那行写实际起出来的子会话的 harness 和目录（proposalShape），不是提案原本的。
 import {
   type DeviceView,
   keys,
+  type ProposalStarts,
+  proposalShape,
   proposalStatus,
   type SessionProposalView,
   type SessionSummary,
@@ -40,7 +43,11 @@ function ProposalRow({
   const t = useT()
   const device = useKey<DeviceView>(keys.device(deviceId))
   const status = proposalStatus(proposal, now)
-  const harness = proposal.harness ?? fallbackHarness
+  const starts = useKey<ProposalStarts>(keys.proposalStarts(deviceId))
+  const childId = status === 'started' ? (proposal.startedId ?? starts?.[proposal.id] ?? '') : ''
+  const child = useKey<SessionSummary>(keys.summary(deviceId, childId))
+  const shape = proposalShape(proposal, child, fallbackHarness)
+  const harness = shape.harness
   return (
     <li className="prop-row" data-proposal={proposal.id} data-state={status}>
       <button
@@ -62,7 +69,13 @@ function ProposalRow({
               {badgeOf(device, harness)}
             </span>
           ) : null}
-          <span className="ell grow">{proposal.prompt}</span>
+          {shape.actual && shape.cwd ? (
+            <span className="ell grow mono prop-cwd" data-actual title={shape.cwd}>
+              {shape.cwd}
+            </span>
+          ) : (
+            <span className="ell grow">{proposal.prompt}</span>
+          )}
         </span>
       </button>
       {status === 'pending' ? (

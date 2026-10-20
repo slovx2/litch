@@ -1,7 +1,7 @@
 // 派子会话的弹窗，两种用法共用一张表（表单的初值和提交的内容在 spawn-form.ts）：
 // - 从侧栏的会话菜单里“派一个子会话…”：挑 harness、模型、强度、项目、目录、权限，全新开始还是带上父会话的
 //   上下文（带上下文只能用父会话的 harness），写标题和第一段话，勾不勾“完成后唤醒主会话”；
-// - 提案卡片上的“改了再开始”：照提案预填，都能改（唤醒与否照提案，不在这里改），确认后带着改过的那几项开始。
+// - 提案卡片上的“改了再开始”：照提案预填，都能改（含“完成后唤醒主会话”），确认后带着改过的那几项开始。
 // 派出去、开始都由设备进程做；沙箱收紧到不宽于父会话，目标 harness 收不紧时这里写明。
 import {
   type DeviceView,
@@ -289,16 +289,14 @@ export function SpawnDialog({ deviceId, parent, proposal, onSpawned, onClose }: 
               onChange={(event) => set({ prompt: event.target.value })}
             />
           </div>
-          {proposal ? null : (
-            <label className="spawn-wake">
-              <input
-                type="checkbox"
-                checked={fields.wake}
-                onChange={(event) => set({ wake: event.target.checked })}
-              />
-              {t('tree.dialog.wake')}
-            </label>
-          )}
+          <label className="spawn-wake">
+            <input
+              type="checkbox"
+              checked={fields.wake}
+              onChange={(event) => set({ wake: event.target.checked })}
+            />
+            {t('tree.dialog.wake')}
+          </label>
           {failure ? <div className="modal-note err">{failure}</div> : null}
         </div>
         <div className="modal-foot">

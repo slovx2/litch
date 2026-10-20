@@ -1,16 +1,21 @@
-// 对话流里的提案卡片（建议任务）：模型调 litch_sessions.start 降成提案的那一条画成这张卡片。
+// 对话流里的提案卡片（建议任务）：模型调 litch_sessions.start 降成提案的那一条画成一张卡片；
+// 收尾调用（litch_sessions.wrap_up）带的建议每条一张，照建议的顺序排在那一条上，被拒的那条只写一行原因。
 // 标题、harness、模型、目录、简报（长的可展开）、状态（等开始、已开始、不要了、撤回了、过期了），
 // 沙箱收不紧时的提醒；等着的有“开始”“改了再开始”“不要”，开始了的能点进子会话。
 // 状态取这个会话的提案列表（连了结的一起），对不上的再看侧栏里哪个子会话记着从这张提案开始。
+// 开始了的写实际起出来的子会话的 harness、目录（proposalShape），不是提案原本的。
 // 侧面板“建议任务”里的每一行用的是同一套按钮（ProposalActs）。
 import {
   type DeviceView,
   keys,
+  type ProposalShape,
   type ProposalStarts,
+  proposalShape,
   proposalStatus,
   type SessionProposalView,
   type SessionSummary,
   type ToolCallItem,
+  type WrapUpSuggestionView,
 } from '@litch/core'
 import { useState } from 'react'
 import { useT } from '../app/appearance.ts'
@@ -90,30 +95,23 @@ export function ProposalActs({
   )
 }
 
-/** 卡片上那一排小字：harness、模型、目录、全新还是带上下文 */
-function ProposalMeta({
-  deviceId,
-  harness,
-  model,
-  cwd,
-  kind,
-}: {
-  deviceId: string
-  harness: string | null
-  model: string | null
-  cwd: string | null
-  kind: SessionProposalView['kind']
-}) {
+/** 卡片上那一排小字：harness、模型、目录、全新还是带上下文。开始了的写的是实际起出来的子会话 */
+function ProposalMeta({ deviceId, shape }: { deviceId: string; shape: ProposalShape }) {
   const t = useT()
   const device = useKey<DeviceView>(keys.device(deviceId))
+  const { harness, model, cwd, kind } = shape
   return (
-    <span className="prop-meta">
+    <span
+      className="prop-meta"
+      data-actual={shape.actual}
+      title={shape.actual ? t('proposal.actual') : undefined}
+    >
       {harness ? (
         <span className="chip" title={nameOf(device, harness)}>
           {badgeOf(device, harness)}
         </span>
       ) : null}
-      {harness ? <span>{nameOf(device, harness)}</span> : null}
+      {harness ? <span data-harness={harness}>{nameOf(device, harness)}</span> : null}
       {model ? <span className="mono">{model}</span> : null}
       {cwd ? (
         <span className="mono ell prop-cwd" title={cwd}>
@@ -125,38 +123,55 @@ function ProposalMeta({
   )
 }
 
-/** litch_sessions.start 降成提案的那一条 */
-export function ProposalCard({
+/** 卡片照着画的那一份：调用时给的（start 的参数、收尾里的一条建议），拿不到提案时就照它 */
+type ProposalSeed = Pick<
+  SessionProposalView,
+  'title' | 'prompt' | 'harness' | 'model' | 'cwd' | 'kind'
+>
+
+/**
+ * 一张提案卡片。proposalId 是空串：收尾的结果还没回来，只照建议画、不写状态。
+ * anchor：卡片自己就是那一条工具调用（start 的那种），滚动定位、侧面板找卡片的标记打在卡片上
+ */
+function ProposalView({
   deviceId,
   sessionId,
-  itemId,
-  item,
-}: ItemRef & { item: ToolCallItem }) {
+  proposalId,
+  seed,
+  anchor,
+}: {
+  deviceId: string
+  sessionId: string
+  proposalId: string
+  seed: ProposalSeed
+  anchor?: string
+}) {
   const t = useT()
   const { open } = useActions()
-  const spawned = item.spawned
-  const proposalId = spawned?.proposalId ?? ''
   const list = useProposalList(deviceId, sessionId)
   const now = useProposalClock(list)
-  const proposal = list?.find((entry) => entry.id === proposalId)
+  const proposal = proposalId ? list?.find((entry) => entry.id === proposalId) : undefined
   const starts = useKey<ProposalStarts>(keys.proposalStarts(deviceId))
   const parent = useKey<SessionSummary>(keys.summary(deviceId, sessionId))
-  const childId = proposal?.startedId ?? starts?.[proposalId] ?? ''
+  const childId = proposal?.startedId ?? (proposalId ? starts?.[proposalId] : undefined) ?? ''
   const child = useKey<SessionSummary>(keys.summary(deviceId, childId))
   const device = useKey<DeviceView>(keys.device(deviceId))
   const [unfolded, setUnfolded] = useState(false)
-  if (!spawned) return null
   // 列表里没有这一张（对面没给、或者还没取到）：照调用时给的画，开始了的看侧栏
   const status = proposal
     ? proposalStatus(proposal, now)
     : childId
       ? 'started'
-      : list === undefined
+      : list === undefined || !proposalId
         ? null
         : 'unknown'
-  const title = proposal?.title ?? spawned.title
-  const prompt = proposal?.prompt ?? spawned.prompt
-  const harness = proposal?.harness ?? spawned.harness ?? parent?.harness ?? null
+  const title = proposal?.title ?? seed.title
+  const prompt = proposal?.prompt ?? seed.prompt
+  const shape = proposalShape(
+    proposal ?? seed,
+    status === 'started' ? child : null,
+    parent?.harness ?? null,
+  )
   const long = prompt.length > LONG_BRIEF || prompt.split('\n').length > 3
   const pending = status === 'pending' && proposal !== undefined
   return (
@@ -164,9 +179,9 @@ export function ProposalCard({
       className="tree-card prop-card"
       data-card="proposal"
       data-proposal={proposalId}
-      data-item={itemId}
+      data-item={anchor}
       data-state={status ?? ''}
-      data-anchor={`i:${itemId}`}
+      data-anchor={anchor ? `i:${anchor}` : undefined}
     >
       <div className="prop-body">
         <span className="tree-card-kind">
@@ -179,13 +194,7 @@ export function ProposalCard({
           ) : null}
         </span>
         <b className="prop-title">{title}</b>
-        <ProposalMeta
-          deviceId={deviceId}
-          harness={harness}
-          model={proposal?.model ?? spawned.model}
-          cwd={proposal?.cwd ?? spawned.cwd}
-          kind={proposal?.kind ?? spawned.kind}
-        />
+        <ProposalMeta deviceId={deviceId} shape={shape} />
         {prompt ? (
           <div className="prop-brief" data-open={unfolded || !long}>
             {prompt}
@@ -233,6 +242,71 @@ export function ProposalCard({
           ) : null}
         </button>
       ) : null}
+    </div>
+  )
+}
+
+/** litch_sessions.start 降成提案的那一条 */
+export function ProposalCard({
+  deviceId,
+  sessionId,
+  itemId,
+  item,
+}: ItemRef & { item: ToolCallItem }) {
+  const spawned = item.spawned
+  if (!spawned) return null
+  return (
+    <ProposalView
+      deviceId={deviceId}
+      sessionId={sessionId}
+      proposalId={spawned.proposalId ?? ''}
+      seed={spawned}
+      anchor={itemId}
+    />
+  )
+}
+
+/** 收尾里没收下的一条建议：卡片的位置上只写一行，标题和设备进程说的原因 */
+function RefusedLine({ suggestion }: { suggestion: WrapUpSuggestionView }) {
+  const t = useT()
+  const reason = suggestion.refused ?? ''
+  return (
+    <div className="prop-refused" data-card="refused" title={reason || undefined}>
+      <Icon name="suggest" small />
+      <b className="ell prop-refused-title">{suggestion.title}</b>
+      <span className="ell grow prop-refused-why">
+        {reason ? t('proposal.refused', { reason }) : t('proposal.refusedBare')}
+      </span>
+    </div>
+  )
+}
+
+/** litch_sessions.wrap_up 带了建议的那一条：照建议的顺序每条一张卡片（空的那种核心说不画，到不了这里） */
+export function WrapUpCards({
+  deviceId,
+  sessionId,
+  itemId,
+  item,
+}: ItemRef & { item: ToolCallItem }) {
+  const suggestions = item.wrapUp?.suggestions ?? []
+  if (suggestions.length === 0) return null
+  return (
+    <div className="wrap-cards" data-card="wrap-up" data-item={itemId} data-anchor={`i:${itemId}`}>
+      {suggestions.map((suggestion, index) =>
+        suggestion.refused !== null ? (
+          // biome-ignore lint/suspicious/noArrayIndexKey: 建议的顺序就是它的身份，没有别的标识
+          <RefusedLine key={index} suggestion={suggestion} />
+        ) : (
+          <ProposalView
+            // biome-ignore lint/suspicious/noArrayIndexKey: 同上；有了提案号也不换 key，免得卡片重建
+            key={index}
+            deviceId={deviceId}
+            sessionId={sessionId}
+            proposalId={suggestion.proposalId ?? ''}
+            seed={suggestion}
+          />
+        ),
+      )}
     </div>
   )
 }

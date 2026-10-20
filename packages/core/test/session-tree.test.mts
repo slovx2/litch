@@ -11,7 +11,9 @@ import {
   connectChannel,
   createMockCore,
   createPortPair,
+  proposalShape,
   proposalStatus,
+  quietOf,
   reduceSession,
   type SessionOp,
   type SessionProposalView,
@@ -486,6 +488,165 @@ test('设备：对面不认 parentThreadId、回了全部会话时，只留父�
   assert.deepEqual([...world.side.sessions.keys()].sort(), ['c1', 'p'])
 })
 
+/** 一次 litch_sessions.wrap_up 调用的条目 */
+const wrapUpItem = (id: string, suggestions: unknown[], result?: unknown) =>
+  projectItem({
+    type: 'dynamicToolCall',
+    id,
+    namespace: 'litch_sessions',
+    tool: 'wrap_up',
+    arguments: { suggestions },
+    status: result ? 'completed' : 'inProgress',
+    contentItems: result ? [{ type: 'inputText', text: JSON.stringify(result) }] : null,
+    success: result ? true : null,
+    durationMs: result ? 2 : null,
+  } as never) as ToolCallItem
+
+test('投影：收尾调用的每条建议按顺序对上结果里的提案或拒绝原因；空的不画，带建议的是卡片', () => {
+  const asked = [
+    { title: '补测试', prompt: '给解析器补测试', harness: 'pi', cwd: '~/x' },
+    { title: '对文案', prompt: '逐键对一遍', kind: 'fork' },
+    { title: '看看', prompt: '看看' },
+  ]
+  // 还没有结果：都是 null；参数一开始就有，所以开始时就定了画成卡片
+  const running = wrapUpItem('w1', asked)
+  assert.deepEqual(
+    running.wrapUp?.suggestions.map((entry) => [entry.proposalId, entry.refused]),
+    [
+      [null, null],
+      [null, null],
+      [null, null],
+    ],
+  )
+  assert.equal(cardOf(running), true)
+  assert.equal(quietOf(running), false)
+
+  const done = wrapUpItem('w1', asked, {
+    suggestions: [
+      { title: '补测试', proposal_id: 'pr1' },
+      { title: '对文案', proposal_id: 'pr2' },
+      { title: '看看', refused: 'too short' },
+    ],
+    note: '',
+  })
+  assert.deepEqual(done.wrapUp?.suggestions, [
+    {
+      title: '补测试',
+      prompt: '给解析器补测试',
+      harness: 'pi',
+      model: null,
+      cwd: '~/x',
+      kind: 'fresh',
+      proposalId: 'pr1',
+      refused: null,
+    },
+    {
+      title: '对文案',
+      prompt: '逐键对一遍',
+      harness: null,
+      model: null,
+      cwd: null,
+      kind: 'fork',
+      proposalId: 'pr2',
+      refused: null,
+    },
+    {
+      title: '看看',
+      prompt: '看看',
+      harness: null,
+      model: null,
+      cwd: null,
+      kind: 'fresh',
+      proposalId: null,
+      refused: 'too short',
+    },
+  ])
+  assert.equal(done.spawned, undefined)
+
+  // 结果的顺序和参数对不上：按标题找
+  const shuffled = wrapUpItem('w2', asked.slice(0, 2), {
+    suggestions: [
+      { title: '对文案', proposal_id: 'pr2' },
+      { title: '补测试', proposal_id: 'pr1' },
+    ],
+    note: '',
+  })
+  assert.deepEqual(
+    shuffled.wrapUp?.suggestions.map((entry) => entry.proposalId),
+    ['pr1', 'pr2'],
+  )
+
+  // 没有建议的收尾：不画，也不是卡片
+  const empty = wrapUpItem('w3', [], { suggestions: [], note: '' })
+  assert.deepEqual(empty.wrapUp, { suggestions: [] })
+  assert.equal(quietOf(empty), true)
+  assert.equal(cardOf(empty), false)
+  // 别的工具调用都不是“不画”的
+  assert.equal(quietOf(projectItem(userText('u', 'hi'))), false)
+})
+
+test('投影：设备进程的提醒（kind="remind"）拆成事件，没有用户自己的话', () => {
+  const text = formatSessionEvent({ kind: 'remind', notes: [] })
+  const item = projectItem(userText('u1', text)) as UserMessageItem
+  assert.equal(item.text, '')
+  assert.deepEqual(item.event, { kind: 'remind', notes: [] })
+})
+
+test('分块：不画的条目不占块、不算进活动；回合只剩说明时照旧直接露出来', () => {
+  assert.deepEqual(
+    bucketItems([
+      { id: 'u', kind: 'userMessage' },
+      { id: 'r', kind: 'reasoning' },
+      { id: 'a', kind: 'agentMessage', phase: 'final' },
+      { id: 'w', kind: 'toolCall', quiet: true },
+    ]),
+    [
+      { type: 'user', itemId: 'u' },
+      { type: 'activity', key: 'r', itemIds: ['r'] },
+      { type: 'answer', itemId: 'a' },
+    ],
+  )
+  assert.deepEqual(
+    bucketItems([
+      { id: 'n', kind: 'notice' },
+      { id: 'w', kind: 'toolCall', quiet: true },
+    ]),
+    [{ type: 'notes', key: 'n', itemIds: ['n'] }],
+  )
+})
+
+test('提案卡片写什么：开始了、子会话在侧栏里的写实际的 harness、目录、方式；别的写提案的，没给的跟父会话', () => {
+  const planned = { harness: 'pi', model: 'm1', cwd: '~/a', kind: 'fork' as const }
+  assert.deepEqual(proposalShape(planned, undefined, 'claude'), {
+    harness: 'pi',
+    model: 'm1',
+    cwd: '~/a',
+    kind: 'fork',
+    actual: false,
+  })
+  assert.equal(proposalShape({ ...planned, harness: null }, null, 'claude').harness, 'claude')
+  const child = {
+    harness: 'dsh',
+    cwd: '/work/b',
+    lineage: {
+      parentId: 'p',
+      kind: 'fresh' as const,
+      origin: 'proposal' as const,
+      title: 'x',
+      wakeParent: true,
+      createdAt: 0,
+      proposalId: 'pr1',
+    },
+  }
+  assert.deepEqual(proposalShape(planned, child, 'claude'), {
+    harness: 'dsh',
+    model: null,
+    cwd: '/work/b',
+    kind: 'fresh',
+    actual: true,
+  })
+})
+
 test('分块：派出子会话、启动子代理（开始时还不知道子线程）画成露在外面的卡片；等待子代理还是活动里的一行', () => {
   const spawn = projectItem({
     type: 'dynamicToolCall',
@@ -609,7 +770,7 @@ test('设备：打开会话时连了结的一起取提案；变了的通知并�
   const { sessionId } = (await world.command('session.proposal.accept', {
     sessionId: 'p',
     proposalId: 'pr2',
-    overrides: { harness: 'dsh', title: '清理旧分支', sandbox: 'read-only' },
+    overrides: { harness: 'dsh', title: '清理旧分支', sandbox: 'read-only', wakeParent: false },
   })) as { sessionId: string }
   assert.equal(sessionId, 'c3')
   assert.deepEqual(
@@ -619,6 +780,7 @@ test('设备：打开会话时连了结的一起取提案；变了的通知并�
       overrides: {
         harness: 'dsh',
         title: '清理旧分支',
+        wakeParent: false,
         sandbox: 'read-only',
         approvalPolicy: 'on-request',
       },
@@ -836,6 +998,100 @@ test('模拟：说“撤回提案”模型撤回最近一个还等着的提案�
     (item) => item.kind === 'toolCall' && item.tool === 'withdraw',
   )
   assert.ok(withdrawCall, '对话里有撤回的那次调用')
+})
+
+test('模拟：说“收尾建议”回答完调收尾带三条建议：两条成了提案（callId 是那次调用），一条被拒；别的几出调空的收尾', async () => {
+  const world = mockWorld()
+  await settle()
+  const parent = world.watch('s6')
+  await settle()
+  const say = async (text: string) => {
+    const before = parent.view?.turns.length ?? 0
+    await world.channel.command('session.send', { deviceId: 'local', sessionId: 's6', text })
+    await world.until(
+      () =>
+        (parent.view?.turns.length ?? 0) > before &&
+        parent.view?.turns.at(-1)?.status === 'completed',
+      `“${text}”这一回合结束`,
+    )
+  }
+  const lastTurnItems = () =>
+    (parent.view?.turns.at(-1)?.itemIds ?? []).map((id) => parent.view?.items[id])
+  await say('收尾建议')
+  const items = lastTurnItems()
+  // 收尾是这一回合的最后一条，在回答后面
+  assert.equal(items.at(-2)?.kind, 'agentMessage')
+  const call = items.at(-1) as ToolCallItem
+  assert.equal(call.tool, 'wrap_up')
+  assert.equal(cardOf(call), true)
+  const suggestions = call.wrapUp?.suggestions ?? []
+  assert.equal(suggestions.length, 3)
+  assert.ok(suggestions[2]?.refused, '第三条被拒，带着原因')
+  const list = parent.view?.proposals ?? []
+  assert.equal(list.length, 2)
+  assert.deepEqual(
+    suggestions.slice(0, 2).map((entry) => entry.proposalId),
+    list.map((entry) => entry.id),
+  )
+  assert.ok(list.every((entry) => entry.callId === call.id && entry.status === 'pending'))
+  assert.equal(list[1]?.harness, 'pi')
+
+  // 从卡片开始，换个 harness、不唤醒：子会话是换过的
+  const second = list[1]
+  assert.ok(second)
+  const { sessionId } = (await world.channel.command('session.proposal.accept', {
+    deviceId: 'local',
+    sessionId: 's6',
+    proposalId: second.id,
+    overrides: { harness: 'claude', wakeParent: false },
+  })) as { sessionId: string }
+  await world.until(() => world.children('s6').some((entry) => entry.id === sessionId), '起出来了')
+  const child = world.children('s6').find((entry) => entry.id === sessionId)
+  assert.equal(child?.harness, 'claude')
+  assert.equal(child?.lineage?.wakeParent, false)
+  assert.equal(child?.lineage?.proposalId, second.id)
+
+  // 提案那一出回答完调的是空的收尾：不画
+  await say('提个子会话')
+  const quiet = lastTurnItems().at(-1) as ToolCallItem
+  assert.equal(quiet.tool, 'wrap_up')
+  assert.deepEqual(quiet.wrapUp, { suggestions: [] })
+  assert.equal(quietOf(quiet), true)
+})
+
+test('模拟：说“忘了收尾”回答完没调收尾，替它开一个提醒的回合，模型在里面补调收尾', async () => {
+  const world = mockWorld()
+  await settle()
+  const parent = world.watch('s6')
+  await settle()
+  const before = parent.view?.turns.length ?? 0
+  await world.channel.command('session.send', {
+    deviceId: 'local',
+    sessionId: 's6',
+    text: '忘了收尾',
+  })
+  await world.until(
+    () =>
+      (parent.view?.turns.length ?? 0) === before + 2 &&
+      parent.view?.turns.at(-1)?.status === 'completed',
+    '提醒的回合结束',
+  )
+  const [asked, reminded] = (parent.view?.turns ?? []).slice(-2)
+  const itemsOf = (ids: string[] | undefined) => (ids ?? []).map((id) => parent.view?.items[id])
+  // 用户的回合里没有收尾
+  assert.ok(itemsOf(asked?.itemIds).every((item) => item?.kind !== 'toolCall'))
+  const [user, call] = itemsOf(reminded?.itemIds)
+  assert.equal(user?.kind, 'userMessage')
+  assert.deepEqual((user as UserMessageItem).event, { kind: 'remind', notes: [] })
+  assert.equal((user as UserMessageItem).text, '')
+  assert.equal((call as ToolCallItem).tool, 'wrap_up')
+  assert.equal((call as ToolCallItem).wrapUp?.suggestions.length, 1)
+  assert.equal(parent.view?.proposals.at(-1)?.callId, call?.id)
+  // 提醒只一次：再等一会儿也不会再开回合
+  const turns = parent.view?.turns.length
+  world.time.advance(5000)
+  await settle()
+  assert.equal(parent.view?.turns.length, turns)
 })
 
 test('模拟：说“用子代理”出子代理卡片；能打开子线程，不能输入的那个只能看；脱离后不再挂着', async () => {

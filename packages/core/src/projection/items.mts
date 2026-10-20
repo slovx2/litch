@@ -18,7 +18,14 @@ import type {
   ToolPart,
   UserMessageItem,
 } from '../model.mjs'
-import type { AgentRefView, AgentState, SessionEventView, SpawnedView } from '../model-tree.mjs'
+import type {
+  AgentRefView,
+  AgentState,
+  SessionEventView,
+  SpawnedView,
+  WrapUpSuggestionView,
+  WrapUpView,
+} from '../model-tree.mjs'
 import { type Phrase, type PhraseKey, phrase } from '../phrase.mjs'
 import { capDiff } from '../text/diff.mjs'
 import { capOutput, utf8Length } from '../text/output-cap.mjs'
@@ -87,7 +94,8 @@ function sessionEvent(event: { kind: string; notes: unknown[] }): SessionEventVi
       },
     ]
   })
-  return { kind: event.kind === 'wake' ? 'wake' : 'notes', notes }
+  const kind = event.kind === 'wake' || event.kind === 'remind' ? event.kind : 'notes'
+  return { kind, notes }
 }
 
 const AGENT_STATES = new Set<string>([
@@ -123,6 +131,8 @@ function agentRefs(
     })
 }
 
+const word = (value: unknown): string | null => (typeof value === 'string' && value ? value : null)
+
 /**
  * litch_sessions.start 的条目：参数里的标题、harness，结果里起出来的子会话号或者提案号。
  * 别的调用（list、read……）是 null，照普通的工具调用画
@@ -147,8 +157,6 @@ function spawnedOf(
       // 失败的结果是一行说明，不是 JSON
     }
   }
-  const word = (value: unknown): string | null =>
-    typeof value === 'string' && value ? value : null
   return {
     threadId,
     proposalId,
@@ -159,6 +167,72 @@ function spawnedOf(
     cwd: word(given.cwd),
     kind: given.kind === 'fork' ? 'fork' : 'fresh',
   }
+}
+
+/** 工具结果里的那段 JSON（客户端工具的结果是一段 inputText）。失败的结果是一行说明，不是 JSON：null */
+function resultJson(
+  output: readonly { type: string; text?: string }[] | null | undefined,
+): Record<string, unknown> | null {
+  for (const part of output ?? []) {
+    if (part.type !== 'inputText' || typeof part.text !== 'string') continue
+    try {
+      const parsed: unknown = JSON.parse(part.text)
+      if (typeof parsed === 'object' && parsed !== null) return parsed as Record<string, unknown>
+    } catch {
+      // 不是 JSON，看下一段
+    }
+  }
+  return null
+}
+
+/**
+ * litch_sessions.wrap_up 的条目：参数里的每条建议，按顺序对上结果里它成了哪张提案、或者为什么没收。
+ * 结果按建议的顺序给；对不上（条数不一样、标题不一样）时按标题找还没用过的那一条。别的调用是 null
+ */
+function wrapUpOf(
+  namespace: string | null | undefined,
+  tool: string,
+  args: unknown,
+  output: readonly { type: string; text?: string }[] | null | undefined,
+): WrapUpView | null {
+  if (namespace !== CLIENT_TOOL_NAMESPACE.sessions || tool !== SESSION_TOOL.wrapUp) return null
+  const given = (typeof args === 'object' && args !== null ? args : {}) as Record<string, unknown>
+  const listed = Array.isArray(given.suggestions) ? given.suggestions : []
+  const answered = resultJson(output)?.suggestions
+  const results = (Array.isArray(answered) ? answered : []).map((entry) =>
+    typeof entry === 'object' && entry !== null ? (entry as Record<string, unknown>) : {},
+  )
+  const used = new Set<number>()
+  const resultFor = (index: number, title: string): Record<string, unknown> | null => {
+    const same = results[index]
+    if (same && !used.has(index) && (same.title === undefined || same.title === title)) {
+      used.add(index)
+      return same
+    }
+    const found = results.findIndex((entry, at) => !used.has(at) && entry.title === title)
+    if (found < 0) return null
+    used.add(found)
+    return results[found] ?? null
+  }
+  const suggestions = listed.flatMap((entry, index): WrapUpSuggestionView[] => {
+    if (typeof entry !== 'object' || entry === null) return []
+    const raw = entry as Record<string, unknown>
+    const title = typeof raw.title === 'string' ? raw.title : ''
+    const result = resultFor(index, title)
+    return [
+      {
+        title,
+        prompt: typeof raw.prompt === 'string' ? raw.prompt : '',
+        harness: word(raw.harness),
+        model: word(raw.model),
+        cwd: word(raw.cwd),
+        kind: raw.kind === 'fork' ? 'fork' : 'fresh',
+        proposalId: word(result?.proposal_id),
+        refused: result && !word(result.proposal_id) ? (word(result.refused) ?? '') : null,
+      },
+    ]
+  })
+  return { suggestions }
 }
 
 /** 数一个补丁里加了几行、删了几行。只认以单个加号或减号开头的行，文件头不算 */
@@ -458,8 +532,10 @@ export function projectItem(item: ThreadItem, streaming = false): ItemView {
       // 客户端工具的截图要看得见：头几张图片留着内容（keepImages）
       const output = resultParts(item.contentItems, null, true)
       const spawned = spawnedOf(item.namespace, item.tool, item.arguments, item.contentItems)
+      const wrapUp = wrapUpOf(item.namespace, item.tool, item.arguments, item.contentItems)
       return toolCall(id, {
         ...(spawned ? { spawned } : {}),
+        ...(wrapUp ? { wrapUp } : {}),
         source: item.namespace ?? null,
         tool: item.tool,
         input: textParts(showJson(item.arguments)),

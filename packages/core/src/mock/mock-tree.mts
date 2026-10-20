@@ -6,6 +6,11 @@
 // - 说“提个子会话”（propose a sub-session）：模型提三个提案（建议任务），第二个过一会儿就过期，
 //   第三个在 Pi 上、沙箱收不紧；点“开始”（可以改了再开始）才起，点“不要”就了结；
 // - 说“撤回提案”（withdraw a proposal）：模型撤回最近一个还等着的提案；
+// - 说“收尾建议”（suggest follow-ups）：模型回答完调收尾（litch_sessions.wrap_up）带三条建议，
+//   两条成了提案（第二条在 Pi 上），第三条简报太短被拒；
+// - 说“忘了收尾”（forget the wrap-up）：模型回答完没调收尾，设备进程替它再开一个回合提醒
+//   （<litch-session-event kind="remind">），模型在那个回合里补调收尾、带一条建议；
+// - 会话树的其余几出（派子会话、唤醒、提案、撤回）回答完都调一次空的收尾，界面上不画；
 // - 说“用子代理”（use sub-agents）：引擎自己派两个子代理线程（不进侧栏），一个能直接输入、一个不能，
 //   它们回来之后父会话才接着说；
 // - 界面上手动派（session.spawn）、脱离（session.detach）、提案的开始和不要、列子代理（session.agents）。
@@ -34,11 +39,18 @@ import { phrase } from '../phrase.mjs'
 import { projectItem } from '../projection/items.mjs'
 import { outgoing } from '../projection/outgoing.mjs'
 import type { SampleLang } from './sample-text.mjs'
-import { TREE_TEXT, type TreeAgent } from './sample-tree.mjs'
+import {
+  TREE_TEXT,
+  type TreeAgent,
+  type TreeProposal,
+  type TreeSuggestion,
+} from './sample-tree.mjs'
 
 const SPAWNS = /派子会话|spawn sub-sessions/i
 const PROPOSES = /提个子会话|propose a sub-session/i
 const WITHDRAWS = /撤回提案|withdraw a proposal/i
+const WRAPS = /收尾建议|suggest follow-ups/i
+const FORGETS = /忘了收尾|forget the wrap-up/i
 
 /** 沙箱档对应的内置权限预设（模拟的子会话用它显示权限） */
 const PRESET_OF: Record<SandboxLevel, string> = {
@@ -69,8 +81,10 @@ export interface MockTreeHost {
   apply(view: SessionView, ops: SessionOp[]): void
   /** 开一个回合：发一条消息（event 是注入在它开头的那一段）。返回回合的标识 */
   startTurn(view: SessionView, message: OutgoingMessage, event?: SessionEventView): string
-  /** 在回合里流出一段回答，流完回合结束 */
-  reply(view: SessionView, turnId: string, text: string): void
+  /** 在回合里流出一段回答，流完回合结束。tail：流完、回合结束之前再加的条目 */
+  reply(view: SessionView, turnId: string, text: string, tail?: () => SessionOp[]): void
+  /** 加上这几条就结束回合（没有回答的回合：提醒之后只补调收尾） */
+  finish(view: SessionView, turnId: string, ops: SessionOp[]): void
   running(view: SessionView): boolean
   /** 这台设备有没有会话树（DeviceView.sessionTree） */
   treeOn(deviceId: string): boolean
@@ -115,6 +129,8 @@ export function createMockTree(host: MockTreeHost): MockTree {
   const scripted = new Map<string, string>()
   /** 引擎自己的子代理线程 */
   const agents = new Map<string, AgentEntry>()
+  /** 这一回合模型没调收尾的会话：回合结束后替它开一个提醒的回合 */
+  const unwrapped = new Set<string>()
 
   const deviceHarness = (deviceId: string, wanted: string | null, fallback: string): string => {
     const ready = host.harnesses(deviceId).filter((entry) => entry.state === 'ready')
@@ -221,7 +237,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
     turnId: string,
     args: Record<string, unknown>,
     result: Record<string, unknown>,
-    tool: 'start' | 'withdraw' = 'start',
+    tool: 'start' | 'withdraw' | 'wrap_up' = 'start',
     id = host.nextId('ls'),
   ): SessionOp => ({
     op: 'item.add',
@@ -267,7 +283,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
       )
     })
     host.apply(view, ops)
-    host.reply(view, turnId, text.spawnReply)
+    host.reply(view, turnId, text.spawnReply, emptyWrapUp(turnId))
   }
 
   const setProposals = (view: SessionView, proposals: SessionProposalView[]) =>
@@ -294,34 +310,100 @@ export function createMockTree(host: MockTreeHost): MockTree {
       (entry) => entry.id === id && entry.status === 'pending' && entry.expiresAt > host.now(),
     )
 
+  /** 照示例记一张等着的提案（和设备进程一样记下提出它的回合和调用），开始之后子会话照示例回话 */
+  const newProposal = (
+    sample: TreeProposal,
+    turnId: string,
+    callId: string,
+    createdAt: number,
+  ): SessionProposalView => {
+    const proposal: SessionProposalView = {
+      id: host.nextId('pr'),
+      title: sample.title,
+      prompt: sample.prompt,
+      harness: sample.harness ?? null,
+      model: null,
+      cwd: sample.cwd ?? null,
+      kind: 'fresh',
+      wakeParent: true,
+      status: 'pending',
+      createdAt,
+      expiresAt: sample.short
+        ? host.now() + SHORT_PROPOSAL_MS
+        : host.now() + SESSION_TREE_LIMITS.proposalTtlSeconds * 1000,
+      settledAt: null,
+      startedId: null,
+      turnId,
+      callId,
+      widerSandbox: sample.widerSandbox ?? null,
+    }
+    scripted.set(`proposal:${proposal.id}`, sample.reply)
+    return proposal
+  }
+
+  /** 空的收尾（这一回合没有建议）：回答流完、回合结束前调一次，界面上不画 */
+  const emptyWrapUp = (turnId: string) => (): SessionOp[] => [
+    sessionsCall(
+      turnId,
+      { suggestions: [] },
+      { suggestions: [], note: 'No suggestions this turn.' },
+      'wrap_up',
+    ),
+  ]
+
+  /**
+   * 收尾带了建议：收下的每条成一张提案（callId 都是这次调用的条目），被拒的照设备进程那样写原因。
+   * 提案列表在调用的那一刻取（tail 里叫），接在手上那一份后面
+   */
+  const wrapUpOps = (
+    view: SessionView,
+    turnId: string,
+    samples: readonly TreeSuggestion[],
+  ): SessionOp[] => {
+    const now = host.now()
+    const callId = host.nextId('ls')
+    const made: SessionProposalView[] = []
+    const results = samples.map((sample, index) => {
+      if (sample.refused) return { title: sample.title, refused: sample.refused }
+      const proposal = newProposal(sample, turnId, callId, now + index)
+      made.push(proposal)
+      return { title: sample.title, proposal_id: proposal.id }
+    })
+    return [
+      sessionsCall(
+        turnId,
+        {
+          suggestions: samples.map((sample) => ({
+            title: sample.title,
+            prompt: sample.prompt,
+            ...(sample.harness ? { harness: sample.harness } : {}),
+            ...(sample.cwd ? { cwd: sample.cwd } : {}),
+          })),
+        },
+        { suggestions: results, note: 'Suggested; waiting for the user.' },
+        'wrap_up',
+        callId,
+      ),
+      { op: 'session.proposals', proposals: [...view.proposals, ...made] },
+    ]
+  }
+
+  /** 回答完调收尾，带三条建议（第三条被拒） */
+  const wrapDemo = (view: SessionView, turnId: string) => {
+    host.reply(view, turnId, text.wrapReply, () => wrapUpOps(view, turnId, text.wrapUp))
+  }
+
+  /** 回答完没调收尾：记下来，回合结束后替它开一个提醒的回合（ended） */
+  const forgetDemo = (view: SessionView, turnId: string) => {
+    unwrapped.add(sameKey(view.deviceId, view.sessionId))
+    host.reply(view, turnId, text.forgetReply)
+  }
+
   const proposeDemo = (view: SessionView, turnId: string) => {
     const now = host.now()
-    const made = text.proposals.map(
-      (sample, index): SessionProposalView => ({
-        id: host.nextId('pr'),
-        title: sample.title,
-        prompt: sample.prompt,
-        harness: sample.harness ?? null,
-        model: null,
-        cwd: sample.cwd ?? null,
-        kind: 'fresh',
-        wakeParent: true,
-        status: 'pending',
-        createdAt: now + index,
-        expiresAt: sample.short
-          ? now + SHORT_PROPOSAL_MS
-          : now + SESSION_TREE_LIMITS.proposalTtlSeconds * 1000,
-        settledAt: null,
-        startedId: null,
-        turnId,
-        callId: host.nextId('ls'),
-        widerSandbox: sample.widerSandbox ?? null,
-      }),
+    const made = text.proposals.map((sample, index) =>
+      newProposal(sample, turnId, host.nextId('ls'), now + index),
     )
-    for (const [index, proposal] of made.entries()) {
-      const sample = text.proposals[index]
-      if (sample) scripted.set(`proposal:${proposal.id}`, sample.reply)
-    }
     host.apply(view, [
       ...made.map((proposal) =>
         sessionsCall(
@@ -347,14 +429,14 @@ export function createMockTree(host: MockTreeHost): MockTree {
         settle(view, proposal.id, 'expired', null, proposal.expiresAt)
       }, proposal.expiresAt - now)
     }
-    host.reply(view, turnId, text.proposeReply)
+    host.reply(view, turnId, text.proposeReply, emptyWrapUp(turnId))
   }
 
   /** 模型撤回最近提的、还等着的那一个提案（litch_sessions.withdraw） */
   const withdrawDemo = (view: SessionView, turnId: string) => {
     const target = view.proposals.filter((entry) => waiting(view, entry.id) !== undefined).at(-1)
     if (!target) {
-      host.reply(view, turnId, text.withdrawNone)
+      host.reply(view, turnId, text.withdrawNone, emptyWrapUp(turnId))
       return
     }
     host.apply(view, [
@@ -367,7 +449,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
     ])
     scripted.delete(`proposal:${target.id}`)
     settle(view, target.id, 'withdrawn')
-    host.reply(view, turnId, text.withdrawReply)
+    host.reply(view, turnId, text.withdrawReply, emptyWrapUp(turnId))
   }
 
   /** 提案开始：照提案起子会话，改过的那几项照改的 */
@@ -383,7 +465,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
       harness: overrides.harness ?? proposal.harness,
       kind: overrides.kind ?? proposal.kind,
       origin: 'proposal',
-      wakeParent: proposal.wakeParent,
+      wakeParent: overrides.wakeParent ?? proposal.wakeParent,
       // 简报改过了，写好的那句回话就对不上了
       reply: overrides.prompt ? null : reply,
       settings: {
@@ -552,7 +634,15 @@ export function createMockTree(host: MockTreeHost): MockTree {
       const key = sameKey(view.deviceId, view.sessionId)
       const user = view.items[view.turns.find((turn) => turn.id === turnId)?.itemIds[0] ?? '']
       if (user?.kind === 'userMessage' && user.event?.kind === 'wake') {
-        host.reply(view, turnId, text.wakeReply)
+        host.reply(view, turnId, text.wakeReply, emptyWrapUp(turnId))
+        return true
+      }
+      // 提醒的回合：模型不再回答，只补调收尾
+      if (user?.kind === 'userMessage' && user.event?.kind === 'remind') {
+        host.setTimer(
+          () => host.finish(view, turnId, wrapUpOps(view, turnId, [text.remindSuggestion])),
+          300,
+        )
         return true
       }
       const script = scripted.get(key)
@@ -577,6 +667,14 @@ export function createMockTree(host: MockTreeHost): MockTree {
       }
       if (WITHDRAWS.test(message.text)) {
         withdrawDemo(view, turnId)
+        return true
+      }
+      if (WRAPS.test(message.text)) {
+        wrapDemo(view, turnId)
+        return true
+      }
+      if (FORGETS.test(message.text)) {
+        forgetDemo(view, turnId)
         return true
       }
       return false
@@ -610,6 +708,11 @@ export function createMockTree(host: MockTreeHost): MockTree {
       }
       // 自己是父会话：刚停下，看看攒着的回报够不够唤醒自己
       tryWake(deviceId, sessionId)
+      // 用户发起的回合没调收尾：替它开一个提醒的回合（一条用户消息之后最多一次）
+      const key = sameKey(deviceId, sessionId)
+      if (unwrapped.delete(key) && status === 'completed' && !host.running(view)) {
+        host.startTurn(view, { text: '', images: [], extras: [] }, { kind: 'remind', notes: [] })
+      }
     },
 
     notesFor(view) {

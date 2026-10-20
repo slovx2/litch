@@ -4,7 +4,7 @@
 // - 引擎自己的子代理线程（标准协议的 parentThreadId、canAcceptDirectInput）：不进侧栏，
 //   在父会话的对话里点子代理条目（ToolCallItem.agents）在侧面板里看，父会话的信息卡里列出来（session.agents）。
 // 界面不认识协议类型，只认识这里的；协议那一份在 packages/protocol/src/session-tree.mts。
-import type { HarnessId, SessionStatus } from './model.mjs'
+import type { HarnessId, SessionStatus, SessionSummary } from './model.mjs'
 
 /** 子会话怎么来的：fresh 只给了简报；fork 带着父会话的全部上下文（只能同 harness） */
 export type LineageKind = 'fresh' | 'fork'
@@ -74,6 +74,43 @@ export interface SessionProposalView {
 export const proposalStatus = (proposal: SessionProposalView, now: number): ProposalStatus =>
   proposal.status === 'pending' && proposal.expiresAt <= now ? 'expired' : proposal.status
 
+/** 提案卡片、侧面板那一行上写的 harness、模型、目录、方式 */
+export interface ProposalShape {
+  harness: HarnessId | null
+  model: string | null
+  cwd: string | null
+  kind: LineageKind
+  /** 写的是实际起出来的子会话（不是提案里的） */
+  actual: boolean
+}
+
+/**
+ * 卡片上写什么：开始了、子会话还在侧栏里的，写实际起出来的那个（“改了再开始”可能换了 harness、目录、方式；
+ * 子会话的模型侧栏里没有，不写）；别的写提案里的，没给 harness 的是父会话的
+ */
+export function proposalShape(
+  planned: Pick<SessionProposalView, 'harness' | 'model' | 'cwd' | 'kind'>,
+  child: Pick<SessionSummary, 'harness' | 'cwd' | 'lineage'> | null | undefined,
+  parentHarness: HarnessId | null,
+): ProposalShape {
+  if (child) {
+    return {
+      harness: child.harness,
+      model: null,
+      cwd: child.cwd || null,
+      kind: child.lineage?.kind ?? planned.kind,
+      actual: true,
+    }
+  }
+  return {
+    harness: planned.harness ?? parentHarness,
+    model: planned.model,
+    cwd: planned.cwd,
+    kind: planned.kind,
+    actual: false,
+  }
+}
+
 /**
  * 用户从提案开始时改的东西（“改了再开始”）。不给的照提案里的；沙箱照样收紧到不宽于父会话。
  * 工作区是界面上的项目，核心按设备有没有项目换成对面的 projectId
@@ -88,6 +125,8 @@ export interface ProposalOverrides {
   title?: string
   prompt?: string
   sandbox?: SandboxLevel
+  /** 子会话停下后要不要唤醒父会话。不给的照提案里的 */
+  wakeParent?: boolean
 }
 
 /** 注入给父会话的一条回报：哪个子会话、这一回合怎么结束的、最后一条回答的开头 */
@@ -100,10 +139,11 @@ export interface SessionNoteView {
 
 /**
  * 设备进程注入给父会话的文字（包在 <litch-session-event> 里）认出来之后的样子。
- * notes：附在用户消息前面的回报；wake：子会话都停下了，设备进程替父会话开的回合
+ * notes：附在用户消息前面的回报；wake：子会话都停下了，设备进程替父会话开的回合；
+ * remind：用户发起的回合结束时模型没调收尾（litch_sessions.wrap_up），设备进程替它再开的回合，notes 是空的
  */
 export interface SessionEventView {
-  kind: 'notes' | 'wake'
+  kind: 'notes' | 'wake' | 'remind'
   notes: SessionNoteView[]
 }
 
@@ -141,6 +181,30 @@ export interface SpawnedView {
   model: string | null
   cwd: string | null
   kind: LineageKind
+}
+
+/** 收尾（litch_sessions.wrap_up）里的一条建议：调用时给的样子，加上结果里它成了哪张提案或者为什么没收 */
+export interface WrapUpSuggestionView {
+  title: string
+  prompt: string
+  /** 没给是 null（跟父会话一样） */
+  harness: HarnessId | null
+  model: string | null
+  cwd: string | null
+  kind: LineageKind
+  /** 成了哪张提案。被拒了、还没有结果是 null */
+  proposalId: string | null
+  /** 没收下的原因（结果里的 refused，对面写的原话）。收下了、还没有结果是 null */
+  refused: string | null
+}
+
+/**
+ * litch_sessions.wrap_up 的条目：模型每回合最后调一次，建议任务放在里面（没有就是空列表）。
+ * 每条建议成一张提案，提案的 callId 都是这次调用的条目 id；空的那种界面不画（quietOf）
+ */
+export interface WrapUpView {
+  /** 照调用时给的顺序 */
+  suggestions: WrapUpSuggestionView[]
 }
 
 /** 引擎自己的一个子代理线程（thread/list 带 parentThreadId 列出来的） */
