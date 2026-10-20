@@ -15,6 +15,7 @@ import type {
 } from '../../protocol/src/session-tree.mjs'
 import { assertStoreFormat, initializeStoreFormat } from '../../shared/src/store-format.mjs'
 import { ensureParent } from '../../shared/src/util.mjs'
+import type { ThreadInstructions } from './codex-instructions.mjs'
 
 /**
  * 迁移，第 n 项把 user_version 从 n 升到 n+1。只往后加，已经发出去的不改：
@@ -87,6 +88,14 @@ const MIGRATIONS: readonly string[] = [
    ALTER TABLE proposals ADD COLUMN turn_id TEXT;
    ALTER TABLE proposals ADD COLUMN call_id TEXT;
    UPDATE proposals SET settled_at = expires_at WHERE status = 'expired';`,
+  // 原生 codex 不保存开发者指令：建会话、分叉时记下客户端给的那段（没给是 null）、带规则的命名空间（JSON）和目录，
+  // 恢复、分叉时设备进程照着补（codex-instructions.mts）
+  `CREATE TABLE thread_instructions(
+     thread_id TEXT PRIMARY KEY,
+     given TEXT,
+     namespaces TEXT NOT NULL,
+     cwd TEXT
+   ) WITHOUT ROWID;`,
 ]
 
 export const SESSION_SCHEMA_VERSION = MIGRATIONS.length
@@ -237,6 +246,11 @@ export class SessionStore {
       tools: prepare('SELECT tools FROM thread_tools WHERE thread_id=?'),
       setTools: prepare(
         'INSERT INTO thread_tools(thread_id, tools) VALUES(?, ?) ON CONFLICT(thread_id) DO UPDATE SET tools=excluded.tools',
+      ),
+      instructions: prepare('SELECT * FROM thread_instructions WHERE thread_id=?'),
+      setInstructions: prepare(
+        `INSERT INTO thread_instructions(thread_id, given, namespaces, cwd) VALUES(?, ?, ?, ?)
+         ON CONFLICT(thread_id) DO UPDATE SET given=excluded.given, namespaces=excluded.namespaces, cwd=excluded.cwd`,
       ),
     }
   }
@@ -474,5 +488,33 @@ export class SessionStore {
 
   setTools(threadId: string, tools: unknown[]): void {
     this.run('setTools', threadId, JSON.stringify(tools))
+  }
+
+  // ---------- 原生 codex 的开发者指令 ----------
+
+  instructions(threadId: string): ThreadInstructions | null {
+    const row = this.statements.instructions?.get(threadId)
+    if (!row) return null
+    let namespaces: ThreadInstructions['namespaces'] = []
+    try {
+      const parsed = JSON.parse(text(row.namespaces))
+      if (Array.isArray(parsed))
+        namespaces = parsed.filter(
+          (one) => typeof one?.name === 'string' && typeof one?.instructions === 'string',
+        )
+    } catch {
+      // 坏了的当作没有规则
+    }
+    return { given: maybe(row.given), namespaces, cwd: maybe(row.cwd) }
+  }
+
+  setInstructions(threadId: string, record: ThreadInstructions): void {
+    this.run(
+      'setInstructions',
+      threadId,
+      record.given,
+      JSON.stringify(record.namespaces),
+      record.cwd,
+    )
   }
 }

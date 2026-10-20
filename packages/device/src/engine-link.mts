@@ -12,6 +12,7 @@
 // 握手时声明 clientTools，命名空间取注册表里的，引擎挑执行方时挑得中这条连接。
 
 import { NO_RECIPIENT_MESSAGE } from '../../shared/src/server-requests.mjs'
+import type { InstructionStore } from './codex-instructions.mjs'
 import { type DeviceTools, declareDeviceTools } from './device-tools.mjs'
 import type { UpstreamDialect } from './dialect.mjs'
 import {
@@ -81,6 +82,9 @@ export interface EngineLinkOptions {
   held(harness: string, requestId: RpcId): boolean
   heldGraceMs?: number
   heldRecheckMs?: number
+  /** 原生 codex 的开发者指令按会话记在哪（codex-instructions.mts）。不给就不补 */
+  instructions?: InstructionStore
+  log?(line: string): void
 }
 
 interface Waiting {
@@ -238,12 +242,25 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
     get closed() {
       return closedWith !== null
     },
-    request: (method, params, requestOptions) =>
-      call(
-        method,
-        (isObject(params) ? dialect.outgoing(method, params) : null) ?? params,
-        requestOptions?.timeoutMs ?? options.requestTimeoutMs,
-      ),
+    async request(method, params, requestOptions) {
+      const timeoutMs = requestOptions?.timeoutMs ?? options.requestTimeoutMs
+      const send = (ready: unknown) =>
+        call(method, (isObject(ready) ? dialect.outgoing(method, ready) : null) ?? ready, timeoutMs)
+      // 原生 codex 建会话、恢复、分叉：先补齐开发者指令（codex-instructions.mts）
+      const prepared =
+        isObject(params) && options.instructions
+          ? dialect.instructions?.(method, params, {
+              ask: (asked, given) => call(asked, given, options.handshakeTimeoutMs),
+              store: options.instructions,
+              log: options.log ?? (() => {}),
+            })
+          : null
+      if (!prepared) return send(params)
+      const { params: ready, remember } = await prepared
+      const result = await send(ready)
+      remember(result)
+      return result
+    },
     onNotification(listener) {
       notified.add(listener)
       return () => notified.delete(listener)

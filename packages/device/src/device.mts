@@ -511,6 +511,8 @@ export class DeviceServer {
               handshakeTimeoutMs: this.taskTiming.handshakeTimeoutMs,
               requestTimeoutMs: this.taskTiming.requestTimeoutMs,
               tools: this.deviceTools,
+              instructions: this.sessionTree.store,
+              log: (line) => this.options.log?.(`[${harness}] ${line}`),
               ...this.options.engineLinks,
               held: (from, requestId) =>
                 [...this.sessions].some((session) => session.holdsServerRequest(from, requestId)),
