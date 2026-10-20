@@ -249,13 +249,15 @@ async function main() {
     litchExtensions: ['harness', 'deviceSettings', 'clientTools'],
     litchClientTools: { namespaces: [ECHO] },
   })
-  // 在设置里打开 Codex，命令行路径写明是 PATH 里找到的那个
+  // 在设置里打开 Codex，命令行路径写明是 PATH 里找到的那个。提醒收尾关掉：假模型不调 wrap_up，
+  // 开着的话每个回合后面多一个提醒回合，跟下面桌面端发起的回合撞上
   const { snapshot } = await litch.call('litch/device/settings/read')
   const written = await litch.call('litch/device/settings/write', {
     expectedVersion: snapshot.version,
     edits: [
       { key: 'harness.codex.enabled', value: true },
       { key: 'harness.codex.cliPath', value: codex },
+      { key: 'sessions.wrapUpReminder', value: false },
     ],
   })
   if (!written.restarted.includes('codex'))

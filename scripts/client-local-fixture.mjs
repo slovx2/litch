@@ -45,6 +45,8 @@
 //                    再不然用 apps/desktop/out/adapter（npm run client:stage:adapter 的产物）
 //   --packed         给装好的应用用：就绪行里不带 LITCH_ADAPTER_ROOT，应用用它自己带的那一份
 //   --pace 毫秒      假模型每发一段停多久，默认 200
+//   设备设置里的提醒收尾（sessions.wrapUpReminder）缺省关：假模型平时不调 litch_sessions.wrap_up。要看提醒时
+//   带环境变量 LITCH_FIXTURE_WRAP_UP_REMINDER=1（见 client-fixture-engines.mjs 的 fixtureDeviceSettings）
 //   就绪后输出一行 LITCH_LOCAL_FIXTURE {"env": {…}, …}，env 里是启动应用或小工具要带的全部环境变量；
 //   然后一直运行到被结束。退出时把这个状态目录上的常驻服务停掉、等它退干净、删掉临时目录。
 //
@@ -95,11 +97,13 @@ import { computerReply } from './client-fixture-computer.mjs'
 import { lastUserText } from './client-fixture-echo.mjs'
 import {
   engineIds,
+  fixtureDeviceSettings,
   gitForWindows,
   prepareWorkDirectory,
   refuseHarnessOnPath,
   spelledApart,
   wantedEngines,
+  writeDeviceSettings,
   writeEngineSettings,
 } from './client-fixture-engines.mjs'
 import { FIXTURE_SKILL, piReply, sendCompletion } from './client-fixture-marks.mjs'
@@ -313,7 +317,7 @@ if (threeEngines) {
   // 服务一起来就照着设置起各个引擎，所以设置要在应用启动之前写好
   writeEngineSettings({ home, root, modelUrl: modelOrigin, engines })
   prepareWorkDirectory(dirs.tri, engines)
-}
+} else writeDeviceSettings(home, fixtureDeviceSettings())
 
 // ---------- 假的登录 shell 和环境文件 ----------
 /** 服务该拿到的 PATH：夹具自己的目录（空的）加系统目录 */

@@ -9,7 +9,12 @@
 // 回合把它们包成 kind=notes 的一段放在用户消息前面（beforeUserTurn）。
 // 唤醒：有客户端连着、开关开着、父会话闲着、它没脱离的直接子会话都停下了（在等用户答的挂满 needsUserMs 也算停下）、
 // 队列里有该唤醒的回报、上一条用户消息之后唤醒不到 10 次，设备进程替父会话发一个 kind=wake 的回合。
+// 提醒收尾：会话带着 litch_sessions、用户亲手发起的回合正常结束（completed）时这一回合没调过 wrap_up，
+// 设置里提醒开着，设备进程替它再开一个 kind=remind 的回合。提醒回合、唤醒回合、定时任务的回合都不是用户发起的，
+// 不会再引出提醒，所以一条用户消息之后最多一次。提醒和唤醒排在同一条检查队列里（check），先提醒、后唤醒：
+// 会话有回合在跑时谁都不发，那个回合结束时再查一遍；提醒发出之前用户又说了话、或者别的回合里调了 wrap_up，提醒作废。
 import { randomUUID } from 'node:crypto'
+import { CLIENT_TOOL_NAMESPACE } from '../../protocol/src/client-tools.mjs'
 import { EXTENSION } from '../../protocol/src/device.mjs'
 import {
   formatSessionEvent,
@@ -45,6 +50,8 @@ export interface SessionTreeHost {
   needsUserMs: number
   /** 这个回合是定时任务发起的：只进回报，不唤醒父会话 */
   taskTurn(threadId: string, turnId: string): boolean
+  /** 设置里“提醒收尾”开着（sessions.wrapUpReminder） */
+  wrapUpReminder(): boolean
   log(line: string): void
 }
 
@@ -92,6 +99,12 @@ export class SessionTree {
    * 一条连接上的“开始”可能排在另一条连接上的“结束”后面到，认出来的就不再当它在跑
    */
   private readonly ended = new Set<string>()
+  /** 调过 litch_sessions.wrap_up 的回合（会话 + 回合）：回合结束时看一眼就删 */
+  private readonly wrapped = new Set<string>()
+  /** 该提醒收尾、还没发出去的会话 → 没调收尾的那个用户回合 */
+  private readonly reminders = new Map<string, string>()
+  /** 提醒回合（会话 + 回合）→ 它替哪个用户回合提醒：一回合几张提案的门槛把两个回合合起来算 */
+  private readonly remindedFor = new Map<string, string>()
   /** 回合结束时要叫醒的（wait 工具在等） */
   private readonly listeners = new Set<(threadId: string) => void>()
   /** 每个父会话的唤醒检查排成一条，免得一次结束触发两个唤醒 */
@@ -281,6 +294,8 @@ export class SessionTree {
     if (this.active.get(threadId) === turn.id) this.active.delete(threadId)
     this.waiting.delete(threadId)
     const userDriven = this.clientTurns.delete(`${harness}\u0000${turn.id}`)
+    const wrapped = this.wrapped.delete(key)
+    this.noteRemind(threadId, turn, userDriven, wrapped)
     for (const listener of [...this.listeners]) listener(threadId)
     const lineage = this.store.parentOf(threadId)
     if (lineage && this.host.enabled() && this.store.markReported(threadId, turn.id))
@@ -292,8 +307,76 @@ export class SessionTree {
       ).catch((error: unknown) =>
         this.host.log(`子会话 ${threadId} 的回报没取到：${String(error)}`),
       )
-    // 父会话自己的回合结束了：它的子会话也许早就停了，看看要不要唤醒
-    if (this.store.childrenOf(threadId).length) this.check(threadId)
+    // 父会话自己的回合结束了：它的子会话也许早就停了，看看要不要唤醒；有提醒在等的，现在可以发了
+    if (this.store.childrenOf(threadId).length || this.reminders.has(threadId)) this.check(threadId)
+  }
+
+  // ---------- 提醒收尾 ----------
+
+  /** 模型在这个回合里调了 litch_sessions.wrap_up（参数对）。还没发出去的提醒跟着作废 */
+  wrappedUp(threadId: string, turnId: string): void {
+    if (!turnId) return
+    if (this.wrapped.size >= ENDED_LIMIT) this.wrapped.clear()
+    this.wrapped.add(`${threadId}\u0000${turnId}`)
+    this.reminders.delete(threadId)
+  }
+
+  /** 这个回合（连同它替之提醒的那个用户回合）里已经提了几张提案 */
+  proposalsInTurn(threadId: string, turnId: string): number {
+    const count = this.store.countInTurn(threadId, turnId)
+    const origin = this.remindedFor.get(`${threadId}\u0000${turnId}`)
+    return origin === undefined ? count : count + this.store.countInTurn(threadId, origin)
+  }
+
+  /** 这个会话会不会被提醒收尾：会话编排、提醒都开着，会话建的时候带了 litch_sessions */
+  private remindable(threadId: string): boolean {
+    if (!this.host.enabled() || !this.host.wrapUpReminder()) return false
+    const tools = this.store.tools(threadId) ?? []
+    return tools.some((spec) => isObject(spec) && spec.name === CLIENT_TOOL_NAMESPACE.sessions)
+  }
+
+  /** 一个回合结束了：用户发起的、正常结束、没调 wrap_up 的，记下要提醒 */
+  private noteRemind(
+    threadId: string,
+    turn: Record<string, unknown>,
+    userDriven: boolean,
+    wrapped: boolean,
+  ): void {
+    if (this.remindedFor.size >= ENDED_LIMIT) this.remindedFor.clear()
+    if (!userDriven) return
+    // 新的用户回合结束了：之前没发出去的提醒由这一回合的结果取代
+    this.reminders.delete(threadId)
+    if (turn.status === 'completed' && !wrapped && this.remindable(threadId))
+      this.reminders.set(threadId, String(turn.id))
+  }
+
+  /** 有提醒在等、会话闲着：替它开一个 kind=remind 的回合 */
+  private async remind(threadId: string): Promise<void> {
+    const origin = this.reminders.get(threadId)
+    if (origin === undefined || this.closed) return
+    if (!this.remindable(threadId)) {
+      this.reminders.delete(threadId)
+      return
+    }
+    // 还有回合在跑（唤醒回合、刚好又来的回合）：等它结束，turnEvent 会再查一遍
+    if (!(await this.idle(threadId))) return
+    const harness = await this.owner(threadId)
+    await this.watch(harness, threadId)
+    // 上面要等应答，这期间用户可能又说了话，或者别的回合里调了 wrap_up
+    if (this.reminders.get(threadId) !== origin || this.active.has(threadId)) return
+    this.reminders.delete(threadId)
+    const link = await this.link(harness)
+    const text = formatSessionEvent({ kind: 'remind', notes: [] })
+    const result = await link.request('turn/start', {
+      threadId,
+      input: [{ type: 'text', text, text_elements: [] }],
+    })
+    const turn = isObject(result) && isObject(result.turn) ? result.turn : null
+    if (typeof turn?.id === 'string') {
+      if (!this.active.has(threadId)) this.active.set(threadId, turn.id)
+      this.remindedFor.set(`${threadId}\u0000${turn.id}`, origin)
+    }
+    this.host.log(`会话 ${threadId}（${harness}）的回合 ${origin} 没调收尾，开了一个提醒回合`)
   }
 
   /** 子会话一回合结束：取最后一条回答的开头，进父会话的队列 */
@@ -331,10 +414,18 @@ export class SessionTree {
 
   // ---------- 唤醒 ----------
 
-  /** 看看要不要唤醒这个父会话。同一个父会话的检查排成一条，检查途中又来的再查一遍 */
+  /**
+   * 看看要不要提醒收尾、唤醒这个会话。同一个会话的检查排成一条，检查途中又来的再查一遍。
+   * 先提醒后唤醒：提醒回合开出去之后会话就不闲了，唤醒等它结束（turnEvent 再查）
+   */
   check(parentId: string): void {
     const previous = this.checks.get(parentId) ?? Promise.resolve()
     const next = previous
+      .then(() =>
+        this.remind(parentId).catch((error: unknown) =>
+          this.host.log(`提醒 ${parentId} 收尾没成：${String(error)}`),
+        ),
+      )
       .then(() => this.wake(parentId))
       .catch((error: unknown) => this.host.log(`唤醒 ${parentId} 没成：${String(error)}`))
       .finally(() => {
@@ -397,6 +488,8 @@ export class SessionTree {
    */
   beforeUserTurn(threadId: string, input: unknown): unknown[] | null {
     if (this.store.wakes(threadId) > 0) this.store.setWakes(threadId, 0)
+    // 用户又说话了：上一回合没发出去的提醒不用了，这一回合结束时再看
+    this.reminders.delete(threadId)
     if (!this.host.enabled() || !Array.isArray(input)) return null
     const notes = this.store.notes(threadId)
     if (notes.length === 0) return null

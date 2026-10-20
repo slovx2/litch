@@ -248,7 +248,7 @@ test('SESSION-PROPOSALS-004：门槛：一回合最多几张（撤回的也算�
         initiation,
       })
       assert.equal(failureOf(refused?.answer), 'invalid', initiation)
-      assert.match(refused?.answer.result.contentItems[0].text, /too short \(79 characters\)/)
+      assert.match(refused?.answer.result.contentItems[0].text, /too short \(width 79;/)
     }
     const fork = resultOf(
       (

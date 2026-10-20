@@ -88,6 +88,7 @@ async function main(): Promise<void> {
     stateDir: args.stateDir,
     log,
     ...(args.processes ? { processes: args.processes } : {}),
+    ...(args.wrapUpReminder === undefined ? {} : { wrapUpReminder: args.wrapUpReminder }),
     ...(control ? { control } : {}),
     pairing: pairingConfig(args.stateDir),
     dial: (socket) => unixConnector(parseSocketUrl(socket, '运行时的套接字')),

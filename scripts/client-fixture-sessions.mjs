@@ -2,11 +2,15 @@
 // 真实窗口验收用它走一遍派子会话、回报、唤醒、提案，模型是回环上的假模型，不花真模型的钱。
 //
 // 用户的话（一回合一次调用，工具结果回来后把结果原样说出来）：
-//   会话：<工具> <JSON 参数>   要在行首（子会话的派出说明会引用父会话的标题，别再触发一次），调 litch_sessions.<工具>，比如 会话：start {"title":"查日志","prompt":"<至少 80 字的简报>","initiation":"user_asked"}（fresh 的简报少于 80 字会被设备进程拒绝）
+//   会话：<工具> <JSON 参数>   要在行首（子会话的派出说明会引用父会话的标题，别再触发一次），调 litch_sessions.<工具>，比如 会话：start {"title":"查日志","prompt":"<够宽的简报>","initiation":"user_asked"}（fresh 的简报显示宽度不到 80 会被设备进程拒绝，汉字算 2：中文至少 40 字）
 //   任务：<工具> <JSON 参数>   同样的做法调 litch_tasks.<工具>（定时任务，设备执行），比如 任务：create {"name":"日报","prompt":"总结","schedule":{"type":"interval","minutes":5}}
 //   浏览器：<工具> <JSON 参数> 同样的做法调 litch_browser.<工具>（只认 navigate、snapshot），比如 浏览器：navigate {"url":"about:blank"}，
 //                              用来在 dsh、OpenCode 上验桌面端执行的客户端工具（client-fixture-browse.mjs 只认 Pi 的工具名）
+//   收尾：<JSON>               要在行首，调 litch_sessions.wrap_up：JSON 是 {"suggestions":[…]}，或者直接写那个数组，比如
+//                              收尾：[{"title":"补测试","prompt":"<够宽的简报>"}]；结果回来后回一句“收尾结果：”加结果原文
 // 设备进程注入的唤醒（<litch-session-event kind="wake">）：回一句“收到子会话的结果：<几条>”，不调工具。
+// 设备进程注入的提醒收尾（<litch-session-event kind="remind">）：调一次 wrap_up（空列表），结果回来后回一句“已收尾”。
+// 平时的回合不调 wrap_up（夹具的设备设置里提醒收尾缺省关，见 client-fixture-engines.mjs 的 fixtureDeviceSettings）。
 // 工具不在（会话不是 Litch 建的、这家没有客户端工具、设置里关了会话编排）时照实说一句。
 //
 // 各家给模型的工具名不一样（Claude Code 是哈希过的 MCP 名，dsh 是 <命名空间>__<工具>，OpenCode 是挂上去的 MCP 名，
@@ -17,7 +21,11 @@
 export const SESSIONS_TRIGGER = /^(会话|任务|浏览器)：(\w+)\s*(\{[\s\S]*\})?/m
 export const SESSIONS_HEARD = '会话结果：'
 export const SESSIONS_WOKEN = '收到子会话的结果：'
+export const WRAP_UP_TRIGGER = /^收尾：\s*([[{][\s\S]*)$/m
+export const WRAP_UP_HEARD = '收尾结果：'
+export const REMIND_DONE = '已收尾'
 const WAKE = /<litch-session-event kind="wake">([\s\S]*?)<\/litch-session-event>/
+const REMIND = /<litch-session-event kind="remind">/
 
 const SPACES = {
   会话: {
@@ -31,6 +39,7 @@ const SPACES = {
       interrupt: 'Interrupt the running turn of one of your sub-sessions',
       accept: 'Start one of your proposal cards because the user told you to',
       withdraw: 'Withdraw a proposal card of yours',
+      wrap_up: 'Call this exactly once at the end of every turn',
     },
   },
   任务: {
@@ -75,6 +84,24 @@ export function sessionsStep(said, { nameOf, results }) {
   if (wake) {
     const lines = wake[1].split('\n').filter((line) => line.startsWith('- '))
     return { text: `${SESSIONS_WOKEN}${lines.length} 条\n${lines.join('\n')}` }
+  }
+  // 提醒收尾、用户点名的收尾：都是调 litch_sessions.wrap_up
+  const reminded = REMIND.test(said)
+  const wrap = reminded ? null : said.match(WRAP_UP_TRIGGER)
+  if (reminded || wrap) {
+    if (results.length > 0)
+      return { text: reminded ? REMIND_DONE : `${WRAP_UP_HEARD}\n${results.join('\n---\n')}` }
+    const name = nameOf(SPACES.会话, 'wrap_up')
+    if (!name) return { text: '没有 litch_sessions 这个工具' }
+    let args = { suggestions: [] }
+    if (wrap)
+      try {
+        const given = JSON.parse(wrap[1])
+        args = Array.isArray(given) ? { suggestions: given } : given
+      } catch {
+        return { text: `参数不是 JSON：${wrap[1]}` }
+      }
+    return { call: { namespace: 'litch_sessions', name, args } }
   }
   const tool = said.match(SESSIONS_TRIGGER)
   if (!tool) return null

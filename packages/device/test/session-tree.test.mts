@@ -245,21 +245,34 @@ test('SESSION-TREE-004：子会话一回合结束进父会话的队列；父会�
   }
 })
 
-/** 在 pi 上的父会话里（用户回合）派一个 claude-code 的子会话，返回两个会话号 */
+/**
+ * 在 pi 上的父会话里（用户回合）派一个 claude-code 的子会话，返回两个会话号。模型派的一律唤醒父会话；
+ * 不要唤醒的只能是用户在界面上派的（litch/session/start 的 wakeParent）
+ */
 async function family(env: ReturnType<typeof treeRig>, wake = true) {
   const client = await litch(env)
   const { threadId } = await parent(client)
-  const childId = resultOf(
-    (
-      await env.pi.callTool(threadId, SESSIONS, 'start', {
-        title: '子任务',
-        prompt: brief('做点事。'),
-        harness: 'claude-code',
-        wake_parent: wake,
-        initiation: 'user_asked',
-      })
-    )?.answer,
-  ).thread_id as string
+  const childId = wake
+    ? (resultOf(
+        (
+          await env.pi.callTool(threadId, SESSIONS, 'start', {
+            title: '子任务',
+            prompt: brief('做点事。'),
+            harness: 'claude-code',
+            initiation: 'user_asked',
+          })
+        )?.answer,
+      ).thread_id as string)
+    : ((
+        await client.call('litch/session/start', {
+          parentThreadId: threadId,
+          harness: 'claude-code',
+          kind: 'fresh',
+          title: '子任务',
+          prompt: brief('做点事。'),
+          wakeParent: false,
+        })
+      ).threadId as string)
   return { client, threadId, childId }
 }
 

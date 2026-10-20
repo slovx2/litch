@@ -2,7 +2,8 @@
 // 执行方是设备进程（device-tools.mts 注册的一个命名空间），工具定义在 packages/protocol/src/client-tools-sessions.mts。
 // 读类（list、read、wait）能看这台设备上所有会话；写类（send、interrupt）只能作用于调用者自己的 Litch 子孙会话，
 // 别的一律 [litch:blocked]，引擎自己的子代理线程另外提示用引擎自己的工具。提案类（start 出提案、accept、withdraw）
-// 只作用于调用者自己会话上的提案；提案的门槛（一回合几张、同标题、fresh 简报的长度）在 start 里查。
+// 只作用于调用者自己会话上的提案；提案的门槛（一回合几张、同标题、fresh 简报的显示宽度）在 start 和 wrap_up 里查。
+// wrap_up 是每回合收尾必调的：每条建议成一张提案，调没调记在会话树里（没调的用户回合结束后设备进程开回合提醒）。
 // 结果是一段 JSON 文字，失败第一行是 [litch:<kind>]，后面是模型能照着改的一句话。
 import {
   type ClientToolCallResponse,
@@ -16,7 +17,9 @@ import {
   type SessionSummary,
   type SessionsStartResult,
   type SessionsWithdrawResult,
+  type SessionsWrapUpResult,
   type SessionTurnSummary,
+  textWidth,
 } from '../../protocol/src/client-tools-sessions.mjs'
 import {
   parseSessionEvent,
@@ -199,10 +202,10 @@ const messageOf = (error: unknown) => (error instanceof Error ? error.message : 
 /** 标题比较时去掉全部空白、不分大小写 */
 const sameTitle = (title: string) => title.replace(/\s+/g, '').toLowerCase()
 
-/** 提案的门槛：一个回合最多几张；同一会话里还在等的提案不能同标题 */
+/** 提案的门槛：一个回合最多几张（提醒回合连同它替之提醒的那个用户回合算）；同一会话里还在等的提案不能同标题 */
 function gate(tree: SessionTree, call: DeviceToolCall, title: string): void {
   const limit = SESSION_TOOL_LIMITS.proposalsPerTurn
-  if (call.turnId && tree.store.countInTurn(call.threadId, call.turnId) >= limit)
+  if (call.turnId && tree.proposalsInTurn(call.threadId, call.turnId) >= limit)
     throw new Refused(
       'blocked',
       `You already proposed ${limit} cards in this turn, the most allowed. Do not propose more now; if other follow-ups are left, mention them in your reply.`,
@@ -216,11 +219,18 @@ function gate(tree: SessionTree, call: DeviceToolCall, title: string): void {
     )
 }
 
-async function start(
-  tree: SessionTree,
-  args: Record<string, unknown>,
-  call: DeviceToolCall,
-): Promise<SessionsStartResult> {
+/** start 和 wrap_up 里一条建议共有的那几项 */
+interface Spec {
+  title: string
+  prompt: string
+  harness: string | undefined
+  model: string | undefined
+  cwd: string | undefined
+  kind: SessionLineageKind
+}
+
+/** 读一条 start 或建议的参数并查一遍：标题、简报、harness、fork 只能同 harness、fresh 简报的宽度 */
+function specOf(args: Record<string, unknown>, call: DeviceToolCall, tree: SessionTree): Spec {
   const title = string(args, 'title', true)
   const prompt = string(args, 'prompt', true)
   const harness = string(args, 'harness')
@@ -229,12 +239,6 @@ async function start(
   const given = string(args, 'kind') ?? 'fresh'
   if (given !== 'fresh' && given !== 'fork')
     throw new Refused('invalid', 'kind must be fresh or fork.')
-  const kind: SessionLineageKind = given
-  const wake = args.wake_parent ?? true
-  if (typeof wake !== 'boolean') throw new Refused('invalid', 'wake_parent must be a boolean.')
-  const initiation = string(args, 'initiation') ?? 'propose'
-  if (initiation !== 'user_asked' && initiation !== 'propose')
-    throw new Refused('invalid', 'initiation must be user_asked or propose.')
   if (prompt.length > SESSION_TOOL_LIMITS.messageChars)
     throw new Refused(
       'invalid',
@@ -242,61 +246,139 @@ async function start(
     )
   if (harness && !tree.host.harnesses().some((source) => source.id === harness))
     throw new Refused('invalid', `There is no harness "${harness}" on this device.`)
-  if (kind === 'fork' && harness && harness !== call.harness)
+  if (given === 'fork' && harness && harness !== call.harness)
     throw new Refused('invalid', `fork only works within the same harness (${call.harness}).`)
-  // fresh 的子会话只知道这段简报：太短的不管直接起还是变成提案都拒绝
-  const length = [...prompt.trim()].length
-  if (kind === 'fresh' && length < SESSION_TOOL_LIMITS.freshPromptMinWidth)
+  // fresh 的子会话只知道这段简报：太短的不管直接起还是变成提案都拒绝。按显示宽度算，汉字这类等宽字符算 2
+  const width = textWidth(prompt.trim())
+  const least = SESSION_TOOL_LIMITS.freshPromptMinWidth
+  if (given === 'fresh' && width < least)
     throw new Refused(
       'invalid',
-      `prompt is too short (${length} characters): a fresh session knows nothing but this text, so it needs at least ${SESSION_TOOL_LIMITS.freshPromptMinWidth}. State the task, the files or area, and what done looks like, then call start again.`,
+      `prompt is too short (width ${width}; each CJK or other full-width character counts as 2, everything else as 1): a fresh session knows nothing but this text, so it needs a width of at least ${least} (about ${least / 2} Chinese characters or ${least} English letters). State the task, the files or area, and what done looks like, then try again.`,
     )
-  // 目标 harness 收不到父会话那么严（比如没有沙箱的 Pi）：模型派的一律变成提案，由用户看过再点
-  const wider = await widerSandbox(tree, call.threadId, harness ?? call.harness).catch(() => null)
-  // 只有用户亲手发起的这个回合里、模型说是用户要的，才直接起；别的一律变成提案
-  const userTurn = tree.isUserTurn(call.harness, call.turnId)
-  if (initiation === 'user_asked' && userTurn && wider === null) {
-    const spec = {
-      harness: harness ?? null,
-      model: model ?? null,
-      cwd: cwd ?? null,
-      kind,
-      title,
-      prompt,
-      wakeParent: wake,
-    }
-    const child = await startChild(tree, call.threadId, spec, 'model')
-    return {
-      thread_id: child.threadId,
-      note: `Started sub-session ${child.threadId} on ${child.harness}. It runs on its own; ${wake ? 'you will be woken with its result as a <litch-session-event> message' : 'its result is attached to the next user message'}. Do not poll it.`,
-    }
-  }
-  // 门槛在上面的等待之后、提案落库之前同步查，同一回合里并发的几次 start 不会一起漏过去
-  const proposalTitle = title.trim().slice(0, 120)
-  gate(tree, call, proposalTitle)
-  const proposal = tree.propose({
+  return { title, prompt, harness, model, cwd, kind: given }
+}
+
+/** 目标 harness 收不到父会话那么严时子会话实际会是的那一档沙箱；收得紧、判断不了是 null */
+const widerFor = (tree: SessionTree, call: DeviceToolCall, spec: Spec) =>
+  widerSandbox(tree, call.threadId, spec.harness ?? call.harness).catch(() => null)
+
+/** 过门槛、落一张提案。门槛在落库之前同步查，同一回合里并发的几次 start 不会一起漏过去 */
+function proposeOne(
+  tree: SessionTree,
+  call: DeviceToolCall,
+  spec: Spec,
+  wider: string | null,
+): SessionProposal {
+  const title = spec.title.trim().slice(0, 120)
+  gate(tree, call, title)
+  return tree.propose({
     threadId: call.threadId,
-    title: proposalTitle,
-    prompt,
-    harness: harness ?? null,
-    model: model ?? null,
-    cwd: cwd ?? null,
-    kind,
-    wakeParent: wake,
+    title,
+    prompt: spec.prompt,
+    harness: spec.harness ?? null,
+    model: spec.model ?? null,
+    cwd: spec.cwd ?? null,
+    kind: spec.kind,
+    // 子会话停下后唤不唤醒由 Litch 定，不交给模型：模型派的、提的一律唤醒（用户从卡片开始时可以改）
+    wakeParent: true,
     turnId: call.turnId || null,
     callId: call.callId || null,
     ...(wider ? { widerSandbox: wider } : {}),
   })
+}
+
+const EXPIRES = `it expires in ${SESSION_TREE_LIMITS.proposalTtlSeconds / 86400} days`
+
+async function start(
+  tree: SessionTree,
+  args: Record<string, unknown>,
+  call: DeviceToolCall,
+): Promise<SessionsStartResult> {
+  const spec = specOf(args, call, tree)
+  const initiation = string(args, 'initiation') ?? 'propose'
+  if (initiation !== 'user_asked' && initiation !== 'propose')
+    throw new Refused('invalid', 'initiation must be user_asked or propose.')
+  // 目标 harness 收不到父会话那么严（比如没有沙箱的 Pi）：模型派的一律变成提案，由用户看过再点
+  const wider = await widerFor(tree, call, spec)
+  // 只有用户亲手发起的这个回合里、模型说是用户要的，才直接起；别的一律变成提案
+  const userTurn = tree.isUserTurn(call.harness, call.turnId)
+  if (initiation === 'user_asked' && userTurn && wider === null) {
+    const child = await startChild(
+      tree,
+      call.threadId,
+      {
+        harness: spec.harness ?? null,
+        model: spec.model ?? null,
+        cwd: spec.cwd ?? null,
+        kind: spec.kind,
+        title: spec.title,
+        prompt: spec.prompt,
+        wakeParent: true,
+      },
+      'model',
+    )
+    return {
+      thread_id: child.threadId,
+      note: `Started sub-session ${child.threadId} on ${child.harness}. It runs on its own; you will be woken with its result as a <litch-session-event> message. Do not poll it.`,
+    }
+  }
+  const proposal = proposeOne(tree, call, spec, wider)
   const why =
     initiation !== 'user_asked'
       ? ''
       : !userTurn
         ? 'This turn was not started by the user typing a message, so the request became a proposal. '
-        : `${harness ?? call.harness} cannot be sandboxed as tightly as this session (it would run with ${wider}), so the request became a proposal for the user to approve. `
+        : `${spec.harness ?? call.harness} cannot be sandboxed as tightly as this session (it would run with ${wider}), so the request became a proposal for the user to approve. `
   return {
     proposal_id: proposal.id,
-    note: `${why}The user now sees a proposal card for "${proposal.title}". Nothing runs until they accept it; it expires in ${SESSION_TREE_LIMITS.proposalTtlSeconds / 86400} days. Do not do the work here as well.`,
+    note: `${why}The user now sees a proposal card for "${proposal.title}". Nothing runs until they accept it; ${EXPIRES}. Do not do the work here as well.`,
   }
+}
+
+/**
+ * 收尾：记下这个回合调过了（不调的话用户回合结束后设备进程会开回合提醒），每条建议照 start(propose) 的门槛
+ * 落一张提案（callId 是这次 wrap_up）。某条不收的写 refused 和能照着改的原因，其余照收；空列表也是成功
+ */
+async function wrapUp(
+  tree: SessionTree,
+  args: Record<string, unknown>,
+  call: DeviceToolCall,
+): Promise<SessionsWrapUpResult> {
+  const given = args.suggestions
+  if (!Array.isArray(given))
+    throw new Refused(
+      'invalid',
+      'suggestions must be an array: the suggested tasks of this turn, or [] when there are none. Call wrap_up again.',
+    )
+  tree.wrappedUp(call.threadId, call.turnId)
+  const suggestions: SessionsWrapUpResult['suggestions'] = []
+  // 一条一条来：前面落下的提案算进后面的门槛（一回合几张、同标题）
+  for (const one of given) {
+    const title = isObject(one) && typeof one.title === 'string' ? one.title.trim() : ''
+    try {
+      if (!isObject(one))
+        throw new Refused('invalid', 'Each suggestion must be an object with title and prompt.')
+      const spec = specOf(one, call, tree)
+      const proposal = proposeOne(tree, call, spec, await widerFor(tree, call, spec))
+      suggestions.push({ title: proposal.title, proposal_id: proposal.id })
+    } catch (error) {
+      suggestions.push({ title, refused: messageOf(error) })
+    }
+  }
+  const made = suggestions.filter((one) => one.proposal_id).length
+  const refused = suggestions.length - made
+  const parts = [
+    given.length === 0
+      ? 'Nothing suggested.'
+      : made > 0
+        ? `The user now sees ${made} suggested-task card${made > 1 ? 's' : ''}; nothing runs until they start one, and ${EXPIRES}. Do not do that work here as well.`
+        : 'No card was made.',
+    refused > 0
+      ? `${refused} suggestion${refused > 1 ? 's were' : ' was'} refused (see refused). If you can fix them, call wrap_up again with only the fixed ones; otherwise mention that work in one line.`
+      : 'Your turn is wrapped up: stop now.',
+  ]
+  return { suggestions, note: parts.join(' ') }
 }
 
 /** 调用者自己的提案（挂在调用者这个会话上的）。没有这个提案、别人的都回给模型 */
@@ -540,6 +622,8 @@ export function sessionToolsHandler(tree: SessionTree): DeviceToolHandler {
           return ok(await accept(tree, args, call))
         case SESSION_TOOL.withdraw:
           return ok(await withdraw(tree, args, call))
+        case SESSION_TOOL.wrapUp:
+          return ok(await wrapUp(tree, args, call))
         case SESSION_TOOL.send:
           return ok(await send(tree, args, call))
         case SESSION_TOOL.wait:
