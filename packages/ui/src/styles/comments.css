@@ -1,0 +1,297 @@
+/* 选中回答文字加评论（packages/ui/src/transcript/comments/）：选区上的浮层、编辑框、原文上的底色和记号、
+   输入框上的片、用户消息里的评论卡片、回答里的“评论 N”。颜色、圆角、阴影都取皮肤的变量 */
+
+/* ---------- 原文上的底色（CSS Custom Highlight，不改页面结构） ---------- */
+::highlight(litch-comment) {
+  background-color: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+/* 正在写的那一条：焦点进了编辑框，选区没了，用它接着标出评论的是哪一段 */
+::highlight(litch-comment-pending) {
+  background-color: color-mix(in srgb, var(--accent) 26%, transparent);
+}
+/* 跳到原文时闪一下 */
+::highlight(litch-comment-flash) {
+  background-color: color-mix(in srgb, var(--accent) 38%, transparent);
+}
+
+/* 段尾的编号记号挂在这一层上。它绝对定位、不占地方，停在对话内容的左上角，记号的位置按它算 */
+.cmt-marks {
+  position: absolute;
+  width: 0;
+  height: 0;
+}
+.cmt-badge,
+.ucmt-n,
+.cmt-chip-n {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 3px;
+  border-radius: var(--r1);
+  background: var(--accent-solid);
+  color: var(--on-accent);
+  font: 600 10px / 16px var(--mono);
+}
+.cmt-badge {
+  position: absolute;
+  z-index: 2;
+  transform: translate(2px, -45%);
+  cursor: pointer;
+}
+.cmt-badge:hover,
+.cmt-badge[aria-expanded="true"] {
+  background: var(--accent);
+}
+
+/* ---------- 选区上方的小浮层：评论、复制 ---------- */
+.cmt-pop {
+  position: fixed;
+  z-index: 30;
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  transform: translateY(-100%);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  background: var(--overlay);
+  box-shadow: var(--shadow);
+  font: 12px / 18px var(--ui);
+}
+.cmt-pop button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: var(--r1);
+  color: var(--ink);
+}
+.cmt-pop button .ic {
+  width: 13px;
+  height: 13px;
+  color: var(--ink-3);
+}
+.cmt-pop button:hover:not(:disabled) {
+  background: var(--hover);
+}
+.cmt-pop button:hover:not(:disabled) .ic {
+  color: var(--accent);
+}
+.cmt-pop button:disabled {
+  color: var(--ink-3);
+}
+
+/* ---------- 编辑框 ---------- */
+.cmt-edit {
+  position: fixed;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(340px, calc(100vw - 16px));
+  padding: 10px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  background: var(--overlay);
+  box-shadow: var(--shadow);
+  font: 13px / 20px var(--ui);
+  color: var(--ink);
+}
+.cmt-edit-quote {
+  padding-left: 8px;
+  border-left: 2px solid var(--accent);
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 180px;
+  overflow: auto;
+}
+.cmt-edit-quote.fold {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+}
+.cmt-edit .cmt-edit-more {
+  margin-top: -6px;
+  height: 20px;
+  font-size: 11px;
+}
+.cmt-edit-text {
+  width: 100%;
+  min-height: 44px;
+  padding: 6px 8px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r1);
+  background: var(--raised);
+  color: var(--ink);
+  font: inherit;
+  resize: none;
+}
+.cmt-edit-text:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.cmt-edit-text::placeholder {
+  color: var(--ink-3);
+}
+.cmt-edit-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.cmt-edit-foot .grow {
+  flex: 1 1 60px;
+  min-width: 0;
+}
+.cmt-edit-hint {
+  font-size: 11px;
+  color: var(--ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cmt-edit-foot .btn {
+  height: 24px;
+  font-size: 12px;
+}
+.cmt-edit-foot [data-act="delete"]:hover {
+  color: var(--err);
+}
+
+/* ---------- 输入框上面的片：编号、引用的开头、评论的开头 ---------- */
+.cmt-chip .cmp-chip-open {
+  gap: 6px;
+}
+.cmt-chip-quote {
+  min-width: 0;
+  max-width: 16em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-2);
+}
+.cmt-chip-note {
+  min-width: 0;
+  max-width: 10em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cmt-chip-note::before {
+  content: "· ";
+  color: var(--ink-3);
+}
+
+/* ---------- 用户消息里发出去的评论 ---------- */
+.ucmts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ucmt-btn {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--line-1);
+  border-radius: var(--r2);
+  background: var(--panel);
+  text-align: left;
+  color: var(--ink);
+  font: inherit;
+}
+.ucmt-btn:hover {
+  border-color: var(--line-2);
+  background: var(--hover);
+}
+.ucmt-n {
+  margin-top: 3px;
+}
+.ucmt-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.ucmt-quote {
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--ink-3);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.ucmt-quote.fold {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+.ucmt-note {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ---------- 回答里的“评论 N” ---------- */
+.cmt-cite {
+  display: inline;
+  margin: 0 1px;
+  padding: 0 4px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r1);
+  font: 600 11px / 16px var(--mono);
+  color: var(--accent);
+  vertical-align: 1px;
+  white-space: nowrap;
+}
+.cmt-cite:hover,
+.cmt-cite:focus-visible {
+  background: var(--hover);
+  border-color: var(--accent);
+}
+.cmt-peek {
+  position: fixed;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 320px;
+  padding: 8px 10px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  background: var(--overlay);
+  box-shadow: var(--shadow);
+  font: 12px / 18px var(--ui);
+  color: var(--ink);
+  pointer-events: none;
+}
+.cmt-peek[data-up] {
+  transform: translateY(-100%);
+}
+.cmt-peek-quote {
+  padding-left: 8px;
+  border-left: 2px solid var(--accent);
+  color: var(--ink-2);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  overflow: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.cmt-peek-note {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

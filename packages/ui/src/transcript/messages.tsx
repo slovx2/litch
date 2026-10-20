@@ -15,6 +15,8 @@ import { ImageViewer } from '../app/ImageViewer.tsx'
 import { useKey } from '../app/services.tsx'
 import { SessionEventBar } from '../tree/EventBar.tsx'
 import { AskReplyBody } from './AskCard.tsx'
+import { SentComments } from './comments/Cards.tsx'
+import { commentsOf } from './comments/Cite.tsx'
 import { Markdown } from './Markdown.tsx'
 import { usePin } from './scroll.ts'
 import { useSmoothText, useToggle } from './state.ts'
@@ -90,9 +92,12 @@ export const UserMessage = memo(function UserMessage({ turnId, ...ref }: UserMes
   const bubble = useRef<HTMLDivElement | null>(null)
   const pin = usePin()
   const t = useT()
-  const text = item?.kind === 'userMessage' ? item.text : ''
+  const said = item?.kind === 'userMessage' ? item.text : ''
   // 答模型边干活边问的题时发的那一段：画成题目和回答
-  const replies = parseAskReply(text)
+  const replies = parseAskReply(said)
+  // 开头带着评论的：评论画成卡片，下面只出打的字
+  const comments = replies ? null : commentsOf(said)
+  const text = comments ? comments.rest : said
 
   // 是不是超过了 20 行，要画出来才知道，而且跟宽度有关：盯着这块文字的尺寸，变了就重新量
   const hasText = text !== ''
@@ -108,12 +113,13 @@ export const UserMessage = memo(function UserMessage({ turnId, ...ref }: UserMes
 
   if (item?.kind !== 'userMessage') return null
   const event = item.event
-  if (event && !text && item.attachments.length === 0) {
+  if (event && !said && item.attachments.length === 0) {
     return <SessionEventBar deviceId={ref.deviceId} event={event} anchor={`u:${ref.itemId}`} />
   }
   const message = (
     <div className="umsg" data-anchor={`u:${ref.itemId}`} ref={bubble}>
       <UserAttachments attachments={item.attachments} />
+      {comments ? <SentComments {...ref} comments={comments.comments} /> : null}
       {replies ? (
         <AskReplyBody replies={replies} />
       ) : text ? (
@@ -152,7 +158,7 @@ export const AgentAnswer = memo(function AgentAnswer(ref: ItemRef) {
   if (item?.kind !== 'agentMessage') return null
   // 条目已经定稿但字还没放完时，继续按“输出中”画，放完那一刻才换成定稿的样子，中间没有跳变
   const streaming = item.status === 'inProgress' || revealing
-  return <Markdown text={text} streaming={streaming} anchor={`a:${ref.itemId}`} />
+  return <Markdown text={text} streaming={streaming} anchor={`a:${ref.itemId}`} item={ref.itemId} />
 })
 
 /** 计划：一张卡片，内容按 Markdown 画 */

@@ -53,6 +53,7 @@ import { createMockTasks } from './mock-tasks.mjs'
 import { createMockTerminals } from './mock-terminals.mjs'
 import { createMockTree } from './mock-tree.mjs'
 import { type ClientToolDemo, clientAskRequest, clientToolCall } from './sample-client-tools.mjs'
+import { ASKS_COMMENTABLE, commentSample, commentsReply } from './sample-comments.mjs'
 import { PI_PLAN_QUESTION, samplePlan } from './sample-compose.mjs'
 import {
   SAMPLE_HOSTS,
@@ -620,6 +621,47 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     }
     if (view.settings.mode === 'plan') {
       planTurn(view, turnId)
+      return turnId
+    }
+    // 选中回答加的评论：逐条回应，用 [N] 标出是哪一条
+    const comments = message.extras.filter((extra) => extra.kind === 'comment')
+    if (comments.length > 0) {
+      reply(view, turnId, commentsReply(lang, comments))
+      return turnId
+    }
+    // 话里带“评论”：回一段能选字的（过程里一段说明、一条命令，最终回答里有段落、代码块和表格）
+    if (ASKS_COMMENTABLE.test(message.text)) {
+      const sample = commentSample(lang)
+      applySessionOps(view, [
+        {
+          op: 'item.add',
+          turnId,
+          item: {
+            id: `${turnId}-n${++seq}`,
+            kind: 'agentMessage',
+            phase: 'commentary',
+            status: 'completed',
+            text: sample.note,
+          },
+        },
+        {
+          op: 'item.add',
+          turnId,
+          item: {
+            id: `${turnId}-c${++seq}`,
+            kind: 'command',
+            command: sample.command,
+            cwd: view.cwd,
+            output: sample.output,
+            elided: null,
+            exitCode: 0,
+            durationMs: 40,
+            startedAt: clock.now(),
+            status: 'completed',
+          },
+        },
+      ])
+      reply(view, turnId, sample.answer)
       return turnId
     }
     if (SHOWS_FILES.test(message.text)) {

@@ -2,6 +2,7 @@
 
 import { enAsks } from './en-asks.ts'
 import { enBimport } from './en-bimport.ts'
+import { enComments } from './en-comments.ts'
 import { enHconfig } from './en-hconfig.ts'
 import { enOnboard } from './en-onboard.ts'
 import { enPairing } from './en-pairing.ts'
@@ -23,6 +24,7 @@ export const en: Record<MessageKey, Entry> = {
   ...enProposals,
   ...enPasswords,
   ...enBimport,
+  ...enComments,
   'title.location': 'Location',
   'workspace.none': 'No project',
 

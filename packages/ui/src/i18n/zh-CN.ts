@@ -3,6 +3,7 @@
 import type { Entry } from './types.ts'
 import { zhAsks } from './zh-CN-asks.ts'
 import { zhBimport } from './zh-CN-bimport.ts'
+import { zhComments } from './zh-CN-comments.ts'
 import { zhHconfig } from './zh-CN-hconfig.ts'
 import { zhOnboard } from './zh-CN-onboard.ts'
 import { zhPairing } from './zh-CN-pairing.ts'
@@ -27,6 +28,8 @@ export const zhCN = {
   ...zhPasswords,
   // 内置浏览器从别的浏览器导入的文案也单独放（zh-CN-bimport.ts）
   ...zhBimport,
+  // 选中回答文字加评论的文案也单独放（zh-CN-comments.ts）
+  ...zhComments,
   'title.location': '当前位置',
   'workspace.none': '无项目',
 

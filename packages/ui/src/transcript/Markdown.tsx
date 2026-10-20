@@ -6,6 +6,8 @@ import { repairStreamingMarkdown } from '@litch/core'
 import { Lexer, type Token, type Tokens } from 'marked'
 import { memo, type ReactNode, useRef } from 'react'
 import { CodeBlock } from './CodeBlock.tsx'
+import { CiteText, HAS_CITE } from './comments/Cite.tsx'
+import { ITEM_ATTR } from './comments/text-range.ts'
 import { ExternalLink } from './ExternalLink.tsx'
 import { CodeSpan, Link, Prose } from './FileLinks.tsx'
 import { languageOf } from './highlight.tsx'
@@ -72,6 +74,8 @@ function inline(tokens: Token[] | undefined): ReactNode {
       case 'text': {
         const text = token as Tokens.Text
         if (text.tokens) return <span key={key}>{inline(text.tokens)}</span>
+        // 可能是指向评论的 [N]（comments/Cite.tsx）：交给它，认不出照常
+        if (HAS_CITE.test(text.text)) return <CiteText key={key} text={text.text} />
         // 没有斜杠的字里不会有要认的路径：绝大多数文字照原样出，不多套一层
         return text.text.includes('/') ? <Prose key={key} text={text.text} /> : text.text
       }
@@ -214,9 +218,11 @@ interface MarkdownProps {
   streaming: boolean
   /** 这段回答在滚动定位里的标识，每个顶层块在它后面再加序号 */
   anchor: string
+  /** 助手回答所在的条目：给了就能在里面选字加评论（comments/） */
+  item?: string
 }
 
-export const Markdown = memo(function Markdown({ text, streaming, anchor }: MarkdownProps) {
+export const Markdown = memo(function Markdown({ text, streaming, anchor, item }: MarkdownProps) {
   const cache = useRef<Parsed | null>(null)
   const normalized = text.includes('\r') ? text.replace(/\r\n?/g, '\n') : text
   const source = streaming ? repairStreamingMarkdown(normalized) : normalized
@@ -230,7 +236,7 @@ export const Markdown = memo(function Markdown({ text, streaming, anchor }: Mark
     streaming && lastToken?.type === 'code' && !fenceClosed(lastToken.raw) ? tail : -1
   return (
     // live：样式据此在最后一块的结尾画一个光标
-    <div className={streaming ? 'md live' : 'md'}>
+    <div className={streaming ? 'md live' : 'md'} {...(item ? { [ITEM_ATTR]: item } : {})}>
       {parsed.all.map((token, index) =>
         token.type === 'space' ? null : (
           // 块只会在末尾增加，序号就是稳定的键

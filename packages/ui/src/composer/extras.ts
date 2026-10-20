@@ -37,7 +37,11 @@ export function pasteVerdict(text: string): 'inline' | 'attach' | 'long' {
 /** 一片上写什么。技能是它叫出来时的样子（斜杠加名字）；没有名字的文字（贴进来的）由界面按语言另说，这里给 null */
 export const extraLabel = (extra: MessageExtra): string | null => {
   if (extra.kind === 'skill') return `/${extra.name}`
-  if (extra.kind === 'comment') return extra.quote
+  // 评论在排队的那一行上只写引用的开头
+  if (extra.kind === 'comment') {
+    const quote = extra.quote.replace(/\s+/g, ' ').trim()
+    return quote.length > 24 ? `${quote.slice(0, 24)}…` : quote
+  }
   return extra.name
 }
 
