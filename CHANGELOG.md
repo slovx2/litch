@@ -10,6 +10,7 @@ versioning or publishing metadata.
 - 适配器：Codex 协议基线从 0.157.1 升到 0.163.0（`codexProtocol`、快照、方法表、`runtime/info` 和 `codex --version` 报的版本），CI 和“一键安装”的验证版 codex 改成 0.163.0；作为 harness 接进来的 codex 下限仍是 0.157.1
 - 适配器：`modelProvider/capabilities/read` 不再带 0.163.0 删掉的 `namespaceTools`（六家入口）
 - Claude Code：支持 0.163.0 新增的 `thread/items/read`、`thread/attachmentOwner/list`，`thread/items/list` 的游标可以是回合里的一个条目（`{type: "item", itemId}`，Pi、DSH、OpenCode、ACP 的入口同样支持），`thread/list` 支持 `excludedThreadIds`，`mcpServerStatus/list` 支持 `serverName`；`mcpServer/oauth/login` 的应答和完成通知带同一个 `loginId`
+- Claude Code：`item/tool/requestUserInput` 的 `isBlocking` 照上游 0.163.0 只在计划模式下是 `true`（原来一律 `true`），两种都照旧一直等到有人回答；同一条连接再 `thread/resume` 时，挂着没答的提问和审批在恢复应答之后用原来的请求号再发一次（上游恢复时不管这条连接收没收到过都重发），客户端换了逻辑通道、底下还是同一条连接时也能找回来；客户端执行的工具调用（`item/tool/call`）仍不重发
 - Claude Code：动态工具（`dynamicTools`）一律直接交给客户端执行，不再走 Claude Code 这边的审批和沙箱，和原生 codex 一样；原来只有 `litch_` 开头的命名空间这样，别的命名空间和不带命名空间的工具按会话的审批策略先问、按沙箱拦
 - Claude Code：动态工具（`dynamicTools`）一律直接交给客户端执行，不再走 Claude Code 这边的审批和沙箱，计划模式、只读沙箱、子代理里也直接放行，和原生 codex 一样（用户自己配的 MCP 服务不算动态工具，照旧走审批）；原来只有 `litch_` 开头的命名空间这样，别的命名空间和不带命名空间的工具按会话的审批策略先问、按沙箱拦
 - Claude Code：去掉入口给普通回合加的“Codex 桌面展示风格”系统提示（对话风格、Mermaid 等），适配器不再维护呈现类指令；需要的客户端自己经开发者指令给

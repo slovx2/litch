@@ -230,7 +230,8 @@ test('QUESTION-001：一次三道题，选项、跳过、自己写，请求的�
     assert.deepEqual(request.questions, questions.map(wireQuestion))
     assert.equal(request.threadId, thread.id)
     assert.equal(request.turnId, turn.id)
-    assert.equal(request.isBlocking, true)
+    // 默认协作模式：照上游不标 blocking（计划模式的见 native-input-reconnect.test.mts）
+    assert.equal(request.isBlocking, false)
 
     // 模型看到的：答了的两道各带着自己的回答，跳过的那道不在里面（下面是 CLI 自己的写法）
     assert.ok(seen, '模型没有收到提问的结果')

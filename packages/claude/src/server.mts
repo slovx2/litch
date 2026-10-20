@@ -1310,6 +1310,8 @@ export class CodexClaudeAppServer {
       threadSource: thread.threadSource,
       ephemeral: thread.ephemeral,
     })
+    // 这条连接已经拿着的提问、审批：应答和用量回放之后再发一次，见 PendingInteractions.resend。
+    const held = this.pendingInteractions.heldBy(peer.id, threadId)
     this.subscribers.add(threadId, peer)
     // 恢复时主动回显持久化的计划与审批设置，客户端不能按本地默认值猜测。
     // 回显是给恢复它的这条连接的；这次恢复没有改动设置时，不去打扰已经在看这个线程的别的连接。
@@ -1327,6 +1329,7 @@ export class CodexClaudeAppServer {
           params: { threadId, ...usage },
         }),
       )
+    if (held.length > 0) setImmediate(() => this.pendingInteractions.resend(peer, held))
     return {
       ...asRecord(
         this.threadEnvelope(
@@ -4908,6 +4911,7 @@ export class CodexClaudeAppServer {
               turn.id,
               item.id,
               event.questions,
+              planMode,
             )
             if (!turnIsActive()) return { answers: {} }
             const contentItems = userInputAnswersAsContent(event.questions, answers)
@@ -5490,10 +5494,13 @@ export class CodexClaudeAppServer {
     turnId: string,
     itemId: string,
     questions: UserInputQuestion[],
+    planMode: boolean,
   ): Promise<UserInputAnswers> {
     const requestId = newId()
     // 题目原样发出去：选项之外能不能自己说，看题目上的 isOther，这里不往选项里补东西。
-    const params = { threadId, turnId, itemId, isBlocking: true, questions }
+    // isBlocking 照上游（core/src/tools/handlers/request_user_input.rs）：只有计划模式是 true；
+    // 只是给客户端展示用的标记，两种都一直等到有人回答
+    const params = { threadId, turnId, itemId, isBlocking: planMode, questions }
     const response = await this.sendServerRequest(
       peer,
       'item/tool/requestUserInput',
