@@ -8,6 +8,8 @@ import { memo, type ReactNode, useRef } from 'react'
 import { CodeBlock } from './CodeBlock.tsx'
 import { ExternalLink } from './ExternalLink.tsx'
 import { CodeSpan, Link, Prose } from './FileLinks.tsx'
+import { languageOf } from './highlight.tsx'
+import { MermaidBlock } from './Mermaid.tsx'
 
 function lex(source: string): Token[] {
   return new Lexer({ gfm: true }).lex(source)
@@ -98,7 +100,10 @@ function listItem(item: Tokens.ListItem, key: number): ReactNode {
   )
 }
 
-function block(token: Token, key: number, anchor?: string): ReactNode {
+/** 围栏代码块的原文以闭合的围栏结尾（流式输出时最后一块可能还没写到那一行） */
+const fenceClosed = (raw: string): boolean => /\n {0,3}(`{3,}|~{3,})[ \t]*\n*$/.test(raw)
+
+function block(token: Token, key: number, anchor?: string, open = false): ReactNode {
   const mark = anchor ? { 'data-anchor': anchor } : {}
   switch (token.type) {
     case 'paragraph':
@@ -124,6 +129,8 @@ function block(token: Token, key: number, anchor?: string): ReactNode {
     }
     case 'code': {
       const code = token as Tokens.Code
+      if (languageOf(code.lang ?? '') === 'mermaid')
+        return <MermaidBlock key={key} anchor={anchor} text={code.text} open={open} />
       return <CodeBlock key={key} anchor={anchor} lang={code.lang ?? ''} text={code.text} />
     }
     case 'list': {
@@ -190,12 +197,15 @@ function block(token: Token, key: number, anchor?: string): ReactNode {
   }
 }
 
-/** 一个顶层块。原文没变就不重画：流式输出时只有最后一块在变 */
+/** 一个顶层块。原文没变就不重画：流式输出时只有最后一块在变。open：它是还没写完的围栏代码块 */
 const Block = memo(
-  function Block({ token, anchor }: { token: Token; anchor: string }) {
-    return block(token, 0, anchor)
+  function Block({ token, anchor, open }: { token: Token; anchor: string; open: boolean }) {
+    return block(token, 0, anchor, open)
   },
-  (before, after) => before.token.raw === after.token.raw && before.token.type === after.token.type,
+  (before, after) =>
+    before.token.raw === after.token.raw &&
+    before.token.type === after.token.type &&
+    before.open === after.open,
 )
 
 interface MarkdownProps {
@@ -212,13 +222,24 @@ export const Markdown = memo(function Markdown({ text, streaming, anchor }: Mark
   const source = streaming ? repairStreamingMarkdown(normalized) : normalized
   const parsed = parse(source, cache.current, !streaming)
   cache.current = parsed
+  // 还在往外流时，最后一块要是围栏没闭合的代码块，就是还没写完
+  let tail = parsed.all.length - 1
+  while (tail >= 0 && parsed.all[tail]?.type === 'space') tail--
+  const lastToken = parsed.all[tail]
+  const unfinished =
+    streaming && lastToken?.type === 'code' && !fenceClosed(lastToken.raw) ? tail : -1
   return (
     // live：样式据此在最后一块的结尾画一个光标
     <div className={streaming ? 'md live' : 'md'}>
       {parsed.all.map((token, index) =>
         token.type === 'space' ? null : (
           // 块只会在末尾增加，序号就是稳定的键
-          <Block key={index} token={token} anchor={`${anchor}:${index}`} />
+          <Block
+            key={index}
+            token={token}
+            anchor={`${anchor}:${index}`}
+            open={index === unfinished}
+          />
         ),
       )}
     </div>

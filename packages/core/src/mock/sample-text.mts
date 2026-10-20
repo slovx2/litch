@@ -61,6 +61,8 @@ export interface SampleText {
    * 也有几样不该认成文件的。给界面试“对话里的路径可以点开”用
    */
   filesReply: string
+  /** 发的话里带“画图”时的回答：一张 mermaid 图，后面跟一张有语法错、画不出来的 */
+  diagramReply: string
   /** 发的话里带“改文件”时，改完之后说的一句 */
   editReply: string
   /** 拒绝审批时附了说明：对面听到之后说的一句。{note} 换成那句说明 */
@@ -256,6 +258,24 @@ const zh: SampleText = {
     '- 长的那个是 `fixtures/long.ts:4200`。',
     '',
     '下面这几样不是工作区里的文件：`console.log`、`../outside/secret.txt`、读/写，还有 https://example.com/a/b.ts 这个网址。',
+  ].join('\n'),
+  diagramReply: [
+    '会话树现在的数据流是这样的，虚线是子会话停下后回到父会话的那一路：',
+    '',
+    '```mermaid',
+    'flowchart LR',
+    '  P[父会话] -->|litch_sessions.start| D[设备进程]',
+    '  D -->|派出| C[子会话]',
+    '  D --> S[(会话存储：父子关系)]',
+    '  C -.->|回报 / 唤醒| P',
+    '```',
+    '',
+    '下面这张写错了，画不出来：',
+    '',
+    '```mermaid',
+    'flowchart LR',
+    '  A[开始] --> --> B',
+    '```',
   ].join('\n'),
   editReply: '改好了：在记录里添了一行，另外新写了一份草稿。差异面板里看得到这两处。',
   declineHeard: '这条命令不跑了。你的说明我看到了：{note}',
@@ -462,6 +482,24 @@ const en: SampleText = {
     '- The long one is `fixtures/long.ts:4200`.',
     '',
     'These are not files in the workspace: `console.log`, https://example.com/a/b.ts, `../outside/secret.txt`, read/write.',
+  ].join('\n'),
+  diagramReply: [
+    "Here is how the session tree's data flows today. The dashed line is the path back to the parent once a child stops:",
+    '',
+    '```mermaid',
+    'flowchart LR',
+    '  P[Parent session] -->|litch_sessions.start| D[Device process]',
+    '  D -->|spawns| C[Child session]',
+    '  D --> S[(Session store: parent links)]',
+    '  C -.->|report / wake| P',
+    '```',
+    '',
+    "This one has a mistake and can't be drawn:",
+    '',
+    '```mermaid',
+    'flowchart LR',
+    '  A[Start] --> --> B',
+    '```',
   ].join('\n'),
   editReply:
     'Done: one line added to the log, and a new draft written. Both show up in the diff panel.',

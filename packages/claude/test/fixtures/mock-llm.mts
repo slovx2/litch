@@ -6,7 +6,12 @@ import { reclaimAtEnd } from './reclaim.mjs'
 export type ModelRequest = Record<string, any>
 export type ModelReply =
   | Array<Record<string, unknown>>
-  | { content: Array<Record<string, unknown>>; headers: Record<string, string> }
+  // usage 换掉这次应答报的用量（默认输入 100、输出 20），用来区分一个回合里的各次请求
+  | {
+      content: Array<Record<string, unknown>>
+      headers?: Record<string, string>
+      usage?: Record<string, number>
+    }
   | { status: number; message: string; errorType?: string; headers?: Record<string, string> }
   | { disconnect: true }
   | { disconnectAfterText: string; afterDelta: () => Promise<void> }
@@ -15,12 +20,29 @@ export type ModelStep = (
   headers: IncomingHttpHeaders,
 ) => ModelReply | Promise<ModelReply>
 
+// CLI 起会话标题的请求：用户那条消息是包在 <session> 里的会话内容，要回的是带 title 的 JSON
+function sessionTitleRequest(body: ModelRequest): boolean {
+  const last = Array.isArray(body.messages) ? body.messages.at(-1) : undefined
+  const user = last?.role === 'user' ? textOf(last.content) : ''
+  return user.startsWith('<session>\n') && textOf(body.system).includes('"title"')
+}
+
+function textOf(content: unknown): string {
+  if (typeof content === 'string') return content
+  if (!Array.isArray(content)) return ''
+  return content.map((block: any) => (typeof block?.text === 'string' ? block.text : '')).join('')
+}
+
 // 只替换模型 HTTP 接口。SDK、CLI、工具及会话文件都使用真实实现。
 export class MockLLM {
   readonly requests: ModelRequest[] = []
   readonly unexpected: string[] = []
   // 计划之外的请求由它应答。只用于时机不由测试控制的请求，例如后台命令结束后 CLI 自行续跑。
   fallback: ModelStep | null = null
+  // CLI 给会话起标题的那次小模型请求（它自己起，或者入口请它起）不进计划、不记进 requests，
+  // 由这里直接回一个标题。默认回空的：CLI 当作没起出来，会话保持没有名字。
+  sessionTitle = ''
+  readonly titleRequests: ModelRequest[] = []
   private steps: ModelStep[] = []
   private reclaimed: (() => void) | undefined
   private closing: Promise<void> | undefined
@@ -45,8 +67,12 @@ export class MockLLM {
         res.writeHead(404).end()
         return
       }
-      this.requests.push(body)
-      const step = this.steps.shift() ?? this.fallback
+      const titling = !responsesAPI && sessionTitleRequest(body)
+      if (titling) this.titleRequests.push(body)
+      else this.requests.push(body)
+      const step: ModelStep | null = titling
+        ? () => [{ type: 'text', text: JSON.stringify({ title: this.sessionTitle }) }]
+        : (this.steps.shift() ?? this.fallback)
       if (!step) throw new Error('收到未计划的模型请求')
       const reply = await step(body, req.headers)
       if (!Array.isArray(reply) && !('content' in reply)) {
@@ -106,7 +132,7 @@ export class MockLLM {
       }
       const content = Array.isArray(reply) ? reply : reply.content
       if (!Array.isArray(reply))
-        for (const [name, value] of Object.entries(reply.headers)) res.setHeader(name, value)
+        for (const [name, value] of Object.entries(reply.headers ?? {})) res.setHeader(name, value)
       if (responsesAPI) {
         res.writeHead(200, { 'Content-Type': 'text/event-stream' })
         const id = `resp_${randomUUID()}`
@@ -158,6 +184,7 @@ export class MockLLM {
           output_tokens: 20,
           cache_creation_input_tokens: 0,
           cache_read_input_tokens: 0,
+          ...(Array.isArray(reply) ? {} : reply.usage),
         },
       }
       if (!body.stream) {

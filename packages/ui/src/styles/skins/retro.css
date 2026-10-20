@@ -459,3 +459,9 @@
   --syn-type: var(--L, #6f5300) var(--D, var(--wire-yellow));
   --syn-meta: var(--L, #74482c) var(--D, var(--wire-brown));
 }
+
+/* mermaid 图也是方角：方框节点、子图的框不带圆角（画图库自己画成路径的圆角形状不在此列） */
+[data-skin="retro"] :is(.mmd-fig, .mmd-stage) rect {
+  rx: 0;
+  ry: 0;
+}

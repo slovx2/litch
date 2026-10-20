@@ -192,6 +192,10 @@ export function relayRuntimeEvents(
       case 'tool_use':
         if (event.toolName === 'SendMessage') sendToolUseId = event.toolUseId
         return
+      // 子线程的占用是被恢复的子代理自己的请求；主会话转交那几次请求不算它的
+      case 'context_usage':
+        if (event.agentToolUseId) await handle({ ...event, agentToolUseId: null })
+        return
       case 'tool_result':
         if (event.toolUseId === sendToolUseId && !event.isError) delivered = true
         return
