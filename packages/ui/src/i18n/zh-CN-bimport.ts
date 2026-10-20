@@ -43,9 +43,8 @@ export const zhBimport = {
   'bimport.hint.keychain':
     '读 Cookie 和密码时 macOS 会弹出钥匙串的授权框，问能不能用 {name} 的密钥。选“允许”才导得进来；拒绝了也可以重试。',
   'bimport.hint.systemAuth': '读 Cookie 和密码时系统会弹出授权框，允许之后才导得进来。',
-  'bimport.elevate': '允许用管理员权限读取 Cookie 和密码',
-  'bimport.elevate.note':
-    '这台电脑上读 {name} 的 Cookie 和密码要管理员同意，勾选后 Windows 会弹出用户账户控制询问。不勾就导不进来。',
+  'bimport.hint.appBound':
+    '这一版还导不了 Windows 上新版 {name} 受保护的那部分数据（多为 Cookie），其余照常导入。',
   'bimport.problem.noSource': '先选一个来源',
   'bimport.problem.noKinds': '至少选一类',
   'bimport.problem.noDomains': '至少写一个网站，或者取消“只导这些网站的 Cookie”',
@@ -82,7 +81,8 @@ export const zhBimport = {
   'bimport.status.missing': '这份资料里没有这类数据',
   'bimport.status.locked': '{name} 还开着，数据文件被占用。完全退出它之后重试。',
   'bimport.status.denied': '系统授权被拒绝了。重试时在弹框里选“允许”。',
-  'bimport.status.needsElevation': '要管理员同意才能读。勾选下面的“允许用管理员权限读取”之后重试。',
+  'bimport.status.needsElevation':
+    '这一版还导不了 Windows 上新版 Chrome 系浏览器受保护的数据（多为 Cookie），其余照常导入。',
   'bimport.status.unsupported': '这台电脑上还读不了这类数据',
   'bimport.status.cancelled': '已停止',
   'bimport.status.failed': '没导进来',

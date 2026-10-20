@@ -26,7 +26,7 @@ const {
   showBanner,
   sourceBlock,
   stagesOf,
-  wantsElevation,
+  hitsAppBound,
   wantsSystemAuth,
 } = logic
 const { translator } = await import('../src/i18n/index.ts')
@@ -115,19 +115,19 @@ test('默认资料是浏览器自己的默认那份；默认勾 Cookie 和密码
   assert.deepEqual(Object.keys(defaultKinds(chrome, chrome.profiles[1])), ['cookies', 'passwords'])
 })
 
-test('表单初值、换来源时类别回到默认、名单和管理员同意留着', () => {
+test('表单初值、换来源时类别回到默认、名单留着', () => {
   assert.equal(initialDraft([edgeEmpty, braveNothing]), null)
   const draft = initialDraft([edgeEmpty, firefox, chrome])
   assert.equal(draft.browser, 'firefox')
   assert.equal(draft.profileId, 'abc.default-release')
-  const edited = { ...draft, onlyDomains: true, domainsText: 'github.com', allowElevated: true }
+  const edited = { ...draft, onlyDomains: true, domainsText: 'github.com' }
   const next = draftFor(chrome, undefined, edited)
   assert.equal(next.browser, 'chrome')
   assert.equal(next.profileId, 'Default')
   assert.deepEqual(next.kinds, has(true, true))
   assert.equal(next.onlyDomains, true)
   assert.equal(next.domainsText, 'github.com')
-  assert.equal(next.allowElevated, true)
+  assert.equal('allowElevated' in next, false)
   // 指定的资料选得了就用它
   assert.equal(draftFor(chrome, 'Profile 1').profileId, 'Profile 1')
   assert.equal(draftFor(chrome, 'nope').profileId, 'Default')
@@ -153,17 +153,17 @@ test('网站名单：网址取主机，前导点、*.、端口、路径不要，
   assert.deepEqual(parseDomains('  '), { domains: [], bad: [] })
 })
 
-test('提示：系统授权、管理员同意只在勾了 Cookie 或密码时出', () => {
+test('提示：系统授权、这一版导不了受保护的那部分只在勾了 Cookie 或密码时出', () => {
   assert.equal(wantsSystemAuth(chrome, []), false)
   assert.equal(wantsSystemAuth(chrome, ['passwords']), true)
   assert.equal(wantsSystemAuth(firefox, ['cookies']), false)
   const edge = { ...edgeEmpty, profiles: [profile('Default')] }
-  assert.equal(wantsElevation(edge, ['cookies']), true)
-  assert.equal(wantsElevation(edge, []), false)
-  assert.equal(wantsElevation(chrome, ['cookies']), false)
+  assert.equal(hitsAppBound(edge, ['cookies']), true)
+  assert.equal(hitsAppBound(edge, []), false)
+  assert.equal(hitsAppBound(chrome, ['cookies']), false)
 })
 
-test('拼请求：只带勾了又能导的；名单只在勾了 Cookie 时用；管理员同意只在要的时候发', () => {
+test('拼请求：只带勾了又能导的；名单只在勾了 Cookie 时用；这一版一律不提权', () => {
   const edge = { ...edgeEmpty, profiles: [profile('Default', { isDefault: true })] }
   const sources = [chrome, firefox, edge]
   const draft = draftFor(chrome, undefined)
@@ -175,10 +175,8 @@ test('拼请求：只带勾了又能导的；名单只在勾了 Cookie 时用；
       allowElevated: false,
     },
   })
-  // 勾了管理员同意，但这个来源不要：不发 true
-  assert.equal(requestOf(sources, { ...draft, allowElevated: true }).request.allowElevated, false)
-  const edgeDraft = { ...draftFor(edge, undefined), allowElevated: true }
-  assert.equal(requestOf(sources, edgeDraft).request.allowElevated, true)
+  // 要管理员同意的来源也不发 true
+  assert.equal(requestOf(sources, draftFor(edge, undefined)).request.allowElevated, false)
   // 一类都没勾
   assert.deepEqual(requestOf(sources, { ...draft, kinds: has(false, false) }), {
     problem: 'noKinds',
@@ -226,43 +224,40 @@ test('一类的结果：每种状态的语气、说法、能不能重试', () =>
     const line = kindReport('cookies', counts(patch))
     return [line.tone, line.say, line.retry]
   }
-  assert.deepEqual(look({}), ['ok', 'bimport.status.ok', null])
-  assert.deepEqual(look({ failed: 2 }), ['warn', 'bimport.status.okFailed', 'again'])
-  assert.deepEqual(look({ discovered: 0, imported: 0 }), ['quiet', 'bimport.status.empty', null])
+  assert.deepEqual(look({}), ['ok', 'bimport.status.ok', false])
+  assert.deepEqual(look({ failed: 2 }), ['warn', 'bimport.status.okFailed', true])
+  assert.deepEqual(look({ discovered: 0, imported: 0 }), ['quiet', 'bimport.status.empty', false])
   // 一条新的都没有：都已经有了、都无效
   assert.deepEqual(look({ imported: 0, skippedExisting: 10 }), [
     'quiet',
     'bimport.status.allExisting',
-    null,
+    false,
   ])
   assert.deepEqual(look({ imported: 0, skippedInvalid: 3 }), [
     'warn',
     'bimport.status.allInvalid',
-    null,
+    false,
   ])
   // partial、failed 说法中性；读取器会报 partial 但 failed 是 0、只有一句 error
-  assert.deepEqual(look({ status: 'partial', failed: 3 }), [
-    'warn',
-    'bimport.status.partial',
-    'again',
-  ])
+  assert.deepEqual(look({ status: 'partial', failed: 3 }), ['warn', 'bimport.status.partial', true])
   assert.deepEqual(look({ status: 'partial', failed: 0, error: 'x' }), [
     'warn',
     'bimport.status.partial',
-    'again',
+    true,
   ])
-  assert.deepEqual(look({ status: 'missing' }), ['quiet', 'bimport.status.missing', null])
-  assert.deepEqual(look({ status: 'locked' }), ['err', 'bimport.status.locked', 'again'])
-  assert.deepEqual(look({ status: 'denied' }), ['err', 'bimport.status.denied', 'again'])
+  assert.deepEqual(look({ status: 'missing' }), ['quiet', 'bimport.status.missing', false])
+  assert.deepEqual(look({ status: 'locked' }), ['err', 'bimport.status.locked', true])
+  assert.deepEqual(look({ status: 'denied' }), ['err', 'bimport.status.denied', true])
+  // 这一版不提权：说明导不了，不给重试
   assert.deepEqual(look({ status: 'needs-elevation' }), [
-    'err',
+    'warn',
     'bimport.status.needsElevation',
-    'elevate',
+    false,
   ])
-  assert.deepEqual(look({ status: 'unsupported' }), ['quiet', 'bimport.status.unsupported', null])
-  assert.deepEqual(look({ status: 'cancelled' }), ['quiet', 'bimport.status.cancelled', null])
-  assert.deepEqual(look({ status: 'failed' }), ['err', 'bimport.status.failed', 'again'])
-  assert.deepEqual(look({ status: 'skipped' }), ['quiet', 'bimport.status.skipped', null])
+  assert.deepEqual(look({ status: 'unsupported' }), ['quiet', 'bimport.status.unsupported', false])
+  assert.deepEqual(look({ status: 'cancelled' }), ['quiet', 'bimport.status.cancelled', false])
+  assert.deepEqual(look({ status: 'failed' }), ['err', 'bimport.status.failed', true])
+  assert.deepEqual(look({ status: 'skipped' }), ['quiet', 'bimport.status.skipped', false])
   // 密码库用不了：重试也没用，不给重试（原话是 browser/passwords/store.mts 的那句）
   const keystore =
     'Saved passwords are encrypted with the system keystore, which is not available on this computer, so no passwords were stored.'
@@ -272,14 +267,14 @@ test('一类的结果：每种状态的语气、说法、能不能重试', () =>
   const store = kindReport('passwords', none('failed', { failed: 3, error: keystore }))
   assert.deepEqual(
     [store.tone, store.say, store.retry],
-    ['err', 'bimport.status.storeUnavailable', null],
+    ['err', 'bimport.status.storeUnavailable', false],
   )
   const half = kindReport('passwords', counts({ status: 'partial', failed: 1, error: keystore }))
-  assert.equal(half.retry, null)
+  assert.equal(half.retry, false)
   // 主进程没报这一类：当没成，能重试
   const lost = kindReport('passwords', undefined)
   assert.equal(lost.status, 'failed')
-  assert.equal(lost.retry, 'again')
+  assert.equal(lost.retry, true)
   // 英文原话只放进详情
   assert.equal(kindReport('cookies', counts({ status: 'failed', error: 'disk' })).error, 'disk')
   assert.equal('error' in kindReport('cookies', counts()), false)
@@ -308,7 +303,13 @@ test('整次的结果：全成、部分成、都没成、没有新的、什么�
   const bad = of({ cookies: none('locked'), passwords: none('needs-elevation') })
   assert.equal(bad.overall, 'failed')
   assert.deepEqual(bad.again, ['cookies'])
-  assert.deepEqual(bad.elevate, ['passwords'])
+  assert.equal('elevate' in bad, false)
+  // 只有这一版导不了的那部分没进来：算部分导入，不算失败
+  assert.equal(of({ ...all, cookies: none('needs-elevation') }).overall, 'partial')
+  assert.equal(
+    of({ cookies: none('needs-elevation'), passwords: none('missing') }).overall,
+    'nothing',
+  )
   // 一类都没导成，也没有出错的：不说“导入完成”
   const empty = of({ cookies: none('missing'), passwords: none('unsupported') })
   assert.equal(empty.overall, 'nothing')
@@ -395,7 +396,7 @@ test('主进程的回答先过一遍：拒绝时的 null、{}、[]，认不出�
   })
 })
 
-test('重试：照原样能重试的几类，勾了管理员同意再加要提权的；网站名单从最初的请求取', () => {
+test('重试：照原样能重试的几类，这一版导不了的不算；网站名单从最初的请求取；不提权', () => {
   const origin = {
     browser: 'edge',
     profileId: 'Default',
@@ -409,25 +410,26 @@ test('重试：照原样能重试的几类，勾了管理员同意再加要提�
       passwords: counts({ status: 'locked' }),
     },
   })
-  assert.deepEqual(retryRequest(origin, report, false), {
+  assert.deepEqual(retryRequest(origin, report), {
     browser: 'edge',
     profileId: 'Default',
     kinds: ['passwords'],
     allowElevated: false,
   })
-  assert.deepEqual(retryRequest(origin, report, true), {
+  const locked = reportOf(origin.kinds, { kinds: { cookies: counts({ status: 'locked' }) } })
+  assert.deepEqual(retryRequest({ ...origin, allowElevated: true }, locked), {
     browser: 'edge',
     profileId: 'Default',
     kinds: ['cookies', 'passwords'],
     cookieDomains: ['github.com'],
-    allowElevated: true,
+    allowElevated: false,
   })
-  const onlyElevate = reportOf(['cookies'], {
+  const onlyAppBound = reportOf(['cookies'], {
     kinds: { cookies: counts({ status: 'needs-elevation' }) },
   })
-  assert.equal(retryRequest(origin, onlyElevate, false), null)
+  assert.equal(retryRequest(origin, onlyAppBound), null)
   const fine = reportOf(['cookies'], { kinds: { cookies: counts() } })
-  assert.equal(retryRequest(origin, fine, true), null)
+  assert.equal(retryRequest(origin, fine), null)
 })
 
 test('重试的结果并进上一次的；整体性的失败以这一次为准', () => {

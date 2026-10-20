@@ -192,7 +192,7 @@ export interface ImportSource {
   kinds: ImportKind[]
   /** 读之前系统会弹授权框（Mac 的钥匙串） */
   promptsSystemAuth: boolean
-  /** Windows 上要管理员同意才能读 Cookie 和密码 */
+  /** Windows 上有应用绑定的数据（多为 Cookie），这一版导不了那一部分 */
   needsElevation: boolean
   profiles: ImportProfile[]
 }
@@ -203,6 +203,7 @@ export interface ImportRequest {
   kinds: ImportKind[]
   /** 只导这些网站（含子域）的 Cookie；不给是全部。小写、无前导点 */
   cookieDomains?: string[]
+  /** 这一版界面一律发 false */
   allowElevated: boolean
 }
 

@@ -65,9 +65,10 @@ Before importing:
 - On macOS, importing from a Chromium-based browser (Chrome, Edge, Brave, Arc, Chromium, Vivaldi) asks
   once for permission to use that browser's key in the Keychain; the user must choose Allow. If they
   denied it, "Try again" asks again. Firefox does not ask.
-- On Windows some browsers need administrator consent to read cookies and passwords: the user ticks
-  "Allow reading cookies and passwords as administrator" and approves the UAC prompt. Without it
-  nothing can be imported from that browser.
+- Limitation of this version: on Windows, recent Chrome, Edge, Brave and other Chromium-based browsers
+  protect part of their data (mostly cookies) so that only the browser itself can read it. Litch
+  cannot import that part yet; the rest is imported as usual and the result says so. Trying again
+  does not help.
 
 The result lists each kind with how many were imported, already there, invalid and failed. Nothing
 already in Litch is overwritten (same site, name and path for cookies; same site and user name for

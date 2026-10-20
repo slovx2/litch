@@ -52,22 +52,18 @@ export function ImportProgressView({
   )
 }
 
-/** 逐类结果。要勾管理员同意才能重试的，勾在这一屏上 */
+/** 逐类结果 */
 export function ImportResultView({
   name,
   origin,
   outcome,
   stopped,
-  consent,
-  onConsent,
 }: {
   name: string
   origin: ImportRequest
   outcome: ImportOutcome
   /** 用户点过“停止导入” */
   stopped: boolean
-  consent: boolean
-  onConsent(on: boolean): void
 }) {
   const t = useT()
   const report = reportOf(origin.kinds, outcome, stopped)
@@ -82,9 +78,6 @@ export function ImportResultView({
             <ResultLine key={line.kind} line={line} name={name} />
           ))}
         </ul>
-      ) : null}
-      {report.elevate.length > 0 ? (
-        <ElevateCheck name={name} checked={consent} onChange={onConsent} />
       ) : null}
     </div>
   )
@@ -153,32 +146,5 @@ function ResultLine({ line, name }: { line: KindReport; name: string }) {
         </details>
       ) : null}
     </li>
-  )
-}
-
-/** “允许用管理员权限读取”的勾，表单上和结果页上各用一次 */
-export function ElevateCheck({
-  name,
-  checked,
-  onChange,
-}: {
-  name: string
-  checked: boolean
-  onChange(on: boolean): void
-}) {
-  const t = useT()
-  return (
-    <label className="bimp-kind bimp-elevate">
-      <input
-        type="checkbox"
-        data-field="allow-elevated"
-        checked={checked}
-        onChange={(event) => onChange(event.target.checked)}
-      />
-      <span className="bimp-kind-text">
-        <span>{t('bimport.elevate')}</span>
-        <span className="form-note">{t('bimport.elevate.note', { name })}</span>
-      </span>
-    </label>
   )
 }

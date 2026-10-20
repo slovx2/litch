@@ -78,12 +78,6 @@
 .bimp-hints p {
   margin: 0;
 }
-.bimp-hints .bimp-elevate {
-  margin-top: 2px;
-  color: var(--ink);
-  font-size: 12px;
-  line-height: 18px;
-}
 
 /* 进度和结果：开头一句，下面逐类一行 */
 .bimp-lead {
@@ -211,10 +205,6 @@
   margin-top: 2px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-}
-.bimp-result > .bimp-elevate {
-  font-size: 12px;
-  line-height: 18px;
 }
 
 /* 浏览器面板：工具栏最右边的菜单，工具栏下面的横幅 */

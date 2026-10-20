@@ -131,8 +131,8 @@ export function parseDomains(text: string): { domains: string[]; bad: string[] }
 /** 勾了的里面有受保护的两类 */
 export const touchesGuarded = (kinds: readonly ImportKind[]): boolean => kinds.some(guarded)
 
-/** 要不要出“允许用管理员权限读取”的勾 */
-export const wantsElevation = (source: ImportSource, kinds: readonly ImportKind[]): boolean =>
+/** 要不要提前说“这一版导不了它受保护的那部分”：Windows 上新版 Chrome 系浏览器的应用绑定数据，这一版不提权去读 */
+export const hitsAppBound = (source: ImportSource, kinds: readonly ImportKind[]): boolean =>
   source.needsElevation && touchesGuarded(kinds)
 
 /** 要不要提前说“系统会弹授权框” */
@@ -148,7 +148,6 @@ export interface ImportDraft {
   onlyDomains: boolean
   /** 网站名单的原文 */
   domainsText: string
-  allowElevated: boolean
 }
 
 /** 表单的初值：默认的来源、资料、类别；一个能选的来源都没有是 null */
@@ -158,7 +157,7 @@ export function initialDraft(sources: readonly ImportSource[]): ImportDraft | nu
   return draftFor(source, undefined)
 }
 
-/** 换了来源或资料之后的表单：类别回到这份资料的默认，名单和管理员同意留着 */
+/** 换了来源或资料之后的表单：类别回到这份资料的默认，名单留着 */
 export function draftFor(
   source: ImportSource,
   profileId: string | undefined,
@@ -173,7 +172,6 @@ export function draftFor(
     kinds: defaultKinds(source, profile),
     onlyDomains: previous?.onlyDomains ?? false,
     domainsText: previous?.domainsText ?? '',
-    allowElevated: previous?.allowElevated ?? false,
   }
 }
 
@@ -212,7 +210,8 @@ export function requestOf(
     browser: chosen.source.browser,
     profileId: chosen.profile.id,
     kinds,
-    allowElevated: wantsElevation(chosen.source, kinds) && draft.allowElevated,
+    // 这一版不提权读
+    allowElevated: false,
   }
   if (kinds.includes('cookies') && draft.onlyDomains) {
     const { domains, bad } = parseDomains(draft.domainsText)
@@ -263,9 +262,6 @@ export const STAGE_TEXT: Record<KindStage, MessageKey> = {
 /** ok：成了；warn：成了一部分；err：没成、能想办法；quiet：没什么可导或没轮上 */
 export type Tone = 'ok' | 'warn' | 'err' | 'quiet'
 
-/** 重试的办法：照原样再来一次；勾上管理员同意再来 */
-export type RetryWay = 'again' | 'elevate'
-
 export interface KindReport {
   kind: ImportKind
   status: ImportKindStatus
@@ -276,7 +272,8 @@ export interface KindReport {
   skippedInvalid: number
   failed: number
   discovered: number
-  retry: RetryWay | null
+  /** 照原样再来一次值得 */
+  retry: boolean
   /** 主进程给的英文原话，只放进“详情” */
   error?: string
 }
@@ -302,25 +299,21 @@ export interface ImportReport {
   kinds: KindReport[]
   /** 能照原样重试的几类 */
   again: ImportKind[]
-  /** 要勾上管理员同意才值得重试的几类 */
-  elevate: ImportKind[]
 }
 
-const STATUS_LOOK: Record<
-  ImportKindStatus,
-  { tone: Tone; say: MessageKey; retry: RetryWay | null }
-> = {
-  ok: { tone: 'ok', say: 'bimport.status.ok', retry: null },
+const STATUS_LOOK: Record<ImportKindStatus, { tone: Tone; say: MessageKey; retry: boolean }> = {
+  ok: { tone: 'ok', say: 'bimport.status.ok', retry: false },
   // partial、failed 管线也拿来报写不进内置浏览器、密码库出错，说法不能只说“读不出来”
-  partial: { tone: 'warn', say: 'bimport.status.partial', retry: 'again' },
-  missing: { tone: 'quiet', say: 'bimport.status.missing', retry: null },
-  locked: { tone: 'err', say: 'bimport.status.locked', retry: 'again' },
-  denied: { tone: 'err', say: 'bimport.status.denied', retry: 'again' },
-  'needs-elevation': { tone: 'err', say: 'bimport.status.needsElevation', retry: 'elevate' },
-  unsupported: { tone: 'quiet', say: 'bimport.status.unsupported', retry: null },
-  cancelled: { tone: 'quiet', say: 'bimport.status.cancelled', retry: null },
-  failed: { tone: 'err', say: 'bimport.status.failed', retry: 'again' },
-  skipped: { tone: 'quiet', say: 'bimport.status.skipped', retry: null },
+  partial: { tone: 'warn', say: 'bimport.status.partial', retry: true },
+  missing: { tone: 'quiet', say: 'bimport.status.missing', retry: false },
+  locked: { tone: 'err', say: 'bimport.status.locked', retry: true },
+  denied: { tone: 'err', say: 'bimport.status.denied', retry: true },
+  // Windows 上新版 Chrome 系浏览器的应用绑定数据：这一版不提权读，重试也没用
+  'needs-elevation': { tone: 'warn', say: 'bimport.status.needsElevation', retry: false },
+  unsupported: { tone: 'quiet', say: 'bimport.status.unsupported', retry: false },
+  cancelled: { tone: 'quiet', say: 'bimport.status.cancelled', retry: false },
+  failed: { tone: 'err', say: 'bimport.status.failed', retry: true },
+  skipped: { tone: 'quiet', say: 'bimport.status.skipped', retry: false },
 }
 
 /** 主进程没报这一类：当没成 */
@@ -350,7 +343,7 @@ export function kindReport(kind: ImportKind, outcome: ImportKindOutcome | undefi
       // 读全了，写的时候有几条没进去
       tone = 'warn'
       say = 'bimport.status.okFailed'
-      retry = 'again'
+      retry = true
     } else if (got.imported === 0) {
       // 没有新的：来源里没有、都已经有了、都无效
       if (got.skippedExisting > 0) {
@@ -367,7 +360,7 @@ export function kindReport(kind: ImportKind, outcome: ImportKindOutcome | undefi
   }
   if ((got.status === 'partial' || got.status === 'failed') && storeUnavailable(got.error)) {
     say = 'bimport.status.storeUnavailable'
-    retry = null
+    retry = false
   }
   return {
     kind,
@@ -414,8 +407,7 @@ export function reportOf(
     : KINDS.filter((kind) => kinds.includes(kind) || outcome.kinds[kind]).map((kind) =>
         kindReport(kind, outcome.kinds[kind]),
       )
-  const again = lines.filter((line) => line.retry === 'again').map((line) => line.kind)
-  const elevate = lines.filter((line) => line.retry === 'elevate').map((line) => line.kind)
+  const again = lines.filter((line) => line.retry).map((line) => line.kind)
   let overall: Overall
   if (outcome.error) overall = outcome.error
   else if (
@@ -432,27 +424,21 @@ export function reportOf(
     else if (lines.some((line) => line.skippedExisting > 0) && !warned) overall = 'existing'
     else overall = 'nothing'
   }
-  return { overall, say: OVERALL_TEXT[overall], kinds: lines, again, elevate }
+  return { overall, say: OVERALL_TEXT[overall], kinds: lines, again }
 }
 
 /**
- * 结果页上点“重试”时发的请求：照原样能重试的几类，加上勾了管理员同意时要提权的几类；
- * 一类都没有是 null。origin 是表单上点“导入”时的那一份（网站名单从它取）
+ * 结果页上点“重试”时发的请求：照原样能重试的几类；一类都没有是 null。
+ * origin 是表单上点“导入”时的那一份（网站名单从它取）
  */
-export function retryRequest(
-  origin: ImportRequest,
-  report: ImportReport,
-  allowElevated: boolean,
-): ImportRequest | null {
-  const kinds = KINDS.filter(
-    (kind) => report.again.includes(kind) || (allowElevated && report.elevate.includes(kind)),
-  )
+export function retryRequest(origin: ImportRequest, report: ImportReport): ImportRequest | null {
+  const kinds = KINDS.filter((kind) => report.again.includes(kind))
   if (kinds.length === 0) return null
   const request: ImportRequest = {
     browser: origin.browser,
     profileId: origin.profileId,
     kinds,
-    allowElevated: origin.allowElevated || allowElevated,
+    allowElevated: false,
   }
   if (kinds.includes('cookies') && origin.cookieDomains) {
     request.cookieDomains = origin.cookieDomains
