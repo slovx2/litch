@@ -711,7 +711,7 @@ button.agent-row:hover {
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
   overflow: hidden;
-  padding: 8px 10px;
+  margin: 8px 10px; /* 用外边距：内边距会把第四行露出半截 */
   font-size: 12.5px;
   line-height: 1.6;
   color: var(--ink-2);
