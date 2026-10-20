@@ -157,6 +157,7 @@
 }
 [data-skin="retro"] .plan,
 [data-skin="retro"] .todo,
+[data-skin="retro"] .rail-card,
 [data-skin="retro"] .code {
   border-color: var(--line-3);
 }
@@ -189,6 +190,7 @@
 [data-skin="retro"] .code-head,
 [data-skin="retro"] .plan-head,
 [data-skin="retro"] .todo-head,
+[data-skin="retro"] .rail-card[data-open] > .rail-head,
 [data-skin="retro"] .file-head {
   border-bottom: 1px dashed var(--line-2);
 }

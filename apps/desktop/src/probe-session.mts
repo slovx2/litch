@@ -468,38 +468,56 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
   let todo: SessionProbe['todo'] = null
   if (!real) {
     await open(main)
-    const card = () => all('.turn').at(-1)?.querySelector<HTMLElement>('.todo')
+    // 窗口够宽时待办在右边常驻的信息栏里（对话里不再画），否则在回合里
+    const card = () =>
+      one<HTMLElement>('.rail-todo') ?? all('.turn').at(-1)?.querySelector<HTMLElement>('.todo')
     const count = () => card()?.querySelector('.todo-count')?.textContent ?? ''
     const steps = () => [...(card()?.querySelectorAll<HTMLElement>('.todo-step') ?? [])]
+    /** 信息栏里全做完的待办默认收着：点开再看 */
+    const expand = async () => {
+      const shown = card()
+      if (!shown?.classList.contains('rail-todo') || shown.hasAttribute('data-open')) return
+      shown.querySelector<HTMLButtonElement>('.rail-head')?.click()
+      await frame()
+    }
+    /** 正在做第几项：对话里的卡片写在标题行上，信息栏里看清单里哪一步在做；没有在做的是 0 */
+    const now = () => {
+      const label = card()?.querySelector('.todo-now')?.textContent
+      if (label) return Number(label.match(/\d+/)?.[0] ?? 0)
+      return steps().findIndex((step) => step.classList.contains('inProgress')) + 1
+    }
     const is = (index: number, status: string) =>
       steps()[index]?.classList.contains(status) === true
     const turnsBefore = all('.turn').length
     await say('列一份待办再动手')
     await until('新的一轮', () => all('.turn').length > turnsBefore)
-    const first = await until('待办卡片', card)
+    // 信息栏里可能还留着上一份待办：等到这一份（0/4）出来
+    const first = await until('待办卡片', () => (count().includes('0/4') ? card() : null))
     const shown =
       steps().length === 4 &&
       count().includes('0/4') &&
       is(0, 'inProgress') &&
       is(1, 'pending') &&
-      Boolean(first.querySelector('.todo-now')?.textContent?.includes('1'))
+      now() === 1
     await until('做完第一步', () => count().includes('1/4'))
     const advanced = card() === first && is(0, 'completed') && is(1, 'inProgress')
     await until('多了一步', () => steps().length === 5)
     const grew = card() === first && count().includes('/5')
     await until('全做完', () => count().includes('5/5'))
     await until('这一轮结束', () => !running() && area(), 60_000)
+    await expand()
     const kept =
       card() === first &&
       steps().length === 5 &&
       steps().every((step) => step.classList.contains('completed')) &&
-      !first.querySelector('.todo-now')
+      now() === 0
     const wholeLines = steps().every((step) => {
       const height = Number.parseFloat(getComputedStyle(step).lineHeight)
       return height > 0 && Number.isInteger(height)
     })
     await open(other)
     await open(main)
+    await expand()
     const reopened = steps().length === 5 && count().includes('5/5')
     // 再来一次，做到一半打断
     await say('todo again')
@@ -507,11 +525,12 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
     ;(await until('停止按钮', () => one<HTMLButtonElement>('.send.stop'))).click()
     await until('被打断的回合停下来', () => !running() && area())
     await frame()
+    await expand()
     const interrupted =
       count().includes('1/4') &&
       steps().length === 4 &&
       !card()?.querySelector('.inProgress') &&
-      !card()?.querySelector('.todo-now')
+      now() === 0
     todo = { shown, advanced, grew, kept, wholeLines, reopened, interrupted }
   }
 

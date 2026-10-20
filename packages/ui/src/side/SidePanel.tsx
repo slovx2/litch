@@ -49,8 +49,8 @@ export function SidePanel({
   place: SidePlace | null
   /** 这一页有没有侧面板。“设备”“已归档对话”这类页面没有：面板不显示，回到对话时原样回来 */
   available: boolean
-  /** 应用启动时面板就开着：那不是人刚打开的，不抢焦点 */
-  startedOpen: boolean
+  /** 应用启动时人打开面板的次数（side.ts 的 raised）：比它多了才是人在这之后打开的，才抢焦点 */
+  startedOpen: number
 }) {
   const side = useSide()
   const t = useT()
@@ -61,11 +61,12 @@ export function SidePanel({
   const visible = side.open && available
   const spec = SIDE_TABS.find((tab) => tab.id === side.tab) ?? SIDE_TABS[0]
 
-  // 面板是人打开的：焦点进面板里（标签的内容自己标出该落在哪），键盘接着就能用
-  const wasOpen = useRef(startedOpen)
+  // 面板是人打开的：焦点进面板里（标签的内容自己标出该落在哪），键盘接着就能用。
+  // 切到一个面板开着的会话不算，不抢焦点
+  const seen = useRef(startedOpen)
   useEffect(() => {
-    const opened = side.open && !wasOpen.current
-    wasOpen.current = side.open
+    const opened = side.open && side.raised !== seen.current
+    seen.current = side.raised
     if (!opened || !available) return
     // 内容可能这一刻才装载：等两帧再找
     let frames = 2
@@ -77,7 +78,7 @@ export function SidePanel({
     }
     handle = requestAnimationFrame(seek)
     return () => cancelAnimationFrame(handle)
-  }, [side.open, available])
+  }, [side.open, side.raised, available])
 
   // 拖左边那条调宽度。面板靠右，往左拖是变宽
   const drag = (event: ReactPointerEvent<HTMLDivElement>) => {

@@ -290,6 +290,9 @@ export async function scrollProbe(): Promise<ScrollProbe> {
     }
     return seen.size
   }
+  // 这一组量的是待办卡片在对话里更新时视口稳不稳：先把右边的信息栏关掉，待办才留在对话里
+  const rail = (window as { __litchRail?: { set(allowed: boolean): void } }).__litchRail
+  rail?.set(false)
   // 这个会话够长，能滚起来。它的回答还在流，先停掉再发
   await halt()
   scroller().scrollTop = 0
@@ -328,6 +331,7 @@ export async function scrollProbe(): Promise<ScrollProbe> {
   await watchTodos(far.sample)
   far.stop()
   const todoBelowSpread = spread(far.values)
+  rail?.set(true)
 
   return {
     todoFollowGapSpread,

@@ -482,3 +482,8 @@
   border-color: var(--err);
   color: var(--err);
 }
+/* 内置浏览器黑名单的输入行：输入框占满，按钮跟在后面 */
+.set-block-add .req-input {
+  flex: 1 1 200px;
+  min-width: 0;
+}

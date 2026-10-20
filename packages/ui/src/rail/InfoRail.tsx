@@ -1,0 +1,117 @@
+// 右边常驻的信息栏：放一些小而常看的东西，有内容就自己出来，没有就不占地方。
+// 和文件、浏览器那种要手动打开的侧面板不是一回事：它排在对话和侧面板之间，跟着眼前的会话走。
+// 眼下只有一张卡片：会话最近的一份待办（各家 harness 的待办都经协议里的“回合计划更新”过来）。
+// 窗口窄到放下它对话就太挤的时候整栏不出，待办回到对话里（见 rail-state.ts）。
+import { type ItemView, keys, type TodoItem, type TurnView, todoKey } from '@litch/core'
+import { type RefObject, useEffect, useMemo, useRef, useState } from 'react'
+import { useT } from '../app/appearance.ts'
+import { Caret } from '../app/icons.tsx'
+import { useKey, useKeys } from '../app/services.tsx'
+import { useToggle } from '../transcript/state.ts'
+import { TodoBar, TodoSteps, todoProgress } from '../transcript/Todo.tsx'
+import { setRailTodo, useRailAllowed } from './rail-state.ts'
+
+/** 信息栏的宽度，和样式里 .rail 的一致 */
+const RAIL_WIDTH = 280
+/** 对话那一栏至少留这么宽，不够就不出信息栏 */
+const MIN_MAIN = 520
+
+interface InfoRailProps {
+  deviceId: string
+  sessionId: string
+}
+
+/** 会话里最近的一份待办，和它所在的回合 */
+function useLatestTodo(deviceId: string, sessionId: string) {
+  const turnIds = useKey<string[]>(keys.turnIds(deviceId, sessionId))
+  const todoKeys = useMemo(
+    () => (turnIds ?? []).map((turnId) => keys.item(deviceId, sessionId, todoKey(turnId))),
+    [deviceId, sessionId, turnIds],
+  )
+  const values = useKeys<ItemView>(todoKeys)
+  let at = values.length - 1
+  while (at >= 0) {
+    const value = values[at]
+    if (value?.kind === 'todo' && value.steps.length > 0) break
+    at--
+  }
+  const item = at >= 0 ? (values[at] as TodoItem) : null
+  const turnId = at >= 0 ? (turnIds?.[at] ?? '') : ''
+  const turn = useKey<TurnView>(keys.turn(deviceId, sessionId, turnId))
+  return { item, running: turn?.status === 'running' }
+}
+
+/** 对话那一栏加上信息栏一共有多宽，够不够放下信息栏 */
+function useFits(rail: RefObject<HTMLElement | null>): boolean {
+  const [fits, setFits] = useState(true)
+  useEffect(() => {
+    const main = document.querySelector<HTMLElement>('.body > .main')
+    if (!main) return
+    // 信息栏出不出，两栏加起来的宽度都一样，不会来回跳
+    const measure = () => {
+      const shown = rail.current?.getBoundingClientRect().width ?? 0
+      setFits(main.getBoundingClientRect().width + shown >= MIN_MAIN + RAIL_WIDTH)
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(main)
+    return () => observer.disconnect()
+  }, [rail])
+  return fits
+}
+
+export function InfoRail({ deviceId, sessionId }: InfoRailProps) {
+  const t = useT()
+  const sessionKey = `${deviceId}:${sessionId}`
+  const rail = useRef<HTMLElement | null>(null)
+  const fits = useFits(rail)
+  const { item, running } = useLatestTodo(deviceId, sessionId)
+  const allowed = useRailAllowed()
+  const show = allowed && fits && item !== null
+  useEffect(() => {
+    setRailTodo(show ? sessionKey : null)
+    return () => setRailTodo(null)
+  }, [show, sessionKey])
+  if (!show || !item) return null
+  return (
+    <aside className="rail" ref={rail} aria-label={t('rail.label')}>
+      <RailTodo sessionKey={sessionKey} item={item} running={running} />
+    </aside>
+  )
+}
+
+/** 待办卡片：标题一行能点开收起；全做完了、回合也结束了，默认收着，只留“已完成 N/N” */
+function RailTodo({
+  sessionKey,
+  item,
+  running,
+}: {
+  sessionKey: string
+  item: TodoItem
+  running: boolean
+}) {
+  const t = useT()
+  const { done, total } = todoProgress(item)
+  const finished = done === total && !running
+  const [open, setOpen] = useToggle(sessionKey, 'rail:todo', !finished)
+  return (
+    <section className="rail-card rail-todo" data-open={open ? '' : undefined}>
+      <button
+        type="button"
+        className="rail-head"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+      >
+        <Caret />
+        <span className="rail-title">{t('todo.title')}</span>
+        <span className="todo-count">{t('todo.count', { done, total })}</span>
+        <TodoBar done={done} total={total} />
+      </button>
+      {open ? (
+        <div className="rail-body">
+          <TodoSteps item={item} />
+        </div>
+      ) : null}
+    </section>
+  )
+}

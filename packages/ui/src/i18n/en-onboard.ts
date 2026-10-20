@@ -78,6 +78,10 @@ export const enOnboard: Record<keyof typeof zhOnboard, Entry> = {
   'assist.confirm.access':
     'Let {device} touch anything on this computer (no sensitive-place blocks)',
   'assist.confirm.site': 'Always allow {origin} in the built-in browser',
+  'assist.confirm.trustAll':
+    'Trust all sites in the built-in browser without asking (except the blocklist)',
+  'assist.confirm.unblock': 'Remove {host} from the built-in browser blocklist',
+  'assist.confirm.unblockAll': 'Clear the built-in browser blocklist',
   'assist.confirm.titleErase': 'Allow this deletion?',
   'assist.confirm.erase.device':
     'Remove the remote device {device} (its connection settings go too)',

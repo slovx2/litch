@@ -72,6 +72,10 @@ export const CONFIG_OPS: readonly ConfigOp[] = [
   { group: 'browser', action: 'sites', write: false },
   { group: 'browser', action: 'allow', write: true, guarded: true },
   { group: 'browser', action: 'forget', write: true },
+  { group: 'browser', action: 'trust', write: true, guarded: true },
+  { group: 'browser', action: 'blocked', write: false },
+  { group: 'browser', action: 'block', write: true },
+  { group: 'browser', action: 'unblock', write: true, guarded: true },
   { group: 'browser', action: 'clear-data', write: true, irreversible: true },
 
   { group: 'computer', action: 'status', write: false },

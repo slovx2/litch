@@ -8,7 +8,15 @@ import { type AxNode, capLines, diffLines, formatAxTree, newRefBook } from '../a
 import { isAllowedCdp } from '../cdp-allow.mjs'
 import { parseKey } from '../keys.mjs'
 import { createSiteBook, sessionKey } from '../sites.mjs'
-import { isLocalHost, isOpenable, needsApproval, originOf, toAddress } from '../url.mjs'
+import {
+  blockedHostOf,
+  hostMatches,
+  isLocalHost,
+  isOpenable,
+  needsApproval,
+  originOf,
+  toAddress,
+} from '../url.mjs'
 
 test('本机地址的认法', () => {
   for (const host of [
@@ -179,5 +187,48 @@ test('CDP 白名单', () => {
     'Overlay.setInspectMode',
   ]) {
     assert.equal(isAllowedCdp(method), false, method)
+  }
+})
+
+test('黑名单的写法和匹配', () => {
+  assert.equal(blockedHostOf('example.com'), 'example.com')
+  assert.equal(blockedHostOf(' https://WWW.Example.com:8443/a?b '), 'www.example.com')
+  assert.equal(blockedHostOf('*.example.com'), 'example.com')
+  assert.equal(blockedHostOf('example.com.'), 'example.com')
+  assert.equal(blockedHostOf(''), null)
+  assert.equal(blockedHostOf('two words'), null)
+  assert.equal(blockedHostOf('ftp://example.com'), null)
+  assert.equal(hostMatches('example.com', 'example.com'), true)
+  assert.equal(hostMatches('a.b.Example.com', 'example.com'), true)
+  assert.equal(hostMatches('notexample.com', 'example.com'), false)
+  assert.equal(hostMatches('example.com.cn', 'example.com'), false)
+})
+
+test('信任所有网站和黑名单存盘，关着时照常', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'litch-sites-'))
+  try {
+    const file = join(dir, 'browser', 'sites.json')
+    const book = createSiteBook(file)
+    const a = sessionKey('local', 'a')
+    assert.deepEqual(book.policy(), { trustAll: false, blocked: [] })
+    book.block('z.test')
+    book.block('b.test')
+    book.block('b.test')
+    // 关着时黑名单不起作用，照常问
+    assert.equal(book.verdict(a, 't1', 'https://b.test'), undefined)
+    book.decline(a, 't1', 'https://x.test')
+    book.setTrustAll(true)
+    assert.equal(book.verdict(a, 't1', 'https://x.test'), 'allow')
+    assert.equal(book.verdict(a, 't1', 'https://m.b.test:8443'), 'blocked')
+    const again = createSiteBook(file)
+    assert.deepEqual(again.policy(), { trustAll: true, blocked: ['b.test', 'z.test'] })
+    assert.equal(again.unblock('nope.test'), 0)
+    assert.equal(again.unblock('b.test'), 1)
+    assert.equal(again.verdict(a, 't1', 'https://b.test'), 'allow')
+    assert.equal(again.unblock(), 1)
+    again.setTrustAll(false)
+    assert.deepEqual(createSiteBook(file).policy(), { trustAll: false, blocked: [] })
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
   }
 })

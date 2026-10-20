@@ -13,6 +13,7 @@ import type {
   ConfigComputerView,
   ConfigMainRequest,
   ConfigMainResult,
+  ConfigSitePolicyView,
   ConfigSiteView,
 } from '../model-config.mjs'
 import type { SampleLang } from './sample-text.mjs'
@@ -44,6 +45,7 @@ export function createMockConfig(host: MockConfigHost): MockConfig {
   const sites: ConfigSiteView[] = [
     { origin: 'https://github.com', at: host.clock.now() - 86_400_000 },
   ]
+  const policy: ConfigSitePolicyView = { trustAll: false, blocked: [] }
   let apps: ConfigAppView[] = [
     { bundleId: 'com.apple.Notes', name: host.lang === 'en' ? 'Notes' : '备忘录' },
     { bundleId: 'com.apple.TextEdit', name: host.lang === 'en' ? 'TextEdit' : '文本编辑' },
@@ -73,6 +75,26 @@ export function createMockConfig(host: MockConfigHost): MockConfig {
       }
       case 'browser.clearData':
         return { ok: true, data: null }
+      case 'browser.policy':
+        return { ok: true, data: { ...policy, blocked: [...policy.blocked] } }
+      case 'browser.trust':
+        policy.trustAll = request.on
+        return { ok: true, data: { ...policy, blocked: [...policy.blocked] } }
+      case 'browser.block': {
+        const host = request.site
+          .trim()
+          .replace(/^\*\./, '')
+          .replace(/^https?:\/\//, '')
+          .replace(/[/:?#].*$/, '')
+          .toLowerCase()
+        if (!host) return { ok: false, reason: `Cannot read the site ${request.site}.` }
+        if (!policy.blocked.includes(host)) policy.blocked = [...policy.blocked, host].sort()
+        return { ok: true, data: { ...policy, blocked: [...policy.blocked] } }
+      }
+      case 'browser.unblock':
+        policy.blocked =
+          request.host === null ? [] : policy.blocked.filter((one) => one !== request.host)
+        return { ok: true, data: { ...policy, blocked: [...policy.blocked] } }
       case 'computer.status':
         return { ok: true, data: computer }
       case 'computer.apps':

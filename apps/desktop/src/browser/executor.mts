@@ -128,6 +128,11 @@ export function createBrowserExecutor(options: BrowserExecutorOptions): BrowserE
       'declined',
       `The user declined access to ${origin}. Do not try to reach this site another way (other tabs, redirects, links, evaluate or other tools). Tell the user and ask how to proceed.`,
     )
+  const blocked = (origin: string) =>
+    clientToolFailure(
+      'declined',
+      `${origin} is on the user's blocklist in Litch's browser settings, so it cannot be opened. Do not try to reach this site another way (other tabs, redirects, links, evaluate or other tools). Tell the user and ask how to proceed.`,
+    )
 
   async function call(
     invocation: ClientToolInvocation,
@@ -202,6 +207,7 @@ export function createBrowserExecutor(options: BrowserExecutorOptions): BrowserE
       const verdict = sites.verdict(session, invocation.turnId, origin)
       if (verdict === 'allow') return null
       if (verdict === 'decline') return declined(origin)
+      if (verdict === 'blocked') return blocked(origin)
       const answer = await context.ask({ kind: 'site', origin, url })
       switch (answer) {
         case 'once':

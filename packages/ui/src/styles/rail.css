@@ -1,0 +1,57 @@
+/* ---------- 右边常驻的信息栏：对话和侧面板之间一列小卡片，有内容才出来 ---------- */
+.rail {
+  flex: none;
+  width: 280px; /* 和 rail/InfoRail.tsx 的 RAIL_WIDTH 一致 */
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 12px 12px 0;
+  background: var(--panel);
+}
+.rail-card {
+  flex: none;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  background: var(--raised);
+}
+/* 卡片标题一行：箭头、名字、计数，进度条靠右；整行能点开收起 */
+.rail-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.rail-card[data-open] > .rail-head {
+  border-bottom: 1px solid var(--line-1);
+}
+.rail-title {
+  font-weight: 500;
+}
+.rail-head .todo-bar {
+  width: 56px;
+}
+/* 栏窄：清单的字小一号，留边也窄一点 */
+.rail-body .todo-note {
+  padding: 8px 10px 0;
+}
+.rail-body .todo-list {
+  padding: 6px 10px 8px;
+}
+.rail-body .todo-step {
+  font-size: 12.5px;
+  line-height: 20px;
+}
+.rail-body .todo-mark {
+  height: 20px;
+}
