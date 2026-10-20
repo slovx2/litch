@@ -231,11 +231,13 @@ test('STREAM-CC-001：一万条增量的回答，写库的次数和序列化的�
       assert.deepEqual(first.deltas('item/agentMessage/delta'), pieces)
       assert.equal(half + late.deltas('item/agentMessage/delta').join(''), whole)
       const methods = first.messages.map((m) => m.method)
-      const started = first.messages.filter((m) => m.method === 'item/started')
+      const allStarted = first.messages.filter((m) => m.method === 'item/started')
+      // 用户消息照上游作为条目先发出来；下面看的是回答的条目
       assert.deepEqual(
-        started.map((m) => m.params.item.type),
-        ['reasoning', 'agentMessage'],
+        allStarted.map((m) => m.params.item.type),
+        ['userMessage', 'reasoning', 'agentMessage'],
       )
+      const started = allStarted.slice(1)
       assert.deepEqual(
         started.map((m) => m.params.item.text ?? m.params.item.summary),
         [[], ''],
