@@ -302,6 +302,8 @@ export interface ProposalOverrides {
   prompt?: string
   approvalPolicy?: unknown
   sandbox?: unknown
+  /** 子会话停下后要不要唤醒父会话。不给照提案 */
+  wakeParent?: boolean
 }
 
 /**
@@ -331,7 +333,7 @@ export async function acceptProposal(
       kind: overrides.kind ?? proposal.kind,
       title: overrides.title ?? proposal.title,
       prompt: overrides.prompt ?? proposal.prompt,
-      wakeParent: proposal.wakeParent,
+      wakeParent: overrides.wakeParent ?? proposal.wakeParent,
       approvalPolicy: overrides.approvalPolicy,
       sandbox: overrides.sandbox,
       proposalId: proposal.id,

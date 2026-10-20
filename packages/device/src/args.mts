@@ -14,6 +14,8 @@ export interface DeviceArgs {
   upstreams: { id: string; path: string }[]
   /** 属于设备的进程（可重连的终端）的上限和期限。命令行里没写的不在里面，用默认值；一项都没写就没有它 */
   processes?: Partial<ProcessLimits>
+  /** --wrap-up-reminder：没有主进程在管设置时提不提醒收尾。没写就没有它（缺省提醒） */
+  wrapUpReminder?: boolean
 }
 
 export const USAGE = [
@@ -23,6 +25,8 @@ export const USAGE = [
   '  --process-limit N          设备上同时最多几个这类进程在跑（默认 32）',
   '  --process-idle-ms N        没有连接挂着的进程留多久，毫秒，到点结束它；0 是不过期（默认 0）',
   '  --process-exited-ms N      进程退出之后它的记录留多久，毫秒（默认 600000）',
+  '没有适配器主进程管设置时（直接起设备进程）才看的，可以不写：',
+  '  --wrap-up-reminder on|off  模型没调 litch_sessions.wrap_up 时要不要开回合提醒（默认 on）',
 ].join('\n')
 
 const HARNESS_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
@@ -43,6 +47,7 @@ export function parseArgs(argv: string[]): DeviceArgs {
   let stateDir: string | null = null
   const upstreams: { id: string; path: string }[] = []
   const processes: Partial<ProcessLimits> = {}
+  let wrapUpReminder: boolean | undefined
   for (let index = 0; index < argv.length; index++) {
     const flag = argv[index]
     const value = argv[index + 1]
@@ -51,6 +56,13 @@ export function parseArgs(argv: string[]): DeviceArgs {
       if (value === undefined || !/^\d+$/.test(value) || Number(value) > limit.max)
         throw new Error(`${flag} 要写 0 到 ${limit.max} 之间的整数，收到的是 ${value}\n${USAGE}`)
       processes[limit.key] = Number(value)
+      index++
+      continue
+    }
+    if (flag === '--wrap-up-reminder') {
+      if (value !== 'on' && value !== 'off')
+        throw new Error(`--wrap-up-reminder 要写 on 或 off，收到的是 ${value}\n${USAGE}`)
+      wrapUpReminder = value === 'on'
       index++
       continue
     }
@@ -78,5 +90,6 @@ export function parseArgs(argv: string[]): DeviceArgs {
     stateDir,
     upstreams,
     ...(Object.keys(processes).length ? { processes } : {}),
+    ...(wrapUpReminder === undefined ? {} : { wrapUpReminder }),
   }
 }

@@ -37,7 +37,11 @@ import { askReply, installAskExtension } from './client-fixture-ask.mjs'
 import { browseReply } from './client-fixture-browse.mjs'
 import { computerReply } from './client-fixture-computer.mjs'
 import { echoReply, lastUserText } from './client-fixture-echo.mjs'
-import { writeEngineSettings } from './client-fixture-engines.mjs'
+import {
+  fixtureDeviceSettings,
+  writeDeviceSettings,
+  writeEngineSettings,
+} from './client-fixture-engines.mjs'
 import { machineReply } from './client-fixture-machine.mjs'
 import { piReply } from './client-fixture-marks.mjs'
 import { serveResponses } from './client-fixture-responses.mjs'
@@ -191,7 +195,8 @@ export async function prepareService({ repo, root, engines = {}, pace = 200 }) {
     JSON.stringify({ defaultProvider: 'gate', defaultModel: 'gate', retry: { enabled: false } }),
   )
   installAskExtension(agent)
-  // --engines 要的几家：设置在服务起来之前写进 svc 那个状态目录，服务一起来就照着起
+  // --engines 要的几家：设置在服务起来之前写进 svc 那个状态目录，服务一起来就照着起。
+  // 不要引擎时也写夹具都要有的那几项（提醒收尾缺省关，见 client-fixture-engines.mjs）；path 那份同样
   if (Object.values(engines).some(Boolean)) {
     writeEngineSettings({
       home: stateOf(homes.svc),
@@ -199,7 +204,8 @@ export async function prepareService({ repo, root, engines = {}, pace = 200 }) {
       modelUrl: `http://127.0.0.1:${model.address().port}`,
       engines,
     })
-  }
+  } else writeDeviceSettings(stateOf(homes.svc), fixtureDeviceSettings())
+  writeDeviceSettings(stateOf(homes.path), fixtureDeviceSettings())
 
   // ---------- 适配器的包装脚本 ----------
   /** 服务和它跑的命令拿到的环境：只有这几样是指死的，主目录跟着登录时的那一个 */

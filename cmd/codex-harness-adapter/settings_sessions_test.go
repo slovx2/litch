@@ -36,3 +36,20 @@ func TestSessionTreeSettingIsDeclared(t *testing.T) {
 		t.Fatalf("写进去的值不对: %s %v", raw, written)
 	}
 }
+
+// 提醒收尾的开关：同一组、设备级的布尔项、默认开、立刻生效。
+func TestWrapUpReminderSettingIsDeclared(t *testing.T) {
+	cfg := settingsTestConfiguration(t)
+	schema := buildSettingsSchema(cfg)
+	spec, declared := schema.spec(wrapUpReminderKey)
+	if !declared || spec.Group != sessionGroup || spec.Type != settingBoolean || spec.Scope != deviceScope || spec.Restart != restartNone || spec.Default != true {
+		t.Fatalf("提醒收尾的开关没有照设备级、默认开的布尔项声明: %+v", spec)
+	}
+	if spec.Title.ZH == "" || spec.Title.EN == "" || spec.Description.ZH == "" || spec.Description.EN == "" {
+		t.Fatal("提醒收尾的开关缺中文或者英文的标题、说明")
+	}
+	changed, problem, err := cfg.settings.apply(0, []settingEdit{edit(wrapUpReminderKey, false)}, schema, cfg.validateSettings)
+	if err != nil || problem != nil || len(changed) != 1 {
+		t.Fatalf("写成关应该能写进去: %v %+v %v", changed, problem, err)
+	}
+}

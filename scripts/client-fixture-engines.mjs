@@ -153,12 +153,35 @@ function opencodeEnv(dir, baseURL) {
   ]
 }
 
+/** 夹具要不要提醒收尾（LITCH_FIXTURE_WRAP_UP_REMINDER=1 才要）。直接起设备进程时用 --wrap-up-reminder 传给它 */
+export const wrapUpReminderWanted = () => process.env.LITCH_FIXTURE_WRAP_UP_REMINDER === '1'
+
+/**
+ * 夹具的设备设置里不管起几个引擎都要有的几项。提醒收尾（sessions.wrapUpReminder）缺省关：假模型平时不调
+ * litch_sessions.wrap_up，开着的话每个用户回合后面都多一个提醒回合，现有的自动检查对不上。
+ * 要看提醒的（会话树的验收）设环境变量 LITCH_FIXTURE_WRAP_UP_REMINDER=1。
+ */
+export function fixtureDeviceSettings() {
+  return { 'sessions.wrapUpReminder': wrapUpReminderWanted() }
+}
+
+/** 设备设置写进 <状态目录>/device/settings.json（主进程起来之前写） */
+export function writeDeviceSettings(home, values) {
+  mkdirSync(join(home, 'device'), { recursive: true, mode: 0o700 })
+  writeFileSync(
+    join(home, 'device', 'settings.json'),
+    `${JSON.stringify({ version: 1, values }, null, 2)}\n`,
+    { mode: 0o600 },
+  )
+}
+
 /**
  * 把这两个引擎的配置写进设置文件（主进程起来之前写，它一起来就照着起）。
  * modelUrl 是假模型的地址（不带路径），root 是夹具的临时目录。Pi 的审批顺手打开：三家都调到“会问”
  */
 export function writeEngineSettings({ home, root, modelUrl, engines }) {
   const values = {
+    ...fixtureDeviceSettings(),
     'harness.pi.approvals': true,
     'harness.opencode.enabled': Boolean(engines.opencode),
     'harness.codex.enabled': Boolean(engines.codex),
@@ -228,12 +251,7 @@ export function writeEngineSettings({ home, root, modelUrl, engines }) {
       plain('no_proxy', '127.0.0.1,localhost'),
     ]
   }
-  mkdirSync(join(home, 'device'), { recursive: true, mode: 0o700 })
-  writeFileSync(
-    join(home, 'device', 'settings.json'),
-    `${JSON.stringify({ version: 1, values }, null, 2)}\n`,
-    { mode: 0o600 },
-  )
+  writeDeviceSettings(home, values)
 }
 
 /**

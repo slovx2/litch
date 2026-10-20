@@ -20,6 +20,7 @@
     "密钥只能写、不能读回：secret 类型读到的是 {set}，环境变量表里的密钥读到的没有 value；通知和日志里也没有。名字看着像密钥的环境变量（含 key、token、secret、passw、credential、auth，不分大小写）不标也按密钥处理。",
     "改了要重启才生效的设置（restart 为 harness）：那个 harness 没有回合在跑时，写入之后设备服务自己把它重新起一遍（停用就是停掉）；有回合在跑、或者判断不了时，写入照样成功，它出现在 snapshot.pendingRestart 里，等用户调 litch/device/harness/restart。",
     "谁能连上聚合面谁就能配置，不另设权限。远程设备走的是同一条连接。",
+    "会话编排那一组（sessions，设备级，改了立刻生效、不重启）：sessions.enabled（默认开）是会话编排的总开关；sessions.wrapUpReminder（默认开）是提醒收尾，用户发起的回合结束时模型没调 litch_sessions.wrap_up，设备服务替它再开一个回合提醒，关掉之后不提醒、wrap_up 照常能用。行为见 session-tree.json。没有适配器主进程在管设置（直接起设备进程）时两项都按开着算，提醒收尾可以用设备进程的启动参数 --wrap-up-reminder off 关掉。",
     "启动参数（--ssh、--claude-port、--pi-port、--dsh-port、--opencode-port、--gemini-port、--qwen-port、--acp-port、--harness）是设置里没写过时的默认值，写过就以设置为准。设置文件不存在时一切和没有这个扩展时一样。"
   ],
   "parts": [

@@ -40,6 +40,11 @@ function overridesOf(value: unknown): ProposalOverrides {
   if (value.prompt != null) out.prompt = requiredString(value.prompt, 'overrides.prompt')
   if (value.approvalPolicy != null) out.approvalPolicy = value.approvalPolicy
   if (value.sandbox != null) out.sandbox = value.sandbox
+  if (value.wakeParent != null) {
+    if (typeof value.wakeParent !== 'boolean')
+      throw new ProtocolError(-32602, 'overrides.wakeParent 必须是布尔值')
+    out.wakeParent = value.wakeParent
+  }
   return out
 }
 

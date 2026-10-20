@@ -75,6 +75,8 @@ export interface DeviceOptions {
    * 不给就没有这项扩展，也不碰任何钥匙文件（和配对无关的测试都不给）
    */
   pairing?: PairingConfig
+  /** 没有主进程在管设置时提不提醒收尾（设置键 sessions.wrapUpReminder），缺省提醒。只有夹具会关 */
+  wrapUpReminder?: boolean
 }
 
 /**
@@ -115,6 +117,12 @@ const DEFAULT_TIMING: SessionTiming = {
  * 设置里“会话编排”的开关（Go 层的 settings_sessions.go 声明）。没有主进程在管（没有设置功能）时按开着算
  */
 export const SESSION_TREE_SETTING = 'sessions.enabled'
+
+/**
+ * 设置里“提醒收尾”的开关（同在 settings_sessions.go）：用户发起的回合结束时模型没调 litch_sessions.wrap_up，
+ * 替它开一个回合提醒。没有主进程在管时看 DeviceOptions.wrapUpReminder，缺省开着
+ */
+export const WRAP_UP_REMINDER_SETTING = 'sessions.wrapUpReminder'
 
 export class DeviceServer {
   private readonly host: SessionHost
@@ -247,6 +255,10 @@ export class DeviceServer {
       timeoutMs: options.timing?.listTimeoutMs ?? DEFAULT_TIMING.listTimeoutMs,
       needsUserMs: options.timing?.needsUserMs ?? DEFAULT_TIMING.needsUserMs,
       taskTurn: (threadId, turnId) => this.tasks?.isTaskTurn(threadId, turnId) ?? false,
+      wrapUpReminder: () => {
+        const value = this.control?.state?.snapshot.values[WRAP_UP_REMINDER_SETTING]
+        return this.control ? value !== false : options.wrapUpReminder !== false
+      },
       log,
     })
     this.deviceTools.register(CLIENT_TOOL_NAMESPACE.sessions, sessionToolsHandler(this.sessionTree))

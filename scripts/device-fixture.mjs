@@ -45,6 +45,10 @@
 //   聚合面上因此一连上就有工作区：根目录相同的那两个合成了一个，下面是两边的会话。
 //   不带这个开关时各个运行时里没有项目，聚合面上的工作区是空的，要客户端自己建。
 //   不能和 --managed 一起用：那时设备进程是主进程一开始就拉起来的，导入发生在造数据之前。
+//
+// 提醒收尾（设备设置 sessions.wrapUpReminder）缺省关：假模型平时不调 litch_sessions.wrap_up，开着的话每个用户回合后面
+// 都多一个提醒回合。要看提醒时带环境变量 LITCH_FIXTURE_WRAP_UP_REMINDER=1（带 --managed 时写进设置，不带时是设备进程的
+// 启动参数 --wrap-up-reminder）。
 import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
@@ -58,10 +62,13 @@ import { serveAnthropic } from './client-fixture-anthropic.mjs'
 import { installAskExtension } from './client-fixture-ask.mjs'
 import {
   engineIds,
+  fixtureDeviceSettings,
   prepareWorkDirectory,
   refuseHarnessOnPath,
   spelledApart,
   wantedEngines,
+  wrapUpReminderWanted,
+  writeDeviceSettings,
   writeEngineSettings,
 } from './client-fixture-engines.mjs'
 import { FIXTURE_SKILL, piReply, sendCompletion } from './client-fixture-marks.mjs'
@@ -276,7 +283,7 @@ async function startService(spec) {
       engines,
     })
     prepareWorkDirectory(dirs.tri, engines)
-  }
+  } else writeDeviceSettings(home, fixtureDeviceSettings())
   // 要起的入口给空闲端口。OpenCode、acp 只在要它时才给；它们和经 ACP 接的另几个不起时用默认端口（7334 起）也不会去听，
   // 不另占：设置页的验收（probe-manage.mts）拿 Pi、dsh 的端口加一加二当“别处没用的端口”，空闲端口挨得紧，多占几个就撞上
   const flags = [
@@ -570,6 +577,9 @@ try {
         '--state',
         join(home, 'device'),
         ...HARNESSES.flatMap((spec) => ['--upstream', `${spec.id}=unix://${spec.socket}`]),
+        // 没有主进程管设置：提醒收尾经启动参数关（见 client-fixture-engines.mjs 的 fixtureDeviceSettings）
+        '--wrap-up-reminder',
+        wrapUpReminderWanted() ? 'on' : 'off',
       ],
       baseEnv,
       'pipe',
