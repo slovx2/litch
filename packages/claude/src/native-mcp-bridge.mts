@@ -1,13 +1,8 @@
 import type { McpSdkServerConfigWithInstance } from '@anthropic-ai/claude-agent-sdk'
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js'
-import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js'
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
 import {
   CallToolRequestSchema,
-  ElicitRequestSchema,
   GetPromptRequestSchema,
   ListPromptsRequestSchema,
   ListResourcesRequestSchema,
@@ -16,16 +11,24 @@ import {
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js'
 import { sdkMcpServers, sdkMcpStartupEnvironment } from './mcp-config.mjs'
-import { mcpOAuthManager } from './mcp-oauth.mjs'
-import { OAuthLoginRequired } from './mcp-oauth-provider.mjs'
-import { NativeMcpClient } from './native-mcp-client.mjs'
+import { McpConnection, McpLease, type NativeMcpPool } from './native-mcp-pool.mjs'
+import { submissionHash } from './protocol-contract.mjs'
 import type { RuntimeHandlers } from './types.mjs'
+import { debugLog } from './util.mjs'
 
 // 连接仍进入真实 SDK 的 MCP 工具执行链；交互直接回到 Hub，避免 CLI 丢弃 URL 和元数据。
+// 给了连接池（Claude 回合）就向池里租连接、用完放回；没给（管理操作）就现连、用完关掉。
+// 交给 CLI 的进程内服务实例（McpServer）每个 CLI 进程现建一份，只有到服务的连接跨回合留着。
 export class NativeMcpBridge {
-  private readonly clients = new Map<string, Client>()
-  private readonly closing = new Map<Client, Promise<void>>()
+  private readonly pool: NativeMcpPool | null
+  private readonly thread: string
+  private readonly leases = new Map<string, { connection: McpConnection; lease: McpLease }>()
   private closed = false
+
+  constructor(pool: NativeMcpPool | null = null, thread = '') {
+    this.pool = pool
+    this.thread = thread
+  }
 
   async connect(
     raw: unknown,
@@ -36,113 +39,182 @@ export class NativeMcpBridge {
   ): Promise<Record<string, McpSdkServerConfigWithInstance>> {
     const result: Record<string, McpSdkServerConfigWithInstance> = {}
     const timeout = Number(sdkMcpStartupEnvironment(raw).MCP_TIMEOUT ?? 30_000)
-    for (const [name, config] of Object.entries(sdkMcpServers(raw))) {
-      signal.throwIfAborted()
-      const client = new NativeMcpClient(
-        { name: 'codex-harness-adapter', version: '0.1.0' },
-        {
-          capabilities: { elicitation: { form: {}, url: {} } },
-        },
-      )
-      this.clients.set(name, client)
-      client.setRequestHandler(ElicitRequestSchema, async (request, extra) => {
-        const combined = AbortSignal.any([signal, extra.signal])
-        combined.throwIfAborted()
-        if (!handlers.onElicitationRequest) throw new Error('MCP 交互处理器未注册')
-        const response = await handlers.onElicitationRequest(
-          { ...request.params, mode: request.params.mode ?? 'form', serverName: name },
-          combined,
-        )
-        combined.throwIfAborted()
-        return response
-      })
-      const cancel = () => {
-        void this.closeClient(client).catch(() => {})
-      }
-      signal.addEventListener('abort', cancel, { once: true })
-      client.onclose = () => signal.removeEventListener('abort', cancel)
-      await client.connect(mcpTransport(config, cwd, signal, source, name), { signal, timeout })
+    const servers = Object.entries(sdkMcpServers(raw)).map(([name, config]) => ({
+      name,
+      config,
+      fingerprint: submissionHash({ cwd, source, config }),
+    }))
+    const started = Date.now()
+    this.pool?.retain(this.thread, new Set(servers.map(({ name }) => name)))
+    // 池里能复用的先一起 ping：几个服务的往返叠在一起，不按个数累加。没 ping 通的已经关掉
+    const pooled = await Promise.allSettled(
+      servers.map(({ name, fingerprint }) => this.reuse(name, fingerprint, signal)),
+    )
+    const taken = pooled.flatMap((outcome, index) => {
+      const name = servers[index]?.name
+      return outcome.status === 'fulfilled' && outcome.value && name
+        ? [{ name, connection: outcome.value }]
+        : []
+    })
+    // ping 的时候进程已经收场了：原样放回去
+    if (this.closed) {
+      await Promise.all(taken.map(({ connection }) => this.pool?.release(connection, true)))
+      throw new Error('MCP 运行时已关闭')
+    }
+    for (const { name, connection } of taken) {
+      const lease = new McpLease(handlers, signal)
+      connection.bind(lease)
+      this.leases.set(name, { connection, lease })
+    }
+    const failed = pooled.find((outcome) => outcome.status === 'rejected')
+    if (failed) throw failed.reason
+    for (const { name, config, fingerprint } of servers) {
       if (this.closed) throw new Error('MCP 运行时已关闭')
       signal.throwIfAborted()
-      const capabilities = client.getServerCapabilities() ?? {}
-      const instructions = client.getInstructions()
-      const instance = new McpServer(client.getServerVersion() ?? { name, version: '1.0.0' }, {
-        capabilities: {
-          tools: {},
-          ...(capabilities.resources ? { resources: {} } : {}),
-          ...(capabilities.prompts ? { prompts: {} } : {}),
-        },
-        ...(instructions === undefined ? {} : { instructions }),
-      })
-      const options = (requestSignal: AbortSignal) => ({
-        signal: AbortSignal.any([signal, requestSignal]),
-        ...(config.timeout === undefined ? {} : { timeout: config.timeout }),
-      })
-      instance.server.setRequestHandler(ListToolsRequestSchema, async (request, extra) => {
-        if (!capabilities.tools) return { tools: [] }
-        const listed = await client.listTools(request.params, options(extra.signal))
-        return {
-          ...listed,
-          tools: listed.tools.map((tool) => ({
-            ...tool,
-            _meta: { ...tool._meta, 'anthropic/alwaysLoad': true },
-          })),
+      let entry = this.leases.get(name)
+      const reused = entry !== undefined
+      if (!entry) {
+        entry = {
+          connection: new McpConnection(name, fingerprint),
+          lease: new McpLease(handlers, signal),
         }
+        entry.connection.bind(entry.lease)
+        this.leases.set(name, entry)
+        // 没给连接池（管理操作）：和以前一样，操作一取消就连同连接一起关掉
+        if (!this.pool) {
+          const { connection } = entry
+          entry.lease.signal.addEventListener(
+            'abort',
+            () => void connection.close().catch(() => {}),
+            {
+              once: true,
+            },
+          )
+        }
+        await entry.connection.connect(config, cwd, source, entry.lease, timeout)
+        this.pool?.adopt(this.thread, name, entry.connection)
+      }
+      if (this.closed) throw new Error('MCP 运行时已关闭')
+      signal.throwIfAborted()
+      const { connection, lease } = entry
+      debugLog('native.mcp.ready', {
+        threadId: this.thread,
+        server: name,
+        reused,
+        atMs: Date.now() - started,
       })
-      instance.server.setRequestHandler(CallToolRequestSchema, (request, extra) =>
-        client.callTool(request.params, undefined, options(extra.signal)),
-      )
-      if (capabilities.resources) {
-        instance.server.setRequestHandler(ListResourcesRequestSchema, (request, extra) =>
-          client.listResources(request.params, options(extra.signal)),
-        )
-        instance.server.setRequestHandler(ListResourceTemplatesRequestSchema, (request, extra) =>
-          client.listResourceTemplates(request.params, options(extra.signal)),
-        )
-        instance.server.setRequestHandler(ReadResourceRequestSchema, (request, extra) =>
-          client.readResource(request.params, options(extra.signal)),
-        )
-      }
-      if (capabilities.prompts) {
-        instance.server.setRequestHandler(ListPromptsRequestSchema, (request, extra) =>
-          client.listPrompts(request.params, options(extra.signal)),
-        )
-        instance.server.setRequestHandler(GetPromptRequestSchema, (request, extra) =>
-          client.getPrompt(request.params, options(extra.signal)),
-        )
-      }
-      result[name] = {
-        type: 'sdk',
-        name,
-        instance,
-        ...(config.timeout ? { timeout: config.timeout } : {}),
-      }
+      result[name] = this.serve(name, config, connection, lease)
     }
+    debugLog('native.mcp.prepared', {
+      threadId: this.thread,
+      servers: servers.length,
+      ms: Date.now() - started,
+    })
     return result
+  }
+
+  // 池里有配置对得上的空闲连接、ping 得通就用它；不通的关掉，由调用方重新连。
+  private async reuse(
+    name: string,
+    fingerprint: string,
+    signal: AbortSignal,
+  ): Promise<McpConnection | null> {
+    const pool = this.pool
+    const connection = pool?.take(this.thread, name, fingerprint)
+    if (!pool || !connection) return null
+    let healthy = false
+    try {
+      healthy = await connection.healthy(signal)
+    } finally {
+      if (!healthy) await pool.release(connection, false)
+    }
+    return connection
+  }
+
+  // 交给 CLI 的那一份：请求都挂在这次租约上，进程收场时还没完的一起取消。
+  private serve(
+    name: string,
+    config: Record<string, any>,
+    connection: McpConnection,
+    lease: McpLease,
+  ): McpSdkServerConfigWithInstance {
+    const client = connection.client
+    const capabilities = client.getServerCapabilities() ?? {}
+    const instructions = client.getInstructions()
+    const instance = new McpServer(client.getServerVersion() ?? { name, version: '1.0.0' }, {
+      capabilities: {
+        tools: {},
+        ...(capabilities.resources ? { resources: {} } : {}),
+        ...(capabilities.prompts ? { prompts: {} } : {}),
+      },
+      ...(instructions === undefined ? {} : { instructions }),
+    })
+    const call = <T,>(
+      requestSignal: AbortSignal,
+      run: (options: { signal: AbortSignal; timeout?: number }) => Promise<T>,
+    ): Promise<T> =>
+      lease.track(requestSignal, false, (signal) =>
+        run({ signal, ...(config.timeout === undefined ? {} : { timeout: config.timeout }) }),
+      )
+    instance.server.setRequestHandler(ListToolsRequestSchema, async (request, extra) => {
+      if (!capabilities.tools) return { tools: [] }
+      const listed = await call(extra.signal, (options) =>
+        connection.listTools(request.params, options),
+      )
+      return {
+        ...listed,
+        tools: listed.tools.map((tool) => ({
+          ...tool,
+          _meta: { ...tool._meta, 'anthropic/alwaysLoad': true },
+        })),
+      }
+    })
+    instance.server.setRequestHandler(CallToolRequestSchema, (request, extra) =>
+      call(extra.signal, (options) => client.callTool(request.params, undefined, options)),
+    )
+    if (capabilities.resources) {
+      instance.server.setRequestHandler(ListResourcesRequestSchema, (request, extra) =>
+        call(extra.signal, (options) => client.listResources(request.params, options)),
+      )
+      instance.server.setRequestHandler(ListResourceTemplatesRequestSchema, (request, extra) =>
+        call(extra.signal, (options) => client.listResourceTemplates(request.params, options)),
+      )
+      instance.server.setRequestHandler(ReadResourceRequestSchema, (request, extra) =>
+        call(extra.signal, (options) => client.readResource(request.params, options)),
+      )
+    }
+    if (capabilities.prompts) {
+      instance.server.setRequestHandler(ListPromptsRequestSchema, (request, extra) =>
+        call(extra.signal, (options) => client.listPrompts(request.params, options)),
+      )
+      instance.server.setRequestHandler(GetPromptRequestSchema, (request, extra) =>
+        call(extra.signal, (options) => client.getPrompt(request.params, options)),
+      )
+    }
+    return {
+      type: 'sdk',
+      name,
+      instance,
+      ...(config.timeout ? { timeout: config.timeout } : {}),
+    }
   }
 
   async close(): Promise<void> {
     this.closed = true
-    const clients = [...this.clients.values()]
-    this.clients.clear()
-    for (const client of clients) this.closeClient(client)
-    await Promise.all(this.closing.values())
-  }
-
-  private closeClient(client: Client): Promise<void> {
-    // SDK transport 的第二次 close 会立即返回；必须复用首次关闭的完成屏障。
-    let pending = this.closing.get(client)
-    if (!pending) {
-      pending = client.close()
-      this.closing.set(client, pending)
-    }
-    return pending
+    const leases = [...this.leases.values()]
+    this.leases.clear()
+    await Promise.all(
+      leases.map(({ connection, lease }) => {
+        const reusable = connection.unbind(lease)
+        return this.pool ? this.pool.release(connection, reusable) : connection.close()
+      }),
+    )
   }
 
   client(name: string): Client {
-    const client = this.clients.get(name)
-    if (!client || this.closed) throw new Error('MCP 连接未建立或已关闭')
-    return client
+    const entry = this.leases.get(name)
+    if (!entry || entry.connection.closed || this.closed) throw new Error('MCP 连接未建立或已关闭')
+    return entry.connection.client
   }
 }
 
@@ -158,67 +230,4 @@ export function cliDeniedServers(raw: unknown): Array<{ serverName: string }> {
   return Object.keys(raw)
     .filter((name) => name !== '' && name === name.trim())
     .map((serverName) => ({ serverName }))
-}
-
-function mcpTransport(
-  config: Record<string, any>,
-  cwd: string,
-  signal: AbortSignal,
-  source: string,
-  name: string,
-): Transport {
-  if (config.type === 'stdio')
-    return new StdioClientTransport({
-      command: config.command,
-      args: config.args,
-      env: config.env,
-      cwd,
-      stderr: 'inherit',
-    })
-  const requestInit = { headers: config.headers }
-  const authenticatedFetch = mcpOAuthManager().fetch(source, name, config, signal)
-  let oauthFailure: OAuthLoginRequired | undefined
-  const fetchWithSignal: typeof fetch = async (input, init) => {
-    // MCP SDK 会把 signal 放在 Request 对象里；覆盖它会让关闭后的 SSE 持续挂起。
-    const signals = [signal]
-    if (input instanceof Request) signals.push(input.signal)
-    if (init?.signal) signals.push(init.signal)
-    try {
-      return await authenticatedFetch(input, {
-        ...init,
-        signal: AbortSignal.any(signals),
-      })
-    } catch (error) {
-      if (error instanceof OAuthLoginRequired) oauthFailure = error
-      throw error
-    }
-  }
-  if (config.type === 'sse') {
-    const transport = new SSEClientTransport(new URL(config.url), {
-      requestInit,
-      fetch: fetchWithSignal,
-    })
-    const start = transport.start.bind(transport)
-    transport.start = async () => {
-      oauthFailure = undefined
-      try {
-        await start()
-      } catch (error) {
-        // EventSource 会丢掉原始异常类型，保留真实 fetch 失败而非按文本猜测认证状态。
-        throw oauthFailure ?? error
-      }
-    }
-    return transport
-  }
-  // 固定 MCP SDK 的 class 与接口对 sessionId 可选性的声明不一致。
-  return new StreamableHTTPClientTransport(new URL(config.url), {
-    requestInit,
-    fetch: fetchWithSignal,
-    reconnectionOptions: {
-      maxRetries: 0,
-      initialReconnectionDelay: 1000,
-      maxReconnectionDelay: 1000,
-      reconnectionDelayGrowFactor: 1,
-    },
-  }) as unknown as Transport
 }

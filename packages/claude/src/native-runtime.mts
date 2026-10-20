@@ -63,6 +63,7 @@ import {
   persistedContextBoundary,
 } from './native-context.mjs'
 import { cliDeniedServers, NativeMcpBridge } from './native-mcp-bridge.mjs'
+import { NativeMcpPool } from './native-mcp-pool.mjs'
 import { NativeProcess, succeedsWithin } from './native-process.mjs'
 import {
   backgroundCommandEnd,
@@ -297,6 +298,8 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
   private sessionKeys = new Map<string, string>()
   // 正在等旧进程退出、还没起新进程的回合（按线程）；打断时置位。
   private starting = new Map<string, { cancelled: boolean }>()
+  // MCP 连接按线程跨回合留着（CLI 进程退出了也留），线程关闭、空闲超时、适配器停止时关。
+  private mcpPool = new NativeMcpPool()
 
   setSessionHandlers(handlers: RuntimeSessionHandlers): void {
     this.sessionHandlers = handlers
@@ -309,6 +312,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
   async closeSession(threadId: string, reason: string): Promise<void> {
     const session = this.sessions.get(threadId)
     if (session) await this.shutdown(session, reason)
+    await this.mcpPool.closeThread(threadId)
   }
 
   async runTurn(context: RuntimeTurnContext, handlers: RuntimeHandlers): Promise<void> {
@@ -542,7 +546,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     this.cleanup.set(key, done)
     const input = new NativeTurnInput()
     const abort = new AbortController()
-    const mcp = new NativeMcpBridge()
+    const mcp = new NativeMcpBridge(this.mcpPool, key)
     const nativeProcess = new NativeProcess(key, context.turnId)
     this.processes.set(key, nativeProcess)
     this.inputs.set(key, input)
@@ -1068,6 +1072,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       ),
       ...others.map((key) => this.interrupt(key)),
     ])
+    await this.mcpPool.close()
     this.turns.clear()
     this.permissions.clear()
   }
