@@ -62,13 +62,14 @@ import {
   onDragChange,
   startDrag,
 } from './drop.ts'
-import { keepSessions } from './filter.ts'
+import { dropNativeChildren, keepSessions } from './filter.ts'
 import { HarnessFilter } from './HarnessFilter.tsx'
 import { DeviceInfo, SessionInfo, WorkspaceInfo } from './InfoCards.tsx'
 import { type RowAction, RowMenu, type RowMenuHandle } from './RowMenu.tsx'
 import { SectionDialog } from './SectionDialog.tsx'
 import { SidebarFrame } from './SidebarFrame.tsx'
-import { useSidebarHarnesses } from './state.ts'
+import { SidebarMore } from './SidebarMore.tsx'
+import { useSidebarHarnesses, useSidebarNativeChildren } from './state.ts'
 import { TallyMarks } from './TallyMarks.tsx'
 import { WorkspaceDialog } from './WorkspaceDialog.tsx'
 
@@ -669,6 +670,9 @@ function DeviceGroup(props: GroupProps) {
   /** 侧栏正只看哪几个 harness 的会话。空的：都看 */
   const filter = useSidebarHarnesses()
   const harnessOf = useKey<SessionHarnesses>(keys.harnessOf(deviceId))
+  /** 别的应用派出来的会话（Claude 桌面端起的子会话）显不显示：默认不显示，开关在侧栏顶上的“更多”里 */
+  const showNative = useSidebarNativeChildren()
+  const nativeChildren = useKey<string[]>(keys.nativeChildren(deviceId)) ?? NO_IDS
   const reconnect = useReconnect(deviceId)
   const t = useT()
   const info = useHoverCard(() => (device ? <DeviceInfo device={device} /> : null))
@@ -689,8 +693,11 @@ function DeviceGroup(props: GroupProps) {
   const picked = selection?.deviceId === deviceId ? selection.sessionId : null
   /** 非露出来不可的会话：正选中的那个，和停下来等人的那些。筛选筛不掉它们，“展示更多”也折不住它们 */
   const always = (id: string) => id === picked || pressing.includes(id)
-  /** 一组里现在要画的会话：只看某几个 harness 的时候是筛过的 */
-  const shown = (groupId: string) => keepSessions(groups[groupId], filter, harnessOf, always)
+  /** 不显示别的应用派出来的会话时，这些藏起来（非露出来不可的照样露） */
+  const hidden = showNative ? NO_IDS : nativeChildren
+  /** 一组里现在要画的会话：别的应用派出来的藏掉，只看某几个 harness 的时候再筛一遍 */
+  const shown = (groupId: string) =>
+    keepSessions(dropNativeChildren(groups[groupId], hidden, always), filter, harnessOf, always)
 
   /**
    * 挂到父会话下面去画的子会话：父会话这时也画在侧栏里（没被筛掉）的那些。
@@ -700,7 +707,8 @@ function DeviceGroup(props: GroupProps) {
   const nested = new Set(
     Object.entries(children).flatMap(([parent, ids]) => (listed.has(parent) ? ids : [])),
   )
-  const kidsOf = (id: string) => keepSessions(children[id], filter, harnessOf, always)
+  const kidsOf = (id: string) =>
+    keepSessions(dropNativeChildren(children[id], hidden, always), filter, harnessOf, always)
   const fold = (id: string) =>
     setFolded((prev) => {
       const next = new Set(prev)
@@ -967,9 +975,15 @@ function DeviceGroup(props: GroupProps) {
     )
   }
 
-  /** 只看某几个 harness 的时候，里面一个它们的会话都没有的工作区整块不出：留着一串空的工作区只是添乱 */
-  const showsWorkspace = (workspace: WorkspaceView) =>
-    filter.length === 0 || shown(workspace.id).length > 0
+  /**
+   * 只看某几个 harness 的时候，里面一个它们的会话都没有的工作区整块不出：留着一串空的工作区只是添乱。
+   * 藏着别的应用派出来的会话时，里面只有这些会话的工作区也一样
+   */
+  const showsWorkspace = (workspace: WorkspaceView) => {
+    if (filter.length > 0) return shown(workspace.id).length > 0
+    // 里面只有藏起来的派出来的会话：同理整块不出。本来就空的工作区照常出
+    return (groups[workspace.id]?.length ?? 0) === 0 || shown(workspace.id).length > 0
+  }
   /**
    * 一个工作区：那一行和它下面的会话。outside：不在置顶、组里，是放东西的地方
    * （会话拖回自己的项目、别的工作区拖到它前面）
@@ -986,7 +1000,7 @@ function DeviceGroup(props: GroupProps) {
         <WorkspaceHead
           workspace={workspace}
           device={device}
-          count={groups[workspace.id]?.length ?? 0}
+          count={dropNativeChildren(groups[workspace.id], hidden, always).length}
           expanded={expanded}
           onToggle={() => toggle(workspace.id)}
           onFocus={() => onFocus(workspace.id)}
@@ -1394,6 +1408,7 @@ export function Sidebar(props: SidebarProps) {
           <span>{t('sidebar.newSession')}</span>
         </button>
         <HarnessFilter />
+        <SidebarMore />
       </div>
       <div className="sb-scroll">
         {shownIds.map((deviceId) => (

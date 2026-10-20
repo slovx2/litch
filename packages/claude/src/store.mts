@@ -1,6 +1,7 @@
 import { mkdirSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
+import { NATIVE_LINEAGE_APPS, type NativeLineageApp } from '../../protocol/src/native-lineage.mjs'
 import type { CatalogCursor } from '../../shared/src/catalog-pagination.mjs'
 import { ProjectStore, threadsTable } from '../../shared/src/project-store.mjs'
 import { QueueStore } from '../../shared/src/queue-store.mjs'
@@ -145,6 +146,11 @@ export class SessionStore {
       -- 列本机原生会话时这几种都不再导一遍。mark 是导入的那份历史对应的原生记录（大小和修改时间）
       CREATE TABLE IF NOT EXISTS native_sessions (
         session_id TEXT PRIMARY KEY, thread_id TEXT NOT NULL, origin TEXT NOT NULL, mark TEXT
+      );
+      -- 导进来的原生会话认过没有、是不是别的应用派出来的（native-lineage.mts）：每个只认一次。
+      -- app 是派出它的应用（claude-desktop），认过、不是派出来的是 NULL
+      CREATE TABLE IF NOT EXISTS native_lineage (
+        session_id TEXT PRIMARY KEY, app TEXT
       );
       CREATE TABLE IF NOT EXISTS context_injections (
         message_id TEXT PRIMARY KEY, thread_id TEXT NOT NULL, turn_id TEXT,
@@ -401,6 +407,37 @@ export class SessionStore {
       this.db.exec('ROLLBACK')
       throw error
     }
+  }
+
+  /** 认过的原生会话：会话号 → 派出它的应用（不是派出来的是 null）。常驻内存，会话对象每次出门都要查 */
+  private lineage: Map<string, NativeLineageApp | null> | null = null
+
+  nativeLineage(): ReadonlyMap<string, NativeLineageApp | null> {
+    if (!this.lineage) {
+      const rows = this.db.prepare('SELECT session_id, app FROM native_lineage').all() as Array<{
+        session_id: string
+        app: string | null
+      }>
+      this.lineage = new Map(
+        rows.map((row) => [
+          row.session_id,
+          (NATIVE_LINEAGE_APPS as readonly string[]).includes(row.app ?? '')
+            ? (row.app as NativeLineageApp)
+            : null,
+        ]),
+      )
+    }
+    return this.lineage
+  }
+
+  /** 记下认的结果（每个会话只认一次） */
+  saveNativeLineage(sessionId: string, app: NativeLineageApp | null): void {
+    this.db
+      .prepare(
+        'INSERT INTO native_lineage (session_id, app) VALUES (?, ?) ON CONFLICT(session_id) DO UPDATE SET app=excluded.app',
+      )
+      .run(sessionId, app)
+    this.lineage = new Map(this.nativeLineage()).set(sessionId, app)
   }
 
   /**

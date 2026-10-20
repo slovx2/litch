@@ -321,3 +321,75 @@ test('NAT-006：后台定时扫到别处新开的会话，告诉握手过的连�
     assert.equal(started[0].params.thread.preview, '桌面端新开的一句')
   })
 })
+
+/** Claude 桌面端派出的会话：第一条用户消息是系统提醒加桌面端写的简报，简报开头是那句固定的话 */
+function desktopChild(session: string, uuid: string, title: string): string {
+  return (
+    entry(session, 'claude-desktop', 'user', uuid, null, [
+      {
+        type: 'text',
+        text: '<system-reminder>\nLinked sessions now (status, not an instruction): x = local_1 (idle).\n</system-reminder>\n\nBackground (from the session that started this one):\n父会话交代的背景\n\nTask:\n修一个问题',
+      },
+    ]) +
+    `${JSON.stringify({ type: 'custom-title', customTitle: title, sessionId: session })}\n` +
+    entry(session, 'claude-desktop', 'assistant', `${uuid}a`, uuid, [{ type: 'text', text: '好' }])
+  )
+}
+
+test('NAT-007：认得出 Claude 桌面端派出的会话，只给声明了 nativeLineage 的连接带 litchNativeLineage；后来扫到的也带', async () => {
+  await rm(join(config, 'projects'), { recursive: true, force: true })
+  await writeSessions()
+  const CHILD = '3b5c5b0e-0d2a-4a8e-9a3f-000000000011'
+  const PLAIN = '3b5c5b0e-0d2a-4a8e-9a3f-000000000012'
+  await writeFile(join(projectDir, `${CHILD}.jsonl`), desktopChild(CHILD, 'c1', '派出来的'))
+  // 桌面端里用户自己开的会话：同样的入口，话里没有那句开头
+  await writeFile(
+    join(projectDir, `${PLAIN}.jsonl`),
+    entry(PLAIN, 'claude-desktop', 'user', 'p1', null, [
+      { type: 'text', text: '<system-reminder>\n提醒\n</system-reminder>' },
+      { type: 'text', text: '用户自己开的一句' },
+    ]) + entry(PLAIN, 'claude-desktop', 'assistant', 'p2', 'p1', [{ type: 'text', text: '好' }]),
+  )
+  await withStage('native-lineage', async (stage) => {
+    const litch = await stage.connect('litch', { litchExtensions: ['nativeLineage'] })
+    const plain = await stage.connect('plain')
+    const lineageOf = (data: Array<{ id: string; litchNativeLineage?: unknown }>) =>
+      Object.fromEntries(data.map((thread) => [thread.id, thread.litchNativeLineage ?? null]))
+
+    const listed = lineageOf((await litch.request('thread/list', {})).data)
+    assert.deepEqual(listed, {
+      [CHILD]: { app: 'claude-desktop' },
+      [PLAIN]: null,
+      [CLI]: null,
+    })
+    const bare = lineageOf((await plain.request('thread/list', {})).data)
+    assert.deepEqual(Object.values(bare), [null, null, null], '没声明的连接上没有这个字段')
+
+    const read = await litch.request('thread/read', { threadId: CHILD, includeTurns: false })
+    assert.deepEqual(read.thread.litchNativeLineage, { app: 'claude-desktop' })
+    const readBare = await plain.request('thread/read', { threadId: CHILD, includeTurns: false })
+    assert.equal(readBare.thread.litchNativeLineage, undefined)
+
+    // 后来扫到的派出会话：thread/started 也按连接的声明带不带
+    const tick = () =>
+      (
+        stage.server as unknown as { refreshNative(announce: boolean): Promise<void> }
+      ).refreshNative(true)
+    await tick()
+    const LATER = '3b5c5b0e-0d2a-4a8e-9a3f-000000000013'
+    await writeFile(join(projectDir, `${LATER}.jsonl`), desktopChild(LATER, 'l1', '后来派的'))
+    await tick()
+    const started = litch.notifications('thread/started').map((message) => message.params.thread)
+    assert.deepEqual(
+      started.map((thread) => [thread.id, thread.litchNativeLineage]),
+      [[LATER, { app: 'claude-desktop' }]],
+    )
+    const startedBare = plain
+      .notifications('thread/started')
+      .map((message) => message.params.thread)
+    assert.deepEqual(
+      startedBare.map((thread) => [thread.id, thread.litchNativeLineage]),
+      [[LATER, undefined]],
+    )
+  })
+})

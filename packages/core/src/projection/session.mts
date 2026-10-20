@@ -9,6 +9,7 @@ import {
 import type {
   HarnessId,
   ItemView,
+  NativeLineageView,
   SessionAbilities,
   SessionStatus,
   SessionSummary,
@@ -150,6 +151,14 @@ export function projectLineage(thread: Thread): SessionLineageView | null {
   return lineageOf(raw)
 }
 
+/** 会话对象上入口加的“别的应用派出来的”（只发给声明了 nativeLineage 的连接）。没有、形状不对的是 null */
+export function projectNativeLineage(thread: Thread): NativeLineageView | null {
+  const raw: unknown = (thread as Thread & { litchNativeLineage?: unknown }).litchNativeLineage
+  if (typeof raw !== 'object' || raw === null) return null
+  const { app } = raw as Record<string, unknown>
+  return typeof app === 'string' && app ? { app } : null
+}
+
 export function lineageOf(raw: unknown): SessionLineageView | null {
   if (typeof raw !== 'object' || raw === null) return null
   const { parentThreadId, kind, origin, title, wakeParent, createdAt, proposalId } = raw as Record<
@@ -240,5 +249,6 @@ export function projectSummary(
     // 和定时任务的关系由设备那一层按任务模块补上（device.mts 的 summaryOf）
     task: null,
     lineage: projectLineage(thread),
+    nativeLineage: projectNativeLineage(thread),
   }
 }

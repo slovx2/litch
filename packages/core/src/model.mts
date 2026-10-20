@@ -345,6 +345,16 @@ export interface SessionSummary {
   task: SessionTaskMark | null
   /** 它是哪个会话派出的 Litch 子会话（会话树）。不是子会话的、对面没有会话树的是 null */
   lineage: SessionLineageView | null
+  /**
+   * 别的应用（比如 Claude 桌面端）从另一个会话派出来的原生会话（nativeLineage 扩展）。
+   * 侧栏默认不显示它们，“更多”菜单里能打开。不是的、认不出的是 null
+   */
+  nativeLineage: NativeLineageView | null
+}
+
+/** 派出这个原生会话的应用。app 是对面报的原样，认不认识由界面定 */
+export interface NativeLineageView {
+  app: string
 }
 
 export interface SidebarView {

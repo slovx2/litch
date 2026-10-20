@@ -63,6 +63,9 @@ export const zhCN = {
   'sidebar.filter.join': '、',
   'sidebar.filter.clear': '取消筛选，看全部',
   'sidebar.filter.none': '没有符合筛选的会话',
+  'sidebar.more': '更多',
+  'sidebar.more.nativeChildren': '显示 Claude Code 子对话',
+  'sidebar.more.nativeChildren.note': 'Claude 桌面端里从别的对话派出来的会话',
   // ---- 侧栏：会话的工作目录不是项目的根 ----
   'session.cwd.sub': '工作目录是项目里的子目录：{path}',
   'session.cwd.away': '工作目录不在这个项目的目录里：{path}',

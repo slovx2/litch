@@ -1201,6 +1201,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         placedAt: null,
         task: null,
         lineage: null,
+        nativeLineage: null,
       }
       sidebar.sessions.push(summary)
       emit(`sidebar:${deviceId}`, [{ op: 'session.upsert', session: summary }])
@@ -1913,6 +1914,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
           placedAt: null,
           task: null,
           lineage: null,
+          nativeLineage: null,
         }
         sidebar.sessions.push(summary)
         emit(`sidebar:${deviceId}`, [{ op: 'session.upsert', session: summary }])
@@ -2162,6 +2164,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
           section: null,
           placedAt: null,
           lineage: null,
+          nativeLineage: null,
         }
         // 显示数据都是能写成 JSON 的，这样抄一份就和原来的互不相干了
         const copy = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T

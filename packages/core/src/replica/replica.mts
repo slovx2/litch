@@ -70,6 +70,11 @@ export const keys = {
   children: (deviceId: string) => `sidebar:${deviceId}:children`,
   /** ProposalStarts：提案 → 从它开始的子会话（在列表里的） */
   proposalStarts: (deviceId: string) => `sidebar:${deviceId}:proposalStarts`,
+  /**
+   * string[]：别的应用派出来的原生会话（SessionSummary.nativeLineage），按标识排。
+   * 侧栏默认不显示它们，“更多”菜单里打开才显示
+   */
+  nativeChildren: (deviceId: string) => `sidebar:${deviceId}:nativeChildren`,
   /** SessionSummary */
   summary: (deviceId: string, sessionId: string) => `summary:${deviceId}:${sessionId}`,
   /** SessionSummary[] | null：已归档的会话，最近动过的在前。null 或者没有这个键：还没取过 */
@@ -654,6 +659,15 @@ export function createReplica(channel: CoreChannel): Replica {
     const started = store.get<ProposalStarts>(keys.proposalStarts(deviceId))
     if (!started || JSON.stringify(started) !== JSON.stringify(starts)) {
       store.set(keys.proposalStarts(deviceId), starts)
+    }
+    // 别的应用派出来的会话：多了、少了才换
+    const spawned = [...sessions.values()]
+      .filter((session) => session.nativeLineage)
+      .map((session) => session.id)
+      .sort()
+    const marked = store.get<string[]>(keys.nativeChildren(deviceId))
+    if (!marked || marked.join('\n') !== spawned.join('\n')) {
+      store.set(keys.nativeChildren(deviceId), spawned)
     }
   }
 

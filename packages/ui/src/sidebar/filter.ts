@@ -69,6 +69,21 @@ export function keepSessions(
 }
 
 /**
+ * 不显示别的应用派出来的会话时一组里留哪些，先后不变。native 是这台设备上派出来的那些（keys.nativeChildren）；
+ * always 的照样留着（正选中的、停下来等人的），和 harness 筛选一样
+ */
+export function dropNativeChildren(
+  ids: readonly string[] | undefined,
+  native: readonly string[],
+  always: (sessionId: string) => boolean,
+): readonly string[] {
+  if (!ids) return []
+  if (native.length === 0) return ids
+  const hidden = new Set(native)
+  return ids.filter((id) => !hidden.has(id) || always(id))
+}
+
+/**
  * 点了某个 harness 之后挑中的是哪几个：挑着的去掉，没挑的加上。
  * 加上之后能挑的全挑上了，和都看是一回事，记成空的（都看）：免得以后多出一个 harness 时它被悄悄筛掉
  */

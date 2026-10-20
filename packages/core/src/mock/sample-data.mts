@@ -248,6 +248,7 @@ const summaries = (
     placedAt: null,
     task: null,
     lineage: null,
+    nativeLineage: null,
     ...extra,
   }))
 
@@ -337,6 +338,8 @@ export function sampleSidebars(now: number, lang: SampleLang): SidebarView[] {
         ['s2', 'litch', 'claude', 'waiting', 3 * MINUTE, { waitingFor: 'approval' }],
         ['s3', 'litch', 'pi', 'idle', 12 * MINUTE, { unread: true }],
         ['s4', 'litch', 'dsh', 'idle', HOUR],
+        // Claude 桌面端从别的对话派出来的 Claude Code 会话：侧栏默认不显示，“更多”里打开才有
+        ['cd1', 'litch', 'claude', 'idle', 5 * HOUR, { nativeLineage: { app: 'claude-desktop' } }],
         ['s5', 'litch', 'codex', 'idle', 26 * HOUR],
         ['s6', 'docs', 'claude', 'idle', 2 * HOUR],
         ['s7', 'docs', 'pi', 'idle', 40 * MINUTE, { unread: true }],

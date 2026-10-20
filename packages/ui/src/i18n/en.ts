@@ -63,6 +63,10 @@ export const en: Record<MessageKey, Entry> = {
   'sidebar.filter.join': ', ',
   'sidebar.filter.clear': 'Clear the filter and show all',
   'sidebar.filter.none': 'No sessions match the filter',
+  'sidebar.more': 'More',
+  'sidebar.more.nativeChildren': 'Show Claude Code sub-sessions',
+  'sidebar.more.nativeChildren.note':
+    'Sessions started from another session in the Claude desktop app',
   // ---- Sidebar: a session working somewhere other than the project root ----
   'session.cwd.sub': 'Working in a subfolder of this project: {path}',
   'session.cwd.away': 'Working outside this project’s folders: {path}',

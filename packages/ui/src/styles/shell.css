@@ -126,38 +126,56 @@
   padding: 8px 12px 0;
 }
 /* 筛选的按钮：和下面各行行尾的按钮对齐。点开的那一块往下弹、靠右 */
-.sb-filter {
+.sb-filter,
+.sb-more {
   position: relative;
   flex: none;
-  margin-right: -2px;
 }
-.sb-filter > .ibtn[aria-expanded="true"] {
+.sb-filter > .ibtn[aria-expanded="true"],
+.sb-more > .ibtn[aria-expanded="true"] {
   background: var(--hover);
   color: var(--ink);
 }
 .sb-filter > .ibtn.on {
   color: var(--accent);
 }
-.sb-filter .pick-opt b {
+.sb-filter .pick-opt b,
+.sb-more .pick-opt b {
   display: flex;
   align-items: center;
   gap: 6px;
 }
-.sb-filter .pick-mark {
+.sb-filter .pick-mark,
+.sb-more .pick-mark {
   flex: none;
   display: inline-flex;
   width: 12px;
   height: 12px;
 }
-.sb-filter .pick-mark > svg.ic {
+.sb-filter .pick-mark > svg.ic,
+.sb-more .pick-mark > svg.ic {
   width: 12px;
   height: 12px;
 }
 .sb-filter .pick-title {
   white-space: nowrap;
 }
+/* 筛选右边的“更多”：样子和筛选一样，最右边的是它，和筛选挨得近些 */
+.sb-more {
+  margin-left: -6px;
+  margin-right: -2px;
+}
+.sb-more .pick-pop {
+  width: 248px;
+}
+/* 开关下面那行说明和开关的名字对齐（让开前面的勾） */
+.sb-more .pick-opt > span {
+  padding-left: 18px;
+}
 /* 正在只看某几个 harness：一行小字说清在看谁，整行点一下就取消 */
 .sb-filter-on {
+  /* 排在“更多”后面，自己换到下一行 */
+  order: 1;
   flex: 0 0 calc(100% + 12px);
   min-width: 0;
   display: flex;

@@ -805,15 +805,15 @@ export class CodexClaudeAppServer {
         )
       case 'thread/resume':
         await this.nativeHistory(asRecord(params).threadId)
-        return this.threadResume(peer, asRecord(params))
+        return this.withNativeLineage(peer, await this.threadResume(peer, asRecord(params)))
       case 'thread/fork':
         return this.threadFork(peer, asRecord(params))
       case 'thread/list':
         await this.refreshNative()
-        return this.threadList(asRecord(params))
+        return this.withNativeLineage(peer, this.threadList(asRecord(params)))
       case 'thread/read':
         await this.nativeHistory(asRecord(params).threadId)
-        return this.threadRead(asRecord(params))
+        return this.withNativeLineage(peer, this.threadRead(asRecord(params)))
       case 'thread/attachment/add':
       case 'thread/attachment/list':
       case 'thread/attachment/remove':
@@ -1451,7 +1451,14 @@ export class CodexClaudeAppServer {
       settings.sandboxPolicy = this.configSandboxPolicy(thread.sandboxMode, thread.cwd)
       this.store.saveThreadSettings(threadId, settings)
       if (announce && !baseline)
-        this.announce({ method: 'thread/started', params: { thread: this.toThread(thread, []) } })
+        this.announce(
+          { method: 'thread/started', params: { thread: this.toThread(thread, []) } },
+          undefined,
+          (target, notification) => ({
+            method: notification.method,
+            params: this.withNativeLineage(target, structuredClone(notification.params)),
+          }),
+        )
     }
     if (added.length > 0) debugLog('native.sessions.imported', { count: added.length })
   }
@@ -6363,7 +6370,15 @@ export class CodexClaudeAppServer {
   // 别的窗口、Litch 侧栏上别处在跑的会话）靠它们跟着变。订阅着它的连接（没人订阅时是引起这条通知的 origin）
   // 本来就收，没握手过也照收：这个入口不强求先握手。临时会话（客户端起标题用的，不进列表）的只给后面这些，
   // 别的连接拿到只会多出一个列表里没有的会话。
-  private announce(notification: { method: string; params: unknown }, origin?: RpcPeer): void {
+  private announce(
+    notification: { method: string; params: unknown },
+    origin?: RpcPeer,
+    /** 各条连接看到的不一样时（按声明带不带扩展字段）：给这条连接的那一份 */
+    shape?: (
+      target: RpcPeer,
+      notification: { method: string; params: unknown },
+    ) => { method: string; params: unknown },
+  ): void {
     if (this.stopped) return
     const params = asRecord(notification.params)
     const threadId = stringOr(params.threadId, stringOr(asRecord(params.thread).id, ''))
@@ -6374,7 +6389,27 @@ export class CodexClaudeAppServer {
       ? watching
       : new Set([...this.accountPeers, ...watching])
     for (const target of targets)
-      if (this.isConnected(target)) this.deliver(target, notification, origin ?? target)
+      if (this.isConnected(target))
+        this.deliver(target, shape ? shape(target, notification) : notification, origin ?? target)
+  }
+
+  /**
+   * 声明了 nativeLineage 的连接：导进来的会话里认得出是别的应用派出来的（native-lineage.mts），
+   * 应答里的会话对象（thread、列表的每一项）带上 litchNativeLineage。没声明的原样给
+   */
+  private withNativeLineage<T>(peer: RpcPeer, result: T): T {
+    if (!this.peerFeatures.get(peer)?.extensions.has(EXTENSION.nativeLineage)) return result
+    const known = this.store.nativeLineage()
+    const mark = (value: unknown) => {
+      if (!value || typeof value !== 'object') return
+      const thread = value as Record<string, unknown>
+      const app = typeof thread.id === 'string' ? known.get(thread.id) : undefined
+      if (app) thread.litchNativeLineage = { app }
+    }
+    const body = result && typeof result === 'object' ? (result as Record<string, unknown>) : {}
+    if (Array.isArray(body.data)) for (const thread of body.data) mark(thread)
+    mark(body.thread)
+    return result
   }
 
   private deliver(
