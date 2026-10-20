@@ -1,42 +1,51 @@
 // “从浏览器导入”的三个入口：设置页“内置浏览器”一组里的一行，浏览器面板工具栏上的菜单
 // （“导入 Cookie 和密码…”），浏览器面板顶上的横幅（从没导过、没关过才出，关了不再出）。
-// 三处打开的都是同一个对话框（BrowserImportDialog.tsx）。没有外壳、外壳的主进程还没有导入接口时都不出。
-import { type ReactNode, useCallback, useEffect, useState } from 'react'
+// 三处打开的都是同一个对话框（BrowserImportDialog.tsx）。没有外壳时都不出（外壳在才挂得上这些组件）。
+// “导过没有、横幅关过没有”这一窗口里只记一份：一处关了横幅、导完了，别的面板和设置页跟着变。
+import { type ReactNode, useEffect, useState, useSyncExternalStore } from 'react'
 import { useT } from '../app/appearance.ts'
 import { More } from '../app/icons.tsx'
 import { usePopover } from '../app/popover.ts'
 import type { BrowserBridge, BrowserImportBridge, ImportState } from '../side/browser/bridge.ts'
 import { BrowserImportDialog } from './BrowserImportDialog.tsx'
-import { showBanner } from './browser-import-logic.ts'
+import { parseState, showBanner } from './browser-import-logic.ts'
 import { dayOf } from './tools-logic.ts'
 
-/** 导过没有、横幅关过没有。取不到当 null（横幅不出） */
-function useImportState(bridge: BrowserImportBridge | undefined) {
-  const [state, setState] = useState<ImportState | null>(null)
-  const refresh = useCallback(() => {
-    if (!bridge) return () => {}
-    let live = true
-    bridge.state().then(
-      (next) => {
-        if (live) setState(next)
-      },
-      () => {},
-    )
-    return () => {
-      live = false
-    }
+/** 取不到（还没取、主进程出错）时是 null，横幅不出 */
+let shared: ImportState | null = null
+const listeners = new Set<() => void>()
+const publish = (next: ImportState) => {
+  shared = next
+  for (const listener of listeners) listener()
+}
+const subscribe = (listener: () => void) => {
+  listeners.add(listener)
+  return () => {
+    listeners.delete(listener)
+  }
+}
+
+/** 向主进程再取一次 */
+const refresh = (bridge: BrowserImportBridge) =>
+  bridge.state().then(
+    (raw) => publish(parseState(raw)),
+    () => {},
+  )
+
+/** 导过没有、横幅关过没有：挂上时取一次，之后跟着这一窗口里的那一份 */
+function useImportState(bridge: BrowserImportBridge): ImportState | null {
+  useEffect(() => {
+    void refresh(bridge)
   }, [bridge])
-  useEffect(() => refresh(), [refresh])
-  return { state, setState, refresh }
+  return useSyncExternalStore(subscribe, () => shared)
 }
 
 /** 设置页“内置浏览器”一组里的“从浏览器导入”一行 */
 export function BrowserImportRow({ bridge }: { bridge: BrowserBridge }) {
   const t = useT()
   const imports = bridge.import
-  const { state, refresh } = useImportState(imports)
+  const state = useImportState(imports)
   const [open, setOpen] = useState(false)
-  if (!imports) return null
   return (
     <section className="set-block" data-browser-import={state?.lastImportAt ? 'done' : 'never'}>
       <h3>{t('bimport.entry.title')}</h3>
@@ -65,7 +74,7 @@ export function BrowserImportRow({ bridge }: { bridge: BrowserBridge }) {
           bridge={imports}
           onClose={() => {
             setOpen(false)
-            refresh()
+            void refresh(imports)
           }}
         />
       ) : null}
@@ -75,7 +84,7 @@ export function BrowserImportRow({ bridge }: { bridge: BrowserBridge }) {
 
 /**
  * 浏览器面板上的两个入口和它们打开的对话框：menu 放在工具栏上，banner 放在工具栏下面（占着位置、
- * 不盖在网页上），dialog 随便放在面板里（模态的，打开时网页由 place.ts 撤下）。没有导入接口时都是 null
+ * 不盖在网页上），dialog 随便放在面板里（模态的，打开时网页由 place.ts 撤下）
  */
 export function useBrowserImport(bridge: BrowserBridge): {
   menu: ReactNode
@@ -83,12 +92,11 @@ export function useBrowserImport(bridge: BrowserBridge): {
   dialog: ReactNode
 } {
   const imports = bridge.import
-  const { state, setState, refresh } = useImportState(imports)
+  const state = useImportState(imports)
   const [open, setOpen] = useState(false)
-  if (!imports) return { menu: null, banner: null, dialog: null }
   const later = () => {
-    // 先在这边收起来，不等主进程
-    setState({ ...(state ?? {}), bannerDismissedAt: Date.now() })
+    // 先在这一窗口里收起来（所有面板一起），不等主进程
+    publish({ ...(shared ?? {}), bannerDismissedAt: Date.now() })
     void imports.dismissBanner().catch(() => {})
   }
   return {
@@ -101,7 +109,7 @@ export function useBrowserImport(bridge: BrowserBridge): {
         bridge={imports}
         onClose={() => {
           setOpen(false)
-          refresh()
+          void refresh(imports)
         }}
       />
     ) : null,

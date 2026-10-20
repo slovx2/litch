@@ -248,3 +248,9 @@
   padding: 0 8px;
   font-size: 12px;
 }
+/* 一个能选的来源都没有时列出来的来源 */
+ul.bimp-sources {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}

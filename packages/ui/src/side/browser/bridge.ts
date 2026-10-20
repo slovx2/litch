@@ -73,8 +73,8 @@ export interface BrowserBridge {
   unblock(host: string | null): Promise<BrowserSitePolicy | null>
   /** 开关或黑名单在别处改了（审批卡片上、litch config） */
   onPolicy(handler: (policy: BrowserSitePolicy) => void): () => void
-  /** 从别的浏览器导入。外壳的主进程旧、还没有这一块时没有 */
-  import?: BrowserImportBridge
+  /** 从别的浏览器导入 */
+  import: BrowserImportBridge
 }
 
 // ---------- 从别的浏览器导入（主进程 apps/desktop/src/browser-import/types.mts，改一边改另一边） ----------
@@ -183,5 +183,5 @@ export const browserBridge = (): BrowserBridge | undefined =>
 /** 会话的键 */
 export const ownerKey = (owner: BrowserOwner): string => `${owner.deviceId}\u0000${owner.threadId}`
 
-/** 外壳给的导入接口。没有外壳、主进程还没有这一块时没有 */
+/** 外壳给的导入接口。没有外壳时没有 */
 export const importBridge = (): BrowserImportBridge | undefined => browserBridge()?.import

@@ -281,7 +281,20 @@ export interface KindReport {
   error?: string
 }
 
-export type Overall = 'ok' | 'partial' | 'failed' | 'cancelled' | 'profile-gone' | 'busy'
+/**
+ * ok：有导进来的、没有没成的；partial：导进来一些、也有没成的；failed：没导进来、有没成的；
+ * existing：没有新的，都已经在 Litch 里了；nothing：什么都没导进来（来源里没有、都无效、读不了）；
+ * cancelled：用户停下了；profile-gone、busy：整体性的失败
+ */
+export type Overall =
+  | 'ok'
+  | 'partial'
+  | 'failed'
+  | 'existing'
+  | 'nothing'
+  | 'cancelled'
+  | 'profile-gone'
+  | 'busy'
 
 export interface ImportReport {
   overall: Overall
@@ -298,7 +311,8 @@ const STATUS_LOOK: Record<
   { tone: Tone; say: MessageKey; retry: RetryWay | null }
 > = {
   ok: { tone: 'ok', say: 'bimport.status.ok', retry: null },
-  partial: { tone: 'warn', say: 'bimport.status.partial', retry: null },
+  // partial、failed 管线也拿来报写不进内置浏览器、密码库出错，说法不能只说“读不出来”
+  partial: { tone: 'warn', say: 'bimport.status.partial', retry: 'again' },
   missing: { tone: 'quiet', say: 'bimport.status.missing', retry: null },
   locked: { tone: 'err', say: 'bimport.status.locked', retry: 'again' },
   denied: { tone: 'err', say: 'bimport.status.denied', retry: 'again' },
@@ -319,18 +333,41 @@ const LOST: ImportKindOutcome = {
   failed: 0,
 }
 
+/**
+ * 密码库用不了（系统的加密存储不可用，Electron 的 safeStorage）：重试也存不进去。
+ * 主进程只给了英文原话（browser/passwords/store.mts 的 PasswordEncryptionUnavailable），只能按它认
+ */
+export const storeUnavailable = (error: string | undefined): boolean =>
+  !!error && /system keystore|encryption (is )?(not )?available|safeStorage/i.test(error)
+
 /** 一类的结果归纳成一行 */
 export function kindReport(kind: ImportKind, outcome: ImportKindOutcome | undefined): KindReport {
   const got = outcome ?? LOST
   const look = STATUS_LOOK[got.status] ?? STATUS_LOOK.failed
-  let { tone, say } = look
-  if (got.status === 'ok' && got.failed > 0) {
-    // 读全了，写的时候有几条没进去
-    tone = 'warn'
-    say = 'bimport.status.okFailed'
-  } else if (got.status === 'ok' && got.discovered === 0 && got.imported === 0) {
-    tone = 'quiet'
-    say = 'bimport.status.empty'
+  let { tone, say, retry } = look
+  if (got.status === 'ok') {
+    if (got.failed > 0) {
+      // 读全了，写的时候有几条没进去
+      tone = 'warn'
+      say = 'bimport.status.okFailed'
+      retry = 'again'
+    } else if (got.imported === 0) {
+      // 没有新的：来源里没有、都已经有了、都无效
+      if (got.skippedExisting > 0) {
+        tone = 'quiet'
+        say = 'bimport.status.allExisting'
+      } else if (got.skippedInvalid > 0) {
+        tone = 'warn'
+        say = 'bimport.status.allInvalid'
+      } else {
+        tone = 'quiet'
+        say = 'bimport.status.empty'
+      }
+    }
+  }
+  if ((got.status === 'partial' || got.status === 'failed') && storeUnavailable(got.error)) {
+    say = 'bimport.status.storeUnavailable'
+    retry = null
   }
   return {
     kind,
@@ -342,22 +379,35 @@ export function kindReport(kind: ImportKind, outcome: ImportKindOutcome | undefi
     skippedInvalid: got.skippedInvalid,
     failed: got.failed,
     discovered: got.discovered,
-    retry: look.retry,
+    retry,
     ...(got.error ? { error: got.error } : {}),
   }
 }
+
+/** 这一行要不要写条数：有任何一个数，或者成了 */
+export const showsCounts = (line: KindReport): boolean =>
+  line.tone === 'ok' || line.imported + line.skippedExisting + line.skippedInvalid + line.failed > 0
 
 export const OVERALL_TEXT: Record<Overall, MessageKey> = {
   ok: 'bimport.overall.ok',
   partial: 'bimport.overall.partial',
   failed: 'bimport.overall.failed',
+  existing: 'bimport.overall.existing',
+  nothing: 'bimport.overall.nothing',
   cancelled: 'bimport.overall.cancelled',
   'profile-gone': 'bimport.overall.profileGone',
   busy: 'bimport.overall.busy',
 }
 
-/** 整次导入归纳：kinds 是这次要导的几类，按它的先后出 */
-export function reportOf(kinds: readonly ImportKind[], outcome: ImportOutcome): ImportReport {
+/**
+ * 整次导入归纳：kinds 是这次要导的几类，按它的先后出。stopped 是用户点过“停止导入”：
+ * 停在两类之间时主进程可能一条 cancelled 都不报（前一类写完了、后一类 skipped），也算停下了
+ */
+export function reportOf(
+  kinds: readonly ImportKind[],
+  outcome: ImportOutcome,
+  stopped = false,
+): ImportReport {
   // 整体性的失败（资料不在、另一个导入在跑）没有逐类的结果
   const lines = outcome.error
     ? []
@@ -368,13 +418,19 @@ export function reportOf(kinds: readonly ImportKind[], outcome: ImportOutcome): 
   const elevate = lines.filter((line) => line.retry === 'elevate').map((line) => line.kind)
   let overall: Overall
   if (outcome.error) overall = outcome.error
-  else if (lines.some((line) => line.status === 'cancelled')) overall = 'cancelled'
-  else {
-    const bad = lines.filter((line) => line.tone === 'err').length
-    const good = lines.filter((line) => line.tone === 'ok' || line.tone === 'warn').length
+  else if (
+    stopped ||
+    lines.some((line) => line.status === 'cancelled' || line.status === 'skipped')
+  ) {
+    overall = 'cancelled'
+  } else {
+    const bad = lines.some((line) => line.tone === 'err')
+    const imported = lines.some((line) => line.imported > 0)
     const warned = lines.some((line) => line.tone === 'warn')
-    if (bad === 0) overall = warned ? 'partial' : 'ok'
-    else overall = good > 0 ? 'partial' : 'failed'
+    if (imported) overall = bad || warned ? 'partial' : 'ok'
+    else if (bad) overall = 'failed'
+    else if (lines.some((line) => line.skippedExisting > 0) && !warned) overall = 'existing'
+    else overall = 'nothing'
   }
   return { overall, say: OVERALL_TEXT[overall], kinds: lines, again, elevate }
 }
@@ -437,6 +493,8 @@ export type ImportStep =
       /** 表单上点“导入”时的那一份 */
       origin: ImportRequest
       outcome: ImportOutcome
+      /** 用户点过“停止导入” */
+      stopped: boolean
     }
   | { name: 'startFailed'; sources: ImportSource[]; reason: string }
 
@@ -452,7 +510,7 @@ export type ImportEvent =
   | { type: 'startFailed'; reason: string }
   | { type: 'back' }
 
-const sourcesOf = (step: ImportStep): ImportSource[] => ('sources' in step ? step.sources : [])
+const stepSources = (step: ImportStep): ImportSource[] => ('sources' in step ? step.sources : [])
 
 /** 对话框换阶段。不合这一阶段的事件不理（比如结果已经出来之后迟到的进度） */
 export function importStep(step: ImportStep, event: ImportEvent): ImportStep {
@@ -497,6 +555,7 @@ export function importStep(step: ImportStep, event: ImportEvent): ImportStep {
         sources: step.sources,
         origin: step.origin,
         outcome: mergeOutcome(step.base, event.outcome),
+        stopped: step.stopping,
       }
     case 'startFailed':
       return step.name === 'running'
@@ -504,7 +563,7 @@ export function importStep(step: ImportStep, event: ImportEvent): ImportStep {
         : step
     case 'back':
       return step.name === 'done' || step.name === 'startFailed'
-        ? { name: 'pick', sources: sourcesOf(step) }
+        ? { name: 'pick', sources: stepSources(step) }
         : step
   }
 }
@@ -517,3 +576,72 @@ export const canClose = (step: ImportStep): boolean => step.name !== 'running'
 /** 浏览器面板上出不出横幅：状态取到了、从没导过、没关过 */
 export const showBanner = (state: ImportState | null): boolean =>
   state !== null && state.lastImportAt === undefined && state.bannerDismissedAt === undefined
+
+// ---------- 主进程给的东西：不信形状 ----------
+// 主进程不认这个窗口时 sources 回 []、state 回 {}、start 回 null（browser-import/install.mts），
+// 旧的或出了错的也可能回别的。界面这边一律先过一遍，认不出的当没有。
+
+const STATUSES: readonly ImportKindStatus[] = [
+  'ok',
+  'partial',
+  'missing',
+  'locked',
+  'denied',
+  'needs-elevation',
+  'unsupported',
+  'cancelled',
+  'failed',
+  'skipped',
+]
+
+const count = (value: unknown): number =>
+  typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : 0
+
+/** start 的回答；认不出整体是 null（当没开始成），某一类认不出就当主进程没报这一类 */
+export function parseOutcome(raw: unknown): ImportOutcome | null {
+  if (!raw || typeof raw !== 'object') return null
+  const value = raw as { error?: unknown; kinds?: unknown }
+  if (value.error === 'profile-gone' || value.error === 'busy')
+    return { error: value.error, kinds: {} }
+  if (!value.kinds || typeof value.kinds !== 'object') return null
+  const kinds: ImportOutcome['kinds'] = {}
+  for (const kind of KINDS) {
+    const one = (value.kinds as Record<string, unknown>)[kind]
+    if (!one || typeof one !== 'object') continue
+    const item = one as Record<string, unknown>
+    const status = STATUSES.find((known) => known === item.status)
+    if (!status) continue
+    kinds[kind] = {
+      status,
+      discovered: count(item.discovered),
+      imported: count(item.imported),
+      skippedExisting: count(item.skippedExisting),
+      skippedInvalid: count(item.skippedInvalid),
+      failed: count(item.failed),
+      ...(typeof item.error === 'string' && item.error ? { error: item.error } : {}),
+    }
+  }
+  return { kinds }
+}
+
+/** sources 的回答：不是数组当没找到 */
+export const parseSources = (raw: unknown): ImportSource[] =>
+  Array.isArray(raw)
+    ? raw.filter(
+        (one): one is ImportSource =>
+          !!one &&
+          typeof one === 'object' &&
+          typeof (one as ImportSource).browser === 'string' &&
+          Array.isArray((one as ImportSource).profiles) &&
+          Array.isArray((one as ImportSource).kinds),
+      )
+    : []
+
+/** state 的回答：只取两个时间 */
+export function parseState(raw: unknown): ImportState {
+  const value = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}
+  const state: ImportState = {}
+  if (typeof value.lastImportAt === 'number') state.lastImportAt = value.lastImportAt
+  if (typeof value.bannerDismissedAt === 'number') state.bannerDismissedAt = value.bannerDismissedAt
+  return state
+}

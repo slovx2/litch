@@ -62,26 +62,36 @@ Before importing:
 
 - Quit the source browser completely (also from the background). While it is open its files are in
   use and the result says so; quit it and click "Try again".
-- macOS asks once for permission to use the browser's key in the Keychain; the user must choose Allow
-  (exception E1). If they denied it, "Try again" asks again.
+- On macOS, importing from a Chromium-based browser (Chrome, Edge, Brave, Arc, Chromium, Vivaldi) asks
+  once for permission to use that browser's key in the Keychain; the user must choose Allow. If they
+  denied it, "Try again" asks again. Firefox does not ask.
 - On Windows some browsers need administrator consent to read cookies and passwords: the user ticks
-  "Allow reading cookies and passwords as administrator" and approves the UAC prompt (E1). Without it
+  "Allow reading cookies and passwords as administrator" and approves the UAC prompt. Without it
   nothing can be imported from that browser.
 
 The result lists each kind with how many were imported, already there, invalid and failed. Nothing
 already in Litch is overwritten (same site, name and path for cookies; same site and user name for
-passwords). Invalid means expired or malformed cookies, or password entries that are not for a
-website (Android apps). The import itself never shows cookie values or passwords to agents or in the
-Litch window; only counts.
+passwords). Invalid means expired or malformed cookies, partitioned cookies (the built-in browser
+cannot store them), or password entries that are not for a website (Android apps). The import itself
+never shows cookie values or passwords to agents or in the Litch window; only counts.
 
 ### Saved passwords
 
 Passwords (imported, or saved after signing in) are kept in Litch's own store, encrypted with the
-system's secure storage, and filled in automatically in the built-in browser: in the user's tabs and
-in agent tabs too, so an agent can sign in to a site the user has a saved password for. When the user
-signs in to a site with a password Litch does not have yet, the Browser tab offers to save it.
+system's secure storage. Nothing is filled in by itself: clicking a sign-in field shows the saved
+accounts for that site, and the password goes in only after one is picked. In tabs an agent opened,
+the agent picks a suggestion the same way; it cannot read password fields or see save prompts.
+Pages that are not https are never filled (localhost and other loopback addresses are the
+exception).
+
+After the user signs in with a password Litch does not have, the Browser tab asks: **Save**, **Not
+now** or **Never for this site**. If Litch already has that user name for the site with a different
+password, it offers to **Update** it instead.
+
 Settings → Built-in browser → **Saved passwords** lists them by site and user name: search, delete
-one, delete all. Passwords cannot be shown or copied. "Clear browsing data" keeps them.
+one, delete all. Below it, **Never save passwords for** lists the sites marked "Never for this site";
+removing one makes Litch ask again there. Passwords cannot be shown or copied. "Clear browsing data"
+keeps them.
 
 Preferences (Settings → Built-in browser):
 

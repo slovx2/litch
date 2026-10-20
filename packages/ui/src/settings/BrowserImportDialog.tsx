@@ -42,6 +42,8 @@ import {
   kindLook,
   LOOK_TEXT,
   PROBLEM_TEXT,
+  parseOutcome,
+  parseSources,
   pickedKinds,
   profileBlock,
   profileLabel,
@@ -86,8 +88,9 @@ export function BrowserImportDialog({ bridge, onClose }: DialogProps) {
     let live = true
     send({ type: 'load' })
     bridge.sources().then(
-      (sources) => {
+      (raw) => {
         if (!live) return
+        const sources = parseSources(raw)
         send({ type: 'loaded', sources })
         // 还在的话留着上次选的，不然回到默认
         setDraft((previous) => {
@@ -109,6 +112,25 @@ export function BrowserImportDialog({ bridge, onClose }: DialogProps) {
 
   useEffect(() => bridge.onProgress((progress) => send({ type: 'progress', progress })), [bridge])
 
+  // Esc 在 document 的捕获阶段先接住：焦点不在对话框里时（导入一开始“导入”换成了“停止导入”，
+  // 焦点掉回 body），它会被外面的 Esc 处理（设置页的“回到对话”）拿去，整页连对话框一起关掉。
+  // 不让它往外传；正在导的时候连默认动作（对话框的 cancel）一起拦下
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      event.stopPropagation()
+      if (running.current) event.preventDefault()
+    }
+    document.addEventListener('keydown', onKey, true)
+    return () => document.removeEventListener('keydown', onKey, true)
+  }, [])
+
+  // 导入一开始焦点放到“停止导入”上，键盘还在对话框里
+  useEffect(() => {
+    if (step.name !== 'running') return
+    dialog.current?.querySelector<HTMLElement>('[data-act="bimp-stop"]')?.focus()
+  }, [step.name])
+
   // 对话框没了（比如切走了页面）还在导：停下来，不留一个看不见的导入
   useEffect(
     () => () => {
@@ -121,7 +143,12 @@ export function BrowserImportDialog({ bridge, onClose }: DialogProps) {
     send(retry ? { type: 'retry', request } : { type: 'start', request })
     setConsent(false)
     bridge.start(request).then(
-      (outcome) => send({ type: 'finished', outcome }),
+      (raw) => {
+        const outcome = parseOutcome(raw)
+        // 主进程不认这次请求（回 null 或认不出的东西）：当没开始成
+        if (outcome) send({ type: 'finished', outcome })
+        else send({ type: 'startFailed', reason: t('bimport.refused') })
+      },
       (error: unknown) => send({ type: 'startFailed', reason: reasonOf(error, t) }),
     )
   }
@@ -157,10 +184,14 @@ export function BrowserImportDialog({ bridge, onClose }: DialogProps) {
         // 正在导的时候 Esc 不关：要先停
         if (!canClose(step)) event.preventDefault()
       }}
-      onClose={onClose}
-      onKeyDown={(event) => {
-        // Esc 只关这个对话框，别让外面的 Esc 处理也跟着动
-        if (event.key === 'Escape') event.stopPropagation()
+      onClose={() => {
+        // 连按两次 Esc 时 Chromium 的第二次 cancel 拦不住（Electron 44 实测），对话框会被关掉：
+        // 还在导就重新打开，不让导入在看不见的地方被悄悄停下
+        if (running.current) {
+          dialog.current?.showModal()
+          return
+        }
+        onClose()
       }}
     >
       <form onSubmit={submit}>
@@ -189,11 +220,7 @@ export function BrowserImportDialog({ bridge, onClose }: DialogProps) {
               }}
             />
           ) : (
-            <div className="modal-body">
-              <p className="modal-note" data-bimp="none">
-                {t('bimport.none')}
-              </p>
-            </div>
+            <NoSource sources={step.sources} />
           )
         ) : step.name === 'running' ? (
           <ImportProgressView
@@ -206,6 +233,7 @@ export function BrowserImportDialog({ bridge, onClose }: DialogProps) {
             name={nameOf(step.origin.browser)}
             origin={step.origin}
             outcome={step.outcome}
+            stopped={step.stopped}
             consent={consent}
             onConsent={setConsent}
           />
@@ -235,6 +263,40 @@ export function BrowserImportDialog({ bridge, onClose }: DialogProps) {
         />
       </form>
     </dialog>
+  )
+}
+
+/**
+ * 一个能选的来源都没有：一个都没找到时说支持哪些；找到了但都导不了时把它们列出来、标上原因
+ */
+function NoSource({ sources }: { sources: ImportSource[] }) {
+  const t = useT()
+  if (sources.length === 0) {
+    return (
+      <div className="modal-body">
+        <p className="modal-note" data-bimp="none">
+          {t('bimport.none')}
+        </p>
+      </div>
+    )
+  }
+  return (
+    <div className="modal-body">
+      <p className="modal-note" data-bimp="unusable">
+        {t('bimport.unusable')}
+      </p>
+      <ul className="form-field bimp-sources">
+        {sources.map((one) => {
+          const block = sourceBlock(one)
+          return (
+            <li key={one.browser} className="bimp-source off" data-browser={one.browser}>
+              <span className="bimp-source-name">{one.name}</span>
+              {block ? <span className="form-note">{t(BLOCK_TEXT[block])}</span> : null}
+            </li>
+          )
+        })}
+      </ul>
+    </div>
   )
 }
 
@@ -491,7 +553,7 @@ function DialogFoot({
       )
       break
     case 'done': {
-      const report = reportOf(step.origin.kinds, step.outcome)
+      const report = reportOf(step.origin.kinds, step.outcome, step.stopped)
       if (report.overall === 'profile-gone') {
         buttons = (
           <>
