@@ -1535,6 +1535,11 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
           // interrupt 时 CLI 给模型的是它自己的那句“用户没让继续，停下等用户”，这里的话只进日志
           return { behavior: 'deny', message: PLAN_HANDED_OFF, interrupt: true }
         }
+        // 先把交来的计划记下（这个回合还没有计划条目时由它补一个），再问
+        await pending.handlers.onEvent({
+          type: 'plan_handoff',
+          plan: typeof input.plan === 'string' && input.plan.trim() ? input.plan : null,
+        })
         const answers = await pending.handlers.onUserInputRequest?.({
           type: 'user_input_request',
           toolName: 'ExitPlanMode',

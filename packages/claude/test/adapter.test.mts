@@ -3120,18 +3120,20 @@ test('turn/start planMode=true flows into Claude SDK permission_mode plan', asyn
     )
     await reader.nextResponse(2)
 
-    // Plan-mode text routes to a Plan ThreadItem via item/plan/delta so the
-    // App's Plan UI lights up. turn/plan/updated is NOT used for plan-mode text;
-    // it is reserved for the update_plan/TodoWrite checklist tool.
+    // 计划模式里说的话照上游 codex 是回答（agentMessage）：只有 <proposed_plan> 块进计划条目。
+    // turn/plan/updated 只给 update_plan/TodoWrite 那种清单用，计划模式的文字不发它。
+    let answerText = ''
     let planText = ''
     let sawPlanUpdated = false
     for (let i = 0; i < 200; i += 1) {
       const message = await reader.next()
+      if (message.method === 'item/agentMessage/delta') answerText += message.params.delta
       if (message.method === 'item/plan/delta') planText += message.params.delta
       if (message.method === 'turn/plan/updated') sawPlanUpdated = true
       if (message.method === 'turn/completed') break
     }
-    assert.match(planText, /planMode=true/, 'plan deltas should carry the runtime context')
+    assert.match(answerText, /planMode=true/, 'the runtime context reaches the answer')
+    assert.equal(planText, '', 'plain plan-mode text is not a plan item')
     assert.equal(sawPlanUpdated, false, 'plan-mode text must not emit turn/plan/updated')
   } finally {
     proc.kill()

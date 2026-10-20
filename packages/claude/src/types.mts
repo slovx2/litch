@@ -332,8 +332,8 @@ export type RuntimeEvent =
     }
   | { type: 'plan_mode'; enabled: boolean }
   | { type: 'plan_text'; text: string }
-  // 模型交了计划、入口不问（见 planConfirmation）：计划条目到此为止，回合随后停下。
-  // plan 是 CLI 交来的计划全文（计划文件的内容），没有时是 null。
+  // 模型交了计划（ExitPlanMode）：计划条目到此为止。入口不问时（见 planConfirmation）回合随后停下，
+  // 在回合里问时这一条先于提问。plan 是 CLI 交来的计划全文（计划文件的内容），没有时是 null。
   | { type: 'plan_handoff'; plan: string | null }
   // 压缩后上下文里还剩多少（compact_boundary 的 compact_metadata.post_tokens），CLI 没报是 null
   | { type: 'context_compacted'; messageId: string; postTokens?: number | null }

@@ -85,6 +85,7 @@ import {
   profileSandboxMode,
   validatePermissionsConfig,
 } from './permission-profiles.mjs'
+import { ProposedPlanParser, type ProposedPlanSegment } from './proposed-plan.mjs'
 import {
   historyHeadCursors,
   isForeignModel,
@@ -182,7 +183,7 @@ import { patchGitInfo } from './thread-metadata.mjs'
 import { threadQueueRequest } from './thread-queue.mjs'
 import { ThreadSubscribers } from './thread-subscribers.mjs'
 import { threadTimelineList } from './thread-timeline.mjs'
-import { toolUseItem } from './tool-items.mjs'
+import { readImageView, toolUseItem } from './tool-items.mjs'
 import { parseTurnSettings } from './turn-settings.mjs'
 import type {
   ClaudeRuntime,
@@ -3461,9 +3462,7 @@ export class CodexClaudeAppServer {
     // `params.planMode === true`; reproduce here so the helpers can check it.
     let planMode = turnSettings.planMode === true
     let planItemId: string | null = null
-    // 这一回合的计划已经交出来了（写进了计划文件，或者模型调了 ExitPlanMode 请用户确认）：
-    // 之后模型说的话是回答，不再并进计划条目。再次进入计划模式时重新算。
-    let planHandedIn = false
+    const planText = new ProposedPlanParser()
     const completePlanItem = (): void => {
       if (!planItemId) return
       const item = this.store.getTurn(turn.id)?.items.find((i) => i.id === planItemId)
@@ -3530,7 +3529,40 @@ export class CodexClaudeAppServer {
         })
       reasoningItemId = null
     }
+    const appendAgentText = (delta: string): void => {
+      const itemId = ensureAgentItem()
+      this.store.appendTextLater(turn.id, itemId, delta)
+      this.notify(peer, {
+        method: 'item/agentMessage/delta',
+        params: { threadId: thread.id, turnId: turn.id, itemId, delta },
+      })
+    }
+    // 计划模式里回答中的 <proposed_plan> 块是计划（plan 条目），块外的照旧是回答（agentMessage），
+    // 和上游 codex 一样；计划块穿插在一条回答中间时，回答还是同一个条目。
+    const applyPlanSegment = (segment: ProposedPlanSegment): void => {
+      if (segment.type === 'text') {
+        appendAgentText(segment.text)
+        return
+      }
+      if (segment.type === 'planStart') {
+        completePlanItem()
+        ensurePlanItem()
+        return
+      }
+      if (segment.type === 'planEnd') {
+        completePlanItem()
+        return
+      }
+      const itemId = ensurePlanItem()
+      this.store.appendTextLater(turn.id, itemId, segment.text)
+      this.notify(peer, {
+        method: 'item/plan/delta',
+        params: { threadId: thread.id, turnId: turn.id, itemId, delta: segment.text },
+      })
+    }
     const completeAgentItem = (phase: 'commentary' | 'final_answer'): void => {
+      // 一段回答说完了：解析器攒着的半行放出来
+      for (const segment of planText.finish()) applyPlanSegment(segment)
       if (!agentItemId) return
       const item = this.store.updateItem(turn.id, agentItemId, (item) =>
         item.type === 'agentMessage' ? { ...item, phase } : item,
@@ -4448,8 +4480,7 @@ export class CodexClaudeAppServer {
           }
           if (event.type === 'plan_text') {
             completePlanItem()
-            // 计划文件里的就是计划：条目只放文件的内容，之后说的话是回答。
-            planHandedIn = true
+            // 计划文件里的就是计划：条目只放文件的内容。
             const itemId = ensurePlanItem()
             this.store.updateItem(turn.id, itemId, (item) =>
               item.type === 'plan' ? { ...item, text: event.text } : item,
@@ -4461,23 +4492,27 @@ export class CodexClaudeAppServer {
             return
           }
           if (event.type === 'plan_handoff') {
-            // 模型交了计划、入口不问（发起回合的连接没声明 planConfirmation）：回合随后停下，
-            // 客户端在回合结束后看最后一个计划条目来问。这个回合里还没有成文的计划（计划是之前的
-            // 回合写进计划文件的）时，补一个计划条目放 CLI 交来的计划。
+            // 模型交了计划（ExitPlanMode）。入口不问时（发起回合的连接没声明 planConfirmation）回合随后停下，
+            // 客户端在回合结束后看最后一个计划条目来问；入口在回合里问时，这一条先于提问到。
+            // 这个回合里还没有成文的计划时补一个计划条目：先用 CLI 交来的计划（计划是之前的回合写进计划文件的）；
+            // CLI 也没有（模型没写文件、没用 <proposed_plan>，只是把计划说了出来）就用刚说完的那段回答，
+            // 不然客户端找不到计划可问。这时那段话既是回答也是计划，界面上会出现两次。
             completeMessage()
             completePlanItem()
-            planHandedIn = true
-            const written = this.store
-              .getTurn(turn.id)
-              ?.items.some((item) => item.type === 'plan' && item.text.trim() !== '')
-            if (!written && event.plan) {
+            const items = this.store.getTurn(turn.id)?.items ?? []
+            const written = items.some((item) => item.type === 'plan' && item.text.trim() !== '')
+            const spoken = items.findLast(
+              (item) => item.type === 'agentMessage' && item.text.trim() !== '',
+            )
+            const plan = event.plan ?? (spoken?.type === 'agentMessage' ? spoken.text : null)
+            if (!written && plan) {
               const itemId = ensurePlanItem()
               this.store.updateItem(turn.id, itemId, (item) =>
-                item.type === 'plan' ? { ...item, text: event.plan ?? '' } : item,
+                item.type === 'plan' ? { ...item, text: plan } : item,
               )
               this.notify(peer, {
                 method: 'item/plan/delta',
-                params: { threadId: thread.id, turnId: turn.id, itemId, delta: event.plan },
+                params: { threadId: thread.id, turnId: turn.id, itemId, delta: plan },
               })
               completePlanItem()
             }
@@ -4487,7 +4522,6 @@ export class CodexClaudeAppServer {
             completeMessage()
             completePlanItem()
             planMode = event.enabled
-            if (event.enabled) planHandedIn = false
             this.threadSettingsUpdate(peer, {
               threadId: thread.id,
               collaborationMode: { mode: planMode ? 'plan' : 'default' },
@@ -4498,27 +4532,15 @@ export class CodexClaudeAppServer {
             if (event.delta.length === 0) return
             completeReasoningItem()
             hasTextOutput = true
-            // In plan mode, text is the plan body — route to a Plan item +
-            // item/plan/delta + (later) turn/plan/updated so the App's
-            // Plan-mode UI lights up natively. Outside plan mode it's a
-            // normal agentMessage delta.
+            // 计划模式里只有 <proposed_plan> 块进计划条目，其余的话是回答（上游 codex 0.163.0 也是这样）；
+            // 计划文件的内容、ExitPlanMode 交来的计划另由 plan_text、plan_handoff 记成计划条目。
             // 结构化摘要属于输出结果，不能混进计划正文或改变计划状态。
             // 流式的字只记一笔（appendTextLater），不是每条增量都把整个回合写一遍。下面两处和思考、命令输出都是。
-            if (planMode && !planHandedIn && params.outputSchema == null) {
-              const itemId = ensurePlanItem()
-              this.store.appendTextLater(turn.id, itemId, event.delta)
-              this.notify(peer, {
-                method: 'item/plan/delta',
-                params: { threadId: thread.id, turnId: turn.id, itemId, delta: event.delta },
-              })
+            if (planMode && params.outputSchema == null) {
+              for (const segment of planText.push(event.delta)) applyPlanSegment(segment)
               return
             }
-            const itemId = ensureAgentItem()
-            this.store.appendTextLater(turn.id, itemId, event.delta)
-            this.notify(peer, {
-              method: 'item/agentMessage/delta',
-              params: { threadId: thread.id, turnId: turn.id, itemId, delta: event.delta },
-            })
+            appendAgentText(event.delta)
             return
           }
           if (event.type === 'reasoning_delta') {
@@ -4651,6 +4673,21 @@ export class CodexClaudeAppServer {
                 method: 'item/completed',
                 params: { threadId: thread.id, turnId: turn.id, item, completedAtMs: nowMillis() },
               })
+            // 读的是图：和上游 view_image 一样另有一个 imageView 条目，开始和完成一起发
+            const image =
+              item && readImageView(item, event.content, event.isError === true, thread.cwd)
+            if (image) {
+              this.store.appendItem(turn.id, image)
+              const at = nowMillis()
+              this.notify(peer, {
+                method: 'item/started',
+                params: { threadId: thread.id, turnId: turn.id, item: image, startedAtMs: at },
+              })
+              this.notify(peer, {
+                method: 'item/completed',
+                params: { threadId: thread.id, turnId: turn.id, item: image, completedAtMs: at },
+              })
+            }
             const diff = await gitTurnDiff(thread.cwd, diffBase)
             if (this.store.turnStatus(turn.id) !== 'inProgress') return
             if (diff) {
@@ -4871,9 +4908,8 @@ export class CodexClaudeAppServer {
           if (!turnIsActive()) return { answers: {} }
           completeMessage()
           if (event.toolName === 'ExitPlanMode') {
-            // 模型交计划了：计划条目到此为止，先收尾再问；不管用户怎么答，之后说的话都是回答。
+            // 模型交计划了：计划条目到此为止，先收尾再问。
             completePlanItem()
-            planHandedIn = true
           }
           // Render AskUserQuestion as Codex's native dynamicToolCall item +
           // item/tool/requestUserInput reverse RPC. The App pops its

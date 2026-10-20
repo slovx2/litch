@@ -1,6 +1,7 @@
 // Claude 的一次工具调用（tool_use 块）在协议里画成哪种条目。实时回合（server.mts）和读原生会话的历史
 // （native-history.mts）共用这一份，两边画出来的一样。条目还没有结果；结果到了用 server-helpers 的
 // toolItemWithResult 收尾。
+import { isAbsolute, resolve } from 'node:path'
 import { mcpToolRef } from './mcp-tool-name.mjs'
 import { fileChangeFromTool } from './server-helpers.mjs'
 import type { ThreadItem } from './types.mjs'
@@ -103,5 +104,27 @@ export function toolUseItem(
     result: null,
     error: null,
     durationMs: null,
+  }
+}
+
+// 模型用 Read 读了一张图（结果里有图片块）：照上游 view_image 另记一个 imageView 条目，路径是绝对路径。
+// Read 自己的那条工具条目照旧留着；读失败、读的不是图都没有。实时回合和读历史都在工具结果到时调它。
+export function readImageView(
+  item: ThreadItem,
+  content: unknown,
+  isError: boolean,
+  cwd: string,
+): Extract<ThreadItem, { type: 'imageView' }> | null {
+  if (isError || item.type !== 'mcpToolCall' || item.server !== 'claude-code') return null
+  if (!/^Read(?: |$)/.test(item.tool)) return null
+  const args = (item.arguments ?? {}) as Record<string, unknown>
+  const raw = args.file_path ?? args.path
+  if (typeof raw !== 'string' || !raw) return null
+  const blocks = Array.isArray(content) ? content : []
+  if (!blocks.some((block) => (block as { type?: unknown } | null)?.type === 'image')) return null
+  return {
+    type: 'imageView',
+    id: `${item.id}:image`,
+    path: isAbsolute(raw) ? raw : resolve(cwd, raw),
   }
 }
