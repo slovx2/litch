@@ -5624,7 +5624,13 @@ export class CodexClaudeAppServer {
       clientId: messageId,
     }
     this.store.saveSteeredMessage(activeTurnId, item, messageId, hash)
-    await this.runtime.steer(threadId, prompt)
+    try {
+      await this.runtime.steer(threadId, prompt)
+    } catch (error) {
+      // 运行时已经在收尾、不再收输入（上游同样拒绝往收尾中的回合里插话）：这句话没进回合，别留在记录里
+      this.store.withdrawSteeredMessage(activeTurnId, item.id, messageId)
+      throw error
+    }
     this.sendInputItem(peer, threadId, activeTurnId, item)
     return { turnId: activeTurnId }
   }

@@ -45,6 +45,7 @@ import type { OnElicitation, Query } from '@anthropic-ai/claude-agent-sdk'
 import { type ApprovalPolicy, allowsApproval, toolApprovalFlow } from './approval-policy.mjs'
 import { deniedMessage } from './approval-request.mjs'
 import { claudeChildEnv } from './claude-provider.mjs'
+import { settingsEnvValue } from './claude-setting-layers.mjs'
 import { cliOutputFormat } from './cli-output-schema.mjs'
 import {
   contextTokens,
@@ -1093,7 +1094,8 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         abortController: abort,
         pathToClaudeCodeExecutable: hostClaudeExecutable(),
         cwd: process.cwd(),
-        settingSources: ['user'],
+        // 只读用户级（入口自己的目录不是项目）；CHA_CLAUDE_SETTING_SOURCES 没选 user 时一层都不读
+        settingSources: claudeSettingSources().filter((source) => source === 'user'),
         tools: [],
         mcpServers: {},
         strictMcpConfig: true,
@@ -1215,6 +1217,17 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     const originalBashInputs: OriginalBashInputs = new Map()
     const reservedGoalTools = new Set<string>()
     const childEnv = claudeChildEnv()
+    // 开着线程号开关时要给的 ANTHROPIC_CUSTOM_HEADERS：以 CLI 本来会用的那份为底（设置的 env 里配了的优先，
+    // 没配用进程环境），下面同时放进进程环境和入口传的设置的 env。CLI 起来后会拿设置里的 env 盖进程环境，
+    // 入口传的这一层优先于用户、项目的设置，才不会被它们盖掉。关着时是空对象，两处都不碰
+    const threadHeader = claudeThreadIdHeaderEnv(
+      {
+        ANTHROPIC_CUSTOM_HEADERS:
+          settingsEnvValue(context.cwd, 'ANTHROPIC_CUSTOM_HEADERS') ??
+          childEnv.ANTHROPIC_CUSTOM_HEADERS,
+      },
+      context.sessionThreadId ?? context.threadId,
+    )
     const opts: Record<string, unknown> = {
       abortController: abort,
       pathToClaudeCodeExecutable: hostClaudeExecutable(),
@@ -1239,17 +1252,20 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         // 命令里调 litch-machine 时按它认会话。CLI 一个会话一个进程，Bash 工具继承它；
         // 追问子代理的回合跑在父线程的会话上，给的是父线程
         LITCH_THREAD_ID: context.sessionThreadId ?? context.threadId,
-        ...claudeThreadIdHeaderEnv(childEnv, context.sessionThreadId ?? context.threadId),
+        ...threadHeader,
       },
       ...runtimePermissionOptions(context, originalBashInputs),
       settings: {
-        // 放 CLI 自己的默认位置时不传，传了项目外的目录 CLI 会报错
-        ...(claudePlansLocation() === 'workspace'
-          ? { plansDirectory: relative(context.cwd, planDirectory(context)) }
-          : {}),
+        // 放 CLI 自己的默认位置时给空串：这一层优先于用户、项目的设置，盖掉那里配的 plansDirectory，
+        // CLI 见到空值就用默认位置，和豁免的目录对得上（给项目外的目录 CLI 会报错再退回默认位置）
+        plansDirectory:
+          claudePlansLocation() === 'workspace'
+            ? relative(context.cwd, planDirectory(context))
+            : '',
         // Skill 的内联 shell 不经过 Bash hook；受限会话只能通过常规工具执行命令。
         ...(needsStrictSkillShell(context) ? { disableSkillShellExecution: true } : {}),
         ...(context.skillOverrides ? { skillOverrides: context.skillOverrides } : {}),
+        ...(threadHeader.ANTHROPIC_CUSTOM_HEADERS ? { env: threadHeader } : {}),
       },
       disallowedTools: ['CronCreate', 'CronDelete', 'CronList', 'ScheduleWakeup'],
       stderr: (data: string) => process.stderr.write(data),

@@ -1291,6 +1291,24 @@ export class SessionStore {
     this.saveSubmission({ ...turn, items: [...turn.items, item] }, messageId, hash)
   }
 
+  /** 插进回合的话没送进去（回合正在收尾、已经结束）：从回合里撤掉，同一个消息号的提交记录也删掉，重试不会当成已收下 */
+  withdrawSteeredMessage(turnId: string, itemId: string, messageId: string | null): void {
+    const turn = this.getTurn(turnId)
+    if (!turn) return
+    this.db.exec('BEGIN IMMEDIATE')
+    try {
+      this.upsertTurn({ ...turn, items: turn.items.filter((item) => item.id !== itemId) })
+      if (messageId)
+        this.db
+          .prepare('DELETE FROM submissions WHERE thread_id=? AND message_id=? AND turn_id=?')
+          .run(turn.threadId, messageId, turn.id)
+      this.db.exec('COMMIT')
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
+  }
+
   saveNativeBoundary(turnId: string, messageId: string): void {
     this.db
       .prepare(`INSERT INTO native_turn_boundaries VALUES (?,?)

@@ -170,15 +170,20 @@ export CHA_CLAUDE_MCP_IDLE_CONNECTIONS=16
 
 ```bash
 # 起 CLI 时读哪几层 Claude Code 设置（逗号分隔：user、project、local），默认三层都读。
-# 只给 user 时工作区里的 .claude/settings*.json（hooks、env 等）、CLAUDE.md、.mcp.json 都不读。
+# 只给 user 时工作区里的 .claude/settings*.json（hooks、env 等）、CLAUDE.md、.mcp.json、.claude/skills 都不读；
+# 入口自己列技能（skills/list）、钩子（hooks/list）、模型，认凭据作用域时也只看选中的几层。
 export CHA_CLAUDE_SETTING_SOURCES="user"
 
 # 计划模式的计划文件放哪：workspace（默认，<工作区>/.claude/plans/codex-harness-adapter/<线程号>/）
 # 或 config（Claude Code 自己的默认位置 <CLAUDE_CONFIG_DIR 或 ~/.claude>/plans/，工作区里不留东西）。
+# config 时用户、项目设置里配的 plansDirectory 被入口盖掉；这个目录各会话共用，计划模式只豁免本会话
+# CLI 自己的那一个计划文件（<slug>.md，从会话记录里认），别的文件照常按沙箱。
 export CHA_CLAUDE_PLANS_LOCATION="config"
 
 # 设成 1 时 CLI 发的每个模型请求带 thread-id: <线程号>（合进 ANTHROPIC_CUSTOM_HEADERS，原有的头保留）。
 # 默认关，关着时一个多余的头都不发；给按线程计费的代理用，代理转发上游前要自己剥掉。
+# Claude Code 设置的 env 里配了 ANTHROPIC_CUSTOM_HEADERS 时以它为底合并，也盖不掉 thread-id；
+# 托管策略（managed-settings.json）里配的盖不过。追问子代理的回合跑在父会话上，带父线程号。
 export CHA_CLAUDE_THREAD_ID_HEADER=1
 ```
 

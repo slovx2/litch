@@ -4,6 +4,7 @@ import { homedir } from 'node:os'
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import { parseDocument } from 'yaml'
 import { ProtocolError } from './protocol-contract.mjs'
+import { claudeSettingSources } from './runtime-config.mjs'
 
 export interface NativeSkill {
   name: string
@@ -81,13 +82,15 @@ export function scanSkillRoot(
 
 export function nativeSkillOverrides(cwd: string): Record<string, string> {
   const result: Record<string, string> = Object.create(null)
+  // 只看 CHA_CLAUDE_SETTING_SOURCES 选中的几层，和 CLI 读的一致
+  const sources = claudeSettingSources()
   for (const path of [
-    join(nativeSkillHome(), 'settings.json'),
+    ...(sources.includes('user') ? [join(nativeSkillHome(), 'settings.json')] : []),
     ...projectSkillDirectories(cwd)
       .reverse()
       .flatMap((directory) => [
-        join(directory, '.claude', 'settings.json'),
-        join(directory, '.claude', 'settings.local.json'),
+        ...(sources.includes('project') ? [join(directory, '.claude', 'settings.json')] : []),
+        ...(sources.includes('local') ? [join(directory, '.claude', 'settings.local.json')] : []),
       ]),
   ]) {
     if (!existsSync(path)) continue
