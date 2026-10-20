@@ -128,6 +128,8 @@ export async function enginesWrite(words: string, label: string, file: string): 
   await kit.send(words)
   const waiting = await kit.cardOrEnd()
   const card = waiting ? kit.readCard(waiting) : null
+  // 进行中的步骤组默认收着，要写的那个文件那一条要点开才画出来
+  if (waiting) await kit.unfold()
   const pending = waiting ? kit.subs(kit.turns().at(-1), '.item-head').map(text).join('｜') : ''
   if (waiting) await kit.answer(waiting, label)
   await kit.idle()

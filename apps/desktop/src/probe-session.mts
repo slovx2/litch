@@ -284,6 +284,14 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
     await frame()
   }
   await until(`侧栏里的“${other}”`, () => rowOf(other))
+  // 回合结束时整段过程收起，对话区随后还要滚一下把位置对上；弹在鼠标处的菜单碰上滚动就收起，等停稳了再点右键
+  let moved = performance.now()
+  const mark = () => {
+    moved = performance.now()
+  }
+  window.addEventListener('scroll', mark, true)
+  await until('页面停止滚动', () => performance.now() - moved > 300)
+  window.removeEventListener('scroll', mark, true)
   const click = rightClick(other)
   const popped = await until('右键菜单', menu)
   await frame()
