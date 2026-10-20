@@ -12,7 +12,7 @@ import {
   shownSpeed,
 } from '@litch/core'
 import { useState } from 'react'
-import { Pressable, ScrollView, StyleSheet, Text } from 'react-native'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { useT } from '../../ui/i18n'
 import { Confirm } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
@@ -87,9 +87,9 @@ export function SettingsBar({
       : null
   if (!options) {
     return percent === null ? null : (
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.bar}>
+      <View style={styles.bar}>
         <Chip label={`${t('compose.context')} ${percent}%`} />
-      </ScrollView>
+      </View>
     )
   }
   const model = options.models.find((entry) => entry.id === settings.model)
@@ -143,13 +143,7 @@ export function SettingsBar({
   const plan = settings.mode === 'plan'
   return (
     <>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        style={styles.bar}
-        contentContainerStyle={styles.barIn}
-      >
+      <View style={styles.bar}>
         {options.models.length > 0 ? (
           <Chip
             testID="settings:model"
@@ -191,7 +185,7 @@ export function SettingsBar({
             {t('compose.context')} {percent}%
           </Text>
         ) : null}
-      </ScrollView>
+      </View>
       <PickerSheet
         visible={open === 'model'}
         title={t('composer.model')}
@@ -248,8 +242,15 @@ export function SettingsBar({
 }
 
 const styles = StyleSheet.create({
-  bar: { flexGrow: 0 },
-  barIn: { alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingBottom: 6 },
+  // 放不下就折到下一行：安卓上横着滚的条几乎划不动（实测，320 宽的屏上速度一多，计划就够不着了）
+  bar: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingBottom: 6,
+  },
   chip: { borderWidth: 1, paddingHorizontal: 8, height: 28, justifyContent: 'center' },
   chipText: { fontSize: 13 },
   usage: { fontSize: 11, marginLeft: 4 },

@@ -31,6 +31,13 @@ tags: [mock]
     visible:
       id: proposal:.*:dismiss
     timeout: 10000
+# 第一张带着背景、比较高，回答停下时它的“不要”可能已经滚到屏幕上面去了：先翻回到它，免得点成下面那张
+- scrollUntilVisible:
+    element:
+      text: (Tidy the CHANGELOG|整理 CHANGELOG)
+    direction: UP
+    centerElement: true
+    timeout: 10000
 - tapOn:
     id: proposal:.*:dismiss
     index: 0
@@ -58,11 +65,22 @@ tags: [mock]
     timeout: 10000
 - assertVisible:
     id: proposal-start:wider
+# 页面比一屏长（多了背景一栏），标题和唤醒开关在下面
+- scrollUntilVisible:
+    element:
+      id: proposal-start:title
+    direction: DOWN
+    timeout: 10000
 - tapOn:
     id: proposal-start:title
 - eraseText: 80
 - inputText: e2e edited
 - hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: proposal-start:wake
+    direction: DOWN
+    timeout: 10000
 - tapOn:
     id: proposal-start:wake
 - scrollUntilVisible:
@@ -71,9 +89,11 @@ tags: [mock]
     direction: DOWN
 - tapOn:
     id: proposal-start:go
-- extendedWaitUntil:
-    visible:
+# 起出来的子会话那一行在卡片下面，窄屏上可能在屏幕外
+- scrollUntilVisible:
+    element:
       id: proposal:.*:child
+    direction: DOWN
     timeout: 15000
 - assertNotVisible:
     id: detail:proposals

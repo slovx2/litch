@@ -83,7 +83,14 @@ export function installDiffKit(): boolean {
     }
   }
   const open = async () => {
-    if (!files.sideOpen()) files.toggle()
+    // 侧面板开没开按会话记：刚换了会话，面板要过一两帧才换成这个会话自己的开合，先等它定下来；
+    // 开合按钮 150 毫秒里只认一次，没开成就隔一会儿再按
+    await files.frame()
+    await files.frame()
+    for (let tries = 0; !files.sideOpen() && tries < 5; tries++) {
+      files.toggle()
+      await files.seen(() => files.sideOpen(), 600)
+    }
     const tab = await until('差异标签', () => one<HTMLElement>('.side-tab[data-tab="diff"]'))
     if (tab.getAttribute('aria-selected') !== 'true') tab.click()
     return wait(

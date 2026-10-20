@@ -34,19 +34,24 @@ export async function roomSeen(
   // 侧面板开没开按会话记（新建对话页按设备记），没开过的切过来是收着的：用快捷键（⌥⌘B）打开。
   // 这几个函数是整个送进页面里跑的，用不了模块里的别的函数，所以写在里面
   const openSide = async () => {
-    if (kit.sideOpen()) return
-    // 开合的快捷键 150 毫秒里只认一次，和上一次按隔开
-    await kit.sleep(220)
-    document.body.dispatchEvent(
-      new KeyboardEvent('keydown', {
-        key: '∫',
-        code: 'KeyB',
-        altKey: true,
-        metaKey: true,
-        bubbles: true,
-        cancelable: true,
-      }),
-    )
+    // 刚换了会话，面板要过一两帧才换成这个会话自己的开合，先等它定下来
+    await kit.frame()
+    await kit.frame()
+    // 开合的快捷键 150 毫秒里只认一次：每次按之前隔开，没开成再按
+    for (let tries = 0; !kit.sideOpen() && tries < 5; tries++) {
+      await kit.sleep(220)
+      document.body.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: '∫',
+          code: 'KeyB',
+          altKey: true,
+          metaKey: true,
+          bubbles: true,
+          cancelable: true,
+        }),
+      )
+      await kit.seen(() => kit.sideOpen(), 600)
+    }
   }
   await kit.seen(() => window.innerWidth === inner && window.innerHeight === innerHeight, 5000)
   await kit.openSession(waiting)
@@ -164,19 +169,24 @@ export async function newPageSeen(args: {
   // 侧面板开没开按会话记（新建对话页按设备记），没开过的切过来是收着的：用快捷键（⌥⌘B）打开。
   // 这几个函数是整个送进页面里跑的，用不了模块里的别的函数，所以写在里面
   const openSide = async () => {
-    if (kit.sideOpen()) return
-    // 开合的快捷键 150 毫秒里只认一次，和上一次按隔开
-    await kit.sleep(220)
-    document.body.dispatchEvent(
-      new KeyboardEvent('keydown', {
-        key: '∫',
-        code: 'KeyB',
-        altKey: true,
-        metaKey: true,
-        bubbles: true,
-        cancelable: true,
-      }),
-    )
+    // 刚换了会话，面板要过一两帧才换成这个会话自己的开合，先等它定下来
+    await kit.frame()
+    await kit.frame()
+    // 开合的快捷键 150 毫秒里只认一次：每次按之前隔开，没开成再按
+    for (let tries = 0; !kit.sideOpen() && tries < 5; tries++) {
+      await kit.sleep(220)
+      document.body.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: '∫',
+          code: 'KeyB',
+          altKey: true,
+          metaKey: true,
+          bubbles: true,
+          cancelable: true,
+        }),
+      )
+      await kit.seen(() => kit.sideOpen(), 600)
+    }
   }
   const placeNow = () => {
     const panel = kit.side()
