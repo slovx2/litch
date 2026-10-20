@@ -12,13 +12,18 @@ export type RunCommand = (
   args: string[],
   input: Buffer,
   signal: AbortSignal,
+  options?: { env?: NodeJS.ProcessEnv },
 ) => Promise<CommandResult>
 
 // 只用管道传数据；不建 shell、不把密文或明文放进参数、错误、日志。
-export const runCommand: RunCommand = async (file, args, input, signal) => {
+export const runCommand: RunCommand = async (file, args, input, signal, options) => {
   checkCancelled(signal)
   return new Promise((resolve, reject) => {
-    const child = spawn(file, args, { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true })
+    const child = spawn(file, args, {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      windowsHide: true,
+      ...options,
+    })
     let stdout: Buffer[] = []
     let stderr: Buffer[] = []
     let bytes = 0
