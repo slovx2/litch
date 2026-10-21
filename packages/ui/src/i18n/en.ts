@@ -819,7 +819,6 @@ export const en: Record<MessageKey, Entry> = {
     'Picked from your system language on first launch. After that it changes only here',
   'settings.switches.intro':
     'Turn task cards, the built-in browser and Computer Use on or off per device, then per harness.',
-  'settings.switches.pending': 'The switch table is not wired in yet.',
   'settings.group.chat': 'Conversation',
   'settings.chat.intro':
     'What happens to messages you send while a turn is running. One setting for every device and harness.',

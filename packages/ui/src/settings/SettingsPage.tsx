@@ -8,6 +8,7 @@ import { BrowserSection } from './BrowserSection.tsx'
 import { ChatSection } from './ChatSection.tsx'
 import { ComputerSection } from './ComputerSection.tsx'
 import { computerBridge, computerIntro } from './computer-bridge.ts'
+import { HarnessSwitches } from './HarnessSwitches.tsx'
 import { LangSection, LookSection } from './Look.tsx'
 import { NotifySection } from './NotifySection.tsx'
 import { ShortcutsSection } from './Shortcuts.tsx'
@@ -153,10 +154,8 @@ export function SettingsPage({
           ) : section === 'chat' ? (
             <ChatSection />
           ) : section === 'switches' ? (
-            // 任务卡、内置浏览器、Computer Use 按“设备 → harness”的开关表（HarnessSwitches.tsx，另一条线在做），合并时换进来
-            <section className="set-block" data-slot="harness-switches">
-              <p className="set-note">{t('settings.switches.pending')}</p>
-            </section>
+            // 任务卡、内置浏览器、Computer Use 按“设备 → harness”的开关表
+            <HarnessSwitches />
           ) : section === 'browser' ? (
             <BrowserSection />
           ) : section === 'computer' ? (

@@ -758,7 +758,6 @@ export const zhCN = {
   'settings.lang.intro': '界面上的字用哪种语言。对面发来的原文不翻译。',
   'settings.lang.note': '第一次启动时已经按系统的语言选好了，之后只有在这里改才会变',
   'settings.switches.intro': '任务卡、内置浏览器、Computer Use 按设备、再按 harness 分别开关。',
-  'settings.switches.pending': '开关表还没接上。',
   'settings.group.chat': '对话',
   'settings.chat.intro': '回合进行中发消息怎么处理。全局一份，所有设备和 harness 都照这个。',
   'settings.chat.sendMode': '回合进行中发消息',
