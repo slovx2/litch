@@ -454,7 +454,12 @@ test('PROFILE-REAL-001：真实 CLI 里 Read 和 Bash 都按档位禁读，自�
     })
     let sequence = 0
     let current = thread.id
-    const call = async (name: string, input: Record<string, unknown>, allowed: boolean) => {
+    const call = async (
+      name: string,
+      input: Record<string, unknown>,
+      allowed: boolean,
+      turnParams: Record<string, unknown> = { permissions: 'saas' },
+    ) => {
       const id = `toolu_profile_${sequence++}`
       let output = ''
       model.enqueue(() => [{ type: 'tool_use', id, name, input }])
@@ -474,7 +479,7 @@ test('PROFILE-REAL-001：真实 CLI 里 Read 和 Bash 都按档位禁读，自�
       const { turn } = await client.request('turn/start', {
         threadId: current,
         input: text(`第 ${sequence} 步`),
-        permissions: 'saas',
+        ...turnParams,
       })
       const completed = await client.completed(turn.id)
       assert.equal(completed.status, 'completed', client.stderr.slice(-3000))
@@ -483,6 +488,15 @@ test('PROFILE-REAL-001：真实 CLI 里 Read 和 Bash 都按档位禁读，自�
     }
     assert.match(await call('Read', { file_path: join(own, 'mine.txt') }, true), /MINE/)
     assert.match(await call('Read', { file_path: join(home, 'ws/B/secret') }, false), /禁止读取/)
+    // 工作目录外可读的文件照 codex 直接读，不走审批（never 下原先会被当成审批请求拒掉）
+    writeFileSync(join(home, 'shared/note.txt'), 'SHARED')
+    assert.match(await call('Read', { file_path: join(home, 'shared/note.txt') }, true), /SHARED/)
+    // 链接指向禁读目录的，按真实路径拒
+    symlinkSync(join(home, 'ws/B'), join(home, 'shared/b-link'))
+    assert.match(
+      await call('Read', { file_path: join(home, 'shared/b-link/secret') }, false),
+      /禁止读取/,
+    )
     const leaked = await call('Bash', { command: `cat ${join(home, 'ws/B/secret')}; true` }, true)
     assert.doesNotMatch(leaked, /SECRET_OF_B/)
     assert.match(leaked, /Operation not permitted|Permission denied|No such file/)
@@ -517,6 +531,51 @@ test('PROFILE-REAL-001：真实 CLI 里 Read 和 Bash 都按档位禁读，自�
       symlinkSync('/proc/self/environ', join(own, 'env-link'))
       assert.match(await call('Read', { file_path: join(own, 'env-link') }, false), /禁止读取/)
     }
+    // on-request、计划模式下读文件同样不发审批：可读的放行，禁读的直接拒
+    const asking = await client.request('thread/start', {
+      cwd: own,
+      permissions: 'saas',
+      approvalPolicy: 'on-request',
+    })
+    current = asking.thread.id
+    const requests: string[] = []
+    client.onServerRequest = async (method) => {
+      requests.push(method)
+      return { decision: 'decline' }
+    }
+    const plan = {
+      permissions: 'saas',
+      collaborationMode: {
+        mode: 'plan',
+        settings: {
+          model: 'claude-sonnet-4-6',
+          reasoning_effort: null,
+          developer_instructions: null,
+        },
+      },
+    }
+    for (const turnParams of [{ permissions: 'saas' }, plan]) {
+      assert.match(
+        await call('Read', { file_path: join(home, 'shared/note.txt') }, true, turnParams),
+        /SHARED/,
+      )
+      assert.match(
+        await call('Read', { file_path: join(home, 'ws/B/secret') }, false, turnParams),
+        /禁止读取/,
+      )
+    }
+    // 内置档位整个磁盘可读：never 下读工作目录外的也放行
+    const builtin = await client.request('thread/start', {
+      cwd: own,
+      sandbox: 'workspace-write',
+      approvalPolicy: 'never',
+    })
+    current = builtin.thread.id
+    assert.match(
+      await call('Read', { file_path: join(home, 'ws/B/secret') }, true, {}),
+      /SECRET_OF_B/,
+    )
+    assert.deepEqual(requests, [], '读文件不能发审批请求')
   } finally {
     await client.close()
     await model.close()

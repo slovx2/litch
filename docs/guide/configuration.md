@@ -230,7 +230,7 @@ node packages/claude/dist/claude/src/adapter.mjs app-server --listen stdio:// \
 - `network.enabled`：命令能不能联网。`network` 下其余的键（代理、域名名单等）不生效。
 - `thread/start`、`turn/start`、`thread/resume`、`thread/fork`、`thread/settings/update` 的 `permissions` 可以填这里定义的名字，没定义的名字照旧回 `-32602`；`default_permissions` 管不带权限也不带旧式 `sandbox` 的新会话。会话记下选中那一刻的档位，之后改配置不影响已有会话，除非请求里再选一次。`permissionProfile/list` 会列出这些档位。
 
-同一份规则同时管两处：模型的 `Bash` 命令（macOS 用 `sandbox-exec`，Linux 用 `bwrap`：禁读的目录盖一层空 tmpfs，再把其中放回的子目录挂回；照 codex 另起 PID 命名空间，挂一份只有沙箱自己进程的 /proc。Docker 默认遮住了 /proc 下的一些路径，用户命名空间里挂不了新的 /proc，这时沙箱里的 /proc 是空的（`ps`、`/dev/stdin`、`/dev/fd`、bash 的进程替换用不了），不回落成宿主的 /proc，免得看到别的会话的命令行；容器加 `--security-opt systempaths=unconfined` 就能挂）和文件类工具（`Read`、`Glob`、`Grep`、`LS`、`NotebookRead` 查禁读，`Write`、`Edit`、`MultiEdit`、`NotebookEdit` 查可写）。`Glob`、`Grep` 的搜索范围里只要有禁读的目录就整个拒绝，请模型换一个不含它的目录；`Glob` 的 pattern 带 `..` 段也拒绝。
+同一份规则同时管两处：模型的 `Bash` 命令（macOS 用 `sandbox-exec`，Linux 用 `bwrap`：禁读的目录盖一层空 tmpfs，再把其中放回的子目录挂回；照 codex 另起 PID 命名空间，挂一份只有沙箱自己进程的 /proc。Docker 默认遮住了 /proc 下的一些路径，用户命名空间里挂不了新的 /proc，这时沙箱里的 /proc 是空的（`ps`、`/dev/stdin`、`/dev/fd`、bash 的进程替换用不了），不回落成宿主的 /proc，免得看到别的会话的命令行；容器加 `--security-opt systempaths=unconfined` 就能挂）和文件类工具（`Read`、`Glob`、`Grep`、`LS`、`NotebookRead` 查禁读，`Write`、`Edit`、`MultiEdit`、`NotebookEdit` 查可写）。`Glob`、`Grep` 的搜索范围里只要有禁读的目录就整个拒绝，请模型换一个不含它的目录；`Glob` 的 pattern 带 `..` 段也拒绝。读文件照 codex 不走审批：哪种审批策略（含 `never`）、计划模式下，读工作目录外的文件都按可读范围直接判定，可读就读，禁读的直接拒；不选自定义档位时整个磁盘可读。
 
 - 路径先取真实路径再判定，大小写也按磁盘上的真实写法纠正（macOS 默认的卷不分大小写）；还不存在的那一段取不到真实写法，在 macOS 上 `deny` 条目按不分大小写比。
 - 不存在的禁读路径照样受管：`sandbox-exec` 的规则不要求路径存在；`bwrap` 照 codex，在可写范围里对第一个不存在的那一级挂一个 `/dev/null` 占位，命令里建不出它，命令结束后删掉占位（只删空文件、空目录）。

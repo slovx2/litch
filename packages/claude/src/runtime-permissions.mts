@@ -31,6 +31,12 @@ const readTools = new Set([
   'WebSearch',
 ])
 const fileTools = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit'])
+// 只读文件、列目录、搜文件的工具
+const fileReadTools = new Set(['Read', 'NotebookRead', 'LS', 'Glob', 'Grep'])
+
+export function isFileReadTool(name: string): boolean {
+  return fileReadTools.has(name)
+}
 
 export function isFileEditTool(name: string): boolean {
   return fileTools.has(name)

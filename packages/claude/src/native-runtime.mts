@@ -96,6 +96,7 @@ import {
 import {
   deniedTool,
   isFileEditTool,
+  isFileReadTool,
   isPlanFile,
   type OriginalBashInputs,
   planDirectory,
@@ -1557,6 +1558,15 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         return { behavior: 'allow', updatedInput: input }
       }
       if (isPlanFile(context, toolName, input)) return { behavior: 'allow', updatedInput: input }
+      // 读文件照 codex 不走审批（哪种审批策略、计划模式都一样）：按可读范围直接判定，自定义档位里
+      // 禁读的拒绝（大小写、链接按真实路径，见 deniedTool），其余放行；内置档位整个磁盘可读。
+      // CLI 只在读工作目录外的文件时才来问，不在这里定就会变成审批，never 下直接被拒
+      if (isFileReadTool(toolName)) {
+        const reason = deniedTool(context, toolName, input)
+        return reason
+          ? { behavior: 'deny', message: reason }
+          : { behavior: 'allow', updatedInput: input }
+      }
       if (
         toolName === 'Bash' &&
         originalBashInputs.has(toolUseId) &&
