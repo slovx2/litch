@@ -43,6 +43,7 @@
 import { OUTPUT_KEEP, PART_CHARS } from '@litch/core'
 import { app, type BrowserWindow } from 'electron'
 import { activityProbe, judgeActivity } from './probe-activity.mjs'
+import { backgroundProbe, judgeBackground } from './probe-background.mjs'
 import { cardRoomProbe, cardsProbe, judgeCards } from './probe-cards.mjs'
 import {
   COMMENT_SESSION,
@@ -112,6 +113,7 @@ type ProbeMode =
   | 'sidebar'
   | 'tasks'
   | 'tree'
+  | 'background'
   | 'onboard'
   | 'harness-settings'
   | 'engines'
@@ -162,6 +164,7 @@ const PROBE_MODES: readonly string[] = [
   'sidebar',
   'tasks',
   'tree',
+  'background',
   'onboard',
   'harness-settings',
   'engines',
@@ -182,6 +185,7 @@ export const MOCK_MODES: readonly string[] = [
   'sidebar',
   'tasks',
   'tree',
+  'background',
   'onboard',
   'harness-settings',
   'terminal',
@@ -268,6 +272,11 @@ async function measure(
     return [result, judgeTasks(result, TASK_NAME)]
   }
   if (mode === 'tree') return runTreeChecks(window)
+  if (mode === 'background') {
+    // 侧栏里一个空闲的会话（模拟核心的示例数据），在它里面演
+    const result = await runInPage(window, backgroundProbe, 'k1')
+    return [result, judgeBackground(result)]
+  }
   if (mode === 'onboard') {
     const result = await runInPage(window, onboardProbe)
     return [result, judgeOnboard(result)]

@@ -368,6 +368,10 @@
           "stopAgent": {
             "description": "后加的位，可以不报（不报就是不会）：对引擎自己派出的子代理线程发 turn/interrupt，只停掉这一个子代理、父会话的回合照常（客户端子代理页上的“停止”）",
             "type": "boolean"
+          },
+          "backgroundTasks": {
+            "description": "后加的位，可以不报（不报就是不报）：会报后台任务的集合（backgroundTasks 扩展，protocol/extensions/background-tasks.json）",
+            "type": "boolean"
           }
         }
       },

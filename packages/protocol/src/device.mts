@@ -102,6 +102,13 @@ export const EXTENSION = {
    * protocol/extensions/native-lineage.json）。声明了它的连接才会在会话对象上看到这个字段。
    */
   nativeLineage: 'nativeLineage',
+  /**
+   * 后台任务：回合结束之后还在跑的工作。会话对象上带 `litchBackground`（集合），回合上带 `litchOrigin`（谁开的），
+   * 集合变了发 litch/thread/background/changed（background-tasks.mts，定义在
+   * protocol/extensions/background-tasks.json）。哪个 harness 会报集合看它声明里的 `features.backgroundTasks`；
+   * 声明了它的连接才看得到这些字段、收得到通知。
+   */
+  backgroundTasks: 'backgroundTasks',
 } as const
 
 export type ExtensionName = (typeof EXTENSION)[keyof typeof EXTENSION]

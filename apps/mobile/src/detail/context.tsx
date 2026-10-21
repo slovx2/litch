@@ -5,6 +5,7 @@ import {
   type FileScope,
   keys,
   pathTwin,
+  type SessionBackgroundView,
   type SessionSummary,
   type WorkspaceView,
 } from '@litch/core'
@@ -32,6 +33,16 @@ export interface TranscriptActions {
 }
 
 export const TranscriptContext = createContext<TranscriptActions | null>(null)
+
+/**
+ * 这个会话的后台任务（和输入框上方那一行同一份，background/BackgroundBar.tsx 的 useSessionBackground）：
+ * 过程摘要数还有几个在后台跑、自发回合开头找叫醒它的任务。只有这两种单元格订阅它
+ */
+export const BackgroundContext = createContext<SessionBackgroundView | null>(null)
+
+export function useBackgroundView(): SessionBackgroundView | null {
+  return useContext(BackgroundContext)
+}
 
 export function useTranscript(): TranscriptActions {
   const value = useContext(TranscriptContext)

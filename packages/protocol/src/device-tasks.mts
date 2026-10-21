@@ -130,6 +130,11 @@ export interface DeviceTaskRun {
   error: TaskError | null
   /** 用户看过没有。没结束的总是 true */
   read: boolean
+  /**
+   * 回合结束时会话里还有几个后台任务在跑（backgroundTasks 扩展）：运行照常算结束，这里注明。
+   * 之后续跑的回合结束、后台全部结束时设备进程会更新它（和 summary），没有的不带
+   */
+  backgroundTasks?: number
 }
 
 /** 运行记录里摘要最多留多少个字 */

@@ -137,7 +137,8 @@ test('经真的套接字：连上用运行时监听代码起的上游，设备�
       (entry: any) => entry.fileName,
     )
     assert.deepEqual(names.sort(), ['note.txt', 'src'])
-    const changed = await client.waitFor((frame) => frame.method === 'fs/changed')
+    // macOS 上目录监听走文件系统事件：整套用例并发跑、别的进程在大量建删文件时，这条通知要晚到十来秒
+    const changed = await client.waitFor((frame) => frame.method === 'fs/changed', 15_000)
     assert.equal((changed.params as any).watchId, 'w1')
     assert.equal((await client.fails('fs/readFile', { path: 'relative' })).code, -32602)
 

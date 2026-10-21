@@ -25,6 +25,7 @@ const ALL: HarnessAbilities = {
   finalOnStart: false,
   turnDiff: true,
   stopAgent: true,
+  backgroundTasks: true,
 }
 
 const DECLARED: Record<string, HarnessAbilities> = {

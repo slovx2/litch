@@ -13,7 +13,7 @@ interface TallyProps {
 }
 
 /**
- * 行尾的汇总：在等人的用和会话行上一样的小标，在跑的、没看过的各一个和会话行上一样的小记号。
+ * 行尾的汇总：在等人的用和会话行上一样的小标，在跑的、只剩后台任务在跑的、没看过的各一个和会话行上一样的小记号。
  * 行上不写数目：一眼只要知道“里面有事”，几个在信息卡里。
  * 侧栏正只看某几个 harness 的时候，汇总跟着只算展开后看得见的那些
  */
@@ -34,9 +34,11 @@ export function TallyMarks({ deviceId, group }: TallyProps) {
       data-approval={tally.approval}
       data-answer={tally.answer}
       data-running={tally.running}
+      data-background={tally.background}
       data-unread={tally.unread}
     >
       {tally.running > 0 ? <i className="st run" /> : null}
+      {tally.background > 0 ? <i className="st bg" /> : null}
       {tally.unread > 0 ? <i className="st unread" /> : null}
       {waiting ? <span className="pill wait">{t(waiting)}</span> : null}
     </span>

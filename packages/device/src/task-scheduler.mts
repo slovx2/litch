@@ -11,12 +11,14 @@ import { randomUUID } from 'node:crypto'
 import type { DeviceTaskRun } from '../../protocol/src/device-tasks.mjs'
 import { countTaskRuns, nextTaskRun } from '../../protocol/src/task-schedule.mjs'
 import type { EngineLink } from './engine-link.mjs'
+import { type FollowUpdate, followBackground } from './task-follow.mjs'
 import {
   executeRun,
   RunFailure,
   type RunHost,
   type RunOutcome,
   recoverRun,
+  summaryOf,
   type TaskTiming,
 } from './task-run.mjs'
 import { publicRun, type RunRow, type TaskRow, type TaskStore } from './task-store.mjs'
@@ -63,6 +65,10 @@ export interface SchedulerHost {
   maxTimerMs: number
   /** 开一条内部连接（见 RunHost.openEngineLink） */
   openEngineLink(harness: string): Promise<EngineLink>
+  /** 见 RunHost.backgroundRunning */
+  backgroundRunning(threadId: string): number
+  /** 后台任务跑完了引擎会不会自己接着做（background.mts 的 wakes） */
+  backgroundWakes(threadId: string): boolean
   log(line: string): void
   /** 任务的字段变了（下一次运行时间、最近一次运行、未读数……） */
   taskChanged(taskId: string): void
@@ -91,6 +97,8 @@ export class TaskScheduler {
   private readonly queue = new Set<string>()
   /** 正在跑的运行（含设备进程重启后接着等的） */
   private readonly executing = new Map<string, Promise<void>>()
+  /** 结束后还在盯着后台任务的运行（停下的办法） */
+  private readonly follows = new Set<() => void>()
   private closed = false
   private started = false
 
@@ -154,6 +162,7 @@ export class TaskScheduler {
     this.closed = true
     if (this.timer !== null) this.host.clock.clearTimer(this.timer)
     this.timer = null
+    for (const stop of [...this.follows]) stop()
   }
 
   private newRun(
@@ -209,6 +218,7 @@ export class TaskScheduler {
       progress: (run) => this.progress(run),
       born: host.born,
       openEngineLink: (harness) => host.openEngineLink(harness),
+      backgroundRunning: (threadId) => host.backgroundRunning(threadId),
       turns: host.turns,
     }
   }
@@ -262,10 +272,12 @@ export class TaskScheduler {
 
   /** 跑完了：记结果；任务上的最近错误、一次性任务的完成、会话没了的暂停跟着变 */
   private finish(id: string, outcome: RunOutcome): void {
-    if (this.closed) return
     const { store, clock } = this.host
-    const current = store.run(id)
-    if (!current) return
+    const current = this.closed ? null : store.run(id)
+    if (!current) {
+      outcome.follow?.link.close()
+      return
+    }
     const run: DeviceTaskRun = {
       ...publicRun(current),
       status: outcome.status,
@@ -273,6 +285,7 @@ export class TaskScheduler {
       summary: outcome.summary,
       error: outcome.error,
       read: false,
+      ...(outcome.backgroundTasks ? { backgroundTasks: outcome.backgroundTasks } : {}),
     }
     store.transaction(() => {
       store.updateRun(run)
@@ -305,6 +318,49 @@ export class TaskScheduler {
     this.host.runChanged(run)
     this.host.taskChanged(run.taskId)
     this.reschedule()
+    if (outcome.follow) this.follow(id, outcome.follow.threadId, outcome.follow.link)
+  }
+
+  /** 运行结束时还有后台任务在跑：接着盯，续跑的回合、跑完都更新这次运行（task-follow.mts） */
+  private follow(id: string, threadId: string, link: EngineLink): void {
+    const { host } = this
+    const stop = followBackground(
+      {
+        now: () => host.clock.now(),
+        limitMs: host.timing.turnTimeoutMs,
+        settleMs: host.timing.followSettleMs,
+        backgroundRunning: (thread) => host.backgroundRunning(thread),
+        backgroundWakes: (thread) => host.backgroundWakes(thread),
+        summaryOf,
+        log: host.log,
+      },
+      link,
+      threadId,
+      (patch) => this.followUp(id, patch),
+    )
+    this.follows.add(stop)
+    link.onClose(() => this.follows.delete(stop))
+  }
+
+  /** 后台任务有了下文：改这次运行的摘要和后台任务数，标成没看过 */
+  private followUp(id: string, patch: FollowUpdate): void {
+    if (this.closed) return
+    const { store } = this.host
+    const current = store.run(id)
+    if (!current) return
+    const { backgroundTasks: _old, ...rest } = publicRun(current)
+    const run: DeviceTaskRun = {
+      ...rest,
+      ...(patch.summary !== undefined ? { summary: patch.summary } : {}),
+      read: false,
+      ...(patch.backgroundTasks > 0 ? { backgroundTasks: patch.backgroundTasks } : {}),
+    }
+    if (!store.updateRun(run)) return
+    this.host.log(
+      `任务 ${run.taskId} 的运行 ${id} 的后台任务有了下文，还剩 ${patch.backgroundTasks} 个在跑`,
+    )
+    this.host.runChanged(run)
+    this.host.taskChanged(run.taskId)
   }
 
   // ---------- 定时 ----------

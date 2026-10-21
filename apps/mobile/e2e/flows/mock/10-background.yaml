@@ -1,0 +1,52 @@
+# 模拟核心：后台任务。新建会话说“background tasks”→ 回合说完两条后台命令还在跑：输入框上方一行、过程摘要末尾“· 2 个在后台运行”→
+# 点那一行从底部弹出列表→ 关掉 → 测试先跑完，自发回合开头一行“后台任务结束，自动继续”→ dev 服务也结束，那一行没了
+appId: dev.litch.app
+name: mock-后台任务
+tags: [mock]
+---
+- runFlow:
+    file: ../_shared/fresh.yaml
+    env:
+      MODE: mock
+      READY: device:local
+- tapOn:
+    id: device:local
+- tapOn:
+    id: sessions:new
+- extendedWaitUntil:
+    visible:
+      id: new-input
+    timeout: 15000
+- tapOn:
+    id: new-input
+- inputText: start two background tasks
+- tapOn:
+    id: new-send
+- extendedWaitUntil:
+    visible:
+      id: background:bar
+    timeout: 20000
+# 摘要那一行末尾（嵌套的文字在安卓上并进外层，只能按整行的字认）。测试 4 秒后就跑完，不卡个数
+- assertVisible:
+    text: "[▸▾].*(running in the background|个在后台运行).*"
+- tapOn:
+    id: background:bar
+- extendedWaitUntil:
+    visible:
+      id: background:sheet
+    timeout: 5000
+# 点一下就要几秒，这时 dev 服务也许已经结束：只要求列表里有任务的行
+- assertVisible:
+    id: background:task:.*
+- tapOn:
+    id: background:scrim
+- extendedWaitUntil:
+    visible:
+      id: turn-origin:backgroundTask
+    timeout: 15000
+- extendedWaitUntil:
+    notVisible:
+      id: background:bar
+    timeout: 20000
+- assertNotVisible:
+    text: "[▸▾].*(running in the background|个在后台运行).*"

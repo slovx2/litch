@@ -163,3 +163,32 @@ test('分叉来的会话最上面一行说从哪来', () => {
     { type: 'forked', key: 'forked', from: '原来的会话' },
   ])
 })
+
+test('后台任务：回合结束了还在跑的步骤不再写“正在做”，摘要带条目号给单元格数；自发回合开头一行在最前', () => {
+  const view = viewOf(
+    [
+      { id: 't1', status: 'completed', itemIds: ['t1:u', 't1:c', 't1:a'] },
+      { id: 't2', status: 'running', itemIds: ['t2:a'], origin: 'backgroundTask', startedAt: 9000 },
+    ],
+    [
+      user('t1:u', '后台跑'),
+      { ...command('t1:c'), status: 'inProgress' },
+      answer('t1:a', '在后台跑着了'),
+      answer('t2:a', '跑完了', 'inProgress'),
+    ],
+  )
+  const rows = new RowBuilder().build(view, 'all')
+  assert.deepEqual(types(rows), ['user', 'group', 'md', 'status', 'origin', 'md', 'status'])
+  const group = rows[1]
+  assert.equal(group.current, null, '回合结束了：还 inProgress 的是后台命令，不当成正在做的一步')
+  assert.equal(group.running, false)
+  assert.equal(group.ended, true)
+  assert.equal(group.ids, 't1:c')
+  assert.deepEqual(rows[4], {
+    type: 'origin',
+    key: 't2:origin',
+    turnId: 't2',
+    origin: 'backgroundTask',
+    startedAt: 9000,
+  })
+})

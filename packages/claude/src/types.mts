@@ -551,6 +551,9 @@ export interface RuntimeSessionHandlers {
   // 返回 false 表示不接，运行时会打断这一轮。
   onSpontaneousTurn(threadId: string): Promise<boolean>
   onBackgroundCommandEnded(threadId: string, end: RuntimeBackgroundCommandEnd): void
+  // CLI 关于后台任务的 system 消息（background_tasks_changed、task_started、task_updated、task_notification），
+  // 原样交给协议层攒后台任务的集合（background-tasks.mts）
+  onBackgroundTaskMessage?(threadId: string, message: Record<string, unknown>): void
   // 进程已退出，仍在运行的后台命令随它结束。
   onSessionClosed(threadId: string, reason: string): void
 }

@@ -60,7 +60,7 @@ export const keys = {
   pressing: (deviceId: string) => `sidebar:${deviceId}:pressing`,
   /** DeviceActivity：这台设备上的会话合起来的忙闲和最近一次动静。设备列表的一行用它 */
   activity: (deviceId: string) => `sidebar:${deviceId}:activity`,
-  /** GroupTallies：每一组里几个在等人、几个在跑、几个未读。侧栏里收起来的工作区、设备那一行用它 */
+  /** GroupTallies：每一组里几个在等人、几个在跑、几个只剩后台任务在跑、几个未读。侧栏里收起来的工作区、设备那一行用它 */
   tallies: (deviceId: string) => `sidebar:${deviceId}:tallies`,
   /** SessionHarnesses：这台设备上每个会话属于哪个 harness。侧栏只看某个 harness 时按它挑会话 */
   harnessOf: (deviceId: string) => `sidebar:${deviceId}:harnessOf`,
@@ -223,6 +223,8 @@ export interface GroupTally {
   running: number
   /** 没看过的。它同时在跑或者在等人也算 */
   unread: number
+  /** 回合停了、后台任务还在跑的（SessionSummary.background）。回合在跑、在等人的不算 */
+  background: number
 }
 
 /**
@@ -413,11 +415,19 @@ function tallySessions(sessions: Iterable<SessionSummary>): GroupTallies {
   for (const session of sessions) {
     const waiting = session.status === 'waiting'
     const running = session.status === 'running'
-    if (!waiting && !running && !session.unread) continue
+    const background = !waiting && !running && (session.background?.running ?? 0) > 0
+    if (!waiting && !running && !background && !session.unread) continue
     const group = (tallies[groupOf(session)] ??= {})
-    const tally = (group[session.harness] ??= { approval: 0, answer: 0, running: 0, unread: 0 })
+    const tally = (group[session.harness] ??= {
+      approval: 0,
+      answer: 0,
+      running: 0,
+      unread: 0,
+      background: 0,
+    })
     if (waiting) tally[session.waitingFor === 'answer' ? 'answer' : 'approval']++
     if (running) tally.running++
+    if (background) tally.background++
     if (session.unread) tally.unread++
   }
   return tallies
@@ -878,6 +888,7 @@ export function createReplica(channel: CoreChannel): Replica {
             status: op.status,
             durationMs: op.durationMs,
             ...(op.error === undefined ? {} : { error: op.error }),
+            ...(op.origin === undefined ? {} : { origin: op.origin }),
           })
         return
       }

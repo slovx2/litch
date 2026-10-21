@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react'
 import {
   ActivityIndicator,
+  Animated,
   Pressable,
   StyleSheet,
   Text,
@@ -11,6 +12,7 @@ import {
   View,
 } from 'react-native'
 import { useTheme } from '../theme'
+import { useBreath } from './breath'
 
 export function Button({
   label,
@@ -244,12 +246,18 @@ export function Chip({
 export function StatusMark({
   status,
 }: {
-  status: 'idle' | 'running' | 'waiting' | 'error' | 'unread' | 'offline'
+  status: 'idle' | 'running' | 'waiting' | 'error' | 'unread' | 'offline' | 'background'
 }) {
   const { c } = useTheme()
-  const glyph = { idle: '·', running: '▶', waiting: '◆', error: '✕', unread: '●', offline: '○' }[
-    status
-  ]
+  const glyph = {
+    idle: '·',
+    running: '▶',
+    waiting: '◆',
+    error: '✕',
+    unread: '●',
+    offline: '○',
+    background: '&',
+  }[status]
   const color = {
     idle: c.ink3,
     running: c.accent,
@@ -257,8 +265,20 @@ export function StatusMark({
     error: c.err,
     unread: c.accent,
     offline: c.ink3,
+    background: c.accent,
   }[status]
+  // 只剩后台任务在跑：复古皮肤里后台作业的 &，慢呼吸，和前台在跑的 ▶ 分开
+  if (status === 'background') return <BreathingMark glyph={glyph} color={color} />
   return <Text style={[styles.mark, { color }]}>{glyph}</Text>
+}
+
+function BreathingMark({ glyph, color }: { glyph: string; color: string }) {
+  const breath = useBreath()
+  return (
+    <Animated.Text testID="mark:background" style={[styles.mark, { color, opacity: breath }]}>
+      {glyph}
+    </Animated.Text>
+  )
 }
 
 const styles = StyleSheet.create({

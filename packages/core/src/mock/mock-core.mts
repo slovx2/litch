@@ -39,6 +39,7 @@ import { settleAnswers } from '../projection/questions.mjs'
 import { reduceSession } from '../projection/reduce.mjs'
 import { settleSteps, todoKey } from '../projection/todo.mjs'
 import { createMockOrganize } from './mock-arrange.mjs'
+import { createMockBackground } from './mock-background.mjs'
 import { createMockCompose } from './mock-compose.mjs'
 import { createMockConfig, RUNS_CONFIG } from './mock-config.mjs'
 import { createMockDiffs } from './mock-diffs.mjs'
@@ -388,6 +389,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       steerImages: declared ? declared.steerImages : true,
       rollbackRestoresFiles: declared ? declared.rollbackRestoresFiles : false,
       finalOnStart: declared ? declared.finalOnStart : false,
+      backgroundTasks: declared ? declared.backgroundTasks : false,
       declared: declared !== null,
     }
   }
@@ -549,6 +551,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     ])
     updateSummary(view.deviceId, view.sessionId, { status: 'running', updatedAt: clock.now() })
     if (tree.claim(view, turnId, message)) return turnId
+    if (background.claim(view, turnId, message)) return turnId
     // 这三样只是顺带演一出别处的动静，回合照常往下走
     if (EDITS_ELSEWHERE.test(message.text)) manage.editElsewhere(view.deviceId, view.harness)
     if (RACES_SETTINGS.test(message.text)) manage.raceNextWrite(view.deviceId, view.harness)
@@ -1305,6 +1308,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         task: null,
         lineage: null,
         nativeLineage: null,
+        background: null,
       }
       sidebar.sessions.push(summary)
       emit(`sidebar:${deviceId}`, [{ op: 'session.upsert', session: summary }])
@@ -1472,6 +1476,19 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     harnesses: (deviceId) => app.devices.find((device) => device.id === deviceId)?.harnesses ?? [],
     settings: (deviceId, harness) => sampleSettings(harnessOn(deviceId, harness)),
     can: (deviceId, harness) => canOf(deviceId, harness),
+    nextId: (prefix) => `${prefix}${++seq}`,
+  })
+
+  // 后台任务：回合结束后还在跑的两条命令，先结束的那条叫醒会话（mock-background.mts）
+  const background = createMockBackground({
+    lang,
+    now: () => clock.now(),
+    setTimer: (run, ms) => clock.setTimer(run, ms),
+    summary: (deviceId, sessionId) =>
+      sidebars.get(deviceId)?.sessions.find((session) => session.id === sessionId),
+    updateSummary,
+    apply: applySessionOps,
+    reply,
     nextId: (prefix) => `${prefix}${++seq}`,
   })
 
@@ -2033,6 +2050,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
           task: null,
           lineage: null,
           nativeLineage: null,
+          background: null,
         }
         sidebar.sessions.push(summary)
         emit(`sidebar:${deviceId}`, [{ op: 'session.upsert', session: summary }])
@@ -2283,6 +2301,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
           placedAt: null,
           lineage: null,
           nativeLineage: null,
+          background: null,
         }
         // 显示数据都是能写成 JSON 的，这样抄一份就和原来的互不相干了
         const copy = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T

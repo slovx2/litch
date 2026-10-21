@@ -18,6 +18,7 @@ import type {
 } from '../model.mjs'
 import type { SessionLineageView } from '../model-tree.mjs'
 import { phrase, type Text } from '../phrase.mjs'
+import { projectBackground, projectOrigin } from './background.mjs'
 import { projectItem } from './items.mjs'
 import { NO_SETTINGS } from './settings.mjs'
 
@@ -32,6 +33,7 @@ export const ALL_ABLE: SessionAbilities = {
   steer: true,
   steerImages: true,
   finalOnStart: false,
+  backgroundTasks: false,
   declared: false,
 }
 
@@ -87,6 +89,12 @@ export const itemKey = (turnId: string, itemId: string, index: number): string =
  * viewId 是这个回合在界面里的标识，默认就是协议里的。
  * 本机发出的回合先用临时标识显示出来，对面给了正式标识之后界面这边不换（见 device/live.mts）。
  */
+/** 回合上入口加的来历（只发给声明了 backgroundTasks 的连接）。用户发的不带 */
+export const originOf = (turn: Turn): { origin?: NonNullable<TurnView['origin']> } => {
+  const origin = projectOrigin((turn as Turn & { litchOrigin?: unknown }).litchOrigin)
+  return origin ? { origin } : {}
+}
+
 export function projectTurn(turn: Turn, viewId = turn.id): { turn: TurnView; items: ItemView[] } {
   const running = turn.status === 'inProgress'
   const last = (turn.items?.length ?? 0) - 1
@@ -103,6 +111,7 @@ export function projectTurn(turn: Turn, viewId = turn.id): { turn: TurnView; ite
       startedAt: toMs(turn.startedAt),
       durationMs: turn.durationMs ?? null,
       error: turn.error?.message ?? null,
+      ...originOf(turn),
     },
     items,
   }
@@ -258,5 +267,8 @@ export function projectSummary(
     task: null,
     lineage: projectLineage(thread),
     nativeLineage: projectNativeLineage(thread),
+    background: projectBackground(
+      (thread as Thread & { litchBackground?: unknown }).litchBackground,
+    ),
   }
 }

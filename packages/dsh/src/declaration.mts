@@ -49,6 +49,8 @@ const features: HarnessFeatures = {
   // 一段话是过程说明还是最终回答，要等这一步落盘、看它带不带工具调用才知道：
   // 流式开始时一律先报成最终回答，结束时才准。
   agentMessagePhase: 'onCompleted',
+  // 后台作业（后台 shell、工作流）从 Web Remote 的 job/list 来（background.mts）；子代理是子会话，不在里面
+  backgroundTasks: true,
 }
 
 // 换档是给 dsh 发一条 /permission 命令：回合进行中也立即执行，同一回合里后面的工具调用就按新的一档判定
@@ -63,7 +65,8 @@ export const declaration: HarnessDeclaration = {
   // litch_ 命名空间的动态工具只交给声明了 clientTools 的连接（server.mts 的 clientToolCall），
   // 工具经 dsh 里的插件交给模型（client-tools.mts）。
   // harness 详情设置（harnessConfig）：配置项、provider 与登录、MCP、AGENTS.md 都读写 dsh 自己的配置（harness-config.mts）。
-  extensions: [EXTENSION.clientTools, EXTENSION.harnessConfig],
+  // 后台作业的集合、回合的来历只给声明了 backgroundTasks 的连接（protocol.mts 的 withBackground）。
+  extensions: [EXTENSION.clientTools, EXTENSION.harnessConfig, EXTENSION.backgroundTasks],
   features,
   // dsh 的沙箱只管写文件：三档都能读任何文件，也都不限制联网。
   permissionPresets: [

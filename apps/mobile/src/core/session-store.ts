@@ -10,13 +10,14 @@ import type {
   AgentMessageItem,
   AskAnswers,
   CoreChannel,
+  SessionBackgroundView,
   SessionOp,
   SessionProposalView,
   SessionView,
   TurnStatus,
   UserMessageItem,
 } from '@litch/core'
-import { gatherAnswers, parseAskReply, reduceSession } from '@litch/core'
+import { deriveBackground, gatherAnswers, parseAskReply, reduceSession } from '@litch/core'
 import { experiment } from '../experiment'
 import { noteOpenStage, noteWork } from '../probe'
 import { type Row, RowBuilder } from './rows'
@@ -60,6 +61,11 @@ export interface SessionMeta {
    * 计划条目在回合结束、请求到达之前就已经在了
    */
   lastTurn: { id: string; status: TurnStatus; itemIds: readonly string[] } | null
+  /**
+   * 对面不报后台任务的集合（can.backgroundTasks 为假）时，从已结束回合里还在跑的命令派生的那一份。
+   * 报集合的是 null，用侧栏摘要上的 SessionSummary.background
+   */
+  derived: SessionBackgroundView | null
 }
 
 const EMPTY: SessionSnapshot = { rows: [], running: false, error: null, publishedAt: 0 }
@@ -289,6 +295,8 @@ export class SessionStore {
       case 'item.add': {
         this.itemTurn.set(op.item.id, op.turnId)
         mark(op.turnId)
+        // 命令的状态决定不报集合的会话有没有后台任务在跑（meta.derived）
+        if (op.item.kind === 'command') this.metaDirty = true
         const answers = gatherAnswers(this.answers, [op.item])
         if (answers !== this.answers) {
           this.answers = answers
@@ -302,9 +310,12 @@ export class SessionStore {
         if (removed?.kind === 'userMessage' && parseAskReply(removed.text))
           this.recountAnswers(view)
         return
+      case 'item.status':
+        mark(this.itemTurn.get(op.itemId))
+        if (view.items[op.itemId]?.kind === 'command') this.metaDirty = true
+        return
       case 'item.appendText':
       case 'item.appendOutput':
-      case 'item.status':
         mark(this.itemTurn.get(op.itemId))
         return
       case 'session.proposals':
@@ -392,6 +403,7 @@ export class SessionStore {
         forkedFrom: view.forkedFrom,
         running,
         lastTurn: lastTurnOf(view),
+        derived: view.can.backgroundTasks ? null : deriveBackground(view.turns, view.items),
       }
       for (const listener of this.metaListeners) listener()
     }

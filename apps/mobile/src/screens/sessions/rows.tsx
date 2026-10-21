@@ -36,6 +36,8 @@ function markOf(summary: SessionSummary) {
   if (summary.status === 'running') return 'running'
   if (summary.status === 'waiting') return 'waiting'
   if (summary.status === 'error') return 'error'
+  // 回合停了、后台任务还在跑
+  if ((summary.background?.running ?? 0) > 0) return 'background'
   return summary.unread ? 'unread' : 'idle'
 }
 
@@ -185,19 +187,20 @@ export const ArchivedRow = memo(function ArchivedRow({
   )
 })
 
-/** 收起来的组的汇总：几个等人、在跑、未读。只在收起时画，自己订阅 keys.tallies */
+/** 收起来的组的汇总：几个等人、在跑、只剩后台任务在跑、未读。只在收起时画，自己订阅 keys.tallies */
 function Tally({ deviceId, groupKey }: { deviceId: string; groupKey: string }) {
   const tallies = useKey<GroupTallies>(keys.tallies(deviceId))
   const theme = useTheme()
   const t = useT()
-  const sum = { approval: 0, answer: 0, running: 0, unread: 0 }
+  const sum = { approval: 0, answer: 0, running: 0, unread: 0, background: 0 }
   for (const tally of Object.values(tallies?.[groupKey] ?? {})) {
     sum.approval += tally.approval
     sum.answer += tally.answer
     sum.running += tally.running
     sum.unread += tally.unread
+    sum.background += tally.background
   }
-  const parts = (['approval', 'answer', 'running', 'unread'] as const)
+  const parts = (['approval', 'answer', 'running', 'background', 'unread'] as const)
     .filter((kind) => sum[kind] > 0)
     .map((kind) => t(`sidebar.tally.${kind}`, { count: sum[kind] }))
   if (parts.length === 0) return null

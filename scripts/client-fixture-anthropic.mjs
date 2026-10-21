@@ -11,6 +11,7 @@
 //   出个计划     先说计划、再调 ExitPlanMode             没有计划模式：照常回话
 //               （计划模式开着才有这个工具）
 //   慢慢说       回话分很多段慢慢发
+//   后台跑       Bash 带 run_in_background              bash 带 run_in_background（见 client-fixture-background.mjs）
 //   本机：…、命令行：…、你在哪   操作本机，见 client-fixture-machine.mjs
 //   别的         把收到的话带回来，开头注明是哪个 harness 收到的；带着技能正文的记号时把记号带回来
 //
@@ -20,6 +21,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { ASK_QUESTIONS, ASK_TRIGGER } from './client-fixture-ask.mjs'
+import { BG_COMMAND, BG_REPLY, BG_TRIGGER } from './client-fixture-background.mjs'
 import {
   EDIT_APPENDED,
   EDIT_COMMAND,
@@ -154,6 +156,7 @@ export function anthropicReply(harness, body, pace) {
   const shell = pwsh ? 'pwsh' : tools.shell
   // 一句话里有好几个词时认最后出现的那个：被打断的回合留下的话，会和新的一句并在同一条消息里
   const marks = [
+    [BG_TRIGGER, 'bg', shell],
     [RUN_TRIGGER, 'run', shell],
     [EDIT_TRIGGER, 'edit', shell],
     [WRITE_TRIGGER, 'write', tools.write],
@@ -167,6 +170,13 @@ export function anthropicReply(harness, body, pace) {
     .sort((a, b) => b.at - a.at)
   const { mark, tool } = marks[0] ?? {}
   if (mark && step === 0) {
+    if (mark === 'bg')
+      return [
+        {
+          tool,
+          input: { command: BG_COMMAND, description: 'fixture sleep', run_in_background: true },
+        },
+      ]
     if (mark === 'run' || mark === 'edit') {
       const commands = pwsh
         ? { run: RUN_COMMAND_PWSH, edit: EDIT_COMMAND_PWSH }
@@ -213,6 +223,7 @@ export function anthropicReply(harness, body, pace) {
         : asked.map(asQuestion)
     return [{ tool, input: { questions } }]
   }
+  if (mark === 'bg') return say(BG_REPLY)
   if (mark === 'run') {
     return say(`命令的结果：\n\n${result.text}\n\n这是隔离环境里的假模型在回话。`)
   }

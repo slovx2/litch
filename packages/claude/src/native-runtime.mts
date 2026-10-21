@@ -168,6 +168,9 @@ interface NativeSession {
   shells: BackgroundShellState
   // 出现在 background_tasks_changed 里的任务（任意类型）。它们结束后 CLI 会自己再跑一轮。
   backgroundTasks: Set<string>
+  // 还在跑的非 ambient 的 MCP、WebSocket 监视（monitor_*）。和后台命令一样要保活进程：
+  // 进程一退它们就没了（Monitor 工具起的是 local_bash，已经算在 shells 里）
+  monitors: Set<string>
   // CLI 上报的会话状态。idle 表示后台子代理及其通知触发的续跑都已结束；
   // null 表示 CLI 没有上报过状态，回合仍在第一条 result 处结束。
   state: 'idle' | 'running' | 'requires_action' | null
@@ -287,6 +290,11 @@ const IDLE_REAP_MS = 2_000
 const SPONTANEOUS_ATTACH_TIMEOUT_MS = 10_000
 const WORKFLOW_JOURNAL_SETTLE_TIMEOUT_MS = 3_000
 
+// 进程名下还有回合结束后要接着跑的东西：后台命令（含 Monitor 工具起的）、MCP 与 WebSocket 监视
+function hasBackgroundWork(session: NativeSession): boolean {
+  return session.shells.live.size > 0 || session.monitors.size > 0
+}
+
 export class NativeClaudeRuntime implements ClaudeRuntime {
   private sdk: ClaudeSdk | null = null
   private turns = new Map<string, PendingTurn>()
@@ -338,7 +346,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       !session.closing &&
       !session.turn &&
       !session.attach &&
-      session.shells.live.size === 0
+      !hasBackgroundWork(session)
     )
   }
 
@@ -368,7 +376,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         throw new ProtocolError(-32009, '上一个 Claude CLI 尚未确认退出，禁止启动新回合')
       reason = this.incompatibility(existing, context)
       if (!reason) return this.runOnSession(existing, context, handlers)
-      if (existing.shells.live.size > 0) restarted = reason
+      if (hasBackgroundWork(existing)) restarted = reason
     }
     if (existing) {
       // 等旧进程退出的这段时间里回合可能被打断：记一个标记，打断时置位。
@@ -572,8 +580,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     session.reapTimer = setTimeout(
       () => {
         session.reapTimer = null
-        if (session.closing || session.turn || session.attach || session.shells.live.size > 0)
-          return
+        if (session.closing || session.turn || session.attach || hasBackgroundWork(session)) return
         void this.shutdown(session, idleMs > 0 ? '空闲保留已到时' : '后台命令已全部结束')
       },
       Math.max(IDLE_REAP_MS, idleMs),
@@ -663,6 +670,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
           nextSeq: 0,
         },
         backgroundTasks: new Set(),
+        monitors: new Set(),
         state: null,
         applied: {
           model: context.model,
@@ -1062,7 +1070,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       return
     }
     // 还有后台命令在跑时只中止这一轮，进程和命令都留下。
-    if (!session.closing && session.shells.live.size > 0 && keepAliveLimit() > 0) {
+    if (!session.closing && hasBackgroundWork(session) && keepAliveLimit() > 0) {
       if (await this.interruptRound(pending)) {
         await this.stopWorkflowTasks(pending)
         if ((await succeedsWithin(pending.settled, 2_500)) && !session.closing) return
@@ -1807,12 +1815,29 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       if (state === 'idle') session.discard = false
       return
     }
+    if (
+      subtype === 'background_tasks_changed' ||
+      subtype === 'task_started' ||
+      subtype === 'task_updated' ||
+      subtype === 'task_notification'
+    )
+      try {
+        this.sessionHandlers?.onBackgroundTaskMessage?.(session.key, message)
+      } catch (error) {
+        debugLog('native.session.backgroundTaskHandlerFailed', {
+          threadId: session.key,
+          error: String(error),
+        })
+      }
     if (subtype === 'background_tasks_changed' && Array.isArray(message.tasks)) {
       const state = session.shells
       const live = new Map<string, number>()
+      const monitors = new Set<string>()
       for (const task of message.tasks as Array<Record<string, unknown>>) {
         if (typeof task.task_id !== 'string' || !task.task_id) continue
         session.backgroundTasks.add(task.task_id)
+        if (String(task.task_type ?? '').startsWith('monitor_') && task.ambient !== true)
+          monitors.add(task.task_id)
         if (task.task_type !== 'local_bash' || task.ambient === true) continue
         let seq = state.seqByTask.get(task.task_id)
         if (seq == null) {
@@ -1822,8 +1847,9 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         live.set(task.task_id, seq)
       }
       state.live = live
+      session.monitors = monitors
       session.process.trackBackgroundProcesses()
-      if (live.size === 0 && !session.turn) this.scheduleReap(session)
+      if (!hasBackgroundWork(session) && !session.turn) this.scheduleReap(session)
       return
     }
     if (
@@ -2808,7 +2834,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
   // 没有后台命令时只有开了空闲保留才留，满额时先回收闲得最久的空闲会话，回收不出位置就不留。
   private keepAlive(session: NativeSession): string | null {
     if (session.closing || session.process.hasExited) return ''
-    const shells = session.shells.live.size > 0
+    const shells = hasBackgroundWork(session)
     if (!shells && keepAliveIdleMs() <= 0) return ''
     const limit = keepAliveLimit()
     if (limit <= 0) return ''

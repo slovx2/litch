@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { appendFileSync } from 'node:fs'
+import { BACKGROUND_TASKS_NOTIFICATION } from '../../protocol/src/background-tasks.mjs'
 import { type ClientToolCallResponse, clientToolFailure } from '../../protocol/src/client-tools.mjs'
 import {
   isClientToolNamespace,
@@ -20,6 +21,7 @@ import { ServerRequests } from '../../shared/src/server-requests.mjs'
 import type { RpcPeer, WireMessage } from '../../shared/src/types.mjs'
 import { sleep } from '../../shared/src/util.mjs'
 import { approve } from './approvals.mjs'
+import { JobRoster } from './background.mjs'
 import {
   ClientToolBridge,
   type DshClientTool,
@@ -76,6 +78,8 @@ export interface LiveThread {
   delivered: Promise<void>
   // 哪条连接发起的哪个回合（客户端工具按它挑执行方）。dsh 自己开的回合（子代理结束后告诉模型）不在这里
   starter: { peer: string; turn: DshTurn } | null
+  // 这个会话名下的后台作业（backgroundTasks 扩展，background.mts）
+  jobs: JobRoster
 }
 
 export class DshServer {
@@ -112,6 +116,8 @@ export class DshServer {
   readonly toolNamespaces = new Map<string, ReadonlySet<string>>()
   // 握手时声明了 harnessConfig 扩展的连接：配置变化、登录进展的通知只发给它们（harness-config.mts）
   readonly configPeers = new Set<string>()
+  // 握手时声明了 backgroundTasks 扩展的连接：后台作业的集合、回合的来历只给它们（background.mts）
+  readonly backgroundPeers = new Set<string>()
   // 跑在 dsh 里的客户端工具插件和适配器之间的连接（client-tools.mts）
   readonly bridge: ClientToolBridge
   // 会话的客户端工具，摊平成交给 dsh 模型的样子（clientTools）
@@ -303,9 +309,28 @@ export class DshServer {
     const everyone =
       threadId === null ||
       (BROADCAST_THREAD_NOTIFICATIONS.has(method) && !threadId.startsWith(EPHEMERAL_PREFIX))
+    // 回合的来历只给声明了 backgroundTasks 的连接（另拷一份，别的连接看到的不变）
+    const origin =
+      threadId && (method === 'turn/started' || method === 'turn/completed')
+        ? this.live.get(threadId)?.projection.origins.get(params?.turn?.id)
+        : undefined
     for (const peer of this.peers.values())
-      if (everyone || (threadId !== null && this.subscriptions.get(threadId)?.has(peer.id)))
-        peer.send({ method, params: threadId ? { threadId, ...params } : params })
+      if (everyone || (threadId !== null && this.subscriptions.get(threadId)?.has(peer.id))) {
+        const shaped =
+          origin && this.backgroundPeers.has(peer.id)
+            ? { ...params, turn: { ...params.turn, litchOrigin: origin } }
+            : params
+        peer.send({ method, params: threadId ? { threadId, ...shaped } : shaped })
+      }
+  }
+
+  /** 后台作业的集合变了：整份发给所有声明过 backgroundTasks 的连接（不只是订阅者，侧栏要标没打开的会话） */
+  publishBackground(threadId: string): void {
+    const live = this.live.get(threadId)
+    if (!live) return
+    const params = { threadId, tasks: live.jobs.list(), wakesOnFinish: true }
+    for (const id of this.backgroundPeers)
+      this.peers.get(id)?.send({ method: BACKGROUND_TASKS_NOTIFICATION.changed, params })
   }
 
   /** 发给声明了 harnessConfig 扩展的连接（litch/harness/config/changed、litch/harness/auth/updated） */
@@ -399,6 +424,7 @@ export class DshServer {
     const notify = (method: string, params: any) => this.notify(id, method, params)
     return new Promise<LiveThread>((resolve, reject) => {
       let live: LiveThread | null = null
+      let stopJobs: () => void = () => {}
       // 首帧必须是带记录数组的快照；不是或迟迟不来都按接口不兼容报错，不让调用方一直挂着。
       const mismatch = (detail: string) => {
         clearTimeout(timer)
@@ -433,13 +459,29 @@ export class DshServer {
                   },
                 },
               ),
-              cancel: () => cancel(),
+              cancel: () => {
+                cancel()
+                stopJobs()
+              },
               preset: null,
               submitted: new Map(),
               delivered: Promise.resolve(),
               starter: null,
+              jobs: new JobRoster(),
             }
             live = opened
+            // 这个会话名下的后台作业：整份名单一帧，变了就再来一帧。dsh 没有这个流时就是没有后台作业可看
+            stopJobs = remote.open(
+              'job/list',
+              { request: { sessionId: id } },
+              (frame) => {
+                if (frame?.type === 'rows' && opened.jobs.rows(frame.jobs, id))
+                  this.publishBackground(id)
+              },
+              (error) => {
+                if (error) console.error(`[dsh] 会话 ${id} 的后台作业流断了：${error.message}`)
+              },
+            )
             const ready = () => {
               // 取图片的这会儿流断了的不算打开了
               if (live !== opened) return
@@ -461,6 +503,8 @@ export class DshServer {
         (error) => {
           clearTimeout(timer)
           if (this.live.get(id) === live) this.live.delete(id)
+          stopJobs()
+          if (live?.jobs.closeAll()) this.publishBackground(id)
           live?.projection.fail('dsh 会话流已中断', notify)
           live = null
           reject(error ?? new Error('dsh 会话流已中断'))
@@ -555,6 +599,7 @@ export class DshServer {
       submitted: new Map(),
       delivered: Promise.resolve(),
       starter: null,
+      jobs: new JobRoster(),
     }
     this.ephemeral.set(thread.id, live)
     this.subscribe(peer, thread.id)
@@ -873,6 +918,7 @@ export class DshServer {
     this.peers.delete(peer.id)
     this.toolNamespaces.delete(peer.id)
     this.configPeers.delete(peer.id)
+    this.backgroundPeers.delete(peer.id)
     this.files.closePeer(peer.id)
     this.processes.closePeer(peer.id)
     this.skills.closePeer(peer.id)

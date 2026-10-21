@@ -32,6 +32,17 @@ export interface RelayHost {
   observe(link: UpstreamLink, method: string, params: Record<string, unknown>): void
   /** 会话树要看的几样（session-tree.mts） */
   sessions: RelaySessions
+  /** 后台任务（background.mts） */
+  background: RelayBackground
+}
+
+export interface RelayBackground {
+  /** 上游的每条通知都给看一眼（在会话树之前：回报里要数还有几个后台任务在跑） */
+  notification(link: UpstreamLink, method: string, params: Record<string, unknown>): void
+  /** 会话对象经过、这条连接声明了 backgroundTasks：原生 codex 的挂上派生的集合 */
+  decorate(thread: Record<string, unknown>): void
+  /** thread/resume 成功应答（带着历史）：原生 codex 的从历史里补集合 */
+  resumed(link: UpstreamLink, thread: Record<string, unknown>): void
 }
 
 export interface RelaySessions {
@@ -172,6 +183,8 @@ export class Relay {
     if (afterwards && frame.error === undefined) afterwards(result)
     if (tracked && frame.error === undefined) this.fulfil(link, tracked, result)
     if (request && frame.error === undefined) this.clientToolsSaw(link, request.method, result)
+    if (request?.method === 'thread/resume' && isObject(result) && isObject(result.thread))
+      this.host.background.resumed(link, result.thread)
     let changed = false
     if (isObject(result)) {
       changed = this.stamp(link, result.thread)
@@ -231,6 +244,7 @@ export class Relay {
     thread.harness = link.harness
     this.host.workspaces.decorate(thread.id, thread)
     if (this.host.declares(EXTENSION.sessionTree)) this.host.sessions.decorate(thread)
+    if (this.host.declares(EXTENSION.backgroundTasks)) this.host.background.decorate(thread)
     return true
   }
 
@@ -293,6 +307,7 @@ export class Relay {
         changed = true
       }
     }
+    if (fields) this.host.background.notification(link, method, fields)
     if (method === 'turn/started' || method === 'turn/completed') {
       const turn = isObject(fields?.turn) ? fields.turn : null
       if (typeof turn?.id === 'string' && method === 'turn/completed') {

@@ -143,3 +143,13 @@ test('刚看过的会话留着：再进来是同一个存储，用完的过期�
   assert.equal(acquireStore(mock.channel, 'local', 's4'), stores[3])
   t.mock.timers.tick(120_000)
 })
+
+test('后台任务：报集合的会话不派生（meta.derived 是 null），回合说完时两条命令还在跑、会话不算在跑', async () => {
+  const { store } = await open('起两个后台任务')
+  store.start()
+  await until(() => finished(store), { timeoutMs: 20000, what: '回合说完' })
+  const meta = store.getMeta()
+  assert.equal(meta.can.backgroundTasks, true)
+  assert.equal(meta.derived, null)
+  assert.equal(meta.running, false)
+})

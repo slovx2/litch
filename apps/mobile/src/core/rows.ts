@@ -17,6 +17,7 @@ import type {
   Text,
   TodoStep,
   ToolCallItem,
+  TurnOrigin,
   TurnView,
   UserAttachment,
   WebSearchItem,
@@ -34,6 +35,17 @@ export type Row =
   /** 会话最上面一行：从哪个会话分叉出来的 */
   | { type: 'forked'; key: string; from: string }
   | { type: 'user'; key: string; turnId: string; text: string; attachments: UserAttachment[] }
+  /**
+   * 不是用户发起的回合开头那一行（后台任务跑完后 harness 自己接着做的……），放在用户气泡的位置。
+   * 叫醒它的任务由单元格对着后台集合找（startedAt 用来找）
+   */
+  | {
+      type: 'origin'
+      key: string
+      turnId: string
+      origin: Exclude<TurnOrigin, 'user'>
+      startedAt: number | null
+    }
   /**
    * 设备进程注入在用户消息开头的那一段（<litch-session-event>）：子会话的回报、唤醒、没调收尾时的提醒。
    * 画成一条轻的提示，不画成用户说的话
@@ -96,7 +108,10 @@ export type Row =
       open: boolean
       expanded: boolean
     }
-  /** 一组过程的摘要。current：正在跑的那一步说的是什么 */
+  /**
+   * 一组过程的摘要。current：正在跑的那一步说的是什么（回合在跑时才有：回合结束后还 inProgress 的是后台命令）。
+   * ids：这一组各步的条目标识（空格隔开），回合结束了（ended）时单元格拿它对着后台集合数还有几个在跑
+   */
   | {
       type: 'group'
       key: string
@@ -106,6 +121,8 @@ export type Row =
       current: Text | null
       running: boolean
       expanded: boolean
+      ids: string
+      ended: boolean
     }
   /** 展开的一组里的一步。output、tail、exitCode、durationMs 是命令条目上会原地变的几项 */
   | {
@@ -191,6 +208,16 @@ export class RowBuilder {
       }
       this.pushGroup(out, turn, steps)
     }
+    if (turn.origin)
+      out.push(
+        this.keep({
+          type: 'origin',
+          key: `${turn.id}:origin`,
+          turnId: turn.id,
+          origin: turn.origin,
+          startedAt: turn.startedAt,
+        }),
+      )
     const first = turn.itemIds[0] ? view.items[turn.itemIds[0]] : undefined
     // 提醒收尾的回合只是补调一次收尾：模型顺口说的“好的”不画（手机上回答没有折叠处），建议的卡片照样画
     const remind = first?.kind === 'userMessage' && first.event?.kind === 'remind'
@@ -323,7 +350,7 @@ export class RowBuilder {
     for (const item of steps) {
       const state = stateOf(item)
       if (state === 'failed') failed++
-      if (state === 'running') current = labelOf(item)
+      if (state === 'running' && turn.status === 'running') current = labelOf(item)
       if (!expanded) continue
       const command = item.kind === 'command' ? item : null
       const stepKey = `s:${item.id}`
@@ -352,6 +379,8 @@ export class RowBuilder {
         current,
         running: current !== null,
         expanded,
+        ids: steps.map((item) => item.id).join(' '),
+        ended: turn.status !== 'running',
       }),
     )
   }

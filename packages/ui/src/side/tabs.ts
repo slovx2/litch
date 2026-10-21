@@ -5,6 +5,7 @@ import type { IconName } from '../app/icons.tsx'
 import type { MessageKey } from '../i18n/index.ts'
 // 内置浏览器：代理要给人看网页时打开面板（启动时就装上，见 browser/show.ts）
 import './browser/show.ts'
+import { BACKGROUND_TAB } from '../background/tab.ts'
 import { AGENTS_TAB } from '../tree/agents.ts'
 import { BROWSER_TAB } from './browser/store.ts'
 
@@ -84,6 +85,17 @@ export const SIDE_TABS: readonly SideTabSpec[] = [
     ),
     Badge: lazy(() =>
       import('../tree/ProposalsBadge.tsx').then((module) => ({ default: module.ProposalsBadge })),
+    ),
+  },
+  {
+    // 回合结束后还在跑的后台任务：输入框上方那一行点了打开（background/state.ts）
+    id: BACKGROUND_TAB,
+    label: 'side.tab.background',
+    icon: 'loop',
+    Panel: lazy(() =>
+      import('../background/BackgroundTab.tsx').then((module) => ({
+        default: module.BackgroundTab,
+      })),
     ),
   },
   {

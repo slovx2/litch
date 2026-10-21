@@ -57,6 +57,7 @@ export function abilitiesOf(
     finalOnStart: features.agentMessagePhase === 'onStart',
     turnDiff: features.turnDiff === true,
     stopAgent: features.stopAgent === true,
+    backgroundTasks: features.backgroundTasks === true,
   }
 }
 

@@ -159,6 +159,10 @@ export class SessionStore {
       CREATE TABLE IF NOT EXISTS native_lineage (
         session_id TEXT PRIMARY KEY, app TEXT
       );
+      -- 不是用户发起的回合是谁开的（backgroundTasks 扩展的 litchOrigin）：只记认得出的，用户的回合不记
+      CREATE TABLE IF NOT EXISTS turn_origins (
+        turn_id TEXT PRIMARY KEY, origin TEXT NOT NULL
+      );
       CREATE TABLE IF NOT EXISTS context_injections (
         message_id TEXT PRIMARY KEY, thread_id TEXT NOT NULL, turn_id TEXT,
         context_json TEXT NOT NULL, committed INTEGER NOT NULL DEFAULT 0
@@ -441,6 +445,27 @@ export class SessionStore {
       )
     }
     return this.lineage
+  }
+
+  /** 记下一个不是用户发起的回合是谁开的 */
+  saveTurnOrigin(turnId: string, origin: string): void {
+    this.db
+      .prepare(
+        'INSERT INTO turn_origins (turn_id, origin) VALUES (?, ?) ON CONFLICT(turn_id) DO UPDATE SET origin=excluded.origin',
+      )
+      .run(turnId, origin)
+  }
+
+  /** 这几个回合里记过来历的：回合 → 谁开的 */
+  turnOrigins(turnIds: readonly string[]): Map<string, string> {
+    const found = new Map<string, string>()
+    if (turnIds.length === 0) return found
+    const select = this.db.prepare('SELECT origin FROM turn_origins WHERE turn_id = ?')
+    for (const id of turnIds) {
+      const row = select.get(id) as { origin: string } | undefined
+      if (row) found.set(id, row.origin)
+    }
+    return found
   }
 
   /** 记下认的结果（每个会话只认一次） */
@@ -1434,6 +1459,11 @@ export class SessionStore {
       this.db
         .prepare(
           'DELETE FROM native_turn_boundaries WHERE turn_id IN (SELECT id FROM turns WHERE thread_id=?)',
+        )
+        .run(threadId)
+      this.db
+        .prepare(
+          'DELETE FROM turn_origins WHERE turn_id IN (SELECT id FROM turns WHERE thread_id=?)',
         )
         .run(threadId)
       for (const table of [

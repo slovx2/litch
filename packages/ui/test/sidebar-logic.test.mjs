@@ -7,7 +7,13 @@ const { isQuiet, NO_TALLY, tallyOf, tallyParts, waitLabel } = await import(
   '../src/sidebar/tally.ts'
 )
 
-const tally = (approval, answer, running, unread) => ({ approval, answer, running, unread })
+const tally = (approval, answer, running, unread, background = 0) => ({
+  approval,
+  answer,
+  running,
+  unread,
+  background,
+})
 
 /** 数据副本给的样子：组 → harness → 这一组里它的会话的状况 */
 const TALLIES = {
@@ -65,6 +71,18 @@ test('汇总：具体的数目一样一句，要紧的在前，没有的不说',
   ])
   assert.deepEqual(tallyParts(tally(0, 0, 2, 0)), [{ key: 'sidebar.tally.running', count: 2 }])
   assert.deepEqual(tallyParts(NO_TALLY), [])
+})
+
+test('汇总：只剩后台任务在跑的单独记，排在在跑的后面；只看某几个 harness 时跟着筛', () => {
+  const tallies = { litch: { claude: tally(0, 0, 1, 0, 2), pi: tally(0, 0, 0, 0, 1) } }
+  assert.deepEqual(tallyOf(tallies, 'litch'), tally(0, 0, 1, 0, 3))
+  assert.deepEqual(tallyOf(tallies, 'litch', ['pi']), tally(0, 0, 0, 0, 1))
+  assert.equal(isQuiet(tally(0, 0, 0, 0, 1)), false)
+  assert.deepEqual(tallyParts(tally(0, 0, 1, 1, 2)), [
+    { key: 'sidebar.tally.running', count: 1 },
+    { key: 'sidebar.tally.background', count: 2 },
+    { key: 'sidebar.tally.unread', count: 1 },
+  ])
 })
 
 // ---------- 侧栏的宽度与开合 ----------

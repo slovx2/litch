@@ -48,7 +48,7 @@ import {
   type RequestChoice,
   type RequestTerms,
 } from '../projection/requests.mjs'
-import { itemKey, projectThread, projectTurn } from '../projection/session.mjs'
+import { itemKey, originOf, projectThread, projectTurn } from '../projection/session.mjs'
 import {
   projectMode,
   projectSettings,
@@ -280,6 +280,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       steerImages: declared ? declared.steerImages : true,
       rollbackRestoresFiles: declared ? declared.rollbackRestoresFiles : false,
       finalOnStart: declared ? declared.finalOnStart : false,
+      backgroundTasks: declared ? declared.backgroundTasks : false,
       declared: declared !== null,
     }
   }
@@ -402,6 +403,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
         status: turn.status === 'inProgress' ? 'running' : turn.status,
         durationMs: turn.durationMs ?? null,
         error: turn.error?.message ?? null,
+        ...originOf(turn),
       },
     ]
     if (turn.status !== 'inProgress') {

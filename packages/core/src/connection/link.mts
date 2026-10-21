@@ -209,6 +209,9 @@ export function createLink(options: LinkOptions): Link {
                 // harnessConfig：声明了才收得到 harness 详情设置的变化和登录进展的通知
                 // （litch/harness/config/changed、litch/harness/auth/updated）
                 EXTENSION.harnessConfig,
+                // backgroundTasks：声明了，会话对象上才有后台任务的集合 litchBackground、回合上才有来历 litchOrigin，
+                // 才收得到集合变了的通知（litch/thread/background/changed）
+                EXTENSION.backgroundTasks,
                 // clientTools：litch_ 开头的命名空间的工具调用交给声明了的连接执行（内置浏览器、Computer Use）
                 ...(tools.length > 0 ? [EXTENSION.clientTools] : []),
               ],

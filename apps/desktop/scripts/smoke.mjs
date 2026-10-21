@@ -56,9 +56,16 @@ const probe = useRemote
     ? 'full'
     : useManage
       ? 'manage'
-      : ['scroll', 'compose', 'sidebar', 'tasks', 'tree', 'onboard', 'harness-settings'].find(
-          (name) => process.argv.includes(`--${name}`),
-        )
+      : [
+          'scroll',
+          'compose',
+          'sidebar',
+          'tasks',
+          'tree',
+          'background',
+          'onboard',
+          'harness-settings',
+        ].find((name) => process.argv.includes(`--${name}`))
 const mode = useRemote
   ? probe
   : useFull || useManage

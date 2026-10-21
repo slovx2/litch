@@ -37,6 +37,8 @@ export interface TaskTiming {
   interruptGraceMs: number
   /** harness 正在起、暂时连不上时最多等多久（毫秒） */
   harnessWaitMs: number
+  /** 后台任务都结束了、引擎会接着做时，等续跑的回合开始多久（毫秒，task-follow.mts） */
+  followSettleMs: number
 }
 
 export const DEFAULT_TASK_TIMING: TaskTiming = {
@@ -48,6 +50,7 @@ export const DEFAULT_TASK_TIMING: TaskTiming = {
   handshakeTimeoutMs: 10_000,
   interruptGraceMs: 30_000,
   harnessWaitMs: 60_000,
+  followSettleMs: 30_000,
 }
 
 /** 一次运行跑完的结果 */
@@ -55,6 +58,10 @@ export interface RunOutcome {
   status: 'succeeded' | 'failed'
   summary: string | null
   error: TaskError | null
+  /** 回合结束时会话里还有几个后台任务在跑（决 430：照常算结束，回报里注明）。0 不带 */
+  backgroundTasks?: number
+  /** 有后台任务在跑时留下来的连接：调度器记完结果后接着盯（task-follow.mts），不用了由它关 */
+  follow?: { threadId: string; link: EngineLink }
 }
 
 export class RunFailure extends Error {
@@ -80,6 +87,8 @@ export interface RunHost {
    * 开不了抛 EngineUnavailable。设备进程退出时它替我们关掉
    */
   openEngineLink(harness: string): Promise<EngineLink>
+  /** 会话里还有几个后台任务在跑（background.mts） */
+  backgroundRunning(threadId: string): number
   /** 记下任务发起的回合（会话树认出它们，不拿来唤醒父会话） */
   turns: TaskTurns
 }
@@ -215,6 +224,7 @@ export async function executeRun(
       throw new RunFailure('cwdMissing', `the working directory ${target.cwd} does not exist`)
   }
   const link = await reach(host, run.harness)
+  let kept = false
   try {
     if (run.threadId === null && target.kind === 'newThread') {
       const started = await link.request('thread/start', {
@@ -283,11 +293,15 @@ export async function executeRun(
       },
     ).finally(sent)
     if (result.status === 'timedOut') host.log(`任务 ${task.id} 的回合超过了时限，打断了`)
-    return outcomeOf(result)
+    const outcome = outcomeOf(result)
+    const background = host.backgroundRunning(threadId)
+    if (background === 0) return outcome
+    kept = true
+    return { ...outcome, backgroundTasks: background, follow: { threadId, link } }
   } catch (error) {
     return lostOrRethrow(error)
   } finally {
-    link.close()
+    if (!kept) link.close()
   }
 }
 
