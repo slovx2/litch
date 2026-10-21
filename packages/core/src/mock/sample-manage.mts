@@ -2,6 +2,7 @@
 // 设置有哪些由“设备服务”声明，界面按类型画——这里就是那个声明。各种类型都放了几项，
 // 还有一项故意用了这一版界面不认识的类型，用来看兜底。内容全是编出来的。
 // 给人看的字本来就要两种语言各一份（界面按当前语言取），所以直接写在这里，不放进 sample-text.mts。
+import { taskCardsSettingKey } from '../../../protocol/src/session-tree.mjs'
 import type { Bilingual, HarnessView } from '../model.mjs'
 import type {
   InheritedEnvView,
@@ -99,6 +100,24 @@ function baseSettings(
       ),
     },
   ]
+}
+
+/** 任务卡按 harness 的开关：和设备服务声明的那一项同形（键是 harness.<id>.taskCards，默认开，不用重启） */
+function taskCardsSetting(harness: HarnessView): SettingSpecView {
+  return {
+    ...BASE,
+    key: taskCardsSettingKey(harness.id),
+    group: `harness.${harness.id}`,
+    type: 'boolean',
+    scope: { kind: 'harness', harness: harness.id },
+    default: true,
+    restart: 'none',
+    title: both('任务卡', 'Task cards'),
+    description: both(
+      '会话里出建议任务卡片、回合末尾收尾。关掉后这个 harness 的会话不再提建议，派子会话等其余能力照旧。',
+      'Sessions suggest follow-up tasks as cards and wrap up each turn. When off, sessions on this harness stop suggesting; starting sub-sessions and the rest still work.',
+    ),
+  }
 }
 
 /** 个别 harness 多出来的几项，各是一种类型 */
@@ -323,7 +342,11 @@ export function sampleSettings(deviceId: string, harnesses: HarnessView[]): Samp
     },
   ]
   const settings = [
-    ...harnesses.flatMap((harness) => [...harnessSettings(harness), ...extraSettings(harness)]),
+    ...harnesses.flatMap((harness) => [
+      ...harnessSettings(harness),
+      ...extraSettings(harness),
+      taskCardsSetting(harness),
+    ]),
     ...deviceSettings(harnesses, firstPort),
   ]
   const has = (id: string) => harnesses.some((harness) => harness.id === id)
@@ -339,6 +362,8 @@ export function sampleSettings(deviceId: string, harnesses: HarnessView[]): Samp
     if (has('pi')) {
       written.set('harness.pi.endpoint', 'https://gate.example.com/v1')
       written.set('harness.pi.apiKey', { set: true })
+      // 本机上 Pi 的任务卡关着：设置页那棵树上本机一行是半选
+      written.set(taskCardsSettingKey('pi'), false)
       written.set('ssh.pi.enabled', true)
     }
   } else if (has('claude')) {

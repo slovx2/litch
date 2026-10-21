@@ -38,6 +38,7 @@ import {
   type ThreadSectionListResponse,
   type Turn,
 } from '../../../protocol/src/index.mjs'
+import { taskCardsSettingKey } from '../../../protocol/src/session-tree.mjs'
 import { ChannelError, type Clock, type SidebarOp } from '../channel/protocol.mjs'
 import type { HostSink } from '../channel/server.mjs'
 import { createLink, type LinkState } from '../connection/link.mjs'
@@ -51,6 +52,7 @@ import type {
   DeviceView,
   HarnessAbilities,
   HarnessId,
+  HarnessSwitches,
   HarnessView,
   OutgoingMessage,
   RemoteTarget,
@@ -121,6 +123,7 @@ import type { MachineFacts } from './machine/types.mjs'
 import { createManagement } from './manage.mjs'
 import { createOrganizer, looseDirectories, type Organizer } from './organize.mjs'
 import { createPairing, type Pairing, type PairingPlatform } from './pairing.mjs'
+import { DEFAULT_TOOL_SWITCHES } from './remote.mjs'
 import type { SnapshotStore } from './snapshot.mjs'
 import { createTasks, type Tasks } from './tasks.mjs'
 import type { TerminalNotesStore } from './terminal-launch.mjs'
@@ -171,8 +174,11 @@ export interface DeviceOptions {
   terminalNotes?: TerminalNotesStore
   /** 通往主进程的客户端工具那一头（tool-hub.mts）。不给就是这台桌面什么都执行不了 */
   tools?: ToolHub
-  /** 这台设备的两个开关现在是什么。不给按默认：浏览器开、Computer Use 关 */
-  toolSwitches?(): { browser: boolean; computer: boolean }
+  /**
+   * 这台设备的两个开关现在是什么：harness 给了是这个 harness 的（没单独设过的跟设备一级），null 是设备一级的。
+   * 不给按默认：浏览器开、Computer Use 关
+   */
+  toolSwitches?(harness: HarnessId | null): { browser: boolean; computer: boolean }
   /** litch_machine：远程设备上的会话操作这台电脑。只有远程设备、核心有执行器时给 */
   machine?: DeviceMachine
   /** 扫码绑定手机要碰 ssh、文件、端口的那几样（外壳给）。不给就出不了码，已绑定的手机照样能看、能撤 */
@@ -202,8 +208,13 @@ export interface DeviceMachine {
   presence(online: boolean): void
 }
 
-/** 设备设置页上两个开关的默认值 */
-export const DEFAULT_TOOL_SWITCHES = { browser: true, computer: false } as const
+export { DEFAULT_TOOL_SWITCHES } from './remote.mjs'
+
+/** 建会话时、调用时按开关管的两个命名空间，各对应开关里的哪一项 */
+const SWITCHED: Record<string, 'browser' | 'computer'> = {
+  [CLIENT_TOOL_NAMESPACE.browser]: 'browser',
+  [CLIENT_TOOL_NAMESPACE.computer]: 'computer',
+}
 
 /** 给执行器的 ssh 目标：别名原样；主机写成 user@host，带端口时用 ssh 认的 ssh://user@host:端口 */
 const sshTarget = (target: RemoteTarget | null): string | null => {
@@ -543,13 +554,41 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     install: installable,
   })
 
-  /** 设置页上的两个开关：这台桌面执行不了的那一项是 null，不出开关 */
+  /**
+   * 设备设置里各项现在的值：有人订阅着设置（manage.mts）时才有，没人看就是 null。
+   * 只用来读任务卡按 harness 的开关
+   */
+  let settingValues: Record<string, unknown> | null = null
+  /** 这个 harness 的任务卡开着没有。没连着、没人看着设置、旧设备服务没有这一项都是 null */
+  const taskCardsOf = (harness: HarnessId): boolean | null => {
+    const value = online ? settingValues?.[taskCardsSettingKey(harness)] : undefined
+    return typeof value === 'boolean' ? value : null
+  }
+
+  /** 两个开关现在是什么：harness 是 null 时是设备一级的 */
+  const switchesOf = (harness: HarnessId | null) =>
+    options.toolSwitches?.(harness) ?? DEFAULT_TOOL_SWITCHES
+
+  /**
+   * 设置页上的开关：设备一级的两个（这台桌面执行不了的那一项是 null，不出开关），
+   * 和设备声明的每个 harness 的三样（任务卡读设备设置，浏览器、Computer Use 存在桌面端）
+   */
   const toolSwitchesView = (): ToolSwitches => {
     const can = options.tools?.namespaces() ?? []
-    const now = options.toolSwitches?.() ?? DEFAULT_TOOL_SWITCHES
+    const now = switchesOf(null)
+    const each: Record<string, HarnessSwitches> = {}
+    for (const entry of harnesses) {
+      const own = switchesOf(entry.id)
+      each[entry.id] = {
+        taskCards: taskCardsOf(entry.id),
+        browser: own.browser,
+        computer: own.computer,
+      }
+    }
     return {
       browser: can.includes(CLIENT_TOOL_NAMESPACE.browser) ? now.browser : null,
       computer: can.includes(CLIENT_TOOL_NAMESPACE.computer) ? now.computer : null,
+      harnesses: each,
     }
   }
 
@@ -1467,11 +1506,16 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       // litch_tasks、litch_sessions 的执行方是设备服务自己：设备列了 deviceTasks、声明了会话树就各自带上，
       // 和这台桌面能执行什么无关（握手时不声明它们，toolNamespaces 里也没有）。
       // 最后是呈现风格（不带工具，只有 instructions；原生 codex 不带，client-tools-presentation.mts）
+      // 内置浏览器、Computer Use 在这个 harness 上关着的不带（模型看不到，也省提示词）；调用时还会再查一次
       const presentation = presentationSpec(harness)
+      const now = switchesOf(harness)
       return [
         ...clientToolSpecs(
           [
-            ...toolNamespaces(),
+            ...toolNamespaces().filter((namespace) => {
+              const which = SWITCHED[namespace]
+              return which === undefined || now[which]
+            }),
             ...(schedulable ? [CLIENT_TOOL_NAMESPACE.tasks] : []),
             ...(sessionTree ? [CLIENT_TOOL_NAMESPACE.sessions] : []),
           ],
@@ -1508,11 +1552,9 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       kind: config.kind,
       target: sshTarget(config.target),
     }),
-    allowed(namespace) {
-      const now = options.toolSwitches?.() ?? DEFAULT_TOOL_SWITCHES
-      if (namespace === CLIENT_TOOL_NAMESPACE.browser) return now.browser
-      if (namespace === CLIENT_TOOL_NAMESPACE.computer) return now.computer
-      return true
+    allowed(namespace, harness) {
+      const which = SWITCHED[namespace]
+      return which === undefined || switchesOf(harness)[which]
     },
     context(threadId) {
       const thread = threads.get(threadId) ?? archived?.get(threadId)
@@ -1776,6 +1818,12 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     supported: () => manageable,
     request: (method, params, requestOptions) => link.request(method, params, requestOptions),
     fail: (error) => fail(error),
+    // 任务卡按 harness 的开关存在设备上：不为它另外去读，有人看着设置（设置页那棵树、设备详情）时跟着那一份走
+    viewed(snapshot) {
+      const before = JSON.stringify(settingValues)
+      settingValues = snapshot ? { ...snapshot.values } : null
+      if (JSON.stringify(settingValues) !== before) hooks.device(view())
+    },
     log,
   })
 

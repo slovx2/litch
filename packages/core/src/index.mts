@@ -120,6 +120,7 @@ export {
   type PairSelfTestResult,
 } from './device/pairing.mjs'
 export {
+  changeToolSwitches,
   checkPairingAddress,
   checkSaved,
   checkTarget,
@@ -131,7 +132,9 @@ export {
   type RemotePlatform,
   type SavedDevices,
   type SavedRemote,
+  type SavedToolSwitches,
   sameTarget,
+  toolSwitchesOf,
   WIRES,
 } from './device/remote.mjs'
 export { checkSnapshot, type DeviceSnapshot, type SnapshotStore } from './device/snapshot.mjs'

@@ -88,6 +88,8 @@ async function codexWorld() {
 
 test('建会话：全部工具定义、工作区、模型强度权限、计划模式、技能、文件、图片都带上，codex 收', async () => {
   const { command, sent } = await codexWorld()
+  // Computer Use 默认关，关着的建会话时不带：先打开，整份定义都过一遍 codex 的校验
+  await command('device.tools.set', { computer: true })
   await command('session.create', {
     harness: 'codex',
     workspaceId: 'w1',
@@ -177,6 +179,7 @@ test('只有 codex 的远程机器（直接连它的常驻服务，中间没有�
   core.start()
   await settle()
   const never = { aborted: false, addEventListener() {} }
+  await core.command('device.tools.set', { deviceId: 'box', computer: true }, never)
   await core.command(
     'session.create',
     {

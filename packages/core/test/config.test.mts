@@ -295,6 +295,38 @@ test('phones pair：只打开出码对话框（带预填），回“请用手机
   assert.match(done.text, /确认码/)
 })
 
+test('tools set --harness：只改这个 harness 的浏览器、Computer Use；--task-cards 写设备设置，不给 --harness 是整台设备', async () => {
+  const m = mock()
+  const local = async () => (await m.app()).devices.find((d) => d.id === 'local')
+  assert.ok((await m.run(['tools', 'set', 'local', '--harness', 'pi', '--browser', 'off'])).ok)
+  let tools = (await local())?.tools
+  assert.equal(tools?.browser, true)
+  assert.equal(tools?.harnesses?.pi?.browser, false)
+  assert.equal(tools?.harnesses?.claude?.browser, true)
+  // 示例里本机 Pi 的任务卡关着
+  assert.equal(tools?.harnesses?.pi?.taskCards, false)
+  assert.ok(
+    (await m.run(['tools', 'set', 'local', '--harness', 'claude', '--task-cards', 'off'])).ok,
+  )
+  await flush()
+  assert.equal((await local())?.tools.harnesses?.claude?.taskCards, false)
+  assert.ok((await m.run(['tools', 'set', 'local', '--task-cards', 'on'])).ok)
+  await flush()
+  tools = (await local())?.tools
+  assert.ok(Object.values(tools?.harnesses ?? {}).every((entry) => entry.taskCards === true))
+
+  const unknown = await m.run(['tools', 'set', 'local', '--harness', 'nope', '--browser', 'on'], {
+    lang: 'en',
+  })
+  assert.equal(unknown.ok, false)
+  assert.match(unknown.text, /No such harness on this device: nope/)
+  const machine = await m.run(['tools', 'set', 'local', '--harness', 'pi', '--machine', 'on'], {
+    lang: 'en',
+  })
+  assert.equal(machine.ok, false)
+  assert.match(machine.text, /not per harness/)
+})
+
 test('放宽安全（E6）：确认卡写清是哪一项，每个窗口都看得到；允许才执行，拒绝不执行', async () => {
   const m = mock()
   const a = m.window()

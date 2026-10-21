@@ -109,7 +109,7 @@ Every operation, with the reference that explains it. Exact arguments: `scripts/
 | `scripts/litch harness list` / `enable` / `disable` / `restart` | Harnesses on a device (installing them is a shell task, see the reference) | `references/harnesses.md` |
 | `scripts/litch projects list` / `add` / `remove` | Projects (folders) on a device | `references/sessions-and-projects.md` |
 | `scripts/litch tasks list` / `create` / `update` / `pause` / `resume` / `run` / `delete` | Scheduled tasks | `references/scheduled-tasks.md` |
-| `scripts/litch tools set` | Per-device switches: built-in browser, Computer Use, operate this computer | `references/browser-and-computer-use.md`, `references/operate-this-computer.md` |
+| `scripts/litch tools set` | Switches per device or per harness: task cards, built-in browser, Computer Use; operate this computer (per device) | `references/browser-and-computer-use.md`, `references/operate-this-computer.md` |
 | `scripts/litch machine set` / `log` / `log-clear` | "Operate this computer": approval, access scope, activity log | `references/operate-this-computer.md` |
 | `scripts/litch browser links` / `sites` / `allow` / `forget` / `clear-data` | Built-in browser preferences and data | `references/browser-and-computer-use.md` |
 | `scripts/litch computer status` / `apps` / `forget` | Computer Use permission status and allowed apps | `references/browser-and-computer-use.md` |

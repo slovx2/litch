@@ -12,7 +12,16 @@ import {
   type Topic,
 } from '../channel/protocol.mjs'
 import type { CoreHost, HostSink } from '../channel/server.mjs'
-import { checkTarget, defaultName, hostLabel, sameTarget, WIRES } from '../device/remote.mjs'
+import {
+  changeToolSwitches,
+  checkTarget,
+  defaultName,
+  hostLabel,
+  type SavedToolSwitches,
+  sameTarget,
+  toolSwitchesOf,
+  WIRES,
+} from '../device/remote.mjs'
 import type {
   AppView,
   ConnectFailureView,
@@ -1242,6 +1251,11 @@ export function createMockCore(options: MockCoreOptions): MockCore {
   const manage = createMockManagement({
     clock,
     stepMs: chunkMs,
+    // 任务卡的开关改了：设备的开关一栏跟着变
+    taskCardsChanged(deviceId) {
+      const device = app.devices.find((entry) => entry.id === deviceId)
+      if (device) emitDevice(device)
+    },
     devices: () => app.devices,
     device: (deviceId) => app.devices.find((entry) => entry.id === deviceId),
     setHarness: (deviceId, harnessId, patch) => {
@@ -1621,7 +1635,37 @@ export function createMockCore(options: MockCoreOptions): MockCore {
   // 加进来的远程设备照着真的那样走一遍：先是“正在连”，过一会儿连上（只有 Codex、没有会话），
   // 或者停在一个要人处理的原因上。哪台主机是哪种结果看 SAMPLE_HOSTS。
 
-  const emitDevice = (device: DeviceView) => emit('app', [{ op: 'device.upsert', device }])
+  /** 各台设备改过的浏览器、Computer Use 开关（和真核心存的一样，remote.mts） */
+  const savedTools = new Map<string, SavedToolSwitches>()
+  /** 设备的开关一栏：设备一级的两个，和每个 harness 的三样（任务卡读模拟的设备设置） */
+  const toolsOf = (device: DeviceView): DeviceView['tools'] => {
+    const kept = savedTools.get(device.id)
+    const now = toolSwitchesOf(kept, null)
+    return {
+      browser: device.tools.browser === null ? null : now.browser,
+      computer: device.tools.computer === null ? null : now.computer,
+      harnesses: Object.fromEntries(
+        device.harnesses.map((harness) => [
+          harness.id,
+          {
+            taskCards: manage.taskCards(device.id, harness.id),
+            ...toolSwitchesOf(kept, harness.id),
+          },
+        ]),
+      ),
+    }
+  }
+  /** 发出去之前把开关一栏算一遍：harness 装了、连上了、任务卡改了，都在这里跟上 */
+  const emitDevice = (device: DeviceView) => {
+    const fresh = { ...device, tools: toolsOf(device) }
+    const index = app.devices.findIndex((entry) => entry.id === device.id)
+    if (index !== -1) app.devices[index] = fresh
+    emit('app', [{ op: 'device.upsert', device: fresh }])
+  }
+  // 一开始的那几台：开关一栏先算好
+  for (const [index, device] of app.devices.entries()) {
+    app.devices[index] = { ...device, tools: toolsOf(device) }
+  }
 
   const patchDevice = (deviceId: string, patch: Partial<DeviceView>): DeviceView => {
     const index = app.devices.findIndex((device) => device.id === deviceId)
@@ -1839,19 +1883,26 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     if (name === 'device.tools.set') {
       const {
         deviceId,
+        harness,
         browser,
         computer,
         machine: operate,
       } = params as Commands['device.tools.set']['params']
       const device = app.devices.find((entry) => entry.id === deviceId)
       if (!device) throw new ChannelError('notFound', `没有这台设备：${deviceId}`)
+      if (harness !== undefined && operate !== undefined) {
+        throw new ChannelError('invalid', '“操作这台电脑”不分 harness，不要带 harness')
+      }
       if (typeof operate === 'boolean') machine.toggle(deviceId, operate)
-      patchDevice(deviceId, {
-        tools: {
-          browser: typeof browser === 'boolean' ? browser : device.tools.browser,
-          computer: typeof computer === 'boolean' ? computer : device.tools.computer,
-        },
-      })
+      savedTools.set(
+        deviceId,
+        changeToolSwitches(savedTools.get(deviceId), {
+          ...(harness === undefined ? {} : { harness }),
+          ...(typeof browser === 'boolean' ? { browser } : {}),
+          ...(typeof computer === 'boolean' ? { computer } : {}),
+        }),
+      )
+      emitDevice(device)
       return {}
     }
     if (name === 'device.reconnect') {

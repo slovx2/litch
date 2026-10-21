@@ -1,6 +1,8 @@
 // 模拟核心的设备与 harness 管理：订阅设置、改设置、重启 harness、诊断、日志、ssh 配置片段。
 // 行为照真的设备服务：一次写入全有或全无、版本号对不上就拒绝、改了要重启才生效的设置时
 // 那个 harness 有回合在跑就标成“待重启”。别的客户端的动静由模拟核心按对话里的关键字来演（见 mock-core.mts）。
+
+import { taskCardsSettingKey } from '../../../protocol/src/session-tree.mjs'
 import { ChannelError, type Clock, type Commands, type ManageOp } from '../channel/protocol.mjs'
 import type { HostSink } from '../channel/server.mjs'
 import type { DeviceView, HarnessView } from '../model.mjs'
@@ -35,10 +37,14 @@ export interface MockManageHost {
   busy(deviceId: string, harnessId: string): boolean
   /** 把这个 harness 上在跑的回合都打断：强行重启时用 */
   interrupt(deviceId: string, harnessId: string): void
+  /** 这台设备上有 harness 的任务卡开关（harness.<id>.taskCards）变了 */
+  taskCardsChanged?(deviceId: string): void
 }
 
 export interface MockManagement {
   subscribe(deviceId: string, sink: HostSink): () => void
+  /** 这个 harness 的任务卡开着没有。设备没连着、没有设置接口的是 null */
+  taskCards(deviceId: string, harness: string): boolean | null
   /** 是管理的命令就处理；不是就返回 undefined，交给别处 */
   command(name: string, params: unknown): Promise<unknown> | undefined
   /** 别的客户端改两项设置：等这台设备的详情有人看着之后过一会儿再改，改完这边会收到通知 */
@@ -117,6 +123,7 @@ export function createMockManagement(host: MockManageHost): MockManagement {
       { op: 'settings.set', snapshot: snapshotOf(state, device.harnesses), keys },
     ]
     for (const sink of sinks.get(deviceId) ?? []) sink.delta(ops)
+    if (keys.some((key) => key.endsWith('.taskCards'))) host.taskCardsChanged?.(deviceId)
   }
 
   /** 这个 harness 停稳之后是什么样：设置里停用了就是停用，否则回到它一开始的样子 */
@@ -270,6 +277,13 @@ export function createMockManagement(host: MockManageHost): MockManagement {
   }
 
   return {
+    taskCards(deviceId, harness) {
+      const device = host.device(deviceId)
+      if (!device?.manageable || device.connection !== 'online') return null
+      const value = currentValue(reach(deviceId).state, taskCardsSettingKey(harness))
+      return typeof value === 'boolean' ? value : null
+    },
+
     subscribe(deviceId, sink) {
       const device = host.device(deviceId)
       if (!device) throw new ChannelError('notFound', `没有这台设备：${deviceId}`)

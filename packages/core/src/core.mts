@@ -7,12 +7,7 @@ import type { CoreHost, HostSink } from './channel/server.mjs'
 import { createConfigBridge } from './config/bridge.mjs'
 import { type ConfigExecutor, createConfigExecutor } from './config/executor.mjs'
 import { ConnectError } from './connection/transport.mjs'
-import {
-  createDevice,
-  DEFAULT_TOOL_SWITCHES,
-  type Device,
-  type DeviceConfig,
-} from './device/device.mjs'
+import { createDevice, type Device, type DeviceConfig } from './device/device.mjs'
 import { channelFailure } from './device/faults.mjs'
 import type { AuthForwardPlatform } from './device/harness-config.mjs'
 import { createMachineExecutor, type MachineExecutorOptions } from './device/machine/executor.mjs'
@@ -20,16 +15,19 @@ import { SENSITIVE_PRESETS } from './device/machine/presets.mjs'
 import type { MachineExecutor, MachineFacts } from './device/machine/types.mjs'
 import type { PairingPlatform } from './device/pairing.mjs'
 import {
+  changeToolSwitches,
   checkPairingAddress,
   checkTarget,
   cleanDeniedPaths,
   type DeviceStore,
   defaultName,
+  HARNESS_ID,
   hostLabel,
   type RemotePlatform,
   type SavedDevices,
   type SavedRemote,
   sameTarget,
+  toolSwitchesOf,
   WIRES,
 } from './device/remote.mjs'
 import {
@@ -150,14 +148,9 @@ export function createCore(options: CoreOptions): Core {
     })
     return configExecutor
   }
-  /** 一台设备的两个开关现在是什么：改过的按改的，没改过的按默认 */
-  const switchesOf = (deviceId: string) => {
-    const kept = saved.tools?.[deviceId] ?? {}
-    return {
-      browser: kept.browser ?? DEFAULT_TOOL_SWITCHES.browser,
-      computer: kept.computer ?? DEFAULT_TOOL_SWITCHES.computer,
-    }
-  }
+  /** 一台设备（给了 harness 是它上面这个 harness）的两个开关现在是什么：改过的按改的，没改过的按默认 */
+  const switchesOf = (deviceId: string, harness: string | null) =>
+    toolSwitchesOf(saved.tools?.[deviceId], harness)
 
   // —— litch_machine：远程设备上的会话操作这台电脑 ——
 
@@ -227,7 +220,7 @@ export function createCore(options: CoreOptions): Core {
       ...(store ? { snapshot: store.snapshot(config.id) } : {}),
       ...(store?.terminals ? { terminalNotes: store.terminals(config.id) } : {}),
       tools: hub,
-      toolSwitches: () => switchesOf(config.id),
+      toolSwitches: (harness) => switchesOf(config.id, harness),
       ...(options.pairing ? { pairing: options.pairing } : {}),
       ...(options.forward ? { forward: options.forward } : {}),
       // litch config 只从本机的 harness 来：只有本机设备的连接声明它
@@ -732,17 +725,26 @@ export function createCore(options: CoreOptions): Core {
           return {}
         }
         case 'device.tools.set': {
-          const { deviceId, browser, computer, machine } =
+          const { deviceId, harness, browser, computer, machine } =
             params as Commands['device.tools.set']['params']
           const device = deviceOf(deviceId)
+          if (harness !== undefined) {
+            if (typeof harness !== 'string' || !HARNESS_ID.test(harness)) {
+              throw new ChannelError('invalid', '没有这个 harness')
+            }
+            // 操作这台电脑不分 harness
+            if (machine !== undefined) {
+              throw new ChannelError('invalid', '“操作这台电脑”不分 harness，不要带 harness')
+            }
+          }
           if (typeof machine === 'boolean') machineDevice(deviceId)
           const before = saved.tools?.[deviceId] ?? {}
-          const next = {
-            ...before,
+          const next = changeToolSwitches(before, {
+            ...(harness === undefined ? {} : { harness }),
             ...(typeof browser === 'boolean' ? { browser } : {}),
             ...(typeof computer === 'boolean' ? { computer } : {}),
             ...(typeof machine === 'boolean' ? { machine } : {}),
-          }
+          })
           saved = { ...saved, tools: { ...(saved.tools ?? {}), [deviceId]: next } }
           persist()
           // 关掉“操作这台电脑”的那一刻（08 号 3.1）：进行中的调用回失败、卡片撤掉、它起的进程都结束
@@ -750,7 +752,7 @@ export function createCore(options: CoreOptions): Core {
             device.stopMachine(clientToolFailure('disabled', MACHINE_DISABLED))
             wiring?.disabled(deviceId)
           }
-          // 开关只在执行时查：已经建好的会话里的调用，下一次就按新的来
+          // 之后建的会话按新的挑工具；已经建好的会话里的调用，下一次就按新的来
           device.update({})
           return {}
         }

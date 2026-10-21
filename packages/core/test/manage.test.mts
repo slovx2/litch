@@ -652,6 +652,37 @@ test('诊断、日志末尾、ssh 配置片段：都换成给界面的形状', a
   })
 })
 
+test('任务卡按 harness 的开关：有人看着设置时设备的显示数据里带上，跟着通知变；没人看、没有这一项是 null，不另外去读', async () => {
+  const w = world()
+  w.settings.schema.settings.push(
+    spec('harness.pi.taskCards', 'boolean', {
+      scope: { kind: 'harness', harness: 'pi' },
+      default: true,
+    }),
+  )
+  w.settings.snapshot.values['harness.pi.taskCards'] = false
+  const me = w.client()
+  me.core.start()
+  await settle()
+  assert.equal(w.settings.reads, 0)
+  assert.equal(me.device()?.tools.harnesses?.pi?.taskCards, null)
+  const { close } = me.watch()
+  await settle()
+  assert.equal(w.settings.reads, 1)
+  assert.equal(me.device()?.tools.harnesses?.pi?.taskCards, false)
+  // 设备服务没声明这一项的 harness（旧版）
+  assert.equal(me.device()?.tools.harnesses?.cc?.taskCards, null)
+  w.broadcast(['harness.pi.taskCards'], {
+    version: 4,
+    values: { ...w.settings.snapshot.values, 'harness.pi.taskCards': true },
+  })
+  await settle()
+  assert.equal(me.device()?.tools.harnesses?.pi?.taskCards, true)
+  close()
+  await settle()
+  assert.equal(me.device()?.tools.harnesses?.pi?.taskCards, null)
+})
+
 test('订阅的时候设备还没连上：连上才有快照；断了再连上，重新读一份', async () => {
   const w = world()
   const me = w.client()
