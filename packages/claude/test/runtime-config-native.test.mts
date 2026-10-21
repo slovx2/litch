@@ -9,6 +9,7 @@ import {
   applyExtendedCacheTtlBeta,
   claudeExtendedCacheTtl,
   claudePlansLocation,
+  claudeSessionTitle,
   claudeSettingSources,
   claudeThreadIdHeader,
   claudeThreadIdHeaderEnv,
@@ -42,7 +43,21 @@ test('CHA_CLAUDE_SETTING_SOURCES：默认三层都读，可只读其中几层，
     plansLocation: 'workspace',
     threadIdHeader: false,
     extendedCacheTtl: true,
+    sessionTitle: true,
   })
+})
+
+test('CHA_CLAUDE_SESSION_TITLE：默认 on，off 关掉自动起名，别的值启动就报错', () => {
+  assert.equal(claudeSessionTitle({}), true)
+  for (const on of ['on', 'ON', '1', 'true', ' yes '])
+    assert.equal(claudeSessionTitle({ CHA_CLAUDE_SESSION_TITLE: on }), true)
+  for (const off of ['off', 'Off', '0', 'false', 'no'])
+    assert.equal(claudeSessionTitle({ CHA_CLAUDE_SESSION_TITLE: off }), false)
+  assert.throws(
+    () => resolveRuntimeConfig({ CHA_CLAUDE_SESSION_TITLE: 'cli-only' }),
+    /CHA_CLAUDE_SESSION_TITLE 无效/,
+  )
+  assert.equal(resolveRuntimeConfig({ CHA_CLAUDE_SESSION_TITLE: 'off' }).native.sessionTitle, false)
 })
 
 test('CHA_CLAUDE_PLANS_LOCATION：默认放工作区，config 放 Claude Code 自己的配置目录，别的值报错', () => {

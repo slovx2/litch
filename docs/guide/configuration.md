@@ -195,9 +195,20 @@ export CHA_CLAUDE_THREAD_ID_HEADER=1
 # 设成 0 时不补，beta 头和直接跑 CLI 时一样（ANTHROPIC_BETAS 里自己写的照旧）。请求体里的 cache_control.ttl
 # 是 CLI 自己定的：订阅登录时 CLI 写 ttl: "1h" 并自己带上这个 beta，API key 时不写，所以关掉不会缺 beta。
 export CHA_CLAUDE_EXTENDED_CACHE_TTL=0
+
+# 默认 on：Claude 会话照旧自动起名（每个会话的头几个回合里 CLI 用小模型发一次起标题的请求，
+# 入口把起出来的标题当会话名）。设成 off 时不再有这个请求：CLI 不自己起（入口给它设
+# CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1），入口也不请它起、回合结束不读标题。
+export CHA_CLAUDE_SESSION_TITLE=off
 ```
 
-四项给了认不出的值时入口启动就报错。
+五项给了认不出的值时入口启动就报错。
+
+关掉自动起名后线程名在协议上的表现：
+
+- 新会话的 `name` 一直是 `null`，入口不会自己发 `thread/name/updated`；`thread/list`、`thread/read` 里没有名字，客户端照常拿 `preview`（第一句话）显示，和原生 Codex 没起名时一样。
+- 客户端的 `thread/name/set` 照常生效，照常发 `thread/name/updated`。
+- 开关在入口启动时读，改了要重启入口。已经起好名的会话不动；开着时 CLI 已经写进会话记录、入口还没读到的标题，关掉以后也不再读。
 
 ## Codex 风格的 `-c` 与权限档位
 
@@ -321,6 +332,7 @@ export CHA_CLAUDE_NODE="/absolute/path/to/node"
 | `CHA_CLAUDE_SETTING_SOURCES` | 起 CLI 时读哪几层 Claude Code 设置，逗号分隔的 `user`、`project`、`local`，默认三层都读；认不出的值启动报错。 |
 | `CHA_CLAUDE_PLANS_LOCATION` | 计划文件放哪：`workspace`（默认，工作区里每个线程一个目录）或 `config`（`<CLAUDE_CONFIG_DIR 或 ~/.claude>/plans/`）。CLI 只认项目内的 `plansDirectory`，所以不能指定任意目录。 |
 | `CHA_CLAUDE_THREAD_ID_HEADER` | 设成 `1` 时模型请求带 `thread-id: <线程号>`（合进 `ANTHROPIC_CUSTOM_HEADERS`），不带回合号；默认关。 |
+| `CHA_CLAUDE_SESSION_TITLE` | 默认 `on`，Claude 会话自动起名；`off` 时 CLI 和入口都不发起标题的模型请求，会话名只来自 `thread/name/set`。 |
 | `CHA_CLAUDE_EXTENDED_CACHE_TTL` | 默认 `1`，往 `ANTHROPIC_BETAS` 补 `extended-cache-ttl-2025-04-11`；`0` 时不补，CLI 发的 beta 头和直接跑 CLI 时一样。 |
 | `CHA_CLAUDE_IDLE_EXIT_MS` | 仅 shim：守护进程空闲退出；本地入口固定为 `0`。还有 Claude 进程在看管后台命令时不算空闲。 |
 | `CHA_CLAUDE_KEEP_ALIVE_SESSIONS` | 同时保留后台命令的 Claude 会话数上限，默认 `8`。回合结束时还有后台命令在跑，该会话的 Claude 进程就留下（每个约占 120–220 MB 内存）；超出上限的会话不保留，后台命令随回合结束而停止并有提示。设为 `0` 关闭保留。 |

@@ -111,7 +111,7 @@ import {
 } from './provider-loop-selection.mjs'
 import { AccountRateLimits } from './rate-limits.mjs'
 import { recordRunEvent } from './run-registry.mjs'
-import { normalizeRuntimeType } from './runtime-config.mjs'
+import { claudeSessionTitle, normalizeRuntimeType } from './runtime-config.mjs'
 import { defaultSandboxPolicy, parseSandboxPolicy, policyFromParams } from './sandbox-policy.mjs'
 import {
   addedFileDiff,
@@ -5243,8 +5243,10 @@ export class CodexClaudeAppServer {
     void this.adoptSessionTitle(thread.id)
   }
 
-  // 这个会话还要不要自动起名：Claude 会话、还没有名字、用户没改过名，只看前三个回合
+  // 这个会话还要不要自动起名：Claude 会话、还没有名字、用户没改过名，只看前三个回合。
+  // CHA_CLAUDE_SESSION_TITLE=off 时一律不起：不请 CLI 起（requestTitle）、回合结束也不读（adoptSessionTitle）
   private wantsSessionTitle(threadId: string): boolean {
+    if (!claudeSessionTitle()) return false
     if ((this.titleChecks.get(threadId) ?? 0) >= 3 || !this.runtime.sessionTitle) return false
     const thread = this.store.getThread(threadId)
     return Boolean(

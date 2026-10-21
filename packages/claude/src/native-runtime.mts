@@ -91,6 +91,7 @@ import { type NativeRateLimitInfo, rateLimitCredentialScope } from './rate-limit
 import {
   applyExtendedCacheTtlBeta,
   claudePlansLocation,
+  claudeSessionTitle,
   claudeSettingSources,
   claudeThreadIdHeaderEnv,
 } from './runtime-config.mjs'
@@ -1255,6 +1256,8 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         // 追问子代理的回合跑在父线程的会话上，给的是父线程
         LITCH_THREAD_ID: context.sessionThreadId ?? context.threadId,
         ...threadHeader,
+        // CHA_CLAUDE_SESSION_TITLE=off：CLI 不自己用小模型起标题（入口这边也不请它起，见 server.mts）
+        ...(claudeSessionTitle() ? {} : { CLAUDE_CODE_DISABLE_TERMINAL_TITLE: '1' }),
       },
       ...runtimePermissionOptions(context, originalBashInputs),
       settings: {

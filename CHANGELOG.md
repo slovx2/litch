@@ -35,6 +35,7 @@ versioning or publishing metadata.
 - Claude Code：回合进行中再发 `turn/start` 时，和上游 codex 一样并进正在跑的回合（相当于 `turn/steer`），回执里是那个回合的号，不再回 `-32009`；带图片的、追问子代理的、审查和手动压缩的、带 `outputSchema` 的回合照旧拒绝，这次请求里的模型、权限等设置不跟着改
 - Claude Code：输入里选的 Skill（`{type: "skill"}`）照上游 codex 把 SKILL.md 正文作为 `<skill>` 片段放在这一轮的话前面交给模型，`turn/start`、`turn/steer` 都是；原来拼成跟在话后面的 “/名字”，技能不在开头时 CLI 不展开，正文到不了模型。关掉的技能什么都不给；不在技能清单里的（比如 CLI 插件带的）照旧转成 “/名字”
 - Claude Code：新增开关 `CHA_CLAUDE_EXTENDED_CACHE_TTL`，默认 `1`，和原来一样往 `ANTHROPIC_BETAS` 补 `extended-cache-ttl-2025-04-11`；设成 `0` 时不补，CLI 发的 `anthropic-beta` 和直接跑 CLI 时一样，给不想多转一个 beta 的计费代理用。请求体里的 `cache_control.ttl` 不是入口写的：订阅登录时 CLI 自己写 `1h` 并自己带上这个 beta，API key 时不写，关掉不会出现缺 beta 的请求。认不出的值启动就报错
+- Claude Code：新增开关 `CHA_CLAUDE_SESSION_TITLE`，默认 `on`，和原来一样自动给会话起名；设成 `off` 时整个会话不再发起标题的小模型请求（CLI 设 `CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1` 不自己起，入口也不请它起、不读标题），会话名一直是空的，只有客户端 `thread/name/set` 改名时才有、才发 `thread/name/updated`。认不出的值启动就报错
 - Claude Code：原生工具执行前不再等 CLI 把这次调用写进会话记录，每次工具调用少等约 80 毫秒（4 核容器里实测一次工具往返的中位数从 124 降到 43 毫秒，codex 0.163.0 是 45 毫秒）。钩子把调用记进入口自己的库就放行；回合开始前逐条到会话记录里核对，调用已经发出、没进会话记录、写它的 CLI 也不在了的（入口崩溃、CLI 被强杀、断电），在这一回合的话前面告诉模型这几次调用结果未知、先核对再依赖或重做，和 CLI 自己给打断的调用补的那条结果同一个意思；子代理里的调用、并行的几次调用都一样。原来的保证不变：发出过的调用不会被模型当成没发生过。只剩一处要等：新会话的会话记录文件还没写出来时（CLI 收到话后约 100 毫秒才写第一批），钩子等文件出现再放行，免得这时崩了下一回合连会话都恢复不了；真实模型想得比这久，一般用不着等。钩子收到的事件找不到对应回合时改为拒绝执行（原来放行）
 - Claude Code：交给模型的权限申请工具（`request_permissions`）描述里去掉内部名称；MCP 服务 OAuth 动态注册报的客户端名从内部名称改成 `codex-harness-adapter`，可用 `CHA_CLAUDE_MCP_OAUTH_CLIENT_NAME` 改。已经注册过的客户端不受影响，下次重新注册才用新名字
 
