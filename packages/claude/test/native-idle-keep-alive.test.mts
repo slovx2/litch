@@ -80,7 +80,8 @@ test('KEEP-IDLE-003：空闲到时退出', { timeout: 60_000 }, async () => {
     await pause(1_500)
     assert.equal(pids(scene).length, 1, '还没到时')
     await until('到时退出', () => pids(scene).length === 0, 10_000)
-    assert.ok(Date.now() - finished >= 3_000, '不早于设定的时长')
+    // 计时从适配器那边回合结束算起，比这边收到回合结束早一点，留出这段传递的余量
+    assert.ok(Date.now() - finished >= 2_700, '不早于设定的时长')
   } finally {
     await disposeScene(scene)
   }

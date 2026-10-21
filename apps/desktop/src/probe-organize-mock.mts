@@ -354,7 +354,7 @@ export async function organizeMockProbe(): Promise<OrganizeMockProbe> {
   }
 
   // ---- 五、按声明给入口 ----
-  /** 点开权限的选择器，把里面每一项的标题和说明读出来 */
+  /** 点开权限的选择器，把里面每一项的标题和说明读出来（说明在鼠标停上去的提示里） */
   const presets = async () => {
     const button = await until('权限的选择器', () =>
       one<HTMLButtonElement>('.pick[data-kind="permission"] .pick-btn'),
@@ -365,7 +365,7 @@ export async function organizeMockProbe(): Promise<OrganizeMockProbe> {
       const found = all('.pick[data-kind="permission"] .pick-opt')
       return found.length > 0 ? found : null
     })
-    const read = options.map((option) => `${text(one('b', option))}：${text(one('span', option))}`)
+    const read = options.map((option) => `${text(one('b', option))}：${option.title}`)
     press(document.activeElement ?? button, 'Escape')
     await until('选择器收起', () => !one('.pick[data-kind="permission"] .pick-pop'))
     return { shown, read }

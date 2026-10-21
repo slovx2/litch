@@ -48,7 +48,7 @@ const SPACES = {
       interrupt: 'Interrupt the running turn of one of your sub-sessions',
       accept: 'Start one of your cards:',
       withdraw: 'Withdraw a proposal card of yours',
-      wrap_up: 'Call this exactly once at the end of every turn',
+      wrap_up: 'Call this exactly once in every turn',
       hand_off: 'Move the task you are in the middle of into its own session',
     },
   },
