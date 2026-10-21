@@ -154,6 +154,12 @@ class SelectableRuntime implements ClaudeRuntime {
     )
   }
 
+  async closeIdleSessions(reason: string): Promise<void> {
+    await Promise.all(
+      [...this.runtimes.values()].map((runtime) => runtime.closeIdleSessions?.(reason)),
+    )
+  }
+
   async closeIdleMcp(): Promise<void> {
     await Promise.all([...this.runtimes.values()].map((runtime) => runtime.closeIdleMcp?.()))
   }

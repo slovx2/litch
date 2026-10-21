@@ -498,8 +498,12 @@ export class CodexClaudeAppServer {
 
   // 所有连接都断开后，看管后台命令的进程再留一段时间；期间有连接回来就继续留。
   private armDetachedReap(): void {
-    // 留着的 MCP 连接（含 stdio 服务的子进程）没人用的现在就关，不等空闲超时
-    if (!this.stopped && this.accountPeers.size === 0) void this.runtime.closeIdleMcp?.()
+    // 只是空闲保留着的 CLI 进程、留着的 MCP 连接（含 stdio 服务的子进程）没人用的现在就关，不等超时
+    if (!this.stopped && this.accountPeers.size === 0)
+      void (async () => {
+        await this.runtime.closeIdleSessions?.('所有客户端已断开')
+        await this.runtime.closeIdleMcp?.()
+      })().catch((error) => debugLog('runtime.closeIdle.failed', { error: String(error) }))
     const linger = detachedLingerMs()
     if (this.stopped || this.detachedReapTimer || linger <= 0 || this.accountPeers.size > 0) return
     if ((this.runtime.liveSessions?.().length ?? 0) === 0) return
@@ -1010,6 +1014,8 @@ export class CodexClaudeAppServer {
         return this.skills.list(peer, asRecord(params), this.skillsCwd(peer))
       case 'skills/extraRoots/set':
         if (this.hasActiveTurns()) throw new ProtocolError(-32009, '活动回合期间不能修改技能目录')
+        // 空闲保留着的 CLI 是按旧的技能配置起的
+        await this.runtime.closeIdleSessions?.('技能配置已改变')
         return this.skills.setRoots(asRecord(params))
       case 'hooks/list':
         return { data: listClaudeHooks(asRecord(params), this.skillsCwd(peer)) }
@@ -1036,6 +1042,7 @@ export class CodexClaudeAppServer {
         return { authPolicy: 'ON_USE', appsNeedingAuth: [] }
       case 'skills/config/write':
         if (this.hasActiveTurns()) throw new ProtocolError(-32009, '活动回合期间不能修改技能开关')
+        await this.runtime.closeIdleSessions?.('技能配置已改变')
         return this.skills.write(
           asRecord(params),
           this.skillsCwd(peer),

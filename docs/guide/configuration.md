@@ -322,8 +322,9 @@ export CHA_CLAUDE_NODE="/absolute/path/to/node"
 | `CHA_CLAUDE_PLANS_LOCATION` | 计划文件放哪：`workspace`（默认，工作区里每个线程一个目录）或 `config`（`<CLAUDE_CONFIG_DIR 或 ~/.claude>/plans/`）。CLI 只认项目内的 `plansDirectory`，所以不能指定任意目录。 |
 | `CHA_CLAUDE_THREAD_ID_HEADER` | 设成 `1` 时模型请求带 `thread-id: <线程号>`（合进 `ANTHROPIC_CUSTOM_HEADERS`），不带回合号；默认关。 |
 | `CHA_CLAUDE_EXTENDED_CACHE_TTL` | 默认 `1`，往 `ANTHROPIC_BETAS` 补 `extended-cache-ttl-2025-04-11`；`0` 时不补，CLI 发的 beta 头和直接跑 CLI 时一样。 |
-| `CHA_CLAUDE_IDLE_EXIT_MS` | 仅 shim：守护进程空闲退出；本地入口固定为 `0`。还有 Claude 进程在看管后台命令时不算空闲。 |
+| `CHA_CLAUDE_IDLE_EXIT_MS` | 仅 shim：守护进程空闲退出；本地入口固定为 `0`。还有 Claude 进程在看管后台命令时不算空闲（只是空闲保留着的不算）。 |
 | `CHA_CLAUDE_KEEP_ALIVE_SESSIONS` | 同时保留后台命令的 Claude 会话数上限，默认 `8`。回合结束时还有后台命令在跑，该会话的 Claude 进程就留下（每个约占 120–220 MB 内存）；超出上限的会话不保留，后台命令随回合结束而停止并有提示。设为 `0` 关闭保留。 |
-| `CHA_CLAUDE_KEEP_ALIVE_DETACHED_MINUTES` | 全部客户端断开后，留着的 Claude 进程再保留多少分钟，默认 `30`；期间有客户端连回来就继续保留。`0` 表示一直保留。有回合在进行的进程不回收，包括停在等待用户确认上的回合。 |
+| `CHA_CLAUDE_KEEP_ALIVE_DETACHED_MINUTES` | 全部客户端断开后，留着的 Claude 进程再保留多少分钟，默认 `30`；期间有客户端连回来就继续保留。`0` 表示一直保留。有回合在进行的进程不回收，包括停在等待用户确认上的回合。只是空闲保留着的进程（见下一行）不等这个时间，全部断开时马上回收。 |
+| `CHA_CLAUDE_KEEP_ALIVE_IDLE_SECONDS` | 回合结束后没有后台命令的 Claude 进程再留多少秒，默认 `0`（回合结束就退出）。大于 `0` 时进程留到超时再退出，期间同一会话的下个回合直接用它，省掉起进程的时间，代价是每个留着的会话一直占着一个 Claude 进程的内存（和看管后台命令时一样）；后台命令全部结束后也照这个时长留。和后台命令共用 `CHA_CLAUDE_KEEP_ALIVE_SESSIONS` 的上限，满了先回收闲得最久的空闲进程（看管后台命令的不让位），回收不出位置就不留；上限为 `0` 时也不留。会话归档、删除、卸载、回退，全部客户端断开，改技能目录或技能开关，适配器停止时马上回收。留着的进程照旧占着它的 MCP 连接，回收后按 MCP 连接的空闲规则处理。 |
 | `CHA_CLAUDE_MOCK` | Run the protocol without Claude credentials. |
 | `ANTHROPIC_API_KEY` / `ANTHROPIC_BASE_URL` | Claude auth / custom endpoint configuration. Keep real values out of git. |
