@@ -109,6 +109,12 @@ export const EXTENSION = {
    * 声明了它的连接才看得到这些字段、收得到通知。
    */
   backgroundTasks: 'backgroundTasks',
+  /**
+   * 别处占着的原生会话：导进来的原生会话此刻正被本机另一个进程开着（Claude 桌面端、终端），入口把它当成只读。
+   * 会话对象上带 `litchNativeOwner`（占用方），占用变了发 litch/thread/nativeOwner/changed（native-owner.mts，
+   * 定义在 protocol/extensions/native-owner.json）。声明了它的连接才看得到这个字段、收得到通知。
+   */
+  nativeOwner: 'nativeOwner',
 } as const
 
 export type ExtensionName = (typeof EXTENSION)[keyof typeof EXTENSION]

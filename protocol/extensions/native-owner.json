@@ -1,0 +1,32 @@
+{
+  "extension": "nativeOwner",
+  "description": "别处占着的原生会话：入口导进来的原生会话此刻正被本机另一个进程开着（Claude 桌面端、终端里的 claude --resume）。两个进程同时写一份原生记录会分叉，所以这时入口把会话当成只读：会写原生记录的请求一律拒绝，内容照常跟着对方刷新，对方退出后自动恢复可写。会话对象上带占用方，占用变了发通知。类型在 packages/protocol/src/native-owner.mts。",
+  "appliesTo": "claude-code 入口（导入本机原生会话的那一部分）。聚合面原样转发会话对象和通知，不加也不删。",
+  "declaration": {
+    "description": "客户端握手时在 capabilities.litchExtensions 里声明 nativeOwner，表示它认识会话对象上的 litchNativeOwner 和 litch/thread/nativeOwner/changed。聚合面把客户端的 capabilities 原样带给每个上游，入口按这条连接的声明决定带不带、发不发。",
+    "where": "initialize.params.capabilities.litchExtensions",
+    "schema": { "type": "array", "items": { "type": "string" }, "contains": { "const": "nativeOwner" } }
+  },
+  "undeclared": "没声明的连接上会话对象上没有 litchNativeOwner，也收不到通知；会写原生记录的请求照样被拒绝（错误里写着原因），官方 Codex 桌面端连兼容面时也拦得住。",
+  "rules": [
+    "只对导进来的会话判定（入口的库里记为 imported 的原生会话），入口自己建的会话不判定。",
+    "判定看 Claude Code 交互进程的登记：<配置目录>/sessions/<进程号>.json（配置目录跟着 CLAUDE_CONFIG_DIR）。有一条的 sessionId 等于这个会话的原生会话号、进程还活着、procStart 和这个进程号现在的启动时间对得上（进程号被复用的不算）、又不是入口自己起的 CLI，就算被占着；entrypoint 取登记里的，running 看 status 是不是 busy。",
+    "兜底：登记里找不到，但原生记录最近 10 秒内被改过，而且入口自己此刻没有为这个会话开着 CLI、入口自己的 CLI 最后一次退出早于这次改动，也算被占着（entrypoint 为 unknown，running 为真）。",
+    "被占着时拒绝会写原生记录的请求：turn/start、thread/compact/start、thread/rollback、thread/revert、thread/inject_items、thread/queue/start、review/start。错误码 -32009，消息说明正由另一个进程接管、这边只读，以及怎么让对方放手。排队的消息和持续目标在这期间不自动开回合。",
+    "读历史、恢复、订阅照常：入口每 3 秒左右看一次被订阅的导入会话，原生记录变了就重画，新回合发 turn/started、item/completed、turn/completed，变了的条目发 item/completed，旧回合没了发 thread/reverted。对方在跑时最后一个回合是 inProgress。",
+    "占用变了（被占上、放开、对方开始或停下跑）给所有声明过的连接发 litch/thread/nativeOwner/changed；只有被订阅的导入会话才盯着，没被订阅的会话对象上的字段在读的时候现算。"
+  ],
+  "parts": [
+    {
+      "kind": "ThreadField",
+      "name": "litchNativeOwner",
+      "on": "thread/list、thread/read、thread/resume、thread/started 等会话对象",
+      "description": "只发给声明了 nativeOwner 的连接，只在被别处占着时有。形状见 native-owner.mts 的 NativeOwner。"
+    },
+    {
+      "kind": "ServerNotification",
+      "methods": ["litch/thread/nativeOwner/changed"],
+      "description": "只发给声明了 nativeOwner 的连接。参数见 native-owner.mts 的 NativeOwnerChangedNotification。"
+    }
+  ]
+}
