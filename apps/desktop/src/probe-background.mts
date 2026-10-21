@@ -79,16 +79,26 @@ export async function backgroundProbe(sessionId: string): Promise<BackgroundSeen
   const sidebarMark = rowMark()?.classList.contains('bg') === true
   seen.mark = rowMark()?.className ?? '没有'
 
-  // 三种皮肤各画各的
-  const root = document.documentElement
-  const was = { skin: root.dataset.skin, theme: root.dataset.theme }
+  // 三种皮肤各画各的。换皮肤、明暗走界面给验收留的口子（window.__litchLook），不直接改根元素上的属性
+  const appearance = (
+    window as unknown as {
+      __litchLook: {
+        get(): { skin: string; theme: string }
+        set(patch: { skin?: string; theme?: string }): void
+      }
+    }
+  ).__litchLook
+  const was = appearance.get()
+  const look = async (skin: string, theme: string) => {
+    appearance.set({ skin, theme })
+    await document.fonts.ready
+    await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))
+  }
   const marks: string[] = []
   const looks: string[] = []
   for (const skin of ['standard', 'retro', 'human']) {
     for (const theme of ['light', 'dark']) {
-      root.dataset.skin = skin
-      root.dataset.theme = theme
-      await sleep(80)
+      await look(skin, theme)
       const mark = rowMark()
       const before = mark ? getComputedStyle(mark, '::before') : null
       if (theme === 'dark')
@@ -104,9 +114,7 @@ export async function backgroundProbe(sessionId: string): Promise<BackgroundSeen
       }
     }
   }
-  if (was.skin) root.dataset.skin = was.skin
-  if (was.theme) root.dataset.theme = was.theme
-  else delete root.dataset.theme
+  appearance.set({ skin: was.skin, theme: was.theme })
   seen.marks = marks.join(' | ')
   const skinMarks =
     marks.length === 3 &&
@@ -141,9 +149,7 @@ export async function backgroundProbe(sessionId: string): Promise<BackgroundSeen
     originTurn?.querySelector('.umsg') === null && (origin?.textContent ?? '').includes('npm test')
   for (const skin of ['standard', 'retro', 'human']) {
     for (const theme of ['light', 'dark']) {
-      root.dataset.skin = skin
-      root.dataset.theme = theme
-      await sleep(60)
+      await look(skin, theme)
       for (const selector of ['.bg-panel .bg-row', '.main .turn-origin']) {
         for (const element of $$(selector)) {
           const box = element.getBoundingClientRect()
@@ -155,9 +161,7 @@ export async function backgroundProbe(sessionId: string): Promise<BackgroundSeen
       }
     }
   }
-  if (was.skin) root.dataset.skin = was.skin
-  if (was.theme) root.dataset.theme = was.theme
-  else delete root.dataset.theme
+  appearance.set({ skin: was.skin, theme: was.theme })
   const barOne = await until(() => ($('.main .bgbar')?.dataset.background ?? '') === '1', 6000)
 
   // —— dev 服务也结束了 ——

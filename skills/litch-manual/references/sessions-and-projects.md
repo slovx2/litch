@@ -39,7 +39,17 @@ explain it:
   devices: text files only), context meter with Compact context.
 - **Side panel**: Files (tree, search, read-only viewer, add a file to the conversation), Diff (all /
   staged / unstaged, stage, unstage, discard, comment on lines; comments go with the next message),
-  Browser, Suggested tasks, Subagents.
+  Browser, Suggested tasks, Background, Subagents.
+- **Background tasks**: work still running after a turn ends (a background command, a Claude Code
+  Monitor, a dsh background job, a long-running Codex command). The session counts as idle, not stuck:
+  a breathing line above the composer says how many are running; clicking it opens the Background tab
+  (running tasks first, then finished ones; name, elapsed time and status, no output). The folded
+  turn says "N running in the background", and the sidebar row shows a slowly breathing hollow mark
+  instead of the spinner. Claude Code and dsh continue on their own when a task finishes; that turn
+  starts with "Background task finished, continuing" instead of a message from the user. Codex does
+  not continue on its own. A sub-session reports to its parent when its turn ends and says how many
+  background tasks are still running. There is no stop button yet: ask the model to stop a task, or
+  stop the turn. On the phone, the same line opens a list from the bottom.
 - **Terminal**: per project; "Put away, keep it running on the device" keeps a terminal alive and
   "Terminals on the device" brings it back. Limits are device settings (`device-settings.md`).
 - **Session menu**: pin, move to group or project, rename, archive (undo available), delete (permanent),
