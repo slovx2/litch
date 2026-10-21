@@ -53,6 +53,8 @@ export interface SessionTreeHost {
   timeoutMs: number
   /** 子会话里的审批、提问挂了这么久没人答，算它停下来在等用户 */
   needsUserMs: number
+  /** 会话树的连接订阅着、又用不着了的会话，隔这么久退订 */
+  releaseMs: number
   /** 这个回合是定时任务发起的：只进回报，不唤醒父会话 */
   taskTurn(threadId: string, turnId: string): boolean
   /** 会话里还有几个后台任务在跑（background.mts） */
@@ -110,6 +112,10 @@ export class SessionTree {
   private readonly links = new Map<string, Promise<EngineLink>>()
   /** 每条引擎连接订阅了哪些会话 */
   private readonly subscribed = new Map<string, Set<string>>()
+  /** 等着看要不要退订的会话 → 计时器 */
+  private readonly releasing = new Map<string, NodeJS.Timeout>()
+  /** 正在退订的会话：这时要再订阅的先等它退完，免得引擎把两个请求倒过来处理 */
+  private readonly unsubscribing = new Map<string, Promise<void>>()
   /** 在跑的回合：会话 → 回合 */
   private readonly active = new Map<string, string>()
   /** 客户端用 turn/start 发起的回合（harness + 回合）：只有它们算用户发起的 */
@@ -190,11 +196,61 @@ export class SessionTree {
 
   /** 让设备进程的连接订阅这个会话（收它的回合通知）。返回 thread/resume 的应答，已经订阅过的是 null */
   async watch(harness: string, threadId: string): Promise<Record<string, unknown> | null> {
+    this.keep(threadId)
+    await this.unsubscribing.get(threadId)
     const link = await this.link(harness)
     if (this.subscribed.get(harness)?.has(threadId)) return null
     const result = await link.request('thread/resume', { threadId })
     this.noteSubscribed(harness, threadId)
     return isObject(result) ? result : null
+  }
+
+  /**
+   * 过 releaseMs 看一眼：设备进程的连接订阅着这个会话、又用不着了（没有回合在跑、不欠后台任务的回报、
+   * 没有挂着的请求），就退订。不退的话引擎一直装着它：原生 codex 只卸载没人订阅的会话，卸载了才放开
+   * 写入锁，设备进程常驻，ChatGPT.app 等别的应用就一直打不开这个会话
+   */
+  releaseLater(harness: string, threadId: string): void {
+    if (this.closed || !this.subscribed.get(harness)?.has(threadId)) return
+    this.keep(threadId)
+    const timer = setTimeout(() => {
+      this.releasing.delete(threadId)
+      if (!this.closed) this.release(harness, threadId)
+    }, this.host.releaseMs)
+    timer.unref()
+    this.releasing.set(threadId, timer)
+  }
+
+  /** 又要用这个会话了：不退订 */
+  private keep(threadId: string): void {
+    const timer = this.releasing.get(threadId)
+    if (timer === undefined) return
+    clearTimeout(timer)
+    this.releasing.delete(threadId)
+  }
+
+  private release(harness: string, threadId: string): void {
+    const threads = this.subscribed.get(harness)
+    const pending = this.links.get(harness)
+    if (!threads?.has(threadId) || !pending) return
+    if (
+      this.active.has(threadId) ||
+      this.backgroundOwed.has(threadId) ||
+      this.waiting.has(threadId)
+    )
+      return
+    threads.delete(threadId)
+    const done = pending
+      .then((link) => link.request('thread/unsubscribe', { threadId }))
+      .then(
+        () => {},
+        (error: unknown) =>
+          this.host.log(`退订会话 ${threadId}（${harness}）没成：${String(error)}`),
+      )
+      .finally(() => {
+        if (this.unsubscribing.get(threadId) === done) this.unsubscribing.delete(threadId)
+      })
+    this.unsubscribing.set(threadId, done)
   }
 
   /** 会话在哪个 harness 上：索引里有的直接给，没有的挨个问 */
@@ -341,6 +397,7 @@ export class SessionTree {
       )
     // 父会话自己的回合结束了：它的子会话也许早就停了，看看要不要唤醒；有提醒在等的，现在可以发了
     if (this.store.childrenOf(threadId).length || this.reminders.has(threadId)) this.check(threadId)
+    this.releaseLater(harness, threadId)
   }
 
   // ---------- 提醒收尾 ----------
@@ -903,6 +960,8 @@ export class SessionTree {
     if (this.expiry) clearTimeout(this.expiry)
     for (const timer of this.timers) clearTimeout(timer)
     this.timers.clear()
+    for (const timer of this.releasing.values()) clearTimeout(timer)
+    this.releasing.clear()
     for (const pending of this.links.values())
       void pending.then(
         (link) => link.close(),

@@ -36,6 +36,7 @@ const WORDS = {
     terminal: '终端',
     side: '侧面板',
     askOnQuit: '退出时询问还在运行的终端',
+    askServiceOnQuit: '退出时询问是否关闭后台服务',
     reload: '重新加载',
     devTools: '开发者工具',
     window: '窗口',
@@ -75,6 +76,7 @@ const WORDS = {
     terminal: 'Terminal',
     side: 'Side Panel',
     askOnQuit: 'Ask About Running Terminals on Quit',
+    askServiceOnQuit: 'Ask About the Background Service on Quit',
     reload: 'Reload',
     devTools: 'Developer Tools',
     window: 'Window',
@@ -117,6 +119,9 @@ export interface MenuHooks {
   /** 退出时还有终端在运行，问不问 */
   askOnQuit(): boolean
   setAskOnQuit(ask: boolean): void
+  /** 退出时要不要一起关后台服务，问不问 */
+  askServiceOnQuit(): boolean
+  setAskServiceOnQuit(ask: boolean): void
   /** 检查更新：打开“关于”并现在查一次。这台机器不出更新（没打包、平台没有包）时是 null，菜单里不放这一项 */
   checkUpdates: (() => void) | null
 }
@@ -179,6 +184,13 @@ export function installMenu(lang: MenuLang, hooks: MenuHooks): void {
           label: say('askOnQuit'),
           checked: hooks.askOnQuit(),
           click: (item) => hooks.setAskOnQuit(item.checked),
+        },
+        // 记住了“关闭”或者“保留”之后，在这里改回每次都问
+        {
+          type: 'checkbox',
+          label: say('askServiceOnQuit'),
+          checked: hooks.askServiceOnQuit(),
+          click: (item) => hooks.setAskServiceOnQuit(item.checked),
         },
         ...(mac ? [] : [line, { role: 'quit', label: say('quit') } as const]),
       ],
