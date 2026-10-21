@@ -10,8 +10,15 @@ import { assertNotification, assertResponse, assertServerRequest } from './schem
 // 审批用例共用的设施：真实 Pi SDK 加回环上的假模型，独立的临时代理目录，结束时全部清掉。
 // 服务端请求不自动回答，由用例决定谁答、什么时候答、答什么。
 
-// fail：这次请求以 400 失败（客户端库不会自动重试），值是错误信息
-export type Reply = { text?: string; tools?: Array<{ name: string; args: unknown }>; fail?: string }
+// fail：这次请求以 400 失败（客户端库不会自动重试），值是错误信息；
+// length：一个字都没有就停在输出上限上（上下文满了时那样）；promptTokens：报的输入用量，默认 10
+export type Reply = {
+  text?: string
+  tools?: Array<{ name: string; args: unknown }>
+  fail?: string
+  length?: boolean
+  promptTokens?: number
+}
 export type Step = Reply | ((body: any) => Reply | Promise<Reply>)
 
 export const APPROVALS = [
@@ -74,17 +81,14 @@ export async function approvalHarness(options: HarnessOptions = {}) {
     const chunk = (delta: unknown, finish: string | null, usage?: unknown) =>
       `data: ${JSON.stringify({ ...base, model: body.model, choices: [{ index: 0, delta, finish_reason: finish }], ...(usage ? { usage } : {}) })}\n\n`
     res.writeHead(200, { 'Content-Type': 'text/event-stream' })
+    const content = reply.length ? '' : (reply.text ?? 'ok')
+    res.write(chunk({ role: 'assistant', ...(calls ? { tool_calls: calls } : { content }) }, null))
+    const prompt = reply.promptTokens ?? 10
     res.write(
-      chunk(
-        { role: 'assistant', ...(calls ? { tool_calls: calls } : { content: reply.text ?? 'ok' }) },
-        null,
-      ),
-    )
-    res.write(
-      chunk({}, calls ? 'tool_calls' : 'stop', {
-        prompt_tokens: 10,
+      chunk({}, calls ? 'tool_calls' : reply.length ? 'length' : 'stop', {
+        prompt_tokens: prompt,
         completion_tokens: 5,
-        total_tokens: 15,
+        total_tokens: prompt + 5,
       }),
     )
     res.end('data: [DONE]\n\n')

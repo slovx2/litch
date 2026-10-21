@@ -18,7 +18,7 @@ import {
 } from './projection.mjs'
 import { planState } from './runtime.mjs'
 import type { ActiveTurn, PiServer } from './server.mjs'
-import type { PiThread } from './store.mjs'
+import type { PiThread, PiTurn } from './store.mjs'
 
 /** write 执行之前文件里的内容，执行完拿它算差异：没有这个文件是 null，读不了是 undefined */
 export function contentBefore(cwd: string, path: string): string | null | undefined {
@@ -214,6 +214,8 @@ export function onEvent(server: PiServer, thread: PiThread, event: any): void {
           codexErrorInfo: null,
           additionalDetails: null,
         }
+      // 压成了 Pi 会接着请求，再来一条消息时这里跟着改过来
+      active.truncated = emptyLength(message)
       const u = message.usage
       const usage = u && {
         totalTokens:
@@ -324,6 +326,14 @@ export function onEvent(server: PiServer, thread: PiThread, event: any): void {
       .getBranch()
       .findLast((e) => e.type === 'compaction')
     if (entry) put({ type: 'contextCompaction', id: `compact:${entry.id}` }, true)
+  }
+  // 自动压缩（阈值、溢出）的结果；手动压缩是单独的回合，失败由 compaction.mts 记。
+  // 失败时 Pi 不停下，照样把满的上下文发出去，原因只在这个事件里，回合结束时报出来（contextError）
+  if (event.type === 'compaction_end' && event.reason !== 'manual') {
+    if (event.result) {
+      delete active.compactionError
+      active.truncated = false
+    } else if (event.errorMessage) active.compactionError = event.errorMessage
   }
   // 只写这个事件动过的条目，不把整个回合再写一遍（回合里的条目一多、结果一大，每次都写整个回合就是平方级的）。
   // 流式的增量一条一条来，量大：只记一笔、不当场写库，原因见 PiStore.saveItemsLater
@@ -510,6 +520,31 @@ async function followNativeTurn(server: PiServer, active: ActiveTurn): Promise<v
   }
 }
 
+/**
+ * 停在 length 上、没有一个字的正文也没有工具调用：上下文满了时 Pi 把输出上限压到上下文 − 已用 − 4096，
+ * 最少只剩十几个词元，模型连一句话都写不出来。思考不算
+ */
+function emptyLength(message: any): boolean {
+  if (message.stopReason !== 'length') return false
+  return !(message.content ?? []).some(
+    (block: any) => block.type === 'toolCall' || (block.type === 'text' && block.text?.trim()),
+  )
+}
+
+/**
+ * 上下文满了这个回合却没出错的，报成失败。Pi 把它们当成可恢复的：自动压缩失败照样往下请求，
+ * 截断的空回复去掉、压一次再接着做，都失败了回合照常结束，事件之外什么都不留。
+ * 不报的话回合是“完成”，用户看不出出了什么事，接着发话（或者被提醒收尾）每次都撞同一堵墙
+ */
+function contextError(active: ActiveTurn): PiTurn['error'] {
+  const { compactionError, truncated } = active
+  if (!compactionError && !truncated) return null
+  const message = compactionError
+    ? `${truncated ? '上下文满了' : '上下文快满了'}，自动压缩失败：${compactionError}`
+    : '上下文满了：模型的回答被截断，一个字也没写出来，自动压缩没有进行'
+  return { message, codexErrorInfo: null, additionalDetails: null }
+}
+
 export async function finishTurn(
   server: PiServer,
   active: ActiveTurn,
@@ -519,6 +554,7 @@ export async function finishTurn(
   const peer =
     (active.peer && server.peers.get(active.peer.id)) ||
     [...(server.subscriptions.get(thread.id) ?? [])].map((id) => server.peers.get(id)).find(Boolean)
+  if (!active.stopped && !turn.error) turn.error = contextError(active)
   turn.status = active.stopped ? 'interrupted' : turn.error ? 'failed' : 'completed'
   const completedAt = Date.now()
   turn.completedAt = completedAt

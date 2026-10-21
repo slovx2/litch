@@ -72,6 +72,10 @@ export interface ActiveTurn {
   pending: SentMessage[]
   native?: boolean
   notices?: string[]
+  /** 最近一条助手消息停在 length 上、一个字一次调用都没给出来（上下文满了），见 turn.mts 的 contextError */
+  truncated?: boolean
+  /** 这个回合里自动压缩最近一次的失败原因；之后压成了就清掉 */
+  compactionError?: string
 }
 export class PiServer {
   readonly store: PiStore
