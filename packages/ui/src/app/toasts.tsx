@@ -13,6 +13,8 @@ export interface Toast {
   /** err：没做成的事，用出错的颜色 */
   tone?: 'plain' | 'err'
   action?: { label(t: Translator): string; run(): void }
+  /** 第二个动作（比如“撤销”之后的“去设置”），排在 action 后面 */
+  more?: { label(t: Translator): string; run(): void }
   /** 多久之后自己消失（毫秒）。0：一直留到用户关掉 */
   lifeMs: number
   /** 提示自己消失了或者被关掉了。点了上面的动作不算 */
@@ -70,7 +72,7 @@ function ToastRow({ toast }: { toast: Shown }) {
     return () => window.clearTimeout(timer)
   }, [id, lifeMs, version, held])
 
-  const { action } = toast
+  const { action, more } = toast
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: 只是用来知道鼠标和焦点在不在上面，能点的是里面的按钮
     <div
@@ -90,11 +92,19 @@ function ToastRow({ toast }: { toast: Shown }) {
       }}
     >
       <span className="toast-text ell">{toast.text(t)}</span>
-      {action ? (
-        <button type="button" className="mini toast-act" onClick={action.run}>
-          {action.label(t)}
-        </button>
-      ) : null}
+      {[action, more].map((entry, index) =>
+        entry ? (
+          <button
+            // biome-ignore lint/suspicious/noArrayIndexKey: 至多两个，位置就是身份
+            key={index}
+            type="button"
+            className="mini toast-act"
+            onClick={entry.run}
+          >
+            {entry.label(t)}
+          </button>
+        ) : null,
+      )}
       <button
         type="button"
         className="ibtn toast-x"

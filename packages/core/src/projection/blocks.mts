@@ -1,11 +1,14 @@
 // 投影的第三步：一个回合里的显示条目 → 块。纯函数。
 // 一个回合画成：用户消息 → 过程 → 最终回答。过程按时间排三种东西：说明段（助手的中间说明，和回答同一套正文样式）、
 // 步骤组（两段说明之间连续的工具调用、思考、提示，收成一行汇总）、启动子代理的那一行。
-// 计划、待办、派出的子会话和提案卡片露在过程外面，位置不变。回合结束后整段过程再收成一行。
+// 计划、待办、派出的子会话露在过程外面，位置不变。回合结束后整段过程再收成一行。
+// 建议任务的卡片（收尾 wrap_up 带的、start 提的）连同收尾留给用户的问题，固定画在回合最下方（最终回答下面）的
+// 收尾区里，原来调用的位置在过程里只留一行；offer 卡挂在回合中间等用户选，不挪。
 
 import type { ItemView } from '../model.mjs'
 import type { AgentThreadView } from '../model-tree.mjs'
 import type { Text } from '../phrase.mjs'
+import { spanOf } from './span.mjs'
 import { agentRunState, agentStatesOf } from './tree.mjs'
 
 /** 分块只需要知道条目的标识和种类；助手消息还要知道它是过程说明还是回答 */
@@ -14,12 +17,15 @@ export interface BlockInput {
   kind: ItemView['kind']
   phase?: 'commentary' | 'final' | 'unknown'
   /**
-   * 画成卡片的条目（cardOf）：outside 露在过程外面（派出的子会话、提案、带题的助手消息）；
-   * inline 排进过程里它所在的位置（启动子代理那一行），整段过程收起时跟着收
+   * 画成卡片的条目（cardPlace）：outside 露在过程外面（派出的子会话、offer 卡、带题的助手消息）；
+   * inline 排进过程里它所在的位置（启动子代理那一行），整段过程收起时跟着收；
+   * tail 是建议任务和收尾的问题：卡片画在回合最下方的收尾区，过程里它的位置只留一行
    */
-  card?: 'outside' | 'inline'
+  card?: CardPlace
   /** 不画的条目（quietOf）：空的收尾调用。不占块，也不算进步数 */
   quiet?: boolean
+  /** 收尾调用（litch_sessions.wrap_up），空的、带建议的都是：认最终回答时看它前后（answersAroundWrapUp） */
+  wrapUp?: boolean
   /** 设备进程提醒收尾的那条用户消息（event.kind 是 remind）：这个回合里模型说的话都收进过程，没有最终回答 */
   remind?: boolean
 }
@@ -42,8 +48,13 @@ export type Block =
   | { type: 'answer'; itemId: string }
   | { type: 'plan'; itemId: string }
   | { type: 'todo'; itemId: string }
-  /** 派出的子会话、提案（含收尾带的建议）、带题的助手消息：一直露在外面 */
+  /** 派出的子会话、offer 卡、带题的助手消息：一直露在外面 */
   | { type: 'card'; itemId: string }
+  /**
+   * 回合最下方的收尾区：这一回合的建议任务卡片和收尾留给用户的问题，按调用的先后。
+   * 有就排在全部块的最后（最终回答下面）；条目同时还在过程里占一行
+   */
+  | { type: 'tail'; itemIds: string[] }
   /**
    * 一段过程。中间夹着露在外面的块时会分成几段，回合收起时几段一起收成一行。
    * key 是这一段第一个条目的标识
@@ -68,14 +79,14 @@ export function answerOf(items: BlockInput[]): string | undefined {
 }
 
 /**
- * 空收尾（没带建议的 wrap_up）前后的回答。规矩是先收尾、再写完整的回答，但模型有时还按旧顺序来：
- * 先写完整回答、再调空收尾、最后补一句短话。Claude 入口把回合最后一段标成 final、之前的标成 commentary，
- * 只认最后一条就把整段回答收进了过程。所以最后一个空收尾紧前面是一条助手消息、它后面只有助手消息时，
+ * 收尾（wrap_up）前后的回答。规矩是先收尾、再写完整的回答，但模型有时还按旧顺序来：
+ * 先写完整回答、再调收尾、最后补一句短话。Claude 入口把回合最后一段标成 final、之前的标成 commentary，
+ * 只认最后一条就把整段回答收进了过程。所以最后一个收尾紧前面是一条助手消息、它后面只有助手消息时，
  * 前面那条连同后面那几条都算回答。新顺序下收尾前顺口说的一句也会这样露出来，代价比把整段回答收掉小。
- * 带建议的收尾是卡片、带题的消息和子代理那一行也是卡片，都不在这条规则里
+ * 带建议的收尾在过程里只占一行（卡片在收尾区），和空收尾一样看；带题的消息和子代理那一行是卡片，不在这条规则里
  */
-function answersAroundQuietWrapUp(items: BlockInput[]): string[] {
-  const at = items.findLastIndex((item) => item.quiet === true)
+function answersAroundWrapUp(items: BlockInput[]): string[] {
+  const at = items.findLastIndex((item) => item.quiet === true || item.wrapUp === true)
   if (at < 0) return []
   const plain = (item: BlockInput) =>
     item.kind === 'agentMessage' && item.card === undefined && item.quiet !== true
@@ -98,9 +109,10 @@ export function bucketItems(items: BlockInput[]): Block[] {
   if (!remind) {
     const last = answerOf(shown)
     if (last !== undefined) answers.add(last)
-    for (const id of answersAroundQuietWrapUp(items)) answers.add(id)
+    for (const id of answersAroundWrapUp(items)) answers.add(id)
   }
   const blocks: Block[] = []
+  const tail: string[] = []
   /** 往过程里加一段：接在前一段过程后面，前面不是过程就开一段新的 */
   const process = (id: string): ProcessPart[] => {
     const last = blocks.at(-1)
@@ -126,12 +138,15 @@ export function bucketItems(items: BlockInput[]): Block[] {
     } else if (item.kind === 'agentMessage') {
       process(item.id).push({ type: 'note', itemId: item.id })
     } else {
+      // 收尾区的卡片在过程里照样占一行（步骤组里），卡片本身记下来排到最后
+      if (item.card === 'tail') tail.push(item.id)
       const parts = process(item.id)
       const last = parts.at(-1)
       if (last?.type === 'steps') last.itemIds.push(item.id)
       else parts.push({ type: 'steps', key: item.id, itemIds: [item.id] })
     }
   }
+  if (tail.length > 0) blocks.push({ type: 'tail', itemIds: tail })
   return blocks
 }
 
@@ -169,14 +184,20 @@ export function processFolded(settled: boolean, touched: boolean, agentsRunning:
 }
 
 /**
- * 这个条目画不画：模型每回合最后都要调一次收尾（litch_sessions.wrap_up），没带建议的那种什么都不画，
+ * 这个条目画不画：模型每回合最后都要调一次收尾（litch_sessions.wrap_up），没带建议、也没留问题的那种什么都不画，
  * 免得每个回合末尾多出一块。和 cardOf 一样只看条目开始时就有的东西（参数）
  */
 export function quietOf(item: ItemView): boolean {
   return (
-    item.kind === 'toolCall' && item.wrapUp !== undefined && item.wrapUp.suggestions.length === 0
+    item.kind === 'toolCall' &&
+    item.wrapUp !== undefined &&
+    item.wrapUp.suggestions.length === 0 &&
+    item.wrapUp.ask === undefined
   )
 }
+
+/** 收尾区的东西：带建议或问题的收尾，start 提的提案（用户亲口要的那种直接起，不算） */
+export type CardPlace = 'outside' | 'inline' | 'tail'
 
 /**
  * 这个条目要不要画成卡片：litch_sessions.start（派出的子会话或提案）、带了建议的收尾（每条一张提案），
@@ -188,14 +209,22 @@ export function cardOf(item: ItemView): boolean {
 }
 
 /**
- * 卡片放在哪：启动子代理那一行排进过程里（inline），别的露在过程外面（outside）；不是卡片是 null。
- * 带题的助手消息（模型边干活边问）也露在外面：过程收起来时不能把要人回答的题一起收掉
+ * 卡片放在哪：启动子代理那一行排进过程里（inline）；建议任务（收尾带的、start 提的）和收尾的问题进回合最下方的
+ * 收尾区（tail）；别的露在过程外面（outside）；不是卡片是 null。
+ * 带题的助手消息（模型边干活边问）也露在外面：过程收起来时不能把要人回答的题一起收掉。
+ * 用户亲口要的 start（user_asked）是直接派出的子会话，露在原处；设备进程核对不过、降成了提案的，
+ * 有了结果（回合结束时重新分块）才挪进收尾区
  */
-export function cardPlace(item: ItemView): 'outside' | 'inline' | null {
+export function cardPlace(item: ItemView): CardPlace | null {
   if (item.kind === 'agentMessage') return item.questions ? 'outside' : null
   if (item.kind !== 'toolCall') return null
-  if (item.spawned) return 'outside'
-  if (item.wrapUp) return item.wrapUp.suggestions.length > 0 ? 'outside' : null
+  const spawned = item.spawned
+  if (spawned) {
+    // 直接起出了子会话的（有子会话号）是派出的卡；用户亲口要的在有结果之前也当它是
+    if (spawned.via !== 'start' || spawned.threadId !== null) return 'outside'
+    return spawned.asked && spawned.proposalId === null ? 'outside' : 'tail'
+  }
+  if (item.wrapUp) return quietOf(item) ? null : 'tail'
   // 启动子代理刚开始时还不知道子线程是谁（上游开始的事件里没有），也画成卡片，等结束时填上
   return item.agents !== undefined &&
     typeof item.tool === 'object' &&
@@ -218,6 +247,10 @@ export type StepKind =
   | 'delete'
   | 'tool'
   | 'notice'
+  /** 建议了几个任务（卡片在回合最下方的收尾区，过程里只留这一行） */
+  | 'suggest'
+  /** 收尾时留了一个问题给用户（问题和按钮也在收尾区） */
+  | 'ask'
 
 // 各家 harness 自带的读、搜、列目录工具的名字（Claude Code 的 Read、Grep、Glob 投影出来是“Read 路径”这样，取第一个词）
 const TOOL_KINDS: Record<string, StepKind> = {
@@ -261,6 +294,8 @@ export function stepKindOf(item: ItemView): StepKind | null {
       return first ? first.change : 'update'
     }
     case 'toolCall':
+      if (item.wrapUp) return item.wrapUp.suggestions.length > 0 ? 'suggest' : 'ask'
+      if (item.spawned?.via === 'start') return 'suggest'
       return toolKind(item.tool)
     case 'webSearch':
       return 'web'
@@ -295,7 +330,7 @@ const declinedOf = (item: ItemView): boolean =>
 export interface StepsTally {
   /** 动作和个数，按组里第一次出现的先后。改文件按路径数，同一个文件改几次算一个 */
   counts: { kind: StepKind; n: number }[]
-  /** 思考了几次（不进汇总文字，只有思考的组写“想了一下”） */
+  /** 有字的思考几条（不进汇总文字；没字的思考不画、不算） */
   thoughts: number
   /** 工具步骤数：不算思考、不算提示 */
   steps: number
@@ -304,7 +339,10 @@ export interface StepsTally {
   /** 改文件加了、删了几行 */
   added: number
   removed: number
-  /** 命令和工具调用报的用时加起来。一个都没报是 null */
+  /**
+   * 这一组从第一条开始到最后一条结束用了多久（含思考、模型出字，按条目上记的 span）。
+   * 没记过时刻（从历史里读出来的）时只有一条报了用时的就用它，别的是 null
+   */
   durationMs: number | null
   /** 第一条提示的文字：组里只有一条提示时汇总直接写它 */
   notice: Text | null
@@ -330,9 +368,11 @@ export function stepsTally(items: ItemView[]): StepsTally {
     durationMs: null,
     notice: null,
   }
+  /** 报了用时的条目（没记过时刻时，只有一条的就用它的） */
+  const timed: number[] = []
   for (const item of items) {
     if (item.kind === 'reasoning') {
-      tally.thoughts++
+      if (thoughtShown(item)) tally.thoughts++
       continue
     }
     const kind = stepKindOf(item)
@@ -340,6 +380,11 @@ export function stepsTally(items: ItemView[]): StepsTally {
     if (kind === 'notice') {
       bump('notice')
       if (item.kind === 'notice' && tally.notice === null) tally.notice = item.label
+      continue
+    }
+    // 建议任务、收尾的问题：卡片在收尾区，这里只记个数，不算工具步骤
+    if (kind === 'suggest' || kind === 'ask') {
+      bump(kind, item.kind === 'toolCall' && item.wrapUp ? item.wrapUp.suggestions.length || 1 : 1)
       continue
     }
     tally.steps++
@@ -360,12 +405,23 @@ export function stepsTally(items: ItemView[]): StepsTally {
       continue
     }
     if ((item.kind === 'command' || item.kind === 'toolCall') && item.durationMs !== null) {
-      tally.durationMs = (tally.durationMs ?? 0) + item.durationMs
+      timed.push(item.durationMs)
     }
     bump(kind)
   }
   tally.counts = order.map((kind) => ({ kind, n: counts.get(kind) ?? 0 }))
+  tally.durationMs =
+    spanOf(items) ?? (timed.length === 1 && items.length === 1 ? timed[0] : null) ?? null
   return tally
+}
+
+/**
+ * 思考条目画不画：有可显示的字才画（一行次要的浅字，点开看全文）。引擎只给了加密的、空的推理，
+ * 想完了就不画、不算；还在想的照样占一行（汇总行上写“正在工作”）
+ */
+export function thoughtShown(item: { kind: string; text?: string; status?: string }): boolean {
+  if (item.kind !== 'reasoning') return true
+  return (item.text ?? '').trim() !== '' || item.status === 'inProgress'
 }
 
 export interface ProcessTally {

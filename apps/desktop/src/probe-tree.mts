@@ -6,6 +6,8 @@
 //   提案卡片（建议任务）在对话流里：等着的有“开始”“改了再开始”“不要”，开始了的能点进子会话，
 //   过期了、撤回了的写着状态；侧面板的“建议任务”列全部，角标是等着的个数，点一条在对话里找到那张卡片；
 //   收尾（wrap_up）带的建议照顺序一张一张、被拒的只一行原因，空的收尾不画；开始了的卡片写实际的 harness；
+//   卡片和收尾的问题排在回合最下方（回答下面），过程里只留一行“建议”；点问题的回复按钮把它的话当用户消息发出，
+//   之后问题折成一行写着回了哪个；卡片的“在这里做”在本会话发一条“在这里做：…”；“⋯”里关任务卡出可撤销的提示；
 //   没调收尾时设备进程的提醒画成一行轻字，不是用户的气泡；
 //   “新任务”出 offer 卡（“新会话 / 在这里做”），选新会话等模型补简报再写“已开始”、下面一行是子会话，
 //   选在这里做写“在这里做”；侧面板里也有这一行和两个按钮；“交接”画成交给了分叉会话的卡，能点开；
@@ -55,6 +57,17 @@ export interface TreeSeen {
   wrapShown: boolean
   wrapQuiet: boolean
   wrapActual: boolean
+  /**
+   * 收尾区：问题和卡片在回合最下方、回答下面，过程里那一步写“建议”；问题的回复按钮发出按钮的话，
+   * 之后问题折成一行写着回了哪个；卡片的“在这里做”发一条“在这里做：…”、卡片写“在这里做”；
+   * “⋯”里关任务卡出提示（设备服务有开关时是“已对 X 关闭任务卡 · 撤销 · 去设置”，撤销后提示收起；
+   * 没有开关时说清楚要先升级）
+   */
+  tailBelow: boolean
+  askShown: boolean
+  askReplied: boolean
+  wrapHere: boolean
+  cardsOff: boolean
   remindBar: boolean
   /**
    * offer 卡：对话流里一张“新会话 / 在这里做”的卡写着等你选，侧面板有这一行和两个按钮、角标算上它；
@@ -332,6 +345,37 @@ export async function treeProbe(): Promise<TreeSeen> {
   })
   seen.wrap = wrapBox()?.textContent ?? '没有'
   await idle()
+  const wrapTurn = wrapBox()?.closest('section.turn')
+  const tail = wrapTurn?.querySelector<HTMLElement>('.turn-tail')
+  // 回合结束后过程收成了“已处理”一行：点开看里面那一步
+  const procHead = wrapTurn?.querySelector<HTMLElement>('.proc-head[aria-expanded="false"]')
+  procHead?.click()
+  await sleep(150)
+  // 收尾区在回答下面：它前面是回答（不是过程），后面最多是回合的尾巴；过程里那一步写“建议”
+  const tailBelow =
+    tail?.contains(wrapBox() ?? null) === true &&
+    tail.previousElementSibling !== null &&
+    !tail.previousElementSibling.classList.contains('proc') &&
+    (tail.nextElementSibling === null ||
+      tail.nextElementSibling.matches('.turn-foot, .running-line')) &&
+    (wrapTurn?.querySelector('.proc')?.textContent ?? '').includes('建议')
+  seen.tail = `${tail?.previousElementSibling?.className ?? '没有'} | ${wrapTurn?.querySelector('.proc')?.textContent ?? '没有过程'}`
+  const askBox = () => wrapTurn?.querySelector<HTMLElement>('.turn-tail .tail-ask')
+  const askShown =
+    askBox()?.dataset.state === 'open' &&
+    (askBox()?.querySelectorAll('button[data-act]').length ?? 0) === 2 &&
+    (askBox()?.textContent ?? '').includes('解析器的单测')
+  askBox()?.querySelector<HTMLElement>('button[data-act="0"]')?.click()
+  const askReplied = await until(() => {
+    const said = $$('.main .umsg').at(-1)?.textContent ?? ''
+    return (
+      said.includes('在这里把解析器的单测补齐') &&
+      askBox()?.dataset.state === 'past' &&
+      (askBox()?.textContent ?? '').includes('在这里补')
+    )
+  })
+  seen.ask = askBox()?.textContent ?? '没有'
+  await idle()
   const firstWrap = () => wrapBox()?.querySelector<HTMLElement>('[data-card="proposal"]')
   firstWrap()?.querySelector<HTMLElement>('[data-act="edit"]')?.click()
   await until(() => $('.spawn-dialog[data-proposal]') !== null)
@@ -359,6 +403,40 @@ export async function treeProbe(): Promise<TreeSeen> {
   await idle()
   await sleep(2500)
   await idle()
+
+  // 第二张在这里做：本会话里发一条“在这里做：标题…”，卡片写“在这里做”、不起子会话
+  const hereLeft = kids().length
+  const secondWrap = () => wrapBox()?.querySelectorAll<HTMLElement>('[data-card="proposal"]')[1]
+  secondWrap()?.querySelector<HTMLElement>('[data-act="here"]')?.click()
+  const wrapHere = await until(
+    () =>
+      secondWrap()?.dataset.state === 'here' &&
+      ($$('.main .umsg').at(-1)?.textContent ?? '').startsWith('在这里做：在 Pi 上对一遍文案') &&
+      kids().length === hereLeft,
+  )
+  seen.here = `${secondWrap()?.dataset.state} ${$$('.main .umsg').at(-1)?.textContent ?? ''}`
+  await idle()
+
+  // “⋯”里关任务卡
+  const toastText = () => $('.toasts .toast-text')?.textContent ?? ''
+  secondWrap()?.querySelector<HTMLElement>('[data-act="more"]')?.click()
+  await until(() => $('.prop-menu [data-option="cardsOff"]') !== null)
+  const offLabel = $('.prop-menu [data-option="cardsOff"]')?.textContent ?? ''
+  $('.prop-menu [data-option="cardsOff"]')?.click()
+  await until(() => toastText() !== '')
+  seen.cardsOff = `${offLabel} → ${toastText()}`
+  let cardsOff = /在 .+ 上对 Claude Code 关闭任务卡/.test(offLabel)
+  if (toastText().startsWith('已对 Claude Code 关闭任务卡')) {
+    const undo = [...document.querySelectorAll<HTMLElement>('.toasts .toast-act')]
+    cardsOff &&=
+      undo.map((button) => button.textContent).join(',') === '撤销,去设置' &&
+      secondWrap()?.dataset.state === 'here'
+    undo[0]?.click()
+    cardsOff &&= await until(() => toastText() === '')
+  } else {
+    cardsOff &&= toastText().includes('还没有任务卡开关')
+    $<HTMLElement>('.toasts .toast-x')?.click()
+  }
 
   // —— 没调收尾：提醒 ——
   await say('忘了收尾')
@@ -542,6 +620,11 @@ export async function treeProbe(): Promise<TreeSeen> {
     wrapShown,
     wrapQuiet,
     wrapActual,
+    tailBelow,
+    askShown,
+    askReplied,
+    wrapHere,
+    cardsOff,
     remindBar,
     offerShown,
     offerStarted,
@@ -584,6 +667,9 @@ export async function treeLooks(parent: string): Promise<TreeLooks> {
     '.agent-row',
     '.prop-card',
     '.prop-refused',
+    '.turn-tail',
+    '.tail-ask',
+    '.prop-menu .ibtn',
     '.sev',
     '.tree-kids .row-line',
     '.tree-fold',
@@ -643,6 +729,11 @@ const LABELS: Record<Exclude<keyof TreeSeen, 'seen'>, string> = {
   wrapShown: '收尾带的三条建议：两张等着的卡片加一行被拒的原因',
   wrapQuiet: '空的收尾不画：撤回的那个回合只有一个活动块',
   wrapActual: '“改了再开始”能改完成后唤醒；换了 harness 开始后卡片写实际的 harness',
+  tailBelow: '收尾区在回合最下方、回答下面，过程里那一步写“建议”',
+  askShown: '收尾的问题带两个回复按钮',
+  askReplied: '点回复按钮发出按钮的话，问题折成一行写着回了哪个',
+  wrapHere: '卡片的“在这里做”在本会话发“在这里做：…”，卡片写在这里做、不起子会话',
+  cardsOff: '“⋯”里关任务卡：提示可撤销（或说清楚设备服务还没有开关）',
   remindBar: '没调收尾的提醒是一行轻字、没有用户气泡，后面跟着补的那张卡片',
   offerShown: '“新任务”出 offer 卡：等你选、两个按钮，侧面板有这一行和按钮、角标算上它',
   offerStarted:

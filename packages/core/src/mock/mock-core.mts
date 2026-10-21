@@ -37,6 +37,7 @@ import { projectItem } from '../projection/items.mjs'
 import { localUserMessage, outgoing } from '../projection/outgoing.mjs'
 import { settleAnswers } from '../projection/questions.mjs'
 import { reduceSession } from '../projection/reduce.mjs'
+import { spanOp } from '../projection/span.mjs'
 import { settleSteps, todoKey } from '../projection/todo.mjs'
 import { createMockOrganize } from './mock-arrange.mjs'
 import { createMockBackground } from './mock-background.mjs'
@@ -442,8 +443,14 @@ export function createMockCore(options: MockCoreOptions): MockCore {
   }
 
   // 改内存里的会话，再把同样的增量发给订阅者；之后新来的订阅者拿到的快照已经包含这些改动
-  const applySessionOps = (view: SessionView, ops: SessionOp[]) => {
-    for (const op of ops) reduceSession(view, op)
+  const applySessionOps = (view: SessionView, given: SessionOp[]) => {
+    // 和设备那边一样，添加条目时记上开始、结束的时刻（步骤组的时长用）
+    const now = clock.now()
+    const ops = given.map((op) => {
+      const stamped = spanOp(view, op, now)
+      reduceSession(view, stamped)
+      return stamped
+    })
     emit(`session:${view.deviceId}:${view.sessionId}`, ops)
   }
 

@@ -498,3 +498,20 @@
   color: var(--ink-3);
   background: var(--hover);
 }
+/* 思考：一行次要的浅字（头一行），点开看全文；不写动词 */
+.item[data-tone="quiet"] .item-head {
+  color: var(--ink-3);
+}
+.item[data-tone="quiet"] .item-head .tgt {
+  font: 12px / 1.4 var(--ui);
+  font-style: italic;
+}
+.item[data-tone="quiet"] .item-head > .ic {
+  opacity: 0.6;
+}
+/* 只有思考的一组：不收成汇总，每条思考直接一行 */
+.steps.thoughts .item-head {
+  height: 26px;
+  padding: 0 4px;
+  font-size: 12px;
+}

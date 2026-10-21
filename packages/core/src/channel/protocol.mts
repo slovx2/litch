@@ -861,6 +861,14 @@ export interface Commands {
     result: Record<string, never>
   }
   /**
+   * 用户点了普通提案卡上的“在这里做”：提案记 here，设备进程往这个会话发一条用户消息（lead 加标题和任务），
+   * 会话正在跑回合时排到回合结束后发。lead 是界面语言的“在这里做：”
+   */
+  'session.proposal.here': {
+    params: { deviceId: string; sessionId: string; proposalId: string; lead?: string }
+    result: Record<string, never>
+  }
+  /**
    * 这个会话下面引擎自己的子代理线程（thread/list 带 parentThreadId，只要直接的子女）。
    * 不缓存，每次现问；对面不会按父会话查的以 unsupported 结束
    */

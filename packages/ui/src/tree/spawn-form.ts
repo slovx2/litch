@@ -6,6 +6,7 @@ import type {
   ProposalOverrides,
   SandboxLevel,
   SessionProposalView,
+  SessionSettings,
 } from '@litch/core'
 
 /** 弹窗里填的东西。空串是“不改、照默认” */
@@ -30,12 +31,21 @@ export interface SpawnParent {
   workspaceId: string | null
 }
 
-/** 表单的初值：手动派的全是父会话的默认；提案的照提案预填 */
-export function fieldsFor(parent: SpawnParent, proposal: SessionProposalView | null): SpawnFields {
+/**
+ * 表单的初值：缺省的底是父会话此刻的设置（settings，和设备进程起子会话时一样），提案里写了的盖过它。
+ * 目标 harness 和父会话不同、提案又没写的模型、强度留空（用那个 harness 的默认）
+ */
+export function fieldsFor(
+  parent: SpawnParent,
+  proposal: SessionProposalView | null,
+  settings?: Pick<SessionSettings, 'model' | 'effort'> | null,
+): SpawnFields {
+  const harness = proposal?.harness ?? parent.harness
+  const inherited = harness === parent.harness ? settings : null
   return {
-    harness: proposal?.harness ?? parent.harness,
-    model: proposal?.model ?? '',
-    effort: '',
+    harness,
+    model: proposal?.model ?? inherited?.model ?? '',
+    effort: proposal?.effort ?? inherited?.effort ?? '',
     workspaceId: parent.workspaceId ?? '',
     cwd: proposal?.cwd ?? '',
     kind: proposal?.kind ?? 'fresh',
@@ -85,7 +95,7 @@ export function overridesOf(
   if (fields.model && fields.model !== proposal.model) overrides.model = fields.model
   // 换了 harness 又没另选模型：提案原来的模型多半是别家的，空字符串让设备进程清掉、用缺省
   else if (!fields.model && harnessChanged && proposal.model) overrides.model = ''
-  if (fields.effort) overrides.effort = fields.effort
+  if (fields.effort && fields.effort !== proposal.effort) overrides.effort = fields.effort
   if (fields.workspaceId && fields.workspaceId !== (parent.workspaceId ?? '')) {
     overrides.workspaceId = fields.workspaceId
   }

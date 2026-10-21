@@ -327,6 +327,8 @@ export interface Device {
   dismissProposal(sessionId: string, proposalId: string): Promise<void>
   /** 用户在 offer 卡上选了“新会话”（session）或“在这里做”（here） */
   answerProposal(sessionId: string, proposalId: string, choice: OfferChoice): Promise<void>
+  /** 普通提案卡上的“在这里做”：设备进程往父会话发标题加任务（在跑就排到回合后） */
+  hereProposal(sessionId: string, proposalId: string, lead?: string): Promise<void>
   /** 这个会话下面引擎自己的子代理线程（直接的子女） */
   agents(sessionId: string): Promise<AgentThreadView[]>
 }
@@ -2129,6 +2131,13 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       treeOnly()
       await guarded(() => link.request(SESSION_TREE_METHOD.proposalAnswer, { proposalId, choice }))
       live.settleProposal(sessionId, proposalId, choice === 'session' ? 'chosen' : 'here', null)
+    },
+    async hereProposal(sessionId, proposalId, lead) {
+      treeOnly()
+      await guarded(() =>
+        link.request(SESSION_TREE_METHOD.proposalHere, { proposalId, ...(lead ? { lead } : {}) }),
+      )
+      live.settleProposal(sessionId, proposalId, 'here', null)
     },
     async agents(sessionId) {
       if (!online) throw new ChannelError('offline', '设备没有连上')

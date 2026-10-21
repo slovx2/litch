@@ -230,6 +230,7 @@ import type {
   ProposalChangedNotification,
   SessionDetachParams,
   SessionProposalAnswerParams,
+  SessionProposalHereParams,
   SessionProposalIdParams,
   SessionProposalListParams,
   SessionProposalListResponse,
@@ -493,6 +494,10 @@ export interface ClientRequests {
   }
   'litch/sessionProposal/answer': {
     params: SessionProposalAnswerParams
+    result: Record<string, never>
+  }
+  'litch/sessionProposal/here': {
+    params: SessionProposalHereParams
     result: Record<string, never>
   }
   // 以下是文件面板用的：列目录、读文件、取元数据、模糊找文件。都是协议里现成的方法，哪种对面都有。

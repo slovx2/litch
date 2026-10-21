@@ -138,6 +138,46 @@ test('对话里的行：收尾的每条建议一张卡、排在过程组后面�
   )
 })
 
+test('收尾区：带建议、留了问题的收尾在过程里只留一步，问题和卡片排到回答下面', () => {
+  const answer = { id: 'a', kind: 'agentMessage', text: '做完了', status: 'completed' }
+  const wrapUp = {
+    summary: null,
+    suggestions: [{ title: '任务 p1' }],
+    ask: '接着做哪个？',
+    actions: [{ label: '先修测试', message: '先把测试修了' }, { label: '不用了' }],
+  }
+  const list = [proposal('p1', { callId: 'w' })]
+  const rows = new RowBuilder().build(
+    viewOf(
+      ['u', 'c1', 'w', 'a'],
+      [user('u', '做吧'), command('c1'), call('w', 'wrap_up', { wrapUp }), answer],
+      list,
+    ),
+    'all',
+  )
+  assert.deepEqual(types(rows), ['user', 'group', 'md', 'wrapAsk', 'proposal', 'status'])
+  assert.equal(rows[1].count, 2, '收尾那一步留在过程里')
+  const ask = rows.find((row) => row.type === 'wrapAsk')
+  assert.equal(ask.ask, '接着做哪个？')
+  assert.deepEqual(
+    ask.actions.map((action) => action.label),
+    ['先修测试', '不用了'],
+  )
+  // 只留了问题、没带建议：问题照样排到最下面
+  const askOnly = new RowBuilder().build(
+    viewOf(
+      ['u', 'w2', 'a'],
+      [
+        user('u', '做吧'),
+        call('w2', 'wrap_up', { wrapUp: { ...wrapUp, suggestions: [] } }),
+        answer,
+      ],
+    ),
+    'all',
+  )
+  assert.deepEqual(types(askOnly), ['user', 'group', 'md', 'wrapAsk', 'status'])
+})
+
 const json = (value) => [{ kind: 'text', text: JSON.stringify(value, null, 2) }]
 const offerCall = (id, extra = {}) =>
   call(id, 'start', {

@@ -6,6 +6,7 @@ import {
   type FileUpdateChange,
   parseSessionEvent,
   SESSION_TOOL,
+  SESSION_TOOL_LIMITS,
   type ThreadItem,
   type UserInput,
   type WebSearchAction,
@@ -161,8 +162,10 @@ function spawnedOf(
       background: '',
       harness: null,
       model: null,
+      effort: null,
       cwd: null,
       kind: 'fork',
+      asked: false,
     }
   }
   const choice = result?.choice
@@ -177,8 +180,10 @@ function spawnedOf(
       given.kind !== 'fork' && typeof given.background === 'string' ? given.background : '',
     harness: word(given.harness),
     model: word(given.model),
+    effort: word(given.effort),
     cwd: word(given.cwd),
     kind: given.kind === 'fork' ? 'fork' : 'fresh',
+    asked: given.initiation === 'user_asked',
   }
 }
 
@@ -249,6 +254,7 @@ function wrapUpOf(
         background: raw.kind !== 'fork' && typeof raw.background === 'string' ? raw.background : '',
         harness: word(raw.harness),
         model: word(raw.model),
+        effort: word(raw.effort),
         cwd: word(raw.cwd),
         kind: raw.kind === 'fork' ? 'fork' : 'fresh',
         proposalId: failure === null ? word(result?.proposal_id) : null,
@@ -261,7 +267,22 @@ function wrapUpOf(
       },
     ]
   })
-  return { suggestions }
+  // 留给用户定的那件事和回复按钮：没有问题时按钮不画；按钮至多 wrapUpActions 个，没有字的不要
+  const ask = typeof given.ask === 'string' ? given.ask.trim() : ''
+  const actions = (Array.isArray(given.actions) ? given.actions : [])
+    .flatMap((entry): { label: string; message?: string }[] => {
+      if (typeof entry !== 'object' || entry === null) return []
+      const raw = entry as Record<string, unknown>
+      const label = typeof raw.label === 'string' ? raw.label.trim() : ''
+      const message = typeof raw.message === 'string' ? raw.message.trim() : ''
+      return label ? [message ? { label, message } : { label }] : []
+    })
+    .slice(0, SESSION_TOOL_LIMITS.wrapUpActions)
+  return {
+    suggestions,
+    ...(ask ? { ask } : {}),
+    ...(ask && actions.length > 0 ? { actions } : {}),
+  }
 }
 
 /** 数一个补丁里加了几行、删了几行。只认以单个加号或减号开头的行，文件头不算 */

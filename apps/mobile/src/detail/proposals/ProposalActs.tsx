@@ -1,4 +1,4 @@
-// 一张等着的提案上的“开始”“改了再开始”“不要”三个按钮，和没做成时的那句话。对话里的卡片和建议任务列表共用。
+// 一张等着的提案上的“开始”“在这里做”“改了再开始”“不要”四个按钮，和没做成时的那句话。对话里的卡片和建议任务列表共用。
 // offer 卡的“新会话”“在这里做”在下面的 OfferActs。“改了再开始”是单独一页（src/screens/proposals/ProposalStartScreen.tsx）。
 import { type DeviceView, keys, type SessionSummary } from '@litch/core'
 import { useNavigation } from '@react-navigation/native'
@@ -37,6 +37,13 @@ export function ProposalActs({
           busy={act.busy}
           onPress={() => act.accept()}
           testID={`proposal:${proposalId}:start`}
+        />
+        <Button
+          kind="plain"
+          label={t('proposal.here')}
+          disabled={off}
+          onPress={() => act.here()}
+          testID={`proposal:${proposalId}:here`}
         />
         <Button
           kind="plain"

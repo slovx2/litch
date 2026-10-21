@@ -2,7 +2,9 @@
 // - 行的标识只由回合、条目、块号决定，流式和定稿之间不变；内容没变的行原样复用同一个对象，单元格不重画。
 // - 过程（命令、工具调用、改文件、搜索、说明）连成一组，收起时是一行高度固定的摘要；展开时每一步各是一行，
 //   排在摘要的上面（倒置列表里往上长，被点的摘要原地不动）。展开收起只由用户点，回合结束时不自动收起。
-// - 每个回合末尾一行状态，从回合开始到结束一直在，只换字不换高度。回合在跑时只在空档里写“{name} 正在工作”（workingShown；在想时这句写在思考那一行上）。
+// - 每个回合末尾一行状态，从回合开始到结束一直在，只换字不换高度。回合在跑时只在空档里写“{name} 正在工作”和已用的时间（workingShown；在想时这句写在思考那一行上）。
+// - 建议任务的卡片（收尾带的、start 提的）和收尾留的问题排在回合最下方（回答下面、状态行上面），过程里调用的位置只留一步；
+//   offer 卡挂在回合中间等人选，不挪。没字的思考不画。
 // - 行里放条目对象本身（单元格从它取要画的东西），再加上条目里会被原地改掉的那几项（核心对文字、状态是原地改的，
 //   对 item.add 是整个换掉）：这样逐项比一遍（sameRow）就知道内容变没变。
 import type {
@@ -22,7 +24,7 @@ import type {
   UserAttachment,
   WebSearchItem,
 } from '@litch/core'
-import { workingShown } from '@litch/core'
+import { spanOf, thoughtShown, workingShown } from '@litch/core'
 import { cardsOf, eventKind, handOffOf, isOfferCall } from '../detail/proposals/logic'
 import { type ChunkState, chunkText, emptyChunks } from './blocks'
 
@@ -72,6 +74,17 @@ export type Row =
       offer: boolean
     }
   /**
+   * 收尾（wrap_up）留给用户的问题和回复按钮，排在回合最下方的卡片前面。能不能答由单元格对着会话的最后一个回合算
+   */
+  | {
+      type: 'wrapAsk'
+      key: string
+      turnId: string
+      itemId: string
+      ask: string
+      actions: readonly { label: string; message?: string }[]
+    }
+  /**
    * litch_sessions.hand_off：做到一半的任务交给了分叉会话。threadId 是起出来的那个，还没有结果是 null。
    * running：调用还没完
    */
@@ -118,6 +131,8 @@ export type Row =
       turnId: string
       count: number
       failed: number
+      /** 这一组从第一条开始到最后一条结束用了多久（条目上记的 span）。没记过是 null */
+      durationMs: number | null
       current: Text | null
       running: boolean
       expanded: boolean
@@ -147,6 +162,8 @@ export type Row =
       turnId: string
       status: TurnView['status']
       durationMs: number | null
+      /** 回合开始的时刻：“正在工作”后面写已经用了多久。对面没给是 null */
+      startedAt: number | null
       /** 回合在跑、而且正处在空档里（核心的 workingShown）：这时才写“正在工作”，别的时候留空 */
       working: boolean
     }
@@ -165,6 +182,8 @@ const STEP_KINDS = new Set<ItemView['kind']>([
 ])
 
 const isStep = (item: ItemView): item is StepItem => STEP_KINDS.has(item.kind)
+
+const NO_ACTIONS: readonly { label: string; message?: string }[] = []
 
 /** 一个会话的行。跟着视图一起活，记着各条目切到哪了、上一次给出的行对象 */
 export class RowBuilder {
@@ -221,27 +240,48 @@ export class RowBuilder {
     const first = turn.itemIds[0] ? view.items[turn.itemIds[0]] : undefined
     // 提醒收尾的回合只是补调一次收尾：模型顺口说的“好的”不画（手机上回答没有折叠处），建议的卡片照样画
     const remind = first?.kind === 'userMessage' && first.event?.kind === 'remind'
+    /** 回合最下方的收尾区：收尾留的问题（最后一个），和这一回合的建议卡片 */
+    let tailAsk: Row | null = null
+    const tailCards: Row[] = []
     for (const itemId of turn.itemIds) {
       const item = view.items[itemId]
       if (!item) continue
       if (remind && item.kind === 'agentMessage') continue
       const cards = item.kind === 'toolCall' ? cardsOf(item, view.proposals) : null
       if (cards && item.kind === 'toolCall') {
-        // 没带建议的收尾不画，也不把前后两段过程拆开
-        if (cards.length === 0) continue
-        flush()
-        for (const proposal of cards)
-          out.push(
-            this.keep({
-              type: 'proposal',
-              key: `${item.id}:${proposal?.id ?? 'call'}`,
-              turnId: turn.id,
-              itemId: item.id,
-              proposal,
-              spawned: item.spawned ?? null,
-              offer: isOfferCall(item),
-            }),
-          )
+        const offer = isOfferCall(item)
+        const ask = item.wrapUp?.ask
+        // 没带建议、也没留问题的收尾不画，也不把前后两段过程拆开
+        if (cards.length === 0 && !ask) continue
+        const rows = cards.map((proposal) =>
+          this.keep<Row>({
+            type: 'proposal',
+            key: `${item.id}:${proposal?.id ?? 'call'}`,
+            turnId: turn.id,
+            itemId: item.id,
+            proposal,
+            spawned: item.spawned ?? null,
+            offer,
+          }),
+        )
+        // offer 卡挂在回合中间等人选，不挪
+        if (offer) {
+          flush()
+          out.push(...rows)
+          continue
+        }
+        // 建议任务、收尾的问题：过程里只留一步，卡片和问题排到回合最下方
+        group.push(item)
+        tailCards.push(...rows)
+        if (ask)
+          tailAsk = this.keep({
+            type: 'wrapAsk',
+            key: `${item.id}:ask`,
+            turnId: turn.id,
+            itemId: item.id,
+            ask,
+            actions: item.wrapUp?.actions ?? NO_ACTIONS,
+          })
         continue
       }
       const handOff = item.kind === 'toolCall' ? handOffOf(item) : null
@@ -299,6 +339,8 @@ export class RowBuilder {
           out.push(...this.markdown(turn.id, item.id, item.text, running, true))
           break
         case 'reasoning': {
+          // 没有可显示的字（引擎只给了加密的、空的推理）：想完了就不画
+          if (!thoughtShown(item)) break
           const expanded = this.expanded.has(item.id)
           out.push(
             this.keep({
@@ -320,6 +362,8 @@ export class RowBuilder {
       }
     }
     flush()
+    if (tailAsk) out.push(tailAsk)
+    out.push(...tailCards)
     if (turn.status === 'failed' && turn.error)
       out.push(this.keep({ type: 'error', key: `${turn.id}:error`, text: turn.error }))
     out.push(
@@ -329,6 +373,7 @@ export class RowBuilder {
         turnId: turn.id,
         status: turn.status,
         durationMs: turn.durationMs,
+        startedAt: turn.startedAt,
         working:
           running &&
           workingShown(
@@ -376,6 +421,7 @@ export class RowBuilder {
         turnId: turn.id,
         count: steps.length,
         failed,
+        durationMs: spanOf(steps),
         current,
         running: current !== null,
         expanded,

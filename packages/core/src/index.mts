@@ -9,6 +9,8 @@ export {
   PAIR_TTL_MS,
   type PairPayload,
 } from '../../protocol/src/device-pairing.mjs'
+// 设备设置里“任务卡”按 harness 的键：提案卡上的“对这个 harness 关闭任务卡”直接写它
+export { taskCardsSettingKey } from '../../protocol/src/session-tree.mjs'
 // 日程怎么算：界面的表单拿它预览“下一次”、先查时区（和设备进程用的是同一份）
 export {
   isTaskTimeZone,
@@ -219,6 +221,7 @@ export {
   type Block,
   type BlockInput,
   bucketItems,
+  type CardPlace,
   cardOf,
   cardPlace,
   type ProcessPart,
@@ -233,6 +236,7 @@ export {
   stepFailed,
   stepKindOf,
   stepsTally,
+  thoughtShown,
   toolKind,
 } from './projection/blocks.mjs'
 export {
@@ -306,6 +310,7 @@ export {
   shownEffort,
   shownSpeed,
 } from './projection/settings.mjs'
+export { spanned, spanOf, spanOp } from './projection/span.mjs'
 export { todoKey } from './projection/todo.mjs'
 // 子代理的状态：对话流的那一行、子代理页、信息卡，和“这个回合里还有没做完的子代理”（回合收起的判定）
 export {

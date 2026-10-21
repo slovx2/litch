@@ -7,7 +7,8 @@
 //   第三个在 Pi 上、沙箱收不紧；点“开始”（可以改了再开始）才起，点“不要”就了结；
 // - 说“撤回提案”（withdraw a proposal）：模型撤回最近一个还等着的提案；
 // - 说“收尾建议”（suggest follow-ups）：模型回答完调收尾（litch_sessions.wrap_up）带三条建议，
-//   两条成了提案（第二条在 Pi 上），第三条简报太短被拒；
+//   两条成了提案（第二条在 Pi 上），第三条简报太短被拒；还留了一个问题和两个回复按钮；
+// - 提案卡上点“在这里做”：提案记 here，往这个会话发“在这里做：标题”加任务，回合在跑就等它结束再发；
 // - 说“忘了收尾”（forget the wrap-up）：模型回答完没调收尾，设备进程替它再开一个回合提醒
 //   （<litch-session-event kind="remind">），模型在那个回合里补调收尾、带一条建议；
 // - 会话树的其余几出（派子会话、唤醒、提案、撤回）回答完都调一次空的收尾，界面上不画；
@@ -154,6 +155,18 @@ export function createMockTree(host: MockTreeHost): MockTree {
   const held = new Set<string>()
   /** 这一回合模型没调收尾的会话：回合结束后替它开一个提醒的回合 */
   const unwrapped = new Set<string>()
+  /** 提案卡上点了“在这里做”、回合还在跑的：等回合结束再发的那几条话 */
+  const heres = new Map<string, string[]>()
+  /** 点了“在这里做”发出去的话：模型照示例回一句 */
+  const hereTexts = new Set<string>()
+
+  /** 往会话里发“在这里做”的那条话：回合在跑就排到回合结束后 */
+  const sendHere = (view: SessionView, message: string) => {
+    const key = sameKey(view.deviceId, view.sessionId)
+    hereTexts.add(message)
+    if (host.running(view)) heres.set(key, [...(heres.get(key) ?? []), message])
+    else host.startTurn(view, outgoing(message))
+  }
 
   const deviceHarness = (deviceId: string, wanted: string | null, fallback: string): string => {
     const ready = host.harnesses(deviceId).filter((entry) => entry.state === 'ready')
@@ -359,6 +372,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
       background: sample.background ?? '',
       harness: sample.harness ?? null,
       model: null,
+      effort: null,
       cwd: sample.cwd ?? null,
       kind: 'fresh',
       wakeParent: true,
@@ -396,6 +410,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
     view: SessionView,
     turnId: string,
     samples: readonly TreeSuggestion[],
+    ask?: { ask: string; actions: readonly { label: string; message?: string }[] },
   ): SessionOp[] => {
     const now = host.now()
     const callId = host.nextId('ls')
@@ -417,6 +432,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
             ...(sample.harness ? { harness: sample.harness } : {}),
             ...(sample.cwd ? { cwd: sample.cwd } : {}),
           })),
+          ...(ask ? { ask: ask.ask, actions: ask.actions } : {}),
         },
         { suggestions: results, note: 'Suggested; waiting for the user.' },
         'wrap_up',
@@ -428,7 +444,12 @@ export function createMockTree(host: MockTreeHost): MockTree {
 
   /** 回答完调收尾，带三条建议（第三条被拒） */
   const wrapDemo = (view: SessionView, turnId: string) => {
-    host.reply(view, turnId, text.wrapReply, () => wrapUpOps(view, turnId, text.wrapUp))
+    // 照规矩先收尾、再写最终回答
+    host.apply(
+      view,
+      wrapUpOps(view, turnId, text.wrapUp, { ask: text.wrapAsk, actions: text.wrapActions }),
+    )
+    host.reply(view, turnId, text.wrapReply)
   }
 
   /** 回答完没调收尾：记下来，回合结束后替它开一个提醒的回合（ended） */
@@ -505,6 +526,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
       background: '',
       harness: null,
       model: null,
+      effort: null,
       cwd: null,
       kind: 'fresh',
       wakeParent: true,
@@ -891,6 +913,10 @@ export function createMockTree(host: MockTreeHost): MockTree {
         return true
       }
       if (held.delete(key)) return true
+      if (hereTexts.delete(message.text)) {
+        host.reply(view, turnId, text.hereReply, emptyWrapUp(turnId))
+        return true
+      }
       const script = scripted.get(key)
       if (script !== undefined) {
         scripted.delete(key)
@@ -972,6 +998,14 @@ export function createMockTree(host: MockTreeHost): MockTree {
       if (unwrapped.delete(key) && status === 'completed' && !host.running(view)) {
         host.startTurn(view, { text: '', images: [], extras: [] }, { kind: 'remind', notes: [] })
       }
+      // 回合在跑时点了“在这里做”的：现在发
+      const queued = heres.get(key)
+      if (queued?.length && !host.running(view)) {
+        const [next, ...rest] = queued
+        if (rest.length > 0) heres.set(key, rest)
+        else heres.delete(key)
+        if (next !== undefined) host.startTurn(view, outgoing(next))
+      }
     },
 
     notesFor(view) {
@@ -1040,6 +1074,17 @@ export function createMockTree(host: MockTreeHost): MockTree {
           return {}
         }
         return { sessionId: acceptProposal(view, proposal, overrides ?? {}) }
+      }
+      if (name === 'session.proposal.here') {
+        const { deviceId, sessionId, proposalId, lead } =
+          params as Commands['session.proposal.here']['params']
+        const view = host.view(deviceId, sessionId)
+        const proposal = waiting(view, proposalId)
+        if (!proposal) throw new ChannelError('notFound', '这个提案已经不在了')
+        scripted.delete(`proposal:${proposalId}`)
+        settle(view, proposalId, 'here')
+        sendHere(view, `${lead ?? 'Do it here: '}${proposal.title}\n\n${proposal.prompt}`)
+        return {}
       }
       if (name === 'session.proposal.answer') {
         const { deviceId, sessionId, proposalId, choice } =

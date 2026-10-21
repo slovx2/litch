@@ -60,6 +60,8 @@ export interface SessionProposalView {
   /** 子会话的 harness。null 是跟父会话一样 */
   harness: HarnessId | null
   model: string | null
+  /** 推理强度。null 是开始那一刻父会话的（目标 harness 不同时是那边的默认） */
+  effort: string | null
   /** 子会话的目录。null 是跟父会话一样 */
   cwd: string | null
   kind: LineageKind
@@ -110,6 +112,8 @@ export type OfferChoice = 'session' | 'here'
 export interface ProposalShape {
   harness: HarnessId | null
   model: string | null
+  /** 推理强度：提案里写了才有（没写的开始时取父会话的）；开始了的不写 */
+  effort: string | null
   cwd: string | null
   kind: LineageKind
   /** 写的是实际起出来的子会话（不是提案里的） */
@@ -121,7 +125,9 @@ export interface ProposalShape {
  * 子会话的模型侧栏里没有，不写）；别的写提案里的，没给 harness 的是父会话的
  */
 export function proposalShape(
-  planned: Pick<SessionProposalView, 'harness' | 'model' | 'cwd' | 'kind'>,
+  planned: Pick<SessionProposalView, 'harness' | 'model' | 'cwd' | 'kind'> & {
+    effort?: string | null
+  },
   child: Pick<SessionSummary, 'harness' | 'cwd' | 'lineage'> | null | undefined,
   parentHarness: HarnessId | null,
 ): ProposalShape {
@@ -129,6 +135,7 @@ export function proposalShape(
     return {
       harness: child.harness,
       model: null,
+      effort: null,
       cwd: child.cwd || null,
       kind: child.lineage?.kind ?? planned.kind,
       actual: true,
@@ -137,6 +144,7 @@ export function proposalShape(
   return {
     harness: planned.harness ?? parentHarness,
     model: planned.model,
+    effort: planned.effort ?? null,
     cwd: planned.cwd,
     kind: planned.kind,
     actual: false,
@@ -255,10 +263,16 @@ export interface SpawnedView {
   background: string
   /** 调用时给的 harness，没给是 null（跟父会话一样） */
   harness: HarnessId | null
-  /** 调用时给的模型、目录，没给是 null */
+  /** 调用时给的模型、强度、目录，没给是 null */
   model: string | null
+  effort: string | null
   cwd: string | null
   kind: LineageKind
+  /**
+   * start 的 initiation 是 user_asked（用户亲口要的，直接起）：设备进程核对不过时才降成提案。
+   * 别的（propose、offer、hand_off）是 false
+   */
+  asked: boolean
 }
 
 /** 收尾（litch_sessions.wrap_up）里的一条建议：调用时给的样子，加上结果里它成了哪张提案或者为什么没收 */
@@ -270,6 +284,7 @@ export interface WrapUpSuggestionView {
   /** 没给是 null（跟父会话一样） */
   harness: HarnessId | null
   model: string | null
+  effort: string | null
   cwd: string | null
   kind: LineageKind
   /** 成了哪张提案。被拒了、还没有结果是 null */
