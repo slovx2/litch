@@ -34,6 +34,8 @@ export const ALL_ABLE: SessionAbilities = {
   steerImages: true,
   finalOnStart: false,
   backgroundTasks: false,
+  // 持续目标只认声明：没有声明可看时不出入口
+  goals: false,
   declared: false,
 }
 
@@ -98,10 +100,13 @@ export const originOf = (turn: Turn): { origin?: NonNullable<TurnView['origin']>
 export function projectTurn(turn: Turn, viewId = turn.id): { turn: TurnView; items: ItemView[] } {
   const running = turn.status === 'inProgress'
   const last = (turn.items?.length ?? 0) - 1
-  const items = (turn.items ?? []).map((item, index) => {
+  const origin = originOf(turn)
+  const items = (turn.items ?? []).flatMap((item, index) => {
+    // 持续目标的续跑回合里那句“接着做”是入口替 harness 说的（Claude 入口），不是用户说的：不画成用户消息
+    if (origin.origin === 'goal' && item.type === 'userMessage') return []
     // 回合还在进行时，只有最后一个条目可能还在往外出字
     const view = projectItem(item, running && index === last)
-    return { ...view, id: itemKey(viewId, view.id, index) }
+    return [{ ...view, id: itemKey(viewId, view.id, index) }]
   })
   return {
     turn: {
@@ -111,7 +116,7 @@ export function projectTurn(turn: Turn, viewId = turn.id): { turn: TurnView; ite
       startedAt: toMs(turn.startedAt),
       durationMs: turn.durationMs ?? null,
       error: turn.error?.message ?? null,
-      ...originOf(turn),
+      ...origin,
     },
     items,
   }

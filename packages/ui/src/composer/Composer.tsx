@@ -31,6 +31,7 @@ import { Clip, Close, Send, Stop } from '../app/icons.tsx'
 import { useKey, useServices } from '../app/services.tsx'
 import { notesKey, takeNotes, withNotes } from '../diff/annotations.ts'
 import { noteWords, PendingNotes } from '../diff/Notes.tsx'
+import { useGoalSend } from '../goal/send.ts'
 import { commentsOf } from '../transcript/comments/Cite.tsx'
 import { revealOrigin } from '../transcript/comments/locate.ts'
 import {
@@ -155,6 +156,8 @@ export function Composer(props: ComposerProps) {
   const [dropping, setDropping] = useState(false)
   const asked = useComposeOptions(deviceId, props.harness)
   const options = props.holdSettings ? null : asked
+  /** 这个会话能不能设持续目标（输入框里的 /goal）。新建对话页上没有会话，按 harness 的声明 */
+  const sessionMeta = useKey<SessionMeta>(sessionId ? keys.session(deviceId, sessionId) : '')
   const input = useRef<HTMLTextAreaElement>(null)
   const picker = useRef<HTMLInputElement>(null)
   /** 正在翻输入历史：翻到倒数第几条，以及翻之前写了一半的字。没在翻就是 null */
@@ -275,6 +278,7 @@ export function Composer(props: ComposerProps) {
       ...(options && options.permissions.length > 0 ? ['permission'] : []),
     ],
     compact: props.compact,
+    goal: sessionId ? sessionMeta?.can.goals === true && sessionMeta.live : undefined,
     onNew: props.onNew,
     plan: options?.plan
       ? {
@@ -772,6 +776,8 @@ export function SessionComposer({ deviceId, sessionId, blocked }: SessionCompose
     },
     [channel, deviceId, sessionId, t, whenRunning],
   )
+  // 打的是 /goal 加上目标：设成持续目标，不当消息发（goal/send.ts）
+  const sendOrGoal = useGoalSend(deviceId, sessionId, onSend)
   // 输入历史就是这个会话里发过的话：不另外存，翻的时候从对话里现找
   const history = useCallback(() => {
     const { store } = replica
@@ -817,7 +823,7 @@ export function SessionComposer({ deviceId, sessionId, blocked }: SessionCompose
           .command('session.configure', { deviceId, sessionId, settings: patch })
           .catch(() => {})
       }}
-      onSend={onSend}
+      onSend={sendOrGoal}
       onStop={() => channel.command('session.interrupt', { deviceId, sessionId })}
       // 它不会引导（声明了不会，或者试过对面不认识）就没有“现在就说”，排着的等回合结束照常发
       {...(can?.steer === false

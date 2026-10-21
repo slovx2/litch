@@ -827,6 +827,7 @@ test('分叉、回退、压缩：模拟核心都支持；没有声明的不会�
     steerImages: true,
     finalOnStart: false,
     backgroundTasks: true,
+    goals: false,
     declared: true,
   })
   await assert.rejects(

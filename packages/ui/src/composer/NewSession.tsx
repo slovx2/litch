@@ -19,6 +19,7 @@ import { nameOf, nextStep, wireStyle } from '../app/device.ts'
 import { useKey, useServices } from '../app/services.tsx'
 import { useAssistant, warmManualDir } from '../assist/useAssistant.ts'
 import { FailureNote, shownState, useReconnect } from '../devices/status.tsx'
+import { parseGoalCommand } from '../goal/logic.ts'
 import { InstallRow } from '../install/InstallRow.tsx'
 import { useInstall } from '../install/useInstall.ts'
 import { WorkspaceDialog } from '../sidebar/WorkspaceDialog.tsx'
@@ -270,6 +271,10 @@ export function NewSession({ draft, onPlace, onCreated, onDevices, assist }: New
   const missing = workspaceId !== null && !workspace
 
   const create = async (text: string, images: ImageAttachment[], extras: MessageExtra[]) => {
+    // 第一句是 /goal 加上目标（harness 会持续目标时）：建好会话就设目标，不发消息，它空闲时自己开始做
+    const goal = harness?.abilities?.goals === true ? parseGoalCommand(text) : null
+    if (goal && !goal.objective) throw new Error(t('goal.needText'))
+    if (goal && (images.length > 0 || extras.length > 0)) throw new Error(t('goal.textOnly'))
     // 和会话里先显示出来的那一条是同一个算法：带着的文字并进正文，技能和图片列在上面
     setPending(
       localUserMessage('pending', { text, images, extras }, harness?.abilities?.mentions === true),
@@ -281,10 +286,11 @@ export function NewSession({ draft, onPlace, onCreated, onDevices, assist }: New
         // 归在哪个工作区明说：只按工作目录去认的话，目录在两个工作区里都算得上时会认错
         ...(workspaceId ? { workspaceId } : {}),
         cwd,
-        text,
+        text: goal ? goal.objective : text,
         images,
         extras,
         settings: sent,
+        ...(goal ? { goal: true } : {}),
       })
       const { mode: _thisOnce, ...kept } = picks
       rememberPicks(deviceId, harnessId, kept)

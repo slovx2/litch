@@ -1,0 +1,171 @@
+/* 持续目标（goal/）：输入框上方那一行、侧面板的“目标”页。
+   只用皮肤变量。靶的记号按状态上色：在做的强调色，停下要人看的警示色，做完的成功色，暂停的灰 */
+
+.goalbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  height: 28px;
+  padding: 0 2px 0 0;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  background: var(--panel);
+  font-size: 12px;
+  color: var(--ink);
+}
+.goal-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  padding: 0 8px 0 9px;
+  border: 0;
+  border-radius: var(--r2);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.goal-main:hover {
+  background: var(--hover);
+}
+.goal-main:focus-visible,
+.goal-act:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.goal-mark {
+  display: inline-flex;
+  flex: none;
+  color: var(--ink-3);
+}
+[data-goal-status="active"] .goal-mark {
+  color: var(--accent);
+}
+[data-goal-status="blocked"] .goal-mark,
+[data-goal-status="usageLimited"] .goal-mark,
+[data-goal-status="budgetLimited"] .goal-mark {
+  color: var(--wait);
+}
+[data-goal-status="complete"] .goal-mark {
+  color: var(--ok);
+}
+.goal-state {
+  flex: none;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.goal-text {
+  flex: 0 1 auto;
+  min-width: 0;
+  color: var(--ink-2);
+}
+.goal-use {
+  flex: none;
+  margin-left: auto;
+  font-size: 11px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.goal-act {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: var(--r1);
+  background: none;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+.goal-act:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+/* 侧面板的“目标”页 */
+.goal-panel {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 12.5px;
+  scrollbar-width: thin;
+}
+.goal-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.goal-head .dim {
+  margin-left: auto;
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+.goal-label {
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+.goal-editor {
+  width: 100%;
+  min-height: 120px;
+  resize: vertical;
+  padding: 8px 10px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  background: var(--raised);
+  color: var(--ink);
+  font: inherit;
+  line-height: 1.5;
+}
+.goal-editor:focus {
+  outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  outline-offset: -1px;
+}
+.goal-edit-row,
+.goal-acts {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.goal-edit-row .dim {
+  margin-right: auto;
+  font-size: 11.5px;
+}
+.goal-acts .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.goal-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+.goal-facts div {
+  min-width: 0;
+}
+.goal-facts dt {
+  font-size: 11px;
+}
+.goal-facts dd {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+.goal-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}

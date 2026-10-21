@@ -66,6 +66,7 @@ import type {
   WorkspaceView,
 } from '../model.mjs'
 import type { ToolAnswer, ToolInvocation } from '../model-client-tools.mjs'
+import type { GoalChange } from '../model-goal.mjs'
 import type { MachineAccessView } from '../model-machine.mjs'
 import type {
   DiagnosticsView,
@@ -250,6 +251,8 @@ export interface Device {
     settings: Partial<SessionSettings>,
     harness?: HarnessId,
     workspaceId?: string,
+    /** message 的文字是持续目标：建好后设下目标，不发消息（live.mts 的 create） */
+    asGoal?: boolean,
   ): Promise<string>
   /** 整理侧栏：工作区的增删改和排序、把会话移到别的工作区、置顶 */
   readonly organize: Organizer
@@ -288,6 +291,9 @@ export interface Device {
   fork(sessionId: string, turnId: string): Promise<string>
   rollback(sessionId: string, turnId: string): Promise<void>
   compact(sessionId: string): Promise<void>
+  /** 设、改、清持续目标（live.mts 的 setGoal、clearGoal） */
+  setGoal(sessionId: string, change: GoalChange): Promise<void>
+  clearGoal(sessionId: string): Promise<void>
   markRead(sessionId: string): void
   /**
    * 订阅这台设备的管理数据（设置的结构和现在的值）。先给快照，之后给增量；返回退订函数。
@@ -423,6 +429,9 @@ type DirectoryMethod = Exclude<
   | 'thread/tokenUsage/updated'
   | 'thread/reverted'
   | 'thread/settings/updated'
+  // 持续目标设了、改了、清了：上游发给每条连接，这一版只给打开着的那个会话（live.mts），侧栏不标
+  | 'thread/goal/updated'
+  | 'thread/goal/cleared'
   // 导进来的会话被别处占上、放开：只关系打开着的那个会话能不能写（live.mts）
   | 'litch/thread/nativeOwner/changed'
   // harness 详情设置的通知不归会话目录（harness-config.mts）
@@ -2013,7 +2022,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       tasks.seen(sessionId)
       return close
     },
-    async create(cwd, message, settings, harness, workspaceId) {
+    async create(cwd, message, settings, harness, workspaceId, asGoal) {
       // 聚合面上新建会话必须说建在哪个 harness 上；别的对面没有这个参数，不带
       const target = mode === 'full' ? pickHarness(harness) : null
       // 归到哪个工作区：对面有这组方法、这个工作区也还在才带
@@ -2021,7 +2030,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         workspaceId && hasProjects === true && workspaces.some((entry) => entry.id === workspaceId)
           ? workspaceId
           : null
-      return live.create(cwd, message, settings, target, home)
+      return live.create(cwd, message, settings, target, home, asGoal === true)
     },
     organize,
     rootCandidates: () =>
@@ -2116,6 +2125,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     fork: (sessionId, turnId) => live.fork(sessionId, turnId),
     rollback: (sessionId, turnId) => live.rollback(sessionId, turnId),
     compact: (sessionId) => live.compact(sessionId),
+    setGoal: (sessionId, change) => live.setGoal(sessionId, change),
+    clearGoal: (sessionId) => live.clearGoal(sessionId),
     markRead(sessionId) {
       if (!unread.delete(sessionId)) return
       const thread = threads.get(sessionId)

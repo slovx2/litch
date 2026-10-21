@@ -174,6 +174,7 @@ export type * from './model-config.mjs'
 export type * from './model-diff.mjs'
 export { DIFF_SCOPES } from './model-diff.mjs'
 export type * from './model-files.mjs'
+export type * from './model-goal.mjs'
 export type * from './model-harness-config.mjs'
 export type * from './model-install.mjs'
 export type * from './model-machine.mjs'
@@ -279,6 +280,7 @@ export {
   parseStatus,
   summarize,
 } from './projection/git-output.mjs'
+export { goalPursuing, goalStalled, projectGoal } from './projection/goal.mjs'
 export { countDiffLines, isInlineImage, projectItem, showJson } from './projection/items.mjs'
 export {
   bilingual,

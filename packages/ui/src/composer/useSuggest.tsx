@@ -7,6 +7,7 @@ import { downHarness } from '../app/device.ts'
 import { whyNot } from '../app/errors.ts'
 import { useKey } from '../app/services.tsx'
 import { showToast } from '../app/toasts.tsx'
+import { GOAL_PREFIX } from '../goal/logic.ts'
 import type { MessageKey } from '../i18n/index.ts'
 import { togglePanel } from '../terminal/panel.ts'
 import type { Compaction } from './ContextMeter.tsx'
@@ -27,6 +28,8 @@ export interface SuggestHost {
   input: RefObject<HTMLTextAreaElement | null>
   /** 底栏上现在有哪几个选择器 */
   pickers: readonly string[]
+  /** 这个会话能不能设持续目标。不给就按 harness 的声明（新建对话页上） */
+  goal?: boolean | undefined
   /** 计划模式的开关：这个 harness 会才给。on 是现在开没开 */
   plan?: { on: boolean; toggle(): void } | undefined
   compact?: Compaction | undefined
@@ -53,6 +56,7 @@ const COMMAND_TEXT: Record<BuiltinId, MessageKey> = {
   new: 'slash.new',
   compact: 'slash.compact',
   plan: 'slash.plan',
+  goal: 'slash.goal',
   model: 'slash.model',
   effort: 'slash.effort',
   permissions: 'slash.permissions',
@@ -128,6 +132,7 @@ export function useSuggest(host: SuggestHost): SuggestControl {
         inSession: Boolean(host.onNew),
         canCompact: Boolean(host.compact?.able && !host.compact.busy),
         plan: Boolean(host.plan),
+        goal: host.goal ?? declared?.goals === true,
         pickers: host.pickers,
         alone: standsAlone(text, slash),
       }).map((id) => ({
@@ -241,6 +246,12 @@ export function useSuggest(host: SuggestHost): SuggestControl {
       return
     }
     const id = command(entry.id)
+    // /goal 不是马上办的事：留下前缀，人接着写目标，发出去时再设（goal/send.ts）
+    if (id === 'goal') {
+      host.edit(GOAL_PREFIX, GOAL_PREFIX.length)
+      setCaret(GOAL_PREFIX.length)
+      return
+    }
     if (id) run(id)
   }
 

@@ -37,8 +37,10 @@ import type {
   TurnView,
 } from '../model.mjs'
 import type { ToolAnswer } from '../model-client-tools.mjs'
+import type { GoalChange, SessionGoalView } from '../model-goal.mjs'
 import type { AgentThreadView } from '../model-tree.mjs'
 import { phrase } from '../phrase.mjs'
+import { looksLikeGoalTurn, projectGoal } from '../projection/goal.mjs'
 import { projectFileChange, projectItem, settledItem } from '../projection/items.mjs'
 import { bodyOf, localUserMessage, outgoing, toInput } from '../projection/outgoing.mjs'
 import { reduceSession } from '../projection/reduce.mjs'
@@ -67,6 +69,7 @@ import { mergeProposals, projectProposals } from '../projection/tree.mjs'
 import {
   channelFailure,
   deviceFault,
+  goalsOff,
   harnessDownError,
   isHarnessDown,
   isHeldElsewhere,
@@ -171,6 +174,11 @@ export interface LiveSessions {
     settings: Partial<SessionSettings>,
     harness: HarnessId | null,
     workspaceId: string | null,
+    /**
+     * message 的文字是持续目标：建好会话后设下目标（thread/goal/set），不开回合，harness 空闲时自己开始做。
+     * 强度、协作模式这些要跟着回合发的设置，这时到用户第一次自己发消息才带过去
+     */
+    asGoal?: boolean,
   ): Promise<string>
   /** 改模型、强度、权限预设。记在这边，下一个回合开始时一起告诉对面 */
   configure(sessionId: string, settings: Partial<SessionSettings>): void
@@ -189,6 +197,10 @@ export interface LiveSessions {
   rollback(sessionId: string, turnId: string): Promise<void>
   /** 让对面开始压缩上下文。受理了就返回 */
   compact(sessionId: string): Promise<void>
+  /** 设、改持续目标（thread/goal/set，origin 是 user）。受理了就返回，新的样子随后由通知带来 */
+  setGoal(sessionId: string, change: GoalChange): Promise<void>
+  /** 清掉持续目标 */
+  clearGoal(sessionId: string): Promise<void>
   /**
    * 用户答了一张提案（开始、不要，offer 卡上选新会话、在这里做）：开着的会话里先改成答过的样子，
    * 不等设备进程的通知。chosen 还没了结（等模型补简报），不记了结的时间
@@ -243,6 +255,8 @@ type Notes = {
 }
 
 const LOAD_TIMEOUT = 60_000
+/** 按停止时先暂停目标，最多等这么久（官方桌面端也是 500 毫秒） */
+const PAUSE_BEFORE_STOP_MS = 500
 
 const isRunning = (view: SessionView): TurnView | undefined =>
   view.turns.findLast((turn) => turn.status === 'running')
@@ -282,6 +296,8 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       rollbackRestoresFiles: declared ? declared.rollbackRestoresFiles : false,
       finalOnStart: declared ? declared.finalOnStart : false,
       backgroundTasks: declared ? declared.backgroundTasks : false,
+      // 持续目标只认声明，没有声明的不先当它会（入口出来了也只能告诉人做不了）
+      goals: declared?.goals === true && !lacks?.has('goals'),
       declared: declared !== null,
     }
   }
@@ -363,6 +379,26 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     return viewId.startsWith('local:') ? null : viewId
   }
 
+  /**
+   * 对面没说来历的续跑回合（原生 codex）：会话有目标、回合里没有用户消息、模型说了话的，记成 goal，
+   * 开头那一行据此写“继续推进目标”。本机发出的回合不算
+   */
+  const markGoalTurn = (live: Live, viewId: string) => {
+    const view = live.view
+    if (!view?.goal || !view.can.goals || viewId.startsWith('local:')) return
+    const turn = view.turns.find((entry) => entry.id === viewId)
+    if (!turn || turn.status === 'running' || !looksLikeGoalTurn(turn, view.items)) return
+    emit(live, [
+      {
+        op: 'turn.status',
+        turnId: viewId,
+        status: turn.status,
+        durationMs: turn.durationMs,
+        origin: 'goal',
+      },
+    ])
+  }
+
   /** 对面第一次提到一个回合：如果本机正好有一个刚发出去的回合在等标识，就是它 */
   const bind = (live: Live, turnId: string): string => {
     const known = live.alias.get(turnId)
@@ -429,6 +465,12 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
 
   const putItem = (live: Live, turnId: string, item: ThreadItem, streaming: boolean) => {
     const viewId = viewTurn(live, turnId)
+    // 续跑回合里入口替 harness 说的那句“接着做”不画成用户消息（和载入时一样，projectTurn）
+    if (
+      item.type === 'userMessage' &&
+      live.view?.turns.find((turn) => turn.id === viewId)?.origin === 'goal'
+    )
+      return
     const ops = ensureTurn(live, viewId)
     const position = live.view?.turns.find((turn) => turn.id === viewId)?.itemIds.length ?? 0
     // 对面回显了本机先显示出来的消息：落在同一个条目上，不多出一条。
@@ -610,6 +652,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     'turn/started': (live, { turn }) => putTurn(live, turn),
     'turn/completed': (live, { turn }) => {
       putTurn(live, turn)
+      markGoalTurn(live, viewTurn(live, turn.id))
       settleItems(live, turn.id, turn.status === 'completed')
       settleTodo(live, turn.id)
       settleSteered(live, viewTurn(live, turn.id), turn.status === 'completed')
@@ -667,6 +710,11 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     'thread/reverted': (live) => {
       if (!live.reverting) load(live)
     },
+    // 持续目标设了、改了（状态、用量）、清掉了。上游发给每条连接，这里只管打开着的会话；
+    // 恢复会话时上游也会补一条现在的样子（有目标的话）
+    'thread/goal/updated': (live, { goal }) =>
+      emit(live, [{ op: 'session.goal', goal: projectGoal(goal) }]),
+    'thread/goal/cleared': (live) => emit(live, [{ op: 'session.goal', goal: null }]),
     // 导进来的会话被别处的进程占上、放开了：占着时只能看，放开了恢复可写。别的原因只读的（归档、子代理）不动
     'litch/thread/nativeOwner/changed': (live, { owner }) => {
       const view = live.view
@@ -714,6 +762,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
         ...view,
         settings: projectSettings(resumed, presetsOf(view.harness)),
         proposals: await proposalsOf(live.id, options),
+        goal: await goalOf(live.id, view.harness, options),
       }
     } catch (error) {
       // 只有对面明确说“订阅不了”才退回去只取历史；断线、超时照常报错。
@@ -758,6 +807,28 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     }
   }
 
+  /**
+   * 会话的持续目标。harness 不会的不问；问的时候对面说没有这个方法、或者关着这个特性（原生 codex 的配置里
+   * 关了 goals），记成这个 harness 不会。问不到的当没有：目标不是看会话的必需品，之后的通知照样会带来
+   */
+  const goalOf = async (
+    threadId: string,
+    harness: HarnessId,
+    options: RpcRequestOptions,
+  ): Promise<SessionGoalView | null> => {
+    if (!abilities(harness).goals) return null
+    try {
+      const { goal } = await host.request('thread/goal/get', { threadId }, options)
+      return projectGoal(goal)
+    } catch (error) {
+      if (!(error instanceof RpcError) || isHarnessDown(error)) throw error
+      if (lacksMethod(error) || goalsOff(error))
+        markLacking(deviceFault(error)?.harness ?? harness, 'goals')
+      else host.log(`取会话 ${threadId} 的目标失败：${error.message}`)
+      return null
+    }
+  }
+
   const load = (live: Live) => {
     live.loading?.abort()
     const cancel = createCancel()
@@ -783,6 +854,13 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
         }
         const kept = todos.get(live.id)
         if (kept) placeTodos(live.view, kept)
+        // 有目标的会话里对面没说来历的续跑回合（原生 codex），和看着它结束时一样认出来
+        if (live.view.goal && live.view.can.goals) {
+          for (const turn of live.view.turns) {
+            if (turn.status !== 'running' && looksLikeGoalTurn(turn, live.view.items))
+              turn.origin = 'goal'
+          }
+        }
         // 客户端工具的卡片是这边自己的，对面给的会话里没有：还挂着的放回去
         for (const waiting of live.requests.values()) {
           if (waiting.view.kind !== 'clientAsk') continue
@@ -969,6 +1047,22 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       if (!lacksMethod(error)) throw failure(error)
       // 聚合面替它说“不支持”的时候写着是哪个 harness：照它说的记
       markLacking(deviceFault(error)?.harness ?? harness, ability)
+      throw new ChannelError('unsupported', UNSUPPORTED)
+    }
+  }
+
+  /** 持续目标的请求：和 attempt 一样，另外对面关着这个特性（goals feature is disabled）也记成不会 */
+  const attemptGoal = async <T,>(
+    live: Live & { view: SessionView },
+    run: () => Promise<T>,
+  ): Promise<T> => {
+    const { harness } = live.view
+    if (!abilities(harness).goals) throw new ChannelError('unsupported', UNSUPPORTED)
+    try {
+      return await run()
+    } catch (error) {
+      if (!lacksMethod(error) && !goalsOff(error)) throw failure(error)
+      markLacking(deviceFault(error)?.harness ?? harness, 'goals')
       throw new ChannelError('unsupported', UNSUPPORTED)
     }
   }
@@ -1170,11 +1264,18 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       }
     },
 
-    async create(cwd, message, settings, harness, workspaceId) {
+    async create(cwd, message, settings, harness, workspaceId, asGoal = false) {
       if (!host.online()) throw new ChannelError('offline', '设备没有连上')
       let started: Awaited<ReturnType<typeof host.request<'thread/start'>>>
       // 还没有会话对象：它算在谁头上，聚合面上就是指定的那个，单个入口上只有那一个
       const target = harness ?? host.sole()
+      const objective = message.text.trim()
+      if (asGoal) {
+        // 不会持续目标的不去建会话：建出来也设不了目标，只会留一个空会话
+        if (target === null || !abilities(target).goals)
+          throw new ChannelError('unsupported', UNSUPPORTED)
+        if (!objective) throw new ChannelError('rejected', '目标不能是空的')
+      }
       const presets = target === null ? null : presetsOf(target)
       // 这台桌面能执行的客户端工具（都默认带上，用的时候再查开关）。工具只能在建会话时定
       const tools = host.dynamicTools?.(target) ?? null
@@ -1214,7 +1315,16 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       sessions.set(live.id, live)
       host.started(thread)
       try {
-        await startTurn(live, message)
+        if (asGoal) {
+          await attemptGoal(live as Live & { view: SessionView }, () =>
+            host.request(
+              'thread/goal/set',
+              { threadId: live.id, origin: 'user', objective },
+              { timeoutMs: LOAD_TIMEOUT },
+            ),
+          )
+          host.touched(live.id)
+        } else await startTurn(live, message)
       } catch (error) {
         // 第一条消息没发出去：界面会把文字还给用户重新来，这个空会话不留着
         sessions.delete(live.id)
@@ -1323,6 +1433,17 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       const turnId = running ? serverTurn(live, running.id) : null
       if (!turnId) throw new ChannelError('rejected', '没有可以打断的回合')
       host.interrupting?.(sessionId)
+      // 目标在做的时候按停止：先把目标暂停（照官方桌面端和终端界面），不然这一轮停下、空闲了它又接着续跑。
+      // 暂停只等一小会儿，没成也照样打断：停下回合要紧
+      if (live.view.goal?.status === 'active' && abilities(live.view.harness).goals) {
+        await host
+          .request(
+            'thread/goal/set',
+            { threadId: sessionId, origin: 'user', status: 'paused' },
+            { timeoutMs: PAUSE_BEFORE_STOP_MS },
+          )
+          .catch((error: unknown) => host.log(`停止前暂停目标没成：${String(error)}`))
+      }
       try {
         await host.request('turn/interrupt', { threadId: sessionId, turnId })
       } catch (error) {
@@ -1430,6 +1551,44 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
         host.request('thread/compact/start', { threadId: sessionId }, { timeoutMs: LOAD_TIMEOUT }),
       )
       host.touched(live.id)
+    },
+    async setGoal(sessionId, change) {
+      const live = need(sessionId)
+      mustReach(live)
+      if (!live.view.live) throw new ChannelError('rejected', '这个会话是只读的')
+      const objective = change.objective?.trim()
+      if (change.objective !== undefined && !objective)
+        throw new ChannelError('rejected', '目标不能是空的')
+      if (!live.view.goal && !objective)
+        throw new ChannelError('rejected', '还没有目标，要先写目标')
+      await attemptGoal(live, () =>
+        host.request(
+          'thread/goal/set',
+          {
+            threadId: sessionId,
+            origin: 'user',
+            ...(objective ? { objective } : {}),
+            ...(change.status ? { status: change.status } : {}),
+            ...(change.tokenBudget !== undefined ? { tokenBudget: change.tokenBudget } : {}),
+          },
+          { timeoutMs: LOAD_TIMEOUT },
+        ),
+      )
+      host.touched(live.id)
+    },
+    async clearGoal(sessionId) {
+      const live = need(sessionId)
+      mustReach(live)
+      if (!live.view.live) throw new ChannelError('rejected', '这个会话是只读的')
+      await attemptGoal(live, () =>
+        host.request(
+          'thread/goal/clear',
+          { threadId: sessionId, origin: 'user' },
+          { timeoutMs: LOAD_TIMEOUT },
+        ),
+      )
+      // 对面清掉了没有目标可清的会话时不发通知：这边自己收掉
+      if (live.view.goal) emit(live, [{ op: 'session.goal', goal: null }])
     },
   }
   return sessionsApi

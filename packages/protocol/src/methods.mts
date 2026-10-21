@@ -76,6 +76,14 @@ import type {
   ThreadDeleteParams,
   ThreadForkParams,
   ThreadForkResponse,
+  ThreadGoalClearedNotification,
+  ThreadGoalClearParams,
+  ThreadGoalClearResponse,
+  ThreadGoalGetParams,
+  ThreadGoalGetResponse,
+  ThreadGoalSetParams,
+  ThreadGoalSetResponse,
+  ThreadGoalUpdatedNotification,
   ThreadListParams,
   ThreadListResponse,
   ThreadMetadataUpdateParams,
@@ -263,6 +271,11 @@ export interface ClientRequests {
   'thread/unsubscribe': { params: ThreadUnsubscribeParams; result: ThreadUnsubscribeResponse }
   'thread/start': { params: ToHarness<ThreadStartParams>; result: ThreadStartResponse }
   'thread/name/set': { params: ThreadSetNameParams; result: Record<string, never> }
+  // 持续目标（协议原有，harness 声明了 features.goals 才调）。set 是部分更新：省略的字段不变，
+  // tokenBudget 给 null 是去掉预算；用户在界面上点的带 origin: 'user'
+  'thread/goal/set': { params: ThreadGoalSetParams; result: ThreadGoalSetResponse }
+  'thread/goal/get': { params: ThreadGoalGetParams; result: ThreadGoalGetResponse }
+  'thread/goal/clear': { params: ThreadGoalClearParams; result: ThreadGoalClearResponse }
   'thread/archive': { params: ThreadArchiveParams; result: Record<string, never> }
   'thread/delete': { params: ThreadDeleteParams; result: Record<string, never> }
   'thread/unarchive': { params: ThreadUnarchiveParams; result: ThreadUnarchiveResponse }
@@ -600,6 +613,10 @@ export interface ServerNotifications {
   'litch/task/changed': DeviceTaskChangedNotification
   /** 扩展，只发给握手时声明过 deviceTasks 的连接：一次运行开始了、结束了、标成看过了 */
   'litch/task/run/changed': DeviceTaskRunChangedNotification
+  /** 一个会话的持续目标设了、改了（状态、用量）。上游发给每条握手过的连接，不只是订阅者 */
+  'thread/goal/updated': ThreadGoalUpdatedNotification
+  /** 一个会话的持续目标清掉了。同上，发给每条握手过的连接 */
+  'thread/goal/cleared': ThreadGoalClearedNotification
   // 以下只有订阅了会话（thread/resume、thread/start）的连接才收得到
   'turn/started': TurnStartedNotification
   'turn/completed': TurnCompletedNotification

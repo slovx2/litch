@@ -2513,11 +2513,16 @@ export class CodexClaudeAppServer {
         return
       }
       // 始终复用真实提交、SDK 会话和审批链路；不注入预制助手历史。
-      void this.turnStart(peer, {
-        threadId,
-        input: [{ type: 'text', text: '继续执行当前持续目标；完成后使用目标工具确认完成。' }],
-        clientUserMessageId: 'goal:' + generation + ':' + newId(),
-      }).catch((error) => {
+      void this.turnStart(
+        peer,
+        {
+          threadId,
+          input: [{ type: 'text', text: '继续执行当前持续目标；完成后使用目标工具确认完成。' }],
+          clientUserMessageId: 'goal:' + generation + ':' + newId(),
+        },
+        undefined,
+        'goal',
+      ).catch((error) => {
         if (this.stopped) return
         this.goalUpdated(threadId, this.goals.patch(threadId, { status: 'blocked' }))
         this.notifyThread(threadId, {
@@ -3554,6 +3559,8 @@ export class CodexClaudeAppServer {
     peer: RpcPeer,
     params: Record<string, unknown>,
     queuedId?: string,
+    /** 不是用户发起的回合记下来历（backgroundTasks 扩展的 litchOrigin）：持续目标的续跑回合是 goal */
+    origin?: LitchTurnOrigin,
   ): Promise<unknown> {
     const threadId = requiredString(params.threadId, 'threadId')
     const thread = this.store.getThread(threadId)
@@ -3675,6 +3682,8 @@ export class CodexClaudeAppServer {
       error: null,
     }
     this.store.saveSubmission(turn, messageId, hash, queuedId)
+    // 在宣布回合开始之前记：turn/started 上就带着来历
+    if (origin) this.store.saveTurnOrigin(turnId, origin)
     this.subscribers.add(threadId, peer)
     if (params.outputSchema == null) this.goals.begin(threadId, turnId)
     recordRunEvent('turn.started', {

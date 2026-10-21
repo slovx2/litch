@@ -100,6 +100,12 @@ export interface HarnessFeatures {
    * 后加的位，没报就是不报；客户端这时退回从“已结束回合里仍 inProgress 的命令条目”派生
    */
   backgroundTasks?: boolean
+  /**
+   * 持续目标：协议原有的 `thread/goal/set`、`thread/goal/get`、`thread/goal/clear` 和
+   * `thread/goal/updated`、`thread/goal/cleared` 照上游的语义做得到（目标一直有效、空闲时自动续跑、
+   * 模型用目标工具报完成或受阻、用量和预算）。后加的位，没报就是不会：客户端不出目标的入口
+   */
+  goals?: boolean
 }
 
 export type PermissionRisk = 'low' | 'medium' | 'high'
