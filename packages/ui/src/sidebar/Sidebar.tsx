@@ -75,6 +75,7 @@ import { SidebarFrame } from './SidebarFrame.tsx'
 import { SidebarMore } from './SidebarMore.tsx'
 import {
   setSidebarBands,
+  setSidebarHarnesses,
   useSidebarBands,
   useSidebarHarnesses,
   useSidebarNativeChildren,
@@ -771,6 +772,27 @@ function DeviceGroup(props: GroupProps) {
   /** 一组里现在要画的会话：别的应用派出来的藏掉，只看某几个 harness 的时候再筛一遍 */
   const shown = (groupId: string) =>
     keepSessions(dropNativeChildren(groups[groupId], hidden, always), filter, harnessOf, unfiltered)
+  /** 一组里被 harness 筛选筛掉的会话有几个（藏起来的派出会话不算） */
+  const filteredOut = (groupId: string) =>
+    filter.length === 0
+      ? 0
+      : dropNativeChildren(groups[groupId], hidden, always).length - shown(groupId).length
+  /**
+   * 一组里的会话全被筛掉了：写一句有几个被筛掉，带“关闭筛选”。
+   * 不写的话这一组看着是空的，可里面其实有会话
+   */
+  const filteredNote = (groupId: string) => {
+    const count = shown(groupId).length === 0 ? filteredOut(groupId) : 0
+    if (count === 0) return null
+    return (
+      <div className="filter-hid">
+        <span className="filter-hid-text">{t('sidebar.filter.hid', { count })}</span>
+        <button type="button" className="filter-off" onClick={() => setSidebarHarnesses([])}>
+          {t('sidebar.filter.off')}
+        </button>
+      </div>
+    )
+  }
 
   /**
    * 挂到父会话下面去画的子会话：父会话这时也画在侧栏里（没被筛掉）的那些。
@@ -1104,14 +1126,12 @@ function DeviceGroup(props: GroupProps) {
   }
 
   /**
-   * 只看某几个 harness 的时候，里面一个它们的会话都没有的工作区整块不出：留着一串空的工作区只是添乱。
-   * 藏着别的应用派出来的会话时，里面只有这些会话的工作区也一样
+   * 藏着别的应用派出来的会话时，里面只有这些会话的工作区整块不出。
+   * harness 筛选不藏工作区：藏了就没法在空项目里新建会话、整理它；里面的会话全被筛掉时写一句（filteredNote）
    */
-  const showsWorkspace = (workspace: WorkspaceView) => {
-    if (filter.length > 0) return shown(workspace.id).length > 0
-    // 里面只有藏起来的派出来的会话：同理整块不出。本来就空的工作区照常出
-    return (groups[workspace.id]?.length ?? 0) === 0 || shown(workspace.id).length > 0
-  }
+  const showsWorkspace = (workspace: WorkspaceView) =>
+    (groups[workspace.id]?.length ?? 0) === 0 ||
+    dropNativeChildren(groups[workspace.id], hidden, always).length > 0
   /**
    * 一个工作区：那一行和它下面的会话。它总在某一组（band）里，siblings 是这一组里画出来的工作区：
    * 拖着会话停在上面是回到自己的项目（那一行高亮）；拖着工作区停在上面是插到它前面或者后面（画一条线）
@@ -1150,7 +1170,12 @@ function DeviceGroup(props: GroupProps) {
           menu={workspaceMenu(workspace)}
           drop={into(name)}
         />
-        {expanded ? rows(shown(workspace.id), workspace.id) : null}
+        {expanded ? (
+          <>
+            {rows(shown(workspace.id), workspace.id)}
+            {filteredNote(workspace.id)}
+          </>
+        ) : null}
       </div>
     )
   }
@@ -1231,6 +1256,8 @@ function DeviceGroup(props: GroupProps) {
   ) => {
     const list = shown(key)
     if (list.length === 0 && inside.length === 0) {
+      const note = filteredNote(key)
+      if (note) return note
       return (
         <div className="band-empty" data-drop={into(key) ? 'into' : undefined}>
           {empty}
@@ -1241,6 +1268,7 @@ function DeviceGroup(props: GroupProps) {
     return (
       <>
         {rows(list, key, first)}
+        {filteredNote(key)}
         {inside.map((workspace) => workspaceBlock(workspace, band, siblings))}
       </>
     )
@@ -1310,11 +1338,11 @@ function DeviceGroup(props: GroupProps) {
   const everything = () => {
     const pinnedShown =
       shown(PINNED).length > 0 ||
+      filteredOut(PINNED) > 0 ||
       pinnedWorkspaces.length > 0 ||
       (draggingHere && filter.length === 0)
     // “项目”能整理的设备上一直在（空的时候也在，好用行尾的加号添加）；整理不了的设备上有项目才出
-    const projectsShown =
-      plainWorkspaces.length > 0 || (device.organizable === true && filter.length === 0)
+    const projectsShown = plainWorkspaces.length > 0 || device.organizable === true
     const addProject = device.organizable ? (
       <button
         type="button"
@@ -1345,8 +1373,6 @@ function DeviceGroup(props: GroupProps) {
       const entry = sections.find((section) => groupOfSection(section.id) === key)
       if (!entry) return []
       const inside = sectionWorkspaces(entry.id)
-      // 只看某几个 harness 的时候，里面没有它们的东西的组不出
-      if (filter.length > 0 && shown(key).length === 0 && inside.length === 0) return []
       return [
         band(
           key,
@@ -1371,7 +1397,7 @@ function DeviceGroup(props: GroupProps) {
             )
           : null}
         {bands}
-        {shown(LOOSE).length > 0 ? (
+        {shown(LOOSE).length > 0 || filteredOut(LOOSE) > 0 ? (
           <div
             data-group={LOOSE}
             className="drop-zone"
@@ -1385,6 +1411,7 @@ function DeviceGroup(props: GroupProps) {
               {add(null)}
             </div>
             {rows(shown(LOOSE), LOOSE)}
+            {filteredNote(LOOSE)}
           </div>
         ) : null}
       </>
@@ -1420,7 +1447,12 @@ function DeviceGroup(props: GroupProps) {
         </div>
       )
     }
-    return <div data-group={key}>{rows(shown(key), key, FOCUS_ROWS)}</div>
+    return (
+      <div data-group={key}>
+        {rows(shown(key), key, FOCUS_ROWS)}
+        {filteredNote(key)}
+      </div>
+    )
   }
   /** 单独查看时顶上那一行写的名字 */
   const focusTitle = (key: string): string =>

@@ -106,7 +106,7 @@ export function judgeFilter(seen: FilterSeen, kept: FilterKept, session: string)
     `只看 Pi 的时候没连着的 gpu-box 下面的会话不对：${titlesOf(seen.after.gpu).join('、')}`,
   )
 
-  // ---- 各组：置顶、分区、“项目”、无项目跟着筛；筛空了的项目整行不出 ----
+  // ---- 各组：筛选不藏项目和组（藏了就没法在空项目里新建、整理）；会话全被筛掉的写一句，带“关闭筛选” ----
   // 没有项目的那一组的键是空的；内置的“项目”组是 :projects，项目都在它里面
   must(
     JSON.stringify(seen.groupsBefore.local) ===
@@ -116,17 +116,28 @@ export function judgeFilter(seen: FilterSeen, kept: FilterKept, session: string)
     `没筛的时候各组不对：${JSON.stringify(seen.groupsBefore)}`,
   )
   must(
-    seen.groupsAfter.local?.join() === ':pinned,:projects,litch,docs',
-    `只看 Pi 的时候本机下面的组不对（分区、无项目里没有 Pi 的，不该出）：${seen.groupsAfter.local?.join()}`,
+    JSON.stringify(seen.groupsAfter) === JSON.stringify(seen.groupsBefore),
+    `只看 Pi 的时候项目、组少了（筛选不该藏它们）：${JSON.stringify(seen.groupsAfter)}`,
+  )
+  const hidAt = (deviceId: string) => (seen.hid[deviceId] ?? []).map((note) => note.split('｜'))
+  const noteOk = (note: string[]) =>
+    /^有 [1-9]\d* 个对话被筛选过滤$/.test(note[1] ?? '') && note[2] === '关闭筛选'
+  must(
+    hidAt('build').some((note) => note[0] === 'infra' && noteOk(note)) &&
+      hidAt('nas').some((note) => note[0] === 'bk' && noteOk(note)),
+    `只看 Pi 的时候没有 Pi 会话的项目（infra、bk）里该写“有几个对话被筛选过滤”加“关闭筛选”：${JSON.stringify(seen.hid)}`,
   )
   must(
-    seen.groupsAfter.build?.join() === ':projects,litch2',
-    `只看 Pi 的时候 build-01 上没有 Pi 会话的项目（infra）还在：${seen.groupsAfter.build?.join()}`,
+    Object.values(seen.hid)
+      .flat()
+      .every((note) => !['litch', 'docs', 'litch2'].includes(note.split('｜')[0] ?? '')),
+    `还留着 Pi 会话的项目里不该写被筛掉几个：${JSON.stringify(seen.hid)}`,
   )
   must(
-    seen.groupsAfter.nas?.length === 0 && seen.none.nas?.join() === '没有符合筛选的会话',
-    `只看 Pi 的时候 nas 下面该只剩一句“没有符合筛选的会话”：${seen.groupsAfter.nas?.join()}｜${seen.none.nas?.join()}`,
+    seen.none.nas?.join() === '没有符合筛选的会话',
+    `只看 Pi 的时候 nas 下面该写“没有符合筛选的会话”：${seen.none.nas?.join()}`,
   )
+  must(seen.offClicked, '点项目里那一句的“关闭筛选”，筛选没有取消')
   must(
     ['local', 'build', 'gpu'].every((deviceId) => seen.none[deviceId]?.length === 0),
     `还有会话的设备下面不该写“没有符合筛选的会话”：${JSON.stringify(seen.none)}`,

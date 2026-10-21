@@ -74,6 +74,9 @@ export const en: Record<MessageKey, Entry> = {
   'sidebar.filter.join': ', ',
   'sidebar.filter.clear': 'Clear the filter and show all',
   'sidebar.filter.none': 'No sessions match the filter',
+  'sidebar.filter.hid': ({ count }) =>
+    `${count} ${Number(count) === 1 ? 'conversation is' : 'conversations are'} hidden by the filter`,
+  'sidebar.filter.off': 'Turn off filter',
   'sidebar.more': 'More',
   'sidebar.more.showActive': 'Always show active conversations',
   'sidebar.more.showActive.note':

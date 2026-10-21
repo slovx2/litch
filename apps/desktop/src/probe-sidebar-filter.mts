@@ -25,6 +25,10 @@ export interface FilterSeen {
   groupsAfter: PerDevice
   /** 筛了之后一个会话都不剩的设备上写的那一句（没有就是空的） */
   none: PerDevice
+  /** 会话全被筛掉的项目、组里那一句：所在组｜字｜带不带“关闭筛选” */
+  hid: PerDevice
+  /** 再只看 Pi，点 nas 上那一句的“关闭筛选”：筛选没了 */
+  offClicked: boolean
   /** 本机的 docs-site：筛之前有“展示更多”，筛之后没有了（剩下的不到一屏） */
   moreBefore: boolean
   moreAfter: boolean
@@ -125,6 +129,15 @@ export async function filterSeen(session: string): Promise<FilterSeen> {
   const after = rows()
   const groupsAfter = groups()
   const none = each((deviceId) => all('.dev-none', kit.device(deviceId)).map(text))
+  const hid = each((deviceId) =>
+    all('.filter-hid', kit.device(deviceId)).map((note) =>
+      [
+        note.closest<HTMLElement>('[data-group]')?.dataset.group ?? '?',
+        text(one('.filter-hid-text', note)),
+        one('.filter-off', note) ? '关闭筛选' : '',
+      ].join('｜'),
+    ),
+  )
   const moreAfter = more()
   const said = `${text(one('.chip', shownLine))}｜${text(one('.ell', shownLine))}`
   const entryOn = entry()?.classList.contains('on') ?? false
@@ -178,6 +191,25 @@ export async function filterSeen(session: string): Promise<FilterSeen> {
   const cleared = await kit.seen(() => !line() && !entry()?.classList.contains('on'), 3000)
   await until('树回到没筛的样子', () => kit.row('把运行时与 SSH 入口的启动拆开'), 5000)
   await kit.frame()
+  const restored = rows()
+  const savedAfter = saved()
+
+  // ---- 八、再只看 Pi，点项目里那一句的“关闭筛选” ----
+  pop = await openChoices()
+  one<HTMLButtonElement>('[data-harness="pi"]', pop)?.click()
+  await until('又只看 Pi', () => line()?.dataset.harness === 'pi', 5000)
+  kit.press(document.activeElement ?? pop, 'Escape')
+  await kit.seen(() => !one('.sb-filter .pick-pop'), 3000)
+  ;(
+    await until(
+      'nas 上那一句',
+      () => one<HTMLButtonElement>('.filter-off', kit.device('nas')),
+      5000,
+    )
+  ).click()
+  const offClicked =
+    (await kit.seen(() => !line() && !one('.filter-hid'), 3000)) && saved() === null
+  await kit.frame()
 
   return {
     entry: hasEntry,
@@ -191,6 +223,8 @@ export async function filterSeen(session: string): Promise<FilterSeen> {
     groupsBefore,
     groupsAfter,
     none,
+    hid,
+    offClicked,
     moreBefore,
     moreAfter,
     stayed,
@@ -204,8 +238,8 @@ export async function filterSeen(session: string): Promise<FilterSeen> {
     twoSaved,
     twoRows,
     cleared,
-    restored: rows(),
-    savedAfter: saved(),
+    restored,
+    savedAfter,
   }
 }
 

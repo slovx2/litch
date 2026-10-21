@@ -206,6 +206,32 @@
   font-size: 12px;
   color: var(--ink-3);
 }
+/* 一个项目、一组里的会话全被筛掉了：一句有几个，后面“关闭筛选” */
+.filter-hid {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 1px 4px 4px 16px;
+  padding: 3px 8px;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--ink-3);
+}
+.filter-hid-text {
+  min-width: 0;
+}
+.filter-off {
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--accent);
+  cursor: pointer;
+}
+.filter-off:hover {
+  text-decoration: underline;
+}
 /* 侧栏里的入口：最上面的“新对话”，底部的“设备”“已归档对话”“设置” */
 .sb-link {
   display: flex;

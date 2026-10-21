@@ -78,6 +78,8 @@ export const zhCN = {
   'sidebar.filter.join': '、',
   'sidebar.filter.clear': '取消筛选，看全部',
   'sidebar.filter.none': '没有符合筛选的会话',
+  'sidebar.filter.hid': '有 {count} 个对话被筛选过滤',
+  'sidebar.filter.off': '关闭筛选',
   'sidebar.more': '更多',
   'sidebar.more.showActive': '永远显示活动对话',
   'sidebar.more.showActive.note': '只看某几个 harness 时，进行中、未读、待处理的对话照样列出',
