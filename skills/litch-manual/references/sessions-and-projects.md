@@ -24,7 +24,8 @@ Sessions are not created or edited through `litch config`. What the user can do 
 explain it:
 
 - **Start**: New session (Mod+N) → pick device, project, harness, model, reasoning effort, permissions
-  (Read only / In project / Full access, or the harness's own presets) and optionally Plan → send the
+  (Read only / In project / Full access, or the harness's own presets) and optionally turn on the
+  Plan mode switch → send the
   first message. `scripts/litch open new` brings the user to this page.
 - **While a turn runs**: messages sent are queued; "Say it now" steers the running turn; Stop
   interrupts it.

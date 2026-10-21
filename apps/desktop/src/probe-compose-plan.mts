@@ -10,6 +10,11 @@ export interface PlanProbe {
   offered: boolean
   /** 点一下开、/plan 关、再 /plan 又开：三次之后开关各是什么样 */
   toggled: boolean[]
+  /**
+   * 开关画得像开关：元素是 role=switch；关着和开着时拨块离轨道左边多远、轨道是什么底色。
+   * 开着时拨块要往右挪、轨道换了颜色，关着时一眼看得出没开
+   */
+  look: { role: string; off: { knob: number; track: string }; on: { knob: number; track: string } }
   /** 单子上有 /plan */
   listed: boolean
   /** 开着计划模式发消息：对话里出了计划卡片 */
@@ -83,7 +88,7 @@ export async function planProbe(real: boolean): Promise<PlanProbe> {
   const press = (target: EventTarget, key: string) =>
     target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }))
   const button = () => one<HTMLButtonElement>('.dock .mode-btn[data-kind="plan"]')
-  const on = () => button()?.getAttribute('aria-pressed') === 'true'
+  const on = () => button()?.getAttribute('aria-checked') === 'true'
   const ask = () => one('.plan-ask')
   const act = (name: string) => one<HTMLButtonElement>(`.plan-ask [data-act="${name}"]`)
   const plans = () => all('.turn').at(-1)?.querySelectorAll('.plan').length ?? 0
@@ -164,8 +169,25 @@ export async function planProbe(real: boolean): Promise<PlanProbe> {
     await until('开关换过来', () => on() === wanted, 5000).catch(() => null)
     return on()
   }
+  /** 拨块离轨道左边多远、轨道的底色 */
+  const knob = () => {
+    const track = button()?.querySelector('.mode-sw')
+    const dot = track?.querySelector('i')
+    if (!track || !dot) return { knob: -1, track: '' }
+    return {
+      knob: Math.round(dot.getBoundingClientRect().left - track.getBoundingClientRect().left),
+      track: getComputedStyle(track).backgroundColor,
+    }
+  }
+  // 拨块挪动有一点过渡，等它停下来再量
+  const still = async () => {
+    await sleep(300)
+    return knob()
+  }
+  const offLook = await still()
   button()?.click()
   const toggled = [await settle(true)]
+  const look = { role: button()?.getAttribute('role') ?? '', off: offLook, on: await still() }
   write(input, '/')
   await until('单子', () => one('.dock .sug-opt[data-kind="command"]'), 5000)
   const listed = all('.dock .sug-opt[data-kind="command"] b').some((b) => text(b) === '/plan')
@@ -317,7 +339,7 @@ export async function planProbe(real: boolean): Promise<PlanProbe> {
         appearance.set({ skin, theme })
         await sleep(200)
         const numbers = [
-          readable('.dock .mode-btn[aria-pressed="true"] span'),
+          readable('.dock .mode-btn[aria-checked="true"] .mode-name'),
           readable('.plan-ask-text b'),
           readable('.plan-ask-text span'),
         ]
@@ -424,6 +446,7 @@ export async function planProbe(real: boolean): Promise<PlanProbe> {
   return {
     offered,
     toggled,
+    look,
     listed,
     planned,
     asked,
@@ -449,6 +472,12 @@ export function judgePlan(probe: PlanProbe, real: boolean): string[] {
   check(
     probe.toggled.join() === 'true,false,true',
     `点一下、/plan、再 /plan 之后开关该是开、关、开，实际是 ${probe.toggled.join()}`,
+  )
+  check(
+    probe.look.role === 'switch' &&
+      probe.look.on.knob > probe.look.off.knob &&
+      probe.look.on.track !== probe.look.off.track,
+    `计划模式的开关关着和开着该看得出来（role=switch，开着时拨块往右、轨道换色），实际是 ${JSON.stringify(probe.look)}`,
   )
   check(probe.listed, '单子上没有 /plan')
   check(probe.planned, '开着计划模式发消息，对话里没有出计划')

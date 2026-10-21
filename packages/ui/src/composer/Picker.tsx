@@ -7,7 +7,10 @@ import { matchOptions, SEARCH_FROM } from './picker-search.ts'
 export interface PickerOption {
   id: string
   title: string
+  /** 标题下面的一行小字。只放“为什么选不了”、主机名、路径这类分辨用的，不放解释这一项是什么的 */
   note?: string
+  /** 解释这一项是什么的话：不占地方，鼠标停在上面才出来 */
+  hint?: string
   /** 标题前面的小记号（设备的线色、工作区挑过的颜色）。按钮上和选项里都带着 */
   lead?: ReactNode
   /** 现在选不了：列在那里让人看得到，旁边的说明里写着为什么 */
@@ -141,6 +144,7 @@ export function Picker({ kind, label, value, options, onPick, search }: PickerPr
                   aria-disabled={option.disabled ? 'true' : undefined}
                   data-option={option.id}
                   data-action={option.action ? '' : undefined}
+                  title={option.hint}
                   onClick={() => pick(option)}
                 >
                   <b>

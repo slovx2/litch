@@ -34,7 +34,7 @@ export async function enginesPlan(words: string, choice: string): Promise<PlanSe
   const kit = (window as unknown as { __enginesKit: EnginesKit }).__enginesKit
   const { one, all, text, until, frame, sleep } = files
   const button = () => one<HTMLButtonElement>('.dock .mode-btn[data-kind="plan"]')
-  const pressed = () => button()?.getAttribute('aria-pressed') === 'true'
+  const pressed = () => button()?.getAttribute('aria-checked') === 'true'
   const ask = () => one('.plan-ask')
 
   await kit.idle()

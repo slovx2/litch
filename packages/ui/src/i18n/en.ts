@@ -1348,8 +1348,9 @@ export const en: Record<MessageKey, Entry> = {
   'skill.scope.system': 'Built in',
   'skill.scope.admin': 'Set by an admin',
 
-  'composer.plan': 'Plan',
-  'composer.plan.off': 'Plan mode: write a plan first and act only after you agree',
+  'composer.plan': 'Plan mode',
+  'composer.plan.off':
+    'Plan mode is off. Turn it on to get a plan first and act only after you agree',
   'composer.plan.on':
     'Plan mode is on: the next message gets a plan first. Click again to turn it off',
   'slash.plan': 'Turn plan mode on: plan first, act after you agree',
