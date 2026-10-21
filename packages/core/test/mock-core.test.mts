@@ -15,6 +15,7 @@ import {
   type SidebarOp,
   type SidebarView,
   serveChannel,
+  workingShown,
 } from '../src/index.mjs'
 import { chunkText, FLOOD_COMMAND } from '../src/mock/mock-core.mjs'
 import { STREAM_SESSION, streamText } from '../src/mock/sample-data.mjs'
@@ -513,4 +514,56 @@ test('“工具大结果”：两次结果很大的工具调用，到界面这�
     { kind: 'blob', type: 'image', mime: 'image/png', bytes: 1536 * 1024, name: null },
     { kind: 'text', text: DUMP_END },
   ])
+})
+
+test('“想一会儿”：回合开头、两段输出之间各空等一会儿，这时末尾那一行该出；出字时不出', async () => {
+  const { channel, time } = setup(20)
+  let view: SessionView | null = null
+  channel.subscribe(
+    { kind: 'session', deviceId: 'local', sessionId: 's3' },
+    {
+      snapshot: (data) => {
+        view = structuredClone(data)
+      },
+      delta(ops: SessionOp[]) {
+        for (const op of ops) if (view) reduceSession(view, structuredClone(op))
+      },
+    },
+  )
+  await settle()
+  const shown = () => {
+    const current = view as SessionView | null
+    const turn = current?.turns.at(-1)
+    if (!current || !turn) return null
+    return workingShown(
+      turn.status === 'running',
+      turn.itemIds.map((id) => current.items[id]),
+      current.requests.length,
+    )
+  }
+  const kinds = () => {
+    const current = view as SessionView | null
+    return current?.turns.at(-1)?.itemIds.map((id) => current.items[id]?.kind)
+  }
+  await channel.command('session.send', { deviceId: 'local', sessionId: 's3', text: '想一会儿' })
+  time.advance(16)
+  await settle()
+  assert.deepEqual(kinds(), ['userMessage'])
+  assert.equal(shown(), true, '等第一个字')
+  time.advance(2400)
+  await settle()
+  assert.deepEqual(kinds(), ['userMessage', 'agentMessage'])
+  assert.equal(shown(), true, '说明写完了，下一段还没来')
+  time.advance(2400 + 40)
+  await settle()
+  assert.equal(shown(), false, '回答正在出字')
+  for (
+    let i = 0;
+    i < 400 && (view as SessionView | null)?.turns.at(-1)?.status === 'running';
+    i++
+  ) {
+    time.advance(20)
+    await settle()
+  }
+  assert.equal(shown(), false, '回合结束')
 })

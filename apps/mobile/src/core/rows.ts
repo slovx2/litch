@@ -2,7 +2,7 @@
 // - 行的标识只由回合、条目、块号决定，流式和定稿之间不变；内容没变的行原样复用同一个对象，单元格不重画。
 // - 过程（命令、工具调用、改文件、搜索、说明）连成一组，收起时是一行高度固定的摘要；展开时每一步各是一行，
 //   排在摘要的上面（倒置列表里往上长，被点的摘要原地不动）。展开收起只由用户点，回合结束时不自动收起。
-// - 每个回合末尾一行状态，从回合开始到结束一直在，只换字不换高度。
+// - 每个回合末尾一行状态，从回合开始到结束一直在，只换字不换高度。回合在跑时只在空档里写“运行中”（workingShown）。
 // - 行里放条目对象本身（单元格从它取要画的东西），再加上条目里会被原地改掉的那几项（核心对文字、状态是原地改的，
 //   对 item.add 是整个换掉）：这样逐项比一遍（sameRow）就知道内容变没变。
 import type {
@@ -21,6 +21,7 @@ import type {
   UserAttachment,
   WebSearchItem,
 } from '@litch/core'
+import { workingShown } from '@litch/core'
 import { cardsOf, eventKind, handOffOf, isOfferCall } from '../detail/proposals/logic'
 import { type ChunkState, chunkText, emptyChunks } from './blocks'
 
@@ -129,6 +130,8 @@ export type Row =
       turnId: string
       status: TurnView['status']
       durationMs: number | null
+      /** 回合在跑、而且正处在空档里（核心的 workingShown）：这时才写“运行中”，别的时候留空 */
+      working: boolean
     }
 
 interface ItemCache {
@@ -299,6 +302,13 @@ export class RowBuilder {
         turnId: turn.id,
         status: turn.status,
         durationMs: turn.durationMs,
+        working:
+          running &&
+          workingShown(
+            running,
+            turn.itemIds.map((id) => view.items[id]),
+            view.requests.length,
+          ),
       }),
     )
     return out

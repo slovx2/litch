@@ -83,6 +83,7 @@ const user = (id, text, event) => ({
 const viewOf = (itemIds, items, proposals = []) => ({
   forkedFrom: null,
   proposals,
+  requests: [],
   turns: [{ id: 't', status: 'completed', itemIds, startedAt: null, durationMs: 10, error: null }],
   items: Object.fromEntries(items.map((item) => [item.id, item])),
 })
