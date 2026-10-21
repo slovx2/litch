@@ -23,8 +23,12 @@ async function modelCalls(llm: MockLLM, expected: number): Promise<void> {
   assert.equal(llm.requests.length, expected)
 }
 
+// 另开连接读适配器的库：库是回滚日志模式，node:sqlite 默认不等锁，撞上适配器提交就报 database is locked，所以等锁
 async function saveGoalEvidence(home: string): Promise<void> {
-  const db = new DatabaseSync(join(home, 'adapter', 'state.sqlite'), { readOnly: true })
+  const db = new DatabaseSync(join(home, 'adapter', 'state.sqlite'), {
+    readOnly: true,
+    timeout: 5_000,
+  })
   try {
     await saveArtifact('goal-ledger', {
       goals: db.prepare('SELECT thread_id,goal_json FROM thread_goals').all(),
@@ -210,7 +214,7 @@ test('GOAL-002：真实 Bash 副作用后崩溃，目标恢复必须阻塞且不
   const llm = new MockLLM()
   const url = await llm.start()
   let client = await ProtocolClient.start(home, url)
-  const db = new DatabaseSync(join(home, 'adapter', 'state.sqlite'))
+  const db = new DatabaseSync(join(home, 'adapter', 'state.sqlite'), { timeout: 5_000 })
   try {
     const target = join(home, 'effect-count.txt')
     const quote = (value: string) => "'" + value.replaceAll("'", "'\"'\"'") + "'"
@@ -337,7 +341,10 @@ test('GOAL-002：用户中断后重启只在 resume 续跑，active 分叉独立
     )
     await client.request('thread/archive', { threadId: thread.id })
     release.shift()?.()
-    const archived = new DatabaseSync(join(home, 'adapter', 'state.sqlite'), { readOnly: true })
+    const archived = new DatabaseSync(join(home, 'adapter', 'state.sqlite'), {
+      readOnly: true,
+      timeout: 5_000,
+    })
     try {
       assert.equal(
         archived.prepare('SELECT status FROM turns WHERE id=?').get(third)?.status,
@@ -397,7 +404,10 @@ test('GOAL-002：工作流列表本地完成必须清理目标账本，随后激
     })
     assert.equal((await client.completed(turn.id)).status, 'completed')
     assert.equal(llm.requests.length, 0, '工作流列表不能伪造模型调用')
-    const db = new DatabaseSync(join(home, 'adapter', 'state.sqlite'), { readOnly: true })
+    const db = new DatabaseSync(join(home, 'adapter', 'state.sqlite'), {
+      readOnly: true,
+      timeout: 5_000,
+    })
     try {
       const row = db
         .prepare('SELECT ledger_json FROM goal_ledgers WHERE thread_id=?')

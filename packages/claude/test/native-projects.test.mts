@@ -307,7 +307,7 @@ test('PROJECT-003：SQLite 归属写入失败回滚完整导入，重试持久�
     const threads: string[] = []
     for (let index = 0; index < 2; index++)
       threads.push((await client.request('thread/start', { cwd: home })).thread.id)
-    const db = new DatabaseSync(join(home, 'adapter', 'state.sqlite'))
+    const db = new DatabaseSync(join(home, 'adapter', 'state.sqlite'), { timeout: 5_000 })
     try {
       db.exec(`CREATE TRIGGER reject_second_member BEFORE INSERT ON project_threads
         WHEN (SELECT count(*) FROM project_threads)>0 BEGIN SELECT RAISE(ABORT, 'project write fault'); END`)

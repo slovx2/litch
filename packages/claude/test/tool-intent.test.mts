@@ -755,7 +755,7 @@ test('INTENT-003：真的 CLI 里接连调工具（含并行的两次、前台�
     })
     assert.equal((await client.completed(next.turn.id)).status, 'completed')
     assert.ok(!JSON.stringify(model.requests.at(-1)).includes(LOST_NOTICE))
-    const db = new DatabaseSync(join(home, 'adapter', 'state.sqlite'))
+    const db = new DatabaseSync(join(home, 'adapter', 'state.sqlite'), { timeout: 5_000 })
     try {
       // 第二回合自己的调用要到回合结束后核对，这里只看第一回合的
       const left = db
@@ -823,7 +823,7 @@ for (const mode of ['cli', 'adapter'] as const)
         .map((name) => readFileSync(join(home, 'claude', 'projects', String(name)), 'utf8'))
         .join('')
       assert.ok(!recorded.includes(callId), '这次调用不该已经进了会话记录')
-      const db = new DatabaseSync(join(home, 'adapter', 'state.sqlite'))
+      const db = new DatabaseSync(join(home, 'adapter', 'state.sqlite'), { timeout: 5_000 })
       try {
         const row = db
           .prepare(
@@ -867,7 +867,7 @@ for (const mode of ['cli', 'adapter'] as const)
       assert.ok(seen.includes('LOST_SECOND'))
       assert.equal(await readFile(target, 'utf8'), 'X', '不能重放')
       // 说过一次就删掉，再下一回合不再说
-      const after = new DatabaseSync(join(home, 'adapter', 'state.sqlite'))
+      const after = new DatabaseSync(join(home, 'adapter', 'state.sqlite'), { timeout: 5_000 })
       try {
         assert.deepEqual(
           after.prepare('SELECT call_id FROM native_tool_intents WHERE call_id=?').all(callId),

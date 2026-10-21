@@ -23,7 +23,7 @@ for (const historyMode of ['paginated', 'legacy']) {
     const model = new MockLLM()
     const url = await model.start()
     let client = await ProtocolClient.start(home, url)
-    const db = new DatabaseSync(join(home, 'adapter', 'state.sqlite'))
+    const db = new DatabaseSync(join(home, 'adapter', 'state.sqlite'), { timeout: 5_000 })
     const entered = signal()
     const release = signal()
     const file = join(home, 'retained-file.txt')

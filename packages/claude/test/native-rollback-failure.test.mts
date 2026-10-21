@@ -12,7 +12,7 @@ test('CONTEXT-003：真实回退事务失败不能分离原生上下文和展示
   const model = new MockLLM()
   const url = await model.start()
   let client = await ProtocolClient.start(home, url)
-  const db = new DatabaseSync(join(home, 'adapter', 'state.sqlite'))
+  const db = new DatabaseSync(join(home, 'adapter', 'state.sqlite'), { timeout: 5_000 })
   try {
     const { thread } = await client.request('thread/start', { cwd: home })
     const start = async (text: string) => {

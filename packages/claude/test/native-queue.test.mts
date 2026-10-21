@@ -14,7 +14,7 @@ test('QUEUE-008：原生队列持久顺序、编辑删除、事务失败、重�
   const model = new MockLLM()
   const url = await model.start()
   let client = await ProtocolClient.start(home, url)
-  const db = new DatabaseSync(join(home, 'adapter', 'state.sqlite'))
+  const db = new DatabaseSync(join(home, 'adapter', 'state.sqlite'), { timeout: 5_000 })
   const file = join(home, 'queue-effects.txt')
   try {
     const { thread } = await client.request('thread/start', {

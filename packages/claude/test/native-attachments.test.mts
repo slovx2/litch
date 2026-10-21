@@ -218,7 +218,10 @@ test('ATTACHMENT-002：真实回合附件幂等、分页隔离、通知及删除
     await client.request('thread/delete', { threadId: otherId })
     await client.raw('thread/attachment/list', { threadId: otherId }, -32602)
     await client.close()
-    const db = new DatabaseSync(join(home, 'adapter', 'state.sqlite'), { readOnly: true })
+    const db = new DatabaseSync(join(home, 'adapter', 'state.sqlite'), {
+      readOnly: true,
+      timeout: 5_000,
+    })
     try {
       assert.equal(db.prepare('SELECT count(*) AS total FROM thread_attachments').get()?.total, 0)
     } finally {

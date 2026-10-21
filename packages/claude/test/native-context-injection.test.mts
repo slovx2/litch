@@ -54,7 +54,10 @@ test('CONTEXT-009：图片精度偏好不阻断正文和图片追加，重启后
   const model = new MockLLM()
   const endpoint = await model.start()
   let client = await ProtocolClient.start(home, endpoint)
-  const db = new DatabaseSync(join(home, 'adapter', 'state.sqlite'), { readOnly: true })
+  const db = new DatabaseSync(join(home, 'adapter', 'state.sqlite'), {
+    readOnly: true,
+    timeout: 5_000,
+  })
   try {
     const { thread } = await client.request('thread/start', { cwd: home, sandbox: 'read-only' })
     const items = ['auto', 'low', 'high', 'original'].map((detail) => ({
@@ -142,7 +145,10 @@ test('CONTEXT-004：真实原生追加零模型调用，文图重启入模，分
   const model = new MockLLM()
   const endpoint = await model.start()
   let client = await ProtocolClient.start(home, endpoint)
-  const db = new DatabaseSync(join(home, 'adapter', 'state.sqlite'), { readOnly: true })
+  const db = new DatabaseSync(join(home, 'adapter', 'state.sqlite'), {
+    readOnly: true,
+    timeout: 5_000,
+  })
   try {
     const { thread } = await client.request('thread/start', { cwd: home })
     const threadId = thread.id
@@ -277,7 +283,7 @@ test('CONTEXT-005：原生追加整批校验、活动互斥及提交失败重启
   const model = new MockLLM()
   const endpoint = await model.start()
   let client = await ProtocolClient.start(home, endpoint)
-  const db = new DatabaseSync(join(home, 'adapter', 'state.sqlite'))
+  const db = new DatabaseSync(join(home, 'adapter', 'state.sqlite'), { timeout: 5_000 })
   let releaseModel: (() => void) | undefined
   try {
     const { thread } = await client.request('thread/start', { cwd: home })
@@ -449,7 +455,10 @@ test('CONTEXT-010：注入 assistant 消息（项目开场白）照上游进下�
   const model = new MockLLM()
   const endpoint = await model.start()
   let client = await ProtocolClient.start(home, endpoint)
-  const db = new DatabaseSync(join(home, 'adapter', 'state.sqlite'), { readOnly: true })
+  const db = new DatabaseSync(join(home, 'adapter', 'state.sqlite'), {
+    readOnly: true,
+    timeout: 5_000,
+  })
   const assistantItem = (text: string) => ({
     type: 'message',
     role: 'assistant',

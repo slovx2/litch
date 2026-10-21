@@ -15,7 +15,7 @@ test('SUBMIT-002：真实工具副作用后适配器崩溃，重试和重启不�
   const model = new MockLLM()
   const url = await model.start()
   let client = await ProtocolClient.start(home, url)
-  const db = new DatabaseSync(join(home, 'adapter', 'state.sqlite'))
+  const db = new DatabaseSync(join(home, 'adapter', 'state.sqlite'), { timeout: 5_000 })
   let cliPID: number | undefined
   let calls = 0
   try {
