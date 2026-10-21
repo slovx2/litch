@@ -47,4 +47,16 @@ export const enProposals: Record<keyof typeof zhProposals, Entry> = {
   'proposal.badge': ({ n }) =>
     Number(n) === 1 ? '1 suggested task waiting' : `${n} suggested tasks waiting`,
   'side.tab.proposals': 'Suggested',
+  'proposal.here': 'Do it here',
+  'proposal.here.lead': 'Do it here: ',
+  'proposal.more': 'More',
+  'proposal.cardsOff': 'Turn off task cards for {harness} on {device}',
+  'proposal.cardsOff.done': 'Task cards turned off for {harness}',
+  'proposal.cardsOff.undo': 'Undo',
+  'proposal.cardsOff.settings': 'Settings',
+  'proposal.cardsOff.failed': "Couldn't turn them off: {reason}",
+  'proposal.cardsOff.missing':
+    'The device service on this device has no task-card switch yet; update it first',
+  'wrap.tail': 'Next steps for this turn',
+  'wrap.replied': 'Replied: {label}',
 }

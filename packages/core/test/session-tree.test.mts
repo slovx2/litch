@@ -113,9 +113,13 @@ test('投影：子代理调用带上每个子线程的状态；litch_sessions.st
     background: '要发版了',
     harness: 'pi',
     model: null,
+    effort: null,
     cwd: null,
     kind: 'fresh',
+    asked: false,
   })
+  // 直接派出去的子会话露在原处；提的提案进回合最下方的收尾区
+  assert.equal(cardPlace(started), 'outside')
 
   const proposed = projectItem({
     type: 'dynamicToolCall',
@@ -131,6 +135,35 @@ test('投影：子代理调用带上每个子线程的状态；litch_sessions.st
   assert.equal(proposed.spawned?.proposalId, 'pr1')
   assert.equal(proposed.spawned?.threadId, null)
   assert.equal(proposed.spawned?.via, 'start')
+  assert.equal(cardPlace(proposed), 'tail')
+  // 用户亲口要的（user_asked）：开始时是派出的卡；设备进程核对不过、降成了提案的，有了结果就进收尾区
+  const askedArgs = { title: '整理', prompt: '整理一下', initiation: 'user_asked', effort: 'high' }
+  const asked = projectItem({
+    type: 'dynamicToolCall',
+    id: 'd6',
+    namespace: 'litch_sessions',
+    tool: 'start',
+    arguments: askedArgs,
+    status: 'inProgress',
+    contentItems: null,
+    success: null,
+    durationMs: null,
+  } as never) as ToolCallItem
+  assert.equal(asked.spawned?.asked, true)
+  assert.equal(asked.spawned?.effort, 'high')
+  assert.equal(cardPlace(asked), 'outside')
+  const demoted = projectItem({
+    type: 'dynamicToolCall',
+    id: 'd6',
+    namespace: 'litch_sessions',
+    tool: 'start',
+    arguments: askedArgs,
+    status: 'completed',
+    contentItems: [{ type: 'inputText', text: JSON.stringify({ proposal_id: 'pr2', note: '' }) }],
+    success: true,
+    durationMs: 3,
+  } as never) as ToolCallItem
+  assert.equal(cardPlace(demoted), 'tail')
 
   // offer 卡：调用还在等用户选，没有结果；选了之后结果里有提案号和选择
   const offerArgs = { title: '加导出按钮', initiation: 'offer' }
@@ -194,8 +227,10 @@ test('投影：子代理调用带上每个子线程的状态；litch_sessions.st
     background: '',
     harness: null,
     model: null,
+    effort: null,
     cwd: null,
     kind: 'fork',
+    asked: false,
   })
   assert.equal(cardPlace(handed), 'outside')
 
@@ -706,6 +741,7 @@ test('投影：收尾调用的每条建议按顺序对上结果里的提案或�
     ],
   )
   assert.equal(cardOf(running), true)
+  assert.equal(cardPlace(running), 'tail')
   assert.equal(quietOf(running), false)
 
   const done = wrapUpItem('w1', asked, {
@@ -723,6 +759,7 @@ test('投影：收尾调用的每条建议按顺序对上结果里的提案或�
       background: '解析刚改过',
       harness: 'pi',
       model: null,
+      effort: null,
       cwd: '~/x',
       kind: 'fresh',
       proposalId: 'pr1',
@@ -734,6 +771,7 @@ test('投影：收尾调用的每条建议按顺序对上结果里的提案或�
       background: '',
       harness: null,
       model: null,
+      effort: null,
       cwd: null,
       kind: 'fork',
       proposalId: 'pr2',
@@ -745,6 +783,7 @@ test('投影：收尾调用的每条建议按顺序对上结果里的提案或�
       background: '',
       harness: null,
       model: null,
+      effort: null,
       cwd: null,
       kind: 'fresh',
       proposalId: null,
@@ -795,6 +834,37 @@ test('投影：收尾调用的每条建议按顺序对上结果里的提案或�
   assert.equal(cardOf(empty), false)
   // 别的工具调用都不是“不画”的
   assert.equal(quietOf(projectItem(userText('u', 'hi'))), false)
+
+  // 只留了问题、没有建议的收尾：照样画（问题和按钮在回合最下方）；按钮至多两个，没字的不要，没问题时按钮不要
+  const asking = projectItem({
+    type: 'dynamicToolCall',
+    id: 'w5',
+    namespace: 'litch_sessions',
+    tool: 'wrap_up',
+    arguments: {
+      suggestions: [],
+      ask: ' 在这里接着修吗？ ',
+      actions: [
+        { label: '修吧', message: '好，在这里修' },
+        { label: '  ' },
+        { label: '先不', message: '' },
+        { label: '第三个' },
+      ],
+    },
+    status: 'completed',
+    contentItems: [{ type: 'inputText', text: '{"suggestions":[]}' }],
+    success: true,
+    durationMs: 1,
+  } as never) as ToolCallItem
+  assert.deepEqual(asking.wrapUp, {
+    suggestions: [],
+    ask: '在这里接着修吗？',
+    actions: [{ label: '修吧', message: '好，在这里修' }, { label: '先不' }],
+  })
+  assert.equal(quietOf(asking), false)
+  assert.equal(cardPlace(asking), 'tail')
+  const buttonsOnly = wrapUpItem('w6', [], { suggestions: [] })
+  assert.equal(quietOf(buttonsOnly), true)
 })
 
 test('投影：设备进程的提醒（kind="remind"）拆成事件，没有用户自己的话', () => {
@@ -825,26 +895,79 @@ test('分块：不画的条目不占块、不算进步骤；回合只剩提示�
     ]),
     [{ type: 'notes', key: 'n', itemIds: ['n'] }],
   )
-  // 提醒收尾的回合：模型顺口说的话收进过程（当说明段，不算最终回答），带建议的收尾照样是卡片
+  // 提醒收尾的回合：模型顺口说的话收进过程（当说明段，不算最终回答），带建议的收尾照样有卡片（在收尾区）
   assert.deepEqual(
     bucketItems([
       { id: 'u', kind: 'userMessage', remind: true },
-      { id: 'w', kind: 'toolCall', card: 'outside' },
+      { id: 'w', kind: 'toolCall', card: 'tail', wrapUp: true },
       { id: 'a', kind: 'agentMessage', phase: 'final' },
     ]),
     [
       { type: 'user', itemId: 'u' },
-      { type: 'card', itemId: 'w' },
-      { type: 'process', key: 'a', parts: [{ type: 'note', itemId: 'a' }] },
+      {
+        type: 'process',
+        key: 'w',
+        parts: [
+          { type: 'steps', key: 'w', itemIds: ['w'] },
+          { type: 'note', itemId: 'a' },
+        ],
+      },
+      { type: 'tail', itemIds: ['w'] },
+    ],
+  )
+})
+
+test('分块：一回合的建议卡片和收尾的问题都排在最终回答下面，过程里原位置只留一行；offer 卡不挪', () => {
+  assert.deepEqual(
+    bucketItems([
+      { id: 'u', kind: 'userMessage' },
+      { id: 'c', kind: 'command' },
+      { id: 's', kind: 'toolCall', card: 'tail' },
+      { id: 'm', kind: 'agentMessage', phase: 'commentary' },
+      { id: 'o', kind: 'toolCall', card: 'outside' },
+      { id: 'w', kind: 'toolCall', card: 'tail', wrapUp: true },
+      { id: 'a', kind: 'agentMessage', phase: 'final' },
+    ]),
+    [
+      { type: 'user', itemId: 'u' },
+      {
+        type: 'process',
+        key: 'c',
+        parts: [
+          { type: 'steps', key: 'c', itemIds: ['c', 's'] },
+          { type: 'note', itemId: 'm' },
+        ],
+      },
+      { type: 'card', itemId: 'o' },
+      { type: 'process', key: 'w', parts: [{ type: 'steps', key: 'w', itemIds: ['w'] }] },
+      { type: 'answer', itemId: 'a' },
+      { type: 'tail', itemIds: ['s', 'w'] },
+    ],
+  )
+  // 旧顺序（先写完整回答、再调带建议的收尾、再补一句）：和空收尾一样，前后的话都算回答
+  assert.deepEqual(
+    bucketItems([
+      { id: 'u', kind: 'userMessage' },
+      { id: 'a1', kind: 'agentMessage', phase: 'commentary' },
+      { id: 'w', kind: 'toolCall', card: 'tail', wrapUp: true },
+      { id: 'a2', kind: 'agentMessage', phase: 'final' },
+    ]),
+    [
+      { type: 'user', itemId: 'u' },
+      { type: 'answer', itemId: 'a1' },
+      { type: 'process', key: 'w', parts: [{ type: 'steps', key: 'w', itemIds: ['w'] }] },
+      { type: 'answer', itemId: 'a2' },
+      { type: 'tail', itemIds: ['w'] },
     ],
   )
 })
 
 test('提案卡片写什么：开始了、子会话在侧栏里的写实际的 harness、目录、方式；别的写提案的，没给的跟父会话', () => {
-  const planned = { harness: 'pi', model: 'm1', cwd: '~/a', kind: 'fork' as const }
+  const planned = { harness: 'pi', model: 'm1', effort: 'high', cwd: '~/a', kind: 'fork' as const }
   assert.deepEqual(proposalShape(planned, undefined, 'claude'), {
     harness: 'pi',
     model: 'm1',
+    effort: 'high',
     cwd: '~/a',
     kind: 'fork',
     actual: false,
@@ -866,6 +989,7 @@ test('提案卡片写什么：开始了、子会话在侧栏里的写实际的 h
   assert.deepEqual(proposalShape(planned, child, 'claude'), {
     harness: 'dsh',
     model: null,
+    effort: null,
     cwd: '/work/b',
     kind: 'fresh',
     actual: true,
@@ -878,7 +1002,7 @@ test('分块：派出子会话、启动子代理（开始时还不知道子线�
     id: 'd1',
     namespace: 'litch_sessions',
     tool: 'start',
-    arguments: { title: 'x', prompt: 'y' },
+    arguments: { title: 'x', prompt: 'y', initiation: 'user_asked' },
     status: 'inProgress',
     contentItems: null,
     success: null,
@@ -1369,7 +1493,7 @@ test('模拟：说“交接”模型把手上的任务交给分叉会话（不�
   assert.equal(parent.view?.proposals.length, 0, '交接不出卡')
 })
 
-test('模拟：说“收尾建议”回答完调收尾带三条建议：两条成了提案（callId 是那次调用），一条被拒；别的几出调空的收尾', async () => {
+test('模拟：说“收尾建议”先调收尾（三条建议加一个问题）再回答：两条成了提案（callId 是那次调用），一条被拒；别的几出调空的收尾', async () => {
   const world = mockWorld()
   await settle()
   const parent = world.watch('s6')
@@ -1388,11 +1512,13 @@ test('模拟：说“收尾建议”回答完调收尾带三条建议：两条�
     (parent.view?.turns.at(-1)?.itemIds ?? []).map((id) => parent.view?.items[id])
   await say('收尾建议')
   const items = lastTurnItems()
-  // 收尾是这一回合的最后一条，在回答后面
-  assert.equal(items.at(-2)?.kind, 'agentMessage')
-  const call = items.at(-1) as ToolCallItem
+  // 照桌面端的做法：先调收尾，最后的话写在它后面（卡片和问题由收尾区排到回答下面）
+  assert.equal(items.at(-1)?.kind, 'agentMessage')
+  const call = items.at(-2) as ToolCallItem
   assert.equal(call.tool, 'wrap_up')
   assert.equal(cardOf(call), true)
+  assert.ok(call.wrapUp?.ask, '带着问题')
+  assert.equal(call.wrapUp?.actions?.length, 2)
   const suggestions = call.wrapUp?.suggestions ?? []
   assert.equal(suggestions.length, 3)
   assert.ok(suggestions[2]?.refused, '第三条被拒，带着原因')

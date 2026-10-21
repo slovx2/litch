@@ -11,8 +11,10 @@ import {
   processFolded,
   processSettled,
   processTally,
+  spanOp,
   stepsTally,
   type ToolCallItem,
+  thoughtShown,
   toolKind,
 } from '../src/index.mjs'
 
@@ -393,10 +395,10 @@ const change = (
   })),
 })
 
-const thought = (id: string): ItemView => ({
+const thought = (id: string, text = '想想看'): ItemView => ({
   id,
   kind: 'reasoning',
-  text: '',
+  text,
   status: 'completed',
 })
 
@@ -411,9 +413,9 @@ test('工具名认成哪种动作：各家的读、搜、列目录、看网页�
   assert.equal(toolKind({ key: 'collab.wait' } as never), 'tool')
 })
 
-test('汇总：动作按先后排、带个数；同一个文件改几次算一个；思考不计入；改动行数和用时加起来', () => {
+test('汇总：动作按先后排、带个数；同一个文件改几次算一个；思考不计入；用时是第一条开始到最后一条结束', () => {
   const tally = stepsTally([
-    thought('r'),
+    { ...thought('r'), span: { from: 1000, to: 4000 } },
     tool('t1', 'Read a.ts'),
     tool('t2', 'Read b.ts'),
     command('c1', { durationMs: 1500 }),
@@ -423,7 +425,7 @@ test('汇总：动作按先后排、带个数；同一个文件改几次算一�
       { path: 'n.ts', change: 'add', added: 10 },
     ]),
     tool('t3', 'Grep x', { durationMs: 500 }),
-    { id: 'w', kind: 'webSearch', query: 'q' },
+    { id: 'w', kind: 'webSearch', query: 'q', span: { from: 9000, to: 9000 } },
   ])
   assert.deepEqual(tally.counts, [
     { kind: 'read', n: 2 },
@@ -437,8 +439,62 @@ test('汇总：动作按先后排、带个数；同一个文件改几次算一�
   assert.equal(tally.steps, 7)
   assert.equal(tally.added, 15)
   assert.equal(tally.removed, 1)
-  assert.equal(tally.durationMs, 2000)
+  // 不是命令报的 1.5 秒加工具报的 0.5 秒：思考、模型出字的时间也在里面
+  assert.equal(tally.durationMs, 8000)
   assert.equal(tally.failed, 0)
+  // 没记过时刻（读历史来的）：只有一条报了用时的组用它，几条的不加起来
+  assert.equal(stepsTally([command('c', { durationMs: 1500 })]).durationMs, 1500)
+  assert.equal(
+    stepsTally([command('c', { durationMs: 1500 }), tool('t', 'x', { durationMs: 500 })])
+      .durationMs,
+    null,
+  )
+  // 还在跑的那一条按开始算
+  assert.equal(
+    stepsTally([
+      { ...command('c'), span: { from: 100, to: 600 } },
+      { ...command('d', { status: 'inProgress' }), span: { from: 900, to: null } },
+    ]).durationMs,
+    800,
+  )
+})
+
+test('汇总：没字的思考不算；收尾的建议和问题只记个数、不算步骤', () => {
+  const tally = stepsTally([
+    thought('r1', ''),
+    thought('r2', '  '),
+    { id: 'r3', kind: 'reasoning', text: '', status: 'inProgress' },
+    thought('r4'),
+  ])
+  assert.equal(tally.thoughts, 2)
+  assert.equal(thoughtShown(thought('r', '')), false)
+  assert.equal(thoughtShown({ kind: 'reasoning', text: '', status: 'inProgress' }), true)
+  assert.equal(thoughtShown(thought('r', '看一下')), true)
+  const wrap = (suggestions: number, ask?: string): ItemView =>
+    tool('w', 'wrap_up', {
+      wrapUp: {
+        suggestions: Array.from({ length: suggestions }, (_, index) => ({
+          title: `s${index}`,
+          prompt: 'p',
+          background: '',
+          harness: null,
+          model: null,
+          effort: null,
+          cwd: null,
+          kind: 'fresh' as const,
+          proposalId: `p${index}`,
+          refused: null,
+        })),
+        ...(ask ? { ask } : {}),
+      },
+    })
+  const cards = stepsTally([command('c'), wrap(2, '接着做吗？')])
+  assert.deepEqual(cards.counts, [
+    { kind: 'command', n: 1 },
+    { kind: 'suggest', n: 2 },
+  ])
+  assert.equal(cards.steps, 1)
+  assert.deepEqual(stepsTally([wrap(0, '接着做吗？')]).counts, [{ kind: 'ask', n: 1 }])
 })
 
 test('汇总：失败的命令、工具、改文件都计入失败；拒绝的另算、不算失败', () => {
@@ -494,4 +550,33 @@ test('整段过程的汇总：说明段、工具步骤、子代理、失败和�
     declined: 1,
     agentsFailed: 1,
   })
+})
+
+test('条目的起止时刻：只在跑着的回合里记；开始沿用第一次看到的，结束只记一次；历史里放进来的不记', () => {
+  const view = (status: 'running' | 'completed', items: Record<string, ItemView> = {}) =>
+    ({
+      turns: [{ id: 't', status, itemIds: Object.keys(items) }],
+      items,
+    }) as never
+  const run = command('c', { status: 'inProgress' })
+  const added = spanOp(view('running'), { op: 'item.add', turnId: 't', item: run }, 100)
+  assert.ok(added.op === 'item.add')
+  assert.deepEqual(added.item.span, { from: 100, to: null })
+  const before = { c: added.item }
+  const done = spanOp(
+    view('running', before),
+    { op: 'item.add', turnId: 't', item: command('c') },
+    700,
+  )
+  assert.ok(done.op === 'item.add')
+  assert.deepEqual(done.item.span, { from: 100, to: 700 }, '开始沿用之前的')
+  const again = spanOp(
+    view('running', { c: done.item }),
+    { op: 'item.add', turnId: 't', item: command('c') },
+    900,
+  )
+  assert.ok(again.op === 'item.add')
+  assert.deepEqual(again.item.span, { from: 100, to: 700 }, '完成的通知来两遍，结束不往后挪')
+  const history = { op: 'item.add', turnId: 't', item: command('h') } as const
+  assert.equal(spanOp(view('completed'), history, 100), history, '读历史放进来的不记')
 })

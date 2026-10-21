@@ -51,6 +51,7 @@ export function projectProposal(
     background: typeof proposal.background === 'string' ? proposal.background : '',
     harness: word(proposal.harness),
     model: word(proposal.model),
+    effort: word(proposal.effort),
     cwd: word(proposal.cwd),
     kind: proposal.kind === 'fork' ? 'fork' : 'fresh',
     wakeParent: proposal.wakeParent === true,

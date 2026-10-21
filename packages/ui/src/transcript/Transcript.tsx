@@ -28,8 +28,9 @@ import {
   useSyncExternalStore,
 } from 'react'
 import { useT } from '../app/appearance.ts'
+import { useElapsed } from '../app/clock.ts'
 import { downHarness, downText, nameOf } from '../app/device.ts'
-import { duration } from '../app/format.ts'
+import { duration, elapsed } from '../app/format.ts'
 import { useKey, useServices } from '../app/services.tsx'
 import { TurnOrigin } from '../background/TurnOrigin.tsx'
 import { Dock, Requests } from '../composer/Dock.tsx'
@@ -39,6 +40,7 @@ import { TaskNote } from '../tasks/TaskNote.tsx'
 import { useAgentsUnfinished } from '../tree/agent-view.tsx'
 import { LineageBar } from '../tree/LineageBar.tsx'
 import { TreeCard } from '../tree/TreeCards.tsx'
+import { TurnTail } from '../tree/TurnTail.tsx'
 import { ActionsProvider } from './actions.tsx'
 import { Notes } from './activity.tsx'
 import { CiteScope } from './comments/Cite.tsx'
@@ -81,15 +83,17 @@ function useBlocks(
       const item = store.get<ItemView>(keys.item(deviceId, sessionId, id))
       if (!item) continue
       const place = cardPlace(item)
+      // 收尾调用（空的、带建议的）：认最终回答时看它前后
+      const wrapUp = item.kind === 'toolCall' && item.wrapUp !== undefined ? { wrapUp: true } : {}
       inputs.push(
         item.kind === 'agentMessage'
           ? { id, kind: item.kind, phase: item.phase, ...(place ? { card: place } : {}) }
           : item.kind === 'userMessage' && item.event?.kind === 'remind'
             ? { id, kind: item.kind, remind: true }
             : place
-              ? { id, kind: item.kind, card: place }
+              ? { id, kind: item.kind, card: place, ...wrapUp }
               : quietOf(item)
-                ? { id, kind: item.kind, quiet: true }
+                ? { id, kind: item.kind, quiet: true, ...wrapUp }
                 : { id, kind: item.kind },
       )
     }
@@ -242,6 +246,7 @@ const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { 
   if (!turn) return null
   // 告一段落之后，第一段过程的开头是收起整段过程的那一行；没告一段落时没有这一行，过程照常摊开
   const firstProcess = blocks.findIndex((block) => block.type === 'process')
+  const tail = blocks.find((block) => block.type === 'tail')
   // 每一块前面最近的那条用户消息：它带着评论的话，回答里的 [N] 指向它的评论（comments/Cite.tsx）
   const userBefore = blocks.map(
     (_, index) =>
@@ -293,6 +298,8 @@ const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { 
             return <TreeCard key={block.itemId} {...ref} itemId={block.itemId} />
           if (block.type === 'notes')
             return <Notes key={block.key} {...ref} itemIds={block.itemIds} />
+          // 收尾区排在回合最后（下面单独画），这里跳过
+          if (block.type === 'tail') return null
           // 收起时后面几段过程都不占地方，只留第一段开头的那一行
           if (settled && !open && index !== firstProcess) return null
           // 位置固定的几个子元素（收起那一行、过程本身），中间切换时下面的说明和步骤组不会被重建
@@ -324,6 +331,8 @@ const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { 
             <span>{turn.error}</span>
           </div>
         ) : null}
+        {/* 建议任务的卡片和收尾留的问题：固定在回合最下方（最终回答下面），不随回答往上冲 */}
+        {tail ? <TurnTail {...ref} turnId={turnId} itemIds={tail.itemIds} /> : null}
         {/* 回合在跑时这一格一直占着位置，只在空档里显出来（只改透明度），出字、跑工具时不跟着跳 */}
         {running ? (
           <div
@@ -334,6 +343,7 @@ const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { 
           >
             <i className="st run" />
             <span>{t('turn.working', { name: nameOf(device, meta?.harness ?? '') })}</span>
+            <TurnElapsed since={turn.startedAt} />
           </div>
         ) : (
           <div className="turn-foot" data-anchor={`t:${turnId}`}>
@@ -345,6 +355,17 @@ const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { 
     </TurnTouch.Provider>
   )
 })
+
+/**
+ * “{harness} 正在工作”后面这一回合已经用了多久。单独一个组件：每秒重画的只有这几个字。
+ * 回合的开始时刻没给（接手时已经在跑、对面没说）就不写
+ */
+function TurnElapsed({ since }: { since: number | null }) {
+  const t = useT()
+  const spent = useElapsed(since)
+  if (spent === null || spent < 1000) return null
+  return <span className="running-time">{elapsed(spent, t)}</span>
+}
 
 /** 等一小会儿再出现的提示：读得快的时候不闪一下“正在读取” */
 function Delayed({ ms, children }: { ms: number; children: ReactNode }) {

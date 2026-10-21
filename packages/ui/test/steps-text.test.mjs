@@ -93,11 +93,11 @@ test('在想的时候：汇总行写“{harness} 正在工作”，和回合末�
   assert.equal(nowOf(think, null, en, 'Codex').label, 'Codex is working')
 })
 
-test('整段过程收成的一行：已处理多久、几段说明、几步、几个子代理；失败、被拒、出错另列', () => {
+test('整段过程收成的一行：已处理多久、几段说明、几步、几个子代理；被拒、出错另列，失败的步骤不数', () => {
   const full = { notes: 3, steps: 18, agents: 2, failed: 1, declined: 2, agentsFailed: 1 }
   assert.deepEqual(processSummary(full, '4 分 12 秒', zh, null), {
     plain: ['已处理 4 分 12 秒', '3 段说明', '18 步', '2 个子代理'],
-    bad: ['1 条失败', '2 条被拒', '1 个子代理失败'],
+    bad: ['2 条被拒', '1 个子代理失败'],
   })
   const bare = { notes: 0, steps: 4, agents: 0, failed: 0, declined: 0, agentsFailed: 0 }
   assert.deepEqual(processSummary(bare, null, zh, 'interrupted'), {

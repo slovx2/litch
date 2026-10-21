@@ -53,6 +53,7 @@ import { EventCell } from './proposals/EventCell'
 import { HandoffCell } from './proposals/HandoffCell'
 import { flash, takeReveal, useRevealWaiting } from './proposals/hooks'
 import { ProposalCell } from './proposals/ProposalCell'
+import { WrapAskCell } from './proposals/WrapAskCell'
 import { GroupCell, StepCell } from './steps'
 import { colors } from './theme'
 import { Flash, ImageViewer, TurnMenu } from './turn-menu'
@@ -76,6 +77,8 @@ function renderRow(row: Row) {
       return <EventCell row={row} />
     case 'proposal':
       return <ProposalCell row={row} />
+    case 'wrapAsk':
+      return <WrapAskCell row={row} />
     case 'handoff':
       return <HandoffCell row={row} />
     case 'md':

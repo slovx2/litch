@@ -52,6 +52,26 @@ test('初值：手动派的是父会话的默认；提案的照提案预填', ()
   assert.equal(filled.wake, false)
 })
 
+test('初值：提案没写的模型、强度按父会话此刻的；换了 harness 的不沿用', () => {
+  const settings = { model: 'sonnet', effort: 'high' }
+  const bare = { ...proposal, model: null, effort: null }
+  const inherited = fieldsFor(parent, bare, settings)
+  assert.equal(inherited.model, 'sonnet')
+  assert.equal(inherited.effort, 'high')
+  // 提案里写了的盖过父会话的
+  const own = fieldsFor(parent, { ...proposal, effort: 'low' }, settings)
+  assert.equal(own.model, 'opus')
+  assert.equal(own.effort, 'low')
+  // 在别的 harness 上开：用那边的默认（空着）
+  const other = fieldsFor(parent, { ...bare, harness: 'pi' }, settings)
+  assert.equal(other.model, '')
+  assert.equal(other.effort, '')
+  // 手动派也一样
+  assert.equal(fieldsFor(parent, null, settings).model, 'sonnet')
+  // 没改的强度不当成改动发
+  assert.deepEqual(overridesOf(own, parent, { ...proposal, effort: 'low' }).effort, undefined)
+})
+
 test('带上下文只能同 harness：换了别的就是全新开始', () => {
   const fields = { ...fieldsFor(parent, proposal), harness: 'pi' }
   assert.equal(kindOf(fields, parent), 'fresh')

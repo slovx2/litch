@@ -256,14 +256,15 @@ function linkedText(
 }
 
 /**
- * 思考：收起时一行（最后一行字），点开是全文。收起的那一行高度固定。
- * 在想的时候写“{name} 正在工作”，和状态行空档里同一句（这时状态行留空），回合在忙只有一处在说
+ * 思考：收起时一行次要的浅字（最后一行字），点开是全文。收起的那一行高度固定。没字的思考不画（rows.ts）。
+ * 在想的时候前面写“{name} 正在工作”，和状态行空档里同一句（这时状态行留空），回合在忙只有一处在说；
+ * 想完了不写“想了一下”这类动词，只有思考的字
  */
 export const ReasoningCell = memo(function ReasoningCell({ row }: Props<'reasoning'>) {
   const { c, font } = useTheme()
   const t = useT()
   const { toggle, harness } = useTranscript()
-  const head = row.open ? t('turn.working', { name: harness }) : t('reasoning.done')
+  const head = row.open ? t('turn.working', { name: harness }) : null
   return (
     <Pressable
       onPress={() => toggle(row.key, row.turnId)}
@@ -273,14 +274,20 @@ export const ReasoningCell = memo(function ReasoningCell({ row }: Props<'reasoni
     >
       {row.expanded ? (
         <>
-          <Text style={[styles.meta, { color: c.ink3, fontSize: font.size.meta }]}>▾ {head}</Text>
-          <Text style={[styles.reasoningText, { color: c.ink2, fontSize: font.size.meta }]}>
+          {head ? (
+            <Text style={[styles.meta, { color: c.ink3, fontSize: font.size.meta }]}>▾ {head}</Text>
+          ) : null}
+          <Text style={[styles.reasoningText, { color: c.ink3, fontSize: font.size.meta }]}>
+            {head ? '' : '▾ '}
             {row.text}
           </Text>
         </>
       ) : (
-        <Text style={[styles.meta, { color: c.ink3, fontSize: font.size.meta }]} numberOfLines={1}>
-          ▸ {row.text ? t('detail.labelled', { head, text: row.text }) : head}
+        <Text
+          style={[styles.meta, styles.thought, { color: c.ink3, fontSize: font.size.meta }]}
+          numberOfLines={1}
+        >
+          ▸ {head ? (row.text ? t('detail.labelled', { head, text: row.text }) : head) : row.text}
         </Text>
       )}
     </Pressable>
@@ -301,8 +308,20 @@ function useLasting(on: boolean): boolean {
   return on && lasted
 }
 
+/** 从 since 起已经过了多久，每秒更新一次。since 是 null（不在显示、不知道何时开始）时不计时 */
+function useTicking(since: number | null): number | null {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (since === null) return
+    setNow(Date.now())
+    const timer = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(timer)
+  }, [since])
+  return since === null ? null : Math.max(0, now - since)
+}
+
 /**
- * 回合末尾的状态行：从回合开始一直在，高度固定，只换字。回合在跑时只在空档里写“{name} 正在工作”，
+ * 回合末尾的状态行：从回合开始一直在，高度固定，只换字。回合在跑时只在空档里写“{name} 正在工作”和已经用了多久，
  * 正在出字、有步骤在跑、在想、等人答复时留空。右边一个“⋯”打开这一回合的操作
  */
 export const StatusCell = memo(function StatusCell({ row }: Props<'status'>) {
@@ -310,12 +329,17 @@ export const StatusCell = memo(function StatusCell({ row }: Props<'status'>) {
   const t = useT()
   const { turnMenu, harness } = useTranscript()
   const working = useLasting(row.working)
+  const spent = useTicking(working ? row.startedAt : null)
   const time =
     row.durationMs == null ? '' : ` · ${t('detail.seconds', { s: seconds(row.durationMs) })}`
   const text =
     row.status === 'running'
       ? working
-        ? t('turn.working', { name: harness })
+        ? `${t('turn.working', { name: harness })}${
+            spent !== null && spent >= 1000
+              ? ` · ${t('detail.seconds', { s: String(Math.floor(spent / 1000)) })}`
+              : ''
+          }`
         : ''
       : row.status === 'completed'
         ? `${t('turn.completed')}${time}`
@@ -483,6 +507,7 @@ export const styles = StyleSheet.create({
   planTitle: { fontSize: 11, marginBottom: 2 },
   reasoning: { paddingHorizontal: 16, minHeight: 28, justifyContent: 'center', paddingVertical: 4 },
   reasoningText: { lineHeight: 19, marginTop: 4 },
+  thought: { fontStyle: 'italic' },
   status: {
     paddingHorizontal: 16,
     height: 26,

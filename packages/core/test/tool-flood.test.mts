@@ -160,8 +160,9 @@ test('工具结果很大：实时、读历史、中途恢复三条路得到的�
     ['读历史', read],
     ['中途恢复', resumed],
   ] as const) {
-    const { id: _core, ...core } = got.core
-    const { id: _ui, ...ui } = got.ui
+    // 看着它开始、结束的时刻（span）只有实时、中途恢复的有，不比
+    const { id: _core, span: _coreSpan, ...core } = got.core as ItemView
+    const { id: _ui, span: _uiSpan, ...ui } = got.ui as ItemView
     const { id: _read, ...expected } = read.core
     assert.deepEqual(core, expected, `${name}：核心里的样子和读历史的不一样`)
     assert.deepEqual(ui, expected, `${name}：界面的副本和读历史的不一样`)

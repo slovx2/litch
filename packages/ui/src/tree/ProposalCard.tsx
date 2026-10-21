@@ -1,7 +1,9 @@
 // 对话流里的提案卡片（建议任务）：模型调 litch_sessions.start 降成提案的那一条画成一张卡片；
-// 收尾调用（litch_sessions.wrap_up）带的建议每条一张，照建议的顺序排在那一条上，被拒的那条只写一行原因。
-// 标题、harness、模型、目录、简报（长的可展开）、状态（等开始、已开始、不要了、撤回了、过期了），
-// 沙箱收不紧时的提醒；等着的有“开始”“改了再开始”“不要”，开始了的能点进子会话。
+// 收尾调用（litch_sessions.wrap_up）带的建议每条一张，照建议的顺序排，被拒的那条只写一行原因。
+// 这些卡片都画在回合最下方的收尾区（TurnTail.tsx），过程里调用的位置只留一行。
+// 标题、harness、模型、目录、简报（长的可展开）、状态（等开始、已开始、在这里做、不要了、撤回了、过期了），
+// 沙箱收不紧时的提醒；等着的有“开始”“在这里做”“改了再开始”“不要”，开始了的能点进子会话。
+// 右上角“···”菜单里一项“在 {设备} 上对 {harness} 关闭任务卡”（task-cards.ts）。
 // 状态取这个会话的提案列表（连了结的一起），对不上的再看侧栏里哪个子会话记着从这张提案开始。
 // 开始了的写实际起出来的子会话的 harness、目录（proposalShape），不是提案原本的。
 // 侧面板“建议任务”里的每一行用的是同一套按钮（ProposalActs）。
@@ -20,19 +22,24 @@ import {
 import { useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { badgeOf, nameOf } from '../app/device.ts'
-import { Icon } from '../app/icons.tsx'
-import { useKey } from '../app/services.tsx'
+import { Icon, More } from '../app/icons.tsx'
+import { usePopover } from '../app/popover.ts'
+import { useKey, useServices } from '../app/services.tsx'
 import { useActions } from '../transcript/actions.tsx'
 import type { ItemRef } from '../transcript/messages.tsx'
 import { STATUS_TEXT, useProposalAct, useProposalClock, useProposalList } from './proposals.ts'
 import { SpawnDialog } from './SpawnDialog.tsx'
 import { SANDBOX_LEVEL } from './sandbox.ts'
 import { markOf } from './TreeCards.tsx'
+import { turnOffTaskCards } from './task-cards.ts'
 
 /** 简报长到要折起来：超过这么多字，或者有好几行 */
 const LONG_BRIEF = 160
 
-/** “开始”“改了再开始”“不要”三个按钮，和没做成时的那句话。卡片和侧面板共用 */
+/**
+ * “开始”“在这里做”“改了再开始”“不要”四个按钮，和没做成时的那句话。卡片和侧面板共用。
+ * “在这里做”：设备进程往这个会话发“在这里做：标题”加任务，回合在跑就排到回合后
+ */
 export function ProposalActs({
   deviceId,
   sessionId,
@@ -61,6 +68,15 @@ export function ProposalActs({
           onClick={() => act.accept()}
         >
           {t('proposal.start')}
+        </button>
+        <button
+          type="button"
+          className="btn"
+          data-act="here"
+          disabled={off}
+          onClick={() => act.here()}
+        >
+          {t('proposal.here')}
         </button>
         <button
           type="button"
@@ -99,7 +115,7 @@ export function ProposalActs({
 function ProposalMeta({ deviceId, shape }: { deviceId: string; shape: ProposalShape }) {
   const t = useT()
   const device = useKey<DeviceView>(keys.device(deviceId))
-  const { harness, model, cwd, kind } = shape
+  const { harness, model, effort, cwd, kind } = shape
   return (
     <span
       className="prop-meta"
@@ -113,6 +129,11 @@ function ProposalMeta({ deviceId, shape }: { deviceId: string; shape: ProposalSh
       ) : null}
       {harness ? <span data-harness={harness}>{nameOf(device, harness)}</span> : null}
       {model ? <span className="mono">{model}</span> : null}
+      {effort ? (
+        <span className="mono" data-effort={effort}>
+          {effort}
+        </span>
+      ) : null}
       {cwd ? (
         <span className="mono ell prop-cwd" title={cwd}>
           {cwd}
@@ -164,7 +185,7 @@ export function Brief({ prompt, background = '' }: { prompt: string; background?
 /** 卡片照着画的那一份：调用时给的（start 的参数、收尾里的一条建议），拿不到提案时就照它 */
 type ProposalSeed = Pick<
   SessionProposalView,
-  'title' | 'prompt' | 'background' | 'harness' | 'model' | 'cwd' | 'kind'
+  'title' | 'prompt' | 'background' | 'harness' | 'model' | 'effort' | 'cwd' | 'kind'
 >
 
 /**
@@ -216,7 +237,7 @@ function ProposalView({
       data-proposal={proposalId}
       data-item={anchor}
       data-state={status ?? ''}
-      data-anchor={anchor ? `i:${anchor}` : undefined}
+      data-anchor={anchor ? `x:${anchor}` : undefined}
     >
       <div className="prop-body">
         <span className="tree-card-kind">
@@ -227,6 +248,7 @@ function ProposalView({
               {t(status === 'unknown' ? 'proposal.state.unknown' : STATUS_TEXT[status])}
             </span>
           ) : null}
+          <CardMenu deviceId={deviceId} sessionId={sessionId} />
         </span>
         <b className="prop-title">{title}</b>
         <ProposalMeta deviceId={deviceId} shape={shape} />
@@ -244,6 +266,65 @@ function ProposalView({
         <StartedChild deviceId={deviceId} childId={childId} title={title} />
       ) : null}
     </div>
+  )
+}
+
+/**
+ * 卡片右上角的“···”：一项“在 {设备} 上对 {harness} 关闭任务卡”，点了直接关、底部出可撤销的提示，卡片本身留着。
+ * harness 是这个会话的（任务卡开关管的是哪个 harness 的会话出卡），不是提案要开在哪个 harness 上
+ */
+function CardMenu({ deviceId, sessionId }: { deviceId: string; sessionId: string }) {
+  const t = useT()
+  const { channel, replica } = useServices()
+  const device = useKey<DeviceView>(keys.device(deviceId))
+  const harness = useKey<SessionSummary>(keys.summary(deviceId, sessionId))?.harness
+  const { open, setOpen, root, trigger, pop, onKeyDown } = usePopover()
+  const [busy, setBusy] = useState(false)
+  if (!device || !harness) return null
+  const label = t('proposal.cardsOff', {
+    device: t.text(device.name),
+    harness: nameOf(device, harness),
+  })
+  return (
+    <span className="prop-menu" ref={root}>
+      <button
+        ref={trigger}
+        type="button"
+        className="ibtn"
+        data-act="more"
+        title={t('proposal.more')}
+        aria-label={t('proposal.more')}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+      >
+        <More />
+      </button>
+      {open ? (
+        // biome-ignore lint/a11y/noStaticElementInteractions: 键盘事件是从里面的按钮冒上来的
+        <div className="pick-pop down end" ref={pop} onKeyDown={onKeyDown}>
+          <div role="menu" aria-label={t('proposal.more')} className="pick-list">
+            <button
+              type="button"
+              role="menuitem"
+              className="pick-opt"
+              data-option="cardsOff"
+              // 开关存在设备上：设备要连着、有设置接口
+              disabled={busy || device.connection !== 'online' || !device.manageable}
+              onClick={() => {
+                setOpen(false)
+                setBusy(true)
+                void turnOffTaskCards(channel, replica, device, harness).finally(() =>
+                  setBusy(false),
+                )
+              }}
+            >
+              <b>{label}</b>
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </span>
   )
 }
 
@@ -330,7 +411,7 @@ export function WrapUpCards({
   const suggestions = item.wrapUp?.suggestions ?? []
   if (suggestions.length === 0) return null
   return (
-    <div className="wrap-cards" data-card="wrap-up" data-item={itemId} data-anchor={`i:${itemId}`}>
+    <div className="wrap-cards" data-card="wrap-up" data-item={itemId} data-anchor={`x:${itemId}`}>
       {suggestions.map((suggestion, index) =>
         suggestion.refused !== null ? (
           // biome-ignore lint/suspicious/noArrayIndexKey: 建议的顺序就是它的身份，没有别的标识

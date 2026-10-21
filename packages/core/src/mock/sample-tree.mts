@@ -60,6 +60,11 @@ export interface TreeText {
   /** 说“收尾建议”时回答完调收尾带的三条建议（第三条被拒），和回答 */
   wrapUp: [TreeSuggestion, TreeSuggestion, TreeSuggestion]
   wrapReply: string
+  /** 收尾时留给用户定的一件事和两个回复按钮（第一个是推荐的，第二个只有字） */
+  wrapAsk: string
+  wrapActions: [{ label: string; message: string }, { label: string }]
+  /** 点了“在这里做”之后，模型在这里回的话 */
+  hereReply: string
   /** 说“忘了收尾”时没调收尾的回答，和设备进程提醒之后模型补的那一条建议 */
   forgetReply: string
   remindSuggestion: TreeSuggestion
@@ -157,6 +162,12 @@ export const TREE_TEXT: Record<SampleLang, TreeText> = {
     ],
     wrapReply:
       '改动做完了，测试都过了。还有两件能单独做的事，我放在下面的建议任务里了，你点“开始”就起。',
+    wrapAsk: '要不要在这里先把解析器的单测补齐？',
+    wrapActions: [
+      { label: '在这里补', message: '好，在这里把解析器的单测补齐。' },
+      { label: '先不用' },
+    ],
+    hereReply: '好，就在这里做。做完了，结果写在上面。',
     forgetReply: '好，按你说的改完了，构建和测试都过了。',
     remindSuggestion: {
       title: '更新产品手册',
@@ -299,6 +310,12 @@ export const TREE_TEXT: Record<SampleLang, TreeText> = {
     ],
     wrapReply:
       'The change is done and the tests pass. Two pieces can run on their own; they are in the suggested tasks below, press Start to run one.',
+    wrapAsk: 'Fill in the parser unit tests here first?',
+    wrapActions: [
+      { label: 'Do it here', message: 'Yes, fill in the parser unit tests here.' },
+      { label: 'Not now' },
+    ],
+    hereReply: 'Doing it here. Done; the result is above.',
     forgetReply: 'Done as you asked; the build and the tests pass.',
     remindSuggestion: {
       title: 'Update the product manual',

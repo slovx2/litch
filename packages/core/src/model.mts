@@ -642,7 +642,7 @@ export interface TodoItem {
   steps: TodoStep[]
 }
 
-export type ItemView =
+export type ItemView = (
   | UserMessageItem
   | AgentMessageItem
   | ReasoningItem
@@ -653,6 +653,19 @@ export type ItemView =
   | WebSearchItem
   | NoticeItem
   | TodoItem
+) & {
+  /**
+   * 这边看到它开始、结束的时刻（毫秒，本机的钟；projection/span.mts 的 spanned 在增量发出之前记上）。
+   * 步骤组的时长按组里第一条开始到最后一条结束算。从历史里读出来的没有这一项
+   */
+  span?: ItemSpan
+}
+
+/** 条目从开始到结束。to 是 null：还没结束 */
+export interface ItemSpan {
+  from: number
+  to: number | null
+}
 
 export type TurnStatus = 'running' | 'completed' | 'interrupted' | 'failed'
 

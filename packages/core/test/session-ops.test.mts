@@ -283,7 +283,10 @@ test('已归档：模拟核心里归档着的会话能只读地打开，恢复�
 /** 会话里某个回合的待办条目 */
 const todoOf = (view: SessionView | null, turnId: string) => {
   const item = view?.items[`${turnId}:#todo`]
-  return item?.kind === 'todo' ? item : null
+  if (item?.kind !== 'todo') return null
+  // 看着它出现的时刻（span）不比
+  const { span: _span, ...rest } = item
+  return rest
 }
 
 test('待办：模型每改一次整份换掉，位置不变；回合结束后留着，没做完的不再标成正在做', async () => {

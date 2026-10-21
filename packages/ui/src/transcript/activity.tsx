@@ -13,7 +13,7 @@ import type {
   ToolPart,
   WebSearchItem,
 } from '@litch/core'
-import { keys, stepKindOf, stepsTally } from '@litch/core'
+import { keys, stepKindOf, stepsTally, thoughtShown } from '@litch/core'
 import {
   Fragment,
   memo,
@@ -42,7 +42,7 @@ import { ToolPath } from './FileLinks.tsx'
 import { type ItemRef, sessionKeyOf, useItem } from './messages.tsx'
 import { usePin } from './scroll.ts'
 import { seenSince, TurnTouch, useToggle } from './state.ts'
-import { nowOf, stepsSummary } from './steps-text.ts'
+import { nowOf, stepsSummary, suggestTitles } from './steps-text.ts'
 
 interface RowProps {
   itemRef: ItemRef
@@ -54,16 +54,18 @@ interface RowProps {
   busy?: boolean
   /** 没有详情的行不能点开 */
   detail?: (() => ReactNode) | null
+  /** quiet：次要的浅色字（思考） */
+  tone?: 'quiet'
 }
 
 /** 步骤组里的一行：动词、对象、右边的元信息；有详情时点一下展开 */
-function Row({ itemRef, icon, verb, target, meta, busy, detail }: RowProps) {
+function Row({ itemRef, icon, verb, target, meta, busy, detail, tone }: RowProps) {
   const [open, setOpen] = useToggle(sessionKeyOf(itemRef), `i:${itemRef.itemId}`, false)
   const head = useRef<HTMLButtonElement | null>(null)
   const pin = usePin()
   const touch = useContext(TurnTouch)
   return (
-    <div className="item">
+    <div className="item" data-tone={tone}>
       <button
         type="button"
         className="item-head"
@@ -98,20 +100,44 @@ function Well({ children }: { children: ReactNode }) {
 
 const firstLine = (text: string): string => text.split('\n', 1)[0] ?? ''
 
+/**
+ * 思考：一行次要的浅字（头一行），点开看全文；不写“想了一下”这类动词。
+ * 没有可显示的字（引擎只给了加密的、空的推理）就不画（thoughtShown）。
+ * 在想的时候只有运行记号和思考的字：“正在工作”只写在步骤组的汇总行上
+ */
 const Reasoning = memo(function Reasoning(ref: ItemRef) {
   const item = useItem<ReasoningItem>(ref)
-  const t = useT()
-  if (item?.kind !== 'reasoning') return null
-  const text = item.text
-  // 在想的时候这一行不写动词：“正在工作”只写在步骤组的汇总行上（组展开时这里只剩记号和思考的字）
+  if (item?.kind !== 'reasoning' || !thoughtShown(item)) return null
+  const text = item.text.trim()
   return (
     <Row
       itemRef={ref}
       icon="think"
-      verb={item.status === 'inProgress' ? '' : t('reasoning.done')}
+      verb=""
       target={firstLine(text)}
       busy={item.status === 'inProgress'}
+      tone="quiet"
       detail={text ? () => <div className="think">{text}</div> : null}
+    />
+  )
+})
+
+/**
+ * 建议任务、收尾留的问题：卡片和问题画在回合最下方的收尾区，过程里它的位置只留这一行（建议的标题）
+ */
+const Suggest = memo(function Suggest(ref: ItemRef) {
+  const item = useItem<ToolCallItem>(ref)
+  const t = useT()
+  if (item?.kind !== 'toolCall') return null
+  const kind = stepKindOf(item)
+  const n = item.wrapUp ? item.wrapUp.suggestions.length || 1 : 1
+  return (
+    <Row
+      itemRef={ref}
+      icon="suggest"
+      verb={t(kind === 'ask' ? 'activity.ask' : 'activity.suggest', { n })}
+      target={suggestTitles(item)}
+      busy={item.status === 'inProgress'}
     />
   )
 })
@@ -448,7 +474,11 @@ export const Notes = memo(function Notes({
   )
 })
 
-function StepItem({ kind, ...ref }: ItemRef & { kind: ItemView['kind'] }) {
+function StepItem({
+  kind,
+  suggest,
+  ...ref
+}: ItemRef & { kind: ItemView['kind']; suggest: boolean }) {
   switch (kind) {
     case 'reasoning':
       return <Reasoning {...ref} />
@@ -457,7 +487,7 @@ function StepItem({ kind, ...ref }: ItemRef & { kind: ItemView['kind'] }) {
     case 'fileChange':
       return <FileChange {...ref} />
     case 'toolCall':
-      return <ToolCall {...ref} />
+      return suggest ? <Suggest {...ref} /> : <ToolCall {...ref} />
     case 'webSearch':
       return <WebSearch {...ref} />
     case 'notice':
@@ -468,6 +498,12 @@ function StepItem({ kind, ...ref }: ItemRef & { kind: ItemView['kind'] }) {
 }
 
 const running = (item: ItemView): boolean => 'status' in item && item.status === 'inProgress'
+
+/** 建议任务、收尾的问题那一行（卡片在收尾区） */
+const isSuggest = (item: ItemView): boolean => {
+  const kind = stepKindOf(item)
+  return kind === 'suggest' || kind === 'ask'
+}
 
 /**
  * 这个会话的 harness 叫什么（“Claude Code”）。只取名字：会话的别的字段在变、名字没变时不引起重画
@@ -520,7 +556,9 @@ interface StepsProps {
 
 /**
  * 步骤组：一行灰色的汇总，默认收着，正在跑的时候也不自动展开。
- * 汇总写动作和个数；右边是失败、被拒的个数（红字）、改动行数、用时。正在跑时左边是运行记号，写当前这一条和计时
+ * 汇总写动作和个数；右边是被拒的个数（红字）、改动行数、这一组从第一条开始到最后一条结束的用时。
+ * 失败的条数不写（每条命令自己的退出码照写）。正在跑时左边是运行记号，写当前这一条和计时。
+ * 没字的思考不画、不算；只剩有字的思考的组不收成汇总，每条思考直接是一行浅字
  */
 export const Steps = memo(function Steps({
   deviceId,
@@ -548,6 +586,19 @@ export const Steps = memo(function Steps({
   const harness = useHarnessName(deviceId, sessionId)
   const current = live ? items.findLast(running) : undefined
   const now = current ? nowOf(current, stepKindOf(current), t, harness) : null
+  const shown = items.filter(thoughtShown)
+  // 什么都不剩（只有想完了、没字的思考）：不占地方
+  if (!current && shown.length === 0) return null
+  // 只有思考：不收成“想了一下”，每条一行浅字，点开看全文
+  if (!current && shown.every((item) => item.kind === 'reasoning')) {
+    return (
+      <div className="steps thoughts" data-anchor={`g:${groupKey}`}>
+        {shown.map((item) => (
+          <Reasoning key={item.id} deviceId={deviceId} sessionId={sessionId} itemId={item.id} />
+        ))}
+      </div>
+    )
+  }
   return (
     <div className="steps" data-running={current ? '' : undefined}>
       <button
@@ -566,9 +617,6 @@ export const Steps = memo(function Steps({
         <span className="sum">{now ? now.label : stepsSummary(tally, t)}</span>
         {now?.target ? <span className="now ell">{now.target}</span> : null}
         <span className="meta">
-          {tally.failed > 0 ? (
-            <span className="bad">{t('activity.failed', { n: tally.failed })}</span>
-          ) : null}
           {tally.declined > 0 ? (
             <span className="bad">{t('activity.declined', { n: tally.declined })}</span>
           ) : null}
@@ -587,13 +635,14 @@ export const Steps = memo(function Steps({
       </button>
       {open ? (
         <div className="steps-body">
-          {items.map((item) => (
+          {shown.map((item) => (
             <StepItem
               key={item.id}
               deviceId={deviceId}
               sessionId={sessionId}
               itemId={item.id}
               kind={item.kind}
+              suggest={isSuggest(item)}
             />
           ))}
         </div>

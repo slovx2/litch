@@ -14,6 +14,8 @@ const COUNT_KEYS = {
   delete: 'activity.delete',
   tool: 'activity.tool',
   notice: 'activity.notice',
+  suggest: 'activity.suggest',
+  ask: 'activity.ask',
 } as const satisfies Record<StepKind, string>
 
 const NOW_KEYS = {
@@ -27,6 +29,8 @@ const NOW_KEYS = {
   delete: 'activity.now.delete',
   tool: 'activity.now.tool',
   notice: 'activity.now.notice',
+  suggest: 'activity.now.suggest',
+  ask: 'activity.now.ask',
 } as const satisfies Record<StepKind, string>
 
 /** 第一个字母大写（英文的汇总是几段拼起来的，只有开头那段要大写；中文不受影响） */
@@ -73,6 +77,8 @@ export function nowOf(
         target: item.changes.map((change) => change.path.split(/[\\/]/).pop()).join(', '),
       }
     case 'toolCall': {
+      // 建议任务、收尾：对象是建议的标题（卡片在回合最下方）
+      if (kind === 'suggest' || kind === 'ask') return { label, target: suggestTitles(item) }
       const tool = t.text(item.tool)
       // Claude Code 的读、搜投影出来是“Read 路径”：动词已经在前面说了，对象只留后半截
       const rest = kind === 'tool' ? tool : tool.replace(/^\S+\s*/, '') || tool
@@ -90,7 +96,20 @@ export function nowOf(
   }
 }
 
-/** 回合结束后整段过程收成的那一行：前半是“已处理 X · N 段说明 · N 步 · N 个子代理”，后半是标红的几项 */
+/** 建议任务那一行写的对象：建议的标题，几条用顿号隔开；只留了问题的写问题 */
+export function suggestTitles(item: ItemView): string {
+  if (item.kind !== 'toolCall') return ''
+  if (item.wrapUp) {
+    const titles = item.wrapUp.suggestions.map((entry) => entry.title).filter(Boolean)
+    return titles.length > 0 ? titles.join(' · ') : (item.wrapUp.ask ?? '')
+  }
+  return item.spawned?.title ?? ''
+}
+
+/**
+ * 回合结束后整段过程收成的那一行：前半是“已处理 X · N 段说明 · N 步 · N 个子代理”，后半是标红的几项。
+ * 失败的步骤不在这里数（每条命令自己的退出码照写）：被拒、失败的子代理、回合出错或中断才标红
+ */
 export function processSummary(
   tally: ProcessTally,
   durationMs: string | null,
@@ -102,7 +121,6 @@ export function processSummary(
   if (tally.steps > 0) plain.push(t('activity.steps', { n: tally.steps }))
   if (tally.agents > 0) plain.push(t('activity.agents', { n: tally.agents }))
   const bad: string[] = []
-  if (tally.failed > 0) bad.push(t('activity.failed', { n: tally.failed }))
   if (tally.declined > 0) bad.push(t('activity.declined', { n: tally.declined }))
   if (tally.agentsFailed > 0) bad.push(t('activity.agentsFailed', { n: tally.agentsFailed }))
   if (ended === 'failed') bad.push(t('turn.failed'))

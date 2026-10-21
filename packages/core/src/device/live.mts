@@ -55,6 +55,7 @@ import {
   settingsDiff,
   turnOverrides,
 } from '../projection/settings.mjs'
+import { spanOp } from '../projection/span.mjs'
 import {
   type KeptTodo,
   placeTodos,
@@ -335,9 +336,16 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
    * 一批增量：先落到这边的视图上，再交给订阅的各方。
    * 增量是值：视图里放的是拷出来的一份（见 reduce.mts），交出去的这些对象之后不会再被这边改动
    */
-  const emit = (live: Live, ops: SessionOp[]) => {
-    if (!live.view || ops.length === 0) return
-    for (const op of ops) reduceSession(live.view, op)
+  const emit = (live: Live, given: SessionOp[]) => {
+    const view = live.view
+    if (!view || given.length === 0) return
+    // 添加条目的那几条记上看到它开始、结束的时刻（步骤组的时长用），再落到视图上
+    const now = host.clock.now()
+    const ops = given.map((op) => {
+      const stamped = spanOp(view, op, now)
+      reduceSession(view, stamped)
+      return stamped
+    })
     for (const sink of live.sinks) sink.delta(ops)
   }
 

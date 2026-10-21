@@ -1,8 +1,9 @@
 // 过程：一组的摘要（收起时一行，高度固定）和展开后的每一步。每一步一行，点开看细节：
 // 命令的输出末尾、改了哪些文件和一小段差异、工具调用的参数和结果。细节都有上限，长的到“差异”“文件”页去看。
-import { diffLines, knownFileRef, type ToolPart, taskOfItem } from '@litch/core'
+import { diffLines, knownFileRef, stepKindOf, type ToolPart, taskOfItem } from '@litch/core'
 import { Children, memo, type ReactNode } from 'react'
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { suggestTitles } from '../../../../packages/ui/src/transcript/steps-text.ts'
 import type { Row, StepState } from '../core/rows'
 import { type Translator, useT } from '../ui/i18n'
 import { type Palette, useTheme } from '../ui/theme'
@@ -34,10 +35,11 @@ export const GroupCell = memo(function GroupCell({ row }: Props<'group'>) {
       ? row.ids.split(' ').filter((id) => taskOfItem(background, id)?.status === 'running').length
       : 0
   const steps = t('activity.steps', { n: row.count })
+  // 失败的条数不写（每一步自己的退出码、失败照写）；跑完了写这一组从第一条开始到最后一条结束的用时
   const tail = row.current
     ? ` · ${t('detail.group.running', { label: t.text(row.current) })}`
-    : row.failed > 0
-      ? ` · ${t('detail.group.failed', { n: row.failed })}`
+    : row.durationMs
+      ? ` · ${t('detail.seconds', { s: seconds(row.durationMs) })}`
       : ''
   return (
     <View style={styles.group}>
@@ -51,7 +53,7 @@ export const GroupCell = memo(function GroupCell({ row }: Props<'group'>) {
         <Text
           style={{
             fontSize: font.size.meta,
-            color: row.failed > 0 && !row.current ? c.err : c.ink3,
+            color: c.ink3,
           }}
           numberOfLines={1}
         >
@@ -96,9 +98,20 @@ export const StepCell = memo(function StepCell({ row }: Props<'step'>) {
     case 'fileChange':
       label = item.changes.map((change) => change.path).join(', ')
       break
-    case 'toolCall':
+    case 'toolCall': {
+      // 建议任务、收尾的问题：卡片和问题在回合最下方，这一步写建议的标题
+      const kind = stepKindOf(item)
+      if (kind === 'suggest' || kind === 'ask') {
+        const n = item.wrapUp ? item.wrapUp.suggestions.length || 1 : 1
+        label = t('detail.labelled', {
+          head: t(kind === 'ask' ? 'activity.ask' : 'activity.suggest', { n }),
+          text: suggestTitles(item),
+        })
+        break
+      }
       label = item.source ? `${t.text(item.source)} · ${t.text(item.tool)}` : t.text(item.tool)
       break
+    }
     case 'webSearch':
       label = t('detail.labelled', { head: t('search.verb'), text: item.query })
       break

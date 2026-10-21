@@ -2,8 +2,10 @@
 // 一、命令在跑的时候，收着的步骤组那一行写“正在运行”、当前这条命令和“已经跑了多久”
 //     （对面不增量给输出时，这是唯一看得出它还活着的东西）；等批准的命令写的是“待审批”，不计时。
 //     跑完之后那一行是动作和个数（“运行 1 条命令”）和用时。
+//     回合在跑时，最下面“{harness} 正在工作”那一行后面跟着这一回合已经跑了多久。
 // 二、整段过程什么时候自己收成一行：一般的 harness 等最终回答写完（这里是回合停下）；声明了“最终回答一开始就知道”的
 //     （模拟核心里的 Codex）在最终回答一开始就收。用户在回合里手动展开过步骤组的，回合结束也不收。
+// 三、思考：只有一行浅字（不写“想了一下”），点开看全文。
 // 整个函数会被转成文字放进页面里执行，所以用到的工具都写在函数里面。
 
 export interface ActivityProbe {
@@ -19,7 +21,11 @@ export interface ActivityProbe {
     openWhileAnswering: boolean
     /** 回合结束之后整段过程收成了一行 */
     closedAfter: boolean
+    /** 回合在跑时“正在工作”那一行后面写的回合用时（去重，按出现的先后） */
+    turnElapsed: string[]
   }
+  /** 只有思考的一段：浅字一行、没有动词、点开有全文 */
+  thought: { line: string; quiet: boolean; verb: boolean; full: boolean }
   /** 等批准的命令：步骤组那一行写的字、有没有在计时 */
   waiting: { label: string; timed: boolean }
   /** 回合进行中手动展开过步骤组：回合结束之后过程还摊着 */
@@ -115,6 +121,7 @@ export async function activityProbe(): Promise<ActivityProbe> {
     await until('那条命令', () => text(one('.now', group() ?? undefined)).includes('npm test'))
     if (touch) group()?.click()
     const elapsed: string[] = []
+    const turnElapsed: string[] = []
     let state = ''
     // 命令跑着的这两秒多：每一帧看一眼那一行写的是什么。每次都重新找那一行，不拿着旧的节点不放
     const deadline = performance.now() + 20_000
@@ -123,6 +130,8 @@ export async function activityProbe(): Promise<ActivityProbe> {
       if (!head || !one('.st.run', head)) break
       const spent = text(one('[data-elapsed]', head))
       if (spent && !elapsed.includes(spent)) elapsed.push(spent)
+      const whole = text(one('.running-line .running-time'))
+      if (whole && !turnElapsed.includes(whole)) turnElapsed.push(whole)
       state = `${text(one('.sum', head))} ${text(one('.now', head))}`
       if (performance.now() > deadline) {
         throw new Error(`过程区：那条命令一直没结束（那一行写着“${text(head)}”）`)
@@ -139,6 +148,7 @@ export async function activityProbe(): Promise<ActivityProbe> {
     await frame()
     return {
       elapsed,
+      turnElapsed,
       running: state,
       done,
       openWhileAnswering,
@@ -170,6 +180,26 @@ export async function activityProbe(): Promise<ActivityProbe> {
   if (!card.isConnected) throw new Error('过程区：审批卡片自己没了')
   await stop()
 
+  // ---- 只有思考的一段 ----
+  await say('推理一会儿')
+  const thinking = await until(
+    '写完的思考',
+    () => {
+      const row = one('.item[data-tone="quiet"]', lastTurn() ?? undefined)
+      return row && !one('.st.run', row) && text(one('.tgt', row)) ? row : null
+    },
+    60_000,
+  )
+  one<HTMLButtonElement>('.item-head', thinking)?.click()
+  await frame()
+  const thought = {
+    line: text(one('.tgt', thinking)),
+    quiet: Boolean(thinking.closest('.steps.thoughts')),
+    verb: Boolean(one('.verb', thinking)),
+    full: text(one('.item-detail .think', thinking)).length > text(one('.tgt', thinking)).length,
+  }
+  if (running()) await stop()
+
   // ---- 手动展开过步骤组的回合 ----
   const touched = await runAWhile(true)
 
@@ -188,7 +218,9 @@ export async function activityProbe(): Promise<ActivityProbe> {
       done: plain.done,
       openWhileAnswering: plain.openWhileAnswering,
       closedAfter: plain.closedAfter,
+      turnElapsed: plain.turnElapsed,
     },
+    thought,
     waiting,
     touched: { openAfter: touched.openAfter },
     early: { closedWhileAnswering: early.openWhileAnswering === false },
@@ -197,7 +229,7 @@ export async function activityProbe(): Promise<ActivityProbe> {
 
 export function judgeActivity(probe: ActivityProbe): string[] {
   const failed: string[] = []
-  const { plain, waiting, touched, early } = probe
+  const { plain, thought, waiting, touched, early } = probe
   // 两秒多的命令：至少看得到“1 秒”，而且都是整秒（末位不带小数，免得一直跳）
   if (plain.elapsed.length === 0) {
     failed.push('命令在跑的时候，步骤组那一行上没有“已经跑了多久”')
@@ -209,6 +241,14 @@ export function judgeActivity(probe: ActivityProbe): string[] {
   }
   if (!/^运行 1 条命令 2\.\d 秒$/.test(plain.done)) {
     failed.push(`命令结束之后步骤组那一行写的不是汇总和用时：${plain.done}`)
+  }
+  if (plain.turnElapsed.length === 0) {
+    failed.push('回合在跑的时候，“正在工作”那一行后面没有回合用时')
+  } else if (!plain.turnElapsed.every((entry) => /^\d+ 秒$/.test(entry))) {
+    failed.push(`回合用时不是整秒：${plain.turnElapsed.join('、')}`)
+  }
+  if (!thought.line || !thought.quiet || thought.verb || !thought.full) {
+    failed.push(`思考不是一行浅字、点开看全文：${JSON.stringify(thought)}`)
   }
   if (!plain.openWhileAnswering) {
     failed.push('一般的 harness：最终回答还没写完，过程就收起来了')
