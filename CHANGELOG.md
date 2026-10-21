@@ -35,6 +35,7 @@ versioning or publishing metadata.
 - Claude Code：回合进行中再发 `turn/start` 时，和上游 codex 一样并进正在跑的回合（相当于 `turn/steer`），回执里是那个回合的号，不再回 `-32009`；带图片的、追问子代理的、审查和手动压缩的、带 `outputSchema` 的回合照旧拒绝，这次请求里的模型、权限等设置不跟着改
 - Claude Code：输入里选的 Skill（`{type: "skill"}`）照上游 codex 把 SKILL.md 正文作为 `<skill>` 片段放在这一轮的话前面交给模型，`turn/start`、`turn/steer` 都是；原来拼成跟在话后面的 “/名字”，技能不在开头时 CLI 不展开，正文到不了模型。关掉的技能什么都不给；不在技能清单里的（比如 CLI 插件带的）照旧转成 “/名字”
 - Claude Code：新增开关 `CHA_CLAUDE_EXTENDED_CACHE_TTL`，默认 `1`，和原来一样往 `ANTHROPIC_BETAS` 补 `extended-cache-ttl-2025-04-11`；设成 `0` 时不补，CLI 发的 `anthropic-beta` 和直接跑 CLI 时一样，给不想多转一个 beta 的计费代理用。请求体里的 `cache_control.ttl` 不是入口写的：订阅登录时 CLI 自己写 `1h` 并自己带上这个 beta，API key 时不写，关掉不会出现缺 beta 的请求。认不出的值启动就报错
+- Claude Code：交给模型的权限申请工具（`request_permissions`）描述里去掉内部名称；MCP 服务 OAuth 动态注册报的客户端名从内部名称改成 `codex-harness-adapter`，可用 `CHA_CLAUDE_MCP_OAUTH_CLIENT_NAME` 改。已经注册过的客户端不受影响，下次重新注册才用新名字
 
 ## 0.14.0
 

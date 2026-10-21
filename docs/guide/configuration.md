@@ -313,6 +313,7 @@ export CHA_CLAUDE_NODE="/absolute/path/to/node"
 | `CHA_CLAUDE_MODEL_ALIASES` / `_EFFORT_ALIASES` | Id remapping. |
 | `CHA_CLAUDE_MCP_SERVERS` | MCP server config (JSON or file path). |
 | `CHA_CLAUDE_MCP_IDLE_MINUTES` | 适配器自己连的 MCP 服务跨回合复用：没人用的连接留多久（分钟），默认 `10`，最长约 `35791`；`0` 表示不复用，每个回合重新连。有状态的 stdio 服务因此跨回合保留状态。 |
+| `CHA_CLAUDE_MCP_OAUTH_CLIENT_NAME` | MCP 服务 OAuth 登录时动态注册报的客户端名（授权页上给用户看），默认 `codex-harness-adapter`。接入方要显示自己的名字时设它。 |
 | `CHA_CLAUDE_MCP_IDLE_CONNECTIONS` | 整个适配器最多留几条没人用的 MCP 连接（一个会话的一个服务算一条），超出时先关最久没用的，默认 `8`；`0` 也表示不复用。 |
 | `CHA_CLAUDE_ALLOWED_TOOLS` | Pre-approved tools. |
 | `CHA_CLAUDE_ADD_DIRS` | Extra directories exposed to Claude. |
