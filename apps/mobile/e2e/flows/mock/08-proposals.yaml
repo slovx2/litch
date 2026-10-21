@@ -29,7 +29,7 @@ tags: [mock]
     timeout: 20000
 - extendedWaitUntil:
     visible:
-      id: proposal:.*:dismiss
+      id: proposal:.*:start
     timeout: 10000
 # 第一张带着背景、比较高，回答停下时它的“不要”可能已经滚到屏幕上面去了：先翻回到它，免得点成下面那张
 - scrollUntilVisible:
@@ -37,6 +37,12 @@ tags: [mock]
       text: (Tidy the CHANGELOG|整理 CHANGELOG)
     direction: UP
     centerElement: true
+    timeout: 10000
+# 四个按钮在窄屏上折成两行，“不要”在第二行，可能被输入框挡着：往下翻到它露出来
+- scrollUntilVisible:
+    element:
+      id: proposal:.*:dismiss
+    direction: DOWN
     timeout: 10000
 - tapOn:
     id: proposal:.*:dismiss
