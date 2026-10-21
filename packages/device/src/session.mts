@@ -31,6 +31,7 @@ import {
 } from '../../shared/src/runtime-version.mjs'
 import type { ClientToolInvoker } from './client-tool-invoke.mjs'
 import type { ClientToolPeer, ClientToolRouter } from './client-tools.mjs'
+import type { CodexTitles } from './codex-titles.mjs'
 import type { ManagedHarness } from './control.mjs'
 import { DeviceCalls, type DeviceLayer } from './device-layer.mjs'
 import { type DeviceTools, declareDeviceTools } from './device-tools.mjs'
@@ -45,7 +46,7 @@ import { describeHarness, type HarnessCatalog, REQUIRED_EXTENSIONS } from './har
 import { instructionsCall } from './instructions.mjs'
 import { listThreads } from './list-threads.mjs'
 import { type DeviceManagement, MANAGEMENT_PREFIX } from './management.mjs'
-import { dialectFor } from './native-codex.mjs'
+import { dialectFor, NATIVE_CODEX_DIALECT } from './native-codex.mjs'
 import { type DevicePairing, PAIR_PREFIX, PairingError } from './pairing.mjs'
 import { Relay } from './relay.mjs'
 import { classify } from './routes.mjs'
@@ -141,6 +142,8 @@ export interface SessionHost {
   harnessEnvNames(harness: string): string[]
   /** 原生 codex 自带的模型目录（主进程跑 `codex debug models --bundled`，控制命令 codex.models）。没有主进程时抛错 */
   codexCatalog(): Promise<unknown>
+  /** 原生 codex 会话的自动起名（codex-titles.mts） */
+  titles: CodexTitles
 }
 
 /** 请求已经有着落：转给上游了（应答由上游来），或者已经自己答过了 */
@@ -204,7 +207,10 @@ export class ClientSession implements ClientToolPeer {
         this.translators.get(link.harness)?.notification(method, params),
       sessions: {
         clientTurn: (harness, turnId) => host.sessionTree.clientTurn(harness, turnId),
-        turnEvent: (harness, method, params) => host.sessionTree.turnEvent(harness, method, params),
+        turnEvent: (harness, method, params) => {
+          host.sessionTree.turnEvent(harness, method, params)
+          host.titles.turnEvent(method, params)
+        },
         decorate: (thread) => host.sessionTree.decorate(thread),
       },
       clientTools: {
@@ -432,6 +438,10 @@ export class ClientSession implements ClientToolPeer {
       home: () => link.facts.home ?? null,
       envNames: () => this.host.harnessEnvNames(link.harness),
       bundledCatalog: () => this.host.codexCatalog(),
+      autoTitle: {
+        enabled: () => this.host.titles.enabled(link.harness),
+        set: (value) => this.host.titles.setEnabled(link.harness, value),
+      },
       notify: (method, params) => {
         if (this.declared.has(EXTENSION.harnessConfig)) this.announce(method, params)
       },
@@ -508,6 +518,12 @@ export class ClientSession implements ClientToolPeer {
           this.host.sessionTree.store.setTools(thread.id, tools)
       })
     }
+    // 经聚合面新建的原生 codex 会话（聚合面只认声明了 harness 扩展的客户端，也就是 Litch）：第一回合结束后起名
+    if (method === 'thread/start' && link.dialect === NATIVE_CODEX_DIALECT)
+      afterwards.push((result) => {
+        const thread = isObject(result) ? result.thread : null
+        if (isObject(thread)) this.host.titles.born(link.harness, thread)
+      })
     const send = (ready: Record<string, unknown> | null): typeof HANDLED => {
       if (afterwards.length)
         this.relay.after(id, (result) => {

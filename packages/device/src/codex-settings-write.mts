@@ -2,7 +2,8 @@
 // 先按当下读到的结构把每一项核对一遍（有没有这一项、锁没锁、值合不合规矩），一项不对整批都不写；
 // 再一次 config/batchWrite 写完 config.toml 里的键（带版本，codex 那头要么全写要么全不写）。
 // 技能的开关不走 batchWrite：codex 要经 skills/config/write 改才会清掉它的技能缓存（上游 catalog_processor.rs），
-// 它们排在 batchWrite 之后一个一个写——batchWrite 被拒的话一个都不会写。
+// 它们排在 batchWrite 之后一个一个写——batchWrite 被拒的话一个都不会写。自动起名的开关存在设备进程里（codex-titles.mts），
+// 也排在 batchWrite 之后。
 import type {
   HarnessConfigEdit,
   HarnessConfigWriteResponse,
@@ -17,7 +18,7 @@ import {
   splitKey,
 } from './codex-config-io.mjs'
 import { type CodexSettings, MEMORY_RESET, readCodexSettings } from './codex-settings.mjs'
-import { HarnessConfigError, text } from './harness-config.mjs'
+import { HarnessConfigError, type TranslatorContext, text } from './harness-config.mjs'
 import { isObject } from './wire.mjs'
 
 type Spec = CodexSettings['specs'][number]
@@ -70,6 +71,8 @@ function check(harness: string, spec: HarnessSettingSpec, value: unknown): void 
 interface Plan {
   edits: CodexEdit[]
   skills: { path: string; enabled: boolean }[]
+  /** 自动起名改成什么（null 是回到默认）；没改是 undefined */
+  autoTitle?: boolean | null
   restartRequired: boolean
 }
 
@@ -116,6 +119,10 @@ function plan(harness: string, settings: CodexSettings, edits: unknown): Plan {
       result.skills.push({ path: spec.write.path, enabled: value !== false })
       continue
     }
+    if (spec.write?.kind === 'autoTitle') {
+      result.autoTitle = value as boolean | null
+      continue
+    }
     if (spec.write?.kind === 'hookTrust') {
       const base = edit.key.slice(0, -'.trusted'.length)
       result.edits.push({
@@ -135,6 +142,7 @@ export async function writeCodexSettings(
   ask: Ask,
   harness: string,
   home: string | null,
+  autoTitle: TranslatorContext['autoTitle'],
   params: Record<string, unknown>,
 ): Promise<HarnessConfigWriteResponse> {
   if (typeof params.expectedVersion !== 'string')
@@ -143,10 +151,11 @@ export async function writeCodexSettings(
       harness,
       text('缺少 expectedVersion', 'expectedVersion is required'),
     )
-  const settings = await readCodexSettings(ask, harness, home)
+  const settings = await readCodexSettings(ask, harness, home, autoTitle.enabled())
   const steps = plan(harness, settings, params.edits)
   await batchWrite(ask, harness, settings.snapshot, steps.edits, params.expectedVersion)
   for (const skill of steps.skills) await ask('skills/config/write', skill)
+  if (steps.autoTitle !== undefined) autoTitle.set(steps.autoTitle)
   // 写完重读一遍：新的版本，以及哪些键写进去了但被更高一层盖住
   const after = await readSnapshot(ask, harness)
   const keys = (params.edits as HarnessConfigEdit[]).map((edit) => edit.key)

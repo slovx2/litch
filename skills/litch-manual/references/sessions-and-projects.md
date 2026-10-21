@@ -44,6 +44,9 @@ explain it:
   "Terminals on the device" brings it back. Limits are device settings (`device-settings.md`).
 - **Session menu**: pin, move to group or project, rename, archive (undo available), delete (permanent),
   schedule a task for this session, start a sub-session, detach a sub-session.
+- **Session names**: Claude Code sessions take the title Claude Code writes; Codex sessions started in
+  Litch are named by Litch after their first turn (switch and conditions in `harnesses.md`). A name the
+  user sets by hand is never replaced.
 - **Archived sessions** page: restore, open read-only, delete.
 - **Reply style**: sessions that Litch starts (including sub-sessions and scheduled tasks) tell the model
   that replies appear in Litch, which renders Markdown and Mermaid diagrams, and to answer

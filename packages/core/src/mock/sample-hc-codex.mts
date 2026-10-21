@@ -93,6 +93,13 @@ export function sampleCodex({ home, remote }: SampleHome): SampleHc {
         description: t('每行一个绝对路径', 'One absolute path per line'),
       },
     ),
+    spec('litch.autoTitle', 'behavior', 'boolean', t('自动起名', 'Name sessions automatically'), {
+      default: true,
+      description: t(
+        '在 Litch 里新建的会话，第一回合结束后由 Litch 用小模型（luna 系，账号的模型清单里有才用）起个名字；手动改过名的不动。关掉后新建的会话不再起名。',
+        'Sessions you start in Litch get a name after their first turn, written by a small model (the luna family, only when your account lists one). Names you set yourself are kept. When off, new sessions are not named.',
+      ),
+    }),
     spec('web_search', 'behavior', 'enum', t('网页搜索', 'Web search'), {
       default: 'cached',
       options: [

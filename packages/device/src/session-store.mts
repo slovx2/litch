@@ -100,6 +100,14 @@ const MIGRATIONS: readonly string[] = [
   `ALTER TABLE proposals ADD COLUMN offer INTEGER NOT NULL DEFAULT 0;`,
   // 提案的背景（litch_sessions 的 background）和任务（prompt）分开存，开始时分两段交给子会话。旧提案没有背景
   `ALTER TABLE proposals ADD COLUMN background TEXT NOT NULL DEFAULT '';`,
+  // Litch 自己替某个 harness 做的功能的开关（不在 harness 原生配置里的，比如原生 codex 的自动起名，codex-titles.mts）。
+  // 值是 JSON，没写过的行不存在、按默认
+  `CREATE TABLE harness_options(
+     harness TEXT NOT NULL,
+     key TEXT NOT NULL,
+     value TEXT NOT NULL,
+     PRIMARY KEY(harness, key)
+   ) WITHOUT ROWID;`,
 ]
 
 export const SESSION_SCHEMA_VERSION = MIGRATIONS.length
@@ -262,6 +270,12 @@ export class SessionStore {
         `INSERT INTO thread_instructions(thread_id, given, namespaces, cwd) VALUES(?, ?, ?, ?)
          ON CONFLICT(thread_id) DO UPDATE SET given=excluded.given, namespaces=excluded.namespaces, cwd=excluded.cwd`,
       ),
+      option: prepare('SELECT value FROM harness_options WHERE harness=? AND key=?'),
+      setOption: prepare(
+        `INSERT INTO harness_options(harness, key, value) VALUES(?, ?, ?)
+         ON CONFLICT(harness, key) DO UPDATE SET value=excluded.value`,
+      ),
+      clearOption: prepare('DELETE FROM harness_options WHERE harness=? AND key=?'),
     }
   }
 
@@ -558,5 +572,24 @@ export class SessionStore {
       JSON.stringify(record.namespaces),
       record.cwd,
     )
+  }
+
+  // ---------- Litch 替 harness 做的功能的开关 ----------
+
+  /** 写过的值；没写过、坏了的是 undefined（按默认） */
+  option(harness: string, key: string): unknown {
+    const raw = this.statements.option?.get(harness, key)?.value
+    if (typeof raw !== 'string') return undefined
+    try {
+      return JSON.parse(raw)
+    } catch {
+      return undefined
+    }
+  }
+
+  /** null：清掉，回到默认 */
+  setOption(harness: string, key: string, value: unknown): void {
+    if (value === null || value === undefined) this.run('clearOption', harness, key)
+    else this.run('setOption', harness, key, JSON.stringify(value))
   }
 }
