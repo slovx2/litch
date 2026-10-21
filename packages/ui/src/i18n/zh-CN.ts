@@ -962,7 +962,6 @@ export const zhCN = {
   'turn.rollback.failed': '没回退成：{reason}',
   'context.unknown': '上下文用了多少，对面还没报',
   'context.compact': '压缩上下文',
-  'context.compactNote': '把之前的对话总结一遍，腾出上下文',
   'context.compactFailed': '没压缩成：{reason}',
   'rail.label': '会话信息',
   'todo.title': '待办',

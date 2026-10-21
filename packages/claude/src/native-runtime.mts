@@ -45,6 +45,7 @@ import { settingsEnvValue } from './claude-setting-layers.mjs'
 import { cliOutputFormat } from './cli-output-schema.mjs'
 import { type CodexErrorInfo, codexErrorInfoFor, TurnFailure } from './codex-error-info.mjs'
 import {
+  compactWindowOf,
   contextTokens,
   contextWindowOf,
   mergeRequestUsage,
@@ -2855,7 +2856,8 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     }
     const claudeSessionId = message.session_id == null ? null : String(message.session_id)
     const usage = (message.usage as Record<string, unknown>) || {}
-    const contextWindow = contextWindowOf(message.modelUsage, pending.contextModel)
+    const modelWindow = contextWindowOf(message.modelUsage, pending.contextModel)
+    const contextWindow = (await compactWindow(pending.query, modelWindow)) ?? modelWindow
     // Push usage + metrics before completed so server can roll them into the
     // turn before emitting turn/completed.
     if (Object.keys(usage).length > 0 || contextWindow !== null) {
@@ -3017,6 +3019,23 @@ function workflowAgentToolUseId(taskId: string, agentId: string): string {
   return `workflow-agent:${taskId}:${agentId}`
 }
 
+/**
+ * CLI 自己 /context 量占用用的窗口（解析后的自动压缩窗口）。summary 档只用上次请求的用量和本地估算，
+ * 不调计数接口；CLI 不答（会话已经收了）或答得慢就算了，退回模型窗口
+ */
+async function compactWindow(query: Query, modelWindow: number | null): Promise<number | null> {
+  try {
+    const usage = await Promise.race([
+      query.getContextUsage({ detail: 'summary' }),
+      delay(CONTEXT_USAGE_GRACE_MS, null, { ref: false }),
+    ])
+    return compactWindowOf(usage, modelWindow)
+  } catch (error) {
+    debugLog('native.sdk.contextUsageFailed', { error: String(error) })
+    return null
+  }
+}
+
 async function settlesWithin(promise: Promise<unknown>, timeoutMs: number): Promise<boolean> {
   if (timeoutMs <= 0) return false
   let timer: NodeJS.Timeout | null = null
@@ -3055,6 +3074,7 @@ function stringOrNull(value: unknown): string | null {
 }
 
 const TITLE_GRACE_MS = 5_000
+const CONTEXT_USAGE_GRACE_MS = 2_000
 
 // 这两个变量设了（不为空就算，CLI 不看值）CLI 就不自己起标题
 function cliSkipsAutoTitle(env: NodeJS.ProcessEnv): boolean {

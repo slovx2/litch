@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
@@ -230,6 +230,49 @@ test('EVENTS-003：一个回合里多次工具调用，占用是最近一次请�
     }
     assert.ok(replay, '恢复时要回放用量')
     assert.deepEqual(replay.params.tokenUsage, final)
+  } finally {
+    await client.close()
+    await llm.close()
+    await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
+  }
+})
+
+test('EVENTS-004：用户设了自动压缩窗口，报的上下文窗口是它，不是模型窗口', {
+  timeout: 90_000,
+}, async () => {
+  const home = await mkdtemp(join(tmpdir(), 'native-window-'))
+  const llm = new MockLLM()
+  const url = await llm.start()
+  // 和用户在 ~/.claude/settings.json 的 env 里设的一样；模拟模型的窗口是 200K，设得比它小才看得出来
+  await mkdir(join(home, 'claude'), { recursive: true })
+  await writeFile(
+    join(home, 'claude', 'settings.json'),
+    JSON.stringify({ env: { CLAUDE_CODE_AUTO_COMPACT_WINDOW: '150000' } }),
+  )
+  const client = await ProtocolClient.start(home, url)
+  try {
+    llm.enqueue(() => ({
+      content: [{ type: 'text', text: 'WINDOW_DONE' }],
+      usage: { input_tokens: 1000, cache_read_input_tokens: 0, output_tokens: 10 },
+    }))
+    const { thread } = await client.request('thread/start', {
+      cwd: home,
+      sandbox: 'danger-full-access',
+      approvalPolicy: 'never',
+    })
+    const { turn } = await client.request('turn/start', {
+      threadId: thread.id,
+      input: [{ type: 'text', text: '说一句' }],
+    })
+    assert.equal((await client.completed(turn.id)).status, 'completed')
+    const usage = client.trace
+      .filter(
+        (message) =>
+          message.method === 'thread/tokenUsage/updated' && message.params.threadId === thread.id,
+      )
+      .at(-1)
+    assert.equal(usage?.params.tokenUsage.modelContextWindow, 150_000)
+    llm.assertConsumed()
   } finally {
     await client.close()
     await llm.close()

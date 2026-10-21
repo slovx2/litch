@@ -123,7 +123,7 @@ export function ContextMeter({
               onClick={run}
             >
               <b>{t('context.compact')}</b>
-              <span>{blocked ?? t('context.compactNote')}</span>
+              {blocked !== null ? <span>{blocked}</span> : null}
             </button>
           </div>
         </div>
