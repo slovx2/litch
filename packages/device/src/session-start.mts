@@ -1,6 +1,7 @@
 // 派一个子会话（模型的 litch_sessions.start、用户的 litch/session/start、开始提案（acceptProposal）都走这里）。
 // fresh：在目标 harness 上 thread/start（目录缺省是父会话的），再 turn/start 发简报；fork：同 harness 的 thread/fork
-// 再 turn/start。审批策略、沙箱取父会话和请求值里更严的那个；模型、强度不限。建好后记父子关系、登记进会话索引
+// 再 turn/start。审批策略、沙箱取父会话和请求值里更严的那个；模型、强度不限，没给的取开始那一刻父会话的
+//（目标 harness 和父会话不同时用那边的默认；那个模型没有这一档强度的也用默认）。建好后记父子关系、登记进会话索引
 // 和设备级工作区（跟父会话在同一个工作区，除非指定了别的），给每条客户端连接发 thread/started 和父子关系的通知。
 import {
   isPresentationSpec,
@@ -202,9 +203,14 @@ export function briefing(
 
 /**
  * 子会话建的时候带哪些动态工具：父会话建时客户端给的那些（目标引擎认客户端工具才带），开关开着再加上 litch_sessions
- *（按“每回合收尾”开关给的那份）
+ *（按“每回合收尾”开关和子会话所在 harness 的“任务卡”开关给的那份）
  */
-function childTools(tree: SessionTree, parentId: string, link: EngineLink): unknown[] | null {
+function childTools(
+  tree: SessionTree,
+  parentId: string,
+  harness: string,
+  link: EngineLink,
+): unknown[] | null {
   const extensions = Array.isArray(link.runtime?.extensions) ? link.runtime.extensions : []
   if (!extensions.includes(EXTENSION.clientTools)) return null
   // 呈现风格看子会话建在哪个 harness 上（原生 codex 不带，按设备侧的 link.native 认），不照搬父会话的
@@ -213,9 +219,39 @@ function childTools(tree: SessionTree, parentId: string, link: EngineLink): unkn
   )
   return [
     ...inherited,
-    ...(tree.host.enabled() ? [sessionTools(tree.host.wrapUp())] : []),
+    ...(tree.host.enabled()
+      ? [sessionTools(tree.host.wrapUp(), tree.host.taskCards(harness))]
+      : []),
     ...(link.native ? [] : [PRESENTATION_SPEC]),
   ]
+}
+
+const textOf = (value: unknown): string | null =>
+  typeof value === 'string' && value ? value : null
+
+/**
+ * 这一档强度子会话用得上没有：问目标引擎的 model/list，找到那个模型（没给模型是缺省的那个）且它列了支持的强度、
+ * 里面没有这一档的，不带（用那边的默认）。问不到、找不到模型、没列强度的照带
+ */
+async function fitEffort(
+  link: EngineLink,
+  model: string | null,
+  effort: string | null,
+): Promise<string | null> {
+  if (!effort) return null
+  try {
+    const result = await link.request('model/list', { includeHidden: true })
+    const data = isObject(result) && Array.isArray(result.data) ? result.data.filter(isObject) : []
+    const entry = model
+      ? data.find((one) => one.model === model || one.id === model)
+      : data.find((one) => one.isDefault === true)
+    const supported = Array.isArray(entry?.supportedReasoningEfforts)
+      ? entry.supportedReasoningEfforts.map((one) => (isObject(one) ? one.reasoningEffort : one))
+      : null
+    return supported && !supported.includes(effort) ? null : effort
+  } catch {
+    return effort
+  }
 }
 
 export async function startChild(
@@ -261,7 +297,17 @@ export async function startChild(
   const parentThread = isObject(parentConfig?.thread) ? parentConfig.thread : null
   const permissions = tightened(parentConfig, spec)
   const link = harness === parentHarness ? parentLink : await tree.link(harness)
-  const tools = spec.kind === 'fresh' ? childTools(tree, parentId, link) : null
+  const tools = spec.kind === 'fresh' ? childTools(tree, parentId, harness, link) : null
+  // 模型、强度没给的取父会话现在的；harness 不同时不带，用那边的默认。父会话自己那一对不用再问
+  const same = harness === parentHarness
+  const parentModel = same ? textOf(parentConfig?.model) : null
+  const parentEffort = same ? textOf(parentConfig?.reasoningEffort) : null
+  const model = spec.model || parentModel
+  const wanted = spec.effort || parentEffort
+  const effort =
+    wanted && (wanted !== parentEffort || model !== parentModel)
+      ? await fitEffort(link, model, wanted)
+      : wanted
   const cwd =
     spec.cwd ||
     (typeof parentConfig?.cwd === 'string' ? parentConfig.cwd : null) ||
@@ -271,12 +317,12 @@ export async function startChild(
       ? await link.request('thread/fork', {
           threadId: parentId,
           ...(spec.handOffBefore ? { beforeTurnId: spec.handOffBefore } : {}),
-          ...(spec.model ? { model: spec.model } : {}),
+          ...(model ? { model } : {}),
           ...permissions,
         })
       : await link.request('thread/start', {
           ...(cwd ? { cwd } : {}),
-          ...(spec.model ? { model: spec.model } : {}),
+          ...(model ? { model } : {}),
           ...permissions,
           ...(tools?.length ? { dynamicTools: tools } : {}),
         })
@@ -324,7 +370,7 @@ export async function startChild(
   await link.request('turn/start', {
     threadId,
     input: [{ type: 'text', text, text_elements: [] }],
-    ...(spec.effort ? { effort: spec.effort } : {}),
+    ...(effort ? { effort } : {}),
   })
   tree.host.log(`会话 ${parentId} 派出子会话 ${threadId}（${harness}，${spec.kind}，${origin}）`)
   return { threadId, harness }
@@ -371,7 +417,7 @@ export async function acceptProposal(
     {
       harness: pick(overrides.harness, proposal.harness),
       model: pick(overrides.model, proposal.model),
-      effort: overrides.effort || null,
+      effort: pick(overrides.effort, proposal.effort ?? null),
       cwd: pick(overrides.cwd, proposal.cwd),
       projectId: overrides.projectId || null,
       kind: overrides.kind ?? proposal.kind,

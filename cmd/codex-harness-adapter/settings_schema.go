@@ -322,6 +322,7 @@ func buildSettingsSchema(c configuration) settingsSchema {
 				Default: []envEntry{}, Title: both("环境变量", "Environment variables"), Description: texts.env,
 			},
 		)
+		schema.Settings = append(schema.Settings, taskCardsSetting(id, group))
 		if id == "pi" {
 			schema.Settings = append(schema.Settings, piApprovalsSetting(c, group))
 		}

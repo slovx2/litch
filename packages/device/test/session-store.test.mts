@@ -146,3 +146,37 @@ test('SESSION-STORE-003：第 5 版的库升上来：提案多出背景一列，
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
+test('SESSION-STORE-004：上一版的库升上来：提案多出 effort 一列，旧提案是 null；新提的存得进、读得回', () => {
+  const dir = tempDir()
+  try {
+    const old = new DatabaseSync(join(dir, 'sessions.sqlite'))
+    initializeStoreFormat(old)
+    const previous = SESSION_SCHEMA_VERSION - 1
+    for (const step of SESSION_MIGRATIONS.slice(0, previous)) old.exec(step)
+    old.exec(`PRAGMA user_version=${previous}`)
+    old.exec(`INSERT INTO proposals(id, thread_id, title, prompt, kind, wake_parent, status, created_at, expires_at, started_thread_id)
+      VALUES('pr1', 'p1', '旧的', '做事', 'fresh', 1, 'pending', 5, 4000000000, NULL)`)
+    old.close()
+    const store = new SessionStore(openSessionDatabase(dir))
+    assert.equal(store.proposal('pr1')?.effort, null)
+    const added = store.addProposal({
+      id: 'pr2',
+      threadId: 'p1',
+      title: '新的',
+      prompt: '补集成测试。',
+      harness: null,
+      model: null,
+      effort: 'high',
+      cwd: null,
+      kind: 'fresh',
+      wakeParent: true,
+      createdAt: 8,
+      expiresAt: 4000000000,
+    })
+    assert.equal(added.effort, 'high')
+    assert.equal(store.proposal('pr2')?.effort, 'high')
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})

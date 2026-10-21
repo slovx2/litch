@@ -9,6 +9,7 @@ import { EXTENSION } from '../../protocol/src/device.mjs'
 import { HARNESS_INSTALL_NOTIFICATION } from '../../protocol/src/device-harness-install.mjs'
 import type { DeviceSettingsSnapshot } from '../../protocol/src/device-settings.mjs'
 import { HARNESS_CONFIG_NOTIFICATION } from '../../protocol/src/harness-config.mjs'
+import { taskCardsSettingKey } from '../../protocol/src/session-tree.mjs'
 import { DeviceBackground } from './background.mjs'
 import { ClientToolInvoker } from './client-tool-invoke.mjs'
 import { ClientToolRouter } from './client-tools.mjs'
@@ -289,6 +290,9 @@ export class DeviceServer {
         const value = this.control?.state?.snapshot.values[WRAP_UP_REMINDER_SETTING]
         return this.control ? value !== false : options.wrapUpReminder !== false
       },
+      // 任务卡按 harness 的开关（settings_sessions.go 的 taskCardsSetting）：没写过、没有主进程在管都按开着算
+      taskCards: (harness) =>
+        this.control?.state?.snapshot.values[taskCardsSettingKey(harness)] !== false,
       log,
     })
     this.deviceTools.register(CLIENT_TOOL_NAMESPACE.sessions, sessionToolsHandler(this.sessionTree))

@@ -16,6 +16,9 @@
 // offer 卡（litch_sessions.start 的 initiation offer）：模型那次调用一直等着（offers），用户在卡上选了（answerOffer）、
 // 又发了话（turn/start、turn/steer）、打断了回合、回合结束了，都让它了结；选了新会话的（chosen）等模型 accept 补简报，
 // 回合结束还没补的当作在这里做。设备进程重启时上一次还在等的一律当作在这里做。
+// 普通提案卡上的“在这里做”（proposalHere）：提案记 here，往父会话发一条用户消息，父会话在跑就排到回合结束后
+//（check 里先发它，再提醒、唤醒）。任务卡按 harness 关着（host.taskCards）时，新会话挑没有建议的那组工具
+//（currentSessionTools），已经带着 wrap_up 的会话也不再提醒。
 import { randomUUID } from 'node:crypto'
 import type { LitchBackgroundTask } from '../../protocol/src/background-tasks.mjs'
 import { CLIENT_TOOL_NAMESPACE } from '../../protocol/src/client-tools.mjs'
@@ -63,6 +66,11 @@ export interface SessionTreeHost {
   wrapUp(): boolean
   /** 设置里“提醒收尾”开着（sessions.wrapUpReminder） */
   wrapUpReminder(): boolean
+  /**
+   * 这个 harness 的“任务卡”开着（harness.<id>.taskCards，默认开）：关着时新会话的 litch_sessions 是没有建议的那一份，
+   * 已有会话的建议当场不落提案、offer 当在这里做、不提醒收尾
+   */
+  taskCards(harness: string): boolean
   log(line: string): void
 }
 
@@ -138,6 +146,8 @@ export class SessionTree {
   private readonly timers = new Set<NodeJS.Timeout>()
   /** 在等用户选的 offer 卡：提案 → 等它的那次调用 */
   private readonly offers = new Map<string, OfferWait>()
+  /** 提案卡上点了“在这里做”、还没发出去的用户消息：会话 → 按先后排的几条（会话在跑时排到回合结束后发） */
+  private readonly heres = new Map<string, string[]>()
   private expiry: NodeJS.Timeout | null = null
   private recovered = false
   private closed = false
@@ -339,8 +349,13 @@ export class SessionTree {
       ).catch((error: unknown) =>
         this.host.log(`子会话 ${threadId} 的回报没取到：${String(error)}`),
       )
-    // 父会话自己的回合结束了：它的子会话也许早就停了，看看要不要唤醒；有提醒在等的，现在可以发了
-    if (this.store.childrenOf(threadId).length || this.reminders.has(threadId)) this.check(threadId)
+    // 父会话自己的回合结束了：它的子会话也许早就停了，看看要不要唤醒；有提醒、“在这里做”在等的，现在可以发了
+    if (
+      this.store.childrenOf(threadId).length ||
+      this.reminders.has(threadId) ||
+      this.heres.has(threadId)
+    )
+      this.check(threadId)
   }
 
   // ---------- 提醒收尾 ----------
@@ -386,14 +401,14 @@ export class SessionTree {
   }
 
   /**
-   * 客户端建会话时带的 litch_sessions 换成设备进程按“每回合收尾”开关给的那份（工具、说明、规则都跟着换）。
-   * 没带 litch_sessions 的、不是数组的返回 null，照原样转
+   * 客户端建会话时带的 litch_sessions 换成设备进程按“每回合收尾”开关和这个 harness 的“任务卡”开关给的那份
+   *（工具、说明、规则都跟着换）。没带 litch_sessions 的、不是数组的返回 null，照原样转
    */
-  currentSessionTools(tools: unknown): unknown[] | null {
+  currentSessionTools(tools: unknown, harness: string): unknown[] | null {
     if (!Array.isArray(tools)) return null
     if (!tools.some((spec) => isObject(spec) && spec.name === CLIENT_TOOL_NAMESPACE.sessions))
       return null
-    const wanted = sessionTools(this.host.wrapUp())
+    const wanted = sessionTools(this.host.wrapUp(), this.host.taskCards(harness))
     return tools.map((spec) =>
       isObject(spec) && spec.name === CLIENT_TOOL_NAMESPACE.sessions ? wanted : spec,
     )
@@ -431,6 +446,11 @@ export class SessionTree {
     // 还有回合在跑（唤醒回合、刚好又来的回合）：等它结束，turnEvent 会再查一遍
     if (!(await this.idle(threadId))) return
     const harness = await this.owner(threadId)
+    // 这个 harness 的任务卡关了：建会话时带着 wrap_up 的也当场不再提醒
+    if (!this.host.taskCards(harness)) {
+      this.reminders.delete(threadId)
+      return
+    }
     await this.watch(harness, threadId)
     // 上面要等应答，这期间用户可能又说了话，或者别的回合里调了 wrap_up
     if (this.reminders.get(threadId) !== origin || this.active.has(threadId)) return
@@ -520,12 +540,18 @@ export class SessionTree {
   // ---------- 唤醒 ----------
 
   /**
-   * 看看要不要提醒收尾、唤醒这个会话。同一个会话的检查排成一条，检查途中又来的再查一遍。
-   * 先提醒后唤醒：提醒回合开出去之后会话就不闲了，唤醒等它结束（turnEvent 再查）
+   * 看看要不要发“在这里做”、提醒收尾、唤醒这个会话。同一个会话的检查排成一条，检查途中又来的再查一遍。
+   * 先发用户点出来的那句话（它是用户的话，提醒跟着作废、回报跟着交出去），再提醒，最后唤醒：
+   * 前一样开出回合之后会话就不闲了，后面的等它结束（turnEvent 再查）
    */
   check(parentId: string): void {
     const previous = this.checks.get(parentId) ?? Promise.resolve()
     const next = previous
+      .then(() =>
+        this.sendHere(parentId).catch((error: unknown) =>
+          this.host.log(`往 ${parentId} 发“在这里做”没成：${String(error)}`),
+        ),
+      )
       .then(() =>
         this.remind(parentId).catch((error: unknown) =>
           this.host.log(`提醒 ${parentId} 收尾没成：${String(error)}`),
@@ -721,6 +747,48 @@ export class SessionTree {
     const settled = this.store.proposal(proposalId)
     if (settled) this.proposalsChanged(settled.threadId, [settled])
     return settled
+  }
+
+  /**
+   * 普通提案卡上用户点了“在这里做”（litch/sessionProposal/here）：只收 pending 的，提案记 here，往父会话发一条用户消息
+   *（lead 加标题，空一行再是任务原文，不带背景）。父会话闲着当场发，在跑就排到回合结束后（check 里先发它）；
+   * 设备进程关掉时还没发出的丢掉，提案仍是 here
+   */
+  proposalHere(proposalId: string, lead?: string): void {
+    if (this.accepting.has(proposalId))
+      throw new DeviceError('unsupported', `提案 ${proposalId} 正在开始`)
+    const proposal = this.pendingProposal(proposalId)
+    if (!this.settleProposal(proposalId, 'here', null, ['pending']))
+      throw new DeviceError('unsupported', `提案 ${proposalId} 已经了结了`)
+    const text = `${lead ?? 'Do it here: '}${proposal.title}\n\n${proposal.prompt}`
+    this.heres.set(proposal.threadId, [...(this.heres.get(proposal.threadId) ?? []), text])
+    this.check(proposal.threadId)
+  }
+
+  /**
+   * 会话闲着、有“在这里做”在排队：发最早的那条，当作用户说的一句话（同客户端的 turn/start：攒着的回报放在前面，
+   * 唤醒计数清零、没发的提醒作废；这个回合算用户发起的，能直接派子会话、会被提醒收尾）。发不出去的留着，下次再试
+   */
+  private async sendHere(threadId: string): Promise<void> {
+    const text = this.heres.get(threadId)?.[0]
+    if (text === undefined || this.closed) return
+    if (!(await this.idle(threadId))) return
+    const harness = await this.owner(threadId)
+    await this.watch(harness, threadId)
+    if (this.active.has(threadId) || this.heres.get(threadId)?.[0] !== text) return
+    const said = [{ type: 'text', text, text_elements: [] }]
+    const input = this.beforeUserTurn(threadId, said) ?? said
+    const link = await this.link(harness)
+    const result = await link.request('turn/start', { threadId, input })
+    const queued = this.heres.get(threadId) ?? []
+    queued.shift()
+    if (queued.length === 0) this.heres.delete(threadId)
+    const turn = isObject(result) && isObject(result.turn) ? result.turn : null
+    if (typeof turn?.id === 'string') {
+      if (!this.active.has(threadId)) this.active.set(threadId, turn.id)
+      this.clientTurn(harness, turn.id)
+    }
+    this.host.log(`替会话 ${threadId}（${harness}）发了提案卡上点的“在这里做”`)
   }
 
   // ---------- offer 卡 ----------

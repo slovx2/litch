@@ -405,7 +405,7 @@ test('SESSION-PROPOSALS-006：用户开始时可改 harness、模型、强度、
     })
     assert.equal(emptyTitle.code, -32602)
     assert.equal(env.device.sessionTree.store.proposal(proposalId)?.status, 'pending')
-    // 改到 pi（同父会话）、清掉模型、换目录、标题、简报，要更宽的权限
+    // 改到 pi（同父会话）、清掉模型（用父会话现在的）、换目录、标题、简报，要更宽的权限
     const { threadId: childId } = await client.call('litch/sessionProposal/accept', {
       proposalId,
       overrides: {
@@ -422,7 +422,7 @@ test('SESSION-PROPOSALS-006：用户开始时可改 harness、模型、强度、
     })
     const started = env.pi.sent('thread/start').at(-1)
     assert.equal(started.cwd, '/work/other')
-    assert.equal(started.model, undefined, '模型清掉了，用缺省')
+    assert.equal(started.model, 'fake', '模型清掉了，用缺省：父会话现在的（同 harness）')
     assert.equal(started.approvalPolicy, 'on-request', '审批收紧到父会话的')
     assert.equal(started.sandbox, 'workspace-write', '沙箱收紧到父会话的')
     const first = env.pi.sent('turn/start').find((params) => params.threadId === childId)
