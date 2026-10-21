@@ -299,6 +299,11 @@ test('INTENT-001：一个回合里一百多次工具调用，钩子都当场放�
       metered.stop()
     }
     assert.deepEqual(denied, [], '会话记录里还没有这次调用，钩子也该放行')
+    // 并行的两次调用谁先记下不一定，按调用号排好再比
+    const byId = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
+    recorded.sort((a, b) => byId(a.callId, b.callId))
+    reserved.sort((a, b) => byId(a[0], b[0]))
+    calls.sort((a, b) => byId(a.id, b.id))
     assert.deepEqual(
       recorded,
       calls.map((call) => ({
