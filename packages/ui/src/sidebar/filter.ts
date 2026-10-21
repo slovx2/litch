@@ -69,6 +69,20 @@ export function keepSessions(
 }
 
 /**
+ * 筛选筛不掉的会话：always 的（正选中的、停下来等人的），加上“永远显示活动对话”打开时活动的那些
+ * （active 是核心的 keys.active：在跑的、只剩后台任务在跑的、没看过的、等人的）
+ */
+export function keptAnyway(
+  always: (sessionId: string) => boolean,
+  showActive: boolean,
+  active: readonly string[],
+): (sessionId: string) => boolean {
+  if (!showActive || active.length === 0) return always
+  const lively = new Set(active)
+  return (id) => lively.has(id) || always(id)
+}
+
+/**
  * 不显示别的应用派出来的会话时一组里留哪些，先后不变。native 是这台设备上派出来的那些（keys.nativeChildren）；
  * always 的照样留着（正选中的、停下来等人的），和 harness 筛选一样
  */

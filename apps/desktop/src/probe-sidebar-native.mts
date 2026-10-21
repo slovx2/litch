@@ -12,7 +12,7 @@ export interface NativeSeen {
   /** 一开始：本机下面有没有它；“更多”的按钮在不在 */
   shownAtStart: boolean
   entry: boolean
-  /** 点开菜单：那一项在不在、勾没勾、焦点是不是落在它上面 */
+  /** 点开菜单：那一项在不在、勾没勾、焦点是不是落在菜单的头一项上 */
   option: boolean
   checkedAtStart: string | null
   focused: boolean
@@ -46,7 +46,8 @@ export async function nativeSeen(title: string): Promise<NativeSeen> {
   button?.click()
   await until('更多的菜单', () => option(), 5000)
   const checkedAtStart = option()?.getAttribute('aria-checked') ?? null
-  const focused = document.activeElement === option()
+  // 焦点落在菜单的头一项上（头一项是“永远显示活动对话”）
+  const focused = document.activeElement === one('.sb-more [role="menu"] .pick-opt')
   option()?.click()
   await until('派出来的会话画出来', () => has(), 5000).catch(() => undefined)
   const checked = option()?.getAttribute('aria-checked') ?? null
@@ -94,7 +95,7 @@ export function judgeNative(seen: NativeSeen, parent: string): string[] {
   must(seen.entry, '侧栏顶上没有“更多”')
   must(!seen.shownAtStart, '派出来的会话默认就画出来了')
   must(seen.option && seen.checkedAtStart === 'false', `“更多”里的开关不对：${seen.checkedAtStart}`)
-  must(seen.focused, '点开“更多”焦点没落在开关上')
+  must(seen.focused, '点开“更多”焦点没落在头一项上')
   must(seen.checked === 'true' && seen.stayed, '点了开关没勾上，或者菜单收了')
   must(seen.shown, '打开开关后派出来的会话没画出来')
   must(

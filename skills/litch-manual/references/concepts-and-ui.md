@@ -31,7 +31,10 @@
   and on the right: the remote-activity marker (only when remote devices are running commands on this
   computer or waiting for approval, see `operate-this-computer.md`), the terminal toggle and the side
   panel toggle. The bar takes the current device's wire color.
-- **Sidebar** (left): **New session** button and a harness filter at the top; then one block per device
+- **Sidebar** (left): **New session** button, a harness filter and a "more" menu at the top (the menu's
+  **Always show active conversations**, on by default, keeps running, unread and waiting sessions listed
+  while the filter is on; **Show Claude Code sub-sessions** shows sessions the Claude desktop app
+  started from another session); then one block per device
   (device row with status, then Pinned, your groups, the built-in Projects group, and "No project"
   sessions); at the bottom **Scheduled tasks**, **Devices**, **Archived sessions** and **Settings**.
   Hovering a device, project or "No project" row shows a **+** that starts a new session there (the

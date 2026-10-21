@@ -15,6 +15,11 @@ export interface SidebarState {
    */
   nativeChildren: boolean
   /**
+   * 永远显示活动对话：只看某几个 harness 时，在跑的（含只剩后台任务在跑的）、没看过的、停下来等人的
+   * 会话照样列出（核心的 keys.active）。默认打开
+   */
+  showActive: boolean
+  /**
    * 各台设备上用户的组和内置的“项目”排的先后（设备标识 → 组的键，拖组的标题行排的）。
    * 只记在这台电脑上：协议里的组没有先后，Codex 桌面端也是把分区的先后记在客户端
    */
@@ -54,6 +59,7 @@ function readSaved(): SidebarState {
         ? [...new Set(parsed.harnesses.filter((id) => typeof id === 'string' && id !== ''))]
         : NONE,
       nativeChildren: parsed.nativeChildren === true,
+      showActive: parsed.showActive !== false,
       bands:
         parsed.bands && typeof parsed.bands === 'object'
           ? Object.fromEntries(
@@ -73,6 +79,7 @@ function readSaved(): SidebarState {
       width: SIDEBAR_DEFAULT,
       harnesses: NONE,
       nativeChildren: false,
+      showActive: true,
       bands: NO_BANDS,
     }
   }
@@ -123,6 +130,14 @@ export const useSidebarNativeChildren = (): boolean =>
 
 export function setSidebarNativeChildren(show: boolean): void {
   if (sidebar.nativeChildren !== show) publish({ ...sidebar, nativeChildren: show })
+}
+
+/** 只要“永远显示活动对话”这一项 */
+export const useSidebarShowActive = (): boolean =>
+  useSyncExternalStore(subscribe, () => sidebar.showActive)
+
+export function setSidebarShowActive(show: boolean): void {
+  if (sidebar.showActive !== show) publish({ ...sidebar, showActive: show })
 }
 
 /** 这台设备上记着的组的先后（没排过是 undefined） */

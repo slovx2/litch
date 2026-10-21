@@ -156,6 +156,7 @@ test('侧栏的状态：没记过就是开着、默认宽度；改了就记下�
     width: state.SIDEBAR_DEFAULT,
     harnesses: [],
     nativeChildren: false,
+    showActive: true,
     bands: {},
   })
   state.setSidebarWidth(356.4)
@@ -164,6 +165,7 @@ test('侧栏的状态：没记过就是开着、默认宽度；改了就记下�
     width: 356,
     harnesses: [],
     nativeChildren: false,
+    showActive: true,
     bands: {},
   })
   // 存的是想要的宽度，夹在最窄和最宽之间
@@ -177,6 +179,7 @@ test('侧栏的状态：没记过就是开着、默认宽度；改了就记下�
     width: state.SIDEBAR_MIN,
     harnesses: [],
     nativeChildren: false,
+    showActive: true,
     bands: {},
   })
   // 只看哪几个 harness 也记在这一份里，重复的只留一个；取消就是记回“都看”
@@ -186,6 +189,7 @@ test('侧栏的状态：没记过就是开着、默认宽度；改了就记下�
     width: state.SIDEBAR_MIN,
     harnesses: ['pi', 'claude'],
     nativeChildren: false,
+    showActive: true,
     bands: {},
   })
   state.setSidebarHarnesses([])
@@ -195,6 +199,11 @@ test('侧栏的状态：没记过就是开着、默认宽度；改了就记下�
   assert.equal(saved().nativeChildren, true)
   state.setSidebarNativeChildren(false)
   assert.equal(saved().nativeChildren, false)
+  // 永远显示活动对话：默认开，关上、打开都记下来
+  state.setSidebarShowActive(false)
+  assert.equal(saved().showActive, false)
+  state.setSidebarShowActive(true)
+  assert.equal(saved().showActive, true)
   // 组的先后按设备记
   state.setSidebarBands('local', [':projects', ':section:a'])
   assert.deepEqual(saved().bands, { local: [':projects', ':section:a'] })
@@ -212,6 +221,7 @@ test('侧栏的状态：记着的照记着的来，离谱的宽度拉回范围�
     width: state.SIDEBAR_MAX,
     harnesses: ['codex', 'pi'],
     nativeChildren: true,
+    showActive: true,
     bands: {},
   })
   state.toggleSidebar()
@@ -229,6 +239,7 @@ test('侧栏的状态：记着的照记着的来，离谱的宽度拉回范围�
     width: broken.SIDEBAR_DEFAULT,
     harnesses: [],
     nativeChildren: false,
+    showActive: true,
     bands: {},
   })
   // 记着的不是数组：当成没在筛；数组里不是字符串的、空的丢掉
@@ -246,8 +257,14 @@ test('侧栏的状态：记着的照记着的来，离谱的宽度拉回范围�
 
 // ---------- 只看某几个 harness 的会话 ----------
 
-const { describeHarness, dropNativeChildren, harnessChoices, keepSessions, toggleHarness } =
-  await import('../src/sidebar/filter.ts')
+const {
+  describeHarness,
+  dropNativeChildren,
+  harnessChoices,
+  keepSessions,
+  keptAnyway,
+  toggleHarness,
+} = await import('../src/sidebar/filter.ts')
 
 const harness = (id, name, badge) => ({ id, name, badge })
 const device = (connection, ...harnesses) => ({ connection, harnesses })
@@ -295,6 +312,23 @@ test('筛选：一组里只留挑中的 harness 的会话，先后不变；正�
   assert.deepEqual(keepSessions(ids, ['pi'], undefined, always), ['s2', 's4'])
   // 挑了两个
   assert.deepEqual(keepSessions(ids, ['pi', 'codex'], harnessOf, never), ['s3', 's4', 's5'])
+})
+
+test('永远显示活动对话：开着时在跑、未读、等人的会话不属于挑中的 harness 也留着；关上照原来的筛', () => {
+  const ids = ['s1', 's2', 's3', 's4', 's5']
+  const harnessOf = { s1: 'claude', s2: 'claude', s3: 'pi', s4: 'codex', s5: 'pi' }
+  // s1 在跑、s4 没看过（核心的 keys.active），s2 正开着
+  const active = ['s1', 's4']
+  const always = (id) => id === 's2'
+  assert.deepEqual(keepSessions(ids, ['pi'], harnessOf, keptAnyway(always, true, active)), ids)
+  assert.deepEqual(keepSessions(ids, ['pi'], harnessOf, keptAnyway(always, false, active)), [
+    's2',
+    's3',
+    's5',
+  ])
+  // 没有活动的、或者开关关着：就是原来的 always
+  assert.equal(keptAnyway(always, true, []), always)
+  assert.equal(keptAnyway(always, false, active), always)
 })
 
 test('派出来的会话：藏着的时候一组里去掉它们，先后不变；正选中的、等人的照样留着', () => {

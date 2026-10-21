@@ -7,6 +7,7 @@ import { join } from 'node:path'
 import type { BrowserWindow } from 'electron'
 import { SIDEBAR_ITEM } from './menu.mjs'
 import { judgeTally, tallySeen } from './probe-sidebar.mjs'
+import { activeSeen, activeSet, judgeActive } from './probe-sidebar-active.mjs'
 import { cwdSeen, judgeCwd } from './probe-sidebar-cwd.mjs'
 import { dragSeen, dragShown, judgeDrag } from './probe-sidebar-drag.mjs'
 import { filterKept, filterSeen, filterTo } from './probe-sidebar-filter.mjs'
@@ -177,6 +178,8 @@ async function run(window: BrowserWindow, hooks: SmokeHooks): Promise<readonly [
   await inPage(window, installSidebarKit)
   const tally = await inPage(window, tallySeen)
   const frame = await frameChecks(window, hooks)
+  // “永远显示活动对话”默认开：筛选那一段量的是原来的筛法，先关上，重启之后量完它自己那一段再打开
+  await inPage(window, activeSet, false)
   const filter = await inPage(window, filterSeen, SESSION)
   const cwd = await inPage(window, cwdSeen)
   const native = await inPage(window, nativeSeen, NATIVE_TITLE)
@@ -193,19 +196,21 @@ async function run(window: BrowserWindow, hooks: SmokeHooks): Promise<readonly [
   await inPage(window, installSidebarKit)
   const reload = await inPage(window, reloadSeen)
   const kept = await inPage(window, filterKept)
+  const active = await inPage(window, activeSeen)
   // 拖着整理：这时筛选已经取消，侧栏是刚起来的样子
   const drag = await inPage(window, dragSeen)
 
   const shots = process.env.LITCH_SIDEBAR_SHOTS
   if (shots) await shoot(window, shots)
   return [
-    { tally, frame: { ...frame, reload }, filter, kept, cwd, native, drag },
+    { tally, frame: { ...frame, reload }, filter, kept, active, cwd, native, drag },
     [
       ...judgeTally(tally),
       ...judgeFrame({ ...frame, reload }),
       ...judgeFilter(filter, kept, SESSION),
       ...judgeCwd(cwd),
       ...judgeNative(native, NATIVE_PARENT),
+      ...judgeActive(active),
       ...judgeDrag(drag),
     ],
   ]

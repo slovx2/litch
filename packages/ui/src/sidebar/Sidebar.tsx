@@ -66,7 +66,7 @@ import {
   slotOf,
   startDrag,
 } from './drop.ts'
-import { dropNativeChildren, keepSessions } from './filter.ts'
+import { dropNativeChildren, keepSessions, keptAnyway } from './filter.ts'
 import { HarnessFilter } from './HarnessFilter.tsx'
 import { DeviceInfo, SessionInfo, WorkspaceInfo } from './InfoCards.tsx'
 import { type RowAction, RowMenu, type RowMenuHandle } from './RowMenu.tsx'
@@ -78,6 +78,7 @@ import {
   useSidebarBands,
   useSidebarHarnesses,
   useSidebarNativeChildren,
+  useSidebarShowActive,
 } from './state.ts'
 import { TallyMarks } from './TallyMarks.tsx'
 import { WorkspaceDialog } from './WorkspaceDialog.tsx'
@@ -737,6 +738,9 @@ function DeviceGroup(props: GroupProps) {
   /** 别的应用派出来的会话（Claude 桌面端起的子会话）显不显示：默认不显示，开关在侧栏顶上的“更多”里 */
   const showNative = useSidebarNativeChildren()
   const nativeChildren = useKey<string[]>(keys.nativeChildren(deviceId)) ?? NO_IDS
+  /** 永远显示活动对话（“更多”里的开关，默认开）：在跑、没看过、等人的会话筛选筛不掉 */
+  const showActive = useSidebarShowActive()
+  const active = useKey<string[]>(keys.active(deviceId)) ?? NO_IDS
   /** 用户的组和“项目”在这台电脑上记着的先后 */
   const savedBands = useSidebarBands(deviceId)
   const reconnect = useReconnect(deviceId)
@@ -760,11 +764,13 @@ function DeviceGroup(props: GroupProps) {
   const picked = selection?.deviceId === deviceId ? selection.sessionId : null
   /** 非露出来不可的会话：正选中的那个，和停下来等人的那些。筛选筛不掉它们，“展示更多”也折不住它们 */
   const always = (id: string) => id === picked || pressing.includes(id)
+  /** 只看某几个 harness 时也筛不掉的：非露出来不可的，和开关开着时活动的那些 */
+  const unfiltered = keptAnyway(always, showActive, active)
   /** 不显示别的应用派出来的会话时，这些藏起来（非露出来不可的照样露） */
   const hidden = showNative ? NO_IDS : nativeChildren
   /** 一组里现在要画的会话：别的应用派出来的藏掉，只看某几个 harness 的时候再筛一遍 */
   const shown = (groupId: string) =>
-    keepSessions(dropNativeChildren(groups[groupId], hidden, always), filter, harnessOf, always)
+    keepSessions(dropNativeChildren(groups[groupId], hidden, always), filter, harnessOf, unfiltered)
 
   /**
    * 挂到父会话下面去画的子会话：父会话这时也画在侧栏里（没被筛掉）的那些。
@@ -775,7 +781,7 @@ function DeviceGroup(props: GroupProps) {
     Object.entries(children).flatMap(([parent, ids]) => (listed.has(parent) ? ids : [])),
   )
   const kidsOf = (id: string) =>
-    keepSessions(dropNativeChildren(children[id], hidden, always), filter, harnessOf, always)
+    keepSessions(dropNativeChildren(children[id], hidden, always), filter, harnessOf, unfiltered)
   const fold = (id: string) =>
     setFolded((prev) => {
       const next = new Set(prev)

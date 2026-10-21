@@ -75,6 +75,9 @@ export const en: Record<MessageKey, Entry> = {
   'sidebar.filter.clear': 'Clear the filter and show all',
   'sidebar.filter.none': 'No sessions match the filter',
   'sidebar.more': 'More',
+  'sidebar.more.showActive': 'Always show active conversations',
+  'sidebar.more.showActive.note':
+    'While filtering by harness, running, unread and waiting conversations still show',
   'sidebar.more.nativeChildren': 'Show Claude Code sub-sessions',
   'sidebar.more.nativeChildren.note':
     'Sessions started from another session in the Claude desktop app',
