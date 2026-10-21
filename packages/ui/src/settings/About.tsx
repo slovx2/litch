@@ -115,9 +115,13 @@ export function AboutSection() {
             {version ? t('settings.about.version', { version }) : '…'}
             {core?.mock ? <span className="pill mute">{t('sidebar.mockCore')}</span> : null}
           </span>
-          {about ? (
-            <span className="about-runtime">
-              Electron {about.electron} · Chromium {about.chrome}
+          {about || core ? (
+            // 核心的版本原来写在侧栏底部，收到了这里
+            <span className="about-runtime" data-core={core?.version}>
+              {[
+                ...(about ? [`Electron ${about.electron}`, `Chromium ${about.chrome}`] : []),
+                ...(core ? [t('sidebar.core', { version: core.version })] : []),
+              ].join(' · ')}
             </span>
           ) : null}
         </div>

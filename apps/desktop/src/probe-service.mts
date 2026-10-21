@@ -74,7 +74,14 @@ export async function mockServiceProbe(): Promise<MockServiceProbe> {
   /** 回到设备列表：在详情里就退出来，在对话里就点侧栏的“设备” */
   const openList = async () => {
     if (one('[data-detail]')) one<HTMLButtonElement>('[data-detail] [data-act="back"]')?.click()
-    else if (!one('.devp-item')) one<HTMLButtonElement>('.sb-link.devices')?.click()
+    else if (!one('.devp-item')) {
+      one<HTMLButtonElement>('.sb-settings')?.click()
+      ;(
+        await until('设置页上进设备页的入口', () =>
+          one<HTMLButtonElement>('.set-go[data-page="devices"]'),
+        )
+      ).click()
+    }
     await until('设备列表', () => !one('[data-detail]') && all('.devp-item').length >= 4)
   }
   /** 设备列表上哪几行有记号 */
@@ -300,7 +307,14 @@ export async function serviceProbe(): Promise<ServiceProbe> {
 
   // 从设备列表重新进一次本机的详情：这一节平时是收着的，要看它刚打开时的样子
   if (one('[data-detail]')) one<HTMLButtonElement>('[data-detail] [data-act="back"]')?.click()
-  else if (!one('.devp-item')) one<HTMLButtonElement>('.sb-link.devices')?.click()
+  else if (!one('.devp-item')) {
+    one<HTMLButtonElement>('.sb-settings')?.click()
+    ;(
+      await until('设置页上进设备页的入口', () =>
+        one<HTMLButtonElement>('.set-go[data-page="devices"]'),
+      )
+    ).click()
+  }
   const item = await until('设备列表上的本机', () =>
     one('[data-detail]') ? null : one('.devp-item[data-device="local"]'),
   )

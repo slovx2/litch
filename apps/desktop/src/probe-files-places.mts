@@ -153,7 +153,12 @@ export async function mockPlaces(titles: {
 
   // ---------- 没有侧面板的页面 ----------
   await settle(titles.home, 'local')
-  one<HTMLButtonElement>('.sb-link.devices')?.click()
+  one<HTMLButtonElement>('.sb-settings')?.click()
+  ;(
+    await until('设置页上进设备页的入口', () =>
+      one<HTMLButtonElement>('.set-go[data-page="devices"]'),
+    )
+  ).click()
   const hiddenOnPage = await kit.seen(() => !kit.sideOpen(), 5000)
   await kit.openSession(titles.home)
   const backFromPage = await kit.seen(() => kit.sideOpen() && kit.rows().length > 0, 5000)

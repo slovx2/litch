@@ -136,7 +136,12 @@ export async function manageProbe(): Promise<ManageProbe> {
   }
   const openDetail = async () => {
     if (!one('[data-detail]')) {
-      one<HTMLButtonElement>('.sb-link.devices')?.click()
+      one<HTMLButtonElement>('.sb-settings')?.click()
+      ;(
+        await until('设置页上进设备页的入口', () =>
+          one<HTMLButtonElement>('.set-go[data-page="devices"]'),
+        )
+      ).click()
       const item = await until('设备列表上的本机', () => one('.devp-item[data-device="local"]'))
       one<HTMLButtonElement>('.devp-row', item)?.click()
     }
@@ -181,7 +186,12 @@ export async function manageProbe(): Promise<ManageProbe> {
 
   // ---- 一、详情页：harness 和状态、设备服务声明的设置 ----
   await until('Pi 的会话都列出来', () => rows().length >= 3)
-  one<HTMLButtonElement>('.sb-link.devices')?.click()
+  one<HTMLButtonElement>('.sb-settings')?.click()
+  ;(
+    await until('设置页上进设备页的入口', () =>
+      one<HTMLButtonElement>('.set-go[data-page="devices"]'),
+    )
+  ).click()
   const item = await until('设备列表上的本机', () =>
     one<HTMLElement>('.devp-item[data-device="local"]'),
   )

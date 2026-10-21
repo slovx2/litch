@@ -1,10 +1,11 @@
 import { useEffect } from 'react'
 import { useT } from '../app/appearance.ts'
-import { Close } from '../app/icons.tsx'
+import { Archive, Close, Forward, Machine } from '../app/icons.tsx'
 import type { MessageKey } from '../i18n/index.ts'
 import { AboutSection } from './About.tsx'
 import { AssistSection } from './AssistSection.tsx'
 import { BrowserSection } from './BrowserSection.tsx'
+import { ChatSection } from './ChatSection.tsx'
 import { ComputerSection } from './ComputerSection.tsx'
 import { computerBridge, computerIntro } from './computer-bridge.ts'
 import { LangSection, LookSection } from './Look.tsx'
@@ -12,13 +13,15 @@ import { NotifySection } from './NotifySection.tsx'
 import { ShortcutsSection } from './Shortcuts.tsx'
 
 /**
- * 设置页左边的几组，按这个顺序排。computer（Computer Use）只在 macOS 上的桌面外壳里有
+ * 设置页左边的几组，按这个顺序排。
+ * “设备”“已归档对话”不是这里的组，是左上角直接进那两页的入口。computer（Computer Use）只在 macOS 上的桌面外壳里有
  * （外壳给了 window.litchComputerUse 才显示），别的系统和普通浏览器里不出这一组
  */
 export const SETTINGS_SECTIONS = [
   'look',
   'lang',
-  'devices',
+  'chat',
+  'switches',
   'browser',
   'computer',
   'notify',
@@ -38,7 +41,8 @@ const shownSections = (): SettingsSection[] =>
 const TITLES: Record<SettingsSection, MessageKey> = {
   look: 'settings.group.look',
   lang: 'settings.group.lang',
-  devices: 'settings.group.devices',
+  chat: 'settings.group.chat',
+  switches: 'settings.group.switches',
   browser: 'settings.group.browser',
   computer: 'settings.group.computer',
   notify: 'settings.group.notify',
@@ -49,7 +53,8 @@ const TITLES: Record<SettingsSection, MessageKey> = {
 const INTROS: Record<SettingsSection, MessageKey> = {
   look: 'settings.look.intro',
   lang: 'settings.lang.intro',
-  devices: 'settings.devices.intro',
+  chat: 'settings.chat.intro',
+  switches: 'settings.switches.intro',
   browser: 'settings.browser.intro',
   computer: 'settings.computer.intro',
   notify: 'settings.notify.intro',
@@ -65,13 +70,22 @@ interface SettingsPageProps {
   onClose(): void
   /** 去“设备”那一页：设备和 harness 的管理都在那边，这里只留一个入口 */
   onDevices(): void
+  /** 去“已归档对话”那一页 */
+  onArchived(): void
 }
 
 /**
  * 设置：和“设备”“已归档对话”一样占着对话区的一整页。左边是分组，右边一次只放一组的内容。
+ * 侧栏底部只留了定时任务和进这里的齿轮，那两页的入口放在左边分组的上面。
  * 这里的每一项都是这台电脑上的偏好，改了当场生效，没有“保存”
  */
-export function SettingsPage({ section: asked, onSection, onClose, onDevices }: SettingsPageProps) {
+export function SettingsPage({
+  section: asked,
+  onSection,
+  onClose,
+  onDevices,
+  onArchived,
+}: SettingsPageProps) {
   const t = useT()
   const sections = shownSections()
   // 要的那一组这里没有（不是 macOS 却要开 Computer Use）：落到第一组
@@ -92,6 +106,17 @@ export function SettingsPage({ section: asked, onSection, onClose, onDevices }: 
     <div className="set-page">
       <nav className="set-nav" aria-label={t('settings.nav')}>
         <h1>{t('settings.title')}</h1>
+        <button type="button" className="set-go" data-page="devices" onClick={onDevices}>
+          <Machine />
+          <span className="grow">{t('sidebar.devices')}</span>
+          <Forward />
+        </button>
+        <button type="button" className="set-go" data-page="archived" onClick={onArchived}>
+          <Archive />
+          <span className="grow">{t('archived.title')}</span>
+          <Forward />
+        </button>
+        <hr className="set-nav-rule" />
         {sections.map((id) => (
           <button
             key={id}
@@ -125,16 +150,12 @@ export function SettingsPage({ section: asked, onSection, onClose, onDevices }: 
             <LookSection />
           ) : section === 'lang' ? (
             <LangSection />
-          ) : section === 'devices' ? (
-            <section className="set-block">
-              <div className="set-rows">
-                <div className="set-row">
-                  <span className="set-note">{t('settings.devices.note')}</span>
-                  <button type="button" className="btn" data-act="open-devices" onClick={onDevices}>
-                    {t('settings.devices.open')}
-                  </button>
-                </div>
-              </div>
+          ) : section === 'chat' ? (
+            <ChatSection />
+          ) : section === 'switches' ? (
+            // 任务卡、内置浏览器、Computer Use 按“设备 → harness”的开关表（HarnessSwitches.tsx，另一条线在做），合并时换进来
+            <section className="set-block" data-slot="harness-switches">
+              <p className="set-note">{t('settings.switches.pending')}</p>
             </section>
           ) : section === 'browser' ? (
             <BrowserSection />

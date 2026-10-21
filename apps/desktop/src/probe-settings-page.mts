@@ -3,7 +3,7 @@
 import type { SettingsKit } from './probe-settings-kit.mjs'
 
 export interface PageSeen {
-  /** 侧栏底部的入口点开之后：标题栏上写的、左边有哪几组、默认在哪一组 */
+  /** 侧栏底部的齿轮点开之后：标题栏上写的、左边有哪几组、默认在哪一组 */
   crumb: string
   sections: string[]
   first: string
@@ -18,8 +18,9 @@ export interface PageSeen {
   closeButton: boolean
   /** 按“主修饰键加逗号”打开（页面自己认的那条路） */
   keyOpens: boolean
-  /** “设备”那一组的按钮通到设备页 */
+  /** 设置页左上角的“设备”“已归档对话”通到那两页 */
   toDevices: boolean
+  toArchived: boolean
   /** 侧栏底部原来那三个临时按钮撤掉了 */
   oldButtons: number
 }
@@ -27,12 +28,12 @@ export interface PageSeen {
 export async function pageSeen(): Promise<PageSeen> {
   const kit = (window as unknown as { __setKit: SettingsKit }).__setKit
   const { until, seen, one, all, text } = kit
-  await until('侧栏', () => one('.sb-link.settings') && one('.ss-row'))
+  await until('侧栏', () => one('.sb-settings') && one('.ss-row'))
   await kit.openSettings()
   const crumb = text(one('.crumb'))
   const sections = all('.set-nav [data-section]').map((entry) => entry.dataset.section ?? '')
   const first = kit.settingsAt() ?? ''
-  const entryCurrent = one('.sb-link.settings')?.getAttribute('aria-current') === 'page'
+  const entryCurrent = one('.sb-settings')?.getAttribute('aria-current') === 'page'
   const titles: string[] = []
   for (const section of sections) {
     await kit.openSettings(section)
@@ -55,11 +56,16 @@ export async function pageSeen(): Promise<PageSeen> {
   press(',', { ctrlKey: true })
   const keyOpens = byMeta && (await seen(() => one('.set-page'), 3000))
 
-  await kit.openSettings('devices')
-  one<HTMLButtonElement>('.set-content [data-act="open-devices"]')?.click()
+  await kit.openSettings()
+  one<HTMLButtonElement>('.set-go[data-page="devices"]')?.click()
   const toDevices = await seen(() => !one('.set-page') && one('.devp'), 3000)
   press('Escape')
   await seen(() => !one('.devp'), 3000)
+  await kit.openSettings()
+  one<HTMLButtonElement>('.set-go[data-page="archived"]')?.click()
+  const toArchived = await seen(() => !one('.set-page') && one('.arch-page'), 3000)
+  press('Escape')
+  await seen(() => !one('.arch-page'), 3000)
 
   return {
     crumb,
@@ -72,6 +78,7 @@ export async function pageSeen(): Promise<PageSeen> {
     closeButton,
     keyOpens,
     toDevices,
+    toArchived,
     oldButtons: all('.look .mini').length,
   }
 }
@@ -149,11 +156,11 @@ export async function controlsSeen(): Promise<ControlsSeen> {
   const groups = () => all('.set-nav [data-section]').map(text)
   choice('lang', 'en')?.click()
   steps.push(`语言 en→${now()}`)
-  await until('界面换成英文', () => text(one('.sb-link.settings')) === 'Settings')
+  await until('界面换成英文', () => one('.sb-settings')?.getAttribute('aria-label') === 'Settings')
   const english = groups()
   choice('lang', 'zh-CN')?.click()
   steps.push(`语言 zh-CN→${now()}`)
-  await until('界面换回中文', () => text(one('.sb-link.settings')) === '设置')
+  await until('界面换回中文', () => one('.sb-settings')?.getAttribute('aria-label') === '设置')
   const chinese = groups()
 
   await kit.openSettings('look')

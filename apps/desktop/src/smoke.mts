@@ -64,6 +64,7 @@ import {
   slashProbe,
 } from './probe-compose-more.mjs'
 import { judgePlan, planProbe } from './probe-compose-plan.mjs'
+import { judgeSendMode, sendModeProbe } from './probe-compose-send.mjs'
 import { devicesProbe, judgeDevices, narrowDevicesProbe } from './probe-devices.mjs'
 import { type DiffMode, runDiffChecks } from './probe-diff-run.mjs'
 import { runEnginesChecks } from './probe-engines-run.mjs'
@@ -419,6 +420,8 @@ async function measure(
   const mention = await runInPage(window, mentionProbe, real)
   // 模型边干活边问的题（只对着模拟核心）：对话里的问题卡片
   const ask = await runInPage(window, askProbe, real)
+  // 回合进行中发消息的两档（只对着模拟核心）：设置页里点立即发送、排队，各发一条看去了哪
+  const sendMode = await runInPage(window, sendModeProbe, real)
   let slashLooks: { wide: SlashLook; narrow: SlashLook } | null = null
   let attachLooks: { wide: AttachLook; narrow: AttachLook } | null = null
   let mentionLooks: { wide: SlashLook; narrow: SlashLook } | null = null
@@ -464,6 +467,7 @@ async function measure(
       mention,
       mentionLooks,
       ask,
+      sendMode,
       comments,
     },
     [
@@ -478,6 +482,7 @@ async function measure(
       ...filesFailed,
       ...judgeMention(mention, real),
       ...judgeAsk(ask),
+      ...judgeSendMode(sendMode),
       ...judgeSheetLook('找文件的单子', mentionLooks),
       ...commentsFailed,
     ],
@@ -555,7 +560,7 @@ const probeOf = (title: string) => `(() => {
     turns: document.querySelectorAll('.turn').length,
     answer: [...document.querySelectorAll('.md')].at(-1)?.textContent?.length ?? 0,
     painted: document.querySelectorAll('.code code span[class^="hljs-"]').length,
-    core: document.querySelector('.sb-foot')?.textContent ?? '',
+    core: document.querySelector('.sb-settings')?.title ?? '',
     devices: [...document.querySelectorAll('.dev-group')].map((group) =>
       [group.querySelector('.dev-row'), group.querySelector('.dev-note')]
         .map((element) => element?.textContent ?? '')
@@ -611,7 +616,7 @@ export async function runSmoke(
     }
     if (last?.shell === 'electron' && last.turns >= 1) {
       if (mode === 'entry') {
-        // 隔离入口里造了四个会话；侧栏底部不该有“模拟核心”的标记
+        // 隔离入口里造了四个会话；侧栏底部齿轮的提示里不该有“模拟核心”
         if (last.rows >= 4 && last.answer > 0 && !last.core.includes('模拟核心')) {
           grew = true
           break

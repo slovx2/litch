@@ -130,7 +130,7 @@ export async function checkLinks({
     check('链接：同一个网址再点不再开', userTabs().length === before + 1, userTabs())
 
     // 设置里关掉（先关，再塞假的 litchShell：设置页的别处会去读它）
-    await ui.page("document.querySelector('.sb-link.settings').click()")
+    await ui.page("document.querySelector('.sb-settings').click()")
     await ui.until("document.querySelector('.set-page')")
     await ui.page(`document.querySelector('.set-nav [data-section="browser"]')?.click()`)
     const toggle = 'document.querySelector(\'[data-act="links-in-browser"]\')'
@@ -155,7 +155,7 @@ export async function checkLinks({
     check('设置关了：不开标签', userTabs().length === count)
 
     // 打开回来，再看退路
-    await ui.page("document.querySelector('.sb-link.settings').click()")
+    await ui.page("document.querySelector('.sb-settings').click()")
     await ui.until("document.querySelector('.set-page')")
     await ui.page(`document.querySelector('.set-nav [data-section="browser"]')?.click()`)
     await ui.until(`${toggle}`)

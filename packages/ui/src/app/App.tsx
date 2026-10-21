@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArchivedPage } from '../archived/ArchivedPage.tsx'
 import { ArchivedSession } from '../archived/ArchivedSession.tsx'
 import { ConfigAgent } from '../assist/ConfigAgent.tsx'
+import { nextAssistSeq } from '../assist/useAssistant.ts'
 import { NewSession } from '../composer/NewSession.tsx'
 import type { PlaceWish } from '../composer/new-place.ts'
 import { useNewPlace } from '../composer/useNewPlace.ts'
@@ -145,7 +146,7 @@ export function App() {
     compose({ deviceId, workspaceId: summary?.workspaceId ?? null })
   }, [picked, replica, compose])
 
-  // 设置页的三个入口：侧栏底部那一项（走 openPage）、Cmd/Ctrl+逗号、应用菜单里的“设置…”和“关于”。
+  // 设置页的三个入口：侧栏底部的齿轮（走 openPage）、Cmd/Ctrl+逗号、应用菜单里的“设置…”和“关于”。
   // 在桌面外壳里这个键是菜单的加速键，按了走的是菜单那条路；页面自己也认它，在普通浏览器里一样能用
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -160,8 +161,10 @@ export function App() {
       if (action === 'settings.about') setSettingsAt('about')
       openPage('settings')
     })
-    // 别处要直接开到某一组（设备详情里 Computer Use 开关旁的“去设置里看看”）
+    // 别处要直接开到某一组（设备详情里 Computer Use 开关旁的“去设置里看看”）。
+    // “设备”原来是设置里的一组，现在是设置页上直接进设备页的入口：要它就直接进设备页
     const offAsk = onSettingsRequest((section) => {
+      if (section === 'devices') return openDevices()
       if (isSettingsSection(section)) setSettingsAt(section)
       openPage('settings')
     })
@@ -170,15 +173,15 @@ export function App() {
       offMenu?.()
       offAsk()
     }
-  }, [openPage])
+  }, [openPage, openDevices])
 
-  /** 第几次点配置助手：新建对话页看着它变了就往输入框里放好那一句 */
+  /** 最近一次点配置助手的序号（nextAssistSeq）：新建对话页看着它变了就往输入框里放好那一句，每个号只放一次 */
   const [assist, setAssist] = useState(0)
   // 配置助手（新建页标题下、设置页、首启引导）：到新建对话页，设备切到本机，harness 和模型照上次的不动
   useEffect(
     () =>
       onAssistantRequest(() => {
-        setAssist((was) => was + 1)
+        setAssist(nextAssistSeq())
         compose({ deviceId: 'local' })
       }),
     [compose],
@@ -273,6 +276,7 @@ export function App() {
               onSection={setSettingsAt}
               onClose={closePage}
               onDevices={openDevices}
+              onArchived={() => openPage('archived')}
             />
           ) : selection ? (
             <Transcript

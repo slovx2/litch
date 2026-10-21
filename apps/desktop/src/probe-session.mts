@@ -359,7 +359,12 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
     undo.goneAfterLeave = performance.now() - leftAt > 4000
     // 上面那个已经过了能撤销的时候，从“已归档对话”里放回来
     const restoreFromPage = async () => {
-      one<HTMLButtonElement>('.sb-link.archived')?.click()
+      one<HTMLButtonElement>('.sb-settings')?.click()
+      ;(
+        await until('设置页上进已归档对话的入口', () =>
+          one<HTMLButtonElement>('.set-go[data-page="archived"]'),
+        )
+      ).click()
       const shelved = await until('已归档对话里的这个会话', () =>
         all('.arch-item').find((element) => element.textContent?.includes(other)),
       )
@@ -412,7 +417,12 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
   // ---- 四、不恢复就看已归档的对话 ----
   await pickFromMenu(other, '归档')
   await until('归档的那一行消失', () => !rowOf(other) && toast())
-  one<HTMLButtonElement>('.sb-link.archived')?.click()
+  one<HTMLButtonElement>('.sb-settings')?.click()
+  ;(
+    await until('设置页上进已归档对话的入口', () =>
+      one<HTMLButtonElement>('.set-go[data-page="archived"]'),
+    )
+  ).click()
   const opener = () =>
     all('.arch-item')
       .find((element) => element.textContent?.includes(other))

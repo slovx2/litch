@@ -180,7 +180,14 @@ export async function mockManageProbe(): Promise<MockManageProbe> {
   /** 回到设备列表（在详情里的话先退出来），再点开一台设备的详情 */
   const openDetail = async (deviceId: string) => {
     if (one('[data-detail]')) act(document, 'back')?.click()
-    else one<HTMLButtonElement>('.sb-link.devices')?.click()
+    else {
+      one<HTMLButtonElement>('.sb-settings')?.click()
+      ;(
+        await until('设置页上进设备页的入口', () =>
+          one<HTMLButtonElement>('.set-go[data-page="devices"]'),
+        )
+      ).click()
+    }
     const item = await until(`设备列表上的 ${deviceId}`, () =>
       one('[data-detail]') ? null : one(`.devp-item[data-device="${deviceId}"]`),
     )
@@ -245,7 +252,12 @@ export async function mockManageProbe(): Promise<MockManageProbe> {
 
   // ---- 一、设备页：每台设备都点得开；没有设置接口的、没连上的各是什么样 ----
   await until('侧栏里的会话', () => all('.ss-row').length >= 10)
-  one<HTMLButtonElement>('.sb-link.devices')?.click()
+  one<HTMLButtonElement>('.sb-settings')?.click()
+  ;(
+    await until('设置页上进设备页的入口', () =>
+      one<HTMLButtonElement>('.set-go[data-page="devices"]'),
+    )
+  ).click()
   await until('设备页', () => all('.devp-item').length >= 4)
   const entries = all('.devp-item').map(
     (item) =>

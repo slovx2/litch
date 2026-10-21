@@ -2,7 +2,8 @@
 // 首启引导第一步列出全部支持的 harness；装 Codex 固定失败，回退里有原因、可展开的日志、官方命令、说明链接、
 // 重新检测；装 Claude Code 日志一行行出来，装好进第二步；点“打开配置助手”到新建页，输入框里是那一句加手册的技能片；
 // 引导记成走完。然后在对话里跑两次 litch config（模拟核心认“配置：…”）：打开 Computer Use 要在确认卡上点允许，
-// 换皮肤由界面照做。最后从设置页“配置助手”一组重新打开引导再关掉。
+// 换皮肤由界面照做。然后从设置页“配置助手”一组重新打开引导再关掉。
+// 最后看配置助手的预填只做一次：发过之后再进新建页，输入框是空的、没有技能片；点了没发、去设置页再回来，不再放一遍。
 // 和别的验收一样，onboardProbe 会被原样送进页面里执行，不能引用函数外面的东西；judgeOnboard 在主进程里跑。
 
 export interface OnboardProbe {
@@ -29,6 +30,8 @@ export interface OnboardProbe {
   card: string
   cardItems: string
   reply: string
+  /** 过程区里那条命令（收在“运行 1 条命令”那一行里，点开了才看得到） */
+  command: string
   /** 撤不回的那张卡（清内置浏览器数据）：标题、项、拒绝之后的回答 */
   eraseTitle: string
   eraseItems: string
@@ -37,6 +40,12 @@ export interface OnboardProbe {
   /** 设置页重新打开引导、再关掉 */
   reopened: string
   reclosed: boolean
+  /** 配置助手放好、发出去之后再进新建页：输入框里的字、技能片几个 */
+  afterSendDraft: string
+  afterSendChips: number
+  /** 点了配置助手没发，去设置页再回来：输入框里的字、技能片几个 */
+  revisitDraft: string
+  revisitChips: number
 }
 
 export async function onboardProbe(): Promise<OnboardProbe> {
@@ -143,6 +152,12 @@ export async function onboardProbe(): Promise<OnboardProbe> {
     const main = text(one('.main'))
     return main.includes('照你说的改好了') ? main : null
   })
+  for (const head of all('.steps-head[aria-expanded="false"]')) head.click()
+  const command = await until('点开过程区里的那条命令', () =>
+    all('.steps .item')
+      .map((item) => text(item))
+      .find((line) => line.includes('litch config')),
+  ).catch(() => '')
   // 撤不回的也出卡（E7）：点拒绝，什么都不删
   await send('配置：browser clear-data')
   const erase = await until('删除的确认卡', () => {
@@ -168,7 +183,7 @@ export async function onboardProbe(): Promise<OnboardProbe> {
   )
 
   // ---------- 设置页重新打开引导 ----------
-  one<HTMLButtonElement>('.sb-link.settings')?.click()
+  one<HTMLButtonElement>('.sb-settings')?.click()
   ;(
     await until('设置页的配置助手一组', () =>
       one<HTMLButtonElement>('.set-nav [data-section="assist"]'),
@@ -183,6 +198,28 @@ export async function onboardProbe(): Promise<OnboardProbe> {
     (await until('重新打开的引导', () => one('.onb')))?.getAttribute('data-onboarding') ?? ''
   one<HTMLButtonElement>('[data-act="onboard-close"]')?.click()
   const reclosed = await until('再关掉', () => one('.onb') === null)
+
+  // ---------- 预填只做一次 ----------
+  const skillChips = () => all('.cmp-chip[data-kind="skill"]').length
+  /** 从侧栏最上面进新建页，等输入框出来，再多等一会儿：要是还会预填，这段时间里就填上了 */
+  const toNewPage = async () => {
+    one<HTMLButtonElement>('.sb-link.new')?.click()
+    const area = await until('新建页的输入框', () =>
+      one('.new-hero') ? one<HTMLTextAreaElement>('.cmp-text') : null,
+    )
+    await sleep(1500)
+    return area
+  }
+  // 上面那一句是放好之后发出去的：再进新建页，什么都不该放
+  const afterSendDraft = (await toNewPage()).value
+  const afterSendChips = skillChips()
+  // 点了没发：去设置页转一圈再回来，还是只有一份
+  one<HTMLButtonElement>('.new-hero [data-act="assistant"]')?.click()
+  await until('点了配置助手放好的技能片', () => skillChips() > 0)
+  one<HTMLButtonElement>('.sb-settings')?.click()
+  await until('设置页', () => one('.set-page'))
+  const revisitDraft = (await toNewPage()).value
+  const revisitChips = skillChips()
 
   return {
     step1: step1 !== null,
@@ -202,12 +239,17 @@ export async function onboardProbe(): Promise<OnboardProbe> {
     card,
     cardItems,
     reply: reply.slice(0, 200),
+    command,
     eraseTitle,
     eraseItems,
     eraseReply: eraseReply.slice(-200),
     skin,
     reopened,
     reclosed,
+    afterSendDraft,
+    afterSendChips,
+    revisitDraft,
+    revisitChips,
   }
 }
 
@@ -237,12 +279,24 @@ export function judgeOnboard(seen: OnboardProbe): string[] {
     `确认卡没写清：“${seen.card}”`,
   )
   must(seen.cardItems === 'tool', `确认卡上的项不对：${seen.cardItems}`)
-  must(seen.reply.includes('litch config tools set local --computer on'), '对话里没有那条命令')
+  must(seen.reply.includes('照你说的改好了'), '允许之后对话里没说改好了')
+  must(
+    seen.command.includes('litch config tools set local --computer on'),
+    `过程区里没有那条命令：“${seen.command}”`,
+  )
   must(seen.eraseTitle === '允许这次删除吗？', `删除卡的标题不对：“${seen.eraseTitle}”`)
   must(seen.eraseItems === 'erase', `删除卡上的项不对：${seen.eraseItems}`)
   must(seen.eraseReply.includes('没做成'), '拒绝之后对话里没说没做成')
   must(seen.skin === 'human', '换皮肤没照做')
   must(seen.reopened === 'assist', `设置页重新打开的引导不对：${seen.reopened}`)
   must(seen.reclosed, '重新打开的引导关不掉')
+  must(
+    seen.afterSendDraft === '' && seen.afterSendChips === 0,
+    `发过之后再进新建页又预填了：“${seen.afterSendDraft}”，技能片 ${seen.afterSendChips} 个`,
+  )
+  must(
+    seen.revisitDraft === '使用 Litch 产品手册帮我配置：' && seen.revisitChips === 1,
+    `点了没发、去设置页再回来，预填不是一份：“${seen.revisitDraft}”，技能片 ${seen.revisitChips} 个`,
+  )
   return failed
 }

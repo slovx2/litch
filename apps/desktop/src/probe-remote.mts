@@ -118,7 +118,7 @@ export async function remoteProbe(aliases: {
   const noPassword = () => !one('input[type="password"]')
 
   // ---- 一、设备页，添加设备：从 ssh 配置里发现、勾上就检查 ----
-  const link = await until('侧栏底部的“设备”', () => one<HTMLButtonElement>('.sb-link.devices'))
+  await until('侧栏底部的齿轮', () => one<HTMLButtonElement>('.sb-settings'))
   // 启动落在新建对话页。这时只有本机，而它连不上：输入区下面说了为什么建不了，按钮是去“设备”一页
   await until('新建对话页', () => one('.new-hero'))
   const toDevices = await until('说明里去“设备”一页的按钮', () =>
@@ -244,7 +244,12 @@ export async function remoteProbe(aliases: {
   const sentAfter = true
 
   // ---- 六、设备页：列表的一行上没有按钮，点进详情改名、换线色 ----
-  link.click()
+  one<HTMLButtonElement>('.sb-settings')?.click()
+  ;(
+    await until('设置页上进设备页的入口', () =>
+      one<HTMLButtonElement>('.set-go[data-page="devices"]'),
+    )
+  ).click()
   await until('设备页', () => one('.devp'))
   noPasswordField &&= noPassword()
   const mine = await until('设备列表里的这台设备', () => item(aliases.ok))

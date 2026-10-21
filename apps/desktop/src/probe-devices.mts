@@ -67,7 +67,12 @@ export async function devicesProbe(): Promise<DevicesProbe> {
   const rowOf = (id: string) => one<HTMLButtonElement>('.devp-row', item(id)) as HTMLButtonElement
   /** 打开设备列表。还停在某台设备的详情里就先退出来 */
   const openList = async () => {
-    one<HTMLButtonElement>('.sb-link.devices')?.click()
+    one<HTMLButtonElement>('.sb-settings')?.click()
+    ;(
+      await until('设置页上进设备页的入口', () =>
+        one<HTMLButtonElement>('.set-go[data-page="devices"]'),
+      )
+    ).click()
     await frame()
     one<HTMLButtonElement>('[data-detail] [data-act="back"]')?.click()
     await until('设备列表', () => !one('[data-detail]') && all('.devp-item').length >= 4)
