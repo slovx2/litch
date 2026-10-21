@@ -31,6 +31,7 @@ import { useT } from '../app/appearance.ts'
 import { downHarness, downText, nameOf } from '../app/device.ts'
 import { duration } from '../app/format.ts'
 import { useKey, useServices } from '../app/services.tsx'
+import { TurnOrigin } from '../background/TurnOrigin.tsx'
 import { Dock, Requests } from '../composer/Dock.tsx'
 import type { MessageKey, Translator } from '../i18n/index.ts'
 import { useRailHasTodo } from '../rail/rail-state.ts'
@@ -258,6 +259,14 @@ const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { 
   return (
     <TurnTouch.Provider value={touch}>
       <section className="turn">
+        {/* 后台任务结束后、定时任务触发时 harness 自己开的回合：开头一行写怎么来的 */}
+        {turn.origin ? (
+          <TurnOrigin
+            deviceId={deviceId}
+            sessionId={sessionId}
+            turn={{ ...turn, origin: turn.origin }}
+          />
+        ) : null}
         {blocks.map((block, index) => {
           if (block.type === 'user')
             return (

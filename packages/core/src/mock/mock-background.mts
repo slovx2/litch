@@ -133,8 +133,9 @@ export function createMockBackground(host: MockBackgroundHost): MockBackground {
     claim(view, turnId, message) {
       if (!STARTS.test(message.text)) return false
       const now = host.now()
-      const dev = command(turnId, 'bg-dev', 'npm run dev', now)
-      const tests = command(turnId, 'bg-test', 'npm test -- --reporter dot', now + 1)
+      // 协议里的条目标识在会话里是唯一的：再演一遍也不和上一遍的撞
+      const dev = command(turnId, host.nextId('bg-dev-'), 'npm run dev', now)
+      const tests = command(turnId, host.nextId('bg-test-'), 'npm test -- --reporter dot', now + 1)
       host.apply(view, [
         { op: 'item.add', turnId, item: dev },
         { op: 'item.add', turnId, item: tests },

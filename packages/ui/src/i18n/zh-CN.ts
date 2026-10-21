@@ -2,6 +2,7 @@
 // 前半是界面自己的话，后半是核心要说的话（键和 packages/core/src/phrase.mts 一一对应）。
 import type { Entry } from './types.ts'
 import { zhAsks } from './zh-CN-asks.ts'
+import { zhBackground } from './zh-CN-background.ts'
 import { zhBimport } from './zh-CN-bimport.ts'
 import { zhComments } from './zh-CN-comments.ts'
 import { zhHconfig } from './zh-CN-hconfig.ts'
@@ -30,6 +31,8 @@ export const zhCN = {
   ...zhBimport,
   // 选中回答文字加评论的文案也单独放（zh-CN-comments.ts）
   ...zhComments,
+  // 后台任务（输入框上方那一行、侧面板的“后台任务”页、各处的记号）的文案也单独放（zh-CN-background.ts）
+  ...zhBackground,
   'title.location': '当前位置',
   'workspace.none': '无项目',
 

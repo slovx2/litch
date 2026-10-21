@@ -1,6 +1,7 @@
 // 英文文案。键必须和 zh-CN.ts 完全一致，多一句少一句都编译不过。
 
 import { enAsks } from './en-asks.ts'
+import { enBackground } from './en-background.ts'
 import { enBimport } from './en-bimport.ts'
 import { enComments } from './en-comments.ts'
 import { enHconfig } from './en-hconfig.ts'
@@ -25,6 +26,7 @@ export const en: Record<MessageKey, Entry> = {
   ...enPasswords,
   ...enBimport,
   ...enComments,
+  ...enBackground,
   'title.location': 'Location',
   'workspace.none': 'No project',
 

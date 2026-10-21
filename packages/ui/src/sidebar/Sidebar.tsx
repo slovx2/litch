@@ -204,9 +204,12 @@ const SessionRow = memo(function SessionRow({
         ? 'wait'
         : summary.status === 'error'
           ? 'err'
-          : summary.unread
-            ? 'unread'
-            : ''
+          : // 回合停了、后台任务还在跑：慢呼吸的空心记号，和前台在跑的转圈分开
+            (summary.background?.running ?? 0) > 0
+            ? 'bg'
+            : summary.unread
+              ? 'unread'
+              : ''
   // 工作目录不是它所在工作区的根（在子目录里开的，或者从别处挪进来的）：标题后面一个小记号。
   // 行上只有记号；是哪个目录在记号的提示和信息卡里
   const home = workspaces.find((entry) => entry.id === summary.workspaceId)
@@ -364,7 +367,15 @@ const SessionRow = memo(function SessionRow({
           onClick={() => onSelect({ deviceId, sessionId })}
           {...info.anchor}
         >
-          <i className={mark ? `st ${mark}` : 'st'} />
+          <i
+            className={mark ? `st ${mark}` : 'st'}
+            {...(mark === 'bg'
+              ? {
+                  title: t('background.sidebar', { count: summary.background?.running ?? 0 }),
+                  'data-background': summary.background?.running,
+                }
+              : {})}
+          />
           <span className="title ell grow">{t.text(summary.title)}</span>
           {nested ? null : apart ? (
             <span

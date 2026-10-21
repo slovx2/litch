@@ -1,8 +1,14 @@
-// 收起的工作区、设备那一行上的汇总：里面有没有在等人的、在跑的、没看过的。
+// 收起的工作区、设备那一行上的汇总：里面有没有在等人的、在跑的、只剩后台任务在跑的、没看过的。
 // 数是数据副本按组、按 harness 算好的（keys.tallies），这里只管合计和“该怎么说”。不碰页面，好单独测。
 import type { GroupTallies, GroupTally } from '@litch/core'
 
-export const NO_TALLY: GroupTally = { approval: 0, answer: 0, running: 0, unread: 0 }
+export const NO_TALLY: GroupTally = {
+  approval: 0,
+  answer: 0,
+  running: 0,
+  unread: 0,
+  background: 0,
+}
 
 /**
  * 一组的状况；group 给 null 是整台设备合起来的（设备那一行收起时用）。
@@ -24,6 +30,7 @@ export function tallyOf(
       if (only.length > 0 && !only.includes(harness)) continue
       sum.running += tally.running
       sum.unread += tally.unread
+      sum.background += tally.background
     }
   }
   return sum
@@ -31,7 +38,7 @@ export function tallyOf(
 
 /** 里面什么事都没有：行上不出汇总 */
 export const isQuiet = (tally: GroupTally): boolean =>
-  tally.approval + tally.answer + tally.running + tally.unread === 0
+  tally.approval + tally.answer + tally.running + tally.unread + tally.background === 0
 
 /**
  * 等人的那个小标写什么。只有一种就和会话行上的字一样（待审批、待回答），两种都有换一个说法；
@@ -50,6 +57,7 @@ export type TallyPart = {
     | 'sidebar.tally.approval'
     | 'sidebar.tally.answer'
     | 'sidebar.tally.running'
+    | 'sidebar.tally.background'
     | 'sidebar.tally.unread'
   count: number
 }
@@ -60,6 +68,7 @@ export function tallyParts(tally: GroupTally): TallyPart[] {
     { key: 'sidebar.tally.approval', count: tally.approval },
     { key: 'sidebar.tally.answer', count: tally.answer },
     { key: 'sidebar.tally.running', count: tally.running },
+    { key: 'sidebar.tally.background', count: tally.background },
     { key: 'sidebar.tally.unread', count: tally.unread },
   ]
   return parts.filter((part) => part.count > 0)
