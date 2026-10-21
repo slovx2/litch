@@ -307,6 +307,8 @@ export {
   firstSentence,
   isAgentSpawn,
 } from './projection/tree.mjs'
+// 回合末尾“正在工作”那一行只在空档出
+export { workingShown } from './projection/working.mjs'
 export { type FileTrees, fileKeys } from './replica/file-trees.mjs'
 export { KeyedStore } from './replica/keyed-store.mjs'
 export {

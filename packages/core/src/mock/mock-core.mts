@@ -184,6 +184,11 @@ const RUN_MS = 2400
  */
 const ASKS_WHILE_WORKING = /边做边问|ask while working/i
 const ASK_RUN_MS = 8000
+/**
+ * 发的话里带“想一会儿”时，回合开头先空等 RUN_MS 什么都不出（等第一个字），出一段说明之后再空等一次
+ * （两段输出之间），再照常回话。给界面试回合末尾那一行“正在工作”：它只在这种空档里出现
+ */
+const THINKS_A_WHILE = /想一会儿|think a while/i
 /** “跑一会儿”那条命令的条目标识 */
 const runKey = (turnId: string): string => `${turnId}-w`
 
@@ -572,6 +577,10 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       runAWhile(view, turnId)
       return turnId
     }
+    if (THINKS_A_WHILE.test(message.text)) {
+      thinkAWhile(view, turnId)
+      return turnId
+    }
     if (ASKS_WHILE_WORKING.test(message.text)) {
       const asks = SAMPLE_TEXT[lang].asyncAsks
       const item: ThreadItem = {
@@ -766,6 +775,30 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       replyHeard(view, turnId)
     }
     replies.set(sessionKey(view), clock.setTimer(finish, ms))
+  }
+
+  /** 回合里两段空档：开头什么都不出，出一段说明后再停一会儿，再照常回话（见 THINKS_A_WHILE） */
+  const thinkAWhile = (view: SessionView, turnId: string) => {
+    const note = () => {
+      applySessionOps(view, [
+        {
+          op: 'item.add',
+          turnId,
+          item: {
+            id: `${turnId}-n${++seq}`,
+            kind: 'agentMessage',
+            phase: 'commentary',
+            status: 'completed',
+            text: commentSample(lang).note,
+          },
+        },
+      ])
+      replies.set(
+        sessionKey(view),
+        clock.setTimer(() => replyHeard(view, turnId), RUN_MS),
+      )
+    }
+    replies.set(sessionKey(view), clock.setTimer(note, RUN_MS))
   }
 
   /**

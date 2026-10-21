@@ -2,7 +2,7 @@
 // 文字一律不可选：安卓上文本选择的监听在滚动时占主线程；复制走长按回合的菜单（长按用户消息、回答，或点状态行的“⋯”）。
 // 颜色、字号只从主题取。会长高的东西（流式的那一块）之外，行的高度在内容不变时不变。
 import { type FileScope, keys, parseAskReply, type SessionSummary } from '@litch/core'
-import { memo, useState } from 'react'
+import { memo, useEffect, useState } from 'react'
 import {
   Image,
   type LayoutChangeEvent,
@@ -284,16 +284,36 @@ export const ReasoningCell = memo(function ReasoningCell({ row }: Props<'reasoni
   )
 })
 
-/** 回合末尾的状态行：从回合开始一直在，高度固定，只换字。右边一个“⋯”打开这一回合的操作 */
+/** 空档要持续这么久才写“运行中”：一卡一卡地出字时不来回闪（和桌面端一样） */
+const WORKING_DELAY_MS = 400
+
+function useLasting(on: boolean): boolean {
+  const [lasted, setLasted] = useState(false)
+  useEffect(() => {
+    setLasted(false)
+    if (!on) return
+    const timer = setTimeout(() => setLasted(true), WORKING_DELAY_MS)
+    return () => clearTimeout(timer)
+  }, [on])
+  return on && lasted
+}
+
+/**
+ * 回合末尾的状态行：从回合开始一直在，高度固定，只换字。回合在跑时只在空档里写“运行中”，
+ * 正在出字、有步骤在跑、等人答复时留空。右边一个“⋯”打开这一回合的操作
+ */
 export const StatusCell = memo(function StatusCell({ row }: Props<'status'>) {
   const { c, font } = useTheme()
   const t = useT()
   const { turnMenu } = useTranscript()
+  const working = useLasting(row.working)
   const time =
     row.durationMs == null ? '' : ` · ${t('detail.seconds', { s: seconds(row.durationMs) })}`
   const text =
     row.status === 'running'
-      ? `${t('command.running')}…`
+      ? working
+        ? `${t('command.running')}…`
+        : ''
       : row.status === 'completed'
         ? `${t('turn.completed')}${time}`
         : row.status === 'interrupted'

@@ -316,6 +316,12 @@ export class SessionStore {
         }
         this.proposalsDirty = true
         return
+      case 'request.add':
+      case 'request.remove':
+        // 有没有待答的请求决定回合末尾那一行写不写“运行中”：在跑的回合重算
+        for (const turn of view.turns) if (turn.status === 'running') mark(turn.id)
+        this.metaDirty = true
+        return
       default:
         // 会话层面的状态（排队、设置、用量、请求、能不能发）：不进行，换一份 meta
         this.metaDirty = true
