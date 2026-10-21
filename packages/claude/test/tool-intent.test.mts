@@ -10,28 +10,29 @@ import {
   truncateSync,
   writeFileSync,
 } from 'node:fs'
-import { mkdtemp, open, rm } from 'node:fs/promises'
+import { mkdtemp, open, readdir, readFile, rm } from 'node:fs/promises'
 import { createRequire, syncBuiltinESMExports } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
 import test from 'node:test'
+import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { getSessionMessages, getSubagentMessages } from '@anthropic-ai/claude-agent-sdk'
 import { NativeClaudeRuntime } from '../src/native-runtime.mjs'
+import { lostToolCallsNotice, NativeToolIntents } from '../src/native-tool-intents.mjs'
+import { SessionStore } from '../src/store.mjs'
 import { ToolIntentTranscripts, TranscriptTail } from '../src/transcript-tail.mjs'
-import type { RuntimeEvent, RuntimeTurnContext } from '../src/types.mjs'
+import type { NativeToolIntent, RuntimeTurnContext } from '../src/types.mjs'
 import { MockLLM, type ModelRequest } from './fixtures/mock-llm.mjs'
 import { ProtocolClient } from './fixtures/protocol-client.mjs'
 
-// 原生工具执行之前，PreToolUse 钩子确认这次调用（tool_use 块）已经写进 CLI 的会话记录，确认不了就拒绝
-// （防止入口重启、恢复时同一个工具被执行两次），同时把那条消息的用量交给目标、登记工具意图。
-// 以前每次都用 SDK 把整个会话记录读出来、逐行解析，钩子触发时那一行多半还没写，隔 25 毫秒再读，
-// 一个回合的开销随调用次数平方涨。这里不看钟，数两样和机器快慢无关的量：
-//   从会话记录（主会话的和子代理的）里一共读了多少字节；
-//   解析了多少行会话记录（JSON.parse 的参数里带着会话 ID 的）。
-// 用的是真的原生运行时，只把 SDK 换成照着念的：它像 CLI 一样往会话记录里写（每个内容块一行、
-// 同一条消息的几行共用消息 id；有的在钩子来之前写好，有的晚一点写，有的先写半行），再调钩子。
-// SDK 的 getSessionMessages、getSubagentMessages 用真的（旧做法调的就是它们）。
+// 原生工具执行之前，PreToolUse 钩子把这次调用记进入口的库就放行，不等 CLI 把它写进会话记录
+// （native-runtime.mts 的 buildOptions）；有没有进会话记录挪到回合开始前、结束后核对（native-tool-intents.mts），
+// 没进、写它的 CLI 又不在了的，下一回合告诉模型。
+// INTENT-001、INTENT-002 用真的原生运行时，只把 SDK 换成照着念的；TAIL-* 是怎么读会话记录：
+// 每份记录只读新增的部分，数的是和机器快慢无关的量（读了多少字节、解析了多少行带着会话 ID 的 JSON）。
+// SETTLE-* 是核对本身；INTENT-003、INTENT-004 用真的 CLI 加假模型。
 
 const require = createRequire(import.meta.url)
 const fsp = require('node:fs/promises') as typeof import('node:fs/promises')
@@ -222,224 +223,205 @@ async function sandbox(
 }
 
 const toolId = () => `toolu_${randomUUID().replace(/-/g, '').slice(0, 24)}`
-/** 交给目标用量的那条消息：在用例里换掉运行时的 goalUsage，记下它收到的 */
-function spyGoalUsage(runtime: NativeClaudeRuntime): Record<string, unknown>[] {
-  const seen: Record<string, unknown>[] = []
-  const goalUsage = Reflect.get(runtime, 'goalUsage') as (...args: unknown[]) => Promise<void>
-  Reflect.set(runtime, 'goalUsage', function (this: unknown, pending: unknown, message: any) {
-    seen.push(message)
-    return goalUsage.call(this, pending, message)
-  })
-  return seen
-}
-
 const CALLS = 150
-const OUTPUT = 4000
+/** 入口告诉模型有调用结果未知时那段话的开头（native-tool-intents.mts） */
+const LOST_NOTICE = 'These tool calls from an earlier turn were started'
 
-test('INTENT-001：一个回合里一百多次工具调用，确认落盘读的字节数和解析的行数不随会话记录变长涨', {
-  timeout: 300_000,
-}, async (t) => {
+test('INTENT-001：一个回合里一百多次工具调用，钩子都当场放行、记下意图，不读会话记录', {
+  timeout: 120_000,
+}, async () => {
   await sandbox(async ({ projects, cwd, transcript, sessionId }) => {
     const main = new FakeTranscript(transcript, sessionId, cwd)
-    // 子代理的记录在会话目录的 subagents/ 下面，工作流的子代理再套一层
-    const subagents = join(transcript.slice(0, -'.jsonl'.length), 'subagents')
-    mkdirSync(join(subagents, 'workflows', 'run-1'), { recursive: true })
+    main.append(main.line({ type: 'user', message: { role: 'user', content: baseContext.prompt } }))
     const childId = 'a0123456789abcdef'
-    const nestedId = 'b0123456789abcdef'
-    const child = new FakeTranscript(
-      join(subagents, `agent-${childId}.jsonl`),
-      sessionId,
-      cwd,
-      childId,
-    )
-    const nested = new FakeTranscript(
-      join(subagents, 'workflows', 'run-1', `agent-${nestedId}.jsonl`),
-      sessionId,
-      cwd,
-      nestedId,
-    )
-    main.append(
-      `${JSON.stringify({ type: 'queue-operation', operation: 'dequeue', timestamp: new Date().toISOString(), sessionId })}\n` +
-        main.line({ type: 'user', message: { role: 'user', content: baseContext.prompt } }) +
-        main.line({
-          type: 'attachment',
-          attachment: { type: 'skill_listing', content: 'y'.repeat(12_000) },
-        }),
-    )
-    child.append(child.line({ type: 'user', message: { role: 'user', content: '子代理：读文件' } }))
-    nested.append(
-      nested.line({ type: 'user', message: { role: 'user', content: '工作流：读文件' } }),
-    )
-
-    const calls: Array<{ id: string; agent: string | undefined; input: Record<string, unknown> }> =
-      []
+    const calls: Array<{ id: string; agent: string | null; input: Record<string, unknown> }> = []
     const denied: string[] = []
+    let slowest = 0
     const runtime = new NativeClaudeRuntime()
-    const usages = spyGoalUsage(runtime)
     Reflect.set(runtime, 'sdk', {
       getSessionMessages,
       getSubagentMessages,
       query: ({ options }: { options: Record<string, any> }) =>
         (async function* () {
           for (let index = 0; index < CALLS; index++) {
-            const where = index % 10 === 3 ? child : index % 10 === 7 ? nested : main
-            const agent = where === child ? childId : where === nested ? nestedId : undefined
-            const messageId = `msg_${index}`
-            // 有的消息里是并行的两次调用：同一条消息、各占一行
+            const agent = index % 10 === 3 ? childId : null
+            // 有的消息里是并行的两次调用；会话记录一行都不写（CLI 还没攒够一批）
             const ids = index % 10 === 5 ? [toolId(), toolId()] : [toolId()]
             const input = { file_path: join(cwd, `f${index}.txt`) }
-            let text = where.assistant(messageId, { type: 'text', text: `看第 ${index} 个` }, 1)
-            for (const id of ids)
-              text += where.assistant(
-                messageId,
-                { type: 'tool_use', id, name: 'Read', input },
-                index % 2 ? 1 : 37,
-              )
-            // 写进会话记录的时机：钩子来之前写好、晚一点写、先写半行晚一点写完
-            if (index % 3 === 0) where.append(text)
-            else if (index % 3 === 1) {
-              const half = Math.floor(text.length / 2)
-              where.append(text.slice(0, half))
-              setTimeout(() => where.append(text.slice(half)), 40)
-            } else setTimeout(() => where.append(text), 40)
-            for (const id of ids) {
-              const event = {
-                hook_event_name: 'PreToolUse',
-                session_id: sessionId,
-                transcript_path: transcript,
-                cwd,
-                tool_name: 'Read',
-                tool_input: input,
-                tool_use_id: id,
-                ...(agent ? { agent_id: agent, agent_type: 'general-purpose' } : {}),
-              }
-              const reason = await preToolUse(options, event, id)
-              if (reason) denied.push(`${index} ${id}: ${reason}`)
+            const decisions = await Promise.all(
+              ids.map(async (id) => {
+                const started = performance.now()
+                const reason = await preToolUse(
+                  options,
+                  {
+                    hook_event_name: 'PreToolUse',
+                    session_id: sessionId,
+                    transcript_path: transcript,
+                    cwd,
+                    tool_name: 'Read',
+                    tool_input: input,
+                    tool_use_id: id,
+                    ...(agent ? { agent_id: agent, agent_type: 'general-purpose' } : {}),
+                  },
+                  id,
+                )
+                slowest = Math.max(slowest, performance.now() - started)
+                return reason
+              }),
+            )
+            ids.forEach((id, k) => {
+              if (decisions[k]) denied.push(`${index} ${id}: ${decisions[k]}`)
               calls.push({ id, agent, input })
-            }
-            for (const id of ids) where.append(where.result(id, `${index}: ${'x'.repeat(OUTPUT)}`))
+            })
           }
           yield { type: 'result', subtype: 'success', result: '看完了。', session_id: sessionId }
         })(),
     })
-    const intents: Array<[string, string, Record<string, unknown>]> = []
-    const events: RuntimeEvent[] = []
+    const recorded: NativeToolIntent[] = []
+    const reserved: Array<[string, string, Record<string, unknown>]> = []
     const metered = await meter(projects, sessionId)
     try {
       await runtime.runTurn(
         { ...baseContext, cwd },
         {
-          onEvent: async (event) => {
-            events.push(event)
-          },
+          onEvent: async () => {},
           onPermissionRequest: async () => ({ decision: 'accept' }),
           onUserInputRequest: async () => ({ answers: {} }),
+          onNativeToolCall: (intent) => {
+            recorded.push(intent)
+          },
           onNativeToolIntent: (callId, name, args) => {
-            intents.push([callId, name, args])
+            reserved.push([callId, name, args])
           },
         },
       )
     } finally {
       metered.stop()
     }
-    const { bytes, lines } = metered.counts
-
-    assert.deepEqual(denied, [], '每次调用都写进了会话记录，钩子都该放行')
+    assert.deepEqual(denied, [], '会话记录里还没有这次调用，钩子也该放行')
     assert.deepEqual(
-      intents,
+      recorded,
+      calls.map((call) => ({
+        callId: call.id,
+        tool: 'Read',
+        input: call.input,
+        sessionKey: baseContext.threadId,
+        transcriptPath: transcript,
+        agentId: call.agent,
+      })),
+    )
+    // 有目标时照旧登记目标用的工具意图（GOAL-002 恢复时靠它挡住自动续跑）
+    assert.deepEqual(
+      reserved,
       calls.map((call) => [call.id, 'Read', call.input]),
     )
-    // 交给目标用量的，就是 SDK 交出来的那一行的 message（字段、用量一样）
-    const listed: Record<string, Awaited<ReturnType<typeof getSessionMessages>>> = {
-      main: await getSessionMessages(sessionId, { dir: cwd }),
-      [childId]: await getSubagentMessages(sessionId, childId, { dir: cwd }),
-      [nestedId]: await getSubagentMessages(sessionId, nestedId, { dir: cwd }),
-    }
-    const fromSdk = (call: (typeof calls)[number]) =>
-      listed[call.agent ?? 'main']?.find((entry) => {
-        const content = (entry.message as { content?: unknown }).content
-        return (
-          Array.isArray(content) &&
-          content.some((block) => block.type === 'tool_use' && block.id === call.id)
-        )
-      })?.message
-    assert.deepEqual(usages, calls.map(fromSdk))
-    assert.ok(
-      events.some((event) => event.type === 'goal_usage'),
-      '目标用量照常发出',
-    )
-
-    // 两样量。会话记录一共多大：每个字节读一遍是线性的；以前每次调用（每隔 25 毫秒）都整份读一遍
-    const size = [main, child, nested].reduce((sum, file) => sum + statSync(file.path).size, 0)
-    t.diagnostic(
-      `${calls.length} 次调用，会话记录共 ${size} 字节：读了 ${bytes} 字节（上限 ${size * 2}），解析了 ${lines} 行（上限 ${calls.length * 2}）`,
-    )
-    assert.ok(size * 2 < (calls.length * size) / 10, '这个上限得比平方级的量小得多才有意义')
-    assert.ok(bytes < size * 2, `从会话记录读了 ${bytes} 字节，记录共 ${size} 字节`)
-    assert.ok(lines < calls.length * 2, `解析了 ${lines} 行会话记录，调用 ${calls.length} 次`)
+    assert.deepEqual(metered.counts, { bytes: 0, lines: 0 }, '钩子不该去读会话记录')
+    assert.ok(slowest < 1_000, `一次钩子最慢 ${slowest.toFixed(0)} 毫秒，不该再等会话记录`)
   })
 })
 
-test('INTENT-002：调用没写进会话记录、只写了半行、写在主会话里标着 isSidechain 的行里，都拒绝执行', {
+test('INTENT-002：意图记不下（回合已经结束）、事件里没有会话记录的路径、回合已取消时拒绝执行', {
   timeout: 60_000,
 }, async () => {
   await sandbox(async ({ cwd, transcript, sessionId }) => {
-    const main = new FakeTranscript(transcript, sessionId, cwd)
-    const [written, missing, half, sidechain] = [toolId(), toolId(), toolId(), toolId()]
-    const block = (id: string) => ({
-      type: 'tool_use',
-      id,
-      name: 'Read',
-      input: { file_path: cwd },
-    })
-    main.append(main.line({ type: 'user', message: { role: 'user', content: '开始' } }))
-    main.append(main.assistant('msg_ok', block(written), 3))
-    main.append(
-      main.line({
-        type: 'assistant',
-        isSidechain: true,
-        message: { id: 'msg_side', role: 'assistant', content: [block(sidechain)] },
-      }),
-    )
-    // 最后一行没写完：整行都在，只差换行
-    main.append(main.assistant('msg_half', block(half), 3).slice(0, -1))
+    new FakeTranscript(transcript, sessionId, cwd).append('')
+    const [ok, refused, pathless] = [toolId(), toolId(), toolId()]
     const runtime = new NativeClaudeRuntime()
     let decisions: Array<string | null> = []
+    const event = (id: string, path: unknown = transcript) => ({
+      hook_event_name: 'PreToolUse',
+      session_id: sessionId,
+      transcript_path: path,
+      cwd,
+      tool_name: 'Read',
+      tool_input: { file_path: cwd },
+      tool_use_id: id,
+    })
     Reflect.set(runtime, 'sdk', {
       getSessionMessages,
       getSubagentMessages,
       query: ({ options }: { options: Record<string, any> }) =>
         (async function* () {
-          decisions = await Promise.all(
-            [written, missing, half, sidechain].map((id) =>
-              preToolUse(
-                options,
-                {
-                  hook_event_name: 'PreToolUse',
-                  session_id: sessionId,
-                  transcript_path: transcript,
-                  cwd,
-                  tool_name: 'Read',
-                  tool_input: { file_path: cwd },
-                  tool_use_id: id,
-                },
-                id,
-              ),
-            ),
-          )
+          decisions = [
+            await preToolUse(options, event(ok), ok),
+            await preToolUse(options, event(refused), refused),
+            await preToolUse(options, event(pathless, null), pathless),
+          ]
           yield { type: 'result', subtype: 'success', result: 'done', session_id: sessionId }
         })(),
     })
+    const recorded: string[] = []
     await runtime.runTurn(
-      { ...baseContext, cwd },
+      { ...baseContext, cwd, trackGoalTools: false },
       {
         onEvent: async () => {},
         onPermissionRequest: async () => ({ decision: 'accept' }),
         onUserInputRequest: async () => ({ answers: {} }),
+        onNativeToolCall: (intent) => {
+          if (intent.callId === refused) throw new Error('Turn 已结束，不能执行原生工具')
+          recorded.push(intent.callId)
+        },
       },
     )
-    const unconfirmed = '原生工具意图未能确认落盘或回合已取消，禁止执行。'
-    assert.deepEqual(decisions, [null, unconfirmed, unconfirmed, unconfirmed])
+    const unrecorded = '原生工具意图未能记下或回合已取消，禁止执行。'
+    assert.deepEqual(decisions, [null, unrecorded, unrecorded])
+    assert.deepEqual(recorded, [ok])
+  })
+})
+
+test('INTENT-005：新会话的记录文件还没写出来时钩子等它出现再放行，一直不出现就拒绝', {
+  timeout: 60_000,
+}, async () => {
+  await sandbox(async ({ cwd, transcript, sessionId }) => {
+    const [late, never] = [toolId(), toolId()]
+    const runtime = new NativeClaudeRuntime()
+    const timings: number[] = []
+    let decisions: Array<string | null> = []
+    const event = (id: string, path: string) => ({
+      hook_event_name: 'PreToolUse',
+      session_id: sessionId,
+      transcript_path: path,
+      cwd,
+      tool_name: 'Read',
+      tool_input: { file_path: cwd },
+      tool_use_id: id,
+    })
+    Reflect.set(runtime, 'sdk', {
+      getSessionMessages,
+      getSubagentMessages,
+      query: ({ options }: { options: Record<string, any> }) =>
+        (async function* () {
+          const timed = async (id: string, path: string) => {
+            const started = performance.now()
+            const reason = await preToolUse(options, event(id, path), id)
+            timings.push(performance.now() - started)
+            return reason
+          }
+          // 像 CLI 第一次写那样，300 毫秒后文件才出现
+          setTimeout(() => new FakeTranscript(transcript, sessionId, cwd).append(''), 300)
+          decisions = [
+            await timed(late, transcript),
+            await timed(never, join(cwd, 'never-written.jsonl')),
+          ]
+          yield { type: 'result', subtype: 'success', result: 'done', session_id: sessionId }
+        })(),
+    })
+    const recorded: string[] = []
+    await runtime.runTurn(
+      { ...baseContext, cwd, trackGoalTools: false },
+      {
+        onEvent: async () => {},
+        onPermissionRequest: async () => ({ decision: 'accept' }),
+        onUserInputRequest: async () => ({ answers: {} }),
+        onNativeToolCall: (intent) => {
+          recorded.push(intent.callId)
+        },
+      },
+    )
+    assert.deepEqual(decisions, [null, '原生工具意图未能记下或回合已取消，禁止执行。'])
+    assert.deepEqual(recorded, [late], '文件一直没有的那次不记意图、不执行')
+    assert.ok(timings[0]! >= 250, `等到文件出现才放行，实际 ${timings[0]!.toFixed(0)} 毫秒`)
+    assert.ok(timings[1]! >= 2_900, `一直不出现时等满再拒，实际 ${timings[1]!.toFixed(0)} 毫秒`)
   })
 })
 
@@ -743,7 +725,7 @@ test('INTENT-003：真的 CLI 里接连调工具（含并行的两次、前台�
     const completed = await client.completed(turn.id)
     assert.equal(completed.status, 'completed', JSON.stringify(completed.error))
     const requests = JSON.stringify(model.requests)
-    assert.ok(!requests.includes('未能确认落盘'), '有工具调用被钩子拒了')
+    assert.ok(!requests.includes('未能记下'), '有工具调用被钩子拒了')
     assert.deepEqual(model.unexpected, [])
     const read = (await client.request('thread/read', { threadId: thread.id, includeTurns: true }))
       .thread
@@ -761,11 +743,295 @@ test('INTENT-003：真的 CLI 里接连调工具（含并行的两次、前台�
       .filter((block: any) => JSON.stringify(block.content).includes('probe-file-content: 42'))
     assert.ok(reads.length >= 2, '主会话和子代理的 Read 都该有结果')
     assert.ok(requests.includes('CHILD_DONE'), '子代理的结果交回了主会话')
+    // 下一回合：CLI 早把这些调用写进了会话记录，不该告诉模型有调用结果未知；记下的意图都核对掉了
+    const next = await client.request('turn/start', {
+      threadId: thread.id,
+      input: [{ type: 'text', text: 'INTENT_MAIN 再来一轮' }],
+    })
+    assert.equal((await client.completed(next.turn.id)).status, 'completed')
+    assert.ok(!JSON.stringify(model.requests.at(-1)).includes(LOST_NOTICE))
+    const db = new DatabaseSync(join(home, 'adapter', 'state.sqlite'))
+    try {
+      // 第二回合自己的调用要到回合结束后核对，这里只看第一回合的
+      const left = db
+        .prepare('SELECT call_id FROM native_tool_intents WHERE turn_id=?')
+        .all(turn.id)
+      assert.deepEqual(left, [])
+    } finally {
+      db.close()
+    }
     const log = readFileSync(join(home, 'adapter', 'debug.jsonl'), 'utf8')
-    assert.ok(!log.includes('native.toolIntent.unconfirmed'))
+    assert.ok(!log.includes('native.toolIntent.unrecorded'))
+    assert.ok(!log.includes('native.toolIntent.lost'))
   } finally {
     await client.close()
     await model.close()
     await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
   }
+})
+
+// 放行执行了、还没进 CLI 会话记录的调用：CLI 一条回复里的工具调用是边流边执行的，这个块那一行要等同一条回复
+// 后面的块流完才写。假模型在 tool_use 块后面停几秒再接一段字，Bash 的副作用发生时这一行一定还没写；
+// 这时把 CLI 强杀（只杀 CLI，或者连入口一起），下一回合模型必须被告知这次调用发出过、结果未知。
+for (const mode of ['cli', 'adapter'] as const)
+  test(`INTENT-004：副作用之后、调用进会话记录之前强杀${mode === 'cli' ? ' CLI' : ' CLI 和入口'}，下一回合告诉模型这次调用结果未知`, {
+    timeout: 120_000,
+  }, async () => {
+    const home = realpathSync(await mkdtemp(join(tmpdir(), 'tool-intent-lost-')))
+    const target = join(home, 'effect.txt')
+    const model = new MockLLM()
+    const url = await model.start()
+    let client = await ProtocolClient.start(home, url)
+    const callId = 'toolu_lost_effect_01'
+    try {
+      model.enqueue(() => [
+        {
+          type: 'tool_use',
+          id: callId,
+          name: 'Bash',
+          input: {
+            command: `printf X >> '${target}'; /bin/sleep 30`,
+            description: 'effect',
+            timeout: 60_000,
+          },
+          pauseAfterMs: 4_000,
+        },
+        { type: 'text', text: 'AFTER_TOOL' },
+      ])
+      const { thread } = await client.request('thread/start', {
+        cwd: home,
+        sandbox: 'danger-full-access',
+        approvalPolicy: 'never',
+      })
+      const { turn } = await client.request('turn/start', {
+        threadId: thread.id,
+        input: [{ type: 'text', text: 'LOST_FIRST 跑一次命令' }],
+      })
+      const deadline = Date.now() + 20_000
+      while (Date.now() < deadline && (await readFile(target, 'utf8').catch(() => '')) !== 'X')
+        await delay(10)
+      assert.equal(await readFile(target, 'utf8'), 'X')
+      // 这时 CLI 的会话记录里还没有这次调用
+      const transcripts = await readdir(join(home, 'claude', 'projects'), { recursive: true })
+      const recorded = transcripts
+        .filter((name) => String(name).endsWith('.jsonl'))
+        .map((name) => readFileSync(join(home, 'claude', 'projects', String(name)), 'utf8'))
+        .join('')
+      assert.ok(!recorded.includes(callId), '这次调用不该已经进了会话记录')
+      const db = new DatabaseSync(join(home, 'adapter', 'state.sqlite'))
+      try {
+        const row = db
+          .prepare(
+            'SELECT tool, input_json FROM native_tool_intents WHERE thread_id=? AND call_id=?',
+          )
+          .get(thread.id, callId) as { tool: string; input_json: string } | undefined
+        assert.equal(row?.tool, 'Bash', '意图必须先于副作用落进入口的库')
+      } finally {
+        db.close()
+      }
+      const started = readFileSync(join(home, 'adapter', 'debug.jsonl'), 'utf8')
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line))
+        .find((entry) => entry.event === 'native.process.started' && entry.turnId === turn.id)
+      assert.ok(started?.childPid)
+      process.kill(started.childPid, 'SIGKILL')
+      if (mode === 'adapter') {
+        client.crash()
+        await client.close()
+        client = await ProtocolClient.start(home, url)
+        await client.request('thread/resume', { threadId: thread.id })
+      } else {
+        const ended = await client.completed(turn.id)
+        assert.notEqual(ended.status, 'completed')
+      }
+      let seen = ''
+      model.enqueue((request) => {
+        seen = JSON.stringify(request.messages)
+        return [{ type: 'text', text: 'SECOND_DONE' }]
+      })
+      const { turn: next } = await client.request('turn/start', {
+        threadId: thread.id,
+        input: [{ type: 'text', text: 'LOST_SECOND 接着来' }],
+      })
+      const done = await client.completed(next.id)
+      assert.equal(done.status, 'completed', JSON.stringify(done.error))
+      assert.ok(seen.includes(LOST_NOTICE), '下一回合要告诉模型这次调用结果未知')
+      assert.ok(seen.includes(`printf X >> '`), '要说清是哪一次调用')
+      assert.ok(!seen.includes(callId), 'CLI 的会话记录里没有这次调用（否则测的不是这条路）')
+      assert.ok(seen.includes('LOST_SECOND'))
+      assert.equal(await readFile(target, 'utf8'), 'X', '不能重放')
+      // 说过一次就删掉，再下一回合不再说
+      const after = new DatabaseSync(join(home, 'adapter', 'state.sqlite'))
+      try {
+        assert.deepEqual(
+          after.prepare('SELECT call_id FROM native_tool_intents WHERE call_id=?').all(callId),
+          [],
+        )
+      } finally {
+        after.close()
+      }
+      const read = await client.request('thread/read', { threadId: thread.id, includeTurns: true })
+      const user = read.thread.turns.at(-1).items.find((item: any) => item.type === 'userMessage')
+      assert.ok(!JSON.stringify(user).includes(LOST_NOTICE), '记录里的用户消息还是用户原样的话')
+      model.assertConsumed()
+    } finally {
+      await client.close()
+      await model.close()
+      await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
+    }
+  })
+
+// ---------- 记下的意图怎么核对：进了会话记录的删掉，没进、CLI 也不在了的告诉模型 ----------
+
+async function intentStore(
+  run: (store: SessionStore, file: FakeTranscript, dir: string) => Promise<void>,
+) {
+  await scratch(async (file, dir) => {
+    const store = new SessionStore(join(dir, 'state.sqlite'))
+    try {
+      await run(store, file, dir)
+    } finally {
+      store.close()
+    }
+  })
+}
+
+const intentOf = (callId: string, path: string, fields: Partial<NativeToolIntent> = {}) => ({
+  callId,
+  tool: 'Bash',
+  input: { command: `echo ${callId}` },
+  sessionKey: 'thread',
+  transcriptPath: path,
+  agentId: null,
+  ...fields,
+})
+
+test('SETTLE-001：进了会话记录的删掉；没进、CLI 不在了的交出来；没进、CLI 还在的留着', async () => {
+  await intentStore(async (store, file) => {
+    const [written, lost, pending, half] = [toolId(), toolId(), toolId(), toolId()]
+    for (const id of [written, lost, pending, half])
+      store.saveNativeToolIntent('thread', 'turn', intentOf(id, file.path))
+    file.append(file.line({ type: 'user', message: { role: 'user', content: '开始' } }))
+    file.append(file.assistant('msg_1', useBlock(written), 3))
+    // 只差换行的半行不算写进去了
+    file.append(file.assistant('msg_2', useBlock(half), 3).slice(0, -1))
+    const intents = new NativeToolIntents(store)
+    // CLI 还在：没进记录的都留着
+    assert.deepEqual(await intents.settle('thread', new Set(['thread'])), [])
+    assert.deepEqual(
+      store.nativeToolIntents('thread').map((row) => row.callId),
+      [lost, pending, half],
+    )
+    // CLI 不在了：没进记录的交出来，但不删（告诉过模型、那一回合结束后才删）
+    const out = await intents.settle('thread', new Set())
+    assert.deepEqual(
+      out.map((row) => row.callId),
+      [lost, pending, half],
+    )
+    assert.equal(out[0]?.turnId, 'turn')
+    assert.deepEqual(out[0]?.input, { command: `echo ${lost}` })
+    store.dropNativeToolIntents(
+      'thread',
+      out.map((row) => row.callId),
+    )
+    assert.deepEqual(store.nativeToolIntents('thread'), [])
+    // 同一次调用再记一次不重复、不改原来的
+    store.saveNativeToolIntent('thread', 'turn', intentOf(written, file.path))
+    store.saveNativeToolIntent('thread', 'turn-2', intentOf(written, file.path))
+    assert.equal(store.nativeToolIntents('thread')[0]?.turnId, 'turn')
+    assert.deepEqual(await intents.settle('thread', new Set()), [])
+    assert.deepEqual(store.nativeToolIntents('thread'), [])
+  })
+})
+
+test('SETTLE-002：子代理的调用到 subagents/ 下面找；记录文件不见了算没写进去', async () => {
+  await intentStore(async (store, file, dir) => {
+    const agent = 'a0123456789abcdef'
+    const sub = join(file.path.slice(0, -'.jsonl'.length), 'subagents')
+    mkdirSync(sub, { recursive: true })
+    const child = new FakeTranscript(join(sub, `agent-${agent}.jsonl`), randomUUID(), dir, agent)
+    const [inChild, inMainOnly, gone] = [toolId(), toolId(), toolId()]
+    child.append(child.assistant('msg_c', useBlock(inChild), 1))
+    file.append(file.assistant('msg_m', useBlock(inMainOnly), 1))
+    store.saveNativeToolIntent('thread', 'turn', intentOf(inChild, file.path, { agentId: agent }))
+    // 子代理的调用在主会话的记录里不算
+    store.saveNativeToolIntent(
+      'thread',
+      'turn',
+      intentOf(inMainOnly, file.path, { agentId: agent }),
+    )
+    store.saveNativeToolIntent('thread', 'turn', intentOf(gone, join(dir, 'missing.jsonl')))
+    const lost = await new NativeToolIntents(store).settle('thread', new Set())
+    assert.deepEqual(
+      lost.map((row) => row.callId),
+      [inMainOnly, gone],
+    )
+    const notice = lostToolCallsNotice(lost)
+    assert.match(notice, /outcome is unknown/)
+    assert.ok(notice.includes(`- Bash (in subagent ${agent}): {"command":"echo ${inMainOnly}"}`))
+    assert.ok(notice.includes(`- Bash: {"command":"echo ${gone}"}`))
+    // 太长的参数截断
+    assert.ok(
+      lostToolCallsNotice([{ ...lost[1]!, input: { command: 'x'.repeat(5_000) } }]).length < 1_500,
+    )
+  })
+})
+
+test('SETTLE-003：回退掉的回合、删掉的会话，它们的意图跟着删', async () => {
+  await intentStore(async (store, file, dir) => {
+    const now = Math.floor(Date.now() / 1000)
+    store.upsertThread({
+      id: 'thread',
+      sessionId: 'thread',
+      forkedFromId: null,
+      preview: '',
+      name: null,
+      archived: false,
+      cwd: dir,
+      model: 'sonnet',
+      reasoningEffort: null,
+      modelProvider: 'claude-code',
+      runtimeBackend: 'claude',
+      claudeSessionId: 'original',
+      codexSessionId: null,
+      source: 'appServer',
+      createdAt: now,
+      updatedAt: now,
+      status: { type: 'idle' },
+      approvalPolicy: 'never',
+      sandboxMode: 'danger-full-access',
+      ephemeral: false,
+      threadSource: 'user',
+      agentRole: null,
+      agentNickname: null,
+      baseInstructions: null,
+      developerInstructions: null,
+      personality: null,
+    } as any)
+    for (const [id, startedAt] of [
+      ['turn-old', now - 10],
+      ['turn-new', now],
+    ] as const)
+      store.upsertTurn({
+        id,
+        threadId: 'thread',
+        status: 'completed',
+        startedAt,
+        completedAt: startedAt,
+        durationMs: 0,
+        items: [],
+        diff: '',
+        error: null,
+      } as any)
+    store.saveNativeToolIntent('thread', 'turn-old', intentOf('old', file.path))
+    store.saveNativeToolIntent('thread', 'turn-new', intentOf('new', file.path))
+    assert.equal(store.deleteRecentTurns('thread', 1), 1)
+    assert.deepEqual(
+      store.nativeToolIntents('thread').map((row) => row.callId),
+      ['old'],
+    )
+    store.deleteThread('thread')
+    assert.deepEqual(store.nativeToolIntents('thread'), [])
+  })
 })
