@@ -148,6 +148,10 @@ class SelectableRuntime implements ClaudeRuntime {
     return [...this.runtimes.values()].flatMap((runtime) => runtime.liveSessions?.() ?? [])
   }
 
+  cliProcessKeys(): string[] {
+    return [...this.runtimes.values()].flatMap((runtime) => runtime.cliProcessKeys?.() ?? [])
+  }
+
   async closeSession(threadId: string, reason: string): Promise<void> {
     await Promise.all(
       [...this.runtimes.values()].map((runtime) => runtime.closeSession?.(threadId, reason)),

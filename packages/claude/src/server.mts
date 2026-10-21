@@ -71,6 +71,7 @@ import {
   nativeSessionsEnabled,
   sdkNativeSessionSource,
 } from './native-sessions.mjs'
+import { lostToolCallsNotice, NativeToolIntents } from './native-tool-intents.mjs'
 import { PendingInteractions } from './pending-interactions.mjs'
 import {
   copyPermissionOverlay,
@@ -110,7 +111,7 @@ import {
 } from './provider-loop-selection.mjs'
 import { AccountRateLimits } from './rate-limits.mjs'
 import { recordRunEvent } from './run-registry.mjs'
-import { normalizeRuntimeType } from './runtime-config.mjs'
+import { claudeSessionTitle, normalizeRuntimeType } from './runtime-config.mjs'
 import { defaultSandboxPolicy, parseSandboxPolicy, policyFromParams } from './sandbox-policy.mjs'
 import {
   addedFileDiff,
@@ -173,7 +174,7 @@ import {
 import { resolveShellEnvironmentPolicy, type ShellEnvironmentPolicy } from './shell-environment.mjs'
 import { layeredSkillRules, skillRules } from './skill-config.mjs'
 import { SkillsRpc } from './skills-rpc.mjs'
-import { PINNED_SECTION_ID, type SessionStore } from './store.mjs'
+import { PINNED_SECTION_ID, type SessionStore, type StoredNativeToolIntent } from './store.mjs'
 import {
   relayRuntimeEvents,
   SubagentProjection,
@@ -369,6 +370,7 @@ export class CodexClaudeAppServer {
   private readonly mcp = new McpRpc()
   // Skill 开关的规则：config.json 的 skills.config 在前，`-c` 的接在后面（skill-config.mts）
   private readonly skills = new SkillsRpc((threadConfig) => this.skillRulesFor(threadConfig))
+  private readonly nativeToolIntents: NativeToolIntents
   // config.json 里的配置（不含 `-c`）
   private persistedOverrides: Record<string, unknown> = {}
   private readonly mcpOAuth = mcpOAuthManager()
@@ -426,6 +428,7 @@ export class CodexClaudeAppServer {
       : null,
   ) {
     this.store = store
+    this.nativeToolIntents = new NativeToolIntents(store)
     this.runtime = runtime
     this.native = nativeSource
       ? new NativeSessions({
@@ -2746,6 +2749,19 @@ export class CodexClaudeAppServer {
     })
   }
 
+  /** 核对这个会话记着的原生工具意图，返回要告诉模型的那些；核对失败只记日志，不挡回合 */
+  private async lostNativeToolCalls(threadId: string): Promise<StoredNativeToolIntent[]> {
+    try {
+      return await this.nativeToolIntents.settle(
+        threadId,
+        new Set(this.runtime.cliProcessKeys?.() ?? []),
+      )
+    } catch (error) {
+      debugLog('native.toolIntent.settleFailed', { threadId, error: String(error) })
+      return []
+    }
+  }
+
   /** 插进回合的话交给运行时的文字：选中的 Skill 正文在前（同 turn/start），其余照旧 */
   private inputPrompt(threadId: string, input: UserInput[]): string {
     const cwd = this.store.getThread(threadId)?.cwd ?? process.cwd()
@@ -3850,6 +3866,13 @@ export class CodexClaudeAppServer {
       acceptRuntimeEvents &&
       this.store.turnStatus(turn.id) === 'inProgress' &&
       this.activeTurnByThread.get(thread.id) === turn.id
+    // 之前的回合里放行执行、却没进 CLI 会话记录的工具调用（入口崩了或 CLI 被强杀），写它的 CLI 也不在了：
+    // 模型在恢复的会话里看不到它们，这一回合的话前面说一声（native-tool-intents.mts）。追问子代理的回合说给
+    // 子代理听（放进转交的那句话）；CLI 自己续跑的回合没有新的话，不看
+    const lostIntents =
+      isCodexThread || params._spontaneous === true ? [] : await this.lostNativeToolCalls(thread.id)
+    const lostNotice = lostIntents.length > 0 ? `${lostToolCallsNotice(lostIntents)}\n\n` : ''
+    if (!relay) effectivePrompt = `${lostNotice}${effectivePrompt}`
     if (!turnIsActive()) return
     this.runtimeReadyByTurn.get(turn.id)?.resolve(true)
     this.handedToRuntime.add(turn.id)
@@ -3866,7 +3889,7 @@ export class CodexClaudeAppServer {
         prompt: effectivePrompt,
         ...(relay
           ? {
-              subagentRelay: { agentId: relay.agentId, message: prompt },
+              subagentRelay: { agentId: relay.agentId, message: `${lostNotice}${prompt}` },
               sessionThreadId: relay.parent.id,
             }
           : {}),
@@ -3979,6 +4002,10 @@ export class CodexClaudeAppServer {
           const result = this.goals.tool(thread.id, turn.id, name, args, callId)
           this.goalUpdated(thread.id, this.store.threadGoal(thread.id))
           return result
+        },
+        onNativeToolCall: (intent) => {
+          if (!turnIsActive()) throw new Error('Turn 已结束，不能执行原生工具')
+          this.store.saveNativeToolIntent(thread.id, turn.id, intent)
         },
         onNativeToolIntent: (callId, name, args) => {
           if (!turnIsActive()) throw new Error('Turn 已结束，不能执行原生工具')
@@ -5109,6 +5136,13 @@ export class CodexClaudeAppServer {
     disarmWatchdog()
     acceptRuntimeEvents = false
     if (this.stopped) return
+    // 说过的不再说；这一回合的调用进了会话记录的删掉（不等：CLI 退出时才写完最后一批，下一回合开始前还会再看）
+    if (lostIntents.length > 0)
+      this.store.dropNativeToolIntents(
+        thread.id,
+        lostIntents.map((row) => row.callId),
+      )
+    void this.lostNativeToolCalls(thread.id)
     for (const item of this.store.finishHookRuns(
       turn.id,
       'unknown',
@@ -5216,8 +5250,10 @@ export class CodexClaudeAppServer {
     void this.adoptSessionTitle(thread.id)
   }
 
-  // 这个会话还要不要自动起名：Claude 会话、还没有名字、用户没改过名，只看前三个回合
+  // 这个会话还要不要自动起名：Claude 会话、还没有名字、用户没改过名，只看前三个回合。
+  // CHA_CLAUDE_SESSION_TITLE=off 时一律不起：不请 CLI 起（requestTitle）、回合结束也不读（adoptSessionTitle）
   private wantsSessionTitle(threadId: string): boolean {
+    if (!claudeSessionTitle()) return false
     if ((this.titleChecks.get(threadId) ?? 0) >= 3 || !this.runtime.sessionTitle) return false
     const thread = this.store.getThread(threadId)
     return Boolean(

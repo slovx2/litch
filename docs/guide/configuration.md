@@ -196,9 +196,20 @@ export CHA_CLAUDE_THREAD_ID_HEADER=1
 # CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL=5m（自己设过的照旧），cache_control.ttl 和 anthropic-beta 由 CLI 决定。
 # 1 小时缓存在长对话里更省（少重新写入缓存），但写入缓存的单价更高。
 export CHA_CLAUDE_PROMPT_CACHE_TTL=1h
+
+# 默认 on：Claude 会话照旧自动起名（每个会话的头几个回合里 CLI 用小模型发一次起标题的请求，
+# 入口把起出来的标题当会话名）。设成 off 时不再有这个请求：CLI 不自己起（入口给它设
+# CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1），入口也不请它起、回合结束不读标题。
+export CHA_CLAUDE_SESSION_TITLE=off
 ```
 
-四项给了认不出的值时入口启动就报错。
+五项给了认不出的值时入口启动就报错。
+
+关掉自动起名后线程名在协议上的表现：
+
+- 新会话的 `name` 一直是 `null`，入口不会自己发 `thread/name/updated`；`thread/list`、`thread/read` 里没有名字，客户端照常拿 `preview`（第一句话）显示，和原生 Codex 没起名时一样。
+- 客户端的 `thread/name/set` 照常生效，照常发 `thread/name/updated`。
+- 开关在入口启动时读，改了要重启入口。已经起好名的会话不动；开着时 CLI 已经写进会话记录、入口还没读到的标题，关掉以后也不再读。
 
 ## Codex 风格的 `-c` 与权限档位
 
@@ -323,6 +334,7 @@ export CHA_CLAUDE_NODE="/absolute/path/to/node"
 | `CHA_CLAUDE_PLANS_LOCATION` | 计划文件放哪：`workspace`（默认，工作区里每个线程一个目录）或 `config`（`<CLAUDE_CONFIG_DIR 或 ~/.claude>/plans/`）。CLI 只认项目内的 `plansDirectory`，所以不能指定任意目录。 |
 | `CHA_CLAUDE_THREAD_ID_HEADER` | 设成 `1` 时模型请求带 `thread-id: <线程号>`（合进 `ANTHROPIC_CUSTOM_HEADERS`），不带回合号；默认关。 |
 | `CHA_CLAUDE_PROMPT_CACHE_TTL` | 提示缓存时长：`default`（默认，什么都不设，和直接跑 CLI 一样）或 `1h`（设 CLI 自己的 `ENABLE_PROMPT_CACHING_1H`、`CLAUDE_CODE_PROMPT_CACHE_TTL=1h`、`CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL=5m`）。 |
+| `CHA_CLAUDE_SESSION_TITLE` | 默认 `on`，Claude 会话自动起名；`off` 时 CLI 和入口都不发起标题的模型请求，会话名只来自 `thread/name/set`。 |
 | `CHA_CLAUDE_IDLE_EXIT_MS` | 仅 shim：守护进程空闲退出；本地入口固定为 `0`。还有 Claude 进程在看管后台命令时不算空闲（只是空闲保留着的不算）。 |
 | `CHA_CLAUDE_KEEP_ALIVE_SESSIONS` | 同时保留后台命令的 Claude 会话数上限，默认 `8`。回合结束时还有后台命令在跑，该会话的 Claude 进程就留下（每个约占 120–220 MB 内存）；超出上限的会话不保留，后台命令随回合结束而停止并有提示。设为 `0` 关闭保留。 |
 | `CHA_CLAUDE_KEEP_ALIVE_DETACHED_MINUTES` | 全部客户端断开后，留着的 Claude 进程再保留多少分钟，默认 `30`；期间有客户端连回来就继续保留。`0` 表示一直保留。有回合在进行的进程不回收，包括停在等待用户确认上的回合。只是空闲保留着的进程（见下一行）不等这个时间，全部断开时马上回收。 |

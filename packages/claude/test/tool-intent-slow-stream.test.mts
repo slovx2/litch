@@ -7,8 +7,8 @@ import { ProtocolClient } from './fixtures/protocol-client.mjs'
 
 // 一条回复里接连几个工具调用，后一个内容块要流好几秒（比如几个子代理，每个的 prompt 都很长）时，
 // CLI 已经开始执行前一个调用、触发 PreToolUse 钩子，但前一个块那一行要等后一个块流完才写进会话记录。
-// 钩子只等 3 秒就拒绝，前一个调用于是被拒（真实会话里三个子代理拒了两个）。这里用真的 CLI 复现：
-// 第一个 Bash 块流完后停 4.5 秒再流第二个块，两个命令都要真的执行。
+// 钩子要是等这一行落进记录才放行，前一个调用就会被拖住甚至拒掉（曾经真实会话里三个子代理拒了两个）。
+// 这里用真的 CLI：第一个 Bash 块流完后停 4.5 秒再流第二个块，两个命令都要真的执行。
 
 const toolResults = (request: ModelRequest): Map<string, string> => {
   const results = new Map<string, string>()
@@ -65,7 +65,7 @@ test('后一个内容块流得慢时，前一个工具调用照样执行（不�
     assert.ok(followUp, '工具结果要交回模型')
     const results = toolResults(followUp)
     for (const id of ['toolu_slow_first', 'toolu_slow_second'])
-      assert.doesNotMatch(results.get(id) ?? '', /未能确认落盘/, `${id} 不能被钩子拒绝`)
+      assert.doesNotMatch(results.get(id) ?? '', /禁止执行/, `${id} 不能被钩子拒绝`)
     assert.equal((await readFile(join(cwd, 'first.txt'), 'utf8')).trim(), 'FIRST')
     assert.equal((await readFile(join(cwd, 'second.txt'), 'utf8')).trim(), 'SECOND')
   } finally {

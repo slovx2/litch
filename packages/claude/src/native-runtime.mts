@@ -83,6 +83,7 @@ import {
   userMessage,
 } from './native-session.mjs'
 import { forkNativeSession } from './native-session-fork.mjs'
+import { waitForTranscript } from './native-tool-intents.mjs'
 import { NativeTurnInput } from './native-turn-input.mjs'
 import { mergePermissionOverlay, permissionToolName } from './permission-grants.mjs'
 import { permissionToolServer } from './permission-tools.mjs'
@@ -91,6 +92,7 @@ import { type NativeRateLimitInfo, rateLimitCredentialScope } from './rate-limit
 import {
   applyPromptCacheTtl,
   claudePlansLocation,
+  claudeSessionTitle,
   claudeSettingSources,
   claudeThreadIdHeaderEnv,
 } from './runtime-config.mjs'
@@ -104,7 +106,6 @@ import {
   runtimePermissionOptions,
   sandboxedBashInput,
 } from './runtime-permissions.mjs'
-import { ModelStreamWatch, ToolIntentTranscripts } from './transcript-tail.mjs'
 import type { RuntimeTurnSettings } from './turn-settings.mjs'
 import type {
   ClaudeRuntime,
@@ -163,7 +164,6 @@ interface NativeSession {
   mcp: NativeMcpBridge
   process: NativeProcess
   // 模型的回复还在不在流：工具意图确认的钩子按它决定等多久
-  stream: ModelStreamWatch
   shells: BackgroundShellState
   // 出现在 background_tasks_changed 里的任务（任意类型）。它们结束后 CLI 会自己再跑一轮。
   backgroundTasks: Set<string>
@@ -284,10 +284,6 @@ const WORKFLOW_TERMINAL_FLUSH_TIMEOUT_MS = 500
 // 没有回合也没有后台命令的进程多留这么久再退出，避免刚停掉命令就来了新回合。
 const IDLE_REAP_MS = 2_000
 const SPONTANEOUS_ATTACH_TIMEOUT_MS = 10_000
-// 工具意图确认：钩子来了、或者回复流完之后，会话记录里那一行最多再等这么久
-const TOOL_INTENT_GRACE_MS = 3_000
-// 回复一直在流时最多等这么久（一条回复里后面的块流了十分钟也算异常）
-const TOOL_INTENT_LIMIT_MS = 10 * 60_000
 const WORKFLOW_JOURNAL_SETTLE_TIMEOUT_MS = 3_000
 
 export class NativeClaudeRuntime implements ClaudeRuntime {
@@ -314,6 +310,10 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
 
   setSessionHandlers(handlers: RuntimeSessionHandlers): void {
     this.sessionHandlers = handlers
+  }
+
+  cliProcessKeys(): string[] {
+    return [...this.processes].filter(([, process]) => !process.hasExited).map(([key]) => key)
   }
 
   // 只是空闲保留着的进程不算：它不看管任何东西，客户端全断开或配置改变时直接关掉。
@@ -624,8 +624,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         },
       })
       const liveHandlers = this.liveHandlers(current)
-      const stream = new ModelStreamWatch()
-      const options = this.buildOptions(sdk, live, abort, current, stream)
+      const options = this.buildOptions(sdk, live, abort, current, key)
       options.spawnClaudeCodeProcess = nativeProcess.spawn.bind(nativeProcess)
       options.mcpServers = await mcp.connect(
         context.mcpServers,
@@ -655,7 +654,6 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         abort,
         mcp,
         process: nativeProcess,
-        stream,
         shells: {
           live: new Map(),
           taskToolUse: new Map(),
@@ -1255,7 +1253,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     context: RuntimeTurnContext,
     abort: AbortController,
     current: () => Promise<PendingTurn | null>,
-    stream: ModelStreamWatch = new ModelStreamWatch(),
+    sessionKey: string,
   ): Record<string, unknown> {
     const originalBashInputs: OriginalBashInputs = new Map()
     const reservedGoalTools = new Set<string>()
@@ -1296,6 +1294,8 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         // 追问子代理的回合跑在父线程的会话上，给的是父线程
         LITCH_THREAD_ID: context.sessionThreadId ?? context.threadId,
         ...threadHeader,
+        // CHA_CLAUDE_SESSION_TITLE=off：CLI 不自己用小模型起标题（入口这边也不请它起，见 server.mts）
+        ...(claudeSessionTitle() ? {} : { CLAUDE_CODE_DISABLE_TERMINAL_TITLE: '1' }),
       },
       ...runtimePermissionOptions(context, originalBashInputs),
       settings: {
@@ -1340,59 +1340,54 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     const mode = derivePermissionMode(context.planMode)
     opts.permissionMode = mode
     const permissionHooks = opts.hooks as { PreToolUse: Array<{ hooks: unknown[] }> }
-    // 工具执行之前确认这次调用已经写进会话记录（入口重启、恢复时以它为准，工具不会被执行两次）。
-    // 每份记录只读新增的部分，不随会话变长，见 transcript-tail.mts。
-    // 等多久：CLI 边流边执行，这一块那一行要等同一条回复后面的块流完才写，所以回复还在流就一直等，
-    // 流完（或者钩子刚来）之后再等几秒；流一直不完也有个上限，免得工具永远挂着。
-    const transcripts = new ToolIntentTranscripts()
-    const waiting = (since: number): boolean => {
-      const now = Date.now()
-      if (now < since + TOOL_INTENT_GRACE_MS || now < stream.lastEnded + TOOL_INTENT_GRACE_MS)
-        return true
-      return stream.streaming && now < since + TOOL_INTENT_LIMIT_MS
-    }
+    // 工具执行之前先把这次调用记进入口自己的库（server.mts 的 onNativeToolCall），记上了才放行。
+    // CLI 的会话记录是攒一阵（约 100 毫秒）才写一批的，入口崩溃、CLI 被强杀时这次调用可能还没进记录，
+    // 恢复的会话里模型就不知道它发出过；入口凭这份意图在下一回合告诉模型（native-tool-intents.mts）。
+    // 不等 CLI 把这一行写进会话记录（那样每次工具调用都要多等约 100 毫秒），只在新会话的记录文件还没有时等它出现。
     permissionHooks.PreToolUse.push({
       hooks: [
         async (event: Record<string, unknown>, toolUseId: string) => {
-          const since = Date.now()
-          let failure: unknown = '超时'
           try {
-            do {
-              abort.signal.throwIfAborted()
-              const assistant = await transcripts.find(event, toolUseId)
-              if (assistant) {
-                const pending = await current()
-                if (pending && context.goalTools) await this.goalUsage(pending, assistant)
-                if (pending && context.trackGoalTools && !isGoalTool(String(event.tool_name))) {
-                  pending.handlers.onNativeToolIntent?.(
-                    toolUseId,
-                    String(event.tool_name),
-                    (event.tool_input ?? {}) as Record<string, unknown>,
-                  )
-                  reservedGoalTools.add(toolUseId)
-                }
-                return {}
-              }
-              await delay(25, undefined, { signal: abort.signal })
-            } while (waiting(since))
+            abort.signal.throwIfAborted()
+            const transcriptPath = event.transcript_path
+            if (typeof transcriptPath !== 'string' || !transcriptPath.endsWith('.jsonl'))
+              throw new Error('钩子事件里没有会话记录的路径')
+            // 新会话的记录文件还没写出来时等它出现，不然崩了连会话都恢复不了（native-tool-intents.mts）
+            await waitForTranscript(transcriptPath, abort.signal)
+            const pending = await current()
+            if (!pending) throw new Error('没有接着这一轮的回合')
+            pending.handlers.onNativeToolCall?.({
+              callId: toolUseId,
+              tool: String(event.tool_name),
+              input: event.tool_input ?? {},
+              sessionKey,
+              transcriptPath,
+              agentId: typeof event.agent_id === 'string' ? event.agent_id : null,
+            })
+            if (context.trackGoalTools && !isGoalTool(String(event.tool_name))) {
+              pending.handlers.onNativeToolIntent?.(
+                toolUseId,
+                String(event.tool_name),
+                (event.tool_input ?? {}) as Record<string, unknown>,
+              )
+              reservedGoalTools.add(toolUseId)
+            }
+            return {}
           } catch (error) {
             // Hook 抛错只会被 CLI 记录，必须显式 deny 才能阻止工具。
-            failure = error
-          }
-          if (!abort.signal.aborted)
-            debugLog('native.toolIntent.unconfirmed', {
-              toolUseId,
-              tool: String(event.tool_name),
-              error: String(failure),
-              waitedMs: Date.now() - since,
-              streaming: stream.streaming,
-            })
-          return {
-            hookSpecificOutput: {
-              hookEventName: 'PreToolUse',
-              permissionDecision: 'deny',
-              permissionDecisionReason: '原生工具意图未能确认落盘或回合已取消，禁止执行。',
-            },
+            if (!abort.signal.aborted)
+              debugLog('native.toolIntent.unrecorded', {
+                toolUseId,
+                tool: String(event.tool_name),
+                error: String(error),
+              })
+            return {
+              hookSpecificOutput: {
+                hookEventName: 'PreToolUse',
+                permissionDecision: 'deny',
+                permissionDecisionReason: '原生工具意图未能记下或回合已取消，禁止执行。',
+              },
+            }
           }
         },
       ],
@@ -1771,7 +1766,6 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
 
   // 属于进程而不属于某个回合的状态：后台任务、会话状态、会话 ID。没有回合时也要跟。
   private observe(session: NativeSession, message: Record<string, unknown>): void {
-    session.stream.observe(message)
     if (
       session.notificationAt != null &&
       isMainToolResult(message) &&

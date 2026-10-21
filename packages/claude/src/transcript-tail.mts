@@ -2,11 +2,10 @@ import { type FileHandle, open, readdir, stat } from 'node:fs/promises'
 import { basename, isAbsolute, join } from 'node:path'
 import { debugLog } from './util.mjs'
 
-// 原生工具执行之前，PreToolUse 钩子要确认这次调用（tool_use 块）已经被 CLI 写进会话记录
-// （native-runtime.mts 的 buildOptions）。钩子触发时那一行多半还没写：CLI 把要写的攒一阵才写一批，
-// 钩子每隔 25 毫秒再看一次。以前每看一次都用 SDK 的 getSessionMessages 把整个会话记录读出来、
-// 逐行解析，一个回合的开销随调用次数平方涨，会话记录跨回合累积，会话越长每次调用越贵。
-// 现在每份记录记着处理到哪儿了，每次只读新增的部分，只解析带 tool_use 块的行。
+// 入口记下的原生工具意图（native-tool-intents.mts）要核对 CLI 有没有把这次调用（tool_use 块）写进会话记录：
+// 回合结束时、下一回合开始前各看一次，不在工具调用的路上。用 SDK 的 getSessionMessages 每次都要把整个会话记录
+// 读出来、逐行解析，会话记录跨回合累积，越长越贵；这里每份记录记着处理到哪儿了，每次只读新增的部分，
+// 只解析带 tool_use 块的行。
 //
 // 认哪一行和 SDK（0.3.282）一样：主会话的记录里，type 是 user 或 assistant、有 uuid、不是 isSidechain、
 // isMeta、teamName 的行；子代理的记录（同一个会话目录下 subagents/ 里的 agent-<id>.jsonl，可能套在
@@ -29,7 +28,7 @@ import { debugLog } from './util.mjs'
 const CHUNK = 4 << 20
 /** 处理到的位置之前留这么多字节，下次先核对 */
 const PRINT = 1024
-/** 一份记录里最多记住这么多次调用在哪一行（先进先出）；钩子很快就来认领，用不了这么多 */
+/** 一份记录里最多记住这么多次调用在哪一行（先进先出）；回合结束时就来认领，用不了这么多 */
 const REMEMBERED = 4096
 /** 最多同时跟着这么多份记录（主会话一份，每个子代理各一份），多了丢掉最久没用的 */
 const TRANSCRIPTS = 256
@@ -219,7 +218,7 @@ export class TranscriptTail {
 }
 
 /**
- * 一个 CLI 进程的工具调用要到哪份记录里确认：钩子给的 transcript_path 是主会话的记录（子代理的调用也是），
+ * 一次工具调用要到哪份记录里确认：钩子给的 transcript_path 是主会话的记录（子代理的调用也是），
  * 带着 agent_id 的到这个会话目录下 subagents/ 里找 agent-<id>.jsonl（和 SDK 的 getSubagentMessages 一样）
  */
 export class ToolIntentTranscripts {
@@ -283,45 +282,5 @@ async function isFile(path: string): Promise<boolean> {
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false
     throw error
-  }
-}
-
-/**
- * 模型的回复还在不在流。CLI 一条回复里的工具调用是边流边执行的：一个 tool_use 块流完就开始执行、
- * 触发 PreToolUse 钩子，但这个块那一行要等后面的块流完（或者整条回复结束）才写进会话记录。
- * 后面的块流得久时（几个子代理接连派出，每个的任务说明都很长），钩子要一直等到这条回复流完，
- * 不能只等固定的几秒。来源按 parent_tool_use_id 分（主会话是空串，子代理各是派它的那次调用）。
- */
-export class ModelStreamWatch {
-  /** 开始了还没结束的回复的来源 */
-  private readonly open = new Set<string>()
-  /** 最近一条回复流完（或者回合结束）的时刻 */
-  private endedAt = 0
-
-  observe(message: Record<string, unknown>): void {
-    if (message.type === 'result') {
-      // 回合结束：流断了没收到 message_stop 的也算完了
-      if (this.open.size > 0) this.endedAt = Date.now()
-      this.open.clear()
-      return
-    }
-    if (message.type !== 'stream_event') return
-    const type = (message.event as Record<string, unknown> | undefined)?.type
-    const source = typeof message.parent_tool_use_id === 'string' ? message.parent_tool_use_id : ''
-    if (type === 'message_start') this.open.add(source)
-    else if (type === 'message_stop') {
-      this.open.delete(source)
-      this.endedAt = Date.now()
-    }
-  }
-
-  /** 有回复正在流 */
-  get streaming(): boolean {
-    return this.open.size > 0
-  }
-
-  /** 最近一条回复流完的时刻（毫秒） */
-  get lastEnded(): number {
-    return this.endedAt
   }
 }

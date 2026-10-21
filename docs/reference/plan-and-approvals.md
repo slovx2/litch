@@ -43,7 +43,7 @@ granular 的 sandbox_approval 对应命令审批，rules 对应规则强制审�
 - PERMISSION-006：真实 Bash 验证目录越界、联网开关、只读与计划模式、完全访问，断言文件内容和本地站点请求数。
 - Tyrs Hand PERMISSION-007：双 SSH 入口验证移动端使用的 thread/settings/update 完整保存权限，切回完全访问生效，配置过程无模型请求。
 - Tyrs Hand PLAN-003：双真实 SSH 客户端经过 Worker/Hub，仲裁计划回答、命令和文件审批；同一个操作只能产生一次副作用。
-- FAILURE-003：对真实 CLI 发送 SIGSTOP/SIGKILL，验证有界终止、审批结束事件先于回合终态、迟到接受无副作用、恢复请求包含原生上下文及取消工具结果。工具意图须经 SDK 确认落盘才允许执行。
+- FAILURE-003：对真实 CLI 发送 SIGSTOP/SIGKILL，验证有界终止、审批结束事件先于回合终态、迟到接受无副作用、恢复请求包含原生上下文及取消工具结果。工具执行前意图先记进入口的库（不等 CLI 写会话记录）；调用已经执行、还没进会话记录时 CLI 或入口崩溃，下一回合告诉模型这次调用结果未知，不当它没发生过（tool-intent 的 INTENT-004）。
 
 运行 npm test 和 npm run test:protocol；通过 CHA_CLAUDE_CLI 指定独立安装的固定 CLI。后者禁止访问公网模型，只运行固定 SDK/宿主 CLI 和本地 Mock LLM，并输出 schema 检查、JUnit、wire 和模型请求证据。
 Linux 全部测试位于隔离网络 namespace。macOS 的 Bash 沙箱测试必须单独运行，因为 Seatbelt 不支持嵌套；此用例使用临时 HOME、白名单环境、虚拟密钥和强制回环的模型端点，并单独记录隔离方式和 JUnit，不能声称具有外层 OS 禁网。

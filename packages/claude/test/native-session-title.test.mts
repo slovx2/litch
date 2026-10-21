@@ -107,3 +107,54 @@ test('TITLE-003：起不出标题时会话保持没有名字', { timeout: 90_000
     await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
   }
 })
+
+// CHA_CLAUDE_SESSION_TITLE=off：CLI 自己不起（给它设 CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1），入口也不请它起、
+// 不读标题。两种宿主环境（CLI 本来会自己起的、本来不起要入口请的）下，几个回合里都不能有起标题的请求
+for (const [label, env] of [
+  ['CLI 本来会自己起名', { CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '' }],
+  ['CLI 本来要入口请它起', {}],
+] as const)
+  test(`TITLE-004：关掉自动起名（${label}），整个会话不发起标题的请求，名字只来自 thread/name/set`, {
+    timeout: 90_000,
+  }, async () => {
+    const home = await mkdtemp(join(tmpdir(), 'native-title-off-'))
+    const llm = new MockLLM()
+    llm.sessionTitle = '排查登录按钮'
+    const url = await llm.start()
+    const client = await ProtocolClient.start(home, url, false, 'api-key', {
+      ...env,
+      CHA_CLAUDE_SESSION_TITLE: 'off',
+    })
+    try {
+      const threadId = await firstTurn(client, llm, home)
+      llm.enqueue(() => [{ type: 'text', text: 'TITLE_REPLY_2' }])
+      const { turn } = await client.request('turn/start', {
+        threadId,
+        input: [{ type: 'text', text: '接着看' }],
+      })
+      assert.equal((await client.completed(turn.id)).status, 'completed')
+      // 标题是异步起的：多等一会儿，晚到的请求也要抓到
+      await new Promise((resolve) => setTimeout(resolve, 1_500))
+      assert.equal(llm.titleRequests.length, 0, '不能有起标题的请求')
+      // 每个模型请求都是计划里的那两个回合（认不出的起标题请求会落进 requests、变成未计划的请求）
+      assert.equal(llm.requests.length, 2)
+      assert.deepEqual(llm.unexpected, [])
+      llm.assertConsumed()
+      assert.equal(
+        client.trace.some((message) => message.method === 'thread/name/updated'),
+        false,
+      )
+      assert.equal((await client.request('thread/read', { threadId })).thread.name, null)
+      // 客户端改名照常生效、照常通知
+      await client.request('thread/name/set', { threadId, name: '我自己起的名' })
+      const named = await client.notification(
+        'thread/name/updated',
+        (params) => params.threadId === threadId,
+      )
+      assert.equal(named.threadName, '我自己起的名')
+    } finally {
+      await client.close()
+      await llm.close()
+      await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
+    }
+  })

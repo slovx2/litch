@@ -15,6 +15,7 @@ import type { ThreadAttachment } from './thread-attachments.mjs'
 import type { ThreadGoal } from './thread-goals.mjs'
 import type {
   JsonValue,
+  NativeToolIntent,
   ThreadItem,
   ThreadRecord,
   ThreadSectionAppearance,
@@ -24,7 +25,7 @@ import type {
   TurnRecord,
   TurnStatus,
 } from './types.mjs'
-import { adapterHome, jsonClone, newId, nowSeconds } from './util.mjs'
+import { adapterHome, jsonClone, newId, nowMillis, nowSeconds } from './util.mjs'
 
 /** 一个原生会话号是怎么来的，见 native_sessions 那张表 */
 export type NativeSessionOrigin = 'adapter' | 'imported' | 'dismissed'
@@ -48,6 +49,12 @@ function openDatabase(path: string): DatabaseSync {
   // 其他连接持有写锁时等待而不是立即报 database is locked。
   db.exec('PRAGMA busy_timeout = 5000')
   return db
+}
+
+/** 库里记着的一次原生工具意图（native_tool_intents 的一行） */
+export interface StoredNativeToolIntent extends NativeToolIntent {
+  threadId: string
+  turnId: string
 }
 
 const STATUS_SQL = 'SELECT status FROM turns WHERE id = ?'
@@ -161,6 +168,12 @@ export class SessionStore {
       CREATE TABLE IF NOT EXISTS tool_executions (
         thread_id TEXT NOT NULL, call_id TEXT NOT NULL, payload_hash TEXT NOT NULL,
         result_json TEXT, PRIMARY KEY(thread_id, call_id)
+      );
+      CREATE TABLE IF NOT EXISTS native_tool_intents (
+        thread_id TEXT NOT NULL, call_id TEXT NOT NULL, turn_id TEXT NOT NULL,
+        session_key TEXT NOT NULL, transcript_path TEXT NOT NULL, agent_id TEXT,
+        tool TEXT NOT NULL, input_json TEXT NOT NULL, created_at INTEGER NOT NULL,
+        PRIMARY KEY(thread_id, call_id)
       );
       CREATE TABLE IF NOT EXISTS thread_goals (
         thread_id TEXT PRIMARY KEY, goal_json TEXT NOT NULL
@@ -1229,6 +1242,50 @@ export class SessionStore {
     return null
   }
 
+  /** 原生工具执行之前记下的意图（native-tool-intents.mts）。同一次调用再记一次不动原来的 */
+  saveNativeToolIntent(threadId: string, turnId: string, intent: NativeToolIntent): void {
+    this.db
+      .prepare(
+        `INSERT OR IGNORE INTO native_tool_intents
+         (thread_id,call_id,turn_id,session_key,transcript_path,agent_id,tool,input_json,created_at)
+         VALUES (?,?,?,?,?,?,?,?,?)`,
+      )
+      .run(
+        threadId,
+        intent.callId,
+        turnId,
+        intent.sessionKey,
+        intent.transcriptPath,
+        intent.agentId,
+        intent.tool,
+        JSON.stringify(intent.input ?? null),
+        nowMillis(),
+      )
+  }
+
+  nativeToolIntents(threadId: string): StoredNativeToolIntent[] {
+    const rows = this.db
+      .prepare('SELECT * FROM native_tool_intents WHERE thread_id=? ORDER BY created_at, rowid')
+      .all(threadId) as Array<Record<string, unknown>>
+    return rows.map((row) => ({
+      threadId: String(row.thread_id),
+      turnId: String(row.turn_id),
+      callId: String(row.call_id),
+      tool: String(row.tool),
+      input: JSON.parse(String(row.input_json)),
+      sessionKey: String(row.session_key),
+      transcriptPath: String(row.transcript_path),
+      agentId: row.agent_id == null ? null : String(row.agent_id),
+    }))
+  }
+
+  dropNativeToolIntents(threadId: string, callIds: Iterable<string>): void {
+    const remove = this.db.prepare(
+      'DELETE FROM native_tool_intents WHERE thread_id=? AND call_id=?',
+    )
+    for (const callId of callIds) remove.run(threadId, callId)
+  }
+
   completeTool(threadId: string, callId: string, result: unknown): void {
     this.db
       .prepare('UPDATE tool_executions SET result_json=? WHERE thread_id=? AND call_id=?')
@@ -1385,6 +1442,7 @@ export class SessionStore {
         'submissions',
         'thread_runtime_settings',
         'tool_executions',
+        'native_tool_intents',
         'thread_goals',
         'goal_ledgers',
         'thread_usage',
@@ -1425,6 +1483,8 @@ export class SessionStore {
     for (const row of ids) {
       this.db.prepare('DELETE FROM hook_runs WHERE turn_id=?').run(row.id)
       this.db.prepare('DELETE FROM native_turn_boundaries WHERE turn_id=?').run(row.id)
+      // 回退掉的回合不再在模型的上下文里，它的工具意图也不用再核对、再告诉模型
+      this.db.prepare('DELETE FROM native_tool_intents WHERE turn_id=?').run(row.id)
       stmt.run(row.id)
     }
     return ids.length

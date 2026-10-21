@@ -465,12 +465,29 @@ export interface PermissionDecision {
   note?: string
 }
 
+/**
+ * 一次原生工具调用的意图：PreToolUse 钩子放行之前由入口记进自己的库（`native_tool_intents`）。
+ * CLI 的会话记录要攒一阵才写，入口崩溃、CLI 被强杀时这次调用可能还没进记录；入口据此在下一回合告诉模型
+ */
+export interface NativeToolIntent {
+  callId: string
+  tool: string
+  input: unknown
+  /** CLI 进程所在会话的键（追问子代理时是父会话）：判断写这份记录的 CLI 还在不在 */
+  sessionKey: string
+  /** 钩子事件里的 transcript_path（主会话的记录）和子代理的 agent_id */
+  transcriptPath: string
+  agentId: string | null
+}
+
 export interface RuntimeHandlers {
   onPermissionToolCall?(
     proposal: import('./permission-grants.mjs').PermissionProposal,
     callId: string,
   ): Promise<import('./permission-grants.mjs').PermissionGrant>
   onGoalToolCall?(name: string, args: Record<string, unknown>, callId: string): Promise<unknown>
+  /** 原生工具执行之前把意图落进入口的库；抛错时钩子拒绝这次调用 */
+  onNativeToolCall?(intent: NativeToolIntent): void
   onNativeToolIntent?(callId: string, name: string, args: Record<string, unknown>): void
   onNativeToolResult?(callId: string, result: unknown): void
   onElicitationRequest?(
@@ -543,6 +560,8 @@ export interface ClaudeRuntime {
   setSessionHandlers?(handlers: RuntimeSessionHandlers): void
   // 仍有 CLI 进程存活的线程（只是空闲保留着的不算）。
   liveSessions?(): string[]
+  // CLI 进程还没退出的会话键（正在收场的也算：退出前它还会写会话记录）
+  cliProcessKeys?(): string[]
   closeSession?(threadId: string, reason: string): Promise<void>
   // 关掉只是空闲保留着的 CLI 进程：客户端全都断开、技能配置要改时
   closeIdleSessions?(reason: string): Promise<void>

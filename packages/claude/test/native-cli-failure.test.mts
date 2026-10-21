@@ -87,16 +87,22 @@ for (const failure of ['frozen', 'crashed'] as const) {
       model.enqueue((request) => {
         const history = JSON.stringify(request.messages)
         assert.match(history, /等待审批再写入/)
-        assert.match(history, /toolu_pending_write/)
         assert.match(history, /明确继续，仅回复恢复成功/)
-        const results = request.messages
-          .flatMap((message: any) => (Array.isArray(message.content) ? message.content : []))
-          .filter(
-            (block: any) =>
-              block.type === 'tool_result' && block.tool_use_id === 'toolu_pending_write',
-          )
-        assert.equal(results.length, 1, '恢复时原生上下文必须对未执行工具补齐取消结果')
-        assert.equal(results[0].is_error, true)
+        // 调用进了 CLI 的会话记录时，CLI 恢复会话时自己补一条取消结果；CLI 还没来得及写就死了时，
+        // 入口在这一回合的话前面说这次调用结果未知（native-tool-intents.mts）。两种都不能让模型当它没发生过
+        if (history.includes('toolu_pending_write')) {
+          const results = request.messages
+            .flatMap((message: any) => (Array.isArray(message.content) ? message.content : []))
+            .filter(
+              (block: any) =>
+                block.type === 'tool_result' && block.tool_use_id === 'toolu_pending_write',
+            )
+          assert.equal(results.length, 1, '恢复时原生上下文必须对未执行工具补齐取消结果')
+          assert.equal(results[0].is_error, true)
+        } else {
+          assert.match(history, /These tool calls from an earlier turn were started/)
+          assert.ok(history.includes('must-not-write.txt'), '要告诉模型是哪一次调用')
+        }
         return [{ type: 'text', text: 'RECOVERED_AFTER_CLI_FAILURE' }]
       })
       const next = await client.request('turn/start', {
