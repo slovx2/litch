@@ -4,6 +4,10 @@ import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { isDeepStrictEqual } from 'node:util'
+import {
+  BACKGROUND_TASKS_NOTIFICATION,
+  type LitchTurnOrigin,
+} from '../../protocol/src/background-tasks.mjs'
 import { EXTENSION } from '../../protocol/src/device.mjs'
 import { catalogPagination } from '../../shared/src/catalog-pagination.mjs'
 import {
@@ -30,6 +34,7 @@ import {
   BackgroundCommands,
   endedCommandItem,
 } from './background-commands.mjs'
+import { BackgroundTaskTracker } from './background-tasks.mjs'
 import {
   backgroundTerminals,
   type ListedBackgroundTerminal,
@@ -350,6 +355,8 @@ export class CodexClaudeAppServer {
   private relayParentByChild = new Map<string, string>()
   // 回合结束后仍在运行的后台命令，以及 CLI 为处理它们的结果自己开的回合。
   private readonly backgroundCommands = new BackgroundCommands()
+  // 后台任务的集合（backgroundTasks 扩展），按 CLI 进程所属的线程记
+  private readonly backgroundTasks = new BackgroundTaskTracker()
   private spontaneousTurns = new Set<string>()
   // 已经交到运行时手里的回合：运行时再说“没有回合在跑”，就是它已经交还、协议层还在收尾。
   private handedToRuntime = new Set<string>()
@@ -443,6 +450,10 @@ export class CodexClaudeAppServer {
       onBackgroundCommandEnded: (threadId, end) => {
         const entry = this.backgroundCommands.take(threadId, end.taskId)
         if (entry) this.finishBackgroundCommand(entry, end)
+      },
+      onBackgroundTaskMessage: (threadId, message) => {
+        const turnId = this.sessionHolder(threadId)?.turnId ?? null
+        if (this.backgroundTasks.apply(threadId, message, turnId)) this.publishBackground(threadId)
       },
       onSessionClosed: (threadId, reason) => this.sessionClosed(threadId, reason),
     })
@@ -829,15 +840,24 @@ export class CodexClaudeAppServer {
         )
       case 'thread/resume':
         await this.nativeHistory(asRecord(params).threadId)
-        return this.withNativeLineage(peer, await this.threadResume(peer, asRecord(params)))
+        return this.withBackground(
+          peer,
+          this.withNativeLineage(peer, await this.threadResume(peer, asRecord(params))),
+        )
       case 'thread/fork':
         return this.threadFork(peer, asRecord(params))
       case 'thread/list':
         await this.refreshNative()
-        return this.withNativeLineage(peer, this.threadList(asRecord(params)))
+        return this.withBackground(
+          peer,
+          this.withNativeLineage(peer, this.threadList(asRecord(params))),
+        )
       case 'thread/read':
         await this.nativeHistory(asRecord(params).threadId)
-        return this.withNativeLineage(peer, this.threadRead(asRecord(params)))
+        return this.withBackground(
+          peer,
+          this.withNativeLineage(peer, this.threadRead(asRecord(params))),
+        )
       case 'thread/attachment/add':
       case 'thread/attachment/list':
       case 'thread/attachment/remove':
@@ -853,7 +873,7 @@ export class CodexClaudeAppServer {
         return threadAttachmentOwnerList(this.store, asRecord(params))
       case 'thread/turns/list':
         await this.nativeHistory(asRecord(params).threadId)
-        return this.threadTurnsList(asRecord(params))
+        return this.withBackground(peer, this.threadTurnsList(asRecord(params)), true)
       case 'thread/timeline/list':
         return threadTimelineList(this.store, asRecord(params))
       case 'thread/items/list':
@@ -869,6 +889,7 @@ export class CodexClaudeAppServer {
         const helper = this.store.getThread(threadId)?.ephemeral === true
         await this.runtime.closeSession?.(threadId, '会话已删除')
         this.store.deleteThread(threadId)
+        this.backgroundTasks.forget(threadId)
         const subscribed = this.subscribers.clear(threadId)
         this.clearThreadState(threadId)
         // 关闭（有连接订阅着它才算加载着）给原来订阅着它的连接，删除再加上删它的这条；不是临时会话的，
@@ -2629,6 +2650,15 @@ export class CodexClaudeAppServer {
       itemId,
       startedAtMs: startedAtMs ?? nowMillis(),
     })
+    if (
+      this.backgroundTasks.link(sessionThreadId, taskId, {
+        itemId,
+        turnId,
+        command: item.command,
+        startedAt: startedAtMs,
+      })
+    )
+      this.publishBackground(sessionThreadId)
     return true
   }
 
@@ -2657,6 +2687,7 @@ export class CodexClaudeAppServer {
   // CLI 进程退出：它名下还在跑的后台命令都已随它结束。
   private sessionClosed(threadId: string, reason: string): void {
     debugLog('runtime.session.closed', { threadId, reason })
+    if (this.backgroundTasks.closeAll(threadId)) this.publishBackground(threadId)
     for (const entry of this.backgroundCommands.drain(threadId))
       this.finishBackgroundCommand(entry, {
         status: 'stopped',
@@ -2705,6 +2736,8 @@ export class CodexClaudeAppServer {
       error: null,
     }
     this.store.upsertTurn(turn)
+    // CLI 自己开的一轮只会是后台任务结束后的续跑（ScheduleWakeup、Cron 关着）
+    this.store.saveTurnOrigin(turn.id, 'backgroundTask')
     this.spontaneousTurns.add(turn.id)
     this.goals.begin(threadId, turn.id)
     recordRunEvent('turn.started', {
@@ -6779,7 +6812,75 @@ export class CodexClaudeAppServer {
       method: notification.method,
       params: summarizeRpcParams(notification.method, notification.params),
     })
-    target.send({ jsonrpc: '2.0', method: notification.method, params: notification.params })
+    const params =
+      notification.method === 'turn/started' || notification.method === 'turn/completed'
+        ? this.withTurnOrigin(target, notification.params)
+        : notification.params
+    target.send({ jsonrpc: '2.0', method: notification.method, params })
+  }
+
+  // ── 后台任务（backgroundTasks 扩展）──
+
+  private declaresBackground(peer: RpcPeer): boolean {
+    return this.peerFeatures.get(peer)?.extensions.has(EXTENSION.backgroundTasks) === true
+  }
+
+  // 集合变了：整份发给所有声明过的连接，不只是订阅者（侧栏要标没打开过的会话）。临时会话的不发
+  private publishBackground(threadId: string): void {
+    if (this.stopped || this.store.getThread(threadId)?.ephemeral) return
+    const params = { threadId, tasks: this.backgroundTasks.list(threadId), wakesOnFinish: true }
+    for (const target of this.accountPeers)
+      if (this.isConnected(target) && this.declaresBackground(target))
+        this.deliver(target, { method: BACKGROUND_TASKS_NOTIFICATION.changed, params }, target)
+  }
+
+  /**
+   * 声明了 backgroundTasks 的连接：应答里的会话对象（thread、列表的每一项）带上 litchBackground（集合不空时），
+   * 回合（thread.turns，turnsPage 为真时是 data 的每一项）带上 litchOrigin（记过来历的）。没声明的原样给
+   */
+  private withBackground<T>(peer: RpcPeer, result: T, turnsPage = false): T {
+    if (!this.declaresBackground(peer)) return result
+    const body = result && typeof result === 'object' ? (result as Record<string, unknown>) : {}
+    const mark = (value: unknown) => {
+      if (!value || typeof value !== 'object') return
+      const thread = value as Record<string, unknown>
+      if (typeof thread.id !== 'string') return
+      const tasks = this.backgroundTasks.list(thread.id)
+      if (tasks.length > 0) thread.litchBackground = { tasks, wakesOnFinish: true }
+      if (Array.isArray(thread.turns)) this.markTurnOrigins(thread.turns)
+    }
+    if (turnsPage) {
+      if (Array.isArray(body.data)) this.markTurnOrigins(body.data)
+      return result
+    }
+    if (Array.isArray(body.data)) for (const thread of body.data) mark(thread)
+    mark(body.thread)
+    return result
+  }
+
+  private markTurnOrigins(turns: unknown[]): void {
+    const ids = turns.flatMap((turn) =>
+      turn && typeof turn === 'object' && typeof (turn as { id?: unknown }).id === 'string'
+        ? [(turn as { id: string }).id]
+        : [],
+    )
+    const origins = this.store.turnOrigins(ids)
+    if (origins.size === 0) return
+    for (const turn of turns) {
+      const record = turn as Record<string, unknown>
+      const origin = origins.get(record?.id as string)
+      if (origin) record.litchOrigin = origin as LitchTurnOrigin
+    }
+  }
+
+  // turn/started、turn/completed 上的回合：给声明了的连接补 litchOrigin（另拷一份，别的连接看到的不变）
+  private withTurnOrigin(target: RpcPeer, params: unknown): unknown {
+    if (!this.declaresBackground(target)) return params
+    const turn = asRecord(asRecord(params).turn)
+    if (typeof turn.id !== 'string') return params
+    const origin = this.store.turnOrigins([turn.id]).get(turn.id)
+    if (!origin) return params
+    return { ...asRecord(params), turn: { ...turn, litchOrigin: origin } }
   }
 
   private finishAbortedItems(peer: RpcPeer, threadId: string, turnId: string): void {

@@ -73,6 +73,7 @@ test('DECL-001：runtime/info 带结构化声明，原有字段原样保留', as
       'planConfirmation',
       'clientTools',
       'harnessConfig',
+      'backgroundTasks',
     ])
     assert.deepEqual(
       presets.map((preset) => [preset.id, preset.risk, preset.requiresConfirmation]),

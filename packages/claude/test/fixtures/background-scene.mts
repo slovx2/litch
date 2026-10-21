@@ -18,12 +18,21 @@ export interface Scene {
 export async function startScene(
   name: string,
   extraEnv: Record<string, string> = {},
+  // 握手时的 capabilities（声明扩展用）。默认什么都不声明
+  capabilities: Record<string, unknown> | null = null,
 ): Promise<Scene> {
   const home = await mkdtemp(join(tmpdir(), `${name}-`))
   const workspace = join(home, 'workspace')
   await mkdir(workspace)
   const model = new MockLLM()
-  const client = await ProtocolClient.start(home, await model.start(), false, 'api-key', extraEnv)
+  const client = await ProtocolClient.start(
+    home,
+    await model.start(),
+    false,
+    'api-key',
+    extraEnv,
+    capabilities,
+  )
   const { thread } = await client.request('thread/start', {
     cwd: workspace,
     approvalPolicy: 'never',

@@ -42,6 +42,8 @@ const features: HarnessFeatures = {
   rename: true,
   // 一段话是过程说明还是最终回答，要等它后面有没有工具调用才知道：开始时不带阶段值。
   agentMessagePhase: 'onCompleted',
+  // 回合结束后还在跑的后台命令、Monitor、后台子代理从 CLI 的 background_tasks_changed 攒成集合（background-tasks.mts）
+  backgroundTasks: true,
 }
 
 // 权限档随回合开始时的会话设置定下来：两个回合之间可以换，回合进行中改的要到下一个回合才起作用。
@@ -103,12 +105,14 @@ export function harnessDeclaration(runtime: RuntimeBackendType): HarnessDeclarat
     ...identity,
     // 计划确认（ExitPlanMode）只对声明了 planConfirmation 的连接在回合里问（native-runtime.mts）；
     // litch_ 命名空间的动态工具只交给声明了 clientTools 的连接（server.mts 的 clientToolExecutor）；
-    // harness 详情设置（litch/harness/*）读写 Claude Code 自己的配置与账号（harness-config.mts）
+    // harness 详情设置（litch/harness/*）读写 Claude Code 自己的配置与账号（harness-config.mts）；
+    // 后台任务的集合、回合的来历只给声明了 backgroundTasks 的连接（server.mts 的 withBackground）
     extensions: [
       EXTENSION.declineWithNote,
       EXTENSION.planConfirmation,
       EXTENSION.clientTools,
       EXTENSION.harnessConfig,
+      EXTENSION.backgroundTasks,
     ],
     features,
     permissionPresets,
