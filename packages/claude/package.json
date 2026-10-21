@@ -16,7 +16,7 @@
     "yaml": "2.8.2"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node ../../scripts/build-process-guard.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "npm run build && cd ../.. && node scripts/build-cli.mjs && node --import ./packages/claude/dist/claude/test/fixtures/isolate-process.mjs --test --test-force-exit --test-concurrency=4 --test-timeout=600000 packages/claude/dist/claude/test/*.mjs",
     "start": "node dist/claude/src/adapter.mjs"

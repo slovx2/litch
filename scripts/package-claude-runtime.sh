@@ -31,6 +31,12 @@ mkdir -p "$stage/claude-runtime/bin" "$stage/home"
 cp "$adapter_source/THIRD_PARTY_NOTICES.md" "$stage/claude-runtime/THIRD_PARTY_NOTICES.md"
 cp -R "$adapter_source/packages/claude/dist" "$adapter_source/packages/claude/node_modules" "$stage/claude-runtime/lib/"
 cp "$adapter_source/packages/claude/package.json" "$adapter_source/packages/claude/package-lock.json" "$adapter_source/LICENSE" "$stage/claude-runtime/lib/"
+# 入口的守护进程（Go）各平台都编了一份（scripts/build-process-guard.mjs），制品只留 linux-amd64
+guards="${stage:?}/claude-runtime/lib/dist/claude/src/process-guard"
+test -x "$guards/linux-amd64/claude-process-guard" || { echo '缺少 linux-amd64 的守护进程' >&2; exit 1; }
+for target in "$guards"/*; do
+  test "$(basename "$target")" = linux-amd64 || rm -rf "${target:?}"
+done
 # PTY 终端由适配器命令行（Go）的 pty-bridge 子命令来起，适配器从 lib/dist 往上找到 bin/ 里的这一份。
 # 关掉 cgo 静态编译，不挑宿主的 C 库；宿主上不再需要 python3。
 (cd "$adapter_source" && CGO_ENABLED=0 go build -trimpath -o "$stage/claude-runtime/bin/codex-harness-adapter" ./cmd/codex-harness-adapter)

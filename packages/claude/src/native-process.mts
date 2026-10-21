@@ -1,8 +1,25 @@
 import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import { createInterface } from 'node:readline'
 import { fileURLToPath } from 'node:url'
 import type { SpawnedProcess, SpawnOptions } from '@anthropic-ai/claude-agent-sdk'
 import { debugLog } from './util.mjs'
+
+// 守护进程（Go，cmd/claude-process-guard）夹在入口和 CLI 之间：按进程组起 CLI、转发输入输出、
+// 记下后台命令的进程身份，入口崩溃、CLI 崩溃都不留孤儿。约定写在它的 main.go 开头：
+// 文件描述符 3 报 CLI 的进程号，4 是入口给的单字节指令（g、s），读到结束就是入口没了。
+// 各平台的一份由 scripts/build-process-guard.mjs 编进 dist 里这个文件旁边的 process-guard/。
+const GO_OS: Partial<Record<NodeJS.Platform, string>> = { win32: 'windows' }
+const GO_ARCH: Partial<Record<string, string>> = { x64: 'amd64', arm64: 'arm64' }
+
+function guardBinary(): string {
+  const target = `${GO_OS[process.platform] ?? process.platform}-${GO_ARCH[process.arch] ?? process.arch}`
+  const name = `claude-process-guard${process.platform === 'win32' ? '.exe' : ''}`
+  const path = fileURLToPath(new URL(`./process-guard/${target}/${name}`, import.meta.url))
+  if (!existsSync(path))
+    throw new Error(`缺少 ${target} 的守护进程 ${path}，先在 packages/claude 下 npm run build`)
+  return path
+}
 
 // 控制请求超时并不等于 CLI 已停止；必须确认进程和管道关闭后才能释放审批。
 export class NativeProcess {
@@ -22,21 +39,13 @@ export class NativeProcess {
 
   spawn(options: SpawnOptions): SpawnedProcess {
     if (this.child) throw new Error('同一个原生回合不能启动第二个 CLI')
-    const child = spawn(
-      process.execPath,
-      [
-        fileURLToPath(new URL('./native-process-guard.mjs', import.meta.url)),
-        options.command,
-        ...options.args,
-      ],
-      {
-        cwd: options.cwd,
-        env: options.env,
-        signal: options.signal,
-        stdio: ['pipe', 'pipe', 'pipe', 'pipe', 'pipe'],
-        detached: process.platform !== 'win32',
-      },
-    ) as ChildProcessWithoutNullStreams
+    const child = spawn(guardBinary(), [options.command, ...options.args], {
+      cwd: options.cwd,
+      env: options.env,
+      signal: options.signal,
+      stdio: ['pipe', 'pipe', 'pipe', 'pipe', 'pipe'],
+      detached: process.platform !== 'win32',
+    }) as ChildProcessWithoutNullStreams
     this.child = child
     const identity = child.stdio[3]
     if (!identity || !('read' in identity)) throw new Error('无法读取 CLI 进程身份')
