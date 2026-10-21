@@ -277,6 +277,8 @@ export class Projection {
   // dsh 起标题之前客户端写来的名字（thread/name/set）。官方桌面端在首条消息前写回的是消息原文，那只是临时名；
   // 和头一句话不一样的是有意起的名字（比如设备进程给派出的子会话起的），dsh 的第一个标题来时钉住它，不让模型标题盖掉
   wanted: string | null = null
+  // 不是用户发起的回合是谁开的（backgroundTasks 扩展的 litchOrigin）：tool-jobs 的完成通知唤醒的那一轮
+  readonly origins = new Map<string, 'backgroundTask'>()
   // 选了模型、还没有哪一次请求用上（见 requested）。
   private chosen = false
   private expected = false
@@ -381,6 +383,13 @@ export class Projection {
       this.expected = false
     } else if (event.type === 'user/message') {
       if (data.source?.kind === 'user') this.userMessage(data, notify)
+      // 后台作业结束、dsh 叫醒空着的会话开的那一轮：开头没有用户的话（会话正忙时它是插进当前回合的，不算）
+      else if (
+        data.source?.kind === 'tool-jobs' &&
+        this.active &&
+        !this.active.items.some((item) => item.type === 'userMessage')
+      )
+        this.origins.set(this.active.id, 'backgroundTask')
     } else if (event.type === 'assistant/message') this.assistantMessage(data, notify)
     else if (event.type === 'tool/call') this.toolCall(data, event.time, notify)
     else if (event.type === 'tool/result') this.toolResult(data, event.time, notify)

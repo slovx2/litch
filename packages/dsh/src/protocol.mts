@@ -185,6 +185,12 @@ export async function dispatch(s: DshServer, peer: RpcPeer, method: string, p: a
         p.capabilities[EXTENSIONS_CAPABILITY].includes(EXTENSION.harnessConfig)
       )
         s.configPeers.add(peer.id)
+      // 声明了 backgroundTasks 的才看得到后台作业的集合、回合的来历
+      if (
+        Array.isArray(p.capabilities?.[EXTENSIONS_CAPABILITY]) &&
+        p.capabilities[EXTENSIONS_CAPABILITY].includes(EXTENSION.backgroundTasks)
+      )
+        s.backgroundPeers.add(peer.id)
       return {
         userAgent: codexUserAgent(
           typeof p.clientInfo?.name === 'string' ? p.clientInfo.name : 'codex-app',
@@ -387,11 +393,15 @@ export async function dispatch(s: DshServer, peer: RpcPeer, method: string, p: a
             (!p.searchTerm || `${thread.name ?? ''} ${thread.preview}`.includes(p.searchTerm))
           )
         })
-      return pageRecords(
-        rows.map((thread) => envelope(s, thread)),
-        p,
-        `threads:${JSON.stringify([p.archived === true, p.projectId, p.sectionId, p.isPinned, p.cwd, p.parentThreadId, p.sourceKinds, p.searchTerm])}`,
-        (thread) => thread.id,
+      return withBackground(
+        s,
+        peer,
+        pageRecords(
+          rows.map((thread) => envelope(s, thread)),
+          p,
+          `threads:${JSON.stringify([p.archived === true, p.projectId, p.sectionId, p.isPinned, p.cwd, p.parentThreadId, p.sourceKinds, p.searchTerm])}`,
+          (thread) => thread.id,
+        ),
       )
     }
     case 'thread/loaded/list':
@@ -406,12 +416,12 @@ export async function dispatch(s: DshServer, peer: RpcPeer, method: string, p: a
         // 会话对象上跟着模型走的只有提供方这一项：和带设置的应答报的是同一个
         const modelProvider = (await s.selection(thread)).model?.split('/')[0] ?? 'dsh'
         const read = envelope(s, thread, p.includeTurns === false ? [] : turns)
-        return { thread: { ...read, modelProvider } }
+        return withBackground(s, peer, { thread: { ...read, modelProvider } })
       }
       const resumed = await settings(s, live)
       // excludeTurns 时不带回合，历史由客户端按游标另取。
       if (p.excludeTurns === true) resumed.thread.turns = []
-      return { ...resumed, ...historyHeadCursors(thread.id, turns) }
+      return withBackground(s, peer, { ...resumed, ...historyHeadCursors(thread.id, turns) })
     }
     case 'thread/unsubscribe': {
       const subscribed = s.subscriptions.get(p.threadId)?.delete(peer.id)
@@ -479,7 +489,12 @@ export async function dispatch(s: DshServer, peer: RpcPeer, method: string, p: a
     }
     case 'thread/turns/list': {
       const { turns } = (await s.load(p.threadId)).projection
-      return pageRecords(turns, p, `turns:${p.threadId}`, (turn) => turn.id)
+      return withBackground(
+        s,
+        peer,
+        pageRecords(turns, p, `turns:${p.threadId}`, (turn) => turn.id),
+        p.threadId,
+      )
     }
     case 'thread/turns/items/list':
     case 'thread/items/list':
@@ -545,4 +560,40 @@ export async function dispatch(s: DshServer, peer: RpcPeer, method: string, p: a
     default:
       throw unsupported(method)
   }
+}
+
+/**
+ * 声明了 backgroundTasks 的连接：应答里的会话对象（thread、列表的每一项）带上后台作业的集合（不空时），
+ * 回合（thread.turns；turnsOf 给了时是 data 的每一项，都是这个会话的回合）带上 litchOrigin。没声明的原样给。
+ * 应答里的对象是这次现拼的（envelope、pageRecords），直接改
+ */
+function withBackground<T>(s: DshServer, peer: RpcPeer, result: T, turnsOf?: string): T {
+  if (!s.backgroundPeers.has(peer.id)) return result
+  const body = result as any
+  const origins = (threadId: string, turns: unknown) => {
+    const known = s.live.get(threadId)?.projection.origins
+    if (!known || !Array.isArray(turns)) return
+    for (const turn of turns) {
+      const origin = known.get(turn?.id)
+      if (origin) turn.litchOrigin = origin
+    }
+  }
+  if (turnsOf) {
+    // 回合对象是投影里的那一份，拷一份再加，别的连接看到的不变
+    if (Array.isArray(body?.data)) body.data = body.data.map((turn: any) => ({ ...turn }))
+    origins(turnsOf, body?.data)
+    return result
+  }
+  const mark = (thread: any) => {
+    if (!thread || typeof thread.id !== 'string') return
+    const tasks = s.live.get(thread.id)?.jobs.list() ?? []
+    if (tasks.length > 0) thread.litchBackground = { tasks, wakesOnFinish: true }
+    if (Array.isArray(thread.turns)) {
+      thread.turns = thread.turns.map((turn: any) => ({ ...turn }))
+      origins(thread.id, thread.turns)
+    }
+  }
+  if (Array.isArray(body?.data)) for (const thread of body.data) mark(thread)
+  mark(body?.thread)
+  return result
 }
