@@ -9,6 +9,8 @@ export {
   PAIR_TTL_MS,
   type PairPayload,
 } from '../../protocol/src/device-pairing.mjs'
+// 任务卡按 harness 的开关在设备设置里的键：设置页那棵树写它
+export { taskCardsSettingKey } from '../../protocol/src/session-tree.mjs'
 // 日程怎么算：界面的表单拿它预览“下一次”、先查时区（和设备进程用的是同一份）
 export {
   isTaskTimeZone,
@@ -120,6 +122,7 @@ export {
   type PairSelfTestResult,
 } from './device/pairing.mjs'
 export {
+  changeToolSwitches,
   checkPairingAddress,
   checkSaved,
   checkTarget,
@@ -131,7 +134,9 @@ export {
   type RemotePlatform,
   type SavedDevices,
   type SavedRemote,
+  type SavedToolSwitches,
   sameTarget,
+  toolSwitchesOf,
   WIRES,
 } from './device/remote.mjs'
 export { checkSnapshot, type DeviceSnapshot, type SnapshotStore } from './device/snapshot.mjs'

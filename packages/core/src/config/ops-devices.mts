@@ -1,4 +1,5 @@
 // litch config 里管设备的几组：devices、tools、machine。落到核心现有的 remote.*、device.*、machine.* 命令。
+import { taskCardsSettingKey } from '../../../protocol/src/session-tree.mjs'
 import { WIRES } from '../device/remote.mjs'
 import type { DeviceView, HarnessView, RemoteCheck, RemoteTarget, WireColor } from '../model.mjs'
 import type { ConfigConfirmItem } from '../model-config.mjs'
@@ -115,6 +116,41 @@ const remoteOnly = (ctx: OpContext, device: DeviceView) => {
 }
 
 const done = (ctx: OpContext, data?: unknown) => ({ text: ctx.say('好了。', 'Done.'), data })
+
+/**
+ * 任务卡开关（设备设置 harness.<id>.taskCards）要写哪几项、对着哪个版本写。
+ * 给了 harness 只写它的，没给写这台设备上声明了这一项的全部 harness
+ */
+async function taskCardEdits(
+  ctx: OpContext,
+  device: DeviceView,
+  harness: string | undefined,
+): Promise<{ version: number; keys: string[] }> {
+  if (device.connection !== 'online' || !device.manageable) {
+    throw new ConfigFailure(
+      'invalid',
+      ctx.say(
+        '任务卡开关存在设备上：这台设备要连着、有设置接口才改得了。',
+        'Task cards are stored on the device: it must be online and have the settings interface.',
+      ),
+    )
+  }
+  const manage = await ctx.first({ kind: 'manage', deviceId: device.id })
+  const wanted = harness === undefined ? device.harnesses.map((entry) => entry.id) : [harness]
+  const keys = wanted
+    .map((id) => taskCardsSettingKey(id))
+    .filter((key) => manage.settings.some((spec) => spec.key === key))
+  if (keys.length === 0) {
+    throw new ConfigFailure(
+      'invalid',
+      ctx.say(
+        '这台设备的设备服务还没有任务卡开关，先升级它。',
+        'The device service on this device has no task-card switch yet; update it first.',
+      ),
+    )
+  }
+  return { version: manage.snapshot.version, keys }
+}
 
 export const DEVICE_OPS: Record<string, OpSpec> = {
   'devices list': {
@@ -241,23 +277,49 @@ export const DEVICE_OPS: Record<string, OpSpec> = {
   },
   'tools set': {
     args: [1, 1],
-    options: ['browser', 'computer', 'machine'],
-    usage: 'tools set <device> [--browser on|off] [--computer on|off] [--machine on|off]',
+    options: ['harness', 'task-cards', 'browser', 'computer', 'machine'],
+    usage:
+      'tools set <device> [--harness <id>] [--task-cards on|off] [--browser on|off] [--computer on|off] [--machine on|off]',
     summary: {
-      zh: '这台设备的会话能不能用内置浏览器、Computer Use、操作这台电脑（打开后两项要用户在桌面端点允许）',
-      en: 'Let sessions on a device use the built-in browser, Computer Use, or this computer (turning on the last two needs the user to allow it on the desktop)',
+      zh: '这台设备（给了 --harness 只改这个 harness）的会话能不能用任务卡、内置浏览器、Computer Use，远程设备能不能操作这台电脑（不分 harness）。不给 --harness 时整台设备的各 harness 一起改；打开 Computer Use、操作这台电脑要用户在桌面端点允许',
+      en: 'Let sessions on a device (only one harness with --harness) use task cards, the built-in browser or Computer Use, and let a remote device use this computer (not per harness). Without --harness every harness on the device changes together; turning on Computer Use or this computer needs the user to allow it on the desktop',
     },
     async run(ctx) {
       const device = await ctx.device(ctx.cmd.positionals[0])
+      const harness = ctx.cmd.options.get('harness')
+      const taskCards = ctx.switchOf('task-cards')
       const browser = ctx.switchOf('browser')
       const computer = ctx.switchOf('computer')
       const machine = ctx.switchOf('machine')
-      if (browser === undefined && computer === undefined && machine === undefined) {
+      if (
+        taskCards === undefined &&
+        browser === undefined &&
+        computer === undefined &&
+        machine === undefined
+      ) {
         throw new ConfigFailure(
           'invalid',
           ctx.say(
-            '至少给一项：--browser、--computer、--machine。',
-            'Pass at least one of --browser, --computer, --machine.',
+            '至少给一项：--task-cards、--browser、--computer、--machine。',
+            'Pass at least one of --task-cards, --browser, --computer, --machine.',
+          ),
+        )
+      }
+      if (harness !== undefined && !device.harnesses.some((entry) => entry.id === harness)) {
+        throw new ConfigFailure(
+          'invalid',
+          ctx.say(
+            `这台设备上没有 ${harness}。有：${device.harnesses.map((entry) => entry.id).join('、') || '（没有）'}`,
+            `No such harness on this device: ${harness}. Harnesses: ${device.harnesses.map((entry) => entry.id).join(', ') || '(none)'}`,
+          ),
+        )
+      }
+      if (harness !== undefined && machine !== undefined) {
+        throw new ConfigFailure(
+          'invalid',
+          ctx.say(
+            '“操作这台电脑”不分 harness：去掉 --harness 再改。',
+            '"Use this computer" is not per harness: drop --harness to change it.',
           ),
         )
       }
@@ -276,19 +338,37 @@ export const DEVICE_OPS: Record<string, OpSpec> = {
           ),
         )
       }
+      // 任务卡存在设备上：要连着、设备服务认这一项。先查清楚，免得前面几项改了、这一项改不了
+      const cards = taskCards === undefined ? null : await taskCardEdits(ctx, device, harness)
       const items: ConfigConfirmItem[] = []
       const name = ctx.nameOf(device)
-      if (computer === true && device.tools.computer !== true)
+      // 打开 Computer Use 要点允许：这一回有哪个 harness 是从关到开
+      const each = Object.entries(device.tools.harnesses ?? {})
+      const computerOff =
+        harness === undefined
+          ? device.tools.computer !== true || each.some(([, entry]) => !entry.computer)
+          : device.tools.harnesses?.[harness]?.computer !== true
+      if (computer === true && computerOff)
         items.push({ kind: 'tool', tool: 'computer', device: name })
       if (machine === true && device.machine?.enabled !== true)
         items.push({ kind: 'tool', tool: 'machine', device: name })
       if (items.length > 0) await ctx.confirm(items)
-      await ctx.run('device.tools.set', {
-        deviceId: device.id,
-        ...(browser === undefined ? {} : { browser }),
-        ...(computer === undefined ? {} : { computer }),
-        ...(machine === undefined ? {} : { machine }),
-      })
+      if (browser !== undefined || computer !== undefined || machine !== undefined) {
+        await ctx.run('device.tools.set', {
+          deviceId: device.id,
+          ...(harness === undefined ? {} : { harness }),
+          ...(browser === undefined ? {} : { browser }),
+          ...(computer === undefined ? {} : { computer }),
+          ...(machine === undefined ? {} : { machine }),
+        })
+      }
+      if (cards && taskCards !== undefined) {
+        await ctx.run('device.settings.write', {
+          deviceId: device.id,
+          expectedVersion: cards.version,
+          edits: cards.keys.map((key) => ({ key, value: taskCards })),
+        })
+      }
       return done(ctx)
     },
   },

@@ -21,6 +21,7 @@ import type {
   LogTailView,
   ManageView,
   SettingEditView,
+  SettingsSnapshotView,
   SettingsWriteResult,
   SshConfigView,
 } from '../model-manage.mjs'
@@ -47,6 +48,8 @@ export interface ManagementHost {
   ): Promise<ClientRequests[M]['result']>
   /** 请求没做成：换成给人看的错误 */
   fail(error: unknown): ChannelError
+  /** 手上那份设置的值换了（null 是不留了：没人订阅、读不成）。设备的显示数据里任务卡的开关靠它 */
+  viewed?(snapshot: SettingsSnapshotView | null): void
   log(line: string): void
 }
 
@@ -126,12 +129,14 @@ export function createManagement(host: ManagementHost): Management {
     if (touched.size === 0 && JSON.stringify(next) === JSON.stringify(view.snapshot)) return
     view = { ...view, snapshot: next }
     publish([{ op: 'settings.set', snapshot: next, keys: [...touched] }])
+    host.viewed?.(next)
   }
 
   const end = (error: ChannelError) => {
     const closing = [...sinks]
     sinks.clear()
     view = null
+    host.viewed?.(null)
     for (const sink of closing) sink.error(error)
   }
 
@@ -145,6 +150,7 @@ export function createManagement(host: ManagementHost): Management {
       if (mine !== epoch) return
       view = projectManage(host.deviceId, raw)
       for (const sink of sinks) sink.snapshot(view)
+      host.viewed?.(view.snapshot)
       // 读的这一会儿里到的通知：比读到的新才用得上
       for (const note of early) apply(note.snapshot, strings(note.keys))
     } catch (error) {
@@ -182,7 +188,10 @@ export function createManagement(host: ManagementHost): Management {
       return () => {
         sinks.delete(sink)
         // 没人看了：不再留着，免得之后拿一份没跟上通知的旧数据当新的给出去
-        if (sinks.size === 0) view = null
+        if (sinks.size === 0 && view) {
+          view = null
+          host.viewed?.(null)
+        }
       }
     },
 

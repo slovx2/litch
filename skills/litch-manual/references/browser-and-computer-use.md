@@ -5,20 +5,37 @@ Litch (Codex, Claude Code, Pi, DSH, OpenCode, Gemini CLI, Qwen Code, ACP) get `l
 `litch_computer` tools. Sessions on remote devices use the desktop's browser and Computer Use too,
 while the desktop is connected (remote adapter 0.8.0 or later).
 
-## Per-device switches
+## Switches per device and harness
 
-`scripts/litch tools set <device> …` turns the capabilities on or off for one device (flags for the
-browser, Computer Use and "operate this computer"; exact names: `scripts/litch tools --help`).
+The browser and Computer Use are switched per device and, below that, per harness (task cards too;
+see `sessions-and-projects.md`). A harness that was never switched on its own follows its device, and
+so does a harness installed later.
+
+`scripts/litch tools set <device> …` changes them (exact flags: `scripts/litch tools --help`):
+
+- without `--harness`, every harness on the device changes together;
+- with `--harness <id>`, only that harness;
+- `--task-cards on|off` writes the device's own setting `harness.<id>.taskCards`, so the device must
+  be online; the browser and Computer Use are stored on the desktop and can be changed while the
+  device is offline.
 
 | Switch | Default | Notes |
 |---|---|---|
+| Task cards | on | Stored on the device; per harness only |
 | Built-in browser | on | |
 | Computer Use | off | Turning it on is **guarded**: Litch shows a confirmation card and the user must click Allow. For a remote device it means agents on that machine can operate this computer's apps |
-| Operate this computer | off | Remote devices only, see `operate-this-computer.md`. Guarded |
+| Operate this computer | off | Remote devices only, not per harness, see `operate-this-computer.md`. Guarded |
 
-In the UI: Devices → the device → "Use this computer". A switch that is off makes the tool fail at once
-with a message telling the model where to turn it on; turning it on works for existing sessions from
-their next call.
+In the UI: Settings → Per-harness switches, a table with a row per device (expand it to see its
+harnesses) and a column per switch. A device cell is checked when all its harnesses are on, empty
+when all are off and half-checked otherwise; clicking it sets the whole column for that device. The
+task-card column of an offline device is read-only. The device page (Devices → the device) shows a
+one-line summary with a link to that table.
+
+When a session is created, the browser and Computer Use tools are only attached if they are on for
+that session's harness; a session created while they were off does not get them later (start a new
+session after turning them on). A switch turned off after a session was created makes the next call
+fail at once, with a message telling the model where to turn it on.
 
 ## Built-in browser
 

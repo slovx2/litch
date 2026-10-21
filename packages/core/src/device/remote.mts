@@ -31,7 +31,7 @@ export interface SavedDevices {
   localWire: WireColor | null
   remotes: SavedRemote[]
   /**
-   * 各台设备（键是设备标识，本机是 local）改过的两个开关：内置浏览器、Computer Use。
+   * 各台设备（键是设备标识，本机是 local）改过的两个开关：内置浏览器、Computer Use，设备一级和按 harness 的。
    * 没改过的不记，按默认来（浏览器开、Computer Use 关）；一个都没改过时没有这一项
    */
   tools?: Record<string, SavedToolSwitches>
@@ -48,10 +48,98 @@ export interface SavedDevices {
 }
 
 export interface SavedToolSwitches {
+  /** 设备一级：没单独设过的 harness（包括以后新装的）跟它 */
   browser?: boolean
   computer?: boolean
-  /** 远程设备“操作这台电脑”，默认关。本机设备没有这一项 */
+  /** 远程设备“操作这台电脑”，默认关。本机设备没有这一项，也不分 harness */
   machine?: boolean
+  /** 按 harness 单独设过的（键是 harness 标识）。和设备一级一样的不记 */
+  harnesses?: Record<string, SavedHarnessSwitches>
+}
+
+export interface SavedHarnessSwitches {
+  browser?: boolean
+  computer?: boolean
+}
+
+/** 设备设置页上两个开关的默认值 */
+export const DEFAULT_TOOL_SWITCHES = { browser: true, computer: false } as const
+
+type ToolColumn = 'browser' | 'computer'
+const TOOL_COLUMNS: readonly ToolColumn[] = ['browser', 'computer']
+
+/**
+ * 一台设备上两个开关现在是什么：给了 harness 的，它单独设过的按它的，没设过的跟设备一级；
+ * 设备一级没改过的按默认
+ */
+export function toolSwitchesOf(
+  kept: SavedToolSwitches | undefined,
+  harness: string | null,
+): { browser: boolean; computer: boolean } {
+  const own = harness === null ? undefined : kept?.harnesses?.[harness]
+  return {
+    browser: own?.browser ?? kept?.browser ?? DEFAULT_TOOL_SWITCHES.browser,
+    computer: own?.computer ?? kept?.computer ?? DEFAULT_TOOL_SWITCHES.computer,
+  }
+}
+
+export interface ToolSwitchChange {
+  harness?: string
+  browser?: boolean
+  computer?: boolean
+  machine?: boolean
+}
+
+/**
+ * 改开关之后存下来的样子。不带 harness：改设备一级，这一列各 harness 单独设过的一并清掉（整列跟着设备走，
+ * 设置页上点设备那一格就是这样）；带 harness：只改这个 harness 的，和设备一级一样的不记
+ */
+export function changeToolSwitches(
+  kept: SavedToolSwitches | undefined,
+  change: ToolSwitchChange,
+): SavedToolSwitches {
+  const { harnesses: before, ...device } = kept ?? {}
+  const each: Record<string, SavedHarnessSwitches> = {}
+  for (const [id, entry] of Object.entries(before ?? {})) each[id] = { ...entry }
+  const given = TOOL_COLUMNS.filter((column) => typeof change[column] === 'boolean')
+  if (change.harness === undefined) {
+    for (const column of given) {
+      device[column] = change[column] as boolean
+      for (const entry of Object.values(each)) delete entry[column]
+    }
+    if (typeof change.machine === 'boolean') device.machine = change.machine
+  } else {
+    const entry = { ...(each[change.harness] ?? {}) }
+    const base = toolSwitchesOf(device, null)
+    for (const column of given) {
+      if (change[column] === base[column]) delete entry[column]
+      else entry[column] = change[column] as boolean
+    }
+    each[change.harness] = entry
+  }
+  for (const [id, entry] of Object.entries(each)) {
+    if (Object.keys(entry).length === 0) delete each[id]
+  }
+  return { ...device, ...(Object.keys(each).length > 0 ? { harnesses: each } : {}) }
+}
+
+/** harness 标识的样子：设备服务声明的都是这种短名字 */
+export const HARNESS_ID = /^[A-Za-z0-9._-]{1,64}$/
+
+/** 读回来的按 harness 那一层：认不出的丢掉，空的不留 */
+function checkHarnessSwitches(value: unknown): Record<string, SavedHarnessSwitches> {
+  const kept: Record<string, SavedHarnessSwitches> = {}
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return kept
+  for (const [id, entry] of Object.entries(value as Record<string, unknown>)) {
+    if (!HARNESS_ID.test(id) || typeof entry !== 'object' || entry === null) continue
+    const { browser, computer } = entry as Record<string, unknown>
+    const one: SavedHarnessSwitches = {
+      ...(typeof browser === 'boolean' ? { browser } : {}),
+      ...(typeof computer === 'boolean' ? { computer } : {}),
+    }
+    if (Object.keys(one).length > 0) kept[id] = one
+  }
+  return kept
 }
 
 export interface SavedMachineSettings {
@@ -186,12 +274,14 @@ export function checkSaved(value: unknown): SavedDevices {
     for (const [id, value] of Object.entries(rawTools as Record<string, unknown>)) {
       if (id !== 'local' && !remotes.some((remote) => remote.id === id)) continue
       if (typeof value !== 'object' || value === null) continue
-      const { browser, computer, machine } = value as Record<string, unknown>
+      const { browser, computer, machine, harnesses } = value as Record<string, unknown>
+      const each = checkHarnessSwitches(harnesses)
       const kept: SavedToolSwitches = {
         ...(typeof browser === 'boolean' ? { browser } : {}),
         ...(typeof computer === 'boolean' ? { computer } : {}),
         // 本机设备没有“操作这台电脑”
         ...(typeof machine === 'boolean' && id !== 'local' ? { machine } : {}),
+        ...(Object.keys(each).length > 0 ? { harnesses: each } : {}),
       }
       if (Object.keys(kept).length > 0) tools[id] = kept
     }

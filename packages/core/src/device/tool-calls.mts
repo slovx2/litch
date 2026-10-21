@@ -90,8 +90,11 @@ export interface ToolCallsHost {
   config?(input: ConfigCallInput): Promise<ClientToolCallResponse>
   /** 调用来自哪台设备，交给执行器（远程设备的 Computer Use 没有“始终允许”，执行器按 kind 判断） */
   device(): ToolInvocation['device']
-  /** 这台设备的开关里这个命名空间开着没有。没有开关的命名空间（测试用的 echo）一律算开着 */
-  allowed(namespace: string): boolean
+  /**
+   * 这台设备上这个 harness 的开关里这个命名空间开着没有（harness 不知道是 null，按设备一级）。
+   * 没有开关的命名空间（测试用的 echo）一律算开着
+   */
+  allowed(namespace: string, harness: string | null): boolean
   /** 这个会话属于哪个 harness、工作目录在哪。不知道的是 null */
   context(threadId: string): { harness: string | null; cwd: string | null }
   /**
@@ -138,9 +141,9 @@ interface Running {
 /** 设备开关关着时给模型的话：告诉它让用户去哪里打开 */
 const DISABLED: Record<string, string> = {
   [CLIENT_TOOL_NAMESPACE.browser]:
-    'The built-in browser is turned off for this device in Litch. Ask the user to turn on "Built-in browser" in Litch (Devices → this device), then try again.',
+    'The built-in browser is turned off for this harness on this device in Litch. Ask the user to turn on "Built-in browser" for it in Litch (Settings → Feature switches), then try again.',
   [CLIENT_TOOL_NAMESPACE.computer]:
-    'Computer Use is turned off for this device in Litch. Ask the user to turn on "Computer Use" in Litch (Devices → this device), then try again.',
+    'Computer Use is turned off for this harness on this device in Litch. Ask the user to turn on "Computer Use" for it in Litch (Settings → Feature switches), then try again.',
 }
 
 /**
@@ -224,17 +227,18 @@ export function createToolCalls(host: ToolCallsHost): ToolCalls {
         ),
       )
     }
-    if (!host.allowed(namespace)) {
+    // 按会话所在的 harness 查：建会话之后才关掉的，已经建好的会话下一次调用就挡住
+    const { harness, cwd } = host.context(params.threadId)
+    if (!host.allowed(namespace, harness)) {
       return Promise.resolve(
         clientToolFailure(
           'disabled',
           DISABLED[namespace] ??
-            `${namespace} is turned off for this device in Litch. Ask the user to turn it on in Litch (Devices → this device).`,
+            `${namespace} is turned off for this harness on this device in Litch. Ask the user to turn it on in Litch (Settings → Feature switches).`,
         ),
       )
     }
     const id = `${host.deviceId}:${++seq}`
-    const { harness, cwd } = host.context(params.threadId)
     const invocation: ToolInvocation = {
       threadId: params.threadId,
       turnId: params.turnId,

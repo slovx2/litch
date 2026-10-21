@@ -359,7 +359,14 @@ test('开关：浏览器默认开、Computer Use 默认关；关着当场回 dis
   })
   core.start()
   await settle()
-  assert.deepEqual(app.devices[0]?.tools, { browser: true, computer: false })
+  const pi = (tools: { browser: boolean; computer: boolean }) => ({
+    pi: { taskCards: null, ...tools },
+  })
+  assert.deepEqual(app.devices[0]?.tools, {
+    browser: true,
+    computer: false,
+    harnesses: pi({ browser: true, computer: false }),
+  })
 
   const off = resultOf(await call({ namespace: 'litch_computer', tool: 'list_apps' }))
   assert.equal(off?.success, false)
@@ -371,6 +378,7 @@ test('开关：浏览器默认开、Computer Use 默认关；关着当场回 dis
   assert.deepEqual(app.devices.find((entry) => entry.id === 'local')?.tools, {
     browser: false,
     computer: true,
+    harnesses: pi({ browser: false, computer: true }),
   })
   void call({ namespace: 'litch_computer', tool: 'list_apps' })
   await settle()
@@ -385,7 +393,11 @@ test('开关：浏览器默认开、Computer Use 默认关；关着当场回 dis
   const bare = setup()
   bare.core.start()
   await settle()
-  assert.deepEqual(bare.app.devices[0]?.tools, { browser: null, computer: null })
+  assert.deepEqual(bare.app.devices[0]?.tools, {
+    browser: null,
+    computer: null,
+    harnesses: pi({ browser: true, computer: false }),
+  })
 })
 
 test('卡片：主进程要用户点头时在这个会话里出一张（会话没开着也载入），侧栏标成等待；答了回给主进程', async () => {

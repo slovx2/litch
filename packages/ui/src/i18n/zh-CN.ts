@@ -10,6 +10,7 @@ import { zhOnboard } from './zh-CN-onboard.ts'
 import { zhPairing } from './zh-CN-pairing.ts'
 import { zhPasswords } from './zh-CN-passwords.ts'
 import { zhProposals } from './zh-CN-proposals.ts'
+import { zhSwitches } from './zh-CN-switches.ts'
 import { zhTasks } from './zh-CN-tasks.ts'
 
 export const zhCN = {
@@ -33,6 +34,8 @@ export const zhCN = {
   ...zhComments,
   // 后台任务（输入框上方那一行、侧面板的“后台任务”页、各处的记号）的文案也单独放（zh-CN-background.ts）
   ...zhBackground,
+  // 设置页“按 harness 开关”那棵树的文案也单独放（zh-CN-switches.ts）
+  ...zhSwitches,
   'title.location': '当前位置',
   'workspace.none': '无项目',
 
@@ -1399,17 +1402,10 @@ export const zhCN = {
   'clientAsk.trustAll.done': '已信任所有网站，不再询问。可在设置 → 内置浏览器里关掉或设黑名单',
   'clientAsk.trustAll.failed': '没开成：{reason}',
   'devices.tools': '用这台电脑的能力',
-  'devices.tools.note':
-    '这台设备上的会话能不能用这台电脑上的这些能力。关着的时候模型调用会当场失败，它会被告知来这里打开。',
   'devices.tools.browser': '内置浏览器',
-  'devices.tools.browser.note':
-    '让模型用 Litch 里的浏览器打开网页、读页面、填表、截图。头一次访问一个网站前会先问你。',
   'devices.tools.computer': 'Computer Use',
-  'devices.tools.computer.note':
-    '让模型操作这台电脑上的应用：点、输入、截屏。头一次操作一个应用前会先问你。',
   'devices.tools.computer.remote':
     '这是远程设备：打开之后，跑在那台远程机器上的代理会来操作这台电脑（你面前的这台），不是操作那台远程机器。那台机器要是被别人控制了，别人就能遥控你的桌面。每个会话、每个应用都要你单独批准，没有“始终允许”。',
-  'devices.tools.failed': '没改成：{reason}',
   'devices.tools.computer.missing':
     '这台 Mac 还没给 Computer Use 两项系统权限（辅助功能、屏幕录制），开关打开了也用不了。',
   'devices.tools.computer.unknown':
