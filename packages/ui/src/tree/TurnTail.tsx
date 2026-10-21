@@ -7,6 +7,8 @@ import { memo, useMemo, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { whyNot } from '../app/errors.ts'
 import { useKey, useKeys, useServices } from '../app/services.tsx'
+import { useSendMode } from '../composer/send-mode.ts'
+import { runningSend } from '../composer/send-mode-logic.ts'
 import { TreeCard } from './TreeCards.tsx'
 import { actionText, askOpen, askReplied, type TailAsk, tailAsk } from './tail.ts'
 
@@ -85,12 +87,20 @@ function AskLine({
     picked ?? askReplied(ask.actions, nextFirst?.kind === 'userMessage' ? nextFirst.text : null)
   const usable = open && picked === null && meta?.live === true && device?.connection === 'online'
 
+  // 回复按钮和输入框一样跟着“回合进行中发消息”的设置：立即发送且插得了话就插进去，否则排队
+  const sendMode = useSendMode()
+  const steer = runningSend(sendMode, meta?.can?.steer !== false) === 'steer'
   const send = (action: { label: string; message?: string }) => {
     if (!usable || busy) return
     setBusy(true)
     setFailure(null)
     channel
-      .command('session.send', { deviceId, sessionId, text: actionText(action) })
+      .command('session.send', {
+        deviceId,
+        sessionId,
+        text: actionText(action),
+        ...(steer ? { now: true } : {}),
+      })
       .then(() => {
         clicked.set(memoKey, action.label)
         setPicked(action.label)
