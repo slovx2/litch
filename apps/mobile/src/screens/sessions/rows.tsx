@@ -222,7 +222,7 @@ export function headLabel(head: GroupHead, t: Translator): string {
   }
 }
 
-/** 一组的标题：点一下收起、展开；工作区的另有“＋”（在这里新建）和长按菜单 */
+/** 一组的标题：点一下收起、展开；工作区和“无项目”的另有“＋”（在这里新建），工作区的还有长按菜单 */
 export const GroupRow = memo(function GroupRow({
   deviceId,
   head,
@@ -273,7 +273,9 @@ export const GroupRow = memo(function GroupRow({
       {onNew ? (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={t('sessions.newHere')}
+          accessibilityLabel={t(
+            head.kind === 'loose' ? 'newSession.buttonLoose' : 'sessions.newHere',
+          )}
           testID={`group:${key}:new`}
           hitSlop={6}
           onPress={() => onNew(head)}

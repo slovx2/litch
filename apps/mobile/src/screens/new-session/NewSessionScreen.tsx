@@ -49,7 +49,8 @@ export function NewSessionScreen({ navigation, route }: Props) {
   const device = useKey<DeviceView>(keys.device(deviceId))
   const workspaces = useKey<WorkspaceView[]>(keys.workspaces(deviceId))
   const [where, setWhere] = useState<Where>(() => {
-    const id = route.params.workspaceId ?? lastPlace(deviceId)
+    const asked = route.params.workspaceId
+    const id = asked === undefined ? lastPlace(deviceId) : asked
     return id ? { kind: 'workspace', id } : { kind: 'loose' }
   })
   const [asking, setAsking] = useState(false)

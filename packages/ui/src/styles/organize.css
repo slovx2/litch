@@ -227,6 +227,14 @@
 .sec-line {
   margin-top: 4px;
 }
+/* “无项目”那一行：不收起、不单独查看，只有小标题和行尾的“新建会话”；高矮和置顶、组那一行一样 */
+.loose-line {
+  height: calc(var(--row-h) - 4px);
+  margin-top: 4px;
+}
+.loose-line > .sec-label {
+  padding: 0 4px;
+}
 /* 空的置顶、组：一句提示，也是放东西的地方 */
 .band-empty {
   margin: 1px 4px 4px 16px;
