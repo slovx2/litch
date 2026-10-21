@@ -35,7 +35,8 @@
     "唤醒：父会话空闲、它的直接子会话都停下、它自己没有待处理的请求、而且至少有一个子会话的 wakeParent 为真时，设备进程替父会话发一个 turn/start，内容是 kind=wake 的 <litch-session-event>。上一条用户消息之后最多唤醒 SESSION_TREE_LIMITS.wakesPerUserMessage 次。没有客户端连着时不唤醒，等有连接上来再查一遍。",
     "子会话里由用户自己发起的回合（客户端的 turn/start）、由定时任务（deviceTasks）发起的回合：结束时照常回报，但这条回报不算“要唤醒”的。",
     "子会话里等着用户答的审批、提问只由用户答：设备进程不替它答，也不把它转给父会话。",
-    "设置里“会话编排”关掉时：设备信息不列 sessionTree，新会话不带 litch_sessions，不回报、不唤醒；已有的父子关系仍然在库里，重新打开后照常显示。"
+    "设置里“会话编排”关掉时：设备信息不列 sessionTree，新会话不带 litch_sessions，不回报、不唤醒；已有的父子关系仍然在库里，重新打开后照常显示。",
+    "子会话一回合结束时还有后台任务在跑（backgroundTasks 扩展）：照常算这一回合结束、照常回报，回报（SessionEventNote）上带 backgroundTasks（还在跑的个数），给模型的那一行写明还在跑、跑完还会再报；后台跑完、引擎自己续跑的那一回合结束时照常再报一次。"
   ],
   "parts": [
     {

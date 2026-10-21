@@ -254,6 +254,11 @@ export interface SessionEventNote {
   status: 'completed' | 'failed' | 'interrupted' | 'needsUser'
   /** 最后一条回答的前 noteChars 个字；没有回答是空字符串 */
   excerpt: string
+  /**
+   * 这一回合结束时子会话里还有几个后台任务在跑（backgroundTasks 扩展）：照常算这一回合结束，
+   * 后台跑完、引擎自己续跑的那一回合结束时会再报一次。没有的不带
+   */
+  backgroundTasks?: number
 }
 
 export interface SessionEvent {
@@ -275,7 +280,10 @@ export function formatSessionEvent(event: SessionEvent): string {
   // 回答里的换行会把一条拆成几行、跟下一条混在一起，人读的这几行压成一行；原文在后面的 JSON 里
   const lines = event.notes.map((note) => {
     const excerpt = note.excerpt.replace(/\s+/g, ' ').trim()
-    return `- "${note.title}" (${note.threadId}) ${note.status}${excerpt ? `: ${excerpt}` : ''}`
+    const background = note.backgroundTasks
+      ? ` (${note.backgroundTasks} background task${note.backgroundTasks === 1 ? '' : 's'} still running; another update comes when they finish)`
+      : ''
+    return `- "${note.title}" (${note.threadId}) ${note.status}${background}${excerpt ? `: ${excerpt}` : ''}`
   })
   const tail =
     event.kind === 'wake'

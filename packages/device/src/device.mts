@@ -1,12 +1,15 @@
 // 设备进程的主体：一台机器上的多个 harness 运行时收在一个入口（聚合面）后面。
 // 这里只管各条客户端连接共用的东西；一条连接上的事在 session.mts。
+
 import { mkdirSync } from 'node:fs'
 import type { DatabaseSync } from 'node:sqlite'
+import { BACKGROUND_TASKS_NOTIFICATION } from '../../protocol/src/background-tasks.mjs'
 import { CLIENT_TOOL_NAMESPACE } from '../../protocol/src/client-tools.mjs'
 import { EXTENSION } from '../../protocol/src/device.mjs'
 import { HARNESS_INSTALL_NOTIFICATION } from '../../protocol/src/device-harness-install.mjs'
 import type { DeviceSettingsSnapshot } from '../../protocol/src/device-settings.mjs'
 import { HARNESS_CONFIG_NOTIFICATION } from '../../protocol/src/harness-config.mjs'
+import { DeviceBackground } from './background.mjs'
 import { ClientToolInvoker } from './client-tool-invoke.mjs'
 import { ClientToolRouter } from './client-tools.mjs'
 import { CodexTitles } from './codex-titles.mjs'
@@ -170,6 +173,8 @@ export class DeviceServer {
   readonly sessionTree: SessionTree
   /** 原生 codex 会话的自动起名 */
   readonly titles: CodexTitles
+  /** 每个会话的后台任务（backgroundTasks 扩展） */
+  readonly background: DeviceBackground
   /** 上一次看到的“会话编排”开关，变了才动 */
   private orchestrating: boolean
   /** 扫码绑定手机。没给配置时是 null */
@@ -186,6 +191,9 @@ export class DeviceServer {
     this.workspaces = new Workspaces(this.db, (method, params, extension) =>
       this.announce(method, params, extension),
     )
+    this.background = new DeviceBackground({
+      announce: (method, params, extension) => this.announce(method, params, extension),
+    })
     const info = deviceInfo(this.version)
     // 设置功能要有适配器主进程在管才有：客户端看这份列表决定出不出设置界面
     if (this.control) info.extensions.push(EXTENSION.deviceSettings)
@@ -230,6 +238,7 @@ export class DeviceServer {
       // harness 正在起（比如服务刚重启、错过的运行正要补跑）时等它一会儿
       openEngineLink: (harness) =>
         this.openEngineLink(harness, { waitMs: taskTiming.harnessWaitMs }),
+      backgroundRunning: (threadId) => this.background.running(threadId),
     })
     // 定时任务：任务存在设备上，到点由设备进程自己连上 harness 去跑
     if (this.tasks) info.extensions.push(EXTENSION.deviceTasks)
@@ -269,6 +278,7 @@ export class DeviceServer {
       timeoutMs: options.timing?.listTimeoutMs ?? DEFAULT_TIMING.listTimeoutMs,
       needsUserMs: options.timing?.needsUserMs ?? DEFAULT_TIMING.needsUserMs,
       taskTurn: (threadId, turnId) => this.tasks?.isTaskTurn(threadId, turnId) ?? false,
+      backgroundRunning: (threadId) => this.background.running(threadId),
       wrapUp: () => {
         const value = this.control?.state?.snapshot.values[WRAP_UP_SETTING]
         return this.control ? value !== false : options.wrapUp !== false
@@ -318,6 +328,7 @@ export class DeviceServer {
         this.announce(HARNESS_CONFIG_NOTIFICATION.changed, params, EXTENSION.harnessConfig),
       harnessEnvNames: (harness) => this.harnessEnvNames(harness),
       titles: this.titles,
+      background: this.background,
       codexCatalog: () =>
         this.control
           ? this.control.request('codex.models', {}, CODEX_CATALOG_TIMEOUT_MS)
@@ -564,6 +575,12 @@ export class DeviceServer {
     }
     this.engineLinks.add(link)
     link.onClose(() => this.engineLinks.delete(link))
+    // 设备进程自己的连接上看到的也算：没有客户端连着时跑的定时任务、子会话，回报里也要数得出后台任务
+    link.onNotification((method, params) => {
+      if (!params || typeof params !== 'object') return
+      if (method === BACKGROUND_TASKS_NOTIFICATION.changed) this.background.reportedChanged(params)
+      else if (link.native) this.background.codexNotification(method, params)
+    })
     return link
   }
 

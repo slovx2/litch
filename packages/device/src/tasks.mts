@@ -75,6 +75,8 @@ export interface DeviceTasksOptions {
   maxTimerMs?: number
   /** 开一条内部连接（DeviceServer.openEngineLink）：跑任务、核对会话在不在 */
   openEngineLink(harness: string): Promise<EngineLink>
+  /** 会话里还有几个后台任务在跑（background.mts）。不给当 0 */
+  backgroundRunning?(threadId: string): number
 }
 
 const seconds = (ms: number): number => Math.floor(ms / 1000)
@@ -123,6 +125,7 @@ export class DeviceTasks {
       timing: this.timing,
       maxTimerMs: options.maxTimerMs ?? MAX_TIMER_MS,
       openEngineLink: (harness) => options.openEngineLink(harness),
+      backgroundRunning: (threadId) => options.backgroundRunning?.(threadId) ?? 0,
       log: options.log,
       taskChanged: (id) => this.changed('updated', id),
       runChanged: (run) => this.runChanged(run),

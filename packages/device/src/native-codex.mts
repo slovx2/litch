@@ -88,6 +88,9 @@ function codexFeatures(): HarnessFeatures {
     rename: true,
     // 模型在条目一开始给的阶段值，item/started 里就带着：用分阶段回话的假模型实测
     agentMessagePhase: 'onStart',
+    // 它自己不报后台任务的集合：设备进程从它的条目通知里派生（background.mts）。后台终端结束不唤醒模型（源码
+    // core/src/unified_exec/async_watcher.rs 只补一条 item/completed）
+    backgroundTasks: true,
   }
 }
 

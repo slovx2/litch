@@ -63,6 +63,8 @@ export interface SchedulerHost {
   maxTimerMs: number
   /** 开一条内部连接（见 RunHost.openEngineLink） */
   openEngineLink(harness: string): Promise<EngineLink>
+  /** 见 RunHost.backgroundRunning */
+  backgroundRunning(threadId: string): number
   log(line: string): void
   /** 任务的字段变了（下一次运行时间、最近一次运行、未读数……） */
   taskChanged(taskId: string): void
@@ -209,6 +211,7 @@ export class TaskScheduler {
       progress: (run) => this.progress(run),
       born: host.born,
       openEngineLink: (harness) => host.openEngineLink(harness),
+      backgroundRunning: (threadId) => host.backgroundRunning(threadId),
       turns: host.turns,
     }
   }
@@ -273,6 +276,7 @@ export class TaskScheduler {
       summary: outcome.summary,
       error: outcome.error,
       read: false,
+      ...(outcome.backgroundTasks ? { backgroundTasks: outcome.backgroundTasks } : {}),
     }
     store.transaction(() => {
       store.updateRun(run)

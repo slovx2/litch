@@ -11,6 +11,7 @@
 //     没人可送时本来就一直等着、等有连接来再送的引擎（Claude、原生 codex）照它原来的做法，不答。
 // 握手时声明 clientTools，命名空间取注册表里的，引擎挑执行方时挑得中这条连接。
 
+import { EXTENSION, EXTENSIONS_CAPABILITY } from '../../protocol/src/device.mjs'
 import { NO_RECIPIENT_MESSAGE } from '../../shared/src/server-requests.mjs'
 import type { InstructionStore } from './codex-instructions.mjs'
 import { type DeviceTools, declareDeviceTools } from './device-tools.mjs'
@@ -220,8 +221,13 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
       declareDeviceTools(
         {
           clientInfo: { name: 'litch-device', title: null, version: options.version },
-          // 项目、队列那几组方法在上游协议里标着实验性
-          capabilities: { experimentalApi: true, requestAttestation: false },
+          // 项目、队列那几组方法在上游协议里标着实验性。声明 backgroundTasks：引擎的后台任务集合也发给这条连接，
+          // 没有客户端连着时会话树、定时任务的回报照样数得出后台任务（原生 codex 的方言不带我们的键）
+          capabilities: {
+            experimentalApi: true,
+            requestAttestation: false,
+            [EXTENSIONS_CAPABILITY]: [EXTENSION.backgroundTasks],
+          },
         },
         tools.namespaces(),
       ),

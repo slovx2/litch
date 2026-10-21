@@ -54,6 +54,8 @@ export interface SessionTreeHost {
   needsUserMs: number
   /** 这个回合是定时任务发起的：只进回报，不唤醒父会话 */
   taskTurn(threadId: string, turnId: string): boolean
+  /** 会话里还有几个后台任务在跑（background.mts） */
+  backgroundRunning(threadId: string): number
   /** 设置里“每回合收尾”开着（sessions.wrapUp）：关掉时新会话的 litch_sessions 里没有 wrap_up，也不提醒 */
   wrapUp(): boolean
   /** 设置里“提醒收尾”开着（sessions.wrapUpReminder） */
@@ -464,11 +466,14 @@ export class SessionTree {
         : turn.status === 'interrupted'
           ? 'interrupted'
           : 'completed'
+    // 决 430：有后台任务还在跑也照常算这一回合结束，回报里注明；后台跑完、引擎自己续跑的那一回合结束时再报一次
+    const background = this.host.backgroundRunning(threadId)
     const note: SessionEventNote = {
       threadId,
       title: lineage.title,
       status,
       excerpt: (answer ?? '').slice(0, SESSION_TREE_LIMITS.noteChars),
+      ...(background > 0 ? { backgroundTasks: background } : {}),
     }
     this.store.addNote(lineage.parentThreadId, note, lineage.wakeParent && wakeable)
     this.host.log(`子会话 ${threadId}（${harness}）的回合 ${String(turn.id)} 已进父会话的回报队列`)
@@ -897,7 +902,13 @@ function busy(thread: unknown): boolean {
 
 /** 队列里的回报去掉库里才有的字段 */
 function publicNote(note: SessionEventNote): SessionEventNote {
-  return { threadId: note.threadId, title: note.title, status: note.status, excerpt: note.excerpt }
+  return {
+    threadId: note.threadId,
+    title: note.title,
+    status: note.status,
+    excerpt: note.excerpt,
+    ...(note.backgroundTasks ? { backgroundTasks: note.backgroundTasks } : {}),
+  }
 }
 
 /** 用户消息里标出来的一个元素（按 UTF-8 字节位置），整体往后挪 shift 个字节 */

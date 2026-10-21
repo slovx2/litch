@@ -65,6 +65,8 @@ const MIGRATIONS: readonly string[] = [
    );
    CREATE INDEX runs_by_task ON runs(task_id, seq);
    CREATE INDEX runs_by_status ON runs(status);`,
+  // 回合结束时会话里还有几个后台任务在跑（backgroundTasks 扩展）。旧的运行记成 0
+  `ALTER TABLE runs ADD COLUMN background INTEGER NOT NULL DEFAULT 0;`,
 ]
 
 /** 现在的结构版本 */
@@ -149,6 +151,7 @@ function runOf(row: Record<string, SQLInputValue>): RunRow {
     summary: text(row.summary),
     error: parsed<TaskError>(row.error),
     read: row.read === 1,
+    ...(Number(row.background) > 0 ? { backgroundTasks: Number(row.background) } : {}),
   }
 }
 
@@ -321,7 +324,7 @@ export class TaskStore {
     const result = this.db
       .prepare(
         `UPDATE runs SET status=?, thread_id=?, turn_id=?, started_at=?, finished_at=?, summary=?,
-           error=?, read=? WHERE id=?`,
+           error=?, read=?, background=? WHERE id=?`,
       )
       .run(
         run.status,
@@ -332,6 +335,7 @@ export class TaskStore {
         run.summary,
         json(run.error),
         run.read ? 1 : 0,
+        run.backgroundTasks ?? 0,
         run.id,
       )
     return Number(result.changes) > 0

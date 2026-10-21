@@ -108,6 +108,8 @@ const MIGRATIONS: readonly string[] = [
      value TEXT NOT NULL,
      PRIMARY KEY(harness, key)
    ) WITHOUT ROWID;`,
+  // 回报记下子会话那一回合结束时还有几个后台任务在跑（backgroundTasks 扩展）。旧的回报记成 0
+  `ALTER TABLE notes ADD COLUMN background INTEGER NOT NULL DEFAULT 0;`,
 ]
 
 export const SESSION_SCHEMA_VERSION = MIGRATIONS.length
@@ -251,8 +253,8 @@ export class SessionStore {
       ),
       nextExpiry: prepare("SELECT MIN(expires_at) AS at FROM proposals WHERE status='pending'"),
       addNote: prepare(
-        `INSERT INTO notes(parent_thread_id, thread_id, title, status, excerpt, wake, created_at)
-         VALUES(?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO notes(parent_thread_id, thread_id, title, status, excerpt, wake, created_at, background)
+         VALUES(?, ?, ?, ?, ?, ?, ?, ?)`,
       ),
       notes: prepare('SELECT * FROM notes WHERE parent_thread_id=? ORDER BY seq'),
       noteParents: prepare('SELECT DISTINCT parent_thread_id FROM notes'),
@@ -495,6 +497,7 @@ export class SessionStore {
       note.excerpt,
       wake ? 1 : 0,
       now(),
+      note.backgroundTasks ?? 0,
     )
   }
 
@@ -505,6 +508,7 @@ export class SessionStore {
       title: text(row.title),
       status: text(row.status) as SessionEventNote['status'],
       excerpt: text(row.excerpt),
+      ...(Number(row.background) > 0 ? { backgroundTasks: Number(row.background) } : {}),
       wake: row.wake === 1,
     }))
   }

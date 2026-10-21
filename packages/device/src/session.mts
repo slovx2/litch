@@ -1,5 +1,6 @@
 // 聚合面上的一条客户端连接：握手、路由、它专属的那一组上游连接。
 import { randomUUID } from 'node:crypto'
+import { BACKGROUND_TASKS_NOTIFICATION } from '../../protocol/src/background-tasks.mjs'
 import {
   CLIENT_TOOL_METHOD,
   CLIENT_TOOLS_CAPABILITY,
@@ -29,6 +30,7 @@ import {
   platformFamily,
   platformOs,
 } from '../../shared/src/runtime-version.mjs'
+import type { DeviceBackground } from './background.mjs'
 import type { ClientToolInvoker } from './client-tool-invoke.mjs'
 import type { ClientToolPeer, ClientToolRouter } from './client-tools.mjs'
 import type { CodexTitles } from './codex-titles.mjs'
@@ -144,6 +146,8 @@ export interface SessionHost {
   codexCatalog(): Promise<unknown>
   /** 原生 codex 会话的自动起名（codex-titles.mts） */
   titles: CodexTitles
+  /** 每个会话的后台任务（background.mts，各连接共用） */
+  background: DeviceBackground
 }
 
 /** 请求已经有着落：转给上游了（应答由上游来），或者已经自己答过了 */
@@ -212,6 +216,38 @@ export class ClientSession implements ClientToolPeer {
           host.titles.turnEvent(method, params)
         },
         decorate: (thread) => host.sessionTree.decorate(thread),
+      },
+      background: {
+        notification: (link, method, params) => {
+          if (method === BACKGROUND_TASKS_NOTIFICATION.changed)
+            host.background.reportedChanged(params)
+          else if (link.dialect.clientToolsByDevice)
+            host.background.codexNotification(method, params)
+        },
+        decorate: (thread) => {
+          host.background.decorate(thread)
+        },
+        resumed: (link, thread) => {
+          if (!link.dialect.clientToolsByDevice) return
+          const candidates = host.background.codexResumed(thread)
+          if (candidates.length === 0) return
+          const threadId = String(thread.id)
+          // 原生 codex 重启过的话历史里的 inProgress 命令早没了：拿后台终端的列表核一遍，问不到就照历史算
+          link
+            .request('thread/backgroundTerminals/list', { threadId }, host.timing.probeTimeoutMs)
+            .then(
+              (result) =>
+                isObject(result) && Array.isArray(result.data)
+                  ? new Set(
+                      result.data.flatMap((entry) =>
+                        isObject(entry) && typeof entry.itemId === 'string' ? [entry.itemId] : [],
+                      ),
+                    )
+                  : null,
+              () => null,
+            )
+            .then((listed) => host.background.codexConfirmed(threadId, candidates, listed))
+        },
       },
       clientTools: {
         offer: (link, frame, upstreamId) => host.clientTools.offer(this, link, frame, upstreamId),
@@ -376,8 +412,16 @@ export class ClientSession implements ClientToolPeer {
             index: this.host.index,
             workspaces: this.host.workspaces,
             timeoutMs: this.host.timing.listTimeoutMs,
-            ...(this.declared.has(EXTENSION.sessionTree)
-              ? { decorate: (row: Record<string, unknown>) => this.host.sessionTree.decorate(row) }
+            ...(this.declared.has(EXTENSION.sessionTree) ||
+            this.declared.has(EXTENSION.backgroundTasks)
+              ? {
+                  decorate: (row: Record<string, unknown>) => {
+                    if (this.declared.has(EXTENSION.sessionTree))
+                      this.host.sessionTree.decorate(row)
+                    if (this.declared.has(EXTENSION.backgroundTasks))
+                      this.host.background.decorate(row)
+                  },
+                }
               : {}),
           },
           frame.params,
