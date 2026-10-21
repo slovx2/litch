@@ -5,7 +5,12 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
-import { SESSION_PROPOSAL_RULES, SESSION_TOOLS } from '../../protocol/src/client-tools-sessions.mjs'
+import {
+  SESSION_PROPOSAL_RULES,
+  SESSION_TOOLS,
+  sessionProposalRules,
+  sessionTools,
+} from '../../protocol/src/client-tools-sessions.mjs'
 import { ECHO_TOOLS } from '../../protocol/src/client-tools-specs.mjs'
 import { composeInstructions } from '../src/codex-instructions.mjs'
 import { openSessionDatabase, SessionStore } from '../src/session-store.mjs'
@@ -162,6 +167,34 @@ test('CODEX-DEV-003：规则按这一版的重拼；更早的设备进程只记�
     await client.call('thread/resume', { threadId: OLD_TWO })
     assert.equal(last(env, 'thread/resume').developerInstructions, RULES)
     assert.ok(env.logs.some((line) => line.includes('config/read 没成')))
+  } finally {
+    await env.close()
+  }
+})
+
+test('CODEX-DEV-006：“每回合收尾”关着时建的会话不带 wrap_up，恢复、分叉时规则挑关着的那份，不看现在的开关', async () => {
+  const env = codexRig()
+  try {
+    const client = await litch(env)
+    const { store } = env.device.sessionTree
+    const off = `# Tool instructions: litch_sessions\n${sessionProposalRules(false)}`
+    // 建会话时带的工具里没有 wrap_up（关着时建的），记下的是旧原文：照工具挑
+    store.setInstructions(OLD_ONE, {
+      given: USER,
+      namespaces: [{ name: 'litch_sessions', instructions: 'Old rules.' }],
+      cwd: '/work',
+    })
+    store.setTools(OLD_ONE, [sessionTools(false)])
+    await client.call('thread/resume', { threadId: OLD_ONE })
+    assert.equal(last(env, 'thread/resume').developerInstructions, `${USER}\n\n${off}`)
+    // 没记下工具的（分叉出来的）：看原文是不是关着的那份
+    store.setInstructions(OLD_TWO, {
+      given: USER,
+      namespaces: [{ name: 'litch_sessions', instructions: sessionProposalRules(false) }],
+      cwd: '/work',
+    })
+    await client.call('thread/resume', { threadId: OLD_TWO })
+    assert.equal(last(env, 'thread/resume').developerInstructions, `${USER}\n\n${off}`)
   } finally {
     await env.close()
   }

@@ -171,6 +171,149 @@ test('最终回答的认定：有 final 取最后一条 final；分不清阶段�
   )
 })
 
+test('分块：旧顺序“长回答 → 空收尾 → 一句短话”，长回答连同短话都按回答画', () => {
+  // 纯聊天：Claude 入口把短话标 final、长回答标 commentary
+  assert.deepEqual(
+    bucketItems([
+      { id: 'u', kind: 'userMessage' },
+      { id: 'long', kind: 'agentMessage', phase: 'commentary' },
+      { id: 'w', kind: 'toolCall', quiet: true },
+      { id: 'short', kind: 'agentMessage', phase: 'final' },
+    ]),
+    [
+      { type: 'user', itemId: 'u' },
+      { type: 'answer', itemId: 'long' },
+      { type: 'answer', itemId: 'short' },
+    ],
+  )
+  // 干过活的：前面的工具和说明照旧进过程；连调两次空收尾也一样
+  assert.deepEqual(
+    bucketItems([
+      { id: 'u', kind: 'userMessage' },
+      { id: 'm', kind: 'agentMessage', phase: 'commentary' },
+      { id: 'c', kind: 'command' },
+      { id: 'long', kind: 'agentMessage', phase: 'commentary' },
+      { id: 'w1', kind: 'toolCall', quiet: true },
+      { id: 'w2', kind: 'toolCall', quiet: true },
+      { id: 'short', kind: 'agentMessage', phase: 'final' },
+    ]),
+    [
+      { type: 'user', itemId: 'u' },
+      {
+        type: 'process',
+        key: 'm',
+        parts: [
+          { type: 'note', itemId: 'm' },
+          { type: 'steps', key: 'c', itemIds: ['c'] },
+        ],
+      },
+      { type: 'answer', itemId: 'long' },
+      { type: 'answer', itemId: 'short' },
+    ],
+  )
+  // 短话还没来时长回答已经按回答画，短话来了不改画法
+  assert.deepEqual(
+    bucketItems([
+      { id: 'u', kind: 'userMessage' },
+      { id: 'long', kind: 'agentMessage', phase: 'commentary' },
+      { id: 'w', kind: 'toolCall', quiet: true },
+    ]),
+    [
+      { type: 'user', itemId: 'u' },
+      { type: 'answer', itemId: 'long' },
+    ],
+  )
+})
+
+test('分块：新顺序“干活 → 空收尾 → 完整回答”照旧；收尾后又干活、带建议的收尾、带题消息不受空收尾影响', () => {
+  assert.deepEqual(
+    bucketItems([
+      { id: 'u', kind: 'userMessage' },
+      { id: 'c', kind: 'command' },
+      { id: 'w', kind: 'toolCall', quiet: true },
+      { id: 'a', kind: 'agentMessage', phase: 'final' },
+    ]),
+    [
+      { type: 'user', itemId: 'u' },
+      { type: 'process', key: 'c', parts: [{ type: 'steps', key: 'c', itemIds: ['c'] }] },
+      { type: 'answer', itemId: 'a' },
+    ],
+  )
+  // 空收尾之后又调了工具：收尾前那条还是说明
+  assert.deepEqual(
+    bucketItems([
+      { id: 'u', kind: 'userMessage' },
+      { id: 'm', kind: 'agentMessage', phase: 'commentary' },
+      { id: 'w', kind: 'toolCall', quiet: true },
+      { id: 'c', kind: 'command' },
+      { id: 'a', kind: 'agentMessage', phase: 'final' },
+    ]),
+    [
+      { type: 'user', itemId: 'u' },
+      {
+        type: 'process',
+        key: 'm',
+        parts: [
+          { type: 'note', itemId: 'm' },
+          { type: 'steps', key: 'c', itemIds: ['c'] },
+        ],
+      },
+      { type: 'answer', itemId: 'a' },
+    ],
+  )
+  // 带建议的收尾是卡片，不是空收尾：前面那条照旧是说明
+  assert.deepEqual(
+    bucketItems([
+      { id: 'u', kind: 'userMessage' },
+      { id: 'm', kind: 'agentMessage', phase: 'commentary' },
+      { id: 'w', kind: 'toolCall', card: 'outside' },
+      { id: 'a', kind: 'agentMessage', phase: 'final' },
+    ]),
+    [
+      { type: 'user', itemId: 'u' },
+      { type: 'process', key: 'm', parts: [{ type: 'note', itemId: 'm' }] },
+      { type: 'card', itemId: 'w' },
+      { type: 'answer', itemId: 'a' },
+    ],
+  )
+  // 空收尾前是带题的消息、子代理那一行：不算回答
+  assert.deepEqual(
+    bucketItems([
+      { id: 'u', kind: 'userMessage' },
+      { id: 'q', kind: 'agentMessage', phase: 'commentary', card: 'outside' },
+      { id: 'sa', kind: 'toolCall', card: 'inline' },
+      { id: 'w', kind: 'toolCall', quiet: true },
+      { id: 'a', kind: 'agentMessage', phase: 'final' },
+    ]),
+    [
+      { type: 'user', itemId: 'u' },
+      { type: 'card', itemId: 'q' },
+      { type: 'process', key: 'sa', parts: [{ type: 'card', itemId: 'sa' }] },
+      { type: 'answer', itemId: 'a' },
+    ],
+  )
+  // 提醒收尾的回合：照旧没有最终回答
+  assert.deepEqual(
+    bucketItems([
+      { id: 'u', kind: 'userMessage', remind: true },
+      { id: 'm', kind: 'agentMessage', phase: 'commentary' },
+      { id: 'w', kind: 'toolCall', quiet: true },
+      { id: 'a', kind: 'agentMessage', phase: 'final' },
+    ]),
+    [
+      { type: 'user', itemId: 'u' },
+      {
+        type: 'process',
+        key: 'm',
+        parts: [
+          { type: 'note', itemId: 'm' },
+          { type: 'note', itemId: 'a' },
+        ],
+      },
+    ],
+  )
+})
+
 test('过程什么时候告一段落：回合结束，或者最终回答写完（声明了一开始就知道的，一开始就算）', () => {
   assert.equal(processSettled(false, []), true)
   assert.equal(processSettled(true, []), false)

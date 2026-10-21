@@ -6,7 +6,11 @@ import {
   isPresentationSpec,
   PRESENTATION_SPEC,
 } from '../../protocol/src/client-tools-presentation.mjs'
-import { SESSION_TOOL_LIMITS, SESSION_TOOLS } from '../../protocol/src/client-tools-sessions.mjs'
+import {
+  SESSION_TOOL_LIMITS,
+  SESSION_TOOLS,
+  sessionTools,
+} from '../../protocol/src/client-tools-sessions.mjs'
 import { EXTENSION } from '../../protocol/src/device.mjs'
 import {
   SESSION_TREE_LIMITS,
@@ -196,7 +200,10 @@ export function briefing(
   ].join('\n')
 }
 
-/** 子会话建的时候带哪些动态工具：父会话建时客户端给的那些（目标引擎认客户端工具才带），开关开着再加上 litch_sessions */
+/**
+ * 子会话建的时候带哪些动态工具：父会话建时客户端给的那些（目标引擎认客户端工具才带），开关开着再加上 litch_sessions
+ *（按“每回合收尾”开关给的那份）
+ */
 function childTools(tree: SessionTree, parentId: string, link: EngineLink): unknown[] | null {
   const extensions = Array.isArray(link.runtime?.extensions) ? link.runtime.extensions : []
   if (!extensions.includes(EXTENSION.clientTools)) return null
@@ -206,7 +213,7 @@ function childTools(tree: SessionTree, parentId: string, link: EngineLink): unkn
   )
   return [
     ...inherited,
-    ...(tree.host.enabled() ? [SESSION_TOOLS] : []),
+    ...(tree.host.enabled() ? [sessionTools(tree.host.wrapUp())] : []),
     ...(link.native ? [] : [PRESENTATION_SPEC]),
   ]
 }

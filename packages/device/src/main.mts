@@ -88,6 +88,7 @@ async function main(): Promise<void> {
     stateDir: args.stateDir,
     log,
     ...(args.processes ? { processes: args.processes } : {}),
+    ...(args.wrapUp === undefined ? {} : { wrapUp: args.wrapUp }),
     ...(args.wrapUpReminder === undefined ? {} : { wrapUpReminder: args.wrapUpReminder }),
     ...(control ? { control } : {}),
     pairing: pairingConfig(args.stateDir),

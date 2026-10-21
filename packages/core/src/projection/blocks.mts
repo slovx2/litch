@@ -35,7 +35,10 @@ export type ProcessPart =
 
 export type Block =
   | { type: 'user'; itemId: string }
-  /** 最终回答：有 final 的取最后一条 final；分不清阶段的取回合里最后一条助手消息 */
+  /**
+   * 最终回答：有 final 的取最后一条 final；分不清阶段的取回合里最后一条助手消息。
+   * 空收尾前后的回答（answersAroundQuietWrapUp）可能是几条，每条一块
+   */
   | { type: 'answer'; itemId: string }
   | { type: 'plan'; itemId: string }
   | { type: 'todo'; itemId: string }
@@ -64,6 +67,25 @@ export function answerOf(items: BlockInput[]): string | undefined {
   return last && last.phase !== 'commentary' ? last.id : undefined
 }
 
+/**
+ * 空收尾（没带建议的 wrap_up）前后的回答。规矩是先收尾、再写完整的回答，但模型有时还按旧顺序来：
+ * 先写完整回答、再调空收尾、最后补一句短话。Claude 入口把回合最后一段标成 final、之前的标成 commentary，
+ * 只认最后一条就把整段回答收进了过程。所以最后一个空收尾紧前面是一条助手消息、它后面只有助手消息时，
+ * 前面那条连同后面那几条都算回答。新顺序下收尾前顺口说的一句也会这样露出来，代价比把整段回答收掉小。
+ * 带建议的收尾是卡片、带题的消息和子代理那一行也是卡片，都不在这条规则里
+ */
+function answersAroundQuietWrapUp(items: BlockInput[]): string[] {
+  const at = items.findLastIndex((item) => item.quiet === true)
+  if (at < 0) return []
+  const plain = (item: BlockInput) =>
+    item.kind === 'agentMessage' && item.card === undefined && item.quiet !== true
+  // 连调几次空收尾的（已经收过尾又调空的会被拒，也是 quiet）：往前跳过它们
+  const before = items.slice(0, at).findLast((item) => item.quiet !== true)
+  const after = items.slice(at + 1)
+  if (!before || !plain(before) || !after.every(plain)) return []
+  return [before.id, ...after.map((item) => item.id)]
+}
+
 export function bucketItems(items: BlockInput[]): Block[] {
   const shown = items.filter((item) => item.quiet !== true)
   // 回合里除了提示什么都没有：收起来就只剩“已处理”，等于什么都没告诉用户
@@ -72,7 +94,12 @@ export function bucketItems(items: BlockInput[]): Block[] {
   }
   // 提醒收尾的回合只是补调一次收尾，模型顺口说的“好的”不算回答：都收进过程，建议的卡片照样露在外面
   const remind = shown[0]?.kind === 'userMessage' && shown[0].remind === true
-  const answer = remind ? undefined : answerOf(shown)
+  const answers = new Set<string>()
+  if (!remind) {
+    const last = answerOf(shown)
+    if (last !== undefined) answers.add(last)
+    for (const id of answersAroundQuietWrapUp(items)) answers.add(id)
+  }
   const blocks: Block[] = []
   /** 往过程里加一段：接在前一段过程后面，前面不是过程就开一段新的 */
   const process = (id: string): ProcessPart[] => {
@@ -92,7 +119,7 @@ export function bucketItems(items: BlockInput[]): Block[] {
       blocks.push({ type: 'todo', itemId: item.id })
     } else if (item.card === 'outside') {
       blocks.push({ type: 'card', itemId: item.id })
-    } else if (item.id === answer) {
+    } else if (answers.has(item.id)) {
       blocks.push({ type: 'answer', itemId: item.id })
     } else if (item.card === 'inline') {
       process(item.id).push({ type: 'card', itemId: item.id })
