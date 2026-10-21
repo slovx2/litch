@@ -14,8 +14,11 @@ export type RootStackParamList = {
   HarnessSettings: { deviceId: string; harness: string; name?: string }
   /** 一台设备上的工作区和会话（相当于桌面端侧栏里这台设备的那一段），含已归档 */
   Sessions: { deviceId: string }
-  /** 新会话：选 harness、工作区或目录、模型和权限，写第一条消息。发出去之后换成详情页 */
-  NewSession: { deviceId: string; workspaceId?: string }
+  /**
+   * 新会话：选 harness、工作区或目录、模型和权限，写第一条消息。发出去之后换成详情页。
+   * workspaceId 是 null 时建不属于项目的会话；不给就从上次在这台设备上的位置开始
+   */
+  NewSession: { deviceId: string; workspaceId?: string | null }
   /** 会话详情。title 是列表里那一行的标题，首帧就画出来（F1） */
   Detail: { deviceId: string; sessionId: string; title?: string }
   /** 一个会话里的建议任务（模型提的子会话提案）：等着的在上、了结的在下，点一条回到对话里那张卡片。title 是会话名，首帧就画 */
