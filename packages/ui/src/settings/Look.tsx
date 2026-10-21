@@ -51,7 +51,7 @@ function SkinPreview({ skin }: { skin: Skin }) {
 }
 
 /** 几个里选一个的一排按钮。选中的那个 aria-pressed 是 true */
-function Choice<T extends string | number>({
+export function Choice<T extends string | number>({
   name,
   value,
   options,
@@ -86,7 +86,15 @@ function Choice<T extends string | number>({
   )
 }
 
-function Row({ title, note, children }: { title: string; note: string; children: ReactNode }) {
+export function Row({
+  title,
+  note,
+  children,
+}: {
+  title: string
+  note: string
+  children: ReactNode
+}) {
   return (
     <div className="set-row">
       <span className="set-label">{title}</span>

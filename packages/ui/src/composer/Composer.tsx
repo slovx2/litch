@@ -25,6 +25,7 @@ import {
 } from 'react'
 import { requestNewSession } from '../app/actions.ts'
 import { useT } from '../app/appearance.ts'
+import { nameOf } from '../app/device.ts'
 import { reasonOf } from '../app/errors.ts'
 import { Clip, Close, Send, Stop } from '../app/icons.tsx'
 import { useKey, useServices } from '../app/services.tsx'
@@ -79,6 +80,8 @@ import {
   readImages,
 } from './images.ts'
 import { SettingsBar, useComposeOptions } from './SettingsBar.tsx'
+import { useSendMode } from './send-mode.ts'
+import { runningPlaceholder, runningSend } from './send-mode-logic.ts'
 import { useSuggest } from './useSuggest.tsx'
 
 interface ComposerProps {
@@ -100,8 +103,10 @@ interface ComposerProps {
   below?: ReactNode
   /** 这是在新建会话：会话建好之后换不了的那几档权限，这时可以选 */
   fresh?: boolean
-  /** 有回合在进行：这时发的消息会排队，没字的时候主按钮是停止 */
+  /** 有回合在进行：这时发的消息会排队（steerNow 时直接插进去），没字的时候主按钮是停止 */
   running: boolean
+  /** 回合进行中发的消息直接插进这个回合（设置里选了立即发送、这个会话也插得了话）：主按钮照常是“发送” */
+  steerNow?: boolean
   queued: QueuedMessage[]
   settings: SessionSettings
   onSettings(patch: Partial<SessionSettings>): void
@@ -479,7 +484,13 @@ export function Composer(props: ComposerProps) {
   }
 
   // 有字、有图或带着东西的时候主按钮是发送（回合进行中就是排队）；什么都没写而回合在跑，主按钮是停止
-  const mode = filled ? (running ? 'queue' : 'send') : running && onStop ? 'stop' : 'send'
+  const mode = filled
+    ? running && !props.steerNow
+      ? 'queue'
+      : 'send'
+    : running && onStop
+      ? 'stop'
+      : 'send'
   return (
     <>
       {queued.length > 0 ? (
@@ -736,6 +747,11 @@ export function SessionComposer({ deviceId, sessionId, blocked }: SessionCompose
     [channel, deviceId, sessionId, able, running, hidden],
   )
 
+  // 回合进行中发的消息：设置里选的是立即发送、这个会话也插得了话就带 now 直接插进去，否则排队。
+  // 带着图而这个 harness 引导时带不了图的，核心照常排着（插不进去不算没发成）
+  const sendMode = useSendMode()
+  const device = useKey<DeviceView>(keys.device(deviceId))
+  const whenRunning = runningSend(sendMode, can?.steer !== false)
   const onSend = useCallback(
     (text: string, images: ImageAttachment[], extras: MessageExtra[]) => {
       // 差异面板里攒着的批注接在这条消息后面一起发；没发成就还回去（diff/annotations.ts）
@@ -747,13 +763,14 @@ export function SessionComposer({ deviceId, sessionId, blocked }: SessionCompose
           text: withNotes(text, notes.text),
           images,
           extras,
+          ...(whenRunning === 'steer' ? { now: true } : {}),
         })
         .catch((error: unknown) => {
           notes.restore()
           throw error
         })
     },
-    [channel, deviceId, sessionId, t],
+    [channel, deviceId, sessionId, t, whenRunning],
   )
   // 输入历史就是这个会话里发过的话：不另外存，翻的时候从对话里现找
   const history = useCallback(() => {
@@ -781,10 +798,15 @@ export function SessionComposer({ deviceId, sessionId, blocked }: SessionCompose
       draftKey={`${deviceId}:${sessionId}`}
       cwd={meta?.cwd ?? null}
       onNew={requestNewSession}
-      placeholder={t(running ? 'composer.placeholderRunning' : 'composer.placeholder')}
+      placeholder={
+        running
+          ? t(runningPlaceholder(whenRunning), { harness: nameOf(device, meta?.harness ?? '') })
+          : t('composer.placeholder')
+      }
       blocked={blocked}
       lead={<PendingNotes deviceId={deviceId} sessionId={sessionId} />}
       running={running}
+      steerNow={whenRunning === 'steer'}
       queued={queued}
       settings={settings}
       usage={usage ?? null}

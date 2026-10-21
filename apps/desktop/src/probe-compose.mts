@@ -177,6 +177,11 @@ export interface ComposeProbe {
 }
 
 export async function composeProbe(real: boolean): Promise<ComposeProbe> {
+  // 这一段量的是排队：回合进行中发的消息先排着（设置里默认是立即发送，见 probe-compose-send.mts）
+  const sendMode = (window as unknown as { __litchSendMode?: { set(mode: string): void } })
+    .__litchSendMode
+  if (!sendMode) throw new Error('界面上没有给验收换发送方式的口子（window.__litchSendMode）')
+  sendMode.set('queue')
   const sleep = (ms: number) => new Promise<void>((done) => setTimeout(done, ms))
   const frame = () => new Promise<void>((done) => requestAnimationFrame(() => done()))
   const until = async <T,>(

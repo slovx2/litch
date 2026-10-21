@@ -65,14 +65,26 @@ const hasComputerUse = (platform: string) => platform === 'darwin' || platform =
 /** 设置页左边的分组和标题：Computer Use 那一组只在 macOS 和 Windows 上有 */
 const sectionsOn = (platform: string) =>
   hasComputerUse(platform)
-    ? ['look', 'lang', 'switches', 'browser', 'computer', 'notify', 'assist', 'keys', 'about']
-    : ['look', 'lang', 'switches', 'browser', 'notify', 'assist', 'keys', 'about']
+    ? [
+        'look',
+        'lang',
+        'chat',
+        'switches',
+        'browser',
+        'computer',
+        'notify',
+        'assist',
+        'keys',
+        'about',
+      ]
+    : ['look', 'lang', 'chat', 'switches', 'browser', 'notify', 'assist', 'keys', 'about']
 const titlesOn = (platform: string, lang: 'zh-CN' | 'en' = 'zh-CN') => {
   const all =
     lang === 'en'
       ? [
           'Appearance',
           'Language',
+          'Conversation',
           'Per-harness switches',
           'Built-in browser',
           'Computer Use',
@@ -84,6 +96,7 @@ const titlesOn = (platform: string, lang: 'zh-CN' | 'en' = 'zh-CN') => {
       : [
           '外观',
           '语言',
+          '对话',
           '按 harness 开关',
           '内置浏览器',
           'Computer Use',

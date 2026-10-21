@@ -5,6 +5,7 @@ import type { MessageKey } from '../i18n/index.ts'
 import { AboutSection } from './About.tsx'
 import { AssistSection } from './AssistSection.tsx'
 import { BrowserSection } from './BrowserSection.tsx'
+import { ChatSection } from './ChatSection.tsx'
 import { ComputerSection } from './ComputerSection.tsx'
 import { computerBridge, computerIntro } from './computer-bridge.ts'
 import { LangSection, LookSection } from './Look.tsx'
@@ -19,6 +20,7 @@ import { ShortcutsSection } from './Shortcuts.tsx'
 export const SETTINGS_SECTIONS = [
   'look',
   'lang',
+  'chat',
   'switches',
   'browser',
   'computer',
@@ -39,6 +41,7 @@ const shownSections = (): SettingsSection[] =>
 const TITLES: Record<SettingsSection, MessageKey> = {
   look: 'settings.group.look',
   lang: 'settings.group.lang',
+  chat: 'settings.group.chat',
   switches: 'settings.group.switches',
   browser: 'settings.group.browser',
   computer: 'settings.group.computer',
@@ -50,6 +53,7 @@ const TITLES: Record<SettingsSection, MessageKey> = {
 const INTROS: Record<SettingsSection, MessageKey> = {
   look: 'settings.look.intro',
   lang: 'settings.lang.intro',
+  chat: 'settings.chat.intro',
   switches: 'settings.switches.intro',
   browser: 'settings.browser.intro',
   computer: 'settings.computer.intro',
@@ -146,6 +150,8 @@ export function SettingsPage({
             <LookSection />
           ) : section === 'lang' ? (
             <LangSection />
+          ) : section === 'chat' ? (
+            <ChatSection />
           ) : section === 'switches' ? (
             // 任务卡、内置浏览器、Computer Use 按“设备 → harness”的开关表（HarnessSwitches.tsx，另一条线在做），合并时换进来
             <section className="set-block" data-slot="harness-switches">

@@ -818,6 +818,14 @@ export const en: Record<MessageKey, Entry> = {
   'settings.switches.intro':
     'Turn task cards, the built-in browser and Computer Use on or off per device, then per harness.',
   'settings.switches.pending': 'The switch table is not wired in yet.',
+  'settings.group.chat': 'Conversation',
+  'settings.chat.intro':
+    'What happens to messages you send while a turn is running. One setting for every device and harness.',
+  'settings.chat.sendMode': 'Sending during a turn',
+  'settings.chat.sendMode.note':
+    'Send now: goes straight into the running turn, or waits in the queue if the harness can’t take messages mid-turn. Queue: sent after the turn ends; queued messages can still be sent now',
+  'settings.chat.mode.now': 'Send now',
+  'settings.chat.mode.queue': 'Queue',
   'settings.devices.open': 'Open Devices',
   'settings.keys.intro': 'Every key that works right now. This list is read-only.',
   'settings.about.intro': 'What this app is, which version it is, and whose code it uses.',
@@ -1260,6 +1268,9 @@ export const en: Record<MessageKey, Entry> = {
   'transcript.toBottom': 'Jump to bottom',
   'composer.placeholder': 'Say something. Enter sends, Shift+Enter adds a line',
   'composer.placeholderRunning': 'A turn is running; messages you send now are queued',
+  'composer.placeholderSteer': 'A turn is running; messages you send now go straight into it',
+  'composer.placeholderNoSteer':
+    'A turn is running; {harness} can’t take messages mid-turn, so messages you send now are queued',
   'composer.send': 'Send',
   'composer.queue': 'Queue',
   'composer.stop': 'Stop',
