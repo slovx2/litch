@@ -115,8 +115,10 @@ export async function harnessSettingsProbe(): Promise<HarnessSettingsProbe> {
   const openDetail = async (deviceId: string) => {
     if (one('.hc-page')) act('hc-back')?.click()
     await frame()
-    if (one('[data-detail]')) act('back')?.click()
-    one<HTMLButtonElement>('.sb-settings')?.click()
+    if (one('[data-detail]'))
+      act('back')?.click()
+      // 一开始侧栏可能还没画出来：等到齿轮再点
+    ;(await until('侧栏的齿轮', () => one<HTMLButtonElement>('.sb-settings'))).click()
     ;(
       await until('设置页上进设备页的入口', () =>
         one<HTMLButtonElement>('.set-go[data-page="devices"]'),

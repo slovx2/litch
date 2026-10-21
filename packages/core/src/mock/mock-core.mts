@@ -837,7 +837,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
   /** 回合开头空等一会儿，再出一条慢慢写的思考，写完照常回话（见 REASONS_A_WHILE） */
   const reasonAWhile = (view: SessionView, turnId: string) => {
     const itemId = `${turnId}-r${++seq}`
-    const chunks = chunkText(SAMPLE_TEXT[lang].secondThought, lang === 'en' ? 2 : 1)
+    const { secondThought, thoughtMore } = SAMPLE_TEXT[lang]
+    const chunks = chunkText(`${secondThought}\n${thoughtMore}`, lang === 'en' ? 2 : 1)
     const every = Math.max(1, Math.floor(REASON_MS / Math.max(1, chunks.length)))
     const step = () => {
       const chunk = chunks.shift()

@@ -19,6 +19,8 @@ export interface SampleText {
   firstAnswer: string
   secondAsk: string
   secondThought: string
+  /** “推理一会儿”那条思考在 secondThought 后面接的第二行：思考只露第一行，点开才看得到这一行 */
+  thoughtMore: string
   placeholder: string
   diskFull: string
   /** 等审批的那个会话 */
@@ -191,6 +193,7 @@ const zh: SampleText = {
     '连在一起的地方在 serveRuntime：它先起运行时，再开 SSH 入口，入口监听失败时直接返回错误，运行时也跟着停。',
   secondAsk: '把启动拆成两步，入口失败只记在这个入口上。改完跑一下现有测试。',
   secondThought: '拆成 startRuntime 和 startSSHEntry 两步，失败记在入口上。',
+  thoughtMore: '入口起不来时运行时照样在，客户端连上还能看到是哪一步失败的。',
   placeholder: '这是模拟核心给的占位回答。接上真实的设备之后，这里显示这个会话的历史。',
   diskFull: '构建机的磁盘满了，命令没能执行。',
   approvalAsk: '把复合游标那组测试跑一遍，过了就提交。',
@@ -414,6 +417,8 @@ const en: SampleText = {
   secondAsk:
     'Split startup into two steps and record an entry failure on that entry only. Run the existing tests when you are done.',
   secondThought: 'Split into startRuntime and startSSHEntry, and record the failure on the entry.',
+  thoughtMore:
+    'If the entry fails, the runtime stays up and clients can still see which step failed.',
   placeholder:
     'This is a placeholder answer from the mock core. Once a real device is connected, the history of this session shows up here.',
   diskFull: 'The build machine’s disk is full, so the command could not run.',
