@@ -172,7 +172,7 @@ async function runHarness(harness, port) {
       serviceErrors: errors,
     }),
   )
-  assert.match(version.stdout, /codex-cli 0\.157\.1/)
+  assert.match(version.stdout, /codex-cli 0\.163\.0/)
   const ssh = spawn(sshCommand, [...sshArgs, 'codex app-server proxy'], { env })
   active.push(ssh)
   ssh.stderr.on('data', (chunk) => {

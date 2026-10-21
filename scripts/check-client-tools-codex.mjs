@@ -89,14 +89,15 @@ const PNG =
 
 // ---------- 假模型：回环上的 Responses 接口 ----------
 // 用户的话里有“调用工具”、工具表里有 litch_echo、上一项还不是工具结果时，调一次它；否则回一句话。
-// 每次请求的最后一项记下来，用来看工具结果交到模型手里没有
+// 带着 litch_echo 的请求（会话本身的）最后一项记下来，用来看工具结果交到模型手里没有；
+// 设备进程第一回合后给会话起名的临时会话不带工具，不记，免得它晚到盖掉会话的那一条
 const lastInputs = []
 const model = await startResponsesModel((body, serial) => {
   const input = Array.isArray(body.input) ? body.input : []
   const last = input.at(-1)
-  lastInputs.push(last)
   for (const name of namespacesOf(body)) namespacesSeen.add(name)
   const tool = (body.tools ?? []).find((entry) => entry.type === 'namespace' && entry.name === ECHO)
+  if (tool) lastInputs.push(last)
   if (userText(body).includes('调用工具') && tool && last?.type !== 'function_call_output')
     return {
       call: {

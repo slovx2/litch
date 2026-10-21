@@ -200,8 +200,9 @@ func TestControlEndStopsCliThenKillsGroup(t *testing.T) {
 
 // CLI 自己崩了：入口先让守护进程记下后台命令（s），守护进程按记下的身份补杀，不在本组的也杀得到。
 // 后台命令不继承 CLI 的输出（CLI 的 Bash 工具也是这样）：守护进程和 node 的 close 一样要等输出读到结束。
+// 用 bash：dash（Ubuntu 的 /bin/sh）没有终端时 set -m 不开作业控制，后台命令不进自己的进程组。
 func TestCliCrashKillsTrackedBackground(t *testing.T) {
-	s := start(t, "/bin/sh", "-c", `set -m; sleep 300 >/dev/null 2>&1 & printf "%s\n" $!; wait`)
+	s := start(t, "/bin/bash", "-c", `set -m; sleep 300 >/dev/null 2>&1 & printf "%s\n" $!; wait`)
 	child := s.childPid()
 	eventually(t, 3*time.Second, func() bool { return strings.Contains(s.stdout.String(), "\n") }, "后台的 sleep 没起来")
 	background, err := strconv.Atoi(strings.TrimSpace(s.stdout.String()))
@@ -219,7 +220,7 @@ func TestCliCrashKillsTrackedBackground(t *testing.T) {
 
 // 停止时同步记一次：没说过 s，入口没了也能收掉别组的后台命令。
 func TestStopTracksBackgroundSynchronously(t *testing.T) {
-	s := start(t, "/bin/sh", "-c", `set -m; trap '' TERM; sleep 300 >/dev/null 2>&1 & printf "%s\n" $!; wait`)
+	s := start(t, "/bin/bash", "-c", `set -m; trap '' TERM; sleep 300 >/dev/null 2>&1 & printf "%s\n" $!; wait`)
 	s.childPid()
 	eventually(t, 3*time.Second, func() bool { return strings.Contains(s.stdout.String(), "\n") }, "后台的 sleep 没起来")
 	background, err := strconv.Atoi(strings.TrimSpace(s.stdout.String()))

@@ -329,14 +329,14 @@ async function verify(instance) {
     { env: instance.env, encoding: 'utf8', timeout: 15000 },
   )
   assert.equal(version.status, 0, version.stderr)
-  assert.match(version.stdout, /codex-cli 0\.157\.1 \(codex-harness-adapter-dsh\)/)
+  assert.match(version.stdout, /codex-cli 0\.163\.0 \(codex-harness-adapter-dsh\)/)
   let decision = 'accept'
   const desktop = await connect(instance, () => ({ decision }))
   const init = await desktop.rpc('initialize', {
     clientInfo: { name: 'dsh-poc-verify', version: '0.0.0' },
     capabilities: { experimentalApi: true },
   })
-  assert.match(init.userAgent, /0\.157\.1/)
+  assert.match(init.userAgent, /0\.163\.0/)
   // 桌面端连接后会并发发出一批请求，此时 dsh 子进程还在启动。
   const [models] = await Promise.all([
     desktop.rpc('model/list', {}),

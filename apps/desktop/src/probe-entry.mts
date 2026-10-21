@@ -136,7 +136,7 @@ export async function entryProbe(): Promise<EntryProbe> {
     diffLines,
     longTurns,
     restoreShift,
-    looseListed: Boolean(looseLabel?.parentElement?.querySelector('.ss-row')),
+    looseListed: Boolean(looseLabel?.closest('[data-group]')?.querySelector('.ss-row')),
   }
 }
 
