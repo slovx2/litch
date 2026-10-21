@@ -21,7 +21,7 @@
 //                    要和另一份构建对照时指过去（那一份要放在某个 packages/claude 下面，才找得到依赖）
 //
 // 量法（一条增量要过三个进程才到这里：假模型 → Claude Code CLI → 守护进程 → 入口 → 这里。
-// 守护进程是入口起的 native-process-guard，夹在中间转发 CLI 的输入输出；CLI 不是我们的代码，单独记）：
+// 守护进程是入口起的 claude-process-guard（Go），夹在中间转发 CLI 的输入输出；CLI 不是我们的代码，单独记）：
 //   入口 CPU  入口进程的 process.cpuUsage()。守护进程和 CLI 的 CPU 是 ps 报的累计 CPU 时间（精度 10 毫秒；
 //             回合结束后它们就退出了，所以隔一百毫秒读一次、取最后读到的）。三样都从假模型开吐那一刻
 //             算到回合结束，起 CLI、握手这些回合固定的开销不在里面。“每条”是它除以条数：
@@ -338,7 +338,7 @@ async function round(deltas, chars, kind = KIND) {
   // 假模型收到要量的那个请求、还没开吐：这一刻给三个进程的 CPU 读数打底，再放行
   await Promise.race([streaming, finished, overdue])
   if (failure) throw new Error(`回合没有正常结束：${failure}`)
-  // 入口起的是守护进程（native-process-guard，夹在中间转发 CLI 的输入输出），CLI 是它的子进程
+  // 入口起的是守护进程（claude-process-guard（Go），夹在中间转发 CLI 的输入输出），CLI 是它的子进程
   const childrenOf = await processTree()
   const guard = childrenOf(engine.pid).findLast((row) => !before.has(row.pid))?.pid
   // 守护进程自己还会起别的子进程（隔一阵看一次进程表的 ps），按程序文件认 CLI

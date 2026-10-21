@@ -244,7 +244,7 @@ export function staleSource(from, entry) {
 }
 
 /** 把一个包放进暂存目录：构建产物（不带测试）、依赖清单、只有运行依赖的 node_modules */
-function stagePackage(spec, out, from = join(repo, 'packages', spec.name)) {
+function stagePackage(spec, out, guardTarget, from = join(repo, 'packages', spec.name)) {
   if (!existsSync(join(from, spec.entry))) {
     if (spec.required) {
       throw new Error(
@@ -266,8 +266,18 @@ function stagePackage(spec, out, from = join(repo, 'packages', spec.name)) {
   const to = join(out, 'packages', spec.name)
   mkdirSync(to, { recursive: true })
   const dist = join(from, 'dist')
-  // 产物目录下面一层是包名（自己的和共用的 shared），再下面的 test 是测试，不带
-  copyTree(dist, join(to, 'dist'), (source) => relative(dist, source).split(sep)[1] !== 'test')
+  // 产物目录下面一层是包名（自己的和共用的 shared），再下面的 test 是测试，不带；
+  // Claude 入口的守护进程各平台都编了一份（scripts/build-process-guard.mjs），只带目标平台的
+  copyTree(dist, join(to, 'dist'), (source) => {
+    const parts = relative(dist, source).split(sep)
+    if (parts[1] === 'test') return false
+    return !(
+      parts[1] === 'src' &&
+      parts[2] === 'process-guard' &&
+      parts[3] &&
+      parts[3] !== guardTarget
+    )
+  })
   // .npmrc 里有裁剪依赖时要用的设置（Pi 的插件把 Pi 本体声明成了对等依赖）
   for (const file of ['package.json', 'package-lock.json', '.npmrc']) {
     if (existsSync(join(from, file))) cpSync(join(from, file), join(to, file))
@@ -435,8 +445,9 @@ export async function stageAdapterTree(
 
   const { node } = await installNode(join(out, 'node'), { platform, arch })
 
+  const guardTarget = `${goOs(platform)}-${goArch}`
   const staged = PACKAGES.filter((spec) =>
-    stagePackage(spec, out, spec.name === 'device' ? resolve(deviceFrom) : undefined),
+    stagePackage(spec, out, guardTarget, spec.name === 'device' ? resolve(deviceFrom) : undefined),
   ).map((spec) => spec.name)
 
   // 根目录的运行依赖

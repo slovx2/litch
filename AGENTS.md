@@ -17,6 +17,7 @@
 | 位置 | 内容 |
 |---|---|
 | `cmd/codex-harness-adapter` | Go 命令行：起停各运行时、设置的权威、控制通道、给设备装 harness、伪终端桥。只监听本机 |
+| `cmd/claude-process-guard` | Claude 入口夹在它和 CLI 之间的守护进程（Go，各平台都编进 `packages/claude/dist`，见 `scripts/build-process-guard.mjs`） |
 | `sshserver` | 通用 Go 库，不依赖上层业务 |
 | `packages/claude`、`pi`、`dsh`、`opencode`、`acp` | 并列的引擎（各 harness 的入口），`packages/shared` 只放共享能力 |
 | `packages/device` | 设备进程：把本机各运行时收在一个聚合面后面，给我们自己的客户端连 |
