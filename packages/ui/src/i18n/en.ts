@@ -75,6 +75,9 @@ export const en: Record<MessageKey, Entry> = {
   'sidebar.filter.clear': 'Clear the filter and show all',
   'sidebar.filter.none': 'No sessions match the filter',
   'sidebar.more': 'More',
+  'sidebar.more.showActive': 'Always show active conversations',
+  'sidebar.more.showActive.note':
+    'While filtering by harness, running, unread and waiting conversations still show',
   'sidebar.more.nativeChildren': 'Show Claude Code sub-sessions',
   'sidebar.more.nativeChildren.note':
     'Sessions started from another session in the Claude desktop app',
@@ -137,6 +140,12 @@ export const en: Record<MessageKey, Entry> = {
   'section.move': 'Move to group…',
   'section.move.title': 'Move to which group',
   'sidebar.pinned.drop': 'Drag here to pin',
+  // 内置的“项目”组：不在置顶、用户组里的项目都在这里，不能删、不能改名
+  'sidebar.projects': 'Projects',
+  'sidebar.projects.menu': 'Actions for Projects',
+  'section.up': 'Move up',
+  'section.down': 'Move down',
+  'sidebar.projects.empty': 'No projects yet. Use + to add one, or drag a project here',
   'sidebar.focus': 'Open on its own',
   'sidebar.focus.back': 'Back',
   'workspace.pin': 'Pin',

@@ -98,6 +98,7 @@
     "client:check:tasks": "npm run build --prefix packages/ui && npm run check:tasks --prefix apps/desktop",
     "client:check:onboard": "npm run build --prefix packages/ui && npm run check:onboard --prefix apps/desktop",
     "client:check:harness-settings": "npm run build --prefix packages/ui && npm run check:harness-settings --prefix apps/desktop",
+    "client:check:sidebar": "npm run build --prefix packages/ui && npm run check:sidebar --prefix apps/desktop",
     "client:check:tree": "npm run build --prefix packages/ui && npm run check:tree --prefix apps/desktop",
     "client:check:background": "npm run build --prefix packages/ui && npm run check:background --prefix apps/desktop",
     "client:check:terminal": "npm run build --prefix packages/ui && npm run check:terminal --prefix apps/desktop",

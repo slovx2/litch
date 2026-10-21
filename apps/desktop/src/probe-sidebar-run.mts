@@ -7,7 +7,9 @@ import { join } from 'node:path'
 import type { BrowserWindow } from 'electron'
 import { SIDEBAR_ITEM } from './menu.mjs'
 import { judgeTally, tallySeen } from './probe-sidebar.mjs'
+import { activeSeen, activeSet, judgeActive } from './probe-sidebar-active.mjs'
 import { cwdSeen, judgeCwd } from './probe-sidebar-cwd.mjs'
+import { dragSeen, dragShown, judgeDrag } from './probe-sidebar-drag.mjs'
 import { filterKept, filterSeen, filterTo } from './probe-sidebar-filter.mjs'
 import { judgeFilter } from './probe-sidebar-filter-judge.mjs'
 import { dragTo, frameSeen, keysSeen, sidebarBecame, sidePanel } from './probe-sidebar-frame.mjs'
@@ -95,9 +97,11 @@ async function frameChecks(
   }
 }
 
-/** 截图用的场景：什么都不动，都展开着（看得到工作目录的记号） */
+/** 截图用的场景：什么都不动，都展开着（看得到工作目录的记号）。前面拖着的先松手 */
 async function scenePlain(): Promise<void> {
   const kit = (window as unknown as { __sidebarKit: SidebarKit }).__sidebarKit
+  // 前面的场景拖着东西：松手
+  window.dispatchEvent(new DragEvent('dragend'))
   await kit.until('侧栏里的会话', () => kit.titles('build').length, 10_000)
 }
 
@@ -143,6 +147,11 @@ async function wear(skin: string, theme: string): Promise<void> {
 
 /** 一个接一个摆：后一个场景是在前一个的样子上接着摆的 */
 const SCENES: [name: string, arrange: (window: BrowserWindow) => Promise<void>][] = [
+  // 拖着 docs-site：停在 litch 上半截是一条插入线，停在“稍后看”的标题上是那一行高亮
+  ['drag-line', (window) => inPage(window, dragShown, 'line')],
+  ['drag-into', (window) => inPage(window, dragShown, 'into')],
+  // 拖着“项目”的标题行：停在“稍后看”那一组上半截，组和组之间一条线
+  ['drag-band', (window) => inPage(window, dragShown, 'band')],
   ['plain', (window) => inPage(window, scenePlain)],
   ['folded', (window) => inPage(window, sceneFolded)],
   ['filter', (window) => inPage(window, filterTo, 'pi')],
@@ -169,6 +178,8 @@ async function run(window: BrowserWindow, hooks: SmokeHooks): Promise<readonly [
   await inPage(window, installSidebarKit)
   const tally = await inPage(window, tallySeen)
   const frame = await frameChecks(window, hooks)
+  // “永远显示活动对话”默认开：筛选那一段量的是原来的筛法，先关上，重启之后量完它自己那一段再打开
+  await inPage(window, activeSet, false)
   const filter = await inPage(window, filterSeen, SESSION)
   const cwd = await inPage(window, cwdSeen)
   const native = await inPage(window, nativeSeen, NATIVE_TITLE)
@@ -185,17 +196,22 @@ async function run(window: BrowserWindow, hooks: SmokeHooks): Promise<readonly [
   await inPage(window, installSidebarKit)
   const reload = await inPage(window, reloadSeen)
   const kept = await inPage(window, filterKept)
+  const active = await inPage(window, activeSeen)
+  // 拖着整理：这时筛选已经取消，侧栏是刚起来的样子
+  const drag = await inPage(window, dragSeen)
 
   const shots = process.env.LITCH_SIDEBAR_SHOTS
   if (shots) await shoot(window, shots)
   return [
-    { tally, frame: { ...frame, reload }, filter, kept, cwd, native },
+    { tally, frame: { ...frame, reload }, filter, kept, active, cwd, native, drag },
     [
       ...judgeTally(tally),
       ...judgeFrame({ ...frame, reload }),
       ...judgeFilter(filter, kept, SESSION),
       ...judgeCwd(cwd),
       ...judgeNative(native, NATIVE_PARENT),
+      ...judgeActive(active),
+      ...judgeDrag(drag),
     ],
   ]
 }

@@ -13,10 +13,18 @@ the side panel (files, diff) and terminals follow the project.
   and the sessions in it are not deleted; the sessions show under "No project" or wherever their working
   folder fits.
 
-In the UI: Add project… on the device's menu or in the new-session project picker; rename, color, pin,
-move to a group, reorder and delete from the project's menu. Groups (sidebar folders) are made from the
-device menu (New group…). Arranging the sidebar (groups, pins, order) is not available through the
-command; tell the user how to do it in the sidebar.
+In the UI: Add project… on the device's menu, the **+** on the built-in Projects group, or in the
+new-session project picker; rename, color, pin, move to a group (or back to Projects), reorder and delete
+from the project's menu. Groups (sidebar folders) are made from the device menu (New group…). Projects
+that are not pinned or in a group are listed under the built-in Projects group (it can't be renamed or
+deleted). In the sidebar, drag a project onto a group's title row to put it at the end of that group
+(the row lights up), or between two projects to place it there (a line shows where it lands); dragging
+it onto Projects takes it out of its group. Drag a group's title row (or Projects') above or below
+another group to change their order, or use Move up / Move down in its menu; Pinned stays on top and
+the order is remembered on this computer only. Sessions can be dragged onto Pinned or a group's title, or
+back onto their own project. The phone app shows the same groups but has no dragging. Arranging the
+sidebar (groups, pins, order) is not available through the command; tell the user how to do it in the
+sidebar.
 
 ## Sessions
 

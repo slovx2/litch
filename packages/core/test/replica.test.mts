@@ -69,6 +69,10 @@ test('启动后：设备、工作区、分组都在，分组按最近更新排�
   assert.deepEqual(store.get(keys.pressing('local')), ['s2'])
   assert.deepEqual(store.get(keys.pressing('build')), ['b1'])
   assert.deepEqual(store.get(keys.pressing('nas')), [])
+  // 活动的会话（在跑、等人、没看过、只剩后台任务在跑）也单独列着：“永远显示活动对话”时筛选筛不掉
+  assert.deepEqual(store.get(keys.active('local')), ['s1', 's2', 's3', 's7'])
+  assert.deepEqual(store.get(keys.active('build')), ['b1'])
+  assert.deepEqual(store.get(keys.active('nas')), [])
   // 别的应用派出来的会话单独列着：侧栏按“更多”里的开关决定藏不藏
   assert.deepEqual(store.get(keys.nativeChildren('local')), ['cd1'])
   assert.deepEqual(store.get(keys.nativeChildren('build')), [])

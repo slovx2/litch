@@ -22,11 +22,19 @@ const TALLIES = {
   ':pinned': { codex: tally(0, 0, 3, 0) },
 }
 
+const sum = (a, b) => Object.fromEntries(Object.keys(a).map((key) => [key, a[key] + b[key]]))
+
 test('汇总：一组的是组里各个 harness 加起来，整台设备的是各组加起来', () => {
   assert.deepEqual(tallyOf(TALLIES, 'litch'), tally(1, 0, 1, 1))
   assert.deepEqual(tallyOf(TALLIES, null), tally(1, 2, 4, 2))
   // 数据副本只记有事的组：不在里面的就是什么事都没有；数据还没到也一样
   assert.deepEqual(tallyOf(TALLIES, 'infra'), NO_TALLY)
+  // 给几组（“项目”那一行收起时）就是它们合起来，没事的组不碍事
+  assert.deepEqual(
+    tallyOf(TALLIES, ['litch', 'docs', 'infra']),
+    sum(tallyOf(TALLIES, 'litch'), tallyOf(TALLIES, 'docs')),
+  )
+  assert.deepEqual(tallyOf(TALLIES, []), NO_TALLY)
   assert.equal(tallyOf(undefined, 'litch'), NO_TALLY)
   assert.deepEqual(tallyOf({}, null), NO_TALLY)
   // 合计不许改到原来的数上
@@ -148,9 +156,18 @@ test('侧栏的状态：没记过就是开着、默认宽度；改了就记下�
     width: state.SIDEBAR_DEFAULT,
     harnesses: [],
     nativeChildren: false,
+    showActive: true,
+    bands: {},
   })
   state.setSidebarWidth(356.4)
-  assert.deepEqual(saved(), { open: true, width: 356, harnesses: [], nativeChildren: false })
+  assert.deepEqual(saved(), {
+    open: true,
+    width: 356,
+    harnesses: [],
+    nativeChildren: false,
+    showActive: true,
+    bands: {},
+  })
   // 存的是想要的宽度，夹在最窄和最宽之间
   state.setSidebarWidth(5000)
   assert.equal(state.sidebarNow().width, state.SIDEBAR_MAX)
@@ -162,6 +179,8 @@ test('侧栏的状态：没记过就是开着、默认宽度；改了就记下�
     width: state.SIDEBAR_MIN,
     harnesses: [],
     nativeChildren: false,
+    showActive: true,
+    bands: {},
   })
   // 只看哪几个 harness 也记在这一份里，重复的只留一个；取消就是记回“都看”
   state.setSidebarHarnesses(['pi', 'claude', 'pi'])
@@ -170,6 +189,8 @@ test('侧栏的状态：没记过就是开着、默认宽度；改了就记下�
     width: state.SIDEBAR_MIN,
     harnesses: ['pi', 'claude'],
     nativeChildren: false,
+    showActive: true,
+    bands: {},
   })
   state.setSidebarHarnesses([])
   assert.deepEqual(saved().harnesses, [])
@@ -178,6 +199,14 @@ test('侧栏的状态：没记过就是开着、默认宽度；改了就记下�
   assert.equal(saved().nativeChildren, true)
   state.setSidebarNativeChildren(false)
   assert.equal(saved().nativeChildren, false)
+  // 永远显示活动对话：默认开，关上、打开都记下来
+  state.setSidebarShowActive(false)
+  assert.equal(saved().showActive, false)
+  state.setSidebarShowActive(true)
+  assert.equal(saved().showActive, true)
+  // 组的先后按设备记
+  state.setSidebarBands('local', [':projects', ':section:a'])
+  assert.deepEqual(saved().bands, { local: [':projects', ':section:a'] })
 })
 
 test('侧栏的状态：记着的照记着的来，离谱的宽度拉回范围里；同一次按键来两回只算一回', async () => {
@@ -192,6 +221,8 @@ test('侧栏的状态：记着的照记着的来，离谱的宽度拉回范围�
     width: state.SIDEBAR_MAX,
     harnesses: ['codex', 'pi'],
     nativeChildren: true,
+    showActive: true,
+    bands: {},
   })
   state.toggleSidebar()
   // 应用菜单的快捷键和页面自己的按键各来一次：第二次不算
@@ -208,6 +239,8 @@ test('侧栏的状态：记着的照记着的来，离谱的宽度拉回范围�
     width: broken.SIDEBAR_DEFAULT,
     harnesses: [],
     nativeChildren: false,
+    showActive: true,
+    bands: {},
   })
   // 记着的不是数组：当成没在筛；数组里不是字符串的、空的丢掉
   stored.set('litch.sidebar', JSON.stringify({ harnesses: 'pi' }))
@@ -224,8 +257,14 @@ test('侧栏的状态：记着的照记着的来，离谱的宽度拉回范围�
 
 // ---------- 只看某几个 harness 的会话 ----------
 
-const { describeHarness, dropNativeChildren, harnessChoices, keepSessions, toggleHarness } =
-  await import('../src/sidebar/filter.ts')
+const {
+  describeHarness,
+  dropNativeChildren,
+  harnessChoices,
+  keepSessions,
+  keptAnyway,
+  toggleHarness,
+} = await import('../src/sidebar/filter.ts')
 
 const harness = (id, name, badge) => ({ id, name, badge })
 const device = (connection, ...harnesses) => ({ connection, harnesses })
@@ -273,6 +312,23 @@ test('筛选：一组里只留挑中的 harness 的会话，先后不变；正�
   assert.deepEqual(keepSessions(ids, ['pi'], undefined, always), ['s2', 's4'])
   // 挑了两个
   assert.deepEqual(keepSessions(ids, ['pi', 'codex'], harnessOf, never), ['s3', 's4', 's5'])
+})
+
+test('永远显示活动对话：开着时在跑、未读、等人的会话不属于挑中的 harness 也留着；关上照原来的筛', () => {
+  const ids = ['s1', 's2', 's3', 's4', 's5']
+  const harnessOf = { s1: 'claude', s2: 'claude', s3: 'pi', s4: 'codex', s5: 'pi' }
+  // s1 在跑、s4 没看过（核心的 keys.active），s2 正开着
+  const active = ['s1', 's4']
+  const always = (id) => id === 's2'
+  assert.deepEqual(keepSessions(ids, ['pi'], harnessOf, keptAnyway(always, true, active)), ids)
+  assert.deepEqual(keepSessions(ids, ['pi'], harnessOf, keptAnyway(always, false, active)), [
+    's2',
+    's3',
+    's5',
+  ])
+  // 没有活动的、或者开关关着：就是原来的 always
+  assert.equal(keptAnyway(always, true, []), always)
+  assert.equal(keptAnyway(always, false, active), always)
 })
 
 test('派出来的会话：藏着的时候一组里去掉它们，先后不变；正选中的、等人的照样留着', () => {

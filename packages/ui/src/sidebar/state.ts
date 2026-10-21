@@ -1,4 +1,4 @@
-// 侧栏自己的状态：开没开、多宽、是不是只看某几个 harness 的会话、显不显示别的应用派出来的子会话。
+// 侧栏自己的状态：开没开、多宽、是不是只看某几个 harness 的会话、显不显示别的应用派出来的子会话、各台设备上组的先后。
 // 记在这台电脑的界面里（litch.sidebar），和外观、终端面板、侧面板一样不经核心。
 // 这个文件不碰页面上的元素，只管数和存取：窗口窄的时候侧栏最宽能画多宽也在这里，好单独测。
 import { useSyncExternalStore } from 'react'
@@ -14,9 +14,20 @@ export interface SidebarState {
    * 默认不显示：它们是别处一个会话的分支，单独摆在侧栏里没有主会话包着，只是添乱
    */
   nativeChildren: boolean
+  /**
+   * 永远显示活动对话：只看某几个 harness 时，在跑的（含只剩后台任务在跑的）、没看过的、停下来等人的
+   * 会话照样列出（核心的 keys.active）。默认打开
+   */
+  showActive: boolean
+  /**
+   * 各台设备上用户的组和内置的“项目”排的先后（设备标识 → 组的键，拖组的标题行排的）。
+   * 只记在这台电脑上：协议里的组没有先后，Codex 桌面端也是把分区的先后记在客户端
+   */
+  bands: Readonly<Record<string, readonly string[]>>
 }
 
 const NONE: readonly string[] = []
+const NO_BANDS: Readonly<Record<string, readonly string[]>> = {}
 
 const STORAGE_KEY = 'litch.sidebar'
 export const SIDEBAR_MIN = 240
@@ -48,10 +59,29 @@ function readSaved(): SidebarState {
         ? [...new Set(parsed.harnesses.filter((id) => typeof id === 'string' && id !== ''))]
         : NONE,
       nativeChildren: parsed.nativeChildren === true,
+      showActive: parsed.showActive !== false,
+      bands:
+        parsed.bands && typeof parsed.bands === 'object'
+          ? Object.fromEntries(
+              Object.entries(parsed.bands)
+                .filter((entry): entry is [string, string[]] => Array.isArray(entry[1]))
+                .map(([device, keys]) => [
+                  device,
+                  [...new Set(keys.filter((key) => typeof key === 'string' && key !== ''))],
+                ]),
+            )
+          : NO_BANDS,
     }
   } catch {
-    // 读不到就用默认的：开着，默认宽度，都看，不显示别的应用派出来的
-    return { open: true, width: SIDEBAR_DEFAULT, harnesses: NONE, nativeChildren: false }
+    // 读不到就用默认的：开着，默认宽度，都看，不显示别的应用派出来的，组照设备给的先后
+    return {
+      open: true,
+      width: SIDEBAR_DEFAULT,
+      harnesses: NONE,
+      nativeChildren: false,
+      showActive: true,
+      bands: NO_BANDS,
+    }
   }
 }
 
@@ -100,6 +130,22 @@ export const useSidebarNativeChildren = (): boolean =>
 
 export function setSidebarNativeChildren(show: boolean): void {
   if (sidebar.nativeChildren !== show) publish({ ...sidebar, nativeChildren: show })
+}
+
+/** 只要“永远显示活动对话”这一项 */
+export const useSidebarShowActive = (): boolean =>
+  useSyncExternalStore(subscribe, () => sidebar.showActive)
+
+export function setSidebarShowActive(show: boolean): void {
+  if (sidebar.showActive !== show) publish({ ...sidebar, showActive: show })
+}
+
+/** 这台设备上记着的组的先后（没排过是 undefined） */
+export const useSidebarBands = (deviceId: string): readonly string[] | undefined =>
+  useSyncExternalStore(subscribe, () => sidebar.bands[deviceId])
+
+export function setSidebarBands(deviceId: string, keys: readonly string[]): void {
+  publish({ ...sidebar, bands: { ...sidebar.bands, [deviceId]: [...keys] } })
 }
 
 export function setSidebarOpen(open: boolean): void {

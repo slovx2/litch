@@ -11,18 +11,21 @@ export const NO_TALLY: GroupTally = {
 }
 
 /**
- * 一组的状况；group 给 null 是整台设备合起来的（设备那一行收起时用）。
+ * 一组的状况；group 给几组是它们合起来的（“项目”那一行收起时用），给 null 是整台设备合起来的（设备那一行收起时用）。
  * only：侧栏正只看这几个 harness 的会话（空的是都看）。这时在跑的、未读的只算它们的（别的展开了也看不见）；
  * 等人的照样都算：停下来等人的会话不管属于谁，筛选时都留在树里
  */
 export function tallyOf(
   tallies: GroupTallies | undefined,
-  group: string | null,
+  group: string | readonly string[] | null,
   only: readonly string[] = [],
 ): GroupTally {
   if (!tallies) return NO_TALLY
   const sum = { ...NO_TALLY }
-  const groups = group === null ? Object.values(tallies) : [tallies[group] ?? {}]
+  const groups =
+    group === null
+      ? Object.values(tallies)
+      : (typeof group === 'string' ? [group] : group).map((key) => tallies[key] ?? {})
   for (const byHarness of groups) {
     for (const [harness, tally] of Object.entries(byHarness)) {
       sum.approval += tally.approval

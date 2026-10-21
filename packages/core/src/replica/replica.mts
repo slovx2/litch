@@ -58,6 +58,11 @@ export const keys = {
   sections: (deviceId: string) => `sidebar:${deviceId}:sections`,
   /** 这台设备上停下来等人审批或回答的会话。侧栏把会话折起来一部分时，这些不能折掉 */
   pressing: (deviceId: string) => `sidebar:${deviceId}:pressing`,
+  /**
+   * string[]：这台设备上活动的会话：在跑的、只剩后台任务在跑的、没看过的、停下来等人的，按标识排。
+   * 侧栏“永远显示活动对话”打开时，只看某几个 harness 也筛不掉它们
+   */
+  active: (deviceId: string) => `sidebar:${deviceId}:active`,
   /** DeviceActivity：这台设备上的会话合起来的忙闲和最近一次动静。设备列表的一行用它 */
   activity: (deviceId: string) => `sidebar:${deviceId}:activity`,
   /** GroupTallies：每一组里几个在等人、几个在跑、几个只剩后台任务在跑、几个未读。侧栏里收起来的工作区、设备那一行用它 */
@@ -650,6 +655,20 @@ export function createReplica(channel: CoreChannel): Replica {
     const before = store.get<string[]>(keys.pressing(deviceId))
     if (!before || before.join('\n') !== pressing.join('\n')) {
       store.set(keys.pressing(deviceId), pressing)
+    }
+    const active = [...sessions.values()]
+      .filter(
+        (session) =>
+          session.status === 'running' ||
+          session.status === 'waiting' ||
+          session.unread ||
+          (session.background?.running ?? 0) > 0,
+      )
+      .map((session) => session.id)
+      .sort()
+    const lively = store.get<string[]>(keys.active(deviceId))
+    if (!lively || lively.join('\n') !== active.join('\n')) {
+      store.set(keys.active(deviceId), active)
     }
     // 忙闲的汇总也一样：数没变就不换，免得一个会话的标题改了，设备列表的那一行跟着重画
     const activity: DeviceActivity = { running: 0, waiting: pressing.length, lastActiveAt: null }

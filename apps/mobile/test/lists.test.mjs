@@ -3,12 +3,19 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { groupOfSection, LOOSE, PINNED } from '@litch/core'
-import { buildList, groupKeyOf } from '../src/screens/sessions/list.ts'
+import { buildList, groupKeyOf, PROJECTS } from '../src/screens/sessions/list.ts'
 import { rowsOf, splitPath } from '../src/screens/tools/diff/rows.ts'
 import { nextAfterClose, pickExisting, workspaceOf } from '../src/screens/tools/terminal/pick.ts'
 
 const section = { id: 'sec', name: '分区' }
-const workspace = (id, roots = [`/w/${id}`]) => ({ id, name: id, roots })
+const workspace = (id, roots = [`/w/${id}`], place = {}) => ({
+  id,
+  name: id,
+  roots,
+  pinned: false,
+  sectionId: null,
+  ...place,
+})
 
 const input = (over = {}) => ({
   groups: {
@@ -24,10 +31,11 @@ const input = (over = {}) => ({
   archivedOpen: false,
   archived: null,
   offline: false,
+  organizable: true,
   ...over,
 })
 
-test('会话列表的顺序：置顶、分区、工作区（没有会话也有标题）、散的，最后是归档的标题', () => {
+test('会话列表的顺序：置顶、分区、“项目”（里面的工作区没有会话也有标题）、散的，最后是归档的标题', () => {
   const items = buildList(input())
   assert.deepEqual(
     items.map((item) => item.key),
@@ -37,6 +45,7 @@ test('会话列表的顺序：置顶、分区、工作区（没有会话也有�
       `g:${groupOfSection('sec')}`,
       's:s1',
       's:s2',
+      `g:${PROJECTS}`,
       'g:w1',
       's:a',
       'g:w2',
@@ -47,16 +56,65 @@ test('会话列表的顺序：置顶、分区、工作区（没有会话也有�
   )
   for (const item of items.filter((each) => each.type === 'group'))
     assert.equal(item.key, `g:${groupKeyOf(item.head)}`, '标题行的键和收起时记的键是同一个')
+  const inner = items.filter((item) => item.type === 'group' && item.inner).map((item) => item.key)
+  assert.deepEqual(inner, ['g:w1', 'g:w2'], '“项目”里的工作区往里缩')
+  assert.deepEqual(items.find((item) => item.key === `g:${PROJECTS}`).tally, ['w1', 'w2'])
 })
 
-test('收起的组只剩标题行（还带着数目）；空的置顶和散的组不画', () => {
+test('工作区排在它所在的那一组里：置顶的在置顶里、进了分区的在分区里，其余的在“项目”里', () => {
+  const items = buildList(
+    input({
+      groups: { [groupOfSection('sec')]: ['s1'], w1: ['a'], w2: ['b'], w3: [] },
+      workspaces: [
+        workspace('w1', undefined, { sectionId: 'sec' }),
+        workspace('w2', undefined, { pinned: true }),
+        workspace('w3'),
+      ],
+    }),
+  )
+  assert.deepEqual(
+    items.map((item) => item.key),
+    [
+      `g:${PINNED}`,
+      'g:w2',
+      's:b',
+      `g:${groupOfSection('sec')}`,
+      's:s1',
+      'g:w1',
+      's:a',
+      `g:${PROJECTS}`,
+      'g:w3',
+      'a:head',
+    ],
+  )
+})
+
+test('收起的组只剩标题行（还带着数目）；收起“项目”连里面的工作区一起收起；空的置顶和散的组不画', () => {
   const items = buildList(input({ collapsed: new Set(['w1']), groups: { w1: ['a', 'b'], w2: [] } }))
   assert.deepEqual(
     items.map((item) => item.key),
-    ['g:w1', 'g:w2', 'a:head'],
+    [`g:${PROJECTS}`, 'g:w1', 'g:w2', 'a:head'],
   )
-  assert.equal(items[0].count, 2)
-  assert.equal(items[0].collapsed, true)
+  assert.equal(items[1].count, 2)
+  assert.equal(items[1].collapsed, true)
+  const shut = buildList(input({ collapsed: new Set([PROJECTS]), groups: { w1: ['a'] } }))
+  assert.deepEqual(
+    shut.map((item) => item.key),
+    [`g:${PROJECTS}`, 'a:head'],
+  )
+  assert.equal(shut[0].collapsed, true)
+})
+
+test('“项目”：能整理的设备上空着也有标题（好在那里添加）；整理不了又没有工作区的不画', () => {
+  const empty = { groups: {}, workspaces: [] }
+  assert.deepEqual(
+    buildList(input(empty)).map((item) => item.key),
+    [`g:${PROJECTS}`, 'a:head'],
+  )
+  assert.deepEqual(
+    buildList(input({ ...empty, organizable: false })).map((item) => item.key),
+    ['a:head'],
+  )
 })
 
 test('归档那一段：没取到时按在不在线说“加载中”或“离线”，取到了是空或一条条', () => {

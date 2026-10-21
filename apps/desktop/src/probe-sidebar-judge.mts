@@ -66,7 +66,14 @@ export function judgeFrame(seen: FrameChecks): string[] {
   laid(seen.afterDrag, 360, '拖到 360 之后')
   must(
     seen.afterDrag.saved ===
-      JSON.stringify({ open: true, width: 360, harnesses: [], nativeChildren: false }),
+      JSON.stringify({
+        open: true,
+        width: 360,
+        harnesses: [],
+        nativeChildren: false,
+        showActive: true,
+        bands: {},
+      }),
     `拖出来的宽度没有记下来：${seen.afterDrag.saved}`,
   )
   must(
@@ -102,7 +109,14 @@ export function judgeFrame(seen: FrameChecks): string[] {
   must(hide.openedByButton, '再点标题栏的开关没有展开侧栏，或者“新对话”没收掉')
   must(
     hide.savedClosed ===
-      JSON.stringify({ open: false, width: 360, harnesses: [], nativeChildren: false }),
+      JSON.stringify({
+        open: false,
+        width: 360,
+        harnesses: [],
+        nativeChildren: false,
+        showActive: true,
+        bands: {},
+      }),
     `侧栏收起没有记下来：${hide.savedClosed}`,
   )
   must(seen.menuFound, '应用菜单里没有“侧栏”那一项')
