@@ -23,7 +23,8 @@ const ZOOMS = [0.8, 0.9, 1, 1.1, 1.25, 1.5]
 export const SETTINGS_SECTIONS = [
   'look',
   'lang',
-  'devices',
+  'chat',
+  'switches',
   'browser',
   'computer',
   'notify',
@@ -128,7 +129,8 @@ export const APP_OPS: Record<string, OpSpec> = {
       let place: ConfigOpenPlace
       if (where === 'settings' || where.startsWith('settings/')) {
         const section = where.includes('/') ? where.slice(where.indexOf('/') + 1) : null
-        if (section !== null && !SETTINGS_SECTIONS.includes(section)) {
+        // devices 是旧的一组（设备入口挪进设置页之后，界面收到它直接进设备页），照旧收
+        if (section !== null && section !== 'devices' && !SETTINGS_SECTIONS.includes(section)) {
           throw bad(ctx, `设置里没有这一组：${section}`, `No such settings section: ${section}`)
         }
         place = { where: 'settings', section }

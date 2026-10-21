@@ -49,6 +49,12 @@ export interface OnboardProbe {
 }
 
 export async function onboardProbe(): Promise<OnboardProbe> {
+  // 后面两句配置话是一句接一句发的，量的是各自那一回合的确认卡：前一回合可能还没收完，按排队发
+  //（设置里默认是立即发送，会插进前一回合，见 probe-compose-send.mts）
+  const sendMode = (window as unknown as { __litchSendMode?: { set(mode: string): void } })
+    .__litchSendMode
+  if (!sendMode) throw new Error('界面上没有给验收换发送方式的口子（window.__litchSendMode）')
+  sendMode.set('queue')
   const sleep = (ms: number) => new Promise<void>((done) => setTimeout(done, ms))
   const one = <E extends Element = HTMLElement>(selector: string, root: ParentNode = document) =>
     root.querySelector<E>(selector)
