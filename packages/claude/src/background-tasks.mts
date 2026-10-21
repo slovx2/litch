@@ -110,9 +110,19 @@ export class BackgroundTaskTracker {
     }
     if (!task) return false
     if (subtype === 'task_updated') {
-      const patch = message.patch && typeof message.patch === 'object' ? message.patch : {}
-      const status = endedStatus((patch as Record<string, unknown>).status)
-      return status ? this.end(task, status) : false
+      const patch = (
+        message.patch && typeof message.patch === 'object' ? message.patch : {}
+      ) as Record<string, unknown>
+      const status = endedStatus(patch.status)
+      if (!status) return false
+      // end_time 是 CLI 记的结束时刻；电平信号多半已经先把它按到达时刻收掉了，这里以 CLI 的为准
+      const endTime = typeof patch.end_time === 'number' ? patch.end_time : null
+      if (task.status !== 'running') {
+        if (endTime === null || task.endedAt === endTime) return false
+        task.endedAt = endTime
+        return true
+      }
+      return this.end(task, status, endTime)
     }
     if (subtype === 'task_notification') {
       const status = endedStatus(message.status)
@@ -177,10 +187,10 @@ export class BackgroundTaskTracker {
     return changed
   }
 
-  private end(task: TrackedTask, status: BackgroundTaskStatus): boolean {
+  private end(task: TrackedTask, status: BackgroundTaskStatus, at: number | null = null): boolean {
     if (task.status !== 'running') return false
     task.status = status
-    task.endedAt = this.now()
+    task.endedAt = at ?? this.now()
     return true
   }
 
@@ -195,23 +205,20 @@ export class BackgroundTaskTracker {
     return changed
   }
 
-  /** 后台命令登记进来了（启动回执）：任务能挂回发起它的那条命令条目。返回集合有没有变 */
+  /**
+   * 后台命令登记进来了（启动回执）：任务能挂回发起它的那条命令条目。返回集合有没有变。
+   * 开始时间不跟条目走：条目从模型发出调用算起，含等审批的时间，任务从 CLI 真正起它算起（task_started）
+   */
   link(
     threadId: string,
     taskId: string,
-    fields: {
-      itemId: string
-      turnId: string
-      command: string | null
-      startedAt?: number | undefined
-    },
+    fields: { itemId: string; turnId: string; command: string | null },
   ): boolean {
     const task = this.byThread.get(threadId)?.get(taskId)
     if (!task) return false
     task.itemId = fields.itemId
     task.turnId = fields.turnId
     if (fields.command) task.command = fields.command
-    if (fields.startedAt != null) task.startedAt = Math.min(task.startedAt, fields.startedAt)
     return true
   }
 

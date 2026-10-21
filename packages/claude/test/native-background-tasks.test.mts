@@ -148,6 +148,60 @@ test('BG-002 结束过的最多留 50 个', () => {
   assert.equal(listed[0]?.id, 'b59')
 })
 
+test('BG-005 用时：从 CLI 真正起它算到 CLI 记的结束时刻，不含等审批，不按消息到达时刻', () => {
+  // 照 2.1.282 的实际顺序：审批过了 CLI 才起命令（task_started 和电平信号一起到），
+  // 结束时电平信号、task_updated（带 end_time）、task_notification 一起到，电平信号在前
+  let clock = 23_000
+  const tracker = new BackgroundTaskTracker(() => clock)
+  tracker.apply(
+    't',
+    level([{ task_id: 'b1', task_type: 'local_bash', description: 'sleep' }]),
+    'turn-1',
+  )
+  tracker.apply(
+    't',
+    { type: 'system', subtype: 'task_started', task_id: 'b1', task_type: 'local_bash' },
+    'turn-1',
+  )
+  // 启动回执挂回命令条目：条目从 1 秒（模型发出调用、开始等审批）算起，任务的开始时间不跟着往前挪
+  tracker.link('t', 'b1', { itemId: 'item-1', turnId: 'turn-1', command: 'sleep 12' })
+  assert.equal(tracker.list('t')[0]?.startedAt, 23_000)
+  clock = 35_400
+  tracker.apply('t', level([]), null)
+  assert.equal(tracker.list('t')[0]?.endedAt, 35_400)
+  const updated = {
+    type: 'system',
+    subtype: 'task_updated',
+    task_id: 'b1',
+    patch: { status: 'completed', end_time: 35_002 },
+  }
+  assert.equal(tracker.apply('t', updated, null), true)
+  assert.equal(tracker.apply('t', updated, null), false)
+  assert.equal(tracker.apply('t', ended('b1', 'completed'), null), false)
+  const b1 = tracker.list('t')[0]
+  assert.deepEqual(
+    { startedAt: b1?.startedAt, endedAt: b1?.endedAt, status: b1?.status },
+    { startedAt: 23_000, endedAt: 35_002, status: 'completed' },
+  )
+
+  // task_updated 先到（任务还算在跑）：直接用它的结束时刻
+  tracker.apply('t', level([{ task_id: 'b2', task_type: 'local_bash', description: 'x' }]), null)
+  clock = 50_000
+  tracker.apply(
+    't',
+    {
+      type: 'system',
+      subtype: 'task_updated',
+      task_id: 'b2',
+      patch: { status: 'failed', end_time: 49_500 },
+    },
+    null,
+  )
+  const b2 = tracker.list('t').find((task) => task.id === 'b2')
+  assert.equal(b2?.status, 'failed')
+  assert.equal(b2?.endedAt, 49_500)
+})
+
 const declaring = { litchExtensions: ['backgroundTasks'] }
 
 // 声明了扩展的连接看到的会话对象、回合多出我们的字段：校验上游结构时去掉

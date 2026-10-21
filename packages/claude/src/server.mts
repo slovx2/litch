@@ -2651,12 +2651,7 @@ export class CodexClaudeAppServer {
       startedAtMs: startedAtMs ?? nowMillis(),
     })
     if (
-      this.backgroundTasks.link(sessionThreadId, taskId, {
-        itemId,
-        turnId,
-        command: item.command,
-        startedAt: startedAtMs,
-      })
+      this.backgroundTasks.link(sessionThreadId, taskId, { itemId, turnId, command: item.command })
     )
       this.publishBackground(sessionThreadId)
     return true
