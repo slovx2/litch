@@ -13,6 +13,7 @@
 import { readlinkSync, realpathSync, rmSync, statSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { delimiter, dirname, join, resolve } from 'node:path'
+import { backgroundResponses } from './client-fixture-background.mjs'
 import { askResponses } from './client-fixture-codex-ask.mjs'
 import { machineResponses } from './client-fixture-machine.mjs'
 import { sessionsResponses } from './client-fixture-sessions.mjs'
@@ -172,10 +173,12 @@ export async function serveResponses(harness, path, raw, res, { serial, pace = 1
   // 操作本机（litch_machine 和 litch-machine 命令）的那几句，见 client-fixture-machine.mjs
   // 会话树（litch_sessions 和设备注入的唤醒）的那几句，见 client-fixture-sessions.mjs
   // 边做边问（request_user_input_async）的那几句，见 client-fixture-codex-ask.mjs
+  // 后台跑一条命令（看后台任务）的那一句，见 client-fixture-background.mjs
   const machine =
     sessionsResponses(body, userText(body)) ??
     machineResponses(body, userText(body)) ??
-    askResponses(body, userText(body))
+    askResponses(body, userText(body)) ??
+    backgroundResponses(body, userText(body))
   if (machine) {
     await sendResponse(res, machine, serial)
     return namespacesOf(body)
