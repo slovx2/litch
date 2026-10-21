@@ -505,3 +505,84 @@ test('NAT-008：Claude 桌面端记了父会话的挂上 parentThreadId；脱离
     await rm(desktop, { recursive: true, force: true })
   }
 })
+
+test('NAT-009：Claude 桌面端换下来的旧会话号不列：导进来过的藏起来，没导进来的不导；旧记录换号后还写过的照列；桌面端数据没了又列出来', async () => {
+  await rm(join(config, 'projects'), { recursive: true, force: true })
+  await mkdir(projectDir, { recursive: true })
+  const desktop = await mkdtemp(join(tmpdir(), 'native-replaced-'))
+  const sessions = join(desktop, 'claude-code-sessions', 'acct', 'org')
+  await mkdir(sessions, { recursive: true })
+  const id = (n: number) => `3b5c5b0e-0d2a-4a8e-9a3f-0000000002${String(n).padStart(2, '0')}`
+  const OLD = id(1)
+  const NEW = id(2)
+  const LATE = id(3)
+  const LATE_NEW = id(4)
+  const KEPT = id(5)
+  const KEPT_NEW = id(6)
+  const talk = (session: string, uuid: string, text: string) =>
+    entry(session, 'claude-desktop', 'user', uuid, null, text) +
+    entry(session, 'claude-desktop', 'assistant', `${uuid}a`, uuid, [{ type: 'text', text: '好' }])
+  /** 写一份记录，修改时间定在 at（毫秒） */
+  const record = async (session: string, body: string, at: number) => {
+    const file = join(projectDir, `${session}.jsonl`)
+    await writeFile(file, body)
+    await utimes(file, new Date(at), new Date(at))
+  }
+  const base = Date.now() - 3_600_000
+  // 旧号写完了才换号；新号的记录开头带着旧号的对话，再往后接着说
+  clock = base
+  await record(OLD, talk(OLD, 'o1', '换号前'), base + 10_000)
+  clock = base + 20_000
+  await record(NEW, talk(NEW, 'n0', '换号后') + talk(NEW, 'n1', '接着说'), base + 30_000)
+  // 第二对：旧号先没导进来，桌面端数据读得到之后才第一次出现
+  clock = base
+  const lateBody = talk(LATE, 'l1', '后来才出现的旧号')
+  clock = base + 20_000
+  await record(LATE_NEW, talk(LATE_NEW, 'm1', '它的新号'), base + 30_000)
+  // 第三对：换号之后还有人接着在旧号上聊（比如在 Litch 里），照列
+  clock = base
+  await record(KEPT, talk(KEPT, 'k1', '换号后还在用的旧号'), base + 600_000)
+  clock = base + 20_000
+  await record(KEPT_NEW, talk(KEPT_NEW, 'q1', '它的新号'), base + 30_000)
+  const meta = (local: string, fields: Record<string, unknown>) =>
+    writeFile(join(sessions, `${local}.json`), JSON.stringify({ sessionId: local, ...fields }))
+
+  const before = process.env.CHA_CLAUDE_DESKTOP_DATA
+  // 先在读不到桌面端数据时导进来（修之前就是这样：两个都列）
+  process.env.CHA_CLAUDE_DESKTOP_DATA = '0'
+  try {
+    await withStage('native-replaced', async (stage) => {
+      const app = await stage.connect('app')
+      const listed = async () =>
+        (await app.request('thread/list', {})).data
+          .map((thread: { id: string }) => thread.id)
+          .sort()
+      const tick = () =>
+        (
+          stage.server as unknown as { refreshNative(announce: boolean): Promise<void> }
+        ).refreshNative(true)
+      assert.deepEqual(await listed(), [KEPT, KEPT_NEW, LATE_NEW, NEW, OLD].sort())
+
+      process.env.CHA_CLAUDE_DESKTOP_DATA = desktop
+      await meta('local_a', { cliSessionId: NEW, priorCliSessionIds: [OLD] })
+      await meta('local_b', { cliSessionId: LATE_NEW, priorCliSessionIds: [LATE] })
+      await meta('local_k', { cliSessionId: KEPT_NEW, priorCliSessionIds: [KEPT] })
+      await record(LATE, lateBody, base + 10_000)
+      await tick()
+      assert.deepEqual(await listed(), [KEPT, KEPT_NEW, LATE_NEW, NEW].sort())
+      assert.equal(app.notifications('thread/started').length, 0, '换下来的旧号不当新会话通知')
+      // 藏起来的没删：按标识照样读得到
+      const read = await app.request('thread/read', { threadId: OLD, includeTurns: false })
+      assert.equal(read.thread.id, OLD)
+
+      // 桌面端的数据读不到了：旧号又列出来，没导进来的那个这时才导
+      await rm(desktop, { recursive: true, force: true })
+      await tick()
+      assert.deepEqual(await listed(), [KEPT, KEPT_NEW, LATE, LATE_NEW, NEW, OLD].sort())
+    })
+  } finally {
+    if (before === undefined) delete process.env.CHA_CLAUDE_DESKTOP_DATA
+    else process.env.CHA_CLAUDE_DESKTOP_DATA = before
+    await rm(desktop, { recursive: true, force: true })
+  }
+})

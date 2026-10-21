@@ -1997,8 +1997,13 @@ export class CodexClaudeAppServer {
       excludedThreadIds: [...(excludedThreadIds as string[])].sort(),
     }
     const pagination = catalogPagination(params, submissionHash(filters))
+    // Claude 桌面端换下来的旧会话号不列（native-sessions.mts）：每次扫描会变，不进游标的散列
+    const hidden = this.native?.hiddenThreads()
     const found = this.store.listThreads({
       ...filters,
+      excludedThreadIds: hidden?.size
+        ? [...filters.excludedThreadIds, ...hidden]
+        : filters.excludedThreadIds,
       sortKey,
       sortDirection: pagination.sortDirection,
       cursor: pagination.cursor,

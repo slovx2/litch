@@ -51,12 +51,14 @@ test('DSK-001：子会话按 spawnedFrom 找到父会话的会话号；脱离过
   await writeFile(join(dir, 'scheduled-tasks.json'), JSON.stringify({ cliSessionId: 'x' }))
 
   const index = new DesktopLineage(() => [root, join(root, 'missing')])
-  const parents = await index.refresh()
+  const { parents, replacedBy } = await index.refresh()
   assert.deepEqual(Object.fromEntries(parents), {
     'cli-c': ['cli-p', 'cli-p0'],
     'cli-r': ['cli-p', 'cli-p0'],
     'cli-r0': ['cli-p', 'cli-p0'],
   })
+  // 换下来的旧号 → 后来换上的号
+  assert.deepEqual(Object.fromEntries(replacedBy), { 'cli-p0': ['cli-p'], 'cli-r0': ['cli-r'] })
 
   // 用户在桌面端让它脱离：文件变了就重读
   const path = await session('local_c', {
@@ -65,11 +67,31 @@ test('DSK-001：子会话按 spawnedFrom 找到父会话的会话号；脱离过
     lineageDetached: true,
   })
   await utimes(path, new Date(), new Date(Date.now() + 5000))
-  assert.equal((await index.refresh()).has('cli-c'), false)
+  assert.equal((await index.refresh()).parents.has('cli-c'), false)
 
   // 父会话的文件没了：子会话也没有父会话了
   await rm(join(dir, 'local_p.json'))
-  assert.deepEqual(Object.fromEntries(await index.refresh()), {})
+  assert.deepEqual(Object.fromEntries((await index.refresh()).parents), {})
+})
+
+test('DSK-004：换过几次号的：每个旧号对着它之后换上的号，先换上的在前', async () => {
+  const many = await mkdtemp(join(tmpdir(), 'desktop-replaced-'))
+  try {
+    const at = join(many, 'claude-code-sessions', 'a', 'o')
+    await mkdir(at, { recursive: true })
+    await writeFile(
+      join(at, 'local_m.json'),
+      JSON.stringify({
+        sessionId: 'local_m',
+        cliSessionId: 'c3',
+        priorCliSessionIds: ['c1', 'c2'],
+      }),
+    )
+    const { replacedBy } = await new DesktopLineage(() => [many]).refresh()
+    assert.deepEqual(Object.fromEntries(replacedBy), { c1: ['c2', 'c3'], c2: ['c3'] })
+  } finally {
+    await rm(many, { recursive: true, force: true })
+  }
 })
 
 test('DSK-002：读单个文件：读不到、不是对象、自己挂自己都当没有父会话', async () => {

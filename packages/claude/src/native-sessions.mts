@@ -10,12 +10,14 @@
 // - 原生记录不归适配器管：删掉导进来的会话只是不再导入，原生记录不动；改名只改库里的。
 // - Claude 桌面端派出的会话：开头认一次（native-lineage.mts），父会话每次扫描时按桌面端的数据目录重算
 //   （desktop-lineage.mts，读不到就是没有父会话）。CHA_CLAUDE_DESKTOP_DATA 指定桌面端的数据目录，给 0 不读。
+// - Claude 桌面端换下来的旧会话号（回退、追加上下文时换号，新号的记录里带着旧号的全部对话）不列：没导进来的不导，
+//   导进来过的从列表里藏起来（不删，桌面端的数据读不到了就又列出来）。换下来之后旧记录还有人接着写过的照列。
 // - CHA_CLAUDE_NATIVE_SESSIONS=0 关掉整件事。
 
 import type { NativeLineageApp } from '../../protocol/src/native-lineage.mjs'
 import type { NativeOwner } from '../../protocol/src/native-owner.mjs'
 import { claudeConfigDir } from './claude-native-files.mjs'
-import { DesktopLineage } from './desktop-lineage.mjs'
+import { type DesktopIndex, DesktopLineage } from './desktop-lineage.mjs'
 import { type NativeMessage, projectNativeHistory } from './native-history.mjs'
 import { findNativeRecords, readNativeLineage } from './native-lineage.mjs'
 import { recentlyWritten } from './native-owner.mjs'
@@ -43,17 +45,17 @@ export interface NativeSessionSource {
   /** 这几个会话各是不是别的应用派出来的（native-lineage.mts）。读不到的也给一个结果（null） */
   lineage(sessionIds: readonly string[]): Promise<Map<string, NativeLineageApp | null>>
   /**
-   * Claude 桌面端记的父子关系（desktop-lineage.mts）：子会话的会话号 → 父会话用过的会话号（眼下的在前）。
-   * 每次扫描都问一遍（桌面端那边会变：新派出的、脱离的）。读不到的给空的
+   * Claude 桌面端的数据（desktop-lineage.mts）：父子关系、换下来的旧会话号。
+   * 每次扫描都问一遍（桌面端那边会变：新派出的、脱离的、换了号的）。读不到的给空的
    */
-  desktopParents(): Promise<Map<string, readonly string[]>>
+  desktop(): Promise<DesktopIndex>
   /** 原生记录（jsonl）的路径，找不到是 null */
   record(sessionId: string): string | null
 }
 
 export function sdkNativeSessionSource(): NativeSessionSource {
   const sdk = () => import('@anthropic-ai/claude-agent-sdk')
-  const desktop = new DesktopLineage()
+  const desktopIndex = new DesktopLineage()
   return {
     list: async () => (await sdk()).listSessions({ includeProgrammatic: false }),
     info: async (sessionId, cwd) => (await sdk()).getSessionInfo(sessionId, { dir: cwd }),
@@ -68,7 +70,7 @@ export function sdkNativeSessionSource(): NativeSessionSource {
         }),
       )
     },
-    desktopParents: async () => desktop.refresh(),
+    desktop: async () => desktopIndex.refresh(),
     record: (sessionId) => findNativeRecords(claudeConfigDir(), [sessionId]).get(sessionId) ?? null,
   }
 }
@@ -130,6 +132,30 @@ export interface NativeRefresh {
 
 const NOTHING: NativeRefresh = { added: [], moved: [] }
 
+/** 旧号的记录在新号开始之后这么久还在写，算有人接着用旧号聊过（换号那一刻旧记录可能还收个尾） */
+const REPLACED_SLACK_MS = 60_000
+
+/**
+ * 桌面端换下来、不该再列的旧会话号：后来换上的号也在列表里，旧记录在那之后没人接着写过。
+ * 新号的记录是从旧号复制出来的（开头时刻和旧号一样）时看不出先后，也算换下来了
+ */
+function replacedSessions(
+  replacedBy: ReadonlyMap<string, readonly string[]>,
+  infos: ReadonlyMap<string, NativeSessionInfo>,
+): Set<string> {
+  const result = new Set<string>()
+  for (const [id, later] of replacedBy) {
+    const old = infos.get(id)
+    const next = later.map((candidate) => infos.get(candidate)).find((info) => info !== undefined)
+    if (!old || !next) continue
+    const started = next.createdAt ?? 0
+    const continued =
+      started > (old.createdAt ?? 0) && old.lastModified > started + REPLACED_SLACK_MS
+    if (!continued) result.add(id)
+  }
+  return result
+}
+
 export class NativeSessions {
   private lastRefresh = 0
   /**
@@ -137,6 +163,8 @@ export class NativeSessions {
    * 那边随时会变，读不到就是没有父会话
    */
   private parents = new Map<string, string>()
+  /** 导进来过、这次扫描算出是桌面端换下来的旧号的会话：列表里不列。也只放在内存里，每次扫描重算 */
+  private hidden = new Set<string>()
   /** 扫完过一遍了：之后再扫到的新会话才是“刚在别处开的” */
   scanned = false
   private refreshing: Promise<NativeRefresh> | null = null
@@ -171,6 +199,16 @@ export class NativeSessions {
   private async scan(): Promise<NativeRefresh> {
     const { store, source } = this.host
     const infos = await source.list()
+    let desktop: DesktopIndex
+    try {
+      desktop = await source.desktop()
+    } catch {
+      desktop = { parents: new Map(), replacedBy: new Map() }
+    }
+    const replaced = replacedSessions(
+      desktop.replacedBy,
+      new Map(infos.map((info) => [info.sessionId, info])),
+    )
     const known = store.nativeSessions()
     const added: string[] = []
     for (const info of infos) {
@@ -179,6 +217,7 @@ export class NativeSessions {
       const record = known.get(info.sessionId)
       const updatedAt = seconds(info.lastModified, 0)
       if (!record) {
+        if (replaced.has(info.sessionId)) continue
         const preview = info.firstPrompt?.trim() || info.summary?.trim() || ''
         // 一句话都没说过的（只开了个头就关了）不列，和别的入口一样
         if (!preview) continue
@@ -202,10 +241,21 @@ export class NativeSessions {
       if (updatedAt > thread.updatedAt || name !== thread.name)
         store.upsertThread({ ...thread, name, updatedAt: Math.max(updatedAt, thread.updatedAt) })
     }
+    this.hidden = new Set(
+      [...replaced].flatMap((id) => {
+        const record = known.get(id)
+        return record?.origin === 'imported' ? [record.threadId] : []
+      }),
+    )
     await this.recognize()
     const fresh = new Set(added)
-    const moved = (await this.locate()).filter((id) => !fresh.has(id))
+    const moved = this.locate(desktop.parents).filter((id) => !fresh.has(id))
     return { added, moved }
+  }
+
+  /** 列表里不列的会话（桌面端换下来的旧号，见 scan） */
+  hiddenThreads(): ReadonlySet<string> {
+    return this.hidden
   }
 
   /** 导进来的会话在 Claude 桌面端的父会话（这个入口里的会话标识）。没有、认不出的是 undefined */
@@ -215,20 +265,15 @@ export class NativeSessions {
 
   /**
    * 按 Claude 桌面端记的父子关系重算导进来的会话挂在谁下面（desktop-lineage.mts）。父会话得也是这个入口里的会话
-   * （导进来过、没删掉）；父会话用过几个会话号的，取导进来过的里面最新的那个。回父会话变了的会话
+   * （导进来过、没删掉、没藏起来）；父会话用过几个会话号的，取导进来过的里面最新的那个。回父会话变了的会话
    */
-  private async locate(): Promise<string[]> {
-    const { store, source } = this.host
-    let found: Map<string, readonly string[]>
-    try {
-      found = await source.desktopParents()
-    } catch {
-      found = new Map()
-    }
+  private locate(found: ReadonlyMap<string, readonly string[]>): string[] {
+    const { store } = this.host
     const known = store.nativeSessions()
     const threadOf = (sessionId: string): string | undefined => {
       const record = known.get(sessionId)
-      if (!record || record.origin === 'dismissed') return undefined
+      if (!record || record.origin === 'dismissed' || this.hidden.has(record.threadId))
+        return undefined
       return store.getThread(record.threadId) ? record.threadId : undefined
     }
     const next = new Map<string, string>()

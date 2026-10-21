@@ -26,6 +26,17 @@ export interface DesktopSession {
   parentLocalId: string | null
 }
 
+/** 一遍扫描读到的：父子关系，和换下来的旧会话号 */
+export interface DesktopIndex {
+  /** 子会话的 Claude Code 会话号 → 父会话用过的会话号（眼下的在前） */
+  parents: Map<string, string[]>
+  /**
+   * 换下来的旧会话号 → 后来换上的会话号（先换上的在前，最后是眼下的）。桌面端回退、追加上下文时换号，
+   * 新号的记录里带着旧号的全部对话，两个都列出来就是重复的同一个会话
+   */
+  replacedBy: Map<string, string[]>
+}
+
 /** 这个文件大一点就不读了：桌面端的会话文件一般几 KB 到几百 KB */
 const MAX_FILE_BYTES = 8 * 1024 * 1024
 const SESSIONS_DIR = 'claude-code-sessions'
@@ -122,8 +133,8 @@ export class DesktopLineage {
     this.roots = roots
   }
 
-  /** 把会话文件重新看一遍，回“子会话的 Claude Code 会话号 → 父会话用过的会话号（眼下的在前）” */
-  async refresh(): Promise<Map<string, string[]>> {
+  /** 把会话文件重新看一遍，回父子关系和换下来的旧会话号 */
+  async refresh(): Promise<DesktopIndex> {
     const seen = new Set<string>()
     for (const root of this.roots()) {
       const top = join(root, SESSIONS_DIR)
@@ -137,7 +148,7 @@ export class DesktopLineage {
           }
     }
     for (const path of [...this.files.keys()]) if (!seen.has(path)) this.files.delete(path)
-    return this.parents()
+    return { parents: this.parents(), replacedBy: this.replacedBy() }
   }
 
   private async load(path: string): Promise<void> {
@@ -155,6 +166,19 @@ export class DesktopLineage {
       return
     }
     this.files.set(path, { stamp, session: await readDesktopSession(path) })
+  }
+
+  private replacedBy(): Map<string, string[]> {
+    const result = new Map<string, string[]>()
+    for (const { session } of this.files.values()) {
+      if (!session) continue
+      const chain = [...session.priorCliSessionIds, session.cliSessionId]
+      chain.forEach((id, index) => {
+        const later = chain.slice(index + 1).filter((next) => next !== id)
+        if (later.length > 0 && !result.has(id)) result.set(id, later)
+      })
+    }
+    return result
   }
 
   private parents(): Map<string, string[]> {
