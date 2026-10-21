@@ -159,6 +159,16 @@ export class SessionStore {
       CREATE TABLE IF NOT EXISTS native_lineage (
         session_id TEXT PRIMARY KEY, app TEXT
       );
+      -- 模型的上下文窗口：入口自己跑回合时从 CLI 的结果里记下（model 是请求里的模型名），
+      -- 导进来的会话算用量时按模型查（native-sessions.mts 不跑 CLI，拿不到窗口）
+      CREATE TABLE IF NOT EXISTS model_windows (
+        model TEXT PRIMARY KEY, window INTEGER NOT NULL
+      );
+      -- 导进来的会话上一次从原生记录里继承的设置（native-record.mts 读的、换成会话设置之后的样子）：
+      -- 会话现在的设置还和它一样，说明用户没在入口里改过，原生记录里的设置变了就接着跟；改过的那一项不再跟
+      CREATE TABLE IF NOT EXISTS native_settings (
+        session_id TEXT PRIMARY KEY, settings_json TEXT NOT NULL
+      );
       -- 不是用户发起的回合是谁开的（backgroundTasks 扩展的 litchOrigin）：只记认得出的，用户的回合不记
       CREATE TABLE IF NOT EXISTS turn_origins (
         turn_id TEXT PRIMARY KEY, origin TEXT NOT NULL
@@ -468,6 +478,39 @@ export class SessionStore {
     return found
   }
 
+  /** 记下一个模型的上下文窗口（后记的盖掉先记的） */
+  saveModelWindow(model: string, window: number): void {
+    this.db
+      .prepare(
+        'INSERT INTO model_windows (model, window) VALUES (?, ?) ON CONFLICT(model) DO UPDATE SET window=excluded.window',
+      )
+      .run(model, window)
+  }
+
+  /** 一个模型的上下文窗口，没记过是 null */
+  modelWindow(model: string): number | null {
+    const row = this.db.prepare('SELECT window FROM model_windows WHERE model=?').get(model) as
+      | { window: number }
+      | undefined
+    return row ? Number(row.window) : null
+  }
+
+  /** 导进来的会话上一次继承的设置，没继承过是 null */
+  nativeSettings(sessionId: string): Record<string, unknown> | null {
+    const row = this.db
+      .prepare('SELECT settings_json FROM native_settings WHERE session_id=?')
+      .get(sessionId) as { settings_json: string } | undefined
+    return row ? (JSON.parse(row.settings_json) as Record<string, unknown>) : null
+  }
+
+  saveNativeSettings(sessionId: string, settings: Record<string, unknown>): void {
+    this.db
+      .prepare(
+        'INSERT INTO native_settings (session_id, settings_json) VALUES (?, ?) ON CONFLICT(session_id) DO UPDATE SET settings_json=excluded.settings_json',
+      )
+      .run(sessionId, JSON.stringify(settings))
+  }
+
   /** 记下认的结果（每个会话只认一次） */
   saveNativeLineage(sessionId: string, app: NativeLineageApp | null): void {
     this.db
@@ -497,6 +540,7 @@ export class SessionStore {
       for (const turn of drop) {
         this.db.prepare('DELETE FROM hook_runs WHERE turn_id=?').run(turn.id)
         this.db.prepare('DELETE FROM native_turn_boundaries WHERE turn_id=?').run(turn.id)
+        this.db.prepare('DELETE FROM turn_origins WHERE turn_id=?').run(turn.id)
         this.db.prepare('DELETE FROM turns WHERE id=?').run(turn.id)
       }
       for (const turn of turns) {

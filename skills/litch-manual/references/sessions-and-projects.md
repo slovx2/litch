@@ -70,6 +70,31 @@ explain it:
   sessions created before this version do not have it, and a session Litch created keeps it when
   opened in another app. There is no setting to turn it off.
 
+## Claude Code sessions started elsewhere
+
+The Claude Code harness also lists Claude Code sessions started elsewhere on the machine (Claude desktop
+app, `claude` in a terminal). They can be opened and continued in Litch, and back in the other app.
+
+- **Read-only while another process has it open**: when the Claude desktop app or a `claude` in a
+  terminal still has the session open, the session is read-only in Litch: the composer is greyed out
+  with "Another process has taken over this session, so it is read-only here" (中文「此会话正由另一个
+  进程接管，这边只读」), and sending, rewinding and compacting are refused. Two processes writing one
+  session would fork its history. What the other side does still shows up in Litch every few seconds,
+  and the session becomes writable again by itself once the other side lets go.
+- **How to make the desktop app let go**: archive that session in the Claude desktop app, or quit the
+  Claude desktop app (it keeps a session's process running after the reply, so a session used there
+  recently is usually still held). In a terminal, exit `claude`. A session that was written to in the
+  last 10 seconds by something Litch cannot identify also counts as held.
+- **Going back**: do not continue the session in the desktop app while Litch is still running a turn
+  in it; wait until Litch's turn has finished. The desktop app does not check, so this cannot be
+  blocked.
+- **Settings**: when Litch picks up the session, it takes the model, reasoning effort, permissions
+  (bypass permissions becomes Full access) and Plan from what the other app used last. A setting the
+  user changes in Litch stays as set; the others keep following the other app. Titles and approvals
+  granted for the session are not shared.
+- **Context usage** shows how much the last request used; the window size is only known for models
+  Litch has run itself, otherwise only the amount used is shown.
+
 ## Session trees (sub-sessions)
 
 A session can start **sub-sessions** on the same device, with any harness. They are nested under the

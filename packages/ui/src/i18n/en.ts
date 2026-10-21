@@ -1715,6 +1715,7 @@ export const en: Record<MessageKey, Entry> = {
   'session.untitled': 'Untitled session',
   'session.readOnly':
     'This session is read-only for now: the device refused the subscription ({message}).',
+  'session.nativeOwned': 'Another process has taken over this session, so it is read-only here',
   'session.agentReadOnly':
     'This is a subagent the engine started on its own. You can watch it but not message it directly.',
   'session.archived': 'This conversation is archived and read-only. Restore it to continue.',

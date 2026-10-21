@@ -2931,7 +2931,12 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     // Push usage + metrics before completed so server can roll them into the
     // turn before emitting turn/completed.
     if (Object.keys(usage).length > 0 || contextWindow !== null) {
-      await pending.handlers.onEvent({ type: 'usage', usage, contextWindow })
+      await pending.handlers.onEvent({
+        type: 'usage',
+        usage,
+        contextWindow,
+        model: pending.contextModel,
+      })
     }
     await pending.handlers.onEvent({
       type: 'metrics',

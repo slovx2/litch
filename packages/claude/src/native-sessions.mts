@@ -4,19 +4,24 @@
 // - 哪些算：SDK 的 listSessions 列出的、不是程序化入口（sdk-ts、sdk-cli 这些，适配器自己跑的 CLI 也在里面）
 //   起的会话；库里记过的原生会话号（适配器自己的、导进来过的、导进来又被删掉的，见 store 的 native_sessions）不算。
 // - 列表时（refresh）只登记会话本身：名字、第一句话、目录、时间。历史在会话第一次被读、被恢复、
-//   要往里发消息时才画（history），原生记录变了（命令行里又说了几句）再接着画后面的。
+//   要往里发消息时才画（history），原生记录变了（命令行里又说了几句）再接着画后面的；有连接订阅着时
+//   服务每隔几秒看一次（server.mts 的 followNative），变了就重画并通知。
+// - 被别处的进程开着时（native-owner.mts）只读：画照样画，会写原生记录的请求由服务拒掉。
 // - 原生记录不归适配器管：删掉导进来的会话只是不再导入，原生记录不动；改名只改库里的。
 // - Claude 桌面端派出的会话：开头认一次（native-lineage.mts），父会话每次扫描时按桌面端的数据目录重算
 //   （desktop-lineage.mts，读不到就是没有父会话）。CHA_CLAUDE_DESKTOP_DATA 指定桌面端的数据目录，给 0 不读。
 // - CHA_CLAUDE_NATIVE_SESSIONS=0 关掉整件事。
 
 import type { NativeLineageApp } from '../../protocol/src/native-lineage.mjs'
+import type { NativeOwner } from '../../protocol/src/native-owner.mjs'
 import { claudeConfigDir } from './claude-native-files.mjs'
 import { DesktopLineage } from './desktop-lineage.mjs'
 import { type NativeMessage, projectNativeHistory } from './native-history.mjs'
 import { findNativeRecords, readNativeLineage } from './native-lineage.mjs'
+import { recentlyWritten } from './native-owner.mjs'
+import { type NativeRecordFacts, readNativeRecordFacts } from './native-record.mjs'
 import type { SessionStore } from './store.mjs'
-import type { ThreadRecord } from './types.mjs'
+import type { ThreadRecord, TurnRecord } from './types.mjs'
 
 /** SDK 给的会话信息里用到的那几项 */
 export interface NativeSessionInfo {
@@ -42,6 +47,8 @@ export interface NativeSessionSource {
    * 每次扫描都问一遍（桌面端那边会变：新派出的、脱离的）。读不到的给空的
    */
   desktopParents(): Promise<Map<string, readonly string[]>>
+  /** 原生记录（jsonl）的路径，找不到是 null */
+  record(sessionId: string): string | null
 }
 
 export function sdkNativeSessionSource(): NativeSessionSource {
@@ -62,6 +69,7 @@ export function sdkNativeSessionSource(): NativeSessionSource {
       )
     },
     desktopParents: async () => desktop.refresh(),
+    record: (sessionId) => findNativeRecords(claudeConfigDir(), [sessionId]).get(sessionId) ?? null,
   }
 }
 
@@ -95,6 +103,18 @@ export interface NativeSessionsHost {
   }): ThreadRecord
   /** 这个会话现在有回合在跑：不去动它的历史 */
   busy(threadId: string): boolean
+  /** 本机交互进程的登记里占着的原生会话：原生会话号 → 占用方（native-owner.mts）。fresh 时不用缓存 */
+  registered(fresh?: boolean): Map<string, NativeOwner>
+  /** 入口自己的 CLI 在这个会话上：此刻开着没有、最后一次退出的时刻（毫秒） */
+  ownCli(threadId: string): { alive: boolean; exitedAt: number }
+}
+
+/** 重画了一遍：画之前、之后的回合，和顺手从原生记录里读的占用、设置（读不到记录是 null） */
+export interface NativeRedraw {
+  sessionId: string
+  before: TurnRecord[]
+  after: TurnRecord[]
+  facts: NativeRecordFacts | null
 }
 
 /** 列表时两次扫描至少隔这么久；中间来的列表用上一次的结果 */
@@ -121,7 +141,9 @@ export class NativeSessions {
   scanned = false
   private refreshing: Promise<NativeRefresh> | null = null
   /** 正在画历史的会话：同一个会话同时来几次，搭同一趟 */
-  private readonly drawing = new Map<string, Promise<void>>()
+  private readonly drawing = new Map<string, Promise<NativeRedraw | null>>()
+  /** 找到过的原生记录：原生会话号 → 路径 */
+  private readonly paths = new Map<string, string>()
 
   private readonly host: NativeSessionsHost
 
@@ -260,11 +282,16 @@ export class NativeSessions {
   }
 
   /**
-   * 导进来的会话：把原生记录里还没画进库的部分画进来。不是导进来的会话、记录没变、正在跑，都不动。
-   * 库里最后一个回合的边界（它在原生记录里的最后一条消息）还在原生记录里，就只接着画那之后的；
-   * 找不到（别处回退过、分了叉，或者库里的回合没有边界）就整份重画
+   * 导进来的会话：把原生记录里还没画进库的部分画进来，回画之前和之后的回合（没动是 null）。
+   * 不是导进来的会话、记录没变、入口自己正在跑它，都不动。怎么接着画：
+   * - 库里末尾是导进来的回合（回合标识就是它在原生记录里的第一条消息）：从它的开头起整段重画、替换掉它。
+   *   别处跑到一半时画过的回合这样就补全了；没有人话打头、又不是记录开头的（以前跑到一半时拆出来的半截）
+   *   再往前找到有头的那一个。
+   * - 末尾是入口自己跑的回合：它的边界（在原生记录里的最后一条消息）还在，就只接着画那之后的。
+   * - 都对不上：记录里压缩过的，只在压缩之后接着画（压缩后的链里没有以前的消息），旧回合一个不删；
+   *   没压缩过的（别处回退过、分了叉）整份重画
    */
-  history(threadId: string): Promise<void> {
+  history(threadId: string): Promise<NativeRedraw | null> {
     const running = this.drawing.get(threadId)
     if (running) return running
     const run = this.draw(threadId).finally(() => this.drawing.delete(threadId))
@@ -272,36 +299,113 @@ export class NativeSessions {
     return run
   }
 
-  private async draw(threadId: string): Promise<void> {
-    const { store, source } = this.host
-    let sessionId: string | null = null
-    let mark: string | null = null
-    for (const [id, record] of store.nativeSessions()) {
-      if (record.threadId !== threadId || record.origin !== 'imported') continue
-      sessionId = id
-      mark = record.mark
+  /** 导进来的会话对应的原生会话号和画过的那份记录的记号。不是导进来的是 null */
+  private imported(threadId: string): { sessionId: string; mark: string | null } | null {
+    for (const [id, record] of this.host.store.nativeSessions())
+      if (record.threadId === threadId && record.origin === 'imported')
+        return { sessionId: id, mark: record.mark }
+    return null
+  }
+
+  /** 原生记录的路径。找过的记下来（记录不会搬家）；找不到不记，下次再找 */
+  private recordPath(sessionId: string): string | null {
+    const known = this.paths.get(sessionId)
+    if (known) return known
+    const found = this.host.source.record(sessionId)
+    if (found) this.paths.set(sessionId, found)
+    return found
+  }
+
+  /**
+   * 这几个会话里被别处占着的（native-owner.mts）：只看导进来的。growth 为真时登记里没有的再看原生记录
+   * 是不是刚被别人改过（要找记录、看文件，列表时不做）。fresh 时重读登记，不用一秒内读过的
+   */
+  owners(threadIds: readonly string[], growth = true, fresh = false): Map<string, NativeOwner> {
+    const found = new Map<string, NativeOwner>()
+    const imported = this.importedAmong(threadIds)
+    let registered: Map<string, NativeOwner> | null = null
+    for (const threadId of threadIds) {
+      const sessionId = imported.get(threadId)
+      if (!sessionId) continue
+      registered ??= this.host.registered(fresh)
+      const owner = registered.get(sessionId)
+      if (owner) {
+        found.set(threadId, owner)
+        continue
+      }
+      if (!growth) continue
+      const own = this.host.ownCli(threadId)
+      if (recentlyWritten(this.recordPath(sessionId), own.alive, own.exitedAt))
+        found.set(threadId, { entrypoint: 'unknown', running: true })
     }
+    return found
+  }
+
+  /** 这几个会话里导进来的：会话 → 原生会话号 */
+  importedAmong(threadIds: readonly string[]): Map<string, string> {
+    const wanted = new Set(threadIds)
+    const found = new Map<string, string>()
+    if (wanted.size === 0) return found
+    for (const [id, record] of this.host.store.nativeSessions())
+      if (record.origin === 'imported' && wanted.has(record.threadId))
+        found.set(record.threadId, id)
+    return found
+  }
+
+  owner(threadId: string): NativeOwner | null {
+    return this.owners([threadId]).get(threadId) ?? null
+  }
+
+  private async draw(threadId: string): Promise<NativeRedraw | null> {
+    const { store, source } = this.host
+    const known = this.imported(threadId)
     const thread = store.getThread(threadId)
-    if (!sessionId || !thread || this.host.busy(threadId)) return
+    if (!known || !thread || this.host.busy(threadId)) return null
+    const { sessionId } = known
     const info = await source.info(sessionId, thread.cwd)
-    if (!info) return
-    const now = markOf(info)
-    if (now === mark) return
+    if (!info) return null
+    const running = this.owner(threadId)?.running === true
+    const now = `${markOf(info)}${running ? ':running' : ''}`
+    // 记录没变：除非最后一个回合的进行中和对方在不在跑对不上（入口重启时把进行中的回合收成了中断）
+    const last = store.listTurns(threadId).at(-1)
+    if (now === known.mark && running === (last?.status === 'inProgress')) return null
     const messages = await source.messages(sessionId, thread.cwd)
-    if (this.host.busy(threadId)) return
-    const turns = store.listTurns(threadId)
-    const last = turns.at(-1)
-    const boundary = last ? store.nativeBoundary(last.id) : null
-    const from = boundary ? messages.findIndex((message) => message.uuid === boundary) + 1 : 0
-    const keep = from > 0 ? turns.length : 0
-    const drawn = projectNativeHistory(
-      threadId,
-      keep > 0 ? messages.slice(from) : messages,
-      thread.cwd,
-    )
-    // 接着画的时候，原生记录里新的这段可能和库里已有的回合同号（同一份记录画过一遍）：跳过已有的
-    const have = new Set(keep > 0 ? turns.map((turn) => turn.id) : [])
+    // 从这里到写进库之间不再等别的：入口自己的回合是同步建的，这时没开始就不会插进来
+    if (this.host.busy(threadId)) return null
+    const before = store.listTurns(threadId)
+    const path = this.recordPath(sessionId)
+    const facts = path ? readNativeRecordFacts(path) : null
+    const at = new Map(messages.map((message, index) => [message.uuid, index]))
+    let keep = before.length
+    let from = -1
+    for (let index = before.length - 1; index >= 0; index--) {
+      const start = at.get(before[index]?.id ?? '')
+      if (start === undefined) break
+      keep = index
+      from = start
+      if (start === 0 || messages[start]?.type === 'user') break
+    }
+    if (from < 0) {
+      const tail = before.at(-1)
+      const boundary = tail ? store.nativeBoundary(tail.id) : null
+      const after = boundary ? at.get(boundary) : undefined
+      if (after !== undefined) from = after + 1
+      else if (tail && facts?.compacted) {
+        // 从压缩后的摘要接着画；链里找不到摘要就整条链都画，已经有的回合跳过
+        const summary = messages.findLastIndex((message) => message.isCompactSummary === true)
+        from = Math.max(0, summary)
+      } else {
+        keep = 0
+        from = 0
+      }
+    }
+    const drawn = projectNativeHistory(threadId, messages.slice(from), thread.cwd, { running })
+    // 原生记录里新的这段可能和库里留着的回合同号（同一份记录画过一遍、压缩后留下的那一段）：跳过已有的
+    const have = new Set(before.slice(0, keep).map((turn) => turn.id))
     const fresh = drawn.turns.filter((turn) => !have.has(turn.id))
     store.replaceNativeHistory(threadId, sessionId, keep, fresh, drawn.boundaries, now)
+    for (const [turnId, origin] of drawn.origins)
+      if (!have.has(turnId)) store.saveTurnOrigin(turnId, origin)
+    return { sessionId, before, after: store.listTurns(threadId), facts }
   }
 }

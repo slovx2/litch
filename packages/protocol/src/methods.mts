@@ -224,6 +224,7 @@ import type {
   HarnessProvidersUpsertParams,
   HarnessProvidersWriteResponse,
 } from './harness-config.mjs'
+import type { NativeOwnerChangedNotification } from './native-owner.mjs'
 import type {
   LineageUpdatedNotification,
   ProposalChangedNotification,
@@ -588,6 +589,8 @@ export interface ServerNotifications {
    * 扩展，只发给握手时声明过 backgroundTasks 的连接（不只是订阅者）：一个会话的后台任务集合变了，整份重发
    */
   'litch/thread/background/changed': BackgroundChangedNotification
+  /** 扩展，只发给握手时声明过 nativeOwner 的连接：一个导进来的会话被别处占上、放开了，或者对方开始、停下跑了 */
+  'litch/thread/nativeOwner/changed': NativeOwnerChangedNotification
   /** 扩展，只发给握手时声明过 deviceTasks 的连接：任务多了、变了、没了 */
   'litch/task/changed': DeviceTaskChangedNotification
   /** 扩展，只发给握手时声明过 deviceTasks 的连接：一次运行开始了、结束了、标成看过了 */

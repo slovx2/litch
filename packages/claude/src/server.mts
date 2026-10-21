@@ -9,6 +9,7 @@ import {
   type LitchTurnOrigin,
 } from '../../protocol/src/background-tasks.mjs'
 import { EXTENSION } from '../../protocol/src/device.mjs'
+import { NATIVE_OWNER_NOTIFICATION, type NativeOwner } from '../../protocol/src/native-owner.mjs'
 import { catalogPagination } from '../../shared/src/catalog-pagination.mjs'
 import {
   clientToolNamespaces,
@@ -47,6 +48,7 @@ import {
   readSettingsDefaults,
   writeSettingsDefaults,
 } from './claude-default-model.mjs'
+import { claudeConfigDir } from './claude-native-files.mjs'
 import { PROVIDER_CONFIG_KEY } from './claude-provider.mjs'
 import { cliConfigLayer, mergeConfigLayers, sessionConfigLayer } from './cli-config.mjs'
 import { TurnFailure, turnErrorOf } from './codex-error-info.mjs'
@@ -70,7 +72,11 @@ import { mcpOAuthManager } from './mcp-oauth.mjs'
 import { type McpCallbacks, McpOperationCancelled, McpRpc, type McpScope } from './mcp-rpc.mjs'
 import { type McpToolRef, mcpToolRef } from './mcp-tool-name.mjs'
 import { parseContextItems } from './native-context.mjs'
+import { NativeOwners, nativeOwnerMessage } from './native-owner.mjs'
+import { ownCliAlive, ownCliExitedAt, ownCliPids } from './native-process.mjs'
+import type { NativeSettings } from './native-record.mjs'
 import {
+  type NativeRedraw,
   type NativeSessionSource,
   NativeSessions,
   nativeSessionsEnabled,
@@ -313,6 +319,8 @@ function turnItemsView(value: unknown): TurnItemsView {
 
 /** 隔多久扫一次本机别处开的 Claude Code 会话（有连接时） */
 const NATIVE_WATCH_MS = 30_000
+// 被订阅的导入会话多久看一次占用和原生记录（停在会话上时别处的进展自己出来）
+const NATIVE_FOLLOW_MS = 3000
 
 export class CodexClaudeAppServer {
   private readonly rateLimits = new AccountRateLimits()
@@ -426,6 +434,17 @@ export class CodexClaudeAppServer {
   /** 本机别处开的 Claude Code 会话（native-sessions.mts）。关掉了是 null */
   private readonly native: NativeSessions | null
   private nativeTimer: NodeJS.Timeout | null = null
+  /** 本机交互进程的登记：导进来的会话被别处占着时只读（native-owner.mts） */
+  private readonly nativeOwners = new NativeOwners({
+    registryDir: () => join(claudeConfigDir(), 'sessions'),
+    ownPids: ownCliPids,
+  })
+  /** 盯着被订阅的导入会话（followNative）的计时器 */
+  private followTimer: NodeJS.Timeout | null = null
+  /** 被订阅的导入会话上次报出去的占用（扩展 nativeOwner）：会话 → 占用方，没人占着的不在里面 */
+  private readonly nativeOwnerState = new Map<string, string>()
+  /** followNative 正在跑：上一趟没完不起下一趟 */
+  private following = false
 
   constructor(
     store: SessionStore,
@@ -443,6 +462,11 @@ export class CodexClaudeAppServer {
           source: nativeSource,
           newThread: (fields) => this.nativeThreadRecord(fields),
           busy: (threadId) => this.sessionHolder(threadId) !== null,
+          registered: (fresh) => this.nativeOwners.registered(fresh),
+          ownCli: (threadId) => ({
+            alive: ownCliAlive(threadId),
+            exitedAt: ownCliExitedAt(threadId),
+          }),
         })
       : null
     this.runtime.setSessionHandlers?.({
@@ -537,6 +561,8 @@ export class CodexClaudeAppServer {
     if (this.stopped) return
     if (this.nativeTimer) clearInterval(this.nativeTimer)
     this.nativeTimer = null
+    if (this.followTimer) clearInterval(this.followTimer)
+    this.followTimer = null
     // 先同步通知仍连接的客户端审批已失效，再抑制退出过程中的其他事件。
     this.pendingInteractions.close()
     this.stopped = true
@@ -838,25 +864,42 @@ export class CodexClaudeAppServer {
           },
           (threadId, projectId) => this.threadProjectUpdated(threadId, projectId),
         )
-      case 'thread/resume':
-        await this.nativeHistory(asRecord(params).threadId)
-        return this.withBackground(
-          peer,
-          this.withNativeLineage(peer, await this.threadResume(peer, asRecord(params))),
+      case 'thread/resume': {
+        const threadId = asRecord(params).threadId
+        await this.nativeHistory(threadId)
+        const resumed = await this.threadResume(peer, asRecord(params))
+        // 从这一刻起盯着它的占用（followNative）：之后变了才发通知，应答里带的就是现在的
+        if (
+          this.native &&
+          typeof threadId === 'string' &&
+          this.native.importedAmong([threadId]).size
         )
+          this.syncNativeOwner(threadId, this.native.owner(threadId), true)
+        return this.withNativeOwner(
+          peer,
+          this.withBackground(peer, this.withNativeLineage(peer, resumed)),
+        )
+      }
       case 'thread/fork':
         return this.threadFork(peer, asRecord(params))
       case 'thread/list':
         await this.refreshNative()
-        return this.withBackground(
+        return this.withNativeOwner(
           peer,
-          this.withNativeLineage(peer, this.threadList(asRecord(params))),
+          this.withBackground(
+            peer,
+            this.withNativeLineage(peer, this.threadList(asRecord(params))),
+          ),
+          false,
         )
       case 'thread/read':
         await this.nativeHistory(asRecord(params).threadId)
-        return this.withBackground(
+        return this.withNativeOwner(
           peer,
-          this.withNativeLineage(peer, this.threadRead(asRecord(params))),
+          this.withBackground(
+            peer,
+            this.withNativeLineage(peer, this.threadRead(asRecord(params))),
+          ),
         )
       case 'thread/attachment/add':
       case 'thread/attachment/list':
@@ -1547,7 +1590,11 @@ export class CodexClaudeAppServer {
           undefined,
           (target, notification) => ({
             method: notification.method,
-            params: this.withNativeLineage(target, structuredClone(notification.params)),
+            params: this.withNativeOwner(
+              target,
+              this.withNativeLineage(target, structuredClone(notification.params)),
+              false,
+            ),
           }),
         )
     }
@@ -1583,17 +1630,252 @@ export class CodexClaudeAppServer {
       if (this.accountPeers.size > 0) void this.refreshNative(true)
     }, NATIVE_WATCH_MS)
     this.nativeTimer.unref()
+    this.followTimer = setInterval(() => {
+      if (this.subscribers.threads().length > 0) void this.followNative()
+    }, NATIVE_FOLLOW_MS)
+    this.followTimer.unref()
   }
 
-  /** 导进来的会话：原生记录里还没画进来的部分画进来。会话不认识的先扫一遍（可能是刚在别处开的） */
+  /**
+   * 导进来的会话：原生记录里还没画进来的部分画进来，有变化就告诉订阅着它的连接（回合、条目、用量、设置）。
+   * 会话不认识的先扫一遍（可能是刚在别处开的）
+   */
   private async nativeHistory(threadId: unknown): Promise<void> {
     if (!this.native || typeof threadId !== 'string' || !threadId) return
     if (!this.store.getThread(threadId)) await this.refreshNative()
+    let redraw: NativeRedraw | null
     try {
-      await this.native.history(threadId)
+      redraw = await this.native.history(threadId)
     } catch (error) {
       debugLog('native.sessions.historyFailed', { threadId, error: String(error) })
+      return
     }
+    if (!redraw || this.stopped) return
+    this.announceRedraw(threadId, redraw.before, redraw.after)
+    const facts = redraw.facts
+    if (!facts) return
+    if (this.inheritNativeSettings(threadId, redraw.sessionId, facts.settings)) {
+      const thread = this.store.getThread(threadId)
+      if (thread) this.notifyThread(threadId, this.threadSettingsNotification(thread))
+    }
+    if (facts.usage) {
+      const stored = this.store.threadUsage(threadId)?.tokenUsage
+      // 窗口只认入口自己跑回合时记下的“模型 → 窗口”，查不到就只报用了多少
+      const window = facts.usage.model ? this.store.modelWindow(facts.usage.model) : null
+      const tokenUsage: ThreadTokenUsage = {
+        total: stored?.total ?? emptyTokenBreakdown(),
+        last: facts.usage.last,
+        modelContextWindow: window,
+      }
+      const turnId = redraw.after.at(-1)?.id
+      if (turnId && !isDeepStrictEqual(stored, tokenUsage)) {
+        this.store.saveThreadUsage(threadId, turnId, tokenUsage)
+        this.notifyThread(threadId, {
+          method: 'thread/tokenUsage/updated',
+          params: { threadId, turnId, tokenUsage },
+        })
+      }
+    }
+  }
+
+  /**
+   * 重画之后告诉订阅者变了什么：新的回合整个发（进行中的发 turn/started，结束了的发 turn/completed，都带全部条目），
+   * 留着的回合里变了、多出来的条目发 item/completed，跟着结束了的再发 turn/completed，从结束变回进行中的发 turn/started。
+   * 有回合或条目没了（之前画到一半拆出来的半截、别处回退过）说不清楚，发 thread/reverted 让客户端整个重新载入
+   */
+  private announceRedraw(threadId: string, before: TurnRecord[], after: TurnRecord[]): void {
+    const prior = new Map(before.map((turn) => [turn.id, turn]))
+    const now = new Map(after.map((turn) => [turn.id, turn]))
+    const gone = (old: TurnRecord) => {
+      const current = now.get(old.id)
+      if (!current) return true
+      const ids = new Set(current.items.map((item) => item.id))
+      return old.items.some((item) => !ids.has(item.id))
+    }
+    if (before.some(gone)) {
+      this.notifyThread(threadId, { method: 'thread/reverted', params: { threadId } })
+      return
+    }
+    for (const turn of after) {
+      const old = prior.get(turn.id)
+      if (old && isDeepStrictEqual(old, turn)) continue
+      if (!old) {
+        this.notifyThread(threadId, {
+          method: turn.status === 'inProgress' ? 'turn/started' : 'turn/completed',
+          params: { threadId, turn: this.toTurn(turn) },
+        })
+        continue
+      }
+      const items = new Map(old.items.map((item) => [item.id, item]))
+      for (const item of turn.items)
+        if (!isDeepStrictEqual(items.get(item.id), item))
+          this.notifyThread(threadId, {
+            method: 'item/completed',
+            params: { threadId, turnId: turn.id, item, completedAtMs: nowMillis() },
+          })
+      if (turn.status !== 'inProgress')
+        this.notifyThread(threadId, {
+          method: 'turn/completed',
+          params: { threadId, turn: this.toTurn(turn) },
+        })
+      else if (old.status !== 'inProgress')
+        // 先画成了结束、后来才知道对方还在跑：改回进行中
+        this.notifyThread(threadId, {
+          method: 'turn/started',
+          params: { threadId, turn: this.toTurn(turn) },
+        })
+    }
+  }
+
+  /**
+   * 导进来的会话跟着原生记录里别处最后用的设置走：模型、推理强度、权限（bypassPermissions 是完全访问，
+   * 别的是新建会话的默认档）、计划模式。用户在入口里改过的那一项不再跟：上一次继承的样子记在库里（native_settings），
+   * 会话现在的那一项还和它一样才换。回有没有改动
+   */
+  private inheritNativeSettings(
+    threadId: string,
+    sessionId: string,
+    native: NativeSettings,
+  ): boolean {
+    const thread = this.store.getThread(threadId)
+    if (!thread) return false
+    const settings = this.store.threadSettings(threadId)
+    const askApproval =
+      normalizeApprovalPolicy(this.configOverrides.approval_policy) ?? 'on-request'
+    const askSandbox = normalizeSandboxMode(this.configOverrides.sandbox_mode) ?? 'workspace-write'
+    const access = (): string =>
+      thread.approvalPolicy === 'never' && thread.sandboxMode === 'danger-full-access'
+        ? 'full'
+        : thread.approvalPolicy === askApproval &&
+            thread.sandboxMode === askSandbox &&
+            !thread.permissionProfileId
+          ? 'ask'
+          : 'custom'
+    const mode = native.permissionMode
+    const target: Record<string, string | boolean | undefined> = {
+      model: native.model,
+      effort: normalizeCodexReasoningEffort(native.effort) ?? undefined,
+      access: !mode || mode === 'plan' ? undefined : mode === 'bypassPermissions' ? 'full' : 'ask',
+      plan: mode ? mode === 'plan' : undefined,
+    }
+    const current: Record<string, string | boolean | null> = {
+      model: thread.model,
+      effort: thread.reasoningEffort,
+      access: access(),
+      plan: settings.planMode === true,
+    }
+    const before = this.store.nativeSettings(sessionId) ?? {}
+    const after: Record<string, unknown> = { ...before }
+    let changed = false
+    for (const [field, value] of Object.entries(target)) {
+      if (value === undefined) continue
+      // 上一次继承之后用户在入口里改过这一项：以入口为准
+      if (field in before && before[field] !== current[field]) continue
+      after[field] = value
+      if (current[field] === value) continue
+      changed = true
+      if (field === 'model') thread.model = value as string
+      else if (field === 'effort') thread.reasoningEffort = value as ThreadRecord['reasoningEffort']
+      else if (field === 'plan') settings.planMode = value as boolean
+      else {
+        const full = value === 'full'
+        thread.approvalPolicy = full ? 'never' : askApproval
+        thread.sandboxMode = full ? 'danger-full-access' : askSandbox
+        thread.permissionProfileId = null
+        delete settings.permissionProfile
+        settings.sandboxPolicy = this.configSandboxPolicy(thread.sandboxMode, thread.cwd)
+      }
+    }
+    if (!isDeepStrictEqual(before, after)) this.store.saveNativeSettings(sessionId, after)
+    if (!changed) return false
+    this.store.upsertThread(thread)
+    this.store.saveThreadSettings(threadId, settings)
+    return true
+  }
+
+  /** 导进来的会话被别处占着时拒绝会写原生记录的请求（扩展 nativeOwner） */
+  private assertNotOwned(threadId: string): void {
+    const owner = this.native?.owner(threadId)
+    if (owner) throw new ProtocolError(-32009, nativeOwnerMessage(owner))
+  }
+
+  /** 声明了 nativeOwner 的连接：应答里被别处占着的导入会话（thread、列表的每一项）带上 litchNativeOwner */
+  private withNativeOwner<T>(peer: RpcPeer | null, result: T, growth = true): T {
+    if (!this.native) return result
+    if (peer && !this.peerFeatures.get(peer)?.extensions.has(EXTENSION.nativeOwner)) return result
+    const body = result && typeof result === 'object' ? (result as Record<string, unknown>) : {}
+    const threads = [...(Array.isArray(body.data) ? body.data : []), body.thread].filter(
+      (value): value is Record<string, unknown> =>
+        !!value && typeof value === 'object' && typeof (value as { id?: unknown }).id === 'string',
+    )
+    const owners = this.native.owners(
+      threads.map((thread) => thread.id as string),
+      growth,
+    )
+    for (const thread of threads) {
+      const owner = owners.get(thread.id as string)
+      if (owner) thread.litchNativeOwner = { ...owner }
+    }
+    return result
+  }
+
+  /**
+   * 盯着被订阅的导入会话：占用变了告诉声明过的连接，原生记录变了重画并通知（nativeHistory）。
+   * 放手了的会话接着跑排着的消息和持续目标
+   */
+  private async followNative(): Promise<void> {
+    if (!this.native || this.following || this.stopped) return
+    this.following = true
+    try {
+      const imported = this.native.importedAmong(this.subscribers.threads())
+      for (const threadId of [...this.nativeOwnerState.keys()])
+        if (!imported.has(threadId)) this.nativeOwnerState.delete(threadId)
+      // 重读登记：一秒内别的地方（列表）读过的可能还是对方开跑之前的，那样会把刚开跑的回合画成已完成
+      const owners = this.native.owners([...imported.keys()], true, true)
+      for (const threadId of imported.keys()) {
+        if (this.sessionHolder(threadId)) continue
+        this.syncNativeOwner(threadId, owners.get(threadId) ?? null)
+        await this.nativeHistory(threadId)
+      }
+    } catch (error) {
+      debugLog('native.sessions.followFailed', { error: String(error) })
+    } finally {
+      this.following = false
+    }
+  }
+
+  /**
+   * 被订阅的导入会话的占用和上次报的不一样了：记下、告诉声明过的连接；放手了的接着跑排着的消息和持续目标。
+   * 恢复时（resuming）还没盯着的只记下不发：恢复的应答里带的就是现在的，别的连接这时也没在看
+   */
+  private syncNativeOwner(threadId: string, owner: NativeOwner | null, resuming = false): void {
+    const shown = owner ? JSON.stringify(owner) : undefined
+    if (resuming && !this.nativeOwnerState.has(threadId)) {
+      if (shown) this.nativeOwnerState.set(threadId, shown)
+      return
+    }
+    if (shown === this.nativeOwnerState.get(threadId)) return
+    if (shown) this.nativeOwnerState.set(threadId, shown)
+    else this.nativeOwnerState.delete(threadId)
+    this.publishNativeOwner(threadId, owner)
+    if (owner) return
+    this.scheduleQueue(threadId)
+    this.scheduleGoal(threadId)
+  }
+
+  private publishNativeOwner(threadId: string, owner: NativeOwner | null): void {
+    if (this.stopped) return
+    const params = { threadId, owner }
+    for (const target of this.accountPeers)
+      if (
+        this.isConnected(target) &&
+        this.peerFeatures.get(target)?.extensions.has(EXTENSION.nativeOwner)
+      )
+        this.deliver(
+          target,
+          { method: NATIVE_OWNER_NOTIFICATION.changed, params: structuredClone(params) },
+          target,
+        )
   }
 
   /** 给一个本机别处开的 Claude Code 会话建记录：模型、权限照新建会话的默认来 */
@@ -2102,6 +2384,7 @@ export class CodexClaudeAppServer {
     if (!thread) throw new ProtocolError(-32602, '未知会话')
     if (thread.runtimeBackend !== 'claude')
       throw new ProtocolError(-32004, 'Claude 入口不能追加其他引擎的会话上下文')
+    this.assertNotOwned(threadId)
     const messages = parseContextItems(params.items).map((message) => ({
       ...message,
       uuid: newId(),
@@ -2204,6 +2487,7 @@ export class CodexClaudeAppServer {
         this.interruptingByThread.has(threadId) ||
         this.nativeMutations.has(threadId) ||
         this.store.pendingContextInjection(threadId) ||
+        this.native?.owner(threadId) ||
         !this.goals.runnable(threadId) ||
         this.store.goalState(threadId).ledger.generation !== generation
       )
@@ -2252,6 +2536,7 @@ export class CodexClaudeAppServer {
             requiredString(params.queuedSubmissionId, 'queuedSubmissionId'),
           )
     if (!item) throw new ProtocolError(-32602, '待执行队列项不存在')
+    this.assertNotOwned(threadId)
     const result = await this.turnStart(
       peer,
       {
@@ -2283,6 +2568,7 @@ export class CodexClaudeAppServer {
         this.interruptingByThread.has(threadId) ||
         this.nativeMutations.has(threadId) ||
         this.store.pendingContextInjection(threadId) ||
+        this.native?.owner(threadId) ||
         this.store.queue.list(threadId).length === 0
       )
         return
@@ -2540,6 +2826,7 @@ export class CodexClaudeAppServer {
     if (!thread) throw new Error(`unknown thread: ${threadId}`)
     if (this.sessionHolder(threadId) || this.interruptingByThread.has(threadId))
       throw new ProtocolError(-32009, '活动会话不能回退')
+    this.assertNotOwned(threadId)
     // Honor the protocol's `numTurns: u32, must be >= 1` — drop that many
     // turns from the end of the thread. Without this, App's rewind UI sends
     // the request and we silently return the unchanged thread, leaving the
@@ -2944,6 +3231,7 @@ export class CodexClaudeAppServer {
     if (!thread) throw new ProtocolError(-32602, '未知会话')
     if (this.activeTurnByThread.has(threadId) || this.interruptingByThread.has(threadId))
       throw new ProtocolError(-32009, '活动会话不能开始审查')
+    this.assertNotOwned(threadId)
     if (params.delivery != null && params.delivery !== 'inline' && params.delivery !== 'detached')
       throw new ProtocolError(-32602, '审查 delivery 无效')
     const target = asRecord(params.target)
@@ -3084,6 +3372,7 @@ export class CodexClaudeAppServer {
     const thread = this.store.getThread(threadId)
     if (!thread) throw new Error(`unknown thread: ${threadId}`)
     if (this.activeTurnByThread.has(threadId)) throw new ProtocolError(-32009, '活动会话不能压缩')
+    this.assertNotOwned(threadId)
     const turnId = newId()
     const compactItem: ThreadItem = { type: 'contextCompaction', id: newId() }
     const turn: TurnRecord = {
@@ -3275,6 +3564,7 @@ export class CodexClaudeAppServer {
       const submitted = this.store.submittedTurn(threadId, messageId, hash)
       if (submitted) return { turn: this.toLifecycleTurn(submitted) }
     }
+    this.assertNotOwned(threadId)
     const merged = queuedId
       ? null
       : await this.joinActiveTurn(peer, threadId, params, messageId, hash)
@@ -4864,6 +5154,8 @@ export class CodexClaudeAppServer {
               add: event.usage,
               window: event.contextWindow ?? null,
             })
+            if (event.model && event.contextWindow)
+              this.store.saveModelWindow(event.model, event.contextWindow)
             return
           }
           if (event.type === 'context_usage') {

@@ -130,14 +130,16 @@ export function projectThread(
   }
   // 引擎自己的子代理线程，对面明说不接受直接输入（V2 的子线程）：只能看，要跟它说话得经主会话
   const mute = thread.canAcceptDirectInput === false
+  // 导进来的原生会话正被别处的进程开着（扩展 nativeOwner）：只能看，对方放手后 litch/thread/nativeOwner/changed 放开
+  const owned = !mute && isNativeOwned(thread)
   return {
     deviceId: scope.deviceId,
     sessionId: thread.id,
     title: threadTitle(thread),
     harness: scope.harness,
     cwd: thread.cwd,
-    live: !mute,
-    note: mute ? phrase('session.agentReadOnly') : null,
+    live: !mute && !owned,
+    note: mute ? phrase('session.agentReadOnly') : owned ? phrase('session.nativeOwned') : null,
     turns,
     items,
     requests: [],
@@ -149,6 +151,12 @@ export function projectThread(
     proposals: [],
     agents: [],
   }
+}
+
+/** 会话对象上入口加的“被别处的进程占着”（只发给声明了 nativeOwner 的连接） */
+export function isNativeOwned(thread: Thread): boolean {
+  const raw: unknown = (thread as Thread & { litchNativeOwner?: unknown }).litchNativeOwner
+  return typeof raw === 'object' && raw !== null
 }
 
 /**
