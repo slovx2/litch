@@ -9,6 +9,7 @@ import { enOnboard } from './en-onboard.ts'
 import { enPairing } from './en-pairing.ts'
 import { enPasswords } from './en-passwords.ts'
 import { enProposals } from './en-proposals.ts'
+import { enSwitches } from './en-switches.ts'
 import { enTasks } from './en-tasks.ts'
 import type { Entry } from './types.ts'
 import type { MessageKey } from './zh-CN.ts'
@@ -27,6 +28,7 @@ export const en: Record<MessageKey, Entry> = {
   ...enBimport,
   ...enComments,
   ...enBackground,
+  ...enSwitches,
   'title.location': 'Location',
   'workspace.none': 'No project',
 
@@ -1475,17 +1477,10 @@ export const en: Record<MessageKey, Entry> = {
     'Trusting all sites; you will not be asked again. Turn it off or set a blocklist in Settings → Built-in browser',
   'clientAsk.trustAll.failed': 'Could not turn it on: {reason}',
   'devices.tools': 'Use this computer',
-  'devices.tools.note':
-    "Whether sessions on this device may use these abilities of this computer. When one is off, the model's call fails right away and it is told to turn it on here.",
   'devices.tools.browser': 'Built-in browser',
-  'devices.tools.browser.note':
-    'Lets the model open pages, read them, fill in forms and take screenshots in the browser inside Litch. You are asked before it first visits a site.',
   'devices.tools.computer': 'Computer Use',
-  'devices.tools.computer.note':
-    'Lets the model use apps on this computer: click, type, take screenshots. You are asked before it first uses an app.',
   'devices.tools.computer.remote':
     'This is a remote device: once this is on, agents running on that remote machine operate this computer (the one in front of you), not the remote machine. If someone takes over that machine, they can drive your desktop. Every session and every app needs your approval; there is no "always allow".',
-  'devices.tools.failed': 'Not changed: {reason}',
   'devices.tools.computer.missing':
     'This Mac hasn’t granted Computer Use its two system permissions (Accessibility, Screen Recording), so it won’t work even when switched on.',
   'devices.tools.computer.unknown':

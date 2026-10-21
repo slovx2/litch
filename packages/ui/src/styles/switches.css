@@ -1,0 +1,122 @@
+/* 设置页“按 harness 开关”那棵树（settings/HarnessSwitches.tsx）：设备一行、下面各 harness 缩进一档，三列多选框居中。
+   只用变量，三套皮肤明暗都跟着走；窄了表格自己横着滚，不撑开页面 */
+.hsw .set-para + .hsw-scroll {
+  margin-top: 10px;
+}
+.hsw-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  background: var(--raised);
+}
+.hsw-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.hsw-table th,
+.hsw-table td {
+  padding: 0 12px;
+  height: calc(var(--row-h) + 2 * var(--row-pad));
+  text-align: left;
+  font-weight: 400;
+  white-space: nowrap;
+}
+.hsw-table thead th {
+  height: auto;
+  padding-block: 8px;
+  font-size: 12px;
+  color: var(--ink-3);
+  border-bottom: 1px solid var(--line-2);
+}
+.hsw-table [data-col] {
+  width: 1%;
+  text-align: center;
+}
+.hsw-table tbody + tbody {
+  border-top: 1px solid var(--line-2);
+}
+.hsw-harness {
+  border-top: 1px solid var(--line-1);
+}
+.hsw-harness th {
+  /* 和设备名对齐到三角之后 */
+  padding-left: 34px;
+  color: var(--ink-2);
+}
+.hsw-device th {
+  font-weight: 600;
+}
+.hsw-fold {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 2px 4px 2px 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.hsw-fold:disabled {
+  cursor: default;
+}
+.hsw-caret {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  display: inline-grid;
+  place-items: center;
+}
+.hsw-caret::before {
+  content: "";
+  border-left: 5px solid var(--ink-3);
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  transition: transform 120ms ease;
+}
+.hsw-fold[aria-expanded="true"] .hsw-caret::before {
+  transform: rotate(90deg);
+}
+.hsw-fold:disabled .hsw-caret::before {
+  border-left-color: transparent;
+}
+.hsw-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hsw-off {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--ink-3);
+}
+.hsw-box {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  vertical-align: middle;
+  accent-color: var(--accent-solid);
+  cursor: pointer;
+}
+.hsw-box:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+.hsw-unknown {
+  display: inline-block;
+  width: 15px;
+  text-align: center;
+  color: var(--ink-3);
+  cursor: help;
+}
+.hsw-notes {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.hsw-notes .set-note {
+  margin: 0;
+}
