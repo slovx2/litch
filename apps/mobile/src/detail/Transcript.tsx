@@ -26,6 +26,8 @@ import type { RootStackParamList } from '../nav/routes'
 import { noteFirstContent, noteWork } from '../probe'
 import { useT } from '../ui/i18n'
 import { useTheme } from '../ui/theme'
+import { useSessionBackground } from './background/BackgroundBar'
+import { OriginCell } from './background/OriginCell'
 import {
   ErrorCell,
   ForkedCell,
@@ -37,7 +39,12 @@ import {
   UserCell,
 } from './cells'
 import { useCommentJump } from './comments/context'
-import { type TranscriptActions, TranscriptContext, useFileScope } from './context'
+import {
+  BackgroundContext,
+  type TranscriptActions,
+  TranscriptContext,
+  useFileScope,
+} from './context'
 import { isWebUrl, parseFileHref } from './links'
 import { EventCell } from './proposals/EventCell'
 import { HandoffCell } from './proposals/HandoffCell'
@@ -60,6 +67,8 @@ function renderRow(row: Row) {
       return <ForkedCell row={row} />
     case 'user':
       return <UserCell row={row} />
+    case 'origin':
+      return <OriginCell row={row} />
     case 'event':
       return <EventCell row={row} />
     case 'proposal':
@@ -215,6 +224,7 @@ export function Transcript({ store, bottomOffset, markers }: Props) {
   }, [more, limit])
   const [pinned, setPinned] = useState(true)
   const actions = useActions(store)
+  const background = useSessionBackground(store)
   useReveal(store, listRef, snapshot.rows, limit, setLimit, actions.say)
   useCommentJump(listRef, snapshot.rows, limit, setLimit)
   const renderItem = useCallback<ListRenderItem<Row>>(({ item }) => renderRow(item), [])
@@ -245,36 +255,38 @@ export function Transcript({ store, bottomOffset, markers }: Props) {
   )
   return (
     <TranscriptContext.Provider value={actions.value}>
-      <View style={[styles.list, { backgroundColor: actions.background }]}>
-        <FlashList
-          ref={listRef}
-          data={rows}
-          inverted
-          renderItem={renderItem}
-          keyExtractor={keyOf}
-          getItemType={typeOf}
-          drawDistance={1500}
-          ListHeaderComponent={header}
-          onEndReached={loadOlder}
-          onEndReachedThreshold={0.5}
-          renderScrollComponent={
-            experiment.keyboard === 'chat' ? (ScrollComponent as never) : undefined
-          }
-          ListFooterComponent={footer}
-          scrollEventThrottle={16}
-          onScroll={(event) => {
-            noteWork('offset', event.nativeEvent.contentOffset.y)
-            const next = event.nativeEvent.contentOffset.y < 8
-            if (next !== pinnedRef.current) {
-              noteWork(next ? 'pin' : 'unpin', event.nativeEvent.contentOffset.y)
-              pinnedRef.current = next
-              setPinned(next)
+      <BackgroundContext.Provider value={background}>
+        <View style={[styles.list, { backgroundColor: actions.background }]}>
+          <FlashList
+            ref={listRef}
+            data={rows}
+            inverted
+            renderItem={renderItem}
+            keyExtractor={keyOf}
+            getItemType={typeOf}
+            drawDistance={1500}
+            ListHeaderComponent={header}
+            onEndReached={loadOlder}
+            onEndReachedThreshold={0.5}
+            renderScrollComponent={
+              experiment.keyboard === 'chat' ? (ScrollComponent as never) : undefined
             }
-          }}
-          style={styles.list}
-        />
-        {actions.overlays}
-      </View>
+            ListFooterComponent={footer}
+            scrollEventThrottle={16}
+            onScroll={(event) => {
+              noteWork('offset', event.nativeEvent.contentOffset.y)
+              const next = event.nativeEvent.contentOffset.y < 8
+              if (next !== pinnedRef.current) {
+                noteWork(next ? 'pin' : 'unpin', event.nativeEvent.contentOffset.y)
+                pinnedRef.current = next
+                setPinned(next)
+              }
+            }}
+            style={styles.list}
+          />
+          {actions.overlays}
+        </View>
+      </BackgroundContext.Provider>
     </TranscriptContext.Provider>
   )
 }

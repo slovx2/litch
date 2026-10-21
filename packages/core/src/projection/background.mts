@@ -141,7 +141,7 @@ export function taskOfItem(
  */
 export function wokenBy(
   background: SessionBackgroundView | null,
-  turn: TurnView,
+  turn: Pick<TurnView, 'startedAt'>,
 ): BackgroundTaskView | null {
   if (!background || turn.startedAt === null) return null
   let best: BackgroundTaskView | null = null

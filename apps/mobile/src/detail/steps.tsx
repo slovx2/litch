@@ -1,13 +1,13 @@
 // 过程：一组的摘要（收起时一行，高度固定）和展开后的每一步。每一步一行，点开看细节：
 // 命令的输出末尾、改了哪些文件和一小段差异、工具调用的参数和结果。细节都有上限，长的到“差异”“文件”页去看。
-import { diffLines, knownFileRef, type ToolPart } from '@litch/core'
+import { diffLines, knownFileRef, type ToolPart, taskOfItem } from '@litch/core'
 import { Children, memo, type ReactNode } from 'react'
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import type { Row, StepState } from '../core/rows'
 import { type Translator, useT } from '../ui/i18n'
 import { type Palette, useTheme } from '../ui/theme'
 import { styles as cellStyles, type Props, seconds } from './cells'
-import { useTranscript } from './context'
+import { useBackgroundView, useTranscript } from './context'
 import { fileHref, isWebUrl } from './links'
 
 /** 命令的输出最多露出末尾多少行 */
@@ -27,6 +27,12 @@ export const GroupCell = memo(function GroupCell({ row }: Props<'group'>) {
   const { c, font } = useTheme()
   const t = useT()
   const { toggle } = useTranscript()
+  const background = useBackgroundView()
+  // 回合结束了还在跑的步骤是后台任务：摘要末尾写还有几个在后台运行（照桌面端收起行的记号）
+  const inBackground =
+    row.ended && background && background.running > 0
+      ? row.ids.split(' ').filter((id) => taskOfItem(background, id)?.status === 'running').length
+      : 0
   const steps = t('activity.steps', { n: row.count })
   const tail = row.current
     ? ` · ${t('detail.group.running', { label: t.text(row.current) })}`
@@ -51,6 +57,11 @@ export const GroupCell = memo(function GroupCell({ row }: Props<'group'>) {
         >
           {row.expanded ? '▾' : '▸'} {t('detail.activity')} · {steps}
           {tail}
+          {inBackground > 0 ? (
+            <Text style={{ color: c.accent }} testID="process-background">
+              {` · ${t('background.inTurn', { count: inBackground })}`}
+            </Text>
+          ) : null}
         </Text>
       </Pressable>
     </View>
