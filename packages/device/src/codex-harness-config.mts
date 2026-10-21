@@ -93,11 +93,18 @@ export class CodexHarnessConfig implements HarnessConfigTranslator {
     const { ask, harness } = this
     switch (method) {
       case M.configRead:
-        return (await readCodexSettings(ask, harness, this.context.home())).response
+        return (
+          await readCodexSettings(
+            ask,
+            harness,
+            this.context.home(),
+            this.context.autoTitle.enabled(),
+          )
+        ).response
       case M.configWrite:
         return this.changing(
           'config',
-          writeCodexSettings(ask, harness, this.context.home(), params),
+          writeCodexSettings(ask, harness, this.context.home(), this.context.autoTitle, params),
         )
       case M.configAction:
         return this.changing('config', runCodexAction(ask, harness, params))

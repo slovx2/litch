@@ -9,6 +9,7 @@ import type { DeviceSettingsSnapshot } from '../../protocol/src/device-settings.
 import { HARNESS_CONFIG_NOTIFICATION } from '../../protocol/src/harness-config.mjs'
 import { ClientToolInvoker } from './client-tool-invoke.mjs'
 import { ClientToolRouter } from './client-tools.mjs'
+import { CodexTitles } from './codex-titles.mjs'
 import type { ControlChannel, ControlState } from './control.mjs'
 import { DeviceLayer } from './device-layer.mjs'
 import type { ProcessLimits } from './device-processes.mjs'
@@ -158,6 +159,8 @@ export class DeviceServer {
   readonly deviceTools: DeviceTools
   /** 会话树：父子关系、提案、回报与唤醒（session-tree.mts） */
   readonly sessionTree: SessionTree
+  /** 原生 codex 会话的自动起名 */
+  readonly titles: CodexTitles
   /** 上一次看到的“会话编排”开关，变了才动 */
   private orchestrating: boolean
   /** 扫码绑定手机。没给配置时是 null */
@@ -264,6 +267,11 @@ export class DeviceServer {
       log,
     })
     this.deviceTools.register(CLIENT_TOOL_NAMESPACE.sessions, sessionToolsHandler(this.sessionTree))
+    this.titles = new CodexTitles({
+      openEngineLink: (harness) => this.openEngineLink(harness),
+      store: this.sessionTree.store,
+      log,
+    })
     const router = new ClientToolRouter({
       graceMs: options.timing?.clientToolGraceMs ?? DEFAULT_TIMING.clientToolGraceMs,
       log,
@@ -296,6 +304,7 @@ export class DeviceServer {
       harnessConfigChanged: (params) =>
         this.announce(HARNESS_CONFIG_NOTIFICATION.changed, params, EXTENSION.harnessConfig),
       harnessEnvNames: (harness) => this.harnessEnvNames(harness),
+      titles: this.titles,
       codexCatalog: () =>
         this.control
           ? this.control.request('codex.models', {}, CODEX_CATALOG_TIMEOUT_MS)
@@ -568,6 +577,7 @@ export class DeviceServer {
     for (const link of [...this.engineLinks]) link.close()
     for (const session of [...this.sessions]) session.close()
     this.sessionTree.close()
+    this.titles.close()
     this.deviceTools.close()
     await this.importer?.close()
     await this.layer.close()

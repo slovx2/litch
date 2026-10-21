@@ -1,5 +1,5 @@
 // 原生 codex 的配置项（litch/harness/config/read）：照官方桌面端的设置页挑的那几组，纯桌面外壳的不做。
-// 每一项的键就是 config.toml 里的键路径；技能和 hooks 的信任是两个例外（见 SYNTHETIC），写的时候翻译。
+// 每一项的键就是 config.toml 里的键路径；技能、hooks 的信任和 Litch 自己的自动起名是例外（看 Spec.write），写的时候翻译。
 // 结构每次现读：模型列表（model/list）、实验特性（experimentalFeature/list）、技能（skills/list）、
 // 插件（plugin/list）、hooks（hooks/list）都是动态的；哪个问不到就不出那几项，不让整个读失败。
 import type {
@@ -71,7 +71,26 @@ const option = (value: string, zh: string, en: string): HarnessSettingOption => 
 
 type Spec = HarnessSettingSpec & {
   /** 写的时候怎么落：不给是 config.toml 里同名的键路径 */
-  write?: { kind: 'skill'; path: string } | { kind: 'hookTrust'; hookKey: string; hash: string }
+  write?:
+    | { kind: 'skill'; path: string }
+    | { kind: 'hookTrust'; hookKey: string; hash: string }
+    | { kind: 'autoTitle' }
+}
+
+/**
+ * 自动起名的开关：不是 codex 的配置，是设备进程替它做的（codex-titles.mts），值存在设备进程自己那里。
+ * 键带 litch 前缀，和 config.toml 的键路径分开
+ */
+export const AUTO_TITLE_KEY = 'litch.autoTitle'
+
+function autoTitleSpec(): Spec {
+  return {
+    ...boolSpec(AUTO_TITLE_KEY, 'behavior', ['自动起名', 'Name sessions automatically'], true, [
+      '在 Litch 里新建的会话，第一回合结束后由 Litch 用小模型（luna 系，账号的模型清单里有才用）起个名字；手动改过名的不动。关掉后新建的会话不再起名。',
+      'Sessions you start in Litch get a name after their first turn, written by a small model (the luna family, only when your account lists one). Names you set yourself are kept. When off, new sessions are not named.',
+    ]),
+    write: { kind: 'autoTitle' },
+  }
 }
 
 function enumSpec(
@@ -347,6 +366,7 @@ function permissionSpecs(snapshot: CodexSnapshot): Spec[] {
 
 function behaviorSpecs(snapshot: CodexSnapshot): Spec[] {
   return [
+    autoTitleSpec(),
     enumSpec(
       'web_search',
       'behavior',
@@ -534,12 +554,15 @@ function featureSpecs(catalog: Catalog, snapshot: CodexSnapshot): Spec[] {
     .map((feature) => featureSpec(feature, snapshot, 'features'))
 }
 
-/** 原生配置里写了的值：普通的键按路径取用户层；技能、hooks 信任这两种翻译过来 */
+/** 原生配置里写了的值：普通的键按路径取用户层；技能、hooks 信任这两种翻译过来；自动起名取设备进程存的 */
 function userValue(
   spec: Spec,
   snapshot: CodexSnapshot,
   catalog: Catalog,
+  autoTitle: boolean,
 ): HarnessSettingValue | undefined {
+  // 开着是默认，不算写过
+  if (spec.write?.kind === 'autoTitle') return autoTitle ? undefined : false
   if (spec.write?.kind === 'skill') {
     const listed = valueAt(snapshot.user, ['skills', 'config'])
     const path = spec.write.path
@@ -574,6 +597,7 @@ export async function readCodexSettings(
   ask: Ask,
   harness: string,
   home: string | null,
+  autoTitle: boolean,
 ): Promise<CodexSettings> {
   const [snapshot, catalog] = await Promise.all([
     readSnapshot(ask, harness),
@@ -591,7 +615,7 @@ export async function readCodexSettings(
   const values: Record<string, HarnessSettingValue> = {}
   const overridden: NonNullable<HarnessConfigReadResponse['overridden']> = {}
   for (const spec of specs) {
-    const value = userValue(spec, snapshot, catalog)
+    const value = userValue(spec, snapshot, catalog, autoTitle)
     if (value !== undefined) values[spec.key] = value
     if (spec.write) continue
     const path = splitKey(spec.key)

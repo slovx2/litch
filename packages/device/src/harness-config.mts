@@ -79,6 +79,8 @@ export interface TranslatorContext {
    * 由主进程用起 app-server 的那个可执行文件和环境跑（控制命令 codex.models）。问不到抛错
    */
   bundledCatalog(): Promise<unknown>
+  /** Litch 替它做的自动起名的开关（codex-titles.mts）：设备进程自己存，不在 harness 的原生配置里。null 是回到默认 */
+  autoTitle: { enabled(): boolean; set(value: boolean | null): void }
   /** 发给这条连接（声明过 harnessConfig 才发） */
   notify(method: string, params: unknown): void
   /** 经这套接口改了配置：告诉所有声明过 harnessConfig 的连接，发起的这条也收 */
