@@ -318,25 +318,9 @@
 [data-skin="retro"] .pick-opt[aria-selected="true"] span {
   color: inherit;
 }
-/* 计划模式的开关和选择器一样用方括号括着；开着的时候反白 */
-[data-skin="retro"] .mode-btn::before {
-  content: "[";
-  color: var(--ink-3);
-}
-[data-skin="retro"] .mode-btn::after {
-  content: "]";
-  color: var(--ink-3);
-}
-[data-skin="retro"] .mode-btn .ic {
-  display: none;
-}
-[data-skin="retro"] .mode-btn[aria-pressed="true"] {
-  background: var(--inv-bg);
-  color: var(--inv-fg);
-}
-[data-skin="retro"] .mode-btn[aria-pressed="true"]::before,
-[data-skin="retro"] .mode-btn[aria-pressed="true"]::after {
-  color: inherit;
+/* 计划模式的开关：方的拨块，开着的时候和设置页的开关一样发光 */
+[data-skin="retro"] .mode-btn[aria-checked="true"] .mode-sw i {
+  box-shadow: var(--glow);
 }
 [data-skin="retro"] .plan-ask {
   border-color: var(--wait);

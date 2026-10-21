@@ -12,7 +12,6 @@ import {
 import { useEffect, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { downHarness } from '../app/device.ts'
-import { Plan } from '../app/icons.tsx'
 import { useKey, useServices } from '../app/services.tsx'
 import type { MessageKey } from '../i18n/index.ts'
 import { EFFORT_TEXT } from './efforts.ts'
@@ -138,7 +137,9 @@ export function SettingsBar({ options, settings, fresh, onChange }: SettingsBarP
     return {
       id: preset.id,
       title,
-      ...(locked ? { disabled: true, note: t('permission.newOnly') } : note ? { note } : {}),
+      // 菜单里只列名字，说明在鼠标停上去的提示里；换不了的那一档在名字下面写为什么
+      ...(note ? { hint: note } : {}),
+      ...(locked ? { disabled: true, note: t('permission.newOnly') } : {}),
       ...(preset.confirm && !locked
         ? {
             confirm: {
@@ -176,7 +177,8 @@ export function SettingsBar({ options, settings, fresh, onChange }: SettingsBarP
             return {
               id: effort.id,
               title: key ? t(key) : effort.id,
-              ...(effort.note ? { note: effort.note } : {}),
+              // 只列名字；对面给的说明放进提示里
+              ...(effort.note ? { hint: effort.note } : {}),
             }
           })}
           onPick={(effort) => onChange({ effort })}
@@ -193,17 +195,17 @@ export function SettingsBar({ options, settings, fresh, onChange }: SettingsBarP
             {
               id: STANDARD_SPEED,
               title: t('composer.speed.standard'),
-              note: t('composer.speed.standard.note'),
+              hint: t('composer.speed.standard.note'),
             },
-            // 快速档按界面的语言说；别的档（对面自定的）用它给的名字和说明
+            // 快速档按界面的语言说；别的档（对面自定的）用它给的名字和说明。说明都只在提示里
             ...model.speeds.map((speed) =>
               FAST_SPEEDS.has(speed.id)
                 ? {
                     id: speed.id,
                     title: t('composer.speed.fast'),
-                    note: t('composer.speed.fast.note'),
+                    hint: t('composer.speed.fast.note'),
                   }
-                : { id: speed.id, title: speed.title, ...(speed.note ? { note: speed.note } : {}) },
+                : { id: speed.id, title: speed.title, ...(speed.note ? { hint: speed.note } : {}) },
             ),
           ]}
           onPick={(speed) => onChange({ speed })}
@@ -219,17 +221,21 @@ export function SettingsBar({ options, settings, fresh, onChange }: SettingsBarP
         />
       ) : null}
       {options.plan ? (
-        // 计划模式：一个开关。开着的时候下一条消息先出计划，确认了再动手
+        // 计划模式：一个开关。开着的时候下一条消息先出计划，确认了再动手。
+        // 画成带拨块的开关，关着的时候也一直在：光看底栏上有“计划”两个字分不出开没开（别的产品里出现计划标识就是开着）
         <button
           type="button"
+          role="switch"
           className="mode-btn"
           data-kind="plan"
-          aria-pressed={settings.mode === 'plan'}
+          aria-checked={settings.mode === 'plan'}
           title={t(settings.mode === 'plan' ? 'composer.plan.on' : 'composer.plan.off')}
           onClick={() => onChange({ mode: settings.mode === 'plan' ? 'default' : 'plan' })}
         >
-          <Plan />
-          <span>{t('composer.plan')}</span>
+          <span className="mode-sw" aria-hidden="true">
+            <i />
+          </span>
+          <span className="mode-name">{t('composer.plan')}</span>
         </button>
       ) : null}
     </>

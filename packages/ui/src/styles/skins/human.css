@@ -289,7 +289,7 @@
 }
 [data-skin="human"] .mode-btn {
   height: 26px;
-  padding: 0 9px;
+  padding: 0 10px 0 6px;
   border-radius: 13px;
   font-size: 13px;
 }

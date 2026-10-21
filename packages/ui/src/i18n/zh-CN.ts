@@ -1284,8 +1284,8 @@ export const zhCN = {
   'skill.scope.admin': '管理员配的',
 
   // 计划模式
-  'composer.plan': '计划',
-  'composer.plan.off': '计划模式：先出一份计划，你点头了再动手',
+  'composer.plan': '计划模式',
+  'composer.plan.off': '计划模式关着。打开后先出一份计划，你点头了再动手',
   'composer.plan.on': '计划模式开着：下一条消息先出计划。再点一下关掉',
   'slash.plan': '打开计划模式：先出计划，确认了再动手',
   'slash.plan.off': '关掉计划模式',

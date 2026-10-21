@@ -60,7 +60,9 @@ changes what the window shows.
 The default page. A prompt box with, below it, pickers for **Device** and **Project** (last item: Add
 project…), and in the composer bar: harness picker (only when more than one harness is ready), Model,
 Reasoning effort, Permissions (Read only / In project / Full access, or the harness's own presets) and
-the Plan switch where supported. The session is created when the first message is sent. Litch
+the Plan mode switch where supported. The menus list names only; hovering an item shows what it means.
+Plan mode is a small on/off switch next to its name: knob left and grey when off, knob right in the
+accent color when on. The session is created when the first message is sent. Litch
 remembers the last device, project, harness and per-harness model/effort/permissions. When nothing can
 be started (no device, device offline, no ready harness) the page says why with an "Open Devices"
 button.

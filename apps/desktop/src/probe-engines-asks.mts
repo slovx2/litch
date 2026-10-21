@@ -206,7 +206,7 @@ export async function enginesSettle(): Promise<string[]> {
   }
   for (const cross of all('.dock .cmp-chip-x, .dock .cmp-att-x')) cross.click()
   const plan = one<HTMLButtonElement>('.dock .mode-btn[data-kind="plan"]')
-  if (plan?.getAttribute('aria-pressed') === 'true') {
+  if (plan?.getAttribute('aria-checked') === 'true') {
     done.push('关掉计划模式')
     plan.click()
   }

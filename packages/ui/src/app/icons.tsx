@@ -129,8 +129,6 @@ export const Down = glyph('M3.5 6l4.5 4.5L12.5 6')
 export const Up = glyph('M3.5 10l4.5-4.5 4.5 4.5')
 /** 更多：横着三个点 */
 export const More = glyph('M3.5 8h1M7.5 8h1M11.5 8h1')
-/** 计划：三行清单，每行前面一个点 */
-export const Plan = glyph('M3.5 4.5h.5M6.5 4.5h6M3.5 8h.5M6.5 8h6M3.5 11.5h.5M6.5 11.5h6')
 /** 命令：一道斜杠，就是打出来叫命令的那个字 */
 export const Slash = glyph('M10.5 2.5l-5 11')
 /** 加附件：一枚回形针 */
