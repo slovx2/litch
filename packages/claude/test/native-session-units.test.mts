@@ -8,6 +8,7 @@ import {
   backgroundCommandEnd,
   goalReminder,
   isMainToolResult,
+  keepAliveIdleMs,
   keepAliveLimit,
   liveContext,
   needsStrictSkillShell,
@@ -297,6 +298,27 @@ test('结束通知之后要不要等它触发的那一轮：从通知到达起�
   assert.equal(isMainToolResult(user({}, [{ type: 'text', text: '追加指令' }])), false)
   assert.equal(isMainToolResult(user({}, '纯文本')), false)
   assert.equal(isMainToolResult({ type: 'assistant', message: { content: [toolResult] } }), false)
+})
+
+test('空闲保留：默认 0（不留），按秒设，非法值当 0，过大的按 setTimeout 的上限', () => {
+  const previous = process.env.CHA_CLAUDE_KEEP_ALIVE_IDLE_SECONDS
+  try {
+    delete process.env.CHA_CLAUDE_KEEP_ALIVE_IDLE_SECONDS
+    assert.equal(keepAliveIdleMs(), 0)
+    process.env.CHA_CLAUDE_KEEP_ALIVE_IDLE_SECONDS = '30'
+    assert.equal(keepAliveIdleMs(), 30_000)
+    process.env.CHA_CLAUDE_KEEP_ALIVE_IDLE_SECONDS = '0.5'
+    assert.equal(keepAliveIdleMs(), 500)
+    for (const raw of ['0', '-1', 'soon', ' ']) {
+      process.env.CHA_CLAUDE_KEEP_ALIVE_IDLE_SECONDS = raw
+      assert.equal(keepAliveIdleMs(), 0, raw)
+    }
+    process.env.CHA_CLAUDE_KEEP_ALIVE_IDLE_SECONDS = '1e12'
+    assert.equal(keepAliveIdleMs(), 2 ** 31 - 1)
+  } finally {
+    if (previous === undefined) delete process.env.CHA_CLAUDE_KEEP_ALIVE_IDLE_SECONDS
+    else process.env.CHA_CLAUDE_KEEP_ALIVE_IDLE_SECONDS = previous
+  }
 })
 
 test('保留上限：默认 8，可用环境变量调整，0 表示不保留', () => {

@@ -541,9 +541,11 @@ export interface RuntimeSessionHandlers {
 export interface ClaudeRuntime {
   supportedModels?(): Promise<NativeModelInfo[]>
   setSessionHandlers?(handlers: RuntimeSessionHandlers): void
-  // 仍有 CLI 进程存活的线程。
+  // 仍有 CLI 进程存活的线程（只是空闲保留着的不算）。
   liveSessions?(): string[]
   closeSession?(threadId: string, reason: string): Promise<void>
+  // 关掉只是空闲保留着的 CLI 进程：客户端全都断开、技能配置要改时
+  closeIdleSessions?(reason: string): Promise<void>
   // 客户端全都断开时：关掉跨回合留着、眼下没人用的 MCP 连接
   closeIdleMcp?(): Promise<void>
   // 删掉 CLI 写下的一份会话记录（连同它的子代理记录）：临时会话卸载时用。找不到就报错。

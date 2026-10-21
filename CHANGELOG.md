@@ -7,6 +7,7 @@ versioning or publishing metadata.
 
 ## 未发布
 
+- Claude Code：新增 `CHA_CLAUDE_KEEP_ALIVE_IDLE_SECONDS`，回合结束后没有后台命令的 CLI 进程再留这么多秒，同一会话的下个回合直接用，不再重起；默认 `0`，和原来一样回合结束就退出。和后台命令共用 `CHA_CLAUDE_KEEP_ALIVE_SESSIONS` 的上限，满了先回收闲得最久的空闲进程；会话归档、删除、卸载、回退，全部客户端断开，改技能配置，适配器停止时马上回收
 - Claude Code：计划模式里模型说的话照上游 codex 记成回答（agentMessage），回合的最终文本就是它；计划条目只来自回答里的 `<proposed_plan>` 块、计划文件和 ExitPlanMode 交来的计划。模型只把计划说出来就交（没写文件、没用 `<proposed_plan>`）时，交计划时拿刚说完的那段话补一个计划条目，客户端照样能问要不要执行
 - Claude Code：模型用 Read 看图时照上游 view_image 另有一个 `imageView` 条目（路径是绝对路径），实时发出、存进回合（全量视图里有），读原生会话的历史也画出来；Read 自己的工具条目照旧
 - 适配器：Codex 协议基线从 0.157.1 升到 0.163.0（`codexProtocol`、快照、方法表、`runtime/info` 和 `codex --version` 报的版本），CI 和“一键安装”的验证版 codex 改成 0.163.0；作为 harness 接进来的 codex 下限仍是 0.157.1

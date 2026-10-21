@@ -18,6 +18,16 @@ export function keepAliveLimit(): number {
   return Number.isSafeInteger(value) && value >= 0 ? value : DEFAULT_KEEP_ALIVE_SESSIONS
 }
 
+// 回合结束后没有后台命令的 CLI 进程再留多久（毫秒），下个回合直接用；0 表示不留（默认）。
+// 和后台命令共用上面的会话数上限。超过 setTimeout 能表示的最大值按最大值算。
+export function keepAliveIdleMs(): number {
+  const raw = process.env.CHA_CLAUDE_KEEP_ALIVE_IDLE_SECONDS
+  if (raw == null || raw.trim() === '') return 0
+  const seconds = Number(raw)
+  if (!Number.isFinite(seconds) || seconds <= 0) return 0
+  return Math.min(Math.round(seconds * 1000), 2 ** 31 - 1)
+}
+
 // 受限会话里 Skill 的内联 shell 必须关闭；这是进程启动时定下的设置。
 export function needsStrictSkillShell(context: RuntimeTurnContext): boolean {
   return (

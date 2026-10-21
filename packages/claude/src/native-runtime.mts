@@ -70,6 +70,7 @@ import {
   backgroundCommandEnd,
   goalReminder,
   isMainToolResult,
+  keepAliveIdleMs,
   keepAliveLimit,
   liveContext,
   needsStrictSkillShell,
@@ -185,6 +186,10 @@ interface NativeSession {
   // 协议层没有接这一轮：丢弃它的输出，直到 CLI 回到 idle。
   discard: boolean
   kept: boolean
+  // 只因空闲保留（CHA_CLAUDE_KEEP_ALIVE_IDLE_SECONDS）而留着：没有回合也没有后台命令，到点就退出。
+  // idleSince 是它闲下来的时间，满额时先回收闲得最久的。
+  idle: boolean
+  idleSince: number
   closing: boolean
   closeReason: string
   // 请 CLI 现起的会话标题，还没起完时进程先别退出（见 finishDeferredResult）
@@ -311,8 +316,29 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     this.sessionHandlers = handlers
   }
 
+  // 只是空闲保留着的进程不算：它不看管任何东西，客户端全断开或配置改变时直接关掉。
   liveSessions(): string[] {
-    return [...this.sessions.values()].filter((session) => !session.closing).map((s) => s.key)
+    return [...this.sessions.values()]
+      .filter((session) => !session.closing && !this.isIdle(session))
+      .map((s) => s.key)
+  }
+
+  async closeIdleSessions(reason: string): Promise<void> {
+    await Promise.all(
+      [...this.sessions.values()]
+        .filter((session) => this.isIdle(session))
+        .map((session) => this.shutdown(session, reason)),
+    )
+  }
+
+  private isIdle(session: NativeSession): boolean {
+    return (
+      session.idle &&
+      !session.closing &&
+      !session.turn &&
+      !session.attach &&
+      session.shells.live.size === 0
+    )
   }
 
   async closeSession(threadId: string, reason: string): Promise<void> {
@@ -453,6 +479,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     handlers: RuntimeHandlers,
   ): Promise<void> {
     this.clearTimer(session, 'reapTimer')
+    session.idle = false
     const ready = this.beginTurnSettings(context)
     try {
       const pending = this.attachTurn(session, context, handlers)
@@ -533,14 +560,23 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     await session.done
   }
 
-  // 没有回合也没有后台命令的进程不再有用。
+  // 没有回合也没有后台命令的进程不再有用。开了空闲保留时多留一会儿，下个回合直接用。
   private scheduleReap(session: NativeSession): void {
     if (session.reapTimer || session.closing) return
-    session.reapTimer = setTimeout(() => {
-      session.reapTimer = null
-      if (session.closing || session.turn || session.attach || session.shells.live.size > 0) return
-      void this.shutdown(session, '后台命令已全部结束')
-    }, IDLE_REAP_MS)
+    const idleMs = keepAliveIdleMs()
+    if (idleMs > 0 && !session.idle) {
+      session.idle = true
+      session.idleSince = Date.now()
+    }
+    session.reapTimer = setTimeout(
+      () => {
+        session.reapTimer = null
+        if (session.closing || session.turn || session.attach || session.shells.live.size > 0)
+          return
+        void this.shutdown(session, idleMs > 0 ? '空闲保留已到时' : '后台命令已全部结束')
+      },
+      Math.max(IDLE_REAP_MS, idleMs),
+    )
     session.reapTimer.unref()
   }
 
@@ -642,6 +678,8 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         attachResolve: null,
         discard: false,
         kept: false,
+        idle: false,
+        idleSince: 0,
         closing: false,
         closeReason: '',
         title: null,
@@ -2772,16 +2810,28 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
 
   // 回合结束时进程要不要留下。返回 null 表示留下；空串表示不留；
   // 其他文字表示本该留下却留不了，要告诉用户后台命令为什么停了。
+  // 没有后台命令时只有开了空闲保留才留，满额时先回收闲得最久的空闲会话，回收不出位置就不留。
   private keepAlive(session: NativeSession): string | null {
     if (session.closing || session.process.hasExited) return ''
-    if (session.shells.live.size === 0) return ''
+    const shells = session.shells.live.size > 0
+    if (!shells && keepAliveIdleMs() <= 0) return ''
     const limit = keepAliveLimit()
     if (limit <= 0) return ''
-    if (session.kept) return null
-    const kept = [...this.sessions.values()].filter((other) => other.kept && !other.closing).length
-    if (kept >= limit)
-      return `已有 ${kept} 个会话在保留后台命令，达到上限；本回合启动的后台命令已随回合结束而停止。`
-    session.kept = true
+    if (!session.kept) {
+      const kept = [...this.sessions.values()].filter((other) => other.kept && !other.closing)
+      const idle = kept
+        .filter((other) => this.isIdle(other))
+        .sort((a, b) => a.idleSince - b.idleSince)
+      const over = kept.length - limit + 1
+      if (over > 0 && idle.length < over)
+        return shells
+          ? `已有 ${kept.length} 个会话在保留后台命令，达到上限；本回合启动的后台命令已随回合结束而停止。`
+          : ''
+      for (const other of idle.slice(0, Math.max(over, 0)))
+        void this.shutdown(other, '保留的会话数达到上限')
+      session.kept = true
+    }
+    if (!shells) this.scheduleReap(session)
     return null
   }
 
