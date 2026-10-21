@@ -230,6 +230,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
         proposalId: options.proposalId ?? null,
       },
       nativeLineage: null,
+      background: null,
     }
     host.addSummary(deviceId, summary)
     // fork：带着父会话到现在为止的全部内容

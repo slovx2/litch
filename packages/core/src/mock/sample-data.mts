@@ -249,6 +249,7 @@ const summaries = (
     task: null,
     lineage: null,
     nativeLineage: null,
+    background: null,
     ...extra,
   }))
 

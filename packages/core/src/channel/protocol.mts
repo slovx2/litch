@@ -204,6 +204,8 @@ export type SessionOp =
       durationMs: number | null
       /** 不带这个字段表示出错原因不变 */
       error?: string | null
+      /** 回合的来历（TurnView.origin）。不带表示不变：有的入口只在回合结束时才给 */
+      origin?: NonNullable<TurnView['origin']>
     }
   /** 加一个条目；标识已经有了就整个换掉（条目定稿时对面会给出完整的最终内容） */
   | { op: 'item.add'; turnId: string; item: ItemView }

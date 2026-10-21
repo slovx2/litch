@@ -23,6 +23,7 @@ import {
   type DeviceSettingsChangedNotification,
   EXTENSION,
   isUnknownMethodError,
+  type LitchBackground,
   type Model,
   type ModelListResponse,
   PINNED_SECTION_ID,
@@ -813,7 +814,10 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
 
   const patchThread = (
     threadId: string,
-    patch: Partial<Thread> & { litchLineage?: SessionTreeThreadFields['litchLineage'] | undefined },
+    patch: Partial<Thread> & {
+      litchLineage?: SessionTreeThreadFields['litchLineage'] | undefined
+      litchBackground?: LitchBackground | undefined
+    },
   ) => {
     if (transient.has(threadId)) return
     if (agentThreads.has(threadId)) {
@@ -1091,6 +1095,11 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     // 会话树：一个会话的 Litch 父子关系建立了、脱离了。只发给声明了 sessionTree 的连接
     'litch/thread/lineage/updated': ({ threadId, lineage }) =>
       patchThread(threadId, { litchLineage: lineage ?? undefined }),
+    // 后台任务的集合变了（整份）。只发给声明了 backgroundTasks 的连接；没打开过的会话也发，侧栏要标
+    'litch/thread/background/changed': ({ threadId, tasks, wakesOnFinish }) =>
+      patchThread(threadId, {
+        litchBackground: tasks.length > 0 ? { tasks, wakesOnFinish } : undefined,
+      }),
   }
 
   const route = (method: string, params: unknown) => {

@@ -32,6 +32,7 @@ export function reduceSession(view: SessionView, op: SessionOp): void {
       turn.status = op.status
       turn.durationMs = op.durationMs
       if (op.error !== undefined) turn.error = op.error
+      if (op.origin !== undefined) turn.origin = op.origin
       return
     }
     case 'item.add': {

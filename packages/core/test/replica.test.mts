@@ -128,6 +128,7 @@ test('各组的状况：几个待审批、待回答、在跑、未读；只记�
     answer,
     running,
     unread,
+    background: 0,
   })
   // 本机：litch 里 Claude Code 的一个在跑、一个等审批，Pi 的一个未读；docs 里 Pi 的一个未读。
   // 按 harness 分开记。置顶的、分区里的、无工作区的都闲着，不占一项

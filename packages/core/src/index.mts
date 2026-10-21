@@ -162,6 +162,7 @@ export { projectWorkspaces, resolveWorkspace } from './device/workspaces.mjs'
 export { createMockCore, type MockCore, type MockCoreOptions } from './mock/mock-core.mjs'
 export type { SampleLang } from './mock/sample-text.mjs'
 export type * from './model.mjs'
+export type * from './model-background.mjs'
 export type * from './model-client-tools.mjs'
 export { CLIENT_TOOL } from './model-client-tools.mjs'
 export type * from './model-config.mjs'
@@ -206,6 +207,13 @@ export {
   gatherAnswers,
   parseAskReply,
 } from './projection/asks.mjs'
+export {
+  deriveBackground,
+  runningFromTurn,
+  sessionBackground,
+  taskOfItem,
+  wokenBy,
+} from './projection/background.mjs'
 export {
   answerOf,
   type Block,

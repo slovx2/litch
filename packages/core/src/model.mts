@@ -2,6 +2,7 @@
 // 协议条目怎么变成这些显示条目，见 projection 目录。
 // 类型是 Text 的字段可能是对面给的原文，也可能是核心自己要说的一句话（见 phrase.mts），界面按当前语言显示。
 
+import type { SessionBackgroundView, TurnOrigin } from './model-background.mjs'
 import type { MachineAccessView, MachineAskView } from './model-machine.mjs'
 import type { DeviceServiceView, ServiceUpgradeView } from './model-service.mjs'
 import type { SessionTaskMark } from './model-tasks.mjs'
@@ -96,6 +97,8 @@ export interface HarnessAbilities {
   turnDiff: boolean
   /** 能单独停掉一个子代理（对子线程发 turn/interrupt）。子代理页上的“停止”按它出 */
   stopAgent: boolean
+  /** 报后台任务的集合（backgroundTasks 扩展）。不报的，界面从已结束回合里还在跑的命令派生 */
+  backgroundTasks: boolean
 }
 
 /** 设备服务给的一段话的两种语言版本。核心不认识语言，原样交给界面，界面按当前的语言取 */
@@ -350,6 +353,11 @@ export interface SessionSummary {
    * 侧栏默认不显示它们，“更多”菜单里能打开；认得出父会话的挂在父会话下面。不是的、认不出的是 null
    */
   nativeLineage: NativeLineageView | null
+  /**
+   * 对面报的后台任务集合（backgroundTasks 扩展，model-background.mts）：回合结束后还在跑的、这次运行里结束过的。
+   * 侧栏有任务在跑时出一个慢呼吸的记号。对面不报、一个也没有的是 null；不报的会话打开后由界面派生（projection/background.mts）
+   */
+  background: SessionBackgroundView | null
 }
 
 /** 派出这个原生会话的应用。app 是对面报的原样，认不认识由界面定 */
@@ -644,6 +652,8 @@ export interface TurnView {
   durationMs: number | null
   /** 回合失败时给人看的原因 */
   error: string | null
+  /** 不是用户发起的回合是怎么开始的（后台任务结束后接着做、定时任务触发）。用户发的不带 */
+  origin?: Exclude<TurnOrigin, 'user'>
 }
 
 /**
@@ -896,6 +906,8 @@ export interface SessionAbilities {
   steerImages: boolean
   /** 最终回答一开始就知道它是最终回答。没有声明的当它不知道，等消息写完再认 */
   finalOnStart: boolean
+  /** 对面报后台任务的集合（SessionSummary.background）。不报的当它不报，界面自己从会话里派生 */
+  backgroundTasks: boolean
   /** 这几项是照 harness 的声明给的，不是先当它会 */
   declared: boolean
 }
