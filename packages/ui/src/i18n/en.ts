@@ -139,6 +139,9 @@ export const en: Record<MessageKey, Entry> = {
   'sidebar.pinned.drop': 'Drag here to pin',
   // 内置的“项目”组：不在置顶、用户组里的项目都在这里，不能删、不能改名
   'sidebar.projects': 'Projects',
+  'sidebar.projects.menu': 'Actions for Projects',
+  'section.up': 'Move up',
+  'section.down': 'Move down',
   'sidebar.projects.empty': 'No projects yet. Use + to add one, or drag a project here',
   'sidebar.focus': 'Open on its own',
   'sidebar.focus.back': 'Back',

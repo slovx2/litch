@@ -19,7 +19,9 @@ from the project's menu. Groups (sidebar folders) are made from the device menu 
 that are not pinned or in a group are listed under the built-in Projects group (it can't be renamed or
 deleted). In the sidebar, drag a project onto a group's title row to put it at the end of that group
 (the row lights up), or between two projects to place it there (a line shows where it lands); dragging
-it onto Projects takes it out of its group. Sessions can be dragged onto Pinned or a group's title, or
+it onto Projects takes it out of its group. Drag a group's title row (or Projects') above or below
+another group to change their order, or use Move up / Move down in its menu; Pinned stays on top and
+the order is remembered on this computer only. Sessions can be dragged onto Pinned or a group's title, or
 back onto their own project. The phone app shows the same groups but has no dragging. Arranging the
 sidebar (groups, pins, order) is not available through the command; tell the user how to do it in the
 sidebar.

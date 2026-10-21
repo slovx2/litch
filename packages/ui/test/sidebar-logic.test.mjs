@@ -156,9 +156,16 @@ test('侧栏的状态：没记过就是开着、默认宽度；改了就记下�
     width: state.SIDEBAR_DEFAULT,
     harnesses: [],
     nativeChildren: false,
+    bands: {},
   })
   state.setSidebarWidth(356.4)
-  assert.deepEqual(saved(), { open: true, width: 356, harnesses: [], nativeChildren: false })
+  assert.deepEqual(saved(), {
+    open: true,
+    width: 356,
+    harnesses: [],
+    nativeChildren: false,
+    bands: {},
+  })
   // 存的是想要的宽度，夹在最窄和最宽之间
   state.setSidebarWidth(5000)
   assert.equal(state.sidebarNow().width, state.SIDEBAR_MAX)
@@ -170,6 +177,7 @@ test('侧栏的状态：没记过就是开着、默认宽度；改了就记下�
     width: state.SIDEBAR_MIN,
     harnesses: [],
     nativeChildren: false,
+    bands: {},
   })
   // 只看哪几个 harness 也记在这一份里，重复的只留一个；取消就是记回“都看”
   state.setSidebarHarnesses(['pi', 'claude', 'pi'])
@@ -178,6 +186,7 @@ test('侧栏的状态：没记过就是开着、默认宽度；改了就记下�
     width: state.SIDEBAR_MIN,
     harnesses: ['pi', 'claude'],
     nativeChildren: false,
+    bands: {},
   })
   state.setSidebarHarnesses([])
   assert.deepEqual(saved().harnesses, [])
@@ -186,6 +195,9 @@ test('侧栏的状态：没记过就是开着、默认宽度；改了就记下�
   assert.equal(saved().nativeChildren, true)
   state.setSidebarNativeChildren(false)
   assert.equal(saved().nativeChildren, false)
+  // 组的先后按设备记
+  state.setSidebarBands('local', [':projects', ':section:a'])
+  assert.deepEqual(saved().bands, { local: [':projects', ':section:a'] })
 })
 
 test('侧栏的状态：记着的照记着的来，离谱的宽度拉回范围里；同一次按键来两回只算一回', async () => {
@@ -200,6 +212,7 @@ test('侧栏的状态：记着的照记着的来，离谱的宽度拉回范围�
     width: state.SIDEBAR_MAX,
     harnesses: ['codex', 'pi'],
     nativeChildren: true,
+    bands: {},
   })
   state.toggleSidebar()
   // 应用菜单的快捷键和页面自己的按键各来一次：第二次不算
@@ -216,6 +229,7 @@ test('侧栏的状态：记着的照记着的来，离谱的宽度拉回范围�
     width: broken.SIDEBAR_DEFAULT,
     harnesses: [],
     nativeChildren: false,
+    bands: {},
   })
   // 记着的不是数组：当成没在筛；数组里不是字符串的、空的丢掉
   stored.set('litch.sidebar', JSON.stringify({ harnesses: 'pi' }))

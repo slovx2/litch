@@ -248,9 +248,11 @@
 
 /* ---------- 拖放 ----------
    两种提示分开：“放进”一组（拖到组、“项目”、工作区的标题行上）是那一行高亮；
-   “插到两个工作区之间”是一条线，画在停着的那个工作区上沿（插到它前面）或下沿（插到它后面，组里最后一个的下沿就是组的末尾）。
-   没有过渡动画，减少动效时不用另外处理 */
-.ws-block {
+   “插到两样之间”是一条线：拖工作区时画在停着的那个工作区上沿（插到它前面）或下沿（插到它后面，
+   组里最后一个的下沿就是组的末尾），拖一整组时画在停着的那一组上沿或下沿。
+   线头一个空心小圆点，和行的边框、分隔线分得开。没有过渡动画，减少动效时不用另外处理 */
+.ws-block,
+.band {
   position: relative;
 }
 .head-line[data-drop="into"],
@@ -263,42 +265,41 @@
 .band-empty[data-drop="into"] {
   border-color: transparent;
 }
-.ws-block[data-drop]::before {
+:is(.ws-block, .band)[data-drop]::before {
   content: "";
   position: absolute;
   z-index: 1;
-  left: 6px;
+  left: 8px;
   right: 4px;
   height: 2px;
   border-radius: var(--r1);
   background: var(--accent);
   pointer-events: none;
 }
-/* 线头一个小圆点，和行的边框、分隔线分得开 */
-.ws-block[data-drop]::after {
+:is(.ws-block, .band)[data-drop]::after {
   content: "";
   position: absolute;
   z-index: 1;
   left: 2px;
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
   border: 2px solid var(--accent);
   border-radius: 50%;
   background: var(--panel);
   box-sizing: border-box;
   pointer-events: none;
 }
-.ws-block[data-drop="before"]::before {
+:is(.ws-block, .band)[data-drop="before"]::before {
   top: -1px;
 }
-.ws-block[data-drop="before"]::after {
-  top: -3px;
+:is(.ws-block, .band)[data-drop="before"]::after {
+  top: -4px;
 }
-.ws-block[data-drop="after"]::before {
+:is(.ws-block, .band)[data-drop="after"]::before {
   bottom: -1px;
 }
-.ws-block[data-drop="after"]::after {
-  bottom: -3px;
+:is(.ws-block, .band)[data-drop="after"]::after {
+  bottom: -4px;
 }
 .row-line[draggable="true"] {
   -webkit-user-drag: element;

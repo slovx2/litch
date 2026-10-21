@@ -54,6 +54,7 @@ import { offerUndo } from './archive-undo.ts'
 import { cwdMark } from './cwd.ts'
 import {
   type Band,
+  bandsAfter,
   DRAG_TYPE,
   type DragItem,
   type DropTarget,
@@ -61,6 +62,7 @@ import {
   dropCommands,
   endDrag,
   onDragChange,
+  orderBands,
   slotOf,
   startDrag,
 } from './drop.ts'
@@ -71,7 +73,12 @@ import { type RowAction, RowMenu, type RowMenuHandle } from './RowMenu.tsx'
 import { SectionDialog } from './SectionDialog.tsx'
 import { SidebarFrame } from './SidebarFrame.tsx'
 import { SidebarMore } from './SidebarMore.tsx'
-import { useSidebarHarnesses, useSidebarNativeChildren } from './state.ts'
+import {
+  setSidebarBands,
+  useSidebarBands,
+  useSidebarHarnesses,
+  useSidebarNativeChildren,
+} from './state.ts'
 import { TallyMarks } from './TallyMarks.tsx'
 import { WorkspaceDialog } from './WorkspaceDialog.tsx'
 
@@ -680,6 +687,12 @@ interface Hit {
   claim?: boolean
 }
 
+/** 拖着的东西停在这一块（一整组）的下半截 */
+function lower(event: DragEvent): boolean {
+  const box = (event.currentTarget as Element).getBoundingClientRect()
+  return event.clientY > box.top + box.height / 2
+}
+
 /** 拖着的东西停在工作区那一块的下半截：那一行的下半截，或者它下面的会话 */
 function below(event: DragEvent): boolean {
   const head = (event.currentTarget as Element).querySelector(':scope > .head-line')
@@ -724,6 +737,8 @@ function DeviceGroup(props: GroupProps) {
   /** 别的应用派出来的会话（Claude 桌面端起的子会话）显不显示：默认不显示，开关在侧栏顶上的“更多”里 */
   const showNative = useSidebarNativeChildren()
   const nativeChildren = useKey<string[]>(keys.nativeChildren(deviceId)) ?? NO_IDS
+  /** 用户的组和“项目”在这台电脑上记着的先后 */
+  const savedBands = useSidebarBands(deviceId)
   const reconnect = useReconnect(deviceId)
   const t = useT()
   const info = useHoverCard(() => (device ? <DeviceInfo device={device} /> : null))
@@ -910,9 +925,34 @@ function DeviceGroup(props: GroupProps) {
   const newSection = (then?: (sectionId: string) => void) =>
     setSectionDialog(then ? { section: null, then } : { section: null })
 
+  /** 用户的组和“项目”现在的先后：记着的照记着的，新建的组接在后面 */
+  const bandKeys = orderBands(savedBands, [
+    ...sections.map((entry) => groupOfSection(entry.id)),
+    PROJECTS,
+  ])
+  /**
+   * 放下去要做的事。拖组只改这台电脑上记着的先后，别的是发给设备的命令（drop.ts）。
+   * null：放不了，或者放下去什么都不变
+   */
+  const plan = (item: DragItem, target: DropTarget): (() => Promise<unknown>) | null => {
+    if (item.kind === 'band') {
+      const next =
+        target.kind === 'band' ? bandsAfter(bandKeys, item.id, target.key, target.after) : null
+      return next ? async () => setSidebarBands(deviceId, next) : null
+    }
+    const commands = dropCommands(item, target, deviceId, workspaces)
+    if (commands.length === 0) return null
+    return async () => {
+      // 一样一样来：先换组，再挪位置
+      for (const { name: command, params } of commands) {
+        await channel.command(command, { deviceId, ...params } as never)
+      }
+    }
+  }
+
   /**
    * 一处能放东西的地方：zone 是它的名字，hit 说拖着的东西停在这里会放到哪。
-   * 放得进来（drop.ts 说放下去有事可做）才接，接的时候提示；放不进来的不拦（除非 claim），让外面一层去接
+   * 放得进来（plan 说放下去有事可做）才接，接的时候提示；放不进来的不拦（除非 claim），让外面一层去接
    */
   const zone = (name: string, hit: (event: DragEvent, item: DragItem) => Hit | null): Zone => ({
     onDragOver(event) {
@@ -920,7 +960,7 @@ function DeviceGroup(props: GroupProps) {
       if (!item || !event.dataTransfer.types.includes(DRAG_TYPE)) return
       const at = hit(event, item)
       if (!at) return
-      if (dropCommands(item, at.target, deviceId, workspaces).length === 0) {
+      if (!plan(item, at.target)) {
         if (!at.claim) return
         event.stopPropagation()
         setOver(null)
@@ -939,8 +979,8 @@ function DeviceGroup(props: GroupProps) {
       const item = draggedItem()
       if (!item) return
       const at = hit(event, item)
-      const commands = at ? dropCommands(item, at.target, deviceId, workspaces) : []
-      if (commands.length === 0) {
+      const work = at ? plan(item, at.target) : null
+      if (!work) {
         if (at?.claim) event.stopPropagation()
         return
       }
@@ -948,16 +988,27 @@ function DeviceGroup(props: GroupProps) {
       event.stopPropagation()
       setOver(null)
       endDrag()
-      organize(
-        (async () => {
-          // 一样一样来：先换组，再挪位置
-          for (const { name: command, params } of commands) {
-            await channel.command(command, { deviceId, ...params } as never)
-          }
-        })(),
-      )
+      organize(work())
     },
   })
+  /** 用户的组、“项目”在先后里挪一格（菜单里的上移、下移，键盘走这里） */
+  const shiftBand = (key: string, step: -1 | 1) => {
+    const at = bandKeys.indexOf(key)
+    const other = bandKeys[at + step]
+    if (other === undefined) return
+    const next = bandsAfter(bandKeys, key, other, step === 1)
+    if (next) setSidebarBands(deviceId, next)
+  }
+  /** 拖起一组的标题行（用户的组、“项目”）：排组的先后 */
+  const dragBand = (key: string) => (event: DragEvent) =>
+    beginDrag(event, {
+      deviceId,
+      kind: 'band',
+      id: key,
+      workspaceId: null,
+      pinned: false,
+      sectionId: null,
+    })
   /** 现在提示的是不是“放进”这一处 */
   const into = (name: string) => over?.zone === name && over.mode === 'into'
 
@@ -1070,13 +1121,16 @@ function DeviceGroup(props: GroupProps) {
         className="drop-zone ws-block"
         data-drop={line}
         {...zone(name, (event, item) =>
-          item.kind === 'session'
-            ? { target: { kind: 'workspace', workspaceId: workspace.id }, mode: 'into' }
-            : {
-                target: slotOf(band, workspace.id, below(event), siblings),
-                mode: below(event) ? 'after' : 'before',
-                claim: true,
-              },
+          // 拖着一整组：交给外面那一组去接
+          item.kind === 'band'
+            ? null
+            : item.kind === 'session'
+              ? { target: { kind: 'workspace', workspaceId: workspace.id }, mode: 'into' }
+              : {
+                  target: slotOf(band, workspace.id, below(event), siblings),
+                  mode: below(event) ? 'after' : 'before',
+                  claim: true,
+                },
         )}
       >
         <WorkspaceHead
@@ -1104,7 +1158,34 @@ function DeviceGroup(props: GroupProps) {
   /** 拖着这台设备上能整理的东西：这时候空的置顶也露出来当落点 */
   const draggingHere = dragging?.deviceId === deviceId
 
-  /** 组的“更多”：改名、新建一个组、删除 */
+  /** 菜单里的上移、下移：排在头一个的没有上移，最后一个的没有下移 */
+  const bandShifts = (key: string): RowAction[] => {
+    const at = bandKeys.indexOf(key)
+    return [
+      ...(at > 0 ? [{ id: 'up', title: t('section.up') }] : []),
+      ...(at >= 0 && at < bandKeys.length - 1 ? [{ id: 'down', title: t('section.down') }] : []),
+    ]
+  }
+  /** “项目”的“更多”：添加项目、上移下移。不能改名、不能删 */
+  const projectsMenu = () => {
+    const actions: RowAction[] = [
+      ...(device.organizable ? [{ id: 'add', title: t('workspace.add') }] : []),
+      ...bandShifts(PROJECTS),
+    ]
+    if (actions.length === 0) return null
+    return (
+      <RowMenu
+        label={t('sidebar.projects.menu')}
+        actions={actions}
+        onAction={(id) => {
+          if (id === 'add') setDialog({ workspace: null })
+          else shiftBand(PROJECTS, id === 'up' ? -1 : 1)
+        }}
+      />
+    )
+  }
+
+  /** 组的“更多”：改名、新建一个组、上移下移、删除 */
   const sectionMenu = (section: SectionView) =>
     device.organizable ? (
       <RowMenu
@@ -1112,6 +1193,7 @@ function DeviceGroup(props: GroupProps) {
         actions={[
           { id: 'rename', title: t('section.rename') },
           { id: 'add', title: t('section.add') },
+          ...bandShifts(groupOfSection(section.id)),
           {
             id: 'delete',
             title: t('section.delete'),
@@ -1126,6 +1208,8 @@ function DeviceGroup(props: GroupProps) {
         onAction={(id) => {
           if (id === 'rename') setSectionDialog({ section })
           else if (id === 'add') newSection()
+          else if (id === 'up' || id === 'down')
+            shiftBand(groupOfSection(section.id), id === 'up' ? -1 : 1)
           else organize(channel.command('section.delete', { deviceId, sectionId: section.id }))
         }}
       />
@@ -1155,8 +1239,22 @@ function DeviceGroup(props: GroupProps) {
       </>
     )
   }
-  /** 一组整块都是放东西的地方：落在里面、没被里面的工作区接住的，就是放进这一组 */
-  const bandZone = (key: string, band: Band) => zone(key, () => ({ target: band, mode: 'into' }))
+  /**
+   * 一组整块都是放东西的地方：落在里面、没被里面的工作区接住的，就是放进这一组。
+   * 拖着的是一整组时，停在这一块的上半截、下半截是插到它前面、后面（置顶不参与排）
+   */
+  const bandZone = (key: string, band: Band) =>
+    zone(key, (event, item) =>
+      item.kind !== 'band'
+        ? { target: band, mode: 'into' }
+        : key === PINNED
+          ? null
+          : {
+              target: { kind: 'band', key, after: lower(event) },
+              mode: lower(event) ? 'after' : 'before',
+              claim: true,
+            },
+    )
 
   /** 置顶、一个组，或者“项目”：那一行和里面的东西 */
   const band = (
@@ -1169,8 +1267,15 @@ function DeviceGroup(props: GroupProps) {
     extra: { add?: ReactNode; tally?: readonly string[] } = {},
   ) => {
     const expanded = !closed.has(key)
+    const line = over?.zone === key && over.mode !== 'into' ? over.mode : undefined
     return (
-      <div key={key} data-group={key} className="drop-zone band" {...bandZone(key, target)}>
+      <div
+        key={key}
+        data-group={key}
+        className="drop-zone band"
+        data-drop={line}
+        {...bandZone(key, target)}
+      >
         <HeadLine
           group={key}
           deviceId={deviceId}
@@ -1184,6 +1289,8 @@ function DeviceGroup(props: GroupProps) {
           menu={menu}
           drop={into(key)}
           tally={extra.tally}
+          // 用户的组和“项目”拖标题行排先后；置顶总在最前
+          onDrag={key === PINNED ? undefined : dragBand(key)}
         />
         {expanded ? bandBody(key, target, inside, empty, FIRST_ROWS) : null}
       </div>
@@ -1199,22 +1306,6 @@ function DeviceGroup(props: GroupProps) {
       shown(PINNED).length > 0 ||
       pinnedWorkspaces.length > 0 ||
       (draggingHere && filter.length === 0)
-    const bands = sections.flatMap((entry) => {
-      const key = groupOfSection(entry.id)
-      const inside = sectionWorkspaces(entry.id)
-      // 只看某几个 harness 的时候，里面没有它们的东西的组不出
-      if (filter.length > 0 && shown(key).length === 0 && inside.length === 0) return []
-      return [
-        band(
-          key,
-          { kind: 'section', sectionId: entry.id },
-          entry.name,
-          inside,
-          t('section.empty'),
-          sectionMenu(entry),
-        ),
-      ]
-    })
     // “项目”能整理的设备上一直在（空的时候也在，好用行尾的加号添加）；整理不了的设备上有项目才出
     const projectsShown =
       plainWorkspaces.length > 0 || (device.organizable === true && filter.length === 0)
@@ -1229,6 +1320,38 @@ function DeviceGroup(props: GroupProps) {
         <Plus />
       </button>
     ) : null
+    // 用户的组和“项目”照这台电脑上记着的先后排（拖标题行、菜单里的上移下移）
+    const bands = bandKeys.flatMap((key) => {
+      if (key === PROJECTS) {
+        if (!projectsShown) return []
+        return [
+          band(
+            PROJECTS,
+            { kind: 'projects' },
+            t('sidebar.projects'),
+            plainWorkspaces,
+            t('sidebar.projects.empty'),
+            projectsMenu(),
+            { add: addProject, tally: plainWorkspaces.map((entry) => entry.id) },
+          ),
+        ]
+      }
+      const entry = sections.find((section) => groupOfSection(section.id) === key)
+      if (!entry) return []
+      const inside = sectionWorkspaces(entry.id)
+      // 只看某几个 harness 的时候，里面没有它们的东西的组不出
+      if (filter.length > 0 && shown(key).length === 0 && inside.length === 0) return []
+      return [
+        band(
+          key,
+          { kind: 'section', sectionId: entry.id },
+          entry.name,
+          inside,
+          t('section.empty'),
+          sectionMenu(entry),
+        ),
+      ]
+    })
     return (
       <>
         {pinnedShown
@@ -1242,22 +1365,13 @@ function DeviceGroup(props: GroupProps) {
             )
           : null}
         {bands}
-        {projectsShown
-          ? band(
-              PROJECTS,
-              { kind: 'projects' },
-              t('sidebar.projects'),
-              plainWorkspaces,
-              t('sidebar.projects.empty'),
-              null,
-              { add: addProject, tally: plainWorkspaces.map((entry) => entry.id) },
-            )
-          : null}
         {shown(LOOSE).length > 0 ? (
           <div
             data-group={LOOSE}
             className="drop-zone"
-            {...zone(LOOSE, () => ({ target: { kind: 'loose' }, mode: 'into' }))}
+            {...zone(LOOSE, (_event, item) =>
+              item.kind === 'band' ? null : { target: { kind: 'loose' }, mode: 'into' },
+            )}
           >
             {/* 行尾和工作区那一行一样有“新建会话”，建的是不属于项目的会话（和设备行上那个是同一件事） */}
             <div className="row-line loose-line" data-drop={into(LOOSE) ? 'into' : undefined}>

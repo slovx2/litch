@@ -21,7 +21,7 @@
   See `sessions-and-projects.md`.
 - **Group** (中文「组」). A sidebar folder you create on a device to collect sessions and projects.
   Projects not in a group or pinned sit in the built-in **Projects** group (中文「项目」), which can't
-  be renamed or deleted.
+  be renamed or deleted. Groups and Projects can be reordered by dragging their title rows.
 - **Skin.** The look of the whole app: **Retro** (default), **Literary** (internal name `human`,
   中文「文艺」) and **Standard**, each in light or dark. See `appearance-and-preferences.md`.
 

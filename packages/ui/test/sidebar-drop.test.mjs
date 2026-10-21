@@ -146,3 +146,46 @@ test('别的设备上拖来的一律不接', () => {
   assert.deepEqual(dropCommands(session(), PINNED, 'remote'), [])
   assert.deepEqual(dropCommands(workspace(), SECTION, 'remote'), [])
 })
+
+test('组的先后：记着的照记着的，删掉的组不算，新建的组按设备给的先后接在后面', async () => {
+  const { orderBands } = await import('../src/sidebar/drop.ts')
+  const present = [':section:a', ':section:b', ':projects']
+  assert.deepEqual(orderBands(undefined, present), present)
+  assert.deepEqual(orderBands([':projects', ':section:gone', ':section:a'], present), [
+    ':projects',
+    ':section:a',
+    ':section:b',
+  ])
+})
+
+test('拖一整组：插到另一组前面、后面；停在自己上、落下去还是原处的不接；组不经设备', async () => {
+  const { bandsAfter } = await import('../src/sidebar/drop.ts')
+  const order = [':section:a', ':section:b', ':projects']
+  assert.deepEqual(bandsAfter(order, ':projects', ':section:a', false), [
+    ':projects',
+    ':section:a',
+    ':section:b',
+  ])
+  assert.deepEqual(bandsAfter(order, ':section:a', ':projects', true), [
+    ':section:b',
+    ':projects',
+    ':section:a',
+  ])
+  assert.equal(bandsAfter(order, ':projects', ':projects', false), null)
+  assert.equal(bandsAfter(order, ':projects', ':section:b', true), null, '本来就在它后面')
+  assert.equal(bandsAfter(order, ':section:a', ':section:b', false), null, '本来就在它前面')
+  assert.equal(bandsAfter(order, ':pinned', ':section:a', false), null, '置顶不参与排')
+  const band = {
+    deviceId: 'local',
+    kind: 'band',
+    id: ':projects',
+    workspaceId: null,
+    pinned: false,
+    sectionId: null,
+  }
+  assert.deepEqual(dropCommands(band, { kind: 'section', sectionId: 'a' }, 'local', ORDER), [])
+  assert.deepEqual(
+    dropCommands(workspace(), { kind: 'band', key: ':projects', after: false }, 'local', ORDER),
+    [],
+  )
+})

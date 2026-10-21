@@ -149,6 +149,8 @@ const SCENES: [name: string, arrange: (window: BrowserWindow) => Promise<void>][
   // 拖着 docs-site：停在 litch 上半截是一条插入线，停在“稍后看”的标题上是那一行高亮
   ['drag-line', (window) => inPage(window, dragShown, 'line')],
   ['drag-into', (window) => inPage(window, dragShown, 'into')],
+  // 拖着“项目”的标题行：停在“稍后看”那一组上半截，组和组之间一条线
+  ['drag-band', (window) => inPage(window, dragShown, 'band')],
   ['plain', (window) => inPage(window, scenePlain)],
   ['folded', (window) => inPage(window, sceneFolded)],
   ['filter', (window) => inPage(window, filterTo, 'pi')],

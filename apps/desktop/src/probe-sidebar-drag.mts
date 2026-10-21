@@ -45,6 +45,14 @@ export interface DragSeen {
   /** 最后挪回原样：“项目”里的、“稍后看”里的项目 */
   end: string[]
   endSection: string[]
+  /** 拖“项目”的标题行停在“稍后看”那一组的上半截：线在置顶的最后一行和“稍后看”之间 */
+  bandLine: Hint
+  /** 放下去之后本机下面各组的先后、这台电脑上记着的先后 */
+  bandsMoved: string[]
+  bandsSaved: string[]
+  /** “项目”的“更多”里有什么；点“下移”之后各组的先后 */
+  projectsMenu: string
+  bandsBack: string[]
   /** 各套皮肤明暗下插入线的颜色和它底下的对比度 */
   lineContrast: number[]
 }
@@ -107,7 +115,7 @@ export async function dragSeen(): Promise<DragSeen> {
       (element) =>
         `${element.dataset.group ?? element.dataset.head ?? element.className.split(' ')[0]}:${element.dataset.drop}`,
     )
-    const lined = one<HTMLElement>('.ws-block[data-drop]', local())
+    const lined = one<HTMLElement>('.ws-block[data-drop], .band[data-drop]', local())
     if (!lined) return { marks, above: '', below: '' }
     const line = getComputedStyle(lined, '::before')
     const box = lined.getBoundingClientRect()
@@ -210,7 +218,38 @@ export async function dragSeen(): Promise<DragSeen> {
   const end = namesIn(':projects')
   const endSection = namesIn(SECTION)
 
-  // 七、各套皮肤明暗下的插入线：线的颜色和它底下的对比度
+  // 七、排组的先后：拖“项目”的标题行到“稍后看”前面，再用“项目”菜单里的“下移”挪回去
+  const topBands = () =>
+    all('[data-group]', local())
+      .filter((group) => group.parentElement?.classList.contains('dev-body'))
+      .map((group) => group.dataset.group ?? '')
+  await lift(head(':projects') as HTMLElement)
+  const bandLine = await hover(block(SECTION) as HTMLElement, 0.2)
+  await drop(block(SECTION) as HTMLElement, 0.2)
+  const bandsMoved = topBands()
+  const bandsSaved =
+    (
+      JSON.parse(localStorage.getItem('litch.sidebar') ?? '{}') as {
+        bands?: Record<string, string[]>
+      }
+    ).bands?.local ?? []
+  ;(
+    await until('“项目”的“更多”', () =>
+      one<HTMLButtonElement>('.row-more > .ibtn', head(':projects') ?? undefined),
+    )
+  ).click()
+  const projectsPop = await until('“项目”的菜单', () =>
+    one('.row-more .pick-pop', head(':projects') ?? undefined),
+  )
+  const projectsMenu = all('.pick-opt', projectsPop).map(text).join('|')
+  one<HTMLButtonElement>('.pick-opt[data-action="down"]', projectsPop)?.click()
+  await sleep(150)
+  await frame()
+  const bandsBack = topBands()
+  if (one('.row-more .pick-pop', local()))
+    kit.press(document.activeElement ?? document.body, 'Escape')
+
+  // 八、各套皮肤明暗下的插入线：线的颜色和它底下的对比度
   await lift(head('docs') as HTMLElement)
   await hover(head('litch') as HTMLElement, 0.25)
   const lineContrast = await kit.eachSkin(() => {
@@ -246,20 +285,35 @@ export async function dragSeen(): Promise<DragSeen> {
     sessionCancelled,
     end,
     endSection,
+    bandLine,
+    bandsMoved,
+    bandsSaved,
+    projectsMenu,
+    bandsBack,
     lineContrast,
   }
 }
 
-/** 截图用的场景：拖着 docs-site，停在 litch 上半截（line）或者“稍后看”的标题上（into），不放 */
-export async function dragShown(kind: 'line' | 'into'): Promise<void> {
+/**
+ * 截图用的场景，拖着不放：docs-site 停在 litch 上半截（line）或者“稍后看”的标题上（into），
+ * 或者拖着“项目”的标题行停在“稍后看”那一组的上半截（band）
+ */
+export async function dragShown(kind: 'line' | 'into' | 'band'): Promise<void> {
   const kit = (window as unknown as { __sidebarKit: SidebarKit }).__sidebarKit
   const local = kit.device('local')
   const head = (group: string) => kit.one<HTMLElement>(`[data-head="${group}"]`, local)
   window.dispatchEvent(new DragEvent('dragend'))
   const carried = new DataTransfer()
-  head('docs')?.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: carried }))
+  head(kind === 'band' ? ':projects' : 'docs')?.dispatchEvent(
+    new DragEvent('dragstart', { bubbles: true, dataTransfer: carried }),
+  )
   await kit.frame()
-  const at = kind === 'line' ? head('litch') : head(':section:sec-later')
+  const at =
+    kind === 'line'
+      ? head('litch')
+      : kind === 'band'
+        ? kit.one<HTMLElement>('[data-group=":section:sec-later"]', local)
+        : head(':section:sec-later')
   if (!at) throw new Error('侧栏里没有要停的那一行')
   const box = at.getBoundingClientRect()
   const over = () =>
@@ -269,7 +323,7 @@ export async function dragShown(kind: 'line' | 'into'): Promise<void> {
         cancelable: true,
         dataTransfer: carried,
         clientX: box.left + 30,
-        clientY: box.top + box.height * (kind === 'line' ? 0.25 : 0.5),
+        clientY: box.top + box.height * (kind === 'into' ? 0.5 : 0.2),
       }),
     )
   over()
@@ -361,6 +415,24 @@ export function judgeDrag(seen: DragSeen): string[] {
   must(
     list(seen.end) === 'litch|docs-site' && seen.endSection.length === 0,
     `没挪回原样：项目 ${list(seen.end)}，稍后看 ${list(seen.endSection)}`,
+  )
+  // 组的先后：线在置顶的最后一行和“稍后看”的标题之间
+  line(seen.bandLine, '文档站的待办汇总', '稍后看', '拖着“项目”的标题行停在“稍后看”上半截')
+  must(
+    list(seen.bandsMoved) === `:pinned|:projects|${SECTION}|`,
+    `“项目”拖到“稍后看”前面之后各组：${seen.bandsMoved.join(' ')}`,
+  )
+  must(
+    list(seen.bandsSaved) === `:projects|${SECTION}`,
+    `组的先后没记在这台电脑上：${list(seen.bandsSaved)}`,
+  )
+  must(
+    seen.projectsMenu === '添加项目…|下移',
+    `“项目”的菜单不对（只该有添加项目和挪先后，不能改名、删除）：${seen.projectsMenu}`,
+  )
+  must(
+    list(seen.bandsBack) === `:pinned|${SECTION}|:projects|`,
+    `点“下移”之后各组：${seen.bandsBack.join(' ')}`,
   )
   must(
     seen.lineContrast.length === 6 && seen.lineContrast.every((ratio) => ratio >= 2),

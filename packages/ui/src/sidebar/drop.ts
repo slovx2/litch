@@ -3,13 +3,15 @@
 // 会话只能拖进置顶、组，或者拖回它自己所在的工作区（就是从置顶、组里拿出来）：
 // 这一版不支持把会话拖到另一个工作区（菜单里的“移到项目”还在）。会话在组里没有可调的顺序，所以只有“放进”。
 // 工作区总在某一组里（置顶、用户建的组，或者“项目”），既能放进一组（排到最后），也能插到一组里两个工作区之间。
+// 用户建的组和“项目”自己也能拖（拖标题行）：插到别的组前面、后面，先后只记在这台电脑上（state.ts 的 bands）。
 
 /** 正在拖的东西。拖的时候记着，放下或者松手就清掉 */
 export interface DragItem {
   deviceId: string
-  kind: 'session' | 'workspace'
+  /** band 是一整组（用户建的组、“项目”），id 是组的键 */
+  kind: 'session' | 'workspace' | 'band'
   id: string
-  /** 会话所属的工作区；拖的是工作区时是它自己 */
+  /** 会话所属的工作区；拖的是工作区时是它自己，拖的是组时是 null */
   workspaceId: string | null
   pinned: boolean
   /** 在哪个组里。不在是 null */
@@ -35,6 +37,8 @@ export type DropTarget =
   | { kind: 'workspace'; workspaceId: string }
   /** “无项目”那一组 */
   | { kind: 'loose' }
+  /** 拖着一组停在 key 这一组上：插到它前面（after 为假）或者后面。只有拖组时有，见 bandsAfter */
+  | { kind: 'band'; key: string; after: boolean }
 
 /** 排工作区要知道的：设备上的顺序（整张表）和各自在哪一组 */
 export interface Placed {
@@ -76,7 +80,8 @@ export function dropCommands(
   deviceId: string,
   order: readonly Placed[] = [],
 ): DropCommand[] {
-  if (item.deviceId !== deviceId) return []
+  // 组的先后不经设备（bandsAfter）
+  if (item.deviceId !== deviceId || item.kind === 'band') return []
   if (item.kind === 'session') {
     const sessionId = item.id
     switch (target.kind) {
@@ -104,12 +109,14 @@ export function dropCommands(
       // 会话不归“项目”组管（它跟着自己的工作区走），也没有可插的位置
       case 'projects':
       case 'slot':
+      case 'band':
         return []
     }
   }
   switch (target.kind) {
     case 'workspace':
     case 'loose':
+    case 'band':
       return []
     case 'slot':
       return placeWorkspace(item, target.band, target.before, order)
@@ -201,4 +208,33 @@ export const draggedItem = (): DragItem | null => current
 export function onDragChange(listener: () => void): () => void {
   listeners.add(listener)
   return () => listeners.delete(listener)
+}
+
+/**
+ * 组的先后：记着的顺序里还在的照记着的排，没记过的（新建的组）按设备给的先后接在后面。
+ * present 是现在有的组，按默认的先后（用户的组按设备给的、“项目”在最后）
+ */
+export function orderBands(
+  saved: readonly string[] | undefined,
+  present: readonly string[],
+): string[] {
+  const kept = (saved ?? []).filter((key) => present.includes(key))
+  return [...kept, ...present.filter((key) => !kept.includes(key))]
+}
+
+/**
+ * 拖着 key 这一组停在 target 这一组上：after 为假插到它前面，为真插到它后面。
+ * 返回新的先后；放不了（拖的不在里面、停在自己上）或者落下去还是原处是 null
+ */
+export function bandsAfter(
+  order: readonly string[],
+  key: string,
+  target: string,
+  after: boolean,
+): string[] | null {
+  if (key === target || !order.includes(key) || !order.includes(target)) return null
+  const rest = order.filter((entry) => entry !== key)
+  const at = rest.indexOf(target) + (after ? 1 : 0)
+  const next = [...rest.slice(0, at), key, ...rest.slice(at)]
+  return next.every((entry, index) => entry === order[index]) ? null : next
 }
