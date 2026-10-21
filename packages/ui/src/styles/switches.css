@@ -1,13 +1,13 @@
 /* 设置页“按 harness 开关”那棵树（settings/HarnessSwitches.tsx）：设备一行、下面各 harness 缩进一档，三列多选框居中。
    只用变量，三套皮肤明暗都跟着走；窄了表格自己横着滚，不撑开页面 */
-.hsw .set-para + .hsw-scroll {
-  margin-top: 10px;
-}
 .hsw-scroll {
   overflow-x: auto;
   border: 1px solid var(--line-2);
   border-radius: var(--r2);
   background: var(--raised);
+}
+.hsw .set-para + .hsw-scroll {
+  margin-top: 10px;
 }
 .hsw-table {
   width: 100%;
@@ -21,13 +21,6 @@
   text-align: left;
   font-weight: 400;
   white-space: nowrap;
-}
-.hsw-table thead th {
-  height: auto;
-  padding-block: 8px;
-  font-size: 12px;
-  color: var(--ink-3);
-  border-bottom: 1px solid var(--line-2);
 }
 .hsw-table [data-col] {
   width: 1%;
@@ -46,6 +39,13 @@
 }
 .hsw-device th {
   font-weight: 600;
+}
+.hsw-table thead th {
+  height: auto;
+  padding-block: 8px;
+  font-size: 12px;
+  color: var(--ink-3);
+  border-bottom: 1px solid var(--line-2);
 }
 .hsw-fold {
   display: inline-flex;
@@ -118,5 +118,7 @@
   gap: 4px;
 }
 .hsw-notes .set-note {
+  /* 通用的 .set-note 是给横排用的（flex-basis 180px），竖排时会被撑高 */
+  flex: none;
   margin: 0;
 }
