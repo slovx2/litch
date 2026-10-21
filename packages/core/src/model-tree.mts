@@ -285,6 +285,10 @@ export interface WrapUpSuggestionView {
 export interface WrapUpView {
   /** 照调用时给的顺序 */
   suggestions: WrapUpSuggestionView[]
+  /** 留给用户定的一件事（litch_sessions.wrap_up 的 ask），和按钮一起画在回合最下方；没有是 undefined */
+  ask?: string
+  /** ask 的回复按钮：点了把 message（没有就是 label）当用户消息发回这个会话 */
+  actions?: { label: string; message?: string }[]
 }
 
 /** 引擎自己的一个子代理线程（thread/list 带 parentThreadId 列出来的，之后跟着通知变） */

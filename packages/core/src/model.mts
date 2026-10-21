@@ -257,6 +257,20 @@ export interface DeviceView {
 export interface ToolSwitches {
   browser: boolean | null
   computer: boolean | null
+  /**
+   * 按 harness 的开关（键是 harness 标识，设备声明的每个 harness 都有一项）。设置页的“设备 → harness”树按它画，
+   * 设备那一格是算出来的（全开、全关、有开有关）
+   */
+  harnesses?: Record<string, HarnessSwitches>
+}
+
+/** 一个 harness 上的三样开关 */
+export interface HarnessSwitches {
+  /** 任务卡：设备设置 harness.<id>.taskCards（存在设备上）。设备没连着、旧设备服务没有这一项时是 null */
+  taskCards: boolean | null
+  /** 内置浏览器、Computer Use：存在桌面端，这个 harness 没单独设过时跟设备那一级 */
+  browser: boolean
+  computer: boolean
 }
 
 /** 用户的 ssh 配置里的一台主机 */

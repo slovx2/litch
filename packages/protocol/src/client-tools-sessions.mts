@@ -54,6 +54,11 @@ export const SESSION_TOOL_LIMITS = {
    * 只知道背景和任务这两段，背景写短了它不知道这件事从哪来、做到哪了。prompt 只要非空
    */
   freshBackgroundMinWidth: 80,
+  /** wrap_up 的回复按钮最多几个；按钮上的字、点了发出的话、问题各自最多多少字 */
+  wrapUpActions: 2,
+  actionLabelChars: 24,
+  actionMessageChars: 300,
+  askChars: 100,
 } as const
 
 // —— 参数（执行器收到后自己校验，不信任这里） ——
@@ -91,6 +96,8 @@ export interface SessionsStartArguments {
   /** 不给是这个会话的 harness */
   harness?: string
   model?: string
+  /** 不给是开始那一刻这个会话的（harness 不同时是那边的默认） */
+  effort?: string
   /** 不给是这个会话的目录 */
   cwd?: string
   /** 缺省 fresh。fork 带上这个会话的全部上下文，只能同 harness */
@@ -106,6 +113,7 @@ export interface SessionsStartArguments {
 
 export interface SessionsAcceptArguments {
   proposal_id: string
+  effort?: string
   /** 开始 offer 卡时补的简报（用户选了新会话之后）；别的卡不给，照提案里的 */
   prompt?: string
   /** 同上，fresh 时必填 */
@@ -132,6 +140,8 @@ export interface SessionsWithdrawArguments {
 export interface SessionsSuggestion {
   title: string
   prompt: string
+  /** 不给是开始那一刻这个会话的（harness 不同时是那边的默认），model 同 */
+  effort?: string
   /** fresh 时必填，见 SessionsStartArguments.background */
   background?: string
   harness?: string
@@ -140,9 +150,22 @@ export interface SessionsSuggestion {
   kind?: SessionLineageKind
 }
 
+/** wrap_up 的一个回复按钮：点了把 message（没有就是 label）当用户消息发回这个会话 */
+export interface SessionsWrapUpAction {
+  label: string
+  message?: string
+}
+
 export interface SessionsWrapUpArguments {
   /** 没有建议时是空数组；最多 proposalsPerTurn 条（和这回合里 start 提的合起来算） */
   suggestions: SessionsSuggestion[]
+  /**
+   * 这一回合留给用户定的一件事（一个短问题），比如要不要在这里接着做刚查出来的事；没有就不给。
+   * 和按钮一起画在回合最下方，下一条用户消息之后失效
+   */
+  ask?: string
+  /** ask 的回复按钮，1 到 wrapUpActions 个，第一个是推荐的；没有 ask 时不给 */
+  actions?: SessionsWrapUpAction[]
 }
 
 export interface SessionsSendArguments {
@@ -315,7 +338,16 @@ const WRAP_UP_TOOL: ClientToolFunctionSpec = {
               description: `Required for fresh (ignored for fork): context for someone who has not seen this conversation: the overall goal, decisions and constraints so far, how this piece fits in (at least ${SESSION_TOOL_LIMITS.freshBackgroundMinWidth} wide; a CJK character counts as 2).`,
             },
             harness: { type: 'string', description: 'Default: this session’s harness.' },
-            model: { type: 'string' },
+            model: {
+              type: 'string',
+              description:
+                'Default: this session’s current model (the target harness’s default when the harness differs).',
+            },
+            effort: {
+              type: 'string',
+              description:
+                'Reasoning effort. Default: this session’s current effort (the target harness’s default when the harness differs).',
+            },
             cwd: { type: 'string', description: 'Default: this session’s folder.' },
             kind: {
               type: 'string',
@@ -325,6 +357,29 @@ const WRAP_UP_TOOL: ClientToolFunctionSpec = {
             },
           },
           required: ['title', 'prompt'],
+          additionalProperties: false,
+        },
+      },
+      ask: {
+        type: 'string',
+        description: `Only when this turn leaves the user one decision (for example whether to go ahead here with what you just found): that one short question, under ${SESSION_TOOL_LIMITS.askChars} characters. Omit when nothing waits on the user.`,
+      },
+      actions: {
+        type: 'array',
+        description: `Reply buttons answering ask, 1 to ${SESSION_TOOL_LIMITS.wrapUpActions}, your recommendation first. A click sends message (or the label) back to you as the user's words.`,
+        items: {
+          type: 'object',
+          properties: {
+            label: {
+              type: 'string',
+              description: `Button text, 1-3 words, under ${SESSION_TOOL_LIMITS.actionLabelChars} characters.`,
+            },
+            message: {
+              type: 'string',
+              description: `What the click sends, under ${SESSION_TOOL_LIMITS.actionMessageChars} characters. Omit when the label says it all.`,
+            },
+          },
+          required: ['label'],
           additionalProperties: false,
         },
       },
@@ -400,7 +455,16 @@ export function sessionTools(wrapUp: boolean): ClientToolNamespaceSpec {
                 'Required for fresh (ignored for fork; not for "offer"): context for someone who has not seen this conversation: the overall goal, decisions and constraints so far, how this piece fits in.',
             },
             harness: { type: 'string', description: 'Default: this session’s harness.' },
-            model: { type: 'string' },
+            model: {
+              type: 'string',
+              description:
+                'Default: this session’s current model (the target harness’s default when the harness differs).',
+            },
+            effort: {
+              type: 'string',
+              description:
+                'Reasoning effort. Default: this session’s current effort (the target harness’s default when the harness differs).',
+            },
             cwd: { type: 'string', description: 'Default: this session’s folder.' },
             kind: {
               type: 'string',
@@ -474,7 +538,16 @@ export function sessionTools(wrapUp: boolean): ClientToolNamespaceSpec {
             },
             title: { type: 'string', description: 'Only for an answered offer: a better title.' },
             harness: { type: 'string' },
-            model: { type: 'string' },
+            model: {
+              type: 'string',
+              description:
+                'Default: this session’s current model (the target harness’s default when the harness differs).',
+            },
+            effort: {
+              type: 'string',
+              description:
+                'Reasoning effort. Default: this session’s current effort (the target harness’s default when the harness differs).',
+            },
             cwd: { type: 'string' },
             kind: { type: 'string', enum: ['fresh', 'fork'] },
           },

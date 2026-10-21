@@ -52,7 +52,10 @@ export type SessionProposalStatus =
   | 'offered'
   /** offer 卡上用户选了新会话，等模型用 accept 补上简报开起来 */
   | 'chosen'
-  /** offer 卡上用户选了在这里做（或者没选就又发了话、回合被打断） */
+  /**
+   * 在这里做：offer 卡上用户选了在这里做（或者没选就又发了话、回合被打断）；
+   * 普通提案卡上用户点了“在这里做”（litch/sessionProposal/here）
+   */
   | 'here'
   | 'started'
   /** 用户点了“不要” */
@@ -77,6 +80,8 @@ export interface SessionProposal {
   /** 子会话的 harness。不给是父会话的 */
   harness: string | null
   model: string | null
+  /** 推理强度。不给是开始那一刻父会话的（目标 harness 和父会话不同时是那边的默认）。旧设备进程不带 */
+  effort?: string | null
   cwd: string | null
   kind: SessionLineageKind
   wakeParent: boolean
@@ -133,7 +138,19 @@ export const SESSION_TREE_METHOD = {
   proposalDismiss: 'litch/sessionProposal/dismiss',
   /** 用户在 offer 卡上选“新会话”或“在这里做”。参数 SessionProposalAnswerParams，应答空对象 */
   proposalAnswer: 'litch/sessionProposal/answer',
+  /**
+   * 用户在普通提案卡上点“在这里做”：提案记 here，设备进程往父会话发一条用户消息（标题加任务），
+   * 父会话正在跑回合时排到回合结束后发。参数 SessionProposalHereParams，应答空对象
+   */
+  proposalHere: 'litch/sessionProposal/here',
 } as const
+
+/**
+ * 设备设置里“任务卡”按 harness 的开关（作用域 harness，布尔，默认开）。关着时这个 harness 的会话：
+ * 不带建议、offer 的规则，没有 wrap_up，不提醒收尾；已有会话的 wrap_up 建议不落提案、offer 直接当在这里做。
+ * litch_sessions 其余能力照旧。整套会话编排仍由设备级的 sessions.enabled 管
+ */
+export const taskCardsSettingKey = (harness: string): string => `harness.${harness}.taskCards`
 
 export const SESSION_TREE_NOTIFICATION = {
   /** 一个会话的父子关系变了（建立、脱离）。lineage 为 null 是没有父会话了 */
@@ -210,6 +227,11 @@ export interface SessionProposalOverrides {
 export interface SessionProposalAnswerParams extends SessionProposalIdParams {
   /** session：新会话（模型接着补简报开起来）；here：在这里做 */
   choice: 'session' | 'here'
+}
+
+export interface SessionProposalHereParams extends SessionProposalIdParams {
+  /** 发给父会话的那条消息的开头（界面语言的“在这里做：”）；不给用英文的 "Do it here: " */
+  lead?: string
 }
 
 export interface SessionProposalAcceptParams extends SessionProposalIdParams {

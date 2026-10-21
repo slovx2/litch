@@ -536,10 +536,17 @@ export interface Commands {
   'device.remove': { params: { deviceId: string }; result: Record<string, never> }
   /**
    * 设备设置页上的两个开关：这台设备上的会话能不能用这台桌面端的内置浏览器、Computer Use。
-   * 只改给了的那一项。存在桌面端；用的时候才查，已经建好的会话下一次调用就按新的来
+   * 只改给了的那一项。存在桌面端；建会话时关着的不挂那组工具，调用时再查一次，已经建好的会话下一次调用就按新的来。
+   * 带 harness 时只改这台设备上这个 harness 的（machine 不分 harness，带 harness 时不收）
    */
   'device.tools.set': {
-    params: { deviceId: string; browser?: boolean; computer?: boolean; machine?: boolean }
+    params: {
+      deviceId: string
+      harness?: string
+      browser?: boolean
+      computer?: boolean
+      machine?: boolean
+    }
     result: Record<string, never>
   }
   /**
