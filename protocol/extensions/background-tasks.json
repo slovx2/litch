@@ -1,0 +1,48 @@
+{
+  "extension": "backgroundTasks",
+  "description": "后台任务：回合结束之后还在跑的工作（后台命令、Monitor、后台子代理、Workflow、dsh 的后台作业）。会话上一份“现在有哪些后台任务”的集合，变了就整份重发；回合上带它是谁开的（后台任务结束后引擎自己续跑的那一轮）。回合状态只描述前台工作，不改：只有后台任务在跑时会话照常报 idle，不往 activeFlags 里加值。类型在 packages/protocol/src/background-tasks.mts。",
+  "appliesTo": "claude-code、dsh 入口自己出集合（runtime/info 的 features.backgroundTasks 为真）；原生 codex 的由设备进程在转发层从它的条目通知里派生（设备进程替它报 features.backgroundTasks）；pi、opencode、acp 不报（它们的后台子代理是子会话，归会话树）。聚合面原样转发引擎的会话对象、通知，不加也不删这些字段。",
+  "declaration": {
+    "description": "客户端握手时在 capabilities.litchExtensions 里声明 backgroundTasks，表示它认识会话对象上的 litchBackground、回合上的 litchOrigin 和 litch/thread/background/changed。聚合面把客户端的 capabilities 原样带给每个上游，入口按这条连接的声明决定带不带。",
+    "where": "initialize.params.capabilities.litchExtensions",
+    "schema": { "type": "array", "items": { "type": "string" }, "contains": { "const": "backgroundTasks" } }
+  },
+  "undeclared": "没声明的连接上看到的是原生表示：已经结束的回合里留着 inProgress 的命令条目，命令结束时补 item/completed（官方 Codex 桌面端的后台进程列表照这个画）。会话对象上没有 litchBackground，回合上没有 litchOrigin，收不到 litch/thread/background/changed。",
+  "rules": [
+    "集合里是运行中的任务，加上这次运行里结束过的（最多 50 个，BACKGROUND_ENDED_LIMIT）。运行中的在前、按开始时间；结束过的在后、按结束时间倒序。结束过的只在引擎（设备进程）的内存里，重启就没了，不进库。",
+    "任务的 id 在引擎内唯一、前后不变；itemId 是发起它的那个条目（能挂回对话），拿不到时不带。",
+    "status：running、completed、failed、stopped。Claude 取 task_notification 的状态，CLI 进程退出时还在跑的记 stopped；原生 codex 取命令条目 item/completed 的状态，退出码非零记 failed，会话卸载、关闭时还在跑的记 stopped；dsh 取作业的状态（killed 记 stopped）。",
+    "wakesOnFinish：后台任务结束后这个 harness 会不会自己接着做。claude-code、dsh 为真，原生 codex 为假。",
+    "litch/thread/background/changed 发给所有声明过的连接（不只是订阅了这个会话的），侧栏要标没打开过的会话；集合整份重发。临时会话的不发。",
+    "litchBackground 只在集合不空时带在会话对象上（thread/read、thread/list、thread/resume、thread/started）。",
+    "litchOrigin 只在知道不是用户发起的回合上带：backgroundTask 是后台任务结束后引擎自己续跑的那一轮（Claude 的 task-notification、dsh 的 tool-jobs 唤醒）。turn/started 发出时还认不出来的（dsh 要等那条消息到了才知道），turn/completed 和历史接口里带。",
+    "有子会话的后台子代理归会话树（sessionTree），不重复进集合；没有子会话、只是一个任务的（Claude 的 local_agent）进集合。",
+    "Claude 的后台子代理、Workflow 照旧让回合保持运行中，直到 CLI 报 idle；它们照样出现在集合里。",
+    "会话树、定时任务照常在 turn/completed 时算一次运行结束；回报里带“还有几个后台任务在跑”，后台跑完的自发回合结束时再回报一次。",
+    "停止：这一版不加新方法；shell 可以用标准的 thread/backgroundTerminals/clean。"
+  ],
+  "parts": [
+    {
+      "kind": "ThreadField",
+      "name": "litchBackground",
+      "on": "thread/list、thread/read、thread/resume、thread/started 的会话对象",
+      "description": "只发给声明了 backgroundTasks 的连接，只在集合不空时有。形状见 background-tasks.mts 的 LitchBackground。"
+    },
+    {
+      "kind": "TurnField",
+      "name": "litchOrigin",
+      "on": "turn/started、turn/completed、thread/read、thread/resume、thread/turns/list 的回合对象",
+      "description": "只发给声明了 backgroundTasks 的连接，只在认得出不是用户发起的回合上有。形状见 background-tasks.mts 的 LitchTurnOrigin。"
+    },
+    {
+      "kind": "ServerNotification",
+      "methods": ["litch/thread/background/changed"],
+      "description": "只发给声明了 backgroundTasks 的连接。参数见 background-tasks.mts 的 BackgroundChangedNotification。"
+    },
+    {
+      "kind": "HarnessFeature",
+      "name": "backgroundTasks",
+      "description": "runtime/info 的 features.backgroundTasks：这个 harness 会报集合。没报、为假的连接，客户端退回从“已结束回合里仍 inProgress 的命令条目”派生。"
+    }
+  ]
+}

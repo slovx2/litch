@@ -2,6 +2,7 @@
 // 没列在这里的方法客户端不调用；没列在这里的通知客户端不处理（记日志后丢弃）。
 // 新增一项要在这里登记，核心里才有类型可用。
 
+import type { BackgroundChangedNotification } from './background-tasks.mjs'
 import type { ClientToolCallParams, ClientToolCallResponse } from './client-tools.mjs'
 import type {
   AgentMessageDeltaNotification,
@@ -62,6 +63,12 @@ import type {
   SkillsListResponse,
   ThreadArchivedNotification,
   ThreadArchiveParams,
+  ThreadBackgroundTerminalsCleanParams,
+  ThreadBackgroundTerminalsCleanResponse,
+  ThreadBackgroundTerminalsListParams,
+  ThreadBackgroundTerminalsListResponse,
+  ThreadBackgroundTerminalsTerminateParams,
+  ThreadBackgroundTerminalsTerminateResponse,
   ThreadClosedNotification,
   ThreadCompactStartParams,
   ThreadCompactStartResponse,
@@ -261,6 +268,21 @@ export interface ClientRequests {
   'thread/fork': { params: ThreadForkParams; result: ThreadForkResponse }
   /** 把某个回合和它之后的都从历史里撤掉。只改对话记录，不还原文件 */
   'thread/revert': { params: ThreadRevertParams; result: ThreadRevertResponse }
+  // 后台终端（实验性接口，握手时要声明 experimentalApi）：会话里回合结束后还在跑的命令。
+  // 客户端现在不调，收在这里留给以后的“停止”（backgroundTasks 扩展第一版不做停止）
+  'thread/backgroundTerminals/list': {
+    params: ThreadBackgroundTerminalsListParams
+    result: ThreadBackgroundTerminalsListResponse
+  }
+  'thread/backgroundTerminals/terminate': {
+    params: ThreadBackgroundTerminalsTerminateParams
+    result: ThreadBackgroundTerminalsTerminateResponse
+  }
+  /** 停掉这个会话全部的后台终端 */
+  'thread/backgroundTerminals/clean': {
+    params: ThreadBackgroundTerminalsCleanParams
+    result: ThreadBackgroundTerminalsCleanResponse
+  }
   /** 手动压缩上下文。应答只表示受理了，压缩本身是随后的一个回合 */
   'thread/compact/start': { params: ThreadCompactStartParams; result: ThreadCompactStartResponse }
   'turn/start': { params: TurnStartParams; result: TurnStartResponse }
@@ -562,6 +584,10 @@ export interface ServerNotifications {
   'litch/device/harness/install/changed': HarnessInstallChangedNotification
   'litch/harness/config/changed': HarnessConfigChangedNotification
   'litch/harness/auth/updated': HarnessAuthUpdatedNotification
+  /**
+   * 扩展，只发给握手时声明过 backgroundTasks 的连接（不只是订阅者）：一个会话的后台任务集合变了，整份重发
+   */
+  'litch/thread/background/changed': BackgroundChangedNotification
   /** 扩展，只发给握手时声明过 deviceTasks 的连接：任务多了、变了、没了 */
   'litch/task/changed': DeviceTaskChangedNotification
   /** 扩展，只发给握手时声明过 deviceTasks 的连接：一次运行开始了、结束了、标成看过了 */

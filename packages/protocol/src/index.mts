@@ -2,6 +2,14 @@
 // codex.mts 是 Codex 原有的，extensions.mts 是我们加的，两边分开放，
 // 改上游的类型时不会碰到我们的扩展。
 
+// 后台任务（backgroundTasks 扩展）：会话上回合结束后还在跑的工作、回合是谁开的。不依赖别的文件
+export type * from './background-tasks.mjs'
+export {
+  BACKGROUND_ENDED_LIMIT,
+  BACKGROUND_TASKS_NOTIFICATION,
+  orderBackgroundTasks,
+  runningBackgroundTasks,
+} from './background-tasks.mjs'
 // 客户端工具（clientTools 扩展）：谁能执行 litch_ 开头的动态工具、没人能执行时怎么回。不依赖别的文件
 export type * from './client-tools.mjs'
 export {

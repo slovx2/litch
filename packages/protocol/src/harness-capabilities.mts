@@ -95,6 +95,11 @@ export interface HarnessFeatures {
    * （客户端子代理页上的“停止”）。后加的位，没报就是不会
    */
   stopAgent?: boolean
+  /**
+   * 会报后台任务的集合（backgroundTasks 扩展：会话对象上的 litchBackground、litch/thread/background/changed）。
+   * 后加的位，没报就是不报；客户端这时退回从“已结束回合里仍 inProgress 的命令条目”派生
+   */
+  backgroundTasks?: boolean
 }
 
 export type PermissionRisk = 'low' | 'medium' | 'high'
