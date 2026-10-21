@@ -58,7 +58,7 @@ export const GroupCell = memo(function GroupCell({ row }: Props<'group'>) {
           {row.expanded ? '▾' : '▸'} {t('detail.activity')} · {steps}
           {tail}
           {inBackground > 0 ? (
-            <Text style={{ color: c.accent }} testID="process-background">
+            <Text style={{ color: c.accent }}>
               {` · ${t('background.inTurn', { count: inBackground })}`}
             </Text>
           ) : null}
