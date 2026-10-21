@@ -5,7 +5,7 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
-## 未发布
+## 0.15.0
 
 - Claude Code：新增 `CHA_CLAUDE_KEEP_ALIVE_IDLE_SECONDS`，回合结束后没有后台命令的 CLI 进程再留这么多秒，同一会话的下个回合直接用，不再重起；默认 `0`，和原来一样回合结束就退出。和后台命令共用 `CHA_CLAUDE_KEEP_ALIVE_SESSIONS` 的上限，满了先回收闲得最久的空闲进程；会话归档、删除、卸载、回退，全部客户端断开，改技能配置，适配器停止时马上回收
 - Claude Code：计划模式里模型说的话照上游 codex 记成回答（agentMessage），回合的最终文本就是它；计划条目只来自回答里的 `<proposed_plan>` 块、计划文件和 ExitPlanMode 交来的计划。模型只把计划说出来就交（没写文件、没用 `<proposed_plan>`）时，交计划时拿刚说完的那段话补一个计划条目，客户端照样能问要不要执行
@@ -16,13 +16,13 @@ versioning or publishing metadata.
 - Claude Code：入口夹在它和 Claude Code CLI 之间的守护进程从 node 脚本改成 Go 程序（`cmd/claude-process-guard`），职责不变（按进程组起 CLI、转发输入输出、记下后台命令的进程身份、入口或 CLI 崩溃时不留孤儿），每起一次 CLI 少一个 node 进程。`packages/claude` 的构建（`npm run build --prefix packages/claude`）现在要 Go（>= 1.26.6），会把 linux、darwin、windows 的 amd64 和 arm64 各编一份放进 `dist/claude/src/process-guard/`，暂存和打包只带目标平台那一份
 - Claude Code：`thread/inject_items` 收 assistant 消息（`output_text`），和 user 消息一样写进原生会话、进下一回合的模型上下文，一批里角色交替时按原顺序各成一条；照上游不生成回合、不发通知，`thread/read` 和条目分页里看不到。工具调用、推理、developer 消息等别的 Responses 条目仍拒绝（上游都收）
 - Claude Code：`item/tool/requestUserInput` 的 `isBlocking` 照上游 0.163.0 只在计划模式下是 `true`（原来一律 `true`），两种都照旧一直等到有人回答；同一条连接再 `thread/resume` 时，挂着没答的提问和审批在恢复应答之后用原来的请求号再发一次（上游恢复时不管这条连接收没收到过都重发），客户端换了逻辑通道、底下还是同一条连接时也能找回来；客户端执行的工具调用（`item/tool/call`）仍不重发
-- Claude Code：动态工具（`dynamicTools`）一律直接交给客户端执行，不再走 Claude Code 这边的审批和沙箱，和原生 codex 一样；原来只有 `litch_` 开头的命名空间这样，别的命名空间和不带命名空间的工具按会话的审批策略先问、按沙箱拦
 - Claude Code：动态工具（`dynamicTools`）一律直接交给客户端执行，不再走 Claude Code 这边的审批和沙箱，计划模式、只读沙箱、子代理里也直接放行，和原生 codex 一样（用户自己配的 MCP 服务不算动态工具，照旧走审批）；原来只有 `litch_` 开头的命名空间这样，别的命名空间和不带命名空间的工具按会话的审批策略先问、按沙箱拦
 - Claude Code：去掉入口给普通回合加的“Codex 桌面展示风格”系统提示（对话风格、Mermaid 等），适配器不再维护呈现类指令；需要的客户端自己经开发者指令给
 - Claude Code：新增三个开关，默认都和原来一样：`CHA_CLAUDE_SETTING_SOURCES` 选读哪几层 Claude Code 设置（只给 `user` 时工作区的 `.claude/settings*.json`、`CLAUDE.md`、`.mcp.json` 都不读；入口自己列技能、钩子、模型和认凭据作用域时也只看选中的几层）；`CHA_CLAUDE_PLANS_LOCATION=config` 把计划文件放到 Claude Code 自己的配置目录，工作区里不留 `.claude/plans`，用户、项目设置里配的 `plansDirectory` 被盖掉，计划模式只豁免本会话的那一个计划文件；`CHA_CLAUDE_THREAD_ID_HEADER=1` 让模型请求带 `thread-id` 头，给按线程计费的代理用（设置的 `env` 里配了 `ANTHROPIC_CUSTOM_HEADERS` 也盖不掉它，原有的头保留）。认不出的值启动就报错
 - Claude Code：Linux 上不再要求装 `socat`。原来入口启动时会查它，可适配器早就关了 SDK 自带的沙箱，受限命令只经自己的 bwrap 包装器，用不到 socat
 - Litch：回答的呈现风格由 Litch 自己给。Litch 建的会话（含子会话、定时任务的会话）告诉模型回答显示在 Litch 里、能渲染 Markdown 和 Mermaid 图，要对话式地回答而不是终端式；用户自己的指令优先。经命名空间 `instructions` 送进系统提示（新的 `litch_presentation`：不带工具、只带 instructions），Claude Code 只在普通回合放、带 `outputSchema` 的回合不放；原生 Codex 不带。官方桌面端直连各 harness 的入口时没有这段
-- Claude Code：适配器自己连的 MCP 服务按会话跨回合复用连接，第二个回合起不再重起 stdio 服务、不再和 HTTP 服务重新握手（先 ping 一次确认还通）。配置或工作目录变了就重建；会话归档、删除、卸载、回退、适配器停止时关掉；没人用的连接默认留 10 分钟、最多 16 条（`CHA_CLAUDE_MCP_IDLE_MINUTES`、`CHA_CLAUDE_MCP_IDLE_CONNECTIONS`，设成 `0` 回到每回合重连）。MCP 服务进程里的状态因此会跨回合留着；回合被打断时还有请求在途的连接不留
+  - 影响：适配器的 Claude Code 入口不再自带原来那段“Codex 桌面展示风格”提示。升级前建的会话（Litch 里的也一样）恢复后没有任何呈现提示，回答可能更像终端里的风格；新建的会话才有 Litch 这段。这段话跟着会话存：Litch 建的会话在官方桌面端打开，模型照样被告知回答显示在 Litch 里
+  - OpenCode 上只有在会话还带着别的 Litch 工具时这段话才送得到（桌面端建的会话总带着）；经聚合面转给原生 Codex 的建会话、恢复、分叉请求里如果有不带工具的命名空间，设备进程整个去掉，免得上游拒绝整个请求
 - Claude Code：`app-server` 接受 codex 风格的 `-c key=<TOML 值>`，认 `approval_policy`、`sandbox_mode`、`default_permissions`、`developer_instructions`、`permissions.*`、`mcp_servers.*`，其余键记日志后忽略；这一层叠在 `config.json` 上，不写回
 - Claude Code：支持配置里自定义的权限档位（`permissions.<名字>`：`extends` 内置档位、`filesystem` 的 read / write / deny 与子路径、`network.enabled`，判定照 codex 取最深的条目），`thread/start`、`turn/start` 等认档位名和 `runtimeWorkspaceRoots`，`default_permissions` 管不带权限的新会话，`permissionProfile/list` 列出它们。禁读同时作用于命令沙箱（macOS 的 sandbox-exec、Linux 的 bwrap 用空 tmpfs 盖住再挂回放开的子目录）和 Read、Glob、Grep、LS 等文件类工具。读文件照 codex 不走审批：读工作目录外的文件按可读范围直接放行或拒绝（原来会变成审批请求，`approval_policy=never` 下连内置 Skill、`/etc/os-release` 都读不了），内置档位整个磁盘可读。可写目录下的 `.git`、`.agents`、`.codex`、`.aws`、`.claude` 默认只读（照 codex，`.claude` 是加的；工作区里的计划文件照常能写），不存在的禁读路径也受管，大小写变体按磁盘上的真实路径判定。子代理线程和在子线程里追问的回合沿用父会话的档位。MCP 工具、动态工具、`Monitor` 等自己带命令的工具和 `command/exec` 不受档位管
 - Claude Code：支持 codex 的 `shell_environment_policy`（`inherit`、`set`、`exclude`、`include_only`、`filters`、`ignore_default_excludes`），可放在 `-c`、`config.json` 和 `thread/start` 的 `config` 里，线程的叠在进程级上面，作用于模型的 Bash 命令（含子代理的、后台的），在沙箱里生效，不改 Claude Code 自身的环境；配了它或选了自定义档位的会话，Linux 上文件类工具不许读 `/proc`，Skill 的内联 shell 关掉
@@ -31,8 +31,6 @@ versioning or publishing metadata.
 - Claude Code 行为变化：Linux 上 Bash 命令的 bwrap 沙箱另起 PID 命名空间（`--unshare-pid`，照 codex），命令里看不到宿主的其他进程，这一条不选自定义档位也生效。Docker 默认配置下挂不了新的 /proc 时（第一次跑命令探测一次），沙箱里的 /proc 是空的，`ps`、`/dev/stdin`、bash 的进程替换用不了，容器加 `--security-opt systempaths=unconfined` 可恢复；`config.json` 里已经写了 `default_permissions` 的，新会话的沙箱模式从此按它来（原来这个键不认）；`config.json` 里的 `permissions` 形状不对时进程起不来（原来不看这个键）
 - Claude Code：回合正在收尾、不再收插话时，`turn/steer` 回错误的同时不再把这句话留在回合记录里，同一个消息号重试也不会被当成已经收下（上游同样拒绝往收尾中的回合里插话）
 - Claude Code：适配器自己连的 MCP 服务按会话跨回合复用连接，第二个回合起不再重起 stdio 服务、不再和 HTTP 服务重新握手（先 ping 一次确认还通）。配置或工作目录变了就重建；会话归档、删除、卸载、回退、客户端全都断开、适配器停止时关掉；没人用的连接默认留 10 分钟、整个适配器最多 8 条（`CHA_CLAUDE_MCP_IDLE_MINUTES`、`CHA_CLAUDE_MCP_IDLE_CONNECTIONS`，设成 `0` 回到每回合重连）。有状态的 stdio 服务（浏览器类等）因此在同一个会话里跨回合保留状态；回合被打断、请求被取消或超时过、重新登录过 OAuth 的连接不留
-  - 影响：适配器的 Claude Code 入口不再自带原来那段“Codex 桌面展示风格”提示。升级前建的会话（Litch 里的也一样）恢复后没有任何呈现提示，回答可能更像终端里的风格；新建的会话才有 Litch 这段。这段话跟着会话存：Litch 建的会话在官方桌面端打开，模型照样被告知回答显示在 Litch 里
-  - OpenCode 上只有在会话还带着别的 Litch 工具时这段话才送得到（桌面端建的会话总带着）；经聚合面转给原生 Codex 的建会话、恢复、分叉请求里如果有不带工具的命名空间，设备进程整个去掉，免得上游拒绝整个请求
 - Claude Code：模型接口出错时回合的错误带上 `codexErrorInfo`，按上游 codex 的种类归：过载（529）是 `serverOverloaded`，429 是 `responseTooManyFailedAttempts`，余额用完是 `usageLimitExceeded`，上下文超长是 `contextWindowExceeded`，鉴权失败是 `unauthorized`，500 是 `internalServerError`，其余带状态码的是 `httpConnectionFailed`；客户端按这个做容量重试不用认错误文字
 - Claude Code：回合进行中再发 `turn/start` 时，和上游 codex 一样并进正在跑的回合（相当于 `turn/steer`），回执里是那个回合的号，不再回 `-32009`；带图片的、追问子代理的、审查和手动压缩的、带 `outputSchema` 的回合照旧拒绝，这次请求里的模型、权限等设置不跟着改
 - Claude Code：输入里选的 Skill（`{type: "skill"}`）照上游 codex 把 SKILL.md 正文作为 `<skill>` 片段放在这一轮的话前面交给模型，`turn/start`、`turn/steer` 都是；原来拼成跟在话后面的 “/名字”，技能不在开头时 CLI 不展开，正文到不了模型。关掉的技能什么都不给；不在技能清单里的（比如 CLI 插件带的）照旧转成 “/名字”
@@ -41,6 +39,11 @@ versioning or publishing metadata.
 - Claude Code：新增开关 `CHA_CLAUDE_SESSION_TITLE`，默认 `on`，和原来一样自动给会话起名；设成 `off` 时整个会话不再发起标题的小模型请求（CLI 设 `CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1` 不自己起，入口也不请它起、不读标题），会话名一直是空的，只有客户端 `thread/name/set` 改名时才有、才发 `thread/name/updated`。认不出的值启动就报错
 - Claude Code：原生工具执行前不再等 CLI 把这次调用写进会话记录，每次工具调用少等约 80 毫秒（4 核容器里实测一次工具往返的中位数从 124 降到 43 毫秒，codex 0.163.0 是 45 毫秒）。钩子把调用记进入口自己的库就放行；回合开始前逐条到会话记录里核对，调用已经发出、没进会话记录、写它的 CLI 也不在了的（入口崩溃、CLI 被强杀、断电），在这一回合的话前面告诉模型这几次调用结果未知、先核对再依赖或重做，和 CLI 自己给打断的调用补的那条结果同一个意思；子代理里的调用、并行的几次调用都一样。原来的保证不变：发出过的调用不会被模型当成没发生过。只剩一处要等：新会话的会话记录文件还没写出来时（CLI 收到话后约 100 毫秒才写第一批），钩子等文件出现再放行，免得这时崩了下一回合连会话都恢复不了；真实模型想得比这久，一般用不着等。钩子收到的事件找不到对应回合时改为拒绝执行（原来放行）
 - Claude Code：交给模型的权限申请工具（`request_permissions`）描述里去掉内部名称；MCP 服务 OAuth 动态注册报的客户端名从内部名称改成 `codex-harness-adapter`，可用 `CHA_CLAUDE_MCP_OAUTH_CLIENT_NAME` 改。已经注册过的客户端不受影响，下次重新注册才用新名字
+- 会话树：收尾的顺序照 Claude 桌面端改成先调 `litch_sessions.wrap_up`、再写完整的最终回答（规则、工具说明、返回提示都改，提醒回合仍只要一句）；原来模型先写长回答、再空收尾、最后补一句短话时，对话区把长回答收进“已处理”只露出短话，现在这种回合里长回答和短话都按回答画。新设置“每回合收尾”（`sessions.wrapUp`，默认开）：关掉时之后新建的会话不带 `wrap_up`、规则不要求收尾、也不提醒，建议改用 `start` 的提案；`litch_sessions` 其余照常；设备进程直接起时用 `--wrap-up on|off`
+- Claude Code：上下文用量的窗口改取 CLI 自己 `/context` 用的那个（解析后的自动压缩窗口），设了 `CLAUDE_CODE_AUTO_COMPACT_WINDOW` 等时按它算，取不到时退回模型窗口；压缩菜单项去掉说明文字
+- 原生 Codex：Litch 新建的会话第一回合后由设备进程用 luna 系的小模型自动起名（账号的模型列表里有才起，不覆盖用户自己改的名字）；Codex 详情设置的“配置”里加“自动起名”开关，默认开，存在设备上，不写进 Codex 的配置文件
+- Litch：回合末尾的“正在工作”只在空档里显出来（正在出字、工具在跑、卡片等人回答时不显示），空档持续约 400 毫秒才出，桌面与手机一致
+- Litch：侧栏“无项目”那一组的标题行加上新建会话按钮（桌面与手机）
 
 ## 0.14.0
 
@@ -50,7 +53,6 @@ versioning or publishing metadata.
 - Litch 内置浏览器：能从别的浏览器导入 Cookie 和已保存的密码（Chrome、Edge、Brave、Arc、Chromium、Vivaldi、Firefox，macOS 和 Windows）。设置页“内置浏览器”、浏览器面板的菜单和第一次打开面板时的横幅都能进；选来源和资料、勾类别、可只导某些网站的 Cookie，逐类报导入、已存在、无效、失败的条数。已有的不覆盖，一次性导入不同步。Mac 上读 Chrome 系会弹钥匙串授权；Windows 上新版 Chrome 系的应用绑定数据这一版导不了
 - Litch 内置浏览器：加了密码库。密码用系统的安全存储加密，只给用户自己开的标签填（点登录框出候选，选中才填，非 https 不填）；登录后提示保存、更新或这个网站永不；设置页能列、搜、删，看不到明文。代理开的标签不填密码：代理要登录时调 `litch_browser` 的 `request_sign_in`，这个标签对代理冻结，浏览器面板出卡片请人登录，交还前清空密码框，代理只知道登录完了还是取消了；读页工具遮住密码框的值
 - 会话树：派 fresh 子会话、提建议任务时“背景”和“任务”分开交：`litch_sessions` 的 `start`、`wrap_up` 的每条建议、`accept`（回答“新会话”时补的简报）多了 `background`，fresh 时必填、显示宽度至少 80（汉字算 2），原来压在 prompt 上的这道门槛挪到背景上，prompt 只要非空；fork 不要背景。子会话收到的第一条消息在任务前面多一段 `Background:`。提案存下背景（库迁移加一列），卡片展开简报时分“背景 / 任务”两段，“改了再开始”和手动派的弹窗里能看能改（全新开始时才有），手机端同样
-- 会话树：收尾的顺序照 Claude 桌面端改成先调 `litch_sessions.wrap_up`、再写完整的最终回答（规则、工具说明、返回提示都改，提醒回合仍只要一句）；原来模型先写长回答、再空收尾、最后补一句短话时，对话区把长回答收进“已处理”只露出短话，现在这种回合里长回答和短话都按回答画。新设置“每回合收尾”（`sessions.wrapUp`，默认开）：关掉时之后新建的会话不带 `wrap_up`、规则不要求收尾、也不提醒，建议改用 `start` 的提案；`litch_sessions` 其余照常；设备进程直接起时用 `--wrap-up on|off`
 - Litch：右边的侧面板（文件、差异、浏览器……）开没开按会话记：在 A 会话里打开，切到没打开过的 B 是收着的，切回 A 又开着；新建对话页按设备记。切会话带出来的打开不抢焦点。宽度和看的标签仍是共用的
 - Litch：Claude 桌面端派出的子会话（Code 标签页里用 start_session 起的）认得出来了：侧栏默认藏起，侧栏顶上的“更多”里打开“显示 Claude Code 子对话”才出来；打开后挂在桌面端里派出它的那个会话下面、能收起，对话顶上“由…派出”能点回父会话。父会话从 Claude 桌面端自己的数据目录里读（只读），读不到、桌面端没装、父会话没导进来时照常单独列。只是显示上的父子关系：不能从父会话给它发消息，做完也不唤醒父会话。
 - Litch：对话右边加了常驻的信息栏，有内容才出来，排在对话和文件、浏览器那些侧面板之间；第一张卡片是会话最近的一份待办（Claude Code 的 TodoWrite，以及 OpenCode、ACP、原生 Codex 发来的待办），全做完后收成一行。窗口窄到放不下时整栏不出，待办回到对话里
