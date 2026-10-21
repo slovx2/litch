@@ -27,7 +27,7 @@ const profileSchema = {
   },
 }
 
-// Tyrs Hand 自有真实 MCP 工具；不冒充 Claude 内建工具。
+// 入口自有的真实 MCP 工具；不冒充 Claude 内建工具。描述是给模型看的，不写产品名。
 export function permissionToolServer(
   request: (proposal: PermissionProposal, callId: string) => Promise<PermissionGrant>,
   identity: (args: unknown) => string,
@@ -39,7 +39,7 @@ export function permissionToolServer(
       {
         name: 'request_permissions',
         description:
-          'Tyrs Hand 权限申请：向用户明确请求新增的现有绝对路径读写权限或网络权限。等待返回后仅使用实际获准范围；拒绝不代表成功。session 仅在当前运行代的同一会话跨回合有效，重启后失效。不能替代退出计划确认。',
+          '权限申请：向用户明确请求新增的现有绝对路径读写权限或网络权限。等待返回后仅使用实际获准范围；拒绝不代表成功。session 仅在当前运行代的同一会话跨回合有效，重启后失效。不能替代退出计划确认。',
         inputSchema: {
           type: 'object',
           additionalProperties: false,

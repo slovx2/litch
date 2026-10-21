@@ -55,6 +55,14 @@ export function validateOAuthDiscovery(
   }
 }
 
+/**
+ * 动态注册时报给授权服务器的客户端名，授权页上会给用户看。默认是适配器自己的名字；
+ * 接入方（比如 Litch）要显示自己的名字时设 CHA_CLAUDE_MCP_OAUTH_CLIENT_NAME
+ */
+export function mcpOAuthClientName(env: NodeJS.ProcessEnv = process.env): string {
+  return env.CHA_CLAUDE_MCP_OAUTH_CLIENT_NAME?.trim() || 'codex-harness-adapter'
+}
+
 export class StoredOAuthProvider implements OAuthClientProvider {
   readonly record: OAuthCredential
   private verifier = ''
@@ -77,7 +85,7 @@ export class StoredOAuthProvider implements OAuthClientProvider {
 
   get clientMetadata() {
     return {
-      client_name: 'Tyrs Hand Claude MCP',
+      client_name: mcpOAuthClientName(),
       redirect_uris: [this.redirectUrl],
       token_endpoint_auth_method: 'none',
       grant_types: ['authorization_code', 'refresh_token'],
