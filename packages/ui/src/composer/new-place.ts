@@ -1,6 +1,6 @@
-// 新建对话页默认建在哪：哪台设备、哪个工作区。这里只有判断，不碰存储也不碰界面，单独拿出来好测
-// （packages/ui/test/new-place.test.mjs）。记住上次用的是哪里，在 remembered.ts。
-import type { DeviceView, WorkspaceView } from '@litch/core'
+// 新建对话页默认建在哪：哪台设备、哪个工作区，以及选过的设置换了去处还算不算数。这里只有判断，
+// 不碰存储也不碰界面，单独拿出来好测（packages/ui/test/new-place.test.mjs）。记住上次用的是哪里，在 remembered.ts。
+import type { ComposeOptions, DeviceView, SessionSettings, WorkspaceView } from '@litch/core'
 
 /** 要建在哪。workspaceId 为 null 表示不属于任何工作区 */
 export interface Place {
@@ -66,6 +66,27 @@ export function defaultHarness<H extends { id: string }>(
     if (hit) return hit
   }
   return ready[0]
+}
+
+/**
+ * 选过的模型、强度、速度、权限、计划模式里，在这份清单上还成立的那几项：上次记下的、换了设备或项目带过来的，
+ * 都要先过一遍。模型得在清单里；强度得是选的那个模型有的一档，没选模型的话用哪个模型要看对面的默认，
+ * 留到 newSessionSettings 去对；速度同样留给它去对；权限得是清单里的一档；这个 harness 不会计划模式就不带
+ */
+export function fitPicks(
+  picks: Partial<SessionSettings>,
+  options: ComposeOptions,
+): Partial<SessionSettings> {
+  const fit: Partial<SessionSettings> = {}
+  const model = options.models.find((entry) => entry.id === picks.model)
+  if (model) fit.model = model.id
+  if (picks.effort && (!model || model.efforts.some((effort) => effort.id === picks.effort)))
+    fit.effort = picks.effort
+  if (picks.speed) fit.speed = picks.speed
+  if (picks.permission && options.permissions.some((preset) => preset.id === picks.permission))
+    fit.permission = picks.permission
+  if (picks.mode && options.plan) fit.mode = picks.mode
+  return fit
 }
 
 /**

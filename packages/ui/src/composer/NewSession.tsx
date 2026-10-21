@@ -24,7 +24,7 @@ import { useInstall } from '../install/useInstall.ts'
 import { WorkspaceDialog } from '../sidebar/WorkspaceDialog.tsx'
 import { UserAttachments } from '../transcript/messages.tsx'
 import { Composer } from './Composer.tsx'
-import type { PlaceWish } from './new-place.ts'
+import { fitPicks, type PlaceWish } from './new-place.ts'
 import { Picker, type PickerOption } from './Picker.tsx'
 import {
   pickHarness,
@@ -223,12 +223,12 @@ export function NewSession({ draft, onPlace, onCreated, onDevices, assist }: New
   const harnessId = harness?.id ?? ''
   const options = useComposeOptions(deviceId, harness?.id)
   /**
-   * 用户这次自己选的，连同是在哪台设备的哪个 harness 上选的：模型这些是 harness 自己的，
-   * 换了设备或者 harness 就不作数了。没选的用上次的，上次也没有就让对面用它的默认值
+   * 用户这次在页上自己选的，连同是在哪个 harness 上选的：模型这些是 harness 自己的，换了 harness 就不作数了
+   * （换回来又算）。换设备、换项目不丢，那边的清单上不成立的那几项才不算（fitPicks）。
+   * 没选的用上次的，上次也没有就让对面用它的默认值
    */
-  const slot = `${deviceId}/${harnessId}`
-  const [chosen, setChosen] = useState<{ slot: string; picks: Partial<SessionSettings> }>({
-    slot,
+  const [chosen, setChosen] = useState<{ harness: string; picks: Partial<SessionSettings> }>({
+    harness: harnessId,
     picks: {},
   })
   /** 已经发出去、会话还没建好的那条消息 */
@@ -244,7 +244,8 @@ export function NewSession({ draft, onPlace, onCreated, onDevices, assist }: New
   // 正点开的选项（比如那个模型才有的强度）会在手底下没了
   const holding = defaults === undefined
 
-  const own = chosen.slot === slot ? chosen.picks : {}
+  const mine = chosen.harness === harnessId ? chosen.picks : {}
+  const own = options ? fitPicks(mine, options) : mine
   const picks = { ...(options ? recallPicks(deviceId, harnessId, options) : {}), ...own }
   // 底栏上显示的：选过的；没选的是对面不带设置新建时会用的，建会话时也照显示的发，显示的就是会用的
   const settled = options && !holding ? newSessionSettings(picks, defaults, options) : null
@@ -339,7 +340,7 @@ export function NewSession({ draft, onPlace, onCreated, onDevices, assist }: New
                 }),
               }),
         }))}
-        onPick={(id) => pickHarness(deviceId, workspaceId, id)}
+        onPick={pickHarness}
       />
     ) : null
 
@@ -440,7 +441,9 @@ export function NewSession({ draft, onPlace, onCreated, onDevices, assist }: New
               queued={[]}
               settings={shown}
               holdSettings={holding}
-              onSettings={(patch) => setChosen({ slot, picks: { ...own, ...patch } })}
+              onSettings={(patch) =>
+                setChosen({ harness: harnessId, picks: { ...mine, ...patch } })
+              }
               onSend={create}
               failure={(reason) => t('newSession.failed', { reason })}
             />

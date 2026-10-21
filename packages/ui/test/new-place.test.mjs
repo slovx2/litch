@@ -11,7 +11,7 @@ globalThis.localStorage = {
   setItem: (key, value) => stored.set(key, String(value)),
 }
 
-const { defaultDevice, defaultHarness, defaultWorkspace, resolvePlace } = await import(
+const { defaultDevice, defaultHarness, defaultWorkspace, fitPicks, resolvePlace } = await import(
   '../src/composer/new-place.ts'
 )
 const { recallDevice, recallWorkspace, rememberHarness, rememberPlace } = await import(
@@ -169,4 +169,42 @@ test('建成之后 harness 按工作区记，同时记成这台设备最近用�
     'local/litch': 'claude-code',
     local: 'claude-code',
   })
+})
+
+/** 拼一份 harness 能选的清单：模型各有几档强度，权限只有给的那几档 */
+const menu = (plan, permissions = [':read-only', ':workspace']) => ({
+  models: [
+    { id: 'opus', efforts: [{ id: 'low' }, { id: 'high' }] },
+    { id: 'haiku', efforts: [{ id: 'low' }] },
+  ],
+  permissions: permissions.map((id) => ({ id })),
+  plan,
+})
+
+test('页上选过的设置换了设备、项目还算数，那边的清单上不成立的那几项才不算', () => {
+  const picks = {
+    model: 'opus',
+    effort: 'high',
+    speed: 'fast',
+    permission: ':workspace',
+    mode: 'plan',
+  }
+  // 那边的清单一样：全都带过去
+  assert.deepEqual(fitPicks(picks, menu(true)), picks)
+  // 那边没有这个模型：模型不算；没选模型时强度留给 newSessionSettings 按对面的默认模型去对
+  assert.deepEqual(fitPicks({ ...picks, model: 'gone' }, menu(true)), {
+    effort: 'high',
+    speed: 'fast',
+    permission: ':workspace',
+    mode: 'plan',
+  })
+  // 选的模型在那边没有这一档强度：强度不算，模型还在
+  assert.deepEqual(fitPicks({ model: 'haiku', effort: 'high' }, menu(true)), { model: 'haiku' })
+  // 那边没有这一档权限、不会计划模式：这两项不算
+  assert.deepEqual(fitPicks(picks, menu(false, [':read-only'])), {
+    model: 'opus',
+    effort: 'high',
+    speed: 'fast',
+  })
+  assert.deepEqual(fitPicks({}, menu(true)), {})
 })

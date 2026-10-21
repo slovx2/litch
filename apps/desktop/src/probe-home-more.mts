@@ -1,7 +1,7 @@
 // 新建对话页上后补的两件事，只对着模拟核心量，接在 probe-home.mts 后面（那一组刚在 build-01 的 infra 里
 // 用 Pi 建过一个会话，这里的默认值是从它记下的东西来的）：
 // 一、建在哪个 harness 上是按项目记的：没用过的项目拿这台设备最近用的，用过的各记各的；
-//     这次只是点选、还没发出去的，换走再换回来也还在。
+//     这次只是点选、还没发出去的，换了项目还是它，换回来也还在；页上选的模型、强度、计划模式也一样。
 // 二、项目的选择器最后一项是“添加项目…”：添加成了页上就指着新的那个，写了一半的字不动。
 // 整个函数会被转成文字放进页面里执行，所以用到的工具都写在函数里面。
 
@@ -16,8 +16,11 @@ export interface HomeMoreProbe {
     /** 换回原来那个项目、再换过来，各是哪个 harness */
     back: string
     again: string
-    /** 没发出去只是点选的：换走再换回来是哪个 */
+    /** 没发出去只是点选的：换到别的项目是哪个，再换回来是哪个 */
+    pickedCarried: string
     pickedKept: string
+    /** 页上选了模型、强度、开了计划模式再换项目：“模型/强度/计划模式开没开” */
+    settingsCarried: string
   }
   add: {
     /** 选择器里最后两项写的什么，最后那一项是不是标成了“一件事” */
@@ -141,9 +144,27 @@ export async function homeMoreProbe(): Promise<HomeMoreProbe> {
   // 只是点选、没发出去
   await choose('harness', 'dsh')
   await choose('workspace', 'infra')
+  const pickedCarried = shown('harness')
   await choose('workspace', 'litch')
   const pickedKept = shown('harness')
   await choose('harness', 'Claude Code')
+  // 选了模型、强度，开了计划模式，再换项目：都还在。计划模式按提示语认开没开，不认具体的属性
+  await choose('model', 'Opus 5.5')
+  await choose('effort', '高')
+  const plan = await until('计划模式的开关', () =>
+    one<HTMLButtonElement>('.mode-btn[data-kind="plan"]'),
+  )
+  const planOff = plan.title
+  plan.click()
+  await until('计划模式开了', () => one('.mode-btn[data-kind="plan"]')?.title !== planOff)
+  await choose('workspace', 'infra')
+  await until('换到 infra', () => shown('workspace') === 'infra' && picker('model'))
+  await frame()
+  const planOn = one('.mode-btn[data-kind="plan"]')?.title
+  const settingsCarried = `${shown('model')}/${shown('effort')}/${planOn !== undefined && planOn !== planOff ? '开' : '关'}`
+  // 收拾：计划模式只管这一次，换回去之前关掉；模型、强度换回来没选过时的样子由下面建会话之前的新建页重新定
+  one<HTMLButtonElement>('.mode-btn[data-kind="plan"]')?.click()
+  await choose('workspace', 'litch')
   // 收拾：刚建的会话删掉（正开着它删，会回到新建对话页）
   const mine = await until('刚建的那个会话', () => rowOf(second))
   mine.click()
@@ -222,7 +243,7 @@ export async function homeMoreProbe(): Promise<HomeMoreProbe> {
   await frame()
 
   return {
-    harness: { start, fresh, after, back, again, pickedKept },
+    harness: { start, fresh, after, back, again, pickedCarried, pickedKept, settingsCarried },
     add: { ...first, cancelKept, picked, crumb, draftKept, listed, offlineHas },
   }
 }
@@ -244,8 +265,14 @@ export function judgeHomeMore(probe: HomeMoreProbe): string[] {
       `harness 没有按项目各记各的：换回去是“${harness.back}”，再换过来是“${harness.again}”`,
     )
   }
+  if (harness.pickedCarried !== 'dsh') {
+    failed.push(`只是点选、没发出去的 harness，换了项目就没了：“${harness.pickedCarried}”`)
+  }
   if (harness.pickedKept !== 'dsh') {
     failed.push(`只是点选、没发出去的 harness，换了项目再换回来没了：“${harness.pickedKept}”`)
+  }
+  if (harness.settingsCarried !== 'Opus 5.5/高/开') {
+    failed.push(`页上选的模型、强度、计划模式，换了项目没留住：“${harness.settingsCarried}”`)
   }
   if (add.last !== '添加项目…' || !add.marked || add.before !== '无项目') {
     failed.push(`项目选择器的最后一项不是“添加项目…”：“${add.before}”“${add.last}”`)
