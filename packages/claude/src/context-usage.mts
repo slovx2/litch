@@ -3,7 +3,9 @@
 //   SDK 结果里的 usage 是整个回合主循环所有请求的累加，一个回合调十次工具，缓存读就算了十遍，不能用。
 // - 主会话和每个子代理各算各的（按 parent_tool_use_id 分路），子代理的请求不改主会话的占用。
 // - 同一次请求的用量会分几次来：流式的开头、结尾，以及按内容块拆开的几条助手消息。按 message.id 合在一起，各项取最大的。
-// - 窗口大小取结果里 modelUsage[主模型].contextWindow，主模型是最近一次顶层请求的模型。
+// - 窗口大小先取 CLI 自己 /context 用的那个：解析后的自动压缩窗口（getContextUsage 的 rawMaxTokens），
+//   用户设了 CLAUDE_CODE_AUTO_COMPACT_WINDOW、autoCompactWindow 时比模型窗口小；
+//   取不到时退回结果里 modelUsage[主模型].contextWindow，主模型是最近一次顶层请求的模型。
 
 export interface RequestUsage {
   id: string
@@ -50,4 +52,12 @@ export function contextWindowOf(modelUsage: unknown, model: string | null): numb
     (entries.length === 1 ? entries[0]?.[1] : undefined)
   const window = (picked as Record<string, unknown> | undefined)?.contextWindow
   return typeof window === 'number' && Number.isSafeInteger(window) && window > 0 ? window : null
+}
+
+/** CLI 解析出的自动压缩窗口（getContextUsage 的 rawMaxTokens）。不是正整数、或比模型窗口还大时不用 */
+export function compactWindowOf(contextUsage: unknown, modelWindow: number | null): number | null {
+  if (!contextUsage || typeof contextUsage !== 'object') return null
+  const raw = (contextUsage as Record<string, unknown>).rawMaxTokens
+  if (typeof raw !== 'number' || !Number.isSafeInteger(raw) || raw <= 0) return null
+  return modelWindow !== null && raw > modelWindow ? null : raw
 }

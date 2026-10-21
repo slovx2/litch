@@ -1030,7 +1030,6 @@ export const en: Record<MessageKey, Entry> = {
   'turn.rollback.failed': 'Could not roll back: {reason}',
   'context.unknown': 'Context usage has not been reported yet',
   'context.compact': 'Compact context',
-  'context.compactNote': 'Summarise the conversation so far to free up context',
   'context.compactFailed': 'Could not compact: {reason}',
   'rail.label': 'Session info',
   'todo.title': 'To-do',
