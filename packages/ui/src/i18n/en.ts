@@ -1081,7 +1081,6 @@ export const en: Record<MessageKey, Entry> = {
   'activity.notes': ({ n }) => plural(n, 'note', 'notes'),
   'activity.agents': ({ n }) => plural(n, 'subagent', 'subagents'),
   'activity.agentsFailed': ({ n }) => `${plural(n, 'subagent', 'subagents')} failed`,
-  'reasoning.running': 'Thinking',
   'reasoning.done': 'Thought',
   'command.verb': 'Run',
   'command.running': 'Running',

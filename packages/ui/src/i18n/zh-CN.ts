@@ -1012,7 +1012,6 @@ export const zhCN = {
   'activity.notes': '{n} 段说明',
   'activity.agents': '{n} 个子代理',
   'activity.agentsFailed': '{n} 个子代理失败',
-  'reasoning.running': '正在想',
   'reasoning.done': '想了一下',
   'command.verb': '运行',
   'command.running': '运行中',

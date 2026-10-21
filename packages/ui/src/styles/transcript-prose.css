@@ -447,13 +447,15 @@
   font-size: 12px;
   color: var(--ink-2);
 }
-/* 对话里回合进行中末尾那一格（.slot；新建会话页那一行不带）：高度固定，只在空档里显出来（Transcript.tsx 的 useWorking），淡入淡出不改布局 */
+/* 对话里回合进行中末尾那一格（.slot；新建会话页那一行不带）：高度固定，只在空档里显出来（Transcript.tsx 的 useWorking），不改布局。
+   只淡入不淡出：别处（步骤组的汇总行）一接手“正在工作”，这里立刻没了，同一时刻只有一处在写 */
 .running-line.slot {
   height: 18px;
   transition: opacity 0.2s ease;
 }
 .running-line.slot[data-hidden] {
   opacity: 0;
+  transition: none;
 }
 
 /* 系统设了“减少动态效果”时，记号和光标不闪。这一段要放在所有动画规则之后 */
