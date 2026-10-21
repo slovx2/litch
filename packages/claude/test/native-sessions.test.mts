@@ -58,6 +58,15 @@ function entry(
 const CLI = '3b5c5b0e-0d2a-4a8e-9a3f-000000000001'
 const SDK = '3b5c5b0e-0d2a-4a8e-9a3f-000000000002'
 
+/**
+ * 原生记录的修改时间挪到一分钟以前：刚写过的记录在入口看来是别处还在写（native-owner.mts 的兜底），会话只读、
+ * 最后一个回合是进行中。这些用例看的是写完了的记录
+ */
+async function settle(...files: string[]): Promise<void> {
+  const past = new Date(Date.now() - 60_000)
+  for (const file of files) await utimes(file, past, past)
+}
+
 async function writeSessions(): Promise<void> {
   await mkdir(projectDir, { recursive: true })
   await writeFile(
@@ -83,6 +92,7 @@ async function writeSessions(): Promise<void> {
     entry(SDK, 'sdk-ts', 'user', 's1', null, '程序里问的一句') +
       entry(SDK, 'sdk-ts', 'assistant', 's2', 's1', [{ type: 'text', text: '程序里答的一句' }]),
   )
+  await settle(join(projectDir, `${CLI}.jsonl`), join(projectDir, `${SDK}.jsonl`))
 }
 
 const message = (
@@ -238,6 +248,7 @@ test('NAT-003：列表里有命令行开的会话、没有程序化入口的；�
       entry(CLI, 'cli', 'user', 'u2', 'a2', '再说一句') +
         entry(CLI, 'cli', 'assistant', 'a3', 'u2', [{ type: 'text', text: '收到' }]),
     )
+    await settle(join(projectDir, `${CLI}.jsonl`))
     const again = await app.request('thread/read', { threadId: CLI, includeTurns: true })
     assert.deepEqual(
       again.thread.turns.map((turn: { id: string }) => turn.id),

@@ -3,8 +3,11 @@
 // 第一次被打开时照这里画一遍，写进适配器的库，之后和适配器自己建的会话一样读。纯函数，不碰文件。
 //
 // 怎么切回合：人说的一句话开一个回合，到下一句人话之前的助手回复、工具调用和结果都算这个回合的。
-// 不算人话的用户消息：只有工具结果的；只有系统提醒的；后台任务的结束通知（origin 是 task-notification）；
-// 斜杠命令在本地的输出；“[Request interrupted by user]”（它把当前回合记成被打断）。
+// 不算人话的用户消息：只有工具结果的；只有系统提醒的；斜杠命令在本地的输出；
+// “[Request interrupted by user]”（它把当前回合记成被打断）；压缩后的摘要（画成一条上下文压缩的条目）。
+// 后台任务的结束通知（origin 是 task-notification）：上一个回合已经停下（最后是助手说完的话、没有等结果的工具调用）时，
+// 它之后的那一轮单独成一个回合，来历记成 backgroundTask，和实时回合里 CLI 自己续跑的一轮一个样子；
+// 回合还在中途（工具结果之后、助手还没接着说）就到的通知并进当前回合。
 // 人话前面 Claude 桌面端拼进去的 <system-reminder> 块去掉，只留人写的那部分。
 // 条目的标识由消息的 uuid 和块的位置拼成：同一份记录再画一遍，标识不变。
 import { toolItemWithResult } from './server-helpers.mjs'
@@ -19,12 +22,25 @@ export interface NativeMessage {
   parent_tool_use_id?: string | null
   timestamp?: string
   origin?: { kind?: string } | null
+  /** 压缩后的那段摘要（“This session is being continued…”） */
+  isCompactSummary?: boolean
 }
 
 export interface NativeHistory {
   turns: TurnRecord[]
   /** 每个回合在原生记录里的最后一条消息（回退、分叉要用，和适配器自己记的边界是同一种） */
   boundaries: Map<string, string>
+  /** 不是人发起的回合是谁开的（backgroundTasks 扩展的 litchOrigin） */
+  origins: Map<string, 'backgroundTask'>
+}
+
+export interface ProjectOptions {
+  mcpServers?: readonly string[]
+  /**
+   * 写这份记录的进程还在跑这一轮：最后一个回合是进行中，没等到结果的工具调用照旧是进行中，
+   * 不当成失败（之后来的结果下一次重画时补上）
+   */
+  running?: boolean
 }
 
 /** 这些工具在实时回合里也不画成工具条目：提问、计划确认由界面问，结构化输出是最终回答，待办是计划卡片 */
@@ -32,6 +48,8 @@ const HIDDEN_TOOLS = new Set(['AskUserQuestion', 'ExitPlanMode', 'StructuredOutp
 const INTERRUPTED = /^\[Request interrupted by user[^\]]*\]$/
 const REMINDER = /<system-reminder>[\s\S]*?<\/system-reminder>/g
 const LOCAL_OUTPUT = /<(local-command-stdout|local-command-stderr|local-command-caveat)>/
+/** 旧一些的记录里结束通知没有 origin，只能看话本身 */
+const TASK_NOTIFICATION = /^\s*<task-notification>/
 
 type Block = Record<string, unknown>
 
@@ -78,16 +96,27 @@ export function projectNativeHistory(
   threadId: string,
   messages: readonly NativeMessage[],
   cwd: string,
-  mcpServers: readonly string[] = [],
+  options: ProjectOptions = {},
 ): NativeHistory {
+  const mcpServers = options.mcpServers ?? []
   const turns: TurnRecord[] = []
   const boundaries = new Map<string, string>()
+  const origins = new Map<string, 'backgroundTask'>()
   let turn: TurnRecord | null = null
   /** 这个回合里还没收到结果的工具调用：tool_use_id → 条目在 items 里的位置 */
   let open = new Map<string, number>()
+  /** 当前回合停下了：最后是助手的话（或者被打断），不是工具结果 */
+  let settled = false
 
-  const finish = (done: TurnRecord | null) => {
+  const finish = (done: TurnRecord | null, final = false) => {
     if (!done) return
+    if (final && options.running) {
+      // 对方还在跑这一轮：阶段等它说完再定，工具调用等结果
+      done.status = 'inProgress'
+      done.completedAt = null
+      turns.push(done)
+      return
+    }
     // 回合里最后一段回答是最终回答，前面的是过程中的话
     let last = true
     for (let at = done.items.length - 1; at >= 0; at--) {
@@ -151,10 +180,25 @@ export function projectNativeHistory(
       }
       if (texts.length === 1 && INTERRUPTED.test(texts[0]?.trim() ?? '')) {
         if (turn) turn.status = 'interrupted'
+        settled = true
         stay()
         continue
       }
-      if (message.origin?.kind === 'task-notification') {
+      if (message.isCompactSummary) {
+        turn ??= begin(message, null)
+        turn.items.push({ type: 'contextCompaction', id: `${message.uuid}:compaction` })
+        stay()
+        continue
+      }
+      if (
+        message.origin?.kind === 'task-notification' ||
+        (texts.length > 0 && texts.every((text) => TASK_NOTIFICATION.test(text)))
+      ) {
+        // 上一轮已经停下：CLI 为这条通知另起了一轮
+        if (!turn || (settled && open.size === 0)) {
+          turn = begin(message, null)
+          origins.set(turn.id, 'backgroundTask')
+        }
         stay()
         continue
       }
@@ -165,18 +209,21 @@ export function projectNativeHistory(
         .filter((input): input is UserInput => input !== null)
       // 只有工具结果之类的：还在这个回合里
       if (said.length === 0 && images.length === 0) {
+        if (blocks.some((block) => block.type === 'tool_result')) settled = false
         stay()
         continue
       }
       const text: UserInput[] =
         said.length > 0 ? [{ type: 'text', text: said.join('\n\n'), text_elements: [] }] : []
       turn = begin(message, [...text, ...images])
+      settled = false
       boundaries.set(turn.id, message.uuid)
       continue
     }
 
     // 助手的消息。记录开头就是助手（没有人话打头）的，单独成一个回合
     turn ??= begin(message, null)
+    settled = true
     const current = turn
     blocks.forEach((block, index) => {
       const id = `${message.uuid}:${index}`
@@ -215,6 +262,6 @@ export function projectNativeHistory(
     if (at !== null) current.completedAt = at
     boundaries.set(current.id, message.uuid)
   }
-  finish(turn)
-  return { turns, boundaries }
+  finish(turn, true)
+  return { turns, boundaries, origins }
 }

@@ -21,6 +21,28 @@ function guardBinary(): string {
   return path
 }
 
+/**
+ * 入口自己起的、还活着的 CLI：进程号 → 会话。看本机原生会话被谁占着（native-owner.mts）时，这些进程不算别人
+ */
+const ownProcesses = new Map<number, string>()
+/** 每个会话上入口自己的 CLI 最后一次退出的时刻（毫秒）：那之前原生记录的改动是入口自己写的 */
+const ownExits = new Map<string, number>()
+
+export function ownCliPids(): ReadonlySet<number> {
+  return new Set(ownProcesses.keys())
+}
+
+/** 入口此刻有没有为这个会话开着 CLI */
+export function ownCliAlive(threadId: string): boolean {
+  for (const owner of ownProcesses.values()) if (owner === threadId) return true
+  return false
+}
+
+/** 入口自己的 CLI 最后一次在这个会话上退出的时刻（毫秒），没有过是 0 */
+export function ownCliExitedAt(threadId: string): number {
+  return ownExits.get(threadId) ?? 0
+}
+
 // 控制请求超时并不等于 CLI 已停止；必须确认进程和管道关闭后才能释放审批。
 export class NativeProcess {
   private child?: ChildProcessWithoutNullStreams
@@ -47,10 +69,13 @@ export class NativeProcess {
       detached: process.platform !== 'win32',
     }) as ChildProcessWithoutNullStreams
     this.child = child
+    let cliPid: number | null = null
     const identity = child.stdio[3]
     if (!identity || !('read' in identity)) throw new Error('无法读取 CLI 进程身份')
     createInterface({ input: identity }).on('line', (line) => {
       const { childPid } = JSON.parse(line) as { childPid: number }
+      cliPid = childPid
+      ownProcesses.set(childPid, this.threadId)
       debugLog('native.process.started', {
         threadId: this.threadId,
         turnId: this.turnId,
@@ -62,6 +87,8 @@ export class NativeProcess {
     this.exited = new Promise<void>((resolve) => {
       child.once('close', () => {
         this.closed = true
+        if (cliPid !== null) ownProcesses.delete(cliPid)
+        ownExits.set(this.threadId, Date.now())
         debugLog('native.process.closed', {
           threadId: this.threadId,
           turnId: this.turnId,

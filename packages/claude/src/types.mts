@@ -382,7 +382,13 @@ export type RuntimeEvent =
     }
   | { type: 'notice'; level: 'info' | 'warning' | 'error'; message: string }
   // 回合累计的用量（只加进 total）；contextWindow 是主模型的上下文窗口，不知道是 null
-  | { type: 'usage'; usage: Record<string, unknown>; contextWindow?: number | null }
+  // model 是最近一次顶层请求的模型（窗口按它记下，导进来的会话算用量时查）
+  | {
+      type: 'usage'
+      usage: Record<string, unknown>
+      contextWindow?: number | null
+      model?: string | null
+    }
   // 一次模型请求结束：现在上下文里有多少（换掉 last）。agentToolUseId 不为空的是那个子代理自己的请求
   | { type: 'context_usage'; usage: Record<string, unknown>; agentToolUseId: string | null }
   | { type: 'goal_usage'; messageId: string; usage: Record<string, unknown> }
