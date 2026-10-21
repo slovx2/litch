@@ -255,6 +255,35 @@ test('WRAP-UP-005：被打断、失败的回合，不是用户发起的回合，
   }
 })
 
+test('WRAP-UP-014：上下文满了、自动压缩失败的回合（引擎报成失败，或者标着完成却带着错误）不提醒，之后正常结束的照常提醒', async () => {
+  const env = treeRig()
+  try {
+    const client = await litch(env)
+    const threadId = await withTools(client)
+    // Pi 入口把这种回合报成失败，错误里写着原因
+    const failed = env.pi.current(threadId) as any
+    failed.error = {
+      message: '上下文满了，自动压缩失败：…',
+      codexErrorInfo: null,
+      additionalDetails: null,
+    }
+    env.pi.end(threadId, 'failed')
+    // 别的引擎可能标着完成、却带着错误
+    await client.call('turn/start', { threadId, input: text('继续') })
+    const odd = env.pi.current(threadId) as any
+    odd.error = { message: '输出被截断', codexErrorInfo: null, additionalDetails: null }
+    env.pi.end(threadId, 'completed')
+    await settle(120)
+    assert.equal(injected(env, threadId, 'remind').length, 0, '出错的回合之后开了提醒回合')
+    // 问题解决了、下一个回合正常结束：照常提醒
+    await client.call('turn/start', { threadId, input: text('再试一次') })
+    env.pi.end(threadId, 'completed', '好了')
+    await until(() => injected(env, threadId, 'remind').length === 1, '正常结束的回合之后提醒')
+  } finally {
+    await env.close()
+  }
+})
+
 test('WRAP-UP-006：设置 sessions.wrapUpReminder 关掉不提醒，wrap_up 照常能用；会话编排关掉也不提醒', async () => {
   const env = treeRig({}, { values: { 'sessions.wrapUpReminder': false } })
   try {

@@ -399,9 +399,14 @@ export class SessionTree {
     )
   }
 
-  /** 这个会话会不会被提醒收尾：会话编排、每回合收尾、提醒都开着，会话建的时候带了 wrap_up */
-  private remindable(threadId: string): boolean {
+  /**
+   * 这个会话会不会被提醒收尾：会话编排、每回合收尾、提醒都开着，会话建的时候带了 wrap_up。
+   * 给了刚结束的回合时，它还得是正常结束的：出错、被截断、自动压缩失败的回合（引擎报成失败或带着错误）
+   * 不提醒，提醒回合多半撞上同一个问题，白花一次请求的钱
+   */
+  private remindable(threadId: string, turn?: Record<string, unknown>): boolean {
     if (!this.host.enabled() || !this.host.wrapUp() || !this.host.wrapUpReminder()) return false
+    if (turn && (turn.status !== 'completed' || turn.error)) return false
     return this.hasWrapUp(threadId)
   }
 
@@ -416,8 +421,7 @@ export class SessionTree {
     if (!userDriven) return
     // 新的用户回合结束了：之前没发出去的提醒由这一回合的结果取代
     this.reminders.delete(threadId)
-    if (turn.status === 'completed' && !wrapped && this.remindable(threadId))
-      this.reminders.set(threadId, String(turn.id))
+    if (!wrapped && this.remindable(threadId, turn)) this.reminders.set(threadId, String(turn.id))
   }
 
   /** 有提醒在等、会话闲着：替它开一个 kind=remind 的回合 */
