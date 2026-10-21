@@ -103,8 +103,8 @@ export interface NativeSessionsHost {
   }): ThreadRecord
   /** 这个会话现在有回合在跑：不去动它的历史 */
   busy(threadId: string): boolean
-  /** 本机交互进程的登记里占着的原生会话：原生会话号 → 占用方（native-owner.mts） */
-  registered(): Map<string, NativeOwner>
+  /** 本机交互进程的登记里占着的原生会话：原生会话号 → 占用方（native-owner.mts）。fresh 时不用缓存 */
+  registered(fresh?: boolean): Map<string, NativeOwner>
   /** 入口自己的 CLI 在这个会话上：此刻开着没有、最后一次退出的时刻（毫秒） */
   ownCli(threadId: string): { alive: boolean; exitedAt: number }
 }
@@ -318,16 +318,16 @@ export class NativeSessions {
 
   /**
    * 这几个会话里被别处占着的（native-owner.mts）：只看导进来的。growth 为真时登记里没有的再看原生记录
-   * 是不是刚被别人改过（要找记录、看文件，列表时不做）
+   * 是不是刚被别人改过（要找记录、看文件，列表时不做）。fresh 时重读登记，不用一秒内读过的
    */
-  owners(threadIds: readonly string[], growth = true): Map<string, NativeOwner> {
+  owners(threadIds: readonly string[], growth = true, fresh = false): Map<string, NativeOwner> {
     const found = new Map<string, NativeOwner>()
     const imported = this.importedAmong(threadIds)
     let registered: Map<string, NativeOwner> | null = null
     for (const threadId of threadIds) {
       const sessionId = imported.get(threadId)
       if (!sessionId) continue
-      registered ??= this.host.registered()
+      registered ??= this.host.registered(fresh)
       const owner = registered.get(sessionId)
       if (owner) {
         found.set(threadId, owner)

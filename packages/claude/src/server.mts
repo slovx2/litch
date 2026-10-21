@@ -462,7 +462,7 @@ export class CodexClaudeAppServer {
           source: nativeSource,
           newThread: (fields) => this.nativeThreadRecord(fields),
           busy: (threadId) => this.sessionHolder(threadId) !== null,
-          registered: () => this.nativeOwners.registered(),
+          registered: (fresh) => this.nativeOwners.registered(fresh),
           ownCli: (threadId) => ({
             alive: ownCliAlive(threadId),
             exitedAt: ownCliExitedAt(threadId),
@@ -1680,7 +1680,7 @@ export class CodexClaudeAppServer {
 
   /**
    * 重画之后告诉订阅者变了什么：新的回合整个发（进行中的发 turn/started，结束了的发 turn/completed，都带全部条目），
-   * 留着的回合里变了、多出来的条目发 item/completed，跟着结束了的再发 turn/completed。
+   * 留着的回合里变了、多出来的条目发 item/completed，跟着结束了的再发 turn/completed，从结束变回进行中的发 turn/started。
    * 有回合或条目没了（之前画到一半拆出来的半截、别处回退过）说不清楚，发 thread/reverted 让客户端整个重新载入
    */
   private announceRedraw(threadId: string, before: TurnRecord[], after: TurnRecord[]): void {
@@ -1716,6 +1716,12 @@ export class CodexClaudeAppServer {
       if (turn.status !== 'inProgress')
         this.notifyThread(threadId, {
           method: 'turn/completed',
+          params: { threadId, turn: this.toTurn(turn) },
+        })
+      else if (old.status !== 'inProgress')
+        // 先画成了结束、后来才知道对方还在跑：改回进行中
+        this.notifyThread(threadId, {
+          method: 'turn/started',
           params: { threadId, turn: this.toTurn(turn) },
         })
     }
@@ -1824,7 +1830,8 @@ export class CodexClaudeAppServer {
       const imported = this.native.importedAmong(this.subscribers.threads())
       for (const threadId of [...this.nativeOwnerState.keys()])
         if (!imported.has(threadId)) this.nativeOwnerState.delete(threadId)
-      const owners = this.native.owners([...imported.keys()])
+      // 重读登记：一秒内别的地方（列表）读过的可能还是对方开跑之前的，那样会把刚开跑的回合画成已完成
+      const owners = this.native.owners([...imported.keys()], true, true)
       for (const threadId of imported.keys()) {
         if (this.sessionHolder(threadId)) continue
         this.syncNativeOwner(threadId, owners.get(threadId) ?? null)

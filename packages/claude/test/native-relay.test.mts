@@ -788,3 +788,41 @@ test('RELAY-011：旧的画法已经留在库里的 0 毫秒回合和没头的�
     )
   })
 })
+
+test('RELAY-012：盯着时登记重读、不用一秒内列表读过的；先画成结束、后来才知道对方在跑的回合发 turn/started 改回进行中', async () => {
+  await fresh()
+  const S = id(12)
+  const scene = { sessionId: S, cwd: CWD }
+  await write(S, HALF_DRAWN.before(scene))
+  const desktop = await liveProcess()
+  const idle = { pid: desktop.pid as number, sessionId: S, status: 'idle' }
+  await register(desktop.pid as number, idle)
+  await withStage('relay-late-busy', async (stage) => {
+    const app = await stage.connect('app')
+    await app.request('thread/list', {})
+    await app.request('thread/resume', { threadId: S })
+    await follow(stage)
+
+    // 对方写下了一句话，登记还是空闲：画成结束
+    await append(S, HALF_DRAWN.asked(scene))
+    await follow(stage)
+    assert.deepEqual(
+      app
+        .notifications('turn/completed')
+        .map((message) => [message.params.turn.id, message.params.turn.status]),
+      [['u1', 'completed']],
+    )
+
+    // 刚列过一次（空闲的登记进了缓存），紧接着登记变成 busy、记录没变：盯着的这一趟照样看得到
+    await app.request('thread/list', {})
+    await register(desktop.pid as number, { ...idle, status: 'busy' })
+    await follow(stage)
+    assert.deepEqual(
+      app
+        .notifications('turn/started')
+        .map((message) => [message.params.turn.id, message.params.turn.status]),
+      [['u1', 'inProgress']],
+    )
+  })
+  await stop(desktop)
+})
