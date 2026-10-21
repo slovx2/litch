@@ -24,6 +24,7 @@ and redo the change. Devices that only have Codex (no device service) have no se
 | `harness.<id>.cliPath` | path | empty | Absolute path of the harness's command. Empty means look it up on the login `PATH` (and a few usual places). For `acp` it is required: the command of the ACP agent to run |
 | `harness.<id>.env` | environment | empty | Environment variables only for this harness: proxy, API endpoint, API keys, `CODEX_HOME` for Codex. They override the service's own environment and the adapter's `env` file. Values can be marked secret |
 | `harness.pi.approvals` | boolean | off | "Ask before acting": Pi asks before running commands, writing or editing files and other side effects in the main session. Not a security boundary (no sandbox; subagents are not asked about) |
+| `harness.claude-code.promptCacheTtl` | enum `default` / `1h` | `default` | "Prompt cache duration" for Claude Code. `default` is what Claude Code does on its own (5 minutes with an API key, 1 hour when signed in with a Claude subscription). `1h` keeps the main conversation cached for an hour: cheaper for long conversations with pauses, but each cache write costs more (about 2× input instead of 1.25×). Subagents stay at 5 minutes. Passed to the runtime as `CHA_CLAUDE_PROMPT_CACHE_TTL` |
 
 The ACP entries take their arguments from an environment variable in their own `env` setting:
 `CHA_GEMINI_ARGS`, `CHA_QWEN_ARGS`, `CHA_ACP_ARGS` (split on whitespace, double quotes supported).

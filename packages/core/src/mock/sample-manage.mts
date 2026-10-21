@@ -142,6 +142,25 @@ function extraSettings(harness: HarnessView): SettingSpecView[] {
           { value: 'trace', title: both('逐条协议消息', 'Trace every protocol message') },
         ],
       },
+      {
+        ...BASE,
+        // 和设备服务真实声明的那一项同形（cmd/codex-harness-adapter/settings_claude.go）
+        key: `${group}.promptCacheTtl`,
+        group,
+        type: 'enum',
+        scope,
+        default: 'default',
+        restart: 'harness',
+        title: both('提示缓存时长', 'Prompt cache duration'),
+        description: both(
+          'Claude 会把对话里前面不变的部分缓存起来，下一轮再用时更便宜也更快。官方默认缓存 5 分钟（用 Claude 订阅登录时是 1 小时）。改成 1 小时后，长对话里隔一阵再接着聊也还接得上缓存，少花重新写入的钱；但每次写入缓存的单价更高（约为普通输入的 2 倍，5 分钟缓存是 1.25 倍），所以短对话、聊完就走的用法不一定划算。子代理和后台请求仍用 5 分钟。改了之后 Claude Code 重启才生效。',
+          'Claude caches the unchanged start of a conversation so the next turn costs less and responds faster. By default the cache lasts 5 minutes (1 hour when signed in with a Claude subscription). With 1 hour, long conversations still hit the cache after a pause, so you pay less for writing it again; but each cache write costs more (about 2× normal input, versus 1.25× for the 5-minute cache), so it may not pay off for short, one-off chats. Subagents and background requests keep 5 minutes. Takes effect after Claude Code restarts.',
+        ),
+        options: [
+          { value: 'default', title: both('跟官方一致', 'Same as Claude Code') },
+          { value: '1h', title: both('1 小时', '1 hour') },
+        ],
+      },
     ]
   }
   if (harness.id === 'pi') {

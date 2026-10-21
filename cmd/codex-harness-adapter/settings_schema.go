@@ -149,6 +149,10 @@ func (c configuration) harnessEnvironment(id string) map[string]string {
 	if raw, written := c.settings.lookup(piApprovalsKey); id == "pi" && written && json.Unmarshal(raw, &approvals) == nil {
 		values[piApprovalsVariable] = map[bool]string{true: "1", false: "0"}[approvals]
 	}
+	// 提示缓存时长同样写过才给变量，盖过更低几层（settings_claude.go）
+	if ttl := c.claudeCacheTTL(); id == claudeHarness && ttl != "" {
+		values[claudeCacheTTLVariable] = ttl
+	}
 	return values
 }
 
@@ -183,6 +187,9 @@ func (c configuration) runtimeFingerprint(id string, enabled bool) string {
 	if id == "pi" {
 		approvals, _ := c.settings.lookup(piApprovalsKey)
 		settings = append(settings, string(approvals))
+	}
+	if id == claudeHarness {
+		settings = append(settings, c.claudeCacheTTL())
 	}
 	payload, _ := json.Marshal(settings)
 	sum := sha256.Sum256(payload)
@@ -317,6 +324,9 @@ func buildSettingsSchema(c configuration) settingsSchema {
 		)
 		if id == "pi" {
 			schema.Settings = append(schema.Settings, piApprovalsSetting(c, group))
+		}
+		if id == claudeHarness {
+			schema.Settings = append(schema.Settings, claudeCacheTTLSetting(c, group))
 		}
 	}
 	description := both(

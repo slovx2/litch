@@ -34,7 +34,8 @@ versioning or publishing metadata.
 - Claude Code：模型接口出错时回合的错误带上 `codexErrorInfo`，按上游 codex 的种类归：过载（529）是 `serverOverloaded`，429 是 `responseTooManyFailedAttempts`，余额用完是 `usageLimitExceeded`，上下文超长是 `contextWindowExceeded`，鉴权失败是 `unauthorized`，500 是 `internalServerError`，其余带状态码的是 `httpConnectionFailed`；客户端按这个做容量重试不用认错误文字
 - Claude Code：回合进行中再发 `turn/start` 时，和上游 codex 一样并进正在跑的回合（相当于 `turn/steer`），回执里是那个回合的号，不再回 `-32009`；带图片的、追问子代理的、审查和手动压缩的、带 `outputSchema` 的回合照旧拒绝，这次请求里的模型、权限等设置不跟着改
 - Claude Code：输入里选的 Skill（`{type: "skill"}`）照上游 codex 把 SKILL.md 正文作为 `<skill>` 片段放在这一轮的话前面交给模型，`turn/start`、`turn/steer` 都是；原来拼成跟在话后面的 “/名字”，技能不在开头时 CLI 不展开，正文到不了模型。关掉的技能什么都不给；不在技能清单里的（比如 CLI 插件带的）照旧转成 “/名字”
-- Claude Code：新增开关 `CHA_CLAUDE_EXTENDED_CACHE_TTL`，默认 `1`，和原来一样往 `ANTHROPIC_BETAS` 补 `extended-cache-ttl-2025-04-11`；设成 `0` 时不补，CLI 发的 `anthropic-beta` 和直接跑 CLI 时一样，给不想多转一个 beta 的计费代理用。请求体里的 `cache_control.ttl` 不是入口写的：订阅登录时 CLI 自己写 `1h` 并自己带上这个 beta，API key 时不写，关掉不会出现缺 beta 的请求。认不出的值启动就报错
+- Claude Code：提示缓存时长改成开关 `CHA_CLAUDE_PROMPT_CACHE_TTL`（`default` 或 `1h`），取代 `CHA_CLAUDE_EXTENDED_CACHE_TTL`（旧开关删掉，设了也不认）。**行为变化**：入口原来总往 `ANTHROPIC_BETAS` 补 `extended-cache-ttl-2025-04-11`（官方 CLI 不这么做），现在默认什么都不设，CLI 发的请求和直接跑 CLI 时一样：用 API key 时 `cache_control` 不写 `ttl`（5 分钟）、`anthropic-beta` 里没有这个 beta；订阅登录时 CLI 自己写 `ttl: "1h"` 并自己带上这个 beta。设成 `1h` 时照 Claude 桌面端的做法给 CLI 设它自己的 `ENABLE_PROMPT_CACHING_1H=1`、`CLAUDE_CODE_PROMPT_CACHE_TTL=1h`、`CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL=5m`（用户设过的同名变量照旧），ttl 和 beta 由 CLI 自己决定：API key 时主对话的请求写 `ttl: "1h"`、带上这个 beta。认不出的值启动就报错
+- Litch：设备设置里 Claude Code 一组多了“提示缓存时长”（跟官方一致 / 1 小时），默认跟官方一致，写到设置键 `harness.claude-code.promptCacheTtl`，经 `CHA_CLAUDE_PROMPT_CACHE_TTL` 交给 Claude Code 的运行时，改了重启它。用 API key 的长对话改成 1 小时更省（缓存过得慢、少重新写入），但缓存写入的单价更高
 - Claude Code：交给模型的权限申请工具（`request_permissions`）描述里去掉内部名称；MCP 服务 OAuth 动态注册报的客户端名从内部名称改成 `codex-harness-adapter`，可用 `CHA_CLAUDE_MCP_OAUTH_CLIENT_NAME` 改。已经注册过的客户端不受影响，下次重新注册才用新名字
 
 ## 0.14.0
