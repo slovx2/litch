@@ -16,6 +16,7 @@ import { useT } from '../app/appearance.ts'
 import { downHarness, downText, wireStyle } from '../app/device.ts'
 import { useKey, useServices } from '../app/services.tsx'
 import { BackgroundBar } from '../background/BackgroundBar.tsx'
+import { GoalBar } from '../goal/GoalBar.tsx'
 import { SessionComposer } from './Composer.tsx'
 import { PlanAsk } from './PlanAsk.tsx'
 import { asksAboutPlan, markPlanAsked } from './plan-ask.ts'
@@ -55,6 +56,8 @@ export function Dock({ deviceId, sessionId }: DockProps) {
     body = (
       <>
         {meta.note ? <div className="cmp-hint err">{t.text(meta.note)}</div> : null}
+        {/* 会话有持续目标：一行，状态、目标和用量，点开右侧的“目标”页 */}
+        <GoalBar deviceId={deviceId} sessionId={sessionId} />
         {/* 回合停了、后台还有任务在跑：一行，只说有几个，点开右侧的“后台任务”页 */}
         <BackgroundBar deviceId={deviceId} sessionId={sessionId} />
         <SessionComposer deviceId={deviceId} sessionId={sessionId} blocked={blocked} />

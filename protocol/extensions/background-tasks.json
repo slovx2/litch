@@ -15,7 +15,7 @@
     "wakesOnFinish：后台任务结束后这个 harness 会不会自己接着做。claude-code、dsh 为真，原生 codex 为假。",
     "litch/thread/background/changed 发给所有声明过的连接（不只是订阅了这个会话的），侧栏要标没打开过的会话；集合整份重发。临时会话的不发。",
     "litchBackground 只在集合不空时带在会话对象上（thread/read、thread/list、thread/resume、thread/started）。",
-    "litchOrigin 只在知道不是用户发起的回合上带：backgroundTask 是后台任务结束后引擎自己续跑的那一轮（Claude 的 task-notification、dsh 的 tool-jobs 唤醒）。turn/started 发出时还认不出来的（dsh 要等那条消息到了才知道），turn/completed 和历史接口里带。",
+    "litchOrigin 只在知道不是用户发起的回合上带：backgroundTask 是后台任务结束后引擎自己续跑的那一轮（Claude 的 task-notification、dsh 的 tool-jobs 唤醒）；goal 是持续目标没做完、引擎空闲时自己起的续做回合（Claude 入口在 turn/started 起就带，它那句内部提示是用户消息条目，客户端不画；原生 codex 的续做回合协议里没有标记，不带，客户端按“有目标、没有用户消息”自己认）。turn/started 发出时还认不出来的（dsh 要等那条消息到了才知道），turn/completed 和历史接口里带。",
     "有子会话的后台子代理归会话树（sessionTree），不重复进集合；没有子会话、只是一个任务的（Claude 的 local_agent）进集合。",
     "Claude 的后台子代理、Workflow 照旧让回合保持运行中，直到 CLI 报 idle；它们照样出现在集合里。",
     "会话树、定时任务照常在 turn/completed 时算一次运行结束；回报里带“还有几个后台任务在跑”，后台跑完的自发回合结束时再回报一次。",

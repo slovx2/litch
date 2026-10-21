@@ -44,6 +44,13 @@ export const lacksMethod = (error: unknown): boolean =>
     (error.code === RPC_ERROR.invalidRequest &&
       /unknown (variant|method)|method not found/i.test(error.message)))
 
+/**
+ * 原生 codex 的配置里关了持续目标（`[features] goals = false`）：thread/goal/* 一律答“无效请求”，
+ * 原因是 goals feature is disabled（上游 app-server 的 thread_goal_processor.rs）
+ */
+export const goalsOff = (error: unknown): boolean =>
+  error instanceof RpcError && /goals feature is disabled/i.test(error.message)
+
 /** harness 的标识怎么换成给人看的名字。不给就照标识说 */
 export type HarnessNamer = (harness: HarnessId) => string
 

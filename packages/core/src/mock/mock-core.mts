@@ -44,6 +44,7 @@ import { createMockCompose } from './mock-compose.mjs'
 import { createMockConfig, RUNS_CONFIG } from './mock-config.mjs'
 import { createMockDiffs } from './mock-diffs.mjs'
 import { createMockFiles } from './mock-files.mjs'
+import { createMockGoal } from './mock-goal.mjs'
 import { createMockHarnessConfig } from './mock-harness-config.mjs'
 import { createMockInstall } from './mock-install.mjs'
 import { createMockMachine } from './mock-machine.mjs'
@@ -397,6 +398,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       rollbackRestoresFiles: declared ? declared.rollbackRestoresFiles : false,
       finalOnStart: declared ? declared.finalOnStart : false,
       backgroundTasks: declared ? declared.backgroundTasks : false,
+      goals: declared?.goals === true && !lacking.has(`${deviceId}:${harness}:goals`),
       declared: declared !== null,
     }
   }
@@ -490,6 +492,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     })
     diffs.turnEnded(view.deviceId, view.sessionId)
     tree.turnStopped(view)
+    goal.turnEnded(view, turnId, status)
     const next = view.queued[0]
     if (next) {
       applySessionOps(view, [{ op: 'queue.set', queued: view.queued.slice(1) }])
@@ -1532,6 +1535,19 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     nextId: (prefix) => `${prefix}${++seq}`,
   })
 
+  // 持续目标：空闲时自己开续跑回合，第三轮报做完（mock-goal.mts）
+  const goal = createMockGoal({
+    lang,
+    now: () => clock.now(),
+    setTimer: (run, ms) => clock.setTimer(run, ms),
+    apply: applySessionOps,
+    reply,
+    busy: (view) => running(view) !== undefined,
+    started: (view) =>
+      updateSummary(view.deviceId, view.sessionId, { status: 'running', updatedAt: clock.now() }),
+    nextId: (prefix) => `${prefix}${++seq}`,
+  })
+
   /** 掉线的那些回合：harness 回来的时候收尾 */
   const dropped = new Map<string, () => void>()
 
@@ -2055,6 +2071,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
           images,
           extras,
           settings,
+          goal: asGoal,
         } = params as Commands['session.create']['params']
         const message = outgoing(text, images, extras)
         const sidebar = sidebars.get(deviceId)
@@ -2070,6 +2087,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
           throw new ChannelError('remote', `没有 ${harness}`, unknown)
         }
         mustBeUp(deviceId, harness)
+        if (asGoal && !canOf(deviceId, harness).goals)
+          throw new ChannelError('unsupported', '对面不支持这个操作')
         if (REFUSES_CREATE.test(text)) {
           throw new ChannelError('remote', SAMPLE_TEXT[lang].createRefused)
         }
@@ -2114,8 +2133,19 @@ export function createMockCore(options: MockCoreOptions): MockCore {
           agents: [],
         }
         sessions.set(sessionKey(view), view)
-        startTurn(view, message)
+        // 第一句是持续目标：设下目标，不发消息，空闲时自己开始做（mock-goal.mts）
+        if (asGoal) goal.set(view, { objective: text })
+        else startTurn(view, message)
         return { sessionId: summary.id }
+      }
+      if (name === 'session.goal.set' || name === 'session.goal.clear') {
+        const { deviceId, sessionId, ...change } = params as Commands['session.goal.set']['params']
+        const view = reachView({ deviceId, sessionId })
+        if (!view.can.goals) throw new ChannelError('unsupported', '对面不支持这个操作')
+        if (!view.live) throw new ChannelError('rejected', '这个会话是只读的')
+        if (name === 'session.goal.clear') goal.clear(view)
+        else goal.set(view, change)
+        return {}
       }
       if (name === 'session.interrupt') {
         const view = reachView(params as Commands['session.interrupt']['params'])
@@ -2130,6 +2160,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
           replyItems.set(streamKey, { turnId: turn.id, itemId: STREAM_SESSION.itemId })
         }
         const current = replyItems.get(sessionKey(view))
+        // 和真的核心一样：目标在做的时候按停止，先把目标暂停，免得停下来又接着续跑
+        if (view.goal?.status === 'active') goal.set(view, { status: 'paused' })
         // 等着审批或回答的回合被打断：请求一并作废
         applySessionOps(
           view,

@@ -385,13 +385,20 @@ export function createCore(options: CoreOptions): Core {
           return {}
         }
         case 'session.create': {
-          const { deviceId, harness, workspaceId, cwd, text, images, extras, settings } =
+          const { deviceId, harness, workspaceId, cwd, text, images, extras, settings, goal } =
             params as Commands['session.create']['params']
           try {
             const message = outgoing(text, images, extras)
             const device = deviceOf(deviceId)
             return {
-              sessionId: await device.create(cwd, message, settings ?? {}, harness, workspaceId),
+              sessionId: await device.create(
+                cwd,
+                message,
+                settings ?? {},
+                harness,
+                workspaceId,
+                goal === true,
+              ),
             }
           } catch (error) {
             throw toChannelFailure(error)
@@ -401,6 +408,25 @@ export function createCore(options: CoreOptions): Core {
           const { deviceId, sessionId, settings } =
             params as Commands['session.configure']['params']
           deviceOf(deviceId).configure(sessionId, settings)
+          return {}
+        }
+        case 'session.goal.set': {
+          const { deviceId, sessionId, ...change } =
+            params as Commands['session.goal.set']['params']
+          try {
+            await deviceOf(deviceId).setGoal(sessionId, change)
+          } catch (error) {
+            throw toChannelFailure(error)
+          }
+          return {}
+        }
+        case 'session.goal.clear': {
+          const { deviceId, sessionId } = params as Commands['session.goal.clear']['params']
+          try {
+            await deviceOf(deviceId).clearGoal(sessionId)
+          } catch (error) {
+            throw toChannelFailure(error)
+          }
           return {}
         }
         case 'session.rename': {

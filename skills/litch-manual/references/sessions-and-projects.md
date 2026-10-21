@@ -63,6 +63,20 @@ explain it:
   There is no stop button yet: ask the model to stop a task, or
   stop the turn. On the phone, the same line opens a list from the bottom; the folded steps and the
   line at the start of a continuing turn look the same as on the desktop.
+- **Goals** (Codex and Claude Code only; other harnesses show no goal controls): type `/goal` followed
+  by what should be achieved and send it. Instead of a normal message this sets the session's goal,
+  and the harness keeps working on it turn after turn while the session is idle, until the goal is
+  achieved, blocked, hits a usage limit or runs out of its budget. Each turn it starts on its own
+  begins with "Goal not met yet, continuing" instead of a message from the user. A line above the
+  composer shows the status, the goal and the time or tokens used, with Pause / Resume and Clear;
+  clicking it opens the Goal tab in the side panel, where the goal can be edited (Save, or Mod+S;
+  saving also resumes it). Sending `/goal` with different text while a goal is unfinished asks before
+  replacing it. Stop pauses an active goal before stopping the turn, so it does not start again by
+  itself. `/goal` also works on the New session page. A finished goal stays shown as achieved until
+  it is cleared or replaced. Only text is accepted (no images or files), and a token budget can be
+  shown but not set in Litch. Goals are not shown on the phone yet. For Codex, a goal set in another
+  app on the same session shows up here too; if goals are turned off in the Codex configuration, the
+  controls disappear for that session.
 - **Terminal**: per project; "Put away, keep it running on the device" keeps a terminal alive and
   "Terminals on the device" brings it back. Limits are device settings (`device-settings.md`).
 - **Session menu**: pin, move to group or project, rename, archive (undo available), delete (permanent),

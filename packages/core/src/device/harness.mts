@@ -58,6 +58,7 @@ export function abilitiesOf(
     turnDiff: features.turnDiff === true,
     stopAgent: features.stopAgent === true,
     backgroundTasks: features.backgroundTasks === true,
+    goals: features.goals === true,
   }
 }
 

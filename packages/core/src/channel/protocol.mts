@@ -38,6 +38,7 @@ import type {
   FileDiff,
 } from '../model-diff.mjs'
 import type { DirectoryView, FileContent, FileSearchView } from '../model-files.mjs'
+import type { GoalChange, SessionGoalView } from '../model-goal.mjs'
 import type {
   HarnessConfigTopicView,
   HcEdit,
@@ -230,6 +231,8 @@ export type SessionOp =
   | { op: 'session.proposals'; proposals: SessionProposalView[] }
   /** 这个会话的子代理（引擎自己派出的子线程）整份换掉：派了新的，或者哪个的状态变了 */
   | { op: 'session.agents'; agents: AgentThreadView[] }
+  /** 持续目标整个换掉（设了、改了状态和用量）；null 是清掉了 */
+  | { op: 'session.goal'; goal: SessionGoalView | null }
 
 /**
  * 设置现在的值整份换掉：这份东西不大，变得也少。
@@ -326,6 +329,11 @@ export interface Commands {
       images?: ImageAttachment[]
       extras?: MessageExtra[]
       settings?: Partial<SessionSettings>
+      /**
+       * text 是持续目标（输入框里的 /goal）：建好会话后设下目标（thread/goal/set），不发消息，
+       * harness 空闲时自己开始做。这时不带图片和附带项。harness 不会持续目标的报 unsupported
+       */
+      goal?: boolean
     }
     result: { sessionId: string }
   }
@@ -364,6 +372,19 @@ export interface Commands {
    */
   'session.implementPlan': {
     params: { deviceId: string; sessionId: string; text: string }
+    result: Record<string, never>
+  }
+  /**
+   * 设持续目标、改它（目标的话、暂停与继续、预算），照 thread/goal/set 的部分更新，带着 origin: user。
+   * 没有目标时要给 objective。harness 不会的报 unsupported。应答时对面已经受理，新的样子随后经 session.goal 到
+   */
+  'session.goal.set': {
+    params: { deviceId: string; sessionId: string } & GoalChange
+    result: Record<string, never>
+  }
+  /** 清掉持续目标 */
+  'session.goal.clear': {
+    params: { deviceId: string; sessionId: string }
     result: Record<string, never>
   }
   /** 给会话改名 */

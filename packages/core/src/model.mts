@@ -3,6 +3,7 @@
 // 类型是 Text 的字段可能是对面给的原文，也可能是核心自己要说的一句话（见 phrase.mts），界面按当前语言显示。
 
 import type { SessionBackgroundView, TurnOrigin } from './model-background.mjs'
+import type { SessionGoalView } from './model-goal.mjs'
 import type { MachineAccessView, MachineAskView } from './model-machine.mjs'
 import type { DeviceServiceView, ServiceUpgradeView } from './model-service.mjs'
 import type { SessionTaskMark } from './model-tasks.mjs'
@@ -99,6 +100,8 @@ export interface HarnessAbilities {
   stopAgent: boolean
   /** 报后台任务的集合（backgroundTasks 扩展）。不报的，界面从已结束回合里还在跑的命令派生 */
   backgroundTasks: boolean
+  /** 持续目标（thread/goal/*）。不会的不出目标的入口 */
+  goals: boolean
 }
 
 /** 设备服务给的一段话的两种语言版本。核心不认识语言，原样交给界面，界面按当前的语言取 */
@@ -922,12 +925,17 @@ export interface SessionAbilities {
   finalOnStart: boolean
   /** 对面报后台任务的集合（SessionSummary.background）。不报的当它不报，界面自己从会话里派生 */
   backgroundTasks: boolean
+  /**
+   * 持续目标（thread/goal/*，model-goal.mts）。只认声明：没声明的 harness 当它不会，不出入口；
+   * 声明了、调用时对面说没有这个方法或者关着这个特性的，记成不会
+   */
+  goals: boolean
   /** 这几项是照 harness 的声明给的，不是先当它会 */
   declared: boolean
 }
 
 /** 试了才知道的那几件事 */
-export type SessionAbility = 'fork' | 'rollback' | 'compact' | 'steer'
+export type SessionAbility = 'fork' | 'rollback' | 'compact' | 'steer' | 'goals'
 
 export interface SessionView {
   deviceId: string
@@ -964,4 +972,6 @@ export interface SessionView {
    * 都按它写状态。设备还没列过、没有子代理是空的
    */
   agents: AgentThreadView[]
+  /** 会话的持续目标（model-goal.mts）。没有目标、harness 不会的不带或是 null */
+  goal?: SessionGoalView | null
 }

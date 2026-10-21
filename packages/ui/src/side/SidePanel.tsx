@@ -1,6 +1,6 @@
 // 主区右边的侧面板：一个带标签页的框，里面是什么由标签登记表（tabs.ts）定。
 // 这里只管框架：开合、拖宽、标签栏、窗口窄的时候怎么让位（一直和对话并排，两边一起让，见 side.ts 的 layoutOf）。
-import { type DeviceView, keys } from '@litch/core'
+import { type DeviceView, keys, type SessionMeta } from '@litch/core'
 import {
   type PointerEvent as ReactPointerEvent,
   Suspense,
@@ -59,7 +59,12 @@ export function SidePanel({
   const device = useKey<DeviceView>(keys.device(place?.deviceId ?? ''))
   const layout = layoutOf(side.width, room)
   const visible = side.open && available
-  const spec = SIDE_TABS.find((tab) => tab.id === side.tab) ?? SIDE_TABS[0]
+  // 要眼前会话的 harness 会某件事才出的标签（目标）：不会的、没有会话的不出，开着它时切过来就显示第一页
+  const meta = useKey<SessionMeta>(
+    place?.sessionId ? keys.session(place.deviceId, place.sessionId) : '',
+  )
+  const tabs = SIDE_TABS.filter((tab) => !tab.needs || meta?.can[tab.needs] === true)
+  const spec = tabs.find((tab) => tab.id === side.tab) ?? tabs[0] ?? SIDE_TABS[0]
 
   // 面板是人打开的：焦点进面板里（标签的内容自己标出该落在哪），键盘接着就能用。
   // 切到一个面板开着的会话不算，不抢焦点
@@ -130,7 +135,7 @@ export function SidePanel({
       />
       <div className="side-tabs">
         <div className="side-tablist" role="tablist" aria-label={t('side.tabs')}>
-          {SIDE_TABS.map((tab) => (
+          {tabs.map((tab) => (
             <button
               key={tab.id}
               type="button"

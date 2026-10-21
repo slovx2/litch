@@ -91,6 +91,9 @@ function codexFeatures(): HarnessFeatures {
     // 它自己不报后台任务的集合：设备进程从它的条目通知里派生（background.mts）。后台终端结束不唤醒模型（源码
     // core/src/unified_exec/async_watcher.rs 只补一条 item/completed）
     backgroundTasks: true,
+    // thread/goal/*：上游 0.157.1 起 goals 特性就是稳定版、默认开（features/src/lib.rs，到 0.163.0 都是）。用户在自己的配置里关了的，
+    // 调用会报 goals feature is disabled，客户端照实际的来。设备进程不读用户的配置，按默认报
+    goals: true,
   }
 }
 

@@ -6,6 +6,7 @@ import type { MessageKey } from '../i18n/index.ts'
 // 内置浏览器：代理要给人看网页时打开面板（启动时就装上，见 browser/show.ts）
 import './browser/show.ts'
 import { BACKGROUND_TAB } from '../background/tab.ts'
+import { GOAL_TAB } from '../goal/tab.ts'
 import { AGENTS_TAB } from '../tree/agents.ts'
 import { BROWSER_TAB } from './browser/store.ts'
 
@@ -44,6 +45,11 @@ export interface SideTabSpec {
   Panel: LazyExoticComponent<ComponentType<SideTabProps>>
   /** 标签上的角标（比如等着的个数）。没有就不画；跟着标签栏一直在，也是用到的时候才装载 */
   Badge?: LazyExoticComponent<ComponentType<{ place: SidePlace }>>
+  /**
+   * 眼前会话的 harness 得会这件事才出这个标签（SessionAbilities 里的那一位）。不给就一直在。
+   * 不会的时候标签栏上没有它；面板正停在它上面时照常画，内容自己说做不了
+   */
+  needs?: 'goals'
 }
 
 export const FILES_TAB = 'files'
@@ -96,6 +102,16 @@ export const SIDE_TABS: readonly SideTabSpec[] = [
       import('../background/BackgroundTab.tsx').then((module) => ({
         default: module.BackgroundTab,
       })),
+    ),
+  },
+  {
+    // 持续目标：输入框上方那一行点了打开（goal/tab.ts），看、改、暂停、清除。harness 不会的不出
+    id: GOAL_TAB,
+    label: 'side.tab.goal',
+    icon: 'target',
+    needs: 'goals',
+    Panel: lazy(() =>
+      import('../goal/GoalTab.tsx').then((module) => ({ default: module.GoalTab })),
     ),
   },
   {

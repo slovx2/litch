@@ -5,6 +5,7 @@ import { zhAsks } from './zh-CN-asks.ts'
 import { zhBackground } from './zh-CN-background.ts'
 import { zhBimport } from './zh-CN-bimport.ts'
 import { zhComments } from './zh-CN-comments.ts'
+import { zhGoal } from './zh-CN-goal.ts'
 import { zhHconfig } from './zh-CN-hconfig.ts'
 import { zhOnboard } from './zh-CN-onboard.ts'
 import { zhPairing } from './zh-CN-pairing.ts'
@@ -33,6 +34,8 @@ export const zhCN = {
   ...zhComments,
   // 后台任务（输入框上方那一行、侧面板的“后台任务”页、各处的记号）的文案也单独放（zh-CN-background.ts）
   ...zhBackground,
+  // 持续目标（输入框里的 /goal、输入框上方那一行、侧面板的“目标”页）的文案也单独放（zh-CN-goal.ts）
+  ...zhGoal,
   'title.location': '当前位置',
   'workspace.none': '无项目',
 
