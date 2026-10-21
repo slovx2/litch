@@ -83,6 +83,8 @@ export type PhraseKey =
   | 'session.readOnly'
   // 引擎自己的子代理线程，对面说它不接受直接输入（canAcceptDirectInput 为假）：只能看
   | 'session.agentReadOnly'
+  // 导进来的原生会话正被本机另一个进程开着（Claude 桌面端、终端）：只能看，对方放手后自动恢复
+  | 'session.nativeOwned'
   | 'session.archived'
   | 'session.queueFailed'
   // 终端

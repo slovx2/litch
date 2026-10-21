@@ -23,6 +23,10 @@ command never starts Litch.
 **The command says this Litch version has no such operation.** The manual and the app differ in
 version; run `scripts/litch help` and use what exists.
 
+**A Claude Code session says another process has taken over and it is read-only.** The Claude desktop
+app or a terminal `claude` still has it open; see `sessions-and-projects.md` → "Claude Code sessions
+started elsewhere" for how to make it let go. Litch picks up the change by itself within seconds.
+
 **A harness is "Unavailable" or "Not installed".** See `harnesses.md` → "Not installed or Unavailable".
 After fixing, `scripts/litch harness restart <device> <id>`.
 

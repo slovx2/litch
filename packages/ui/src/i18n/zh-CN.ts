@@ -1612,6 +1612,7 @@ export const zhCN = {
   'session.untitled': '没有标题的会话',
   'session.readOnly': '这个会话现在只能看：设备那头没让订阅（{message}）。',
   'session.agentReadOnly': '这是引擎自己派出的子代理，只能看，不能直接给它发消息。',
+  'session.nativeOwned': '此会话正由另一个进程接管，这边只读',
   'session.archived': '这个对话已经归档，只能看。恢复之后才能接着聊。',
   'session.queueFailed': '排着队的消息没发出去：{message}。再发一条时会重试。',
   'tasks.unsupported': '这台设备的服务版本不支持定时任务。升级设备上的适配器之后就能用。',

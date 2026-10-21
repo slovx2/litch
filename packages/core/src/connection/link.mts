@@ -206,6 +206,9 @@ export function createLink(options: LinkOptions): Link {
                 // nativeLineage：声明了，别的应用（Claude 桌面端）派出来的原生会话上才有 litchNativeLineage，
                 // 侧栏据此默认收起它们
                 EXTENSION.nativeLineage,
+                // nativeOwner：声明了，导进来的会话被本机另一个进程占着时会话对象上带 litchNativeOwner、
+                // 占用变了收得到通知，输入框据此置灰
+                EXTENSION.nativeOwner,
                 // harnessConfig：声明了才收得到 harness 详情设置的变化和登录进展的通知
                 // （litch/harness/config/changed、litch/harness/auth/updated）
                 EXTENSION.harnessConfig,

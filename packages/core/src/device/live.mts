@@ -657,6 +657,15 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     'thread/reverted': (live) => {
       if (!live.reverting) load(live)
     },
+    // 导进来的会话被别处的进程占上、放开了：占着时只能看，放开了恢复可写。别的原因只读的（归档、子代理）不动
+    'litch/thread/nativeOwner/changed': (live, { owner }) => {
+      const view = live.view
+      if (!view) return
+      const note = phrase('session.nativeOwned')
+      if (owner && view.live) emit(live, [{ op: 'session.state', live: false, note }])
+      else if (!owner && !view.live && typeof view.note === 'object' && view.note?.key === note.key)
+        emit(live, [{ op: 'session.state', live: true, note: null }])
+    },
     // 会话树：这个会话上的提案变了（新提、开始、不要、撤回、过期），带着现在全部等着的和刚变的那几条
     'litch/sessionProposal/changed': (live, { proposals, changed }) => {
       if (!live.view) return
