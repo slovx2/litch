@@ -9,10 +9,12 @@ import {
   processItemIds,
   processSettled,
   quietOf,
+  type RequestView,
   type SessionMeta,
   type SessionSummary,
   type Text,
   type TurnView,
+  workingShown,
 } from '@litch/core'
 import {
   Component,
@@ -124,6 +126,54 @@ function useSettled(
   })
 }
 
+/**
+ * 回合末尾那一行“正在工作”此刻该不该出（规矩在核心的 workingShown：只填空档）。
+ * 订阅回合里的每一条条目和待答的请求；结果是个布尔值，字在长而结论没变时不引起重画。回合不在跑时什么都不订阅
+ */
+function useWorking(ref: SessionRef, running: boolean, itemIds: string[]): boolean {
+  const { store } = useServices().replica
+  const { deviceId, sessionId } = ref
+  const itemKeys = useMemo(
+    () => itemIds.map((itemId) => keys.item(deviceId, sessionId, itemId)),
+    [deviceId, sessionId, itemIds],
+  )
+  const requestsKey = keys.requests(deviceId, sessionId)
+  const subscribe = useCallback(
+    (listener: () => void) => {
+      if (!running) return () => {}
+      const offs = [...itemKeys, requestsKey].map((key) => store.subscribe(key, listener))
+      return () => {
+        for (const off of offs) off()
+      }
+    },
+    [store, itemKeys, requestsKey, running],
+  )
+  return useSyncExternalStore(
+    subscribe,
+    () =>
+      running &&
+      workingShown(
+        running,
+        itemKeys.map((key) => store.get<ItemView>(key)),
+        store.get<RequestView[]>(requestsKey)?.length ?? 0,
+      ),
+  )
+}
+
+/** 空档要持续 WORKING_DELAY_MS 才算：一卡一卡地出字时，状态行不跟着来回闪 */
+const WORKING_DELAY_MS = 400
+
+function useLasting(on: boolean, ms: number): boolean {
+  const [lasted, setLasted] = useState(false)
+  useEffect(() => {
+    setLasted(false)
+    if (!on) return
+    const timer = window.setTimeout(() => setLasted(true), ms)
+    return () => window.clearTimeout(timer)
+  }, [on, ms])
+  return on && lasted
+}
+
 /** 一个回合画坏了不连累别的回合 */
 class TurnBoundary extends Component<
   { children: ReactNode; label: string },
@@ -148,6 +198,8 @@ class TurnBoundary extends Component<
 
 /** 读会话没成时核心留下的那个错误 */
 type SessionFailure = { code?: string; message: string; text?: Text }
+
+const NO_ITEMS: string[] = []
 
 const TURN_END: Record<Exclude<TurnView['status'], 'running'>, MessageKey> = {
   failed: 'turn.failed',
@@ -174,6 +226,7 @@ const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { 
   const running = turn?.status === 'running'
   const { blocks, answerId, processIds } = useBlocks(ref, turn?.itemIds ?? [], turn?.status)
   const settled = useSettled(ref, running, answerId, meta?.can.finalOnStart === true)
+  const working = useLasting(useWorking(ref, running, turn?.itemIds ?? NO_ITEMS), WORKING_DELAY_MS)
   const touched = useTurnTouched(sessionKey, turnId)
   // 待办在右边的信息栏里时，对话里不再画一遍
   const todoInRail = useRailHasTodo(sessionKey)
@@ -262,8 +315,14 @@ const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { 
             <span>{turn.error}</span>
           </div>
         ) : null}
+        {/* 回合在跑时这一格一直占着位置，只在空档里显出来（只改透明度），出字、跑工具时不跟着跳 */}
         {running ? (
-          <div className="running-line" data-anchor={`t:${turnId}`}>
+          <div
+            className="running-line slot"
+            data-anchor={`t:${turnId}`}
+            data-hidden={working ? undefined : ''}
+            aria-hidden={!working}
+          >
             <i className="st run" />
             <span>{t('turn.working', { name: nameOf(device, meta?.harness ?? '') })}</span>
           </div>

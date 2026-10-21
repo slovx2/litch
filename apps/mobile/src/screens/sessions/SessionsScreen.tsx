@@ -116,7 +116,7 @@ export function SessionsScreen({ navigation, route }: Props) {
     (head: GroupHead) =>
       navigation.navigate('NewSession', {
         deviceId,
-        ...(head.kind === 'workspace' ? { workspaceId: head.workspace.id } : {}),
+        workspaceId: head.kind === 'workspace' ? head.workspace.id : null,
       }),
     [navigation, deviceId],
   )
@@ -159,7 +159,11 @@ export function SessionsScreen({ navigation, route }: Props) {
               count={item.count}
               collapsed={item.collapsed}
               onToggle={toggleGroup}
-              onNew={item.head.kind === 'workspace' && online ? newIn : undefined}
+              onNew={
+                (item.head.kind === 'workspace' || item.head.kind === 'loose') && online
+                  ? newIn
+                  : undefined
+              }
               onMenu={item.head.kind === 'workspace' && canMenu ? workspaceOf : undefined}
             />
           )

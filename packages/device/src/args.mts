@@ -14,6 +14,8 @@ export interface DeviceArgs {
   upstreams: { id: string; path: string }[]
   /** 属于设备的进程（可重连的终端）的上限和期限。命令行里没写的不在里面，用默认值；一项都没写就没有它 */
   processes?: Partial<ProcessLimits>
+  /** --wrap-up：没有主进程在管设置时要不要每回合收尾。没写就没有它（缺省要） */
+  wrapUp?: boolean
   /** --wrap-up-reminder：没有主进程在管设置时提不提醒收尾。没写就没有它（缺省提醒） */
   wrapUpReminder?: boolean
 }
@@ -26,7 +28,8 @@ export const USAGE = [
   '  --process-idle-ms N        没有连接挂着的进程留多久，毫秒，到点结束它；0 是不过期（默认 0）',
   '  --process-exited-ms N      进程退出之后它的记录留多久，毫秒（默认 600000）',
   '没有适配器主进程管设置时（直接起设备进程）才看的，可以不写：',
-  '  --wrap-up-reminder on|off  模型没调 litch_sessions.wrap_up 时要不要开回合提醒（默认 on）',
+  '  --wrap-up on|off           新会话的 litch_sessions 带不带 wrap_up、规则要不要求每回合收尾（默认 on）',
+  '  --wrap-up-reminder on|off  模型没调 litch_sessions.wrap_up 时要不要开回合提醒（默认 on；--wrap-up off 时不提醒）',
 ].join('\n')
 
 const HARNESS_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
@@ -42,12 +45,18 @@ const PROCESS_FLAGS: Record<string, { key: keyof ProcessLimits; max: number }> =
   '--process-exited-ms': { key: 'exitedRetentionMs', max: MAX_TIMER_MS },
 }
 
+/** 写 on|off 的几个开关：对应哪一项 */
+const SWITCH_FLAGS: Record<string, 'wrapUp' | 'wrapUpReminder'> = {
+  '--wrap-up': 'wrapUp',
+  '--wrap-up-reminder': 'wrapUpReminder',
+}
+
 export function parseArgs(argv: string[]): DeviceArgs {
   let listen: string | null = null
   let stateDir: string | null = null
   const upstreams: { id: string; path: string }[] = []
   const processes: Partial<ProcessLimits> = {}
-  let wrapUpReminder: boolean | undefined
+  const switches: { wrapUp?: boolean; wrapUpReminder?: boolean } = {}
   for (let index = 0; index < argv.length; index++) {
     const flag = argv[index]
     const value = argv[index + 1]
@@ -59,10 +68,11 @@ export function parseArgs(argv: string[]): DeviceArgs {
       index++
       continue
     }
-    if (flag === '--wrap-up-reminder') {
+    const toggle = flag === undefined ? undefined : SWITCH_FLAGS[flag]
+    if (toggle) {
       if (value !== 'on' && value !== 'off')
-        throw new Error(`--wrap-up-reminder 要写 on 或 off，收到的是 ${value}\n${USAGE}`)
-      wrapUpReminder = value === 'on'
+        throw new Error(`${flag} 要写 on 或 off，收到的是 ${value}\n${USAGE}`)
+      switches[toggle] = value === 'on'
       index++
       continue
     }
@@ -90,6 +100,6 @@ export function parseArgs(argv: string[]): DeviceArgs {
     stateDir,
     upstreams,
     ...(Object.keys(processes).length ? { processes } : {}),
-    ...(wrapUpReminder === undefined ? {} : { wrapUpReminder }),
+    ...switches,
   }
 }

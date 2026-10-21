@@ -15,7 +15,11 @@
 //     规则按这一版设备进程的重拼（规则改了，下一次压缩起生效）。客户端带了、里面没有规则的，规则拼在后面。
 // 每次恢复、分叉都带上整段是安全的（实测）：恢复不马上重放；会话还装载着时 codex 忽略这个参数；压缩后只放一次，不叠加。
 // 只管经设备服务的原生 codex：直连 codex 的用法没有设备进程替它记。
-import { SESSION_TOOLS } from '../../protocol/src/client-tools-sessions.mjs'
+import {
+  SESSION_TOOL,
+  SESSION_TOOLS,
+  sessionProposalRules,
+} from '../../protocol/src/client-tools-sessions.mjs'
 import { type Ask, isEmptyNamespace } from './dialect.mjs'
 import { isObject } from './wire.mjs'
 
@@ -46,10 +50,22 @@ export interface PreparedInstructions {
   remember(result: unknown): void
 }
 
-/** 设备进程这一版的规则原文：按命名空间。不在这里的照记下的原文 */
-const CURRENT: Record<string, string | undefined> = {
-  [SESSION_TOOLS.name]: SESSION_TOOLS.instructions,
-}
+/**
+ * 设备进程这一版的规则原文：按命名空间，给的是记下的原文和会话建的时候带的动态工具。不在这里的照记下的原文。
+ * litch_sessions 分“每回合收尾”开着和关着两份：会话的工具是建会话时定下的，恢复、分叉时照那时的工具里
+ * 有没有 wrap_up 挑这一版的哪一份，不看现在的开关；没记下工具的（分叉出来的）看原文是不是关着的那份
+ */
+const CURRENT: Record<string, ((recorded: string, tools: unknown[] | null) => string) | undefined> =
+  {
+    [SESSION_TOOLS.name]: (recorded, tools) => {
+      const spec = tools?.find((one) => isObject(one) && one.name === SESSION_TOOLS.name)
+      const wrapUp = isObject(spec)
+        ? Array.isArray(spec.tools) &&
+          spec.tools.some((tool) => isObject(tool) && tool.name === SESSION_TOOL.wrapUp)
+        : recorded !== sessionProposalRules(false)
+      return sessionProposalRules(wrapUp)
+    },
+  }
 
 const METHODS = new Set(['thread/start', 'thread/resume', 'thread/fork'])
 
@@ -143,7 +159,10 @@ export function prepareInstructions(
   if (!record) return null
   // 规则按这一版的重拼；这一版不认识的命名空间照记下的原文
   const sections = record.namespaces.map((one) =>
-    instructionSection(one.name, CURRENT[one.name] ?? one.instructions),
+    instructionSection(
+      one.name,
+      CURRENT[one.name]?.(one.instructions, context.store.tools(threadId)) ?? one.instructions,
+    ),
   )
   const cwd = cwdOf(params.cwd) ?? record.cwd
   return (async () => {

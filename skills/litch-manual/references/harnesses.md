@@ -57,7 +57,11 @@ harness's own config files on that device (shared with its CLI there):
   `~/.claude/settings.json`, including models, context window, telemetry and OpenTelemetry export;
   OpenCode, Pi, DSH: their own settings). Codex also has a global context window and auto-compact
   limit that apply to every model. Some changes say they need a new session or a restart; the page
-  offers the restart.
+  offers the restart. Codex's Config tab also has **Name sessions automatically** (on by default; it is
+  Litch's own switch, kept on the device, not in Codex's config file): after the first turn of a
+  session started in Litch, Litch names it with a small model of the luna family, only if the account's
+  model list has one, and never over a name the user set. Turning it off affects sessions started
+  afterwards.
 - **Accounts**: sign in (browser, device code, or pasting a code back), set an API key, add custom
   providers, switch the active provider. Codex can stay signed in to ChatGPT while using an API-key
   provider. OAuth credentials stay in the harness's own store; keys the harness only reads from

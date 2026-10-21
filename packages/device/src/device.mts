@@ -9,6 +9,7 @@ import type { DeviceSettingsSnapshot } from '../../protocol/src/device-settings.
 import { HARNESS_CONFIG_NOTIFICATION } from '../../protocol/src/harness-config.mjs'
 import { ClientToolInvoker } from './client-tool-invoke.mjs'
 import { ClientToolRouter } from './client-tools.mjs'
+import { CodexTitles } from './codex-titles.mjs'
 import type { ControlChannel, ControlState } from './control.mjs'
 import { DeviceLayer } from './device-layer.mjs'
 import type { ProcessLimits } from './device-processes.mjs'
@@ -75,6 +76,8 @@ export interface DeviceOptions {
    * 不给就没有这项扩展，也不碰任何钥匙文件（和配对无关的测试都不给）
    */
   pairing?: PairingConfig
+  /** 没有主进程在管设置时要不要每回合收尾（设置键 sessions.wrapUp），缺省要。只有夹具会关 */
+  wrapUp?: boolean
   /** 没有主进程在管设置时提不提醒收尾（设置键 sessions.wrapUpReminder），缺省提醒。只有夹具会关 */
   wrapUpReminder?: boolean
 }
@@ -121,6 +124,13 @@ const DEFAULT_TIMING: SessionTiming = {
 export const SESSION_TREE_SETTING = 'sessions.enabled'
 
 /**
+ * 设置里“每回合收尾”的总开关（同在 settings_sessions.go）：开着时新会话的 litch_sessions 带 wrap_up，规则要求
+ * 每回合先收尾再写最终回答；关掉时新会话不带 wrap_up、规则里不提收尾，也不提醒。没有主进程在管时看
+ * DeviceOptions.wrapUp，缺省开着
+ */
+export const WRAP_UP_SETTING = 'sessions.wrapUp'
+
+/**
  * 设置里“提醒收尾”的开关（同在 settings_sessions.go）：用户发起的回合结束时模型没调 litch_sessions.wrap_up，
  * 替它开一个回合提醒。没有主进程在管时看 DeviceOptions.wrapUpReminder，缺省开着
  */
@@ -158,6 +168,8 @@ export class DeviceServer {
   readonly deviceTools: DeviceTools
   /** 会话树：父子关系、提案、回报与唤醒（session-tree.mts） */
   readonly sessionTree: SessionTree
+  /** 原生 codex 会话的自动起名 */
+  readonly titles: CodexTitles
   /** 上一次看到的“会话编排”开关，变了才动 */
   private orchestrating: boolean
   /** 扫码绑定手机。没给配置时是 null */
@@ -257,6 +269,10 @@ export class DeviceServer {
       timeoutMs: options.timing?.listTimeoutMs ?? DEFAULT_TIMING.listTimeoutMs,
       needsUserMs: options.timing?.needsUserMs ?? DEFAULT_TIMING.needsUserMs,
       taskTurn: (threadId, turnId) => this.tasks?.isTaskTurn(threadId, turnId) ?? false,
+      wrapUp: () => {
+        const value = this.control?.state?.snapshot.values[WRAP_UP_SETTING]
+        return this.control ? value !== false : options.wrapUp !== false
+      },
       wrapUpReminder: () => {
         const value = this.control?.state?.snapshot.values[WRAP_UP_REMINDER_SETTING]
         return this.control ? value !== false : options.wrapUpReminder !== false
@@ -264,6 +280,11 @@ export class DeviceServer {
       log,
     })
     this.deviceTools.register(CLIENT_TOOL_NAMESPACE.sessions, sessionToolsHandler(this.sessionTree))
+    this.titles = new CodexTitles({
+      openEngineLink: (harness) => this.openEngineLink(harness),
+      store: this.sessionTree.store,
+      log,
+    })
     const router = new ClientToolRouter({
       graceMs: options.timing?.clientToolGraceMs ?? DEFAULT_TIMING.clientToolGraceMs,
       log,
@@ -296,6 +317,7 @@ export class DeviceServer {
       harnessConfigChanged: (params) =>
         this.announce(HARNESS_CONFIG_NOTIFICATION.changed, params, EXTENSION.harnessConfig),
       harnessEnvNames: (harness) => this.harnessEnvNames(harness),
+      titles: this.titles,
       codexCatalog: () =>
         this.control
           ? this.control.request('codex.models', {}, CODEX_CATALOG_TIMEOUT_MS)
@@ -568,6 +590,7 @@ export class DeviceServer {
     for (const link of [...this.engineLinks]) link.close()
     for (const session of [...this.sessions]) session.close()
     this.sessionTree.close()
+    this.titles.close()
     this.deviceTools.close()
     await this.importer?.close()
     await this.layer.close()

@@ -44,6 +44,9 @@ explain it:
   "Terminals on the device" brings it back. Limits are device settings (`device-settings.md`).
 - **Session menu**: pin, move to group or project, rename, archive (undo available), delete (permanent),
   schedule a task for this session, start a sub-session, detach a sub-session.
+- **Session names**: Claude Code sessions take the title Claude Code writes; Codex sessions started in
+  Litch are named by Litch after their first turn (switch and conditions in `harnesses.md`). A name the
+  user sets by hand is never replaced.
 - **Archived sessions** page: restore, open read-only, delete.
 - **Reply style**: sessions that Litch starts (including sub-sessions and scheduled tasks) tell the model
   that replies appear in Litch, which renders Markdown and Mermaid diagrams, and to answer
@@ -79,10 +82,15 @@ woken to continue.
   The side panel's **Suggested tasks** tab lists every card of the current session, with a badge for
   the waiting ones; clicking one scrolls to it. You can also tell the model "start the second one", and
   it withdraws cards that went stale. At most three cards it raises on its own per turn (independent
-  steps of an agreed plan count separately), four in all. The model ends every turn with a
-  wrap-up call that carries its suggestions (an empty one when there are none); when a turn the user
-  started ends without it, Litch starts one short reminder turn (a light line "Reminded the model to
-  wrap up"). The reminder is the device setting `sessions.wrapUpReminder` (on by default). Started cards
+  steps of an agreed plan count separately), four in all. When its work is done, the model makes a
+  wrap-up call that carries its suggestions (an empty one when there are none) and then writes its full
+  final answer as the last message of the turn; the steps before the wrap-up fold into "Worked". If a
+  model still writes its answer first and only a short line after the wrap-up, the answer is shown in
+  full, not folded. When a turn the user started ends without a wrap-up, Litch starts one short reminder
+  turn (a light line "Reminded the model to wrap up"). Device settings: `sessions.wrapUp` (on by default)
+  turns the wrap-up off for sessions created afterwards (the model then suggests cards only when it sees
+  fit, and nothing is reminded); `sessions.wrapUpReminder` (on by default, no effect while
+  `sessions.wrapUp` is off) switches the reminder, at once. Started cards
   show the harness and folder the sub-session actually got. The mobile app shows the same cards and a
   per-session list (the "N suggested tasks waiting for you" bar at the top of a conversation, or the menu).
 - **New task or here**: when the user asks for something unrelated to the current session, the model

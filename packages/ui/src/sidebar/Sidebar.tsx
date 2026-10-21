@@ -1128,7 +1128,11 @@ function DeviceGroup(props: GroupProps) {
         {plainWorkspaces.map((workspace) => workspaceBlock(workspace, true))}
         {shown(LOOSE).length > 0 ? (
           <div data-group={LOOSE} className="drop-zone" {...zone(LOOSE, { kind: 'loose' })}>
-            <div className="sec-label">{t('workspace.none')}</div>
+            {/* 行尾和工作区那一行一样有“新建会话”，建的是不属于项目的会话（和设备行上那个是同一件事） */}
+            <div className="row-line loose-line">
+              <div className="sec-label">{t('workspace.none')}</div>
+              {add(null)}
+            </div>
             {rows(shown(LOOSE), LOOSE)}
           </div>
         ) : null}
