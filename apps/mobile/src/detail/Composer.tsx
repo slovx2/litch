@@ -16,6 +16,7 @@ import { whyNot } from '../../../../packages/ui/src/app/errors.ts'
 import type { SessionStore } from '../core/session-store'
 import { useChannel, useKey } from '../shell/services'
 import { useT } from '../ui/i18n'
+import { BackgroundBar } from './background/BackgroundBar'
 import { ComposeBox, useDraft } from './composer/ComposeBox'
 import { draftKey } from './composer/drafts'
 import { downHarness, useComposeOptions } from './composer/options'
@@ -117,16 +118,20 @@ export function Composer({
       onError={setError}
       top={
         meta ? (
-          <QueueTray
-            queued={meta.queued}
-            running={running}
-            canSteer={meta.can.steer}
-            steerImages={meta.can.steerImages}
-            onSteer={steer}
-            onEdit={(message) => unqueue(message, true)}
-            onRemove={(message) => unqueue(message, false)}
-            onRefused={() => setError(t('composer.steer.noImages'))}
-          />
+          <>
+            {/* 回合停了、后台还有任务在跑：一行，只说有几个，点开从底部列出来 */}
+            <BackgroundBar store={store} />
+            <QueueTray
+              queued={meta.queued}
+              running={running}
+              canSteer={meta.can.steer}
+              steerImages={meta.can.steerImages}
+              onSteer={steer}
+              onEdit={(message) => unqueue(message, true)}
+              onRemove={(message) => unqueue(message, false)}
+              onRefused={() => setError(t('composer.steer.noImages'))}
+            />
+          </>
         ) : null
       }
       bar={
