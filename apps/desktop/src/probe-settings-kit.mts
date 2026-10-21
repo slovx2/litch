@@ -110,7 +110,7 @@ export function installSettingsKit(): boolean {
   const settingsAt = () => (one('.set-page') ? (one('.set-content')?.dataset.section ?? '') : null)
   const openSettings = async (section?: string) => {
     if (!one('.set-page')) {
-      const entry = await until('侧栏底部的“设置”', () => one<HTMLElement>('.sb-link.settings'))
+      const entry = await until('侧栏底部的齿轮', () => one<HTMLElement>('.sb-settings'))
       entry.click()
     }
     const page = await until('设置页', () => one<HTMLElement>('.set-page'))

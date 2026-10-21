@@ -102,18 +102,20 @@
 }
 .sb-foot {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 6px 12px 8px;
-  border-top: 1px solid var(--line-1);
-  font-size: 11px;
-  color: var(--ink-3);
-}
-.sb-core {
-  display: flex;
   align-items: center;
-  gap: 8px;
-  min-height: 16px;
+  gap: 6px;
+  padding: 4px 12px 6px;
+  border-top: 1px solid var(--line-1);
+}
+/* 底下只一行：定时任务占满左边，齿轮贴右 */
+.sb-foot .sb-link {
+  flex: 1 1 0;
+  min-width: 0;
+  margin-bottom: 0;
+}
+.sb-settings.on {
+  background: var(--sel);
+  color: var(--ink);
 }
 /* 侧栏最上面常驻的“新对话”：不跟着下面的设备和会话滚。
    它右边是筛选的小按钮（有得挑才出现）；正筛着的时候下面多一行，自己占一整行 */
@@ -232,7 +234,7 @@
 .filter-off:hover {
   text-decoration: underline;
 }
-/* 侧栏里的入口：最上面的“新对话”，底部的“设备”“已归档对话”“设置” */
+/* 侧栏里的入口：最上面的“新对话”，底部的“定时任务” */
 .sb-link {
   display: flex;
   align-items: center;

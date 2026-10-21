@@ -1,4 +1,4 @@
-// 内存里的假密码库：管线的测试用；样本模式下真的密码库还没接上时也用它，让界面走得通。
+// 内存里的假密码库：管线的测试和样本模式用（样本模式不碰真的密码库）。
 // 去重规则照 3.2 节：同源同用户名不覆盖。
 import type { ImportedPassword } from '../protected-types.mjs'
 import type { ImportCounts, PasswordSink } from '../sinks.mjs'

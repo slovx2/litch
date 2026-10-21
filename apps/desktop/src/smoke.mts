@@ -555,7 +555,7 @@ const probeOf = (title: string) => `(() => {
     turns: document.querySelectorAll('.turn').length,
     answer: [...document.querySelectorAll('.md')].at(-1)?.textContent?.length ?? 0,
     painted: document.querySelectorAll('.code code span[class^="hljs-"]').length,
-    core: document.querySelector('.sb-foot')?.textContent ?? '',
+    core: document.querySelector('.sb-settings')?.title ?? '',
     devices: [...document.querySelectorAll('.dev-group')].map((group) =>
       [group.querySelector('.dev-row'), group.querySelector('.dev-note')]
         .map((element) => element?.textContent ?? '')
@@ -611,7 +611,7 @@ export async function runSmoke(
     }
     if (last?.shell === 'electron' && last.turns >= 1) {
       if (mode === 'entry') {
-        // 隔离入口里造了四个会话；侧栏底部不该有“模拟核心”的标记
+        // 隔离入口里造了四个会话；侧栏底部齿轮的提示里不该有“模拟核心”
         if (last.rows >= 4 && last.answer > 0 && !last.core.includes('模拟核心')) {
           grew = true
           break

@@ -116,7 +116,12 @@ export async function harnessSettingsProbe(): Promise<HarnessSettingsProbe> {
     if (one('.hc-page')) act('hc-back')?.click()
     await frame()
     if (one('[data-detail]')) act('back')?.click()
-    ;(await until('侧栏的“设备”', () => one<HTMLButtonElement>('.sb-link.devices'))).click()
+    one<HTMLButtonElement>('.sb-settings')?.click()
+    ;(
+      await until('设置页上进设备页的入口', () =>
+        one<HTMLButtonElement>('.set-go[data-page="devices"]'),
+      )
+    ).click()
     const item = await until(`设备列表上的 ${deviceId}`, () =>
       one('[data-detail]') ? null : one(`.devp-item[data-device="${deviceId}"]`),
     )

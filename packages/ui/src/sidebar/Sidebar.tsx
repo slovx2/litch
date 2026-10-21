@@ -31,18 +31,7 @@ import { badgeOf, downHarness, downText, nameOf, wireStyle } from '../app/device
 import { reasonOf } from '../app/errors.ts'
 import { ago } from '../app/format.ts'
 import { useHoverCard } from '../app/HoverCard.tsx'
-import {
-  Archive,
-  Back,
-  Caret,
-  Clock,
-  Forward,
-  Gear,
-  Icon,
-  Machine,
-  Notice,
-  Plus,
-} from '../app/icons.tsx'
+import { Back, Caret, Clock, Forward, Gear, Icon, Notice, Plus } from '../app/icons.tsx'
 import { useKey, useServices } from '../app/services.tsx'
 import { showToast } from '../app/toasts.tsx'
 import type { PlaceWish } from '../composer/new-place.ts'
@@ -1603,8 +1592,12 @@ function DeviceGroup(props: GroupProps) {
   )
 }
 
-/** 侧栏底部：核心的基本信息。同时确认命令这条路是通的 */
-function CoreInfo() {
+/**
+ * 侧栏底部右边的齿轮：进设置。设备、已归档对话、版本都收在设置页里（设置页左上角直接进设备页、已归档对话页，
+ * 版本在“关于”）。提示里带着核心的版本，顺带确认命令这条路是通的。
+ * 那三页都是从这里进去的，开着其中哪一页齿轮都亮着
+ */
+function SettingsButton({ page, onOpen }: { page: Page | null; onOpen(): void }) {
   const { channel } = useServices()
   const [info, setInfo] = useState<{ version: string; mock: boolean } | null>(null)
   const t = useT()
@@ -1616,12 +1609,25 @@ function CoreInfo() {
       .catch(() => {})
     return () => controller.abort()
   }, [channel])
-  if (!info) return <span>{t('sidebar.connectingCore')}</span>
+  const tip = [
+    t('sidebar.settings'),
+    ...(info ? [t('sidebar.core', { version: info.version })] : []),
+    ...(info?.mock ? [t('sidebar.mockCore')] : []),
+  ].join(' · ')
+  const lit = page === 'settings' || page === 'devices' || page === 'archived'
   return (
-    <>
-      {info.mock ? <span className="pill mute">{t('sidebar.mockCore')}</span> : null}
-      <span className="mono">{t('sidebar.core', { version: info.version })}</span>
-    </>
+    <button
+      type="button"
+      className={lit ? 'ibtn sb-settings on' : 'ibtn sb-settings'}
+      aria-current={page === 'settings' ? 'page' : undefined}
+      aria-label={t('sidebar.settings')}
+      title={tip}
+      data-core={info?.version}
+      data-mock={info?.mock ? '' : undefined}
+      onClick={onOpen}
+    >
+      <Gear />
+    </button>
   )
 }
 
@@ -1715,38 +1721,10 @@ export function Sidebar(props: SidebarProps) {
           />
         ))}
       </div>
+      {/* 底下一行：左边定时任务，右边进设置的齿轮 */}
       <div className="sb-foot">
         <TasksLink on={page === 'tasks'} onOpen={() => onPage('tasks')} />
-        <button
-          type="button"
-          className={page === 'devices' ? 'sb-link devices on' : 'sb-link devices'}
-          aria-current={page === 'devices' ? 'page' : undefined}
-          onClick={() => onPage('devices')}
-        >
-          <Machine />
-          <span>{t('sidebar.devices')}</span>
-        </button>
-        <button
-          type="button"
-          className={page === 'archived' ? 'sb-link archived on' : 'sb-link archived'}
-          aria-current={page === 'archived' ? 'page' : undefined}
-          onClick={() => onPage('archived')}
-        >
-          <Archive />
-          <span>{t('archived.title')}</span>
-        </button>
-        <button
-          type="button"
-          className={page === 'settings' ? 'sb-link settings on' : 'sb-link settings'}
-          aria-current={page === 'settings' ? 'page' : undefined}
-          onClick={() => onPage('settings')}
-        >
-          <Gear />
-          <span>{t('sidebar.settings')}</span>
-        </button>
-        <div className="sb-core">
-          <CoreInfo />
-        </div>
+        <SettingsButton page={page} onOpen={() => onPage('settings')} />
       </div>
     </SidebarFrame>
   )

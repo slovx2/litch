@@ -37,6 +37,24 @@
   color: var(--ink);
   font-weight: 500;
 }
+/* 分组上面那两项不是组，是直接进“设备”“已归档对话”那两页的入口：前面带图标，后面一个箭头 */
+.set-nav .set-go {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.set-go .grow {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.set-go .ic:last-child {
+  color: var(--ink-3);
+}
+.set-nav-rule {
+  margin: 6px 8px;
+  border: 0;
+  border-top: 1px solid var(--line-1);
+}
 .set-body {
   flex: 1 1 0;
   min-width: 0;

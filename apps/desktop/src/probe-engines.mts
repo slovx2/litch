@@ -45,7 +45,12 @@ export async function enginesDevice(place: EnginesPlace, wanted: string[]): Prom
   const block = (id: string) => one(`[data-harness-block="${id}"]`)
 
   // ---- 一、设备详情：要走的那几个 harness 都可用 ----
-  ;(await until('侧栏底部的“设备”', () => one<HTMLButtonElement>('.sb-link.devices'))).click()
+  one<HTMLButtonElement>('.sb-settings')?.click()
+  ;(
+    await until('设置页上进设备页的入口', () =>
+      one<HTMLButtonElement>('.set-go[data-page="devices"]'),
+    )
+  ).click()
   const item = await until('设备列表上的本机', () => one('.devp-item[data-device="local"]'))
   one<HTMLButtonElement>('.devp-row', item)?.click()
   await until('管理数据', () => one('[data-manage-state="ready"]'), 60_000)

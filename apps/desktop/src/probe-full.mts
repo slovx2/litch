@@ -120,13 +120,21 @@ export async function fullProbe(): Promise<FullProbe> {
     ;(await until(`侧栏里的“${title}”`, () => rowOf(title))).click()
     await until(`“${title}”的内容`, () => text(one('.crumb b')) === title && one('.turn'))
   }
-  const devicesLink = () => one<HTMLButtonElement>('.sb-link.devices')
+  /** 设备页的入口收进了设置页：先点侧栏底部的齿轮，再点设置页左上角的“设备” */
+  const toDevices = async () => {
+    one<HTMLButtonElement>('.sb-settings')?.click()
+    ;(
+      await until('设置页上进设备页的入口', () =>
+        one<HTMLButtonElement>('.set-go[data-page="devices"]'),
+      )
+    ).click()
+  }
   /**
    * 从设备列表点进本机的详情。列表的一行上只有徽标；名字、版本、状态和原因在详情里
    * （这台夹具设备没有设置接口，harness 一个一项地列在第一节里）。返回列表上本机那一行，没经过列表就是 null
    */
   const openDetail = async () => {
-    devicesLink()?.click()
+    await toDevices()
     const row = await until('设备列表上的本机', () =>
       one('[data-detail]') ? null : one<HTMLButtonElement>('.devp-item .devp-row'),
     )
@@ -163,7 +171,7 @@ export async function fullProbe(): Promise<FullProbe> {
 
   // ---- 一、连上了：两个 harness 的会话都在侧栏里，各带各的徽标 ----
   await until('两个 harness 的会话都列出来', () => all('.ss-row').length >= 5)
-  await until('侧栏底部的“设备”', devicesLink)
+  await until('侧栏底部的齿轮', () => one('.sb-settings'))
   await openDetail()
   const harnesses = await until('设备详情里的两个 harness', () => {
     const seen = listed()
@@ -241,7 +249,7 @@ export async function fullProbe(): Promise<FullProbe> {
   await until('这一行又显示成用不了', () => isDown(opening), 30_000)
   await open(onFirst)
   const otherWorks = await converse(first.id, '另一个照常能发', '另一个 harness 的回话')
-  devicesLink()?.click()
+  await toDevices()
   const chip = () => one(`.devp-item .devp-chips .chip[data-harness="${second.id}"]`)
   await until('设备列表上它的徽标', chip)
   const rowShowsDown = Boolean(
@@ -417,7 +425,12 @@ export async function mockFullProbe(): Promise<MockFullProbe> {
 
   // ---- 一、设备页和侧栏：本机是完整模式，有一个 harness 不可用 ----
   const local = await until('侧栏里的本机', () => one('.dev-group'))
-  ;(await until('侧栏底部的“设备”', () => one<HTMLButtonElement>('.sb-link.devices'))).click()
+  one<HTMLButtonElement>('.sb-settings')?.click()
+  ;(
+    await until('设置页上进设备页的入口', () =>
+      one<HTMLButtonElement>('.set-go[data-page="devices"]'),
+    )
+  ).click()
   const row = await until('设备列表上的本机', () => one('.devp-item'))
   const chips = all('.devp-chips .chip[data-harness]', row)
   const harnessCount = chips.length

@@ -276,7 +276,7 @@ export function installBrowser(options: {
   })
 
   // 从别的浏览器导入：window.litchBrowser.import 的几条消息（browser-import/install.mts）
-  installBrowserImport({ fromUi, userData: options.userData })
+  installBrowserImport({ fromUi, userData: options.userData, passwords })
 
   return { executor, host, sites, settings, forwarding, passwords }
 }

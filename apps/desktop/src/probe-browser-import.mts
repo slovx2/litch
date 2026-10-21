@@ -205,7 +205,7 @@ void app.whenReady().then(async () => {
     )
 
     // ---------- 设置页：导入 Chrome 的默认资料 ----------
-    await click('.sb-link.settings')
+    await click('.sb-settings')
     await until("document.querySelector('.set-page')")
     await click('.set-nav [data-section="browser"]')
     check(

@@ -92,7 +92,12 @@ export async function mockFlow(): Promise<MockFlow> {
   keptAcrossSession = await kit.seen(() => same(kit.rows(), held), 3000)
 
   // 开“设备”那一页再回来
-  one<HTMLButtonElement>('.sb-link.devices')?.click()
+  one<HTMLButtonElement>('.sb-settings')?.click()
+  ;(
+    await until('设置页上进设备页的入口', () =>
+      one<HTMLButtonElement>('.set-go[data-page="devices"]'),
+    )
+  ).click()
   await until('设备页打开', () => text(one('.crumb b')) === '设备')
   const hiddenOnPage = !kit.panelOpen()
   homeRow()?.click()

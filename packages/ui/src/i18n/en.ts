@@ -35,7 +35,6 @@ export const en: Record<MessageKey, Entry> = {
   'sidebar.waitApproval': 'Needs approval',
   'sidebar.offline': 'Offline',
   'sidebar.single': '{name} only',
-  'sidebar.connectingCore': 'Connecting to core…',
   'sidebar.mockCore': 'Mock core',
   'sidebar.core': 'Core {version}',
   'sidebar.connecting': 'Connecting',
@@ -790,7 +789,7 @@ export const en: Record<MessageKey, Entry> = {
   'settings.nav': 'Settings sections',
   'settings.group.look': 'Appearance',
   'settings.group.lang': 'Language',
-  'settings.group.devices': 'Devices',
+  'settings.group.switches': 'Per-harness switches',
   'settings.group.keys': 'Shortcuts',
   'settings.group.about': 'About',
   'settings.look.intro': 'Changes apply right away. No restart, and running turns keep going.',
@@ -816,9 +815,9 @@ export const en: Record<MessageKey, Entry> = {
     'The language of the interface. Text that comes from the other side is shown as written.',
   'settings.lang.note':
     'Picked from your system language on first launch. After that it changes only here',
-  'settings.devices.intro': 'This computer and the remote machines you have added.',
-  'settings.devices.note':
-    'Adding and removing devices, how they connect, and each harness’s switch and settings all live on the Devices page.',
+  'settings.switches.intro':
+    'Turn task cards, the built-in browser and Computer Use on or off per device, then per harness.',
+  'settings.switches.pending': 'The switch table is not wired in yet.',
   'settings.devices.open': 'Open Devices',
   'settings.keys.intro': 'Every key that works right now. This list is read-only.',
   'settings.about.intro': 'What this app is, which version it is, and whose code it uses.',

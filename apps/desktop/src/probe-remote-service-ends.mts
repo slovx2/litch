@@ -45,7 +45,12 @@ export async function serviceGrow(aliases: ServiceAliases, opening: string): Pro
   const peer = () => within('.devp-facts dd[data-peer]')?.dataset.peer ?? ''
 
   // ---- 一、只有 codex 的那台：照旧能用，详情里说了装上设备服务能多出什么、怎么装 ----
-  one<HTMLButtonElement>('.sb-link.devices')?.click()
+  one<HTMLButtonElement>('.sb-settings')?.click()
+  ;(
+    await until('设置页上进设备页的入口', () =>
+      one<HTMLButtonElement>('.set-go[data-page="devices"]'),
+    )
+  ).click()
   const mine = await until('设备列表里只有 codex 的那台', () =>
     detail() ? null : item(aliases.grow),
   )

@@ -343,7 +343,12 @@ export async function homeProbe(real: boolean): Promise<HomeProbe> {
 
   // ---- 八、Ctrl+N ----
   // 眼前没有会话（开着“设备”一页，之前也没选着哪个会话）：到新建对话页，用默认的去处
-  one<HTMLButtonElement>('.sb-link.devices')?.click()
+  one<HTMLButtonElement>('.sb-settings')?.click()
+  ;(
+    await until('设置页上进设备页的入口', () =>
+      one<HTMLButtonElement>('.set-go[data-page="devices"]'),
+    )
+  ).click()
   await until('“设备”一页', () => one('.devp'))
   press(document, 'n', { ctrlKey: true })
   await until('快捷键带到新建对话页', () => home() && picker('device'), 5000).catch(() => null)

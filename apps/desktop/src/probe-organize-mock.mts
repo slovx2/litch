@@ -437,13 +437,13 @@ export async function organizeMockProbe(): Promise<OrganizeMockProbe> {
       }
     }
   ).__litchLook
-  const devicesLink = () => text(one('.sb-link.devices'))
+  const settingsLabel = () => one('.sb-settings')?.getAttribute('aria-label')
   look.set({ lang: 'en' })
-  await until('界面换成英文', () => devicesLink() === 'Devices')
+  await until('界面换成英文', () => settingsLabel() === 'Settings')
   const en = await reasonOf()
   seen.reasonEn = en.join('｜')
   look.set({ lang: 'zh-CN' })
-  await until('界面换回中文', () => devicesLink() === '设备')
+  await until('界面换回中文', () => settingsLabel() === '设置')
   ;(
     await until('设备行上的新建按钮', () => one<HTMLButtonElement>('.dev-row ~ .row-add', local()))
   ).click()

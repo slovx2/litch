@@ -587,10 +587,12 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
 
   await act(newName, '归档')
   await until('归档的那一行从列表里消失', () => !rowOf(newName))
-  const shelf = await until('侧栏底部的“已归档对话”', () =>
-    one<HTMLButtonElement>('.sb-link.archived'),
-  )
-  shelf.click()
+  one<HTMLButtonElement>('.sb-settings')?.click()
+  ;(
+    await until('设置页上进已归档对话的入口', () =>
+      one<HTMLButtonElement>('.set-go[data-page="archived"]'),
+    )
+  ).click()
   const shelved = await until('已归档对话里的这个会话', () => shelvedOf(newName))
   const archived =
     !one('.sb-scroll')?.textContent?.includes(newName) &&

@@ -52,7 +52,12 @@ export async function screensSeen(titles: { talk: string; waiting: string }): Pr
   await sweep('审批卡片', ['.main'])
 
   // 已归档对话
-  one<HTMLButtonElement>('.sb-link.archived')?.click()
+  one<HTMLButtonElement>('.sb-settings')?.click()
+  ;(
+    await until('设置页上进已归档对话的入口', () =>
+      one<HTMLButtonElement>('.set-go[data-page="archived"]'),
+    )
+  ).click()
   await until('已归档对话那一页', () => one('.arch-page') && all('.arch-item').length > 0)
   const archivedRows = all('.arch-item').length
   await sweep('已归档', ['.main'])

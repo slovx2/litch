@@ -172,7 +172,12 @@ export async function toolsSeen(): Promise<ToolsSeen> {
 
   // ---- 设备详情：Computer Use 开关下面那一句 ----
   if (!one('.devp')) {
-    one<HTMLButtonElement>('.sb-link.devices')?.click()
+    one<HTMLButtonElement>('.sb-settings')?.click()
+    ;(
+      await until('设置页上进设备页的入口', () =>
+        one<HTMLButtonElement>('.set-go[data-page="devices"]'),
+      )
+    ).click()
     await until('设备页', () => one('.devp'))
   }
   const openDevice = async (id: string) => {
@@ -196,7 +201,12 @@ export async function toolsSeen(): Promise<ToolsSeen> {
       : (kit.settingsAt() ?? '没开')
     one<HTMLButtonElement>('.set-head .ibtn')?.click()
     await seen(() => !one('.set-page'), 3000)
-    one<HTMLButtonElement>('.sb-link.devices')?.click()
+    one<HTMLButtonElement>('.sb-settings')?.click()
+    ;(
+      await until('设置页上进设备页的入口', () =>
+        one<HTMLButtonElement>('.set-go[data-page="devices"]'),
+      )
+    ).click()
     await until('设备页', () => one('.devp'))
   } else {
     // 详情里按 Esc 回到列表

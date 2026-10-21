@@ -65,15 +65,15 @@ const hasComputerUse = (platform: string) => platform === 'darwin' || platform =
 /** 设置页左边的分组和标题：Computer Use 那一组只在 macOS 和 Windows 上有 */
 const sectionsOn = (platform: string) =>
   hasComputerUse(platform)
-    ? ['look', 'lang', 'devices', 'browser', 'computer', 'notify', 'assist', 'keys', 'about']
-    : ['look', 'lang', 'devices', 'browser', 'notify', 'assist', 'keys', 'about']
+    ? ['look', 'lang', 'switches', 'browser', 'computer', 'notify', 'assist', 'keys', 'about']
+    : ['look', 'lang', 'switches', 'browser', 'notify', 'assist', 'keys', 'about']
 const titlesOn = (platform: string, lang: 'zh-CN' | 'en' = 'zh-CN') => {
   const all =
     lang === 'en'
       ? [
           'Appearance',
           'Language',
-          'Devices',
+          'Per-harness switches',
           'Built-in browser',
           'Computer Use',
           'Notifications',
@@ -81,7 +81,17 @@ const titlesOn = (platform: string, lang: 'zh-CN' | 'en' = 'zh-CN') => {
           'Shortcuts',
           'About',
         ]
-      : ['外观', '语言', '设备', '内置浏览器', 'Computer Use', '通知', '配置助手', '快捷键', '关于']
+      : [
+          '外观',
+          '语言',
+          '按 harness 开关',
+          '内置浏览器',
+          'Computer Use',
+          '通知',
+          '配置助手',
+          '快捷键',
+          '关于',
+        ]
   return hasComputerUse(platform) ? all : all.filter((title) => title !== 'Computer Use')
 }
 /** 只在没打包时才有的两项菜单，清单里不列（装好的应用里没有） */
@@ -164,12 +174,13 @@ export function judgeFirst(
   same(page.titles, titlesOn(platform), '各组的标题')
   same(page.first, 'look', '设置页默认在哪一组')
   must(page.crumb === '设置', `标题栏上写的不是“设置”：“${page.crumb}”`)
-  must(page.entryCurrent, '侧栏底部的“设置”没有标成正开着')
+  must(page.entryCurrent, '侧栏底部的齿轮没有标成正开着')
   must(page.panelsHidden, '设置页上还显示着终端面板或侧面板')
   must(page.escCloses, 'Esc 没有关掉设置页回到新建对话页')
   must(page.closeButton, '右上角的叉没有关掉设置页')
   must(page.keyOpens, '按主修饰键加逗号没有打开设置页')
-  must(page.toDevices, '“设备”那一组的按钮没有通到设备页')
+  must(page.toDevices, '设置页左上角的“设备”没有通到设备页')
+  must(page.toArchived, '设置页左上角的“已归档对话”没有通到那一页')
   same(page.oldButtons, 0, '侧栏底部的临时按钮')
   must(menu.settingsItem && menu.settingsAt !== '没开', `应用菜单的“设置…”没有打开设置页`)
   must(
