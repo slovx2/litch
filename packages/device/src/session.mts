@@ -492,6 +492,11 @@ export class ClientSession implements ClientToolPeer {
       this.host.sessionTree.userSpoke(params.threadId)
     if (params && method === 'turn/interrupt' && typeof params.threadId === 'string')
       this.host.sessionTree.interrupted(params.threadId)
+    // 建会话带的 litch_sessions 换成设备进程按设置给的那份（“每回合收尾”开关，session-tree.mts 的 currentSessionTools）
+    if (params && method === 'thread/start') {
+      const tools = this.host.sessionTree.currentSessionTools(params.dynamicTools)
+      if (tools) params = { ...params, dynamicTools: tools }
+    }
     // 应答回来之后要记的（一个请求只有一个 after）
     const afterwards: ((result: unknown) => void)[] = []
     // 建会话时带的动态工具记下来：设备进程替这个会话派子会话时照样带上

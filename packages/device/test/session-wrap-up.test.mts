@@ -6,6 +6,7 @@ import test from 'node:test'
 import {
   SESSION_TOOL_LIMITS,
   SESSION_TOOLS,
+  sessionProposalRules,
   textWidth,
 } from '../../protocol/src/client-tools-sessions.mjs'
 import { parseSessionEvent } from '../../protocol/src/session-tree.mjs'
@@ -96,7 +97,7 @@ test('WRAP-UP-001：一次 wrap_up 出几张提案，callId 是这次调用、tu
     const quiet = await withTools(client, '顺便问个小问题')
     const empty = resultOf(await wrapUp(env, quiet, []))
     assert.deepEqual(empty.suggestions, [])
-    assert.match(empty.note, /Nothing suggested.*at most one short line/)
+    assert.match(empty.note, /Nothing suggested.*Now write your final answer.*complete on its own/)
     // suggestions 不是数组：整个调用不收
     const bad = await env.pi.callTool(threadId, SESSIONS, 'wrap_up', {})
     assert.equal(failureOf(bad?.answer), 'invalid')
@@ -210,6 +211,9 @@ test('WRAP-UP-004：用户回合正常结束、没调 wrap_up：开一个 kind=r
       remindTurn,
     )
     assert.match(result.suggestions[1].refused, /already proposed 4 cards/)
+    // 提醒回合里回答已经在上一个回合了：只要一句，不要再写最终回答
+    assert.match(result.note, /End your turn now, with at most one short line/)
+    assert.doesNotMatch(result.note, /final answer/)
     // 提醒回合本身不调收尾也不会再提醒
     env.pi.end(threadId, 'completed', '好')
     await settle(80)
@@ -443,6 +447,86 @@ test('WRAP-UP-011：唤不唤醒由 Litch 定：模型的 start（直接起、�
       )?.answer,
     )
     assert.equal(env.device.sessionTree.store.proposal(proposed.proposal_id)?.wakeParent, true)
+  } finally {
+    await env.close()
+  }
+})
+
+/** 设备进程转给 pi 的建会话请求里，这个会话的 litch_sessions */
+const sentSessions = (env: TreeEnv, index: number) =>
+  env.pi.sent('thread/start')[index]?.dynamicTools?.find((spec: any) => spec?.name === SESSIONS)
+
+test('WRAP-UP-012：设置 sessions.wrapUp 关掉：新会话的 litch_sessions 没有 wrap_up、规则不提收尾，不提醒；提案照常；开关只管之后新建的会话', async () => {
+  const env = treeRig({}, { values: { 'sessions.wrapUp': false } })
+  try {
+    const client = await litch(env)
+    const offId = await withTools(client)
+    const off = sentSessions(env, 0)
+    assert.deepEqual(
+      off.tools.map((tool: any) => tool.name).includes('wrap_up'),
+      false,
+      '关着时不给 wrap_up',
+    )
+    assert.equal(off.instructions, sessionProposalRules(false))
+    assert.doesNotMatch(`${off.instructions}\n${off.description}`, /wrap_up/)
+    assert.equal(env.device.sessionTree.hasWrapUp(offId), false)
+    // 其余照常：提案卡片能出
+    resultOf(
+      (await env.pi.callTool(offId, SESSIONS, 'start', { title: '甲', ...brief('甲') }))?.answer,
+    )
+    env.pi.end(offId)
+    await settle(80)
+    assert.equal(injected(env, offId, 'remind').length, 0, '关着不提醒')
+    // 打开：之后新建的会话带 wrap_up、照常提醒；关着时建的那个还是没有，也不提醒
+    env.control?.patch({ values: { 'sessions.wrapUp': true } as never })
+    await settle(30)
+    const onId = await withTools(client)
+    const on = sentSessions(env, 1)
+    assert.ok(on.tools.some((tool: any) => tool.name === 'wrap_up'))
+    assert.equal(on.instructions, SESSION_TOOLS.instructions)
+    env.pi.end(onId)
+    await until(() => injected(env, onId, 'remind').length === 1, '开着就提醒')
+    await until(() => env.pi.running(onId), '提醒回合在跑')
+    env.pi.end(onId, 'completed', '好')
+    await client.call('turn/start', { threadId: offId, input: text('再来') })
+    env.pi.end(offId)
+    await settle(80)
+    assert.equal(injected(env, offId, 'remind').length, 0, '会话没有 wrap_up 就不提醒')
+    // 再关掉：已经带着 wrap_up 的会话也当场不再提醒
+    env.control?.patch({ values: { 'sessions.wrapUp': false } as never })
+    await settle(30)
+    await client.call('turn/start', { threadId: onId, input: text('又来') })
+    env.pi.end(onId)
+    await settle(80)
+    assert.equal(injected(env, onId, 'remind').length, 1)
+  } finally {
+    await env.close()
+  }
+})
+
+test('WRAP-UP-013：没有主进程管设置时看启动参数 --wrap-up（DeviceOptions.wrapUp），缺省开；派出的子会话按开关带', async () => {
+  assert.equal(parseArgs(BASE_ARGS).wrapUp, undefined, '不写就没有，按开着算')
+  assert.equal(parseArgs([...BASE_ARGS, '--wrap-up', 'off']).wrapUp, false)
+  assert.equal(parseArgs([...BASE_ARGS, '--wrap-up', 'on']).wrapUp, true)
+  assert.throws(() => parseArgs([...BASE_ARGS, '--wrap-up', 'yes']), /on 或 off/)
+  const env = treeRig({}, { wrapUp: false })
+  try {
+    const client = await litch(env)
+    const threadId = await withTools(client)
+    assert.equal(env.device.sessionTree.hasWrapUp(threadId), false)
+    const childId = resultOf(
+      (
+        await env.pi.callTool(threadId, SESSIONS, 'start', {
+          title: '子任务',
+          ...brief('做点事。'),
+          initiation: 'user_asked',
+        })
+      )?.answer,
+    ).thread_id as string
+    assert.equal(env.device.sessionTree.hasWrapUp(childId), false, '子会话也没有 wrap_up')
+    env.pi.end(threadId)
+    await settle(80)
+    assert.equal(injected(env, threadId, 'remind').length, 0)
   } finally {
     await env.close()
   }

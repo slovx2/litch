@@ -56,11 +56,13 @@ snippet for entries that are on and running (see `troubleshooting.md`).
 | `tasks.enabled` | on | "Run on schedule". Off: schedules do not fire; running and manually started runs continue. When turned back on, missed times are not made up (one-time tasks still run once) |
 | `tasks.maxConcurrent` | 2 (1 – 16) | Task runs going at once on the device; the rest wait in order |
 
-### Session orchestration (group `sessions`, applies at once)
+### Session orchestration (group `sessions`, applies at once; `sessions.wrapUp` to new sessions)
 
 | Key | Default | Meaning |
 |---|---|---|
 | `sessions.enabled` | on | Models may use `litch_sessions` to list and read sessions on the device, start sub-sessions and message their own sub-sessions; sub-sessions report back and can wake the parent. Off: new sessions do not get these tools; existing parent links still show |
+| `sessions.wrapUp` | on | The model ends every turn with a `litch_sessions.wrap_up` call (its suggested tasks) and then its final answer. Off: sessions created afterwards do not get `wrap_up` and are not asked to wrap up, and no reminders are sent; the rest of `litch_sessions` works as before. Existing sessions keep the tools they started with |
+| `sessions.wrapUpReminder` | on | If a turn you started ends without a wrap-up, Litch opens one short turn to remind the model. No effect while `sessions.wrapUp` is off |
 
 ## Things that are not device settings
 

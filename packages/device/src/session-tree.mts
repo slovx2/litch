@@ -9,8 +9,8 @@
 // 回合把它们包成 kind=notes 的一段放在用户消息前面（beforeUserTurn）。
 // 唤醒：有客户端连着、开关开着、父会话闲着、它没脱离的直接子会话都停下了（在等用户答的挂满 needsUserMs 也算停下）、
 // 队列里有该唤醒的回报、上一条用户消息之后唤醒不到 10 次，设备进程替父会话发一个 kind=wake 的回合。
-// 提醒收尾：会话带着 litch_sessions、用户亲手发起的回合正常结束（completed）时这一回合没调过 wrap_up，
-// 设置里提醒开着，设备进程替它再开一个 kind=remind 的回合。提醒回合、唤醒回合、定时任务的回合都不是用户发起的，
+// 提醒收尾：会话带着 wrap_up、用户亲手发起的回合正常结束（completed）时这一回合没调过 wrap_up，
+// 设置里“每回合收尾”和提醒都开着，设备进程替它再开一个 kind=remind 的回合。提醒回合、唤醒回合、定时任务的回合都不是用户发起的，
 // 不会再引出提醒，所以一条用户消息之后最多一次。提醒和唤醒排在同一条检查队列里（check），先提醒、后唤醒：
 // 会话有回合在跑时谁都不发，那个回合结束时再查一遍；提醒发出之前用户又说了话、或者别的回合里调了 wrap_up，提醒作废。
 // offer 卡（litch_sessions.start 的 initiation offer）：模型那次调用一直等着（offers），用户在卡上选了（answerOffer）、
@@ -18,6 +18,7 @@
 // 回合结束还没补的当作在这里做。设备进程重启时上一次还在等的一律当作在这里做。
 import { randomUUID } from 'node:crypto'
 import { CLIENT_TOOL_NAMESPACE } from '../../protocol/src/client-tools.mjs'
+import { SESSION_TOOL, sessionTools } from '../../protocol/src/client-tools-sessions.mjs'
 import { EXTENSION } from '../../protocol/src/device.mjs'
 import {
   formatSessionEvent,
@@ -53,6 +54,8 @@ export interface SessionTreeHost {
   needsUserMs: number
   /** 这个回合是定时任务发起的：只进回报，不唤醒父会话 */
   taskTurn(threadId: string, turnId: string): boolean
+  /** 设置里“每回合收尾”开着（sessions.wrapUp）：关掉时新会话的 litch_sessions 里没有 wrap_up，也不提醒 */
+  wrapUp(): boolean
   /** 设置里“提醒收尾”开着（sessions.wrapUpReminder） */
   wrapUpReminder(): boolean
   log(line: string): void
@@ -355,11 +358,44 @@ export class SessionTree {
     return origin === undefined ? count : count + this.store.countInTurn(threadId, origin)
   }
 
-  /** 这个会话会不会被提醒收尾：会话编排、提醒都开着，会话建的时候带了 litch_sessions */
-  private remindable(threadId: string): boolean {
-    if (!this.host.enabled() || !this.host.wrapUpReminder()) return false
+  /** 这个回合是设备进程替它开的提醒回合 */
+  isReminderTurn(threadId: string, turnId: string): boolean {
+    return this.remindedFor.has(`${threadId}\u0000${turnId}`)
+  }
+
+  /**
+   * 会话建的时候带的 litch_sessions 里有没有 wrap_up。建会话时按“每回合收尾”的开关定（currentSessionTools），
+   * 之后改开关不影响已有的会话：工具是建会话时交给引擎的
+   */
+  hasWrapUp(threadId: string): boolean {
     const tools = this.store.tools(threadId) ?? []
-    return tools.some((spec) => isObject(spec) && spec.name === CLIENT_TOOL_NAMESPACE.sessions)
+    return tools.some(
+      (spec) =>
+        isObject(spec) &&
+        spec.name === CLIENT_TOOL_NAMESPACE.sessions &&
+        Array.isArray(spec.tools) &&
+        spec.tools.some((tool) => isObject(tool) && tool.name === SESSION_TOOL.wrapUp),
+    )
+  }
+
+  /**
+   * 客户端建会话时带的 litch_sessions 换成设备进程按“每回合收尾”开关给的那份（工具、说明、规则都跟着换）。
+   * 没带 litch_sessions 的、不是数组的返回 null，照原样转
+   */
+  currentSessionTools(tools: unknown): unknown[] | null {
+    if (!Array.isArray(tools)) return null
+    if (!tools.some((spec) => isObject(spec) && spec.name === CLIENT_TOOL_NAMESPACE.sessions))
+      return null
+    const wanted = sessionTools(this.host.wrapUp())
+    return tools.map((spec) =>
+      isObject(spec) && spec.name === CLIENT_TOOL_NAMESPACE.sessions ? wanted : spec,
+    )
+  }
+
+  /** 这个会话会不会被提醒收尾：会话编排、每回合收尾、提醒都开着，会话建的时候带了 wrap_up */
+  private remindable(threadId: string): boolean {
+    if (!this.host.enabled() || !this.host.wrapUp() || !this.host.wrapUpReminder()) return false
+    return this.hasWrapUp(threadId)
   }
 
   /** 一个回合结束了：用户发起的、正常结束、没调 wrap_up 的，记下要提醒 */

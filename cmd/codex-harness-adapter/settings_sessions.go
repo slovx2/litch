@@ -8,8 +8,14 @@ package main
 
 const sessionTreeKey = "sessions.enabled"
 
+// 每回合收尾：开着时新会话的 litch_sessions 带 wrap_up，规则要求模型每回合干完活先调它（建议任务放在参数里）、再写最终回答。
+// 设备进程按 wrapUpKey 读（device.mts 的 WRAP_UP_SETTING），建会话时按它换掉客户端给的那组工具，所以只对之后新建的会话生效；
+// 提醒跟着它当场停。关掉时规则里不提收尾，建议改用 start 的 propose，会话编排的其余能力照常。
+const wrapUpKey = "sessions.wrapUp"
+
 // 提醒收尾：用户发起的回合结束时模型没调 litch_sessions.wrap_up，设备进程替它再开一个回合提醒（一条用户消息之后最多一次）。
 // 设备进程按 wrapUpReminderKey 读（device.mts 的 WRAP_UP_REMINDER_SETTING），改了当场生效；关掉之后 wrap_up 照常能用。
+// 每回合收尾关着时它不起作用。
 const wrapUpReminderKey = "sessions.wrapUpReminder"
 
 const sessionGroup = "sessions"
@@ -31,13 +37,21 @@ func sessionSettings() (settingGroup, []settingSpec) {
 			"While on, the model can use litch_sessions to list and read sessions on this device, start sub-sessions (as a proposal card unless the user asked for one), and message its own sub-sessions; a sub-session hands each turn's result back and can wake its parent. When off, new sessions do not get these tools and nothing is reported or woken; existing parent links still show. Takes effect at once.",
 		),
 	}
+	wrapUp := settingSpec{
+		Key: wrapUpKey, Group: sessionGroup, Type: settingBoolean, Scope: deviceScope, Restart: restartNone,
+		Default: true, Title: both("每回合收尾", "Wrap up every turn"),
+		Description: both(
+			"开着时模型每回合干完活先调 litch_sessions.wrap_up，把值得另开会话的后续工作作为建议任务卡片交给你（没有建议也要调），再写给你的最终回答。关掉之后模型不再收尾，规则里也不要求，只在它自己觉得有必要时用提案卡片建议；派子会话、提案、开新会话这些照常。开关只对之后新建的会话生效：已有会话照建的时候的工具和规则，只是关掉后不再提醒。",
+			"While on, the model ends every turn by calling litch_sessions.wrap_up once its work is done, handing you follow-up work worth its own session as suggested-task cards (it calls it even with nothing to suggest), and then writes its final answer. When off, the model does not wrap up and is not asked to; it suggests work with proposal cards only when it sees fit, and sub-sessions, proposals and new-session offers work as before. Applies to sessions created afterwards: existing sessions keep the tools and rules they started with, except that reminders stop once this is off.",
+		),
+	}
 	reminder := settingSpec{
 		Key: wrapUpReminderKey, Group: sessionGroup, Type: settingBoolean, Scope: deviceScope, Restart: restartNone,
 		Default: true, Title: both("提醒收尾", "Wrap-up reminder"),
 		Description: both(
-			"模型每回合最后要调 litch_sessions.wrap_up，把建议任务交给用户（没有建议也要调）。开着时，你发的消息那一回合结束了模型还没调，Litch 会替它再开一个回合提醒一次（多花一点 token）。关掉之后不提醒，模型照样可以调。立刻生效。",
-			"The model should end every turn by calling litch_sessions.wrap_up with its suggested tasks (even when there are none). While on, if a turn you started ends without it, Litch opens one more turn to remind the model (a few extra tokens). When off, there is no reminder; the model can still call it. Takes effect at once.",
+			"每回合收尾开着时，模型每回合都要调 litch_sessions.wrap_up。开着这一项时，你发的消息那一回合结束了模型还没调，Litch 会替它再开一个回合提醒一次（多花一点 token）。关掉之后不提醒，模型照样可以调。每回合收尾关着时这一项不起作用。立刻生效。",
+			"While Wrap up every turn is on, the model should call litch_sessions.wrap_up in every turn. While this is on, if a turn you started ends without it, Litch opens one more turn to remind the model (a few extra tokens). When off, there is no reminder; the model can still call it. Has no effect while Wrap up every turn is off. Takes effect at once.",
 		),
 	}
-	return group, []settingSpec{spec, reminder}
+	return group, []settingSpec{spec, wrapUp, reminder}
 }

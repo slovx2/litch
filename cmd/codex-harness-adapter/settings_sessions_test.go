@@ -53,3 +53,27 @@ func TestWrapUpReminderSettingIsDeclared(t *testing.T) {
 		t.Fatalf("写成关应该能写进去: %v %+v %v", changed, problem, err)
 	}
 }
+
+// 每回合收尾的总开关：同一组、设备级的布尔项、默认开、不用重启；排在提醒收尾前面。
+func TestWrapUpSettingIsDeclared(t *testing.T) {
+	cfg := settingsTestConfiguration(t)
+	schema := buildSettingsSchema(cfg)
+	spec, declared := schema.spec(wrapUpKey)
+	if !declared || spec.Group != sessionGroup || spec.Type != settingBoolean || spec.Scope != deviceScope || spec.Restart != restartNone || spec.Default != true {
+		t.Fatalf("每回合收尾的开关没有照设备级、默认开的布尔项声明: %+v", spec)
+	}
+	if spec.Title.ZH == "" || spec.Title.EN == "" || spec.Description.ZH == "" || spec.Description.EN == "" {
+		t.Fatal("每回合收尾的开关缺中文或者英文的标题、说明")
+	}
+	order := map[string]int{}
+	for index, one := range schema.Settings {
+		order[one.Key] = index
+	}
+	if order[wrapUpKey] > order[wrapUpReminderKey] {
+		t.Fatal("每回合收尾应排在提醒收尾前面")
+	}
+	changed, problem, err := cfg.settings.apply(0, []settingEdit{edit(wrapUpKey, false)}, schema, cfg.validateSettings)
+	if err != nil || problem != nil || len(changed) != 1 {
+		t.Fatalf("写成关应该能写进去: %v %+v %v", changed, problem, err)
+	}
+}

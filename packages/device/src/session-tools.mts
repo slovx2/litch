@@ -3,7 +3,8 @@
 // 读类（list、read、wait）能看这台设备上所有会话；写类（send、interrupt）只能作用于调用者自己的 Litch 子孙会话，
 // 别的一律 [litch:blocked]，引擎自己的子代理线程另外提示用引擎自己的工具。提案类（start 出提案、accept、withdraw）
 // 只作用于调用者自己会话上的提案；提案的门槛（一回合几张、同标题、fresh 简报的显示宽度）在 start 和 wrap_up 里查。
-// wrap_up 是每回合收尾必调的：每条建议成一张提案，调没调记在会话树里（没调的用户回合结束后设备进程开回合提醒）。
+// wrap_up 是每回合收尾必调的（干完活先调它、再写最终回答）：每条建议成一张提案，调没调记在会话树里
+// （没调的用户回合结束后设备进程开回合提醒）。设置里“每回合收尾”关掉时新会话没有这个工具（session-tree.mts）。
 // start 的 initiation offer 只带标题落一张 offer 卡，调用一直等到用户选（或者又发了话、回合结束）；选了新会话的，
 // 模型再用 accept 带上简报开起来。hand_off 把做到一半的任务交给一个分叉到这个回合之前的子会话，立刻开始。
 // 结果是一段 JSON 文字，失败第一行是 [litch:<kind>]，后面是模型能照着改的一句话。
@@ -388,7 +389,7 @@ async function offer(
   if (!tree.isUserTurn(call.harness, call.turnId))
     throw new Refused(
       'blocked',
-      'An offer is only for a new task in a message the user just typed, and this turn was not started that way. Do the work here, or suggest it with wrap_up.',
+      `An offer is only for a new task in a message the user just typed, and this turn was not started that way. Do the work here, or suggest it with ${tree.hasWrapUp(call.threadId) ? 'wrap_up' : 'start (initiation "propose")'}.`,
     )
   gate(tree, call, title)
   const proposal = tree.propose({
@@ -445,11 +446,16 @@ async function wrapUp(
       'invalid',
       'suggestions must be an array: the suggested tasks of this turn, or [] when there are none. Call wrap_up again.',
     )
-  // 已经收过尾又来一次空的：有的模型不写字就结束不了回合，被要求“别再写字”时会一遍遍调空收尾。回一个错，让它写一句就停
+  // 提醒回合补调的收尾：回答已经在上一个回合里了，只要一句。别的回合先收尾、再写完整的最终回答
+  const reminder = tree.isReminderTurn(call.threadId, call.turnId)
+  const finish = reminder
+    ? 'End your turn now, with at most one short line; do not repeat your last reply.'
+    : 'Now write your final answer to the user as the last message of this turn, complete on its own (not a summary of or a pointer to earlier text). If you already wrote the full answer earlier in this turn, do not repeat it; end with at most one short line.'
+  // 已经收过尾又来一次空的：有的模型不写字就结束不了回合，会一遍遍调空收尾。回一个错，让它去写回答
   if (given.length === 0 && tree.isWrappedUp(call.threadId, call.turnId))
     throw new Refused(
       'invalid',
-      'This turn is already wrapped up. Do not call wrap_up again: end your turn now, with at most one short line.',
+      `This turn is already wrapped up; do not call wrap_up again. ${finish}`,
     )
   tree.wrappedUp(call.threadId, call.turnId)
   const suggestions: SessionsWrapUpResult['suggestions'] = []
@@ -478,8 +484,8 @@ async function wrapUp(
         ? `The user now sees ${made} suggested-task card${made > 1 ? 's' : ''}; nothing runs until they start one, and ${EXPIRES}. Do not do that work here as well.`
         : 'No card was made.',
     refused > 0
-      ? `${refused} suggestion${refused > 1 ? 's were' : ' was'} refused (see refused). If you can fix them, call wrap_up again with only the fixed ones; otherwise mention that work in one line.`
-      : 'Your turn is wrapped up: end it now, with at most one short line. Do not call wrap_up again.',
+      ? `${refused} suggestion${refused > 1 ? 's were' : ' was'} refused (see refused). If you can fix them, call wrap_up again with only the fixed ones first; otherwise mention that work in one line. ${finish}`
+      : `Your turn is wrapped up; do not call wrap_up again. ${finish}`,
   ]
   return { suggestions, note: parts.join(' ') }
 }
