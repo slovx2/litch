@@ -50,20 +50,37 @@ export interface PreparedInstructions {
   remember(result: unknown): void
 }
 
+/** 任务卡关着的那份规则的头一句：没记下工具时靠它认 */
+const PLAIN_HEAD = `${sessionProposalRules(false, false).split('. ')[0]}.`
+
 /**
  * 设备进程这一版的规则原文：按命名空间，给的是记下的原文和会话建的时候带的动态工具。不在这里的照记下的原文。
- * litch_sessions 分“每回合收尾”开着和关着两份：会话的工具是建会话时定下的，恢复、分叉时照那时的工具里
- * 有没有 wrap_up 挑这一版的哪一份，不看现在的开关；没记下工具的（分叉出来的）看原文是不是关着的那份
+ * litch_sessions 分三份：“每回合收尾”开着、关着，和这个 harness 的“任务卡”关着（没有建议的那份）。会话的工具是
+ * 建会话时定下的，恢复、分叉时照那时的工具挑这一版的哪一份（有 wrap_up 是收尾那份；start 收不收 propose 看任务卡），
+ * 不看现在的开关；没记下工具的（分叉出来的）看原文：任务卡那份的头一句；是建议规则却没提 wrap_up 的是收尾关着那份，
+ * 认不出来的按收尾开着
  */
 const CURRENT: Record<string, ((recorded: string, tools: unknown[] | null) => string) | undefined> =
   {
     [SESSION_TOOLS.name]: (recorded, tools) => {
       const spec = tools?.find((one) => isObject(one) && one.name === SESSION_TOOLS.name)
-      const wrapUp = isObject(spec)
-        ? Array.isArray(spec.tools) &&
-          spec.tools.some((tool) => isObject(tool) && tool.name === SESSION_TOOL.wrapUp)
-        : recorded !== sessionProposalRules(false)
-      return sessionProposalRules(wrapUp)
+      if (!isObject(spec)) {
+        if (recorded.startsWith(PLAIN_HEAD)) return sessionProposalRules(false, false)
+        const off = sessionProposalRules(false)
+        const unwrapped =
+          recorded === off ||
+          (recorded.startsWith(off.split('. ')[0] as string) &&
+            !recorded.includes(`litch_sessions.${SESSION_TOOL.wrapUp}`))
+        return sessionProposalRules(!unwrapped)
+      }
+      const functions = Array.isArray(spec.tools) ? spec.tools.filter(isObject) : []
+      const wrapUp = functions.some((tool) => tool.name === SESSION_TOOL.wrapUp)
+      const start = functions.find((tool) => tool.name === SESSION_TOOL.start)
+      const schema = isObject(start?.inputSchema) ? start.inputSchema : null
+      const properties = isObject(schema?.properties) ? schema.properties : null
+      const initiation = isObject(properties?.initiation) ? properties.initiation : null
+      const cards = !Array.isArray(initiation?.enum) || initiation.enum.includes('propose')
+      return sessionProposalRules(wrapUp, cards)
     },
   }
 

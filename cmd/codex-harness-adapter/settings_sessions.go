@@ -20,6 +20,22 @@ const wrapUpReminderKey = "sessions.wrapUpReminder"
 
 const sessionGroup = "sessions"
 
+// 任务卡按 harness 的开关（作用域 harness，放在各 harness 自己那一组里）：关着时这个 harness 上的会话没有建议任务卡片、
+// “新会话 / 在这里做”的卡和收尾，也不提醒；派子会话、交接这些照旧。设备进程按 taskCardsKey 读
+// （packages/protocol/src/session-tree.mts 的 taskCardsSettingKey），新会话建的时候挑那组工具，已有会话当场生效。
+func taskCardsKey(id string) string { return "harness." + id + ".taskCards" }
+
+func taskCardsSetting(id, group string) settingSpec {
+	return settingSpec{
+		Key: taskCardsKey(id), Group: group, Type: settingBoolean, Scope: harnessScope(id), Restart: restartNone,
+		Default: true, Title: both("任务卡", "Task cards"),
+		Description: both(
+			"开着时模型会把值得另开会话的后续工作做成建议任务卡片，和这个会话无关的新任务先出“新会话 / 在这里做”的卡，每回合收尾。关掉之后这个 harness 的会话不再出这些卡、不收尾也不提醒；你明说要时它照样派子会话、交接任务。立刻生效，已有会话也一样。会话编排关着时这一项不起作用。",
+			"While on, the model turns follow-up work worth its own session into suggested-task cards, asks with a \"New session / Do it here\" card before a new task unrelated to the session, and wraps up every turn. When off, sessions of this harness get none of these cards, no wrap-up and no reminder; the model still starts sub-sessions and hands off tasks when you ask. Takes effect at once, also in existing sessions. Has no effect while Session orchestration is off.",
+		),
+	}
+}
+
 func sessionSettings() (settingGroup, []settingSpec) {
 	description := both(
 		"一个会话可以派出子会话（任意 harness，同一台设备），子会话的结果回到主会话。",

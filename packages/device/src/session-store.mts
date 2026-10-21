@@ -110,6 +110,8 @@ const MIGRATIONS: readonly string[] = [
    ) WITHOUT ROWID;`,
   // 回报记下子会话那一回合结束时还有几个后台任务在跑（backgroundTasks 扩展）。旧的回报记成 0
   `ALTER TABLE notes ADD COLUMN background INTEGER NOT NULL DEFAULT 0;`,
+  // 提案的推理强度（start、wrap_up 的建议可带 effort）。不写是 null，开始时取父会话那一刻的；旧提案都是 null
+  `ALTER TABLE proposals ADD COLUMN effort TEXT;`,
 ]
 
 export const SESSION_SCHEMA_VERSION = MIGRATIONS.length
@@ -198,6 +200,7 @@ function proposalOf(row: Row): SessionProposal {
     background: text(row.background),
     harness: maybe(row.harness),
     model: maybe(row.model),
+    effort: maybe(row.effort),
     cwd: maybe(row.cwd),
     kind: text(row.kind) as SessionLineageKind,
     wakeParent: row.wake_parent === 1,
@@ -232,8 +235,8 @@ export class SessionStore {
       detach: prepare('UPDATE lineage SET detached_at=? WHERE thread_id=?'),
       reported: prepare('UPDATE lineage SET reported_turn=? WHERE thread_id=?'),
       addProposal: prepare(
-        `INSERT INTO proposals(id, thread_id, title, prompt, harness, model, cwd, kind, wake_parent, status, created_at, expires_at, wider_sandbox, turn_id, call_id, offer, background)
-         VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO proposals(id, thread_id, title, prompt, harness, model, cwd, kind, wake_parent, status, created_at, expires_at, wider_sandbox, turn_id, call_id, offer, background, effort)
+         VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ),
       proposal: prepare('SELECT * FROM proposals WHERE id=?'),
       // 还在等的：等用户点的卡、等用户选的 offer 卡、用户选了新会话等模型补简报的
@@ -406,10 +409,12 @@ export class SessionStore {
       proposal.callId ?? null,
       proposal.offer ? 1 : 0,
       proposal.background ?? '',
+      proposal.effort ?? null,
     )
     return {
       ...proposal,
       background: proposal.background ?? '',
+      effort: proposal.effort ?? null,
       status,
       startedThreadId: null,
       settledAt: null,

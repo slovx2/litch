@@ -254,3 +254,42 @@ test('CODEX-DEV-005：记下的存在 sessions.sqlite 里，设备进程重启�
   assert.equal(composeInstructions('Mine\n', ['# A', '# B']), 'Mine\n\n# A\n\n# B')
   assert.equal(composeInstructions('Mine\n\n# A', ['# A', '# B']), 'Mine\n\n# A\n\n# B')
 })
+
+test('CODEX-DEV-007：任务卡关着时建的会话（没有建议的那份）：恢复时规则挑那一份；没记下工具的看原文头一句，旧版收尾关着的原文认得出', async () => {
+  const env = codexRig()
+  try {
+    const client = await litch(env)
+    const { store } = env.device.sessionTree
+    const plain = `# Tool instructions: litch_sessions\n${sessionProposalRules(true, false)}`
+    store.setInstructions(OLD_ONE, {
+      given: USER,
+      namespaces: [{ name: 'litch_sessions', instructions: 'Old rules.' }],
+      cwd: '/work',
+    })
+    store.setTools(OLD_ONE, [sessionTools(true, false)])
+    await client.call('thread/resume', { threadId: OLD_ONE })
+    assert.equal(last(env, 'thread/resume').developerInstructions, `${USER}\n\n${plain}`)
+    // 没记下工具：原文是任务卡关着的那份
+    store.setInstructions(OLD_TWO, {
+      given: USER,
+      namespaces: [{ name: 'litch_sessions', instructions: sessionProposalRules(false, false) }],
+      cwd: '/work',
+    })
+    await client.call('thread/resume', { threadId: OLD_TWO })
+    assert.equal(last(env, 'thread/resume').developerInstructions, `${USER}\n\n${plain}`)
+    // 上一版收尾关着时的原文（头一句一样、没提 wrap_up）：挑这一版收尾关着的那份
+    const older = `${sessionProposalRules(false).split('. ')[0]}. Older wording without the wrap-up tool.`
+    store.setInstructions(OLD_TWO, {
+      given: USER,
+      namespaces: [{ name: 'litch_sessions', instructions: older }],
+      cwd: '/work',
+    })
+    await client.call('thread/resume', { threadId: OLD_TWO })
+    assert.equal(
+      last(env, 'thread/resume').developerInstructions,
+      `${USER}\n\n# Tool instructions: litch_sessions\n${sessionProposalRules(false)}`,
+    )
+  } finally {
+    await env.close()
+  }
+})

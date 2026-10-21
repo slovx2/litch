@@ -277,38 +277,120 @@ export function textWidth(text: string): number {
   return width
 }
 
+/** 掐成最多 limit 个字（按码点算，不切开代理对），前后空白去掉 */
+const clip = (value: string, limit: number): string =>
+  Array.from(value.trim()).slice(0, limit).join('').trim()
+
+/**
+ * 把 wrap_up 参数里的 ask、actions 按规矩整理成能画的样子（session-tree.json 的规矩）：超长的截断，按钮多于
+ * wrapUpActions 的丢掉多的，label 是空的、不是对象的按钮丢掉，message 是空的去掉，没有 ask 时连按钮一起不要。
+ * 都不算错。设备进程收尾时用它，界面从调用参数里读出来画之前也用它（两边按同一份规矩）。没有 ask 是 null；
+ * trimmed 是有没有改动过（给模型的那句话里提一句）
+ */
+export function wrapUpAsk(args: unknown): {
+  value: { ask: string; actions: SessionsWrapUpAction[] } | null
+  trimmed: boolean
+} {
+  const fields = typeof args === 'object' && args !== null ? (args as Record<string, unknown>) : {}
+  const given = fields.ask
+  const actionsGiven = fields.actions
+  const ask = typeof given === 'string' ? clip(given, SESSION_TOOL_LIMITS.askChars) : ''
+  if (!ask) return { value: null, trimmed: given != null || actionsGiven != null }
+  let trimmed = ask !== given
+  const actions: SessionsWrapUpAction[] = []
+  const list = Array.isArray(actionsGiven) ? actionsGiven : []
+  if (actionsGiven != null && !Array.isArray(actionsGiven)) trimmed = true
+  for (const one of list) {
+    const action = typeof one === 'object' && one !== null ? (one as Record<string, unknown>) : {}
+    const label =
+      typeof action.label === 'string'
+        ? clip(action.label, SESSION_TOOL_LIMITS.actionLabelChars)
+        : ''
+    if (!label || actions.length >= SESSION_TOOL_LIMITS.wrapUpActions) {
+      trimmed = true
+      continue
+    }
+    const message =
+      typeof action.message === 'string'
+        ? clip(action.message, SESSION_TOOL_LIMITS.actionMessageChars)
+        : ''
+    if (label !== action.label || message !== (action.message ?? '')) trimmed = true
+    actions.push(message ? { label, message } : { label })
+  }
+  return { value: { ask, actions }, trimmed }
+}
+
 /**
  * 建议任务（提案卡片）的规矩：挂上 litch_sessions 时加进系统提示（命名空间的 instructions）。
+ * 结构和判断条件照 Claude 桌面端现行的同类提示，用自己的话写，不另加 Litch 自己的特例：先说什么才配单开一个会话
+ *（自成一件事；当前任务的一部分不算），再按请求对这个会话是什么（第一件任务、接着做、新任务、用户明说）分流；
+ * 接着这次发现往下做的那一件留在这里，用收尾的 ask 加按钮问；没做完、没验到的还是这个任务；大多数回合没有后续；
+ * 拿不准时看简报是不是大半在复述这里查到的。
  * 只靠规则模型不会主动提（16 号设计第 0 条的验收），所以每回合收尾必须调 wrap_up，建议放在它的参数里；
  * 用户发起的回合没调，设备进程会再开一个回合提醒（SessionEventKind 的 remind）。
  * 顺序照 Claude 桌面端：先收尾、再写最终回答。反过来的话回合最后一段是“回答已经给你了”这种短话，
  * 只认最后一段为回答的界面会把真正的回答收进过程。
  * wrapUp 是设置里“每回合收尾”的开关（设备进程按它换掉客户端给的这组工具）：关掉时没有 wrap_up 这个工具，
- * 规则里也不提收尾，建议改用 start 的 propose。
+ * 规则里也不提收尾，建议改用 start 的 propose，要用户定的事写在回答最后一行。
+ * taskCards 是这个 harness 的“任务卡”开关（设备设置 harness.<id>.taskCards）：关着时规则里不提建议、offer、收尾，
+ * 只留用户明说时派子会话、交接、简报这几条（wrapUp 不起作用）
  */
-export function sessionProposalRules(wrapUp: boolean): string {
+export function sessionProposalRules(wrapUp: boolean, taskCards = true): string {
+  if (!taskCards) return plainSessionRules()
   return [
-    'Separate sessions and suggested tasks (Litch). Work can go to its own session, possibly on another harness, model or folder: the user starts it with one click on a card in this conversation; nothing runs until then.',
+    'Separate sessions and suggested tasks (Litch). A task of its own can run in a separate session on this device, possibly on another harness, model or folder: the user starts it with one click on a card in this conversation, and nothing runs until then.',
+    SESSION_PURPOSE,
     'Before acting on a request, decide what it is to this session:',
-    "- A continuation: anything that builds on what was done, found or decided here (a correction, a follow-up, a question, the next iteration, going ahead with what you just investigated or suggested), and anything a few tool calls settle, whatever it is about. Do it here. When unsure, it is a continuation: a wrong offer stops the user's work, a wrong continuation only makes this session a little longer.",
-    '- A new task: unrelated work that a fresh session would do just as well from the user\'s words alone, because it builds on nothing done, found or decided here. Your first action is litch_sessions.start with initiation "offer" and a title only, with no other tool call and no plan before it: the user gets a "New session / Do it here" card and the call waits for their choice. If they choose a new session, call litch_sessions.accept with the proposal_id and the full brief; if they choose here, do it here.',
-    '- The user asked in words for separate, parallel or background work, or told you to start a piece now: litch_sessions.start with initiation "user_asked", one session per independent piece.',
-    'While you work, suggest what you notice or conclude on your own: independent or out-of-scope work, a fix spotted in passing, the follow-up your answer recommends (also when the turn only answered a question). One card per independent piece, at most ' +
-      `${SESSION_TOOL_LIMITS.proactivePerTurn} per turn, never the same piece twice, never what you are about to do anyway. A task the user's message tells you to do is never one of these: it is a continuation, a new task or user_asked.`,
-    'A follow-up you name gets a card, not just a sentence: when your reply calls some work a follow-up, a separate change or "for later", and it is real work worth doing next in its own session (not a one-line tweak or speculation), suggest it before the turn ends. The card is how you ask for the user\'s OK, so do not leave it as "want me to ...?" or "needs your OK" in prose; mention the cards in one line.',
+    '- The first task: until a task has been finished in this session, the request is simply what this session is for. Do it here.',
+    "- A continuation: anything that builds on what was done, found or decided here (a correction, a follow-up, a question, the next iteration, going ahead with what you just investigated or suggested, even when it will get its own commit), and anything a few tool calls settle, whatever it is about. Do it here. When unsure, it is a continuation: a wrong offer stops the user's work, a wrong continuation only makes this session a little longer.",
+    '- A new task: after a task has been finished here, unrelated work that a fresh session would do just as well from the user\'s words alone, because it builds on nothing done, found or decided here. Your first action is litch_sessions.start with initiation "offer" and a title only, with no other tool call and no plan before it: the user gets a "New session / Do it here" card and the call waits for their choice. If they choose a new session, call litch_sessions.accept with the proposal_id and the full brief; if they choose here, do it here.',
+    USER_ASKED,
+    `A task of its own that you notice or conclude while you work and the user has not asked for (out-of-scope work, a fix spotted in passing, the follow-up your answer recommends, also in a turn that only answered a question) becomes a card: one card per independent piece, at most ${SESSION_TOOL_LIMITS.proactivePerTurn} per turn, never the same piece twice, never what you are about to do anyway. A task the user's message tells you to do is never one of these: it is the first task, a continuation, a new task or user_asked.`,
+    `One piece of work that acts on what this session just found, such as the fix for what you diagnosed, stays here while this session has nothing else in flight (no unfinished change or running sub-session for other work): a new session would have to find it all again. It is not a card and gets no brief: ${wrapUp ? "ask about it with wrap_up's ask and a reply button that has you do it here" : 'ask about it in one short question as the last line of your answer'}, and do it when the user says yes.`,
+    'A piece you left or could not verify is still this task, not a follow-up: finish or check it now, here or in a subagent, or say plainly in your answer what is not done or not verified.',
+    'A follow-up you name gets a card or a question, not just a sentence: when your reply calls some work a follow-up, a separate change or "for later", and it is real work worth doing next (not a one-line tweak or speculation), put it to the user before the turn ends: the one piece that acts on what you just found as that question, any other task of its own as a card. The card or the question is how you ask for their OK, so do not ask again in prose ("want me to ...?"); mention the cards in one line.',
+    'When unsure whether something is a task of its own: if the brief you would write mostly retells what you found here, it stays here.',
     `After the user accepts a plan, check whether two or more of its steps are real work that can each run on its own: none needs another step's result or changes already made in this session, none is needed by another step, none touches files another step touches, none must land in one change with another. A last step that only checks the finished work does not count. When at least two pass and the user has not said where to run them, say in one line which step you start on, and propose each of the others right away with litch_sessions.start (initiation "propose"), at most ${SESSION_TOOL_LIMITS.proposalsPerTurn}. Right before you begin a step you proposed, withdraw its card; if the user already started it, leave that step to its session.`,
-    "Not for a card: quick things (a question, a read, one edit, a handful of tool calls), which stay here; anything that first needs the user's decision, which you ask about, suggesting only the parts that do not depend on it.",
-    'If a new user message about something unrelated arrives while you are in the middle of a task, hand that task off with litch_sessions.hand_off (a title and the remaining plan: steps, files, what done looks like), then answer the new message. A small correction is not that: just adjust. If the user said to keep working here, keep it here.',
+    "Not for a card: anything that first needs the user's decision. Ask about it, and suggest only the parts that do not depend on it.",
+    HAND_OFF,
     wrapUp
-      ? 'Every turn ends with litch_sessions.wrap_up and then your final answer, in that order. When the work is done (in a turn that only answers a question: before you write the answer), call wrap_up exactly once. Part of wrapping up is deciding, unasked, whether the request left real follow-up work that belongs in its own session: the next step the request implies, a piece you left or could not verify, the part that can run while the user reviews the rest, something the user set aside earlier, or a self-contained next task better started fresh than from a long history; never work unrelated to the request. Pass those in suggestions (skip ones you already proposed this turn), or an empty list. Then write your final answer to the user as the last message of the turn: complete on its own, never a summary of or a pointer to text above it, because what came before wrap_up is shown folded as work in progress. If you skip wrap_up, Litch reminds you in a new message.'
-      : 'To suggest work, call litch_sessions.start with initiation "propose": each call makes one card the user can start; nothing runs until they do. Write your final answer to the user as the last message of the turn.',
-    `A fresh session sees nothing of this conversation: it gets only the two parts of its brief, written in your own words for someone who has not read any of this. background: the overall goal, what has been decided or ruled out so far, the constraints to respect, and how this piece fits in (at least ${SESSION_TOOL_LIMITS.freshBackgroundMinWidth} wide; a CJK character counts as 2). prompt: the task itself, the files or area, and what done looks like. A fork already has this conversation, so it needs only the prompt. Follow-ups for a session you started go to it with litch_sessions.send, not to a new session.`,
-    'Right before each litch_sessions.start or hand_off, write a bold title line and one sentence on what it will do.',
+      ? 'Every turn ends with litch_sessions.wrap_up and then your final answer, in that order. When the work is done (in a turn that only answers a question: before you write the answer), call wrap_up exactly once. Part of wrapping up is deciding, unasked, whether the request left a real follow-up and where it runs; most turns leave none. A task of its own (work that lands apart from this change, something the user set aside earlier, or a self-contained next task better started fresh than from a long history; never work unrelated to the request) goes into suggestions, skipping cards you already proposed this turn. A decision or step the turn leaves to the user, such as going ahead here with what you just found, goes into ask: that one decision as one short question, with reply buttons in actions, your pick first. With neither, pass an empty suggestions list and no ask. Then write your final answer to the user as the last message of the turn: complete on its own, never a summary of or a pointer to text above it, because what came before wrap_up is shown folded as work in progress. If you skip wrap_up, Litch reminds you in a new message.'
+      : 'Most turns leave no follow-up. To suggest a task of its own, call litch_sessions.start with initiation "propose": each call makes one card the user can start; nothing runs until they do. Write your final answer to the user as the last message of the turn.',
+    FRESH_BRIEF,
+    TITLE_LINE,
     'If the user tells you to start a card ("start the second one"), call litch_sessions.accept with its proposal_id. If a card went stale (done here after all, no longer needed, replaced by a better one), withdraw it with litch_sessions.withdraw; propose the replacement first.',
   ].join('\n')
 }
 
-/** 收尾开着（默认）时的规则：客户端带的就是这一份 */
+/** 什么才配单开一个会话：几份规则共用 */
+const SESSION_PURPOSE =
+  'What a separate session is for: a task of its own. It outlives this turn, a short brief is enough to start it, the user may want to open, steer or review it apart from this work, and it ends in something of its own (a branch, a pull request, a change in another repository). A piece of the task at hand is never one, however large or parallel: searching or reading widely, independent parts of one change, and testing, checking or reviewing what you built run here or in your own subagents, whose results come back to you in this turn. Quick things (a question, a read, one edit, a handful of tool calls) stay here.'
+
+const USER_ASKED =
+  '- The user asked in words for separate, parallel or background work, or told you to start a piece now: litch_sessions.start with initiation "user_asked", one session per independent piece. Pieces whose results you need for your answer in this turn go to your own subagents instead, unless the user asked for sessions.'
+
+const HAND_OFF =
+  'If a new user message about something unrelated arrives while you are in the middle of a task, hand that task off with litch_sessions.hand_off (a title and the remaining plan: steps, files, what done looks like), then answer the new message. A small correction is not that: just adjust. If the user said to keep working here, keep it here.'
+
+const FRESH_BRIEF = `A fresh session sees nothing of this conversation: it gets only the two parts of its brief, written in your own words for someone who has not read any of this. background: the overall goal, what has been decided or ruled out so far, the constraints to respect, and how this piece fits in (at least ${SESSION_TOOL_LIMITS.freshBackgroundMinWidth} wide; a CJK character counts as 2). prompt: the task itself, the files or area, and what done looks like. A fork already has this conversation, so it needs only the prompt. Follow-ups for a session you started go to it with litch_sessions.send, not to a new session.`
+
+const TITLE_LINE =
+  'Right before each litch_sessions.start or hand_off, write a bold title line and one sentence on what it will do.'
+
+/** 任务卡关着时的规则：只有用户明说时派子会话、交接、简报，不提建议、offer、收尾 */
+function plainSessionRules(): string {
+  return [
+    'Separate sessions (Litch). Work can run in a separate session on this device, possibly on another harness, model or folder, when the user asks for it.',
+    SESSION_PURPOSE,
+    USER_ASKED.slice(2),
+    HAND_OFF,
+    FRESH_BRIEF,
+    TITLE_LINE,
+    'If the user tells you to start one of the cards already in this conversation, call litch_sessions.accept with its proposal_id. Write your final answer to the user as the last message of the turn.',
+  ].join('\n')
+}
+
+/** 收尾开着（默认）、任务卡开着时的规则：客户端带的就是这一份 */
 export const SESSION_PROPOSAL_RULES = sessionProposalRules(true)
 
 const THREAD_ID = { type: 'string', description: 'Session id (thread id) from list or start.' }
@@ -318,7 +400,7 @@ const PROPOSAL_ID = { type: 'string', description: 'proposal_id returned by star
 const WRAP_UP_TOOL: ClientToolFunctionSpec = {
   type: 'function',
   name: SESSION_TOOL.wrapUp,
-  description: `Call this exactly once in every turn, when the work is done and before your final answer, even when there is nothing to suggest (pass an empty list); then write the final answer as the last message of the turn, complete on its own (not a summary of or a pointer to text above). First decide, unasked, whether the request left real follow-up work for its own session: the next step it implies, a piece you left or could not verify, the part that can run while the user reviews the rest, something the user set aside earlier, or a self-contained next task better started fresh; never unrelated work. Each suggestion becomes a card the user can start; nothing runs until they do. At most ${SESSION_TOOL_LIMITS.proposalsPerTurn} cards per turn, counting start proposals.`,
+  description: `Call this exactly once in every turn, when the work is done and before your final answer, even when there is nothing to pass (an empty suggestions list, no ask); then write the final answer as the last message of the turn, complete on its own (not a summary of or a pointer to text above). First decide, unasked, whether the request left a real follow-up and where it runs; most turns leave none. suggestions: tasks of their own, each a card the user can start (nothing runs until they do): work that lands apart from this change, something the user set aside earlier, or a self-contained next task better started fresh; never unrelated work, and never a piece of this task (a piece you left or could not verify is this task: finish it, or say so in your answer). ask and actions: the one decision or step this turn leaves to the user, such as going ahead here with the one piece of work that acts on what you just found (that piece is never a card). At most ${SESSION_TOOL_LIMITS.proposalsPerTurn} cards per turn, counting start proposals.`,
   inputSchema: {
     type: 'object',
     properties: {
@@ -362,21 +444,21 @@ const WRAP_UP_TOOL: ClientToolFunctionSpec = {
       },
       ask: {
         type: 'string',
-        description: `Only when this turn leaves the user one decision (for example whether to go ahead here with what you just found): that one short question, under ${SESSION_TOOL_LIMITS.askChars} characters. Omit when nothing waits on the user.`,
+        description: `Only when this turn leaves the user a decision to make or a step to take (for example whether to go ahead here with the fix for what you just found): that one decision as one short question, under ${SESSION_TOOL_LIMITS.askChars} characters, never two joined by "and", with no reason or recommendation and without listing the options the buttons give. Omit when nothing waits on the user.`,
       },
       actions: {
         type: 'array',
-        description: `Reply buttons answering ask, 1 to ${SESSION_TOOL_LIMITS.wrapUpActions}, your recommendation first. A click sends message (or the label) back to you as the user's words.`,
+        description: `Reply buttons answering ask, 1 to ${SESSION_TOOL_LIMITS.wrapUpActions}. The first is your recommendation; add a second only when it is a realistic alternative the user might pick. A click sends message (or the label) back to you as the user's words. Only with ask.`,
         items: {
           type: 'object',
           properties: {
             label: {
               type: 'string',
-              description: `Button text, 1-3 words, under ${SESSION_TOOL_LIMITS.actionLabelChars} characters.`,
+              description: `Button text in the user's voice, 1-3 words (for example "Yes, fix it"), under ${SESSION_TOOL_LIMITS.actionLabelChars} characters.`,
             },
             message: {
               type: 'string',
-              description: `What the click sends, under ${SESSION_TOOL_LIMITS.actionMessageChars} characters. Omit when the label says it all.`,
+              description: `What the click sends as the user's words, plain text under ${SESSION_TOOL_LIMITS.actionMessageChars} characters. Omit when the label says it all.`,
             },
           },
           required: ['label'],
@@ -389,16 +471,32 @@ const WRAP_UP_TOOL: ClientToolFunctionSpec = {
   },
 }
 
+/** 命名空间说明里讲建议的那一句，跟着两个开关 */
+function suggestionLine(wrapUp: boolean, taskCards: boolean): string {
+  if (!taskCards)
+    return 'Start one only when the user asks for it in words (start, initiation "user_asked").'
+  return `${wrapUp ? 'Every turn ends with wrap_up and then your final answer; most turns have nothing to pass, and a task of its own goes into its suggestions as a card.' : 'A task of its own becomes a card with start (initiation "propose").'} A new task unrelated to this session starts with an offer (start, initiation "offer").`
+}
+
+/** start 的说明：任务卡关着时只有 user_asked */
+function startDescription(wrapUp: boolean, taskCards: boolean): string {
+  const fresh = `A fresh sub-session knows only background and prompt: background gives the context it cannot see (at least ${SESSION_TOOL_LIMITS.freshBackgroundMinWidth} wide; a CJK character counts as 2), prompt the task. Harness, model, effort and folder default to this session's current ones (model and effort: the target harness's defaults when the harness differs).`
+  if (!taskCards)
+    return `Start a sub-session the user asked for in their latest message (initiation "user_asked"); it starts now and runs on its own. ${fresh}`
+  return `Start a sub-session, propose one, or offer a new session. initiation "user_asked": the user asked for separate work in their latest message; it starts now. "propose" (default): a card the user may start; nothing runs until they do (at most ${SESSION_TOOL_LIMITS.proposalsPerTurn} cards per turn). "offer": after a task has been finished in this session, the user's latest message is a new task unrelated to it; send the title only, as the only call in that message; the card asks the user "New session" or "Do it here" and the call waits for the answer, which tells you what to do next. ${fresh}${wrapUp ? ' To suggest work at the end of a turn, use wrap_up instead.' : ''}`
+}
+
 /**
- * litch_sessions 这组工具。wrapUp 跟着设置里“每回合收尾”的开关：客户端带的是开着的那份（SESSION_TOOLS），
- * 设备进程建会话时按设置换成对应的那份（session-tools.mts 的 currentSessionTools）
+ * litch_sessions 这组工具。wrapUp 跟着设置里“每回合收尾”的开关，taskCards 跟着这个 harness 的“任务卡”开关
+ *（关着时没有 wrap_up，start 只收 user_asked，规则不提建议）：客户端带的是都开着的那份（SESSION_TOOLS），
+ * 设备进程建会话时按设置和会话的 harness 换成对应的那份（session-tree.mts 的 currentSessionTools）
  */
-export function sessionTools(wrapUp: boolean): ClientToolNamespaceSpec {
+export function sessionTools(wrapUp: boolean, taskCards = true): ClientToolNamespaceSpec {
   return {
     type: 'namespace',
     name: CLIENT_TOOL_NAMESPACE.sessions,
-    description: `Litch sessions on this device. A sub-session is a full, separate session the user can open and talk to; use it for independent work the user also wants to follow, or work that needs another harness, model or folder. For quick lookups inside this task, use your own subagents instead. ${wrapUp ? 'Every turn ends with wrap_up and then your final answer; real follow-up work goes into its suggestions as cards.' : 'Real follow-up work becomes a card with start (initiation "propose").'} A new task unrelated to this session starts with an offer (start, initiation "offer"). Results of your sub-sessions arrive later as a <litch-session-event> message; do not poll. You can only send to or interrupt your own sub-sessions. Never answer approvals or questions waiting inside a sub-session: only the user can.`,
-    instructions: sessionProposalRules(wrapUp),
+    description: `Litch sessions on this device. A sub-session is a full, separate session the user can open and talk to; it is for a task of its own that the user may want to follow apart from this work, or for work that needs another harness, model or folder. Parts of the task at hand, however large, run here or in your own subagents. ${suggestionLine(wrapUp, taskCards)} Results of your sub-sessions arrive later as a <litch-session-event> message; do not poll. You can only send to or interrupt your own sub-sessions. Never answer approvals or questions waiting inside a sub-session: only the user can.`,
+    instructions: sessionProposalRules(wrapUp, taskCards),
     tools: [
       {
         type: 'function',
@@ -438,8 +536,7 @@ export function sessionTools(wrapUp: boolean): ClientToolNamespaceSpec {
       {
         type: 'function',
         name: SESSION_TOOL.start,
-        description:
-          `Start a sub-session, propose one, or offer a new session. initiation "user_asked": the user asked for separate work in their latest message; it starts now. "propose" (default): a card the user may start; nothing runs until they do (at most ${SESSION_TOOL_LIMITS.proposalsPerTurn} cards per turn). "offer": the user's latest message is a new task unrelated to this session; send the title only, as the only call in that message; the card asks the user "New session" or "Do it here" and the call waits for the answer, which tells you what to do next. A fresh sub-session knows only background and prompt: background gives the context it cannot see (at least ${SESSION_TOOL_LIMITS.freshBackgroundMinWidth} wide; a CJK character counts as 2), prompt the task. ${wrapUp ? 'To suggest work at the end of a turn, use wrap_up instead.' : ''}`.trimEnd(),
+        description: startDescription(wrapUp, taskCards),
         inputSchema: {
           type: 'object',
           properties: {
@@ -472,9 +569,12 @@ export function sessionTools(wrapUp: boolean): ClientToolNamespaceSpec {
               description:
                 'fork copies this whole conversation (same harness only). Default fresh.',
             },
-            initiation: { type: 'string', enum: ['user_asked', 'propose', 'offer'] },
+            initiation: {
+              type: 'string',
+              enum: taskCards ? ['user_asked', 'propose', 'offer'] : ['user_asked'],
+            },
           },
-          required: ['title'],
+          required: taskCards ? ['title'] : ['title', 'initiation'],
           additionalProperties: false,
         },
       },
@@ -516,12 +616,13 @@ export function sessionTools(wrapUp: boolean): ClientToolNamespaceSpec {
           additionalProperties: false,
         },
       },
-      ...(wrapUp ? [WRAP_UP_TOOL] : []),
+      ...(wrapUp && taskCards ? [WRAP_UP_TOOL] : []),
       {
         type: 'function',
         name: SESSION_TOOL.accept,
-        description:
-          'Start one of your cards: a proposal the user told you to start in their latest message (for example "start the second one"; refused on turns the user did not start), or an offer the user answered with "New session" (then pass the full brief: background and prompt, and harness, model, cwd, kind when they differ from this session).',
+        description: taskCards
+          ? 'Start one of your cards: a proposal the user told you to start in their latest message (for example "start the second one"; refused on turns the user did not start; it starts as proposed, with this session\'s current model and effort where the card has none), or an offer the user answered with "New session" (then pass the full brief: background and prompt, and harness, model, effort, cwd, kind when they differ from this session).'
+          : 'Start one of the cards already in this conversation that the user told you to start in their latest message (for example "start the second one"; refused on turns the user did not start). It starts as proposed, with this session\'s current model and effort where the card has none.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -603,5 +704,5 @@ export function sessionTools(wrapUp: boolean): ClientToolNamespaceSpec {
   }
 }
 
-/** 客户端建会话时带的那份（收尾开着） */
+/** 客户端建会话时带的那份（收尾、任务卡都开着） */
 export const SESSION_TOOLS: ClientToolNamespaceSpec = sessionTools(true)

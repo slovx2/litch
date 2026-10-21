@@ -119,12 +119,22 @@ woken to continue.
   Qwen Code, ACP) the model has `litch_sessions` tools: list and read sessions on the device, start
   sub-sessions, send to and interrupt its own sub-sessions, wait for them. When the user did not ask for
   a sub-session in that turn, it becomes a suggested task instead of starting directly.
-- **Suggested tasks**: the model is told to suggest real follow-up work (something it noticed, the next
-  step its answer recommends, independent steps of a plan) as a card instead of only mentioning it. The
-  card sits in the conversation at the point it was suggested and shows its state (waiting, started,
-  dismissed, withdrawn by the model, expired after 7 days). Buttons: Start, Edit and start (change the
-  harness, model, effort, project, folder, fresh or with context, title, task, background,
-  permissions), Dismiss. A fresh card the model raises always carries a background (the overall goal,
+- **Suggested tasks**: the model suggests a task of its own as a card instead of only mentioning it:
+  work that ends in something of its own (a branch, a pull request) and that you may want to follow
+  apart from this conversation, such as something it noticed, the follow-up its answer recommends, or
+  independent steps of an agreed plan. Parts of the current task (however large), and anything it left
+  unfinished or unverified, stay in the conversation; most turns end with no card. When the next step
+  simply continues what the model just found (say, fixing what it diagnosed), it asks one short
+  question at the end of the turn with one or two reply buttons instead of making a card; a click
+  sends the button's words as your message, and the question lapses with your next message. The
+  card shows its state (waiting, started, done here, dismissed, withdrawn by the model, expired after
+  7 days). Buttons: Start, Do it here (the card is settled and "Do it here: <title>" plus the task is
+  sent to the session as your message, after the running turn if one is running), Edit and start
+  (change the harness, model, effort, project, folder, fresh or with context, title, task,
+  background, permissions), Dismiss. Whatever the card does not set comes from the parent session as
+  it is when you start: harness, model, reasoning effort and folder (on another harness, that
+  harness's default model and effort). The same holds when the model starts a sub-session or hands
+  off a task. A fresh card the model raises always carries a background (the overall goal,
   decisions and constraints so far) next to the task; the sub-session gets it as its own section
   before the task. Expand the brief on the card to read it.
   The side panel's **Suggested tasks** tab lists every card of the current session, with a badge for
@@ -138,10 +148,15 @@ woken to continue.
   turn (a light line "Reminded the model to wrap up"). Device settings: `sessions.wrapUp` (on by default)
   turns the wrap-up off for sessions created afterwards (the model then suggests cards only when it sees
   fit, and nothing is reminded); `sessions.wrapUpReminder` (on by default, no effect while
-  `sessions.wrapUp` is off) switches the reminder, at once. Started cards
+  `sessions.wrapUp` is off) switches the reminder, at once. **Task cards** can be switched off per
+  harness with the device setting `harness.<id>.taskCards` (on by default, for example
+  `scripts/litch settings set <device> harness.pi.taskCards=false`): sessions of that harness then get
+  no suggested-task cards, no new-session offers, no wrap-up and no reminder, at once and in running
+  sessions too; the model still starts sub-sessions when you ask and hands off tasks. Started cards
   show the harness and folder the sub-session actually got. The mobile app shows the same cards and a
   per-session list (the "N suggested tasks waiting for you" bar at the top of a conversation, or the menu).
-- **New task or here**: when the user asks for something unrelated to the current session, the model
+- **New task or here**: when the user asks for something unrelated to the current session (after a
+  first task has been done in it; the first request is simply what the session is for), the model
   first shows a card with only a title and two buttons, "New session" and "Do it here". New session: the
   model writes the brief and the sub-session starts. Do it here: the model does it in this session.
   Sending a new message instead of choosing counts as "Do it here". Requests that build on the session

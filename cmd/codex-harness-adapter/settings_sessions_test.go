@@ -77,3 +77,28 @@ func TestWrapUpSettingIsDeclared(t *testing.T) {
 		t.Fatalf("写成关应该能写进去: %v %+v %v", changed, problem, err)
 	}
 }
+
+// 任务卡按 harness 的开关：每个 harness 自己那一组里一项，作用域 harness、默认开、不用重启；写成关能写进去，别的 harness 不受影响。
+func TestTaskCardsSettingIsDeclaredPerHarness(t *testing.T) {
+	cfg := settingsTestConfiguration(t)
+	schema := buildSettingsSchema(cfg)
+	for _, id := range knownHarnesses {
+		spec, declared := schema.spec(taskCardsKey(id))
+		if !declared || spec.Group != "harness."+id || spec.Type != settingBoolean || spec.Scope != harnessScope(id) || spec.Restart != restartNone || spec.Default != true {
+			t.Fatalf("%s 的任务卡开关没有照 harness 级、默认开的布尔项声明: %+v", id, spec)
+		}
+		if spec.Title.ZH == "" || spec.Title.EN == "" || spec.Description.ZH == "" || spec.Description.EN == "" {
+			t.Fatalf("%s 的任务卡开关缺中文或者英文的标题、说明", id)
+		}
+	}
+	if taskCardsKey("pi") != "harness.pi.taskCards" {
+		t.Fatalf("键名应和 packages/protocol/src/session-tree.mts 的 taskCardsSettingKey 一样: %s", taskCardsKey("pi"))
+	}
+	changed, problem, err := cfg.settings.apply(0, []settingEdit{edit(taskCardsKey("pi"), false)}, schema, cfg.validateSettings)
+	if err != nil || problem != nil || len(changed) != 1 {
+		t.Fatalf("写成关应该能写进去: %v %+v %v", changed, problem, err)
+	}
+	if _, written := cfg.settings.lookup(taskCardsKey("claude-code")); written {
+		t.Fatal("别的 harness 的任务卡开关不该被写")
+	}
+}

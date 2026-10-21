@@ -7,6 +7,8 @@
 // （没调的用户回合结束后设备进程开回合提醒）。设置里“每回合收尾”关掉时新会话没有这个工具（session-tree.mts）。
 // start 的 initiation offer 只带标题落一张 offer 卡，调用一直等到用户选（或者又发了话、回合结束）；选了新会话的，
 // 模型再用 accept 带上简报开起来。hand_off 把做到一半的任务交给一个分叉到这个回合之前的子会话，立刻开始。
+// 这个 harness 的任务卡关着（设备设置 harness.<id>.taskCards）时当场生效：wrap_up 的建议一条都不落、propose 回 blocked、
+// offer 直接当在这里做；wrap_up 的 ask、actions 只整理（wrapUpAsk）、不存库，界面从调用参数里读。
 // 结果是一段 JSON 文字，失败第一行是 [litch:<kind>]，后面是模型能照着改的一句话。
 import {
   type ClientToolCallResponse,
@@ -24,6 +26,7 @@ import {
   type SessionsWrapUpResult,
   type SessionTurnSummary,
   textWidth,
+  wrapUpAsk,
 } from '../../protocol/src/client-tools-sessions.mjs'
 import {
   parseSessionEvent,
@@ -231,11 +234,12 @@ interface Spec {
   background: string
   harness: string | undefined
   model: string | undefined
+  effort: string | undefined
   cwd: string | undefined
   kind: SessionLineageKind
 }
 
-/** 子会话起在哪：harness、模型、目录、fresh 还是 fork。harness 要在这台设备上，fork 只能同 harness */
+/** 子会话起在哪：harness、模型、强度、目录、fresh 还是 fork。harness 要在这台设备上，fork 只能同 harness */
 function targetOf(
   args: Record<string, unknown>,
   call: DeviceToolCall,
@@ -243,6 +247,7 @@ function targetOf(
 ): Omit<Spec, 'title' | 'prompt' | 'background'> {
   const harness = string(args, 'harness')
   const model = string(args, 'model')
+  const effort = string(args, 'effort')
   const cwd = string(args, 'cwd')
   const kind = string(args, 'kind') ?? 'fresh'
   if (kind !== 'fresh' && kind !== 'fork')
@@ -251,7 +256,7 @@ function targetOf(
     throw new Refused('invalid', `There is no harness "${harness}" on this device.`)
   if (kind === 'fork' && harness && harness !== call.harness)
     throw new Refused('invalid', `fork only works within the same harness (${call.harness}).`)
-  return { harness, model, cwd, kind }
+  return { harness, model, effort, cwd, kind }
 }
 
 /**
@@ -304,6 +309,7 @@ function proposeOne(
     background: spec.background,
     harness: spec.harness ?? null,
     model: spec.model ?? null,
+    effort: spec.effort ?? null,
     cwd: spec.cwd ?? null,
     kind: spec.kind,
     // 子会话停下后唤不唤醒由 Litch 定，不交给模型：模型派的、提的一律唤醒（用户从卡片开始时可以改）
@@ -316,6 +322,10 @@ function proposeOne(
 
 const EXPIRES = `it expires in ${SESSION_TREE_LIMITS.proposalTtlSeconds / 86400} days`
 
+/** 这个 harness 的任务卡关着时，建议、提案不落卡的原因（已经建好的会话手里还有建议的工具，当场生效靠它） */
+const cardsOff = (harness: string) =>
+  `Task cards are turned off for ${harness} on this device, so no card was made. Do not suggest work as cards in this session; if a follow-up matters, mention it in your answer.`
+
 async function start(
   tree: SessionTree,
   args: Record<string, unknown>,
@@ -323,7 +333,8 @@ async function start(
   signal: AbortSignal,
 ): Promise<SessionsStartResult> {
   const initiation = string(args, 'initiation') ?? 'propose'
-  if (initiation === 'offer') return offer(tree, args, call, signal)
+  const cards = tree.host.taskCards(call.harness)
+  if (initiation === 'offer') return cards ? offer(tree, args, call, signal) : offerOff(args, call)
   if (initiation !== 'user_asked' && initiation !== 'propose')
     throw new Refused('invalid', 'initiation must be user_asked, propose or offer.')
   const spec = specOf(args, call, tree)
@@ -338,6 +349,7 @@ async function start(
       {
         harness: spec.harness ?? null,
         model: spec.model ?? null,
+        effort: spec.effort ?? null,
         cwd: spec.cwd ?? null,
         kind: spec.kind,
         title: spec.title,
@@ -352,13 +364,19 @@ async function start(
       note: `Started sub-session ${child.threadId} on ${child.harness}. It runs on its own; you will be woken with its result as a <litch-session-event> message. Do not poll it.`,
     }
   }
-  const proposal = proposeOne(tree, call, spec, wider)
   const why =
     initiation !== 'user_asked'
       ? ''
       : !userTurn
         ? 'This turn was not started by the user typing a message, so the request became a proposal. '
         : `${spec.harness ?? call.harness} cannot be sandboxed as tightly as this session (it would run with ${wider}), so the request became a proposal for the user to approve. `
+  // 任务卡关着：不落卡。用户要的、只是降成了提案的，让用户自己从会话菜单开
+  if (!cards)
+    throw new Refused(
+      'blocked',
+      `${why}${cardsOff(call.harness)}${initiation === 'user_asked' ? ' Tell the user they can start it themselves from the session menu (Start a sub-session).' : ''}`,
+    )
+  const proposal = proposeOne(tree, call, spec, wider)
   return {
     proposal_id: proposal.id,
     note: `${why}The user now sees a proposal card for "${proposal.title}". Nothing runs until they accept it; ${EXPIRES}. Do not do the work here as well.`,
@@ -399,6 +417,7 @@ async function offer(
     background: '',
     harness: target.harness ?? null,
     model: target.model ?? null,
+    effort: target.effort ?? null,
     cwd: target.cwd ?? null,
     kind: target.kind,
     wakeParent: true,
@@ -411,6 +430,15 @@ async function offer(
     proposal_id: proposal.id,
     choice: outcome.choice,
     note: offerNote(proposal, outcome),
+  }
+}
+
+/** 任务卡关着时的 offer：不出卡，直接当在这里做 */
+function offerOff(args: Record<string, unknown>, call: DeviceToolCall): SessionsStartResult {
+  const title = string(args, 'title', true).trim().slice(0, 120)
+  return {
+    choice: 'here',
+    note: `Task cards are turned off for ${call.harness} on this device, so there is no "New session" card: do "${title}" here, in this session.`,
   }
 }
 
@@ -458,10 +486,17 @@ async function wrapUp(
       `This turn is already wrapped up; do not call wrap_up again. ${finish}`,
     )
   tree.wrappedUp(call.threadId, call.turnId)
+  // 问题和按钮不建提案、不存库，界面从这次调用的参数里读；这里只按规矩整理一遍，改过的话提一句
+  const asked = wrapUpAsk(args)
+  const cards = tree.host.taskCards(call.harness)
   const suggestions: SessionsWrapUpResult['suggestions'] = []
   // 一条一条来：前面落下的提案算进后面的门槛（一回合几张、同标题）
   for (const one of given) {
     const title = isObject(one) && typeof one.title === 'string' ? one.title.trim() : ''
+    if (!cards) {
+      suggestions.push({ title, refused: cardsOff(call.harness) })
+      continue
+    }
     try {
       if (!isObject(one))
         throw new Refused(
@@ -482,12 +517,23 @@ async function wrapUp(
       ? 'Nothing suggested.'
       : made > 0
         ? `The user now sees ${made} suggested-task card${made > 1 ? 's' : ''}; nothing runs until they start one, and ${EXPIRES}. Do not do that work here as well.`
-        : 'No card was made.',
-    refused > 0
-      ? `${refused} suggestion${refused > 1 ? 's were' : ' was'} refused (see refused). If you can fix them, call wrap_up again with only the fixed ones first; otherwise mention that work in one line. ${finish}`
-      : `Your turn is wrapped up; do not call wrap_up again. ${finish}`,
+        : cards
+          ? 'No card was made.'
+          : '',
+    ...(asked.value
+      ? [
+          `The user sees your question${asked.value.actions.length ? ' with its buttons' : ''} at the end of the turn${asked.trimmed ? ' (shortened to fit the limits)' : ''}; a click comes back to you as their message.`,
+        ]
+      : asked.trimmed
+        ? ['ask was empty, so no question or buttons are shown.']
+        : []),
+    !cards && refused > 0
+      ? `${cardsOff(call.harness)} ${finish}`
+      : refused > 0
+        ? `${refused} suggestion${refused > 1 ? 's were' : ' was'} refused (see refused). If you can fix them, call wrap_up again with only the fixed ones first; otherwise mention that work in one line. ${finish}`
+        : `Your turn is wrapped up; do not call wrap_up again. ${finish}`,
   ]
-  return { suggestions, note: parts.join(' ') }
+  return { suggestions, note: parts.filter(Boolean).join(' ') }
 }
 
 /** 调用者自己的提案（挂在调用者这个会话上的）。没有这个提案、别人的都回给模型 */
@@ -516,7 +562,16 @@ const settledWord: Record<Exclude<SessionProposal['status'], 'pending' | 'starte
 }
 
 /** accept 里只有开始 offer 卡时才给的简报字段 */
-const BRIEF_FIELDS = ['prompt', 'background', 'title', 'harness', 'model', 'cwd', 'kind'] as const
+const BRIEF_FIELDS = [
+  'prompt',
+  'background',
+  'title',
+  'harness',
+  'model',
+  'effort',
+  'cwd',
+  'kind',
+] as const
 
 /**
  * 用户在这个回合里让开始某张提案：按提案原样起（同用户点“开始”），只在用户亲手发起的回合里允许。
@@ -539,7 +594,7 @@ async function accept(
   if (BRIEF_FIELDS.some((name) => args[name] !== undefined && args[name] !== null))
     throw new Refused(
       'invalid',
-      `prompt, background, title, harness, model, cwd and kind are only for an offer the user answered with "New session"; proposal ${proposalId} starts as it was proposed. Call accept again with proposal_id only.`,
+      `prompt, background, title, harness, model, effort, cwd and kind are only for an offer the user answered with "New session"; proposal ${proposalId} starts as it was proposed. Call accept again with proposal_id only.`,
     )
   // 正在被用户点开始：等它起完，按已经开始了答
   const running = tree.accepting.get(proposalId)
@@ -623,6 +678,7 @@ async function acceptOffer(
       background: args.background,
       harness: args.harness ?? proposal.harness,
       model: args.model ?? proposal.model,
+      effort: args.effort ?? proposal.effort,
       cwd: args.cwd ?? proposal.cwd,
       kind: args.kind ?? proposal.kind,
     },
@@ -645,6 +701,7 @@ async function acceptOffer(
       // 空字符串是用缺省（这个会话的）
       harness: spec.harness ?? '',
       model: spec.model ?? '',
+      effort: spec.effort ?? '',
       cwd: spec.cwd ?? '',
       kind: spec.kind,
     },
