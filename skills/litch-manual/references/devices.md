@@ -4,7 +4,9 @@
 
 - **Local** is this computer. It is always there; Litch starts its bundled device service on launch.
   The service keeps running after Litch quits, so sessions, terminals and scheduled tasks are not
-  interrupted. Local cannot be removed or renamed.
+  interrupted. On quit Litch asks whether to stop it as well (only for a service Litch started
+  itself); the choice can be remembered, and File → "Ask About the Background Service on Quit" turns
+  the question back on. Local cannot be removed or renamed.
 - A **remote device** is another machine reached through its own SSH server. Litch logs in with the
   user's ssh config and keys, starts the device service there if needed and keeps one connection that
   carries every harness on that machine. No port is opened on either side.

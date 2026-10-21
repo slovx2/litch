@@ -48,6 +48,7 @@ import {
   OPEN_EXTERNAL,
   PICK_FOLDER,
   REQUEST_CORE_PORT,
+  SERVICE,
   SET_LANGUAGE,
   SET_LOOK,
   TERMINALS,
@@ -57,7 +58,13 @@ import {
   UPDATE_SET_AUTO,
   UPDATE_STATE,
 } from './ipc.mjs'
-import { bundledAdapter, defaultAdapterHome, serviceEnv, stopIdleDevice } from './local-adapter.mjs'
+import {
+  bundledAdapter,
+  defaultAdapterHome,
+  serviceEnv,
+  stopDevice,
+  stopIdleDevice,
+} from './local-adapter.mjs'
 import { loginEnvironment } from './login-env.mjs'
 import {
   backdropOf,
@@ -73,6 +80,13 @@ import { MANUAL_SET_ENABLED, MANUAL_STATUS } from './manual-ipc.mjs'
 import { createManualSkill } from './manual-skill.mjs'
 import { installMenu, type MenuLang } from './menu.mjs'
 import { readPreferences, writePreference } from './preferences.mjs'
+import {
+  askServiceBeforeQuit,
+  readServiceQuitChoice,
+  type ServiceQuitOutcome,
+  stopServiceOnQuit,
+  writeServiceQuitChoice,
+} from './quit-service.mjs'
 import {
   type AliveCount,
   type QuitOutcome,
@@ -275,6 +289,11 @@ function startCore(): void {
         return
       }
       clientTools.handle(tool)
+      return
+    }
+    const service = message as { type?: unknown; id?: unknown; stoppable?: unknown } | null
+    if (service?.type === SERVICE && typeof service.id === 'number') {
+      serviceWaiting.get(service.id)?.(service.stoppable === true)
       return
     }
     const data = message as { type?: unknown; id?: unknown; alive?: AliveCount } | null
@@ -646,6 +665,34 @@ app.on('will-quit', (event) => {
     })
 })
 
+/**
+ * 用户选了退出时一起关后台服务：核心已经结束，再请服务停下（忙的话问一声，quit-service.mts）。
+ * Windows 上有下好的安装程序时由 installOnQuit 去停，这里不管
+ */
+let stoppingServiceOnQuit = false
+app.on('will-quit', (event) => {
+  if (!stopServiceAfterQuit || stoppingServiceOnQuit || !adapterRoot) return
+  if (process.platform === 'win32' && updater?.installer()) return
+  event.preventDefault()
+  stoppingServiceOnQuit = true
+  const adapter = bundledAdapter(adapterRoot)
+  const home = process.env.LITCH_ADAPTER_HOME || defaultAdapterHome()
+  const lang = menuLang ?? 'en'
+  const env = serviceEnv(lang, null)
+  void stopServiceOnQuit({
+    lang,
+    stop: (ifIdle) => stopDevice(adapter, home, env, new AbortController().signal, ifIdle),
+    ...(serviceBusyAnswer
+      ? { answer: serviceBusyAnswer }
+      : smoke
+        ? { answer: 'keep' as const }
+        : {}),
+    log: (line) => console.error(`[service] ${line}`),
+  })
+    .catch((error: unknown) => console.error(`[service] 关后台服务失败：${String(error)}`))
+    .then(() => app.exit(0))
+})
+
 // ---------- 退出之前：还有终端在运行的话问一声（quit-terminals.mts） ----------
 
 let askSeq = 0
@@ -695,6 +742,56 @@ function settleQuit(answer = quitAnswer): Promise<QuitOutcome> {
   })
 }
 
+// ---------- 退出之前：后台服务要不要一起关（quit-service.mts） ----------
+
+const serviceWaiting = new Map<number, (stoppable: boolean) => void>()
+
+/** 问核心本机连着的是不是 device-start 拉起的服务。核心没了、到点没答，都当作不是 */
+function askCoreService(timeoutMs: number): Promise<boolean> {
+  const child = core
+  if (!child) return Promise.resolve(false)
+  return new Promise((resolve) => {
+    const id = ++askSeq
+    const timer = setTimeout(() => {
+      serviceWaiting.delete(id)
+      resolve(false)
+    }, timeoutMs)
+    serviceWaiting.set(id, (stoppable) => {
+      clearTimeout(timer)
+      serviceWaiting.delete(id)
+      resolve(stoppable)
+    })
+    child.postMessage({ type: SERVICE, id })
+  })
+}
+
+/** 自检时不弹窗，用这里给的回答：退出时问的那一下（keep、stop、cancel），服务忙时问的那一下（force、keep） */
+const serviceAnswer = ['keep', 'stop', 'cancel'].includes(process.env.LITCH_QUIT_SERVICE ?? '')
+  ? (process.env.LITCH_QUIT_SERVICE as 'keep' | 'stop' | 'cancel')
+  : undefined
+const serviceBusyAnswer = ['force', 'keep'].includes(process.env.LITCH_QUIT_SERVICE_BUSY ?? '')
+  ? (process.env.LITCH_QUIT_SERVICE_BUSY as 'force' | 'keep')
+  : undefined
+
+function settleService(): Promise<ServiceQuitOutcome> {
+  const dataDir = app.getPath('userData')
+  return askServiceBeforeQuit({
+    lang: menuLang ?? 'en',
+    stoppable: () => askCoreService(1500),
+    choice: () => readServiceQuitChoice(dataDir),
+    remember(choice) {
+      writeServiceQuitChoice(dataDir, choice)
+      refreshMenu()
+    },
+    window: () => BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null,
+    // 自检不弹窗；没给回答的自检按“保留”算，免得卡在一个看不见的对话框上，也不去关真的服务
+    ...(serviceAnswer ? { answer: serviceAnswer } : smoke ? { answer: 'keep' as const } : {}),
+  })
+}
+
+/** 用户选了退出时一起关后台服务：应用真的退出时（will-quit）再关 */
+let stopServiceAfterQuit = false
+
 /** 应用菜单现在用的语言。界面起来之前先按系统的来，界面报上来之后跟界面的 */
 let menuLang: MenuLang | null = null
 function refreshMenu(): void {
@@ -739,6 +836,16 @@ function refreshMenu(): void {
       }
       refreshMenu()
     },
+    askServiceOnQuit: () => readServiceQuitChoice(dataDir) === 'ask',
+    setAskServiceOnQuit(ask) {
+      try {
+        // 关掉“每次都问”等于记住“保留”：这是不打断任何东西的那一种
+        writeServiceQuitChoice(dataDir, ask ? 'ask' : 'keep')
+      } catch (error) {
+        dialog.showErrorBox(app.name, String(error))
+      }
+      refreshMenu()
+    },
   })
 }
 function showMenu(lang: MenuLang): void {
@@ -774,9 +881,19 @@ app.on('before-quit', (event) => {
         console.error(`退出前清点终端失败：${String(error)}`)
         return { proceed: true, alive: null, asked: false, did: 'none' }
       })
-      .then((outcome) => {
+      .then(async (outcome) => {
+        if (!outcome.proceed) return false
+        // 终端问完再问后台服务；点了取消就都不退了
+        const service = await settleService().catch((error: unknown): ServiceQuitOutcome => {
+          console.error(`退出前问后台服务失败：${String(error)}`)
+          return { proceed: true, stop: false, asked: false }
+        })
+        stopServiceAfterQuit = service.stop
+        return service.proceed
+      })
+      .then((proceed) => {
         quitAsking = false
-        if (!outcome.proceed) return
+        if (!proceed) return
         quitSettled = true
         app.quit()
       })

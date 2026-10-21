@@ -93,6 +93,8 @@ export interface SessionTiming {
   clientToolGraceMs: number
   /** 子会话里的审批、提问挂了这么久没人答，算它停下来在等用户（session-tree.mts） */
   needsUserMs: number
+  /** 会话树的连接订阅着、又用不着了的会话，隔这么久退订（session-tree.mts 的 releaseLater） */
+  releaseMs: number
 }
 
 /** 这台设备上的一个 harness：怎么连它的运行时，以及适配器主进程眼里它的状态 */

@@ -21,6 +21,11 @@ export const MENU = 'litch:menu'
  * 一问一答，用 id 对上；不传终端里的任何内容
  */
 export const TERMINALS = 'terminals'
+/**
+ * 主进程 ↔ 工具进程：退出应用之前问一声，本机连着的是不是 device-start 拉起的那份后台服务（是的话才问用户要不要一起关）。
+ * 一问一答，用 id 对上（quit-service.mts）
+ */
+export const SERVICE = 'service'
 /** 界面 → 主进程：现在的皮肤、明暗、缩放（缩放由主进程做，三样它都记着，下次冷启动用） */
 export const SET_LOOK = 'litch:set-look'
 /** 界面 → 主进程，等应答：应用的名字、版本，和应用里带着哪些许可文本 */

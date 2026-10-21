@@ -126,16 +126,21 @@ export async function widerSandbox(
   return (SANDBOX_RANK[best] ?? 0) < (SANDBOX_RANK[theirs] ?? 0) ? best : null
 }
 
-/** 父会话现在的设置（审批策略、沙箱、目录）：恢复一下就拿得到，顺带让设备进程的连接订阅它 */
+/**
+ * 父会话现在的设置（审批策略、沙箱、目录）：恢复一下就拿得到，顺带让设备进程的连接订阅它。
+ * 订阅留到父会话这一回合结束，用不着了由会话树退订（releaseLater）
+ */
 async function parentSettings(
   tree: SessionTree,
   parentId: string,
   parentHarness: string,
 ): Promise<{ link: EngineLink; config: Record<string, unknown> | null }> {
+  const resumed = await tree.watch(parentHarness, parentId)
   const link = await tree.link(parentHarness)
-  const resumed = await link.request('thread/resume', { threadId: parentId })
-  tree.noteSubscribed(parentHarness, parentId)
-  return { link, config: isObject(resumed) ? resumed : null }
+  // 已经订阅着的 watch 不再恢复，给的是 null：设置照样要读
+  const config = resumed ?? (await link.request('thread/resume', { threadId: parentId }))
+  tree.releaseLater(parentHarness, parentId)
+  return { link, config: isObject(config) ? config : null }
 }
 
 /** 子会话的审批策略、沙箱：不宽于父会话。父会话报不出来的那一项照请求的给（都没有就不带，用引擎的缺省） */

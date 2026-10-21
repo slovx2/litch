@@ -20,7 +20,7 @@ import {
 import type { MessagePortMain } from 'electron'
 import { CLIENT_TOOL, type ClientToolToCore, type ClientToolToMain } from './client-tools/types.mjs'
 import { fileDeviceStore } from './device-store.mjs'
-import { ATTACH, LANGUAGE, TERMINALS } from './ipc.mjs'
+import { ATTACH, LANGUAGE, SERVICE, TERMINALS } from './ipc.mjs'
 import { type AdapterLang, localDevice, upgradeReport } from './local-adapter.mjs'
 import { desktopPairing } from './pairing.mjs'
 import { createForwarder } from './ssh/forward.mjs'
@@ -233,6 +233,14 @@ process.parentPort.on('message', (event) => {
         reply()
       })
     } else reply()
+    return
+  }
+  if (event.data?.type === SERVICE) {
+    // 退出应用之前主进程来问：本机连着的是不是 device-start 拉起的服务。另外指定的入口、前台运行的、
+    // 还没连上过的都不是，那就不问用户要不要关
+    const { id } = event.data as { id: number }
+    const stoppable = local.last()?.service?.detached === true
+    process.parentPort.postMessage({ type: SERVICE, id, stoppable })
     return
   }
   if (event.data?.type === LANGUAGE) {

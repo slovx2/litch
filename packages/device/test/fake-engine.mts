@@ -71,6 +71,7 @@ export class FakeEngine extends FakeUpstream {
         ...this.config,
       }
     }
+    this.handlers['thread/unsubscribe'] = () => ({ status: 'unsubscribed' })
     this.handlers['thread/read'] = (params) => {
       const thread = this.thread(params.threadId)
       const turns = params.includeTurns ? (this.turns.get(thread.id) ?? []) : []

@@ -330,16 +330,31 @@ export type StopOutcome =
  * 忙不忙由服务自己说（有回合在跑、有属于设备的终端在跑、有别的客户端连着，都算忙）。
  * 这条命令从不按进程号去结束谁。被取消时抛 ConnectError，别的都落在返回值里。
  */
-export async function stopIdleDevice(
+export function stopIdleDevice(
   adapter: BundledAdapter,
   home: string,
   env: NodeJS.ProcessEnv,
   signal: AbortSignalLike,
   timeoutMs: number = STOP_TIMEOUT_MS,
 ): Promise<StopOutcome> {
+  return stopDevice(adapter, home, env, signal, true, timeoutMs)
+}
+
+/**
+ * 请这个状态目录上的服务停下。ifIdle 为 false 时不管忙不忙都停（在跑的回合、属于设备的终端跟着结束）：
+ * 只在用户看过忙的原因、说了仍然关闭之后用（quit-service.mts）
+ */
+export async function stopDevice(
+  adapter: BundledAdapter,
+  home: string,
+  env: NodeJS.ProcessEnv,
+  signal: AbortSignalLike,
+  ifIdle: boolean,
+  timeoutMs: number = STOP_TIMEOUT_MS,
+): Promise<StopOutcome> {
   const end = await runCommand(
     adapter,
-    ['device-stop', '--home', home, '--if-idle'],
+    ['device-stop', '--home', home, ...(ifIdle ? ['--if-idle'] : [])],
     env,
     signal,
     timeoutMs,
@@ -360,8 +375,8 @@ export interface LocalDevice {
   last(): DeviceStartResult | null
   /**
    * 这次运行期间由这边拉起来的那份服务（报 started 的那一次）。没拉起过就是 null。
-   * 应用退出时不停它：服务是常驻的，退出之后会话继续在，和远程设备一样。
-   * 以后做“退出时一并停止”的选项时，要停的进程号从这里取；别人启动的服务不在这里，也不归我们停。
+   * 应用退出时默认不停它：服务是常驻的，退出之后会话继续在，和远程设备一样。
+   * 退出时要不要一起停由用户选（quit-service.mts），只停 device-start 拉起的（看 last() 的 service.detached）。
    */
   launched(): DeviceStartResult | null
   /**
