@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-const { dropCommands } = await import('../src/sidebar/drop.ts')
+const { dropCommands, slotOf } = await import('../src/sidebar/drop.ts')
 
 const session = (extra = {}) => ({
   deviceId: 'local',
@@ -55,27 +55,91 @@ test('会话：只能拖回自己的项目（从置顶、组里拿出来），�
   assert.deepEqual(dropCommands(session({ pinned: true }), { kind: 'loose' }, 'local'), [])
 })
 
-test('工作区：拖进置顶、组；拖到外面的工作区上是放回列表、排在它前面', () => {
-  assert.deepEqual(dropCommands(workspace(), PINNED, 'local'), [
-    { name: 'workspace.update', params: { workspaceId: 'app', pinned: true } },
+// 设备上的顺序：置顶的 top，组 sec-1 里的 s1、s2，其余（“项目”里）的 app、docs、web
+const ORDER = [
+  { id: 'app', pinned: false, sectionId: null },
+  { id: 's1', pinned: false, sectionId: 'sec-1' },
+  { id: 'docs', pinned: false, sectionId: null },
+  { id: 'top', pinned: true, sectionId: null },
+  { id: 's2', pinned: false, sectionId: 'sec-1' },
+  { id: 'web', pinned: false, sectionId: null },
+]
+const PROJECTS = { kind: 'projects' }
+const slot = (band, before) => ({ kind: 'slot', band, before })
+const update = (params) => ({ name: 'workspace.update', params: { workspaceId: 'app', ...params } })
+const move = (before) => ({ name: 'workspace.move', params: { workspaceId: 'app', before } })
+
+test('工作区：放进置顶、组是排到那一组的最后（整张表里那一组最后一个的下一个前面）', () => {
+  assert.deepEqual(dropCommands(workspace(), PINNED, 'local', ORDER), [
+    update({ pinned: true }),
+    move('s2'),
   ])
-  assert.deepEqual(dropCommands(workspace(), SECTION, 'local'), [
-    { name: 'workspace.update', params: { workspaceId: 'app', sectionId: 'sec-1' } },
+  assert.deepEqual(dropCommands(workspace(), SECTION, 'local', ORDER), [
+    update({ sectionId: 'sec-1' }),
+    move('web'),
   ])
-  assert.deepEqual(dropCommands(workspace({ sectionId: 'sec-1' }), SECTION, 'local'), [])
-  const before = { kind: 'workspace', workspaceId: 'docs' }
-  assert.deepEqual(dropCommands(workspace({ sectionId: 'sec-1' }), before, 'local'), [
-    { name: 'workspace.update', params: { workspaceId: 'app', sectionId: null } },
-    { name: 'workspace.move', params: { workspaceId: 'app', before: 'docs' } },
-  ])
-  assert.deepEqual(dropCommands(workspace({ pinned: true }), before, 'local'), [
-    { name: 'workspace.update', params: { workspaceId: 'app', pinned: false } },
-    { name: 'workspace.move', params: { workspaceId: 'app', before: 'docs' } },
-  ])
+  // 空的组：只换组，不用挪
   assert.deepEqual(
-    dropCommands(workspace(), { kind: 'workspace', workspaceId: 'app' }, 'local'),
+    dropCommands(workspace(), { kind: 'section', sectionId: 'empty' }, 'local', ORDER),
+    [update({ sectionId: 'empty' })],
+  )
+  // 已经是那一组的最后一个：什么都不做
+  const last = workspace({ id: 's2', workspaceId: 's2', sectionId: 'sec-1' })
+  assert.deepEqual(dropCommands(last, SECTION, 'local', ORDER), [])
+})
+
+test('工作区：拖回“项目”就是从置顶、组里拿出来，排到“项目”的最后', () => {
+  assert.deepEqual(dropCommands(workspace({ sectionId: 'sec-1' }), PROJECTS, 'local', ORDER), [
+    update({ sectionId: null }),
+    move(null),
+  ])
+  assert.deepEqual(dropCommands(workspace({ pinned: true }), PROJECTS, 'local', ORDER), [
+    update({ pinned: false }),
+    move(null),
+  ])
+  // 插到“项目”里两个之间
+  assert.deepEqual(
+    dropCommands(workspace({ sectionId: 'sec-1' }), slot(PROJECTS, 'web'), 'local', ORDER),
+    [update({ sectionId: null }), move('web')],
+  )
+  // 本来就在“项目”里、也是最后一个
+  const web = workspace({ id: 'web', workspaceId: 'web' })
+  assert.deepEqual(dropCommands(web, PROJECTS, 'local', ORDER), [])
+})
+
+test('工作区：同一组里插到两个之间；落下去还是原处的不接', () => {
+  assert.deepEqual(dropCommands(workspace(), slot(PROJECTS, 'web'), 'local', ORDER), [move('web')])
+  assert.deepEqual(dropCommands(workspace(), slot(PROJECTS, null), 'local', ORDER), [move(null)])
+  // 插到自己前面、插到自己后面那一个的前面：都还是原处
+  assert.deepEqual(dropCommands(workspace(), slot(PROJECTS, 'app'), 'local', ORDER), [])
+  assert.deepEqual(dropCommands(workspace(), slot(PROJECTS, 'docs'), 'local', ORDER), [])
+  // 往前挪：web 插到 app 前面
+  const web = workspace({ id: 'web', workspaceId: 'web' })
+  assert.deepEqual(dropCommands(web, slot(PROJECTS, 'app'), 'local', ORDER), [
+    { name: 'workspace.move', params: { workspaceId: 'web', before: 'app' } },
+  ])
+  // 从“项目”插进组里两个之间
+  assert.deepEqual(dropCommands(workspace(), slot(SECTION, 's2'), 'local', ORDER), [
+    update({ sectionId: 'sec-1' }),
+    move('s2'),
+  ])
+})
+
+test('停在一组里的工作区上：上半截插到它前面，下半截插到下一个前面，最后一个的下半截是组的末尾', () => {
+  const siblings = ['app', 'docs', 'web']
+  assert.deepEqual(slotOf(PROJECTS, 'docs', false, siblings), slot(PROJECTS, 'docs'))
+  assert.deepEqual(slotOf(PROJECTS, 'docs', true, siblings), slot(PROJECTS, 'web'))
+  assert.deepEqual(slotOf(PROJECTS, 'web', true, siblings), slot(PROJECTS, null))
+})
+
+test('工作区不往工作区那一行、“无项目”里放；会话不往“项目”、两个工作区之间放', () => {
+  assert.deepEqual(
+    dropCommands(workspace(), { kind: 'workspace', workspaceId: 'docs' }, 'local', ORDER),
     [],
   )
+  assert.deepEqual(dropCommands(workspace({ pinned: true }), { kind: 'loose' }, 'local', ORDER), [])
+  assert.deepEqual(dropCommands(session({ pinned: true }), PROJECTS, 'local', ORDER), [])
+  assert.deepEqual(dropCommands(session(), slot(PROJECTS, 'docs'), 'local', ORDER), [])
 })
 
 test('别的设备上拖来的一律不接', () => {

@@ -137,6 +137,9 @@ export const en: Record<MessageKey, Entry> = {
   'section.move': 'Move to group…',
   'section.move.title': 'Move to which group',
   'sidebar.pinned.drop': 'Drag here to pin',
+  // 内置的“项目”组：不在置顶、用户组里的项目都在这里，不能删、不能改名
+  'sidebar.projects': 'Projects',
+  'sidebar.projects.empty': 'No projects yet. Use + to add one, or drag a project here',
   'sidebar.focus': 'Open on its own',
   'sidebar.focus.back': 'Back',
   'workspace.pin': 'Pin',

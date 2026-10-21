@@ -187,13 +187,16 @@ export const ArchivedRow = memo(function ArchivedRow({
   )
 })
 
-/** 收起来的组的汇总：几个等人、在跑、只剩后台任务在跑、未读。只在收起时画，自己订阅 keys.tallies */
-function Tally({ deviceId, groupKey }: { deviceId: string; groupKey: string }) {
+/**
+ * 收起来的组的汇总：几个等人、在跑、只剩后台任务在跑、未读。只在收起时画，自己订阅 keys.tallies。
+ * groupKeys 是要合起来的几组（“项目”是它里面的各个工作区）
+ */
+function Tally({ deviceId, groupKeys }: { deviceId: string; groupKeys: readonly string[] }) {
   const tallies = useKey<GroupTallies>(keys.tallies(deviceId))
   const theme = useTheme()
   const t = useT()
   const sum = { approval: 0, answer: 0, running: 0, unread: 0, background: 0 }
-  for (const tally of Object.values(tallies?.[groupKey] ?? {})) {
+  for (const tally of groupKeys.flatMap((key) => Object.values(tallies?.[key] ?? {}))) {
     sum.approval += tally.approval
     sum.answer += tally.answer
     sum.running += tally.running
@@ -218,6 +221,8 @@ export function headLabel(head: GroupHead, t: Translator): string {
       return t('sidebar.pinned')
     case 'section':
       return head.section.name
+    case 'projects':
+      return t('sidebar.projects')
     case 'workspace':
       return head.workspace.name
     case 'loose':
@@ -225,12 +230,17 @@ export function headLabel(head: GroupHead, t: Translator): string {
   }
 }
 
-/** 一组的标题：点一下收起、展开；工作区和“无项目”的另有“＋”（在这里新建），工作区的还有长按菜单 */
+/**
+ * 一组的标题：点一下收起、展开；工作区和“无项目”的另有“＋”（在这里新建），“项目”的“＋”是添加项目，
+ * 工作区的还有长按菜单
+ */
 export const GroupRow = memo(function GroupRow({
   deviceId,
   head,
   count,
   collapsed,
+  inner = false,
+  tally,
   onToggle,
   onNew,
   onMenu,
@@ -239,6 +249,10 @@ export const GroupRow = memo(function GroupRow({
   head: GroupHead
   count: number
   collapsed: boolean
+  /** 排在置顶、分区、“项目”里的工作区：往里缩一点 */
+  inner?: boolean
+  /** 收起时汇总哪几组。没有就是它自己那一组 */
+  tally?: readonly string[] | undefined
   onToggle(key: string): void
   onNew?(head: GroupHead): void
   onMenu?(head: GroupHead): void
@@ -257,7 +271,7 @@ export const GroupRow = memo(function GroupRow({
         testID={`group:${key}`}
         onPress={() => onToggle(key)}
         onLongPress={onMenu ? () => onMenu(head) : undefined}
-        style={styles.groupMain}
+        style={[styles.groupMain, inner ? styles.groupInner : null]}
       >
         <Text style={[styles.chevron, { color: c.ink3, fontFamily: theme.font.mono }]}>
           {collapsed ? '▸' : '▾'}
@@ -271,13 +285,21 @@ export const GroupRow = memo(function GroupRow({
         <Text style={[styles.groupCount, { color: c.ink3, fontFamily: theme.font.mono }]}>
           {count}
         </Text>
-        {collapsed ? <Tally deviceId={deviceId} groupKey={key} /> : <View style={styles.grow} />}
+        {collapsed ? (
+          <Tally deviceId={deviceId} groupKeys={tally ?? [key]} />
+        ) : (
+          <View style={styles.grow} />
+        )}
       </Pressable>
       {onNew ? (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t(
-            head.kind === 'loose' ? 'newSession.buttonLoose' : 'sessions.newHere',
+            head.kind === 'projects'
+              ? 'workspace.add'
+              : head.kind === 'loose'
+                ? 'newSession.buttonLoose'
+                : 'sessions.newHere',
           )}
           testID={`group:${key}:new`}
           hitSlop={6}
@@ -373,6 +395,7 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingLeft: 12,
   },
+  groupInner: { paddingLeft: 26 },
   chevron: { width: 14, fontSize: 12 },
   groupName: { flexShrink: 1, fontSize: 13, fontWeight: '600' },
   groupCount: { fontSize: 11 },

@@ -22,11 +22,19 @@ const TALLIES = {
   ':pinned': { codex: tally(0, 0, 3, 0) },
 }
 
+const sum = (a, b) => Object.fromEntries(Object.keys(a).map((key) => [key, a[key] + b[key]]))
+
 test('汇总：一组的是组里各个 harness 加起来，整台设备的是各组加起来', () => {
   assert.deepEqual(tallyOf(TALLIES, 'litch'), tally(1, 0, 1, 1))
   assert.deepEqual(tallyOf(TALLIES, null), tally(1, 2, 4, 2))
   // 数据副本只记有事的组：不在里面的就是什么事都没有；数据还没到也一样
   assert.deepEqual(tallyOf(TALLIES, 'infra'), NO_TALLY)
+  // 给几组（“项目”那一行收起时）就是它们合起来，没事的组不碍事
+  assert.deepEqual(
+    tallyOf(TALLIES, ['litch', 'docs', 'infra']),
+    sum(tallyOf(TALLIES, 'litch'), tallyOf(TALLIES, 'docs')),
+  )
+  assert.deepEqual(tallyOf(TALLIES, []), NO_TALLY)
   assert.equal(tallyOf(undefined, 'litch'), NO_TALLY)
   assert.deepEqual(tallyOf({}, null), NO_TALLY)
   // 合计不许改到原来的数上

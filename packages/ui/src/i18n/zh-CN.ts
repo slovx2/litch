@@ -139,6 +139,8 @@ export const zhCN = {
   'section.move': '移到组…',
   'section.move.title': '移到哪个组',
   'sidebar.pinned.drop': '拖到这里置顶',
+  'sidebar.projects': '项目',
+  'sidebar.projects.empty': '还没有项目。点行尾的 + 添加，或者把项目拖到这里',
   'sidebar.focus': '单独查看',
   'sidebar.focus.back': '返回',
   'workspace.pin': '置顶',

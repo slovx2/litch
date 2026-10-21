@@ -50,7 +50,8 @@ export function SessionsScreen({ navigation, route }: Props) {
   const archived = useKey<SessionSummary[] | null>(keys.archived(deviceId)) ?? null
   const online = device?.connection === 'online'
   // 工作区那一行的“＋”要设备连着；“⋯”里的事要连着或者能整理，一件都做不了就不出
-  const canMenu = online || device?.organizable === true
+  const organizable = device?.organizable === true
+  const canMenu = online || organizable
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set())
   const [archivedOpen, setArchivedOpen] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
@@ -70,8 +71,9 @@ export function SessionsScreen({ navigation, route }: Props) {
         archivedOpen,
         archived,
         offline: !online,
+        organizable,
       }),
-    [groups, sections, workspaces, collapsed, archivedOpen, archived, online],
+    [groups, sections, workspaces, collapsed, archivedOpen, archived, online, organizable],
   )
   const noSessions = Object.values(groups).every((ids) => ids.length === 0)
 
@@ -114,10 +116,13 @@ export function SessionsScreen({ navigation, route }: Props) {
   )
   const newIn = useCallback(
     (head: GroupHead) =>
-      navigation.navigate('NewSession', {
-        deviceId,
-        workspaceId: head.kind === 'workspace' ? head.workspace.id : null,
-      }),
+      // “项目”那一行的“＋”是添加项目
+      head.kind === 'projects'
+        ? setWorkspaceEdit({ kind: 'add' })
+        : navigation.navigate('NewSession', {
+            deviceId,
+            workspaceId: head.kind === 'workspace' ? head.workspace.id : null,
+          }),
     [navigation, deviceId],
   )
   const workspaceOf = useCallback((head: GroupHead) => {
@@ -158,9 +163,12 @@ export function SessionsScreen({ navigation, route }: Props) {
               head={item.head}
               count={item.count}
               collapsed={item.collapsed}
+              inner={item.inner}
+              tally={item.tally}
               onToggle={toggleGroup}
               onNew={
-                (item.head.kind === 'workspace' || item.head.kind === 'loose') && online
+                ((item.head.kind === 'workspace' || item.head.kind === 'loose') && online) ||
+                (item.head.kind === 'projects' && organizable)
                   ? newIn
                   : undefined
               }
@@ -186,6 +194,7 @@ export function SessionsScreen({ navigation, route }: Props) {
       openArchived,
       online,
       canMenu,
+      organizable,
     ],
   )
 

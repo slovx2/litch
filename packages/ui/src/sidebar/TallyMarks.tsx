@@ -8,8 +8,8 @@ import { isQuiet, tallyOf, tallyParts, waitLabel } from './tally.ts'
 
 interface TallyProps {
   deviceId: string
-  /** 哪一组（和数据副本里分组的键一样）。null：整台设备合起来 */
-  group: string | null
+  /** 哪一组（和数据副本里分组的键一样），给几组就是它们合起来。null：整台设备合起来 */
+  group: string | readonly string[] | null
 }
 
 /**

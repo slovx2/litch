@@ -53,6 +53,7 @@ import { SpawnDialog } from '../tree/SpawnDialog.tsx'
 import { offerUndo } from './archive-undo.ts'
 import { cwdMark } from './cwd.ts'
 import {
+  type Band,
   DRAG_TYPE,
   type DragItem,
   type DropTarget,
@@ -60,6 +61,7 @@ import {
   dropCommands,
   endDrag,
   onDragChange,
+  slotOf,
   startDrag,
 } from './drop.ts'
 import { dropNativeChildren, keepSessions } from './filter.ts'
@@ -77,6 +79,11 @@ const NO_WORKSPACES: readonly WorkspaceView[] = []
 const NO_SECTIONS: readonly SectionView[] = []
 /** 菜单里“移到组”那一屏最后的“新建组…” */
 const NEW_SECTION = ':new'
+/**
+ * 内置的“项目”组的键：不在置顶、用户组里的工作区都排在这里面。只是界面上的一组，设备上没有它，
+ * 不能删、不能改名。和 SessionGroups 的键（''、':pinned'、':section:…'、工作区标识）不会撞上
+ */
+const PROJECTS = ':projects'
 
 /** 现在正在拖的东西。拖起来、放下时叫醒订阅的组件 */
 const useDragging = (): DragItem | null => useSyncExternalStore(onDragChange, draggedItem)
@@ -511,6 +518,10 @@ interface HeadProps {
   /** 整行和名字按钮各加的样式名：工作区是 ws-line、ws-row，置顶和组是 sec-line、sec-row */
   className: string
   toggleClass: string
+  /** 拖着的东西放下去就是“放进”这一组（这个工作区）：整行高亮 */
+  drop?: boolean | undefined
+  /** 收起时行尾汇总哪几组（“项目”是它里面的各个工作区）。不给就是 group 这一组 */
+  tally?: readonly string[] | undefined
 }
 
 /**
@@ -526,6 +537,7 @@ function HeadLine(props: HeadProps) {
       className={`row-line head-line ${props.className}`}
       data-head={group}
       data-workspace={props.workspaceId}
+      data-drop={props.drop ? 'into' : undefined}
       draggable={onDrag !== undefined}
       onDragStart={onDrag}
       onDragEnd={onDrag ? endDrag : undefined}
@@ -559,7 +571,7 @@ function HeadLine(props: HeadProps) {
       <span className="grow head-fill" />
       {expanded ? null : (
         <span className="head-tally">
-          <TallyMarks deviceId={deviceId} group={group} />
+          <TallyMarks deviceId={deviceId} group={props.tally ?? group} />
         </span>
       )}
       {add}
@@ -581,15 +593,17 @@ interface WorkspaceHeadProps {
   add: ReactNode
   /** 行尾的“更多”：改名与颜色、置顶、移到组、调顺序、删除。这台设备上整理不了就没有 */
   menu: ReactNode
+  /** 拖着的会话放下去就是回到这个项目：整行高亮 */
+  drop: boolean
 }
 
 /**
  * 工作区那一行：行上只有名字（挑过颜色的前面多一个色块），目录在信息卡里。
  * 收起的时候里面的会话都不画，行尾汇总一下里面有没有在等人的、在跑的、没看过的；展开着就不用，里面自己看得见。
- * 能整理的设备上可以拖：拖进置顶、组，或者拖到外面的工作区上排在它前面
+ * 能整理的设备上可以拖：放进置顶、组、“项目”，或者插到一组里两个工作区之间
  */
 function WorkspaceHead(props: WorkspaceHeadProps) {
-  const { workspace, device, count, expanded, onToggle, onFocus, add, menu } = props
+  const { workspace, device, count, expanded, onToggle, onFocus, add, menu, drop } = props
   const card = useHoverCard(() => (
     <WorkspaceInfo workspace={workspace} device={device} count={count} />
   ))
@@ -612,6 +626,7 @@ function WorkspaceHead(props: WorkspaceHeadProps) {
       add={add}
       menu={menu}
       card={card}
+      drop={drop}
       onDrag={
         device.organizable
           ? (event) =>
@@ -642,12 +657,35 @@ const MAX_DEPTH = 8
 /** 子会话每一层往里缩多少像素（和 tree.css 的 .tree-kids 一致） */
 const INDENT = 14
 
-/** 一组放东西的地方（置顶、组、外面的工作区、无项目）在拖放时的样子：能放的时候高亮 */
+/** 一处放东西的地方（置顶、组、“项目”、工作区、无项目）接拖放的那几个事件 */
 interface Zone {
   onDragOver(event: DragEvent): void
   onDragLeave(event: DragEvent): void
   onDrop(event: DragEvent): void
-  'data-drop'?: 'on'
+}
+
+/**
+ * 拖着东西停在哪、放下去会怎样，界面据此提示：
+ * into 是放进 zone 这一组（这个工作区），那一行的标题高亮；before、after 是插到 zone 这个工作区的前面、后面，画一条线
+ */
+interface Over {
+  zone: string
+  mode: 'into' | 'before' | 'after'
+}
+
+/** 一处落点在这个位置上要放到哪：claim 为真时放不了也不让外面一层接（停在工作区上别变成“放进它所在的组”） */
+interface Hit {
+  target: DropTarget
+  mode: Over['mode']
+  claim?: boolean
+}
+
+/** 拖着的东西停在工作区那一块的下半截：那一行的下半截，或者它下面的会话 */
+function below(event: DragEvent): boolean {
+  const head = (event.currentTarget as Element).querySelector(':scope > .head-line')
+  if (!head) return false
+  const box = head.getBoundingClientRect()
+  return event.clientY > box.top + box.height / 2
 }
 
 function DeviceGroup(props: GroupProps) {
@@ -670,8 +708,8 @@ function DeviceGroup(props: GroupProps) {
   const [extra, setExtra] = useState<Readonly<Record<string, number>>>({})
   /** 收起了子会话的父会话 */
   const [folded, setFolded] = useState<ReadonlySet<string>>(new Set())
-  /** 拖着东西停在哪一组上（能放的时候才记） */
-  const [over, setOver] = useState<string | null>(null)
+  /** 拖着东西停在哪、放下去会怎样（能放的时候才记） */
+  const [over, setOver] = useState<Over | null>(null)
   /** 开着“在手机上使用…”的出码对话框 */
   const [pairing, setPairing] = useState(false)
   /** 设备那一行的菜单：行尾的按钮和右键是同一份 */
@@ -693,6 +731,7 @@ function DeviceGroup(props: GroupProps) {
   const gone =
     focus !== null &&
     focus !== PINNED &&
+    focus !== PROJECTS &&
     !sections.some((entry) => groupOfSection(entry.id) === focus) &&
     !workspaces.some((entry) => entry.id === focus)
   useEffect(() => {
@@ -872,45 +911,57 @@ function DeviceGroup(props: GroupProps) {
     setSectionDialog(then ? { section: null, then } : { section: null })
 
   /**
-   * 一处能放东西的地方。拖着的东西放得进来（drop.ts 说放下去有事可做）才接，接的时候高亮；
-   * 放不进来的不拦，让外面一层（工作区在组里时是那个组）去接
+   * 一处能放东西的地方：zone 是它的名字，hit 说拖着的东西停在这里会放到哪。
+   * 放得进来（drop.ts 说放下去有事可做）才接，接的时候提示；放不进来的不拦（除非 claim），让外面一层去接
    */
-  const zone = (key: string, target: DropTarget): Zone => ({
+  const zone = (name: string, hit: (event: DragEvent, item: DragItem) => Hit | null): Zone => ({
     onDragOver(event) {
       const item = draggedItem()
       if (!item || !event.dataTransfer.types.includes(DRAG_TYPE)) return
-      if (dropCommands(item, target, deviceId).length === 0) return
+      const at = hit(event, item)
+      if (!at) return
+      if (dropCommands(item, at.target, deviceId, workspaces).length === 0) {
+        if (!at.claim) return
+        event.stopPropagation()
+        setOver(null)
+        return
+      }
       event.preventDefault()
       event.stopPropagation()
       event.dataTransfer.dropEffect = 'move'
-      if (over !== key) setOver(key)
+      if (over?.zone !== name || over.mode !== at.mode) setOver({ zone: name, mode: at.mode })
     },
     onDragLeave(event) {
       if (event.currentTarget.contains(event.relatedTarget as Node | null)) return
-      setOver((at) => (at === key ? null : at))
+      setOver((was) => (was?.zone === name ? null : was))
     },
     onDrop(event) {
       const item = draggedItem()
       if (!item) return
-      const commands = dropCommands(item, target, deviceId)
-      if (commands.length === 0) return
+      const at = hit(event, item)
+      const commands = at ? dropCommands(item, at.target, deviceId, workspaces) : []
+      if (commands.length === 0) {
+        if (at?.claim) event.stopPropagation()
+        return
+      }
       event.preventDefault()
       event.stopPropagation()
       setOver(null)
       endDrag()
       organize(
         (async () => {
-          // 一样一样来：先从组里拿出来，再挪位置
-          for (const { name, params } of commands) {
-            await channel.command(name, { deviceId, ...params } as never)
+          // 一样一样来：先换组，再挪位置
+          for (const { name: command, params } of commands) {
+            await channel.command(command, { deviceId, ...params } as never)
           }
         })(),
       )
     },
-    ...(over === key ? { 'data-drop': 'on' as const } : {}),
   })
+  /** 现在提示的是不是“放进”这一处 */
+  const into = (name: string) => over?.zone === name && over.mode === 'into'
 
-  /** 和它在一处（同在置顶、同一个组、都在外面）的工作区，按设备上的顺序 */
+  /** 和它在一处（同在置顶、同一个组、都在“项目”里）的工作区，按设备上的顺序 */
   const siblingsOf = (workspace: WorkspaceView) =>
     workspaces.filter((entry) =>
       workspace.pinned
@@ -936,6 +987,10 @@ function DeviceGroup(props: GroupProps) {
         title: t('section.move.title'),
         back: t('session.move.back'),
         options: [
+          // 在置顶、用户组里的可以挪回内置的“项目”
+          ...(workspace.pinned || workspace.sectionId
+            ? [{ id: PROJECTS, title: t('sidebar.projects') }]
+            : []),
           ...sections
             .filter((entry) => entry.id !== workspace.sectionId)
             .map((entry) => ({ id: entry.id, title: entry.name })),
@@ -971,7 +1026,10 @@ function DeviceGroup(props: GroupProps) {
             organize(channel.command('workspace.update', { ...target, sectionId: null }))
           } else if (id === 'group') {
             if (choice === NEW_SECTION) newSection(regroup)
-            else if (choice) regroup(choice)
+            else if (choice === PROJECTS) {
+              const out = workspace.pinned ? { pinned: false } : { sectionId: null }
+              organize(channel.command('workspace.update', { ...target, ...out }))
+            } else if (choice) regroup(choice)
           } else {
             // 上移：挪到同一处前一个的前面；下移：挪到同一处后面第二个的前面，
             // 后面只剩一个就挪到它在整张表里的下一个前面（没有就是最后）
@@ -998,17 +1056,28 @@ function DeviceGroup(props: GroupProps) {
     return (groups[workspace.id]?.length ?? 0) === 0 || shown(workspace.id).length > 0
   }
   /**
-   * 一个工作区：那一行和它下面的会话。outside：不在置顶、组里，是放东西的地方
-   * （会话拖回自己的项目、别的工作区拖到它前面）
+   * 一个工作区：那一行和它下面的会话。它总在某一组（band）里，siblings 是这一组里画出来的工作区：
+   * 拖着会话停在上面是回到自己的项目（那一行高亮）；拖着工作区停在上面是插到它前面或者后面（画一条线）
    */
-  const workspaceBlock = (workspace: WorkspaceView, outside: boolean) => {
+  const workspaceBlock = (workspace: WorkspaceView, band: Band, siblings: readonly string[]) => {
     const expanded = !closed.has(workspace.id)
+    const name = `ws:${workspace.id}`
+    const line = over?.zone === name && over.mode !== 'into' ? over.mode : undefined
     return (
       <div
         key={workspace.id}
         data-group={workspace.id}
-        className="drop-zone"
-        {...(outside ? zone(workspace.id, { kind: 'workspace', workspaceId: workspace.id }) : {})}
+        className="drop-zone ws-block"
+        data-drop={line}
+        {...zone(name, (event, item) =>
+          item.kind === 'session'
+            ? { target: { kind: 'workspace', workspaceId: workspace.id }, mode: 'into' }
+            : {
+                target: slotOf(band, workspace.id, below(event), siblings),
+                mode: below(event) ? 'after' : 'before',
+                claim: true,
+              },
+        )}
       >
         <WorkspaceHead
           workspace={workspace}
@@ -1019,6 +1088,7 @@ function DeviceGroup(props: GroupProps) {
           onFocus={() => onFocus(workspace.id)}
           add={add(workspace.id)}
           menu={workspaceMenu(workspace)}
+          drop={into(name)}
         />
         {expanded ? rows(shown(workspace.id), workspace.id) : null}
       </div>
@@ -1061,30 +1131,46 @@ function DeviceGroup(props: GroupProps) {
       />
     ) : null
 
-  /** 置顶、组里的东西：会话在前，工作区在后。都没有时一句提示（也是放东西的地方） */
-  const bandBody = (key: string, inside: WorkspaceView[], empty: string, first: number) => {
+  /** 一组（置顶、组、“项目”）里的东西：会话在前，工作区在后。都没有时一句提示（也是放东西的地方） */
+  const bandBody = (
+    key: string,
+    band: Band,
+    inside: WorkspaceView[],
+    empty: string,
+    first: number,
+  ) => {
     const list = shown(key)
-    if (list.length === 0 && inside.length === 0) return <div className="band-empty">{empty}</div>
+    if (list.length === 0 && inside.length === 0) {
+      return (
+        <div className="band-empty" data-drop={into(key) ? 'into' : undefined}>
+          {empty}
+        </div>
+      )
+    }
+    const siblings = inside.map((entry) => entry.id)
     return (
       <>
         {rows(list, key, first)}
-        {inside.map((workspace) => workspaceBlock(workspace, false))}
+        {inside.map((workspace) => workspaceBlock(workspace, band, siblings))}
       </>
     )
   }
+  /** 一组整块都是放东西的地方：落在里面、没被里面的工作区接住的，就是放进这一组 */
+  const bandZone = (key: string, band: Band) => zone(key, () => ({ target: band, mode: 'into' }))
 
-  /** 置顶或者一个组：那一行和里面的东西。整块都是放东西的地方 */
+  /** 置顶、一个组，或者“项目”：那一行和里面的东西 */
   const band = (
     key: string,
-    target: DropTarget,
+    target: Band,
     title: ReactNode,
     inside: WorkspaceView[],
     empty: string,
     menu: ReactNode,
+    extra: { add?: ReactNode; tally?: readonly string[] } = {},
   ) => {
     const expanded = !closed.has(key)
     return (
-      <div key={key} data-group={key} className="drop-zone band" {...zone(key, target)}>
+      <div key={key} data-group={key} className="drop-zone band" {...bandZone(key, target)}>
         <HeadLine
           group={key}
           deviceId={deviceId}
@@ -1094,14 +1180,20 @@ function DeviceGroup(props: GroupProps) {
           expanded={expanded}
           onToggle={() => toggle(key)}
           onFocus={() => onFocus(key)}
+          add={extra.add}
           menu={menu}
+          drop={into(key)}
+          tally={extra.tally}
         />
-        {expanded ? bandBody(key, inside, empty, FIRST_ROWS) : null}
+        {expanded ? bandBody(key, target, inside, empty, FIRST_ROWS) : null}
       </div>
     )
   }
 
-  /** 照常显示：置顶、各个组排在工作区前面，是用户特意拿出来的；里面的东西不再出现在外面 */
+  /**
+   * 照常显示：置顶、各个组排在“项目”前面，是用户特意拿出来的；里面的东西不再出现在别处。
+   * 其余的工作区都在内置的“项目”组里，最后是“无项目”
+   */
   const everything = () => {
     const pinnedShown =
       shown(PINNED).length > 0 ||
@@ -1123,6 +1215,20 @@ function DeviceGroup(props: GroupProps) {
         ),
       ]
     })
+    // “项目”能整理的设备上一直在（空的时候也在，好用行尾的加号添加）；整理不了的设备上有项目才出
+    const projectsShown =
+      plainWorkspaces.length > 0 || (device.organizable === true && filter.length === 0)
+    const addProject = device.organizable ? (
+      <button
+        type="button"
+        className="ibtn row-add"
+        title={t('workspace.add')}
+        aria-label={t('workspace.add')}
+        onClick={() => setDialog({ workspace: null })}
+      >
+        <Plus />
+      </button>
+    ) : null
     return (
       <>
         {pinnedShown
@@ -1136,11 +1242,25 @@ function DeviceGroup(props: GroupProps) {
             )
           : null}
         {bands}
-        {plainWorkspaces.map((workspace) => workspaceBlock(workspace, true))}
+        {projectsShown
+          ? band(
+              PROJECTS,
+              { kind: 'projects' },
+              t('sidebar.projects'),
+              plainWorkspaces,
+              t('sidebar.projects.empty'),
+              null,
+              { add: addProject, tally: plainWorkspaces.map((entry) => entry.id) },
+            )
+          : null}
         {shown(LOOSE).length > 0 ? (
-          <div data-group={LOOSE} className="drop-zone" {...zone(LOOSE, { kind: 'loose' })}>
+          <div
+            data-group={LOOSE}
+            className="drop-zone"
+            {...zone(LOOSE, () => ({ target: { kind: 'loose' }, mode: 'into' }))}
+          >
             {/* 行尾和工作区那一行一样有“新建会话”，建的是不属于项目的会话（和设备行上那个是同一件事） */}
-            <div className="row-line loose-line">
+            <div className="row-line loose-line" data-drop={into(LOOSE) ? 'into' : undefined}>
               <div className="sec-label">{t('workspace.none')}</div>
               {add(null)}
             </div>
@@ -1151,44 +1271,46 @@ function DeviceGroup(props: GroupProps) {
     )
   }
 
-  /** 单独查看一组：只有它里面的东西，会话先露出多一些 */
+  /**
+   * 单独查看一组：只有它里面的东西，会话先露出多一些。
+   * 单独查看一个工作区时，看得到的会话本来就在它里面，没有可放的
+   */
   const focused = (key: string) => {
-    if (key === PINNED) {
-      return (
-        <div data-group={PINNED} className="drop-zone band" {...zone(PINNED, { kind: 'pinned' })}>
-          {bandBody(PINNED, pinnedWorkspaces, t('sidebar.pinned.drop'), FOCUS_ROWS)}
-        </div>
-      )
-    }
     const section = sections.find((entry) => groupOfSection(entry.id) === key)
-    if (section) {
+    const spec: { band: Band; inside: WorkspaceView[]; empty: string } | null =
+      key === PINNED
+        ? { band: { kind: 'pinned' }, inside: pinnedWorkspaces, empty: t('sidebar.pinned.drop') }
+        : key === PROJECTS
+          ? {
+              band: { kind: 'projects' },
+              inside: plainWorkspaces,
+              empty: t('sidebar.projects.empty'),
+            }
+          : section
+            ? {
+                band: { kind: 'section', sectionId: section.id },
+                inside: sectionWorkspaces(section.id),
+                empty: t('section.empty'),
+              }
+            : null
+    if (spec) {
       return (
-        <div
-          data-group={key}
-          className="drop-zone band"
-          {...zone(key, { kind: 'section', sectionId: section.id })}
-        >
-          {bandBody(key, sectionWorkspaces(section.id), t('section.empty'), FOCUS_ROWS)}
+        <div data-group={key} className="drop-zone band" {...bandZone(key, spec.band)}>
+          {bandBody(key, spec.band, spec.inside, spec.empty, FOCUS_ROWS)}
         </div>
       )
     }
-    return (
-      <div
-        data-group={key}
-        className="drop-zone"
-        {...zone(key, { kind: 'workspace', workspaceId: key })}
-      >
-        {rows(shown(key), key, FOCUS_ROWS)}
-      </div>
-    )
+    return <div data-group={key}>{rows(shown(key), key, FOCUS_ROWS)}</div>
   }
   /** 单独查看时顶上那一行写的名字 */
   const focusTitle = (key: string): string =>
     key === PINNED
       ? t('sidebar.pinned')
-      : (sections.find((entry) => groupOfSection(entry.id) === key)?.name ??
-        workspaces.find((entry) => entry.id === key)?.name ??
-        '')
+      : key === PROJECTS
+        ? t('sidebar.projects')
+        : (sections.find((entry) => groupOfSection(entry.id) === key)?.name ??
+          workspaces.find((entry) => entry.id === key)?.name ??
+          '')
 
   const dialogs = (
     <>
@@ -1232,7 +1354,7 @@ function DeviceGroup(props: GroupProps) {
         data-focus={focus}
         style={wireStyle(device.wire)}
       >
-        <div className="row-line focus-bar">
+        <div className="row-line focus-bar" data-drop={into(focus) ? 'into' : undefined}>
           <button type="button" className="focus-back" onClick={() => onFocus(null)}>
             <Back />
             <span>{t('sidebar.focus.back')}</span>

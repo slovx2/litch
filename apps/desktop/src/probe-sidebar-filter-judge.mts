@@ -106,21 +106,21 @@ export function judgeFilter(seen: FilterSeen, kept: FilterKept, session: string)
     `只看 Pi 的时候没连着的 gpu-box 下面的会话不对：${titlesOf(seen.after.gpu).join('、')}`,
   )
 
-  // ---- 各组：置顶、分区、无项目跟着筛；筛空了的项目整行不出 ----
-  // 没有项目的那一组的键是空的
+  // ---- 各组：置顶、分区、“项目”、无项目跟着筛；筛空了的项目整行不出 ----
+  // 没有项目的那一组的键是空的；内置的“项目”组是 :projects，项目都在它里面
   must(
     JSON.stringify(seen.groupsBefore.local) ===
-      JSON.stringify([':pinned', ':section:sec-later', 'litch', 'docs', '']) &&
-      seen.groupsBefore.build?.join() === 'litch2,infra' &&
-      seen.groupsBefore.nas?.join() === 'bk',
+      JSON.stringify([':pinned', ':section:sec-later', ':projects', 'litch', 'docs', '']) &&
+      seen.groupsBefore.build?.join() === ':projects,litch2,infra' &&
+      seen.groupsBefore.nas?.join() === ':projects,bk',
     `没筛的时候各组不对：${JSON.stringify(seen.groupsBefore)}`,
   )
   must(
-    seen.groupsAfter.local?.join() === ':pinned,litch,docs',
+    seen.groupsAfter.local?.join() === ':pinned,:projects,litch,docs',
     `只看 Pi 的时候本机下面的组不对（分区、无项目里没有 Pi 的，不该出）：${seen.groupsAfter.local?.join()}`,
   )
   must(
-    seen.groupsAfter.build?.join() === 'litch2',
+    seen.groupsAfter.build?.join() === ':projects,litch2',
     `只看 Pi 的时候 build-01 上没有 Pi 会话的项目（infra）还在：${seen.groupsAfter.build?.join()}`,
   )
   must(

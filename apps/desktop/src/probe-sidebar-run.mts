@@ -8,6 +8,7 @@ import type { BrowserWindow } from 'electron'
 import { SIDEBAR_ITEM } from './menu.mjs'
 import { judgeTally, tallySeen } from './probe-sidebar.mjs'
 import { cwdSeen, judgeCwd } from './probe-sidebar-cwd.mjs'
+import { dragSeen, dragShown, judgeDrag } from './probe-sidebar-drag.mjs'
 import { filterKept, filterSeen, filterTo } from './probe-sidebar-filter.mjs'
 import { judgeFilter } from './probe-sidebar-filter-judge.mjs'
 import { dragTo, frameSeen, keysSeen, sidebarBecame, sidePanel } from './probe-sidebar-frame.mjs'
@@ -95,9 +96,11 @@ async function frameChecks(
   }
 }
 
-/** 截图用的场景：什么都不动，都展开着（看得到工作目录的记号） */
+/** 截图用的场景：什么都不动，都展开着（看得到工作目录的记号）。前面拖着的先松手 */
 async function scenePlain(): Promise<void> {
   const kit = (window as unknown as { __sidebarKit: SidebarKit }).__sidebarKit
+  // 前面的场景拖着东西：松手
+  window.dispatchEvent(new DragEvent('dragend'))
   await kit.until('侧栏里的会话', () => kit.titles('build').length, 10_000)
 }
 
@@ -143,6 +146,9 @@ async function wear(skin: string, theme: string): Promise<void> {
 
 /** 一个接一个摆：后一个场景是在前一个的样子上接着摆的 */
 const SCENES: [name: string, arrange: (window: BrowserWindow) => Promise<void>][] = [
+  // 拖着 docs-site：停在 litch 上半截是一条插入线，停在“稍后看”的标题上是那一行高亮
+  ['drag-line', (window) => inPage(window, dragShown, 'line')],
+  ['drag-into', (window) => inPage(window, dragShown, 'into')],
   ['plain', (window) => inPage(window, scenePlain)],
   ['folded', (window) => inPage(window, sceneFolded)],
   ['filter', (window) => inPage(window, filterTo, 'pi')],
@@ -185,17 +191,20 @@ async function run(window: BrowserWindow, hooks: SmokeHooks): Promise<readonly [
   await inPage(window, installSidebarKit)
   const reload = await inPage(window, reloadSeen)
   const kept = await inPage(window, filterKept)
+  // 拖着整理：这时筛选已经取消，侧栏是刚起来的样子
+  const drag = await inPage(window, dragSeen)
 
   const shots = process.env.LITCH_SIDEBAR_SHOTS
   if (shots) await shoot(window, shots)
   return [
-    { tally, frame: { ...frame, reload }, filter, kept, cwd, native },
+    { tally, frame: { ...frame, reload }, filter, kept, cwd, native, drag },
     [
       ...judgeTally(tally),
       ...judgeFrame({ ...frame, reload }),
       ...judgeFilter(filter, kept, SESSION),
       ...judgeCwd(cwd),
       ...judgeNative(native, NATIVE_PARENT),
+      ...judgeDrag(drag),
     ],
   ]
 }

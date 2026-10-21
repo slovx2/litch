@@ -20,6 +20,8 @@
   device. Sessions can be forked, rolled back, archived, and can have **sub-sessions** (a session tree).
   See `sessions-and-projects.md`.
 - **Group** (中文「组」). A sidebar folder you create on a device to collect sessions and projects.
+  Projects not in a group or pinned sit in the built-in **Projects** group (中文「项目」), which can't
+  be renamed or deleted.
 - **Skin.** The look of the whole app: **Retro** (default), **Literary** (internal name `human`,
   中文「文艺」) and **Standard**, each in light or dark. See `appearance-and-preferences.md`.
 
@@ -30,10 +32,11 @@
   computer or waiting for approval, see `operate-this-computer.md`), the terminal toggle and the side
   panel toggle. The bar takes the current device's wire color.
 - **Sidebar** (left): **New session** button and a harness filter at the top; then one block per device
-  (device row with status, then Pinned, Groups, Projects, and "No project" sessions); at the bottom
-  **Scheduled tasks**, **Devices**, **Archived sessions** and **Settings**. Hovering a device, project
-  or "No project" row shows a **+** that starts a new session there (the device row and "No project"
-  start one outside any project). Right-click or the "more"
+  (device row with status, then Pinned, your groups, the built-in Projects group, and "No project"
+  sessions); at the bottom **Scheduled tasks**, **Devices**, **Archived sessions** and **Settings**.
+  Hovering a device, project or "No project" row shows a **+** that starts a new session there (the
+  device row and "No project" start one outside any project); the **+** on the Projects row adds a
+  project. Right-click or the "more"
   button on a device, project or session row opens its menu (add project, new group, use on phone;
   rename, pin, move, delete; schedule a task, start a sub-session, archive, delete).
 - **Main area**: the new-session page, a session, or one of the pages (Devices, Settings, Scheduled
