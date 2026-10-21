@@ -23,7 +23,8 @@ test('RULES-001：收尾开着的那份：什么配单开、第一件任务、�
     /stays here while this session has nothing else in flight/,
     /ask about it with wrap_up's ask and a reply button that has you do it here/,
     /A piece you left or could not verify is still this task, not a follow-up/,
-    /most turns leave none/,
+    /Most turns leave no card/,
+    /also after a turn that only investigated or answered a question/,
     /mostly retells what you found here, it stays here/,
   ])
     assert.match(FULL, phrase)
