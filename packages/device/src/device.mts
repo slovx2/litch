@@ -239,6 +239,7 @@ export class DeviceServer {
       openEngineLink: (harness) =>
         this.openEngineLink(harness, { waitMs: taskTiming.harnessWaitMs }),
       backgroundRunning: (threadId) => this.background.running(threadId),
+      backgroundWakes: (threadId) => this.background.wakes(threadId),
     })
     // 定时任务：任务存在设备上，到点由设备进程自己连上 harness 去跑
     if (this.tasks) info.extensions.push(EXTENSION.deviceTasks)
@@ -279,6 +280,7 @@ export class DeviceServer {
       needsUserMs: options.timing?.needsUserMs ?? DEFAULT_TIMING.needsUserMs,
       taskTurn: (threadId, turnId) => this.tasks?.isTaskTurn(threadId, turnId) ?? false,
       backgroundRunning: (threadId) => this.background.running(threadId),
+      backgroundWakes: (threadId) => this.background.wakes(threadId),
       wrapUp: () => {
         const value = this.control?.state?.snapshot.values[WRAP_UP_SETTING]
         return this.control ? value !== false : options.wrapUp !== false
@@ -290,6 +292,10 @@ export class DeviceServer {
       log,
     })
     this.deviceTools.register(CLIENT_TOOL_NAMESPACE.sessions, sessionToolsHandler(this.sessionTree))
+    // 子会话的后台任务跑完了：引擎不会接着做的，会话树补一条回报（决 430）
+    this.background.onSettled((threadId, tasks) =>
+      this.sessionTree.backgroundSettled(threadId, tasks),
+    )
     this.titles = new CodexTitles({
       openEngineLink: (harness) => this.openEngineLink(harness),
       store: this.sessionTree.store,

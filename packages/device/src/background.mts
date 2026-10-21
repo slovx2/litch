@@ -6,6 +6,7 @@
 //     恢复会话时从历史里补，再拿 thread/backgroundTerminals/list 核一遍（原生 codex 重启之后历史里留着的
 //     inProgress 命令其实早没了）。派生出来的集合由这里发通知、挂到会话对象上。
 // 同一条通知会经每条订阅了这个会话的上游连接各来一份，这里的每一步都是幂等的，真的变了才发。
+// 一个会话在跑的从有变成没有时叫一声 onSettled（会话树、定时任务要补报，决 430）。
 import {
   BACKGROUND_TASKS_NOTIFICATION,
   type BackgroundTaskStatus,
@@ -37,6 +38,9 @@ export class DeviceBackground {
   private readonly inTurn = new Map<string, Map<string, RunningCommand>>()
   /** 原生 codex 派生出来的集合：会话 → 任务（键是命令条目的标识） */
   private readonly derived = new Map<string, Map<string, LitchBackgroundTask>>()
+  /** 上一次看到的在跑个数：从有变成没有时叫 settled 的订阅者 */
+  private readonly lastRunning = new Map<string, number>()
+  private readonly settled = new Set<(threadId: string, tasks: LitchBackgroundTask[]) => void>()
 
   constructor(host: BackgroundHost) {
     this.host = host
@@ -53,6 +57,25 @@ export class DeviceBackground {
       tasks: params.tasks as LitchBackgroundTask[],
       wakesOnFinish: params.wakesOnFinish === true,
     })
+    this.settle(params.threadId)
+  }
+
+  /** 一个会话在跑的后台任务全部结束时叫一声（给的是这时的整份集合）。返回取消 */
+  onSettled(listener: (threadId: string, tasks: LitchBackgroundTask[]) => void): () => void {
+    this.settled.add(listener)
+    return () => {
+      this.settled.delete(listener)
+    }
+  }
+
+  private settle(threadId: string): void {
+    const running = this.running(threadId)
+    const before = this.lastRunning.get(threadId) ?? 0
+    if (running > 0) this.lastRunning.set(threadId, running)
+    else this.lastRunning.delete(threadId)
+    if (before === 0 || running > 0) return
+    const tasks = this.derivedOf(threadId)?.tasks ?? this.reported.get(threadId)?.tasks ?? []
+    for (const listener of [...this.settled]) listener(threadId, tasks)
   }
 
   /** 原生 codex 的一条通知 */
@@ -177,6 +200,7 @@ export class DeviceBackground {
   }
 
   forget(threadId: string): void {
+    this.lastRunning.delete(threadId)
     this.reported.delete(threadId)
     this.inTurn.delete(threadId)
     this.derived.delete(threadId)
@@ -203,6 +227,7 @@ export class DeviceBackground {
       { threadId, ...background },
       EXTENSION.backgroundTasks,
     )
+    this.settle(threadId)
   }
 
   /** 原生 codex 的会话对象经过、这条连接声明了扩展：挂上派生的集合 */
@@ -212,6 +237,12 @@ export class DeviceBackground {
     if (!background) return false
     thread.litchBackground = structuredClone(background)
     return true
+  }
+
+  /** 后台任务跑完了引擎会不会自己接着做（原生 codex 不会；引擎报的照它说的） */
+  wakes(threadId: string): boolean {
+    if (this.derived.get(threadId)?.size) return false
+    return this.reported.get(threadId)?.wakesOnFinish === true
   }
 
   /** 这个会话还有几个后台任务在跑（会话树、定时任务的回报里写） */

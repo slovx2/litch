@@ -17,6 +17,7 @@
 // 又发了话（turn/start、turn/steer）、打断了回合、回合结束了，都让它了结；选了新会话的（chosen）等模型 accept 补简报，
 // 回合结束还没补的当作在这里做。设备进程重启时上一次还在等的一律当作在这里做。
 import { randomUUID } from 'node:crypto'
+import type { LitchBackgroundTask } from '../../protocol/src/background-tasks.mjs'
 import { CLIENT_TOOL_NAMESPACE } from '../../protocol/src/client-tools.mjs'
 import { SESSION_TOOL, sessionTools } from '../../protocol/src/client-tools-sessions.mjs'
 import { EXTENSION } from '../../protocol/src/device.mjs'
@@ -56,6 +57,8 @@ export interface SessionTreeHost {
   taskTurn(threadId: string, turnId: string): boolean
   /** 会话里还有几个后台任务在跑（background.mts） */
   backgroundRunning(threadId: string): number
+  /** 后台任务跑完了引擎会不会自己接着做（background.mts 的 wakes） */
+  backgroundWakes(threadId: string): boolean
   /** 设置里“每回合收尾”开着（sessions.wrapUp）：关掉时新会话的 litch_sessions 里没有 wrap_up，也不提醒 */
   wrapUp(): boolean
   /** 设置里“提醒收尾”开着（sessions.wrapUpReminder） */
@@ -126,6 +129,8 @@ export class SessionTree {
   private readonly reminders = new Map<string, string>()
   /** 提醒回合（会话 + 回合）→ 它替哪个用户回合提醒：一回合几张提案的门槛把两个回合合起来算 */
   private readonly remindedFor = new Map<string, string>()
+  /** 上一次回报写了还有后台任务在跑的子会话：跑完了要再报一次 */
+  private readonly backgroundOwed = new Set<string>()
   /** 回合结束时要叫醒的（wait 工具在等） */
   private readonly listeners = new Set<(threadId: string) => void>()
   /** 每个父会话的唤醒检查排成一条，免得一次结束触发两个唤醒 */
@@ -477,6 +482,38 @@ export class SessionTree {
     }
     this.store.addNote(lineage.parentThreadId, note, lineage.wakeParent && wakeable)
     this.host.log(`子会话 ${threadId}（${harness}）的回合 ${String(turn.id)} 已进父会话的回报队列`)
+    if (background > 0) {
+      this.backgroundOwed.add(threadId)
+      // 跑完以后的事（自发回合、集合变化）要看得到：盯上这个子会话
+      void this.watch(harness, threadId).catch((error: unknown) =>
+        this.host.log(`盯子会话 ${threadId} 的后台任务没成：${String(error)}`),
+      )
+    } else this.backgroundOwed.delete(threadId)
+    this.check(lineage.parentThreadId)
+  }
+
+  /**
+   * 子会话的后台任务全部结束了（background.mts 的 onSettled）。引擎会自己接着做的，等那一回合结束照常回报；
+   * 不会的（原生 codex）这里补一条回报，摘录写各任务的结局
+   */
+  backgroundSettled(threadId: string, tasks: LitchBackgroundTask[]): void {
+    if (!this.backgroundOwed.has(threadId) || this.host.backgroundWakes(threadId)) return
+    this.backgroundOwed.delete(threadId)
+    const lineage = this.store.parentOf(threadId)
+    if (!lineage || !this.host.enabled()) return
+    const outcomes = tasks
+      .filter((task) => task.status !== 'running')
+      .slice(0, 5)
+      .map((task) => `${task.title} (${task.status})`)
+      .join('; ')
+    const note: SessionEventNote = {
+      threadId,
+      title: lineage.title,
+      status: 'completed',
+      excerpt: `Background tasks finished: ${outcomes}`.slice(0, SESSION_TREE_LIMITS.noteChars),
+    }
+    this.store.addNote(lineage.parentThreadId, note, lineage.wakeParent)
+    this.host.log(`子会话 ${threadId} 的后台任务跑完了，补了一条回报`)
     this.check(lineage.parentThreadId)
   }
 

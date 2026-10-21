@@ -48,7 +48,10 @@ explain it:
   instead of the spinner. Claude Code and dsh continue on their own when a task finishes; that turn
   starts with "Background task finished, continuing" instead of a message from the user. Codex does
   not continue on its own. A sub-session reports to its parent when its turn ends and says how many
-  background tasks are still running. There is no stop button yet: ask the model to stop a task, or
+  background tasks are still running, then reports again when they finish (after the turn that
+  continues, or right away for Codex). A scheduled run ends with its turn too; when the background
+  work finishes later, the run's summary and count are updated and it shows as unread again.
+  There is no stop button yet: ask the model to stop a task, or
   stop the turn. On the phone, the same line opens a list from the bottom.
 - **Terminal**: per project; "Put away, keep it running on the device" keeps a terminal alive and
   "Terminals on the device" brings it back. Limits are device settings (`device-settings.md`).
