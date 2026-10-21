@@ -11,8 +11,8 @@ import { homedir } from 'node:os'
 import { join, relative } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 
-// 1 小时提示缓存的 beta（CHA_CLAUDE_EXTENDED_CACHE_TTL=0 时不补），CLI 继承这个进程的环境
-applyExtendedCacheTtlBeta()
+// 提示缓存时长（CHA_CLAUDE_PROMPT_CACHE_TTL=1h 时设 CLI 自己的那几个变量，默认什么都不设），CLI 继承这个进程的环境
+applyPromptCacheTtl()
 
 // In-process Claude runtime — replaces the Python sidecar entirely. Talks to
 // @anthropic-ai/claude-agent-sdk directly so we get a single process boundary
@@ -89,7 +89,7 @@ import { permissionToolServer } from './permission-tools.mjs'
 import { ProtocolError, submissionHash } from './protocol-contract.mjs'
 import { type NativeRateLimitInfo, rateLimitCredentialScope } from './rate-limits.mjs'
 import {
-  applyExtendedCacheTtlBeta,
+  applyPromptCacheTtl,
   claudePlansLocation,
   claudeSettingSources,
   claudeThreadIdHeaderEnv,

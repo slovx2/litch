@@ -6,9 +6,9 @@ import test from 'node:test'
 import { listClaudeHooks } from '../src/claude-capabilities.mjs'
 import { settingsEnvValue } from '../src/claude-setting-layers.mjs'
 import {
-  applyExtendedCacheTtlBeta,
-  claudeExtendedCacheTtl,
+  applyPromptCacheTtl,
   claudePlansLocation,
+  claudePromptCacheTtl,
   claudeSettingSources,
   claudeThreadIdHeader,
   claudeThreadIdHeaderEnv,
@@ -41,7 +41,7 @@ test('CHA_CLAUDE_SETTING_SOURCES：默认三层都读，可只读其中几层，
     settingSources: ['user', 'project', 'local'],
     plansLocation: 'workspace',
     threadIdHeader: false,
-    extendedCacheTtl: true,
+    promptCacheTtl: 'default',
   })
 })
 
@@ -133,29 +133,33 @@ test('CHA_CLAUDE_SETTING_SOURCES 也管入口自己读的设置：钩子列表�
   }
 })
 
-test('CHA_CLAUDE_EXTENDED_CACHE_TTL：默认开、补进原有的 beta；0 时不动 ANTHROPIC_BETAS；别的值报错', () => {
-  const beta = 'extended-cache-ttl-2025-04-11'
-  assert.equal(claudeExtendedCacheTtl({}), true)
-  assert.equal(claudeExtendedCacheTtl({ CHA_CLAUDE_EXTENDED_CACHE_TTL: '0' }), false)
-  assert.equal(claudeExtendedCacheTtl({ CHA_CLAUDE_EXTENDED_CACHE_TTL: '1' }), true)
-  assert.throws(
-    () => resolveRuntimeConfig({ CHA_CLAUDE_EXTENDED_CACHE_TTL: '1h' }),
-    /CHA_CLAUDE_EXTENDED_CACHE_TTL 无效/,
-  )
-  const empty: NodeJS.ProcessEnv = {}
-  applyExtendedCacheTtlBeta(empty)
-  assert.equal(empty.ANTHROPIC_BETAS, beta)
-  const user: NodeJS.ProcessEnv = { ANTHROPIC_BETAS: 'user-beta' }
-  applyExtendedCacheTtlBeta(user)
-  applyExtendedCacheTtlBeta(user)
-  assert.equal(user.ANTHROPIC_BETAS, `user-beta,${beta}`)
-  const off: NodeJS.ProcessEnv = {
-    CHA_CLAUDE_EXTENDED_CACHE_TTL: '0',
-    ANTHROPIC_BETAS: 'user-beta',
+test('CHA_CLAUDE_PROMPT_CACHE_TTL：默认 default、什么都不设；1h 设 CLI 自己的三个变量，用户设过的照旧；别的值报错', () => {
+  assert.equal(claudePromptCacheTtl({}), 'default')
+  assert.equal(claudePromptCacheTtl({ CHA_CLAUDE_PROMPT_CACHE_TTL: ' Default ' }), 'default')
+  assert.equal(claudePromptCacheTtl({ CHA_CLAUDE_PROMPT_CACHE_TTL: '1H' }), '1h')
+  for (const bad of ['1', '5m', '0', 'on'])
+    assert.throws(
+      () => resolveRuntimeConfig({ CHA_CLAUDE_PROMPT_CACHE_TTL: bad }),
+      /CHA_CLAUDE_PROMPT_CACHE_TTL 无效/,
+    )
+  const untouched: NodeJS.ProcessEnv = { ANTHROPIC_BETAS: 'user-beta' }
+  applyPromptCacheTtl(untouched)
+  assert.deepEqual(untouched, { ANTHROPIC_BETAS: 'user-beta' })
+  const hour: NodeJS.ProcessEnv = { CHA_CLAUDE_PROMPT_CACHE_TTL: '1h' }
+  applyPromptCacheTtl(hour)
+  applyPromptCacheTtl(hour)
+  assert.deepEqual(hour, {
+    CHA_CLAUDE_PROMPT_CACHE_TTL: '1h',
+    ENABLE_PROMPT_CACHING_1H: '1',
+    CLAUDE_CODE_PROMPT_CACHE_TTL: '1h',
+    CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL: '5m',
+  })
+  // 入口不再自己往 ANTHROPIC_BETAS 补 beta
+  assert.equal('ANTHROPIC_BETAS' in hour, false)
+  const mine: NodeJS.ProcessEnv = {
+    CHA_CLAUDE_PROMPT_CACHE_TTL: '1h',
+    CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL: '1h',
   }
-  applyExtendedCacheTtlBeta(off)
-  assert.equal(off.ANTHROPIC_BETAS, 'user-beta')
-  const unset: NodeJS.ProcessEnv = { CHA_CLAUDE_EXTENDED_CACHE_TTL: '0' }
-  applyExtendedCacheTtlBeta(unset)
-  assert.equal(unset.ANTHROPIC_BETAS, undefined)
+  applyPromptCacheTtl(mine)
+  assert.equal(mine.CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL, '1h')
 })

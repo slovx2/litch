@@ -191,10 +191,11 @@ export CHA_CLAUDE_PLANS_LOCATION="config"
 # 托管策略（managed-settings.json）里配的盖不过。追问子代理的回合跑在父会话上，带父线程号。
 export CHA_CLAUDE_THREAD_ID_HEADER=1
 
-# 默认 1：入口往 ANTHROPIC_BETAS 补上 extended-cache-ttl-2025-04-11，CLI 发的 anthropic-beta 多这一项。
-# 设成 0 时不补，beta 头和直接跑 CLI 时一样（ANTHROPIC_BETAS 里自己写的照旧）。请求体里的 cache_control.ttl
-# 是 CLI 自己定的：订阅登录时 CLI 写 ttl: "1h" 并自己带上这个 beta，API key 时不写，所以关掉不会缺 beta。
-export CHA_CLAUDE_EXTENDED_CACHE_TTL=0
+# 提示缓存时长。默认 default：入口什么都不设，和直接跑 CLI 时一样（API key 时 5 分钟，订阅登录时 CLI 自己用 1 小时）。
+# 设成 1h 时给 CLI 设它自己的 ENABLE_PROMPT_CACHING_1H=1、CLAUDE_CODE_PROMPT_CACHE_TTL=1h、
+# CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL=5m（自己设过的照旧），cache_control.ttl 和 anthropic-beta 由 CLI 决定。
+# 1 小时缓存在长对话里更省（少重新写入缓存），但写入缓存的单价更高。
+export CHA_CLAUDE_PROMPT_CACHE_TTL=1h
 ```
 
 四项给了认不出的值时入口启动就报错。
@@ -321,7 +322,7 @@ export CHA_CLAUDE_NODE="/absolute/path/to/node"
 | `CHA_CLAUDE_SETTING_SOURCES` | 起 CLI 时读哪几层 Claude Code 设置，逗号分隔的 `user`、`project`、`local`，默认三层都读；认不出的值启动报错。 |
 | `CHA_CLAUDE_PLANS_LOCATION` | 计划文件放哪：`workspace`（默认，工作区里每个线程一个目录）或 `config`（`<CLAUDE_CONFIG_DIR 或 ~/.claude>/plans/`）。CLI 只认项目内的 `plansDirectory`，所以不能指定任意目录。 |
 | `CHA_CLAUDE_THREAD_ID_HEADER` | 设成 `1` 时模型请求带 `thread-id: <线程号>`（合进 `ANTHROPIC_CUSTOM_HEADERS`），不带回合号；默认关。 |
-| `CHA_CLAUDE_EXTENDED_CACHE_TTL` | 默认 `1`，往 `ANTHROPIC_BETAS` 补 `extended-cache-ttl-2025-04-11`；`0` 时不补，CLI 发的 beta 头和直接跑 CLI 时一样。 |
+| `CHA_CLAUDE_PROMPT_CACHE_TTL` | 提示缓存时长：`default`（默认，什么都不设，和直接跑 CLI 一样）或 `1h`（设 CLI 自己的 `ENABLE_PROMPT_CACHING_1H`、`CLAUDE_CODE_PROMPT_CACHE_TTL=1h`、`CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL=5m`）。 |
 | `CHA_CLAUDE_IDLE_EXIT_MS` | 仅 shim：守护进程空闲退出；本地入口固定为 `0`。还有 Claude 进程在看管后台命令时不算空闲（只是空闲保留着的不算）。 |
 | `CHA_CLAUDE_KEEP_ALIVE_SESSIONS` | 同时保留后台命令的 Claude 会话数上限，默认 `8`。回合结束时还有后台命令在跑，该会话的 Claude 进程就留下（每个约占 120–220 MB 内存）；超出上限的会话不保留，后台命令随回合结束而停止并有提示。设为 `0` 关闭保留。 |
 | `CHA_CLAUDE_KEEP_ALIVE_DETACHED_MINUTES` | 全部客户端断开后，留着的 Claude 进程再保留多少分钟，默认 `30`；期间有客户端连回来就继续保留。`0` 表示一直保留。有回合在进行的进程不回收，包括停在等待用户确认上的回合。只是空闲保留着的进程（见下一行）不等这个时间，全部断开时马上回收。 |

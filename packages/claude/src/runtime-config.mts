@@ -37,7 +37,7 @@ export interface RuntimeConfig {
     settingSources: ClaudeSettingSource[]
     plansLocation: ClaudePlansLocation
     threadIdHeader: boolean
-    extendedCacheTtl: boolean
+    promptCacheTtl: ClaudePromptCacheTtl
   }
 }
 
@@ -113,29 +113,36 @@ export function claudeThreadIdHeaderEnv(
   return { ANTHROPIC_CUSTOM_HEADERS: [...kept, `thread-id: ${threadId}`].join('\n') }
 }
 
-/** 1 小时提示缓存的 beta 名 */
-export const EXTENDED_CACHE_TTL_BETA = 'extended-cache-ttl-2025-04-11'
+/** 提示缓存时长：default 照官方 CLI 自己的（什么都不设）；1h 把主对话的缓存时长设成 1 小时 */
+export type ClaudePromptCacheTtl = 'default' | '1h'
 
 /**
- * CHA_CLAUDE_EXTENDED_CACHE_TTL：默认开，入口往 ANTHROPIC_BETAS 补上 1 小时缓存的 beta，CLI 发的 anthropic-beta 多这一项。
- * 设成 0 时不补，CLI 发的 beta 头和直接跑 CLI 时一样（用户自己在 ANTHROPIC_BETAS 里写的照旧）
+ * 1h 时给 CLI 设的它自己的环境变量（照 Claude 桌面端起 CLI 时的设法）：主对话 1 小时，子代理、后台和辅助请求
+ * 仍是 5 分钟。请求体里的 cache_control.ttl 和 anthropic-beta 由 CLI 按这些变量自己决定，入口不写
  */
-export function claudeExtendedCacheTtl(env: NodeJS.ProcessEnv = process.env): boolean {
-  const raw = env.CHA_CLAUDE_EXTENDED_CACHE_TTL?.trim().toLowerCase()
-  if (!raw || raw === '1' || raw === 'true' || raw === 'on' || raw === 'yes') return true
-  if (raw === '0' || raw === 'false' || raw === 'off' || raw === 'no') return false
+export const PROMPT_CACHE_1H_ENV: Readonly<Record<string, string>> = {
+  ENABLE_PROMPT_CACHING_1H: '1',
+  CLAUDE_CODE_PROMPT_CACHE_TTL: '1h',
+  CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL: '5m',
+}
+
+/**
+ * CHA_CLAUDE_PROMPT_CACHE_TTL：Claude Code 的提示缓存时长，取值 default（没设、为空也是它）或 1h。
+ * 认不出的值直接报错，不默默退回默认
+ */
+export function claudePromptCacheTtl(env: NodeJS.ProcessEnv = process.env): ClaudePromptCacheTtl {
+  const raw = env.CHA_CLAUDE_PROMPT_CACHE_TTL?.trim().toLowerCase()
+  if (!raw || raw === 'default') return 'default'
+  if (raw === '1h') return '1h'
   throw new Error(
-    `CHA_CLAUDE_EXTENDED_CACHE_TTL 无效：${env.CHA_CLAUDE_EXTENDED_CACHE_TTL}（只能是 1 或 0）`,
+    `CHA_CLAUDE_PROMPT_CACHE_TTL 无效：${env.CHA_CLAUDE_PROMPT_CACHE_TTL}（只能是 default 或 1h）`,
   )
 }
 
-/** 开关开着时把 1 小时缓存的 beta 补进 ANTHROPIC_BETAS（已有的保留）；关着时不动 */
-export function applyExtendedCacheTtlBeta(env: NodeJS.ProcessEnv = process.env): void {
-  if (!claudeExtendedCacheTtl(env)) return
-  const betas = env.ANTHROPIC_BETAS
-  if (!betas) env.ANTHROPIC_BETAS = EXTENDED_CACHE_TTL_BETA
-  else if (!betas.includes(EXTENDED_CACHE_TTL_BETA))
-    env.ANTHROPIC_BETAS = `${betas},${EXTENDED_CACHE_TTL_BETA}`
+/** 1h 时把 PROMPT_CACHE_1H_ENV 设进环境（用户自己设过的同名变量照旧）；default 时什么都不动 */
+export function applyPromptCacheTtl(env: NodeJS.ProcessEnv = process.env): void {
+  if (claudePromptCacheTtl(env) !== '1h') return
+  for (const [name, value] of Object.entries(PROMPT_CACHE_1H_ENV)) env[name] ??= value
 }
 
 export function resolveRuntimeConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig {
@@ -178,7 +185,7 @@ export function resolveRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runt
       settingSources: claudeSettingSources(env),
       plansLocation: claudePlansLocation(env),
       threadIdHeader: claudeThreadIdHeader(env),
-      extendedCacheTtl: claudeExtendedCacheTtl(env),
+      promptCacheTtl: claudePromptCacheTtl(env),
     },
   }
 }
