@@ -61,19 +61,36 @@ test('步骤组：只有思考的写“想了一下”；只有一条提示的�
 
 test('正在跑的那一条：动词按动作，对象是命令、文件名、工具名后半截', () => {
   const command = { id: 'c', kind: 'command', command: 'go vet ./...', status: 'inProgress' }
-  assert.deepEqual(nowOf(command, 'command', zh), { label: '正在运行', target: 'go vet ./...' })
+  assert.deepEqual(nowOf(command, 'command', zh, 'Codex'), {
+    label: '正在运行',
+    target: 'go vet ./...',
+  })
   const read = { id: 'r', kind: 'toolCall', tool: 'Read src/a.ts', source: 'claude-code' }
-  assert.deepEqual(nowOf(read, 'read', zh), { label: '正在读取', target: 'src/a.ts' })
+  assert.deepEqual(nowOf(read, 'read', zh, 'Claude Code'), {
+    label: '正在读取',
+    target: 'src/a.ts',
+  })
   const mcp = { id: 'm', kind: 'toolCall', tool: 'click', source: 'browser' }
-  assert.deepEqual(nowOf(mcp, 'tool', zh), { label: '正在调用', target: 'browser · click' })
+  assert.deepEqual(nowOf(mcp, 'tool', zh, 'Codex'), {
+    label: '正在调用',
+    target: 'browser · click',
+  })
   const edit = {
     id: 'f',
     kind: 'fileChange',
     changes: [{ path: 'cmd/serve.go', change: 'update' }],
   }
-  assert.deepEqual(nowOf(edit, 'update', zh), { label: '正在修改', target: 'serve.go' })
-  const think = { id: 't', kind: 'reasoning', text: '先拆两步\n再补测试' }
-  assert.deepEqual(nowOf(think, null, zh), { label: '正在想', target: '先拆两步' })
+  assert.deepEqual(nowOf(edit, 'update', zh, 'Codex'), { label: '正在修改', target: 'serve.go' })
+})
+
+test('在想的时候：汇总行写“{harness} 正在工作”，和回合末尾空档里那一行一字不差，不另起一种说法', () => {
+  const think = { id: 't', kind: 'reasoning', text: '先拆两步\n再补测试', status: 'inProgress' }
+  assert.deepEqual(nowOf(think, null, zh, 'Claude Code'), {
+    label: 'Claude Code 正在工作',
+    target: '先拆两步',
+  })
+  assert.equal(nowOf(think, null, zh, 'Codex').label, zh('turn.working', { name: 'Codex' }))
+  assert.equal(nowOf(think, null, en, 'Codex').label, 'Codex is working')
 })
 
 test('整段过程收成的一行：已处理多久、几段说明、几步、几个子代理；失败、被拒、出错另列', () => {

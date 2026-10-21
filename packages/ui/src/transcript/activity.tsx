@@ -2,23 +2,36 @@
 // 步骤组一行灰色的汇总（两段说明之间连续的条目）→ 每个条目一行 → 条目的详情。每一级点一下展开。
 import type {
   CommandItem,
+  DeviceView,
   FileChangeItem,
   ItemView,
   NoticeItem,
   ReasoningItem,
   RequestView,
+  SessionMeta,
   ToolCallItem,
   ToolPart,
   WebSearchItem,
 } from '@litch/core'
 import { keys, stepKindOf, stepsTally } from '@litch/core'
-import { Fragment, memo, type ReactNode, useContext, useMemo, useRef, useState } from 'react'
+import {
+  Fragment,
+  memo,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react'
 import { useT } from '../app/appearance.ts'
 import { useElapsed } from '../app/clock.ts'
+import { nameOf } from '../app/device.ts'
 import { duration, elapsed } from '../app/format.ts'
 import { ImageViewer } from '../app/ImageViewer.tsx'
 import { Caret, Icon, type IconName } from '../app/icons.tsx'
-import { useKey, useKeys } from '../app/services.tsx'
+import { useKey, useKeys, useServices } from '../app/services.tsx'
 import { openDiffAt } from '../diff/state.ts'
 import { byteSize } from '../files/lines.ts'
 import type { Translator } from '../i18n/index.ts'
@@ -65,7 +78,7 @@ function Row({ itemRef, icon, verb, target, meta, busy, detail }: RowProps) {
         }}
       >
         {busy ? <i className="st run" /> : <Icon name={icon} small />}
-        <span className="verb">{verb}</span>
+        {verb ? <span className="verb">{verb}</span> : null}
         <span className="tgt ell">{target}</span>
         {meta ? <span className="meta">{meta}</span> : null}
       </button>
@@ -90,11 +103,12 @@ const Reasoning = memo(function Reasoning(ref: ItemRef) {
   const t = useT()
   if (item?.kind !== 'reasoning') return null
   const text = item.text
+  // 在想的时候这一行不写动词：“正在工作”只写在步骤组的汇总行上（组展开时这里只剩记号和思考的字）
   return (
     <Row
       itemRef={ref}
       icon="think"
-      verb={t(item.status === 'inProgress' ? 'reasoning.running' : 'reasoning.done')}
+      verb={item.status === 'inProgress' ? '' : t('reasoning.done')}
       target={firstLine(text)}
       busy={item.status === 'inProgress'}
       detail={text ? () => <div className="think">{text}</div> : null}
@@ -456,6 +470,27 @@ function StepItem({ kind, ...ref }: ItemRef & { kind: ItemView['kind'] }) {
 const running = (item: ItemView): boolean => 'status' in item && item.status === 'inProgress'
 
 /**
+ * 这个会话的 harness 叫什么（“Claude Code”）。只取名字：会话的别的字段在变、名字没变时不引起重画
+ */
+function useHarnessName(deviceId: string, sessionId: string): string {
+  const { store } = useServices().replica
+  const deviceKey = keys.device(deviceId)
+  const sessionKey = keys.session(deviceId, sessionId)
+  const subscribe = useCallback(
+    (listener: () => void) => {
+      const offs = [deviceKey, sessionKey].map((key) => store.subscribe(key, listener))
+      return () => {
+        for (const off of offs) off()
+      }
+    },
+    [store, deviceKey, sessionKey],
+  )
+  return useSyncExternalStore(subscribe, () =>
+    nameOf(store.get<DeviceView>(deviceKey), store.get<SessionMeta>(sessionKey)?.harness ?? ''),
+  )
+}
+
+/**
  * 正在跑的那一条已经跑了多久。等批准的命令写“待审批”，不计时（等人的时间不算它跑的）。
  * 单独一个组件：每秒重画的只有这几个字
  */
@@ -510,8 +545,9 @@ export const Steps = memo(function Steps({
     [values],
   )
   const tally = useMemo(() => stepsTally(items), [items])
+  const harness = useHarnessName(deviceId, sessionId)
   const current = live ? items.findLast(running) : undefined
-  const now = current ? nowOf(current, stepKindOf(current), t) : null
+  const now = current ? nowOf(current, stepKindOf(current), t, harness) : null
   return (
     <div className="steps" data-running={current ? '' : undefined}>
       <button

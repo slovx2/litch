@@ -255,12 +255,15 @@ function linkedText(
   return text
 }
 
-/** 思考：收起时一行（最后一行字），点开是全文。收起的那一行高度固定 */
+/**
+ * 思考：收起时一行（最后一行字），点开是全文。收起的那一行高度固定。
+ * 在想的时候写“{name} 正在工作”，和状态行空档里同一句（这时状态行留空），回合在忙只有一处在说
+ */
 export const ReasoningCell = memo(function ReasoningCell({ row }: Props<'reasoning'>) {
   const { c, font } = useTheme()
   const t = useT()
-  const { toggle } = useTranscript()
-  const head = t(row.open ? 'reasoning.running' : 'reasoning.done')
+  const { toggle, harness } = useTranscript()
+  const head = row.open ? t('turn.working', { name: harness }) : t('reasoning.done')
   return (
     <Pressable
       onPress={() => toggle(row.key, row.turnId)}
@@ -284,7 +287,7 @@ export const ReasoningCell = memo(function ReasoningCell({ row }: Props<'reasoni
   )
 })
 
-/** 空档要持续这么久才写“运行中”：一卡一卡地出字时不来回闪（和桌面端一样） */
+/** 空档要持续这么久才写“正在工作”：一卡一卡地出字时不来回闪（和桌面端一样） */
 const WORKING_DELAY_MS = 400
 
 function useLasting(on: boolean): boolean {
@@ -299,20 +302,20 @@ function useLasting(on: boolean): boolean {
 }
 
 /**
- * 回合末尾的状态行：从回合开始一直在，高度固定，只换字。回合在跑时只在空档里写“运行中”，
- * 正在出字、有步骤在跑、等人答复时留空。右边一个“⋯”打开这一回合的操作
+ * 回合末尾的状态行：从回合开始一直在，高度固定，只换字。回合在跑时只在空档里写“{name} 正在工作”，
+ * 正在出字、有步骤在跑、在想、等人答复时留空。右边一个“⋯”打开这一回合的操作
  */
 export const StatusCell = memo(function StatusCell({ row }: Props<'status'>) {
   const { c, font } = useTheme()
   const t = useT()
-  const { turnMenu } = useTranscript()
+  const { turnMenu, harness } = useTranscript()
   const working = useLasting(row.working)
   const time =
     row.durationMs == null ? '' : ` · ${t('detail.seconds', { s: seconds(row.durationMs) })}`
   const text =
     row.status === 'running'
       ? working
-        ? `${t('command.running')}…`
+        ? t('turn.working', { name: harness })
         : ''
       : row.status === 'completed'
         ? `${t('turn.completed')}${time}`

@@ -15,6 +15,8 @@ import { useKey } from '../shell/services'
 export interface TranscriptActions {
   deviceId: string
   sessionId: string
+  /** 会话的 harness 叫什么（“Claude Code”）：回合在忙时那一句“{name} 正在工作”用 */
+  harness: string
   /** 认文件路径的范围：工作区的根和会话的工作目录。还不知道时是 null，只认网址 */
   scope: FileScope | null
   /** 文件页开在哪个根下（工作区的主目录，不属于工作区的是会话的工作目录） */

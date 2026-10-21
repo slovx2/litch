@@ -190,6 +190,13 @@ const ASK_RUN_MS = 8000
  * （两段输出之间），再照常回话。给界面试回合末尾那一行“正在工作”：它只在这种空档里出现
  */
 const THINKS_A_WHILE = /想一会儿|think a while/i
+/**
+ * 发的话里带“推理一会儿”时，回合开头先空等 RUN_MS（等第一个字），接着来一条思考，按真的时间慢慢出字、
+ * 过 REASON_MS 结束，再照常回话。给界面试“正在工作”那一个提示：空档里在末尾，思考时换到思考所在的那一行
+ */
+const REASONS_A_WHILE = /推理一会儿|reason a while/i
+/** “推理一会儿”那条思考写多久：比出字慢得多，界面上来得及点开、截图 */
+const REASON_MS = 6000
 /** “跑一会儿”那条命令的条目标识 */
 const runKey = (turnId: string): string => `${turnId}-w`
 
@@ -584,6 +591,10 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       thinkAWhile(view, turnId)
       return turnId
     }
+    if (REASONS_A_WHILE.test(message.text)) {
+      reasonAWhile(view, turnId)
+      return turnId
+    }
     if (ASKS_WHILE_WORKING.test(message.text)) {
       const asks = SAMPLE_TEXT[lang].asyncAsks
       const item: ThreadItem = {
@@ -802,6 +813,35 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       )
     }
     replies.set(sessionKey(view), clock.setTimer(note, RUN_MS))
+  }
+
+  /** 回合开头空等一会儿，再出一条慢慢写的思考，写完照常回话（见 REASONS_A_WHILE） */
+  const reasonAWhile = (view: SessionView, turnId: string) => {
+    const itemId = `${turnId}-r${++seq}`
+    const chunks = chunkText(SAMPLE_TEXT[lang].secondThought, lang === 'en' ? 2 : 1)
+    const every = Math.max(1, Math.floor(REASON_MS / Math.max(1, chunks.length)))
+    const step = () => {
+      const chunk = chunks.shift()
+      if (chunk)
+        applySessionOps(view, [{ op: 'item.appendText', itemId, field: 'text', text: chunk }])
+      if (chunks.length > 0) {
+        replies.set(sessionKey(view), clock.setTimer(step, every))
+        return
+      }
+      applySessionOps(view, [{ op: 'item.status', itemId, status: 'completed' }])
+      replyHeard(view, turnId)
+    }
+    const start = () => {
+      applySessionOps(view, [
+        {
+          op: 'item.add',
+          turnId,
+          item: { id: itemId, kind: 'reasoning', status: 'inProgress', text: '' },
+        },
+      ])
+      replies.set(sessionKey(view), clock.setTimer(step, every))
+    }
+    replies.set(sessionKey(view), clock.setTimer(start, RUN_MS))
   }
 
   /**

@@ -567,3 +567,60 @@ test('“想一会儿”：回合开头、两段输出之间各空等一会儿�
   }
   assert.equal(shown(), false, '回合结束')
 })
+
+test('“推理一会儿”：“正在工作”同一时刻只在一处——空档里在末尾那一行，在想时换到思考所在的汇总行', async () => {
+  const { channel, time } = setup(20)
+  let view: SessionView | null = null
+  channel.subscribe(
+    { kind: 'session', deviceId: 'local', sessionId: 's3' },
+    {
+      snapshot: (data) => {
+        view = structuredClone(data)
+      },
+      delta(ops: SessionOp[]) {
+        for (const op of ops) if (view) reduceSession(view, structuredClone(op))
+      },
+    },
+  )
+  await settle()
+  // 此刻写着“正在工作”的地方：末尾那一行（workingShown），和思考所在的步骤组汇总行（有在想的思考时，
+  // 界面的 nowOf 写的是同一句）。思考那一行自己在想的时候不写动词
+  const spots = () => {
+    const current = view as SessionView | null
+    const turn = current?.turns.at(-1)
+    if (!current || !turn) return []
+    const items = turn.itemIds.map((id) => current.items[id])
+    const running = turn.status === 'running'
+    const out: string[] = []
+    if (workingShown(running, items, current.requests.length)) out.push('末尾')
+    if (running && items.some((item) => item?.kind === 'reasoning' && item.status === 'inProgress'))
+      out.push('思考')
+    return out
+  }
+  await channel.command('session.send', { deviceId: 'local', sessionId: 's3', text: '推理一会儿' })
+  time.advance(16)
+  await settle()
+  assert.deepEqual(spots(), ['末尾'], '等第一个字')
+  time.advance(2400)
+  await settle()
+  assert.deepEqual(spots(), ['思考'], '思考刚开始，还没出字')
+  const seen = new Set<string>()
+  for (
+    let i = 0;
+    i < 800 && (view as SessionView | null)?.turns.at(-1)?.status === 'running';
+    i++
+  ) {
+    const now = spots()
+    assert.ok(now.length <= 1, `同一时刻有两处在写：${now.join('、')}`)
+    seen.add(now.join('') || '无')
+    time.advance(20)
+    await settle()
+  }
+  // 想完了接着出回答：回答出字时哪儿都不写（正文末尾的光标就是）
+  assert.ok(seen.has('思考') && seen.has('无'), [...seen].join('、'))
+  const thought = Object.values((view as SessionView | null)?.items ?? {}).find(
+    (item) => item.kind === 'reasoning',
+  )
+  assert.equal(thought?.status, 'completed', '想完了留着那一条，能点开看')
+  assert.deepEqual(spots(), [], '回合结束')
+})

@@ -3,6 +3,7 @@
 // 内容变高、键盘升起都不用 JS 追底。“保持可见位置”一直开着：原型在贴底时把它关掉，可开关一次列表就插拔一次
 // 它的锚点视图，刚打开长会话就快速甩动时安卓 Fabric 挂载会崩（Unable to add a view into a view that is not a ViewGroup，
 // 2026-10-17 复现：开关时 15 次崩 5–7 次，一直开 15 次 0 次）。一直开着贴底也没受影响（T1 的偏差仍是 0.00x dp）。
+import { type DeviceView, keys } from '@litch/core'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { FlashList, type FlashListRef, type ListRenderItem } from '@shopify/flash-list'
@@ -19,11 +20,13 @@ import {
 } from 'react'
 import { Linking, type ScrollViewProps, StyleSheet, View } from 'react-native'
 import { KeyboardChatScrollView, useKeyboardState } from 'react-native-keyboard-controller'
+import { nameOf } from '../../../../packages/ui/src/app/device.ts'
 import type { Row } from '../core/rows'
 import type { SessionSnapshot, SessionStore } from '../core/session-store'
 import { experiment } from '../experiment'
 import type { RootStackParamList } from '../nav/routes'
 import { noteFirstContent, noteWork } from '../probe'
+import { useKey } from '../shell/services'
 import { useT } from '../ui/i18n'
 import { useTheme } from '../ui/theme'
 import { useSessionBackground } from './background/BackgroundBar'
@@ -136,6 +139,8 @@ function useActions(store: SessionStore) {
   const { c } = useTheme()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const cwd = useSyncExternalStore(store.subscribeMeta, () => store.getMeta()?.cwd ?? null)
+  const harnessId = useSyncExternalStore(store.subscribeMeta, () => store.getMeta()?.harness ?? '')
+  const harness = nameOf(useKey<DeviceView>(keys.device(deviceId)), harnessId)
   const { scope, root } = useFileScope(deviceId, sessionId, cwd)
   const [menu, setMenu] = useState<string | null>(null)
   const [image, setImage] = useState<string | null>(null)
@@ -149,6 +154,7 @@ function useActions(store: SessionStore) {
     () => ({
       deviceId,
       sessionId,
+      harness,
       scope,
       root,
       toggle: (key, turnId) => store.toggle(key, turnId),
@@ -175,7 +181,7 @@ function useActions(store: SessionStore) {
       openSession,
       viewImage: setImage,
     }),
-    [store, deviceId, sessionId, scope, root, cwd, navigation, openSession, t],
+    [store, deviceId, sessionId, harness, scope, root, cwd, navigation, openSession, t],
   )
   const overlays = (
     <>
