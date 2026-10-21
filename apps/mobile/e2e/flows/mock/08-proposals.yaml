@@ -43,6 +43,7 @@ tags: [mock]
     element:
       id: proposal:.*:dismiss
     direction: DOWN
+    centerElement: true
     timeout: 10000
 - tapOn:
     id: proposal:.*:dismiss
