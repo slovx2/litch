@@ -369,12 +369,14 @@ test('PROFILE-007：大小写变体、不存在的禁读路径、Glob 的 ..、�
     assert.match(String(denied('Glob', { pattern: '../**/k.txt' })), /不能带 \.\./)
     assert.match(String(denied('Glob', { pattern: 'a/../../B/*' })), /不能带 \.\./)
     assert.equal(denied('Glob', { pattern: '**/*.txt', path: join(own, 'open') }), null)
-    // 可写目录下的 .git、.agents、.codex、.aws 只读，不存在的也一样；档位明确给了 write 的照档位
+    // 可写目录下的 .git、.agents、.codex、.aws、.claude 只读，不存在的也一样；档位明确给了 write 的照档位
     for (const path of [
       '.git/hooks/pre-commit',
       '.agents/skills/x.md',
       '.codex/config.toml',
       '.aws/config',
+      '.claude/settings.json',
+      '.claude/skills/x/SKILL.md',
     ])
       assert.match(String(denied('Write', { file_path: join(own, path) })), /超出授权目录/, path)
     assert.equal(denied('Read', { file_path: join(own, '.git/HEAD') }), null)
@@ -384,6 +386,21 @@ test('PROFILE-007：大小写变体、不存在的禁读路径、Glob 的 ..、�
       /超出授权目录/,
     )
     assert.equal(denied('Write', { file_path: join(own, 'gitignore/.git-not') }), null)
+    // 计划文件放工作区里（CHA_CLAUDE_PLANS_LOCATION 默认）时在 .claude/plans 下，本会话那个照常能写，
+    // .claude 的别处计划模式里也写不了
+    const planning = { ...ctx, planMode: true } as RuntimeTurnContext
+    assert.equal(
+      deniedTool(planning, 'Write', {
+        file_path: join(own, '.claude/plans/codex-harness-adapter/t/plan.md'),
+      }),
+      null,
+    )
+    assert.ok(deniedTool(planning, 'Write', { file_path: join(own, '.claude/settings.json') }))
+    assert.ok(
+      deniedTool(planning, 'Write', {
+        file_path: join(own, '.claude/plans/codex-harness-adapter/other/plan.md'),
+      }),
+    )
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
@@ -438,12 +455,14 @@ const SANDBOX_CASES: Array<[string, (root: string) => string, boolean]> = [
   ['改 .git', () => 'echo x > .git/config', false],
   ['建 .codex', () => 'mkdir .codex', false],
   ['建 .agents', () => 'mkdir -p .agents/skills', false],
+  ['建 .claude', () => 'mkdir -p .claude/skills', false],
+  ['写 .claude 的设置', () => 'echo {} > .claude/settings.json', false],
   ['别的点目录照常写', () => 'mkdir -p .cache && echo x > .cache/y', true],
 ]
 
 // 跑完沙箱，宿主上不留占位，也没被建出来
 function assertNoLeftovers(own: string): void {
-  for (const name of ['future', '.codex', '.agents'])
+  for (const name of ['future', '.codex', '.agents', '.claude'])
     assert.equal(existsSync(join(own, name)), false, `${name} 不该留在宿主上`)
 }
 
@@ -527,7 +546,7 @@ test('PROFILE-006：bwrap 用空 tmpfs 盖住禁读目录、建好挂载点再�
     assert.ok(at('--perms', '555', '--tmpfs', join(own, '.codex'), '--remount-ro') > 0)
     assert.deepEqual(
       [...placeholders].sort(),
-      ['.agents', '.aws', '.codex', 'future'].map((name) => join(own, name)).sort(),
+      ['.agents', '.aws', '.claude', '.codex', 'future'].map((name) => join(own, name)).sort(),
     )
     if (!bwrapUsable()) return
     for (const [name, command, allowed] of SANDBOX_CASES) {

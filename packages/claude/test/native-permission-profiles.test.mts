@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -502,6 +503,11 @@ test('PROFILE-REAL-001：真实 CLI 里 Read 和 Bash 都按档位禁读，自�
     assert.match(leaked, /Operation not permitted|Permission denied|No such file/)
     await call('Bash', { command: 'printf ok > made.txt' }, true)
     assert.equal(readFileSync(join(own, 'made.txt'), 'utf8'), 'ok')
+    // 工作区的 .claude 和 .codex、.git 一样只读：文件工具、命令都写不进去
+    await call('Write', { file_path: join(own, '.claude/settings.json'), content: '{}' }, false)
+    await call('Bash', { command: 'mkdir -p .claude/skills' }, false)
+    assert.equal(existsSync(join(own, '.claude/settings.json')), false)
+    assert.equal(existsSync(join(own, '.claude/skills')), false)
     // 线程 config 的 shell_environment_policy：只留基本变量加 set 的，CLI 自己的变量（模型地址等）不给命令
     const scoped = await client.request('thread/start', {
       cwd: own,
@@ -564,6 +570,39 @@ test('PROFILE-REAL-001：真实 CLI 里 Read 和 Bash 都按档位禁读，自�
         /禁止读取/,
       )
     }
+    // 计划文件默认放在工作区的 .claude/plans 下，计划模式里 CLI 给的那个照常能写
+    let planFile = ''
+    model.enqueue((request) => {
+      const location = /create your plan at ([^\n]+?) using the Write tool/.exec(
+        JSON.stringify(request).replaceAll('\\n', '\n'),
+      )
+      assert.ok(location, 'CLI 必须给出计划文件路径')
+      planFile = location[1]!
+      assert.ok(planFile.startsWith(join(own, '.claude/plans/')), planFile)
+      return [
+        {
+          type: 'tool_use',
+          id: 'toolu_plan',
+          name: 'Write',
+          input: { file_path: planFile, content: '# 计划' },
+        },
+      ]
+    })
+    model.enqueue((request) => {
+      const result = request.messages
+        .flatMap((m: any) => (Array.isArray(m.content) ? m.content : []))
+        .find((b: any) => b.type === 'tool_result' && b.tool_use_id === 'toolu_plan') as any
+      assert.notEqual(result?.is_error, true, JSON.stringify(result))
+      return [{ type: 'text', text: '好' }]
+    })
+    const planned = await client.request('turn/start', {
+      threadId: current,
+      input: text('写计划'),
+      ...plan,
+    })
+    assert.equal((await client.completed(planned.turn.id)).status, 'completed')
+    model.assertConsumed()
+    assert.equal(readFileSync(planFile, 'utf8'), '# 计划')
     // 内置档位整个磁盘可读：never 下读工作目录外的也放行
     const builtin = await client.request('thread/start', {
       cwd: own,

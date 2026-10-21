@@ -6,6 +6,7 @@ import {
   type FileSystemRule,
   type FileSystemRules,
   normalizedPath,
+  PROTECTED_METADATA_NAMES,
   pathAccess,
   withWritableRoots,
 } from './permission-profiles.mjs'
@@ -190,7 +191,7 @@ function firstMissing(path: string): string | null {
   return null
 }
 
-const METADATA_NAMES = new Set(['.git', '.agents', '.codex', '.aws'])
+const METADATA_NAMES = new Set(PROTECTED_METADATA_NAMES)
 
 // bwrap：根按 `:root` 只读或可写挂上；禁读的目录盖一层空 tmpfs（里面要挂回的子目录先建好挂载点，
 // 有要挂回的给 111 只许穿过、没有的给 000），文件用 /dev/null 盖住；可读、可写的子目录按真实路径挂回。

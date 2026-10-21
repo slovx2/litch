@@ -353,10 +353,12 @@ export function compileFileSystemRules(
 }
 
 // 可写目录下这几个顶层目录默认只读（codex 的 PROTECTED_METADATA_PATH_NAMES、metadata_write_denial）：
-// .git 的钩子、.codex 和 .agents 的配置、.aws 的凭据助手都会被沙箱外的程序拿去执行。档位里给这个路径
-// 写了条目（哪种访问都算）就照档位；它下面更深的 write 条目照旧可写。不存在的也保护，免得被建出来。
+// .git 的钩子、.codex 和 .agents 的配置、.aws 的凭据助手都会被沙箱外的程序拿去执行；.claude 同理
+// （Claude Code 的项目设置、钩子、Skill、代理、命令，codex 没有这一项）。本会话的计划文件在
+// `.claude/plans/` 下时由 isPlanFile 单独放行。档位里给这个路径写了条目（哪种访问都算）就照档位；
+// 它下面更深的 write 条目照旧可写。不存在的也保护，免得被建出来。
 // .git 是指向别处的文件（worktree、子模块）时，指向的 gitdir 一并只读
-const PROTECTED_METADATA_NAMES = ['.git', '.agents', '.codex', '.aws']
+export const PROTECTED_METADATA_NAMES = ['.git', '.agents', '.codex', '.aws', '.claude']
 
 function protectMetadata(byPath: ReadonlyMap<string, FileAccess>): FileSystemRule[] {
   const entries = [...byPath].map(([path, access]) => ({ path, access }))

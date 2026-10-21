@@ -234,7 +234,7 @@ node packages/claude/dist/claude/src/adapter.mjs app-server --listen stdio:// \
 
 - 路径先取真实路径再判定，大小写也按磁盘上的真实写法纠正（macOS 默认的卷不分大小写）；还不存在的那一段取不到真实写法，在 macOS 上 `deny` 条目按不分大小写比。
 - 不存在的禁读路径照样受管：`sandbox-exec` 的规则不要求路径存在；`bwrap` 照 codex，在可写范围里对第一个不存在的那一级挂一个 `/dev/null` 占位，命令里建不出它，命令结束后删掉占位（只删空文件、空目录）。
-- 可写目录下的 `.git`、`.agents`、`.codex`、`.aws` 默认只读（codex 的 `metadata_write_denial`），不存在的也不许建；`.git` 是指向别处的文件时，指向的 gitdir 一并只读。档位里给这个路径写了条目就照档位，比如 `"/ws/u1/.codex" = "write"`。Linux 上不存在的元数据目录只在工作区根下面放占位（只读的空目录），`/tmp` 之类别的可写目录下的靠文件类工具拦。
+- 可写目录下的 `.git`、`.agents`、`.codex`、`.aws`、`.claude` 默认只读（codex 的 `metadata_write_denial`；`.claude` 是这边加的，里面的设置、钩子、Skill 会被打开同一工作区的 Claude Code 执行），不存在的也不许建；`.git` 是指向别处的文件时，指向的 gitdir 一并只读。档位里给这个路径写了条目就照档位，比如 `"/ws/u1/.codex" = "write"`。Linux 上不存在的元数据目录只在工作区根下面放占位（只读的空目录），`/tmp` 之类别的可写目录下的靠文件类工具拦。计划文件放在工作区里时（`CHA_CLAUDE_PLANS_LOCATION` 不是 `config`）在 `.claude/plans/` 下，计划模式里本会话的那一个照常能写；入口自己链的 Skill 在 Claude Code 配置目录下，不受影响。
 
 不受档位管的（这些照旧只看审批策略和各自的设置）：MCP 服务的工具、动态工具（客户端注册的）、`Monitor` 之类自己带命令的工具、Claude Code 的钩子、`command/exec`（客户端直接起的命令，照旧按请求里的 `sandboxPolicy`）。
 
