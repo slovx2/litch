@@ -3,7 +3,7 @@
 // 存在浏览器的本地存储里，读写失败就当没记过。
 import type { ComposeOptions, DeviceView, HarnessView, SessionSettings } from '@litch/core'
 import { useSyncExternalStore } from 'react'
-import { defaultHarness } from './new-place.ts'
+import { defaultHarness, fitPicks } from './new-place.ts'
 
 const STORE_KEY = 'litch.lastSettings'
 /**
@@ -65,8 +65,11 @@ export function recallWorkspace(deviceId: string): string | null | undefined {
 /** harness 是按“设备上的哪个工作区”记的：同一台设备上不同的工作区各用各的 */
 const spot = (deviceId: string, workspaceId: string | null) => `${deviceId}/${workspaceId ?? ''}`
 
-/** 这次运行里在各个去处点选的那个 harness。还没发出去就切走再回来，选的还在 */
-const picked = new Map<string, string>()
+/**
+ * 这次在新建对话页上点选的那个 harness。不跟着去处记：换了设备、换了项目还是它（那边没有的话才按默认的来），
+ * 还没发出去就切走再回来也还在。建成了会话就放下，之后各个项目回到各自记下的
+ */
+let picked: string | undefined
 const watchers = new Set<() => void>()
 const watch = (watcher: () => void) => {
   watchers.add(watcher)
@@ -74,14 +77,20 @@ const watch = (watcher: () => void) => {
     watchers.delete(watcher)
   }
 }
-
-/** 选一个 harness：新建会话的那一页和标题栏都跟着变 */
-export function pickHarness(deviceId: string, workspaceId: string | null, harness: string): void {
-  picked.set(spot(deviceId, workspaceId), harness)
+const repick = (harness: string | undefined) => {
+  picked = harness
   for (const watcher of watchers) watcher()
 }
 
-/** 会话建成了：记下这个工作区这次用的是哪个 harness（下次在这里默认还是它），同时也是这台设备上最近用的 */
+/** 选一个 harness：新建会话的那一页和标题栏都跟着变 */
+export function pickHarness(harness: string): void {
+  repick(harness)
+}
+
+/**
+ * 会话建成了：记下这个工作区这次用的是哪个 harness（下次在这里默认还是它），同时也是这台设备上最近用的。
+ * 页上点选的那个到这里就放下了
+ */
 export function rememberHarness(
   deviceId: string,
   workspaceId: string | null,
@@ -89,10 +98,11 @@ export function rememberHarness(
 ): void {
   write(HARNESS_KEY, spot(deviceId, workspaceId), harness)
   write(HARNESS_KEY, deviceId, harness)
+  repick(undefined)
 }
 
 /**
- * 新建会话建在哪个 harness 上：这次在这里点选的，没点过就是这个工作区上次用的，这个工作区还没用过就是
+ * 新建会话建在哪个 harness 上：这次在页上点选的，没点过就是这个工作区上次用的，这个工作区还没用过就是
  * 这台设备上最近用的，再没有就是第一个可用的。前三个得现在可用才算数。一个可用的都没有就是 undefined。
  */
 export function useNewHarness(
@@ -101,7 +111,7 @@ export function useNewHarness(
 ): HarnessView | undefined {
   const deviceId = device?.id ?? ''
   const here = spot(deviceId, workspaceId)
-  const chosen = useSyncExternalStore(watch, () => picked.get(here))
+  const chosen = useSyncExternalStore(watch, () => picked)
   const ready = device?.harnesses.filter((entry) => entry.state === 'ready') ?? []
   const last = read<string>(HARNESS_KEY)
   return defaultHarness(ready, [chosen, last[here], last[deviceId]])
@@ -109,16 +119,5 @@ export function useNewHarness(
 
 /** 上次的选择里现在还选得到的那几项。对面换过模型清单之后，过期的不带出来 */
 export function recallPicks(deviceId: string, harness: string, options: ComposeOptions): Picks {
-  const last = read<Picks>(STORE_KEY)[slot(deviceId, harness)] ?? {}
-  const picks: Picks = {}
-  const model = options.models.find((entry) => entry.id === last.model)
-  if (model) picks.model = model.id
-  // 强度得是记下的那个模型有的一档。没记模型的话用哪个模型要看对面的默认，留到 newSessionSettings 去对
-  if (last.effort && (!model || model.efforts.some((effort) => effort.id === last.effort)))
-    picks.effort = last.effort
-  // 速度同样留给 newSessionSettings 去对：得是标准或者那个模型有的那一档
-  if (last.speed) picks.speed = last.speed
-  if (options.permissions.some((preset) => preset.id === last.permission) && last.permission)
-    picks.permission = last.permission
-  return picks
+  return fitPicks(read<Picks>(STORE_KEY)[slot(deviceId, harness)] ?? {}, options)
 }
