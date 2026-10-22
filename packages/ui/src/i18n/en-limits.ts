@@ -2,10 +2,9 @@
 import type { Entry } from './types.ts'
 
 export const enLimits = {
-  'limits.title': 'Plan usage',
-  'limits.window.hours': '{n}-hour',
-  'limits.window.days': '{n}-day',
-  'limits.window.week': 'Weekly',
+  'limits.window.hours': '{n}-hour limit',
+  'limits.window.days': '{n}-day limit',
+  'limits.window.week': 'Weekly limit',
   'limits.window.other': 'Limit',
   'limits.named': '{name} · {window}',
   'limits.used': '{percent}% used',

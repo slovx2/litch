@@ -11,14 +11,14 @@ const en = translator('en')
 const window = (windowMins) => ({ usedPercent: 10, windowMins, resetsAt: null })
 const MINUTE = 60_000
 
-test('LIMITS-UI-001 窗口按长短起名：5 小时、每周、整天的写天数，说不出的只写“额度”', () => {
-  assert.equal(windowLabel(window(300), zh), '5 小时')
-  assert.equal(windowLabel(window(10080), zh), '每周')
-  assert.equal(windowLabel(window(1440), zh), '1 天')
+test('LIMITS-UI-001 窗口按长短起名：5 小时额度、每周额度、整天的写天数，说不出的只写“额度”', () => {
+  assert.equal(windowLabel(window(300), zh), '5 小时额度')
+  assert.equal(windowLabel(window(10080), zh), '每周额度')
+  assert.equal(windowLabel(window(1440), zh), '1 天额度')
   assert.equal(windowLabel(window(null), zh), '额度')
   assert.equal(windowLabel(window(45), zh), '额度')
-  assert.equal(windowLabel(window(300), en), '5-hour')
-  assert.equal(windowLabel(window(10080), en), 'Weekly')
+  assert.equal(windowLabel(window(300), en), '5-hour limit')
+  assert.equal(windowLabel(window(10080), en), 'Weekly limit')
 })
 
 test('LIMITS-UI-002 重置时间写相对时间：分钟、小时加分、天加小时；不到一分钟和已经过了的写“即将重置”', () => {

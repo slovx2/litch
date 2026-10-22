@@ -1,12 +1,11 @@
-// 账号额度的中文文案：用量环弹层里的“账号额度”一段。
+// 账号额度的中文文案：用量环弹层里上下文下面那几行。
 // 并进 zh-CN.ts 的那一份里用（键的集合以那一份为准），英文在 en-limits.ts。
 import type { Entry } from './types.ts'
 
 export const zhLimits = {
-  'limits.title': '账号额度',
-  'limits.window.hours': '{n} 小时',
-  'limits.window.days': '{n} 天',
-  'limits.window.week': '每周',
+  'limits.window.hours': '{n} 小时额度',
+  'limits.window.days': '{n} 天额度',
+  'limits.window.week': '每周额度',
   'limits.window.other': '额度',
   'limits.named': '{name} · {window}',
   'limits.used': '已用 {percent}%',

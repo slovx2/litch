@@ -30,52 +30,65 @@ export function useAccountLimits(deviceId: string, harness: string | undefined):
   return rows
 }
 
-/** 一行：名字和百分比、进度条、重置时间。快用完的时候换成提醒的颜色（和圆环一样的档） */
-function LimitRow({ row, now }: { row: AccountLimitRow; now: number }) {
+/**
+ * 弹层里的一行用量：名字靠左，补充的那句（词元数、什么时候重置）和百分比靠右，下面一条细进度条。
+ * 上下文和账号额度都用它。快用完的时候换成提醒的颜色（和圆环同档）。percent 是 null 时只画空的条
+ */
+export function MeterRow({
+  label,
+  percent,
+  detail,
+  title,
+}: {
+  label: string
+  percent: number | null
+  detail: string | null
+  /** 补充那句悬停时的说明（重置的具体时刻） */
+  title?: string | undefined
+}) {
   const t = useT()
-  const { usedPercent, resetsAt } = row.window
-  const window = windowLabel(row.window, t)
-  const label = row.name ? t('limits.named', { name: row.name, window }) : window
-  const level = usedPercent >= 90 ? ' full' : usedPercent >= 70 ? ' high' : ''
-  const reset = resetsIn(resetsAt, now, t)
+  const level = percent === null ? '' : percent >= 90 ? ' full' : percent >= 70 ? ' high' : ''
+  const width = percent === null ? 0 : Math.min(100, percent)
   return (
-    <div className={`limit${level}`}>
-      <div className="limit-head">
-        <span className="limit-name">{label}</span>
-        <span className="mono">{usedPercent}%</span>
+    <div className={`meter${level}`}>
+      <div className="meter-head">
+        <span className="meter-name">{label}</span>
+        {detail ? (
+          <span className="meter-detail" title={title}>
+            {detail}
+          </span>
+        ) : null}
+        <span className="meter-pct mono">{percent === null ? '—' : `${percent}%`}</span>
       </div>
       <span
-        className="limit-bar"
+        className="meter-bar"
         role="progressbar"
-        aria-label={`${label} · ${t('limits.used', { percent: usedPercent })}`}
+        aria-label={percent === null ? label : `${label} · ${t('limits.used', { percent })}`}
         aria-valuemin={0}
         aria-valuemax={100}
-        aria-valuenow={Math.min(100, usedPercent)}
+        aria-valuenow={width}
       >
-        <i style={{ width: `${Math.min(100, usedPercent)}%` }} />
+        <i className="meter-fill" style={{ width: `${width}%` }} />
       </span>
-      {reset ? (
-        <div
-          className="limit-reset"
-          title={resetsAt === null ? undefined : new Date(resetsAt).toLocaleString()}
-        >
-          {reset}
-        </div>
-      ) : null}
     </div>
   )
 }
 
+/** 账号额度的几行。没有额度时什么都不画 */
 export function AccountLimits({ rows }: { rows: AccountLimitRow[] }) {
   const t = useT()
   const now = useNow()
-  if (rows.length === 0) return null
-  return (
-    <section className="limits" aria-label={t('limits.title')}>
-      <div className="limits-title">{t('limits.title')}</div>
-      {rows.map((row) => (
-        <LimitRow key={row.id} row={row} now={now} />
-      ))}
-    </section>
-  )
+  return rows.map((row) => {
+    const window = windowLabel(row.window, t)
+    const { resetsAt } = row.window
+    return (
+      <MeterRow
+        key={row.id}
+        label={row.name ? t('limits.named', { name: row.name, window }) : window}
+        percent={row.window.usedPercent}
+        detail={resetsIn(resetsAt, now, t)}
+        title={resetsAt === null ? undefined : new Date(resetsAt).toLocaleString()}
+      />
+    )
+  })
 }

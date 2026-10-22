@@ -357,83 +357,98 @@
 .ctx-btn.full:hover {
   color: var(--err);
 }
-/* 圆环在底栏的右头，浮层靠右对齐，不伸到输入区外面。.pick-pop 写在后面，要多一级才压得住它；
-   下面有账号额度时比别的选择器高，放宽高度上限 */
+/* 圆环在底栏的右头，浮层靠右对齐，不伸到输入区外面。.pick-pop 写在后面，要多一级才压得住它。
+   宽度定死：几行的百分比上下对齐，最长的一行（“4 天 23 小时后重置”）也不折行 */
 .pick-pop.ctx-pop {
   left: auto;
   right: 0;
-  min-width: 240px;
+  width: 300px;
+  max-width: min(300px, 90vw);
   max-height: min(480px, 70vh);
+  padding: 6px;
 }
-.ctx-detail {
-  padding: 5px 8px 6px;
-  font-size: 11px;
-  line-height: 16px;
-  color: var(--ink-3);
+/* 弹层里的一行用量（上下文、账号额度）：名字靠左，补充的那句和百分比靠右，下面一条细进度条。
+   快用完的换成提醒的颜色（和圆环同档） */
+.meter {
+  padding: 5px 6px 6px;
 }
-/* 弹层里的账号额度：每个窗口一行名字和百分比，下面一条细进度条和重置时间。快用完的换成提醒的颜色（和圆环同档） */
-.limits {
-  margin-bottom: 4px;
-  padding: 6px 8px 8px;
-  border-top: 1px solid var(--line-1);
-  border-bottom: 1px solid var(--line-1);
-}
-.limits-title {
-  margin-bottom: 6px;
-  font-size: 11px;
-  line-height: 16px;
-  font-weight: 500;
-  color: var(--ink-2);
-}
-.limit + .limit {
-  margin-top: 8px;
-}
-.limit-head {
+.meter-head {
   display: flex;
   align-items: baseline;
-  gap: 12px;
+  gap: 8px;
   font-size: 12px;
   line-height: 18px;
-  color: var(--ink-2);
+  white-space: nowrap;
 }
-.limit-name {
+.meter-name {
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  color: var(--ink-2);
 }
-.limit-head .mono {
+.meter-detail {
   flex: none;
   font-size: 11px;
   color: var(--ink-3);
 }
-.limit-bar {
+.meter-pct {
+  flex: none;
+  min-width: 4ch;
+  text-align: right;
+  font-size: 11px;
+  color: var(--ink);
+}
+.meter-bar {
   display: block;
   height: 4px;
-  margin-top: 3px;
+  margin-top: 4px;
   background: var(--hover);
   border-radius: var(--r1);
   overflow: hidden;
 }
-.limit-bar i {
+.meter-fill {
   display: block;
   height: 100%;
   background: var(--accent);
 }
-.limit.high .limit-bar i {
+.meter.high .meter-fill {
   background: var(--wait);
 }
-.limit.full .limit-bar i {
+.meter.high .meter-pct {
+  color: var(--wait);
+}
+.meter.full .meter-fill {
   background: var(--err);
 }
-.limit.full .limit-head .mono {
+.meter.full .meter-pct {
   color: var(--err);
 }
-.limit-reset {
-  margin-top: 2px;
+/* 压缩上下文：一个整宽的按钮，和上面的几行隔开。压不了时淡下去，原因写在下面一行小字里 */
+.btn.ctx-compact {
+  width: 100%;
+  justify-content: center;
+  margin-top: 6px;
+  font-size: 12px;
+}
+.btn.ctx-compact[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.btn.ctx-compact[aria-disabled="true"]:hover {
+  background: var(--raised);
+}
+.btn.ctx-compact[aria-disabled="true"]:active {
+  transform: none;
+}
+.ctx-why {
+  padding: 4px 6px 0;
   font-size: 11px;
   line-height: 16px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--ink-3);
 }
 /* 底栏上的选择器：模型、强度、权限。按钮平时很淡，不跟输入的文字抢 */
