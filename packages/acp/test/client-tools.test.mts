@@ -395,6 +395,11 @@ test('Litch 的呈现风格（不带工具的命名空间）进 MCP 服务的 in
 test('Litch 的 MCP 桥起不来（临时目录用不了）：不挂桥，会话照建、回合照跑；之后起得来了接回时照挂', async () => {
   const s = await scene()
   const tmp = process.env.TMPDIR
+  // 赋 undefined 会变成字符串 "undefined"（CI 的 Linux 上本来就没设 TMPDIR）
+  const restoreTmp = () => {
+    if (tmp === undefined) delete process.env.TMPDIR
+    else process.env.TMPDIR = tmp
+  }
   // 桥的套接字放在 tmpdir() 下新建的目录里：TMPDIR 指到不存在的地方，监听就起不来
   const broken = join(s.root, 'no-such-tmp')
   try {
@@ -425,7 +430,7 @@ test('Litch 的 MCP 桥起不来（临时目录用不了）：不挂桥，会话
       await server.close()
     }
     // 临时目录好了：会话记着的动态工具还在，再接回时桥照挂上，工具能用
-    process.env.TMPDIR = tmp
+    restoreTmp()
     server = new AcpServer(s.home, s.env)
     again = { ...s, server, desktop: client(server) }
     try {
@@ -442,7 +447,7 @@ test('Litch 的 MCP 桥起不来（临时目录用不了）：不挂桥，会话
       await server.close()
     }
   } finally {
-    process.env.TMPDIR = tmp
+    restoreTmp()
     await s.restore()
   }
 })
