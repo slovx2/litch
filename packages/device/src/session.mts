@@ -218,6 +218,7 @@ export class ClientSession implements ClientToolPeer {
           host.titles.turnEvent(method, params)
         },
         decorate: (thread) => host.sessionTree.decorate(thread),
+        deleted: (threadId) => host.sessionTree.deleted(threadId),
       },
       background: {
         notification: (link, method, params) => {
@@ -548,6 +549,9 @@ export class ClientSession implements ClientToolPeer {
       this.host.sessionTree.userSpoke(params.threadId)
     if (params && method === 'turn/interrupt' && typeof params.threadId === 'string')
       this.host.sessionTree.interrupted(params.threadId)
+    // 用户归档子会话：先记下来，归档打断的那个回合结束时就认得出是用户停的（引擎可能先发回合结束再应答）
+    if (params && method === 'thread/archive' && typeof params.threadId === 'string')
+      this.host.sessionTree.archived(params.threadId)
     // 建会话带的 litch_sessions 换成设备进程按设置给的那份（“每回合收尾”开关、这个 harness 的“任务卡”开关，
     // session-tree.mts 的 currentSessionTools）
     if (params && method === 'thread/start') {

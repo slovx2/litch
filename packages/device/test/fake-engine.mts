@@ -8,7 +8,7 @@ export interface FakeTurn {
   id: string
   status: 'inProgress' | 'completed' | 'failed' | 'interrupted'
   items: Record<string, unknown>[]
-  error: null
+  error: { message: string } | null
 }
 
 export class FakeEngine extends FakeUpstream {
@@ -114,6 +114,14 @@ export class FakeEngine extends FakeUpstream {
       this.end(params.threadId, 'interrupted')
       return {}
     }
+    // 归档在跑的会话：回合先被打断，再发 thread/archived（适配器入口的做法）
+    this.handlers['thread/archive'] = (params) => {
+      const thread = this.thread(params.threadId)
+      if (this.running(thread.id)) this.end(thread.id, 'interrupted')
+      thread.archived = true
+      queueMicrotask(() => this.notify('thread/archived', { threadId: thread.id }))
+      return {}
+    }
   }
 
   thread(threadId: unknown): FakeThread {
@@ -144,10 +152,16 @@ export class FakeEngine extends FakeUpstream {
     return turn
   }
 
-  /** 结束会话正在跑的回合，带一条回答 */
-  end(threadId: string, status: FakeTurn['status'] = 'completed', answer?: string): FakeTurn {
+  /** 结束会话正在跑的回合，带一条回答；失败、打断的可以带上回合的错误 */
+  end(
+    threadId: string,
+    status: FakeTurn['status'] = 'completed',
+    answer?: string,
+    error?: string,
+  ): FakeTurn {
     const turn = this.current(threadId)
     if (!turn) throw new Error(`${threadId} 没有回合在跑`)
+    if (error !== undefined) turn.error = { message: error }
     if (answer !== undefined) {
       const item = { type: 'agentMessage', id: `a${++this.serial}`, text: answer }
       turn.items.push(item)

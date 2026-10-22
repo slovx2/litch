@@ -128,6 +128,11 @@ export class SessionTree {
   private readonly active = new Map<string, string>()
   /** 客户端用 turn/start 发起的回合（harness + 回合）：只有它们算用户发起的 */
   private readonly clientTurns = new Set<string>()
+  /**
+   * 用户亲手停下的子会话（客户端的 turn/interrupt、归档）：会话 → 怎么停的。它在跑的回合结束时取走，
+   * 那条回报注明是用户停的、不唤醒父会话。模型用 litch_sessions 打断的走设备进程自己的连接，不经过这里
+   */
+  private readonly userStops = new Map<string, 'interrupted' | 'archived'>()
   /** 子会话里挂着没人答的请求：会话 → 请求号 → 开始挂的时刻（毫秒） */
   private readonly waiting = new Map<string, Map<string, number>>()
   /** 已经为“在等用户”进过一次队列的回合，同一个回合只报一次 */
@@ -331,8 +336,12 @@ export class SessionTree {
   }
 
   private engineEvent(harness: string, method: string, params: Record<string, unknown>): void {
+    const threadId = typeof params.threadId === 'string' ? params.threadId : null
     if (method === 'turn/started' || method === 'turn/completed')
       this.turnEvent(harness, method, params)
+    // 别处（官方桌面端等直连引擎的客户端）归档、删掉的，只能从引擎的通知上看到
+    else if (method === 'thread/archived' && threadId) this.archived(threadId)
+    else if (method === 'thread/deleted' && threadId) this.deleted(threadId)
     else if (method === 'serverRequest/resolved' && params.requestId != null)
       for (const [threadId, requests] of this.waiting) {
         requests.delete(String(params.requestId))
@@ -391,6 +400,13 @@ export class SessionTree {
     if (this.active.get(threadId) === turn.id) this.active.delete(threadId)
     this.waiting.delete(threadId)
     const userDriven = this.clientTurns.delete(`${harness}\u0000${turn.id}`)
+    const stop = this.userStops.get(threadId)
+    this.userStops.delete(threadId)
+    // 用户点了停止、回合却是自己先做完的，不算用户停的；归档的不管回合怎么结束都算
+    const userStopped =
+      stop === 'archived' || (stop === 'interrupted' && turn.status === 'interrupted')
+        ? stop
+        : undefined
     const wrapped = this.wrapped.delete(key)
     this.offersEnded(threadId, turn.id)
     this.noteRemind(threadId, turn, userDriven, wrapped)
@@ -401,7 +417,8 @@ export class SessionTree {
         harness,
         threadId,
         turn,
-        !userDriven && !this.host.taskTurn(threadId, turn.id),
+        !userDriven && !userStopped && !this.host.taskTurn(threadId, turn.id),
+        userStopped,
       ).catch((error: unknown) =>
         this.host.log(`子会话 ${threadId} 的回报没取到：${String(error)}`),
       )
@@ -530,28 +547,40 @@ export class SessionTree {
     this.host.log(`会话 ${threadId}（${harness}）的回合 ${origin} 没调收尾，开了一个提醒回合`)
   }
 
-  /** 子会话一回合结束：取最后一条回答的开头，进父会话的队列 */
+  /**
+   * 子会话一回合结束：取最后一条回答的开头，失败、被打断的再带上回合的错误，进父会话的队列。
+   * userStopped：用户亲手停下的（这时 wakeable 已经是假）
+   */
   private async report(
     harness: string,
     threadId: string,
     turn: Record<string, unknown>,
     wakeable: boolean,
+    userStopped?: SessionEventNote['userStopped'],
   ): Promise<void> {
     const lineage = this.store.parentOf(threadId)
     if (!lineage) return
-    let answer = lastAnswer(turn)
-    if (answer === null) {
-      // 回合结束的通知里多半不带条目：读一遍会话，找这个回合
-      const { thread } = await this.read(threadId, true).catch(() => ({ thread: null }))
-      const turns = isObject(thread) && Array.isArray(thread.turns) ? thread.turns : []
-      answer = lastAnswer(turns.find((one) => isObject(one) && one.id === turn.id))
-    }
     const status: SessionEventNote['status'] =
       turn.status === 'failed'
         ? 'failed'
         : turn.status === 'interrupted'
           ? 'interrupted'
           : 'completed'
+    let answer = lastAnswer(turn)
+    let error = status === 'completed' ? null : turnError(turn)
+    if (answer === null || (status !== 'completed' && error === null)) {
+      // 回合结束的通知里多半不带条目（有的也不带错误）：读一遍会话，找这个回合
+      const { thread } = await this.read(threadId, true).catch(() => ({ thread: null }))
+      const turns = isObject(thread) && Array.isArray(thread.turns) ? thread.turns : []
+      const full = turns.find((one) => isObject(one) && one.id === turn.id)
+      answer ??= lastAnswer(full)
+      if (status !== 'completed') error ??= turnError(full)
+    }
+    // 回合刚结束、还在读的工夫里用户把它归档了（archived 那时还没有这条回报可改）：一样不唤醒
+    if (!userStopped && this.host.index.archived(threadId)) {
+      userStopped = 'archived'
+      wakeable = false
+    }
     // 决 430：有后台任务还在跑也照常算这一回合结束，回报里注明；后台跑完、引擎自己续跑的那一回合结束时再报一次
     const background = this.host.backgroundRunning(threadId)
     const note: SessionEventNote = {
@@ -560,6 +589,8 @@ export class SessionTree {
       status,
       excerpt: (answer ?? '').slice(0, SESSION_TREE_LIMITS.noteChars),
       ...(background > 0 ? { backgroundTasks: background } : {}),
+      ...(error ? { error: error.slice(0, SESSION_TREE_LIMITS.noteChars) } : {}),
+      ...(userStopped ? { userStopped } : {}),
     }
     this.store.addNote(lineage.parentThreadId, note, lineage.wakeParent && wakeable)
     this.host.log(`子会话 ${threadId}（${harness}）的回合 ${String(turn.id)} 已进父会话的回报队列`)
@@ -913,10 +944,30 @@ export class SessionTree {
       if (wait.threadId === threadId) this.offerHere(id, 'spoke')
   }
 
-  /** 用户打断了这个会话的回合（turn/interrupt）：在等的 offer 卡当作在这里做 */
+  /**
+   * 用户打断了这个会话的回合（客户端的 turn/interrupt）：在等的 offer 卡当作在这里做；
+   * 是子会话、正在跑的话记下是用户停的
+   */
   interrupted(threadId: string): void {
     for (const [id, wait] of [...this.offers])
       if (wait.threadId === threadId) this.offerHere(id, 'interrupted')
+    if (this.store.parentOf(threadId) && this.active.has(threadId))
+      this.userStops.set(threadId, 'interrupted')
+  }
+
+  /**
+   * 子会话被归档了（客户端发的 thread/archive，或引擎的 thread/archived 通知）：用户不要它了。
+   * 在跑的回合结束时的回报、已经排着的回报都不再唤醒父会话，注明已归档
+   */
+  archived(threadId: string): void {
+    if (!this.store.parentOf(threadId)) return
+    if (this.active.has(threadId)) this.userStops.set(threadId, 'archived')
+    this.store.muteNotes(threadId, 'archived')
+  }
+
+  /** 会话删掉了：它带的动态工具跟着删 */
+  deleted(threadId: string): void {
+    this.store.dropTools(threadId)
   }
 
   /**
@@ -1076,7 +1127,15 @@ function publicNote(note: SessionEventNote): SessionEventNote {
     status: note.status,
     excerpt: note.excerpt,
     ...(note.backgroundTasks ? { backgroundTasks: note.backgroundTasks } : {}),
+    ...(note.error ? { error: note.error } : {}),
+    ...(note.userStopped ? { userStopped: note.userStopped } : {}),
   }
+}
+
+/** 回合上的错误原文（turn.error.message）。没有是 null */
+function turnError(turn: unknown): string | null {
+  const error = isObject(turn) && isObject(turn.error) ? turn.error : null
+  return typeof error?.message === 'string' && error.message.trim() ? error.message : null
 }
 
 /** 用户消息里标出来的一个元素（按 UTF-8 字节位置），整体往后挪 shift 个字节 */

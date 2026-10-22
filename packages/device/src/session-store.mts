@@ -112,6 +112,12 @@ const MIGRATIONS: readonly string[] = [
   `ALTER TABLE notes ADD COLUMN background INTEGER NOT NULL DEFAULT 0;`,
   // 提案的推理强度（start、wrap_up 的建议可带 effort）。不写是 null，开始时取父会话那一刻的；旧提案都是 null
   `ALTER TABLE proposals ADD COLUMN effort TEXT;`,
+  // 回报记下回合失败、被打断时的错误原文，和子会话是不是用户亲手停下的（interrupted、archived）。旧的回报都是 null
+  `ALTER TABLE notes ADD COLUMN error TEXT;
+   ALTER TABLE notes ADD COLUMN user_stopped TEXT;`,
+  // 只做一次的整理，做完删掉那一行。pruneThreadTools：以前删会话时没删它带的动态工具，留下的行清一次（device.mts）
+  `CREATE TABLE chores(name TEXT PRIMARY KEY) WITHOUT ROWID;
+   INSERT INTO chores(name) VALUES('pruneThreadTools');`,
 ]
 
 export const SESSION_SCHEMA_VERSION = MIGRATIONS.length
@@ -256,9 +262,10 @@ export class SessionStore {
       ),
       nextExpiry: prepare("SELECT MIN(expires_at) AS at FROM proposals WHERE status='pending'"),
       addNote: prepare(
-        `INSERT INTO notes(parent_thread_id, thread_id, title, status, excerpt, wake, created_at, background)
-         VALUES(?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO notes(parent_thread_id, thread_id, title, status, excerpt, wake, created_at, background, error, user_stopped)
+         VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ),
+      muteNotes: prepare('UPDATE notes SET wake=0, user_stopped=? WHERE thread_id=?'),
       notes: prepare('SELECT * FROM notes WHERE parent_thread_id=? ORDER BY seq'),
       noteParents: prepare('SELECT DISTINCT parent_thread_id FROM notes'),
       dropNotes: prepare('DELETE FROM notes WHERE parent_thread_id=? AND seq<=?'),
@@ -267,6 +274,10 @@ export class SessionStore {
         'INSERT INTO wakes(thread_id, count) VALUES(?, ?) ON CONFLICT(thread_id) DO UPDATE SET count=excluded.count',
       ),
       tools: prepare('SELECT tools FROM thread_tools WHERE thread_id=?'),
+      toolThreads: prepare('SELECT thread_id FROM thread_tools'),
+      chore: prepare('SELECT 1 AS pending FROM chores WHERE name=?'),
+      choreDone: prepare('DELETE FROM chores WHERE name=?'),
+      dropTools: prepare('DELETE FROM thread_tools WHERE thread_id=?'),
       setTools: prepare(
         'INSERT INTO thread_tools(thread_id, tools) VALUES(?, ?) ON CONFLICT(thread_id) DO UPDATE SET tools=excluded.tools',
       ),
@@ -503,7 +514,14 @@ export class SessionStore {
       wake ? 1 : 0,
       now(),
       note.backgroundTasks ?? 0,
+      note.error ?? null,
+      note.userStopped ?? null,
     )
+  }
+
+  /** 用户亲手停下了这个子会话：它排着的回报都不再唤醒父会话，注明怎么停的 */
+  muteNotes(threadId: string, userStopped: NonNullable<SessionEventNote['userStopped']>): void {
+    this.run('muteNotes', userStopped, threadId)
   }
 
   notes(parentThreadId: string): QueuedNote[] {
@@ -514,6 +532,10 @@ export class SessionStore {
       status: text(row.status) as SessionEventNote['status'],
       excerpt: text(row.excerpt),
       ...(Number(row.background) > 0 ? { backgroundTasks: Number(row.background) } : {}),
+      ...(typeof row.error === 'string' ? { error: row.error } : {}),
+      ...(row.user_stopped === 'interrupted' || row.user_stopped === 'archived'
+        ? { userStopped: row.user_stopped }
+        : {}),
       wake: row.wake === 1,
     }))
   }
@@ -553,6 +575,32 @@ export class SessionStore {
 
   setTools(threadId: string, tools: unknown[]): void {
     this.run('setTools', threadId, JSON.stringify(tools))
+  }
+
+  /** 会话删掉了：它带的动态工具跟着删 */
+  dropTools(threadId: string): void {
+    this.run('dropTools', threadId)
+  }
+
+  /** 只做一次的整理还没做 */
+  chore(name: string): boolean {
+    return this.statements.chore?.get(name) !== undefined
+  }
+
+  choreDone(name: string): void {
+    this.run('choreDone', name)
+  }
+
+  /** 清掉 known 说不认识的会话的那一行，返回清掉几行 */
+  pruneTools(known: (threadId: string) => boolean): number {
+    let dropped = 0
+    for (const row of this.statements.toolThreads?.all() ?? []) {
+      const threadId = text(row.thread_id)
+      if (known(threadId)) continue
+      this.run('dropTools', threadId)
+      dropped++
+    }
+    return dropped
   }
 
   // ---------- 原生 codex 的开发者指令 ----------

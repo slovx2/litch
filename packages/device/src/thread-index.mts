@@ -117,6 +117,16 @@ export class ThreadIndex {
     }
   }
 
+  /** 记着这个会话归档了 */
+  archived(threadId: string): boolean {
+    return this.load(threadId)?.archived === true
+  }
+
+  /** 一个会话都没记着（库刚建、刚换过） */
+  empty(): boolean {
+    return this.db.prepare('SELECT 1 FROM threads LIMIT 1').get() === undefined
+  }
+
   forget(threadId: string): void {
     this.known.delete(threadId)
     this.remove.run(threadId)

@@ -281,6 +281,13 @@ export interface SessionEventNote {
    * 后台跑完、引擎自己续跑的那一回合结束时会再报一次。没有的不带
    */
   backgroundTasks?: number
+  /** 回合失败、被打断时回合上的错误原文，截到 noteChars 个字以内。没有的不带 */
+  error?: string
+  /**
+   * 子会话是用户亲手停下的：在客户端里停了它的回合（interrupted），或者归档了它（archived）。
+   * 这样的回报只进队列、不唤醒父会话。模型用 litch_sessions 打断的不算，不带
+   */
+  userStopped?: 'interrupted' | 'archived'
 }
 
 export interface SessionEvent {
@@ -305,7 +312,14 @@ export function formatSessionEvent(event: SessionEvent): string {
     const background = note.backgroundTasks
       ? ` (${note.backgroundTasks} background task${note.backgroundTasks === 1 ? '' : 's'} still running; another update comes when they finish)`
       : ''
-    return `- "${note.title}" (${note.threadId}) ${note.status}${background}${excerpt ? `: ${excerpt}` : ''}`
+    const stopped =
+      note.userStopped === 'archived'
+        ? ' (archived by the user)'
+        : note.userStopped === 'interrupted'
+          ? ' (stopped by the user)'
+          : ''
+    const error = note.error ? ` (error: ${note.error.replace(/\s+/g, ' ').trim()})` : ''
+    return `- "${note.title}" (${note.threadId}) ${note.status}${stopped}${background}${excerpt ? `: ${excerpt}` : ''}${error}`
   })
   const tail =
     event.kind === 'wake'

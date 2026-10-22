@@ -52,6 +52,8 @@ export interface RelaySessions {
   turnEvent(harness: string, method: string, params: Record<string, unknown>): void
   /** 会话对象经过、这条连接声明了 sessionTree：挂上 litchLineage */
   decorate(thread: Record<string, unknown>): void
+  /** 会话删掉了（thread/delete 成功、thread/deleted 通知） */
+  deleted(threadId: string): void
 }
 
 /**
@@ -223,6 +225,7 @@ export class Relay {
     if (tracked.kind === 'gone') {
       workspaces.forget(tracked.threadId)
       index.forget(tracked.threadId)
+      this.host.sessions.deleted(tracked.threadId)
     } else if (tracked.kind === 'shelved') index.setArchived(tracked.threadId, tracked.archived)
     else {
       const thread = isObject(result) ? result.thread : null
@@ -285,6 +288,7 @@ export class Relay {
     } else if (method === 'thread/deleted' && threadId) {
       this.host.workspaces.forget(threadId)
       this.host.index.forget(threadId)
+      this.host.sessions.deleted(threadId)
     } else if (method === 'thread/archived' && threadId) this.host.index.setArchived(threadId, true)
     else if (method === 'thread/unarchived' && threadId)
       this.host.index.setArchived(threadId, false)
