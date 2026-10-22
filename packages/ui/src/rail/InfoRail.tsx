@@ -80,7 +80,7 @@ export function InfoRail({ deviceId, sessionId }: InfoRailProps) {
   )
 }
 
-/** 待办卡片：标题一行能点开收起；全做完了、回合也结束了，默认收着，只留“已完成 N/N” */
+/** 待办卡片：标题一行（名字、箭头，右边是进度摘要）能点开收起；全做完了、回合也结束了，默认收着，只留“已完成 N/N” */
 function RailTodo({
   sessionKey,
   item,
@@ -102,10 +102,12 @@ function RailTodo({
         aria-expanded={open}
         onClick={() => setOpen(!open)}
       >
-        <Caret />
         <span className="rail-title">{t('todo.title')}</span>
-        <span className="todo-count">{t('todo.count', { done, total })}</span>
-        <TodoBar done={done} total={total} />
+        <Caret />
+        <span className="rail-sum">
+          <span className="todo-count">{t('todo.count', { done, total })}</span>
+          <TodoBar done={done} total={total} />
+        </span>
       </button>
       {open ? (
         <div className="rail-body">
