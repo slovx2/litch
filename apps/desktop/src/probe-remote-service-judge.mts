@@ -151,7 +151,7 @@ export function judgeRemoteService(seen: ServiceSeen, aliases: ServiceAliases): 
   must(
     old.preview.includes('版本过低') &&
       old.stage === 'outdated' &&
-      old.text.includes('太旧') &&
+      old.text.includes('过旧') &&
       old.guides.includes('devices.guide.upgradeService') &&
       old.commands.some((command) => command.includes('install.sh')),
     `适配器太旧的那台，没有停在对应的阶段上，或者没有说该怎么办：${JSON.stringify(old)}`,

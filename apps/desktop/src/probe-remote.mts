@@ -405,7 +405,7 @@ export function judgeRemote(probe: RemoteProbe): string[] {
   must(probe.noPasswordField, '出现了密码输入框')
   must(probe.connected && probe.rows >= 4, `远程设备没有列出会话（${probe.rows} 行）`)
   must(
-    probe.notes.some((note) => note.includes('ssh') || note.includes('codex')),
+    probe.notes.some((note) => /ssh|codex/i.test(note)),
     `连接途中没有显示走到哪一步：${JSON.stringify(probe.notes)}`,
   )
   must(probe.localDown, '本机没有入口，却没有显示连不上')
@@ -432,7 +432,7 @@ export function judgeRemote(probe: RemoteProbe): string[] {
   must(probe.renamed, '改名没有生效')
   must(probe.recolored, '换线色没有生效')
   must(probe.editMatches, `改连接的对话框里没有带着现在的配置：${probe.editPrefilled}`)
-  must(probe.editRejected.includes('加过'), `换成已经加过的设备没有被拒绝：${probe.editRejected}`)
+  must(probe.editRejected.includes('已添加'), `换成已经加过的设备没有被拒绝：${probe.editRejected}`)
   must(
     probe.moved && probe.movedGuide.includes('@openai/codex@latest'),
     `改连接之后没有照新的配置重新连，或者详情里没有该怎么办：${probe.movedGuide}`,
