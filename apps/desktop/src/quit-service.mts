@@ -29,35 +29,35 @@ const WORDS = {
   'zh-CN': {
     message: '是否同时关闭后台服务？',
     detail:
-      '后台服务关着时，定时任务不会运行；还没跑完的回合、设备上的终端会停下。' +
-      '下次打开 Litch 会自动重新启动它。\n\n保留的话它在后台接着运行，上面这些都照常。',
+      '关闭后，定时任务不再运行，未完成的回合和设备上的终端会停止。' +
+      '下次打开 Litch 时会自动重新启动。\n\n保留则继续在后台运行。',
     stop: '关闭后台服务',
     keep: '保留后台服务',
     cancel: '取消',
-    remember: '记住我的选择，下次不再提醒',
-    busy: '后台服务还在忙',
+    remember: '记住选择，不再询问',
+    busy: '后台服务正忙',
     busyDetail: (reasons: string) =>
-      `${reasons}\n\n仍然关闭会把它们中断；也可以保留后台服务，让它们接着运行。`,
+      `${reasons}\n\n强制关闭会中断以上工作；也可以保留后台服务，让它们继续运行。`,
     force: '仍然关闭',
-    turns: (names: string) => `${names} 有回合在跑`,
-    someTurns: '有回合在跑',
-    processes: (count: number) => `有 ${count} 个终端在设备上运行`,
-    clients: (count: number) => `还有 ${count} 个别的客户端连着（比如手机或另一台电脑）`,
-    unknown: '后台服务没有应答，判断不了它在做什么',
+    turns: (names: string) => `${names} 有回合正在运行`,
+    someTurns: '有回合正在运行',
+    processes: (count: number) => `有 ${count} 个终端正在设备上运行`,
+    clients: (count: number) => `有 ${count} 个其他客户端已连接（如手机或另一台电脑）`,
+    unknown: '后台服务无响应，无法确定其状态',
   },
   en: {
     message: 'Also stop the background service?',
     detail:
-      'While it is stopped, scheduled tasks don’t run, and unfinished turns and device terminals stop. ' +
-      'Litch starts it again the next time you open it.\n\n' +
-      'If you keep it, it keeps running in the background and all of this carries on.',
+      'When stopped, scheduled tasks won’t run, and unfinished turns and device terminals will stop. ' +
+      'Litch restarts it the next time you open it.\n\n' +
+      'If you keep it, it continues running in the background.',
     stop: 'Stop Background Service',
     keep: 'Keep It Running',
     cancel: 'Cancel',
-    remember: 'Remember my choice and don’t ask again',
-    busy: 'The background service is still busy',
+    remember: 'Don’t ask again',
+    busy: 'The background service is busy',
     busyDetail: (reasons: string) =>
-      `${reasons}\n\nStopping it now interrupts them. You can also keep the service running so they can finish.`,
+      `${reasons}\n\nStopping it now interrupts this work. You can keep the service running so it can finish.`,
     force: 'Stop Anyway',
     turns: (names: string) => `Turns are running in ${names}`,
     someTurns: 'Turns are running',
@@ -69,7 +69,7 @@ const WORDS = {
       count === 1
         ? 'Another client is connected (a phone or another computer)'
         : `${count} other clients are connected (a phone or another computer)`,
-    unknown: 'The background service didn’t answer, so it’s unclear what it is doing',
+    unknown: 'The background service isn’t responding, so its status is unknown',
   },
 } as const
 

@@ -51,8 +51,8 @@ test('引用太长截掉后面', () => {
 
 test('评论超过十条、引用是空的，不发', () => {
   const many = Array.from({ length: 11 }, (_, at) => comment(`段 ${at}`))
-  assert.throws(() => outgoing('hi', [], many), /评论太多了/)
-  assert.throws(() => outgoing('hi', [], [comment('  ')]), /消息带的东西不对/)
+  assert.throws(() => outgoing('hi', [], many), /评论过多/)
+  assert.throws(() => outgoing('hi', [], [comment('  ')]), /消息附件无效/)
 })
 
 test('认不出来的照原文：不在开头、没收尾、编号不连、多了别的东西', () => {

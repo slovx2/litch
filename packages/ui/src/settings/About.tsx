@@ -60,8 +60,13 @@ function LicenseRow({ entry, title }: { entry: LicenseEntry; title: string }) {
         {entry.license ? <span className="lic-kind">{entry.license}</span> : null}
       </div>
       {open ? (
-        // biome-ignore lint/a11y/noNoninteractiveTabindex: 全文很长，在这一块里自己滚；能拿焦点，键盘才滚得动
-        <pre id={id} className="lic-text" tabIndex={0}>
+        <pre
+          id={id}
+          className="lic-text"
+          // biome-ignore lint/a11y/noNoninteractiveTabindex: 全文很长，在这一块里自己滚；能拿焦点，键盘才滚得动
+          tabIndex={0}
+          data-state={body === undefined ? 'loading' : body === null ? 'missing' : 'shown'}
+        >
           {body === undefined
             ? t('settings.about.loading')
             : body === null
@@ -145,10 +150,7 @@ export function AboutSection() {
         </div>
       </section>
       <section className="set-block" data-licenses={shell === 'electron' ? 'shell' : 'none'}>
-        <h3>
-          {t('settings.about.licenses')}
-          <span>{t('settings.about.licenses.note')}</span>
-        </h3>
+        <h3>{t('settings.about.licenses')}</h3>
         {shell !== 'electron' ? (
           <p className="set-para">{t('settings.about.browser')}</p>
         ) : about ? (

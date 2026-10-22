@@ -83,7 +83,7 @@ export interface Tasks {
 /** 对账时一起取的运行记录有多少条：用来认出哪些会话是任务跑出来的（更早的认不出，见交接说明） */
 export const RECENT_RUNS = 200
 
-const UNSUPPORTED = '这台设备的服务版本不支持定时任务'
+const UNSUPPORTED = '此设备的服务版本不支持定时任务'
 
 /** 运行走到哪一步了：先后只用来挑“哪个是新的” */
 const STAGE: Record<TaskRunView['status'], number> = {
@@ -273,7 +273,7 @@ export function createTasks(host: TasksHost): Tasks {
   }
 
   const reachable = () => {
-    if (!host.online()) throw new ChannelError('offline', '设备没有连上')
+    if (!host.online()) throw new ChannelError('offline', '设备未连接')
     if (!host.supported()) {
       throw new ChannelError('unsupported', UNSUPPORTED, phrase('tasks.unsupported'))
     }

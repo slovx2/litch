@@ -95,7 +95,6 @@ export function SettingsScreen(_props: Props) {
           ]}
           onPick={(lang) => setPrefs({ lang })}
         />
-        <Note>{t('sessions.settings.lang.note')}</Note>
 
         <SectionLabel>{t('look.theme')}</SectionLabel>
         <Choices<Prefs['appearance']>
@@ -108,7 +107,6 @@ export function SettingsScreen(_props: Props) {
           ]}
           onPick={(appearance) => setPrefs({ appearance })}
         />
-        <Note>{t('sessions.settings.theme.note')}</Note>
 
         <SectionLabel>{t('switches.col.taskCards')}</SectionLabel>
         <TaskCardsSection />

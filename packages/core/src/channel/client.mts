@@ -86,7 +86,7 @@ export function connectChannel(port: Port): CoreChannel {
 
   return {
     command(name, params, options) {
-      if (closed) return Promise.reject(new ChannelError('closed', '通道已经关闭'))
+      if (closed) return Promise.reject(new ChannelError('closed', '通道已关闭'))
       const signal = options?.signal
       if (signal?.aborted) return Promise.reject(new ChannelError('cancelled', '命令已取消'))
       const id = nextId++
@@ -108,7 +108,7 @@ export function connectChannel(port: Port): CoreChannel {
 
     subscribe(topic, sink) {
       if (closed) {
-        sink.error?.(new ChannelError('closed', '通道已经关闭'))
+        sink.error?.(new ChannelError('closed', '通道已关闭'))
         return () => {}
       }
       const id = nextId++
@@ -123,7 +123,7 @@ export function connectChannel(port: Port): CoreChannel {
     close() {
       if (closed) return
       closed = true
-      const error = new ChannelError('closed', '通道已经关闭')
+      const error = new ChannelError('closed', '通道已关闭')
       for (const entry of pending.values()) entry.reject(error)
       pending.clear()
       for (const sink of sinks.values()) sink.error?.(error)

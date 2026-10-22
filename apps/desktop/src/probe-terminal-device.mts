@@ -151,7 +151,7 @@ export async function deviceDrop(): Promise<DeviceDrop> {
   await until('又接回来了', () => kit.tabs()[0]?.state === 'running', 90_000)
   await kit.see('后面的输出', /\ngap-23/, 60_000)
   await kit.prompt()
-  const gapLine = kit.rows().find((row) => row.includes('没能补回来')) ?? ''
+  const gapLine = kit.rows().find((row) => row.includes('未能恢复')) ?? ''
   const backlogLine = kit.rows().find((row) => row.includes('略过了')) ?? ''
   const gapsAfterLongDrop = gaps() - gapsAfterShortDrop
   const tailShown = kit.rows().includes('0123456789') && kit.rows().includes('gap-23')

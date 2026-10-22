@@ -119,11 +119,11 @@ export async function sendModeProbe(real: boolean): Promise<SendModeProbe | null
   const queued = Boolean(
     await until('托盘里的那一条', () => one('.tray-row'), 5000).catch(() => null),
   )
-  const steer = all('.tray-row .mini').find((button) => text(button).includes('现在就说'))
+  const steer = one<HTMLButtonElement>('.tray-row .mini.steer')
   steer?.click()
   const manualSteered = Boolean(
     await until(
-      '点“现在就说”之后插进同一个回合',
+      '点“立即插入”之后插进同一个回合',
       () => !one('.tray-row') && said('排着的话') && all('.turn').length === before,
       10_000,
     ).catch(() => null),
@@ -158,7 +158,7 @@ export function judgeSendMode(probe: SendModeProbe | null): string[] {
     probe.choices.join(',') === 'now,queue',
     `设置页“对话”里的档不对：${probe.choices.join(',')}`,
   )
-  check(probe.steerHint.includes('直接插进'), `立即发送时的提示不对：“${probe.steerHint}”`)
+  check(probe.steerHint.includes('直接插入'), `立即发送时的提示不对：“${probe.steerHint}”`)
   check(probe.steerButton === '发送', `立即发送时按钮上写的是“${probe.steerButton}”`)
   check(
     probe.steered,

@@ -61,7 +61,7 @@ export function judgeMockManage(probe: MockManageProbe): string[] {
   )
   same(
     probe.summaries,
-    ['状况：1 个没起来，1 个在监听', 'ssh：开着 2 个', 'terminal：', '环境文件：2 个变量'],
+    ['状况：1 个启动失败，1 个监听中', 'ssh：已开启 2 个', 'terminal：', '环境文件：2 个变量'],
     '收着的各节，标题后面的摘要不对',
   )
   must(probe.foldsReachable, '收起展开的地方不都是聚焦得到、带着状态和箭头的按钮')
@@ -181,7 +181,7 @@ export function judgeMockManage(probe: MockManageProbe): string[] {
     `带着没保存的改动回来，开着的不是有改动的那一节（有改动的那一节:Pi 那一块）：${probe.draftReopened}`,
   )
 
-  must(probe.raceToast.includes('别处'), `保存撞上别处的改动，没有冲突提示：${probe.raceToast}`)
+  must(probe.raceToast.includes('其他位置'), `保存撞上别处的改动，没有冲突提示：${probe.raceToast}`)
   must(probe.raceConflict, '冲突之后，被别处改过的那一栏没有标出来')
   must(probe.raceOtherKept, '冲突之后，别的栏的改动没有原样留着')
   must(probe.raceLatest === '22440', `选了“用最新的”，显示的不是别处改成的值：${probe.raceLatest}`)
@@ -309,7 +309,7 @@ export function judgeManage(probe: ManageProbe): string[] {
   must(
     probe.newSessionWhy.includes('停用') &&
       probe.newSessionWhy.includes('重新启用') &&
-      probe.newSessionWhy.endsWith('｜去设备页'),
+      probe.newSessionWhy.endsWith('｜前往设备页'),
     `新建对话页上没有说 Pi 是怎么回事、下一步做什么，或者没有去设备页的按钮：${probe.newSessionWhy}`,
   )
   must(
@@ -333,7 +333,7 @@ export function judgeManage(probe: ManageProbe): string[] {
   must(probe.confirmTitle.includes('Pi'), `它有回合在跑，重启前没有先问：${probe.confirmTitle}`)
   must(probe.forced, '说了仍然重启，“待重启”没有收掉')
   must(
-    probe.restartToast.includes('重新启动') && probe.restartState === 'ready',
+    probe.restartToast.includes('已重启') && probe.restartState === 'ready',
     `空闲时重启没有成：${probe.restartToast}（${probe.restartState}）`,
   )
 

@@ -5,6 +5,11 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
+## 未发布
+
+- 侧栏底部改成横排三个小按钮：定时任务、外观、设置。“外观”往上弹一小块，可直接改皮肤、明暗、语言，其余项在设置页的“外观”里；设置图标重画成齿轮（原来的样子像太阳，容易被当成深浅切换）
+- 界面文案全面改写：桌面、手机、核心报到界面上的错误和主进程弹窗改成书面、简洁的说法，删掉含义已经明确的说明；产品名统一写作 Codex、Claude Code、Pi、DSH、OpenCode
+
 ## 0.16.0
 
 - 后台任务：回合结束后还在跑的工作（Claude Code 的后台命令和子任务、原生 Codex 回合结束时还在跑的命令、dsh 的后台作业）有了统一的集合（协议扩展 `backgroundTasks`）。桌面端输入框上方一行写几个在跑，点开右侧“后台任务”页看运行中和已结束的（名称、用时、来源回合）；侧栏有记号；后台跑完引擎自己接着做的回合开头写一行。手机端同样

@@ -185,12 +185,12 @@ export function judgeTally(seen: TallySeen): string[] {
     `收起的项目那一行上看不出里面有等审批的、在跑的、没看过的：${seen.workspace}`,
   )
   must(
-    seen.spoken === 'img：1 个待审批，1 个在跑，1 个未读',
+    seen.spoken === 'img：1 个待审批，1 个运行中，1 个未读',
     `收起的项目上的汇总，读屏听到的不对：${seen.spoken}`,
   )
   must(!seen.digits, '行上的汇总里写了数目（数目该在信息卡里）')
   must(
-    seen.card === '现在：1 个待审批｜1 个在跑｜1 个未读',
+    seen.card === '当前：1 个待审批｜1 个运行中｜1 个未读',
     `项目的信息卡里没有写里面各有几个：${seen.card}`,
   )
   must(seen.backWhenOpen, '项目展开回去之后汇总还在，或者里面等审批的会话没画出来')
@@ -199,12 +199,12 @@ export function judgeTally(seen: TallySeen): string[] {
     `收起的设备那一行上的汇总不对：${seen.device}`,
   )
   must(
-    seen.deviceCard === '现在：1 个待审批｜1 个在跑｜2 个未读',
+    seen.deviceCard === '当前：1 个待审批｜1 个运行中｜2 个未读',
     `设备的信息卡里没有写下面各有几个：${seen.deviceCard}`,
   )
   must(seen.idle === '没有｜', `什么事都没有的项目收起来不该有汇总：${seen.idle}`)
   must(
-    seen.live.join(' → ') === '待回答｜｜｜0/1/0/0 → 等你处理｜｜｜1/1/0/0 → 待回答｜｜｜0/1/0/0',
+    seen.live.join(' → ') === '待回答｜｜｜0/1/0/0 → 待处理｜｜｜1/1/0/0 → 待回答｜｜｜0/1/0/0',
     `项目收着的时候里面有会话停下来等审批，行上没有跟着变：${seen.live.join(' → ')}`,
   )
   must(

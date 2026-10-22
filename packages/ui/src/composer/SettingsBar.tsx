@@ -192,11 +192,7 @@ export function SettingsBar({ options, settings, fresh, onChange }: SettingsBarP
           value={shownSpeed(settings.speed, model)}
           options={[
             // 标准不在对面给的清单里：明着选它要发 default，不然用的是模型的默认档
-            {
-              id: STANDARD_SPEED,
-              title: t('composer.speed.standard'),
-              hint: t('composer.speed.standard.note'),
-            },
+            { id: STANDARD_SPEED, title: t('composer.speed.standard') },
             // 快速档按界面的语言说；别的档（对面自定的）用它给的名字和说明。说明都只在提示里
             ...model.speeds.map((speed) =>
               FAST_SPEEDS.has(speed.id)

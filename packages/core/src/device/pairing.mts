@@ -193,9 +193,9 @@ export function createPairing(host: PairingHost): Pairing {
 
   const reachable = () => {
     if (!host.online())
-      throw new ChannelError('offline', '设备没有连上', undefined, { key: 'offline' })
+      throw new ChannelError('offline', '设备未连接', undefined, { key: 'offline' })
     if (!host.supported()) {
-      throw new ChannelError('unsupported', '这台设备的服务版本不支持扫码绑定手机', undefined, {
+      throw new ChannelError('unsupported', '此设备的服务版本不支持扫码绑定手机', undefined, {
         key: 'unsupported',
       })
     }
@@ -304,8 +304,8 @@ export function createPairing(host: PairingHost): Pairing {
       throw startFailure(
         'hostKeyMismatch',
         known.length === 0
-          ? '这台电脑的 known_hosts 里没有这台主机的记录'
-          : '这台电脑连到的和这台机器自报的主机钥匙不一样',
+          ? '本机的 known_hosts 中没有该主机的记录'
+          : '本机连接到的主机密钥与该设备自报的不一致',
       )
     }
     const tested = await platform.selfTest({
@@ -387,10 +387,10 @@ export function createPairing(host: PairingHost): Pairing {
       reachable()
       const { platform } = host
       if (!platform) {
-        throw startFailure('unsupported', '这个客户端出不了码：没有能调 ssh 的外壳')
+        throw startFailure('unsupported', '此客户端无法生成二维码：没有可调用 ssh 的外壳')
       }
       const target = host.target()
-      if (host.kind === 'ssh' && !target) throw startFailure('unsupported', '这台设备没有连接配置')
+      if (host.kind === 'ssh' && !target) throw startFailure('unsupported', '该设备没有连接配置')
       if (host.kind === 'local' && !(await platform.localSsh())) {
         throw startFailure('sshOff', '127.0.0.1:22 上没有 SSH 服务')
       }

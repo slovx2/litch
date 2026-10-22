@@ -217,7 +217,7 @@ export async function organizeProbe(second: string): Promise<OrganizeProbe> {
   await until('项目没了', () => !workspaceLine('网页'))
   await until('里面的会话回到上一层的项目', () => groupOf(BUILD) === appKey)
   const deleted =
-    seen.deleteAsk.includes('只删掉项目这条记录') &&
+    seen.deleteAsk.includes('仅删除项目记录') &&
     groupOf(RELEASE) === appKey &&
     Boolean(rowOf(BUILD)) &&
     Boolean(rowOf(RELEASE))

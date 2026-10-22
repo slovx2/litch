@@ -240,10 +240,7 @@ function HelperStatus({ bridge }: { bridge: ComputerUseBridge }) {
   const warnings = winWarnings(state)
   return (
     <section className="set-block" data-helper={look} data-checking={checking}>
-      <h3>
-        {t('settings.computer.helper')}
-        <span>{t('settings.computer.helper.note')}</span>
-      </h3>
+      <h3>{t('settings.computer.helper')}</h3>
       {state === null ? (
         <p className="set-para">{t('settings.computer.checking')}</p>
       ) : (

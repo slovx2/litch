@@ -67,7 +67,7 @@ function connect(url: string): Promise<WebSocket | string> {
     socket.onclose = () => {
       if (settled) return
       settled = true
-      done('握手前就断开了')
+      done('握手前连接已断开')
     }
   })
 }

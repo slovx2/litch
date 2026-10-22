@@ -266,10 +266,7 @@ function SavedSites({ bridge }: { bridge: BrowserBridge }) {
   const phase = listPhase(sites, failure !== null && sites === null)
   return (
     <section className="set-block" data-sites={phase}>
-      <h3>
-        {t('settings.browser.sites')}
-        <span>{t('settings.browser.sites.note')}</span>
-      </h3>
+      <h3>{t('settings.browser.sites')}</h3>
       {phase === 'loading' ? (
         <p className="set-para">{t('settings.about.loading')}</p>
       ) : phase === 'failed' ? (

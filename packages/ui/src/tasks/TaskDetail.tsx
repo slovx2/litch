@@ -74,7 +74,8 @@ export function TaskDetail({
   const [asking, setAsking] = useState(false)
   const [busy, setBusy] = useState(false)
   /** 刚做完的那件事怎么说（立即运行），或者没做成的原因 */
-  const [said, setSaid] = useState<{ text: string; err: boolean } | null>(null)
+  // kind 写进 data-said，验收按它认是哪一句，不按文字
+  const [said, setSaid] = useState<{ text: string; err: boolean; kind: string } | null>(null)
   /** 见过这个任务：之后没了才说“已经不在了”，刚打开还没到的那一下不算 */
   const seen = useRef(false)
   if (task) seen.current = true
@@ -150,7 +151,7 @@ export function TaskDetail({
   }
 
   const fail = (error: unknown) =>
-    setSaid({ text: t('tasks.failed', { reason: reasonOf(error, t) }), err: true })
+    setSaid({ text: t('tasks.failed', { reason: reasonOf(error, t) }), err: true, kind: 'failed' })
   const act = (run: () => Promise<unknown>) => {
     setBusy(true)
     setSaid(null)
@@ -164,6 +165,7 @@ export function TaskDetail({
       setSaid({
         text: t(deduplicated ? 'tasks.detail.already' : 'tasks.detail.started'),
         err: false,
+        kind: deduplicated ? 'already' : 'started',
       })
     })
   const pause = () =>
@@ -263,7 +265,11 @@ export function TaskDetail({
             {asking ? <div className="devp-note">{t('tasks.detail.deleteNote')}</div> : null}
             {!online ? <div className="devp-note">{t('tasks.detail.offline')}</div> : null}
             {said ? (
-              <div className={said.err ? 'devp-note err' : 'devp-note'} role="status" data-said>
+              <div
+                className={said.err ? 'devp-note err' : 'devp-note'}
+                role="status"
+                data-said={said.kind}
+              >
                 {said.text}
               </div>
             ) : null}

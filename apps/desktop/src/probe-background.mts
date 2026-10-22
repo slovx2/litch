@@ -199,7 +199,7 @@ export async function backgroundProbe(sessionId: string): Promise<BackgroundSeen
 }
 
 const LABELS: Record<Exclude<keyof BackgroundSeen, 'seen' | 'looks'>, string> = {
-  bar: '回合说完时输入框上方一行写着 2 个后台任务在跑',
+  bar: '回合说完时输入框上方一行写着 2 个后台任务正在运行',
   breathing: '那一行整条在呼吸',
   foldMark: '收起的过程那一行末尾写着 2 个在后台运行',
   sidebarMark: '侧栏那一行是后台任务的记号',

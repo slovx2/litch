@@ -73,7 +73,7 @@ export function createOrganizer(host: OrganizeHost): Organizer {
   let seq = 0
 
   const ready = () => {
-    if (!host.online()) throw new ChannelError('offline', '设备没有连上')
+    if (!host.online()) throw new ChannelError('offline', '设备未连接')
     if (!host.capable()) {
       throw new ChannelError(
         'unsupported',

@@ -39,7 +39,7 @@ export const Diff = memo(function Diff({ change }: { change: FileChangeEntry }) 
     <div className="diff">
       {lines.map((line, index) =>
         line.type === 'gap' ? (
-          <div key={index} className="dl gap" title={t('diff.elidedWhy')}>
+          <div key={index} className="dl gap">
             {t('diff.elided', { n: line.lines, size: byteSize(line.bytes) })}
           </div>
         ) : line.type === 'hunk' ? (

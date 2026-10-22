@@ -178,12 +178,12 @@ function judgePlaces(places: PlacesSeen): string[] {
     `不属于项目的会话，根应该是它的工作目录：${places.loose}（${places.looseRows} 行）`,
   )
   must(
-    places.unsupported.startsWith('unsupported｜这台设备上看不了文件｜') &&
+    places.unsupported.startsWith('unsupported｜此设备不支持查看文件｜') &&
       !places.unsupportedRetry,
     `不提供文件访问的设备，说明不对：${places.unsupported}`,
   )
   must(
-    places.noSearchRows > 0 && places.noSearch.startsWith('unsupported｜这台设备上不能找文件｜'),
+    places.noSearchRows > 0 && places.noSearch.startsWith('unsupported｜此设备不支持搜索文件｜'),
     `不提供找文件的设备：树 ${places.noSearchRows} 行，找文件那里写的是 ${places.noSearch}`,
   )
   must(
@@ -226,7 +226,7 @@ function judgeLook(look: LookSeen): string[] {
     'File tree',
     'Read-only',
   ]
-  const chinese = ['侧面板', '文件', '侧面板（⌘/Ctrl+Alt+B）', '找文件', '文件树', '只读']
+  const chinese = ['侧面板', '文件', '侧面板（⌘/Ctrl+Alt+B）', '查找文件', '文件树', '只读']
   if (look.english.join('|') !== english.join('|'))
     failed.push(`英文界面下的文案不对：${look.english.join('|')}`)
   if (look.chinese.join('|') !== chinese.join('|'))
@@ -296,7 +296,7 @@ function judgeShell(shell: ShellSeen): string[] {
     `在新建对话页上换了项目，面板没跟着换：${newPage.workspace}`,
   )
   must(
-    newPage.noWorkspace.startsWith('没有项目目录可看'),
+    newPage.noWorkspace.startsWith('没有项目目录'),
     `新建对话页上选了“无项目”，面板里没有说明：${newPage.noWorkspace}`,
   )
   must(

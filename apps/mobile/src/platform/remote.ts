@@ -22,15 +22,15 @@ export async function configFor(target: RemoteTarget): Promise<RemoteConfig> {
       'unreachable',
       phrase('ssh.config'),
       false,
-      '手机上没有 ssh 配置，不认别名',
+      '手机上没有 SSH 配置，不支持主机别名',
     )
   }
   if (!target.user) {
-    throw new ConnectError('auth', phrase('ssh.auth'), false, '[invalid] 没有填用户名')
+    throw new ConnectError('auth', phrase('ssh.auth'), false, '[invalid] 未填写用户名')
   }
   const secret = target.keyFile ? await keySecret(target.keyFile) : null
   if (!secret) {
-    throw new ConnectError('auth', phrase('ssh.auth'), false, '[key] 这台手机上没有这把钥匙了')
+    throw new ConnectError('auth', phrase('ssh.auth'), false, '[key] 此手机上已没有该密钥')
   }
   const port = target.port ?? 22
   const dev = remoteDev()

@@ -5,17 +5,17 @@ import type { Entry } from '../../../../../packages/ui/src/i18n/types.ts'
 
 export const zhCN = {
   'timed.entry.count': '{count} 个任务',
-  'timed.entry.none': '到点由设备自己跑，手机断开也照样跑',
-  'timed.unread': '{count} 次没看',
+  'timed.entry.none': '由设备按时运行，手机断开时也会运行',
+  'timed.unread': '{count} 次未读',
   'timed.row': '{label} {value}',
   'timed.mark': '定时',
-  'timed.runs.markRead': '全部标成看过',
+  'timed.runs.markRead': '全部标为已读',
   'timed.date': '日期（年-月-日）',
-  'timed.monthDay.note': '没有这一天的月份（比如 31 号）在当月最后一天跑',
-  'timed.preview.estimated': '下一次在 {when}（按手机的时区估算，设备的时区可能不一样）',
-  'timed.zone.device': '设备的时区（{zone}）',
-  'timed.zone.local': '{zone}（手机所在）',
-  'timed.zone.task': '{zone}（任务原来的）',
+  'timed.monthDay.note': '没有该日期的月份（如 31 日）在当月最后一天运行',
+  'timed.preview.estimated': '下次运行：{when}（按手机时区估算，可能与设备时区不同）',
+  'timed.zone.device': '设备时区（{zone}）',
+  'timed.zone.local': '{zone}（手机）',
+  'timed.zone.task': '{zone}（任务原时区）',
 } satisfies Record<string, Entry>
 
 const plural = (one: string, many: string) => (args: Record<string, string | number>) =>
@@ -23,16 +23,16 @@ const plural = (one: string, many: string) => (args: Record<string, string | num
 
 export const en: Record<keyof typeof zhCN, Entry> = {
   'timed.entry.count': plural('{count} task', '{count} tasks'),
-  'timed.entry.none': 'Run by the device on schedule, even while your phone is away',
-  'timed.unread': '{count} unseen',
+  'timed.entry.none': 'Run by the device on schedule, even when your phone is disconnected',
+  'timed.unread': '{count} unread',
   'timed.row': '{label}: {value}',
   'timed.mark': 'Scheduled',
-  'timed.runs.markRead': 'Mark all as seen',
+  'timed.runs.markRead': 'Mark all as read',
   'timed.date': 'Date (YYYY-MM-DD)',
   'timed.monthDay.note': 'Months without that day (like the 31st) run on their last day',
   'timed.preview.estimated':
     'Next run {when} (estimated in this phone’s time zone; the device’s may differ)',
-  'timed.zone.device': 'The device’s time zone ({zone})',
+  'timed.zone.device': 'Device time zone ({zone})',
   'timed.zone.local': '{zone} (this phone)',
-  'timed.zone.task': '{zone} (the task’s)',
+  'timed.zone.task': '{zone} (task’s original)',
 }

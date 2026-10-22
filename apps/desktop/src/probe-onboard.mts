@@ -290,7 +290,7 @@ export function judgeOnboard(seen: OnboardProbe): string[] {
     seen.command.includes('litch config tools set local --computer on'),
     `过程区里没有那条命令：“${seen.command}”`,
   )
-  must(seen.eraseTitle === '允许这次删除吗？', `删除卡的标题不对：“${seen.eraseTitle}”`)
+  must(seen.eraseTitle === '允许删除？', `删除卡的标题不对：“${seen.eraseTitle}”`)
   must(seen.eraseItems === 'erase', `删除卡上的项不对：${seen.eraseItems}`)
   must(seen.eraseReply.includes('没做成'), '拒绝之后对话里没说没做成')
   must(seen.skin === 'human', '换皮肤没照做')

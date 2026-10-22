@@ -51,8 +51,8 @@ import {
 } from './browser-import-logic.ts'
 import '../styles/browser-import.css'
 
-const KIND_NOTE: Record<ImportKind, MessageKey> = {
-  cookies: 'bimport.kind.cookies.note',
+/** 只有需要多说一句的那类才有说明（Cookie 不用解释） */
+const KIND_NOTE: Partial<Record<ImportKind, MessageKey>> = {
   passwords: 'bimport.kind.passwords.note',
 }
 
@@ -367,6 +367,7 @@ function PickForm({
           <legend className="form-label">{t('bimport.kinds')}</legend>
           {KINDS.map((kind) => {
             const look = kindLook(source, chosen?.profile, kind)
+            const noteKey = look === 'ok' ? KIND_NOTE[kind] : LOOK_TEXT[look]
             return (
               <label key={kind} className={look === 'ok' ? 'bimp-kind' : 'bimp-kind off'}>
                 <input
@@ -380,9 +381,7 @@ function PickForm({
                 />
                 <span className="bimp-kind-text">
                   <span>{t(KIND_TEXT[kind])}</span>
-                  <span className="form-note">
-                    {look === 'ok' ? t(KIND_NOTE[kind]) : t(LOOK_TEXT[look])}
-                  </span>
+                  {noteKey ? <span className="form-note">{t(noteKey)}</span> : null}
                 </span>
               </label>
             )

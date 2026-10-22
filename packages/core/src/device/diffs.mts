@@ -337,7 +337,7 @@ export function createDiffs(host: DiffsHost): Diffs {
   }
 
   const mustBeOnline = () => {
-    if (!host.online()) throw new ChannelError('offline', '设备没有连上')
+    if (!host.online()) throw new ChannelError('offline', '设备未连接')
   }
 
   // ---------- 本回合差异 ----------
@@ -732,7 +732,7 @@ export function createDiffs(host: DiffsHost): Diffs {
   return {
     open(root, scope, sessionId, sink) {
       const at = locate(root)
-      if (!DIFF_SCOPES.includes(scope)) throw new ChannelError('rejected', '没有这种比法')
+      if (!DIFF_SCOPES.includes(scope)) throw new ChannelError('rejected', '无效的比较范围')
       const room = roomOf(at)
       room.stopLinger?.()
       room.stopLinger = null

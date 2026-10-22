@@ -171,7 +171,6 @@ export function ArchivedPage({ onClose, onOpen }: ArchivedPageProps) {
       <header className="arch-head">
         <div>
           <h1>{t('archived.title')}</h1>
-          <p>{t('archived.intro')}</p>
         </div>
         <button
           type="button"

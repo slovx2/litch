@@ -145,9 +145,9 @@ export function judgeCwd(seen: CwdSeen): string[] {
   must(
     seen.marked.join('\n') ===
       [
-        'local｜导航栏按使用场景重排｜sub｜工作目录是项目里的子目录：~/work/docs-site/content/guide',
-        'build｜差异面板的大文件降级｜sub｜工作目录是项目里的子目录：/srv/work/litch/apps/desktop',
-        'build｜缓存目录配额｜away｜工作目录不在这个项目的目录里：/var/cache/ci',
+        'local｜导航栏按使用场景重排｜sub｜工作目录为项目子目录：~/work/docs-site/content/guide',
+        'build｜差异面板的大文件降级｜sub｜工作目录为项目子目录：/srv/work/litch/apps/desktop',
+        'build｜缓存目录配额｜away｜工作目录不在项目目录内：/var/cache/ci',
       ].join('\n'),
     `工作目录不是项目的根的会话，行上的记号不对：${seen.marked.join('；')}`,
   )
@@ -160,8 +160,8 @@ export function judgeCwd(seen: CwdSeen): string[] {
   must(
     seen.cards.join('\n') ===
       [
-        '~/work/docs-site/content/guide｜项目里的子目录',
-        '/var/cache/ci｜不在这个项目的目录里',
+        '~/work/docs-site/content/guide｜项目子目录',
+        '/var/cache/ci｜不在项目目录内',
         '~/work/docs-site｜',
       ].join('\n'),
     `信息卡里目录那一栏不对：${seen.cards.join('；')}`,

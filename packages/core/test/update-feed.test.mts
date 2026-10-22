@@ -55,7 +55,7 @@ test('读清单：只留认得的三个端，额外的键不管', () => {
 })
 
 test('读清单：形状不对就报错，不猜', () => {
-  assert.throws(() => parseUpdateFeed(null), /不是一个对象/)
+  assert.throws(() => parseUpdateFeed(null), /更新清单格式错误/)
   assert.throws(() => parseUpdateFeed(feed({ version: 'latest' })), /版本号/)
   assert.throws(() => parseUpdateFeed(feed({ assets: undefined })), /assets/)
   const bad = (patch: Record<string, unknown>) =>

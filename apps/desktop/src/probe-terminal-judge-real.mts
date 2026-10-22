@@ -148,14 +148,14 @@ export function judgeDevice(seen: DeviceSeen, lenient: boolean): string[] {
   must(!basics.ephemeralPill, '属于设备的终端不该标“随连接结束”')
 
   // ---------- 断线再连回 ----------
-  must(drop.awayNote.includes('自动接回'), `断线之后没有说它还在设备上跑（${drop.awayNote}）`)
+  must(drop.awayNote.includes('自动恢复'), `断线之后没有说它还在设备上跑（${drop.awayNote}）`)
   must(drop.contentKept, '断线之后终端里的内容不在了')
   must(drop.notYet, '还没连回来，断线期间的输出却已经显示了')
   must(drop.rejoined, '连回来之后状态条还在')
   must(drop.replayedOnce, '断线期间的输出没有正好补一次')
   must(drop.gapsAfterShortDrop === 0, '断线期间的输出都补回来了，却说少了一段')
   must(drop.usable, '接回来之后不能接着用')
-  must(drop.gapLine.includes('没能补回来'), '断线期间的输出超过了设备留着的量，终端里没有说明')
+  must(drop.gapLine.includes('未能恢复'), '断线期间的输出超过了设备留着的量，终端里没有说明')
   must(
     drop.gapsAfterLongDrop === 1 && drop.backlogLine === '',
     `补回来的时候又略过了输出：说了 ${drop.gapsAfterLongDrop} 次（${drop.backlogLine}）`,
@@ -217,7 +217,7 @@ export function judgeEntry(seen: EntrySeen, lenient: boolean): string[] {
     `关随连接结束的终端，选项应该只有“不关了”和“结束”：${drop.choices.join('|')}`,
   )
   must(drop.askFocus === 'cancel', `焦点应该落在“不关了”上（现在是 ${drop.askFocus}）`)
-  must(drop.lostNote.includes('连接断过'), `断线之后没有标成已断开（${drop.lostNote}）`)
+  must(drop.lostNote.includes('连接已断开'), `断线之后没有标成已断开（${drop.lostNote}）`)
   must(drop.contentKept, '断线之后终端里的内容不在了')
   must(drop.restartOffline, '没连上的时候不该能重开')
   must(drop.deaf, '已经断开的终端敲键还有反应')

@@ -24,7 +24,7 @@ export function mobileReason(failure: ConnectFailureView): Key | null {
       : 'devices.why.hostKeyUnknown'
   }
   if (failure.stage === 'auth') {
-    if (/没有这把钥匙/.test(detail)) return 'devices.why.keyMissing'
+    if (/没有该密钥/.test(detail)) return 'devices.why.keyMissing'
     if (/^\[(key|keyLocked)\]/.test(detail)) return 'devices.why.keyBroken'
     return 'devices.why.auth'
   }

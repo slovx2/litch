@@ -54,7 +54,7 @@ function checkExtra(extra: MessageExtra): MessageExtra {
   ) {
     return { kind: 'comment', itemId: extra.itemId, quote: extra.quote, note: extra.note }
   }
-  throw new ChannelError('rejected', '消息带的东西不对')
+  throw new ChannelError('rejected', '消息附件无效')
 }
 
 /** 带着的一段文字并进正文时的样子：有名字的（一个文件的内容）前面加一行名字，对面才知道这是哪个文件 */
@@ -86,17 +86,17 @@ export function outgoing(
   images: ImageAttachment[] = [],
   extras: MessageExtra[] = [],
 ): OutgoingMessage {
-  if (images.length > MAX_IMAGES) throw new ChannelError('rejected', '图片太多了')
+  if (images.length > MAX_IMAGES) throw new ChannelError('rejected', '图片过多')
   for (const image of images) {
-    if (!isInlineImage(image.url)) throw new ChannelError('rejected', '附件不是能发的图片')
+    if (!isInlineImage(image.url)) throw new ChannelError('rejected', '附件不是可发送的图片')
   }
-  if (extras.length > MAX_EXTRAS) throw new ChannelError('rejected', '带的东西太多了')
+  if (extras.length > MAX_EXTRAS) throw new ChannelError('rejected', '附件过多')
   const checked = extras.map(checkExtra)
   if (checked.filter((extra) => extra.kind === 'comment').length > MAX_COMMENTS) {
-    throw new ChannelError('rejected', '评论太多了')
+    throw new ChannelError('rejected', '评论过多')
   }
   if (!text.trim() && images.length === 0 && checked.length === 0) {
-    throw new ChannelError('rejected', '消息是空的')
+    throw new ChannelError('rejected', '消息为空')
   }
   return { text, images: images.map(({ url, name }) => ({ url, name })), extras: checked }
 }

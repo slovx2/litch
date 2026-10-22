@@ -35,7 +35,7 @@ const WORDS = {
     sidebar: '侧栏',
     terminal: '终端',
     side: '侧面板',
-    askOnQuit: '退出时询问还在运行的终端',
+    askOnQuit: '退出时询问正在运行的终端',
     askServiceOnQuit: '退出时询问是否关闭后台服务',
     reload: '重新加载',
     devTools: '开发者工具',

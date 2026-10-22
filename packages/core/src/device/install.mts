@@ -113,8 +113,8 @@ export function createInstall(host: InstallHost): Install {
   }
 
   const reachable = () => {
-    if (!host.online()) throw new ChannelError('offline', '设备没有连上')
-    if (!host.supported()) throw new ChannelError('unsupported', '这台设备的服务不支持安装 harness')
+    if (!host.online()) throw new ChannelError('offline', '设备未连接')
+    if (!host.supported()) throw new ChannelError('unsupported', '此设备的服务不支持安装 harness')
   }
 
   const loadVersions = async (latest: boolean): Promise<HarnessVersionView[]> => {

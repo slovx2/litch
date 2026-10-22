@@ -183,7 +183,7 @@ export async function enginesSettle(): Promise<string[]> {
     if (card) {
       const buttons = all('.req-actions .btn', card)
       const out =
-        buttons.find((button) => /拒绝并停下/.test(text(button))) ??
+        buttons.find((button) => /拒绝并停止/.test(text(button))) ??
         buttons.find((button) => /^拒绝/.test(text(button))) ??
         one<HTMLButtonElement>('[data-act="skip"]', card)
       done.push(`收掉一张卡片：${text(one('.req-head', card))}`)

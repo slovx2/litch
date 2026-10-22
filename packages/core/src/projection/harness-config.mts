@@ -263,7 +263,7 @@ export function projectStep(raw: HarnessAuthStep | unknown): HcAuthStep {
   return {
     kind: 'failed',
     message: {
-      'zh-CN': '对面给了一个认不出的登录步骤',
+      'zh-CN': '设备返回了无法识别的登录步骤',
       en: 'The device sent an unrecognized login step',
     },
   }

@@ -126,9 +126,9 @@ export function judgeTree(tree: TreeSeen, lines: FileLines): string[] {
   )
   must(tree.afterCollapse < 100, `收起三万个条目的目录之后树里还有 ${tree.afterCollapse} 行`)
   // ---- 说明行、符号链接、隐藏文件 ----
-  must(tree.emptyNote === '空的', `空目录下面的说明不对：${tree.emptyNote}`)
+  must(tree.emptyNote === '空目录', `空目录下面的说明不对：${tree.emptyNote}`)
   must(
-    tree.lockedNote.startsWith('没读到：') && tree.lockedRetry,
+    tree.lockedNote.startsWith('读取失败：') && tree.lockedRetry,
     `列不了的目录没有说明原因，或者没有“重试”：${tree.lockedNote}`,
   )
   must(
@@ -228,7 +228,7 @@ export function judgeView(view: ViewSeen, lines: FileLines): string[] {
       'fixtures/big.log｜tooLarge fixtures/blob.dat｜binary docs/images/shot.png｜binary fixtures/gone.txt｜missing',
     `显示不了的文件占位不对：${view.holds.join(' ／ ')}`,
   )
-  must(view.holds[2]?.includes('这是图片') === true, `图片的占位没有说是图片：${view.holds[2]}`)
+  must(view.holds[2]?.includes('｜图片｜') === true, `图片的占位没有说是图片：${view.holds[2]}`)
   must(
     view.lossyText === 'caf\uFFFD' && view.lossyPill === '编码不明',
     `不是 UTF-8 的文件：显示成 ${JSON.stringify(view.lossyText)}，标记 ${view.lossyPill}`,
@@ -252,7 +252,7 @@ export function judgeSearch(search: SearchSeen): string[] {
   must(search.hitMenu === 3, `结果上点右键，菜单里有 ${search.hitMenu} 项`)
   must(search.opened === 'scripts/tool.py', `回车没有固定打开第一条：${search.opened}`)
   must(search.cleared && search.revealed, '按 Esc 回到树上，找到的那个文件没有露出来、选中')
-  must(search.none === '没有找到。', `找不到的时候写的不对：${search.none}`)
+  must(search.none === '未找到。', `找不到的时候写的不对：${search.none}`)
   must(
     search.dirHit === 'fixtures/many/group-17' && search.dirRevealed,
     `点找到的目录，没有在树里露出来：${search.dirHit}`,

@@ -82,12 +82,7 @@ export const MermaidBlock = memo(function MermaidBlock({ text, open, anchor }: M
             {t(copied ? 'code.copied' : 'code.copy')}
           </button>
           {svg !== null ? (
-            <button
-              type="button"
-              className="mini"
-              title={t('mermaid.zoomTitle')}
-              onClick={() => setZoomed(true)}
-            >
+            <button type="button" className="mini" onClick={() => setZoomed(true)}>
               {t('mermaid.zoom')}
             </button>
           ) : null}

@@ -18,7 +18,6 @@ export function NotifySection() {
         <div className="set-row">
           <div className="set-switch-text">
             <label htmlFor="set-notify-success">{t('settings.notify.success')}</label>
-            <span className="set-note">{t('settings.notify.successNote')}</span>
           </div>
           <button
             id="set-notify-success"

@@ -7,10 +7,10 @@ export const zhCN = {
   'app.cancel': '取消',
   'app.retry': '重试',
   'app.booting': '启动中…',
-  'app.bootFailed': '核心没起来：{error}',
+  'app.bootFailed': '核心启动失败：{error}',
   'app.mockBadge': '模拟核心',
   'app.fixtureBadge': '测试夹具',
-  'app.todo': '这一页还在做',
+  'app.todo': '此页面尚未完成',
 } satisfies Record<`app.${string}`, Entry>
 
 export const en: Record<keyof typeof zhCN, Entry> = {
@@ -18,8 +18,8 @@ export const en: Record<keyof typeof zhCN, Entry> = {
   'app.cancel': 'Cancel',
   'app.retry': 'Retry',
   'app.booting': 'Starting…',
-  'app.bootFailed': 'The core failed to start: {error}',
+  'app.bootFailed': 'The core couldn’t start: {error}',
   'app.mockBadge': 'Mock core',
   'app.fixtureBadge': 'Test fixture',
-  'app.todo': 'This page is not built yet',
+  'app.todo': 'This page isn’t ready yet',
 }

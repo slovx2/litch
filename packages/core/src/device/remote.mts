@@ -186,40 +186,40 @@ const refuse = (message: string): never => {
 
 // 这些值会原样交给 ssh 当参数：不许以减号开头（会被当成选项），不许有空白和控制字符
 const plain = (value: unknown, what: string, max = 255): string => {
-  if (typeof value !== 'string') return refuse(`${what}要是一段字`)
+  if (typeof value !== 'string') return refuse(`${what}必须是文本`)
   const text = value.trim()
-  if (!text) return refuse(`${what}不能是空的`)
-  if (text.length > max) return refuse(`${what}太长了`)
+  if (!text) return refuse(`${what}不能为空`)
+  if (text.length > max) return refuse(`${what}过长`)
   if (text.startsWith('-') || /[\s\u0000-\u001f\u007f]/.test(text)) {
-    return refuse(`${what}里不能有空白，也不能以减号开头`)
+    return refuse(`${what}不能包含空白，也不能以减号开头`)
   }
   return text
 }
 
 /** 检查并整理一份连接配置。不合规矩的直接拒绝 */
 export function checkTarget(value: unknown): RemoteTarget {
-  if (typeof value !== 'object' || value === null) return refuse('连接配置不对')
+  if (typeof value !== 'object' || value === null) return refuse('连接配置无效')
   const raw = value as Record<string, unknown>
   if (raw.kind === 'alias') return { kind: 'alias', alias: plain(raw.alias, '别名') }
-  if (raw.kind !== 'host') return refuse('连接配置不对')
+  if (raw.kind !== 'host') return refuse('连接配置无效')
   const host = plain(raw.host, '主机名')
-  if (host.includes('@')) refuse('主机名里不要带用户名，用户名单独填')
+  if (host.includes('@')) refuse('主机名中不要包含用户名，请单独填写用户名')
   let port: number | null = null
   if (raw.port !== null && raw.port !== undefined && raw.port !== '') {
     port = Number(raw.port)
-    if (!Number.isInteger(port) || port < 1 || port > 65535) refuse('端口要在 1 到 65535 之间')
+    if (!Number.isInteger(port) || port < 1 || port > 65535) refuse('端口须在 1 到 65535 之间')
   }
   const user = raw.user ? plain(raw.user, '用户名', 64) : null
-  if (user && /[@:/]/.test(user)) refuse('用户名里不能有 @、冒号和斜杠')
+  if (user && /[@:/]/.test(user)) refuse('用户名不能包含 @、冒号或斜杠')
   let keyFile: string | null = null
   if (raw.keyFile) {
-    if (typeof raw.keyFile !== 'string') return refuse('密钥文件要给路径')
+    if (typeof raw.keyFile !== 'string') return refuse('请填写密钥文件路径')
     keyFile = raw.keyFile.trim()
     // 路径里可以有空格，但不能有换行和控制字符，也不能让 ssh 当成选项
     if (!keyFile || keyFile.startsWith('-') || /[\u0000-\u001f\u007f]/.test(keyFile)) {
-      refuse('密钥文件的路径不对')
+      refuse('密钥文件路径无效')
     }
-    if (keyFile.length > 1024) refuse('密钥文件的路径太长了')
+    if (keyFile.length > 1024) refuse('密钥文件路径过长')
   }
   return { kind: 'host', host, port, user, keyFile }
 }

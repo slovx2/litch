@@ -52,7 +52,7 @@ export function judgeFilter(seen: FilterSeen, kept: FilterKept, session: string)
   must(seen.moreBefore, '没筛的时候 docs-site 该有“展示更多”')
 
   // ---- 只看 Pi ----
-  must(seen.line === 'PI｜只看 Pi', `“正在只看”那一行写的不对：${seen.line}`)
+  must(seen.line === 'PI｜仅显示 Pi', `“正在只看”那一行写的不对：${seen.line}`)
   must(seen.stayed, '挑了 Pi 之后选项就收起了：多选该能接着挑')
   must(seen.entryOn, '筛着的时候入口没有画成开着的')
   must(seen.saved === 'pi', `挑的 harness 没有记在界面本地：${seen.saved}`)
@@ -121,7 +121,7 @@ export function judgeFilter(seen: FilterSeen, kept: FilterKept, session: string)
   )
   const hidAt = (deviceId: string) => (seen.hid[deviceId] ?? []).map((note) => note.split('｜'))
   const noteOk = (note: string[]) =>
-    /^有 [1-9]\d* 个对话被筛选过滤$/.test(note[1] ?? '') && note[2] === '关闭筛选'
+    /^[1-9]\d* 个对话已被筛选隐藏$/.test(note[1] ?? '') && note[2] === '关闭筛选'
   must(
     hidAt('build').some((note) => note[0] === 'infra' && noteOk(note)) &&
       hidAt('nas').some((note) => note[0] === 'bk' && noteOk(note)),
@@ -134,8 +134,8 @@ export function judgeFilter(seen: FilterSeen, kept: FilterKept, session: string)
     `还留着 Pi 会话的项目里不该写被筛掉几个：${JSON.stringify(seen.hid)}`,
   )
   must(
-    seen.none.nas?.join() === '没有符合筛选的会话',
-    `只看 Pi 的时候 nas 下面该写“没有符合筛选的会话”：${seen.none.nas?.join()}`,
+    seen.none.nas?.join() === '没有符合筛选条件的会话',
+    `只看 Pi 的时候 nas 下面该写“没有符合筛选条件的会话”：${seen.none.nas?.join()}`,
   )
   must(seen.offClicked, '点项目里那一句的“关闭筛选”，筛选没有取消')
   must(
@@ -163,7 +163,7 @@ export function judgeFilter(seen: FilterSeen, kept: FilterKept, session: string)
 
   // ---- 再挑上 Codex ----
   must(
-    seen.twoLine === 'PI CX｜只看 Pi、Codex',
+    seen.twoLine === 'PI CX｜仅显示 Pi、Codex',
     `挑了两个之后“正在只看”那一行写的不对：${seen.twoLine}`,
   )
   must(seen.twoSaved === 'pi,codex', `挑了两个之后记在界面本地的不对：${seen.twoSaved}`)
@@ -186,7 +186,7 @@ export function judgeFilter(seen: FilterSeen, kept: FilterKept, session: string)
   )
 
   // ---- 应用重开之后还记得 ----
-  must(kept.line === 'pi｜只看 Pi', `应用重开之后不记得上次只看的是谁：${kept.line}`)
+  must(kept.line === 'pi｜仅显示 Pi', `应用重开之后不记得上次只看的是谁：${kept.line}`)
   const keptRows = kept.rows.map(parse)
   must(
     keptRows.length >= 4 &&

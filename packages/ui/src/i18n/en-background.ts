@@ -19,10 +19,10 @@ export const enBackground: Record<keyof typeof zhBackground, Entry> = {
   'background.ended': 'Finished',
   'background.none': 'No background tasks running',
   'background.noneEver':
-    'No background tasks in this session yet. Commands still running after a turn ends show up here.',
-  'background.pick': 'Open a session to see its background tasks here.',
+    'No background tasks in this session. Commands still running after a turn ends appear here.',
+  'background.pick': 'Open a session to see its background tasks.',
   'background.wakes': 'Continues automatically when done',
-  'background.noWake': 'Does not continue on its own',
+  'background.noWake': 'Doesn’t continue automatically',
   'background.status.running': 'Running',
   'background.status.completed': 'Done',
   'background.status.failed': 'Failed',

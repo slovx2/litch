@@ -500,7 +500,7 @@ export function judgeHarnessSettings(seen: HarnessSettingsProbe): string[] {
   }
   must(!seen.unsupportedEntry, 'build-01 上还不支持的 dsh 也有“详情设置”入口')
   must(
-    seen.unsupportedNote.includes('还不支持'),
+    seen.unsupportedNote.includes('不支持'),
     `还不支持的 harness 没有说明：“${seen.unsupportedNote}”`,
   )
   must(seen.badNumber.includes('范围'), `保留天数填 0 没有提示超出范围：“${seen.badNumber}”`)
@@ -514,8 +514,8 @@ export function judgeHarnessSettings(seen: HarnessSettingsProbe): string[] {
   must(seen.keptAfterConflict === 1, `冲突之后改动没留着：${seen.keptAfterConflict}`)
   must(seen.resaved === 'false', `冲突之后再存没存成：自动记忆是 ${seen.resaved}`)
   must(seen.moved && seen.tookLatest, '别处改了没有提示，或者“用最新的”没放弃改动')
-  must(seen.pasteFailed.includes('没登录成'), `错的授权码没有说没成：“${seen.pasteFailed}”`)
-  must(seen.pasteDone.includes('登录好了'), `对的授权码没有登录好：“${seen.pasteDone}”`)
+  must(seen.pasteFailed.includes('登录失败'), `错的授权码没有说没成：“${seen.pasteFailed}”`)
+  must(seen.pasteDone.includes('登录成功'), `对的授权码没有登录好：“${seen.pasteDone}”`)
   must(
     seen.restartBanner && seen.restartCleared,
     '切换 provider 之后没有重启提示，或者重启后没收掉',
@@ -525,17 +525,17 @@ export function judgeHarnessSettings(seen: HarnessSettingsProbe): string[] {
     `浏览器登录的转发状态不对：${seen.forwardStates.join('→')}`,
   )
   must(seen.forwardText.includes('1455'), `转发的说明里没有端口：“${seen.forwardText}”`)
-  must(seen.browserDone.includes('登录好了'), `浏览器登录最后没成：“${seen.browserDone}”`)
+  must(seen.browserDone.includes('登录成功'), `浏览器登录最后没成：“${seen.browserDone}”`)
   must(seen.userCode === 'WDJB-MJHT', `设备码不对：“${seen.userCode}”`)
-  must(seen.deviceDone.includes('登录好了'), `设备码登录最后没成：“${seen.deviceDone}”`)
-  must(seen.apiKeyFailed.includes('没登录成'), `错的 API key 没有说没成：“${seen.apiKeyFailed}”`)
-  must(seen.apiKeyDone.includes('登录好了'), `对的 API key 没成：“${seen.apiKeyDone}”`)
+  must(seen.deviceDone.includes('登录成功'), `设备码登录最后没成：“${seen.deviceDone}”`)
+  must(seen.apiKeyFailed.includes('登录失败'), `错的 API key 没有说没成：“${seen.apiKeyFailed}”`)
+  must(seen.apiKeyDone.includes('登录成功'), `对的 API key 没成：“${seen.apiKeyDone}”`)
   must(seen.envToast.includes('LITELLM_API_KEY'), `环境变量写完没有提示：“${seen.envToast}”`)
   must(seen.activeAfter === 'litellm', `改用公司网关之后在用的是：${seen.activeAfter}`)
   must(seen.customAdded.includes('Probe Gateway'), `自定义 provider 没加上：“${seen.customAdded}”`)
   must(seen.customRemoved, '自定义 provider 没删掉')
   must(seen.actionConfirm.includes('清空'), `清空记忆之前没有确认：“${seen.actionConfirm}”`)
-  must(seen.actionToast.includes('做完了'), `清空记忆没有做完的提示：“${seen.actionToast}”`)
+  must(seen.actionToast.includes('已完成'), `清空记忆没有做完的提示：“${seen.actionToast}”`)
   must(seen.mcpAdded.includes('probe-echo@1.0.0'), `MCP 服务没加上：“${seen.mcpAdded}”`)
   must(seen.mcpDisabled === 'false', 'playwright 没关掉')
   must(seen.mcpRemoved, 'probe-echo 没删掉')

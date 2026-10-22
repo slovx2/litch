@@ -16,12 +16,12 @@ const clip = (text: string): string => {
 
 const ACTIONS: Record<NoticeLang, Record<MachineNotice['action'], string>> = {
   'zh-CN': {
-    exec: '想在这台电脑上运行命令',
-    write: '想在这台电脑上写文件',
-    read: '想读这台电脑上的文件',
-    list: '想看这台电脑上的目录',
-    copy: '想在两台机器之间复制文件',
-    process: '想操作这台电脑上的进程',
+    exec: '请求在本机运行命令',
+    write: '请求在本机写入文件',
+    read: '请求读取本机文件',
+    list: '请求查看本机目录',
+    copy: '请求在设备之间复制文件',
+    process: '请求操作本机进程',
   },
   en: {
     exec: 'wants to run a command on this computer',
@@ -43,7 +43,7 @@ export function noticeText(
   const title = `${who} ${action}`
   const tail =
     lang === 'zh-CN'
-      ? '来自一个命令行调用（不知道是哪个会话），到 Litch 里确认。'
+      ? '来自命令行调用（会话未知），请在 Litch 中确认。'
       : 'From a command-line call (session unknown). Review it in Litch.'
   const summary = clip(notice.summary)
   return { title, body: summary ? `${summary}\n${tail}` : tail }

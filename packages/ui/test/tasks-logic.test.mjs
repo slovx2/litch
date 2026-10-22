@@ -82,7 +82,7 @@ test('失败的原因：种类一句人话，后面跟设备的原话；状态�
   )
   assert.equal(
     errorText({ code: 'timedOut', message: '' }, en),
-    'The turn ran too long and was interrupted',
+    'Turn timed out and was interrupted',
   )
   assert.deepEqual(['succeeded', 'failed', 'running', 'queued', 'canceled'].map(runTone), [
     'ok',

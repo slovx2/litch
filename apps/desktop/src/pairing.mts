@@ -46,7 +46,7 @@ function sshConfigOf(target: RemoteTarget): Promise<Map<string, string[]>> {
       { timeout: 5000, windowsHide: true },
       (error, stdout, stderr) => {
         if (error) {
-          fail(new Error(tailOf(String(stderr)) ?? `ssh -G 没成：${error.message}`))
+          fail(new Error(tailOf(String(stderr)) ?? `ssh -G 执行失败：${error.message}`))
           return
         }
         const found = new Map<string, string[]>()
@@ -192,7 +192,7 @@ function runSelfTest(args: string[], key: string): Promise<PairSelfTestResult> {
       child.kill('SIGKILL')
       settle({
         ok: false,
-        said: tailOf(stderr) ?? `一次性钥匙登录 ${SELF_TEST_MS / 1000} 秒没有结果`,
+        said: tailOf(stderr) ?? `一次性钥匙登录在 ${SELF_TEST_MS / 1000} 秒内无结果`,
       })
     }, SELF_TEST_MS)
     child.stdout.setEncoding('utf8').on('data', (chunk: string) => {
@@ -201,7 +201,7 @@ function runSelfTest(args: string[], key: string): Promise<PairSelfTestResult> {
     child.stderr.setEncoding('utf8').on('data', (chunk: string) => {
       stderr = (stderr + chunk).slice(-8000)
     })
-    child.on('error', (error) => settle({ ok: false, said: `起不了 ssh：${error.message}` }))
+    child.on('error', (error) => settle({ ok: false, said: `无法启动 ssh：${error.message}` }))
     child.on('close', () => {
       const found = verdict(stdout)
       if (found) return settle(found)
@@ -211,7 +211,7 @@ function runSelfTest(args: string[], key: string): Promise<PairSelfTestResult> {
           tailOf(stderr) ??
           (stdout.trim()
             ? stdout.trim().slice(-2000)
-            : '一次性钥匙登录之后没有回应：sshd 可能没认这把钥匙的强制命令'),
+            : '一次性钥匙登录后无响应：sshd 可能未识别该钥匙的强制命令'),
       })
     })
     child.stdin.on('error', () => {})
@@ -256,7 +256,7 @@ export function desktopPairing(options: DesktopPairingOptions): PairingPlatform 
       const host = first(config, 'hostname')
       const user = first(config, 'user')
       const port = Number(first(config, 'port'))
-      if (!host || !user) throw new Error('ssh -G 没解析出主机名或用户')
+      if (!host || !user) throw new Error('ssh -G 未解析出主机名或用户名')
       return { host, port: Number.isInteger(port) && port > 0 ? port : 22, user }
     },
 

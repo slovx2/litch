@@ -269,9 +269,9 @@ export function createHarnessConfig(host: HarnessConfigHost): HarnessConfig {
   const fail = (error: unknown) => hcFailure(error, host.fail)
 
   const reachable = (harness: string) => {
-    if (!host.online()) throw new ChannelError('offline', '设备没有连上')
+    if (!host.online()) throw new ChannelError('offline', '设备未连接')
     if (!supported(harness)) {
-      throw new ChannelError('unsupported', `${host.nameOf(harness)} 还不支持详情设置`)
+      throw new ChannelError('unsupported', `${host.nameOf(harness)} 暂不支持详情设置`)
     }
   }
 
@@ -384,7 +384,7 @@ export function createHarnessConfig(host: HarnessConfigHost): HarnessConfig {
 
   const attemptOf = (harness: string, attemptId: string): HcAttempt => {
     const attempt = entries.get(harness)?.attempts.get(attemptId)
-    if (!attempt) throw new ChannelError('notFound', '这次登录已经不在了')
+    if (!attempt) throw new ChannelError('notFound', '该登录已失效')
     return attempt
   }
 
@@ -463,8 +463,8 @@ export function createHarnessConfig(host: HarnessConfigHost): HarnessConfig {
   // ---------- 统一模式 ----------
 
   const overview = async (): Promise<InstructionsOverview> => {
-    if (!host.online()) throw new ChannelError('offline', '设备没有连上')
-    if (!host.deviceSupported()) throw new ChannelError('unsupported', '这台设备不支持详情设置')
+    if (!host.online()) throw new ChannelError('offline', '设备未连接')
+    if (!host.deviceSupported()) throw new ChannelError('unsupported', '此设备不支持详情设置')
     const harnesses = host.configurable()
     const read = await Promise.all(
       harnesses.map(async (harness) => {
@@ -532,8 +532,8 @@ export function createHarnessConfig(host: HarnessConfigHost): HarnessConfig {
             attempt.step = {
               kind: 'failed',
               message: {
-                'zh-CN': '设备断开了，这次登录没有结束',
-                en: 'The device disconnected before this login finished',
+                'zh-CN': '设备已断开，登录未完成',
+                en: 'The device disconnected before login finished',
               },
             }
             attempt.busy = false
@@ -802,7 +802,7 @@ export function createHarnessConfig(host: HarnessConfigHost): HarnessConfig {
 
     async writeModels(harness, entries, expectedVersion) {
       if (entries !== null && entries.length === 0) {
-        throw new ChannelError('invalid', '模型清单不能是空的；要用自带的目录请恢复')
+        throw new ChannelError('invalid', '模型清单不能为空。如需使用内置清单，请恢复默认')
       }
       const result = await writing(harness, 'models', () =>
         host.request(
@@ -824,7 +824,7 @@ export function createHarnessConfig(host: HarnessConfigHost): HarnessConfig {
     async unify(harness, content) {
       const seen = await overview()
       const source = seen.entries.find((entry) => entry.harness === harness)?.info
-      if (!source) throw new ChannelError('notFound', `读不到 ${host.nameOf(harness)} 的指令文件`)
+      if (!source) throw new ChannelError('notFound', `无法读取 ${host.nameOf(harness)} 的指令文件`)
       const linkPaths = seen.entries.flatMap((entry) =>
         entry.harness !== harness && entry.info && entry.info.path !== source.path
           ? [entry.info.path]
@@ -889,7 +889,7 @@ export function createHarnessConfig(host: HarnessConfigHost): HarnessConfig {
       (one) => one.type === 'env' && one.scope.kind === 'harness' && one.scope.harness === harness,
     )
     if (!spec) {
-      throw new ChannelError('unsupported', `设备设置里没有 ${host.nameOf(harness)} 的环境变量`)
+      throw new ChannelError('unsupported', `设备设置中没有 ${host.nameOf(harness)} 的环境变量`)
     }
     const current = manage.snapshot.values[spec.key]
     const table: EnvEntryView[] = (Array.isArray(current) ? current : [])

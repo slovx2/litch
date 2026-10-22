@@ -124,7 +124,7 @@ test('文案：全部停的问话只说有的那一样；英文的复数', () =>
   )
   assert.equal(
     translate('zh-CN', 'machine.pop.stopAll.ask', { running: 1, pending: 3 }),
-    '结束 1 个命令、拒绝 3 件待处理？',
+    '结束 1 个命令、拒绝 3 项待处理？',
   )
   assert.equal(
     translate('en', 'machine.pop.stopAll.ask', { running: 0, pending: 2 }),

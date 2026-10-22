@@ -374,7 +374,7 @@ export function judgeDevices(
       // build-01 上有五个：徽标只摆四个，多的记个数
       'build｜build-01｜dev@build-01｜已连接｜5 个 harness｜CC PI DS CX +1',
       // 没有设备服务、只连着原生 codex 的远程设备：说“只有它”
-      'nas｜nas｜admin@nas.lan｜已连接｜只有 Codex｜CX',
+      'nas｜nas｜admin@nas.lan｜已连接｜仅 Codex｜CX',
       'gpu｜gpu-box｜dev@gpu-box｜离线｜2 个 harness｜CC PI',
     ],
     '设备列表一行上的字不对（标识｜名字｜主机｜状态｜harness 概况｜徽标）',
@@ -415,8 +415,8 @@ export function judgeDevices(
     `最近活动没有跟着会话变：${JSON.stringify(probe.busy)}`,
   )
   must(
-    (probe.busyText[1] ?? '').includes(`${(start?.waiting ?? 0) + 1} 个在等你`) &&
-      (probe.busyText[3] ?? '').includes(`${(start?.running ?? 0) + 1} 个在跑`),
+    (probe.busyText[1] ?? '').includes(`${(start?.waiting ?? 0) + 1} 个待处理`) &&
+      (probe.busyText[3] ?? '').includes(`${(start?.running ?? 0) + 1} 个运行中`),
     `忙闲那一栏没有把在等人的、在跑的写出来：${JSON.stringify(probe.busyText)}`,
   )
 

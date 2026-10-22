@@ -374,8 +374,8 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
   await until('回话开始输出', liveLength)
   const turnsBefore = all('.turn').length
   await say('插进来的话')
-  const steerButton = await until('托盘里的“现在就说”', () =>
-    all('.tray-row .mini').find((button) => button.textContent?.includes('现在就说')),
+  const steerButton = await until('托盘里的“立即插入”', () =>
+    one<HTMLButtonElement>('.tray-row .mini.steer'),
   )
   steerButton.click()
   await until('插进来的话出现在对话里', () => users().includes('插进来的话'))
@@ -570,17 +570,17 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
   /** “已归档对话”那一页里的一行 */
   const shelvedOf = (title: string) =>
     all('.arch-item').find((element) => element.textContent?.includes(title))
-  /** 点开某一行的菜单，选标题里带这几个字的那一项 */
-  const act = async (row: string, title: string) => {
+  /** 点开某一行的菜单，选那一项（按 data-action，不按文案） */
+  const act = async (row: string, action: 'rename' | 'archive' | 'delete') => {
     rowOf(row)?.parentElement?.querySelector<HTMLButtonElement>('.row-more > .ibtn')?.click()
-    const item = await until(`菜单项“${title}”`, () =>
-      all('.row-more .pick-opt').find((element) => element.textContent?.includes(title)),
+    const item = await until(`菜单项“${action}”`, () =>
+      one<HTMLButtonElement>(`.row-more .pick-opt[data-action="${action}"]`),
     )
     item.click()
     await frame()
   }
   const newName = '改过名的会话'
-  await act(opening, '改名')
+  await act(opening, 'rename')
   const nameField = await until('改名的输入框', () => one<HTMLInputElement>('.ss-name'))
   await frame()
   const nameFocused = document.activeElement === nameField
@@ -590,7 +590,7 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
   await until('侧栏上的新名字', () => rowOf(newName))
   const renamed = nameFocused && Boolean(one('.crumb')?.textContent?.includes(newName))
 
-  await act(newName, '归档')
+  await act(newName, 'archive')
   await until('归档的那一行从列表里消失', () => !rowOf(newName))
   one<HTMLButtonElement>('.sb-settings')?.click()
   ;(
@@ -612,7 +612,7 @@ export async function composeProbe(real: boolean): Promise<ComposeProbe> {
   await until('恢复的会话的内容', () => users().includes(opening))
   const restored = !one('.arch-page') && Boolean(one('.crumb')?.textContent?.includes(newName))
 
-  await act(newName, '删除')
+  await act(newName, 'delete')
   const deleteAsked = Boolean(one('.row-more .pick-ask')) && Boolean(rowOf(newName))
   one<HTMLButtonElement>('.row-more .pick-ask .btn.danger')?.click()
   await until('删掉的那一行消失', () => !rowOf(newName))

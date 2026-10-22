@@ -369,7 +369,7 @@ export function judgeMockService(probe: MockServiceProbe): string[] {
   same(probe.localHead, 'false:没有要说的:0.7.0:', '本机平时“设备服务”一节的样子不对')
   same(
     probe.localFacts,
-    '0.7.0｜0.7.0｜bundled:应用自带的那份适配器｜true｜有启动时间｜有进程号',
+    '0.7.0｜0.7.0｜bundled:应用自带的适配器｜true｜有启动时间｜有进程号',
     '本机的设备服务没有摆全（版本｜应用自带｜来源｜按需拉起｜启动时间｜进程号）',
   )
   same(probe.remoteHead, 'false:没有要说的:0.7.0:', '远程设备“设备服务”一节的样子不对')
@@ -388,7 +388,7 @@ export function judgeMockService(probe: MockServiceProbe): string[] {
   same(probe.flagsBusy, ['local'], '旧而忙没换时，只有本机那一行该有记号')
   same(
     probe.busyHead,
-    'true:busy:0.6.0:比应用自带的旧',
+    'true:busy:0.6.0:比应用自带的版本旧',
     '旧而忙没换时这一节没有自己开着，或者标题行不对',
   )
   must(
@@ -405,22 +405,18 @@ export function judgeMockService(probe: MockServiceProbe): string[] {
     (probe.busyReasons[0] ?? '').includes('dsh'),
     `有回合在跑的那一条没说是哪个 harness：${probe.busyReasons[0]}`,
   )
-  same(probe.retryLabel, '现在再试一次', '没有“现在再试一次”')
+  same(probe.retryLabel, '立即重试', '没有“立即重试”')
   same(probe.busyFolds, 'false>true', '这一节合不上，或者合上之后自己弹开了（合上之后>再点开）')
 
   // 再试一次，回合还停着
   same(probe.retrying, 'true:正在重新连接…', '点了“现在再试一次”之后按钮的样子不对（不能再点:字）')
-  same(probe.stillToast, '设备服务还不闲，这次也没换', '还不闲时再试，没有说结果')
+  same(probe.stillToast, '设备服务仍在忙碌，本次仍未更新', '还不闲时再试，没有说结果')
   same(kinds(probe.stillReasons), ['activeTurns'], '再试之后原因没有换成现在的')
-  same(probe.stillHead, 'true:busy:0.6.0:比应用自带的旧', '还不闲时再试，这一节不该变')
+  same(probe.stillHead, 'true:busy:0.6.0:比应用自带的版本旧', '还不闲时再试，这一节不该变')
 
   // 闲了再试：换上了
   must(probe.doneToast.includes('0.7.0'), `换成之后的提示没说换成了哪版：${probe.doneToast}`)
-  same(
-    probe.replacedHead,
-    'true:replaced:0.7.0:刚从 0.6.0 换上来',
-    '换上新版之后这一节的标题行不对',
-  )
+  same(probe.replacedHead, 'true:replaced:0.7.0:已从 0.6.0 更新', '换上新版之后这一节的标题行不对')
   must(
     probe.replacedText.includes('0.6.0 → 0.7.0'),
     `换上新版的那句话没说从哪版到哪版：${probe.replacedText}`,
@@ -430,20 +426,24 @@ export function judgeMockService(probe: MockServiceProbe): string[] {
 
   // 另外几种
   const [front = '', frontCommands = ''] = (probe.scenes.服务是前台的 ?? '').split('｜')
-  same(front, 'true:foreground:0.6.0:比应用自带的旧', '前台的或者有服务管理器管着的，这一节不对')
+  same(
+    front,
+    'true:foreground:0.6.0:比应用自带的版本旧',
+    '前台的或者有服务管理器管着的，这一节不对',
+  )
   same(
     frontCommands,
     'brew upgrade codex-harness-adapter && brew services restart codex-harness-adapter',
     '前台的或者有服务管理器管着的，没有给该怎么换的命令',
   )
   const [old = '', oldCommands = '', oldSaid = ''] = (probe.scenes.服务太旧 ?? '').split('｜')
-  same(old, 'true:unsupported:没报版本:比应用自带的旧', '太旧、停不了的，这一节不对')
+  same(old, 'true:unsupported:未报告版本:比应用自带的版本旧', '太旧、停不了的，这一节不对')
   same(oldCommands, 'ps -p 4821 -o command= && kill 4821', '太旧、停不了的，没有给手工结束的命令')
   must(oldSaid.includes('4821'), `太旧、停不了的，没有带命令行的原话：${oldSaid}`)
   const [stuck = '', stuckCommands = '', stuckSaid = ''] = (probe.scenes.服务没停成 ?? '').split(
     '｜',
   )
-  same(stuck, 'true:failed:0.6.0:比应用自带的旧', '去停了没停成的，这一节不对')
+  same(stuck, 'true:failed:0.6.0:比应用自带的版本旧', '去停了没停成的，这一节不对')
   same(stuckCommands, '', '去停了没停成的，不该给命令')
   must(stuckSaid.includes('没有退出'), `去停了没停成的，没有带命令行的原话：${stuckSaid}`)
   same(

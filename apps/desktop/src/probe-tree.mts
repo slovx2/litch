@@ -188,7 +188,7 @@ export async function treeProbe(): Promise<TreeSeen> {
   row?.querySelector<HTMLElement>('.row-more .ibtn')?.click()
   await sleep(200)
   const item = [...(row?.querySelectorAll<HTMLElement>('.pick-pop button') ?? [])].find((entry) =>
-    (entry.textContent ?? '').includes('派一个子会话'),
+    (entry.textContent ?? '').includes('派出子会话'),
   )
   item?.click()
   await until(() => $('.spawn-dialog') !== null)
@@ -425,16 +425,16 @@ export async function treeProbe(): Promise<TreeSeen> {
   $('.prop-menu [data-option="cardsOff"]')?.click()
   await until(() => toastText() !== '')
   seen.cardsOff = `${offLabel} → ${toastText()}`
-  let cardsOff = /在 .+ 上对 Claude Code 关闭任务卡/.test(offLabel)
-  if (toastText().startsWith('已对 Claude Code 关闭任务卡')) {
+  let cardsOff = /在 .+ 上关闭 Claude Code 的任务卡/.test(offLabel)
+  if (toastText().startsWith('已关闭 Claude Code 的任务卡')) {
     const undo = [...document.querySelectorAll<HTMLElement>('.toasts .toast-act')]
     cardsOff &&=
-      undo.map((button) => button.textContent).join(',') === '撤销,去设置' &&
+      undo.map((button) => button.textContent).join(',') === '撤销,前往设置' &&
       secondWrap()?.dataset.state === 'here'
     undo[0]?.click()
     cardsOff &&= await until(() => toastText() === '')
   } else {
-    cardsOff &&= toastText().includes('还没有任务卡开关')
+    cardsOff &&= toastText().includes('任务卡开关')
     $<HTMLElement>('.toasts .toast-x')?.click()
   }
 

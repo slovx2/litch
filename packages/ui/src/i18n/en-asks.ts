@@ -10,8 +10,9 @@ export const enAsks: Record<keyof typeof zhAsks, Entry> = {
   'ask.other': 'Or write your own',
   'ask.reply': 'Write an answer',
   'ask.send': 'Send',
-  'ask.note': 'The model keeps working; your answer goes into the running turn',
-  'ask.queued': 'This turn cannot take input now; your answer is queued and goes out when it ends',
+  'ask.note': 'The model keeps working. Your answer is added to the current turn.',
+  'ask.queued':
+    'This turn can’t take input now. Your answer is queued and sent when the turn ends.',
   'ask.skipped': 'Skipped',
   'ask.replied': 'Answered a question',
 }

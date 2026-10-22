@@ -78,7 +78,6 @@ export function SectionDialog({ deviceId, section, onCreated, onClose }: Section
               autoFocus
               onChange={(event) => setName(event.target.value)}
             />
-            {adding ? <span className="form-note">{t('section.name.hint')}</span> : null}
           </div>
           {failure ? <div className="modal-note err">{failure}</div> : null}
         </div>

@@ -135,7 +135,7 @@ function judgeBasics(basics: BasicsSeen, lines: DiffLines): string[] {
     `没跟踪的二进制文件没说是二进制：${basics.notes['fixtures/blob.dat']}`,
   )
   must(
-    (basics.notes['scripts/tool.py'] ?? '').includes('名字'),
+    (basics.notes['scripts/tool.py'] ?? '').includes('重命名'),
     `只改了名的文件没说只改了名：${basics.notes['scripts/tool.py']}`,
   )
   must(
@@ -224,7 +224,7 @@ function judgeWrites(writes: WritesSeen): string[] {
     writes.afterUnstage.join(',') === 'stage,discard',
     `取消暂存之后该回到暂存、还原：${writes.afterUnstage.join(',')}`,
   )
-  failed.push(...judgeAsk('还原', writes.ask, 'Makefile', /3 行.*1 行.*找不回来/))
+  failed.push(...judgeAsk('还原', writes.ask, 'Makefile', /3 行.*1 行.*无法撤销/))
   must(
     writes.ask.includes('还原') && writes.ask.includes('取消'),
     `还原的确认框上该有“还原”和“取消”两个按钮：${writes.ask.slice(2).join('、')}`,
@@ -232,7 +232,7 @@ function judgeWrites(writes: WritesSeen): string[] {
   must(writes.keptOnCancel, '点了取消，文件却没了')
   must(writes.goneOnYes, '确认还原之后文件还在列表里')
   failed.push(
-    ...judgeAsk('删没跟踪的文件', writes.askUntracked, 'serve_test.go', /没跟踪.*10 行.*找不回来/),
+    ...judgeAsk('删没跟踪的文件', writes.askUntracked, 'serve_test.go', /未跟踪.*10 行.*无法恢复/),
   )
   must(
     writes.askUntracked.includes('删除'),
@@ -240,7 +240,7 @@ function judgeWrites(writes: WritesSeen): string[] {
   )
   must(writes.untrackedGone, '确认删除之后没跟踪的文件还在列表里')
   must(
-    /拿回来/.test(writes.askDeleted[0] ?? '') && /不会丢/.test(writes.askDeleted[1] ?? ''),
+    /恢复/.test(writes.askDeleted[0] ?? '') && /不会丢失/.test(writes.askDeleted[1] ?? ''),
     `还原一个删了的文件，该说是拿回来、不会丢东西：${writes.askDeleted.slice(0, 2).join(' / ')}`,
   )
   must(writes.toasts.length === 0, `暂存、还原的过程中出了错：${writes.toasts.join(' | ')}`)
@@ -277,14 +277,14 @@ function judgeTurn(turn: TurnSeen): string[] {
     `面板重新打开之后没有跟上收着的时候的改动：${turn.closed.listed.join(' ')}`,
   )
   must(
-    /太长/.test(turn.tooLong.note) && turn.tooLong.picked === 'notes/agent-big-2.md',
+    /过长/.test(turn.tooLong.note) && turn.tooLong.picked === 'notes/agent-big-2.md',
     `对话里太长不展开的那一处，该有去差异面板的入口，点了之后选中那个文件：说的是“${turn.tooLong.note}”，选中的是 ${turn.tooLong.picked}`,
   )
   return failed
 }
 
 function judgeGone(turn: TurnSeen): string[] {
-  return /没有没提交的改动/.test(turn.goneToast)
+  return /没有未提交的改动/.test(turn.goneToast)
     ? []
     : [`从对话里点一个已经没有改动的文件，该说一声它现在没有改动：出的提示是“${turn.goneToast}”`]
 }
@@ -353,7 +353,7 @@ function judgePlaces(places: PlacesSeen): string[] {
     huge.wrap.off === 20 && huge.wrap.sideways && huge.wrap.on > huge.wrap.off,
     `折行开关不对：不折的时候长行该是一行高（20px）、内容区能横着滚，折了之后变高。量到 ${JSON.stringify(huge.wrap)}`,
   )
-  must(/没有没提交的改动/.test(places.clean), `干净的仓库该说没有改动：${places.clean}`)
+  must(/没有未提交的改动/.test(places.clean), `干净的仓库该说没有改动：${places.clean}`)
   must(/不是 git 仓库/.test(plain.before), `不是仓库的目录该说不是 git 仓库：${plain.before}`)
   must(
     plain.source === 'turn' && plain.files.length === 2,
@@ -364,8 +364,11 @@ function judgePlaces(places: PlacesSeen): string[] {
     `显示本回合改动的时候不该有范围和暂存、还原的按钮：范围 ${plain.scopeShown}，按钮 ${plain.acts} 个`,
   )
   must(/不是 git 仓库/.test(plain.banner), `显示本回合改动的时候没说明这不是仓库：${plain.banner}`)
-  must(/起不了命令/.test(places.unsupported), `起不了进程的设备该说看不了：${places.unsupported}`)
-  must(/没连上/.test(places.offline), `没连上的设备该说没连上：${places.offline}`)
+  must(
+    /不支持执行命令/.test(places.unsupported),
+    `起不了进程的设备该说看不了：${places.unsupported}`,
+  )
+  must(/未连接/.test(places.offline), `没连上的设备该说没连上：${places.offline}`)
   return failed
 }
 
@@ -473,7 +476,7 @@ export function judgeReal(
     `二进制文件没说是二进制：${main.notes['bin.dat']}`,
   )
   must(
-    (main.notes['renamed.txt'] ?? '').includes('名字'),
+    (main.notes['renamed.txt'] ?? '').includes('重命名'),
     `只改了名的文件没说只改了名：${main.notes['renamed.txt']}`,
   )
   must(main.painted > 0, '差异没有上色')
@@ -498,11 +501,11 @@ export function judgeReal(
     main.afterUnstage.join(',') === 'stage,discard',
     `取消暂存之后该回到暂存、还原：${main.afterUnstage.join(',')}`,
   )
-  failed.push(...judgeAsk('还原', main.ask, 'src/app.ts', /2 行.*2 行.*找不回来/))
+  failed.push(...judgeAsk('还原', main.ask, 'src/app.ts', /2 行.*2 行.*无法撤销/))
   must(main.keptOnCancel, '点了取消，文件却没了')
   must(main.goneOnYes, '确认还原之后文件还在列表里')
   failed.push(
-    ...judgeAsk('删没跟踪的文件', main.askUntracked, 'fresh.txt', /没跟踪.*4 行.*找不回来/),
+    ...judgeAsk('删没跟踪的文件', main.askUntracked, 'fresh.txt', /未跟踪.*4 行.*无法恢复/),
   )
   must(main.untrackedGone, '确认删除之后没跟踪的文件还在列表里')
   must(main.toasts.length === 0, `暂存、还原的过程中出了错：${main.toasts.join(' | ')}`)

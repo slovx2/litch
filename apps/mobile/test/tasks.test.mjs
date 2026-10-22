@@ -95,7 +95,7 @@ test('任务一行：日程、下一次或状态、最近一次、未读和记�
   const now = Date.now()
   const plain = taskLines(task({ nextRunAt: now + 3_600_000 }), now, 'UTC', zh)
   assert.equal(plain.title, '日报')
-  assert.match(plain.detail, /^每天 09:00\n下一次 /)
+  assert.match(plain.detail, /^每天 09:00\n下次 /)
   assert.equal(plain.meta, undefined)
   assert.equal(plain.mark, 'idle')
   // 任务的时区和看的人不一样：日程后面带上时区名
@@ -108,7 +108,7 @@ test('任务一行：日程、下一次或状态、最近一次、未读和记�
     zh,
   )
   assert.equal(busy.mark, 'running')
-  assert.match(busy.detail, /最近一次 在跑 今天 \d\d:\d\d/)
+  assert.match(busy.detail, /上次 运行中 今天 \d\d:\d\d/)
 
   const failed = taskLines(
     task({ unreadRuns: 2, lastError: { code: 'turnFailed', message: 'boom' } }),
@@ -117,7 +117,7 @@ test('任务一行：日程、下一次或状态、最近一次、未读和记�
     zh,
   )
   assert.equal(failed.mark, 'error')
-  assert.equal(failed.meta, '2 次没看')
+  assert.equal(failed.meta, '2 次未读')
   assert.equal(taskLines(task({ unreadRuns: 1 }), now, 'UTC', zh).mark, 'unread')
   assert.match(taskLines(task({ status: 'paused' }), now, 'UTC', zh).detail, /已暂停/)
   assert.equal(taskLines(task({ status: 'completed' }), now, 'UTC', zh).mark, 'offline')
@@ -130,7 +130,7 @@ test('运行记录一行：状态、时间、触发、合并；错误优先于�
     now,
     zh,
   )
-  assert.match(ok.title, /^成功 · 今天 \d\d:\d\d · 按日程 · 合并了错过的 3 次$/)
+  assert.match(ok.title, /^成功 · 今天 \d\d:\d\d · 定时 · 合并了 3 次错过的运行$/)
   assert.equal(ok.detail, '写好了')
   assert.equal(ok.mark, 'unread')
   const bad = runLines(
