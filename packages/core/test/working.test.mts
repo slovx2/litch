@@ -1,4 +1,4 @@
-// 回合末尾“正在工作”那一行：只在空档出，别处已经在表示“正在做”时不出。
+// 回合末尾“正在工作”那一行：回合在跑时一直在，只在正文出字、等人答复时让开。
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import type { AgentMessageItem, CommandItem, ItemView, ToolCallItem } from '../src/index.mjs'
@@ -61,16 +61,24 @@ test('正文正在出字：不显示，光标已经表示在工作', () => {
   assert.equal(workingShown(true, [user, message('inProgress', '正在写')], 0), false)
 })
 
-test('有条目在跑：不显示，汇总行带着运行记号', () => {
-  assert.equal(workingShown(true, [user, command('inProgress')], 0), false)
-  assert.equal(workingShown(true, [user, tool('inProgress')], 0), false)
-  const thinking: ItemView = { id: 'r', kind: 'reasoning', text: '', status: 'inProgress' }
-  assert.equal(workingShown(true, [user, thinking], 0), false)
-})
-
-test('不画的收尾调用在跑：照样显示', () => {
+test('命令、工具、思考在跑：照样显示，步骤来去不让它闪', () => {
+  assert.equal(workingShown(true, [user, command('inProgress')], 0), true)
+  assert.equal(workingShown(true, [user, tool('inProgress')], 0), true)
+  const thinking: ItemView = { id: 'r', kind: 'reasoning', text: '在想', status: 'inProgress' }
+  assert.equal(workingShown(true, [user, thinking], 0), true)
+  assert.equal(
+    workingShown(true, [user, message('completed', '先看看'), command('inProgress')], 0),
+    true,
+  )
   const wrapUp = tool('inProgress', { wrapUp: { suggestions: [] } })
   assert.equal(workingShown(true, [user, message('completed', '做完了'), wrapUp], 0), true)
+})
+
+test('步骤在跑、正文也在出字：不显示', () => {
+  assert.equal(
+    workingShown(true, [user, command('inProgress'), message('inProgress', '正在写')], 0),
+    false,
+  )
 })
 
 test('有待答的审批或提问：不显示', () => {

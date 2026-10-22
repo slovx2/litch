@@ -2,7 +2,7 @@
 // - 行的标识只由回合、条目、块号决定，流式和定稿之间不变；内容没变的行原样复用同一个对象，单元格不重画。
 // - 过程（命令、工具调用、改文件、搜索、说明）连成一组，收起时是一行高度固定的摘要；展开时每一步各是一行，
 //   排在摘要的上面（倒置列表里往上长，被点的摘要原地不动）。展开收起只由用户点，回合结束时不自动收起。
-// - 每个回合末尾一行状态，从回合开始到结束一直在，只换字不换高度。回合在跑时只在空档里写“{name} 正在工作”和已用的时间（workingShown；在想时这句写在思考那一行上）。
+// - 每个回合末尾一行状态，从回合开始到结束一直在，只换字不换高度。回合在跑时写“{name} 正在工作”和已用的时间，只在正文出字、等人答复时留空（workingShown）。
 // - 建议任务的卡片（收尾带的、start 提的）和收尾留的问题排在回合最下方（回答下面、状态行上面），过程里调用的位置只留一步；
 //   offer 卡挂在回合中间等人选，不挪。没字的思考不画。
 // - 行里放条目对象本身（单元格从它取要画的东西），再加上条目里会被原地改掉的那几项（核心对文字、状态是原地改的，
@@ -118,7 +118,6 @@ export type Row =
       key: string
       turnId: string
       text: string
-      open: boolean
       expanded: boolean
     }
   /**
@@ -169,7 +168,7 @@ export type Row =
       durationMs: number | null
       /** 回合开始的时刻：“正在工作”后面写已经用了多久。对面没给是 null */
       startedAt: number | null
-      /** 回合在跑、而且正处在空档里（核心的 workingShown）：这时才写“正在工作”，别的时候留空 */
+      /** 回合在跑、没有正文在出字、没有等人答复（核心的 workingShown）：这时写“正在工作”，别的时候留空 */
       working: boolean
     }
 
@@ -356,7 +355,6 @@ export class RowBuilder {
               key: item.id,
               turnId: turn.id,
               text: expanded ? item.text.trim() : lastLine(item.text),
-              open: item.status === 'inProgress',
               expanded,
             }),
           )

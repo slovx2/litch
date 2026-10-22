@@ -568,8 +568,8 @@ test('“想一会儿”：回合开头、两段输出之间各空等一会儿�
   assert.equal(shown(), false, '回合结束')
 })
 
-test('“推理一会儿”：“正在工作”同一时刻只在一处——空档里在末尾那一行，在想时换到思考所在的汇总行', async () => {
-  const { channel, time } = setup(20)
+/** 订阅模拟核心上 s3 这个会话，返回一个取此刻视图的函数 */
+const watchS3 = (channel: ReturnType<typeof setup>['channel']) => {
   let view: SessionView | null = null
   channel.subscribe(
     { kind: 'session', deviceId: 'local', sessionId: 's3' },
@@ -582,45 +582,81 @@ test('“推理一会儿”：“正在工作”同一时刻只在一处——�
       },
     },
   )
-  await settle()
-  // 此刻写着“正在工作”的地方：末尾那一行（workingShown），和思考所在的步骤组汇总行（有在想的思考时，
-  // 界面的 nowOf 写的是同一句）。思考那一行自己在想的时候不写动词
-  const spots = () => {
-    const current = view as SessionView | null
-    const turn = current?.turns.at(-1)
-    if (!current || !turn) return []
-    const items = turn.itemIds.map((id) => current.items[id])
-    const running = turn.status === 'running'
-    const out: string[] = []
-    if (workingShown(running, items, current.requests.length)) out.push('末尾')
-    if (running && items.some((item) => item?.kind === 'reasoning' && item.status === 'inProgress'))
-      out.push('思考')
-    return out
+  return () => view as SessionView | null
+}
+
+/** 此刻最后一个回合：末尾那一行出不出、有没有正文在出字、在跑的是哪几种条目 */
+const lastTurnState = (view: SessionView | null) => {
+  const turn = view?.turns.at(-1)
+  if (!view || !turn) return null
+  const items = turn.itemIds.map((id) => view.items[id])
+  const running = turn.status === 'running'
+  return {
+    running,
+    shown: workingShown(running, items, view.requests.length),
+    writing: items.some(
+      (item) => item?.kind === 'agentMessage' && item.status === 'inProgress' && item.text !== '',
+    ),
+    busy: items.flatMap((item) =>
+      item && 'status' in item && item.status === 'inProgress' && item.kind !== 'agentMessage'
+        ? [item.kind]
+        : [],
+    ),
   }
+}
+
+test('“推理一会儿”：在想的时候末尾那一行照样在（思考所在的汇总行不写“正在工作”），回答出字时让开', async () => {
+  const { channel, time } = setup(20)
+  const current = watchS3(channel)
+  await settle()
   await channel.command('session.send', { deviceId: 'local', sessionId: 's3', text: '推理一会儿' })
   time.advance(16)
   await settle()
-  assert.deepEqual(spots(), ['末尾'], '等第一个字')
+  assert.equal(lastTurnState(current())?.shown, true, '等第一个字')
   time.advance(2400)
   await settle()
-  assert.deepEqual(spots(), ['思考'], '思考刚开始，还没出字')
+  assert.deepEqual(lastTurnState(current())?.busy, ['reasoning'])
+  assert.equal(lastTurnState(current())?.shown, true, '思考刚开始')
   const seen = new Set<string>()
-  for (
-    let i = 0;
-    i < 800 && (view as SessionView | null)?.turns.at(-1)?.status === 'running';
-    i++
-  ) {
-    const now = spots()
-    assert.ok(now.length <= 1, `同一时刻有两处在写：${now.join('、')}`)
-    seen.add(now.join('') || '无')
+  for (let i = 0; i < 800 && lastTurnState(current())?.running; i++) {
+    const now = lastTurnState(current())
+    if (now?.busy.includes('reasoning')) assert.equal(now.shown, true, '在想的时候不让开')
+    assert.equal(now?.shown, !now?.writing, '只在正文出字时让开')
+    seen.add(now?.shown ? '末尾' : '无')
     time.advance(20)
     await settle()
   }
-  // 想完了接着出回答：回答出字时哪儿都不写（正文末尾的光标就是）
-  assert.ok(seen.has('思考') && seen.has('无'), [...seen].join('、'))
-  const thought = Object.values((view as SessionView | null)?.items ?? {}).find(
-    (item) => item.kind === 'reasoning',
-  )
+  assert.ok(seen.has('末尾') && seen.has('无'), [...seen].join('、'))
+  const thought = Object.values(current()?.items ?? {}).find((item) => item.kind === 'reasoning')
   assert.equal(thought?.status, 'completed', '想完了留着那一条，能点开看')
-  assert.deepEqual(spots(), [], '回合结束')
+  assert.equal(lastTurnState(current())?.shown, false, '回合结束')
+})
+
+test('“忙一阵”：命令、读文件、思考来来去去时末尾那一行一直在，只在说明和回答出字时让开', async () => {
+  const { channel, time } = setup(20)
+  const current = watchS3(channel)
+  await settle()
+  await channel.command('session.send', { deviceId: 'local', sessionId: 's3', text: '忙一阵' })
+  time.advance(16)
+  await settle()
+  const busy = new Set<string>()
+  let hides = 0
+  let stray = 0
+  let last = lastTurnState(current())?.shown ?? false
+  for (let i = 0; i < 2000 && lastTurnState(current())?.running; i++) {
+    const now = lastTurnState(current())
+    if (!now) break
+    for (const kind of now.busy) busy.add(kind)
+    if (last && !now.shown) {
+      hides++
+      if (!now.writing) stray++
+    }
+    last = now.shown
+    time.advance(20)
+    await settle()
+  }
+  assert.deepEqual([...busy].sort(), ['command', 'reasoning', 'toolCall'], '场景里该有的步骤都来过')
+  assert.equal(stray, 0, '没有正文出字时让开过')
+  assert.equal(hides, 2, '说明、最终回答各让开一次')
+  assert.equal(lastTurnState(current())?.running, false, '回合结束')
 })

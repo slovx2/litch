@@ -134,7 +134,7 @@ function useSettled(
 }
 
 /**
- * 回合末尾那一行“正在工作”此刻该不该出（规矩在核心的 workingShown：只填空档）。
+ * 回合末尾那一行“正在工作”此刻该不该出（规矩在核心的 workingShown：只在正文出字、等人答复时让开）。
  * 订阅回合里的每一条条目和待答的请求；结果是个布尔值，字在长而结论没变时不引起重画。回合不在跑时什么都不订阅
  */
 function useWorking(ref: SessionRef, running: boolean, itemIds: string[]): boolean {
@@ -167,8 +167,8 @@ function useWorking(ref: SessionRef, running: boolean, itemIds: string[]): boole
   )
 }
 
-/** 空档要持续 WORKING_DELAY_MS 才算：一卡一卡地出字时，状态行不跟着来回闪 */
-const WORKING_DELAY_MS = 400
+/** 让开之后要持续 WORKING_DELAY_MS 才再显出：两段正文挨着出字时不跟着闪一下，出完字又不至于迟迟不出来 */
+const WORKING_DELAY_MS = 300
 
 function useLasting(on: boolean, ms: number): boolean {
   const [lasted, setLasted] = useState(false)
@@ -340,7 +340,7 @@ const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { 
         ) : null}
         {/* 建议任务的卡片和收尾留的问题：固定在回合最下方（最终回答下面），不随回答往上冲 */}
         {tail ? <TurnTail {...ref} turnId={turnId} itemIds={tail.itemIds} /> : null}
-        {/* 回合在跑时这一格一直占着位置，只在空档里显出来（只改透明度），出字、跑工具时不跟着跳 */}
+        {/* 回合在跑时这一格一直占着位置，正文出字时隐去（只改透明度，不跟着跳）；用时从回合开始算，隐去时照样走 */}
         {running ? (
           <div
             className="running-line slot"

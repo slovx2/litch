@@ -209,6 +209,17 @@ const THINKS_A_WHILE = /想一会儿|think a while/i
 const REASONS_A_WHILE = /推理一会儿|reason a while/i
 /** “推理一会儿”那条思考写多久：比出字慢得多，界面上来得及点开、截图 */
 const REASON_MS = 6000
+/**
+ * 发的话里带“忙一阵”时，回合里按真的时间来一串过程：几条很快跑完的命令、读一个文件、一段思考、一段说明，
+ * 每两步之间停 BUSY_GAP_MS（模型在想下一步），最后照常回话。给界面试回合末尾那一行“正在工作”：
+ * 命令、工具、思考来来去去时它一直在，只有正文出字时隐去
+ */
+const KEEPS_BUSY = /忙一阵|keep busy/i
+const BUSY_GAP_MS = 900
+/** “忙一阵”里每条命令、工具跑多久：真的命令常常一百毫秒上下就完 */
+const BUSY_STEP_MS = 150
+/** “忙一阵”里的条目标识带这个前缀，回合被打断时还在跑的记成没成 */
+const busyKey = (turnId: string, n: number): string => `${turnId}-b${n}`
 /** “跑一会儿”那条命令的条目标识 */
 const runKey = (turnId: string): string => `${turnId}-w`
 
@@ -482,12 +493,15 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     // 待办里还标着“正在做”的步骤（回合被打断了）改回“还没做”
     const todo = view.items[todoKey(turnId)]
     const settled = todo?.kind === 'todo' ? settleSteps(todo.steps) : null
-    // “跑一会儿”的那条命令、“工具大结果”的工具还没跑完回合就停了（被打断）：也算没成，不留着一直转
-    const ran = [view.items[runKey(turnId)], view.items[toolKey(turnId)]].flatMap((entry) =>
-      (entry?.kind === 'command' || entry?.kind === 'toolCall') && entry.status === 'inProgress'
+    // “跑一会儿”的那条命令、“工具大结果”的工具、“忙一阵”的那几步还没跑完回合就停了（被打断）：也算没成，不留着一直转
+    const busy = (turn?.itemIds ?? []).filter((id) => id.startsWith(`${turnId}-b`))
+    const ran = [runKey(turnId), toolKey(turnId), ...busy].flatMap((id) => {
+      const entry = view.items[id]
+      return (entry?.kind === 'command' || entry?.kind === 'toolCall') &&
+        entry.status === 'inProgress'
         ? [{ op: 'item.status', itemId: entry.id, status: 'failed' } satisfies SessionOp]
-        : [],
-    )
+        : []
+    })
     applySessionOps(view, [
       ...ran,
       ...(todo?.kind === 'todo' && settled !== todo.steps && settled
@@ -613,6 +627,10 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     }
     if (REASONS_A_WHILE.test(message.text)) {
       reasonAWhile(view, turnId)
+      return turnId
+    }
+    if (KEEPS_BUSY.test(message.text)) {
+      keepBusy(view, turnId)
       return turnId
     }
     if (ASKS_WHILE_WORKING.test(message.text)) {
@@ -911,6 +929,108 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       replies.set(sessionKey(view), clock.setTimer(step, every))
     }
     replies.set(sessionKey(view), clock.setTimer(start, RUN_MS))
+  }
+
+  /** 回合里按真的时间来一串过程，步与步之间停一会儿，最后照常回话（见 KEEPS_BUSY） */
+  const keepBusy = (view: SessionView, turnId: string) => {
+    const later = (step: () => void, ms: number) =>
+      replies.set(sessionKey(view), clock.setTimer(step, ms))
+    let n = 0
+    /** 一条很快跑完的命令 */
+    const command = (line: string) => (next: () => void) => {
+      const startedAt = clock.now()
+      const item = {
+        id: busyKey(turnId, ++n),
+        kind: 'command',
+        command: line,
+        cwd: view.cwd,
+        output: '',
+        elided: null,
+        exitCode: null,
+        durationMs: null,
+        startedAt,
+        status: 'inProgress',
+      } satisfies ItemView
+      applySessionOps(view, [{ op: 'item.add', turnId, item }])
+      later(() => {
+        const durationMs = clock.now() - startedAt
+        const done = {
+          ...item,
+          output: 'ok\n',
+          exitCode: 0,
+          durationMs,
+          status: 'completed' as const,
+        }
+        applySessionOps(view, [{ op: 'item.add', turnId, item: done }])
+        next()
+      }, BUSY_STEP_MS)
+    }
+    /** 读一个文件（Claude Code 的读投影出来是“Read 路径”） */
+    const read = (path: string) => (next: () => void) => {
+      const item = {
+        id: busyKey(turnId, ++n),
+        kind: 'toolCall',
+        source: null,
+        tool: `Read ${path}`,
+        input: [],
+        output: [],
+        error: null,
+        durationMs: null,
+        status: 'inProgress',
+      } satisfies ItemView
+      applySessionOps(view, [{ op: 'item.add', turnId, item }])
+      later(() => {
+        const done = { ...item, durationMs: BUSY_STEP_MS, status: 'completed' as const }
+        applySessionOps(view, [{ op: 'item.add', turnId, item: done }])
+        next()
+      }, BUSY_STEP_MS)
+    }
+    /** 一段一点点出字的思考或说明 */
+    const stream = (kind: 'reasoning' | 'commentary', text: string) => (next: () => void) => {
+      const itemId = `${turnId}-${kind === 'reasoning' ? 'r' : 'n'}${++seq}`
+      applySessionOps(view, [
+        {
+          op: 'item.add',
+          turnId,
+          item:
+            kind === 'reasoning'
+              ? { id: itemId, kind: 'reasoning', status: 'inProgress', text: '' }
+              : {
+                  id: itemId,
+                  kind: 'agentMessage',
+                  phase: 'commentary',
+                  status: 'inProgress',
+                  text: '',
+                },
+        },
+      ])
+      const chunks = chunkText(text, lang === 'en' ? 2 : 1)
+      const step = () => {
+        const chunk = chunks.shift()
+        if (chunk)
+          applySessionOps(view, [{ op: 'item.appendText', itemId, field: 'text', text: chunk }])
+        if (chunks.length > 0) {
+          later(step, Math.max(chunkMs, 1))
+          return
+        }
+        applySessionOps(view, [{ op: 'item.status', itemId, status: 'completed' }])
+        next()
+      }
+      later(step, Math.max(chunkMs, 1))
+    }
+    const steps = [
+      command('git log --oneline | head -40'),
+      read('docs/HANDOFF.md'),
+      stream('reasoning', SAMPLE_TEXT[lang].secondThought),
+      command('wc -l docs/API_COVERAGE.md'),
+      stream('commentary', commentSample(lang).note),
+      command('ls -la .local'),
+    ]
+    const run = (index: number) => {
+      const step = steps[index]
+      later(step ? () => step(() => run(index + 1)) : () => replyHeard(view, turnId), BUSY_GAP_MS)
+    }
+    run(0)
   }
 
   /**
