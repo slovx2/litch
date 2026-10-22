@@ -5,6 +5,10 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
+## 未发布
+
+- 发版：发布页多一份给集成方的 Claude 入口包 `cha-v<版本>.tar.gz`（编译输出、运行依赖、记版本的 `cha-build.json`）和它的校验和清单 `cha-SHA256SUMS.txt`，在钉了摘要的容器里出，同一个提交在哪出都是同一个 sha256（`scripts/package-cha.sh`）；0.16.0 的那份已补传
+
 ## 0.16.0
 
 - 后台任务：回合结束后还在跑的工作（Claude Code 的后台命令和子任务、原生 Codex 回合结束时还在跑的命令、dsh 的后台作业）有了统一的集合（协议扩展 `backgroundTasks`）。桌面端输入框上方一行写几个在跑，点开右侧“后台任务”页看运行中和已结束的（名称、用时、来源回合）；侧栏有记号；后台跑完引擎自己接着做的回合开头写一行。手机端同样
