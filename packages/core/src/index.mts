@@ -25,6 +25,7 @@ export { type CoreChannel, connectChannel, type TopicSink } from './channel/clie
 export { createPortPair } from './channel/memory-port.mjs'
 export {
   type AbortSignalLike,
+  type AccountLimitsOp,
   type AppOp,
   ChannelError,
   type ChannelErrorExtra,
@@ -177,6 +178,7 @@ export type * from './model-files.mjs'
 export type * from './model-goal.mjs'
 export type * from './model-harness-config.mjs'
 export type * from './model-install.mjs'
+export type * from './model-limits.mjs'
 export type * from './model-machine.mjs'
 export type * from './model-manage.mjs'
 export type * from './model-pairing.mjs'

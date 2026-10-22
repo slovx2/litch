@@ -7,6 +7,7 @@ import { zhBimport } from './zh-CN-bimport.ts'
 import { zhComments } from './zh-CN-comments.ts'
 import { zhGoal } from './zh-CN-goal.ts'
 import { zhHconfig } from './zh-CN-hconfig.ts'
+import { zhLimits } from './zh-CN-limits.ts'
 import { zhOnboard } from './zh-CN-onboard.ts'
 import { zhPairing } from './zh-CN-pairing.ts'
 import { zhPasswords } from './zh-CN-passwords.ts'
@@ -39,6 +40,7 @@ export const zhCN = {
   ...zhSwitches,
   // 持续目标（输入框里的 /goal、输入框上方那一行、侧面板的“目标”页）的文案也单独放（zh-CN-goal.ts）
   ...zhGoal,
+  ...zhLimits,
   'title.location': '当前位置',
   'workspace.none': '无项目',
 
@@ -957,7 +959,10 @@ export const zhCN = {
   'turn.rollback.no': '取消',
   'turn.rollback.failed': '回退失败：{reason}',
   'context.unknown': '尚未报告上下文用量',
+  'context.label': '上下文',
   'context.compact': '压缩上下文',
+  'context.compactBusy': '回合进行中，结束后可压缩',
+  'context.compactUnsupported': '此 harness 不支持压缩',
   'context.compactFailed': '压缩失败：{reason}',
   'rail.label': '会话信息',
   'todo.title': '待办',

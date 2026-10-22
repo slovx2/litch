@@ -89,7 +89,11 @@ import { NativeTurnInput } from './native-turn-input.mjs'
 import { mergePermissionOverlay, permissionToolName } from './permission-grants.mjs'
 import { permissionToolServer } from './permission-tools.mjs'
 import { ProtocolError, submissionHash } from './protocol-contract.mjs'
-import { type NativeRateLimitInfo, rateLimitCredentialScope } from './rate-limits.mjs'
+import {
+  type NativeAccountUsage,
+  type NativeRateLimitInfo,
+  rateLimitCredentialScope,
+} from './rate-limits.mjs'
 import {
   applyPromptCacheTtl,
   claudePlansLocation,
@@ -1129,10 +1133,29 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
   }
 
   // 模型目录取自固定 CLI 的原生 /model 列表；只读元数据，不发送用户消息也不请求模型。
-  async supportedModels(): Promise<NativeModelInfo[]> {
+  supportedModels(): Promise<NativeModelInfo[]> {
+    return this.metadataQuery('model-catalog', '读取原生模型目录超时', (query) =>
+      query.supportedModels(),
+    )
+  }
+
+  // 订阅额度取自 CLI 的 get_usage（/usage 背后的数据），CLI 自己用它的登录去问；
+  // 跳过本机会话记录的扫描（behaviors），只要额度
+  accountUsage(): Promise<NativeAccountUsage> {
+    return this.metadataQuery('account-usage', '读取账号额度超时', (query) =>
+      query.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET({ skipBehaviors: true }),
+    )
+  }
+
+  // 起一个只答控制请求的 CLI：不发用户消息，问完就关
+  private async metadataQuery<T>(
+    label: string,
+    timeoutMessage: string,
+    ask: (query: Query) => Promise<T>,
+  ): Promise<T> {
     const sdk = await this.loadSdk()
     const abort = new AbortController()
-    const nativeProcess = new NativeProcess('model-catalog', newId())
+    const nativeProcess = new NativeProcess(label, newId())
     const prompt = (async function* (): AsyncGenerator<never> {
       await new Promise((resolve) =>
         abort.signal.addEventListener('abort', resolve, { once: true }),
@@ -1154,9 +1177,9 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         spawnClaudeCodeProcess: nativeProcess.spawn.bind(nativeProcess),
       },
     })
-    const timeout = setTimeout(() => abort.abort(new Error('读取原生模型目录超时')), 20_000)
+    const timeout = setTimeout(() => abort.abort(new Error(timeoutMessage)), 20_000)
     try {
-      return await query.supportedModels()
+      return await ask(query)
     } finally {
       clearTimeout(timeout)
       abort.abort()

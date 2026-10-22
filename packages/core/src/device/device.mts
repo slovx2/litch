@@ -97,6 +97,7 @@ import { composeOptions, projectDefaults } from '../projection/settings.mjs'
 import type { SkillCatalog } from '../projection/skills.mjs'
 import { pathTwin, samePath } from '../text/paths.mjs'
 import type { ToolHub } from '../tool-hub.mjs'
+import { type AccountLimits, createAccountLimits } from './account-limits.mjs'
 import { createAgentThreads } from './agents.mjs'
 import { collectThreads, type Listing, mergeListing } from './catalog.mjs'
 import { createComposeAids } from './compose.mjs'
@@ -324,6 +325,8 @@ export interface Device {
   readonly install: Install
   /** 这台设备上各 harness 的详情设置：配置项、账号与 provider、MCP、指令文件（harness-config.mts） */
   readonly harnessConfig: HarnessConfig
+  /** 这台设备上各 harness 的账号额度（account-limits.mts） */
+  readonly accountLimits: AccountLimits
   /** litch_machine 把这台设备当作一台能操作的机器时用的：它的连接 */
   readonly machineLink: MachineDeviceLink
   /** 现查这台设备的情况（主机名、系统、用户、主目录、shell），缓存一会儿。没连着时抛错 */
@@ -1371,6 +1374,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     pairing.resync()
     install.resync()
     harnessConfig.resync()
+    accountLimits.resync()
     await reconcile()
   }
 
@@ -1396,6 +1400,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       pairing.offline()
       install.offline()
       harnessConfig.offline()
+      accountLimits.offline()
     }
     switch (state.phase) {
       case 'idle':
@@ -1456,6 +1461,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       if (install.notification(method, params)) return
       // harness 详情设置：配置变了、登录有进展
       if (harnessConfig.notification(method, params)) return
+      // 账号额度变了
+      if (accountLimits.notification(method, params)) return
       // 差异面板在设备上跑的命令结束了、它盯着的路径变了：先认它自己起的那些，剩下的进程通知才是终端的
       if (diffs.notification(method, params)) return
       // litch_machine 起的进程（执行器的、现查设备情况的）也不是终端的
@@ -1823,6 +1830,15 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     log,
   })
 
+  const accountLimits = createAccountLimits({
+    deviceId: config.id,
+    now: () => options.clock.now(),
+    online: () => online,
+    aggregated: () => mode === 'full',
+    request: (method, params, requestOptions) => link.request(method, params, requestOptions),
+    log,
+  })
+
   const manage = createManagement({
     deviceId: config.id,
     online: () => online,
@@ -2151,6 +2167,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     pairing,
     install,
     harnessConfig,
+    accountLimits,
     machineLink,
     machineFacts,
     stopMachine: (response) => toolCalls.stopMachine(response),

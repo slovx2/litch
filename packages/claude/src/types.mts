@@ -572,6 +572,8 @@ export interface RuntimeSessionHandlers {
 
 export interface ClaudeRuntime {
   supportedModels?(): Promise<NativeModelInfo[]>
+  // 账号的订阅额度（CLI 的 get_usage）。不发用户消息、不请求模型
+  accountUsage?(): Promise<import('./rate-limits.mjs').NativeAccountUsage>
   setSessionHandlers?(handlers: RuntimeSessionHandlers): void
   // 仍有 CLI 进程存活的线程（只是空闲保留着的不算）。
   liveSessions?(): string[]

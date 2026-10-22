@@ -321,9 +321,15 @@ function turnItemsView(value: unknown): TurnItemsView {
 const NATIVE_WATCH_MS = 30_000
 // 被订阅的导入会话多久看一次占用和原生记录（停在会话上时别处的进展自己出来）
 const NATIVE_FOLLOW_MS = 3000
+/** 两次 get_usage 之间至少隔多久：每次都要起一个 CLI，服务端那头也有频率限制 */
+const ACCOUNT_USAGE_INTERVAL_MS = 60_000
 
 export class CodexClaudeAppServer {
   private readonly rateLimits = new AccountRateLimits()
+  // get_usage：正在问的那一次、上次问的时刻、上次问到时账号有没有额度
+  private accountUsageInFlight: Promise<void> | null = null
+  private accountUsageAt = Number.NEGATIVE_INFINITY
+  private accountUsageAvailable = false
   private readonly accountPeers = new Set<RpcPeer>()
   // 请求从一条仍连着的连接手里收回（它退订了这个线程）：直接告诉它撤掉卡片，不经线程路由。
   private pendingInteractions = new PendingInteractions((peer, threadId, requestId) => {
@@ -4208,6 +4214,7 @@ export class CodexClaudeAppServer {
     if (!turnIsActive()) return
     this.runtimeReadyByTurn.get(turn.id)?.resolve(true)
     this.handedToRuntime.add(turn.id)
+    void this.refreshAccountUsage(false)
     const runtimeTurn = this.runtime.runTurn(
       {
         threadId: thread.id,
@@ -5472,6 +5479,7 @@ export class CodexClaudeAppServer {
     disarmWatchdog()
     acceptRuntimeEvents = false
     if (this.stopped) return
+    void this.refreshAccountUsage(false)
     // 说过的不再说；这一回合的调用进了会话记录的删掉（不等：CLI 退出时才写完最后一批，下一回合开始前还会再看）
     if (lostIntents.length > 0)
       this.store.dropNativeToolIntents(
@@ -6459,14 +6467,47 @@ export class CodexClaudeAppServer {
     return { data, nextCursor }
   }
 
-  private accountRateLimits(): unknown {
+  private async accountRateLimits(): Promise<unknown> {
+    await this.refreshAccountUsage(true)
     return this.rateLimits.read()
   }
 
   private recordRateLimits(event: Extract<RuntimeEvent, { type: 'rate_limits' }>): void {
-    for (const rateLimits of this.rateLimits.record(event.credentialScope, event.info))
+    this.publishRateLimits(this.rateLimits.record(event.credentialScope, event.info))
+  }
+
+  private publishRateLimits(changed: unknown[]): void {
+    for (const rateLimits of changed)
       for (const peer of this.accountPeers)
         this.notify(peer, { method: 'account/rateLimits/updated', params: { rateLimits } })
+  }
+
+  /**
+   * 用 CLI 的 get_usage 把账号额度读齐（钥匙串登录的订阅账号回合里的限额事件不认，只能靠它）。
+   * 读额度时总会问（隔 ACCOUNT_USAGE_INTERVAL_MS 以上）；回合开始、结束时只在上次问到有额度时才问，
+   * 用 API key、第三方 provider 的不为每个回合多起一个 CLI。问不到就留着原来的
+   */
+  private refreshAccountUsage(requested: boolean): Promise<void> {
+    if (!this.runtime.accountUsage) return Promise.resolve()
+    if (this.accountUsageInFlight) return this.accountUsageInFlight
+    if (!requested && !this.accountUsageAvailable) return Promise.resolve()
+    if (Date.now() - this.accountUsageAt < ACCOUNT_USAGE_INTERVAL_MS) return Promise.resolve()
+    this.accountUsageAt = Date.now()
+    const asking = this.runtime
+      .accountUsage()
+      .then(
+        (usage) => {
+          if (this.stopped) return
+          this.accountUsageAvailable = usage.rate_limits_available === true
+          this.publishRateLimits(this.rateLimits.replace(usage))
+        },
+        (error: unknown) => debugLog('account.usageFailed', { error: String(error) }),
+      )
+      .finally(() => {
+        if (this.accountUsageInFlight === asking) this.accountUsageInFlight = null
+      })
+    this.accountUsageInFlight = asking
+    return asking
   }
 
   // 记下一个线程的用量并发 `thread/tokenUsage/updated`。三样各管各的：add 只加进累计（total），

@@ -3,6 +3,7 @@ import { useT } from '../app/appearance.ts'
 import { whyNot } from '../app/errors.ts'
 import { usePopover } from '../app/popover.ts'
 import { showToast } from '../app/toasts.tsx'
+import { AccountLimits, MeterRow, useAccountLimits } from './AccountLimits.tsx'
 
 /** 把词元数写短：980 → 980，84000 → 84k，1250000 → 1.3M */
 export function shortTokens(count: number): string {
@@ -24,6 +25,11 @@ export interface Compaction {
   /** 有回合在进行，这时压不了 */
   busy: boolean
   run(): Promise<unknown>
+}
+
+/** 弹层里的账号额度：弹层开着才订阅 */
+function OpenLimits({ deviceId, harness }: { deviceId: string; harness: string }) {
+  return <AccountLimits rows={useAccountLimits(deviceId, harness)} />
 }
 
 function Ring({ percent }: { percent: number | null }) {
@@ -51,13 +57,16 @@ function Ring({ percent }: { percent: number | null }) {
  * 上下文占用：一个小圆环加百分比，快满的时候换成提醒的颜色。
  * 给了 compact 的话它是个按钮，点开能手动压缩上下文；这时对面没报过占用也显示（一个空的圆环）。
  * 没给 compact 时，对面没报过、或者没报窗口有多大（算不出占比）就不显示。
+ * 给了 limits（会话在哪台设备、哪个 harness 上）时，弹层里另有一段账号额度，没有额度时不出。
  */
 export function ContextMeter({
   usage,
   compact,
+  limits,
 }: {
   usage: ContextUsage | null
   compact?: Compaction | undefined
+  limits?: { deviceId: string; harness: string } | undefined
 }) {
   const t = useT()
   const { open, setOpen, close, root, trigger, pop, onKeyDown } = usePopover()
@@ -81,11 +90,16 @@ export function ContextMeter({
       </span>
     )
   }
-  /** 现在为什么压不了。能压就是 null */
-  const blocked = !compact.able ? t('ability.unsupported') : compact.busy ? t('turn.busy') : null
+  /** 现在为什么压不了（按钮下面一行小字）。能压就是 null */
+  const blocked = !compact.able
+    ? t('context.compactUnsupported')
+    : compact.busy
+      ? t('context.compactBusy')
+      : null
   const run = () => {
-    close(true)
+    // 压不了的时候点了不关弹层：原因就写在按钮下面
     if (blocked) return
+    close(true)
     compact.run().catch((error: unknown) =>
       showToast({
         id: 'compact-failed',
@@ -103,29 +117,40 @@ export function ContextMeter({
         className={`ctx ctx-btn${level}`}
         title={label}
         aria-label={label}
-        aria-haspopup="menu"
+        aria-haspopup="dialog"
         aria-expanded={open}
         onClick={() => setOpen(!open)}
       >
         <Ring percent={percent} />
       </button>
       {open ? (
-        // biome-ignore lint/a11y/noStaticElementInteractions: 键盘事件是从里面的按钮冒上来的
-        <div className="pick-pop ctx-pop" ref={pop} onKeyDown={onKeyDown}>
-          <div className="ctx-detail">{label}</div>
-          <div role="menu" aria-label={label} className="pick-list">
-            {/* 压不了的时候不用 disabled：留着能看到为什么 */}
-            <button
-              type="button"
-              role="menuitem"
-              className="pick-opt ctx-compact"
-              aria-disabled={blocked !== null}
-              onClick={run}
-            >
-              <b>{t('context.compact')}</b>
-              {blocked !== null ? <span>{blocked}</span> : null}
-            </button>
-          </div>
+        <div
+          className="pick-pop ctx-pop"
+          role="dialog"
+          aria-label={label}
+          ref={pop}
+          onKeyDown={onKeyDown}
+        >
+          <MeterRow
+            label={t('context.label')}
+            percent={percent}
+            detail={
+              usage?.windowTokens
+                ? `${shortTokens(usage.usedTokens)} / ${shortTokens(usage.windowTokens)}`
+                : null
+            }
+          />
+          {limits ? <OpenLimits deviceId={limits.deviceId} harness={limits.harness} /> : null}
+          {/* 压不了的时候不用 disabled：还能聚焦、悬停，下面写着为什么 */}
+          <button
+            type="button"
+            className="btn ctx-compact"
+            aria-disabled={blocked !== null}
+            onClick={run}
+          >
+            {t('context.compact')}
+          </button>
+          {blocked !== null ? <div className="ctx-why">{blocked}</div> : null}
         </div>
       ) : null}
     </div>

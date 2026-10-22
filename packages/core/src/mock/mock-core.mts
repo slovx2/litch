@@ -57,6 +57,7 @@ import { createMockFiles } from './mock-files.mjs'
 import { createMockGoal } from './mock-goal.mjs'
 import { createMockHarnessConfig } from './mock-harness-config.mjs'
 import { createMockInstall } from './mock-install.mjs'
+import { mockAccountLimits } from './mock-limits.mjs'
 import { createMockMachine } from './mock-machine.mjs'
 import { createMockManagement } from './mock-manage.mjs'
 import { createMockPairing } from './mock-pairing.mjs'
@@ -2711,6 +2712,11 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         return harnessConfig.subscribe(topic.deviceId, topic.harness, sink)
       }
       if (topic.kind === 'config') return config.subscribe(sink)
+      // 账号额度（mock-limits.mts）：只给快照
+      if (topic.kind === 'accountLimits') {
+        sink.snapshot(mockAccountLimits(topic.deviceId, topic.harness, clock.now()))
+        return () => {}
+      }
       const key = topicKey(topic)
       if (topic.kind === 'app') {
         sink.snapshot(app)

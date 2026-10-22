@@ -6,6 +6,7 @@ import { enBimport } from './en-bimport.ts'
 import { enComments } from './en-comments.ts'
 import { enGoal } from './en-goal.ts'
 import { enHconfig } from './en-hconfig.ts'
+import { enLimits } from './en-limits.ts'
 import { enOnboard } from './en-onboard.ts'
 import { enPairing } from './en-pairing.ts'
 import { enPasswords } from './en-passwords.ts'
@@ -31,6 +32,7 @@ export const en: Record<MessageKey, Entry> = {
   ...enBackground,
   ...enSwitches,
   ...enGoal,
+  ...enLimits,
   'title.location': 'Location',
   'workspace.none': 'No project',
 
@@ -1005,7 +1007,10 @@ export const en: Record<MessageKey, Entry> = {
   'turn.rollback.no': 'Cancel',
   'turn.rollback.failed': 'Couldn’t roll back: {reason}',
   'context.unknown': 'Context usage not reported yet',
+  'context.label': 'Context',
   'context.compact': 'Compact context',
+  'context.compactBusy': 'Available when the turn ends',
+  'context.compactUnsupported': 'Not supported by this harness',
   'context.compactFailed': 'Couldn’t compact: {reason}',
   'rail.label': 'Session info',
   'todo.title': 'To-do',

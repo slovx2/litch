@@ -54,6 +54,7 @@ import type {
   HarnessVersionView,
   InstallTopicView,
 } from '../model-install.mjs'
+import type { AccountLimitsView } from '../model-limits.mjs'
 import type {
   MachineAccessMode,
   MachineActivityView,
@@ -156,6 +157,12 @@ export type Topic =
    */
   | { kind: 'harnessConfig'; deviceId: string; harness: string }
   /**
+   * 一台设备上一个 harness 的账号额度（account/rateLimits/read）。用量环的弹层开着时才订阅，有人订阅核心才去读；
+   * 之后跟着 account/rateLimits/updated。没有额度、harness 不认识这个方法时 rows 是空的，照样成立；
+   * 没连上时给上次知道的，连上、重连之后再读一遍
+   */
+  | { kind: 'accountLimits'; deviceId: string; harness: string }
+  /**
    * 配置 Litch（litch_config 执行器）要界面做的事和挂着的确认卡。要做的事只发给一个窗口（最近订阅的那个），
    * 确认卡每个窗口都有。应用的外框一直订阅着
    */
@@ -176,6 +183,7 @@ export interface TopicData {
   pairing: PairingTopicView
   install: InstallTopicView
   harnessConfig: HarnessConfigTopicView
+  accountLimits: AccountLimitsView
   config: ConfigTopicView
 }
 
@@ -270,6 +278,9 @@ export type InstallOp = { op: 'install.set'; view: InstallTopicView }
 /** 详情设置整份换：一次变的往往是一整块（重读了 providers），按块拆增量不划算 */
 export type HarnessConfigOp = { op: 'hc.set'; view: HarnessConfigTopicView }
 
+/** 账号额度整份换：只有几行 */
+export type AccountLimitsOp = { op: 'limits.set'; view: AccountLimitsView }
+
 export interface TopicOp {
   app: AppOp
   sidebar: SidebarOp
@@ -283,6 +294,7 @@ export interface TopicOp {
   pairing: PairingOp
   install: InstallOp
   harnessConfig: HarnessConfigOp
+  accountLimits: AccountLimitsOp
   config: ConfigTopicOp
 }
 

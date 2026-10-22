@@ -714,7 +714,8 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
     const stopped = await until('“压缩上下文”', compactEntry)
     compact.busyBlocked =
       stopped.getAttribute('aria-disabled') === 'true' &&
-      Boolean(stopped.textContent?.includes('回合进行中')) &&
+      // 停用的原因写在按钮下面那一行小字里
+      Boolean(one('.ctx-pop .ctx-why')?.textContent?.includes('回合进行中')) &&
       act(earlier, 'fork')?.getAttribute('aria-disabled') === 'true'
     press(stopped, 'Escape')
     await until('浮层收起', () => !one('.ctx-pop'))
@@ -748,7 +749,7 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
     ;(await until('上下文圆环', meter)).click()
     const compactStopped =
       off(await until('“压缩上下文”', compactEntry)) &&
-      Boolean(compactEntry()?.textContent?.includes('不支持'))
+      Boolean(one('.ctx-pop .ctx-why')?.textContent?.includes('不支持'))
     press(compactEntry() as HTMLElement, 'Escape')
     await until('浮层收起', () => !one('.ctx-pop'))
     const othersKept = !off(one('.umsg .act-rollback'))
