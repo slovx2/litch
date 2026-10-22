@@ -19,6 +19,7 @@
 // 这里不读它们。某个端这一版没出包，assets 里就没有那一项，那个端照旧不提示。
 //
 // 纯逻辑，不碰网络和文件：取清单、下载、安装各端自己做。
+import { compareVersions, isVersion } from './text/versions.mjs'
 
 /** 清单的固定地址：总是最新一个正式版的那一份 */
 export const UPDATE_FEED_URL =
@@ -64,7 +65,7 @@ export function parseUpdateFeed(value: unknown, options: { allowHttp?: boolean }
     (options.allowHttp === true && typeof url === 'string' && url.startsWith('http://'))
   if (!isObject(value)) throw new Error('更新清单格式错误')
   const { version, pubDate, notesUrl, assets } = value
-  if (typeof version !== 'string' || !parseVersion(version)) {
+  if (typeof version !== 'string' || !isVersion(version)) {
     throw new Error(`更新清单的版本号无效：${String(version)}`)
   }
   if (!isObject(assets)) throw new Error('更新清单缺少 assets')
@@ -95,54 +96,6 @@ export function parseUpdateFeed(value: unknown, options: { allowHttp?: boolean }
     notesUrl: okUrl(notesUrl) ? notesUrl : '',
     assets: picked,
   }
-}
-
-interface Version {
-  core: [number, number, number]
-  pre: string[]
-}
-
-function parseVersion(text: string): Version | null {
-  const match = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/.exec(
-    text.trim(),
-  )
-  if (!match) return null
-  return {
-    core: [Number(match[1]), Number(match[2]), Number(match[3])],
-    pre: match[4] ? match[4].split('.') : [],
-  }
-}
-
-/**
- * 按语义化版本比：a 比 b 新是正数，旧是负数，一样是 0；有一边读不了是 null。
- * 带预发布的比同号的正式版旧；预发布逐段比，数字段按数值、比非数字段旧，前面都一样时段少的旧；+ 后面的不比
- */
-export function compareVersions(a: string, b: string): number | null {
-  const left = parseVersion(a)
-  const right = parseVersion(b)
-  if (!left || !right) return null
-  for (const i of [0, 1, 2] as const) {
-    const diff = left.core[i] - right.core[i]
-    if (diff !== 0) return Math.sign(diff)
-  }
-  if (left.pre.length === 0 || right.pre.length === 0) {
-    return left.pre.length === right.pre.length ? 0 : left.pre.length === 0 ? 1 : -1
-  }
-  for (let i = 0; i < Math.min(left.pre.length, right.pre.length); i++) {
-    const x = left.pre[i] ?? ''
-    const y = right.pre[i] ?? ''
-    const xNum = /^\d+$/.test(x)
-    const yNum = /^\d+$/.test(y)
-    if (xNum && yNum) {
-      const diff = Number(x) - Number(y)
-      if (diff !== 0) return Math.sign(diff)
-    } else if (xNum !== yNum) {
-      return xNum ? -1 : 1
-    } else if (x !== y) {
-      return x < y ? -1 : 1
-    }
-  }
-  return Math.sign(left.pre.length - right.pre.length)
 }
 
 export interface UpdateOffer {

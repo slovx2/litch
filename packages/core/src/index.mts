@@ -133,6 +133,7 @@ export {
   type MachineLogStore,
   PAIRING_NAME_MAX,
   type RemotePlatform,
+  type RemoteUpgradePlatform,
   type SavedDevices,
   type SavedRemote,
   type SavedToolSwitches,
@@ -408,9 +409,13 @@ export {
 } from './text/paths.mjs'
 export { parseSpans, type SpanNode, spanText, splitSpanLines } from './text/spans.mjs'
 export { capParts, PART_CHARS } from './text/tool-cap.mjs'
+export {
+  type AdapterInstallMethod,
+  compareVersions,
+  installMethodOf,
+} from './text/versions.mjs'
 export { createToolHub, type ToolCallHandlers, type ToolHub } from './tool-hub.mjs'
 export {
-  compareVersions,
   parseUpdateFeed,
   UPDATE_CHECK_INTERVAL_MS,
   UPDATE_FEED_URL,

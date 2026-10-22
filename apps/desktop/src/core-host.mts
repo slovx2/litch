@@ -25,6 +25,7 @@ import { type AdapterLang, localDevice, upgradeReport } from './local-adapter.mj
 import { desktopPairing } from './pairing.mjs'
 import { createForwarder } from './ssh/forward.mjs'
 import { discoverHosts } from './ssh/hosts.mjs'
+import { remoteUpgrade } from './ssh/upgrade.mjs'
 import { checkRemote, sshOpener } from './transport-ssh.mjs'
 
 const clock: Clock = {
@@ -169,7 +170,13 @@ function createHost(): Core | MockCore {
     clock,
     version,
     log: (line) => console.error(`[core] ${line}`),
-    remote: { opener: sshOpener, discover: discoverHosts, check: checkRemote },
+    remote: {
+      opener: sshOpener,
+      discover: discoverHosts,
+      check: checkRemote,
+      // 远程设备服务的一键升级；远端命令行的原话跟界面的语言
+      upgrade: remoteUpgrade(() => adapterLang),
+    },
     clientTools: toolPort,
     forward: authForward(),
     // 操作这台电脑（litch_machine）的脚本只有 POSIX 的写法：Windows 的桌面端不提供，远程设备上就没有这个工具和开关

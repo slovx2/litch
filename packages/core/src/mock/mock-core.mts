@@ -61,6 +61,7 @@ import { mockAccountLimits } from './mock-limits.mjs'
 import { createMockMachine } from './mock-machine.mjs'
 import { createMockManagement } from './mock-manage.mjs'
 import { createMockPairing } from './mock-pairing.mjs'
+import { createMockRemoteUpgrade } from './mock-remote-upgrade.mjs'
 import { createMockService } from './mock-service.mjs'
 import { createMockTasks } from './mock-tasks.mjs'
 import { createMockTerminals } from './mock-terminals.mjs'
@@ -605,6 +606,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     if (ORGANIZES_ELSEWHERE.test(message.text)) organize.elsewhere(view.deviceId, view.sessionId)
     // 本机的设备服务换没换版本的几出（关键字在 mock-service.mts 开头）
     service.stage(view.deviceId, message.text)
+    // 远程设备服务比应用旧、一键升级的几出（关键字在 mock-remote-upgrade.mts 开头）
+    remoteUpgrade.stage(view.deviceId, message.text)
     if (DROPS_HARNESS.test(message.text) && dropHarness(view, turnId)) return turnId
     if (ASKS_APPROVAL.test(message.text)) {
       askApproval(view, turnId)
@@ -1657,6 +1660,20 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     ],
   })
 
+  const remoteUpgrade = createMockRemoteUpgrade({
+    clock,
+    stepMs: chunkMs,
+    device: (deviceId) => app.devices.find((entry) => entry.id === deviceId),
+    patch: (deviceId, patch) => void patchDevice(deviceId, patch),
+    engaged: (deviceId) => [
+      ...new Set(
+        (sidebars.get(deviceId)?.sessions ?? [])
+          .filter((session) => session.status === 'running' || session.status === 'waiting')
+          .map((session) => session.harness),
+      ),
+    ],
+  })
+
   const compose = createMockCompose({
     clock,
     // 晚三拍到：够看见“正在取”，又不至于让人等
@@ -2009,6 +2026,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         manageable: false,
         service: null,
         upgrade: null,
+        remoteUpgrade: null,
         tools: { browser: true, computer: false },
         // 新加的远程设备：“操作这台电脑”默认关
         machine: sampleMachineAccess(''),
@@ -2097,6 +2115,11 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         }),
       )
       emitDevice(device)
+      return {}
+    }
+    if (name === 'device.upgradeService') {
+      const { deviceId, mode } = params as Commands['device.upgradeService']['params']
+      remoteUpgrade.run(deviceId, mode)
       return {}
     }
     if (name === 'device.reconnect') {

@@ -1,7 +1,9 @@
 // 设备详情里的“设备服务”一节：这台设备上在跑的常驻服务是哪一版、从哪份适配器起的、什么时候起的、怎么起的。
 // 本机另外说这一次连接换没换版本——换上了新版说一句；比应用自带的旧而没换成的，说清为什么、该怎么办。
+// 远程设备在跑的比应用旧时，这里有一键升级（RemoteUpgrade.tsx）。
 // 平时收着，标题后面一个版本号就够看；有“没换成”要说的时候默认开着，可以合上。
 // 只在连着的时候有这一节：没连上时在跑的是哪一份说不准，上次知道的不拿出来当现在的。
+// 例外是远程设备的一键升级：正在升级（停了服务、正在重连），或者旧到连不上（也给同一个按钮），没连着也摆出来。
 // 判断都在 service.ts 里，这里只管摆。
 import type { DeviceView, ServiceUpgradeView } from '@litch/core'
 import { useEffect, useId, useRef, useState } from 'react'
@@ -10,6 +12,7 @@ import { nameOf } from '../app/device.ts'
 import { Fold } from '../app/Fold.tsx'
 import { useServices } from '../app/services.tsx'
 import { showToast } from '../app/toasts.tsx'
+import { RemoteUpgradeNote } from './RemoteUpgrade.tsx'
 import {
   busyLine,
   endSteps,
@@ -18,8 +21,10 @@ import {
   olderLine,
   originOf,
   pillOf,
+  remotePillOf,
   replacedLine,
   type ServiceNotice,
+  staleRemote,
   staleService,
 } from './service.ts'
 import { GuideSteps } from './status.tsx'
@@ -112,10 +117,15 @@ export function ServiceSection({ device }: { device: DeviceView }) {
   const { channel } = useServices()
   const t = useT()
   const id = useId()
-  const { service, upgrade } = device
+  const { upgrade } = device
   const online = device.connection === 'online'
+  // 没连着时在跑的是哪一份说不准：上次知道的不摆出来
+  const service = online ? device.service : null
+  const remote = device.remoteUpgrade
   const notice = noticeOf(upgrade)
-  const stale = staleService(device)
+  /** 远程设备的一键升级在进行中，或者有没做成、换上了要说的 */
+  const remoteBusy = remote !== null && remote.phase.step !== 'idle'
+  const stale = staleService(device) || staleRemote(device) || remoteBusy
   /** 开没开。有“没换成”要说的时候默认开着；之后听用户的，那件事了结了也不自己合上 */
   const [open, setOpen] = useState(stale)
   useEffect(() => {
@@ -161,10 +171,10 @@ export function ServiceSection({ device }: { device: DeviceView }) {
     channel.command('device.reconnect', { deviceId: device.id }).catch(() => setRetrying(false))
   }
 
-  if (!online && !retrying) return null
-  if (service === null && notice === null) return null
+  if (!online && !retrying && remote === null) return null
+  if (service === null && notice === null && remote === null) return null
   const origin = service === null ? null : originOf(service, upgrade)
-  const pill = pillOf(upgrade)
+  const pill = remote ? remotePillOf(remote) : pillOf(upgrade)
   return (
     <section
       className="mng-sec"
@@ -202,6 +212,22 @@ export function ServiceSection({ device }: { device: DeviceView }) {
                 <dt>{t('service.bundled')}</dt>
                 <dd className="mono" data-fact="bundled">
                   {upgrade.bundled.version}
+                </dd>
+              </div>
+            ) : null}
+            {remote ? (
+              <div>
+                <dt>{t('service.app')}</dt>
+                <dd className="mono" data-fact="app">
+                  {remote.target}
+                </dd>
+              </div>
+            ) : null}
+            {remote?.installed && remote.installed !== service?.version ? (
+              <div>
+                <dt>{t('service.installed')}</dt>
+                <dd className="mono" data-fact="installed">
+                  {remote.installed}
                 </dd>
               </div>
             ) : null}
@@ -245,6 +271,7 @@ export function ServiceSection({ device }: { device: DeviceView }) {
               </>
             ) : null}
           </dl>
+          {remote ? <RemoteUpgradeNote device={device} view={remote} /> : null}
           {upgrade && notice ? (
             <UpgradeNote
               device={device}

@@ -38,9 +38,11 @@ configuration. The user checks it in the harness's own CLI (exception E3); the h
 `devices.md`. Authentication and host-key problems are fixed by the user in a terminal; then
 `scripts/litch devices reconnect <device>`.
 
-**"The adapter is too old" or "an older service is running" on a remote device.** The user upgrades the
-adapter there (rerun the install script, or `brew upgrade codex-harness-adapter`). An older service keeps
-running until its turns finish; Litch never stops it by itself.
+**"The adapter is too old" or "an older service is running" on a remote device.** The user can click
+**Upgrade** in the device's "Device service" section (see `devices.md`), or upgrade the adapter there by
+hand (rerun the install script, or `brew upgrade codex-harness-adapter`). An older service keeps running
+until it is idle; Litch stops it only after the user confirmed. If the upgrade fails at the download
+step, the device probably can't reach GitHub: install from a copied archive with `install.sh --from`.
 
 **Built-in browser or Computer Use calls fail.** Check the device's switches
 (`scripts/litch tools set`, `browser-and-computer-use.md`) and, for Computer Use,

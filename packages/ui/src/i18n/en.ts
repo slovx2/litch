@@ -11,6 +11,7 @@ import { enOnboard } from './en-onboard.ts'
 import { enPairing } from './en-pairing.ts'
 import { enPasswords } from './en-passwords.ts'
 import { enProposals } from './en-proposals.ts'
+import { enRupgrade } from './en-rupgrade.ts'
 import { enSwitches } from './en-switches.ts'
 import { enTasks } from './en-tasks.ts'
 import type { Entry } from './types.ts'
@@ -33,6 +34,7 @@ export const en: Record<MessageKey, Entry> = {
   ...enSwitches,
   ...enGoal,
   ...enLimits,
+  ...enRupgrade,
   'title.location': 'Location',
   'workspace.none': 'No project',
 
