@@ -22,6 +22,7 @@ export interface Look {
   skin: string
   theme: string
   density: string
+  chatWidth: string
   zoom: number
   lang: string
 }

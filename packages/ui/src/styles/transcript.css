@@ -1,5 +1,19 @@
 /* 对话区的骨架、用户消息、过程区。回答和输入区在 transcript-prose.css */
 
+/* 对话区宽度（外观设置里的一项，根元素上的 data-chat-width）：正文最宽 1280 或 760，在对话区里居中。
+   输入框、审批卡、计划确认条和正文一样宽，用户气泡最宽 760。宽内容（代码、表格、差异）不越出正文，在自己的框里横着滚。
+   左右留白 24，所在那一栏窄于 600 时 16：百分比按用到它的元素的容器宽度算（.tr 是滚动区，.dock 是对话区），
+   乘一个大数夹在两个值之间，就是一个不用容器查询的开关。
+   窗口变窄时先缩正文两边的空白，再缩正文；对话区加信息栏不到 800 时信息栏收起（rail/InfoRail.tsx），
+   再窄才轮到侧面板让位（side/side.ts）。对话区不到 808 时两档画出来一样 */
+:root {
+  --tr-max: 1280px;
+  --tr-gut: clamp(16px, (100% - 599px) * 1000, 24px);
+}
+:root[data-chat-width="compact"] {
+  --tr-max: 760px;
+}
+
 /* 反向列布局：滚动位置是“离底部多远”，内容在底部增长时浏览器自己保持贴底。
    关掉浏览器的滚动锚定，离开底部之后的补偿由 transcript/scroll.ts 自己算 */
 .tr-scroll {
@@ -19,11 +33,11 @@
 }
 .tr {
   width: 100%;
-  max-width: 808px;
+  max-width: calc(var(--tr-max) + 2 * var(--tr-gut));
   /* 反向列里内容不满一屏时默认贴着底排。下边距设成自动，把它推到顶上：
      短对话从上往下长，点开一个条目时上面的内容也不会被顶走 */
   margin: 0 auto auto;
-  padding: 20px 24px 14px;
+  padding: 20px var(--tr-gut) 14px;
   display: flex;
   flex-direction: column;
   gap: 24px;
@@ -77,7 +91,7 @@
 /* ---------- 用户消息 ---------- */
 .umsg {
   align-self: flex-end;
-  max-width: 82%;
+  max-width: min(82%, 760px);
   background: var(--raised);
   border: 1px solid var(--line-2);
   border-radius: var(--r3) var(--r3) var(--r1) var(--r3);

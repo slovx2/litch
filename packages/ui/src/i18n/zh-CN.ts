@@ -741,6 +741,9 @@ export const zhCN = {
   'density.compact': '紧凑',
   'density.standard': '标准',
   'density.roomy': '宽松',
+  'look.chatWidth': '对话区宽度',
+  'chatWidth.wide': '宽',
+  'chatWidth.compact': '紧凑',
 
   'sidebar.settings': '设置',
   'sidebar.look': '外观',

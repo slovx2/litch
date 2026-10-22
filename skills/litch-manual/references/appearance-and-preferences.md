@@ -13,7 +13,12 @@ Skin, theme and language can also be changed from the **Appearance** button at t
 | Skin | `retro` (Retro), `human` (Literary, 中文「文艺」), `standard` (Standard) | `retro` |
 | Theme | `system`, `light`, `dark` | `system` |
 | Density | Compact, Standard, Roomy | Standard |
+| Conversation width (`--width`) | `wide` (text up to 1280 px), `compact` (up to 760 px, 中文「紧凑」) | `wide` |
 | Zoom | 80%, 90%, 100%, 110%, 125%, 150% | 100% |
+
+Conversation width only matters in wide windows: the conversation and the input box stay centred and
+never run under the info rail; when the conversation area is narrower than about 810 px both settings
+look the same.
 
 ## Language (Settings → Language)
 

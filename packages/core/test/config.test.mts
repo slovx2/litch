@@ -236,14 +236,20 @@ test('界面那几项交给最近开的窗口，窗口做完回话；没有窗�
   const none = await m.run(['look', 'set', '--skin', 'human'], { lang: 'en' })
   assert.equal(none.ok, false)
   assert.match(none.text, /window/i)
+  const badWidth = await m.run(['look', 'set', '--width', 'huge'], { lang: 'en' })
+  assert.equal(badWidth.ok, false)
+  assert.match(badWidth.text, /--width must be wide, compact/)
 
   const older = m.window()
   const newer = m.window()
-  const pending = m.run(['look', 'set', '--skin', 'human', '--zoom', '110'])
+  const pending = m.run(['look', 'set', '--skin', 'human', '--width', 'compact', '--zoom', '110'])
   await flush()
   assert.equal(older.seen.view?.asks.length, 0, '只交给最近订阅的那一个')
   const [ask] = newer.seen.view?.asks ?? []
-  assert.deepEqual(ask?.request, { kind: 'prefs.set', patch: { skin: 'human', zoom: 1.1 } })
+  assert.deepEqual(ask?.request, {
+    kind: 'prefs.set',
+    patch: { skin: 'human', chatWidth: 'compact', zoom: 1.1 },
+  })
   await m.command('config.reply', {
     id: ask?.id,
     ok: true,
@@ -251,6 +257,7 @@ test('界面那几项交给最近开的窗口，窗口做完回话；没有窗�
       skin: 'human',
       theme: 'system',
       density: 'normal',
+      chatWidth: 'compact',
       zoom: 1.1,
       lang: 'zh-CN',
       linksInApp: true,
@@ -260,6 +267,7 @@ test('界面那几项交给最近开的窗口，窗口做完回话；没有窗�
   const done = await pending
   assert.ok(done.ok)
   assert.match(done.text, /human/)
+  assert.match(done.text, /width compact/)
   assert.equal(newer.seen.view?.asks.length, 0)
   await assert.rejects(m.command('config.reply', { id: ask?.id, ok: true }), { code: 'notFound' })
 

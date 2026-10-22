@@ -191,7 +191,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  max-width: 82%;
+  max-width: min(82%, 760px);
   min-width: 0;
   padding: 2px 4px;
   font-size: 12px;

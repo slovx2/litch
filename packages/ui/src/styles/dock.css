@@ -4,10 +4,10 @@
   flex: none;
 }
 .dock {
-  padding: 0 24px 16px;
+  padding: 0 var(--tr-gut) 16px;
 }
 .dock-in {
-  max-width: 760px;
+  max-width: var(--tr-max);
   margin: 0 auto;
   display: flex;
   flex-direction: column;
@@ -648,14 +648,14 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 0 24px 8px;
+  padding: 0 var(--tr-gut) 8px;
 }
 /* 卡片占的地方，和输入区一样宽。最高到窗口的一半，再多就在卡片里面滚 */
 .req-frame {
   position: relative;
   flex: 0 1 auto;
   width: 100%;
-  max-width: 760px;
+  max-width: var(--tr-max);
   margin: 0 auto;
   min-height: 0;
   max-height: 50vh;

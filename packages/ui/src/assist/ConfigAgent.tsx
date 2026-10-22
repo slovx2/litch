@@ -15,6 +15,8 @@ import { useEffect, useRef, useState } from 'react'
 import { requestDevice, requestNewSession, requestSettings, requestTasks } from '../app/actions.ts'
 import {
   type Appearance,
+  CHAT_WIDTHS,
+  type ChatWidth,
   currentLang,
   DENSITIES,
   type Density,
@@ -40,6 +42,7 @@ function prefsNow(look: Appearance): ConfigPrefs {
     skin: look.skin,
     theme: look.theme,
     density: look.density,
+    chatWidth: look.chatWidth,
     zoom: look.zoom,
     lang: currentLang(),
     linksInApp: linksInApp(),
@@ -276,6 +279,8 @@ function pickLook(patch: Partial<ConfigPrefs>): Partial<Appearance> {
   if (theme) look.theme = theme
   const density = oneOf<Density>(DENSITIES, patch.density)
   if (density) look.density = density
+  const chatWidth = oneOf<ChatWidth>(CHAT_WIDTHS, patch.chatWidth)
+  if (chatWidth) look.chatWidth = chatWidth
   const zoom = oneOf<Zoom>(ZOOMS, patch.zoom)
   if (zoom !== undefined) look.zoom = zoom
   if (patch.lang === 'zh-CN' || patch.lang === 'en') look.lang = patch.lang

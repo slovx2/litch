@@ -114,7 +114,7 @@ Every operation, with the reference that explains it. Exact arguments: `scripts/
 | `scripts/litch browser links` / `sites` / `allow` / `forget` / `clear-data` | Built-in browser preferences and data | `references/browser-and-computer-use.md` |
 | `scripts/litch computer status` / `apps` / `forget` | Computer Use permission status and allowed apps | `references/browser-and-computer-use.md` |
 | `scripts/litch phones list` / `pair` / `revoke` | Phones paired by QR code | `references/phones.md` |
-| `scripts/litch look set` / `language` | Skin, light/dark, density, zoom; UI language | `references/appearance-and-preferences.md` |
+| `scripts/litch look set` / `language` | Skin, light/dark, density, conversation width, zoom; UI language | `references/appearance-and-preferences.md` |
 | `scripts/litch notify task-success` | System notification when a scheduled task succeeds | `references/appearance-and-preferences.md` |
 | `scripts/litch diagnose run` / `logs` / `ssh-config` | Diagnostics, logs, SSH entries for the official Codex app | `references/troubleshooting.md` |
 

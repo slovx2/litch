@@ -4,11 +4,13 @@
 // 属于主进程的几项（浏览器网站、Computer Use）经核心↔主进程的客户端工具消息（model-client-tools.mts）。
 // 核心不认识语言：卡片上只给结构，字由界面按当前语言拼。
 
-/** 界面本地的几样偏好（外观五项里的四项、语言、链接用内置浏览器开、任务成功的通知） */
+/** 界面本地的几样偏好（外观里除了语言的五项、语言、链接用内置浏览器开、任务成功的通知） */
 export interface ConfigPrefs {
   skin: string
   theme: string
   density: string
+  /** 对话区宽度：wide、compact */
+  chatWidth: string
   zoom: number
   lang: 'zh-CN' | 'en'
   /** 对话里的链接在内置浏览器里开 */
