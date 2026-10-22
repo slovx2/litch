@@ -90,7 +90,7 @@ import type {
   ProposalOverrides,
   SandboxLevel,
 } from '../model-tree.mjs'
-import { phrase, sameText, type Text } from '../phrase.mjs'
+import { describeText, phrase, sameText, type Text } from '../phrase.mjs'
 import type { RequestChoice } from '../projection/requests.mjs'
 import { projectService, projectUpgrade } from '../projection/service.mjs'
 import { isAgentThread, parentOf, projectSummary, threadTitle } from '../projection/session.mjs'
@@ -98,6 +98,7 @@ import { composeOptions, projectDefaults } from '../projection/settings.mjs'
 import type { SkillCatalog } from '../projection/skills.mjs'
 import { pathTwin, samePath } from '../text/paths.mjs'
 import type { ToolHub } from '../tool-hub.mjs'
+import { type CoreTrace, traceError, traceWith } from '../trace.mjs'
 import { type AccountLimits, createAccountLimits } from './account-limits.mjs'
 import { createAgentThreads } from './agents.mjs'
 import { collectThreads, type Listing, mergeListing } from './catalog.mjs'
@@ -202,6 +203,8 @@ export interface DeviceOptions {
    */
   remoteUpgrade?: { version: string; platform: RemoteUpgradePlatform | null }
   log?(line: string): void
+  /** 摘要：对这台设备的请求、它发来的请求、连接状态的变化。每条都添上设备的标识 */
+  trace?: CoreTrace
 }
 
 /** 一台远程设备上 litch_machine 的那几样，由核心给（machine-wiring.mts 的接线） */
@@ -455,6 +458,7 @@ type Routes = { [M in DirectoryMethod]: (params: ServerNotifications[M]) => void
 export function createDevice(config: DeviceConfig, options: DeviceOptions): Device {
   const { hooks } = options
   const log = (line: string) => options.log?.(`[${config.id}] ${line}`)
+  const trace = options.trace ? traceWith(options.trace, { device: config.id }) : null
   let name = config.name
   let wire = config.wire
   /** 对面是哪一种。认出来之前、对面不是设备服务时都是 single */
@@ -1425,7 +1429,26 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     await reconcile()
   }
 
+  /** 上一次记下的连接阶段：同一个阶段里报的进度（走到哪一步）不重复记 */
+  let tracedPhase: string | null = null
+  const traceState = (state: LinkState) => {
+    if (!trace || state.phase === tracedPhase) return
+    tracedPhase = state.phase
+    const failure = state.phase === 'waiting' || state.phase === 'failed' ? state.failure : null
+    trace(
+      'link',
+      {
+        phase: state.phase,
+        ...('attempt' in state ? { attempt: state.attempt } : {}),
+        ...(failure ? { stage: failure.stage, error: traceError(describeText(failure.text)) } : {}),
+        ...(state.phase === 'connected' ? { server: state.info.userAgent } : {}),
+      },
+      failure ? 'warn' : 'info',
+    )
+  }
+
   const onState = (state: LinkState) => {
+    traceState(state)
     if (state.phase !== 'connected') {
       session++
       const dropped = online
@@ -1533,6 +1556,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     request: (method, params, id) =>
       toolCalls.serverRequest(method, params, id) ?? live.serverRequest(method, params, id),
     log,
+    ...(trace ? { trace } : {}),
   })
 
   const live = createLiveSessions({

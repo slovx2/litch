@@ -300,6 +300,7 @@ func parseConfiguration(args []string) (configuration, error) {
 		return cfg, err
 	}
 	applyUserLanguage(cfg.userEnv)
+	applyUserLogLimits(cfg.userEnv)
 	return cfg, nil
 }
 
@@ -403,6 +404,8 @@ func (c configuration) environment() []string {
 	if path := adapterCLIPath(); path != "" {
 		values[adapterCLIEnvironment] = path
 	}
+	// 入口的日志目录（logs/<harness>）：引擎一启动就从自己的环境里拿走，它跑的命令看不到（logs.go）
+	values[logDirEnvironment] = c.harnessLogDirectory()
 	if c.native() {
 		values = map[string]string{}
 	}

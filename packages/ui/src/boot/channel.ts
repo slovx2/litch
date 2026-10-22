@@ -19,6 +19,8 @@ export interface ShellBridge {
   requestCorePort(): void
   /** 请外壳用系统的浏览器打开一个网址。外壳只接受 http 和 https */
   openExternal(url: string): void
+  /** 用系统的文件管理器打开日志目录：desktop 是桌面端自己的，device 是本机设备服务的 */
+  openLogs?(which: 'desktop' | 'device'): void
   /** 告诉外壳界面现在用的是哪种语言，应用菜单跟着换 */
   setLanguage(lang: 'zh-CN' | 'en'): void
   /** 用户选中、拖进来、贴进来的一个文件在磁盘上的位置。不是从磁盘来的是空的 */

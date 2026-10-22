@@ -32,6 +32,8 @@ export function protocolEnv(
     TMPDIR: home,
     CODEX_HOME: join(home, 'codex'),
     CHA_CLAUDE_HOME: join(home, 'adapter'),
+    // 日志目录（命令行平时经它交给入口）：调试日志、协议请求摘要都写在用例自己的目录里
+    LITCH_LOG_DIR: join(home, 'adapter'),
     CLAUDE_CONFIG_DIR: join(home, 'claude'),
     // CLI 的每用户临时根不看 TMPDIR，默认是 /tmp/claude-<uid>（本机所有 Claude Code 共用），
     // 后台命令的输出、贴进来的图都写在那下面：指进用例自己的目录，跟着用例一起删

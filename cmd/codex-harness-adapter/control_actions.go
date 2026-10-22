@@ -69,7 +69,7 @@ func (m *harnessManager) sshEntryCheck(id string) diagnosticCheck {
 	case "failed":
 		check.Status = "failed"
 		detail = view.Reason.Text
-		logPath := filepath.Join(m.base.home, id, "runtime.log")
+		logPath := filepath.Join(m.base.home, "logs", id, "runtime.log")
 		check.LogPath = &logPath
 	case "off":
 		detail = both("入口在设置里关着", "The entry is turned off in settings")
@@ -86,24 +86,29 @@ const (
 )
 
 type logRequest struct {
-	Source   string `json:"source"` // device、service、runtime、diagnostics
+	// device、service、control、requests；带 harness 的：runtime、diagnostics、rpc、debug、agent
+	Source   string `json:"source"`
 	Harness  string `json:"harness"`
 	MaxBytes int64  `json:"maxBytes"`
 }
 
+// 每种日志在 logs/ 下的文件名。带 harness 的在 logs/<harness>/ 下
+var (
+	deviceLogFiles  = map[string]string{"device": "device.log", "service": "service.log", "control": "control.jsonl", "requests": "device.jsonl"}
+	harnessLogFiles = map[string]string{"runtime": "runtime.log", "diagnostics": "diagnostics.log", "rpc": "rpc.jsonl", "debug": "debug.jsonl", "agent": "agent.log"}
+)
+
 func (s *controlServer) logTail(request logRequest) (any, *controlError) {
 	var path string
-	switch request.Source {
-	case "device":
-		path = s.c.deviceLog()
-	case "service":
-		path = filepath.Join(s.c.deviceDirectory(), "service.log")
-	case "runtime", "diagnostics":
+	root := s.c.logsDirectory()
+	if name, ok := deviceLogFiles[request.Source]; ok {
+		path = filepath.Join(root, name)
+	} else if name, ok := harnessLogFiles[request.Source]; ok {
 		if !isKnownHarness(request.Harness) {
 			return nil, unknownHarness(request.Harness)
 		}
-		path = filepath.Join(s.c.home, request.Harness, request.Source+".log")
-	default:
+		path = filepath.Join(root, request.Harness, name)
+	} else {
 		return nil, &controlError{Reason: "invalid", Text: both("没有 %q 这种日志", "There is no log called %q").with(request.Source)}
 	}
 	limit := request.MaxBytes
@@ -115,7 +120,7 @@ func (s *controlServer) logTail(request logRequest) (any, *controlError) {
 	if err != nil {
 		return nil, controlFailure(err)
 	}
-	return map[string]any{"path": path, "text": text, "truncated": truncated, "size": size}, nil
+	return map[string]any{"path": path, "text": text, "truncated": truncated, "size": size, "directory": root}, nil
 }
 
 // 取文件末尾至多 limit 个字节，从整行开始。文件不存在不算错，就是还没有日志。

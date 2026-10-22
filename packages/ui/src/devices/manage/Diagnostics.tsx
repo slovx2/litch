@@ -1,12 +1,19 @@
 // 诊断和日志：让设备服务把各个 harness 查一遍，逐项给结果；以及看一份日志的末尾。
 // 都是即时的动作，和保存设置无关。
-import type { DeviceView, DiagnosticCheckView, DiagnosticsView, LogTailView } from '@litch/core'
+import type {
+  DeviceView,
+  DiagnosticCheckView,
+  DiagnosticsView,
+  LogSource,
+  LogTailView,
+} from '@litch/core'
 import { useEffect, useRef, useState } from 'react'
 import { useT } from '../../app/appearance.ts'
 import { badgeOf, nameOf } from '../../app/device.ts'
 import { whyNot } from '../../app/errors.ts'
 import { useServices } from '../../app/services.tsx'
 import type { MessageKey } from '../../i18n/index.ts'
+import { sshCommand } from '../guide.ts'
 
 const MARKS: Record<string, { cls: string; mark: string; title: MessageKey }> = {
   ok: { cls: 'check pass', mark: '✓', title: 'manage.diag.ok' },
@@ -109,21 +116,43 @@ function sizeText(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
+/** 每个 harness 都有的两份，和只有适配器的入口才有的协议请求摘要；调试日志只有 Claude 入口写 */
+const HARNESS_LOGS: { source: LogSource; label: MessageKey; when?: (id: string) => boolean }[] = [
+  { source: 'runtime', label: 'manage.logs.runtime' },
+  { source: 'diagnostics', label: 'manage.logs.diagnostics' },
+  { source: 'rpc', label: 'manage.logs.rpc', when: (id) => id !== 'codex' },
+  { source: 'debug', label: 'manage.logs.debug', when: (id) => id === 'claude-code' },
+]
+
+/** 远程设备：在终端里看这份日志末尾的那一句 */
+function tailCommand(device: DeviceView, path: string): string | null {
+  if (!device.target) return null
+  return `${sshCommand(device.target)} 'tail -n 200 ${path.replaceAll("'", "'\\''")}'`
+}
+
 export function Logs({ device }: { device: DeviceView }) {
   const { channel } = useServices()
   const t = useT()
-  /** 选的是哪一份：device、service，或者“runtime:哪个 harness”“diagnostics:哪个 harness” */
+  /** 选的是哪一份：device、service、control、requests，或者“哪种:哪个 harness” */
   const [picked, setPicked] = useState('device')
   const [reading, setReading] = useState(false)
   const [log, setLog] = useState<{ picked: string; tail: LogTailView } | null>(null)
   const [failure, setFailure] = useState<unknown>(null)
+  const [copied, setCopied] = useState(false)
   const well = useRef<HTMLPreElement>(null)
+  /** 本机设备才有：外壳替我们用系统的文件管理器打开日志目录 */
+  const shell = device.kind === 'local' ? window.litchShell : undefined
+  const openLogs = shell?.openLogs?.bind(shell)
+  const command = log && device.kind === 'ssh' ? tailCommand(device, log.tail.path) : null
+  const copy = (text: string) => {
+    void navigator.clipboard?.writeText(text).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    })
+  }
 
   const read = async () => {
-    const [source, harness] = picked.split(':') as [
-      'device' | 'service' | 'runtime' | 'diagnostics',
-      string | undefined,
-    ]
+    const [source, harness] = picked.split(':') as [LogSource, string | undefined]
     setReading(true)
     setFailure(null)
     try {
@@ -159,16 +188,17 @@ export function Logs({ device }: { device: DeviceView }) {
         >
           <option value="device">{t('manage.logs.device')}</option>
           <option value="service">{t('manage.logs.service')}</option>
-          {device.harnesses.map((harness) => (
-            <option key={`r:${harness.id}`} value={`runtime:${harness.id}`}>
-              {t('manage.logs.runtime', { name: harness.name })}
-            </option>
-          ))}
-          {device.harnesses.map((harness) => (
-            <option key={`d:${harness.id}`} value={`diagnostics:${harness.id}`}>
-              {t('manage.logs.diagnostics', { name: harness.name })}
-            </option>
-          ))}
+          <option value="control">{t('manage.logs.control')}</option>
+          <option value="requests">{t('manage.logs.requests')}</option>
+          {HARNESS_LOGS.flatMap((kind) =>
+            device.harnesses
+              .filter((harness) => kind.when?.(harness.id) ?? true)
+              .map((harness) => (
+                <option key={`${kind.source}:${harness.id}`} value={`${kind.source}:${harness.id}`}>
+                  {t(kind.label, { name: harness.name })}
+                </option>
+              )),
+          )}
         </select>
         <button
           type="button"
@@ -180,6 +210,26 @@ export function Logs({ device }: { device: DeviceView }) {
           {t(reading ? 'manage.loading' : 'manage.logs.read')}
         </button>
       </div>
+      {openLogs ? (
+        <div className="mng-log-open">
+          <button
+            type="button"
+            className="btn"
+            data-act="open-device-logs"
+            onClick={() => openLogs('device')}
+          >
+            {t('manage.logs.openDevice')}
+          </button>
+          <button
+            type="button"
+            className="btn"
+            data-act="open-desktop-logs"
+            onClick={() => openLogs('desktop')}
+          >
+            {t('manage.logs.openDesktop')}
+          </button>
+        </div>
+      ) : null}
       {failure ? (
         <div className="mng-note err" role="alert">
           {t('manage.failed', { reason: whyNot(failure, t) })}
@@ -202,6 +252,19 @@ export function Logs({ device }: { device: DeviceView }) {
           ) : (
             <div className="form-note">{t('manage.logs.empty')}</div>
           )}
+          {log.tail.directory ? (
+            <div className="form-note" data-log-dir>
+              {t('manage.logs.directory')} <code className="mono">{log.tail.directory}</code>
+            </div>
+          ) : null}
+          {command ? (
+            <div className="cfail-cmd" data-log-command>
+              <code className="mono">{command}</code>
+              <button type="button" className="mini" onClick={() => copy(command)}>
+                {t(copied ? 'devices.guide.copied' : 'devices.guide.copy')}
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </section>

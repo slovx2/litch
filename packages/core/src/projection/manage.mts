@@ -239,6 +239,7 @@ export function projectLogTail(raw: DeviceLogsReadResponse): LogTailView {
     text: text(raw.text),
     truncated: raw.truncated === true,
     size: typeof raw.size === 'number' ? raw.size : 0,
+    directory: typeof raw.directory === 'string' && raw.directory ? raw.directory : null,
   }
 }
 

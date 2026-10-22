@@ -3,6 +3,7 @@
 // 唯一的例外是客户端工具（内置浏览器、Computer Use）：核心把模型的工具调用交给这里登记的执行器（client-tools/），
 // 经手的只有那一次调用的参数和结果。
 import { spawn } from 'node:child_process'
+import { mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { isAbsolute, join, normalize, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -46,6 +47,7 @@ import {
   NOTIFY,
   NOTIFY_CLICK,
   OPEN_EXTERNAL,
+  OPEN_LOGS,
   PICK_FOLDER,
   REQUEST_CORE_PORT,
   SERVICE,
@@ -65,6 +67,7 @@ import {
   stopDevice,
   stopIdleDevice,
 } from './local-adapter.mjs'
+import { createDesktopLog, DESKTOP_LOG_DIR, teeConsole } from './log-file.mjs'
 import { loginEnvironment } from './login-env.mjs'
 import {
   backdropOf,
@@ -138,6 +141,31 @@ if (process.env.LITCH_PROFILE) app.setPath('userData', process.env.LITCH_PROFILE
 // 开发时对着模拟核心跑（client:start:mock）没给目录的，用一份自己的，和平时那份分开：
 // 模拟核心的设备配置、侧栏快照、外观的选择都不该落进平时用的那一份
 else if (process.env.LITCH_MOCK) app.setPath('userData', `${app.getPath('userData')} Mock`)
+/**
+ * 桌面端自己的日志目录：平时是系统给应用的日志位置。macOS 上明说是 ~/Library/Logs/<应用名>：不给路径时
+ * Electron 取的是程序包的名字，开发时会落到 ~/Library/Logs/Electron；别的系统用 Electron 的默认（用户数据目录下的 logs）。
+ * 自检、截图、对着模拟核心跑的写进它们那一份用户数据目录下的 logs，不混进平时那份
+ */
+const logsDir =
+  smoke || process.env.LITCH_PROFILE || process.env.LITCH_MOCK
+    ? join(app.getPath('userData'), 'logs')
+    : (() => {
+        if (process.platform === 'darwin')
+          app.setAppLogsPath(join(app.getPath('home'), 'Library', 'Logs', app.getName()))
+        else app.setAppLogsPath()
+        return app.getPath('logs')
+      })()
+/** 主进程的日志（main.jsonl）：启动、核心进程的起和退出，以及原来打到标准错误的每一行 */
+const mainLog = createDesktopLog(join(logsDir, 'main.jsonl'), { source: 'main' })
+teeConsole(mainLog)
+mainLog.write('start', {
+  version: app.getVersion(),
+  platform: process.platform,
+  arch: process.arch,
+  electron: process.versions.electron,
+  packaged: app.isPackaged,
+  ...(smokeMode ? { smoke: smokeMode } : {}),
+})
 /**
  * 应用自带的适配器在哪，交给核心去启动和连接（见 local-adapter.mts）。空的就是没有。
  * 装好的应用里它在 Resources/adapter（scripts/pack.mjs 放进去的）；开发时用 LITCH_ADAPTER_ROOT
@@ -253,6 +281,8 @@ function startCore(): void {
       // 设备配置和侧栏快照存在用户数据目录里
       LITCH_DATA_DIR: app.getPath('userData'),
       LITCH_ADAPTER_ROOT: adapterRoot,
+      // 核心进程的日志（core.jsonl）和主进程的放在一起
+      [DESKTOP_LOG_DIR]: logsDir,
       // 示例数据的语言：没指定就跟系统
       LITCH_LANG: forcedLang ?? (app.getLocale().startsWith('zh') ? 'zh-CN' : 'en'),
       // 对着模拟核心自检时不连任何设备
@@ -260,6 +290,8 @@ function startCore(): void {
     },
   })
   core = child
+  // 进程号要等它真起来了才有
+  child.once('spawn', () => mainLog.write('core.start', { corePid: child.pid ?? null }))
   // 先告诉核心这台桌面能执行哪些客户端工具：它等这一句再去连设备，握手时照着声明
   child.postMessage({ type: CLIENT_TOOL, op: 'namespaces', namespaces: clientTools.namespaces() })
   // 核心往回发两种消息：客户端工具的调用和答复；退出前问它终端的事，它的回答
@@ -301,6 +333,7 @@ function startCore(): void {
     askWaiting.get(data.id)?.(data.alive ?? null)
   })
   child.on('exit', (code) => {
+    mainLog.write('core.exit', { code, quitting }, code === 0 || quitting ? 'info' : 'warn')
     if (core === child) core = null
     // 核心没了：它交来的调用都不用做了，卡片都当作没答
     clientTools.reset()
@@ -405,6 +438,28 @@ ipcMain.on(OPEN_EXTERNAL, (event, url: unknown) => {
   }
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return
   void shell.openExternal(parsed.toString())
+})
+
+// 设备详情“日志”一节的两个按钮：用系统的文件管理器打开日志目录。只开这两个固定的目录，不接受界面给的路径
+ipcMain.on(OPEN_LOGS, (event, which: unknown) => {
+  const frame = event.senderFrame
+  if (!frame || frame !== event.sender.mainFrame || !isUiUrl(frame.url)) return
+  const directory =
+    which === 'desktop'
+      ? logsDir
+      : which === 'device'
+        ? join(process.env.LITCH_ADAPTER_HOME || defaultAdapterHome(), 'logs')
+        : null
+  if (!directory) return
+  mainLog.write('openLogs', { which })
+  // 自检里只记下来，不真的弹出文件管理器
+  if (smoke) return
+  try {
+    mkdirSync(directory, { recursive: true, mode: 0o700 })
+  } catch {}
+  void shell.openPath(directory).then((failure) => {
+    if (failure) console.error(`没能打开日志目录 ${directory}：${failure}`)
+  })
 })
 
 // 定时任务跑完了的系统通知：要不要发、说什么由界面定，这里只认界面自己的主框架发来的、形状对的那一条

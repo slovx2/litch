@@ -2,6 +2,7 @@
 // 平台能力（定时器、端口、传输）在这里做成核心要的接口再交进去，核心自己不碰 Node 和 Electron。
 import { execFileSync } from 'node:child_process'
 import { arch, homedir, hostname, release, userInfo } from 'node:os'
+import { join } from 'node:path'
 import {
   type AuthForwardPlatform,
   type ClientToolPort,
@@ -22,6 +23,7 @@ import { CLIENT_TOOL, type ClientToolToCore, type ClientToolToMain } from './cli
 import { fileDeviceStore } from './device-store.mjs'
 import { ATTACH, LANGUAGE, SERVICE, TERMINALS } from './ipc.mjs'
 import { type AdapterLang, localDevice, upgradeReport } from './local-adapter.mjs'
+import { createDesktopLog, DESKTOP_LOG_DIR, type DesktopLog, teeConsole } from './log-file.mjs'
 import { desktopPairing } from './pairing.mjs'
 import { createForwarder } from './ssh/forward.mjs'
 import { discoverHosts } from './ssh/hosts.mjs'
@@ -48,6 +50,19 @@ function fromElectronPort(port: MessagePortMain): Port {
 }
 
 const version = process.env.LITCH_VERSION ?? '0.0.0'
+
+/**
+ * 核心进程的日志（core.jsonl，目录由主进程给）：对各台设备的请求和设备发来的请求、连接状态的变化、
+ * 界面命令的摘要，以及原来打到标准错误的每一行。没给目录（单独跑的）就不记
+ */
+const coreLog: DesktopLog | null = process.env[DESKTOP_LOG_DIR]
+  ? createDesktopLog(join(process.env[DESKTOP_LOG_DIR] as string, 'core.jsonl'), { source: 'core' })
+  : null
+if (coreLog) {
+  teeConsole(coreLog)
+  coreLog.write('start', { version, mock: process.env.LITCH_MOCK === '1' })
+}
+const trace = coreLog ? { trace: coreLog.write } : {}
 
 /**
  * 本机的适配器用哪种语言说话（它的原话会显示在“详情”里）。跟界面的语言：界面起来之后经主进程报过来；
@@ -170,6 +185,7 @@ function createHost(): Core | MockCore {
     clock,
     version,
     log: (line) => console.error(`[core] ${line}`),
+    ...trace,
     remote: {
       opener: sshOpener,
       discover: discoverHosts,
@@ -258,7 +274,7 @@ process.parentPort.on('message', (event) => {
   if (event.data?.type !== ATTACH) return
   const [port] = event.ports
   if (!port) return
-  const stop = serveChannel(fromElectronPort(port), core, { clock })
+  const stop = serveChannel(fromElectronPort(port), core, { clock, ...trace })
   // 窗口关掉或者页面重新加载时，对面那头的端口会关闭：取消它的命令，退掉它的订阅
   port.on('close', stop)
 })

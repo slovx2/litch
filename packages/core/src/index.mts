@@ -415,6 +415,7 @@ export {
   installMethodOf,
 } from './text/versions.mjs'
 export { createToolHub, type ToolCallHandlers, type ToolHub } from './tool-hub.mjs'
+export { type CoreTrace, type TraceLevel, traceError, traceParams } from './trace.mjs'
 export {
   parseUpdateFeed,
   UPDATE_CHECK_INTERVAL_MS,

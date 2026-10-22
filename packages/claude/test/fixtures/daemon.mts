@@ -199,6 +199,8 @@ export class Daemon {
           TMPDIR: home,
           CODEX_HOME: join(home, 'codex'),
           CHA_CLAUDE_HOME: join(home, 'adapter'),
+          // 日志目录（命令行平时经它交给入口）：调试日志、协议请求摘要都写在用例自己的目录里
+          LITCH_LOG_DIR: join(home, 'adapter'),
           CLAUDE_CONFIG_DIR: join(home, 'claude'),
           CLAUDE_CODE_TMPDIR: join(home, 'ct'),
           CHA_CLAUDE_CLI: requiredClaudeCli(),

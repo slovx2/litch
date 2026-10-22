@@ -6,10 +6,14 @@ Start every investigation with `scripts/litch status`, then narrow down.
 
 - `scripts/litch diagnose run <device>` runs the device's checks (each harness's command, terminals,
   SSH entries) and reports what failed and why. Same as Devices → the device → Diagnostics → Run checks.
-- `scripts/litch diagnose logs <device>` reads the tail of a log: the device process, the background
-  service, or one harness's runtime or diagnostics log (`--harness <id>`; see
-  `scripts/litch diagnose --help`). Quote the relevant lines to the user, not whole logs, and never
-  secrets that may appear in them.
+- `scripts/litch diagnose logs <device>` reads the tail of a log (`--source`, `--harness <id>`; see
+  `scripts/litch diagnose --help`): the device process (`device`), the background service (`service`),
+  control-channel requests (`control`), the device's per-request summary (`requests`: method, harness,
+  ok, duration, error), or for one harness its runtime log (`runtime`), diagnostics log
+  (`diagnostics`), per-request summary (`rpc`) and, for Claude Code, its detailed debug log (`debug`).
+  Same as Devices → the device → Logs. Quote the relevant lines to the user, not whole logs, and never
+  secrets that may appear in them. The summaries never contain conversation text, file contents or
+  command output.
 - `scripts/litch diagnose ssh-config <device>` prints the `~/.ssh/config` snippet that lets the
   **official Codex desktop app** reach this device's harnesses through the built-in SSH entries (only
   for entries that are on and running; turn them on with the `ssh.<id>.enabled` settings,
@@ -59,7 +63,16 @@ access or WSL2); network-share folders are not supported in the files panel.
 ## Where things live (read-only facts for explaining, do not edit by hand)
 
 - The adapter's state on each device: `~/.codex-harness-adapter` (device settings in
-  `device/settings.json`, logs per harness).
+  `device/settings.json`). All its logs are under `~/.codex-harness-adapter/logs/` (one subfolder per
+  harness). Each log is rotated at 10 MB, keeps at most 5 files and drops files not written for 7 days
+  (`LITCH_LOG_MAX_BYTES`, `LITCH_LOG_KEEP`, `LITCH_LOG_MAX_AGE_DAYS` in the service's environment change
+  this). Claude Code's `debug.jsonl` rotates at 50 MB and keeps 3 older files instead
+  (`CHA_CLAUDE_DEBUG_LOG_MAX_BYTES`, `CHA_CLAUDE_DEBUG_LOG_KEEP`); the 7-day rule applies to it too. Logs left in the old places (`device/*.log`, `<harness>/*.log`, `claude-code/debug.jsonl`) by
+  versions before this layout are no longer written and can be deleted.
+- The desktop app's own logs (`main.jsonl`, `core.jsonl`: requests to devices, connection changes, UI
+  commands): `~/Library/Logs/Litch` on macOS, the app's logs folder elsewhere, same limits. On the
+  local device, Devices → the device → Logs has buttons that open this folder and the device's log
+  folder; for a remote device the Logs section shows the folder and a `tail` command to copy.
 - The desktop app's own data: the app's user-data folder (devices, sidebar snapshots, preferences).
 - This manual: `~/.agents/skills/litch-manual`, linked into other harnesses' skill folders. Litch
   rewrites it every time it starts; the switch "Install the manual into local harnesses" is in Litch's

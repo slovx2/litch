@@ -242,7 +242,7 @@ func TestDeviceStartSucceedsWhenNoHarnessCanStart(t *testing.T) {
 	// 服务的输出里：每个入口各自的原因，加一句为什么留着；没有“没有可用入口”的收场白。
 	var output string
 	waitUntil(t, "服务说明了为什么留着", func() bool {
-		data, _ := os.ReadFile(filepath.Join(cfg.deviceDirectory(), "service.log"))
+		data, _ := os.ReadFile(filepath.Join(cfg.logsDirectory(), "service.log"))
 		output = string(data)
 		return strings.Contains(output, "现在没有可用的 harness")
 	})

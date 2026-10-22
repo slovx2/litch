@@ -1,5 +1,6 @@
-import { appendFileSync } from 'node:fs'
+import { appendFileSync, statSync } from 'node:fs'
 import { join, resolve } from 'node:path'
+import { logLimits, rotateLog } from '../../shared/src/log-file.mjs'
 import { adapterHome, ensureParent } from './util.mjs'
 
 export type RunRegistryEventName =
@@ -33,6 +34,7 @@ export function recordRunEvent(
   if (!path) return { ok: true, path: null, error: null }
   try {
     ensureParent(path)
+    rotateRunRegistry(path, env)
     appendFileSync(path, `${JSON.stringify(runRegistryEntry(event, data))}\n`, {
       mode: 0o600,
     })
@@ -41,6 +43,22 @@ export function recordRunEvent(
     if (error instanceof Error) return { ok: false, path, error: error.message }
     throw error
   }
+}
+
+/**
+ * 运行记录是 workflow 命令要读的数据，不按时长删；只和日志一样设大小上限（log-file.mts 的 logLimits），
+ * 到了就换新文件，旧的留几份
+ */
+function rotateRunRegistry(path: string, env: NodeJS.ProcessEnv): void {
+  const limits = logLimits(env)
+  if (limits.maxBytes <= 0) return
+  let size = 0
+  try {
+    size = statSync(path).size
+  } catch {
+    return
+  }
+  if (size >= limits.maxBytes) rotateLog(path, limits)
 }
 
 export function runRegistryEntry(

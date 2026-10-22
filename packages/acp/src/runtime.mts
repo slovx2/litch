@@ -2,6 +2,7 @@
 import { type ChildProcess, spawn } from 'node:child_process'
 import { appendFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { takeLogDir } from '../../shared/src/log-file.mjs'
 import { type ResolvedAgent, resolveAgent } from './agent.mjs'
 import { AcpConnection, AcpError } from './connection.mjs'
 import { type AgentCapabilities, capabilitiesOf } from './declaration.mjs'
@@ -67,9 +68,17 @@ export class AcpRuntime {
     return this.starting
   }
 
+  /**
+   * agent 的启动命令和标准错误，写在命令行给的日志目录（LITCH_LOG_DIR）下的 agent.log；没给就不写。
+   * 大小由起它的命令行按 .log 的规矩换（复制再截断，见 cmd/codex-harness-adapter/logs.go）
+   */
   private log(text: string): void {
+    const directory = takeLogDir()
+    if (!directory) return
+    const path = join(directory, 'agent.log')
     try {
-      appendFileSync(join(this.home, 'agent.log'), text)
+      mkdirSync(directory, { recursive: true, mode: 0o700 })
+      appendFileSync(path, text, { mode: 0o600 })
     } catch {}
   }
 

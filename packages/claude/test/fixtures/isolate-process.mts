@@ -10,6 +10,10 @@ process.once('exit', () => rmSync(home, { recursive: true, force: true }))
 process.env.HOME = home
 process.env.USERPROFILE = home
 delete process.env.CLAUDE_CONFIG_DIR
+// 会话里跑测试时可能继承了真实状态目录的变量：日志只写进用例自己给的位置
+delete process.env.LITCH_LOG_DIR
+delete process.env.CHA_CLAUDE_DEBUG_LOG
+delete process.env.CHA_CLAUDE_HOME
 // 进程内起的 CLI 也不往本机共用的 /tmp/claude-<uid> 里写（它不看 TMPDIR）
 process.env.CLAUDE_CODE_TMPDIR = join(home, 'ct')
 // 进程内解析 CLI 路径的用例同样不能落到 PATH 里的 claude。

@@ -48,7 +48,7 @@ func (d *deviceService) runOnce(ctx context.Context, upstreams []configuration, 
 		return false, "start-failed", err
 	}
 	defer hostplatform.RemoveSocket(c.deviceSocket())
-	log, err := openPrivateLog(c.deviceDirectory(), "device.log")
+	log, err := openPrivateLog(c.logsDirectory(), "device.log")
 	if err != nil {
 		return false, "start-failed", err
 	}

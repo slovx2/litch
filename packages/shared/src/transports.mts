@@ -4,16 +4,21 @@ import net from 'node:net'
 import readline from 'node:readline'
 import { WebSocket, WebSocketServer } from 'ws'
 import { nativeWirePaths } from './native-path.mjs'
+import { rpcTrace } from './rpc-log.mjs'
 import type { RpcPeer, WireMessage } from './types.mjs'
 import { defaultSocketPath, ensureParent, newId, sleep } from './util.mjs'
 
 export type MessageHandler = (peer: RpcPeer, message: WireMessage) => void | Promise<void>
 export type CloseHandler = (peer: RpcPeer) => void
 
+/** 协议请求摘要（rpc-log.mts）：命令行没给日志目录时是 null */
+const trace = rpcTrace()
+
 class StdioPeer implements RpcPeer {
   readonly id = 'stdio'
 
   send(message: WireMessage): void {
+    trace?.sent(this, message)
     // process.stdout.write can throw a synchronous EPIPE if the consumer
     // (App's SSH stream) has closed mid-stream. Without the guard a single
     // peer disconnect during a Claude text stream would kill the entire
@@ -41,6 +46,7 @@ class WebSocketPeer implements RpcPeer {
 
   send(message: WireMessage): void {
     if (this.ws.readyState !== WebSocket.OPEN) return
+    trace?.sent(this, message)
     try {
       this.ws.send(JSON.stringify(message))
     } catch (error) {
@@ -66,12 +72,15 @@ export function startStdioTransport(
   onClose: CloseHandler,
 ): RunningTransport {
   const peer = new StdioPeer()
+  trace?.opened(peer)
   const rl = readline.createInterface({ input: process.stdin })
   rl.on('line', (line) => {
     const trimmed = line.trim()
     if (!trimmed) return
     try {
-      void onMessage(peer, nativeWirePaths(JSON.parse(trimmed) as WireMessage))
+      const message = nativeWirePaths(JSON.parse(trimmed) as WireMessage)
+      trace?.received(peer, message)
+      void onMessage(peer, message)
     } catch (error) {
       peer.send({
         jsonrpc: '2.0',
@@ -80,7 +89,10 @@ export function startStdioTransport(
       })
     }
   })
-  rl.on('close', () => onClose(peer))
+  rl.on('close', () => {
+    trace?.closed(peer)
+    onClose(peer)
+  })
   return {
     async close() {
       rl.close()
@@ -100,11 +112,14 @@ export async function startWebSocketTransport(
 
   wss.on('connection', (ws) => {
     const peer = new WebSocketPeer(ws)
+    trace?.opened(peer)
     onConnect?.(peer)
     ws.on('message', (data) => {
       try {
         const text = Buffer.isBuffer(data) ? data.toString('utf8') : String(data)
-        void onMessage(peer, nativeWirePaths(JSON.parse(text) as WireMessage))
+        const message = nativeWirePaths(JSON.parse(text) as WireMessage)
+        trace?.received(peer, message)
+        void onMessage(peer, message)
       } catch (error) {
         peer.send({
           jsonrpc: '2.0',
@@ -113,7 +128,10 @@ export async function startWebSocketTransport(
         })
       }
     })
-    ws.on('close', () => onClose(peer))
+    ws.on('close', () => {
+      trace?.closed(peer)
+      onClose(peer)
+    })
   })
 
   await new Promise<void>((resolve, reject) => {

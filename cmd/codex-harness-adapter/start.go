@@ -43,6 +43,10 @@ func start(ctx context.Context, c configuration) error {
 	device := openDeviceService(c)
 	manager.aggregate = device.provides()
 	deviceContext, stopDevice := context.WithCancel(ctx)
+	// 拿着设备锁的那一份服务管日志目录的轮转和清理：同一个状态目录只有一份在扫
+	if device.lock != nil {
+		go keepLogs(deviceContext, c)
+	}
 	control := device.openControl(deviceContext, manager, shutdown)
 	deviceStopped := make(chan struct{})
 	go func() {

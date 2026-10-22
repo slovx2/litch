@@ -46,6 +46,13 @@ import { ThreadIndex } from './thread-index.mjs'
 import { type Connector, isObject, type Wire, type WireHandlers } from './wire.mjs'
 import { Workspaces } from './workspaces.mjs'
 
+/** 记一条结构化的摘要：事件名和少量字段（不带正文、内容、密钥） */
+export type DeviceTrace = (
+  event: string,
+  fields: Record<string, unknown>,
+  level?: 'info' | 'warn' | 'error',
+) => void
+
 export interface DeviceOptions {
   /** 设备进程自己的状态目录，设备库 device.sqlite 放在里面 */
   stateDir: string
@@ -71,6 +78,8 @@ export interface DeviceOptions {
   flow?: Partial<FlowLimits>
   /** 运行日志：连接的建立与断开、harness 的可用状态变化。不给就不记 */
   log?(line: string): void
+  /** 结构化的摘要（logs/device.jsonl）：连接、每个客户端请求的成败和耗时。不给就不记 */
+  trace?: DeviceTrace
   /** 定时任务的时钟和时限。只有测试会改 */
   tasks?: { clock?: TaskClock; timing?: Partial<TaskTiming>; maxTimerMs?: number }
   /** 内部连接替引擎看着没人拿的请求：先等多久、隔多久再看（毫秒），见 engine-link.mts。只有测试会改 */
@@ -322,6 +331,7 @@ export class DeviceServer {
       log,
     })
     this.host = {
+      ...(options.trace ? { trace: options.trace } : {}),
       harnesses: () => this.harnesses(),
       management: new DeviceManagement({
         control: this.control,

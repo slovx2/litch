@@ -178,7 +178,17 @@ const toggleHarness = async (ctx: OpContext, on: boolean) => {
   return writeResult(ctx, result)
 }
 
-const LOG_SOURCES: readonly LogSource[] = ['device', 'service', 'runtime', 'diagnostics']
+const LOG_SOURCES: readonly LogSource[] = [
+  'device',
+  'service',
+  'control',
+  'requests',
+  'runtime',
+  'diagnostics',
+  'rpc',
+  'debug',
+  'agent',
+]
 
 export const HARNESS_OPS: Record<string, OpSpec> = {
   'settings get': {
@@ -336,7 +346,7 @@ export const HARNESS_OPS: Record<string, OpSpec> = {
     args: [1, 1],
     options: ['harness', 'source', 'bytes'],
     usage:
-      'diagnose logs <device> [--source device|service|runtime|diagnostics] [--harness <id>] [--bytes <n>]',
+      'diagnose logs <device> [--source device|service|control|requests|runtime|diagnostics|rpc|debug|agent] [--harness <id>] [--bytes <n>]',
     summary: { zh: '读设备上日志的末尾', en: 'Read the tail of a log on the device' },
     async run(ctx) {
       const device = await ctx.device(ctx.cmd.positionals[0])

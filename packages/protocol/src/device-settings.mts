@@ -249,10 +249,20 @@ export const DEVICE_LOGS_READ = 'litch/device/logs/read'
 
 export interface DeviceLogsReadParams {
   /**
-   * device：设备进程的日志；service：常驻服务的输出（由客户端拉起时才有）；
-   * runtime：某个 harness 的运行日志；diagnostics：某个 harness 的诊断日志。后两种要带 harness。
+   * device：设备进程的日志；service：常驻服务的输出（由客户端拉起时才有）；control：控制通道的请求摘要；
+   * requests：设备进程的连接和请求摘要。要带 harness 的：runtime（运行日志）、diagnostics（诊断日志）、
+   * rpc（入口的协议请求摘要）、debug（Claude 入口的调试日志）、agent（ACP agent 的输出）
    */
-  source: 'device' | 'service' | 'runtime' | 'diagnostics'
+  source:
+    | 'device'
+    | 'service'
+    | 'runtime'
+    | 'diagnostics'
+    | 'control'
+    | 'requests'
+    | 'rpc'
+    | 'debug'
+    | 'agent'
   harness?: string
   /** 最多取末尾这么多字节，默认 65536，最大 1048576 */
   maxBytes?: number
@@ -267,6 +277,8 @@ export interface DeviceLogsReadResponse {
   truncated: boolean
   /** 文件现在的大小（字节） */
   size: number
+  /** 设备上的日志目录（所有日志都在它下面）。旧版的设备服务没有 */
+  directory?: string
 }
 
 /** 取给官方 Codex 桌面端用的 ssh 配置片段 */

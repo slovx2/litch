@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"runtime"
 	"sync"
 	"time"
@@ -92,6 +93,8 @@ type controlServer struct {
 	installs     *installer
 	installQueue []installJob
 	installDirty chan struct{}
+	// 控制请求的摘要（logs/control.jsonl）
+	journal *jsonLog
 }
 
 // 只有拿着设备锁的进程可以调用：遗留的套接字由它清掉。
@@ -108,7 +111,9 @@ func openControlServer(ctx context.Context, c configuration, manager *harnessMan
 		return nil, err
 	}
 	server := &controlServer{c: c, manager: manager, path: path, listener: listener, peers: map[net.Conn]*sync.Mutex{}, dirty: make(chan struct{}, 1),
-		facts: facts, shutdown: shutdown, asks: map[int]*pendingAsk{}, installDirty: make(chan struct{}, 1)}
+		facts: facts, shutdown: shutdown, asks: map[int]*pendingAsk{}, installDirty: make(chan struct{}, 1),
+		journal: newJSONLog(filepath.Join(c.logsDirectory(), "control.jsonl"), "control")}
+	server.journal.write("info", "start", map[string]any{"version": adapterVersion(c.root)})
 	server.ctx, server.stop = context.WithCancel(ctx)
 	server.installs = server.newInstaller()
 	manager.changed = server.broadcast
@@ -133,6 +138,7 @@ func (s *controlServer) close() {
 	s.mu.Unlock()
 	s.done.Wait()
 	_ = hostplatform.RemoveSocket(s.path)
+	s.journal.write("info", "stop", nil)
 }
 
 func (s *controlServer) accept() {
@@ -252,7 +258,9 @@ func (s *controlServer) serve(connection net.Conn) {
 				s.stopService(connection, lock, request)
 				return
 			}
+			began := time.Now()
 			result, failure := s.handle(request.Method, request.Params)
+			s.record(request, began, failure)
 			if request.Method == "settings.write" || request.Method == "harness.apply" {
 				// 应答之前先把现状送到：设备进程拿手上最新的 state 当这次请求的结果，不用猜后面还有没有一条。
 				s.publish()
@@ -264,6 +272,24 @@ func (s *controlServer) serve(connection net.Conn) {
 			s.send(connection, lock, map[string]any{"id": request.ID, "result": result})
 		}()
 	}
+}
+
+// 记一条控制请求的摘要：方法、harness（参数里有的话）、成败、耗时、失败的原因和原文。参数别的不记（设置里有密钥）。
+func (s *controlServer) record(request controlRequest, began time.Time, failure *controlError) {
+	fields := map[string]any{"method": request.Method, "ok": failure == nil, "ms": time.Since(began).Milliseconds()}
+	var params struct {
+		Harness string `json:"harness"`
+	}
+	if json.Unmarshal(request.Params, &params) == nil && params.Harness != "" {
+		fields["harness"] = params.Harness
+	}
+	level := "info"
+	if failure != nil {
+		level = "warn"
+		fields["reason"] = failure.Reason
+		fields["error"] = logErrorText(failure.Text.String())
+	}
+	s.journal.write(level, "control", fields)
 }
 
 func readControlLine(reader *bufio.Reader) ([]byte, error) {
