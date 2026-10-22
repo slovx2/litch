@@ -32,3 +32,16 @@ export interface GoalChange {
   status?: 'active' | 'paused'
   tokenBudget?: number | null
 }
+
+/**
+ * 刚达成的目标留下的那一句（照官方桌面端）：目标一报达成，客户端就清掉它（thread/goal/clear），
+ * 输入框上方那一行随之没了，改在达成它的那个回合最后一条回答下面写“目标已达成 · 用时 N”。
+ * 只记最近一次；再设新目标就没了。只在这边的内存里，重新打开会话不再有
+ */
+export interface GoalReachedView {
+  /** 达成它的那个回合（界面里的标识） */
+  turnId: string
+  objective: string
+  /** 目标在做的状态下一共花的时间，秒（协议的 timeUsedSeconds） */
+  timeUsedSeconds: number
+}

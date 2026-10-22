@@ -11,6 +11,7 @@ import type {
   AskAnswers,
   CoreChannel,
   SessionBackgroundView,
+  SessionGoalView,
   SessionOp,
   SessionProposalView,
   SessionView,
@@ -66,6 +67,8 @@ export interface SessionMeta {
    * 报集合的是 null，用侧栏摘要上的 SessionSummary.background
    */
   derived: SessionBackgroundView | null
+  /** 持续目标（harness 会才有）：输入框上方那一行用。达成了核心马上清掉，回答下面那一句在对话区的行里 */
+  goal: SessionGoalView | null
 }
 
 const EMPTY: SessionSnapshot = { rows: [], running: false, error: null, publishedAt: 0 }
@@ -275,6 +278,7 @@ export class SessionStore {
     this.stats.ops++
     const before = op.op === 'session.proposals' ? view.proposals : null
     const removed = op.op === 'item.remove' ? view.items[op.itemId] : undefined
+    const reachedBefore = op.op === 'session.goalReached' ? view.goalReached?.turnId : undefined
     reduceSession(view, op)
     const mark = (turnId: string | undefined) => {
       if (turnId && this.dirty !== 'all') this.dirty.add(turnId)
@@ -326,6 +330,11 @@ export class SessionStore {
           else mark(this.itemTurn.get(proposal.callId))
         }
         this.proposalsDirty = true
+        return
+      case 'session.goalReached':
+        // 目标达成那一句挪了（写上、设新目标后拿掉）：前后两个回合重算
+        mark(reachedBefore)
+        mark(op.reached?.turnId)
         return
       case 'request.add':
       case 'request.remove':
@@ -404,6 +413,7 @@ export class SessionStore {
         running,
         lastTurn: lastTurnOf(view),
         derived: view.can.backgroundTasks ? null : deriveBackground(view.turns, view.items),
+        goal: view.goal ?? null,
       }
       for (const listener of this.metaListeners) listener()
     }

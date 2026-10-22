@@ -11,6 +11,7 @@ export const enGoal = {
   'goal.status.usageLimited': 'Usage limit reached, goal stopped',
   'goal.status.budgetLimited': 'Budget used up, goal stopped',
   'goal.status.complete': 'Goal reached',
+  'goal.reached': 'Goal reached · {time}',
   'goal.tokens': '{used} / {budget} tokens',
   'goal.spent': '{time} spent',
   'goal.time.s': '{n}s',

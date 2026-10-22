@@ -72,6 +72,7 @@ import { entryProbe, judgeEntry } from './probe-entry.mjs'
 import { type FilesMode, runFilesChecks } from './probe-files-run.mjs'
 import { runFirstTurnChecks } from './probe-first-turn.mjs'
 import { fullProbe, judgeFull, judgeMockFull, mockFullProbe } from './probe-full.mjs'
+import { goalProbe, judgeGoal } from './probe-goal.mjs'
 import { harnessSettingsProbe, judgeHarnessSettings } from './probe-harness-settings.mjs'
 import { homeProbe, judgeHome } from './probe-home.mjs'
 import { homeLook, judgeHomeLook } from './probe-home-look.mjs'
@@ -115,6 +116,7 @@ type ProbeMode =
   | 'tasks'
   | 'tree'
   | 'background'
+  | 'goal'
   | 'onboard'
   | 'harness-settings'
   | 'engines'
@@ -166,6 +168,7 @@ const PROBE_MODES: readonly string[] = [
   'tasks',
   'tree',
   'background',
+  'goal',
   'onboard',
   'harness-settings',
   'engines',
@@ -187,6 +190,7 @@ export const MOCK_MODES: readonly string[] = [
   'tasks',
   'tree',
   'background',
+  'goal',
   'onboard',
   'harness-settings',
   'terminal',
@@ -277,6 +281,11 @@ async function measure(
     // 侧栏里一个空闲的会话（模拟核心的示例数据），在它里面演
     const result = await runInPage(window, backgroundProbe, 'k1')
     return [result, judgeBackground(result)]
+  }
+  if (mode === 'goal') {
+    // 模拟核心示例数据里 build-01 上那个空闲的原生 Codex 会话（持续目标只有它会），在它里面演
+    const result = await runInPage(window, goalProbe, 'b6')
+    return [result, judgeGoal(result)]
   }
   if (mode === 'onboard') {
     const result = await runInPage(window, onboardProbe)

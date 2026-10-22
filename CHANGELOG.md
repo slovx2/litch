@@ -5,6 +5,11 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
+## 未发布
+
+- 持续目标：达成后照官方 ChatGPT.app 自动清掉目标（`thread/goal/clear`），输入框上方那一行随之消失，在达成它的那一轮最后一条回答下面写“目标已达成 · 用时 N”；再设新目标时这一句跟着拿掉
+- 持续目标：手机端也有了，规则和桌面一致——只在会持续目标的会话（原生 Codex）出现；输入框上方一行（状态、用时、目标的话，可暂停、继续、清除，清除不弹确认）；斜杠单子里有 `/goal`（新会话页也能用，只收文字）；续做回合开头一行“目标未达成，自动继续”；达成后自动清掉、回答下写用时
+
 ## 0.16.0
 
 - 后台任务：回合结束后还在跑的工作（Claude Code 的后台命令和子任务、原生 Codex 回合结束时还在跑的命令、dsh 的后台作业）有了统一的集合（协议扩展 `backgroundTasks`）。桌面端输入框上方一行写几个在跑，点开右侧“后台任务”页看运行中和已结束的（名称、用时、来源回合）；侧栏有记号；后台跑完引擎自己接着做的回合开头写一行。手机端同样

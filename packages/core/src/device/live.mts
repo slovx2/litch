@@ -385,7 +385,9 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
    */
   const markGoalTurn = (live: Live, viewId: string) => {
     const view = live.view
-    if (!view?.goal || !view.can.goals || viewId.startsWith('local:')) return
+    // 达成目标的那一轮结束时目标已经清掉了，它也算
+    const pursued = view?.goal || view?.goalReached?.turnId === viewId
+    if (!view || !pursued || !view.can.goals || viewId.startsWith('local:')) return
     const turn = view.turns.find((entry) => entry.id === viewId)
     if (!turn || turn.status === 'running' || !looksLikeGoalTurn(turn, view.items)) return
     emit(live, [
@@ -398,6 +400,34 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       },
     ])
   }
+
+  /**
+   * 目标达成了（照官方桌面端）：清掉它（thread/goal/clear，不带 origin：不算用户改了目标，不记进模型的上下文），
+   * 输入框上方那一行马上收起，改在达成它的回合（通知带着；没带就是最后一个回合）的回答下面写用了多久。
+   * 同一个会话开着几个客户端时各自都会清一次，后清的回 cleared: false，没有关系
+   */
+  const reachGoal = (live: Live, goal: SessionGoalView, turnId: string | null | undefined) => {
+    const view = live.view
+    if (!view) return
+    const turn = turnId ? viewTurn(live, turnId) : view.turns.at(-1)?.id
+    // 已经收过这一次了（载入时问到的和恢复后对面补的那条是同一个）
+    if (!view.goal && turn && view.goalReached?.turnId === turn) return
+    emit(live, [
+      { op: 'session.goal', goal: null },
+      {
+        op: 'session.goalReached',
+        reached: turn
+          ? { turnId: turn, objective: goal.objective, timeUsedSeconds: goal.timeUsedSeconds }
+          : null,
+      },
+    ])
+    clearReached(live)
+  }
+
+  const clearReached = (live: Live) =>
+    host
+      .request('thread/goal/clear', { threadId: live.id }, { timeoutMs: LOAD_TIMEOUT })
+      .catch((error: unknown) => host.log(`清掉会话 ${live.id} 已达成的目标没成：${String(error)}`))
 
   /** 对面第一次提到一个回合：如果本机正好有一个刚发出去的回合在等标识，就是它 */
   const bind = (live: Live, turnId: string): string => {
@@ -712,8 +742,17 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     },
     // 持续目标设了、改了（状态、用量）、清掉了。上游发给每条连接，这里只管打开着的会话；
     // 恢复会话时上游也会补一条现在的样子（有目标的话）
-    'thread/goal/updated': (live, { goal }) =>
-      emit(live, [{ op: 'session.goal', goal: projectGoal(goal) }]),
+    'thread/goal/updated': (live, { goal, turnId }) => {
+      const next = projectGoal(goal)
+      if (next?.status === 'complete' && live.view?.can.goals) return reachGoal(live, next, turnId)
+      // 设了新目标：上一个目标达成的那一句不再写（照官方桌面端）
+      emit(live, [
+        { op: 'session.goal', goal: next },
+        ...(next && live.view?.goalReached
+          ? [{ op: 'session.goalReached' as const, reached: null }]
+          : []),
+      ])
+    },
     'thread/goal/cleared': (live) => emit(live, [{ op: 'session.goal', goal: null }]),
     // 导进来的会话被别处的进程占上、放开了：占着时只能看，放开了恢复可写。别的原因只读的（归档、子代理）不动
     'litch/thread/nativeOwner/changed': (live, { owner }) => {
@@ -838,6 +877,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       (view) => {
         if (cancel.signal.aborted) return
         live.loading = null
+        const reached = live.view?.goalReached ?? null
         live.alias.clear()
         live.echo.clear()
         live.itemAlias.clear()
@@ -854,8 +894,11 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
         }
         const kept = todos.get(live.id)
         if (kept) placeTodos(live.view, kept)
+        // 目标达成的那一句是这边记的，对面的历史里没有：回合还在就留着
+        if (reached && live.view.turns.some((turn) => turn.id === reached.turnId))
+          live.view.goalReached = reached
         // 有目标的会话里对面没说来历的续跑回合（原生 codex），和看着它结束时一样认出来
-        if (live.view.goal && live.view.can.goals) {
+        if ((live.view.goal || live.view.goalReached) && live.view.can.goals) {
           for (const turn of live.view.turns) {
             if (turn.status !== 'running' && looksLikeGoalTurn(turn, live.view.items))
               turn.origin = 'goal'
@@ -867,6 +910,16 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
           if (!live.view.requests.some((request) => request.id === waiting.view.id)) {
             live.view.requests.push(waiting.view)
           }
+        }
+        // 没人看着的时候达成的目标：现在照样清掉、在最后一个回合下面写用时（快照里就不带它，不闪一下）
+        const done = live.view.goal?.status === 'complete' ? live.view.goal : null
+        const last = live.view.turns.at(-1)?.id
+        if (done && live.view.can.goals) {
+          live.view.goal = null
+          live.view.goalReached = last
+            ? { turnId: last, objective: done.objective, timeUsedSeconds: done.timeUsedSeconds }
+            : null
+          clearReached(live)
         }
         for (const sink of live.sinks) sink.snapshot(live.view)
         const held = live.held

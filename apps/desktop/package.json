@@ -35,6 +35,7 @@
     "check:harness-settings": "npm run build && node scripts/smoke.mjs --harness-settings",
     "check:tree": "npm run build && node scripts/smoke.mjs --tree",
     "check:background": "npm run build && node scripts/smoke.mjs --background",
+    "check:goal": "npm run build && node scripts/smoke.mjs --goal",
     "check:manage": "npm run build && node scripts/smoke.mjs --manage --mock && node scripts/smoke.mjs --manage",
     "check:terminal": "npm run build && node scripts/check-terminal.mjs",
     "check:files": "npm run build && node scripts/check-files.mjs",

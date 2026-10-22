@@ -63,6 +63,7 @@ const probe = useRemote
           'tasks',
           'tree',
           'background',
+          'goal',
           'onboard',
           'harness-settings',
         ].find((name) => process.argv.includes(`--${name}`))

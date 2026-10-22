@@ -111,6 +111,9 @@ export const keys = {
   agents: (deviceId: string, sessionId: string) => `session:${deviceId}:${sessionId}:agents`,
   /** SessionGoalView | null：这个会话的持续目标（model-goal.mts） */
   goal: (deviceId: string, sessionId: string) => `session:${deviceId}:${sessionId}:goal`,
+  /** GoalReachedView | null：刚达成、已清掉的目标留在回答下面的那一句 */
+  goalReached: (deviceId: string, sessionId: string) =>
+    `session:${deviceId}:${sessionId}:goalReached`,
   /**
    * SessionNotes：这个会话收到过的子会话回报，每个子会话留最近的一条（对话里注入的 <litch-session-event>）。
    * 派出子会话的那张卡片上的“最后一句回报”用它
@@ -1023,6 +1026,9 @@ export function createReplica(channel: CoreChannel): Replica {
       case 'session.goal':
         store.set(keys.goal(deviceId, sessionId), op.goal)
         return
+      case 'session.goalReached':
+        store.set(keys.goalReached(deviceId, sessionId), op.reached)
+        return
     }
   }
 
@@ -1137,6 +1143,7 @@ export function createReplica(channel: CoreChannel): Replica {
                 store.set(keys.proposals(deviceId, sessionId), view.proposals)
                 store.set(keys.agents(deviceId, sessionId), view.agents)
                 store.set(keys.goal(deviceId, sessionId), view.goal ?? null)
+                store.set(keys.goalReached(deviceId, sessionId), view.goalReached ?? null)
                 // 按回合、条目的先后：同一个子会话后来的回报盖掉先前的
                 const ordered = view.turns.flatMap((turn) =>
                   turn.itemIds.flatMap((id) => view.items[id] ?? []),

@@ -1,8 +1,10 @@
 // 新会话：选 harness（设备上可用的不止一个时）、建在哪（工作区、不属于任何工作区、或者自己填一个目录）、
 // 模型和权限这些（没选的显示对面不带设置新建时会用的，建会话时照显示的发），写第一句话发出去。
 // 建会话和发第一条消息是一条命令（session.create），成了就把这一页换成详情页；没成就把文字还回输入框。
+// harness 会持续目标时第一句可以是 `/goal 要做到的事`：建好会话就设目标、不发消息（和桌面一样）。
 // 建不了的时候（设备没连上、没有可用的 harness、明说的工作区不在了）当场写原因，不悄悄换去处。
 import {
+  type CommentExtra,
   type DeviceView,
   type HarnessView,
   type ImageAttachment,
@@ -21,6 +23,8 @@ import { ComposeBox, useDraft } from '../../detail/composer/ComposeBox'
 import { draftKey } from '../../detail/composer/drafts'
 import { useComposeOptions, useNewSessionDefaults } from '../../detail/composer/options'
 import { SettingsBar } from '../../detail/composer/SettingsBar'
+import { goalIntent } from '../../detail/goal/logic'
+import { SlashGoal } from '../../detail/goal/SlashGoal'
 import type { RootStackParamList } from '../../nav/routes'
 import { useChannel, useKey } from '../../shell/services'
 import { useT } from '../../ui/i18n'
@@ -112,7 +116,13 @@ export function NewSessionScreen({ navigation, route }: Props) {
         ? t('composer.image.unsupported')
         : null
 
-  const create = async (text: string, images: ImageAttachment[]) => {
+  const goalsAble = harness?.abilities?.goals === true
+  const create = async (typed: string, images: ImageAttachment[], comments: CommentExtra[]) => {
+    // 第一句是 /goal 加上目标（harness 会持续目标时）：建好会话就设目标，不发消息，它空闲时自己开始做
+    const intent = goalIntent(typed, images.length + comments.length, goalsAble, null)
+    if (intent.kind === 'refuse') throw new Error(t(intent.key))
+    const goal = intent.kind === 'goal'
+    const text = goal ? intent.objective : typed
     const { sessionId } = await channel.command('session.create', {
       deviceId,
       ...(harness ? { harness: harness.id } : {}),
@@ -122,6 +132,7 @@ export function NewSessionScreen({ navigation, route }: Props) {
       text,
       images,
       settings: sent,
+      ...(goal ? { goal: true } : {}),
     })
     const { mode: _thisOnce, ...kept } = picks
     remember(deviceId, workspaceId, harness?.id, kept)
@@ -246,6 +257,7 @@ export function NewSessionScreen({ navigation, route }: Props) {
               error={error}
               onSend={create}
               onError={setError}
+              top={<SlashGoal text={draft.text} able={goalsAble} onPick={draft.setText} />}
               bar={
                 <SettingsBar
                   fresh

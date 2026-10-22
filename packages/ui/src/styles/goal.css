@@ -169,3 +169,16 @@
   font-size: 12px;
   line-height: 1.5;
 }
+
+/* 回合最后一条回答下面：目标已达成 · 用时 N */
+.goal-reached {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.goal-reached .ic {
+  flex: none;
+  color: var(--ok);
+}
