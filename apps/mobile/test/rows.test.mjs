@@ -78,7 +78,7 @@ test('正在跑的一步：摘要上说它在做什么；只有说明的一组�
   assert.deepEqual(types(new RowBuilder().build(onlyNotice, 'all')), ['notice', 'status'])
 })
 
-test('状态行只在空档里写“运行中”：出字、有步骤在跑、等人答复时留空', () => {
+test('状态行在回合跑时写“正在工作”：只在正文出字、等人答复时留空，步骤在跑照写', () => {
   const working = (items, requests = []) => {
     const view = viewOf(
       [{ id: 't', status: 'running', itemIds: items.map((item) => item.id) }],
@@ -90,7 +90,7 @@ test('状态行只在空档里写“运行中”：出字、有步骤在跑、�
   assert.equal(working([user('u', '跑')]), true)
   assert.equal(working([user('u', '跑'), answer('a', '先看看')]), true)
   assert.equal(working([user('u', '跑'), answer('a', '正在写', 'inProgress')]), false)
-  assert.equal(working([user('u', '跑'), { ...command('c'), status: 'inProgress' }]), false)
+  assert.equal(working([user('u', '跑'), { ...command('c'), status: 'inProgress' }]), true)
   assert.equal(working([user('u', '跑')], [{ id: 'r', kind: 'approval' }]), false)
   const done = viewOf([{ id: 't', status: 'completed', itemIds: ['u'] }], [user('u', '跑')])
   assert.equal(new RowBuilder().build(done, 'all').at(-1).working, false)

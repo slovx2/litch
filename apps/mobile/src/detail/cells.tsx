@@ -257,14 +257,12 @@ function linkedText(
 
 /**
  * 思考：收起时一行次要的浅字（最后一行字），点开是全文。收起的那一行高度固定。没字的思考不画（rows.ts）。
- * 在想的时候前面写“{name} 正在工作”，和状态行空档里同一句（这时状态行留空），回合在忙只有一处在说；
- * 想完了不写“想了一下”这类动词，只有思考的字
+ * 不写“想了一下”这类动词，在想的时候也只有思考的字：“{name} 正在工作”只写在状态行上，回合在忙只有一处在说
  */
 export const ReasoningCell = memo(function ReasoningCell({ row }: Props<'reasoning'>) {
   const { c, font } = useTheme()
   const t = useT()
-  const { toggle, harness } = useTranscript()
-  const head = row.open ? t('turn.working', { name: harness }) : null
+  const { toggle } = useTranscript()
   return (
     <Pressable
       onPress={() => toggle(row.key, row.turnId)}
@@ -273,29 +271,23 @@ export const ReasoningCell = memo(function ReasoningCell({ row }: Props<'reasoni
       testID="reasoning-toggle"
     >
       {row.expanded ? (
-        <>
-          {head ? (
-            <Text style={[styles.meta, { color: c.ink3, fontSize: font.size.meta }]}>▾ {head}</Text>
-          ) : null}
-          <Text style={[styles.reasoningText, { color: c.ink3, fontSize: font.size.meta }]}>
-            {head ? '' : '▾ '}
-            {row.text}
-          </Text>
-        </>
+        <Text style={[styles.reasoningText, { color: c.ink3, fontSize: font.size.meta }]}>
+          ▾ {row.text}
+        </Text>
       ) : (
         <Text
           style={[styles.meta, styles.thought, { color: c.ink3, fontSize: font.size.meta }]}
           numberOfLines={1}
         >
-          ▸ {head ? (row.text ? t('detail.labelled', { head, text: row.text }) : head) : row.text}
+          ▸ {row.text}
         </Text>
       )}
     </Pressable>
   )
 })
 
-/** 空档要持续这么久才写“正在工作”：一卡一卡地出字时不来回闪（和桌面端一样） */
-const WORKING_DELAY_MS = 400
+/** 留空之后要持续这么久才再写“正在工作”：两段正文挨着出字时不来回闪（和桌面端一样） */
+const WORKING_DELAY_MS = 300
 
 function useLasting(on: boolean): boolean {
   const [lasted, setLasted] = useState(false)
@@ -321,8 +313,8 @@ function useTicking(since: number | null): number | null {
 }
 
 /**
- * 回合末尾的状态行：从回合开始一直在，高度固定，只换字。回合在跑时只在空档里写“{name} 正在工作”和已经用了多久，
- * 正在出字、有步骤在跑、在想、等人答复时留空。右边一个“⋯”打开这一回合的操作
+ * 回合末尾的状态行：从回合开始一直在，高度固定，只换字。回合在跑时写“{name} 正在工作”和已经用了多久，
+ * 正文在出字、等人答复时留空；命令、工具、思考在跑时照写。右边一个“⋯”打开这一回合的操作
  */
 export const StatusCell = memo(function StatusCell({ row }: Props<'status'>) {
   const { c, font } = useTheme()

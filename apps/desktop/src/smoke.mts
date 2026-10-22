@@ -99,6 +99,7 @@ import { installTerminalKit } from './probe-terminal-kit.mjs'
 import { runTerminalChecks, type TerminalMode } from './probe-terminal-run.mjs'
 import { judgeTools, toolsProbe } from './probe-tools.mjs'
 import { runTreeChecks } from './probe-tree.mjs'
+import { judgeWorking, workingProbe } from './probe-working.mjs'
 import type { QuitOutcome } from './quit-terminals.mjs'
 
 type ProbeMode =
@@ -412,6 +413,8 @@ async function measure(
   // 活动区里跟“回合正在跑”有关的两件事（命令已经跑了多久、活动块什么时候收）：只对着模拟核心量，
   // 要一条不出输出地跑上两秒多的命令，和一个声明了“最终回答一开始就知道”的 harness
   const activity = real ? null : await runInPage(window, activityProbe)
+  // 回合末尾“正在工作”那一行：命令、工具、思考来去时不隐去，只在正文出字时隐去（只对着模拟核心）
+  const working = real ? null : await runInPage(window, workingProbe)
   // 请求卡片和输入框并存那一组排最后：平常大小量一遍，窗口缩到允许的最小再让请求出现一次，
   // 模拟核心上再开着终端面板来一次（打开面板会顺手开一个终端，真实入口上不这样做）
   const cards = await runInPage(window, cardsProbe, real)
@@ -465,6 +468,7 @@ async function measure(
       ...result,
       ...session,
       activity,
+      working,
       cardsBeside: cards,
       cardRoom: { short, withTerminal },
       slash,
@@ -484,6 +488,7 @@ async function measure(
       ...judgeCompose(result),
       ...judgeSession(session),
       ...(activity ? judgeActivity(activity) : []),
+      ...(working ? judgeWorking(working) : []),
       ...judgeCards(cards, short, withTerminal, real),
       ...judgeSlash(slash, real, slashLooks),
       ...judgePlan(plan, real),

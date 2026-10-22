@@ -53,20 +53,14 @@ export function stepsSummary(tally: StepsTally, t: Translator): string {
 /**
  * 正在跑的那一条：前面的动词（“正在读取”）和后面的对象（命令、文件、工具名、搜的词）。
  * kind 是核心的 stepKindOf 给的（这里不引核心的代码，好单独测）。
- * 在想的时候写“{harness} 正在工作”，和回合末尾空档里那一行同一句：回合在忙只有一种说法，只是换个位置
+ * 在想的时候不写动词，只有思考的头一行：“{harness} 正在工作”只在回合末尾那一行写，同一时刻只有一处
  */
 export function nowOf(
   item: ItemView,
   kind: StepKind | null,
   t: Translator,
-  harness: string,
 ): { label: string; target: string } {
-  if (item.kind === 'reasoning') {
-    return {
-      label: t('turn.working', { name: harness }),
-      target: item.text.split('\n', 1)[0] ?? '',
-    }
-  }
+  if (item.kind === 'reasoning') return { label: '', target: item.text.split('\n', 1)[0] ?? '' }
   const label = kind ? t(NOW_KEYS[kind]) : t('activity.now.notice')
   switch (item.kind) {
     case 'command':
