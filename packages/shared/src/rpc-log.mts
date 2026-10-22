@@ -1,8 +1,8 @@
 // 入口的协议请求摘要（<日志目录>/rpc.jsonl）：每个请求的方法、连接、编号、成败、耗时、错误原文，
-// 服务端发出的请求和对面的答复，连接的开和关。通知不记，参数只挑标识字段（log-file.mts 的 idFields）。
+// 服务端发出的请求和对面的答复，连接的开和关。通知不记，参数只挑标识和设置字段（log-file.mts 的 paramFields）。
 // 传输层（transports.mts）收发每一帧时调这里；命令行没给日志目录（测试、单独跑）时什么都不做。
 import { basename, join } from 'node:path'
-import { createJsonlLog, errorText, idFields, type JsonlLog, takeLogDir } from './log-file.mjs'
+import { createJsonlLog, errorText, type JsonlLog, paramFields, takeLogDir } from './log-file.mjs'
 import type { RpcPeer, WireMessage } from './types.mjs'
 
 interface Pending {
@@ -82,7 +82,7 @@ export function createRpcTrace(log: JsonlLog, now: () => number = Date.now): Rpc
         incoming.set(keyOf(peer, id), {
           method,
           at: now(),
-          ids: idFields((message as { params?: unknown }).params),
+          ids: paramFields((message as { params?: unknown }).params),
         })
       } else settle(outgoing, 'serverRequest', peer, message)
     },
@@ -94,7 +94,7 @@ export function createRpcTrace(log: JsonlLog, now: () => number = Date.now): Rpc
         outgoing.set(keyOf(peer, id), {
           method,
           at: now(),
-          ids: idFields((message as { params?: unknown }).params),
+          ids: paramFields((message as { params?: unknown }).params),
         })
       } else settle(incoming, 'rpc', peer, message)
     },

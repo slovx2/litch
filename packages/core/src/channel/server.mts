@@ -5,7 +5,7 @@
 // 增量是值：交进来的那一刻就拷一份再排队。它要在这里最多等一帧才发出去，这期间核心照样在改自己手里的东西，
 // 排着的这一份不能跟着变。快照是当场发的，端口在发出的那一刻取值（Port.post 的约定），不用另外拷。
 import { extendSkipping, type SkippingOutput, skipOutput } from '../text/output-cap.mjs'
-import { type CoreTrace, traceError, traceIds } from '../trace.mjs'
+import { type CoreTrace, traceError, traceParams } from '../trace.mjs'
 import { copyValue } from '../value.mjs'
 import { createCancel } from './cancel.mjs'
 import {
@@ -181,7 +181,7 @@ export function serveChannel(port: Port, host: CoreHost, options: ServeOptions):
               'command',
               {
                 command: name,
-                ...traceIds(params),
+                ...traceParams(params),
                 ok: error === null,
                 ms: options.clock.now() - at,
                 ...(error ? { code: error.code, error: traceError(error.message) } : {}),

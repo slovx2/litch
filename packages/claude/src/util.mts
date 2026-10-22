@@ -10,7 +10,13 @@ import {
 
 export { platformFamily, platformOs } from '../../shared/src/runtime-version.mjs'
 
-import { logLimits, pruneLogs, rotateLog, takeLogDir } from '../../shared/src/log-file.mjs'
+import {
+  type LogLimits,
+  logLimits,
+  pruneLogs,
+  rotateLog,
+  takeLogDir,
+} from '../../shared/src/log-file.mjs'
 import { setSharedLogger } from '../../shared/src/util.mjs'
 import type { ImageInput } from './types.mjs'
 
@@ -115,7 +121,26 @@ export function debugLog(event: string, data: Record<string, unknown> = {}): voi
 }
 
 /**
- * 把攒着的调试日志写出去。上限和别的日志一样（log-file.mts 的 logLimits）：写之前文件已经不小于上限，
+ * debug.jsonl 的上限。它记得细、排查 Claude 最常用，大小和个数不跟别的日志走：沿用原来的两个变量，
+ * 单个 50MB（CHA_CLAUDE_DEBUG_LOG_MAX_BYTES），另留 3 份旧的（CHA_CLAUDE_DEBUG_LOG_KEEP，不含正在写的）。
+ * 按时长删和别的日志一样（LITCH_LOG_MAX_AGE_DAYS）。命令行那一层清理日志目录时也照这一套（logs.go 的 limitsFor）。
+ */
+export function debugLogLimits(env: NodeJS.ProcessEnv = process.env): LogLimits {
+  return {
+    maxBytes: numericEnv(env.CHA_CLAUDE_DEBUG_LOG_MAX_BYTES, 50 * 1024 * 1024),
+    keep: Math.max(1, Math.floor(numericEnv(env.CHA_CLAUDE_DEBUG_LOG_KEEP, 3))) + 1,
+    maxAgeMs: logLimits(env).maxAgeMs,
+  }
+}
+
+function numericEnv(raw: string | undefined, fallback: number): number {
+  if (!raw) return fallback
+  const parsed = Number(raw)
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback
+}
+
+/**
+ * 把攒着的调试日志写出去。上限见 debugLogLimits：写之前文件已经不小于上限，
  * 就先换一个新文件，旧的按个数和时长清理。写不成（磁盘满、没权限）就算了，日志不能耽误正事。
  */
 export function flushDebugLog(): void {
@@ -124,7 +149,7 @@ export function flushDebugLog(): void {
   if (!pending) return
   const { path, lines } = pending
   try {
-    const limits = logLimits()
+    const limits = debugLogLimits()
     const fresh = readyLogDir !== dirname(path)
     let size = limits.maxBytes > 0 ? fileSize(path) : 0
     if (fresh) pruneLogs(path, limits)

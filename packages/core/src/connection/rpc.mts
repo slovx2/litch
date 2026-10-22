@@ -10,7 +10,7 @@ import {
 } from '../../../protocol/src/index.mjs'
 import type { AbortSignalLike, Clock } from '../channel/protocol.mjs'
 import { describeText, type Text } from '../phrase.mjs'
-import { type CoreTrace, traceError, traceIds } from '../trace.mjs'
+import { type CoreTrace, traceError, traceParams } from '../trace.mjs'
 import type { Transport } from './transport.mjs'
 
 /** 对面明确回了一个错误 */
@@ -106,7 +106,7 @@ export function createRpc(transport: Transport, options: RpcOptions): Rpc {
       'serverRequest',
       {
         method,
-        ...traceIds(params),
+        ...traceParams(params),
         ok: error === null,
         ms: options.clock.now() - at,
         ...(error === null ? {} : { error: traceError(error) }),
@@ -219,7 +219,7 @@ export function createRpc(transport: Transport, options: RpcOptions): Rpc {
             {
               method,
               id,
-              ...traceIds(params),
+              ...traceParams(params),
               ok: error === null,
               ms: options.clock.now() - at,
               ...(error === null ? {} : { error: traceError(error) }),

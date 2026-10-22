@@ -41,30 +41,52 @@ type logLimits struct {
 	maxAge   time.Duration // 0：不按时长删
 }
 
-func currentLogLimits() logLimits {
-	number := func(name string, fallback float64) float64 {
-		raw := os.Getenv(name)
-		if raw == "" {
-			return fallback
-		}
-		value, err := strconv.ParseFloat(raw, 64)
-		if err != nil || value < 0 {
-			return fallback
-		}
-		return value
+// 环境变量里的非负数，没设或不对就用默认
+func logNumber(name string, fallback float64) float64 {
+	raw := os.Getenv(name)
+	if raw == "" {
+		return fallback
 	}
-	keep := int(number("LITCH_LOG_KEEP", 5))
+	value, err := strconv.ParseFloat(raw, 64)
+	if err != nil || value < 0 {
+		return fallback
+	}
+	return value
+}
+
+func currentLogLimits() logLimits {
+	keep := int(logNumber("LITCH_LOG_KEEP", 5))
 	if keep < 1 {
 		keep = 1
 	}
 	return logLimits{
-		maxBytes: int64(number("LITCH_LOG_MAX_BYTES", 10*1024*1024)),
+		maxBytes: int64(logNumber("LITCH_LOG_MAX_BYTES", 10*1024*1024)),
 		keep:     keep,
-		maxAge:   time.Duration(number("LITCH_LOG_MAX_AGE_DAYS", 7) * float64(24*time.Hour)),
+		maxAge:   time.Duration(logNumber("LITCH_LOG_MAX_AGE_DAYS", 7) * float64(24*time.Hour)),
 	}
 }
 
-var logLimitVariables = []string{"LITCH_LOG_MAX_BYTES", "LITCH_LOG_KEEP", "LITCH_LOG_MAX_AGE_DAYS"}
+// Claude 的 debug.jsonl 大小和个数沿用它原来的两个变量（单个 50MB，另留 3 份旧的，不含正在写的），
+// 按时长删和别的一样。和 packages/claude/src/util.mts 的 debugLogLimits 是同一套。
+func limitsFor(path string, limits logLimits) logLimits {
+	if filepath.Base(path) != "debug.jsonl" {
+		return limits
+	}
+	keep := int(logNumber("CHA_CLAUDE_DEBUG_LOG_KEEP", 3))
+	if keep < 1 {
+		keep = 1
+	}
+	return logLimits{
+		maxBytes: int64(logNumber("CHA_CLAUDE_DEBUG_LOG_MAX_BYTES", 50*1024*1024)),
+		keep:     keep + 1,
+		maxAge:   limits.maxAge,
+	}
+}
+
+var logLimitVariables = []string{
+	"LITCH_LOG_MAX_BYTES", "LITCH_LOG_KEEP", "LITCH_LOG_MAX_AGE_DAYS",
+	"CHA_CLAUDE_DEBUG_LOG_MAX_BYTES", "CHA_CLAUDE_DEBUG_LOG_KEEP",
+}
 
 // 后台服务拿不到终端里的环境变量，所以环境文件里的日志上限也算数：放进这个进程自己的环境，
 // 这一层（currentLogLimits）和它起的 Node 进程（经 os.Environ 继承）就按同一套上限。进程环境里设了的以进程环境为准。
@@ -173,19 +195,28 @@ func prepareHeldLog(path string, limits logLimits, now time.Time) {
 }
 
 // 把整个日志目录扫一遍：到了上限的 .log 换下来，所有来源按个数和时长清理。.jsonl 的大小归写它的进程管。
+// 正在写的那份没了、只剩旧的（比如过期删掉了），也照它的名字清理。
 func tidyLogs(root string, limits logLimits, now time.Time) {
+	sources := map[string]bool{}
 	_ = filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
-		if err != nil || entry.IsDir() || rotatedPattern.MatchString(entry.Name()) {
+		if err != nil || entry.IsDir() {
 			return nil
 		}
-		switch {
-		case strings.HasSuffix(path, ".log"):
-			prepareHeldLog(path, limits, now)
-		case strings.HasSuffix(path, ".jsonl"):
-			pruneLog(path, limits, now)
+		if match := rotatedPattern.FindStringSubmatch(entry.Name()); match != nil {
+			path = filepath.Join(filepath.Dir(path), match[1])
+		}
+		if strings.HasSuffix(path, ".log") || strings.HasSuffix(path, ".jsonl") {
+			sources[path] = true
 		}
 		return nil
 	})
+	for path := range sources {
+		if strings.HasSuffix(path, ".log") {
+			prepareHeldLog(path, limits, now)
+		} else {
+			pruneLog(path, limitsFor(path, limits), now)
+		}
+	}
 }
 
 // 常驻服务里一直跑着：每隔 logTidyInterval 扫一遍日志目录。起来时先扫一遍。

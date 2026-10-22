@@ -23,7 +23,7 @@ import {
 import type { HarnessConfigChangedNotification } from '../../protocol/src/harness-config.mjs'
 import { localTaskTimeZone } from '../../protocol/src/task-schedule.mjs'
 import { clientToolNamespaces } from '../../shared/src/client-tool-executor.mjs'
-import { errorText, idFields } from '../../shared/src/log-file.mjs'
+import { errorText, paramFields } from '../../shared/src/log-file.mjs'
 import { ProtocolError, requiredString } from '../../shared/src/protocol-contract.mjs'
 import {
   CODEX_PROTOCOL_VERSION,
@@ -388,7 +388,7 @@ export class ClientSession implements ClientToolPeer {
 
   private request(id: RpcId, method: string, frame: Frame, raw: string): void {
     if (this.host.trace)
-      this.started.set(idKey(id), { method, at: Date.now(), ids: idFields(frame.params) })
+      this.started.set(idKey(id), { method, at: Date.now(), ids: paramFields(frame.params) })
     const fail = (error: unknown) => {
       this.traced(id, error)
       if (this.state !== 'closed') this.wire.send(JSON.stringify({ id, error: toRpcError(error) }))

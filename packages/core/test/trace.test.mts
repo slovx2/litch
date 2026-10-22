@@ -9,7 +9,7 @@ import {
   createRpc,
   createTransportPair,
   serveChannel,
-  traceIds,
+  traceParams,
 } from '../src/index.mjs'
 import { RpcFailure, serveFake } from './fake-server.mjs'
 import { fakeClock, settle } from './helpers.mjs'
@@ -138,9 +138,9 @@ test('界面命令：名字、标识字段、成败、错误码；终端按键�
   )
 })
 
-test('标识字段：只要第一层名字以 Id 结尾的和 harness，字符串截到 100 字', () => {
+test('参数字段：第一层的标识（以 Id 结尾、harness）和设置（模型、强度、权限、工作目录），正文不记', () => {
   assert.deepEqual(
-    traceIds({
+    traceParams({
       deviceId: 'd',
       harness: 'pi',
       text: '正文',
@@ -148,7 +148,24 @@ test('标识字段：只要第一层名字以 Id 结尾的和 harness，字符�
       threadId: 't'.repeat(150),
       nested: { turnId: 'u' },
       hid: 'not an id',
+      model: 'gpt-5.5',
+      effort: 'low',
+      cwd: '/work',
+      approvalPolicy: 'never',
+      sandboxPolicy: { type: 'readOnly', note: '正文' },
+      collaborationMode: { mode: 'default', settings: { developer_instructions: '正文' } },
+      input: [{ type: 'text', text: '正文' }],
     }),
-    { deviceId: 'd', harness: 'pi', threadId: 't'.repeat(100) },
+    {
+      deviceId: 'd',
+      harness: 'pi',
+      threadId: 't'.repeat(100),
+      model: 'gpt-5.5',
+      effort: 'low',
+      cwd: '/work',
+      approvalPolicy: 'never',
+      sandboxPolicy: 'readOnly',
+      collaborationMode: 'default',
+    },
   )
 })

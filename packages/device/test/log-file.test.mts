@@ -7,8 +7,8 @@ import test from 'node:test'
 import {
   createJsonlLog,
   errorText,
-  idFields,
   type LogLimits,
+  paramFields,
   pruneLogs,
   resetTakenLogDir,
   takeLogDir,
@@ -69,20 +69,39 @@ test('按时长清理：最后一次写入超过期限的旧文件删掉，太�
   assert.deepEqual(readdirSync(directory).sort(), ['debug.jsonl.1', 'other.jsonl.1'])
 })
 
-test('参数只挑标识字段，错误原文截短', () => {
+test('参数只挑标识和设置字段，正文、密钥不记，错误原文截短', () => {
   assert.deepEqual(
-    idFields({
+    paramFields({
       threadId: 't1',
       turnId: 7,
       harness: 'pi',
       input: [{ type: 'text', text: '用户的话' }],
-      cwd: '/secret/project',
+      cwd: '/work/project',
+      model: 'claude-opus-5-5',
+      reasoningEffort: 'medium',
+      permissionMode: 'acceptEdits',
+      sandbox: 'workspace-write',
+      permissions: { allow: ['Bash(rm:*)'] },
+      approvalPolicy: { granular: { rules: true } },
+      baseInstructions: '系统提示',
+      developerInstructions: '开发者说明',
+      config: { apiKey: 'sk-1' },
       apiKey: 'sk-1',
       providerId: 'x'.repeat(300),
     }),
-    { threadId: 't1', turnId: 7, harness: 'pi', providerId: 'x'.repeat(100) },
+    {
+      threadId: 't1',
+      turnId: 7,
+      harness: 'pi',
+      cwd: '/work/project',
+      model: 'claude-opus-5-5',
+      reasoningEffort: 'medium',
+      permissionMode: 'acceptEdits',
+      sandbox: 'workspace-write',
+      providerId: 'x'.repeat(100),
+    },
   )
-  assert.deepEqual(idFields(['threadId']), {})
+  assert.deepEqual(paramFields(['threadId']), {})
   assert.equal(errorText({ code: 1, message: 'm' }), 'm')
   assert.equal(errorText(new Error('e'.repeat(600))).length, 501)
 })
@@ -115,7 +134,17 @@ test('入口的协议请求摘要：请求配上应答记成败和耗时，服�
     jsonrpc: '2.0',
     id: 1,
     method: 'turn/start',
-    params: { threadId: 't1', input: [{ type: 'text', text: '不该进日志的正文' }] },
+    params: {
+      threadId: 't1',
+      input: [{ type: 'text', text: '不该进日志的正文' }],
+      model: 'gpt-5.5',
+      effort: 'high',
+      cwd: '/work/project',
+      approvalPolicy: 'on-request',
+      sandboxPolicy: { type: 'workspaceWrite', writableRoots: ['/work/project/正文'] },
+      collaborationMode: { mode: 'plan', settings: { developer_instructions: '正文' } },
+      outputSchema: { description: '正文' },
+    },
   })
   trace.received(peer, { jsonrpc: '2.0', id: 2, method: 'thread/read', params: {} })
   trace.sent(peer, { jsonrpc: '2.0', method: 'item/agentMessage/delta', params: { delta: '正文' } })
@@ -147,6 +176,12 @@ test('入口的协议请求摘要：请求配上应答记成败和耗时，服�
         peer: 'abcdef01',
         id: 1,
         threadId: 't1',
+        model: 'gpt-5.5',
+        effort: 'high',
+        cwd: '/work/project',
+        approvalPolicy: 'on-request',
+        sandboxPolicy: 'workspaceWrite',
+        collaborationMode: 'plan',
         ok: true,
         ms: 25,
       },

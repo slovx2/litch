@@ -153,3 +153,38 @@ func TestLogDirectoryIsHandedToChildren(t *testing.T) {
 		t.Fatalf("设备进程的日志目录不对: %v", got)
 	}
 }
+
+// Claude 的 debug.jsonl 按它自己的个数清理（另留 3 份旧的），不跟统一的个数走；时长照统一的
+func TestTidyLogsKeepsClaudeDebugLimits(t *testing.T) {
+	t.Setenv("CHA_CLAUDE_DEBUG_LOG_KEEP", "")
+	t.Setenv("CHA_CLAUDE_DEBUG_LOG_MAX_BYTES", "")
+	root := t.TempDir()
+	now := time.Date(2026, 10, 22, 12, 0, 0, 0, time.UTC)
+	limits := logLimits{maxBytes: 1 << 20, keep: 2, maxAge: 7 * 24 * time.Hour}
+	fresh, stale := now.Add(-time.Hour), now.Add(-8*24*time.Hour)
+	debug := filepath.Join(root, "claude-code", "debug.jsonl")
+	writeFile(t, debug, "{}\n", fresh)
+	for n := 1; n <= 4; n++ {
+		writeFile(t, rotatedLogName(debug, n), "{}\n", fresh)
+	}
+	writeFile(t, rotatedLogName(filepath.Join(root, "claude-code", "rpc.jsonl"), 2), "{}\n", fresh)
+	writeFile(t, filepath.Join(root, "pi", "debug.jsonl.1"), "{}\n", stale)
+	tidyLogs(root, limits, now)
+	for n := 1; n <= 3; n++ {
+		if !exists(rotatedLogName(debug, n)) {
+			t.Errorf("debug.jsonl.%d 该留着", n)
+		}
+	}
+	if exists(rotatedLogName(debug, 4)) {
+		t.Error("debug.jsonl 另留 3 份旧的，.4 该删")
+	}
+	if exists(rotatedLogName(filepath.Join(root, "claude-code", "rpc.jsonl"), 2)) {
+		t.Error("别的来源照统一的个数，rpc.jsonl.2 该删")
+	}
+	if exists(filepath.Join(root, "pi", "debug.jsonl.1")) {
+		t.Error("过期的照统一的时长删")
+	}
+	if got := limitsFor(debug, limits); got.maxBytes != 50*1024*1024 || got.keep != 4 || got.maxAge != limits.maxAge {
+		t.Errorf("debug.jsonl 的上限不对: %+v", got)
+	}
+}

@@ -64,7 +64,8 @@ access or WSL2); network-share folders are not supported in the files panel.
   `device/settings.json`). All its logs are under `~/.codex-harness-adapter/logs/` (one subfolder per
   harness). Each log is rotated at 10 MB, keeps at most 5 files and drops files not written for 7 days
   (`LITCH_LOG_MAX_BYTES`, `LITCH_LOG_KEEP`, `LITCH_LOG_MAX_AGE_DAYS` in the service's environment change
-  this). Logs left in the old places (`device/*.log`, `<harness>/*.log`, `claude-code/debug.jsonl`) by
+  this). Claude Code's `debug.jsonl` rotates at 50 MB and keeps 3 older files instead
+  (`CHA_CLAUDE_DEBUG_LOG_MAX_BYTES`, `CHA_CLAUDE_DEBUG_LOG_KEEP`); the 7-day rule applies to it too. Logs left in the old places (`device/*.log`, `<harness>/*.log`, `claude-code/debug.jsonl`) by
   versions before this layout are no longer written and can be deleted.
 - The desktop app's own logs (`main.jsonl`, `core.jsonl`: requests to devices, connection changes, UI
   commands): `~/Library/Logs/Litch` on macOS, the app's logs folder elsewhere, same limits. On the
