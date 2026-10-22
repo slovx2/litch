@@ -23,3 +23,38 @@ test('Write 新建文件的 diff 为完整内容，覆盖已有文件按更新�
     await rm(directory, { recursive: true, force: true })
   }
 })
+
+test('Edit 的 diff 带行号和行数的 hunk 头（客户端靠它认出补丁、给增删染色），空行照留', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'file-change-'))
+  try {
+    const file = join(directory, 'core.py')
+    await writeFile(file, 'a\nb\nold1\n\nold2\nz\n')
+    // 还没改：按旧文字找到第 3 行
+    const [before] = fileChangeFromTool('Edit', {
+      file_path: file,
+      old_string: 'old1\n\nold2',
+      new_string: 'new1\nnew2',
+    })
+    assert.equal(
+      before?.diff,
+      `--- a/${file}\n+++ b/${file}\n@@ -3,3 +3,2 @@\n-old1\n-\n-old2\n+new1\n+new2\n`,
+    )
+    // 已经改完了（调用来晚了）：按新文字找
+    await writeFile(file, 'a\nb\nnew1\nnew2\nz\n')
+    const [after] = fileChangeFromTool('Edit', {
+      file_path: file,
+      old_string: 'old1\n\nold2',
+      new_string: 'new1\nnew2',
+    })
+    assert.match(after?.diff ?? '', /^@@ -3,3 \+3,2 @@$/m)
+    // 文件读不到：从第 1 行算，照样是能认出的补丁
+    const [missing] = fileChangeFromTool('Edit', {
+      file_path: join(directory, 'gone.py'),
+      old_string: 'x',
+      new_string: '',
+    })
+    assert.match(missing?.diff ?? '', /^@@ -1,1 \+0,0 @@$/m)
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+})

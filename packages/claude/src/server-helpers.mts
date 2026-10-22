@@ -994,61 +994,85 @@ export function fileChangeFromTool(
   toolName: string,
   input: Record<string, unknown>,
 ): FileUpdateChange[] {
+  const path = String(input.file_path ?? input.path ?? input.filename ?? 'unknown')
+  const current = readText(path)
   if (toolName === 'MultiEdit' && Array.isArray(input.edits)) {
     return input.edits.map((edit, index) => {
       const rec = asRecord(edit)
+      const target = String(input.file_path ?? input.path ?? `edit-${index}`)
+      const oldText = String(rec.old_string ?? '')
+      const newText = String(rec.new_string ?? '')
       return {
-        path: String(input.file_path ?? input.path ?? `edit-${index}`),
+        path: target,
         kind: { type: 'update', move_path: null },
-        diff: simpleDiff(
-          String(input.file_path ?? input.path ?? `edit-${index}`),
-          String(rec.old_string ?? ''),
-          String(rec.new_string ?? ''),
-        ),
+        diff: simpleDiff(target, oldText, newText, editStart(current, oldText, newText)),
       }
     })
   }
-  const path = String(input.file_path ?? input.path ?? input.filename ?? 'unknown')
   if (toolName === 'Write') {
     // 与原生 Codex 一致：新建文件的 diff 就是完整内容（客户端按行计为新增）；覆盖已有文件是更新，给出统一 diff。
     const content = String(input.content ?? '')
-    let previous: string | null = null
-    try {
-      previous = readFileSync(path, 'utf8')
-    } catch {
-      previous = null
-    }
-    if (previous === null) return [{ path, kind: { type: 'add' }, diff: content }]
+    if (current === null) return [{ path, kind: { type: 'add' }, diff: content }]
     return [
       {
         path,
         kind: { type: 'update', move_path: null },
-        diff: simpleDiff(path, previous, content),
+        diff: simpleDiff(path, current, content, 1),
       },
     ]
   }
+  const oldText = String(input.old_string ?? '')
+  const newText = String(input.new_string ?? '')
   return [
     {
       path,
       kind: { type: 'update', move_path: null },
-      diff: simpleDiff(path, String(input.old_string ?? ''), String(input.new_string ?? '')),
+      diff: simpleDiff(path, oldText, newText, editStart(current, oldText, newText)),
     },
   ]
 }
 
-export function simpleDiff(path: string, oldText: string, newText: string): string {
+function readText(path: string): string | null {
+  try {
+    return readFileSync(path, 'utf8')
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 改动从文件的第几行开始：CLI 发来调用时多半还没改，按旧文字找；已经改完了（来晚了）按新文字找。
+ * 都找不到（文件读不到、文字对不上）算第 1 行：行号不准，但增删照样画得出来
+ */
+function editStart(content: string | null, oldText: string, newText: string): number {
+  if (content === null) return 1
+  for (const text of [oldText, newText]) {
+    if (!text) continue
+    const at = content.indexOf(text)
+    if (at >= 0) return content.slice(0, at).split('\n').length
+  }
+  return 1
+}
+
+/** 一段文字拆成补丁里的行：末尾的换行不多出一个空行，中间的空行照留 */
+function patchLines(text: string): string[] {
+  if (text === '') return []
+  return (text.endsWith('\n') ? text.slice(0, -1) : text).split('\n')
+}
+
+/**
+ * 旧文字整段换成新文字的统一格式补丁，一个 hunk，从 start 行起。hunk 头带行号和行数：
+ * 只写 “@@” 的客户端认不出是补丁，增删就不染色了
+ */
+export function simpleDiff(path: string, oldText: string, newText: string, start = 1): string {
+  const removed = patchLines(oldText)
+  const added = patchLines(newText)
   return [
     `--- a/${path}`,
     `+++ b/${path}`,
-    '@@',
-    ...oldText
-      .split('\n')
-      .filter(Boolean)
-      .map((line) => `-${line}`),
-    ...newText
-      .split('\n')
-      .filter(Boolean)
-      .map((line) => `+${line}`),
+    `@@ -${removed.length ? start : start - 1},${removed.length} +${added.length ? start : start - 1},${added.length} @@`,
+    ...removed.map((line) => `-${line}`),
+    ...added.map((line) => `+${line}`),
     '',
   ].join('\n')
 }
