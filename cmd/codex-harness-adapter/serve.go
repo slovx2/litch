@@ -97,7 +97,7 @@ func serveRuntime(ctx context.Context, c configuration, autoInit bool, stage *st
 	process.Stdout, process.Stderr = log, log
 	runtimeFailure := func(kind string, message bilingual, cause error) error {
 		fmt.Fprintf(log, "\n%s: %v\n", message, cause)
-		logPath := filepath.Join(c.directory(), "runtime.log")
+		logPath := filepath.Join(c.harnessLogDirectory(), "runtime.log")
 		return &harnessFailure{kind: kind, text: message, logPath: logPath,
 			err: fmt.Errorf(tr("%s，请重试；若仍失败，请查看日志 %s", "%s. Please retry; if it keeps failing, see the log %s"), message, logPath)}
 	}

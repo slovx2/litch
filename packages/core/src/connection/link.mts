@@ -16,6 +16,7 @@ import { type Cancel, createCancel } from '../channel/cancel.mjs'
 import type { Clock } from '../channel/protocol.mjs'
 import type { ConnectGuide, ConnectStage } from '../model.mjs'
 import { phrase, type Text } from '../phrase.mjs'
+import type { CoreTrace } from '../trace.mjs'
 import { createRpc, type Rpc, RpcAbortError, RpcError, type RpcRequestOptions } from './rpc.mjs'
 import { ConnectError, type TransportOpener, toConnectError } from './transport.mjs'
 
@@ -64,6 +65,8 @@ export interface LinkOptions {
   /** 对面发来、要答复的请求。返回 undefined 表示不处理（会回“方法不存在”） */
   request?(method: string, params: unknown, id: JsonRpcId): Promise<unknown> | undefined
   log?(line: string): void
+  /** 每个请求的摘要，交给这条连接上的 RPC（rpc.mts） */
+  trace?: CoreTrace
 }
 
 export interface Link {
@@ -166,6 +169,7 @@ export function createLink(options: LinkOptions): Link {
           fail(1, new ConnectError('unreachable', reason ?? phrase('connect.dropped')))
         },
         ...(options.log ? { log: options.log } : {}),
+        ...(options.trace ? { trace: options.trace } : {}),
       })
       let info: InitializeResponse
       // 能执行的客户端工具：声明了扩展，还要在 litchClientTools 里列出命名空间（client-tools.mts）

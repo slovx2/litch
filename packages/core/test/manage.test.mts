@@ -633,7 +633,13 @@ test('诊断、日志末尾、ssh 配置片段：都换成给界面的形状', a
   assert.deepEqual(sent('litch/device/diagnostics/run'), [{ harness: 'pi' }])
   assert.deepEqual(
     await me.command('device.logs.read', { source: 'runtime', harness: 'pi', maxBytes: 2048 }),
-    { path: '/state/pi/runtime.log', text: '一行日志\n', truncated: true, size: 4096 },
+    {
+      path: '/state/logs/pi/runtime.log',
+      text: '一行日志\n',
+      truncated: true,
+      size: 4096,
+      directory: '/state/logs',
+    },
   )
   assert.deepEqual(sent('litch/device/logs/read'), [
     { source: 'runtime', harness: 'pi', maxBytes: 2048 },

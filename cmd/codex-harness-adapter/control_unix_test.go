@@ -248,7 +248,7 @@ func TestControlDiagnosticsAndLogs(t *testing.T) {
 		}
 	}
 	failed := status["pi/runtime"]
-	if failed.Detail == nil || !strings.Contains(failed.Detail.ZH, "设置里给 Pi 填的“命令行路径”") || failed.LogPath == nil || *failed.LogPath != filepath.Join(entries[1].directory(), "diagnostics.log") {
+	if failed.Detail == nil || !strings.Contains(failed.Detail.ZH, "设置里给 Pi 填的“命令行路径”") || failed.LogPath == nil || *failed.LogPath != filepath.Join(entries[1].harnessLogDirectory(), "diagnostics.log") {
 		t.Fatalf("没过的检查应说明原因并指出日志: %+v", failed)
 	}
 	// 只查一个。
@@ -283,6 +283,35 @@ func TestControlDiagnosticsAndLogs(t *testing.T) {
 	}
 	if _, failure := control.call("logs.tail", map[string]any{"source": "runtime", "harness": "../etc"}); failure == nil || failure.Reason != "unknownHarness" {
 		t.Fatalf("日志只能按已知的 harness 取: %+v", failure)
+	}
+	// 控制请求都进了摘要：方法、成败、耗时，失败的带原因；参数不记
+	var journal struct {
+		Path      string `json:"path"`
+		Text      string `json:"text"`
+		Directory string `json:"directory"`
+	}
+	control.must("logs.tail", map[string]any{"source": "control"}, &journal)
+	if journal.Directory != cfg.logsDirectory() || journal.Path != filepath.Join(cfg.logsDirectory(), "control.jsonl") {
+		t.Fatalf("控制通道的摘要不在日志目录里: %+v", journal)
+	}
+	var sawFailure, sawTail bool
+	for _, line := range strings.Split(strings.TrimSpace(journal.Text), "\n") {
+		var entry map[string]any
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			t.Fatalf("摘要里有一行不是 JSON: %q", line)
+		}
+		if entry["event"] == "control" && entry["method"] == "logs.tail" && entry["ok"] == false && entry["reason"] == "unknownHarness" {
+			sawFailure = true
+		}
+		if entry["event"] == "control" && entry["method"] == "diagnostics.run" && entry["harness"] == "claude-code" && entry["ok"] == true {
+			sawTail = true
+		}
+		if _, leaked := entry["params"]; leaked {
+			t.Fatalf("摘要不该带参数: %q", line)
+		}
+	}
+	if !sawFailure || !sawTail {
+		t.Fatalf("控制请求的摘要不全: %s", journal.Text)
 	}
 }
 

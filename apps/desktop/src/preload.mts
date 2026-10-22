@@ -17,6 +17,7 @@ import {
   NOTIFY,
   NOTIFY_CLICK,
   OPEN_EXTERNAL,
+  OPEN_LOGS,
   PICK_FOLDER,
   REQUEST_CORE_PORT,
   SET_LANGUAGE,
@@ -39,6 +40,8 @@ contextBridge.exposeInMainWorld('litchShell', {
   platform: process.platform,
   requestCorePort: () => ipcRenderer.send(REQUEST_CORE_PORT),
   openExternal: (url: string) => ipcRenderer.send(OPEN_EXTERNAL, url),
+  // 用系统的文件管理器打开日志目录：desktop 是桌面端自己的，device 是本机设备服务的
+  openLogs: (which: 'desktop' | 'device') => ipcRenderer.send(OPEN_LOGS, which),
   setLanguage: (lang: string) => ipcRenderer.send(SET_LANGUAGE, lang),
   // 用户自己选中、拖进来、贴进来的文件在磁盘上的位置：往消息里提到一个本机文件时要它。
   // 只认页面手里已经有的文件对象，给不出别的路径；不是从磁盘来的（剪贴板里的截图）是空的

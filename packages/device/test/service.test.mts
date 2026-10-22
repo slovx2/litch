@@ -5,7 +5,15 @@
 import assert from 'node:assert/strict'
 import { type ChildProcess, spawn, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs'
 import net from 'node:net'
 import { dirname, join } from 'node:path'
 import test from 'node:test'
@@ -516,7 +524,8 @@ test('真的主进程加真的设备进程加假的运行时：一条聚合面�
       const runtime = await call('litch/device/logs/read', { source: 'runtime', harness: 'pi' })
       assertSettingsResponse('litch/device/logs/read', runtime)
       assert.match(runtime.text, /fake runtime started pi/)
-      assert.equal(runtime.path, join(service.home, 'pi', 'runtime.log'))
+      assert.equal(runtime.path, join(service.home, 'logs', 'pi', 'runtime.log'))
+      assert.equal(runtime.directory, join(service.home, 'logs'))
       const device = await call('litch/device/logs/read', { source: 'device', maxBytes: 200 })
       assertSettingsResponse('litch/device/logs/read', device)
       assert.equal(device.truncated, true)
@@ -612,8 +621,15 @@ test('真的主进程加真的设备进程加假的运行时：一条聚合面�
     await t.test('密钥没有被发回来，也没有进任何日志', () => {
       assert.ok(!(client as TestClient).raw.join('\n').includes(SECRET), '没有哪一帧带着密钥')
       assert.ok(!service.output().includes(SECRET), '主进程打出来的字里没有')
-      for (const path of ['device/device.log', 'pi/runtime.log', 'pi/diagnostics.log'])
-        assert.ok(!readFileSync(join(service.home, path), 'utf8').includes(SECRET), path)
+      // 日志目录里的每一份（输出、摘要）都查；控制通道和设备进程的摘要这时已经有了
+      const logs = join(service.home, 'logs')
+      const files = (readdirSync(logs, { recursive: true }) as string[]).filter((name) =>
+        statSync(join(logs, name)).isFile(),
+      )
+      for (const name of ['device.log', 'control.jsonl', 'device.jsonl', 'pi/runtime.log'])
+        assert.ok(files.includes(name), `日志目录里没有 ${name}：${files.join(' ')}`)
+      for (const name of files)
+        assert.ok(!readFileSync(join(logs, name), 'utf8').includes(SECRET), name)
     })
   } finally {
     client?.close()

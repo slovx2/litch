@@ -558,6 +558,19 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+.mng-log > .form-note,
+.mng-log > .cfail-cmd {
+  margin: 0 10px 8px;
+}
+.mng-log > .form-note code {
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.mng-log-open {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
 
 /* ---------- 保存条：有没保存的改动时贴在底下 ---------- */
 .mng-save {

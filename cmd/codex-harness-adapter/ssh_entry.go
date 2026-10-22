@@ -207,7 +207,7 @@ func serveSSHEntry(ctx context.Context, c configuration, version string, autoIni
 			fmt.Fprintf(log, "\nSSH 入口启动失败: %v\n", err)
 			writeSSHEntryStatus(c, "failed", "start-failed", err)
 			fmt.Fprintf(os.Stderr, tr("警告：[%s] SSH 入口启动失败，详见日志 %s；%s。\n", "Warning: [%s] the SSH entry failed to start, see the log %s; %s.\n"),
-				c.harness, filepath.Join(c.directory(), "runtime.log"), unaffected)
+				c.harness, filepath.Join(c.harnessLogDirectory(), "runtime.log"), unaffected)
 			return
 		}
 		if !warned {

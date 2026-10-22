@@ -10,6 +10,7 @@ import {
 } from '../../../protocol/src/index.mjs'
 import type { AbortSignalLike, Clock } from '../channel/protocol.mjs'
 import { describeText, type Text } from '../phrase.mjs'
+import { type CoreTrace, traceError, traceIds } from '../trace.mjs'
 import type { Transport } from './transport.mjs'
 
 /** 对面明确回了一个错误 */
@@ -62,6 +63,8 @@ export interface RpcOptions {
   /** 连接断了。只调用一次 */
   close(reason: Text | null): void
   log?(line: string): void
+  /** 每个请求的摘要（方法、标识字段、成败、耗时、错误原文）。不给就不记 */
+  trace?: CoreTrace
 }
 
 export interface Rpc {
@@ -96,7 +99,23 @@ export function createRpc(transport: Transport, options: RpcOptions): Rpc {
     return entry
   }
 
+  const trace = options.trace
+  /** 对面发来的请求答完了：记一条摘要 */
+  const answered = (method: string, params: unknown, at: number, error: unknown) =>
+    trace?.(
+      'serverRequest',
+      {
+        method,
+        ...traceIds(params),
+        ok: error === null,
+        ms: options.clock.now() - at,
+        ...(error === null ? {} : { error: traceError(error) }),
+      },
+      error === null ? 'info' : 'warn',
+    )
+
   const answer = (id: JsonRpcId, method: string, params: unknown) => {
+    const at = options.clock.now()
     let handled: Promise<unknown> | undefined
     try {
       handled = options.request?.(method, params, id)
@@ -105,14 +124,17 @@ export function createRpc(transport: Transport, options: RpcOptions): Rpc {
     }
     if (!handled) {
       options.log?.(`对面发来了客户端不处理的请求：${method}`)
+      answered(method, params, at, `客户端不处理 ${method}`)
       send({ id, error: { code: RPC_ERROR.methodNotFound, message: `客户端不处理 ${method}` } })
       return
     }
     handled.then(
       (result) => {
+        answered(method, params, at, null)
         if (result !== NO_REPLY) send({ id, result: result ?? {} })
       },
       (error: unknown) => {
+        answered(method, params, at, error)
         const message = error instanceof Error ? error.message : String(error)
         send({ id, error: { code: RPC_ERROR.internalError, message } })
       },
@@ -170,7 +192,7 @@ export function createRpc(transport: Transport, options: RpcOptions): Rpc {
       if (signal?.aborted) return Promise.reject(new RpcAbortError('cancelled', '已取消'))
       const id = nextId++
       const timeoutMs = requestOptions?.timeoutMs ?? defaultTimeout
-      return new Promise<unknown>((resolve, reject) => {
+      const sent = new Promise<unknown>((resolve, reject) => {
         const entry: Pending = { method, resolve, reject, stopTimer: null }
         if (timeoutMs > 0) {
           entry.stopTimer = options.clock.setTimer(() => {
@@ -189,6 +211,28 @@ export function createRpc(transport: Transport, options: RpcOptions): Rpc {
         )
         send(params === undefined ? { id, method } : { id, method, params })
       })
+      if (trace) {
+        const at = options.clock.now()
+        const record = (error: unknown) =>
+          trace(
+            'rpc',
+            {
+              method,
+              id,
+              ...traceIds(params),
+              ok: error === null,
+              ms: options.clock.now() - at,
+              ...(error === null ? {} : { error: traceError(error) }),
+              ...(error instanceof RpcAbortError ? { aborted: error.reason } : {}),
+            },
+            error === null ? 'info' : 'warn',
+          )
+        sent.then(
+          () => record(null),
+          (error: unknown) => record(error),
+        )
+      }
+      return sent
     },
 
     notify(method, params) {

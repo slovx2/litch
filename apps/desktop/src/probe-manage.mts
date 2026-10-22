@@ -53,6 +53,10 @@ export interface ManageProbe {
   /** 日志的末尾；里面没有刚才填的密钥 */
   deviceLog: number
   runtimeLog: number
+  /** 摘要日志（控制通道、设备请求、Pi 的协议请求）里各认出了几条 JSON 行，以及记了的方法 */
+  summaries: { control: number; requests: number; rpc: number; methods: string[] }
+  /** 读出来的那一份下面写着的日志目录 */
+  logDir: string
   logLeaks: string[]
   /** 打开 Pi 的 SSH 入口：起来了，配置片段复制得到；再关上 */
   sshBefore: string
@@ -372,9 +376,31 @@ export async function manageProbe(): Promise<ManageProbe> {
     service: await readLog('service'),
     runtime: await readLog('runtime:pi'),
     diagnostics: await readLog('diagnostics:pi'),
+    control: await readLog('control'),
+    requests: await readLog('requests'),
+    rpc: await readLog('rpc:pi'),
   }
+  const logDir = text(one('[data-log-dir] code'))
   const deviceLog = logs.device.length
   const runtimeLog = logs.runtime.length
+  /** 摘要日志一行一条 JSON：数认得出的行，收集记下的方法 */
+  const methods = new Set<string>()
+  const parsed = (body: string) =>
+    body.split('\n').filter((line) => {
+      try {
+        const entry = JSON.parse(line) as { method?: unknown }
+        if (typeof entry.method === 'string') methods.add(entry.method)
+        return true
+      } catch {
+        return false
+      }
+    }).length
+  const summaries = {
+    control: parsed(logs.control),
+    requests: parsed(logs.requests),
+    rpc: parsed(logs.rpc),
+    methods: [...methods].sort(),
+  }
   const logLeaks = [
     ...Object.entries(logs).flatMap(([name, body]) => (body.includes(SECRET) ? [name] : [])),
     ...leaks(),
@@ -456,6 +482,8 @@ export async function manageProbe(): Promise<ManageProbe> {
     checks,
     deviceLog,
     runtimeLog,
+    summaries,
+    logDir,
     logLeaks,
     sshBefore,
     sshOn,

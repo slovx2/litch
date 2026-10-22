@@ -194,10 +194,11 @@ export function fakeSettings(): { settings: FakeSettings; handlers: Record<strin
     'litch/device/logs/read': (params) => {
       const { source, harness } = params as { source: string; harness?: string }
       return {
-        path: harness ? `/state/${harness}/${source}.log` : `/state/device/${source}.log`,
+        path: harness ? `/state/logs/${harness}/${source}.log` : `/state/logs/${source}.log`,
         text: '一行日志\n',
         truncated: true,
         size: 4096,
+        directory: '/state/logs',
       }
     },
     'litch/device/sshConfig/read': () => ({

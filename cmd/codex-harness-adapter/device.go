@@ -48,7 +48,7 @@ func (c configuration) deviceSocket() string {
 func (c configuration) deviceMain() string {
 	return filepath.Join(c.root, "packages", "device", "dist", "device", "src", "main.mjs")
 }
-func (c configuration) deviceLog() string { return filepath.Join(c.deviceDirectory(), "device.log") }
+func (c configuration) deviceLog() string { return filepath.Join(c.logsDirectory(), "device.log") }
 func (c configuration) serviceStatusPath() string {
 	return filepath.Join(c.deviceDirectory(), "service.json")
 }
@@ -61,14 +61,14 @@ func (c configuration) serviceEnvironment() []string {
 	present := map[string]bool{adapterCLIEnvironment: true}
 	for _, entry := range os.Environ() {
 		name, _, _ := strings.Cut(entry, "=")
-		if name == adapterCLIEnvironment || name == deviceSocketEnvironment || isMachineThreadVariable(name) {
+		if name == adapterCLIEnvironment || name == deviceSocketEnvironment || name == logDirEnvironment || isMachineThreadVariable(name) {
 			continue
 		}
 		present[name] = true
 		result = append(result, entry)
 	}
 	for name, value := range c.userEnv {
-		if !present[name] && name != deviceSocketEnvironment && !isMachineThreadVariable(name) {
+		if !present[name] && name != deviceSocketEnvironment && name != logDirEnvironment && !isMachineThreadVariable(name) {
 			result = append(result, name+"="+value)
 		}
 	}
@@ -77,6 +77,8 @@ func (c configuration) serviceEnvironment() []string {
 	}
 	// 属于设备的终端里跑 litch-machine 时靠它找到服务（状态目录不是默认的那个时）
 	result = append(result, deviceSocketEnvironment+"="+c.deviceSocket())
+	// 设备进程的日志目录：它一启动就从自己的环境里拿走，属于设备的终端看不到（logs.go）
+	result = append(result, logDirEnvironment+"="+c.logsDirectory())
 	return result
 }
 

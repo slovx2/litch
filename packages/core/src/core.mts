@@ -43,6 +43,7 @@ import type { TerminalsAlive } from './model-terminal.mjs'
 import { phrase } from './phrase.mjs'
 import { outgoing } from './projection/outgoing.mjs'
 import { createToolHub } from './tool-hub.mjs'
+import type { CoreTrace } from './trace.mjs'
 
 export interface CoreOptions {
   clock: Clock
@@ -70,6 +71,8 @@ export interface CoreOptions {
    */
   config?: CoreConfigOptions
   log?(line: string): void
+  /** 摘要：对各台设备的请求、设备发来的请求、连接状态的变化（trace.mts）。不给就不记 */
+  trace?: CoreTrace
 }
 
 export interface CoreConfigOptions {
@@ -217,6 +220,7 @@ export function createCore(options: CoreOptions): Core {
       clock: options.clock,
       clientInfo,
       ...(options.log ? { log: options.log } : {}),
+      ...(options.trace ? { trace: options.trace } : {}),
       ...(store ? { snapshot: store.snapshot(config.id) } : {}),
       ...(store?.terminals ? { terminalNotes: store.terminals(config.id) } : {}),
       tools: hub,

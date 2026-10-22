@@ -156,6 +156,8 @@ jobs:
       - run: npm run client:test
       # 界面里不靠浏览器就能测的那部分逻辑（终端面板的开合、只认最新的那一次）
       - run: npm run client:test:ui
+      # 桌面端自己的日志：轮转、清理、console 落盘
+      - run: npm run test:log-file --prefix apps/desktop
       - run: npm run client:build
       - run: npm run client:smoke
       # 对话区“不飘”的验收：在不显示的窗口里真的去滚、去点，逐帧量位置

@@ -5,6 +5,7 @@
 // 增量是值：交进来的那一刻就拷一份再排队。它要在这里最多等一帧才发出去，这期间核心照样在改自己手里的东西，
 // 排着的这一份不能跟着变。快照是当场发的，端口在发出的那一刻取值（Port.post 的约定），不用另外拷。
 import { extendSkipping, type SkippingOutput, skipOutput } from '../text/output-cap.mjs'
+import { type CoreTrace, traceError, traceIds } from '../trace.mjs'
 import { copyValue } from '../value.mjs'
 import { createCancel } from './cancel.mjs'
 import {
@@ -40,7 +41,17 @@ export interface ServeOptions {
   clock: Clock
   /** 合并增量的时间窗，默认 16 毫秒（一帧） */
   frameMs?: number
+  /** 界面命令的摘要（名字、标识字段、成败、耗时、错误原文）。不给就不记 */
+  trace?: CoreTrace
 }
+
+/** 太密的界面命令不记：终端的按键、改尺寸、确认收到输出、重画 */
+const UNTRACED_COMMANDS = new Set([
+  'terminal.write',
+  'terminal.resize',
+  'terminal.ack',
+  'terminal.redraw',
+])
 
 interface TextAppend {
   op: 'item.appendText'
@@ -158,17 +169,37 @@ export function serveChannel(port: Port, host: CoreHost, options: ServeOptions):
     if (!closed) port.post(message)
   }
 
+  const trace = options.trace
   const runCommand = (id: number, name: string, params: unknown) => {
     const cancel = createCancel()
     commands.set(id, cancel)
+    const at = options.clock.now()
+    const record =
+      trace && !UNTRACED_COMMANDS.has(name)
+        ? (error: ChannelError | null) =>
+            trace(
+              'command',
+              {
+                command: name,
+                ...traceIds(params),
+                ok: error === null,
+                ms: options.clock.now() - at,
+                ...(error ? { code: error.code, error: traceError(error.message) } : {}),
+              },
+              error ? 'warn' : 'info',
+            )
+        : null
     host.command(name, params, cancel.signal).then(
       (result) => {
+        record?.(null)
         // 已经取消的命令不再回应答，界面那边早就结束了
         if (commands.delete(id)) send({ t: 'res', id, ok: true, result })
       },
       (error: unknown) => {
+        const failure = toChannelError(error)
+        record?.(failure)
         if (commands.delete(id)) {
-          send({ t: 'res', id, ok: false, error: toChannelError(error).toShape() })
+          send({ t: 'res', id, ok: false, error: failure.toShape() })
         }
       },
     )

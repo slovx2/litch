@@ -407,6 +407,7 @@ export {
 export { parseSpans, type SpanNode, spanText, splitSpanLines } from './text/spans.mjs'
 export { capParts, PART_CHARS } from './text/tool-cap.mjs'
 export { createToolHub, type ToolCallHandlers, type ToolHub } from './tool-hub.mjs'
+export { type CoreTrace, type TraceLevel, traceError, traceIds } from './trace.mjs'
 export {
   compareVersions,
   parseUpdateFeed,

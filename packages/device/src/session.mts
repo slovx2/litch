@@ -23,6 +23,7 @@ import {
 import type { HarnessConfigChangedNotification } from '../../protocol/src/harness-config.mjs'
 import { localTaskTimeZone } from '../../protocol/src/task-schedule.mjs'
 import { clientToolNamespaces } from '../../shared/src/client-tool-executor.mjs'
+import { errorText, idFields } from '../../shared/src/log-file.mjs'
 import { ProtocolError, requiredString } from '../../shared/src/protocol-contract.mjs'
 import {
   CODEX_PROTOCOL_VERSION,
@@ -35,6 +36,7 @@ import type { ClientToolInvoker } from './client-tool-invoke.mjs'
 import type { ClientToolPeer, ClientToolRouter } from './client-tools.mjs'
 import type { CodexTitles } from './codex-titles.mjs'
 import type { ManagedHarness } from './control.mjs'
+import type { DeviceTrace } from './device.mjs'
 import { DeviceCalls, type DeviceLayer } from './device-layer.mjs'
 import { type DeviceTools, declareDeviceTools } from './device-tools.mjs'
 import {
@@ -62,6 +64,7 @@ import {
   type Connector,
   DeviceError,
   type Frame,
+  idKey,
   isObject,
   type RpcId,
   toRpcError,
@@ -121,6 +124,8 @@ export interface SessionHost {
   timing: SessionTiming
   /** 运行日志 */
   log(line: string): void
+  /** 结构化的摘要（logs/device.jsonl）。没有就不记 */
+  trace?: DeviceTrace
   closed(session: ClientSession): void
   /** 这条连接连上了一个 harness 的运行时：它现有的项目还没导入过的话，现在可以去读了 */
   reachable(harness: string): void
@@ -196,6 +201,8 @@ export class ClientSession implements ClientToolPeer {
   private readonly probes = new Map<string, Promise<string | null>>()
   /** 替不认识 litch/harness/* 的上游（原生 codex）答这些方法的翻译器，每个 harness 一个，用到才建 */
   private readonly translators = new Map<string, HarnessConfigTranslator>()
+  /** 记摘要用：客户端发来、还没应答的请求（键是请求号），见 traced */
+  private readonly started = new Map<string, { method: string; at: number; ids: object }>()
 
   constructor(host: SessionHost, wire: Wire) {
     this.host = host
@@ -208,6 +215,7 @@ export class ClientSession implements ClientToolPeer {
       workspaces: host.workspaces,
       startedHoldMs: host.timing.startedHoldMs,
       log: (line) => host.log(`${this.tag} ${line}`),
+      answered: (link, id, error) => this.traced(id, error, link.harness),
       deviceTools: host.deviceTools,
       observe: (link, method, params) =>
         this.translators.get(link.harness)?.notification(method, params),
@@ -306,6 +314,39 @@ export class ClientSession implements ClientToolPeer {
     this.host.clientInvoke.peerLeft(this)
     this.host.closed(this)
     if (greeted) this.host.log(`${this.tag} 断开`)
+    this.host.trace?.('peer.close', {
+      conn: this.id.slice(0, 8),
+      ...(this.started.size ? { unanswered: this.started.size } : {}),
+    })
+    this.started.clear()
+  }
+
+  /**
+   * 一个客户端请求有了结果：记一条摘要（方法、连接、请求号、标识字段、成败、耗时、错误原文）。
+   * 转发给上游的由 Relay 在应答回来时调（harness 是转去的那个）；设备进程自己答的在 request 里调
+   */
+  private traced(id: RpcId, error: unknown, harness?: string): void {
+    const trace = this.host.trace
+    if (!trace) return
+    const key = idKey(id)
+    const entry = this.started.get(key)
+    if (!entry) return
+    this.started.delete(key)
+    const failed = error !== null && error !== undefined
+    trace(
+      'rpc',
+      {
+        method: entry.method,
+        conn: this.id.slice(0, 8),
+        id,
+        ...(harness ? { harness } : {}),
+        ...entry.ids,
+        ok: !failed,
+        ms: Date.now() - entry.at,
+        ...(failed ? { error: errorText(error) } : {}),
+      },
+      failed ? 'warn' : 'info',
+    )
   }
 
   deliverClientTool(harness: string, frame: Frame, onAnswer: (reply: Frame) => void): RpcId {
@@ -346,7 +387,10 @@ export class ClientSession implements ClientToolPeer {
   }
 
   private request(id: RpcId, method: string, frame: Frame, raw: string): void {
+    if (this.host.trace)
+      this.started.set(idKey(id), { method, at: Date.now(), ids: idFields(frame.params) })
     const fail = (error: unknown) => {
+      this.traced(id, error)
       if (this.state !== 'closed') this.wire.send(JSON.stringify({ id, error: toRpcError(error) }))
     }
     let outcome: unknown
@@ -359,8 +403,9 @@ export class ClientSession implements ClientToolPeer {
     // 能立刻转发的请求在上面已经同步发走了，先后顺序和客户端发来的一致
     if (outcome === HANDLED) return
     Promise.resolve(outcome).then((result) => {
-      if (result !== HANDLED && this.state !== 'closed')
-        this.wire.send(JSON.stringify({ id, result: result ?? {} }))
+      if (result === HANDLED) return
+      this.traced(id, null)
+      if (this.state !== 'closed') this.wire.send(JSON.stringify({ id, result: result ?? {} }))
     }, fail)
   }
 
@@ -949,6 +994,13 @@ export class ClientSession implements ClientToolPeer {
     this.wire.send(JSON.stringify({ id, result }))
     // 名字和版本是客户端自己报的，原样进日志之前先转成一行
     this.host.log(`${this.tag} 握手完成：${JSON.stringify([client.name, client.version])}`)
+    this.traced(id, null)
+    this.host.trace?.('peer.ready', {
+      conn: this.id.slice(0, 8),
+      client: typeof client.name === 'string' ? client.name.slice(0, 100) : null,
+      version: typeof client.version === 'string' ? client.version.slice(0, 100) : null,
+      extensions: this.declared.size,
+    })
     for (const link of this.links.values()) {
       const info = this.describe(link)
       this.announced.set(link.harness, JSON.stringify(info))

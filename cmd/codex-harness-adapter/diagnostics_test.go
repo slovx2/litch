@@ -55,7 +55,7 @@ else console.log('pty-self-check ok');`
 		t.Fatalf("没有明确成功结论: %s %v", output, err)
 	}
 	assertCleanTerminal(t, output)
-	log, err := os.ReadFile(filepath.Join(cfg.directory(), "diagnostics.log"))
+	log, err := os.ReadFile(filepath.Join(cfg.harnessLogDirectory(), "diagnostics.log"))
 	if err != nil || !strings.Contains(string(log), "releaseReady") || !strings.Contains(string(log), "ExperimentalWarning") || !strings.Contains(string(log), "pty-self-check ok") {
 		t.Fatalf("诊断证据丢失: %s %v", log, err)
 	}
@@ -85,7 +85,7 @@ func TestDiagnosticFailuresRemainActionable(t *testing.T) {
 				t.Fatalf("缺少失败原因或排障路径: %s %v", output, err)
 			}
 			assertCleanTerminal(t, output)
-			log, err := os.ReadFile(filepath.Join(cfg.directory(), "diagnostics.log"))
+			log, err := os.ReadFile(filepath.Join(cfg.harnessLogDirectory(), "diagnostics.log"))
 			if err != nil || !strings.Contains(string(log), "INTERNAL_DETAIL") {
 				t.Fatalf("失败证据丢失: %s %v", log, err)
 			}
@@ -180,7 +180,7 @@ if (!process.argv.includes('--runtime-info')) { console.log('INTERNAL_DETAIL std
 				t.Fatalf("入口未启动: %s %v", output, startErr)
 			}
 			assertCleanTerminal(t, output)
-			log, err := os.ReadFile(filepath.Join(cfg.directory(), "runtime.log"))
+			log, err := os.ReadFile(filepath.Join(cfg.harnessLogDirectory(), "runtime.log"))
 			if err != nil || !strings.Contains(string(log), "INTERNAL_DETAIL stderr") || !strings.Contains(string(log), "INTERNAL_DETAIL stdout") {
 				t.Fatalf("运行日志丢失: %s %v", log, err)
 			}

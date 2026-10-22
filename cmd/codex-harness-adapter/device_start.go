@@ -302,7 +302,7 @@ func launchService(ctx context.Context, c configuration, deadline time.Time, out
 	if err != nil {
 		return err
 	}
-	log, err := openPrivateLog(c.deviceDirectory(), "service.log")
+	log, err := openPrivateLog(c.logsDirectory(), "service.log")
 	if err != nil {
 		return err
 	}

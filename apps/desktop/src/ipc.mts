@@ -10,6 +10,8 @@ export const CORE_PORT = 'litch:core-port'
 export const ATTACH = 'attach'
 /** 界面 → 主进程：请用系统的浏览器打开这个网址 */
 export const OPEN_EXTERNAL = 'litch:open-external'
+/** 界面 → 主进程：用系统的文件管理器打开日志目录（desktop：桌面端自己的；device：本机设备服务的） */
+export const OPEN_LOGS = 'litch:open-logs'
 /** 界面 → 主进程：界面现在用的是这种语言（应用菜单跟着换） */
 export const SET_LANGUAGE = 'litch:set-language'
 /** 主进程 → 工具进程：界面现在用的是这种语言（核心让本机的适配器也用它说话） */

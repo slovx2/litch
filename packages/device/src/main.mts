@@ -3,6 +3,7 @@
 import { createHash } from 'node:crypto'
 import { dirname, join, win32 } from 'node:path'
 import { adapterCliPath } from '../../shared/src/adapter-cli.mjs'
+import { createJsonlLog, takeLogDir } from '../../shared/src/log-file.mjs'
 import { setSharedLogger } from '../../shared/src/util.mjs'
 import { parseArgs, USAGE } from './args.mjs'
 import { SocketControl } from './control.mjs'
@@ -18,6 +19,12 @@ import {
 import type { PairingConfig } from './pairing.mjs'
 import { watchParent } from './parent-watch.mjs'
 import { listenUnix, parseSocketUrl, socketExists, unixConnector } from './sockets.mjs'
+
+/**
+ * 命令行给的日志目录（<状态目录>/logs），一加载就从环境里拿走：属于设备的终端、设备进程起的命令看不到它。
+ * 没给（测试、单独起的）就不写结构化的摘要
+ */
+const logDir = takeLogDir()
 
 /** 就绪标记。Go 层和测试等的就是这一行 */
 const READY_LINE = 'LITCH_DEVICE_READY'
@@ -82,11 +89,14 @@ async function main(): Promise<void> {
     setSharedLogger((event, data) =>
       process.stderr.write(`[litch-device] ${event} ${JSON.stringify(data)}\n`),
     )
+  const summary = logDir ? createJsonlLog(join(logDir, 'device.jsonl'), { source: 'device' }) : null
+  summary?.write('start', { version: deviceVersion(), node: process.versions.node })
   const controlPath = controlSocketPath(args.stateDir)
   const control = socketExists(controlPath) ? new SocketControl(controlPath, log) : undefined
   const device = new DeviceServer({
     stateDir: args.stateDir,
     log,
+    ...(summary ? { trace: summary.write } : {}),
     ...(args.processes ? { processes: args.processes } : {}),
     ...(args.wrapUp === undefined ? {} : { wrapUp: args.wrapUp }),
     ...(args.wrapUpReminder === undefined ? {} : { wrapUpReminder: args.wrapUpReminder }),

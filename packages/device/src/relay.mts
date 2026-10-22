@@ -24,6 +24,8 @@ export interface RelayHost {
   /** 会话开始的通知最多扣多久（毫秒），见 SessionTiming.startedHoldMs */
   startedHoldMs: number
   log(line: string): void
+  /** 转发给上游的一个请求有了结果（应答到了，或者上游断开了）：记摘要用。error 是 null 表示成功 */
+  answered?(link: UpstreamLink, id: RpcId, error: unknown): void
   /** 原生 codex 的客户端工具调用交给设备进程挑执行方（client-tools.mts），这几处要告诉它 */
   clientTools: RelayClientTools
   /** 由设备进程自己执行的命名空间：这类 item/tool/call 不管哪种上游都在这里拦下交给它（device-tools.mts） */
@@ -197,6 +199,7 @@ export class Relay {
     const failure = request && isObject(frame.error) ? frame.error : null
     const replaced =
       request && failure ? link.dialect.rejection(link.harness, request.method, failure) : null
+    if (request) this.host.answered?.(link, request.id, replaced ?? frame.error ?? null)
     if (replaced) this.host.send(JSON.stringify({ id: frame.id, error: replaced }))
     else this.host.send(changed ? JSON.stringify(frame) : raw)
     // 扣着的会话开始通知现在可以放了：归属已经记好，放出去的时候带得上
@@ -435,6 +438,7 @@ export class Relay {
         `${harness} 的连接断开了，${request.method} 没有等到应答`,
         { harness, method: request.method },
       )
+      this.host.answered?.(link, request.id, error)
       this.host.send(JSON.stringify({ id: request.id, error: toRpcError(error) }))
     }
     for (const [key, entry] of this.pending) {

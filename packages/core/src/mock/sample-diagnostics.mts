@@ -10,6 +10,7 @@ import type {
 import { both } from './sample-manage.mjs'
 
 const STATE_DIR = '~/.codex-harness-adapter'
+const LOG_DIR = `${STATE_DIR}/logs`
 
 /** 一个 harness 的三项检查：引擎的命令行和运行环境、终端、它的 SSH 入口 */
 function checksOf(harness: HarnessView, snapshot: SettingsSnapshotView): DiagnosticCheckView[] {
@@ -33,7 +34,7 @@ function checksOf(harness: HarnessView, snapshot: SettingsSnapshotView): Diagnos
               `${harness.name} 的命令行能找到，但它说还没有登录。在这台设备的终端里登录一次，再回来重启它。`,
               `The ${harness.name} CLI was found, but it reports that it is not signed in. Sign in once from a terminal on this device, then restart it here.`,
             ),
-      logPath: up || stopped ? null : `${STATE_DIR}/${harness.id}/diagnostics.log`,
+      logPath: up || stopped ? null : `${LOG_DIR}/${harness.id}/diagnostics.log`,
     },
     {
       id: 'terminal',
@@ -62,7 +63,7 @@ function checksOf(harness: HarnessView, snapshot: SettingsSnapshotView): Diagnos
                 '运行时没在跑，入口没有起',
                 'The runtime is not running, so the entry is not up',
               ),
-    logPath: failed ? `${STATE_DIR}/${harness.id}/runtime.log` : null,
+    logPath: failed ? `${LOG_DIR}/${harness.id}/runtime.log` : null,
   })
   return checks
 }
@@ -90,8 +91,52 @@ export function sampleLog(
 ): LogTailView {
   const harness = harnesses.find((entry) => entry.id === harnessId)
   const lines: string[] = []
-  let path = `${STATE_DIR}/device/${source}.log`
-  if (source === 'device') {
+  const file: Partial<Record<LogSource, string>> = {
+    control: 'control.jsonl',
+    requests: 'device.jsonl',
+    rpc: 'rpc.jsonl',
+    debug: 'debug.jsonl',
+    agent: 'agent.log',
+  }
+  const name = file[source] ?? `${source}.log`
+  let path = `${LOG_DIR}/${name}`
+  /** 摘要日志的一行（和设备上的格式一样） */
+  const json = (ago: number, src: string, event: string, fields: Record<string, unknown>) =>
+    JSON.stringify({
+      ts: new Date(now - ago * 1000).toISOString(),
+      level: fields.ok === false ? 'warn' : 'info',
+      src,
+      pid: 4711,
+      event,
+      ...fields,
+    })
+  if (source === 'control') {
+    lines.push(
+      json(5398, 'control', 'start', { version: '0.0.0' }),
+      json(1320, 'control', 'control', { method: 'settings.read', ok: true, ms: 3 }),
+      json(95, 'control', 'control', { method: 'settings.write', ok: true, ms: 412 }),
+    )
+  } else if (source === 'requests') {
+    lines.push(
+      json(1320, 'device', 'peer.ready', { conn: '7f3a91c0', client: 'litch', extensions: 9 }),
+      json(1319, 'device', 'rpc', {
+        method: 'thread/list',
+        conn: '7f3a91c0',
+        id: 3,
+        ok: true,
+        ms: 41,
+      }),
+      json(2710, 'device', 'rpc', {
+        method: 'thread/resume',
+        conn: '7f3a91c0',
+        id: 12,
+        harness: harnesses[0]?.id ?? 'pi',
+        threadId: '019a3f…c2',
+        ok: true,
+        ms: 230,
+      }),
+    )
+  } else if (source === 'device') {
     lines.push(
       `${stamp(now, 5400)} [litch-device] listening on ${STATE_DIR}/device/device.sock`,
       ...harnesses.map((entry, index) =>
@@ -114,8 +159,32 @@ export function sampleLog(
       `${stamp(now, 5396)} device service ready`,
     )
   } else if (harness) {
-    path = `${STATE_DIR}/${harness.id}/${source}.log`
-    if (source === 'runtime') {
+    path = `${LOG_DIR}/${harness.id}/${name}`
+    if (source === 'rpc' && harness.id !== 'codex') {
+      lines.push(
+        json(2710, harness.id, 'rpc', {
+          method: 'thread/resume',
+          peer: '5c2e0d4a',
+          id: 12,
+          ok: true,
+          ms: 182,
+        }),
+        json(2708, harness.id, 'rpc', {
+          method: 'turn/start',
+          peer: '5c2e0d4a',
+          id: 13,
+          ok: true,
+          ms: 9,
+        }),
+        json(2700, harness.id, 'serverRequest', {
+          method: 'item/commandExecution/requestApproval',
+          peer: '5c2e0d4a',
+          id: 0,
+          ok: true,
+          ms: 6120,
+        }),
+      )
+    } else if (source === 'runtime') {
       lines.push(
         `${stamp(now, 5400)} [codex-harness-adapter] listening on ${STATE_DIR}/${harness.id}/runtime.sock`,
         `${stamp(now, 2710)} [${harness.id}] thread/resume 019a3f…c2 ok`,
@@ -134,7 +203,7 @@ export function sampleLog(
   const text = lines.length > 0 ? `${lines.join('\n')}\n` : ''
   // 运行日志演示“前面还有没取的内容”
   const truncated = source === 'runtime' && text !== ''
-  return { path, text, truncated, size: truncated ? 184_320 : text.length }
+  return { path, text, truncated, size: truncated ? 184_320 : text.length, directory: LOG_DIR }
 }
 
 /** 给 Codex 桌面端的 ssh 配置片段：开着而且起来了的入口各一段 */

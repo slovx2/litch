@@ -4271,16 +4271,16 @@ test('thread/start with ephemeral=true is hidden from thread/list and surfaces t
   }
 })
 
-test('debug.jsonl rotates once it crosses CHA_CLAUDE_DEBUG_LOG_MAX_BYTES', async () => {
+test('debug.jsonl rotates once it crosses LITCH_LOG_MAX_BYTES', async () => {
   const util = await import(resolve('packages/claude/dist/claude/src/util.mjs'))
   const home = await mkdtemp(join(tmpdir(), 'codex-harness-adapter-rotate-'))
   const logPath = join(home, 'debug.jsonl')
   const prevPath = process.env.CHA_CLAUDE_DEBUG_LOG
-  const prevMax = process.env.CHA_CLAUDE_DEBUG_LOG_MAX_BYTES
-  const prevKeep = process.env.CHA_CLAUDE_DEBUG_LOG_KEEP
+  const prevMax = process.env.LITCH_LOG_MAX_BYTES
+  const prevKeep = process.env.LITCH_LOG_KEEP
   process.env.CHA_CLAUDE_DEBUG_LOG = logPath
-  process.env.CHA_CLAUDE_DEBUG_LOG_MAX_BYTES = '512'
-  process.env.CHA_CLAUDE_DEBUG_LOG_KEEP = '2'
+  process.env.LITCH_LOG_MAX_BYTES = '512'
+  process.env.LITCH_LOG_KEEP = '3'
   try {
     // Each line is ~150 bytes; write enough to cross 512 bytes twice.
     for (let i = 0; i < 30; i += 1) util.debugLog('test.rotate', { i, payload: 'x'.repeat(120) })
@@ -4290,20 +4290,17 @@ test('debug.jsonl rotates once it crosses CHA_CLAUDE_DEBUG_LOG_MAX_BYTES', async
     const entries = await fs.readdir(home)
     assert.ok(entries.includes('debug.jsonl'), 'active log should exist')
     assert.ok(entries.includes('debug.jsonl.1'), 'rotation should have produced a .1 slot')
-    // KEEP=2 means at most .1 + .2; .3 must never appear.
-    assert.ok(
-      !entries.includes('debug.jsonl.3'),
-      'rotation should respect CHA_CLAUDE_DEBUG_LOG_KEEP',
-    )
+    // KEEP=3 counts the active file: at most .1 + .2, .3 must never appear.
+    assert.ok(!entries.includes('debug.jsonl.3'), 'rotation should respect LITCH_LOG_KEEP')
     const activeSize = (await fs.stat(logPath)).size
     assert.ok(activeSize < 512 * 4, 'active log should have been freshly started after rotation')
   } finally {
     if (prevPath == null) delete process.env.CHA_CLAUDE_DEBUG_LOG
     else process.env.CHA_CLAUDE_DEBUG_LOG = prevPath
-    if (prevMax == null) delete process.env.CHA_CLAUDE_DEBUG_LOG_MAX_BYTES
-    else process.env.CHA_CLAUDE_DEBUG_LOG_MAX_BYTES = prevMax
-    if (prevKeep == null) delete process.env.CHA_CLAUDE_DEBUG_LOG_KEEP
-    else process.env.CHA_CLAUDE_DEBUG_LOG_KEEP = prevKeep
+    if (prevMax == null) delete process.env.LITCH_LOG_MAX_BYTES
+    else process.env.LITCH_LOG_MAX_BYTES = prevMax
+    if (prevKeep == null) delete process.env.LITCH_LOG_KEEP
+    else process.env.LITCH_LOG_KEEP = prevKeep
     await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 80 })
   }
 })

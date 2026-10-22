@@ -201,14 +201,14 @@
     {
       "kind": "ClientRequest",
       "method": "litch/device/logs/read",
-      "description": "读日志的末尾。device：设备进程的日志；service：常驻服务的输出（由客户端拉起时才有）；runtime、diagnostics：某个 harness 的运行日志、诊断日志，要带 harness。文件还没有时 text 是空串，不算错。",
+      "description": "读日志的末尾。device：设备进程的日志；service：常驻服务的输出（由客户端拉起时才有）；control：控制通道的请求摘要；requests：设备进程的连接和请求摘要；runtime、diagnostics、rpc、debug、agent：某个 harness 的运行日志、诊断日志、协议请求摘要、调试日志（Claude 入口）、ACP agent 的输出，要带 harness。文件还没有时 text 是空串，不算错。",
       "params": {
         "type": "object",
         "additionalProperties": false,
         "required": ["source"],
         "properties": {
           "source": {
-            "enum": ["device", "service", "runtime", "diagnostics"]
+            "enum": ["device", "service", "runtime", "diagnostics", "control", "requests", "rpc", "debug", "agent"]
           },
           "harness": {
             "type": "string"
@@ -241,6 +241,10 @@
             "description": "文件现在的大小（字节）",
             "type": "integer",
             "minimum": 0
+          },
+          "directory": {
+            "description": "设备上的日志目录（所有日志都在它下面）",
+            "type": "string"
           }
         }
       }

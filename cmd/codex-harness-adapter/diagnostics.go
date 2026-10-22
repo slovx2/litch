@@ -27,12 +27,12 @@ type runtimeDetails struct {
 // 用户环境只要求 Node 24 及以上稳定版。
 const minimumNodeMajor = 24
 
-// 原始诊断只保存在本入口的私有日志中，不把 JSON、警告和堆栈混入用户输出。
+// 原始诊断只保存在本入口的私有日志中（logs/<harness>/），不把 JSON、警告和堆栈混入用户输出。
 func openLocalLog(c configuration, name string) (*os.File, error) {
-	return openPrivateLog(c.directory(), name)
+	return openPrivateLog(c.harnessLogDirectory(), name)
 }
 
-// 设备进程和后台服务的日志不属于任何一个入口，按目录打开。
+// 设备进程和后台服务的日志不属于任何一个入口，按目录打开。打开之前到了上限先换下来（logs.go）。
 func openPrivateLog(directory, name string) (*os.File, error) {
 	if err := os.MkdirAll(directory, 0o700); err != nil {
 		return nil, fmt.Errorf(tr("无法创建状态目录，请检查目录权限: %w", "cannot create the state directory; check its permissions: %w"), err)
@@ -41,6 +41,7 @@ func openPrivateLog(directory, name string) (*os.File, error) {
 		return nil, fmt.Errorf(tr("无法保护状态目录，请检查目录权限: %w", "cannot restrict access to the state directory; check its permissions: %w"), err)
 	}
 	path := filepath.Join(directory, name)
+	prepareHeldLog(path, currentLogLimits(), time.Now())
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		return nil, fmt.Errorf(tr("无法写入日志，请检查目录权限: %w", "cannot write the log; check the directory permissions: %w"), err)
@@ -64,7 +65,7 @@ func (f *harnessFailure) Error() string { return f.err.Error() }
 func (f *harnessFailure) Unwrap() error { return f.err }
 
 func diagnosticFailure(c configuration, kind string, text bilingual) error {
-	logPath := filepath.Join(c.directory(), "diagnostics.log")
+	logPath := filepath.Join(c.harnessLogDirectory(), "diagnostics.log")
 	return &harnessFailure{kind: kind, text: text, logPath: logPath,
 		err: fmt.Errorf(tr("%s；详细日志：%s", "%s; detailed log: %s"), text, logPath)}
 }

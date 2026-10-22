@@ -95,18 +95,14 @@ test('调试日志：一轮事件循环里记的行一起写一次，先后不�
 })
 
 test('调试日志：一起写的行越过上限时照旧轮换，换的位置和一行一行写时一样', async () => {
-  const saved = [
-    'CHA_CLAUDE_DEBUG_LOG',
-    'CHA_CLAUDE_DEBUG_LOG_MAX_BYTES',
-    'CHA_CLAUDE_DEBUG_LOG_KEEP',
-  ]
+  const saved = ['CHA_CLAUDE_DEBUG_LOG', 'LITCH_LOG_MAX_BYTES', 'LITCH_LOG_KEEP']
   const previous = saved.map((name) => process.env[name])
   const directory = await mkdtemp(join(tmpdir(), 'claude-rotated-log-'))
   const path = join(directory, 'debug.jsonl')
   Object.assign(process.env, {
     CHA_CLAUDE_DEBUG_LOG: path,
-    CHA_CLAUDE_DEBUG_LOG_MAX_BYTES: '400',
-    CHA_CLAUDE_DEBUG_LOG_KEEP: '20',
+    LITCH_LOG_MAX_BYTES: '400',
+    LITCH_LOG_KEEP: '20',
   })
   try {
     for (let index = 0; index < 20; index++)

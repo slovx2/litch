@@ -343,6 +343,17 @@ export function judgeManage(probe: ManageProbe): string[] {
   )
   must(probe.deviceLog > 0, '设备进程的日志没读到')
   must(probe.runtimeLog > 0, 'Pi 的运行日志没读到')
+  must(
+    probe.summaries.control > 0 && probe.summaries.requests > 0 && probe.summaries.rpc > 0,
+    `摘要日志没读到：${JSON.stringify(probe.summaries)}`,
+  )
+  must(
+    ['logs.tail', 'litch/device/logs/read'].every((method) =>
+      probe.summaries.methods.includes(method),
+    ),
+    `摘要日志里少了该记的请求：${probe.summaries.methods.join(' ')}`,
+  )
+  must(probe.logDir.endsWith('/logs'), `日志目录没写出来：${probe.logDir}`)
   same(probe.logLeaks, [], '日志或者界面上出现了刚才填的密钥')
 
   must(probe.sshBefore === 'off', `SSH 入口一开始不是关着的：${probe.sshBefore}`)

@@ -171,10 +171,21 @@ export interface DiagnosticsView {
 }
 
 /**
- * 读哪份日志。device：设备进程的；service：常驻服务的输出；
- * runtime、diagnostics：某个 harness 的运行日志、诊断日志，要说是哪个 harness
+ * 读哪份日志。device：设备进程的输出；service：常驻服务的输出；control：控制通道的请求摘要；
+ * requests：设备进程的连接和请求摘要。
+ * 要说是哪个 harness 的：runtime（运行日志）、diagnostics（诊断日志）、rpc（入口的协议请求摘要）、
+ * debug（Claude 入口的调试日志）、agent（ACP agent 的输出）
  */
-export type LogSource = 'device' | 'service' | 'runtime' | 'diagnostics'
+export type LogSource =
+  | 'device'
+  | 'service'
+  | 'control'
+  | 'requests'
+  | 'runtime'
+  | 'diagnostics'
+  | 'rpc'
+  | 'debug'
+  | 'agent'
 
 /** 日志的末尾 */
 export interface LogTailView {
@@ -186,6 +197,8 @@ export interface LogTailView {
   truncated: boolean
   /** 文件现在的大小（字节） */
   size: number
+  /** 设备上的日志目录。旧版的设备服务不报，是 null */
+  directory: string | null
 }
 
 /** 给官方 Codex 桌面端用的 ssh 配置片段 */

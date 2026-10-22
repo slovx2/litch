@@ -1,14 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
-import {
-  appendFileSync,
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  renameSync,
-  statSync,
-  unlinkSync,
-} from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { homedir, platform, tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import {
@@ -19,6 +10,7 @@ import {
 
 export { platformFamily, platformOs } from '../../shared/src/runtime-version.mjs'
 
+import { logLimits, pruneLogs, rotateLog, takeLogDir } from '../../shared/src/log-file.mjs'
 import { setSharedLogger } from '../../shared/src/util.mjs'
 import type { ImageInput } from './types.mjs'
 
@@ -77,16 +69,30 @@ process.on('exit', () => {
 })
 
 /**
- * 记一行调试日志（默认写在状态目录的 debug.jsonl）。
+ * 调试日志写在哪：CHA_CLAUDE_DEBUG_LOG 指定的文件（0、false 是不写），否则是命令行给的日志目录
+ * （LITCH_LOG_DIR，启动时取走，见 log-file.mts 的 takeLogDir）下的 debug.jsonl；都没有就不写。
+ * 不跟着 CHA_CLAUDE_HOME 走：会话里跑的命令继承了它，测试进程会写进真实的状态目录。
+ */
+function debugLogPath(): string | null {
+  const configured = process.env.CHA_CLAUDE_DEBUG_LOG
+  if (configured === '0' || configured === 'false') return null
+  if (configured) return resolve(configured)
+  const directory = takeLogDir()
+  return directory ? join(directory, 'debug.jsonl') : null
+}
+// 模块一加载就取走日志目录：入口起 CLI 之前变量就已经不在环境里了
+takeLogDir()
+
+/**
+ * 记一行调试日志（见 debugLogPath）。
  * 不当场写文件：每条通知都记一行，流式输出时一秒上千行，每行都同步地建目录、看大小、打开、写、关上，
  * 占了入口处理一条增量的一半开销。现在先攒着，这一轮事件循环的末尾（setImmediate）一次写出去，
  * 进程退出时（process.exit、正常停下）也写；行的先后不变，换了文件（改了 CHA_CLAUDE_DEBUG_LOG）时
  * 先把攒着的写进原来那个。进程被强杀时少的是最后这一轮里记的几行。
  */
 export function debugLog(event: string, data: Record<string, unknown> = {}): void {
-  if (process.env.CHA_CLAUDE_DEBUG_LOG === '0' || process.env.CHA_CLAUDE_DEBUG_LOG === 'false')
-    return
-  const path = resolve(process.env.CHA_CLAUDE_DEBUG_LOG || join(adapterHome(), 'debug.jsonl'))
+  const path = debugLogPath()
+  if (!path) return
   let line: string
   try {
     const entry = {
@@ -109,8 +115,8 @@ export function debugLog(event: string, data: Record<string, unknown> = {}): voi
 }
 
 /**
- * 把攒着的调试日志写出去。到了上限照旧轮换（rotateLogIfNeeded），在哪一行之前换和一行一行写时一样：
- * 写之前文件已经不小于上限，就先换一个新文件。写不成（磁盘满、没权限）就算了，日志不能耽误正事。
+ * 把攒着的调试日志写出去。上限和别的日志一样（log-file.mts 的 logLimits）：写之前文件已经不小于上限，
+ * 就先换一个新文件，旧的按个数和时长清理。写不成（磁盘满、没权限）就算了，日志不能耽误正事。
  */
 export function flushDebugLog(): void {
   const pending = pendingLog
@@ -118,14 +124,17 @@ export function flushDebugLog(): void {
   if (!pending) return
   const { path, lines } = pending
   try {
-    const maxBytes = numericEnv('CHA_CLAUDE_DEBUG_LOG_MAX_BYTES', 50 * 1024 * 1024)
-    let size = maxBytes > 0 ? fileSize(path) : 0
+    const limits = logLimits()
+    const fresh = readyLogDir !== dirname(path)
+    let size = limits.maxBytes > 0 ? fileSize(path) : 0
+    if (fresh) pruneLogs(path, limits)
     let chunk = ''
     for (const line of lines) {
-      if (maxBytes > 0 && size >= maxBytes) {
+      if (limits.maxBytes > 0 && size >= limits.maxBytes) {
         appendLog(path, chunk)
         chunk = ''
-        rotateLogIfNeeded(path)
+        rotateLog(path, limits)
+        pruneLogs(path, limits)
         size = 0
       }
       chunk += line
@@ -152,52 +161,12 @@ function appendLog(path: string, text: string): void {
     readyLogDir = dir
   }
   try {
-    appendFileSync(path, text)
+    appendFileSync(path, text, { mode: 0o600 })
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
     ensureParent(path)
-    appendFileSync(path, text)
+    appendFileSync(path, text, { mode: 0o600 })
   }
-}
-
-// Long-running adapter daemons would otherwise grow debug.jsonl until the disk
-// fills. Bound it with a simple `.1`/`.2`/... rotation: when the active log
-// passes `maxBytes`, push it down one slot and start fresh. Bound by `keep`,
-// dropping anything older. Sized envs override; failures swallow because the
-// debug log is best-effort and must never break the main flow.
-export function rotateLogIfNeeded(path: string): void {
-  const maxBytes = numericEnv('CHA_CLAUDE_DEBUG_LOG_MAX_BYTES', 50 * 1024 * 1024)
-  if (maxBytes <= 0) return
-  const keep = Math.max(1, numericEnv('CHA_CLAUDE_DEBUG_LOG_KEEP', 3))
-  let size = 0
-  try {
-    size = statSync(path).size
-  } catch {
-    return // file does not exist yet — nothing to rotate
-  }
-  if (size < maxBytes) return
-  // Drop the oldest slot if it would push us past `keep`.
-  const oldest = `${path}.${keep}`
-  try {
-    unlinkSync(oldest)
-  } catch {}
-  // Shift `.k-1` → `.k`, `.k-2` → `.k-1`, …, `.1` → `.2`.
-  for (let i = keep - 1; i >= 1; i -= 1) {
-    try {
-      renameSync(`${path}.${i}`, `${path}.${i + 1}`)
-    } catch {}
-  }
-  // Move the active log to `.1`. The next appendFileSync recreates it.
-  try {
-    renameSync(path, `${path}.1`)
-  } catch {}
-}
-
-function numericEnv(name: string, fallback: number): number {
-  const raw = process.env[name]
-  if (!raw) return fallback
-  const parsed = Number(raw)
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback
 }
 
 // CLI 探测与 initialize 使用同一协议版本；升级时同步 schema 和 codex-shim。
