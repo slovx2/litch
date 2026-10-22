@@ -390,7 +390,13 @@ export type RuntimeEvent =
       model?: string | null
     }
   // 一次模型请求结束：现在上下文里有多少（换掉 last）。agentToolUseId 不为空的是那个子代理自己的请求
-  | { type: 'context_usage'; usage: Record<string, unknown>; agentToolUseId: string | null }
+  // model 是最近一次顶层请求的模型：回合还没结束、线程还没记下窗口时按它查窗口
+  | {
+      type: 'context_usage'
+      usage: Record<string, unknown>
+      agentToolUseId: string | null
+      model?: string | null
+    }
   | { type: 'goal_usage'; messageId: string; usage: Record<string, unknown> }
   | { type: 'goal_limit'; usageLimited: boolean }
   | {

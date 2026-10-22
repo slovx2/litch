@@ -279,3 +279,49 @@ test('EVENTS-004：用户设了自动压缩窗口，报的上下文窗口是它�
     await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
   }
 })
+
+test('EVENTS-005：窗口记下过的模型，新会话第一个回合里的用量就带窗口，不等回合结束（派出的子会话一跑很久）', {
+  timeout: 90_000,
+}, async () => {
+  const home = await mkdtemp(join(tmpdir(), 'native-window-early-'))
+  const llm = new MockLLM()
+  const url = await llm.start()
+  const client = await ProtocolClient.start(home, url)
+  const reply = () => ({
+    content: [{ type: 'text', text: 'EARLY_WINDOW_DONE' }],
+    usage: { input_tokens: 1000, cache_read_input_tokens: 0, output_tokens: 10 },
+  })
+  const run = async () => {
+    const { thread } = await client.request('thread/start', {
+      cwd: home,
+      sandbox: 'danger-full-access',
+      approvalPolicy: 'never',
+    })
+    const { turn } = await client.request('turn/start', {
+      threadId: thread.id,
+      input: [{ type: 'text', text: '说一句' }],
+    })
+    assert.equal((await client.completed(turn.id)).status, 'completed')
+    return client.trace.filter(
+      (message) =>
+        message.method === 'thread/tokenUsage/updated' && message.params.threadId === thread.id,
+    )
+  }
+  try {
+    llm.enqueue(reply)
+    llm.enqueue(reply)
+    const first = await run()
+    // 头一个会话：回合结束之前还不知道窗口
+    assert.equal(first[0]?.params.tokenUsage.modelContextWindow, null)
+    const window = first.at(-1)?.params.tokenUsage.modelContextWindow
+    assert.ok(typeof window === 'number' && window > 0)
+    const second = await run()
+    assert.ok(second.length >= 2, '回合中的那次和回合结束的那次都要报')
+    assert.equal(second[0]?.params.tokenUsage.modelContextWindow, window)
+    llm.assertConsumed()
+  } finally {
+    await client.close()
+    await llm.close()
+    await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
+  }
+})

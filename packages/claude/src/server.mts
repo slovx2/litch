@@ -5174,8 +5174,10 @@ export class CodexClaudeAppServer {
           }
           if (event.type === 'context_usage') {
             const last = tokenBreakdownFromClaudeUsage(event.usage)
+            // 窗口要等回合结束才报：第一个回合（派出的子会话常常一跑很久）里先按模型查以前记下的
+            const known = event.model ? this.store.modelWindow(event.model) : null
             if (!event.agentToolUseId) {
-              this.recordTokenUsage(peer, thread.id, turn.id, { last })
+              this.recordTokenUsage(peer, thread.id, turn.id, { last, window: known })
               return
             }
             // 子代理自己的请求：记在它的子线程上，窗口先借父线程的
@@ -5183,7 +5185,7 @@ export class CodexClaudeAppServer {
             if (ctx)
               this.recordTokenUsage(peer, ctx.childThreadId, ctx.childTurnId, {
                 last,
-                window: this.store.threadUsage(thread.id)?.tokenUsage.modelContextWindow ?? null,
+                window: this.store.threadUsage(thread.id)?.tokenUsage.modelContextWindow ?? known,
               })
             return
           }

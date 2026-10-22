@@ -2980,6 +2980,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       type: 'context_usage',
       usage: { ...entry.usage },
       agentToolUseId: lane || null,
+      model: pending.contextModel,
     })
   }
 
