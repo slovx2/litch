@@ -212,10 +212,7 @@ function NeverSites({ passwords }: { passwords: BrowserPasswordsBridge }) {
   const phase = listPhase(sites, failure !== null && sites === null)
   return (
     <div data-never={phase}>
-      <h4 className="set-sub">
-        {t('settings.browser.never')}
-        <span>{t('settings.browser.never.note')}</span>
-      </h4>
+      <h4 className="set-sub">{t('settings.browser.never')}</h4>
       {phase === 'loading' ? null : phase === 'failed' ? (
         <p className="set-para err" role="alert">
           {t('settings.browser.failed', { reason: failure ?? '' })}

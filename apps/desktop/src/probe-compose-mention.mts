@@ -241,7 +241,7 @@ export async function mentionProbe(real: boolean): Promise<MentionProbe> {
   write(field, '@zzzzqqqq-nothing')
   await until(
     '“没有对得上的”',
-    () => sheet() && rows().length === 0 && /没有|No /.test(note()),
+    () => sheet() && rows().length === 0 && /无匹配|No /.test(note()),
     15_000,
   ).catch(() => null)
   const none = note()
@@ -428,7 +428,7 @@ export function judgeMention(probe: MentionProbe, real: boolean): string[] {
   }
   if (probe.unsupported !== null) {
     check(
-      probe.unsupported.includes('不提供'),
+      probe.unsupported.includes('不支持搜索文件'),
       `对面不提供找文件的设备上，单子上没有照实说：“${probe.unsupported}”`,
     )
   }

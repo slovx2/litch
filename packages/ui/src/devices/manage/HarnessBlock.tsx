@@ -128,13 +128,7 @@ export function HarnessBlock(props: HarnessBlockProps) {
         ) : null}
         {toggle}
         {typeof settings === 'function' ? (
-          <button
-            type="button"
-            className="btn"
-            data-act="harness-settings"
-            title={t('hc.entry.note', { name })}
-            onClick={settings}
-          >
+          <button type="button" className="btn" data-act="harness-settings" onClick={settings}>
             {t('hc.entry')}
           </button>
         ) : null}

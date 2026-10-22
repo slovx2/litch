@@ -230,7 +230,7 @@ export function createTerminals(host: TerminalsHost): Terminals {
 
   const find = (terminalId: string): Term => {
     const term = terms.get(terminalId)
-    if (!term) throw new ChannelError('notFound', `没有这个终端：${terminalId}`)
+    if (!term) throw new ChannelError('notFound', `终端不存在：${terminalId}`)
     return term
   }
 
@@ -624,7 +624,7 @@ export function createTerminals(host: TerminalsHost): Terminals {
     flushSize(term)
   }
 
-  const offlineError = () => new ChannelError('offline', '设备没有连上')
+  const offlineError = () => new ChannelError('offline', '设备未连接')
 
   return {
     openList(sink) {
@@ -775,7 +775,7 @@ export function createTerminals(host: TerminalsHost): Terminals {
       // 没挂着的时候协议原有的写输入落不到它上面：先攒着，挂回去之后按先后写
       const bytes = base64Bytes(data)
       if (term.inputBytes + bytes > INPUT_MAX) {
-        throw new ChannelError('rejected', '终端还没接回来，攒着的输入太多了')
+        throw new ChannelError('rejected', '终端尚未重新连接，缓存的输入过多')
       }
       term.input.push(data)
       term.inputBytes += bytes
@@ -824,7 +824,7 @@ export function createTerminals(host: TerminalsHost): Terminals {
       const term = find(terminalId)
       if (mode === 'leave') {
         if (!term.durable || (term.state !== 'running' && term.state !== 'away')) {
-          throw new ChannelError('rejected', '这个终端留不住：它不属于设备，或者已经结束了')
+          throw new ChannelError('rejected', '无法保留该终端：它不属于设备或已结束')
         }
         term.shown = false
         if (!notes.hidden.includes(term.handle)) notes.hidden.push(term.handle)
@@ -874,7 +874,7 @@ export function createTerminals(host: TerminalsHost): Terminals {
     async restart(terminalId, rows, cols) {
       const term = find(terminalId)
       if (term.state !== 'exited' && term.state !== 'lost') {
-        throw new ChannelError('rejected', '这个终端还在运行')
+        throw new ChannelError('rejected', '该终端仍在运行')
       }
       if (!host.online()) throw offlineError()
       const before = term.handle

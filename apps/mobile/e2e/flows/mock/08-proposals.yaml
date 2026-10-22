@@ -51,13 +51,13 @@ tags: [mock]
 # 那张卡片在屏幕上面一截：往回翻到看得见它的状态
 - scrollUntilVisible:
     element:
-      text: (Dismissed|不要了)
+      text: (Dismissed|已忽略)
     direction: UP
     timeout: 10000
 # 第二张八秒后过期（模拟核心里特意定得短）
 - extendedWaitUntil:
     visible:
-      text: (Expired|过期了)
+      text: (Expired|已过期)
     timeout: 20000
 - scrollUntilVisible:
     element:
@@ -113,7 +113,7 @@ tags: [mock]
       id: proposals
     timeout: 10000
 - assertVisible:
-    text: .*(Settled \(3\)|已了结（3）).*
+    text: .*(Settled \(3\)|已处理（3）).*
 - tapOn:
     id: proposals:reveal:.*
     index: 0

@@ -31,7 +31,7 @@ export function publicFromSeed(seed: Buffer): Buffer {
   })
   const spki = createPublicKey(key).export({ format: 'der', type: 'spki' })
   if (spki.length !== SPKI_ED25519.length + 32 || !spki.subarray(0, 12).equals(SPKI_ED25519)) {
-    throw new Error('算出来的公钥形状不对')
+    throw new Error('生成的公钥格式错误')
   }
   return spki.subarray(SPKI_ED25519.length)
 }

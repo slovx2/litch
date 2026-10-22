@@ -424,7 +424,7 @@ export function judgeRemote(probe: RemoteProbe): string[] {
   must(probe.sentAfter, '连回来之后发不了消息')
   must(probe.guideShown, `什么都没装的那台没有给出安装指引：${probe.guide}`)
   must(
-    /^codex:只有 .+｜none:什么都没装$/.test(probe.listPeers),
+    /^codex:仅 .+｜none:未安装$/.test(probe.listPeers),
     `设备列表上没有说出对面是哪一种：${probe.listPeers}`,
   )
   must(probe.rowIsPlain, '设备列表的一行上出现了整行那个按钮之外的按钮或输入框')

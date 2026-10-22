@@ -29,7 +29,7 @@ import { autofillKind, autofillTab } from './tabs.mjs'
 const LABEL_MAX = 80
 
 const WORDS = {
-  'zh-CN': { title: 'Litch 已保存的密码', empty: '（没有用户名）' },
+  'zh-CN': { title: 'Litch 已保存的密码', empty: '（无用户名）' },
   en: { title: 'Litch saved passwords', empty: '(no username)' },
 }
 

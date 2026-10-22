@@ -234,7 +234,7 @@ export function judgeMock(seen: MockSeen, lenient: boolean): string[] {
     `英文界面下的字不对：${look.english.join('|')}`,
   )
   must(
-    look.chinese.join('|') === '终端 1|清屏|终端|新开终端',
+    look.chinese.join('|') === '终端 1|清屏|终端|新建终端',
     `中文界面下的字不对：${look.chinese.join('|')}`,
   )
 

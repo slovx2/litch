@@ -393,9 +393,9 @@ export async function slashProbe(real: boolean): Promise<SlashProbe> {
     input.value === '' &&
     (real && told
       ? turns() === turnsBefore &&
-        /^没压缩成：\S/.test(told) &&
+        /^压缩失败：\S/.test(told) &&
         // 原因是对面给的，不是界面说不出原因时的套话（packages/ui 的 error.*、ability.unsupported）
-        !/出了点问题|设备没有|已取消|不支持这个操作/.test(told)
+        !/发生错误|设备未连接|设备响应超时|已取消|不支持该操作/.test(told)
       : turns() === turnsBefore + 1)
   one<HTMLButtonElement>('[data-toast="compact-failed"] .toast-x')?.click()
   await idle()
@@ -866,16 +866,16 @@ export function judgeSlash(
   }
   const states = probe.states
   if (states) {
-    check(states.empty === '这里没有技能', `dsh 上该写没有技能，写的是“${states.empty}”`)
+    check(states.empty === '暂无技能', `dsh 上该写没有技能，写的是“${states.empty}”`)
     check(
-      states.unsupported === '这个 harness 带不了技能',
+      states.unsupported === '该 harness 不支持技能',
       `没有声明的 codex 上写的是“${states.unsupported}”`,
     )
-    check(states.failed.startsWith('技能没取到：'), `没取到时写的是“${states.failed}”`)
-    check(states.retryOffered, '没取到时没有“再取一次”')
-    check(states.retried === 6, `再取一次之后该有 6 项，有 ${states.retried} 项`)
+    check(states.failed.startsWith('技能加载失败：'), `没取到时写的是“${states.failed}”`)
+    check(states.retryOffered, '没取到时没有“重试”')
+    check(states.retried === 6, `重试之后该有 6 项，有 ${states.retried} 项`)
     check(
-      states.skipped === '有 1 项没列出来：开头的元数据里没有 description',
+      states.skipped === '1 项未列出：开头的元数据里没有 description',
       `有一项没列出来时写的是“${states.skipped}”`,
     )
     check(

@@ -73,8 +73,8 @@ export async function tasksProbe(name: string): Promise<TasksProbe> {
     }).then((target) => target.click())
 
   // 侧栏入口：数要等示例任务到了才有
-  const link = await until('侧栏底下的“定时任务”', () => one<HTMLElement>('.sb-link.tasks'))
-  const badge = Number(text(await until('入口上没看过的数', () => one('.sb-link.tasks .sb-count'))))
+  const link = await until('侧栏底下的“定时任务”', () => one<HTMLElement>('.sb-btn.tasks'))
+  const badge = Number(text(await until('入口上没看过的数', () => one('.sb-btn.tasks .sb-count'))))
 
   // 列表
   link.click()
@@ -121,7 +121,8 @@ export async function tasksProbe(name: string): Promise<TasksProbe> {
 
   // 立即运行：等它跑完，运行记录里出现“去会话”
   await click('[data-act="run-now"]')
-  const said = text(await until('立即运行之后那一句', () => one('[data-said]')))
+  const said =
+    (await until('立即运行之后那一句', () => one<HTMLElement>('[data-said]')))?.dataset.said ?? ''
   const done = await until(
     '跑完的那一次',
     () =>
@@ -185,13 +186,13 @@ export function judgeTasks(seen: TasksProbe, name: string): string[] {
   must(seen.unsupported.includes('不支持'), `不支持的那台没说清楚：“${seen.unsupported}”`)
   must(seen.formShown, '新建表单没出来')
   must(
-    seen.preview === 'at' && seen.previewText.startsWith('下一次在'),
+    seen.preview === 'at' && seen.previewText.startsWith('下次运行：'),
     `表单底下没说出下一次：${seen.preview}“${seen.previewText}”`,
   )
   must(seen.created === name, `建好之后的详情不是这个任务：“${seen.created}”`)
   must(seen.schedule.includes('每周一、五'), `详情里的日程不对：“${seen.schedule}”`)
   must(seen.listed, '回到列表里没有刚建的那一行')
-  must(seen.said === '开始跑了', `立即运行之后说的是“${seen.said}”`)
+  must(seen.said === 'started', `立即运行之后说的是 ${seen.said}`)
   must(seen.runStatus === 'succeeded', `立即运行的那一次是 ${seen.runStatus}`)
   must(seen.selected.startsWith(name), `去会话之后选中的是“${seen.selected}”`)
   must(seen.crumb.includes(name), `标题栏上是“${seen.crumb}”`)

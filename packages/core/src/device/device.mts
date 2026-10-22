@@ -1669,7 +1669,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   const machineLink: MachineDeviceLink = {
     online: () => online,
     request(method, params, requestOptions) {
-      if (!online) return Promise.reject(new ChannelError('offline', '设备没有连上'))
+      if (!online) return Promise.reject(new ChannelError('offline', '设备未连接'))
       return link.request(method, params, requestOptions)
     },
     onProcessNotification(handler) {
@@ -1716,7 +1716,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   }
 
   const machineFacts = (): Promise<MachineFacts> => {
-    if (!online) return Promise.reject(new ChannelError('offline', '设备没有连上'))
+    if (!online) return Promise.reject(new ChannelError('offline', '设备未连接'))
     const cached = machineFactsCache
     if (cached && options.clock.now() - cached.at < FACTS_TTL_MS) {
       return Promise.resolve({
@@ -1955,8 +1955,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
 
   /** 会话树的那几件事：设备没声明就做不了，连不着也做不了 */
   const treeOnly = () => {
-    if (!online) throw new ChannelError('offline', '设备没有连上')
-    if (!sessionTree) throw new ChannelError('unsupported', '这台设备没有会话树')
+    if (!online) throw new ChannelError('offline', '设备未连接')
+    if (!sessionTree) throw new ChannelError('unsupported', '此设备不支持会话树')
   }
 
   /**
@@ -2043,7 +2043,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     // 这三件事对面成了之后会发通知，但不一定发给提出请求的这条连接：这边自己先改，通知再来是幂等的
     async rename(sessionId, title) {
       const name = title.trim()
-      if (!name) throw new ChannelError('rejected', '名字不能是空的')
+      if (!name) throw new ChannelError('rejected', '名称不能为空')
       await guarded(() => link.request('thread/name/set', { threadId: sessionId, name }))
       const thread = threads.get(sessionId)
       if (thread) upsertThread({ ...thread, name })
@@ -2067,11 +2067,11 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       unshelve(sessionId)
     },
     async loadArchived() {
-      if (!online) throw new ChannelError('offline', '设备没有连上')
+      if (!online) throw new ChannelError('offline', '设备未连接')
       await guarded(loadArchived)
     },
     async composeOptions(harness) {
-      if (!online) throw new ChannelError('offline', '设备没有连上')
+      if (!online) throw new ChannelError('offline', '设备未连接')
       const target = mode === 'full' ? pickHarness(harness) : null
       const key = target ?? ''
       // 换了一次连接就重新问：对面可能升级过，或者刚登录完。某个 harness 掉线再回来也一样（见 recover）
@@ -2096,7 +2096,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       return value
     },
     async newSessionDefaults(harness, cwd) {
-      if (!online) throw new ChannelError('offline', '设备没有连上')
+      if (!online) throw new ChannelError('offline', '设备未连接')
       const target = mode === 'full' ? pickHarness(harness) : null
       const routed = target === null ? {} : { harness: target }
       // 对面不认识这两个方法（旧一些的对面）当它什么都没说
@@ -2199,7 +2199,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       live.settleProposal(sessionId, proposalId, 'here', null)
     },
     async agents(sessionId) {
-      if (!online) throw new ChannelError('offline', '设备没有连上')
+      if (!online) throw new ChannelError('offline', '设备未连接')
       // 只要直接的子女；不给 sourceKinds 时按父会话查的返回全部来历的子线程（上游的规矩）
       const listing = await guarded(() =>
         collectThreads((cursor) =>

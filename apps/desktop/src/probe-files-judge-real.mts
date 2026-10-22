@@ -89,7 +89,7 @@ function judgeRealTree(tree: RealTree, dirs: RealDirs, lines: FileLines): string
     tree.linkDir.includes('file:long.ts'),
     `指向目录的符号链接展开之后不对：${tree.linkDir.join(' ')}`,
   )
-  must(tree.emptyNote === '空的', `空目录下面的说明不对：${tree.emptyNote}`)
+  must(tree.emptyNote === '空目录', `空目录下面的说明不对：${tree.emptyNote}`)
   must(
     tree.hits[0] === 'file:lib/deep/nested/needle-file.ts' && tree.marked === 'needlefile',
     `找文件的结果不对：${tree.hits.join(' ')}（标出来的字：${tree.marked}）`,

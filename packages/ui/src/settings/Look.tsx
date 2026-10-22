@@ -20,7 +20,7 @@ const SKIN_NOTES: Record<Skin, MessageKey> = {
 }
 
 /** 语言的名字用它自己的字写，不跟着界面的语言变：找不着北的时候也认得出自己那一种 */
-const LANG_NAMES: Record<Lang, string> = { 'zh-CN': '中文', en: 'English' }
+export const LANG_NAMES: Record<Lang, string> = { 'zh-CN': '中文', en: 'English' }
 
 /**
  * 一种皮肤的预览。不是截图：这一小块上把那种皮肤的变量整套重新声明了一遍（皮肤样式文件里的 data-skin-preview），
@@ -92,14 +92,15 @@ export function Row({
   children,
 }: {
   title: string
-  note: string
+  /** 只有选了会有不明显后果、或者控件不能用要说明原因时才给 */
+  note?: string | undefined
   children: ReactNode
 }) {
   return (
     <div className="set-row">
       <span className="set-label">{title}</span>
       {children}
-      <span className="set-note">{note}</span>
+      {note ? <span className="set-note">{note}</span> : null}
     </div>
   )
 }
@@ -114,10 +115,7 @@ export function LookSection() {
   return (
     <>
       <section className="set-block">
-        <h3>
-          {t('look.skin')}
-          <span>{t('settings.look.skin.note')}</span>
-        </h3>
+        <h3>{t('look.skin')}</h3>
         <div className="skins" role="radiogroup" aria-label={t('look.skin')}>
           {SKINS.map((skin) => (
             // biome-ignore lint/a11y/useSemanticElements: 一张卡片里有预览和说明，原生的单选框放不下这些
@@ -146,7 +144,7 @@ export function LookSection() {
       </section>
       <section className="set-block">
         <div className="set-rows">
-          <Row title={t('look.theme')} note={t('settings.look.theme.note')}>
+          <Row title={t('look.theme')}>
             <Choice
               name="theme"
               value={look.theme}
@@ -155,7 +153,7 @@ export function LookSection() {
               onPick={(theme) => setAppearance({ theme })}
             />
           </Row>
-          <Row title={t('look.density')} note={t('settings.look.density.note')}>
+          <Row title={t('look.density')}>
             <Choice
               name="density"
               value={look.density}
@@ -164,10 +162,7 @@ export function LookSection() {
               onPick={(density) => setAppearance({ density })}
             />
           </Row>
-          <Row
-            title={t('look.zoom')}
-            note={t(canZoom ? 'settings.look.zoom.note' : 'settings.look.zoom.browser')}
-          >
+          <Row title={t('look.zoom')} note={canZoom ? undefined : t('settings.look.zoom.browser')}>
             <Choice
               name="zoom"
               value={look.zoom}
@@ -190,7 +185,7 @@ export function LangSection() {
   return (
     <section className="set-block">
       <div className="set-rows">
-        <Row title={t('look.lang')} note={t('settings.lang.note')}>
+        <Row title={t('look.lang')}>
           <Choice
             name="lang"
             value={look.lang}

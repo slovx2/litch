@@ -28,12 +28,12 @@ export function judgeRemoteService(seen: ServiceSeen, aliases: ServiceAliases): 
     `预览没有说出对面是设备服务和它的版本：${connect.previewService}`,
   )
   must(
-    connect.previewServiceNote.includes('没在运行'),
+    connect.previewServiceNote.includes('未运行'),
     `设备服务还没起来的时候，预览没有照实说：${connect.previewServiceNote}`,
   )
   must(
     connect.previewCodex.startsWith('codex｜') &&
-      /只有 Codex \d+\.\d+\.\d+/.test(connect.previewCodex),
+      /仅 Codex \d+\.\d+\.\d+/.test(connect.previewCodex),
     `预览没有说出对面只有 codex：${connect.previewCodex}`,
   )
   must(
@@ -69,7 +69,7 @@ export function judgeRemoteService(seen: ServiceSeen, aliases: ServiceAliases): 
     `详情里没有摆出那台机器上在跑的设备服务（版本｜来源｜是不是按需拉起的）：${connect.serviceFacts}`,
   )
   must(
-    connect.growPeer === 'codex' && connect.growText.startsWith('只有'),
+    connect.growPeer === 'codex' && connect.growText.startsWith('仅'),
     `只有 codex 的那台，设备列表上没有照实说：${connect.growPeer}｜${connect.growText}`,
   )
   must(connect.workspaceAdded, `在远程设备上没能添加项目：${connect.workspaces.join('、')}`)
@@ -143,13 +143,13 @@ export function judgeRemoteService(seen: ServiceSeen, aliases: ServiceAliases): 
   must(legacy.pill.includes('err'), `旧服务在跑的那台不该自己一直重试：${legacy.pill}`)
   plain('设备服务起不来', down)
   must(
-    down.stage === 'startFailed' && down.text.includes('没能起来') && down.detail.length > 0,
+    down.stage === 'startFailed' && down.text.includes('启动失败') && down.detail.length > 0,
     `设备服务起不来的那台，没有停在对应的阶段上，或者没有带上对面的原话：${JSON.stringify(down)}`,
   )
   must(!down.pill.includes('err'), `设备服务起不来的那台该是隔一阵再试：${down.pill}`)
   plain('适配器太旧', old)
   must(
-    old.preview.includes('版本太低') &&
+    old.preview.includes('版本过低') &&
       old.stage === 'outdated' &&
       old.text.includes('太旧') &&
       old.guides.includes('devices.guide.upgradeService') &&

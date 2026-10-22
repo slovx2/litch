@@ -146,7 +146,7 @@ export function App() {
     compose({ deviceId, workspaceId: summary?.workspaceId ?? null })
   }, [picked, replica, compose])
 
-  // 设置页的三个入口：侧栏底部的齿轮（走 openPage）、Cmd/Ctrl+逗号、应用菜单里的“设置…”和“关于”。
+  // 设置页的入口：侧栏底部的“设置”（走 openPage）、“外观”弹层里的“更多外观设置”（走 requestSettings）、Cmd/Ctrl+逗号、应用菜单里的“设置…”和“关于”。
   // 在桌面外壳里这个键是菜单的加速键，按了走的是菜单那条路；页面自己也认它，在普通浏览器里一样能用
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {

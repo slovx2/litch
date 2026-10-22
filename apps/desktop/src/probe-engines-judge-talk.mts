@@ -9,7 +9,7 @@ import { type StepJudge, type Verdict, WORDS } from './probe-engines-spec.mjs'
 const RUN_COMMAND = 'echo fixture-ran-$((6*7)) | tee fixture-ran.txt'
 const RAN = 'fixture-ran-42'
 /** 没有题目标签时卡片标题栏上的字 */
-const QUESTION_HEAD = '有问题要你回答'
+const QUESTION_HEAD = '需要你回答问题'
 /** 假模型问的两道题里各选项（scripts/client-fixture-ask.mjs、client-fixture-anthropic.mjs） */
 const FIRST_OPTIONS = ['只改客户端', '只改适配器', '两边一起改']
 
@@ -76,7 +76,7 @@ const start: StepJudge = (id, spec, raw, v, place) => {
 const cardLooks = (id: string, seen: ApprovalSeen, v: Verdict, cwd: string) => {
   const card = seen.card
   if (!card) return v.fail(`跑命令没有来问（权限选着“${seen.permission}”）`)
-  v.check(card.head === '要你批准：运行一条命令', `卡片的标题是“${card.head}”`)
+  v.check(card.head === '需要批准：运行命令', `卡片的标题是“${card.head}”`)
   v.check(card.body[0] === RUN_COMMAND, `卡片上的命令是“${card.body[0]}”`)
   v.check(card.focused, '卡片出来时焦点不在卡片上')
   v.check(seen.pending === '待审批', `卡片等着的时候，对话里那条命令右边写的是“${seen.pending}”`)

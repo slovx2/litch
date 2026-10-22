@@ -90,13 +90,13 @@ export function createUpdater(options: UpdaterOptions): Updater {
     })
     autoUpdater.on('update-not-available', () => {
       // 清单说有新的、Squirrel 却说没有：清单和它读的那两项对不上（不该发生），照实报
-      if (state.phase === 'downloading') fail(new Error('更新清单和 Squirrel 读到的版本对不上'))
+      if (state.phase === 'downloading') fail(new Error('更新清单与 Squirrel 读取的版本不一致'))
     })
   }
 
   async function fetchFeed() {
     const response = await net.fetch(options.feedUrl, { cache: 'no-store' })
-    if (!response.ok) throw new Error(`取更新清单失败：HTTP ${response.status}`)
+    if (!response.ok) throw new Error(`获取更新清单失败：HTTP ${response.status}`)
     return parseUpdateFeed(await response.json(), { allowHttp: options.allowHttp })
   }
 
@@ -143,7 +143,7 @@ export function createUpdater(options: UpdaterOptions): Updater {
     const sum = hash.digest('hex')
     if (received !== offer.asset.size || sum !== offer.asset.sha256) {
       rmSync(part, { force: true })
-      throw new Error('下下来的安装程序和更新清单对不上（大小或校验和不一样），没有用它')
+      throw new Error('下载的安装程序与更新清单不一致（大小或校验和不同），已放弃使用')
     }
     renameSync(part, target)
     return target

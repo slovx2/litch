@@ -120,7 +120,7 @@ export function createCore(options: CoreOptions): Core {
 
   const deviceOf = (deviceId: string): Device => {
     const device = devices.get(deviceId)
-    if (!device) throw new ChannelError('notFound', `没有这台设备：${deviceId}`)
+    if (!device) throw new ChannelError('notFound', `设备不存在：${deviceId}`)
     return device
   }
 
@@ -317,19 +317,19 @@ export function createCore(options: CoreOptions): Core {
 
   const savedRemote = (deviceId: string): SavedRemote => {
     const entry = saved.remotes.find((remote) => remote.id === deviceId)
-    if (!entry) throw new ChannelError('rejected', '本机设备不能这样改')
+    if (!entry) throw new ChannelError('rejected', '本机设备不支持此修改')
     return entry
   }
 
   /** “操作这台电脑”只有远程设备有，这台桌面端也得执行得了 */
   const machineDevice = (deviceId: string): void => {
     const device = deviceOf(deviceId)
-    if (device.view.kind !== 'ssh') throw new ChannelError('invalid', '本机设备没有这一项')
-    if (!wiring) throw new ChannelError('unsupported', '这台桌面端执行不了 litch_machine')
+    if (device.view.kind !== 'ssh') throw new ChannelError('invalid', '本机设备没有此设置项')
+    if (!wiring) throw new ChannelError('unsupported', '此桌面端无法执行 litch_machine')
   }
 
   const wireOf = (value: unknown): WireColor => {
-    if (!WIRES.includes(value as WireColor)) throw new ChannelError('rejected', '没有这种线色')
+    if (!WIRES.includes(value as WireColor)) throw new ChannelError('rejected', '无效的线色')
     return value as WireColor
   }
 
@@ -689,7 +689,7 @@ export function createCore(options: CoreOptions): Core {
           const { name, target, wire } = params as Commands['device.add']['params']
           const checked = checkTarget(target)
           if (saved.remotes.some((entry) => sameTarget(entry.target, checked))) {
-            throw new ChannelError('rejected', '这台设备已经加过了')
+            throw new ChannelError('rejected', '该设备已添加')
           }
           const entry: SavedRemote = {
             id: newId(),
@@ -710,7 +710,7 @@ export function createCore(options: CoreOptions): Core {
           const device = deviceOf(deviceId)
           if (deviceId === 'local') {
             if (name !== undefined || target !== undefined) {
-              throw new ChannelError('rejected', '本机设备只能改线色')
+              throw new ChannelError('rejected', '本机设备只能修改线色')
             }
             if (wire !== undefined) {
               saved = { ...saved, localWire: wireOf(wire) }
@@ -733,7 +733,7 @@ export function createCore(options: CoreOptions): Core {
               (entry) => entry.id !== deviceId && sameTarget(entry.target, next.target),
             )
           ) {
-            throw new ChannelError('rejected', '这台设备已经加过了')
+            throw new ChannelError('rejected', '该设备已添加')
           }
           saved = {
             ...saved,
@@ -766,11 +766,11 @@ export function createCore(options: CoreOptions): Core {
           const device = deviceOf(deviceId)
           if (harness !== undefined) {
             if (typeof harness !== 'string' || !HARNESS_ID.test(harness)) {
-              throw new ChannelError('invalid', '没有这个 harness')
+              throw new ChannelError('invalid', '未知的 harness')
             }
             // 操作这台电脑不分 harness
             if (machine !== undefined) {
-              throw new ChannelError('invalid', '“操作这台电脑”不分 harness，不要带 harness')
+              throw new ChannelError('invalid', '“操作这台电脑”不区分 harness，请勿指定 harness')
             }
           }
           if (typeof machine === 'boolean') machineDevice(deviceId)
@@ -799,12 +799,12 @@ export function createCore(options: CoreOptions): Core {
           const before = saved.machine?.[deviceId] ?? {}
           const next = { ...before }
           if (approval !== undefined) {
-            if (!APPROVALS.includes(approval)) throw new ChannelError('invalid', '没有这种审批方式')
+            if (!APPROVALS.includes(approval)) throw new ChannelError('invalid', '无效的审批方式')
             next.approval = approval
           }
           if (access !== undefined) {
             if (!access || !ACCESS_MODES.includes(access.mode)) {
-              throw new ChannelError('invalid', '没有这种访问范围')
+              throw new ChannelError('invalid', '无效的访问范围')
             }
             next.access = access.mode
             if (Array.isArray(access.custom)) next.custom = cleanDeniedPaths(access.custom)
@@ -821,14 +821,14 @@ export function createCore(options: CoreOptions): Core {
         case 'machine.answer': {
           const { pendingId, optionId, note } = params as Commands['machine.answer']['params']
           if (!wiring?.answer(String(pendingId), String(optionId), note ?? null)) {
-            throw new ChannelError('notFound', '这张卡片已经不在了')
+            throw new ChannelError('notFound', '该卡片已不存在')
           }
           return {}
         }
         case 'machine.process.kill': {
           const { processId } = params as Commands['machine.process.kill']['params']
           if (!wiring?.kill(String(processId))) {
-            throw new ChannelError('notFound', '这个进程已经不在了')
+            throw new ChannelError('notFound', '该进程已不存在')
           }
           return {}
         }
@@ -1093,7 +1093,7 @@ export function createCore(options: CoreOptions): Core {
           } else {
             const checked = checkPairingAddress(address)
             if (!checked)
-              throw new ChannelError('invalid', '给手机的地址不对', undefined, { key: 'address' })
+              throw new ChannelError('invalid', '手机连接地址无效', undefined, { key: 'address' })
             saved = { ...saved, pairing: { ...(saved.pairing ?? {}), [deviceId]: checked } }
           }
           persist()
@@ -1116,7 +1116,7 @@ export function createCore(options: CoreOptions): Core {
         case 'install.start': {
           const { deviceId, harness, version } = params as Commands['install.start']['params']
           if (version !== 'verified' && version !== 'latest') {
-            throw new ChannelError('invalid', '只能装验证版或最新版')
+            throw new ChannelError('invalid', '只能安装验证版或最新版')
           }
           return { job: await deviceOf(deviceId).install.start(String(harness), version) }
         }
@@ -1204,7 +1204,7 @@ export function createCore(options: CoreOptions): Core {
         case 'harnessConfig.env.set': {
           const p = params as Commands['harnessConfig.env.set']['params']
           if (typeof p.name !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(p.name)) {
-            throw new ChannelError('invalid', '环境变量的名字不对', undefined, { key: 'name' })
+            throw new ChannelError('invalid', '环境变量名无效', undefined, { key: 'name' })
           }
           return deviceOf(p.deviceId).harnessConfig.setEnv(
             String(p.harness),
@@ -1274,14 +1274,14 @@ export function createCore(options: CoreOptions): Core {
         case 'config.reply': {
           const { id, ok, data, reason } = params as Commands['config.reply']['params']
           if (!configBridge.reply(String(id), ok === true, data, reason ?? null)) {
-            throw new ChannelError('notFound', '这件事已经不等了')
+            throw new ChannelError('notFound', '该请求已失效')
           }
           return {}
         }
         case 'config.confirm': {
           const { id, allow } = params as Commands['config.confirm']['params']
           if (!configBridge.answer(String(id), allow === true)) {
-            throw new ChannelError('notFound', '这张卡片已经不在了')
+            throw new ChannelError('notFound', '该卡片已不存在')
           }
           return {}
         }
@@ -1304,7 +1304,7 @@ export function createCore(options: CoreOptions): Core {
           }
           return {}
         default:
-          throw new ChannelError('unknownCommand', `不认识的命令：${name}`)
+          throw new ChannelError('unknownCommand', `未知命令：${name}`)
       }
     },
 

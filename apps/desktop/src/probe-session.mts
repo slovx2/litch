@@ -299,18 +299,18 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
   const spot = popped.getBoundingClientRect()
   // 末尾三项总是这三样。设备上能整理侧栏的话前面多出“置顶”“移到组…”和“移到项目…”：
   // 模拟核心里一定有；真实入口上看对面有没有这组方法、有没有别的项目。
-  // 设备声明了会话树的话还有“派一个子会话…”，支持定时任务的话还有“为这个会话建定时任务”
+  // 设备声明了会话树的话还有“派出子会话…”，支持定时任务的话还有“为此会话创建定时任务”
   // （模拟核心的本机两样都声明了；真实入口看对面）
-  const spawnable = names.includes('派一个子会话…')
-  const schedulable = names.includes('为这个会话建定时任务')
+  const spawnable = names.includes('派出子会话…')
+  const schedulable = names.includes('为此会话创建定时任务')
   const organizing = names
     .slice(0, -3)
-    .filter((name) => name !== '派一个子会话…' && name !== '为这个会话建定时任务')
+    .filter((name) => name !== '派出子会话…' && name !== '为此会话创建定时任务')
     .join('|')
   const contextMenu: SessionProbe['contextMenu'] = {
     opened:
       click.handled &&
-      names.slice(-3).join('|') === '改名|归档|删除' &&
+      names.slice(-3).join('|') === '重命名|归档|删除' &&
       (real || (spawnable && schedulable)) &&
       (real
         ? ['', '置顶|移到组…', '置顶|移到组…|移到项目…'].includes(organizing)
@@ -625,7 +625,7 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
   await frame()
   const rollback: SessionProbe['rollback'] = {
     asked:
-      Boolean(asking.textContent?.includes('找不回来')) &&
+      Boolean(asking.textContent?.includes('无法恢复')) &&
       Boolean(asking.textContent?.includes('不会还原')) &&
       document.activeElement?.textContent === '取消',
     cancelKept: false,
@@ -687,10 +687,10 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
   )
   const told = refusal()
   if (real && told && turns() === turnsNow) {
-    // Pi 不压：提示是“没压缩成：”加上原因，原因是对面的原话。这里不写死它，
+    // Pi 不压：提示是“压缩失败：”加上原因，原因是对面的原话。这里不写死它，
     // judgeSession 只看它是不是界面自己的套话。再等一会儿，确认后面也没有冒出回合来
     await sleep(1_500)
-    compact.refused = told.startsWith('没压缩成：') ? told.slice('没压缩成：'.length).trim() : ''
+    compact.refused = told.startsWith('压缩失败：') ? told.slice('压缩失败：'.length).trim() : ''
     compact.ran = turns() === turnsNow && !one('.ctx-pop')
     one<HTMLButtonElement>('[data-toast="compact-failed"] .toast-x')?.click()
   } else {
@@ -714,7 +714,7 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
     const stopped = await until('“压缩上下文”', compactEntry)
     compact.busyBlocked =
       stopped.getAttribute('aria-disabled') === 'true' &&
-      Boolean(stopped.textContent?.includes('回合还在进行')) &&
+      Boolean(stopped.textContent?.includes('回合进行中')) &&
       act(earlier, 'fork')?.getAttribute('aria-disabled') === 'true'
     press(stopped, 'Escape')
     await until('浮层收起', () => !one('.ctx-pop'))
@@ -736,14 +736,14 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
     await until('说不支持的提示', () => failed().includes('不支持'))
     await until('分叉按钮停掉', () => off(forkButton()))
     const forkStopped =
-      failed().includes('没分叉成') && Boolean(forkButton()?.title.includes('不支持'))
+      failed().includes('分叉失败') && Boolean(forkButton()?.title.includes('不支持'))
     one<HTMLButtonElement>('.toast.err .toast-x')?.click()
     await until('提示关掉', () => !one('.toast.err'))
     ;(await until('上下文圆环', meter)).click()
     ;(await until('“压缩上下文”', compactEntry)).click()
     await until(
       '说不支持的提示',
-      () => failed().includes('没压缩成') && failed().includes('不支持'),
+      () => failed().includes('压缩失败') && failed().includes('不支持'),
     )
     ;(await until('上下文圆环', meter)).click()
     const compactStopped =
@@ -762,7 +762,7 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
 }
 
 /** 界面在说不出具体原因时自己用的几句话（packages/ui 的 error.*、ability.unsupported） */
-const GENERIC_REASONS = ['出了点问题', '设备没有', '已取消', '不支持这个操作']
+const GENERIC_REASONS = ['发生错误', '设备未连接', '设备响应超时', '已取消', '不支持该操作']
 
 /** 哪些项不合格。全过就是空的 */
 export function judgeSession(probe: SessionProbe): string[] {

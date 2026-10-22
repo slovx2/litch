@@ -152,7 +152,7 @@ export function createRpc(transport: Transport, options: RpcOptions): Rpc {
   const shutdown = (reason: Text | null) => {
     if (closed) return
     closed = true
-    const error = new RpcAbortError('closed', reason ? describeText(reason) : '连接已经关闭')
+    const error = new RpcAbortError('closed', reason ? describeText(reason) : '连接已关闭')
     for (const id of [...pending.keys()]) settle(id)?.reject(error)
     options.close(reason)
   }
@@ -165,7 +165,7 @@ export function createRpc(transport: Transport, options: RpcOptions): Rpc {
     },
 
     request(method, params, requestOptions) {
-      if (closed) return Promise.reject(new RpcAbortError('closed', '连接已经关闭'))
+      if (closed) return Promise.reject(new RpcAbortError('closed', '连接已关闭'))
       const signal = requestOptions?.signal
       if (signal?.aborted) return Promise.reject(new RpcAbortError('cancelled', '已取消'))
       const id = nextId++
@@ -175,7 +175,7 @@ export function createRpc(transport: Transport, options: RpcOptions): Rpc {
         if (timeoutMs > 0) {
           entry.stopTimer = options.clock.setTimer(() => {
             if (settle(id))
-              reject(new RpcAbortError('timeout', `${method} 超过 ${timeoutMs} 毫秒没有应答`))
+              reject(new RpcAbortError('timeout', `${method} 在 ${timeoutMs} 毫秒内未响应`))
           }, timeoutMs)
         }
         pending.set(id, entry)

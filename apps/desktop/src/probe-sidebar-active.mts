@@ -84,7 +84,7 @@ export function judgeActive(seen: ActiveSeen): string[] {
     if (!ok) failed.push(message)
   }
   const { running, unread, waiting, own } = ACTIVE_TITLES
-  must(seen.label === '永远显示活动对话', `“更多”里的开关写的是：${seen.label}`)
+  must(seen.label === '始终显示活动对话', `“更多”里的开关写的是：${seen.label}`)
   must(seen.checkedAtStart === 'false', `前面关上了的开关没跟着变：${seen.checkedAtStart}`)
   must(
     seen.off.includes(own) &&

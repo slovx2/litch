@@ -175,9 +175,7 @@ function OutputWell({ item }: { item: CommandItem }) {
       {output}
       {elided ? (
         <>
-          <span className="well-gap" title={t('command.elidedWhy')}>
-            {t('command.elided', { size: byteSize(elided.bytes) })}
-          </span>
+          <span className="well-gap">{t('command.elided', { size: byteSize(elided.bytes) })}</span>
           {elided.tail}
         </>
       ) : null}
@@ -314,7 +312,7 @@ function PartsWell({ parts }: { parts: ToolPart[] }) {
         if (part.kind === 'gap') {
           return (
             // biome-ignore lint/suspicious/noArrayIndexKey: 段只按先后排，整份一起换
-            <span key={index} className="well-gap" title={t('tool.elidedWhy')}>
+            <span key={index} className="well-gap">
               {partsGap(part, t)}
             </span>
           )

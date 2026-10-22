@@ -102,20 +102,103 @@
 }
 .sb-foot {
   display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 12px 6px;
+  align-items: stretch;
+  gap: 4px;
+  padding: 4px 8px 6px;
   border-top: 1px solid var(--line-1);
 }
-/* 底下只一行：定时任务占满左边，齿轮贴右 */
-.sb-foot .sb-link {
+/* 底下横排三个一样宽的小按钮：图标在上、名字在下。名字太长时省略，不换行、不挤歪 */
+.sb-foot > .sb-btn,
+.sb-look {
   flex: 1 1 0;
   min-width: 0;
-  margin-bottom: 0;
 }
-.sb-settings.on {
+.sb-look {
+  position: relative;
+  display: flex;
+}
+.sb-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  /* 左右不垫：flex-basis 为 0 时内边距会算进宽度，三个就不一样宽了 */
+  padding: 4px 0 3px;
+  border-radius: var(--r1);
+  color: var(--ink-2);
+  font-size: 11px;
+  line-height: 14px;
+}
+.sb-btn:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.sb-btn.on {
   background: var(--sel);
   color: var(--ink);
+}
+.sb-btn-ic {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+.sb-btn-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 定时任务没看过的运行数：贴在钟的右上角，比别处的小一号，不盖住钟面 */
+.sb-btn-ic .sb-count {
+  position: absolute;
+  left: calc(100% - 3px);
+  top: -4px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 7px;
+  font-size: 9px;
+  line-height: 14px;
+}
+/* 外观的小弹层：往上弹，和侧栏左边对齐；三排各是名字在上、一排按钮在下 */
+.sb-look-pop {
+  left: 0;
+  width: max-content;
+  min-width: 0;
+  max-width: none;
+  max-height: none;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sb-look .sb-look-pop {
+  left: calc(-100% - 4px);
+}
+.sb-look-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.sb-look-row .seg {
+  display: flex;
+}
+.sb-look-row .seg button {
+  flex: 1 1 auto;
+}
+.sb-look-more {
+  align-self: flex-start;
+  padding: 2px 0;
+  font-size: 12px;
+  color: var(--accent);
+}
+.sb-look-more:hover {
+  text-decoration: underline;
 }
 /* 侧栏最上面常驻的“新对话”：不跟着下面的设备和会话滚。
    它右边是筛选的小按钮（有得挑才出现）；正筛着的时候下面多一行，自己占一整行 */

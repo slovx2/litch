@@ -6,7 +6,7 @@ import type { FilesKit } from './probe-files-kit.mjs'
 
 /** 一张请求卡片上看得到的东西 */
 export interface CardSeen {
-  /** 标题那一行（“要你批准：运行一条命令”“有问题要你回答”） */
+  /** 标题那一行（“需要批准：运行命令”“需要你回答问题”） */
   head: string
   /** 正文：命令、目录、原因、题目，一样一行 */
   body: string[]

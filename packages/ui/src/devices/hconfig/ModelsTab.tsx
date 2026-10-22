@@ -229,9 +229,7 @@ export function ModelsTab({ device, harnessId, name, slot }: ModelsTabProps) {
               : t('hc.models.bases', { name, count: data.bases.length })}
           </h2>
         </div>
-        <p className="mng-sec-note">
-          {showingList ? t('hc.models.list.note') : t('hc.models.bases.note')}
-        </p>
+        {showingList ? <p className="mng-sec-note">{t('hc.models.list.note')}</p> : null}
         {showingList ? (
           entries.length === 0 ? (
             <div className="mng-state" data-hc-models-empty>

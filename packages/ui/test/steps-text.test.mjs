@@ -44,15 +44,15 @@ test('步骤组：动作和个数按先后连起来，量词按动作定', () =>
       }),
       zh,
     ),
-    '搜索 1 次，新增 2 个文件，调用 4 次工具，查网页 1 次，列出 1 个目录，删除 1 个文件',
+    '搜索 1 次，新增 2 个文件，调用 4 次工具，查询网页 1 次，列出 1 个目录，删除 1 个文件',
   )
   // 英文开头那段大写
   assert.equal(stepsSummary(tally({ counts: [{ kind: 'command', n: 1 }] }), en), 'Ran 1 command')
 })
 
-test('步骤组：只有思考的写“想了一下”；只有一条提示的写那条提示', () => {
-  assert.equal(stepsSummary(tally({ thoughts: 2 }), zh), '想了一下')
-  assert.equal(stepsSummary(tally({ thoughts: 1 }), en), 'Thought for a moment')
+test('步骤组：只有思考的写“已思考”；只有一条提示的写那条提示', () => {
+  assert.equal(stepsSummary(tally({ thoughts: 2 }), zh), '已思考')
+  assert.equal(stepsSummary(tally({ thoughts: 1 }), en), 'Thought')
   const notice = tally({ counts: [{ kind: 'notice', n: 1 }], notice: '上下文已压缩' })
   assert.equal(stepsSummary(notice, zh), '上下文已压缩')
   const notices = tally({ counts: [{ kind: 'notice', n: 2 }], notice: '上下文已压缩' })

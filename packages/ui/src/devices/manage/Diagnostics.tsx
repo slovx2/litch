@@ -180,7 +180,6 @@ export function Logs({ device }: { device: DeviceView }) {
           {t(reading ? 'manage.loading' : 'manage.logs.read')}
         </button>
       </div>
-      <p className="mng-sec-note">{t('manage.logs.note')}</p>
       {failure ? (
         <div className="mng-note err" role="alert">
           {t('manage.failed', { reason: whyNot(failure, t) })}

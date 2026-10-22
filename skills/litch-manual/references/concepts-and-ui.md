@@ -36,7 +36,9 @@
   while the filter is on; **Show Claude Code sub-sessions** shows sessions the Claude desktop app
   started from another session); then one block per device
   (device row with status, then Pinned, your groups, the built-in Projects group, and "No project"
-  sessions); at the bottom **Scheduled tasks**, **Devices**, **Archived sessions** and **Settings**.
+  sessions); at the bottom three small buttons: **Schedule** (scheduled tasks), **Appearance** (a
+  popover for skin, theme and language, with a link to Settings → Appearance) and **Settings** (Devices
+  and Archived sessions are entered from the Settings page).
   Hovering a device, project or "No project" row shows a **+** that starts a new session there (the
   device row and "No project" start one outside any project); the **+** on the Projects row adds a
   project. Right-click or the "more"

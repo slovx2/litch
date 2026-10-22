@@ -69,7 +69,7 @@ const write: StepJudge = (id, _spec, raw, v) => {
   if (id === 'dsh') v.check(seen.card === null, 'dsh 在“项目内”档上写项目里的文件，却来问了')
   else {
     v.check(
-      seen.card?.head === '要你批准：修改文件',
+      seen.card?.head === '需要批准：修改文件',
       `写文件之前${seen.card ? `来的卡片是“${seen.card.head}”` : '没有来问'}`,
     )
     // 卡片上不写是哪个文件：要看对话里那一条，它这时已经在了、带着文件名和加减行数
@@ -180,7 +180,7 @@ const rollback: StepJudge = (id, _spec, raw, v) => {
 }
 
 /** 界面在说不出具体原因时自己用的几句话（packages/ui 的 error.*、ability.unsupported） */
-const GENERIC_REASONS = ['出了点问题', '设备没有', '已取消', '不支持这个操作']
+const GENERIC_REASONS = ['发生错误', '设备未连接', '设备响应超时', '已取消', '不支持该操作']
 
 const compact: StepJudge = (id, _spec, raw, v) => {
   const seen = raw as CompactSeen
@@ -189,9 +189,9 @@ const compact: StepJudge = (id, _spec, raw, v) => {
     `压缩之后再发一句：“${seen.next.foot}”“${seen.next.answer.slice(0, 60)}”`,
   )
   // Pi 自己不肯压缩太小的会话（夹具里的会话只有几百个词元）：不开回合，请求的错误是它的原话，
-  // 界面出一条“没压缩成：原因”的提示。原因是对面说的，这里不写死它，只要求有、而且不是界面的套话。
+  // 界面出一条“压缩失败：原因”的提示。原因是对面说的，这里不写死它，只要求有、而且不是界面的套话。
   // 压缩本身在夹具里量不到
-  const refused = /没压缩成：([^｜]*)/.exec(seen.told)
+  const refused = /压缩失败：([^｜]*)/.exec(seen.told)
   if (id === 'pi' && refused) {
     const reason = (refused[1] ?? '').trim()
     v.check(!seen.ran, `Pi 没压，对话里却多出了一个回合：${seen.turn.join('｜')}`)

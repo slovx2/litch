@@ -272,7 +272,7 @@ export async function homeProbe(real: boolean): Promise<HomeProbe> {
       '没建成的说明',
       () => {
         const line = text(one('.dock .cmp-hint.err'))
-        return line.includes('会话没建成') ? line : null
+        return line.includes('新建会话失败') ? line : null
       },
       10_000,
     ).catch(() => '')

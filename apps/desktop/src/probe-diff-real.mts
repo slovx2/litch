@@ -53,7 +53,10 @@ export async function realDiff(names: {
   const branch = one('.db-total')?.getAttribute('title') ?? ''
   // 盯上了没有：对面的应答比概况晚一点到，等一等
   const watching = await kit.seen(
-    () => !(one('.db [data-tool="refresh"]')?.getAttribute('title') ?? '').includes('盯不了'),
+    () =>
+      !(one('.db [data-tool="refresh"]')?.getAttribute('title') ?? '').includes(
+        '不支持监视文件变化',
+      ),
     5000,
   )
   const tree = await diff.listed()

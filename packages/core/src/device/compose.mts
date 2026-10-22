@@ -39,12 +39,12 @@ export interface ComposeAids {
   plan(harness: HarnessId | undefined): Promise<boolean>
 }
 
-const UNSUPPORTED = '对面不支持这个操作'
+const UNSUPPORTED = '对方不支持此操作'
 
 export function createComposeAids(host: ComposeHost): ComposeAids {
   /** 发给谁，以及这件事它声明了会不会。没有声明就是 undefined：试了才知道 */
   const aim = (wanted: HarnessId | undefined, ability: keyof HarnessAbilities) => {
-    if (!host.online()) throw new ChannelError('offline', '设备没有连上')
+    if (!host.online()) throw new ChannelError('offline', '设备未连接')
     const target = host.target(wanted)
     const owner = target ?? host.sole()
     const declared = owner === null ? null : host.declared(owner)
@@ -71,7 +71,7 @@ export function createComposeAids(host: ComposeHost): ComposeAids {
       return projectSkills(response)
     },
     async plan(wanted) {
-      if (!host.online()) throw new ChannelError('offline', '设备没有连上')
+      if (!host.online()) throw new ChannelError('offline', '设备未连接')
       const target = host.target(wanted)
       try {
         const { data } = await host.request(

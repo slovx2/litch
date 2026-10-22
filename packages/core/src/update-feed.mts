@@ -62,30 +62,30 @@ export function parseUpdateFeed(value: unknown, options: { allowHttp?: boolean }
   const okUrl = (url: unknown): url is string =>
     httpsUrl(url) ||
     (options.allowHttp === true && typeof url === 'string' && url.startsWith('http://'))
-  if (!isObject(value)) throw new Error('更新清单不是一个对象')
+  if (!isObject(value)) throw new Error('更新清单格式错误')
   const { version, pubDate, notesUrl, assets } = value
   if (typeof version !== 'string' || !parseVersion(version)) {
-    throw new Error(`更新清单的版本号读不了：${String(version)}`)
+    throw new Error(`更新清单的版本号无效：${String(version)}`)
   }
-  if (!isObject(assets)) throw new Error('更新清单里没有 assets')
+  if (!isObject(assets)) throw new Error('更新清单缺少 assets')
   const picked: UpdateFeed['assets'] = {}
   for (const platform of PLATFORMS) {
     const asset = assets[platform]
     if (asset === undefined) continue
-    if (!isObject(asset)) throw new Error(`更新清单的 ${platform} 不是一个对象`)
+    if (!isObject(asset)) throw new Error(`更新清单中 ${platform} 的格式错误`)
     const { url, sha256, size, versionCode } = asset
-    if (!okUrl(url)) throw new Error(`更新清单的 ${platform} 地址不对：${String(url)}`)
+    if (!okUrl(url)) throw new Error(`更新清单中 ${platform} 的地址无效：${String(url)}`)
     if (typeof sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(sha256)) {
-      throw new Error(`更新清单的 ${platform} 校验和不对`)
+      throw new Error(`更新清单中 ${platform} 的校验和无效`)
     }
     if (typeof size !== 'number' || !Number.isSafeInteger(size) || size <= 0) {
-      throw new Error(`更新清单的 ${platform} 大小不对`)
+      throw new Error(`更新清单中 ${platform} 的大小无效`)
     }
     if (
       versionCode !== undefined &&
       (typeof versionCode !== 'number' || !Number.isSafeInteger(versionCode))
     ) {
-      throw new Error(`更新清单的 ${platform} versionCode 不对`)
+      throw new Error(`更新清单中 ${platform} 的 versionCode 无效`)
     }
     picked[platform] = { url, sha256, size, ...(versionCode === undefined ? {} : { versionCode }) }
   }

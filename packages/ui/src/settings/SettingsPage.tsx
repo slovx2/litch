@@ -51,17 +51,13 @@ const TITLES: Record<SettingsSection, MessageKey> = {
   keys: 'settings.group.keys',
   about: 'settings.group.about',
 }
-const INTROS: Record<SettingsSection, MessageKey> = {
-  look: 'settings.look.intro',
-  lang: 'settings.lang.intro',
-  chat: 'settings.chat.intro',
+/** 组标题下的一句说明：只有这一组有不明显的范围或后果时才写，其余组不写 */
+const INTROS: Partial<Record<SettingsSection, MessageKey>> = {
   switches: 'settings.switches.intro',
   browser: 'settings.browser.intro',
   computer: 'settings.computer.intro',
   notify: 'settings.notify.intro',
   assist: 'settings.assist.intro',
-  keys: 'settings.keys.intro',
-  about: 'settings.about.intro',
 }
 
 interface SettingsPageProps {
@@ -91,6 +87,7 @@ export function SettingsPage({
   const sections = shownSections()
   // 要的那一组这里没有（不是 macOS 却要开 Computer Use）：落到第一组
   const section = sections.includes(asked) ? asked : 'look'
+  const intro = section === 'computer' ? computerIntro() : INTROS[section]
 
   // Esc 回到对话
   useEffect(() => {
@@ -134,7 +131,7 @@ export function SettingsPage({
         <header className="set-head">
           <div>
             <h2>{t(TITLES[section])}</h2>
-            <p>{t(section === 'computer' ? computerIntro() : INTROS[section])}</p>
+            {intro ? <p>{t(intro)}</p> : null}
           </div>
           <button
             type="button"

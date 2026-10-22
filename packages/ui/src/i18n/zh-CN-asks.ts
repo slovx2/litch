@@ -4,14 +4,14 @@ import type { Entry } from './types.ts'
 
 export const zhAsks = {
   'ask.title': '问题',
-  'ask.state.open': '等你回答',
+  'ask.state.open': '待回答',
   'ask.state.answered': '已答',
-  'ask.state.closed': '没有回答',
-  'ask.other': '或者自己写',
-  'ask.reply': '写下回答',
+  'ask.state.closed': '未回答',
+  'ask.other': '或自行填写',
+  'ask.reply': '填写回答',
   'ask.send': '发送',
-  'ask.note': '模型没有停下来等，答了会插进正在进行的回合',
-  'ask.queued': '这个回合插不进话，答复排在队列里，回合结束后发出',
-  'ask.skipped': '跳过了',
-  'ask.replied': '回答了问题',
+  'ask.note': '模型不会暂停等待，回答将插入当前回合',
+  'ask.queued': '当前回合无法插入消息，回答已排队，将在回合结束后发送',
+  'ask.skipped': '已跳过',
+  'ask.replied': '已回答问题',
 } satisfies Record<string, Entry>

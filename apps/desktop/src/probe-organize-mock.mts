@@ -298,8 +298,8 @@ export async function organizeMockProbe(): Promise<OrganizeMockProbe> {
   const lastPop = await menuOf(workspaceLine('launchd'), '最后一个项目')
   seen.lastMenu = items(lastPop)
   const menuEnds =
-    seen.firstMenu === '改名与颜色…|置顶|移到组…|下移|删除' &&
-    seen.lastMenu === '改名与颜色…|置顶|移到组…|上移|删除'
+    seen.firstMenu === '重命名与颜色…|置顶|移到组…|下移|删除' &&
+    seen.lastMenu === '重命名与颜色…|置顶|移到组…|上移|删除'
   one<HTMLButtonElement>('.pick-opt[data-action="edit"]', lastPop)?.click()
   await until('改名与颜色的对话框', dialog)
   const nameField = await until('名字那一栏', () => one<HTMLInputElement>('#ws-name'))
@@ -322,7 +322,7 @@ export async function organizeMockProbe(): Promise<OrganizeMockProbe> {
   const asking = await until('删除之前的那一问', () => one('.pick-ask', deletePop))
   seen.deleteAsk = text(asking)
   const deleteAsked =
-    seen.deleteAsk.includes('只删掉项目这条记录') && Boolean(workspaceLine('日志笔记'))
+    seen.deleteAsk.includes('仅删除项目记录') && Boolean(workspaceLine('日志笔记'))
   one<HTMLButtonElement>('.btn.danger', asking)?.click()
   await until('项目没了', () => !workspaceLine('日志笔记'))
   const deleted = Boolean(await until('里面的会话回到“无项目”', () => groupOf(S9) === ''))
@@ -401,13 +401,13 @@ export async function organizeMockProbe(): Promise<OrganizeMockProbe> {
     shownOnOthers: claudeHasFork,
     // 模拟核心的本机声明了会话树：能派子会话
     noDelete:
-      seen.dshMenu === '置顶|移到组…|移到项目…|为这个会话建定时任务|派一个子会话…|改名|归档',
+      seen.dshMenu === '置顶|移到组…|移到项目…|为此会话创建定时任务|派出子会话…|重命名|归档',
     presetNotes: dsh.read.length === 3 && Boolean(dsh.read[0]?.startsWith('只读：不能改文件')),
     solePreset:
       pi.read.length === 1 &&
       pi.shown === '完全访问' &&
       pi.read[0]?.includes('Pi 没有审批') === true,
-    builtinPresets: bare.read.length === 3 && Boolean(bare.read[0]?.startsWith('只读：只能看。')),
+    builtinPresets: bare.read.length === 3 && Boolean(bare.read[0]?.startsWith('只读：仅可读取。')),
     noNote,
     ruleShown,
   }
@@ -460,16 +460,16 @@ export async function organizeMockProbe(): Promise<OrganizeMockProbe> {
   const reasons: OrganizeMockProbe['reasons'] = {
     zh:
       zh[0] === 'notInstalled' &&
-      zh[1] === '这台设备上没有装' &&
-      Boolean(zh[2]?.includes('装好它的命令行')) &&
+      zh[1] === '此设备未安装' &&
+      Boolean(zh[2]?.includes('安装其命令行工具')) &&
       Boolean(zh[3]?.includes('没有找到 codex')),
     en:
       en[0] === 'notInstalled' &&
       en[1] === 'Not installed on this device' &&
-      Boolean(en[2]?.includes('Install its command-line tool')) &&
+      Boolean(en[2]?.includes('Install its CLI')) &&
       Boolean(en[3]?.includes('codex was not found')),
     pickerNext:
-      seen.pickerNote.includes('这台设备上没有装') && seen.pickerNote.includes('装好它的命令行'),
+      seen.pickerNote.includes('此设备未安装') && seen.pickerNote.includes('安装其命令行工具'),
   }
 
   return { groups, place, workspace, elsewhere, declared, reasons, seen }

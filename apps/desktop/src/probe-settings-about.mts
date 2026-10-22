@@ -71,8 +71,9 @@ export async function aboutSeen(): Promise<AboutSeen> {
     if (!row) return ''
     one<HTMLButtonElement>('.fold', row)?.click()
     const body = await until('许可的全文', () => {
-      const shown = text(one('.lic-text', row))
-      return shown && shown !== '正在取…' ? shown : null
+      const pre = one('.lic-text', row)
+      const shown = text(pre)
+      return shown && pre?.dataset.state !== 'loading' ? shown : null
     })
     one<HTMLButtonElement>('.fold', row)?.click()
     await kit.seen(() => !one('.lic-text', row), 2000)

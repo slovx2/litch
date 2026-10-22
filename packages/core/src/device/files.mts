@@ -148,7 +148,7 @@ export function createFiles(host: FilesHost): Files {
   }
 
   const mustBeOnline = () => {
-    if (!host.online()) throw new ChannelError('offline', '设备没有连上')
+    if (!host.online()) throw new ChannelError('offline', '设备未连接')
   }
 
   /** 请求没做成。对面说不认识这个方法的记下来；别的换成给人看的错误 */

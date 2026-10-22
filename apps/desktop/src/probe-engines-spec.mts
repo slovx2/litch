@@ -56,7 +56,7 @@ export const WORDS = {
   workspace: '三引擎验收',
   approve: '跑个命令，这一次会批准',
   refuse: '再跑个命令，这一次会拒绝',
-  accept: '允许这一次',
+  accept: '仅允许本次',
   decline: '拒绝',
   ask: '问我两个问题',
   askOne: '问一句',

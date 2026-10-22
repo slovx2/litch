@@ -29,37 +29,36 @@ export function writeQuitChoice(dataDir: string, choice: QuitChoice): void {
 
 const WORDS = {
   'zh-CN': {
-    durable: (count: number) => `还有 ${count} 个终端在设备上运行`,
-    durableDetail: '可以让它们留在设备上继续运行，下次打开时接回来；也可以现在就结束。',
-    alsoEphemeral: (count: number) => `另有 ${count} 个终端跟着连接走，退出时会一起结束。`,
-    ephemeral: (count: number) => `还有 ${count} 个终端在运行`,
-    ephemeralDetail: '这些终端跟着连接走：退出应用，里面正在运行的程序会一起结束。',
-    leave: '留在设备上',
-    end: '结束它们',
+    durable: (count: number) => `有 ${count} 个终端正在设备上运行`,
+    durableDetail: '可以让它们在设备上继续运行，下次打开时重新连接；也可以立即结束。',
+    alsoEphemeral: (count: number) => `另有 ${count} 个终端随连接结束，退出时会一并关闭。`,
+    ephemeral: (count: number) => `有 ${count} 个终端正在运行`,
+    ephemeralDetail: '这些终端随连接结束：退出应用后，其中正在运行的程序会一并终止。',
+    leave: '保留在设备上',
+    end: '结束终端',
     quit: '退出',
     cancel: '取消',
-    remember: '记住我的选择，以后不再问（可以在“文件”菜单里改回来）',
+    remember: '记住选择，不再询问（可在“文件”菜单中更改）',
   },
   en: {
     durable: (count: number) =>
       count === 1
-        ? 'A terminal is still running on its device'
-        : `${count} terminals are still running on their devices`,
-    durableDetail:
-      'They can keep running on the device and be picked up again next time, or be ended now.',
+        ? 'A terminal is running on its device'
+        : `${count} terminals are running on their devices`,
+    durableDetail: 'Keep them running on the device and reconnect next time, or end them now.',
     alsoEphemeral: (count: number) =>
       count === 1
-        ? 'Another terminal lives with the connection and will end when you quit.'
-        : `${count} more terminals live with the connection and will end when you quit.`,
+        ? 'Another terminal is tied to the connection and will close when you quit.'
+        : `${count} more terminals are tied to the connection and will close when you quit.`,
     ephemeral: (count: number) =>
-      count === 1 ? 'A terminal is still running' : `${count} terminals are still running`,
+      count === 1 ? 'A terminal is running' : `${count} terminals are running`,
     ephemeralDetail:
-      'These terminals live with the connection: quitting ends whatever is running in them.',
+      'These terminals are tied to the connection. Quitting ends any programs running in them.',
     leave: 'Keep Running',
-    end: 'End Them',
+    end: 'End Terminals',
     quit: 'Quit',
     cancel: 'Cancel',
-    remember: 'Remember my choice and don’t ask again (change it back in the File menu)',
+    remember: 'Don’t ask again (change this in the File menu)',
   },
 } as const
 

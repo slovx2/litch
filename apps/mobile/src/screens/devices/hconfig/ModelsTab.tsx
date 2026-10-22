@@ -255,14 +255,12 @@ export function ModelsTab({
             ? t('hc.models.list', { count: entries.length })
             : t('hc.models.bases', { name, count: data.bases.length })}
         </SectionLabel>
-        <Note
-          text={
-            showingList
-              ? `${t('hc.models.list.note')}${locked ? '' : ` ${t('hcm.models.tap')}`}`
-              : t('hc.models.bases.note')
-          }
-          tone="dim"
-        />
+        {showingList ? (
+          <Note
+            text={`${t('hc.models.list.note')}${locked ? '' : ` ${t('hcm.models.tap')}`}`}
+            tone="dim"
+          />
+        ) : null}
         {showingList ? (
           entries.length === 0 ? (
             <Note text={t('hc.models.empty')} tone="wait" testID="hc:models:empty" />

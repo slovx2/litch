@@ -79,7 +79,7 @@ export interface Management {
  */
 const WAIT = { write: 120_000, restart: 130_000, diagnostics: 180_000 }
 
-const UNSUPPORTED = '这台设备没有设置接口'
+const UNSUPPORTED = '此设备不支持设置接口'
 
 const strings = (value: unknown): string[] =>
   Array.isArray(value) ? value.filter((entry) => typeof entry === 'string') : []
@@ -175,7 +175,7 @@ export function createManagement(host: ManagementHost): Management {
   }
 
   const reachable = () => {
-    if (!host.online()) throw new ChannelError('offline', '设备没有连上')
+    if (!host.online()) throw new ChannelError('offline', '设备未连接')
     if (!host.supported()) throw new ChannelError('unsupported', UNSUPPORTED)
   }
 

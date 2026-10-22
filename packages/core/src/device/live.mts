@@ -261,7 +261,7 @@ const PAUSE_BEFORE_STOP_MS = 500
 const isRunning = (view: SessionView): TurnView | undefined =>
   view.turns.findLast((turn) => turn.status === 'running')
 
-const UNSUPPORTED = '对面不支持这个操作'
+const UNSUPPORTED = '对方不支持此操作'
 
 export function createLiveSessions(host: LiveHost): LiveSessions {
   const sessions = new Map<string, Live>()
@@ -343,7 +343,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
 
   /** 这件事要够得着对面才做得了。够不着就说明是哪一种：设备没连上，还是它的 harness 现在不可用 */
   const mustReach = (live: Live) => {
-    if (!host.online()) throw new ChannelError('offline', '设备没有连上')
+    if (!host.online()) throw new ChannelError('offline', '设备未连接')
     const owner = ownerOf(live)
     if (owner !== null && !host.ready(owner)) throw harnessDownError(host.harnessName(owner))
   }
@@ -1130,7 +1130,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
 
   const need = (sessionId: string): Live & { view: SessionView } => {
     const live = sessions.get(sessionId)
-    if (!live?.view) throw new ChannelError('notFound', `会话没有打开：${sessionId}`)
+    if (!live?.view) throw new ChannelError('notFound', `会话未打开：${sessionId}`)
     return live as Live & { view: SessionView }
   }
 
@@ -1318,7 +1318,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     },
 
     async create(cwd, message, settings, harness, workspaceId, asGoal = false) {
-      if (!host.online()) throw new ChannelError('offline', '设备没有连上')
+      if (!host.online()) throw new ChannelError('offline', '设备未连接')
       let started: Awaited<ReturnType<typeof host.request<'thread/start'>>>
       // 还没有会话对象：它算在谁头上，聚合面上就是指定的那个，单个入口上只有那一个
       const target = harness ?? host.sole()
@@ -1327,7 +1327,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
         // 不会持续目标的不去建会话：建出来也设不了目标，只会留一个空会话
         if (target === null || !abilities(target).goals)
           throw new ChannelError('unsupported', UNSUPPORTED)
-        if (!objective) throw new ChannelError('rejected', '目标不能是空的')
+        if (!objective) throw new ChannelError('rejected', '目标不能为空')
       }
       const presets = target === null ? null : presetsOf(target)
       // 这台桌面能执行的客户端工具（都默认带上，用的时候再查开关）。工具只能在建会话时定
@@ -1399,10 +1399,10 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
 
     async implementPlan(sessionId, text) {
       const live = need(sessionId)
-      if (!live.view.live) throw new ChannelError('rejected', '这个会话是只读的')
+      if (!live.view.live) throw new ChannelError('rejected', '此会话只读')
       mustReach(live)
       if (isRunning(live.view) || live.queued.length > 0) {
-        throw new ChannelError('rejected', '回合还在进行，现在执行不了计划')
+        throw new ChannelError('rejected', '回合正在进行，暂时无法执行计划')
       }
       // 退出计划模式和“执行”是同一个回合里的事：模式跟着这个回合发过去。
       // 标识以 plan: 开头是和适配器的约定：Pi 引擎认出来之后走它自己的“实施计划”，不把这句话当成新的要求
@@ -1413,7 +1413,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
 
     async send(sessionId, message, now) {
       const live = need(sessionId)
-      if (!live.view.live) throw new ChannelError('rejected', '这个会话是只读的')
+      if (!live.view.live) throw new ChannelError('rejected', '此会话只读')
       mustReach(live)
       if (isRunning(live.view) || live.queued.length > 0) {
         const id = `q${++localSeq}`
@@ -1431,10 +1431,10 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     async steer(sessionId, messageId) {
       const live = need(sessionId)
       const message = live.queued.find((entry) => entry.id === messageId)
-      if (!message) throw new ChannelError('rejected', '这条消息已经不在队列里了')
+      if (!message) throw new ChannelError('rejected', '该消息已不在队列中')
       const running = isRunning(live.view)
       const turnId = running ? serverTurn(live, running.id) : null
-      if (!running || !turnId) throw new ChannelError('rejected', '现在没有可以插话的回合')
+      if (!running || !turnId) throw new ChannelError('rejected', '当前没有可插入消息的回合')
       const { harness } = live.view
       const can = abilities(harness)
       // 声明了不会的、试过不行的：不去发，消息照常排着等这个回合结束
@@ -1484,7 +1484,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       const live = need(sessionId)
       const running = isRunning(live.view)
       const turnId = running ? serverTurn(live, running.id) : null
-      if (!turnId) throw new ChannelError('rejected', '没有可以打断的回合')
+      if (!turnId) throw new ChannelError('rejected', '当前没有可中断的回合')
       host.interrupting?.(sessionId)
       // 目标在做的时候按停止：先把目标暂停（照官方桌面端和终端界面），不然这一轮停下、空闲了它又接着续跑。
       // 暂停只等一小会儿，没成也照样打断：停下回合要紧
@@ -1516,7 +1516,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     respond(sessionId, requestId, choice) {
       const live = need(sessionId)
       const request = live.requests.get(requestId)
-      if (!request) throw new ChannelError('rejected', '这个请求已经不在了')
+      if (!request) throw new ChannelError('rejected', '该请求已不存在')
       if (choice.note?.trim()) {
         // 说明只能跟着声明了能带说明的选项走，别的不替用户悄悄丢掉
         const { view } = request
@@ -1524,10 +1524,10 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
           view.kind === 'approval' || view.kind === 'clientAsk'
             ? view.options.find((entry) => entry.id === choice.optionId)
             : undefined
-        if (!option?.note) throw new ChannelError('rejected', '这个选项不能附说明')
+        if (!option?.note) throw new ChannelError('rejected', '该选项不支持附加说明')
       }
       const result = request.answer(choice)
-      if (result === null) throw new ChannelError('rejected', '这个请求没有这样的选项')
+      if (result === null) throw new ChannelError('rejected', '该请求没有此选项')
       live.requests.delete(requestId)
       request.resolve(result)
       emit(live, [
@@ -1537,11 +1537,11 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     },
 
     async fork(sessionId, turnId) {
-      const live = idle(sessionId, '回合还在进行，结束之后才能分叉')
+      const live = idle(sessionId, '回合正在进行，结束后才能分叉')
       const last = live.view.turns.some((turn) => turn.id === turnId)
         ? serverTurn(live, turnId)
         : null
-      if (!last) throw new ChannelError('rejected', '这个回合已经不在了')
+      if (!last) throw new ChannelError('rejected', '该回合已不存在')
       const { thread } = await attempt(live, 'fork', () =>
         host.request(
           'thread/fork',
@@ -1555,12 +1555,12 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     },
 
     async rollback(sessionId, turnId) {
-      const live = idle(sessionId, '回合还在进行，结束之后才能回退')
-      if (!live.view.live) throw new ChannelError('rejected', '这个会话是只读的')
+      const live = idle(sessionId, '回合正在进行，结束后才能回退')
+      if (!live.view.live) throw new ChannelError('rejected', '此会话只读')
       const before = live.view.turns.some((turn) => turn.id === turnId)
         ? serverTurn(live, turnId)
         : null
-      if (!before) throw new ChannelError('rejected', '这个回合已经不在了')
+      if (!before) throw new ChannelError('rejected', '该回合已不存在')
       live.reverting = true
       try {
         // 按回合的标识回退，不按“倒数几个”：两边数出来的个数万一不一样，撤错了找不回来
@@ -1598,8 +1598,8 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     },
 
     async compact(sessionId) {
-      const live = idle(sessionId, '回合还在进行，结束之后才能压缩')
-      if (!live.view.live) throw new ChannelError('rejected', '这个会话是只读的')
+      const live = idle(sessionId, '回合正在进行，结束后才能压缩')
+      if (!live.view.live) throw new ChannelError('rejected', '此会话只读')
       await attempt(live, 'compact', () =>
         host.request('thread/compact/start', { threadId: sessionId }, { timeoutMs: LOAD_TIMEOUT }),
       )
@@ -1608,12 +1608,12 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     async setGoal(sessionId, change) {
       const live = need(sessionId)
       mustReach(live)
-      if (!live.view.live) throw new ChannelError('rejected', '这个会话是只读的')
+      if (!live.view.live) throw new ChannelError('rejected', '此会话只读')
       const objective = change.objective?.trim()
       if (change.objective !== undefined && !objective)
-        throw new ChannelError('rejected', '目标不能是空的')
+        throw new ChannelError('rejected', '目标不能为空')
       if (!live.view.goal && !objective)
-        throw new ChannelError('rejected', '还没有目标，要先写目标')
+        throw new ChannelError('rejected', '尚未设置目标，请先填写目标')
       await attemptGoal(live, () =>
         host.request(
           'thread/goal/set',
@@ -1632,7 +1632,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     async clearGoal(sessionId) {
       const live = need(sessionId)
       mustReach(live)
-      if (!live.view.live) throw new ChannelError('rejected', '这个会话是只读的')
+      if (!live.view.live) throw new ChannelError('rejected', '此会话只读')
       await attemptGoal(live, () =>
         host.request(
           'thread/goal/clear',

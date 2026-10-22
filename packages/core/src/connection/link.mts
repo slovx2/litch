@@ -284,7 +284,7 @@ export function createLink(options: LinkOptions): Link {
     },
 
     request(method, params, requestOptions) {
-      if (!rpc) return Promise.reject(new RpcAbortError('closed', '设备没有连上'))
+      if (!rpc) return Promise.reject(new RpcAbortError('closed', '设备未连接'))
       return rpc.request(method, params, requestOptions) as Promise<never>
     },
   }

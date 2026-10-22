@@ -159,7 +159,7 @@ export function createExec(host: ExecHost): Exec {
 
     offline() {
       for (const entry of [...waiting.values()]) {
-        entry.reject(new RpcAbortError('closed', '连接断了'))
+        entry.reject(new RpcAbortError('closed', '连接已断开'))
       }
     },
   }
