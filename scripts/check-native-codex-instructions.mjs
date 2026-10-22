@@ -47,7 +47,7 @@ if (!existsSync(join(repo, 'packages/device/dist/device/src/main.mjs'))) {
   process.exit(1)
 }
 // 规则用设备进程构建产物里的那一份（和设备进程拼进去的是同一段）
-const { SESSION_TOOLS } = await import(
+const { SESSION_TOOLS, outsideLitch } = await import(
   join(repo, 'packages/device/dist/protocol/src/client-tools-sessions.mjs')
 )
 
@@ -67,6 +67,8 @@ const deviceSocket = join(dirs.adapterHome, 'device', 'device.sock')
 // 认标记：规则的头一句（从构建产物里取，规则改写了也跟着变）、config.toml 那段里的记号
 const RULES_MARK = SESSION_TOOLS.instructions.split('. ')[0]
 const CONFIG_MARK = 'CFG_MARK_7Q'
+// 规则末尾“不在 Litch 里就别再调 litch_*”的兜底：拿到官方桌面端分叉、接着用的会话靠它停手，要跟着规则一起到
+const OUTSIDE_MARK = outsideLitch(true)
 
 // ---------- 假模型：记下每次请求里两个标记各出现几次，压缩请求回一段摘要 ----------
 const seen = []
@@ -78,6 +80,7 @@ const model = await startResponsesModel((body) => {
   seen.push({
     said: compaction ? '（压缩）' : said,
     rules: count(input, RULES_MARK),
+    outside: count(input, JSON.stringify(OUTSIDE_MARK).slice(1, -1)),
     config: count(input, CONFIG_MARK),
   })
   return { text: compaction ? 'SUMMARY_OF_CONVERSATION' : `假模型收到：${said}` }
@@ -202,14 +205,14 @@ const available = (frame) =>
   frame.params.harness === 'codex' &&
   frame.params.info.available === true
 
-/** 这一步之后的模型请求：规则、config.toml 那段都各只有 1 次 */
+/** 这一步之后的模型请求：规则（连同末尾的兜底）、config.toml 那段都各只有 1 次 */
 function bothOnce(from, what) {
   const asked = seen.slice(from).filter((entry) => entry.said !== '（压缩）')
   expect(asked.length > 0, `${what}：没有模型请求`)
   for (const entry of asked)
     expect(
-      entry.rules === 1 && entry.config === 1,
-      `${what}：请求「${entry.said}」里规则 ${entry.rules} 次、config.toml 那段 ${entry.config} 次，应各 1 次`,
+      entry.rules === 1 && entry.outside === 1 && entry.config === 1,
+      `${what}：请求「${entry.said}」里规则 ${entry.rules} 次、兜底 ${entry.outside} 次、config.toml 那段 ${entry.config} 次，应各 1 次`,
     )
 }
 
