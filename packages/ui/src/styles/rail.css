@@ -1,4 +1,6 @@
-/* ---------- 右边常驻的信息栏：对话和侧面板之间一列小卡片，有内容才出来 ---------- */
+/* ---------- 右边常驻的信息栏：对话和侧面板之间一列小卡片，有内容才出来 ----------
+   和对话同底色，中间不画分隔线；卡片是轻的分组：浅描边、留白多，标题一行能收起，右边放摘要，
+   下面一条一行（记号、文字、右边的状态）。以后加的卡片照这个结构来 */
 .rail {
   flex: none;
   width: 280px; /* 和 rail/InfoRail.tsx 的 RAIL_WIDTH 一致 */
@@ -6,25 +8,32 @@
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 12px 12px 12px 0;
+  gap: 12px;
+  padding: 14px 14px 14px 6px;
   background: var(--panel);
+  /* 滚动条和对话区一样是悬浮的：平时不画，鼠标进来才露出滑块（transcript.css 的 .tr-scroll） */
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.rail:hover {
+  scrollbar-color: var(--line-2) transparent;
 }
 .rail-card {
   flex: none;
   border: 1px solid var(--line-2);
-  border-radius: var(--r2);
-  background: var(--raised);
+  border-radius: var(--r3);
+  background: none;
 }
-/* 卡片标题一行：箭头、名字、计数，进度条靠右；整行能点开收起 */
+/* 标题一行：名字、箭头，右边是摘要（计数、进度条）；整行能点开收起 */
 .rail-head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   width: 100%;
-  height: 34px;
-  padding: 0 10px;
+  height: 40px;
+  padding: 0 14px;
   border: 0;
+  border-radius: inherit;
   background: none;
   font: inherit;
   color: inherit;
@@ -32,26 +41,62 @@
   white-space: nowrap;
   cursor: pointer;
 }
-.rail-card[data-open] > .rail-head {
-  border-bottom: 1px solid var(--line-1);
-}
 .rail-title {
+  font-size: 13px;
   font-weight: 500;
+  color: var(--ink);
 }
-.rail-head .todo-bar {
-  width: 56px;
+.rail-head > .caret-ic {
+  width: 10px;
+  height: 10px;
+  color: var(--ink-3);
 }
-/* 栏窄：清单的字小一号，留边也窄一点 */
+.rail-head:hover > .caret-ic {
+  color: var(--ink);
+}
+.rail-sum {
+  margin-left: auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.rail-sum .todo-count {
+  font: inherit;
+}
+.rail-sum .todo-bar {
+  margin-left: 0;
+  width: 44px;
+}
+/* 条目：和标题的字对齐，一条一行；记号在左，字可以折行 */
+.rail-body {
+  padding: 0 8px 10px;
+}
 .rail-body .todo-note {
-  padding: 8px 10px 0;
+  padding: 0 6px 6px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-3);
 }
 .rail-body .todo-list {
-  padding: 6px 10px 8px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
 }
 .rail-body .todo-step {
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: var(--r1);
   font-size: 12.5px;
   line-height: 20px;
 }
 .rail-body .todo-mark {
   height: 20px;
+}
+/* 正在做的那一步：底色淡淡一层，比别的步骤显眼 */
+.rail-body .todo-step.inProgress {
+  background: var(--hover);
 }
