@@ -151,6 +151,8 @@ export { isUnknownMethodError, RPC_ERROR } from './methods.mjs'
 // 别处占着的原生会话（nativeOwner 扩展）：被另一个进程开着时只读。不依赖别的文件
 export type * from './native-owner.mjs'
 export { NATIVE_OWNER_NOTIFICATION } from './native-owner.mjs'
+// 别的会话发来的消息（peerMessages 扩展）：用户消息条目上的发送方。不依赖别的文件
+export type * from './peer-messages.mjs'
 // 会话树（sessionTree 扩展）：子会话的父子关系、提案、回报与唤醒；模型用的 litch_sessions 工具。不依赖别的文件
 export type * from './session-tree.mjs'
 export {

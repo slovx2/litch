@@ -41,10 +41,12 @@ export const UserCell = memo(function UserCell({ row }: Props<'user'>) {
   const { turnMenu, viewImage } = useTranscript()
   const images = row.attachments.filter((each) => each.kind === 'image' && each.url)
   const others = row.attachments.filter((each) => !(each.kind === 'image' && each.url))
+  // 别的会话发来的：原话照登，不认答题、评论这些格式
+  const peer = row.peer
   // 答模型边干活边问的题时发的那一段：画成题目和回答
-  const replies = parseAskReply(row.text)
+  const replies = peer ? null : parseAskReply(row.text)
   // 开头带评论的：评论画成卡片，下面才是打的字
-  const comments = replies ? null : commentsOfRow(row)
+  const comments = replies || peer ? null : commentsOfRow(row)
   const text = comments ? comments.rest : row.text
   const menu = () => {
     notePressedAnswer(row.turnId, null)
@@ -56,11 +58,20 @@ export const UserCell = memo(function UserCell({ row }: Props<'user'>) {
         onLongPress={menu}
         style={({ pressed: down }) => [
           styles.userBubble,
-          { backgroundColor: c.sunken, borderColor: c.line2 },
+          peer
+            ? { backgroundColor: c.panel, borderColor: c.line3, borderStyle: 'dashed' }
+            : { backgroundColor: c.sunken, borderColor: c.line2 },
           down ? pressed(c) : null,
         ]}
-        testID="user-message"
+        testID={peer ? 'peer-message' : 'user-message'}
       >
+        {peer ? (
+          <Text style={[styles.peerHead, { color: c.ink2, fontSize: font.size.meta }]}>
+            <Text style={{ color: c.accent }}>✉ </Text>
+            {peer.name ? t('peer.from', { name: peer.name }) : t('peer.fromUnnamed')}
+            {peer.bypass ? <Text style={{ color: c.wait }}>{` · ${t('peer.bypass')}`}</Text> : null}
+          </Text>
+        ) : null}
         {images.length > 0 ? (
           <View style={styles.thumbs}>
             {images.map((image, index) => (
@@ -490,6 +501,7 @@ export const styles = StyleSheet.create({
     gap: 6,
   },
   userText: { lineHeight: 22 },
+  peerHead: { fontWeight: '600' },
   thumbs: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   thumb: { width: 72, height: 72, borderWidth: 1 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },

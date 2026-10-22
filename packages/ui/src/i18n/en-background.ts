@@ -37,4 +37,5 @@ export const enBackground: Record<keyof typeof zhBackground, Entry> = {
   'background.origin.schedule': 'Started by a scheduled task',
   'background.origin.goal': 'Goal not met yet, continuing',
   'background.origin.queue': 'Queued message, sent automatically',
+  'background.origin.peer': 'Message from another session',
 }

@@ -53,7 +53,11 @@ import {
 } from './context-usage.mjs'
 import { dynamicToolCliNames, dynamicToolServer } from './dynamic-tools.mjs'
 import { goalToolServer, isGoalTool } from './goal-tools.mjs'
-import { hostClaudeEnvOverrides, hostClaudeExecutable } from './host-claude.mjs'
+import {
+  hostClaudeEnvOverrides,
+  hostClaudeExecutable,
+  hostClaudeSessionEnv,
+} from './host-claude.mjs'
 import { jsonSchemaValidator } from './json-schema.mjs'
 import { sdkMcpStartupEnvironment } from './mcp-config.mjs'
 import {
@@ -77,6 +81,7 @@ import {
   needsStrictSkillShell,
   notificationFolded,
   notificationGraceLeft,
+  peerMessageOf,
   resultConfirms,
   sessionFingerprint,
   startsRound,
@@ -96,6 +101,7 @@ import {
 } from './rate-limits.mjs'
 import {
   applyPromptCacheTtl,
+  claudeCrossSessionInbox,
   claudePlansLocation,
   claudeSessionTitle,
   claudeSettingSources,
@@ -1323,6 +1329,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       },
       context.sessionThreadId ?? context.threadId,
     )
+    const inbox = claudeCrossSessionInbox()
     const opts: Record<string, unknown> = {
       abortController: abort,
       pathToClaudeCodeExecutable: hostClaudeExecutable(),
@@ -1335,7 +1342,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       // 失败后由持久化状态对账；禁止 CLI 自行重放可能已接收的模型请求。
       env: {
         ...childEnv,
-        ...hostClaudeEnvOverrides,
+        ...hostClaudeSessionEnv(inbox),
         ...sdkMcpStartupEnvironment(context.mcpServers),
         CLAUDE_CODE_MAX_RETRIES: '0',
         CLAUDE_CODE_DISABLE_NONSTREAMING_FALLBACK: '1',
@@ -1364,7 +1371,12 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         ...(context.skillOverrides ? { skillOverrides: context.skillOverrides } : {}),
         ...(context.disableBundledSkills ? { disableBundledSkills: true } : {}),
         ...(threadHeader.ANTHROPIC_CUSTOM_HEADERS ? { env: threadHeader } : {}),
+        // 别的会话发来的消息一律直接投递：不设时 CLI 按权限档位扣住不一致的，SDK 起的会话批不了，过期就丢了
+        ...(inbox ? { crossSessionInbound: 'accept' } : {}),
       },
+      // 收件箱开着时让 CLI 回显进模型的用户消息（照 Claude 桌面端）：别的会话发来的那条带 origin.kind=peer，
+      // 认出来画进对话（handlePeerReplay）；自己发的、后台通知的回显丢掉
+      ...(inbox ? { extraArgs: { 'replay-user-messages': null } } : {}),
       disallowedTools: ['CronCreate', 'CronDelete', 'CronList', 'ScheduleWakeup'],
       stderr: (data: string) => process.stderr.write(data),
       onElicitation: (async (request, { signal }) => {
@@ -1751,6 +1763,12 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
           if (!startsRound(message)) continue
           pending = await this.currentTurn(session)
           if (!pending) continue
+        }
+        // 回显的用户消息（收件箱开着时才有）：别的会话发来的画进对话，别的丢掉；都不当原生边界
+        if (message.type === 'user' && message.isReplay === true) {
+          const peer = peerMessageOf(message)
+          if (peer) await pending.handlers.onEvent({ type: 'peer_message', ...peer })
+          continue
         }
         if (
           (message.type === 'assistant' || message.type === 'user') &&

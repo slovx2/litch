@@ -904,7 +904,10 @@ export class CodexClaudeAppServer {
           this.syncNativeOwner(threadId, this.native.owner(threadId), true)
         return this.withNativeOwner(
           peer,
-          this.withBackground(peer, this.withNativeLineage(peer, resumed)),
+          this.withBackground(
+            peer,
+            this.withNativeLineage(peer, this.withPeerMessages(peer, resumed)),
+          ),
         )
       }
       case 'thread/fork':
@@ -925,7 +928,10 @@ export class CodexClaudeAppServer {
           peer,
           this.withBackground(
             peer,
-            this.withNativeLineage(peer, this.threadRead(asRecord(params))),
+            this.withNativeLineage(
+              peer,
+              this.withPeerMessages(peer, this.threadRead(asRecord(params))),
+            ),
           ),
         )
       case 'thread/attachment/add':
@@ -943,14 +949,18 @@ export class CodexClaudeAppServer {
         return threadAttachmentOwnerList(this.store, asRecord(params))
       case 'thread/turns/list':
         await this.nativeHistory(asRecord(params).threadId)
-        return this.withBackground(peer, this.threadTurnsList(asRecord(params)), true)
+        return this.withBackground(
+          peer,
+          this.withPeerMessages(peer, this.threadTurnsList(asRecord(params)), true),
+          true,
+        )
       case 'thread/timeline/list':
         return threadTimelineList(this.store, asRecord(params))
       case 'thread/items/list':
-        return this.threadItemsList(asRecord(params))
+        return this.withPeerItems(peer, this.threadItemsList(asRecord(params)))
       case 'thread/items/read':
         await this.nativeHistory(asRecord(params).threadId)
-        return this.threadItemsRead(asRecord(params))
+        return this.withPeerItems(peer, this.threadItemsRead(asRecord(params)))
       case 'thread/delete': {
         const threadId = requiredString(asRecord(params).threadId, 'threadId')
         if (!this.store.getThread(threadId)) throw new ProtocolError(-32602, '未知会话')
@@ -4698,6 +4708,25 @@ export class CodexClaudeAppServer {
             completeMessage()
             return
           }
+          if (event.type === 'peer_message') {
+            // 别的会话发来的消息（peerMessages 扩展）：一条带 litchPeer 的用户消息条目。前面那段回答到此为止；
+            // 引擎空闲时 CLI 为它自己开的那一轮，开头就是它，来历记成 peer
+            completeMessage()
+            if (
+              this.spontaneousTurns.has(turn.id) &&
+              this.store.getTurn(turn.id)?.items.length === 0
+            )
+              this.store.saveTurnOrigin(turn.id, 'peer')
+            const item: ThreadItem = {
+              type: 'userMessage',
+              id: newId(),
+              content: [{ type: 'text', text: event.text, text_elements: [] }],
+              litchPeer: event.peer,
+            }
+            this.store.appendItem(turn.id, item)
+            this.sendInputItem(peer, thread.id, turn.id, item)
+            return
+          }
           if (event.type === 'tool_use' && !itemIds.has(event.toolUseId)) completeMessage()
           if (event.type === 'tool_use' && isSubagentToolName(event.toolName)) {
             // Spawn the child thread, then mirror MultiAgent V2: a
@@ -7423,8 +7452,57 @@ export class CodexClaudeAppServer {
     const params =
       notification.method === 'turn/started' || notification.method === 'turn/completed'
         ? this.withTurnOrigin(target, notification.params)
-        : notification.params
+        : notification.method === 'item/started' || notification.method === 'item/completed'
+          ? this.withPeerItem(target, notification.params)
+          : notification.params
     target.send({ jsonrpc: '2.0', method: notification.method, params })
+  }
+
+  // ── 别的会话发来的消息（peerMessages 扩展）──
+
+  private declaresPeerMessages(peer: RpcPeer): boolean {
+    return this.peerFeatures.get(peer)?.extensions.has(EXTENSION.peerMessages) === true
+  }
+
+  // item/started、item/completed 上的用户消息：没声明的连接去掉 litchPeer（另拷一份，别的连接看到的不变）
+  private withPeerItem(target: RpcPeer, params: unknown): unknown {
+    const item = asRecord(asRecord(params).item)
+    if (!('litchPeer' in item) || this.declaresPeerMessages(target)) return params
+    const { litchPeer: _, ...rest } = item
+    return { ...asRecord(params), item: rest }
+  }
+
+  // thread/items/list、thread/items/read 的 data[].item：没声明的连接去掉 litchPeer
+  private withPeerItems<T>(peer: RpcPeer, result: T): T {
+    if (this.declaresPeerMessages(peer)) return result
+    const data = (result as { data?: unknown } | null)?.data
+    if (Array.isArray(data))
+      for (const entry of data) {
+        const item = (entry as { item?: unknown } | null)?.item
+        if (item && typeof item === 'object') delete (item as { litchPeer?: unknown }).litchPeer
+      }
+    return result
+  }
+
+  /**
+   * 应答里的回合（thread.turns，turnsPage 为真时是 data 的每一项）：没声明 peerMessages 的连接去掉用户消息上的
+   * litchPeer。应答是现拼的，直接改
+   */
+  private withPeerMessages<T>(peer: RpcPeer, result: T, turnsPage = false): T {
+    if (this.declaresPeerMessages(peer)) return result
+    const strip = (turns: unknown) => {
+      if (!Array.isArray(turns)) return
+      for (const turn of turns) {
+        const items = (turn as { items?: unknown } | null)?.items
+        if (Array.isArray(items))
+          for (const item of items)
+            if (item && typeof item === 'object') delete (item as { litchPeer?: unknown }).litchPeer
+      }
+    }
+    const body = result && typeof result === 'object' ? (result as Record<string, unknown>) : {}
+    if (turnsPage) strip(body.data)
+    else strip(asRecord(body.thread).turns)
+    return result
   }
 
   // ── 后台任务（backgroundTasks 扩展）──

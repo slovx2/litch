@@ -136,7 +136,11 @@ test('native SDK runtime maps manual /workflows prompts to the human workflow tr
     plansDirectory: relative(context.cwd, planDirectory(context)),
     enableWorkflows: true,
     workflowKeywordTriggerEnabled: true,
+    // 收件箱默认开：别的会话发来的一律直接投递，并回显进模型的用户消息
+    crossSessionInbound: 'accept',
   })
+  assert.deepEqual(options.extraArgs, { 'replay-user-messages': null })
+  assert.equal(options.env.CLAUDE_CODE_HARBOR_KITE, undefined)
   assert.equal(options.permissionMode, 'default')
   assert.equal(options.allowDangerouslySkipPermissions, undefined)
   assert.equal(typeof options.canUseTool, 'function')

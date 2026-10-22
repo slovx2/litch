@@ -118,12 +118,20 @@ export interface TurnRecord {
   costUsd?: number | null
 }
 
+import type { LitchPeer } from '../../protocol/src/peer-messages.mjs'
 import type { UserInput } from '../../shared/src/types.mjs'
 
 export type { UserInput } from '../../shared/src/types.mjs'
 
 export type ThreadItem =
-  | { type: 'userMessage'; id: string; content: UserInput[]; clientId?: string | null }
+  | {
+      type: 'userMessage'
+      id: string
+      content: UserInput[]
+      clientId?: string | null
+      /** 别的会话发来的消息（peerMessages 扩展）：只发给声明过的连接，别的连接上去掉 */
+      litchPeer?: LitchPeer
+    }
   | { type: 'agentMessage'; id: string; text: string; phase: string | null; memoryCitation: null }
   | { type: 'plan'; id: string; text: string }
   | { type: 'reasoning'; id: string; summary: string[]; content: string[] }
@@ -397,6 +405,8 @@ export type RuntimeEvent =
       questions: UserInputQuestion[]
     }
   | { type: 'notice'; level: 'info' | 'warning' | 'error'; message: string }
+  // 别的会话发来的消息进了模型（CLI 回显的 origin.kind=peer）：text 是对方的原文
+  | { type: 'peer_message'; text: string; peer: LitchPeer }
   // 回合累计的用量（只加进 total）；contextWindow 是主模型的上下文窗口，不知道是 null
   // model 是最近一次顶层请求的模型（窗口按它记下，导进来的会话算用量时查）
   | {

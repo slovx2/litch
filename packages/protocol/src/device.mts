@@ -115,6 +115,11 @@ export const EXTENSION = {
    * 定义在 protocol/extensions/native-owner.json）。声明了它的连接才看得到这个字段、收得到通知。
    */
   nativeOwner: 'nativeOwner',
+  /**
+   * 别的会话发来的消息：harness 自己的会话间消息进了对话，用户消息条目上带 `litchPeer` 说是谁发的
+   * （peer-messages.mts，定义在 protocol/extensions/peer-messages.json）。声明了它的连接才看得到这个字段。
+   */
+  peerMessages: 'peerMessages',
 } as const
 
 export type ExtensionName = (typeof EXTENSION)[keyof typeof EXTENSION]

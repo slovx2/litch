@@ -11,6 +11,7 @@ import { zhLimits } from './zh-CN-limits.ts'
 import { zhOnboard } from './zh-CN-onboard.ts'
 import { zhPairing } from './zh-CN-pairing.ts'
 import { zhPasswords } from './zh-CN-passwords.ts'
+import { zhPeer } from './zh-CN-peer.ts'
 import { zhProposals } from './zh-CN-proposals.ts'
 import { zhRupgrade } from './zh-CN-rupgrade.ts'
 import { zhSwitches } from './zh-CN-switches.ts'
@@ -41,6 +42,7 @@ export const zhCN = {
   ...zhSwitches,
   // 持续目标（输入框里的 /goal、输入框上方那一行、侧面板的“目标”页）的文案也单独放（zh-CN-goal.ts）
   ...zhGoal,
+  ...zhPeer,
   ...zhLimits,
   // 远程设备服务的一键升级（zh-CN-rupgrade.ts）
   ...zhRupgrade,

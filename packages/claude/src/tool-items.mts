@@ -90,6 +90,10 @@ export function toolUseItem(
   } else if (event.toolName === 'Glob') {
     const pat = String(event.input.pattern ?? '')
     if (pat) displayTool = `Glob ${pat}`
+  } else if (event.toolName === 'SendMessage') {
+    // 发给谁（子代理、队友或本机别的 Claude 会话）：客户端汇总成“发消息给 X”
+    const to = typeof event.input.to === 'string' ? event.input.to.trim() : ''
+    if (to) displayTool = `SendMessage ${to}`
   }
 
   // 真正的 MCP 工具报它所在的服务和不带前缀的工具名；Claude Code 自带的工具没有服务，记在 claude-code 名下。

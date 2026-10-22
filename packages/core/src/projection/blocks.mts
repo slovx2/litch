@@ -251,6 +251,8 @@ export type StepKind =
   | 'suggest'
   /** 收尾时留了一个问题给用户（问题和按钮也在收尾区） */
   | 'ask'
+  /** 给别的会话、子代理发消息（Claude Code 的 SendMessage） */
+  | 'message'
 
 // 各家 harness 自带的读、搜、列目录工具的名字（Claude Code 的 Read、Grep、Glob 投影出来是“Read 路径”这样，取第一个词）
 const TOOL_KINDS: Record<string, StepKind> = {
@@ -275,6 +277,8 @@ const TOOL_KINDS: Record<string, StepKind> = {
   webfetch: 'web',
   web_fetch: 'web',
   fetch: 'web',
+  // Claude Code 的 SendMessage 投影出来是“SendMessage 收件人”
+  sendmessage: 'message',
 }
 
 /** 工具调用算哪种动作：认得出的读、搜、列目录、看网页，别的都是“调用工具” */

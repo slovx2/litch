@@ -586,3 +586,63 @@ test('NAT-009：Claude 桌面端换下来的旧会话号不列：导进来过的
     await rm(desktop, { recursive: true, force: true })
   }
 })
+
+test('NAT-010：别的会话发来的消息画成带 litchPeer 的用户消息；停下之后来的开回合、来历是 peer，中途来的插进当前回合', () => {
+  const peerOrigin = (body: string) => ({
+    kind: 'peer',
+    from: 'uds:/tmp/cc-socks/1.sock',
+    name: 'peer-a',
+    fromSession: 'local_abc',
+    fromMode: 'bypass',
+    body,
+  })
+  const history = projectNativeHistory(
+    't1',
+    [
+      message('user', 'u1', '第一句'),
+      message('assistant', 'a1', [{ type: 'text', text: '第一段回答' }]),
+      message('user', 'p1', 'Another Claude session sent a message: <cross-session-message>…', {
+        origin: peerOrigin('请看一下日志'),
+      }),
+      message('assistant', 'a2', [
+        { type: 'text', text: '去看' },
+        { type: 'tool_use', id: 'k1', name: 'Bash', input: { command: 'ls' } },
+      ]),
+      message('user', 'r1', [
+        { type: 'tool_result', tool_use_id: 'k1', content: 'x', is_error: false },
+      ]),
+      // 工具结果之后、助手还没接着说就到的：插进当前回合；没有 body 的用整段文字
+      message('user', 'p2', '直接写进来的话', { origin: { kind: 'peer', from: 'unknown' } }),
+      message('assistant', 'a3', [{ type: 'text', text: '看完了' }]),
+      // 进程内后台子代理发的不算
+      message('user', 'p3', '子代理的话', {
+        origin: { kind: 'peer', from: 'x', senderTaskId: 't' },
+      }),
+    ],
+    '/w',
+  )
+  const [first, second, third] = history.turns
+  assert.equal(history.turns.length, 3)
+  assert.deepEqual(
+    first?.items.map((item) => item.type),
+    ['userMessage', 'agentMessage'],
+  )
+  assert.equal(history.origins.get(second!.id), 'peer')
+  const peers = second!.items.filter((item) => item.type === 'userMessage')
+  assert.deepEqual(peers, [
+    {
+      type: 'userMessage',
+      id: 'p1:peer',
+      content: [{ type: 'text', text: '请看一下日志', text_elements: [] }],
+      litchPeer: { name: 'peer-a', session: 'local_abc', mode: 'bypass' },
+    },
+    {
+      type: 'userMessage',
+      id: 'p2:peer',
+      content: [{ type: 'text', text: '直接写进来的话', text_elements: [] }],
+      litchPeer: {},
+    },
+  ])
+  // 子代理发的那条照人话算（老规矩），开了第三个回合
+  assert.equal(history.origins.get(third!.id), undefined)
+})

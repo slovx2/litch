@@ -8,17 +8,21 @@ import {
   backgroundBash,
   cliProcesses,
   disposeScene,
+  readTurns,
   runTurn,
   type Scene,
   startScene,
   uniqueSleep,
 } from './fixtures/background-scene.mjs'
 import { requiredClaudeCli } from './fixtures/claude-cli.mjs'
+import { declaring } from './fixtures/extension-wire.mjs'
 import { MockLLM, type ModelRequest } from './fixtures/mock-llm.mjs'
 
 // Claude Code 默认给每个会话开本机收件箱（登记在 <配置目录>/sessions/<pid>.json，带 messagingSocketPath），
 // 本机别处的 Claude 会话能用 ListAgents 看见、用 SendMessage 发进来并直接开回合。
-// 入口给 CLI 设了 CLAUDE_CODE_HARBOR_KITE=0：这里用真实 CLI 断言它真的关上了，CLI 升级改了开关名时能及时发现。
+// 设置里“接收别的 Claude 会话的消息”（CHA_CLAUDE_CROSS_SESSION_INBOX）默认开：入口让 CLI 一律直接投递、回显进模型的
+// 用户消息，别的会话发来的画成带 litchPeer 的用户消息条目（peerMessages 扩展）。关着时入口给 CLI 设
+// CLAUDE_CODE_HARBOR_KITE=0：这里用真实 CLI 断言它真的关上了，CLI 升级改了开关名时能及时发现。
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -62,8 +66,9 @@ interface PeerResult {
 }
 
 // 像用户在终端或桌面端开的另一个 Claude 会话：同一个配置目录，收件箱按 CLI 默认开着。
-// 它的模型先调 ListAgents，再用 SendMessage 发给 to。
-async function peerSend(scene: Scene, to: string): Promise<PeerResult> {
+// 它的模型先调 ListAgents，再用 SendMessage 发给 to。bypass 时它是跳过确认档（--dangerously-skip-permissions），
+// CLI 不设 crossSessionInbound 时按档位扣住这种消息
+async function peerSend(scene: Scene, to: string, bypass = false): Promise<PeerResult> {
   const model = new MockLLM()
   const result: PeerResult = { ended: '', listAgents: '', send: '', peerEntry: undefined }
   let child: ChildProcessWithoutNullStreams | undefined
@@ -97,10 +102,10 @@ async function peerSend(scene: Scene, to: string): Promise<PeerResult> {
         'stream-json',
         '--verbose',
         '-n',
-        'peer-prompting',
-        '--allowedTools',
-        'SendMessage',
-        'ListAgents',
+        bypass ? 'peer-bypass' : 'peer-prompting',
+        ...(bypass
+          ? ['--dangerously-skip-permissions']
+          : ['--allowedTools', 'SendMessage', 'ListAgents']),
       ],
       {
         cwd: scene.workspace,
@@ -139,10 +144,10 @@ async function peerSend(scene: Scene, to: string): Promise<PeerResult> {
   }
 }
 
-test('入口起的 CLI 不开本机收件箱：不登记套接字、模型没有 ListAgents、别处的会话发不进来', {
+test('设置里关掉时入口起的 CLI 不开本机收件箱：不登记套接字、模型没有 ListAgents、别处的会话发不进来', {
   timeout: 180_000,
 }, async () => {
-  const scene = await startScene('native-peer-inbox')
+  const scene = await startScene('native-peer-inbox', { CHA_CLAUDE_CROSS_SESSION_INBOX: 'off' })
   try {
     let receiverTools: string[] = []
     // 后台命令把进程留在回合之外：这正是外来消息能自己开回合的窗口。
@@ -160,7 +165,6 @@ test('入口起的 CLI 不开本机收件箱：不登记套接字、模型没有
 
     const [cli] = cliProcesses(scene)
     assert.ok(cli, '后台命令在跑，CLI 进程应当留着')
-    assert.ok(receiverTools.includes('SendMessage'), '子代理、teammate 用的 SendMessage 仍在')
     assert.ok(!receiverTools.includes('ListAgents'), `模型不该有 ListAgents：${receiverTools}`)
 
     const mine = registry(scene).find((entry) => entry.pid === cli.pid)
@@ -186,6 +190,166 @@ test('入口起的 CLI 不开本机收件箱：不登记套接字、模型没有
     assert.equal(turnsAfter, turnsBefore, '外来消息不该开回合')
     assert.equal(extraRequests, 0, '模型不该再收到请求')
   } finally {
+    await disposeScene(scene)
+  }
+})
+
+// 声明了扩展的连接多出我们的字段（会话上的 litchBackground、回合上的 litchOrigin、用户消息上的 litchPeer）：
+// 校验上游结构时去掉
+function standardView(method: string, _kind: string, payload: any): unknown {
+  if (method.startsWith('litch/')) return undefined
+  const copy = structuredClone(payload)
+  const stripTurn = (turn: any) => {
+    if (!turn || typeof turn !== 'object') return
+    delete turn.litchOrigin
+    for (const item of turn.items ?? []) delete item?.litchPeer
+  }
+  const stripThread = (thread: any) => {
+    if (!thread || typeof thread !== 'object') return
+    delete thread.litchBackground
+    for (const turn of thread.turns ?? []) stripTurn(turn)
+  }
+  stripThread(copy?.thread)
+  for (const entry of copy?.data ?? []) {
+    stripThread(entry)
+    stripTurn(entry)
+  }
+  stripTurn(copy?.turn)
+  delete copy?.item?.litchPeer
+  return copy
+}
+
+const turnsStarted = (scene: Scene): string[] =>
+  scene.client.trace
+    .filter((m: any) => m.method === 'turn/started')
+    .map((m: any) => m.params.turn.id as string)
+
+async function until(what: string, check: () => boolean, ms = 30_000): Promise<void> {
+  const end = Date.now() + ms
+  while (!check()) {
+    if (Date.now() > end) throw new Error(`等不到：${what}`)
+    await sleep(100)
+  }
+}
+
+test('默认开着：跳过确认档的会话空闲时发来，自己开一个来历为 peer 的回合，开头是带 litchPeer 的消息', {
+  timeout: 180_000,
+}, async () => {
+  const scene = await startScene(
+    'native-peer-accept',
+    {},
+    declaring('peerMessages', 'backgroundTasks'),
+  )
+  scene.client.standardView = standardView
+  try {
+    let receiverTools: string[] = []
+    const seen: string[] = []
+    scene.model.enqueue((request, headers) => {
+      receiverTools = peerTools(request)
+      return backgroundBash('toolu_keep_alive', uniqueSleep(90))(request, headers)
+    })
+    scene.model.enqueue(() => [{ type: 'text', text: '已在后台启动' }])
+    scene.model.fallback = (request) => {
+      seen.push(JSON.stringify(request.messages?.at(-1)?.content ?? ''))
+      return [{ type: 'text', text: '这是对外来消息的回答' }]
+    }
+    assert.equal((await runTurn(scene, '在后台起一条命令')).status, 'completed')
+    assert.ok(
+      receiverTools.includes('ListAgents'),
+      `收件箱开着时模型应有 ListAgents：${receiverTools}`,
+    )
+
+    const [cli] = cliProcesses(scene)
+    const mine = registry(scene).find((entry) => entry.pid === cli?.pid)
+    assert.ok(mine?.messagingSocketPath, '收件箱开着时应登记套接字')
+
+    const before = turnsStarted(scene).length
+    const peer = await peerSend(scene, mine.name ?? String(cli?.pid), true)
+    assert.equal(peer.ended, 'result')
+    assert.ok(
+      peer.listAgents.includes(mine.name ?? '\0'),
+      `别处的 ListAgents 应列出它：${peer.listAgents}`,
+    )
+    await until('外来消息开回合', () => turnsStarted(scene).length > before)
+    const turnId = turnsStarted(scene).at(-1)!
+    const done = await scene.client.completed(turnId)
+    assert.equal(done.status, 'completed')
+    assert.equal(done.litchOrigin, 'peer', '回合来历应是 peer')
+    assert.ok(
+      seen.some((text) => text.includes('from-mode=\\"bypass\\"')),
+      `模型应收到跳过确认档发来的消息：${seen}`,
+    )
+
+    const turn = (await readTurns(scene)).find((candidate) => candidate.id === turnId)
+    const [first, ...rest] = turn.items
+    assert.equal(first.type, 'userMessage')
+    assert.deepEqual(first.content, [
+      { type: 'text', text: '我是另一个 Claude 会话，请回复 hello', text_elements: [] },
+    ])
+    assert.deepEqual(first.litchPeer, { name: 'peer-bypass', mode: 'bypass' })
+    assert.ok(
+      rest.some(
+        (item: any) => item.type === 'agentMessage' && item.text === '这是对外来消息的回答',
+      ),
+    )
+    // 实时的条目通知也带着
+    const live = scene.client.trace.find(
+      (m: any) => m.method === 'item/completed' && m.params.item.id === first.id,
+    )
+    assert.deepEqual(live?.params.item.litchPeer, first.litchPeer)
+    // 自己发的话的回显不重复出条目
+    const firstTurn = (await readTurns(scene))[0]
+    assert.equal(firstTurn.items.filter((item: any) => item.type === 'userMessage').length, 1)
+  } finally {
+    await disposeScene(scene)
+  }
+})
+
+test('回合进行中发来的插进当前回合；没声明 peerMessages 的连接看到的是普通用户消息', {
+  timeout: 180_000,
+}, async () => {
+  const scene = await startScene('native-peer-midturn')
+  let release = () => {}
+  const held = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  try {
+    scene.model.enqueue(async () => {
+      await held
+      return [{ type: 'text', text: '第一段回答' }]
+    })
+    scene.model.fallback = () => [{ type: 'text', text: '这是对外来消息的回答' }]
+    const { turn } = await scene.client.request('turn/start', {
+      threadId: scene.threadId,
+      input: [{ type: 'text', text: '用户的第一句话' }],
+    })
+    await until('模型请求到达', () => scene.model.requests.length === 1)
+    const [cli] = cliProcesses(scene)
+    const mine = registry(scene).find((entry) => entry.pid === cli?.pid)
+    assert.ok(mine?.messagingSocketPath)
+    const peer = await peerSend(scene, mine.name ?? String(cli?.pid))
+    assert.equal(peer.ended, 'result')
+    release()
+    const done = await scene.client.completed(turn.id)
+    assert.equal(done.status, 'completed')
+    assert.equal(turnsStarted(scene).length, 1, '不该另开回合')
+
+    const [only] = await readTurns(scene)
+    const users = only.items.filter((item: any) => item.type === 'userMessage')
+    assert.equal(users.length, 2, `回合里应有自己的话和外来的消息：${JSON.stringify(only.items)}`)
+    assert.equal(users[1].content[0].text, '我是另一个 Claude 会话，请回复 hello')
+    assert.ok(!('litchPeer' in users[1]), '没声明的连接上不该有 litchPeer')
+    const texts = only.items
+      .filter((item: any) => item.type === 'agentMessage')
+      .map((i: any) => i.text)
+    assert.deepEqual(texts, ['第一段回答', '这是对外来消息的回答'])
+    const order = only.items.map((item: any) => item.type)
+    assert.ok(
+      order.indexOf('agentMessage') < order.lastIndexOf('userMessage'),
+      `外来消息应排在第一段回答之后：${order}`,
+    )
+  } finally {
+    release()
     await disposeScene(scene)
   }
 })

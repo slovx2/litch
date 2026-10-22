@@ -147,6 +147,19 @@ export function applyPromptCacheTtl(env: NodeJS.ProcessEnv = process.env): void 
 }
 
 /**
+ * CHA_CLAUDE_CROSS_SESSION_INBOX：默认 on，Litch 的 Claude 会话开着 CLI 自带的本机收件箱，
+ * 这台机器上别的 Claude 会话能用 SendMessage 发进来（host-claude.mts 的 hostClaudeSessionEnv）。off 时关掉
+ */
+export function claudeCrossSessionInbox(env: NodeJS.ProcessEnv = process.env): boolean {
+  const raw = env.CHA_CLAUDE_CROSS_SESSION_INBOX?.trim().toLowerCase()
+  if (!raw || raw === 'on' || raw === '1' || raw === 'true' || raw === 'yes') return true
+  if (raw === 'off' || raw === '0' || raw === 'false' || raw === 'no') return false
+  throw new Error(
+    `CHA_CLAUDE_CROSS_SESSION_INBOX 无效：${env.CHA_CLAUDE_CROSS_SESSION_INBOX}（只能是 on 或 off）`,
+  )
+}
+
+/**
  * CHA_CLAUDE_SESSION_TITLE：默认 on，Claude 会话照旧自动起名（CLI 用小模型起标题，入口读出来当会话名）。
  * off 时 CLI 不自己起（给它设 CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1），入口也不请它起、不读标题，
  * 整个回合不会多发起标题的模型请求；会话名只来自客户端的 thread/name/set

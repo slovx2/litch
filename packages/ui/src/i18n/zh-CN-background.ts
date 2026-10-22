@@ -31,4 +31,5 @@ export const zhBackground = {
   'background.origin.schedule': '定时任务触发',
   'background.origin.goal': '目标未达成，自动继续',
   'background.origin.queue': '排队的消息，已自动发送',
+  'background.origin.peer': '另一个会话发来消息',
 } satisfies Record<string, Entry>

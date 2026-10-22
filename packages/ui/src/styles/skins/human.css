@@ -130,6 +130,10 @@
   font-size: 15px;
   line-height: 26px;
 }
+[data-skin="human"] .umsg.peer {
+  background: var(--panel);
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--line-2));
+}
 [data-skin="human"] .steps-body .item-detail {
   border-color: var(--line-1);
   border-radius: 8px;

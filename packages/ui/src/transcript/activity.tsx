@@ -349,12 +349,20 @@ const ToolCall = memo(function ToolCall(ref: ItemRef) {
   // 等待、发输入这些子代理调用（启动子代理那一次是露在外面的卡片）：涉及的子线程在详情里，点开在侧面板里看
   const agents = item.agents ?? []
   const hasDetail = input.length > 0 || output.length > 0 || error !== null || agents.length > 0
+  // 给别的会话、子代理发消息（“SendMessage 收件人”）：写成“发消息给 收件人”
+  const message = stepKindOf(item) === 'message'
   return (
     <Row
       itemRef={ref}
-      icon="tool"
-      verb={t('tool.verb')}
-      target={item.source ? `${t.text(item.source)} · ${tool}` : tool}
+      icon={message ? 'note' : 'tool'}
+      verb={t(message ? 'tool.message.verb' : 'tool.verb')}
+      target={
+        message
+          ? tool.replace(/^\S+\s*/, '') || tool
+          : item.source
+            ? `${t.text(item.source)} · ${tool}`
+            : tool
+      }
       busy={item.status === 'inProgress'}
       meta={
         <>

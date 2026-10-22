@@ -15,6 +15,7 @@ import type {
   FileChangeEntry,
   ItemStatus,
   ItemView,
+  PeerView,
   ToolCallItem,
   ToolPart,
   UserMessageItem,
@@ -39,7 +40,18 @@ const baseName = (path: string): string => path.split(/[\\/]/).pop() || path
 export const isInlineImage = (url: unknown): url is string =>
   typeof url === 'string' && /^data:image\/(png|jpeg|webp|gif);base64,/.test(url)
 
-function userMessage(id: string, content: UserInput[]): UserMessageItem {
+/** 用户消息条目上的 litchPeer（peerMessages 扩展）：对面写的，逐项核对 */
+function peerOf(raw: unknown): PeerView | undefined {
+  if (!raw || typeof raw !== 'object') return undefined
+  const { name, session, mode } = raw as Record<string, unknown>
+  return {
+    name: typeof name === 'string' && name.trim() ? name.trim() : null,
+    session: typeof session === 'string' && session ? session : null,
+    bypass: mode === 'bypass',
+  }
+}
+
+function userMessage(id: string, content: UserInput[], rawPeer?: unknown): UserMessageItem {
   const texts: string[] = []
   const attachments: UserMessageItem['attachments'] = []
   for (const part of content ?? []) {
@@ -72,6 +84,9 @@ function userMessage(id: string, content: UserInput[]): UserMessageItem {
     }
   }
   const text = texts.join('\n')
+  // 别的会话发来的：原文照登，不认注入（那是对方的话）
+  const peer = peerOf(rawPeer)
+  if (peer) return { id, kind: 'userMessage', text, attachments, peer }
   // 设备进程注入在开头的子会话回报、唤醒：认出来单放，剩下的才是用户自己说的话
   const { event, rest } = parseSessionEvent(text)
   if (!event) return { id, kind: 'userMessage', text, attachments }
@@ -536,7 +551,7 @@ export function projectItem(item: ThreadItem, streaming = false): ItemView {
   const open: ItemStatus = streaming ? 'inProgress' : 'completed'
   switch (item.type) {
     case 'userMessage':
-      return userMessage(id, item.content)
+      return userMessage(id, item.content, (item as { litchPeer?: unknown }).litchPeer)
     case 'agentMessage': {
       // 题目标识用协议条目自己的标识：显示条目的标识可能是本机另起的
       const questions = projectQuestions(item.id, item.questions)

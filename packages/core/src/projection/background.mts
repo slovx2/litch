@@ -18,7 +18,7 @@ import type {
 
 const KINDS: readonly string[] = ['shell', 'agent', 'monitor', 'workflow', 'remote', 'other']
 const STATUSES: readonly string[] = ['running', 'completed', 'failed', 'stopped']
-const ORIGINS: readonly string[] = ['user', 'backgroundTask', 'schedule', 'goal', 'queue']
+const ORIGINS: readonly string[] = ['user', 'backgroundTask', 'schedule', 'goal', 'queue', 'peer']
 
 const text = (value: unknown): string | null => (typeof value === 'string' && value ? value : null)
 const time = (value: unknown): number | null =>

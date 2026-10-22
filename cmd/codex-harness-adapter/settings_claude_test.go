@@ -79,3 +79,65 @@ func TestClaudeCacheTTLSetting(t *testing.T) {
 		t.Fatalf("不在可选值里的应被拒绝: %+v %v", problem, err)
 	}
 }
+
+// 会话间消息：只有 Claude Code 有，默认开，改了要重启；写过才落到 CHA_CLAUDE_CROSS_SESSION_INBOX 上（on / off），
+// 没写过时更低几层明说 off 的算关。
+func TestClaudeInboxSetting(t *testing.T) {
+	t.Setenv(claudeInboxVariable, "")
+	_ = os.Unsetenv(claudeInboxVariable)
+	cfg := settingsTestConfiguration(t)
+	schema := buildSettingsSchema(cfg)
+	spec, declared := schema.spec(claudeInboxKey)
+	if !declared || spec.Type != settingBoolean || spec.Default != true || spec.Restart != restartHarness ||
+		spec.Group != "harness.claude-code" || spec.Scope != harnessScope(claudeHarness) {
+		t.Fatalf("会话间消息的声明不对: %+v", spec)
+	}
+	for text, points := range map[string][]string{
+		spec.Description.ZH: {"SendMessage", "权限", "重启"},
+		spec.Description.EN: {"SendMessage", "permissions", "restarts"},
+	} {
+		for _, point := range points {
+			if !strings.Contains(text, point) {
+				t.Fatalf("说明里没写 %q: %s", point, text)
+			}
+		}
+	}
+	variable := func(id string) string { return cfg.forHarness(id).environmentValue(claudeInboxVariable) }
+	shown := func() any {
+		_, values, _ := cfg.settings.present(buildSettingsSchema(cfg))
+		return values[claudeInboxKey]
+	}
+	write := func(version int, value json.RawMessage) {
+		t.Helper()
+		changed, problem, err := cfg.settings.apply(version, []settingEdit{{Key: claudeInboxKey, Value: value}}, schema, cfg.validateSettings)
+		if err != nil || problem != nil || len(changed) != 1 {
+			t.Fatalf("写入失败: %v %+v %v", changed, problem, err)
+		}
+	}
+
+	if variable(claudeHarness) != "" || shown() != true {
+		t.Fatalf("没写过时不该给变量、应算开着: %q %v", variable(claudeHarness), shown())
+	}
+	untouched, pi := cfg.runtimeFingerprint(claudeHarness, true), cfg.runtimeFingerprint("pi", true)
+
+	write(0, json.RawMessage("false"))
+	if variable(claudeHarness) != "off" || variable("pi") != "" || shown() != false {
+		t.Fatalf("关掉之后变量不对: %q", variable(claudeHarness))
+	}
+	if cfg.runtimeFingerprint(claudeHarness, true) == untouched || cfg.runtimeFingerprint("pi", true) != pi {
+		t.Fatal("改会话间消息应只让 Claude Code 的运行时待重启")
+	}
+
+	write(1, json.RawMessage("true"))
+	if variable(claudeHarness) != "on" || shown() != true {
+		t.Fatalf("打开之后变量不对: %q", variable(claudeHarness))
+	}
+
+	// 清掉：更低几层明说 off 的算关
+	cfg.userEnv = map[string]string{claudeInboxVariable: "off"}
+	write(2, json.RawMessage("null"))
+	if variable(claudeHarness) != "off" || shown() != false || cfg.runtimeFingerprint(claudeHarness, true) != untouched {
+		t.Fatalf("清掉之后应由环境文件说了算: %q %v", variable(claudeHarness), shown())
+	}
+	cfg.userEnv = nil
+}

@@ -180,6 +180,21 @@ function extraSettings(harness: HarnessView): SettingSpecView[] {
           { value: '1h', title: both('1 小时', '1 hour') },
         ],
       },
+      {
+        ...BASE,
+        // 和设备服务真实声明的那一项同形（cmd/codex-harness-adapter/settings_claude.go）
+        key: `${group}.crossSessionInbox`,
+        group,
+        type: 'boolean',
+        scope,
+        default: true,
+        restart: 'harness',
+        title: both('接收别的 Claude 会话的消息', 'Messages from other Claude sessions'),
+        description: both(
+          '开着时，这台设备上别的 Claude 会话（Claude 桌面端、终端里的 Claude Code、Litch 里别的 Claude 会话）可以用 SendMessage 给这里的会话发消息，会话收到后会自己开一个回合处理，对话里显示是谁发来的。对方的请求按收到消息的会话自己的权限执行：完全访问的会话不会再问你。只在会话的 Claude Code 进程还开着时收得到。关掉之后这里的会话不出现在别的会话的列表里，也收不到。改了之后 Claude Code 重启才生效。',
+          "While on, other Claude sessions on this device (the Claude desktop app, Claude Code in a terminal, other Claude sessions in Litch) can message sessions here with SendMessage; the session starts a turn to handle it, and the conversation shows who sent it. The request runs with the receiving session's own permissions: a full-access session will not ask you. Messages arrive only while the session's Claude Code process is running. When off, sessions here are not listed to other sessions and receive nothing. Takes effect after Claude Code restarts.",
+        ),
+      },
     ]
   }
   if (harness.id === 'pi') {

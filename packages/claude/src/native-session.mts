@@ -1,5 +1,7 @@
 import { closeSync, fstatSync, openSync, readSync } from 'node:fs'
 import type { SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
+import type { LitchPeer } from '../../protocol/src/peer-messages.mjs'
+import { peerFromOrigin } from './peer-message.mjs'
 import { submissionHash } from './protocol-contract.mjs'
 import type { RuntimeBackgroundCommandEnd, RuntimeTurnContext } from './types.mjs'
 import { parseWorkflowCommand, workflowRuntimePrompt } from './workflow-command.mjs'
@@ -129,6 +131,29 @@ export function steerMessage(text: string, uuid: string): SDKUserMessage {
     parent_tool_use_id: null,
     origin: { kind: 'human' },
   }
+}
+
+// 收件箱开着时 CLI 回显进模型的每条用户消息（--replay-user-messages）。别的会话发来的那条给出原文和发送方
+// （peer-message.mts）；主循环之外的、别的回显（自己发的、后台任务通知的）是 null
+export function peerMessageOf(
+  message: Record<string, unknown>,
+): { text: string; peer: LitchPeer } | null {
+  if (message.type !== 'user' || message.isReplay !== true || message.parent_tool_use_id)
+    return null
+  return peerFromOrigin(message.origin, replayText(message))
+}
+
+function replayText(message: Record<string, unknown>): string {
+  const content = (message.message as { content?: unknown } | undefined)?.content
+  if (typeof content === 'string') return content
+  if (!Array.isArray(content)) return ''
+  return content
+    .flatMap((block) =>
+      block && typeof block === 'object' && (block as { type?: unknown }).type === 'text'
+        ? [String((block as { text?: unknown }).text ?? '')]
+        : [],
+    )
+    .join('\n\n')
 }
 
 // 一条 result 是否确认了给定的用户消息。用户消息可能被并进通知触发的那一轮，

@@ -8,8 +8,11 @@
 // 后台任务的结束通知（origin 是 task-notification）：上一个回合已经停下（最后是助手说完的话、没有等结果的工具调用）时，
 // 它之后的那一轮单独成一个回合，来历记成 backgroundTask，和实时回合里 CLI 自己续跑的一轮一个样子；
 // 回合还在中途（工具结果之后、助手还没接着说）就到的通知并进当前回合。
+// 别的会话发来的消息（origin 是 peer，peerMessages 扩展）：画成带 litchPeer 的用户消息条目；上一个回合已经停下时
+// 它开一个回合，来历记成 peer，回合还在中途时插进当前回合，和实时回合一样。
 // 人话前面 Claude 桌面端拼进去的 <system-reminder> 块去掉，只留人写的那部分。
 // 条目的标识由消息的 uuid 和块的位置拼成：同一份记录再画一遍，标识不变。
+import { peerFromOrigin } from './peer-message.mjs'
 import { toolItemWithResult } from './server-helpers.mjs'
 import { readImageView, toolUseItem } from './tool-items.mjs'
 import type { TurnRecord, UserInput } from './types.mjs'
@@ -21,7 +24,7 @@ export interface NativeMessage {
   message: unknown
   parent_tool_use_id?: string | null
   timestamp?: string
-  origin?: { kind?: string } | null
+  origin?: { kind?: string; [field: string]: unknown } | null
   /** 压缩后的那段摘要（“This session is being continued…”） */
   isCompactSummary?: boolean
 }
@@ -31,7 +34,7 @@ export interface NativeHistory {
   /** 每个回合在原生记录里的最后一条消息（回退、分叉要用，和适配器自己记的边界是同一种） */
   boundaries: Map<string, string>
   /** 不是人发起的回合是谁开的（backgroundTasks 扩展的 litchOrigin） */
-  origins: Map<string, 'backgroundTask'>
+  origins: Map<string, 'backgroundTask' | 'peer'>
 }
 
 export interface ProjectOptions {
@@ -101,7 +104,7 @@ export function projectNativeHistory(
   const mcpServers = options.mcpServers ?? []
   const turns: TurnRecord[] = []
   const boundaries = new Map<string, string>()
-  const origins = new Map<string, 'backgroundTask'>()
+  const origins = new Map<string, 'backgroundTask' | 'peer'>()
   let turn: TurnRecord | null = null
   /** 这个回合里还没收到结果的工具调用：tool_use_id → 条目在 items 里的位置 */
   let open = new Map<string, number>()
@@ -187,6 +190,23 @@ export function projectNativeHistory(
       if (message.isCompactSummary) {
         turn ??= begin(message, null)
         turn.items.push({ type: 'contextCompaction', id: `${message.uuid}:compaction` })
+        stay()
+        continue
+      }
+      const peer = peerFromOrigin(message.origin, texts.join('\n\n'))
+      if (peer) {
+        // 上一轮已经停下：CLI 为这条消息另起了一轮
+        if (!turn || (settled && open.size === 0)) {
+          turn = begin(message, null)
+          origins.set(turn.id, 'peer')
+        }
+        turn.items.push({
+          type: 'userMessage',
+          id: `${message.uuid}:peer`,
+          content: [{ type: 'text', text: peer.text, text_elements: [] }],
+          litchPeer: peer.peer,
+        })
+        settled = false
         stay()
         continue
       }

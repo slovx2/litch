@@ -43,8 +43,11 @@ export interface BackgroundChangedNotification extends LitchBackground {
   threadId: string
 }
 
-/** 回合上的 `litchOrigin`：这一回合是谁开的。没有这个字段的按用户发起的算 */
-export type LitchTurnOrigin = 'user' | 'backgroundTask' | 'schedule' | 'goal' | 'queue'
+/**
+ * 回合上的 `litchOrigin`：这一回合是谁开的。没有这个字段的按用户发起的算。
+ * peer 是别的会话发来消息、引擎空闲时自己开的那一轮（消息本身是回合开头带 litchPeer 的用户消息条目，peerMessages 扩展）
+ */
+export type LitchTurnOrigin = 'user' | 'backgroundTask' | 'schedule' | 'goal' | 'queue' | 'peer'
 
 export const BACKGROUND_TASKS_NOTIFICATION = {
   changed: 'litch/thread/background/changed',

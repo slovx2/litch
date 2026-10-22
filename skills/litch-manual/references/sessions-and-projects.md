@@ -203,6 +203,14 @@ woken to continue.
   in the side panel's Subagents tab and cannot be messaged directly. In Claude Code sessions, Litch stops
   a subagent that shows no activity for 30 minutes; the turn and the other subagents keep running, and
   the model is told that Litch, not you, stopped it.
+- **Messages from other Claude sessions**: Claude Code sessions on the same computer can message each
+  other (`ListAgents`, `SendMessage`), including the Claude desktop app's sessions and Claude Code in a
+  terminal. A message that reaches a Litch session shows as "Message from …" in place of your own
+  message (with "Sender skips approvals" when the sender runs tools without asking, and "Open in
+  Claude" when it came from a Claude desktop session); an idle session handles it in a turn of its own,
+  a busy one right after its current step. On the sending side the step reads "Message …". This is the
+  device setting `harness.claude-code.crossSessionInbox` (on by default); it works only while the
+  receiving session's Claude Code process is running, and only between sessions on the same computer.
 
 The whole feature can be switched per device with the `sessions.enabled` setting
 (`scripts/litch settings set <device> sessions.enabled=false`); remote devices need adapter 0.11.0 or

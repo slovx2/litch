@@ -153,6 +153,10 @@ func (c configuration) harnessEnvironment(id string) map[string]string {
 	if ttl := c.claudeCacheTTL(); id == claudeHarness && ttl != "" {
 		values[claudeCacheTTLVariable] = ttl
 	}
+	// 会话间消息同样写过才给变量：开是 on，关是 off
+	if inbox, written := c.claudeInbox(); id == claudeHarness && written {
+		values[claudeInboxVariable] = map[bool]string{true: "on", false: "off"}[inbox]
+	}
 	return values
 }
 
@@ -189,7 +193,8 @@ func (c configuration) runtimeFingerprint(id string, enabled bool) string {
 		settings = append(settings, string(approvals))
 	}
 	if id == claudeHarness {
-		settings = append(settings, c.claudeCacheTTL())
+		inbox, _ := c.settings.lookup(claudeInboxKey)
+		settings = append(settings, c.claudeCacheTTL(), string(inbox))
 	}
 	payload, _ := json.Marshal(settings)
 	sum := sha256.Sum256(payload)
@@ -327,7 +332,7 @@ func buildSettingsSchema(c configuration) settingsSchema {
 			schema.Settings = append(schema.Settings, piApprovalsSetting(c, group))
 		}
 		if id == claudeHarness {
-			schema.Settings = append(schema.Settings, claudeCacheTTLSetting(c, group))
+			schema.Settings = append(schema.Settings, claudeCacheTTLSetting(c, group), claudeInboxSetting(c, group))
 		}
 	}
 	description := both(

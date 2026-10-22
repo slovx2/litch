@@ -127,6 +127,50 @@
   color: var(--ink-3);
   opacity: 0.55;
 }
+/* 别的会话发来的消息：位置同用户消息，底色换成面板色、虚线边，最上面一行写是谁发来的（照 Claude 桌面端的 From X） */
+.umsg.peer {
+  background: var(--panel);
+  border-style: dashed;
+  border-color: var(--line-3);
+}
+.peer-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-2);
+}
+.peer-head .ic {
+  flex: none;
+  color: var(--accent);
+}
+.peer-from {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: 600;
+}
+.peer-tag {
+  padding: 0 6px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r1);
+  color: var(--wait);
+  font-size: 11px;
+}
+.peer-open {
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+}
+.peer-open:hover {
+  text-decoration: underline;
+}
 .umsg-text {
   white-space: pre-wrap;
   overflow-wrap: anywhere;

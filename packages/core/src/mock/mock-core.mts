@@ -61,6 +61,7 @@ import { mockAccountLimits } from './mock-limits.mjs'
 import { createMockMachine } from './mock-machine.mjs'
 import { createMockManagement } from './mock-manage.mjs'
 import { createMockPairing } from './mock-pairing.mjs'
+import { createMockPeer } from './mock-peer.mjs'
 import { createMockRemoteUpgrade } from './mock-remote-upgrade.mjs'
 import { createMockService } from './mock-service.mjs'
 import { createMockTasks } from './mock-tasks.mjs'
@@ -595,6 +596,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     updateSummary(view.deviceId, view.sessionId, { status: 'running', updatedAt: clock.now() })
     if (tree.claim(view, turnId, message)) return turnId
     if (background.claim(view, turnId, message)) return turnId
+    if (peerDemo.claim(view, turnId, message)) return turnId
     // 这三样只是顺带演一出别处的动静，回合照常往下走
     if (EDITS_ELSEWHERE.test(message.text)) manage.editElsewhere(view.deviceId, view.harness)
     if (RACES_SETTINGS.test(message.text)) manage.raceNextWrite(view.deviceId, view.harness)
@@ -1738,6 +1740,17 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     setTimer: (run, ms) => clock.setTimer(run, ms),
     summary: (deviceId, sessionId) =>
       sidebars.get(deviceId)?.sessions.find((session) => session.id === sessionId),
+    updateSummary,
+    apply: applySessionOps,
+    reply,
+    nextId: (prefix) => `${prefix}${++seq}`,
+  })
+
+  // 会话间消息：发出一条，过一会儿 Claude 桌面端的会话发来一条（mock-peer.mts）
+  const peerDemo = createMockPeer({
+    lang,
+    now: () => clock.now(),
+    setTimer: (run, ms) => clock.setTimer(run, ms),
     updateSummary,
     apply: applySessionOps,
     reply,

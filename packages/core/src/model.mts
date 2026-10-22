@@ -418,6 +418,21 @@ export interface UserMessageItem {
    * 有它的时候 text 是去掉注入部分之后用户自己说的话（唤醒回合是空的）。没有注入的不带这一项
    */
   event?: SessionEventView
+  /**
+   * 别的会话发来的消息（peerMessages 扩展的 litchPeer）：不是用户打的字，text 是对方的原文。
+   * 界面画成“来自 X 的消息”，不画成用户自己的话
+   */
+  peer?: PeerView
+}
+
+/** 发来消息的那个会话（发送方自报，只用来显示和导航） */
+export interface PeerView {
+  /** 显示名。直接写收件箱的外部进程没有 */
+  name: string | null
+  /** 发送方宿主里的会话号：Claude 桌面端的是 local_ 开头 */
+  session: string | null
+  /** 对方是跳过确认（不问就执行工具）的会话 */
+  bypass: boolean
 }
 
 export interface UserAttachment {

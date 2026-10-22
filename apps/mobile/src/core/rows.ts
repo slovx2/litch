@@ -12,6 +12,7 @@ import type {
   FileChangeItem,
   ItemView,
   NoticeItem,
+  PeerView,
   SessionNoteView,
   SessionProposalView,
   SessionView,
@@ -36,7 +37,15 @@ export type StepState = 'running' | 'done' | 'failed' | 'declined'
 export type Row =
   /** 会话最上面一行：从哪个会话分叉出来的 */
   | { type: 'forked'; key: string; from: string }
-  | { type: 'user'; key: string; turnId: string; text: string; attachments: UserAttachment[] }
+  | {
+      type: 'user'
+      key: string
+      turnId: string
+      text: string
+      attachments: UserAttachment[]
+      /** 别的会话发来的消息（peerMessages 扩展）：气泡上面写是谁发来的 */
+      peer?: PeerView
+    }
   /**
    * 不是用户发起的回合开头那一行（后台任务跑完后 harness 自己接着做的……），放在用户气泡的位置。
    * 叫醒它的任务由单元格对着后台集合找（startedAt 用来找）
@@ -231,7 +240,8 @@ export class RowBuilder {
       }
       this.pushGroup(out, turn, steps)
     }
-    if (turn.origin)
+    // 别的会话发来消息开的回合：开头那条消息自己写着来源，不再另写一行（照桌面端）
+    if (turn.origin && turn.origin !== 'peer')
       out.push(
         this.keep({
           type: 'origin',
@@ -332,6 +342,7 @@ export class RowBuilder {
                 turnId: turn.id,
                 text: item.text,
                 attachments: item.attachments,
+                ...(item.peer ? { peer: item.peer } : {}),
               }),
             )
           break

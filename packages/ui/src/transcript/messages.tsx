@@ -18,6 +18,7 @@ import { AskReplyBody } from './AskCard.tsx'
 import { SentComments } from './comments/Cards.tsx'
 import { commentsOf } from './comments/Cite.tsx'
 import { Markdown } from './Markdown.tsx'
+import { PeerHead } from './PeerHead.tsx'
 import { usePin } from './scroll.ts'
 import { useSmoothText, useToggle } from './state.ts'
 import { TurnActions } from './TurnActions.tsx'
@@ -82,7 +83,8 @@ interface UserMessageProps extends ItemRef {
 
 /**
  * 用户消息：靠右的气泡。很长的时候先收成 20 行，可以展开。
- * 设备进程注入的回报、唤醒（item.event）画成气泡上面的一条系统提示；唤醒的回合没有用户自己的话，只有那一条
+ * 设备进程注入的回报、唤醒（item.event）画成气泡上面的一条系统提示；唤醒的回合没有用户自己的话，只有那一条。
+ * 别的会话发来的（item.peer）换一种底色，最上面一行写是谁发来的；正文是对方的原话，不认评论、答题这些格式
  */
 export const UserMessage = memo(function UserMessage({ turnId, ...ref }: UserMessageProps) {
   const item = useItem<UserMessageItem>(ref)
@@ -93,10 +95,11 @@ export const UserMessage = memo(function UserMessage({ turnId, ...ref }: UserMes
   const pin = usePin()
   const t = useT()
   const said = item?.kind === 'userMessage' ? item.text : ''
+  const peer = item?.kind === 'userMessage' ? item.peer : undefined
   // 答模型边干活边问的题时发的那一段：画成题目和回答
-  const replies = parseAskReply(said)
+  const replies = peer ? null : parseAskReply(said)
   // 开头带着评论的：评论画成卡片，下面只出打的字
-  const comments = replies ? null : commentsOf(said)
+  const comments = replies || peer ? null : commentsOf(said)
   const text = comments ? comments.rest : said
 
   // 是不是超过了 20 行，要画出来才知道，而且跟宽度有关：盯着这块文字的尺寸，变了就重新量
@@ -117,7 +120,13 @@ export const UserMessage = memo(function UserMessage({ turnId, ...ref }: UserMes
     return <SessionEventBar deviceId={ref.deviceId} event={event} anchor={`u:${ref.itemId}`} />
   }
   const message = (
-    <div className="umsg" data-anchor={`u:${ref.itemId}`} ref={bubble}>
+    <div
+      className={peer ? 'umsg peer' : 'umsg'}
+      data-anchor={`u:${ref.itemId}`}
+      data-peer={peer ? '' : undefined}
+      ref={bubble}
+    >
+      {peer ? <PeerHead peer={peer} /> : null}
       <UserAttachments attachments={item.attachments} />
       {comments ? <SentComments {...ref} comments={comments.comments} /> : null}
       {replies ? (

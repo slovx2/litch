@@ -16,6 +16,7 @@ const COUNT_KEYS = {
   notice: 'activity.notice',
   suggest: 'activity.suggest',
   ask: 'activity.ask',
+  message: 'activity.message',
 } as const satisfies Record<StepKind, string>
 
 const NOW_KEYS = {
@@ -31,6 +32,7 @@ const NOW_KEYS = {
   notice: 'activity.now.notice',
   suggest: 'activity.now.suggest',
   ask: 'activity.now.ask',
+  message: 'activity.now.message',
 } as const satisfies Record<StepKind, string>
 
 /** 第一个字母大写（英文的汇总是几段拼起来的，只有开头那段要大写；中文不受影响） */

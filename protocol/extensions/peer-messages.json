@@ -1,0 +1,26 @@
+{
+  "extension": "peerMessages",
+  "description": "别的会话发来的消息：harness 自己的会话间消息（Claude Code 的本机收件箱：同一用户在这台机器上的别的 Claude 会话用 SendMessage 发进来）进了对话。它是一条用户消息条目，但不是用户打的字；条目上带 litchPeer 说是谁发的，客户端画成“来自 X 的消息”。类型在 packages/protocol/src/peer-messages.mts。",
+  "appliesTo": "claude-code 入口，设备设置 harness.claude-code.crossSessionInbox 开着时（默认开）。聚合面原样转发条目，不加也不删。",
+  "declaration": {
+    "description": "客户端握手时在 capabilities.litchExtensions 里声明 peerMessages，表示它认识用户消息条目上的 litchPeer。聚合面把客户端的 capabilities 原样带给每个上游，入口按这条连接的声明决定带不带。",
+    "where": "initialize.params.capabilities.litchExtensions",
+    "schema": { "type": "array", "items": { "type": "string" }, "contains": { "const": "peerMessages" } }
+  },
+  "undeclared": "没声明的连接上看到的是一条普通的用户消息，正文是对方的原文；条目上没有 litchPeer。",
+  "rules": [
+    "Claude 入口让 CLI 回显进模型的用户消息（--replay-user-messages），只认 origin.kind 为 peer、不在子代理里、不是进程内后台子代理发的那些；自己发的、后台任务通知的回显丢掉。",
+    "正文是 CLI 给的 body（去掉信封的原文，和模型看到的一致）；直接写收件箱、没有 body 的，用 CLI 给模型的整段文字。",
+    "引擎空闲时收到：引擎自己开一个回合，回合开头是这条消息，回合的 litchOrigin 是 peer（backgroundTasks 扩展）。回合进行中收到：CLI 在当前这一轮之后接着处理，消息条目插在当前回合里。",
+    "litchPeer 里的名字和会话号都是发送方自报的，只用来显示和导航，不代表身份。",
+    "收件箱由设备设置 harness.claude-code.crossSessionInbox 管：开着时入口不关 CLI 的收件箱，并让 CLI 一律直接投递（crossSessionInbound: accept，不按权限档扣住）；关着时关掉收件箱，别的会话看不见、发不进来。改了要重启 Claude Code。"
+  ],
+  "parts": [
+    {
+      "kind": "ItemField",
+      "name": "litchPeer",
+      "on": "userMessage 条目（item/started、item/completed、thread/read、thread/resume、thread/turns/list 里的回合）",
+      "description": "只发给声明了 peerMessages 的连接，只在别的会话发来的消息上有。形状见 peer-messages.mts 的 LitchPeer。"
+    }
+  ]
+}

@@ -2,10 +2,15 @@ import { execFileSync } from 'node:child_process'
 import { cliCommand, resolveHostCli } from '../../shared/src/host-cli.mjs'
 import { isVersionAtLeast } from '../../shared/src/min-version.mjs'
 
-// 入口起的每个 CLI 都不开本机收件箱（Claude Code 的跨会话消息）：Litch 托管的会话不登记套接字，
-// 本机别处的 Claude 会话看不见、也发不进来；跨会话由 Litch 自己的 litch_sessions 做。
-// 放在 ...process.env 之后，压过外面环境里带进来的值。
+// 入口自己用的一次性 CLI（追加上下文、读用量、起标题这类）不开本机收件箱（Claude Code 的跨会话消息）：
+// 不登记套接字，本机别处的 Claude 会话看不见它们。放在 ...process.env 之后，压过外面环境里带进来的值。
 export const hostClaudeEnvOverrides = { CLAUDE_CODE_HARBOR_KITE: '0' } as const
+
+// 会话的 CLI：设置里“接收别的 Claude 会话的消息”开着（CHA_CLAUDE_CROSS_SESSION_INBOX，默认开）时不关收件箱，
+// 别处的 Claude 会话能列出它、发消息进来；关着时和一次性的一样关掉
+export function hostClaudeSessionEnv(inbox: boolean): Readonly<Record<string, string>> {
+  return inbox ? {} : hostClaudeEnvOverrides
+}
 
 // 解析真实文件，保留 npm CLI 的 .js 后缀，让 SDK 使用其官方 Node 启动方式。
 export function hostClaudeExecutable(env: NodeJS.ProcessEnv = process.env): string {

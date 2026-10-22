@@ -425,11 +425,19 @@ ipcMain.on(REQUEST_CORE_PORT, (event) => {
   event.sender.postMessage(CORE_PORT, null, [port2])
 })
 
-// 回答里的链接交给系统的浏览器。只接受界面自己的主框架发来的、http 或 https 的网址
+// Claude 桌面端会话的深链：别的 Claude 会话发来的消息上“在 Claude 桌面端打开”用（只认这一种形状）
+const CLAUDE_DESKTOP_SESSION = /^claude:\/\/claude\.ai\/epitaxy\/local_[A-Za-z0-9-]+$/
+
+// 回答里的链接交给系统的浏览器。只接受界面自己的主框架发来的、http 或 https 的网址，
+// 以及 Claude 桌面端会话的深链（交给 Claude 桌面端）
 ipcMain.on(OPEN_EXTERNAL, (event, url: unknown) => {
   const frame = event.senderFrame
   if (!frame || frame !== event.sender.mainFrame || !isUiUrl(frame.url)) return
   if (typeof url !== 'string') return
+  if (CLAUDE_DESKTOP_SESSION.test(url)) {
+    void shell.openExternal(url)
+    return
+  }
   let parsed: URL
   try {
     parsed = new URL(url)

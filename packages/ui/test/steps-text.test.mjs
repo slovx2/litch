@@ -81,6 +81,11 @@ test('正在跑的那一条：动词按动作，对象是命令、文件名、�
     changes: [{ path: 'cmd/serve.go', change: 'update' }],
   }
   assert.deepEqual(nowOf(edit, 'update', zh), { label: '正在修改', target: 'serve.go' })
+  // 给别的会话发消息（Claude Code 的“SendMessage 收件人”）：对象是收件人
+  const send = { id: 's', kind: 'toolCall', tool: 'SendMessage 修 CI', source: 'claude-code' }
+  assert.deepEqual(nowOf(send, 'message', zh), { label: '正在发消息给', target: '修 CI' })
+  assert.equal(stepsSummary(tally({ counts: [{ kind: 'message', n: 2 }] }), zh), '发送 2 条消息')
+  assert.equal(stepsSummary(tally({ counts: [{ kind: 'message', n: 1 }] }), en), 'Sent 1 message')
 })
 
 test('在想的时候：汇总行不写动词，只有思考的头一行（“正在工作”只在回合末尾那一行写）', () => {
