@@ -22,6 +22,8 @@
 // 输入区的高度也会跟着皮肤变，视口自己变高变矮的那几个像素也要算进去。
 // 这一阵子里用户自己滚了，就不再盯，照他滚到的地方来。
 //
+// 滚到靠近最上面时收起一块：滚动范围变小，浏览器在排版时就先把滚动位置夹回范围里，补偿要从夹之前的位置算（见 shift）。
+//
 // 补不了的情况：收起的高度比下面剩的内容还多（比如贴着底部收起一大块），滚动位置已经到头了，
 // 那一行只能跟着下来。要彻底不动得在底部垫一块留白，这个放在后面做。
 import {
@@ -105,6 +107,8 @@ export function useTranscriptScroll(sessionKey: string): TranscriptScroll {
   const steadied = useRef<Steady | null>(null)
   /** 上一次改滚动位置时想要的值，和浏览器实际给的值 */
   const written = useRef<{ wanted: number; given: number } | null>(null)
+  /** 上一次认位置时的滚动位置。内容变矮、浏览器把滚动位置夹回范围里的时候，靠它知道夹之前在哪 */
+  const seen = useRef<number | null>(null)
   /** 现在显示的是哪个会话，以及它的内容是不是已经画出来、位置恢复过了 */
   const shown = useRef(sessionKey)
   const armed = useRef(false)
@@ -120,6 +124,7 @@ export function useTranscriptScroll(sessionKey: string): TranscriptScroll {
     pinned.current = null
     steadied.current = null
     written.current = null
+    seen.current = null
     if (!follow.current) {
       follow.current = true
       setFollowing(true)
@@ -147,10 +152,17 @@ export function useTranscriptScroll(sessionKey: string): TranscriptScroll {
   const shift = useCallback((delta: number) => {
     const scroller = scrollerRef.current
     if (!scroller || Math.abs(delta) < 0.01) return
+    // 内容变矮、滚动范围跟着变小时，浏览器在排版时就把滚动位置夹回了新的范围里（停在最上面），
+    // 等不到这里补偿。从夹过的位置算会多补一截：离最上面越近、收起的越多，眼前的内容往上跳得越远。
+    // 这时要从夹之前的位置算。用户自己滚的在这之前已经经滚动事件认过了，不会被当成夹的
+    const now = scroller.scrollTop
+    const top = scroller.clientHeight - scroller.scrollHeight
+    const before = seen.current
+    const base = before !== null && before < now && Math.abs(now - top) < 1 ? before : now
     // 浏览器会把滚动位置取整到设备像素。接着“上次想要的值”往下算，取整的误差才不会越积越多；
     // 上次之后用户自己滚过，就以现在的实际位置为准
     const last = written.current
-    const from = last && scroller.scrollTop === last.given ? last.wanted : scroller.scrollTop
+    const from = last && base === last.given ? last.wanted : base
     const wanted = from - delta
     scroller.scrollTop = wanted
     const given = scroller.scrollTop
@@ -193,6 +205,7 @@ export function useTranscriptScroll(sessionKey: string): TranscriptScroll {
     const scroller = scrollerRef.current
     const content = contentRef.current
     if (!scroller || !content || !armed.current) return
+    seen.current = scroller.scrollTop
     const distance = -scroller.scrollTop
     const atBottom = distance <= AT_BOTTOM
     if (atBottom !== follow.current) {

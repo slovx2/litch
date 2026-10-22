@@ -89,6 +89,7 @@ import {
   machineToolCall,
   sampleMachineAccess,
 } from './sample-machine.mjs'
+import { ASKS_REPORT, readCall, reportSample } from './sample-report.mjs'
 import { sampleRemoteService } from './sample-service.mjs'
 import { sampleTaskAnswer } from './sample-tasks.mjs'
 import { SAMPLE_TEXT, type SampleLang } from './sample-text.mjs'
@@ -702,6 +703,54 @@ export function createMockCore(options: MockCoreOptions): MockCore {
             status: 'completed',
           },
         },
+      ])
+      reply(view, turnId, sample.answer)
+      return turnId
+    }
+    // 话里带“长报告”：过程里一段思考、一段说明、五条命令、一次读文件，最终回答很长（标题、两张表、列表）
+    if (ASKS_REPORT.test(message.text)) {
+      const sample = reportSample(lang)
+      applySessionOps(view, [
+        {
+          op: 'item.add',
+          turnId,
+          item: {
+            id: `${turnId}-t${++seq}`,
+            kind: 'reasoning',
+            status: 'completed',
+            text: sample.thought,
+          },
+        },
+        {
+          op: 'item.add',
+          turnId,
+          item: {
+            id: `${turnId}-n${++seq}`,
+            kind: 'agentMessage',
+            phase: 'commentary',
+            status: 'completed',
+            text: sample.note,
+          },
+        },
+        ...sample.commands.map(
+          ({ command, output }): SessionOp => ({
+            op: 'item.add',
+            turnId,
+            item: {
+              id: `${turnId}-c${++seq}`,
+              kind: 'command',
+              command,
+              cwd: view.cwd,
+              output,
+              elided: null,
+              exitCode: 0,
+              durationMs: 80,
+              startedAt: clock.now(),
+              status: 'completed',
+            },
+          }),
+        ),
+        { op: 'item.add', turnId, item: projectItem(readCall(`${turnId}-r${++seq}`, sample.read)) },
       ])
       reply(view, turnId, sample.answer)
       return turnId
