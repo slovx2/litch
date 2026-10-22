@@ -84,6 +84,7 @@ test('真 sshd：一次性钥匙只能登记，登记后手机钥匙能登录，
           adapterHome: root,
           unsupported: null,
           sshdVersion: () => detectSshdVersion(),
+          tailscaleSsh: async () => false,
         },
       },
     )

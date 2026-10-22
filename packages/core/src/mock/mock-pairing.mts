@@ -2,7 +2,13 @@
 // 行为照真的核心和设备服务：一个配对只接受一部手机、作废了的不会再变、到期自己作废；
 // 出码之后隔一会儿就“有一部手机来登记”，不用真的扫。没连上的设备出码以 offline 结束，
 // 不支持的（只有原生 codex 的）以 unsupported 结束。主机钥匙核对和自检这里不演，总是过。
-import { PAIR_DECIDE_TIMEOUT_MS, PAIR_TTL_MS } from '../../../protocol/src/device-pairing.mjs'
+// 方式按手机要连的地址认：是 tailnet 地址（*.ts.net、100.64.0.0/10）就演 Tailscale 方式，设备也当它开着 Tailscale SSH。
+import {
+  isTailnetHost,
+  PAIR_DECIDE_TIMEOUT_MS,
+  PAIR_TTL_MS,
+  type PairMode,
+} from '../../../protocol/src/device-pairing.mjs'
 import { ChannelError, type Clock, type Commands, type PairingOp } from '../channel/protocol.mjs'
 import type { HostSink } from '../channel/server.mjs'
 import { checkPairingAddress } from '../device/remote.mjs'
@@ -34,6 +40,7 @@ export interface MockPairing {
 
 const NAMES: readonly string[] = [
   'pairing.start',
+  'pairing.detect',
   'pairing.cancel',
   'pairing.decide',
   'pairing.status',
@@ -211,6 +218,13 @@ export function createMockPairing(host: MockPairingHost): MockPairing {
     timers.set(pairId, [arrive, expire])
   }
 
+  /** 记住的（没有就是原配置的）地址是 tailnet 的：当这台设备开着 Tailscale SSH */
+  const tailnetOf = (deviceId: string): boolean => {
+    const device = host.device(deviceId)
+    const address = stateOf(deviceId).remembered ?? (device ? originalOf(device, host.lang) : null)
+    return address !== null && isTailnetHost(address.host)
+  }
+
   const view = (deviceId: string): PairingTopicView => {
     const device = host.device(deviceId)
     const state = stateOf(deviceId)
@@ -219,6 +233,7 @@ export function createMockPairing(host: MockPairingHost): MockPairing {
       deviceId,
       available: device ? device.pairing : null,
       phones: online && device?.pairing ? [...state.phones] : null,
+      tailscale: online && device?.pairing ? tailnetOf(deviceId) : null,
       pairs: [...state.pairs.values()],
     }
   }
@@ -226,7 +241,7 @@ export function createMockPairing(host: MockPairingHost): MockPairing {
   const handle = async (name: string, params: unknown): Promise<unknown> => {
     switch (name) {
       case 'pairing.start': {
-        const { deviceId } = params as Commands['pairing.start']['params']
+        const { deviceId, address, mode } = params as Commands['pairing.start']['params']
         const device = usable(deviceId)
         const state = stateOf(deviceId)
         const n = ++seq
@@ -239,16 +254,32 @@ export function createMockPairing(host: MockPairingHost): MockPairing {
         setStatus(deviceId, status)
         schedule(deviceId, status.pairId)
         const original = originalOf(device, host.lang)
+        const chosen: PairMode =
+          mode ??
+          (isTailnetHost(address?.host ?? state.remembered?.host ?? original.host)
+            ? 'tailscale'
+            : 'key')
         const pairing: PairingView = {
           deviceId,
           pairId: status.pairId,
-          seed: made(n, 43, B64URL),
+          mode: chosen,
+          seed: chosen === 'key' ? made(n, 43, B64URL) : null,
+          command:
+            chosen === 'tailscale'
+              ? `'/home/dev/.local/bin/codex-harness-adapter' pair-enroll --home '/home/dev/.codex-harness-adapter' ${status.pairId}`
+              : null,
+          checked: true,
+          tailscaleSsh: chosen === 'tailscale' || tailnetOf(deviceId),
           expiresAt: status.expiresAt,
           hostKey: { ...HOST_KEY },
           address: state.remembered ? { ...state.remembered } : { ...original },
           original,
         }
         return { pairing }
+      }
+      case 'pairing.detect': {
+        const { host: at } = params as Commands['pairing.detect']['params']
+        return { mode: isTailnetHost(at) ? 'tailscale' : 'key' }
       }
       case 'pairing.cancel': {
         const { deviceId, pairId } = params as Commands['pairing.cancel']['params']
@@ -279,7 +310,9 @@ export function createMockPairing(host: MockPairingHost): MockPairing {
           ...state.phones.filter((phone) => phone.phoneId !== phoneId),
           { phoneId, name: phoneName, fingerprint, addedAt: clock.now() },
         ]
-        publish(deviceId, [{ op: 'phones.set', phones: [...state.phones] }])
+        publish(deviceId, [
+          { op: 'phones.set', phones: [...state.phones], tailscale: tailnetOf(deviceId) },
+        ])
         return { status: next }
       }
       case 'pairing.status': {
@@ -313,7 +346,9 @@ export function createMockPairing(host: MockPairingHost): MockPairing {
           throw new ChannelError('notFound', '没有这部手机')
         }
         state.phones = state.phones.filter((phone) => phone.phoneId !== phoneId)
-        publish(deviceId, [{ op: 'phones.set', phones: [...state.phones] }])
+        publish(deviceId, [
+          { op: 'phones.set', phones: [...state.phones], tailscale: tailnetOf(deviceId) },
+        ])
         return {}
       }
     }

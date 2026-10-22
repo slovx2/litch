@@ -5,19 +5,26 @@
 //   自检：把一次性私钥写成临时文件（600），用系统的 ssh 带 -i 和 IdentitiesOnly 登一次，往标准输入写自检那一行，
 //     看强制命令回不回 {"ok":true,"probe":true}。本机不读用户的 ssh 配置和 known_hosts（-F none，
 //     设备报的主机钥匙写进临时的 UserKnownHostsFile）。临时文件放在状态目录下，用完就删。
+//   横幅：连手机要连的那个地址读 SSH 横幅（只连 TCP），核心拿它认是不是 Tailscale SSH；
+//   tailscale 方式的自检：用一把临时生成、谁都没登记过的钥匙登那个地址（不读用户的 ssh 配置，主机钥匙只认设备报的），
+//     执行登记命令，标准输入写自检那一行。Tailscale 要浏览器验证时把链接交回去，不干等。
 // 这里绝不往用户的 ~/.ssh 里写任何东西。
 import { execFile, spawn } from 'node:child_process'
+import { randomBytes } from 'node:crypto'
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { connect } from 'node:net'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   base64UrlDecode,
+  type PairEnrollTestInput,
+  type PairHostKey,
   type PairingHostAddress,
   type PairingPlatform,
   type PairSelfTestInput,
   type PairSelfTestResult,
   type RemoteTarget,
+  tailscaleVerifyUrl,
 } from '@litch/core'
 import { opensshPrivateKey } from './pairing-key.mjs'
 import { sshBase } from './ssh/args.mjs'
@@ -25,7 +32,7 @@ import { tailOf } from './ssh/run.mjs'
 
 /** 自检最多等多久：连接、认证、强制命令回一行 */
 const SELF_TEST_MS = 25_000
-/** 读本机 SSH 横幅最多等多久 */
+/** 读 SSH 横幅最多等多久 */
 const BANNER_MS = 3000
 /** 自检时写进标准输入的那一行，和期望回来的那一行 */
 const PROBE = '{"v":1,"probe":true}\n'
@@ -114,30 +121,8 @@ function testArgs(input: PairSelfTestInput, knownHosts: string): string[] {
     )
     return [...options, '--', destination]
   }
-  return [
-    '-T',
-    // 本机：不读用户的 ssh 配置，主机钥匙只认设备报的那几把
-    '-F',
-    'none',
-    '-o',
-    'BatchMode=yes',
-    '-o',
-    'ConnectTimeout=10',
-    '-o',
-    'StrictHostKeyChecking=yes',
-    '-o',
-    `UserKnownHostsFile=${knownHosts}`,
-    '-o',
-    'GlobalKnownHostsFile=/dev/null',
-    '-o',
-    'CheckHostIP=no',
-    '-p',
-    String(localPort()),
-    '-l',
-    input.user,
-    '--',
-    '127.0.0.1',
-  ]
+  // 本机：不读用户的 ssh 配置，主机钥匙只认设备报的那几把
+  return bareArgs('127.0.0.1', localPort(), input.user, knownHosts)
 }
 
 /** 强制命令回的那一行：自检过了是 null，没过是原因 */
@@ -158,8 +143,47 @@ function verdict(stdout: string): { ok: true } | { ok: false; said: string } | n
   return null
 }
 
-/** 起一次 ssh 跑自检。key 是私钥文件的路径 */
-function runSelfTest(args: string[], key: string): Promise<PairSelfTestResult> {
+/**
+ * 不读用户 ssh 配置的那几项：主机钥匙只认 knownHosts 里的（设备报的那几把）。
+ * 本机的一次性钥匙自检、tailscale 方式的自检都这样连
+ */
+function bareArgs(host: string, port: number, user: string, knownHosts: string): string[] {
+  return [
+    '-T',
+    '-F',
+    'none',
+    '-o',
+    'BatchMode=yes',
+    '-o',
+    'ConnectTimeout=10',
+    '-o',
+    'StrictHostKeyChecking=yes',
+    '-o',
+    `UserKnownHostsFile=${knownHosts}`,
+    '-o',
+    'GlobalKnownHostsFile=/dev/null',
+    '-o',
+    'CheckHostIP=no',
+    '-p',
+    String(port),
+    '-l',
+    user,
+    '--',
+    host,
+  ]
+}
+
+/** 设备报的主机钥匙写成 known_hosts 的几行：非 22 端口写成 [主机]:端口 */
+const knownLines = (host: string, port: number, keys: readonly PairHostKey[]): string => {
+  const name = port === 22 ? host : `[${host}]:${port}`
+  return keys.map((entry) => `${name} ${entry.publicKey}\n`).join('')
+}
+
+/**
+ * 起一次 ssh 跑自检。key 是私钥文件的路径，command 是要对面执行的
+ * （一次性钥匙方式是强制命令，写什么都一样；tailscale 方式是登记命令）
+ */
+function runSelfTest(args: string[], key: string, command: string): Promise<PairSelfTestResult> {
   return new Promise((done) => {
     const child = spawn(
       'ssh',
@@ -174,8 +198,7 @@ function runSelfTest(args: string[], key: string): Promise<PairSelfTestResult> {
         '-o',
         'PreferredAuthentications=publickey',
         ...args,
-        // 强制命令不看这一句；万一登进去的不是强制命令（sshd 认了别的钥匙），也只是什么都不做
-        'true',
+        command,
       ],
       { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true },
     )
@@ -200,6 +223,12 @@ function runSelfTest(args: string[], key: string): Promise<PairSelfTestResult> {
     })
     child.stderr.setEncoding('utf8').on('data', (chunk: string) => {
       stderr = (stderr + chunk).slice(-8000)
+      // Tailscale 要在浏览器里再验证一次：它会一直等人去点，不干等到超时
+      const verifyUrl = tailscaleVerifyUrl(stderr)
+      if (verifyUrl && stderr.includes('\n', stderr.indexOf(verifyUrl))) {
+        child.kill('SIGKILL')
+        settle({ ok: false, said: stderr.trim().slice(-2000), verifyUrl })
+      }
     })
     child.on('error', (error) => settle({ ok: false, said: `无法启动 ssh：${error.message}` }))
     child.on('close', () => {
@@ -211,7 +240,9 @@ function runSelfTest(args: string[], key: string): Promise<PairSelfTestResult> {
           tailOf(stderr) ??
           (stdout.trim()
             ? stdout.trim().slice(-2000)
-            : '一次性钥匙登录后无响应：sshd 可能未识别该钥匙的强制命令'),
+            : command === 'true'
+              ? '一次性钥匙登录后无响应：sshd 可能未识别该钥匙的强制命令'
+              : '登录后执行登记命令无响应：设备上的适配器路径可能不对'),
       })
     })
     child.stdin.on('error', () => {})
@@ -219,24 +250,28 @@ function runSelfTest(args: string[], key: string): Promise<PairSelfTestResult> {
   })
 }
 
-/** 127.0.0.1 上有没有 SSH 服务：连得上、头一行是 SSH- 开头的横幅 */
-function sshBanner(port: number): Promise<boolean> {
+/** host:port 上 SSH 服务的横幅：连得上、头一行是 SSH- 开头的，返回这一行；否则是 null */
+function sshBanner(host: string, port: number): Promise<string | null> {
   return new Promise((done) => {
-    const socket = connect(port, '127.0.0.1')
+    const socket = connect(port, host)
     let head = ''
-    const finish = (ok: boolean) => {
+    let settled = false
+    const finish = () => {
+      if (settled) return
+      settled = true
       clearTimeout(timer)
       socket.destroy()
-      done(ok)
+      const line = head.split(/\r?\n/)[0] ?? ''
+      done(line.startsWith('SSH-') ? line : null)
     }
-    const timer = setTimeout(() => finish(false), BANNER_MS)
+    const timer = setTimeout(finish, BANNER_MS)
     socket.setEncoding('latin1')
     socket.on('data', (chunk: string) => {
       head += chunk
-      if (head.includes('\n') || head.length >= 255) finish(head.startsWith('SSH-'))
+      if (head.includes('\n') || head.length >= 255) finish()
     })
-    socket.on('error', () => finish(false))
-    socket.on('close', () => finish(head.startsWith('SSH-')))
+    socket.on('error', finish)
+    socket.on('close', finish)
   })
 }
 
@@ -272,7 +307,9 @@ export function desktopPairing(options: DesktopPairingOptions): PairingPlatform 
       return found.flat()
     },
 
-    localSsh: () => sshBanner(localPort()),
+    localSsh: async () => (await sshBanner('127.0.0.1', localPort())) !== null,
+
+    banner: (host, port) => sshBanner(host, port),
 
     localName: () => options.localName(),
 
@@ -284,14 +321,28 @@ export function desktopPairing(options: DesktopPairingOptions): PairingPlatform 
         const key = join(dir, 'id')
         writeFileSync(key, opensshPrivateKey(Buffer.from(seed)), { mode: 0o600 })
         const knownHosts = join(dir, 'known_hosts')
-        const port = localPort()
-        const name = port === 22 ? '127.0.0.1' : `[127.0.0.1]:${port}`
-        writeFileSync(
-          knownHosts,
-          input.hostKeys.map((entry) => `${name} ${entry.publicKey}\n`).join(''),
-          { mode: 0o600 },
-        )
-        return await runSelfTest(testArgs(input, knownHosts), key)
+        writeFileSync(knownHosts, knownLines('127.0.0.1', localPort(), input.hostKeys), {
+          mode: 0o600,
+        })
+        // 强制命令不看这一句；万一登进去的不是强制命令（sshd 认了别的钥匙），也只是什么都不做
+        return await runSelfTest(testArgs(input, knownHosts), key, 'true')
+      } finally {
+        rmSync(dir, { recursive: true, force: true })
+      }
+    },
+
+    async enrollTest(input: PairEnrollTestInput) {
+      const dir = scratch()
+      try {
+        // 一把谁都没登记过的钥匙：Tailscale SSH 不看钥匙，能登进去说明是 Tailscale 放行的
+        const key = join(dir, 'id')
+        writeFileSync(key, opensshPrivateKey(randomBytes(32)), { mode: 0o600 })
+        const knownHosts = join(dir, 'known_hosts')
+        writeFileSync(knownHosts, knownLines(input.host, input.port, input.hostKeys), {
+          mode: 0o600,
+        })
+        const args = bareArgs(input.host, input.port, input.user, knownHosts)
+        return await runSelfTest(args, key, input.command)
       } finally {
         rmSync(dir, { recursive: true, force: true })
       }

@@ -61,6 +61,20 @@ export const zhPairing = {
   'pairing.fail.offline': '设备未连接，连接后再试。',
   'pairing.fail.said': 'ssh 输出',
   'pairing.retry': '重试',
+  'pairing.fail.tailscale':
+    '用于检查的地址由 Tailscale SSH 接管：它不读取 authorized_keys，一次性密钥的强制命令不生效。可改用 Tailscale 方式生成二维码。',
+  'pairing.useTailscale': '改用 Tailscale 方式',
+  'pairing.fail.verify':
+    'Tailscale 要求在浏览器中完成一次验证（ACL 的 check 模式）。打开验证页面完成验证后点重试。',
+  'pairing.fail.verify.open': '打开验证页面',
+  'pairing.tailscale.note':
+    '此地址由 Tailscale SSH 接管：手机需先安装并登录 Tailscale，能否登录由 Tailscale ACL 决定。tailnet 中被 ACL 允许的设备无需密钥即可以 {user} 登录，在 Litch 中撤销无法阻止它们。',
+  'pairing.tailscale.phone': '本机能登录不代表手机能登录：ACL 可以按设备设置。',
+  'pairing.tailscale.unchecked': '本机无法连接此地址，未做生成前的检查。',
+  'phones.tailscale':
+    '此设备使用 Tailscale SSH，撤销只删除密钥。要阻止某台手机，请在 Tailscale 管理后台修改 ACL 或移除该设备。',
+  'phones.revoke.askTailscale':
+    '撤销“{name}”的密钥？此设备使用 Tailscale SSH，撤销只删除密钥，该手机仍可经 Tailscale 登录；要阻止它，请在 Tailscale 管理后台修改 ACL 或移除该设备。',
   'phones.title': '手机',
   'phones.count': '{count} 部',
   'phones.none': '无',

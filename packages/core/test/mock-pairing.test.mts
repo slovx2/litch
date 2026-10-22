@@ -11,6 +11,7 @@ import {
   type PairingTopicView,
   type PairingView,
   type PairStatus,
+  pairingPayload,
 } from '../src/index.mjs'
 import { fakeClock, settle } from './helpers.mjs'
 
@@ -58,17 +59,8 @@ test('出码 → 手机来登记带确认码 → 允许 → 手机进了列表�
   }
   assert.deepEqual(pairing.original, { name: 'build-01', host: '10.0.3.11', port: 22, user: 'dev' })
   assert.equal(s.latest(pairing.pairId)?.state, 'waiting')
-  const text = encodePairPayload({
-    v: 1,
-    n: pairing.address.name,
-    h: pairing.address.host,
-    p: pairing.address.port,
-    u: pairing.address.user,
-    k: { t: pairing.hostKey.type, f: pairing.hostKey.fingerprint },
-    s: pairing.seed,
-    i: pairing.pairId,
-    e: pairing.expiresAt,
-  })
+  assert.equal(pairing.mode, 'key')
+  const text = encodePairPayload(pairingPayload(pairing, pairing.address))
   assert.equal(decodePairPayload(text)?.i, pairing.pairId)
 
   s.time.advance(1000)

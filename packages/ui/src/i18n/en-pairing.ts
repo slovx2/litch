@@ -65,6 +65,22 @@ export const enPairing: Record<keyof typeof zhPairing, Entry> = {
   'pairing.fail.offline': 'Device not connected. Try again once it connects.',
   'pairing.fail.said': 'ssh output',
   'pairing.retry': 'Retry',
+  'pairing.fail.tailscale':
+    'The address used for the check is handled by Tailscale SSH, which ignores authorized_keys, so the one-time key’s forced command has no effect. Generate the code the Tailscale way instead.',
+  'pairing.useTailscale': 'Use Tailscale instead',
+  'pairing.fail.verify':
+    'Tailscale requires a check in the browser (ACL check mode). Open the verification page, finish it, then retry.',
+  'pairing.fail.verify.open': 'Open verification page',
+  'pairing.tailscale.note':
+    'Tailscale SSH handles this address: the phone needs Tailscale installed and signed in, and your Tailscale ACL decides whether it can log in. Any tailnet device the ACL allows can log in as {user} without a key; revoking in Litch can’t stop them.',
+  'pairing.tailscale.phone':
+    'This computer being able to log in doesn’t mean the phone can: ACLs can differ per device.',
+  'pairing.tailscale.unchecked':
+    'This computer can’t reach this address, so the code wasn’t checked.',
+  'phones.tailscale':
+    'This device uses Tailscale SSH, so revoking only removes the key. To block a phone, change your ACL or remove the device in the Tailscale admin console.',
+  'phones.revoke.askTailscale':
+    'Revoke the key of “{name}”? This device uses Tailscale SSH: revoking only removes the key, and the phone can still log in through Tailscale. To block it, change your ACL or remove the device in the Tailscale admin console.',
   'phones.title': 'Phones',
   'phones.count': (args) => `${args.count} ${Number(args.count) === 1 ? 'phone' : 'phones'}`,
   'phones.none': 'None',

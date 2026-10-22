@@ -1,6 +1,7 @@
 // 设备详情里的“手机”一节：这台设备上绑定了哪些手机（名字、绑定日期、撤销），和“在手机上使用…”的入口。
 // 设备服务支持扫码绑定（DeviceView.pairing）才有；连着但服务太旧的说一句先升级；只有 codex 的设备不出这一节。
 // 平时收着，标题后面写几部；开着这一节（或者对话框）时才订阅，核心那时才去设备上取。
+// 设备开着 Tailscale SSH 时列表上方、撤销的确认里都写明：撤销只删钥匙，拦不住 tailnet 里被 ACL 允许的设备。
 import { type DeviceView, keys, type PairingTopicView, type PairPhone } from '@litch/core'
 import { useEffect, useId, useState } from 'react'
 import { useT } from '../app/appearance.ts'
@@ -60,6 +61,7 @@ export function PhonesSection({ device }: { device: DeviceView }) {
     )
   }
   const phones = topic?.phones ?? null
+  const tailscale = topic?.tailscale === true
   return (
     <section className="mng-sec" data-sec="phones" data-open={open}>
       <div className="mng-sec-head">
@@ -88,6 +90,11 @@ export function PhonesSection({ device }: { device: DeviceView }) {
       </div>
       {open ? (
         <div id={id} className="mng-sec-body">
+          {online && tailscale ? (
+            <div className="devp-note" data-phones-tailscale="true">
+              {t('phones.tailscale')}
+            </div>
+          ) : null}
           {!online ? (
             <div className="devp-note">{t('phones.offline')}</div>
           ) : phones === null ? (
@@ -97,7 +104,12 @@ export function PhonesSection({ device }: { device: DeviceView }) {
           ) : (
             <ul className="phone-list">
               {phones.map((phone) => (
-                <PhoneRow key={phone.phoneId} deviceId={device.id} phone={phone} />
+                <PhoneRow
+                  key={phone.phoneId}
+                  deviceId={device.id}
+                  phone={phone}
+                  tailscale={tailscale}
+                />
               ))}
             </ul>
           )}
@@ -108,8 +120,16 @@ export function PhonesSection({ device }: { device: DeviceView }) {
   )
 }
 
-/** 一部手机：名字、绑定日期、撤销（先问一句） */
-function PhoneRow({ deviceId, phone }: { deviceId: string; phone: PairPhone }) {
+/** 一部手机：名字、绑定日期、撤销（先问一句；Tailscale SSH 的设备问的时候说明撤销拦不住它） */
+function PhoneRow({
+  deviceId,
+  phone,
+  tailscale,
+}: {
+  deviceId: string
+  phone: PairPhone
+  tailscale: boolean
+}) {
   const { channel } = useServices()
   const t = useT()
   const [asking, setAsking] = useState(false)
@@ -157,7 +177,11 @@ function PhoneRow({ deviceId, phone }: { deviceId: string; phone: PairPhone }) {
       </div>
       {asking ? (
         <div className="phone-ask">
-          <span className="devp-ask">{t('phones.revoke.ask', { name: phone.name })}</span>
+          <span className="devp-ask">
+            {t(tailscale ? 'phones.revoke.askTailscale' : 'phones.revoke.ask', {
+              name: phone.name,
+            })}
+          </span>
           <span className="grow" />
           <button type="button" className="btn ghost" onClick={() => setAsking(false)}>
             {t('permission.confirm.no')}

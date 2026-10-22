@@ -4,6 +4,8 @@
 //
 // 一次配对：start 写一次性钥匙行 → 手机用它登录，强制命令 pair-enroll 调 enroll（挂着）→ 状态 requested，
 // 通知出码的一方 → decide 允许就追加手机行；结束（done、expired、cancelled、rejected）时删掉一次性钥匙行。
+// Tailscale 方式（start 的 mode 为 tailscale）不写一次性钥匙行，把登记命令交给出码的一方放进二维码，
+// 手机登进去后自己执行它；之后的状态和登记都一样。
 import { hostname as osHostname, userInfo } from 'node:os'
 import { EXTENSION } from '../../protocol/src/device.mjs'
 import {
@@ -26,6 +28,7 @@ import {
   type PairEnrollError,
   type PairEnrollOutput,
   type PairHostKey,
+  type PairMode,
   type PairPhoneRequest,
   type PairState,
   type PairStatus,
@@ -59,6 +62,8 @@ export const PAIR_PREFIX = 'litch/pair/'
 export const PAIR_WAIT_MS = 30_000
 /** 配对结束后还记着它这么久：出码的一方、命令行还能问到最后的状态，之后当作不认识 */
 export const PAIR_FORGET_MS = 10 * 60 * 1000
+/** 开没开 Tailscale SSH 记多久：phones 一打开设备详情就问，不用每次都跑命令 */
+export const TAILSCALE_CACHE_MS = 30_000
 
 /** 定时器。测试换成可以拨的假时钟 */
 export interface PairingClock {
@@ -86,6 +91,8 @@ export interface PairingConfig {
   /** 不支持配对的原因（Windows 的管理员账号）。支持是 null */
   unsupported: string | null
   sshdVersion(): Promise<SshdVersion | null>
+  /** 这台机器开着 Tailscale SSH 没有（pair-host.mts 的 detectTailscaleSsh） */
+  tailscaleSsh(): Promise<boolean>
   platform?: NodeJS.Platform
   clock?: PairingClock
   /** 设备上的主机名和用户名，默认取系统的 */
@@ -113,6 +120,7 @@ export class PairingError extends Error {
 
 interface Pair {
   id: string
+  mode: PairMode
   expiresAt: number
   state: PairState
   phone: PairPhoneRequest | null
@@ -135,6 +143,9 @@ export class DevicePairing {
   private readonly windows: boolean
   private readonly pairs = new Map<string, Pair>()
   private version: Promise<SshdVersion | null> | null = null
+  private tailscale: { at: number; value: Promise<boolean> } | null = null
+  /** 已绑定手机的通知排的队 */
+  private notices: Promise<void> = Promise.resolve()
   private closed = false
 
   constructor(config: PairingConfig, host: PairingHost) {
@@ -174,7 +185,7 @@ export class DevicePairing {
     const given = isObject(params) ? params : {}
     switch (method) {
       case DEVICE_PAIR_START:
-        return this.start()
+        return this.start(modeOf(given.mode))
       case DEVICE_PAIR_CANCEL:
         this.cancel(pairIdOf(given))
         return {}
@@ -196,7 +207,10 @@ export class DevicePairing {
     }
   }
 
-  private async start(): Promise<DevicePairStartResponse> {
+  private async start(mode: PairMode): Promise<DevicePairStartResponse> {
+    // Tailscale SSH 只在 Linux、macOS 上有；Windows 上要这种方式多半是出码的一方认错了
+    if (mode === 'tailscale' && this.windows)
+      throw new PairingError(DEVICE_PAIR_ERROR.unsupported, 'Windows 上没有 Tailscale SSH')
     try {
       this.keys.check()
     } catch (error) {
@@ -206,19 +220,24 @@ export class DevicePairing {
     const hostKey = preferredHostKey(hostKeys)
     if (!hostKey) throw new PairingError(DEVICE_PAIR_ERROR.noHostKey, '读不到这台机器的主机钥匙')
     this.version ??= this.config.sshdVersion().catch(() => null)
-    const version = await this.version
+    const [version, tailscaleSsh] = await Promise.all([this.version, this.tailscaleSsh()])
     if (this.closed) throw new PairingError(DEVICE_PAIR_ERROR.unsupported, '设备服务正在关闭')
     const id = newPairId()
-    const key = newOneTimeKey()
     const expiresAt = this.clock.now() + PAIR_TTL_MS
     const command = enrollCommand(this.config.adapterCli, id, this.windows, this.config.adapterHome)
-    try {
-      this.keys.append(oneTimeLine(id, key.publicKeyLine, command, expiryTime(version, expiresAt)))
-    } catch (error) {
-      throw keysFileError(error)
+    const key = mode === 'key' ? newOneTimeKey() : null
+    if (key) {
+      try {
+        this.keys.append(
+          oneTimeLine(id, key.publicKeyLine, command, expiryTime(version, expiresAt)),
+        )
+      } catch (error) {
+        throw keysFileError(error)
+      }
     }
     const pair: Pair = {
       id,
+      mode,
       expiresAt,
       state: 'waiting',
       phone: null,
@@ -232,17 +251,29 @@ export class DevicePairing {
     pair.timers.expiry = this.clock.setTimeout(() => {
       if (pair.state === 'waiting') this.finish(pair, 'expired')
     }, PAIR_TTL_MS)
-    this.host.log(`配对 ${id} 开始，有效到 ${new Date(expiresAt).toISOString()}`)
+    this.host.log(`配对 ${id} 开始（${mode}），有效到 ${new Date(expiresAt).toISOString()}`)
     this.changed(pair)
-    return {
+    const base = {
       pairId: id,
-      seed: key.seed,
       expiresAt,
       hostKey,
       hostKeys,
       hostname: this.config.hostname ?? osHostname(),
       user: this.config.user ?? currentUser(),
+      tailscaleSsh,
     }
+    return key
+      ? { ...base, mode: 'key', seed: key.seed }
+      : { ...base, mode: 'tailscale', enrollCommand: command }
+  }
+
+  /** 开没开 Tailscale SSH，记 TAILSCALE_CACHE_MS */
+  private tailscaleSsh(): Promise<boolean> {
+    const now = this.clock.now()
+    if (!this.tailscale || now - this.tailscale.at >= TAILSCALE_CACHE_MS) {
+      this.tailscale = { at: now, value: this.config.tailscaleSsh().catch(() => false) }
+    }
+    return this.tailscale.value
   }
 
   private cancel(pairId: string): void {
@@ -272,7 +303,7 @@ export class DevicePairing {
       throw keysFileError(error)
     }
     this.finish(pair, 'done', null)
-    this.host.announce(DEVICE_PAIR_PHONES_CHANGED, this.phones(), EXTENSION.devicePairing)
+    this.announcePhones()
     return statusOf(pair)
   }
 
@@ -324,7 +355,7 @@ export class DevicePairing {
   }
 
   /** 已绑定的手机：钥匙文件里带 litch-mobile: 标记的行 */
-  private phones(): DevicePairPhonesResponse {
+  private async phones(): Promise<DevicePairPhonesResponse> {
     const seen = new Set<string>()
     const data = []
     for (const line of this.keys.lines()) {
@@ -333,7 +364,18 @@ export class DevicePairing {
       seen.add(phone.phoneId)
       data.push(phone)
     }
-    return { data }
+    return { data, tailscaleSsh: await this.tailscaleSsh() }
+  }
+
+  /** 已绑定的手机变了：带全部列表通知。列表当场读，排着队发，后读的不会先到 */
+  private announcePhones(): void {
+    const ready = this.phones()
+    this.notices = this.notices
+      .then(() => ready)
+      .then(
+        (phones) => this.host.announce(DEVICE_PAIR_PHONES_CHANGED, phones, EXTENSION.devicePairing),
+        (error: unknown) => this.host.log(`列已绑定的手机失败：${String(error)}`),
+      )
   }
 
   private revoke(phoneId: unknown): void {
@@ -346,7 +388,7 @@ export class DevicePairing {
     }
     if (removed === 0) throw new PairingError(DEVICE_PAIR_ERROR.unknownPhone, `没有手机 ${phoneId}`)
     this.host.log(`撤掉了手机 ${phoneId} 的钥匙`)
-    this.host.announce(DEVICE_PAIR_PHONES_CHANGED, this.phones(), EXTENSION.devicePairing)
+    this.announcePhones()
   }
 
   /** 配对结束：删一次性钥匙行，挂着的 enroll 拿到结果（error 是 null 表示登记成功），过一阵忘掉它 */
@@ -360,7 +402,8 @@ export class DevicePairing {
     this.clock.clearTimeout(pair.timers.expiry)
     this.clock.clearTimeout(pair.timers.decide)
     try {
-      this.keys.remove((line) => isPairLine(line, pair.id))
+      // Tailscale 方式没写过行
+      if (pair.mode === 'key') this.keys.remove((line) => isPairLine(line, pair.id))
     } catch (failure) {
       // 删不掉也无害：pair-enroll 每次都核对配对，设备进程下次启动时还会清
       this.host.log(`配对 ${pair.id} 的一次性钥匙行删不掉：${String(failure)}`)
@@ -421,6 +464,12 @@ function statusOf(pair: Pair): PairStatus {
     expiresAt: pair.expiresAt,
     phone: pair.phone ? { ...pair.phone } : null,
   }
+}
+
+function modeOf(value: unknown): PairMode {
+  if (value === undefined || value === 'key') return 'key'
+  if (value === 'tailscale') return 'tailscale'
+  throw new PairingError(null, 'mode 要是 key 或 tailscale')
 }
 
 function pairIdOf(params: Record<string, unknown>): string {

@@ -2,7 +2,7 @@
 //   一、种子拼出来的 OpenSSH 私钥文件 ssh-keygen 认得、算出的公钥一样；
 //   二、外壳的几样（pairing.mts）：ssh -G 解析地址、从夹具的 known_hosts 里找主机钥匙、本机的 SSH 横幅、
 //       一次性钥匙自检（夹具的钥匙文件里临时加一行带强制命令的一次性钥匙，强制命令是个只会答自检的小脚本），
-//       以及自检失败的几种（钥匙不认、主机钥匙不对），临时文件用完删掉；
+//       以及自检失败的几种（钥匙不认、主机钥匙不对），读横幅，tailscale 方式的自检对着普通 sshd 被拒，临时文件用完删掉；
 //   三、整条链：核心经 ssh 连夹具上装了适配器的那台，设备服务列了 devicePairing 时真的出一次码再作废，
 //       看夹具的钥匙文件里一次性钥匙行出现又消失。设备服务还没有这项扩展时这一段跳过并写明。
 // 每一项结果打一行 LITCH_PAIR_CHECK {...}，全部过了退出码是 0。
@@ -162,6 +162,26 @@ const deadPort = await new Promise<number>((done) => {
 process.env.LITCH_LOCAL_SSH_PORT = String(deadPort)
 say('localSshOff', !(await platform.localSsh()))
 delete process.env.LITCH_LOCAL_SSH_PORT
+
+// 横幅：夹具的 sshd 报 OpenSSH 的；没人听的端口是 null
+const banner = await platform.banner('127.0.0.1', resolved.port)
+say('banner', banner?.startsWith('SSH-2.0-OpenSSH') === true, { banner })
+say('bannerDead', (await platform.banner('127.0.0.1', deadPort)) === null)
+// tailscale 方式的自检对着普通的 sshd：临时钥匙谁都没登记过，被拒（说明递上去的只有它，没用用户自己的配置）
+const enrolled = await platform.enrollTest({
+  host: '127.0.0.1',
+  port: resolved.port,
+  user: resolved.user,
+  command: 'true',
+  hostKeys: [hostKey],
+})
+say(
+  'enrollTestRefused',
+  !enrolled.ok && /Permission denied/i.test(enrolled.ok ? '' : enrolled.said),
+  {
+    enrolled,
+  },
+)
 
 // 自检用的临时文件都删了；钥匙文件还原
 const left = existsSync(join(dataDir, 'pairing')) ? readdirSync(join(dataDir, 'pairing')) : []

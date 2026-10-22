@@ -2,15 +2,20 @@
 // 左边是二维码、倒计时和“复制配对文本”，右边是给手机用的地址四项（预填记住的或原配置，可改，改了二维码当场换，
 // 旁边写着原配置、可一键恢复，改过的按设备记住）和状态一行：等扫码 → 手机“名字”请求绑定（确认码、允许、拒绝）→ 已绑定。
 // 码到期自动作废、重新出一张；关掉对话框时没用完的码作废掉。出不了码时按原因说人话，自检这类把 ssh 的原话摆出来。
+// 方式（一次性钥匙或 Tailscale，12 号设计第七之四节）由核心按手机要连的地址认：改了主机、端口时重新认一次，
+// 方式变了就换一张码；Tailscale 方式多一段说明（手机要装 Tailscale、ACL 说了算、撤销拦不住）。
 import {
   type ChannelError,
   type DeviceView,
   encodePairPayload,
   keys,
   type PairingAddress,
+  type PairingTarget,
   type PairingTopicView,
   type PairingView,
+  type PairMode,
   type PairState,
+  pairingPayload,
 } from '@litch/core'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useT } from '../app/appearance.ts'
@@ -30,6 +35,7 @@ import {
   draftOf,
   failureOf,
   finalState,
+  redetects,
   refreshes,
   sameAddress,
   showsSaid,
@@ -37,7 +43,7 @@ import {
 } from './pairing.ts'
 import { QrCode } from './QrCode.tsx'
 
-/** 改地址之后隔多久记下来：边打边记没有意义 */
+/** 改地址之后隔多久记下来、重新认方式：边打边记没有意义 */
 const REMEMBER_MS = 600
 
 interface PairDialogProps {
@@ -64,17 +70,13 @@ const withPrefill = (draft: AddressDraft, prefill: PairDialogProps['prefill']): 
 
 /** 二维码里的那段文字 */
 const payloadText = (pairing: PairingView, address: PairingAddress): string =>
-  encodePairPayload({
-    v: 1,
-    n: address.name,
-    h: address.host,
-    p: address.port,
-    u: address.user,
-    k: { t: pairing.hostKey.type, f: pairing.hostKey.fingerprint },
-    s: pairing.seed,
-    i: pairing.pairId,
-    e: pairing.expiresAt,
-  })
+  encodePairPayload(pairingPayload(pairing, address))
+
+/** 出一张码时指定的：方式、按哪个地址认 */
+interface StartOptions {
+  mode?: PairMode
+  address?: PairingTarget
+}
 
 /** 一秒走一下的钟：倒计时要它 */
 function useSecond(): number {
@@ -108,6 +110,10 @@ export function PairDialog({ device, prefill, onClose }: PairDialogProps) {
   const now = useSecond()
   /** 预填只用在第一张码上：之后换码不再盖掉用户改过的 */
   const firstFill = useRef(prefill)
+  /** 现在这张码的方式是按哪个地址认的：表单里的主机、端口和它不一样时重新认 */
+  const probed = useRef<{ host: string; port: number } | null>(null)
+  /** 换方式、改用 Tailscale 之后再换码（到期、重试）照这一次的来 */
+  const lastOptions = useRef<StartOptions>({})
 
   // 开着的时候订阅这台设备的配对情况：状态一行跟着它走
   useEffect(() => replica.openPairing(deviceId), [replica, deviceId])
@@ -124,39 +130,46 @@ export function PairDialog({ device, prefill, onClose }: PairDialogProps) {
     [channel, deviceId],
   )
 
-  /** 出一张码。换码时先把旧的作废；表单里正在改的地址不动 */
-  const start = useCallback(() => {
-    const old = live.current
-    if (old && !finalState(old.state)) discard(old.pairId)
-    live.current = null
-    const mine = ++generation.current
-    setStarting(true)
-    setFailure(null)
-    setDecideError(null)
-    channel.command('pairing.start', { deviceId }).then(
-      ({ pairing: next }) => {
-        if (closed.current || mine !== generation.current) {
-          discard(next.pairId)
-          return
-        }
-        setPairing(next)
-        setStarting(false)
-        setDraft((was) => was ?? withPrefill(draftOf(next.address), firstFill.current))
-        if (remembered.current === null) remembered.current = next.address
-      },
-      (error: unknown) => {
-        if (closed.current || mine !== generation.current) return
-        setPairing(null)
-        setStarting(false)
-        setFailure(error as ChannelError)
-      },
-    )
-  }, [channel, deviceId, discard])
+  /** 出一张码。换码时先把旧的作废；表单里正在改的地址不动。不给 options 照上一次的 */
+  const start = useCallback(
+    (options?: StartOptions) => {
+      if (options) lastOptions.current = options
+      const given = lastOptions.current
+      const old = live.current
+      if (old && !finalState(old.state)) discard(old.pairId)
+      live.current = null
+      const mine = ++generation.current
+      setStarting(true)
+      setFailure(null)
+      setDecideError(null)
+      channel.command('pairing.start', { deviceId, ...given }).then(
+        ({ pairing: next }) => {
+          if (closed.current || mine !== generation.current) {
+            discard(next.pairId)
+            return
+          }
+          setPairing(next)
+          setStarting(false)
+          setDraft((was) => was ?? withPrefill(draftOf(next.address), firstFill.current))
+          if (remembered.current === null) remembered.current = next.address
+          const at = given.address ?? next.address
+          probed.current = { host: at.host, port: at.port }
+        },
+        (error: unknown) => {
+          if (closed.current || mine !== generation.current) return
+          setPairing(null)
+          setStarting(false)
+          setFailure(error as ChannelError)
+        },
+      )
+    },
+    [channel, deviceId, discard],
+  )
 
   // 打开就出码；关掉时把没用完的那张作废
   useEffect(() => {
     closed.current = false
-    start()
+    start({})
     return () => {
       closed.current = true
       generation.current++
@@ -201,6 +214,24 @@ export function PairDialog({ device, prefill, onClose }: PairDialogProps) {
     }, REMEMBER_MS)
     return () => clearTimeout(timer)
   }, [pairing, address, channel, deviceId])
+
+  // 改了主机或端口（停手一会儿）：重新认方式，变了就按新地址换一张码
+  useEffect(() => {
+    if (!pairing || !address || starting || finalState(state)) return
+    if (!redetects(probed.current, address)) return
+    const at = { host: address.host, port: address.port, user: address.user }
+    const timer = setTimeout(() => {
+      probed.current = { host: at.host, port: at.port }
+      channel.command('pairing.detect', { deviceId, host: at.host, port: at.port }).then(
+        ({ mode }) => {
+          if (closed.current || mode === pairing.mode) return
+          start({ mode, address: at })
+        },
+        () => {},
+      )
+    }, REMEMBER_MS)
+    return () => clearTimeout(timer)
+  }, [pairing, address, starting, state, channel, deviceId, start])
 
   const decide = (allow: boolean) => {
     if (!pairing) return
@@ -267,7 +298,12 @@ export function PairDialog({ device, prefill, onClose }: PairDialogProps) {
         <div className="modal-body">
           <div className="modal-note">{t('pairing.intro')}</div>
           {failure ? (
-            <Failure device={device} failure={failure} onRetry={start} />
+            <Failure
+              device={device}
+              failure={failure}
+              onRetry={() => start()}
+              onTailscale={() => start({ mode: 'tailscale' })}
+            />
           ) : (
             <div className="pair-main">
               <div className="pair-code" data-pair-ready={text ? 'true' : 'false'}>
@@ -319,6 +355,18 @@ export function PairDialog({ device, prefill, onClose }: PairDialogProps) {
                     </div>
                   ) : null}
                   <div className="modal-note">{t('pairing.address.note')}</div>
+                  {pairing?.mode === 'tailscale' ? (
+                    <div className="modal-note pair-tailscale" data-pair-mode="tailscale">
+                      <div>{t('pairing.tailscale.note', { user: address?.user ?? '' })}</div>
+                      <div>
+                        {t(
+                          pairing.checked
+                            ? 'pairing.tailscale.phone'
+                            : 'pairing.tailscale.unchecked',
+                        )}
+                      </div>
+                    </div>
+                  ) : null}
                   {original ? (
                     <div className="pair-original" data-pair-changed={changed ? 'true' : 'false'}>
                       <span className="ell mono">
@@ -396,7 +444,7 @@ export function PairDialog({ device, prefill, onClose }: PairDialogProps) {
         <div className="modal-foot">
           <span className="grow" />
           {state === 'rejected' || state === 'cancelled' ? (
-            <button type="button" className="btn" data-act="pair-again" onClick={start}>
+            <button type="button" className="btn" data-act="pair-again" onClick={() => start()}>
               {t('pairing.again')}
             </button>
           ) : null}
@@ -414,19 +462,25 @@ export function PairDialog({ device, prefill, onClose }: PairDialogProps) {
   )
 }
 
-/** 出不了码：按原因说人话；没开 SSH 服务的说怎么开；自检这类把 ssh 的原话摆出来；能重试 */
+/**
+ * 出不了码：按原因说人话；没开 SSH 服务的说怎么开；自检这类把 ssh 的原话摆出来；能重试。
+ * 自检连的地址是 Tailscale SSH 的给“改用 Tailscale 方式”；Tailscale 要浏览器验证的给验证页面的链接
+ */
 function Failure({
   device,
   failure,
   onRetry,
+  onTailscale,
 }: {
   device: DeviceView
   failure: ChannelError
   onRetry(): void
+  onTailscale(): void
 }) {
   const t = useT()
   const kind = failureOf(failure)
   const said = failure.message.trim()
+  const verifyUrl = kind === 'verify' && /^https?:\/\//.test(said) ? said : null
   return (
     <div className="cfail pair-fail" data-pair-failure={kind ?? 'other'} role="alert">
       <div className="cfail-text">
@@ -436,6 +490,25 @@ function Failure({
         {kind ? t(`pairing.fail.${kind}`) : t('pairing.failed', { reason: reasonOf(failure, t) })}
       </div>
       {kind === 'sshOff' ? <div className="cfail-text">{t(sshOffHint(device.os))}</div> : null}
+      {verifyUrl ? (
+        <div className="cfail-text">
+          <a
+            href={verifyUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="mono"
+            data-pair-verify={verifyUrl}
+            onClick={(event) => {
+              const shell = window.litchShell
+              if (!shell) return
+              event.preventDefault()
+              shell.openExternal(verifyUrl)
+            }}
+          >
+            {t('pairing.fail.verify.open')}
+          </a>
+        </div>
+      ) : null}
       {kind && showsSaid(kind) && said ? (
         <div className="svc-said">
           <span className="devp-note">{t('pairing.fail.said')}</span>
@@ -444,6 +517,11 @@ function Failure({
       ) : null}
       {kind === 'unsupported' ? null : (
         <div className="cfail-acts">
+          {kind === 'tailscale' ? (
+            <button type="button" className="mini" data-act="pair-tailscale" onClick={onTailscale}>
+              {t('pairing.useTailscale')}
+            </button>
+          ) : null}
           <button type="button" className="mini retry" data-act="pair-retry" onClick={onRetry}>
             {t('pairing.retry')}
           </button>

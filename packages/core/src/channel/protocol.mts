@@ -75,8 +75,10 @@ import type {
 } from '../model-manage.mjs'
 import type {
   PairingAddress,
+  PairingTarget,
   PairingTopicView,
   PairingView,
+  PairMode,
   PairPhone,
   PairStatus,
 } from '../model-pairing.mjs'
@@ -269,7 +271,7 @@ export type TasksOp =
  * 一个配对的状态整条换（只有这台桌面端开出来的配对才有，别处开的不发）
  */
 export type PairingOp =
-  | { op: 'phones.set'; phones: PairPhone[] }
+  | { op: 'phones.set'; phones: PairPhone[]; tailscale: boolean }
   | { op: 'pair.status'; status: PairStatus }
 
 /** 安装情况整份换：不大，一次变的往往是好几项（任务的日志、状态，接着版本也重新探测） */
@@ -827,8 +829,19 @@ export interface Commands {
   }
   // ---------- 扫码绑定手机 ----------
   // 都要设备列了 devicePairing，不然以 unsupported 结束；没连上以 offline 结束。失败的 key 见 PairingStartFailure。
-  /** 出码：设备上建配对、核对主机钥匙、自检，都过了才回。配对的状态变化经 pairing.status 回来 */
-  'pairing.start': { params: { deviceId: string }; result: { pairing: PairingView } }
+  /**
+   * 出码：设备上建配对、核对主机钥匙、自检，都过了才回。配对的状态变化经 pairing.status 回来。
+   * address 是手机要连的地址（表单里现在的），不给就用记住的或原配置；mode 不给就按这个地址认（pairModeOf）
+   */
+  'pairing.start': {
+    params: { deviceId: string; address?: PairingTarget; mode?: PairMode }
+    result: { pairing: PairingView }
+  }
+  /** 手机要连的这个地址该用哪种方式出码（读横幅，读不到时看设备自报）。表单里改了主机、端口时问 */
+  'pairing.detect': {
+    params: { deviceId: string; host: string; port: number }
+    result: { mode: PairMode }
+  }
   /** 关掉对话框、换新码前：作废这个配对 */
   'pairing.cancel': { params: { deviceId: string; pairId: string }; result: Record<string, never> }
   /** 允许或拒绝正在登记的手机 */

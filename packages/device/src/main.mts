@@ -13,6 +13,7 @@ import {
   defaultAuthorizedKeys,
   defaultHostKeysDir,
   detectSshdVersion,
+  detectTailscaleSsh,
   readHostKeys,
   windowsAdmin,
 } from './pair-host.mjs'
@@ -62,6 +63,7 @@ function pairingConfig(stateDir: string): PairingConfig {
         ? 'Windows 的管理员账号的钥匙在 administrators_authorized_keys 里，请手动添加'
         : null,
     sshdVersion: () => detectSshdVersion(),
+    tailscaleSsh: () => detectTailscaleSsh(),
   }
 }
 

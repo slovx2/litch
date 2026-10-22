@@ -16,6 +16,8 @@ export interface SshTarget {
   hostKeyType?: string
   /** 每个会话上设的环境变量（对面 sshd 放行的才生效） */
   env?: Record<string, string>
+  /** 扫码绑定的 Tailscale 方式：登进去后执行的登记命令（二维码里的 c） */
+  enrollCommand?: string
 }
 
 export interface RunResult {
@@ -89,7 +91,10 @@ export const ssh = {
   async inspectPrivateKey(privateKey: string, passphrase: string): Promise<KeyDescription> {
     return JSON.parse(await native.inspectPrivateKey(privateKey, passphrase)) as KeyDescription
   },
-  /** 扫码绑定：用一次性钥匙登进去，往 pair-enroll 的标准输入写一行，返回它写回的那一行（最多等 3 分钟） */
+  /**
+   * 扫码绑定：登进去（一次性钥匙，或 Tailscale 方式下手机自己的钥匙并执行 enrollCommand），
+   * 往 pair-enroll 的标准输入写一行，返回它写回的那一行（最多等 3 分钟）
+   */
   enrollPair: (target: SshTarget, line: string): Promise<string> =>
     native.enrollPair(JSON.stringify(target), line),
   /** 6 位确认码，和电脑上显示的那个比对 */

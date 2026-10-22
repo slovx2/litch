@@ -7,7 +7,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
-	"encoding/base64"
+	"crypto/rand"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -63,17 +64,31 @@ func renderQR(w io.Writer, text string) error {
 // 自检的结果之一：本机没有 ssh 客户端，跳过
 var errNoSSHClient = errors.New("no ssh client")
 
-// pairSelfCheck 用一次性钥匙经系统的 ssh 连 127.0.0.1:<port>，输入自检那一行（{"v":1,"probe":true}），
-// 设备服务认出是自检就只回 ok，不消耗配对。这样 sshd 不认 authorized_keys（别的 AuthorizedKeysFile、StrictModes 嫌权限、
-// AuthenticationMethods 要双因素）、主机钥匙对不上，在手机扫之前就能发现。
-// 私钥（种子写成 OpenSSH 格式，600）和只放这一把主机钥匙的 known_hosts 放在 dir 下新建的目录里，用完删掉；
+// 自检连哪里、用什么钥匙：一次性钥匙方式 seed 是那把钥匙的种子、连 127.0.0.1，强制命令替它执行登记；
+// Tailscale 方式 seed 为空（临时生成一把谁都没登记过的），连手机走的地址，自己执行 command
+type pairCheck struct {
+	seed     []byte
+	host     string
+	port     int
+	user     string
+	hostKeys []pairHostKey
+	command  string
+}
+
+// pairSelfCheck 经系统的 ssh 登一次，输入自检那一行（{"v":1,"probe":true}），设备服务认出是自检就只回 ok，不消耗配对。
+// 一次性钥匙方式下 sshd 不认 authorized_keys（别的 AuthorizedKeysFile、StrictModes 嫌权限、AuthenticationMethods 要双因素）、
+// 主机钥匙对不上，在手机扫之前就能发现；Tailscale 方式下 ACL 不放行、登记命令的路径不对也能发现。
+// 私钥（OpenSSH 格式，600）和只放设备报的主机钥匙的 known_hosts 放在 dir 下新建的目录里，用完删掉；
 // ssh 不读任何配置文件、不用 agent，碰不到用户自己的 ~/.ssh。
-func pairSelfCheck(ctx context.Context, sshPath, dir string, start pairStartResponse, port int, user string) error {
-	seed, err := base64.RawURLEncoding.DecodeString(start.Seed)
-	if err != nil || len(seed) != ed25519.SeedSize {
-		return errors.New(tr("设备服务给的一次性钥匙不对", "the one-time key from the device service is malformed"))
+func pairSelfCheck(ctx context.Context, sshPath, dir string, check pairCheck) error {
+	seed := check.seed
+	if seed == nil {
+		seed = make([]byte, ed25519.SeedSize)
+		if _, err := rand.Read(seed); err != nil {
+			return err
+		}
 	}
-	block, err := ssh.MarshalPrivateKey(ed25519.NewKeyFromSeed(seed), "litch-pair:"+start.PairID)
+	block, err := ssh.MarshalPrivateKey(ed25519.NewKeyFromSeed(seed), "litch-pair-check")
 	if err != nil {
 		return err
 	}
@@ -89,17 +104,25 @@ func pairSelfCheck(ctx context.Context, sshPath, dir string, start pairStartResp
 	if err := os.WriteFile(key, pem.EncodeToMemory(block), 0o600); err != nil {
 		return err
 	}
-	host := "127.0.0.1"
-	if port != 22 {
-		host = "[127.0.0.1]:" + strconv.Itoa(port)
+	name := check.host
+	if check.port != 22 {
+		name = "[" + check.host + "]:" + strconv.Itoa(check.port)
+	}
+	var hosts strings.Builder
+	for _, hostKey := range check.hostKeys {
+		hosts.WriteString(name + " " + hostKey.PublicKey + "\n")
 	}
 	knownHosts := filepath.Join(work, "known_hosts")
-	if err := os.WriteFile(knownHosts, []byte(host+" "+start.HostKey.PublicKey+"\n"), 0o600); err != nil {
+	if err := os.WriteFile(knownHosts, []byte(hosts.String()), 0o600); err != nil {
 		return err
 	}
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
-	command := exec.CommandContext(ctx, sshPath, pairSSHArgs(key, knownHosts, port, user)...)
+	args := pairSSHArgs(key, knownHosts, check.host, check.port, check.user)
+	if check.command != "" {
+		args = append(args, check.command)
+	}
+	command := exec.CommandContext(ctx, sshPath, args...)
 	command.Stdin = strings.NewReader(`{"v":1,"probe":true}` + "\n")
 	var stdout, stderr bytes.Buffer
 	command.Stdout, command.Stderr = &stdout, &stderr
@@ -135,7 +158,7 @@ func pairSelfCheck(ctx context.Context, sshPath, dir string, start pairStartResp
 	return errors.New(said)
 }
 
-func pairSSHArgs(key, knownHosts string, port int, user string) []string {
+func pairSSHArgs(key, knownHosts, host string, port int, user string) []string {
 	return []string{
 		"-F", os.DevNull, "-T",
 		"-p", strconv.Itoa(port), "-l", user, "-i", key,
@@ -149,6 +172,20 @@ func pairSSHArgs(key, knownHosts string, port int, user string) []string {
 		"-o", "UpdateHostKeys=no",
 		"-o", "ConnectTimeout=10",
 		"-o", "LogLevel=ERROR",
-		"127.0.0.1",
+		"--", host,
 	}
 }
+
+// tailscaleVerifyURL：Tailscale 要在浏览器里再验证一次时（ACL 的 check 模式）tailscaled 给的链接，
+// 和 device-pairing.mts 的 tailscaleVerifyUrl 认法一样。没有是空的
+func tailscaleVerifyURL(text string) string {
+	if found := tailscaleVisitPattern.FindStringSubmatch(text); found != nil {
+		return found[1]
+	}
+	return tailscaleLoginPattern.FindString(text)
+}
+
+var (
+	tailscaleVisitPattern = regexp.MustCompile(`(?i)To authenticate, visit:\s*(https?://\S+)`)
+	tailscaleLoginPattern = regexp.MustCompile(`https://login\.tailscale\.com/a/\S+`)
+)

@@ -140,3 +140,17 @@ func TestIsYes(t *testing.T) {
 		}
 	}
 }
+
+// 和 packages/core/test/device-pairing-payload.test.mts 的 tailscale 样例是同一份
+func TestEncodeTailscalePairPayloadMatchesTypeScript(t *testing.T) {
+	sample := pairPayload{
+		Name: "开发机 song-debian", Host: "song-debian.tail2e2f6a.ts.net", Port: 22, User: "root",
+		HostKeyType: "ssh-ed25519", HostKeyFP: "SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU",
+		Tailscale: true, Command: "'/opt/litch/bin/codex-harness-adapter' pair-enroll --home '/root/.codex-harness-adapter' Ab3dEf6hIj9kLm2n",
+		PairID: "Ab3dEf6hIj9kLm2n", ExpiresAt: 1_792_000_000_000,
+	}
+	want := "LITCHPAIR1:eyJ2IjoxLCJuIjoi5byA5Y-R5py6IHNvbmctZGViaWFuIiwiaCI6InNvbmctZGViaWFuLnRhaWwyZTJmNmEudHMubmV0IiwicCI6MjIsInUiOiJyb290IiwiayI6eyJ0Ijoic3NoLWVkMjU1MTkiLCJmIjoiU0hBMjU2OitEaVkzd3Z2VjZUdUpKaGJwWmlzRi96TERBMHpQTVN2SGRrcjRVdkNPcVUifSwibSI6InRhaWxzY2FsZSIsImMiOiInL29wdC9saXRjaC9iaW4vY29kZXgtaGFybmVzcy1hZGFwdGVyJyBwYWlyLWVucm9sbCAtLWhvbWUgJy9yb290Ly5jb2RleC1oYXJuZXNzLWFkYXB0ZXInIEFiM2RFZjZoSWo5a0xtMm4iLCJpIjoiQWIzZEVmNmhJajlrTG0ybiIsImUiOjE3OTIwMDAwMDAwMDB9"
+	if got := encodePairPayload(sample); got != want {
+		t.Fatalf("和 TS 编出来的不一样：\n%s\n%s", got, want)
+	}
+}

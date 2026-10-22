@@ -93,6 +93,7 @@ export function pairConfig(place: PairPlace, more: Partial<PairingConfig> = {}):
     adapterHome: '/home/tester/.codex-harness-adapter',
     unsupported: null,
     sshdVersion: async () => [9, 9],
+    tailscaleSsh: async () => false,
     hostname: 'test-host',
     user: 'tester',
     ...more,

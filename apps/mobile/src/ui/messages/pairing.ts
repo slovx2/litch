@@ -51,6 +51,15 @@ export const zhCN = {
   'pair.why.noAnswer':
     '已登录，但远程设备未返回登记结果。其适配器可能过旧，请先在电脑上升级设备服务。',
   'pair.why.unknown': '发生意外错误。',
+  'pair.why.tailscaleOff':
+    '无法连接 {host}:{port}：手机上的 Tailscale 可能未打开或未登录。打开并登录后重新扫码。',
+  'pair.why.denied':
+    'Tailscale 不允许此手机登录：请检查 Tailscale ACL 是否允许此手机以该用户登录。',
+  'pair.why.verify': 'Tailscale 要求在浏览器中完成一次验证。打开验证页面完成后点重试。',
+  'pair.verify.open': '打开验证页面',
+  'pair.retry': '重试',
+  'pair.tailscale':
+    '此设备经 Tailscale SSH 连接，请先打开手机上的 Tailscale 并登录。能否登录由 Tailscale ACL 决定。',
   'pair.detail': '详情：{detail}',
 
   'pair.revoke': '同时在远程设备上撤销此手机的密钥',
@@ -117,6 +126,16 @@ export const en: Record<keyof typeof zhCN, Entry> = {
   'pair.why.noAnswer':
     'Signed in, but the remote device returned no pairing result. Its adapter may be outdated. Update the device service from the computer first.',
   'pair.why.unknown': 'Something unexpected happened.',
+  'pair.why.tailscaleOff':
+    'Can’t reach {host}:{port}. Tailscale on this phone may be off or signed out. Turn it on, sign in and scan again.',
+  'pair.why.denied':
+    'Tailscale doesn’t let this phone log in. Check that your Tailscale ACL allows this phone to log in as this user.',
+  'pair.why.verify':
+    'Tailscale requires a check in the browser. Open the verification page, finish it, then retry.',
+  'pair.verify.open': 'Open verification page',
+  'pair.retry': 'Retry',
+  'pair.tailscale':
+    'This device is reached over Tailscale SSH. Turn on Tailscale on this phone and sign in first. Your Tailscale ACL decides whether it can log in.',
   'pair.detail': 'Details: {detail}',
 
   'pair.revoke': 'Also revoke this phone’s key on the remote device',

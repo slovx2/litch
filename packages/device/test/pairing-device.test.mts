@@ -118,3 +118,29 @@ test('不握手也能走完一次配对；通知只发给声明了 devicePairing
     rmSync(place.root, { recursive: true, force: true })
   }
 })
+
+test('Tailscale 方式的应答也合扩展定义：没有 seed，有 enrollCommand', async () => {
+  const place = pairPlace()
+  const device = rig({}, {}, { pairing: pairConfig(place, { tailscaleSsh: async () => true }) })
+  try {
+    const cli = new TestClient(device.device)
+    params('litch/pair/start', { mode: 'tailscale' })
+    const started = await cli.call('litch/pair/start', { mode: 'tailscale' })
+    response('litch/pair/start', started)
+    assert.deepEqual(
+      [started.mode, started.tailscaleSsh, 'seed' in started],
+      ['tailscale', true, false],
+    )
+    // 两种方式的字段混在一起不合定义
+    assert.throws(() => response('litch/pair/start', { ...started, seed: 'A'.repeat(43) }))
+    const keyed = await cli.call('litch/pair/start', {})
+    response('litch/pair/start', keyed)
+    assert.throws(() =>
+      response('litch/pair/start', { ...keyed, enrollCommand: started.enrollCommand }),
+    )
+    response('litch/pair/phones', await cli.call('litch/pair/phones', {}))
+  } finally {
+    await device.close()
+    rmSync(place.root, { recursive: true, force: true })
+  }
+})
