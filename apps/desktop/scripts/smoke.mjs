@@ -388,8 +388,8 @@ child.stderr.on('data', (chunk) => {
 // 设备服务那一遍要拉起真的服务、开终端、断好几次线，给得宽一些。
 // 输入区那一组探针多、里面有按真的时间走的等待（流水线上一遍要一分半），也给宽：到点还没结果是直接杀掉，
 // 杀掉的那一遍什么都不说，所以这个时限只用来拦真的卡死，不能贴着平时的用时定。
-// 滚动验收后面接着一段按真的时间狂打日志的命令（probe-output.mts）和两次结果很大的工具调用（probe-tools.mts），
-// 比别的模拟核心自检多给两分钟
+// 滚动验收后面接着一段按真的时间狂打日志的命令（probe-output.mts）、两次结果很大的工具调用（probe-tools.mts）
+// 和回合结束后的点开收起（probe-fold.mts），比别的模拟核心自检多给三分钟
 const useCompose = process.argv.includes('--compose')
 const useScroll = process.argv.includes('--scroll') && !useEntry
 const timer = setTimeout(
@@ -400,9 +400,11 @@ const timer = setTimeout(
       ? 300_000
       : useRemote || useDevice
         ? 240_000
-        : useScroll || probe === 'tree'
-          ? 240_000
-          : 120_000,
+        : useScroll
+          ? 300_000
+          : probe === 'tree'
+            ? 240_000
+            : 120_000,
 )
 child.on('exit', async (code) => {
   clearTimeout(timer)

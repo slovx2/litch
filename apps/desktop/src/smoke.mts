@@ -71,6 +71,7 @@ import { runEnginesChecks } from './probe-engines-run.mjs'
 import { entryProbe, judgeEntry } from './probe-entry.mjs'
 import { type FilesMode, runFilesChecks } from './probe-files-run.mjs'
 import { runFirstTurnChecks } from './probe-first-turn.mjs'
+import { foldProbe, judgeFold } from './probe-fold.mjs'
 import { fullProbe, judgeFull, judgeMockFull, mockFullProbe } from './probe-full.mjs'
 import { goalProbe, judgeGoal } from './probe-goal.mjs'
 import { harnessSettingsProbe, judgeHarnessSettings } from './probe-harness-settings.mjs'
@@ -315,9 +316,12 @@ async function measure(
     // 工具调用的结果很大的那一段也接在后面
     const tools = await runInPage(window, toolsProbe)
     const toolsAfter = processMemory(window)
+    // 回合结束后在过程区和长回答之间点开、收起：被点的那一行不动
+    const fold = await runInPage(window, foldProbe)
     return [
       {
         ...result,
+        fold,
         output: { ...output, memory: { before, after } },
         burst: { ...burst, memory: { before: after, after: burstAfter } },
         tools: { ...tools, memory: { before: burstAfter, after: toolsAfter } },
@@ -327,6 +331,7 @@ async function measure(
         ...judgeOutput(output, OUTPUT_SHOWN_LIMIT),
         ...judgeOutput(burst, OUTPUT_SHOWN_LIMIT).map((line) => `（猛打）${line}`),
         ...judgeTools(tools, TOOL_LIMITS),
+        ...judgeFold(fold),
       ],
     ]
   }
