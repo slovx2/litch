@@ -63,7 +63,7 @@ explain it:
   There is no stop button yet: ask the model to stop a task, or
   stop the turn. On the phone, the same line opens a list from the bottom; the folded steps and the
   line at the start of a continuing turn look the same as on the desktop.
-- **Goals** (Codex only; other harnesses, Claude Code included, show no goal controls): type `/goal` followed
+- **Goals** (Codex and Claude Code only; other harnesses show no goal controls): type `/goal` followed
   by what should be achieved and send it. Instead of a normal message this sets the session's goal,
   and the harness keeps working on it turn after turn while the session is idle, until the goal is
   achieved, blocked, hits a usage limit or runs out of its budget. Each turn it starts on its own

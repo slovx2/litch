@@ -39,7 +39,7 @@ export interface PlanProbe {
   real: { card: string; noAsk: boolean; carried: boolean; off: boolean; quiet: boolean } | null
   /** 不会计划模式的 harness（dsh）：底栏上没有开关，单子上没有 /plan。只在模拟核心上量 */
   absent: { button: boolean; command: boolean } | null
-  /** 单子上有没有 /goal：Codex 会持续目标、Claude Code 会话里没有。只在模拟核心上量 */
+  /** 单子上有没有 /goal：Codex、Claude Code 都会持续目标。只在模拟核心上量 */
   goal: { codex: boolean; claude: boolean } | null
   /**
    * 引擎自己会问的（Claude Code）。只在模拟核心上量：
@@ -526,7 +526,7 @@ export function judgePlan(probe: PlanProbe, real: boolean): string[] {
   }
   if (probe.goal) {
     check(probe.goal.codex, 'Codex 会话的单子上没有 /goal')
-    check(!probe.goal.claude, 'Claude Code 会话的单子上有 /goal')
+    check(probe.goal.claude, 'Claude Code 会话的单子上没有 /goal')
   }
   if (probe.engine) {
     check(probe.engine.noAsk, '引擎自己在问的时候，客户端也问了一遍')
