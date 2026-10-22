@@ -31,6 +31,8 @@ type Target struct {
 	HostKeyType string `json:"hostKeyType"`
 	// 每个会话上设的环境变量。只有对面的 sshd 放行（AcceptEnv）的才生效；测试夹具靠它区分情形
 	Env map[string]string `json:"env"`
+	// 扫码绑定的 Tailscale 方式：登进去后执行的登记命令（二维码里的 c）。空的就是一次性钥匙方式，对面是强制命令
+	EnrollCommand string `json:"enrollCommand"`
 }
 
 func parseTarget(encoded string) (Target, error) {
@@ -112,6 +114,14 @@ func connectSSH(ctx context.Context, target Target) (*ssh.Client, error) {
 		User:            target.User,
 		Auth:            []ssh.AuthMethod{ssh.PublicKeys(signer)},
 		HostKeyCallback: pinnedHostKeyCallback(expected),
+		// Tailscale SSH 的 ACL 是 check 模式时，tailscaled 在登录阶段发一句带链接的横幅、等人去浏览器里点。
+		// 不干等：带着链接退出来，界面让人点开、验完重试（验过之后一段时间内不再要求）
+		BannerCallback: func(message string) error {
+			if url := tailscaleVerifyURL(message); url != "" {
+				return &verifyError{url: url}
+			}
+			return nil
+		},
 	}
 	if target.HostKeyType != "" {
 		algorithms, err := hostKeyAlgorithms(target.HostKeyType)
@@ -128,6 +138,11 @@ func connectSSH(ctx context.Context, target Target) (*ssh.Client, error) {
 	clientConnection, channels, requests, err := ssh.NewClientConn(connection, address, config)
 	if err != nil {
 		_ = connection.Close()
+		var verify *verifyError
+		if errors.As(err, &verify) {
+			// 种类后面只放链接：界面拿它做一个能点开的按钮
+			return nil, kindf(kindVerify, "%s", verify.url)
+		}
 		return nil, kindf(handshakeKind(err), "SSH 握手失败: %w", err)
 	}
 	_ = connection.SetDeadline(time.Time{})

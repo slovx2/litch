@@ -1240,7 +1240,8 @@ export function createReplica(channel: CoreChannel): Replica {
               if (!was) return
               let next = was
               for (const op of ops) {
-                if (op.op === 'phones.set') next = { ...next, phones: op.phones }
+                if (op.op === 'phones.set')
+                  next = { ...next, phones: op.phones, tailscale: op.tailscale }
                 else {
                   const others = next.pairs.filter((pair) => pair.pairId !== op.status.pairId)
                   next = { ...next, pairs: [...others, op.status] }

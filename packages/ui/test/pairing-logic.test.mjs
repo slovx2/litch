@@ -95,6 +95,8 @@ test('每一种失败、每一种状态两种语言都有话说', () => {
       'sshOff',
       'unsupported',
       'offline',
+      'tailscale',
+      'verify',
     ]) {
       assert.notEqual(t(`pairing.fail.${key}`), `pairing.fail.${key}`)
     }
@@ -102,5 +104,22 @@ test('每一种失败、每一种状态两种语言都有话说', () => {
       assert.notEqual(t(`pairing.state.${state}`), `pairing.state.${state}`)
     }
     assert.match(t('phones.count', { count: 2 }), /2/)
+    assert.match(t('pairing.tailscale.note', { user: 'root' }), /root/)
   }
+})
+
+test('Tailscale 方式：两种新的失败认得出、tailscale 那种摆原话；换了主机或端口才重新认方式', async () => {
+  const { redetects } = await import('../src/devices/pairing.ts')
+  assert.equal(failureOf({ key: 'tailscale' }), 'tailscale')
+  assert.equal(failureOf({ key: 'verify' }), 'verify')
+  assert.equal(showsSaid('tailscale'), true)
+  assert.equal(showsSaid('verify'), false)
+  assert.equal(redetects(null, address), true)
+  assert.equal(redetects({ host: 'device-ts', port: 2222 }, address), false)
+  assert.equal(
+    redetects({ host: 'device-ts', port: 2222 }, { ...address, name: '别的', user: 'x' }),
+    false,
+  )
+  assert.equal(redetects({ host: 'device-ts', port: 22 }, address), true)
+  assert.equal(redetects({ host: 'a.ts.net', port: 2222 }, address), true)
 })

@@ -5,6 +5,8 @@ package main
 //   pair                  用户 ssh 进这台机器后自己跑：在终端里出码、确认（pair_run.go）
 // 约定（方法名、二维码格式、一行进一行出的格式、错误码）在 packages/protocol/src/device-pairing.mts，
 // 这里照着写，改形状要两边一起改。两个子命令都直连 device.sock，不握手（方法不要求声明，通知收不到，用长轮询）。
+// 这台机器开着 Tailscale SSH 时 pair 可以出 Tailscale 方式的码（不写一次性钥匙行，二维码里带登记命令，
+// 手机登进来后自己执行 pair-enroll），见 12 号设计第七之四节。
 
 import (
 	"context"
@@ -29,17 +31,24 @@ const (
 	pairEnrollMethod = "litch/pair/enroll"
 
 	pairPayloadPrefix = "LITCHPAIR1:"
+
+	// 出码的方式（PairMode）
+	pairModeKey       = "key"
+	pairModeTailscale = "tailscale"
 )
 
-// DevicePairStartResponse
+// DevicePairStartResponse。key 方式带 Seed，tailscale 方式带 EnrollCommand
 type pairStartResponse struct {
-	PairID    string        `json:"pairId"`
-	Seed      string        `json:"seed"`
-	ExpiresAt int64         `json:"expiresAt"`
-	HostKey   pairHostKey   `json:"hostKey"`
-	HostKeys  []pairHostKey `json:"hostKeys"`
-	Hostname  string        `json:"hostname"`
-	User      string        `json:"user"`
+	PairID        string        `json:"pairId"`
+	Mode          string        `json:"mode"`
+	Seed          string        `json:"seed"`
+	EnrollCommand string        `json:"enrollCommand"`
+	ExpiresAt     int64         `json:"expiresAt"`
+	HostKey       pairHostKey   `json:"hostKey"`
+	HostKeys      []pairHostKey `json:"hostKeys"`
+	Hostname      string        `json:"hostname"`
+	User          string        `json:"user"`
+	TailscaleSSH  bool          `json:"tailscaleSsh"`
 }
 
 type pairHostKey struct {
@@ -63,7 +72,7 @@ type pairPhoneRequest struct {
 	Code        string `json:"code"`
 }
 
-// PairPayload：二维码和“配对文本”里的东西
+// PairPayload：二维码和“配对文本”里的东西。Tailscale 方式没有 Seed，有 Command
 type pairPayload struct {
 	Name        string // n
 	Host        string // h
@@ -72,12 +81,14 @@ type pairPayload struct {
 	HostKeyType string // k.t
 	HostKeyFP   string // k.f
 	Seed        string // s
+	Tailscale   bool   // m 为 tailscale
+	Command     string // c
 	PairID      string // i
 	ExpiresAt   int64  // e
 }
 
 // encodePairPayload 和 device-pairing.mts 的 encodePairPayload 一字不差：前缀加 base64url（无填充）的
-// UTF-8 JSON，JSON 是 JSON.stringify 的写法，键的顺序 v n h p u k s i e。
+// UTF-8 JSON，JSON 是 JSON.stringify 的写法，键的顺序 v n h p u k s i e（Tailscale 方式是 v n h p u k m c i e）。
 // 不用 encoding/json：它会把 U+2028、U+2029 写成转义（JSON.stringify 原样输出），出来的字节就不一样了。
 func encodePairPayload(payload pairPayload) string {
 	var b strings.Builder
@@ -91,8 +102,13 @@ func encodePairPayload(payload pairPayload) string {
 	writeJSString(&b, payload.HostKeyType)
 	b.WriteString(`,"f":`)
 	writeJSString(&b, payload.HostKeyFP)
-	b.WriteString(`},"s":`)
-	writeJSString(&b, payload.Seed)
+	if payload.Tailscale {
+		b.WriteString(`},"m":"tailscale","c":`)
+		writeJSString(&b, payload.Command)
+	} else {
+		b.WriteString(`},"s":`)
+		writeJSString(&b, payload.Seed)
+	}
 	b.WriteString(`,"i":`)
 	writeJSString(&b, payload.PairID)
 	b.WriteString(`,"e":` + strconv.FormatInt(payload.ExpiresAt, 10) + `}`)

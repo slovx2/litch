@@ -39,6 +39,7 @@ import {
 import type { AppView, RemoteCheck, WireColor } from './model.mjs'
 import type { ClientToolPort } from './model-client-tools.mjs'
 import type { MachineAccessMode, MachineAccessView, MachineApproval } from './model-machine.mjs'
+import type { PairingView } from './model-pairing.mjs'
 import type { TerminalsAlive } from './model-terminal.mjs'
 import { phrase } from './phrase.mjs'
 import { outgoing } from './projection/outgoing.mjs'
@@ -1073,20 +1074,31 @@ export function createCore(options: CoreOptions): Core {
           return {}
         }
         case 'pairing.start': {
-          const { deviceId } = params as Commands['pairing.start']['params']
-          const started = await deviceOf(deviceId).pairing.start()
+          const { deviceId, address, mode } = params as Commands['pairing.start']['params']
           const remembered = saved.pairing?.[deviceId]
-          return {
-            pairing: {
-              deviceId,
-              pairId: started.pairId,
-              seed: started.seed,
-              expiresAt: started.expiresAt,
-              hostKey: started.hostKey,
-              address: remembered ? { ...remembered } : { ...started.original },
-              original: started.original,
-            },
+          const at = address ?? remembered
+          const started = await deviceOf(deviceId).pairing.start({
+            ...(at ? { address: { host: at.host, port: at.port, user: at.user } } : {}),
+            ...(mode ? { mode } : {}),
+          })
+          const pairing: PairingView = {
+            deviceId,
+            pairId: started.pairId,
+            mode: started.mode,
+            seed: started.seed,
+            command: started.command,
+            checked: started.checked,
+            tailscaleSsh: started.tailscaleSsh,
+            expiresAt: started.expiresAt,
+            hostKey: started.hostKey,
+            address: remembered ? { ...remembered } : { ...started.original },
+            original: started.original,
           }
+          return { pairing }
+        }
+        case 'pairing.detect': {
+          const { deviceId, host, port } = params as Commands['pairing.detect']['params']
+          return { mode: await deviceOf(deviceId).pairing.detect(host, port) }
         }
         case 'pairing.cancel': {
           const { deviceId, pairId } = params as Commands['pairing.cancel']['params']

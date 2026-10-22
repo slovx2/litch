@@ -40,3 +40,22 @@ to happen within 2 minutes. Do not show the QR code while sharing the screen.
 - On a machine without the desktop app, `codex-harness-adapter pair` shows the same QR code in a
   terminal.
 - Settings of the Litch app on the phone itself are out of reach (exception E9).
+
+## Tailscale SSH
+
+When the address in the code is served by Tailscale SSH (the machine runs `tailscale set --ssh` and the
+phone comes in over the tailnet), tailscaled lets connections in by the Tailscale ACL and ignores
+`authorized_keys`, so the one-time key cannot work. Litch notices this (the SSH banner of that address,
+or the device reporting Tailscale SSH for a `*.ts.net` / `100.64.0.0/10` address) and creates the code
+the Tailscale way instead: the dialog says so, the phone must have Tailscale on and signed in, and after
+logging in with its own key it enrolls itself; the confirmation code and Allow work as usual.
+
+- Whether a phone can log in is decided by the Tailscale ACL. Any tailnet device the ACL allows can log in
+  as that user without a key, so **revoking a phone in Litch does not block it**: change the ACL or remove
+  the device in the Tailscale admin console. The phone list and the revoke prompt say this.
+- If the ACL uses check mode, Litch (and the phone) shows the verification link; open it, finish the
+  check, then retry.
+- If the one-time key check fails because the address the desktop uses is Tailscale SSH, the dialog says
+  so and offers "Use Tailscale instead".
+- `codex-harness-adapter pair` asks whether the phone uses the Tailscale address when the machine runs
+  Tailscale SSH.

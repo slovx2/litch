@@ -12,9 +12,11 @@ export type SshKind =
   | 'invalid'
   /** 扫码绑定时登进去了，对面却没给出登记结果 */
   | 'enroll'
+  /** Tailscale SSH 要在浏览器里再验证一次，后面是链接 */
+  | 'verify'
 
 const KIND =
-  /\[(unreachable|hostKeyUnknown|hostKeyChanged|auth|key|keyLocked|invalid|enroll)\] ([^\n]*)/
+  /\[(unreachable|hostKeyUnknown|hostKeyChanged|auth|key|keyLocked|invalid|enroll|verify)\] ([^\n]*)/
 
 export interface SshProblem {
   /** 认不出来的是 null，按连不到算 */

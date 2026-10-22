@@ -76,6 +76,32 @@ type enrollServer struct {
 
 func startEnrollServer(t *testing.T, allowed ssh.PublicKey, reply func(line string) string) *enrollServer {
 	t.Helper()
+	return startEnrollServerWith(t, &ssh.ServerConfig{
+		PublicKeyCallback: func(_ ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
+			if bytes.Equal(key.Marshal(), allowed.Marshal()) {
+				return &ssh.Permissions{}, nil
+			}
+			return nil, net.ErrClosed
+		},
+	}, reply)
+}
+
+// 像 Tailscale SSH 的：什么钥匙都收（按 tailnet 身份放行，不看钥匙），banner 不空时登录阶段先发一句横幅
+func startTailscaleServer(t *testing.T, banner string, reply func(line string) string) *enrollServer {
+	t.Helper()
+	config := &ssh.ServerConfig{
+		PublicKeyCallback: func(ssh.ConnMetadata, ssh.PublicKey) (*ssh.Permissions, error) {
+			return &ssh.Permissions{}, nil
+		},
+	}
+	if banner != "" {
+		config.BannerCallback = func(ssh.ConnMetadata) string { return banner }
+	}
+	return startEnrollServerWith(t, config, reply)
+}
+
+func startEnrollServerWith(t *testing.T, config *ssh.ServerConfig, reply func(line string) string) *enrollServer {
+	t.Helper()
 	edSigner, _ := newKey(t)
 	ecKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
@@ -84,14 +110,6 @@ func startEnrollServer(t *testing.T, allowed ssh.PublicKey, reply func(line stri
 	ecSigner, err := ssh.NewSignerFromKey(ecKey)
 	if err != nil {
 		t.Fatal(err)
-	}
-	config := &ssh.ServerConfig{
-		PublicKeyCallback: func(_ ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
-			if bytes.Equal(key.Marshal(), allowed.Marshal()) {
-				return &ssh.Permissions{}, nil
-			}
-			return nil, net.ErrClosed
-		},
 	}
 	config.AddHostKey(edSigner)
 	config.AddHostKey(ecSigner)
@@ -264,5 +282,43 @@ func TestReadResultSkipsShellNoise(t *testing.T) {
 	_, err = readResult(strings.NewReader("Welcome to the test machine.\n"))
 	if err == nil || !strings.Contains(err.Error(), "Welcome to the test machine.") {
 		t.Fatalf("只有杂字应当报错并带上原话，得到 %v", err)
+	}
+}
+
+// Tailscale 方式：用手机自己的钥匙（对面不看钥匙）登进去，执行二维码里的登记命令
+func TestEnrollPairRunsGivenCommand(t *testing.T) {
+	server := startTailscaleServer(t, "", func(line string) string { return `{"ok":true,"phoneId":"cec3a3912e6e882d"}` })
+	_, privateKey := newKey(t)
+	host, port, _ := net.SplitHostPort(server.address)
+	var number int
+	_ = json.Unmarshal([]byte(port), &number)
+	command := "'/root/.local/bin/codex-harness-adapter' pair-enroll --home '/root/.codex-harness-adapter' Ab3dEf6hIj9kLm2n"
+	encoded, _ := json.Marshal(Target{
+		Host: host, Port: number, User: "root", PrivateKey: privateKey,
+		HostKeyType: ssh.KeyAlgoED25519, HostFingerprint: ssh.FingerprintSHA256(server.ed25519), EnrollCommand: command,
+	})
+	line, err := EnrollPair(string(encoded), `{"v":1,"publicKey":"ssh-ed25519 AAAA","name":"手机"}`)
+	if err != nil || line != `{"ok":true,"phoneId":"cec3a3912e6e882d"}` {
+		t.Fatalf("回话 %q，%v", line, err)
+	}
+	if got := <-server.command; got != command {
+		t.Fatalf("执行的命令是 %q", got)
+	}
+}
+
+// Tailscale 要浏览器验证（ACL 的 check 模式）：登录阶段的横幅里带链接，不干等，带着链接退出来
+func TestEnrollPairStopsAtTailscaleCheck(t *testing.T) {
+	banner := "# Tailscale SSH requires an additional check.\n# To authenticate, visit: https://login.tailscale.com/a/l2b3c4d5e6\n"
+	server := startTailscaleServer(t, banner, func(string) string { return `{"ok":true}` })
+	seed, _ := newSeed(t)
+	_, err := EnrollPair(server.target(t, seed, ssh.KeyAlgoED25519, ssh.FingerprintSHA256(server.ed25519)), "{}")
+	expectKind(t, err, kindVerify)
+	if err.Error() != "[verify] https://login.tailscale.com/a/l2b3c4d5e6" {
+		t.Fatalf("错误文字要只有链接: %v", err)
+	}
+	// 别的横幅不碍事
+	plain := startTailscaleServer(t, "Welcome\n", func(string) string { return `{"ok":true}` })
+	if _, err := EnrollPair(plain.target(t, seed, ssh.KeyAlgoED25519, ssh.FingerprintSHA256(plain.ed25519)), "{}"); err != nil {
+		t.Fatal(err)
 	}
 }

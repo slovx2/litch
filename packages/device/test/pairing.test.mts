@@ -9,6 +9,7 @@ import {
   PAIR_TTL_MS,
   type PairStatus,
 } from '../../protocol/src/device-pairing.mjs'
+import { detectTailscaleSsh } from '../src/pair-host.mjs'
 import { confirmCodeOf, parseEd25519Line, phoneIdOf } from '../src/pair-keys.mjs'
 import { DevicePairing, PAIR_FORGET_MS, PAIR_WAIT_MS, type PairingConfig } from '../src/pairing.mjs'
 import { FakeClock, type PairPlace, pairConfig, pairPlace, phoneKey } from './pair-kit.mjs'
@@ -315,9 +316,11 @@ test('撤销手机：删它的行，没有回 unknownPhone', async () => {
     const phoneId = status.phone?.phoneId
     assert.deepEqual(await r.call('litch/pair/revoke', { phoneId }), {})
     assert.equal(r.keys(), '')
+    // 通知要等开没开 Tailscale SSH 的结果，晚一拍
+    await new Promise((resolve) => setImmediate(resolve))
     assert.deepEqual(r.sent.at(-1), {
       method: 'litch/pair/phones/changed',
-      params: { data: [] },
+      params: { data: [], tailscaleSsh: false },
       extension: 'devicePairing',
     })
     assert.equal((await r.fails('litch/pair/revoke', { phoneId })).data.reason, 'unknownPhone')
@@ -386,5 +389,120 @@ test('不支持、读不到主机钥匙、钥匙文件改不了时 start 报对�
     } finally {
       linked.close()
     }
+  }
+})
+
+test('Tailscale 方式：不写一次性钥匙行，回登记命令；登记、允许照旧写手机行，结束时没有行要删', async () => {
+  const r = rig({ tailscaleSsh: async () => true })
+  try {
+    mkdirSync(dirname(r.place.keysFile))
+    writeFileSync(r.place.keysFile, 'ssh-ed25519 AAAAmine me@laptop\n')
+    const started = await r.call('litch/pair/start', { mode: 'tailscale' })
+    assert.equal(started.mode, 'tailscale')
+    assert.equal(started.seed, undefined)
+    assert.equal(started.tailscaleSsh, true)
+    assert.equal(
+      started.enrollCommand,
+      `'/opt/litch/bin/codex-harness-adapter' pair-enroll --home '/home/tester/.codex-harness-adapter' ${started.pairId}`,
+    )
+    assert.equal(r.keys(), 'ssh-ed25519 AAAAmine me@laptop\n')
+    const { pairId } = started
+    assert.deepEqual(await r.call('litch/pair/enroll', { pairId, input: { v: 1, probe: true } }), {
+      ok: true,
+      probe: true,
+    })
+    const { pending, key } = await request(r, pairId)
+    await r.call('litch/pair/decide', { pairId, allow: true })
+    const result = await pending
+    assert.equal(result.ok, true)
+    assert.ok(r.keys().startsWith(`ssh-ed25519 AAAAmine me@laptop\n${key} litch-mobile:`))
+    assert.doesNotMatch(r.keys(), /litch-pair:/)
+    const phones = await r.call('litch/pair/phones')
+    assert.equal(phones.tailscaleSsh, true)
+    assert.equal(phones.data.length, 1)
+    // 过期、取消的也没有行要删，状态照常
+    const other = await r.call('litch/pair/start', { mode: 'tailscale' })
+    await r.call('litch/pair/cancel', { pairId: other.pairId })
+    assert.equal(
+      (await r.call('litch/pair/wait', { pairId: other.pairId, since: null })).state,
+      'cancelled',
+    )
+  } finally {
+    r.close()
+  }
+})
+
+test('key 方式也回 mode 和 tailscaleSsh；开没开 Tailscale SSH 记 30 秒', async () => {
+  let asked = 0
+  let on = false
+  const r = rig({
+    tailscaleSsh: async () => {
+      asked++
+      return on
+    },
+  })
+  try {
+    const started = await r.call('litch/pair/start', { mode: 'key' })
+    assert.deepEqual([started.mode, started.tailscaleSsh], ['key', false])
+    assert.equal(started.enrollCommand, undefined)
+    on = true
+    assert.equal((await r.call('litch/pair/phones')).tailscaleSsh, false)
+    assert.equal(asked, 1)
+    r.clock.advance(30_000)
+    assert.equal((await r.call('litch/pair/phones')).tailscaleSsh, true)
+    assert.equal(asked, 2)
+  } finally {
+    r.close()
+  }
+})
+
+test('mode 不认识回 -32602；Windows 上不支持 tailscale 方式', async () => {
+  const r = rig()
+  try {
+    const failure = await r.fails('litch/pair/start', { mode: 'magic' })
+    assert.deepEqual([failure.code, failure.data], [-32602, undefined])
+  } finally {
+    r.close()
+  }
+  const windows = rig({ platform: 'win32' })
+  try {
+    assert.equal(
+      (await windows.fails('litch/pair/start', { mode: 'tailscale' })).data.reason,
+      'unsupported',
+    )
+  } finally {
+    windows.close()
+  }
+})
+
+test('detectTailscaleSsh：认 tailscale debug prefs 的 RunSSH，命令不在、看不懂都算没开', {
+  skip: process.platform === 'win32',
+}, async () => {
+  const place = pairPlace()
+  try {
+    const cli = (name: string, body: string) => {
+      const file = join(place.root, name)
+      writeFileSync(file, `#!/bin/sh\n${body}\n`, { mode: 0o755 })
+      return file
+    }
+    const prefs = (value: string) => ({
+      LITCH_TAILSCALE_CLI: cli(
+        `ts-${value}`,
+        `[ "$1 $2" = "debug prefs" ] || exit 2\necho '{"RunSSH": ${value}, "Hostname": "h"}'`,
+      ),
+    })
+    assert.equal(await detectTailscaleSsh(prefs('true')), true)
+    assert.equal(await detectTailscaleSsh(prefs('false')), false)
+    assert.equal(
+      await detectTailscaleSsh({ LITCH_TAILSCALE_CLI: cli('ts-bad', 'echo nope') }),
+      false,
+    )
+    assert.equal(await detectTailscaleSsh({ LITCH_TAILSCALE_CLI: cli('ts-fail', 'exit 1') }), false)
+    assert.equal(
+      await detectTailscaleSsh({ LITCH_TAILSCALE_CLI: join(place.root, 'missing') }),
+      false,
+    )
+  } finally {
+    rmSync(place.root, { recursive: true, force: true })
   }
 })

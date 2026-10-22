@@ -2,6 +2,7 @@ package main
 
 // pair-enroll <配对号>：一次性钥匙行的强制命令。手机用一次性钥匙 SSH 登录后，sshd 只让它跑这一条，
 // 客户端要求执行的是什么都不管（sshd 放在 SSH_ORIGINAL_COMMAND 里，这里不看它）。
+// Tailscale 方式下没有强制命令：手机用自己的钥匙登进来（tailscaled 按 ACL 放行）后自己执行这一条，输入输出一样。
 // 从标准输入读一行 PairEnrollInput，交给设备服务（litch/pair/enroll，一直挂到允许、拒绝或超时），
 // 把 PairEnrollOutput 写成一行到标准输出，退出码一律是 0：手机只看那一行。
 //
@@ -192,12 +193,13 @@ func readPairEnrollLine(stdin io.Reader, timeout time.Duration) ([]byte, error) 
 
 const pairEnrollHelpZH = `pair-enroll [--home DIR] <配对号>
 
-扫码绑定手机时，一次性钥匙行的强制命令（设备服务写进 authorized_keys），不是给人直接用的。
+扫码绑定手机时，一次性钥匙行的强制命令（设备服务写进 authorized_keys）；Tailscale 方式下由手机登进来后执行。
+不是给人直接用的。
 从标准输入读一行 JSON（最多 4 KB），交给本机的设备服务，把结果写成一行 JSON 到标准输出。
 要在终端里出码，用 pair。`
 
 const pairEnrollHelpEN = `pair-enroll [--home DIR] <pair id>
 
-The forced command of the one-time key line the device service writes to authorized_keys while pairing a phone;
-not meant to be run by hand. Reads one JSON line (at most 4 KB) from stdin, hands it to the device service on this
+The forced command of the one-time key line the device service writes to authorized_keys while pairing a phone
+(the phone runs it itself after logging in when pairing the Tailscale way); not meant to be run by hand. Reads one JSON line (at most 4 KB) from stdin, hands it to the device service on this
 machine, and writes the result as one JSON line to stdout. To show a pairing code in the terminal, use pair.`

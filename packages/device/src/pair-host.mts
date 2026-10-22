@@ -10,6 +10,8 @@ import { fingerprintOf } from './pair-keys.mjs'
 export const AUTHORIZED_KEYS_ENV = 'LITCH_AUTHORIZED_KEYS'
 /** 测试用：主机钥匙从这个目录读（默认 /etc/ssh，Windows 是 %ProgramData%\ssh） */
 export const HOST_KEYS_DIR_ENV = 'LITCH_SSH_HOST_KEYS_DIR'
+/** 测试用：tailscale 命令行换成这个（默认按 PATH 找 tailscale） */
+export const TAILSCALE_CLI_ENV = 'LITCH_TAILSCALE_CLI'
 
 export function defaultAuthorizedKeys(env: NodeJS.ProcessEnv = process.env): string {
   return env[AUTHORIZED_KEYS_ENV] || join(homedir(), '.ssh', 'authorized_keys')
@@ -90,6 +92,30 @@ export async function detectSshdVersion(platform: NodeJS.Platform = process.plat
     if (version) return version
   }
   return parseOpenSshVersion(await output('ssh', ['-V']))
+}
+
+/**
+ * 这台机器开着 Tailscale SSH 没有：tailscale debug prefs 的 JSON 里 RunSSH 为 true。
+ * tailscaled 接管 tailnet 进来的 SSH 连接，按 ACL 放行，不看 authorized_keys（强制命令也就不生效）。
+ * 命令不在、跑不通（tailscaled 没在跑、没权限连它的套接字）、看不懂都算没开
+ */
+export function detectTailscaleSsh(env: NodeJS.ProcessEnv = process.env): Promise<boolean> {
+  return new Promise((resolve) => {
+    execFile(
+      env[TAILSCALE_CLI_ENV] || 'tailscale',
+      ['debug', 'prefs'],
+      { timeout: 3000, windowsHide: true },
+      (error, stdout) => {
+        if (error) return resolve(false)
+        try {
+          const prefs = JSON.parse(String(stdout)) as { RunSSH?: unknown } | null
+          resolve(prefs?.RunSSH === true)
+        } catch {
+          resolve(false)
+        }
+      },
+    )
+  })
 }
 
 /** 跑一下，标准输出和标准错误合在一起返回，失败（包括退出码不为 0）也返回已有的输出 */

@@ -3,6 +3,7 @@ package sshtransport
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 )
 
@@ -25,6 +26,8 @@ const (
 	kindInvalid = "invalid"
 	// 扫码绑定时登进去了，对面却没给出登记结果：没回一整行就退了、或者等满了时间
 	kindEnroll = "enroll"
+	// Tailscale SSH 要在浏览器里再验证一次（ACL 的 check 模式）。错误文字就是那个链接
+	kindVerify = "verify"
 )
 
 type kindError struct {
@@ -58,11 +61,36 @@ func (e *hostKeyChangedError) Error() string {
 	return fmt.Sprintf("SSH 主机指纹已变化：期望 %s，实际 %s", e.expected, e.actual)
 }
 
+// verifyError 由横幅回调返回：tailscaled 给了验证链接
+type verifyError struct {
+	url string
+}
+
+func (e *verifyError) Error() string { return e.url }
+
+// 和 device-pairing.mts 的 tailscaleVerifyUrl 认法一样
+var (
+	tailscaleVisitPattern = regexp.MustCompile(`(?i)To authenticate, visit:\s*(https?://\S+)`)
+	tailscaleLoginPattern = regexp.MustCompile(`https://login\.tailscale\.com/a/\S+`)
+)
+
+// tailscaleVerifyURL：横幅里 Tailscale 要求浏览器验证的链接，没有是空的
+func tailscaleVerifyURL(text string) string {
+	if found := tailscaleVisitPattern.FindStringSubmatch(text); found != nil {
+		return found[1]
+	}
+	return tailscaleLoginPattern.FindString(text)
+}
+
 // handshakeKind 认出握手失败是哪一种。x/crypto 的认证失败只有一句话可认（unable to authenticate）
 func handshakeKind(err error) string {
 	var changed *hostKeyChangedError
 	if errors.As(err, &changed) {
 		return kindHostKeyChanged
+	}
+	var verify *verifyError
+	if errors.As(err, &verify) {
+		return kindVerify
 	}
 	if strings.Contains(err.Error(), "unable to authenticate") {
 		return kindAuth

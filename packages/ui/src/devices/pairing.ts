@@ -77,6 +77,8 @@ const FAILURES: readonly PairingStartFailure[] = [
   'sshOff',
   'unsupported',
   'offline',
+  'tailscale',
+  'verify',
 ]
 
 /** 出码没成：核心的错误带着 key 的照 key 说；不认识的是 null，由调用方给一般的说法 */
@@ -100,7 +102,15 @@ export const showsSaid = (failure: PairingStartFailure | null): boolean =>
   failure === null ||
   failure === 'selfTest' ||
   failure === 'keysFile' ||
-  failure === 'hostKeyMismatch'
+  failure === 'hostKeyMismatch' ||
+  failure === 'tailscale'
+
+/**
+ * 表单里的地址换了主机或端口，要不要重新认一次方式：probed 是上一次认方式时的那个地址。
+ * 别名、用户不影响连到哪台机器的哪个服务，不算
+ */
+export const redetects = (probed: { host: string; port: number } | null, address: PairingAddress) =>
+  probed === null || probed.host !== address.host || probed.port !== address.port
 
 /** 作废了的状态不会再变：到了这一步就不再倒计时、不再自动换码 */
 export const finalState = (state: PairState): boolean =>

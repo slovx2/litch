@@ -129,6 +129,12 @@ type fakePairing struct {
 	waits     int
 	// 每次 start 之后立刻过期（测换码的上限）
 	autoExpire bool
+	// 这台机器开着 Tailscale SSH（给 pair 的 tailscaleSSH）
+	tailscale bool
+	// 设备服务太旧：不认 mode，总是回一次性钥匙
+	old bool
+	// 每次 start 的 mode 参数
+	modes []any
 }
 
 func (f *fakePairing) set(state string, phone map[string]any) {
@@ -148,16 +154,30 @@ func (f *fakePairing) answer(method string, params map[string]any) (any, *device
 	switch method {
 	case pairStartMethod:
 		f.starts++
+		f.modes = append(f.modes, params["mode"])
 		f.pairID, f.state, f.phone = fmt.Sprintf("Pair%d", f.starts), "waiting", nil
 		if f.autoExpire {
 			f.state = "expired"
 		}
+		tailscale := params["mode"] == "tailscale" && !f.old
 		f.mu.Unlock()
-		return map[string]any{
-			"pairId": f.pairID, "seed": pairSample.Seed, "expiresAt": time.Now().Add(10 * time.Minute).UnixMilli(),
-			"hostKey":  map[string]any{"type": "ssh-ed25519", "fingerprint": "SHA256:host", "publicKey": "ssh-ed25519 AAAAhost"},
-			"hostKeys": []any{}, "hostname": "song-debian", "user": "song",
-		}, nil
+		hostKey := map[string]any{"type": "ssh-ed25519", "fingerprint": "SHA256:host", "publicKey": "ssh-ed25519 AAAAhost"}
+		answer := map[string]any{
+			"pairId": f.pairID, "expiresAt": time.Now().Add(10 * time.Minute).UnixMilli(),
+			"hostKey":  hostKey,
+			"hostKeys": []any{hostKey, map[string]any{"type": "ssh-rsa", "fingerprint": "SHA256:rsa", "publicKey": "ssh-rsa AAAArsa"}},
+			"hostname": "song-debian", "user": "song",
+		}
+		if tailscale {
+			answer["mode"], answer["tailscaleSsh"] = "tailscale", true
+			answer["enrollCommand"] = "'/opt/litch/bin/codex-harness-adapter' pair-enroll --home '/h' " + f.pairID
+		} else {
+			answer["seed"] = pairSample.Seed
+			if !f.old {
+				answer["mode"], answer["tailscaleSsh"] = "key", f.tailscale
+			}
+		}
+		return answer, nil
 	case pairWaitMethod:
 		f.waits++
 		deadline := time.After(2 * time.Second)
@@ -254,7 +274,8 @@ func startPairRun(t *testing.T, fake *fakePairing, lookSSH func() (string, error
 	t.Cleanup(func() { cancel(); _ = writer.Close() })
 	pio := pairIO{
 		stdin: reader, stdout: run.stdout, stderr: run.stderr, env: envOf(nil), lookSSH: lookSSH,
-		ensure: func(_ context.Context, target pairTarget, _ io.Writer) error { run.ensured <- target; return nil },
+		tailscaleSSH: func(context.Context) bool { return fake.tailscale },
+		ensure:       func(_ context.Context, target pairTarget, _ io.Writer) error { run.ensured <- target; return nil },
 	}
 	go func() { run.done <- pairMain(ctx, append([]string{"--home", home}, extra...), pio) }()
 	return run
@@ -534,5 +555,133 @@ func TestPairSelfCheckFailureStillShowsCode(t *testing.T) {
 	run.exit(t)
 	if output := run.stdout.String(); !strings.Contains(output, "expired: 过期了") {
 		t.Fatalf("输出里没有设备服务的原话：\n%s", output)
+	}
+}
+
+func TestPairTailscaleWay(t *testing.T) {
+	fake := &fakePairing{tailscale: true}
+	run := startPairRun(t, fake, nil, "--host", "song-debian.tail2e2f6a.ts.net")
+	eventually(t, "问手机走不走 Tailscale", func() bool {
+		return strings.Contains(run.stdout.String(), "手机经 Tailscale 地址连这台机器吗？[y/N]")
+	})
+	_, _ = run.stdin.Write([]byte("y\n"))
+	run.polled(t, 1)
+	output := run.stdout.String()
+	payload := pairTextIn(t, output)
+	if payload["m"] != "tailscale" || payload["c"] != "'/opt/litch/bin/codex-harness-adapter' pair-enroll --home '/h' Pair1" ||
+		payload["s"] != nil || payload["h"] != "song-debian.tail2e2f6a.ts.net" || payload["u"] != "song" {
+		t.Fatalf("配对文本不对：%v", payload)
+	}
+	for _, want := range []string{"本机没有 ssh 客户端，跳过（自检会用一把临时钥匙", "经 Tailscale SSH 连接", "以 song 登录"} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("输出里没有 %q：\n%s", want, output)
+		}
+	}
+	run.request(t)
+	_, _ = run.stdin.Write([]byte("y\n"))
+	if code := run.exit(t); code != 0 {
+		t.Fatalf("退出码 %d：%s\n%s", code, run.stdout, run.stderr)
+	}
+	if !strings.Contains(run.stdout.String(), "已绑定手机“Pixel 8”，它的钥匙已登记") {
+		t.Fatalf("完成的话不对：\n%s", run.stdout)
+	}
+	if len(fake.modes) != 1 || fake.modes[0] != "tailscale" {
+		t.Fatalf("start 的 mode：%v", fake.modes)
+	}
+}
+
+func TestPairTailscaleAnsweredNoAndOldDevice(t *testing.T) {
+	// 开着 Tailscale SSH 但手机不走它：照旧出一次性钥匙的码
+	fake := &fakePairing{tailscale: true}
+	run := startPairRun(t, fake, nil)
+	eventually(t, "问手机走不走 Tailscale", func() bool { return strings.Contains(run.stdout.String(), "[y/N]") })
+	_, _ = run.stdin.Write([]byte("n\n"))
+	run.polled(t, 1)
+	if payload := pairTextIn(t, run.stdout.String()); payload["s"] != pairSample.Seed || payload["m"] != nil {
+		t.Fatalf("配对文本不对：%v", payload)
+	}
+	run.cancel()
+	run.exit(t)
+	if fake.modes[0] != nil {
+		t.Fatalf("start 不该带 mode：%v", fake.modes)
+	}
+	// 设备服务太旧、不认 mode：作废它建的配对，说清楚
+	old := &fakePairing{tailscale: true, old: true}
+	run = startPairRun(t, old, nil)
+	eventually(t, "问手机走不走 Tailscale", func() bool { return strings.Contains(run.stdout.String(), "[y/N]") })
+	_, _ = run.stdin.Write([]byte("y\n"))
+	if code := run.exit(t); code != pairExitFailed {
+		t.Fatalf("退出码 %d", code)
+	}
+	if !strings.Contains(run.stderr.String(), "不支持 Tailscale 方式") || len(old.cancels) != 1 {
+		t.Fatalf("没说太旧或没作废：%s %v", run.stderr, old.cancels)
+	}
+	// 没人能回答（标准输入关了）：不出码
+	closed := &fakePairing{tailscale: true}
+	run = startPairRun(t, closed, nil)
+	eventually(t, "问手机走不走 Tailscale", func() bool { return strings.Contains(run.stdout.String(), "[y/N]") })
+	_ = run.stdin.Close()
+	if code := run.exit(t); code != pairExitFailed || closed.starts != 0 {
+		t.Fatalf("退出码 %d，start %d 次", code, closed.starts)
+	}
+}
+
+func TestPairTailscaleSelfCheck(t *testing.T) {
+	sshPath, logs := fakeSSH(t, `echo 'Welcome.'; echo '{"ok":true,"probe":true}'`)
+	fake := &fakePairing{tailscale: true}
+	run := startPairRun(t, fake, func() (string, error) { return sshPath, nil }, "--host", "box.tail1.ts.net")
+	eventually(t, "问手机走不走 Tailscale", func() bool { return strings.Contains(run.stdout.String(), "[y/N]") })
+	_, _ = run.stdin.Write([]byte("yes\n"))
+	run.polled(t, 1)
+	if output := run.stdout.String(); !strings.Contains(output, "自检通过（本机能登不代表手机能登") {
+		t.Fatalf("自检应当通过：\n%s\n%s", output, run.stderr)
+	}
+	run.cancel()
+	run.exit(t)
+	args := readLog(t, logs, "args")
+	for _, want := range []string{"-p\n22\n", "-l\nsong\n", "IdentitiesOnly=yes\n", "StrictHostKeyChecking=yes\n",
+		"--\nbox.tail1.ts.net\n'/opt/litch/bin/codex-harness-adapter' pair-enroll --home '/h' Pair1\n"} {
+		if !strings.Contains(args, want) {
+			t.Fatalf("ssh 的参数里没有 %q：\n%s", want, args)
+		}
+	}
+	if hosts := readLog(t, logs, "known_hosts"); hosts != "box.tail1.ts.net ssh-ed25519 AAAAhost\nbox.tail1.ts.net ssh-rsa AAAArsa\n" {
+		t.Fatalf("known_hosts：%q", hosts)
+	}
+	if _, err := ssh.ParsePrivateKey([]byte(readLog(t, logs, "key"))); err != nil {
+		t.Fatalf("临时私钥不是 OpenSSH 认得的格式：%v", err)
+	}
+	// Tailscale 要浏览器验证：把链接说出来
+	sshPath, _ = fakeSSH(t, `echo '# To authenticate, visit: https://login.tailscale.com/a/abc123' >&2; exit 255`)
+	run = startPairRun(t, &fakePairing{tailscale: true}, func() (string, error) { return sshPath, nil }, "--host", "box.tail1.ts.net")
+	eventually(t, "问手机走不走 Tailscale", func() bool { return strings.Contains(run.stdout.String(), "[y/N]") })
+	_, _ = run.stdin.Write([]byte("y\n"))
+	run.polled(t, 1)
+	run.cancel()
+	run.exit(t)
+	if output := run.stdout.String(); !strings.Contains(output, "打开 https://login.tailscale.com/a/abc123 验证后") {
+		t.Fatalf("没说验证链接：\n%s", output)
+	}
+}
+
+func TestDetectTailscaleSSH(t *testing.T) {
+	dir := t.TempDir()
+	cli := func(name, body string) string {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte("#!/bin/sh\n"+body+"\n"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	on := cli("on", `[ "$1 $2" = "debug prefs" ] || exit 2; echo '{"RunSSH": true}'`)
+	off := cli("off", `echo '{"RunSSH": false}'`)
+	bad := cli("bad", `echo nope`)
+	for _, c := range []struct {
+		cli  string
+		want bool
+	}{{on, true}, {off, false}, {bad, false}, {filepath.Join(dir, "missing"), false}} {
+		if got := detectTailscaleSSH(context.Background(), envOf(map[string]string{"LITCH_TAILSCALE_CLI": c.cli})); got != c.want {
+			t.Fatalf("%s：%v", c.cli, got)
+		}
 	}
 }

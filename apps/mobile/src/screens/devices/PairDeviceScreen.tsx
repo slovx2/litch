@@ -1,6 +1,7 @@
 // 扫码添加：扫电脑上的配对二维码（或者粘贴配对文本）→ 确认要加的设备（地址是电脑上定的，这里不能改）
 // → 添加：生成手机自己的钥匙、用一次性钥匙登记（显示确认码，等电脑上点允许）、记下主机指纹、用自己的钥匙检查并添加。
 // 流程本身在 src/platform/pairing.ts。配对文本是秘密（短时、一次），只放在这一页的状态里，不进路由参数、不落盘。
+// Tailscale 方式的码在确认页多一句“先打开手机上的 Tailscale”；Tailscale 要浏览器验证时给打开链接和重试。
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { CameraView, useCameraPermissions } from 'expo-camera'
 import * as Clipboard from 'expo-clipboard'
@@ -9,7 +10,7 @@ import { Keyboard, Linking, Platform, StyleSheet, Text, View } from 'react-nativ
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 import { ssh } from '../../../modules/litch-ssh/src'
 import type { RootStackParamList } from '../../nav/routes'
-import { forgetKey, generateKey } from '../../platform/keys'
+import { forgetKey, generateKey, keySecret } from '../../platform/keys'
 import { trustHost } from '../../platform/known-hosts'
 import {
   looksLikePair,
@@ -117,6 +118,7 @@ export function PairDeviceScreen({ navigation }: Props) {
     const deps: PairDeps = {
       makeKey: generateKey,
       dropKey: forgetKey,
+      privateKey: async (id) => (await keySecret(id))?.privateKey ?? null,
       confirmCode: ssh.pairConfirmCode,
       enroll: ssh.enrollPair,
       trust: trustHost,
@@ -201,6 +203,11 @@ export function PairDeviceScreen({ navigation }: Props) {
 
         {phase.kind === 'confirm' ? (
           <View style={styles.form}>
+            {phase.payload.m === 'tailscale' ? (
+              <Text style={[styles.note, { color: theme.c.ink2 }]} testID="pair:tailscale">
+                {t('pair.tailscale')}
+              </Text>
+            ) : null}
             <Text style={[styles.note, { color: theme.c.ink3 }]}>{t('pair.confirm.fixed')}</Text>
             {phase.expired ? (
               <Text style={[styles.note, { color: theme.c.err }]} testID="pair:expired">
@@ -225,12 +232,34 @@ export function PairDeviceScreen({ navigation }: Props) {
             <Text style={[styles.note, { color: theme.c.ink }]}>
               {t(`pair.why.${phase.problem}`, { host: phase.payload.h, port: phase.payload.p })}
             </Text>
-            {phase.detail ? (
+            {phase.problem === 'verify' && phase.detail ? (
+              <>
+                <Button
+                  label={t('pair.verify.open')}
+                  testID="pair:verify"
+                  onPress={() => {
+                    const url = phase.detail
+                    if (url) void Linking.openURL(url)
+                  }}
+                />
+                <Button
+                  kind="plain"
+                  label={t('pair.retry')}
+                  testID="pair:retry"
+                  onPress={() => void add(phase.payload)}
+                />
+              </>
+            ) : phase.detail ? (
               <Text selectable style={[styles.detail, { color: theme.c.ink3 }]}>
                 {t('pair.detail', { detail: phase.detail })}
               </Text>
             ) : null}
-            <Button label={t('pair.again')} testID="pair:again" onPress={again} />
+            <Button
+              kind={phase.problem === 'verify' ? 'plain' : undefined}
+              label={t('pair.again')}
+              testID="pair:again"
+              onPress={again}
+            />
           </View>
         ) : null}
       </KeyboardAwareScrollView>

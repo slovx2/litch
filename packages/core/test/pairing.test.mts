@@ -12,11 +12,13 @@ import {
   createCore,
   type DeviceStore,
   hostKeyTrusted,
+  type PairEnrollTestInput,
   type PairingOp,
   type PairingPlatform,
   type PairingTopicView,
   type PairingView,
   type PairSelfTestInput,
+  type PairSelfTestResult,
   type SavedDevices,
 } from '../src/index.mjs'
 import { fakeDevice, harness } from './fake-device.mjs'
@@ -43,36 +45,57 @@ interface Options {
   known?: string[]
   sshOn?: boolean
   selfTest?: (input: PairSelfTestInput) => { ok: true } | { ok: false; said: string }
+  enrollTest?: (input: PairEnrollTestInput) => PairSelfTestResult
   startError?: RpcFailure
   store?: DeviceStore
+  /** 各个地址上的 SSH 横幅，键是 host:port；没有的读不到（null） */
+  banners?: Record<string, string>
+  /** 设备自报开着 Tailscale SSH */
+  tailscaleSsh?: boolean
+  /** 设备服务太旧：不认 mode，也不回 mode 和 tailscaleSsh */
+  oldDevice?: boolean
 }
 
 function world(options: Options = {}) {
   const fake = fakeDevice([harness('pi', { threads: [thread({ id: 'p1' })] })])
   fake.device.extensions = options.extensions ?? ['harness', 'devicePairing']
-  const calls = { tests: [] as PairSelfTestInput[], localSsh: 0 }
+  const calls = {
+    tests: [] as PairSelfTestInput[],
+    enrollTests: [] as PairEnrollTestInput[],
+    banners: [] as string[],
+    localSsh: 0,
+  }
   let n = 0
   const phones = [{ phoneId: 'ph1', name: 'Pixel 8', fingerprint: 'SHA256:p1', addedAt: 5 }]
   const handlers = {
-    'litch/pair/start': () => {
+    'litch/pair/start': (params: unknown) => {
       if (options.startError) throw options.startError
       n++
-      return {
+      const base = {
         pairId: `pair${n}`,
-        seed: 'c2VlZA',
         expiresAt: 1_000_000 + n,
         hostKey: ED,
         hostKeys: [ED, RSA],
         hostname: 'mac.lan',
         user: 'song',
       }
+      if (options.oldDevice) return { ...base, seed: 'c2VlZA' }
+      const tailscaleSsh = options.tailscaleSsh ?? false
+      return (params as { mode?: string }).mode === 'tailscale'
+        ? {
+            ...base,
+            mode: 'tailscale',
+            tailscaleSsh,
+            enrollCommand: `'/x/adapter' pair-enroll ${base.pairId}`,
+          }
+        : { ...base, mode: 'key', tailscaleSsh, seed: 'c2VlZA' }
     },
     'litch/pair/cancel': () => ({}),
     'litch/pair/decide': (params: unknown) => {
       const { pairId, allow } = params as { pairId: string; allow: boolean }
       return { pairId, state: allow ? 'done' : 'rejected', expiresAt: 1, phone: null }
     },
-    'litch/pair/phones': () => ({ data: phones }),
+    'litch/pair/phones': () => ({ data: phones, tailscaleSsh: options.tailscaleSsh ?? false }),
     'litch/pair/revoke': (params: unknown) => {
       const { phoneId } = params as { phoneId: string }
       if (!phones.some((phone) => phone.phoneId === phoneId)) {
@@ -90,9 +113,17 @@ function world(options: Options = {}) {
       return options.sshOn ?? true
     },
     localName: () => 'Song 的 MacBook',
+    banner: async (host, port) => {
+      calls.banners.push(`${host}:${port}`)
+      return options.banners?.[`${host}:${port}`] ?? null
+    },
     selfTest: async (input) => {
       calls.tests.push(input)
       return options.selfTest?.(input) ?? { ok: true }
+    },
+    enrollTest: async (input) => {
+      calls.enrollTests.push(input)
+      return options.enrollTest?.(input) ?? { ok: true }
     },
   }
   const time = fakeClock()
@@ -292,7 +323,7 @@ test('主题：订阅时去取已绑定的手机；只跟自己开的配对；�
   await settled()
   assert.equal(seen.snapshots[0]?.available, true)
   assert.equal(w.sent('litch/pair/phones').length, 1)
-  assert.deepEqual(seen.ops.at(-1), { op: 'phones.set', phones: w.phones })
+  assert.deepEqual(seen.ops.at(-1), { op: 'phones.set', phones: w.phones, tailscale: false })
 
   const pairing = await started(w)
   assert.deepEqual(seen.ops.at(-1), {
@@ -330,13 +361,13 @@ test('主题：订阅时去取已绑定的手机；只跟自己开的配对；�
     ...w.phones,
     { phoneId: 'ph2', name: 'iPhone', fingerprint: 'SHA256:p2', addedAt: 9 },
   ]
-  w.broadcast('litch/pair/phones/changed', { data: more })
+  w.broadcast('litch/pair/phones/changed', { data: more, tailscaleSsh: true })
   await settled()
-  assert.deepEqual(seen.ops.at(-1), { op: 'phones.set', phones: more })
+  assert.deepEqual(seen.ops.at(-1), { op: 'phones.set', phones: more, tailscale: true })
 
   await w.command('pairing.revoke', { phoneId: 'ph1' })
   assert.deepEqual(w.sent('litch/pair/revoke'), [{ phoneId: 'ph1' }])
-  assert.deepEqual(seen.ops.at(-1), { op: 'phones.set', phones: [more[1]] })
+  assert.deepEqual(seen.ops.at(-1), { op: 'phones.set', phones: [more[1]], tailscale: true })
   const gone = await failureOf(w.command('pairing.revoke', { phoneId: 'nope' }))
   assert.equal(gone.code, 'notFound')
 
@@ -415,4 +446,134 @@ test('主机钥匙核对、地址检查', () => {
   ]) {
     assert.equal(checkPairingAddress(bad), null, JSON.stringify(bad))
   }
+})
+
+const TS = 'SSH-2.0-Tailscale'
+const OPENSSH = 'SSH-2.0-OpenSSH_9.2p1 Debian-2'
+
+test('手机要连的地址是 Tailscale SSH：tailscale 方式建配对，自检用临时钥匙执行登记命令，不用一次性钥匙', async () => {
+  const w = world({ banners: { '10.0.0.5:2222': TS }, tailscaleSsh: true })
+  w.core.start()
+  await settled()
+  const pairing = await started(w)
+  assert.deepEqual(w.sent('litch/pair/start'), [{ mode: 'tailscale' }])
+  assert.equal(pairing.mode, 'tailscale')
+  assert.equal(pairing.seed, null)
+  assert.equal(pairing.command, "'/x/adapter' pair-enroll pair1")
+  assert.equal(pairing.checked, true)
+  assert.equal(pairing.tailscaleSsh, true)
+  assert.equal(w.calls.tests.length, 0)
+  assert.deepEqual(w.calls.enrollTests, [
+    {
+      host: '10.0.0.5',
+      port: 2222,
+      user: 'dev',
+      command: "'/x/adapter' pair-enroll pair1",
+      hostKeys: [ED, RSA],
+    },
+  ])
+  // 横幅是别的：一次性钥匙
+  const keyed = world({ banners: { '10.0.0.5:2222': OPENSSH }, tailscaleSsh: true })
+  keyed.core.start()
+  await settled()
+  assert.equal((await started(keyed)).mode, 'key')
+  assert.deepEqual(keyed.sent('litch/pair/start'), [{}])
+})
+
+test('按表单里的地址认方式；读不到横幅时设备开着 Tailscale SSH、地址是 tailnet 的就换成 tailscale 方式，跳过自检', async () => {
+  const w = world({ tailscaleSsh: true })
+  w.core.start()
+  await settled()
+  const address = { host: 'build.tail1.ts.net', port: 22, user: 'root' }
+  const pairing = ((await w.command('pairing.start', { address })) as { pairing: PairingView })
+    .pairing
+  assert.deepEqual(w.calls.banners, ['build.tail1.ts.net:22'])
+  assert.deepEqual(w.sent('litch/pair/start'), [{}, { mode: 'tailscale' }])
+  assert.deepEqual(w.sent('litch/pair/cancel'), [{ pairId: 'pair1' }])
+  assert.equal(pairing.pairId, 'pair2')
+  assert.equal(pairing.mode, 'tailscale')
+  assert.equal(pairing.checked, false)
+  assert.equal(w.calls.enrollTests.length, 0)
+  // 指定了方式就照办，不读横幅
+  const forced = world({ banners: { '10.0.0.5:2222': OPENSSH } })
+  forced.core.start()
+  await settled()
+  const again = (
+    (await forced.command('pairing.start', { mode: 'tailscale' })) as {
+      pairing: PairingView
+    }
+  ).pairing
+  assert.equal(again.mode, 'tailscale')
+  assert.deepEqual(forced.sent('litch/pair/start'), [{ mode: 'tailscale' }])
+  // detect：横幅优先，读不到时看设备自报（上一次 start 带回来的）
+  assert.deepEqual(await w.command('pairing.detect', { host: 'a.ts.net', port: 22 }), {
+    mode: 'tailscale',
+  })
+  assert.deepEqual(await forced.command('pairing.detect', { host: '10.0.0.5', port: 2222 }), {
+    mode: 'key',
+  })
+})
+
+test('一次性钥匙自检没过、自检连的地址是 Tailscale SSH：报 tailscale；Tailscale 要浏览器验证时报 verify 带链接', async () => {
+  const w = world({
+    banners: { 'lan-host:22': OPENSSH, '10.0.0.5:2222': TS },
+    selfTest: () => ({ ok: false, said: '一次性钥匙登录后无响应' }),
+  })
+  w.core.start()
+  await settled()
+  const failure = await failureOf(
+    w.command('pairing.start', { address: { host: 'lan-host', port: 22, user: 'dev' } }),
+  )
+  assert.equal(failure.key, 'tailscale')
+  assert.equal(failure.message, '一次性钥匙登录后无响应')
+  assert.deepEqual(w.sent('litch/pair/cancel'), [{ pairId: 'pair1' }])
+  // 自检连的地址不是 Tailscale：照旧是 selfTest
+  const plain = world({
+    banners: { '10.0.0.5:2222': OPENSSH },
+    selfTest: () => ({ ok: false, said: 'Permission denied' }),
+  })
+  plain.core.start()
+  await settled()
+  assert.equal((await failureOf(plain.command('pairing.start'))).key, 'selfTest')
+
+  const url = 'https://login.tailscale.com/a/abc123'
+  const check = world({
+    banners: { '10.0.0.5:2222': TS },
+    enrollTest: () => ({ ok: false, said: `# To authenticate, visit: ${url}`, verifyUrl: url }),
+  })
+  check.core.start()
+  await settled()
+  const verify = await failureOf(check.command('pairing.start'))
+  assert.equal(verify.key, 'verify')
+  assert.equal(verify.message, url)
+  assert.deepEqual(check.sent('litch/pair/cancel'), [{ pairId: 'pair1' }])
+})
+
+test('设备服务太旧、不认 tailscale 方式：作废它建的配对，报 unsupported', async () => {
+  const w = world({ oldDevice: true, banners: { '10.0.0.5:2222': TS } })
+  w.core.start()
+  await settled()
+  const failure = await failureOf(w.command('pairing.start'))
+  assert.equal(failure.key, 'unsupported')
+  assert.deepEqual(w.sent('litch/pair/cancel'), [{ pairId: 'pair1' }])
+  // 默认方式照旧能出码
+  const keyed = world({ oldDevice: true })
+  keyed.core.start()
+  await settled()
+  const pairing = await started(keyed)
+  assert.deepEqual([pairing.mode, pairing.seed, pairing.tailscaleSsh], ['key', 'c2VlZA', false])
+})
+
+test('本机走 tailscale 方式时不要求开着系统的 SSH 服务', async () => {
+  const w = world({ kind: 'local', sshOn: false, banners: { 'mac.tail1.ts.net:22': TS } })
+  w.core.start()
+  await settled()
+  const pairing = (
+    (await w.command('pairing.start', {
+      address: { host: 'mac.tail1.ts.net', port: 22, user: 'song' },
+    })) as { pairing: PairingView }
+  ).pairing
+  assert.equal(pairing.mode, 'tailscale')
+  assert.equal(w.calls.localSsh, 0)
+  assert.equal(w.calls.enrollTests[0]?.host, 'mac.tail1.ts.net')
 })

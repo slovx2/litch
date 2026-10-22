@@ -43,7 +43,7 @@ test('配对文本：认前缀和格式，过期的照样解出来给人看', ()
 })
 
 test('登记：用一次性钥匙、只协商二维码里那一种主机钥匙、钉住它的指纹；公钥不带注释', () => {
-  assert.deepEqual(enrollTarget(payload), {
+  assert.deepEqual(enrollTarget(payload, 'ignored'), {
     host: 'mac.tail',
     port: 2222,
     user: 'song',
@@ -121,12 +121,20 @@ function fakeDeps({ enroll, check = async () => ({ ok: true }) } = {}) {
     async dropKey(id) {
       calls.push(`dropKey ${id}`)
     },
+    async privateKey(id) {
+      calls.push(`privateKey ${id}`)
+      return 'PRIVATE'
+    },
     async confirmCode(pairId, publicKey) {
       calls.push(`code ${pairId} ${publicKey === PUBLIC}`)
       return '965093'
     },
     async enroll(target, line) {
-      calls.push(`enroll ${target.seed === payload.s} ${JSON.parse(line).name}`)
+      calls.push(
+        target.enrollCommand
+          ? `enroll ${target.privateKey} ${target.enrollCommand} ${JSON.parse(line).name}`
+          : `enroll ${target.seed === payload.s} ${JSON.parse(line).name}`,
+      )
       return enroll ? enroll() : '{"ok":true}'
     },
     trust(host, port, key) {
@@ -246,4 +254,61 @@ test('删设备时撤钥匙：按指纹找到自己、没连上不试、没登�
     }),
     { kind: 'failed', reason: 'unsupported' },
   )
+})
+
+const tailscale = {
+  v: 1,
+  n: 'song-debian',
+  h: 'song-debian.tail2e2f6a.ts.net',
+  p: 22,
+  u: 'root',
+  k: { t: 'ssh-ed25519', f: 'SHA256:abcdefg' },
+  m: 'tailscale',
+  c: "'/root/.local/bin/codex-harness-adapter' pair-enroll --home '/root/.codex-harness-adapter' Ab3dEf6hIj9kLm2n",
+  i: 'Ab3dEf6hIj9kLm2n',
+  e: NOW + 60_000,
+}
+
+test('Tailscale 方式的码：解得出；登记用手机自己的私钥、执行二维码里的登记命令，不带种子', async () => {
+  const parsed = parsePairText(encodePairPayload(tailscale), NOW)
+  assert.equal(parsed.ok, true)
+  assert.deepEqual(parsed.payload, tailscale)
+  assert.deepEqual(enrollTarget(tailscale, 'PRIVATE'), {
+    host: 'song-debian.tail2e2f6a.ts.net',
+    port: 22,
+    user: 'root',
+    passphrase: '',
+    hostKeyType: 'ssh-ed25519',
+    hostFingerprint: 'SHA256:abcdefg',
+    privateKey: 'PRIVATE',
+    enrollCommand: tailscale.c,
+  })
+  const { deps, calls } = fakeDeps()
+  const result = await runPairing(tailscale, deps, () => {})
+  assert.deepEqual(result, { ok: true, deviceId: 'dev-1', checked: true })
+  assert.deepEqual(calls.slice(0, 4), [
+    'makeKey',
+    'code Ab3dEf6hIj9kLm2n true',
+    'privateKey k-0123456789abcdef',
+    `enroll PRIVATE ${tailscale.c} Pixel 8`,
+  ])
+})
+
+test('Tailscale 方式的错误：连不上 tailnet 地址、ACL 不让登、要浏览器验证', () => {
+  const said = (text, code = tailscale) =>
+    enrollFailure(new Error(`Call rejected.\n→ Caused by: ${text}`), code)
+  assert.equal(
+    said('[unreachable] dial tcp: lookup x.ts.net: no such host').problem,
+    'tailscaleOff',
+  )
+  assert.equal(
+    said('[unreachable] timeout', { ...tailscale, h: '192.168.1.5' }).problem,
+    'unreachable',
+  )
+  assert.equal(said('[unreachable] timeout', payload).problem, 'unreachable')
+  assert.equal(said('[auth] unable to authenticate').problem, 'denied')
+  assert.deepEqual(said('[verify] https://login.tailscale.com/a/abc123'), {
+    problem: 'verify',
+    detail: 'https://login.tailscale.com/a/abc123',
+  })
 })

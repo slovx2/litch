@@ -4,6 +4,9 @@
 // 出码（start）一步做完：本机先看 127.0.0.1:22 有没有 SSH 服务 → 设备上建配对（litch/pair/start）→
 // ssh 设备拿这台桌面端 known_hosts 里这台主机的记录和设备自报的主机钥匙比（本机直接信设备报的）→
 // 经外壳用系统 ssh 拿一次性钥匙试登一次（不消耗配对）。哪一步没过都把配对作废、删掉一次性钥匙行，再报原因。
+// 先读手机要连的地址的 SSH 横幅定方式（pairModeOf）：是 Tailscale SSH 就用 tailscale 方式（设备不写一次性钥匙行，
+// 自检改成用一把临时钥匙登那个地址、执行登记命令）；读不到横幅时按设备自报的 tailscaleSsh 和地址再定一次。
+// 一次性钥匙的自检没过时再看自检连的那个地址是不是 Tailscale SSH，是就直接这样说（失败的 key 是 tailscale）。
 // 要碰 ssh、文件、端口的那几样由外壳给（PairingPlatform）；没有外壳（移动端、测试）时出不了码，
 // 已绑定的手机（phones）和撤销（revoke）照样能用。
 //
@@ -20,16 +23,26 @@ import {
   DEVICE_PAIR_START,
   DEVICE_PAIR_WAIT,
   type DevicePairPhonesChangedNotification,
+  type DevicePairStartResponse,
   type PairHostKey,
+  type PairMode,
+  type PairPayload,
   type PairPhone,
   type PairStatus,
+  pairModeOf,
 } from '../../../protocol/src/device-pairing.mjs'
 import type { ClientRequestMethod, ClientRequests } from '../../../protocol/src/index.mjs'
 import { ChannelError, type PairingOp } from '../channel/protocol.mjs'
 import type { HostSink } from '../channel/server.mjs'
 import { RpcError, type RpcRequestOptions } from '../connection/rpc.mjs'
 import type { RemoteTarget } from '../model.mjs'
-import type { PairingAddress, PairingStartFailure, PairingTopicView } from '../model-pairing.mjs'
+import type {
+  PairingAddress,
+  PairingStartFailure,
+  PairingTarget,
+  PairingTopicView,
+  PairingView,
+} from '../model-pairing.mjs'
 
 /** ssh 解析出来的、这台桌面端连那台设备时实际用的地址 */
 export interface PairingHostAddress {
@@ -49,8 +62,19 @@ export interface PairSelfTestInput {
   hostKeys: PairHostKey[]
 }
 
-/** 自检的结果。没过时 said 是 ssh 的原话（或者强制命令回的那一行） */
-export type PairSelfTestResult = { ok: true } | { ok: false; said: string }
+/** tailscale 方式的自检：用一把临时钥匙登手机要连的地址，执行登记命令 */
+export interface PairEnrollTestInput extends PairingTarget {
+  /** 登记命令（start 回的 enrollCommand） */
+  command: string
+  /** 设备报的全部主机钥匙：写进临时的 known_hosts */
+  hostKeys: PairHostKey[]
+}
+
+/**
+ * 自检的结果。没过时 said 是 ssh 的原话（或者登记命令回的那一行）；
+ * verifyUrl 是 Tailscale 要求在浏览器里再验证一次时给的链接（ACL 的 check 模式）
+ */
+export type PairSelfTestResult = { ok: true } | { ok: false; said: string; verifyUrl?: string }
 
 /**
  * 出码要碰 ssh、文件、端口的那几样，由外壳给（apps/desktop/src/pairing.mts）。
@@ -63,10 +87,14 @@ export interface PairingPlatform {
   knownKeys(target: RemoteTarget): Promise<string[]>
   /** 本机：127.0.0.1:22 上有没有 SSH 服务（读得到 SSH- 开头的横幅） */
   localSsh(): Promise<boolean>
+  /** host:port 上 SSH 服务的横幅（头一行），只连 TCP、不登录。连不上、不是 SSH 是 null */
+  banner(host: string, port: number): Promise<string | null>
   /** 本机：给手机看的名字（电脑名称，没有就是主机名） */
   localName(): string
   /** 用一次性钥匙试登一次：标准输入写自检那一行，等 pair-enroll 回 {"ok":true,"probe":true} */
   selfTest(input: PairSelfTestInput): Promise<PairSelfTestResult>
+  /** tailscale 方式：用临时钥匙登地址、执行登记命令，标准输入写自检那一行，等回 {"ok":true,"probe":true} */
+  enrollTest(input: PairEnrollTestInput): Promise<PairSelfTestResult>
 }
 
 export interface PairingHost {
@@ -94,10 +122,21 @@ export interface PairingHost {
 /** pairing.start 的结果，还差“预填哪个地址”（记在桌面端，由核心那一层填） */
 export interface PairingStarted {
   pairId: string
-  seed: string
+  mode: PairMode
+  seed: string | null
+  command: string | null
+  checked: boolean
+  tailscaleSsh: boolean
   expiresAt: number
   hostKey: PairHostKey
   original: PairingAddress
+}
+
+export interface PairingStartOptions {
+  /** 手机要连的地址：按它认方式、tailscale 方式的自检也连它。不给就用原配置 */
+  address?: PairingTarget
+  /** 不给就按地址认 */
+  mode?: PairMode
 }
 
 export interface Pairing {
@@ -109,7 +148,9 @@ export interface Pairing {
   offline(): void
   /** 是配对的通知就处理掉并返回 true */
   notification(method: string, params: unknown): boolean
-  start(): Promise<PairingStarted>
+  start(options?: PairingStartOptions): Promise<PairingStarted>
+  /** 手机要连的这个地址该用哪种方式 */
+  detect(host: string, port: number): Promise<PairMode>
   cancel(pairId: string): Promise<void>
   decide(pairId: string, allow: boolean): Promise<PairStatus>
   status(pairId: string): Promise<PairStatus>
@@ -129,6 +170,23 @@ const FINAL: ReadonlySet<PairStatus['state']> = new Set([
 const keyOf = (line: string): string | null => {
   const [type, body] = line.trim().split(/\s+/)
   return type && body ? `${type} ${body}` : null
+}
+
+/** 二维码里的东西：这张码加上给手机的地址。两种方式各带各的（种子，或者登记命令） */
+export function pairingPayload(pairing: PairingView, address: PairingAddress): PairPayload {
+  const base = {
+    v: 1 as const,
+    n: address.name,
+    h: address.host,
+    p: address.port,
+    u: address.user,
+    k: { t: pairing.hostKey.type, f: pairing.hostKey.fingerprint },
+    i: pairing.pairId,
+    e: pairing.expiresAt,
+  }
+  return pairing.mode === 'tailscale'
+    ? { ...base, m: 'tailscale', c: pairing.command ?? '' }
+    : { ...base, s: pairing.seed ?? '' }
 }
 
 /** 设备自报的主机钥匙里有没有一把和桌面端 known_hosts 里记的一样 */
@@ -168,6 +226,8 @@ export function createPairing(host: PairingHost): Pairing {
   let available: boolean | null = null
   /** 已绑定的手机。null：还没取到 */
   let phones: PairPhone[] | null = null
+  /** 设备自报开着 Tailscale SSH（phones、start 的结果里带）。null：还没取到 */
+  let tailscale: boolean | null = null
   /** 正在取已绑定的手机：同时要的搭一趟车 */
   let loading: Promise<PairPhone[]> | null = null
   /** 这台桌面端开出来的配对，按开的先后 */
@@ -179,6 +239,7 @@ export function createPairing(host: PairingHost): Pairing {
     deviceId,
     available,
     phones: phones ? [...phones] : null,
+    tailscale,
     pairs: [...pairs.values()],
   })
 
@@ -244,16 +305,18 @@ export function createPairing(host: PairingHost): Pairing {
     return pairs.get(status.pairId) ?? status
   }
 
-  const setPhones = (next: PairPhone[]) => {
+  const setPhones = (next: PairPhone[], nextTailscale = tailscale === true) => {
     phones = [...next]
-    publish([{ op: 'phones.set', phones: [...next] }])
+    tailscale = nextTailscale
+    publish([{ op: 'phones.set', phones: [...next], tailscale: nextTailscale }])
   }
 
   const loadPhones = (): Promise<PairPhone[]> => {
     if (loading) return loading
     const mine = epoch
     const run = guarded(() => host.request(DEVICE_PAIR_PHONES, {})).then((result) => {
-      if (mine === epoch) setPhones(result.data)
+      // 老的设备服务不带 tailscaleSsh：当作没开
+      if (mine === epoch) setPhones(result.data, result.tailscaleSsh === true)
       return result.data
     })
     loading = run
@@ -290,16 +353,35 @@ export function createPairing(host: PairingHost): Pairing {
       .catch((error: unknown) => host.log(`作废配对失败：${String(error)}`))
   }
 
-  /** 出码时 ssh 设备那一段：解析地址、核对主机钥匙、自检 */
+  /** tailscale 方式的自检：横幅读不到（这台电脑连不到手机要连的地址）就跳过，返回 false */
+  const vetEnroll = async (
+    platform: PairingPlatform,
+    started: DevicePairStartResponse,
+    phoneAt: PairingTarget,
+    banner: string | null,
+  ): Promise<boolean> => {
+    if (started.mode !== 'tailscale') return true
+    if (banner === null) return false
+    const tested = await platform.enrollTest({
+      ...phoneAt,
+      command: started.enrollCommand,
+      hostKeys: started.hostKeys,
+    })
+    if (tested.ok) return true
+    if (tested.verifyUrl) throw startFailure('verify', tested.verifyUrl)
+    throw startFailure('selfTest', tested.said)
+  }
+
+  /** 出码时 ssh 设备那一段：核对主机钥匙、自检。返回原配置和自检做了没有 */
   const vetRemote = async (
     platform: PairingPlatform,
     target: RemoteTarget,
-    started: ClientRequests[typeof DEVICE_PAIR_START]['result'],
-  ): Promise<PairingAddress> => {
-    const [resolved, known] = await Promise.all([
-      platform.resolve(target),
-      platform.knownKeys(target),
-    ])
+    resolved: PairingHostAddress,
+    started: DevicePairStartResponse,
+    phoneAt: PairingTarget,
+    banner: string | null,
+  ): Promise<{ original: PairingAddress; checked: boolean }> => {
+    const known = await platform.knownKeys(target)
     if (!hostKeyTrusted(started.hostKeys, known)) {
       throw startFailure(
         'hostKeyMismatch',
@@ -308,26 +390,48 @@ export function createPairing(host: PairingHost): Pairing {
           : '本机连接到的主机密钥与该设备自报的不一致',
       )
     }
+    const original = {
+      name: target.kind === 'alias' ? target.alias : host.displayName(),
+      host: resolved.host,
+      port: resolved.port,
+      user: resolved.user,
+    }
+    if (started.mode === 'tailscale') {
+      return { original, checked: await vetEnroll(platform, started, phoneAt, banner) }
+    }
     const tested = await platform.selfTest({
       target,
       user: resolved.user,
       seed: started.seed,
       hostKeys: started.hostKeys,
     })
-    if (!tested.ok) throw startFailure('selfTest', tested.said)
-    return {
-      name: target.kind === 'alias' ? target.alias : host.displayName(),
-      host: resolved.host,
-      port: resolved.port,
-      user: resolved.user,
+    if (tested.ok) return { original, checked: true }
+    // 自检连的是这台桌面端自己的配置：那个地址由 Tailscale SSH 接管时强制命令不生效，直接这样说
+    const same = resolved.host === phoneAt.host && resolved.port === phoneAt.port
+    const at = same ? banner : await platform.banner(resolved.host, resolved.port)
+    if (pairModeOf(at, started.tailscaleSsh === true, resolved.host) === 'tailscale') {
+      throw startFailure('tailscale', tested.said)
     }
+    throw startFailure('selfTest', tested.said)
   }
 
-  /** 出码时本机那一段：主机钥匙直接信设备报的，自检连 127.0.0.1:22 */
+  /** 出码时本机那一段：主机钥匙直接信设备报的，一次性钥匙的自检连 127.0.0.1:22 */
   const vetLocal = async (
     platform: PairingPlatform,
-    started: ClientRequests[typeof DEVICE_PAIR_START]['result'],
-  ): Promise<PairingAddress> => {
+    started: DevicePairStartResponse,
+    phoneAt: PairingTarget | null,
+    banner: string | null,
+  ): Promise<{ original: PairingAddress; checked: boolean }> => {
+    const original = {
+      name: platform.localName(),
+      host: started.hostname,
+      port: 22,
+      user: started.user,
+    }
+    if (started.mode === 'tailscale') {
+      const at = phoneAt ?? { host: original.host, port: original.port, user: original.user }
+      return { original, checked: await vetEnroll(platform, started, at, banner) }
+    }
     const tested = await platform.selfTest({
       target: null,
       user: started.user,
@@ -335,7 +439,20 @@ export function createPairing(host: PairingHost): Pairing {
       hostKeys: started.hostKeys,
     })
     if (!tested.ok) throw startFailure('selfTest', tested.said)
-    return { name: platform.localName(), host: started.hostname, port: 22, user: started.user }
+    return { original, checked: true }
+  }
+
+  /** 设备上建一个配对。要 tailscale 方式而设备回的不是，说明设备服务太旧 */
+  const create = async (mode: PairMode | null): Promise<DevicePairStartResponse> => {
+    const started = await guarded(() =>
+      host.request(DEVICE_PAIR_START, mode === 'tailscale' ? { mode } : {}),
+    )
+    tailscale = started.tailscaleSsh === true
+    if (mode === 'tailscale' && started.mode !== 'tailscale') {
+      discard(started.pairId)
+      throw startFailure('unsupported', '此设备的服务版本不支持 Tailscale 方式出码，请先升级')
+    }
+    return started
   }
 
   return {
@@ -358,6 +475,7 @@ export function createPairing(host: PairingHost): Pairing {
       loading = null
       available = host.supported()
       phones = null
+      tailscale = null
       snapshotAll()
       if (!available) return
       refreshPairs()
@@ -377,13 +495,14 @@ export function createPairing(host: PairingHost): Pairing {
         return true
       }
       if (method === DEVICE_PAIR_PHONES_CHANGED) {
-        setPhones((params as DevicePairPhonesChangedNotification).data)
+        const changed = params as DevicePairPhonesChangedNotification
+        setPhones(changed.data, changed.tailscaleSsh === true)
         return true
       }
       return false
     },
 
-    async start() {
+    async start(options = {}) {
       reachable()
       const { platform } = host
       if (!platform) {
@@ -391,10 +510,34 @@ export function createPairing(host: PairingHost): Pairing {
       }
       const target = host.target()
       if (host.kind === 'ssh' && !target) throw startFailure('unsupported', '该设备没有连接配置')
-      if (host.kind === 'local' && !(await platform.localSsh())) {
+      let resolved: PairingHostAddress | null = null
+      if (target) {
+        try {
+          resolved = await platform.resolve(target)
+        } catch (error) {
+          throw startFailure('selfTest', error instanceof Error ? error.message : String(error))
+        }
+      }
+      // 手机要连的地址：给了就用，否则原配置。本机的原配置要等设备报主机名，这时先不认方式
+      const phoneAt = options.address ?? resolved
+      const banner = phoneAt ? await platform.banner(phoneAt.host, phoneAt.port) : null
+      let mode: PairMode | null =
+        options.mode ??
+        (phoneAt && banner !== null ? pairModeOf(banner, false, phoneAt.host) : null)
+      if (host.kind === 'local' && mode !== 'tailscale' && !(await platform.localSsh())) {
         throw startFailure('sshOff', '127.0.0.1:22 上没有 SSH 服务')
       }
-      const started = await guarded(() => host.request(DEVICE_PAIR_START, {}))
+      let started = await create(mode)
+      // 横幅读不到：设备开着 Tailscale SSH、地址又是 tailnet 的，换成 tailscale 方式重新建
+      if (
+        mode === null &&
+        phoneAt &&
+        pairModeOf(null, tailscale === true, phoneAt.host) === 'tailscale'
+      ) {
+        discard(started.pairId)
+        mode = 'tailscale'
+        started = await create(mode)
+      }
       pairs.set(started.pairId, {
         pairId: started.pairId,
         state: 'waiting',
@@ -402,16 +545,21 @@ export function createPairing(host: PairingHost): Pairing {
         phone: null,
       })
       try {
-        const original = target
-          ? await vetRemote(platform, target, started)
-          : await vetLocal(platform, started)
+        const vetted =
+          target && resolved
+            ? await vetRemote(platform, target, resolved, started, phoneAt ?? resolved, banner)
+            : await vetLocal(platform, started, phoneAt, banner)
         publish([{ op: 'pair.status', status: pairs.get(started.pairId) as PairStatus }])
         return {
           pairId: started.pairId,
-          seed: started.seed,
+          mode: started.mode === 'tailscale' ? 'tailscale' : 'key',
+          seed: started.mode === 'tailscale' ? null : started.seed,
+          command: started.mode === 'tailscale' ? started.enrollCommand : null,
+          checked: vetted.checked,
+          tailscaleSsh: started.tailscaleSsh === true,
           expiresAt: started.expiresAt,
           hostKey: started.hostKey,
-          original,
+          original: vetted.original,
         }
       } catch (error) {
         pairs.delete(started.pairId)
@@ -419,6 +567,12 @@ export function createPairing(host: PairingHost): Pairing {
         if (error instanceof ChannelError) throw error
         throw startFailure('selfTest', error instanceof Error ? error.message : String(error))
       }
+    },
+
+    async detect(at, port) {
+      const { platform } = host
+      if (!platform) return 'key'
+      return pairModeOf(await platform.banner(at, port), tailscale === true, at)
     },
 
     async cancel(pairId) {

@@ -4,6 +4,8 @@ package main
 
 import (
 	"context"
+	"crypto/ed25519"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,11 +14,16 @@ import (
 )
 
 // 自检：本机有 ssh 就用一次性钥匙连 127.0.0.1 试一下。失败只提示，照样出码：
-// --port 给的可能是手机走的转发端口，本机的 sshd 不在那个端口上
+// --port 给的可能是手机走的转发端口，本机的 sshd 不在那个端口上。
+// Tailscale 方式改成用一把临时钥匙连 --host 给的地址（手机走的那个），执行登记命令
 func (s *pairSession) selfCheck(ctx context.Context, start pairStartResponse, payload pairPayload) {
 	out := s.pio.stdout
 	sshPath, err := s.pio.lookSSH()
 	if err != nil {
+		if s.mode == pairModeTailscale {
+			fmt.Fprintln(out, tr("自检：本机没有 ssh 客户端，跳过（自检会用一把临时钥匙经 Tailscale 地址登进来执行登记命令）。", "Check: no ssh client on this machine, skipped (the check logs in over the Tailscale address with a throwaway key and runs the enrollment command)."))
+			return
+		}
 		fmt.Fprintln(out, tr("自检：本机没有 ssh 客户端，跳过（自检会用一次性钥匙连 127.0.0.1，看 sshd 认不认这把钥匙）。", "Check: no ssh client on this machine, skipped (the check logs in to 127.0.0.1 with the one-time key to see whether sshd accepts it)."))
 		return
 	}
@@ -24,8 +31,32 @@ func (s *pairSession) selfCheck(ctx context.Context, start pairStartResponse, pa
 	if dir == "" {
 		dir = os.TempDir()
 	}
+	if s.mode == pairModeTailscale {
+		fmt.Fprintf(out, tr("自检：用临时钥匙连 %s:%d 执行登记命令……\n", "Check: logging in to %s:%d with a throwaway key to run the enrollment command...\n"), payload.Host, payload.Port)
+		check := pairCheck{host: payload.Host, port: payload.Port, user: payload.User, hostKeys: start.HostKeys, command: start.EnrollCommand}
+		if err := pairSelfCheck(ctx, sshPath, dir, check); err != nil {
+			fmt.Fprintln(out, tr("自检没通过，ssh 的原话：", "The check failed; ssh said:"))
+			fmt.Fprintln(out, "  "+err.Error())
+			if url := tailscaleVerifyURL(err.Error()); url != "" {
+				fmt.Fprintf(out, tr("Tailscale 要求在浏览器里验证一次：打开 %s 验证后，手机照常扫码即可。\n", "Tailscale requires a check in the browser: open %s, finish it, then scan the code on the phone as usual.\n"), url)
+				return
+			}
+			fmt.Fprintln(out, tr(
+				"常见原因：--host 不是这台机器的 Tailscale 地址、Tailscale ACL 不允许本机以这个用户登录、设备服务找不到。本机登不进来时手机不一定也不行（ACL 可以按设备区分）。",
+				"Common causes: --host is not this machine's Tailscale address, the Tailscale ACL does not let this machine log in as this user, or the device service cannot be found. The phone may still get in when this machine cannot (ACLs can differ per device)."))
+			return
+		}
+		fmt.Fprintln(out, tr("自检通过（本机能登不代表手机能登，ACL 可以按设备区分）。", "Check passed (the phone may still be refused: ACLs can differ per device)."))
+		return
+	}
 	fmt.Fprintf(out, tr("自检：用一次性钥匙连 127.0.0.1:%d……\n", "Check: logging in to 127.0.0.1:%d with the one-time key...\n"), payload.Port)
-	if err := pairSelfCheck(ctx, sshPath, dir, start, payload.Port, payload.User); err != nil {
+	seed, err := base64.RawURLEncoding.DecodeString(start.Seed)
+	if err != nil || len(seed) != ed25519.SeedSize {
+		fmt.Fprintln(out, tr("自检没通过：设备服务给的一次性钥匙不对", "The check failed: the one-time key from the device service is malformed"))
+		return
+	}
+	check := pairCheck{seed: seed, host: "127.0.0.1", port: payload.Port, user: payload.User, hostKeys: []pairHostKey{start.HostKey}}
+	if err := pairSelfCheck(ctx, sshPath, dir, check); err != nil {
 		fmt.Fprintln(out, tr("自检没通过，ssh 的原话：", "The check failed; ssh said:"))
 		fmt.Fprintln(out, "  "+err.Error())
 		fmt.Fprintln(out, tr(
@@ -52,6 +83,11 @@ func (s *pairSession) show(start pairStartResponse, payload pairPayload) {
 		payload.User, payload.Host, payload.Port, payload.Name, payload.HostKeyType, payload.HostKeyFP)
 	fmt.Fprintf(out, tr("有效期到 %s（约 %d 分钟），只能用一次。别在共享屏幕、录屏时显示。手机走的地址不一样时用 --host、--port 指定。\n", "Valid until %s (about %d minutes), for one use only. Do not show it while sharing or recording your screen. Use --host and --port when the phone reaches this machine at another address.\n"),
 		expires.Format("15:04:05"), minutes)
+	if s.mode == pairModeTailscale {
+		fmt.Fprintf(out, tr(
+			"经 Tailscale SSH 连接：手机要先装好并登录 Tailscale，能不能登进来由你的 Tailscale ACL 决定；tailnet 里被 ACL 允许的设备不要钥匙就能以 %s 登录，撤销手机的钥匙拦不住它们。\n",
+			"Over Tailscale SSH: the phone needs Tailscale installed and signed in, and your Tailscale ACL decides whether it gets in; any tailnet device the ACL allows can log in as %s without a key, and revoking the phone's key cannot stop them.\n"), payload.User)
+	}
 	fmt.Fprintln(out, tr("等手机扫码……按 Ctrl-C 取消。", "Waiting for the phone to scan... Press Ctrl-C to cancel."))
 }
 
@@ -115,7 +151,11 @@ func (s *pairSession) watch(ctx context.Context, start pairStartResponse) string
 				if phone != nil {
 					name = phone.Name
 				}
-				fmt.Fprintf(out, tr("已绑定手机“%s”。之后它用自己的钥匙连这台机器，一次性钥匙已经删掉。\n", "Paired the phone %q. From now on it connects with its own key; the one-time key has been removed.\n"), name)
+				if s.mode == pairModeTailscale {
+					fmt.Fprintf(out, tr("已绑定手机“%s”，它的钥匙已登记。\n", "Paired the phone %q; its key has been added.\n"), name)
+				} else {
+					fmt.Fprintf(out, tr("已绑定手机“%s”。之后它用自己的钥匙连这台机器，一次性钥匙已经删掉。\n", "Paired the phone %q. From now on it connects with its own key; the one-time key has been removed.\n"), name)
+				}
 				return "done"
 			case "expired":
 				return "expired"
@@ -206,5 +246,14 @@ func (s *pairSession) cancel(pairID string) {
 		fmt.Fprintln(s.pio.stderr, tr("\n已中断，但没能取消这次配对（一次性钥匙行会在过期或设备服务重启时删掉）：", "\nInterrupted, but the pairing could not be cancelled (the one-time key line is removed when it expires or the device service restarts): ")+err.Error())
 		return
 	}
+	if s.mode == pairModeTailscale {
+		fmt.Fprintln(s.pio.stdout, tr("\n已取消。", "\nCancelled."))
+		return
+	}
 	fmt.Fprintln(s.pio.stdout, tr("\n已取消，一次性钥匙已删掉。", "\nCancelled; the one-time key has been removed."))
+}
+
+// 出码之后发现不能用（设备服务太旧、不认 tailscale 方式）：作废它，不说什么
+func (s *pairSession) cancelQuietly(pairID string) {
+	_, _ = pairCall(context.Background(), s.socket, pairCancelMethod, map[string]any{"pairId": pairID}, 5*time.Second)
 }

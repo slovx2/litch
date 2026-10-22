@@ -5,9 +5,11 @@ export {
   base64UrlDecode,
   decodePairPayload,
   encodePairPayload,
+  isTailnetHost,
   PAIR_PAYLOAD_PREFIX,
   PAIR_TTL_MS,
   type PairPayload,
+  tailscaleVerifyUrl,
 } from '../../protocol/src/device-pairing.mjs'
 // 设备设置里“任务卡”按 harness 的键：设置页那棵树、提案卡上的“对这个 harness 关闭任务卡”都写它
 export { taskCardsSettingKey } from '../../protocol/src/session-tree.mjs'
@@ -117,10 +119,12 @@ export {
 export type { AuthForwardPlatform } from './device/harness-config.mjs'
 export {
   hostKeyTrusted,
+  type PairEnrollTestInput,
   type PairingHostAddress,
   type PairingPlatform,
   type PairSelfTestInput,
   type PairSelfTestResult,
+  pairingPayload,
 } from './device/pairing.mjs'
 export {
   changeToolSwitches,

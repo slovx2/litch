@@ -1,7 +1,7 @@
 {
   "extension": "devicePairing",
   "status": "已定（2026-10-19 主线落的约定，设备侧线补齐 JSON Schema 和规则）",
-  "description": "扫码绑定手机：出码的一方（桌面端经聚合面，或设备上的命令行 pair 直连 device.sock）让设备服务建一个配对，设备服务往当前用户的 authorized_keys 末尾追加一把一次性钥匙行（restrict、强制命令 pair-enroll <配对号>、expiry-time），把种子交给出码的一方。手机扫码后用这把钥匙 SSH 登录，sshd 只让它跑 pair-enroll；手机往标准输入写一行公钥和名字，设备服务通知出码的一方，允许后追加手机的钥匙行、删掉一次性钥匙行，pair-enroll 把结果写回标准输出。类型、二维码编解码、确认码算法在 packages/protocol/src/device-pairing.mts。",
+  "description": "扫码绑定手机：出码的一方（桌面端经聚合面，或设备上的命令行 pair 直连 device.sock）让设备服务建一个配对，设备服务往当前用户的 authorized_keys 末尾追加一把一次性钥匙行（restrict、强制命令 pair-enroll <配对号>、expiry-time），把种子交给出码的一方。手机扫码后用这把钥匙 SSH 登录，sshd 只让它跑 pair-enroll；手机往标准输入写一行公钥和名字，设备服务通知出码的一方，允许后追加手机的钥匙行、删掉一次性钥匙行，pair-enroll 把结果写回标准输出。类型、二维码编解码、确认码算法在 packages/protocol/src/device-pairing.mts。设备开着 Tailscale SSH 时 tailscaled 不看 authorized_keys，强制命令不生效：这时出码的一方用 Tailscale 方式（start 的 mode 为 tailscale），设备服务不写一次性钥匙行，二维码里带登记命令，手机用自己的钥匙登进去后自己执行它。",
   "appliesTo": "只有聚合面。兼容面上没有这个扩展的任何内容。",
   "declaration": {
     "description": "设备服务在 runtime/info 的 device.extensions 里列出 devicePairing，表示支持。方法不要求握手时声明（命令行不握手）；通知 litch/pair/changed、litch/pair/phones/changed 只发给握手时在 capabilities.litchExtensions 里列了 devicePairing 的连接。",
@@ -21,6 +21,8 @@
     "支持与否：设备服务启动时拿到了配置（钥匙文件、主机钥匙目录）、找得到适配器命令行（命令行经环境变量 CHA_ADAPTER_CLI 交过来；没人交时从设备包的位置往上找 bin/codex-harness-adapter），而且不是 Windows 的管理员账号（whoami /groups 里有 S-1-5-32-544；判断不了按是算），runtime/info 的 device.extensions 才列 devicePairing。不支持时 litch/pair/* 一律回 unsupported。",
     "钥匙文件：当前用户的 ~/.ssh/authorized_keys；环境变量 LITCH_AUTHORIZED_KEYS 给了就用它（测试用）。主机钥匙从 /etc/ssh 读（Windows 是 %ProgramData%\\ssh），环境变量 LITCH_SSH_HOST_KEYS_DIR 给了就用它（测试用）。",
     "改钥匙文件：先不加锁按原内容算一遍，不用改就什么都不碰（不建锁文件、不写）；要改时检查、加锁（同目录的 <文件名>.litch-lock，用 O_EXCL 建，超过 10 秒的算死锁删掉，最多等 3 秒），重读、只在末尾追加（原文件最后没有换行先补一个）或整行删掉带标记的行，其他字节不动；写同目录的临时文件（600）、fsync，改名前原文件被别的程序改过就重来（最多 3 次），再改名。目录不存在时建成 700，已有的目录不改权限。文件是符号链接、不是普通文件、属主不是当前用户、没有属主写权限（多半由配置管理工具管着）、不可写时不改，报 keysFile。Windows 上不看属主和权限位。",
+    "方式：start 的 mode 不给或是 key 时照下面写一次性钥匙行；是 tailscale 时不写任何行，回 mode: tailscale 和 enrollCommand（就是一次性钥匙行里的那条命令，'<适配器路径>' pair-enroll --home '<状态目录>' <配对号>），没有 seed。Windows 上不支持 tailscale，回 unsupported。之后的状态、enroll、decide、wait、手机行、清理都和 key 一样（结束时没有行要删）。",
+    "tailscaleSsh：start 和 phones 的结果里都带，表示这台机器开着 Tailscale SSH。设备服务跑 tailscale debug prefs（最多等 3 秒），JSON 里 RunSSH 为 true 才算；命令不在、跑不通、看不懂都算 false。结果记 30 秒。litch/pair/phones/changed 带的是同一份。",
     "一次性钥匙行：restrict,command=\"<命令>\",expiry-time=\"<时间>\" ssh-ed25519 <公钥> litch-pair:<配对号>。命令是 '<适配器路径>' pair-enroll <配对号>（路径用单引号按 sh 的规矩引；Windows 用双引号），选项值里的双引号写成 \\\"。配对号是 16 个字母数字。",
     "expiry-time：sshd 的版本先问 sshd 自己（/usr/sbin/sshd 等常见位置跑 -V，老版不认 -V 但打出的用法说明里带版本），找不到再看 ssh -V。OpenSSH 9.1 及以上写带 Z 的 UTC 时间 YYYYMMDDHHMMSSZ，正好是过期时间；8.2 到 9.0 只认 sshd 所在时区的本地时间，写设备进程的本地时间再加一天（两边时区可能不同，宁晚不早）；低于 8.2 或认不出版本就不加。这一项只是兜底：pair-enroll 每次都向设备服务核对，过期、用过、取消的一律拒绝，所以残留的行无害。",
     "状态：start 后是 waiting；手机登记（enroll）后 requested；出码的一方允许后 done，拒绝后 rejected；requested 后 PAIR_DECIDE_TIMEOUT_MS（2 分钟）没表态也是 rejected（手机收到 timeout）；cancel 后 cancelled（手机收到 expired）。到了 expiresAt 只作废还在 waiting 的（expired）；已经 requested 的等表态或 2 分钟超时，不因为二维码到期中断。done、expired、cancelled、rejected 都是终态，终态的配对再记 10 分钟（wait、decide 还问得到最后的状态），之后回 unknownPair。",
@@ -38,12 +40,12 @@
       "kind": "ClientRequest",
       "method": "litch/pair/start",
       "params": {
-        "$ref": "#/definitions/Empty"
+        "$ref": "#/definitions/StartParams"
       },
       "response": {
         "$ref": "#/definitions/StartResponse"
       },
-      "description": "建配对，写一次性钥匙行。钥匙文件改不了回 keysFile，读不到主机钥匙回 noHostKey。"
+      "description": "建配对，key 方式写一次性钥匙行（tailscale 方式不写）。钥匙文件改不了回 keysFile，读不到主机钥匙回 noHostKey。"
     },
     {
       "kind": "ClientRequest",
@@ -216,18 +218,42 @@
         }
       }
     },
+    "StartParams": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "enum": ["key", "tailscale"]
+        }
+      }
+    },
     "StartResponse": {
       "type": "object",
-      "additionalProperties": false,
-      "required": ["pairId", "seed", "expiresAt", "hostKey", "hostKeys", "hostname", "user"],
+      "required": [
+        "pairId",
+        "mode",
+        "expiresAt",
+        "hostKey",
+        "hostKeys",
+        "hostname",
+        "user",
+        "tailscaleSsh"
+      ],
       "properties": {
         "pairId": {
           "$ref": "#/definitions/PairId"
         },
+        "mode": {
+          "enum": ["key", "tailscale"]
+        },
         "seed": {
-          "description": "ed25519 私钥的 32 字节种子，base64url 无填充",
+          "description": "key 方式才有：ed25519 私钥的 32 字节种子，base64url 无填充",
           "type": "string",
           "pattern": "^[A-Za-z0-9_-]{43}$"
+        },
+        "enrollCommand": {
+          "description": "tailscale 方式才有：手机登进去后执行的登记命令，一行",
+          "type": "string",
+          "pattern": "^[^\\r\\n]+$"
         },
         "expiresAt": {
           "type": "number"
@@ -247,8 +273,36 @@
         },
         "user": {
           "type": "string"
+        },
+        "tailscaleSsh": {
+          "type": "boolean"
         }
-      }
+      },
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "required": ["seed"],
+          "properties": {
+            "mode": {
+              "const": "key"
+            }
+          },
+          "not": {
+            "required": ["enrollCommand"]
+          }
+        },
+        {
+          "required": ["enrollCommand"],
+          "properties": {
+            "mode": {
+              "const": "tailscale"
+            }
+          },
+          "not": {
+            "required": ["seed"]
+          }
+        }
+      ]
     },
     "PhoneRequest": {
       "type": "object",
@@ -319,13 +373,16 @@
     "PhonesResponse": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["data"],
+      "required": ["data", "tailscaleSsh"],
       "properties": {
         "data": {
           "type": "array",
           "items": {
             "$ref": "#/definitions/Phone"
           }
+        },
+        "tailscaleSsh": {
+          "type": "boolean"
         }
       }
     },

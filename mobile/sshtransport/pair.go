@@ -21,7 +21,8 @@ import (
 // 对面的 sshd 只让这把钥匙跑强制命令 pair-enroll。手机往标准输入写一行 JSON（PairEnrollInput），
 // 等电脑上点允许，读回一行 JSON（PairEnrollOutput）。这里只管把那一行送过去、把那一行拿回来，JSON 由界面那头拼和解。
 
-// 请求执行的命令。对面是强制命令，这里写什么都会被换掉，写成它的名字只是为了日志里看得明白
+// 一次性钥匙方式请求执行的命令。对面是强制命令，这里写什么都会被换掉，写成它的名字只是为了日志里看得明白。
+// Tailscale 方式没有强制命令，执行的是 target 里的 EnrollCommand（二维码里的登记命令）
 const enrollCommand = "pair-enroll"
 
 // 等回话最多等多久：对面等电脑上表态最多 2 分钟，再留出连接和写钥匙文件的时间。变量是为了测试能调短
@@ -30,7 +31,8 @@ var enrollTimeout = 3 * time.Minute
 // 标准输出最多读多少字节来找回话那一行，超过就不认
 const enrollLineMax = 64 * 1024
 
-// EnrollPair 用 target（一般带 Seed 和 HostKeyType）连上去，往标准输入写 line（自动补换行），返回回话那一行（去掉换行）。
+// EnrollPair 用 target（一次性钥匙方式带 Seed，Tailscale 方式带手机自己的私钥和 EnrollCommand；都带 HostKeyType）连上去，
+// 往标准输入写 line（自动补换行），返回回话那一行（去掉换行）。
 // 回话那一行是标准输出里第一行带布尔 ok 的 JSON 对象：sshd 经登录 shell 跑强制命令，shell 的启动文件（.bashrc 之类）
 // 打出来的字会排在它前面，要跳过。
 // 对面没回一整行就退出、等满 enrollTimeout 都算 [enroll] 种类的失败；连不上、指纹不对、钥匙不被接受照旧是原来的种类
@@ -67,7 +69,11 @@ func EnrollPair(targetJSON, line string) (string, error) {
 	}
 	var stderr bytes.Buffer
 	session.Stderr = &stderr
-	if err = session.Start(enrollCommand); err != nil {
+	command := enrollCommand
+	if target.EnrollCommand != "" {
+		command = target.EnrollCommand
+	}
+	if err = session.Start(command); err != nil {
 		return "", kindf(kindUnreachable, "执行登记: %w", err)
 	}
 	if _, err = io.WriteString(stdin, strings.TrimRight(line, "\n")+"\n"); err != nil {

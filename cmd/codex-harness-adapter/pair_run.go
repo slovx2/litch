@@ -4,6 +4,8 @@ package main
 // 调 litch/pair/start 拿一次性钥匙，在终端里画二维码、打印配对文本；用 litch/pair/wait 长轮询，
 // 有手机来登记时打印手机名和确认码、问 y/N，按回答调 litch/pair/decide。Ctrl-C 调 litch/pair/cancel 删掉一次性钥匙行。
 // 标准输入关了（没人能回 y）也取消。二维码过期了自动换一张新的（和桌面端一样，决 292），最多换 pairMaxRenewals 次，免得没人管的终端一直挂着。
+// 这台机器开着 Tailscale SSH（tailscale debug prefs 里 RunSSH 为 true）时先问手机是不是走 Tailscale 地址，
+// 是就出 Tailscale 方式的码：设备服务不写一次性钥匙行，自检改成用临时钥匙经本机 ssh 连 --host 给的地址执行登记命令。
 
 import (
 	"bufio"
@@ -39,6 +41,8 @@ type pairIO struct {
 	ensure func(ctx context.Context, target pairTarget, stderr io.Writer) error
 	// 找 ssh 客户端，找不到就跳过自检
 	lookSSH func() (string, error)
+	// 这台机器开着 Tailscale SSH 没有。测试里换成固定的
+	tailscaleSSH func(ctx context.Context) bool
 }
 
 type pairOptions struct {
@@ -53,8 +57,9 @@ func runPair(ctx context.Context, argv []string) error {
 	defer stop()
 	code := pairMain(ctx, argv, pairIO{
 		stdin: os.Stdin, stdout: os.Stdout, stderr: os.Stderr, env: os.Getenv,
-		ensure:  ensurePairDevice,
-		lookSSH: func() (string, error) { return exec.LookPath("ssh") },
+		ensure:       ensurePairDevice,
+		lookSSH:      func() (string, error) { return exec.LookPath("ssh") },
+		tailscaleSSH: func(ctx context.Context) bool { return detectTailscaleSSH(ctx, os.Getenv) },
 	})
 	if code == 0 {
 		return nil
@@ -117,9 +122,19 @@ type pairSession struct {
 	options  pairOptions
 	// 标准输入一行一行地来；读完了通道关掉
 	lines <-chan string
+	// pairModeKey 或 pairModeTailscale
+	mode string
 }
 
 func (s *pairSession) run(ctx context.Context) int {
+	mode, outcome := s.chooseMode(ctx)
+	switch outcome {
+	case "interrupted":
+		return pairExitInterrupted
+	case "closed":
+		return pairExitFailed
+	}
+	s.mode = mode
 	for renewals := 0; ; renewals++ {
 		start, err := s.start(ctx)
 		if err != nil {
@@ -152,14 +167,55 @@ func (s *pairSession) run(ctx context.Context) int {
 	}
 }
 
+// 这台机器开着 Tailscale SSH 时问一句手机是不是走 Tailscale 地址；没开就是一次性钥匙。
+// 第二个返回值：ok、interrupted（Ctrl-C）、closed（标准输入关了，没人能回答）
+func (s *pairSession) chooseMode(ctx context.Context) (string, string) {
+	if s.pio.tailscaleSSH == nil || !s.pio.tailscaleSSH(ctx) {
+		return pairModeKey, "ok"
+	}
+	out := s.pio.stdout
+	fmt.Fprintln(out, tr(
+		"这台机器开着 Tailscale SSH：经 tailnet 进来的 SSH 连接由 tailscaled 按 ACL 放行，不看 authorized_keys，一次性钥匙的强制命令不生效。",
+		"This machine runs Tailscale SSH: SSH connections arriving over the tailnet are let in by tailscaled according to the ACL, without reading authorized_keys, so the one-time key's forced command has no effect."))
+	fmt.Fprint(out, tr("手机经 Tailscale 地址连这台机器吗？[y/N] ", "Will the phone reach this machine at its Tailscale address? [y/N] "))
+	select {
+	case <-ctx.Done():
+		fmt.Fprintln(out)
+		return "", "interrupted"
+	case line, open := <-s.lines:
+		if !open {
+			fmt.Fprintln(out)
+			fmt.Fprintln(out, tr("标准输入已经关了，没人能回答，不出码。", "Standard input is closed and nobody can answer; no code is shown."))
+			return "", "closed"
+		}
+		if isYes(line) {
+			return pairModeTailscale, "ok"
+		}
+		return pairModeKey, "ok"
+	}
+}
+
 // 调 litch/pair/start。每次单独连一条：长轮询的那条在等应答，不和它挤
 func (s *pairSession) start(ctx context.Context) (pairStartResponse, error) {
 	var start pairStartResponse
-	raw, err := pairCall(ctx, s.socket, pairStartMethod, map[string]any{}, 30*time.Second)
+	params := map[string]any{}
+	if s.mode == pairModeTailscale {
+		params["mode"] = pairModeTailscale
+	}
+	raw, err := pairCall(ctx, s.socket, pairStartMethod, params, 30*time.Second)
 	if err != nil {
 		return start, pairCallError(err)
 	}
-	if json.Unmarshal(raw, &start) != nil || start.PairID == "" || start.Seed == "" || start.HostKey.Fingerprint == "" {
+	if json.Unmarshal(raw, &start) != nil || start.PairID == "" || start.HostKey.Fingerprint == "" {
+		return start, errors.New(tr("设备服务的应答看不懂", "the device service sent an answer this command cannot read"))
+	}
+	if s.mode == pairModeTailscale {
+		if start.Mode != pairModeTailscale || start.EnrollCommand == "" {
+			// 老的设备服务不认 mode，照旧写了一次性钥匙行：作废掉
+			s.cancelQuietly(start.PairID)
+			return start, errors.New(tr("这台机器上在跑的设备服务太旧，不支持 Tailscale 方式。请升级适配器，用 device-stop 停掉设备服务后再试。", "The device service running on this machine is too old for the Tailscale way. Upgrade the adapter, stop the device service with device-stop, then try again."))
+		}
+	} else if start.Seed == "" {
 		return start, errors.New(tr("设备服务的应答看不懂", "the device service sent an answer this command cannot read"))
 	}
 	return start, nil
@@ -212,7 +268,12 @@ func (s *pairSession) payload(start pairStartResponse) pairPayload {
 	payload := pairPayload{
 		Name: s.options.name, Host: s.options.host, Port: s.options.port, User: start.User,
 		HostKeyType: start.HostKey.Type, HostKeyFP: start.HostKey.Fingerprint,
-		Seed: start.Seed, PairID: start.PairID, ExpiresAt: start.ExpiresAt,
+		PairID: start.PairID, ExpiresAt: start.ExpiresAt,
+	}
+	if s.mode == pairModeTailscale {
+		payload.Tailscale, payload.Command = true, start.EnrollCommand
+	} else {
+		payload.Seed = start.Seed
 	}
 	if payload.Host == "" {
 		payload.Host = hostname
@@ -234,6 +295,25 @@ func readLines(stdin io.Reader) <-chan string {
 		}
 	}()
 	return lines
+}
+
+// detectTailscaleSSH：tailscale debug prefs 的 JSON 里 RunSSH 为 true。和设备服务（pair-host.mts）的判断一样，
+// 命令行换成 LITCH_TAILSCALE_CLI 给的（测试用）；命令不在、跑不通、看不懂都算没开
+func detectTailscaleSSH(ctx context.Context, env func(string) string) bool {
+	cli := env("LITCH_TAILSCALE_CLI")
+	if cli == "" {
+		cli = "tailscale"
+	}
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	output, err := exec.CommandContext(ctx, cli, "debug", "prefs").Output()
+	if err != nil {
+		return false
+	}
+	var prefs struct {
+		RunSSH bool `json:"RunSSH"`
+	}
+	return json.Unmarshal(output, &prefs) == nil && prefs.RunSSH
 }
 
 func isYes(answer string) bool {

@@ -1,10 +1,13 @@
 // 扫码绑定手机这一头的流程（三方怎么配合写在 packages/protocol/src/device-pairing.mts 开头）：
 // 认配对文本 → 生成手机自己的钥匙 → 用二维码里的一次性钥匙登进去执行登记（钉住二维码里的主机指纹、只协商那一种算法），
 // 期间显示确认码等电脑上允许 → 记下主机指纹（不再弹首次确认）→ 用自己的钥匙走原来的检查和添加。
+// Tailscale 方式的码（m 为 tailscale）没有一次性钥匙：用手机自己的钥匙登进去（tailscaled 按 ACL 放行，不看钥匙），
+// 自己执行二维码里的登记命令，输入输出一样。
 // 这里不碰界面和原生模块，用到的都经 PairDeps 交进来，单元测试拿假的跑。
 import type { RemoteCheck, RemoteTarget } from '@litch/core'
 import {
   decodePairPayload,
+  isTailnetHost,
   PAIR_ENROLL_ERROR,
   PAIR_PAYLOAD_PREFIX,
   PAIR_PHONE_NAME_MAX,
@@ -33,7 +36,9 @@ export const looksLikePair = (text: string): boolean => text.trim().startsWith(P
 /**
  * 没成的原因。前七种是 pair-enroll 回的（PAIR_ENROLL_ERROR），后面几种是手机这头看到的：
  * refused 一次性钥匙登不进去（用过、过期之后那一行被删了，或者对面的 sshd 不认）；hostKey 主机指纹对不上；
- * unreachable 连不上二维码里的地址；noAnswer 登进去了但对面没给出登记结果；unknown 别的
+ * unreachable 连不上二维码里的地址；noAnswer 登进去了但对面没给出登记结果；unknown 别的。
+ * Tailscale 方式另有三种：tailscaleOff 连不上 tailnet 地址（手机上的 Tailscale 多半没开或没登录）；
+ * denied Tailscale 不让这部手机登（ACL）；verify Tailscale 要在浏览器里再验证一次（detail 是链接）
  */
 export type PairProblem =
   | PairEnrollError
@@ -42,6 +47,9 @@ export type PairProblem =
   | 'unreachable'
   | 'noAnswer'
   | 'unknown'
+  | 'tailscaleOff'
+  | 'denied'
+  | 'verify'
 
 const ENROLL_ERRORS = new Set<string>(Object.values(PAIR_ENROLL_ERROR))
 
@@ -67,12 +75,19 @@ export function parseEnrollOutput(
   }
 }
 
-/** SSH 模块抛的错认成原因 */
-export function enrollFailure(error: unknown): { problem: PairProblem; detail: string } {
+/** SSH 模块抛的错认成原因。payload 是 Tailscale 方式的码时，连不上、被拒说成 Tailscale 那边的事 */
+export function enrollFailure(
+  error: unknown,
+  payload?: PairPayload,
+): { problem: PairProblem; detail: string } {
   const { kind, message } = sshProblem(error)
+  const tailscale = payload?.m === 'tailscale'
   switch (kind) {
+    case 'verify':
+      // 种类后面就是链接
+      return { problem: 'verify', detail: message.replace(/^\[verify\] /, '').trim() }
     case 'auth':
-      return { problem: 'refused', detail: message }
+      return { problem: tailscale ? 'denied' : 'refused', detail: message }
     case 'hostKeyChanged':
     case 'hostKeyUnknown':
       return { problem: 'hostKey', detail: message }
@@ -80,24 +95,31 @@ export function enrollFailure(error: unknown): { problem: PairProblem; detail: s
       return { problem: 'noAnswer', detail: message }
     case 'unreachable':
     case null:
-      return { problem: 'unreachable', detail: message }
+      return {
+        problem: tailscale && payload && isTailnetHost(payload.h) ? 'tailscaleOff' : 'unreachable',
+        detail: message,
+      }
     default:
       return { problem: 'unknown', detail: message }
   }
 }
 
-/** 用一次性钥匙登进去的连接配置 */
-export function enrollTarget(payload: PairPayload): SshTarget {
-  return {
+/**
+ * 登记时的连接配置：一次性钥匙方式用二维码里的种子；Tailscale 方式用手机自己的私钥，执行二维码里的登记命令。
+ * 都钉住二维码里的主机指纹、只协商那一种算法
+ */
+export function enrollTarget(payload: PairPayload, privateKey: string): SshTarget {
+  const base = {
     host: payload.h,
     port: payload.p,
     user: payload.u,
-    privateKey: '',
     passphrase: '',
-    seed: payload.s,
     hostKeyType: payload.k.t,
     hostFingerprint: payload.k.f,
   }
+  return payload.m === 'tailscale'
+    ? { ...base, privateKey, enrollCommand: payload.c }
+    : { ...base, privateKey: '', seed: payload.s }
 }
 
 /** 公钥行只要前两段（类型和 base64），不带注释：确认码、登记都按这个算 */
@@ -144,6 +166,8 @@ export interface PairDeps {
   makeKey(): Promise<{ id: string; publicKey: string }>
   /** 登记没成时删掉刚生成的钥匙 */
   dropKey(id: string): Promise<void>
+  /** 刚生成的那把的私钥（Tailscale 方式登记时用它登录）。读不出来是 null */
+  privateKey(id: string): Promise<string | null>
   confirmCode(pairId: string, publicKey: string): Promise<string>
   enroll(target: SshTarget, line: string): Promise<string>
   trust(host: string, port: number, key: HostKey): void
@@ -165,9 +189,15 @@ export async function runPairing(
     onStep({ step: 'enroll', code })
     let line: string
     try {
-      line = await deps.enroll(enrollTarget(payload), enrollLine(key.publicKey, deps.phoneName))
+      const privateKey = payload.m === 'tailscale' ? await deps.privateKey(key.id) : ''
+      if (privateKey === null)
+        return { ok: false, problem: 'unknown', detail: '读不出刚生成的私钥' }
+      line = await deps.enroll(
+        enrollTarget(payload, privateKey),
+        enrollLine(key.publicKey, deps.phoneName),
+      )
     } catch (error) {
-      const { problem, detail } = enrollFailure(error)
+      const { problem, detail } = enrollFailure(error, payload)
       return { ok: false, problem, detail }
     }
     const output = parseEnrollOutput(line)
