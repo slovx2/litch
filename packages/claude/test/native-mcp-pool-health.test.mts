@@ -332,3 +332,29 @@ test('MCP-025：客户端全都断开时（closeIdle）没人用的连接现在�
     }
   })
 })
+
+test('MCP-026：回合里有服务连不上（端口没人听）时跳过它，其余照常交给 CLI；管理操作照旧报错', async () => {
+  const http = await httpServer()
+  const closed = createServer()
+  await new Promise<void>((done) => closed.listen(0, '127.0.0.1', done))
+  const dead = { url: `http://127.0.0.1:${(closed.address() as AddressInfo).port}/mcp` }
+  await new Promise<void>((done) => closed.close(() => done()))
+  const p = pool()
+  try {
+    const servers = { dead, remote: { url: http.url } }
+    const names = await session(p, 't1', servers, async (clients) => Object.keys(clients))
+    assert.deepEqual(names, ['remote'])
+    assert.deepEqual(p.snapshot(), [{ thread: 't1', name: 'remote', taken: false }])
+    const bridge = new NativeMcpBridge()
+    try {
+      await assert.rejects(
+        bridge.connect({ dead }, process.cwd(), {}, new AbortController().signal),
+      )
+    } finally {
+      await bridge.close()
+    }
+  } finally {
+    await p.close()
+    await http.close()
+  }
+})

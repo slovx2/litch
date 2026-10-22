@@ -99,7 +99,22 @@ export class NativeMcpBridge {
             },
           )
         }
-        await entry.connection.connect(config, cwd, source, entry.lease, timeout)
+        try {
+          await entry.connection.connect(config, cwd, source, entry.lease, timeout)
+        } catch (error) {
+          // 回合里连不上的服务（没起、要登录、握手超时）照原生 Claude Code 跳过，回合照常跑；
+          // 管理操作针对的就是这一个服务，照旧报错。收场、取消也照旧往上抛。
+          if (!this.pool || this.closed || signal.aborted) throw error
+          this.leases.delete(name)
+          entry.connection.unbind(entry.lease)
+          await entry.connection.close().catch(() => {})
+          debugLog('native.mcp.failed', {
+            threadId: this.thread,
+            server: name,
+            error: error instanceof Error ? error.message : String(error),
+          })
+          continue
+        }
         this.pool?.adopt(this.thread, name, entry.connection)
       }
       if (this.closed) throw new Error('MCP 运行时已关闭')

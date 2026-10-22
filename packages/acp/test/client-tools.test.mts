@@ -391,3 +391,58 @@ test('Litch 的呈现风格（不带工具的命名空间）进 MCP 服务的 in
     ['litch_echo'],
   )
 })
+
+test('Litch 的 MCP 桥起不来（临时目录用不了）：不挂桥，会话照建、回合照跑；之后起得来了接回时照挂', async () => {
+  const s = await scene()
+  const tmp = process.env.TMPDIR
+  // 桥的套接字放在 tmpdir() 下新建的目录里：TMPDIR 指到不存在的地方，监听就起不来
+  const broken = join(s.root, 'no-such-tmp')
+  try {
+    let desktop = await litch(s)
+    process.env.TMPDIR = broken
+    let thread: any
+    let done: any
+    try {
+      thread = (await desktop.call('thread/start', { cwd: s.cwd, dynamicTools: TOOLS })).thread
+      const created = (await s.received()).filter((m) => m.method === 'session/new').at(-1)
+      assert.deepEqual(created.params.mcpServers, [])
+      done = await turn({ ...s, desktop }, thread.id, text('hello'))
+      assert.equal(done.status, 'completed')
+    } finally {
+      await s.server.close()
+    }
+    // 适配器重启后头一回合接回 agent 时才挂桥：这时还起不来，回合照跑
+    let server = new AcpServer(s.home, s.env)
+    let again: Scene = { ...s, server, desktop: client(server) }
+    try {
+      desktop = await litch(again)
+      await desktop.call('thread/resume', { threadId: thread.id })
+      done = await turn({ ...again, desktop }, thread.id, text('hello'))
+      assert.equal(done.status, 'completed')
+      const resumed = (await s.received()).filter((m) => m.method === 'session/resume').at(-1)
+      assert.deepEqual(resumed.params.mcpServers, [])
+    } finally {
+      await server.close()
+    }
+    // 临时目录好了：会话记着的动态工具还在，再接回时桥照挂上，工具能用
+    process.env.TMPDIR = tmp
+    server = new AcpServer(s.home, s.env)
+    again = { ...s, server, desktop: client(server) }
+    try {
+      desktop = await litch(again)
+      await desktop.call('thread/resume', { threadId: thread.id })
+      done = await turn(
+        { ...again, desktop },
+        thread.id,
+        text('tool gemini echo_echo {"text":"back"}'),
+      )
+      assert.equal(said(done), '结果：回声：{"text":"back"}')
+      assert.deepEqual([...violations], [])
+    } finally {
+      await server.close()
+    }
+  } finally {
+    process.env.TMPDIR = tmp
+    await s.restore()
+  }
+})

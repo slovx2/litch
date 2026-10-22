@@ -306,7 +306,17 @@ export class ClientTools {
   ): Promise<{ servers: StdioMcpServer[]; key: string | null }> {
     const specs = dynamicToolSpecs(raw)
     if (!specs.length && !toolInstructions(raw)) return { servers: [], key: null }
-    const path = await this.listen()
+    let path: string
+    try {
+      path = await this.listen()
+    } catch (error) {
+      // 桥的监听起不来（临时目录用不了之类）：这一次不挂，会话照建、回合照跑，只是没有客户端工具。
+      // 会话记着的动态工具还在，下次接回 agent 时再试
+      console.error(
+        `[acp] Litch 的 MCP 桥起不来，这次不挂客户端工具: ${error instanceof Error ? error.message : String(error)}`,
+      )
+      return { servers: [], key: null }
+    }
     const key = (threadId && this.keys.get(threadId)) || randomUUID()
     this.bridges.set(key, { threadId, specs, instructions: toolInstructions(raw) })
     if (threadId) this.keys.set(threadId, key)
@@ -354,6 +364,8 @@ export class ClientTools {
       })
     }).catch((error) => {
       this.listening = null
+      if (this.directory) rmSync(this.directory, { recursive: true, force: true })
+      this.directory = null
       throw error
     })
     return this.listening
