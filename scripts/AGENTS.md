@@ -79,6 +79,10 @@ plain `.mjs` / shell.
 - `package-adapter.mjs` — builds the standalone release archives
   (`npm run package:adapter`), the checksum list and a copy of `install.sh`.
   Writes the tar itself so entries are deterministic across hosts.
+- `package-cha.sh` — builds `cha-v<version>.tar.gz` (Claude entry build plus
+  `cha-build.json`, for an integrator) and `cha-SHA256SUMS.txt` in
+  digest-pinned containers, so a commit always yields the same sha256. Run by
+  `release.yml`; `--ref v<version>` backfills a published release.
 - `adapter-launcher.sh` — entry point inside the standalone release; resolves
   its real location and passes every argument through unchanged. The CLI picks
   the bundled Node by itself when `--node` is not given. POSIX sh, no PATH

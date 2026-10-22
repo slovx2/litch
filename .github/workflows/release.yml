@@ -2,6 +2,7 @@ name: Release
 
 # 出这一版要发的全部东西，挂到这个标签的发布页：
 #   适配器的独立发布包（linux-x64、linux-arm64、darwin-arm64）、它的校验和清单、安装脚本
+#   给集成方的 Claude 入口包 cha-v<版本>.tar.gz 和它的校验和清单 cha-SHA256SUMS.txt（scripts/package-cha.sh）
 #   桌面应用 Litch 的安装包：macOS（Apple Silicon）签名并公证过的 dmg，Windows（x64）的安装程序（不签名，还没有经过完整的测试）
 #   安卓应用（arm64）：发版钥匙签名的 apk
 #   应用自己的更新：macOS 的 zip（Squirrel 下这个）和更新清单 litch-update.json，
@@ -110,6 +111,31 @@ jobs:
         with:
           name: adapter
           path: ${{ runner.temp }}/release
+          if-no-files-found: error
+
+  # 给集成方（WakeQora）的 Claude 入口包 cha-v<版本>.tar.gz 和它的校验和清单。在钉了摘要的容器里出，
+  # 同一个提交在哪出都是同一个 sha256，集成方把清单里的值记进自己的锁文件
+  cha:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.REF }}
+      - name: 标签和版本号要对得上
+        if: env.TAG != ''
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if [ "v${version}" != "${TAG}" ]; then
+            echo "标签是 ${TAG}，package.json 里的版本号是 ${version}" >&2
+            exit 1
+          fi
+      - name: 出包
+        run: bash scripts/package-cha.sh --out "${RUNNER_TEMP}/cha"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: cha
+          path: ${{ runner.temp }}/cha
           if-no-files-found: error
 
   desktop-macos:
@@ -381,7 +407,7 @@ jobs:
           if-no-files-found: error
 
   publish:
-    needs: [adapter, desktop-macos, desktop-windows, android]
+    needs: [adapter, cha, desktop-macos, desktop-windows, android]
     if: github.event_name == 'push' || (inputs.tag != '' && inputs.publish)
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -427,6 +453,8 @@ jobs:
             codex-harness-adapter-*.tar.gz \
             codex-harness-adapter-SHA256SUMS.txt \
             install.sh \
+            cha-v*.tar.gz \
+            cha-SHA256SUMS.txt \
             Litch-*.dmg \
             Litch-*-setup.exe \
             Litch-*-macos-arm64.zip \

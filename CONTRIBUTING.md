@@ -50,7 +50,7 @@ coding conventions.
 
 ## 发版
 
-发版由维护者做。整个仓库只有一个版本号（根目录 `package.json`），适配器各包、客户端各包和它们的锁文件一起改，`npm run check` 会指出落下的；更新日志里“未发布”那一节改成版本号。打标签之前在本机跑 `npm run check:adapter-package`（要 Docker），并在要打标签的提交上跑一轮全量（`gh workflow run full.yml`）；release.yml 查不到这个提交上有通过的全量，就不挂发布页。推 `v<版本>` 标签后，`.github/workflows/release.yml` 出全部的包：适配器的独立发布包和安装脚本、macOS 的 dmg 和 zip、Windows 的安装程序、安卓的 apk，以及应用自动更新读的清单 `litch-update.json`（`scripts/update-manifest.mjs` 生成），都出好了一起挂到草稿发布页。安卓包的 `versionCode` 由版本号算出（`apps/mobile/plugins/release-signing.js`），`apps/mobile/app.json` 的版本号也要一起改。核对过再公开，**不要标成预发布**：安装脚本和三个端的自动更新取的都是“最新一版”，公开之前谁也收不到。
+发版由维护者做。整个仓库只有一个版本号（根目录 `package.json`），适配器各包、客户端各包和它们的锁文件一起改，`npm run check` 会指出落下的；更新日志里“未发布”那一节改成版本号。打标签之前在本机跑 `npm run check:adapter-package`（要 Docker），并在要打标签的提交上跑一轮全量（`gh workflow run full.yml`）；release.yml 查不到这个提交上有通过的全量，就不挂发布页。推 `v<版本>` 标签后，`.github/workflows/release.yml` 出全部的包：适配器的独立发布包和安装脚本、macOS 的 dmg 和 zip、Windows 的安装程序、安卓的 apk，应用自动更新读的清单 `litch-update.json`（`scripts/update-manifest.mjs` 生成），以及给集成方的 Claude 入口包 `cha-v<版本>.tar.gz` 和它的校验和清单 `cha-SHA256SUMS.txt`（`scripts/package-cha.sh` 在钉了摘要的 Go、Node 容器里出，同一个提交出来的 sha256 不变；要给已发的版本补一份，在本机跑 `bash scripts/package-cha.sh --ref v<版本> --out <目录>` 再 `gh release upload`），都出好了一起挂到草稿发布页。安卓包的 `versionCode` 由版本号算出（`apps/mobile/plugins/release-signing.js`），`apps/mobile/app.json` 的版本号也要一起改。核对过再公开，**不要标成预发布**：安装脚本和三个端的自动更新取的都是“最新一版”，公开之前谁也收不到。
 
 macOS 的 dmg 要用 Developer ID 签名并经苹果公证，公证用 App Store Connect 的 API 密钥（.p8）。要在仓库的 Settings → Secrets and variables → Actions 里配这五项机密（也可以用 `gh secret set <名字> --repo slovx2/litch`，值从标准输入给）：
 
