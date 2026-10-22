@@ -23,7 +23,12 @@ type Props = NativeStackScreenProps<RootStackParamList, 'DeviceDetail'>
 
 function peerText(device: DeviceView, t: Translator): string {
   if (device.harnesses.length === 0) return t('devices.detail.peer.unknown')
-  const service = device.service ? ` ${device.service.version}` : ''
+  // 远程设备的服务比应用旧：手机上只说一句，不给升级的按钮（一键升级只在桌面端，那边经 ssh 替用户装）
+  const older =
+    device.remoteUpgrade && device.remoteUpgrade.phase.step !== 'done'
+      ? ` · ${t('service.remote.sum.stale')}`
+      : ''
+  const service = device.service ? ` ${device.service.version}${older}` : ''
   return device.mode === 'full'
     ? t('devices.peer.service', { count: device.harnesses.length }) + service
     : t('devices.peer.only', { name: device.harnesses[0]?.name ?? '' })

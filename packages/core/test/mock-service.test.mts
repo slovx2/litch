@@ -204,3 +204,60 @@ test('别的没换成的情形没有“再试一次”：重新连接不会把�
     assert.deepEqual(local().upgrade, before, words)
   }
 })
+
+test('远程设备的一键升级四出：马上换上、等空闲（还有回合等人就照旧等，立即换上不等）、下载失败、配方没跟上', async () => {
+  const { channel, devices, flush, say } = setup()
+  await settle()
+  const build = () => devices.get('build') as DeviceView
+  const run = (mode: 'start' | 'retry' | 'force') =>
+    channel.command('device.upgradeService', { deviceId: 'build', mode })
+  const until = async (step: string) => {
+    for (let n = 0; n < 40 && build().remoteUpgrade?.phase.step !== step; n++) await flush(200)
+    assert.equal(build().remoteUpgrade?.phase.step, step)
+  }
+  assert.equal(build().remoteUpgrade, null, '平时和应用是同一版')
+  await assert.rejects(run('start'))
+
+  await say('b2', '远程服务旧', 'build')
+  await flush()
+  assert.deepEqual(
+    [build().remoteUpgrade?.running, build().remoteUpgrade?.target, build().remoteUpgrade?.method],
+    ['0.6.0', '0.7.0', 'script'],
+  )
+  await run('start')
+  await until('done')
+  assert.equal(build().service?.version, '0.7.0')
+  assert.equal(build().connection, 'online')
+
+  // b1 上有一个请求停着等人：一直不闲
+  await say('b2', '远程服务旧而忙', 'build')
+  await flush()
+  await run('start')
+  await until('waiting')
+  const waiting = build().remoteUpgrade?.phase
+  assert.ok(
+    waiting?.step === 'waiting' && waiting.busy.some((entry) => entry.reason === 'activeTurns'),
+  )
+  await run('retry')
+  await flush()
+  await until('waiting')
+  assert.equal(build().service?.version, '0.6.0', '还在等：旧的接着用')
+  await run('force')
+  await until('done')
+
+  await say('b2', '远程下载失败', 'build')
+  await flush()
+  await run('start')
+  await until('failed')
+  const download = build().remoteUpgrade?.phase
+  assert.equal(download?.step === 'failed' ? download.at : null, 'download')
+
+  await say('b2', 'remote formula is behind', 'build')
+  await flush()
+  assert.equal(build().remoteUpgrade?.method, 'brew')
+  await run('start')
+  await until('failed')
+  const behind = build().remoteUpgrade?.phase
+  assert.equal(behind?.step === 'failed' ? behind.at : null, 'behind')
+  assert.equal(build().remoteUpgrade?.installed, '0.6.1')
+})

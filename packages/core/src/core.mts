@@ -223,6 +223,10 @@ export function createCore(options: CoreOptions): Core {
       toolSwitches: (harness) => switchesOf(config.id, harness),
       ...(options.pairing ? { pairing: options.pairing } : {}),
       ...(options.forward ? { forward: options.forward } : {}),
+      // 远程设备服务的一键升级：要装的是应用的这一版；外壳没给能力（手机端）就只显示“比应用旧”
+      ...(config.kind === 'ssh'
+        ? { remoteUpgrade: { version: options.version, platform: remote?.upgrade ?? null } }
+        : {}),
       // litch config 只从本机的 harness 来：只有本机设备的连接声明它
       ...(options.config && config.kind === 'local'
         ? {
@@ -924,6 +928,14 @@ export function createCore(options: CoreOptions): Core {
         case 'device.reconnect':
           deviceOf((params as { deviceId: string }).deviceId).retry()
           return {}
+        case 'device.upgradeService': {
+          const { deviceId, mode } = params as Commands['device.upgradeService']['params']
+          if (mode !== 'start' && mode !== 'retry' && mode !== 'force') {
+            throw new ChannelError('rejected', '不认识的做法')
+          }
+          deviceOf(deviceId).upgradeService(mode)
+          return {}
+        }
         case 'terminal.open': {
           const { deviceId, workspaceId, cwd, rows, cols } =
             params as Commands['terminal.open']['params']

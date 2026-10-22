@@ -8,14 +8,13 @@
 //
 // 版本怎么比（compareService）：
 //   1. 在跑的没报自己的来历（它比这项功能出现得早）：unknown，按旧算。
-//   2. 两边的版本号都按语义化版本读（主.次.修订，可以带 -预发布 和 +构建信息）。数字逐段比；
-//      带预发布的比不带的旧（1.2.0-rc.1 < 1.2.0）；预发布按点分开逐段比，数字段按数值，别的按字符，
-//      数字段比非数字段旧，前面都一样时段数少的旧；+ 后面的构建信息不参加比较。
-//      拿不到版本号的构建报的是 0.0.0-unknown，照这套规则它比任何正式版本都旧。
+//   2. 两边的版本号按语义化版本比，规则在核心的 text/versions.mts（compareVersions），远程设备的一键升级用的也是它。
 //   3. 有一边读不成语义化版本：字面完全一样算 same，否则 incomparable，不换（不知道谁新就不动）。
 //   4. 版本号一样时再看程序文件的戳：两边是同一个根目录、戳都有而且不一样，说明服务起来之后那份程序被换过了
 //      （开发时反复构建版本号不变，应用原地升级而适配器版本号没动，都是这样），算 rebuilt，按旧算。
 //      根目录不同的两份不比戳：戳只说明“是不是同一个文件”，说明不了谁新。
+
+import { compareVersions } from '@litch/core'
 
 /** 正在运行的那份服务的来历：就绪行的 service */
 export interface ServiceFacts {
@@ -89,53 +88,6 @@ export function parseCliFacts(value: unknown): CliFacts | null {
   const { version, root } = value
   if (typeof version !== 'string' || version === '' || typeof root !== 'string') return null
   return { version, root, build: textOr(value.build) }
-}
-
-interface Version {
-  core: [number, number, number]
-  /** 预发布的各段。没有预发布是空的 */
-  pre: string[]
-}
-
-const VERSION =
-  /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z.-]+)?$/
-
-function parseVersion(text: string): Version | null {
-  const found = VERSION.exec(text.trim())
-  if (!found) return null
-  return {
-    core: [Number(found[1]), Number(found[2]), Number(found[3])],
-    pre: found[4] ? found[4].split('.') : [],
-  }
-}
-
-const sign = (value: number): -1 | 0 | 1 => (value < 0 ? -1 : value > 0 ? 1 : 0)
-
-/** 预发布的一段和另一段比 */
-function comparePart(left: string, right: string): -1 | 0 | 1 {
-  const numeric = /^\d+$/
-  const [a, b] = [numeric.test(left), numeric.test(right)]
-  if (a && b) return sign(Number(left) - Number(right))
-  // 数字段比非数字段旧
-  if (a !== b) return a ? -1 : 1
-  return left < right ? -1 : left > right ? 1 : 0
-}
-
-/** 两个版本号比先后：-1 是前一个旧，1 是前一个新，0 一样。有一边读不成语义化版本就是 null */
-export function compareVersions(left: string, right: string): -1 | 0 | 1 | null {
-  const [a, b] = [parseVersion(left), parseVersion(right)]
-  if (!a || !b) return null
-  for (const index of [0, 1, 2] as const) {
-    const order = sign(a.core[index] - b.core[index])
-    if (order !== 0) return order
-  }
-  // 带预发布的比不带的旧
-  if (a.pre.length === 0 || b.pre.length === 0) return sign(b.pre.length - a.pre.length)
-  for (let index = 0; index < Math.min(a.pre.length, b.pre.length); index++) {
-    const order = comparePart(a.pre[index] as string, b.pre[index] as string)
-    if (order !== 0) return order
-  }
-  return sign(a.pre.length - b.pre.length)
 }
 
 /** 在跑的那一份（没报来历是 null）相对于自带的那一份。规则见文件开头 */

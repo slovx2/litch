@@ -1,15 +1,17 @@
 // 设备详情里“设备服务”一节的判断：这次连接换版本的结果要不要说、说哪一种；不闲的原因各说成哪一句；
 // 要用户自己动手时给哪几步、哪几条命令。只有逻辑，不引组件和样式，
 // 能直接被测试引用（packages/ui/test/service-logic.test.mjs）。
-// 这里只说明怎么办：应用自己从不按进程号去结束谁，也不替用户升级、重启服务。
+// 应用自己从不按进程号去结束谁。本机换版本由外壳在连接时做；远程设备只在用户点了“升级”、确认之后才替他装、换（见文件末尾）。
 import type {
   DeviceServiceView,
   DeviceView,
+  RemoteInstallMethod,
+  RemoteUpgradeView,
   ServiceBusyView,
   ServiceUpgradeView,
 } from '@litch/core'
 import type { Args, MessageKey } from '../i18n/index.ts'
-import { type GuideStep, RESTART_SERVICE_BREW, UPGRADE_SERVICE_BREW } from './guide.ts'
+import { type GuideStep, RELEASES, RESTART_SERVICE_BREW, UPGRADE_SERVICE_BREW } from './guide.ts'
 
 /**
  * 换版本的结果里值得说的几种：
@@ -160,4 +162,151 @@ export function endSteps(pid: number | null): GuideStep[] {
     step('service.unsupported.end', `kill ${pid}`),
     step('service.unsupported.after'),
   ]
+}
+
+// ---------- 远程设备：在跑的比应用旧时的一键升级 ----------
+// 状态由核心记（DeviceView.remoteUpgrade），这里只定说哪一句、给不给按钮、给哪几条命令。
+
+/** 远程那一段要说的是哪一种：older 还没动手；别的照 phase 的 step（stopping 里不等闲的那种是 forcing） */
+export type RemoteNotice =
+  | 'older'
+  | 'installing'
+  | 'stopping'
+  | 'forcing'
+  | 'reconnecting'
+  | 'waiting'
+  | 'restart'
+  | 'failed'
+  | 'done'
+
+export function remoteNoticeOf(view: RemoteUpgradeView | null): RemoteNotice | null {
+  if (!view) return null
+  const { phase } = view
+  switch (phase.step) {
+    case 'idle':
+      return 'older'
+    case 'stopping':
+      return phase.force ? 'forcing' : 'stopping'
+    default:
+      return phase.step
+  }
+}
+
+/**
+ * 给不给按钮、叫什么：upgrade 升级；swap 换上新版（装着的已经不旧）。没有按钮是 null：
+ * 这一端做不了；正在做；认不出是怎么装的（决 462，只给命令）；只差换上而服务有别的东西管着（决 463）
+ */
+export function remoteButtonOf(view: RemoteUpgradeView | null): 'upgrade' | 'swap' | null {
+  if (!view?.capable) return null
+  if (view.phase.step !== 'idle' && view.phase.step !== 'failed') return null
+  if (view.action === 'swap') return view.managed ? null : 'swap'
+  return view.method === null ? null : 'upgrade'
+}
+
+/**
+ * 这台设备那一行要不要留记号：远程设备在跑的比应用旧（还没换上，包括正在升级、等着换）。
+ * 没连上的不算，和本机一样
+ */
+export function staleRemote(device: DeviceView): boolean {
+  if (device.connection !== 'online') return false
+  const notice = remoteNoticeOf(device.remoteUpgrade)
+  return notice !== null && notice !== 'done'
+}
+
+/** 装应用这一版的那一句（确认卡上给人看、没做成时给人复制）。和核心让那台机器跑的是同一件事 */
+export function installCommand(method: RemoteInstallMethod, version: string): string {
+  return method === 'brew'
+    ? UPGRADE_SERVICE_BREW
+    : `curl -fsSL ${RELEASES}/download/v${version}/install.sh | sh -s -- --version ${version}`
+}
+
+/** 装好之后换上新版的那一句：只在服务闲着时停，下次连接时应用会用新版把它拉起来 */
+export const STOP_IF_IDLE = 'codex-harness-adapter device-stop --if-idle'
+
+/** 节标题后面的小标 */
+export function remotePillOf(
+  view: RemoteUpgradeView | null,
+): (Line & { tone: 'ok' | 'wait' }) | null {
+  const notice = remoteNoticeOf(view)
+  if (view === null || notice === null) return null
+  if (notice === 'done') {
+    return view.phase.step === 'done' && view.phase.from !== null
+      ? { tone: 'ok', key: 'service.sum.replaced', args: { from: view.phase.from } }
+      : { tone: 'ok', key: 'service.sum.replaced.plain', args: {} }
+  }
+  if (notice === 'waiting') return { tone: 'wait', key: 'service.remote.sum.waiting', args: {} }
+  return { tone: 'wait', key: 'service.remote.sum.stale', args: {} }
+}
+
+/** 开头那一句：在跑的是哪版、应用是哪版 */
+export function remoteOlderLine(view: RemoteUpgradeView): Line {
+  const to = view.target
+  if (view.running === null) return { key: 'service.remote.older.unknown', args: { to } }
+  return { key: 'service.remote.older', args: { from: view.running, to } }
+}
+
+/** 换上之后那一句 */
+export function remoteDoneLine(view: RemoteUpgradeView): Line {
+  const { phase } = view
+  const to = phase.step === 'done' ? phase.to : view.target
+  if (phase.step === 'done' && phase.from !== null) {
+    return { key: 'service.remote.done', args: { from: phase.from, to } }
+  }
+  return { key: 'service.remote.done.plain', args: { to } }
+}
+
+/**
+ * 要用户自己动手时的那几步：
+ * 认不出安装方式：两种装法的命令都给，再给换上的那一句；
+ * 装好了而服务有别的东西管着（restart，或者只差换上而有别的东西管着）：用他自己的方式重启；
+ * 没做成：照停在哪一步给（装没装成给装的那一句；装成了没换上给换的那一句；太旧停不了给手工结束的几步）。
+ * pid 是在跑的服务的进程号（太旧停不了时用），不知道是 null
+ */
+export function remoteSteps(view: RemoteUpgradeView, pid: number | null): GuideStep[] {
+  // 知道是 Homebrew 装的就直说；两种都给的时候 Homebrew 那一条是“如果……”
+  const install = (method: RemoteInstallMethod): GuideStep =>
+    step(
+      method === 'script'
+        ? 'service.remote.step.script'
+        : view.method === 'brew'
+          ? 'service.remote.step.brew.known'
+          : 'service.remote.step.brew',
+      installCommand(method, view.target),
+    )
+  const swap = step('service.remote.step.stop', STOP_IF_IDLE)
+  const after = step('service.remote.step.after')
+  const { phase } = view
+  if (
+    phase.step === 'restart' ||
+    (phase.step === 'idle' && view.action === 'swap' && view.managed)
+  ) {
+    return [...FOREGROUND_STEPS.filter((entry) => entry.text !== 'service.foreground.brew')]
+  }
+  if (phase.step === 'idle') {
+    if (view.method !== null || !view.capable) return []
+    return [install('script'), install('brew'), swap, after]
+  }
+  if (phase.step !== 'failed') return []
+  const method = view.method ?? 'script'
+  switch (phase.at) {
+    case 'download':
+      return [install(method), step('service.remote.step.from'), swap, after]
+    case 'connect':
+    case 'fetch':
+    case 'install':
+    case 'brew':
+    case 'behind':
+    case 'verify':
+      return [install(method), swap, after]
+    case 'unsupported':
+      return endSteps(pid)
+    case 'legacy':
+      return [
+        step('devices.guide.restartService', RESTART_SERVICE_BREW),
+        step('devices.guide.restartService.manual'),
+      ]
+    case 'stop':
+    case 'stale':
+      return [swap, after]
+  }
 }

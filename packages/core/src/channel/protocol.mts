@@ -537,6 +537,15 @@ export interface Commands {
   }
   /** 立刻重连一台设备。正在等重连或已经失败时才有效果 */
   'device.reconnect': { params: { deviceId: string }; result: Record<string, never> }
+  /**
+   * 远程设备服务的一键升级（界面上用户确认过才发）。start：在那台机器上装应用的这一版、空闲时换上
+   * （装着的已经不旧时只换）；retry：等空闲时现在再请一次；force：立即换上，进行中的事会被打断。
+   * 立刻返回，进度和结果在设备显示数据的 remoteUpgrade 里；做不了（本机设备、认不出安装方式、上一步没做完）是 rejected
+   */
+  'device.upgradeService': {
+    params: { deviceId: string; mode: 'start' | 'retry' | 'force' }
+    result: Record<string, never>
+  }
   /** 手动刷新一台设备的会话目录 */
   'device.refresh': { params: { deviceId: string }; result: Record<string, never> }
   /**

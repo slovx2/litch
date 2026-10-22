@@ -24,13 +24,8 @@
 //     --cwd <目录>           会话的工作目录，不给就是当前目录
 //     --model <模型>         新建会话时指定的模型，不给就用对面默认的
 //     --turn-timeout <毫秒>  等回合结束最多等多久，默认 60000
-import { type Clock, createLink, describeText, projectUpgrade } from '@litch/core'
-import {
-  compareService,
-  compareVersions,
-  parseCliFacts,
-  parseServiceFacts,
-} from './adapter-upgrade.mjs'
+import { type Clock, compareVersions, createLink, describeText, projectUpgrade } from '@litch/core'
+import { compareService, parseCliFacts, parseServiceFacts } from './adapter-upgrade.mjs'
 import { localDevice, upgradeReport } from './local-adapter.mjs'
 import { loginEnvironment } from './login-env.mjs'
 

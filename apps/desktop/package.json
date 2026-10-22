@@ -21,6 +21,7 @@
     "check:compose": "npm run build && node scripts/smoke.mjs --compose",
     "check:compose:entry": "npm run build && node scripts/smoke.mjs --compose --entry",
     "check:ssh": "npm run build && node scripts/check-ssh.mjs",
+    "check:upgrade": "npm run build && node scripts/check-upgrade.mjs",
     "check:pair": "npm run build && node scripts/check-pair.mjs",
     "check:client-tools": "npm run build && node scripts/check-client-tools.mjs",
     "check:tools:remote": "node scripts/check-tools-remote.mjs",

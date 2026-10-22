@@ -124,7 +124,7 @@ function wrap(inner: (names: Names) => string[]): RemoteScript {
 const has = (command: string): string => `command -v ${command} >/dev/null 2>&1`
 
 /**
- * 看一眼对面有什么：适配器在不在、报不报得出版本、它的服务现在在不在跑；codex 在不在、是什么版本。
+ * 看一眼对面有什么：适配器在不在、在哪（adapterPath）、报不报得出版本、它的服务现在在不在跑；codex 在不在、是什么版本。
  * 两样都看，由这边按“先设备服务、后 codex”定；不启动任何东西。输出是一行一个 `键=值`。
  * “服务在不在跑”用代理子命令来试：标准输入直接结束时，聚合面连得上它以 0 退出，连不上以非 0 退出。
  */
@@ -134,6 +134,16 @@ export function probeScript(): RemoteScript {
     `printf 'system=%s\\n' "$(uname -s 2>/dev/null)"`,
     `if ${has(adapter)}; then`,
     '  echo adapter=yes',
+    // 命令解开链接之后的真实位置：一键升级按它认是怎么装的（安装脚本、Homebrew），见核心的 installMethodOf。
+    // 不用 readlink -f（老的 macOS 没有），照安装包入口 adapter-launcher.sh 的写法一层层解
+    `  at=$(command -v ${adapter})`,
+    '  n=0',
+    '  while [ -L "$at" ] && [ "$n" -lt 20 ]; do',
+    '    link=$(readlink "$at")',
+    '    case $link in /*) at=$link ;; *) at=$(dirname "$at")/$link ;; esac',
+    '    n=$((n + 1))',
+    '  done',
+    `  printf 'adapterPath=%s\\n' "$at"`,
     // 报不出版本的：把它的原话带回来，多半是一句“未知命令”
     `  if said=$(${adapter} version </dev/null 2>&1); then`,
     `    printf '%s\\n' "$said" | sed -n '1s/^/adapterVersion=/p'`,
@@ -218,4 +228,140 @@ export function proxyScript(peer: Peer | 'auto'): RemoteScript {
       ...native,
     ]
   })
+}
+
+// ---------- 一键升级：装新版、请服务空闲时停下 ----------
+// 两段脚本的送法和上面三段一样。里面只有写死的命令名、应用自己的版本号和写死的下载地址，
+// 没有任何对面给的值；版本号先校验成只有语义化版本的字符，再放进单引号。
+
+/** 安装脚本和发布包都从这里取（scripts/install.sh 的 RELEASES 是同一个地址） */
+const RELEASES = 'https://github.com/slovx2/litch/releases'
+
+/**
+ * 下载地址的前缀。平时就是 RELEASES；LITCH_REMOTE_RELEASES 只给开发和自检用：
+ * 换成一个 file:// 的本地目录（里面照发布页的样子放 download/v<版本>/ 下的几样），装的时候就不联网
+ */
+function releases(): string {
+  const given = process.env.LITCH_REMOTE_RELEASES?.trim()
+  if (!given) return RELEASES
+  if (!/^(?:https:\/\/|file:\/\/\/)[A-Za-z0-9_./:-]+$/.test(given)) {
+    throw new Error(`LITCH_REMOTE_RELEASES 不是一个合规的地址：${given}`)
+  }
+  return given.replace(/\/+$/, '')
+}
+
+/** 只许是语义化版本的字符（和 install.sh 的 valid_version 一样严） */
+function versionName(version: string): string {
+  if (!/^[0-9][0-9A-Za-z.+-]*$/.test(version)) throw new Error(`不是一个版本号：${version}`)
+  return version
+}
+
+/** 远端命令行说哪种语言：跟界面的。安装脚本和适配器都认 CHA_LANG */
+export type RemoteLang = 'zh-CN' | 'en'
+
+export interface InstallPlan {
+  /** script：下载这一版的安装脚本来装；brew：brew upgrade */
+  method: 'script' | 'brew'
+  /** 要装的版本：应用自己的版本 */
+  version: string
+  lang: RemoteLang
+}
+
+/** 跑一句命令、把它的原话收进 said，退出码收进 code（这两行之后接着判断） */
+const capture = (command: string): string[] => [
+  `said=$(${command} </dev/null 2>&1)`,
+  'code=$?',
+  `printf '%s\\n' "$said" | sed 's/^/said=/'`,
+]
+
+/** 停在这一步：报出是哪一步、退出码，脚本以 0 结束（没走到 step= 这一行的，是半路断了） */
+const stopAt = (step: string): string[] => [
+  `echo step=${step}`,
+  `printf 'code=%s\\n' "$code"`,
+  'exit 0',
+]
+
+/**
+ * 在对面装新版。输出一行一个 `键=值`：
+ *   said=…        各步命令的原话（多行），给“详情”用
+ *   step=…        走到了哪一步：fetch（没有 curl、wget）、download、install、brew、verify
+ *   code=…        那一步的退出码；verify 是 0 才算装好了
+ *   installed=…   装完问到的版本那一行（`codex-harness-adapter 0.16.0`）
+ * 安装脚本那一种先把这一版的 install.sh 下到临时目录再执行（不用 curl | sh：下载断了时 sh 会拿到半截脚本），
+ * 带上 --version（装的就是应用的这一版）和 --base-url（和下载 install.sh 的是同一处）。
+ * 安装脚本自己核对 SHA-256 清单，对不上不装；它不停、不重启在跑的服务。
+ */
+export function installScript(plan: InstallPlan): RemoteScript {
+  const version = quote(versionName(plan.version))
+  const base = quote(releases())
+  return wrap(({ marker, adapter }) => [
+    `printf '%s\\n' ${quote(marker)}`,
+    `CHA_LANG=${quote(plan.lang)}`,
+    'export CHA_LANG',
+    ...(plan.method === 'brew'
+      ? [
+          `if ! ${has('brew')}; then code=127; ${stopAt('brew').join('; ')}; fi`,
+          ...capture('brew upgrade codex-harness-adapter'),
+          `if [ "$code" -ne 0 ]; then ${stopAt('brew').join('; ')}; fi`,
+        ]
+      : [
+          'work=$(mktemp -d 2>/dev/null || mktemp -d -t litch-upgrade 2>/dev/null)',
+          `if [ -z "$work" ]; then code=1; ${stopAt('download').join('; ')}; fi`,
+          `trap 'rm -rf "$work"' EXIT`,
+          `url=${base}/download/v${version}/install.sh`,
+          `if ${has('curl')}; then`,
+          ...capture('curl -fsSL -o "$work/install.sh" "$url"').map((line) => `  ${line}`),
+          `elif ${has('wget')}; then`,
+          ...capture('wget -q -O "$work/install.sh" "$url"').map((line) => `  ${line}`),
+          'else',
+          `  code=127; ${stopAt('fetch').join('; ')}`,
+          'fi',
+          `if [ "$code" -ne 0 ]; then ${stopAt('download').join('; ')}; fi`,
+          ...capture(`sh "$work/install.sh" --version ${version} --base-url ${base}`),
+          `if [ "$code" -ne 0 ]; then ${stopAt('install').join('; ')}; fi`,
+        ]),
+    // 装完问一句现在装着的是哪一版。命令名还是那一个：安装脚本换的是它指向的 current，Homebrew 换的是 Cellar 里的那份
+    `if said=$(${adapter} version </dev/null 2>&1); then`,
+    `  printf '%s\\n' "$said" | sed -n '1s/^/installed=/p'`,
+    '  code=0',
+    'else',
+    '  code=$?',
+    `  printf '%s\\n' "$said" | sed 's/^/said=/'`,
+    'fi',
+    ...stopAt('verify'),
+  ])
+}
+
+/**
+ * 请对面的服务停下（device-stop）。ifIdle 为 true 时它不闲就不停（回合在跑、终端开着、别的客户端连着），
+ * 为 false 时照停，进行中的事会被打断：只在“立即换上”的第二次确认之后用。
+ * 输出：out=（它标准输出的那一行 JSON，里面有 busy）、said=（给人看的那一句）、code=（它的退出码，含义见 device_stop.go）。
+ * 用的是装完之后命令名指向的那一份（新版），所以旧服务自己没有 device-stop 这条命令也停得了，只要它认得停止请求
+ */
+export function stopScript(options: { ifIdle: boolean; lang: RemoteLang }): RemoteScript {
+  const flag = options.ifIdle ? ' --if-idle' : ''
+  return wrap(({ marker, adapter }) => [
+    `printf '%s\\n' ${quote(marker)}`,
+    `${has(adapter)} || exit ${EXIT.notFound}`,
+    `CHA_LANG=${quote(options.lang)}`,
+    'export CHA_LANG',
+    // 标准输出和标准错误分开收：前者是给程序读的那一行，后者是给人看的那一句
+    'note=$(mktemp 2>/dev/null || mktemp -t litch-stop 2>/dev/null) || note=',
+    `out=$(${adapter} device-stop${flag} </dev/null 2>"\${note:-/dev/null}")`,
+    'code=$?',
+    // 服务把连着的客户端也算“不闲”，发请求的这个应用自己就连着，光凭它永远等不到闲。
+    // 客户端断了会自己重连（连上的就是新版），不算要等的事：不闲的原因只有客户端时，紧接着不带 --if-idle 再停一次
+    ...(options.ifIdle
+      ? [
+          `if [ "$code" = 4 ] && printf '%s' "$out" | grep -q '"reason":"clients"' &&`,
+          `  ! printf '%s' "$out" | grep -o '"reason":"[A-Za-z]*"' | grep -qv '"reason":"clients"'; then`,
+          `  out=$(${adapter} device-stop </dev/null 2>"\${note:-/dev/null}")`,
+          '  code=$?',
+          'fi',
+        ]
+      : []),
+    `if [ -n "$note" ]; then sed 's/^/said=/' "$note"; rm -f "$note"; fi`,
+    `printf '%s\\n' "$out" | sed 's/^/out=/'`,
+    `printf 'code=%s\\n' "$code"`,
+  ])
 }

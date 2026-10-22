@@ -86,6 +86,12 @@ const ALIASES = {
   svcOld: 'litch-fx-svc-old',
   /** 一开始只有 codex；growFlag 那个文件建出来之后“装上了适配器”（和 svc 是同一台），删掉又只剩 codex */
   grow: 'litch-fx-grow',
+  /**
+   * 一键升级（apps/desktop/src/ssh/upgrade.mts）：主目录单独一个（就绪行的 upgradeHome），适配器是替身——
+   * 安装脚本往 ~/.local/bin 装上了“新版”就交给它，没装时是一个只报得出旧版本的适配器；另有一个替身 brew。
+   * 新版的发布包由自检自己造（apps/desktop/scripts/check-upgrade.mjs），不联网
+   */
+  upgrade: 'litch-fx-upg',
 }
 
 // 套接字路径有长度上限，目录名都起得很短。系统给的临时目录太长就退到 /tmp
@@ -243,6 +249,36 @@ try {
       ].join('\n'),
     { mode: 0o755 },
   )
+  // 一键升级那台：替身适配器和替身 brew。替身 brew 什么都不装、照常以 0 退出（brew 已经是最新时就是这样），
+  // 装完问到的还是旧版本：核心按“配方没跟上”说
+  const upgradeHome = join(root, 'u')
+  mkdirSync(join(upgradeHome, 'bin'), { recursive: true })
+  writeFileSync(
+    join(upgradeHome, 'bin', service.adapter),
+    [
+      '#!/bin/sh',
+      'real="$HOME/.local/bin/codex-harness-adapter"',
+      'if [ -x "$real" ]; then exec "$real" "$@"; fi',
+      'case "$1" in',
+      '  version) echo "codex-harness-adapter 0.0.1" ;;',
+      '  device-proxy) exit 1 ;;',
+      '  *) echo "未知命令: $1" >&2; exit 2 ;;',
+      'esac',
+      '',
+    ].join('\n'),
+    { mode: 0o755 },
+  )
+  writeFileSync(
+    join(upgradeHome, 'bin', 'brew'),
+    [
+      '#!/bin/sh',
+      'echo "brew $*" >>"$HOME/brew.log"',
+      'echo "Warning: already installed"',
+      '',
+    ].join('\n'),
+    { mode: 0o755 },
+  )
+
   // 启动脚本：学真实机器的样子，工具目录只在这里才加进 PATH，并且往标准输出里写点无关的东西。
   // 客户端要是没经登录 shell 就找不到 codex，要是没把这些输出切掉就握不了手。
   const codexBin = q(join(home, 'bin'))
@@ -257,6 +293,7 @@ try {
     `  legacy) HOME=${q(homes.legacy)} ;;`,
     `  svcdown) HOME=${q(service.down)} ;;`,
     `  grow) if [ -e ${q(growFlag)} ]; then HOME=${q(homes.svc)}; fi ;;`,
+    `  upgrade) HOME=${q(upgradeHome)} ;;`,
     'esac',
     'export HOME',
     // sshd 把会话放在这台电脑真的家目录里开始；挪到临时的家目录去，起的服务就不会去看真的那一份
@@ -269,6 +306,7 @@ try {
     `  svcold) PATH=${q(bins.old)}":$PATH" ;;`,
     `  both) PATH=${q(bins.ok)}:${codexBin}":$PATH" ;;`,
     `  grow) PATH=${codexBin}":$PATH"; if [ -e ${q(growFlag)} ]; then PATH=${q(bins.ok)}":$PATH"; fi ;;`,
+    `  upgrade) PATH=${q(join(upgradeHome, 'bin'))}":$PATH" ;;`,
     `  *) PATH=${codexBin}":$PATH" ;;`,
     'esac',
     'export PATH',
@@ -346,6 +384,7 @@ try {
       host(ALIASES.svcDown, {}, ['SetEnv LITCH_FX_MODE=svcdown']),
       host(ALIASES.svcOld, {}, ['SetEnv LITCH_FX_MODE=svcold']),
       host(ALIASES.grow, {}, ['SetEnv LITCH_FX_MODE=grow']),
+      host(ALIASES.upgrade, {}, ['SetEnv LITCH_FX_MODE=upgrade']),
     ].join('\n'),
   )
 
@@ -387,6 +426,8 @@ try {
       states: service.states,
       /** 建出这个文件，grow 那个别名就“装上了适配器”；删掉就又只剩 codex */
       growFlag,
+      /** 一键升级那台的主目录（别名 upgrade） */
+      upgradeHome,
       /** 设备服务那边新建会话时用的工作目录，和每次模型请求记一行的文件 */
       work: service.work,
       modelLog: service.modelLog,

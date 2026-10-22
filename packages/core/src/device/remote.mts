@@ -5,6 +5,12 @@ import type { TransportOpener } from '../connection/transport.mjs'
 import type { DiscoveredHost, RemoteCheck, RemoteTarget, WireColor } from '../model.mjs'
 import type { MachineAccessMode, MachineApproval, MachineLogEntry } from '../model-machine.mjs'
 import type { PairingAddress } from '../model-pairing.mjs'
+import type {
+  RemoteAdapterFacts,
+  RemoteInstallMethod,
+  RemoteInstallResult,
+  RemoteStopResult,
+} from '../model-service.mjs'
 import type { SnapshotStore } from './device.mjs'
 import type { TerminalNotesStore } from './terminal-launch.mjs'
 
@@ -16,6 +22,25 @@ export interface RemotePlatform {
   discover(): Promise<DiscoveredHost[]>
   /** 连过去看一眼对面有什么，不启动任何东西 */
   check(target: RemoteTarget, signal: AbortSignalLike): Promise<RemoteCheck>
+  /** 远程设备服务的一键升级要在那台机器上做的三件事。不给（手机端）就只显示“比应用旧” */
+  upgrade?: RemoteUpgradePlatform
+}
+
+/**
+ * 一键升级在远程机器上做的事，经 ssh、以那台机器上登录用户的身份。ssh 自己没连上时抛 ConnectError。
+ * 用户在界面上确认过才会调 install 和 stop；inspect 只是看一眼，不改任何东西
+ */
+export interface RemoteUpgradePlatform {
+  /** 那台机器上装着的适配器在哪、报的是哪一版 */
+  inspect(target: RemoteTarget, signal: AbortSignalLike): Promise<RemoteAdapterFacts>
+  /** 装这一版：安装脚本（--version）或 brew upgrade；装完报装上的版本 */
+  install(
+    target: RemoteTarget,
+    plan: { method: RemoteInstallMethod; version: string },
+    signal: AbortSignalLike,
+  ): Promise<RemoteInstallResult>
+  /** 请服务停下（device-stop）。ifIdle 为 false 时不等它闲，进行中的事会被打断 */
+  stop(target: RemoteTarget, ifIdle: boolean, signal: AbortSignalLike): Promise<RemoteStopResult>
 }
 
 export interface SavedRemote {

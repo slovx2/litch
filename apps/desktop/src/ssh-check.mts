@@ -7,6 +7,9 @@
 //     每一行带着 at：从这次运行开始算起过了多少毫秒，量各步耗时用。
 //   --probe：只做添加设备之前的那一眼检查，不启动任何东西。
 //   --hold：连上之后不断开，一直等到连接自己断掉，把断开的原因打出来（验心跳用）。
+//   --inspect：一键升级的“看一眼装着的是哪一份”（ssh/upgrade.mts），打一行结果。
+//   --install <script|brew> <版本>：一键升级的“装这一版”，打一行结果。不经确认，只给自检用。
+//   --stop [--force]：一键升级的“请服务停下”（默认 --if-idle），打一行结果。
 // 另：node dist/ssh-check.mjs --discover 列出 ssh 配置里发现到的主机；
 //     node dist/ssh-check.mjs --store <目录> 把设备配置和侧栏快照在那个目录里存取一遍。
 import {
@@ -18,6 +21,7 @@ import {
 } from '@litch/core'
 import { fileDeviceStore } from './device-store.mjs'
 import { discoverHosts } from './ssh/hosts.mjs'
+import { remoteUpgrade } from './ssh/upgrade.mjs'
 import { checkRemote, sshOpener } from './transport-ssh.mjs'
 
 const clock: Clock = {
@@ -71,6 +75,28 @@ if (process.argv[2] === '--store') {
 
 const target = JSON.parse(process.argv[2] ?? 'null') as RemoteTarget
 const hold = process.argv.includes('--hold')
+
+/** 一键升级在远端做的那三件事，各跑一次就退出。远端命令行说中文，自检按中文的原话认 */
+const upgradeAt = ['--inspect', '--install', '--stop'].find((flag) => process.argv.includes(flag))
+if (upgradeAt) {
+  const platform = remoteUpgrade(() => 'zh-CN')
+  const signal = new AbortController().signal
+  const value = (flag: string, offset = 1) =>
+    process.argv[process.argv.indexOf(flag) + offset] ?? ''
+  try {
+    if (upgradeAt === '--inspect') say({ facts: await platform.inspect(target, signal) })
+    else if (upgradeAt === '--install') {
+      const method = value('--install') === 'brew' ? 'brew' : 'script'
+      say({
+        install: await platform.install(target, { method, version: value('--install', 2) }, signal),
+      })
+    } else say({ stop: await platform.stop(target, !process.argv.includes('--force'), signal) })
+    process.exit(0)
+  } catch (error) {
+    say({ error: error instanceof Error ? error.message : String(error) })
+    process.exit(1)
+  }
+}
 
 if (process.argv.includes('--probe')) {
   const result = await checkRemote(target, new AbortController().signal)

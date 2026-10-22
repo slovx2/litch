@@ -1,6 +1,7 @@
 // 远程设备没连上之后“该怎么办”：一步一步的说明，有的带一条可以复制去终端里运行的命令。
 // 只有逻辑，不引组件和样式，能直接被测试引用（packages/ui/test/device-guide.test.mjs）。
-// 这里只说明怎么办：不替用户在那台机器上装适配器、升级、停服务。harness 本身可以按用户点的按钮由设备服务装
+// 这里只说明怎么办，不替用户在那台机器上装适配器。适配器太旧连不上时，设备详情“设备服务”一节另有一键升级
+// （用户确认之后才做，service.ts 的 remoteButtonOf）。harness 本身可以按用户点的按钮由设备服务装
 // （设备列了 harnessInstall 时，见 install/），那条路不经这里；设备不支持时这里的说明照旧。
 import type { ConnectFailureView, RemoteTarget } from '@litch/core'
 import type { MessageKey } from '../i18n/index.ts'
@@ -9,8 +10,9 @@ import type { MessageKey } from '../i18n/index.ts'
  * 在远程机器上装（或者升级）适配器的那一句：独立安装的方式，装到用户目录，不要 root
  * （适配器说明 ADAPTER.md 的“安装与启动”一节）。重跑同一句就是升级
  */
-export const INSTALL_SERVICE =
-  'curl -fsSL https://github.com/slovx2/litch/releases/latest/download/install.sh | sh'
+/** 发布页。适配器的安装脚本和发布包都在这里（scripts/install.sh 的 RELEASES） */
+export const RELEASES = 'https://github.com/slovx2/litch/releases'
+export const INSTALL_SERVICE = `curl -fsSL ${RELEASES}/latest/download/install.sh | sh`
 export const UPGRADE_SERVICE_BREW = 'brew upgrade codex-harness-adapter'
 export const RESTART_SERVICE_BREW = 'brew services restart codex-harness-adapter'
 const INSTALL_CODEX = 'npm install -g @openai/codex'

@@ -5,7 +5,7 @@
 import type { SessionBackgroundView, TurnOrigin } from './model-background.mjs'
 import type { GoalReachedView, SessionGoalView } from './model-goal.mjs'
 import type { MachineAccessView, MachineAskView } from './model-machine.mjs'
-import type { DeviceServiceView, ServiceUpgradeView } from './model-service.mjs'
+import type { DeviceServiceView, RemoteUpgradeView, ServiceUpgradeView } from './model-service.mjs'
 import type { SessionTaskMark } from './model-tasks.mjs'
 import type {
   AgentRefView,
@@ -229,6 +229,11 @@ export interface DeviceView {
    * 远程设备、另外指定了入口的本机、还没连上过的都是 null
    */
   upgrade: ServiceUpgradeView | null
+  /**
+   * 远程设备：在跑的服务比应用旧时的一键升级（model-service.mts 的 RemoteUpgradeView）。
+   * 本机设备、不比应用旧又没在升级的都是 null
+   */
+  remoteUpgrade: RemoteUpgradeView | null
   /**
    * 这台设备上的会话能不能用这台桌面端的两项能力（设备设置页的两个开关，存在桌面端、按设备记）。
    * null：这台桌面端根本执行不了这一项（比如不在 macOS 上就没有 Computer Use），设置页不出这个开关

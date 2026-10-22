@@ -550,6 +550,28 @@
   gap: 4px;
   min-width: 0;
 }
+/* 远程设备一键升级的确认：装哪一版、用哪种方式（附那条命令）、会不会打断 */
+.svc-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  color: var(--ink-2);
+}
+.svc-confirm .svc-busy {
+  color: var(--ink);
+}
+.svc-cmd {
+  padding: 4px 8px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r1);
+  background: var(--sunken);
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+  user-select: all;
+}
 /* 列表行：服务比应用自带的旧、这次没换成。只是个记号，跟在连接状态后面 */
 .devp-state {
   align-items: center;

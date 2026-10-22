@@ -48,6 +48,7 @@ import type { MachineDeviceLink, MachineSessionAsk } from '../machine-wiring.mjs
 import type {
   ComposeOptions,
   ConnectFailureView,
+  ConnectGuide,
   ConnectionState,
   DeviceView,
   HarnessAbilities,
@@ -124,7 +125,8 @@ import type { MachineFacts } from './machine/types.mjs'
 import { createManagement } from './manage.mjs'
 import { createOrganizer, looseDirectories, type Organizer } from './organize.mjs'
 import { createPairing, type Pairing, type PairingPlatform } from './pairing.mjs'
-import { DEFAULT_TOOL_SWITCHES } from './remote.mjs'
+import { DEFAULT_TOOL_SWITCHES, type RemoteUpgradePlatform } from './remote.mjs'
+import { createServiceUpgrader, type UpgradeMode } from './service-upgrade.mjs'
 import type { SnapshotStore } from './snapshot.mjs'
 import { createTasks, type Tasks } from './tasks.mjs'
 import type { TerminalNotesStore } from './terminal-launch.mjs'
@@ -193,6 +195,11 @@ export interface DeviceOptions {
   config?(input: ConfigCallInput): Promise<ClientToolCallResponse>
   /** 握手时报的这台桌面端（本机设备声明 litch_config 时用；远程设备的在 machine.desktop 里） */
   desktop?: ClientToolsDesktopInfo
+  /**
+   * 远程设备服务的一键升级（service-upgrade.mts）：应用的版本，和外壳在那台机器上动手的那份能力。
+   * 只有远程设备给；platform 是 null（手机端）时只显示“比应用旧”
+   */
+  remoteUpgrade?: { version: string; platform: RemoteUpgradePlatform | null }
   log?(line: string): void
 }
 
@@ -233,6 +240,8 @@ export interface Device {
   stop(): void
   /** 立刻重连。连着的时候是丢掉现在这条连接、从头再连一次 */
   retry(): void
+  /** 远程设备服务的一键升级：升级（或换上新版）、现在再请一次空闲时停、立即换上。做不了的抛 ChannelError */
+  upgradeService(mode: UpgradeMode): void
   /** 改显示名、线色。怎么连不在这里改：那要换一条连接，由核心重建这台设备 */
   update(patch: { name?: Text; wire?: WireColor }): void
   /** 手动刷新：重新做一次全量对账 */
@@ -475,6 +484,35 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   let upgrade: ServiceUpgradeView | null = null
   /** 等着补问“服务的来历”的那个定时器：取消函数。没在等是 null */
   let askingService: (() => void) | null = null
+  /** 对面说了会报服务的来历，这一次却还没给：这时在跑的是哪一版还不知道 */
+  let serviceDue = false
+  /**
+   * 远程设备服务的一键升级：在跑的比应用旧时设备详情里那个“升级”背后的状态（service-upgrade.mts）。
+   * 本机设备、核心没给这项能力时没有
+   */
+  const upgrader =
+    config.kind === 'ssh' && config.target && options.remoteUpgrade
+      ? createServiceUpgrader({
+          clock: options.clock,
+          version: options.remoteUpgrade.version,
+          target: config.target,
+          platform: options.remoteUpgrade.platform,
+          changed: () => hooks.device(view()),
+          reconnect: () => retry(),
+          log,
+        })
+      : null
+  /** 把现在的连接状态告诉一键升级那一头。guide：没连上时该给哪一份“怎么办” */
+  function tellUpgrader(guide: ConnectGuide | null = null) {
+    upgrader?.seen({
+      online,
+      full: mode === 'full',
+      // 断开之后 service 留着断开前知道的；一键升级只认连着时的
+      service: online ? service : null,
+      serviceDue: online && serviceDue,
+      guide: online ? null : guide,
+    })
+  }
   /** 设备的主目录和系统。主目录只有设备服务会报 */
   let home: string | null = null
   let platform: string | null = null
@@ -557,6 +595,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     manageable,
     service,
     upgrade,
+    remoteUpgrade: upgrader?.view() ?? null,
     tools: toolSwitchesView(),
     // 远程设备“操作这台电脑”：本机设备、执行不了的桌面端是 null
     machine: options.machine?.view() ?? null,
@@ -1262,8 +1301,16 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
           const found = isDeviceRuntime(info) ? projectService(info.device.service) : null
           if (found) {
             service = found
+            serviceDue = false
+            tellUpgrader()
             hooks.device(view())
           } else if (attempt < SERVICE_ASKS) askServiceLater(mine, attempt + 1)
+          else {
+            // 问了几次都没有：当作它不报
+            serviceDue = false
+            tellUpgrader()
+            hooks.device(view())
+          }
         },
         (error: unknown) => {
           if (mine === session) log(`补问设备服务的来历失败：${String(error)}`)
@@ -1277,8 +1324,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     const mine = session
     // 上一次连接时认的声明不算数了：对面可能升级过
     terms.clear()
-    /** 对面说了会报服务的来历，这一次却没给：过一会儿要再问 */
-    let serviceDue = false
+    serviceDue = false
     try {
       const info = await link.request('runtime/info', {})
       if (mine !== session) return
@@ -1360,6 +1406,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     // 上一次连接留下的说明不算数了，对账之后重新算
     gaps.clear()
     catalogError = null
+    tellUpgrader()
     setConnection('online', null)
     if (serviceDue) askServiceLater(mine, 1)
     live.resync()
@@ -1397,6 +1444,9 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       install.offline()
       harnessConfig.offline()
     }
+    if (state.phase !== 'connected') {
+      tellUpgrader(state.phase === 'failed' ? (state.failure.guide ?? null) : null)
+    }
     switch (state.phase) {
       case 'idle':
         setConnection('offline', null)
@@ -1424,6 +1474,12 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         holders = 0
         void identify()
     }
+  }
+
+  /** 立刻重连：连着的时候是丢掉这条连接重新连一次 */
+  function retry() {
+    if (online) link.reopen()
+    else link.retry()
   }
 
   const link = createLink({
@@ -2007,9 +2063,16 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       return online
     },
     start: () => link.start(),
-    stop: () => link.stop(),
+    stop: () => {
+      upgrader?.dispose()
+      link.stop()
+    },
     // 连着的时候也照做：丢掉这条连接重新连一次，对面换了东西（装上了设备服务）就此换过去
-    retry: () => (online ? link.reopen() : link.retry()),
+    retry,
+    upgradeService(mode) {
+      if (!upgrader) throw new ChannelError('rejected', '只有远程设备能一键升级设备服务')
+      upgrader.run(mode)
+    },
     update(patch) {
       if (patch.name !== undefined) name = patch.name
       if (patch.wire !== undefined) wire = patch.wire

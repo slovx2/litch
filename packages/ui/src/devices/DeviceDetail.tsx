@@ -19,6 +19,7 @@ import { HarnessList } from './HarnessList.tsx'
 import { HarnessSettingsPage } from './hconfig/HarnessSettingsPage.tsx'
 import { ManagePanel } from './manage/ManagePanel.tsx'
 import { PhonesSection } from './PhonesSection.tsx'
+import { UpgradeButton } from './RemoteUpgrade.tsx'
 import { ServiceSection } from './ServiceSection.tsx'
 import { FailureNote, GuideSteps, StatePill, useReconnect } from './status.tsx'
 import { ToolSwitches } from './ToolSwitches.tsx'
@@ -289,7 +290,15 @@ export function DeviceDetail({ deviceId, onBack, onClose }: DeviceDetailProps) {
               </div>
             </dl>
             {device.failure ? (
-              <FailureNote failure={device.failure} target={device.target} />
+              <>
+                <FailureNote failure={device.failure} target={device.target} />
+                {/* 适配器旧到连不上：除了可复制的命令，也给一键升级（认得出安装方式时），和设备服务一节里的是同一个 */}
+                {device.failure.guide === 'upgradeService' && device.remoteUpgrade ? (
+                  <div className="cfail-acts" data-remote-guide>
+                    <UpgradeButton device={device} view={device.remoteUpgrade} />
+                  </div>
+                ) : null}
+              </>
             ) : device.note ? (
               <div className="devp-note">{t.text(device.note)}</div>
             ) : null}

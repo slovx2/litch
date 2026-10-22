@@ -9,7 +9,7 @@ import { chipTitle, downHarness, wireStyle } from '../app/device.ts'
 import { ago } from '../app/format.ts'
 import { Forward, Notice } from '../app/icons.tsx'
 import { useKey } from '../app/services.tsx'
-import { staleService } from './service.ts'
+import { staleRemote, staleService } from './service.ts'
 import { StatePill } from './status.tsx'
 
 /** 一行上最多摆几个 harness 的徽标，再多的收成“+N” */
@@ -131,14 +131,15 @@ export function DeviceRow({ deviceId, focus, onOpen }: DeviceRowProps) {
         </span>
         <span className="devp-cell devp-state">
           <StatePill device={device} />
-          {/* 唯一一种要在行上留记号的：服务比应用自带的旧、这次没换成。只是个记号，原因和办法在详情里 */}
-          {staleService(device) ? (
+          {/* 唯一一种要在行上留记号的：服务比应用的旧、还没换成（本机是这次没换成，远程是还没升级或者在等着换）。
+              只是个记号，原因和办法在详情里 */}
+          {staleService(device) || staleRemote(device) ? (
             <span
               className="devp-flag"
               role="img"
               data-flag="service"
-              title={t('service.flag')}
-              aria-label={t('service.flag')}
+              title={t(device.kind === 'local' ? 'service.flag' : 'service.remote.flag')}
+              aria-label={t(device.kind === 'local' ? 'service.flag' : 'service.remote.flag')}
             >
               <Notice />
             </span>
