@@ -359,7 +359,17 @@ export function sessionProposalRules(wrapUp: boolean, taskCards = true): string 
     FRESH_BRIEF,
     TITLE_LINE,
     'If the user tells you to start a card ("start the second one"), call litch_sessions.accept with its proposal_id. If a card went stale (done here after all, no longer needed, replaced by a better one), withdraw it with litch_sessions.withdraw; propose the replacement first.',
+    outsideLitch(wrapUp),
   ].join('\n')
+}
+
+/**
+ * 不在 Litch 里了的兜底：Litch 建的会话被拿到别的客户端（比如官方桌面端分叉、接着用）时，规则还在上下文里，
+ * litch_* 工具却调不通（报不支持这个命名空间、没有这个工具）。不写这一句，模型每个回合都去调收尾、一直报错。
+ * 没有收尾的那几份不提 wrap_up
+ */
+export function outsideLitch(wrapUp: boolean): string {
+  return `If a litch_* tool call fails because its namespace or the tool is not supported or does not exist (for example "Unsupported dynamic tool namespace"), this conversation is no longer running in Litch. From then on do not call any litch_* tool in this conversation${wrapUp ? ', wrap_up included,' : ''} and skip the steps above that need them; just answer the user.`
 }
 
 /** 什么才配单开一个会话：几份规则共用 */
@@ -387,6 +397,7 @@ function plainSessionRules(): string {
     FRESH_BRIEF,
     TITLE_LINE,
     'If the user tells you to start one of the cards already in this conversation, call litch_sessions.accept with its proposal_id. Write your final answer to the user as the last message of the turn.',
+    outsideLitch(false),
   ].join('\n')
 }
 
@@ -495,7 +506,7 @@ export function sessionTools(wrapUp: boolean, taskCards = true): ClientToolNames
   return {
     type: 'namespace',
     name: CLIENT_TOOL_NAMESPACE.sessions,
-    description: `Litch sessions on this device. A sub-session is a full, separate session the user can open and talk to; it is for a task of its own that the user may want to follow apart from this work, or for work that needs another harness, model or folder. Parts of the task at hand, however large, run here or in your own subagents. ${suggestionLine(wrapUp, taskCards)} Results of your sub-sessions arrive later as a <litch-session-event> message; do not poll. You can only send to or interrupt your own sub-sessions. Never answer approvals or questions waiting inside a sub-session: only the user can.`,
+    description: `Litch sessions on this device. A sub-session is a full, separate session the user can open and talk to; it is for a task of its own that the user may want to follow apart from this work, or for work that needs another harness, model or folder. Parts of the task at hand, however large, run here or in your own subagents. ${suggestionLine(wrapUp, taskCards)} Results of your sub-sessions arrive later as a <litch-session-event> message; do not poll. You can only send to or interrupt your own sub-sessions. Never answer approvals or questions waiting inside a sub-session: only the user can. If these tools report an unsupported namespace or a missing tool, you are not in Litch: stop calling litch_* tools in this conversation.`,
     instructions: sessionProposalRules(wrapUp, taskCards),
     tools: [
       {

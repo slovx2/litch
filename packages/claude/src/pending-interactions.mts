@@ -42,6 +42,8 @@ function replayable(entry: { method: string; threadId: string }): boolean {
 // 订阅连接断开只摘掉它自己；一条都不剩了，请求回到没人可送，照旧留着。
 export class PendingInteractions {
   private pending = new Map<string, PendingInteraction>()
+  // 每个线程最近一条请求结束（回答、取消、失效）的时刻（毫秒）。子代理看门狗把等人回答的那段时间刨掉
+  private finished = new Map<string, number>()
   // 请求从一条仍然连着的连接手里收回时调用，让它撤掉界面上的卡片。
   private readonly withdrawn: (peer: RpcPeer, threadId: string, id: string) => void
 
@@ -64,6 +66,7 @@ export class PendingInteractions {
       const finish = (response?: JsonRpcResponse, error?: Error) => {
         const entry = this.pending.get(id)
         if (!entry || !this.pending.delete(id)) return
+        if (threadId) this.finished.set(threadId, Date.now())
         signal?.removeEventListener('abort', cancelled)
         // 在唤醒等待者前发送结束事件，崩溃和取消也使用同一个完成路径。
         try {
@@ -176,6 +179,11 @@ export class PendingInteractions {
   has(threadId: string): boolean {
     for (const entry of this.pending.values()) if (entry.threadId === threadId) return true
     return false
+  }
+
+  // 这个线程最近一条请求结束的时刻（毫秒），没有过是 0。
+  finishedAt(threadId: string): number {
+    return this.finished.get(threadId) ?? 0
   }
 
   // 有请求在等、却没有连接可送的线程。

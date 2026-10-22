@@ -208,6 +208,9 @@ export function relayRuntimeEvents(
       case 'session':
       case 'native_boundary':
       case 'subagent_backgrounded':
+      // 转交用的 SendMessage 续跑的就是这个子代理，过程已经是本回合的正文，不再另开回合
+      case 'subagent_resumed':
+      case 'subagent_resume_finished':
         return
       case 'completed':
         if (event.success && !delivered) throw new Error('主会话没有把这条消息转给子代理，请重试')

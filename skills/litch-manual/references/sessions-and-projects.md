@@ -194,6 +194,8 @@ woken to continue.
   sessions the model started or suggested always wake the parent; when you start one yourself (spawn
   dialog, Edit and start) you can turn "Wake the main session when done" off. Nothing is woken while no client is
   connected; it happens when one connects. Turns run by scheduled tasks report but do not wake.
+  A sub-session you stop or archive yourself does not wake the parent either: the report notes it and
+  the parent sees it on your next message. A failed or interrupted turn's report carries its error.
 - **Detach as a standalone session** (session menu or the "Started from …" bar at the top of a
   sub-session) cuts the link.
 - **Subagents** started by a harness itself (for example Codex's agents) are not sub-sessions; they show

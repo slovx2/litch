@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  outsideLitch,
   SESSION_TOOL_LIMITS,
   SESSION_TOOLS,
   sessionProposalRules,
@@ -74,4 +75,24 @@ test('RULES-003：给原生 codex 的约束：命名空间说明不超过 1024 �
   }
   assert.notEqual(FULL.split('. ')[0], PLAIN.split('. ')[0])
   assert.equal(SESSION_TOOL_LIMITS.proactivePerTurn, 3)
+})
+
+test('RULES-004：不在 Litch 里的兜底：三份规则各有一次，放在最后，命名空间说明也提一句；调不通（不支持这个命名空间、没有这个工具）就不再调 litch_*，有收尾的那份写明收尾也不调', () => {
+  const full = outsideLitch(true)
+  assert.match(full, /Unsupported dynamic tool namespace/)
+  assert.match(full, /does not exist/)
+  assert.match(full, /do not call any litch_\* tool in this conversation, wrap_up included,/)
+  assert.doesNotMatch(outsideLitch(false), /wrap_up/)
+  for (const [wrapUp, cards] of [
+    [true, true],
+    [false, true],
+    [true, false],
+  ] as const) {
+    const spec = sessionTools(wrapUp, cards)
+    const rules = spec.instructions as string
+    const fallback = outsideLitch(wrapUp && cards)
+    assert.equal(rules.split(fallback).length - 1, 1)
+    assert.ok(rules.endsWith(fallback), '放在最后，不打断前面的规矩')
+    assert.match(spec.description, /unsupported namespace or a missing tool, you are not in Litch/)
+  }
 })

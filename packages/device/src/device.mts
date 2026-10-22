@@ -299,6 +299,14 @@ export class DeviceServer {
         this.control?.state?.snapshot.values[taskCardsSettingKey(harness)] !== false,
       log,
     })
+    // 以前删会话时没删它带的动态工具（每个几十 KB）：设备不认识的会话的那一行清一次。
+    // 索引是空的（device.sqlite 刚建、刚换过）时分不出哪些会话还在，留到下次启动
+    const sessionStore = this.sessionTree.store
+    if (sessionStore.chore('pruneThreadTools') && !this.index.empty()) {
+      const dropped = sessionStore.pruneTools((threadId) => this.index.lookup(threadId) !== null)
+      sessionStore.choreDone('pruneThreadTools')
+      if (dropped > 0) log(`清掉了 ${dropped} 个已删会话留下的动态工具`)
+    }
     this.deviceTools.register(CLIENT_TOOL_NAMESPACE.sessions, sessionToolsHandler(this.sessionTree))
     // 子会话的后台任务跑完了：引擎不会接着做的，会话树补一条回报（决 430）
     this.background.onSettled((threadId, tasks) =>
