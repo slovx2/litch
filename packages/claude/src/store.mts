@@ -1221,6 +1221,14 @@ export class SessionStore {
     return rows.map((row: unknown) => this.rowToTurn(row))
   }
 
+  // 父会话下面的子代理线程（工作流的也在内）。主模型用 SendMessage 续跑子代理时按代理 ID 从里面找回子线程
+  subagentThreadIds(parentThreadId: string): string[] {
+    const rows = this.db
+      .prepare("SELECT id FROM threads WHERE forked_from_id = ? AND thread_source = 'subagent'")
+      .all(parentThreadId) as Array<{ id: string }>
+    return rows.map((row) => String(row.id))
+  }
+
   threadSettings(threadId: string): ThreadRuntimeSettings {
     const row = this.db
       .prepare('SELECT settings_json FROM thread_runtime_settings WHERE thread_id=?')

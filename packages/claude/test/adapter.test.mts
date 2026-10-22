@@ -5394,7 +5394,7 @@ test('subagent watchdog terminalizes a runtime that never returns', async () => 
           message.params.turn.id === turnId,
       )
       assert.equal(completed.params.turn.status, 'failed')
-      assert.match(completed.params.turn.error.message, /terminal result within 1 second/)
+      assert.match(completed.params.turn.error.message, /no subagent activity for 1 second/)
       assert.equal(interrupted.length, 1)
       const child = store
         .listThreads({ includeEphemeral: true })
@@ -5485,7 +5485,7 @@ test('workflow watchdog terminalizes a launch that never publishes a result', as
           message.params.turn.id === turnId,
       )
       assert.equal(completed.params.turn.status, 'failed')
-      assert.match(completed.params.turn.error.message, /terminal result within 1 second/)
+      assert.match(completed.params.turn.error.message, /no subagent activity for 1 second/)
       assert.equal(interrupted.length, 1)
       assert.equal(
         messages.some(

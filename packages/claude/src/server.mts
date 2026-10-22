@@ -248,9 +248,10 @@ import { parseWorkflowCommand } from './workflow-command.mjs'
 import { maybeCreateThreadWorktree } from './worktree.mjs'
 
 // A missing Claude Task result must not keep Codex cc in its working state
-// forever. This is deliberately a long, configurable watchdog for the whole
-// subagent phase; it is not the short journal-drain grace period used when a
-// terminal notification has already arrived.
+// forever. 看门狗按“多久没有子代理活动”算，不按子代理阶段的总时长：派出、续跑子代理，
+// 子代理的条目、增量、CLI 的 task_progress 都重新计时；回合停在等人回答时不算。
+// It is not the short journal-drain grace period used when a terminal
+// notification has already arrived.
 const DEFAULT_SUBAGENT_WATCHDOG_MS = 30 * 60 * 1000
 const MIN_SUBAGENT_WATCHDOG_MS = 100
 
@@ -299,7 +300,15 @@ interface ActiveSubagentState {
   turn: TurnRecord
   contexts: Map<string, SubagentContext>
   active: Set<string>
+  // 主模型用 SendMessage 续跑的子代理：当初派出它的 Agent 调用 ID → 子线程上新开的回合
+  resumed: Map<string, ResumedSubagent>
 }
+
+// 被主模型续跑的子代理在子线程上新开的回合
+type ResumedSubagent = Pick<
+  SubagentContext,
+  'childThreadId' | 'childTurnId' | 'prompt' | 'projection'
+>
 
 interface PeerFeatures {
   // Codex cc 26.818.61809 only accepts started/interacted/interrupted in the
@@ -4150,12 +4159,15 @@ export class CodexClaudeAppServer {
     // CodexProxyRuntime consumes it as the resume id. In mock mode the
     // mock runtime handles everything regardless of model id — bypass the
     // codex-proxy override so unit tests stay deterministic.
-    this.subagentStateByTurn.set(turn.id, {
-      thread,
-      turn,
+    // 续跑的子代理：派出它的 Agent 调用 ID → 上下文；SendMessage 的调用 ID → 前者
+    const resumedSubagents = new Map<string, ResumedSubagent>()
+    const resumedBySend = new Map<string, string>()
+    const closureSubagents = {
       contexts: subagentContexts,
       active: activeSubagents,
-    })
+      resumed: resumedSubagents,
+    }
+    this.subagentStateByTurn.set(turn.id, { thread, turn, ...closureSubagents })
     let acceptRuntimeEvents = true
     let watchdogTimer: NodeJS.Timeout | null = null
     let resolveWatchdog: (() => void) | null = null
@@ -4166,31 +4178,44 @@ export class CodexClaudeAppServer {
             resolveWatchdog = resolve
           })
         : null
+    // 最近一次子代理活动的时刻（毫秒）。计时器不随每次活动重设，到点时再看离最近一次活动够不够时限
+    let subagentActiveAt = Date.now()
+    const subagentsRunning = (): boolean =>
+      activeSubagents.size > 0 || resumedSubagents.size > 0 || workflowInFlight
     const disarmWatchdog = (): void => {
       if (watchdogTimer) clearTimeout(watchdogTimer)
       watchdogTimer = null
     }
-    const armWatchdog = (): void => {
-      if (
-        !watchdogPromise ||
-        watchdogTimer ||
-        !acceptRuntimeEvents ||
-        (activeSubagents.size === 0 && !workflowInFlight)
-      )
-        return
+    const armWatchdog = (delayMs = watchdogTimeoutMs): void => {
+      if (!watchdogPromise || watchdogTimer || !acceptRuntimeEvents || !subagentsRunning()) return
       watchdogTimer = setTimeout(() => {
         watchdogTimer = null
-        // 回合停在那里等人确认不算子代理没有回音：接着等，重新计时。
+        if (!acceptRuntimeEvents || !subagentsRunning()) return
+        // 回合停在那里等人回答不算子代理没有回音：接着等，答完了从答完的那一刻重新计时。
         if (this.pendingInteractions.has(thread.id)) {
           armWatchdog()
+          return
+        }
+        const quietSince = Math.max(
+          subagentActiveAt,
+          this.pendingInteractions.finishedAt(thread.id),
+        )
+        const left = quietSince + watchdogTimeoutMs - Date.now()
+        if (left > 0) {
+          armWatchdog(left)
           return
         }
         // Flip this before resolving the race so an already-buffered SDK event
         // cannot create a fresh child after the watchdog has decided to fail.
         acceptRuntimeEvents = false
         resolveWatchdog?.()
-      }, watchdogTimeoutMs)
+      }, delayMs)
       watchdogTimer.unref()
+    }
+    // 子代理有动静：重新计时（还没在计时的开始计时）
+    const subagentActivity = (): void => {
+      subagentActiveAt = Date.now()
+      armWatchdog()
     }
     // 每来一个运行时事件都要问一遍，流式的每条增量也是：只问状态，不把整个回合读出来。
     const turnIsActive = (): boolean =>
@@ -4467,21 +4492,61 @@ export class CodexClaudeAppServer {
             mcpServers.names = event.names
             return
           }
+          if (event.type === 'subagent_activity') {
+            if (subagentsRunning()) subagentActivity()
+            return
+          }
+          if (event.type === 'subagent_resumed') {
+            const ctx = this.resumeSubagentChild(peer, thread, event, mcpServers)
+            if (!ctx) return
+            resumedSubagents.set(ctx.agentToolUseId, ctx.context)
+            resumedBySend.set(event.toolUseId, ctx.agentToolUseId)
+            subagentActivity()
+            return
+          }
+          if (event.type === 'subagent_resume_finished') {
+            const agentToolUseId = resumedBySend.get(event.toolUseId)
+            const ctx = agentToolUseId ? resumedSubagents.get(agentToolUseId) : undefined
+            if (!agentToolUseId || !ctx) return
+            resumedBySend.delete(event.toolUseId)
+            resumedSubagents.delete(agentToolUseId)
+            const failure = event.status === 'failed' ? subagentFailure(event.summary) : null
+            this.completeSubagentChildTurn(
+              peer,
+              ctx,
+              event.status === 'completed' ? event.summary : '',
+              event.status,
+              failure ? { message: failure } : null,
+            )
+            const childThread = this.store.getThread(ctx.childThreadId)
+            if (childThread) {
+              childThread.updatedAt = nowSeconds()
+              this.store.upsertThread(childThread)
+            }
+            if (!subagentsRunning()) disarmWatchdog()
+            return
+          }
           if (event.type === 'subagent_backgrounded') {
             if (!activeSubagents.has(event.toolUseId)) return
+            subagentActivity()
             backgroundSubagents.add(event.toolUseId)
             const ctx = subagentContexts.get(event.toolUseId)
             if (ctx) this.saveSubagentId(ctx.childThreadId, event.agentId)
             return
           }
           if (event.type === 'subagent_event') {
+            const ctx =
+              subagentContexts.get(event.agentToolUseId) ??
+              resumedSubagents.get(event.agentToolUseId)
+            if (!ctx) return
+            subagentActivity()
             // 动态工具由原始回调生成生命周期，不再按子代理的工具调用重复投影。
             if (
               event.event.type === 'tool_use' &&
               event.event.toolName.startsWith('mcp__codex_harness_adapter')
             )
               return
-            subagentContexts.get(event.agentToolUseId)?.projection?.handle(event.event)
+            ctx.projection?.handle(event.event)
             return
           }
           if (activeSubagents.size > backgroundSubagents.size) {
@@ -4574,15 +4639,17 @@ export class CodexClaudeAppServer {
               codexSessionId: null,
             }
             this.store.upsertThread(childThread)
-            // 子代理在父会话的 CLI 里跑，权限档就是父会话的：快照跟着记到子线程上（报给客户端的也一致）
+            // 子代理在父会话的 CLI 里跑，权限档就是父会话的：快照跟着记到子线程上（报给客户端的也一致）。
+            // 派出它的 Agent 调用 ID 也记上：主模型以后用 SendMessage 续跑它时，它的消息还挂在这次调用下面
             const parentProfile = this.store.threadSettings(thread.id)
+            const childSettings = this.store.threadSettings(childThreadId)
+            childSettings.claudeAgentToolUseId = event.toolUseId
             if (parentProfile.permissionProfile) {
-              const childSettings = this.store.threadSettings(childThreadId)
               childSettings.permissionProfile = parentProfile.permissionProfile
               if (parentProfile.sandboxPolicy)
                 childSettings.sandboxPolicy = parentProfile.sandboxPolicy
-              this.store.saveThreadSettings(childThreadId, childSettings)
             }
+            this.store.saveThreadSettings(childThreadId, childSettings)
             // Child notifications must follow the current parent peer. This
             // matters after unix-daemon reconnects, when the old peer is gone
             // before the child publishes its response.
@@ -4745,7 +4812,7 @@ export class CodexClaudeAppServer {
             itemIds.set(event.toolUseId, waitId)
             subagentContexts.set(event.toolUseId, subagentContext)
             activeSubagents.add(event.toolUseId)
-            armWatchdog()
+            subagentActivity()
             return
           }
           if (event.type === 'tool_result' && activeSubagents.has(event.toolUseId)) {
@@ -4926,7 +4993,7 @@ export class CodexClaudeAppServer {
             activeSubagents.delete(event.toolUseId)
             backgroundSubagents.delete(event.toolUseId)
             subagentContexts.delete(event.toolUseId)
-            if (activeSubagents.size === 0 && !workflowInFlight) disarmWatchdog()
+            if (!subagentsRunning()) disarmWatchdog()
             return
           }
           if (event.type === 'plan_text') {
@@ -5025,7 +5092,7 @@ export class CodexClaudeAppServer {
             if (isWorkflowToolName(event.toolName)) {
               workflowLaunchToolUseIds.add(event.toolUseId)
               workflowInFlight = true
-              armWatchdog()
+              subagentActivity()
             }
             // Defense in depth against duplicate tool_use events for the same
             // tool_use_id. Claude SDK has been known to emit a block_start
@@ -5087,7 +5154,7 @@ export class CodexClaudeAppServer {
           if (event.type === 'tool_result') {
             if (workflowLaunchToolUseIds.delete(event.toolUseId)) {
               workflowInFlight = workflowLaunchToolUseIds.size > 0
-              if (activeSubagents.size === 0 && !workflowInFlight) disarmWatchdog()
+              if (!subagentsRunning()) disarmWatchdog()
             }
             const itemId = itemIds.get(event.toolUseId)
             if (!itemId) return
@@ -5497,17 +5564,10 @@ export class CodexClaudeAppServer {
     if (outcome.kind === 'timeout') {
       const timeoutSeconds = Math.ceil(watchdogTimeoutMs / 1000)
       const timeoutUnit = timeoutSeconds === 1 ? 'second' : 'seconds'
-      const message = `Subagent did not publish a terminal result within ${timeoutSeconds} ${timeoutUnit}.`
+      const message = `Subagent timed out: no subagent activity for ${timeoutSeconds} ${timeoutUnit}.`
       if (this.store.turnStatus(turn.id) === 'inProgress') {
         completeMessage()
-        this.finalizeOrphanedSubagents(
-          peer,
-          thread,
-          turn,
-          subagentContexts,
-          activeSubagents,
-          message,
-        )
+        this.finalizeOrphanedSubagents(peer, thread, turn, closureSubagents, message)
         this.subagentStateByTurn.delete(turn.id)
         // 原生中断包含有界强制终止；必须等 CLI 停止后才能释放用户审批。
         await this.runtime.interrupt(thread.id)
@@ -5517,13 +5577,13 @@ export class CodexClaudeAppServer {
     if (outcome.kind === 'rejected') {
       if (this.store.turnStatus(turn.id) === 'inProgress') {
         completeMessage()
-        this.finalizeOrphanedSubagents(peer, thread, turn, subagentContexts, activeSubagents)
+        this.finalizeOrphanedSubagents(peer, thread, turn, closureSubagents)
       }
       this.subagentStateByTurn.delete(turn.id)
       throw outcome.error
     }
     if (this.store.turnStatus(turn.id) === 'inProgress') {
-      this.finalizeOrphanedSubagents(peer, thread, turn, subagentContexts, activeSubagents)
+      this.finalizeOrphanedSubagents(peer, thread, turn, closureSubagents)
     }
     this.subagentStateByTurn.delete(turn.id)
     // 回合结束前这几处只问状态，不把整个回合读出来
@@ -5628,9 +5688,80 @@ export class CodexClaudeAppServer {
     })
   }
 
+  /**
+   * 主模型用 SendMessage 续跑了这个会话的一个子代理：在它的子线程上新开一个回合（交给它的话是用户消息），
+   * 续跑的过程投影进这个回合。找不到子线程（不是这个会话派出的、派出时还没记调用 ID）时返回 null，不投影
+   */
+  private resumeSubagentChild(
+    peer: RpcPeer,
+    thread: ThreadRecord,
+    event: Extract<RuntimeEvent, { type: 'subagent_resumed' }>,
+    mcpServers: { names: string[] },
+  ): { agentToolUseId: string; context: ResumedSubagent } | null {
+    const childThreadId = this.store
+      .subagentThreadIds(thread.id)
+      .find((id) => this.store.threadSettings(id).claudeAgentId === event.agentId)
+    const childThread = childThreadId ? this.store.getThread(childThreadId) : null
+    const agentToolUseId = childThreadId
+      ? this.store.threadSettings(childThreadId).claudeAgentToolUseId
+      : undefined
+    if (!childThread || !agentToolUseId) {
+      debugLog('subagent.resume.unknown', { threadId: thread.id, agentId: event.agentId })
+      return null
+    }
+    for (const subscriber of this.recipients(peer, { threadId: thread.id }))
+      if (this.isConnected(subscriber)) this.subscribers.add(childThread.id, subscriber)
+    const prompt: ThreadItem = {
+      type: 'userMessage',
+      id: newId(),
+      content: [{ type: 'text', text: event.message, text_elements: [] }],
+    }
+    const childTurn: TurnRecord = {
+      id: newId(),
+      threadId: childThread.id,
+      status: 'inProgress',
+      startedAt: nowSeconds(),
+      completedAt: null,
+      durationMs: null,
+      items: [prompt],
+      diff: '',
+      error: null,
+    }
+    this.store.upsertTurn(childTurn)
+    this.setThreadStatus(peer, childThread.id, { type: 'active', activeFlags: [] })
+    this.notify(peer, {
+      method: 'turn/started',
+      params: { threadId: childThread.id, turn: this.toLifecycleTurn(childTurn) },
+    })
+    this.emitItemLifecycle(peer, childThread.id, childTurn.id, prompt)
+    debugLog('subagent.resumed', {
+      threadId: thread.id,
+      childThreadId: childThread.id,
+      childTurnId: childTurn.id,
+    })
+    return {
+      agentToolUseId,
+      context: {
+        childThreadId: childThread.id,
+        childTurnId: childTurn.id,
+        prompt: event.message,
+        projection: new SubagentProjection(
+          {
+            appendItem: (item) => void this.store.appendItem(childTurn.id, item),
+            updateItem: (itemId, update) => this.store.updateItem(childTurn.id, itemId, update),
+            notify: (method, params) => this.notify(peer, { method, params }),
+            toolItem: (toolEvent) => this.toolUseToItem(toolEvent, thread.cwd, mcpServers.names),
+          },
+          childThread.id,
+          childTurn.id,
+        ),
+      },
+    }
+  }
+
   private completeSubagentChildTurn(
     peer: RpcPeer,
-    context: SubagentContext,
+    context: ResumedSubagent,
     resultText: string,
     status: 'completed' | 'failed' | 'interrupted',
     error: unknown | null,
@@ -5837,11 +5968,23 @@ export class CodexClaudeAppServer {
     peer: RpcPeer,
     thread: ThreadRecord,
     turn: TurnRecord,
-    contexts: Map<string, SubagentContext>,
-    active: Set<string>,
+    subagents: Pick<ActiveSubagentState, 'contexts' | 'active' | 'resumed'>,
     failureMessage = 'Subagent ended without a terminal task result.',
     stopped = false,
   ): void {
+    const { contexts, active } = subagents
+    // 续跑的子代理只有子线程上的回合，父会话里没有为它开的条目
+    for (const [agentToolUseId, context] of Array.from(subagents.resumed)) {
+      subagents.resumed.delete(agentToolUseId)
+      const message = stopped ? null : failureMessage
+      this.completeSubagentChildTurn(
+        peer,
+        context,
+        message ?? '',
+        stopped ? 'interrupted' : 'failed',
+        message ? { message } : null,
+      )
+    }
     for (const toolUseId of Array.from(active)) {
       const context = contexts.get(toolUseId)
       active.delete(toolUseId)
@@ -6039,8 +6182,7 @@ export class CodexClaudeAppServer {
             peer,
             subagents.thread,
             subagents.turn,
-            subagents.contexts,
-            subagents.active,
+            subagents,
             undefined,
             true,
           )
@@ -7336,14 +7478,7 @@ export class CodexClaudeAppServer {
         send: () => {},
         close: () => {},
       }
-      this.finalizeOrphanedSubagents(
-        peer,
-        state.thread,
-        turn,
-        state.contexts,
-        state.active,
-        message,
-      )
+      this.finalizeOrphanedSubagents(peer, state.thread, turn, state, message)
       this.subagentStateByTurn.delete(turnId)
     }
   }

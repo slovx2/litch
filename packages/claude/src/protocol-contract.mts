@@ -27,6 +27,8 @@ export interface ThreadRuntimeSettings {
   gitInfo?: { sha: string | null; branch: string | null; originUrl: string | null } | null
   // 子代理线程：CLI 给这个子代理的 ID，追问时按它寻址。
   claudeAgentId?: string
+  // 子代理线程：派出它的那次 Agent 调用的 ID。CLI 续跑子代理（SendMessage）时，子代理的消息照旧挂在这次调用下面
+  claudeAgentToolUseId?: string
   // 分叉出来的会话：上一次放在用户消息前面交给模型的那份开发者指令，和带着它的回合
   // （server.mts 的 instructionsInjected）。上下文压缩过就去掉
   injectedInstructions?: { text: string; turnId: string }

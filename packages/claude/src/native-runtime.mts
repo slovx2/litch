@@ -257,6 +257,12 @@ interface PendingTurn {
   backgroundAgents: Map<string, string>
   // 各子代理最近一段正文，后台子代理结束时作为它的结果。
   subagentText: Map<string, string>
+  // 主会话这一回合调的 SendMessage：调用 ID → 交给子代理的话。CLI 续跑子代理时 task_started 的 tool_use_id 是其中之一
+  sendMessages: Map<string, string>
+  // 这一回合里被 SendMessage 续跑、还没结束的子代理：agentId → 那次 SendMessage 的调用 ID
+  resumedAgents: Map<string, string>
+  // 上次报子代理流式增量的时刻（毫秒）：增量很密，隔一秒报一次就够看门狗用
+  subagentStreamAt: number
   // 主会话最近一条 API 出错的助手消息上 CLI 归的类（SDKAssistantMessageError），回合失败时拼 codexErrorInfo
   apiErrorCategory: string | null
 }
@@ -472,6 +478,9 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       planHandoff: false,
       backgroundAgents: new Map(),
       subagentText: new Map(),
+      sendMessages: new Map(),
+      resumedAgents: new Map(),
+      subagentStreamAt: 0,
       apiErrorCategory: null,
     }
     this.turns.set(context.turnId, pending)
@@ -1930,6 +1939,49 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       if (message.state === 'idle') await this.finishDeferredResult(pending)
       return
     }
+    // 主模型用 SendMessage 续跑已结束的子代理：CLI 以同一个代理 ID 再起一个 local_agent 任务，
+    // tool_use_id 是那次 SendMessage；跑的过程照旧是挂在当初 Agent 调用下面的子代理消息，结束时发 task_notification
+    if (
+      subtype === 'task_started' &&
+      message.task_type === 'local_agent' &&
+      typeof message.task_id === 'string' &&
+      typeof message.tool_use_id === 'string' &&
+      pending.sendMessages?.has(message.tool_use_id)
+    ) {
+      ;(pending.resumedAgents ??= new Map()).set(message.task_id, message.tool_use_id)
+      await pending.handlers.onEvent({
+        type: 'subagent_resumed',
+        toolUseId: message.tool_use_id,
+        agentId: message.task_id,
+        message: pending.sendMessages?.get(message.tool_use_id) ?? '',
+      })
+      return
+    }
+    if (subtype === 'task_progress') {
+      await pending.handlers.onEvent({ type: 'subagent_activity' })
+      return
+    }
+    if (
+      subtype === 'task_notification' &&
+      typeof message.task_id === 'string' &&
+      typeof message.tool_use_id === 'string' &&
+      pending.resumedAgents?.get(message.task_id) === message.tool_use_id
+    ) {
+      pending.resumedAgents?.delete(message.task_id)
+      await pending.handlers.onEvent({
+        type: 'subagent_resume_finished',
+        toolUseId: String(message.tool_use_id),
+        agentId: message.task_id,
+        status:
+          message.status === 'completed'
+            ? 'completed'
+            : message.status === 'killed' || message.status === 'stopped'
+              ? 'interrupted'
+              : 'failed',
+        summary: String(message.summary ?? '').trim(),
+      })
+      return
+    }
     if (subtype === 'task_notification' && typeof message.task_id === 'string') {
       const agentToolUseId = pending.backgroundAgents?.get(message.task_id)
       if (agentToolUseId) {
@@ -2218,6 +2270,10 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       if (id) await this.goalUsage(pending, { id, usage: event.usage })
       await this.contextUsage(pending, source, id, event.usage)
     }
+    if (message.parent_tool_use_id && Date.now() - (pending.subagentStreamAt ?? 0) >= 1000) {
+      pending.subagentStreamAt = Date.now()
+      await pending.handlers.onEvent({ type: 'subagent_activity' })
+    }
     if (message.parent_tool_use_id || pending.activeSubagents.size > 0) return
     if (eventType === 'message_start') {
       const inner = event.message as Record<string, unknown> | undefined
@@ -2346,6 +2402,8 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         if (!id) continue
         if (name === 'Bash')
           pending.session?.shells.bashCommand.set(id, String(input.command ?? ''))
+        if (!nestedMessage && name === 'SendMessage')
+          (pending.sendMessages ??= new Map()).set(id, String(input.message ?? input.content ?? ''))
         // Suppress nested tool uses while a subagent is in flight.
         const parentSubagent = nestedMessage || pending.activeSubagents.size > 0
         if (isSubagentTool(name)) {
