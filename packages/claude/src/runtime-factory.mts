@@ -4,6 +4,7 @@ import { MockRuntime } from './mock-runtime.mjs'
 import type { ContextInjection } from './native-context.mjs'
 import { NativeClaudeRuntime } from './native-runtime.mjs'
 import { ProtocolError } from './protocol-contract.mjs'
+import type { NativeAccountUsage } from './rate-limits.mjs'
 import {
   type RuntimeBackendType,
   type RuntimeConfig,
@@ -100,6 +101,13 @@ class SelectableRuntime implements ClaudeRuntime {
     const runtime = this.runtimeFor(this.config.type)
     if (!runtime.supportedModels) throw new Error('当前运行时不提供原生模型目录')
     return runtime.supportedModels()
+  }
+
+  // 运行时问不了额度（模拟、HTTP 桥）就当账号没有额度
+  async accountUsage(): Promise<NativeAccountUsage> {
+    const runtime = this.runtimeFor(this.config.type)
+    if (!runtime.accountUsage) return { rate_limits_available: false, rate_limits: null }
+    return runtime.accountUsage()
   }
 
   async appendContext(context: ContextInjection): Promise<{ boundary: string }> {

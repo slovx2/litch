@@ -45,7 +45,11 @@ explain it:
   and everything after it; files are only restored where the harness supports it, the confirmation says
   which).
 - **Composer**: `/` for commands and skills, `@` to mention a file, attach images and files (remote
-  devices: text files only), context meter with Compact context.
+  devices: text files only), context meter with Compact context. In an existing session, clicking the
+  meter also shows Plan usage when the harness is signed in with a subscription (Claude Code with an
+  Anthropic subscription, Codex with ChatGPT): the 5-hour and weekly windows, per-model weekly limits
+  when there are any, how much of each is used and when it resets. API keys and third-party providers
+  have no plan usage, and the section is not shown.
 - **Side panel**: Files (tree, search, read-only viewer, add a file to the conversation), Diff (all /
   staged / unstaged, stage, unstage, discard, comment on lines; comments go with the next message),
   Browser, Suggested tasks, Background, Subagents.

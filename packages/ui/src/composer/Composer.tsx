@@ -671,7 +671,11 @@ export function Composer(props: ComposerProps) {
             onChange={props.onSettings}
           />
           <span className="grow" />
-          <ContextMeter usage={props.usage ?? null} compact={props.compact} />
+          <ContextMeter
+            usage={props.usage ?? null}
+            compact={props.compact}
+            limits={props.harness ? { deviceId, harness: props.harness } : undefined}
+          />
           {mode === 'stop' ? (
             <button
               type="button"

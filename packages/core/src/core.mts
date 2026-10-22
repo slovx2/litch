@@ -1351,6 +1351,8 @@ export function createCore(options: CoreOptions): Core {
       if (topic.kind === 'install') return device.install.open(sink)
       // harness 详情设置：设备不支持时 supported 是 false，照样成立
       if (topic.kind === 'harnessConfig') return device.harnessConfig.open(topic.harness, sink)
+      // 账号额度：没有额度、对面不认识时 rows 是空的，照样成立
+      if (topic.kind === 'accountLimits') return device.accountLimits.open(topic.harness, sink)
       // 设备还没连上时订阅照样成立，连上之后才有快照
       return device.openSession(topic.sessionId, sink)
     },

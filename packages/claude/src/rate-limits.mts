@@ -2,8 +2,15 @@ import { createHash } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
-import type { SDKRateLimitInfo } from '@anthropic-ai/claude-agent-sdk'
+import type { SDKControlGetUsageResponse, SDKRateLimitInfo } from '@anthropic-ai/claude-agent-sdk'
 import { claudeSettingSources } from './runtime-config.mjs'
+
+// CLI 的 get_usage 控制请求（/usage 背后的数据）。用钥匙串或凭据文件登录的订阅账号才有额度，
+// 用 API key、第三方 provider、只带推理权限的令牌时 rate_limits_available 是 false
+export type NativeAccountUsage = Pick<
+  SDKControlGetUsageResponse,
+  'rate_limits_available' | 'rate_limits'
+>
 
 const identityKeys =
   /^(ANTHROPIC_|CLAUDE_CODE_OAUTH_TOKEN$|CLAUDE_CODE_USE_|AWS_|GOOGLE_|AZURE_|CLOUD_ML_)/
@@ -126,10 +133,29 @@ function validUtilization(value: unknown): value is number {
   )
 }
 
+/** 一个窗口的观测。比例是 0–1 的小数，重置时间是秒级时间戳；at 越大越新 */
+interface Observation {
+  utilization: number
+  resetsAt: number | null
+  at: number
+  /** 按模型分的窗口给人看的名字 */
+  name?: string
+}
+
+/** get_usage 里取哪几个固定窗口（seven_day_oauth_apps、extra_usage 不是用量窗口，不取） */
+const fetchedTypes = ['five_hour', 'seven_day', 'seven_day_opus', 'seven_day_sonnet'] as const
+const windowNames: Record<string, string> = { seven_day_opus: 'Opus', seven_day_sonnet: 'Sonnet' }
+
+type UsageWindow = { utilization: number | null; resets_at: string | null } | null | undefined
+
 export class AccountRateLimits {
   private scope: string | null = null
-  // SDK 的原始比例和状态单独保存，不从 token 数或费用估算配额。
-  private observed = new Map<string, SDKRateLimitInfo>()
+  // SDK 的原始比例单独保存，不从 token 数或费用估算配额。
+  // observed 是回合里 CLI 报的（rate_limit_event），只认显式凭据，凭据一变就清空；
+  // fetched 是 get_usage 读到的整份，每读一次整个换掉。两边都有的窗口取新的那份
+  private observed = new Map<string, Observation>()
+  private fetched = new Map<string, Observation>()
+  private tick = 0
 
   private synchronize(): string | null {
     const scope = rateLimitCredentialScope(process.cwd())
@@ -140,10 +166,18 @@ export class AccountRateLimits {
     return scope
   }
 
+  /** 和 before 比，变了的快照 */
+  private changes(before: Record<string, RateLimitSnapshot>): RateLimitSnapshot[] {
+    return Object.entries(this.read().rateLimitsByLimitId)
+      .filter(([id, snapshot]) => JSON.stringify(before[id]) !== JSON.stringify(snapshot))
+      .map(([, snapshot]) => snapshot)
+  }
+
   record(scope: string | null, info: NativeRateLimitInfo): RateLimitSnapshot[] {
     const current = this.synchronize()
     if (!scope || scope !== current) return []
     const before = this.read().rateLimitsByLimitId
+    const at = ++this.tick
     if (
       info.unifiedWindows &&
       typeof info.unifiedWindows === 'object' &&
@@ -157,17 +191,51 @@ export class AccountRateLimits {
           !Array.isArray(window) &&
           validUtilization(window.utilization)
         )
-          this.observed.set(type, { ...window, status: info.status })
+          this.observed.set(type, {
+            utilization: window.utilization,
+            resetsAt: window.resetsAt ?? null,
+            at,
+          })
     if (
       info.rateLimitType &&
       limitTypes.has(info.rateLimitType) &&
       validUtilization(info.utilization)
     )
-      this.observed.set(info.rateLimitType, { ...info })
-    const after = this.read()
-    return Object.entries(after.rateLimitsByLimitId)
-      .filter(([id, snapshot]) => JSON.stringify(before[id]) !== JSON.stringify(snapshot))
-      .map(([, snapshot]) => snapshot)
+      this.observed.set(info.rateLimitType, {
+        utilization: info.utilization,
+        resetsAt: info.resetsAt ?? null,
+        at,
+      })
+    return this.changes(before)
+  }
+
+  /** 换上 get_usage 读到的一整份。账号没有额度（API key 等）时清掉上次读到的 */
+  replace(usage: NativeAccountUsage): RateLimitSnapshot[] {
+    this.synchronize()
+    const before = this.read().rateLimitsByLimitId
+    this.fetched.clear()
+    const limits = usage.rate_limits_available ? usage.rate_limits : null
+    const at = ++this.tick
+    const put = (type: string, window: UsageWindow, name?: string) => {
+      // get_usage 给的是 0–100 的百分数，重置时间是 ISO 字符串
+      if (!window || typeof window.utilization !== 'number') return
+      const utilization = window.utilization / 100
+      if (!validUtilization(utilization)) return
+      const resets = window.resets_at ? Date.parse(window.resets_at) : Number.NaN
+      this.fetched.set(type, {
+        utilization,
+        resetsAt: Number.isFinite(resets) ? Math.floor(resets / 1000) : null,
+        at,
+        ...(name ? { name } : {}),
+      })
+    }
+    if (limits) {
+      for (const type of fetchedTypes) put(type, limits[type])
+      for (const model of Array.isArray(limits.model_scoped) ? limits.model_scoped : [])
+        if (typeof model?.display_name === 'string' && model.display_name)
+          put(`model:${model.display_name}`, model, model.display_name)
+    }
+    return this.changes(before)
   }
 
   read(): {
@@ -177,27 +245,30 @@ export class AccountRateLimits {
     this.synchronize()
     const rateLimits = emptySnapshot()
     const rateLimitsByLimitId: Record<string, RateLimitSnapshot> = { 'claude-code': rateLimits }
-    for (const [type, info] of this.observed) {
-      if (
-        typeof info.utilization !== 'number' ||
-        !Number.isFinite(info.utilization) ||
-        info.utilization < 0
-      )
-        continue
+    const merged = new Map(this.fetched)
+    for (const [type, entry] of this.observed)
+      if ((merged.get(type)?.at ?? -1) < entry.at) merged.set(type, entry)
+    for (const [type, info] of merged) {
       // 固定协议快照的 JSON schema 要求 int32；四舍五入，不把超过 100% 的真实值钳为 100。
       const usedPercent = Math.round(info.utilization * 100)
-      if (usedPercent > 2147483647) continue
       const window: RateLimitWindow = {
         usedPercent,
         windowDurationMins:
-          type === 'five_hour' ? 300 : type.startsWith('seven_day') ? 10080 : null,
+          type === 'five_hour'
+            ? 300
+            : type.startsWith('seven_day') || type.startsWith('model:')
+              ? 10080
+              : null,
         resetsAt:
-          Number.isSafeInteger(info.resetsAt) && (info.resetsAt ?? -1) >= 0 ? info.resetsAt! : null,
+          Number.isSafeInteger(info.resetsAt) && (info.resetsAt ?? -1) >= 0 ? info.resetsAt : null,
       }
       if (type === 'five_hour') rateLimits.primary = window
       else if (type === 'seven_day') rateLimits.secondary = window
       else {
-        const snapshot = emptySnapshot(`claude-code:${type}`, `Claude Code ${type}`)
+        const snapshot = emptySnapshot(
+          `claude-code:${type}`,
+          info.name ?? windowNames[type] ?? `Claude Code ${type}`,
+        )
         snapshot.primary = window
         rateLimitsByLimitId[snapshot.limitId] = snapshot
       }

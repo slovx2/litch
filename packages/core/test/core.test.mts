@@ -218,8 +218,8 @@ test('通知按白名单变成侧栏的增量；不认识的通知只记一次�
   server.notify('thread/name/updated', { threadId: 'a', threadName: '改了名' })
   server.notify('thread/project/updated', { threadId: 'n', projectId: null })
   server.notify('thread/archived', { threadId: 'n' })
-  server.notify('account/rateLimits/updated', { threadId: 'a' })
-  server.notify('account/rateLimits/updated', { threadId: 'a' })
+  server.notify('account/updated', { threadId: 'a' })
+  server.notify('account/updated', { threadId: 'a' })
   await settle()
 
   const ops = sidebar.ops.map((op) =>
@@ -237,7 +237,7 @@ test('通知按白名单变成侧栏的增量；不认识的通知只记一次�
     ['session.remove', 'n'],
   ])
   assert.equal(listed(), before, '通知不该引起重新列目录')
-  assert.equal(logs.filter((line) => line.includes('account/rateLimits/updated')).length, 1)
+  assert.equal(logs.filter((line) => line.includes('account/updated')).length, 1)
 
   // 目录里没有的会话来了状态通知：向对面要它的信息再放进侧栏
   state.threads.push(thread({ id: 'z', cwd: '/tmp', name: '别处开的' }))

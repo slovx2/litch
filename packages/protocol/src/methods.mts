@@ -5,6 +5,7 @@
 import type { BackgroundChangedNotification } from './background-tasks.mjs'
 import type { ClientToolCallParams, ClientToolCallResponse } from './client-tools.mjs'
 import type {
+  AccountRateLimitsUpdatedNotification,
   AgentMessageDeltaNotification,
   CollaborationModeListResponse,
   CommandExecutionOutputDeltaNotification,
@@ -29,6 +30,8 @@ import type {
   FsWatchResponse,
   FuzzyFileSearchParams,
   FuzzyFileSearchResponse,
+  GetAccountRateLimitsParams,
+  GetAccountRateLimitsResponse,
   InitializeParams,
   InitializeResponse,
   ItemCompletedNotification,
@@ -305,6 +308,14 @@ export interface ClientRequests {
   /** 往正在进行的回合里插一句话 */
   'turn/steer': { params: TurnSteerParams; result: TurnSteerResponse }
   'model/list': { params: ToHarness<ModelListParams>; result: ModelListResponse }
+  /**
+   * 账号的用量额度（Codex 的 ChatGPT 登录、Claude Code 的订阅登录才有）：主额度的 5 小时、每周两个窗口，
+   * 按模型分的等别的额度在 rateLimitsByLimitId 里。聚合面上要带 `harness`
+   */
+  'account/rateLimits/read': {
+    params: ToHarness<GetAccountRateLimitsParams>
+    result: GetAccountRateLimitsResponse
+  }
   /**
    * 对面现在的配置（合上各层之后的）。客户端只用它算不带设置新建会话时对面会用什么（新建页的默认显示）。
    * cwd 给了就按那个目录看（项目里的配置层也算上）。聚合面上要带 `harness`
@@ -639,6 +650,11 @@ export interface ServerNotifications {
   'thread/settings/updated': ThreadSettingsUpdatedNotification
   /** 这个会话的上下文现在用了多少。回合里每次模型请求之后来一条，载入会话时也会补一条 */
   'thread/tokenUsage/updated': ThreadTokenUsageUpdatedNotification
+  /**
+   * 账号额度变了，只带变了的那一份额度（按 limitId），要并进最近读到的那一份。
+   * 不带会话标识：聚合面转发时加上 `harness` 说是哪个 harness 的
+   */
+  'account/rateLimits/updated': AccountRateLimitsUpdatedNotification & { harness?: string }
   error: ErrorNotification
   /** 一个待答复的请求有了结果：自己答的、别的客户端答的、或者回合结束作废了 */
   'serverRequest/resolved': ServerRequestResolvedNotification

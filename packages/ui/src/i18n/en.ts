@@ -6,6 +6,7 @@ import { enBimport } from './en-bimport.ts'
 import { enComments } from './en-comments.ts'
 import { enGoal } from './en-goal.ts'
 import { enHconfig } from './en-hconfig.ts'
+import { enLimits } from './en-limits.ts'
 import { enOnboard } from './en-onboard.ts'
 import { enPairing } from './en-pairing.ts'
 import { enPasswords } from './en-passwords.ts'
@@ -31,6 +32,7 @@ export const en: Record<MessageKey, Entry> = {
   ...enBackground,
   ...enSwitches,
   ...enGoal,
+  ...enLimits,
   'title.location': 'Location',
   'workspace.none': 'No project',
 
