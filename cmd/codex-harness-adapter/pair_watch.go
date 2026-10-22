@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -32,6 +33,16 @@ func (s *pairSession) selfCheck(ctx context.Context, start pairStartResponse, pa
 		dir = os.TempDir()
 	}
 	if s.mode == pairModeTailscale {
+		// 本机连自己的 tailnet 地址走回环，到的是系统的 sshd、不经 tailscaled（song-debian 上实测），这时没法在本机自检
+		banner := s.pio.banner(ctx, payload.Host, payload.Port)
+		if !strings.HasPrefix(banner, "SSH-2.0-Tailscale") {
+			if banner == "" {
+				fmt.Fprintf(out, tr("自检：本机连不到 %s:%d，跳过。\n", "Check: this machine cannot reach %s:%d, skipped.\n"), payload.Host, payload.Port)
+			} else {
+				fmt.Fprintf(out, tr("自检：本机连 %s:%d 到的是 %s，不是 Tailscale SSH（连自己的 tailnet 地址不经 tailscaled），没法在本机自检，跳过。\n", "Check: from this machine %s:%d answers as %s, not Tailscale SSH (connections to its own tailnet address bypass tailscaled), so the check cannot run here; skipped.\n"), payload.Host, payload.Port, banner)
+			}
+			return
+		}
 		fmt.Fprintf(out, tr("自检：用临时钥匙连 %s:%d 执行登记命令……\n", "Check: logging in to %s:%d with a throwaway key to run the enrollment command...\n"), payload.Host, payload.Port)
 		check := pairCheck{host: payload.Host, port: payload.Port, user: payload.User, hostKeys: start.HostKeys, command: start.EnrollCommand}
 		if err := pairSelfCheck(ctx, sshPath, dir, check); err != nil {

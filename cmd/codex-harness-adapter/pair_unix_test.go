@@ -135,6 +135,8 @@ type fakePairing struct {
 	old bool
 	// 每次 start 的 mode 参数
 	modes []any
+	// pair 读到的 --host 上的横幅；空的当作 Tailscale SSH
+	banner string
 }
 
 func (f *fakePairing) set(state string, phone map[string]any) {
@@ -275,7 +277,13 @@ func startPairRun(t *testing.T, fake *fakePairing, lookSSH func() (string, error
 	pio := pairIO{
 		stdin: reader, stdout: run.stdout, stderr: run.stderr, env: envOf(nil), lookSSH: lookSSH,
 		tailscaleSSH: func(context.Context) bool { return fake.tailscale },
-		ensure:       func(_ context.Context, target pairTarget, _ io.Writer) error { run.ensured <- target; return nil },
+		banner: func(context.Context, string, int) string {
+			if fake.banner == "" {
+				return "SSH-2.0-Tailscale"
+			}
+			return fake.banner
+		},
+		ensure: func(_ context.Context, target pairTarget, _ io.Writer) error { run.ensured <- target; return nil },
 	}
 	go func() { run.done <- pairMain(ctx, append([]string{"--home", home}, extra...), pio) }()
 	return run
@@ -661,6 +669,20 @@ func TestPairTailscaleSelfCheck(t *testing.T) {
 	run.exit(t)
 	if output := run.stdout.String(); !strings.Contains(output, "打开 https://login.tailscale.com/a/abc123 验证后") {
 		t.Fatalf("没说验证链接：\n%s", output)
+	}
+	// 本机连自己的 tailnet 地址到的是系统的 sshd：跳过，不拿临时钥匙去碰 sshd
+	sshPath, logs = fakeSSH(t, `exit 255`)
+	run = startPairRun(t, &fakePairing{tailscale: true, banner: "SSH-2.0-OpenSSH_10.0p2 Debian-7"}, func() (string, error) { return sshPath, nil }, "--host", "box.tail1.ts.net")
+	eventually(t, "问手机走不走 Tailscale", func() bool { return strings.Contains(run.stdout.String(), "[y/N]") })
+	_, _ = run.stdin.Write([]byte("y\n"))
+	run.polled(t, 1)
+	run.cancel()
+	run.exit(t)
+	if output := run.stdout.String(); !strings.Contains(output, "到的是 SSH-2.0-OpenSSH_10.0p2 Debian-7，不是 Tailscale SSH") {
+		t.Fatalf("没说跳过的原因：\n%s", output)
+	}
+	if _, err := os.Stat(filepath.Join(logs, "args")); !os.IsNotExist(err) {
+		t.Fatal("不该跑 ssh")
 	}
 }
 

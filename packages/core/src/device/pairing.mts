@@ -24,6 +24,7 @@ import {
   DEVICE_PAIR_WAIT,
   type DevicePairPhonesChangedNotification,
   type DevicePairStartResponse,
+  isTailnetHost,
   type PairHostKey,
   type PairMode,
   type PairPayload,
@@ -353,7 +354,17 @@ export function createPairing(host: PairingHost): Pairing {
       .catch((error: unknown) => host.log(`作废配对失败：${String(error)}`))
   }
 
-  /** tailscale 方式的自检：横幅读不到（这台电脑连不到手机要连的地址）就跳过，返回 false */
+  /**
+   * 手机要连的地址上的横幅。本机不读：电脑连自己的 tailnet 地址走的是回环，到的是系统的 sshd、不经 tailscaled，
+   * 读到的不算数（song-debian 上实测），只看设备自报
+   */
+  const bannerOf = (
+    platform: PairingPlatform,
+    at: { host: string; port: number },
+  ): Promise<string | null> =>
+    host.kind === 'local' ? Promise.resolve(null) : platform.banner(at.host, at.port)
+
+  /** tailscale 方式的自检：横幅读不到（这台电脑连不到手机要连的地址，或者是本机）就跳过，返回 false */
   const vetEnroll = async (
     platform: PairingPlatform,
     started: DevicePairStartResponse,
@@ -520,23 +531,28 @@ export function createPairing(host: PairingHost): Pairing {
       }
       // 手机要连的地址：给了就用，否则原配置。本机的原配置要等设备报主机名，这时先不认方式
       const phoneAt = options.address ?? resolved
-      const banner = phoneAt ? await platform.banner(phoneAt.host, phoneAt.port) : null
-      let mode: PairMode | null =
+      const banner = phoneAt ? await bannerOf(platform, phoneAt) : null
+      // 横幅读不到、地址又是 tailnet 的：要看设备自报，先按一次性钥匙建，回来再定
+      const mode: PairMode | null =
         options.mode ??
-        (phoneAt && banner !== null ? pairModeOf(banner, false, phoneAt.host) : null)
-      if (host.kind === 'local' && mode !== 'tailscale' && !(await platform.localSsh())) {
+        (banner !== null
+          ? pairModeOf(banner, false, phoneAt?.host ?? '')
+          : phoneAt && isTailnetHost(phoneAt.host)
+            ? null
+            : 'key')
+      if (host.kind === 'local' && mode === 'key' && !(await platform.localSsh())) {
         throw startFailure('sshOff', '127.0.0.1:22 上没有 SSH 服务')
       }
       let started = await create(mode)
-      // 横幅读不到：设备开着 Tailscale SSH、地址又是 tailnet 的，换成 tailscale 方式重新建
-      if (
-        mode === null &&
-        phoneAt &&
-        pairModeOf(null, tailscale === true, phoneAt.host) === 'tailscale'
-      ) {
-        discard(started.pairId)
-        mode = 'tailscale'
-        started = await create(mode)
+      if (mode === null) {
+        // 设备开着 Tailscale SSH：换成 tailscale 方式重新建
+        if (tailscale === true) {
+          discard(started.pairId)
+          started = await create('tailscale')
+        } else if (host.kind === 'local' && !(await platform.localSsh())) {
+          discard(started.pairId)
+          throw startFailure('sshOff', '127.0.0.1:22 上没有 SSH 服务')
+        }
       }
       pairs.set(started.pairId, {
         pairId: started.pairId,
@@ -572,7 +588,7 @@ export function createPairing(host: PairingHost): Pairing {
     async detect(at, port) {
       const { platform } = host
       if (!platform) return 'key'
-      return pairModeOf(await platform.banner(at, port), tailscale === true, at)
+      return pairModeOf(await bannerOf(platform, { host: at, port }), tailscale === true, at)
     },
 
     async cancel(pairId) {

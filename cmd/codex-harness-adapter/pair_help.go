@@ -15,7 +15,8 @@ const pairHelpZH = `codex-harness-adapter pair [--host 主机] [--port 端口] [
 本机有 ssh 客户端时，出码前先用一次性钥匙连 127.0.0.1 自检一次（不消耗这张码）。
 
 这台机器开着 Tailscale SSH 时会先问手机是不是经 Tailscale 地址连。是的话出 Tailscale 方式的码：tailscaled 不看
-authorized_keys，所以不写一次性钥匙，手机登进来后自己执行登记；自检改成用临时钥匙经 --host 给的地址试一次。
+authorized_keys，所以不写一次性钥匙，手机登进来后自己执行登记；自检改成用临时钥匙经 --host 给的地址试一次
+（本机连自己的 tailnet 地址到的是系统的 sshd、不经 tailscaled，这时跳过）。
 tailnet 里被 ACL 允许的设备不要钥匙就能登录，撤销手机的钥匙拦不住它们。`
 
 const pairHelpEN = `codex-harness-adapter pair [--host HOST] [--port PORT] [--name NAME] [--home DIR]
@@ -37,5 +38,7 @@ cancels and removes the one-time key. With an ssh client on this machine, the on
 
 When this machine runs Tailscale SSH you are first asked whether the phone comes in over its Tailscale address. If so,
 the code uses the Tailscale way: tailscaled ignores authorized_keys, so no one-time key is written and the phone runs
-the enrollment itself after logging in; the check logs in over the --host address with a throwaway key instead.
+the enrollment itself after logging in; the check logs in over the --host address with a throwaway key instead
+(skipped when that address reaches the system sshd from here: connections to the machine's own tailnet address
+bypass tailscaled).
 Any tailnet device the ACL allows can log in without a key, and revoking the phone's key cannot stop them.`

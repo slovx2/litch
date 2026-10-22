@@ -564,16 +564,31 @@ test('设备服务太旧、不认 tailscale 方式：作废它建的配对，报
   assert.deepEqual([pairing.mode, pairing.seed, pairing.tailscaleSsh], ['key', 'c2VlZA', false])
 })
 
-test('本机走 tailscale 方式时不要求开着系统的 SSH 服务', async () => {
-  const w = world({ kind: 'local', sshOn: false, banners: { 'mac.tail1.ts.net:22': TS } })
+test('本机：不读自己 tailnet 地址的横幅（回环到的是系统的 sshd），按设备自报定方式，不要求开着 SSH 服务、跳过自检', async () => {
+  const address = { host: 'mac.tail1.ts.net', port: 22, user: 'song' }
+  const w = world({
+    kind: 'local',
+    sshOn: false,
+    tailscaleSsh: true,
+    banners: { 'mac.tail1.ts.net:22': OPENSSH },
+  })
   w.core.start()
   await settled()
-  const pairing = (
-    (await w.command('pairing.start', {
-      address: { host: 'mac.tail1.ts.net', port: 22, user: 'song' },
-    })) as { pairing: PairingView }
-  ).pairing
+  const pairing = ((await w.command('pairing.start', { address })) as { pairing: PairingView })
+    .pairing
   assert.equal(pairing.mode, 'tailscale')
+  assert.equal(pairing.checked, false)
+  assert.deepEqual(w.calls.banners, [])
   assert.equal(w.calls.localSsh, 0)
-  assert.equal(w.calls.enrollTests[0]?.host, 'mac.tail1.ts.net')
+  assert.deepEqual(w.sent('litch/pair/start'), [{}, { mode: 'tailscale' }])
+  assert.deepEqual(await w.command('pairing.detect', { host: 'mac.tail1.ts.net', port: 22 }), {
+    mode: 'tailscale',
+  })
+  // 设备没开 Tailscale SSH：还是一次性钥匙，这时要系统的 SSH 服务，没开就作废刚建的配对
+  const off = world({ kind: 'local', sshOn: false })
+  off.core.start()
+  await settled()
+  const failure = await failureOf(off.command('pairing.start', { address }))
+  assert.equal(failure.key, 'sshOff')
+  assert.deepEqual(off.sent('litch/pair/cancel'), [{ pairId: 'pair1' }])
 })

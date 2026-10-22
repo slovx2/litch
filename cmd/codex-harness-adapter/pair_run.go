@@ -15,10 +15,12 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -43,6 +45,8 @@ type pairIO struct {
 	lookSSH func() (string, error)
 	// 这台机器开着 Tailscale SSH 没有。测试里换成固定的
 	tailscaleSSH func(ctx context.Context) bool
+	// 读 host:port 的 SSH 横幅（头一行），连不上是空的。测试里换成固定的
+	banner func(ctx context.Context, host string, port int) string
 }
 
 type pairOptions struct {
@@ -60,6 +64,7 @@ func runPair(ctx context.Context, argv []string) error {
 		ensure:       ensurePairDevice,
 		lookSSH:      func() (string, error) { return exec.LookPath("ssh") },
 		tailscaleSSH: func(ctx context.Context) bool { return detectTailscaleSSH(ctx, os.Getenv) },
+		banner:       sshBanner,
 	})
 	if code == 0 {
 		return nil
@@ -314,6 +319,25 @@ func detectTailscaleSSH(ctx context.Context, env func(string) string) bool {
 		RunSSH bool `json:"RunSSH"`
 	}
 	return json.Unmarshal(output, &prefs) == nil && prefs.RunSSH
+}
+
+// sshBanner 只连 TCP、读 SSH 服务的头一行，不登录。最多等 3 秒，连不上、不是 SSH 是空的
+func sshBanner(ctx context.Context, host string, port int) string {
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	connection, err := (&net.Dialer{}).DialContext(ctx, "tcp", net.JoinHostPort(host, strconv.Itoa(port)))
+	if err != nil {
+		return ""
+	}
+	defer connection.Close()
+	deadline, _ := ctx.Deadline()
+	_ = connection.SetReadDeadline(deadline)
+	line, _ := bufio.NewReader(io.LimitReader(connection, 255)).ReadString('\n')
+	line = strings.TrimRight(line, "\r\n")
+	if !strings.HasPrefix(line, "SSH-") {
+		return ""
+	}
+	return line
 }
 
 func isYes(answer string) bool {
