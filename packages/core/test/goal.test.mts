@@ -167,7 +167,8 @@ test('GOAL-CORE-004 模拟：设下目标后空闲时自己续跑（来历 goal�
   const channel = connectChannel(uiPort)
   const state = { view: null as SessionView | null }
   channel.subscribe(
-    { kind: 'session', deviceId: 'local', sessionId: 'k1' },
+    // 模拟核心里会持续目标的只有原生 Codex：build-01 上那一个
+    { kind: 'session', deviceId: 'build', sessionId: 'b6' },
     {
       snapshot: (data) => {
         state.view = data
@@ -188,7 +189,7 @@ test('GOAL-CORE-004 模拟：设下目标后空闲时自己续跑（来历 goal�
   const idle = () =>
     state.view !== null && state.view.turns.every((entry) => entry.status !== 'running')
   const call = (name: 'session.goal.set' | 'session.goal.clear', params: object) =>
-    channel.command(name, { deviceId: 'local', sessionId: 'k1', ...params } as never)
+    channel.command(name, { deviceId: 'build', sessionId: 'b6', ...params } as never)
   await until(idle, '会话载入了')
   assert.equal(state.view?.can.goals, true)
   const before = state.view?.turns.length ?? 0

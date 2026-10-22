@@ -137,7 +137,9 @@ export function createMockManagement(host: MockManageHost): MockManagement {
         down: 'disabled',
       }
     }
-    const origin = origins.get(`${deviceId}:${harnessId}`)
+    // 一开始就停用着的，启用后是可用的
+    const found = origins.get(`${deviceId}:${harnessId}`)
+    const origin = found?.state === 'disabled' ? undefined : found
     return {
       state: origin?.state ?? 'ready',
       reason: origin?.reason ?? null,

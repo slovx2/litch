@@ -1,6 +1,6 @@
 // 设置页“按 harness 开关”那棵树（HarnessSwitches.tsx）和设备详情里那一行摘要要算的东西。
 // 只存 harness 这一层：设备那一格是算出来的（全开、全关、有开有关）。
-import type { DeviceView, HarnessSwitches } from '@litch/core'
+import type { DeviceView, HarnessSwitches, HarnessView } from '@litch/core'
 
 export type SwitchColumn = 'taskCards' | 'browser' | 'computer'
 
@@ -15,12 +15,24 @@ export interface HarnessRow {
   switches: HarnessSwitches
 }
 
-/** 这台设备下面的各 harness，按设备声明的顺序 */
+/**
+ * 这台设备下面列出来的各 harness，按设备声明的顺序。设置里停用了的不列（开关值照旧存着，启用后出现、照旧生效），
+ * 设备那一格的三态和点了设整列都只算列出来的这些
+ */
 export function harnessRows(device: DeviceView): HarnessRow[] {
+  return rowsOf(device, (state) => state !== 'disabled')
+}
+
+/** 停用着、没列出来的那些：点设备那一格设整列时它们的值要留住 */
+export function hiddenRows(device: DeviceView): HarnessRow[] {
+  return rowsOf(device, (state) => state === 'disabled')
+}
+
+function rowsOf(device: DeviceView, keep: (state: HarnessView['state']) => boolean): HarnessRow[] {
   const each = device.tools.harnesses ?? {}
   return device.harnesses.flatMap((entry) => {
     const switches = each[entry.id]
-    return switches ? [{ id: entry.id, name: entry.name, switches }] : []
+    return switches && keep(entry.state) ? [{ id: entry.id, name: entry.name, switches }] : []
   })
 }
 
@@ -42,6 +54,12 @@ export function deviceCell(device: DeviceView, column: SwitchColumn): CellState 
   if (known.every((state) => state === 'on')) return 'on'
   return known.every((state) => state === 'off') ? 'off' : 'mixed'
 }
+
+/** 点设备那一格时任务卡要写的那些 harness：列出来的、知道现值的（桌面和手机共用） */
+export const taskCardTargets = (device: DeviceView): string[] =>
+  harnessRows(device)
+    .filter((row) => row.switches.taskCards !== null)
+    .map((row) => row.id)
 
 /** 点设备那一格之后整列设成什么：全开的关掉，别的（全关、有开有关）都打开 */
 export const nextForDevice = (state: CellState): boolean => state !== 'on'

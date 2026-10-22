@@ -8,6 +8,7 @@ import {
   type PasswordsRemoved,
   type PasswordsSeen,
 } from './probe-settings-passwords.mjs'
+import { judgeSwitches, type SwitchesSeen } from './probe-settings-switches.mjs'
 import { judgeTools, type ToolsSeen } from './probe-settings-tools.mjs'
 import type { PersistSeen, TurnSeen } from './probe-settings-turn.mjs'
 import type { SizeSeen } from './probe-terminal-size.mjs'
@@ -51,6 +52,7 @@ export interface FirstSeen {
   menuKeys: MenuKey[]
   about: AboutSeen
   tools: ToolsSeen
+  switches: SwitchesSeen
   passwords: { seen: PasswordsSeen; removed: PasswordsRemoved }
   turn: TurnSeen
   screens: ScreensSeen
@@ -242,6 +244,7 @@ export function judgeFirst(
   // ---- 快捷键、关于 ----
   failed.push(...judgeKeys(seen.keys, seen.menuKeys, platform))
   failed.push(...judgeTools(seen.tools, platform))
+  failed.push(...judgeSwitches(seen.switches))
   failed.push(...judgePasswords(seen.passwords.seen, seen.passwords.removed))
   same(about.name, 'Litch', '关于里的名字')
   same(about.version, hooks.version, '关于里的版本')

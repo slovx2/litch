@@ -4,9 +4,8 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-const { columnShown, deviceCell, editable, harnessRows, nextForDevice, summaryOf } = await import(
-  '../src/settings/harness-switches-logic.ts'
-)
+const { columnShown, deviceCell, editable, harnessRows, hiddenRows, nextForDevice, summaryOf } =
+  await import('../src/settings/harness-switches-logic.ts')
 
 const sw = (taskCards, browser, computer) => ({ taskCards, browser, computer })
 const device = (harnesses, extra = {}) => ({
@@ -63,4 +62,34 @@ test('摘要：全开、全关、只对哪几个开着；不知道是 null', () 
   assert.deepEqual(summaryOf(d, 'browser'), { kind: 'some', names: ['CC'] })
   assert.deepEqual(summaryOf(device({ cc: sw(null, false, false) }), 'browser'), { kind: 'none' })
   assert.equal(summaryOf(device({ cc: sw(null, false, false) }), 'taskCards'), null)
+})
+
+test('设置里停用的 harness 不列，设备那一格不算它；启用后照旧列出，值没丢', () => {
+  const d = device({ cc: sw(true, true, false), pi: sw(false, false, true) })
+  d.harnesses = [
+    { id: 'cc', name: 'Claude Code', state: 'ready' },
+    { id: 'pi', name: 'Pi', state: 'disabled' },
+  ]
+  assert.deepEqual(
+    harnessRows(d).map((row) => row.id),
+    ['cc'],
+  )
+  assert.deepEqual(
+    hiddenRows(d).map((row) => row.id),
+    ['pi'],
+  )
+  assert.equal(deviceCell(d, 'taskCards'), 'on')
+  assert.equal(deviceCell(d, 'browser'), 'on')
+  assert.equal(deviceCell(d, 'computer'), 'off')
+  assert.deepEqual(summaryOf(d, 'computer'), { kind: 'none' })
+  // 不可用（比如没装）的照列，只有停用的不列
+  d.harnesses[1].state = 'unavailable'
+  assert.deepEqual(
+    harnessRows(d).map((row) => [row.id, row.switches.computer]),
+    [
+      ['cc', false],
+      ['pi', true],
+    ],
+  )
+  assert.equal(deviceCell(d, 'computer'), 'mixed')
 })

@@ -39,6 +39,8 @@ export interface PlanProbe {
   real: { card: string; noAsk: boolean; carried: boolean; off: boolean; quiet: boolean } | null
   /** 不会计划模式的 harness（dsh）：底栏上没有开关，单子上没有 /plan。只在模拟核心上量 */
   absent: { button: boolean; command: boolean } | null
+  /** 单子上有没有 /goal：Codex 会持续目标、Claude Code 会话里没有。只在模拟核心上量 */
+  goal: { codex: boolean; claude: boolean } | null
   /**
    * 引擎自己会问的（Claude Code）。只在模拟核心上量：
    * 出了计划接着来的是提问卡片，这时没有客户端的那一问；选“执行”之后开关自己关了；
@@ -190,7 +192,9 @@ export async function planProbe(real: boolean): Promise<PlanProbe> {
   const look = { role: button()?.getAttribute('role') ?? '', off: offLook, on: await still() }
   write(input, '/')
   await until('单子', () => one('.dock .sug-opt[data-kind="command"]'), 5000)
-  const listed = all('.dock .sug-opt[data-kind="command"] b').some((b) => text(b) === '/plan')
+  const commands = () => all('.dock .sug-opt[data-kind="command"] b').map((b) => text(b))
+  const listed = commands().includes('/plan')
+  const codexGoal = commands().includes('/goal')
   await slash('plan')
   toggled.push(await settle(false))
   await slash('plan')
@@ -380,9 +384,15 @@ export async function planProbe(real: boolean): Promise<PlanProbe> {
 
   // ---- 七、引擎自己会问的 ----
   let engine: PlanProbe['engine'] = null
+  let goal: PlanProbe['goal'] = null
   if (!real) {
-    await open('首页文案')
+    input = await open('首页文案')
     await idle()
+    write(input, '/')
+    await until('单子', () => one('.dock .sug-opt[data-kind="command"]'), 5000)
+    goal = { codex: codexGoal, claude: commands().includes('/goal') }
+    write(input, '')
+    await until('单子收起', () => !one('.dock .sug-opt'), 5000)
     const answer = async (key: string) => {
       const shown = await until('计划确认的提问卡片', card, 60_000)
       await frame()
@@ -457,6 +467,7 @@ export async function planProbe(real: boolean): Promise<PlanProbe> {
     implemented,
     real: live,
     absent,
+    goal,
     engine,
     fresh,
     layouts,
@@ -512,6 +523,10 @@ export function judgePlan(probe: PlanProbe, real: boolean): string[] {
   if (probe.absent) {
     check(!probe.absent.button, '不会计划模式的 harness 上出了开关')
     check(!probe.absent.command, '不会计划模式的 harness 上单子里有 /plan')
+  }
+  if (probe.goal) {
+    check(probe.goal.codex, 'Codex 会话的单子上没有 /goal')
+    check(!probe.goal.claude, 'Claude Code 会话的单子上有 /goal')
   }
   if (probe.engine) {
     check(probe.engine.noAsk, '引擎自己在问的时候，客户端也问了一遍')
