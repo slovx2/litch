@@ -1,7 +1,8 @@
 // 会话详情的输入区：排着队的消息、输入框、设置条。会话层面的状态（排队、设置、用量、能不能发、在不在跑）
 // 一律从会话存储的 meta 订阅来（src/core/session-store.ts），不另开会话订阅。
 // 发消息走 session.send：没有回合在跑就开一个，在跑就由核心排队；排着的可以现在就插进去（steer）、拿回来改、拿掉。
-// 回合在跑而输入框是空的，按钮是“停止”（session.interrupt）。
+// 回合在跑而输入框是空的，按钮是“停止”（session.interrupt；有在做的目标时核心先把它暂停）。
+// harness 会持续目标时，输入框上方有目标那一行，`/goal 要做到的事` 截下来设目标（goal/）。
 import {
   type CommentExtra,
   type DeviceView,
@@ -22,6 +23,9 @@ import { draftKey } from './composer/drafts'
 import { downHarness, useComposeOptions } from './composer/options'
 import { QueueTray } from './composer/QueueTray'
 import { SettingsBar } from './composer/SettingsBar'
+import { GoalBar } from './goal/GoalBar'
+import { SlashGoal } from './goal/SlashGoal'
+import { useGoalSend } from './goal/useGoalSend'
 import { onRefill } from './refill'
 
 export function Composer({
@@ -80,6 +84,9 @@ export function Composer({
   const send = async (text: string, images: ImageAttachment[], comments: CommentExtra[]) => {
     await channel.command('session.send', { deviceId, sessionId, text, images, extras: comments })
   }
+  // 输入框里的 /goal 截在这里设目标（harness 会才截），换掉没做完的目标前问的那个对话框也在这里画
+  const goal = useGoalSend(deviceId, sessionId, meta, send)
+  const goalsAble = meta?.can.goals === true && meta.live
   const stop = () => {
     setError(null)
     channel
@@ -113,12 +120,17 @@ export function Composer({
       error={error}
       markers={markers}
       inputRef={inputRef}
-      onSend={send}
+      onSend={goal.send}
       onStop={stop}
       onError={setError}
       top={
         meta ? (
           <>
+            {goal.confirm}
+            {/* 斜杠单子：刚打了 / 开头的一个词，harness 会目标时给出 /goal */}
+            <SlashGoal text={draft.text} able={goalsAble} onPick={draft.setText} />
+            {/* 会话的持续目标：状态、用时、目标的话，暂停或继续、清除 */}
+            <GoalBar store={store} onError={setError} />
             {/* 回合停了、后台还有任务在跑：一行，只说有几个，点开从底部列出来 */}
             <BackgroundBar store={store} />
             <QueueTray

@@ -11,6 +11,7 @@ export const zhGoal = {
   'goal.status.usageLimited': '用量到顶，目标停下',
   'goal.status.budgetLimited': '预算用完，目标停下',
   'goal.status.complete': '目标已达成',
+  'goal.reached': '目标已达成 · 用时 {time}',
   'goal.tokens': '{used} / {budget} 词元',
   'goal.spent': '用时 {time}',
   'goal.time.s': '{n} 秒',

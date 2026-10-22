@@ -1,0 +1,76 @@
+# 模拟核心：持续目标。打开 build-01 上那个原生 Codex 会话（持续目标只有它会）→ 输入框里打 / 出斜杠单子，点 /goal、
+# 接着写目标发出去 → 输入框上方出目标那一行（在做）→ 续跑回合开头一行“目标未达成，自动继续”→ 第三轮达成：
+# 那一行没了，最后一轮回答下面一行“目标已达成 · 用时 N”→ 再设一个目标：用时那一句没了，暂停、继续、清除（不弹确认）。
+# 安卓上 Maestro 打不了中文，目标写英文。CI 的默认机型屏幕小（320 宽）：目标那一行的按钮会折行，点之前先等它露出来
+appId: dev.litch.app
+name: mock-持续目标
+tags: [mock]
+---
+- runFlow:
+    file: ../_shared/fresh.yaml
+    env:
+      MODE: mock
+      READY: device:build
+- openLink: litch://open?device=build&session=b6
+- extendedWaitUntil:
+    visible:
+      id: composer-input
+    timeout: 15000
+- tapOn:
+    id: composer-input
+- inputText: /
+- extendedWaitUntil:
+    visible:
+      id: slash:goal
+    timeout: 5000
+- tapOn:
+    id: slash:goal
+- inputText: tidy the release notes
+- tapOn:
+    id: composer-send
+- hideKeyboard
+# 续跑回合开头那一行（模拟核心三轮几秒就跑完，第一个目标只看结果）
+- extendedWaitUntil:
+    visible:
+      id: turn-origin:goal
+    timeout: 15000
+# 第三轮达成：那一行没了，回答下面一行用时
+- extendedWaitUntil:
+    visible:
+      id: goal:reached
+    timeout: 20000
+- assertNotVisible:
+    id: goal:bar
+- assertVisible:
+    text: ".*(Goal reached|目标已达成).*"
+# 再设一个目标：马上暂停（一轮要 1.5 秒起步，还远没跑完三轮），停着时看那一行和目标的话，用时那一句没了
+- tapOn:
+    id: composer-input
+- inputText: /goal check the links again
+- tapOn:
+    id: composer-send
+# 发出去紧接着点暂停，中间不收键盘、不另等：三轮只要七八秒，Maestro 慢的时候等一下就错过了
+- tapOn:
+    id: goal:pause
+- hideKeyboard
+- extendedWaitUntil:
+    visible:
+      id: goal:status:paused
+    timeout: 5000
+- assertVisible:
+    text: check the links again
+- assertNotVisible:
+    id: goal:reached
+- extendedWaitUntil:
+    visible:
+      id: goal:resume
+    timeout: 5000
+# 继续以后再过几秒又会跑完：紧接着清掉（继续成没成看清除按钮还在不在就够了）
+- tapOn:
+    id: goal:resume
+- tapOn:
+    id: goal:clear
+- extendedWaitUntil:
+    notVisible:
+      id: goal:bar
+    timeout: 5000

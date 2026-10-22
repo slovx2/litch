@@ -1,6 +1,6 @@
 // 模拟核心里的持续目标（thread/goal/*，model-goal.mts），照原生 codex 的样子演：
 // 设下目标（active）后，会话空闲时 harness 自己开续跑回合（来历 goal，没有用户消息），每轮回一句话、记一笔用量；
-// 第三轮模型报做完了（complete）。设了预算的，用量到了预算就停在 budgetLimited。
+// 第三轮模型报做完了（complete），照客户端的规矩马上清掉、在那一轮回答下面写用时。设了预算的，用量到了预算就停在 budgetLimited。
 // 用户暂停（paused）就不再续跑，继续（active）接着跑；用户自己发的消息照常开回合，结束后接着续跑。
 // 用户打断续跑的回合，目标跟着暂停（官方的终端界面这样做：打断就是不想让它接着跑了）。
 import type { SessionOp } from '../channel/protocol.mjs'
@@ -10,7 +10,7 @@ import type { GoalChange, SessionGoalView } from '../model-goal.mjs'
 import type { SampleLang } from './sample-text.mjs'
 
 /** 空闲多久开下一轮续跑（按模拟的时钟） */
-export const GOAL_CONTINUE_MS = 800
+export const GOAL_CONTINUE_MS = 1500
 /** 每轮续跑记多少词元 */
 export const GOAL_ROUND_TOKENS = 1200
 /** 第几轮模型报做完了 */
@@ -134,6 +134,9 @@ export function createMockGoal(host: MockGoalHost): MockGoal {
               createdAt: now,
               updatedAt: now,
             }
+      // 新设的目标：上一个达成的那一句不再写
+      if (fresh && view.goalReached)
+        host.apply(view, [{ op: 'session.goalReached', reached: null }])
       put(view, {
         ...base,
         ...(objective ? { objective } : {}),
@@ -165,9 +168,22 @@ export function createMockGoal(host: MockGoalHost): MockGoal {
         else if (status === 'failed') next = 'blocked'
         else if (goal.tokenBudget !== null && tokensUsed >= goal.tokenBudget) next = 'budgetLimited'
         else if (state.rounds >= GOAL_ROUNDS) next = 'complete'
+        const timeUsedSeconds = goal.timeUsedSeconds + seconds
+        if (goal.status === 'active' && next === 'complete') {
+          // 达成了：照客户端的规矩（device/live.mts 的 reachGoal）马上清掉，在这一轮的回答下面写用时
+          runs.delete(view)
+          host.apply(view, [
+            { op: 'session.goal', goal: null },
+            {
+              op: 'session.goalReached',
+              reached: { turnId, objective: goal.objective, timeUsedSeconds },
+            },
+          ])
+          return
+        }
         patch(view, {
           tokensUsed,
-          timeUsedSeconds: goal.timeUsedSeconds + seconds,
+          timeUsedSeconds,
           status: goal.status === 'active' ? next : goal.status,
         })
       }

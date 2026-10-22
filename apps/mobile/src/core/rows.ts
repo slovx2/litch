@@ -24,7 +24,7 @@ import type {
   UserAttachment,
   WebSearchItem,
 } from '@litch/core'
-import { spanOf, thoughtShown, workingShown } from '@litch/core'
+import { goalReachedIn, spanOf, thoughtShown, workingShown } from '@litch/core'
 import { cardsOf, eventKind, handOffOf, isOfferCall } from '../detail/proposals/logic'
 import { type ChunkState, chunkText, emptyChunks } from './blocks'
 
@@ -154,6 +154,11 @@ export type Row =
     }
   | { type: 'todo'; key: string; note: string | null; steps: TodoStep[]; running: boolean }
   | { type: 'notice'; key: string; label: Text; detail: string | null }
+  /**
+   * 达成目标的那一轮：最后一条回答下面一行“目标已达成 · 用时 N”（核心的 goalReachedIn 定写不写）。
+   * ms 是目标一共用了多久
+   */
+  | { type: 'goalReached'; key: string; turnId: string; ms: number; objective: string }
   /** 失败的回合带着的原因，排在状态行上面。被打断的回合不画（照桌面端） */
   | { type: 'error'; key: string; text: string }
   | {
@@ -243,6 +248,8 @@ export class RowBuilder {
     /** 回合最下方的收尾区：收尾留的问题（最后一个），和这一回合的建议卡片 */
     let tailAsk: Row | null = null
     const tailCards: Row[] = []
+    /** 最后一条回答的末尾在 out 里的位置：目标达成那一句插在这里 */
+    let answerEnd = -1
     for (const itemId of turn.itemIds) {
       const item = view.items[itemId]
       if (!item) continue
@@ -333,6 +340,7 @@ export class RowBuilder {
           out.push(
             ...this.markdown(turn.id, item.id, item.text, item.status === 'inProgress', false),
           )
+          answerEnd = out.length
           break
         case 'plan':
           // 计划条目没有自己的状态：回合在跑就当它还在长
@@ -362,6 +370,19 @@ export class RowBuilder {
       }
     }
     flush()
+    const reachedMs = goalReachedIn(view.goalReached, turn)
+    if (reachedMs !== null && view.goalReached && answerEnd >= 0)
+      out.splice(
+        answerEnd,
+        0,
+        this.keep({
+          type: 'goalReached',
+          key: `${turn.id}:goal`,
+          turnId: turn.id,
+          ms: reachedMs,
+          objective: view.goalReached.objective,
+        }),
+      )
     if (tailAsk) out.push(tailAsk)
     out.push(...tailCards)
     if (turn.status === 'failed' && turn.error)

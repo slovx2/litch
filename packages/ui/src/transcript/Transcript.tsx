@@ -18,6 +18,7 @@ import {
 } from '@litch/core'
 import {
   Component,
+  Fragment,
   memo,
   type ReactNode,
   useCallback,
@@ -34,6 +35,7 @@ import { duration, elapsed } from '../app/format.ts'
 import { useKey, useServices } from '../app/services.tsx'
 import { TurnOrigin } from '../background/TurnOrigin.tsx'
 import { Dock, Requests } from '../composer/Dock.tsx'
+import { GoalReached } from '../goal/GoalReached.tsx'
 import type { MessageKey, Translator } from '../i18n/index.ts'
 import { useRailHasTodo } from '../rail/rail-state.ts'
 import { TaskNote } from '../tasks/TaskNote.tsx'
@@ -247,6 +249,7 @@ const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { 
   // 告一段落之后，第一段过程的开头是收起整段过程的那一行；没告一段落时没有这一行，过程照常摊开
   const firstProcess = blocks.findIndex((block) => block.type === 'process')
   const tail = blocks.find((block) => block.type === 'tail')
+  const lastAnswer = blocks.findLastIndex((block) => block.type === 'answer')
   // 每一块前面最近的那条用户消息：它带着评论的话，回答里的 [N] 指向它的评论（comments/Cite.tsx）
   const userBefore = blocks.map(
     (_, index) =>
@@ -284,9 +287,13 @@ const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { 
             )
           if (block.type === 'answer')
             return (
-              <CiteScope key={block.itemId} {...ref} userId={userBefore[index]}>
-                <AgentAnswer {...ref} itemId={block.itemId} />
-              </CiteScope>
+              <Fragment key={block.itemId}>
+                <CiteScope {...ref} userId={userBefore[index]}>
+                  <AgentAnswer {...ref} itemId={block.itemId} />
+                </CiteScope>
+                {/* 达成目标的那一轮：最后一条回答下面写用了多久（目标随即清掉） */}
+                {index === lastAnswer && !running ? <GoalReached {...ref} turn={turn} /> : null}
+              </Fragment>
             )
           if (block.type === 'plan')
             return <PlanCard key={block.itemId} {...ref} itemId={block.itemId} />

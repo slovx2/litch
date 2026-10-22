@@ -72,10 +72,14 @@ explain it:
   clicking it opens the Goal tab in the side panel, where the goal can be edited (Save, or Mod+S;
   saving also resumes it). Sending `/goal` with different text while a goal is unfinished asks before
   replacing it. Stop pauses an active goal before stopping the turn, so it does not start again by
-  itself. `/goal` also works on the New session page. A finished goal stays shown as achieved until
-  it is cleared or replaced. Only text is accepted (no images or files), and a token budget can be
-  shown but not set in Litch. Goals are not shown on the phone yet. For Codex, a goal set in another
-  app on the same session shows up here too; if goals are turned off in the Codex configuration, the
+  itself. `/goal` also works on the New session page. Once the goal is achieved it is cleared right
+  away: the line above the composer goes, and "Goal reached · <time>" appears under the last answer
+  of the turn that achieved it (until a new goal is set). Only text is accepted (no images or files),
+  and a token budget can be shown but not set in Litch. The phone follows the same rules: the goal
+  line above the composer (status, time, Pause / Resume, Clear — no confirmation), `/goal` from the
+  slash list (also on the New session page), the line at the start of a continuing turn and the
+  "Goal reached" line; editing in a side tab is desktop only. For Codex, a goal set in another app on
+  the same session shows up here too; if goals are turned off in the Codex configuration, the
   controls disappear for that session.
 - **Terminal**: per project; "Put away, keep it running on the device" keeps a terminal alive and
   "Terminals on the device" brings it back. Limits are device settings (`device-settings.md`).

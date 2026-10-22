@@ -38,7 +38,7 @@ import type {
   FileDiff,
 } from '../model-diff.mjs'
 import type { DirectoryView, FileContent, FileSearchView } from '../model-files.mjs'
-import type { GoalChange, SessionGoalView } from '../model-goal.mjs'
+import type { GoalChange, GoalReachedView, SessionGoalView } from '../model-goal.mjs'
 import type {
   HarnessConfigTopicView,
   HcEdit,
@@ -233,6 +233,8 @@ export type SessionOp =
   | { op: 'session.agents'; agents: AgentThreadView[] }
   /** 持续目标整个换掉（设了、改了状态和用量）；null 是清掉了 */
   | { op: 'session.goal'; goal: SessionGoalView | null }
+  /** 目标达成了、清掉了，回答下面那一句换掉；null 是不再写（设了新目标） */
+  | { op: 'session.goalReached'; reached: GoalReachedView | null }
 
 /**
  * 设置现在的值整份换掉：这份东西不大，变得也少。

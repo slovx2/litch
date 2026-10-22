@@ -3,7 +3,7 @@
 // 类型是 Text 的字段可能是对面给的原文，也可能是核心自己要说的一句话（见 phrase.mts），界面按当前语言显示。
 
 import type { SessionBackgroundView, TurnOrigin } from './model-background.mjs'
-import type { SessionGoalView } from './model-goal.mjs'
+import type { GoalReachedView, SessionGoalView } from './model-goal.mjs'
 import type { MachineAccessView, MachineAskView } from './model-machine.mjs'
 import type { DeviceServiceView, ServiceUpgradeView } from './model-service.mjs'
 import type { SessionTaskMark } from './model-tasks.mjs'
@@ -987,4 +987,6 @@ export interface SessionView {
   agents: AgentThreadView[]
   /** 会话的持续目标（model-goal.mts）。没有目标、harness 不会的不带或是 null */
   goal?: SessionGoalView | null
+  /** 刚达成、已经清掉的目标留下的那一句（model-goal.mts）。没有是 null 或不带 */
+  goalReached?: GoalReachedView | null
 }

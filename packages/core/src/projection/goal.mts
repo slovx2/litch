@@ -1,7 +1,7 @@
 // 持续目标的投影（model-goal.mts）：协议的 ThreadGoal → SessionGoalView。
 // 目标是对面发来的，不能只靠类型：形状不对的当没有。协议里的时间是秒，界面这边一律毫秒。
 import type { ItemView, TurnView } from '../model.mjs'
-import type { GoalStatus, SessionGoalView } from '../model-goal.mjs'
+import type { GoalReachedView, GoalStatus, SessionGoalView } from '../model-goal.mjs'
 
 const STATUSES: readonly string[] = [
   'active',
@@ -53,4 +53,16 @@ export function looksLikeGoalTurn(turn: TurnView, items: Record<string, ItemView
     if (kind === 'agentMessage') spoke = true
   }
   return spoke
+}
+
+/**
+ * 这个回合的最后一条回答下面要不要写“目标已达成 · 用时 N”：达成目标的就是这个回合，而且回合已经结束了
+ * （达成是回合里模型调工具报的，那时回合还在跑）。要写时给出目标一共用了多少毫秒，不写是 null
+ */
+export function goalReachedIn(
+  reached: GoalReachedView | null | undefined,
+  turn: Pick<TurnView, 'id' | 'status'> | null | undefined,
+): number | null {
+  if (!reached || !turn || reached.turnId !== turn.id || turn.status === 'running') return null
+  return reached.timeUsedSeconds * 1000
 }

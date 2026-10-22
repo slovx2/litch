@@ -12,7 +12,7 @@ import {
   serveChannel,
 } from '../src/index.mjs'
 import { GOAL_CONTINUE_MS, GOAL_ROUND_TOKENS, GOAL_ROUNDS } from '../src/mock/mock-goal.mjs'
-import { goalPursuing, goalStalled, projectGoal } from '../src/projection/goal.mjs'
+import { goalPursuing, goalReachedIn, goalStalled, projectGoal } from '../src/projection/goal.mjs'
 import { deviceWorld, features } from './device-world.mjs'
 import { harness } from './fake-device.mjs'
 import { RpcFailure } from './fake-server.mjs'
@@ -54,6 +54,12 @@ test('GOAL-CORE-001 目标的投影：时间换成毫秒，形状不对的当没
   assert.equal(goalPursuing(projectGoal(goal({ status: 'paused' }))), false)
   assert.equal(goalStalled(projectGoal(goal({ status: 'budgetLimited' }))), true)
   assert.equal(goalStalled(projectGoal(goal({ status: 'complete' }))), false)
+  // 达成的用时只写在达成它的回合下面，回合结束了才写
+  const reached = { turnId: 't2', objective: '把测试全跑通', timeUsedSeconds: 90 }
+  assert.equal(goalReachedIn(reached, { id: 't2', status: 'completed' }), 90_000)
+  assert.equal(goalReachedIn(reached, { id: 't2', status: 'running' }), null)
+  assert.equal(goalReachedIn(reached, { id: 't1', status: 'completed' }), null)
+  assert.equal(goalReachedIn(null, { id: 't2', status: 'completed' }), null)
 })
 
 test('GOAL-CORE-002 声明了 goals：打开时取目标，通知改、清，命令转成 thread/goal/set、clear 并带 origin user', async () => {
@@ -88,10 +94,10 @@ test('GOAL-CORE-002 声明了 goals：打开时取目标，通知改、清，命
   world.peer.last().notify('thread/goal/updated', {
     threadId: 'a',
     turnId: 't1',
-    goal: goal({ status: 'complete', tokensUsed: 900 }),
+    goal: goal({ status: 'paused', tokensUsed: 900 }),
   })
   await settle()
-  assert.equal(watched.seen.view?.goal?.status, 'complete')
+  assert.equal(watched.seen.view?.goal?.status, 'paused')
   assert.equal(watched.seen.view?.goal?.tokensUsed, 900)
 
   await world.command('session.goal.set', { sessionId: 'a', objective: '  再加一个用例  ' })
@@ -165,9 +171,9 @@ test('GOAL-CORE-004 模拟：设下目标后空闲时自己续跑（来历 goal�
   const [uiPort, corePort] = createPortPair()
   serveChannel(corePort, createMockCore({ clock: time.clock, chunkMs: 0 }), { clock: time.clock })
   const channel = connectChannel(uiPort)
+  // 示例数据里 build-01 上那个空闲的原生 Codex 会话：持续目标只有它会
   const state = { view: null as SessionView | null }
   channel.subscribe(
-    // 模拟核心里会持续目标的只有原生 Codex：build-01 上那一个
     { kind: 'session', deviceId: 'build', sessionId: 'b6' },
     {
       snapshot: (data) => {
@@ -195,9 +201,12 @@ test('GOAL-CORE-004 模拟：设下目标后空闲时自己续跑（来历 goal�
   const before = state.view?.turns.length ?? 0
 
   await call('session.goal.set', { objective: '整理发版说明' })
-  await until(() => state.view?.goal?.status === 'complete', '第三轮报做完了')
+  await until(() => !!state.view?.goalReached, '第三轮报做完了')
+  assert.equal(state.view?.goal ?? null, null, '达成了马上清掉')
   const added = state.view?.turns.slice(before) ?? []
   assert.equal(added.length, GOAL_ROUNDS)
+  assert.equal(state.view?.goalReached?.turnId, added.at(-1)?.id, '用时写在最后一轮下面')
+  assert.equal(state.view?.goalReached?.objective, '整理发版说明')
   assert.ok(added.every((entry) => entry.origin === 'goal'))
   assert.ok(
     added.every((entry) =>
@@ -205,7 +214,6 @@ test('GOAL-CORE-004 模拟：设下目标后空闲时自己续跑（来历 goal�
     ),
     '续跑回合没有用户消息',
   )
-  assert.equal(state.view?.goal?.tokensUsed, GOAL_ROUNDS * GOAL_ROUND_TOKENS)
   time.advance(GOAL_CONTINUE_MS * 3)
   await settle()
   assert.equal(state.view?.turns.length, before + GOAL_ROUNDS, '做完了就不再续跑')
@@ -214,6 +222,8 @@ test('GOAL-CORE-004 模拟：设下目标后空闲时自己续跑（来历 goal�
   await call('session.goal.set', { objective: '再查一遍链接', tokenBudget: GOAL_ROUND_TOKENS })
   await until(() => state.view?.goal?.status === 'budgetLimited', '预算用完了')
   assert.equal(state.view?.goal?.objective, '再查一遍链接')
+  assert.equal(state.view?.goal?.tokensUsed, GOAL_ROUND_TOKENS)
+  assert.equal(state.view?.goalReached, null, '设了新目标，上一个达成的那一句不再写')
   await until(idle, '那一轮说完了')
 
   // 继续、马上暂停：不再续跑
@@ -367,4 +377,89 @@ test('GOAL-CORE-007 新建会话时第一句是目标：建好就设目标、不
     (error: unknown) => error instanceof ChannelError && error.code === 'unsupported',
   )
   assert.equal(world.sent('thread/start').length, 1, '不会的不去建会话')
+})
+
+test('GOAL-CORE-008 目标达成：马上清掉（thread/goal/clear 不带 origin），在达成它的回合下面记用时；设了新目标就不再写；打开时已经达成的照样清', async () => {
+  const codex = harness('codex', {
+    declaration: { features: features({ goals: true }) },
+    threads: [
+      thread({
+        id: 'a',
+        turns: [
+          turn('t1', [userText('u1', '开工'), agentText('m1', '好')]),
+          turn('t2', [], { status: 'inProgress' }),
+        ],
+      }),
+      thread({ id: 'b', turns: [turn('t1', [userText('u1', '开工'), agentText('m1', '好')])] }),
+    ],
+  })
+  const goals: Record<string, ReturnType<typeof goal> | null> = {
+    a: goal(),
+    b: goal({ threadId: 'b', status: 'complete', timeUsedSeconds: 75 }),
+  }
+  const world = deviceWorld([codex], {
+    extra: {
+      'thread/goal/get': (params) => ({ goal: goals[(params as { threadId: string }).threadId] }),
+      'thread/goal/clear': (params) => {
+        const { threadId } = params as { threadId: string }
+        const cleared = goals[threadId] !== null
+        goals[threadId] = null
+        return { cleared }
+      },
+    },
+  })
+  world.core.start()
+  await settleMany()
+  const watched = watchSession(world.core, 'a')
+  await settleMany()
+  const view = () => watched.seen.view
+  assert.equal(view()?.goal?.status, 'active')
+
+  // 续跑回合里模型报了做完：回合还在跑，通知就到了
+  world.peer.last().notify('item/completed', {
+    threadId: 'a',
+    turnId: 't2',
+    item: agentText('m2', '都做完了'),
+  })
+  world.peer.last().notify('thread/goal/updated', {
+    threadId: 'a',
+    turnId: 't2',
+    goal: goal({ status: 'complete', timeUsedSeconds: 125 }),
+  })
+  await settleMany()
+  assert.equal(view()?.goal, null, '输入框上那一行马上收起')
+  assert.deepEqual(view()?.goalReached, {
+    turnId: 't2',
+    objective: '把测试全跑通',
+    timeUsedSeconds: 125,
+  })
+  assert.deepEqual(world.sent('thread/goal/clear'), [{ threadId: 'a' }])
+  world.peer.last().notify('turn/completed', { threadId: 'a', turn: turn('t2', []) })
+  world.peer.last().notify('thread/goal/cleared', { threadId: 'a' })
+  await settle()
+  assert.equal(view()?.turns.at(-1)?.origin, 'goal', '达成那一轮结束时目标已清掉，照样认成续跑')
+  assert.equal(view()?.goalReached?.turnId, 't2', '对面说清掉了，用时那一句留着')
+
+  // 设了新目标：上一个达成的那一句不再写
+  world.peer.last().notify('thread/goal/updated', {
+    threadId: 'a',
+    turnId: null,
+    goal: goal({ objective: '再加一个用例' }),
+  })
+  await settle()
+  assert.equal(view()?.goal?.objective, '再加一个用例')
+  assert.equal(view()?.goalReached, null)
+  watched.close()
+
+  // 没人看着时达成的：打开时问到的是 complete，照样清掉，用时写在最后一个回合下面
+  const second = watchSession(world.core, 'b')
+  await settleMany()
+  assert.equal(second.seen.view?.goal, null)
+  assert.deepEqual(second.seen.view?.goalReached, {
+    turnId: 't1',
+    objective: '把测试全跑通',
+    timeUsedSeconds: 75,
+  })
+  assert.deepEqual(world.sent('thread/goal/clear'), [{ threadId: 'a' }, { threadId: 'b' }])
+  second.close()
 })

@@ -48,6 +48,7 @@ import {
   TranscriptContext,
   useFileScope,
 } from './context'
+import { GoalReachedCell } from './goal/GoalReachedCell'
 import { isWebUrl, parseFileHref } from './links'
 import { EventCell } from './proposals/EventCell'
 import { HandoffCell } from './proposals/HandoffCell'
@@ -93,6 +94,8 @@ function renderRow(row: Row) {
       return <TodoCell row={row} />
     case 'notice':
       return <NoticeCell row={row} />
+    case 'goalReached':
+      return <GoalReachedCell row={row} />
     case 'error':
       return <ErrorCell row={row} />
     case 'status':
