@@ -5,6 +5,11 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
+## 未发布
+
+- 持续目标（goal）：Claude Code 会话不再报 `features.goals`，Litch 里没有 `/goal`、输入框上方的目标一行和右侧“目标”页，只有原生 Codex 会话有；适配器 Claude 入口照上游做的 `thread/goal/*` 保留，官方桌面端直连时照旧能用
+- 设置页“按 harness 开关”那棵树只列设备上启用着的 harness：在设备设置里停用的不出行，设备那一格的三态和点了设整列也不算它；开关值不清，启用后出现、照旧生效。手机端任务卡那一列同样
+
 ## 0.16.0
 
 - 后台任务：回合结束后还在跑的工作（Claude Code 的后台命令和子任务、原生 Codex 回合结束时还在跑的命令、dsh 的后台作业）有了统一的集合（协议扩展 `backgroundTasks`）。桌面端输入框上方一行写几个在跑，点开右侧“后台任务”页看运行中和已结束的（名称、用时、来源回合）；侧栏有记号；后台跑完引擎自己接着做的回合开头写一行。手机端同样

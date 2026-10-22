@@ -28,8 +28,8 @@ export function judgeFilter(seen: FilterSeen, kept: FilterKept, session: string)
   // ---- 入口 ----
   must(seen.entry && seen.quietAtStart, '没筛的时候：筛选的入口不在，或者已经写着“只看”了')
   must(
-    seen.options.join() === ',claude,pi,dsh,codex,opencode',
-    `筛选能挑的不对（该是全部，加连着的设备上的五个 harness）：${seen.options.join()}`,
+    seen.options.join() === ',claude,pi,dsh,codex,opencode,gemini',
+    `筛选能挑的不对（该是全部，加连着的设备上的六个 harness，停用着的 Gemini CLI 也算）：${seen.options.join()}`,
   )
   must(
     seen.chosenAtStart === '' && seen.focusAtStart === '',

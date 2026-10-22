@@ -9,7 +9,9 @@ while the desktop is connected (remote adapter 0.8.0 or later).
 
 The browser and Computer Use are switched per device and, below that, per harness (task cards too;
 see `sessions-and-projects.md`). A harness that was never switched on its own follows its device, and
-so does a harness installed later.
+so does a harness installed later. The tree under Settings → Per-harness switches lists only the
+harnesses enabled on each device: one turned off in the device settings has no row there and is left
+out when a device's box is clicked, and its switches are kept and apply again once it is enabled.
 
 `scripts/litch tools set <device> …` changes them (exact flags: `scripts/litch tools --help`):
 

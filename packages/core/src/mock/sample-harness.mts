@@ -26,14 +26,14 @@ const ALL: HarnessAbilities = {
   turnDiff: true,
   stopAgent: true,
   backgroundTasks: true,
-  // 持续目标只有原生 codex 和 Claude Code 会（Claude 入口自己照上游做了一份）
+  // 持续目标只有原生 codex 会（Claude 入口照上游做的那份不报，Litch 里不出入口）
   goals: false,
 }
 
 const DECLARED: Record<string, HarnessAbilities> = {
   // 引导只把文字交给模型，图片到不了
   // 子代理不能单独停（Claude 入口还不支持对子线程打断）
-  claude: { ...ALL, steerImages: false, stopAgent: false, goals: true },
+  claude: { ...ALL, steerImages: false, stopAgent: false },
   // Pi 和 dsh 不发本回合的差异：工作目录不是 git 仓库时，差异面板在它们的会话里没有东西可看
   pi: { ...ALL, turnDiff: false },
   dsh: { ...ALL, fork: false, rollback: false, compact: false, remove: false, turnDiff: false },
@@ -53,6 +53,7 @@ const KNOWN: Record<string, [name: string, badge: string, version: string]> = {
   dsh: ['dsh', 'DS', '0.2.0-rc.2'],
   codex: ['Codex', 'CX', '0.160.0'],
   opencode: ['OpenCode', 'OC', '1.18.33'],
+  gemini: ['Gemini CLI', 'GE', '0.42.0'],
 }
 
 export interface SampleHarnessOptions {

@@ -44,9 +44,8 @@ const features: HarnessFeatures = {
   agentMessagePhase: 'onCompleted',
   // 回合结束后还在跑的后台命令、Monitor、后台子代理从 CLI 的 background_tasks_changed 攒成集合（background-tasks.mts）
   backgroundTasks: true,
-  // 持续目标照上游做（goal-controller.mts）：目标存在入口自己的库里，空闲时自动续跑，
-  // 模型经 codex_harness_adapter_goal 的三个工具读目标、报完成或受阻，用量按原生消息累计
-  goals: true,
+  // 持续目标不报：入口照上游做的 thread/goal/*（goal-controller.mts）留着给官方桌面端直连时用，
+  // 照报的话 Litch 会出目标入口，而 Claude 会话先不做持续目标
 }
 
 // 权限档随回合开始时的会话设置定下来：两个回合之间可以换，回合进行中改的要到下一个回合才起作用。

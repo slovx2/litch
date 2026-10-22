@@ -366,8 +366,13 @@ export function sampleSettings(deviceId: string, harnesses: HarnessView[]): Samp
       written.set(taskCardsSettingKey('pi'), false)
       written.set('ssh.pi.enabled', true)
     }
-  } else if (has('claude')) {
-    written.set('harness.claude.cliPath', '/opt/claude/bin/claude')
+  } else {
+    if (has('claude')) written.set('harness.claude.cliPath', '/opt/claude/bin/claude')
+    // 远程那台上的 Gemini CLI 停用着（sample-data.mts），任务卡也关着：启用后树上那一行是空的
+    if (has('gemini')) {
+      written.set('harness.gemini.enabled', false)
+      written.set(taskCardsSettingKey('gemini'), false)
+    }
   }
   return {
     groups,

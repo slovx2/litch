@@ -1,5 +1,6 @@
 // 设置里的“任务卡”：和桌面设置页“按 harness 开关”同一棵树，只有任务卡一列（手机不执行浏览器和 Computer Use）。
-// 每台设备一行（点名字展开、收起），下面是它的各 harness；设备那一格是算出来的三态，点了把这台设备的各 harness 一起设。
+// 每台设备一行（点名字展开、收起），下面是它启用着的各 harness（设置里停用的不列，启用后出现、值照旧）；
+// 设备那一格是算出来的三态，点了把列出来的各 harness 一起设。
 // 任务卡存在设备上（设备设置 harness.<id>.taskCards），写入走设备设置的写入，要带版本号：开着这一页时订阅能管理的设备的设置，
 // 核心也靠这份订阅给出现值。离线、旧设备服务没有这一项的只读（一条横线）。判断和桌面共用 harness-switches-logic.ts。
 import { type DeviceView, keys, type SettingsSnapshotView, taskCardsSettingKey } from '@litch/core'
@@ -13,6 +14,7 @@ import {
   harnessCell,
   harnessRows,
   nextForDevice,
+  taskCardTargets,
 } from '../../../../../packages/ui/src/settings/harness-switches-logic.ts'
 import { useBusy, useChannel, useKey, useReplica } from '../../shell/services'
 import { type Key, useT } from '../../ui/i18n'
@@ -127,11 +129,7 @@ function DeviceRows({ deviceId }: { deviceId: string }) {
         {mark(
           whole,
           t('switches.cell.device', { name, column }),
-          () =>
-            write(
-              rows.filter((row) => row.switches.taskCards !== null).map((row) => row.id),
-              nextForDevice(whole),
-            ),
+          () => write(taskCardTargets(device), nextForDevice(whole)),
           `task-cards:${deviceId}:device`,
         )}
       </View>

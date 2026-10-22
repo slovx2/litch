@@ -21,6 +21,7 @@ import {
 import { installSettingsKit, type SettingsKit } from './probe-settings-kit.mjs'
 import { controlsSeen, menuSeen, pageSeen, previewSeen } from './probe-settings-page.mjs'
 import { passwordsRemoved, passwordsSeen, SEEDED_SEALED } from './probe-settings-passwords.mjs'
+import { switchesSeen } from './probe-settings-switches.mjs'
 import { toolsSeen } from './probe-settings-tools.mjs'
 import {
   innerSize,
@@ -162,6 +163,7 @@ async function runFirst(window: BrowserWindow, hooks: SmokeHooks): Promise<First
   const about = await inPage(window, aboutSeen)
   await shot(window, 'about')
   const tools = await inPage(window, toolsSeen)
+  const switches = await inPage(window, switchesSeen)
   // 已保存的密码：接在清除浏览数据之后量
   const passwords = {
     seen: await inPage(window, passwordsSeen, SEEDED_SEALED),
@@ -203,6 +205,7 @@ async function runFirst(window: BrowserWindow, hooks: SmokeHooks): Promise<First
     menuKeys: menuKeys(),
     about,
     tools,
+    switches,
     passwords,
     turn,
     screens,
