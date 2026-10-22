@@ -254,6 +254,18 @@ import { maybeCreateThreadWorktree } from './worktree.mjs'
 // notification has already arrived.
 const DEFAULT_SUBAGENT_WATCHDOG_MS = 30 * 60 * 1000
 const MIN_SUBAGENT_WATCHDOG_MS = 100
+// 看门狗给工作流计时用的键（工作流没有自己的 Agent 调用）
+const WORKFLOW_WATCH = 'workflow'
+
+// 看门狗停掉一个子代理后送给主模型的话：CLI 会说它是“被用户停掉”的，这里说清楚是 Litch
+function watchdogStopNote(title: string, agentId: string, seconds: number): string {
+  return [
+    `Litch stopped the subagent "${title}" (agent ID ${agentId}) because it showed no activity for ${seconds} second${seconds === 1 ? '' : 's'}.`,
+    'The user did not stop it. If a task notification or SendMessage says it was stopped by the user, that was Litch.',
+    'Its partial changes may already be on disk: check them before you start the work again. Your other subagents keep running.',
+    'This message is from Litch, not typed by the user.',
+  ].join(' ')
+}
 
 function isWorkflowToolName(value: string): boolean {
   const name = value.trim().toLowerCase()
@@ -4184,10 +4196,21 @@ export class CodexClaudeAppServer {
             resolveWatchdog = resolve
           })
         : null
-    // 最近一次子代理活动的时刻（毫秒）。计时器不随每次活动重设，到点时再看离最近一次活动够不够时限
-    let subagentActiveAt = Date.now()
+    // 每个在跑的子代理（按派出它的 Agent 调用；Workflow 记在 WORKFLOW_WATCH 下）最近一次有动静的时刻（毫秒）。
+    // 计时器不随每次活动重设，到点时逐个看离各自最近一次活动够不够时限
+    const subagentActiveAt = new Map<string, number>()
+    // Agent 调用与 CLI 任务 ID 的对照：看门狗单独停一个子代理、按任务 ID 认 task_progress 是谁的
+    const subagentTaskIds = new Map<string, string>()
+    const subagentByTask = new Map<string, string>()
+    // 被看门狗停掉的子代理（Agent 调用）：之后它的结果、事件都不再投影，已经按“Litch 停掉”收了尾
+    const stoppedByWatchdog = new Set<string>()
     const subagentsRunning = (): boolean =>
       activeSubagents.size > 0 || resumedSubagents.size > 0 || workflowInFlight
+    const runningSubagents = (): string[] => [
+      ...activeSubagents,
+      ...resumedSubagents.keys(),
+      ...(workflowInFlight ? [WORKFLOW_WATCH] : []),
+    ]
     const disarmWatchdog = (): void => {
       if (watchdogTimer) clearTimeout(watchdogTimer)
       watchdogTimer = null
@@ -4202,26 +4225,103 @@ export class CodexClaudeAppServer {
           armWatchdog()
           return
         }
-        const quietSince = Math.max(
-          subagentActiveAt,
-          this.pendingInteractions.finishedAt(thread.id),
-        )
-        const left = quietSince + watchdogTimeoutMs - Date.now()
-        if (left > 0) {
-          armWatchdog(left)
+        const answeredAt = this.pendingInteractions.finishedAt(thread.id)
+        const now = Date.now()
+        const silent: string[] = []
+        let next = watchdogTimeoutMs
+        for (const key of runningSubagents()) {
+          if (!subagentActiveAt.has(key)) subagentActiveAt.set(key, now)
+          const left =
+            Math.max(subagentActiveAt.get(key) ?? now, answeredAt) + watchdogTimeoutMs - now
+          if (left > 0) next = Math.min(next, left)
+          else silent.push(key)
+        }
+        if (silent.length === 0) {
+          armWatchdog(next)
           return
         }
-        // Flip this before resolving the race so an already-buffered SDK event
-        // cannot create a fresh child after the watchdog has decided to fail.
-        acceptRuntimeEvents = false
-        resolveWatchdog?.()
+        void stopSilentSubagents(silent).then((stopped) => {
+          if (stopped) {
+            armWatchdog()
+            return
+          }
+          // 单独停不了（没有任务 ID、工作流、CLI 不认）：照旧结束整个回合。
+          // Flip this before resolving the race so an already-buffered SDK event
+          // cannot create a fresh child after the watchdog has decided to fail.
+          acceptRuntimeEvents = false
+          resolveWatchdog?.()
+        })
       }, delayMs)
       watchdogTimer.unref()
     }
-    // 子代理有动静：重新计时（还没在计时的开始计时）
-    const subagentActivity = (): void => {
-      subagentActiveAt = Date.now()
+    // 子代理有动静：记下是谁（认不出是谁的算所有在跑的），还没在计时的开始计时
+    const subagentActivity = (key?: string): void => {
+      const now = Date.now()
+      if (key) subagentActiveAt.set(key, now)
+      else for (const running of runningSubagents()) subagentActiveAt.set(running, now)
       armWatchdog()
+    }
+    const rememberSubagentTask = (key: string, taskId: string): void => {
+      subagentTaskIds.set(key, taskId)
+      subagentByTask.set(taskId, key)
+    }
+    // 只停没动静的那几个子代理，回合和别的子代理照常。有一个停不了就返回 false，由调用方结束整个回合
+    const stopSilentSubagents = async (keys: string[]): Promise<boolean> => {
+      const seconds = Math.ceil(watchdogTimeoutMs / 1000)
+      for (const key of keys) {
+        const taskId = subagentTaskIds.get(key)
+        if (key === WORKFLOW_WATCH || !taskId || !this.runtime.stopSubagentTask) {
+          debugLog('native.subagent.watchdogCannotStop', {
+            threadId: thread.id,
+            key,
+            taskId: taskId ?? null,
+          })
+          return false
+        }
+        if (!acceptRuntimeEvents) return true
+        stoppedByWatchdog.add(key)
+        if (!(await this.runtime.stopSubagentTask(thread.id, taskId))) {
+          stoppedByWatchdog.delete(key)
+          return false
+        }
+        if (!acceptRuntimeEvents) return true
+        const ctx = subagentContexts.get(key) ?? resumedSubagents.get(key)
+        const title = (ctx && this.store.getThread(ctx.childThreadId)?.name) || key
+        const failure = `Litch stopped this subagent: no activity for ${seconds} second${seconds === 1 ? '' : 's'}.`
+        this.finalizeOrphanedSubagents(
+          peer,
+          thread,
+          turn,
+          activeSubagents.has(key)
+            ? { contexts: subagentContexts, active: new Set([key]), resumed: new Map() }
+            : {
+                contexts: subagentContexts,
+                active: new Set(),
+                resumed: new Map(ctx ? [[key, ctx]] : []),
+              },
+          failure,
+        )
+        activeSubagents.delete(key)
+        backgroundSubagents.delete(key)
+        resumedSubagents.delete(key)
+        for (const [send, agent] of resumedBySend) if (agent === key) resumedBySend.delete(send)
+        debugLog('native.subagent.watchdogStopped', {
+          threadId: thread.id,
+          turnId: turn.id,
+          taskId,
+        })
+        // CLI 会把这个子代理记成“被用户停掉”，SendMessage 也会这么回。告诉模型是 Litch 停的
+        await this.runtime
+          .steer(thread.id, watchdogStopNote(title, taskId, seconds))
+          .catch((error: unknown) =>
+            debugLog('native.subagent.watchdogNoteFailed', {
+              threadId: thread.id,
+              error: String(error),
+            }),
+          )
+      }
+      if (!subagentsRunning()) disarmWatchdog()
+      return true
     }
     // 每来一个运行时事件都要问一遍，流式的每条增量也是：只问状态，不把整个回合读出来。
     const turnIsActive = (): boolean =>
@@ -4500,21 +4600,42 @@ export class CodexClaudeAppServer {
             return
           }
           if (event.type === 'subagent_activity') {
-            if (subagentsRunning()) subagentActivity()
+            if (!subagentsRunning()) return
+            const owner =
+              event.agentToolUseId &&
+              (activeSubagents.has(event.agentToolUseId) ||
+                resumedSubagents.has(event.agentToolUseId))
+                ? event.agentToolUseId
+                : event.taskId
+                  ? subagentByTask.get(event.taskId)
+                  : undefined
+            // 认不出是哪个子代理的（别的任务的进度、早于登记的）照旧算所有在跑的
+            subagentActivity(owner)
             return
           }
+          if (event.type === 'subagent_task') {
+            if (activeSubagents.has(event.toolUseId))
+              rememberSubagentTask(event.toolUseId, event.taskId)
+            return
+          }
+          // 看门狗停掉的子代理：已经收了尾，CLI 之后补来的结果不再投影
+          if (event.type === 'tool_result' && stoppedByWatchdog.has(event.toolUseId)) return
           if (event.type === 'subagent_resumed') {
             const ctx = this.resumeSubagentChild(peer, thread, event, mcpServers)
             if (!ctx) return
             resumedSubagents.set(ctx.agentToolUseId, ctx.context)
             resumedBySend.set(event.toolUseId, ctx.agentToolUseId)
-            subagentActivity()
+            stoppedByWatchdog.delete(ctx.agentToolUseId)
+            rememberSubagentTask(ctx.agentToolUseId, event.agentId)
+            subagentActivity(ctx.agentToolUseId)
             return
           }
           if (event.type === 'subagent_resume_finished') {
             const agentToolUseId = resumedBySend.get(event.toolUseId)
             const ctx = agentToolUseId ? resumedSubagents.get(agentToolUseId) : undefined
             if (!agentToolUseId || !ctx) return
+            // 看门狗正在停它：CLI 的结束通知可能先到，收尾交给看门狗（记成 Litch 停掉）
+            if (stoppedByWatchdog.has(agentToolUseId)) return
             resumedBySend.delete(event.toolUseId)
             resumedSubagents.delete(agentToolUseId)
             const failure = event.status === 'failed' ? subagentFailure(event.summary) : null
@@ -4535,7 +4656,8 @@ export class CodexClaudeAppServer {
           }
           if (event.type === 'subagent_backgrounded') {
             if (!activeSubagents.has(event.toolUseId)) return
-            subagentActivity()
+            rememberSubagentTask(event.toolUseId, event.agentId)
+            subagentActivity(event.toolUseId)
             backgroundSubagents.add(event.toolUseId)
             const ctx = subagentContexts.get(event.toolUseId)
             if (ctx) this.saveSubagentId(ctx.childThreadId, event.agentId)
@@ -4546,7 +4668,7 @@ export class CodexClaudeAppServer {
               subagentContexts.get(event.agentToolUseId) ??
               resumedSubagents.get(event.agentToolUseId)
             if (!ctx) return
-            subagentActivity()
+            subagentActivity(event.agentToolUseId)
             // 动态工具由原始回调生成生命周期，不再按子代理的工具调用重复投影。
             if (
               event.event.type === 'tool_use' &&
@@ -4819,7 +4941,7 @@ export class CodexClaudeAppServer {
             itemIds.set(event.toolUseId, waitId)
             subagentContexts.set(event.toolUseId, subagentContext)
             activeSubagents.add(event.toolUseId)
-            subagentActivity()
+            subagentActivity(event.toolUseId)
             return
           }
           if (event.type === 'tool_result' && activeSubagents.has(event.toolUseId)) {
@@ -5099,7 +5221,7 @@ export class CodexClaudeAppServer {
             if (isWorkflowToolName(event.toolName)) {
               workflowLaunchToolUseIds.add(event.toolUseId)
               workflowInFlight = true
-              subagentActivity()
+              subagentActivity(WORKFLOW_WATCH)
             }
             // Defense in depth against duplicate tool_use events for the same
             // tool_use_id. Claude SDK has been known to emit a block_start

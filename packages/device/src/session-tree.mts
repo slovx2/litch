@@ -679,7 +679,8 @@ export class SessionTree {
     const fresh = this.store.notes(parentId)
     if (!fresh.some((note) => note.wake) || this.active.has(parentId)) return
     const link = await this.link(harness)
-    const text = formatSessionEvent({ kind: 'wake', notes: fresh.map(publicNote) })
+    const latest = latestPerSession(fresh)
+    const text = formatSessionEvent({ kind: 'wake', notes: latest.map(publicNote) })
     const result = await link.request('turn/start', {
       threadId: parentId,
       input: [{ type: 'text', text, text_elements: [] }],
@@ -689,7 +690,7 @@ export class SessionTree {
       this.active.set(parentId, turn.id)
     this.store.dropNotes(parentId, Math.max(...fresh.map((note) => note.seq)))
     this.store.setWakes(parentId, this.store.wakes(parentId) + 1)
-    this.host.log(`替会话 ${parentId}（${harness}）开了一个唤醒回合，带着 ${fresh.length} 条回报`)
+    this.host.log(`替会话 ${parentId}（${harness}）开了一个唤醒回合，带着 ${latest.length} 条回报`)
   }
 
   /**
@@ -718,7 +719,10 @@ export class SessionTree {
     const notes = this.store.notes(threadId)
     if (notes.length === 0) return null
     this.store.dropNotes(threadId, Math.max(...notes.map((note) => note.seq)))
-    const event = formatSessionEvent({ kind: 'notes', notes: notes.map(publicNote) })
+    const event = formatSessionEvent({
+      kind: 'notes',
+      notes: latestPerSession(notes).map(publicNote),
+    })
     const at = input.findIndex((item) => isObject(item) && item.type === 'text')
     if (at < 0) return [{ type: 'text', text: event, text_elements: [] }, ...input]
     const first = input[at] as Record<string, unknown>
@@ -1120,6 +1124,19 @@ function busy(thread: unknown): boolean {
 }
 
 /** 队列里的回报去掉库里才有的字段 */
+/**
+ * 同一个子会话排了几条回报（父会话忙着的时候它又跑了几回合）只交最新的一条：旧的失败、半截的结果已经过时，
+ * 列在一起像是前后矛盾。次序按各子会话最新那条进队列的先后
+ */
+function latestPerSession<T extends SessionEventNote & { seq: number }>(notes: T[]): T[] {
+  const latest = new Map<string, T>()
+  for (const note of [...notes].sort((a, b) => a.seq - b.seq)) {
+    latest.delete(note.threadId)
+    latest.set(note.threadId, note)
+  }
+  return [...latest.values()]
+}
+
 function publicNote(note: SessionEventNote): SessionEventNote {
   return {
     threadId: note.threadId,

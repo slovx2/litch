@@ -366,8 +366,11 @@ export type RuntimeEvent =
   | { type: 'subagent_backgrounded'; toolUseId: string; agentId: string }
   // 子代理内部的正文、思考与工具调用，按所属 Agent 工具调用投影到子线程。
   | { type: 'subagent_event'; agentToolUseId: string; event: SubagentInnerEvent }
-  // 子代理有动静（CLI 的 task_progress、子代理的流式增量）。只给看门狗重新计时，不投影
-  | { type: 'subagent_activity' }
+  // 子代理有动静（CLI 的 task_progress、子代理的流式增量）。只给看门狗重新计时，不投影。
+  // agentToolUseId 是派出它的 Agent 调用，taskId 是 CLI 的任务 ID；认不出是哪一个时都不带
+  | { type: 'subagent_activity'; agentToolUseId?: string; taskId?: string }
+  // CLI 给一个 Agent 调用起了任务（task_started，local_agent）：看门狗单独停它时要用这个任务 ID
+  | { type: 'subagent_task'; toolUseId: string; taskId: string }
   // 主模型用 SendMessage 续跑了一个已结束的子代理（toolUseId 是那次 SendMessage，agentId 是 CLI 的代理 ID）。
   // 续跑期间子代理的消息照旧挂在当初派出它的 Agent 调用下面（subagent_event 的 agentToolUseId）。message 是交给它的话
   | { type: 'subagent_resumed'; toolUseId: string; agentId: string; message: string }
@@ -601,6 +604,8 @@ export interface ClaudeRuntime {
   deleteSession?(sessionId: string, cwd: string): Promise<void>
   listBackgroundShells?(threadId: string): RuntimeBackgroundShell[]
   stopBackgroundShell?(threadId: string, taskId: string): Promise<boolean>
+  // 停掉一个子代理任务（看门狗用），回合照常。停不了（没有进程、任务已不在）返回 false
+  stopSubagentTask?(threadId: string, taskId: string): Promise<boolean>
   updateTurnSettings?(
     threadId: string,
     turnId: string,

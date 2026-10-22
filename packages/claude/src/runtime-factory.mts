@@ -147,6 +147,12 @@ class SelectableRuntime implements ClaudeRuntime {
     return false
   }
 
+  async stopSubagentTask(threadId: string, taskId: string): Promise<boolean> {
+    for (const runtime of this.runtimes.values())
+      if (await runtime.stopSubagentTask?.(threadId, taskId)) return true
+    return false
+  }
+
   setSessionHandlers(handlers: RuntimeSessionHandlers): void {
     this.sessionHandlers = handlers
     for (const runtime of this.runtimes.values()) runtime.setSessionHandlers?.(handlers)

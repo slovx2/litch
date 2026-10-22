@@ -653,3 +653,44 @@ test('SESSION-TREE-014：父会话带着呈现风格派子会话：子会话也�
     await env.close()
   }
 })
+
+test('SESSION-TREE-015：父会话忙着时同一个子会话跑了几回合：唤醒只交它最新的一条', async () => {
+  const env = treeRig()
+  try {
+    const { threadId, childId } = await family(env)
+    env.claude.end(childId, 'failed', undefined, '连接断了')
+    env.claude.selfTurn(childId)
+    env.claude.end(childId, 'failed', undefined, '又断了')
+    env.claude.selfTurn(childId)
+    env.claude.end(childId, 'completed', '做完了')
+    await until(() => env.device.sessionTree.store.notes(threadId).length === 3, '三条都进队列')
+    env.pi.end(threadId)
+    await until(() => wakesOf(env, threadId).length === 1, '父会话停下后唤醒')
+    const [wake] = wakesOf(env, threadId)
+    assert.equal(wake?.notes.length, 1)
+    assert.equal(wake?.notes[0]?.status, 'completed')
+    assert.equal(wake?.notes[0]?.excerpt, '做完了')
+    assert.equal(env.device.sessionTree.store.notes(threadId).length, 0, '旧的几条也一起出队')
+  } finally {
+    await env.close()
+  }
+})
+
+test('SESSION-TREE-016：不唤醒的子会话攒了几条回报：用户说话时附在前面的只留它最新的一条', async () => {
+  const env = treeRig()
+  try {
+    const { client, threadId, childId } = await family(env, false)
+    env.pi.end(threadId)
+    env.claude.end(childId, 'completed', '第一遍')
+    env.claude.selfTurn(childId)
+    env.claude.end(childId, 'interrupted', '第二遍')
+    await until(() => env.device.sessionTree.store.notes(threadId).length === 2, '两条进队列')
+    await client.call('turn/start', { threadId, input: text('接着来') })
+    const parsed = parseSessionEvent(env.pi.sent('turn/start').at(-1).input[0].text)
+    assert.equal(parsed.event?.notes.length, 1)
+    assert.equal(parsed.event?.notes[0]?.excerpt, '第二遍')
+    assert.equal(parsed.rest, '接着来')
+  } finally {
+    await env.close()
+  }
+})

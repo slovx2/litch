@@ -266,7 +266,8 @@ interface PendingTurn {
   // 这一回合里被 SendMessage 续跑、还没结束的子代理：agentId → 那次 SendMessage 的调用 ID
   resumedAgents: Map<string, string>
   // 上次报子代理流式增量的时刻（毫秒）：增量很密，隔一秒报一次就够看门狗用
-  subagentStreamAt: number
+  // 每个子代理（按派出它的 Agent 调用）上一次报“有动静”的时刻
+  subagentStreamAt: Map<string, number>
   // 主会话最近一条 API 出错的助手消息上 CLI 归的类（SDKAssistantMessageError），回合失败时拼 codexErrorInfo
   apiErrorCategory: string | null
 }
@@ -484,7 +485,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       subagentText: new Map(),
       sendMessages: new Map(),
       resumedAgents: new Map(),
-      subagentStreamAt: 0,
+      subagentStreamAt: new Map(),
       apiErrorCategory: null,
     }
     this.turns.set(context.turnId, pending)
@@ -836,6 +837,18 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       return true
     } catch (error) {
       debugLog('native.backgroundShell.stopFailed', { threadId, taskId, error: String(error) })
+      return false
+    }
+  }
+
+  async stopSubagentTask(threadId: string, taskId: string): Promise<boolean> {
+    const session = this.sessionFor(threadId)
+    if (!session || session.closing) return false
+    try {
+      await session.query.stopTask(taskId)
+      return true
+    } catch (error) {
+      debugLog('native.subagent.stopFailed', { threadId, taskId, error: String(error) })
       return false
     }
   }
@@ -1981,8 +1994,25 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       return
     }
     if (subtype === 'task_progress') {
-      await pending.handlers.onEvent({ type: 'subagent_activity' })
+      await pending.handlers.onEvent({
+        type: 'subagent_activity',
+        ...(typeof message.task_id === 'string' ? { taskId: message.task_id } : {}),
+        ...(typeof message.tool_use_id === 'string' ? { agentToolUseId: message.tool_use_id } : {}),
+      })
       return
+    }
+    if (
+      subtype === 'task_started' &&
+      message.task_type === 'local_agent' &&
+      typeof message.task_id === 'string' &&
+      typeof message.tool_use_id === 'string'
+    ) {
+      await pending.handlers.onEvent({
+        type: 'subagent_task',
+        toolUseId: message.tool_use_id,
+        taskId: message.task_id,
+      })
+      // 不 return：后台任务的集合也要看这条
     }
     if (
       subtype === 'task_notification' &&
@@ -2293,9 +2323,12 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       if (id) await this.goalUsage(pending, { id, usage: event.usage })
       await this.contextUsage(pending, source, id, event.usage)
     }
-    if (message.parent_tool_use_id && Date.now() - (pending.subagentStreamAt ?? 0) >= 1000) {
-      pending.subagentStreamAt = Date.now()
-      await pending.handlers.onEvent({ type: 'subagent_activity' })
+    if (
+      message.parent_tool_use_id &&
+      Date.now() - (pending.subagentStreamAt.get(source) ?? 0) >= 1000
+    ) {
+      pending.subagentStreamAt.set(source, Date.now())
+      await pending.handlers.onEvent({ type: 'subagent_activity', agentToolUseId: source })
     }
     if (message.parent_tool_use_id || pending.activeSubagents.size > 0) return
     if (eventType === 'message_start') {

@@ -7,8 +7,8 @@ import test from 'node:test'
 import { MockLLM, type ModelRequest } from './fixtures/mock-llm.mjs'
 import { ProtocolClient } from './fixtures/protocol-client.mjs'
 
-// 子代理看门狗按“多久没有子代理活动”算：子代理一直在干活（工具调用、正文），总时长超过时限也不算失联；
-// 一点动静都没有满了时限才判失败。主模型用 SendMessage 续跑已结束的子代理时，续跑的过程进子线程的
+// 子代理看门狗按每个子代理“多久没有动静”算：子代理一直在干活（工具调用、正文），总时长超过时限也不算失联；
+// 一点动静都没有满了时限，Litch 只停那一个，回合和别的子代理照常。主模型用 SendMessage 续跑已结束的子代理时，续跑的过程进子线程的
 // 一个新回合，也归看门狗管。真实 CLI 加回环上的假模型，看门狗时限用环境变量调小。
 
 const toolId = () => `toolu_${randomUUID().replace(/-/g, '').slice(0, 20)}`
@@ -107,23 +107,103 @@ for (const background of [false, true])
     }
   })
 
-test('ACTIVITY-003：子代理一点动静都没有，满了时限照旧判失败', { timeout: 120_000 }, async () => {
+test('ACTIVITY-003：前台子代理一点动静都没有，满了时限 Litch 只停它：子线程失败，主模型接着做完', {
+  timeout: 120_000,
+}, async () => {
   const s = await scene(2000)
   try {
     const busy = busyChild(0, false)
+    const seen: string[] = []
     s.model.fallback = async (request) => {
       const first = JSON.stringify((request.messages as Messages)[0]?.content ?? '')
       // 子代理的模型请求一直不回：没有任何动静
-      if (first.includes('BUSY_CHILD')) await sleep(8000)
+      if (first.includes('BUSY_CHILD')) await sleep(20_000)
+      if (JSON.stringify(request.messages).includes('Litch stopped the subagent')) seen.push('note')
       return busy(request)
     }
+    const started = Date.now()
     const { turn } = await s.client.request('turn/start', {
       threadId: s.threadId,
       input: [{ type: 'text', text: 'BUSY_MAIN 派子代理' }],
     })
     const done = await s.client.completed(turn.id)
-    assert.equal(done.status, 'failed')
-    assert.match(done.error.message, /no subagent activity for 2 seconds/)
+    assert.equal(done.status, 'completed', JSON.stringify(done.error))
+    assert.ok(Date.now() - started < 18_000, '不该等到子代理自己回来')
+    assert.ok(seen.includes('note'), '主模型应收到 Litch 停掉子代理的说明')
+    const child = await readThread(s.client, childThreadId(s.client, s.threadId))
+    assert.equal(child.turns.at(-1).status, 'failed')
+    assert.match(JSON.stringify(child.turns.at(-1).error), /Litch stopped this subagent/)
+  } finally {
+    await s.dispose()
+  }
+})
+
+test('ACTIVITY-004：两个后台子代理一个没动静，看门狗只停它；另一个照常做完，回合不失败，主模型知道是 Litch 停的', {
+  timeout: 120_000,
+}, async () => {
+  // 时限 2.5 秒：SILENT 的头一次模型请求 20 秒不回；BUSY 跑 5 条 sleep 1，一直有动静
+  const s = await scene(2500)
+  try {
+    const busy = busyChild(5, true)
+    const seen: string[] = []
+    s.model.fallback = async (request) => {
+      const messages = (request.messages ?? []) as Messages
+      const first = JSON.stringify(messages[0]?.content ?? '')
+      const all = JSON.stringify(messages)
+      if (first.includes('SILENT_CHILD')) {
+        await sleep(20_000)
+        return [{ type: 'text', text: 'SILENT_DONE' }]
+      }
+      if (first.includes('BUSY_CHILD')) return busy(request)
+      if (!all.includes('"Agent"'))
+        return [
+          {
+            type: 'tool_use',
+            id: toolId(),
+            name: 'Agent',
+            input: {
+              description: '没动静',
+              prompt: 'SILENT_CHILD 等着',
+              subagent_type: 'general-purpose',
+            },
+          },
+          {
+            type: 'tool_use',
+            id: toolId(),
+            name: 'Agent',
+            input: {
+              description: '一直在干活',
+              prompt: 'BUSY_CHILD 跑几条命令',
+              subagent_type: 'general-purpose',
+            },
+          },
+        ]
+      if (all.includes('Litch stopped the subagent')) seen.push('note')
+      return [{ type: 'text', text: 'MAIN_OK' }]
+    }
+    const started = Date.now()
+    const { turn } = await s.client.request('turn/start', {
+      threadId: s.threadId,
+      input: [{ type: 'text', text: 'TWO_MAIN 派两个子代理' }],
+    })
+    const done = await s.client.completed(turn.id)
+    assert.equal(done.status, 'completed', JSON.stringify(done.error))
+    assert.ok(Date.now() - started < 18_000, '没动静的子代理应被单独停掉，不该等到它自己回来')
+    assert.ok(seen.includes('note'), '主模型应收到 Litch 停掉子代理的说明')
+    const children = s.client.trace
+      .filter(
+        (message) => message.method === 'thread/started' && message.params.thread.id !== s.threadId,
+      )
+      .map((message) => message.params.thread.id as string)
+    assert.equal(children.length, 2)
+    const turns = await Promise.all(
+      children.map(async (id) => (await readThread(s.client, id)).turns.at(-1)),
+    )
+    const failed = turns.filter((childTurn: any) => childTurn.status === 'failed')
+    const completed = turns.filter((childTurn: any) => childTurn.status === 'completed')
+    assert.equal(failed.length, 1, JSON.stringify(turns.map((t: any) => t.status)))
+    assert.equal(completed.length, 1)
+    assert.match(JSON.stringify(failed[0].error), /Litch stopped this subagent/)
   } finally {
     await s.dispose()
   }
@@ -247,23 +327,23 @@ test('RESUME-001：主模型用 SendMessage 续跑已结束的子代理，续跑
   }
 })
 
-test('RESUME-002：续跑的子代理一点动静都没有，满了时限照样判失败，子线程的回合跟着失败', {
+test('RESUME-002：续跑的子代理一点动静都没有，满了时限 Litch 只停它：子线程的这一回合失败，父回合照常结束', {
   timeout: 120_000,
 }, async () => {
   const s = await scene(2000)
   try {
-    s.model.fallback = resumeRouter(s.home, 1, 8000)
+    s.model.fallback = resumeRouter(s.home, 1, 20_000)
     const childId = await firstTurn(s)
     const { turn } = await s.client.request('turn/start', {
       threadId: s.threadId,
       input: [{ type: 'text', text: 'MAIN_SECOND 再问问子代理' }],
     })
     const done = await s.client.completed(turn.id)
-    assert.equal(done.status, 'failed')
-    assert.match(done.error.message, /no subagent activity for 2 seconds/)
+    assert.equal(done.status, 'completed', JSON.stringify(done.error))
     const child = await readThread(s.client, childId)
     assert.equal(child.turns.length, 2)
     assert.equal(child.turns[1].status, 'failed')
+    assert.match(JSON.stringify(child.turns[1].error), /Litch stopped this subagent/)
   } finally {
     await s.dispose()
   }

@@ -166,7 +166,7 @@ test('nested assistant events do not split or contaminate parent messages', asyn
       { type: 'message_boundary' },
       { type: 'text_delta', delta: 'Parent' },
       // 子代理的流式增量只报一次“有动静”（隔一秒最多一次，给子代理看门狗计时），不进父消息
-      { type: 'subagent_activity' },
+      { type: 'subagent_activity', agentToolUseId: 'parent-tool' },
       // 子代理的正文按完整内容块归到它自己的线程，不进入父消息，也不重复流式增量。
       {
         type: 'subagent_event',

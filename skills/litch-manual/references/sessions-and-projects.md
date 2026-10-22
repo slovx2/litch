@@ -196,10 +196,13 @@ woken to continue.
   connected; it happens when one connects. Turns run by scheduled tasks report but do not wake.
   A sub-session you stop or archive yourself does not wake the parent either: the report notes it and
   the parent sees it on your next message. A failed or interrupted turn's report carries its error.
+  If a sub-session finishes several turns while the parent is busy, only its latest report is handed over.
 - **Detach as a standalone session** (session menu or the "Started from …" bar at the top of a
   sub-session) cuts the link.
 - **Subagents** started by a harness itself (for example Codex's agents) are not sub-sessions; they show
-  in the side panel's Subagents tab and cannot be messaged directly.
+  in the side panel's Subagents tab and cannot be messaged directly. In Claude Code sessions, Litch stops
+  a subagent that shows no activity for 30 minutes; the turn and the other subagents keep running, and
+  the model is told that Litch, not you, stopped it.
 
 The whole feature can be switched per device with the `sessions.enabled` setting
 (`scripts/litch settings set <device> sessions.enabled=false`); remote devices need adapter 0.11.0 or
