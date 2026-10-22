@@ -11,6 +11,7 @@ import {
 import { judgeSwitches, type SwitchesSeen } from './probe-settings-switches.mjs'
 import { judgeTools, type ToolsSeen } from './probe-settings-tools.mjs'
 import type { PersistSeen, TurnSeen } from './probe-settings-turn.mjs'
+import { judgeWidths, type WidthSeen } from './probe-settings-width.mjs'
 import type { SizeSeen } from './probe-terminal-size.mjs'
 
 /** 应用菜单里带着键的一项 */
@@ -57,6 +58,8 @@ export interface FirstSeen {
   turn: TurnSeen
   screens: ScreensSeen
   zooms: ZoomSeen[]
+  /** 对话区宽度：没选过时是哪一档，几种窗口宽度、侧面板开合、两档下量到的 */
+  widths: { start: string; rows: WidthSeen[] }
   persist: PersistSeen
   kept: ShellLook
 }
@@ -223,6 +226,7 @@ export function judgeFirst(
     '每点一下之后根元素上的样子',
   )
   same(controls.rowHeights, [24, 32, 28], '三档密度下侧栏一行的高度')
+  same(controls.widths, ['compact', 'wide'], '对话区宽度点了之后根元素上标的')
   same(controls.langChoices, ['zh-CN', 'en'], '语言有哪几档')
   same(controls.english, titlesOn(platform, 'en'), '英文的组名')
   same(controls.chinese, titlesOn(platform), '换回中文的组名')
@@ -332,6 +336,8 @@ export function judgeFirst(
       `${name}：侧面板横向溢出 ${lists.sideOverflow.join('、')}`,
     )
   }
+
+  failed.push(...judgeWidths(seen.widths.start, seen.widths.rows))
 
   // ---- 重开还在 ----
   same(persist.root, 'human/dark/compact/en', '重新加载之后根元素上的样子')

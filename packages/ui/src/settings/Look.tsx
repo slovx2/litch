@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import {
+  CHAT_WIDTHS,
   DENSITIES,
   LANGS,
   SKINS,
@@ -105,7 +106,7 @@ export function Row({
   )
 }
 
-/** 外观：皮肤（带预览）、明暗、密度、界面缩放。点了当场生效 */
+/** 外观：皮肤（带预览）、明暗、密度、对话区宽度、界面缩放。点了当场生效 */
 export function LookSection() {
   const look = useAppearance()
   const { shell } = useServices()
@@ -160,6 +161,15 @@ export function LookSection() {
               options={DENSITIES}
               label={(density) => t(`density.${density}`)}
               onPick={(density) => setAppearance({ density })}
+            />
+          </Row>
+          <Row title={t('look.chatWidth')}>
+            <Choice
+              name="chatWidth"
+              value={look.chatWidth}
+              options={CHAT_WIDTHS}
+              label={(width) => t(`chatWidth.${width}`)}
+              onPick={(chatWidth) => setAppearance({ chatWidth })}
             />
           </Row>
           <Row title={t('look.zoom')} note={canZoom ? undefined : t('settings.look.zoom.browser')}>

@@ -33,6 +33,7 @@ import {
   turnSeen,
   zoomNow,
 } from './probe-settings-turn.mjs'
+import { type WidthSeen, widthAtStart, widthSeen } from './probe-settings-width.mjs'
 import { installTerminalKit } from './probe-terminal-kit.mjs'
 import { sizeSeen } from './probe-terminal-size.mjs'
 import type { SmokeHooks } from './smoke.mjs'
@@ -133,11 +134,36 @@ async function zoomSeen(window: BrowserWindow, zoom: number, base: number): Prom
   }
 }
 
+/**
+ * 对话区宽度：页面 1280、1600、1920 宽（屏幕放不下的那几档量到的是放得下的最宽），侧面板开合，两档各量一次。
+ * 量完换回宽档
+ */
+async function widthsSeen(window: BrowserWindow, base: number): Promise<WidthSeen[]> {
+  const rows: WidthSeen[] = []
+  const [, height = 0] = window.getContentSize()
+  for (const wanted of [1280, 1600, 1920]) {
+    window.setContentSize(wanted, height)
+    const [inner = 0] = window.getContentSize()
+    await inPage(window, sizedTo, inner, height)
+    for (const side of [false, true]) {
+      await inPage(window, sidePanel, side)
+      for (const chatWidth of ['wide', 'compact']) {
+        rows.push(await inPage(window, widthSeen, MOCK.talk, chatWidth, side))
+        await shot(window, `width-${inner}-${side ? 'side' : 'plain'}-${chatWidth}`)
+      }
+    }
+    await inPage(window, sidePanel, false)
+  }
+  await inPage(window, lookSet, { chatWidth: 'wide' }, base)
+  return rows
+}
+
 async function runFirst(window: BrowserWindow, hooks: SmokeHooks): Promise<FirstSeen> {
   const base = screen.getDisplayMatching(window.getBounds()).scaleFactor
   await inPage(window, installSettingsKit)
   const atStart = await inPage(window, innerSize)
   const page = await inPage(window, pageSeen)
+  const widthStart = await inPage(window, widthAtStart)
 
   // 应用菜单：“设置…”“关于”，和“显示”里管缩放的三项
   step('应用菜单：设置')
@@ -181,6 +207,7 @@ async function runFirst(window: BrowserWindow, hooks: SmokeHooks): Promise<First
   await inPage(window, installFilesKit)
   const zooms = [await zoomSeen(window, 0.8, base), await zoomSeen(window, 1.5, base)]
   await inPage(window, lookSet, { zoom: 1 }, base)
+  const widths = { start: widthStart, rows: await widthsSeen(window, base) }
   window.setSize(width, height)
 
   // 重开还在：换成一份不是默认的外观（连语言），重新加载——地址里不带平时那个“语言是中文”的临时指定
@@ -210,6 +237,7 @@ async function runFirst(window: BrowserWindow, hooks: SmokeHooks): Promise<First
     turn,
     screens,
     zooms,
+    widths,
     persist,
     // 外壳自己记下来的那一份（用户数据目录的 preferences.json）
     kept: readLook(app.getPath('userData')),

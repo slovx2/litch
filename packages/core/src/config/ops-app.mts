@@ -17,6 +17,8 @@ import { phoneCount } from './ops-places.mjs'
 const SKINS = ['retro', 'human', 'standard']
 const MODES = ['light', 'dark', 'system']
 const DENSITIES = ['compact', 'standard', 'roomy']
+/** 对话区宽度（和界面的 CHAT_WIDTHS 一致） */
+const WIDTHS = ['wide', 'compact']
 /** 界面缩放的几档（和界面的 ZOOMS 一致） */
 const ZOOMS = [0.8, 0.9, 1, 1.1, 1.25, 1.5]
 /** 设置页的几组，和界面 SettingsPage.tsx 的 SETTINGS_SECTIONS 同一个顺序 */
@@ -34,7 +36,7 @@ export const SETTINGS_SECTIONS = [
 ]
 
 const prefsLine = (prefs: ConfigPrefs) =>
-  `language ${prefs.lang} · skin ${prefs.skin} · mode ${prefs.theme} · density ${prefs.density} · zoom ${Math.round(prefs.zoom * 100)}% · links ${prefs.linksInApp ? 'in-app' : 'system'} · task-success notices ${prefs.notifySuccess ? 'on' : 'off'}`
+  `language ${prefs.lang} · skin ${prefs.skin} · mode ${prefs.theme} · density ${prefs.density} · width ${prefs.chatWidth} · zoom ${Math.round(prefs.zoom * 100)}% · links ${prefs.linksInApp ? 'in-app' : 'system'} · task-success notices ${prefs.notifySuccess ? 'on' : 'off'}`
 
 const setPrefs = async (ctx: OpContext, patch: Partial<ConfigPrefs>) => {
   const prefs = (await ctx.ui({ kind: 'prefs.set', patch })) as ConfigPrefs
@@ -145,11 +147,11 @@ export const APP_OPS: Record<string, OpSpec> = {
   },
   'look set': {
     args: [0, 0],
-    options: ['skin', 'mode', 'density', 'zoom'],
-    usage: `look set [--skin ${SKINS.join('|')}] [--mode ${MODES.join('|')}] [--density ${DENSITIES.join('|')}] [--zoom ${ZOOMS.map((zoom) => `${Math.round(zoom * 100)}`).join('|')}]`,
+    options: ['skin', 'mode', 'density', 'width', 'zoom'],
+    usage: `look set [--skin ${SKINS.join('|')}] [--mode ${MODES.join('|')}] [--density ${DENSITIES.join('|')}] [--width ${WIDTHS.join('|')}] [--zoom ${ZOOMS.map((zoom) => `${Math.round(zoom * 100)}`).join('|')}]`,
     summary: {
-      zh: '换外观（皮肤、明暗、密度、缩放）',
-      en: 'Change the look (skin, light/dark, density, zoom)',
+      zh: '换外观（皮肤、明暗、密度、对话区宽度、缩放）',
+      en: 'Change the look (skin, light/dark, density, conversation width, zoom)',
     },
     async run(ctx) {
       const get = (name: string) => ctx.cmd.options.get(name)
@@ -175,6 +177,16 @@ export const APP_OPS: Record<string, OpSpec> = {
             `--density must be ${DENSITIES.join(', ')}`,
           )
         patch.density = density
+      }
+      const width = get('width')
+      if (width !== undefined) {
+        if (!WIDTHS.includes(width))
+          throw bad(
+            ctx,
+            `对话区宽度只能是 ${WIDTHS.join('、')}`,
+            `--width must be ${WIDTHS.join(', ')}`,
+          )
+        patch.chatWidth = width
       }
       const zoomRaw = get('zoom')
       if (zoomRaw !== undefined) {

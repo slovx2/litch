@@ -321,7 +321,7 @@
 /* “计划写好了，要不要执行”：排在输入框上面，和输入区一样宽。一句话在左，三个按钮在右，窄了就换行 */
 .plan-ask {
   width: 100%;
-  max-width: 760px;
+  max-width: var(--tr-max);
   margin: 0 auto;
   display: flex;
   flex-wrap: wrap;

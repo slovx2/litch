@@ -779,6 +779,9 @@ export const en: Record<MessageKey, Entry> = {
   'density.compact': 'Compact',
   'density.standard': 'Standard',
   'density.roomy': 'Roomy',
+  'look.chatWidth': 'Conversation width',
+  'chatWidth.wide': 'Wide',
+  'chatWidth.compact': 'Narrow',
 
   'sidebar.settings': 'Settings',
   'sidebar.look': 'Appearance',

@@ -98,6 +98,8 @@ export interface ControlsSeen {
   steps: string[]
   /** 三档密度下侧栏里一行会话多高 */
   rowHeights: number[]
+  /** 对话区宽度那一排点了紧凑、宽之后根元素上标的 */
+  widths: string[]
   /** 换成英文之后左边那几组的名字，换回中文之后的 */
   english: string[]
   chinese: string[]
@@ -148,6 +150,12 @@ export async function controlsSeen(): Promise<ControlsSeen> {
     await until(`密度“${density}”标成选中`, () => pressed('density') === density)
     rowHeights.push(one('.ss-row')?.offsetHeight ?? 0)
   }
+  const widths: string[] = []
+  for (const width of ['compact', 'wide']) {
+    choice('chatWidth', width)?.click()
+    await until(`对话区宽度“${width}”标成选中`, () => pressed('chatWidth') === width)
+    widths.push(root.dataset.chatWidth ?? '')
+  }
 
   await kit.openSettings('lang')
   const langChoices = all('[data-choice="lang"] [data-value]').map(
@@ -179,6 +187,7 @@ export async function controlsSeen(): Promise<ControlsSeen> {
   return {
     steps,
     rowHeights,
+    widths,
     english,
     chinese,
     langChoices,

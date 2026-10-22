@@ -89,7 +89,7 @@ together with a save bar. See `devices.md` and `device-settings.md`.
 
 ### Settings
 
-Sections in order: **Appearance** (skin, theme, density, zoom), **Language**, **Devices** (a shortcut
+Sections in order: **Appearance** (skin, theme, density, conversation width, zoom), **Language**, **Devices** (a shortcut
 to the Devices page), **Built-in browser** (links, import from another browser, trust all sites and the blocklist, always-allowed sites, saved passwords, clear browsing data),
 **Computer Use** (macOS and Windows only: permissions or helper status, always-allowed apps),
 **Notifications** (scheduled tasks), **Config assistant** (section id `assist`: the switch that
