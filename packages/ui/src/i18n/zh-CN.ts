@@ -737,6 +737,9 @@ export const zhCN = {
   'density.roomy': '宽松',
 
   'sidebar.settings': '设置',
+  'sidebar.look': '外观',
+  'sidebar.look.more': '更多外观设置',
+  'sidebar.tasks': '定时任务',
   'settings.title': '设置',
   'settings.close': '回到对话',
   'settings.nav': '设置的分组',

@@ -4,6 +4,8 @@ These are preferences of the Litch app on this computer (not device settings). T
 
 ## Look (Settings → Appearance)
 
+Skin, theme and language can also be changed from the **Appearance** button at the bottom of the sidebar.
+
 `scripts/litch look set` changes any of (exact flags: `scripts/litch look --help`):
 
 | Item | Values | Default |

@@ -31,7 +31,7 @@ import { badgeOf, downHarness, downText, nameOf, wireStyle } from '../app/device
 import { reasonOf } from '../app/errors.ts'
 import { ago } from '../app/format.ts'
 import { useHoverCard } from '../app/HoverCard.tsx'
-import { Back, Caret, Clock, Forward, Gear, Icon, Notice, Plus } from '../app/icons.tsx'
+import { Back, Caret, Forward, Icon, Notice, Plus } from '../app/icons.tsx'
 import { useKey, useServices } from '../app/services.tsx'
 import { showToast } from '../app/toasts.tsx'
 import type { PlaceWish } from '../composer/new-place.ts'
@@ -60,6 +60,7 @@ import { HarnessFilter } from './HarnessFilter.tsx'
 import { DeviceInfo, SessionInfo, WorkspaceInfo } from './InfoCards.tsx'
 import { type RowAction, RowMenu, type RowMenuHandle } from './RowMenu.tsx'
 import { SectionDialog } from './SectionDialog.tsx'
+import { SidebarFoot } from './SidebarFoot.tsx'
 import { SidebarFrame } from './SidebarFrame.tsx'
 import { SidebarMore } from './SidebarMore.tsx'
 import {
@@ -1592,71 +1593,6 @@ function DeviceGroup(props: GroupProps) {
   )
 }
 
-/**
- * 侧栏底部右边的齿轮：进设置。设备、已归档对话、版本都收在设置页里（设置页左上角直接进设备页、已归档对话页，
- * 版本在“关于”）。提示里带着核心的版本，顺带确认命令这条路是通的。
- * 那三页都是从这里进去的，开着其中哪一页齿轮都亮着
- */
-function SettingsButton({ page, onOpen }: { page: Page | null; onOpen(): void }) {
-  const { channel } = useServices()
-  const [info, setInfo] = useState<{ version: string; mock: boolean } | null>(null)
-  const t = useT()
-  useEffect(() => {
-    const controller = new AbortController()
-    channel
-      .command('core.info', {}, { signal: controller.signal })
-      .then(setInfo)
-      .catch(() => {})
-    return () => controller.abort()
-  }, [channel])
-  const tip = [
-    t('sidebar.settings'),
-    ...(info ? [t('sidebar.core', { version: info.version })] : []),
-    ...(info?.mock ? [t('sidebar.mockCore')] : []),
-  ].join(' · ')
-  const lit = page === 'settings' || page === 'devices' || page === 'archived'
-  return (
-    <button
-      type="button"
-      className={lit ? 'ibtn sb-settings on' : 'ibtn sb-settings'}
-      aria-current={page === 'settings' ? 'page' : undefined}
-      aria-label={t('sidebar.settings')}
-      title={tip}
-      data-core={info?.version}
-      data-mock={info?.mock ? '' : undefined}
-      onClick={onOpen}
-    >
-      <Gear />
-    </button>
-  )
-}
-
-/** 底下的“定时任务”：后面是各台设备上没看过的运行一共几条 */
-function TasksLink({ on, onOpen }: { on: boolean; onOpen(): void }) {
-  const unread = useKey<number>(keys.tasksUnread) ?? 0
-  const t = useT()
-  return (
-    <button
-      type="button"
-      className={on ? 'sb-link tasks on' : 'sb-link tasks'}
-      aria-current={on ? 'page' : undefined}
-      onClick={onOpen}
-    >
-      <Clock />
-      <span className="grow">{t('tasks.title')}</span>
-      {unread > 0 ? (
-        <span
-          className="sb-count"
-          data-unread={unread}
-          title={t('tasks.unread', { count: unread })}
-        >
-          {unread}
-        </span>
-      ) : null}
-    </button>
-  )
-}
-
 interface SidebarProps {
   selection: Selection | null
   draft: Draft | null
@@ -1721,11 +1657,7 @@ export function Sidebar(props: SidebarProps) {
           />
         ))}
       </div>
-      {/* 底下一行：左边定时任务，右边进设置的齿轮 */}
-      <div className="sb-foot">
-        <TasksLink on={page === 'tasks'} onOpen={() => onPage('tasks')} />
-        <SettingsButton page={page} onOpen={() => onPage('settings')} />
-      </div>
+      <SidebarFoot page={page} onPage={onPage} />
     </SidebarFrame>
   )
 }

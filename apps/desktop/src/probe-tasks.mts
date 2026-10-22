@@ -73,8 +73,8 @@ export async function tasksProbe(name: string): Promise<TasksProbe> {
     }).then((target) => target.click())
 
   // 侧栏入口：数要等示例任务到了才有
-  const link = await until('侧栏底下的“定时任务”', () => one<HTMLElement>('.sb-link.tasks'))
-  const badge = Number(text(await until('入口上没看过的数', () => one('.sb-link.tasks .sb-count'))))
+  const link = await until('侧栏底下的“定时任务”', () => one<HTMLElement>('.sb-btn.tasks'))
+  const badge = Number(text(await until('入口上没看过的数', () => one('.sb-btn.tasks .sb-count'))))
 
   // 列表
   link.click()

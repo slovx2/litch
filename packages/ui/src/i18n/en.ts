@@ -788,6 +788,9 @@ export const en: Record<MessageKey, Entry> = {
   'density.roomy': 'Roomy',
 
   'sidebar.settings': 'Settings',
+  'sidebar.look': 'Appearance',
+  'sidebar.look.more': 'More appearance settings',
+  'sidebar.tasks': 'Schedule',
   'settings.title': 'Settings',
   'settings.close': 'Back to the conversation',
   'settings.nav': 'Settings sections',

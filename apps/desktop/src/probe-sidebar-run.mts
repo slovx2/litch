@@ -12,6 +12,7 @@ import { cwdSeen, judgeCwd } from './probe-sidebar-cwd.mjs'
 import { dragSeen, dragShown, judgeDrag } from './probe-sidebar-drag.mjs'
 import { filterKept, filterSeen, filterTo } from './probe-sidebar-filter.mjs'
 import { judgeFilter } from './probe-sidebar-filter-judge.mjs'
+import { footSeen, judgeFoot } from './probe-sidebar-foot.mjs'
 import { dragTo, frameSeen, keysSeen, sidebarBecame, sidePanel } from './probe-sidebar-frame.mjs'
 import { hideNow, hideSeen, reloadSeen } from './probe-sidebar-hide.mjs'
 import { type FrameChecks, judgeFrame } from './probe-sidebar-judge.mjs'
@@ -178,6 +179,10 @@ async function run(window: BrowserWindow, hooks: SmokeHooks): Promise<readonly [
   await inPage(window, installSidebarKit)
   const tally = await inPage(window, tallySeen)
   const frame = await frameChecks(window, hooks)
+  // 底部三个按钮：拖到最窄再量，量完放回去
+  await inPage(window, dragTo, 0)
+  const foot = await inPage(window, footSeen)
+  await inPage(window, dragTo, 360)
   // “永远显示活动对话”默认开：筛选那一段量的是原来的筛法，先关上，重启之后量完它自己那一段再打开
   await inPage(window, activeSet, false)
   const filter = await inPage(window, filterSeen, SESSION)
@@ -203,10 +208,11 @@ async function run(window: BrowserWindow, hooks: SmokeHooks): Promise<readonly [
   const shots = process.env.LITCH_SIDEBAR_SHOTS
   if (shots) await shoot(window, shots)
   return [
-    { tally, frame: { ...frame, reload }, filter, kept, active, cwd, native, drag },
+    { tally, frame: { ...frame, reload }, foot, filter, kept, active, cwd, native, drag },
     [
       ...judgeTally(tally),
       ...judgeFrame({ ...frame, reload }),
+      ...judgeFoot(foot),
       ...judgeFilter(filter, kept, SESSION),
       ...judgeCwd(cwd),
       ...judgeNative(native, NATIVE_PARENT),

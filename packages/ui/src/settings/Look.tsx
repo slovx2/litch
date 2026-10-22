@@ -20,7 +20,7 @@ const SKIN_NOTES: Record<Skin, MessageKey> = {
 }
 
 /** 语言的名字用它自己的字写，不跟着界面的语言变：找不着北的时候也认得出自己那一种 */
-const LANG_NAMES: Record<Lang, string> = { 'zh-CN': '中文', en: 'English' }
+export const LANG_NAMES: Record<Lang, string> = { 'zh-CN': '中文', en: 'English' }
 
 /**
  * 一种皮肤的预览。不是截图：这一小块上把那种皮肤的变量整套重新声明了一遍（皮肤样式文件里的 data-skin-preview），

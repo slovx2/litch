@@ -64,7 +64,7 @@ export async function screensSeen(titles: { talk: string; waiting: string }): Pr
   one<HTMLButtonElement>('.arch-head .ibtn')?.click()
 
   // 定时任务：列表；一个有几次运行（有失败、有成功）的任务的详情，运行记录取到了再量；新建表单
-  one<HTMLButtonElement>('.sb-link.tasks')?.click()
+  one<HTMLButtonElement>('.sb-btn.tasks')?.click()
   await until('定时任务列表', () => one('[data-tasks="list"]') && all('.tk-row').length > 0)
   const taskRows = all('.tk-row').length
   await sweep('定时任务', ['.main'])
