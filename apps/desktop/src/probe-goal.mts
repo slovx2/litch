@@ -76,7 +76,8 @@ export async function goalProbe(sessionId: string): Promise<GoalSeen> {
   seen.origin = $('.main .turn-origin[data-origin="goal"]')?.textContent ?? '没有'
 
   // —— 第三轮达成：那一行没了，最后一轮回答下面写用时 ——
-  const barGone = await until(() => $('.main .goalbar') === null, 15000)
+  // 三轮续做加上流式出字，机器忙时要十几秒，留足余量
+  const barGone = await until(() => $('.main .goalbar') === null, 30000)
   await until(() => $('.main .goal-reached') !== null, 4000)
   const reached = $$('.main .goal-reached')
   const last = turns().at(-1)
