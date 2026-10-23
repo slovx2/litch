@@ -180,6 +180,8 @@ export interface LiveSessions {
      */
     asGoal?: boolean,
   ): Promise<string>
+  /** 在 harness 上新建会话时会带上的客户端工具定义（create 用的同一份）；不带是空的 */
+  toolsFor(harness: HarnessId | null): unknown[]
   /** 改模型、强度、权限预设。记在这边，下一个回合开始时一起告诉对面 */
   configure(sessionId: string, settings: Partial<SessionSettings>): void
   /** 执行计划：退出计划模式，并以 text 这句话发起一个回合。回合还在进行的时候做不了 */
@@ -1362,6 +1364,8 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
         release(entry)
       }
     },
+
+    toolsFor: (harness) => host.dynamicTools?.(harness) ?? [],
 
     async create(cwd, message, settings, harness, workspaceId, asGoal = false) {
       if (!host.online()) throw new ChannelError('offline', '设备未连接')

@@ -52,6 +52,12 @@
       "description": "只发给声明了 sessionTree 的连接，只在有父会话的会话上有。形状见 session-tree.mts 的 SessionLineage。"
     },
     {
+      "kind": "ThreadField",
+      "name": "litchToolNamespaces",
+      "on": "同 litchLineage",
+      "description": "只发给声明了 sessionTree 的连接，只在设备进程记着这个会话建的时候带了哪些动态工具时有（经设备进程建的会话）：其中 litch_ 开头的命名空间名，字符串数组，可以是空的。客户端据此判断这个会话里的模型能不能用 litch_sessions 读别的会话；没有这个字段的当没带。"
+    },
+    {
       "kind": "ClientRequest",
       "methods": ["litch/session/start", "litch/session/detach", "litch/sessionProposal/list", "litch/sessionProposal/accept", "litch/sessionProposal/dismiss", "litch/sessionProposal/answer", "litch/sessionProposal/here"],
       "description": "参数与应答见 session-tree.mts。start 起好后发 litch/thread/lineage/updated 和标准的 thread/started。 litch/sessionProposal/answer 只收声明了 sessionTree 的连接。"
