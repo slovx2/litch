@@ -77,8 +77,10 @@ export function UserAttachments({ attachments }: { attachments: UserAttachment[]
 }
 
 interface UserMessageProps extends ItemRef {
-  /** 给了就在这条消息上出“分叉”“回退”：它是这个回合开头的那条，而且现在做得了 */
+  /** 给了就在这条消息上出“分叉”“回退”：现在做得了（回合结束了、设备连着这些） */
   turnId?: string | undefined
+  /** 它不是回合开头的那条，是回合进行中插进来的话 */
+  steered?: boolean
 }
 
 /**
@@ -86,7 +88,11 @@ interface UserMessageProps extends ItemRef {
  * 设备进程注入的回报、唤醒（item.event）画成气泡上面的一条系统提示；唤醒的回合没有用户自己的话，只有那一条。
  * 别的会话发来的（item.peer）换一种底色，最上面一行写是谁发来的；正文是对方的原话，不认评论、答题这些格式
  */
-export const UserMessage = memo(function UserMessage({ turnId, ...ref }: UserMessageProps) {
+export const UserMessage = memo(function UserMessage({
+  turnId,
+  steered = false,
+  ...ref
+}: UserMessageProps) {
   const item = useItem<UserMessageItem>(ref)
   const [open, setOpen] = useToggle(sessionKeyOf(ref), `u:${ref.itemId}`, false)
   const [long, setLong] = useState(false)
@@ -148,7 +154,10 @@ export const UserMessage = memo(function UserMessage({ turnId, ...ref }: UserMes
           {t(open ? 'message.collapse' : 'message.expand')}
         </button>
       ) : null}
-      {turnId ? <TurnActions {...ref} turnId={turnId} /> : null}
+      {/* 别的会话发来的话不是自己插的，不在它上面切 */}
+      {turnId && !(steered && peer) ? (
+        <TurnActions {...ref} turnId={turnId} steered={steered} />
+      ) : null}
     </div>
   )
   if (!event) return message

@@ -188,9 +188,9 @@ class SelectableRuntime implements ClaudeRuntime {
     await Promise.all([...this.runtimes.values()].map((runtime) => runtime.closeIdleMcp?.()))
   }
 
-  async steer(threadId: string, prompt: string): Promise<void> {
+  async steer(threadId: string, prompt: string, uuid?: string): Promise<void> {
     const runtime = this.activeRuntimeByThread.get(threadId) ?? this.runtimeFor(this.config.type)
-    await runtime.steer(threadId, prompt)
+    await runtime.steer(threadId, prompt, uuid)
   }
 
   async interrupt(threadId: string): Promise<void> {

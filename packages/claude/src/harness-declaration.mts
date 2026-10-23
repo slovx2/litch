@@ -16,8 +16,9 @@ const features: HarnessFeatures = {
   interrupt: true,
   compact: true,
   fork: true,
-  // 回退是换一份截短的原生会话，文件系统上的改动不动。
-  revert: { byTurnId: true, byCount: true, restoresFiles: false },
+  // 回退是换一份截短的原生会话，文件系统上的改动不动。插进回合的话在原生记录里有自己的位置，
+  // 回退、分叉都能切在它之前（steer-cut.mts）
+  revert: { byTurnId: true, byCount: true, restoresFiles: false, byItemId: true },
   queue: true,
   // 每次工具调用结束后拿 git 算一遍，工作目录不是 git 仓库时没有。
   turnDiff: true,

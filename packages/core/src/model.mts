@@ -71,6 +71,8 @@ export interface HarnessAbilities {
   rollback: boolean
   /** 回退时连那之后改过的文件也照快照恢复（OpenCode 是这样）；不会的只截掉对话 */
   rollbackRestoresFiles: boolean
+  /** 分叉、回退能切在回合中间：插进回合的那条用户消息之前（features.revert.byItemId） */
+  cutInTurn: boolean
   /** 手动压缩上下文 */
   compact: boolean
   /** 回合进行中把排着的消息插进去（引导） */
@@ -961,6 +963,11 @@ export interface SessionAbilities {
   rollback: boolean
   /** 回退时连那之后改过的文件也照快照恢复（OpenCode 是这样）；不会的只截掉对话 */
   rollbackRestoresFiles: boolean
+  /**
+   * 分叉、回退能切在回合中间（插进回合的那条用户消息之前）。只认声明，没声明的当它不会：
+   * 插进去的话上不出这两个入口
+   */
+  cutInTurn: boolean
   /** 手动压缩上下文 */
   compact: boolean
   /** 回合进行中把排着的消息插进去（引导） */

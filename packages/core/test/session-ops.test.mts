@@ -874,6 +874,7 @@ test('分叉、回退、压缩：模拟核心都支持；没有声明的不会�
     fork: false,
     rollback: false,
     rollbackRestoresFiles: false,
+    cutInTurn: false,
     compact: false,
     steer: true,
     steerImages: true,

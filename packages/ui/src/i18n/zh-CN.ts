@@ -1617,6 +1617,7 @@ export const zhCN = {
   'session.nativeOwned': '此会话正由另一个进程使用，当前只读',
   'session.archived': '此对话已归档，只读。恢复后即可继续。',
   'session.queueFailed': '排队的消息发送失败：{message}。发送下一条时会重试。',
+  'session.steerQueued': '没能插进正在进行的回合（{message}），已排队，回合结束后发送。',
   'tasks.unsupported': '此设备的服务版本不支持定时任务，请升级设备上的适配器。',
   'tasks.gone': '该任务已不存在（可能已在其他位置删除）。',
   'tasks.conflict': '该任务刚在其他位置被修改，已更新为最新内容。请确认后再保存。',

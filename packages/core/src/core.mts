@@ -592,17 +592,19 @@ export function createCore(options: CoreOptions): Core {
           return {}
         }
         case 'session.fork': {
-          const { deviceId, sessionId, turnId } = params as Commands['session.fork']['params']
+          const { deviceId, sessionId, turnId, itemId } =
+            params as Commands['session.fork']['params']
           try {
-            return { sessionId: await deviceOf(deviceId).fork(sessionId, turnId) }
+            return { sessionId: await deviceOf(deviceId).fork(sessionId, turnId, itemId) }
           } catch (error) {
             throw toChannelFailure(error)
           }
         }
         case 'session.rollback': {
-          const { deviceId, sessionId, turnId } = params as Commands['session.rollback']['params']
+          const { deviceId, sessionId, turnId, itemId } =
+            params as Commands['session.rollback']['params']
           try {
-            await deviceOf(deviceId).rollback(sessionId, turnId)
+            await deviceOf(deviceId).rollback(sessionId, turnId, itemId)
           } catch (error) {
             throw toChannelFailure(error)
           }

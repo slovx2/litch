@@ -254,6 +254,11 @@ import type {
  * 对面不是聚合面时不许带：有些参数结构遇到不认识的字段会直接拒绝。
  */
 type ToHarness<T> = T & { harness?: string }
+/**
+ * 切在回合中间（我们的扩展，harness 声明了 `features.revert.byItemId` 才带）：`beforeTurnId` 那个回合里
+ * 插进去的一条用户消息。保留之前的回合和这一回合在它之前的部分，它和它之后的都不要
+ */
+type CutBeforeItem<T> = T & { beforeItemId?: string }
 
 /** 客户端发给对面的请求 */
 export interface ClientRequests {
@@ -283,9 +288,9 @@ export interface ClientRequests {
   'thread/delete': { params: ThreadDeleteParams; result: Record<string, never> }
   'thread/unarchive': { params: ThreadUnarchiveParams; result: ThreadUnarchiveResponse }
   /** 从一个会话分出一个新会话，可以只带到某个回合为止的历史 */
-  'thread/fork': { params: ThreadForkParams; result: ThreadForkResponse }
+  'thread/fork': { params: CutBeforeItem<ThreadForkParams>; result: ThreadForkResponse }
   /** 把某个回合和它之后的都从历史里撤掉。只改对话记录，不还原文件 */
-  'thread/revert': { params: ThreadRevertParams; result: ThreadRevertResponse }
+  'thread/revert': { params: CutBeforeItem<ThreadRevertParams>; result: ThreadRevertResponse }
   // 后台终端（实验性接口，握手时要声明 experimentalApi）：会话里回合结束后还在跑的命令。
   // 客户端现在不调，收在这里留给以后的“停止”（backgroundTasks 扩展第一版不做停止）
   'thread/backgroundTerminals/list': {

@@ -191,10 +191,13 @@ export interface LiveSessions {
   interrupt(sessionId: string): Promise<void>
   unqueue(sessionId: string, messageId: string): void
   respond(sessionId: string, requestId: string, choice: RequestChoice): void
-  /** 从 turnId 这个回合（含）分叉出一个新会话，返回新会话的标识 */
-  fork(sessionId: string, turnId: string): Promise<string>
-  /** 把 turnId 这个回合和它后面的都撤掉 */
-  rollback(sessionId: string, turnId: string): Promise<void>
+  /**
+   * 从 turnId 这个回合（含）分叉出一个新会话，返回新会话的标识。
+   * itemId：这个回合只带到插进去的这条用户消息之前（界面里的条目标识）
+   */
+  fork(sessionId: string, turnId: string, itemId?: string): Promise<string>
+  /** 把 turnId 这个回合和它后面的都撤掉；带 itemId 时这一回合只撤掉这条插进去的话和它之后的 */
+  rollback(sessionId: string, turnId: string, itemId?: string): Promise<void>
   /** 让对面开始压缩上下文。受理了就返回 */
   compact(sessionId: string): Promise<void>
   /** 设、改持续目标（thread/goal/set，origin 是 user）。受理了就返回，新的样子随后由通知带来 */
@@ -269,6 +272,11 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
   const sessions = new Map<string, Live>()
   let localSeq = 0
   /**
+   * 这次运行的记号，拼进发给对面的消息号里。localSeq 每次启动从 0 数起，入口按“会话 + 消息号”永久记账
+   * （同一个号换了内容就拒），只用序号的话重启后在老会话里会撞上以前用过的号
+   */
+  const runMark = `${host.clock.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
+  /**
    * 各会话的待办进度：会话标识 → 协议里的回合标识 → 那个回合的待办。
    * 协议不把它存进历史，会话放掉再打开、断线重连之后就取不回来了，所以这边记着，载入之后放回原处。
    * 只在这次运行里有效：客户端重启之后，以前的回合里就没有它了。
@@ -296,6 +304,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       steer: can('steer'),
       steerImages: declared ? declared.steerImages : true,
       rollbackRestoresFiles: declared ? declared.rollbackRestoresFiles : false,
+      cutInTurn: declared?.cutInTurn === true,
       finalOnStart: declared ? declared.finalOnStart : false,
       backgroundTasks: declared ? declared.backgroundTasks : false,
       // 持续目标只认声明，没有声明的不先当它会（入口出来了也只能告诉人做不了）
@@ -373,6 +382,29 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
   const viewItem = (live: Live, viewId: string, itemId: string, index = 0): string => {
     const key = itemKey(viewId, itemId, index)
     return live.itemAlias.get(key) ?? key
+  }
+
+  /**
+   * 切在回合中间时发给对面的条目标识：界面里回合 viewId 的条目 key 换回协议里的条目标识。
+   * 先显示出来、对面还没回显的（还没对上标识的）、不是插进去的用户消息的、会话不会切在回合中间的，都不行
+   */
+  const cutAt = (live: Live & { view: SessionView }, viewId: string, key: string): string => {
+    if (!live.view.can.cutInTurn) throw new ChannelError('unsupported', UNSUPPORTED)
+    const turn = live.view.turns.find((entry) => entry.id === viewId)
+    const item = live.view.items[key]
+    if (!turn || item?.kind !== 'userMessage' || turn.itemIds.indexOf(key) < 1)
+      throw new ChannelError('rejected', '这条消息不是插进这个回合的话')
+    let own = key
+    for (const [from, to] of live.itemAlias) {
+      if (to === key) {
+        own = from
+        break
+      }
+    }
+    const id = own.startsWith(`${viewId}:`) ? own.slice(viewId.length + 1) : ''
+    if (!id || id.startsWith('#') || id.startsWith('steer:'))
+      throw new ChannelError('rejected', '这条消息还没被对面收下，稍后再试')
+    return id
   }
 
   /** 协议里的回合标识。本机刚发出、对面还没给标识的回合返回 null */
@@ -1434,8 +1466,14 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
         live.queued = [...live.queued, { id, ...message }]
         emit(live, [{ op: 'queue.set', queued: live.queued }])
         pump(live)
-        // 插不进去时 steer 已经把它放回了队列：消息照常排着，等这个回合结束再发，不算没发成
-        if (now && isRunning(live.view)) await sessionsApi.steer(sessionId, id).catch(() => {})
+        // 插不进去时 steer 已经把它放回了队列：消息照常排着，等这个回合结束再发，不算没发成。
+        // 它不会插话的（界面跟着退回排队，提示里写着）不用再说；别的原因写一句，不然只看得到消息躺在队列里
+        if (now && isRunning(live.view)) {
+          await sessionsApi.steer(sessionId, id).catch((error: unknown) => {
+            if (error instanceof ChannelError && error.code === 'unsupported') return
+            setNote(live, phrase('session.steerQueued', { message: failure(error).message }))
+          })
+        }
         return
       }
       await startTurn(live, message)
@@ -1460,7 +1498,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
           phrase('fault.steerImages'),
         )
       }
-      const clientId = `litch-${host.deviceId}-${++localSeq}`
+      const clientId = `litch-${host.deviceId}-${runMark}-${++localSeq}`
       const key = `${running.id}:steer:${localSeq}`
       // 先从队列里拿出来、显示进回合里，不等对面
       live.queued = live.queued.filter((entry) => entry !== message)
@@ -1550,17 +1588,22 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       ])
     },
 
-    async fork(sessionId, turnId) {
+    async fork(sessionId, turnId, itemId) {
       const live = idle(sessionId, '回合正在进行，结束后才能分叉')
       const last = live.view.turns.some((turn) => turn.id === turnId)
         ? serverTurn(live, turnId)
         : null
       if (!last) throw new ChannelError('rejected', '该回合已不存在')
+      const cut = itemId === undefined ? null : cutAt(live, turnId, itemId)
       const { thread } = await attempt(live, 'fork', () =>
         host.request(
           'thread/fork',
           // 新会话的内容打开时再取，这里不要
-          { threadId: sessionId, lastTurnId: last, excludeTurns: true },
+          {
+            threadId: sessionId,
+            ...(cut ? { beforeTurnId: last, beforeItemId: cut } : { lastTurnId: last }),
+            excludeTurns: true,
+          },
           { timeoutMs: LOAD_TIMEOUT },
         ),
       )
@@ -1568,25 +1611,32 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       return thread.id
     },
 
-    async rollback(sessionId, turnId) {
+    async rollback(sessionId, turnId, itemId) {
       const live = idle(sessionId, '回合正在进行，结束后才能回退')
       if (!live.view.live) throw new ChannelError('rejected', '此会话只读')
       const before = live.view.turns.some((turn) => turn.id === turnId)
         ? serverTurn(live, turnId)
         : null
       if (!before) throw new ChannelError('rejected', '该回合已不存在')
+      const cut = itemId === undefined ? null : cutAt(live, turnId, itemId)
       live.reverting = true
       try {
         // 按回合的标识回退，不按“倒数几个”：两边数出来的个数万一不一样，撤错了找不回来
         await attempt(live, 'rollback', () =>
           host.request(
             'thread/revert',
-            { threadId: sessionId, beforeTurnId: before },
+            { threadId: sessionId, beforeTurnId: before, ...(cut ? { beforeItemId: cut } : {}) },
             { timeoutMs: LOAD_TIMEOUT },
           ),
         )
       } finally {
         live.reverting = false
+      }
+      // 切在回合中间：这一回合只剩前半段，照对面的重新载入，不在这边一条条拿掉
+      if (cut) {
+        if (sessions.get(live.id) === live) load(live)
+        host.touched(live.id)
+        return
       }
       // 对面撤掉了，这边跟着拿掉。请求途中会话重新载入过的话回合的标识换成了协议里的，两种都认；
       // 已经不在了（重新载入时就没有它了）就什么都不用做

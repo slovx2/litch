@@ -267,7 +267,8 @@ const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { 
           at < index && block.type === 'user',
       )?.itemId,
   )
-  // 分叉、回退挂在回合开头的那条用户消息上。回合结束了、会话能发消息、设备连着、它所属的 harness 可用才出
+  // 分叉、回退挂在用户消息上：回合开头那条按回合切，后面插进来的话切在它之前（harness 会切在回合中间才出，
+  // TurnActions 里判断）。回合结束了、会话能发消息、设备连着、它所属的 harness 可用才出
   const actable =
     !running &&
     meta?.live === true &&
@@ -292,7 +293,8 @@ const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { 
                 key={block.itemId}
                 {...ref}
                 itemId={block.itemId}
-                turnId={actable && index === 0 ? turnId : undefined}
+                turnId={actable ? turnId : undefined}
+                steered={index > 0}
               />
             )
           if (block.type === 'answer')

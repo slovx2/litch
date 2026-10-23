@@ -1700,6 +1700,8 @@ export const en: Record<MessageKey, Entry> = {
   'session.archived': 'This conversation is archived and read-only. Restore it to continue.',
   'session.queueFailed':
     'Queued message not sent: {message}. It will be retried with your next message.',
+  'session.steerQueued':
+    'Couldn’t add the message to the running turn ({message}). It’s queued and will be sent when the turn ends.',
   'tasks.unsupported':
     'The service on this device doesn’t support scheduled tasks. Update the adapter on the device.',
   'tasks.gone': 'This task no longer exists. It may have been deleted elsewhere.',

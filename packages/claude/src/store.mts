@@ -1573,16 +1573,31 @@ export class SessionStore {
   }
 
   // 原生分叉成功后一次提交 session 指针及展示历史。崩溃最多留下未引用的原生分支。
+  // truncated：切在回合中间时被切开的那一回合（只留前半段）和切掉的条目。
+  // 切掉的插话的提交记录跟着删，它们的工具意图也不用再核对（和整回合退掉一样）
   commitRollback(
     thread: ThreadRecord,
     numTurns: number,
     boundaries: ReadonlyMap<string, string>,
+    truncated?: { turn: TurnRecord; removed: readonly ThreadItem[] },
   ): number {
     this.flushAll()
     this.db.exec('BEGIN IMMEDIATE')
     try {
       this.upsertThread(thread)
       const dropped = this.deleteRecentTurns(thread.id, numTurns)
+      if (truncated) {
+        this.writeTurn(truncated.turn)
+        for (const item of truncated.removed) {
+          if (item.type === 'userMessage' && item.clientId)
+            this.db
+              .prepare('DELETE FROM submissions WHERE thread_id=? AND message_id=? AND turn_id=?')
+              .run(thread.id, item.clientId, truncated.turn.id)
+          this.db
+            .prepare('DELETE FROM native_tool_intents WHERE turn_id=? AND call_id=?')
+            .run(truncated.turn.id, item.id)
+        }
+      }
       for (const [turnId, messageId] of boundaries) this.saveNativeBoundary(turnId, messageId)
       this.db.exec('COMMIT')
       return dropped

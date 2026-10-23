@@ -1095,6 +1095,41 @@ test('引导：排着的消息插进正在进行的回合，对面回显时不�
   assert.deepEqual(session.texts(), [['一', '二']])
 })
 
+test('立即发送：消息号每次运行都不一样（入口按消息号永久记账，重启后不能撞上以前用过的）；没插成写一句、照常排着', async () => {
+  const ids: string[] = []
+  for (let run = 0; run < 2; run++) {
+    const { core, command, sent } = setup()
+    core.start()
+    await settle()
+    const session = watch(core)
+    await settle()
+    await command('session.send', { ...where, text: '一' })
+    await command('session.send', { ...where, text: '二', now: true })
+    const steer = sent('turn/steer')[0] as { clientUserMessageId: string }
+    assert.match(steer.clientUserMessageId, /^litch-local-[0-9a-z]+-\d+$/)
+    ids.push(steer.clientUserMessageId)
+    session.close()
+  }
+  assert.notEqual(ids[0], ids[1], '两次运行同样的操作，消息号也不能一样')
+
+  const { core, world, command } = setup()
+  core.start()
+  await settle()
+  const session = watch(core)
+  await settle()
+  await command('session.send', { ...where, text: '一' })
+  world.steerFailure = new RpcFailure(-32009, '消息 ID 已被不同内容使用')
+  await command('session.send', { ...where, text: '二', now: true })
+  assert.deepEqual(
+    session.seen.view?.queued.map((entry) => entry.text),
+    ['二'],
+  )
+  assert.deepEqual(session.seen.view?.note, {
+    key: 'session.steerQueued',
+    args: { message: '消息 ID 已被不同内容使用' },
+  })
+})
+
 test('引导：话插进去了但回合被打断、对面一直没回显，就放回队首接着发，不悄悄丢掉', async () => {
   const { core, peer, command, sent } = setup()
   core.start()

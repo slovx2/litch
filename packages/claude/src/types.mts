@@ -636,7 +636,11 @@ export interface ClaudeRuntime {
   // CLI 给这个会话起的标题（用户改的名优先，其次 CLI 起的），没有是 null
   sessionTitle?(sessionId: string, cwd: string): Promise<string | null>
   runTurn(context: RuntimeTurnContext, handlers: RuntimeHandlers): Promise<void>
-  steer(threadId: string, prompt: string): Promise<void>
+  /**
+   * 往进行中的回合里插话。uuid：这条消息交给 CLI 时用的标识，原生记录里插话那一行（queued_command 附件）
+   * 的 source_uuid 就是它，回退、分叉切在这条插话之前时靠它找位置（steer-cut.mts）
+   */
+  steer(threadId: string, prompt: string, uuid?: string): Promise<void>
   interrupt(threadId: string): Promise<void>
   stop(): Promise<void>
 }
