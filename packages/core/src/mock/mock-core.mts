@@ -1726,6 +1726,18 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       if (running(view)?.id === turnId) endTurn(view, turnId, null, 'interrupted')
     },
     running: (view) => running(view) !== undefined,
+    steer: (view, message) => {
+      const turn = running(view)
+      if (!turn || !view.can.steer) return false
+      applySessionOps(view, [
+        {
+          op: 'item.add',
+          turnId: turn.id,
+          item: localUserMessage(`s${++seq}`, message, mentionsIn(view)),
+        },
+      ])
+      return true
+    },
     treeOn: (deviceId) =>
       app.devices.find((device) => device.id === deviceId)?.sessionTree === true,
     harnesses: (deviceId) => app.devices.find((device) => device.id === deviceId)?.harnesses ?? [],

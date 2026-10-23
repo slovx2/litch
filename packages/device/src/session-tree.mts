@@ -16,8 +16,8 @@
 // offer 卡（litch_sessions.start 的 initiation offer）：模型那次调用一直等着（offers），用户在卡上选了（answerOffer）、
 // 又发了话（turn/start、turn/steer）、打断了回合、回合结束了，都让它了结；选了新会话的（chosen）等模型 accept 补简报，
 // 回合结束还没补的当作在这里做。设备进程重启时上一次还在等的一律当作在这里做。
-// 普通提案卡上的“在这里做”（proposalHere）：提案记 here，往父会话发一条用户消息，父会话在跑就排到回合结束后
-//（check 里先发它，再提醒、唤醒）。任务卡按 harness 关着（host.taskCards）时，新会话挑没有建议的那组工具
+// 普通提案卡上的“在这里做”（proposalHere）：提案记 here，往父会话发一条用户消息，父会话在跑就当场插进那个回合
+//（turn/steer，同用户在输入框里插话），插不进去的排到回合结束后（check 里先发它，再提醒、唤醒）。任务卡按 harness 关着（host.taskCards）时，新会话挑没有建议的那组工具
 //（currentSessionTools），已经带着 wrap_up 的会话也不再提醒。
 import { randomUUID } from 'node:crypto'
 import type { LitchBackgroundTask } from '../../protocol/src/background-tasks.mjs'
@@ -157,8 +157,11 @@ export class SessionTree {
   private readonly timers = new Set<NodeJS.Timeout>()
   /** 在等用户选的 offer 卡：提案 → 等它的那次调用 */
   private readonly offers = new Map<string, OfferWait>()
-  /** 提案卡上点了“在这里做”、还没发出去的用户消息：会话 → 按先后排的几条（会话在跑时排到回合结束后发） */
-  private readonly heres = new Map<string, string[]>()
+  /**
+   * 提案卡上点了“在这里做”、还没发出去的用户消息：会话 → 按先后排的几条。会话在跑时先试着插进回合，
+   * 插不进去的（steer 记成 false）等回合结束再发
+   */
+  private readonly heres = new Map<string, { text: string; steer: boolean }[]>()
   private expiry: NodeJS.Timeout | null = null
   private recovered = false
   private closed = false
@@ -847,7 +850,8 @@ export class SessionTree {
 
   /**
    * 普通提案卡上用户点了“在这里做”（litch/sessionProposal/here）：只收 pending 的，提案记 here，往父会话发一条用户消息
-   *（lead 加标题，空一行再是任务原文，不带背景）。父会话闲着当场发，在跑就排到回合结束后（check 里先发它）；
+   *（lead 加标题，空一行再是任务原文，不带背景）。父会话闲着当场发，在跑就插进那个回合，插不进去的排到回合结束后
+   *（check 里先发它）；
    * 设备进程关掉时还没发出的丢掉，提案仍是 here
    */
   proposalHere(proposalId: string, lead?: string): void {
@@ -857,34 +861,74 @@ export class SessionTree {
     if (!this.settleProposal(proposalId, 'here', null, ['pending']))
       throw new DeviceError('unsupported', `提案 ${proposalId} 已经了结了`)
     const text = `${lead ?? 'Do it here: '}${proposal.title}\n\n${proposal.prompt}`
-    this.heres.set(proposal.threadId, [...(this.heres.get(proposal.threadId) ?? []), text])
+    const queued = this.heres.get(proposal.threadId) ?? []
+    this.heres.set(proposal.threadId, [...queued, { text, steer: true }])
     this.check(proposal.threadId)
   }
 
   /**
-   * 会话闲着、有“在这里做”在排队：发最早的那条，当作用户说的一句话（同客户端的 turn/start：攒着的回报放在前面，
-   * 唤醒计数清零、没发的提醒作废；这个回合算用户发起的，能直接派子会话、会被提醒收尾）。发不出去的留着，下次再试
+   * 有“在这里做”在排队：发最早的那条，当作用户说的一句话。会话在跑就插进那个回合（同客户端的 turn/steer：
+   * 在等的 offer 卡当作在这里做），插不进去的（回合刚好结束、引擎不会插话）记下来，等会话闲了再发；
+   * 闲着的同客户端的 turn/start（攒着的回报放在前面，唤醒计数清零、没发的提醒作废；这个回合算用户发起的，
+   * 能直接派子会话、会被提醒收尾）。发不出去的留着，下次再试
    */
   private async sendHere(threadId: string): Promise<void> {
-    const text = this.heres.get(threadId)?.[0]
-    if (text === undefined || this.closed) return
-    if (!(await this.idle(threadId))) return
+    const entry = this.heres.get(threadId)?.[0]
+    if (entry === undefined || this.closed) return
     const harness = await this.owner(threadId)
     await this.watch(harness, threadId)
-    if (this.active.has(threadId) || this.heres.get(threadId)?.[0] !== text) return
-    const said = [{ type: 'text', text, text_elements: [] }]
-    const input = this.beforeUserTurn(threadId, said) ?? said
+    if (this.heres.get(threadId)?.[0] !== entry) return
+    const said = [{ type: 'text', text: entry.text, text_elements: [] }]
     const link = await this.link(harness)
+    const running = entry.steer ? await this.runningTurn(threadId) : null
+    if (running) {
+      try {
+        await link.request('turn/steer', { threadId, input: said, expectedTurnId: running })
+        this.shiftHere(threadId, entry)
+        this.userSpoke(threadId)
+        this.host.log(
+          `替会话 ${threadId}（${harness}）把提案卡上点的“在这里做”插进了回合 ${running}`,
+        )
+        return
+      } catch (error) {
+        entry.steer = false
+        this.host.log(`“在这里做”没插进会话 ${threadId} 的回合，等它结束再发：${String(error)}`)
+      }
+    }
+    if (!(await this.idle(threadId))) return
+    if (this.active.has(threadId) || this.heres.get(threadId)?.[0] !== entry) return
+    const input = this.beforeUserTurn(threadId, said) ?? said
     const result = await link.request('turn/start', { threadId, input })
-    const queued = this.heres.get(threadId) ?? []
-    queued.shift()
-    if (queued.length === 0) this.heres.delete(threadId)
+    this.shiftHere(threadId, entry)
     const turn = isObject(result) && isObject(result.turn) ? result.turn : null
     if (typeof turn?.id === 'string') {
       if (!this.active.has(threadId)) this.active.set(threadId, turn.id)
       this.clientTurn(harness, turn.id)
     }
     this.host.log(`替会话 ${threadId}（${harness}）发了提案卡上点的“在这里做”`)
+  }
+
+  private shiftHere(threadId: string, entry: { text: string; steer: boolean }): void {
+    const rest = (this.heres.get(threadId) ?? []).filter((one) => one !== entry)
+    if (rest.length === 0) this.heres.delete(threadId)
+    else this.heres.set(threadId, rest)
+  }
+
+  /**
+   * 会话正在跑的回合号。看到过开始通知的直接用；设备进程刚订阅、错过了开始通知的问引擎：先看停没停，
+   * 在跑才连回合一起读（长会话的回合不小），取最后一个在跑的。没在跑、读不到的是 null
+   */
+  private async runningTurn(threadId: string): Promise<string | null> {
+    const seen = this.active.get(threadId)
+    if (seen) return seen
+    const status = await this.read(threadId, false).catch(() => ({ thread: null }))
+    if (!busy(status.thread)) return null
+    const { thread } = await this.read(threadId, true).catch(() => ({ thread: null }))
+    if (!isObject(thread) || !Array.isArray(thread.turns)) return null
+    const turn = thread.turns.at(-1)
+    return isObject(turn) && turn.status === 'inProgress' && typeof turn.id === 'string'
+      ? turn.id
+      : null
   }
 
   // ---------- offer 卡 ----------

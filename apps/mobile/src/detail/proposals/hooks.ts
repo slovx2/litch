@@ -82,7 +82,7 @@ export function useProposalAct(deviceId: string, sessionId: string, proposalId: 
       run(channel.command('session.proposal.dismiss', { deviceId, sessionId, proposalId })),
     answer: (choice: 'session' | 'here') =>
       run(channel.command('session.proposal.answer', { deviceId, sessionId, proposalId, choice })),
-    // 普通提案卡上的“在这里做”：设备进程往这个会话发“在这里做：”（界面语言）加标题和任务，回合在跑就排到回合后
+    // 普通提案卡上的“在这里做”：设备进程往这个会话发“在这里做：”（界面语言）加标题和任务，回合在跑就插进那个回合
     here: () =>
       run(
         channel.command('session.proposal.here', {

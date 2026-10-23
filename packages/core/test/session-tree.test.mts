@@ -1506,6 +1506,49 @@ test('模拟：说“新任务”出 offer 卡、调用等着；选新会话模�
   assert.equal(list().at(-1)?.id, third.id)
 })
 
+test('模拟：回合在跑时点提案卡上的“在这里做”，那句话插进正在跑的回合，不排队', async () => {
+  const world = mockWorld()
+  await settle()
+  const parent = world.watch('s6')
+  await settle()
+  await world.channel.command('session.send', {
+    deviceId: 'local',
+    sessionId: 's6',
+    text: '提个子会话',
+  })
+  const list = () => parent.view?.proposals ?? []
+  await world.until(() => list().length === 3, '三张提案')
+  await world.until(() => parent.view?.turns.at(-1)?.status === 'completed', '提案的回合结束')
+  const proposal = list()[2]
+  assert.ok(proposal)
+  // 说一件新任务：模型发 offer 卡等用户选，回合一直在跑
+  await world.channel.command('session.send', {
+    deviceId: 'local',
+    sessionId: 's6',
+    text: '新任务：给设置页加个导出按钮',
+  })
+  await world.until(() => list().some((entry) => entry.offer), '出了一张 offer 卡')
+  const running = parent.view?.turns.at(-1)
+  assert.equal(running?.status, 'running', '回合在跑')
+  await world.channel.command('session.proposal.here', {
+    deviceId: 'local',
+    sessionId: 's6',
+    proposalId: proposal.id,
+    lead: '在这里做：',
+  })
+  await world.until(() => list()[2]?.status === 'here', '提案记成在这里做')
+  const said = (parent.view?.turns.find((turn) => turn.id === running?.id)?.itemIds ?? [])
+    .map((id) => parent.view?.items[id])
+    .filter((item) => item?.kind === 'userMessage')
+  assert.ok(
+    said.some(
+      (item) => item?.kind === 'userMessage' && item.text.startsWith(`在这里做：${proposal.title}`),
+    ),
+    '插进了正在跑的那个回合',
+  )
+  assert.deepEqual(parent.view?.queued, [], '没有排队')
+})
+
 test('模拟：说“交接”模型把手上的任务交给分叉会话（不出卡，立刻起），再回答新消息', async () => {
   const world = mockWorld()
   await settle()

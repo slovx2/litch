@@ -75,7 +75,7 @@ export const STATUS_TEXT = {
 
 /**
  * 一张提案上的“开始”“在这里做”“不要”，offer 卡上的“新会话”“在这里做”：发出去、等着、没做成的原因。
- * 提案卡的“在这里做”由设备进程往这个会话发“在这里做：”（界面语言）加标题和任务，回合在跑就排到回合后
+ * 提案卡的“在这里做”由设备进程往这个会话发“在这里做：”（界面语言）加标题和任务，回合在跑就插进那个回合
  */
 export function useProposalAct(deviceId: string, sessionId: string, proposalId: string) {
   const { channel } = useServices()
