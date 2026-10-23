@@ -178,6 +178,39 @@ test('收尾区：带建议、留了问题的收尾在过程里只留一步，�
   assert.deepEqual(types(askOnly), ['user', 'group', 'md', 'wrapAsk', 'status'])
 })
 
+test('收尾区：回合还在跑时收尾带的卡片和问题先不排，过程里那一步照留；中途 start 的提案照排', () => {
+  const wrapUp = { summary: null, suggestions: [{ title: '任务 p1' }], ask: '接着做哪个？' }
+  const spawned = { proposalId: 'p2', threadId: null, title: '任务 p2', prompt: '简报' }
+  const list = [proposal('p1', { callId: 'w' }), proposal('p2', { callId: 's' })]
+  const items = [
+    user('u', '做吧'),
+    call('s', 'start', { spawned }),
+    call('w', 'wrap_up', { wrapUp }),
+    { id: 'a', kind: 'agentMessage', text: '做完了', status: 'inProgress' },
+  ]
+  const view = viewOf(['u', 's', 'w', 'a'], items, list)
+  const running = { ...view, turns: [{ ...view.turns[0], status: 'running', durationMs: null }] }
+  const live = new RowBuilder().build(running, 'all')
+  assert.deepEqual(types(live), ['user', 'group', 'md', 'proposal', 'status'])
+  assert.equal(live[1].count, 2, '收尾那一步留在过程里')
+  assert.equal(live.find((row) => row.type === 'proposal').key, 's:p2')
+  // 回合结束：问题和收尾的卡排进来
+  const done = new RowBuilder().build(view, 'all')
+  assert.deepEqual(types(done), [
+    'user',
+    'group',
+    'md',
+    'wrapAsk',
+    'proposal',
+    'proposal',
+    'status',
+  ])
+  assert.deepEqual(
+    done.filter((row) => row.type === 'proposal').map((row) => row.key),
+    ['s:p2', 'w:p1'],
+  )
+})
+
 const json = (value) => [{ kind: 'text', text: JSON.stringify(value, null, 2) }]
 const offerCall = (id, extra = {}) =>
   call(id, 'start', {

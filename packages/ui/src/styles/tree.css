@@ -872,6 +872,21 @@ button.agent-row:hover {
   gap: 8px;
   min-width: 0;
 }
+/* 看着回合结束才出来的那一下：滑进来 */
+.turn-tail[data-fresh] {
+  animation: tail-in 0.3s ease-out both;
+}
+@keyframes tail-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .turn-tail[data-fresh] {
+    animation: none;
+  }
+}
 .tail-ask {
   display: flex;
   flex-direction: column;

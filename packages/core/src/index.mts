@@ -231,6 +231,7 @@ export {
   answerOf,
   type Block,
   type BlockInput,
+  type BucketOptions,
   bucketItems,
   type CardPlace,
   cardOf,

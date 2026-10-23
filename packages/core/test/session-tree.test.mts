@@ -909,6 +909,17 @@ test('分块：不画的条目不占块、不算进步骤；回合只剩提示�
       { type: 'tail', itemIds: ['w'] },
     ],
   )
+  // 提醒的回合还在跑：收尾带的卡片同样等它结束
+  assert.deepEqual(
+    bucketItems(
+      [
+        { id: 'u', kind: 'userMessage', remind: true },
+        { id: 'w', kind: 'toolCall', card: 'tail', wrapUp: true },
+      ],
+      { turnRunning: true },
+    ),
+    [],
+  )
   // 补调的是空收尾：什么都不画
   assert.deepEqual(
     bucketItems([
@@ -962,6 +973,33 @@ test('分块：一回合的建议卡片和收尾的问题都排在最终回答�
       { type: 'answer', itemId: 'a2' },
       { type: 'tail', itemIds: ['w'] },
     ],
+  )
+})
+
+test('分块：回合还在跑时收尾带的卡片和问题先不进收尾区，过程里那一步照留；中途 start 的提案照旧进', () => {
+  const items = [
+    { id: 'u', kind: 'userMessage' as const },
+    { id: 's', kind: 'toolCall' as const, card: 'tail' as const },
+    { id: 'w', kind: 'toolCall' as const, card: 'tail' as const, wrapUp: true },
+    { id: 'a', kind: 'agentMessage' as const, phase: 'unknown' as const },
+  ]
+  // 先收尾、回答正在写：回答照旧认得出来，收尾区里只有中途提的那张
+  assert.deepEqual(bucketItems(items, { turnRunning: true }), [
+    { type: 'user', itemId: 'u' },
+    { type: 'process', key: 's', parts: [{ type: 'steps', key: 's', itemIds: ['s', 'w'] }] },
+    { type: 'answer', itemId: 'a' },
+    { type: 'tail', itemIds: ['s'] },
+  ])
+  // 回合结束（不传、传 false 都一样）：收尾带的排进来，按调用先后
+  const ended = bucketItems(items, { turnRunning: false })
+  assert.deepEqual(ended.at(-1), { type: 'tail', itemIds: ['s', 'w'] })
+  assert.deepEqual(bucketItems(items), ended)
+  // 只有收尾的回合在跑：没有收尾区
+  assert.equal(
+    bucketItems([items[0], items[2], items[3]] as typeof items, { turnRunning: true }).some(
+      (block) => block.type === 'tail',
+    ),
+    false,
   )
 })
 

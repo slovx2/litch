@@ -27,7 +27,7 @@ import type {
   WebSearchItem,
 } from '@litch/core'
 import { goalReachedIn, spanOf, thoughtShown, workingShown } from '@litch/core'
-import { cardsOf, eventKind, handOffOf, isOfferCall } from '../detail/proposals/logic'
+import { cardsOf, eventKind, handOffOf, isOfferCall, isWrapUp } from '../detail/proposals/logic'
 import { type ChunkState, chunkText, emptyChunks } from './blocks'
 
 export type StepItem = CommandItem | FileChangeItem | ToolCallItem | WebSearchItem | NoticeItem
@@ -296,8 +296,10 @@ export class RowBuilder {
           out.push(...rows)
           continue
         }
-        // 建议任务、收尾的问题：过程里只留一步（提醒的回合没有过程），卡片和问题排到回合最下方
+        // 建议任务、收尾的问题：过程里只留一步（提醒的回合没有过程），卡片和问题排到回合最下方。
+        // 收尾带的等回合结束再排：先收尾、再写回答，收到就排的话卡片比回答先出来（中途 start 的提案照旧）
         if (!remind) group.push(item)
+        if (running && isWrapUp(item)) continue
         tailCards.push(...rows)
         if (ask)
           tailAsk = this.keep({
