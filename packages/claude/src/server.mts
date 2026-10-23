@@ -4051,6 +4051,26 @@ export class CodexClaudeAppServer {
       completeReasoningItem()
       completeAgentItem(phase)
     }
+    // CLI 回合中途自己压缩上下文（自动压缩）：照上游发一个 contextCompaction 条目，开始时 item/started，
+    // 压成了（compact_boundary）才记进回合、发 item/completed；没压成就一直不完成，客户端在回合结束时当它没压完。
+    // 没压成之后同一回合里再压，用的还是这一条
+    let compaction: ThreadItem | null = null
+    const startCompaction = (item: ThreadItem): void =>
+      this.notify(peer, {
+        method: 'item/started',
+        params: { threadId: thread.id, turnId: turn.id, item, startedAtMs: nowMillis() },
+      })
+    const finishCompaction = (): void => {
+      // 老版本的 CLI 不报开始：压成时开始、完成一起发
+      const item = compaction ?? { type: 'contextCompaction', id: newId() }
+      if (!compaction) startCompaction(item)
+      compaction = null
+      this.store.appendItem(turn.id, item)
+      this.notify(peer, {
+        method: 'item/completed',
+        params: { threadId: thread.id, turnId: turn.id, item, completedAtMs: nowMillis() },
+      })
+    }
 
     // Allow per-turn override of policy (Codex App may attach updated values
     // when the user toggles Full access mid-conversation), then fall back to
@@ -4607,7 +4627,16 @@ export class CodexClaudeAppServer {
           // CLI 自己压缩了上下文：之前放在用户消息前面的指令压进了摘要，下个回合再放一次
           if (event.type === 'context_compacted') {
             this.rememberInjectedInstructions(runtimeThread.id, null)
+            finishCompaction()
             this.compactedUsage(peer, thread.id, turn.id, event.postTokens)
+          }
+          // 压得久时 CLI 隔一阵再报一次“在压”：还是同一次压缩
+          if (event.type === 'compacting') {
+            if (compaction) return
+            completeMessage()
+            compaction = { type: 'contextCompaction', id: newId() }
+            startCompaction(compaction)
+            return
           }
           if (event.type === 'session') {
             this.store.updateClaudeSessionId(thread.id, event.claudeSessionId)

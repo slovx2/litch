@@ -530,11 +530,13 @@ function toolCall(
 
 /**
  * 回合结束时还标着 inProgress 的条目，按回合的结局收尾（对面漏发了“完成”，不能一直显示在跑）。
- * 回合正常结束算完成，打断或失败算失败。命令不管：后台命令跨回合跑，结束时对面再补完成；
+ * 回合正常结束算完成，打断或失败算失败；上下文压缩一律算没完成。命令不管：后台命令跨回合跑，结束时对面再补完成；
  * 派子代理的调用也不管：子代理可能还在跑，它的状态以子线程为准。没什么要改的返回 null。
  */
 export function settledItem(item: ItemView, turnCompleted: boolean): ItemView | null {
   if (!('status' in item) || item.status !== 'inProgress') return null
+  // 压成了对面先发完成再结束回合（上游一直这样）；回合都结束了还没完成，就是没压成（Claude、Pi 自动压缩失败时回合照跑）
+  if (item.kind === 'compaction') return { ...item, status: 'interrupted' }
   if (item.kind === 'agentMessage' || item.kind === 'reasoning')
     return { ...item, status: 'completed' }
   if (item.kind === 'fileChange' || (item.kind === 'toolCall' && item.agents === undefined))
@@ -703,7 +705,13 @@ export function projectItem(item: ThreadItem, streaming = false): ItemView {
         detail: item.review || null,
       }
     case 'contextCompaction':
-      return { id, kind: 'notice', label: phrase('notice.contextCompaction'), detail: null }
+      // 是不是手动的由调用方按它知道的补上（live.mts、session.mts）
+      return {
+        id,
+        kind: 'compaction',
+        status: streaming ? 'inProgress' : 'completed',
+        source: 'automatic',
+      }
     default: {
       // 类型上这里到不了，但对面的协议可能比我们新
       const unknown = item as { id?: unknown; type?: unknown }

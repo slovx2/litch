@@ -2,6 +2,7 @@
 // 步骤组一行灰色的汇总（两段说明之间连续的条目）→ 每个条目一行 → 条目的详情。每一级点一下展开。
 import type {
   CommandItem,
+  CompactionItem,
   FileChangeItem,
   ItemView,
   NoticeItem,
@@ -445,6 +446,32 @@ const Notice = memo(function Notice(ref: ItemRef) {
       target=""
       detail={detail ? () => <div className="think">{detail}</div> : null}
     />
+  )
+})
+
+/** 压了这么久还没完，后面加一句“可能要几分钟”（官方桌面端也是 10 秒） */
+const COMPACTION_SLOW_MS = 10_000
+
+/**
+ * 上下文压缩：对话里一条分隔线，不收进过程。压的时候写“正在压缩上下文”，久了加一句可能要几分钟；
+ * 压完写“上下文已压缩”（自动压的写“已自动压缩”），没压完回合就停了写“压缩已中断”
+ */
+export const Compaction = memo(function Compaction(ref: ItemRef) {
+  const item = useItem<Extract<ItemView, CompactionItem>>(ref)
+  const t = useT()
+  const running = item?.kind === 'compaction' && item.status === 'inProgress'
+  const spent = useElapsed(running ? (item.span?.from ?? null) : null)
+  if (item?.kind !== 'compaction') return null
+  const label = running
+    ? t(spent !== null && spent >= COMPACTION_SLOW_MS ? 'compaction.slow' : 'compaction.running')
+    : item.status === 'interrupted'
+      ? t('compaction.interrupted')
+      : t(item.source === 'manual' ? 'compaction.manual' : 'compaction.automatic')
+  return (
+    <div className="compaction" data-state={item.status} data-anchor={`i:${ref.itemId}`}>
+      {running ? <i className="st run" /> : <Icon name="compact" small />}
+      <span>{label}</span>
+    </div>
   )
 })
 

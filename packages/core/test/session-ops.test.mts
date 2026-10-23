@@ -661,21 +661,69 @@ test('压缩：受理了就返回，压缩作为一个回合照常从通知里�
   server.notify('turn/started', { threadId: 'a', turn: started('c1') })
   await settle()
   await assert.rejects(command('session.compact', where), { code: 'rejected' })
-  server.notify('item/completed', {
-    threadId: 'a',
-    turnId: 'c1',
-    item: { type: 'contextCompaction', id: 'compact:1' },
-    completedAtMs: 0,
-  })
+  const item = { type: 'contextCompaction', id: 'compact:1' } as const
+  server.notify('item/started', { threadId: 'a', turnId: 'c1', item, startedAtMs: 0 })
+  await settle()
+  // 压的时候：一条“正在压缩”，是这边点的；不另外写“正在工作”
+  const compaction = () => {
+    const view = session.seen.view
+    const id = view?.turns.at(-1)?.itemIds[0]
+    return id ? view?.items[id] : undefined
+  }
+  assert.deepEqual(
+    { ...compaction(), span: undefined },
+    {
+      id: 'c1:compact:1',
+      kind: 'compaction',
+      status: 'inProgress',
+      source: 'manual',
+      span: undefined,
+    },
+  )
+  // 压了多久按 span 算（界面压久了多写一句）
+  assert.equal(compaction()?.span?.to, null)
+  server.notify('item/completed', { threadId: 'a', turnId: 'c1', item, completedAtMs: 0 })
   server.notify('turn/completed', { threadId: 'a', turn: finished('c1') })
   await settle()
   const last = session.seen.view?.turns.at(-1)
   assert.equal(last?.status, 'completed')
   assert.deepEqual(
     last?.itemIds.map((id) => session.seen.view?.items[id]?.kind),
-    ['notice'],
+    ['compaction'],
   )
+  assert.equal((compaction() as { status?: string }).status, 'completed')
+  assert.equal((compaction() as { source?: string }).source, 'manual')
   assert.equal(sent('thread/compact/start').length, 1)
+})
+
+test('自动压缩：用户回合里开始压是“正在压缩”、算自动的；回合结束了还没等到完成就是没压完', async () => {
+  const { core, peer } = setup([threeTurns()])
+  core.start()
+  await settle()
+  const session = watch(core)
+  await settle()
+  const server = peer.last()
+  const compaction = () => {
+    const view = session.seen.view
+    const id = view?.turns.at(-1)?.itemIds.at(-1)
+    return id ? view?.items[id] : undefined
+  }
+  server.notify('turn/started', { threadId: 'a', turn: started('t9') })
+  server.notify('item/started', {
+    threadId: 'a',
+    turnId: 't9',
+    item: { type: 'contextCompaction', id: 'auto' },
+    startedAtMs: 0,
+  })
+  await settle()
+  assert.equal(compaction()?.kind, 'compaction')
+  assert.deepEqual(
+    [(compaction() as { status?: string }).status, (compaction() as { source?: string }).source],
+    ['inProgress', 'automatic'],
+  )
+  server.notify('turn/completed', { threadId: 'a', turn: finished('t9') })
+  await settle()
+  assert.equal((compaction() as { status?: string }).status, 'interrupted')
 })
 
 test('降级：对面说不认识的事记成不会，开着的会话都知道，之后不再去问；重新连上从头再试', async () => {
@@ -791,17 +839,21 @@ test('分叉、回退、压缩：模拟核心都支持；没有声明的不会�
   await core.command('session.rollback', { ...target, turnId: second }, never)
   assert.deepEqual(turnIds(session.view), ids.slice(0, -1))
 
-  // 压缩：一个没有用户消息的回合，留下一行说明，占用降下来
+  // 压缩：一个没有用户消息的回合，先是“正在压缩”，压完是“已压缩”，占用降下来
   const used = session.view?.usage?.usedTokens ?? 0
   await core.command('session.compact', target, never)
   assert.equal(session.view?.turns.at(-1)?.status, 'running')
+  const compaction = () => {
+    const id = session.view?.turns.at(-1)?.itemIds[0]
+    const item = id ? session.view?.items[id] : undefined
+    return item?.kind === 'compaction' ? [item.status, item.source] : item?.kind
+  }
+  assert.deepEqual(compaction(), ['inProgress', 'manual'])
   time.advance(60_000)
   const last = session.view?.turns.at(-1)
   assert.equal(last?.status, 'completed')
-  assert.deepEqual(
-    last?.itemIds.map((id) => session.view?.items[id]?.kind),
-    ['notice'],
-  )
+  assert.equal(last?.itemIds.length, 1)
+  assert.deepEqual(compaction(), ['completed', 'manual'])
   assert.ok((session.view?.usage?.usedTokens ?? 0) < used)
 
   // 没有声明的那台（直接连的原生 codex）不会分叉：试过一次才知道

@@ -7,6 +7,7 @@ import { createTwoFilesPatch } from 'diff'
 import { outputDelta } from './command-output.mjs'
 import { watchNativeSession } from './native-watch.mjs'
 import {
+  COMPACTION_ITEM_ENTRY,
   contentItem,
   declineItem,
   finishTool,
@@ -321,12 +322,30 @@ export function onEvent(server: PiServer, thread: PiThread, event: any): void {
     if (event.result?.details?.source === 'plan_mode_complete')
       put({ type: 'plan', id: `plan:${event.toolCallId}`, text: event.result.details.plan }, true)
   }
+  // 压缩开始就发条目的开始（照上游），压成了发完成。手动压缩时这个回合在开始之后才开，开始由 compaction.mts 补。
+  // 开始时还不知道 Pi 的压缩记录号，条目另起一个号，压成时记下两个号的对应，重画历史时沿用（projection.mts）
+  if (event.type === 'compaction_start' && !active.compacting) {
+    active.compacting = { type: 'contextCompaction', id: `compact:${randomUUID()}` }
+    put(active.compacting, false)
+  }
   if (event.type === 'compaction_end' && event.result) {
     const entry = active.live?.session.sessionManager
       .getBranch()
       .findLast((e) => e.type === 'compaction')
-    if (entry) put({ type: 'contextCompaction', id: `compact:${entry.id}` }, true)
+    const item =
+      active.compacting ?? (entry ? { type: 'contextCompaction', id: `compact:${entry.id}` } : null)
+    if (item && entry && active.compacting)
+      active.live?.session.sessionManager.appendCustomEntry(COMPACTION_ITEM_ENTRY, {
+        id: item.id,
+        entry: entry.id,
+      })
+    if (item) put(item, true)
+  } else if (event.type === 'compaction_end' && active.compacting) {
+    // 没压成（出错、被打断）：条目不留在回合里，客户端没等到完成，回合结束时当它没压完
+    turn.items = turn.items.filter((item) => item !== active.compacting)
+    server.store.saveTurn(thread.id, turn)
   }
+  if (event.type === 'compaction_end') delete active.compacting
   // 自动压缩（阈值、溢出）的结果；手动压缩是单独的回合，失败由 compaction.mts 记。
   // 失败时 Pi 不停下，照样把满的上下文发出去，原因只在这个事件里，回合结束时报出来（contextError）
   if (event.type === 'compaction_end' && event.reason !== 'manual') {

@@ -177,7 +177,34 @@ test('条目：不认识的类型变成一行说明，不抛错', () => {
     label: { key: 'notice.unknownItem', args: { type: 'holoDeck' } },
     detail: null,
   })
-  assert.equal(projectItem({ type: 'contextCompaction', id: 'k' }).kind, 'notice')
+})
+
+test('条目：上下文压缩是单独一种，开始了是在压，完成了是已压；来源先算自动的', () => {
+  const item = { type: 'contextCompaction', id: 'k' } as const
+  assert.deepEqual(projectItem(item, true), {
+    id: 'k',
+    kind: 'compaction',
+    status: 'inProgress',
+    source: 'automatic',
+  })
+  assert.equal(projectItem(item).kind, 'compaction')
+  assert.equal((projectItem(item) as { status: string }).status, 'completed')
+})
+
+test('读历史：没有用户消息的回合里的压缩是手动的，用户回合里的是自动的；还在跑的回合最后一条是在压', () => {
+  const compaction = { type: 'contextCompaction', id: 'k' } as const
+  const of = (projected: ReturnType<typeof projectTurn>) =>
+    projected.items.flatMap((item) =>
+      item.kind === 'compaction' ? [[item.status, item.source]] : [],
+    )
+  assert.deepEqual(of(projectTurn(turn('t1', [compaction]))), [['completed', 'manual']])
+  assert.deepEqual(of(projectTurn(turn('t2', [userText('u', '接着做'), compaction]))), [
+    ['completed', 'automatic'],
+  ])
+  assert.deepEqual(
+    of(projectTurn(turn('t3', [userText('u', '接着做'), compaction], { status: 'inProgress' }))),
+    [['inProgress', 'automatic']],
+  )
 })
 
 test('会话：标题、状态、时间单位', () => {

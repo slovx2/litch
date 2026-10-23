@@ -2683,8 +2683,14 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         const view = reachView(params as Commands['session.compact']['params'])
         if (running(view)) throw new ChannelError('rejected', '回合还在进行，结束之后才能压缩')
         attempt(view, 'compact')
-        // 压缩是一个没有用户消息的回合：过一会儿留下一行“上下文已压缩”，占用降下来
+        // 压缩是一个没有用户消息的回合：先是一行“正在压缩上下文”，过一会儿变成“上下文已压缩”，占用降下来
         const turnId = `m${++seq}`
+        const compaction: ItemView = {
+          id: `${turnId}-n`,
+          kind: 'compaction',
+          status: 'inProgress',
+          source: 'manual',
+        }
         applySessionOps(view, [
           {
             op: 'turn.add',
@@ -2697,20 +2703,12 @@ export function createMockCore(options: MockCoreOptions): MockCore {
               error: null,
             },
           },
+          { op: 'item.add', turnId, item: compaction },
         ])
         updateSummary(view.deviceId, view.sessionId, { status: 'running', updatedAt: clock.now() })
         const finish = () => {
           applySessionOps(view, [
-            {
-              op: 'item.add',
-              turnId,
-              item: {
-                id: `${turnId}-n`,
-                kind: 'notice',
-                label: phrase('notice.contextCompaction'),
-                detail: null,
-              },
-            },
+            { op: 'item.add', turnId, item: { ...compaction, status: 'completed' } },
             ...(view.usage
               ? [
                   {
@@ -2722,7 +2720,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
           ])
           endTurn(view, turnId, null, 'completed')
         }
-        replies.set(sessionKey(view), clock.setTimer(finish, Math.max(chunkMs * 10, 1)))
+        replies.set(sessionKey(view), clock.setTimer(finish, Math.max(chunkMs * 40, 1)))
         return {}
       }
       throw new ChannelError('unknownCommand', `不认识的命令：${name}`)

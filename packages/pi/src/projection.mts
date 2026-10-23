@@ -146,6 +146,9 @@ export function toolItem(
  */
 export const SUBAGENT_THREAD_ENTRY = 'codex-harness-adapter-subagent'
 
+/** 一次压缩的条目号对应 Pi 的哪条压缩记录（turn.mts 压成时记），重画历史时沿用这个号 */
+export const COMPACTION_ITEM_ENTRY = 'codex-harness-adapter-compaction'
+
 /** 子代理条目的 receiverThreadIds、agentsStates 用子会话的线程号；还不知道（子会话没建成）时只能用 agentId */
 export type SubagentReceiver = (agentId: string) => string
 
@@ -227,6 +230,11 @@ export function projectHistory(entries: any[], thread: PiThread): PiTurn[] {
     if (entry.type === 'custom' && entry.customType === SUBAGENT_THREAD_ENTRY)
       subagentThreads.set(entry.data.agentId, entry.data.threadId)
   const receiver: SubagentReceiver = (agentId) => subagentThreads.get(agentId) ?? agentId
+  // 压缩条目实时发出去时用的号（开始时还没有 Pi 的压缩记录号，见 turn.mts）：重画时沿用，和实时的对得上
+  const compactions = new Map<string, string>()
+  for (const entry of entries)
+    if (entry.type === 'custom' && entry.customType === COMPACTION_ITEM_ENTRY)
+      compactions.set(entry.data.entry, entry.data.id)
   for (const entry of entries) {
     if (entry.type === 'custom' && entry.customType === 'codex-harness-adapter-declined')
       declined.add(entry.data.id)
@@ -295,7 +303,10 @@ export function projectHistory(entries: any[], thread: PiThread): PiTurn[] {
         }
         turns.push(turn)
       }
-      turn.items.push({ type: 'contextCompaction', id: `compact:${entry.id}` })
+      turn.items.push({
+        type: 'contextCompaction',
+        id: compactions.get(entry.id) ?? `compact:${entry.id}`,
+      })
     }
     if (entry.type !== 'message') continue
     const msg = entry.message

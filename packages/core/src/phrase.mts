@@ -128,7 +128,6 @@ export type PhraseKey =
   | 'notice.slept'
   | 'notice.enteredReview'
   | 'notice.exitedReview'
-  | 'notice.contextCompaction'
   | 'notice.unknownItem'
 
 export type PhraseArgs = Record<string, string | number>

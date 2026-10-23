@@ -101,11 +101,14 @@ export function projectTurn(turn: Turn, viewId = turn.id): { turn: TurnView; ite
   const running = turn.status === 'inProgress'
   const last = (turn.items?.length ?? 0) - 1
   const origin = originOf(turn)
+  // 手动压缩是单独的一个回合，里面没有用户消息；自动压缩发生在用户发起的回合里（上游回合开始前的那次也是）
+  const manual = !(turn.items ?? []).some((item) => item.type === 'userMessage')
   const items = (turn.items ?? []).flatMap((item, index) => {
     // 持续目标的续跑回合里那句“接着做”是入口替 harness 说的（Claude 入口），不是用户说的：不画成用户消息
     if (origin.origin === 'goal' && item.type === 'userMessage') return []
     // 回合还在进行时，只有最后一个条目可能还在往外出字
     const view = projectItem(item, running && index === last)
+    if (view.kind === 'compaction' && manual) view.source = 'manual'
     return [{ ...view, id: itemKey(viewId, view.id, index) }]
   })
   return {

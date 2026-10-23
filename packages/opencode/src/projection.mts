@@ -276,6 +276,11 @@ export class Projection {
       for (const [id, owner] of [...this.unflushed]) if (owner === turn) this.flushUser(id, notify)
     if (info.error) this.turnError.set(turn.id, info.error)
     if (info.time?.completed) this.closeTexts(info.id, notify)
+    // 写摘要的那条（summary 为真）写完了、没出错：压完了
+    if (info.summary === true && info.time?.completed && !info.error)
+      for (const item of turn.items)
+        if (item.type === 'contextCompaction' && this.open.delete(item.id))
+          notify('item/completed', { turnId: turn.id, item })
   }
 
   /** message.part.updated */
@@ -290,9 +295,10 @@ export class Projection {
       // 用户自己跑的命令（thread/shellCommand 经 OpenCode 的 /shell）：这一轮里的命令条目标成 userShell
       if (part.type === 'text' && part.synthetic && part.text === SHELL_MARK)
         this.shellTurns.add(turn.id)
-      // 压缩：一条带压缩部件的用户消息，画成一个上下文压缩条目
+      // 压缩：一条带压缩部件的用户消息，画成一个上下文压缩条目。这时才开始压（照上游先发开始），
+      // 写摘要的那条助手消息写完了才算压完（message）
       if (part.type === 'compaction' && !turn.items.some((item) => item.id === part.id))
-        this.put(turn, { type: 'contextCompaction', id: part.id }, true, notify)
+        this.put(turn, { type: 'contextCompaction', id: part.id }, false, notify)
       return
     }
     // 压缩时的那条摘要（summary 为真的助手消息）不当回答显示
@@ -670,6 +676,8 @@ export class Projection {
       )
     for (const item of turn.items) {
       if (!this.open.delete(item.id)) continue
+      // 摘要没写完回合就结束了：没压成，不发完成（客户端当它没压完）
+      if (item.type === 'contextCompaction') continue
       if (item.status === 'inProgress') item.status = 'failed'
       notify('item/completed', { turnId: turn.id, item })
     }

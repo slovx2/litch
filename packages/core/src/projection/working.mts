@@ -10,6 +10,7 @@ import type { ItemView } from '../model.mjs'
  * - 回合不在跑：不显示（换成回合结束那一行）。
  * - 有待答的请求：不显示，输入区上方的卡片已经说了。
  * - 有正在写、已经有字的助手消息（说明或最终回答）：不显示。还没出字的不算，那还是在等。
+ * - 正在压缩上下文：不显示，压缩那一行自己写着“正在压缩”。
  * - 别的都显示，包括命令、改文件、工具调用、思考正在跑的时候。
  * 出字停下多久才显示是界面的事（两段正文挨着时不闪），这里只给此刻的结论
  */
@@ -20,6 +21,8 @@ export function workingShown(
 ): boolean {
   if (!running || pending > 0) return false
   return !items.some(
-    (item) => item?.kind === 'agentMessage' && item.status === 'inProgress' && item.text !== '',
+    (item) =>
+      (item?.kind === 'agentMessage' && item.status === 'inProgress' && item.text !== '') ||
+      (item?.kind === 'compaction' && item.status === 'inProgress'),
   )
 }

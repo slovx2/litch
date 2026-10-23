@@ -354,6 +354,8 @@ export type RuntimeEvent =
   | { type: 'plan_handoff'; plan: string | null }
   // 压缩后上下文里还剩多少（compact_boundary 的 compact_metadata.post_tokens），CLI 没报是 null
   | { type: 'context_compacted'; messageId: string; postTokens?: number | null }
+  // CLI 开始压缩上下文（压得久时每 30 秒再报一次）。压成了随后有 context_compacted，没压成没有
+  | { type: 'compacting' }
   | { type: 'native_boundary'; messageId: string }
   | { type: 'session'; claudeSessionId: string }
   // 这一轮里 CLI 连着哪些 MCP 服务（配置里的原名）。拆 MCP 工具名时拿它对服务名。

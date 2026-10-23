@@ -1,7 +1,7 @@
 // 投影的第三步：一个回合里的显示条目 → 块。纯函数。
 // 一个回合画成：用户消息 → 过程 → 最终回答。过程按时间排三种东西：说明段（助手的中间说明，和回答同一套正文样式）、
 // 步骤组（两段说明之间连续的工具调用、思考、提示，收成一行汇总）、启动子代理的那一行。
-// 计划、待办、派出的子会话露在过程外面，位置不变。回合结束后整段过程再收成一行。
+// 计划、待办、上下文压缩、派出的子会话露在过程外面，位置不变。回合结束后整段过程再收成一行。
 // 建议任务的卡片（收尾 wrap_up 带的、start 提的）连同收尾留给用户的问题，固定画在回合最下方（最终回答下面）的
 // 收尾区里，原来调用的位置在过程里只留一行；offer 卡挂在回合中间等用户选，不挪。
 
@@ -48,6 +48,8 @@ export type Block =
   | { type: 'answer'; itemId: string }
   | { type: 'plan'; itemId: string }
   | { type: 'todo'; itemId: string }
+  /** 上下文压缩：一条分隔线，一直露在外面（官方桌面端也是），压的时候写“正在压缩”，压完写“已压缩” */
+  | { type: 'compaction'; itemId: string }
   /** 派出的子会话、offer 卡、带题的助手消息：一直露在外面 */
   | { type: 'card'; itemId: string }
   /**
@@ -129,6 +131,8 @@ export function bucketItems(items: BlockInput[]): Block[] {
     } else if (item.kind === 'todo') {
       // 待办进度一直露在外面，不跟着过程收起来
       blocks.push({ type: 'todo', itemId: item.id })
+    } else if (item.kind === 'compaction') {
+      blocks.push({ type: 'compaction', itemId: item.id })
     } else if (item.card === 'outside') {
       blocks.push({ type: 'card', itemId: item.id })
     } else if (answers.has(item.id)) {

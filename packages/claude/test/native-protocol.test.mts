@@ -52,6 +52,68 @@ test('CONTEXT-002：原生压缩后重启恢复使用压缩上下文', { timeout
   }
 })
 
+test('CONTEXT-003：回合中途自动压缩时照上游发 contextCompaction 的开始和完成', {
+  timeout: 90_000,
+}, async () => {
+  const home = await mkdtemp(join(tmpdir(), 'native-auto-compaction-'))
+  const model = new MockLLM()
+  const url = await model.start()
+  const client = await ProtocolClient.start(home, url)
+  const compaction = (method: string) =>
+    client.trace.filter(
+      (message) => message.method === method && message.params?.item?.type === 'contextCompaction',
+    )
+  try {
+    // 头一回合报的用量接近上下文窗口：下一回合发请求之前 CLI 自己先压缩
+    model.enqueue(() => ({
+      content: [{ type: 'text', text: 'BEFORE_AUTO_COMPACT' }],
+      usage: { input_tokens: 195_000, output_tokens: 20 },
+    }))
+    const { thread } = await client.request('thread/start', { cwd: home })
+    const first = await client.request('turn/start', {
+      threadId: thread.id,
+      input: [{ type: 'text', text: 'AUTO_COMPACT_ORIGINAL_INPUT' }],
+    })
+    assert.equal((await client.completed(first.turn.id)).status, 'completed')
+    assert.equal(compaction('item/started').length, 0)
+    model.assertConsumed()
+    // 压缩请求到模型的时候，客户端已经知道在压了，还没收到完成
+    let startedWhileCompacting = false
+    model.enqueue(() => {
+      startedWhileCompacting =
+        compaction('item/started').length === 1 && compaction('item/completed').length === 0
+      return [{ type: 'text', text: 'AUTO_COMPACT_SUMMARY' }]
+    })
+    model.enqueue(() => [{ type: 'text', text: 'AFTER_AUTO_COMPACT' }])
+    const second = await client.request('turn/start', {
+      threadId: thread.id,
+      input: [{ type: 'text', text: '接着来' }],
+    })
+    assert.equal((await client.completed(second.turn.id)).status, 'completed')
+    model.assertConsumed()
+    assert.equal(startedWhileCompacting, true)
+    const [started] = compaction('item/started')
+    const [completed] = compaction('item/completed')
+    assert.equal(compaction('item/completed').length, 1)
+    assert.equal(started.params.turnId, second.turn.id)
+    assert.equal(completed.params.item.id, started.params.item.id)
+    // 记进了回合：用户消息之后、回答之前；读历史也有
+    const { thread: read } = await client.request('thread/read', {
+      threadId: thread.id,
+      includeTurns: true,
+    })
+    const turn = read.turns.find((entry: any) => entry.id === second.turn.id)
+    assert.deepEqual(
+      turn.items.map((item: any) => item.type),
+      ['userMessage', 'contextCompaction', 'agentMessage'],
+    )
+  } finally {
+    await client.close()
+    await model.close()
+    await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
+  }
+})
+
 for (const status of [429, 500, 503]) {
   test(`FAILURE-${status}：失败终结，重复提交不触发模型重放`, { timeout: 60_000 }, async () => {
     const home = await mkdtemp(join(tmpdir(), `native-failure-${status}-`))

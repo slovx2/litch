@@ -2109,6 +2109,11 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       })
       return
     }
+    // 开始压缩：status 是 compacting。压完时（成没成都是）、权限模式变了时也发 status，那几条不用：压成了另有 compact_boundary
+    if (subtype === 'status') {
+      if (message.status === 'compacting') await pending.handlers.onEvent({ type: 'compacting' })
+      return
+    }
     if (subtype === 'compact_boundary') {
       const meta = message.compact_metadata as Record<string, unknown> | undefined
       await pending.handlers.onEvent({

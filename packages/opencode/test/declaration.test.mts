@@ -264,12 +264,19 @@ test('OpenCode：分叉、回退（连文件一起恢复）、按个数回退、
     )
     assert.equal(await readFile(file, 'utf8'), 'v1\n')
 
-    // 压缩跑成一个回合，里面是上下文压缩条目
+    // 压缩跑成一个回合，里面是上下文压缩条目：先发开始、摘要写完了才发完成（compaction.test.mts）
     await declared(s, features.compact, 'thread/compact/start', { threadId })
     const compacted = await desktop.until('turn/completed', (p) =>
       p.turn.items.some((item: any) => item.type === 'contextCompaction'),
     )
     assert.equal(compacted.turn.status, 'completed')
+    const compaction = desktop.notifications.filter(
+      (n: any) => n.params?.item?.type === 'contextCompaction',
+    )
+    assert.deepEqual(
+      compaction.map((n: any) => n.method),
+      ['item/started', 'item/completed'],
+    )
 
     await declared(s, features.rename, 'thread/name/set', { threadId, name: '声明测试' })
     assert.equal((await desktop.call('thread/read', { threadId })).thread.name, '声明测试')

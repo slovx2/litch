@@ -76,6 +76,8 @@ export interface ActiveTurn {
   truncated?: boolean
   /** 这个回合里自动压缩最近一次的失败原因；之后压成了就清掉 */
   compactionError?: string
+  /** 正在压缩：已经发了开始、还没完成的那个 contextCompaction 条目（turn.mts、compaction.mts） */
+  compacting?: any
 }
 export class PiServer {
   readonly store: PiStore

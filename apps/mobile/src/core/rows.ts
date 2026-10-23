@@ -9,6 +9,7 @@
 //   对 item.add 是整个换掉）：这样逐项比一遍（sameRow）就知道内容变没变。
 import type {
   CommandItem,
+  CompactionItem,
   FileChangeItem,
   ItemView,
   NoticeItem,
@@ -162,6 +163,14 @@ export type Row =
     }
   | { type: 'todo'; key: string; note: string | null; steps: TodoStep[]; running: boolean }
   | { type: 'notice'; key: string; label: Text; detail: string | null }
+  /** 上下文压缩：一条分隔线，不进过程组（照桌面端）。startedAt：这边看着它开始的时刻，压久了多写一句 */
+  | {
+      type: 'compaction'
+      key: string
+      status: CompactionItem['status']
+      source: CompactionItem['source']
+      startedAt: number | null
+    }
   /**
    * 达成目标的那一轮：最后一条回答下面一行“目标已达成 · 用时 N”（核心的 goalReachedIn 定写不写）。
    * ms 是目标一共用了多久
@@ -374,6 +383,17 @@ export class RowBuilder {
         case 'todo':
           out.push(
             this.keep({ type: 'todo', key: item.id, note: item.note, steps: item.steps, running }),
+          )
+          break
+        case 'compaction':
+          out.push(
+            this.keep({
+              type: 'compaction',
+              key: item.id,
+              status: item.status,
+              source: item.source,
+              startedAt: item.span?.from ?? null,
+            }),
           )
           break
       }

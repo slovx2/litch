@@ -468,6 +468,32 @@
   margin: 2px 0 6px 22px;
   overflow: hidden;
 }
+/* 上下文压缩：一条分隔线，字在中间。压的时候字深一点、前面是在跑的记号 */
+.compaction {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 22px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.compaction::before,
+.compaction::after {
+  content: "";
+  flex: 1 1 0;
+  min-width: 16px;
+  border-top: 1px solid var(--line-2);
+}
+.compaction > span {
+  min-width: 0;
+  text-align: center;
+}
+.compaction[data-state="inProgress"] {
+  color: var(--ink-2);
+}
+.compaction .ic {
+  flex: none;
+}
 /* 只有提示的回合：提示直接露在外面 */
 .notes .item-head {
   height: 26px;

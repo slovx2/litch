@@ -1722,6 +1722,10 @@ export const en: Record<MessageKey, Entry> = {
   'notice.slept': 'Waited {seconds}s',
   'notice.enteredReview': 'Entered review mode',
   'notice.exitedReview': 'Exited review mode',
-  'notice.contextCompaction': 'Context compacted',
+  'compaction.running': 'Compacting context',
+  'compaction.slow': 'Compacting context — long sessions can take a few minutes',
+  'compaction.manual': 'Context compacted',
+  'compaction.automatic': 'Context was nearly full and got compacted',
+  'compaction.interrupted': 'Compaction didn’t finish',
   'notice.unknownItem': 'Unsupported item type: {type}',
 }
