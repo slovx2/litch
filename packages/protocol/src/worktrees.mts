@@ -83,6 +83,8 @@ export const WORKTREE_CHANGED = 'litch/worktree/changed'
 
 export interface WorktreeChangedNotification {
   worktree: Worktree
+  /** 连分支一起删掉了：设备上已经没有这条记录 */
+  deleted?: boolean
 }
 
 export interface WorktreeListResponse {

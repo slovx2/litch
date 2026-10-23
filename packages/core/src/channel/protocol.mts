@@ -98,6 +98,12 @@ import type {
   SandboxLevel,
   SessionProposalView,
 } from '../model-tree.mjs'
+import type {
+  WorktreeBranchesView,
+  WorktreeFrom,
+  WorktreesTopicView,
+  WorktreeView,
+} from '../model-worktrees.mjs'
 import type { Phrase, Text } from '../phrase.mjs'
 import type { SkippingOutput } from '../text/output-cap.mjs'
 
@@ -169,6 +175,12 @@ export type Topic =
    * 确认卡每个窗口都有。应用的外框一直订阅着
    */
   | { kind: 'config' }
+  /**
+   * 一台设备上设备层建的工作树（worktrees 扩展）：设置页的“工作树”一块开着时才订阅，有人订阅核心才去读；
+   * 之后跟着 litch/worktree/changed。设备没有这项扩展时快照里 available 是 false，照样成立；
+   * 没连上时给上次知道的。连上、重连之后再读一遍
+   */
+  | { kind: 'worktrees'; deviceId: string }
 
 export type TopicKind = Topic['kind']
 
@@ -187,6 +199,7 @@ export interface TopicData {
   harnessConfig: HarnessConfigTopicView
   accountLimits: AccountLimitsView
   config: ConfigTopicView
+  worktrees: WorktreesTopicView
 }
 
 // ---------- 增量 ----------
@@ -283,6 +296,9 @@ export type HarnessConfigOp = { op: 'hc.set'; view: HarnessConfigTopicView }
 /** 账号额度整份换：只有几行 */
 export type AccountLimitsOp = { op: 'limits.set'; view: AccountLimitsView }
 
+/** 工作树的列表整份换：不长，变得也少 */
+export type WorktreesOp = { op: 'worktrees.set'; view: WorktreesTopicView }
+
 export interface TopicOp {
   app: AppOp
   sidebar: SidebarOp
@@ -298,6 +314,7 @@ export interface TopicOp {
   harnessConfig: HarnessConfigOp
   accountLimits: AccountLimitsOp
   config: ConfigTopicOp
+  worktrees: WorktreesOp
 }
 
 // ---------- 命令 ----------
@@ -350,6 +367,11 @@ export interface Commands {
        * harness 空闲时自己开始做。这时不带图片和附带项。harness 不会持续目标的报 unsupported
        */
       goal?: boolean
+      /**
+       * 在新工作树里建（设备列了 worktrees、cwd 在 git 仓库里才能用）：设备先从 from（不给是仓库默认分支）
+       * 建一个工作树，会话在里面对应的子目录起，大仓库可能要几十秒。建不成以 rejected 结束，不留空会话
+       */
+      worktree?: { from?: WorktreeFrom }
     }
     result: { sessionId: string }
   }
@@ -937,6 +959,26 @@ export interface Commands {
   'session.agents': {
     params: { deviceId: string; sessionId: string }
     result: { agents: AgentThreadView[] }
+  }
+  // ---------- 工作树 ----------
+  // 都要设备列了 worktrees，不然以 unsupported 结束；没连上以 offline 结束。
+  /** 一个目录所在仓库的分支（新建页“从哪切”）。目录不在 git 仓库里时 branches 是 null */
+  'worktree.branches': {
+    params: { deviceId: string; cwd: string }
+    result: { branches: WorktreeBranchesView | null }
+  }
+  /**
+   * 删一个工作树的目录：有改动时 discard 为真直接丢，否则先做快照（能恢复）。分支留着，withBranch 为真才删
+   *（连快照和记录一起删）。结果同时进 worktrees 主题
+   */
+  'worktree.remove': {
+    params: { deviceId: string; id: string; discard?: boolean; withBranch?: boolean }
+    result: { worktree: WorktreeView }
+  }
+  /** 把删了目录的工作树建回原路径（有快照的连改动一起放回）。原路径被占、分支和快照都没了以 rejected 结束 */
+  'worktree.restore': {
+    params: { deviceId: string; id: string }
+    result: { worktree: WorktreeView }
   }
   // ---------- 给设备装 harness ----------
   // 都要设备列了 harnessInstall，不然以 unsupported 结束；没连上以 offline 结束。

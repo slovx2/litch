@@ -17,6 +17,7 @@ import type {
   TurnView,
 } from '../model.mjs'
 import type { SessionLineageView } from '../model-tree.mjs'
+import type { SessionWorktreeView, WorktreeState } from '../model-worktrees.mjs'
 import { phrase, type Text } from '../phrase.mjs'
 import { projectBackground, projectOrigin } from './background.mjs'
 import { projectItem } from './items.mjs'
@@ -287,5 +288,27 @@ export function projectSummary(
     background: projectBackground(
       (thread as Thread & { litchBackground?: unknown }).litchBackground,
     ),
+    worktree: projectWorktree((thread as Thread & { litchWorktree?: unknown }).litchWorktree),
+  }
+}
+
+const WORKTREE_STATES: readonly WorktreeState[] = ['creating', 'ready', 'kept', 'removed']
+
+/** 会话对象上设备进程加的 litchWorktree（只发给声明了 worktrees 的连接）。没有、形状不对的是 null */
+export function projectWorktree(raw: unknown): SessionWorktreeView | null {
+  if (typeof raw !== 'object' || raw === null) return null
+  const { id, path, branch, baseRef, baseCommit, state, sourceRoot } = raw as Record<
+    string,
+    unknown
+  >
+  if (typeof id !== 'string' || typeof path !== 'string' || typeof branch !== 'string') return null
+  return {
+    id,
+    path,
+    branch,
+    baseRef: typeof baseRef === 'string' ? baseRef : '',
+    baseCommit: typeof baseCommit === 'string' ? baseCommit : '',
+    state: WORKTREE_STATES.includes(state as WorktreeState) ? (state as WorktreeState) : 'ready',
+    sourceRoot: typeof sourceRoot === 'string' ? sourceRoot : '',
   }
 }

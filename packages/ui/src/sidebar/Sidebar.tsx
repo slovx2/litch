@@ -226,6 +226,13 @@ const SessionRow = memo(function SessionRow({
   const apartSaid = apart
     ? t(apart.kind === 'sub' ? 'session.cwd.sub' : 'session.cwd.away', { path: summary.cwd })
     : undefined
+  // 在设备层建的工作树里：目录本来就不在工作区的根里，记号换成工作树的，提示里写分支
+  const tree = summary.worktree
+  const treeSaid = tree
+    ? t(tree.state === 'removed' ? 'session.worktree.removed' : 'session.worktree', {
+        branch: tree.branch,
+      })
+    : undefined
   // 所属的 harness 现在用不了：这一行是上次留下的。行上不加字，徽标换个画法，为什么用不了在提示和设备信息卡里
   const down = downHarness(device, summary.harness)
   const classes = [
@@ -393,7 +400,18 @@ const SessionRow = memo(function SessionRow({
               : {})}
           />
           <span className="title ell grow">{t.text(summary.title)}</span>
-          {nested ? null : apart ? (
+          {nested ? null : tree ? (
+            <span
+              className="cwd-mark"
+              role="img"
+              data-cwd="worktree"
+              data-state={tree.state}
+              title={treeSaid}
+              aria-label={treeSaid}
+            >
+              <Icon name="branch" />
+            </span>
+          ) : apart ? (
             <span
               className="cwd-mark"
               role="img"

@@ -100,3 +100,33 @@
 .rail-body .todo-step.inProgress {
   background: var(--hover);
 }
+/* 工作树卡片：分支、起点、路径三行事实，下面一排小按钮 */
+.rail-worktree .rail-body {
+  padding: 0 14px 12px;
+  font-size: 12px;
+}
+.rail-worktree .rail-sum {
+  max-width: 150px;
+}
+.rail-worktree .info-facts dt {
+  min-width: 36px;
+}
+.rail-note {
+  margin: 8px 0 0;
+  line-height: 18px;
+  color: var(--ink-3);
+}
+.rail-note.err {
+  color: var(--err);
+}
+.rail-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.rail-acts .btn > svg.ic {
+  width: 12px;
+  height: 12px;
+  margin-right: 4px;
+}

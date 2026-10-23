@@ -113,6 +113,7 @@ export function sampleApp(_lang: SampleLang, now: number): AppView {
       pairing: true,
       // 给 harness 安装：版本、安装进度、失败回退（mock-install.mts）
       install: true,
+      worktrees: true,
     },
     {
       id: 'build',
@@ -160,6 +161,7 @@ export function sampleApp(_lang: SampleLang, now: number): AppView {
       sessionTree: true,
       pairing: true,
       install: true,
+      worktrees: true,
     },
     {
       id: 'nas',
@@ -190,6 +192,7 @@ export function sampleApp(_lang: SampleLang, now: number): AppView {
       sessionTree: false,
       pairing: false,
       install: false,
+      worktrees: false,
     },
     {
       id: 'gpu',
@@ -227,6 +230,7 @@ export function sampleApp(_lang: SampleLang, now: number): AppView {
       // 断开之前知道它支持；现在连不上，出不了码
       pairing: true,
       install: true,
+      worktrees: true,
     },
   ]
   return { devices }
@@ -264,6 +268,7 @@ const summaries = (
     lineage: null,
     nativeLineage: null,
     background: null,
+    worktree: null,
     ...extra,
   }))
 
@@ -352,7 +357,26 @@ export function sampleSidebars(now: number, lang: SampleLang): SidebarView[] {
         ['s1', 'litch', 'claude', 'running', 0],
         ['s2', 'litch', 'claude', 'waiting', 3 * MINUTE, { waitingFor: 'approval' }],
         ['s3', 'litch', 'pi', 'idle', 12 * MINUTE, { unread: true }],
-        ['s4', 'litch', 'dsh', 'idle', HOUR],
+        // 在设备层建的工作树里跑的：侧栏行上一个工作树的小记号，信息栏有分支和路径
+        [
+          's4',
+          'litch',
+          'dsh',
+          'idle',
+          HOUR,
+          {
+            cwd: '~/.codex-harness-adapter/worktrees/litch/sidebar-tweaks-3f2a1c',
+            worktree: {
+              id: 'sidebar-tweaks-3f2a1c',
+              path: '~/.codex-harness-adapter/worktrees/litch/sidebar-tweaks-3f2a1c',
+              branch: 'litch/sidebar-tweaks-3f2a1c',
+              baseRef: 'main',
+              baseCommit: '9b2e4f1c0a7d3e5b6c8f9a0b1c2d3e4f5a6b7c8d',
+              state: 'ready',
+              sourceRoot: '~/work/litch',
+            },
+          },
+        ],
         // Claude 桌面端从 s1 派出来的 Claude Code 会话：侧栏默认不显示，“更多”里打开才有，挂在 s1 下面
         [
           'cd1',

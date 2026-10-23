@@ -209,8 +209,12 @@ export class Worktrees {
       )
   }
 
-  private changed(worktree: Worktree): void {
-    this.host.announce(WORKTREE_CHANGED, { worktree }, EXTENSION.worktrees)
+  private changed(worktree: Worktree, deleted = false): void {
+    this.host.announce(
+      WORKTREE_CHANGED,
+      deleted ? { worktree, deleted: true } : { worktree },
+      EXTENSION.worktrees,
+    )
   }
 
   private update(worktree: Worktree, patch: Partial<Worktree>): Worktree {
@@ -427,7 +431,7 @@ export class Worktrees {
         if (snapshotRef) await gitMaybe(worktree.sourceRoot, ['update-ref', '-d', snapshotRef])
         this.db.prepare('DELETE FROM worktrees WHERE id = ?').run(id)
         const gone = { ...worktree, state: 'removed' as const, snapshotRef: null, updatedAt: now() }
-        this.changed(gone)
+        this.changed(gone, true)
         this.host.log(`删了工作树 ${worktree.path} 和分支 ${worktree.branch}`)
         return gone
       }

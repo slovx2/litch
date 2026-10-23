@@ -64,6 +64,7 @@ export {
   type TopicKind,
   type TopicOp,
   toChannelError,
+  type WorktreesOp,
 } from './channel/protocol.mjs'
 export {
   type CoreHost,
@@ -213,6 +214,7 @@ export {
   proposalStatus,
   proposedBy,
 } from './model-tree.mjs'
+export type * from './model-worktrees.mjs'
 export {
   describeText,
   type Phrase,

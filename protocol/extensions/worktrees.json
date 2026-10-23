@@ -24,7 +24,7 @@
     "litchWorktree（会话对象上，ThreadWorktree）：只发给声明了 worktrees 的连接，只在是设备层工作树主人的会话上有，挂法同 litchLineage（thread/list、thread/read、thread/started、thread/resume 等）。",
     "litch/worktree/list：这台设备上设备层建的全部工作树（含 removed，不含连分支一起删掉的），新建的在前。",
     "litch/worktree/branches（cwd）：所在仓库的当前分支、默认分支、本地分支、origin/ 远程分支。cwd 不在 git 仓库里回 -32602。",
-    "litch/worktree/remove（id、discard、withBranch）：目录还在、有未提交的改动或未跟踪的文件、discard 不为真时，先把工作区（含未跟踪文件，用临时索引，不碰暂存区）做成挂在 HEAD 上的提交，记在源仓库的 refs/litch/snapshots/<id>，再 git worktree remove --force；状态记成 removed、带 snapshotRef。分支默认留着；withBranch 为真时连分支（git branch -D）和快照一起删，记录也删掉，发一次 state 为 removed 的变化通知。",
+    "litch/worktree/remove（id、discard、withBranch）：目录还在、有未提交的改动或未跟踪的文件、discard 不为真时，先把工作区（含未跟踪文件，用临时索引，不碰暂存区）做成挂在 HEAD 上的提交，记在源仓库的 refs/litch/snapshots/<id>，再 git worktree remove --force；状态记成 removed、带 snapshotRef。分支默认留着；withBranch 为真时连分支（git branch -D）和快照一起删，记录也删掉，发一次 state 为 removed、带 deleted: true 的变化通知。",
     "litch/worktree/restore（id）：removed 的建回原路径：分支在就检出分支，分支没了但有快照就从快照的父提交建回分支；有快照的把快照里的文件放回去、快照里删掉的删掉、清掉暂存（改动回到未提交的样子），再删掉快照引用。原路径上已经有东西回 -32602。kept 的（目录还在）改回 ready。",
     "建、删、恢复在设备进程里排成一条队做（同一个仓库上同时跑两个 git worktree 会抢锁）。git 一律带 GIT_TERMINAL_PROMPT=0，不弹凭据提示。",
     "litch/worktree/changed（WorktreeChangedNotification）：建成、主人变了、删了、恢复了都发，只发给声明了 worktrees 的连接。"
@@ -54,7 +54,9 @@
     },
     {
       "kind": "ServerNotification",
-      "methods": ["litch/worktree/changed"],
+      "methods": [
+        "litch/worktree/changed"
+      ],
       "description": "只发给声明了 worktrees 的连接。"
     }
   ]

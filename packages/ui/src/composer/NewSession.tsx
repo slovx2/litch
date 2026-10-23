@@ -10,6 +10,7 @@ import {
   type SessionSettings,
   type UserMessageItem,
   type WorkspaceView,
+  type WorktreeBranchesView,
 } from '@litch/core'
 import { useEffect, useState } from 'react'
 import type { Draft, Selection } from '../app/App.tsx'
@@ -36,7 +37,18 @@ import {
   useNewHarness,
 } from './remembered.ts'
 import { useComposeOptions, useNewSessionDefaults } from './SettingsBar.tsx'
+import { useBranches } from './useBranches.ts'
 import { useDevices } from './useNewPlace.ts'
+import {
+  branchFrom,
+  FROM_DEFAULT,
+  FROM_WORKING,
+  fitFrom,
+  fromOf,
+  recallWhere,
+  rememberWhere,
+  type WhereChoice,
+} from './worktree-place.ts'
 
 interface NewSessionProps {
   /** 现在指着哪台设备、哪个工作区。一台设备都没有就是 null */
@@ -50,6 +62,12 @@ interface NewSessionProps {
   assist: number
 }
 
+/** 起点：默认分支不带，设备按默认分支切 */
+const withFrom = (id: string) => {
+  const from = fromOf(id)
+  return from ? { from } : {}
+}
+
 /** 等会话的内容到了界面这一侧再切过去，免得切换的那一下气泡闪没了。最多等这么久 */
 const HANDOVER_MS = 1500
 
@@ -61,13 +79,27 @@ interface PlaceBarProps {
   /** 指着的工作区不在这台设备的表里 */
   missing: boolean
   onPlace(wish: PlaceWish): void
+  /** 工作区根所在仓库的分支。不是 git 仓库、设备建不了工作树、还在问时不出“在哪做” */
+  branches: WorktreeBranchesView | null | undefined
+  where: WhereChoice
+  onWhere(choice: WhereChoice): void
 }
 
 /** 工作区选择器最后那一项“添加工作区…”的标识。不会和工作区的标识、LOOSE 撞上 */
 const ADD_WORKSPACE = '\u0000add'
 
 /** 输入框下面那一排：建在哪台设备上、哪个工作区里。先设备后工作区，因为工作区是设备上的 */
-function PlaceBar({ draft, device, harness, workspaces, missing, onPlace }: PlaceBarProps) {
+function PlaceBar({
+  draft,
+  device,
+  harness,
+  workspaces,
+  missing,
+  onPlace,
+  branches,
+  where,
+  onWhere,
+}: PlaceBarProps) {
   const t = useT()
   const devices = useDevices()
   const { deviceId, workspaceId } = draft
@@ -152,6 +184,7 @@ function PlaceBar({ draft, device, harness, workspaces, missing, onPlace }: Plac
           }}
         />
       </span>
+      {branches ? <WhereItems branches={branches} where={where} onWhere={onWhere} /> : null}
       {adding ? (
         <WorkspaceDialog
           deviceId={deviceId}
@@ -161,6 +194,70 @@ function PlaceBar({ draft, device, harness, workspaces, missing, onPlace }: Plac
         />
       ) : null}
     </div>
+  )
+}
+
+/** “在哪做”（本地 / 新工作树）；选了新工作树，后面再跟一个“从哪切” */
+function WhereItems({
+  branches,
+  where,
+  onWhere,
+}: {
+  branches: WorktreeBranchesView
+  where: WhereChoice
+  onWhere(choice: WhereChoice): void
+}) {
+  const t = useT()
+  const fromOptions: PickerOption[] = [
+    {
+      id: FROM_DEFAULT,
+      title: t('newSession.from.default', { branch: branches.defaultBranch ?? 'HEAD' }),
+    },
+    {
+      id: FROM_WORKING,
+      title: t('newSession.from.working'),
+      hint: t('newSession.from.workingHint'),
+    },
+    ...branches.local.map((name) => ({
+      id: branchFrom(name),
+      title: name,
+      ...(name === branches.current ? { note: t('newSession.from.current') } : {}),
+    })),
+    ...branches.remote.map((name) => ({ id: branchFrom(name), title: name })),
+  ]
+  return (
+    <>
+      <span className="new-place-item">
+        <span className="new-place-label">{t('newSession.where')}</span>
+        <Picker
+          kind="where"
+          label={t('newSession.where.label')}
+          value={where.worktree ? 'worktree' : 'local'}
+          options={[
+            { id: 'local', title: t('newSession.where.local') },
+            {
+              id: 'worktree',
+              title: t('newSession.where.worktree'),
+              hint: t('newSession.where.worktreeHint'),
+            },
+          ]}
+          onPick={(id) => onWhere({ ...where, worktree: id === 'worktree' })}
+        />
+      </span>
+      {where.worktree ? (
+        <span className="new-place-item">
+          <span className="new-place-label">{t('newSession.from')}</span>
+          <Picker
+            kind="from"
+            label={t('newSession.from.label')}
+            value={where.from}
+            options={fromOptions}
+            search={t('newSession.from.search')}
+            onPick={(id) => onWhere({ ...where, from: id })}
+          />
+        </span>
+      ) : null}
+    </>
   )
 }
 
@@ -236,6 +333,15 @@ export function NewSession({ draft, onPlace, onCreated, onDevices, assist }: New
   const [pending, setPending] = useState<UserMessageItem | null>(null)
 
   const cwd = workspace?.roots[0] ?? null
+  /** 工作区根的分支：不是 git 仓库、设备建不了工作树时是 null，不出“在哪做” */
+  const branches = useBranches(device, workspace ? cwd : null)
+  /** 这次在页上选的“在哪做”，连同是在哪台设备的哪个工作区选的；换了去处就回到那里记下的 */
+  const [whereChosen, setWhereChosen] = useState<{ spot: string; choice: WhereChoice } | null>(null)
+  const whereSpot = `${deviceId}/${workspaceId ?? ''}`
+  const whereRaw =
+    whereChosen?.spot === whereSpot ? whereChosen.choice : recallWhere(deviceId, workspaceId)
+  const where: WhereChoice = { ...whereRaw, from: fitFrom(whereRaw.from, branches) }
+  const inWorktree = Boolean(branches) && where.worktree
   // 配置助手：点了之后设备切到本机，这里放好那一句（有手册的技能就带技能片）
   useAssistant(assist, { device, harness, cwd }, 'new')
   useEffect(warmManualDir, [])
@@ -291,11 +397,13 @@ export function NewSession({ draft, onPlace, onCreated, onDevices, assist }: New
         extras,
         settings: sent,
         ...(goal ? { goal: true } : {}),
+        ...(inWorktree ? { worktree: { ...withFrom(where.from) } } : {}),
       })
       const { mode: _thisOnce, ...kept } = picks
       rememberPicks(deviceId, harnessId, kept)
       if (harness) rememberHarness(deviceId, workspaceId, harness.id)
       rememberPlace(deviceId, workspaceId)
+      if (branches) rememberWhere(deviceId, workspaceId, where)
       // 先把这个会话的内容订阅过来，等内容和侧栏上的那一行都到了再切：
       // 切过去的第一帧就有那条消息，标题栏也不会空一下
       const close = replica.openSession(deviceId, sessionId)
@@ -421,7 +529,7 @@ export function NewSession({ draft, onPlace, onCreated, onDevices, assist }: New
               </div>
               <div className="running-line">
                 <i className="st run" />
-                <span>{t('newSession.creating')}</span>
+                <span>{t(inWorktree ? 'newSession.creatingWorktree' : 'newSession.creating')}</span>
               </div>
             </section>
           </div>
@@ -450,6 +558,9 @@ export function NewSession({ draft, onPlace, onCreated, onDevices, assist }: New
                     workspaces={workspaces}
                     missing={missing}
                     onPlace={onPlace}
+                    branches={branches}
+                    where={where}
+                    onWhere={(choice) => setWhereChosen({ spot: whereSpot, choice })}
                   />
                 ) : null
               }

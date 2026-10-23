@@ -17,6 +17,7 @@ import type {
   SpawnedView,
   WrapUpView,
 } from './model-tree.mjs'
+import type { SessionWorktreeView } from './model-worktrees.mjs'
 import type { Phrase, Text } from './phrase.mjs'
 import type { DiffElision } from './text/diff.mjs'
 import type { OutputElision } from './text/output-cap.mjs'
@@ -262,6 +263,11 @@ export interface DeviceView {
    * 单 harness 模式、旧版的设备服务都是 false，界面退回原来的说明；断开之后留着断开前知道的
    */
   install: boolean
+  /**
+   * 设备服务能建工作树（设备信息的 extensions 里列了 worktrees，设备上有 git）：新建页有“在哪做”。
+   * 单 harness 模式、旧版的设备服务都是 false；断开之后留着断开前知道的
+   */
+  worktrees: boolean
 }
 
 /** 设备设置页上“内置浏览器”“Computer Use”两个开关。默认浏览器开、Computer Use 关 */
@@ -383,6 +389,8 @@ export interface SessionSummary {
    * 侧栏有任务在跑时出一个慢呼吸的记号。对面不报、一个也没有的是 null；不报的会话打开后由界面派生（projection/background.mts）
    */
   background: SessionBackgroundView | null
+  /** 会话所在的设备层工作树（worktrees 扩展，model-worktrees.mts）。不在工作树里的、对面不报的是 null */
+  worktree: SessionWorktreeView | null
 }
 
 /** 派出这个原生会话的应用。app 是对面报的原样，认不认识由界面定 */

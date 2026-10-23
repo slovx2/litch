@@ -344,6 +344,49 @@ function deviceSettings(harnesses: HarnessView[], firstPort: number): SettingSpe
         { value: 'forever', title: both('一直留着', 'Forever') },
       ],
     },
+    // 工作树一组（照 Go 层 settings_worktrees.go）：设置页这一组下面还列出这台设备上的工作树
+    {
+      ...BASE,
+      key: 'worktrees.root',
+      group: 'worktrees',
+      type: 'path',
+      scope,
+      default: '',
+      restart: 'none',
+      title: both('存放位置', 'Location'),
+      description: both(
+        '工作树都建在这个目录下，按仓库分子目录。空着时放在设备服务的状态目录里的 worktrees 下。',
+        'Worktrees are created under this directory, one subdirectory per repository. When empty they go under worktrees in the device service’s state directory.',
+      ),
+    },
+    {
+      ...BASE,
+      key: 'worktrees.branchPrefix',
+      group: 'worktrees',
+      type: 'string',
+      scope,
+      default: 'litch/',
+      restart: 'none',
+      title: both('分支前缀', 'Branch prefix'),
+      description: both(
+        '新分支名的开头。默认 litch/，清空就回到默认。',
+        'Start of each new branch name. Default litch/; clearing it restores the default.',
+      ),
+    },
+    {
+      ...BASE,
+      key: 'worktrees.fetchFirst',
+      group: 'worktrees',
+      type: 'boolean',
+      scope,
+      default: false,
+      restart: 'none',
+      title: both('先拉取默认分支', 'Fetch the default branch first'),
+      description: both(
+        '从默认分支切时先 git fetch 一次 origin 上的那个分支。',
+        'When branching from the default branch, run git fetch for that branch on origin first.',
+      ),
+    },
   ]
 }
 
@@ -373,6 +416,15 @@ export function sampleSettings(deviceId: string, harnesses: HarnessView[]): Samp
       id: 'terminal',
       title: both('可重连的终端', 'Reconnectable terminals'),
       description: null,
+      scope: { kind: 'device' },
+    },
+    {
+      id: 'worktrees',
+      title: both('工作树', 'Worktrees'),
+      description: both(
+        '新会话可以开在自己的工作树里：设备服务在会话所在的机器上用 git 切一份新检出、建一个新分支。',
+        'A new session can start in its own worktree: the device service uses git on the session’s machine to check out a fresh copy on a new branch.',
+      ),
       scope: { kind: 'device' },
     },
   ]

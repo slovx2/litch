@@ -35,6 +35,17 @@ explain it:
   (Read only / In project / Full access, or the harness's own presets) and optionally turn on the
   Plan mode switch → send the
   first message. `scripts/litch open new` brings the user to this page.
+- **Worktrees**: on the New session page, when the project folder is in a git repository on a device
+  that supports worktrees, "Where" offers Local (the project folder) or New worktree. A new worktree is
+  created by the device service with its own branch (named from the first line of the message), so the
+  session's changes stay out of the project folder; "From" picks what to branch from: the default
+  branch, the current local state (current commit plus uncommitted changes and new files), or any
+  local or remote branch. The choice is remembered per device and project. Such a session shows a
+  branch mark in the sidebar and a Worktree card in the info rail (branch, base, path; Terminal, Copy
+  path, and Restore when the folder was removed). Device settings → Worktrees lists every worktree on
+  the device: Remove deletes the folder and keeps the branch (uncommitted changes saved as a snapshot,
+  or discarded), Restore brings a removed one back with its snapshot, Remove with branch deletes both
+  for good. Where worktrees go and how branches are named: `device-settings.md`.
 - **While a turn runs**: messages sent are queued; "Say it now" steers the running turn; Stop
   interrupts it.
 - **Approvals and questions** appear as cards above the composer: commands, file changes, extra

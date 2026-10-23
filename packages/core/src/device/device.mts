@@ -39,6 +39,7 @@ import {
   type Turn,
 } from '../../../protocol/src/index.mjs'
 import { taskCardsSettingKey } from '../../../protocol/src/session-tree.mjs'
+import type { ThreadWorktree, WorktreeFrom } from '../../../protocol/src/worktrees.mjs'
 import { ChannelError, type Clock, type SidebarOp } from '../channel/protocol.mjs'
 import type { HostSink } from '../channel/server.mjs'
 import { createLink, type LinkState } from '../connection/link.mjs'
@@ -149,6 +150,7 @@ import {
   type ToolAskPlace,
 } from './tool-calls.mjs'
 import { projectWorkspaces, resolveWorkspace } from './workspaces.mjs'
+import { createWorktrees, type Worktrees } from './worktrees.mjs'
 
 export type { DeviceSnapshot, SnapshotStore } from './snapshot.mjs'
 
@@ -274,6 +276,8 @@ export interface Device {
     workspaceId?: string,
     /** message 的文字是持续目标：建好后设下目标，不发消息（live.mts 的 create） */
     asGoal?: boolean,
+    /** 在新工作树里建（worktrees 扩展） */
+    worktree?: { from?: WorktreeFrom },
   ): Promise<string>
   /** 整理侧栏：工作区的增删改和排序、把会话移到别的工作区、置顶 */
   readonly organize: Organizer
@@ -344,6 +348,8 @@ export interface Device {
   readonly pairing: Pairing
   /** 这台设备上给 harness 安装：版本、安装任务（install.mts） */
   readonly install: Install
+  /** 这台设备上设备层建的工作树：列表、分支、删、恢复（worktrees.mts） */
+  readonly worktrees: Worktrees
   /** 这台设备上各 harness 的详情设置：配置项、账号与 provider、MCP、指令文件（harness-config.mts） */
   readonly harnessConfig: HarnessConfig
   /** 这台设备上各 harness 的账号额度（account-limits.mts） */
@@ -489,6 +495,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   let pairable = false
   /** 对面支不支持给 harness 安装（harnessInstall 扩展）。断开之后留着断开前知道的 */
   let installable = false
+  /** 对面能不能建工作树（worktrees 扩展）。断开之后留着断开前知道的 */
+  let worktreesOn = false
   /** 对面支不支持 harness 详情设置（harnessConfig 扩展，设备那一级）。断开之后留着断开前知道的 */
   let configurable = false
   /**
@@ -618,6 +626,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     sessionTree,
     pairing: pairable,
     install: installable,
+    worktrees: worktreesOn,
   })
 
   /**
@@ -924,6 +933,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     patch: Partial<Thread> & {
       litchLineage?: SessionTreeThreadFields['litchLineage'] | undefined
       litchBackground?: LitchBackground | undefined
+      litchWorktree?: ThreadWorktree | undefined
     },
   ) => {
     if (transient.has(threadId)) return
@@ -1361,6 +1371,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         sessionTree = info.device.extensions?.includes(EXTENSION.sessionTree) === true
         pairable = info.device.extensions?.includes(EXTENSION.devicePairing) === true
         installable = info.device.extensions?.includes(EXTENSION.harnessInstall) === true
+        worktreesOn = info.device.extensions?.includes(EXTENSION.worktrees) === true
         // 在跑的是哪一份服务：握手时声明过才给，旧版的设备服务不报
         service = projectService(info.device.service)
         serviceDue =
@@ -1381,6 +1392,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         sessionTree = false
         pairable = false
         installable = false
+        worktreesOn = false
         configurable = false
         service = null
         home = null
@@ -1403,6 +1415,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       sessionTree = false
       pairable = false
       installable = false
+      worktreesOn = false
       configurable = false
       service = null
       home = null
@@ -1433,6 +1446,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     tasks.resync()
     pairing.resync()
     install.resync()
+    worktrees.resync()
     harnessConfig.resync()
     accountLimits.resync()
     await reconcile()
@@ -1478,6 +1492,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       tasks.offline()
       pairing.offline()
       install.offline()
+      worktrees.offline()
       harnessConfig.offline()
       accountLimits.offline()
     }
@@ -1547,6 +1562,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       if (pairing.notification(method, params)) return
       // 给 harness 安装：任务的状态和日志
       if (install.notification(method, params)) return
+      // 工作树：建成、换了主人、删了、恢复了
+      if (worktrees.notification(method, params)) return
       // harness 详情设置：配置变了、登录有进展
       if (harnessConfig.notification(method, params)) return
       // 账号额度变了
@@ -1917,6 +1934,16 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     log,
   })
 
+  const worktrees = createWorktrees({
+    deviceId: config.id,
+    online: () => online,
+    supported: () => worktreesOn,
+    request: (method, params, requestOptions) => link.request(method, params, requestOptions),
+    fail: (error) => fail(error),
+    owned: (threadId, worktree) => patchThread(threadId, { litchWorktree: worktree ?? undefined }),
+    log,
+  })
+
   const harnessConfig = createHarnessConfig({
     deviceId: config.id,
     target: () => config.target,
@@ -2151,7 +2178,10 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       tasks.seen(sessionId)
       return close
     },
-    async create(cwd, message, settings, harness, workspaceId, asGoal) {
+    async create(cwd, message, settings, harness, workspaceId, asGoal, worktree) {
+      if (worktree && !worktreesOn)
+        throw new ChannelError('unsupported', '此设备的服务不支持工作树')
+      if (worktree && cwd === null) throw new ChannelError('rejected', '没有工作区，建不了工作树')
       // 聚合面上新建会话必须说建在哪个 harness 上；别的对面没有这个参数，不带
       const target = mode === 'full' ? pickHarness(harness) : null
       // 归到哪个工作区：对面有这组方法、这个工作区也还在才带
@@ -2170,7 +2200,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       const said = mentionsSessions(message)
         ? await withMentionRefs(message, readable, mentionHost)
         : message
-      return live.create(cwd, said, settings, target, home, asGoal === true)
+      return live.create(cwd, said, settings, target, home, asGoal === true, worktree)
     },
     organize,
     rootCandidates: () =>
@@ -2296,6 +2326,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     tasks,
     pairing,
     install,
+    worktrees,
     harnessConfig,
     accountLimits,
     machineLink,
