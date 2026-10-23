@@ -122,7 +122,11 @@ import {
 } from './provider-loop-selection.mjs'
 import { AccountRateLimits } from './rate-limits.mjs'
 import { recordRunEvent } from './run-registry.mjs'
-import { claudeSessionTitle, normalizeRuntimeType } from './runtime-config.mjs'
+import {
+  claudeCrossSessionInbox,
+  claudeSessionTitle,
+  normalizeRuntimeType,
+} from './runtime-config.mjs'
 import { defaultSandboxPolicy, parseSandboxPolicy, policyFromParams } from './sandbox-policy.mjs'
 import {
   addedFileDiff,
@@ -563,10 +567,11 @@ export class CodexClaudeAppServer {
 
   // 所有连接都断开后，看管后台命令的进程再留一段时间；期间有连接回来就继续留。
   private armDetachedReap(): void {
-    // 只是空闲保留着的 CLI 进程、留着的 MCP 连接（含 stdio 服务的子进程）没人用的现在就关，不等超时
+    // 只是空闲保留着的 CLI 进程、留着的 MCP 连接（含 stdio 服务的子进程）没人用的现在就关，不等超时。
+    // 开着会话间消息时空闲进程照样到时才关：客户端都走了，别的 Claude 会话也还发得进来
     if (!this.stopped && this.accountPeers.size === 0)
       void (async () => {
-        await this.runtime.closeIdleSessions?.('所有客户端已断开')
+        if (!claudeCrossSessionInbox()) await this.runtime.closeIdleSessions?.('所有客户端已断开')
         await this.runtime.closeIdleMcp?.()
       })().catch((error) => debugLog('runtime.closeIdle.failed', { error: String(error) }))
     const linger = detachedLingerMs()
@@ -2259,6 +2264,7 @@ export class CodexClaudeAppServer {
       method: 'thread/name/updated',
       params: { threadId, threadName: name ?? undefined },
     })
+    if (name?.trim()) void this.runtime.renameSession?.(threadId, name.trim())
     return {}
   }
 
@@ -4408,6 +4414,8 @@ export class CodexClaudeAppServer {
         ...(turnPurpose === 'normal' && this.wantsSessionTitle(thread.id)
           ? { sessionTitle: thread.preview }
           : {}),
+        ...(thread.name?.trim() ? { sessionName: thread.name.trim() } : {}),
+        ...(thread.ephemeral ? { ephemeral: true } : {}),
         imageInputs: Array.isArray(params._imageInputs)
           ? (params._imageInputs as ImageInput[])
           : [],
@@ -5845,6 +5853,7 @@ export class CodexClaudeAppServer {
       method: 'thread/name/updated',
       params: { threadId, threadName: title },
     })
+    void this.runtime.renameSession?.(threadId, title)
   }
 
   /**

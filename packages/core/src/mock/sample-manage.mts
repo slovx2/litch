@@ -191,8 +191,28 @@ function extraSettings(harness: HarnessView): SettingSpecView[] {
         restart: 'harness',
         title: both('接收别的 Claude 会话的消息', 'Messages from other Claude sessions'),
         description: both(
-          '开着时，这台设备上别的 Claude 会话（Claude 桌面端、终端里的 Claude Code、Litch 里别的 Claude 会话）可以用 SendMessage 给这里的会话发消息，会话收到后会自己开一个回合处理，对话里显示是谁发来的。对方的请求按收到消息的会话自己的权限执行：完全访问的会话不会再问你。只在会话的 Claude Code 进程还开着时收得到。关掉之后这里的会话不出现在别的会话的列表里，也收不到。改了之后 Claude Code 重启才生效。',
-          "While on, other Claude sessions on this device (the Claude desktop app, Claude Code in a terminal, other Claude sessions in Litch) can message sessions here with SendMessage; the session starts a turn to handle it, and the conversation shows who sent it. The request runs with the receiving session's own permissions: a full-access session will not ask you. Messages arrive only while the session's Claude Code process is running. When off, sessions here are not listed to other sessions and receive nothing. Takes effect after Claude Code restarts.",
+          '开着时，这台设备上别的 Claude 会话（Claude 桌面端、终端里的 Claude Code、Litch 里别的 Claude 会话）可以用 SendMessage 给这里的会话发消息，会话收到后会自己开一个回合处理，对话里显示是谁发来的。对方的请求按收到消息的会话自己的权限执行：完全访问的会话不会再问你。回合结束后，会话按“空闲会话保持在线”再留一阵，留着时也收得到。关掉之后这里的会话不出现在别的会话的列表里，也收不到。改了之后 Claude Code 重启才生效。',
+          "While on, other Claude sessions on this device (the Claude desktop app, Claude Code in a terminal, other Claude sessions in Litch) can message sessions here with SendMessage; the session starts a turn to handle it, and the conversation shows who sent it. The request runs with the receiving session's own permissions: a full-access session will not ask you. After a turn ends, the session stays reachable for as long as “Keep idle sessions online” allows. When off, sessions here are not listed to other sessions and receive nothing. Takes effect after Claude Code restarts.",
+        ),
+      },
+      {
+        ...BASE,
+        key: `${group}.idleKeepAlive`,
+        group,
+        type: 'enum',
+        scope,
+        default: '1h',
+        restart: 'harness',
+        title: both('空闲会话保持在线', 'Keep idle sessions online'),
+        options: [
+          { value: 'off', title: both('关', 'Off') },
+          { value: '15m', title: both('15 分钟', '15 minutes') },
+          { value: '1h', title: both('1 小时', '1 hour') },
+          { value: '4h', title: both('4 小时', '4 hours') },
+        ],
+        description: both(
+          '会话的回合结束后，它的 Claude Code 进程再留这么久，期间别的 Claude 会话发来的消息照样收得到，接着聊也不用重新启动。每个留着的会话约占 100–200MB 内存，最多同时留 8 个（和看管后台命令的进程共用这个上限），满了先关闲得最久的。只在开着“接收别的 Claude 会话的消息”时生效。改了之后 Claude Code 重启才生效。',
+          "After a session's turn ends, its Claude Code process stays this long, so messages from other Claude sessions still arrive and the next turn needs no restart. Each kept session uses about 100–200 MB of memory; at most 8 are kept at once (shared with processes keeping background commands), and the one idle longest closes first. Applies only while “Messages from other Claude sessions” is on. Takes effect after Claude Code restarts.",
         ),
       },
     ]

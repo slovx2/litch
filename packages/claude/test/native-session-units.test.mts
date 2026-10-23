@@ -300,22 +300,34 @@ test('结束通知之后要不要等它触发的那一轮：从通知到达起�
   assert.equal(isMainToolResult({ type: 'assistant', message: { content: [toolResult] } }), false)
 })
 
-test('空闲保留：默认 0（不留），按秒设，非法值当 0，过大的按 setTimeout 的上限', () => {
+test('空闲保留：没设时开着会话间消息留 1 小时、关着不留，按秒设，非法值当 0，过大的按 setTimeout 的上限', () => {
   const previous = process.env.CHA_CLAUDE_KEEP_ALIVE_IDLE_SECONDS
+  const inbox = process.env.CHA_CLAUDE_CROSS_SESSION_INBOX
   try {
     delete process.env.CHA_CLAUDE_KEEP_ALIVE_IDLE_SECONDS
+    delete process.env.CHA_CLAUDE_CROSS_SESSION_INBOX
+    assert.equal(keepAliveIdleMs(), 60 * 60 * 1000)
+    process.env.CHA_CLAUDE_CROSS_SESSION_INBOX = 'off'
     assert.equal(keepAliveIdleMs(), 0)
+    // 明设的秒数不看收件箱
+    process.env.CHA_CLAUDE_KEEP_ALIVE_IDLE_SECONDS = '30'
+    assert.equal(keepAliveIdleMs(), 30_000)
+    delete process.env.CHA_CLAUDE_CROSS_SESSION_INBOX
     process.env.CHA_CLAUDE_KEEP_ALIVE_IDLE_SECONDS = '30'
     assert.equal(keepAliveIdleMs(), 30_000)
     process.env.CHA_CLAUDE_KEEP_ALIVE_IDLE_SECONDS = '0.5'
     assert.equal(keepAliveIdleMs(), 500)
-    for (const raw of ['0', '-1', 'soon', ' ']) {
+    process.env.CHA_CLAUDE_KEEP_ALIVE_IDLE_SECONDS = ' '
+    assert.equal(keepAliveIdleMs(), 60 * 60 * 1000, '空白当没设')
+    for (const raw of ['0', '-1', 'soon']) {
       process.env.CHA_CLAUDE_KEEP_ALIVE_IDLE_SECONDS = raw
       assert.equal(keepAliveIdleMs(), 0, raw)
     }
     process.env.CHA_CLAUDE_KEEP_ALIVE_IDLE_SECONDS = '1e12'
     assert.equal(keepAliveIdleMs(), 2 ** 31 - 1)
   } finally {
+    if (inbox === undefined) delete process.env.CHA_CLAUDE_CROSS_SESSION_INBOX
+    else process.env.CHA_CLAUDE_CROSS_SESSION_INBOX = inbox
     if (previous === undefined) delete process.env.CHA_CLAUDE_KEEP_ALIVE_IDLE_SECONDS
     else process.env.CHA_CLAUDE_KEEP_ALIVE_IDLE_SECONDS = previous
   }

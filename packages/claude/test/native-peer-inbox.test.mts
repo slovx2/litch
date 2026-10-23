@@ -353,3 +353,42 @@ test('回合进行中发来的插进当前回合；没声明 peerMessages 的连
     await disposeScene(scene)
   }
 })
+
+test('默认开着：没有后台命令的会话空闲保留着也收得到；登记名是会话名，改名后跟着换', {
+  timeout: 180_000,
+}, async () => {
+  const scene = await startScene(
+    'native-peer-idle',
+    {},
+    declaring('peerMessages', 'backgroundTasks'),
+  )
+  try {
+    await scene.client.request('thread/name/set', { threadId: scene.threadId, name: '修 CI' })
+    scene.model.enqueue(() => [{ type: 'text', text: '好的' }])
+    scene.model.fallback = () => [{ type: 'text', text: '这是对外来消息的回答' }]
+    assert.equal((await runTurn(scene, '说一句')).status, 'completed')
+
+    const [cli] = cliProcesses(scene)
+    assert.ok(cli, '没有后台命令，空闲保留（开着收件箱默认 1 小时）也把 CLI 留下')
+    const entry = () => registry(scene).find((candidate) => candidate.pid === cli.pid)
+    assert.equal(entry()?.name, '修 CI', '收件箱登记名应是会话名')
+
+    await scene.client.request('thread/name/set', {
+      threadId: scene.threadId,
+      name: '修 CI 流水线',
+    })
+    await until('登记名跟着改名', () => entry()?.name === '修 CI 流水线')
+
+    const before = turnsStarted(scene).length
+    const peer = await peerSend(scene, '修 CI 流水线')
+    assert.equal(peer.ended, 'result')
+    assert.ok(peer.listAgents.includes('修 CI 流水线'), `别处应按新名字看到它：${peer.listAgents}`)
+    await until('外来消息开回合', () => turnsStarted(scene).length > before)
+    const done = await scene.client.completed(turnsStarted(scene).at(-1)!)
+    assert.equal(done.status, 'completed')
+    assert.equal(done.litchOrigin, 'peer')
+    assert.equal(cliProcesses(scene)[0]?.pid, cli.pid, '用的是留着的同一个进程')
+  } finally {
+    await disposeScene(scene)
+  }
+})

@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"strconv"
 	"strings"
 
 	"github.com/slovx2/litch/packages/protocol"
@@ -157,6 +158,10 @@ func (c configuration) harnessEnvironment(id string) map[string]string {
 	if inbox, written := c.claudeInbox(); id == claudeHarness && written {
 		values[claudeInboxVariable] = map[bool]string{true: "on", false: "off"}[inbox]
 	}
+	// 空闲保持在线写过、收件箱又开着才给变量（settings_claude.go）
+	if seconds, written := c.claudeIdle(); id == claudeHarness && written && c.claudeInboxOn() {
+		values[claudeIdleVariable] = strconv.Itoa(seconds)
+	}
 	return values
 }
 
@@ -194,7 +199,8 @@ func (c configuration) runtimeFingerprint(id string, enabled bool) string {
 	}
 	if id == claudeHarness {
 		inbox, _ := c.settings.lookup(claudeInboxKey)
-		settings = append(settings, c.claudeCacheTTL(), string(inbox))
+		idle, _ := c.settings.lookup(claudeIdleKey)
+		settings = append(settings, c.claudeCacheTTL(), string(inbox), string(idle))
 	}
 	payload, _ := json.Marshal(settings)
 	sum := sha256.Sum256(payload)
@@ -332,7 +338,7 @@ func buildSettingsSchema(c configuration) settingsSchema {
 			schema.Settings = append(schema.Settings, piApprovalsSetting(c, group))
 		}
 		if id == claudeHarness {
-			schema.Settings = append(schema.Settings, claudeCacheTTLSetting(c, group), claudeInboxSetting(c, group))
+			schema.Settings = append(schema.Settings, claudeCacheTTLSetting(c, group), claudeInboxSetting(c, group), claudeIdleSetting(c, group))
 		}
 	}
 	description := both(

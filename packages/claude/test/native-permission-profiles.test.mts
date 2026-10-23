@@ -435,7 +435,10 @@ test('PROFILE-REAL-001：真实 CLI 里 Read 和 Bash 都按档位禁读，自�
   const { own } = layout(home)
   writeFileSync(join(own, 'mine.txt'), 'MINE')
   const model = new MockLLM()
-  const client = await ProtocolClient.start(home, await model.start())
+  // 每一步都起新 CLI：留着的进程里 CLI 对同一个文件回“没变，参照上次”，看不出这一步的权限
+  const client = await ProtocolClient.start(home, await model.start(), false, 'api-key', {
+    CHA_CLAUDE_KEEP_ALIVE_IDLE_SECONDS: '0',
+  })
   try {
     await client.request('config/value/write', {
       keyPath: 'permissions',

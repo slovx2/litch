@@ -141,3 +141,70 @@ func TestClaudeInboxSetting(t *testing.T) {
 	}
 	cfg.userEnv = nil
 }
+
+func TestClaudeIdleSetting(t *testing.T) {
+	for _, name := range []string{claudeInboxVariable, claudeIdleVariable} {
+		t.Setenv(name, "")
+		_ = os.Unsetenv(name)
+	}
+	cfg := settingsTestConfiguration(t)
+	schema := buildSettingsSchema(cfg)
+	spec, declared := schema.spec(claudeIdleKey)
+	if !declared || spec.Type != settingEnum || spec.Default != "1h" || spec.Restart != restartHarness ||
+		spec.Group != "harness.claude-code" || len(spec.Options) != 4 {
+		t.Fatalf("空闲保持在线的声明不对: %+v", spec)
+	}
+	for text, points := range map[string][]string{
+		spec.Description.ZH: {"100–200MB", "8 个", "接收别的 Claude 会话的消息", "重启"},
+		spec.Description.EN: {"100–200 MB", "8 are kept", "Messages from other Claude sessions", "restarts"},
+	} {
+		for _, point := range points {
+			if !strings.Contains(text, point) {
+				t.Fatalf("说明里没写 %q: %s", point, text)
+			}
+		}
+	}
+	variable := func() string { return cfg.forHarness(claudeHarness).environmentValue(claudeIdleVariable) }
+	version := 0
+	write := func(key string, value json.RawMessage) {
+		t.Helper()
+		changed, problem, err := cfg.settings.apply(version, []settingEdit{{Key: key, Value: value}}, schema, cfg.validateSettings)
+		if err != nil || problem != nil || len(changed) != 1 {
+			t.Fatalf("写入失败: %v %+v %v", changed, problem, err)
+		}
+		version++
+	}
+
+	if variable() != "" {
+		t.Fatalf("没写过时不该给变量: %q", variable())
+	}
+	untouched := cfg.runtimeFingerprint(claudeHarness, true)
+	write(claudeIdleKey, json.RawMessage(`"4h"`))
+	if variable() != "14400" || cfg.runtimeFingerprint(claudeHarness, true) == untouched {
+		t.Fatalf("改成 4 小时之后变量不对或没待重启: %q", variable())
+	}
+	write(claudeIdleKey, json.RawMessage(`"off"`))
+	if variable() != "0" {
+		t.Fatalf("关掉之后变量不对: %q", variable())
+	}
+	// 收件箱关着时不给变量，由更低几层说了算
+	write(claudeIdleKey, json.RawMessage(`"15m"`))
+	write(claudeInboxKey, json.RawMessage("false"))
+	if variable() != "" {
+		t.Fatalf("收件箱关着时不该给变量: %q", variable())
+	}
+	write(claudeInboxKey, json.RawMessage("null"))
+	if variable() != "900" {
+		t.Fatalf("收件箱回到默认开之后变量不对: %q", variable())
+	}
+
+	// 没写过时的显示：更低几层设了秒数的取不超过它的最长一档
+	write(claudeIdleKey, json.RawMessage("null"))
+	for raw, want := range map[string]string{"0": "off", "120": "off", "900": "15m", "7200": "1h", "86400": "4h", "x": "1h"} {
+		cfg.userEnv = map[string]string{claudeIdleVariable: raw}
+		if got := cfg.defaultClaudeIdle(); got != want {
+			t.Fatalf("更低几层是 %s 时应显示 %s，得到 %s", raw, want, got)
+		}
+	}
+	cfg.userEnv = nil
+}

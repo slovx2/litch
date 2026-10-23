@@ -31,7 +31,9 @@ async function withStage(
   await mkdir(cwd)
   await mkdir(join(home, 'claude'))
   const model = new MockLLM()
-  const client = await ProtocolClient.start(home, await model.start(), false, 'api-key', switches, {
+  // 回合结束 CLI 就退（不做空闲保留），连接回到池里，数的才是连接池自己的规矩
+  const keep = { CHA_CLAUDE_KEEP_ALIVE_IDLE_SECONDS: '0', ...switches }
+  const client = await ProtocolClient.start(home, await model.start(), false, 'api-key', keep, {
     // 握手后的探测另起一份，和回合里的混在一起不好数
     optOutNotificationMethods: [STARTUP],
   })
@@ -315,7 +317,9 @@ test('MCP-024：守护进程上的客户端全都断开后，留着的连接（s
   const log = join(home, 'counted.jsonl')
   await mkdir(cwd)
   const model = new MockLLM()
-  const daemon = await Daemon.start(home, await model.start())
+  const daemon = await Daemon.start(home, await model.start(), {
+    CHA_CLAUDE_KEEP_ALIVE_IDLE_SECONDS: '0',
+  })
   try {
     const client = await daemon.connect('first', {
       optOutNotificationMethods: [STARTUP],

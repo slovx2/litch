@@ -164,6 +164,8 @@ interface NativeSession {
   // 会话所属线程；追问回合跑在父线程的会话上。
   key: string
   fingerprint: string
+  // 进程起来时的登录与模型服务设置（rateLimitCredentialScope），变了就不再复用这个进程
+  credentialScope: string | null
   strictSkillShell: boolean
   sessionId: string | null
   // 当前回合的上下文；没有回合时是最近一个回合的。
@@ -349,6 +351,19 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       .map((s) => s.key)
   }
 
+  // 会话改了名，进程还开着：请它在收件箱里换名字（rename_session，同时记成会话的标题）。
+  // 关着收件箱时不发；老版本的 CLI 不认，报错就算了，下次起进程时经 CLAUDE_CODE_SESSION_NAME 带上
+  async renameSession(threadId: string, name: string): Promise<void> {
+    const session = this.sessions.get(threadId)
+    if (!session || session.closing || !claudeCrossSessionInbox()) return
+    // 运行时有这个方法，SDK 的类型声明里没写
+    const query = session.query as Query & { renameSession?: (title: string) => Promise<void> }
+    if (typeof query.renameSession !== 'function') return
+    await query.renameSession(name).catch((error) => {
+      debugLog('native.session_rename.failed', { threadId, error: String(error) })
+    })
+  }
+
   async closeIdleSessions(reason: string): Promise<void> {
     await Promise.all(
       [...this.sessions.values()]
@@ -425,6 +440,9 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     if (context.forkSession || (context.claudeSessionId ?? null) !== session.sessionId)
       return '会话历史已改变'
     if (sessionFingerprint(context) !== session.fingerprint) return '工作目录、工具或指令配置已改变'
+    // 进程起来时读的登录、模型服务设置（环境变量、settings.json 里的凭据）之后不再重读
+    if (rateLimitCredentialScope(context.cwd) !== session.credentialScope)
+      return 'Claude 的登录或模型服务设置已改变'
     if (needsStrictSkillShell(context) && !session.strictSkillShell) return '权限设置已收紧'
     if ((!context.model && session.applied.model) || (!context.effort && session.applied.effort))
       return '模型设置已改变'
@@ -673,6 +691,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       session = {
         key,
         fingerprint: sessionFingerprint(context),
+        credentialScope: rateLimitCredentialScope(context.cwd),
         strictSkillShell: needsStrictSkillShell(context),
         sessionId: null,
         context,
@@ -1343,6 +1362,8 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       env: {
         ...childEnv,
         ...hostClaudeSessionEnv(inbox),
+        // 收件箱里的登记名：别的会话 ListAgents 看到、SendMessage 发往的就是它。没有名字时 CLI 按目录自己起
+        ...(inbox && context.sessionName ? { CLAUDE_CODE_SESSION_NAME: context.sessionName } : {}),
         ...sdkMcpStartupEnvironment(context.mcpServers),
         CLAUDE_CODE_MAX_RETRIES: '0',
         CLAUDE_CODE_DISABLE_NONSTREAMING_FALLBACK: '1',
@@ -2967,7 +2988,8 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
   private keepAlive(session: NativeSession): string | null {
     if (session.closing || session.process.hasExited) return ''
     const shells = hasBackgroundWork(session)
-    if (!shells && keepAliveIdleMs() <= 0) return ''
+    // 临时会话没人会接着聊、也不该被别的会话找到：只为后台命令留
+    if (!shells && (keepAliveIdleMs() <= 0 || session.context.ephemeral)) return ''
     const limit = keepAliveLimit()
     if (limit <= 0) return ''
     if (!session.kept) {

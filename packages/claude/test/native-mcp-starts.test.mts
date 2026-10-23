@@ -52,7 +52,8 @@ async function withStage(
     await model.start(),
     false,
     'api-key',
-    {},
+    // 回合结束 CLI 就退：第二个回合起新 CLI，才看得出它会不会自己再连一份
+    { CHA_CLAUDE_KEEP_ALIVE_IDLE_SECONDS: '0' },
     optOut.length ? { optOutNotificationMethods: optOut } : null,
   )
   try {

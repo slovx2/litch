@@ -3,11 +3,13 @@ import type { SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { LitchPeer } from '../../protocol/src/peer-messages.mjs'
 import { peerFromOrigin } from './peer-message.mjs'
 import { submissionHash } from './protocol-contract.mjs'
+import { claudeCrossSessionInbox } from './runtime-config.mjs'
 import type { RuntimeBackgroundCommandEnd, RuntimeTurnContext } from './types.mjs'
 import { parseWorkflowCommand, workflowRuntimePrompt } from './workflow-command.mjs'
 
 // CLI 进程在回合结束后是否留下，以及留多少个，见 docs/guide/configuration.md。
 const DEFAULT_KEEP_ALIVE_SESSIONS = 8
+const DEFAULT_INBOX_IDLE_MS = 60 * 60 * 1000
 const BACKGROUND_OUTPUT_LIMIT = 64 * 1024
 
 type MessageUuid = `${string}-${string}-${string}-${string}-${string}`
@@ -20,11 +22,11 @@ export function keepAliveLimit(): number {
   return Number.isSafeInteger(value) && value >= 0 ? value : DEFAULT_KEEP_ALIVE_SESSIONS
 }
 
-// 回合结束后没有后台命令的 CLI 进程再留多久（毫秒），下个回合直接用；0 表示不留（默认）。
-// 和后台命令共用上面的会话数上限。超过 setTimeout 能表示的最大值按最大值算。
+// 回合结束后没有后台命令的 CLI 进程再留多久（毫秒），下个回合直接用，留着时也收得到别的会话发来的消息；0 表示不留。
+// 没设时开着会话间消息就留 1 小时、关着就不留。和后台命令共用上面的会话数上限。超过 setTimeout 能表示的最大值按最大值算。
 export function keepAliveIdleMs(): number {
   const raw = process.env.CHA_CLAUDE_KEEP_ALIVE_IDLE_SECONDS
-  if (raw == null || raw.trim() === '') return 0
+  if (raw == null || raw.trim() === '') return claudeCrossSessionInbox() ? DEFAULT_INBOX_IDLE_MS : 0
   const seconds = Number(raw)
   if (!Number.isFinite(seconds) || seconds <= 0) return 0
   return Math.min(Math.round(seconds * 1000), 2 ** 31 - 1)

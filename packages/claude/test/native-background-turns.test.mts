@@ -187,7 +187,7 @@ test('命令在回合中途结束、通知随后面的请求送达：回合照�
 })
 
 test('两条后台命令同时结束：只产生一个自行续跑的回合', { timeout: 90_000 }, async () => {
-  const scene = await startScene('native-bg-pair')
+  const scene = await startScene('native-bg-pair', { CHA_CLAUDE_KEEP_ALIVE_IDLE_SECONDS: '0' })
   const suffix = String(process.hrtime.bigint()).slice(-6)
   const both = deferred()
   try {

@@ -42,8 +42,10 @@ async function otherThread(scene: Scene): Promise<Scene> {
   return { ...scene, threadId: thread.id }
 }
 
-test('KEEP-IDLE-001：默认不留，回合结束 CLI 就退出', { timeout: 60_000 }, async () => {
-  const scene = await startScene('keep-idle-default')
+test('KEEP-IDLE-001：关着会话间消息时默认不留，回合结束 CLI 就退出', {
+  timeout: 60_000,
+}, async () => {
+  const scene = await startScene('keep-idle-default', { CHA_CLAUDE_CROSS_SESSION_INBOX: 'off' })
   try {
     await reply(scene, '好的')
     await until('CLI 退出', () => pids(scene).length === 0, 10_000)
@@ -152,7 +154,7 @@ test('KEEP-IDLE-005：后台命令结束后照空闲保留的时长留着，不�
   }
 })
 
-test('KEEP-IDLE-006：守护进程上的客户端全断开，空闲保留的 CLI 和它的 MCP 服务马上回收', {
+test('KEEP-IDLE-006：关着会话间消息时，守护进程上的客户端全断开，空闲保留的 CLI 和它的 MCP 服务马上回收', {
   timeout: 90_000,
 }, async () => {
   const home = await mkdtemp(join(tmpdir(), 'keep-idle-detach-'))
@@ -162,6 +164,7 @@ test('KEEP-IDLE-006：守护进程上的客户端全断开，空闲保留的 CLI
   const model = new MockLLM()
   const daemon = await Daemon.start(home, await model.start(), {
     CHA_CLAUDE_KEEP_ALIVE_IDLE_SECONDS: '600',
+    CHA_CLAUDE_CROSS_SESSION_INBOX: 'off',
   })
   const cli = claudeCliCommand()
   const clis = () =>
@@ -199,6 +202,44 @@ test('KEEP-IDLE-006：守护进程上的客户端全断开，空闲保留的 CLI
       async () => (await countedServers(log))[0]?.closed === true,
       10_000,
     )
+  } finally {
+    const tree = descendants(daemon.process.pid as number).map((row) => row.pid)
+    await daemon.close()
+    await model.close()
+    killAll(tree)
+    await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
+  }
+})
+
+test('KEEP-IDLE-007：开着会话间消息（默认）时，客户端全断开，空闲保留的 CLI 照样留着，别的会话还发得进来', {
+  timeout: 90_000,
+}, async () => {
+  const home = await mkdtemp(join(tmpdir(), 'keep-idle-inbox-'))
+  const cwd = join(home, 'project')
+  await mkdir(cwd)
+  const model = new MockLLM()
+  // 没设空闲时长：开着收件箱的默认是 1 小时
+  const daemon = await Daemon.start(home, await model.start())
+  const cli = claudeCliCommand()
+  const clis = () =>
+    descendants(daemon.process.pid as number).filter((row) => row.command.startsWith(cli))
+  try {
+    const client = await daemon.connect('first')
+    const { thread } = await client.request('thread/start', {
+      cwd,
+      approvalPolicy: 'never',
+      sandbox: 'danger-full-access',
+    })
+    model.enqueue(() => [{ type: 'text', text: 'DONE' }])
+    const { turn } = await client.request('turn/start', {
+      threadId: thread.id,
+      input: [{ type: 'text', text: '说一句' }],
+    })
+    assert.equal((await client.completed(turn.id)).status, 'completed')
+    assert.equal(clis().length, 1, '没有后台命令，空闲保留把 CLI 留下')
+    await client.disconnect()
+    await new Promise((resolve) => setTimeout(resolve, 3_000))
+    assert.equal(clis().length, 1, '客户端都走了，空闲的 CLI 也该留着')
   } finally {
     const tree = descendants(daemon.process.pid as number).map((row) => row.pid)
     await daemon.close()

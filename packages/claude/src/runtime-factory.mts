@@ -172,6 +172,12 @@ class SelectableRuntime implements ClaudeRuntime {
     )
   }
 
+  async renameSession(threadId: string, name: string): Promise<void> {
+    await Promise.all(
+      [...this.runtimes.values()].map((runtime) => runtime.renameSession?.(threadId, name)),
+    )
+  }
+
   async closeIdleSessions(reason: string): Promise<void> {
     await Promise.all(
       [...this.runtimes.values()].map((runtime) => runtime.closeIdleSessions?.(reason)),

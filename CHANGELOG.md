@@ -5,6 +5,14 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
+## 未发布
+
+- Claude Code：空闲的会话也收得到别的会话发来的消息。设备设置 Claude Code 一组加“空闲会话保持在线”（`harness.claude-code.idleKeepAlive`：关、15 分钟、1 小时、4 小时，默认 1 小时，改了重启 harness）：回合结束、没有后台命令时 CLI 进程再留这么久，接着聊也不用重起。最多同时留 8 个（和看管后台命令的进程共用上限），满了先关闲得最久的；每个约占 100–200MB 内存。只在开着“接收别的 Claude 会话的消息”时生效；`CHA_CLAUDE_KEEP_ALIVE_IDLE_SECONDS` 没设时，开着收件箱就留 1 小时，关着不留
+  - 开着收件箱时，客户端全断开不再马上关掉空闲的进程，照样到时退出，桌面端关了别的会话也还发得进来
+  - 起标题、侧聊这类临时会话不做空闲保留
+  - 留着的进程起来之后，Claude 的登录或模型服务设置（环境变量、`settings.json` 里的凭据）变了，下一回合换一个新进程，不再用旧凭据
+- Claude Code：收件箱里的登记名用会话名（用户改的或起好的标题），别的会话 `ListAgents` 看到、`SendMessage` 发往的是“修 CI”这样的名字；进程开着时改名当场跟着换（同时记成原生会话的标题）
+
 ## 0.17.1
 
 - 依赖安全升级：Claude Code 入口用的 `@modelcontextprotocol/sdk` 升到 1.32.1，守护进程与适配器改用 Go 1.26.10 编译（源码构建的最低 Go 版本随之改为 1.26.10），修掉 `cha-v<版本>.tar.gz` 里这两处的已知漏洞

@@ -92,7 +92,7 @@ test('后台命令跨回合存活：回合结束后命令条目仍在进行，�
 test('后台命令自己结束：命令条目补完成通知，CLI 自行续跑成为一个没有用户消息的回合', {
   timeout: 90_000,
 }, async () => {
-  const scene = await startScene('native-bg-finish')
+  const scene = await startScene('native-bg-finish', { CHA_CLAUDE_KEEP_ALIVE_IDLE_SECONDS: '0' })
   const command = `${uniqueSleep(2)} && echo BG_DONE_MARKER`
   try {
     scene.model.enqueue(backgroundBash('toolu_finish', command))
@@ -164,7 +164,9 @@ for (const method of ['terminate', 'clean'] as const)
   test(`空闲时 ${method} 后台命令：命令停止，条目收尾，不产生新回合`, {
     timeout: 90_000,
   }, async () => {
-    const scene = await startScene(`native-bg-${method}`)
+    const scene = await startScene(`native-bg-${method}`, {
+      CHA_CLAUDE_KEEP_ALIVE_IDLE_SECONDS: '0',
+    })
     const command = uniqueSleep(60)
     try {
       scene.model.enqueue(backgroundBash('toolu_stop', command))

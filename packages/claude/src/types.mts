@@ -322,6 +322,10 @@ export interface RuntimeTurnContext {
   planConfirmation?: boolean
   // 会话还没有名字：CLI 不会自己起标题时（宿主环境关了，或者是续接的会话），请它照这句话（会话的第一句话）起一个
   sessionTitle?: string
+  // 临时会话（起标题、侧聊这类，不进会话列表）：回合结束不做空闲保留
+  ephemeral?: boolean
+  // 会话的名字（用户改的或起好的标题）：开着会话间消息时用它在 CLI 的收件箱里登记，别的会话按这个名字发消息
+  sessionName?: string
   // Multimodal input attached to the turn. localImage gets read + base64
   // encoded; image (URL) is passed through as-is. Sidecar reshapes the
   // Claude SDK query into a multimodal user message when this is non-empty.
@@ -606,6 +610,8 @@ export interface ClaudeRuntime {
   // CLI 进程还没退出的会话键（正在收场的也算：退出前它还会写会话记录）
   cliProcessKeys?(): string[]
   closeSession?(threadId: string, reason: string): Promise<void>
+  // 会话改了名：进程还开着时让它在收件箱里换成新名字（没开着的下次起进程时带上）
+  renameSession?(threadId: string, name: string): Promise<void>
   // 关掉只是空闲保留着的 CLI 进程：客户端全都断开、技能配置要改时
   closeIdleSessions?(reason: string): Promise<void>
   // 客户端全都断开时：关掉跨回合留着、眼下没人用的 MCP 连接
