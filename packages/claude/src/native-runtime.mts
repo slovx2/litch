@@ -2580,7 +2580,9 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       const isWorkflowLaunch = pending.workflowToolUseIds?.delete(toolUseId) === true
       const wasSubagent = pending.activeSubagents.delete(toolUseId)
       const backgroundAgentId =
-        wasSubagent && !isWorkflowLaunch && !isError ? asyncAgentLaunchId(structured) : null
+        wasSubagent && !isWorkflowLaunch && !isError
+          ? (asyncAgentLaunchId(structured) ?? launchReceiptAgentId(bodyContent))
+          : null
       if (backgroundAgentId) {
         // Agent 默认后台运行，此时拿到的只是启动回执。子代理的结果以
         // task_notification 为准；主模型在此期间继续输出，不再按子代理抑制。
@@ -3245,6 +3247,20 @@ function asyncAgentLaunchId(value: unknown): string | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   const result = value as Record<string, unknown>
   return result.status === 'async_launched' ? stringOrNull(result.agentId) : null
+}
+
+// 没有结构化结果时按回执的文字认：子代理自己派出的后台子代理（CLI 记成 spawnDepth 2），SDK 不给那条
+// 工具结果带 tool_use_result；一条用户消息里有几个工具结果时结构化结果也归属不了。回执开头是
+// “Async agent launched successfully.”，后面写着 agentId: <id>
+function launchReceiptAgentId(content: unknown): string | null {
+  const text =
+    typeof content === 'string'
+      ? content
+      : Array.isArray(content)
+        ? content.map((entry) => (typeof entry?.text === 'string' ? entry.text : '')).join('\n')
+        : ''
+  if (!text.trimStart().startsWith('Async agent launched successfully')) return null
+  return /\bagentId:\s*([A-Za-z0-9_-]+)/.exec(text)?.[1] ?? null
 }
 
 function isWorkflowTool(name: string): boolean {
