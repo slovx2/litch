@@ -1,6 +1,6 @@
 # 模拟核心：harness 详情设置。设备详情里 Claude Code 的“详情设置” → 配置：改强度、保存 →
-# 账号：Console 登录走粘贴授权码 → API key（只认环境变量的）写进设备设置、顶上提示重启、就地重启 →
-# MCP、指令文件只能看
+# 账号：Anthropic 账号走 Console 粘贴授权码登录 → API key 供应商填密钥 → 网关从 provider 拉取型号、勾选写回、保存 →
+# MCP、指令文件只能看（要重启的提示由 09-model-list 在 Codex 上走）
 appId: dev.litch.app
 name: mock-harness 详情设置
 tags: [mock]
@@ -38,11 +38,20 @@ tags: [mock]
     visible:
       id: hc:config:said
     timeout: 10000
-# 账号：Console 粘贴授权码登录
+# 账号：Anthropic 账号用 Console 粘贴授权码登录
 - tapOn:
     id: hc:tab:accounts:pick
+# 账号页的 provider 是异步取来的：先等第一张卡片出来再滚，免得取到之前就往下滚过了头
+- extendedWaitUntil:
+    visible:
+      id: hc:provider:anthropic:auth
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: hc:provider:anthropic:method:console
+    timeout: 10000
 - tapOn:
-    id: hc:provider:console:method:console
+    id: hc:provider:anthropic:method:console
 # 登录那一块出在卡片底下，屏幕小的模拟器上（流水线用的默认机型）要滚下去才看得见
 - scrollUntilVisible:
     element:
@@ -61,48 +70,71 @@ tags: [mock]
     element:
       id: hc:attempt:.*:done
     timeout: 10000
-# API key：写进设备设置，要重启才生效
+# API key 供应商“工作”：填上密钥，卡片上显示末四位
 - scrollUntilVisible:
     element:
-      id: hc:provider:api-key:method:env
-- tapOn:
-    id: hc:provider:api-key:method:env
-- scrollUntilVisible:
-    element:
-      id: hc:provider:api-key:form:value
+      id: hc:provider:work:method:apiKey
     timeout: 10000
 - tapOn:
-    id: hc:provider:api-key:form:value
+    id: hc:provider:work:method:apiKey
+- scrollUntilVisible:
+    element:
+      id: hc:provider:work:form:apiKey
+    timeout: 10000
+- tapOn:
+    id: hc:provider:work:form:apiKey
 - inputText: sk-e2e-1234
 - hideKeyboard
 - scrollUntilVisible:
     element:
-      id: hc:provider:api-key:form:submit
+      id: hc:provider:work:form:submit
 - tapOn:
-    id: hc:provider:api-key:form:submit
+    id: hc:provider:work:form:submit
 - scrollUntilVisible:
     element:
-      id: hc:provider:api-key:form:said
+      id: hc:provider:work:auth
+      text: .*1234.*
     timeout: 10000
-# 要重启的提示在页面顶上
+# 网关 DeepSeek：编辑 → 从 provider 拉取型号 → 勾上 R2 → 写入清单 → 保存
 - scrollUntilVisible:
     element:
-      id: hc:restart
+      id: hc:provider:deepseek:edit
     direction: UP
     timeout: 10000
 - tapOn:
-    id: hc:restart:now
-# 模拟核心里本机的 Claude Code 有回合在跑：问一声要不要照样重启
-- extendedWaitUntil:
-    visible:
-      id: confirm:ok
+    id: hc:provider:deepseek:edit
+- scrollUntilVisible:
+    element:
+      id: hc:custom:discover:ask
     timeout: 10000
 - tapOn:
-    id: confirm:ok
+    id: hc:custom:discover:ask
+- scrollUntilVisible:
+    element:
+      id: hc:custom:discover:deepseek-r2
+    timeout: 10000
+- tapOn:
+    id: hc:custom:discover:deepseek-r2
+- scrollUntilVisible:
+    element:
+      id: hc:custom:discover:apply
+- tapOn:
+    id: hc:custom:discover:apply
+- scrollUntilVisible:
+    element:
+      id: hc:custom:models
+      text: .*deepseek-r2.*
+    direction: UP
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: hc:custom:save
+- tapOn:
+    id: hc:custom:save
 - extendedWaitUntil:
     notVisible:
-      id: hc:restart
-    timeout: 15000
+      id: hc:custom
+    timeout: 10000
 # MCP、指令文件：只能看
 - tapOn:
     id: hc:tab:mcp:pick
