@@ -256,3 +256,21 @@ export async function applySnapshot(path: string, commit: string): Promise<void>
   if (gone.length) await git(path, ['rm', '-q', '-f', '--', ...gone])
   await git(path, ['reset', '-q'])
 }
+
+/**
+ * 分支在快照之后又有了新提交：把快照相对它父提交的改动三方应用到当前 HEAD 上（不撤掉新提交）。
+ * 干净应用的清掉暂存、回 true；有冲突的冲突留在工作区（文件里带冲突记号，索引里是未合并），回 false
+ */
+export async function replaySnapshot(path: string, commit: string): Promise<boolean> {
+  const patch = await gitBytes(path, ['diff', '--binary', '--full-index', `${commit}^`, commit])
+  if (patch.length === 0) return true
+  try {
+    await gitBytes(path, ['apply', '--3way', '--binary', '--whitespace=nowarn'], { input: patch })
+  } catch (error) {
+    const conflicts = await gitList(path, ['diff', '-z', '--name-only', '--diff-filter=U'])
+    if (conflicts.length > 0) return false
+    throw error
+  }
+  await git(path, ['reset', '-q'])
+  return true
+}

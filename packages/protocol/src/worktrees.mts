@@ -41,7 +41,7 @@ export interface Worktree {
   /** 主人会话；刚建、会话还没起来时是 null */
   ownerThreadId: string | null
   state: WorktreeState
-  /** 删目录前做的快照（refs/litch/snapshots/<id>），没做是 null */
+  /** 删目录前做的快照（refs/litch/snapshots/<id>-<毫秒时间戳>），没做是 null */
   snapshotRef: string | null
   /** 秒 */
   createdAt: number

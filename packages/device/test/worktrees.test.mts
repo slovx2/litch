@@ -211,7 +211,7 @@ test('WT-006：有改动时先做快照再删目录、分支留着；恢复后�
     sh(made.path, 'add', 'new/file.txt')
     const removed = await env.worktrees.remove(made.id)
     assert.equal(removed.state, 'removed')
-    assert.equal(removed.snapshotRef, `refs/litch/snapshots/${made.id}`)
+    assert.match(removed.snapshotRef ?? '', new RegExp(`^refs/litch/snapshots/${made.id}-\\d+$`))
     assert.equal(existsSync(made.path), false)
     assert.equal(sh(env.repo, 'rev-parse', made.branch), tip)
     assert.equal(sh(env.repo, 'rev-parse', `${removed.snapshotRef}^`), tip)

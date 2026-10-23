@@ -234,7 +234,10 @@ export class ClientSession implements ClientToolPeer {
         decorate: (thread) => host.sessionTree.decorate(thread),
         deleted: (threadId) => host.sessionTree.deleted(threadId),
       },
-      worktrees: { decorate: (thread) => host.worktrees?.decorate(thread) },
+      worktrees: {
+        decorate: (thread) => host.worktrees?.decorate(thread),
+        adopt: (thread) => host.worktrees?.adopt(String(thread.id), thread.cwd),
+      },
       background: {
         notification: (link, method, params) => {
           if (method === BACKGROUND_TASKS_NOTIFICATION.changed)
@@ -472,6 +475,8 @@ export class ClientSession implements ClientToolPeer {
             index: this.host.index,
             workspaces: this.host.workspaces,
             timeoutMs: this.host.timing.listTimeoutMs,
+            adopt: (row: Record<string, unknown>) =>
+              this.host.worktrees?.adopt(String(row.id), row.cwd),
             ...(this.declared.has(EXTENSION.sessionTree) ||
             this.declared.has(EXTENSION.backgroundTasks) ||
             this.declared.has(EXTENSION.worktrees)
@@ -650,6 +655,15 @@ export class ClientSession implements ClientToolPeer {
       else if (method === 'thread/unarchive') afterwards.push(() => void life.reopen(subject))
       else if (method === 'thread/delete') afterwards.push(() => void life.deleted(subject))
     }
+    // 分叉出来的会话共用着源会话的工作树（应答没带目录时照源会话算）：记成共用者，源会话归档、删掉时转给它
+    if (method === 'thread/fork' && subject && this.host.worktrees) {
+      const worktrees = this.host.worktrees
+      afterwards.push((result) => {
+        const thread = isObject(result) ? result.thread : null
+        if (isObject(thread) && typeof thread.id === 'string')
+          worktrees.adopt(thread.id, thread.cwd, subject)
+      })
+    }
     const send = (ready: Record<string, unknown> | null): typeof HANDLED => {
       if (afterwards.length || failures.length)
         this.relay.after(
@@ -714,7 +728,7 @@ export class ClientSession implements ClientToolPeer {
         ...(isObject(ask.from) ? { from: worktreeFrom(ask.from) } : {}),
         ...(typeof ask.title === 'string' ? { title: ask.title } : {}),
       })
-      .then((made) => {
+      .then(async (made): Promise<typeof HANDLED> => {
         afterwards.push((result) => {
           const thread = isObject(result) ? result.thread : null
           if (isObject(thread) && typeof thread.id === 'string') worktrees.own(made.id, thread.id)
@@ -722,7 +736,13 @@ export class ClientSession implements ClientToolPeer {
         failures.push(() => {
           void worktrees.abandon(made.id)
         })
-        return proceed({ ...params, cwd: worktreeCwd(made) })
+        // 还没转出去就出错了（补开发者指令时、上游断了）：没人会认领这个工作树，删掉
+        try {
+          return await proceed({ ...params, cwd: worktreeCwd(made) })
+        } catch (error) {
+          void worktrees.abandon(made.id)
+          throw error
+        }
       })
   }
 

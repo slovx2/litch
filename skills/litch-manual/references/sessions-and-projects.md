@@ -51,8 +51,11 @@ explain it:
   "All" compares against where the worktree started (its latest common commit with the base branch),
   so committed changes show too ("Since <commit>"); those can't be discarded there. Archiving the
   session removes a clean worktree (the branch stays), keeps one with uncommitted changes (see
-  `worktrees.keptDays`), or hands it to a sub-session still sharing it; reopening or unarchiving the
-  session brings the folder back. Deleting the session deletes its worktree folder without a snapshot.
+  `worktrees.keptDays`), or hands it to a session still sharing it (a sub-session or fork working in
+  that folder); reopening or unarchiving the session, or a sharing session, brings the folder back
+  (changes made on the branch since then are kept; a clash is left as conflicts to resolve). Deleting
+  the session hands the worktree to a session still sharing it, otherwise deletes the folder without
+  a snapshot.
   Where worktrees go, how branches are named and automatic cleanup: `device-settings.md`.
 - **While a turn runs**: messages sent are queued; "Say it now" steers the running turn; Stop
   interrupts it.

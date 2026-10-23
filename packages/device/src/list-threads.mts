@@ -20,6 +20,8 @@ export interface ListContext {
   timeoutMs: number
   /** 给每一行会话对象挂上设备层另外的字段（声明了 sessionTree 的连接：litchLineage） */
   decorate?(row: Record<string, unknown>): void
+  /** 目录在设备层工作树里的会话记成共用者（worktrees.mts 的 adopt） */
+  adopt?(row: Record<string, unknown>): void
 }
 
 /**
@@ -127,6 +129,7 @@ export async function listThreads(context: ListContext, params: unknown): Promis
   })
   for (const row of merged.data) {
     context.workspaces.decorate(row.id, row)
+    context.adopt?.(row)
     context.decorate?.(row)
   }
   for (const harness of merged.excluded)

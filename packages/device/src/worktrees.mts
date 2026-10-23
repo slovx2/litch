@@ -17,6 +17,7 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs'
+import * as pathApi from 'node:path'
 import { basename, dirname, join, relative, resolve, sep } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { EXTENSION } from '../../protocol/src/device.mjs'
@@ -48,6 +49,7 @@ import {
   gitList,
   gitMaybe,
   mergeBase,
+  replaySnapshot,
   repoOf,
   snapshot,
 } from './worktree-git.mjs'
@@ -73,6 +75,15 @@ export interface WorktreeSettings {
   autoCleanup: boolean
   keepCount: number
   keptDays: number
+}
+
+export interface RemoveOptions {
+  /** 不留快照（会话删了） */
+  discard?: boolean
+  /** 连分支、快照、记录一起删 */
+  withBranch?: boolean
+  /** 写进快照提交说明的原因 */
+  reason?: string
 }
 
 export interface WorktreeHost {
@@ -143,6 +154,12 @@ export function slugOf(title: string | undefined): string {
 }
 
 const now = () => Math.floor(Date.now() / 1000)
+
+/** path 是不是 dir 本身或在它下面。paths 给 node:path 的 posix、win32 时按那种系统的路径算 */
+export function inside(dir: string, path: string, paths: typeof pathApi = pathApi): boolean {
+  const rel = paths.relative(dir, path)
+  return rel === '' || (rel !== '..' && !rel.startsWith(`..${paths.sep}`) && !paths.isAbsolute(rel))
+}
 
 export class Worktrees {
   private readonly db: DatabaseSync
@@ -397,6 +414,7 @@ export class Worktrees {
   own(id: string, threadId: string): void {
     const worktree = this.get(id)
     if (!worktree) return
+    this.unshare(threadId)
     const next = this.update(worktree, { ownerThreadId: threadId })
     this.ownerFile(next)
   }
@@ -421,6 +439,32 @@ export class Worktrees {
     this.db.prepare('DELETE FROM sharers WHERE thread_id = ?').run(threadId)
   }
 
+  /** threadId 共用着的那个工作树（不是主人）；没有是 null */
+  sharedBy(threadId: string): Worktree | null {
+    const row = this.db.prepare('SELECT worktree_id FROM sharers WHERE thread_id = ?').get(threadId)
+    return row ? this.get(String(row.worktree_id)) : null
+  }
+
+  /** cwd 在哪个设备层工作树里（工作树根或下面的目录）；不在是 null */
+  containing(cwd: string): Worktree | null {
+    return this.list().find((one) => inside(one.path, cwd)) ?? null
+  }
+
+  /**
+   * 见到一个会话（新建、分叉的应答，列表里的一行）：目录在某个工作树里、又不是它的主人的，记成共用者，
+   * 主人归档、删掉时才知道还有谁在用。分叉的应答不带目录时看 source（源会话）在哪个工作树里
+   */
+  adopt(threadId: string, cwd: unknown, source?: string): void {
+    const worktree =
+      typeof cwd === 'string' && cwd
+        ? this.containing(cwd)
+        : source
+          ? (this.forThread(source) ?? this.sharedBy(source))
+          : null
+    if (!worktree || worktree.ownerThreadId === threadId || this.forThread(threadId)) return
+    if (this.sharedBy(threadId)?.id !== worktree.id) this.share(worktree.id, threadId)
+  }
+
   /** 主人换成 threadId（原来共用着的会话）：它不再算共用的 */
   transfer(id: string, threadId: string): Worktree | null {
     const worktree = this.get(id)
@@ -431,45 +475,88 @@ export class Worktrees {
     return next
   }
 
-  /** 主人归档了、工作树有改动：原样留着，记 kept（到期由清理存快照再删） */
-  keep(id: string): Worktree | null {
-    const worktree = this.get(id)
-    return worktree?.state === 'ready' ? this.update(worktree, { state: 'kept' }) : worktree
+  /**
+   * 主人归档了（worktree-life.mts）：在队里重读记录，when 不成立就不动、回 null。有改动的原样留着（kept，
+   * 到期由清理存快照再删），干净的删目录（分支留着）
+   */
+  retire(id: string, when: (worktree: Worktree) => boolean): Promise<Worktree | null> {
+    return this.serial(async () => {
+      const worktree = this.get(id)
+      if (!worktree || worktree.state !== 'ready' || worktree.snapshotRef || !when(worktree))
+        return null
+      if (existsSync(worktree.path) && (await dirty(worktree.path)))
+        return this.update(worktree, { state: 'kept' })
+      return this.removeNow(worktree, { reason: 'archived' })
+    })
   }
 
-  /** 留着的又用上了（取消归档、重新打开） */
-  revive(id: string): Worktree | null {
-    const worktree = this.get(id)
-    return worktree?.state === 'kept' ? this.update(worktree, { state: 'ready' }) : worktree
+  /** 留着的又用上了（取消归档、重新打开）。和建、删排在一条队里 */
+  revive(id: string): Promise<Worktree | null> {
+    return this.serial(async () => {
+      const worktree = this.get(id)
+      return worktree?.state === 'kept' && !worktree.snapshotRef
+        ? this.update(worktree, { state: 'ready' })
+        : worktree
+    })
   }
 
-  /** 工作树目录里有没有未提交的改动、未跟踪的文件；目录不在是 false */
-  async isDirty(id: string): Promise<boolean> {
-    const worktree = this.get(id)
-    return worktree !== null && existsSync(worktree.path) && (await dirty(worktree.path))
-  }
-
-  /** 新会话没起来：刚建的工作树没用了，删干净（没主人的才删） */
+  /** 新会话没起来：刚建的工作树没用了，删干净（没主人的才删）。删不掉只记日志 */
   abandon(id: string): Promise<void> {
     return this.serial(async () => {
       const worktree = this.get(id)
       if (!worktree || worktree.ownerThreadId) return
       await this.discard(worktree, true)
       this.db.prepare('DELETE FROM worktrees WHERE id = ?').run(id)
+    }).catch((error: unknown) =>
+      this.host.log(
+        `没用上的工作树 ${id} 没删干净：${error instanceof Error ? error.message : String(error)}`,
+      ),
+    )
+  }
+
+  /**
+   * 设备进程起来时对账：上次建到一半的（creating）删干净；建好了却没有主人、没人共用、也没有改动的
+   *（会话还没起来进程就退了）删掉，连分支
+   */
+  reconcile(): Promise<void> {
+    return this.serial(async () => {
+      for (const worktree of this.list()) {
+        const orphan =
+          worktree.state === 'creating' ||
+          (worktree.state === 'ready' &&
+            !worktree.ownerThreadId &&
+            this.sharers(worktree.id).length === 0 &&
+            !(existsSync(worktree.path) && (await dirty(worktree.path))))
+        if (!orphan) continue
+        try {
+          await this.discard(worktree, true)
+          this.db.prepare('DELETE FROM worktrees WHERE id = ?').run(worktree.id)
+          this.host.log(`删了上次没用上的工作树 ${worktree.path}`)
+        } catch (error) {
+          this.host.log(`上次没用上的工作树 ${worktree.path} 没删掉：${String(error)}`)
+        }
+      }
     })
   }
 
   // ---------- 删、恢复 ----------
 
-  /** 删目录：git worktree remove，不行再自己删（只删在工作树根下面的） */
+  /** 删目录：git worktree remove，不行再自己删（只删在工作树根下面的）；目录还在就抛 */
   private async discard(worktree: Worktree, withBranch: boolean): Promise<void> {
     if (existsSync(worktree.path))
       await git(worktree.sourceRoot, ['worktree', 'remove', '--force', worktree.path]).catch(
         () => null,
       )
-    if (existsSync(worktree.path) && this.inRoot(worktree.path))
-      rmSync(worktree.path, { recursive: true, force: true })
+    if (existsSync(worktree.path) && this.inRoot(worktree.path)) {
+      try {
+        rmSync(worktree.path, { recursive: true, force: true })
+      } catch (error) {
+        this.host.log(`删工作树目录 ${worktree.path} 出错：${String(error)}`)
+      }
+    }
     await gitMaybe(worktree.sourceRoot, ['worktree', 'prune'])
+    if (existsSync(worktree.path))
+      throw new ProtocolError(-32603, `工作树目录 ${worktree.path} 删不掉`)
     if (withBranch && (await branchExists(worktree.sourceRoot, worktree.branch)))
       await git(worktree.sourceRoot, ['branch', '-D', worktree.branch])
   }
@@ -480,52 +567,90 @@ export class Worktrees {
     return rel !== '' && !rel.startsWith('..') && !rel.startsWith(sep) && rel.split(sep).length >= 2
   }
 
-  remove(id: string, options: { discard?: boolean; withBranch?: boolean; reason?: string } = {}) {
+  remove(id: string, options: RemoveOptions = {}): Promise<Worktree> {
+    return this.serial(async () => this.removeNow(this.need(id), options))
+  }
+
+  /** 在队里重读记录后再判一次 when，不成立就不删、回 null（清理、删会话算候选和真删之间状况可能变了） */
+  removeIf(
+    id: string,
+    when: (worktree: Worktree) => boolean,
+    options: RemoveOptions = {},
+  ): Promise<Worktree | null> {
     return this.serial(async () => {
-      const worktree = this.need(id)
-      let snapshotRef = worktree.snapshotRef
-      if (worktree.state !== 'removed' && existsSync(worktree.path)) {
-        if (!options.discard && (await dirty(worktree.path))) {
-          snapshotRef = `${WORKTREE_SNAPSHOT_REF}${worktree.id}`
-          await snapshot(worktree.path, snapshotRef, options.reason ?? 'removed')
-        }
-      }
-      await this.discard(worktree, options.withBranch === true)
-      if (options.withBranch) {
-        if (snapshotRef) await gitMaybe(worktree.sourceRoot, ['update-ref', '-d', snapshotRef])
-        this.db.prepare('DELETE FROM worktrees WHERE id = ?').run(id)
-        const gone = { ...worktree, state: 'removed' as const, snapshotRef: null, updatedAt: now() }
-        this.changed(gone, true)
-        this.host.log(`删了工作树 ${worktree.path} 和分支 ${worktree.branch}`)
-        return gone
-      }
-      this.host.log(`删了工作树 ${worktree.path}${snapshotRef ? '（改动留了快照）' : ''}`)
-      return this.update(worktree, { state: 'removed', snapshotRef })
+      const worktree = this.get(id)
+      return worktree && when(worktree) ? this.removeNow(worktree, options) : null
     })
   }
 
+  /**
+   * 有改动、discard 不为真的先做快照：引用带时间戳、不覆盖别的，做完立刻落库；已经有快照（上次删到一半）的不重做。
+   * 目录确实删掉了才记 removed；删到一半失败的记录不变、快照引用留着，再删一次接着删，恢复时先删完再从快照建回
+   */
+  private async removeNow(worktree: Worktree, options: RemoveOptions): Promise<Worktree> {
+    let current = worktree
+    if (
+      current.state !== 'removed' &&
+      !current.snapshotRef &&
+      !options.discard &&
+      existsSync(current.path) &&
+      (await dirty(current.path))
+    ) {
+      const ref = `${WORKTREE_SNAPSHOT_REF}${current.id}-${Date.now()}`
+      await snapshot(current.path, ref, options.reason ?? 'removed')
+      current = this.update(current, { snapshotRef: ref })
+    }
+    await this.discard(current, options.withBranch === true)
+    const stale = current.snapshotRef && (options.withBranch || options.discard)
+    if (stale) await gitMaybe(current.sourceRoot, ['update-ref', '-d', current.snapshotRef ?? ''])
+    if (options.withBranch) {
+      this.db.prepare('DELETE FROM worktrees WHERE id = ?').run(current.id)
+      const gone = { ...current, state: 'removed' as const, snapshotRef: null, updatedAt: now() }
+      this.changed(gone, true)
+      this.host.log(`删了工作树 ${current.path} 和分支 ${current.branch}`)
+      return gone
+    }
+    const snapshotRef = stale ? null : current.snapshotRef
+    this.host.log(`删了工作树 ${current.path}${snapshotRef ? '（改动留了快照）' : ''}`)
+    return this.update(current, { state: 'removed', snapshotRef })
+  }
+
+  /**
+   * 建回原路径。删到一半的（不是已删除、却带着快照引用）先删完；目录不在了的（手动删的）照删了的建回。
+   * 分支在就检出分支，分支没了但有快照就从快照的父提交建回分支。有快照的：分支还在快照的父提交上，把快照里的文件放回去；
+   * 分支之后又有了新提交，把快照的改动三方应用上去（不撤掉新提交），有冲突的冲突留在工作区、快照引用留着不删
+   */
   restore(id: string): Promise<Worktree> {
     return this.serial(async () => {
-      const worktree = this.need(id)
+      let worktree = this.need(id)
       if (worktree.state !== 'removed') {
-        if (!existsSync(worktree.path))
-          throw new ProtocolError(-32603, `工作树目录 ${worktree.path} 不在了，记录却不是已删除`)
-        return worktree.state === 'ready' ? worktree : this.update(worktree, { state: 'ready' })
+        if (worktree.snapshotRef) worktree = await this.removeNow(worktree, {})
+        else if (existsSync(worktree.path))
+          return worktree.state === 'ready' ? worktree : this.update(worktree, { state: 'ready' })
+        else await gitMaybe(worktree.sourceRoot, ['worktree', 'prune'])
       }
       if (existsSync(worktree.path))
         throw new ProtocolError(-32602, `${worktree.path} 已经有东西了，建不回去`)
       const snap = worktree.snapshotRef
         ? await commitOf(worktree.sourceRoot, worktree.snapshotRef)
         : null
-      if (!(await branchExists(worktree.sourceRoot, worktree.branch))) {
+      const tip = await commitOf(worktree.sourceRoot, `refs/heads/${worktree.branch}`)
+      if (!tip) {
         if (!snap) throw new ProtocolError(-32602, `分支 ${worktree.branch} 已经删了，恢复不了`)
         await git(worktree.sourceRoot, ['branch', worktree.branch, `${snap}^`])
       }
       mkdirSync(dirname(worktree.path), { recursive: true })
       await git(worktree.sourceRoot, ['worktree', 'add', worktree.path, worktree.branch])
+      let kept: string | null = null
       if (snap) {
-        await applySnapshot(worktree.path, snap)
-        await gitMaybe(worktree.sourceRoot, ['update-ref', '-d', worktree.snapshotRef ?? ''])
+        const moved = tip !== null && tip !== (await commitOf(worktree.sourceRoot, `${snap}^`))
+        if (!moved) await applySnapshot(worktree.path, snap)
+        else if (!(await replaySnapshot(worktree.path, snap))) kept = worktree.snapshotRef
+        if (kept)
+          this.host.log(
+            `工作树 ${worktree.path} 的分支在快照之后有了新提交，快照的改动应用上去有冲突，快照留在 ${kept}`,
+          )
+        else await gitMaybe(worktree.sourceRoot, ['update-ref', '-d', worktree.snapshotRef ?? ''])
       }
       this.ownerFile(worktree)
       this.host.log(`恢复了工作树 ${worktree.path}`)
