@@ -1203,6 +1203,9 @@ export const zhCN = {
   'composer.stop': '停止',
   'composer.stopKeys': '停止（连按两下 Esc）',
   'composer.escAgain': '再按一次 Esc 停止',
+  'composer.providerSwitch': '下一轮起换到 {name}，第一轮不走提示缓存。',
+  'composer.providerSwitch.claude':
+    '下一轮起换到 {name}，第一轮不走提示缓存；型号名不变时，上一家的思考签名可能被拒，被拒时换回原来那家或换一个型号。',
   'composer.context': '上下文已用 {percent}%（{used} / {window}）',
   'composer.offline': '设备未连接，无法发送消息。',
   'composer.harnessDown': '{name} 当前不可用，恢复后才能发送消息。',

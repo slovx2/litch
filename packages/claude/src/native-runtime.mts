@@ -41,7 +41,13 @@ import type { OnElicitation, Query, SDKUserMessage } from '@anthropic-ai/claude-
 import { type ApprovalPolicy, allowsApproval, toolApprovalFlow } from './approval-policy.mjs'
 import { deniedMessage } from './approval-request.mjs'
 import { claudeConfigDir } from './claude-native-files.mjs'
-import { claudeChildEnv } from './claude-provider.mjs'
+import {
+  ACCOUNT_PROVIDER,
+  contextLaunch,
+  NATIVE_PROVIDER,
+  plainProvider,
+  withFlagSettings,
+} from './claude-provider.mjs'
 import { settingsEnvValue } from './claude-setting-layers.mjs'
 import { cliOutputFormat } from './cli-output-schema.mjs'
 import { type CodexErrorInfo, codexErrorInfoFor, TurnFailure } from './codex-error-info.mjs'
@@ -162,6 +168,32 @@ interface BackgroundShellState {
   nextSeq: number
 }
 
+// 额度与凭据的归属：账号和用户自己的配置（native）按 CLI 实际会用的凭据算，凭据变了要换进程、
+// 额度观测也跟着换主；用户加的供应商没有订阅额度，它们的密钥和定义由 providerScope 管
+function rateScope(context: RuntimeTurnContext): string | null {
+  const provider = context.provider ?? plainProvider()
+  return provider === ACCOUNT_PROVIDER || provider === NATIVE_PROVIDER
+    ? rateLimitCredentialScope(context.cwd)
+    : null
+}
+
+// 供应商没填密钥、被删了时算不出来：给一个不会和任何进程对上的值，新进程起的时候再正式报错
+function providerScope(context: RuntimeTurnContext): string {
+  try {
+    return contextLaunch(context.provider, context.model).scope
+  } catch {
+    return 'unavailable'
+  }
+}
+
+function titleEnv(context: RuntimeTurnContext): NodeJS.ProcessEnv {
+  try {
+    return contextLaunch(context.provider, context.model).env
+  } catch {
+    return process.env
+  }
+}
+
 // 一个 CLI 进程。回合结束时还有后台命令在跑，进程就留下来接着服务后面的回合；
 // 期间 CLI 自己开的一轮（后台命令结束后的续跑）由协议层另建回合接上。
 interface NativeSession {
@@ -170,6 +202,8 @@ interface NativeSession {
   fingerprint: string
   // 进程起来时的登录与模型服务设置（rateLimitCredentialScope），变了就不再复用这个进程
   credentialScope: string | null
+  // 进程起来时的供应商、它的定义和密钥（claude-provider.mts 的 scope），变了也不再复用
+  providerScope: string
   strictSkillShell: boolean
   sessionId: string | null
   // 当前回合的上下文；没有回合时是最近一个回合的。
@@ -457,8 +491,8 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       return '会话历史已改变'
     if (sessionFingerprint(context) !== session.fingerprint) return '工作目录、工具或指令配置已改变'
     // 进程起来时读的登录、模型服务设置（环境变量、settings.json 里的凭据）之后不再重读
-    if (rateLimitCredentialScope(context.cwd) !== session.credentialScope)
-      return 'Claude 的登录或模型服务设置已改变'
+    if (rateScope(context) !== session.credentialScope) return 'Claude 的登录或模型服务设置已改变'
+    if (providerScope(context) !== session.providerScope) return '模型供应商或它的设置已改变'
     if (needsStrictSkillShell(context) && !session.strictSkillShell) return '权限设置已收紧'
     if ((!context.model && session.applied.model) || (!context.effort && session.applied.effort))
       return '模型设置已改变'
@@ -488,7 +522,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       reject = fail
     })
     const pending: PendingTurn = {
-      credentialScope: rateLimitCredentialScope(context.cwd),
+      credentialScope: rateScope(context),
       session,
       context,
       handlers,
@@ -685,7 +719,8 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         ended = true
       },
     )
-    const configDir = claudeConfigDir(claudeChildEnv())
+    // 供应商只换 ANTHROPIC_* 那几项，不动配置目录：按设备进程自己的环境找
+    const configDir = claudeConfigDir()
     const startBy = Date.now() + PEER_WAKE_START_MS
     let readyBy: number | null = null
     while (!ended) {
@@ -771,7 +806,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       })
       const liveHandlers = this.liveHandlers(current)
       const inboxSocket = claudeCrossSessionInbox()
-        ? await claimPeerInboxSocket(key, claudeChildEnv())
+        ? await claimPeerInboxSocket(key, process.env)
         : null
       const options = this.buildOptions(sdk, live, abort, current, key, inboxSocket)
       options.spawnClaudeCodeProcess = nativeProcess.spawn.bind(nativeProcess)
@@ -794,7 +829,8 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       session = {
         key,
         fingerprint: sessionFingerprint(context),
-        credentialScope: rateLimitCredentialScope(context.cwd),
+        credentialScope: rateScope(context),
+        providerScope: providerScope(context),
         strictSkillShell: needsStrictSkillShell(context),
         sessionId: null,
         context,
@@ -1191,7 +1227,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     if (!description || session.title) return
     if (
       context.claudeSessionId == null &&
-      !cliSkipsAutoTitle({ ...claudeChildEnv(), ...hostClaudeEnvOverrides })
+      !cliSkipsAutoTitle({ ...titleEnv(context), ...hostClaudeEnvOverrides })
     )
       return
     // 运行时有这个方法，SDK 的类型声明里没写
@@ -1290,18 +1326,26 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     this.permissions.clear()
   }
 
-  // 模型目录取自固定 CLI 的原生 /model 列表；只读元数据，不发送用户消息也不请求模型。
-  supportedModels(): Promise<NativeModelInfo[]> {
-    return this.metadataQuery('model-catalog', '读取原生模型目录超时', (query) =>
-      query.supportedModels(),
+  // 模型目录取自固定 CLI 的原生 /model 列表（按供应商的凭据列，订阅、API key 各有各的）；
+  // 只读元数据，不发送用户消息也不请求模型。
+  supportedModels(provider?: string | null): Promise<NativeModelInfo[]> {
+    return this.metadataQuery(
+      'model-catalog',
+      '读取原生模型目录超时',
+      (query) => query.supportedModels(),
+      provider ?? null,
     )
   }
 
   // 订阅额度取自 CLI 的 get_usage（/usage 背后的数据），CLI 自己用它的登录去问；
   // 跳过本机会话记录的扫描（behaviors），只要额度
   accountUsage(): Promise<NativeAccountUsage> {
-    return this.metadataQuery('account-usage', '读取账号额度超时', (query) =>
-      query.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET({ skipBehaviors: true }),
+    return this.metadataQuery(
+      'account-usage',
+      '读取账号额度超时',
+      (query) =>
+        query.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET({ skipBehaviors: true }),
+      ACCOUNT_PROVIDER,
     )
   }
 
@@ -1310,7 +1354,9 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     label: string,
     timeoutMessage: string,
     ask: (query: Query) => Promise<T>,
+    provider: string | null,
   ): Promise<T> {
+    const launch = contextLaunch(provider, null)
     const sdk = await this.loadSdk()
     const abort = new AbortController()
     const nativeProcess = new NativeProcess(label, newId())
@@ -1330,7 +1376,8 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         tools: [],
         mcpServers: {},
         strictMcpConfig: true,
-        env: { ...claudeChildEnv(), ...hostClaudeEnvOverrides },
+        env: { ...launch.env, ...hostClaudeEnvOverrides },
+        ...(launch.flagSettings ? { settings: withFlagSettings({}, launch) } : {}),
         stderr: (data: string) => process.stderr.write(data),
         spawnClaudeCodeProcess: nativeProcess.spawn.bind(nativeProcess),
       },
@@ -1448,14 +1495,19 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
   ): Record<string, unknown> {
     const originalBashInputs: OriginalBashInputs = new Map()
     const reservedGoalTools = new Set<string>()
-    const childEnv = claudeChildEnv()
+    // 会话所选型号的供应商：没填密钥、供应商被删了在这里报错，回合失败，绝不退回账号
+    const launch = contextLaunch(context.provider, context.model)
+    const childEnv = launch.env
     // 开着线程号开关时要给的 ANTHROPIC_CUSTOM_HEADERS：以 CLI 本来会用的那份为底（设置的 env 里配了的优先，
     // 没配用进程环境），下面同时放进进程环境和入口传的设置的 env。CLI 起来后会拿设置里的 env 盖进程环境，
     // 入口传的这一层优先于用户、项目的设置，才不会被它们盖掉。关着时是空对象，两处都不碰
     const threadHeader = claudeThreadIdHeaderEnv(
       {
         ANTHROPIC_CUSTOM_HEADERS:
-          settingsEnvValue(context.cwd, 'ANTHROPIC_CUSTOM_HEADERS') ??
+          // 托管模式下 CLI 不认设置文件里的请求头，只认进程环境（供应商定义里的头已经在里面）
+          (launch.managed
+            ? undefined
+            : settingsEnvValue(context.cwd, 'ANTHROPIC_CUSTOM_HEADERS')) ??
           childEnv.ANTHROPIC_CUSTOM_HEADERS,
       },
       context.sessionThreadId ?? context.threadId,
@@ -1706,6 +1758,8 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         : {}),
     }
 
+    // 账号：命令行设置层把用户设置里的凭据、地址、云厂商开关、apiKeyHelper 置空，压过它们
+    opts.settings = withFlagSettings(opts.settings as Record<string, unknown>, launch)
     void sdk // keep parameter referenced for future SDK-version-gated options
     return opts
   }

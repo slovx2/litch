@@ -1,8 +1,9 @@
-// harness 详情设置里 Claude Code 的账号与 provider：litch/harness/providers/*、auth/*。
-// 三种互斥（switchable）：Anthropic 账号（claude.ai 订阅或 Console，`claude auth login` 粘贴码登录，
-// 凭据由 CLI 自己存）、API key、自定义网关（可以有几个，地址记在适配器的 config.json）。
-// 后两种的密钥和账号的长期令牌是 env 方式：客户端写进设备设置的 harness.claude-code.env，适配器重启后读到，
-// 起 CLI 时按选择换成 ANTHROPIC_*（claude-provider.mts）。Bedrock、Vertex、Foundry 这一版不做。
+// harness 详情设置里 Claude Code 的账号与供应商：litch/harness/providers/*、auth/*。
+// 账号一个（claude.ai 订阅或 Console，`claude auth login` 粘贴码登录，凭据由 CLI 自己存；另可存一个长期令牌）；
+// 供应商多个（Anthropic API key、Anthropic 兼容网关），定义在适配器的 config.json，密钥和额外请求头在
+// provider-secrets.json：请求头读出去时每行的值打码（`Name: …末四位`），保存时没改的那几行换回原值。
+// 不存在“当前在用的供应商”：会话按自己所选型号的供应商起 CLI（claude-provider.mts），所以 switchable 是 false。
+// 用户自己在 settings.json、启动环境里配的凭据或网关列成只读的 native。Bedrock、Vertex、Foundry 这一版不做。
 import type {
   HarnessAuthField,
   HarnessAuthStartResponse,
@@ -12,6 +13,7 @@ import type {
   HarnessProvidersReadResponse,
   HarnessProvidersWriteResponse,
   HarnessProviderTemplate,
+  HarnessSettingSpec,
   HarnessText,
 } from '../../protocol/src/harness-config.mjs'
 import { HARNESS_CONFIG_NOTIFICATION } from '../../protocol/src/harness-config.mjs'
@@ -23,27 +25,33 @@ import {
   type LoginMode,
   type LoginOutcome,
 } from './claude-auth.mjs'
-import { contentHash } from './claude-native-files.mjs'
 import {
   ACCOUNT_PROVIDER,
-  API_KEY_PROVIDER,
-  applyProviderEnv,
-  ENV_API_KEY,
-  ENV_OAUTH_TOKEN,
-  GATEWAY_ID_PATTERN,
-  type GatewayDefinition,
-  gatewayTokenEnv,
-  type ProviderSelection,
-  readProviderSelection,
-  writeProviderSelection,
+  NATIVE_PROVIDER,
+  nativeOverrides,
+  PROVIDER_ID_PATTERN,
+  type ProviderConfig,
+  type ProviderDefinition,
+  type ProviderModel,
+  providerConfigVersion,
+  providerHeadersKey,
+  providerLaunch,
+  readProviderConfig,
+  readProviderSecrets,
+  secretLabel,
+  writeProviderConfig,
+  writeProviderSecret,
 } from './claude-provider.mjs'
 import { CLAUDE_HARNESS_ID, HarnessConfigError, text } from './harness-config-common.mjs'
 
 export interface ProvidersHost {
   /** 只发给握手时声明了 harnessConfig 的连接 */
   broadcast(method: string, params: unknown): void
+  /** 供应商的定义或密钥变了：适配器重算模型目录 */
+  providersChanged?(): void
 }
 
+const API_KEY_TEMPLATE = 'anthropicApiKey'
 const GATEWAY_TEMPLATE = 'anthropicGateway'
 
 const CODE_FIELD: HarnessAuthField = {
@@ -51,6 +59,19 @@ const CODE_FIELD: HarnessAuthField = {
   title: text('授权码', 'Authorization code'),
   secret: true,
   placeholder: 'xxxx#yyyy',
+}
+
+const API_KEY_FIELD: HarnessAuthField = {
+  id: 'apiKey',
+  title: text('密钥', 'Key'),
+  secret: true,
+}
+
+const TOKEN_FIELD: HarnessAuthField = {
+  id: 'token',
+  title: text('长期令牌', 'Long-lived token'),
+  secret: true,
+  placeholder: 'sk-ant-oat01-…',
 }
 
 // 远程 Mac 上经 SSH 起的进程，登录钥匙串可能锁着，CLI 存不进凭据（风险，没在真机上验过）
@@ -65,17 +86,6 @@ function joinText(...parts: Array<HarnessText | null>): HarnessText {
     'zh-CN': present.map((part) => part['zh-CN']).join('\n'),
     en: present.map((part) => part.en).join('\n'),
   }
-}
-
-function tail(value: string): string {
-  return value.length > 8 ? `…${value.slice(-4)}` : '已设置'
-}
-
-function envAuth(name: string, label: (value: string) => string): HarnessProviderAuthState {
-  const value = process.env[name]
-  return value
-    ? { signedIn: true, kind: 'env', label: label(value) }
-    : { signedIn: false, kind: 'none', label: null }
 }
 
 function accountAuth(status: ClaudeAuthStatus): HarnessProviderAuthState {
@@ -98,69 +108,176 @@ function accountAuth(status: ClaudeAuthStatus): HarnessProviderAuthState {
   }
 }
 
+const field = (
+  key: string,
+  type: HarnessSettingSpec['type'],
+  title: HarnessText,
+  extra: Partial<HarnessSettingSpec> = {},
+): HarnessSettingSpec => ({
+  key,
+  group: 'provider',
+  type,
+  title,
+  description: null,
+  default: null,
+  effect: 'newSession',
+  ...extra,
+})
+
+const TITLE_FIELD = field('title', 'string', text('名字', 'Name'), {
+  description: text(
+    '模型选单里显示成“[名字] 模型”。',
+    'Shown as "[Name] model" in the model menu.',
+  ),
+})
+const KEY_SPEC = field('apiKey', 'secret', text('密钥', 'Key'))
+const BASE_URL_KEY_NOTE = text(
+  '换到别的主机、改密钥放的位置，要重新填密钥。',
+  'Changing the host or the key header requires entering the key again.',
+)
+
+function apiKeyTemplate(): HarnessProviderTemplate {
+  return {
+    id: API_KEY_TEMPLATE,
+    title: text('Anthropic API key', 'Anthropic API key'),
+    description: text(
+      'Console 里建的 key，经 x-api-key 发给 Anthropic。可以加几个（比如不同组织的 key）。',
+      'A Console API key, sent as x-api-key. Add several for different organizations.',
+    ),
+    fields: [
+      TITLE_FIELD,
+      KEY_SPEC,
+      field('baseUrl', 'string', text('地址', 'Base URL'), {
+        description: text(
+          '不填用官方地址。换到别的主机要重新填密钥。',
+          'Leave empty for the official endpoint. Changing the host requires entering the key again.',
+        ),
+        placeholder: 'https://api.anthropic.com',
+      }),
+    ],
+  }
+}
+
 function gatewayTemplate(): HarnessProviderTemplate {
   return {
     id: GATEWAY_TEMPLATE,
     title: text('Anthropic 兼容网关', 'Anthropic-compatible gateway'),
     description: text(
-      '经 ANTHROPIC_BASE_URL 走自己的网关或代理。令牌另外在“网关令牌”里填。',
-      'Route through your own gateway via ANTHROPIC_BASE_URL. Set the token under "Gateway token".',
+      '自己的网关、代理，或提供 Anthropic 接口的第三方模型服务。',
+      'Your own gateway or proxy, or a third-party service with an Anthropic-compatible API.',
     ),
     fields: [
-      {
-        key: 'title',
-        group: 'provider',
-        type: 'string',
-        title: text('名字', 'Name'),
-        description: null,
-        default: null,
-        effect: 'newSession',
-      },
-      {
-        key: 'baseUrl',
-        group: 'provider',
-        type: 'string',
-        title: text('网关地址', 'Base URL'),
-        description: text('写进 ANTHROPIC_BASE_URL。', 'Becomes ANTHROPIC_BASE_URL.'),
-        default: null,
-        effect: 'newSession',
+      TITLE_FIELD,
+      field('baseUrl', 'string', text('地址', 'Base URL'), {
         clearable: false,
         placeholder: 'https://gateway.example.com',
-      },
-      {
-        key: 'authHeader',
-        group: 'provider',
-        type: 'enum',
-        title: text('令牌放在哪', 'Token header'),
-        description: null,
+        description: BASE_URL_KEY_NOTE,
+      }),
+      KEY_SPEC,
+      field('authHeader', 'enum', text('密钥放在哪', 'Key header'), {
         default: 'bearer',
-        effect: 'newSession',
         options: [
-          {
-            value: 'bearer',
-            title: text(
-              'Authorization: Bearer（ANTHROPIC_AUTH_TOKEN）',
-              'Authorization: Bearer (ANTHROPIC_AUTH_TOKEN)',
-            ),
-          },
-          {
-            value: 'apiKey',
-            title: text('x-api-key（ANTHROPIC_API_KEY）', 'x-api-key (ANTHROPIC_API_KEY)'),
-          },
+          { value: 'bearer', title: text('Authorization: Bearer', 'Authorization: Bearer') },
+          { value: 'apiKey', title: text('x-api-key', 'x-api-key') },
         ],
-      },
+      }),
+      field('models', 'stringList', text('型号', 'Models'), {
+        description: text(
+          '每行一个型号 ID，要显示别的名字写成“ID = 名字”。可以从网关拉取。',
+          'One model ID per line; write "ID = Name" for a display name. Can be fetched from the gateway.',
+        ),
+      }),
+      field('smallModel', 'string', text('小模型', 'Small model'), {
+        description: text(
+          'Claude Code 起标题、haiku 档等内部请求用的型号。不填用会话所选的型号。',
+          'Used for titles and other internal haiku-tier requests. Defaults to the session model.',
+        ),
+      }),
+      field('headers', 'text', text('额外请求头', 'Extra headers'), {
+        description: text(
+          '每行一个“名字: 值”。存在设备的密钥文件里，这里只显示值的末四位。',
+          'One "Name: Value" per line. Stored with the keys on the device; only the last four characters of each value are shown.',
+        ),
+      }),
     ],
+    discoverModels: 'models',
   }
 }
 
-function selectionVersion(selection: ProviderSelection): string {
-  return contentHash(JSON.stringify(selection))
+/** 每行 `Name: Value` 的值换成末四位，名字照旧 */
+function maskHeaders(headers: string): string {
+  return headerLines(headers)
+    .map(({ name, value }) => `${name}: ${secretLabel(value)}`)
+    .join('\n')
+}
+
+function headerLines(headers: string): { name: string; value: string }[] {
+  return headers.split('\n').flatMap((line) => {
+    const colon = line.indexOf(':')
+    if (colon <= 0) return []
+    return [{ name: line.slice(0, colon).trim(), value: line.slice(colon + 1).trim() }]
+  })
+}
+
+/** 交回来的请求头：值还是打码的那几行（名字相同、码对得上）换回存着的原值 */
+function unmaskHeaders(given: string, stored: string | null): string {
+  const before = new Map(
+    headerLines(stored ?? '').map(({ name, value }) => [name.toLowerCase(), value]),
+  )
+  return headerLines(given)
+    .map(({ name, value }) => {
+      const original = before.get(name.toLowerCase())
+      return `${name}: ${original !== undefined && value === secretLabel(original) ? original : value}`
+    })
+    .join('\n')
+}
+
+function modelLines(models: ProviderModel[]): string[] {
+  return models.map((model) => (model.title ? `${model.id} = ${model.title}` : model.id))
+}
+
+function parseModelLines(value: unknown): ProviderModel[] {
+  const lines = Array.isArray(value) ? value : typeof value === 'string' ? value.split('\n') : []
+  const seen = new Set<string>()
+  const models: ProviderModel[] = []
+  for (const line of lines) {
+    if (typeof line !== 'string') continue
+    const at = line.indexOf('=')
+    const id = (at < 0 ? line : line.slice(0, at)).trim()
+    const title = at < 0 ? '' : line.slice(at + 1).trim()
+    if (!id || seen.has(id)) continue
+    seen.add(id)
+    models.push({ id, title: title || null })
+  }
+  return models
+}
+
+function hostOf(baseUrl: string | null): string | null {
+  if (!baseUrl) return null
+  try {
+    return new URL(baseUrl).host
+  } catch {
+    return baseUrl
+  }
+}
+
+/** 密钥发往的源（协议、主机、端口）；不填地址是官方地址 */
+function originOf(baseUrl: string | null): string {
+  try {
+    return new URL(baseUrl ?? 'https://api.anthropic.com').origin
+  } catch {
+    return baseUrl ?? ''
+  }
 }
 
 interface Attempt {
   login: ClaudeLoginAttempt
   /** 结局对应的一步：continue 的应答和 auth/updated 通知共用，只查一次登录状态 */
   final: Promise<HarnessAuthStep> | null
+}
+
+export interface DiscoveredModels {
+  models: ProviderModel[]
 }
 
 export class ClaudeProviders {
@@ -171,14 +288,15 @@ export class ClaudeProviders {
     this.host = host
   }
 
-  // 按账号算的环境：查状态、登录、登出都用它，不受当前选的是 API key 还是网关影响
-  private accountEnv(selection = readProviderSelection()): NodeJS.ProcessEnv {
-    return applyProviderEnv(process.env, selection, ACCOUNT_PROVIDER)
+  // 按账号算的环境：查状态、登录、登出都用它。auth 子命令不收 --settings，用户 settings.json 里另配的
+  // 凭据会让它报的不是账号（读的时候另加提示）
+  private accountEnv(): NodeJS.ProcessEnv {
+    return providerLaunch(ACCOUNT_PROVIDER, null).env
   }
 
-  private async accountState(selection: ProviderSelection): Promise<HarnessProviderAuthState> {
+  private async accountState(): Promise<HarnessProviderAuthState> {
     try {
-      return accountAuth(await claudeAuthStatus(this.accountEnv(selection)))
+      return accountAuth(await claudeAuthStatus(this.accountEnv()))
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       return {
@@ -191,20 +309,13 @@ export class ClaudeProviders {
   }
 
   async read(): Promise<HarnessProvidersReadResponse> {
-    const selection = readProviderSelection()
-    const active = selection.active ?? ACCOUNT_PROVIDER
-    const account = await this.accountState(selection)
-    // 没选过时环境原样交给 CLI：设备环境里有 ANTHROPIC_* 的话实际用的是它
-    if (
-      selection.active === null &&
-      ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_BASE_URL'].some(
-        (name) => process.env[name],
-      )
-    )
-      account.detail = text(
-        '还没选过用哪种：设备环境里的 ANTHROPIC_* 变量原样生效，可能盖过这个账号。选一次之后按选的来。',
-        'No provider chosen yet: ANTHROPIC_* variables from the device environment are passed through and may take precedence. Choose one to override.',
-      )
+    const config = readProviderConfig()
+    const secrets = readProviderSecrets()
+    const account = await this.accountState()
+    const token = secrets[ACCOUNT_PROVIDER]
+    if (!account.signedIn && token)
+      Object.assign(account, { signedIn: true, kind: 'apiKey', label: secretLabel(token) })
+    const overrides = nativeOverrides()
     const providers: HarnessProvider[] = [
       {
         id: ACCOUNT_PROVIDER,
@@ -229,9 +340,8 @@ export class ClaudeProviders {
           },
           {
             id: 'oauthToken',
-            kind: 'env',
-            envName: ENV_OAUTH_TOKEN,
-            effect: 'harness',
+            kind: 'apiKey',
+            fields: [TOKEN_FIELD],
             title: text('长期令牌', 'Long-lived token'),
             description: text(
               '在任何一台登录过的电脑上运行 claude setup-token，把输出的令牌填在这里。设备上存不了凭据（远程 Mac 的钥匙串锁着）时用它。',
@@ -239,148 +349,214 @@ export class ClaudeProviders {
             ),
           },
         ],
-        active: active === ACCOUNT_PROVIDER,
-        canLogout: account.signedIn && account.kind === 'oauth',
+        active: false,
+        canLogout: account.signedIn && (account.kind === 'oauth' || Boolean(token)),
       },
-      {
-        id: API_KEY_PROVIDER,
-        title: text('API key', 'API key'),
-        kind: 'builtin',
-        auth: envAuth(ENV_API_KEY, tail),
-        methods: [
-          {
-            id: 'apiKey',
-            kind: 'env',
-            envName: ENV_API_KEY,
-            effect: 'harness',
-            title: text('API key', 'API key'),
-            description: text(
-              'Console 里建的 key，作为 ANTHROPIC_API_KEY 交给 Claude Code。',
-              'A Console API key, passed as ANTHROPIC_API_KEY.',
-            ),
-          },
-        ],
-        active: active === API_KEY_PROVIDER,
-        canLogout: false,
-      },
-      ...Object.entries(selection.gateways).map(([id, gateway]) =>
-        this.gatewayProvider(id, gateway, active),
+      ...(overrides.length > 0
+        ? [
+            {
+              id: NATIVE_PROVIDER,
+              title: text('Claude Code 自己的配置', 'Claude Code configuration'),
+              kind: 'builtin' as const,
+              auth: {
+                signedIn: true,
+                kind: 'env' as const,
+                label: overrides.join(', '),
+                detail: text(
+                  '启动环境或 settings.json 里另配了凭据或模型服务。选这个供应商的型号时原样照它走；在这里改不了。',
+                  'Credentials or a model service are configured in the environment or settings.json. Models from this provider use it as is; it cannot be edited here.',
+                ),
+              },
+              methods: [],
+              active: false,
+              canLogout: false,
+            },
+          ]
+        : []),
+      ...Object.entries(config.providers).map(([id, provider]) =>
+        this.customProvider(
+          id,
+          provider,
+          secrets[id] ?? null,
+          secrets[providerHeadersKey(id)] ?? null,
+        ),
       ),
     ]
     return {
       providers,
-      switchable: true,
-      templates: [gatewayTemplate()],
-      version: selectionVersion(selection),
+      switchable: false,
+      templates: [apiKeyTemplate(), gatewayTemplate()],
+      version: providerConfigVersion(config, secrets),
     }
   }
 
-  private gatewayProvider(id: string, gateway: GatewayDefinition, active: string): HarnessProvider {
-    let host = gateway.baseUrl
-    try {
-      host = new URL(gateway.baseUrl).host
-    } catch {}
+  private customProvider(
+    id: string,
+    provider: ProviderDefinition,
+    secret: string | null,
+    headers: string | null,
+  ): HarnessProvider {
+    const host = hostOf(provider.baseUrl)
     return {
       id,
-      title: text(gateway.title ?? id, gateway.title ?? id),
+      title: text(provider.title ?? id, provider.title ?? id),
       kind: 'custom',
-      auth: envAuth(gatewayTokenEnv(id), () => host),
+      auth: secret
+        ? {
+            signedIn: true,
+            kind: 'apiKey',
+            label: [secretLabel(secret), host].filter(Boolean).join(' · '),
+          }
+        : { signedIn: false, kind: 'none', label: host },
       methods: [
         {
-          id: 'token',
-          kind: 'env',
-          envName: gatewayTokenEnv(id),
-          effect: 'harness',
-          title: text('网关令牌', 'Gateway token'),
+          id: 'apiKey',
+          kind: 'apiKey',
+          fields: [API_KEY_FIELD],
+          title: text('密钥', 'Key'),
           description: null,
         },
       ],
-      active: active === id,
+      active: false,
       definition: {
-        ...(gateway.title ? { title: gateway.title } : {}),
-        baseUrl: gateway.baseUrl,
-        authHeader: gateway.authHeader,
+        ...(provider.title ? { title: provider.title } : {}),
+        ...(provider.baseUrl ? { baseUrl: provider.baseUrl } : {}),
+        apiKey: { set: secret !== null },
+        ...(provider.kind === 'gateway'
+          ? {
+              authHeader: provider.authHeader,
+              models: modelLines(provider.models),
+              ...(provider.smallModel ? { smallModel: provider.smallModel } : {}),
+              ...(headers ? { headers: maskHeaders(headers) } : {}),
+            }
+          : {}),
       },
-      templateId: GATEWAY_TEMPLATE,
-      canLogout: false,
+      templateId: provider.kind === 'gateway' ? GATEWAY_TEMPLATE : API_KEY_TEMPLATE,
+      canLogout: secret !== null,
     }
   }
 
-  private checkVersion(selection: ProviderSelection, expected: unknown): void {
+  private checkVersion(expected: unknown): void {
     if (typeof expected !== 'string')
       throw new HarnessConfigError(
         'invalidValue',
         text('缺少 expectedVersion', 'expectedVersion is required'),
       )
-    if (expected !== selectionVersion(selection))
+    if (expected !== providerConfigVersion())
       throw new HarnessConfigError(
         'versionConflict',
-        text('provider 配置已经变了，请重新读取', 'Providers changed; reload them'),
+        text('供应商配置已经变了，请重新读取', 'Providers changed; reload them'),
       )
   }
 
-  private save(selection: ProviderSelection): HarnessProvidersWriteResponse {
-    writeProviderSelection(selection)
-    this.changed()
-    return { version: selectionVersion(readProviderSelection()), restartRequired: false }
-  }
-
-  private changed(): void {
+  private changed(): HarnessProvidersWriteResponse {
+    this.host.providersChanged?.()
     this.host.broadcast(HARNESS_CONFIG_NOTIFICATION.changed, {
       harness: CLAUDE_HARNESS_ID,
       part: 'providers',
     })
+    return { version: providerConfigVersion(), restartRequired: false }
+  }
+
+  private custom(id: unknown, config: ProviderConfig): ProviderDefinition {
+    if (id === ACCOUNT_PROVIDER || id === NATIVE_PROVIDER)
+      throw new HarnessConfigError(
+        'readOnly',
+        text('内置的供应商不能改', 'Built-in providers cannot be edited'),
+        'providerId',
+      )
+    if (typeof id !== 'string' || !Object.hasOwn(config.providers, id))
+      throw new HarnessConfigError(
+        'notFound',
+        text(`没有供应商 ${String(id)}`, `No provider ${String(id)}`),
+        'providerId',
+      )
+    return config.providers[id] as ProviderDefinition
   }
 
   upsert(params: Record<string, unknown>): HarnessProvidersWriteResponse {
-    const selection = readProviderSelection()
-    this.checkVersion(selection, params.expectedVersion)
+    this.checkVersion(params.expectedVersion)
+    const config = readProviderConfig()
     const id = params.providerId
-    if (typeof id !== 'string' || !GATEWAY_ID_PATTERN.test(id))
+    if (
+      typeof id === 'string' &&
+      (id.toLowerCase() === ACCOUNT_PROVIDER || id.toLowerCase() === NATIVE_PROVIDER)
+    )
+      throw new HarnessConfigError(
+        'readOnly',
+        text('内置的供应商不能改', 'Built-in providers cannot be edited'),
+        'providerId',
+      )
+    if (typeof id !== 'string' || !PROVIDER_ID_PATTERN.test(id))
       throw new HarnessConfigError(
         'invalidValue',
         text(
-          'providerId 只能用字母、数字和 - _',
-          'providerId may only contain letters, digits, - and _',
+          'providerId 只能用字母、数字和 - _，最长 32 个字',
+          'providerId may only contain letters, digits, - and _ (up to 32)',
         ),
         'providerId',
       )
-    if (id === ACCOUNT_PROVIDER || id === API_KEY_PROVIDER)
-      throw new HarnessConfigError(
-        'readOnly',
-        text('内置的 provider 不能改', 'Built-in providers cannot be edited'),
-        'providerId',
-      )
-    if (params.templateId !== GATEWAY_TEMPLATE)
+    const kind =
+      params.templateId === GATEWAY_TEMPLATE
+        ? 'gateway'
+        : params.templateId === API_KEY_TEMPLATE
+          ? 'apiKey'
+          : null
+    if (kind === null)
       throw new HarnessConfigError(
         'notFound',
         text('没有这个模板', 'Unknown template'),
         'templateId',
       )
-    const clash = Object.keys(selection.gateways).find(
-      (other) => other !== id && gatewayTokenEnv(other) === gatewayTokenEnv(id),
+    // ID 区分大小写（型号前缀照原样比），只差大小写的两家分不清，不让加
+    const twin = Object.keys(config.providers).find(
+      (other) => other !== id && other.toLowerCase() === id.toLowerCase(),
     )
-    if (clash)
+    if (twin)
+      throw new HarnessConfigError(
+        'invalidValue',
+        text(`已经有供应商 ${twin}`, `Provider ${twin} already exists`),
+        'providerId',
+      )
+    const existing = config.providers[id]
+    if (existing && existing.kind !== kind)
       throw new HarnessConfigError(
         'invalidValue',
         text(
-          `和 ${clash} 的令牌变量名重了，换个 id`,
-          `Its token variable clashes with ${clash}; pick another id`,
+          '不能改供应商的类型，删掉重加',
+          'The provider type cannot change; remove and add it again',
         ),
-        'providerId',
+        'templateId',
       )
-    const definition = (params.definition ?? {}) as Record<string, unknown>
+    // 改已有的：没给的项照旧（详情设置的表单只送改过的那几栏）
+    const given = (params.definition ?? {}) as Record<string, unknown>
+    const secrets = readProviderSecrets()
+    const storedHeaders = secrets[providerHeadersKey(id)] ?? null
+    const definition: Record<string, unknown> = {
+      ...(existing
+        ? {
+            title: existing.title,
+            baseUrl: existing.baseUrl,
+            authHeader: existing.authHeader,
+            models: modelLines(existing.models),
+            smallModel: existing.smallModel,
+          }
+        : {}),
+      ...given,
+    }
     const baseUrl = typeof definition.baseUrl === 'string' ? definition.baseUrl.trim() : ''
-    let url: URL | null = null
-    try {
-      url = new URL(baseUrl)
-    } catch {}
-    if (!url || (url.protocol !== 'http:' && url.protocol !== 'https:'))
-      throw new HarnessConfigError(
-        'invalidValue',
-        text('网关地址要是 http 或 https 地址', 'Base URL must be an http(s) URL'),
-        'baseUrl',
-      )
+    if (baseUrl || kind === 'gateway') {
+      let url: URL | null = null
+      try {
+        url = new URL(baseUrl)
+      } catch {}
+      if (!url || (url.protocol !== 'http:' && url.protocol !== 'https:'))
+        throw new HarnessConfigError(
+          'invalidValue',
+          text('地址要是 http 或 https 地址', 'Base URL must be an http(s) URL'),
+          'baseUrl',
+        )
+    }
     if (
       definition.authHeader != null &&
       definition.authHeader !== 'bearer' &&
@@ -388,55 +564,135 @@ export class ClaudeProviders {
     )
       throw new HarnessConfigError(
         'invalidValue',
-        text('令牌位置只能是 bearer 或 apiKey', 'authHeader must be bearer or apiKey'),
+        text('密钥位置只能是 bearer 或 apiKey', 'authHeader must be bearer or apiKey'),
         'authHeader',
       )
-    const title = typeof definition.title === 'string' ? definition.title.trim() : ''
-    selection.gateways[id] = {
-      title: title || null,
-      baseUrl,
-      authHeader: definition.authHeader === 'apiKey' ? 'apiKey' : 'bearer',
+    const string = (value: unknown) =>
+      typeof value === 'string' && value.trim() ? value.trim() : null
+    const next: ProviderDefinition = {
+      kind,
+      title: string(definition.title),
+      baseUrl: baseUrl || null,
+      authHeader: kind === 'gateway' && definition.authHeader !== 'apiKey' ? 'bearer' : 'apiKey',
+      models: kind === 'gateway' ? parseModelLines(definition.models) : [],
+      smallModel: kind === 'gateway' ? string(definition.smallModel) : null,
     }
-    return this.save(selection)
+    // 密钥：给了字串就换（空串是清掉）；不给、或原样交回读到的 {set} 不动。
+    // 存着的密钥是发给原来那个主机、按原来的位置放的：主机或位置变了又没给新密钥，不能照发过去
+    const newKey = typeof definition.apiKey === 'string' ? definition.apiKey.trim() : null
+    if (
+      existing &&
+      secrets[id] &&
+      newKey === null &&
+      (originOf(existing.baseUrl) !== originOf(next.baseUrl) ||
+        existing.authHeader !== next.authHeader)
+    )
+      throw new HarnessConfigError(
+        'invalidValue',
+        text(
+          '换了主机或密钥放的位置，要重新填密钥',
+          'The host or key header changed; enter the key again',
+        ),
+        'apiKey',
+      )
+    config.providers[id] = next
+    config.removed = config.removed.filter((other) => other !== id)
+    writeProviderConfig(config)
+    if (newKey !== null) writeProviderSecret(id, newKey || null)
+    if (kind === 'gateway' && Object.hasOwn(given, 'headers')) {
+      const headers = string(given.headers)
+      writeProviderSecret(
+        providerHeadersKey(id),
+        headers === null ? null : unmaskHeaders(headers, storedHeaders) || null,
+      )
+    }
+    return this.changed()
   }
 
   remove(params: Record<string, unknown>): HarnessProvidersWriteResponse {
-    const selection = readProviderSelection()
-    this.checkVersion(selection, params.expectedVersion)
-    const id = params.providerId
-    if (id === ACCOUNT_PROVIDER || id === API_KEY_PROVIDER)
-      throw new HarnessConfigError(
-        'readOnly',
-        text('内置的 provider 不能删', 'Built-in providers cannot be removed'),
-        'providerId',
-      )
-    if (typeof id !== 'string' || !Object.hasOwn(selection.gateways, id))
-      throw new HarnessConfigError(
-        'notFound',
-        text(`没有 provider ${String(id)}`, `No provider ${String(id)}`),
-        'providerId',
-      )
-    delete selection.gateways[id]
-    // 删的是正在用的：退回账号（不回到“没选过”，免得悄悄用上环境里别的凭据）
-    if (selection.active === id) selection.active = ACCOUNT_PROVIDER
-    return this.save(selection)
+    if (params.expectedVersion != null) this.checkVersion(params.expectedVersion)
+    const config = readProviderConfig()
+    const id = params.providerId as string
+    this.custom(id, config)
+    delete config.providers[id]
+    // 还用着它的型号的会话认得出是它，报没有这个供应商（不当成账号的型号）
+    config.removed = [...config.removed.filter((other) => other !== id), id]
+    // 上一次选的正是它的型号：新会话回到账号（不悄悄换到别家）
+    if (config.last?.startsWith(`${id}/`)) config.last = null
+    writeProviderConfig(config)
+    writeProviderSecret(id, null)
+    writeProviderSecret(providerHeadersKey(id), null)
+    return this.changed()
   }
 
-  activate(params: Record<string, unknown>): HarnessProvidersWriteResponse {
-    const selection = readProviderSelection()
-    this.checkVersion(selection, params.expectedVersion)
-    const id = params.providerId
-    if (
-      typeof id !== 'string' ||
-      (id !== ACCOUNT_PROVIDER && id !== API_KEY_PROVIDER && !Object.hasOwn(selection.gateways, id))
+  activate(_params: Record<string, unknown>): HarnessProvidersWriteResponse {
+    throw new HarnessConfigError(
+      'invalidValue',
+      text(
+        'Claude Code 没有“当前供应商”：每个会话按所选型号的供应商来',
+        'Claude Code has no active provider: each session uses the provider of its model',
+      ),
+      'providerId',
     )
+  }
+
+  /** 网关的 GET /v1/models：列出它有的型号给用户勾，不写任何东西 */
+  async discoverModels(params: Record<string, unknown>): Promise<DiscoveredModels> {
+    const config = readProviderConfig()
+    const provider = this.custom(params.providerId, config)
+    if (provider.kind !== 'gateway' || !provider.baseUrl)
       throw new HarnessConfigError(
-        'notFound',
-        text(`没有 provider ${String(id)}`, `No provider ${String(id)}`),
+        'invalidValue',
+        text('只有网关能拉取型号', 'Only gateways can list models'),
         'providerId',
       )
-    selection.active = id
-    return this.save(selection)
+    const secrets = readProviderSecrets()
+    const secret = secrets[params.providerId as string]
+    if (!secret)
+      throw new HarnessConfigError(
+        'invalidValue',
+        text('先填密钥', 'Set the key first'),
+        'providerId',
+      )
+    const url = `${provider.baseUrl.replace(/\/+$/, '')}/v1/models?limit=1000`
+    // 和 CLI 发请求时一样带上额外请求头（网关可能靠它认组织）
+    const headers: Record<string, string> = Object.fromEntries(
+      headerLines(secrets[providerHeadersKey(params.providerId as string)] ?? '').map(
+        ({ name, value }) => [name.toLowerCase(), value],
+      ),
+    )
+    headers['anthropic-version'] = '2023-06-01'
+    if (provider.authHeader === 'bearer') headers.authorization = `Bearer ${secret}`
+    else headers['x-api-key'] = secret
+    let response: Response
+    try {
+      response = await fetch(url, {
+        headers,
+        redirect: 'error',
+        signal: AbortSignal.timeout(15_000),
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      throw new HarnessConfigError(
+        'invalidValue',
+        text(`连不上网关：${message}`, `Cannot reach the gateway: ${message}`),
+      )
+    }
+    if (!response.ok)
+      throw new HarnessConfigError(
+        'invalidValue',
+        text(`网关回了 ${response.status}`, `The gateway answered ${response.status}`),
+      )
+    const body = (await response.json().catch(() => null)) as { data?: unknown } | null
+    const models = parseModelLines(
+      (Array.isArray(body?.data) ? body.data : []).flatMap((entry: unknown) => {
+        const record = entry && typeof entry === 'object' ? (entry as Record<string, unknown>) : {}
+        if (typeof record.id !== 'string') return []
+        const title = typeof record.display_name === 'string' ? record.display_name.trim() : ''
+        return [title && title !== record.id ? `${record.id} = ${title}` : record.id]
+      }),
+    )
+    return { models }
   }
 
   // ---------- 登录 ----------
@@ -444,23 +700,41 @@ export class ClaudeProviders {
   async authStart(params: Record<string, unknown>): Promise<HarnessAuthStartResponse> {
     const providerId = params.providerId
     const methodId = params.methodId
+    const inputs = (params.inputs ?? {}) as Record<string, unknown>
+    // 填密钥（长期令牌、供应商的 key）：当场写进密钥文件，不经 CLI
     if (
-      providerId !== ACCOUNT_PROVIDER &&
-      providerId !== API_KEY_PROVIDER &&
-      !Object.hasOwn(readProviderSelection().gateways, String(providerId))
-    )
-      throw new HarnessConfigError(
-        'notFound',
-        text(`没有 provider ${String(providerId)}`, `No provider ${String(providerId)}`),
-        'providerId',
-      )
+      (providerId === ACCOUNT_PROVIDER && methodId === 'oauthToken') ||
+      (providerId !== ACCOUNT_PROVIDER && methodId === 'apiKey')
+    ) {
+      if (providerId !== ACCOUNT_PROVIDER) this.custom(providerId, readProviderConfig())
+      const fieldId = providerId === ACCOUNT_PROVIDER ? 'token' : 'apiKey'
+      const value = typeof inputs[fieldId] === 'string' ? (inputs[fieldId] as string).trim() : ''
+      if (!value)
+        return {
+          attemptId: `${String(providerId)}-${String(methodId)}`,
+          step: {
+            kind: 'prompt',
+            fields: [providerId === ACCOUNT_PROVIDER ? TOKEN_FIELD : API_KEY_FIELD],
+            message: null,
+          },
+        }
+      writeProviderSecret(providerId as string, value)
+      this.changed()
+      return {
+        attemptId: `${String(providerId)}-${String(methodId)}`,
+        step: {
+          kind: 'done',
+          auth:
+            providerId === ACCOUNT_PROVIDER
+              ? await this.accountState()
+              : { signedIn: true, kind: 'apiKey', label: secretLabel(value) },
+        },
+      }
+    }
     if (providerId !== ACCOUNT_PROVIDER || (methodId !== 'claudeai' && methodId !== 'console'))
       throw new HarnessConfigError(
         'invalidValue',
-        text(
-          '这种方式不经登录：客户端直接把变量写进设备设置的 harness.claude-code.env',
-          'This method does not sign in: write the variable into harness.claude-code.env in device settings',
-        ),
+        text('没有这种登录方式', 'Unknown sign-in method'),
         'methodId',
       )
     // 同一时间只留一次登录：CLI 每次都起一个新的授权流程，旧的码交不上了
@@ -522,7 +796,7 @@ export class ClaudeProviders {
           ),
         }
       }
-      return { kind: 'done', auth: await this.accountState(readProviderSelection()) }
+      return { kind: 'done', auth: await this.accountState() }
     })()
     return attempt.final
   }
@@ -560,7 +834,18 @@ export class ClaudeProviders {
 
   async authLogout(params: Record<string, unknown>): Promise<Record<string, never>> {
     const providerId = params.providerId
+    if (providerId === NATIVE_PROVIDER)
+      throw new HarnessConfigError(
+        'readOnly',
+        text(
+          '这些凭据在启动环境或 settings.json 里，到那里去改',
+          'These credentials live in the environment or settings.json; change them there',
+        ),
+        'providerId',
+      )
     if (providerId === ACCOUNT_PROVIDER) {
+      // 登出连同存的长期令牌一起清掉；供应商和它们的密钥不动
+      writeProviderSecret(ACCOUNT_PROVIDER, null)
       try {
         await claudeAuthLogout(this.accountEnv())
       } catch (error) {
@@ -573,27 +858,10 @@ export class ClaudeProviders {
       this.changed()
       return {}
     }
-    const selection = readProviderSelection()
-    const envName =
-      providerId === API_KEY_PROVIDER
-        ? ENV_API_KEY
-        : typeof providerId === 'string' && Object.hasOwn(selection.gateways, providerId)
-          ? gatewayTokenEnv(providerId)
-          : null
-    if (!envName)
-      throw new HarnessConfigError(
-        'notFound',
-        text(`没有 provider ${String(providerId)}`, `No provider ${String(providerId)}`),
-        'providerId',
-      )
-    throw new HarnessConfigError(
-      'readOnly',
-      text(
-        `密钥在设备设置里：清掉 harness.claude-code.env 里的 ${envName}`,
-        `The key lives in device settings: remove ${envName} from harness.claude-code.env`,
-      ),
-      'providerId',
-    )
+    this.custom(providerId, readProviderConfig())
+    writeProviderSecret(providerId as string, null)
+    this.changed()
+    return {}
   }
 
   close(): void {

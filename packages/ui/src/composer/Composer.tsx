@@ -82,6 +82,7 @@ import {
   MAX_IMAGES,
   readImages,
 } from './images.ts'
+import { switchedProvider } from './provider-switch.ts'
 import { SettingsBar, useComposeOptions } from './SettingsBar.tsx'
 import { useSendMode } from './send-mode.ts'
 import { runningPlaceholder, runningSend } from './send-mode-logic.ts'
@@ -872,6 +873,21 @@ export function SessionComposer({ deviceId, sessionId, blocked }: SessionCompose
   )
   // 打的是 /goal 加上目标：设成持续目标，不当消息发（goal/send.ts）
   const sendOrGoal = useGoalSend(deviceId, sessionId, onSend)
+  // 上一轮用的型号：会话打开时是它当时的设置，之后每开始一轮记一次。下一轮要换到别的供应商时提示一行
+  const options = useComposeOptions(deviceId, meta?.harness)
+  const [ranWith, setRanWith] = useState<{ sessionId: string; model: string | null } | null>(null)
+  useEffect(() => {
+    if (settings.model && ranWith?.sessionId !== sessionId)
+      setRanWith({ sessionId, model: settings.model })
+  }, [sessionId, settings.model, ranWith?.sessionId])
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 只在开始一轮的那一下记，跑着的时候换了型号算下一轮的
+  useEffect(() => {
+    if (running) setRanWith({ sessionId, model: settings.model })
+  }, [running, sessionId])
+  const switched =
+    ranWith?.sessionId === sessionId
+      ? switchedProvider(ranWith.model, settings.model, options?.models ?? [])
+      : null
   // 输入历史就是这个会话里发过的话：不另外存，翻的时候从对话里现找
   const history = useCallback(() => {
     const { store } = replica
@@ -905,6 +921,18 @@ export function SessionComposer({ deviceId, sessionId, blocked }: SessionCompose
       }
       blocked={blocked}
       lead={<PendingNotes deviceId={deviceId} sessionId={sessionId} />}
+      below={
+        switched ? (
+          <div className="cmp-hint" data-provider-switch>
+            {t(
+              meta?.harness === 'claude-code'
+                ? 'composer.providerSwitch.claude'
+                : 'composer.providerSwitch',
+              { name: switched },
+            )}
+          </div>
+        ) : undefined
+      }
       running={running}
       turnId={last}
       asking={asking}

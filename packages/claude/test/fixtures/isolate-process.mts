@@ -14,6 +14,15 @@ delete process.env.CLAUDE_CONFIG_DIR
 delete process.env.LITCH_LOG_DIR
 delete process.env.CHA_CLAUDE_DEBUG_LOG
 delete process.env.CHA_CLAUDE_HOME
+// 跑测试的人自己的模型凭据、网关、云厂商开关：进程内的模型目录会把它们当成用户自己另配的供应商
+for (const name of Object.keys(process.env))
+  if (
+    /^ANTHROPIC_/.test(name) ||
+    /^CLAUDE_CODE_USE_/.test(name) ||
+    name === 'CLAUDE_CODE_OAUTH_TOKEN' ||
+    name === 'CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST'
+  )
+    delete process.env[name]
 // 进程内起的 CLI 也不往本机共用的 /tmp/claude-<uid> 里写（它不看 TMPDIR）
 process.env.CLAUDE_CODE_TMPDIR = join(home, 'ct')
 // 进程内解析 CLI 路径的用例同样不能落到 PATH 里的 claude。

@@ -97,10 +97,10 @@ class SelectableRuntime implements ClaudeRuntime {
     return (await this.runtimeFor(this.config.type).sessionTitle?.(sessionId, cwd)) ?? null
   }
 
-  async supportedModels(): Promise<NativeModelInfo[]> {
+  async supportedModels(provider?: string | null): Promise<NativeModelInfo[]> {
     const runtime = this.runtimeFor(this.config.type)
     if (!runtime.supportedModels) throw new Error('当前运行时不提供原生模型目录')
-    return runtime.supportedModels()
+    return runtime.supportedModels(provider)
   }
 
   // 运行时问不了额度（模拟、HTTP 桥）就当账号没有额度

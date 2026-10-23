@@ -457,12 +457,15 @@ export const sampleQuestions = (list: SampleQuestion[], allowOther: boolean): Qu
   }))
 
 /** s1 这个会话里还没“说完”的回答。模拟核心会把它一小段一小段地流出来 */
-/** 发消息时能选什么。最后一个模型没有强度档，用来看强度控件会不会跟着消失 */
+/**
+ * 发消息时能选什么（Claude Code：账号和一个网关供应商都能用，型号带“[供应商] ”前缀，见 33 号设计）。
+ * 账号的最后一个模型没有强度档，用来看强度控件会不会跟着消失
+ */
 export const SAMPLE_OPTIONS: ComposeOptions = {
   models: [
     {
-      id: 'claude-sonnet-5-5',
-      title: 'Sonnet 5.5',
+      id: 'anthropic/claude-sonnet-5-5',
+      title: '[Account] Sonnet 5.5',
       efforts: ['low', 'medium', 'high'].map((id) => ({ id, note: '' })),
       defaultEffort: 'medium',
       speeds: [],
@@ -471,8 +474,8 @@ export const SAMPLE_OPTIONS: ComposeOptions = {
       acceptsImages: true,
     },
     {
-      id: 'claude-opus-5-5',
-      title: 'Opus 5.5',
+      id: 'anthropic/claude-opus-5-5',
+      title: '[Account] Opus 5.5',
       efforts: ['low', 'medium', 'high', 'xhigh'].map((id) => ({ id, note: '' })),
       defaultEffort: 'high',
       speeds: [],
@@ -481,8 +484,28 @@ export const SAMPLE_OPTIONS: ComposeOptions = {
       acceptsImages: true,
     },
     {
-      id: 'claude-haiku-5-5',
-      title: 'Haiku 5.5',
+      id: 'anthropic/claude-haiku-5-5',
+      title: '[Account] Haiku 5.5',
+      efforts: [],
+      defaultEffort: null,
+      speeds: [],
+      defaultSpeed: null,
+      isDefault: false,
+      acceptsImages: true,
+    },
+    {
+      id: 'deepseek/deepseek-v4',
+      title: '[DeepSeek] DeepSeek V4',
+      efforts: [],
+      defaultEffort: null,
+      speeds: [],
+      defaultSpeed: null,
+      isDefault: false,
+      acceptsImages: true,
+    },
+    {
+      id: 'deepseek/deepseek-v4-flash',
+      title: '[DeepSeek] deepseek-v4-flash',
       efforts: [],
       defaultEffort: null,
       speeds: [],

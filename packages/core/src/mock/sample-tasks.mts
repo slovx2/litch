@@ -206,7 +206,7 @@ export function sampleTasks(deviceId: string, now: number, lang: SampleLang): Sa
         schedule: { type: 'monthly', day: 31, time: '18:00' },
         timezone: 'Asia/Shanghai',
         status: 'paused',
-        target: newThread('claude', '~/work/litch', 'litch', 'claude-opus-5-5'),
+        target: newThread('claude', '~/work/litch', 'litch', 'anthropic/claude-opus-5-5'),
         createdAgo: 90 * DAY,
       },
       {

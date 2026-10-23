@@ -2,7 +2,7 @@ import { type ChildProcess, execFileSync, spawn } from 'node:child_process'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { claudeChildEnv } from './claude-provider.mjs'
+import { contextLaunch } from './claude-provider.mjs'
 import type { ClaudeRuntime, RuntimeHandlers, RuntimeTurnContext } from './types.mjs'
 
 export interface ClaudePRuntimeOptions {
@@ -40,7 +40,7 @@ export class ClaudePTranscriptRuntime implements ClaudeRuntime {
       }
 
       const args = this.argsForContext(context, inputFile)
-      const result = await this.runProcessWithRetry(context.threadId, args, context.cwd, handlers)
+      const result = await this.runProcessWithRetry(context, args, context.cwd, handlers)
       const parsed = parseClaudePJson(result.stdout)
       const text = parsed?.result ?? result.stdout.trim()
       const sessionId = parsed?.sessionId
@@ -118,14 +118,17 @@ export class ClaudePTranscriptRuntime implements ClaudeRuntime {
   }
 
   private runProcess(
-    threadId: string,
+    context: RuntimeTurnContext,
     args: string[],
     cwd: string,
   ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+    const { threadId } = context
     const child = spawn(this.options.command, args, {
       cwd,
       // 命令里调 litch-machine 时按它认会话
-      env: { ...claudeChildEnv(), LITCH_THREAD_ID: threadId },
+      // 照会话型号的供应商起（选了网关的型号就用网关的凭据）；账号放进设置层的那几项这个包装命令收不了，
+      // 用户设置里另配的凭据照旧
+      env: { ...contextLaunch(context.provider, context.model).env, LITCH_THREAD_ID: threadId },
       stdio: ['ignore', 'pipe', 'pipe'],
       detached: process.platform !== 'win32',
     })
@@ -172,7 +175,7 @@ export class ClaudePTranscriptRuntime implements ClaudeRuntime {
   }
 
   private async runProcessWithRetry(
-    threadId: string,
+    context: RuntimeTurnContext,
     args: string[],
     cwd: string,
     handlers: RuntimeHandlers,
@@ -182,7 +185,7 @@ export class ClaudePTranscriptRuntime implements ClaudeRuntime {
     for (let attempt = 1; attempt <= attempts; attempt += 1) {
       let result: { stdout: string; stderr: string; exitCode: number }
       try {
-        result = await this.runProcess(threadId, args, cwd)
+        result = await this.runProcess(context, args, cwd)
       } catch (error) {
         if (isClaudePTimeoutError(error) && attempt < attempts) {
           await handlers.onEvent({

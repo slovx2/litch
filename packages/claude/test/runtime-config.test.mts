@@ -114,6 +114,8 @@ test('native SDK runtime maps manual /workflows prompts to the human workflow tr
     prompt: '/workflows open three subagents, reply ok',
     approvalPolicy: 'never',
     sandboxMode: 'danger-full-access',
+    // 用户自己的配置原样走，命令行设置层里没有账号要置空的那几项
+    provider: 'native',
   })
   const messages: any[] = [userMessage(context, null, null)]
 

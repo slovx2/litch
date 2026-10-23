@@ -69,6 +69,18 @@ harness's own config files on that device (shared with its CLI there):
   providers, switch the active provider. Codex can stay signed in to ChatGPT while using an API-key
   provider. OAuth credentials stay in the harness's own store; keys the harness only reads from
   environment variables are kept in that harness's environment on the device (secret).
+  Claude Code has no active provider: the one account (Claude subscription, Console, or a
+  `claude setup-token` long-lived token) and any number of providers the user adds (Anthropic API keys,
+  Anthropic-compatible gateways with a hand-written or fetched model list) all appear in the model
+  picker as `[Provider] model` once more than one is usable. Each session runs on the provider of its
+  model and can switch at the next turn (the composer says so under the input); new sessions start
+  with the last model picked. Editing a gateway offers "Fetch models from provider" to tick models
+  from its `/v1/models` into the list. Keys and extra headers of added
+  providers are stored by Litch on the device (not in `~/.claude`), shown only by their last four
+  characters. Moving a provider to another host or changing its key header requires entering the key
+  again. A session whose provider was removed fails with an error instead of moving to another
+  provider. Credentials or a gateway configured in Claude Code's own `settings.json` or environment
+  show as a read-only "Claude Code" provider.
 - **Models** (Codex only): a custom model list that replaces Codex's built-in catalog in its model
   picker. Each entry either uses a built-in model as is, or is based on one with a new model name,
   display name or context window (everything else is copied from the base). Models not in the list

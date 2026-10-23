@@ -79,12 +79,15 @@ export function Picker({ kind, label, value, options, onPick, search }: PickerPr
     if (option.id !== value) onPick(option.id)
   }
 
+  const display = current?.title ?? value ?? label
   return (
     <div className="pick" ref={root} data-kind={kind}>
       <button
         ref={trigger}
         type="button"
         className="pick-btn"
+        // 当前值自己就以方括号开头（带供应商前缀的模型，“[Account] Opus”）：皮肤别再套一层
+        data-bracketed={display.startsWith('[') ? '' : undefined}
         title={label}
         aria-label={`${label}：${current?.title ?? value ?? ''}`}
         aria-haspopup="listbox"
@@ -92,7 +95,7 @@ export function Picker({ kind, label, value, options, onPick, search }: PickerPr
         onClick={() => setOpen(!open)}
       >
         {current?.lead}
-        <span className="ell">{current?.title ?? value ?? label}</span>
+        <span className="ell">{display}</span>
         <Caret />
       </button>
       {open ? (

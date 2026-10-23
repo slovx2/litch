@@ -670,8 +670,8 @@ export function createMockHarnessConfig(host: MockHarnessConfigHost): MockHarnes
           } else if (!(one.key in definition)) definition[one.key] = { set: false }
         } else if (value !== undefined) definition[one.key] = value
       }
-      const name =
-        typeof definition.name === 'string' && definition.name ? definition.name : p.providerId
+      const named = definition.name ?? definition.title
+      const name = typeof named === 'string' && named ? named : p.providerId
       const keyed = Object.values(definition).some(
         (value) =>
           typeof value === 'object' && value !== null && (value as { set?: boolean }).set === true,
@@ -695,6 +695,22 @@ export function createMockHarnessConfig(host: MockHarnessConfigHost): MockHarnes
       bump(state, 'providers')
       publish(state)
       return { restartRequired: false }
+    },
+    'harnessConfig.providers.discoverModels': (params) => {
+      const p = params as Commands['harnessConfig.providers.discoverModels']['params']
+      const { providers } = of(p).sample
+      const was = providers.providers.find((one) => one.id === p.providerId)
+      if (!was) throw new ChannelError('notFound', `没有这个 provider：${p.providerId}`)
+      const template = providers.templates.find((one) => one.id === was.templateId)
+      if (!template?.discoverModels) throw new ChannelError('rejected', '这个 provider 不能拉型号')
+      if (!was.auth.signedIn) throw new ChannelError('rejected', '先填密钥')
+      return {
+        models: [
+          { id: 'deepseek-v4', title: 'DeepSeek V4' },
+          { id: 'deepseek-v4-flash', title: null },
+          { id: 'deepseek-r2', title: 'DeepSeek R2' },
+        ],
+      }
     },
     'harnessConfig.providers.remove': (params) => {
       const p = params as Commands['harnessConfig.providers.remove']['params']
@@ -721,11 +737,8 @@ export function createMockHarnessConfig(host: MockHarnessConfigHost): MockHarnes
       }
       for (const one of providers.providers) one.active = one.id === p.providerId
       bump(state, 'providers')
-      // Claude 换登录方式要重启才换得过去
-      const restart = state.harness === 'claude'
-      if (restart) state.restartRequired = true
       publish(state)
-      return { restartRequired: restart }
+      return { restartRequired: false }
     },
     'harnessConfig.auth.start': (params) => {
       const p = params as Commands['harnessConfig.auth.start']['params']

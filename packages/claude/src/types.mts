@@ -304,6 +304,8 @@ export interface RuntimeTurnContext {
   cwd: string
   runtimeType: RuntimeBackendType | null
   model: string | null
+  // 会话所选型号的供应商（claude-provider.mts）；不给按 plainProvider() 算
+  provider?: string | null
   effort: string | null
   claudeSessionId: string | null
   forkSession: boolean
@@ -620,7 +622,8 @@ export interface RuntimeSessionHandlers {
 }
 
 export interface ClaudeRuntime {
-  supportedModels?(): Promise<NativeModelInfo[]>
+  // provider：按哪个供应商的凭据列（claude-provider.mts）；不给按不带前缀的型号的供应商
+  supportedModels?(provider?: string | null): Promise<NativeModelInfo[]>
   // 账号的订阅额度（CLI 的 get_usage）。不发用户消息、不请求模型
   accountUsage?(): Promise<import('./rate-limits.mjs').NativeAccountUsage>
   setSessionHandlers?(handlers: RuntimeSessionHandlers): void

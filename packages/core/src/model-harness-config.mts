@@ -148,6 +148,8 @@ export interface HcTemplate {
   title: Bilingual
   description: Bilingual | null
   fields: HcSettingSpec[]
+  /** 能从 provider 自己那里拉型号来填的字段；没有是 null */
+  discoverModels: string | null
 }
 
 export interface HcProvidersView {

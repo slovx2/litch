@@ -109,6 +109,32 @@ export function sameAsStored(
   return JSON.stringify(parsed.value) === JSON.stringify(now)
 }
 
+/** 型号清单的一行（`id` 或 `id = 显示名`）里的型号 ID */
+export const modelLineId = (line: string): string => line.split('=')[0]?.trim() ?? ''
+
+/**
+ * 从 provider 拉来的型号勾选完，并回清单：拉来的里勾掉的去掉，勾上而清单里没有的加在末尾
+ * （有显示名写成 `id = 显示名`），清单里别的行原样留着
+ */
+export function mergeDiscovered(
+  current: readonly string[],
+  found: readonly { id: string; title: string | null }[],
+  picked: ReadonlySet<string>,
+): string[] {
+  const foundIds = new Set(found.map((model) => model.id))
+  const kept = current.filter((line) => {
+    const id = modelLineId(line)
+    return !foundIds.has(id) || picked.has(id)
+  })
+  const have = new Set(kept.map(modelLineId))
+  const added = found
+    .filter((model) => picked.has(model.id) && !have.has(model.id))
+    .map((model) =>
+      model.title && model.title !== model.id ? `${model.id} = ${model.title}` : model.id,
+    )
+  return [...kept, ...added]
+}
+
 /** 改了之后怎么生效：给人看的那一句的键。立刻生效的没有 */
 export const effectKey = (effect: HcEffect): 'hc.effect.newSession' | 'hc.effect.harness' | null =>
   effect === 'newSession'

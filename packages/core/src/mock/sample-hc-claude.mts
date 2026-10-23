@@ -1,5 +1,5 @@
 // 模拟核心里 Claude Code 的详情设置示例（15 号设计 2.2）：~/.claude/settings.json 的那些项，
-// 订阅与 Console 登录（粘贴授权码），API key 和自定义网关（只认环境变量，存 Litch 的设备设置）。
+// 账号（订阅、Console、长期令牌）和用户加的供应商（33 号设计：API key、Anthropic 兼容网关），没有“当前供应商”。
 import {
   configOf,
   field,
@@ -154,63 +154,125 @@ export function sampleClaude({ home }: SampleHome): SampleHc {
     },
   )
   const paste = [field('code', t('授权码（code#state）', 'Authorization code (code#state)'))]
+  const name = spec('title', 'provider', 'string', t('名字', 'Name'), {
+    description: t('模型选单里显示成“[名字] 模型”。', 'Shown as "[Name] model" in the model menu.'),
+  })
+  const key = spec('apiKey', 'provider', 'secret', t('密钥', 'Key'))
+  const keyMethod = method('apiKey', 'apiKey', t('密钥', 'Key'), {
+    fields: [field('apiKey', t('密钥', 'Key'))],
+  })
   return {
     config,
     providers: {
       providers: [
         provider(
-          'claude-ai',
-          t('Claude 订阅（Pro / Max）', 'Claude subscription (Pro / Max)'),
+          'anthropic',
+          t('Anthropic 账号', 'Anthropic account'),
           [
-            method('subscription', 'oauthPaste', t('用 claude.ai 登录', 'Sign in with claude.ai'), {
-              description: t(
-                '在浏览器里授权后，把页面上给的授权码贴回来',
-                'Authorize in the browser, then paste the code it shows',
-              ),
+            method(
+              'claudeai',
+              'oauthPaste',
+              t('Claude 订阅（claude.ai）', 'Claude subscription (claude.ai)'),
+              {
+                description: t(
+                  'Pro、Max、Team、Enterprise 账号。',
+                  'Pro, Max, Team or Enterprise plans.',
+                ),
+                fields: paste,
+              },
+            ),
+            method('console', 'oauthPaste', t('Anthropic Console', 'Anthropic Console'), {
+              description: t('按 API 用量计费。', 'Billed by API usage.'),
               fields: paste,
+            }),
+            method('oauthToken', 'apiKey', t('长期令牌', 'Long-lived token'), {
+              description: t(
+                '在任何一台登录过的电脑上运行 claude setup-token，把输出的令牌填在这里。',
+                'Run claude setup-token on any signed-in computer and paste the token here.',
+              ),
+              fields: [field('token', t('长期令牌', 'Long-lived token'))],
             }),
           ],
           {
-            active: true,
             canLogout: true,
-            auth: { signedIn: true, kind: 'oauth', label: 'dev@example.com · Max', detail: null },
+            auth: { signedIn: true, kind: 'oauth', label: 'dev@example.com · max', detail: null },
           },
         ),
-        provider('console', t('Anthropic Console', 'Anthropic Console'), [
-          method('console', 'oauthPaste', t('用 Console 账号登录', 'Sign in with Console'), {
-            fields: paste,
-          }),
-        ]),
-        provider('api-key', t('API key', 'API key'), [
-          method('env', 'env', t('ANTHROPIC_API_KEY', 'ANTHROPIC_API_KEY'), {
-            envName: 'ANTHROPIC_API_KEY',
-            description: t(
-              'Claude Code 只从环境变量读：存在 Litch 的设备设置里，启动时注入',
-              'Claude Code only reads it from the environment: Litch keeps it in the device settings',
-            ),
-          }),
-        ]),
-        provider('gateway', t('自定义网关', 'Custom gateway'), [
-          method(
-            'base-url',
-            'env',
-            t('网关地址 ANTHROPIC_BASE_URL', 'Gateway URL ANTHROPIC_BASE_URL'),
-            {
-              envName: 'ANTHROPIC_BASE_URL',
-            },
-          ),
-          method(
-            'token',
-            'env',
-            t('网关令牌 ANTHROPIC_AUTH_TOKEN', 'Gateway token ANTHROPIC_AUTH_TOKEN'),
-            {
-              envName: 'ANTHROPIC_AUTH_TOKEN',
-            },
-          ),
-        ]),
+        provider('deepseek', t('DeepSeek', 'DeepSeek'), [keyMethod], {
+          kind: 'custom',
+          templateId: 'anthropicGateway',
+          canLogout: true,
+          auth: { signedIn: true, kind: 'apiKey', label: '…9f2c · api.deepseek.com', detail: null },
+          definition: {
+            title: 'DeepSeek',
+            baseUrl: 'https://api.deepseek.com/anthropic',
+            apiKey: { set: true },
+            authHeader: 'bearer',
+            models: ['deepseek-v4 = DeepSeek V4', 'deepseek-v4-flash'],
+            smallModel: 'deepseek-v4-flash',
+          },
+        }),
+        provider('work', t('工作', 'Work'), [keyMethod], {
+          kind: 'custom',
+          templateId: 'anthropicApiKey',
+          definition: { title: '工作', apiKey: { set: false } },
+        }),
       ],
-      switchable: true,
-      templates: [],
+      switchable: false,
+      templates: [
+        {
+          id: 'anthropicApiKey',
+          title: t('Anthropic API key', 'Anthropic API key'),
+          description: t(
+            'Console 里建的 key，经 x-api-key 发给 Anthropic。可以加几个（比如不同组织的 key）。',
+            'A Console API key, sent as x-api-key. Add several for different organizations.',
+          ),
+          fields: [
+            name,
+            key,
+            spec('baseUrl', 'provider', 'string', t('地址', 'Base URL'), {
+              description: t('不填用官方地址。', 'Leave empty for the official endpoint.'),
+              placeholder: 'https://api.anthropic.com',
+            }),
+          ],
+          discoverModels: null,
+        },
+        {
+          id: 'anthropicGateway',
+          title: t('Anthropic 兼容网关', 'Anthropic-compatible gateway'),
+          description: t(
+            '自己的网关、代理，或提供 Anthropic 接口的第三方模型服务。',
+            'Your own gateway or proxy, or a third-party service with an Anthropic-compatible API.',
+          ),
+          fields: [
+            name,
+            spec('baseUrl', 'provider', 'string', t('地址', 'Base URL'), {
+              placeholder: 'https://gateway.example.com',
+            }),
+            key,
+            spec('authHeader', 'provider', 'enum', t('密钥放在哪', 'Key header'), {
+              default: 'bearer',
+              options: [opt('bearer', 'Authorization: Bearer'), opt('apiKey', 'x-api-key')],
+            }),
+            spec('models', 'provider', 'stringList', t('型号', 'Models'), {
+              description: t(
+                '每行一个型号 ID，要显示别的名字写成“ID = 名字”。可以从网关拉取。',
+                'One model ID per line; write "ID = Name" for a display name. Can be fetched from the gateway.',
+              ),
+            }),
+            spec('smallModel', 'provider', 'string', t('小模型', 'Small model'), {
+              description: t(
+                'Claude Code 起标题、haiku 档等内部请求用的型号。不填用会话所选的型号。',
+                'Used for titles and other internal haiku-tier requests. Defaults to the session model.',
+              ),
+            }),
+            spec('headers', 'provider', 'text', t('额外请求头', 'Extra headers'), {
+              description: t('每行一个“名字: 值”。', 'One "Name: Value" per line.'),
+            }),
+          ],
+          discoverModels: 'models',
+        },
+      ],
       version: 'p1',
     },
     mcp: {

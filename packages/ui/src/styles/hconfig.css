@@ -137,6 +137,40 @@
   min-width: 0;
 }
 
+/* 自定义 provider 的型号清单：从 provider 自己那里拉来勾选 */
+.hc-discover {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.hc-discover-acts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+.hc-discover-list {
+  margin: 0;
+  padding: 6px 8px;
+  list-style: none;
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r1);
+  background: var(--sunken);
+  font-size: 12px;
+  line-height: 20px;
+}
+.hc-discover-list label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.hc-discover-title {
+  color: var(--ink-3);
+}
+
 /* 一次登录走到哪一步 */
 .hc-attempt {
   display: flex;

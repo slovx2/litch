@@ -17,7 +17,15 @@ import { whyNot } from '../../app/errors.ts'
 import { useServices } from '../../app/services.tsx'
 import { showToast } from '../../app/toasts.tsx'
 import { HcControl } from './HcControl.tsx'
-import { type HcDraft, parseDraft, usableMethods } from './logic.ts'
+import {
+  type HcDraft,
+  linesOf,
+  mergeDiscovered,
+  modelLineId,
+  parseDraft,
+  rawOf,
+  usableMethods,
+} from './logic.ts'
 import { AttemptView, AuthFields, filled, HcDialog, inputsOf, SlotState, useRun } from './parts.tsx'
 
 interface AccountsTabProps {
@@ -609,9 +617,138 @@ function CustomDialog({
             {parsed && !parsed.ok ? (
               <span className="form-note err">{t(parsed.problem)}</span>
             ) : null}
+            {template?.discoverModels === field.key ? (
+              <Discover
+                device={device}
+                harnessId={harnessId}
+                provider={provider}
+                current={linesOf(
+                  String(draft?.kind === 'value' ? draft.value : rawOf(field, stored[field.key])),
+                )}
+                disabled={busy}
+                onPick={(lines) =>
+                  setDrafts((current) => ({
+                    ...current,
+                    [field.key]: { kind: 'value', value: lines.join('\n') },
+                  }))
+                }
+              />
+            ) : null}
           </div>
         )
       })}
     </HcDialog>
+  )
+}
+
+/**
+ * 从 provider 自己那里拉型号（模板的 discoverModels 指着的那一栏）：列出来让人勾，勾完并回这一栏的草稿。
+ * 要用存着的密钥去问，所以新加的、还没填密钥的先保存
+ */
+function Discover({
+  device,
+  harnessId,
+  provider,
+  current,
+  disabled,
+  onPick,
+}: {
+  device: DeviceView
+  harnessId: string
+  provider: HcProvider | null
+  current: string[]
+  disabled: boolean
+  onPick(lines: string[]): void
+}) {
+  const t = useT()
+  const { channel } = useServices()
+  const [found, setFound] = useState<{ id: string; title: string | null }[] | null>(null)
+  const [picked, setPicked] = useState<Set<string>>(new Set())
+  const [asking, setAsking] = useState(false)
+  const [failure, setFailure] = useState<string | null>(null)
+  const ready = provider?.auth.signedIn === true
+  const ask = async () => {
+    if (!provider) return
+    setAsking(true)
+    setFailure(null)
+    try {
+      const { models } = await channel.command('harnessConfig.providers.discoverModels', {
+        deviceId: device.id,
+        harness: harnessId,
+        providerId: provider.id,
+      })
+      const have = new Set(current.map(modelLineId))
+      setFound(models)
+      setPicked(new Set(models.filter((model) => have.has(model.id)).map((model) => model.id)))
+    } catch (error) {
+      setFailure(whyNot(error, t))
+    }
+    setAsking(false)
+  }
+  const toggle = (id: string) =>
+    setPicked((was) => {
+      const next = new Set(was)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  return (
+    <div className="hc-discover" data-hc-discover>
+      <div className="hc-discover-acts">
+        <button
+          type="button"
+          className="mini"
+          data-act="hc-discover"
+          disabled={disabled || asking || !ready}
+          onClick={() => void ask()}
+        >
+          {t(asking ? 'hc.discover.asking' : 'hc.discover')}
+        </button>
+        {ready ? null : <span className="form-note">{t('hc.discover.needKey')}</span>}
+      </div>
+      {failure ? <span className="form-note err">{failure}</span> : null}
+      {found && found.length === 0 ? (
+        <span className="form-note">{t('hc.discover.none')}</span>
+      ) : null}
+      {found && found.length > 0 ? (
+        <>
+          <ul className="hc-discover-list">
+            {found.map((model) => (
+              <li key={model.id}>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={picked.has(model.id)}
+                    disabled={disabled}
+                    onChange={() => toggle(model.id)}
+                  />
+                  <span className="mono ell">{model.id}</span>
+                  {model.title && model.title !== model.id ? (
+                    <span className="ell hc-discover-title">{model.title}</span>
+                  ) : null}
+                </label>
+              </li>
+            ))}
+          </ul>
+          <div className="hc-discover-acts">
+            <button
+              type="button"
+              className="mini"
+              data-act="hc-discover-apply"
+              disabled={disabled}
+              onClick={() => {
+                onPick(mergeDiscovered(current, found, picked))
+                setFound(null)
+              }}
+            >
+              {t('hc.discover.apply', { count: picked.size })}
+            </button>
+            <button type="button" className="mini" onClick={() => setFound(null)}>
+              {t('hc.discover.cancel')}
+            </button>
+          </div>
+        </>
+      ) : null}
+    </div>
   )
 }
