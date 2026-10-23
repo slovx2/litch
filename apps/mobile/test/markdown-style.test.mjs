@@ -98,7 +98,10 @@ for (const { name, theme } of themes) {
     // 对话区的底是 raised（Transcript.tsx）
     const ground = c.raised
     const header = over(table.headerBackgroundColor, ground)
-    assert.ok(contrast(table.headerTextColor, header) >= 7, `表头 ${contrast(table.headerTextColor, header)}`)
+    assert.ok(
+      contrast(table.headerTextColor, header) >= 7,
+      `表头 ${contrast(table.headerTextColor, header)}`,
+    )
     for (const row of [table.rowEvenBackgroundColor, table.rowOddBackgroundColor]) {
       assert.equal(row, 'transparent')
       assert.ok(contrast(table.color, over(row, ground)) >= 7)
@@ -114,12 +117,12 @@ for (const { name, theme } of themes) {
     const style = markdownStyleOf(theme)
     const ground = c.raised
     const pairs = {
-      'h6': [style.h6.color, ground],
-      'blockquote': [style.blockquote.color, over(style.blockquote.backgroundColor, ground)],
-      'codeBlock': [style.codeBlock.color, style.codeBlock.backgroundColor],
-      'code': [style.code.color, over(style.code.backgroundColor, ground)],
-      'math': [style.math.color, style.math.backgroundColor],
-      'highlight': [style.highlight.color, over(style.highlight.backgroundColor, ground)],
+      h6: [style.h6.color, ground],
+      blockquote: [style.blockquote.color, over(style.blockquote.backgroundColor, ground)],
+      codeBlock: [style.codeBlock.color, style.codeBlock.backgroundColor],
+      code: [style.code.color, over(style.code.backgroundColor, ground)],
+      math: [style.math.color, style.math.backgroundColor],
+      highlight: [style.highlight.color, over(style.highlight.backgroundColor, ground)],
       'taskList.checkedText': [style.taskList.checkedTextColor, ground],
       'taskList.checkmark': [style.taskList.checkmarkColor, style.taskList.checkedColor],
     }
