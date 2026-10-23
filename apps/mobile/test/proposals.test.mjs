@@ -252,7 +252,7 @@ test('交接：画成单独一行（标题、分叉会话），不进过程组�
   assert.equal(types(failed).includes('handoff'), false)
 })
 
-test('注入的会话事件：提醒、唤醒只画提示不画用户消息；回报加上用户自己的话两样都画', () => {
+test('注入的会话事件：唤醒只画提示不画用户消息，提醒收尾的回合对用户透明；回报加上用户自己的话两样都画', () => {
   const remind = { kind: 'remind', notes: [] }
   const notes = {
     kind: 'notes',
@@ -261,10 +261,9 @@ test('注入的会话事件：提醒、唤醒只画提示不画用户消息；�
   assert.equal(eventKind(remind), 'remind')
   assert.equal(eventKind({ kind: 'wake', notes: notes.notes }), 'wake')
   assert.equal(eventKind(notes), 'notes')
+  // 提醒收尾的回合：提醒、模型顺口说的话、过程、状态行都不画
   const only = new RowBuilder().build(viewOf(['u'], [user('u', '', remind)]), 'all')
-  assert.deepEqual(types(only), ['event', 'status'])
-  assert.equal(only[0].kind, 'remind')
-  // 提醒回合里模型顺口说的话不画
+  assert.deepEqual(types(only), [])
   const said = {
     id: 'a',
     kind: 'agentMessage',
@@ -272,8 +271,27 @@ test('注入的会话事件：提醒、唤醒只画提示不画用户消息；�
     status: 'completed',
     phase: 'final',
   }
-  const acked = new RowBuilder().build(viewOf(['u', 'a'], [user('u', '', remind), said]), 'all')
-  assert.deepEqual(types(acked), ['event', 'status'])
+  const acked = new RowBuilder().build(
+    viewOf(['u', 'c1', 'a'], [user('u', '', remind), command('c1'), said]),
+    'all',
+  )
+  assert.deepEqual(types(acked), [])
+  // 补调的收尾留了问题、带了建议：只画问题和卡片
+  const wrapUp = {
+    summary: null,
+    suggestions: [{ title: '任务 p1' }],
+    ask: '接着做哪个？',
+    actions: [{ label: '好' }],
+  }
+  const asked = new RowBuilder().build(
+    viewOf(
+      ['u', 'w', 'a'],
+      [user('u', '', remind), call('w', 'wrap_up', { wrapUp }), said],
+      [proposal('p1', { callId: 'w' })],
+    ),
+    'all',
+  )
+  assert.deepEqual(types(asked), ['wrapAsk', 'proposal'])
   const both = new RowBuilder().build(viewOf(['u'], [user('u', '接着做', notes)]), 'all')
   assert.deepEqual(types(both), ['event', 'user', 'status'])
   assert.equal(both[0].notes[0].excerpt, '好了')

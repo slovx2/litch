@@ -249,8 +249,12 @@ export class RowBuilder {
       }
       this.pushGroup(out, turn, steps)
     }
+    const first = turn.itemIds[0] ? view.items[turn.itemIds[0]] : undefined
+    // 提醒收尾的回合对用户透明（照桌面端）：那是设备进程替用户提醒模型补调一次收尾，提醒、模型顺口说的话、过程、
+    // 状态行都不画，只留收尾带出来的卡片和问题
+    const remind = first?.kind === 'userMessage' && first.event?.kind === 'remind'
     // 别的会话发来消息开的回合：开头那条消息自己写着来源，不再另写一行（照桌面端）
-    if (turn.origin && turn.origin !== 'peer')
+    if (turn.origin && turn.origin !== 'peer' && !remind)
       out.push(
         this.keep({
           type: 'origin',
@@ -260,9 +264,6 @@ export class RowBuilder {
           startedAt: turn.startedAt,
         }),
       )
-    const first = turn.itemIds[0] ? view.items[turn.itemIds[0]] : undefined
-    // 提醒收尾的回合只是补调一次收尾：模型顺口说的“好的”不画（手机上回答没有折叠处），建议的卡片照样画
-    const remind = first?.kind === 'userMessage' && first.event?.kind === 'remind'
     /** 回合最下方的收尾区：收尾留的问题（最后一个），和这一回合的建议卡片 */
     let tailAsk: Row | null = null
     const tailCards: Row[] = []
@@ -271,8 +272,8 @@ export class RowBuilder {
     for (const itemId of turn.itemIds) {
       const item = view.items[itemId]
       if (!item) continue
-      if (remind && item.kind === 'agentMessage') continue
       const cards = item.kind === 'toolCall' ? cardsOf(item, view.proposals) : null
+      if (remind && !cards) continue
       if (cards && item.kind === 'toolCall') {
         const offer = isOfferCall(item)
         const ask = item.wrapUp?.ask
@@ -295,8 +296,8 @@ export class RowBuilder {
           out.push(...rows)
           continue
         }
-        // 建议任务、收尾的问题：过程里只留一步，卡片和问题排到回合最下方
-        group.push(item)
+        // 建议任务、收尾的问题：过程里只留一步（提醒的回合没有过程），卡片和问题排到回合最下方
+        if (!remind) group.push(item)
         tailCards.push(...rows)
         if (ask)
           tailAsk = this.keep({
@@ -414,6 +415,7 @@ export class RowBuilder {
       )
     if (tailAsk) out.push(tailAsk)
     out.push(...tailCards)
+    if (remind) return out
     if (turn.status === 'failed' && turn.error)
       out.push(this.keep({ type: 'error', key: `${turn.id}:error`, text: turn.error }))
     out.push(

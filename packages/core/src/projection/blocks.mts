@@ -26,7 +26,7 @@ export interface BlockInput {
   quiet?: boolean
   /** 收尾调用（litch_sessions.wrap_up），空的、带建议的都是：认最终回答时看它前后（answersAroundWrapUp） */
   wrapUp?: boolean
-  /** 设备进程提醒收尾的那条用户消息（event.kind 是 remind）：这个回合里模型说的话都收进过程，没有最终回答 */
+  /** 设备进程提醒收尾的那条用户消息（event.kind 是 remind）：这个回合对用户透明，只留收尾带出来的卡片 */
   remind?: boolean
 }
 
@@ -105,14 +105,13 @@ export function bucketItems(items: BlockInput[]): Block[] {
   if (shown.length > 0 && shown.every((item) => item.kind === 'notice')) {
     return [{ type: 'notes', key: shown[0]?.id ?? '', itemIds: shown.map((item) => item.id) }]
   }
-  // 提醒收尾的回合只是补调一次收尾，模型顺口说的“好的”不算回答：都收进过程，建议的卡片照样露在外面
-  const remind = shown[0]?.kind === 'userMessage' && shown[0].remind === true
+  // 提醒收尾的回合对用户透明：那是设备进程替用户提醒模型补调一次收尾，提醒本身、模型顺口说的话、过程都不画，
+  // 只留收尾带出来的卡片（建议、问题）
+  if (shown[0]?.kind === 'userMessage' && shown[0].remind === true) return remindBlocks(shown)
   const answers = new Set<string>()
-  if (!remind) {
-    const last = answerOf(shown)
-    if (last !== undefined) answers.add(last)
-    for (const id of answersAroundWrapUp(items)) answers.add(id)
-  }
+  const last = answerOf(shown)
+  if (last !== undefined) answers.add(last)
+  for (const id of answersAroundWrapUp(items)) answers.add(id)
   const blocks: Block[] = []
   const tail: string[] = []
   /** 往过程里加一段：接在前一段过程后面，前面不是过程就开一段新的 */
@@ -150,6 +149,16 @@ export function bucketItems(items: BlockInput[]): Block[] {
       else parts.push({ type: 'steps', key: item.id, itemIds: [item.id] })
     }
   }
+  if (tail.length > 0) blocks.push({ type: 'tail', itemIds: tail })
+  return blocks
+}
+
+/** 提醒收尾的回合画出来的：露在外面的卡片，和收尾区（建议任务、收尾的问题）。别的都不画 */
+function remindBlocks(shown: BlockInput[]): Block[] {
+  const blocks: Block[] = shown
+    .filter((item) => item.card === 'outside')
+    .map((item) => ({ type: 'card', itemId: item.id }))
+  const tail = shown.filter((item) => item.card === 'tail').map((item) => item.id)
   if (tail.length > 0) blocks.push({ type: 'tail', itemIds: tail })
   return blocks
 }

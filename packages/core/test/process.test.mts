@@ -295,7 +295,7 @@ test('分块：新顺序“干活 → 空收尾 → 完整回答”照旧；收�
       { type: 'answer', itemId: 'a' },
     ],
   )
-  // 提醒收尾的回合：照旧没有最终回答
+  // 提醒收尾的回合对用户透明：补调的是空收尾，什么都不画（不认最终回答）
   assert.deepEqual(
     bucketItems([
       { id: 'u', kind: 'userMessage', remind: true },
@@ -303,17 +303,7 @@ test('分块：新顺序“干活 → 空收尾 → 完整回答”照旧；收�
       { id: 'w', kind: 'toolCall', quiet: true },
       { id: 'a', kind: 'agentMessage', phase: 'final' },
     ]),
-    [
-      { type: 'user', itemId: 'u' },
-      {
-        type: 'process',
-        key: 'm',
-        parts: [
-          { type: 'note', itemId: 'm' },
-          { type: 'note', itemId: 'a' },
-        ],
-      },
-    ],
+    [],
   )
 })
 

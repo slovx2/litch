@@ -61,6 +61,8 @@ interface SessionRef {
 
 interface TurnBlocks {
   blocks: Block[]
+  /** 设备进程提醒收尾的回合（开头是 event.kind 为 remind 的用户消息） */
+  remind: boolean
   /** 最终回答那一条 */
   answerId: string | undefined
   /** 整段过程里所有条目的标识 */
@@ -102,6 +104,7 @@ function useBlocks(
     const blocks = bucketItems(inputs)
     return {
       blocks,
+      remind: inputs[0] !== undefined && 'remind' in inputs[0] && inputs[0].remind,
       answerId: blocks.find((block) => block.type === 'answer')?.itemId,
       processIds: blocks.flatMap((block) =>
         block.type === 'process' ? processItemIds(block.parts) : [],
@@ -231,7 +234,7 @@ const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { 
   const ref = useMemo(() => ({ deviceId, sessionId }), [deviceId, sessionId])
   const sessionKey = `${deviceId}:${sessionId}`
   const running = turn?.status === 'running'
-  const { blocks, answerId, processIds } = useBlocks(ref, turn?.itemIds ?? [], turn?.status)
+  const { blocks, remind, answerId, processIds } = useBlocks(ref, turn?.itemIds ?? [], turn?.status)
   const settled = useSettled(ref, running, answerId, meta?.can.finalOnStart === true)
   const working = useLasting(useWorking(ref, running, turn?.itemIds ?? NO_ITEMS), WORKING_DELAY_MS)
   const touched = useTurnTouched(sessionKey, turnId)
@@ -245,7 +248,8 @@ const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { 
     !processFolded(settled, touched, agentsRunning),
   )
   const touch = useCallback(() => touchTurn(sessionKey, turnId), [sessionKey, turnId])
-  if (!turn) return null
+  // 提醒收尾的回合对用户透明（核心的 bucketItems 只给它留卡片）：没有卡片就整个不画，有卡片也不画开头、用时和结尾
+  if (!turn || (remind && blocks.length === 0)) return null
   // 告一段落之后，第一段过程的开头是收起整段过程的那一行；没告一段落时没有这一行，过程照常摊开
   const firstProcess = blocks.findIndex((block) => block.type === 'process')
   const tail = blocks.find((block) => block.type === 'tail')
@@ -269,7 +273,7 @@ const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { 
       <section className="turn">
         {/* 后台任务结束后、定时任务触发时 harness 自己开的回合：开头一行写怎么来的 */}
         {/* 别的会话发来消息开的回合：开头那条消息自己写着来源，不再另写一行 */}
-        {turn.origin && turn.origin !== 'peer' ? (
+        {turn.origin && turn.origin !== 'peer' && !remind ? (
           <TurnOrigin
             deviceId={deviceId}
             sessionId={sessionId}
@@ -336,7 +340,7 @@ const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { 
         })}
         {/* 回合级的出错框只给失败的回合（官方桌面端也是这样）：被打断的回合对面就算带了一句错误
           （旧版 Claude Code 入口带过 interrupted），也只在结尾写“已中断”，不画红框 */}
-        {turn.status === 'failed' && turn.error ? (
+        {turn.status === 'failed' && turn.error && !remind ? (
           <div className="errbox">
             <span>{turn.error}</span>
           </div>
@@ -344,7 +348,7 @@ const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { 
         {/* 建议任务的卡片和收尾留的问题：固定在回合最下方（最终回答下面），不随回答往上冲 */}
         {tail ? <TurnTail {...ref} turnId={turnId} itemIds={tail.itemIds} /> : null}
         {/* 回合在跑时这一格一直占着位置，正文出字时隐去（只改透明度，不跟着跳）；用时从回合开始算，隐去时照样走 */}
-        {running ? (
+        {remind ? null : running ? (
           <div
             className="running-line slot"
             data-anchor={`t:${turnId}`}
