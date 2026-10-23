@@ -63,6 +63,8 @@ export function onEvent(server: PiServer, thread: PiThread, event: any): void {
         notices: [],
       }
       server.active.set(thread.id, active)
+      // 后台 shell 结束时交给 Pi 的消息开的这一轮：记下来历（只给声明了 backgroundTasks 的连接看）
+      server.takeOrigin(thread.id, turn.id)
       live.session.sessionManager.appendCustomEntry('codex-harness-adapter-turn', {
         id: turn.id,
         startedAt: turn.startedAt,

@@ -24,8 +24,9 @@ const ASKING: HarnessFeatures['approvals'] = {
 }
 const SILENT: HarnessFeatures['approvals'] = { kinds: [], uncovered: [] }
 
-// 别的能力位开没开审批都一样。
-const features = (approvals: boolean): HarnessFeatures => ({
+// 别的能力位开没开审批都一样。backgroundShell：注入的后台 shell（设置 harness.pi.backgroundShell）开着，
+// 会报后台任务的集合（server.mts 的 shells）。
+const features = (approvals: boolean, backgroundShell: boolean): HarnessFeatures => ({
   steer: true,
   interrupt: true,
   compact: true,
@@ -50,6 +51,7 @@ const features = (approvals: boolean): HarnessFeatures => ({
   // 一段话是过程说明还是最终回答取决于这次请求的停止原因，流式过程中还没有：
   // 开始时报的阶段值不能信，消息结束时才准。
   agentMessagePhase: 'onCompleted',
+  ...(backgroundShell ? { backgroundTasks: true } : {}),
 })
 
 // Pi 没有沙箱，所以一直是“完全访问”这一档，没得选；问不问跟着设置走，说明照实写。
@@ -64,8 +66,22 @@ const ASKING_PRESET: CapabilityText = {
   en: 'No sandbox. In the main session it asks you before running commands, changing files or calling other tools with side effects; actions inside subagents are not asked about. Asking only gives you a look first and is not a security boundary',
 }
 
-/** approvals：这次运行打没打开审批（approvals.mts 的 approvalsEnabled） */
-export function harnessDeclaration(approvals: boolean): HarnessDeclaration {
+/**
+ * approvals：这次运行打没打开审批（approvals.mts 的 approvalsEnabled）；backgroundShell：打没打开注入的后台 shell
+ * （shared/src/background-shell.mts 的 backgroundShellEnabled）
+ */
+export function harnessDeclaration(
+  approvals: boolean,
+  backgroundShell = false,
+): HarnessDeclaration {
+  const extensions = approvals
+    ? [
+        EXTENSION.declineWithNote,
+        EXTENSION.planConfirmation,
+        EXTENSION.clientTools,
+        EXTENSION.harnessConfig,
+      ]
+    : [EXTENSION.planConfirmation, EXTENSION.clientTools, EXTENSION.harnessConfig]
   return {
     // 名字和徽标不在这里写：和设置里这一组的标题是同一个出处
     ...HARNESS_IDENTITY.pi,
@@ -73,15 +89,9 @@ export function harnessDeclaration(approvals: boolean): HarnessDeclaration {
     // 只对声明了 planConfirmation 的连接问，没声明的由客户端在回合结束后自己问（ui.mts）。
     // litch_ 命名空间的动态工具只交给声明了 clientTools 的连接（server.mts 的 call）。
     // litch/harness/* 读写 Pi 自己的配置文件（harness-config.mts），配置变化和登录进展只通知声明了它的连接。
-    extensions: approvals
-      ? [
-          EXTENSION.declineWithNote,
-          EXTENSION.planConfirmation,
-          EXTENSION.clientTools,
-          EXTENSION.harnessConfig,
-        ]
-      : [EXTENSION.planConfirmation, EXTENSION.clientTools, EXTENSION.harnessConfig],
-    features: features(approvals),
+    // 后台 shell 开着时，后台任务的集合、回合的来历只给声明了 backgroundTasks 的连接。
+    extensions: backgroundShell ? [...extensions, EXTENSION.backgroundTasks] : extensions,
+    features: features(approvals, backgroundShell),
     permissionPresets: [
       {
         ...builtinPreset(PRESET.fullAccess, approvals ? ASKING_PRESET : SILENT_PRESET, {

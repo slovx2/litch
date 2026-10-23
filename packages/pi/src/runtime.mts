@@ -7,6 +7,11 @@ import type {
   ExtensionUIContext,
   InlineExtension,
 } from '@earendil-works/pi-coding-agent'
+import type { ClientToolNamespaceSpec } from '../../protocol/src/client-tools.mjs'
+import {
+  BACKGROUND_SHELL_NAMESPACE,
+  type ShellToolResult,
+} from '../../shared/src/background-shell.mjs'
 import { ProtocolError } from '../../shared/src/protocol-contract.mjs'
 import type { ToolCallAsk, ToolCallBlock } from './approvals.mjs'
 import {
@@ -34,7 +39,18 @@ export interface SessionHost {
   tool(tool: ClientTool, args: unknown, id: string, signal?: AbortSignal): Promise<any>
   /** 工具执行之前问用户（approvals.mts）。没打开审批时不给这一项，Pi 那边就不挂这道钩子 */
   approve?: (ask: ToolCallAsk) => Promise<ToolCallBlock | undefined>
+  /**
+   * 注入的后台 shell（shared/src/background-shell.mts）：工具由入口自己执行，不经客户端。
+   * 没打开时不给这一项，模型看不到这几个工具
+   */
+  shell?: {
+    spec: ClientToolNamespaceSpec
+    run(tool: string, args: unknown, id: string, signal?: AbortSignal): Promise<ShellToolResult>
+  }
 }
+
+/** 后台 shell 的工具在 Pi 里叫这个名字（Pi 没有命名空间，拼起来）：litch_shell_start 这样 */
+export const shellToolName = (tool: string): string => `${BACKGROUND_SHELL_NAMESPACE}_${tool}`
 export interface LiveSession {
   session: AgentSession
   loader: DefaultResourceLoader
@@ -197,16 +213,19 @@ export async function openSession(
     settingsManager,
     sessionManager: manager,
     resourceLoader: loader,
-    customTools: clientTools(thread.dynamicTools).map((tool) => ({
-      name: tool.piName,
-      label: tool.name,
-      description: toolDescription(tool),
-      parameters: tool.inputSchema as any,
-      async execute(id: string, args: unknown, signal?: AbortSignal) {
-        const result = await host.tool(tool, args, id, signal)
-        return { content: clientToolContent(result), details: result }
-      },
-    })),
+    customTools: [
+      ...clientTools(thread.dynamicTools).map((tool) => ({
+        name: tool.piName,
+        label: tool.name,
+        description: toolDescription(tool),
+        parameters: tool.inputSchema as any,
+        async execute(id: string, args: unknown, signal?: AbortSignal) {
+          const result = await host.tool(tool, args, id, signal)
+          return { content: clientToolContent(result), details: result }
+        },
+      })),
+      ...shellTools(host),
+    ],
   })
   session.subscribe(host.emit)
   // 官方扩展 sendUserMessage 是 fire-and-forget。跟踪公开方法的原始 Promise，
@@ -297,6 +316,30 @@ export async function openSession(
     },
   }
   return live
+}
+
+/** 后台 shell 的几个工具，交给 Pi 时和动态工具一样：说明前面带着 [litch_shell.start]，命名空间的说明挂在第一个上 */
+function shellTools(host: SessionHost) {
+  const shell = host.shell
+  if (!shell) return []
+  return shell.spec.tools.map((tool, index) => ({
+    name: shellToolName(tool.name),
+    label: tool.name,
+    description: toolDescription({
+      name: tool.name,
+      namespace: shell.spec.name,
+      ...(index === 0 ? { namespaceDescription: shell.spec.description } : {}),
+      description: tool.description,
+      inputSchema: tool.inputSchema,
+    }),
+    parameters: tool.inputSchema as any,
+    async execute(id: string, args: unknown, signal?: AbortSignal) {
+      const result = await shell.run(tool.name, args, id, signal)
+      // 失败照 Pi 的规矩抛错：Pi 把错误信息交给模型、条目记成失败
+      if (result.isError) throw new Error(result.text)
+      return { content: [{ type: 'text' as const, text: result.text }], details: result }
+    },
+  }))
 }
 
 export function planState(session: AgentSession): any {

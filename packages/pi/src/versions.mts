@@ -30,8 +30,11 @@ export function hostPi(): HostPi {
   return host
 }
 
-/** approvals：这次运行打没打开审批，声明里的审批种类、权限预设的说明跟着它走 */
-export function runtimeInfo(approvals: boolean) {
+/**
+ * approvals：这次运行打没打开审批，声明里的审批种类、权限预设的说明跟着它走；
+ * backgroundShell：打没打开注入的后台 shell，声明里的 backgroundTasks 跟着它走
+ */
+export function runtimeInfo(approvals: boolean, backgroundShell = false) {
   const pi = hostPi()
   const installed = installedVersions()
   validateInstalledVersions(installed)
@@ -56,7 +59,7 @@ export function runtimeInfo(approvals: boolean) {
     ],
     releaseReady: false,
     // 结构化的声明：显示名、徽标、能力位、权限预设、支持的扩展。上面那份字符串清单原样留着。
-    ...harnessDeclaration(approvals),
+    ...harnessDeclaration(approvals, backgroundShell),
   }
 }
 
