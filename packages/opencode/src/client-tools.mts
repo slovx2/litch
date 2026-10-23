@@ -1,11 +1,13 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
+import { isAbsolute, relative } from 'node:path'
 import { type ClientToolCallResponse, clientToolFailure } from '../../protocol/src/client-tools.mjs'
 import {
   BACKGROUND_SHELL_NAMESPACE,
   backgroundShellSpec,
   runShellTool,
   SHELL_START_TOOL,
+  shellCwd,
 } from '../../shared/src/background-shell.mjs'
 import {
   clientToolNamespaces,
@@ -16,6 +18,7 @@ import {
 import { ProtocolError, requiredString } from '../../shared/src/protocol-contract.mjs'
 import type { RpcPeer } from '../../shared/src/types.mjs'
 import type { OpencodeApi } from './api.mjs'
+import { approve, DECLINED_MESSAGE } from './approvals.mjs'
 import type { LiveThread, OpencodeServer, Preset } from './server.mjs'
 
 // 动态工具（thread/start.dynamicTools），含客户端工具（clientTools 扩展，protocol/extensions/client-tools.json）。
@@ -189,6 +192,8 @@ export class ClientTools {
   private readonly waiters = new Set<() => void>()
   /** 正在执行的 MCP 调用：会话号 + JSON-RPC 请求号 → 取消 */
   private readonly calls = new Map<string, AbortController>()
+  /** 后台命令在项目外跑、用户答了“本会话都允许”的目录（含子目录）：会话号 → 目录。只在内存里 */
+  private readonly outside = new Map<string, Set<string>>()
   private readonly secret = randomBytes(24).toString('base64url')
   private http: Server | null = null
   private listening: Promise<string> | null = null
@@ -472,6 +477,46 @@ export class ClientTools {
     }
   }
 
+  /**
+   * 后台命令要在项目目录之外跑：照 OpenCode 自己对项目外目录的默认（external_directory 要问），经同一条审批的路问一次。
+   * 完全访问的不问（OpenCode 要问的那时一律放行）；“本会话都允许”记下那个目录，之后它和它下面的不再问。
+   * 返回拒绝时给模型的话，放行返回 null
+   */
+  private async outsideDirectory(
+    live: LiveThread,
+    callId: string,
+    args: unknown,
+    signal: AbortSignal,
+  ): Promise<string | null> {
+    const given = (args as { cwd?: unknown } | null)?.cwd
+    const cwd = shellCwd(live.directory, typeof given === 'string' ? given : undefined)
+    const inside = (root: string) => {
+      const path = relative(root, cwd)
+      return path === '' || (!path.startsWith('..') && !isAbsolute(path))
+    }
+    const threadId = live.projection.thread.id
+    if (inside(live.directory)) return null
+    if ((live.turnPreset ?? live.settings.preset) === ':danger-full-access') return null
+    if ([...(this.outside.get(threadId) ?? [])].some(inside)) return null
+    const answer = await approve(
+      this.server,
+      live,
+      {
+        id: callId,
+        sessionID: threadId,
+        permission: 'external_directory',
+        patterns: [cwd],
+        tool: { callID: callId },
+      },
+      signal,
+    )
+    if (answer.interrupt) void this.server.turns.interrupt(threadId)
+    if (answer.reply === 'always')
+      this.outside.set(threadId, new Set([...(this.outside.get(threadId) ?? []), cwd]))
+    if (answer.reply === 'reject') return answer.message ?? DECLINED_MESSAGE
+    return null
+  }
+
   /** 模型调了一个动态工具：交给执行方，等它答 */
   private async call(
     threadId: string,
@@ -486,6 +531,10 @@ export class ClientTools {
     const turnId = live.projection.active?.id ?? ''
     // 后台 shell 由入口自己执行
     if (spec.namespace === BACKGROUND_SHELL_NAMESPACE && this.server.shells) {
+      if (spec.tool === SHELL_START_TOOL) {
+        const denied = await this.outsideDirectory(live, callId, args, signal)
+        if (denied) return { success: false, contentItems: [{ type: 'inputText', text: denied }] }
+      }
       const result = await runShellTool(
         this.server.shells,
         {

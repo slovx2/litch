@@ -18,6 +18,7 @@ import {
   runShellTool,
   SHELL_START_TOOL,
   type ShellTask,
+  shellCwd,
 } from '../../shared/src/background-shell.mjs'
 import {
   clientToolNamespaces,
@@ -71,6 +72,8 @@ const TURN_ORIGIN_META = 'turnOrigin'
 const SHELL_EVENT_MESSAGE = 'litch-background-event'
 /** 唤醒时会话已经卸载、要装回来：装载要一条连接当发起方，这时可能谁都没连着，用这条不在连接表里的占位 */
 const BACKGROUND_PEER: RpcPeer = { id: 'codex-harness-adapter:background', send() {}, close() {} }
+/** 唤醒时 Pi 还没闲下来，隔多久再看 */
+const WAKE_RETRY_MS = 200
 
 export interface ActiveTurn {
   thread: PiThread
@@ -181,12 +184,15 @@ export class PiServer {
 
   /** 后台 shell 的集合变了：整份发给所有声明过 backgroundTasks 的连接（不只是订阅者，侧栏要标没打开的会话） */
   publishBackground(threadId: string): void {
+    // 临时会话的不发（只有建它的连接知道它）
+    if (this.store.ephemeral(threadId)) return
     const params = { threadId, tasks: this.report.tasks(threadId), wakesOnFinish: true }
     this.notifyExtension(EXTENSION.backgroundTasks, BACKGROUND_TASKS_NOTIFICATION.changed, params)
   }
   /**
-   * 后台 shell 自己结束了：把结果作为一条不显示的消息交给 Pi，让它接着做。会话闲着就开一轮（记成后台任务唤醒的），
-   * 正在跑就排在这一轮后面（Pi 的 followUp：这一轮做完前交给模型）。会话卸载了先装回来
+   * 后台 shell 自己结束了：把结果作为一条不显示的消息交给 Pi，开一轮让它接着做（记成后台任务唤醒的）。
+   * 有回合在跑（Litch 记着的，包括刚 turn/start、Pi 还没开始跑的那一段和收尾那一段）就等它结束再看：
+   * 不并进别人的回合，免得和用户的 prompt 抢跑、被打断时随队列一起清掉。会话卸载了先装回来
    */
   private async wake(threadId: string, tasks: ShellTask[]): Promise<void> {
     if (this.closing) return
@@ -197,12 +203,37 @@ export class PiServer {
       return
     }
     const text = await formatShellEvent(tasks)
-    const live = this.sessions.get(threadId) ?? (await this.load(thread, BACKGROUND_PEER))
-    if (!this.active.has(threadId)) this.pendingOrigins.set(threadId, 'backgroundTask')
-    await live.session.sendCustomMessage(
-      { customType: SHELL_EVENT_MESSAGE, content: text, display: false },
-      { triggerTurn: true, deliverAs: 'followUp' },
-    )
+    while (!this.closing) {
+      const busy = this.active.get(threadId)
+      if (busy) {
+        await busy.done
+        continue
+      }
+      const started = await this.serial(threadId, async () => {
+        if (this.closing) return true
+        if (this.active.has(threadId)) return false
+        const live = this.sessions.get(threadId) ?? (await this.load(thread, BACKGROUND_PEER))
+        if (!live.session.isIdle || live.hasPendingInputs()) return false
+        // Pi 同步标成在跑（之后 ensureIdle 拒掉客户端的 turn/start），agent_start 时 turn.mts 取走来历。
+        // 整轮跑完才返回，不在锁里等
+        this.pendingOrigins.set(threadId, 'backgroundTask')
+        live.session
+          .sendCustomMessage(
+            { customType: SHELL_EVENT_MESSAGE, content: text, display: false },
+            { triggerTurn: true },
+          )
+          .catch((error) => {
+            this.pendingOrigins.delete(threadId)
+            this.notify(threadId, 'warning', {
+              message: `后台命令结束后没能叫醒 Pi：${error instanceof Error ? error.message : String(error)}`,
+            })
+          })
+        return true
+      })
+      if (started) return
+      // Pi 自己还没闲下来（压缩、扩展在等输入）：过一会儿再看
+      await new Promise((resolve) => setTimeout(resolve, WAKE_RETRY_MS))
+    }
   }
   /** Pi 自己开了一轮（不是客户端发起的）：要是在等后台 shell 的唤醒，这一轮记成它开的。返回来历 */
   takeOrigin(threadId: string, turnId: string): LitchTurnOrigin | undefined {
@@ -349,7 +380,10 @@ export class PiServer {
         : null
       : approvalKind(ask, client)
     if (!kind) return undefined
-    const key = grantKey(kind, ask, thread.cwd, targetPath(thread.cwd, ask.input.path))
+    // 后台命令按模型给的目录跑：卡片上、“本会话都允许”记的都是那个目录
+    const cwd =
+      shell && typeof ask.input.cwd === 'string' ? shellCwd(thread.cwd, ask.input.cwd) : thread.cwd
+    const key = grantKey(kind, ask, cwd, targetPath(thread.cwd, ask.input.path))
     if (this.grants.get(thread.id)?.has(key)) return undefined
     const active = this.active.get(thread.id)
     if (!active) return { block: true, reason: unansweredMessage('no turn in progress') }
@@ -374,7 +408,7 @@ export class PiServer {
     const request = approvalRequest(
       kind,
       { threadId: thread.id, turnId: active.turn.id, itemId: ask.toolCallId },
-      { command: commandOf(ask), cwd: thread.cwd, reason },
+      { command: commandOf(ask), cwd, reason },
     )
     let answer: ApprovalDecision
     try {

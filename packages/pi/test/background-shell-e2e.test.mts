@@ -68,7 +68,7 @@ interface Scene {
 
 async function scene(
   options: { backgroundShell: boolean; approvals?: boolean },
-  respond: (body: any, res: ServerResponse) => void,
+  respond: (body: any, res: ServerResponse) => void | Promise<void>,
   run: (scene: Scene) => Promise<void>,
 ): Promise<void> {
   const root = await mkdtemp(join(tmpdir(), 'pi-bg-shell-'))
@@ -85,7 +85,7 @@ async function scene(
     const body = JSON.parse(Buffer.concat(chunks).toString())
     bodies.push(body)
     res.writeHead(200, { 'Content-Type': 'text/event-stream' })
-    respond(body, res)
+    await respond(body, res)
     res.end('data: [DONE]\n\n')
   })
   await new Promise<void>((resolve) => http.listen(0, '127.0.0.1', resolve))
@@ -263,25 +263,30 @@ test('BG-SHELL-PI-003：关着时模型看不到工具，声明里也不报', { 
   )
 })
 
-test('BG-SHELL-PI-004：审批打开时，起后台命令照跑命令问（带命令原文），读、列不问', {
+test('BG-SHELL-PI-004：审批打开时，起后台命令照跑命令问（带命令原文和实际目录），读、列不问', {
   timeout: 60_000,
 }, async () => {
   await scene(
     { backgroundShell: true, approvals: true },
     (body, res) => {
       const results = body.messages.filter((m: any) => m.role === 'tool').length
-      if (results === 0) return call(res, 'litch_shell_start', { command: 'echo asked' })
+      if (results === 0)
+        return call(res, 'litch_shell_start', { command: 'echo asked', cwd: 'sub' })
       if (results === 1) return call(res, 'litch_shell_list', {})
       say(res, '好了')
     },
     async ({ server, cwd, litch, ok }) => {
-      const threadId = (await ok(litch, 'thread/start', { cwd, model: 'gate/gate' })).thread.id
+      const { thread } = await ok(litch, 'thread/start', { cwd, model: 'gate/gate' })
+      const threadId = thread.id
+      await mkdir(join(thread.cwd, 'sub'))
       await ok(litch, 'turn/start', { threadId, input: [{ type: 'text', text: '跑' }] })
       const asks = () => litch.messages.filter((m) => /requestApproval$/.test(String(m.method)))
       await until('来问了', () => asks().length > 0)
       const [request] = asks()
       assert.equal(request.method, 'item/commandExecution/requestApproval')
       assert.equal(request.params.command, 'echo asked')
+      // 模型给的相对目录接在会话目录后面：卡片上是实际跑的目录
+      assert.equal(request.params.cwd, join(thread.cwd, 'sub'))
       await server.handle(litch, {
         jsonrpc: '2.0',
         id: request.id,
@@ -289,6 +294,126 @@ test('BG-SHELL-PI-004：审批打开时，起后台命令照跑命令问（带�
       } as any)
       await until('回合结束', () => completed(litch).length >= 1)
       assert.equal(asks().length, 1, '只问了起命令的那一次')
+    },
+  )
+})
+
+/** 命令等这个文件出现才结束：用例自己定它什么时候结束 */
+const waitFor = (file: string) => `while [ ! -f ${file} ]; do sleep 0.05; done; echo bg-done`
+
+test('BG-SHELL-PI-005：回合进行中后台命令结束，等这一轮做完再另开一轮，不并进用户的回合', {
+  timeout: 60_000,
+}, async () => {
+  let release = () => {}
+  const held = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  await scene(
+    { backgroundShell: true },
+    async (body, res) => {
+      if (lastText(body).includes('<litch-background-event>')) return say(res, '收到后台结果')
+      if (body.messages.at(-1)?.role === 'tool') return say(res, '在跑了')
+      if (lastText(body).includes('慢慢来')) {
+        await held
+        return say(res, '慢慢做完了')
+      }
+      call(res, 'litch_shell_start', { command: waitFor('go') })
+    },
+    async ({ cwd, litch, bodies, ok }) => {
+      const { thread } = await ok(litch, 'thread/start', { cwd, model: 'gate/gate' })
+      const threadId = thread.id
+      await ok(litch, 'turn/start', { threadId, input: [{ type: 'text', text: '跑' }] })
+      await until('第一轮结束', () => completed(litch).length === 1)
+      const second = (
+        await ok(litch, 'turn/start', { threadId, input: [{ type: 'text', text: '慢慢来' }] })
+      ).turn
+      await until('第二轮问到模型', () => bodies.some((body) => lastText(body).includes('慢慢来')))
+      // 第二轮还在等模型，后台命令这时结束
+      await writeFile(join(thread.cwd, 'go'), '')
+      await until(
+        '后台命令结束',
+        () => changed(litch).at(-1)?.params.tasks[0]?.status === 'completed',
+      )
+      await pause(500)
+      assert.equal(completed(litch).length, 1, '第二轮还没完，没有被唤醒抢走')
+      release()
+      await until('唤醒的一轮结束', () => completed(litch).length === 3)
+      const [, done, wake] = completed(litch).map((m) => m.params.turn)
+      assert.equal(done.id, second.id)
+      assert.equal(done.status, 'completed')
+      assert.equal(done.litchOrigin, undefined)
+      assert.equal(wake.litchOrigin, 'backgroundTask')
+      assert.equal(wake.status, 'completed')
+      // 用户那句话照常交给了模型，那一轮的请求里没有后台的结果
+      const asked = bodies.filter((body) => lastText(body).includes('慢慢来'))
+      assert.equal(asked.length, 1)
+      assert.ok(!JSON.stringify(asked[0].messages).includes('litch-background-event'))
+      assert.ok(bodies.some((body) => lastText(body).includes('<litch-background-event>')))
+    },
+  )
+})
+
+test('BG-SHELL-PI-006：客户端全断开、会话已卸载时，后台命令结束靠占位连接装回会话再唤醒', {
+  timeout: 60_000,
+}, async () => {
+  let release = () => {}
+  const hung = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  await scene(
+    { backgroundShell: true },
+    async (body, res) => {
+      if (lastText(body).includes('<litch-background-event>')) return say(res, '后台的跑完了')
+      if (body.messages.at(-1)?.role === 'tool') return say(res, '在跑了')
+      if (lastText(body).includes('挂住')) {
+        await hung
+        return say(res, '迟了')
+      }
+      call(res, 'litch_shell_start', { command: waitFor('go') })
+    },
+    async ({ server, cwd, litch, plain, bodies, ok }) => {
+      try {
+        const { thread } = await ok(litch, 'thread/start', { cwd, model: 'gate/gate' })
+        const threadId = thread.id
+        await ok(litch, 'turn/start', { threadId, input: [{ type: 'text', text: '跑' }] })
+        await until('第一轮结束', () => completed(litch).length === 1)
+        // 打断一轮会丢掉执行会话（下次照原生会话文件装回）
+        const { turn } = await ok(litch, 'turn/start', {
+          threadId,
+          input: [{ type: 'text', text: '挂住' }],
+        })
+        await until('第二轮问到模型', () => bodies.some((body) => lastText(body).includes('挂住')))
+        await ok(litch, 'turn/interrupt', { threadId, turnId: turn.id })
+        await until('第二轮停了', () => completed(litch).length === 2)
+        assert.equal(server.sessions.has(threadId), false, '会话卸载了')
+        server.closePeer(litch)
+        server.closePeer(plain)
+        await writeFile(join(thread.cwd, 'go'), '')
+        await until('唤醒时问到模型', () =>
+          bodies.some((body) => lastText(body).includes('<litch-background-event>')),
+        )
+        // 重新连上来看：唤醒的那一轮做完了，记着来历
+        const again = recorder('again')
+        await ok(again, 'initialize', {
+          clientInfo: { name: 'again', title: null, version: '1.0.0' },
+          capabilities: { experimentalApi: true, litchExtensions: ['backgroundTasks'] },
+        })
+        let last: any
+        for (let waited = 0; waited < 30_000; waited += 50) {
+          const read = await ok(again, 'thread/read', { threadId, includeTurns: true })
+          last = read.thread.turns.at(-1)
+          if (last?.litchOrigin === 'backgroundTask' && last.status === 'completed') break
+          await pause(50)
+        }
+        assert.equal(last?.litchOrigin, 'backgroundTask', JSON.stringify(last))
+        assert.equal(last.status, 'completed')
+        assert.equal(
+          last.items.some((item: any) => item.type === 'userMessage'),
+          false,
+        )
+      } finally {
+        release()
+      }
     },
   )
 })

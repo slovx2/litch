@@ -217,3 +217,75 @@ test('运行时退出：在跑的整组结束、记 stopped、不唤醒；删会
     await cleanup()
   }
 })
+
+const alive = (pid: number | null): boolean => {
+  if (pid === null) return false
+  try {
+    process.kill(-pid, 0)
+    return true
+  } catch {
+    return false
+  }
+}
+const pause = (ms: number) => new Promise((done) => setTimeout(done, ms))
+
+test('命令把进程放到后台（x &、输出重定向走的守护进程）：shell 退出了任务还算在跑，组里都结束才算结束', async () => {
+  const { root, shells, finished, nextFinish, cleanup } = rig()
+  try {
+    // 放到后台、输出还走管道的：等它跑完，输出收得到
+    const late = shells.start('t1', { command: '(sleep 0.6; echo late) & echo early' }, root)
+    // 输出重定向走、一直不结束的：停的时候连它一起停
+    const daemon = shells.start('t1', { command: 'sleep 60 > /dev/null 2>&1 & echo started' }, root)
+    await pause(400)
+    assert.equal(shells.get('t1', late.id)?.status, 'running')
+    assert.equal(shells.get('t1', daemon.id)?.status, 'running')
+    assert.equal(finished.length, 0, 'shell 退出时没有当成结束去唤醒')
+    const finishing = nextFinish()
+    await finishing
+    assert.equal(shells.get('t1', late.id)?.status, 'completed')
+    const read = await shells.read('t1', late.id)
+    assert.match(read.output, /early[\s\S]*late/)
+    assert.deepEqual(
+      finished.flat().map((task) => task.id),
+      [late.id],
+    )
+    assert.ok(alive(daemon.pid))
+    assert.equal(shells.stop('t1', daemon.id, 'user'), true)
+    for (let i = 0; i < 100 && shells.runningCount('t1') > 0; i++) await pause(50)
+    assert.equal(shells.get('t1', daemon.id)?.status, 'stopped')
+    assert.equal(alive(daemon.pid), false, '组里放到后台的那个也停了')
+  } finally {
+    await cleanup()
+  }
+})
+
+test('运行时退出：shell 已经退出、组里还有活的也一起结束，不白等宽限', async () => {
+  const { root, shells, cleanup } = rig()
+  try {
+    const daemon = shells.start('t1', { command: 'sleep 60 > /dev/null 2>&1 &' }, root)
+    await pause(300)
+    assert.equal(shells.get('t1', daemon.id)?.status, 'running')
+    const started = Date.now()
+    await shells.close()
+    assert.ok(Date.now() - started < 2_000, `close 用了 ${Date.now() - started}ms`)
+    assert.equal(shells.get('t1', daemon.id)?.stoppedBy, 'shutdown')
+    assert.equal(alive(daemon.pid), false)
+  } finally {
+    await cleanup()
+  }
+})
+
+test('日志写不进去（目录没了）：运行时不退出，任务照常结束、输出照样计数', async () => {
+  const { root, shells, nextFinish, cleanup } = rig()
+  try {
+    const finishing = nextFinish()
+    const task = shells.start('t1', { command: 'echo lost' }, root)
+    // 日志文件是异步打开的：这时把目录删掉，打开就失败
+    rmSync(join(root, 'logs', 't1'), { recursive: true, force: true })
+    await finishing
+    assert.equal(shells.get('t1', task.id)?.status, 'completed')
+    assert.ok((shells.get('t1', task.id)?.totalBytes ?? 0) > 0)
+  } finally {
+    await cleanup()
+  }
+})
