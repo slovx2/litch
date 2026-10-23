@@ -7,7 +7,13 @@ import { PALETTES } from '../src/ui/palettes.ts'
 const themes = Object.entries(PALETTES).flatMap(([skin, pair]) =>
   Object.entries(pair).map(([mode, c]) => ({
     name: `${skin}/${mode}`,
-    theme: { skin, c, font: { mono: 'monospace', size: {} }, radius: { s: 0, m: 0, l: 0 } },
+    theme: {
+      skin,
+      dark: mode === 'dark',
+      c,
+      font: { mono: 'monospace', size: {} },
+      radius: { s: 0, m: 0, l: 0 },
+    },
   })),
 )
 
@@ -134,6 +140,40 @@ for (const { name, theme } of themes) {
     assert.ok(contrast(over(style.thematicBreak.color, ground), ground) >= 1.3)
   })
 }
+
+/** 组件给深底配的那套上色里要换掉的记号（运算符、标点、变量、内嵌的跟着代码块的字色，不用写） */
+const SYNTAX_KEYS = [
+  'comment',
+  'keyword',
+  'string',
+  'number',
+  'constant',
+  'function',
+  'type',
+  'property',
+  'attribute',
+  'tag',
+]
+
+for (const { name, theme } of themes) {
+  test(`${name}：代码上色每种记号都写了，在代码块的底上看得清`, () => {
+    const { codeBlock } = markdownStyleOf(theme)
+    for (const key of SYNTAX_KEYS) {
+      const color = codeBlock.syntaxColors?.[key]
+      assert.equal(typeof color, 'string', `syntaxColors.${key} 没写`)
+      const ratio = contrast(color, codeBlock.backgroundColor)
+      // 和桌面端同一套颜色：注释是三级字，其余是线色，按非正文的大字标准 3:1
+      assert.ok(ratio >= 3, `syntaxColors.${key} ${ratio.toFixed(2)}`)
+    }
+  })
+}
+
+test('浅色复古另配了更深的代码颜色，深色用皮肤的线色', () => {
+  const light = themes.find((t) => t.name === 'retro/light').theme
+  const dark = themes.find((t) => t.name === 'retro/dark').theme
+  assert.equal(markdownStyleOf(light).codeBlock.syntaxColors.string, '#0b6b3d')
+  assert.equal(markdownStyleOf(dark).codeBlock.syntaxColors.string, dark.c.wire.green)
+})
 
 test('同一套配色拿到的是同一个样式对象（组件不因此重新排版）', () => {
   const [{ theme }] = themes
