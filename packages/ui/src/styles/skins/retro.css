@@ -293,12 +293,13 @@
   background: var(--err);
   border-color: var(--err);
 }
-/* 选择器：方括号括起来的当前值，弹出来的是带硬投影的菜单，选中的那一项反白 */
-[data-skin="retro"] .pick-btn::before {
+/* 选择器：方括号括起来的当前值（值自己以方括号开头的不再套，免得成了 [[Account] Opus]），
+   弹出来的是带硬投影的菜单，选中的那一项反白 */
+[data-skin="retro"] .pick-btn:not([data-bracketed])::before {
   content: "[";
   color: var(--ink-3);
 }
-[data-skin="retro"] .pick-btn::after {
+[data-skin="retro"] .pick-btn:not([data-bracketed])::after {
   content: "]";
   color: var(--ink-3);
 }

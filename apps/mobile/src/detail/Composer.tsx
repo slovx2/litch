@@ -21,6 +21,7 @@ import { BackgroundBar } from './background/BackgroundBar'
 import { ComposeBox, useDraft } from './composer/ComposeBox'
 import { draftKey, type SessionExtra } from './composer/drafts'
 import { downHarness, useComposeOptions } from './composer/options'
+import { ProviderSwitch } from './composer/ProviderSwitch'
 import { QueueTray } from './composer/QueueTray'
 import { SettingsBar } from './composer/SettingsBar'
 import { GoalBar } from './goal/GoalBar'
@@ -140,6 +141,14 @@ export function Composer({
             <GoalBar store={store} onError={setError} />
             {/* 后台还有任务在跑（回合在不在跑都一样）：一行，只说有几个，点开从底部列出来 */}
             <BackgroundBar store={store} />
+            {/* 下一轮要换到别的供应商：提示一行 */}
+            <ProviderSwitch
+              sessionId={sessionId}
+              harness={meta.harness}
+              model={meta.settings.model}
+              running={running}
+              options={options}
+            />
             <QueueTray
               queued={meta.queued}
               running={running}

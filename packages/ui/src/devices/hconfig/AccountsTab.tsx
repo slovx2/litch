@@ -666,7 +666,7 @@ function Discover({
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [asking, setAsking] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
-  const ready = provider !== null && provider.auth.signedIn
+  const ready = provider?.auth.signedIn === true
   const ask = async () => {
     if (!provider) return
     setAsking(true)
