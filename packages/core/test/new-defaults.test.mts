@@ -160,6 +160,15 @@ test('新建页：选了的优先；换了模型时配置的强度这个模型�
   assert.equal(newSessionSettings({}, configured, declared).permission, null)
 })
 
+test('新建页：一档强度也没得选的模型不发强度，它报的默认档、配置里的、选过的都不发', () => {
+  // DSH 没配推理档的模型：model/list 报默认档 off、可选的一档没有，发了 off 整个选择被拒
+  const plain = { ...options, models: [...options.models, option('plain/flat', [], 'off')] }
+  assert.equal(newSessionSettings({ model: 'plain/flat' }, null, plain).effort, null)
+  const configured = defaults({ model: 'plain/flat', effort: 'high' })
+  assert.equal(newSessionSettings({}, configured, plain).effort, null)
+  assert.equal(newSessionSettings({ effort: 'low' }, configured, plain).effort, null)
+})
+
 test('新建页的速度：选了的、配置的得是标准或这个模型有的那一档，不然不发；显示时没选的是模型自己的默认档', () => {
   // 选了标准：发 default（不发的话 gpt-5.5 用的是它默认的快速）
   assert.equal(newSessionSettings({ speed: STANDARD_SPEED }, null, options).speed, 'default')

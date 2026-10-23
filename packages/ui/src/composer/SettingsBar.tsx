@@ -115,10 +115,11 @@ export function SettingsBar({ options, settings, fresh, onChange }: SettingsBarP
   const pickModel = (id: string) => {
     const next = options.models.find((entry) => entry.id === id)
     // 新模型没有现在这一档强度，就换成它默认的那一档。现在用的本来就是模型的默认档（强度是 null）的，
-    // 换了模型还是跟着新模型的默认档走，不替它定一档
+    // 换了模型还是跟着新模型的默认档走，不替它定一档。新模型一档也没得选的，不发强度（它报的默认档对面不一定认）
     const keep =
       settings.effort === null || next?.efforts.some((effort) => effort.id === settings.effort)
-    onChange({ model: id, ...(keep || !next?.defaultEffort ? {} : { effort: next.defaultEffort }) })
+    const fallback = next?.efforts.length ? next.defaultEffort : null
+    onChange({ model: id, ...(keep || !fallback ? {} : { effort: fallback }) })
   }
 
   // 只有一档的（没得选）：它就是现在这一档，对面没说也这样显示

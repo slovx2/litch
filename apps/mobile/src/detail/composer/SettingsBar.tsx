@@ -153,10 +153,12 @@ export function SettingsBar({
 
   const pickModel = (id: string) => {
     const next = options.models.find((entry) => entry.id === id)
-    // 现在用的本来就是模型的默认档（强度是 null）的，换了模型还跟着新模型的默认档走
+    // 现在用的本来就是模型的默认档（强度是 null）的，换了模型还跟着新模型的默认档走。
+    // 新模型一档也没得选的，不发强度（它报的默认档对面不一定认）
     const keep =
       settings.effort === null || next?.efforts.some((entry) => entry.id === settings.effort)
-    onChange({ model: id, ...(keep || !next?.defaultEffort ? {} : { effort: next.defaultEffort }) })
+    const fallback = next?.efforts.length ? next.defaultEffort : null
+    onChange({ model: id, ...(keep || !fallback ? {} : { effort: fallback }) })
   }
   const pickPermission = (id: string) => {
     const preset = options.permissions.find((entry) => entry.id === id)

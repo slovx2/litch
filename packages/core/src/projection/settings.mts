@@ -190,6 +190,7 @@ export function projectDefaults(
  * defaults 是对面不带设置新建时会用的（还没问到是 null）。
  * - 模型：选了的；没选是对面的默认（不在清单里也照样是它，会话就用它）；对面没说是清单里标了默认的，再没有是第一个。
  * - 强度：选了的、对面默认的，得是这个模型有的那一档；都不是就是这个模型自己的默认档。
+ *   一档也没得选的模型是 null（不发）：它报的默认档不一定是对面认的值，DSH 没配推理档的模型报 off，发了整个选择被拒。
  *   不在清单里的模型不知道它有哪几档，选了的、默认的照用。
  * - 速度：选了的、对面默认的，得是标准或者这个模型有的那一档；都不是就是 null（不发，用模型自己的默认档）。
  *   不在清单里的模型不知道它有哪几档，不发。
@@ -207,7 +208,9 @@ export function newSessionSettings(
   const option = listed(model)
   const fits = (effort: string | null | undefined): effort is string =>
     Boolean(effort) && (!option || option.efforts.some((entry) => entry.id === effort))
-  const effort = [picks.effort, defaults?.effort].find(fits) ?? option?.defaultEffort ?? null
+  const effort =
+    [picks.effort, defaults?.effort].find(fits) ??
+    (option?.efforts.length ? option.defaultEffort : null)
   const offered = (speed: string | null | undefined): speed is string =>
     Boolean(option?.speeds.length) &&
     (speed === STANDARD_SPEED || Boolean(option?.speeds.some((entry) => entry.id === speed)))
