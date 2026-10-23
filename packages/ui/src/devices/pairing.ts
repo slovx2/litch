@@ -124,3 +124,19 @@ export const finalState = (state: PairState): boolean =>
  * 完成、拒绝、被别处作废的也不换，等人点。
  */
 export const refreshes = (state: PairState): boolean => state === 'waiting' || state === 'expired'
+
+/** 主机下拉里一项是哪种写法：IP、MagicDNS 全名、短名（核心的 tailnetHosts 给的就是这三种） */
+export type HostKind = 'ip' | 'long' | 'short'
+
+export const hostKind = (host: string): HostKind =>
+  host.includes(':') || /^\d{1,3}(\.\d{1,3}){3}$/.test(host)
+    ? 'ip'
+    : host.includes('.')
+      ? 'long'
+      : 'short'
+
+export const HOST_KIND_LABEL: Record<HostKind, MessageKey> = {
+  ip: 'pairing.host.ip',
+  long: 'pairing.host.long',
+  short: 'pairing.host.short',
+}

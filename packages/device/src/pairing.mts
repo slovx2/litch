@@ -32,6 +32,7 @@ import {
   type PairPhoneRequest,
   type PairState,
   type PairStatus,
+  type PairTailnet,
 } from '../../protocol/src/device-pairing.mjs'
 import { expiryTime, preferredHostKey, type SshdVersion } from './pair-host.mjs'
 import {
@@ -93,6 +94,8 @@ export interface PairingConfig {
   sshdVersion(): Promise<SshdVersion | null>
   /** 这台机器开着 Tailscale SSH 没有（pair-host.mts 的 detectTailscaleSsh） */
   tailscaleSsh(): Promise<boolean>
+  /** 这台机器在 tailnet 里的名字和地址（pair-host.mts 的 detectTailnet）。不给当作没有 */
+  tailnet?(): Promise<PairTailnet | null>
   platform?: NodeJS.Platform
   clock?: PairingClock
   /** 设备上的主机名和用户名，默认取系统的 */
@@ -144,6 +147,7 @@ export class DevicePairing {
   private readonly pairs = new Map<string, Pair>()
   private version: Promise<SshdVersion | null> | null = null
   private tailscale: { at: number; value: Promise<boolean> } | null = null
+  private tailnetSelf: { at: number; value: Promise<PairTailnet | null> } | null = null
   /** 已绑定手机的通知排的队 */
   private notices: Promise<void> = Promise.resolve()
   private closed = false
@@ -220,7 +224,11 @@ export class DevicePairing {
     const hostKey = preferredHostKey(hostKeys)
     if (!hostKey) throw new PairingError(DEVICE_PAIR_ERROR.noHostKey, '读不到这台机器的主机钥匙')
     this.version ??= this.config.sshdVersion().catch(() => null)
-    const [version, tailscaleSsh] = await Promise.all([this.version, this.tailscaleSsh()])
+    const [version, tailscaleSsh, tailnet] = await Promise.all([
+      this.version,
+      this.tailscaleSsh(),
+      this.tailnet(),
+    ])
     if (this.closed) throw new PairingError(DEVICE_PAIR_ERROR.unsupported, '设备服务正在关闭')
     const id = newPairId()
     const expiresAt = this.clock.now() + PAIR_TTL_MS
@@ -261,6 +269,7 @@ export class DevicePairing {
       hostname: this.config.hostname ?? osHostname(),
       user: this.config.user ?? currentUser(),
       tailscaleSsh,
+      ...(tailnet ? { tailnet } : {}),
     }
     return key
       ? { ...base, mode: 'key', seed: key.seed }
@@ -274,6 +283,16 @@ export class DevicePairing {
       this.tailscale = { at: now, value: this.config.tailscaleSsh().catch(() => false) }
     }
     return this.tailscale.value
+  }
+
+  /** 这台机器在 tailnet 里的名字和地址，也记 TAILSCALE_CACHE_MS */
+  private tailnet(): Promise<PairTailnet | null> {
+    const now = this.clock.now()
+    if (!this.tailnetSelf || now - this.tailnetSelf.at >= TAILSCALE_CACHE_MS) {
+      const value = this.config.tailnet?.().catch(() => null) ?? Promise.resolve(null)
+      this.tailnetSelf = { at: now, value }
+    }
+    return this.tailnetSelf.value
   }
 
   private cancel(pairId: string): void {

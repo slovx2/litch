@@ -3,7 +3,7 @@ import { execFile, execFileSync } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, win32 } from 'node:path'
-import type { PairHostKey } from '../../protocol/src/device-pairing.mjs'
+import type { PairHostKey, PairTailnet } from '../../protocol/src/device-pairing.mjs'
 import { fingerprintOf } from './pair-keys.mjs'
 
 /** 测试用：钥匙文件换成这个路径（默认 ~/.ssh/authorized_keys） */
@@ -116,6 +116,42 @@ export function detectTailscaleSsh(env: NodeJS.ProcessEnv = process.env): Promis
       },
     )
   })
+}
+
+/**
+ * 这台机器在 tailnet 里的 MagicDNS 名字和地址：tailscale status --peers=false --json 的 Self。
+ * 出码的一方拿它把预填地址里的 tailnet IP 换成名字。命令不在、跑不通、看不懂、tailnet 没开 MagicDNS 都是 null
+ */
+export function detectTailnet(env: NodeJS.ProcessEnv = process.env): Promise<PairTailnet | null> {
+  return new Promise((resolve) => {
+    execFile(
+      env[TAILSCALE_CLI_ENV] || 'tailscale',
+      ['status', '--peers=false', '--json'],
+      { timeout: 3000, windowsHide: true, maxBuffer: 4 * 1024 * 1024 },
+      (error, stdout) => resolve(error ? null : parseTailnetStatus(String(stdout))),
+    )
+  })
+}
+
+/** tailscale status --json 的输出里取 Self 的名字和地址。没开 MagicDNS（名字解析不了）是 null */
+export function parseTailnetStatus(text: string): PairTailnet | null {
+  let status: {
+    Self?: { DNSName?: unknown; TailscaleIPs?: unknown } | null
+    CurrentTailnet?: { MagicDNSEnabled?: unknown } | null
+  } | null
+  try {
+    status = JSON.parse(text)
+  } catch {
+    return null
+  }
+  if (status?.CurrentTailnet?.MagicDNSEnabled !== true) return null
+  const name = status.Self?.DNSName
+  if (typeof name !== 'string' || !name.replace(/\.$/, '')) return null
+  const ips = status.Self?.TailscaleIPs
+  return {
+    name: name.replace(/\.$/, ''),
+    addresses: Array.isArray(ips) ? ips.filter((ip): ip is string => typeof ip === 'string') : [],
+  }
 }
 
 /** 跑一下，标准输出和标准错误合在一起返回，失败（包括退出码不为 0）也返回已有的输出 */

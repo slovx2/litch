@@ -49,6 +49,13 @@ type pairStartResponse struct {
 	Hostname      string        `json:"hostname"`
 	User          string        `json:"user"`
 	TailscaleSSH  bool          `json:"tailscaleSsh"`
+	// 这台机器在 tailnet 里的 MagicDNS 名和地址；老的设备服务、没开 MagicDNS 时没有
+	Tailnet *pairTailnet `json:"tailnet,omitempty"`
+}
+
+type pairTailnet struct {
+	Name      string   `json:"name"`
+	Addresses []string `json:"addresses"`
 }
 
 type pairHostKey struct {

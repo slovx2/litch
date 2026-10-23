@@ -9,7 +9,7 @@ import {
   PAIR_TTL_MS,
   type PairStatus,
 } from '../../protocol/src/device-pairing.mjs'
-import { detectTailscaleSsh } from '../src/pair-host.mjs'
+import { detectTailnet, detectTailscaleSsh, parseTailnetStatus } from '../src/pair-host.mjs'
 import { confirmCodeOf, parseEd25519Line, phoneIdOf } from '../src/pair-keys.mjs'
 import { DevicePairing, PAIR_FORGET_MS, PAIR_WAIT_MS, type PairingConfig } from '../src/pairing.mjs'
 import { FakeClock, type PairPlace, pairConfig, pairPlace, phoneKey } from './pair-kit.mjs'
@@ -456,6 +456,42 @@ test('key 方式也回 mode 和 tailscaleSsh；开没开 Tailscale SSH 记 30 �
   }
 })
 
+test('start 带这台机器在 tailnet 里的名字和地址（有才带），和 tailscaleSsh 一样记 30 秒', async () => {
+  let asked = 0
+  let self: { name: string; addresses: string[] } | null = {
+    name: 'box.tail1.ts.net',
+    addresses: ['100.101.102.103', 'fd7a:115c:a1e0::1'],
+  }
+  const r = rig({
+    tailnet: async () => {
+      asked++
+      return self
+    },
+  })
+  try {
+    const started = await r.call('litch/pair/start', { mode: 'key' })
+    assert.deepEqual(started.tailnet, {
+      name: 'box.tail1.ts.net',
+      addresses: ['100.101.102.103', 'fd7a:115c:a1e0::1'],
+    })
+    self = null
+    assert.ok((await r.call('litch/pair/start', { mode: 'tailscale' })).tailnet)
+    assert.equal(asked, 1)
+    r.clock.advance(30_000)
+    assert.equal('tailnet' in (await r.call('litch/pair/start', { mode: 'key' })), false)
+    assert.equal(asked, 2)
+  } finally {
+    r.close()
+  }
+  // 配置里没给（老的写法）：不带
+  const bare = rig()
+  try {
+    assert.equal('tailnet' in (await bare.call('litch/pair/start', { mode: 'key' })), false)
+  } finally {
+    bare.close()
+  }
+})
+
 test('mode 不认识回 -32602；Windows 上不支持 tailscale 方式', async () => {
   const r = rig()
   try {
@@ -502,6 +538,56 @@ test('detectTailscaleSsh：认 tailscale debug prefs 的 RunSSH，命令不在�
       await detectTailscaleSsh({ LITCH_TAILSCALE_CLI: join(place.root, 'missing') }),
       false,
     )
+  } finally {
+    rmSync(place.root, { recursive: true, force: true })
+  }
+})
+
+test('parseTailnetStatus：取 Self 的 MagicDNS 名（去掉末尾的点）和地址；没开 MagicDNS、看不懂是 null', () => {
+  const status = (magic: unknown, self: unknown) =>
+    JSON.stringify({ Self: self, CurrentTailnet: { Name: 'x', MagicDNSEnabled: magic } })
+  const self = {
+    HostName: 'song-debian',
+    DNSName: 'song-debian.tail2e2f6a.ts.net.',
+    TailscaleIPs: ['100.124.139.97', 'fd7a:115c:a1e0::ba34:8b64'],
+  }
+  assert.deepEqual(parseTailnetStatus(status(true, self)), {
+    name: 'song-debian.tail2e2f6a.ts.net',
+    addresses: ['100.124.139.97', 'fd7a:115c:a1e0::ba34:8b64'],
+  })
+  assert.equal(parseTailnetStatus(status(false, self)), null)
+  assert.equal(parseTailnetStatus(status(true, { ...self, DNSName: '' })), null)
+  assert.equal(parseTailnetStatus(status(true, null)), null)
+  assert.deepEqual(parseTailnetStatus(status(true, { DNSName: 'a.b.ts.net' })), {
+    name: 'a.b.ts.net',
+    addresses: [],
+  })
+  assert.equal(parseTailnetStatus('nope'), null)
+  assert.equal(parseTailnetStatus('null'), null)
+})
+
+test('detectTailnet：跑 tailscale status --peers=false --json，命令不在、跑不通是 null', {
+  skip: process.platform === 'win32',
+}, async () => {
+  const place = pairPlace()
+  try {
+    const cli = (name: string, body: string) => {
+      const file = join(place.root, name)
+      writeFileSync(file, `#!/bin/sh\n${body}\n`, { mode: 0o755 })
+      return file
+    }
+    const json =
+      '{"Self":{"DNSName":"h.t.ts.net.","TailscaleIPs":["100.64.0.9"]},"CurrentTailnet":{"MagicDNSEnabled":true}}'
+    const good = cli(
+      'ts-status',
+      `[ "$*" = "status --peers=false --json" ] || exit 2\necho '${json}'`,
+    )
+    assert.deepEqual(await detectTailnet({ LITCH_TAILSCALE_CLI: good }), {
+      name: 'h.t.ts.net',
+      addresses: ['100.64.0.9'],
+    })
+    assert.equal(await detectTailnet({ LITCH_TAILSCALE_CLI: cli('ts-fail', 'exit 1') }), null)
+    assert.equal(await detectTailnet({ LITCH_TAILSCALE_CLI: join(place.root, 'missing') }), null)
   } finally {
     rmSync(place.root, { recursive: true, force: true })
   }

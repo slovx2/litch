@@ -13,6 +13,7 @@ import {
   defaultAuthorizedKeys,
   defaultHostKeysDir,
   detectSshdVersion,
+  detectTailnet,
   detectTailscaleSsh,
   readHostKeys,
   windowsAdmin,
@@ -64,6 +65,7 @@ function pairingConfig(stateDir: string): PairingConfig {
         : null,
     sshdVersion: () => detectSshdVersion(),
     tailscaleSsh: () => detectTailscaleSsh(),
+    tailnet: () => detectTailnet(),
   }
 }
 

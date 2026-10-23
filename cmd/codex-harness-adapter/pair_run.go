@@ -264,7 +264,8 @@ func pairCallError(err error) error {
 	return err
 }
 
-// 二维码里的东西：地址四项按参数，没给就用设备服务报的主机名和用户
+// 二维码里的东西：地址四项按参数，没给就用设备服务报的主机名和用户。
+// Tailscale 方式没给 --host 时主机用这台机器的 tailnet IP：手机上的 DNS 不一定认 MagicDNS 名和系统的短主机名
 func (s *pairSession) payload(start pairStartResponse) pairPayload {
 	hostname := start.Hostname
 	if hostname == "" {
@@ -280,6 +281,9 @@ func (s *pairSession) payload(start pairStartResponse) pairPayload {
 	} else {
 		payload.Seed = start.Seed
 	}
+	if payload.Host == "" && payload.Tailscale && start.Tailnet != nil {
+		payload.Host = tailnetIP(start.Tailnet.Addresses)
+	}
 	if payload.Host == "" {
 		payload.Host = hostname
 	}
@@ -287,6 +291,19 @@ func (s *pairSession) payload(start pairStartResponse) pairPayload {
 		payload.Name = hostname
 	}
 	return payload
+}
+
+// tailnetIP：tailnet 地址里先挑 IPv4，没有就 IPv6，都没有是空的
+func tailnetIP(addresses []string) string {
+	for _, address := range addresses {
+		if !strings.Contains(address, ":") {
+			return address
+		}
+	}
+	if len(addresses) > 0 {
+		return addresses[0]
+	}
+	return ""
 }
 
 // 标准输入一行一行地交出来，读完了关掉通道
