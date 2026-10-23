@@ -1,6 +1,6 @@
 // 手机端 SSH 的 JS 接口。参数和结果在原生那一层都是 JSON 字符串，这里解析成对象。
 // 失败时原生那头的错误文字以 `[种类] ` 开头（mobile/sshtransport/errors.go），认种类见 src/platform/ssh-errors.ts
-import { requireNativeModule } from 'expo-modules-core'
+import { native } from './native'
 
 export interface SshTarget {
   host: string
@@ -50,21 +50,6 @@ export interface KeyDescription {
   publicKey: string
   fingerprint: string
 }
-
-interface Native {
-  probeHost(host: string, port: number, user: string): Promise<string>
-  runScript(target: string, script: string, marker: string): Promise<string>
-  openStream(id: string, target: string, script: string, marker: string): Promise<string>
-  streamState(id: string): Promise<string>
-  closeStream(id: string): Promise<void>
-  generateEd25519Key(): Promise<string>
-  inspectPrivateKey(privateKey: string, passphrase: string): Promise<string>
-  enrollPair(target: string, line: string): Promise<string>
-  pairConfirmCode(pairId: string, publicKey: string): Promise<string>
-  pairPhoneId(publicKey: string): Promise<string>
-}
-
-const native = requireNativeModule<Native>('LitchSsh')
 
 export const ssh = {
   async probeHost(host: string, port: number, user: string): Promise<HostKey> {

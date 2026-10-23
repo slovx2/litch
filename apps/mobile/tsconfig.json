@@ -15,5 +15,6 @@
       "@litch/core": ["../../packages/core/src/index.mts"]
     }
   },
-  "include": ["src", "modules/*/src", "index.js"]
+  "include": ["src", "modules/*/src", "index.js"],
+  "exclude": ["**/*.web.ts", "**/*.web.tsx"]
 }

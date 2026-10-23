@@ -7,7 +7,9 @@
   "main": "index.js",
   "scripts": {
     "web:build": "node scripts/build-webview-terminal.mjs && node scripts/build-webview-bench.mjs",
-    "typecheck": "npm run web:build && tsc -p tsconfig.json --noEmit",
+    "preview": "expo start --web --port 5189",
+    "preview:check": "node scripts/check-preview.mjs",
+    "typecheck": "npm run web:build && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.web.json --noEmit",
     "prebuild": "expo prebuild --platform android --no-install",
     "android:release": "npm run web:build && cd android && ./gradlew assembleRelease",
     "fixture": "node scripts/fixture.mjs",
@@ -45,8 +47,11 @@
   "devDependencies": {
     "@babel/core": "7.29.7",
     "@babel/preset-typescript": "7.29.7",
+    "@expo/metro-runtime": "57.0.16",
     "@types/react": "19.2.18",
     "babel-preset-expo": "57.0.13",
+    "react-dom": "19.2.3",
+    "react-native-web": "0.21.4",
     "typescript": "7.0.2"
   },
   "overrides": {
