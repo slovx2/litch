@@ -91,6 +91,7 @@ import type {
   SandboxLevel,
 } from '../model-tree.mjs'
 import { describeText, phrase, sameText, type Text } from '../phrase.mjs'
+import { outgoing } from '../projection/outgoing.mjs'
 import type { RequestChoice } from '../projection/requests.mjs'
 import { projectService, projectUpgrade } from '../projection/service.mjs'
 import { isAgentThread, parentOf, projectSummary, threadTitle } from '../projection/session.mjs'
@@ -105,7 +106,7 @@ import { collectThreads, type Listing, mergeListing } from './catalog.mjs'
 import { createComposeAids } from './compose.mjs'
 import { createDiffs, type Diffs } from './diffs.mjs'
 import { createExec } from './exec.mjs'
-import { channelFailure, listNames } from './faults.mjs'
+import { channelFailure, lacksMethod, listNames } from './faults.mjs'
 import { createFiles, type Files } from './files.mjs'
 import {
   codexHarness,
@@ -360,7 +361,7 @@ export interface Device {
   dismissProposal(sessionId: string, proposalId: string): Promise<void>
   /** 用户在 offer 卡上选了“新会话”（session）或“在这里做”（here） */
   answerProposal(sessionId: string, proposalId: string, choice: OfferChoice): Promise<void>
-  /** 普通提案卡上的“在这里做”：设备进程往父会话发标题加任务（在跑就排到回合后） */
+  /** 普通提案卡上的“在这里做”：“在这里做：标题”加任务当用户的话进输入队列（在跑就排到回合后，同 Claude 桌面端） */
   hereProposal(sessionId: string, proposalId: string, lead?: string): Promise<void>
   /** 这个会话下面引擎自己的子代理线程（直接的子女） */
   agents(sessionId: string): Promise<AgentThreadView[]>
@@ -2298,9 +2299,23 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     },
     async hereProposal(sessionId, proposalId, lead) {
       treeOnly()
-      await guarded(() =>
-        link.request(SESSION_TREE_METHOD.proposalHere, { proposalId, ...(lead ? { lead } : {}) }),
-      )
+      const params = { proposalId, ...(lead ? { lead } : {}) }
+      // 照 Claude 桌面端：那句话当用户的话进这边的输入队列，回合在跑就排到回合结束，界面上看得见、能撤、能插话。
+      // 会话没在界面上开着、设备进程旧（没有 markHere）的，交给设备进程发（它在回合结束后发）
+      if (live.watched(sessionId)) {
+        let text: string | null = null
+        try {
+          text = (await link.request(SESSION_TREE_METHOD.proposalMarkHere, params)).text
+        } catch (error) {
+          if (!lacksMethod(error)) throw fail(error)
+        }
+        if (text !== null) {
+          live.settleProposal(sessionId, proposalId, 'here', null)
+          await live.send(sessionId, outgoing(text), false)
+          return
+        }
+      }
+      await guarded(() => link.request(SESSION_TREE_METHOD.proposalHere, params))
       live.settleProposal(sessionId, proposalId, 'here', null)
     },
     async agents(sessionId) {

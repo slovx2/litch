@@ -245,6 +245,7 @@ import type {
   SessionProposalIdParams,
   SessionProposalListParams,
   SessionProposalListResponse,
+  SessionProposalMarkHereResult,
   SessionStartParams,
   SessionStartResponse,
 } from './session-tree.mjs'
@@ -528,6 +529,10 @@ export interface ClientRequests {
   'litch/sessionProposal/here': {
     params: SessionProposalHereParams
     result: Record<string, never>
+  }
+  'litch/sessionProposal/markHere': {
+    params: SessionProposalHereParams
+    result: SessionProposalMarkHereResult
   }
   // 以下是文件面板用的：列目录、读文件、取元数据、模糊找文件。都是协议里现成的方法，哪种对面都有。
   // 聚合面上它们由设备进程自己处理（packages/device/src/routes.mts），不转给任何引擎，所以不带 `harness`，

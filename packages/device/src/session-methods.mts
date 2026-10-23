@@ -2,7 +2,8 @@
 // packages/protocol/src/session-tree.mts）。只有聚合面有，由设备进程自己答，不转给引擎；
 // 设置里“会话编排”关着时一律回“不支持”（设备信息里这时也不列 sessionTree）。
 // 答 offer 卡（litch/sessionProposal/answer）只收握手时声明了 sessionTree 的连接：没声明的看不到 offer 卡。
-// 普通提案卡上的“在这里做”（litch/sessionProposal/here）只收 pending 的提案，往父会话发一条用户消息（session-tree.mts）。
+// 普通提案卡上的“在这里做”（litch/sessionProposal/here）只收 pending 的提案，往父会话发一条用户消息（session-tree.mts）；
+// litch/sessionProposal/markHere 只了结提案、把那句话交回给客户端，由客户端放进自己的输入队列发（看得见、能撤）。
 
 import { SESSION_TREE_METHOD, type SessionLineageKind } from '../../protocol/src/session-tree.mjs'
 import { ProtocolError, requiredString } from '../../shared/src/protocol-contract.mjs'
@@ -141,6 +142,14 @@ export async function sessionTreeCall(
         optional(fields.lead, 'lead'),
       )
       return {}
+    case SESSION_TREE_METHOD.proposalMarkHere:
+      return {
+        text: tree.proposalHere(
+          requiredString(fields.proposalId, 'proposalId'),
+          optional(fields.lead, 'lead'),
+          false,
+        ),
+      }
     default:
       throw new DeviceError('unsupported', `聚合面不支持 ${method}`, { method })
   }

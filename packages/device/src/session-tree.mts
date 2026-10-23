@@ -848,17 +848,20 @@ export class SessionTree {
   /**
    * 普通提案卡上用户点了“在这里做”（litch/sessionProposal/here）：只收 pending 的，提案记 here，往父会话发一条用户消息
    *（lead 加标题，空一行再是任务原文，不带背景）。父会话闲着当场发，在跑就排到回合结束后（check 里先发它）；
-   * 设备进程关掉时还没发出的丢掉，提案仍是 here
+   * 设备进程关掉时还没发出的丢掉，提案仍是 here。send 为 false（litch/sessionProposal/markHere）时只了结、
+   * 不发，那句话交回给客户端自己排进输入队列。返回那句话
    */
-  proposalHere(proposalId: string, lead?: string): void {
+  proposalHere(proposalId: string, lead?: string, send = true): string {
     if (this.accepting.has(proposalId))
       throw new DeviceError('unsupported', `提案 ${proposalId} 正在开始`)
     const proposal = this.pendingProposal(proposalId)
     if (!this.settleProposal(proposalId, 'here', null, ['pending']))
       throw new DeviceError('unsupported', `提案 ${proposalId} 已经了结了`)
     const text = `${lead ?? 'Do it here: '}${proposal.title}\n\n${proposal.prompt}`
+    if (!send) return text
     this.heres.set(proposal.threadId, [...(this.heres.get(proposal.threadId) ?? []), text])
     this.check(proposal.threadId)
+    return text
   }
 
   /**

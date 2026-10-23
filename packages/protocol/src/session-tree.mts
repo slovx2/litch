@@ -143,6 +143,12 @@ export const SESSION_TREE_METHOD = {
    * 父会话正在跑回合时排到回合结束后发。参数 SessionProposalHereParams，应答空对象
    */
   proposalHere: 'litch/sessionProposal/here',
+  /**
+   * 同上，但设备进程只了结提案、不发：那条消息（同 here 的写法）在应答里交回，由客户端放进自己的输入队列
+   *（回合在跑时排到回合结束，同 Claude 桌面端；界面上看得见、能撤）。参数 SessionProposalHereParams，
+   * 应答 SessionProposalMarkHereResult。旧的设备进程没有这个方法，客户端退回 here
+   */
+  proposalMarkHere: 'litch/sessionProposal/markHere',
 } as const
 
 /**
@@ -232,6 +238,11 @@ export interface SessionProposalAnswerParams extends SessionProposalIdParams {
 export interface SessionProposalHereParams extends SessionProposalIdParams {
   /** 发给父会话的那条消息的开头（界面语言的“在这里做：”）；不给用英文的 "Do it here: " */
   lead?: string
+}
+
+export interface SessionProposalMarkHereResult {
+  /** 要以用户的话发进这个会话的那条消息 */
+  text: string
 }
 
 export interface SessionProposalAcceptParams extends SessionProposalIdParams {
