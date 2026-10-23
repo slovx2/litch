@@ -7,6 +7,7 @@ import {
   type MessageExtra,
   pathTwin,
   type QueuedMessage,
+  type RequestView,
   type SessionMeta,
   type SessionSettings,
   type TurnView,
@@ -61,6 +62,7 @@ import {
   saveDraftExtras,
   saveDraftImages,
 } from './drafts.ts'
+import { ESC_WINDOW, type EscArm, escStep, listenEscape } from './escape.ts'
 import {
   EXTRAS_LIMIT,
   fileExtra,
@@ -106,6 +108,10 @@ interface ComposerProps {
   fresh?: boolean
   /** 有回合在进行：这时发的消息会排队（steerNow 时直接插进去），没字的时候主按钮是停止 */
   running: boolean
+  /** 在跑的是哪个回合：两下 Esc 得在同一个回合里按（escape.ts） */
+  turnId?: string
+  /** 有请求卡片等着回答：这时的 Esc 留给卡片（拒绝），不拿来打断 */
+  asking?: boolean
   /** 回合进行中发的消息直接插进这个回合（设置里选了立即发送、这个会话也插得了话）：主按钮照常是“发送” */
   steerNow?: boolean
   queued: QueuedMessage[]
@@ -341,6 +347,15 @@ export function Composer(props: ComposerProps) {
     })
   }
 
+  /** 按了第一下 Esc：在哪个回合里、什么时候，到点作废的计时（下面的两下 Esc 停） */
+  const [armed, setArmed] = useState(false)
+  const arm = useRef<{ at: EscArm | null; timer?: ReturnType<typeof setTimeout> }>({ at: null })
+  const disarm = useCallback(() => {
+    clearTimeout(arm.current.timer)
+    arm.current = { at: null }
+    setArmed(false)
+  }, [])
+
   const send = useCallback(() => {
     const content = text.trim()
     const attached = images
@@ -349,6 +364,7 @@ export function Composer(props: ComposerProps) {
     if (!content && attached.length === 0 && carried.length === 0 && commented.length === 0) return
     // 先清空：消息已经显示在对话里了。没发成功再把文字、图片和附带项还回来
     recalling.current = null
+    disarm()
     setText('')
     setImages([])
     setExtras([])
@@ -367,7 +383,7 @@ export function Composer(props: ComposerProps) {
         setError(failure ? failure(why) : t('composer.failed', { reason: why }))
       })
       .finally(() => setBusy(false))
-  }, [onSend, failure, draftKey, text, images, extras, comments, t])
+  }, [onSend, failure, draftKey, text, images, extras, comments, t, disarm])
 
   const stop = () => {
     setError(null)
@@ -375,6 +391,37 @@ export function Composer(props: ComposerProps) {
       setError(t('composer.interruptFailed', { reason: reasonOf(reason, t) }))
     })
   }
+
+  // 回合在跑时按两下 Esc 停（escape.ts）：第一下上膛、底栏写一句“再按一次”，2 秒内再按才停。
+  // 输入框里的字不动，停了焦点回到输入框。回合换了、停了、发了消息，上的膛都作废
+  const stopNow = useRef(stop)
+  stopNow.current = stop
+  const stoppable = running && Boolean(onStop) && !props.asking
+  const turnId = props.turnId ?? ''
+  useEffect(() => {
+    const area = input.current
+    if (!stoppable || !area) return
+    const off = listenEscape({
+      input: area,
+      handle(event) {
+        event.preventDefault()
+        const now = Date.now()
+        if (escStep(arm.current.at, turnId, now) === 'stop') {
+          disarm()
+          stopNow.current()
+          input.current?.focus({ preventScroll: true })
+          return
+        }
+        clearTimeout(arm.current.timer)
+        arm.current = { at: { turnId, at: now }, timer: setTimeout(disarm, ESC_WINDOW) }
+        setArmed(true)
+      },
+    })
+    return () => {
+      off()
+      disarm()
+    }
+  }, [stoppable, turnId, disarm])
 
   /**
    * 输入历史：光标在最前面时按上箭头，换成上一次发过的话，再按接着往前；下箭头往回，翻过头回到原来写了一半的字。
@@ -671,6 +718,11 @@ export function Composer(props: ComposerProps) {
             onChange={props.onSettings}
           />
           <span className="grow" />
+          {armed ? (
+            <span className="cmp-esc ell" role="status">
+              {t('composer.escAgain')}
+            </span>
+          ) : null}
           <ContextMeter
             usage={props.usage ?? null}
             compact={props.compact}
@@ -679,8 +731,8 @@ export function Composer(props: ComposerProps) {
           {mode === 'stop' ? (
             <button
               type="button"
-              className="send stop"
-              title={t('composer.stop')}
+              className={armed ? 'send stop armed' : 'send stop'}
+              title={t('composer.stopKeys')}
               aria-label={t('composer.stop')}
               onClick={stop}
             >
@@ -736,6 +788,7 @@ export function SessionComposer({ deviceId, sessionId, blocked }: SessionCompose
   const last = turnIds?.[turnIds.length - 1] ?? ''
   const running = useKey<TurnView>(keys.turn(deviceId, sessionId, last))?.status === 'running'
   const queued = useKey<QueuedMessage[]>(keys.queued(deviceId, sessionId)) ?? NO_QUEUE
+  const asking = (useKey<RequestView[]>(keys.requests(deviceId, sessionId))?.length ?? 0) > 0
   const settings = useKey<SessionSettings>(keys.settings(deviceId, sessionId)) ?? NO_SETTINGS
   const usage = useKey<ContextUsage | null>(keys.usage(deviceId, sessionId))
   const meta = useKey<SessionMeta>(keys.session(deviceId, sessionId))
@@ -816,6 +869,8 @@ export function SessionComposer({ deviceId, sessionId, blocked }: SessionCompose
       blocked={blocked}
       lead={<PendingNotes deviceId={deviceId} sessionId={sessionId} />}
       running={running}
+      turnId={last}
+      asking={asking}
       steerNow={whenRunning === 'steer'}
       queued={queued}
       settings={settings}

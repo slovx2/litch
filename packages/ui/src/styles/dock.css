@@ -305,6 +305,18 @@
   background: var(--ink);
   color: var(--panel);
 }
+/* 按了一下 Esc、再按一下就停：停止按钮描一圈，旁边写一句（Composer.tsx） */
+.send.stop.armed {
+  box-shadow:
+    0 0 0 2px var(--panel),
+    0 0 0 4px var(--ink-3);
+}
+.cmp-esc {
+  min-width: 0;
+  margin-right: 8px;
+  font-size: 11px;
+  color: var(--ink-2);
+}
 /* 上下文占用：小圆环加百分比。平时很淡，快满的时候换成提醒的颜色 */
 .ctx {
   flex: none;

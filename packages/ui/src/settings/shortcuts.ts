@@ -238,6 +238,16 @@ export const SHORTCUTS = [
     keys: ['Esc'],
     source: [{ file: `${UI}/composer/Suggest.tsx`, has: "if (event.key === 'Escape') {" }],
   },
+  {
+    // 两下之间不超过两秒；焦点不在输入框里也算（composer/escape.ts）
+    id: 'interrupt',
+    group: 'composer',
+    keys: ['Esc'],
+    source: [
+      { file: `${UI}/composer/escape.ts`, has: "event.key !== 'Escape'" },
+      { file: `${UI}/composer/Composer.tsx`, has: 'escStep(arm.current.at, turnId, now)' },
+    ],
+  },
 
   // ---------- 请求卡片：审批、提问、表单 ----------
   {
