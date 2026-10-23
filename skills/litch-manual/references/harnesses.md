@@ -42,6 +42,9 @@ user. Litch has no command for it. Do it yourself with the user's OK, or give th
 - Never use sudo. If npm's global folder is not writable, tell the user (they can set an npm prefix in
   their home, or use a Node version manager); do not change system folders.
 - npm must be the one on the user's login `PATH`, the same one the harness will be found with.
+  Litch's own install and update buttons also check npm's global folder (`npm prefix -g`): if the new
+  copy is not on `PATH`, or an older copy from another Node installation comes first, Litch uses the
+  new one and writes it into `harness.<id>.cliPath` (the install log says so).
 - For a remote device the command has to run on that machine: in a terminal there, or, with the user's
   OK, `ssh <alias> '<command>'` from here.
 - Afterwards make Litch pick it up: `scripts/litch harness restart <device> <id>` (it re-detects the
