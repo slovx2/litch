@@ -73,6 +73,8 @@ async function main(): Promise<void> {
         )
   for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP'])
     process.once(signal, () => void close(true).then(() => process.exit(0)))
+  // 没走到收场就退出的（未捕获的异常等）：同步杀掉还在跑的后台命令，免得留下孤儿进程组
+  process.once('exit', () => server.shells?.killAllSync())
 }
 
 /**
