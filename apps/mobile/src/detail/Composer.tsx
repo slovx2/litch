@@ -19,7 +19,7 @@ import { useChannel, useKey } from '../shell/services'
 import { useT } from '../ui/i18n'
 import { BackgroundBar } from './background/BackgroundBar'
 import { ComposeBox, useDraft } from './composer/ComposeBox'
-import { draftKey } from './composer/drafts'
+import { draftKey, type SessionExtra } from './composer/drafts'
 import { downHarness, useComposeOptions } from './composer/options'
 import { QueueTray } from './composer/QueueTray'
 import { SettingsBar } from './composer/SettingsBar'
@@ -81,8 +81,8 @@ export function Composer({
         ? t('composer.image.unsupported')
         : null
 
-  const send = async (text: string, images: ImageAttachment[], comments: CommentExtra[]) => {
-    await channel.command('session.send', { deviceId, sessionId, text, images, extras: comments })
+  const send = async (text: string, images: ImageAttachment[], extras: MessageExtra[]) => {
+    await channel.command('session.send', { deviceId, sessionId, text, images, extras })
   }
   // 输入框里的 /goal 截在这里设目标（harness 会才截），换掉没做完的目标前问的那个对话框也在这里画
   const goal = useGoalSend(deviceId, sessionId, meta, send)
@@ -107,7 +107,13 @@ export function Composer({
     channel
       .command('session.unqueue', { deviceId, sessionId, messageId: message.id })
       .catch(() => {})
-    if (edit) draft.refill(message.text, message.images, commentsIn(message.extras))
+    if (edit)
+      draft.refill(
+        message.text,
+        message.images,
+        commentsIn(message.extras),
+        sessionsIn(message.extras),
+      )
   }
 
   return (
@@ -120,6 +126,7 @@ export function Composer({
       error={error}
       markers={markers}
       inputRef={inputRef}
+      mentions={{ deviceId, sessionId }}
       onSend={goal.send}
       onStop={stop}
       onError={setError}
@@ -131,7 +138,7 @@ export function Composer({
             <SlashGoal text={draft.text} able={goalsAble} onPick={draft.setText} />
             {/* 会话的持续目标：状态、用时、目标的话，暂停或继续、清除 */}
             <GoalBar store={store} onError={setError} />
-            {/* 回合停了、后台还有任务在跑：一行，只说有几个，点开从底部列出来 */}
+            {/* 后台还有任务在跑（回合在不在跑都一样）：一行，只说有几个，点开从底部列出来 */}
             <BackgroundBar store={store} />
             <QueueTray
               queued={meta.queued}
@@ -166,3 +173,10 @@ export function Composer({
 
 const commentsIn = (extras: MessageExtra[]): CommentExtra[] =>
   extras.filter((extra): extra is CommentExtra => extra.kind === 'comment')
+
+const sessionsIn = (extras: MessageExtra[]): SessionExtra[] =>
+  extras.flatMap((extra) =>
+    extra.kind === 'session'
+      ? [{ kind: 'session', threadId: extra.threadId, title: extra.title }]
+      : [],
+  )

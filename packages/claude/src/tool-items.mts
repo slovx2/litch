@@ -2,6 +2,7 @@
 // （native-history.mts）共用这一份，两边画出来的一样。条目还没有结果；结果到了用 server-helpers 的
 // toolItemWithResult 收尾。
 import { isAbsolute, resolve } from 'node:path'
+import type { LitchPeer } from '../../protocol/src/peer-messages.mjs'
 import { mcpToolRef } from './mcp-tool-name.mjs'
 import { fileChangeFromTool } from './server-helpers.mjs'
 import type { ThreadItem } from './types.mjs'
@@ -109,6 +110,23 @@ export function toolUseItem(
     error: null,
     durationMs: null,
   }
+}
+
+/**
+ * Claude 的 SendMessage 发给了别的会话（peerMessages 扩展）：peerOf 认出收件方时条目带 litchPeer，
+ * tool 写成“SendMessage 收件方名字”，不露收件箱地址（uds:<套接字路径>）。认不出的原样返回
+ */
+export function withPeerTarget(
+  item: ThreadItem,
+  peerOf: (address: string) => LitchPeer | null,
+): ThreadItem {
+  if (item.type !== 'mcpToolCall' || item.server !== 'claude-code') return item
+  if (!/^SendMessage /.test(item.tool)) return item
+  const to = (item.arguments as { to?: unknown } | null)?.to
+  if (typeof to !== 'string' || !to.trim()) return item
+  const peer = peerOf(to.trim())
+  if (!peer) return item
+  return { ...item, tool: peer.name ? `SendMessage ${peer.name}` : item.tool, litchPeer: peer }
 }
 
 // 模型用 Read 读了一张图（结果里有图片块）：照上游 view_image 另记一个 imageView 条目，路径是绝对路径。

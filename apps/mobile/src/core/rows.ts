@@ -14,6 +14,7 @@ import type {
   ItemView,
   NoticeItem,
   PeerView,
+  SessionMentionView,
   SessionNoteView,
   SessionProposalView,
   SessionView,
@@ -46,6 +47,8 @@ export type Row =
       attachments: UserAttachment[]
       /** 别的会话发来的消息（peerMessages 扩展）：气泡上面写是谁发来的 */
       peer?: PeerView
+      /** 提到的会话：正文里的 ＠[标题] 画成能点的字（核心认出来的 UserMessageItem.sessions） */
+      sessions?: SessionMentionView[]
     }
   /**
    * 不是用户发起的回合开头那一行（后台任务跑完后 harness 自己接着做的……），放在用户气泡的位置。
@@ -355,6 +358,7 @@ export class RowBuilder {
                 text: item.text,
                 attachments: item.attachments,
                 ...(item.peer ? { peer: item.peer } : {}),
+                ...(item.sessions ? { sessions: item.sessions } : {}),
               }),
             )
           break

@@ -75,6 +75,7 @@ export function nowOf(
     case 'toolCall': {
       // 建议任务、收尾：对象是建议的标题（卡片在回合最下方）
       if (kind === 'suggest' || kind === 'ask') return { label, target: suggestTitles(item) }
+      if (kind === 'message') return { label, target: messageTarget(item, t) }
       const tool = t.text(item.tool)
       // Claude Code 的读、搜投影出来是“Read 路径”：动词已经在前面说了，对象只留后半截
       const rest = kind === 'tool' ? tool : tool.replace(/^\S+\s*/, '') || tool
@@ -90,6 +91,21 @@ export function nowOf(
     default:
       return { label, target: '' }
   }
+}
+
+/**
+ * 发消息给谁（Claude 的 SendMessage 投影出来是“SendMessage 收件人”）：入口认出了收件方就写它的名字；
+ * 收件人是收件箱地址（uds:<套接字路径>）又没认出来时写“另一个 Claude 会话”，带上套接字名里的进程号，不露路径
+ */
+export function messageTarget(item: ItemView, t: Translator): string {
+  if (item.kind !== 'toolCall') return ''
+  if (item.peer?.name) return item.peer.name
+  const tool = t.text(item.tool)
+  const rest = tool.replace(/^\S+\s*/, '') || tool
+  const socket = /^uds:(\S+)$/.exec(rest)?.[1]
+  if (socket === undefined) return rest
+  const pid = /(\d+)\.sock$/.exec(socket)?.[1]
+  return pid ? t('tool.message.peerPid', { pid }) : t('tool.message.peer')
 }
 
 /** 建议任务那一行写的对象：建议的标题，几条用顿号隔开；只留了问题的写问题 */

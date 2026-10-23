@@ -10,6 +10,7 @@ import {
 } from '../../protocol/src/background-tasks.mjs'
 import { EXTENSION } from '../../protocol/src/device.mjs'
 import { NATIVE_OWNER_NOTIFICATION, type NativeOwner } from '../../protocol/src/native-owner.mjs'
+import type { LitchPeer } from '../../protocol/src/peer-messages.mjs'
 import { catalogPagination } from '../../shared/src/catalog-pagination.mjs'
 import {
   clientToolNamespaces,
@@ -72,7 +73,7 @@ import { mcpOAuthManager } from './mcp-oauth.mjs'
 import { type McpCallbacks, McpOperationCancelled, McpRpc, type McpScope } from './mcp-rpc.mjs'
 import { type McpToolRef, mcpToolRef } from './mcp-tool-name.mjs'
 import { parseContextItems } from './native-context.mjs'
-import { NativeOwners, nativeOwnerMessage } from './native-owner.mjs'
+import { alive, NativeOwners, nativeOwnerMessage, readRegistry } from './native-owner.mjs'
 import { ownCliAlive, ownCliExitedAt, ownCliPids } from './native-process.mjs'
 import type { NativeSettings } from './native-record.mjs'
 import {
@@ -83,6 +84,7 @@ import {
   sdkNativeSessionSource,
 } from './native-sessions.mjs'
 import { lostToolCallsNotice, NativeToolIntents } from './native-tool-intents.mjs'
+import { type PeerLookup, resolvePeer } from './peer-target.mjs'
 import { PendingInteractions } from './pending-interactions.mjs'
 import {
   copyPermissionOverlay,
@@ -203,7 +205,7 @@ import { patchGitInfo } from './thread-metadata.mjs'
 import { threadQueueRequest } from './thread-queue.mjs'
 import { ThreadSubscribers } from './thread-subscribers.mjs'
 import { threadTimelineList } from './thread-timeline.mjs'
-import { readImageView, toolUseItem } from './tool-items.mjs'
+import { readImageView, toolUseItem, withPeerTarget } from './tool-items.mjs'
 import { parseTurnSettings } from './turn-settings.mjs'
 import type {
   ClaudeRuntime,
@@ -482,6 +484,18 @@ export class CodexClaudeAppServer {
   private readonly nativeOwnerState = new Map<string, string>()
   /** followNative 正在跑：上一趟没完不起下一趟 */
   private following = false
+  /** 认收件箱地址（peer-target.mts）：本机的进程登记，原生会话号对回这个入口的会话 */
+  private readonly peerLookup: Omit<PeerLookup, 'seen'> = {
+    registry: () =>
+      readRegistry(join(claudeConfigDir(), 'sessions')).filter((entry) => alive(entry.pid)),
+    thread: (sessionId) => {
+      const record = this.store.nativeSessions().get(sessionId)
+      const thread = record ? this.store.getThread(record.threadId) : null
+      return thread ? { id: thread.id, name: thread.name?.trim() || null } : null
+    },
+  }
+  /** 会话里收到过的消息（只记在内存里）：会话 → 发送方的收件箱地址 → 发送方。回信的 SendMessage 按它认收件方 */
+  private readonly peerAddresses = new Map<string, Map<string, LitchPeer>>()
 
   constructor(
     store: SessionStore,
@@ -504,6 +518,7 @@ export class CodexClaudeAppServer {
             alive: ownCliAlive(threadId),
             exitedAt: ownCliExitedAt(threadId),
           }),
+          peers: this.peerLookup,
         })
       : null
     this.runtime.setSessionHandlers?.({
@@ -4526,6 +4541,7 @@ export class CodexClaudeAppServer {
               },
               thread.cwd,
               mcpServers.names,
+              thread.id,
             )
             itemId = item.id
             itemIds.set(callId, item.id)
@@ -4826,11 +4842,18 @@ export class CodexClaudeAppServer {
               this.store.getTurn(turn.id)?.items.length === 0
             )
               this.store.saveTurnOrigin(turn.id, 'peer')
+            let litchPeer = event.peer
+            if (event.address) {
+              litchPeer = resolvePeer(event.address, this.peerLookup, event.peer) ?? event.peer
+              const seen = this.peerAddresses.get(thread.id) ?? new Map<string, LitchPeer>()
+              seen.set(event.address, litchPeer)
+              this.peerAddresses.set(thread.id, seen)
+            }
             const item: ThreadItem = {
               type: 'userMessage',
               id: newId(),
               content: [{ type: 'text', text: event.text, text_elements: [] }],
-              litchPeer: event.peer,
+              litchPeer,
             }
             this.store.appendItem(turn.id, item)
             this.sendInputItem(peer, thread.id, turn.id, item)
@@ -5042,7 +5065,7 @@ export class CodexClaudeAppServer {
                     this.store.updateItem(childTurn.id, itemId, update),
                   notify: (method, params) => this.notify(peer, { method, params }),
                   toolItem: (toolEvent) =>
-                    this.toolUseToItem(toolEvent, thread.cwd, mcpServers.names),
+                    this.toolUseToItem(toolEvent, thread.cwd, mcpServers.names, thread.id),
                 },
                 childThreadId,
                 childTurn.id,
@@ -5386,7 +5409,7 @@ export class CodexClaudeAppServer {
               itemIds.set(event.toolUseId, '')
               return
             }
-            const item = this.toolUseToItem(event, thread.cwd, mcpServers.names)
+            const item = this.toolUseToItem(event, thread.cwd, mcpServers.names, thread.id)
             itemIds.set(event.toolUseId, item.id)
             itemStartedAtMs.set(item.id, nowMillis())
             this.store.appendItem(turn.id, item)
@@ -5639,6 +5662,7 @@ export class CodexClaudeAppServer {
               },
               thread.cwd,
               mcpServers.names,
+              thread.id,
             )
             itemId = item.id
             itemIds.set(event.toolUseId, item.id)
@@ -6019,7 +6043,8 @@ export class CodexClaudeAppServer {
             appendItem: (item) => void this.store.appendItem(childTurn.id, item),
             updateItem: (itemId, update) => this.store.updateItem(childTurn.id, itemId, update),
             notify: (method, params) => this.notify(peer, { method, params }),
-            toolItem: (toolEvent) => this.toolUseToItem(toolEvent, thread.cwd, mcpServers.names),
+            toolItem: (toolEvent) =>
+              this.toolUseToItem(toolEvent, thread.cwd, mcpServers.names, thread.id),
           },
           childThread.id,
           childTurn.id,
@@ -7244,8 +7269,12 @@ export class CodexClaudeAppServer {
     event: Extract<RuntimeEvent, { type: 'tool_use' }>,
     cwd: string,
     mcpServers: readonly string[],
+    threadId: string,
   ): ThreadItem {
-    return toolUseItem(event, cwd, mcpServers)
+    const seen = this.peerAddresses.get(threadId)
+    return withPeerTarget(toolUseItem(event, cwd, mcpServers), (address) =>
+      resolvePeer(address, seen ? { ...this.peerLookup, seen } : this.peerLookup),
+    )
   }
 
   private threadEnvelope(thread: ThreadRecord, turns: TurnRecord[] = []): unknown {

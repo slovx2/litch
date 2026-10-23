@@ -153,6 +153,21 @@ export type * from './native-owner.mjs'
 export { NATIVE_OWNER_NOTIFICATION } from './native-owner.mjs'
 // 别的会话发来的消息（peerMessages 扩展）：用户消息条目上的发送方。不依赖别的文件
 export type * from './peer-messages.mjs'
+// 输入框里 @ 的会话：正文末尾那一段的写法与认回来。引用 session-tree.mts
+export type * from './session-mentions.mjs'
+export {
+  excerptOfTurns,
+  matchMentions,
+  mentionSegments,
+  mentionSpots,
+  mentionTitle,
+  parseSessionMentions,
+  SENT_SIGIL,
+  SESSION_MENTION_LIMITS,
+  SESSION_MENTION_TAG,
+  sentText,
+  sessionMentionsBlock,
+} from './session-mentions.mjs'
 // 会话树（sessionTree 扩展）：子会话的父子关系、提案、回报与唤醒；模型用的 litch_sessions 工具。不依赖别的文件
 export type * from './session-tree.mjs'
 export {

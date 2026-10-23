@@ -192,6 +192,8 @@ export type ThreadItem =
       // Codex v2 McpToolCallError shape — { message: string } and nothing else.
       error: { message: string } | null
       durationMs: number | null
+      /** Claude 的 SendMessage 发给了别的会话（peerMessages 扩展）：认出来的收件方。只发给声明过的连接 */
+      litchPeer?: LitchPeer
     }
   // Native Codex Web Search rendering. Claude SDK's WebSearch tool input is
   // {query: string}; we map it to Codex's `webSearch` ThreadItem so the App
@@ -411,8 +413,9 @@ export type RuntimeEvent =
       questions: UserInputQuestion[]
     }
   | { type: 'notice'; level: 'info' | 'warning' | 'error'; message: string }
-  // 别的会话发来的消息进了模型（CLI 回显的 origin.kind=peer）：text 是对方的原文
-  | { type: 'peer_message'; text: string; peer: LitchPeer }
+  // 别的会话发来的消息进了模型（CLI 回显的 origin.kind=peer）：text 是对方的原文，
+  // address 是对方的收件箱地址（uds:<套接字路径>），CLI 给了才有
+  | { type: 'peer_message'; text: string; peer: LitchPeer; address?: string }
   // 回合累计的用量（只加进 total）；contextWindow 是主模型的上下文窗口，不知道是 null
   // model 是最近一次顶层请求的模型（窗口按它记下，导进来的会话算用量时查）
   | {

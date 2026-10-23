@@ -11,6 +11,19 @@ export {
   type PairPayload,
   tailscaleVerifyUrl,
 } from '../../protocol/src/device-pairing.mjs'
+// 输入框里 @ 的会话：正文里的写法、对上、切段（协议包里的同一份，设备进程也用）
+export {
+  type MentionSegment,
+  type MentionSpot,
+  matchMentions,
+  mentionSegments,
+  mentionSpots,
+  mentionTitle,
+  type ParsedSessionMention,
+  SENT_SIGIL,
+  SESSION_MENTION_LIMITS,
+  type SessionMentionRef,
+} from '../../protocol/src/session-mentions.mjs'
 // 设备设置里“任务卡”按 harness 的键：设置页那棵树、提案卡上的“对这个 harness 关闭任务卡”都写它
 export { taskCardsSettingKey } from '../../protocol/src/session-tree.mjs'
 // 日程怎么算：界面的表单拿它预览“下一次”、先查时区（和设备进程用的是同一份）
@@ -221,6 +234,7 @@ export {
   parseAskReply,
 } from './projection/asks.mjs'
 export {
+  backgroundHint,
   deriveBackground,
   runningFromTurn,
   sessionBackground,

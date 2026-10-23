@@ -3,7 +3,9 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-const { nowOf, processSummary, stepsSummary } = await import('../src/transcript/steps-text.ts')
+const { messageTarget, nowOf, processSummary, stepsSummary } = await import(
+  '../src/transcript/steps-text.ts'
+)
 const { translator } = await import('../src/i18n/index.ts')
 
 const zh = translator('zh-CN')
@@ -86,6 +88,34 @@ test('正在跑的那一条：动词按动作，对象是命令、文件名、�
   assert.deepEqual(nowOf(send, 'message', zh), { label: '正在发消息给', target: '修 CI' })
   assert.equal(stepsSummary(tally({ counts: [{ kind: 'message', n: 2 }] }), zh), '发送 2 条消息')
   assert.equal(stepsSummary(tally({ counts: [{ kind: 'message', n: 1 }] }), en), 'Sent 1 message')
+})
+
+test('发消息给收件箱地址：认出了写名字，认不出写“另一个 Claude 会话”加进程号，不露套接字路径', () => {
+  const uds = 'SendMessage uds:/tmp/cc-socks/887369.sock'
+  const named = {
+    id: 's',
+    kind: 'toolCall',
+    tool: 'SendMessage 修 CI',
+    source: 'claude-code',
+    peer: { name: '修 CI', session: null, thread: 'thread-9', bypass: false },
+  }
+  assert.equal(messageTarget(named, zh), '修 CI')
+  // 名字以入口认出来的为准（tool 里还是地址时也一样）
+  assert.equal(messageTarget({ ...named, tool: uds }, zh), '修 CI')
+  const bare = { id: 's', kind: 'toolCall', tool: uds, source: 'claude-code' }
+  assert.equal(messageTarget(bare, zh), '另一个 Claude 会话（进程 887369）')
+  assert.equal(messageTarget(bare, en), 'another Claude session (process 887369)')
+  assert.deepEqual(nowOf(bare, 'message', zh), {
+    label: '正在发消息给',
+    target: '另一个 Claude 会话（进程 887369）',
+  })
+  const odd = { ...bare, tool: 'SendMessage uds:/run/cc/inbox' }
+  assert.equal(messageTarget(odd, zh), '另一个 Claude 会话')
+  // 按名字发的、发给子代理的照原样
+  assert.equal(
+    messageTarget({ ...bare, tool: 'SendMessage deadbeefcafef00d' }, zh),
+    'deadbeefcafef00d',
+  )
 })
 
 test('在想的时候：汇总行不写动词，只有思考的头一行（“正在工作”只在回合末尾那一行写）', () => {

@@ -2,7 +2,13 @@
 // 会话详情和新建会话页共用；发去哪、发成功没有由外面定，这里只管写、清空、没发成时还回来。
 // 草稿按会话记（drafts.ts）：文字落盘，图片只在内存里。回车在手机上是换行，发送只靠按钮。
 // 选中回答加的评论也是草稿的一部分（落盘），一条一片排在最上面；只有评论、没打字也能发。
-import { type CommentExtra, type ImageAttachment, MAX_COMMENTS } from '@litch/core'
+// 打 `@` 在输入框上面列这台设备上的会话（MentionList.tsx），点了写成 @[标题]，发出去时随消息带上是哪个会话。
+import {
+  type CommentExtra,
+  type ImageAttachment,
+  MAX_COMMENTS,
+  type MessageExtra,
+} from '@litch/core'
 import {
   type ReactNode,
   type RefObject,
@@ -14,6 +20,7 @@ import {
 } from 'react'
 import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { whyNot } from '../../../../../packages/ui/src/app/errors.ts'
+import { keepMentioned } from '../../../../../packages/ui/src/composer/session-hits.ts'
 import { useT } from '../../ui/i18n'
 import { useTheme } from '../../ui/theme'
 import { CommentChips } from '../comments/CommentChips'
@@ -24,24 +31,37 @@ import {
   loadDraft,
   loadDraftComments,
   loadDraftImages,
+  loadDraftSessions,
+  type SessionExtra,
   saveDraft,
   saveDraftComments,
   saveDraftImages,
+  saveDraftSessions,
   subscribeDraftComments,
 } from './drafts'
 import { useGrow } from './grow'
 import { MAX_IMAGE_MB, MAX_IMAGES, pickImages, REFUSAL_TEXT } from './images'
+import { MentionList, mentionTrigger } from './MentionList'
 
 export interface Draft {
   text: string
   images: ImageAttachment[]
   /** 选中回答加的评论，按加的先后 */
   comments: CommentExtra[]
+  /** 打 @ 提到的会话。正文里那几个字删掉了就跟着去掉 */
+  sessions: SessionExtra[]
   setText(text: string): void
+  /** 选中一个会话：换上新的字，记下这个会话 */
+  mention(text: string, extra: SessionExtra): void
   setImages(update: (current: ImageAttachment[]) => ImageAttachment[]): void
   setComments(list: CommentExtra[]): void
-  /** 把一段话、几张图和评论放回输入框（没发出去的、从队列里拿回来改的），接在现有的后面 */
-  refill(text: string, images: ImageAttachment[], comments?: CommentExtra[]): void
+  /** 把一段话、几张图、评论和提到的会话放回输入框（没发出去的、从队列里拿回来改的），接在现有的后面 */
+  refill(
+    text: string,
+    images: ImageAttachment[],
+    comments?: CommentExtra[],
+    sessions?: SessionExtra[],
+  ): void
   clear(): void
 }
 
@@ -51,9 +71,17 @@ export function useDraft(key: string): Draft {
     key,
     text: loadDraft(key),
     images: loadDraftImages(key),
+    sessions: loadDraftSessions(key),
   }))
   const current =
-    state.key === key ? state : { key, text: loadDraft(key), images: loadDraftImages(key) }
+    state.key === key
+      ? state
+      : {
+          key,
+          text: loadDraft(key),
+          images: loadDraftImages(key),
+          sessions: loadDraftSessions(key),
+        }
   if (current !== state) setState(current)
   useEffect(() => {
     saveDraft(key, current.text)
@@ -61,11 +89,26 @@ export function useDraft(key: string): Draft {
   useEffect(() => {
     saveDraftImages(key, current.images)
   }, [key, current.images])
+  useEffect(() => {
+    saveDraftSessions(key, current.sessions)
+  }, [key, current.sessions])
   // 评论另有一份，对话区的全文页也会往里加：订阅着
   const comments = useSyncExternalStore(subscribeDraftComments, () => loadDraftComments(key))
   // 离开页面时把攒着的草稿写进文件
   useEffect(() => () => flushDrafts(), [])
-  const setText = useCallback((text: string) => setState((s) => ({ ...s, text })), [])
+  const setText = useCallback(
+    (text: string) => setState((s) => ({ ...s, text, sessions: keepMentioned(s.sessions, text) })),
+    [],
+  )
+  const mention = useCallback(
+    (text: string, extra: SessionExtra) =>
+      setState((s) => ({
+        ...s,
+        text,
+        sessions: [...s.sessions.filter((one) => one.threadId !== extra.threadId), extra],
+      })),
+    [],
+  )
   const setImages = useCallback(
     (update: (list: ImageAttachment[]) => ImageAttachment[]) =>
       setState((s) => ({ ...s, images: update(s.images) })),
@@ -73,26 +116,37 @@ export function useDraft(key: string): Draft {
   )
   const setComments = useCallback((list: CommentExtra[]) => saveDraftComments(key, list), [key])
   const refill = useCallback(
-    (text: string, images: ImageAttachment[], back: CommentExtra[] = []) => {
+    (
+      text: string,
+      images: ImageAttachment[],
+      back: CommentExtra[] = [],
+      mentioned: SessionExtra[] = [],
+    ) => {
       if (back.length)
         saveDraftComments(key, [...back, ...loadDraftComments(key)].slice(0, MAX_COMMENTS))
       setState((s) => ({
         ...s,
         text: s.text && text ? `${text}\n${s.text}` : text || s.text,
         images: [...images, ...s.images].slice(0, MAX_IMAGES),
+        sessions: [
+          ...mentioned,
+          ...s.sessions.filter((one) => !mentioned.some((back) => back.threadId === one.threadId)),
+        ],
       }))
     },
     [key],
   )
   const clear = useCallback(() => {
     dropDraft(key)
-    setState((s) => ({ ...s, text: '', images: [] }))
+    setState((s) => ({ ...s, text: '', images: [], sessions: [] }))
   }, [key])
   return {
     text: current.text,
     images: current.images,
     comments,
+    sessions: current.sessions,
     setText,
+    mention,
     setImages,
     setComments,
     refill,
@@ -111,6 +165,7 @@ export function ComposeBox({
   bar,
   markers,
   inputRef,
+  mentions,
   onSend,
   onStop,
   onError,
@@ -132,8 +187,13 @@ export function ComposeBox({
   /** 输入框下面一排：设置条 */
   bar?: ReactNode
   markers?: boolean
-  /** 发出去。出错时把文字、图片、评论还回输入框，并给外面一个说法 */
-  onSend(text: string, images: ImageAttachment[], comments: CommentExtra[]): Promise<void>
+  /** 打 `@` 列哪台设备上的会话、当前是哪个会话（新建页上没有）。不给就不列 */
+  mentions?: { deviceId: string; sessionId: string | null }
+  /**
+   * 发出去：extras 是评论和提到的会话（正文里还写着的）。出错时把文字、图片、评论、提到的会话还回输入框，
+   * 并给外面一个说法
+   */
+  onSend(text: string, images: ImageAttachment[], extras: MessageExtra[]): Promise<void>
   onStop?(): void
   onError(message: string | null): void
   testID?: string
@@ -145,6 +205,9 @@ export function ComposeBox({
   const own = useRef<TextInput>(null)
   const input = inputRef ?? own
   const grow = useGrow(input, draft.text)
+  /** 光标在哪：认 `@` 用。还没动过光标的当在末尾 */
+  const [caret, setCaret] = useState<number | null>(null)
+  const trigger = mentions ? mentionTrigger(draft.text, caret) : null
   const filled =
     draft.text.trim().length > 0 || draft.images.length > 0 || draft.comments.length > 0
   const mode = filled ? (running ? 'queue' : 'send') : running && onStop ? 'stop' : 'send'
@@ -157,6 +220,7 @@ export function ComposeBox({
     const text = draft.text.trim()
     const images = draft.images
     const comments = draft.comments
+    const sessions = keepMentioned(draft.sessions, text)
     if ((!text && images.length === 0 && comments.length === 0) || blocked || sending) return
     if (images.length > 0 && imagesOff) {
       onError(imagesOff)
@@ -166,9 +230,9 @@ export function ComposeBox({
     draft.clear()
     onError(null)
     setSending(true)
-    onSend(text, images, comments)
+    onSend(text, images, [...comments, ...sessions])
       .catch((reason: unknown) => {
-        draft.refill(text, images, comments)
+        draft.refill(text, images, comments, sessions)
         onError(t('composer.failed', { reason: whyNot(reason, t) }))
       })
       .finally(() => setSending(false))
@@ -207,6 +271,20 @@ export function ComposeBox({
       {markers ? <View style={styles.mark} /> : null}
       {top}
       <CommentChips comments={draft.comments} onChange={draft.setComments} testID={testID} />
+      {mentions && trigger ? (
+        <MentionList
+          deviceId={mentions.deviceId}
+          sessionId={mentions.sessionId}
+          text={draft.text}
+          trigger={trigger}
+          bound={draft.sessions}
+          onPick={(next, extra) => {
+            draft.mention(next.text, extra)
+            setCaret(next.caret)
+          }}
+          testID={testID}
+        />
+      ) : null}
       {note ? (
         <Text
           testID={`${testID}-note`}
@@ -254,6 +332,7 @@ export function ComposeBox({
           ref={input}
           value={draft.text}
           onChangeText={draft.setText}
+          onSelectionChange={(event) => setCaret(event.nativeEvent.selection.end)}
           placeholder={placeholder}
           placeholderTextColor={c.ink3}
           multiline

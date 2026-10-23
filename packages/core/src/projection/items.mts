@@ -5,6 +5,7 @@ import {
   CLIENT_TOOL_NAMESPACE,
   type FileUpdateChange,
   parseSessionEvent,
+  parseSessionMentions,
   SESSION_TOOL,
   SESSION_TOOL_LIMITS,
   type ThreadItem,
@@ -40,13 +41,14 @@ const baseName = (path: string): string => path.split(/[\\/]/).pop() || path
 export const isInlineImage = (url: unknown): url is string =>
   typeof url === 'string' && /^data:image\/(png|jpeg|webp|gif);base64,/.test(url)
 
-/** 用户消息条目上的 litchPeer（peerMessages 扩展）：对面写的，逐项核对 */
+/** 条目上的 litchPeer（peerMessages 扩展：用户消息上是发送方，SendMessage 的工具条目上是收件方）：对面写的，逐项核对 */
 function peerOf(raw: unknown): PeerView | undefined {
   if (!raw || typeof raw !== 'object') return undefined
-  const { name, session, mode } = raw as Record<string, unknown>
+  const { name, session, thread, mode } = raw as Record<string, unknown>
   return {
     name: typeof name === 'string' && name.trim() ? name.trim() : null,
     session: typeof session === 'string' && session ? session : null,
+    ...(typeof thread === 'string' && thread ? { thread } : {}),
     bypass: mode === 'bypass',
   }
 }
@@ -89,8 +91,30 @@ function userMessage(id: string, content: UserInput[], rawPeer?: unknown): UserM
   if (peer) return { id, kind: 'userMessage', text, attachments, peer }
   // 设备进程注入在开头的子会话回报、唤醒：认出来单放，剩下的才是用户自己说的话
   const { event, rest } = parseSessionEvent(text)
-  if (!event) return { id, kind: 'userMessage', text, attachments }
-  return { id, kind: 'userMessage', text: rest, attachments, event: sessionEvent(event) }
+  if (!event) return withSessionMentions({ id, kind: 'userMessage', text, attachments })
+  return withSessionMentions({
+    id,
+    kind: 'userMessage',
+    text: rest,
+    attachments,
+    event: sessionEvent(event),
+  })
+}
+
+/** 正文末尾是提到会话的那一段的：认出来单放（sessions），text 里去掉那一段 */
+export function withSessionMentions(item: UserMessageItem): UserMessageItem {
+  const found = parseSessionMentions(item.text)
+  if (!found) return item
+  return {
+    ...item,
+    text: found.rest,
+    sessions: found.mentions.map(({ index, threadId, title, harness }) => ({
+      index,
+      threadId,
+      title,
+      harness,
+    })),
+  }
 }
 
 const NOTE_STATUS = new Set(['completed', 'failed', 'interrupted', 'needsUser'])
@@ -603,8 +627,10 @@ export function projectItem(item: ThreadItem, streaming = false): ItemView {
         changes: (item.changes ?? []).map(projectFileChange),
         status: item.status,
       }
-    case 'mcpToolCall':
+    case 'mcpToolCall': {
+      const peer = peerOf((item as { litchPeer?: unknown }).litchPeer)
       return toolCall(id, {
+        ...(peer ? { peer } : {}),
         source: item.server,
         tool: item.tool,
         input: textParts(showJson(item.arguments)),
@@ -614,6 +640,7 @@ export function projectItem(item: ThreadItem, streaming = false): ItemView {
         durationMs: item.durationMs ?? null,
         status: toolStatus(item.status),
       })
+    }
     case 'dynamicToolCall': {
       // 客户端工具的截图要看得见：头几张图片留着内容（keepImages）
       const output = resultParts(item.contentItems, null, true)

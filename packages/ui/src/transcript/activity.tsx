@@ -28,9 +28,10 @@ import { commandLook, commandState } from './command-state.ts'
 import { Diff } from './Diff.tsx'
 import { ToolPath } from './FileLinks.tsx'
 import { type ItemRef, sessionKeyOf, useItem } from './messages.tsx'
+import { desktopSessionLink, PeerLinks } from './PeerHead.tsx'
 import { usePin } from './scroll.ts'
 import { seenSince, TurnTouch, useToggle } from './state.ts'
-import { nowOf, stepsSummary, suggestTitles } from './steps-text.ts'
+import { messageTarget, nowOf, stepsSummary, suggestTitles } from './steps-text.ts'
 
 interface RowProps {
   itemRef: ItemRef
@@ -349,20 +350,22 @@ const ToolCall = memo(function ToolCall(ref: ItemRef) {
   const tool = t.text(item.tool)
   // 等待、发输入这些子代理调用（启动子代理那一次是露在外面的卡片）：涉及的子线程在详情里，点开在侧面板里看
   const agents = item.agents ?? []
-  const hasDetail = input.length > 0 || output.length > 0 || error !== null || agents.length > 0
-  // 给别的会话、子代理发消息（“SendMessage 收件人”）：写成“发消息给 收件人”
+  // 给别的会话、子代理发消息（“SendMessage 收件人”）：写成“发消息给 收件人”。收件方认出来是这台设备上的
+  // Litch 会话、Claude 桌面端的会话时，详情最上面一行能点过去；收件箱地址照旧在参数里
   const message = stepKindOf(item) === 'message'
+  const peer =
+    message && (item.peer?.thread || desktopSessionLink(item.peer?.session ?? null))
+      ? item.peer
+      : undefined
+  const hasDetail =
+    input.length > 0 || output.length > 0 || error !== null || agents.length > 0 || !!peer
   return (
     <Row
       itemRef={ref}
       icon={message ? 'note' : 'tool'}
       verb={t(message ? 'tool.message.verb' : 'tool.verb')}
       target={
-        message
-          ? tool.replace(/^\S+\s*/, '') || tool
-          : item.source
-            ? `${t.text(item.source)} · ${tool}`
-            : tool
+        message ? messageTarget(item, t) : item.source ? `${t.text(item.source)} · ${tool}` : tool
       }
       busy={item.status === 'inProgress'}
       meta={
@@ -377,6 +380,22 @@ const ToolCall = memo(function ToolCall(ref: ItemRef) {
         hasDetail
           ? () => (
               <>
+                {peer ? (
+                  <div className="io">
+                    <div className="io-label">{t('tool.message.to')}</div>
+                    <div className="peer-to">
+                      <span className="ell">{messageTarget(item, t)}</span>
+                      <PeerLinks
+                        deviceId={ref.deviceId}
+                        peer={peer}
+                        hints={{
+                          litch: 'tool.message.openLitchHint',
+                          desktop: 'tool.message.openHint',
+                        }}
+                      />
+                    </div>
+                  </div>
+                ) : null}
                 {agents.length > 0 ? (
                   <div className="io">
                     <div className="io-label">{t('info.agents')}</div>

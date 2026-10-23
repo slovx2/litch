@@ -203,6 +203,33 @@ const started = (id: string): Turn => turn(id, [], { status: 'inProgress' })
 const finished = (id: string, fields: Partial<Turn> = {}): Turn =>
   turn(id, [], { status: 'completed', durationMs: 1200, ...fields })
 
+test('发送提到会话的消息：当前会话没带 litch_sessions 时替模型读那个会话，附上最后一个回合的摘录', async () => {
+  const other = thread({
+    id: 'b',
+    turns: [turn('t-b', [userText('ub', '构建为什么慢'), agentText('ab', '因为没开缓存')])],
+  })
+  const { core, command, sent } = setup([thread({ id: 'a', turns: [] }), other])
+  core.start()
+  await settle()
+  watch(core)
+  await settle()
+  await command('session.send', {
+    ...where,
+    text: '参考 @[构建]',
+    extras: [{ kind: 'session', threadId: 'b', title: '构建' }],
+  })
+  await settle()
+  const [params] = sent('turn/start') as { input: { text: string }[] }[]
+  const text = params?.input[0]?.text ?? ''
+  assert.ok(text.startsWith('参考 ＠[构建]\n\n<litch-session-mentions>\n'))
+  assert.match(text, /You cannot open these sessions/)
+  assert.match(text, /<session index="1" thread_id="b" title="构建" harness="[^"]+"/)
+  assert.match(
+    text,
+    /<last-input>构建为什么慢<\/last-input>\n<last-answer>因为没开缓存<\/last-answer>/,
+  )
+})
+
 test('发送：消息立刻显示；对面给的回合、回显的消息、流出来的回答都落在同一个回合上', async () => {
   const { core, peer, command, sent } = setup()
   core.start()
