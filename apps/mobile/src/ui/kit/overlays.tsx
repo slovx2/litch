@@ -21,6 +21,8 @@ export interface SheetAction {
   onPress(): void
   danger?: boolean
   testID?: string
+  /** 开关那样的一项：给了就在前面画勾选记号，点一下换、动作单照样收起 */
+  checked?: boolean
 }
 
 /** 底部动作单。visible 为 false 时什么都不画 */
@@ -65,7 +67,10 @@ export function Sheet({
         {actions.map((action) => (
           <Pressable
             key={action.label}
-            accessibilityRole="button"
+            accessibilityRole={action.checked === undefined ? 'button' : 'checkbox'}
+            accessibilityState={
+              action.checked === undefined ? undefined : { checked: action.checked }
+            }
             testID={action.testID}
             onPress={() => {
               onClose()
@@ -81,7 +86,9 @@ export function Sheet({
             ]}
           >
             <Text style={[styles.sheetText, { color: action.danger ? c.err : c.ink }]}>
-              {action.label}
+              {action.checked === undefined
+                ? action.label
+                : `${action.checked ? theme.check.on : theme.check.off} ${action.label}`}
             </Text>
           </Pressable>
         ))}

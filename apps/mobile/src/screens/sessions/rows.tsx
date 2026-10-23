@@ -1,5 +1,7 @@
 // 会话列表里的各种行。会话行自己订阅自己的摘要（keys.summary），收起来的组标题自己订阅汇总（keys.tallies）：
 // 一个会话有了动静只重画它那一行，整张列表不跟着重画。行高固定，FlashList 回收得稳。
+// 子会话的行照桌面侧栏只有状态记号、标题和定时任务记号，往里缩、左边一根竖线连着父会话；
+// 有子会话的行尾多一个收起、展开的按钮（桌面在行首，手机上行首太窄、又挨着返回手势，挪到行尾）。
 import {
   type DeviceView,
   type GroupTallies,
@@ -7,7 +9,7 @@ import {
   type SessionSummary,
   type WireColor,
 } from '@litch/core'
-import { memo } from 'react'
+import { memo, type ReactNode } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { ago } from '../../../../../packages/ui/src/app/format.ts'
 import { useKey } from '../../shell/services'
@@ -19,6 +21,14 @@ import { type GroupHead, groupKeyOf } from './list'
 
 export const SESSION_ROW_H = 60
 export const GROUP_ROW_H = 44
+/** 子会话的一行：一行字，高度够一个触控目标 */
+export const CHILD_ROW_H = 44
+/** 子会话每一层往里缩多少 */
+const INDENT = 18
+/** 会话行左边距（状态记号从这里开始） */
+const ROW_LEFT = 10
+/** 状态记号宽 16，竖线对着上一层记号的正中 */
+const MARK_MID = 8
 
 const lastSegment = (path: string): string => {
   const trimmed = path.replace(/[\\/]+$/, '')
@@ -48,12 +58,15 @@ function SummaryLine({
   onPress,
   onLongPress,
   testID,
+  fold,
 }: {
   summary: SessionSummary
   device: DeviceView | undefined
   onPress(): void
   onLongPress?(): void
   testID: string
+  /** 有子会话：行尾的收起、展开按钮 */
+  fold?: ReactNode
 }) {
   const theme = useTheme()
   const t = useT()
@@ -75,6 +88,7 @@ function SummaryLine({
       onLongPress={onLongPress}
       style={({ pressed }) => [
         styles.session,
+        fold ? styles.sessionFold : null,
         { borderBottomColor: c.line1, backgroundColor: pressed ? c.press : c.panel },
       ]}
     >
@@ -142,6 +156,121 @@ function SummaryLine({
           </Text>
         </View>
       </View>
+      {fold}
+    </Pressable>
+  )
+}
+
+/** 子会话的一行：缩进、每一层一根竖线，状态记号、标题、定时任务记号（和桌面侧栏一样不写 harness、时间） */
+function ChildLine({
+  summary,
+  depth,
+  onPress,
+  onLongPress,
+  testID,
+  fold,
+}: {
+  summary: SessionSummary
+  depth: number
+  onPress(): void
+  onLongPress(): void
+  testID: string
+  fold?: ReactNode
+}) {
+  const theme = useTheme()
+  const t = useT()
+  const { c } = theme
+  return (
+    <Pressable
+      accessibilityRole="button"
+      testID={testID}
+      onPress={onPress}
+      onLongPress={onLongPress}
+      style={({ pressed }) => [
+        styles.child,
+        fold ? styles.sessionFold : null,
+        {
+          paddingLeft: ROW_LEFT + depth * INDENT,
+          borderBottomColor: c.line1,
+          backgroundColor: pressed ? c.press : c.panel,
+        },
+      ]}
+    >
+      {Array.from({ length: depth }, (_, level) => (
+        <View
+          // biome-ignore lint/suspicious/noArrayIndexKey: 竖线只按第几层排，不会换位置
+          key={level}
+          style={[
+            styles.guide,
+            { left: ROW_LEFT + level * INDENT + MARK_MID, backgroundColor: c.line2 },
+          ]}
+        />
+      ))}
+      <StatusMark status={markOf(summary)} />
+      <Text
+        numberOfLines={1}
+        style={[
+          styles.title,
+          {
+            color: c.ink,
+            fontSize: theme.font.size.body,
+            fontWeight: summary.unread ? '700' : '500',
+          },
+        ]}
+      >
+        {titleOf(summary, t)}
+      </Text>
+      {summary.task ? (
+        <Text
+          testID={`${testID}:task`}
+          style={[
+            styles.badge,
+            {
+              color: c.ink2,
+              borderColor: c.line2,
+              fontFamily: theme.font.mono,
+              borderRadius: theme.radius.s,
+            },
+          ]}
+        >
+          ⏱
+        </Text>
+      ) : null}
+      {fold}
+    </Pressable>
+  )
+}
+
+/** 有子会话的行尾：收起、展开下面的子会话，写着有几个 */
+function FoldButton({
+  kids,
+  folded,
+  onPress,
+  testID,
+}: {
+  kids: number
+  folded: boolean
+  onPress(): void
+  testID: string
+}) {
+  const theme = useTheme()
+  const t = useT()
+  const label = folded ? t('tree.unfold', { n: kids }) : t('tree.fold')
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ expanded: !folded }}
+      testID={testID}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.fold,
+        { backgroundColor: pressed ? theme.c.press : 'transparent' },
+      ]}
+    >
+      <Text style={[styles.foldText, { color: theme.c.ink3, fontFamily: theme.font.mono }]}>
+        {folded ? '▸' : '▾'} {kids}
+      </Text>
     </Pressable>
   )
 }
@@ -149,24 +278,56 @@ function SummaryLine({
 export const SessionRow = memo(function SessionRow({
   deviceId,
   sessionId,
+  depth,
+  kids,
+  folded,
   onOpen,
   onMenu,
+  onFold,
 }: {
   deviceId: string
   sessionId: string
+  /** 第几层子会话，0 是排在组里的 */
+  depth: number
+  /** 挂在它下面的子会话有几个 */
+  kids: number
+  folded: boolean
   onOpen(summary: SessionSummary): void
   onMenu(summary: SessionSummary): void
+  onFold(sessionId: string): void
 }) {
   const summary = useKey<SessionSummary>(keys.summary(deviceId, sessionId))
   const device = useKey<DeviceView>(keys.device(deviceId))
-  if (!summary) return <View style={{ height: SESSION_ROW_H }} />
+  if (!summary) return <View style={{ height: depth > 0 ? CHILD_ROW_H : SESSION_ROW_H }} />
+  const testID = `session:${sessionId}`
+  const fold =
+    kids > 0 ? (
+      <FoldButton
+        kids={kids}
+        folded={folded}
+        onPress={() => onFold(sessionId)}
+        testID={`${testID}:fold`}
+      />
+    ) : undefined
+  if (depth > 0)
+    return (
+      <ChildLine
+        summary={summary}
+        depth={depth}
+        testID={testID}
+        onPress={() => onOpen(summary)}
+        onLongPress={() => onMenu(summary)}
+        fold={fold}
+      />
+    )
   return (
     <SummaryLine
       summary={summary}
       device={device}
-      testID={`session:${sessionId}`}
+      testID={testID}
       onPress={() => onOpen(summary)}
       onLongPress={() => onMenu(summary)}
+      fold={fold}
     />
   )
 })
@@ -378,6 +539,25 @@ const styles = StyleSheet.create({
     paddingRight: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
+  /** 行尾有收起按钮：按钮自己占满右边，不再留右边距 */
+  sessionFold: { paddingRight: 0 },
+  child: {
+    height: CHILD_ROW_H,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingRight: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  guide: { position: 'absolute', top: 0, bottom: 0, width: StyleSheet.hairlineWidth * 2 },
+  fold: {
+    minWidth: 52,
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+  },
+  foldText: { fontSize: 12 },
   sessionText: { flex: 1, minWidth: 0, gap: 4 },
   line: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   title: { flex: 1 },

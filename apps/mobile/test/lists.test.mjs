@@ -32,6 +32,10 @@ const input = (over = {}) => ({
   archived: null,
   offline: false,
   organizable: true,
+  children: {},
+  hidden: [],
+  folded: new Set(),
+  always: () => false,
   ...over,
 })
 
@@ -124,6 +128,79 @@ test('归档那一段：没取到时按在不在线说“加载中”或“离�
   assert.equal(note({ archived: [] }).note, 'empty')
   const last = note({ archived: [{ id: 'old' }] })
   assert.deepEqual([last.type, last.key], ['archived', 'a:old'])
+})
+
+const sessionRows = (items) =>
+  items
+    .filter((item) => item.type === 'session')
+    .map((item) => [item.id, item.depth, item.kids, item.folded])
+
+test('会话树：子会话挂在父会话下面、一层缩一级，不在自己那一组里另占一行；兄弟照核心给的先后', () => {
+  const items = buildList(
+    input({
+      groups: { w1: ['p', 'c2', 'x'], w2: ['c1'], [LOOSE]: ['g1'] },
+      children: { p: ['c1', 'c2'], c1: ['g1'] },
+    }),
+  )
+  assert.deepEqual(sessionRows(items), [
+    ['p', 0, 2, false],
+    ['c1', 1, 1, false],
+    ['g1', 2, 0, false],
+    ['c2', 1, 0, false],
+    ['x', 0, 0, false],
+  ])
+  // 子会话都挂走了的组照样有标题（和桌面侧栏一样），数目还算着它们
+  const w2 = items.find((item) => item.key === 'g:w2')
+  assert.equal(w2.count, 1)
+  assert.equal(
+    items.findIndex((item) => item.key === 'g:w2') + 1,
+    items.findIndex((item) => item.key === `g:${LOOSE}`),
+    'w2 下面没有会话行',
+  )
+})
+
+test('会话树：父会话不在列表里（藏起来了）的子会话照常排在自己那一组；父会话在收起的组里，子会话跟着收起', () => {
+  const groups = { w1: ['p'], w2: ['c'] }
+  const children = { p: ['c'] }
+  const gone = buildList(input({ groups, children, hidden: ['p'] }))
+  assert.deepEqual(sessionRows(gone), [['c', 0, 0, false]])
+  const shut = buildList(input({ groups, children, collapsed: new Set(['w1']) }))
+  assert.deepEqual(sessionRows(shut), [])
+})
+
+test('会话树：收起了的父会话下面只露出停下来等人的；默认都展开', () => {
+  const groups = { w1: ['p'] }
+  const children = { p: ['c1', 'c2'] }
+  assert.deepEqual(sessionRows(buildList(input({ groups, children }))).length, 3)
+  const folded = buildList(
+    input({ groups, children, folded: new Set(['p']), always: (id) => id === 'c2' }),
+  )
+  assert.deepEqual(sessionRows(folded), [
+    ['p', 0, 2, true],
+    ['c2', 1, 0, false],
+  ])
+})
+
+test('派出来的会话：藏着时整个不画、不算数，只有它们的工作区不出；等人的照露', () => {
+  const groups = { w1: ['p', 'n1'], w2: ['n2'], [LOOSE]: ['n3'] }
+  const children = { p: ['n1'] }
+  const hidden = ['n1', 'n2', 'n3']
+  const items = buildList(input({ groups, children, hidden }))
+  assert.deepEqual(sessionRows(items), [['p', 0, 0, false]])
+  assert.equal(items.find((item) => item.key === 'g:w1').count, 1)
+  assert.equal(
+    items.some((item) => item.key === 'g:w2'),
+    false,
+  )
+  assert.equal(
+    items.some((item) => item.key === `g:${LOOSE}`),
+    false,
+  )
+  const waiting = buildList(input({ groups, children, hidden, always: (id) => id === 'n1' }))
+  assert.deepEqual(sessionRows(waiting), [
+    ['p', 0, 1, false],
+    ['n1', 1, 0, false],
+  ])
 })
 
 test('差异摊成行：段头的写法、两边的行号各自往下数，说明行不算一行', () => {

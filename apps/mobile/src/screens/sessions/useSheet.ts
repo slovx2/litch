@@ -3,7 +3,7 @@
 import type { DeviceView, SessionSummary, WorkspaceView } from '@litch/core'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import type { RootStackParamList } from '../../nav/routes'
-import { useChannel } from '../../shell/services'
+import { useChannel, useServices } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import type { SheetAction } from '../../ui/kit/overlays'
 import { archivedMenu, sessionMenu, workspaceMenu } from './menus'
@@ -36,6 +36,7 @@ export function useSheet({
   setAsk,
   setWorkspaceEdit,
   navigation,
+  nativeHere,
 }: {
   menu: Menu | null
   device: DeviceView | undefined
@@ -47,9 +48,12 @@ export function useSheet({
   setAsk(ask: Ask | null): void
   setWorkspaceEdit(edit: WorkspaceEdit | null): void
   navigation: NativeStackNavigationProp<RootStackParamList, 'Sessions'>
+  /** 这台设备上有别的应用派出来的会话：有才出“显示 Claude Code 子对话”的开关（开着的照出，好关掉） */
+  nativeHere: boolean
 }): { title?: string; actions: SheetAction[] } {
   const t = useT()
   const channel = useChannel()
+  const { prefs, setPrefs } = useServices()
   if (!menu) return { actions: [] }
   const target = (summary: SessionSummary) => ({ deviceId, sessionId: summary.id })
   const askDelete = (summary: SessionSummary) =>
@@ -173,6 +177,13 @@ export function useSheet({
         testID: 'menu:screen:tasks',
         onPress: () => navigation.navigate('Tasks', { deviceId }),
       })
+      if (nativeHere || prefs.nativeChildren)
+        actions.push({
+          label: t('sidebar.more.nativeChildren'),
+          checked: prefs.nativeChildren,
+          testID: 'menu:screen:nativeChildren',
+          onPress: () => setPrefs({ nativeChildren: !prefs.nativeChildren }),
+        })
       return { actions }
     }
   }
