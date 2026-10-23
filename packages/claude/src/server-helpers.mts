@@ -9,6 +9,20 @@ import { homedir, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import type { ApprovalPolicy } from './approval-policy.mjs'
+import { type ClaudeAuthStatus, claudeAuthStatus } from './claude-auth.mjs'
+import {
+  ACCOUNT_PROVIDER,
+  hasProviderPrefix,
+  joinModelRef,
+  NATIVE_PROVIDER,
+  nativeOverrides,
+  plainProvider,
+  providerConfigVersion,
+  providerLaunch,
+  readProviderConfig,
+  readProviderSecrets,
+  splitModelRef,
+} from './claude-provider.mjs'
 import {
   customPermissionProfileList,
   isCustomPermissionProfile,
@@ -81,6 +95,7 @@ export function stringOr(value: unknown, fallback: string): string {
 }
 
 export type SelectableModelOption = {
+  /** 型号 ID：`<供应商>/<型号>`（claude-provider.mts）；CHA_CLAUDE_MODELS 给的测试目录不带前缀 */
   id: string
   sdkModel: string | null
   displayName: string
@@ -89,7 +104,7 @@ export type SelectableModelOption = {
   efforts?: string[]
 }
 
-// 原生目录取得前只提供默认项；默认项交由原生 SDK 解析 settings.json。
+// 一个供应商的原生目录取得前只提供默认项；默认项交由原生 SDK 解析 settings.json。
 const defaultModelOption: SelectableModelOption = {
   id: 'default',
   sdkModel: null,
@@ -97,20 +112,22 @@ const defaultModelOption: SelectableModelOption = {
   description: 'Use the model configured for Claude Code',
   isDefault: true,
 }
-let runtimeModelCatalog: { key: string; options: SelectableModelOption[] } | null = null
 
-// 原生目录随固定 CLI 与 Claude 用户设置变化；设置文件改变后重新读取。
+// 账号、native、各 API key 供应商的原生目录（CLI 按各自的凭据列）；网关的型号是用户手填的，不进这里
+const runtimeModelCatalogs = new Map<string, { key: string; options: SelectableModelOption[] }>()
+
+// 原生目录随固定 CLI、Claude 用户设置和供应商配置变化；变了重新读取。
 function modelCatalogKey(): string {
   const settings = join(
     process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), '.claude'),
     'settings.json',
   )
+  let stamp = 'none'
   try {
     const stat = statSync(settings)
-    return `${stat.mtimeMs}:${stat.size}`
-  } catch {
-    return 'none'
-  }
+    stamp = `${stat.mtimeMs}:${stat.size}`
+  } catch {}
+  return `${stamp}:${providerConfigVersion()}`
 }
 
 // 以 resolvedModel（实际发往模型接口的型号）生成带精确版本的显示名，例如
@@ -123,52 +140,172 @@ export function modelNameFromResolved(resolved: string | undefined): string | nu
   return longContext ? `${name} (1M context)` : name
 }
 
+// 账号登没登录（claude auth status，按账号的环境查）。只在还有别的供应商能用时才查：没登录就不进选单
+let accountSignedIn: { key: string; value: boolean } | null = null
+
+/** 供应商、密钥、账号登录变了：下次重读各家目录、重查账号 */
+export function invalidateProviderCatalogs(): void {
+  accountSignedIn = null
+  runtimeModelCatalogs.clear()
+}
+
+/** 账号以外能用的：用户另配了模型服务时的 native，填了密钥的各供应商 */
+function otherProviders(): string[] {
+  const config = readProviderConfig()
+  const secrets = readProviderSecrets()
+  return [
+    ...(nativeOverrides().length > 0 ? [NATIVE_PROVIDER] : []),
+    ...Object.keys(config.providers).filter((id) => secrets[id]),
+  ]
+}
+
+/** 能用的供应商。账号没登录、又有别家能用时不算它；只有它一个时总是算（选单不至于是空的） */
+export function usableProviders(): string[] {
+  const others = otherProviders()
+  const account = others.length === 0 || accountSignedIn?.value !== false
+  return [...(account ? [ACCOUNT_PROVIDER] : []), ...others]
+}
+
+function accountUsable(status: ClaudeAuthStatus): boolean {
+  if (!status.loggedIn) return false
+  // auth 子命令不收 --settings：用户 settings.json 里另配的 key 也会报成已登录，那不是账号
+  return (
+    status.authMethod === 'claude.ai' ||
+    status.authMethod === 'oauth_token' ||
+    (status.authMethod === 'api_key' && status.apiKeySource === '/login managed key')
+  )
+}
+
 export async function loadRuntimeModelCatalog(runtime: ClaudeRuntime): Promise<void> {
   if (process.env.CHA_CLAUDE_MODELS || !runtime.supportedModels) return
   const key = modelCatalogKey()
-  if (runtimeModelCatalog?.key === key) return
-  try {
-    const models = await runtime.supportedModels()
-    runtimeModelCatalog = {
-      key,
-      options: models.map((model) => {
-        const precise = modelNameFromResolved(model.resolvedModel)
-        return {
-          id: model.value,
-          sdkModel: model.value === 'default' ? null : model.value,
-          // 选择仍传原生别名，CLI 升级后别名自动指向新型号；只有显示名带精确版本。
-          displayName: precise
-            ? model.value === 'default'
-              ? `Default · ${precise}`
-              : precise
-            : model.displayName,
-          description: model.description,
-          isDefault: model.value === 'default',
-          ...(model.supportedEffortLevels ? { efforts: model.supportedEffortLevels } : {}),
-        }
-      }),
-    }
-  } catch (error) {
-    debugLog('model.catalog.failed', {
-      error: error instanceof Error ? error.message : String(error),
-    })
+  if (otherProviders().length > 0 && accountSignedIn?.key !== key) {
+    let value = false
+    try {
+      value = accountUsable(await claudeAuthStatus(providerLaunch(ACCOUNT_PROVIDER, null).env))
+    } catch {}
+    accountSignedIn = { key, value }
   }
+  const config = readProviderConfig()
+  // 网关的型号是用户手填的，不从 CLI 读
+  const providers = usableProviders().filter(
+    (provider) => config.providers[provider]?.kind !== 'gateway',
+  )
+  for (const provider of [...runtimeModelCatalogs.keys()])
+    if (!providers.includes(provider)) runtimeModelCatalogs.delete(provider)
+  await Promise.all(
+    providers.map(async (provider) => {
+      if (runtimeModelCatalogs.get(provider)?.key === key) return
+      try {
+        const models = await runtime.supportedModels!(provider)
+        runtimeModelCatalogs.set(provider, {
+          key,
+          options: models.map((model) => {
+            const precise = modelNameFromResolved(model.resolvedModel)
+            return {
+              id: model.value,
+              sdkModel: model.value === 'default' ? null : model.value,
+              // 选择仍传原生别名，CLI 升级后别名自动指向新型号；只有显示名带精确版本。
+              displayName: precise
+                ? model.value === 'default'
+                  ? `Default · ${precise}`
+                  : precise
+                : model.displayName,
+              description: model.description,
+              isDefault: model.value === 'default',
+              ...(model.supportedEffortLevels ? { efforts: model.supportedEffortLevels } : {}),
+            }
+          }),
+        })
+      } catch (error) {
+        debugLog('model.catalog.failed', {
+          provider,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+    }),
+  )
+}
+
+/** 选单里显示的供应商名：账号写 Account，模型选单不分语言 */
+export function providerLabel(provider: string, config = readProviderConfig()): string {
+  if (provider === ACCOUNT_PROVIDER) return 'Account'
+  if (provider === NATIVE_PROVIDER) return 'Claude Code'
+  return config.providers[provider]?.title ?? provider
+}
+
+/** 能用的供应商多于一个时型号显示名前加“[供应商] ” */
+export function showProviderPrefix(): boolean {
+  return usableProviders().length > 1
 }
 
 export function allSelectableModelOptions(): SelectableModelOption[] {
   if (process.env.CHA_CLAUDE_MODELS) return claudeModelOptions()
-  return runtimeModelCatalog?.options ?? [defaultModelOption]
+  const config = readProviderConfig()
+  const usable = usableProviders()
+  const prefix = usable.length > 1
+  // 只有一家能用、又正是不带前缀的型号所属的那一家时，型号 ID 不带前缀（和只有一种凭据时以前的写法一样）
+  const qualifyIds = !(usable.length === 1 && usable[0] === plainProvider())
+  const qualify = (provider: string, option: SelectableModelOption): SelectableModelOption => ({
+    ...option,
+    id: qualifyIds ? joinModelRef(provider, option.id) : option.id,
+    displayName: prefix
+      ? `[${providerLabel(provider, config)}] ${option.displayName}`
+      : option.displayName,
+  })
+  const options: SelectableModelOption[] = []
+  for (const provider of usable) {
+    const definition = config.providers[provider]
+    if (definition?.kind === 'gateway') {
+      for (const [index, model] of definition.models.entries())
+        options.push(
+          qualify(provider, {
+            id: model.id,
+            sdkModel: model.id,
+            displayName: model.title ?? model.id,
+            description: definition.title ?? provider,
+            // 网关排在最前（账号没登录）时，它清单里的第一个算默认
+            isDefault: provider === usable[0] && index === 0,
+          }),
+        )
+      continue
+    }
+    const catalog = runtimeModelCatalogs.get(provider)?.options ?? [defaultModelOption]
+    // 只有排在最前的那一家的“默认”算全局默认；别家的默认项只是那一家的默认
+    for (const option of catalog)
+      options.push(
+        qualify(provider, {
+          ...option,
+          isDefault: provider === usable[0] && option.isDefault === true,
+        }),
+      )
+  }
+  return options
 }
 
-// 除目录行外，也接受 CLI 可直接解析的别名与完整型号（例如持久化的 opus）；
-// 显式配置 CHA_CLAUDE_MODELS 时只接受该列表。
+/** 型号 ID 交给 CLI 的那一段：账号和 native 照 CLI 的别名规则解析，别家的型号原样（CLI 不认识，网关认识） */
+export function runModel(
+  ref: string | null | undefined,
+  purpose: 'normal' | 'summary' = 'normal',
+): { provider: string; model: string | null } {
+  const { provider, model } = splitModelRef(ref ?? '')
+  if (provider === ACCOUNT_PROVIDER || provider === NATIVE_PROVIDER)
+    return { provider, model: resolveClaudeModel(model, purpose) }
+  return { provider, model: model.trim() || null }
+}
+
+// 除目录行外，也接受 CLI 可直接解析的别名与完整型号（例如持久化的 opus）；别家供应商的型号不限
+// （CLI 原样交给网关）；显式配置 CHA_CLAUDE_MODELS 时只接受该列表。
 export function isSelectableModel(id: string): boolean {
   if (allSelectableModelOptions().some((option) => option.id.toLowerCase() === id.toLowerCase()))
     return true
   if (process.env.CHA_CLAUDE_MODELS) return false
+  const { provider, model } = splitModelRef(id)
+  if (provider !== ACCOUNT_PROVIDER && provider !== NATIVE_PROVIDER) return model.trim().length > 0
   return (
-    /^(default|best|opusplan|sonnet-1m|opus-plan|(sonnet|opus|haiku|fable)(\[1m\])?)$/.test(id) ||
-    /^claude-[a-z0-9.-]+(\[1m\])?$/.test(id)
+    /^(default|best|opusplan|sonnet-1m|opus-plan|(sonnet|opus|haiku|fable)(\[1m\])?)$/.test(
+      model,
+    ) || /^claude-[a-z0-9.-]+(\[1m\])?$/.test(model)
   )
 }
 
@@ -180,20 +317,24 @@ export function defaultSelectableModelId(): string {
 }
 
 // 和目录里某一行只是大小写不同的，按目录里的写法记：会话报的模型和 model/list 的那一行逐字相同。
+// 不带前缀的（以前的会话、CLI 的别名）补上 plainProvider() 的前缀再找，找到就用目录里那一行。
 export function catalogModelId(id: string): string {
-  return (
-    allSelectableModelOptions().find((option) => option.id.toLowerCase() === id.toLowerCase())
-      ?.id ?? id
-  )
+  const options = allSelectableModelOptions()
+  const find = (candidate: string) =>
+    options.find((option) => option.id.toLowerCase() === candidate.toLowerCase())?.id
+  if (process.env.CHA_CLAUDE_MODELS || hasProviderPrefix(id)) return find(id) ?? id
+  return find(joinModelRef(plainProvider(), id)) ?? find(id) ?? id
 }
 
 // model/list 里给目录之外的模型补的一行：配置的默认模型（CHA_CLAUDE_DEFAULT_MODEL 或 config 的 model）、
 // 会话指定的模型。CLI 别名和完整型号都认，原样交给它；能看出型号的显示精确名字，看不出的照原文。
 export function extraModelOption(id: string, isDefault: boolean): SelectableModelOption {
+  const { provider, model } = splitModelRef(id)
+  const name = modelNameFromResolved(model) ?? modelDisplayName(model)
   return {
     id,
-    sdkModel: id,
-    displayName: modelNameFromResolved(id) ?? modelDisplayName(id),
+    sdkModel: model,
+    displayName: showProviderPrefix() ? `[${providerLabel(provider)}] ${name}` : name,
     description: isDefault
       ? 'Default model configured for this adapter'
       : 'Model selected for an existing thread',
@@ -202,13 +343,8 @@ export function extraModelOption(id: string, isDefault: boolean): SelectableMode
 }
 
 export function normalizeSelectableModelId(value: string, fallback: string): string {
-  const options = allSelectableModelOptions()
   for (const candidate of [value, fallback])
-    if (isSelectableModel(candidate))
-      return (
-        options.find((option) => option.id.toLowerCase() === candidate.toLowerCase())?.id ??
-        candidate
-      )
+    if (isSelectableModel(candidate)) return catalogModelId(candidate)
   const defaultModel = defaultSelectableModelId()
   debugLog('config.model.repaired', { requestedModel: value, repairedModel: defaultModel })
   return defaultModel

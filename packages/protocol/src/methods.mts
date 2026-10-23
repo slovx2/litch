@@ -231,6 +231,7 @@ import type {
   HarnessParams,
   HarnessProviderIdParams,
   HarnessProvidersActivateParams,
+  HarnessProvidersDiscoverModelsResponse,
   HarnessProvidersReadResponse,
   HarnessProvidersUpsertParams,
   HarnessProvidersWriteResponse,
@@ -481,6 +482,10 @@ export interface ClientRequests {
   'litch/harness/providers/activate': {
     params: HarnessProvidersActivateParams
     result: HarnessProvidersWriteResponse
+  }
+  'litch/harness/providers/discoverModels': {
+    params: HarnessProviderIdParams
+    result: HarnessProvidersDiscoverModelsResponse
   }
   'litch/harness/auth/start': { params: HarnessAuthStartParams; result: HarnessAuthStartResponse }
   'litch/harness/auth/continue': { params: HarnessAuthContinueParams; result: HarnessAuthStep }

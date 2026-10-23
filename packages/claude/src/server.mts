@@ -50,7 +50,13 @@ import {
   writeSettingsDefaults,
 } from './claude-default-model.mjs'
 import { claudeConfigDir } from './claude-native-files.mjs'
-import { PROVIDER_CONFIG_KEY } from './claude-provider.mjs'
+import {
+  ACCOUNT_PROVIDER,
+  hasProviderPrefix,
+  PROVIDER_CONFIG_KEY,
+  readProviderConfig,
+  writeProviderConfig,
+} from './claude-provider.mjs'
 import { cliConfigLayer, mergeConfigLayers, sessionConfigLayer } from './cli-config.mjs'
 import { TurnFailure, turnErrorOf } from './codex-error-info.mjs'
 import {
@@ -148,6 +154,7 @@ import {
   gitUntrackedDiff,
   gitWorktreeTree,
   hasLegacyPermissionParams,
+  invalidateProviderCatalogs,
   isGitWorkTree,
   isNotAGitRepo,
   isSelectableModel,
@@ -174,6 +181,7 @@ import {
   reasoningEffortFromParams,
   reviewLabel,
   reviewPrompt,
+  runModel,
   sandboxEnvelope,
   sandboxFromTurnParams,
   simpleDiff,
@@ -248,7 +256,6 @@ import {
   platformFamily,
   platformOs,
   resolveClaudeEffort,
-  resolveClaudeModel,
   textFromInput,
 } from './util.mjs'
 import { parseWorkflowCommand } from './workflow-command.mjs'
@@ -453,6 +460,11 @@ export class CodexClaudeAppServer {
       })),
     defaultsChanged: () => {
       this.loadPersistedConfig()
+    },
+    providersChanged: () => {
+      // 供应商、密钥变了：重读各家的原生目录；上一次选的型号可能随供应商删掉了
+      invalidateProviderCatalogs()
+      void loadRuntimeModelCatalog(this.runtime).then(() => this.loadPersistedConfig())
     },
     mcpLogin: (name, complete) => {
       const scope = this.mcpScope()
@@ -1321,6 +1333,7 @@ export class CodexClaudeAppServer {
       params.ephemeral === true ||
       params.threadSource === 'title_generation' ||
       params.threadSource === 'memory_consolidation'
+    if (modelFromParams(params, null) && !isTitleOrHelper) this.rememberModel(model)
     const thread: ThreadRecord = {
       id,
       sessionId: id,
@@ -1426,6 +1439,7 @@ export class CodexClaudeAppServer {
       const newBackend = isCodexOpenAiModel(model) ? 'codex' : 'claude'
       if (newBackend === thread.runtimeBackend) {
         thread.model = model
+        this.rememberModel(model)
       } else {
         debugLog('thread.resume.modelBackendMismatch', {
           threadId,
@@ -2479,7 +2493,7 @@ export class CodexClaudeAppServer {
       {
         threadId,
         cwd: thread.cwd,
-        model: resolveClaudeModel(thread.model),
+        ...runModel(thread.model),
         sessionId: thread.claudeSessionId ?? newId(),
         existingSession: !!thread.claudeSessionId,
         messageId: newId(),
@@ -2702,6 +2716,7 @@ export class CodexClaudeAppServer {
       const newBackend = isCodexOpenAiModel(model) ? 'codex' : 'claude'
       thread.runtimeBackend = newBackend
       thread.model = model
+      this.rememberModel(model)
     }
     if (reasoningEffort) thread.reasoningEffort = reasoningEffort
     const permissionProfileId = permissionProfileIdFromParams(params)
@@ -2779,6 +2794,7 @@ export class CodexClaudeAppServer {
     if (model) {
       thread.runtimeBackend = isCodexOpenAiModel(model) ? 'codex' : 'claude'
       thread.model = model
+      this.rememberModel(model)
     }
     const reasoningEffort = reasoningEffortFromParams(params, null)
     if (reasoningEffort) thread.reasoningEffort = reasoningEffort
@@ -3612,7 +3628,7 @@ export class CodexClaudeAppServer {
         prompt: '/compact',
         cwd: thread.cwd,
         runtimeType: null,
-        model: resolveClaudeModel(thread.model, 'normal'),
+        ...runModel(thread.model),
         effort: resolveClaudeEffort(thread.reasoningEffort ?? null),
         claudeSessionId: thread.claudeSessionId,
         forkSession: false,
@@ -3758,6 +3774,7 @@ export class CodexClaudeAppServer {
       this.configOverrides.permissions,
     )
     if (model) thread.model = catalogModelId(model)
+    if (modelFromParams(params, null)) this.rememberModel(thread.model)
     if (reasoningEffort) thread.reasoningEffort = reasoningEffort
     if (permissionProfileId) {
       thread.permissionProfileId = permissionProfileId
@@ -4270,9 +4287,11 @@ export class CodexClaudeAppServer {
           .filter(Boolean)
           .join('\n\n') || null
     const isCodexThread = false
-    const resolvedModel = isCodexThread
-      ? rawTurnModel
-      : resolveClaudeModel(rawTurnModel, params.outputSchema == null ? 'normal' : 'summary')
+    // 型号 ID 带着供应商（`<供应商>/<型号>`）：CLI 只拿型号，供应商决定起 CLI 用的凭据
+    const turnRun = runModel(rawTurnModel, params.outputSchema == null ? 'normal' : 'summary')
+    const resolvedModel = isCodexThread ? rawTurnModel : turnRun.model
+    // 账号额度只在用账号的回合前后问（别的供应商没有订阅额度）
+    const accountTurn = !isCodexThread && turnRun.provider === ACCOUNT_PROVIDER
     const resolvedEffort = resolveClaudeEffort(
       relay
         ? (relay.parent.reasoningEffort ?? process.env.CHA_CLAUDE_EFFORT ?? null)
@@ -4465,7 +4484,7 @@ export class CodexClaudeAppServer {
     if (!turnIsActive()) return
     this.runtimeReadyByTurn.get(turn.id)?.resolve(true)
     this.handedToRuntime.add(turn.id)
-    void this.refreshAccountUsage(false)
+    if (accountTurn) void this.refreshAccountUsage(false)
     const runtimeTurn = this.runtime.runTurn(
       {
         threadId: thread.id,
@@ -4488,6 +4507,7 @@ export class CodexClaudeAppServer {
         cwd: relay ? relay.parent.cwd : stringOr(params.cwd, thread.cwd),
         runtimeType: isCodexThread ? 'codex-proxy' : null,
         model: resolvedModel,
+        provider: isCodexThread ? null : turnRun.provider,
         effort: resolvedEffort,
         claudeSessionId: isCodexThread ? thread.codexSessionId : runtimeThread.claudeSessionId,
         forkSession,
@@ -5833,7 +5853,7 @@ export class CodexClaudeAppServer {
     disarmWatchdog()
     acceptRuntimeEvents = false
     if (this.stopped) return
-    void this.refreshAccountUsage(false)
+    if (accountTurn) void this.refreshAccountUsage(false)
     // 说过的不再说；这一回合的调用进了会话记录的删掉（不等：CLI 退出时才写完最后一批，下一回合开始前还会再看）
     if (lostIntents.length > 0)
       this.store.dropNativeToolIntents(
@@ -6519,7 +6539,11 @@ export class CodexClaudeAppServer {
   private async turnSettingsUpdate(params: Record<string, unknown>): Promise<unknown> {
     const threadId = requiredString(params.threadId, 'threadId')
     const turnId = requiredString(params.turnId, 'turnId')
-    const settings = parseTurnSettings(params)
+    const { settings, provider } = parseTurnSettings(params)
+    const thread = this.store.getThread(threadId)
+    // 换了供应商要换 CLI 进程（凭据在进程环境里），这一回合不能当场换，下一回合起生效
+    if (provider !== null && thread && provider !== runModel(thread.model).provider)
+      return { status: 'targetUnavailable' }
     const active = (): boolean =>
       this.activeTurnByThread.get(threadId) === turnId &&
       this.store.getTurn(turnId)?.status === 'inProgress'
@@ -6851,10 +6875,13 @@ export class CodexClaudeAppServer {
     const catalog = allSelectableModelOptions()
     const listed = new Set(catalog.map((option) => option.id.toLowerCase()))
     const extras: string[] = []
+    // 以前的会话记的是不带供应商的型号：目录里已有它带前缀的那一行时，补的这一行藏起来（会话报的型号仍找得到）
+    const duplicates = new Set<string>()
     for (const id of [defaultModel, ...this.store.threadModels()]) {
       if (!id || isCodexOpenAiModel(id) || listed.has(id.toLowerCase())) continue
       listed.add(id.toLowerCase())
       extras.push(id)
+      if (catalogModelId(id) !== id) duplicates.add(id)
     }
     const options = [...catalog, ...extras.map((id) => extraModelOption(id, id === defaultModel))]
     const hasConfiguredDefault = options.some((option) => option.id === defaultModel)
@@ -6878,7 +6905,7 @@ export class CodexClaudeAppServer {
       displayName: option.displayName,
       description: option.description,
       modelSpecialty: null,
-      hidden: false,
+      hidden: duplicates.has(option.id),
       supportedReasoningEfforts: reasoningEffortsFor(option.efforts),
       defaultReasoningEffort: this.configReasoningEffort,
       inputModalities: ['text', 'image'],
@@ -8000,6 +8027,22 @@ export class CodexClaudeAppServer {
   }
 
   // 默认模型与强度以 Claude Code 的 settings.json 为准（model、effortLevel），config.json 里的旧值第一次读到时搬过去
+  // 用户在某个会话（含新建）里选了型号：记成上一次选择，新会话照它。只记带供应商前缀的
+  private rememberModel(model: string | null): void {
+    if (!model || !hasProviderPrefix(model)) return
+    const config = readProviderConfig()
+    if (config.last === model) return
+    try {
+      writeProviderConfig({ ...config, last: model })
+    } catch (error) {
+      debugLog('provider.last.failed', {
+        error: error instanceof Error ? error.message : String(error),
+      })
+      return
+    }
+    this.configModel = model
+  }
+
   private loadPersistedConfig() {
     let snapshot = readConfigFile(this.configPath)
     this.validateConfigValues(snapshot.values)
@@ -8024,7 +8067,14 @@ export class CodexClaudeAppServer {
         : typeof legacyModel === 'string'
           ? legacyModel
           : null
-    this.configModel = model === null ? defaultSelectableModelId() : catalogModelId(model)
+    // 上一次在任何会话里选的型号优先（新建会话记住上一次选择），其次 settings.json 的默认模型
+    const last = readProviderConfig().last
+    this.configModel =
+      last !== null && isSelectableModel(last)
+        ? catalogModelId(last)
+        : model === null
+          ? defaultSelectableModelId()
+          : catalogModelId(model)
     this.configReasoningEffort =
       defaults.effort ??
       normalizeCodexReasoningEffort(typeof legacyEffort === 'string' ? legacyEffort : null) ??

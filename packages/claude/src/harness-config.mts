@@ -1180,6 +1180,8 @@ export class ClaudeHarnessConfig {
         return this.providers.remove(params)
       case HARNESS_CONFIG_METHOD.providersActivate:
         return this.providers.activate(params)
+      case HARNESS_CONFIG_METHOD.providersDiscoverModels:
+        return this.providers.discoverModels(params)
       case HARNESS_CONFIG_METHOD.authStart:
         return this.providers.authStart(params)
       case HARNESS_CONFIG_METHOD.authContinue:

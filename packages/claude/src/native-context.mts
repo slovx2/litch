@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { setTimeout as delay } from 'node:timers/promises'
 import { isDeepStrictEqual } from 'node:util'
 import type { Options, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
-import { claudeChildEnv } from './claude-provider.mjs'
+import { contextLaunch, withFlagSettings } from './claude-provider.mjs'
 import { hostClaudeEnvOverrides, hostClaudeExecutable } from './host-claude.mjs'
 import type { NativeProcess } from './native-process.mjs'
 import { ProtocolError } from './protocol-contract.mjs'
@@ -34,6 +34,8 @@ export interface ContextInjection {
   threadId: string
   cwd: string
   model: string | null
+  // 会话所选型号的供应商；不给按 plainProvider() 算
+  provider?: string | null
   sessionId: string
   existingSession: boolean
   // 这一批的编号（适配器库里的键），不是原生消息的 uuid
@@ -244,13 +246,14 @@ export async function appendNativeContext(
   if (context.existingSession && !exists)
     throw new ProtocolError(-32000, '原生会话缺失，不能丢弃历史后追加上下文')
   abort.signal.throwIfAborted()
+  const launch = contextLaunch(context.provider, context.model)
   const options: Options = {
     pathToClaudeCodeExecutable: hostClaudeExecutable(),
     cwd: context.cwd,
     ...(context.model ? { model: context.model } : {}),
     abortController: abort,
     settingSources: claudeSettingSources(),
-    settings: { disableAllHooks: true, disableSkillShellExecution: true },
+    settings: withFlagSettings({ disableAllHooks: true, disableSkillShellExecution: true }, launch),
     strictMcpConfig: true,
     mcpServers: {},
     tools: [],
@@ -259,7 +262,7 @@ export async function appendNativeContext(
     persistSession: true,
     ...(exists ? { resume: context.sessionId } : { sessionId: context.sessionId }),
     env: {
-      ...claudeChildEnv(),
+      ...launch.env,
       ...hostClaudeEnvOverrides,
       CLAUDE_CODE_MAX_RETRIES: '0',
       CLAUDE_CODE_DISABLE_NONSTREAMING_FALLBACK: '1',

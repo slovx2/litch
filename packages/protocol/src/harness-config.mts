@@ -41,6 +41,8 @@ export const HARNESS_CONFIG_METHOD = {
   providersRemove: 'litch/harness/providers/remove',
   /** 切换当前在用的 provider（只有 switchable 为 true 的 harness 有） */
   providersActivate: 'litch/harness/providers/activate',
+  /** 列出某个自定义 provider 自己报的模型（网关的 /v1/models），供用户勾选进清单；不写任何东西 */
+  providersDiscoverModels: 'litch/harness/providers/discoverModels',
   /** 开始一次登录或设置 API key。应答是第一步；之后的进展也会经 auth/updated 通知 */
   authStart: 'litch/harness/auth/start',
   /** 交上一步要的东西（粘贴的授权码、表单） */
@@ -337,8 +339,8 @@ export interface HarnessProviderTemplate {
 export interface HarnessProvidersReadResponse {
   providers: HarnessProvider[]
   /**
-   * 有没有“当前在用的 provider”这回事：Codex（model_provider）、Claude（订阅、API key、网关三选一）、
-   * Pi（defaultProvider）是 true；OpenCode 按所选模型决定用哪个，是 false
+   * 有没有“当前在用的 provider”这回事：Codex（model_provider）、Pi（defaultProvider）是 true；
+   * OpenCode、Claude（型号写成 `<provider>/<型号>`，会话按所选型号的 provider 来）是 false
    */
   switchable: boolean
   templates: HarnessProviderTemplate[]
@@ -362,6 +364,16 @@ export interface HarnessProviderIdParams extends HarnessParams {
 
 export interface HarnessProvidersActivateParams extends HarnessProviderIdParams {
   expectedVersion: string
+}
+
+export interface HarnessProviderModel {
+  id: string
+  /** 对方给的显示名；没有是 null */
+  title: string | null
+}
+
+export interface HarnessProvidersDiscoverModelsResponse {
+  models: HarnessProviderModel[]
 }
 
 export interface HarnessProvidersWriteResponse {

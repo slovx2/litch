@@ -11,6 +11,7 @@ import {
   symlink,
   writeFile,
 } from 'node:fs/promises'
+import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
@@ -19,11 +20,19 @@ import { ClaudeLoginAttempt, claudeAuthStatus } from '../src/claude-auth.mjs'
 import { migrateDefaultModel, readSettingsDefaults } from '../src/claude-default-model.mjs'
 import {
   ACCOUNT_PROVIDER,
-  API_KEY_PROVIDER,
-  applyProviderEnv,
-  claudeChildEnv,
-  gatewayTokenEnv,
-  readProviderSelection,
+  hasProviderPrefix,
+  joinModelRef,
+  NATIVE_PROVIDER,
+  nativeOverrides,
+  ProviderUnavailableError,
+  parseProviderConfig,
+  plainProvider,
+  providerLaunch,
+  readProviderConfig,
+  readProviderSecrets,
+  splitModelRef,
+  withFlagSettings,
+  writeProviderConfig,
 } from '../src/claude-provider.mjs'
 import {
   readClaudeConfig,
@@ -51,8 +60,6 @@ const CREDENTIAL_ENV = [
   'ANTHROPIC_AUTH_TOKEN',
   'ANTHROPIC_BASE_URL',
   'CLAUDE_CODE_OAUTH_TOKEN',
-  'LITCH_CLAUDE_API_KEY',
-  'LITCH_CLAUDE_OAUTH_TOKEN',
 ]
 
 // 每个用例自己的 Claude 配置目录和适配器目录：只设这几个变量，用完复原，绝不碰真实的 ~/.claude
@@ -596,60 +603,178 @@ test('HC-CLAUDE-005：默认模型从适配器的 config.json 搬到 settings.js
     assert.equal((await readJson(configPath)).model, undefined)
   }))
 
-test('HC-CLAUDE-006：按选的 provider 改写给 CLI 的环境，LITCH_ 的密钥不传下去', () => {
+test('HC-CLAUDE-006：按会话的供应商算起 CLI 的环境，没填密钥绝不退回账号', () => {
   const base = {
     PATH: '/bin',
     ANTHROPIC_API_KEY: 'from-device-env',
     ANTHROPIC_BASE_URL: 'https://old.example.test',
-    LITCH_CLAUDE_API_KEY: 'sk-ant-api-litch',
-    LITCH_CLAUDE_OAUTH_TOKEN: 'sk-ant-oat-litch',
-    [gatewayTokenEnv('corp-gw')]: 'gw-token',
+    CLAUDE_CODE_USE_BEDROCK: '1',
+    ANTHROPIC_MODEL: 'opus',
+    ANTHROPIC_CUSTOM_HEADERS: 'X-Old: 1',
   }
-  const selection = {
-    active: null,
-    gateways: {
-      'corp-gw': { title: null, baseUrl: 'https://gw.example.test', authHeader: 'bearer' as const },
+  // 以前的版本存密钥的变量：哪家都不带下去
+  const legacy = { ...base, LITCH_CLAUDE_API_KEY: 'sk-ant-api-old' }
+  const config = {
+    last: null,
+    providers: {
+      corp: {
+        kind: 'gateway' as const,
+        title: '公司网关',
+        baseUrl: 'https://gw.example.test',
+        authHeader: 'bearer' as const,
+        models: [{ id: 'glm-4.6', title: null }],
+        smallModel: 'glm-4.5-air',
+        headers: 'X-Team: a',
+      },
+      work: {
+        kind: 'apiKey' as const,
+        title: null,
+        baseUrl: null,
+        authHeader: 'apiKey' as const,
+        models: [],
+        smallModel: null,
+        headers: null,
+      },
     },
   }
-  assert.equal(gatewayTokenEnv('corp-gw'), 'LITCH_CLAUDE_GATEWAY_CORP_GW_TOKEN')
-  // 没选过：除了去掉 LITCH_ 的密钥，原样
-  assert.deepEqual(applyProviderEnv(base, selection), {
+  const secrets = { corp: 'gw-token', work: 'sk-ant-api-work' }
+
+  // native：用户自己的配置，原样
+  const native = providerLaunch(NATIVE_PROVIDER, null, legacy, config, secrets)
+  assert.deepEqual(native.env, base)
+  assert.equal(native.flagSettings, null)
+
+  // 账号：凭据、地址、云厂商开关去掉，设置文件里的同名项在命令行设置层置空
+  const account = providerLaunch(ACCOUNT_PROVIDER, null, legacy, config, secrets)
+  assert.deepEqual(account.env, {
     PATH: '/bin',
-    ANTHROPIC_API_KEY: 'from-device-env',
-    ANTHROPIC_BASE_URL: 'https://old.example.test',
+    ANTHROPIC_MODEL: 'opus',
+    ANTHROPIC_CUSTOM_HEADERS: 'X-Old: 1',
   })
-  assert.deepEqual(applyProviderEnv(base, { ...selection, active: ACCOUNT_PROVIDER }), {
-    PATH: '/bin',
-    CLAUDE_CODE_OAUTH_TOKEN: 'sk-ant-oat-litch',
-  })
-  assert.deepEqual(
-    applyProviderEnv(
-      { PATH: '/bin', ANTHROPIC_API_KEY: 'x' },
-      { ...selection, active: ACCOUNT_PROVIDER },
-    ),
-    {
-      PATH: '/bin',
-    },
+  assert.equal(account.managed, false)
+  assert.equal(account.flagSettings?.apiKeyHelper, '')
+  assert.equal(account.flagSettings?.env?.ANTHROPIC_API_KEY, '')
+  assert.equal(account.flagSettings?.env?.ANTHROPIC_BASE_URL, '')
+  assert.equal(account.flagSettings?.env?.CLAUDE_CODE_USE_BEDROCK, '')
+  assert.equal(account.flagSettings?.env?.CLAUDE_CODE_OAUTH_TOKEN, undefined)
+  // 外面带进来的长期令牌是账号凭据，留着；存了令牌时换成存的
+  assert.equal(
+    providerLaunch(ACCOUNT_PROVIDER, null, { CLAUDE_CODE_OAUTH_TOKEN: 'outer' }, config, secrets)
+      .env.CLAUDE_CODE_OAUTH_TOKEN,
+    'outer',
   )
-  assert.deepEqual(applyProviderEnv(base, { ...selection, active: API_KEY_PROVIDER }), {
-    PATH: '/bin',
-    ANTHROPIC_API_KEY: 'sk-ant-api-litch',
+  const withToken = providerLaunch(ACCOUNT_PROVIDER, null, base, config, {
+    ...secrets,
+    anthropic: 'sk-ant-oat-stored',
   })
-  assert.deepEqual(applyProviderEnv(base, { ...selection, active: 'corp-gw' }), {
+  assert.equal(withToken.env.CLAUDE_CODE_OAUTH_TOKEN, 'sk-ant-oat-stored')
+  assert.notEqual(withToken.scope, account.scope)
+
+  // API key：托管模式，x-api-key，官方地址
+  const work = providerLaunch('work', 'opus', legacy, config, secrets)
+  assert.deepEqual(work.env, {
     PATH: '/bin',
+    CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST: '1',
+    ANTHROPIC_API_KEY: 'sk-ant-api-work',
+  })
+  assert.equal(work.managed, true)
+  assert.equal(work.flagSettings, null)
+
+  // 网关：Bearer、地址、两档都指向所选型号，小模型另配，额外请求头换成它的
+  const corp = providerLaunch('corp', 'glm-4.6', base, config, secrets)
+  assert.deepEqual(corp.env, {
+    PATH: '/bin',
+    CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST: '1',
+    ANTHROPIC_BASE_URL: 'https://gw.example.test',
     ANTHROPIC_AUTH_TOKEN: 'gw-token',
-    ANTHROPIC_BASE_URL: 'https://gw.example.test',
+    ANTHROPIC_DEFAULT_OPUS_MODEL: 'glm-4.6',
+    ANTHROPIC_DEFAULT_SONNET_MODEL: 'glm-4.6',
+    ANTHROPIC_DEFAULT_HAIKU_MODEL: 'glm-4.5-air',
+    ANTHROPIC_CUSTOM_HEADERS: 'X-Team: a',
   })
+  // 同一网关换型号不换进程；换密钥、改定义要换
+  assert.equal(providerLaunch('corp', 'kimi-k2', base, config, secrets).scope, corp.scope)
+  assert.notEqual(
+    providerLaunch('corp', 'glm-4.6', base, config, { ...secrets, corp: 'other' }).scope,
+    corp.scope,
+  )
   const apiKeyHeader = {
-    active: 'corp-gw',
-    gateways: { 'corp-gw': { ...selection.gateways['corp-gw'], authHeader: 'apiKey' as const } },
+    ...config,
+    providers: {
+      ...config.providers,
+      corp: { ...config.providers.corp, authHeader: 'apiKey' as const },
+    },
   }
-  assert.deepEqual(applyProviderEnv(base, apiKeyHeader), {
-    PATH: '/bin',
-    ANTHROPIC_API_KEY: 'gw-token',
-    ANTHROPIC_BASE_URL: 'https://gw.example.test',
-  })
+  const corpApiKey = providerLaunch('corp', 'glm-4.6', base, apiKeyHeader, secrets)
+  assert.equal(corpApiKey.env.ANTHROPIC_API_KEY, 'gw-token')
+  assert.equal(corpApiKey.env.ANTHROPIC_AUTH_TOKEN, undefined)
+  assert.notEqual(corpApiKey.scope, corp.scope)
+
+  // 没填密钥、供应商不在了：报错，不退回账号
+  assert.throws(
+    () => providerLaunch('corp', 'glm-4.6', base, config, {}),
+    (error) => error instanceof ProviderUnavailableError && error.provider === 'corp',
+  )
+  assert.throws(() => providerLaunch('gone', null, base, config, secrets), ProviderUnavailableError)
+
+  // 命令行设置层：并进已有的 settings，launch 的同名项优先
+  assert.deepEqual(
+    withFlagSettings({ disableAllHooks: true, env: { A: '1', ANTHROPIC_API_KEY: 'x' } }, account)
+      .env,
+    { A: '1', ...account.flagSettings?.env },
+  )
+  assert.deepEqual(withFlagSettings({ disableAllHooks: true }, corp), { disableAllHooks: true })
 })
+
+test('HC-CLAUDE-014：型号 ID 的供应商前缀，不带前缀的按用户自己的配置算', () =>
+  isolated(async ({ claude }) => {
+    const config = parseProviderConfig({
+      last: 'corp/glm-4.6',
+      providers: {
+        corp: { kind: 'gateway', baseUrl: 'https://gw.example.test', models: [{ id: 'glm-4.6' }] },
+        work: { kind: 'apiKey' },
+        // 认不出的、保留名、网关没地址的都不要
+        'bad id': { kind: 'apiKey' },
+        anthropic: { kind: 'apiKey' },
+        nourl: { kind: 'gateway' },
+      },
+    })
+    assert.deepEqual(Object.keys(config.providers), ['corp', 'work'])
+    assert.equal(config.providers.work!.authHeader, 'apiKey')
+    assert.equal(config.providers.corp!.authHeader, 'bearer')
+    assert.deepEqual(splitModelRef('corp/glm-4.6', config), { provider: 'corp', model: 'glm-4.6' })
+    assert.deepEqual(splitModelRef('anthropic/opus[1m]', config), {
+      provider: 'anthropic',
+      model: 'opus[1m]',
+    })
+    // 前缀不是已知的供应商：整串是型号（网关自己的型号可能带 /）
+    assert.deepEqual(splitModelRef('vendor/model', config), {
+      provider: 'anthropic',
+      model: 'vendor/model',
+    })
+    assert.deepEqual(splitModelRef('opus', config), { provider: 'anthropic', model: 'opus' })
+    assert.equal(hasProviderPrefix('native/opus', config), true)
+    assert.equal(hasProviderPrefix('vendor/model', config), false)
+    assert.equal(joinModelRef('corp', 'a/b'), 'corp/a/b')
+
+    assert.deepEqual(nativeOverrides(), [])
+    assert.equal(plainProvider(), ACCOUNT_PROVIDER)
+    await writeFile(
+      join(claude, 'settings.json'),
+      JSON.stringify({
+        env: { ANTHROPIC_BASE_URL: 'https://mine.example.test' },
+        apiKeyHelper: 'x',
+      }),
+    )
+    assert.deepEqual(nativeOverrides(), ['ANTHROPIC_BASE_URL', 'apiKeyHelper'])
+    assert.equal(plainProvider(), NATIVE_PROVIDER)
+    assert.equal(splitModelRef('opus', config).provider, NATIVE_PROVIDER)
+    assert.deepEqual(nativeOverrides({ ...process.env, CLAUDE_CODE_USE_VERTEX: '1' }), [
+      'ANTHROPIC_BASE_URL',
+      'CLAUDE_CODE_USE_VERTEX',
+      'apiKeyHelper',
+    ])
+  }))
 
 // 假 CLI 拷进用例的临时目录再用：只认 auth 子命令，状态记在配置目录里，不碰钥匙串
 async function withFakeCli(root: string): Promise<string> {
@@ -666,113 +791,254 @@ async function calls(claude: string): Promise<any[]> {
     .map((line) => JSON.parse(line))
 }
 
-test('HC-CLAUDE-007：provider 三选一、自定义网关、切换不丢 key', () =>
-  isolated(
-    async ({ root, claude }) => {
-      process.env.CHA_CLAUDE_CLI = await withFakeCli(root)
-      const events: Array<{ method: string; params: any }> = []
-      const providers = new ClaudeProviders({
-        broadcast: (method, params) => events.push({ method, params }),
-      })
-      let read = await providers.read()
-      assert.equal(read.switchable, true)
-      assert.deepEqual(
-        read.providers.map((provider) => [provider.id, provider.active]),
-        [
-          ['anthropic', true],
-          ['api-key', false],
-        ],
-      )
-      const account = read.providers[0]!
-      assert.deepEqual(account.auth, { signedIn: false, kind: 'none', label: null })
-      assert.deepEqual(
-        account.methods.map((method) => [method.id, method.kind, method.envName ?? null]),
-        [
-          ['claudeai', 'oauthPaste', null],
-          ['console', 'oauthPaste', null],
-          ['oauthToken', 'env', 'LITCH_CLAUDE_OAUTH_TOKEN'],
-        ],
-      )
-      const apiKey = read.providers[1]!
-      assert.deepEqual(apiKey.auth, { signedIn: true, kind: 'env', label: '…7890' })
-      assert.equal(apiKey.methods[0]!.envName, 'LITCH_CLAUDE_API_KEY')
-      assert.equal(apiKey.methods[0]!.effect, 'harness')
-      assert.deepEqual(
-        read.templates.map((template) => template.id),
-        ['anthropicGateway'],
-      )
+test('HC-CLAUDE-007：加改删供应商，密钥只进 0600 的密钥文件，没有“当前供应商”', () =>
+  isolated(async ({ root, claude, adapter }) => {
+    process.env.CHA_CLAUDE_CLI = await withFakeCli(root)
+    const events: Array<{ method: string; params: any }> = []
+    let changes = 0
+    const providers = new ClaudeProviders({
+      broadcast: (method, params) => events.push({ method, params }),
+      providersChanged: () => changes++,
+    })
+    let read = await providers.read()
+    assert.equal(read.switchable, false)
+    assert.deepEqual(
+      read.providers.map((provider) => provider.id),
+      ['anthropic'],
+    )
+    const account = read.providers[0]!
+    assert.deepEqual(account.auth, { signedIn: false, kind: 'none', label: null })
+    assert.deepEqual(
+      account.methods.map((method) => [method.id, method.kind]),
+      [
+        ['claudeai', 'oauthPaste'],
+        ['console', 'oauthPaste'],
+        ['oauthToken', 'apiKey'],
+      ],
+    )
+    assert.deepEqual(
+      read.templates.map((template) => template.id),
+      ['anthropicApiKey', 'anthropicGateway'],
+    )
 
-      let version = providers.upsert({
-        providerId: 'corp',
-        templateId: 'anthropicGateway',
-        definition: { title: '公司网关', baseUrl: 'https://gw.example.test/v1' },
-        expectedVersion: read.version,
-      }).version
-      await rejectsWith(
-        () => providers.activate({ providerId: 'api-key', expectedVersion: read.version }),
-        'versionConflict',
-      )
+    let version = providers.upsert({
+      providerId: 'corp',
+      templateId: 'anthropicGateway',
+      definition: {
+        title: '公司网关',
+        baseUrl: 'https://gw.example.test',
+        apiKey: 'gw-secret-123456789',
+        models: ['glm-4.6 = GLM 4.6', 'kimi-k2', 'kimi-k2', ' '],
+        smallModel: 'glm-4.5-air',
+      },
+      expectedVersion: read.version,
+    }).version
+    assert.equal(changes, 1)
+    const secretsPath = join(adapter, 'provider-secrets.json')
+    assert.equal((await stat(secretsPath)).mode & 0o777, 0o600)
+    assert.deepEqual(await readJson(secretsPath), { secrets: { corp: 'gw-secret-123456789' } })
+    const config = await readFile(join(adapter, 'config.json'), 'utf8')
+    assert.doesNotMatch(config, /gw-secret/, '密钥不进 config.json')
+    assert.deepEqual(JSON.parse(config).overrides.litch_providers.providers.corp.models, [
+      { id: 'glm-4.6', title: 'GLM 4.6' },
+      { id: 'kimi-k2' },
+    ])
+
+    await rejectsWith(
+      () =>
+        providers.upsert({
+          providerId: 'corp',
+          templateId: 'anthropicGateway',
+          definition: { baseUrl: 'https://x.test' },
+          expectedVersion: read.version,
+        }),
+      'versionConflict',
+    )
+    for (const providerId of ['anthropic', 'native'])
       await rejectsWith(
         () =>
           providers.upsert({
-            providerId: 'api-key',
-            templateId: 'anthropicGateway',
+            providerId,
+            templateId: 'anthropicApiKey',
             definition: {},
             expectedVersion: version,
           }),
         'readOnly',
       )
-      await rejectsWith(
-        () =>
-          providers.upsert({
-            providerId: 'bad',
-            templateId: 'anthropicGateway',
-            definition: { baseUrl: 'ftp://x' },
-            expectedVersion: version,
-          }),
+    await rejectsWith(
+      () =>
+        providers.upsert({
+          providerId: 'bad',
+          templateId: 'anthropicGateway',
+          definition: { baseUrl: 'ftp://x' },
+          expectedVersion: version,
+        }),
+      'invalidValue',
+    )
+    await rejectsWith(
+      () =>
+        providers.upsert({
+          providerId: 'corp',
+          templateId: 'anthropicApiKey',
+          definition: {},
+          expectedVersion: version,
+        }),
+      'invalidValue',
+    )
+    await rejectsWith(
+      () => providers.activate({ providerId: 'corp', expectedVersion: version }),
+      'invalidValue',
+    )
+
+    // API key 供应商先不填 key；之后经登录方法填
+    version = providers.upsert({
+      providerId: 'work',
+      templateId: 'anthropicApiKey',
+      definition: { title: '工作' },
+      expectedVersion: version,
+    }).version
+    read = await providers.read()
+    const corp = read.providers.find((provider) => provider.id === 'corp')!
+    assert.equal(corp.kind, 'custom')
+    assert.equal(corp.templateId, 'anthropicGateway')
+    assert.deepEqual(corp.definition, {
+      title: '公司网关',
+      baseUrl: 'https://gw.example.test',
+      apiKey: { set: true },
+      authHeader: 'bearer',
+      models: ['glm-4.6 = GLM 4.6', 'kimi-k2'],
+      smallModel: 'glm-4.5-air',
+    })
+    assert.deepEqual(corp.auth, {
+      signedIn: true,
+      kind: 'apiKey',
+      label: '…6789 · gw.example.test',
+    })
+    const work = read.providers.find((provider) => provider.id === 'work')!
+    assert.equal(work.templateId, 'anthropicApiKey')
+    assert.deepEqual(work.auth, { signedIn: false, kind: 'none', label: null })
+    const prompt = await providers.authStart({ providerId: 'work', methodId: 'apiKey' })
+    assert.equal(prompt.step.kind, 'prompt')
+    const done = await providers.authStart({
+      providerId: 'work',
+      methodId: 'apiKey',
+      inputs: { apiKey: ' sk-ant-api-work-0000 ' },
+    })
+    assert.deepEqual(done.step, {
+      kind: 'done',
+      auth: { signedIn: true, kind: 'apiKey', label: '…0000' },
+    })
+    assert.equal(readProviderSecrets().work, 'sk-ant-api-work-0000')
+    // 原样交回读到的 {set}：密钥不动；空串：清掉
+    version = (await providers.read()).version
+    version = providers.upsert({
+      providerId: 'work',
+      templateId: 'anthropicApiKey',
+      definition: { title: '工作', apiKey: { set: true } },
+      expectedVersion: version,
+    }).version
+    assert.equal(readProviderSecrets().work, 'sk-ant-api-work-0000')
+    await providers.authLogout({ providerId: 'work' })
+    assert.equal(readProviderSecrets().work, undefined)
+
+    // 删掉上一次所选型号的供应商：新会话回到账号
+    writeProviderConfig({ ...readProviderConfig(), last: 'corp/glm-4.6' })
+    version = (await providers.read()).version
+    providers.remove({ providerId: 'corp', expectedVersion: version })
+    assert.equal(readProviderConfig().last, null)
+    assert.deepEqual(readProviderSecrets(), {})
+    await rejectsWith(() => providers.remove({ providerId: 'corp' }), 'notFound')
+
+    // 用户自己在 settings.json 里配了网关：多出一个只读的 native
+    await writeFile(
+      join(claude, 'settings.json'),
+      JSON.stringify({ env: { ANTHROPIC_BASE_URL: 'https://mine.example.test' } }),
+    )
+    read = await providers.read()
+    const native = read.providers.find((provider) => provider.id === 'native')!
+    assert.equal(native.kind, 'builtin')
+    assert.equal(native.auth.label, 'ANTHROPIC_BASE_URL')
+    assert.equal(native.canLogout, false)
+    await rejectsWith(() => providers.authLogout({ providerId: 'native' }), 'readOnly')
+
+    assert.ok(events.every((event) => event.method === 'litch/harness/config/changed'))
+    assert.ok(
+      events.every(
+        (event) => event.params.harness === 'claude-code' && event.params.part === 'providers',
+      ),
+    )
+    // 查账号状态用的是账号的环境：settings.json 里的网关地址不在进程环境里
+    assert.ok((await calls(claude)).every((call) => call.args[1] === 'status'))
+  }))
+
+test('HC-CLAUDE-015：从网关拉型号（回环上的假网关）', () =>
+  isolated(async () => {
+    const seen: Array<{ url: string; headers: Record<string, unknown> }> = []
+    const server = createServer((req, res) => {
+      seen.push({ url: req.url ?? '', headers: req.headers })
+      if (req.headers.authorization !== 'Bearer gw-token') {
+        res.writeHead(401).end()
+        return
+      }
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end(
+        JSON.stringify({
+          data: [
+            { id: 'glm-4.6', display_name: 'GLM 4.6' },
+            { id: 'kimi-k2', display_name: 'kimi-k2' },
+            { id: 'glm-4.6' },
+            { name: 'no-id' },
+          ],
+        }),
+      )
+    })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const port = (server.address() as { port: number }).port
+    const providers = new ClaudeProviders({ broadcast: () => {} })
+    try {
+      let version = (await providers.read()).version
+      version = providers.upsert({
+        providerId: 'corp',
+        templateId: 'anthropicGateway',
+        definition: { baseUrl: `http://127.0.0.1:${port}/`, apiKey: 'gw-token' },
+        expectedVersion: version,
+      }).version
+      assert.deepEqual(await providers.discoverModels({ providerId: 'corp' }), {
+        models: [
+          { id: 'glm-4.6', title: 'GLM 4.6' },
+          { id: 'kimi-k2', title: null },
+        ],
+      })
+      assert.equal(seen[0]!.url, '/v1/models?limit=1000')
+      assert.equal(seen[0]!.headers['x-api-key'], undefined)
+      assert.equal(readProviderConfig().providers.corp!.models.length, 0, '只列出来，不写')
+
+      // 密钥不对：报网关回的状态码
+      providers.upsert({
+        providerId: 'corp',
+        templateId: 'anthropicGateway',
+        definition: { baseUrl: `http://127.0.0.1:${port}`, apiKey: 'wrong' },
+        expectedVersion: version,
+      })
+      const failed = await rejectsWith(
+        () => providers.discoverModels({ providerId: 'corp' }),
         'invalidValue',
       )
-      version = providers.activate({ providerId: 'corp', expectedVersion: version }).version
-      read = await providers.read()
-      const corp = read.providers.find((provider) => provider.id === 'corp')!
-      assert.equal(corp.kind, 'custom')
-      assert.equal(corp.active, true)
-      assert.equal(corp.templateId, 'anthropicGateway')
-      assert.deepEqual(corp.definition, {
-        title: '公司网关',
-        baseUrl: 'https://gw.example.test/v1',
-        authHeader: 'bearer',
+      assert.match(failed.message, /401/)
+      version = (await providers.read()).version
+      providers.upsert({
+        providerId: 'work',
+        templateId: 'anthropicApiKey',
+        definition: { apiKey: 'sk-ant-api-x' },
+        expectedVersion: version,
       })
-      assert.equal(corp.methods[0]!.envName, 'LITCH_CLAUDE_GATEWAY_CORP_TOKEN')
-      assert.deepEqual(corp.auth, { signedIn: false, kind: 'none', label: null })
-      let env = claudeChildEnv()
-      assert.equal(env.ANTHROPIC_BASE_URL, 'https://gw.example.test/v1')
-      assert.equal(env.ANTHROPIC_API_KEY, undefined)
-      assert.equal(env.LITCH_CLAUDE_API_KEY, undefined)
-
-      version = providers.activate({ providerId: 'api-key', expectedVersion: read.version }).version
-      env = claudeChildEnv()
-      assert.equal(env.ANTHROPIC_API_KEY, 'sk-ant-api-test-1234567890')
-      assert.equal(env.ANTHROPIC_BASE_URL, undefined)
-      assert.ok(readProviderSelection().gateways.corp, '切走了网关定义还在')
-
-      version = providers.activate({ providerId: 'corp', expectedVersion: version }).version
-      providers.remove({ providerId: 'corp', expectedVersion: version })
-      assert.equal(readProviderSelection().active, 'anthropic', '删掉正在用的退回账号')
-      assert.ok(events.every((event) => event.method === 'litch/harness/config/changed'))
-      assert.ok(
-        events.every(
-          (event) => event.params.harness === 'claude-code' && event.params.part === 'providers',
-        ),
-      )
-      await rejectsWith(() => providers.authLogout({ providerId: 'api-key' }), 'readOnly')
-      assert.deepEqual(
-        await calls(claude).then((list) => list.every((call) => call.args[1] === 'status')),
-        true,
-      )
-    },
-    { LITCH_CLAUDE_API_KEY: 'sk-ant-api-test-1234567890' },
-  ))
+      await rejectsWith(() => providers.discoverModels({ providerId: 'work' }), 'invalidValue')
+      await rejectsWith(() => providers.discoverModels({ providerId: 'anthropic' }), 'readOnly')
+    } finally {
+      providers.close()
+      await new Promise((resolve) => server.close(resolve))
+    }
+  }))
 
 test('HC-CLAUDE-008：Anthropic 账号的粘贴码登录、取消、登出（假 CLI）', () =>
   isolated(
@@ -784,7 +1050,7 @@ test('HC-CLAUDE-008：Anthropic 账号的粘贴码登录、取消、登出（假
       })
       try {
         await rejectsWith(
-          () => providers.authStart({ providerId: 'api-key', methodId: 'apiKey' }),
+          () => providers.authStart({ providerId: 'anthropic', methodId: 'nope' }),
           'invalidValue',
         )
         const started = await providers.authStart({ providerId: 'anthropic', methodId: 'claudeai' })
@@ -848,10 +1114,12 @@ test('HC-CLAUDE-008：Anthropic 账号的粘贴码登录、取消、登出（假
         const read = await providers.read()
         assert.equal(read.providers[0]!.canLogout, true)
         assert.equal(read.providers[0]!.auth.label, 'dev@example.test · max')
-        assert.ok(
-          read.providers[0]!.auth.detail,
-          '没选过 provider 而设备环境里有 ANTHROPIC_API_KEY 时提示',
+        // 设备环境里有 ANTHROPIC_API_KEY：它是用户自己的配置，另列一个只读的 native
+        assert.deepEqual(
+          read.providers.map((provider) => provider.id),
+          ['anthropic', 'native'],
         )
+        assert.equal(read.providers[1]!.auth.label, 'ANTHROPIC_API_KEY')
 
         // 失败带上 CLI 的原话
         const failing = await providers.authStart({ providerId: 'anthropic', methodId: 'console' })
@@ -882,6 +1150,23 @@ test('HC-CLAUDE-008：Anthropic 账号的粘贴码登录、取消、登出（假
 
         await providers.authLogout({ providerId: 'anthropic' })
         assert.equal((await providers.read()).providers[0]!.auth.signedIn, false)
+
+        // 长期令牌：存进密钥文件，查状态时作为 CLAUDE_CODE_OAUTH_TOKEN 交给 CLI；登出一并清掉
+        const token = await providers.authStart({
+          providerId: 'anthropic',
+          methodId: 'oauthToken',
+          inputs: { token: 'sk-ant-oat01-long-lived' },
+        })
+        assert.deepEqual(token.step, {
+          kind: 'done',
+          auth: { signedIn: true, kind: 'env', label: 'CLAUDE_CODE_OAUTH_TOKEN' },
+        })
+        const status = (await calls(claude)).at(-1)
+        assert.equal(status.CLAUDE_CODE_OAUTH_TOKEN, 'sk-ant-oat01-long-lived')
+        assert.equal(status.ANTHROPIC_API_KEY, null)
+        assert.equal((await providers.read()).providers[0]!.canLogout, true)
+        await providers.authLogout({ providerId: 'anthropic' })
+        assert.equal(readProviderSecrets().anthropic, undefined)
       } finally {
         providers.close()
       }
@@ -1001,17 +1286,34 @@ test('HC-CLAUDE-010：经适配器调 litch/harness/*，默认模型以 settings
     assert.equal(rejected.error.data.key, 'effortLevel')
     assert.equal(rejected.error.data.harness, 'claude-code')
 
-    // provider 的选择记在 config.json，但不出现在给官方桌面端的 config/read 里
+    // 供应商的定义记在 config.json，但不出现在给官方桌面端的 config/read 里；加上就进模型选单
     const providers = await call('litch/harness/providers/read')
-    await call('litch/harness/providers/activate', {
-      providerId: 'api-key',
+    await call('litch/harness/providers/upsert', {
+      providerId: 'corp',
+      templateId: 'anthropicGateway',
+      definition: {
+        baseUrl: 'http://127.0.0.1:1',
+        apiKey: 'gw-token',
+        models: ['glm-4.6 = GLM 4.6'],
+      },
       expectedVersion: providers.version,
     })
-    assert.equal(
-      (await readJson(join(home, 'adapter', 'config.json'))).overrides.litch_provider.active,
-      'api-key',
+    assert.deepEqual(
+      Object.keys(
+        (await readJson(join(home, 'adapter', 'config.json'))).overrides.litch_providers.providers,
+      ),
+      ['corp'],
     )
-    assert.equal((await client.request('config/read')).config.litch_provider, undefined)
+    assert.equal((await client.request('config/read')).config.litch_providers, undefined)
+    const models = (await client.request('model/list', {})).data
+    const corp = models.find((entry: any) => entry.id === 'corp/glm-4.6')
+    assert.equal(corp?.displayName, '[corp] GLM 4.6', JSON.stringify(models))
+    const activate = await client.raw('litch/harness/providers/activate', {
+      harness: 'claude-code',
+      providerId: 'corp',
+      expectedVersion: providers.version,
+    })
+    assert.equal(activate.error.data.litch, 'invalidValue')
 
     // MCP：写进 .claude.json，再走现有的 OAuth 登录
     const mcp = await call('litch/harness/mcp/read')

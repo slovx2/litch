@@ -215,6 +215,27 @@
     },
     {
       "kind": "ClientRequest",
+      "method": "litch/harness/providers/discoverModels",
+      "description": "列出一个自定义 provider 自己报的模型（Claude Code 的网关：GET <地址>/v1/models，带它存的密钥），供用户勾选进清单；不写任何东西。没有这个 provider 回 notFound；不是网关、没填密钥、连不上、对方报错都回 invalidValue。",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "harness": {
+            "type": "string"
+          },
+          "providerId": {
+            "type": "string"
+          }
+        },
+        "required": ["harness", "providerId"]
+      },
+      "response": {
+        "$ref": "#/definitions/HarnessProvidersDiscoverModelsResponse"
+      }
+    },
+    {
+      "kind": "ClientRequest",
       "method": "litch/harness/auth/start",
       "description": "开始一次登录或设置 API key。应答是第一步，之后的进展经 auth/updated 通知给发起它的连接。env 方式不经这里（客户端直接写设备设置的 harness.<id>.env），调了回 invalidValue。",
       "params": {
@@ -1668,6 +1689,29 @@
         }
       },
       "required": ["version", "restartRequired"]
+    },
+    "HarnessProvidersDiscoverModelsResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "models": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": ["string", "null"]
+              }
+            },
+            "required": ["id", "title"]
+          }
+        }
+      },
+      "required": ["models"]
     }
   }
 }
