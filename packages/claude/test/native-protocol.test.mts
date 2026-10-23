@@ -77,9 +77,13 @@ test('CONTEXT-003：回合中途自动压缩时照上游发 contextCompaction �
     assert.equal((await client.completed(first.turn.id)).status, 'completed')
     assert.equal(compaction('item/started').length, 0)
     model.assertConsumed()
-    // 压缩请求到模型的时候，客户端已经知道在压了，还没收到完成
+    // 压缩还没完成的时候，客户端已经知道在压了。CLI 报“在压缩”和发压缩请求几乎同时，开始的通知经适配器到客户端
+    // 可能比请求到模型晚一点（CI 的慢机器上见过），所以模型先等客户端看到开始、再回压缩的结果
     let startedWhileCompacting = false
-    model.enqueue(() => {
+    model.enqueue(async () => {
+      const deadline = Date.now() + 10_000
+      while (compaction('item/started').length === 0 && Date.now() < deadline)
+        await new Promise((resolve) => setTimeout(resolve, 20))
       startedWhileCompacting =
         compaction('item/started').length === 1 && compaction('item/completed').length === 0
       return [{ type: 'text', text: 'AUTO_COMPACT_SUMMARY' }]
