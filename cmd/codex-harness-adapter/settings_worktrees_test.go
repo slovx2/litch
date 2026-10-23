@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"path/filepath"
+	"testing"
+)
 
 // 工作树的三项：单独一组、设备级、立刻生效；位置要写绝对路径，前缀默认 litch/，先拉取默认关。
 func TestWorktreeSettingsAreDeclared(t *testing.T) {
@@ -50,7 +53,8 @@ func TestWorktreeSettingsAreDeclared(t *testing.T) {
 	if _, problem, _ := cfg.settings.apply(0, []settingEdit{edit(worktreeRootKey, "relative/dir")}, schema, cfg.validateSettings); problem == nil || problem.key != worktreeRootKey {
 		t.Fatalf("相对路径应被拒绝: %+v", problem)
 	}
-	changed, problem, err := cfg.settings.apply(0, []settingEdit{edit(worktreeRootKey, "/srv/worktrees"), edit(worktreePrefixKey, "wt/"), edit(worktreeFetchKey, true)}, schema, cfg.validateSettings)
+	// 绝对路径按所在系统的规矩写（Windows 上 /srv 不算绝对路径）
+	changed, problem, err := cfg.settings.apply(0, []settingEdit{edit(worktreeRootKey, filepath.Join(t.TempDir(), "worktrees")), edit(worktreePrefixKey, "wt/"), edit(worktreeFetchKey, true)}, schema, cfg.validateSettings)
 	if err != nil || problem != nil || len(changed) != 3 {
 		t.Fatalf("写入失败: %v %+v %v", changed, problem, err)
 	}

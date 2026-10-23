@@ -60,7 +60,11 @@ export function gitBytes(cwd: string, args: string[], options: RunOptions = {}):
           ),
         )
     })
-    child.stdin.end(options.input ?? '')
+    // git 不读输入就退出（出错、用不着）时，往已关的管道写会报 EPIPE（Linux 上常见）：
+    // 没有输入就只关不写；结果以退出码为准，输入这一侧的错误不抛
+    child.stdin.on('error', () => {})
+    if (options.input === undefined) child.stdin.end()
+    else child.stdin.end(options.input)
   })
 }
 
