@@ -13,7 +13,7 @@ import {
 } from '@litch/core'
 import { useEffect, useState } from 'react'
 import type { Draft, Selection } from '../app/App.tsx'
-import { requestAssistant } from '../app/actions.ts'
+import { requestAssistant, requestDevice } from '../app/actions.ts'
 import { useT } from '../app/appearance.ts'
 import { nameOf, nextStep, wireStyle } from '../app/device.ts'
 import { useKey, useServices } from '../app/services.tsx'
@@ -338,13 +338,23 @@ export function NewSession({ draft, onPlace, onCreated, onDevices, assist }: New
           title: entry.name,
           ...(entry.state === 'ready'
             ? {}
-            : {
-                disabled: true,
-                note: t('harness.whyNext', {
-                  reason: entry.reason ? t.text(entry.reason) : t('harness.state.unavailable'),
-                  next: nextStep(entry, t),
+            : entry.down === 'notInstalled'
+              ? // 没装的只说没装，装去设备页（那里每个 harness 旁边有安装按钮）
+                {
+                  disabled: true,
+                  note: t('newSession.harness.notInstalled'),
+                  noteAction: {
+                    label: t('newSession.harness.install'),
+                    run: () => requestDevice(device.id),
+                  },
+                }
+              : {
+                  disabled: true,
+                  note: t('harness.whyNext', {
+                    reason: entry.reason ? t.text(entry.reason) : t('harness.state.unavailable'),
+                    next: nextStep(entry, t),
+                  }),
                 }),
-              }),
         }))}
         onPick={pickHarness}
       />

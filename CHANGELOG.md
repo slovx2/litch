@@ -12,6 +12,8 @@ versioning or publishing metadata.
   - 起标题、侧聊这类临时会话不做空闲保留
   - 留着的进程起来之后，Claude 的登录或模型服务设置（环境变量、`settings.json` 里的凭据）变了，下一回合换一个新进程，不再用旧凭据
 - Claude Code：收件箱里的登记名用会话名（用户改的或起好的标题），别的会话 `ListAgents` 看到、`SendMessage` 发往的是“修 CI”这样的名字；进程开着时改名当场跟着换（同时记成原生会话的标题）
+- 新建会话与切换模型：一档强度也没得选的模型不再发强度。以前会发它在模型清单里报的默认档，DSH 上没配推理档的模型（`cordis.patch.yml` 里自己加的供应商常这样）报的是 `off`，发过去整个选择被拒（“does not support reasoning effort "off"”），会话建不起来
+- 新建会话页：harness 选单里没装的那一项只写“未安装”，旁边一个“去安装”，点了打开那台设备的设置页去装
 
 ## 0.17.1
 

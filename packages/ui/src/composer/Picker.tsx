@@ -15,6 +15,8 @@ export interface PickerOption {
   lead?: ReactNode
   /** 现在选不了：列在那里让人看得到，旁边的说明里写着为什么 */
   disabled?: boolean
+  /** 说明那一行右边的一个小按钮（选不了的那一项“去安装”）：点了先收起列表再做 */
+  noteAction?: { label: string; run(): void }
   /** 选它之前要再确认一次 */
   confirm?: { title: string; note: string; yes: string; no: string }
   /** 这一项不是一个值，是一件事（“添加…”）：和上面的值隔开一条线，从来不算选中的 */
@@ -134,26 +136,47 @@ export function Picker({ kind, label, value, options, onPick, search }: PickerPr
               {searching && shown.length === 0 ? (
                 <div className="pick-none">{t('picker.noMatch')}</div>
               ) : null}
-              {shown.map((option) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  role="option"
-                  className="pick-opt"
-                  aria-selected={!option.action && option.id === value}
-                  aria-disabled={option.disabled ? 'true' : undefined}
-                  data-option={option.id}
-                  data-action={option.action ? '' : undefined}
-                  title={option.hint}
-                  onClick={() => pick(option)}
-                >
-                  <b>
-                    {option.lead}
-                    {option.title}
-                  </b>
-                  {option.note ? <span>{option.note}</span> : null}
-                </button>
-              ))}
+              {shown.map((option) => {
+                const row = (
+                  <button
+                    key={option.id}
+                    type="button"
+                    role="option"
+                    className="pick-opt"
+                    aria-selected={!option.action && option.id === value}
+                    aria-disabled={option.disabled ? 'true' : undefined}
+                    data-option={option.id}
+                    data-action={option.action ? '' : undefined}
+                    title={option.hint}
+                    onClick={() => pick(option)}
+                  >
+                    <b>
+                      {option.lead}
+                      {option.title}
+                    </b>
+                    {option.note ? <span>{option.note}</span> : null}
+                  </button>
+                )
+                const action = option.noteAction
+                if (!action) return row
+                // 按钮不能套在选项的按钮里：并排放着，压在说明那一行的右边
+                return (
+                  <div key={option.id} className="pick-opt-wrap">
+                    {row}
+                    <button
+                      type="button"
+                      className="pick-note-action"
+                      data-note-action={option.id}
+                      onClick={() => {
+                        close(true)
+                        action.run()
+                      }}
+                    >
+                      {action.label}
+                    </button>
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>

@@ -1397,6 +1397,8 @@ export const en: Record<MessageKey, Entry> = {
   'newSession.creating': 'Creating session…',
   'newSession.failed': 'Couldn’t create the session: {reason}',
   'newSession.harness': 'Choose a harness',
+  'newSession.harness.notInstalled': 'Not installed',
+  'newSession.harness.install': 'Install',
   'newSession.noHarness': 'No harness is available on this device, so a session can’t be started.',
 
   'request.command': 'Approval needed: run a command',

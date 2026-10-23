@@ -1341,6 +1341,8 @@ export const zhCN = {
   'newSession.creating': '正在新建会话…',
   'newSession.failed': '新建会话失败：{reason}',
   'newSession.harness': '选择 harness',
+  'newSession.harness.notInstalled': '未安装',
+  'newSession.harness.install': '去安装',
   'newSession.noHarness': '该设备暂无可用的 harness，无法新建会话。',
 
   'request.command': '需要批准：运行命令',

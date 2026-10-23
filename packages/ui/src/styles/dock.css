@@ -571,6 +571,21 @@
 .pick-opt[aria-disabled="true"]:hover {
   background: none;
 }
+/* 说明那一行右边带一个小按钮的那一项（“未安装 · 去安装”） */
+.pick-opt-wrap {
+  position: relative;
+}
+.pick-note-action {
+  position: absolute;
+  right: 8px;
+  bottom: 5px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--accent);
+}
+.pick-note-action:hover {
+  text-decoration: underline;
+}
 /* 不是值、是一件事的那一项（“添加工作区…”）：和上面的值隔开 */
 .pick-opt[data-action] {
   margin-top: 3px;
