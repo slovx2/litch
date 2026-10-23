@@ -7,6 +7,7 @@
 //   litch://bench                                  WebView 吞吐测试
 //   litch://remote?adapter=…&env=名=值             远程设备的开发参数（src/platform/dev.ts），验收接测试夹具用
 //   litch://seed?count=300[&device=…]              建一批会话（量会话列表的滑动，只在模拟核心里用）
+//   litch://spawn?parent=<标识>[&title=…&device=…]  从一个会话派一个子会话（看会话列表里的树）
 //   litch://terminal[?device=…&root=…&terminal=…&stats=1]  终端页（root 不给：夹具的工作目录，否则设备上第一个工作区的根）
 //   litch://diff[?device=…&root=…&scope=all|staged|unstaged&session=…]  差异页（root 同上）
 //   litch://hconfig?harness=<标识>[&device=…]    一个 harness 的详情设置
@@ -120,6 +121,21 @@ export function handleDevLink(url: string, services: Services | null): BootMode 
       const deviceId = deviceOf()
       if (!deviceId) return 'later'
       void seedSessions(channel, replica.store, deviceId, Number(params.get('count')) || 300)
+      return null
+    }
+    case 'spawn': {
+      const deviceId = deviceOf()
+      const parentId = params.get('parent')
+      if (!deviceId || !parentId) return null
+      const title = params.get('title') ?? '子会话'
+      void channel.command('session.spawn', {
+        deviceId,
+        parentId,
+        kind: 'fresh',
+        title,
+        prompt: title,
+        wakeParent: false,
+      })
       return null
     }
     case 'terminal':

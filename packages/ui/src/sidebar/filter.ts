@@ -98,6 +98,16 @@ export function dropNativeChildren(
 }
 
 /**
+ * 藏着别的应用派出来的会话时，一个工作区还出不出：里面只有这些会话的整块不出，空的照出（好在里面新建）。
+ * ids 是工作区里的会话（SessionGroups 里的那一组），native、always 同 dropNativeChildren
+ */
+export const workspaceShown = (
+  ids: readonly string[] | undefined,
+  native: readonly string[],
+  always: (sessionId: string) => boolean,
+): boolean => (ids?.length ?? 0) === 0 || dropNativeChildren(ids, native, always).length > 0
+
+/**
  * 点了某个 harness 之后挑中的是哪几个：挑着的去掉，没挑的加上。
  * 加上之后能挑的全挑上了，和都看是一回事，记成空的（都看）：免得以后多出一个 harness 时它被悄悄筛掉
  */

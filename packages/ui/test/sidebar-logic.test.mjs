@@ -264,6 +264,7 @@ const {
   keepSessions,
   keptAnyway,
   toggleHarness,
+  workspaceShown,
 } = await import('../src/sidebar/filter.ts')
 
 const harness = (id, name, badge) => ({ id, name, badge })
@@ -341,6 +342,45 @@ test('派出来的会话：藏着的时候一组里去掉它们，先后不变�
     ['s1', 's2', 'n2'],
   )
   assert.deepEqual(dropNativeChildren(undefined, ['n1'], never), [])
+  // 工作区：只有藏起来的会话的整块不出，空的照出，有等人的照出
+  assert.equal(workspaceShown(['n1', 'n2'], ['n1', 'n2'], never), false)
+  assert.equal(workspaceShown([], ['n1'], never), true)
+  assert.equal(workspaceShown(undefined, ['n1'], never), true)
+  assert.equal(workspaceShown(['n1', 's1'], ['n1'], never), true)
+  assert.equal(
+    workspaceShown(['n1'], ['n1'], (id) => id === 'n1'),
+    true,
+  )
+})
+
+// ---------- 会话树 ----------
+
+const { kidsShown, nestedUnder } = await import('../src/sidebar/tree.ts')
+
+test('会话树：父会话也在列表里的子会话才挂过去，父会话被筛掉了的照常在自己那一组', () => {
+  const children = { p: ['c1', 'c2'], c1: ['g1'], gone: ['o1'] }
+  assert.deepEqual([...nestedUnder(['p', 'c1', 'c2', 'g1', 'o1'], children)].sort(), [
+    'c1',
+    'c2',
+    'g1',
+  ])
+  assert.deepEqual([...nestedUnder([], children)], [])
+})
+
+test('会话树：收起了的父会话下面只露出非露出来不可的，展开着全露出来、先后不变', () => {
+  const kids = ['c1', 'c2', 'c3']
+  assert.equal(
+    kidsShown(kids, false, () => false),
+    kids,
+  )
+  assert.deepEqual(
+    kidsShown(kids, true, (id) => id === 'c3'),
+    ['c3'],
+  )
+  assert.deepEqual(
+    kidsShown(kids, true, () => false),
+    [],
+  )
 })
 
 test('筛选：点一下挑上或去掉；能挑的全挑上了就是都看', () => {

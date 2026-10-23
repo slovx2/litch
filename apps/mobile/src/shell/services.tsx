@@ -26,6 +26,11 @@ export interface Prefs {
   boot: BootMode
   /** 自动检查应用更新（src/update/）；关了只在设置页点“检查更新”时查 */
   autoUpdate: boolean
+  /**
+   * 会话列表里显不显示别的应用派出来的会话（Claude 桌面端起的 Claude Code 子会话，核心的 keys.nativeChildren）。
+   * 照桌面侧栏默认不显示，开关在会话列表的“⋯”里
+   */
+  nativeChildren: boolean
 }
 
 const DEFAULT_PREFS: Prefs = {
@@ -34,6 +39,7 @@ const DEFAULT_PREFS: Prefs = {
   skin: 'retro',
   boot: 'stored',
   autoUpdate: true,
+  nativeChildren: false,
 }
 const prefsFile = jsonFile<Partial<Prefs>>('prefs.json')
 

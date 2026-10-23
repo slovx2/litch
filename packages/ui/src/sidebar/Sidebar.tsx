@@ -55,7 +55,7 @@ import {
   slotOf,
   startDrag,
 } from './drop.ts'
-import { dropNativeChildren, keepSessions, keptAnyway } from './filter.ts'
+import { dropNativeChildren, keepSessions, keptAnyway, workspaceShown } from './filter.ts'
 import { HarnessFilter } from './HarnessFilter.tsx'
 import { DeviceInfo, SessionInfo, WorkspaceInfo } from './InfoCards.tsx'
 import { type RowAction, RowMenu, type RowMenuHandle } from './RowMenu.tsx'
@@ -72,6 +72,7 @@ import {
   useSidebarShowActive,
 } from './state.ts'
 import { TallyMarks } from './TallyMarks.tsx'
+import { kidsShown, MAX_DEPTH, nestedUnder } from './tree.ts'
 import { WorkspaceDialog } from './WorkspaceDialog.tsx'
 
 const NO_WORKSPACES: readonly WorkspaceView[] = []
@@ -651,8 +652,6 @@ const FOCUS_ROWS = 50
 const MORE_ROWS = 10
 const NO_IDS: readonly string[] = []
 const NO_CHILDREN: SessionChildren = {}
-/** 侧栏里子会话最多套几层 */
-const MAX_DEPTH = 8
 /** 子会话每一层往里缩多少像素（和 tree.css 的 .tree-kids 一致） */
 const INDENT = 14
 
@@ -788,9 +787,9 @@ function DeviceGroup(props: GroupProps) {
    * 挂到父会话下面去画的子会话：父会话这时也画在侧栏里（没被筛掉）的那些。
    * 父会话被筛掉了的，子会话照常排在自己那一组里
    */
-  const listed = new Set(Object.keys(groups).flatMap((group) => shown(group)))
-  const nested = new Set(
-    Object.entries(children).flatMap(([parent, ids]) => (listed.has(parent) ? ids : [])),
+  const nested = nestedUnder(
+    Object.keys(groups).flatMap((group) => shown(group)),
+    children,
   )
   const kidsOf = (id: string) =>
     keepSessions(dropNativeChildren(children[id], hidden, always), filter, harnessOf, unfiltered)
@@ -806,7 +805,7 @@ function DeviceGroup(props: GroupProps) {
     if (depth > MAX_DEPTH) return null
     const kids = kidsOf(sessionId)
     const shut = folded.has(sessionId)
-    const visible = shut ? kids.filter(always) : kids
+    const visible = kidsShown(kids, shut, always)
     return (
       <div
         key={sessionId}
@@ -1120,8 +1119,7 @@ function DeviceGroup(props: GroupProps) {
    * harness 筛选不藏工作区：藏了就没法在空项目里新建会话、整理它；里面的会话全被筛掉时写一句（filteredNote）
    */
   const showsWorkspace = (workspace: WorkspaceView) =>
-    (groups[workspace.id]?.length ?? 0) === 0 ||
-    dropNativeChildren(groups[workspace.id], hidden, always).length > 0
+    workspaceShown(groups[workspace.id], hidden, always)
   /**
    * 一个工作区：那一行和它下面的会话。它总在某一组（band）里，siblings 是这一组里画出来的工作区：
    * 拖着会话停在上面是回到自己的项目（那一行高亮）；拖着工作区停在上面是插到它前面或者后面（画一条线）
