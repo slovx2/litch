@@ -257,6 +257,7 @@ import type {
   WorktreeListResponse,
   WorktreeRemoveParams,
   WorktreeStartFields,
+  WorktreeSyncBaseResponse,
 } from './worktrees.mjs'
 
 /**
@@ -551,6 +552,7 @@ export interface ClientRequests {
   'litch/worktree/branches': { params: WorktreeBranchesParams; result: WorktreeBranchesResponse }
   'litch/worktree/remove': { params: WorktreeRemoveParams; result: { worktree: Worktree } }
   'litch/worktree/restore': { params: { id: string }; result: { worktree: Worktree } }
+  'litch/worktree/syncBase': { params: { id: string }; result: WorktreeSyncBaseResponse }
   // 以下是文件面板用的：列目录、读文件、取元数据、模糊找文件。都是协议里现成的方法，哪种对面都有。
   // 聚合面上它们由设备进程自己处理（packages/device/src/routes.mts），不转给任何引擎，所以不带 `harness`，
   // 哪个 harness 掉线都不影响；单个 harness 的入口上是那个引擎进程在读；原生 codex 是它自己读。

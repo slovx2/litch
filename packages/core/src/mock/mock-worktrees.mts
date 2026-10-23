@@ -72,6 +72,8 @@ export function createMockWorktrees(host: MockWorktreesHost): MockWorktrees {
   const lists = new Map<string, WorktreeView[]>()
   const sinks = new Map<string, Set<HostSink>>()
   let serial = 0
+  /** 合入过基础分支的 */
+  const synced = new Set<string>()
 
   const listOf = (deviceId: string): WorktreeView[] => {
     let list = lists.get(deviceId)
@@ -238,6 +240,22 @@ export function createMockWorktrees(host: MockWorktreesHost): MockWorktrees {
           }
           put(deviceId, next)
           return { worktree: next }
+        })()
+      }
+      if (name === 'worktree.syncBase') {
+        const { deviceId, id } = params as Commands['worktree.syncBase']['params']
+        reachable(deviceId)
+        return (async () => {
+          const row = need(deviceId, id)
+          if (row.state === 'removed')
+            throw new ChannelError('rejected', `工作树 ${id} 的目录不在，先恢复`)
+          if (row.baseRef === 'HEAD' || row.baseRef === 'working-tree')
+            throw new ChannelError('rejected', '这个工作树不是从分支切的，没有可以合入的基础分支')
+          await wait(3)
+          // 示例：第一次合进来，之后没有新提交
+          const status = synced.has(id) ? 'upToDate' : 'merged'
+          synced.add(id)
+          return { result: { status, files: [] } }
         })()
       }
       return undefined

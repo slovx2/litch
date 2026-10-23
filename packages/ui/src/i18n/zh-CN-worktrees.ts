@@ -53,6 +53,15 @@ export const zhWorktrees = {
   'worktree.removeBranch': '连分支删除',
   'worktree.removeBranch.ask':
     '删除工作树目录、分支 {branch} 和快照。分支上没合并的提交会丢失，无法恢复。',
+  'diffs.since': '对比起点 {commit}',
+  'diffs.since.tip':
+    '会话在工作树里：“全部”对比的是工作树的起点（与基础分支最近的共同提交），已提交的改动也包括在内',
+  'worktree.sync': '合入 {base}',
+  'worktree.syncing': '合入中…',
+  'worktree.sync.hint': '把基础分支的新提交合并进这个工作树（不推送）。需要先提交工作树里的改动',
+  'worktree.sync.merged': '已合入 {base} 的新提交。',
+  'worktree.sync.upToDate': '{base} 没有新提交。',
+  'worktree.sync.conflicts': '合并有冲突，停在冲突状态：{files}。可在终端里解决，或交给模型处理。',
   'worktree.check': '新工作树',
   'worktree.check.hint': '勾选：子会话使用独立的工作树和分支。不勾选：与当前会话共用目录',
 } satisfies Record<string, Entry>

@@ -64,6 +64,11 @@ export function Bar({
           <>
             {t('diffs.total', { files: totals.files })}
             <Counts entry={{ added: totals.added, removed: totals.removed, binary: false }} />
+            {view?.since ? (
+              <span className="db-since mono" title={t('diffs.since.tip')}>
+                {t('diffs.since', { commit: view.since.slice(0, 7) })}
+              </span>
+            ) : null}
           </>
         ) : null}
       </span>
@@ -115,7 +120,8 @@ export function actsOf(entry: DiffEntry, scope: DiffScope, writable: boolean): F
   const acts: FileAct[] = []
   if (scope !== 'staged' && entry.unstaged) acts.push('stage')
   if (scope !== 'unstaged' && entry.staged) acts.push('unstage')
-  if (scope !== 'staged' && !entry.dir) acts.push('discard')
+  // 只在提交里的改动（工作树会话对着起点看时）没有可还原的
+  if (scope !== 'staged' && !entry.dir && (entry.staged || entry.unstaged)) acts.push('discard')
   return acts
 }
 

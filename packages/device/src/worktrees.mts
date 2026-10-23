@@ -29,6 +29,7 @@ import {
   type WorktreeBranchesResponse,
   type WorktreeFrom,
   type WorktreeState,
+  type WorktreeSyncBaseResponse,
 } from '../../protocol/src/worktrees.mjs'
 import { ProtocolError, requiredString } from '../../shared/src/protocol-contract.mjs'
 import { assertStoreFormat, initializeStoreFormat } from '../../shared/src/store-format.mjs'
@@ -46,6 +47,7 @@ import {
   gitDirOf,
   gitList,
   gitMaybe,
+  mergeBase,
   repoOf,
   snapshot,
 } from './worktree-git.mjs'
@@ -67,6 +69,10 @@ export interface WorktreeSettings {
   root: string
   branchPrefix: string
   fetchFirst: boolean
+  /** 清理（worktree-life.mts） */
+  autoCleanup: boolean
+  keepCount: number
+  keptDays: number
 }
 
 export interface WorktreeHost {
@@ -98,6 +104,11 @@ export function openWorktreeDatabase(stateDir: string): DatabaseSync {
       updated_at INTEGER NOT NULL
     ) WITHOUT ROWID;
     CREATE INDEX IF NOT EXISTS worktrees_owner ON worktrees(owner_thread_id);
+    -- 共用着某个工作树的会话（子会话照规则或明说共用父会话的目录）：主人归档时工作树转给还没归档的
+    CREATE TABLE IF NOT EXISTS sharers(
+      thread_id TEXT PRIMARY KEY,
+      worktree_id TEXT NOT NULL
+    ) WITHOUT ROWID;
     PRAGMA user_version=${SCHEMA_VERSION};`)
   return db
 }
@@ -148,6 +159,10 @@ export class Worktrees {
     const next = this.queue.then(work, work)
     this.queue = next.catch(() => null)
     return next
+  }
+
+  settings(): WorktreeSettings {
+    return this.host.settings()
   }
 
   get(id: string): Worktree | null {
@@ -386,6 +401,54 @@ export class Worktrees {
     this.ownerFile(next)
   }
 
+  /** 这个会话共用着工作树 id（不是主人） */
+  share(id: string, threadId: string): void {
+    this.db
+      .prepare('INSERT OR REPLACE INTO sharers(thread_id, worktree_id) VALUES(?, ?)')
+      .run(threadId, id)
+  }
+
+  /** 共用着工作树 id 的会话 */
+  sharers(id: string): string[] {
+    return this.db
+      .prepare('SELECT thread_id FROM sharers WHERE worktree_id = ?')
+      .all(id)
+      .map((row) => String(row.thread_id))
+  }
+
+  /** 会话删了：不再记它共用着什么 */
+  unshare(threadId: string): void {
+    this.db.prepare('DELETE FROM sharers WHERE thread_id = ?').run(threadId)
+  }
+
+  /** 主人换成 threadId（原来共用着的会话）：它不再算共用的 */
+  transfer(id: string, threadId: string): Worktree | null {
+    const worktree = this.get(id)
+    if (!worktree) return null
+    this.unshare(threadId)
+    const next = this.update(worktree, { ownerThreadId: threadId })
+    this.ownerFile(next)
+    return next
+  }
+
+  /** 主人归档了、工作树有改动：原样留着，记 kept（到期由清理存快照再删） */
+  keep(id: string): Worktree | null {
+    const worktree = this.get(id)
+    return worktree?.state === 'ready' ? this.update(worktree, { state: 'kept' }) : worktree
+  }
+
+  /** 留着的又用上了（取消归档、重新打开） */
+  revive(id: string): Worktree | null {
+    const worktree = this.get(id)
+    return worktree?.state === 'kept' ? this.update(worktree, { state: 'ready' }) : worktree
+  }
+
+  /** 工作树目录里有没有未提交的改动、未跟踪的文件；目录不在是 false */
+  async isDirty(id: string): Promise<boolean> {
+    const worktree = this.get(id)
+    return worktree !== null && existsSync(worktree.path) && (await dirty(worktree.path))
+  }
+
   /** 新会话没起来：刚建的工作树没用了，删干净（没主人的才删） */
   abandon(id: string): Promise<void> {
     return this.serial(async () => {
@@ -498,6 +561,20 @@ export class Worktrees {
     }
   }
 
+  /** 把起点分支的新提交合进工作树（WORKTREE_METHOD.syncBase）。和建、删排在同一条队里 */
+  syncBase(id: string): Promise<WorktreeSyncBaseResponse> {
+    return this.serial(async () => {
+      const worktree = this.need(id)
+      if (worktree.state === 'removed' || !existsSync(worktree.path))
+        throw new ProtocolError(-32602, `工作树 ${id} 的目录不在，先恢复`)
+      if (worktree.baseRef === 'HEAD' || worktree.baseRef === 'working-tree')
+        throw new ProtocolError(-32602, '这个工作树不是从分支切的，没有可以合入的基础分支')
+      const result = await mergeBase(worktree.path, worktree.baseRef)
+      this.host.log(`工作树 ${id} 合入 ${worktree.baseRef}：${result.status}`)
+      return result
+    })
+  }
+
   /** litch/worktree/* 由设备进程自己答 */
   async call(method: string, params: unknown): Promise<unknown> {
     const fields = isObject(params) ? params : {}
@@ -515,6 +592,8 @@ export class Worktrees {
         }
       case WORKTREE_METHOD.restore:
         return { worktree: await this.restore(requiredString(fields.id, 'id')) }
+      case WORKTREE_METHOD.syncBase:
+        return this.syncBase(requiredString(fields.id, 'id'))
       default:
         throw new ProtocolError(-32601, `没有方法 ${method}`)
     }

@@ -36,6 +36,12 @@ export interface WorktreeView extends SessionWorktreeView {
 }
 
 /** 一个检出所在仓库的分支（新建页“从哪切”用） */
+/** 合入基础分支的结果：merged 合进来了、upToDate 没有新提交、conflicts 停在冲突状态（files 是冲突的文件） */
+export interface WorktreeSyncView {
+  status: 'merged' | 'upToDate' | 'conflicts'
+  files: string[]
+}
+
 export interface WorktreeBranchesView {
   /** 当前检出的分支；分离 HEAD 是 null */
   current: string | null

@@ -72,6 +72,7 @@ import {
   type Wire,
 } from './wire.mjs'
 import type { Workspaces } from './workspaces.mjs'
+import type { WorktreeLife } from './worktree-life.mjs'
 import { type Worktrees, worktreeCwd, worktreeFrom } from './worktrees.mjs'
 
 export interface UpstreamConfig {
@@ -158,6 +159,8 @@ export interface SessionHost {
   background: DeviceBackground
   /** 设备层的工作树（worktrees.mts）。这台机器上没有 git 时是 null，设备上就没有这项扩展 */
   worktrees: Worktrees | null
+  /** 工作树跟着会话的归档、删除、重新打开走（worktree-life.mts）。没有 git 时是 null */
+  worktreeLife: WorktreeLife | null
 }
 
 /** 请求已经有着落：转给上游了（应答由上游来），或者已经自己答过了 */
@@ -639,6 +642,14 @@ export class ClientSession implements ClientToolPeer {
         const thread = isObject(result) ? result.thread : null
         if (isObject(thread)) this.host.titles.born(link.harness, thread)
       })
+    // 工作树跟着会话走（worktree-life.mts）：归档、删了之后收拾，取消归档之后建回或接着用
+    const life = this.host.worktreeLife
+    const subject = typeof fields?.threadId === 'string' ? fields.threadId : null
+    if (life && subject) {
+      if (method === 'thread/archive') afterwards.push(() => void life.archived(subject))
+      else if (method === 'thread/unarchive') afterwards.push(() => void life.reopen(subject))
+      else if (method === 'thread/delete') afterwards.push(() => void life.deleted(subject))
+    }
     const send = (ready: Record<string, unknown> | null): typeof HANDLED => {
       if (afterwards.length || failures.length)
         this.relay.after(
@@ -688,8 +699,12 @@ export class ClientSession implements ClientToolPeer {
       !fields ||
       !worktrees ||
       !this.declared.has(EXTENSION.worktrees)
-    )
+    ) {
+      // 重新打开工作树已经删了的会话：先把目录建回来，引擎恢复会话要那个目录在
+      if (method === 'thread/resume' && life && subject && life.waiting(subject))
+        return life.reopen(subject).then(() => proceed(params))
       return proceed(params)
+    }
     const ask = isObject(fields.litchWorktree) ? fields.litchWorktree : {}
     const cwd = typeof params.cwd === 'string' && params.cwd ? params.cwd : null
     if (!cwd) throw new ProtocolError(-32602, '要在新工作树里建会话得给 cwd')

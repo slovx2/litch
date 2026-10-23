@@ -434,12 +434,18 @@ export async function startChild(
   const threadId = thread.id
   // 分叉时不是每个引擎都认 cwd（Pi、OpenCode、通用 ACP 照源会话的目录）：没换过去的，刚建的工作树删掉、共用父会话的目录
   let branch: string | null = null
-  if (made && !sameDir(thread.cwd, where)) {
-    tree.host.log(`${harness} 分叉时没用新工作树的目录，子会话 ${threadId} 共用父会话的目录`)
-    void tree.host.worktrees?.abandon(made.id)
-  } else if (made) {
+  if (made && sameDir(thread.cwd, where)) {
     tree.host.worktrees?.own(made.id, threadId)
     branch = made.branch
+  } else {
+    if (made) {
+      tree.host.log(`${harness} 分叉时没用新工作树的目录，子会话 ${threadId} 共用父会话的目录`)
+      void tree.host.worktrees?.abandon(made.id)
+    }
+    // 共用着某个工作树的记下来：主人归档时转给还没归档的它（worktree-life.mts）
+    const dir = typeof thread.cwd === 'string' ? thread.cwd : where
+    const shared = hostWorktree(tree, parentId, dir, true)
+    if (shared) tree.host.worktrees?.share(shared.id, threadId)
   }
   tree.noteSubscribed(harness, threadId)
   // 不起名的话引擎拿第一条消息（派出说明）当标题，侧栏里一排子会话都是同一句开头

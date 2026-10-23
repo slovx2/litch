@@ -2025,12 +2025,20 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     log,
   })
 
-  /** 认得的根：工作区的根，和会话的工作目录（不属于工作区的会话，面板以它的工作目录为根） */
+  /** 会话所在的设备层工作树（worktrees 扩展挂在会话对象上的）；没有是 null */
+  const worktreeOf = (thread: Thread): ThreadWorktree | null =>
+    (thread as Thread & { litchWorktree?: ThreadWorktree }).litchWorktree ?? null
+
+  /**
+   * 认得的根：工作区的根，会话的工作目录（不属于工作区的会话，面板以它的工作目录为根），
+   * 和会话所在的设备层工作树的根（工作树里的会话，面板以工作树为根）
+   */
   const knownRoot = (root: string): boolean => {
     if (workspaces.some((workspace) => workspace.roots.some((entry) => samePath(entry, root)))) {
       return true
     }
-    for (const thread of threads.values()) if (samePath(thread.cwd, root)) return true
+    for (const thread of threads.values())
+      if (samePath(thread.cwd, root) || samePath(worktreeOf(thread)?.path ?? '', root)) return true
     return false
   }
 
@@ -2039,6 +2047,15 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     online: () => online,
     platform: () => platform,
     knownRoot,
+    startOf(root) {
+      for (const thread of threads.values()) {
+        const tree = worktreeOf(thread)
+        if (!tree || tree.state === 'removed' || !samePath(tree.path, root)) continue
+        const branch = tree.baseRef !== 'HEAD' && tree.baseRef !== 'working-tree'
+        return { commit: tree.baseCommit, ref: branch ? tree.baseRef : null }
+      }
+      return null
+    },
     turnDiffDeclared(sessionId) {
       const thread = threads.get(sessionId)
       if (!thread) return null

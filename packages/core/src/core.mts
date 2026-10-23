@@ -1170,6 +1170,10 @@ export function createCore(options: CoreOptions): Core {
           const { deviceId, id } = params as Commands['worktree.restore']['params']
           return { worktree: await deviceOf(deviceId).worktrees.restore(String(id)) }
         }
+        case 'worktree.syncBase': {
+          const { deviceId, id } = params as Commands['worktree.syncBase']['params']
+          return { result: await deviceOf(deviceId).worktrees.syncBase(String(id)) }
+        }
         case 'install.versions': {
           const { deviceId, latest } = params as Commands['install.versions']['params']
           return { harnesses: await deviceOf(deviceId).install.versions(latest === true) }

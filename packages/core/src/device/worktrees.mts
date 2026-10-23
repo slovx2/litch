@@ -15,7 +15,12 @@ import { ChannelError, type WorktreesOp } from '../channel/protocol.mjs'
 import type { HostSink } from '../channel/server.mjs'
 import type { RpcRequestOptions } from '../connection/rpc.mjs'
 import { RpcError } from '../connection/rpc.mjs'
-import type { WorktreeBranchesView, WorktreesTopicView, WorktreeView } from '../model-worktrees.mjs'
+import type {
+  WorktreeBranchesView,
+  WorktreeSyncView,
+  WorktreesTopicView,
+  WorktreeView,
+} from '../model-worktrees.mjs'
 
 export interface WorktreesHost {
   deviceId: string
@@ -43,6 +48,7 @@ export interface Worktrees {
   branches(cwd: string): Promise<WorktreeBranchesView | null>
   remove(id: string, options: { discard?: boolean; withBranch?: boolean }): Promise<WorktreeView>
   restore(id: string): Promise<WorktreeView>
+  syncBase(id: string): Promise<WorktreeSyncView>
 }
 
 /** 删、恢复要跑 git，大仓库慢 */
@@ -217,6 +223,23 @@ export function createWorktrees(host: WorktreesHost): Worktrees {
         () => host.request(WORKTREE_METHOD.restore, { id }, { timeoutMs: GIT_TIMEOUT_MS }),
         () => false,
       )
+    },
+
+    async syncBase(id) {
+      reachable()
+      try {
+        const response = await host.request(
+          WORKTREE_METHOD.syncBase,
+          { id },
+          { timeoutMs: GIT_TIMEOUT_MS },
+        )
+        return {
+          status: response.status,
+          files: Array.isArray(response.files) ? response.files : [],
+        }
+      } catch (thrown) {
+        throw host.fail(thrown)
+      }
     },
   }
 }

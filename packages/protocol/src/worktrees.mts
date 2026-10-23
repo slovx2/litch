@@ -76,7 +76,20 @@ export const WORKTREE_METHOD = {
   remove: 'litch/worktree/remove',
   /** 把删了目录的工作树建回原路径（有快照从快照，没有从分支）。参数 { id }，应答 { worktree } */
   restore: 'litch/worktree/restore',
+  /**
+   * 把基础分支的新提交合进工作树（在工作树里 git merge 起点分支，不推送）。有未提交的改动、合并或变基做到一半、
+   * 不是从分支切的（HEAD、当前本地状态）回 -32602。有冲突时停在冲突状态，列出冲突的文件，交给模型或用户解决。
+   * 参数 { id }，应答 WorktreeSyncBaseResponse
+   */
+  syncBase: 'litch/worktree/syncBase',
 } as const
+
+export interface WorktreeSyncBaseResponse {
+  /** merged：合进来了；upToDate：基础分支没有新提交；conflicts：停在冲突状态 */
+  status: 'merged' | 'upToDate' | 'conflicts'
+  /** 冲突的文件（相对工作树根）；别的状态是空的 */
+  files: string[]
+}
 
 /** 工作树变了（建成、主人变了、删了、恢复了）：只发给声明了 worktrees 的连接 */
 export const WORKTREE_CHANGED = 'litch/worktree/changed'
@@ -117,11 +130,17 @@ export const WORKTREE_SETTING = {
   root: 'worktrees.root',
   branchPrefix: 'worktrees.branchPrefix',
   fetchFirst: 'worktrees.fetchFirst',
+  autoCleanup: 'worktrees.autoCleanup',
+  keepCount: 'worktrees.keepCount',
+  keptDays: 'worktrees.keptDays',
 } as const
 
 export const WORKTREE_DEFAULTS = {
   branchPrefix: 'litch/',
   fetchFirst: false,
+  autoCleanup: true,
+  keepCount: 15,
+  keptDays: 30,
 } as const
 
 /** 快照引用的前缀 */

@@ -57,6 +57,17 @@ export const enWorktrees: Record<keyof typeof zhWorktrees, Entry> = {
   'worktree.removeBranch': 'Remove with branch',
   'worktree.removeBranch.ask':
     'Removes the worktree folder, the branch {branch} and its snapshot. Unmerged commits on the branch are lost for good.',
+  'diffs.since': 'Since {commit}',
+  'diffs.since.tip':
+    'This session is in a worktree: All compares against where the worktree started (its latest common commit with the base branch), so committed changes are included',
+  'worktree.sync': 'Merge {base}',
+  'worktree.syncing': 'Merging…',
+  'worktree.sync.hint':
+    'Merge new commits from the base branch into this worktree (nothing is pushed). Commit the worktree’s changes first',
+  'worktree.sync.merged': 'Merged the new commits from {base}.',
+  'worktree.sync.upToDate': '{base} has no new commits.',
+  'worktree.sync.conflicts':
+    'The merge has conflicts and is stopped there: {files}. Resolve them in the terminal or ask the model to.',
   'worktree.check': 'New worktree',
   'worktree.check.hint':
     'Checked: the sub-session gets its own worktree and branch. Unchecked: it shares this session’s folder',

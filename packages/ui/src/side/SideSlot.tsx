@@ -22,6 +22,7 @@ const NO_ROOTS: readonly string[] = []
 
 /**
  * 面板跟着眼前的会话走：会话在哪个工作区，面板里就是那个工作区；不属于工作区的会话，用它的工作目录；
+ * 在设备层工作树里的会话，根是那棵工作树（文件、终端、差异都看它，不看源仓库）；
  * 正在写的新会话看它要建在哪。眼前什么都没有就是 null。
  */
 function usePlace(selection: Selection | null, draft: Draft | null): SidePlace | null {
@@ -33,7 +34,15 @@ function usePlace(selection: Selection | null, draft: Draft | null): SidePlace |
   const workspaceId = draft ? draft.workspaceId : (summary?.workspaceId ?? null)
   const cwd = draft ? null : (summary?.cwd ?? null)
   const workspace = workspaces?.find((entry) => entry.id === workspaceId)
-  const roots = workspace ? workspace.roots : !draft && cwd ? [cwd] : NO_ROOTS
+  const tree = draft ? null : (summary?.worktree ?? null)
+  const roots =
+    tree && tree.state !== 'removed'
+      ? [tree.path]
+      : workspace
+        ? workspace.roots
+        : !draft && cwd
+          ? [cwd]
+          : NO_ROOTS
   // 根按内容比：侧栏每来一次增量，工作区的对象都是新的，面板不该跟着重画
   const rootsKey = roots.join('\n')
   const sessionId = draft ? null : (selection?.sessionId ?? null)

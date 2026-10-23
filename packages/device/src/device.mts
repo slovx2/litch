@@ -12,6 +12,7 @@ import type { DeviceSettingsSnapshot } from '../../protocol/src/device-settings.
 import { HARNESS_CONFIG_NOTIFICATION } from '../../protocol/src/harness-config.mjs'
 import { taskCardsSettingKey } from '../../protocol/src/session-tree.mjs'
 import { WORKTREE_DEFAULTS, WORKTREE_SETTING } from '../../protocol/src/worktrees.mjs'
+import { PINNED_SECTION_ID } from '../../shared/src/thread-sections.mjs'
 import { DeviceBackground } from './background.mjs'
 import { ClientToolInvoker } from './client-tool-invoke.mjs'
 import { ClientToolRouter } from './client-tools.mjs'
@@ -48,6 +49,7 @@ import { ThreadIndex } from './thread-index.mjs'
 import { type Connector, isObject, type Wire, type WireHandlers } from './wire.mjs'
 import { Workspaces } from './workspaces.mjs'
 import { gitVersion } from './worktree-git.mjs'
+import { WorktreeLife } from './worktree-life.mjs'
 import { openWorktreeDatabase, type WorktreeSettings, Worktrees } from './worktrees.mjs'
 
 /** 记一条结构化的摘要：事件名和少量字段（不带正文、内容、密钥） */
@@ -146,10 +148,20 @@ export function worktreeSettings(
   const root = values?.[WORKTREE_SETTING.root]
   const prefix = values?.[WORKTREE_SETTING.branchPrefix]
   const fetch = values?.[WORKTREE_SETTING.fetchFirst]
+  const clean = values?.[WORKTREE_SETTING.autoCleanup]
+  const count = (key: string, fallback: number, least: number, most: number) => {
+    const value = values?.[key]
+    return typeof value === 'number' && Number.isInteger(value) && value >= least && value <= most
+      ? value
+      : fallback
+  }
   return {
     root: typeof root === 'string' && root.trim() ? root.trim() : join(stateDir, 'worktrees'),
     branchPrefix: typeof prefix === 'string' ? prefix.trim() : WORKTREE_DEFAULTS.branchPrefix,
     fetchFirst: typeof fetch === 'boolean' ? fetch : WORKTREE_DEFAULTS.fetchFirst,
+    autoCleanup: typeof clean === 'boolean' ? clean : WORKTREE_DEFAULTS.autoCleanup,
+    keepCount: count(WORKTREE_SETTING.keepCount, WORKTREE_DEFAULTS.keepCount, 1, 200),
+    keptDays: count(WORKTREE_SETTING.keptDays, WORKTREE_DEFAULTS.keptDays, 7, 365),
   }
 }
 
@@ -213,6 +225,7 @@ export class DeviceServer {
   private readonly pairing: DevicePairing | null
   /** 设备层的工作树。这台机器上没有 git 时是 null */
   readonly worktrees: Worktrees | null
+  readonly worktreeLife: WorktreeLife | null
   private readonly worktreesDb: DatabaseSync | null
 
   constructor(options: DeviceOptions) {
@@ -350,6 +363,21 @@ export class DeviceServer {
       if (dropped > 0) log(`清掉了 ${dropped} 个已删会话留下的动态工具`)
     }
     this.deviceTools.register(CLIENT_TOOL_NAMESPACE.sessions, sessionToolsHandler(this.sessionTree))
+    // 工作树跟着会话的归档、删除、重新打开走，定时清理（worktree-life.mts）
+    this.worktreeLife = this.worktrees
+      ? new WorktreeLife(this.worktrees, {
+          known: (threadId) => this.index.recent(threadId),
+          pinned: (threadId) =>
+            this.workspaces.sections.placement(threadId)?.section.id === PINNED_SECTION_ID,
+          running: (threadId) => this.sessionTree.isActive(threadId),
+          roots: () =>
+            this.workspaces.projects
+              .list()
+              .flatMap((project) => project.roots.map((root) => root.path)),
+          log,
+        })
+      : null
+    this.worktreeLife?.start()
     // 子会话的后台任务跑完了：引擎不会接着做的，会话树补一条回报（决 430）
     this.background.onSettled((threadId, tasks) =>
       this.sessionTree.backgroundSettled(threadId, tasks),
@@ -395,6 +423,7 @@ export class DeviceServer {
       titles: this.titles,
       background: this.background,
       worktrees: this.worktrees,
+      worktreeLife: this.worktreeLife,
       codexCatalog: () =>
         this.control
           ? this.control.request('codex.models', {}, CODEX_CATALOG_TIMEOUT_MS)
@@ -677,6 +706,7 @@ export class DeviceServer {
     for (const link of [...this.engineLinks]) link.close()
     for (const session of [...this.sessions]) session.close()
     this.sessionTree.close()
+    this.worktreeLife?.stop()
     this.titles.close()
     this.deviceTools.close()
     await this.importer?.close()

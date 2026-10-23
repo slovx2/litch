@@ -101,6 +101,7 @@ import type {
 import type {
   WorktreeBranchesView,
   WorktreeFrom,
+  WorktreeSyncView,
   WorktreesTopicView,
   WorktreeView,
 } from '../model-worktrees.mjs'
@@ -988,6 +989,14 @@ export interface Commands {
   'worktree.restore': {
     params: { deviceId: string; id: string }
     result: { worktree: WorktreeView }
+  }
+  /**
+   * 把基础分支的新提交合进工作树（不推送）。有未提交的改动、别的 git 操作做到一半、不是从分支切的以 rejected 结束；
+   * 有冲突时停在冲突状态，结果里列出冲突的文件
+   */
+  'worktree.syncBase': {
+    params: { deviceId: string; id: string }
+    result: { result: WorktreeSyncView }
   }
   // ---------- 给设备装 harness ----------
   // 都要设备列了 harnessInstall，不然以 unsupported 结束；没连上以 offline 结束。

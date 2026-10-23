@@ -91,6 +91,8 @@ export function gitWorld(options: GitWorldOptions = {}) {
     gitMissing: false,
     roots: new Set<string>([remoteRoot]),
     turnDiff: options.turnDiff,
+    /** 当成设备层工作树的根：“全部”对着的起点（diffs 的 startOf） */
+    starts: new Map<string, { commit: string; ref: string | null }>(),
     /** 每起一条命令叫一次：测试拿它卡在“命令刚发出去”的那一刻 */
     onSpawn: null as ((command: string[]) => void) | null,
   }
@@ -182,6 +184,7 @@ export function gitWorld(options: GitWorldOptions = {}) {
     platform: () => options.platform ?? null,
     knownRoot: (path) => [...state.roots].some((known) => samePath(known, path)),
     turnDiffDeclared: () => (state.turnDiff === undefined ? null : state.turnDiff),
+    startOf: (path) => [...state.starts].find(([root]) => samePath(root, path))?.[1] ?? null,
     request: ((method: string, params: unknown) => request(method, params)) as never,
     fail: (error) => error as ChannelError,
     log() {},

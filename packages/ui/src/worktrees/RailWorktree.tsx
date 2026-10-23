@@ -1,6 +1,7 @@
 // 信息栏里的工作树卡片：会话在设备层建的工作树里时出来。写分支、起点、工作树路径；
-// 能复制路径、打开终端（终端本来就以会话目录为根）；目录被删了的（改动留了快照）能建回来。
-import type { SessionWorktreeView } from '@litch/core'
+// 能复制路径、打开终端（终端本来就以会话目录为根）、把基础分支的新提交合进来（不推送）；
+// 目录被删了的（改动留了快照）能建回来。
+import type { SessionWorktreeView, WorktreeSyncView } from '@litch/core'
 import { useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { Caret, Icon } from '../app/icons.tsx'
@@ -24,7 +25,10 @@ export function RailWorktree({
   const [copied, setCopied] = useState(false)
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
+  const [synced, setSynced] = useState<WorktreeSyncView | null>(null)
   const removed = worktree.state === 'removed'
+  // 从 HEAD、当前本地状态切的没有基础分支
+  const branched = worktree.baseRef !== 'HEAD' && worktree.baseRef !== 'working-tree'
   const copy = () => {
     navigator.clipboard.writeText(worktree.path).then(
       () => {
@@ -42,6 +46,17 @@ export function RailWorktree({
       .catch((error: unknown) => setFailure(error instanceof Error ? error.message : String(error)))
       .finally(() => setBusy(false))
   }
+  const sync = () => {
+    setBusy(true)
+    setFailure(null)
+    setSynced(null)
+    channel
+      .command('worktree.syncBase', { deviceId, id: worktree.id })
+      .then(({ result }) => setSynced(result))
+      .catch((error: unknown) => setFailure(error instanceof Error ? error.message : String(error)))
+      .finally(() => setBusy(false))
+  }
+  const base = baseName(worktree.baseRef, t)
   return (
     <section
       className="rail-card rail-worktree"
@@ -68,7 +83,7 @@ export function RailWorktree({
             </div>
             <div>
               <dt>{t('worktree.base')}</dt>
-              <dd className="mono">{baseName(worktree.baseRef, t)}</dd>
+              <dd className="mono">{base}</dd>
             </div>
             <div>
               <dt>{t('info.path')}</dt>
@@ -76,6 +91,18 @@ export function RailWorktree({
             </div>
           </dl>
           {removed ? <p className="rail-note">{t('worktree.removedNote')}</p> : null}
+          {synced ? (
+            <p className="rail-note" data-sync={synced.status}>
+              {synced.status === 'conflicts'
+                ? t('worktree.sync.conflicts', { files: synced.files.join('、') })
+                : t(
+                    synced.status === 'merged' ? 'worktree.sync.merged' : 'worktree.sync.upToDate',
+                    {
+                      base,
+                    },
+                  )}
+            </p>
+          ) : null}
           {failure ? <p className="rail-note err">{failure}</p> : null}
           <div className="rail-acts">
             {removed ? (
@@ -99,6 +126,19 @@ export function RailWorktree({
                 {t('worktree.terminal')}
               </button>
             )}
+            {!removed && branched ? (
+              <button
+                type="button"
+                className="btn ghost"
+                data-act="worktree-sync"
+                disabled={busy}
+                title={t('worktree.sync.hint')}
+                onClick={sync}
+              >
+                <Icon name="branch" small />
+                {t(busy ? 'worktree.syncing' : 'worktree.sync', { base })}
+              </button>
+            ) : null}
             <button type="button" className="btn ghost" data-act="worktree-copy" onClick={copy}>
               <Icon name="copy" small />
               {t(copied ? 'worktree.copied' : 'worktree.copyPath')}

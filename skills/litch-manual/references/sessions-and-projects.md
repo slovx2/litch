@@ -45,7 +45,15 @@ explain it:
   path, and Restore when the folder was removed). Device settings → Worktrees lists every worktree on
   the device: Remove deletes the folder and keeps the branch (uncommitted changes saved as a snapshot,
   or discarded), Restore brings a removed one back with its snapshot, Remove with branch deletes both
-  for good. Where worktrees go and how branches are named: `device-settings.md`.
+  for good. The Worktree card also has "Merge <base>": it merges new commits from the branch the
+  worktree started from (nothing is pushed; commit the worktree's changes first; on conflicts it stops
+  and lists the files to resolve in the terminal or by the model). In such a session the Diff tab's
+  "All" compares against where the worktree started (its latest common commit with the base branch),
+  so committed changes show too ("Since <commit>"); those can't be discarded there. Archiving the
+  session removes a clean worktree (the branch stays), keeps one with uncommitted changes (see
+  `worktrees.keptDays`), or hands it to a sub-session still sharing it; reopening or unarchiving the
+  session brings the folder back. Deleting the session deletes its worktree folder without a snapshot.
+  Where worktrees go, how branches are named and automatic cleanup: `device-settings.md`.
 - **While a turn runs**: messages sent are queued; "Say it now" steers the running turn; Stop
   interrupts it.
 - **Approvals and questions** appear as cards above the composer: commands, file changes, extra

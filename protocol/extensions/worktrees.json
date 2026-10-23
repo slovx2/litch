@@ -26,6 +26,8 @@
     "litch/worktree/branches（cwd）：所在仓库的当前分支、默认分支、本地分支、origin/ 远程分支。cwd 不在 git 仓库里回 -32602。",
     "litch/worktree/remove（id、discard、withBranch）：目录还在、有未提交的改动或未跟踪的文件、discard 不为真时，先把工作区（含未跟踪文件，用临时索引，不碰暂存区）做成挂在 HEAD 上的提交，记在源仓库的 refs/litch/snapshots/<id>，再 git worktree remove --force；状态记成 removed、带 snapshotRef。分支默认留着；withBranch 为真时连分支（git branch -D）和快照一起删，记录也删掉，发一次 state 为 removed、带 deleted: true 的变化通知。",
     "litch/worktree/restore（id）：removed 的建回原路径：分支在就检出分支，分支没了但有快照就从快照的父提交建回分支；有快照的把快照里的文件放回去、快照里删掉的删掉、清掉暂存（改动回到未提交的样子），再删掉快照引用。原路径上已经有东西回 -32602。kept 的（目录还在）改回 ready。",
+    "litch/worktree/syncBase（id）：在工作树里 git merge --no-edit 起点分支（起点是 origin/ 的先 fetch 那一支），不推送。目录不在、有未提交的改动或未跟踪的文件、合并或变基做到一半、起点不是分支（HEAD、working-tree）回 -32602。结果 merged、upToDate（起点分支已经在 HEAD 的历史里）或 conflicts（停在冲突状态，files 是冲突的文件），合并因别的原因失败时先 git merge --abort 再回错误。",
+    "会话归档、删除、重新打开时设备进程照规矩处理它的工作树（见 32 号设计）：主人归档时还有没归档的会话共用着就转给它，否则干净的删目录、有改动的记 kept；kept 超过 worktrees.keptDays 天做快照再删；thread/resume 一个工作树已删的会话之前先 restore；thread/unarchive 之后 kept 改回 ready、removed 的 restore；thread/delete 之后不留快照直接删目录。worktrees.autoCleanup 开着时活着的超过 worktrees.keepCount 个就回收（快照后删），置顶的、在跑的、一小时内建的、被加成工作区根的不动。分支一律留着。",
     "建、删、恢复在设备进程里排成一条队做（同一个仓库上同时跑两个 git worktree 会抢锁）。git 一律带 GIT_TERMINAL_PROMPT=0，不弹凭据提示。",
     "litch/worktree/changed（WorktreeChangedNotification）：建成、主人变了、删了、恢复了都发，只发给声明了 worktrees 的连接。"
   ],
@@ -48,7 +50,8 @@
         "litch/worktree/list",
         "litch/worktree/branches",
         "litch/worktree/remove",
-        "litch/worktree/restore"
+        "litch/worktree/restore",
+        "litch/worktree/syncBase"
       ],
       "description": "参数与应答见 worktrees.mts。"
     },

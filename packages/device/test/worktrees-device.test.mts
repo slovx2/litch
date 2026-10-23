@@ -138,3 +138,28 @@ test('WTD-003：建不了工作树时回错误、不转给引擎；引擎没建�
     await done()
   }
 })
+
+test('WTD-004：经聚合面归档工作树的主人，干净的删了目录；重新打开（thread/resume）之前先建回来', async () => {
+  const { env, repo, done } = world()
+  try {
+    const client = env.connect()
+    await client.initialize(['harness', 'worktrees'])
+    const started = await client.call('thread/start', {
+      harness: 'pi',
+      cwd: repo,
+      litchWorktree: { title: 'Archive me' },
+    })
+    const threadId = started.thread.id as string
+    await until(() => env.device.worktrees?.forThread(threadId) != null, '记成主人')
+    const made = env.device.worktrees?.forThread(threadId)
+    assert.ok(made)
+    await client.call('thread/archive', { threadId })
+    await until(() => env.device.worktrees?.get(made.id)?.state === 'removed', '归档后删了目录')
+    assert.equal(existsSync(made.path), false)
+    await client.call('thread/resume', { threadId })
+    assert.equal(env.device.worktrees?.get(made.id)?.state, 'ready')
+    assert.equal(existsSync(made.path), true, 'resume 转给引擎之前目录已经建回来了')
+  } finally {
+    await done()
+  }
+})

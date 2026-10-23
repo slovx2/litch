@@ -1,7 +1,8 @@
 // 工作树用到的 git 操作（worktrees.mts）。一律不弹凭据提示、输出用英文，跑在设备所在的机器上。
 import { execFileSync, spawn } from 'node:child_process'
-import { rmSync } from 'node:fs'
+import { existsSync, rmSync } from 'node:fs'
 import { basename, dirname, isAbsolute, join } from 'node:path'
+import type { WorktreeSyncBaseResponse } from '../../protocol/src/worktrees.mjs'
 import { ProtocolError } from '../../shared/src/protocol-contract.mjs'
 
 const GIT_ENV = {
@@ -178,6 +179,36 @@ export async function defaultStart(
 export async function dirty(path: string): Promise<boolean> {
   const out = await git(path, ['status', '--porcelain=v1', '--untracked-files=all'])
   return out !== ''
+}
+
+/** 合并、变基、拣选做到一半时 git 目录里留下的记号 */
+const HALFWAY = ['MERGE_HEAD', 'CHERRY_PICK_HEAD', 'REVERT_HEAD', 'rebase-merge', 'rebase-apply']
+
+/**
+ * 把 ref 合进 path 这个检出（worktrees 的 syncBase）。ref 是 origin/ 的先 fetch 那一支（拉不到不算错）。
+ * 有未提交的改动、别的 git 操作做到一半的拒绝；冲突时停在冲突状态、列出冲突的文件，别的失败先 merge --abort 再抛
+ */
+export async function mergeBase(path: string, ref: string): Promise<WorktreeSyncBaseResponse> {
+  if (await dirty(path))
+    throw new ProtocolError(-32602, '工作树里有未提交的改动或未跟踪的文件，先提交再合入')
+  const dir = await gitDirOf(path)
+  if (HALFWAY.some((name) => existsSync(join(dir, name))))
+    throw new ProtocolError(-32602, '工作树里有合并、变基或拣选做到一半，先做完或放弃')
+  if (ref.startsWith('origin/'))
+    await gitMaybe(path, ['fetch', '--quiet', 'origin', ref.slice('origin/'.length)])
+  if ((await gitMaybe(path, ['merge-base', '--is-ancestor', ref, 'HEAD'])) !== null)
+    return { status: 'upToDate', files: [] }
+  try {
+    await git(path, ['merge', '--no-edit', ref])
+    return { status: 'merged', files: [] }
+  } catch (error) {
+    const files = await gitList(path, ['diff', '-z', '--name-only', '--diff-filter=U']).catch(
+      () => [],
+    )
+    if (files.length > 0) return { status: 'conflicts', files }
+    await gitMaybe(path, ['merge', '--abort'])
+    throw error
+  }
 }
 
 /** 这个工作树的 git 目录（.git/worktrees/<名字>） */

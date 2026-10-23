@@ -27,7 +27,22 @@ func TestWorktreeSettingsAreDeclared(t *testing.T) {
 	if !declared || fetch.Type != settingBoolean || fetch.Default != false || fetch.Restart != restartNone {
 		t.Fatalf("先拉取声明得不对: %+v", fetch)
 	}
-	for _, spec := range []settingSpec{root, prefix, fetch} {
+	clean, declared := schema.spec(worktreeCleanKey)
+	if !declared || clean.Type != settingBoolean || clean.Default != true || clean.Restart != restartNone {
+		t.Fatalf("自动清理声明得不对: %+v", clean)
+	}
+	keep, declared := schema.spec(worktreeKeepKey)
+	if !declared || keep.Type != settingInteger || keep.Default != worktreeKeepDefault || *keep.Minimum != 1 {
+		t.Fatalf("保留个数声明得不对: %+v", keep)
+	}
+	days, declared := schema.spec(worktreeDaysKey)
+	if !declared || days.Type != settingInteger || days.Default != worktreeDaysDefault || *days.Minimum != 7 || *days.Maximum != 365 {
+		t.Fatalf("改动保留天数声明得不对: %+v", days)
+	}
+	if _, problem, _ := cfg.settings.apply(0, []settingEdit{edit(worktreeDaysKey, 3)}, schema, cfg.validateSettings); problem == nil || problem.key != worktreeDaysKey {
+		t.Fatalf("不到 7 天应被拒绝: %+v", problem)
+	}
+	for _, spec := range []settingSpec{root, prefix, fetch, clean, days} {
 		if spec.Group != worktreeGroup || spec.Title.ZH == "" || spec.Title.EN == "" || spec.Description.ZH == "" || spec.Description.EN == "" {
 			t.Fatalf("%s 缺分组或者中英文的标题、说明", spec.Key)
 		}
