@@ -11,7 +11,6 @@ import {
 } from '../../protocol/src/client-tools-sessions.mjs'
 import { parseSessionEvent } from '../../protocol/src/session-tree.mjs'
 import { failureOf, resultOf } from './fake-engine.mjs'
-import { RpcFailure } from './fake-upstream.mjs'
 import type { TestClient } from './helpers.mjs'
 import {
   brief,
@@ -216,20 +215,11 @@ const sentText = (env: TreeEnv, threadId: string, wanted: string) =>
     .filter((params) => params.threadId === threadId)
     .filter((params) => String(params.input?.at(-1)?.text ?? '').includes(wanted))
 
-/** 设备进程替这个会话发的 turn/steer 里，最后一段文字是 text 的 */
-const steeredText = (env: TreeEnv, threadId: string, wanted: string) =>
-  env.pi
-    .sent('turn/steer')
-    .filter((params) => params.threadId === threadId)
-    .filter((params) => String(params.input?.at(-1)?.text ?? '') === wanted)
-
-test('HERE-001：普通提案卡上点“在这里做”：提案记 here；父会话在跑时当场插进那个回合（同用户插话），发 lead 加标题、空一行加任务（不带背景）', async () => {
+test('HERE-001：普通提案卡上点“在这里做”：提案记 here；父会话在跑时排到回合后，发 lead 加标题、空一行加任务（不带背景），算用户回合', async () => {
   const env = treeRig()
   try {
     const client = await litch(env)
     const threadId = await withTools(client)
-    const running = env.pi.current(threadId)?.id as string
-    assert.ok(running)
     const proposalId = await propose(env, threadId, '补集成测试')
     assert.deepEqual(
       await client.call('litch/sessionProposal/here', { proposalId, lead: '在这里做：' }),
@@ -245,49 +235,20 @@ test('HERE-001：普通提案卡上点“在这里做”：提案记 here；父�
         ),
       '收到提案变成 here 的通知',
     )
-    const message = '在这里做：补集成测试\n\n补集成测试的任务原文'
-    await until(() => steeredText(env, threadId, message).length === 1, '插进在跑的回合')
-    const steered = steeredText(env, threadId, message)[0]
-    assert.equal(steered.expectedTurnId, running, '插的是正在跑的那个回合')
-    assert.doesNotMatch(steered.input.at(-1).text, /Background|整理/, '不带背景')
-    assert.ok(
-      env.pi.current(threadId)?.items.some((item) => item.content === steered.input),
-      '话进了那个回合',
-    )
-    // 插进去了就不再另起回合
-    env.pi.end(threadId)
-    await settle(60)
-    assert.equal(sentText(env, threadId, message).length, 0, '回合结束后不再发一遍')
-    // 已经了结了的再点：不支持
-    const again = await client.fails('litch/sessionProposal/here', { proposalId })
-    assert.match(again.message, /已经当作在这里做了结了/)
-  } finally {
-    await env.close()
-  }
-})
-
-test('HERE-003：插不进去（引擎不会插话、回合刚好结束）时排到回合结束后发，算用户回合', async () => {
-  const env = treeRig()
-  try {
-    const client = await litch(env)
-    const threadId = await withTools(client)
-    env.pi.handlers['turn/steer'] = () => {
-      throw new RpcFailure(-32601, 'turn/steer 不支持')
-    }
-    const proposalId = await propose(env, threadId, '补集成测试')
-    await client.call('litch/sessionProposal/here', { proposalId, lead: '在这里做：' })
-    const message = '在这里做：补集成测试\n\n补集成测试的任务原文'
-    await until(() => env.pi.sent('turn/steer').length === 1, '先试着插话')
     await settle(40)
+    const message = '在这里做：补集成测试\n\n补集成测试的任务原文'
     assert.equal(sentText(env, threadId, message).length, 0, '父会话在跑，先不发')
     env.pi.end(threadId)
     await until(() => sentText(env, threadId, message).length === 1, '回合结束后发出')
-    assert.equal(env.pi.sent('turn/steer').length, 1, '插不进去的不再试')
     const sent = sentText(env, threadId, message)[0]
     assert.equal(sent.input.at(-1).text, message)
+    assert.doesNotMatch(sent.input.at(-1).text, /Background|整理/, '不带背景')
     const turnId = env.pi.current(threadId)?.id as string
     assert.ok(turnId)
     assert.equal(env.device.sessionTree.isUserTurn('pi', turnId), true, '算用户发起的回合')
+    // 已经了结了的再点：不支持
+    const again = await client.fails('litch/sessionProposal/here', { proposalId })
+    assert.match(again.message, /已经当作在这里做了结了/)
   } finally {
     await env.close()
   }

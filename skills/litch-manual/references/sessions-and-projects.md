@@ -154,8 +154,7 @@ woken to continue.
   cards for independent plan steps appear as soon as the model suggests them. The
   card shows its state (waiting, started, done here, dismissed, withdrawn by the model, expired after
   7 days). Buttons: Start, Do it here (the card is settled and "Do it here: <title>" plus the task is
-  sent to the session as your message; if a turn is running it is added to that turn, like a message
-  you send while it works), Edit and start
+  sent to the session as your message, after the running turn if one is running), Edit and start
   (change the harness, model, effort, project, folder, fresh or with context, title, task,
   background, permissions), Dismiss. Whatever the card does not set comes from the parent session as
   it is when you start: harness, model, reasoning effort and folder (on another harness, that

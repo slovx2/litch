@@ -140,7 +140,7 @@ export const SESSION_TREE_METHOD = {
   proposalAnswer: 'litch/sessionProposal/answer',
   /**
    * 用户在普通提案卡上点“在这里做”：提案记 here，设备进程往父会话发一条用户消息（标题加任务），
-   * 父会话正在跑回合时插进那个回合（turn/steer），插不进去的排到回合结束后发。参数 SessionProposalHereParams，应答空对象
+   * 父会话正在跑回合时排到回合结束后发。参数 SessionProposalHereParams，应答空对象
    */
   proposalHere: 'litch/sessionProposal/here',
 } as const
