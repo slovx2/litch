@@ -37,6 +37,10 @@ export function makeRepo(parent: string, name = 'app'): string {
   const repo = join(parent, name)
   mkdirSync(repo, { recursive: true })
   sh(repo, 'init', '-q', '-b', 'main')
+  // 设备进程替人合入基础分支时用的是仓库配置的身份（不带 GIT_TEST_ENV）：全局配置屏蔽了，
+  // 流水线机器上从系统账户推不出名字，没配会报 Committer identity unknown
+  sh(repo, 'config', 'user.name', 'Test')
+  sh(repo, 'config', 'user.email', 'test@example.com')
   write(repo, 'README.md', 'hello\n')
   write(repo, 'src/app.txt', 'v1\n')
   commitAll(repo, 'init')
