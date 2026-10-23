@@ -31,6 +31,7 @@ import {
 } from './drafts'
 import { useGrow } from './grow'
 import { MAX_IMAGE_MB, MAX_IMAGES, pickImages, REFUSAL_TEXT } from './images'
+import { rowLayout } from './layout'
 
 export interface Draft {
   text: string
@@ -320,32 +321,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingBottom: 8,
-  },
-  side: { width: 40, height: 40, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  ...rowLayout,
   sideText: { fontSize: 22, lineHeight: 26 },
-  input: {
-    flex: 1,
-    minHeight: 40,
-    maxHeight: 132,
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    lineHeight: 22,
-    textAlignVertical: 'top',
-  },
-  send: {
-    minWidth: 56,
-    height: 40,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   sendText: { fontSize: 15, fontWeight: '600' },
 })
