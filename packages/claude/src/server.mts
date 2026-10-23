@@ -497,6 +497,10 @@ export class CodexClaudeAppServer {
       const thread = record ? this.store.getThread(record.threadId) : null
       return thread ? { id: thread.id, name: thread.name?.trim() || null } : null
     },
+    litchThread: (threadId) => {
+      const thread = this.store.getThread(threadId)
+      return thread ? { id: thread.id, name: thread.name?.trim() || null } : null
+    },
   }
   /** 会话里收到过的消息（只记在内存里）：会话 → 发送方的收件箱地址 → 发送方。回信的 SendMessage 按它认收件方 */
   private readonly peerAddresses = new Map<string, Map<string, LitchPeer>>()

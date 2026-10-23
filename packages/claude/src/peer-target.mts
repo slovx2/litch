@@ -6,9 +6,11 @@
 //   messagingSocketPath 对得上、进程还活着的那条，给出登记名、宿主会话号、原生会话号；
 //   原生会话号是 Litch 自己的会话（或导进来的）时，名字换成 Litch 里的标题，并带上会话号好点过去。
 // - 这个会话里收到过的消息：origin.from 是同一个地址的，用发送方当时报的名字和会话号（对方进程退了也认得出）。
+// - Litch 自己会话的固定地址（…/litch-<会话键>.sock，peer-inbox-socket.mts）：登记里没有（对方进程退了）也按会话键认。
 // 两样都认不出时给 null，调用方照旧写地址，客户端写成可读的说法。纯函数，登记和库由调用方给。
 import type { LitchPeer } from '../../protocol/src/peer-messages.mjs'
 import type { RegistryEntry } from './native-owner.mjs'
+import { sessionKeyFromAddress } from './peer-inbox-socket.mjs'
 
 /** `uds:<套接字路径>` 里的路径。别的地址（名字、bridge:…）是 null */
 export function udsSocket(address: string): string | null {
@@ -23,6 +25,8 @@ export interface PeerLookup {
   registry?: () => readonly RegistryEntry[]
   /** 原生会话号 → Litch 里的会话（会话号、标题）。不是 Litch 认得的会话是 null */
   thread?: (sessionId: string) => { id: string; name: string | null } | null
+  /** 会话键（Litch 的会话号）→ 这个入口的会话。固定地址的进程退了、登记里没有时用 */
+  litchThread?: (threadId: string) => { id: string; name: string | null } | null
 }
 
 /**
@@ -43,7 +47,11 @@ export function resolvePeer(
   } catch {
     // 登记读不了：只靠收到过的消息
   }
-  const litch = entry ? (lookup.thread?.(entry.sessionId) ?? null) : null
+  const key = sessionKeyFromAddress(address.trim())
+  const litch =
+    (entry ? lookup.thread?.(entry.sessionId) : null) ??
+    (key ? lookup.litchThread?.(key) : null) ??
+    null
   const peer: LitchPeer = { ...base }
   const name = litch?.name ?? entry?.name ?? base?.name ?? seen?.name
   if (name) peer.name = name
