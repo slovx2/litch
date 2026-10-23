@@ -131,7 +131,7 @@ export function Composer({
             <SlashGoal text={draft.text} able={goalsAble} onPick={draft.setText} />
             {/* 会话的持续目标：状态、用时、目标的话，暂停或继续、清除 */}
             <GoalBar store={store} onError={setError} />
-            {/* 回合停了、后台还有任务在跑：一行，只说有几个，点开从底部列出来 */}
+            {/* 后台还有任务在跑（回合在不在跑都一样）：一行，只说有几个，点开从底部列出来 */}
             <BackgroundBar store={store} />
             <QueueTray
               queued={meta.queued}

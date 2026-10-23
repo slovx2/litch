@@ -114,6 +114,13 @@ export function sessionBackground(
   return reports ? reported : deriveBackground(turns, items)
 }
 
+/**
+ * 输入框上方那一行写几个（0 就不出）：在跑的后台任务个数。和回合进不进行无关——人接着说话、
+ * 新回合在跑时，上一回合留在后台的任务照样在跑，这一行照样在（“正在工作”说的是前台）
+ */
+export const backgroundHint = (background: SessionBackgroundView | null): number =>
+  background?.running ?? 0
+
 /** 这个回合发起的、还在跑的后台任务有几个（收起行末尾的“· N 个在后台运行”） */
 export function runningFromTurn(background: SessionBackgroundView | null, turn: TurnView): number {
   if (!background || background.running === 0) return 0

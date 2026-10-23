@@ -58,7 +58,7 @@ export function Dock({ deviceId, sessionId }: DockProps) {
         {meta.note ? <div className="cmp-hint err">{t.text(meta.note)}</div> : null}
         {/* 会话有持续目标：一行，状态、目标和用量，点开右侧的“目标”页 */}
         <GoalBar deviceId={deviceId} sessionId={sessionId} />
-        {/* 回合停了、后台还有任务在跑：一行，只说有几个，点开右侧的“后台任务”页 */}
+        {/* 后台还有任务在跑（回合在不在跑都一样）：一行，只说有几个，点开右侧的“后台任务”页 */}
         <BackgroundBar deviceId={deviceId} sessionId={sessionId} />
         <SessionComposer deviceId={deviceId} sessionId={sessionId} blocked={blocked} />
       </>
