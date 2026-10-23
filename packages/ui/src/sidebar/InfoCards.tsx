@@ -14,6 +14,7 @@ import { useKey } from '../app/services.tsx'
 import { HarnessList, HarnessWhy } from '../devices/HarnessList.tsx'
 import { StatePill } from '../devices/status.tsx'
 import { useAgentList } from '../tree/useAgentList.ts'
+import { baseName } from '../worktrees/labels.ts'
 import { cwdMark } from './cwd.ts'
 import { TallyFact } from './TallyMarks.tsx'
 
@@ -130,11 +131,24 @@ export function SessionInfo({ summary, device, workspace }: SessionInfoProps) {
             <dt>{t('info.path')}</dt>
             <dd>
               <span className="info-path mono">{summary.cwd}</span>
-              {apart ? (
+              {summary.worktree ? null : apart ? (
                 <span className="info-cwd" data-cwd={apart.kind}>
                   {t(apart.kind === 'sub' ? 'info.cwd.sub' : 'info.cwd.away')}
                 </span>
               ) : null}
+            </dd>
+          </div>
+        ) : null}
+        {summary.worktree ? (
+          <div>
+            <dt>{t('info.worktree')}</dt>
+            <dd>
+              <span className="mono">{summary.worktree.branch}</span>
+              <span className="info-cwd" data-cwd="worktree">
+                {summary.worktree.state === 'removed'
+                  ? t('info.worktree.removed')
+                  : t('info.worktree.from', { base: baseName(summary.worktree.baseRef, t) })}
+              </span>
             </dd>
           </div>
         ) : null}

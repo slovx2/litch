@@ -63,6 +63,11 @@ export interface DiffsHost {
   platform(): string | null
   /** 这个目录是不是这台设备上认得的根：某个工作区的根，或者某个会话的工作目录。给的是理过的路径 */
   knownRoot(root: string): boolean
+  /**
+   * 这个根是不是设备层工作树（里的会话）：是的话给起点提交和基础分支（从 HEAD、当前本地状态切的没有分支，是 null），
+   * “全部”对着起点算；不是是 null
+   */
+  startOf(root: string): { commit: string; ref: string | null } | null
   /** 这个会话所属的 harness 发不发本回合的差异：它声明了的照声明；没有声明是 null（来了就用） */
   turnDiffDeclared(sessionId: string): boolean | null
   request<M extends ClientRequestMethod>(
@@ -165,6 +170,8 @@ interface Room {
   status: StatusOutput | null
   /** 还没有提交的仓库里当“上一次提交”用的空树 */
   emptyTree: string | null
+  /** 工作树里的会话：“全部”对着的起点（DiffView.since）；别的是 null */
+  since: string | null
   summaries: Map<DiffScope, Summary>
   error: ChannelErrorShape | null
   version: number
@@ -398,6 +405,7 @@ export function createDiffs(host: DiffsHost): Diffs {
       omitted: 0,
       watching: room.watches.length > 0,
       writable: false,
+      since: null,
     }
     if (room.error) return { ...base, phase: 'failed', error: room.error }
     if (!room.probe) return base
@@ -426,6 +434,7 @@ export function createDiffs(host: DiffsHost): Diffs {
       entries: summary.entries,
       omitted: summary.omitted,
       writable: true,
+      since: sub.scope === 'all' ? room.since : null,
     }
   }
 
@@ -533,9 +542,16 @@ export function createDiffs(host: DiffsHost): Diffs {
     scope === 'all' ? [base] : scope === 'staged' ? ['--cached'] : []
 
   const baseOf = async (room: Room, status: StatusOutput): Promise<string> => {
-    if (!status.initial) return 'HEAD'
-    room.emptyTree ??= await git.emptyTree(room.root)
-    return room.emptyTree
+    if (status.initial) {
+      room.since = null
+      room.emptyTree ??= await git.emptyTree(room.root)
+      return room.emptyTree
+    }
+    const start = host.startOf(room.root)
+    room.since = start
+      ? ((start.ref ? await git.mergeBase(room.root, start.ref) : null) ?? start.commit)
+      : null
+    return room.since ?? 'HEAD'
   }
 
   const load = async (room: Room, mine: number): Promise<void> => {
@@ -642,6 +658,7 @@ export function createDiffs(host: DiffsHost): Diffs {
       arming: false,
       status: null,
       emptyTree: null,
+      since: null,
       summaries: new Map(),
       error: null,
       version: 0,

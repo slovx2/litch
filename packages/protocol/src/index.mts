@@ -188,3 +188,12 @@ export {
   nextTaskRun,
   validateTaskSchedule,
 } from './task-schedule.mjs'
+// 工作树（worktrees 扩展）：thread/start 上要一个新工作树、会话对象上的 litchWorktree、列出删除恢复
+export type * from './worktrees.mjs'
+export {
+  WORKTREE_CHANGED,
+  WORKTREE_DEFAULTS,
+  WORKTREE_METHOD,
+  WORKTREE_SETTING,
+  WORKTREE_SNAPSHOT_REF,
+} from './worktrees.mjs'

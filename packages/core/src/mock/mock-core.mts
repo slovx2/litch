@@ -67,6 +67,7 @@ import { createMockService } from './mock-service.mjs'
 import { createMockTasks } from './mock-tasks.mjs'
 import { createMockTerminals } from './mock-terminals.mjs'
 import { createMockTree } from './mock-tree.mjs'
+import { createMockWorktrees, shownOf } from './mock-worktrees.mjs'
 import { type ClientToolDemo, clientAskRequest, clientToolCall } from './sample-client-tools.mjs'
 import { ASKS_COMMENTABLE, commentSample, commentsReply } from './sample-comments.mjs'
 import { PI_PLAN_QUESTION, samplePlan } from './sample-compose.mjs'
@@ -1485,6 +1486,24 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     device: (deviceId) => app.devices.find((entry) => entry.id === deviceId),
   })
 
+  // ---------- 工作树（mock-worktrees.mts） ----------
+  const worktrees = createMockWorktrees({
+    clock,
+    stepMs: chunkMs,
+    device: (deviceId) => app.devices.find((entry) => entry.id === deviceId),
+    sessions: (deviceId) => sidebars.get(deviceId)?.sessions ?? [],
+    roots: (deviceId) =>
+      (sidebars.get(deviceId)?.workspaces ?? []).flatMap((workspace) => workspace.roots),
+    owned(deviceId, sessionId, worktree) {
+      const sidebar = sidebars.get(deviceId)
+      const index = sidebar?.sessions.findIndex((entry) => entry.id === sessionId) ?? -1
+      if (!sidebar || index < 0) return
+      const next = { ...(sidebar.sessions[index] as SessionSummary), worktree }
+      sidebar.sessions[index] = next
+      emit(`sidebar:${deviceId}`, [{ op: 'session.upsert', session: next }])
+    },
+  })
+
   // ---------- 给设备装 harness（mock-install.mts） ----------
   const install = createMockInstall({
     clock,
@@ -1550,6 +1569,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         lineage: null,
         nativeLineage: null,
         background: null,
+        worktree: null,
       }
       sidebar.sessions.push(summary)
       emit(`sidebar:${deviceId}`, [{ op: 'session.upsert', session: summary }])
@@ -1726,12 +1746,29 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       if (running(view)?.id === turnId) endTurn(view, turnId, null, 'interrupted')
     },
     running: (view) => running(view) !== undefined,
+    enqueue: (view, message) =>
+      applySessionOps(view, [
+        { op: 'queue.set', queued: [...view.queued, { id: `q${++seq}`, ...message }] },
+      ]),
     treeOn: (deviceId) =>
       app.devices.find((device) => device.id === deviceId)?.sessionTree === true,
     harnesses: (deviceId) => app.devices.find((device) => device.id === deviceId)?.harnesses ?? [],
     settings: (deviceId, harness) => sampleSettings(harnessOn(deviceId, harness)),
     can: (deviceId, harness) => canOf(deviceId, harness),
     nextId: (prefix) => `${prefix}${++seq}`,
+    childWorktree(deviceId, sessionId, cwd, from, title) {
+      // 建不成（不在工作区里之类）就共用父会话的目录，和设备进程照缺省开的一样
+      worktrees
+        .create(deviceId, cwd, from, title)
+        .then((made) => {
+          worktrees.own(deviceId, made.id, sessionId)
+          const where = made.subPath ? `${made.path}/${made.subPath}` : made.path
+          updateSummary(deviceId, sessionId, { cwd: where })
+          const view = sessions.get(`session:${deviceId}:${sessionId}`)
+          if (view) view.cwd = where
+        })
+        .catch(() => {})
+    },
   })
 
   // 后台任务：回合结束后还在跑的两条命令，先结束的那条叫醒会话（mock-background.mts）
@@ -2047,6 +2084,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         sessionTree: false,
         pairing: false,
         install: false,
+        worktrees: false,
       }
       app.devices.push(device)
       sidebars.set(device.id, {
@@ -2186,6 +2224,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       if (paired !== undefined) return paired
       const installing = install.command(name, params)
       if (installing !== undefined) return installing
+      const branched = worktrees.command(name, params)
+      if (branched !== undefined) return branched
       const configured = config.command(name, params)
       if (configured !== undefined) return configured
       const typed = terminals.command(name, params)
@@ -2338,6 +2378,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
           extras,
           settings,
           goal: asGoal,
+          worktree: tree,
         } = params as Commands['session.create']['params']
         const message = outgoing(text, images, extras)
         const sidebar = sidebars.get(deviceId)
@@ -2358,6 +2399,12 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         if (REFUSES_CREATE.test(text)) {
           throw new ChannelError('remote', SAMPLE_TEXT[lang].createRefused)
         }
+        if (tree && cwd === null) throw new ChannelError('rejected', '没有工作区，建不了工作树')
+        // 要新工作树的先建它（要一会儿），会话在它里面对应的子目录起
+        const made =
+          tree && cwd !== null
+            ? await worktrees.create(deviceId, cwd, tree.from, text.split('\n')[0] ?? '')
+            : null
         const summary: SessionSummary = {
           id: `new${++seq}`,
           // 界面说了建在哪个工作区就归在那里；没说的按工作目录去认
@@ -2368,7 +2415,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
           waitingFor: null,
           unread: false,
           updatedAt: clock.now(),
-          cwd: cwd ?? '~',
+          cwd: made ? (made.subPath ? `${made.path}/${made.subPath}` : made.path) : (cwd ?? '~'),
           pinned: false,
           section: null,
           placedAt: null,
@@ -2376,9 +2423,11 @@ export function createMockCore(options: MockCoreOptions): MockCore {
           lineage: null,
           nativeLineage: null,
           background: null,
+          worktree: made ? shownOf(made) : null,
         }
         sidebar.sessions.push(summary)
         emit(`sidebar:${deviceId}`, [{ op: 'session.upsert', session: summary }])
+        if (made) worktrees.own(deviceId, made.id, summary.id)
         const view: SessionView = {
           deviceId,
           sessionId: summary.id,
@@ -2649,6 +2698,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
           lineage: null,
           nativeLineage: null,
           background: null,
+          worktree: null,
         }
         // 显示数据都是能写成 JSON 的，这样抄一份就和原来的互不相干了
         const copy = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T
@@ -2762,6 +2812,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       if (topic.kind === 'pairing') return pairing.subscribe(topic.deviceId, sink)
       // 给设备装 harness（mock-install.mts）、litch config（mock-config.mts）
       if (topic.kind === 'install') return install.subscribe(topic.deviceId, sink)
+      // 工作树（mock-worktrees.mts）
+      if (topic.kind === 'worktrees') return worktrees.subscribe(topic.deviceId, sink)
       if (topic.kind === 'harnessConfig') {
         return harnessConfig.subscribe(topic.deviceId, topic.harness, sink)
       }

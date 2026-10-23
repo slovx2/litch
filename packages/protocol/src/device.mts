@@ -120,6 +120,12 @@ export const EXTENSION = {
    * （peer-messages.mts，定义在 protocol/extensions/peer-messages.json）。声明了它的连接才看得到这个字段。
    */
   peerMessages: 'peerMessages',
+  /**
+   * 工作树：设备进程在会话所在的机器上建 git 工作树，新会话在里面起（worktrees.mts，定义在
+   * protocol/extensions/worktrees.json）。设备信息的 `extensions` 里列了它（这台机器上有 git），litch/worktree/* 和
+   * thread/start 的 `litchWorktree` 才能用；声明了它的连接才会在会话对象上看到 `litchWorktree`、收到变化通知。
+   */
+  worktrees: 'worktrees',
 } as const
 
 export type ExtensionName = (typeof EXTENSION)[keyof typeof EXTENSION]

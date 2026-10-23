@@ -603,3 +603,20 @@
 .linkish:hover {
   color: var(--ink);
 }
+/* 设备设置“工作树”一组下面的列表（worktrees/WorktreeList.tsx），行的骨架借扫码绑定手机的列表 */
+.wt-list-wrap {
+  margin-top: 14px;
+}
+.wt-list-wrap > h4 {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.wt-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--ink-3);
+}

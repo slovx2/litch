@@ -41,6 +41,7 @@ test('初值：手动派的是父会话的默认；提案的照提案预填', ()
     background: '',
     sandbox: '',
     wake: true,
+    worktree: false,
   })
   const filled = fieldsFor(parent, proposal)
   assert.equal(filled.harness, 'claude')
@@ -169,6 +170,24 @@ test('手动派：和父会话一样的不带，填了的才带', () => {
       sandbox: 'workspace-write',
     },
   )
+})
+
+test('工作树开关：初值是模型定的、没定照缺省，手动派时父会话有工作树就勾上；设备能建时才发', () => {
+  assert.equal(
+    fieldsFor(parent, { ...proposal, worktree: null, worktreeDefault: true }).worktree,
+    true,
+  )
+  assert.equal(
+    fieldsFor(parent, { ...proposal, worktree: false, worktreeDefault: true }).worktree,
+    false,
+  )
+  assert.equal(fieldsFor({ ...parent, worktree: { id: 'w1' } }, null).worktree, true)
+  const fields = { ...fieldsFor(parent, null), prompt: '查一下链接' }
+  assert.equal('worktree' in spawnParams(fields, parent), false)
+  assert.equal(spawnParams({ ...fields, worktree: true }, parent, true).worktree, true)
+  const card = { ...proposal, worktree: null, worktreeDefault: true }
+  assert.deepEqual(overridesOf(fieldsFor(parent, card), parent, card), {})
+  assert.deepEqual(overridesOf(fieldsFor(parent, card), parent, card, true), { worktree: true })
 })
 
 test('沙箱：目标 harness 给得到的都比要的宽时说出会是哪一档；要的比父会话宽按父会话算', () => {

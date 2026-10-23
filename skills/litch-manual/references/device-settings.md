@@ -68,6 +68,20 @@ snippet for entries that are on and running (see `troubleshooting.md`).
 | `sessions.wrapUp` | on | The model ends every turn with a `litch_sessions.wrap_up` call (its suggested tasks) and then its final answer. Off: sessions created afterwards do not get `wrap_up` and are not asked to wrap up, and no reminders are sent; the rest of `litch_sessions` works as before. Existing sessions keep the tools they started with |
 | `sessions.wrapUpReminder` | on | If a turn you started ends without a wrap-up, Litch opens one short turn to remind the model. No effect while `sessions.wrapUp` is off |
 
+### Worktrees (group `worktrees`, apply from the next worktree)
+
+The device service creates a session's worktree with git on the device itself (only when git is
+installed there). Existing worktrees are never moved.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `worktrees.root` | empty: `worktrees` in the device service's state directory | Absolute path; worktrees go under `<root>/<repository folder name>/` |
+| `worktrees.branchPrefix` | `litch/` | Start of each new branch name; clearing it restores the default |
+| `worktrees.fetchFirst` | off | Fetch the default branch from `origin` before branching from it. Off: use whichever of the local and `origin` copies is newer |
+| `worktrees.autoCleanup` | on | When there are more live worktrees than `worktrees.keepCount`, remove those whose session is archived or gone first, then the least recently active (changes saved as a snapshot first; all restorable). Pinned, running, created within the last hour, and worktrees added as a project folder are kept |
+| `worktrees.keepCount` | 15 (1 – 200) | Live worktrees to keep on the device |
+| `worktrees.keptDays` | 30 (7 – 365) | A worktree with uncommitted changes whose session was archived is kept as it is for this many days, then its changes are saved as a snapshot and the folder removed |
+
 ## Things that are not device settings
 
 - Per-device switches for the built-in browser, Computer Use and "operate this computer" live in Litch,

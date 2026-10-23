@@ -72,6 +72,8 @@ import {
   type Wire,
 } from './wire.mjs'
 import type { Workspaces } from './workspaces.mjs'
+import type { WorktreeLife } from './worktree-life.mjs'
+import { type Worktrees, worktreeCwd, worktreeFrom } from './worktrees.mjs'
 
 export interface UpstreamConfig {
   id: string
@@ -155,6 +157,10 @@ export interface SessionHost {
   titles: CodexTitles
   /** 每个会话的后台任务（background.mts，各连接共用） */
   background: DeviceBackground
+  /** 设备层的工作树（worktrees.mts）。这台机器上没有 git 时是 null，设备上就没有这项扩展 */
+  worktrees: Worktrees | null
+  /** 工作树跟着会话的归档、删除、重新打开走（worktree-life.mts）。没有 git 时是 null */
+  worktreeLife: WorktreeLife | null
 }
 
 /** 请求已经有着落：转给上游了（应答由上游来），或者已经自己答过了 */
@@ -228,6 +234,7 @@ export class ClientSession implements ClientToolPeer {
         decorate: (thread) => host.sessionTree.decorate(thread),
         deleted: (threadId) => host.sessionTree.deleted(threadId),
       },
+      worktrees: { decorate: (thread) => host.worktrees?.decorate(thread) },
       background: {
         notification: (link, method, params) => {
           if (method === BACKGROUND_TASKS_NOTIFICATION.changed)
@@ -441,6 +448,11 @@ export class ClientSession implements ClientToolPeer {
             frame.params,
             this.declared.has(EXTENSION.sessionTree),
           )
+        if (method.startsWith('litch/worktree/')) {
+          if (!this.host.worktrees)
+            throw new DeviceError('unsupported', '这台设备上没有 git，用不了工作树', { method })
+          return this.host.worktrees.call(method, frame.params)
+        }
         // 统一模式（harnessConfig）：只是文件操作，设备进程自己做，不经主进程
         if (INSTRUCTIONS_METHODS.has(method)) return instructionsCall(method, frame.params)
         if (method.startsWith(MANAGEMENT_PREFIX))
@@ -461,13 +473,15 @@ export class ClientSession implements ClientToolPeer {
             workspaces: this.host.workspaces,
             timeoutMs: this.host.timing.listTimeoutMs,
             ...(this.declared.has(EXTENSION.sessionTree) ||
-            this.declared.has(EXTENSION.backgroundTasks)
+            this.declared.has(EXTENSION.backgroundTasks) ||
+            this.declared.has(EXTENSION.worktrees)
               ? {
                   decorate: (row: Record<string, unknown>) => {
                     if (this.declared.has(EXTENSION.sessionTree))
                       this.host.sessionTree.decorate(row)
                     if (this.declared.has(EXTENSION.backgroundTasks))
                       this.host.background.decorate(row)
+                    if (this.declared.has(EXTENSION.worktrees)) this.host.worktrees?.decorate(row)
                   },
                 }
               : {}),
@@ -579,8 +593,15 @@ export class ClientSession implements ClientToolPeer {
     const { expectation, withhold } = fields
       ? this.host.workspaces.outgoing(method, fields)
       : { expectation: null, withhold: [] }
+    // 要在新工作树里建会话（worktrees 扩展的 litchWorktree）：设备层先建工作树、换掉 cwd，参数本身不带给引擎；
+    // 没声明这项扩展的连接带了也当不认识的参数丢掉
+    const wantsWorktree = method === 'thread/start' && fields !== null && 'litchWorktree' in fields
     // harness 是聚合面的扩展参数，上游没声明认识它，不能带过去
-    const dropped = keepHarness ? withhold : ['harness', ...withhold]
+    const dropped = [
+      ...(keepHarness ? [] : ['harness']),
+      ...withhold,
+      ...(wantsWorktree ? ['litchWorktree'] : []),
+    ]
     let params = fields
     if (fields && dropped.some((key) => key in fields))
       params = Object.fromEntries(Object.entries(fields).filter(([key]) => !dropped.includes(key)))
@@ -603,8 +624,9 @@ export class ClientSession implements ClientToolPeer {
       const tools = this.host.sessionTree.currentSessionTools(params.dynamicTools, link.harness)
       if (tools) params = { ...params, dynamicTools: tools }
     }
-    // 应答回来之后要记的（一个请求只有一个 after）
+    // 应答回来之后要记的（一个请求只有一个 after）；没成时要收拾的
     const afterwards: ((result: unknown) => void)[] = []
+    const failures: (() => void)[] = []
     // 建会话时带的动态工具记下来：设备进程替这个会话派子会话时照样带上
     if (method === 'thread/start' && Array.isArray(params?.dynamicTools)) {
       const tools = params.dynamicTools as unknown[]
@@ -620,11 +642,27 @@ export class ClientSession implements ClientToolPeer {
         const thread = isObject(result) ? result.thread : null
         if (isObject(thread)) this.host.titles.born(link.harness, thread)
       })
+    // 工作树跟着会话走（worktree-life.mts）：归档、删了之后收拾，取消归档之后建回或接着用
+    const life = this.host.worktreeLife
+    const subject = typeof fields?.threadId === 'string' ? fields.threadId : null
+    if (life && subject) {
+      if (method === 'thread/archive') afterwards.push(() => void life.archived(subject))
+      else if (method === 'thread/unarchive') afterwards.push(() => void life.reopen(subject))
+      else if (method === 'thread/delete') afterwards.push(() => void life.deleted(subject))
+    }
     const send = (ready: Record<string, unknown> | null): typeof HANDLED => {
-      if (afterwards.length)
-        this.relay.after(id, (result) => {
-          for (const work of afterwards) work(result)
-        })
+      if (afterwards.length || failures.length)
+        this.relay.after(
+          id,
+          (result) => {
+            for (const work of afterwards) work(result)
+          },
+          failures.length
+            ? () => {
+                for (const work of failures) work()
+              }
+            : undefined,
+        )
       // 这个上游的“话”里要另外带的参数（原生 codex：选了权限预设时配套的审批策略）
       let outgoing = ready
       if (outgoing) outgoing = link.dialect.outgoing(method, outgoing) ?? outgoing
@@ -638,18 +676,54 @@ export class ClientSession implements ClientToolPeer {
       return HANDLED
     }
     // 原生 codex 建会话、恢复、分叉：先补齐开发者指令（可能要先问它一句 config/read），再转（codex-instructions.mts）
-    const prepared = params
-      ? link.dialect.instructions?.(method, params, {
-          ask: (asked, given) => this.query(link, asked, given),
-          store: this.host.sessionTree.store,
-          log: (line) => this.host.log(`${this.tag} ${line}`),
+    const proceed = (
+      given: Record<string, unknown> | null,
+    ): typeof HANDLED | Promise<typeof HANDLED> => {
+      const prepared = given
+        ? link.dialect.instructions?.(method, given, {
+            ask: (asked, more) => this.query(link, asked, more),
+            store: this.host.sessionTree.store,
+            log: (line) => this.host.log(`${this.tag} ${line}`),
+          })
+        : null
+      if (!prepared) return send(given)
+      return prepared.then(({ params: ready, remember }) => {
+        afterwards.push(remember)
+        return send(ready)
+      })
+    }
+    const worktrees = this.host.worktrees
+    if (
+      !wantsWorktree ||
+      !params ||
+      !fields ||
+      !worktrees ||
+      !this.declared.has(EXTENSION.worktrees)
+    ) {
+      // 重新打开工作树已经删了的会话：先把目录建回来，引擎恢复会话要那个目录在
+      if (method === 'thread/resume' && life && subject && life.waiting(subject))
+        return life.reopen(subject).then(() => proceed(params))
+      return proceed(params)
+    }
+    const ask = isObject(fields.litchWorktree) ? fields.litchWorktree : {}
+    const cwd = typeof params.cwd === 'string' && params.cwd ? params.cwd : null
+    if (!cwd) throw new ProtocolError(-32602, '要在新工作树里建会话得给 cwd')
+    return worktrees
+      .create({
+        cwd,
+        ...(isObject(ask.from) ? { from: worktreeFrom(ask.from) } : {}),
+        ...(typeof ask.title === 'string' ? { title: ask.title } : {}),
+      })
+      .then((made) => {
+        afterwards.push((result) => {
+          const thread = isObject(result) ? result.thread : null
+          if (isObject(thread) && typeof thread.id === 'string') worktrees.own(made.id, thread.id)
         })
-      : null
-    if (!prepared) return send(params)
-    return prepared.then(({ params: ready, remember }) => {
-      afterwards.push(remember)
-      return send(ready)
-    })
+        failures.push(() => {
+          void worktrees.abandon(made.id)
+        })
+        return proceed({ ...params, cwd: worktreeCwd(made) })
+      })
   }
 
   /** 设备层自己向一个上游问一句，等它的应答 */
@@ -732,6 +806,7 @@ export class ClientSession implements ClientToolPeer {
     thread.harness = link.harness
     workspaces.decorate(threadId, thread)
     if (this.declared.has(EXTENSION.sessionTree)) this.host.sessionTree.decorate(thread)
+    if (this.declared.has(EXTENSION.worktrees)) this.host.worktrees?.decorate(thread)
     return more ? result : { thread }
   }
 
@@ -927,6 +1002,7 @@ export class ClientSession implements ClientToolPeer {
     const copy: Record<string, unknown> = { ...thread, harness }
     this.host.workspaces.decorate(thread.id, copy)
     if (this.declared.has(EXTENSION.sessionTree)) this.host.sessionTree.decorate(copy)
+    if (this.declared.has(EXTENSION.worktrees)) this.host.worktrees?.decorate(copy)
     this.send(JSON.stringify({ method: 'thread/started', params: { thread: copy } }))
   }
 

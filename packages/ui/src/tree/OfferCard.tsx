@@ -12,10 +12,12 @@ import {
   type SessionProposalView,
   type ToolCallItem,
 } from '@litch/core'
+import { useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { Icon } from '../app/icons.tsx'
 import { useKey } from '../app/services.tsx'
 import type { ItemRef } from '../transcript/messages.tsx'
+import { useWorktreesOn, WorktreeCheck } from '../worktrees/WorktreeCheck.tsx'
 import { findOffer, offerState } from './offer.ts'
 import { Brief, StartedChild } from './ProposalCard.tsx'
 import { STATUS_TEXT, useProposalAct, useProposalClock, useProposalList } from './proposals.ts'
@@ -35,6 +37,8 @@ export function OfferActs({
   const t = useT()
   const device = useKey<DeviceView>(keys.device(deviceId))
   const act = useProposalAct(deviceId, sessionId, proposal.id)
+  const [worktree, setWorktree] = useState(proposal.worktree ?? proposal.worktreeDefault)
+  const worktrees = useWorktreesOn(deviceId)
   const off = act.busy || device?.connection !== 'online'
   return (
     <>
@@ -44,7 +48,7 @@ export function OfferActs({
           className="btn primary"
           data-act="session"
           disabled={off}
-          onClick={() => act.answer('session')}
+          onClick={() => act.answer('session', worktrees ? worktree : undefined)}
         >
           {t('proposal.offer.session')}
         </button>
@@ -57,6 +61,12 @@ export function OfferActs({
         >
           {t('proposal.offer.here')}
         </button>
+        <WorktreeCheck
+          deviceId={deviceId}
+          checked={worktree}
+          disabled={off}
+          onChange={setWorktree}
+        />
       </div>
       {act.failure ? <p className="prop-err err">{act.failure}</p> : null}
     </>

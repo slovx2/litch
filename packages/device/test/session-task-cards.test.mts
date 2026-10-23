@@ -290,6 +290,29 @@ test('HERE-002：父会话闲着当场发，lead 不给用英文；offer 卡、�
   }
 })
 
+test('HERE-003：markHere 只了结提案、把那句话交回给客户端，设备进程自己不发（回合结束后也不发）', async () => {
+  const env = treeRig({}, { wrapUpReminder: false })
+  try {
+    const client = await litch(env)
+    const threadId = await withTools(client)
+    const proposalId = await propose(env, threadId, '补集成测试')
+    const message = '在这里做：补集成测试\n\n补集成测试的任务原文'
+    assert.deepEqual(
+      await client.call('litch/sessionProposal/markHere', { proposalId, lead: '在这里做：' }),
+      { text: message },
+    )
+    assert.equal(env.device.sessionTree.store.proposal(proposalId)?.status, 'here')
+    env.pi.end(threadId)
+    await until(() => !env.device.sessionTree.isActive(threadId), '回合结束')
+    await settle(60)
+    assert.equal(sentText(env, threadId, message).length, 0, '设备进程不发')
+    const again = await client.fails('litch/sessionProposal/markHere', { proposalId })
+    assert.match(again.message, /已经当作在这里做了结了/)
+  } finally {
+    await env.close()
+  }
+})
+
 test('ASK-001：wrapUpAsk 按规矩整理：超长截断、按钮多的丢掉、空的 label 丢掉、没 ask 时连按钮不要，都不算错', () => {
   assert.deepEqual(wrapUpAsk({ suggestions: [] }), { value: null, trimmed: false })
   assert.deepEqual(wrapUpAsk({ actions: [{ label: '好' }] }), { value: null, trimmed: true })

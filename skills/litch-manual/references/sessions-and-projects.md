@@ -35,6 +35,25 @@ explain it:
   (Read only / In project / Full access, or the harness's own presets) and optionally turn on the
   Plan mode switch → send the
   first message. `scripts/litch open new` brings the user to this page.
+- **Worktrees**: on the New session page, when the project folder is in a git repository on a device
+  that supports worktrees, "Where" offers Local (the project folder) or New worktree. A new worktree is
+  created by the device service with its own branch (named from the first line of the message), so the
+  session's changes stay out of the project folder; "From" picks what to branch from: the default
+  branch, the current local state (current commit plus uncommitted changes and new files), or any
+  local or remote branch. The choice is remembered per device and project. Such a session shows a
+  branch mark in the sidebar and a Worktree card in the info rail (branch, base, path; Terminal, Copy
+  path, and Restore when the folder was removed). Device settings → Worktrees lists every worktree on
+  the device: Remove deletes the folder and keeps the branch (uncommitted changes saved as a snapshot,
+  or discarded), Restore brings a removed one back with its snapshot, Remove with branch deletes both
+  for good. The Worktree card also has "Merge <base>": it merges new commits from the branch the
+  worktree started from (nothing is pushed; commit the worktree's changes first; on conflicts it stops
+  and lists the files to resolve in the terminal or by the model). In such a session the Diff tab's
+  "All" compares against where the worktree started (its latest common commit with the base branch),
+  so committed changes show too ("Since <commit>"); those can't be discarded there. Archiving the
+  session removes a clean worktree (the branch stays), keeps one with uncommitted changes (see
+  `worktrees.keptDays`), or hands it to a sub-session still sharing it; reopening or unarchiving the
+  session brings the folder back. Deleting the session deletes its worktree folder without a snapshot.
+  Where worktrees go, how branches are named and automatic cleanup: `device-settings.md`.
 - **While a turn runs**: messages sent are queued; "Say it now" steers the running turn; Stop
   interrupts it.
 - **Approvals and questions** appear as cards above the composer: commands, file changes, extra
@@ -170,6 +189,14 @@ woken to continue.
   off a task. A fresh card the model raises always carries a background (the overall goal,
   decisions and constraints so far) next to the task; the sub-session gets it as its own section
   before the task. Expand the brief on the card to read it.
+- **Where a sub-session works** (devices that support worktrees): when the parent session is in a
+  worktree Litch created (or shares one), a new sub-session gets its own new worktree and branch,
+  starting from the last commit of the parent's branch (the parent's uncommitted changes are not
+  carried over); otherwise it shares the parent's folder. The model can say which it wants; cards,
+  the "New session" choice of an offer card and the Start a sub-session dialog have a "New worktree"
+  checkbox, preset this way, and what is checked there wins. "Do it here" always stays in the current
+  session and folder. A handed-off task gets a worktree only on harnesses that can fork into another
+  folder (Codex, Claude Code); elsewhere it shares the folder.
   The side panel's **Suggested tasks** tab lists every card of the current session, with a badge for
   the waiting ones; clicking one scrolls to it. You can also tell the model "start the second one", and
   it withdraws cards that went stale. At most three cards it raises on its own per turn (independent

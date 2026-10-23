@@ -18,6 +18,7 @@ import { useT } from '../../app/appearance.ts'
 import { whyNot } from '../../app/errors.ts'
 import { useKey, useServices } from '../../app/services.tsx'
 import { useInstall } from '../../install/useInstall.ts'
+import { WorktreeList } from '../../worktrees/WorktreeList.tsx'
 import { Diagnostics, Logs } from './Diagnostics.tsx'
 import { adoptDrafts, useDrafts } from './drafts.ts'
 import { InheritedEnv } from './EnvEditor.tsx'
@@ -215,7 +216,8 @@ export function ManagePanel({
       </section>
       <SshEntries device={device} snapshot={snapshot} />
       {deviceBuckets.map((bucket) => {
-        const on = switchesOn(bucket.specs, snapshot)
+        // 工作树那一组的开关只有“先拉取”一项，“全部关闭”读起来像工作树关了：不出摘要
+        const on = bucket.group?.id === 'worktrees' ? null : switchesOn(bucket.specs, snapshot)
         return (
           <FoldSection
             key={bucket.group?.id ?? ''}
@@ -235,6 +237,8 @@ export function ManagePanel({
               <p className="mng-sec-note">{t.said(bucket.group.description)}</p>
             ) : null}
             <div className="mng-rows">{bucket.specs.map(row)}</div>
+            {/* 工作树那一组下面列出这台设备上建过的工作树，能删、能恢复 */}
+            {bucket.group?.id === 'worktrees' ? <WorktreeList device={device} /> : null}
           </FoldSection>
         )
       })}
