@@ -248,7 +248,8 @@ const AgentDetail = memo(function AgentDetail({
           </div>
         ) : null}
       </div>
-      <div className="agents-transcript">
+      {/* 这一块里按的 Esc 归子代理自己的输入区（两下打断的是它的回合，composer/escape.ts） */}
+      <div className="agents-transcript" data-esc-scope>
         <Transcript deviceId={deviceId} sessionId={agentId} />
       </div>
     </div>
