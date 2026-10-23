@@ -2,6 +2,7 @@
 // 固定画在最终回答下面，不会被后面的回答冲上去（核心的 bucketItems 把它们排成最后一块 tail）。
 // 依次是：问题和回复按钮，然后按调用先后的卡片。卡片照常带状态，过去的回合里能开始的还能开始。
 // 问题在下一条用户消息之后失效，折成一行（用户点的是哪个按钮看得出来时写上）。
+// 收尾带的卡片和问题等回合结束才排进来（核心的 bucketItems）；看着回合结束出来的那一下滑进来（fresh）。
 import { type DeviceView, type ItemView, keys, type SessionMeta, type TurnView } from '@litch/core'
 import { memo, useMemo, useState } from 'react'
 import { useT } from '../app/appearance.ts'
@@ -17,6 +18,8 @@ interface TailProps {
   sessionId: string
   turnId: string
   itemIds: string[]
+  /** 看着回合结束才出来的：滑进来 */
+  fresh?: boolean
 }
 
 /** 点过的按钮（会话、条目 → 按钮上的字）：卡片重建、滚出去再回来也还记得点过 */
@@ -27,6 +30,7 @@ export const TurnTail = memo(function TurnTail({
   sessionId,
   turnId,
   itemIds,
+  fresh = false,
 }: TailProps) {
   const t = useT()
   const itemKeys = useMemo(
@@ -36,7 +40,12 @@ export const TurnTail = memo(function TurnTail({
   const items = useKeys<ItemView>(itemKeys)
   const ask = tailAsk(items)
   return (
-    <section className="turn-tail" data-tail={turnId} aria-label={t('wrap.tail')}>
+    <section
+      className="turn-tail"
+      data-tail={turnId}
+      data-fresh={fresh ? '' : undefined}
+      aria-label={t('wrap.tail')}
+    >
       {ask ? <AskLine deviceId={deviceId} sessionId={sessionId} turnId={turnId} ask={ask} /> : null}
       {itemIds.map((itemId) => {
         const item = items[itemIds.indexOf(itemId)]

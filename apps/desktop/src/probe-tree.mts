@@ -336,12 +336,17 @@ export async function treeProbe(): Promise<TreeSeen> {
   // —— 收尾带的建议 ——
   const wrapBox = () => $$('.main .wrap-cards').at(-1)
   await say('收尾建议')
+  // 收尾带的卡片要等回合结束才出：等的这段时间里，回合在跑时卡片一次也不该露出来
+  let wrapEarly = false
   const wrapShown = await until(() => {
+    const running = $$('.main section.turn').at(-1)?.querySelector('.running-line') ?? null
+    if (running !== null && wrapBox()?.closest('section.turn') === running.closest('section.turn'))
+      wrapEarly = true
     const box = wrapBox()
     const parts = [...(box?.children ?? [])].map((part) =>
       part.classList.contains('prop-refused') ? 'refused' : (part as HTMLElement).dataset.state,
     )
-    return parts.join(',') === 'pending,pending,refused'
+    return parts.join(',') === 'pending,pending,refused' && !wrapEarly
   })
   seen.wrap = wrapBox()?.textContent ?? '没有'
   await idle()
@@ -726,7 +731,7 @@ const LABELS: Record<Exclude<keyof TreeSeen, 'seen'>, string> = {
   proposalDismissed: '点“不要”记成不要了，不起子会话',
   proposalWithdrawn: '模型撤回的提案写“撤回了”',
   proposalPanel: '侧面板等着的在上、了结的在下，点一条对话里那张卡片闪一下',
-  wrapShown: '收尾带的三条建议：两张等着的卡片加一行被拒的原因',
+  wrapShown: '收尾带的三条建议：两张等着的卡片加一行被拒的原因，回合结束才出',
   wrapQuiet: '空的收尾不画：撤回的那个回合只有一个活动块',
   wrapActual: '“改了再开始”能改完成后唤醒；换了 harness 开始后卡片写实际的 harness',
   tailBelow: '收尾区在回合最下方、回答下面，过程里那一步写“建议”',

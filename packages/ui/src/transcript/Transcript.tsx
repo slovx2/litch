@@ -25,6 +25,7 @@ import {
   useEffect,
   useLayoutEffect,
   useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
 } from 'react'
@@ -70,7 +71,7 @@ interface TurnBlocks {
 /**
  * 把一个回合的条目分成块。条目的种类、卡片与否只看开始时就有的东西，所以只在标识的列表变化时重算；
  * 助手消息的阶段要到写完才定（声明了 agentMessagePhase: onCompleted 的 harness），回合结束时再算一遍，
- * 让最后认作最终回答的那一条落定
+ * 让最后认作最终回答的那一条落定；收尾带的卡片和问题也在这时进收尾区（回合在跑时先不画，见核心的 bucketItems）
  */
 function useBlocks(
   { deviceId, sessionId }: SessionRef,
@@ -78,7 +79,6 @@ function useBlocks(
   status: TurnView['status'] | undefined,
 ): TurnBlocks {
   const { store } = useServices().replica
-  // biome-ignore lint/correctness/useExhaustiveDependencies: status 变了就是要重算
   return useMemo(() => {
     const inputs = []
     for (const id of itemIds) {
@@ -99,7 +99,7 @@ function useBlocks(
                 : { id, kind: item.kind },
       )
     }
-    const blocks = bucketItems(inputs)
+    const blocks = bucketItems(inputs, { turnRunning: status === 'running' })
     return {
       blocks,
       answerId: blocks.find((block) => block.type === 'answer')?.itemId,
@@ -245,6 +245,11 @@ const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { 
     !processFolded(settled, touched, agentsRunning),
   )
   const touch = useCallback(() => touchTurn(sessionKey, turnId), [sessionKey, turnId])
+  // 收尾区是看着回合结束才出来的（这里见过它在跑、在跑时还没有收尾区）：滑进来，读历史、滚回来时不动
+  const seen = useRef({ running: false, tail: false })
+  const hasTail = blocks.some((block) => block.type === 'tail')
+  if (running) seen.current = { running: true, tail: seen.current.tail || hasTail }
+  const freshTail = !running && seen.current.running && !seen.current.tail
   if (!turn) return null
   // 告一段落之后，第一段过程的开头是收起整段过程的那一行；没告一段落时没有这一行，过程照常摊开
   const firstProcess = blocks.findIndex((block) => block.type === 'process')
@@ -342,7 +347,10 @@ const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { 
           </div>
         ) : null}
         {/* 建议任务的卡片和收尾留的问题：固定在回合最下方（最终回答下面），不随回答往上冲 */}
-        {tail ? <TurnTail {...ref} turnId={turnId} itemIds={tail.itemIds} /> : null}
+        {/* 收尾带的卡片和问题等回合结束才进来（核心的 bucketItems），先收尾再写回答时不比回答先出 */}
+        {tail ? (
+          <TurnTail {...ref} turnId={turnId} itemIds={tail.itemIds} fresh={freshTail} />
+        ) : null}
         {/* 回合在跑时这一格一直占着位置，正文出字时隐去（只改透明度，不跟着跳）；用时从回合开始算，隐去时照样走 */}
         {running ? (
           <div

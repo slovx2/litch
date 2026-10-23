@@ -150,6 +150,8 @@ woken to continue.
   simply continues what the model just found (say, fixing what it diagnosed), it asks one short
   question at the end of the turn with one or two reply buttons instead of making a card; a click
   sends the button's words as your message, and the question lapses with your next message. The
+  cards and the question from the wrap-up appear below the final answer once the turn has ended;
+  cards for independent plan steps appear as soon as the model suggests them. The
   card shows its state (waiting, started, done here, dismissed, withdrawn by the model, expired after
   7 days). Buttons: Start, Do it here (the card is settled and "Do it here: <title>" plus the task is
   sent to the session as your message, after the running turn if one is running), Edit and start

@@ -4,6 +4,8 @@
 // 计划、待办、上下文压缩、派出的子会话露在过程外面，位置不变。回合结束后整段过程再收成一行。
 // 建议任务的卡片（收尾 wrap_up 带的、start 提的）连同收尾留给用户的问题，固定画在回合最下方（最终回答下面）的
 // 收尾区里，原来调用的位置在过程里只留一行；offer 卡挂在回合中间等用户选，不挪。
+// 收尾（wrap_up）带的卡片和问题等回合结束才进收尾区：规矩是先收尾、再写最终回答，收到就画的话卡片比回答先出来，
+// 没头没尾（照 Claude 桌面端：下一步框在回合结束前藏着）。回合中途 start 提的提案照旧收到就进，要趁回合在跑点开始。
 
 import type { ItemView } from '../model.mjs'
 import type { AgentThreadView } from '../model-tree.mjs'
@@ -54,7 +56,7 @@ export type Block =
   | { type: 'card'; itemId: string }
   /**
    * 回合最下方的收尾区：这一回合的建议任务卡片和收尾留给用户的问题，按调用的先后。
-   * 有就排在全部块的最后（最终回答下面）；条目同时还在过程里占一行
+   * 有就排在全部块的最后（最终回答下面）；条目同时还在过程里占一行。收尾带的要等回合结束（BucketOptions）
    */
   | { type: 'tail'; itemIds: string[] }
   /**
@@ -99,7 +101,12 @@ function answersAroundWrapUp(items: BlockInput[]): string[] {
   return [before.id, ...after.map((item) => item.id)]
 }
 
-export function bucketItems(items: BlockInput[]): Block[] {
+export interface BucketOptions {
+  /** 回合还在跑：收尾带的卡片和问题先不进收尾区（过程里那一步照留），等回合结束再进 */
+  turnRunning?: boolean
+}
+
+export function bucketItems(items: BlockInput[], options: BucketOptions = {}): Block[] {
   const shown = items.filter((item) => item.quiet !== true)
   // 回合里除了提示什么都没有：收起来就只剩“已处理”，等于什么都没告诉用户
   if (shown.length > 0 && shown.every((item) => item.kind === 'notice')) {
@@ -142,8 +149,9 @@ export function bucketItems(items: BlockInput[]): Block[] {
     } else if (item.kind === 'agentMessage') {
       process(item.id).push({ type: 'note', itemId: item.id })
     } else {
-      // 收尾区的卡片在过程里照样占一行（步骤组里），卡片本身记下来排到最后
-      if (item.card === 'tail') tail.push(item.id)
+      // 收尾区的卡片在过程里照样占一行（步骤组里），卡片本身记下来排到最后；收尾带的等回合结束
+      if (item.card === 'tail' && !(options.turnRunning === true && item.wrapUp === true))
+        tail.push(item.id)
       const parts = process(item.id)
       const last = parts.at(-1)
       if (last?.type === 'steps') last.itemIds.push(item.id)
