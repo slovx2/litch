@@ -5,6 +5,10 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
+## 未发布
+
+- 扫码绑定手机：设备走 Tailscale SSH、桌面端按 MagicDNS 名（或短名）连它时，出码对话框的主机默认填它的 tailnet IP（手机上开着别的 VPN 时 `*.ts.net` 常常解析不了）；主机一栏旁加下拉，在 IP、MagicDNS 全名、短名之间换。设备服务在 `litch/pair/start` 的结果里多带 `tailnet`（名字和地址）。`codex-harness-adapter pair` 选 Tailscale 方式又没给 `--host` 时也用 tailnet IP
+
 ## 0.18.0
 
 - 输入区：回合在跑时连按两下 Esc 停止（照 ChatGPT 桌面端，两下之间不超过 2 秒），输入框里有字也行、焦点不在输入框也行，停了字留着、焦点回到输入框。第一下在底栏写“再按一次 Esc 停止”，停止按钮在的话描一圈。弹层、菜单、“/”“@”单子、对话框里的 Esc 只关它们；焦点在别的输入框、终端里不算；有审批、提问等着时 Esc 留给卡片。侧面板子代理页里按的归子代理自己的回合。设置页快捷键里有这一条

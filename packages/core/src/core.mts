@@ -1095,6 +1095,7 @@ export function createCore(options: CoreOptions): Core {
             hostKey: started.hostKey,
             address: remembered ? { ...remembered } : { ...started.original },
             original: started.original,
+            hosts: started.hosts,
           }
           return { pairing }
         }

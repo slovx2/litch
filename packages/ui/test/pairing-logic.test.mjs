@@ -12,6 +12,8 @@ const {
   draftOf,
   failureOf,
   finalState,
+  HOST_KIND_LABEL,
+  hostKind,
   refreshes,
   sameAddress,
   showsSaid,
@@ -125,4 +127,26 @@ test('Tailscale 方式：两种新的失败认得出、tailscale 那种摆原话
   )
   assert.equal(redetects({ host: 'device-ts', port: 22 }, address), true)
   assert.equal(redetects({ host: 'a.ts.net', port: 2222 }, address), true)
+})
+
+test('主机下拉：认出 IP、MagicDNS 全名、短名，两种语言都有说法', () => {
+  assert.deepEqual(
+    [
+      '100.124.139.97',
+      'fd7a:115c:a1e0::ba34:8b64',
+      'song-debian.tail2e2f6a.ts.net',
+      'song-debian',
+    ].map(hostKind),
+    ['ip', 'ip', 'long', 'short'],
+  )
+  for (const lang of ['zh-CN', 'en']) {
+    const t = translator(lang)
+    for (const key of [
+      ...Object.values(HOST_KIND_LABEL),
+      'pairing.host.pick',
+      'pairing.host.choose',
+    ]) {
+      assert.notEqual(t(key), key)
+    }
+  }
 })

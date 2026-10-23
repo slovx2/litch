@@ -41,8 +41,13 @@ export interface PairingView {
   hostKey: PairHostKey
   /** 预填的地址：这台设备上次改过的（记在桌面端），没有就是原配置 */
   address: PairingAddress
-  /** 原配置：ssh 设备是 ssh -G 解析出的；本机是设备报的主机名、用户、22 */
+  /**
+   * 原配置：ssh 设备是 ssh -G 解析出的（那是设备自己的 MagicDNS 名、设备开着 Tailscale SSH 时换成它的 tailnet IP）；
+   * 本机是设备报的主机名、用户、22
+   */
   original: PairingAddress
+  /** 主机的候选：设备在 tailnet 里的 IP、MagicDNS 全名、短名（设备报了 tailnet 才有），界面做成下拉 */
+  hosts: string[]
 }
 
 /**

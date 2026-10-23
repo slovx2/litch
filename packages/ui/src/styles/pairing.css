@@ -86,6 +86,22 @@
   font-size: 12px;
   color: var(--ink-2);
 }
+/* 输入框占满右边一列；主机那一栏后面还有 tailnet 写法的下拉，下拉只占它要的宽度 */
+.pair-input {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+.pair-input > input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.pair-input > select {
+  flex: 0 1 auto;
+  width: 9em;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
 .pair-field .req-input[aria-invalid="true"] {
   box-shadow: 0 0 0 1px var(--err);
 }

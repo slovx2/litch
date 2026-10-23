@@ -101,6 +101,14 @@ const originalOf = (device: DeviceView, lang: SampleLang): PairingAddress => {
   return { name: alias, host: device.id === 'build' ? '10.0.3.11' : alias, port: 22, user: 'dev' }
 }
 
+/** 示例远程设备在 tailnet 里的主机写法（IP、全名、短名），出码对话框的下拉用；本机没有 */
+const tailnetHostsOf = (device: DeviceView): string[] => {
+  if (device.kind === 'local') return []
+  const short =
+    (device.target?.kind === 'alias' ? device.target.alias : device.id).split('.')[0] ?? device.id
+  return ['100.88.7.21', `${short}.tail5e1d.ts.net`, short]
+}
+
 interface DevicePairing {
   phones: PairPhone[]
   pairs: Map<string, PairStatus>
@@ -274,6 +282,7 @@ export function createMockPairing(host: MockPairingHost): MockPairing {
           hostKey: { ...HOST_KEY },
           address: state.remembered ? { ...state.remembered } : { ...original },
           original,
+          hosts: tailnetHostsOf(device),
         }
         return { pairing }
       }

@@ -7,6 +7,8 @@
 // 先读手机要连的地址的 SSH 横幅定方式（pairModeOf）：是 Tailscale SSH 就用 tailscale 方式（设备不写一次性钥匙行，
 // 自检改成用一把临时钥匙登那个地址、执行登记命令）；读不到横幅时按设备自报的 tailscaleSsh 和地址再定一次。
 // 一次性钥匙的自检没过时再看自检连的那个地址是不是 Tailscale SSH，是就直接这样说（失败的 key 是 tailscale）。
+// 预填的原配置是 ssh -G 解析出的；那是设备自己在 tailnet 里的名字、设备又开着 Tailscale SSH 时换成它的 tailnet IP（phoneHostOf），
+// 设备报的 tailnet 写法（IP、全名、短名）一并交给界面做下拉。
 // 要碰 ssh、文件、端口的那几样由外壳给（PairingPlatform）；没有外壳（移动端、测试）时出不了码，
 // 已绑定的手机（phones）和撤销（revoke）照样能用。
 //
@@ -30,6 +32,7 @@ import {
   type PairPayload,
   type PairPhone,
   type PairStatus,
+  type PairTailnet,
   pairModeOf,
 } from '../../../protocol/src/device-pairing.mjs'
 import type { ClientRequestMethod, ClientRequests } from '../../../protocol/src/index.mjs'
@@ -131,6 +134,8 @@ export interface PairingStarted {
   expiresAt: number
   hostKey: PairHostKey
   original: PairingAddress
+  /** 设备在 tailnet 里的主机写法（tailnetHosts），给界面做下拉；没有是空的 */
+  hosts: string[]
 }
 
 export interface PairingStartOptions {
@@ -200,6 +205,37 @@ export function hostKeyTrusted(
     const key = keyOf(entry.publicKey)
     return key !== null && trusted.has(key)
   })
+}
+
+/**
+ * 这台设备在 tailnet 里能给手机用的主机写法，按预填的先后：IPv4、IPv6、MagicDNS 全名、短名（全名的头一段）。
+ * 设备没报 tailnet 是空的
+ */
+export function tailnetHosts(tailnet: PairTailnet | undefined): string[] {
+  if (!tailnet) return []
+  const v4 = tailnet.addresses.filter((address) => !address.includes(':'))
+  const v6 = tailnet.addresses.filter((address) => address.includes(':'))
+  const short = tailnet.name.split('.')[0] ?? ''
+  return [...new Set([...v4, ...v6, tailnet.name, short].filter(Boolean))]
+}
+
+/**
+ * 预填给手机的主机：原配置里是这台设备自己在 tailnet 里的某种写法（MagicDNS 全名、短名、tailnet IP）、
+ * 设备又开着 Tailscale SSH 时，换成它的 tailnet IP。手机上的 DNS 不一定认 MagicDNS 名（比如手机上开着别的 VPN），
+ * IP 到的是同一台机器、同一个 tailscaled，方式和强制命令的情形都不变。别的地址（局域网、跳板后面的）原样不动
+ */
+export function phoneHostOf(
+  host: string,
+  started: Pick<DevicePairStartResponse, 'tailscaleSsh' | 'tailnet'>,
+): string {
+  if (!started.tailscaleSsh) return host
+  const hosts = tailnetHosts(started.tailnet)
+  const bare = host
+    .trim()
+    .replace(/^\[(.*)\]$/, '$1')
+    .replace(/\.$/, '')
+    .toLowerCase()
+  return hosts.some((each) => each.toLowerCase() === bare) ? (hosts[0] ?? host) : host
 }
 
 /** 设备回的这个扩展自己的错误：原因在 error.data.reason 里 */
@@ -403,7 +439,7 @@ export function createPairing(host: PairingHost): Pairing {
     }
     const original = {
       name: target.kind === 'alias' ? target.alias : host.displayName(),
-      host: resolved.host,
+      host: phoneHostOf(resolved.host, started),
       port: resolved.port,
       user: resolved.user,
     }
@@ -576,6 +612,7 @@ export function createPairing(host: PairingHost): Pairing {
           expiresAt: started.expiresAt,
           hostKey: started.hostKey,
           original: vetted.original,
+          hosts: tailnetHosts(started.tailnet),
         }
       } catch (error) {
         pairs.delete(started.pairId)

@@ -4,7 +4,7 @@
 // 已绑定的手机跟着通知走、撤销、记住的地址存进设备配置。
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import type { PairHostKey, PairStatus } from '../../protocol/src/device-pairing.mjs'
+import type { PairHostKey, PairStatus, PairTailnet } from '../../protocol/src/device-pairing.mjs'
 import {
   type ChannelError,
   checkPairingAddress,
@@ -54,6 +54,10 @@ interface Options {
   tailscaleSsh?: boolean
   /** 设备服务太旧：不认 mode，也不回 mode 和 tailscaleSsh */
   oldDevice?: boolean
+  /** 设备自报的 tailnet 名字和地址 */
+  tailnet?: PairTailnet
+  /** ssh -G 解析出的地址，默认 10.0.0.5:2222、dev */
+  resolved?: { host: string; port: number; user: string }
 }
 
 function world(options: Options = {}) {
@@ -81,14 +85,16 @@ function world(options: Options = {}) {
       }
       if (options.oldDevice) return { ...base, seed: 'c2VlZA' }
       const tailscaleSsh = options.tailscaleSsh ?? false
+      const more = options.tailnet ? { tailnet: options.tailnet } : {}
       return (params as { mode?: string }).mode === 'tailscale'
         ? {
             ...base,
+            ...more,
             mode: 'tailscale',
             tailscaleSsh,
             enrollCommand: `'/x/adapter' pair-enroll ${base.pairId}`,
           }
-        : { ...base, mode: 'key', tailscaleSsh, seed: 'c2VlZA' }
+        : { ...base, ...more, mode: 'key', tailscaleSsh, seed: 'c2VlZA' }
     },
     'litch/pair/cancel': () => ({}),
     'litch/pair/decide': (params: unknown) => {
@@ -106,7 +112,7 @@ function world(options: Options = {}) {
   }
   const peer = fakeOpener({ ...fake.handlers, ...handlers })
   const platform: PairingPlatform = {
-    resolve: async () => ({ host: '10.0.0.5', port: 2222, user: 'dev' }),
+    resolve: async () => options.resolved ?? { host: '10.0.0.5', port: 2222, user: 'dev' },
     knownKeys: async () => options.known ?? ['ssh-rsa AAAARSA'],
     localSsh: async () => {
       calls.localSsh++
@@ -478,6 +484,53 @@ test('手机要连的地址是 Tailscale SSH：tailscale 方式建配对，自�
   await settled()
   assert.equal((await started(keyed)).mode, 'key')
   assert.deepEqual(keyed.sent('litch/pair/start'), [{}])
+})
+
+test('原配置是设备自己的 MagicDNS 名、设备开着 Tailscale SSH：预填换成 tailnet IP，候选带 IP、全名、短名；记住的不动', async () => {
+  const tailnet = { name: 'box.tail1.ts.net', addresses: ['fd7a:115c:a1e0::1', '100.101.102.103'] }
+  const hosts = ['100.101.102.103', 'fd7a:115c:a1e0::1', 'box.tail1.ts.net', 'box']
+  const resolved = { host: 'box.tail1.ts.net', port: 22, user: 'root' }
+  const w = world({ banners: { 'box.tail1.ts.net:22': TS }, tailscaleSsh: true, tailnet, resolved })
+  w.core.start()
+  await settled()
+  const pairing = await started(w)
+  assert.equal(pairing.mode, 'tailscale')
+  assert.deepEqual(pairing.original, {
+    name: 'build-01',
+    host: '100.101.102.103',
+    port: 22,
+    user: 'root',
+  })
+  assert.deepEqual(pairing.address, pairing.original)
+  assert.deepEqual(pairing.hosts, hosts)
+  // 自检连的是原配置（这台电脑自己的 ssh 配置）
+  assert.equal(w.calls.enrollTests[0]?.host, 'box.tail1.ts.net')
+  // 记住过的地址照旧预填
+  const remembered = { name: 'box', host: 'box.tail1.ts.net', port: 22, user: 'root' }
+  await w.command('pairing.rememberAddress', { address: remembered })
+  const again = await started(w)
+  assert.deepEqual(again.address, remembered)
+  assert.equal(again.original.host, '100.101.102.103')
+  // 短名、带末尾点的全名、大写的 IPv6 也认
+  for (const host of ['box', 'BOX.tail1.ts.net.', 'FD7A:115C:A1E0::1']) {
+    const other = world({ tailscaleSsh: true, tailnet, resolved: { ...resolved, host } })
+    other.core.start()
+    await settled()
+    assert.equal((await started(other)).original.host, '100.101.102.103')
+  }
+  // 没开 Tailscale SSH、地址不是它自己的：不换；没报 tailnet：也没有候选
+  for (const options of [
+    { tailscaleSsh: false, tailnet, resolved },
+    { tailscaleSsh: true, tailnet, resolved: { ...resolved, host: '10.0.0.5' } },
+    { tailscaleSsh: true, resolved },
+  ]) {
+    const other = world(options)
+    other.core.start()
+    await settled()
+    const view = await started(other)
+    assert.equal(view.original.host, options.resolved.host)
+    assert.deepEqual(view.hosts, options.tailnet ? hosts : [])
+  }
 })
 
 test('按表单里的地址认方式；读不到横幅时设备开着 Tailscale SSH、地址是 tailnet 的就换成 tailscale 方式，跳过自检', async () => {

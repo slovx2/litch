@@ -137,6 +137,8 @@ type fakePairing struct {
 	modes []any
 	// pair 读到的 --host 上的横幅；空的当作 Tailscale SSH
 	banner string
+	// start 回的 tailnet；空的不带
+	tailnet map[string]any
 }
 
 func (f *fakePairing) set(state string, phone map[string]any) {
@@ -169,6 +171,9 @@ func (f *fakePairing) answer(method string, params map[string]any) (any, *device
 			"hostKey":  hostKey,
 			"hostKeys": []any{hostKey, map[string]any{"type": "ssh-rsa", "fingerprint": "SHA256:rsa", "publicKey": "ssh-rsa AAAArsa"}},
 			"hostname": "song-debian", "user": "song",
+		}
+		if f.tailnet != nil {
+			answer["tailnet"] = f.tailnet
 		}
 		if tailscale {
 			answer["mode"], answer["tailscaleSsh"] = "tailscale", true
@@ -596,6 +601,32 @@ func TestPairTailscaleWay(t *testing.T) {
 	if len(fake.modes) != 1 || fake.modes[0] != "tailscale" {
 		t.Fatalf("start 的 mode：%v", fake.modes)
 	}
+}
+
+func TestPairTailscaleDefaultsToTailnetIP(t *testing.T) {
+	tailnet := map[string]any{"name": "song-debian.tail2e2f6a.ts.net", "addresses": []any{"fd7a:115c:a1e0::ba34:8b64", "100.124.139.97"}}
+	// Tailscale 方式、没给 --host：主机用 tailnet 的 IPv4，名字仍是主机名
+	fake := &fakePairing{tailscale: true, tailnet: tailnet}
+	run := startPairRun(t, fake, nil)
+	eventually(t, "问手机走不走 Tailscale", func() bool { return strings.Contains(run.stdout.String(), "[y/N]") })
+	_, _ = run.stdin.Write([]byte("y\n"))
+	run.polled(t, 1)
+	if payload := pairTextIn(t, run.stdout.String()); payload["h"] != "100.124.139.97" || payload["n"] != "song-debian" {
+		t.Fatalf("配对文本不对：%v", payload)
+	}
+	run.cancel()
+	run.exit(t)
+	// 一次性钥匙方式不换
+	keyed := &fakePairing{tailscale: true, tailnet: tailnet}
+	run = startPairRun(t, keyed, nil)
+	eventually(t, "问手机走不走 Tailscale", func() bool { return strings.Contains(run.stdout.String(), "[y/N]") })
+	_, _ = run.stdin.Write([]byte("n\n"))
+	run.polled(t, 1)
+	if payload := pairTextIn(t, run.stdout.String()); payload["h"] != "song-debian" {
+		t.Fatalf("配对文本不对：%v", payload)
+	}
+	run.cancel()
+	run.exit(t)
 }
 
 func TestPairTailscaleAnsweredNoAndOldDevice(t *testing.T) {

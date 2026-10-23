@@ -60,4 +60,8 @@ logging in with its own key it enrolls itself; the confirmation code and Allow w
 - If the one-time key check fails because the address the desktop uses is Tailscale SSH, the dialog says
   so and offers "Use Tailscale instead".
 - `codex-harness-adapter pair` asks whether the phone uses the Tailscale address when the machine runs
-  Tailscale SSH.
+  Tailscale SSH; the Tailscale way without `--host` puts the machine's tailnet IP in the code.
+- When the desktop's own SSH config reaches the device by its Tailscale name (MagicDNS name, short name or
+  tailnet IP) and the device runs Tailscale SSH, the dialog fills in the device's tailnet IP: the phone's
+  DNS may not resolve MagicDNS names (for example while another VPN app is on). The menu next to the host
+  switches between the IP, the full MagicDNS name and the short name.

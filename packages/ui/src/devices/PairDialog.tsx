@@ -4,6 +4,7 @@
 // 码到期自动作废、重新出一张；关掉对话框时没用完的码作废掉。出不了码时按原因说人话，自检这类把 ssh 的原话摆出来。
 // 方式（一次性钥匙或 Tailscale，12 号设计第七之四节）由核心按手机要连的地址认：改了主机、端口时重新认一次，
 // 方式变了就换一张码；Tailscale 方式多一段说明（手机要装 Tailscale、ACL 说了算、撤销拦不住）。
+// 设备报了 tailnet 时主机旁边有个下拉，在 tailnet IP、MagicDNS 全名、短名之间换（核心预填的是 IP）。
 import {
   type ChannelError,
   type DeviceView,
@@ -35,6 +36,8 @@ import {
   draftOf,
   failureOf,
   finalState,
+  HOST_KIND_LABEL,
+  hostKind,
   redetects,
   refreshes,
   sameAddress,
@@ -332,23 +335,51 @@ export function PairDialog({ device, prefill, onClose }: PairDialogProps) {
               <div className="pair-side">
                 <fieldset className="pair-address" disabled={!draft || finalState(state)}>
                   <legend className="form-label">{t('pairing.address')}</legend>
-                  {ADDRESS_FIELDS.map((field) => (
-                    <label key={field} className="pair-field" data-field={field}>
-                      <span className="pair-field-label">{t(FIELD_LABEL[field])}</span>
-                      <input
-                        className="req-input"
-                        value={draft?.[field] ?? ''}
-                        autoComplete="off"
-                        spellCheck={false}
-                        inputMode={field === 'port' ? 'numeric' : undefined}
-                        aria-invalid={problem?.field === field ? 'true' : undefined}
-                        onChange={(event) => {
-                          const value = event.target.value
-                          setDraft((was) => (was ? { ...was, [field]: value } : was))
-                        }}
-                      />
-                    </label>
-                  ))}
+                  {ADDRESS_FIELDS.map((field) => {
+                    // 主机：设备报了 tailnet 时旁边一个下拉，在 IP、MagicDNS 全名、短名之间换
+                    const hosts = field === 'host' ? (pairing?.hosts ?? []) : []
+                    return (
+                      <label key={field} className="pair-field" data-field={field}>
+                        <span className="pair-field-label">{t(FIELD_LABEL[field])}</span>
+                        <span className="pair-input">
+                          <input
+                            className="req-input"
+                            value={draft?.[field] ?? ''}
+                            autoComplete="off"
+                            spellCheck={false}
+                            inputMode={field === 'port' ? 'numeric' : undefined}
+                            aria-invalid={problem?.field === field ? 'true' : undefined}
+                            onChange={(event) => {
+                              const value = event.target.value
+                              setDraft((was) => (was ? { ...was, [field]: value } : was))
+                            }}
+                          />
+                          {hosts.length > 0 ? (
+                            <select
+                              className="req-input"
+                              data-act="pick-host"
+                              aria-label={t('pairing.host.choose')}
+                              title={t('pairing.host.choose')}
+                              value={hosts.includes(draft?.host ?? '') ? draft?.host : ''}
+                              onChange={(event) => {
+                                const value = event.target.value
+                                if (value) setDraft((was) => (was ? { ...was, host: value } : was))
+                              }}
+                            >
+                              <option value="" disabled>
+                                {t('pairing.host.pick')}
+                              </option>
+                              {hosts.map((host) => (
+                                <option key={host} value={host}>
+                                  {`${t(HOST_KIND_LABEL[hostKind(host)])} · ${host}`}
+                                </option>
+                              ))}
+                            </select>
+                          ) : null}
+                        </span>
+                      </label>
+                    )
+                  })}
                   {problem ? (
                     <div className="modal-note err" data-pair-problem={problem.field}>
                       {t(problem.problem)}
