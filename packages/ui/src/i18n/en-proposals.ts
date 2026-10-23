@@ -25,7 +25,7 @@ export const enProposals: Record<keyof typeof zhProposals, Entry> = {
   'proposal.state.unknown': 'Proposal closed',
   'proposal.state.offered': 'Awaiting choice',
   'proposal.state.chosen': 'Waiting for the brief',
-  'proposal.state.here': 'Doing it here',
+  'proposal.state.here': 'Sent to this session',
   'proposal.offer.kind': 'New task',
   'proposal.offer.ask': 'This is unrelated to the current session. Start a new session for it?',
   'proposal.offer.session': 'New session',

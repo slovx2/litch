@@ -245,6 +245,7 @@ import type {
   SessionProposalIdParams,
   SessionProposalListParams,
   SessionProposalListResponse,
+  SessionProposalMarkHereResult,
   SessionStartParams,
   SessionStartResponse,
 } from './session-tree.mjs'
@@ -540,6 +541,10 @@ export interface ClientRequests {
   'litch/sessionProposal/here': {
     params: SessionProposalHereParams
     result: Record<string, never>
+  }
+  'litch/sessionProposal/markHere': {
+    params: SessionProposalHereParams
+    result: SessionProposalMarkHereResult
   }
   // 以下是工作树（扩展 worktrees，见 worktrees.mts）：只有聚合面有，设备信息的 `extensions` 里列了 worktrees 才能用
   'litch/worktree/list': { params: Record<string, never>; result: WorktreeListResponse }

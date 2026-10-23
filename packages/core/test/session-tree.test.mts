@@ -503,7 +503,7 @@ const lineageOf = (parent: string, title: string) => ({
   createdAt: 1_700_000_050,
 })
 
-function treeWorld(options: { tree?: boolean } = {}) {
+function treeWorld(options: { tree?: boolean; markHere?: boolean } = {}) {
   const calls: { method: string; params: Record<string, unknown> }[] = []
   const record = (method: string, reply: unknown) => (params: unknown) => {
     calls.push({ method, params: params as Record<string, unknown> })
@@ -582,6 +582,14 @@ function treeWorld(options: { tree?: boolean } = {}) {
       },
       'litch/sessionProposal/dismiss': record('litch/sessionProposal/dismiss', {}),
       'litch/sessionProposal/answer': record('litch/sessionProposal/answer', {}),
+      'litch/sessionProposal/here': record('litch/sessionProposal/here', {}),
+      ...(options.markHere === false
+        ? {}
+        : {
+            'litch/sessionProposal/markHere': record('litch/sessionProposal/markHere', {
+              text: '在这里做：整理 CHANGELOG\n\n整理一下',
+            }),
+          }),
     },
   })
   return { ...world, calls, codex }
@@ -1241,6 +1249,103 @@ test('设备：offer 卡上选“新会话”先记成等补简报（不起子�
   assert.equal(second?.status, 'here')
   assert.ok(second?.settledAt)
   watched.close()
+})
+
+test('设备：提案卡上点“在这里做”，设备进程只了结（markHere），那句话由核心当用户的话发（照 Claude 桌面端进输入队列）', async () => {
+  const world = treeWorld()
+  world.core.start()
+  await settle()
+  const watched = watchSession(world.core, 'p')
+  await settle()
+  await settle()
+  await world.command('session.proposal.here', {
+    sessionId: 'p',
+    proposalId: 'pr1',
+    lead: '在这里做：',
+  })
+  await settle()
+  assert.deepEqual(
+    world.calls.filter(
+      (entry) =>
+        entry.method.startsWith('litch/sessionProposal/') &&
+        entry.method !== 'litch/sessionProposal/list',
+    ),
+    [
+      {
+        method: 'litch/sessionProposal/markHere',
+        params: { proposalId: 'pr1', lead: '在这里做：' },
+      },
+    ],
+    '只了结，不让设备进程发',
+  )
+  assert.equal(watched.seen.view?.proposals[0]?.status, 'here')
+  const started = world.sent('turn/start').filter((params) => params.threadId === 'p')
+  assert.equal(started.length, 1, '会话闲着：核心当场发出')
+  assert.match(JSON.stringify(started[0]?.input), /在这里做：整理 CHANGELOG/)
+  watched.close()
+})
+
+test('设备：设备进程旧、没有 markHere 时退回 here，由设备进程发', async () => {
+  const world = treeWorld({ markHere: false })
+  world.core.start()
+  await settle()
+  const watched = watchSession(world.core, 'p')
+  await settle()
+  await settle()
+  await world.command('session.proposal.here', { sessionId: 'p', proposalId: 'pr1' })
+  await settle()
+  assert.deepEqual(
+    world.calls.filter((entry) => entry.method === 'litch/sessionProposal/here'),
+    [{ method: 'litch/sessionProposal/here', params: { proposalId: 'pr1' } }],
+  )
+  assert.equal(watched.seen.view?.proposals[0]?.status, 'here')
+  assert.equal(world.sent('turn/start').filter((params) => params.threadId === 'p').length, 0)
+  watched.close()
+})
+
+test('模拟：回合在跑时点提案卡上的“在这里做”，那句话进输入队列（看得见），回合结束后发出', async () => {
+  const world = mockWorld()
+  await settle()
+  const parent = world.watch('s6')
+  await settle()
+  await world.channel.command('session.send', {
+    deviceId: 'local',
+    sessionId: 's6',
+    text: '提个子会话',
+  })
+  const list = () => parent.view?.proposals ?? []
+  await world.until(() => list().length === 3, '三张提案')
+  await world.until(() => parent.view?.turns.at(-1)?.status === 'completed', '提案的回合结束')
+  const proposal = list()[2]
+  assert.ok(proposal)
+  // 说一件新任务：模型发 offer 卡等用户选，回合一直在跑
+  await world.channel.command('session.send', {
+    deviceId: 'local',
+    sessionId: 's6',
+    text: '新任务：给设置页加个导出按钮',
+  })
+  await world.until(() => list().some((entry) => entry.offer), '出了一张 offer 卡')
+  const running = parent.view?.turns.at(-1)
+  assert.equal(running?.status, 'running', '回合在跑')
+  await world.channel.command('session.proposal.here', {
+    deviceId: 'local',
+    sessionId: 's6',
+    proposalId: proposal.id,
+    lead: '在这里做：',
+  })
+  await world.until(() => list()[2]?.status === 'here', '提案记成在这里做')
+  const text = `在这里做：${proposal.title}`
+  assert.ok(
+    parent.view?.queued.some((message) => message.text.startsWith(text)),
+    '排在输入队列里',
+  )
+  await world.channel.command('session.interrupt', { deviceId: 'local', sessionId: 's6' })
+  await world.until(
+    () =>
+      (parent.view?.queued.length ?? 1) === 0 &&
+      userItems(parent.view).some((item) => item.text.startsWith(text)),
+    '回合结束后发出',
+  )
 })
 
 // —— 模拟核心里的演示 ——

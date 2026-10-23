@@ -105,6 +105,8 @@ export interface MockTreeHost {
   /** 回合还在跑的话打断它（和用户点停止一样收尾） */
   stop(view: SessionView, turnId: string): void
   running(view: SessionView): boolean
+  /** 把一条话放进输入队列（回合结束后照常发） */
+  enqueue(view: SessionView, message: OutgoingMessage): void
   /** 这台设备有没有会话树（DeviceView.sessionTree） */
   treeOn(deviceId: string): boolean
   harnesses(deviceId: string): HarnessView[]
@@ -155,16 +157,13 @@ export function createMockTree(host: MockTreeHost): MockTree {
   const held = new Set<string>()
   /** 这一回合模型没调收尾的会话：回合结束后替它开一个提醒的回合 */
   const unwrapped = new Set<string>()
-  /** 提案卡上点了“在这里做”、回合还在跑的：等回合结束再发的那几条话 */
-  const heres = new Map<string, string[]>()
   /** 点了“在这里做”发出去的话：模型照示例回一句 */
   const hereTexts = new Set<string>()
 
-  /** 往会话里发“在这里做”的那条话：回合在跑就排到回合结束后 */
+  /** 往会话里发“在这里做”的那条话：同真的核心，当用户的话进输入队列，回合在跑就排到回合结束后 */
   const sendHere = (view: SessionView, message: string) => {
-    const key = sameKey(view.deviceId, view.sessionId)
     hereTexts.add(message)
-    if (host.running(view)) heres.set(key, [...(heres.get(key) ?? []), message])
+    if (host.running(view) || view.queued.length > 0) host.enqueue(view, outgoing(message))
     else host.startTurn(view, outgoing(message))
   }
 
@@ -997,14 +996,6 @@ export function createMockTree(host: MockTreeHost): MockTree {
       const key = sameKey(deviceId, sessionId)
       if (unwrapped.delete(key) && status === 'completed' && !host.running(view)) {
         host.startTurn(view, { text: '', images: [], extras: [] }, { kind: 'remind', notes: [] })
-      }
-      // 回合在跑时点了“在这里做”的：现在发
-      const queued = heres.get(key)
-      if (queued?.length && !host.running(view)) {
-        const [next, ...rest] = queued
-        if (rest.length > 0) heres.set(key, rest)
-        else heres.delete(key)
-        if (next !== undefined) host.startTurn(view, outgoing(next))
       }
     },
 

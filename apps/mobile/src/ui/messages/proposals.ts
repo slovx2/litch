@@ -17,7 +17,7 @@ export const zhCN = {
   'proposals.start.gone': '找不到此提案',
   'proposals.state.offered': '待选择',
   'proposals.state.chosen': '等待模型补充简报',
-  'proposals.state.here': '在这里做',
+  'proposals.state.here': '已交给这个会话',
   'proposals.offer.kind': '新任务',
   'proposals.offer.ask': '此任务与当前对话无关。要新开会话，还是在这里做？',
   'proposals.offer.chosen': '模型正在撰写简报，完成后将开启新会话',
@@ -44,7 +44,7 @@ export const en: Record<keyof typeof zhCN, Entry> = {
   'proposals.start.gone': 'This proposal is gone',
   'proposals.state.offered': 'Awaiting choice',
   'proposals.state.chosen': 'Waiting for the brief',
-  'proposals.state.here': 'Doing it here',
+  'proposals.state.here': 'Sent to this session',
   'proposals.offer.kind': 'New task',
   'proposals.offer.ask': 'This isn’t related to this chat. Start a new session, or do it here?',
   'proposals.offer.chosen':

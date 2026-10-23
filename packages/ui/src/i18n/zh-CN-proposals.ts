@@ -36,7 +36,7 @@ export const zhProposals = {
   'proposal.state.unknown': '提案已收起',
   'proposal.state.offered': '待选择',
   'proposal.state.chosen': '等待模型补充简报',
-  'proposal.state.here': '在这里做',
+  'proposal.state.here': '已交给这个会话',
   'proposal.offer.kind': '新任务',
   'proposal.offer.ask': '此任务与当前会话无关，是否新开一个会话？',
   'proposal.offer.session': '新会话',
