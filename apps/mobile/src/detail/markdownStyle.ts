@@ -3,8 +3,48 @@
 // 浅灰的引用底、深色的四到六级标题……），深色主题下会和配色里的浅色字撞在一起。
 // 所以凡是带颜色的项都在这里写全，测试（test/markdown-style.test.mjs）逐项看有没有漏、对比度够不够。
 // 表格照桌面端（packages/ui 的 transcript-prose.css）：表体不铺底、跟着对话区，表头一层淡的墨色，没有斑马纹。
+// 代码上色也照桌面端：几种记号色取皮肤里现成的线色，浅色下几种皮肤自己另配的照抄（packages/ui/src/styles/skins/）。
+// 组件默认的上色是给深底配的，浅色主题的代码块上发白。
 import type { MarkdownStyle } from 'react-native-enriched-markdown'
-import type { Palette, Theme } from '../ui/theme'
+import type { Palette, Skin, Theme } from '../ui/theme'
+
+type SyntaxColors = NonNullable<NonNullable<MarkdownStyle['codeBlock']>['syntaxColors']>
+
+/** 浅色下线色在代码块的底上太淡，这几种皮肤另配了更深的 */
+const LIGHT_SYNTAX: Record<
+  Skin,
+  Partial<Record<'keyword' | 'string' | 'number' | 'function' | 'type' | 'meta', string>>
+> = {
+  retro: {
+    keyword: '#6a34ab',
+    string: '#0b6b3d',
+    number: '#8a4a00',
+    function: '#1f55b5',
+    type: '#6f5300',
+    meta: '#74482c',
+  },
+  standard: { type: '#866b00' },
+  human: { type: '#86690f' },
+}
+
+/** 运算符、标点、变量、内嵌的不上色，跟着代码块的字色（组件里不写就是这样） */
+function syntaxColorsOf(c: Palette, skin: Skin, dark: boolean): SyntaxColors {
+  const own = dark ? {} : LIGHT_SYNTAX[skin]
+  const meta = own.meta ?? c.wire.brown
+  const number = own.number ?? c.wire.orange
+  return {
+    comment: c.ink3,
+    keyword: own.keyword ?? c.wire.violet,
+    string: own.string ?? c.wire.green,
+    number,
+    constant: number,
+    function: own.function ?? c.wire.blue,
+    type: own.type ?? c.wire.yellow,
+    property: meta,
+    attribute: meta,
+    tag: meta,
+  }
+}
 
 /** 每套配色一份 Markdown 样式（对象不变，组件不会因为它重新排版） */
 const styleCache = new WeakMap<Palette, MarkdownStyle>()
@@ -15,7 +55,8 @@ export function markdownStyleOf({
   font,
   radius,
   skin,
-}: Pick<Theme, 'c' | 'font' | 'radius' | 'skin'>): MarkdownStyle {
+  dark,
+}: Pick<Theme, 'c' | 'font' | 'radius' | 'skin' | 'dark'>): MarkdownStyle {
   let style = styleCache.get(c)
   if (style) return style
   const ui = font.ui
@@ -54,6 +95,7 @@ export function markdownStyleOf({
       borderWidth: 1,
       padding: 10,
       borderRadius: radius.m,
+      syntaxColors: syntaxColorsOf(c, skin, dark),
     },
     code: {
       fontSize: 13,
