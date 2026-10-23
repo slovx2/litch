@@ -68,7 +68,8 @@ export interface TreeSeen {
   askReplied: boolean
   wrapHere: boolean
   cardsOff: boolean
-  remindBar: boolean
+  /** 没调收尾时设备进程补的那一回合：不画提醒、气泡、过程和用时，只有补的那张卡片 */
+  remindQuiet: boolean
   /**
    * offer 卡：对话流里一张“新会话 / 在这里做”的卡写着等你选，侧面板有这一行和两个按钮、角标算上它；
    * 选新会话先写等模型补简报，再写已开始、下面一行是起出来的子会话（侧栏里多一个）；
@@ -444,17 +445,27 @@ export async function treeProbe(): Promise<TreeSeen> {
   }
 
   // —— 没调收尾：提醒 ——
+  // 设备进程替用户提醒模型补调收尾的那一回合对用户透明：不画提醒那一行、用户气泡、过程和用时，
+  // 只剩补调收尾带出来的那张卡片，看着就接在上一回合下面
   await say('忘了收尾')
-  const remindBar = await until(() => {
-    const bar = $('.main .sev[data-event="remind"]')
-    const turn = bar?.closest('section.turn')
+  const remindTurn = () => {
+    const turns = $$('.main section.turn')
+    const asked = turns.findIndex((turn) =>
+      turn.querySelector('.umsg')?.textContent?.includes('忘了收尾'),
+    )
+    return asked < 0 ? undefined : turns[asked + 1]
+  }
+  const remindQuiet = await until(() => {
+    const turn = remindTurn()
     return (
-      bar !== null &&
-      turn?.querySelector('.umsg') === null &&
+      turn !== undefined &&
+      $('.main .sev[data-event="remind"]') === null &&
+      [...turn.children].every((child) => child.matches('.turn-tail')) &&
       turn.querySelectorAll('.wrap-cards [data-card="proposal"]').length === 1
     )
   })
-  seen.remind = $('.main .sev[data-event="remind"]')?.textContent ?? '没有'
+  seen.remind =
+    [...(remindTurn()?.children ?? [])].map((child) => child.className).join('|') || '没有'
   await idle()
 
   // —— offer 卡：新会话 ——
@@ -630,7 +641,7 @@ export async function treeProbe(): Promise<TreeSeen> {
     askReplied,
     wrapHere,
     cardsOff,
-    remindBar,
+    remindQuiet,
     offerShown,
     offerStarted,
     offerHere: offerHere && hereNoChild,
@@ -739,7 +750,7 @@ const LABELS: Record<Exclude<keyof TreeSeen, 'seen'>, string> = {
   askReplied: '点回复按钮发出按钮的话，问题折成一行写着回了哪个',
   wrapHere: '卡片的“在这里做”在本会话发“在这里做：…”，卡片写在这里做、不起子会话',
   cardsOff: '“⋯”里关任务卡：提示可撤销（或说清楚设备服务还没有开关）',
-  remindBar: '没调收尾的提醒是一行轻字、没有用户气泡，后面跟着补的那张卡片',
+  remindQuiet: '没调收尾时补的那一回合只有补的那张卡片，不画提醒、用户气泡、过程和用时',
   offerShown: '“新任务”出 offer 卡：等你选、两个按钮，侧面板有这一行和按钮、角标算上它',
   offerStarted:
     'offer 卡选新会话：先等模型补简报，再写已开始、带简报，下面一行是侧栏里新多的子会话',
