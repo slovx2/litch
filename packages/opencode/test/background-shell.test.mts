@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { dirname } from 'node:path'
 import test from 'node:test'
 import { serverName } from '../src/client-tools.mjs'
 import { OpencodeServer } from '../src/server.mjs'
@@ -125,6 +126,58 @@ test('OpenCode：后台 shell 关着时模型看不到这几个工具', { skip, 
         toolNames(body).some((name) => name.includes('shell_start')),
         false,
       )
+  } finally {
+    await env.restore()
+  }
+})
+
+test('OpenCode：后台命令要在项目外跑时照 OpenCode 的默认先问；拒了不起命令，模型拿到拒绝', {
+  skip,
+  timeout: 180000,
+}, async () => {
+  const outside = { value: '' }
+  const env = await isolate(
+    scripted({
+      OUT: [
+        [
+          {
+            type: 'tool',
+            get name() {
+              return startName.value
+            },
+            get input() {
+              return { command: 'echo outside', cwd: outside.value }
+            },
+          },
+        ],
+        [{ type: 'text', chunks: ['那就不跑了。'] }],
+      ],
+    }),
+    { server: { backgroundShell: true } },
+  )
+  try {
+    const litch = client(env.server, ['backgroundTasks'])
+    await litch.initialize()
+    const asked: any[] = []
+    litch.onRequest((request) => {
+      asked.push(request)
+      return request.method === 'item/commandExecution/requestApproval'
+        ? { decision: 'decline' }
+        : {}
+    })
+    const { thread } = await litch.call('thread/start', { cwd: env.cwd })
+    startName.value = `${serverName(thread.id)}_shell_start`
+    outside.value = dirname(thread.cwd)
+    const { turn } = await litch.call('turn/start', { threadId: thread.id, input: text('OUT 跑') })
+    await litch.until('turn/completed', (p) => p.turn.id === turn.id, 60000)
+    assert.equal(asked.length, 1)
+    assert.equal(asked[0].method, 'item/commandExecution/requestApproval')
+    assert.match(asked[0].params.command, /^external_directory: /)
+    assert.ok(asked[0].params.command.includes(outside.value))
+    // 没起命令；模型拿到的工具结果是拒绝
+    assert.deepEqual(env.server.shells?.list(thread.id), [])
+    const after = env.model.requests.at(-1)
+    assert.ok(said(after, 'denied by user'))
   } finally {
     await env.restore()
   }

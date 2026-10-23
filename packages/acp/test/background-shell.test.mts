@@ -162,13 +162,21 @@ test('ACP：回放历史时，交给 agent 的后台结果另起一轮、记来�
   projection.update(user('<litch-background-event>\nBackground task shell-1 exited'), quiet)
   projection.update(user(' 后半段'), quiet)
   projection.update(agent('跑完了'), quiet)
+  // agent 对后台结果什么都没说（出错了），紧跟着就是用户的下一句：不能被当成结果的后半段吞掉
+  projection.update({ ...user('<litch-background-event>\nshell-2 exited'), messageId: 'm1' }, quiet)
+  projection.update({ ...user('还有一句'), messageId: 'm2' }, quiet)
+  projection.update(agent('好的'), quiet)
   projection.endReplay()
-  assert.equal(projection.turns.length, 2)
-  const [first, second] = projection.turns
+  assert.equal(projection.turns.length, 4)
+  const [first, second, third, fourth] = projection.turns
   assert.equal(projection.origins.get(first?.id ?? ''), undefined)
   assert.equal(projection.origins.get(second?.id ?? ''), 'backgroundTask')
   assert.deepEqual(
     second?.items.map((item: any) => item.type),
     ['agentMessage'],
   )
+  assert.equal(projection.origins.get(third?.id ?? ''), 'backgroundTask')
+  assert.deepEqual(third?.items, [])
+  assert.equal(projection.origins.get(fourth?.id ?? ''), undefined)
+  assert.equal((fourth?.items[0] as any)?.content[0].text, '还有一句')
 })

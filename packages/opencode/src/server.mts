@@ -247,6 +247,8 @@ export class OpencodeServer {
 
   /** 后台 shell 的集合变了：整份发给所有声明过 backgroundTasks 的连接（不只是订阅者，侧栏要标没打开的会话） */
   publishBackground(threadId: string): void {
+    // 临时会话的不发（只有建它的连接知道它）
+    if (this.ephemeral.has(threadId)) return
     const params = { threadId, tasks: this.report.tasks(threadId), wakesOnFinish: true }
     for (const peer of this.peers.values())
       if (this.report.declared(peer.id))

@@ -212,16 +212,18 @@ export class Turns {
     const parts = [{ type: 'text', text: await formatShellEvent(tasks), synthetic: true }]
     const api = await this.server.api()
     await this.server.clientTools.ensure(api, live)
-    const active = projection.active
-    if (active) {
+    // 每次等完都再看一眼：等的时候这一轮结束了，就按闲着另开一轮，不记到已经结束的回合上
+    for (let active = projection.active; active; active = projection.active) {
       await this.ready(live, active)
-      const id = messageId()
-      this.server.store.setMeta('steer', `${threadId}:${id}`, { turnId: active.id })
+      if (projection.active !== active) continue
       const {
         ref: _ref,
         effort: _effort,
         ...body
       } = await this.body(live, live.turnPreset ?? live.settings.preset)
+      if (projection.active !== active) continue
+      const id = messageId()
+      this.server.store.setMeta('steer', `${threadId}:${id}`, { turnId: active.id })
       await api.request('POST', `/session/${threadId}/prompt_async`, {
         directory: live.directory,
         body: { messageID: id, parts, ...body },

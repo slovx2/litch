@@ -112,6 +112,8 @@ export class Projection {
   private replaying = false
   // 正在流的那一段话或思考：别的条目一来就收尾
   private current: { item: any; messageId: string | null } | null = null
+  /** 回放时刚认出的后台结果那段话：紧跟着来的同一条消息的分块接着吞掉，中间隔了别的更新就不算了 */
+  private eventChunk: { messageId: string | null } | null = null
   private counter = 0
   private readonly tools = new Map<string, ToolState>()
   private readonly startedMs = new Map<string, number>()
@@ -267,12 +269,22 @@ export class Projection {
     const turn = this.active
     const last = turn?.items.at(-1)
     const quiet: Notify = () => {}
-    // 后台 shell 结束时适配器交给 agent 的那段话：另起一轮，记成后台任务唤醒的，不画成用户的话
-    //（分几块来的，后面几块也吞掉）
-    if (turn && turn.items.length === 0 && this.origins.get(turn.id) === 'backgroundTask') return
+    const messageId = typeof chunk?.messageId === 'string' ? chunk.messageId : null
+    // 后台 shell 结束时适配器交给 agent 的那段话：另起一轮，记成后台任务唤醒的，不画成用户的话。
+    // 分几块来的，紧跟着的后几块也吞掉（带消息号的要同一条）；之后来的是用户真说的话
+    const event = this.eventChunk
+    this.eventChunk = null
+    if (
+      event &&
+      (event.messageId === null || messageId === null || event.messageId === messageId)
+    ) {
+      this.eventChunk = event
+      return
+    }
     if (isShellEventText(text)) {
       if (turn) this.finish({ stopReason: 'end_turn' }, quiet, this.thread.updatedAt * 1000)
       this.begin(quiet, this.thread.updatedAt * 1000, 'backgroundTask')
+      this.eventChunk = { messageId }
       return
     }
     if (turn && last?.type === 'userMessage' && turn.items.length === 1) {
@@ -324,6 +336,7 @@ export class Projection {
     const kind = update?.sessionUpdate
     const quiet: Notify = () => {}
     const send = this.replaying ? quiet : notify
+    if (kind !== 'user_message_chunk') this.eventChunk = null
     switch (kind) {
       case 'user_message_chunk':
         // 实时回合里用户的话是适配器自己放的（客户端发来的样子），agent 回显的不再要

@@ -1,7 +1,7 @@
 {
   "extension": "backgroundTasks",
-  "description": "后台任务：回合结束之后还在跑的工作（后台命令、Monitor、后台子代理、Workflow、dsh 的后台作业）。会话上一份“现在有哪些后台任务”的集合，变了就整份重发；回合上带它是谁开的（后台任务结束后引擎自己续跑的那一轮）。回合状态只描述前台工作，不改：只有后台任务在跑时会话照常报 idle，不往 activeFlags 里加值。类型在 packages/protocol/src/background-tasks.mts。",
-  "appliesTo": "claude-code、dsh 入口自己出集合（runtime/info 的 features.backgroundTasks 为真）；原生 codex 的由设备进程在转发层从它的条目通知里派生（设备进程替它报 features.backgroundTasks）；pi、opencode、acp 不报（它们的后台子代理是子会话，归会话树）。聚合面原样转发引擎的会话对象、通知，不加也不删这些字段。",
+  "description": "后台任务：回合结束之后还在跑的工作（后台命令、Monitor、后台子代理、Workflow、dsh 的后台作业、Litch 注入的后台命令）。会话上一份“现在有哪些后台任务”的集合，变了就整份重发；回合上带它是谁开的（后台任务结束后引擎自己续跑的那一轮）。回合状态只描述前台工作，不改：只有后台任务在跑时会话照常报 idle，不往 activeFlags 里加值。类型在 packages/protocol/src/background-tasks.mts。",
+  "appliesTo": "claude-code、dsh 入口自己出集合（runtime/info 的 features.backgroundTasks 为真）；原生 codex 的由设备进程在转发层从它的条目通知里派生（设备进程替它报 features.backgroundTasks）；pi、opencode 和通用 acp 入口打开了注入的后台命令（litch_shell，设置 harness.<id>.backgroundShell，默认开）时自己出集合并报 features.backgroundTasks，关着时不报；它们的后台子代理是子会话，归会话树，不进集合。gemini、qwen 不报。聚合面原样转发引擎的会话对象、通知，不加也不删这些字段。",
   "declaration": {
     "description": "客户端握手时在 capabilities.litchExtensions 里声明 backgroundTasks，表示它认识会话对象上的 litchBackground、回合上的 litchOrigin 和 litch/thread/background/changed。聚合面把客户端的 capabilities 原样带给每个上游，入口按这条连接的声明决定带不带。",
     "where": "initialize.params.capabilities.litchExtensions",
@@ -11,15 +11,15 @@
   "rules": [
     "集合里是运行中的任务，加上这次运行里结束过的（最多 50 个，BACKGROUND_ENDED_LIMIT）。运行中的在前、按开始时间；结束过的在后、按结束时间倒序。结束过的只在引擎（设备进程）的内存里，重启就没了，不进库。",
     "任务的 id 在引擎内唯一、前后不变；itemId 是发起它的那个条目（能挂回对话），拿不到时不带。",
-    "status：running、completed、failed、stopped。Claude 取 task_notification 的状态，CLI 进程退出时还在跑的记 stopped；原生 codex 取命令条目 item/completed 的状态，退出码非零记 failed，会话卸载、关闭时还在跑的记 stopped；dsh 取作业的状态（killed 记 stopped）。",
-    "wakesOnFinish：后台任务结束后这个 harness 会不会自己接着做。claude-code、dsh 为真，原生 codex 为假。",
+    "status：running、completed、failed、stopped。Claude 取 task_notification 的状态，CLI 进程退出时还在跑的记 stopped；原生 codex 取命令条目 item/completed 的状态，退出码非零记 failed，会话卸载、关闭时还在跑的记 stopped；dsh 取作业的状态（killed 记 stopped）；Litch 注入的后台命令：自己退出且退出码为 0、没有信号记 completed，否则 failed，被停掉（模型、用户、运行时退出、会话删除）的记 stopped。命令把进程放到后台的（同一个进程组），shell 退出后组里还有活的就还算 running，都结束了才按 shell 的退出码结束。",
+    "wakesOnFinish：后台任务结束后这个 harness 会不会自己接着做。claude-code、dsh 和打开了注入后台命令的 pi、opencode、acp 为真（注入的命令自己结束时才唤醒，被停掉的不唤醒），原生 codex 为假。",
     "litch/thread/background/changed 发给所有声明过的连接（不只是订阅了这个会话的），侧栏要标没打开过的会话；集合整份重发。临时会话的不发。",
     "litchBackground 只在集合不空时带在会话对象上（thread/read、thread/list、thread/resume、thread/started）。",
     "litchOrigin 只在知道不是用户发起的回合上带：backgroundTask 是后台任务结束后引擎自己续跑的那一轮（Claude 的 task-notification、dsh 的 tool-jobs 唤醒）；goal 是持续目标没做完、引擎空闲时自己起的续做回合（Claude 入口在 turn/started 起就带，它那句内部提示是用户消息条目，客户端不画；原生 codex 的续做回合协议里没有标记，不带，客户端按“有目标、没有用户消息”自己认）。turn/started 发出时还认不出来的（dsh 要等那条消息到了才知道），turn/completed 和历史接口里带。",
     "有子会话的后台子代理归会话树（sessionTree），不重复进集合；没有子会话、只是一个任务的（Claude 的 local_agent）进集合。",
     "Claude 的后台子代理、Workflow 照旧让回合保持运行中，直到 CLI 报 idle；它们照样出现在集合里。",
     "会话树、定时任务照常在 turn/completed 时算一次运行结束；回报里带“还有几个后台任务在跑”，后台跑完的自发回合结束时再回报一次。",
-    "停止：这一版不加新方法；shell 可以用标准的 thread/backgroundTerminals/clean。"
+    "停止：这一版不加新方法；shell 用标准的 thread/backgroundTerminals/terminate（单个，processId 是任务 id）和 clean（这个会话全部）。"
   ],
   "parts": [
     {

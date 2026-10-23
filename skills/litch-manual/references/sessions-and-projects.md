@@ -93,7 +93,9 @@ explain it:
   work finishes later, the run's summary and count are updated and it shows as unread again.
   There is no stop button yet: ask the model to stop a task, or
   stop the turn. With Pi's "Ask before acting" on, starting a background command is asked about like
-  any other command; in OpenCode's read-only permission mode the model cannot start one. On the phone, the same line opens a list from the bottom; the folded steps and the
+  any other command; in OpenCode's read-only permission mode the model cannot start one, and outside
+  the project folder it asks first (except with full access). On the phone, the same line opens a list
+  from the bottom; the folded steps and the
   line at the start of a continuing turn look the same as on the desktop.
 - **Goals** (Codex and Claude Code only; other harnesses show no goal controls): type `/goal` followed
   by what should be achieved and send it. Instead of a normal message this sets the session's goal,
