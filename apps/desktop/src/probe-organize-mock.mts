@@ -454,7 +454,7 @@ export async function organizeMockProbe(): Promise<OrganizeMockProbe> {
   const off = await until('选不了的那一项', () =>
     one('.pick[data-kind="harness"] .pick-opt[data-option="codex"]'),
   )
-  seen.pickerNote = text(one('span', off))
+  seen.pickerNote = `${text(one('span', off))}｜${text(one('[data-note-action="codex"]'))}`
   press(document.activeElement ?? harnessPicker, 'Escape')
   await open(S6)
   const reasons: OrganizeMockProbe['reasons'] = {
@@ -468,8 +468,8 @@ export async function organizeMockProbe(): Promise<OrganizeMockProbe> {
       en[1] === 'Not installed on this device' &&
       Boolean(en[2]?.includes('Install its CLI')) &&
       Boolean(en[3]?.includes('codex was not found')),
-    pickerNext:
-      seen.pickerNote.includes('此设备未安装') && seen.pickerNote.includes('安装其命令行工具'),
+    // 没装的只写“未安装”，旁边一个“去安装”
+    pickerNext: seen.pickerNote === '未安装｜去安装',
   }
 
   return { groups, place, workspace, elsewhere, declared, reasons, seen }

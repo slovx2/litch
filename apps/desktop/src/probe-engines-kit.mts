@@ -277,6 +277,8 @@ export function installEnginesKit(): boolean {
             `${text(one('.verb', item))} ${text(one('.tgt', item))}｜${stateOf(item)}`.trim(),
           )
         }
+        // 压缩那一条（正在压缩、已压缩、没压成）单独一块
+        if (block.matches('.compaction')) return [text(block)]
         if (block.matches('.plan')) return [`计划：${text(one('.plan-body', block))}`]
         if (block.matches('.md')) return [`回答：${text(block)}`]
         if (block.matches('.turn-foot')) return [`结束：${text(one('span', block))}`]
