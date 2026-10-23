@@ -8,7 +8,7 @@ import "encoding/json"
 const backgroundShellVariable = "CHA_BACKGROUND_SHELL"
 
 // 设置里没写过、更低几层也没给变量时开不开：和 packages/shared/src/background-shell.mts 的 BACKGROUND_SHELL_DEFAULT 一致。
-const backgroundShellDefault = false
+const backgroundShellDefault = true
 
 var backgroundShellHarnesses = map[string]bool{"pi": true, "opencode": true, "acp": true}
 

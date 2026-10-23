@@ -56,8 +56,8 @@ explain it:
   Browser, Suggested tasks, Background, Subagents.
 - **Background tasks**: work still running after a turn ends (a background command, a Claude Code
   Monitor, a dsh background job, a long-running Codex command, or a background command Litch gives Pi,
-  OpenCode and ACP sessions through its `litch_shell` tools when the harness's "Background commands"
-  setting is on). The session counts as idle, not stuck:
+  OpenCode and ACP sessions through its `litch_shell` tools (on by default; each harness's "Background
+  commands" setting turns it off). The session counts as idle, not stuck:
   a breathing line above the composer says how many are running; clicking it opens the Background tab
   (running tasks first, then finished ones; name, elapsed time and status, no output). The folded
   turn says "N running in the background", and the sidebar row shows a slowly breathing hollow mark

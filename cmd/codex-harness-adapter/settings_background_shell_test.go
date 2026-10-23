@@ -50,13 +50,20 @@ func TestBackgroundShellSetting(t *testing.T) {
 			t.Fatalf("%s 的指纹变没变不对: %v", id, changed)
 		}
 	}
-	// 关掉是明说的 0，盖过环境文件里的
-	cfg.userEnv = map[string]string{backgroundShellVariable: "1"}
-	if !cfg.defaultBackgroundShell("pi") {
-		t.Fatal("环境文件里开着时，没写过的 Pi 读到的默认应是开着")
+	// 环境文件里关着时，没写过的读到的默认是关；设置里写过的盖过环境文件
+	if !backgroundShellDefault || !cfg.defaultBackgroundShell("pi") {
+		t.Fatal("什么都没给时应默认开着")
 	}
-	write(1, backgroundShellKey("pi"), json.RawMessage(`false`))
-	if variable("pi") != "0" {
-		t.Fatalf("关掉之后变量应是 0: %q", variable("pi"))
+	cfg.userEnv = map[string]string{backgroundShellVariable: "0"}
+	if cfg.defaultBackgroundShell("pi") {
+		t.Fatal("环境文件里关着时，没写过的 Pi 读到的默认应是关着")
+	}
+	write(1, backgroundShellKey("pi"), json.RawMessage(`true`))
+	if variable("pi") != "1" {
+		t.Fatalf("打开之后变量应是 1: %q", variable("pi"))
+	}
+	write(2, backgroundShellKey("acp"), json.RawMessage(`false`))
+	if variable("acp") != "0" {
+		t.Fatalf("关掉之后变量应是 0: %q", variable("acp"))
 	}
 }

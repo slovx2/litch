@@ -108,6 +108,19 @@ test('ACP：用户停掉的不唤醒；backgroundTerminals 列得出、停得掉
   }
 })
 
+test('ACP：acp 默认带后台 shell，不带动态工具的会话也挂 litch 的 MCP 服务', async () => {
+  const s = await scene()
+  try {
+    assert.notEqual(s.server.shells, null)
+    const peer = await litch(s.server)
+    await peer.call('thread/start', { cwd: s.cwd })
+    const created = (await s.received()).filter((m: any) => m.method === 'session/new')
+    assert.equal(created.at(-1).params.mcpServers[0]?.name, 'litch')
+  } finally {
+    await dispose(s)
+  }
+})
+
 test('ACP：gemini、qwen 不带后台 shell；acp 关着时也不带', async () => {
   for (const extra of [
     { ...ON, CHA_ACP_AGENT: 'gemini' },

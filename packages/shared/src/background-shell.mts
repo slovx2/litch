@@ -31,8 +31,8 @@ import { commandEnv } from './command-env.mjs'
 /** 设置 harness.<id>.backgroundShell 落到的环境变量：1 开、0 关，运行时起来时读一次 */
 export const BACKGROUND_SHELL_VARIABLE = 'CHA_BACKGROUND_SHELL'
 
-/** 设置里没写过时开不开（待用户定，见设计文档 31 号） */
-export const BACKGROUND_SHELL_DEFAULT = false
+/** 设置里没写过、环境里也没给时开着（每个 harness 可在设置里单独关） */
+export const BACKGROUND_SHELL_DEFAULT = true
 
 export function backgroundShellEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   const value = env[BACKGROUND_SHELL_VARIABLE]

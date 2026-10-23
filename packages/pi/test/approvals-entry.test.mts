@@ -76,12 +76,17 @@ test('APPROVAL-007：入口进程按环境变量定开关：值是 1 才算开�
   try {
     const asking = { kinds: ['command', 'fileChange'], uncovered: ['subagents'] }
     const silent = { kinds: [], uncovered: [] }
+    // 后台命令的变量没给，按默认开着：声明里都带 backgroundTasks
     for (const [value, approvals, extensions] of [
-      [undefined, silent, ['planConfirmation', 'clientTools', 'harnessConfig']],
-      ['0', silent, ['planConfirmation', 'clientTools', 'harnessConfig']],
+      [undefined, silent, ['planConfirmation', 'clientTools', 'harnessConfig', 'backgroundTasks']],
+      ['0', silent, ['planConfirmation', 'clientTools', 'harnessConfig', 'backgroundTasks']],
       // 只认 1：别的写法不算开，免得写错了的值悄悄变成“会问”的声明。
-      ['true', silent, ['planConfirmation', 'clientTools', 'harnessConfig']],
-      ['1', asking, ['declineWithNote', 'planConfirmation', 'clientTools', 'harnessConfig']],
+      ['true', silent, ['planConfirmation', 'clientTools', 'harnessConfig', 'backgroundTasks']],
+      [
+        '1',
+        asking,
+        ['declineWithNote', 'planConfirmation', 'clientTools', 'harnessConfig', 'backgroundTasks'],
+      ],
     ] as const) {
       const before = detected(value)
       assert.deepEqual(before.features.approvals, approvals, `检测，变量是 ${value}`)
