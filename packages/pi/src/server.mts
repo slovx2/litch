@@ -1,6 +1,24 @@
 import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
+import { join } from 'node:path'
+import {
+  BACKGROUND_TASKS_NOTIFICATION,
+  type LitchTurnOrigin,
+} from '../../protocol/src/background-tasks.mjs'
+import type { ClientToolNamespaceSpec } from '../../protocol/src/client-tools.mjs'
 import { EXTENSION } from '../../protocol/src/device.mjs'
+import {
+  type BackgroundReport,
+  notificationWithOrigin,
+} from '../../shared/src/background-report.mjs'
+import {
+  BackgroundShells,
+  backgroundShellSpec,
+  formatShellEvent,
+  runShellTool,
+  SHELL_START_TOOL,
+  type ShellTask,
+} from '../../shared/src/background-shell.mjs'
 import {
   clientToolNamespaces,
   isClientToolNamespace,
@@ -41,11 +59,18 @@ import { clientTools } from './dynamic-tools.mjs'
 import { NativeFiles, nativeBranch, sessionIndexDirectories } from './native-files.mjs'
 import { discoverSessions, inputRecord, projectHistory, type SentMessage } from './projection.mjs'
 import { dispatch } from './protocol.mjs'
-import { type LiveSession, openSession, planState } from './runtime.mjs'
+import { type LiveSession, openSession, planState, shellToolName } from './runtime.mjs'
 import type { SessionManager } from './sdk.mjs'
 import { PiStore, type PiThread, type PiTurn } from './store.mjs'
 import { contentBefore, inputPreview, onEvent, runTurn } from './turn.mjs'
 import { createUi } from './ui.mjs'
+
+/** 回合的来历记在库的元数据里（键是回合号），不放在回合对象上：没声明 backgroundTasks 的连接不该看到 */
+const TURN_ORIGIN_META = 'turnOrigin'
+/** 后台 shell 结束时交给 Pi 的那条消息（不显示，projection.mts 不画它） */
+const SHELL_EVENT_MESSAGE = 'litch-background-event'
+/** 唤醒时会话已经卸载、要装回来：装载要一条连接当发起方，这时可能谁都没连着，用这条不在连接表里的占位 */
+const BACKGROUND_PEER: RpcPeer = { id: 'codex-harness-adapter:background', send() {}, close() {} }
 
 export interface ActiveTurn {
   thread: PiThread
@@ -119,13 +144,97 @@ export class PiServer {
   private readonly toolNamespaces = new Map<string, ReadonlySet<string>>()
   /** 工具执行之前问不问用户。运行时起来时定下，之后不变（设置 harness.pi.approvals，改了要重启运行时） */
   readonly approvals: boolean
-  constructor(home: string, options: { approvals?: boolean } = {}) {
+  /**
+   * 注入的后台 shell（shared/src/background-shell.mts）。设置 harness.pi.backgroundShell 关着时是 null，
+   * 模型看不到这几个工具、也不报后台任务的集合。进程归这个运行时，运行时退出时一起结束
+   */
+  readonly shells: BackgroundShells | null
+  private readonly shellSpec: ClientToolNamespaceSpec | null
+  /** 后台 shell 自己结束、等着开的那一轮：下一个 Pi 自己开的回合记成后台任务唤醒的（turn.mts） */
+  private readonly pendingOrigins = new Map<string, LitchTurnOrigin>()
+  /** 后台任务的集合、回合的来历怎么加到给声明过 backgroundTasks 的连接的应答和通知上 */
+  readonly report: BackgroundReport
+  constructor(home: string, options: { approvals?: boolean; backgroundShell?: boolean } = {}) {
     this.approvals = options.approvals === true
     this.store = new PiStore(home)
     this.projects = new ProjectStore(this.store.db, threadsTable(this.store.db))
     this.queue = new QueueStore(this.store.db)
+    this.shells = options.backgroundShell
+      ? new BackgroundShells(join(home, 'background-shell'), {
+          changed: (threadId) => this.publishBackground(threadId),
+          finished: (threadId, tasks) =>
+            void this.wake(threadId, tasks).catch((error) =>
+              this.notify(threadId, 'warning', {
+                message: `后台命令结束后没能叫醒 Pi：${error instanceof Error ? error.message : String(error)}`,
+              }),
+            ),
+        })
+      : null
+    this.shellSpec = this.shells ? backgroundShellSpec(true) : null
+    this.report = {
+      declared: (peerId) => this.declared.get(peerId)?.has(EXTENSION.backgroundTasks) === true,
+      tasks: (threadId) => this.shells?.collection(threadId) ?? [],
+      origin: (_threadId, turnId) => this.store.getMeta(TURN_ORIGIN_META, turnId) ?? undefined,
+      wakes: true,
+    }
   }
 
+  /** 后台 shell 的集合变了：整份发给所有声明过 backgroundTasks 的连接（不只是订阅者，侧栏要标没打开的会话） */
+  publishBackground(threadId: string): void {
+    const params = { threadId, tasks: this.report.tasks(threadId), wakesOnFinish: true }
+    this.notifyExtension(EXTENSION.backgroundTasks, BACKGROUND_TASKS_NOTIFICATION.changed, params)
+  }
+  /**
+   * 后台 shell 自己结束了：把结果作为一条不显示的消息交给 Pi，让它接着做。会话闲着就开一轮（记成后台任务唤醒的），
+   * 正在跑就排在这一轮后面（Pi 的 followUp：这一轮做完前交给模型）。会话卸载了先装回来
+   */
+  private async wake(threadId: string, tasks: ShellTask[]): Promise<void> {
+    if (this.closing) return
+    let thread: PiThread
+    try {
+      thread = this.store.thread(threadId)
+    } catch {
+      return
+    }
+    const text = await formatShellEvent(tasks)
+    const live = this.sessions.get(threadId) ?? (await this.load(thread, BACKGROUND_PEER))
+    if (!this.active.has(threadId)) this.pendingOrigins.set(threadId, 'backgroundTask')
+    await live.session.sendCustomMessage(
+      { customType: SHELL_EVENT_MESSAGE, content: text, display: false },
+      { triggerTurn: true, deliverAs: 'followUp' },
+    )
+  }
+  /** Pi 自己开了一轮（不是客户端发起的）：要是在等后台 shell 的唤醒，这一轮记成它开的。返回来历 */
+  takeOrigin(threadId: string, turnId: string): LitchTurnOrigin | undefined {
+    const origin = this.pendingOrigins.get(threadId)
+    if (!origin) return undefined
+    this.pendingOrigins.delete(threadId)
+    this.store.setMeta(TURN_ORIGIN_META, turnId, origin)
+    return origin
+  }
+  /** 后台 shell 的一次工具调用（runtime.mts 的 shell.run） */
+  private runShell(
+    thread: PiThread,
+    tool: string,
+    args: unknown,
+    id: string,
+    signal?: AbortSignal,
+  ) {
+    if (!this.shells) throw new Error('background shell is off')
+    const turnId = this.active.get(thread.id)?.turn.id
+    return runShellTool(
+      this.shells,
+      {
+        threadId: thread.id,
+        cwd: thread.cwd,
+        tool,
+        arguments: args,
+        itemId: id,
+        ...(turnId ? { turnId } : {}),
+      },
+      signal,
+    )
+  }
   async handle(peer: RpcPeer, message: WireMessage): Promise<void> {
     this.peers.set(peer.id, peer)
     if (!('method' in message)) {
@@ -232,7 +341,13 @@ export class PiServer {
     ask: ToolCallAsk,
   ): Promise<ToolCallBlock | undefined> {
     const client = clientTools(thread.dynamicTools).some((tool) => tool.piName === ask.toolName)
-    const kind = approvalKind(ask, client)
+    // 后台 shell 起命令照跑命令问，别的几个（读、停、列）不问
+    const shell = this.shellSpec?.tools.find((tool) => shellToolName(tool.name) === ask.toolName)
+    const kind = shell
+      ? shell.name === SHELL_START_TOOL
+        ? 'command'
+        : null
+      : approvalKind(ask, client)
     if (!kind) return undefined
     const key = grantKey(kind, ask, thread.cwd, targetPath(thread.cwd, ask.input.path))
     if (this.grants.get(thread.id)?.has(key)) return undefined
@@ -322,6 +437,9 @@ export class PiServer {
     this.store.delete(threadId)
     this.grants.delete(threadId)
     this.attached.delete(threadId)
+    this.pendingOrigins.delete(threadId)
+    // 删掉的会话：它起的后台 shell 一起停，记录和日志都不要了
+    this.shells?.forget(threadId)
   }
   subscribe(peer: RpcPeer, id: string): void {
     const ids = this.subscriptions.get(id) ?? new Set<string>()
@@ -339,8 +457,11 @@ export class PiServer {
       threadId === null ||
       (BROADCAST_THREAD_NOTIFICATIONS.has(method) && !this.store.ephemeral(threadId))
     for (const peer of this.peers.values())
-      if (everyone || (threadId !== null && this.subscriptions.get(threadId)?.has(peer.id)))
-        peer.send({ method, params: threadId ? { threadId, ...params } : params })
+      if (everyone || (threadId !== null && this.subscriptions.get(threadId)?.has(peer.id))) {
+        // 回合的来历只给声明了 backgroundTasks 的连接（另拷一份）
+        const shaped = notificationWithOrigin(this.report, peer.id, threadId, method, params)
+        peer.send({ method, params: threadId ? { threadId, ...shaped } : shaped })
+      }
   }
   /** 扩展的通知（不属于哪个会话）：只发给握手时声明了这个扩展的连接 */
   notifyExtension(extension: string, method: string, params: any): void {
@@ -515,6 +636,15 @@ export class PiServer {
         ...(this.approvals
           ? { approve: (ask: ToolCallAsk) => this.approve(peer, thread, ask) }
           : {}),
+        ...(this.shellSpec
+          ? {
+              shell: {
+                spec: this.shellSpec,
+                run: (tool: string, args: unknown, id: string, signal?: AbortSignal) =>
+                  this.runShell(thread, tool, args, id, signal),
+              },
+            }
+          : {}),
       },
       prepared,
     )
@@ -637,6 +767,7 @@ export class PiServer {
     if (existing) return existing
     if (params.outputSchema != null) throw new ProtocolError(-32602, 'Pi 首期不支持严格结构化输出')
     this.ensureIdle(thread.id)
+    this.pendingOrigins.delete(thread.id)
     const active = this.admit(peer, thread, params, clientId, input)
     // 头一句话在回合开始时就记下（上游记下第一条用户消息就落盘）：第一个回合进行中读会话、列会话就有预览。
     // 上游这时不另发通知，这里也不发
@@ -742,6 +873,7 @@ export class PiServer {
         !live.session.isIdle ||
         live.hasPendingInputs() ||
         this.background.get(id)?.size ||
+        this.shells?.runningCount(id) ||
         this.loading.has(id) ||
         this.releasing.has(id) ||
         this.locks.has(id)
@@ -780,6 +912,7 @@ export class PiServer {
   }
   async close(): Promise<void> {
     this.closing = true
+    await this.shells?.close()
     await Promise.allSettled(this.loading.values())
     await Promise.allSettled(this.releasing.values())
     for (const id of this.active.keys()) await this.interrupt(id)

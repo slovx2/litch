@@ -150,6 +150,8 @@ func (c configuration) harnessEnvironment(id string) map[string]string {
 	if raw, written := c.settings.lookup(piApprovalsKey); id == "pi" && written && json.Unmarshal(raw, &approvals) == nil {
 		values[piApprovalsVariable] = map[bool]string{true: "1", false: "0"}[approvals]
 	}
+	// 后台命令的开关同样写过才给变量（settings_background_shell.go）
+	c.backgroundShellEnvironment(id, values)
 	// 提示缓存时长同样写过才给变量，盖过更低几层（settings_claude.go）
 	if ttl := c.claudeCacheTTL(); id == claudeHarness && ttl != "" {
 		values[claudeCacheTTLVariable] = ttl
@@ -193,6 +195,9 @@ func (c configuration) defaultPiApprovals() bool {
 // 决定一个运行时怎么起的那几项设置的指纹。运行中的进程用的指纹和现在算出来的不一样，就是“待重启”。
 func (c configuration) runtimeFingerprint(id string, enabled bool) string {
 	settings := []any{enabled, c.settings.text(cliPathKey(id)), c.settings.env(envKey(id))}
+	if shell := c.backgroundShellFingerprint(id); shell != "" {
+		settings = append(settings, shell)
+	}
 	if id == "pi" {
 		approvals, _ := c.settings.lookup(piApprovalsKey)
 		settings = append(settings, string(approvals))
@@ -336,6 +341,9 @@ func buildSettingsSchema(c configuration) settingsSchema {
 		schema.Settings = append(schema.Settings, taskCardsSetting(id, group))
 		if id == "pi" {
 			schema.Settings = append(schema.Settings, piApprovalsSetting(c, group))
+		}
+		if backgroundShellHarnesses[id] {
+			schema.Settings = append(schema.Settings, backgroundShellSetting(c, id, group))
 		}
 		if id == claudeHarness {
 			schema.Settings = append(schema.Settings, claudeCacheTTLSetting(c, group), claudeInboxSetting(c, group), claudeIdleSetting(c, group))

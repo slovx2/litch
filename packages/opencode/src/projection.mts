@@ -60,6 +60,8 @@ export interface ProjectionHooks {
   dynamicTool(name: string): DynamicToolSpec | null
   /** 一个动态工具的部件开始跑了（MCP 调用进来时按它认出条目号） */
   dynamicToolStarted(itemId: string, name: string, input: unknown): void
+  /** 这条用户消息是适配器自己开的一轮（后台 shell 结束时的唤醒）：重读历史时它另起回合 */
+  selfStarted(messageId: string): boolean
 }
 
 interface PartState {
@@ -703,6 +705,8 @@ export class Projection {
 function startsTurn(info: any, parts: any[], active: OcTurn | null, hooks: ProjectionHooks) {
   if (!active) return true
   if (hooks.steer(info.id)) return false
+  // 只有一段不显示的话（后台 shell 结束时交给模型的），但那是适配器另开的一轮
+  if (hooks.selfStarted(info.id)) return true
   const compaction = parts.find((part) => part?.type === 'compaction')
   if (compaction) return compaction.auto !== true
   return parts.some(realPart)

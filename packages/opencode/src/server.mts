@@ -1,5 +1,15 @@
 import { appendFileSync } from 'node:fs'
+import { join } from 'node:path'
+import {
+  BACKGROUND_TASKS_NOTIFICATION,
+  type LitchTurnOrigin,
+} from '../../protocol/src/background-tasks.mjs'
 import { EXTENSION } from '../../protocol/src/device.mjs'
+import {
+  type BackgroundReport,
+  notificationWithOrigin,
+} from '../../shared/src/background-report.mjs'
+import { BackgroundShells } from '../../shared/src/background-shell.mjs'
 import { FilesystemRpc } from '../../shared/src/filesystem-rpc.mjs'
 import { FuzzyFileSearch, FuzzySearchSessions } from '../../shared/src/fuzzy-session.mjs'
 import { declaredExtensions } from '../../shared/src/harness-declaration.mjs'
@@ -98,8 +108,33 @@ export class OpencodeServer {
     this.notify(threadId, method, params),
   )
 
-  constructor(home: string) {
+  /**
+   * 注入的后台 shell（shared/src/background-shell.mts）。设置 harness.opencode.backgroundShell 关着时是 null，
+   * 模型看不到这几个工具、也不报后台任务的集合。进程归这个运行时，运行时退出时一起结束
+   */
+  readonly shells: BackgroundShells | null
+  /** 后台任务的集合、回合的来历怎么加到给声明过 backgroundTasks 的连接的应答和通知上 */
+  readonly report: BackgroundReport
+
+  constructor(home: string, options: { backgroundShell?: boolean } = {}) {
     this.store = new OpencodeStore(home)
+    this.shells = options.backgroundShell
+      ? new BackgroundShells(join(home, 'background-shell'), {
+          changed: (threadId) => this.publishBackground(threadId),
+          finished: (threadId, tasks) =>
+            void this.turns.wake(threadId, tasks).catch((error) =>
+              this.notify(threadId, 'warning', {
+                message: `后台命令结束后没能叫醒 OpenCode：${error instanceof Error ? error.message : String(error)}`,
+              }),
+            ),
+        })
+      : null
+    this.report = {
+      declared: (peerId) => this.declared.get(peerId)?.has(EXTENSION.backgroundTasks) === true,
+      tasks: (threadId) => this.shells?.collection(threadId) ?? [],
+      origin: (threadId, turnId) => this.origin(threadId, turnId),
+      wakes: true,
+    }
     this.projects = new ProjectStore(this.store.db, {
       find: (id) => this.knownThread(id),
       recency: (ids) => {
@@ -203,8 +238,28 @@ export class OpencodeServer {
       threadId === null ||
       (BROADCAST_THREAD_NOTIFICATIONS.has(method) && !threadId.startsWith(EPHEMERAL_PREFIX))
     for (const peer of this.peers.values())
-      if (everyone || (threadId !== null && this.subscriptions.get(threadId)?.has(peer.id)))
-        peer.send({ method, params: threadId ? { threadId, ...params } : params })
+      if (everyone || (threadId !== null && this.subscriptions.get(threadId)?.has(peer.id))) {
+        // 回合的来历只给声明了 backgroundTasks 的连接（另拷一份）
+        const shaped = notificationWithOrigin(this.report, peer.id, threadId, method, params)
+        peer.send({ method, params: threadId ? { threadId, ...shaped } : shaped })
+      }
+  }
+
+  /** 后台 shell 的集合变了：整份发给所有声明过 backgroundTasks 的连接（不只是订阅者，侧栏要标没打开的会话） */
+  publishBackground(threadId: string): void {
+    const params = { threadId, tasks: this.report.tasks(threadId), wakesOnFinish: true }
+    for (const peer of this.peers.values())
+      if (this.report.declared(peer.id))
+        peer.send({ method: BACKGROUND_TASKS_NOTIFICATION.changed, params })
+  }
+
+  /** 回合是谁开的（记在库的元数据里，键是会话和回合号；回合号就是开头那条用户消息的号）。用户发起的是 undefined */
+  origin(threadId: string, turnId: string): LitchTurnOrigin | undefined {
+    return this.store.getMeta('turnOrigin', `${threadId}:${turnId}`) ?? undefined
+  }
+
+  setOrigin(threadId: string, turnId: string, origin: LitchTurnOrigin): void {
+    this.store.setMeta('turnOrigin', `${threadId}:${turnId}`, origin)
   }
 
   /** 订阅着这个线程、还连着的连接，按订阅的先后 */
@@ -253,6 +308,7 @@ export class OpencodeServer {
       dynamicTool: (name) => this.clientTools.lookup(threadId, name),
       dynamicToolStarted: (itemId, name, input) =>
         this.clientTools.started(threadId, itemId, name, input),
+      selfStarted: (messageId) => this.origin(threadId, messageId) !== undefined,
     }
   }
 
@@ -501,6 +557,7 @@ export class OpencodeServer {
   close(signalled = false): Promise<void> {
     this.closing ??= (async () => {
       this.requests.reject(() => true, '适配器正在关闭')
+      await this.shells?.close()
       await this.runtime.close(signalled)
       await this.clientTools.close()
       this.files.close()

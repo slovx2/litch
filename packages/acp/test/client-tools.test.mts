@@ -87,7 +87,8 @@ const said = (done: any) =>
     .join('')
 
 test('声明 clientTools；带动态工具的会话挂上 litch 的 MCP 服务，工具名和 instructions 交给 agent', async () => {
-  const s = await scene()
+  // 关掉注入的后台命令：开着时每个会话都挂 litch（background-shell.test.mts 守着）
+  const s = await scene({ CHA_BACKGROUND_SHELL: '0' })
   try {
     const info = await s.desktop.call('runtime/info', {})
     assert.ok(info.extensions.includes('clientTools'))
@@ -131,7 +132,8 @@ test('声明 clientTools；带动态工具的会话挂上 litch 的 MCP 服务�
 })
 
 test('只带 Litch 的呈现风格（不带工具的命名空间）的会话也挂 litch 的 MCP 服务：工具清单是空的，instructions 交给 agent', async () => {
-  const s = await scene()
+  // 关掉注入的后台命令，工具清单里才没有它的工具
+  const s = await scene({ CHA_BACKGROUND_SHELL: '0' })
   try {
     const desktop = await litch(s)
     const { thread } = await desktop.call('thread/start', {

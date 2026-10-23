@@ -1,3 +1,4 @@
+import { formatShellEvent, type ShellTask } from '../../shared/src/background-shell.mjs'
 import { ProtocolError } from '../../shared/src/protocol-contract.mjs'
 import type { RpcPeer } from '../../shared/src/types.mjs'
 import { sleep } from '../../shared/src/util.mjs'
@@ -76,7 +77,7 @@ export class Turns {
         // 子代理的会话直接发话时照 OpenCode 给子代理的默认：不能再派子代理、不记待办
         ...(thread.parentThreadId ? { task: false, todowrite: false } : {}),
         // 动态工具的 MCP 服务只给自己的会话看（client-tools.mts）
-        ...this.server.clientTools.rules(thread.id),
+        ...this.server.clientTools.rules(thread.id, preset),
       },
       ref,
       effort,
@@ -199,6 +200,54 @@ export class Turns {
       body: { messageID: id, parts: input.parts, ...body },
     })
     return { turnId: active.id }
+  }
+
+  /**
+   * 后台 shell 自己结束了（shared/src/background-shell.mts）：把结果作为一段不显示的话（synthetic，OpenCode 交给模型、
+   * 界面上不画）交给 OpenCode。会话闲着就开一轮，记成后台任务唤醒的；正在跑就照插话并进这一轮
+   */
+  async wake(threadId: string, tasks: ShellTask[]): Promise<void> {
+    const live = await this.server.load(threadId)
+    const { projection } = live
+    const parts = [{ type: 'text', text: await formatShellEvent(tasks), synthetic: true }]
+    const api = await this.server.api()
+    await this.server.clientTools.ensure(api, live)
+    const active = projection.active
+    if (active) {
+      await this.ready(live, active)
+      const id = messageId()
+      this.server.store.setMeta('steer', `${threadId}:${id}`, { turnId: active.id })
+      const {
+        ref: _ref,
+        effort: _effort,
+        ...body
+      } = await this.body(live, live.turnPreset ?? live.settings.preset)
+      await api.request('POST', `/session/${threadId}/prompt_async`, {
+        directory: live.directory,
+        body: { messageID: id, parts, ...body },
+      })
+      return
+    }
+    const id = messageId()
+    // 先记来历再开回合：turn/started 发出去时就带着
+    this.server.setOrigin(threadId, id, 'backgroundTask')
+    const notify = (method: string, value: any) => this.server.notify(threadId, method, value)
+    const turn = projection.expect(id, live.settings.plan, notify)
+    const preset = live.settings.preset
+    live.turnPreset = preset
+    live.starter = null
+    live.delivered = (async () => {
+      try {
+        const { ref: _ref, effort: _effort, ...body } = await this.body(live, preset)
+        await api.request('POST', `/session/${threadId}/prompt_async`, {
+          directory: live.directory,
+          body: { messageID: id, parts, ...body },
+        })
+      } catch (error) {
+        if (projection.active === turn)
+          projection.fail(error instanceof Error ? error.message : String(error), notify)
+      }
+    })()
   }
 
   // 等回合真的开始跑：提示词交到了，OpenCode 也建了那条用户消息（最多等几秒）
