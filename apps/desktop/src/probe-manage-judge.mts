@@ -61,7 +61,13 @@ export function judgeMockManage(probe: MockManageProbe): string[] {
   )
   same(
     probe.summaries,
-    ['状况：1 个启动失败，1 个监听中', 'ssh：已开启 2 个', 'terminal：', '环境文件：2 个变量'],
+    [
+      '状况：1 个启动失败，1 个监听中',
+      'ssh：已开启 2 个',
+      'terminal：',
+      'worktrees：',
+      '环境文件：2 个变量',
+    ],
     '收着的各节，标题后面的摘要不对',
   )
   must(probe.foldsReachable, '收起展开的地方不都是聚焦得到、带着状态和箭头的按钮')
