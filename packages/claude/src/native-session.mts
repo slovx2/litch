@@ -139,7 +139,7 @@ export function steerMessage(text: string, uuid: string): SDKUserMessage {
 // （peer-message.mts）；主循环之外的、别的回显（自己发的、后台任务通知的）是 null
 export function peerMessageOf(
   message: Record<string, unknown>,
-): { text: string; peer: LitchPeer } | null {
+): { text: string; peer: LitchPeer; address?: string } | null {
   if (message.type !== 'user' || message.isReplay !== true || message.parent_tool_use_id)
     return null
   return peerFromOrigin(message.origin, replayText(message))

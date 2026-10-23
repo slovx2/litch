@@ -168,8 +168,21 @@
   font: inherit;
   cursor: pointer;
 }
+.peer-open + .peer-open {
+  margin-left: 0;
+}
 .peer-open:hover {
   text-decoration: underline;
+}
+/* 发送方那边“发消息给”的详情：收件方的名字，后面是点过去的按钮 */
+.peer-to {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 12px 8px;
+  font-size: 12px;
+  line-height: 18px;
 }
 .umsg-text {
   white-space: pre-wrap;

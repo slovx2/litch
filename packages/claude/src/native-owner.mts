@@ -17,15 +17,24 @@ export const NATIVE_GROWTH_MS = 10_000
 /** 两次读登记至少隔这么久：会话对象出门、请求进门都要问，不能每次都读一遍目录 */
 const REGISTRY_GAP_MS = 1000
 
-interface RegistryEntry {
+export interface RegistryEntry {
   pid: number
   sessionId: string
   procStart: string | null
   status: string | null
   entrypoint: string | null
+  /** 收件箱的套接字（别的会话 SendMessage 发往 uds:<它>）。收件箱关着时没有 */
+  socket: string | null
+  /** 登记名（ListAgents 里列的、SendMessage 按名字发往的） */
+  name: string | null
+  /** 宿主里的会话号（宿主设的 CLAUDE_CODE_HOST_SESSION_ID，Claude 桌面端是 local_…） */
+  hostSessionId: string | null
 }
 
-function readRegistry(dir: string): RegistryEntry[] {
+const text = (value: unknown): string | null =>
+  typeof value === 'string' && value.trim() ? value.trim() : null
+
+export function readRegistry(dir: string): RegistryEntry[] {
   let names: string[]
   try {
     names = readdirSync(dir)
@@ -46,6 +55,9 @@ function readRegistry(dir: string): RegistryEntry[] {
         procStart: typeof raw.procStart === 'string' ? raw.procStart : null,
         status: typeof raw.status === 'string' ? raw.status : null,
         entrypoint: typeof raw.entrypoint === 'string' ? raw.entrypoint : null,
+        socket: text(raw.messagingSocketPath),
+        name: text(raw.name),
+        hostSessionId: text(raw.hostSessionId),
       })
     } catch {
       // 写到一半、格式不对的跳过：下一次再读
@@ -54,7 +66,7 @@ function readRegistry(dir: string): RegistryEntry[] {
   return entries
 }
 
-function alive(pid: number): boolean {
+export function alive(pid: number): boolean {
   try {
     process.kill(pid, 0)
     return true

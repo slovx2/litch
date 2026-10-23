@@ -1,12 +1,23 @@
 // 模拟核心里的会话间消息（peerMessages 扩展，Claude 的本机收件箱）：
 // 对话里说“别的会话”（英文 other session）：模型先列出本机的会话、给“终端里的 Claude”发一条消息，回一句就停下；
-// 过一会儿 Claude 桌面端的一个会话（跳过确认档）发来一条消息，harness 自己开一轮（来历 peer，开头是那条消息）处理它。
+// 过一会儿 Claude 桌面端的一个会话（跳过确认档）发来一条消息，harness 自己开一轮（来历 peer，开头是那条消息）处理它：
+// 先照真模型的做法往信封里的收件箱地址回一封（入口认出了收件方，条目上写它的名字），再回答。
 // 条目的显示标识照真的核心写成“回合:协议条目标识”。
 import type { SessionOp } from '../channel/protocol.mjs'
-import type { ItemView, OutgoingMessage, SessionSummary, SessionView } from '../model.mjs'
+import type {
+  ItemView,
+  OutgoingMessage,
+  SessionSummary,
+  SessionView,
+  ToolCallItem,
+} from '../model.mjs'
 import type { SampleLang } from './sample-text.mjs'
 
 const STARTS = /别的会话|other sessions?/i
+
+/** 发来消息的 Claude 桌面端会话：会话号、收件箱地址 */
+const PEER_SESSION = 'local_6f1c2d3e-4a5b-4c6d-8e9f-0a1b2c3d4e5f'
+const PEER_ADDRESS = 'uds:/tmp/cc-socks/41237.sock'
 
 /** 发出去之后多久收到对面的消息（按模拟的时钟） */
 export const PEER_REPLY_MS = 4000
@@ -52,7 +63,7 @@ export interface MockPeer {
 
 export function createMockPeer(host: MockPeerHost): MockPeer {
   const text = TEXT[host.lang]
-  const tool = (turnId: string, name: string, input: string, output: string): ItemView => ({
+  const tool = (turnId: string, name: string, input: string, output: string): ToolCallItem => ({
     id: `${turnId}:${host.nextId('peer-tool-')}`,
     kind: 'toolCall',
     source: 'claude-code',
@@ -72,11 +83,7 @@ export function createMockPeer(host: MockPeerHost): MockPeer {
       kind: 'userMessage',
       text: text.peerText,
       attachments: [],
-      peer: {
-        name: text.from,
-        session: 'local_6f1c2d3e-4a5b-4c6d-8e9f-0a1b2c3d4e5f',
-        bypass: true,
-      },
+      peer: { name: text.from, session: PEER_SESSION, bypass: true },
     }
     host.apply(view, [
       {
@@ -92,6 +99,19 @@ export function createMockPeer(host: MockPeerHost): MockPeer {
         },
       },
       { op: 'item.add', turnId, item: message },
+      {
+        op: 'item.add',
+        turnId,
+        item: {
+          ...tool(
+            turnId,
+            `SendMessage ${text.from}`,
+            JSON.stringify({ to: PEER_ADDRESS, message: '…' }, null, 2),
+            '{"success":true}',
+          ),
+          peer: { name: text.from, session: PEER_SESSION, bypass: false },
+        },
+      },
     ])
     host.updateSummary(view.deviceId, view.sessionId, { status: 'running', updatedAt: host.now() })
     host.reply(view, turnId, text.answer)
