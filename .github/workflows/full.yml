@@ -23,7 +23,7 @@ jobs:
           cache: npm
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
-          go-version: 1.26.6
+          go-version: 1.26.10
       - name: Linux 沙箱依赖
         if: runner.os == 'Linux'
         run: |
@@ -104,7 +104,7 @@ jobs:
           cache: npm
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
-          go-version: 1.26.6
+          go-version: 1.26.10
       # 工具链的版本只在 rust-toolchain.toml 里写，rustup 在 crate 目录里按它装、按它用
       - name: Rust 工具链（apps/computer-use-win/rust-toolchain.toml）
         working-directory: apps/computer-use-win
@@ -149,7 +149,7 @@ jobs:
       # 带终端的进程由适配器命令行（Go）的 pty-bridge 子命令来起，下面对着真实入口的那几步要用到它
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
-          go-version: 1.26.6
+          go-version: 1.26.10
       - run: npm ci --no-audit --no-fund
       - run: npm run client:setup
       - run: npm run client:typecheck
@@ -210,7 +210,7 @@ jobs:
           cache: npm
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
-          go-version: 1.26.6
+          go-version: 1.26.10
       - run: npm ci --no-audit --no-fund
       - run: npm ci --prefix packages/dsh --no-audit --no-fund
       - name: 安装隔离的 dsh
@@ -235,7 +235,7 @@ jobs:
           cache: npm
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
-          go-version: 1.26.6
+          go-version: 1.26.10
       - run: npm ci --no-audit --no-fund
       - run: npm ci --prefix packages/opencode --no-audit --no-fund
       - name: 安装隔离的 opencode
@@ -261,7 +261,7 @@ jobs:
           cache: npm
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
-          go-version: 1.26.6
+          go-version: 1.26.10
       - run: npm ci --no-audit --no-fund
       - run: npm ci --prefix packages/claude --no-audit --no-fund
       - run: npm ci --prefix packages/pi --no-audit --no-fund
@@ -294,7 +294,7 @@ jobs:
           cache: npm
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
-          go-version: 1.26.6
+          go-version: 1.26.10
       - run: npm ci --no-audit --no-fund
       - run: npm ci --prefix packages/claude --no-audit --no-fund
       - run: npm ci --prefix packages/pi --no-audit --no-fund
@@ -335,7 +335,7 @@ jobs:
           cache: npm
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
-          go-version: 1.26.6
+          go-version: 1.26.10
       - name: 模拟器用的 KVM、打包用的 JDK 17
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules

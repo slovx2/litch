@@ -41,7 +41,7 @@ Claude Code also needs `bubblewrap`. On macOS (Apple Silicon) the script works a
 
 ### Run from source
 
-Install Node.js **24**, Go **≥ 1.26.6**, and at least one configured harness: [Claude Code **≥ 2.1.282**](https://code.claude.com/docs/en/setup) or [Pi **≥ 0.99.1**](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/README.md#getting-started) (installed with npm). Newer stable versions are accepted; exact versions are not required. [Platform dependencies](docs/guide/getting-started.md#系统依赖)
+Install Node.js **24**, Go **≥ 1.26.10**, and at least one configured harness: [Claude Code **≥ 2.1.282**](https://code.claude.com/docs/en/setup) or [Pi **≥ 0.99.1**](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/README.md#getting-started) (installed with npm). Newer stable versions are accepted; exact versions are not required. [Platform dependencies](docs/guide/getting-started.md#系统依赖)
 
 ```sh
 git clone https://github.com/slovx2/litch.git

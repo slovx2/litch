@@ -19,8 +19,8 @@ set -euo pipefail
 
 NODE_IMAGE="node:24.19.0-bookworm-slim@sha256:3638d9a6fe4030bd716be989438248074489337ba3275657f93595428be4fc03"
 # 守护进程（cmd/claude-process-guard）用的 Go，要和 go.mod 写的版本一样
-GO_VERSION="1.26.6"
-GO_IMAGE="golang:${GO_VERSION}-bookworm@sha256:116d58cbd88c1297624acc6e967a060012422bacf9930927e23fb719189c6f36"
+GO_VERSION="1.26.10"
+GO_IMAGE="golang:${GO_VERSION}-bookworm@sha256:632dff7351799a5a9954a48dc06670ade72ee44e8c351cdc0e5a57af2fea21af"
 # 包只给 Linux 用：守护进程只编这两个平台
 GUARD_TARGETS="linux-amd64 linux-arm64"
 

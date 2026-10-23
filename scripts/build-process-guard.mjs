@@ -55,7 +55,7 @@ try {
   if (error.code === 'ENOENT') {
     console.error(
       '这台电脑上找不到 go 命令，编不出 Claude 入口的守护进程（cmd/claude-process-guard）。\n' +
-        '入口起 Claude Code CLI 都要经过它。请装上 Go（>= 1.26.6）再试。',
+        '入口起 Claude Code CLI 都要经过它。请装上 Go（>= 1.26.10）再试。',
     )
   } else console.error(error.message)
   process.exit(1)

@@ -1,6 +1,6 @@
 module github.com/slovx2/litch
 
-go 1.26.6
+go 1.26.10
 
 require (
 	github.com/Microsoft/go-winio v0.6.2

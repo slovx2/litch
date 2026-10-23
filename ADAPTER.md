@@ -41,7 +41,7 @@ Claude Code 还需要 `bubblewrap`。macOS（Apple Silicon）上不用 Homebrew 
 
 ### 从源码启动
 
-准备 Node.js **24**、Go **≥ 1.26.6**，以及至少一个已配置登录的引擎：[Claude Code **≥ 2.1.282**](https://code.claude.com/docs/en/setup) 或 [Pi **≥ 0.99.1**](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/README.md#getting-started)（npm 安装）。接受更高稳定版本，无需安装精确版本。[各系统依赖](docs/guide/getting-started.md#系统依赖)
+准备 Node.js **24**、Go **≥ 1.26.10**，以及至少一个已配置登录的引擎：[Claude Code **≥ 2.1.282**](https://code.claude.com/docs/en/setup) 或 [Pi **≥ 0.99.1**](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/README.md#getting-started)（npm 安装）。接受更高稳定版本，无需安装精确版本。[各系统依赖](docs/guide/getting-started.md#系统依赖)
 
 ```sh
 git clone https://github.com/slovx2/litch.git

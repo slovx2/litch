@@ -13,7 +13,7 @@ jobs:
       # 制品里带着适配器的命令行：终端用的伪终端桥是它的子命令
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
-          go-version: 1.26.6
+          go-version: 1.26.10
       - name: 沙箱依赖
         run: |
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0

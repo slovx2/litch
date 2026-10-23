@@ -5,7 +5,7 @@ entry point; the full contributor guide lives in [docs/contributing.md](docs/con
 
 ## Before you start
 
-- 本机工具只要求最低稳定版本：Node.js 24（>= 24.0.0）、Go >= 1.26.6；Claude Code CLI >= 2.1.282、Pi CLI >= 0.99.1。允许更高稳定版，不要求用户安装精确版本或降级。
+- 本机工具只要求最低稳定版本：Node.js 24（>= 24.0.0）、Go >= 1.26.10；Claude Code CLI >= 2.1.282、Pi CLI >= 0.99.1。允许更高稳定版，不要求用户安装精确版本或降级。
 - SDK/插件的仓库依赖仍按精确版本锁定，CI 使用 `protocol/versions.json` 的基线复现；环境版本范围与依赖锁是不同约束。
 - 使用 `npm run setup` 安装锁定依赖并构建，`npm start` 自动检测并启动可用引擎；缺失或失败入口只告警，`--harness` 可指定单引擎。
 - Keep changes small and reviewable. Separate runtime/protocol work, docs work,

@@ -2,7 +2,7 @@
 
 ## Toolchain
 
-本机环境最低要求为 Node.js 24、Go 1.26.6（源码构建）、Claude Code CLI 2.1.282、Pi CLI 0.99.1；接受更高稳定版，不要求安装精确版本。仓库 SDK、插件依赖与 CI 验证基线继续锁定，见 `protocol/versions.json`。
+本机环境最低要求为 Node.js 24、Go 1.26.10（源码构建）、Claude Code CLI 2.1.282、Pi CLI 0.99.1；接受更高稳定版，不要求安装精确版本。仓库 SDK、插件依赖与 CI 验证基线继续锁定，见 `protocol/versions.json`。
 
 Pi 本体不随适配器分发：`packages/pi` 只把它列为开发依赖，用于类型和测试基线，运行时加载用户安装的 Pi。测试默认使用这份基线，设置 `PI_CLI` 可改测本机安装的版本，例如 `PI_CLI=$(command -v pi) npm test --prefix packages/pi`。
 
