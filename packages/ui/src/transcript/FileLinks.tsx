@@ -19,6 +19,7 @@ import { createContext, type MouseEvent, type ReactNode, useContext, useMemo } f
 import { useT } from '../app/appearance.ts'
 import { useKey } from '../app/services.tsx'
 import { openInFiles } from '../files/state.ts'
+import { sessionRoots } from '../side/roots.ts'
 import { ExternalLink } from './ExternalLink.tsx'
 
 export interface FileLinks {
@@ -31,7 +32,7 @@ const Context = createContext<FileLinks | null>(null)
 export const FileLinksProvider = Context.Provider
 
 /**
- * 这个会话里的路径怎么认、点了去哪。路径要落在会话的工作区里（不属于工作区的会话，落在它的工作目录里）；
+ * 这个会话里的路径怎么认、点了去哪。路径要落在会话的根里（side/roots.ts，和侧面板的根一样：工作树、工作区、工作目录）；
  * 只读地看已归档的对话时没有摘要，也就不认路径。同一个目录的另一种写法按设备的系统认（pathTwin）
  */
 export function useSessionFileLinks(
@@ -42,14 +43,14 @@ export function useSessionFileLinks(
   const os = useKey<DeviceView>(keys.device(deviceId))?.os
   const workspaceId = summary?.workspaceId ?? null
   const cwd = summary?.cwd ?? ''
-  const roots = workspaces?.find((entry) => entry.id === workspaceId)?.roots
+  const roots = sessionRoots(summary, workspaces?.find((entry) => entry.id === workspaceId)?.roots)
   // 按内容比：侧栏每来一次增量，工作区的对象都是新的
-  const rootsKey = roots?.join('\n') ?? ''
+  const rootsKey = roots.join('\n')
   // biome-ignore lint/correctness/useExhaustiveDependencies: roots 按内容（rootsKey）比
   return useMemo(() => {
     if (!summary) return null
     const here = cwd ? normalizePath(cwd) : ''
-    const candidates = (roots ?? (here ? [here] : [])).map(normalizePath)
+    const candidates = roots.map(normalizePath)
     const twin = pathTwin(os)
     // 工作区有几个根的：工作目录在哪个根里就认哪个
     const root = candidates.find((entry) => here && insideRoot(entry, here, twin)) ?? candidates[0]
