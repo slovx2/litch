@@ -380,7 +380,7 @@ export function createPairing(host: PairingHost): Pairing {
     })
     if (tested.ok) return true
     if (tested.verifyUrl) throw startFailure('verify', tested.verifyUrl)
-    throw startFailure('selfTest', tested.said)
+    throw startFailure('enrollTest', tested.said)
   }
 
   /** 出码时 ssh 设备那一段：核对主机钥匙、自检。返回原配置和自检做了没有 */

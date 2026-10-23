@@ -63,6 +63,7 @@ export type PairingStartFailure =
   | 'offline'
   | 'tailscale'
   | 'verify'
+  | 'enrollTest'
 
 /** pairing 主题的快照：一台设备上已绑定的手机，和这台桌面端开出来、还没作废的配对 */
 export interface PairingTopicView {

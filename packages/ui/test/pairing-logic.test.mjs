@@ -97,6 +97,7 @@ test('每一种失败、每一种状态两种语言都有话说', () => {
       'offline',
       'tailscale',
       'verify',
+      'enrollTest',
     ]) {
       assert.notEqual(t(`pairing.fail.${key}`), `pairing.fail.${key}`)
     }
@@ -114,6 +115,8 @@ test('Tailscale 方式：两种新的失败认得出、tailscale 那种摆原话
   assert.equal(failureOf({ key: 'verify' }), 'verify')
   assert.equal(showsSaid('tailscale'), true)
   assert.equal(showsSaid('verify'), false)
+  assert.equal(failureOf({ key: 'enrollTest' }), 'enrollTest')
+  assert.equal(showsSaid('enrollTest'), true)
   assert.equal(redetects(null, address), true)
   assert.equal(redetects({ host: 'device-ts', port: 2222 }, address), false)
   assert.equal(

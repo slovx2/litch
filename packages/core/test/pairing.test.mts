@@ -547,6 +547,18 @@ test('一次性钥匙自检没过、自检连的地址是 Tailscale SSH：报 ta
   assert.equal(verify.key, 'verify')
   assert.equal(verify.message, url)
   assert.deepEqual(check.sent('litch/pair/cancel'), [{ pairId: 'pair1' }])
+
+  // Tailscale 方式的自检别的原因没过（比如主机钥匙对不上）：是 enrollTest，不说一次性钥匙
+  const refused = world({
+    banners: { '10.0.0.5:2222': TS },
+    enrollTest: () => ({ ok: false, said: 'Host key verification failed.' }),
+  })
+  refused.core.start()
+  await settled()
+  const enroll = await failureOf(refused.command('pairing.start'))
+  assert.equal(enroll.key, 'enrollTest')
+  assert.equal(enroll.message, 'Host key verification failed.')
+  assert.deepEqual(refused.sent('litch/pair/cancel'), [{ pairId: 'pair1' }])
 })
 
 test('设备服务太旧、不认 tailscale 方式：作废它建的配对，报 unsupported', async () => {

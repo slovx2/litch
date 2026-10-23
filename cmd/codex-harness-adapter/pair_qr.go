@@ -158,6 +158,11 @@ func pairSelfCheck(ctx context.Context, sshPath, dir string, check pairCheck) er
 	return errors.New(said)
 }
 
+// sshQuoted：-o 里的文件路径加引号，ssh 会按空白把 UserKnownHostsFile 拆成好几个文件
+func sshQuoted(path string) string {
+	return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(path) + `"`
+}
+
 func pairSSHArgs(key, knownHosts, host string, port int, user string) []string {
 	return []string{
 		"-F", os.DevNull, "-T",
@@ -167,7 +172,7 @@ func pairSSHArgs(key, knownHosts, host string, port int, user string) []string {
 		"-o", "BatchMode=yes",
 		"-o", "PreferredAuthentications=publickey",
 		"-o", "StrictHostKeyChecking=yes",
-		"-o", "UserKnownHostsFile=" + knownHosts,
+		"-o", "UserKnownHostsFile=" + sshQuoted(knownHosts),
 		"-o", "GlobalKnownHostsFile=" + os.DevNull,
 		"-o", "UpdateHostKeys=no",
 		"-o", "ConnectTimeout=10",

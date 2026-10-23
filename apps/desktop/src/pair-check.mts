@@ -71,7 +71,8 @@ const hostKey: PairHostKey = {
 }
 
 // ---------- 二、外壳的几样 ----------
-const dataDir = join(root, 'dd')
+// 目录名带空格：macOS 的用户数据目录是 ~/Library/Application Support/Litch，临时 known_hosts 就放在它下面
+const dataDir = join(root, 'Application Support', 'dd')
 const platform: PairingPlatform = desktopPairing({ dataDir, localName: () => '自检用的电脑' })
 const ok = { kind: 'alias' as const, alias: aliases.ok ?? '' }
 

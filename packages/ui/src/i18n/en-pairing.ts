@@ -67,6 +67,8 @@ export const enPairing: Record<keyof typeof zhPairing, Entry> = {
   'pairing.retry': 'Retry',
   'pairing.fail.tailscale':
     'The address used for the check is handled by Tailscale SSH, which ignores authorized_keys, so the one-time key’s forced command has no effect. Generate the code the Tailscale way instead.',
+  'pairing.fail.enrollTest':
+    'The check before generating the code failed: this computer couldn’t log in to this address over Tailscale SSH with a temporary key and run the enroll command. See the output below; if your Tailscale ACL doesn’t let this computer in, the phone usually can’t log in either.',
   'pairing.useTailscale': 'Use Tailscale instead',
   'pairing.fail.verify':
     'Tailscale requires a check in the browser (ACL check mode). Open the verification page, finish it, then retry.',

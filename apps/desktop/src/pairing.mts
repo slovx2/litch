@@ -144,6 +144,12 @@ function verdict(stdout: string): { ok: true } | { ok: false; said: string } | n
 }
 
 /**
+ * -o 里的文件路径加引号：ssh 按空白把 UserKnownHostsFile 拆成好几个文件，
+ * 用户数据目录在 macOS 上是 ~/Library/Application Support/Litch，不加就一把主机钥匙都读不到
+ */
+export const sshQuoted = (path: string): string => `"${path.replace(/[\\"]/g, '\\$&')}"`
+
+/**
  * 不读用户 ssh 配置的那几项：主机钥匙只认 knownHosts 里的（设备报的那几把）。
  * 本机的一次性钥匙自检、tailscale 方式的自检都这样连
  */
@@ -159,7 +165,7 @@ function bareArgs(host: string, port: number, user: string, knownHosts: string):
     '-o',
     'StrictHostKeyChecking=yes',
     '-o',
-    `UserKnownHostsFile=${knownHosts}`,
+    `UserKnownHostsFile=${sshQuoted(knownHosts)}`,
     '-o',
     'GlobalKnownHostsFile=/dev/null',
     '-o',

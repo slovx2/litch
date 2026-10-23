@@ -471,7 +471,7 @@ key=; hosts=
 while [ $# -gt 0 ]; do
   case "$1" in
     -i) key=$2; shift ;;
-    -o) case "$2" in UserKnownHostsFile=*) hosts=${2#UserKnownHostsFile=} ;; esac; shift ;;
+    -o) case "$2" in UserKnownHostsFile=*) hosts=${2#UserKnownHostsFile=\"}; hosts=${hosts%\"} ;; esac; shift ;;
   esac
   shift
 done

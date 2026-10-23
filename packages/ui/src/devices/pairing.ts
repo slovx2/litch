@@ -79,6 +79,7 @@ const FAILURES: readonly PairingStartFailure[] = [
   'offline',
   'tailscale',
   'verify',
+  'enrollTest',
 ]
 
 /** 出码没成：核心的错误带着 key 的照 key 说；不认识的是 null，由调用方给一般的说法 */
@@ -103,7 +104,8 @@ export const showsSaid = (failure: PairingStartFailure | null): boolean =>
   failure === 'selfTest' ||
   failure === 'keysFile' ||
   failure === 'hostKeyMismatch' ||
-  failure === 'tailscale'
+  failure === 'tailscale' ||
+  failure === 'enrollTest'
 
 /**
  * 表单里的地址换了主机或端口，要不要重新认一次方式：probed 是上一次认方式时的那个地址。

@@ -63,6 +63,8 @@ export const zhPairing = {
   'pairing.retry': '重试',
   'pairing.fail.tailscale':
     '用于检查的地址由 Tailscale SSH 接管：它不读取 authorized_keys，一次性密钥的强制命令不生效。可改用 Tailscale 方式生成二维码。',
+  'pairing.fail.enrollTest':
+    '出码前的检查没通过：本机用临时密钥经 Tailscale SSH 登录此地址并执行登记命令失败。看下面的原话；Tailscale ACL 不放行本机时，手机通常也登不进去。',
   'pairing.useTailscale': '改用 Tailscale 方式',
   'pairing.fail.verify':
     'Tailscale 要求在浏览器中完成一次验证（ACL 的 check 模式）。打开验证页面完成验证后点重试。',
