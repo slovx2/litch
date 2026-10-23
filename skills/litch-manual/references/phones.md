@@ -57,7 +57,8 @@ to happen within 2 minutes. Do not show the QR code while sharing the screen.
   the user taps Update, then confirms the system installer. If it says the new version is signed
   differently, the installed build was not a release build (for example one installed for testing):
   uninstall it and install the release APK once (this clears the phone app's data; devices must be added
-  again), after which updates work.
+  again), after which updates work. If the download breaks off, the bar offers Retry; any failure bar can
+  be closed with ✕ and stays closed for that package until a newer one is released.
 
 ## Tailscale SSH
 
