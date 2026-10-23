@@ -12,13 +12,13 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native'
-import { EnrichedMarkdownText, type MarkdownStyle } from 'react-native-enriched-markdown'
+import { EnrichedMarkdownText } from 'react-native-enriched-markdown'
 import type { Row } from '../core/rows'
 import { experiment } from '../experiment'
 import { noteWork } from '../probe'
 import { useKey } from '../shell/services'
 import { useT } from '../ui/i18n'
-import { type Palette, type Theme, useTheme } from '../ui/theme'
+import { type Palette, useTheme } from '../ui/theme'
 import { AskCell, AskReplyText, useAsks } from './asks/AskCell'
 import { CommentCards, commentsOfRow } from './comments/CommentCards'
 import { useComments, useFlashedRow } from './comments/context'
@@ -26,6 +26,7 @@ import { notePressedAnswer } from './comments/hub'
 import { linkCommentRefs, parseCommentHref } from './comments/refs'
 import { useTranscript } from './context'
 import { linkify } from './links'
+import { markdownStyleOf } from './markdownStyle'
 import { labelMermaid } from './mermaid'
 
 export type Props<T extends Row['type']> = { row: Extract<Row, { type: T }> }
@@ -137,48 +138,6 @@ export const UserCell = memo(function UserCell({ row }: Props<'user'>) {
     </View>
   )
 })
-
-/** 每套配色一份 Markdown 样式（对象不变，组件不会因为它重新排版） */
-const styleCache = new WeakMap<Palette, MarkdownStyle>()
-
-/** 每种皮肤、每种明暗的配色是各自的一份，按配色缓存就是按皮肤缓存 */
-function markdownStyleOf({ c, font, radius, skin }: Theme): MarkdownStyle {
-  let style = styleCache.get(c)
-  if (style) return style
-  const ui = font.ui
-  // 人文皮肤正文行距放开一点
-  const body = skin === 'human' ? 25 : 22
-  style = {
-    paragraph: { fontSize: 15, lineHeight: body, color: c.ink, fontFamily: ui },
-    h1: { fontSize: 20, lineHeight: 28, color: c.ink, fontWeight: '700', fontFamily: ui },
-    h2: { fontSize: 19, lineHeight: 26, color: c.ink, fontWeight: '700', fontFamily: ui },
-    h3: { fontSize: 17, lineHeight: 24, color: c.ink, fontWeight: '700', fontFamily: ui },
-    list: { fontSize: 15, lineHeight: body, color: c.ink, fontFamily: ui },
-    codeBlock: {
-      fontSize: 13,
-      lineHeight: 19,
-      fontFamily: font.mono,
-      color: c.ink,
-      backgroundColor: c.sunken,
-      borderColor: c.line1,
-      borderWidth: 1,
-      padding: 10,
-      borderRadius: radius.m,
-    },
-    code: { fontSize: 13, fontFamily: font.mono, color: c.ink, backgroundColor: c.sunken },
-    blockquote: { borderColor: c.line2, color: c.ink2 },
-    link: { color: c.accent, underline: true },
-    // 文件路径和网址一个颜色，只是不画下划线：改写前后字形一样（links.ts）
-    linkVariants: {
-      '^litch-file:': { color: c.accent, underline: false },
-      // 回答里指向评论的 [N]（comments/refs.ts）：一个小记号
-      '^litch-comment:': { color: c.accent, underline: false, backgroundColor: c.sel },
-    },
-    table: { borderColor: c.line2, headerBackgroundColor: c.sunken, color: c.ink },
-  } as MarkdownStyle
-  styleCache.set(c, style)
-  return style
-}
 
 /**
  * 写完的块（不再长）第一次排好版后把高度钉死：宽高都定了，布局引擎就不再调它的测量函数。
