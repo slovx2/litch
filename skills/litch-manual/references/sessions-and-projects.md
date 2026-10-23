@@ -211,8 +211,11 @@ woken to continue.
   message (with "Sender skips approvals" when the sender runs tools without asking, and "Open in
   Claude" when it came from a Claude desktop session); an idle session handles it in a turn of its own,
   a busy one right after its current step. On the sending side the step reads "Message …". This is the
-  device setting `harness.claude-code.crossSessionInbox` (on by default); it works only while the
-  receiving session's Claude Code process is running, and only between sessions on the same computer.
+  device setting `harness.claude-code.crossSessionInbox` (on by default), and works only between
+  sessions on the same computer. A session keeps the same address while Litch restarts its Claude Code
+  process. When another Litch session messages one whose process is not running, Litch starts it
+  first and the message opens a turn there; from the Claude desktop app or a terminal, the receiving
+  session's process has to be running.
 
 The whole feature can be switched per device with the `sessions.enabled` setting
 (`scripts/litch settings set <device> sessions.enabled=false`); remote devices need adapter 0.11.0 or

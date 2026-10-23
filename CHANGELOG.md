@@ -7,6 +7,8 @@ versioning or publishing metadata.
 
 ## 未发布
 
+- Claude Code：会话之间的消息不再因为对方换了进程而发不到。会话的收件箱地址按会话固定（`cc-socks/litch-<会话号>.sock`，经 CLI 的 `--messaging-socket-path`），打断回合、空闲回收后再开回合换了进程，别的会话照着旧地址（收到的消息里的回信地址）照样发得到。以前这时报 ENOENT，模型会说对方不在线
+- Claude Code：Litch 的会话给本机另一个没在跑的 Litch 会话发消息（按地址或按名字）时，先把对方拉起来再发：对方开一个来历为“来自其他会话”的回合，和对方在线时一样。拉起来了却没等到消息（发送失败）的，那一回合 60 秒后写一句说明收尾。Claude 桌面端、终端里的会话发来的照旧只在对方进程活着时收得到
 - 扫码绑定手机：设备走 Tailscale SSH、桌面端按 MagicDNS 名（或短名）连它时，出码对话框的主机默认填它的 tailnet IP（手机上开着别的 VPN 时 `*.ts.net` 常常解析不了）；主机一栏旁加下拉，在 IP、MagicDNS 全名、短名之间换。设备服务在 `litch/pair/start` 的结果里多带 `tailnet`（名字和地址）。`codex-harness-adapter pair` 选 Tailscale 方式又没给 `--host` 时也用 tailnet IP
 
 ## 0.18.0

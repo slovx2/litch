@@ -2,9 +2,10 @@
 // 别的会话记下的地址（ListAgents 列出的、收到的消息信封里的 from）在 Litch 换了进程之后就作废：打断回合、
 // 启动配置变了、空闲回收后再开回合，都会起新进程。入口经 CLI 的 --messaging-socket-path 给每个会话一个
 // 不随进程变的地址，换了进程照样发得到。
-import { lstatSync, mkdirSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { existsSync, lstatSync, mkdirSync, readFileSync } from 'node:fs'
 import { connect } from 'node:net'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 
 // CLI 认的套接字路径上限（字节），超了它自己也会退到 /tmp/cc-socks-<uid>/ 下
 const MAX_SOCKET_PATH = 103
@@ -21,6 +22,30 @@ export function peerInboxSocketPaths(
   return [join(base, 'cc-socks', file), join('/tmp', `cc-socks-${uid}`, file)].filter(
     (path, index, all) => Buffer.byteLength(path) <= MAX_SOCKET_PATH && all.indexOf(path) === index,
   )
+}
+
+/** SendMessage 的 to 是某个 Litch 会话的固定地址（uds:…/litch-<会话键>.sock）时给出会话键 */
+export function sessionKeyFromAddress(to: string): string | null {
+  if (!to.startsWith('uds:')) return null
+  return /^litch-([A-Za-z0-9_-]{1,64})\.sock$/.exec(basename(to.slice(4)))?.[1] ?? null
+}
+
+/**
+ * 这个 CLI 进程的收件箱能不能收：登记（<配置目录>/sessions/<pid>.json）里有套接字、口令文件
+ * （<pid>.<套接字路径的 sha256>.key）写出来了、套接字在听。发送方要这三样都齐才发得进去
+ */
+export async function inboxReady(pid: number, configDir: string): Promise<boolean> {
+  const sessions = join(configDir, 'sessions')
+  let socket: unknown
+  try {
+    socket = JSON.parse(readFileSync(join(sessions, `${pid}.json`), 'utf8')).messagingSocketPath
+  } catch {
+    return false
+  }
+  if (typeof socket !== 'string' || !socket) return false
+  const digest = createHash('sha256').update(socket).digest('hex')
+  if (!existsSync(join(sessions, `${pid}.${digest}.key`))) return false
+  return listening(socket)
 }
 
 /**

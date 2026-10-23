@@ -280,6 +280,9 @@ export interface RuntimeTurnContext {
   sessionThreadId?: string
   // CLI 自己开的一轮（后台任务结束后的续跑）：没有用户输入，接到已在运行的那一轮上。
   spontaneous?: boolean
+  // 别的会话要发消息进来、这个会话却没有 CLI：和 spontaneous 一起给。没有进程时起一个、不送用户消息，
+  // 等收件箱里的消息开这一轮；等不到就收尾（native-runtime.mts 的 peerWakeWaitMs）
+  wake?: boolean
   // systemPromptAddendum 末尾的目标说明。它每回合都可能变化，进程存活期间随用户消息更新。
   goalContext?: string | null
   permissionTools?: boolean
@@ -597,6 +600,10 @@ export interface RuntimeSessionHandlers {
   // CLI 自己开了一轮。协议层建好回合并以 spontaneous 上下文调用 runTurn 后返回 true；
   // 返回 false 表示不接，运行时会打断这一轮。
   onSpontaneousTurn(threadId: string): Promise<boolean>
+  // 会话 from 的模型要用 SendMessage 发给 to：to 是本机的另一个 Litch 会话、它又没有 CLI 时，协议层为它建一个
+  // wake 回合把 CLI 拉起来。返回目标的会话键（已经有 CLI 的也返回，调用方等它的收件箱就绪），不是 Litch 会话、
+  // 拉不起来时返回 null
+  onPeerWake?(to: string, from: string): Promise<string | null>
   onBackgroundCommandEnded(threadId: string, end: RuntimeBackgroundCommandEnd): void
   // CLI 关于后台任务的 system 消息（background_tasks_changed、task_started、task_updated、task_notification），
   // 原样交给协议层攒后台任务的集合（background-tasks.mts）
