@@ -1,4 +1,4 @@
-// 通用的小控件：按钮、列表行、分组标题、输入框、空状态、状态记号。复古皮肤：方角、实线、反白选中。
+// 通用的小控件：按钮、列表行、分组标题、输入框、空状态、状态记号。圆角、字体、选中样式、记号都跟皮肤走（src/ui/theme.ts）。
 // 各页面共用；要加新的通用控件就加在 src/ui/kit/ 下（谁先要谁加，合并时由主线检查有没有重复）。
 import type { ReactNode } from 'react'
 import {
@@ -11,7 +11,7 @@ import {
   type TextInputProps,
   View,
 } from 'react-native'
-import { useTheme } from '../theme'
+import { type StatusKind, type Theme, useTheme } from '../theme'
 import { useBreath } from './breath'
 
 export function Button({
@@ -30,7 +30,7 @@ export function Button({
   busy?: boolean
   testID?: string
 }) {
-  const { c, hit } = useTheme()
+  const { c, hit, radius, font } = useTheme()
   const inactive = disabled || busy
   const bg = kind === 'solid' ? c.accentSolid : 'transparent'
   const fg = kind === 'solid' ? c.onAccent : kind === 'danger' ? c.err : c.ink
@@ -49,6 +49,7 @@ export function Button({
         styles.button,
         {
           minHeight: hit,
+          borderRadius: radius.m,
           backgroundColor: bg,
           borderColor: border,
           opacity: inactive ? 0.5 : pressed ? 0.75 : 1,
@@ -56,7 +57,7 @@ export function Button({
       ]}
     >
       {busy ? <ActivityIndicator size="small" color={fg} /> : null}
-      <Text style={[styles.buttonText, { color: fg }]}>{label}</Text>
+      <Text style={[styles.buttonText, { color: fg, fontFamily: font.ui }]}>{label}</Text>
     </Pressable>
   )
 }
@@ -81,13 +82,13 @@ export function Row({
   right?: ReactNode
   onPress?(): void
   onLongPress?(): void
-  /** 选中 = 反白 */
+  /** 选中：复古是反白，另外两种是强调色的淡底 */
   selected?: boolean
   testID?: string
 }) {
   const theme = useTheme()
   const { c } = theme
-  const ink = selected ? c.invFg : c.ink
+  const ink = selected ? c.selFg : c.ink
   return (
     <Pressable
       accessibilityRole={onPress ? 'button' : undefined}
@@ -99,7 +100,7 @@ export function Row({
         {
           minHeight: theme.hit + 12,
           borderBottomColor: c.line1,
-          backgroundColor: selected ? c.invBg : pressed ? c.press : c.panel,
+          backgroundColor: selected ? c.selBg : pressed ? c.press : c.panel,
         },
       ]}
     >
@@ -108,7 +109,10 @@ export function Row({
         <View style={styles.rowTop}>
           <Text
             numberOfLines={1}
-            style={[styles.rowTitle, { color: ink, fontSize: theme.font.size.body }]}
+            style={[
+              styles.rowTitle,
+              { color: ink, fontSize: theme.font.size.body, fontFamily: theme.font.ui },
+            ]}
           >
             {title}
           </Text>
@@ -116,7 +120,7 @@ export function Row({
             <Text
               style={[
                 styles.rowMeta,
-                { color: selected ? c.invFg : c.ink3, fontFamily: theme.font.mono },
+                { color: selected ? c.selFg : c.ink3, fontFamily: theme.font.mono },
               ]}
             >
               {meta}
@@ -126,7 +130,7 @@ export function Row({
         {detail ? (
           <Text
             numberOfLines={2}
-            style={[styles.rowDetail, { color: selected ? c.invFg : c.ink2 }]}
+            style={[styles.rowDetail, { color: selected ? c.selFg : c.ink2 }]}
           >
             {detail}
           </Text>
@@ -137,13 +141,14 @@ export function Row({
   )
 }
 
-/** 分组的小标题（复古皮肤里前面带 “## ”） */
+/** 分组的小标题（复古皮肤里前面带 “## ”、用等宽字） */
 export function SectionLabel({ children, right }: { children: string; right?: ReactNode }) {
   const theme = useTheme()
   return (
     <View style={[styles.section, { backgroundColor: theme.c.win }]}>
-      <Text style={[styles.sectionText, { color: theme.c.ink2, fontFamily: theme.font.mono }]}>
-        ## {children}
+      <Text style={[styles.sectionText, sectionFont(theme), { color: theme.c.ink2 }]}>
+        {theme.sectionPrefix}
+        {children}
       </Text>
       {right}
     </View>
@@ -172,6 +177,7 @@ export function Field({
             color: c.ink,
             backgroundColor: c.raised,
             borderColor: error ? c.err : c.line2,
+            borderRadius: theme.radius.m,
             minHeight: theme.hit,
           },
           input.multiline ? styles.fieldMulti : null,
@@ -217,7 +223,7 @@ export function Chip({
   disabled?: boolean
   testID?: string
 }) {
-  const { c } = useTheme()
+  const { c, radius } = useTheme()
   return (
     <Pressable
       accessibilityRole="button"
@@ -230,44 +236,33 @@ export function Chip({
         styles.chip,
         {
           borderColor: on ? c.line3 : c.line2,
-          backgroundColor: on ? c.invBg : pressed ? c.press : 'transparent',
+          borderRadius: radius.s,
+          backgroundColor: on ? c.selBg : pressed ? c.press : 'transparent',
           opacity: disabled ? 0.5 : 1,
         },
       ]}
     >
-      <Text numberOfLines={1} style={[styles.chipText, { color: on ? c.invFg : c.ink }]}>
+      <Text numberOfLines={1} style={[styles.chipText, { color: on ? c.selFg : c.ink }]}>
         {label}
       </Text>
     </Pressable>
   )
 }
 
-/** 状态记号：用形状区分（设计稿：会话状态用形状，不只靠颜色） */
-export function StatusMark({
-  status,
-}: {
-  status: 'idle' | 'running' | 'waiting' | 'error' | 'unread' | 'offline' | 'background'
-}) {
-  const { c } = useTheme()
-  const glyph = {
-    idle: '·',
-    running: '▶',
-    waiting: '◆',
-    error: '✕',
-    unread: '●',
-    offline: '○',
-    background: '&',
-  }[status]
+/** 状态记号：用形状区分（设计稿：会话状态用形状，不只靠颜色），形状跟皮肤走 */
+export function StatusMark({ status }: { status: StatusKind }) {
+  const { c, marks } = useTheme()
+  const glyph = marks[status]
   const color = {
     idle: c.ink3,
     running: c.accent,
     waiting: c.wait,
     error: c.err,
-    unread: c.accent,
+    unread: c.seal,
     offline: c.ink3,
     background: c.accent,
   }[status]
-  // 只剩后台任务在跑：复古皮肤里后台作业的 &，慢呼吸，和前台在跑的 ▶ 分开
+  // 只剩后台任务在跑：慢呼吸，和前台在跑的分开
   if (status === 'background') return <BreathingMark glyph={glyph} color={color} />
   return <Text style={[styles.mark, { color }]}>{glyph}</Text>
 }
@@ -279,6 +274,13 @@ function BreathingMark({ glyph, color }: { glyph: string; color: string }) {
       {glyph}
     </Animated.Text>
   )
+}
+
+/** 分组小标题的字：复古用等宽，人文用衬线并拉开字距，标准用系统字 */
+export function sectionFont(theme: Theme) {
+  if (theme.skin === 'retro') return { fontFamily: theme.font.mono }
+  if (theme.skin === 'human') return { fontFamily: theme.font.ui, letterSpacing: 1.5 }
+  return { fontWeight: '600' as const }
 }
 
 const styles = StyleSheet.create({

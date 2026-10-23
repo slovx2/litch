@@ -17,7 +17,7 @@ import { useSessionStore } from './hooks'
 const clicked = new Map<string, string>()
 
 export const WrapAskCell = memo(function WrapAskCell({ row }: Props<'wrapAsk'>) {
-  const { c, font } = useTheme()
+  const { c, font, radius } = useTheme()
   const t = useT()
   const channel = useChannel()
   const { deviceId, sessionId } = useTranscript()
@@ -59,7 +59,10 @@ export const WrapAskCell = memo(function WrapAskCell({ row }: Props<'wrapAsk'>) 
   return (
     <View
       testID={`wrap-ask:${row.itemId}`}
-      style={[styles.card, { borderColor: c.line3, backgroundColor: c.raised }]}
+      style={[
+        styles.card,
+        { borderColor: c.line3, backgroundColor: c.raised, borderRadius: radius.l },
+      ]}
     >
       <Text style={[styles.ask, { color: c.ink, fontSize: font.size.body }]}>{row.ask}</Text>
       {row.actions.length > 0 ? (

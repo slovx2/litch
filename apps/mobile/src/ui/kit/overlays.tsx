@@ -14,7 +14,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useT } from '../i18n'
 import { useTheme } from '../theme'
-import { Button } from './controls'
+import { Button, sectionFont } from './controls'
 
 export interface SheetAction {
   label: string
@@ -45,13 +45,19 @@ export function Sheet({
       <View
         style={[
           styles.sheet,
-          { backgroundColor: c.raised, borderColor: c.line3, paddingBottom: insets.bottom + 8 },
+          {
+            backgroundColor: c.raised,
+            borderColor: c.line3,
+            borderTopLeftRadius: theme.radius.l,
+            borderTopRightRadius: theme.radius.l,
+            paddingBottom: insets.bottom + 8,
+          },
         ]}
       >
         {title ? (
           <Text
             numberOfLines={2}
-            style={[styles.sheetTitle, { color: c.ink2, fontFamily: theme.font.mono }]}
+            style={[styles.sheetTitle, sectionFont(theme), { color: c.ink2 }]}
           >
             {title}
           </Text>
@@ -100,7 +106,8 @@ export function Dialog({
   onClose(): void
   children: ReactNode
 }) {
-  const { c } = useTheme()
+  const theme = useTheme()
+  const { c } = theme
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <KeyboardAvoidingView
@@ -108,7 +115,12 @@ export function Dialog({
         style={styles.center}
       >
         <Pressable style={styles.scrim} onPress={onClose} />
-        <View style={[styles.dialog, { backgroundColor: c.raised, borderColor: c.line3 }]}>
+        <View
+          style={[
+            styles.dialog,
+            { backgroundColor: c.raised, borderColor: c.line3, borderRadius: theme.radius.l },
+          ]}
+        >
           {children}
         </View>
       </KeyboardAvoidingView>
@@ -133,11 +145,12 @@ export function Confirm({
   onConfirm(): void
   onClose(): void
 }) {
-  const { c } = useTheme()
+  const theme = useTheme()
+  const { c } = theme
   const t = useT()
   return (
     <Dialog visible={visible} onClose={onClose}>
-      <Text style={[styles.dialogTitle, { color: c.ink }]}>{title}</Text>
+      <Text style={[styles.dialogTitle, { color: c.ink, fontFamily: theme.font.ui }]}>{title}</Text>
       {detail ? <Text style={[styles.dialogDetail, { color: c.ink2 }]}>{detail}</Text> : null}
       <View style={styles.dialogButtons}>
         <Button kind="plain" label={t('app.cancel')} onPress={onClose} />
@@ -187,7 +200,7 @@ export function Prompt({
   }
   return (
     <Dialog visible={visible} onClose={onClose}>
-      <Text style={[styles.dialogTitle, { color: c.ink }]}>{title}</Text>
+      <Text style={[styles.dialogTitle, { color: c.ink, fontFamily: theme.font.ui }]}>{title}</Text>
       <TextInput
         autoFocus
         value={value}
@@ -202,7 +215,13 @@ export function Prompt({
         testID="prompt:input"
         style={[
           styles.promptInput,
-          { color: c.ink, borderColor: c.line2, backgroundColor: c.panel, minHeight: theme.hit },
+          {
+            color: c.ink,
+            borderColor: c.line2,
+            borderRadius: theme.radius.m,
+            backgroundColor: c.panel,
+            minHeight: theme.hit,
+          },
         ]}
       />
       <View style={styles.dialogButtons}>

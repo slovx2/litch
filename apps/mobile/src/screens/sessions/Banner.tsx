@@ -51,7 +51,7 @@ export function DeviceBanner({ deviceId }: { deviceId: string }) {
           testID="sessions:reconnect"
           hitSlop={8}
           onPress={() => void channel.command('device.reconnect', { deviceId }).catch(() => {})}
-          style={[styles.retry, { borderColor: c.line3 }]}
+          style={[styles.retry, { borderColor: c.line3, borderRadius: theme.radius.m }]}
         >
           <Text style={[styles.retryText, { color: c.ink }]}>{t('sidebar.retry')}</Text>
         </Pressable>

@@ -109,7 +109,14 @@ export function FailureCard({
   const steps = stepsOf(failure, target)
   return (
     <View
-      style={[styles.failure, { borderColor: theme.c.err, backgroundColor: theme.c.raised }]}
+      style={[
+        styles.failure,
+        {
+          borderColor: theme.c.err,
+          backgroundColor: theme.c.raised,
+          borderRadius: theme.radius.l,
+        },
+      ]}
       testID={`failure:${failure.stage}`}
     >
       <Text style={[styles.failureStage, { color: theme.c.err }]}>
@@ -256,6 +263,7 @@ export function WirePicker({ value, onPick }: { value: WireColor; onPick(wire: W
             {
               backgroundColor: theme.c.wire[wire],
               borderColor: wire === value ? theme.c.line3 : 'transparent',
+              borderRadius: theme.radius.s,
             },
           ]}
         />

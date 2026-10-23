@@ -71,12 +71,13 @@ function Control({
                 styles.pick,
                 {
                   borderColor: wrong ? c.err : on ? c.line3 : c.line2,
-                  backgroundColor: on ? c.invBg : c.panel,
+                  backgroundColor: on ? c.selBg : c.panel,
+                  borderRadius: theme.radius.m,
                   minHeight: theme.hit - 8,
                 },
               ]}
             >
-              <Text style={{ color: on ? c.invFg : c.ink, fontSize: 14 }}>{option.label}</Text>
+              <Text style={{ color: on ? c.selFg : c.ink, fontSize: 14 }}>{option.label}</Text>
             </Pressable>
           )
         })}
@@ -116,6 +117,7 @@ function Control({
           color: c.ink,
           borderColor: wrong ? c.err : c.line2,
           backgroundColor: c.panel,
+          borderRadius: theme.radius.m,
           minHeight: theme.hit,
         },
       ]}

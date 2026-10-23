@@ -106,6 +106,7 @@ function SummaryLine({
                 color: down ? c.ink3 : c.ink2,
                 borderColor: down ? c.line1 : c.line2,
                 fontFamily: theme.font.mono,
+                borderRadius: theme.radius.s,
                 textDecorationLine: down ? 'line-through' : 'none',
               },
             ]}
@@ -117,7 +118,12 @@ function SummaryLine({
               testID={`${testID}:task`}
               style={[
                 styles.badge,
-                { color: c.ink2, borderColor: c.line2, fontFamily: theme.font.mono },
+                {
+                  color: c.ink2,
+                  borderColor: c.line2,
+                  fontFamily: theme.font.mono,
+                  borderRadius: theme.radius.s,
+                },
               ]}
             >
               ⏱ {t('timed.mark')}

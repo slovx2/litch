@@ -85,7 +85,11 @@ export const AskCell = memo(function AskCell({
       testID={`ask:${itemId}`}
       style={[
         styles.card,
-        { borderColor: state === 'open' ? c.line3 : c.line2, backgroundColor: c.raised },
+        {
+          borderColor: state === 'open' ? c.line3 : c.line2,
+          backgroundColor: c.raised,
+          borderRadius: theme.radius.l,
+        },
       ]}
     >
       <View style={styles.head}>
@@ -134,11 +138,12 @@ export const AskCell = memo(function AskCell({
                         {
                           minHeight: theme.hit,
                           borderColor: checked ? c.line3 : c.line2,
-                          backgroundColor: checked ? c.invBg : pressed ? c.press : c.panel,
+                          borderRadius: theme.radius.m,
+                          backgroundColor: checked ? c.selBg : pressed ? c.press : c.panel,
                         },
                       ]}
                     >
-                      <Text style={{ color: checked ? c.invFg : c.ink, fontSize: 15 }}>
+                      <Text style={{ color: checked ? c.selFg : c.ink, fontSize: 15 }}>
                         {checked ? '◉ ' : '○ '}
                         {option}
                       </Text>
@@ -161,6 +166,7 @@ export const AskCell = memo(function AskCell({
                       color: c.ink,
                       borderColor: c.line2,
                       backgroundColor: c.panel,
+                      borderRadius: theme.radius.m,
                       minHeight: theme.hit,
                     },
                   ]}

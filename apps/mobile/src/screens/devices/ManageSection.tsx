@@ -46,7 +46,12 @@ export function HarnessList({ device }: { device: DeviceView }) {
   const t = useT()
   return device.harnesses.map((harness) => (
     <View key={harness.id} style={styles.head} testID={`harness:${harness.id}`}>
-      <Text style={[styles.badge, { color: theme.c.ink, borderColor: theme.c.line2 }]}>
+      <Text
+        style={[
+          styles.badge,
+          { color: theme.c.ink, borderColor: theme.c.line2, borderRadius: theme.radius.s },
+        ]}
+      >
         {harness.badge}
       </Text>
       <View style={styles.grow}>
@@ -256,7 +261,12 @@ function HarnessHead({
   return (
     <View>
       <View style={styles.head} testID={`harness:${harness.id}`}>
-        <Text style={[styles.badge, { color: theme.c.ink, borderColor: theme.c.line2 }]}>
+        <Text
+          style={[
+            styles.badge,
+            { color: theme.c.ink, borderColor: theme.c.line2, borderRadius: theme.radius.s },
+          ]}
+        >
           {harness.badge}
         </Text>
         <View style={styles.grow}>

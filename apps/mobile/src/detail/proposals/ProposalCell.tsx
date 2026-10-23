@@ -89,6 +89,7 @@ export const ProposalCell = memo(function ProposalCell({ row }: Props<'proposal'
         {
           borderColor: lit ? c.accent : waiting || choosing ? c.line3 : c.line2,
           borderWidth: lit ? 2 : 1,
+          borderRadius: theme.radius.l,
           backgroundColor: c.raised,
         },
       ]}
@@ -126,7 +127,12 @@ export const ProposalCell = memo(function ProposalCell({ row }: Props<'proposal'
               <Text
                 style={[
                   styles.badge,
-                  { color: c.ink2, borderColor: c.line2, fontFamily: font.mono },
+                  {
+                    color: c.ink2,
+                    borderColor: c.line2,
+                    fontFamily: font.mono,
+                    borderRadius: theme.radius.s,
+                  },
                 ]}
               >
                 {badgeOf(device, harness)}

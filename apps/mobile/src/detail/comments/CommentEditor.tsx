@@ -59,7 +59,13 @@ export function CommentEditor({
         testID="comment-editor:note"
         style={[
           styles.input,
-          { color: c.ink, borderColor: c.line2, backgroundColor: c.panel, minHeight: theme.hit },
+          {
+            color: c.ink,
+            borderColor: c.line2,
+            backgroundColor: c.panel,
+            borderRadius: theme.radius.m,
+            minHeight: theme.hit,
+          },
         ]}
       />
       <View style={styles.buttons}>

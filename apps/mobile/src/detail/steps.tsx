@@ -167,12 +167,15 @@ export function sizeOf(bytes: number): string {
 
 /** 等宽的一块字，长行横着滑，不折行 */
 function Well({ children }: { children: ReactNode }) {
-  const { c } = useTheme()
+  const { c, radius } = useTheme()
   return (
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
-      style={[styles.well, { backgroundColor: c.sunken, borderColor: c.line1 }]}
+      style={[
+        styles.well,
+        { backgroundColor: c.sunken, borderColor: c.line1, borderRadius: radius.l },
+      ]}
       contentContainerStyle={styles.wellInner}
     >
       <View>{children}</View>
@@ -322,7 +325,7 @@ function ToolDetail({ row }: Props<'step'>) {
 }
 
 function Parts({ title, parts, tone }: { title: string; parts: ToolPart[]; tone?: 'err' }) {
-  const { c, font } = useTheme()
+  const { c, font, radius } = useTheme()
   const t = useT()
   const { viewImage } = useTranscript()
   let budget = TOOL_CHARS
@@ -360,7 +363,10 @@ function Parts({ title, parts, tone }: { title: string; parts: ToolPart[]; tone?
       shown.push(
         part.src && shots++ < TOOL_SHOTS ? (
           <Pressable onPress={() => part.src && viewImage(part.src)}>
-            <Image source={{ uri: part.src }} style={[styles.shot, { borderColor: c.line2 }]} />
+            <Image
+              source={{ uri: part.src }}
+              style={[styles.shot, { borderColor: c.line2, borderRadius: radius.s }]}
+            />
           </Pressable>
         ) : (
           <Text style={[styles.code, { fontFamily: font.mono, color: c.ink3 }]}>[{desc}]</Text>

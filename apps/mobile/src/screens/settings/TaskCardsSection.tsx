@@ -20,8 +20,6 @@ import { useBusy, useChannel, useKey, useReplica } from '../../shell/services'
 import { type Key, useT } from '../../ui/i18n'
 import { useTheme } from '../../ui/theme'
 
-const MARK: Record<CellState, string> = { on: '[x]', off: '[ ]', mixed: '[-]', unknown: ' – ' }
-
 const NO_DEVICES: readonly string[] = []
 
 export function TaskCardsSection() {
@@ -94,7 +92,7 @@ function DeviceRows({ deviceId }: { deviceId: string }) {
         <Text
           style={[styles.markText, { color: locked ? c.ink3 : c.ink, fontFamily: theme.font.mono }]}
         >
-          {MARK[state]}
+          {state === 'unknown' ? ' – ' : theme.check[state]}
         </Text>
       </Pressable>
     )

@@ -16,7 +16,7 @@ function Mini({
   testID: string
   muted?: boolean
 }) {
-  const { c } = useTheme()
+  const { c, radius } = useTheme()
   return (
     <Pressable
       accessibilityRole="button"
@@ -25,7 +25,11 @@ function Mini({
       onPress={onPress}
       style={({ pressed }) => [
         styles.mini,
-        { borderColor: c.line2, backgroundColor: pressed ? c.press : 'transparent' },
+        {
+          borderColor: c.line2,
+          backgroundColor: pressed ? c.press : 'transparent',
+          borderRadius: radius.s,
+        },
       ]}
     >
       <Text style={[styles.miniText, { color: muted ? c.ink3 : c.ink }]}>{label}</Text>

@@ -115,6 +115,7 @@ export function AccountsTab({
                       color: c.ink,
                       backgroundColor: c.raised,
                       borderColor: c.line2,
+                      borderRadius: theme.radius.m,
                       minHeight: theme.hit,
                     },
                   ]}

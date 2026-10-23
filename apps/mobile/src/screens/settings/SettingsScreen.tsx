@@ -10,7 +10,7 @@ import { type Prefs, useServices } from '../../shell/services'
 import { type Key, useT } from '../../ui/i18n'
 import { SectionLabel } from '../../ui/kit/controls'
 import { Screen } from '../../ui/kit/Screen'
-import { useTheme } from '../../ui/theme'
+import { SKINS, type Skin, useTheme } from '../../ui/theme'
 import { CURRENT_VERSION } from '../../update/store'
 import { TaskCardsSection } from './TaskCardsSection'
 import { AutoUpdateSwitch, UpdateStatus } from './UpdateSection'
@@ -47,16 +47,23 @@ function Choices<V extends string>({
               {
                 minHeight: theme.hit,
                 borderBottomColor: c.line1,
-                backgroundColor: on ? c.invBg : pressed ? c.press : c.panel,
+                backgroundColor: on ? c.selBg : pressed ? c.press : c.panel,
               },
             ]}
           >
             <Text
-              style={[styles.mark, { color: on ? c.invFg : c.ink3, fontFamily: theme.font.mono }]}
+              style={[styles.mark, { color: on ? c.selFg : c.ink3, fontFamily: theme.font.mono }]}
             >
-              {on ? '[x]' : '[ ]'}
+              {on ? theme.radio.on : theme.radio.off}
             </Text>
-            <Text style={[styles.choiceText, { color: on ? c.invFg : c.ink }]}>{option.label}</Text>
+            <Text
+              style={[
+                styles.choiceText,
+                { color: on ? c.selFg : c.ink, fontFamily: theme.font.ui },
+              ]}
+            >
+              {option.label}
+            </Text>
           </Pressable>
         )
       })}
@@ -67,6 +74,12 @@ function Choices<V extends string>({
 function Note({ children }: { children: ReactNode }) {
   const { c } = useTheme()
   return <Text style={[styles.note, { color: c.ink3 }]}>{children}</Text>
+}
+
+const SKIN_LABEL: Record<Skin, Key> = {
+  retro: 'skin.retro',
+  human: 'skin.human',
+  standard: 'skin.standard',
 }
 
 const BOOT_LABEL: Record<BootMode, Key> = {
@@ -106,6 +119,14 @@ export function SettingsScreen(_props: Props) {
             { value: 'dark', label: t('theme.dark') },
           ]}
           onPick={(appearance) => setPrefs({ appearance })}
+        />
+
+        <SectionLabel>{t('look.skin')}</SectionLabel>
+        <Choices<Skin>
+          name="skin"
+          value={prefs.skin}
+          options={SKINS.map((skin) => ({ value: skin, label: t(SKIN_LABEL[skin]) }))}
+          onPick={(skin) => setPrefs({ skin })}
         />
 
         <SectionLabel>{t('switches.col.taskCards')}</SectionLabel>

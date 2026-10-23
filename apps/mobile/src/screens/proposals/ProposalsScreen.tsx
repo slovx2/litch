@@ -130,7 +130,15 @@ function ProposalRow({
         <View style={styles.line}>
           {proposal.harness ? (
             <Text
-              style={[styles.badge, { color: c.ink2, borderColor: c.line2, fontFamily: font.mono }]}
+              style={[
+                styles.badge,
+                {
+                  color: c.ink2,
+                  borderColor: c.line2,
+                  fontFamily: font.mono,
+                  borderRadius: theme.radius.s,
+                },
+              ]}
             >
               {badgeOf(device, proposal.harness)}
             </Text>

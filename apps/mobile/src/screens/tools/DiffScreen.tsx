@@ -176,11 +176,12 @@ function Scopes({ scope, onPick }: { scope: DiffScope; onPick(scope: DiffScope):
               {
                 minHeight: theme.hit - 8,
                 borderColor: c.line3,
-                backgroundColor: on ? c.invBg : 'transparent',
+                borderRadius: theme.radius.m,
+                backgroundColor: on ? c.selBg : 'transparent',
               },
             ]}
           >
-            <Text style={{ color: on ? c.invFg : c.ink, fontSize: theme.font.size.meta }}>
+            <Text style={{ color: on ? c.selFg : c.ink, fontSize: theme.font.size.meta }}>
               {t(`diffs.scope.${one}`)}
             </Text>
           </Pressable>

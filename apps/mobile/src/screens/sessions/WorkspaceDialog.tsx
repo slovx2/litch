@@ -109,6 +109,7 @@ export function WorkspaceDialog({
           {
             borderColor: on ? c.line3 : c.line1,
             borderWidth: on ? 2 : 1,
+            borderRadius: theme.radius.s,
             backgroundColor: value ? c.wire[value] : c.raised,
           },
         ]}
@@ -125,7 +126,12 @@ export function WorkspaceDialog({
         style={styles.center}
       >
         <Pressable style={styles.scrim} onPress={onClose} />
-        <View style={[styles.dialog, { backgroundColor: c.raised, borderColor: c.line3 }]}>
+        <View
+          style={[
+            styles.dialog,
+            { backgroundColor: c.raised, borderColor: c.line3, borderRadius: theme.radius.l },
+          ]}
+        >
           <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.body}>
             <Text style={[styles.title, { color: c.ink }]}>
               {t(adding ? 'workspace.add.title' : 'workspace.edit.title')}
@@ -153,7 +159,11 @@ export function WorkspaceDialog({
                         onPress={() => setRoot(path)}
                         style={({ pressed }) => [
                           styles.candidate,
-                          { borderColor: c.line1, backgroundColor: pressed ? c.press : c.panel },
+                          {
+                            borderColor: c.line1,
+                            backgroundColor: pressed ? c.press : c.panel,
+                            borderRadius: theme.radius.m,
+                          },
                         ]}
                       >
                         <Text

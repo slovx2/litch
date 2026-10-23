@@ -93,7 +93,7 @@ export function RemoveDevice({
           onPress={() => setRevoke((value) => !value)}
         >
           <Text style={[styles.box, { color: theme.c.ink, fontFamily: theme.font.mono }]}>
-            {revoke ? '[x]' : '[ ]'}
+            {revoke ? theme.check.on : theme.check.off}
           </Text>
           <Text style={[styles.detail, styles.checkLabel, { color: theme.c.ink }]}>
             {t('pair.revoke')}

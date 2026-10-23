@@ -78,7 +78,15 @@ export function Card({
   return (
     <View
       testID={testID}
-      style={[styles.card, { maxHeight, backgroundColor: c.raised, borderColor: c.wait }]}
+      style={[
+        styles.card,
+        {
+          maxHeight,
+          backgroundColor: c.raised,
+          borderColor: c.wait,
+          borderRadius: theme.radius.l,
+        },
+      ]}
     >
       <View style={[styles.head, { borderBottomColor: c.line1 }]}>
         <Text style={[styles.mark, { color: c.wait }]}>◆</Text>
@@ -151,6 +159,7 @@ export function CardButton({
           minHeight: theme.hit - 4,
           backgroundColor: bg,
           borderColor: border,
+          borderRadius: theme.radius.m,
           opacity: disabled ? 0.45 : pressed ? 0.75 : 1,
         },
       ]}
@@ -164,7 +173,16 @@ export function CardButton({
 export function Well({ children }: { children: string }) {
   const theme = useTheme()
   return (
-    <View style={[styles.well, { backgroundColor: theme.c.sunken, borderColor: theme.c.line1 }]}>
+    <View
+      style={[
+        styles.well,
+        {
+          backgroundColor: theme.c.sunken,
+          borderColor: theme.c.line1,
+          borderRadius: theme.radius.l,
+        },
+      ]}
+    >
       <Text
         selectable
         style={[styles.wellText, { color: theme.c.ink, fontFamily: theme.font.mono }]}
@@ -191,7 +209,13 @@ export function Why({ children, tone }: { children: string; tone?: 'err' }) {
 }
 
 const styles = StyleSheet.create({
-  card: { marginHorizontal: 8, marginBottom: 6, borderWidth: 1, borderLeftWidth: 3 },
+  card: {
+    marginHorizontal: 8,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderLeftWidth: 3,
+    overflow: 'hidden',
+  },
   head: {
     flexDirection: 'row',
     alignItems: 'center',

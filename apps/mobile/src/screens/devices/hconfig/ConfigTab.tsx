@@ -177,7 +177,10 @@ export function ConfigTab({
     <View style={styles.fill} testID="hc:tab:config">
       <KeyboardAwareScrollView keyboardShouldPersistTaps="handled" bottomOffset={24}>
         {moved ? (
-          <View style={[styles.moved, { borderColor: c.wait }]} testID="hc:moved">
+          <View
+            style={[styles.moved, { borderColor: c.wait, borderRadius: theme.radius.l }]}
+            testID="hc:moved"
+          >
             <Note text={t('hc.moved')} tone="wait" />
             <View style={styles.acts}>
               <Chip label={t('manage.conflict.keepMine')} onPress={() => setBase(slot.revision)} />

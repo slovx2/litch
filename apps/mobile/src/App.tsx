@@ -60,7 +60,7 @@ export default function App() {
   }, [])
   const scheme = useColorScheme()
   const isDark = prefs.appearance === 'system' ? scheme === 'dark' : prefs.appearance === 'dark'
-  const theme = useMemo(() => makeTheme(isDark), [isDark])
+  const theme = useMemo(() => makeTheme(prefs.skin, isDark), [prefs.skin, isDark])
   const lang = prefs.lang === 'system' ? systemLang() : prefs.lang
   const t = useMemo(() => translator(lang), [lang])
   const { booted, error, retry } = useBooted(prefs, lang)

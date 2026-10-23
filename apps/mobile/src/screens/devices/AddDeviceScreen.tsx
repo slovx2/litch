@@ -41,7 +41,10 @@ function CheckResult({ result }: { result: Extract<RemoteCheck, { ok: true }> })
   }
   return (
     <View
-      style={[styles.result, { borderColor: theme.c.ok, backgroundColor: theme.c.raised }]}
+      style={[
+        styles.result,
+        { borderColor: theme.c.ok, backgroundColor: theme.c.raised, borderRadius: theme.radius.l },
+      ]}
       testID={`check:${result.peer}`}
     >
       {lines.map((line) => (

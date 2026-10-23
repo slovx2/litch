@@ -5,6 +5,6 @@ console.log(
   `[自检] with=${typeof [].with} findLast=${typeof [].findLast} toSpliced=${typeof [].toSpliced} hermes=${typeof HermesInternal}`,
 )
 
-import App from './src/App'
+import Root from './src/Root'
 
-registerRootComponent(App)
+registerRootComponent(Root)

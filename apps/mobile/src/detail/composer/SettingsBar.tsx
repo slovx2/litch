@@ -38,6 +38,7 @@ function Chip({ label, onPress, testID }: { label: string; onPress?(): void; tes
         styles.chip,
         {
           borderColor: c.line2,
+          borderRadius: theme.radius.s,
           backgroundColor: pressed ? c.press : 'transparent',
         },
       ]}
@@ -71,6 +72,7 @@ function PlanSwitch({ on, onPress }: { on: boolean; onPress(): void }) {
         styles.mode,
         {
           borderColor: on ? c.line3 : c.line2,
+          borderRadius: theme.radius.s,
           backgroundColor: pressed ? c.press : 'transparent',
         },
       ]}
@@ -79,7 +81,8 @@ function PlanSwitch({ on, onPress }: { on: boolean; onPress(): void }) {
         style={[
           styles.track,
           {
-            borderRadius: theme.radius,
+            // 开关在有圆角的皮肤里是胶囊形
+            borderRadius: theme.radius.s ? 999 : 0,
             borderColor: on ? c.accentSolid : c.line3,
             backgroundColor: on ? c.accentSolid : c.sunken,
             alignItems: on ? 'flex-end' : 'flex-start',
@@ -89,7 +92,7 @@ function PlanSwitch({ on, onPress }: { on: boolean; onPress(): void }) {
         <View
           style={[
             styles.knob,
-            { borderRadius: theme.radius, backgroundColor: on ? c.onAccent : c.ink3 },
+            { borderRadius: theme.radius.s ? 999 : 0, backgroundColor: on ? c.onAccent : c.ink3 },
           ]}
         />
       </View>

@@ -42,7 +42,7 @@ function Option({
 }) {
   const theme = useTheme()
   const { c } = theme
-  const ink = checked ? c.invFg : c.ink
+  const ink = checked ? c.selFg : c.ink
   return (
     <Pressable
       accessibilityRole="radio"
@@ -55,7 +55,8 @@ function Option({
         {
           minHeight: theme.hit,
           borderColor: checked ? c.line3 : c.line2,
-          backgroundColor: checked ? c.invBg : pressed ? c.press : c.panel,
+          borderRadius: theme.radius.m,
+          backgroundColor: checked ? c.selBg : pressed ? c.press : c.panel,
         },
       ]}
     >
@@ -64,7 +65,7 @@ function Option({
         {title}
       </Text>
       {note ? (
-        <Text style={[styles.optionNote, { color: checked ? c.invFg : c.ink2 }]}>{note}</Text>
+        <Text style={[styles.optionNote, { color: checked ? c.selFg : c.ink2 }]}>{note}</Text>
       ) : null}
     </Pressable>
   )
@@ -237,13 +238,14 @@ export function QuestionCard(props: CardProps<QuestionRequest>) {
                   styles.step,
                   {
                     borderColor: index === page ? c.line3 : c.line1,
-                    backgroundColor: index === page ? c.invBg : 'transparent',
+                    borderRadius: theme.radius.s,
+                    backgroundColor: index === page ? c.selBg : 'transparent',
                   },
                 ]}
               >
                 <Text
                   style={{
-                    color: index === page ? c.invFg : c.ink2,
+                    color: index === page ? c.selFg : c.ink2,
                     fontFamily: theme.font.mono,
                     fontSize: 12,
                   }}
@@ -296,7 +298,13 @@ export function QuestionCard(props: CardProps<QuestionRequest>) {
           testID="request:other"
           style={[
             styles.input,
-            { color: c.ink, borderColor: c.line2, backgroundColor: c.panel, minHeight: theme.hit },
+            {
+              color: c.ink,
+              borderColor: c.line2,
+              backgroundColor: c.panel,
+              borderRadius: theme.radius.m,
+              minHeight: theme.hit,
+            },
           ]}
         />
       ) : null}

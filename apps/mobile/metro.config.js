@@ -19,10 +19,19 @@ config.resolver.sourceExts = [...config.resolver.sourceExts, 'mts']
 // 核心那边没有 node_modules，它引用的第三方包（没有）和这边共用一份
 config.resolver.nodeModulesPaths = [path.join(__dirname, 'node_modules')]
 
+// 网页上的界面预览（src/preview/）：react-native-webview 没有网页版，换成 iframe 的替身；
+// react-native-enriched-markdown 的网页版补上 onLayout。只在打网页包时换
+const WEB_STANDINS = {
+  'react-native-webview': path.join(__dirname, 'src/preview/webview.web.tsx'),
+  'react-native-enriched-markdown': path.join(__dirname, 'src/preview/markdown.web.tsx'),
+}
+
 const fallback = config.resolver.resolveRequest
 config.resolver.resolveRequest = (context, moduleName, platform) => {
   // 共用的界面代码按包名引用核心
   if (moduleName === '@litch/core') return { type: 'sourceFile', filePath: CORE_ENTRY }
+  if (platform === 'web' && Object.hasOwn(WEB_STANDINS, moduleName))
+    return { type: 'sourceFile', filePath: WEB_STANDINS[moduleName] }
   if (moduleName.startsWith('.') && moduleName.endsWith('.mjs')) {
     const candidate = path.resolve(
       path.dirname(context.originModulePath),

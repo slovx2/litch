@@ -49,7 +49,7 @@ export function BackgroundBar({ store }: { store: SessionStore }) {
           onPress={() => setOpen(true)}
           onPressIn={() => setPressed(true)}
           onPressOut={() => setPressed(false)}
-          style={[styles.bar, { borderColor: c.accent, borderRadius: theme.radius }]}
+          style={[styles.bar, { borderColor: c.accent, borderRadius: theme.radius.m }]}
         >
           <Animated.View
             pointerEvents="none"

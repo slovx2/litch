@@ -29,6 +29,7 @@ import {
   saveDraftImages,
   subscribeDraftComments,
 } from './drafts'
+import { useGrow } from './grow'
 import { MAX_IMAGE_MB, MAX_IMAGES, pickImages, REFUSAL_TEXT } from './images'
 
 export interface Draft {
@@ -143,6 +144,7 @@ export function ComposeBox({
   const [sending, setSending] = useState(false)
   const own = useRef<TextInput>(null)
   const input = inputRef ?? own
+  const grow = useGrow(input, draft.text)
   const filled =
     draft.text.trim().length > 0 || draft.images.length > 0 || draft.comments.length > 0
   const mode = filled ? (running ? 'queue' : 'send') : running && onStop ? 'stop' : 'send'
@@ -220,7 +222,7 @@ export function ComposeBox({
             <View
               // biome-ignore lint/suspicious/noArrayIndexKey: 同一张图可以加两次，缩略图没有自己的状态
               key={`${index}:${image.url.length}`}
-              style={[styles.thumb, { borderColor: c.line2 }]}
+              style={[styles.thumb, { borderColor: c.line2, borderRadius: theme.radius.s }]}
             >
               <Image source={{ uri: image.url }} style={styles.thumbImage} resizeMode="cover" />
               <Pressable
@@ -244,7 +246,7 @@ export function ComposeBox({
           testID={`${testID}-image`}
           hitSlop={6}
           onPress={() => void addImages()}
-          style={[styles.side, { borderColor: c.line2 }]}
+          style={[styles.side, { borderColor: c.line2, borderRadius: theme.radius.m }]}
         >
           <Text style={[styles.sideText, { color: imagesOff ? c.ink3 : c.ink }]}>＋</Text>
         </Pressable>
@@ -255,6 +257,7 @@ export function ComposeBox({
           placeholder={placeholder}
           placeholderTextColor={c.ink3}
           multiline
+          {...grow}
           testID={`${testID}-input`}
           style={[
             styles.input,
@@ -262,7 +265,9 @@ export function ComposeBox({
               color: c.ink,
               backgroundColor: c.raised,
               borderColor: c.line2,
+              borderRadius: theme.radius.m,
               fontSize: theme.font.size.body,
+              fontFamily: theme.font.ui,
             },
           ]}
         />
@@ -274,6 +279,7 @@ export function ComposeBox({
           style={({ pressed }) => [
             styles.send,
             {
+              borderRadius: theme.radius.m,
               backgroundColor: mode === 'stop' ? 'transparent' : c.accentSolid,
               borderColor: mode === 'stop' ? c.err : c.accentSolid,
               opacity: mode !== 'stop' && (!filled || blocked) ? 0.45 : pressed ? 0.75 : 1,
@@ -330,6 +336,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     paddingHorizontal: 10,
     paddingVertical: 8,
+    lineHeight: 22,
     textAlignVertical: 'top',
   },
   send: {
