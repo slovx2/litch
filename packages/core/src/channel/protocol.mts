@@ -363,15 +363,20 @@ export interface Commands {
    * 应答时新会话已经在侧栏里。有回合在进行时不能分叉。
    */
   'session.fork': {
-    params: { deviceId: string; sessionId: string; turnId: string }
+    /**
+     * 不带 itemId：带上到 turnId 这个回合为止（含这一回合）。带 itemId（这个回合里插进去的一条用户消息）：
+     * 这一回合只带到它之前。要会话的 can.cutInTurn
+     */
+    params: { deviceId: string; sessionId: string; turnId: string; itemId?: string }
     result: { sessionId: string }
   }
   /**
    * 回退：把 turnId 这个回合和它后面的回合都从会话里撤掉，找不回来。
    * 只改会话的历史，已经对文件做的改动不会还原。有回合在进行时不能回退。
+   * 带 itemId（这个回合里插进去的一条用户消息）时只撤掉它和它之后的，这一回合前面的留着。要会话的 can.cutInTurn
    */
   'session.rollback': {
-    params: { deviceId: string; sessionId: string; turnId: string }
+    params: { deviceId: string; sessionId: string; turnId: string; itemId?: string }
     result: Record<string, never>
   }
   /**

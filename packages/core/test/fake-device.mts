@@ -433,6 +433,7 @@ export function fakeDevice(harnesses: FakeHarness[]): {
       return { thread: stamp(entry, forked) }
     }),
     'thread/compact/start': byThread('thread/compact/start', () => ({})),
+    'thread/revert': byThread('thread/revert', (entry, found) => ({ thread: stamp(entry, found) })),
     'turn/start': byThread('turn/start', () => {
       if (device.turnFailure) throw device.turnFailure
       return { turn: turn(`srv-${++device.turnSeq}`, [], { status: 'inProgress' }) }

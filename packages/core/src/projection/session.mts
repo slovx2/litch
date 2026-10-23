@@ -32,6 +32,7 @@ export const ALL_ABLE: SessionAbilities = {
   compact: true,
   steer: true,
   steerImages: true,
+  cutInTurn: false,
   finalOnStart: false,
   backgroundTasks: false,
   // 持续目标只认声明：没有声明可看时不出入口

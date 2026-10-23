@@ -189,6 +189,7 @@ import {
 import { resolveShellEnvironmentPolicy, type ShellEnvironmentPolicy } from './shell-environment.mjs'
 import { layeredSkillRules, skillRules } from './skill-config.mjs'
 import { SkillsRpc } from './skills-rpc.mjs'
+import { readCutBeforeSteer } from './steer-cut.mjs'
 import { PINNED_SECTION_ID, type SessionStore, type StoredNativeToolIntent } from './store.mjs'
 import {
   relayRuntimeEvents,
@@ -296,6 +297,12 @@ function subagentWatchdogTimeoutMs(env: NodeJS.ProcessEnv = process.env): number
 }
 
 type TurnItemsView = 'full' | 'summary' | 'notLoaded'
+
+/** 切在回合中间：被切开的回合，和原生记录里切到哪条消息为止（steer-cut.mts） */
+interface SteerCut {
+  turnId: string
+  messageId: string
+}
 
 interface SubagentContext {
   childThreadId: string
@@ -1493,8 +1500,13 @@ export class CodexClaudeAppServer {
     // 位置参数（lastTurnId / beforeTurnId）决定带走哪些回合；源线程的回合、原生会话和进程都不动。
     const parentTurns = this.store.listTurns(parentId)
     const retained = forkRetainedTurns(parentTurns, position)
-    const nativeFork = await this.forkNativeHistory(parent, parentTurns, retained)
-    const boundaries = this.remapNativeBoundaries(retained, nativeFork)
+    // 切在回合中间：原生会话复制到那条插话之前，被切开的那一回合记这个位置
+    const cut =
+      position?.kind === 'beforeItem' && retained.at(-1)?.id === position.turnId
+        ? this.steerCut(parent, position.turnId, position.itemId)
+        : null
+    const nativeFork = await this.forkNativeHistory(parent, parentTurns, retained, cut)
+    const boundaries = this.remapNativeBoundaries(retained, nativeFork, cut)
     const now = nowSeconds()
     const id = newId()
     const requestedCwd = stringOr(params.cwd, parent.cwd)
@@ -2847,8 +2859,10 @@ export class CodexClaudeAppServer {
     parent: ThreadRecord,
     parentTurns: TurnRecord[],
     retained: TurnRecord[],
+    cut: SteerCut | null = null,
   ): Promise<NativeSessionFork | null> {
     if (!parent.claudeSessionId) return null
+    if (cut) return this.forkNativeSession(parent, cut.messageId)
     if (retained.length === parentTurns.length) return this.forkNativeSession(parent)
     const last = retained.at(-1)
     if (!last) return null
@@ -2860,17 +2874,29 @@ export class CodexClaudeAppServer {
   private remapNativeBoundaries(
     turns: TurnRecord[],
     fork: NativeSessionFork | null,
+    cut: SteerCut | null = null,
   ): Map<string, string> {
     const result = new Map<string, string>()
     if (!fork) return result
     for (const turn of turns) {
-      const old = this.store.nativeBoundary(turn.id)
+      const old = cut?.turnId === turn.id ? cut.messageId : this.store.nativeBoundary(turn.id)
       if (!old) continue
       const mapped = fork.messageIds[old]
       if (!mapped) throw new ProtocolError(-32000, '原生分叉缺少保留回合的消息边界')
       result.set(turn.id, mapped)
     }
     return result
+  }
+
+  /**
+   * 回合 turnId 里那条插话 itemId 在原生记录里的切口（steer-cut.mts）。没有原生会话的是 null：
+   * 历史只在库里，切库里的就够了。有原生会话却找不到的报错，不去猜位置
+   */
+  private steerCut(thread: ThreadRecord, turnId: string, itemId: string): SteerCut | null {
+    if (!thread.claudeSessionId) return null
+    const messageId = readCutBeforeSteer(thread.claudeSessionId, itemId)
+    if (!messageId) throw new ProtocolError(-32000, '原生记录里找不到这条插话的位置，不能切在这里')
+    return { turnId, messageId }
   }
 
   private async threadRollback(params: Record<string, unknown>): Promise<unknown> {
@@ -2910,9 +2936,21 @@ export class CodexClaudeAppServer {
     const turns = this.store.listTurns(threadId)
     const index = turns.findIndex((turn) => turn.id === beforeTurnId)
     if (index < 0) throw new ProtocolError(-32602, 'beforeTurnId 不属于此会话的当前历史')
+    const beforeItemId =
+      params.beforeItemId == null ? null : requiredString(params.beforeItemId, 'beforeItemId')
+    const retained =
+      beforeItemId === null
+        ? null
+        : forkRetainedTurns(turns, {
+            kind: 'beforeItem',
+            turnId: beforeTurnId,
+            itemId: beforeItemId,
+          })
+    // 切在回合中间（留下了被切开的那一回合的前半段）走自己的路；切在回合开头的和按回合退一样
+    if (retained && retained.length > index) await this.revertIntoTurn(threadId, turns, retained)
     // 两种 historyMode 共用同一持久化历史；保留原模式，不阻断旧会话使用新入口。
     // 原生分叉与 SQLite 提交共用旧入口的事务，文件系统副作用不回退。
-    await this.threadRollback({ threadId, numTurns: turns.length - index })
+    else await this.threadRollback({ threadId, numTurns: turns.length - index })
     const thread = this.store.getThread(threadId)!
     setImmediate(() =>
       this.notifyThread(threadId, {
@@ -2924,6 +2962,43 @@ export class CodexClaudeAppServer {
       thread: this.toThread(thread, []),
       ...historyHeadCursors(threadId, this.store.listTurns(threadId)),
     }
+  }
+
+  /**
+   * 回退到回合中间那条插话之前：原生会话复制到插话前的那条消息，被切开的回合只留前半段，它后面的回合都不要。
+   * 和按回合退一样先结束握着旧原生会话的进程；文件改动不还原
+   */
+  private async revertIntoTurn(
+    threadId: string,
+    turns: TurnRecord[],
+    retained: TurnRecord[],
+  ): Promise<void> {
+    const thread = this.store.getThread(threadId)
+    if (!thread) throw new ProtocolError(-32602, '未知会话')
+    if (this.sessionHolder(threadId) || this.interruptingByThread.has(threadId))
+      throw new ProtocolError(-32009, '活动会话不能回退')
+    this.assertNotOwned(threadId)
+    const kept = retained.at(-1)!
+    const original = turns[retained.length - 1]!
+    const removed = original.items.slice(kept.items.length)
+    const cut = this.steerCut(thread, kept.id, removed[0]!.id)
+    await this.runtime.closeSession?.(threadId, '会话已回退')
+    let nativeFork: NativeSessionFork | null = null
+    if (cut) {
+      nativeFork = await this.forkNativeSession(thread, cut.messageId)
+      thread.claudeSessionId = nativeFork.sessionId
+    }
+    const boundaries = this.remapNativeBoundaries(retained, nativeFork, cut)
+    const dropped = this.store.commitRollback(thread, turns.length - retained.length, boundaries, {
+      turn: kept,
+      removed,
+    })
+    debugLog('thread.revertIntoTurn', {
+      threadId,
+      turnId: kept.id,
+      removed: removed.length,
+      dropped,
+    })
   }
 
   private threadShellCommand(peer: RpcPeer, params: Record<string, unknown>): unknown {
@@ -3180,7 +3255,7 @@ export class CodexClaudeAppServer {
     }
     // 先送进去再落库：送不进去时这条消息不能留下“已提交”的记录。
     try {
-      await this.runtime.steer(threadId, this.inputPrompt(threadId, input))
+      await this.runtime.steer(threadId, this.inputPrompt(threadId, input), item.id)
     } catch (error) {
       if (!(error instanceof ProtocolError) || error.code !== -32009) throw error
       // 那一轮刚好结束：等它收尾完，按普通回合提交。
@@ -6476,7 +6551,8 @@ export class CodexClaudeAppServer {
     }
     this.store.saveSteeredMessage(activeTurnId, item, messageId, hash)
     try {
-      await this.runtime.steer(threadId, prompt)
+      // 条目的标识就是交给 CLI 的消息标识：以后切在这条插话之前时按它在原生记录里找位置
+      await this.runtime.steer(threadId, prompt, item.id)
     } catch (error) {
       // 运行时已经在收尾、不再收输入（上游同样拒绝往收尾中的回合里插话）：这句话没进回合，别留在记录里
       this.store.withdrawSteeredMessage(activeTurnId, item.id, messageId)

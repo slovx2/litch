@@ -72,6 +72,7 @@ test('声明到了界面看得到的地方：harness 上带着它会什么；没
     fork: false,
     rollback: false,
     rollbackRestoresFiles: false,
+    cutInTurn: false,
     compact: false,
     steer: true,
     steerImages: true,
@@ -103,6 +104,7 @@ test('会话操作按声明来：声明了不会的一上来就是不会，去�
     fork: false,
     rollback: false,
     rollbackRestoresFiles: false,
+    cutInTurn: false,
     compact: false,
     steer: true,
     steerImages: true,
@@ -691,4 +693,73 @@ test('回退会不会连文件一起恢复照声明给界面：OpenCode 这样�
   assert.deepEqual([restores?.rollback, restores?.rollbackRestoresFiles], [true, true])
   assert.equal(abilitiesOf(features(), 'pi')?.rollbackRestoresFiles, false)
   assert.equal(ALL_ABLE.rollbackRestoresFiles, false)
+})
+
+test('切在回合中间只认声明：声明了的发 beforeItemId，切口换成协议里的条目标识，回退后照对面重新载入；没声明的不发', async () => {
+  const steered = turn('t1', [
+    userText('u1', '开头'),
+    userText('s1', '插的话'),
+    userText('s2', '又插一句'),
+  ])
+  const { core, command, sent } = deviceWorld([
+    harness('claude', {
+      displayName: 'Claude Code',
+      declaration: {
+        extensions: [],
+        features: features({
+          revert: { byTurnId: true, byCount: true, restoresFiles: false, byItemId: true },
+        }),
+      },
+      threads: [thread({ id: 'c1', turns: [steered] })],
+    }),
+    harness('pi', {
+      displayName: 'Pi',
+      declaration: { extensions: [], features: features() },
+      threads: [thread({ id: 'p1', turns: [steered] })],
+    }),
+  ])
+  core.start()
+  await settle()
+  const onClaude = watchSession(core, 'c1')
+  const onPi = watchSession(core, 'p1')
+  await settle()
+  assert.equal(onClaude.seen.view?.can.cutInTurn, true)
+  assert.equal(onPi.seen.view?.can.cutInTurn, false)
+
+  await command('session.fork', { sessionId: 'c1', turnId: 't1', itemId: 't1:s2' })
+  await command('session.fork', { sessionId: 'c1', turnId: 't1' })
+  assert.deepEqual(
+    sent('thread/fork').map(({ threadId, lastTurnId, beforeTurnId, beforeItemId }) => ({
+      threadId,
+      lastTurnId,
+      beforeTurnId,
+      beforeItemId,
+    })),
+    [
+      { threadId: 'c1', lastTurnId: undefined, beforeTurnId: 't1', beforeItemId: 's2' },
+      { threadId: 'c1', lastTurnId: 't1', beforeTurnId: undefined, beforeItemId: undefined },
+    ],
+  )
+  // 回合开头那条不是插进来的话，不能拿来切
+  await assert.rejects(
+    command('session.rollback', { sessionId: 'c1', turnId: 't1', itemId: 't1:u1' }),
+    { code: 'rejected' },
+  )
+  const reads = sent('thread/resume').length + sent('thread/read').length
+  await command('session.rollback', { sessionId: 'c1', turnId: 't1', itemId: 't1:s1' })
+  await settle()
+  assert.deepEqual(sent('thread/revert'), [
+    { threadId: 'c1', beforeTurnId: 't1', beforeItemId: 's1' },
+  ])
+  assert.ok(sent('thread/resume').length + sent('thread/read').length > reads, '回退后重新载入')
+
+  for (const [name, params] of [
+    ['session.fork', { sessionId: 'p1', turnId: 't1', itemId: 't1:s1' }],
+    ['session.rollback', { sessionId: 'p1', turnId: 't1', itemId: 't1:s1' }],
+  ] as const) {
+    await assert.rejects(command(name, params), { code: 'unsupported' }, name)
+  }
+  assert.equal(sent('thread/revert').length, 1)
+  onClaude.close()
+  onPi.close()
 })

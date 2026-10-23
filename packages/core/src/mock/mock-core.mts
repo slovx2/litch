@@ -420,6 +420,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       compact: can('compact'),
       steer: can('steer'),
       steerImages: declared ? declared.steerImages : true,
+      cutInTurn: declared?.cutInTurn === true,
       rollbackRestoresFiles: declared ? declared.rollbackRestoresFiles : false,
       finalOnStart: declared ? declared.finalOnStart : false,
       backgroundTasks: declared ? declared.backgroundTasks : false,
@@ -2616,14 +2617,23 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         }
         return {}
       }
+      /** 切在回合中间：第 at 个回合里那条插进来的话的位置。会话不会这样切、不是插进来的话，都不行 */
+      const cutIn = (view: SessionView, at: number, itemId: string): number => {
+        if (!view.can.cutInTurn) throw new ChannelError('unsupported', '对方不支持此操作')
+        const index = view.turns[at]?.itemIds.indexOf(itemId) ?? -1
+        if (index < 1 || view.items[itemId]?.kind !== 'userMessage')
+          throw new ChannelError('rejected', '这条消息不是插进这个回合的话')
+        return index
+      }
       if (name === 'session.fork') {
-        const { turnId, ...where } = params as Commands['session.fork']['params']
+        const { turnId, itemId, ...where } = params as Commands['session.fork']['params']
         const view = reachView(where)
         if (running(view)) throw new ChannelError('rejected', '回合还在进行，结束之后才能分叉')
         const at = view.turns.findIndex((turn) => turn.id === turnId)
         const sidebar = sidebars.get(view.deviceId)
         if (at < 0 || !sidebar) throw new ChannelError('rejected', '这个回合已经不在了')
         attempt(view, 'fork')
+        const cut = itemId === undefined ? -1 : cutIn(view, at, itemId)
         // 新会话里是到这个回合为止（含）的内容，名字和原来的一样
         const summary: SessionSummary = {
           ...findSummary(view.deviceId, view.sessionId),
@@ -2643,6 +2653,9 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         // 显示数据都是能写成 JSON 的，这样抄一份就和原来的互不相干了
         const copy = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T
         const turns = copy(view.turns.slice(0, at + 1))
+        // 切在回合中间：这一回合只带到那条插进来的话之前
+        const last = turns[at]
+        if (last && cut >= 0) last.itemIds = last.itemIds.slice(0, cut)
         const items: SessionView['items'] = {}
         for (const turn of turns) {
           for (const id of turn.itemIds) {
@@ -2666,16 +2679,23 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         return { sessionId: summary.id }
       }
       if (name === 'session.rollback') {
-        const { turnId, ...where } = params as Commands['session.rollback']['params']
+        const { turnId, itemId, ...where } = params as Commands['session.rollback']['params']
         const view = reachView(where)
         if (running(view)) throw new ChannelError('rejected', '回合还在进行，结束之后才能回退')
         const at = view.turns.findIndex((turn) => turn.id === turnId)
         if (at < 0) throw new ChannelError('rejected', '这个回合已经不在了')
         attempt(view, 'rollback')
-        applySessionOps(
-          view,
-          view.turns.slice(at).map((turn): SessionOp => ({ op: 'turn.remove', turnId: turn.id })),
-        )
+        // 切在回合中间：这一回合从那条插进来的话起拿掉，后面的回合整个拿掉
+        const cut = itemId === undefined ? -1 : cutIn(view, at, itemId)
+        const kept = cut >= 0 ? view.turns[at] : undefined
+        applySessionOps(view, [
+          ...(kept ? kept.itemIds.slice(cut) : []).map(
+            (id): SessionOp => ({ op: 'item.remove', turnId: turnId, itemId: id }),
+          ),
+          ...view.turns
+            .slice(kept ? at + 1 : at)
+            .map((turn): SessionOp => ({ op: 'turn.remove', turnId: turn.id })),
+        ])
         updateSummary(view.deviceId, view.sessionId, { updatedAt: clock.now() })
         return {}
       }

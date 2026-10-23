@@ -43,6 +43,7 @@ export function abilitiesOf(
     // 我们回退用的是按回合标识的那一种（thread/revert），按个数的不算
     rollback: features.revert?.byTurnId === true,
     rollbackRestoresFiles: features.revert?.restoresFiles === true,
+    cutInTurn: features.revert?.byItemId === true,
     compact: features.compact === true,
     steer: features.steer === true,
     steerImages: listed(features.steerInputTypes).includes('image'),

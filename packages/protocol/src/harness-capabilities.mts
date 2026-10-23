@@ -60,6 +60,11 @@ export interface HarnessFeatures {
     byCount: boolean
     /** 回退时会不会把那几轮改过的文件也恢复原样 */
     restoresFiles: boolean
+    /**
+     * 能切在回合中间：`thread/revert`、`thread/fork` 在 `beforeTurnId` 之外再带 `beforeItemId`
+     * （那个回合里插进去的一条用户消息），保留这一回合在它之前的部分。没有就当不会
+     */
+    byItemId?: boolean
   }
   /** 设备侧的消息队列（`thread/queue/*`）：排队的消息存在设备上，客户端断开也不丢 */
   queue: boolean

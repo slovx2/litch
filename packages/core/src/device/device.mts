@@ -301,8 +301,9 @@ export interface Device {
   interrupt(sessionId: string): Promise<void>
   unqueue(sessionId: string, messageId: string): void
   respond(sessionId: string, requestId: string, choice: RequestChoice): void
-  fork(sessionId: string, turnId: string): Promise<string>
-  rollback(sessionId: string, turnId: string): Promise<void>
+  /** itemId：切在这个回合里插进去的那条用户消息之前（界面里的条目标识） */
+  fork(sessionId: string, turnId: string, itemId?: string): Promise<string>
+  rollback(sessionId: string, turnId: string, itemId?: string): Promise<void>
   compact(sessionId: string): Promise<void>
   /** 设、改、清持续目标（live.mts 的 setGoal、clearGoal） */
   setGoal(sessionId: string, change: GoalChange): Promise<void>
@@ -2225,8 +2226,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     interrupt: (sessionId) => live.interrupt(sessionId),
     unqueue: (sessionId, messageId) => live.unqueue(sessionId, messageId),
     respond: (sessionId, requestId, choice) => live.respond(sessionId, requestId, choice),
-    fork: (sessionId, turnId) => live.fork(sessionId, turnId),
-    rollback: (sessionId, turnId) => live.rollback(sessionId, turnId),
+    fork: (sessionId, turnId, itemId) => live.fork(sessionId, turnId, itemId),
+    rollback: (sessionId, turnId, itemId) => live.rollback(sessionId, turnId, itemId),
     compact: (sessionId) => live.compact(sessionId),
     setGoal: (sessionId, change) => live.setGoal(sessionId, change),
     clearGoal: (sessionId) => live.clearGoal(sessionId),

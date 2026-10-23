@@ -1,6 +1,8 @@
 // 自己发过的一条消息上能做的两件事：从这里分叉成新会话、回退到这里改了重发。
 // 平时不显示，鼠标到这条消息上或者键盘焦点进来才出现；不占排版的位置，出不出现对话都不会动。
-import { type ItemView, keys, type SessionMeta } from '@litch/core'
+// 回合开头那条按回合切；回合进行中插进来的话要 harness 会切在回合中间（can.cutInTurn）才有，
+// 回退切在它之前，分叉带上它和模型回它的话、到下一条插进来的话之前（会切在回合中间时开头那条也这样带）。
+import { type ItemView, keys, type SessionMeta, type TurnView } from '@litch/core'
 import { useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { Confirm } from '../app/Confirm.tsx'
@@ -18,11 +20,13 @@ interface TurnActionsProps {
   deviceId: string
   sessionId: string
   turnId: string
-  /** 这个回合开头的那条用户消息 */
+  /** 挂在哪条用户消息上 */
   itemId: string
+  /** 它是回合进行中插进来的话，不是回合开头那条 */
+  steered: boolean
 }
 
-export function TurnActions({ deviceId, sessionId, turnId, itemId }: TurnActionsProps) {
+export function TurnActions({ deviceId, sessionId, turnId, itemId, steered }: TurnActionsProps) {
   const { channel, replica } = useServices()
   const meta = useKey<SessionMeta>(keys.session(deviceId, sessionId))
   const { busy, open } = useActions()
@@ -38,19 +42,41 @@ export function TurnActions({ deviceId, sessionId, turnId, itemId }: TurnActions
   // 它所属的 harness 声明了不会的那一样：不出这个入口。
   // 没有声明的照旧留着能点：对面说不认识了，点了说为什么
   const declared = meta?.can.declared === true
-  const showFork = !(declared && meta?.can.fork === false)
-  const showRollback = !(declared && meta?.can.rollback === false)
+  // 切在回合中间只认声明：插进来的话上，声明了会的才出
+  const cut = meta?.can.cutInTurn === true
+  const showFork = steered
+    ? cut && meta?.can.fork === true
+    : !(declared && meta?.can.fork === false)
+  const showRollback = steered
+    ? cut && meta?.can.rollback === true
+    : !(declared && meta?.can.rollback === false)
   if (!showFork && !showRollback) return null
 
   const say = (text: string, tone: 'plain' | 'err' = 'err') =>
     showToast({ id: 'turn-action', tone, lifeMs: tone === 'err' ? 8000 : 4000, text: () => text })
 
+  /** 这个回合里它后面那条自己插进来的话（分叉带到它之前）；别的会话发来的、只是一条系统提示的不算 */
+  const nextSteer = (): string | null => {
+    const ids = replica.store.get<TurnView>(keys.turn(deviceId, sessionId, turnId))?.itemIds ?? []
+    for (const id of ids.slice(ids.indexOf(itemId) + 1)) {
+      const item = replica.store.get<ItemView>(keys.item(deviceId, sessionId, id))
+      if (item?.kind === 'userMessage' && !item.peer && (!item.event || item.text)) return id
+    }
+    return null
+  }
+
   const fork = () => {
     if (working) return
     if (forkBlocked) return say(forkBlocked)
+    const next = cut ? nextSteer() : null
     setWorking(true)
     channel
-      .command('session.fork', { deviceId, sessionId, turnId })
+      .command('session.fork', {
+        deviceId,
+        sessionId,
+        turnId,
+        ...(next ? { itemId: next } : {}),
+      })
       .then(
         (result) => {
           say(t('turn.fork.done'), 'plain')
@@ -80,7 +106,7 @@ export function TurnActions({ deviceId, sessionId, turnId, itemId }: TurnActions
     }))
     setWorking(true)
     channel
-      .command('session.rollback', { deviceId, sessionId, turnId })
+      .command('session.rollback', { deviceId, sessionId, turnId, ...(steered ? { itemId } : {}) })
       .then(
         () => {
           if (item?.kind !== 'userMessage') return

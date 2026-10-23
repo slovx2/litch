@@ -272,6 +272,10 @@
               "restoresFiles": {
                 "description": "回退时会不会把那几轮改过的文件也恢复原样",
                 "type": "boolean"
+              },
+              "byItemId": {
+                "description": "能切在回合中间：thread/revert、thread/fork 在 beforeTurnId 之外再带 beforeItemId（那个回合里插进去的一条用户消息），保留这一回合在它之前的部分。没有就当不会",
+                "type": "boolean"
               }
             }
           },
