@@ -5,7 +5,7 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
-## 未发布
+## 0.18.0
 
 - 输入区：回合在跑时连按两下 Esc 停止（照 ChatGPT 桌面端，两下之间不超过 2 秒），输入框里有字也行、焦点不在输入框也行，停了字留着、焦点回到输入框。第一下在底栏写“再按一次 Esc 停止”，停止按钮在的话描一圈。弹层、菜单、“/”“@”单子、对话框里的 Esc 只关它们；焦点在别的输入框、终端里不算；有审批、提问等着时 Esc 留给卡片。侧面板子代理页里按的归子代理自己的回合。设置页快捷键里有这一条
 - 会话树：收尾带的建议卡片和问题等回合结束再出现，位置不变（最终回答下面），看着回合结束时滑进来（关了动效不播）。以前模型照规矩先收尾、再写回答，卡片比回答先出来、没头没尾。回合中途 start 提的提案照旧收到就出，侧面板“建议任务”不受影响。手机端同样（不播动画）
