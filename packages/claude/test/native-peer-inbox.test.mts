@@ -375,6 +375,66 @@ test('回合进行中发来的插进当前回合；没声明 peerMessages 的连
   }
 })
 
+// 2026-10-23 song-debian：别的会话照着收到的消息信封回信（to 是 uds:<套接字>），这期间用户打断了对方的回合，
+// 入口关掉 CLI、下个回合起了新进程，按进程号起的地址作废，回信报 ENOENT、模型当成对方不在线。
+// 入口给每个会话一个固定地址，换了进程照样发得到
+test('收件箱地址固定：打断回合换了进程，别处按旧地址发来照样收到', {
+  timeout: 180_000,
+}, async () => {
+  const scene = await startScene(
+    'native-peer-stable',
+    {},
+    declaring('peerMessages', 'backgroundTasks'),
+  )
+  let release = () => {}
+  const held = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  try {
+    scene.model.enqueue(async () => {
+      await held
+      return [{ type: 'text', text: '被打断的回答' }]
+    })
+    scene.model.enqueue(() => [{ type: 'text', text: '第二个回合' }])
+    scene.model.fallback = () => [{ type: 'text', text: '这是对外来消息的回答' }]
+    const { turn } = await scene.client.request('turn/start', {
+      threadId: scene.threadId,
+      input: [{ type: 'text', text: '说一句' }],
+    })
+    await until('模型请求到达', () => scene.model.requests.length === 1)
+    const [first] = cliProcesses(scene)
+    const before = registry(scene).find((entry) => entry.pid === first?.pid)
+    const address = before?.messagingSocketPath
+    assert.ok(address, '应登记收件箱套接字')
+    assert.ok(
+      address.endsWith(`/litch-${scene.threadId}.sock`),
+      `地址应按会话固定，不按进程号：${address}`,
+    )
+
+    // 没有后台命令时打断会关掉 CLI，下个回合起新进程（就是现场那样）
+    await scene.client.request('turn/interrupt', { threadId: scene.threadId, turnId: turn.id })
+    assert.equal((await scene.client.completed(turn.id)).status, 'interrupted')
+    release()
+    assert.equal((await runTurn(scene, '再说一句')).status, 'completed')
+    const [second] = cliProcesses(scene)
+    assert.ok(second && second.pid !== first?.pid, '打断之后应换了进程')
+    const after = registry(scene).find((entry) => entry.pid === second.pid)
+    assert.equal(after?.messagingSocketPath, address, '新进程登记的是同一个地址')
+
+    const started = turnsStarted(scene).length
+    const peer = await peerSend(scene, `uds:${address}`)
+    assert.equal(peer.ended, 'result')
+    assert.match(peer.send, /success\\?":true/, `按旧地址应发得出去：${peer.send}`)
+    await until('外来消息开回合', () => turnsStarted(scene).length > started)
+    const done = await scene.client.completed(turnsStarted(scene).at(-1)!)
+    assert.equal(done.status, 'completed')
+    assert.equal(done.litchOrigin, 'peer')
+  } finally {
+    release()
+    await disposeScene(scene)
+  }
+})
+
 test('默认开着：没有后台命令的会话空闲保留着也收得到；登记名是会话名，改名后跟着换', {
   timeout: 180_000,
 }, async () => {

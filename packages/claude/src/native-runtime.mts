@@ -92,6 +92,7 @@ import {
 import { forkNativeSession } from './native-session-fork.mjs'
 import { waitForTranscript } from './native-tool-intents.mjs'
 import { NativeTurnInput } from './native-turn-input.mjs'
+import { claimPeerInboxSocket } from './peer-inbox-socket.mjs'
 import { mergePermissionOverlay, permissionToolName } from './permission-grants.mjs'
 import { permissionToolServer } from './permission-tools.mjs'
 import { ProtocolError, submissionHash } from './protocol-contract.mjs'
@@ -671,7 +672,10 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         },
       })
       const liveHandlers = this.liveHandlers(current)
-      const options = this.buildOptions(sdk, live, abort, current, key)
+      const inboxSocket = claudeCrossSessionInbox()
+        ? await claimPeerInboxSocket(key, claudeChildEnv())
+        : null
+      const options = this.buildOptions(sdk, live, abort, current, key, inboxSocket)
       options.spawnClaudeCodeProcess = nativeProcess.spawn.bind(nativeProcess)
       options.mcpServers = await mcp.connect(
         context.mcpServers,
@@ -1334,6 +1338,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     abort: AbortController,
     current: () => Promise<PendingTurn | null>,
     sessionKey: string,
+    inboxSocket: string | null = null,
   ): Record<string, unknown> {
     const originalBashInputs: OriginalBashInputs = new Map()
     const reservedGoalTools = new Set<string>()
@@ -1397,8 +1402,16 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         ...(inbox ? { crossSessionInbound: 'accept' } : {}),
       },
       // 收件箱开着时让 CLI 回显进模型的用户消息（照 Claude 桌面端）：别的会话发来的那条带 origin.kind=peer，
-      // 认出来画进对话（handlePeerReplay）；自己发的、后台通知的回显丢掉
-      ...(inbox ? { extraArgs: { 'replay-user-messages': null } } : {}),
+      // 认出来画进对话（handlePeerReplay）；自己发的、后台通知的回显丢掉。
+      // 收件箱用会话的固定地址（peer-inbox-socket.mts）：换了进程，别处记下的地址照样发得到
+      ...(inbox
+        ? {
+            extraArgs: {
+              'replay-user-messages': null,
+              ...(inboxSocket ? { 'messaging-socket-path': inboxSocket } : {}),
+            },
+          }
+        : {}),
       disallowedTools: ['CronCreate', 'CronDelete', 'CronList', 'ScheduleWakeup'],
       stderr: (data: string) => process.stderr.write(data),
       onElicitation: (async (request, { signal }) => {
