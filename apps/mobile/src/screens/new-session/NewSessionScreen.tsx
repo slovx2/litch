@@ -4,11 +4,11 @@
 // harness 会持续目标时第一句可以是 `/goal 要做到的事`：建好会话就设目标、不发消息（和桌面一样）。
 // 建不了的时候（设备没连上、没有可用的 harness、明说的工作区不在了）当场写原因，不悄悄换去处。
 import {
-  type CommentExtra,
   type DeviceView,
   type HarnessView,
   type ImageAttachment,
   keys,
+  type MessageExtra,
   newSessionSettings,
   type SessionSettings,
   type WorkspaceView,
@@ -117,9 +117,9 @@ export function NewSessionScreen({ navigation, route }: Props) {
         : null
 
   const goalsAble = harness?.abilities?.goals === true
-  const create = async (typed: string, images: ImageAttachment[], comments: CommentExtra[]) => {
+  const create = async (typed: string, images: ImageAttachment[], extras: MessageExtra[]) => {
     // 第一句是 /goal 加上目标（harness 会持续目标时）：建好会话就设目标，不发消息，它空闲时自己开始做
-    const intent = goalIntent(typed, images.length + comments.length, goalsAble, null)
+    const intent = goalIntent(typed, images.length + extras.length, goalsAble, null)
     if (intent.kind === 'refuse') throw new Error(t(intent.key))
     const goal = intent.kind === 'goal'
     const text = goal ? intent.objective : typed
@@ -131,6 +131,8 @@ export function NewSessionScreen({ navigation, route }: Props) {
       cwd,
       text,
       images,
+      // 打 @ 提到的会话（新建页上没有评论）
+      ...(extras.length > 0 ? { extras } : {}),
       settings: sent,
       ...(goal ? { goal: true } : {}),
     })
@@ -255,6 +257,7 @@ export function NewSessionScreen({ navigation, route }: Props) {
               blocked={blocked}
               imagesOff={imagesOff}
               error={error}
+              mentions={{ deviceId, sessionId: null }}
               onSend={create}
               onError={setError}
               top={<SlashGoal text={draft.text} able={goalsAble} onPick={draft.setText} />}

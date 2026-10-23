@@ -28,6 +28,7 @@ import { useTranscript } from './context'
 import { linkify } from './links'
 import { markdownStyleOf } from './markdownStyle'
 import { labelMermaid } from './mermaid'
+import { MentionedText } from './SessionMentions'
 
 export type Props<T extends Row['type']> = { row: Extract<Row, { type: T }> }
 
@@ -131,7 +132,7 @@ export const UserCell = memo(function UserCell({ row }: Props<'user'>) {
               { color: c.ink, fontSize: font.size.body, fontFamily: font.ui },
             ]}
           >
-            {text}
+            {peer ? text : <MentionedText text={text} sessions={row.sessions} />}
           </Text>
         ) : null}
       </Pressable>
