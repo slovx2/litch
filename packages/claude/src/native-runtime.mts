@@ -40,6 +40,7 @@ applyPromptCacheTtl()
 import type { OnElicitation, Query, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import { type ApprovalPolicy, allowsApproval, toolApprovalFlow } from './approval-policy.mjs'
 import { deniedMessage } from './approval-request.mjs'
+import { claudeConfigDir } from './claude-native-files.mjs'
 import { claudeChildEnv } from './claude-provider.mjs'
 import { settingsEnvValue } from './claude-setting-layers.mjs'
 import { cliOutputFormat } from './cli-output-schema.mjs'
@@ -92,6 +93,7 @@ import {
 import { forkNativeSession } from './native-session-fork.mjs'
 import { waitForTranscript } from './native-tool-intents.mjs'
 import { NativeTurnInput } from './native-turn-input.mjs'
+import { claimPeerInboxSocket, inboxReady } from './peer-inbox-socket.mjs'
 import { mergePermissionOverlay, permissionToolName } from './permission-grants.mjs'
 import { permissionToolServer } from './permission-tools.mjs'
 import { ProtocolError, submissionHash } from './protocol-contract.mjs'
@@ -308,6 +310,8 @@ const WORKFLOW_TERMINAL_FLUSH_TIMEOUT_MS = 500
 // 没有回合也没有后台命令的进程多留这么久再退出，避免刚停掉命令就来了新回合。
 const IDLE_REAP_MS = 2_000
 const SPONTANEOUS_ATTACH_TIMEOUT_MS = 10_000
+// 为别的会话唤醒时：等对方 CLI 的收件箱就绪最多多久（起 CLI 一般几秒）
+const PEER_WAKE_READY_MS = 30_000
 const WORKFLOW_JOURNAL_SETTLE_TIMEOUT_MS = 3_000
 
 // 进程名下还有回合结束后要接着跑的东西：后台命令（含 Monitor 工具起的）、MCP 与 WebSocket 监视
@@ -397,8 +401,15 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     const key = context.sessionThreadId ?? context.threadId
     const existing = this.sessions.get(key)
     if (context.spontaneous) {
+      // 为别的会话发来的消息唤醒：没有进程就起一个（不送用户消息），等收件箱里的消息开这一轮
+      if (context.wake && (!existing || existing.closing)) {
+        if (existing) await succeedsWithin(existing.done, 5_000)
+        if (this.processes.has(key))
+          throw new ProtocolError(-32009, '上一个 Claude CLI 尚未确认退出，无法唤醒')
+        return this.startSession(key, context, handlers)
+      }
       // 那一轮已经被拒绝或超时放弃时，没有东西可接。
-      if (!existing || existing.closing || existing.turn || !existing.attach)
+      if (!existing || existing.closing || existing.turn || (!existing.attach && !context.wake))
         throw new ProtocolError(-32009, 'Claude CLI 已退出，自行续跑的回合无法接上')
       return this.runOnSession(existing, context, handlers)
     }
@@ -531,6 +542,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     const ready = this.beginTurnSettings(context)
     try {
       const pending = this.attachTurn(session, context, handlers)
+      if (context.wake) this.armWakeTimeout(session, pending)
       // 用户消息送进去之前到达的 result（比如正好赶上的后台命令通知那一轮）不属于这个回合：
       // 接上时就记下要等的消息 ID。
       const uuid = context.spontaneous ? null : randomUUID()
@@ -608,6 +620,66 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     await session.done
   }
 
+  // 唤醒回合等的那条消息一直没来（发送方的 SendMessage 被拒、发送失败）：说一声，按普通回合结束收尾
+  private armWakeTimeout(session: NativeSession, pending: PendingTurn): void {
+    const timer = setTimeout(() => {
+      if (pending.resolved || session.turn !== pending || session.closing) return
+      if (session.state === 'running' || session.state === 'requires_action') return
+      void this.endEmptyWake(session, pending)
+    }, peerWakeWaitMs())
+    timer.unref()
+    void pending.settled.then(() => clearTimeout(timer))
+  }
+
+  private async endEmptyWake(session: NativeSession, pending: PendingTurn): Promise<void> {
+    this.detach(pending)
+    const refusal = this.keepAlive(session)
+    if (refusal !== null) {
+      session.closing = true
+      session.process.allowGracefulClose()
+      session.input.close()
+    }
+    try {
+      await pending.handlers.onEvent({
+        type: 'notice',
+        level: 'info',
+        message: '为别的会话发来的消息唤醒了这个会话，但没有等到消息',
+      })
+      await pending.handlers.onEvent({
+        type: 'completed',
+        success: true,
+        result: null,
+        claudeSessionId: session.sessionId,
+      })
+      pending.resolve()
+    } catch (error) {
+      pending.reject(error instanceof Error ? error : new Error(String(error)))
+    }
+  }
+
+  // 别的会话的 SendMessage 要发给 to：是本机没在跑的 Litch 会话时先把它的 CLI 拉起来，等收件箱就绪再放行，
+  // 消息照旧由 CLI 自己投递。认不出、拉不起来、等不到都放行，CLI 照常报它的错
+  private async wakePeer(from: string, to: string): Promise<void> {
+    if (!to || !this.sessionHandlers?.onPeerWake) return
+    let key: string | null
+    try {
+      key = await this.sessionHandlers.onPeerWake(to, from)
+    } catch (error) {
+      debugLog('native.peerWake.failed', { from, to, error: String(error) })
+      return
+    }
+    if (!key || key === from) return
+    const deadline = Date.now() + PEER_WAKE_READY_MS
+    const configDir = claudeConfigDir(claudeChildEnv())
+    while (Date.now() < deadline) {
+      const session = this.sessions.get(key)
+      const pid = session && !session.closing ? session.process.cliPid : null
+      if (pid !== null && (await inboxReady(pid, configDir))) return
+      await delay(200)
+    }
+    debugLog('native.peerWake.notReady', { from, to, key })
+  }
+
   // 没有回合也没有后台命令的进程不再有用。开了空闲保留时多留一会儿，下个回合直接用。
   private scheduleReap(session: NativeSession): void {
     if (session.reapTimer || session.closing) return
@@ -671,7 +743,10 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         },
       })
       const liveHandlers = this.liveHandlers(current)
-      const options = this.buildOptions(sdk, live, abort, current, key)
+      const inboxSocket = claudeCrossSessionInbox()
+        ? await claimPeerInboxSocket(key, claudeChildEnv())
+        : null
+      const options = this.buildOptions(sdk, live, abort, current, key, inboxSocket)
       options.spawnClaudeCodeProcess = nativeProcess.spawn.bind(nativeProcess)
       options.mcpServers = await mcp.connect(
         context.mcpServers,
@@ -740,8 +815,12 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       // SDKUserMessage envelopes. Always feed the iterable form so we have
       // room to attach image blocks alongside the text and the door is open
       // for mid-turn steer() calls.
-      input.send(userMessage(context, null, null))
-      this.requestTitle(session, context)
+      // 唤醒回合不送用户消息：这一轮由收件箱里别的会话发来的消息开
+      if (context.wake) this.armWakeTimeout(session, pending)
+      else {
+        input.send(userMessage(context, null, null))
+        this.requestTitle(session, context)
+      }
     } catch (error) {
       // 进程没有进入消息循环，这里按同样的顺序收尾。
       ready(null)
@@ -1334,6 +1413,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     abort: AbortController,
     current: () => Promise<PendingTurn | null>,
     sessionKey: string,
+    inboxSocket: string | null = null,
   ): Record<string, unknown> {
     const originalBashInputs: OriginalBashInputs = new Map()
     const reservedGoalTools = new Set<string>()
@@ -1397,8 +1477,16 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         ...(inbox ? { crossSessionInbound: 'accept' } : {}),
       },
       // 收件箱开着时让 CLI 回显进模型的用户消息（照 Claude 桌面端）：别的会话发来的那条带 origin.kind=peer，
-      // 认出来画进对话（handlePeerReplay）；自己发的、后台通知的回显丢掉
-      ...(inbox ? { extraArgs: { 'replay-user-messages': null } } : {}),
+      // 认出来画进对话（handlePeerReplay）；自己发的、后台通知的回显丢掉。
+      // 收件箱用会话的固定地址（peer-inbox-socket.mts）：换了进程，别处记下的地址照样发得到
+      ...(inbox
+        ? {
+            extraArgs: {
+              'replay-user-messages': null,
+              ...(inboxSocket ? { 'messaging-socket-path': inboxSocket } : {}),
+            },
+          }
+        : {}),
       disallowedTools: ['CronCreate', 'CronDelete', 'CronList', 'ScheduleWakeup'],
       stderr: (data: string) => process.stderr.write(data),
       onElicitation: (async (request, { signal }) => {
@@ -1480,6 +1568,19 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         },
       ],
     })
+
+    // 发给本机没在跑的 Litch 会话：先把对方拉起来（wakePeer）。追问回合的 SendMessage 发给子代理，不走这里
+    if (claudeCrossSessionInbox())
+      permissionHooks.PreToolUse.push({
+        hooks: [
+          async (event: Record<string, unknown>) => {
+            if (event.tool_name !== 'SendMessage' || context.subagentRelay) return {}
+            const input = (event.tool_input ?? {}) as Record<string, unknown>
+            if (typeof input.to === 'string') await this.wakePeer(sessionKey, input.to.trim())
+            return {}
+          },
+        ],
+      })
 
     // 追问回合可能跑在已经存活的进程上，所以这个钩子始终注册，调用时再看是不是追问回合。
     permissionHooks.PreToolUse.push({
@@ -3346,4 +3447,11 @@ function cliSkipsAutoTitle(env: NodeJS.ProcessEnv): boolean {
 export function sdkResumeSessionId(value: string | null, _cwd?: string): string | null {
   // 只恢复调用方明确指定的会话；交由 SDK 报告不存在或损坏的历史。
   return value
+}
+
+// 唤醒回合等别的会话那条消息最多多久，默认 60 秒（CHA_CLAUDE_PEER_WAKE_WAIT_MS，用例里调短）
+function peerWakeWaitMs(): number {
+  const raw = process.env.CHA_CLAUDE_PEER_WAKE_WAIT_MS
+  const ms = raw == null || raw.trim() === '' ? 60_000 : Number(raw)
+  return Number.isFinite(ms) && ms > 0 ? ms : 60_000
 }

@@ -174,3 +174,18 @@ test('PEER-TARGET-006：读原生记录时回信按前面收到的消息认出�
     mode: 'bypass',
   })
 })
+
+test('PEER-TARGET-007：Litch 会话的固定地址，对方进程退了、登记里没有也按会话键认', () => {
+  const address = 'uds:/tmp/cc-socks/litch-0ee16b91-c9c1-469a-95bd-74f766904972.sock'
+  const litchThread = (id: string) =>
+    id === '0ee16b91-c9c1-469a-95bd-74f766904972' ? { id, name: '状态网页' } : null
+  assert.deepEqual(resolvePeer(address, { registry: () => [], litchThread }), {
+    name: '状态网页',
+    thread: '0ee16b91-c9c1-469a-95bd-74f766904972',
+  })
+  // 不是这里的会话：照旧认不出
+  assert.equal(
+    resolvePeer('uds:/tmp/cc-socks/litch-other.sock', { registry: () => [], litchThread }),
+    null,
+  )
+})

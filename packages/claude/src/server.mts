@@ -84,6 +84,7 @@ import {
   sdkNativeSessionSource,
 } from './native-sessions.mjs'
 import { lostToolCallsNotice, NativeToolIntents } from './native-tool-intents.mjs'
+import { sessionKeyFromAddress } from './peer-inbox-socket.mjs'
 import { type PeerLookup, resolvePeer } from './peer-target.mjs'
 import { PendingInteractions } from './pending-interactions.mjs'
 import {
@@ -406,6 +407,8 @@ export class CodexClaudeAppServer {
   // 后台任务的集合（backgroundTasks 扩展），按 CLI 进程所属的线程记
   private readonly backgroundTasks = new BackgroundTaskTracker()
   private spontaneousTurns = new Set<string>()
+  // 正在为别的会话发来的消息唤醒的会话（线程 → 唤醒结果），同时有几个发送方时一起等
+  private peerWakes = new Map<string, Promise<string | null>>()
   // 已经交到运行时手里的回合：运行时再说“没有回合在跑”，就是它已经交还、协议层还在收尾。
   private handedToRuntime = new Set<string>()
   private turnClearWaiters = new Map<string, Array<() => void>>()
@@ -494,6 +497,10 @@ export class CodexClaudeAppServer {
       const thread = record ? this.store.getThread(record.threadId) : null
       return thread ? { id: thread.id, name: thread.name?.trim() || null } : null
     },
+    litchThread: (threadId) => {
+      const thread = this.store.getThread(threadId)
+      return thread ? { id: thread.id, name: thread.name?.trim() || null } : null
+    },
   }
   /** 会话里收到过的消息（只记在内存里）：会话 → 发送方的收件箱地址 → 发送方。回信的 SendMessage 按它认收件方 */
   private readonly peerAddresses = new Map<string, Map<string, LitchPeer>>()
@@ -524,6 +531,7 @@ export class CodexClaudeAppServer {
       : null
     this.runtime.setSessionHandlers?.({
       onSpontaneousTurn: (threadId) => this.spontaneousTurn(threadId),
+      onPeerWake: (to, from) => this.peerWake(to, from),
       onBackgroundCommandEnded: (threadId, end) => {
         const entry = this.backgroundCommands.take(threadId, end.taskId)
         if (entry) this.finishBackgroundCommand(entry, end)
@@ -3187,6 +3195,85 @@ export class CodexClaudeAppServer {
     return true
   }
 
+  // 会话 from 的模型要用 SendMessage 发给 to（29 号文档第七节）：认出 to 是这里的哪个会话（固定地址里的会话键，
+  // 或按名字对会话标题），它没有 CLI 时建一个 wake 回合把 CLI 拉起来，消息照旧由 CLI 的收件箱投递。
+  // 返回目标线程，调用方等它的收件箱就绪；不是这里的会话、拉不起来时返回 null
+  private async peerWake(to: string, from: string): Promise<string | null> {
+    if (this.stopped) return null
+    const threadId = sessionKeyFromAddress(to) ?? this.peerThreadByName(to)
+    if (!threadId || threadId === from) return null
+    const thread = this.store.getThread(threadId)
+    if (!thread || thread.archived || thread.ephemeral) return null
+    if (this.runtime.cliProcessKeys?.().includes(threadId)) return threadId
+    const waking = this.peerWakes.get(threadId)
+    if (waking) return waking
+    const started = this.startPeerWake(threadId).finally(() => this.peerWakes.delete(threadId))
+    this.peerWakes.set(threadId, started)
+    return started
+  }
+
+  // 按名字发的（ListAgents 列的名字，可能带“ [ref]”）：对上恰好一个会话的标题才算
+  private peerThreadByName(to: string): string | null {
+    const name = to.replace(/\s*\[[0-9a-zA-Z]+\]$/, '').trim()
+    // 发给自己的子代理的（main、a 开头的代理号）不算
+    if (!name || name === 'main' || /^a[0-9a-f]{8,}$/.test(name) || /[/:]/.test(name)) return null
+    const matches = this.store
+      .listThreads({ searchTerm: name, limit: 50 })
+      .filter((thread) => thread.name?.trim() === name)
+    return matches.length === 1 ? (matches[0] as ThreadRecord).id : null
+  }
+
+  private async startPeerWake(threadId: string): Promise<string | null> {
+    // 回合正在起（进程马上就有）：等它就是了
+    if (this.activeTurnByThread.has(threadId)) return threadId
+    if (
+      this.interruptingByThread.has(threadId) ||
+      this.nativeMutations.has(threadId) ||
+      this.store.pendingContextInjection(threadId) ||
+      this.store.listTurns(threadId).some((turn) => turn.status === 'inProgress')
+    )
+      return null
+    const thread = this.store.getThread(threadId)
+    if (!thread) return null
+    // 和 CLI 自己开的一轮一样，不属于哪条连接（见 spontaneousTurn）
+    const peer = detachedPeer(threadId)
+    const turn: TurnRecord = {
+      id: newId(),
+      threadId,
+      status: 'inProgress',
+      startedAt: nowSeconds(),
+      completedAt: null,
+      durationMs: null,
+      items: [],
+      diff: '',
+      error: null,
+    }
+    this.store.upsertTurn(turn)
+    this.store.saveTurnOrigin(turn.id, 'peer')
+    this.spontaneousTurns.add(turn.id)
+    this.goals.begin(threadId, turn.id)
+    recordRunEvent('turn.started', {
+      threadId,
+      turnId: turn.id,
+      cwd: thread.cwd,
+      model: thread.model,
+      runtimeBackend: thread.runtimeBackend,
+      purpose: 'normal',
+    })
+    this.markActiveTurn(threadId, turn.id)
+    this.setThreadStatus(peer, threadId, { type: 'active', activeFlags: [] })
+    this.notify(peer, {
+      method: 'turn/started',
+      params: { threadId, turn: this.toLifecycleTurn(turn) },
+    })
+    void this.runRuntimeTurn(peer, thread, turn, '', {
+      threadId,
+      _spontaneous: true,
+      _wake: true,
+    }).catch((error) => this.failTurn(peer, threadId, turn, error))
+    return threadId
+  }
+
   private sessionHolder(threadId: string): { threadId: string; turnId: string } | null {
     const own = this.activeTurnByThread.get(threadId)
     if (own) return { threadId, turnId: own }
@@ -4484,6 +4571,7 @@ export class CodexClaudeAppServer {
             }
           : {}),
         ...(params._spontaneous === true ? { spontaneous: true } : {}),
+        ...(params._wake === true ? { wake: true } : {}),
         goalContext: turnPurpose === 'normal' ? this.goals.context(runtimeThread.id) : null,
         cwd: relay ? relay.parent.cwd : stringOr(params.cwd, thread.cwd),
         runtimeType: isCodexThread ? 'codex-proxy' : null,
