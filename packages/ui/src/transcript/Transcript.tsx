@@ -44,7 +44,7 @@ import { LineageBar } from '../tree/LineageBar.tsx'
 import { TreeCard } from '../tree/TreeCards.tsx'
 import { TurnTail } from '../tree/TurnTail.tsx'
 import { ActionsProvider } from './actions.tsx'
-import { Notes } from './activity.tsx'
+import { Compaction, Notes } from './activity.tsx'
 import { CiteScope } from './comments/Cite.tsx'
 import { CommentLayer } from './comments/Layer.tsx'
 import { FileLinksProvider, useSessionFileLinks } from './FileLinks.tsx'
@@ -306,6 +306,8 @@ const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { 
             return <TreeCard key={block.itemId} {...ref} itemId={block.itemId} />
           if (block.type === 'notes')
             return <Notes key={block.key} {...ref} itemIds={block.itemIds} />
+          if (block.type === 'compaction')
+            return <Compaction key={block.itemId} {...ref} itemId={block.itemId} />
           // 收尾区排在回合最后（下面单独画），这里跳过
           if (block.type === 'tail') return null
           // 收起时后面几段过程都不占地方，只留第一段开头的那一行

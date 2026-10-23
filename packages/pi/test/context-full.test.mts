@@ -12,6 +12,10 @@ import { approvalHarness, type Step } from './approval-harness.mjs'
 /** 写摘要的请求（整段历史的、切开的那一轮前半段的）：Pi 把对话序列化成文字交给模型 */
 const summarizing = (body: any) => /<conversation>|# Conversation\n/.test(JSON.stringify(body))
 
+/** 发给客户端的压缩条目的开始、完成 */
+const compactionNotes = (c: { messages: any[] }, method: 'item/started' | 'item/completed') =>
+  c.messages.filter((m: any) => m.method === method && m.params?.item?.type === 'contextCompaction')
+
 /** keep：压缩时留下最近多少个词元不压；0 是一轮说完就有东西可压 */
 async function setup(keep?: number) {
   const h = await approvalHarness({
@@ -71,12 +75,32 @@ test('截断之后自动压缩失败：回合失败，错误里是 Pi 给的失�
 })
 
 test('截断之后压成了、Pi 接着做完：回合照常完成，有压缩条目和后来的回答', async () => {
-  const { h, say } = await setup(0)
+  const { h, c, threadId, say } = await setup(0)
   try {
     assert.equal((await say('头一轮')).status, 'completed')
-    const after: Step = (body) => (summarizing(body) ? { text: '摘要' } : { text: '压完接着答' })
+    // 写摘要的时候客户端已经收到压缩条目的开始、还没收到完成（界面这时写“正在压缩”）
+    let compactingShown = false
+    const after: Step = (body) => {
+      if (!summarizing(body)) return { text: '压完接着答' }
+      compactingShown =
+        compactionNotes(c, 'item/started').length === 1 &&
+        compactionNotes(c, 'item/completed').length === 0
+      return { text: '摘要' }
+    }
     h.steps.push({ length: true }, after, after, after)
     const turn = await say('第二轮')
+    assert.equal(compactingShown, true)
+    const [started] = compactionNotes(c, 'item/started')
+    assert.deepEqual(
+      compactionNotes(c, 'item/completed').map((m: any) => m.params.item.id),
+      [started.params.item.id],
+    )
+    // 读历史（从 Pi 的会话记录重画）时还是同一个号
+    const history = (await c.ok('thread/read', { threadId, includeTurns: true })).thread.turns
+    assert.ok(
+      history.at(-1).items.some((item: any) => item.id === started.params.item.id),
+      JSON.stringify(history.at(-1).items),
+    )
     assert.equal(turn.status, 'completed', JSON.stringify(turn.error))
     assert.equal(turn.error, null)
     const types = turn.items.map((item: any) => item.type)
@@ -92,7 +116,7 @@ test('截断之后压成了、Pi 接着做完：回合照常完成，有压缩�
 })
 
 test('回答写完了、过了阈值的自动压缩失败：回答留着，回合失败，写明上下文快满了和原因', async () => {
-  const { h, say } = await setup(0)
+  const { h, c, say } = await setup(0)
   try {
     assert.equal((await say('头一轮')).status, 'completed')
     h.steps.push(
@@ -103,6 +127,10 @@ test('回答写完了、过了阈值的自动压缩失败：回答留着，回�
     const turn = await say('第二轮')
     assert.equal(turn.status, 'failed')
     assert.match(turn.error.message, /^上下文快满了，自动压缩失败：.*模拟的摘要故障/)
+    // 开始发过，没压成就不发完成，回合里也不留压缩条目
+    assert.equal(compactionNotes(c, 'item/started').length, 1)
+    assert.equal(compactionNotes(c, 'item/completed').length, 0)
+    assert.ok(!turn.items.some((item: any) => item.type === 'contextCompaction'))
     assert.ok(
       turn.items.some((item: any) => item.type === 'agentMessage' && item.text === '答好了'),
       JSON.stringify(turn.items),

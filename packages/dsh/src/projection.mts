@@ -393,6 +393,8 @@ export class Projection {
     } else if (event.type === 'assistant/message') this.assistantMessage(data, notify)
     else if (event.type === 'tool/call') this.toolCall(data, event.time, notify)
     else if (event.type === 'tool/result') this.toolResult(data, event.time, notify)
+    else if (event.type === 'compaction/start' || event.type === 'compaction/end')
+      this.compaction(data, event.type === 'compaction/end', notify)
     else if (event.type === 'approval/asked') this.asked.set(data.id, data.callId)
     else if (event.type === 'approval/decided') {
       const call = this.calls.get(this.asked.get(data.id) ?? '')
@@ -651,6 +653,23 @@ export class Projection {
     this.put(turn, call.item, true, notify)
   }
 
+  /**
+   * dsh 回合中途自己压缩上下文（自动压缩）：照上游发一个 contextCompaction 条目，compaction/start 时开始，
+   * compaction/end 没带错误时完成；带错误是没压成，条目撤掉、不发完成（客户端在回合结束时当它没压完）。
+   * 回合外的手动压缩（dsh 自己的界面里点的）不画
+   */
+  private compaction(data: any, ended: boolean, notify: Notify): void {
+    const turn = this.active
+    if (!turn || typeof data.compactionId !== 'string' || !data.compactionId) return
+    const item = { type: 'contextCompaction', id: `compact:${data.compactionId}` }
+    if (!ended) this.put(turn, item, false, notify)
+    else if (data.error === undefined) this.put(turn, item, true, notify)
+    else {
+      turn.items = turn.items.filter((entry) => entry.id !== item.id)
+      this.open.delete(item.id)
+    }
+  }
+
   private end(reason: any, time: number, notify: Notify): void {
     const turn = this.active
     if (!turn) return
@@ -669,6 +688,8 @@ export class Projection {
       }
     for (const item of turn.items) {
       if (!this.open.delete(item.id)) continue
+      // 压缩没等到 compaction/end：没压成，不发完成
+      if (item.type === 'contextCompaction') continue
       if (item.status === 'inProgress') item.status = 'failed'
       notify('item/completed', { turnId: turn.id, item })
     }

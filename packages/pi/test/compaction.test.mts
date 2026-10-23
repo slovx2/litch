@@ -72,7 +72,19 @@ test('真的压了：单独一个回合，只有“上下文已压缩”；之�
   try {
     assert.equal((await say('头一轮 OLD-1')).status, 'completed')
     // 压缩时 Pi 请模型写摘要（一轮切在中间时还有一次前半轮的摘要），都回同一句
-    h.steps.push({ text: SUMMARY }, { text: SUMMARY })
+    // 写摘要的时候客户端已经收到压缩条目的开始、还没收到完成（界面这时写“正在压缩”）
+    let compactingShown = false
+    const summary = () => {
+      compactingShown ||=
+        c.messages.some(
+          (m: any) => m.method === 'item/started' && m.params?.item?.type === 'contextCompaction',
+        ) &&
+        !c.messages.some(
+          (m: any) => m.method === 'item/completed' && m.params?.item?.type === 'contextCompaction',
+        )
+      return { text: SUMMARY }
+    }
+    h.steps.push(summary, summary)
     const sent = c.messages.length
     assert.deepEqual(await c.ok('thread/compact/start', { threadId }), {})
     const started = await c.until(
@@ -85,6 +97,7 @@ test('真的压了：单独一个回合，只有“上下文已压缩”；之�
       turn.items.map((item: any) => item.type),
       ['contextCompaction'],
     )
+    assert.equal(compactingShown, true)
     const history = (await c.ok('thread/read', { threadId, includeTurns: true })).thread.turns
     assert.deepEqual(
       { id: history.at(-1).id, status: history.at(-1).status, items: history.at(-1).items },

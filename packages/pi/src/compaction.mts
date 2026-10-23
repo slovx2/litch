@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { ProtocolError } from '../../shared/src/protocol-contract.mjs'
 import type { RpcPeer } from '../../shared/src/types.mjs'
 import { watchNativeSession } from './native-watch.mjs'
@@ -37,6 +38,11 @@ export async function startCompaction(
       server.notify(thread.id, 'thread/status/changed', {
         status: { type: 'active', activeFlags: [] },
       })
+      // Pi 发“开始压缩”时这个回合还没开：压缩条目的开始在这里补，完成照常由 turn.mts 发
+      started.compacting = { type: 'contextCompaction', id: `compact:${randomUUID()}` }
+      turn.items.push(started.compacting)
+      server.store.saveTurn(thread.id, turn)
+      server.notify(thread.id, 'item/started', { turnId: turn.id, item: started.compacting })
       active = started
       resolve()
     }

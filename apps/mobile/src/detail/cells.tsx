@@ -404,6 +404,38 @@ export const NoticeCell = memo(function NoticeCell({ row }: Props<'notice'>) {
   )
 })
 
+/** 压了这么久还没完，后面加一句“可能要几分钟”（和桌面端一样 10 秒） */
+const COMPACTION_SLOW_MS = 10_000
+
+/** 上下文压缩：一条分隔线，字在中间。压的时候写“正在压缩上下文”，压完写已压缩，没压完回合就停了写没完成 */
+export const CompactionCell = memo(function CompactionCell({ row }: Props<'compaction'>) {
+  const { c, font } = useTheme()
+  const t = useT()
+  const running = row.status === 'inProgress'
+  const spent = useTicking(running ? row.startedAt : null)
+  const label = running
+    ? t(spent !== null && spent >= COMPACTION_SLOW_MS ? 'compaction.slow' : 'compaction.running')
+    : row.status === 'interrupted'
+      ? t('compaction.interrupted')
+      : t(row.source === 'manual' ? 'compaction.manual' : 'compaction.automatic')
+  return (
+    <View style={styles.compaction} testID="compaction">
+      <View style={[styles.compactionLine, { backgroundColor: c.line2 }]} />
+      <Text
+        style={[
+          styles.meta,
+          styles.compactionText,
+          { color: running ? c.ink2 : c.ink3, fontSize: font.size.meta },
+        ]}
+        numberOfLines={2}
+      >
+        {label}
+      </Text>
+      <View style={[styles.compactionLine, { backgroundColor: c.line2 }]} />
+    </View>
+  )
+})
+
 /** 会话最上面：从哪个会话分叉出来的。原会话这台设备上还有，点名字过去 */
 export const ForkedCell = memo(function ForkedCell({ row }: Props<'forked'>) {
   const { c, font } = useTheme()
@@ -521,6 +553,15 @@ export const styles = StyleSheet.create({
   more: { paddingHorizontal: 8, height: 26, justifyContent: 'center' },
   error: { marginHorizontal: 16, marginVertical: 4, borderWidth: 1, padding: 10 },
   notice: { paddingHorizontal: 16, paddingVertical: 4 },
+  compaction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  compactionLine: { flex: 1, minWidth: 16, height: StyleSheet.hairlineWidth },
+  compactionText: { flexShrink: 1, textAlign: 'center' },
   forked: {
     paddingHorizontal: 16,
     paddingVertical: 10,

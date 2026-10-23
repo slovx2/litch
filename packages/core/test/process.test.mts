@@ -16,6 +16,7 @@ import {
   type ToolCallItem,
   thoughtShown,
   toolKind,
+  workingShown,
 } from '../src/index.mjs'
 
 test('分块：说明把工具调用切成几组，最后一条 final 是最终回答，其余都进过程', () => {
@@ -518,10 +519,10 @@ test('汇总：只有思考的组没有动作；只有一条提示时带上它�
   assert.equal(only.steps, 0)
   assert.equal(only.durationMs, null)
   const notice = stepsTally([
-    { id: 'n', kind: 'notice', label: { key: 'notice.contextCompaction' } as never, detail: null },
+    { id: 'n', kind: 'notice', label: { key: 'notice.enteredReview' } as never, detail: null },
   ])
   assert.deepEqual(notice.counts, [{ kind: 'notice', n: 1 }])
-  assert.deepEqual(notice.notice, { key: 'notice.contextCompaction' })
+  assert.deepEqual(notice.notice, { key: 'notice.enteredReview' })
   assert.equal(notice.steps, 0)
 })
 
@@ -579,4 +580,35 @@ test('条目的起止时刻：只在跑着的回合里记；开始沿用第一�
   assert.deepEqual(again.item.span, { from: 100, to: 700 }, '完成的通知来两遍，结束不往后挪')
   const history = { op: 'item.add', turnId: 't', item: command('h') } as const
   assert.equal(spanOp(view('completed'), history, 100), history, '读历史放进来的不记')
+})
+
+test('分块：上下文压缩是一条露在外面的分隔线，不进过程；压的时候不另写“正在工作”', () => {
+  assert.deepEqual(
+    bucketItems([
+      { id: 'u', kind: 'userMessage' },
+      { id: 'c1', kind: 'command' },
+      { id: 'k', kind: 'compaction' },
+      { id: 'c2', kind: 'command' },
+      { id: 'a', kind: 'agentMessage', phase: 'final' },
+    ]),
+    [
+      { type: 'user', itemId: 'u' },
+      { type: 'process', key: 'c1', parts: [{ type: 'steps', key: 'c1', itemIds: ['c1'] }] },
+      { type: 'compaction', itemId: 'k' },
+      { type: 'process', key: 'c2', parts: [{ type: 'steps', key: 'c2', itemIds: ['c2'] }] },
+      { type: 'answer', itemId: 'a' },
+    ],
+  )
+  // 手动压缩的回合里只有它
+  assert.deepEqual(bucketItems([{ id: 'k', kind: 'compaction' }]), [
+    { type: 'compaction', itemId: 'k' },
+  ])
+  const compaction = (status: 'inProgress' | 'completed'): ItemView => ({
+    id: 'k',
+    kind: 'compaction',
+    status,
+    source: 'automatic',
+  })
+  assert.equal(workingShown(true, [compaction('inProgress')], 0), false)
+  assert.equal(workingShown(true, [compaction('completed')], 0), true)
 })

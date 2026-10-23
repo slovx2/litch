@@ -639,7 +639,19 @@ export interface WebSearchItem {
   query: string
 }
 
-/** 一行说明：上下文压缩、进入审查模式这类事件，以及这一版客户端不认识的条目类型 */
+/**
+ * 上下文压缩（协议的 contextCompaction）。inProgress：对面发了开始、还没发完成；
+ * interrupted：回合结束了还没等到完成，没压成。manual：这边点的压缩（读历史时按回合里没有用户消息认），
+ * 别的算自动压缩。压了多久看 span
+ */
+export interface CompactionItem {
+  id: string
+  kind: 'compaction'
+  status: 'inProgress' | 'completed' | 'interrupted'
+  source: 'manual' | 'automatic'
+}
+
+/** 一行说明：进入审查模式这类事件，以及这一版客户端不认识的条目类型 */
 export interface NoticeItem {
   id: string
   kind: 'notice'
@@ -675,6 +687,7 @@ export type ItemView = (
   | PlanItem
   | WebSearchItem
   | NoticeItem
+  | CompactionItem
   | TodoItem
 ) & {
   /**

@@ -32,6 +32,7 @@ import { useTheme } from '../ui/theme'
 import { useSessionBackground } from './background/BackgroundBar'
 import { OriginCell } from './background/OriginCell'
 import {
+  CompactionCell,
   ErrorCell,
   ForkedCell,
   MarkdownCell,
@@ -94,6 +95,8 @@ function renderRow(row: Row) {
       return <TodoCell row={row} />
     case 'notice':
       return <NoticeCell row={row} />
+    case 'compaction':
+      return <CompactionCell row={row} />
     case 'goalReached':
       return <GoalReachedCell row={row} />
     case 'error':

@@ -248,6 +248,8 @@ interface Live {
   steered: Map<string, { key: string; turnId: string; message: OutgoingMessage }>
   /** 我们自己发出的回退还没回来。这期间对面的“历史被改写了”通知说的就是这一次，不用重新载入 */
   reverting: boolean
+  /** 这边发出的手动压缩里，对面还没开始压的几次：接下来开始的压缩算手动的（官方桌面端也这样认） */
+  compacting: number
 }
 
 type Notes = {
@@ -521,6 +523,15 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     }
     const key = echoed ?? viewItem(live, viewId, item.id, position)
     const view: ItemView = { ...projectItem(item, streaming), id: key }
+    if (view.kind === 'compaction') {
+      // 完成时沿用开始时定下的来源；头一次见到它时认一下是不是这边点的
+      const seen = live.view?.items[key]
+      if (seen?.kind === 'compaction') view.source = seen.source
+      else if (live.compacting > 0) {
+        live.compacting--
+        view.source = 'manual'
+      }
+    }
     // 看着它开始的命令记下时刻：对面不增量给输出的时候，界面拿它显示“已经跑了多久”
     if (view.kind === 'command' && streaming && view.status === 'inProgress') {
       view.startedAt = host.clock.now()
@@ -686,6 +697,8 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       settleItems(live, turn.id, turn.status === 'completed')
       settleTodo(live, turn.id)
       settleSteered(live, viewTurn(live, turn.id), turn.status === 'completed')
+      // 手动压缩的回合结束了还没见到压缩条目（对面不发）：不留到以后，免得把下一次自动压缩认成手动的
+      live.compacting = 0
       // 回合结束时还没答的请求已经没有意义了
       settleRequests(live, (request) => request.turnId === turn.id)
       host.touched(live.id)
@@ -1079,6 +1092,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     pending: {},
     steered: new Map(),
     reverting: false,
+    compacting: 0,
   })
 
   /**
@@ -1600,9 +1614,19 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     async compact(sessionId) {
       const live = idle(sessionId, '回合正在进行，结束后才能压缩')
       if (!live.view.live) throw new ChannelError('rejected', '此会话只读')
-      await attempt(live, 'compact', () =>
-        host.request('thread/compact/start', { threadId: sessionId }, { timeoutMs: LOAD_TIMEOUT }),
-      )
+      live.compacting++
+      try {
+        await attempt(live, 'compact', () =>
+          host.request(
+            'thread/compact/start',
+            { threadId: sessionId },
+            { timeoutMs: LOAD_TIMEOUT },
+          ),
+        )
+      } catch (error) {
+        live.compacting = Math.max(0, live.compacting - 1)
+        throw error
+      }
       host.touched(live.id)
     },
     async setGoal(sessionId, change) {

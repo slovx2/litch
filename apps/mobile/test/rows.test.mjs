@@ -26,7 +26,7 @@ const command = (id, status, exitCode = null) => ({
   startedAt: null,
   query: '',
 })
-const notice = (id) => ({ id, kind: 'notice', label: '压缩了上下文', detail: null })
+const notice = (id) => ({ id, kind: 'notice', label: '进入审查模式', detail: null })
 
 function viewOf(turns, items) {
   return {
@@ -191,4 +191,39 @@ test('后台任务：回合结束了还在跑的步骤不再写“正在做”�
     origin: 'backgroundTask',
     startedAt: 9000,
   })
+})
+
+test('上下文压缩：一条单独的分隔行，不进过程组；压的时候状态行不写“正在工作”', () => {
+  const compaction = (status, span) => ({
+    id: 'k',
+    kind: 'compaction',
+    status,
+    source: 'automatic',
+    ...(span ? { span } : {}),
+  })
+  const running = viewOf(
+    [{ id: 't', status: 'running', itemIds: ['u', 'c1', 'k'] }],
+    [
+      user('u', '接着做'),
+      { ...command('c1'), status: 'completed' },
+      compaction('inProgress', { from: 5, to: null }),
+    ],
+  )
+  const rows = new RowBuilder().build(running, 'all')
+  assert.deepEqual(types(rows), ['user', 'group', 'compaction', 'status'])
+  assert.deepEqual(
+    { status: rows[2].status, source: rows[2].source, startedAt: rows[2].startedAt },
+    { status: 'inProgress', source: 'automatic', startedAt: 5 },
+  )
+  assert.equal(rows[3].working, false)
+  const done = viewOf(
+    [{ id: 't', status: 'completed', itemIds: ['k'] }],
+    [{ ...compaction('completed'), source: 'manual' }],
+  )
+  const after = new RowBuilder().build(done, 'all')
+  assert.deepEqual(types(after), ['compaction', 'status'])
+  assert.deepEqual(
+    [after[0].status, after[0].source, after[0].startedAt],
+    ['completed', 'manual', null],
+  )
 })
