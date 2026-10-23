@@ -8,8 +8,12 @@ export interface ProcessRow {
 }
 
 // 直接读操作系统的进程表：判断“进程是否还在”不能只看适配器自己的列表接口。
+// 进程多、命令行长的机器上整张表能超过默认的 1 MiB 输出上限（ENOBUFS），放宽到 64 MiB。
 export function processTable(): ProcessRow[] {
-  return execFileSync('/bin/ps', ['-A', '-o', 'pid=,ppid=,pgid=,command='], { encoding: 'utf8' })
+  return execFileSync('/bin/ps', ['-A', '-o', 'pid=,ppid=,pgid=,command='], {
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+  })
     .split('\n')
     .flatMap((line) => {
       const match = /^\s*(\d+)\s+(\d+)\s+(\d+)\s+(.*)$/.exec(line)
