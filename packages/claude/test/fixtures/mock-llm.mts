@@ -210,6 +210,12 @@ export class MockLLM {
               ? { type: 'thinking_delta', thinking: item.thinking }
               : { type: 'input_json_delta', partial_json: JSON.stringify(item.input) }
         this.event(res, 'content_block_delta', { index, delta })
+        // 思考块的签名照真的接口在收尾前单独一个 signature_delta（CLI 靠签名认旁白）
+        if (item.type === 'thinking' && typeof item.signature === 'string')
+          this.event(res, 'content_block_delta', {
+            index,
+            delta: { type: 'signature_delta', signature: item.signature },
+          })
         this.event(res, 'content_block_stop', { index })
         if (typeof item.pauseAfterMs === 'number')
           await new Promise((resolve) => setTimeout(resolve, item.pauseAfterMs as number))

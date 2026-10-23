@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { signatureKind } from '../src/narration.mjs'
 import { NativeClaudeRuntime } from '../src/native-runtime.mjs'
 import type { RuntimeEvent, RuntimeTurnContext } from '../src/types.mjs'
+import { signatureOf } from './fixtures/narration-signature.mjs'
 
 const context: RuntimeTurnContext = {
   threadId: 'thread',
@@ -77,9 +79,10 @@ function text(value: string) {
 test('native presentation keeps streamed progress and a later unstreamed final answer', async () => {
   const events = await collect([
     start('progress'),
+    // CLI 在一块收尾时就发这一块的那一帧，下一块的增量在它后面
     delta('thinking', 'Inspect first.', 0),
-    delta('text', 'I will inspect the file.', 1),
     assistant('progress', [{ type: 'thinking', thinking: 'Inspect first.' }]),
+    delta('text', 'I will inspect the file.', 1),
     assistant('progress', [text('I will inspect the file.')]),
     assistant('progress', [
       { type: 'tool_use', id: 'read', name: 'Read', input: { file_path: '/tmp/example' } },
@@ -248,4 +251,98 @@ test('ordinary subscription limit updates are quiet and real warnings retain con
     level: 'warning',
     message: 'Retry after 30 seconds.',
   })
+})
+
+// 旁白（narration.mts）：签名标了 narration、或那一帧的 narration_block_indexes 列了它的 thinking 块是说明文字，
+// 单独成一段；其余的照旧是思考。流式的 thinking 增量不先当思考发出去
+test('native presentation draws narration as its own commentary and keeps real thinking as reasoning', async () => {
+  const narration = (body: string) => ({
+    type: 'thinking',
+    thinking: body,
+    signature: signatureOf('narration'),
+  })
+  const events = await collect([
+    start('step'),
+    delta('thinking', 'Looking', 0),
+    { type: 'assistant', message: { id: 'step', content: [narration('Looking')] } },
+    delta('text', 'Found it.', 1),
+    assistant('step', [text('Found it.')]),
+    // 帧上的下标说了算：签名没标、下标列了的是旁白，签名标了、下标没列的不是
+    {
+      type: 'assistant',
+      narration_block_indexes: [1],
+      message: {
+        id: 'step',
+        content: [
+          { type: 'thinking', thinking: 'unlisted', signature: signatureOf('narration') },
+          { type: 'thinking', thinking: 'listed', signature: 'x' },
+        ],
+      },
+    },
+    assistant('step', [
+      { type: 'thinking', thinking: 'reasoning', signature: signatureOf('thinking') },
+      { type: 'thinking', thinking: 'broken', signature: 'not base64 at all' },
+      narration('   '),
+    ]),
+  ])
+  assert.deepEqual(events, [
+    { type: 'message_boundary' },
+    { type: 'message_boundary' },
+    { type: 'text_delta', delta: 'Looking' },
+    { type: 'message_boundary' },
+    { type: 'text_delta', delta: 'Found it.' },
+    { type: 'reasoning_delta', delta: 'unlisted' },
+    { type: 'message_boundary' },
+    { type: 'text_delta', delta: 'listed' },
+    { type: 'message_boundary' },
+    { type: 'reasoning_delta', delta: 'reasoning' },
+    { type: 'reasoning_delta', delta: 'broken' },
+    { type: 'reasoning_delta', delta: '   ' },
+  ])
+})
+
+test('narration in a subagent goes to the child as text, and structured output keeps it out of the result', async () => {
+  const subagent = await collect([
+    assistant('main', [
+      {
+        type: 'tool_use',
+        id: 'agent',
+        name: 'Agent',
+        input: { prompt: 'look', description: 'Look' },
+      },
+    ]),
+    {
+      type: 'assistant',
+      parent_tool_use_id: 'agent',
+      message: {
+        id: 'child',
+        content: [
+          { type: 'thinking', thinking: 'child narration', signature: signatureOf('narration') },
+          { type: 'thinking', thinking: 'child thought', signature: signatureOf('thinking') },
+        ],
+      },
+    },
+  ])
+  assert.deepEqual(
+    subagent.filter((event) => event.type === 'subagent_event').map((event) => event.event),
+    [
+      { type: 'text', text: 'child narration' },
+      { type: 'reasoning', text: 'child thought' },
+    ],
+  )
+  const structured = await collect(
+    [
+      assistant('answer', [
+        { type: 'thinking', thinking: 'aside', signature: signatureOf('narration') },
+      ]),
+    ],
+    { outputFormat: { type: 'json_schema', schema: { type: 'object' } } },
+    { structured_output: { ok: true } },
+  )
+  assert.deepEqual(structured, [
+    { type: 'reasoning_delta', delta: 'aside' },
+    { type: 'text_delta', delta: '{"ok":true}' },
+  ])
+  assert.equal(signatureKind(signatureOf('summary')), 'summary')
+  assert.equal(signatureKind(''), null)
 })

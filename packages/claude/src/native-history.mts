@@ -11,7 +11,9 @@
 // 别的会话发来的消息（origin 是 peer，peerMessages 扩展）：画成带 litchPeer 的用户消息条目；上一个回合已经停下时
 // 它开一个回合，来历记成 peer，回合还在中途时插进当前回合，和实时回合一样。
 // 人话前面 Claude 桌面端拼进去的 <system-reminder> 块去掉，只留人写的那部分。
+// 有字的 thinking 块里，签名标了旁白的（narration.mts）画成说明文字，其余的画成思考。
 // 条目的标识由消息的 uuid 和块的位置拼成：同一份记录再画一遍，标识不变。
+import { isNarration } from './narration.mjs'
 import { peerFromOrigin } from './peer-message.mjs'
 import { toolItemWithResult } from './server-helpers.mjs'
 import { readImageView, toolUseItem } from './tool-items.mjs'
@@ -110,6 +112,8 @@ export function projectNativeHistory(
   let open = new Map<string, number>()
   /** 当前回合停下了：最后是助手的话（或者被打断），不是工具结果 */
   let settled = false
+  /** 旁白变成的说明条目的 id */
+  const narrated = new Set<string>()
 
   const finish = (done: TurnRecord | null, final = false) => {
     if (!done) return
@@ -120,13 +124,14 @@ export function projectNativeHistory(
       turns.push(done)
       return
     }
-    // 回合里最后一段回答是最终回答，前面的是过程中的话
+    // 回合里最后一段回答是最终回答，前面的是过程中的话。旁白总是过程中的话，也不顶掉最终回答
     let last = true
     for (let at = done.items.length - 1; at >= 0; at--) {
       const item = done.items[at]
       if (item?.type !== 'agentMessage') continue
-      done.items[at] = { ...item, phase: last ? 'final_answer' : 'commentary' }
-      last = false
+      const final = last && !narrated.has(item.id)
+      done.items[at] = { ...item, phase: final ? 'final_answer' : 'commentary' }
+      if (final) last = false
     }
     // 没等到结果的工具调用：记录到这里就断了，当成失败
     for (const at of open.values()) {
@@ -253,7 +258,12 @@ export function projectNativeHistory(
           current.items.push({ type: 'agentMessage', id, text, phase: null, memoryCitation: null })
       } else if (block.type === 'thinking') {
         const text = String(block.thinking ?? '')
-        if (text.trim()) current.items.push({ type: 'reasoning', id, summary: [text], content: [] })
+        if (!text.trim()) return
+        // 旁白（narration.mts）是说明文字，不是思考
+        if (isNarration(block, index)) {
+          narrated.add(id)
+          current.items.push({ type: 'agentMessage', id, text, phase: null, memoryCitation: null })
+        } else current.items.push({ type: 'reasoning', id, summary: [text], content: [] })
       } else if (block.type === 'tool_use') {
         const name = String(block.name ?? '')
         const toolUseId = String(block.id ?? '')

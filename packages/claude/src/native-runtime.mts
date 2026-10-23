@@ -23,8 +23,8 @@ applyPromptCacheTtl()
 //
 // What this file preserves from the Python sidecar:
 //   * subagent suppression state machine (active_subagent_ids)
-//   * text/thinking stream-vs-block dedup — JS SDK re-delivers completed
-//     content blocks after their streaming deltas
+//   * text stream-vs-block dedup — JS SDK re-delivers completed content
+//     blocks after their streaming deltas（thinking 不流式发，等整块到了才分得清是思考还是旁白）
 //   * ToolUseBlock double-delivery dedup (skip start, take from AssistantMessage)
 //   * SDK StructuredOutput 结果校验与转发
 //   * derive_permission_mode mapping for (approvalPolicy, sandbox, planMode)
@@ -60,6 +60,7 @@ import {
 } from './host-claude.mjs'
 import { jsonSchemaValidator } from './json-schema.mjs'
 import { sdkMcpStartupEnvironment } from './mcp-config.mjs'
+import { isNarration, narrationIndexes } from './narration.mjs'
 import {
   appendNativeContext,
   type ContextInjection,
@@ -2406,12 +2407,9 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
           return
         }
         await pending.handlers.onEvent({ type: 'text_delta', delta: text })
-      } else if (deltaType === 'thinking_delta') {
-        const thinking = String(delta.thinking ?? '')
-        if (!thinking) return
-        this.recordStreamedBlock(pending, event.index, 'thinking', thinking)
-        await pending.handlers.onEvent({ type: 'reasoning_delta', delta: thinking })
       }
+      // thinking_delta 不发：这个块是思考还是旁白（narration.mts），要等签名和那一帧助手消息到了才知道，
+      // 整块到了再按块发。默认的思考展示下真思考本来就没有字，看不出差别；打开了思考摘要时摘要整块出现
     }
   }
 
@@ -2470,16 +2468,19 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     }
     const content = (inner.content as Array<Record<string, unknown>>) || []
     const agentToolUseId = stringOrNull(message.parent_tool_use_id)
-    for (const block of content) {
+    const narration = narrationIndexes(message)
+    for (const [index, block] of content.entries()) {
       const blockType = String(block.type ?? '')
       if (agentToolUseId && (blockType === 'text' || blockType === 'thinking')) {
         const text = String((blockType === 'text' ? block.text : block.thinking) ?? '')
         if (!text) continue
+        // 旁白按说明文字给子线程，但它不是子代理的结果，不记成最后一段话
         if (blockType === 'text') (pending.subagentText ??= new Map()).set(agentToolUseId, text)
+        const said = blockType === 'text' || isNarration(block, index, narration)
         await pending.handlers.onEvent({
           type: 'subagent_event',
           agentToolUseId,
-          event: { type: blockType === 'text' ? 'text' : 'reasoning', text },
+          event: { type: said ? 'text' : 'reasoning', text },
         })
         continue
       }
@@ -2493,8 +2494,16 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         }
       } else if (blockType === 'thinking') {
         if (nestedMessage || pending.activeSubagents.size > 0) continue
-        const thinking = this.unstreamedBlockText(pending, 'thinking', String(block.thinking ?? ''))
-        if (thinking) await pending.handlers.onEvent({ type: 'reasoning_delta', delta: thinking })
+        const thinking = String(block.thinking ?? '')
+        if (!thinking) continue
+        if (!pending.context?.outputFormat && isNarration(block, index, narration)) {
+          // 旁白是一段说明：前后各断一次，不和前面的回答、同一条消息后面的正文粘成一条
+          await pending.handlers.onEvent({ type: 'message_boundary' })
+          await pending.handlers.onEvent({ type: 'text_delta', delta: thinking })
+          await pending.handlers.onEvent({ type: 'message_boundary' })
+        } else {
+          await pending.handlers.onEvent({ type: 'reasoning_delta', delta: thinking })
+        }
       } else if (blockType === 'tool_use') {
         const id = String(block.id ?? '')
         const name = String(block.name ?? '')

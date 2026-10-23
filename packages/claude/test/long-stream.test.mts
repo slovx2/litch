@@ -226,8 +226,8 @@ test('STREAM-CC-001：一万条增量的回答，写库的次数和序列化的�
       JSON.stringify = stringify
       const written = changes() - changesBefore
 
-      // 客户端收到的：增量逐条照旧，条目开始时不带字，完成时带全文
-      assert.deepEqual(first.deltas('item/reasoning/summaryTextDelta'), thoughts)
+      // 客户端收到的：正文的增量逐条照旧；思考整块一条（是思考还是旁白要等整块到了才分得清）。条目开始时不带字，完成时带全文
+      assert.deepEqual(first.deltas('item/reasoning/summaryTextDelta'), [thoughts.join('')])
       assert.deepEqual(first.deltas('item/agentMessage/delta'), pieces)
       assert.equal(half + late.deltas('item/agentMessage/delta').join(''), whole)
       const methods = first.messages.map((m) => m.method)
