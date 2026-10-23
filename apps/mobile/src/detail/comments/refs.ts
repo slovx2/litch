@@ -69,10 +69,37 @@ export function snippet(text: string, max: number): string {
   return flat.length > max ? `${flat.slice(0, max)}…` : flat
 }
 
-/** 拿去在行里找的那一截：引用的第一行非空的字，最多 40 个。块是在空行处切的，第一行一定落在一块里 */
+/**
+ * 比对用的纯文字：去掉行内的 Markdown 记号。选字回复的引用是画出来的字（没有反引号、星号、链接地址），
+ * 全文页选的是源码，块里存的是源码，两边都剥成这样再比。记号字符一律删掉（两边删法一样，变量名里的 _ 也不碍事），
+ * [字](地址) 留字、<网址> 留网址、反斜杠转义留后面那个字，空白并成一个空格
+ */
+export function plainOf(text: string): string {
+  return text
+    .replace(/!?\[([^\]\n]*)\]\([^)\n]*\)/g, '$1')
+    .replace(/<(https?:\/\/[^>\s]+)>/g, '$1')
+    .replace(/\\([!-/:-@[-`{-~])/g, '$1')
+    .replace(/[`*_~]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/** 块的纯文字，按行对象记着：一个块比对一次就够 */
+const plainRows = new WeakMap<Row, string>()
+
+function plainRow(row: Extract<Row, { type: 'md' }>): string {
+  let plain = plainRows.get(row)
+  if (plain === undefined) {
+    plain = plainOf(row.text)
+    plainRows.set(row, plain)
+  }
+  return plain
+}
+
+/** 拿去在行里找的那一截：引用的第一行非空的字（剥成纯文字），最多 40 个。块是在空行处切的，第一行一定落在一块里 */
 function probeOf(quote: string): string {
-  const line = quote.split('\n').find((each) => each.trim()) ?? ''
-  return line.trim().slice(0, 40)
+  const line = quote.split('\n').find((each) => plainOf(each)) ?? ''
+  return plainOf(line).slice(0, 40)
 }
 
 /** 从发出去的消息里认回来的评论（回退后放回输入框的）不知道原文在哪个条目，条目标识写这个 */
@@ -100,7 +127,7 @@ export function findQuote(rows: readonly Row[], target: QuoteTarget): number {
     for (let at = 0; at < rows.length; at++) {
       const row = rows[at]
       if (row?.type !== 'md' || row.itemId !== target.itemId) continue
-      if (probe && row.text.includes(probe)) return at
+      if (probe && plainRow(row).includes(probe)) return at
       // 从新到旧排：同一条回答越往后越靠前，留着最后看到的那块
       first = at
     }
@@ -114,7 +141,7 @@ export function findQuote(rows: readonly Row[], target: QuoteTarget): number {
   }
   for (let at = start; at < rows.length; at++) {
     const row = rows[at]
-    if (row?.type === 'md' && !row.plan && row.text.includes(probe)) return at
+    if (row?.type === 'md' && !row.plan && plainRow(row).includes(probe)) return at
   }
   return -1
 }

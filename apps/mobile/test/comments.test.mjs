@@ -8,6 +8,7 @@ import {
   findQuote,
   linkCommentRefs,
   parseCommentHref,
+  plainOf,
   snippet,
   UNKNOWN_ITEM,
 } from '../src/detail/comments/refs.ts'
@@ -85,6 +86,30 @@ test('找原文：只知道回合的从那一回合往前找，计划不算；�
   assert.equal(findQuote(rows, { quote: '计划里也写了', turnId: 't2' }), -1)
   assert.equal(findQuote(rows, { quote: '缓存要清掉', itemId: UNKNOWN_ITEM }), 1)
   assert.equal(findQuote(rows, { quote: '   ', turnId: 't2' }), -1)
+})
+
+test('找原文：选字回复引用的是画出来的字，块里是源码；行内代码、加粗、链接、转义都剥掉再比', () => {
+  const marked = [
+    md('b1:2', 't3', 'b1', '最后一块：没有记号的字'),
+    md(
+      'b1:1',
+      't3',
+      'b1',
+      '重试在 `src/net/client.ts` 第 12 行的 `retry`，**超时的请求**不该重试，见 [文档](https://x.test/a)。',
+    ),
+    md('b1:0', 't3', 'b1', '1\\. 先看 <https://x.test/b> 再说，snake_case 的名字也行'),
+  ]
+  // 画出来的字：没有反引号、星号、链接地址
+  assert.equal(
+    findQuote(marked, { quote: 'src/net/client.ts 第 12 行的 retry，超时', itemId: 'b1' }),
+    1,
+  )
+  assert.equal(findQuote(marked, { quote: '超时的请求不该重试，见 文档。', itemId: 'b1' }), 1)
+  assert.equal(findQuote(marked, { quote: '1. 先看 https://x.test/b 再说', turnId: 't4' }), 2)
+  assert.equal(findQuote(marked, { quote: 'snake_case 的名字', itemId: 'b1' }), 2)
+  // 全文页选的是源码，照样认得
+  assert.equal(findQuote(marked, { quote: '`retry`，**超时的请求**', itemId: 'b1' }), 1)
+  assert.equal(plainOf('a  `b`\n  **c** [d](e)'), 'a b c d')
 })
 
 let generation = 0
