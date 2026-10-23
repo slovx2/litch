@@ -4,7 +4,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { writeProviderConfig, writeProviderSecret } from '../src/claude-provider.mjs'
+import {
+  readProviderConfig,
+  writeProviderConfig,
+  writeProviderSecret,
+} from '../src/claude-provider.mjs'
 import {
   allSelectableModelOptions,
   catalogModelId,
@@ -103,7 +107,6 @@ function addProviders(): void {
           { id: 'vendor/kimi', title: null },
         ],
         smallModel: null,
-        headers: null,
       },
       work: {
         kind: 'apiKey',
@@ -112,9 +115,9 @@ function addProviders(): void {
         authHeader: 'apiKey',
         models: [],
         smallModel: null,
-        headers: null,
       },
     },
+    removed: [],
   })
 }
 
@@ -207,4 +210,25 @@ test('PROVIDERS-004：用户自己在 settings.json 里配了网关，不带前�
     ])
     assert.deepEqual(runModel('opus'), { provider: 'native', model: 'opus' })
     assert.equal(catalogModelId('default'), 'native/default')
+  }))
+
+test('PROVIDERS-005：删掉的供应商的型号仍认得出是它，供应商前缀区分大小写', () =>
+  withProviders(async () => {
+    addProviders()
+    writeProviderSecret('corp', 'gw-token')
+    await loadRuntimeModelCatalog(fakeRuntime([]))
+    // 型号只差大小写的照目录里的写法；前缀只差大小写的不是这一家
+    assert.equal(catalogModelId('corp/GLM-4.6'), 'corp/glm-4.6')
+    assert.equal(catalogModelId('Corp/glm-4.6'), 'Corp/glm-4.6')
+    assert.equal(isSelectableModel('Corp/glm-4.6'), false)
+    assert.deepEqual(runModel('Corp/glm-4.6'), { provider: 'anthropic', model: 'Corp/glm-4.6' })
+
+    const { corp: _, ...rest } = readProviderConfig().providers
+    writeProviderConfig({ ...readProviderConfig(), providers: rest, removed: ['corp'] })
+    invalidateProviderCatalogs()
+    await loadRuntimeModelCatalog(fakeRuntime([]))
+    assert.deepEqual(usableProviders(), ['anthropic'])
+    // 不落到账号：起 CLI 时按 corp 报没有这个供应商；选单里那一行带着它的名字
+    assert.deepEqual(runModel('corp/glm-4.6'), { provider: 'corp', model: 'glm-4.6' })
+    assert.equal(extraModelOption('corp/glm-4.6', false).displayName, '[corp] glm-4.6')
   }))

@@ -4,7 +4,7 @@
 //   另可放一个 `claude setup-token` 生成的长期令牌（存在下面的密钥文件里）。
 // - 供应商可以有多个，用户自己加：Anthropic API key（官方地址或自定的地址，x-api-key）和 Anthropic 兼容网关
 //   （地址、鉴权头、手填的型号清单、小模型映射、额外请求头）。定义记在适配器的 config.json（litch_providers），
-//   密钥只在 provider-secrets.json（0600，只写不读回）。
+//   密钥和额外请求头（常带令牌）只在 provider-secrets.json（0600，不原样读回）。
 // - native：用户自己在 settings.json、启动环境里配的凭据或网关（Claude Code 自己的配置），只读，原样交给 CLI。
 //
 // 不同供应商的型号放进同一个目录，型号 ID 写成 `<供应商>/<型号>`，按第一个 `/` 切；不带已知前缀的
@@ -44,14 +44,17 @@ export interface ProviderDefinition {
   models: ProviderModel[]
   /** gateway：CLI 内部用小模型的请求（起标题、haiku 档）改用哪个；null 用会话所选的型号 */
   smallModel: string | null
-  /** gateway：额外请求头，每行 `Name: Value`，原样进 ANTHROPIC_CUSTOM_HEADERS */
-  headers: string | null
 }
 
 export interface ProviderConfig {
   /** 上一次在任何会话（含新建页）里选的型号（`<供应商>/<型号>`）；新会话照它 */
   last: string | null
   providers: Record<string, ProviderDefinition>
+  /**
+   * 删掉的供应商 ID：会话的型号还带着这个前缀时认出是它、报“没有这个供应商”，不当成不带前缀的型号
+   * 交给账号（网关的历史不能发到别家）。同名的重新加上就从这里去掉
+   */
+  removed: string[]
 }
 
 function asObject(value: unknown): Record<string, unknown> {
@@ -94,11 +97,22 @@ export function parseProviderConfig(value: unknown): ProviderConfig {
       authHeader: kind === 'gateway' && entry.authHeader === 'apiKey' ? 'apiKey' : 'bearer',
       models: kind === 'gateway' ? parseModels(entry.models) : [],
       smallModel: kind === 'gateway' ? optionalString(entry.smallModel) : null,
-      headers: kind === 'gateway' ? optionalString(entry.headers) : null,
     }
     if (kind === 'apiKey') providers[id].authHeader = 'apiKey'
   }
-  return { last: optionalString(record.last), providers }
+  const removed = Array.isArray(record.removed)
+    ? [
+        ...new Set(
+          record.removed.filter(
+            (id): id is string =>
+              typeof id === 'string' &&
+              PROVIDER_ID_PATTERN.test(id) &&
+              !Object.hasOwn(providers, id),
+          ),
+        ),
+      ]
+    : []
+  return { last: optionalString(record.last), providers, removed }
 }
 
 export function providerConfigPath(): string {
@@ -110,7 +124,7 @@ export function readProviderConfig(path = providerConfigPath()): ProviderConfig 
     return parseProviderConfig(readConfigFile(path).values[PROVIDER_CONFIG_KEY])
   } catch {
     // config.json 坏了时服务本身起不来（启动时会报）；这里按没配过处理
-    return { last: null, providers: {} }
+    return { last: null, providers: {}, removed: [] }
   }
 }
 
@@ -131,7 +145,6 @@ export function writeProviderConfig(config: ProviderConfig, path = providerConfi
                 ...(model.title ? { title: model.title } : {}),
               })),
               ...(provider.smallModel ? { smallModel: provider.smallModel } : {}),
-              ...(provider.headers ? { headers: provider.headers } : {}),
             }
           : {}),
       },
@@ -141,19 +154,29 @@ export function writeProviderConfig(config: ProviderConfig, path = providerConfi
     path,
     {
       ...values,
-      [PROVIDER_CONFIG_KEY]: { ...(config.last ? { last: config.last } : {}), providers },
+      [PROVIDER_CONFIG_KEY]: {
+        ...(config.last ? { last: config.last } : {}),
+        providers,
+        ...(config.removed.length ? { removed: config.removed } : {}),
+      },
     },
     version,
   )
 }
 
-/** 供应商配置的版本：定义、上一次选择、各家密钥的有无（密钥本身不进） */
+/**
+ * 供应商配置的版本：定义、各家密钥的有无（密钥本身不进）。上一次选的型号不算：每次建会话、换型号都会记，
+ * 算进来的话开着的编辑框一保存就报冲突，模型目录也跟着重查
+ */
 export function providerConfigVersion(
   config = readProviderConfig(),
   secrets = readProviderSecrets(),
 ): string {
   const present = Object.keys(secrets).sort()
-  return createHash('sha256').update(JSON.stringify({ config, present })).digest('hex').slice(0, 16)
+  return createHash('sha256')
+    .update(JSON.stringify({ providers: config.providers, removed: config.removed, present }))
+    .digest('hex')
+    .slice(0, 16)
 }
 
 // ---------- 密钥 ----------
@@ -174,7 +197,12 @@ export function readProviderSecrets(path = providerSecretsPath()): Record<string
   }
 }
 
-/** 改一个供应商的密钥；null 是删掉 */
+/** 网关的额外请求头（每行 `Name: Value`，原样进 ANTHROPIC_CUSTOM_HEADERS）在密钥文件里的键；ID 里没有 `:` */
+export function providerHeadersKey(id: string): string {
+  return `${id}:headers`
+}
+
+/** 改一个供应商的密钥（或 providerHeadersKey 那一项）；null 是删掉 */
 export function writeProviderSecret(
   id: string,
   value: string | null,
@@ -204,12 +232,17 @@ function knownProvider(id: string, config: ProviderConfig): boolean {
   return RESERVED_IDS.has(id) || Object.hasOwn(config.providers, id)
 }
 
-/** `<供应商>/<型号>` 切开；前缀不是已知的供应商时整串是型号，供应商按 plainProvider() 算 */
+/**
+ * `<供应商>/<型号>` 切开（供应商 ID 区分大小写）。前缀是删掉的供应商时照样切开，起 CLI 时报没有这个供应商；
+ * 前缀不是已知的供应商时整串是型号（只有一家能用时目录里的 ID 不带前缀，型号本身可能带 `/`），
+ * 供应商按 plainProvider() 算
+ */
 export function splitModelRef(ref: string, config = readProviderConfig()): ModelRef {
   const slash = ref.indexOf('/')
   if (slash > 0) {
     const provider = ref.slice(0, slash)
-    if (knownProvider(provider, config)) return { provider, model: ref.slice(slash + 1) }
+    if (knownProvider(provider, config) || config.removed.includes(provider))
+      return { provider, model: ref.slice(slash + 1) }
   }
   return { provider: plainProvider(), model: ref }
 }
@@ -351,18 +384,26 @@ export function providerLaunch(
     }
   if (provider === ACCOUNT_PROVIDER) {
     const token = secrets[ACCOUNT_PROVIDER]
+    // 用户另配了模型服务时，型号映射（ANTHROPIC_DEFAULT_SONNET_MODEL 之类）是写给那一家的，账号不认；
+    // 没另配时是用户给账号定的版本，照用
+    const models = nativeOverrides(base).length > 0 ? MODEL_VARS : []
     const env = without(base, [
       ...CREDENTIAL_VARS.filter((name) => name !== 'CLAUDE_CODE_OAUTH_TOKEN'),
       ...ENDPOINT_VARS,
       ...PLATFORM_VARS,
       ...HOST_VARS,
+      ...models,
     ])
     // 存了长期令牌用它；没存时外面带进来的 CLAUDE_CODE_OAUTH_TOKEN 也是账号凭据，留着
     if (token) env.CLAUDE_CODE_OAUTH_TOKEN = token
     const blank = Object.fromEntries(
-      ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', ...ENDPOINT_VARS, ...PLATFORM_VARS].map(
-        (name) => [name, ''],
-      ),
+      [
+        'ANTHROPIC_API_KEY',
+        'ANTHROPIC_AUTH_TOKEN',
+        ...ENDPOINT_VARS,
+        ...PLATFORM_VARS,
+        ...models,
+      ].map((name) => [name, '']),
     )
     return {
       provider,
@@ -381,6 +422,8 @@ export function providerLaunch(
       provider,
       `供应商 ${definition.title ?? provider} 还没填密钥，在设备的 Claude Code 详情设置里填上`,
     )
+  const headers =
+    definition.kind === 'gateway' ? (secrets[providerHeadersKey(provider)] ?? null) : null
   const env = without(base, [
     ...CREDENTIAL_VARS,
     ...ENDPOINT_VARS,
@@ -400,15 +443,24 @@ export function providerLaunch(
     }
     const small = definition.smallModel ?? model
     if (small) env.ANTHROPIC_DEFAULT_HAIKU_MODEL = small
-    if (definition.headers) env.ANTHROPIC_CUSTOM_HEADERS = definition.headers
+    if (headers) env.ANTHROPIC_CUSTOM_HEADERS = headers
   }
   return {
     provider,
     env,
     flagSettings: null,
     managed: true,
-    // 型号不算：同一网关里换型号由 CLI 当场换，不换进程
-    scope: scopeOf([provider, definition, createHash('sha256').update(secret).digest('hex')]),
+    // 只算进了环境的几项：改显示名、型号清单不换进程。网关的型号也算，opus、sonnet 档的映射跟着它，
+    // 进程起来之后改不了
+    scope: scopeOf([
+      provider,
+      definition.baseUrl,
+      definition.authHeader,
+      definition.kind === 'gateway' ? [model, definition.smallModel] : null,
+      createHash('sha256')
+        .update(`${secret}\n${headers ?? ''}`)
+        .digest('hex'),
+    ]),
   }
 }
 

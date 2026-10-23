@@ -27,6 +27,7 @@ import {
   ProviderUnavailableError,
   parseProviderConfig,
   plainProvider,
+  providerConfigVersion,
   providerLaunch,
   readProviderConfig,
   readProviderSecrets,
@@ -624,7 +625,6 @@ test('HC-CLAUDE-006：按会话的供应商算起 CLI 的环境，没填密钥�
         authHeader: 'bearer' as const,
         models: [{ id: 'glm-4.6', title: null }],
         smallModel: 'glm-4.5-air',
-        headers: 'X-Team: a',
       },
       work: {
         kind: 'apiKey' as const,
@@ -633,24 +633,36 @@ test('HC-CLAUDE-006：按会话的供应商算起 CLI 的环境，没填密钥�
         authHeader: 'apiKey' as const,
         models: [],
         smallModel: null,
-        headers: null,
       },
     },
+    removed: [],
   }
-  const secrets = { corp: 'gw-token', work: 'sk-ant-api-work' }
+  const secrets = { corp: 'gw-token', 'corp:headers': 'X-Team: a', work: 'sk-ant-api-work' }
 
   // native：用户自己的配置，原样
   const native = providerLaunch(NATIVE_PROVIDER, null, legacy, config, secrets)
   assert.deepEqual(native.env, base)
   assert.equal(native.flagSettings, null)
 
-  // 账号：凭据、地址、云厂商开关去掉，设置文件里的同名项在命令行设置层置空
+  // 账号：凭据、地址、云厂商开关去掉，设置文件里的同名项在命令行设置层置空。另配了模型服务时
+  // 型号映射是写给那一家的，也去掉
   const account = providerLaunch(ACCOUNT_PROVIDER, null, legacy, config, secrets)
   assert.deepEqual(account.env, {
     PATH: '/bin',
-    ANTHROPIC_MODEL: 'opus',
     ANTHROPIC_CUSTOM_HEADERS: 'X-Old: 1',
   })
+  assert.equal(account.flagSettings?.env?.ANTHROPIC_MODEL, '')
+  assert.equal(account.flagSettings?.env?.ANTHROPIC_DEFAULT_SONNET_MODEL, '')
+  // 没另配时是用户给账号定的版本，照用
+  const pinned = providerLaunch(
+    ACCOUNT_PROVIDER,
+    null,
+    { PATH: '/bin', ANTHROPIC_DEFAULT_SONNET_MODEL: 'claude-sonnet-5-5' },
+    config,
+    secrets,
+  )
+  assert.equal(pinned.env.ANTHROPIC_DEFAULT_SONNET_MODEL, 'claude-sonnet-5-5')
+  assert.equal(pinned.flagSettings?.env?.ANTHROPIC_DEFAULT_SONNET_MODEL, undefined)
   assert.equal(account.managed, false)
   assert.equal(account.flagSettings?.apiKeyHelper, '')
   assert.equal(account.flagSettings?.env?.ANTHROPIC_API_KEY, '')
@@ -692,12 +704,25 @@ test('HC-CLAUDE-006：按会话的供应商算起 CLI 的环境，没填密钥�
     ANTHROPIC_DEFAULT_HAIKU_MODEL: 'glm-4.5-air',
     ANTHROPIC_CUSTOM_HEADERS: 'X-Team: a',
   })
-  // 同一网关换型号不换进程；换密钥、改定义要换
-  assert.equal(providerLaunch('corp', 'kimi-k2', base, config, secrets).scope, corp.scope)
+  // 换型号（opus、sonnet 档的映射跟着变）、换密钥、换请求头要换进程；改显示名、型号清单不换
+  assert.notEqual(providerLaunch('corp', 'kimi-k2', base, config, secrets).scope, corp.scope)
   assert.notEqual(
     providerLaunch('corp', 'glm-4.6', base, config, { ...secrets, corp: 'other' }).scope,
     corp.scope,
   )
+  assert.notEqual(
+    providerLaunch('corp', 'glm-4.6', base, config, { ...secrets, 'corp:headers': 'X-Team: b' })
+      .scope,
+    corp.scope,
+  )
+  const renamed = {
+    ...config,
+    providers: {
+      ...config.providers,
+      corp: { ...config.providers.corp, title: '新名字', models: [{ id: 'x', title: null }] },
+    },
+  }
+  assert.equal(providerLaunch('corp', 'glm-4.6', base, renamed, secrets).scope, corp.scope)
   const apiKeyHeader = {
     ...config,
     providers: {
@@ -1012,7 +1037,11 @@ test('HC-CLAUDE-015：从网关拉型号（回环上的假网关）', () =>
       version = providers.upsert({
         providerId: 'corp',
         templateId: 'anthropicGateway',
-        definition: { baseUrl: `http://127.0.0.1:${port}/`, apiKey: 'gw-token' },
+        definition: {
+          baseUrl: `http://127.0.0.1:${port}/`,
+          apiKey: 'gw-token',
+          headers: 'X-Team: litch',
+        },
         expectedVersion: version,
       }).version
       assert.deepEqual(await providers.discoverModels({ providerId: 'corp' }), {
@@ -1023,6 +1052,8 @@ test('HC-CLAUDE-015：从网关拉型号（回环上的假网关）', () =>
       })
       assert.equal(seen[0]!.url, '/v1/models?limit=1000')
       assert.equal(seen[0]!.headers['x-api-key'], undefined)
+      // 额外请求头和 CLI 发请求时一样带上
+      assert.equal(seen[0]!.headers['x-team'], 'litch')
       assert.equal(readProviderConfig().providers.corp!.models.length, 0, '只列出来，不写')
 
       // 密钥不对：报网关回的状态码
@@ -1050,6 +1081,117 @@ test('HC-CLAUDE-015：从网关拉型号（回环上的假网关）', () =>
       providers.close()
       await new Promise((resolve) => server.close(resolve))
     }
+  }))
+
+test('HC-CLAUDE-016：删掉的供应商认得出、换主机要重填密钥、请求头不原样读回、ID 不分大小写查重', () =>
+  isolated(async ({ adapter }) => {
+    const providers = new ClaudeProviders({ broadcast: () => {} })
+    const read = async () => (await providers.read()).version
+    providers.upsert({
+      providerId: 'corp',
+      templateId: 'anthropicGateway',
+      definition: {
+        baseUrl: 'https://gw.example.test/v1',
+        apiKey: 'gw-secret-123456789',
+        models: ['glm-4.6'],
+        headers: 'X-Team: team-secret-abcd\nX-Org: o',
+      },
+      expectedVersion: await read(),
+    })
+    // 请求头和密钥一起进密钥文件，读出去只有末四位
+    assert.equal(readProviderSecrets()['corp:headers'], 'X-Team: team-secret-abcd\nX-Org: o')
+    assert.doesNotMatch(await readFile(join(adapter, 'config.json'), 'utf8'), /team-secret/)
+    const shown = (await providers.read()).providers.find((provider) => provider.id === 'corp')!
+    assert.equal(shown.definition?.headers, 'X-Team: …abcd\nX-Org: …')
+    // 交回打码的那几行：原值留着；改了的那行换新
+    providers.upsert({
+      providerId: 'corp',
+      templateId: 'anthropicGateway',
+      definition: { headers: 'X-Team: …abcd\nX-Org: new-org' },
+      expectedVersion: await read(),
+    })
+    assert.equal(readProviderSecrets()['corp:headers'], 'X-Team: team-secret-abcd\nX-Org: new-org')
+
+    // 同一主机换路径照存的密钥；换主机、换密钥位置要重填
+    providers.upsert({
+      providerId: 'corp',
+      templateId: 'anthropicGateway',
+      definition: { baseUrl: 'https://gw.example.test/v2' },
+      expectedVersion: await read(),
+    })
+    for (const definition of [
+      { baseUrl: 'https://evil.example.test' },
+      { baseUrl: 'http://gw.example.test/v2' },
+      { authHeader: 'apiKey' },
+    ]) {
+      const error = await rejectsWith(
+        async () =>
+          providers.upsert({
+            providerId: 'corp',
+            templateId: 'anthropicGateway',
+            definition,
+            expectedVersion: await read(),
+          }),
+        'invalidValue',
+      )
+      assert.equal(error.data.key, 'apiKey')
+      assert.equal(readProviderConfig().providers.corp!.baseUrl, 'https://gw.example.test/v2')
+    }
+    providers.upsert({
+      providerId: 'corp',
+      templateId: 'anthropicGateway',
+      definition: { baseUrl: 'https://other.example.test', apiKey: 'other-key' },
+      expectedVersion: await read(),
+    })
+    assert.equal(readProviderSecrets().corp, 'other-key')
+
+    // 只差大小写的 ID：不让加，保留名也一样
+    await rejectsWith(
+      async () =>
+        providers.upsert({
+          providerId: 'Corp',
+          templateId: 'anthropicApiKey',
+          definition: {},
+          expectedVersion: await read(),
+        }),
+      'invalidValue',
+    )
+    await rejectsWith(
+      async () =>
+        providers.upsert({
+          providerId: 'Anthropic',
+          templateId: 'anthropicApiKey',
+          definition: {},
+          expectedVersion: await read(),
+        }),
+      'readOnly',
+    )
+
+    // 上一次选的型号不算进版本：开着的编辑框照样能存
+    const before = await read()
+    writeProviderConfig({ ...readProviderConfig(), last: 'corp/glm-4.6' })
+    assert.equal(providerConfigVersion(), before)
+
+    // 删掉之后，还带着它前缀的会话型号认得出是它，起 CLI 时报没有这个供应商
+    providers.remove({ providerId: 'corp', expectedVersion: await read() })
+    assert.deepEqual(readProviderConfig().removed, ['corp'])
+    assert.deepEqual(readProviderSecrets(), {})
+    assert.deepEqual(splitModelRef('corp/glm-4.6'), { provider: 'corp', model: 'glm-4.6' })
+    assert.throws(
+      () => providerLaunch('corp', 'glm-4.6', process.env),
+      (error) => error instanceof ProviderUnavailableError && error.provider === 'corp',
+    )
+    // 别的前缀照旧当成型号本身
+    assert.equal(splitModelRef('z-ai/glm-4.6').provider, ACCOUNT_PROVIDER)
+    // 同名的重新加上：不再算删掉的
+    providers.upsert({
+      providerId: 'corp',
+      templateId: 'anthropicApiKey',
+      definition: {},
+      expectedVersion: await read(),
+    })
+    assert.deepEqual(readProviderConfig().removed, [])
+    providers.close()
   }))
 
 test('HC-CLAUDE-008：Anthropic 账号的粘贴码登录、取消、登出（假 CLI）', () =>

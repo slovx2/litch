@@ -1,6 +1,7 @@
 // harness 详情设置里 Claude Code 的账号与供应商：litch/harness/providers/*、auth/*。
 // 账号一个（claude.ai 订阅或 Console，`claude auth login` 粘贴码登录，凭据由 CLI 自己存；另可存一个长期令牌）；
-// 供应商多个（Anthropic API key、Anthropic 兼容网关），定义在适配器的 config.json，密钥在 provider-secrets.json。
+// 供应商多个（Anthropic API key、Anthropic 兼容网关），定义在适配器的 config.json，密钥和额外请求头在
+// provider-secrets.json：请求头读出去时每行的值打码（`Name: …末四位`），保存时没改的那几行换回原值。
 // 不存在“当前在用的供应商”：会话按自己所选型号的供应商起 CLI（claude-provider.mts），所以 switchable 是 false。
 // 用户自己在 settings.json、启动环境里配的凭据或网关列成只读的 native。Bedrock、Vertex、Foundry 这一版不做。
 import type {
@@ -33,6 +34,7 @@ import {
   type ProviderDefinition,
   type ProviderModel,
   providerConfigVersion,
+  providerHeadersKey,
   providerLaunch,
   readProviderConfig,
   readProviderSecrets,
@@ -129,6 +131,10 @@ const TITLE_FIELD = field('title', 'string', text('名字', 'Name'), {
   ),
 })
 const KEY_SPEC = field('apiKey', 'secret', text('密钥', 'Key'))
+const BASE_URL_KEY_NOTE = text(
+  '换到别的主机、改密钥放的位置，要重新填密钥。',
+  'Changing the host or the key header requires entering the key again.',
+)
 
 function apiKeyTemplate(): HarnessProviderTemplate {
   return {
@@ -142,7 +148,10 @@ function apiKeyTemplate(): HarnessProviderTemplate {
       TITLE_FIELD,
       KEY_SPEC,
       field('baseUrl', 'string', text('地址', 'Base URL'), {
-        description: text('不填用官方地址。', 'Leave empty for the official endpoint.'),
+        description: text(
+          '不填用官方地址。换到别的主机要重新填密钥。',
+          'Leave empty for the official endpoint. Changing the host requires entering the key again.',
+        ),
         placeholder: 'https://api.anthropic.com',
       }),
     ],
@@ -162,6 +171,7 @@ function gatewayTemplate(): HarnessProviderTemplate {
       field('baseUrl', 'string', text('地址', 'Base URL'), {
         clearable: false,
         placeholder: 'https://gateway.example.com',
+        description: BASE_URL_KEY_NOTE,
       }),
       KEY_SPEC,
       field('authHeader', 'enum', text('密钥放在哪', 'Key header'), {
@@ -184,11 +194,42 @@ function gatewayTemplate(): HarnessProviderTemplate {
         ),
       }),
       field('headers', 'text', text('额外请求头', 'Extra headers'), {
-        description: text('每行一个“名字: 值”。', 'One "Name: Value" per line.'),
+        description: text(
+          '每行一个“名字: 值”。存在设备的密钥文件里，这里只显示值的末四位。',
+          'One "Name: Value" per line. Stored with the keys on the device; only the last four characters of each value are shown.',
+        ),
       }),
     ],
     discoverModels: 'models',
   }
+}
+
+/** 每行 `Name: Value` 的值换成末四位，名字照旧 */
+function maskHeaders(headers: string): string {
+  return headerLines(headers)
+    .map(({ name, value }) => `${name}: ${secretLabel(value)}`)
+    .join('\n')
+}
+
+function headerLines(headers: string): { name: string; value: string }[] {
+  return headers.split('\n').flatMap((line) => {
+    const colon = line.indexOf(':')
+    if (colon <= 0) return []
+    return [{ name: line.slice(0, colon).trim(), value: line.slice(colon + 1).trim() }]
+  })
+}
+
+/** 交回来的请求头：值还是打码的那几行（名字相同、码对得上）换回存着的原值 */
+function unmaskHeaders(given: string, stored: string | null): string {
+  const before = new Map(
+    headerLines(stored ?? '').map(({ name, value }) => [name.toLowerCase(), value]),
+  )
+  return headerLines(given)
+    .map(({ name, value }) => {
+      const original = before.get(name.toLowerCase())
+      return `${name}: ${original !== undefined && value === secretLabel(original) ? original : value}`
+    })
+    .join('\n')
 }
 
 function modelLines(models: ProviderModel[]): string[] {
@@ -217,6 +258,15 @@ function hostOf(baseUrl: string | null): string | null {
     return new URL(baseUrl).host
   } catch {
     return baseUrl
+  }
+}
+
+/** 密钥发往的源（协议、主机、端口）；不填地址是官方地址 */
+function originOf(baseUrl: string | null): string {
+  try {
+    return new URL(baseUrl ?? 'https://api.anthropic.com').origin
+  } catch {
+    return baseUrl ?? ''
   }
 }
 
@@ -324,7 +374,12 @@ export class ClaudeProviders {
           ]
         : []),
       ...Object.entries(config.providers).map(([id, provider]) =>
-        this.customProvider(id, provider, secrets[id] ?? null),
+        this.customProvider(
+          id,
+          provider,
+          secrets[id] ?? null,
+          secrets[providerHeadersKey(id)] ?? null,
+        ),
       ),
     ]
     return {
@@ -339,6 +394,7 @@ export class ClaudeProviders {
     id: string,
     provider: ProviderDefinition,
     secret: string | null,
+    headers: string | null,
   ): HarnessProvider {
     const host = hostOf(provider.baseUrl)
     return {
@@ -371,7 +427,7 @@ export class ClaudeProviders {
               authHeader: provider.authHeader,
               models: modelLines(provider.models),
               ...(provider.smallModel ? { smallModel: provider.smallModel } : {}),
-              ...(provider.headers ? { headers: provider.headers } : {}),
+              ...(headers ? { headers: maskHeaders(headers) } : {}),
             }
           : {}),
       },
@@ -422,7 +478,10 @@ export class ClaudeProviders {
     this.checkVersion(params.expectedVersion)
     const config = readProviderConfig()
     const id = params.providerId
-    if (id === ACCOUNT_PROVIDER || id === NATIVE_PROVIDER)
+    if (
+      typeof id === 'string' &&
+      (id.toLowerCase() === ACCOUNT_PROVIDER || id.toLowerCase() === NATIVE_PROVIDER)
+    )
       throw new HarnessConfigError(
         'readOnly',
         text('内置的供应商不能改', 'Built-in providers cannot be edited'),
@@ -449,6 +508,16 @@ export class ClaudeProviders {
         text('没有这个模板', 'Unknown template'),
         'templateId',
       )
+    // ID 区分大小写（型号前缀照原样比），只差大小写的两家分不清，不让加
+    const twin = Object.keys(config.providers).find(
+      (other) => other !== id && other.toLowerCase() === id.toLowerCase(),
+    )
+    if (twin)
+      throw new HarnessConfigError(
+        'invalidValue',
+        text(`已经有供应商 ${twin}`, `Provider ${twin} already exists`),
+        'providerId',
+      )
     const existing = config.providers[id]
     if (existing && existing.kind !== kind)
       throw new HarnessConfigError(
@@ -461,6 +530,8 @@ export class ClaudeProviders {
       )
     // 改已有的：没给的项照旧（详情设置的表单只送改过的那几栏）
     const given = (params.definition ?? {}) as Record<string, unknown>
+    const secrets = readProviderSecrets()
+    const storedHeaders = secrets[providerHeadersKey(id)] ?? null
     const definition: Record<string, unknown> = {
       ...(existing
         ? {
@@ -469,7 +540,6 @@ export class ClaudeProviders {
             authHeader: existing.authHeader,
             models: modelLines(existing.models),
             smallModel: existing.smallModel,
-            headers: existing.headers,
           }
         : {}),
       ...given,
@@ -499,19 +569,43 @@ export class ClaudeProviders {
       )
     const string = (value: unknown) =>
       typeof value === 'string' && value.trim() ? value.trim() : null
-    config.providers[id] = {
+    const next: ProviderDefinition = {
       kind,
       title: string(definition.title),
       baseUrl: baseUrl || null,
       authHeader: kind === 'gateway' && definition.authHeader !== 'apiKey' ? 'bearer' : 'apiKey',
       models: kind === 'gateway' ? parseModelLines(definition.models) : [],
       smallModel: kind === 'gateway' ? string(definition.smallModel) : null,
-      headers: kind === 'gateway' ? string(definition.headers) : null,
     }
+    // 密钥：给了字串就换（空串是清掉）；不给、或原样交回读到的 {set} 不动。
+    // 存着的密钥是发给原来那个主机、按原来的位置放的：主机或位置变了又没给新密钥，不能照发过去
+    const newKey = typeof definition.apiKey === 'string' ? definition.apiKey.trim() : null
+    if (
+      existing &&
+      secrets[id] &&
+      newKey === null &&
+      (originOf(existing.baseUrl) !== originOf(next.baseUrl) ||
+        existing.authHeader !== next.authHeader)
+    )
+      throw new HarnessConfigError(
+        'invalidValue',
+        text(
+          '换了主机或密钥放的位置，要重新填密钥',
+          'The host or key header changed; enter the key again',
+        ),
+        'apiKey',
+      )
+    config.providers[id] = next
+    config.removed = config.removed.filter((other) => other !== id)
     writeProviderConfig(config)
-    // 密钥：给了字串就换（空串是清掉）；不给、或原样交回读到的 {set} 不动
-    if (typeof definition.apiKey === 'string')
-      writeProviderSecret(id, definition.apiKey.trim() || null)
+    if (newKey !== null) writeProviderSecret(id, newKey || null)
+    if (kind === 'gateway' && Object.hasOwn(given, 'headers')) {
+      const headers = string(given.headers)
+      writeProviderSecret(
+        providerHeadersKey(id),
+        headers === null ? null : unmaskHeaders(headers, storedHeaders) || null,
+      )
+    }
     return this.changed()
   }
 
@@ -521,10 +615,13 @@ export class ClaudeProviders {
     const id = params.providerId as string
     this.custom(id, config)
     delete config.providers[id]
+    // 还用着它的型号的会话认得出是它，报没有这个供应商（不当成账号的型号）
+    config.removed = [...config.removed.filter((other) => other !== id), id]
     // 上一次选的正是它的型号：新会话回到账号（不悄悄换到别家）
     if (config.last?.startsWith(`${id}/`)) config.last = null
     writeProviderConfig(config)
     writeProviderSecret(id, null)
+    writeProviderSecret(providerHeadersKey(id), null)
     return this.changed()
   }
 
@@ -549,7 +646,8 @@ export class ClaudeProviders {
         text('只有网关能拉取型号', 'Only gateways can list models'),
         'providerId',
       )
-    const secret = readProviderSecrets()[params.providerId as string]
+    const secrets = readProviderSecrets()
+    const secret = secrets[params.providerId as string]
     if (!secret)
       throw new HarnessConfigError(
         'invalidValue',
@@ -557,7 +655,13 @@ export class ClaudeProviders {
         'providerId',
       )
     const url = `${provider.baseUrl.replace(/\/+$/, '')}/v1/models?limit=1000`
-    const headers: Record<string, string> = { 'anthropic-version': '2023-06-01' }
+    // 和 CLI 发请求时一样带上额外请求头（网关可能靠它认组织）
+    const headers: Record<string, string> = Object.fromEntries(
+      headerLines(secrets[providerHeadersKey(params.providerId as string)] ?? '').map(
+        ({ name, value }) => [name.toLowerCase(), value],
+      ),
+    )
+    headers['anthropic-version'] = '2023-06-01'
     if (provider.authHeader === 'bearer') headers.authorization = `Bearer ${secret}`
     else headers['x-api-key'] = secret
     let response: Response

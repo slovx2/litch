@@ -55,6 +55,7 @@ import {
   hasProviderPrefix,
   PROVIDER_CONFIG_KEY,
   readProviderConfig,
+  splitModelRef,
   writeProviderConfig,
 } from './claude-provider.mjs'
 import { cliConfigLayer, mergeConfigLayers, sessionConfigLayer } from './cli-config.mjs'
@@ -195,6 +196,7 @@ import {
   tokenBreakdownFromClaudeUsage,
   toolItemWithResult,
   toolResultText,
+  usableProviders,
   userInputAnswersAsContent,
 } from './server-helpers.mjs'
 import { resolveShellEnvironmentPolicy, type ShellEnvironmentPolicy } from './shell-environment.mjs'
@@ -8168,10 +8170,13 @@ export class CodexClaudeAppServer {
         : typeof legacyModel === 'string'
           ? legacyModel
           : null
-    // 上一次在任何会话里选的型号优先（新建会话记住上一次选择），其次 settings.json 的默认模型
+    // 上一次在任何会话里选的型号优先（新建会话记住上一次选择），其次 settings.json 的默认模型。
+    // 那一家现在用不了（登出、清了密钥）时不照它，新会话第一轮不至于就报错
     const last = readProviderConfig().last
     this.configModel =
-      last !== null && isSelectableModel(last)
+      last !== null &&
+      isSelectableModel(last) &&
+      usableProviders().includes(splitModelRef(last).provider)
         ? catalogModelId(last)
         : model === null
           ? defaultSelectableModelId()

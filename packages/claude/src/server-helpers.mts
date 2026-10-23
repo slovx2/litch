@@ -296,8 +296,7 @@ export function runModel(
 // 除目录行外，也接受 CLI 可直接解析的别名与完整型号（例如持久化的 opus）；别家供应商的型号不限
 // （CLI 原样交给网关）；显式配置 CHA_CLAUDE_MODELS 时只接受该列表。
 export function isSelectableModel(id: string): boolean {
-  if (allSelectableModelOptions().some((option) => option.id.toLowerCase() === id.toLowerCase()))
-    return true
+  if (findCatalogId(allSelectableModelOptions(), id)) return true
   if (process.env.CHA_CLAUDE_MODELS) return false
   const { provider, model } = splitModelRef(id)
   if (provider !== ACCOUNT_PROVIDER && provider !== NATIVE_PROVIDER) return model.trim().length > 0
@@ -315,12 +314,27 @@ export function defaultSelectableModelId(): string {
   return options.find((option) => option.isDefault === true)?.id ?? options[0]?.id ?? 'default'
 }
 
+// 目录里的那一行：逐字相同的优先，其次型号只差大小写的（CLI 的别名不分大小写）。供应商前缀照原样比，
+// 不会把 Corp/x 认成 corp/x。
+function findCatalogId(
+  options: readonly SelectableModelOption[],
+  candidate: string,
+): string | undefined {
+  const exact = options.find((option) => option.id === candidate)
+  if (exact) return exact.id
+  const prefix = (id: string) => id.slice(0, Math.max(0, id.indexOf('/')))
+  return options.find(
+    (option) =>
+      prefix(option.id) === prefix(candidate) &&
+      option.id.toLowerCase() === candidate.toLowerCase(),
+  )?.id
+}
+
 // 和目录里某一行只是大小写不同的，按目录里的写法记：会话报的模型和 model/list 的那一行逐字相同。
 // 不带前缀的（以前的会话、CLI 的别名）补上 plainProvider() 的前缀再找，找到就用目录里那一行。
 export function catalogModelId(id: string): string {
   const options = allSelectableModelOptions()
-  const find = (candidate: string) =>
-    options.find((option) => option.id.toLowerCase() === candidate.toLowerCase())?.id
+  const find = (candidate: string) => findCatalogId(options, candidate)
   if (process.env.CHA_CLAUDE_MODELS || hasProviderPrefix(id)) return find(id) ?? id
   return find(joinModelRef(plainProvider(), id)) ?? find(id) ?? id
 }
@@ -333,7 +347,11 @@ export function extraModelOption(id: string, isDefault: boolean): SelectableMode
   return {
     id,
     sdkModel: model,
-    displayName: showProviderPrefix() ? `[${providerLabel(provider)}] ${name}` : name,
+    // 供应商用不了（删掉了、没填密钥）时总带前缀：看得出这个会话是哪一家的
+    displayName:
+      showProviderPrefix() || !usableProviders().includes(provider)
+        ? `[${providerLabel(provider)}] ${name}`
+        : name,
     description: isDefault
       ? 'Default model configured for this adapter'
       : 'Model selected for an existing thread',
