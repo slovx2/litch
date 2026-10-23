@@ -520,6 +520,9 @@ export const en: Record<MessageKey, Entry> = {
   'archived.close': 'Back to conversation',
   'session.menu': 'Session actions',
   'session.rename': 'Rename',
+  'session.quote': 'Mention in the message box',
+  'session.quote.none':
+    'You can only mention it in the message box of another session on the same device',
   'session.archive': 'Archive',
   'session.delete': 'Delete',
   'session.delete.title': 'Delete this session?',
@@ -1305,8 +1308,12 @@ export const en: Record<MessageKey, Entry> = {
   'peek.inline': 'Put back in message',
   'peek.remove': 'Remove',
 
-  'at.label': 'Mention a file',
+  'at.label': 'Mention a session or file',
   'at.group': 'Files and folders',
+  'at.group.sessions': 'Sessions',
+  'mention.open': 'Open session: {about}',
+  'mention.gone': 'This session is no longer in the list',
+  'at.sessions.full': 'A message can mention at most {max} sessions',
   'at.hint': 'Type to search files and folders in the working directory',
   'at.searching': 'Searching…',
   'at.none': 'No matching files',

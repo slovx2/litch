@@ -254,6 +254,36 @@
   white-space: nowrap;
 }
 
+/* 提到的会话（输入框里 @ 的）：用户消息和回答里的 ＠[标题] 画成一个小片，点了打开那个会话 */
+.smen {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  max-width: 100%;
+  margin: 0 1px;
+  padding: 0 5px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r1);
+  font: inherit;
+  line-height: 1.35;
+  color: var(--accent);
+  vertical-align: baseline;
+  white-space: nowrap;
+}
+.smen span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+button.smen:hover,
+button.smen:focus-visible {
+  background: var(--hover);
+  border-color: var(--accent);
+}
+.smen.gone {
+  color: var(--ink-3);
+  border-style: dashed;
+}
+
 /* ---------- 过程区（用户消息和最终回答之间）：说明是正文，步骤收成一行弱化的汇总 ---------- */
 .proc {
   display: flex;

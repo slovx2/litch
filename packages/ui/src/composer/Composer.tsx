@@ -85,6 +85,7 @@ import {
 import { SettingsBar, useComposeOptions } from './SettingsBar.tsx'
 import { useSendMode } from './send-mode.ts'
 import { runningPlaceholder, runningSend } from './send-mode-logic.ts'
+import { keepMentioned } from './session-hits.ts'
 import { useSuggest } from './useSuggest.tsx'
 
 interface ComposerProps {
@@ -182,6 +183,10 @@ export function Composer(props: ComposerProps) {
   useEffect(() => {
     saveDraftExtras(draftKey, extras)
   }, [draftKey, extras])
+  // 提到的会话跟着正文走：@[标题] 那几个字删掉了，就不再带这个会话
+  useEffect(() => {
+    setExtras((current) => keepMentioned(current, text))
+  }, [text])
   // 别处把一段话放回来（回退之后把原来那条消息还给用户改）：放进输入框，光标落到末尾
   useEffect(
     () =>
@@ -223,12 +228,33 @@ export function Composer(props: ComposerProps) {
     () =>
       onMention((mention) => {
         const area = input.current
-        if (!area) return
+        if (!area) return false
         recalling.current = null
+        // 引用一个会话：只收同一台设备上的别的会话，写成 @[标题] 插在光标那里，另外记下是哪个
+        if (mention.kind === 'session') {
+          if (mention.deviceId !== deviceId || mention.threadId === sessionId) return false
+          const next = insertIntoDraft(
+            area.value,
+            `@[${mention.title}]`,
+            area.selectionStart,
+            area.selectionEnd,
+          )
+          setText(next.text)
+          setExtras((current) =>
+            mergeExtras(current, [
+              { kind: 'session', threadId: mention.threadId, title: mention.title },
+            ]),
+          )
+          requestAnimationFrame(() => {
+            area.focus()
+            area.setSelectionRange(next.caret, next.caret)
+          })
+          return true
+        }
         if (!mention.line) {
           setExtras((current) => mergeExtras(current, [fileExtra(mention, cwd, pathTwin(os))]))
           requestAnimationFrame(() => area.focus())
-          return
+          return true
         }
         const next = insertIntoDraft(
           area.value,
@@ -241,8 +267,9 @@ export function Composer(props: ComposerProps) {
           area.focus()
           area.setSelectionRange(next.caret, next.caret)
         })
+        return true
       }),
-    [cwd, os],
+    [cwd, os, deviceId, sessionId],
   )
 
   // 输入框跟着内容长高。先收回去再量，删字的时候才会变矮
@@ -269,10 +296,14 @@ export function Composer(props: ComposerProps) {
     images.length > 0 && (noImages || (model !== undefined && !model.acceptsImages))
   const filled =
     text.trim().length > 0 || images.length > 0 || extras.length > 0 || comments.length > 0
+  /** 输入框上面出片的那几样：提到的会话写在正文里，不算 */
+  const chipped = extras.filter((extra) => extra.kind !== 'session').length
   const ready = filled && !blocked && !busy && !imagesRefused
 
   const suggest = useSuggest({
     deviceId,
+    sessionId,
+    mentioned: extras.flatMap((extra) => (extra.kind === 'session' ? [extra.threadId] : [])),
     harness: props.harness,
     cwd: props.cwd ?? null,
     fresh: props.fresh,
@@ -548,12 +579,15 @@ export function Composer(props: ComposerProps) {
         <ul className="tray" aria-label={t('composer.queued')}>
           {queued.map((message) => (
             <li key={message.id} className="tray-row">
-              {message.extras.map((extra, index) => (
-                // biome-ignore lint/suspicious/noArrayIndexKey: 贴进来的文字没有自己的标识，同一段可以带两遍
-                <span key={index} className="mention">
-                  {labelOf(extra)}
-                </span>
-              ))}
+              {message.extras.map((extra, index) =>
+                // 提到的会话写在正文里，不另出一片
+                extra.kind === 'session' ? null : (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: 贴进来的文字没有自己的标识，同一段可以带两遍
+                  <span key={index} className="mention">
+                    {labelOf(extra)}
+                  </span>
+                ),
+              )}
               {message.images.length > 0 ? (
                 <span className="mention">
                   {t('composer.imageCount', { n: message.images.length })}
@@ -598,7 +632,7 @@ export function Composer(props: ComposerProps) {
         onDrop={onDrop}
       >
         {suggest.popup}
-        {images.length > 0 || extras.length > 0 || comments.length > 0 ? (
+        {images.length > 0 || chipped > 0 || comments.length > 0 ? (
           <ul className="cmp-atts" aria-label={t('composer.attached')}>
             {comments.map((comment, index) => (
               <CommentChip
@@ -626,18 +660,21 @@ export function Composer(props: ComposerProps) {
                 }
               />
             ))}
-            {extras.map((extra, index) => (
-              <ExtraChip
-                // biome-ignore lint/suspicious/noArrayIndexKey: 贴进来的文字没有自己的标识，同一段可以带两遍
-                key={index}
-                extra={extra}
-                onInline={() => inline(index)}
-                onRemove={() => {
-                  setExtras((current) => current.filter((_, at) => at !== index))
-                  input.current?.focus()
-                }}
-              />
-            ))}
+            {extras.map((extra, index) =>
+              // 提到的会话写在正文里（@[标题]），不另出一片：删掉那几个字就不带了
+              extra.kind === 'session' ? null : (
+                <ExtraChip
+                  // biome-ignore lint/suspicious/noArrayIndexKey: 贴进来的文字没有自己的标识，同一段可以带两遍
+                  key={index}
+                  extra={extra}
+                  onInline={() => inline(index)}
+                  onRemove={() => {
+                    setExtras((current) => current.filter((_, at) => at !== index))
+                    input.current?.focus()
+                  }}
+                />
+              ),
+            )}
             {images.map((image, index) => (
               // biome-ignore lint/suspicious/noArrayIndexKey: 图片没有自己的标识，同一张图可以加两次
               <li key={index} className="cmp-att">

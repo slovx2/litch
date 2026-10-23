@@ -13,12 +13,18 @@ import { togglePanel } from '../terminal/panel.ts'
 import type { Compaction } from './ContextMeter.tsx'
 import { type BuiltinId, builtinCommands, PICKER_OF } from './commands.ts'
 import { Suggest, type SuggestEntry, type SuggestGroup, useSuggestKeys } from './Suggest.tsx'
+import { insertMention } from './session-hits.ts'
 import { cutTrigger, findTrigger, rank, standsAlone } from './suggest.ts'
 import { useFileHits } from './useFileHits.ts'
+import { useSessionHits } from './useSessionHits.ts'
 import { useSkills } from './useSkills.ts'
 
 export interface SuggestHost {
   deviceId: string
+  /** 当前会话。新建对话页上没有。`@` 列会话时不列它自己 */
+  sessionId?: string | undefined
+  /** 这条消息里已经提到的会话（随消息带的 session）：`@` 不再列它们，满了不再列 */
+  mentioned: readonly string[]
   harness: string | undefined
   /** 技能按哪个工作目录取（没有就由对面按它自己的当前目录看）；`@` 找文件也在这个目录里找，没有就找不了 */
   cwd: string | null
@@ -117,10 +123,14 @@ export function useSuggest(host: SuggestHost): SuggestControl {
   const declared = device?.harnesses.find((entry) => entry.id === harness)?.abilities
   // 它声明了带不了技能：不去问
   const askable = Boolean(reachable) && declared?.skills !== false
-  // 两种单子：行首的 `/` 列命令和技能，词开头的 `@` 找文件
+  // 两种单子：行首的 `/` 列命令和技能，词开头的 `@` 找会话和文件
   const slash = trigger?.kind === 'slash' ? trigger : null
   const at = trigger?.kind === 'at' ? trigger : null
   const { skills, again } = useSkills({ deviceId, harness, cwd }, slash !== null && askable)
+  const sessions = useSessionHits(
+    { deviceId, current: host.sessionId ?? null, bound: host.mentioned },
+    at ? at.query : null,
+  )
   const files = useFileHits(
     { deviceId, root: cwd, online: device?.connection === 'online', fresh: host.fresh === true },
     at ? at.query : null,
@@ -197,8 +207,9 @@ export function useSuggest(host: SuggestHost): SuggestControl {
   const nothing = shownCommands.length === 0 && shownSkills.length === 0
   if (query && nothing && settled) status = undefined
 
+  // 会话在前：没打字时列最近的几个，文件那一组这时只是一句“输入以搜索”
   const groups: SuggestGroup[] = at
-    ? [files.group]
+    ? [sessions.group, files.group]
     : [
         { id: 'commands', title: t('slash.group.commands'), entries: shownCommands },
         {
@@ -232,6 +243,16 @@ export function useSuggest(host: SuggestHost): SuggestControl {
   const pick = (entry: SuggestEntry) => {
     if (!trigger) return
     if (entry.kind === 'again') return again()
+    // 会话：`@查询` 换成正文里的 @[标题]，另外记下是哪个会话（发出去时按标题对上）
+    if (entry.kind === 'session') {
+      const extra = sessions.extraOf(entry.id)
+      if (!extra) return
+      const next = insertMention(text, trigger, extra.title)
+      host.edit(next.text, next.caret)
+      setCaret(next.caret)
+      host.addExtra(extra)
+      return
+    }
     const cut = cutTrigger(text, trigger)
     host.edit(cut.text, cut.caret)
     setCaret(cut.caret)

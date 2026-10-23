@@ -493,6 +493,8 @@ export const zhCN = {
   'archived.close': '返回对话',
   'session.menu': '会话操作',
   'session.rename': '重命名',
+  'session.quote': '在输入框里引用',
+  'session.quote.none': '只能在同一台设备上另一个会话的输入框里引用它',
   'session.archive': '归档',
   'session.delete': '删除',
   'session.delete.title': '删除此会话？',
@@ -1252,8 +1254,12 @@ export const zhCN = {
   'peek.remove': '移除',
 
   // 输入框里打 / 弹出来的单子
-  'at.label': '提到文件',
+  'at.label': '提到会话或文件',
   'at.group': '文件和目录',
+  'at.group.sessions': '会话',
+  'mention.open': '打开会话：{about}',
+  'mention.gone': '这个会话已不在列表中',
+  'at.sessions.full': '一条消息最多提到 {max} 个会话',
   'at.hint': '输入名称，搜索工作目录中的文件和目录',
   'at.searching': '正在搜索…',
   'at.none': '无匹配文件',
