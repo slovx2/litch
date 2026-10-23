@@ -561,6 +561,21 @@ export class SessionStore {
     return row ? this.rowToThread(row) : null
   }
 
+  // 标题恰好是 name 的顶层 Claude 会话（不含子代理线程、临时会话、归档的），最多 limit 个：
+  // 别的会话按名字发消息时认对方用，调用方拿个数判断是不是唯一
+  claudeThreadsNamed(name: string, limit: number): string[] {
+    return (
+      this.db
+        .prepare(
+          `SELECT id FROM threads
+           WHERE archived = 0 AND ephemeral = 0 AND runtime_backend = 'claude' AND trim(name) = ?
+             AND NOT (thread_source IS 'subagent' AND forked_from_id IS NOT NULL)
+           LIMIT ?`,
+        )
+        .all(name, limit) as Array<{ id: string }>
+    ).map((row) => row.id)
+  }
+
   // 全部临时会话（含它们的子代理会话）：入口启动时这些都是上次留下的，没有连接能再订阅它们。
   ephemeralThreads(): ThreadRecord[] {
     return this.db

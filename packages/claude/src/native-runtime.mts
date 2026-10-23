@@ -128,6 +128,7 @@ import type {
   PermissionDecision,
   RuntimeBackgroundShell,
   RuntimeHandlers,
+  RuntimePeerWake,
   RuntimeSessionHandlers,
   RuntimeTurnContext,
 } from './types.mjs'
@@ -310,7 +311,8 @@ const WORKFLOW_TERMINAL_FLUSH_TIMEOUT_MS = 500
 // 没有回合也没有后台命令的进程多留这么久再退出，避免刚停掉命令就来了新回合。
 const IDLE_REAP_MS = 2_000
 const SPONTANEOUS_ATTACH_TIMEOUT_MS = 10_000
-// 为别的会话唤醒时：等对方 CLI 的收件箱就绪最多多久（起 CLI 一般几秒）
+// 为别的会话唤醒时：等对方的 CLI 进程起来最多多久（之前要算差异基线、连 MCP），进程起来之后等它的收件箱就绪最多多久
+const PEER_WAKE_START_MS = 60_000
 const PEER_WAKE_READY_MS = 30_000
 const WORKFLOW_JOURNAL_SETTLE_TIMEOUT_MS = 3_000
 
@@ -340,6 +342,8 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
   private starting = new Map<string, { cancelled: boolean }>()
   // MCP 连接按线程跨回合留着（CLI 进程退出了也留），线程关闭、空闲超时、适配器停止时关。
   private mcpPool = new NativeMcpPool()
+  // 会话里起过的有名字的子代理（Agent 工具的 name），按会话键：SendMessage 发给它们时不当成发给别的会话
+  private agentNames = new Map<string, Set<string>>()
 
   setSessionHandlers(handlers: RuntimeSessionHandlers): void {
     this.sessionHandlers = handlers
@@ -658,26 +662,49 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
   }
 
   // 别的会话的 SendMessage 要发给 to：是本机没在跑的 Litch 会话时先把它的 CLI 拉起来，等收件箱就绪再放行，
-  // 消息照旧由 CLI 自己投递。认不出、拉不起来、等不到都放行，CLI 照常报它的错
+  // 消息照旧由 CLI 自己投递。认不出、拉不起来、等不到都放行，CLI 照常报它的错。
+  // 分两段等：先等进程起来（之前有算基线、连 MCP 这些，唤醒回合结束了就不再等），再从起来那刻算收件箱就绪
   private async wakePeer(from: string, to: string): Promise<void> {
     if (!to || !this.sessionHandlers?.onPeerWake) return
-    let key: string | null
+    // 发给自己起的、有名字的子代理：CLI 先按自己的代理认，不是别的会话
+    if (this.agentNames.get(from)?.has(to.replace(/\s*\[[0-9a-zA-Z]+\]$/, '').trim())) return
+    let wake: RuntimePeerWake | null
     try {
-      key = await this.sessionHandlers.onPeerWake(to, from)
+      wake = await this.sessionHandlers.onPeerWake(to, from)
     } catch (error) {
       debugLog('native.peerWake.failed', { from, to, error: String(error) })
       return
     }
-    if (!key || key === from) return
-    const deadline = Date.now() + PEER_WAKE_READY_MS
+    if (!wake || wake.key === from) return
+    let ended = false
+    void wake.ended?.then(
+      () => {
+        ended = true
+      },
+      () => {
+        ended = true
+      },
+    )
     const configDir = claudeConfigDir(claudeChildEnv())
-    while (Date.now() < deadline) {
-      const session = this.sessions.get(key)
+    const startBy = Date.now() + PEER_WAKE_START_MS
+    let readyBy: number | null = null
+    while (!ended) {
+      const session = this.sessions.get(wake.key)
       const pid = session && !session.closing ? session.process.cliPid : null
-      if (pid !== null && (await inboxReady(pid, configDir))) return
+      if (pid !== null) {
+        readyBy ??= Date.now() + PEER_WAKE_READY_MS
+        if (await inboxReady(pid, configDir)) return
+        if (Date.now() > readyBy) break
+      } else if (Date.now() > startBy) break
       await delay(200)
     }
-    debugLog('native.peerWake.notReady', { from, to, key })
+    debugLog('native.peerWake.notReady', { from, to, key: wake.key, ended })
+  }
+
+  closingSession(threadId: string): Promise<void> | null {
+    const session = this.sessions.get(threadId)
+    if (session) return session.closing ? session.done : null
+    return this.processes.has(threadId) ? (this.cleanup.get(threadId) ?? null) : null
   }
 
   // 没有回合也没有后台命令的进程不再有用。开了空闲保留时多留一会儿，下个回合直接用。
@@ -877,7 +904,11 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         () => {},
       )
     } finally {
-      if (this.sessions.get(session.key) === session) this.sessions.delete(session.key)
+      if (this.sessions.get(session.key) === session) {
+        this.sessions.delete(session.key)
+        // 有名字的子代理跟着进程没了
+        this.agentNames.delete(session.key)
+      }
       if (this.cleanup.get(session.key) === session.done) this.cleanup.delete(session.key)
       try {
         this.sessionHandlers?.onSessionClosed(session.key, reason)
@@ -1574,8 +1605,14 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       permissionHooks.PreToolUse.push({
         hooks: [
           async (event: Record<string, unknown>) => {
-            if (event.tool_name !== 'SendMessage' || context.subagentRelay) return {}
             const input = (event.tool_input ?? {}) as Record<string, unknown>
+            // 记下自己起的有名字的子代理：发给它们的 SendMessage 不是发给别的会话
+            if (isSubagentTool(String(event.tool_name)) && typeof input.name === 'string') {
+              const names = this.agentNames.get(sessionKey) ?? new Set<string>()
+              names.add(input.name.trim())
+              this.agentNames.set(sessionKey, names)
+            }
+            if (event.tool_name !== 'SendMessage' || context.subagentRelay) return {}
             if (typeof input.to === 'string') await this.wakePeer(sessionKey, input.to.trim())
             return {}
           },

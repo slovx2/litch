@@ -74,7 +74,7 @@ import { type McpCallbacks, McpOperationCancelled, McpRpc, type McpScope } from 
 import { type McpToolRef, mcpToolRef } from './mcp-tool-name.mjs'
 import { parseContextItems } from './native-context.mjs'
 import { alive, NativeOwners, nativeOwnerMessage, readRegistry } from './native-owner.mjs'
-import { ownCliAlive, ownCliExitedAt, ownCliPids } from './native-process.mjs'
+import { ownCliAlive, ownCliExitedAt, ownCliPids, succeedsWithin } from './native-process.mjs'
 import type { NativeSettings } from './native-record.mjs'
 import {
   type NativeRedraw,
@@ -220,6 +220,7 @@ import type {
   RpcPeer,
   RuntimeBackgroundCommandEnd,
   RuntimeEvent,
+  RuntimePeerWake,
   ThreadItem,
   ThreadRecord,
   ThreadSectionAppearance,
@@ -407,7 +408,7 @@ export class CodexClaudeAppServer {
   private readonly backgroundTasks = new BackgroundTaskTracker()
   private spontaneousTurns = new Set<string>()
   // 正在为别的会话发来的消息唤醒的会话（线程 → 唤醒结果），同时有几个发送方时一起等
-  private peerWakes = new Map<string, Promise<string | null>>()
+  private peerWakes = new Map<string, Promise<RuntimePeerWake | null>>()
   // 已经交到运行时手里的回合：运行时再说“没有回合在跑”，就是它已经交还、协议层还在收尾。
   private handedToRuntime = new Set<string>()
   private turnClearWaiters = new Map<string, Array<() => void>>()
@@ -3194,14 +3195,17 @@ export class CodexClaudeAppServer {
 
   // 会话 from 的模型要用 SendMessage 发给 to（29 号文档第七节）：认出 to 是这里的哪个会话（固定地址里的会话键，
   // 或按名字对会话标题），它没有 CLI 时建一个 wake 回合把 CLI 拉起来，消息照旧由 CLI 的收件箱投递。
-  // 返回目标线程，调用方等它的收件箱就绪；不是这里的会话、拉不起来时返回 null
-  private async peerWake(to: string, from: string): Promise<string | null> {
+  // 返回目标线程和那个回合什么时候结束（起进程失败也算结束，调用方不必再等）；不是这里的会话、
+  // 被别处占着、拉不起来时返回 null
+  private async peerWake(to: string, from: string): Promise<RuntimePeerWake | null> {
     if (this.stopped) return null
     const threadId = sessionKeyFromAddress(to) ?? this.peerThreadByName(to)
     if (!threadId || threadId === from) return null
     const thread = this.store.getThread(threadId)
-    if (!thread || thread.archived || thread.ephemeral) return null
-    if (this.runtime.cliProcessKeys?.().includes(threadId)) return threadId
+    if (!thread || thread.archived || thread.ephemeral || thread.runtimeBackend !== 'claude')
+      return null
+    // 导进来的会话正被 Claude 桌面端或终端开着：不另起 CLI 续接（会分叉），消息由占着它的进程收。登记现读
+    if (this.native?.owners([threadId], true, true).has(threadId)) return null
     const waking = this.peerWakes.get(threadId)
     if (waking) return waking
     const started = this.startPeerWake(threadId).finally(() => this.peerWakes.delete(threadId))
@@ -3209,20 +3213,32 @@ export class CodexClaudeAppServer {
     return started
   }
 
-  // 按名字发的（ListAgents 列的名字，可能带“ [ref]”）：对上恰好一个会话的标题才算
+  // 按名字发的（ListAgents 列的名字，可能带“ [ref]”）：对上恰好一个顶层 Claude 会话的标题才算。
+  // 本机登记里活着的别的进程（Claude 桌面端、终端）叫这个名字时 CLI 会发给它，不另唤醒
   private peerThreadByName(to: string): string | null {
     const name = to.replace(/\s*\[[0-9a-zA-Z]+\]$/, '').trim()
     // 发给自己的子代理的（main、a 开头的代理号）不算
     if (!name || name === 'main' || /^a[0-9a-f]{8,}$/.test(name) || /[/:]/.test(name)) return null
-    const matches = this.store
-      .listThreads({ searchTerm: name, limit: 50 })
-      .filter((thread) => thread.name?.trim() === name)
-    return matches.length === 1 ? (matches[0] as ThreadRecord).id : null
+    const own = ownCliPids()
+    try {
+      const registry = readRegistry(join(claudeConfigDir(), 'sessions'))
+      if (registry.some((entry) => entry.name === name && !own.has(entry.pid) && alive(entry.pid)))
+        return null
+    } catch {
+      // 登记读不了：只按会话标题认
+    }
+    const ids = this.store.claudeThreadsNamed(name, 2)
+    return ids.length === 1 ? (ids[0] as string) : null
   }
 
-  private async startPeerWake(threadId: string): Promise<string | null> {
-    // 回合正在起（进程马上就有）：等它就是了
-    if (this.activeTurnByThread.has(threadId)) return threadId
+  private async startPeerWake(threadId: string): Promise<RuntimePeerWake | null> {
+    // 进程正在收场（打断、空闲到时）：等它退完再唤醒，不然拿到的是要退的那个
+    const closing = this.runtime.closingSession?.(threadId)
+    if (closing) await succeedsWithin(closing, 10_000)
+    if (this.runtime.cliProcessKeys?.().includes(threadId)) return { key: threadId, ended: null }
+    // 回合正在起（进程马上就有）：等它就是了，回合结束了还没就绪就不必再等
+    const active = this.activeTurnByThread.get(threadId)
+    if (active) return { key: threadId, ended: this.activeTurnCleared(threadId, active) }
     if (
       this.interruptingByThread.has(threadId) ||
       this.nativeMutations.has(threadId) ||
@@ -3263,12 +3279,12 @@ export class CodexClaudeAppServer {
       method: 'turn/started',
       params: { threadId, turn: this.toLifecycleTurn(turn) },
     })
-    void this.runRuntimeTurn(peer, thread, turn, '', {
+    const ended = this.runRuntimeTurn(peer, thread, turn, '', {
       threadId,
       _spontaneous: true,
       _wake: true,
     }).catch((error) => this.failTurn(peer, threadId, turn, error))
-    return threadId
+    return { key: threadId, ended }
   }
 
   private sessionHolder(threadId: string): { threadId: string; turnId: string } | null {
