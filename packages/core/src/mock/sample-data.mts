@@ -357,13 +357,24 @@ export function sampleSidebars(now: number, lang: SampleLang): SidebarView[] {
         ['s1', 'litch', 'claude', 'running', 0],
         ['s2', 'litch', 'claude', 'waiting', 3 * MINUTE, { waitingFor: 'approval' }],
         ['s3', 'litch', 'pi', 'idle', 12 * MINUTE, { unread: true }],
-        // 在设备层建的工作树里跑的：侧栏行上一个工作树的小记号，信息栏有分支和路径
+        ['s4', 'litch', 'dsh', 'idle', HOUR],
+        // Claude 桌面端从 s1 派出来的 Claude Code 会话：侧栏默认不显示，“更多”里打开才有，挂在 s1 下面
         [
-          's4',
+          'cd1',
           'litch',
-          'dsh',
+          'claude',
           'idle',
-          HOUR,
+          5 * HOUR,
+          { nativeLineage: { app: 'claude-desktop', parentId: 's1', createdAt: now - 6 * HOUR } },
+        ],
+        // 在设备层建的工作树里跑的：侧栏行上一个工作树的小记号，信息栏有分支和路径。
+        // 别拿桌面端验收常用的会话（s4 是文件、差异面板验收的主场）：工作树会话的侧面板根是工作树
+        [
+          's5',
+          'litch',
+          'codex',
+          'idle',
+          26 * HOUR,
           {
             cwd: '~/.codex-harness-adapter/worktrees/litch/sidebar-tweaks-3f2a1c',
             worktree: {
@@ -377,16 +388,6 @@ export function sampleSidebars(now: number, lang: SampleLang): SidebarView[] {
             },
           },
         ],
-        // Claude 桌面端从 s1 派出来的 Claude Code 会话：侧栏默认不显示，“更多”里打开才有，挂在 s1 下面
-        [
-          'cd1',
-          'litch',
-          'claude',
-          'idle',
-          5 * HOUR,
-          { nativeLineage: { app: 'claude-desktop', parentId: 's1', createdAt: now - 6 * HOUR } },
-        ],
-        ['s5', 'litch', 'codex', 'idle', 26 * HOUR],
         ['s6', 'docs', 'claude', 'idle', 2 * HOUR],
         ['s7', 'docs', 'pi', 'idle', 40 * MINUTE, { unread: true }],
         ['s8', 'docs', 'claude', 'idle', 5 * 24 * HOUR],

@@ -10,6 +10,7 @@ import { useKey, useServices } from '../app/services.tsx'
 import { dismissToast, showToast } from '../app/toasts.tsx'
 import { ownerKey } from './browser/bridge.ts'
 import { BROWSER_TAB, onPendingShow, setViewing } from './browser/store.ts'
+import { sessionRoots } from './roots.ts'
 import { setSideView, showSideTab, toggleSide, useSide, viewKey } from './side.ts'
 import type { SidePlace } from './tabs.ts'
 
@@ -34,15 +35,7 @@ function usePlace(selection: Selection | null, draft: Draft | null): SidePlace |
   const workspaceId = draft ? draft.workspaceId : (summary?.workspaceId ?? null)
   const cwd = draft ? null : (summary?.cwd ?? null)
   const workspace = workspaces?.find((entry) => entry.id === workspaceId)
-  const tree = draft ? null : (summary?.worktree ?? null)
-  const roots =
-    tree && tree.state !== 'removed'
-      ? [tree.path]
-      : workspace
-        ? workspace.roots
-        : !draft && cwd
-          ? [cwd]
-          : NO_ROOTS
+  const roots = draft ? (workspace?.roots ?? NO_ROOTS) : sessionRoots(summary, workspace?.roots)
   // 根按内容比：侧栏每来一次增量，工作区的对象都是新的，面板不该跟着重画
   const rootsKey = roots.join('\n')
   const sessionId = draft ? null : (selection?.sessionId ?? null)

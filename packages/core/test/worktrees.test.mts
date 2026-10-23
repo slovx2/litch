@@ -273,7 +273,7 @@ test('WT-CORE-004 模拟：在新工作树里建会话，会话目录在工作�
   )
   time.advance(50)
   await settle()
-  assert.equal(rows.get('s4')?.worktree?.branch, 'litch/sidebar-tweaks-3f2a1c')
+  assert.equal(rows.get('s5')?.worktree?.branch, 'litch/sidebar-tweaks-3f2a1c')
   const branches = await channel.command('worktree.branches', {
     deviceId: 'local',
     cwd: '~/work/litch',
@@ -336,7 +336,7 @@ test('WT-CORE-005 模拟：父会话在工作树里时派的子会话默认开�
   const spawn = (extra: object) =>
     channel.command('session.spawn', {
       deviceId: 'local',
-      parentId: 's4',
+      parentId: 's5',
       kind: 'fresh',
       title: 'Split the sidebar',
       prompt: 'Split the sidebar into two files',
@@ -352,13 +352,13 @@ test('WT-CORE-005 模拟：父会话在工作树里时派的子会话默认开�
   assert.equal(rows.get(own)?.worktree?.baseRef, 'litch/sidebar-tweaks-3f2a1c')
   assert.equal(rows.get(own)?.cwd, rows.get(own)?.worktree?.path)
   assert.equal(rows.get(shared)?.worktree, null)
-  assert.equal(rows.get(shared)?.cwd, rows.get('s4')?.cwd)
+  assert.equal(rows.get(shared)?.cwd, rows.get('s5')?.cwd)
   // 提案投影：模型定的、没定时的缺省
   const [view] = projectProposals(
     [
       {
         id: 'p1',
-        threadId: 's4',
+        threadId: 's5',
         title: 't',
         prompt: 'p',
         harness: null,
