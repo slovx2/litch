@@ -55,8 +55,10 @@ export const BACKGROUND_SHELL_LIMITS = {
   waitMaxSeconds: 300,
   /** 停的时候先发 SIGTERM，等这么久还没退出就 SIGKILL */
   killGraceMs: 3_000,
-  /** shell 退出后再等这么久把管道里剩下的读完（孙进程拿着管道不放的不等它） */
+  /** 进程组里一个都不剩之后再等这么久把管道里剩下的读完 */
   drainMs: 2_000,
+  /** shell 退出了、它放到后台的进程（`x &`、`nohup x &`）还在：隔多久看一次进程组还有没有活的 */
+  groupPollMs: 250,
   /** 命令退出后攒这么久，一起交给 host.finished（几个差不多同时结束的只唤醒一次） */
   settleMs: 300,
   /** 唤醒时给模型看的输出末尾多少字节 */
@@ -116,11 +118,16 @@ export interface ShellToolResult {
 interface Running {
   child: ChildProcess
   stream: WriteStream
+  /** 日志写不进去了（磁盘满、目录被删）：之后的输出只计数不落盘 */
+  logBroken: boolean
   /** shell 退出了（退出码有了），管道可能还没读完 */
   exited: boolean
-  /** 等它结束的（read 的 wait_seconds） */
+  /** 等它结束的（read 的 wait_seconds、close） */
   waiters: Set<() => void>
   killTimer?: NodeJS.Timeout
+  /** shell 退出了、进程组还有活的：轮询它 */
+  groupPoll?: NodeJS.Timeout
+  drainTimer?: NodeJS.Timeout
 }
 
 const text = (value: unknown): string => (typeof value === 'string' ? value : '')
@@ -161,6 +168,22 @@ function shellOf(command: string): { file: string; args: string[] } {
         ? '/bin/bash'
         : '/bin/sh'
   return { file, args: ['-c', command] }
+}
+
+/** 命令实际在哪个目录跑：模型给的 cwd 接在会话目录后面（绝对路径照用），没给就是会话目录。审批也按它问 */
+export function shellCwd(baseCwd: string, cwd?: string): string {
+  return cwd ? (isAbsolute(cwd) ? cwd : resolve(baseCwd, cwd)) : baseCwd
+}
+
+/** 这个进程组还有没有活着的进程（Windows 没有进程组，算没有） */
+function groupAlive(child: ChildProcess): boolean {
+  if (process.platform === 'win32' || child.pid === undefined) return false
+  try {
+    process.kill(-child.pid, 0)
+    return true
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'EPERM'
+  }
 }
 
 export class BackgroundShells {
@@ -245,11 +268,7 @@ export class BackgroundShells {
       )
     if (this.runningCount() >= BACKGROUND_SHELL_LIMITS.runningTotal)
       throw new Error('too many background tasks are running on this device; stop one first')
-    const cwd = request.cwd
-      ? isAbsolute(request.cwd)
-        ? request.cwd
-        : resolve(baseCwd, request.cwd)
-      : baseCwd
+    const cwd = shellCwd(baseCwd, request.cwd)
     if (!existsSync(cwd)) throw new Error(`working directory does not exist: ${cwd}`)
     const id = `shell-${++this.seq}`
     const folder = join(this.dir, threadKey(threadId))
@@ -281,7 +300,8 @@ export class BackgroundShells {
     })
     const entry: Running = {
       child,
-      stream: createWriteStream(task.log),
+      stream: this.logStream(task, task.log),
+      logBroken: false,
       exited: false,
       waiters: new Set(),
     }
@@ -293,31 +313,50 @@ export class BackgroundShells {
     const write = (chunk: Buffer) => this.write(task, entry, chunk)
     child.stdout?.on('data', write)
     child.stderr?.on('data', write)
-    let drain: NodeJS.Timeout | undefined
-    const settle = (code: number | null, signal: NodeJS.Signals | null) => {
-      if (drain) clearTimeout(drain)
+    const finish = (code: number | null, signal: NodeJS.Signals | null) => {
+      if (entry.drainTimer) clearTimeout(entry.drainTimer)
+      if (entry.groupPoll) clearInterval(entry.groupPoll)
       if (!this.running.has(id)) return
       this.ended(task, entry, code, signal)
     }
+    // shell 退出后：它放到后台的进程（同一个进程组）还活着，任务就还算在跑，接着收它们的输出，
+    // 一个都不剩了再把管道里剩下的读完、按 shell 的退出码结束。停、关闭时照样按进程组杀
+    let pipesClosed = false
+    const afterExit = () => {
+      if (entry.groupPoll || entry.drainTimer || !this.running.has(id)) return
+      const drain = () => {
+        if (pipesClosed) return finish(task.exitCode, task.signal as NodeJS.Signals | null)
+        entry.drainTimer = setTimeout(() => {
+          child.stdout?.destroy()
+          child.stderr?.destroy()
+          finish(task.exitCode, task.signal as NodeJS.Signals | null)
+        }, BACKGROUND_SHELL_LIMITS.drainMs)
+        entry.drainTimer.unref()
+      }
+      if (!groupAlive(child)) return drain()
+      entry.groupPoll = setInterval(() => {
+        if (groupAlive(child)) return
+        clearInterval(entry.groupPoll)
+        drain()
+      }, BACKGROUND_SHELL_LIMITS.groupPollMs)
+      entry.groupPoll.unref()
+    }
     child.on('error', (error) => {
       this.write(task, entry, Buffer.from(`\n[failed to start: ${error.message}]\n`))
-      settle(127, null)
+      finish(127, null)
     })
     child.on('exit', (code, signal) => {
       entry.exited = true
       task.exitCode = code
       task.signal = signal
-      // 孙进程拿着管道不放（比如命令里有 `x &`）：不等它，到点按退出算
-      drain = setTimeout(() => {
-        child.stdout?.destroy()
-        child.stderr?.destroy()
-        settle(code, signal)
-      }, BACKGROUND_SHELL_LIMITS.drainMs)
-      drain.unref()
+      afterExit()
     })
-    child.on('close', (code, signal) =>
-      settle(code ?? task.exitCode, signal ?? (task.signal as NodeJS.Signals | null)),
-    )
+    // 管道都关了：组里没有活的就结束（不等 drain 到点），还有活的（输出重定向走了的守护进程）接着等它们
+    child.on('close', () => {
+      pipesClosed = true
+      if (!entry.exited || groupAlive(child)) return
+      finish(task.exitCode, task.signal as NodeJS.Signals | null)
+    })
     this.host.log?.(`后台 shell ${id}（会话 ${threadId}）起了：${command}`)
     this.host.changed(threadId)
     return task
@@ -405,7 +444,8 @@ export class BackgroundShells {
             done()
           }, BACKGROUND_SHELL_LIMITS.killGraceMs)
           timer.unref()
-          entry.child.once('exit', () => {
+          // 等的是任务结束（ended 里叫 waiters），不是 shell 的 exit：shell 已经退出、组里还有活的也等得到
+          entry.waiters.add(() => {
             clearTimeout(timer)
             done()
           })
@@ -433,14 +473,52 @@ export class BackgroundShells {
 
   private write(task: ShellTask, entry: Running, chunk: Buffer): void {
     task.totalBytes += chunk.length
+    if (entry.logBroken) return
     if (task.logBytes + chunk.length > BACKGROUND_SHELL_LIMITS.logFileBytes && task.logBytes > 0) {
       // 满了：现在这个挪成 .1（顶掉更早的），接着写新的
-      const full = entry.stream
-      entry.stream = rotate(task.log, full)
+      entry.stream = this.rotate(task, entry.stream)
       task.logBytes = 0
     }
-    entry.stream.write(chunk)
     task.logBytes += chunk.length
+    if (entry.stream.write(chunk)) return
+    // 落盘跟不上：先不读管道（命令写满管道就会停下来等），写完了再接着读
+    const { stdout, stderr } = entry.child
+    stdout?.pause()
+    stderr?.pause()
+    const resume = () => {
+      stdout?.resume()
+      stderr?.resume()
+    }
+    entry.stream.once('drain', resume)
+    entry.stream.once('error', resume)
+  }
+
+  /** 日志的写入流：出错（磁盘满、目录被删）不让整个运行时退出，这个任务之后只计数不落盘 */
+  private logStream(task: ShellTask, path: string, flags = 'w'): WriteStream {
+    const stream = createWriteStream(path, { flags })
+    stream.on('error', (error) => {
+      const entry = this.running.get(task.id)
+      if (entry && entry.stream === stream && !entry.logBroken) {
+        entry.logBroken = true
+        this.host.log?.(
+          `后台 shell ${task.id} 的日志写不进去了，之后的输出不再落盘：${error.message}`,
+        )
+      }
+    })
+    return stream
+  }
+
+  private rotate(task: ShellTask, full: WriteStream): WriteStream {
+    full.end()
+    // 写入是异步的，旧流里还没落盘的会跟着打开着的文件描述符写进改名后的 .1，新输出进新文件。
+    // Windows 上改不了打开着的文件的名字：不换，接着写这一个
+    try {
+      rmSync(`${task.log}.1`, { force: true })
+      renameSync(task.log, `${task.log}.1`)
+    } catch {
+      return this.logStream(task, task.log, 'a')
+    }
+    return this.logStream(task, task.log)
   }
 
   private ended(
@@ -491,19 +569,6 @@ export class BackgroundShells {
 /** 会话号可能带路径不认的字，目录名用它的安全形式 */
 function threadKey(threadId: string): string {
   return threadId.replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 120) || 'thread'
-}
-
-function rotate(path: string, full: WriteStream): WriteStream {
-  full.end()
-  // 写入是异步的，旧流里还没落盘的会跟着打开着的文件描述符写进改名后的 .1，新输出进新文件。
-  // Windows 上改不了打开着的文件的名字：不换，接着写这一个
-  try {
-    rmSync(`${path}.1`, { force: true })
-    renameSync(path, `${path}.1`)
-  } catch {
-    return createWriteStream(path, { flags: 'a' })
-  }
-  return createWriteStream(path)
 }
 
 /** 日志末尾 max 字节（不够就从 .1 的末尾补） */
