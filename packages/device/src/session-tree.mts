@@ -76,12 +76,8 @@ export interface SessionTreeHost {
   log(line: string): void
 }
 
-/** 会话对象上的一段文字，掐成 limit 个字以内：留头留尾，中间换成省略号 */
-export function trimText(value: string, limit: number): string {
-  if (value.length <= limit) return value
-  const head = Math.ceil((limit - 1) / 2)
-  return `${value.slice(0, head)}…${value.slice(value.length - (limit - 1 - head))}`
-}
+/** 会话对象上的一段文字，掐成 limit 个字以内：留头留尾，中间换成省略号（和客户端附摘录时用同一份） */
+export { trimText } from '../../protocol/src/session-mentions.mjs'
 
 /** 一个回合里最后一条回答的正文。没有是 null */
 export function lastAnswer(turn: unknown): string | null {
@@ -742,11 +738,25 @@ export class SessionTree {
 
   // ---------- 会话对象、父子关系 ----------
 
-  /** 会话对象经过聚合面、发给声明了 sessionTree 的连接时：有父会话的挂上 litchLineage */
+  /**
+   * 会话对象经过聚合面、发给声明了 sessionTree 的连接时：有父会话的挂上 litchLineage；
+   * 记着建会话时带的动态工具的，挂上其中 litch_ 开头的命名空间（litchToolNamespaces）
+   */
   decorate(thread: Record<string, unknown>): void {
     if (typeof thread.id !== 'string') return
     const lineage = this.lineage(thread.id)
     if (lineage) thread.litchLineage = lineage
+    const tools = this.store.tools(thread.id)
+    if (tools) {
+      thread.litchToolNamespaces = tools.flatMap((spec) =>
+        isObject(spec) &&
+        spec.type === 'namespace' &&
+        typeof spec.name === 'string' &&
+        spec.name.startsWith('litch_')
+          ? [spec.name]
+          : [],
+      )
+    }
   }
 
   /** 会话对外的 litchLineage。没有父会话（或者脱离了）是 null */

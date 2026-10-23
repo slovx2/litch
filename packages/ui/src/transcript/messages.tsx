@@ -19,6 +19,7 @@ import { SentComments } from './comments/Cards.tsx'
 import { commentsOf } from './comments/Cite.tsx'
 import { Markdown } from './Markdown.tsx'
 import { PeerHead } from './PeerHead.tsx'
+import { MentionedText } from './SessionMentions.tsx'
 import { usePin } from './scroll.ts'
 import { useSmoothText, useToggle } from './state.ts'
 import { TurnActions } from './TurnActions.tsx'
@@ -139,7 +140,11 @@ export const UserMessage = memo(function UserMessage({
         <AskReplyBody replies={replies} />
       ) : text ? (
         <div className={open ? 'umsg-text' : 'umsg-text clamp'} ref={body}>
-          {text}
+          {peer ? (
+            text
+          ) : (
+            <MentionedText deviceId={ref.deviceId} text={text} sessions={item.sessions} />
+          )}
         </div>
       ) : null}
       {long || open ? (

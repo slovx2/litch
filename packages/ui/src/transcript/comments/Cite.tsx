@@ -21,6 +21,7 @@ import { useT } from '../../app/appearance.ts'
 import { useKey, useServices } from '../../app/services.tsx'
 import { flash } from '../../tree/proposals.ts'
 import { Prose } from '../FileLinks.tsx'
+import { MentionScope } from '../SessionMentions.tsx'
 import { setToggle } from '../state.ts'
 import { cardMark, cardToggle } from './Cards.tsx'
 import { revealOrigin } from './locate.ts'
@@ -59,7 +60,10 @@ interface ScopeProps {
   children: ReactNode
 }
 
-/** 回合里跟在一条用户消息后面的那些块：那条消息带评论的话，里面的 [N] 认作指向它的评论 */
+/**
+ * 回合里跟在一条用户消息后面的那些块：那条消息带评论的话，里面的 [N] 认作指向它的评论；
+ * 提到了会话的，里面对得上的 @[标题] 画成会话片（SessionMentions.tsx 的 MentionScope）
+ */
 export function CiteScope({ deviceId, sessionId, userId, children }: ScopeProps) {
   const item = useKey<UserMessageItem>(keys.item(deviceId, sessionId, userId ?? ''))
   const text = item?.kind === 'userMessage' ? item.text : ''
@@ -68,7 +72,16 @@ export function CiteScope({ deviceId, sessionId, userId, children }: ScopeProps)
     () => (comments && userId ? { deviceId, sessionId, userId, comments } : null),
     [comments, deviceId, sessionId, userId],
   )
-  return <CiteContext.Provider value={value}>{children}</CiteContext.Provider>
+  return (
+    <CiteContext.Provider value={value}>
+      <MentionScope
+        deviceId={deviceId}
+        sessions={item?.kind === 'userMessage' ? item.sessions : undefined}
+      >
+        {children}
+      </MentionScope>
+    </CiteContext.Provider>
+  )
 }
 
 /** 回答里的一段字：里面的 [N] 对得上评论就画成记号，别的照常 */

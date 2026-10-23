@@ -43,6 +43,12 @@ export interface SessionLineage {
 /** 会话对象上我们加的字段 */
 export interface SessionTreeThreadFields {
   litchLineage?: SessionLineage
+  /**
+   * 会话建的时候带了哪些 `litch_` 命名空间的动态工具（设备进程记下的 thread/start.dynamicTools）。
+   * 客户端据此知道这个会话里的模型能不能用 litch_sessions 读别的会话。只发给声明了 sessionTree 的连接；
+   * 设备进程没记着的（不是经它建的、更早的设备进程）没有这个字段
+   */
+  litchToolNamespaces?: string[]
 }
 
 /** 提案的状态 */

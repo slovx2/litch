@@ -131,18 +131,24 @@ export function prefillDraft(key: string, lead: string, more: MessageExtra[]): v
  * 给的是“是什么”，不是一段现成的字：输入区把它变成随消息带的一片（和打 @ 选中的是同一种，extras.ts 的 fileExtra）；
  * 带了行号的片上放不下，还是写成 路径:行号 的字插在光标那里（mentionText）。
  */
-export interface Mention {
-  kind: 'file'
-  /** 相对于工作区根的路径，目录带斜杠 */
-  path: string
-  /** 设备上完整的路径 */
-  full: string
-  dir: boolean
-  line?: number | null
-}
+export type Mention =
+  | {
+      kind: 'file'
+      /** 相对于工作区根的路径，目录带斜杠 */
+      path: string
+      /** 设备上完整的路径 */
+      full: string
+      dir: boolean
+      line?: number | null
+    }
+  /**
+   * 侧栏会话行菜单的“在输入框里引用”：输入区把它写成正文里的 @[title]（和打 @ 选中的一样）。
+   * 只引用得了同一台设备上的、别的会话：不是的输入区不收
+   */
+  | { kind: 'session'; deviceId: string; threadId: string; title: string }
 
 /** 带行号的写法：路径:行号 */
-export const mentionText = (mention: Mention): string =>
+export const mentionText = (mention: Extract<Mention, { kind: 'file' }>): string =>
   mention.line ? `${mention.path}:${mention.line}` : mention.path
 
 /**
@@ -165,11 +171,14 @@ export function insertIntoDraft(
   return { text: head + after, caret: head.length }
 }
 
+/** 输入区收下了返回真以外的值；不收（引用的会话不在它的设备上、就是它自己）返回 false */
+type Mentioner = (mention: Mention) => boolean | undefined
+
 /** 开着的输入区，后登记的在后面。眼前同时只有一个输入区，用最后登记的那个 */
-const mentioners: ((mention: Mention) => void)[] = []
+const mentioners: Mentioner[] = []
 
 /** 输入区开着的时候登记自己：别处要往输入框里加东西时找它。返回取消登记的函数 */
-export function onMention(insert: (mention: Mention) => void): () => void {
+export function onMention(insert: Mentioner): () => void {
   mentioners.push(insert)
   return () => {
     const at = mentioners.lastIndexOf(insert)
@@ -177,12 +186,14 @@ export function onMention(insert: (mention: Mention) => void): () => void {
   }
 }
 
-/** 往眼前的输入框里加一样东西。眼前没有输入区（正停在审批上、开着别的页面）就什么都不做，返回 false */
+/**
+ * 往眼前的输入框里加一样东西。眼前没有输入区（正停在审批上、开着别的页面）、输入区不收，
+ * 就什么都不做，返回 false
+ */
 export function mentionInComposer(mention: Mention): boolean {
   const insert = mentioners.at(-1)
   if (!insert) return false
-  insert(mention)
-  return true
+  return insert(mention) !== false
 }
 
 const images = new Map<string, ImageAttachment[]>()

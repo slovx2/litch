@@ -3,6 +3,7 @@ import {
   groupOfSection,
   keys,
   LOOSE,
+  mentionTitle,
   PINNED,
   pathTwin,
   type SectionView,
@@ -34,6 +35,7 @@ import { useHoverCard } from '../app/HoverCard.tsx'
 import { Back, Caret, Forward, Icon, Notice, Plus } from '../app/icons.tsx'
 import { useKey, useServices } from '../app/services.tsx'
 import { showToast } from '../app/toasts.tsx'
+import { mentionInComposer } from '../composer/drafts.ts'
 import type { PlaceWish } from '../composer/new-place.ts'
 import { PairDialog } from '../devices/PairDialog.tsx'
 import { FailureNote, shownState, useReconnect } from '../devices/status.tsx'
@@ -280,6 +282,8 @@ const SessionRow = memo(function SessionRow({
         },
       })
   }
+  // 在眼前的输入框里引用这个会话（写成 @[标题]）：只引用得了同一台设备上的别的会话，输入区自己判断
+  actions.push({ id: 'quote', title: t('session.quote') })
   // 为这个会话建定时任务：到点在这个会话里接着发。设备的服务要支持定时任务
   if (online && schedulable) actions.push({ id: 'schedule', title: t('tasks.forSession') })
   // 会话树是设备层的事：设备连着、声明了就能脱离，不用经过它所属的 harness；
@@ -317,6 +321,11 @@ const SessionRow = memo(function SessionRow({
     if (id === 'rename') {
       settled.current = false
       setNaming(t.text(summary.title))
+    } else if (id === 'quote') {
+      const title = mentionTitle(t.text(summary.title)) || sessionId.slice(0, 8)
+      if (!mentionInComposer({ kind: 'session', deviceId, threadId: sessionId, title })) {
+        showToast({ id: 'session-quote', lifeMs: 4000, text: (say) => say('session.quote.none') })
+      }
     } else if (id === 'schedule') requestTasks({ view: 'new', deviceId, threadId: sessionId })
     else if (id === 'spawn') setSpawning(true)
     else if (id === 'detach') {

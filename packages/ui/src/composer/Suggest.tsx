@@ -1,4 +1,4 @@
-// 输入框上面弹出来的那张单子：打 `/` 列命令和技能，打 `@` 找文件和目录。
+// 输入框上面弹出来的那张单子：打 `/` 列命令和技能，打 `@` 找这台设备上的会话、文件和目录。
 // 焦点一直留在输入框里，单子自己不拿焦点：上下键、回车、Tab、Esc 由输入框的按键处理转过来（useSuggestKeys），
 // 别的键照常是打字，打的字就是过滤的词。这样单子开着的时候按键不会落到别处（比如输入框上面的请求卡片）。
 // 行上只放一眼要看的：记号、名字、一句说明；选中那一项的全文和来源、位置在单子底下那一栏。
@@ -15,8 +15,8 @@ import { type Rankable, step } from './suggest.ts'
 
 export interface SuggestEntry extends Rankable {
   id: string
-  /** 记号按它画：命令、技能、文件、目录；again 是“再试一次”那一行 */
-  kind: 'command' | 'skill' | 'again' | 'file' | 'dir'
+  /** 记号按它画：命令、技能、会话、文件、目录；again 是“再试一次”那一行 */
+  kind: 'command' | 'skill' | 'again' | 'session' | 'file' | 'dir'
   title: string
   /** 一句说明，行上放不下就截断，全文在底下那一栏 */
   note: string
@@ -36,6 +36,7 @@ const ICONS: Record<SuggestEntry['kind'], () => ReactNode> = {
   command: Slash,
   skill: Spark,
   again: Spark,
+  session: () => <Icon name="note" />,
   file: () => <Icon name="file" />,
   dir: () => <Icon name="folder" />,
 }

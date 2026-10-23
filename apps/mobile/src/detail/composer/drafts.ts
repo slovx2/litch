@@ -1,9 +1,14 @@
 // 没发出去的草稿，按会话记：文字存进应用文档目录的 drafts.json（离开再进、杀掉应用重开都还在），
-// 图片只记在内存里（data URL 太大，不往文件里放；重开应用就没了，和桌面端一样）。
+// 图片只记在内存里（data URL 太大，不往文件里放；重开应用就没了，和桌面端一样），打 @ 提到的会话也是。
 // 选中回答加的评论另存一个文件 draft-comments.json，也落盘；对话区（全文页加评论）和输入区（评论片）
 // 两边都要改它，所以评论可以订阅（subscribeDraftComments），谁改了另一边跟着变。
 // 写文件攒一下再写：每敲一个字同步写一次文件会占 JS 线程。离开页面时当场写（flushDrafts）。
-import { type CommentExtra, type ImageAttachment, MAX_COMMENTS } from '@litch/core'
+import {
+  type CommentExtra,
+  type ImageAttachment,
+  MAX_COMMENTS,
+  type MessageExtra,
+} from '@litch/core'
 import { jsonFile } from '../../shell/json-file'
 
 /** 最多留这么多个会话的草稿，超出时丢掉最早写的 */
@@ -73,9 +78,21 @@ export function saveDraftImages(key: string, list: ImageAttachment[]): void {
   else images.delete(key)
 }
 
+/** 打 @ 提到的会话（正文里是 @[标题]）：和图片一样只在内存里，按会话记 */
+export type SessionExtra = Extract<MessageExtra, { kind: 'session' }>
+const sessions = new Map<string, SessionExtra[]>()
+
+export const loadDraftSessions = (key: string): SessionExtra[] => sessions.get(key) ?? []
+
+export function saveDraftSessions(key: string, list: SessionExtra[]): void {
+  if (list.length) sessions.set(key, list)
+  else sessions.delete(key)
+}
+
 export function dropDraft(key: string): void {
   saveDraft(key, '')
   images.delete(key)
+  sessions.delete(key)
   saveDraftComments(key, NONE)
 }
 

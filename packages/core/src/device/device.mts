@@ -125,6 +125,13 @@ import { createInstall, type Install } from './install.mjs'
 import { createLiveSessions } from './live.mjs'
 import type { MachineFacts } from './machine/types.mjs'
 import { createManagement } from './manage.mjs'
+import {
+  MENTION_READ_MS,
+  type MentionHost,
+  mentionsSessions,
+  readsSessions,
+  withMentionRefs,
+} from './mentions.mjs'
 import { createOrganizer, looseDirectories, type Organizer } from './organize.mjs'
 import { createPairing, type Pairing, type PairingPlatform } from './pairing.mjs'
 import { DEFAULT_TOOL_SWITCHES, type RemoteUpgradePlatform } from './remote.mjs'
@@ -1560,6 +1567,23 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     ...(trace ? { trace } : {}),
   })
 
+  // 消息里提到的会话（输入框里 @ 的）：侧栏里认得的补上 harness、目录、状态，读不到时替模型读一次附摘录
+  const mentionHost: MentionHost = {
+    summary(threadId) {
+      const thread = threads.get(threadId)
+      return thread ? summaryOf(thread) : undefined
+    },
+    async read(threadId) {
+      const { thread } = await link.request(
+        'thread/read',
+        { threadId, includeTurns: true },
+        { timeoutMs: MENTION_READ_MS },
+      )
+      return thread
+    },
+    log,
+  }
+
   const live = createLiveSessions({
     deviceId: config.id,
     clock: options.clock,
@@ -2134,7 +2158,18 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         workspaceId && hasProjects === true && workspaces.some((entry) => entry.id === workspaceId)
           ? workspaceId
           : null
-      return live.create(cwd, message, settings, target, home, asGoal === true)
+      // 新建的会话带不带 litch_sessions，看建会话时给的动态工具
+      const tools = live.toolsFor(target)
+      const readable = tools.some(
+        (spec) =>
+          typeof spec === 'object' &&
+          spec !== null &&
+          (spec as { name?: unknown }).name === CLIENT_TOOL_NAMESPACE.sessions,
+      )
+      const said = mentionsSessions(message)
+        ? await withMentionRefs(message, readable, mentionHost)
+        : message
+      return live.create(cwd, said, settings, target, home, asGoal === true)
     },
     organize,
     rootCandidates: () =>
@@ -2221,7 +2256,13 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       return projectDefaults(requirements, config)
     },
     skills: (harness, cwd) => aids.skills(harness, cwd),
-    send: (sessionId, message, now) => live.send(sessionId, message, now),
+    // 提到了会话的先补上 ref（读不到时要等替模型读的那一次，最多 MENTION_READ_MS）；别的消息照旧当场显示
+    send: (sessionId, message, now) =>
+      mentionsSessions(message)
+        ? withMentionRefs(message, readsSessions(threads.get(sessionId)), mentionHost).then(
+            (said) => live.send(sessionId, said, now),
+          )
+        : live.send(sessionId, message, now),
     steer: (sessionId, messageId) => live.steer(sessionId, messageId),
     interrupt: (sessionId) => live.interrupt(sessionId),
     unqueue: (sessionId, messageId) => live.unqueue(sessionId, messageId),

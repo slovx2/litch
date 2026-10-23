@@ -5,6 +5,7 @@ import {
   CLIENT_TOOL_NAMESPACE,
   type FileUpdateChange,
   parseSessionEvent,
+  parseSessionMentions,
   SESSION_TOOL,
   SESSION_TOOL_LIMITS,
   type ThreadItem,
@@ -90,8 +91,30 @@ function userMessage(id: string, content: UserInput[], rawPeer?: unknown): UserM
   if (peer) return { id, kind: 'userMessage', text, attachments, peer }
   // 设备进程注入在开头的子会话回报、唤醒：认出来单放，剩下的才是用户自己说的话
   const { event, rest } = parseSessionEvent(text)
-  if (!event) return { id, kind: 'userMessage', text, attachments }
-  return { id, kind: 'userMessage', text: rest, attachments, event: sessionEvent(event) }
+  if (!event) return withSessionMentions({ id, kind: 'userMessage', text, attachments })
+  return withSessionMentions({
+    id,
+    kind: 'userMessage',
+    text: rest,
+    attachments,
+    event: sessionEvent(event),
+  })
+}
+
+/** 正文末尾是提到会话的那一段的：认出来单放（sessions），text 里去掉那一段 */
+export function withSessionMentions(item: UserMessageItem): UserMessageItem {
+  const found = parseSessionMentions(item.text)
+  if (!found) return item
+  return {
+    ...item,
+    text: found.rest,
+    sessions: found.mentions.map(({ index, threadId, title, harness }) => ({
+      index,
+      threadId,
+      title,
+      harness,
+    })),
+  }
 }
 
 const NOTE_STATUS = new Set(['completed', 'failed', 'interrupted', 'needsUser'])

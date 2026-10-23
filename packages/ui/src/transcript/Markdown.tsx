@@ -12,6 +12,7 @@ import { ExternalLink } from './ExternalLink.tsx'
 import { CodeSpan, Link, Prose } from './FileLinks.tsx'
 import { languageOf } from './highlight.tsx'
 import { MermaidBlock } from './Mermaid.tsx'
+import { AnswerMentions, HAS_MENTION } from './SessionMentions.tsx'
 
 function lex(source: string): Token[] {
   return new Lexer({ gfm: true }).lex(source)
@@ -74,16 +75,25 @@ function inline(tokens: Token[] | undefined): ReactNode {
       case 'text': {
         const text = token as Tokens.Text
         if (text.tokens) return <span key={key}>{inline(text.tokens)}</span>
-        // 可能是指向评论的 [N]（comments/Cite.tsx）：交给它，认不出照常
-        if (HAS_CITE.test(text.text)) return <CiteText key={key} text={text.text} />
-        // 没有斜杠的字里不会有要认的路径：绝大多数文字照原样出，不多套一层
-        return text.text.includes('/') ? <Prose key={key} text={text.text} /> : text.text
+        // 可能是这一回合用户提到的会话（SessionMentions.tsx）：对得上的画成片，其余照下面的办
+        if (HAS_MENTION.test(text.text)) {
+          return <AnswerMentions key={key} text={text.text} plain={plainText} />
+        }
+        return plainText(text.text, key)
       }
       default:
         // 转义字符、行内 HTML 和以后新出的类型：按原文显示
         return 'text' in token ? (token as { text: string }).text : token.raw
     }
   })
+}
+
+/** 回答里一段没有格式的字 */
+function plainText(text: string, key: number): ReactNode {
+  // 可能是指向评论的 [N]（comments/Cite.tsx）：交给它，认不出照常
+  if (HAS_CITE.test(text)) return <CiteText key={key} text={text} />
+  // 没有斜杠的字里不会有要认的路径：绝大多数文字照原样出，不多套一层
+  return text.includes('/') ? <Prose key={key} text={text} /> : text
 }
 
 function listItem(item: Tokens.ListItem, key: number): ReactNode {

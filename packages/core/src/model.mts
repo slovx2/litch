@@ -2,6 +2,7 @@
 // 协议条目怎么变成这些显示条目，见 projection 目录。
 // 类型是 Text 的字段可能是对面给的原文，也可能是核心自己要说的一句话（见 phrase.mts），界面按当前语言显示。
 
+import type { SessionMentionRef } from '../../protocol/src/session-mentions.mjs'
 import type { SessionBackgroundView, TurnOrigin } from './model-background.mjs'
 import type { GoalReachedView, SessionGoalView } from './model-goal.mjs'
 import type { MachineAccessView, MachineAskView } from './model-machine.mjs'
@@ -425,6 +426,21 @@ export interface UserMessageItem {
    * 界面画成“来自 X 的消息”，不画成用户自己的话
    */
   peer?: PeerView
+  /**
+   * 提到的会话（正文末尾那一段 <litch-session-mentions> 认出来的，按序号）。有它的时候 text 里没有那一段，
+   * 正文里的提及是 ＠[标题]，界面按 mentionSegments 切开画成能点的片。没提到会话的不带这一项
+   */
+  sessions?: SessionMentionView[]
+}
+
+/** 用户消息里提到的一个会话（同一台设备上） */
+export interface SessionMentionView {
+  /** 从 1 开始 */
+  index: number
+  threadId: string
+  /** 发出去时写进正文的标题（会话后来改了名也不变） */
+  title: string
+  harness: string | null
 }
 
 /** 发来消息（或者收消息）的那个会话（对方自报，只用来显示和导航） */
@@ -471,6 +487,12 @@ export type MessageExtra =
    * itemId 是那段原文所在的助手条目。发出去时写成正文开头的一段（见 projection/comments.mts）
    */
   | { kind: 'comment'; itemId: string; quote: string; note: string }
+  /**
+   * 提到的一个会话（输入框里打 @ 选的，正文里是 @[title]）。threadId 是同一台设备上的会话号。
+   * 发出去时正文里对上的 @[title] 换成 ＠[title]，末尾加一段 <litch-session-mentions>（projection/session-mentions.mts）。
+   * ref 由核心在发出去之前补上（会话的 harness、目录、状态，读不到时的摘录），界面给的不算数
+   */
+  | { kind: 'session'; threadId: string; title: string; ref?: SessionMentionRef }
 
 /** 要发出去的一条消息 */
 export interface OutgoingMessage {

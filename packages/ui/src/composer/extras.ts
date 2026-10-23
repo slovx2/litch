@@ -37,6 +37,8 @@ export function pasteVerdict(text: string): 'inline' | 'attach' | 'long' {
 /** 一片上写什么。技能是它叫出来时的样子（斜杠加名字）；没有名字的文字（贴进来的）由界面按语言另说，这里给 null */
 export const extraLabel = (extra: MessageExtra): string | null => {
   if (extra.kind === 'skill') return `/${extra.name}`
+  // 提到的会话写在正文里（@[标题]），这里只在别处要一个名字时用
+  if (extra.kind === 'session') return `@${extra.title}`
   // 评论在排队的那一行上只写引用的开头
   if (extra.kind === 'comment') {
     const quote = extra.quote.replace(/\s+/g, ' ').trim()
@@ -51,7 +53,8 @@ export const sameExtra = (a: MessageExtra, b: MessageExtra): boolean => {
   if (a.kind === 'comment') {
     return b.kind === 'comment' && a.itemId === b.itemId && a.quote === b.quote && a.note === b.note
   }
-  if (b.kind === 'text' || b.kind === 'comment') return false
+  if (a.kind === 'session') return b.kind === 'session' && a.threadId === b.threadId
+  if (b.kind === 'text' || b.kind === 'comment' || b.kind === 'session') return false
   return b.kind === a.kind && a.path === b.path
 }
 
