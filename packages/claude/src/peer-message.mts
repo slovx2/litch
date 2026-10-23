@@ -5,12 +5,13 @@ import type { LitchPeer } from '../../protocol/src/peer-messages.mjs'
 
 /**
  * origin 说这是别的会话发来的（kind 为 peer，不是进程内后台子代理发的 senderTaskId）时，给出原文和发送方；
- * 不是时为 null。原文取 CLI 给的 body（去掉信封，和模型看到的一致），没有 body 的（直接写收件箱的外部进程）用 fallback
+ * 不是时为 null。原文取 CLI 给的 body（去掉信封，和模型看到的一致），没有 body 的（直接写收件箱的外部进程）用 fallback。
+ * address 是发送方的收件箱地址（origin.from，形如 uds:<套接字路径>）：模型回信时 SendMessage 发往的就是它
  */
 export function peerFromOrigin(
   origin: unknown,
   fallback: string,
-): { text: string; peer: LitchPeer } | null {
+): { text: string; peer: LitchPeer; address?: string } | null {
   if (!origin || typeof origin !== 'object') return null
   const source = origin as Record<string, unknown>
   if (source.kind !== 'peer' || source.senderTaskId !== undefined) return null
@@ -21,5 +22,6 @@ export function peerFromOrigin(
   if (typeof source.fromSession === 'string' && source.fromSession)
     peer.session = source.fromSession
   if (source.fromMode === 'bypass' || source.fromMode === 'prompting') peer.mode = source.fromMode
-  return { text, peer }
+  const address = typeof source.from === 'string' && source.from.trim() ? source.from.trim() : null
+  return address ? { text, peer, address } : { text, peer }
 }

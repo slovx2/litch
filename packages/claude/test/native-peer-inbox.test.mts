@@ -249,8 +249,23 @@ test('默认开着：跳过确认档的会话空闲时发来，自己开一个�
       return backgroundBash('toolu_keep_alive', uniqueSleep(90))(request, headers)
     })
     scene.model.enqueue(() => [{ type: 'text', text: '已在后台启动' }])
+    // 收到外来消息时照真模型的做法回信：SendMessage 发往信封里的 from（收件箱地址 uds:<套接字路径>）
+    let replyTo = ''
     scene.model.fallback = (request) => {
-      seen.push(JSON.stringify(request.messages?.at(-1)?.content ?? ''))
+      const last = JSON.stringify(request.messages?.at(-1)?.content ?? '')
+      seen.push(last)
+      const from = /from=\\"(uds:[^"\\]+)\\"/.exec(last)?.[1]
+      if (from && !replyTo) {
+        replyTo = from
+        return [
+          {
+            type: 'tool_use',
+            id: 'toolu_peer_reply',
+            name: 'SendMessage',
+            input: { to: from, summary: '回信', message: 'hello' },
+          },
+        ]
+      }
       return [{ type: 'text', text: '这是对外来消息的回答' }]
     }
     assert.equal((await runTurn(scene, '在后台起一条命令')).status, 'completed')
@@ -292,6 +307,12 @@ test('默认开着：跳过确认档的会话空闲时发来，自己开一个�
         (item: any) => item.type === 'agentMessage' && item.text === '这是对外来消息的回答',
       ),
     )
+    // 回信发往收件箱地址：条目上写的是对方的名字，不是套接字路径（地址还在参数里）
+    assert.match(replyTo, /^uds:.+\.sock$/, `信封里应有发送方的收件箱地址：${seen}`)
+    const reply = rest.find((item: any) => item.type === 'mcpToolCall' && item.arguments?.to)
+    assert.equal(reply?.tool, 'SendMessage peer-bypass')
+    assert.deepEqual(reply?.litchPeer, { name: 'peer-bypass' })
+    assert.equal(reply?.arguments.to, replyTo)
     // 实时的条目通知也带着
     const live = scene.client.trace.find(
       (m: any) => m.method === 'item/completed' && m.params.item.id === first.id,
@@ -388,6 +409,83 @@ test('默认开着：没有后台命令的会话空闲保留着也收得到；�
     assert.equal(done.status, 'completed')
     assert.equal(done.litchOrigin, 'peer')
     assert.equal(cliProcesses(scene)[0]?.pid, cli.pid, '用的是留着的同一个进程')
+  } finally {
+    await disposeScene(scene)
+  }
+})
+
+test('两个 Litch 会话互发：回信发往收件箱地址时写成对方在 Litch 里的标题，带对方的会话号；收到的消息也带', {
+  timeout: 180_000,
+}, async () => {
+  const scene = await startScene(
+    'native-peer-litch',
+    {},
+    declaring('peerMessages', 'backgroundTasks'),
+  )
+  try {
+    await scene.client.request('thread/name/set', { threadId: scene.threadId, name: '修 CI' })
+    const { thread: other } = await scene.client.request('thread/start', {
+      cwd: scene.workspace,
+      approvalPolicy: 'never',
+      sandbox: 'danger-full-access',
+    })
+    await scene.client.request('thread/name/set', { threadId: other.id, name: '写文档' })
+    scene.model.enqueue(() => [{ type: 'text', text: '好的' }])
+    // 两个会话共用一个假模型，请求谁先到说不准：按最后一条消息的内容回
+    let replyTo = ''
+    scene.model.fallback = (request) => {
+      const last = JSON.stringify(request.messages?.at(-1)?.content ?? '')
+      if (last.includes('toolu_b_send') || last.includes('toolu_a_reply'))
+        return [{ type: 'text', text: '发完了' }]
+      const from = /from=\\"(uds:[^"\\]+)\\"/.exec(last)?.[1]
+      if (from && last.includes('from-name=\\"写文档\\"') && !replyTo) {
+        replyTo = from
+        return [
+          {
+            type: 'tool_use',
+            id: 'toolu_a_reply',
+            name: 'SendMessage',
+            input: { to: from, summary: '回信', message: '收到' },
+          },
+        ]
+      }
+      if (last.includes('给修 CI 发消息'))
+        return [
+          {
+            type: 'tool_use',
+            id: 'toolu_b_send',
+            name: 'SendMessage',
+            input: { to: '修 CI', summary: '问一句', message: 'CI 修好了吗' },
+          },
+        ]
+      return [{ type: 'text', text: '好' }]
+    }
+    assert.equal((await runTurn(scene, '说一句')).status, 'completed')
+    const before = turnsStarted(scene).length
+    const { turn } = await scene.client.request('turn/start', {
+      threadId: other.id,
+      input: [{ type: 'text', text: '给修 CI 发消息' }],
+    })
+    assert.equal((await scene.client.completed(turn.id)).status, 'completed')
+    // 修 CI 那边为外来消息开的回合（写文档那边收到回信也会开一个，按会话认）
+    const peerTurnOf = (): string | undefined =>
+      scene.client.trace
+        .filter((m: any) => m.method === 'turn/started')
+        .slice(before)
+        .find((m: any) => m.params.threadId === scene.threadId)?.params.turn.id
+    await until('外来消息开回合', () => peerTurnOf() !== undefined)
+    const peerTurn = peerTurnOf()!
+    assert.equal((await scene.client.completed(peerTurn)).status, 'completed')
+
+    const items = (await readTurns(scene)).find((candidate) => candidate.id === peerTurn).items
+    const received = items.find((item: any) => item.type === 'userMessage')
+    assert.equal(received?.litchPeer?.name, '写文档')
+    assert.equal(received?.litchPeer?.thread, other.id, '发送方是 Litch 的会话：带它的会话号')
+    assert.match(replyTo, /^uds:.+\.sock$/)
+    const reply = items.find((item: any) => item.type === 'mcpToolCall' && item.arguments?.to)
+    assert.equal(reply?.tool, 'SendMessage 写文档')
+    assert.deepEqual(reply?.litchPeer, { name: '写文档', thread: other.id })
+    assert.equal(reply?.arguments.to, replyTo)
   } finally {
     await disposeScene(scene)
   }

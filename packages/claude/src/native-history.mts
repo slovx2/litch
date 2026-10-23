@@ -9,14 +9,18 @@
 // 它之后的那一轮单独成一个回合，来历记成 backgroundTask，和实时回合里 CLI 自己续跑的一轮一个样子；
 // 回合还在中途（工具结果之后、助手还没接着说）就到的通知并进当前回合。
 // 别的会话发来的消息（origin 是 peer，peerMessages 扩展）：画成带 litchPeer 的用户消息条目；上一个回合已经停下时
-// 它开一个回合，来历记成 peer，回合还在中途时插进当前回合，和实时回合一样。
+// 它开一个回合，来历记成 peer，回合还在中途时插进当前回合，和实时回合一样。发往收件箱地址的 SendMessage
+// 按前面收到过的消息（和调用方给的进程登记）认出收件方（peer-target.mts）。
 // 人话前面 Claude 桌面端拼进去的 <system-reminder> 块去掉，只留人写的那部分。
 // 有字的 thinking 块里，签名标了旁白的（narration.mts）画成说明文字，其余的画成思考。
 // 条目的标识由消息的 uuid 和块的位置拼成：同一份记录再画一遍，标识不变。
+
+import type { LitchPeer } from '../../protocol/src/peer-messages.mjs'
 import { isNarration } from './narration.mjs'
 import { peerFromOrigin } from './peer-message.mjs'
+import { type PeerLookup, resolvePeer } from './peer-target.mjs'
 import { toolItemWithResult } from './server-helpers.mjs'
-import { readImageView, toolUseItem } from './tool-items.mjs'
+import { readImageView, toolUseItem, withPeerTarget } from './tool-items.mjs'
 import type { TurnRecord, UserInput } from './types.mjs'
 
 /** 记录里的一条消息：SDK 的 SessionMessage，加上它实际带着的时间和来源 */
@@ -46,6 +50,8 @@ export interface ProjectOptions {
    * 不当成失败（之后来的结果下一次重画时补上）
    */
   running?: boolean
+  /** 认收件箱地址用的本机登记和 Litch 会话（peer-target.mts）；不给时只靠记录里收到过的消息 */
+  peers?: Omit<PeerLookup, 'seen'>
 }
 
 /** 这些工具在实时回合里也不画成工具条目：提问、计划确认由界面问，结构化输出是最终回答，待办是计划卡片 */
@@ -114,6 +120,9 @@ export function projectNativeHistory(
   let settled = false
   /** 旁白变成的说明条目的 id */
   const narrated = new Set<string>()
+  /** 收到过的消息：发送方的收件箱地址 → 发送方。回信的 SendMessage 发往的就是这个地址 */
+  const seen = new Map<string, LitchPeer>()
+  const lookup: PeerLookup = { ...options.peers, seen }
 
   const finish = (done: TurnRecord | null, final = false) => {
     if (!done) return
@@ -200,6 +209,10 @@ export function projectNativeHistory(
       }
       const peer = peerFromOrigin(message.origin, texts.join('\n\n'))
       if (peer) {
+        const litchPeer = peer.address
+          ? (resolvePeer(peer.address, lookup, peer.peer) ?? peer.peer)
+          : peer.peer
+        if (peer.address) seen.set(peer.address, litchPeer)
         // 上一轮已经停下：CLI 为这条消息另起了一轮
         if (!turn || (settled && open.size === 0)) {
           turn = begin(message, null)
@@ -209,7 +222,7 @@ export function projectNativeHistory(
           type: 'userMessage',
           id: `${message.uuid}:peer`,
           content: [{ type: 'text', text: peer.text, text_elements: [] }],
-          litchPeer: peer.peer,
+          litchPeer,
         })
         settled = false
         stay()
@@ -270,7 +283,10 @@ export function projectNativeHistory(
         if (!toolUseId || HIDDEN_TOOLS.has(name)) return
         const input = (block.input as Record<string, unknown> | undefined) ?? {}
         open.set(toolUseId, current.items.length)
-        const item = toolUseItem({ toolUseId, toolName: name, input }, cwd, mcpServers, id)
+        const item = withPeerTarget(
+          toolUseItem({ toolUseId, toolName: name, input }, cwd, mcpServers, id),
+          (address) => resolvePeer(address, lookup),
+        )
         // 实时回合里 Write 拿磁盘上现在的文件比出差异；读历史时磁盘上早就是后来的样子了，只给写进去的全文
         current.items.push(
           name === 'Write' && item.type === 'fileChange'

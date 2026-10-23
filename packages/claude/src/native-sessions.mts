@@ -22,6 +22,7 @@ import { type NativeMessage, projectNativeHistory } from './native-history.mjs'
 import { findNativeRecords, readNativeLineage } from './native-lineage.mjs'
 import { recentlyWritten } from './native-owner.mjs'
 import { type NativeRecordFacts, readNativeRecordFacts } from './native-record.mjs'
+import type { PeerLookup } from './peer-target.mjs'
 import type { SessionStore } from './store.mjs'
 import type { ThreadRecord, TurnRecord } from './types.mjs'
 
@@ -109,6 +110,8 @@ export interface NativeSessionsHost {
   registered(fresh?: boolean): Map<string, NativeOwner>
   /** 入口自己的 CLI 在这个会话上：此刻开着没有、最后一次退出的时刻（毫秒） */
   ownCli(threadId: string): { alive: boolean; exitedAt: number }
+  /** 认收件箱地址用的本机登记和 Litch 会话（peer-target.mts）。不给时只靠记录里收到过的消息 */
+  peers?: Omit<PeerLookup, 'seen'>
 }
 
 /** 重画了一遍：画之前、之后的回合，和顺手从原生记录里读的占用、设置（读不到记录是 null） */
@@ -444,7 +447,10 @@ export class NativeSessions {
         from = 0
       }
     }
-    const drawn = projectNativeHistory(threadId, messages.slice(from), thread.cwd, { running })
+    const drawn = projectNativeHistory(threadId, messages.slice(from), thread.cwd, {
+      running,
+      ...(this.host.peers ? { peers: this.host.peers } : {}),
+    })
     // 原生记录里新的这段可能和库里留着的回合同号（同一份记录画过一遍、压缩后留下的那一段）：跳过已有的
     const have = new Set(before.slice(0, keep).map((turn) => turn.id))
     const fresh = drawn.turns.filter((turn) => !have.has(turn.id))

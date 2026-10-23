@@ -69,6 +69,33 @@ test('条目：别的会话发来的消息（litchPeer）带上发送方，原�
   })
 })
 
+test('条目：SendMessage 的工具条目上的 litchPeer 是收件方，带着 Litch 里的会话号', () => {
+  const send = {
+    type: 'mcpToolCall',
+    id: 's',
+    server: 'claude-code',
+    tool: 'SendMessage 修 CI',
+    status: 'completed',
+    arguments: { to: 'uds:/tmp/cc-socks/887369.sock', message: 'hi' },
+    result: null,
+    error: null,
+    durationMs: 142,
+  }
+  const item = projectItem({
+    ...send,
+    litchPeer: { name: '修 CI', thread: 'thread-9', session: 'local_abc' },
+  } as unknown as ThreadItem)
+  assert.deepEqual(item.kind === 'toolCall' && item.peer, {
+    name: '修 CI',
+    session: 'local_abc',
+    thread: 'thread-9',
+    bypass: false,
+  })
+  // 没认出收件方的（或者没声明扩展）没有这一项
+  const bare = projectItem(send as unknown as ThreadItem)
+  assert.ok(bare.kind === 'toolCall' && !('peer' in bare))
+})
+
 test('条目：助手消息的阶段，没标就是 unknown；是否还在出字由所在回合决定', () => {
   assert.deepEqual(projectItem(agentText('a', '好', 'final_answer')), {
     id: 'a',

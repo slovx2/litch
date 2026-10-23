@@ -427,12 +427,14 @@ export interface UserMessageItem {
   peer?: PeerView
 }
 
-/** 发来消息的那个会话（发送方自报，只用来显示和导航） */
+/** 发来消息（或者收消息）的那个会话（对方自报，只用来显示和导航） */
 export interface PeerView {
-  /** 显示名。直接写收件箱的外部进程没有 */
+  /** 显示名：对方是这台设备上的 Litch 会话时是它的标题。直接写收件箱的外部进程没有 */
   name: string | null
-  /** 发送方宿主里的会话号：Claude 桌面端的是 local_ 开头 */
+  /** 对方宿主里的会话号：Claude 桌面端的是 local_ 开头 */
   session: string | null
+  /** 对方是这台设备上的 Litch 会话时，它的会话号（点了在 Litch 里打开）。认不出没有 */
+  thread?: string
   /** 对方是跳过确认（不问就执行工具）的会话 */
   bypass: boolean
 }
@@ -626,6 +628,8 @@ export interface ToolCallItem {
   spawned?: SpawnedView
   /** litch_sessions.wrap_up：这一回合收尾时的建议任务（每条一张提案）。别的工具调用没有这一项 */
   wrapUp?: WrapUpView
+  /** 给别的会话发消息（Claude 的 SendMessage，peerMessages 扩展）：认出来的收件方。认不出、别的工具调用没有这一项 */
+  peer?: PeerView
 }
 
 export interface PlanItem {

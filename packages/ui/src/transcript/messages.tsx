@@ -132,7 +132,7 @@ export const UserMessage = memo(function UserMessage({
       data-peer={peer ? '' : undefined}
       ref={bubble}
     >
-      {peer ? <PeerHead peer={peer} /> : null}
+      {peer ? <PeerHead deviceId={ref.deviceId} peer={peer} /> : null}
       <UserAttachments attachments={item.attachments} />
       {comments ? <SentComments {...ref} comments={comments.comments} /> : null}
       {replies ? (
