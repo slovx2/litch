@@ -5,6 +5,10 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
+## 0.17.1
+
+- 依赖安全升级：Claude Code 入口用的 `@modelcontextprotocol/sdk` 升到 1.32.1，守护进程与适配器改用 Go 1.26.10 编译（源码构建的最低 Go 版本随之改为 1.26.10），修掉 `cha-v<版本>.tar.gz` 里这两处的已知漏洞
+
 ## 0.17.0
 
 - 对话区：回合结束后滚到靠近最上面时收起步骤组、整段过程、思考或命令，被点的那一行不再往上跳（以前会跳走收起的高度，眼前的内容滚出屏幕）；展开、收起都留在原位
