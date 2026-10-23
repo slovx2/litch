@@ -596,14 +596,21 @@ export interface RuntimeBackgroundCommandEnd {
 }
 
 // 跨回合存活的 CLI 进程在没有回合时发生的事，由协议层接手。
+export interface RuntimePeerWake {
+  // 目标的会话键
+  key: string
+  // 唤醒回合（或正在起的那个回合）结束：起进程失败也算，调用方不必再等它的收件箱。已有 CLI 时为 null
+  ended: Promise<unknown> | null
+}
+
 export interface RuntimeSessionHandlers {
   // CLI 自己开了一轮。协议层建好回合并以 spontaneous 上下文调用 runTurn 后返回 true；
   // 返回 false 表示不接，运行时会打断这一轮。
   onSpontaneousTurn(threadId: string): Promise<boolean>
   // 会话 from 的模型要用 SendMessage 发给 to：to 是本机的另一个 Litch 会话、它又没有 CLI 时，协议层为它建一个
-  // wake 回合把 CLI 拉起来。返回目标的会话键（已经有 CLI 的也返回，调用方等它的收件箱就绪），不是 Litch 会话、
+  // wake 回合把 CLI 拉起来。已经有 CLI 的也给出（调用方等它的收件箱就绪）；不是这里的会话、被别处占着、
   // 拉不起来时返回 null
-  onPeerWake?(to: string, from: string): Promise<string | null>
+  onPeerWake?(to: string, from: string): Promise<RuntimePeerWake | null>
   onBackgroundCommandEnded(threadId: string, end: RuntimeBackgroundCommandEnd): void
   // CLI 关于后台任务的 system 消息（background_tasks_changed、task_started、task_updated、task_notification），
   // 原样交给协议层攒后台任务的集合（background-tasks.mts）
@@ -622,6 +629,8 @@ export interface ClaudeRuntime {
   // CLI 进程还没退出的会话键（正在收场的也算：退出前它还会写会话记录）
   cliProcessKeys?(): string[]
   closeSession?(threadId: string, reason: string): Promise<void>
+  // 这个会话的 CLI 正在收场时给出它退完的时刻，没在收场为 null
+  closingSession?(threadId: string): Promise<void> | null
   // 会话改了名：进程还开着时让它在收件箱里换成新名字（没开着的下次起进程时带上）
   renameSession?(threadId: string, name: string): Promise<void>
   // 关掉只是空闲保留着的 CLI 进程：客户端全都断开、技能配置要改时

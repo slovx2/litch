@@ -826,3 +826,23 @@ test('RELAY-012：盯着时登记重读、不用一秒内列表读过的；先�
   })
   await stop(desktop)
 })
+
+test('RELAY-013：别的会话发来消息时，导进来的会话被桌面端开着就不唤醒（会分叉）；放手后才唤醒', async () => {
+  await fresh()
+  const S = id(13)
+  await write(S, say(S, 'u1', null, '桌面端说的') + answer(S, 'a1', 'u1', '好'))
+  const desktop = await liveProcess()
+  await register(desktop.pid as number, { pid: desktop.pid as number, sessionId: S })
+  await withStage('relay-peer-wake', async (stage) => {
+    const app = await stage.connect('app')
+    await app.request('thread/list', {})
+    const address = `uds:/tmp/cc-socks/litch-${S}.sock`
+    assert.equal(await stage.session().onPeerWake?.(address, 'sender'), null)
+    assert.deepEqual(app.notifications('turn/started'), [], '没有为它起回合')
+
+    await stop(desktop)
+    const wake = await stage.session().onPeerWake?.(address, 'sender')
+    assert.equal(wake?.key, S, '占用方走了才唤醒')
+    await wake?.ended
+  })
+})
