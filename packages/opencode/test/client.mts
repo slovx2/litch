@@ -158,7 +158,12 @@ export interface Isolated {
 // 项目目录是一个 git 仓库：OpenCode 的快照（回合差异、回退恢复文件）只在 git 仓库里做。
 export async function isolate(
   respond: MockResponder,
-  options: { permission?: Record<string, unknown>; files?: Record<string, string> } = {},
+  options: {
+    permission?: Record<string, unknown>
+    files?: Record<string, string>
+    /** 交给 OpencodeServer 的选项（后台 shell 开不开） */
+    server?: { backgroundShell?: boolean }
+  } = {},
 ): Promise<Isolated> {
   if (!opencodeCli) throw new Error('没有 OpenCode')
   const root = await realpath(await mkdtemp(join(tmpdir(), 'cha-opencode-')))
@@ -228,7 +233,7 @@ export async function isolate(
   git('-c', 'user.name=t', '-c', 'user.email=t@t', 'add', '-A')
   git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'init')
   const home = join(root, 'adapter')
-  const server = new OpencodeServer(home)
+  const server = new OpencodeServer(home, options.server ?? {})
   return {
     root,
     cwd,

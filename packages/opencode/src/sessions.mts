@@ -174,6 +174,8 @@ export class Sessions {
   deleted(id: string): void {
     const live = this.server.live.get(id)
     this.known.delete(id)
+    // 它起的后台 shell 一起停，记录和日志都不要了
+    this.server.shells?.forget(id)
     if (!live) return
     this.server.live.delete(id)
     this.server.requests.reject((threadId) => threadId === id, '会话已删除')

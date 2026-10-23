@@ -1,4 +1,5 @@
 import { isAbsolute } from 'node:path'
+import { backgroundTerminalsPage, withBackground } from '../../shared/src/background-report.mjs'
 import { gitDiffToRemote } from '../../shared/src/git-diff-remote.mjs'
 import { applyNotificationOptOut } from '../../shared/src/notification-opt-out.mjs'
 import { projectRequest } from '../../shared/src/project-rpc.mjs'
@@ -94,7 +95,7 @@ export async function dispatch(
         platformOs: platformOs(),
       }
     case 'runtime/info':
-      return runtimeInfo()
+      return runtimeInfo(s.shells !== null)
     case 'server/diagnostics':
       return {
         process: {
@@ -216,7 +217,7 @@ export async function dispatch(
     case 'thread/start':
       return startThread(s, peer, p)
     case 'thread/list':
-      return listThreads(s, p)
+      return withBackground(s.report, peer.id, await listThreads(s, p))
     case 'thread/loaded/list':
       return { data: [...s.live.keys(), ...s.ephemeral.keys()], nextCursor: null }
     case 'thread/resume':
@@ -226,12 +227,15 @@ export async function dispatch(
       // 和上游一样，thread/read 只读不订阅
       if (method === 'thread/read') {
         const read = envelope(s, thread, p.includeTurns === false ? [] : turns)
-        return { thread: read }
+        return withBackground(s.report, peer.id, { thread: read })
       }
       s.subscribe(peer, thread.id)
       const resumed = await settings(s, live)
       if (p.excludeTurns === true) resumed.thread.turns = []
-      return { ...resumed, ...historyHeadCursors(thread.id, turns) }
+      return withBackground(s.report, peer.id, {
+        ...resumed,
+        ...historyHeadCursors(thread.id, turns),
+      })
     }
     case 'thread/unsubscribe': {
       const subscribed = s.subscriptions.get(p.threadId)?.delete(peer.id)
@@ -287,13 +291,14 @@ async function startThread(s: OpencodeServer, peer: RpcPeer, p: any): Promise<an
   })
   if (typeof created?.id !== 'string')
     throw new ProtocolError(-32603, 'OpenCode 建会话没有返回会话号')
-  if (tools.length) {
-    s.clientTools.remember(created.id, p.dynamicTools)
-    // 有了会话号再放开自己的服务（OpenCode 把这几条接在原有规则后面；之后每次发消息整个替换）
+  if (tools.length) s.clientTools.remember(created.id, p.dynamicTools)
+  // 有动态工具、或者入口自己带着工具（后台 shell）的会话：有了会话号再放开自己的服务
+  //（OpenCode 把这几条接在原有规则后面；之后每次发消息整个替换）
+  if (s.clientTools.specs(created.id).length) {
     await api
       .request('PATCH', `/session/${created.id}`, {
         directory: cwd,
-        body: { permission: toolRuleset(toolRules(created.id)) },
+        body: { permission: toolRuleset(s.clientTools.rules(created.id, base.preset)) },
       })
       .catch((error) =>
         console.error(`[opencode] 会话 ${created.id} 的工具规则没有写上: ${error.message}`),
@@ -384,7 +389,12 @@ async function dispatchTurn(s: OpencodeServer, peer: RpcPeer, method: string, p:
     }
     case 'thread/turns/list': {
       const { turns } = (await s.load(requiredString(p.threadId, 'threadId'))).projection
-      return pageRecords(turns, p, `turns:${p.threadId}`, (turn) => turn.id)
+      return withBackground(
+        s.report,
+        peer.id,
+        pageRecords(turns, p, `turns:${p.threadId}`, (turn) => turn.id),
+        p.threadId,
+      )
     }
     case 'thread/turns/items/list':
     case 'thread/items/list':
@@ -424,9 +434,24 @@ async function dispatchTurn(s: OpencodeServer, peer: RpcPeer, method: string, p:
     case 'thread/queue/list':
     case 'thread/attachment/list':
       return { data: [], nextCursor: null, backwardsCursor: null }
+    // 后台终端就是注入的后台 shell（没打开时一直是空的）；用户在这里停的不唤醒模型
     case 'thread/backgroundTerminals/list':
-      return { data: [], nextCursor: null }
+      return backgroundTerminalsPage(
+        s.shells?.terminals(requiredString(p.threadId, 'threadId')) ?? [],
+        p,
+      )
+    case 'thread/backgroundTerminals/terminate':
+      return {
+        terminated:
+          s.shells?.stop(
+            requiredString(p.threadId, 'threadId'),
+            requiredString(p.processId, 'processId'),
+            'user',
+          ) === true,
+      }
     case 'thread/backgroundTerminals/clean':
+      s.shells?.stopThread(requiredString(p.threadId, 'threadId'), 'user')
+      return {}
     case 'thread/increment_elicitation':
     case 'thread/decrement_elicitation':
       return {}

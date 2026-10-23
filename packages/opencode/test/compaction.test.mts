@@ -25,6 +25,7 @@ const hooks: ProjectionHooks = {
   mcpServers: () => [],
   dynamicTool: () => null,
   dynamicToolStarted: () => {},
+  selfStarted: () => false,
 }
 
 function scene() {

@@ -1,3 +1,4 @@
+import { declareBackgroundTasks } from '../../shared/src/background-report.mjs'
 import { CODEX_PROTOCOL_VERSION } from '../../shared/src/runtime-version.mjs'
 import { declaration } from './declaration.mjs'
 import { hostOpencodeExecutable, hostOpencodeVersion } from './host-opencode.mjs'
@@ -34,7 +35,8 @@ export function compatibilityHint(version: string): string {
   return `当前 OpenCode ${version}，适配器验证过的版本：${versions.opencodeVerified.join('、')}；请换用验证过的版本或升级适配器`
 }
 
-export function runtimeInfo() {
+/** backgroundShell：这次运行打没打开注入的后台 shell，声明里的 backgroundTasks 跟着它走 */
+export function runtimeInfo(backgroundShell = false) {
   const { version } = detectHostOpencode()
   return {
     engine: 'opencode',
@@ -44,6 +46,6 @@ export function runtimeInfo() {
     cliBuild: version,
     capabilities: ['submission.idempotency'],
     releaseReady: false,
-    ...declaration,
+    ...(backgroundShell ? declareBackgroundTasks(declaration) : declaration),
   }
 }

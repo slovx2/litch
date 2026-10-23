@@ -3,6 +3,8 @@
 // 只改给声明了扩展的连接的那一份：应答里的会话对象带上 litchBackground（有任务时），回合带上 litchOrigin（有来历时）。
 // 回合对象可能是引擎记着的那一份，先拷一份再加，别的连接看到的不变。
 import type { LitchBackgroundTask, LitchTurnOrigin } from '../../protocol/src/background-tasks.mjs'
+import { EXTENSION } from '../../protocol/src/device.mjs'
+import type { HarnessDeclaration } from '../../protocol/src/harness-capabilities.mjs'
 import { ProtocolError } from './protocol-contract.mjs'
 
 export interface BackgroundReport {
@@ -87,5 +89,16 @@ export function backgroundTerminalsPage<T extends { processId: string }>(
   return {
     data: terminals.slice(start, end),
     nextCursor: end < terminals.length ? (terminals[end - 1]?.processId ?? null) : null,
+  }
+}
+
+/** 打开了后台 shell 的入口在声明里加上 backgroundTasks：扩展列表里有它、能力位报会报集合 */
+export function declareBackgroundTasks(declaration: HarnessDeclaration): HarnessDeclaration {
+  return {
+    ...declaration,
+    extensions: [...(declaration.extensions ?? []), EXTENSION.backgroundTasks],
+    ...(declaration.features
+      ? { features: { ...declaration.features, backgroundTasks: true } }
+      : {}),
   }
 }
