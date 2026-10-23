@@ -373,7 +373,13 @@ export interface Device {
   /** 会话树：提案上点了“不要” */
   dismissProposal(sessionId: string, proposalId: string): Promise<void>
   /** 用户在 offer 卡上选了“新会话”（session）或“在这里做”（here） */
-  answerProposal(sessionId: string, proposalId: string, choice: OfferChoice): Promise<void>
+  /** worktree：选新会话时卡上的工作树开关 */
+  answerProposal(
+    sessionId: string,
+    proposalId: string,
+    choice: OfferChoice,
+    worktree?: boolean,
+  ): Promise<void>
   /** 普通提案卡上的“在这里做”：“在这里做：标题”加任务当用户的话进输入队列（在跑就排到回合后，同 Claude 桌面端） */
   hereProposal(sessionId: string, proposalId: string, lead?: string): Promise<void>
   /** 这个会话下面引擎自己的子代理线程（直接的子女） */
@@ -395,6 +401,8 @@ export interface SpawnRequest {
   background?: string
   wakeParent: boolean
   sandbox?: SandboxLevel
+  /** 要不要自己的工作树。不给照设备的缺省（父会话在设备层工作树里就开新的） */
+  worktree?: boolean
 }
 
 /** 沙箱档配的审批策略（和内置的三档权限预设一样：完全访问不问，别的按需问） */
@@ -2139,6 +2147,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         ...(request.cwd ? { cwd: request.cwd } : {}),
         ...(projectId ? { projectId } : {}),
         ...sandboxParams(request.sandbox),
+        ...(request.worktree === undefined ? {} : { worktree: request.worktree }),
       }),
     )
     await adoptChild(threadId)
@@ -2364,9 +2373,15 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       await guarded(() => link.request(SESSION_TREE_METHOD.proposalDismiss, { proposalId }))
       live.settleProposal(sessionId, proposalId, 'dismissed', null)
     },
-    async answerProposal(sessionId, proposalId, choice) {
+    async answerProposal(sessionId, proposalId, choice, worktree) {
       treeOnly()
-      await guarded(() => link.request(SESSION_TREE_METHOD.proposalAnswer, { proposalId, choice }))
+      await guarded(() =>
+        link.request(SESSION_TREE_METHOD.proposalAnswer, {
+          proposalId,
+          choice,
+          ...(choice === 'session' && worktree !== undefined ? { worktree } : {}),
+        }),
+      )
       live.settleProposal(sessionId, proposalId, choice === 'session' ? 'chosen' : 'here', null)
     },
     async hereProposal(sessionId, proposalId, lead) {

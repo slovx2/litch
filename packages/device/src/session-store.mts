@@ -118,6 +118,9 @@ const MIGRATIONS: readonly string[] = [
   // 只做一次的整理，做完删掉那一行。pruneThreadTools：以前删会话时没删它带的动态工具，留下的行清一次（device.mts）
   `CREATE TABLE chores(name TEXT PRIMARY KEY) WITHOUT ROWID;
    INSERT INTO chores(name) VALUES('pruneThreadTools');`,
+  // 提案上子会话要不要自己的工作树（worktrees 扩展）：模型或用户定的（null 是没定），和没定时照缺省算出来的
+  `ALTER TABLE proposals ADD COLUMN worktree INTEGER;
+   ALTER TABLE proposals ADD COLUMN worktree_default INTEGER NOT NULL DEFAULT 0;`,
 ]
 
 export const SESSION_SCHEMA_VERSION = MIGRATIONS.length
@@ -219,6 +222,8 @@ function proposalOf(row: Row): SessionProposal {
     callId: maybe(row.call_id),
     ...(typeof row.wider_sandbox === 'string' ? { widerSandbox: row.wider_sandbox } : {}),
     ...(row.offer === 1 ? { offer: true } : {}),
+    worktree: row.worktree == null ? null : row.worktree === 1,
+    worktreeDefault: row.worktree_default === 1,
   }
 }
 
@@ -241,9 +246,10 @@ export class SessionStore {
       detach: prepare('UPDATE lineage SET detached_at=? WHERE thread_id=?'),
       reported: prepare('UPDATE lineage SET reported_turn=? WHERE thread_id=?'),
       addProposal: prepare(
-        `INSERT INTO proposals(id, thread_id, title, prompt, harness, model, cwd, kind, wake_parent, status, created_at, expires_at, wider_sandbox, turn_id, call_id, offer, background, effort)
-         VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO proposals(id, thread_id, title, prompt, harness, model, cwd, kind, wake_parent, status, created_at, expires_at, wider_sandbox, turn_id, call_id, offer, background, effort, worktree, worktree_default)
+         VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ),
+      proposalWorktree: prepare('UPDATE proposals SET worktree=? WHERE id=?'),
       proposal: prepare('SELECT * FROM proposals WHERE id=?'),
       // 还在等的：等用户点的卡、等用户选的 offer 卡、用户选了新会话等模型补简报的
       pending: prepare(
@@ -421,6 +427,8 @@ export class SessionStore {
       proposal.offer ? 1 : 0,
       proposal.background ?? '',
       proposal.effort ?? null,
+      proposal.worktree == null ? null : proposal.worktree ? 1 : 0,
+      proposal.worktreeDefault ? 1 : 0,
     )
     return {
       ...proposal,
@@ -431,7 +439,14 @@ export class SessionStore {
       settledAt: null,
       turnId: proposal.turnId ?? null,
       callId: proposal.callId ?? null,
+      worktree: proposal.worktree ?? null,
+      worktreeDefault: proposal.worktreeDefault ?? false,
     }
+  }
+
+  /** 用户在 offer 卡上选新会话时定了工作树开关 */
+  setProposalWorktree(id: string, worktree: boolean): void {
+    this.run('proposalWorktree', worktree ? 1 : 0, id)
   }
 
   proposal(id: string): SessionProposal | null {

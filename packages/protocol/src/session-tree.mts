@@ -113,6 +113,13 @@ export interface SessionProposal {
    * 模型这样派出时一律变成提案，提案卡片上要写明
    */
   widerSandbox?: string
+  /**
+   * 子会话要不要自己的工作树（worktrees 扩展）：模型明说的，或用户在 offer 卡上选新会话时定的；没定是 null。
+   * 旧设备进程不带
+   */
+  worktree?: boolean | null
+  /** 没人定时照缺省算出来的（父会话在 Litch 建的工作树里就是真），卡上开关的初值用 worktree ?? 它。旧设备进程不带 */
+  worktreeDefault?: boolean
 }
 
 /** 上限（设备进程和界面按同一份） */
@@ -192,6 +199,8 @@ export interface SessionStartParams {
   /** 审批策略、沙箱：给了也会被收紧到不宽于父会话 */
   approvalPolicy?: string
   sandbox?: string
+  /** 子会话要不要自己的工作树（设备列了 worktrees 才认）。不给照缺省：父会话在 Litch 建的工作树里就开新的 */
+  worktree?: boolean
 }
 
 export interface SessionStartResponse {
@@ -234,11 +243,15 @@ export interface SessionProposalOverrides {
   sandbox?: string
   /** 子会话停下后要不要唤醒父会话 */
   wakeParent?: boolean
+  /** 子会话要不要自己的工作树。不给照提案（提案也没定就照缺省） */
+  worktree?: boolean
 }
 
 export interface SessionProposalAnswerParams extends SessionProposalIdParams {
   /** session：新会话（模型接着补简报开起来）；here：在这里做 */
   choice: 'session' | 'here'
+  /** 选新会话时卡上那个工作树开关：记到提案上，模型补简报开起来时照它。不给照提案原来的 */
+  worktree?: boolean
 }
 
 export interface SessionProposalHereParams extends SessionProposalIdParams {

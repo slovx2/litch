@@ -173,6 +173,14 @@ woken to continue.
   off a task. A fresh card the model raises always carries a background (the overall goal,
   decisions and constraints so far) next to the task; the sub-session gets it as its own section
   before the task. Expand the brief on the card to read it.
+- **Where a sub-session works** (devices that support worktrees): when the parent session is in a
+  worktree Litch created (or shares one), a new sub-session gets its own new worktree and branch,
+  starting from the last commit of the parent's branch (the parent's uncommitted changes are not
+  carried over); otherwise it shares the parent's folder. The model can say which it wants; cards,
+  the "New session" choice of an offer card and the Start a sub-session dialog have a "New worktree"
+  checkbox, preset this way, and what is checked there wins. "Do it here" always stays in the current
+  session and folder. A handed-off task gets a worktree only on harnesses that can fork into another
+  folder (Codex, Claude Code); elsewhere it shares the folder.
   The side panel's **Suggested tasks** tab lists every card of the current session, with a badge for
   the waiting ones; clicking one scrolls to it. You can also tell the model "start the second one", and
   it withdraws cards that went stale. At most three cards it raises on its own per turn (independent

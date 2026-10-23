@@ -241,22 +241,23 @@ export class Worktrees {
   }): Promise<Worktree> {
     const settings = this.host.settings()
     const from = spec.from ?? { kind: 'default' }
-    const { top, prefix } = await repoOf(spec.cwd)
+    // 记在主仓库下（从另一个会话的工作树里再开也是）；起点、当前本地状态、被忽略的文件按 cwd 所在的检出算
+    const { top, prefix, main } = await repoOf(spec.cwd)
     const start = await this.startOf(top, from, settings.fetchFirst)
     const slug = slugOf(spec.title)
     let picked: { name: string; path: string; branch: string } | null = null
     for (let attempt = 0; attempt < 8 && !picked; attempt++) {
       const random = randomBytes(3).toString('hex')
       const name = slug ? `${slug}-${random}` : random
-      const path = join(settings.root, basename(top), name)
+      const path = join(settings.root, basename(main), name)
       const branch = `${settings.branchPrefix}${name}`
-      if (!existsSync(path) && !(await branchExists(top, branch))) picked = { name, path, branch }
+      if (!existsSync(path) && !(await branchExists(main, branch))) picked = { name, path, branch }
     }
     if (!picked) throw new ProtocolError(-32603, '起不出不重名的工作树名字')
     const stamp = now()
     let worktree: Worktree = {
       id: picked.name,
-      sourceRoot: top,
+      sourceRoot: main,
       path: picked.path,
       subPath: prefix.replace(/\/+$/, ''),
       branch: picked.branch,
@@ -271,7 +272,7 @@ export class Worktrees {
     this.save(worktree)
     try {
       mkdirSync(dirname(worktree.path), { recursive: true })
-      await git(top, [
+      await git(main, [
         'worktree',
         'add',
         '--no-track',

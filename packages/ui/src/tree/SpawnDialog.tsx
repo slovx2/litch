@@ -18,6 +18,7 @@ import { reasonOf } from '../app/errors.ts'
 import { useKey, useServices } from '../app/services.tsx'
 import { EFFORT_TEXT } from '../composer/efforts.ts'
 import { useComposeOptions } from '../composer/SettingsBar.tsx'
+import { WorktreeCheck } from '../worktrees/WorktreeCheck.tsx'
 import { SANDBOX_CHOICES, SANDBOX_LEVEL, widerLevel } from './sandbox.ts'
 import { fieldsFor, kindOf, overridesOf, type SpawnFields, spawnParams } from './spawn-form.ts'
 
@@ -77,12 +78,12 @@ export function SpawnDialog({ deviceId, parent, proposal, onSpawned, onClose }: 
           deviceId,
           sessionId: parent.id,
           proposalId: proposal.id,
-          overrides: overridesOf(fields, parent, proposal),
+          overrides: overridesOf(fields, parent, proposal, device?.worktrees === true),
         })
       : channel.command('session.spawn', {
           deviceId,
           parentId: parent.id,
-          ...spawnParams(fields, parent),
+          ...spawnParams(fields, parent, device?.worktrees === true),
         })
     sent
       .then(({ sessionId }) => {
@@ -316,6 +317,11 @@ export function SpawnDialog({ deviceId, parent, proposal, onSpawned, onClose }: 
             />
             {t('tree.dialog.wake')}
           </label>
+          <WorktreeCheck
+            deviceId={deviceId}
+            checked={fields.worktree}
+            onChange={(worktree) => set({ worktree })}
+          />
           {failure ? <div className="modal-note err">{failure}</div> : null}
         </div>
         <div className="modal-foot">

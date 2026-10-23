@@ -53,4 +53,6 @@ export const zhWorktrees = {
   'worktree.removeBranch': '连分支删除',
   'worktree.removeBranch.ask':
     '删除工作树目录、分支 {branch} 和快照。分支上没合并的提交会丢失，无法恢复。',
+  'worktree.check': '新工作树',
+  'worktree.check.hint': '勾选：子会话使用独立的工作树和分支。不勾选：与当前会话共用目录',
 } satisfies Record<string, Entry>

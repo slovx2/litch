@@ -15,6 +15,7 @@ import {
   type WorktreesOp,
   type WorktreesTopicView,
 } from '../src/index.mjs'
+import { projectProposals } from '../src/projection/tree.mjs'
 import { fakeDevice, harness } from './fake-device.mjs'
 import { fakeOpener, RpcFailure } from './fake-server.mjs'
 import { fakeClock, settle } from './helpers.mjs'
@@ -311,4 +312,69 @@ test('WT-CORE-004 模拟：在新工作树里建会话，会话目录在工作�
     }),
     { code: 'rejected' },
   )
+})
+
+test('WT-CORE-005 模拟：父会话在工作树里时派的子会话默认开新的（从父会话的分支切），明说不要的共用；提案投影带开关的初值', async () => {
+  const time = fakeClock(1_700_000_000_000)
+  const [uiPort, corePort] = createPortPair()
+  serveChannel(corePort, createMockCore({ clock: time.clock, chunkMs: 0 }), { clock: time.clock })
+  const channel = connectChannel(uiPort)
+  const rows = new Map<string, SessionSummary>()
+  channel.subscribe(
+    { kind: 'sidebar', deviceId: 'local' },
+    {
+      snapshot: (data) => {
+        for (const entry of data.sessions) rows.set(entry.id, entry)
+      },
+      delta(ops: SidebarOp[]) {
+        for (const op of ops) if (op.op === 'session.upsert') rows.set(op.session.id, op.session)
+      },
+    },
+  )
+  time.advance(50)
+  await settle()
+  const spawn = (extra: object) =>
+    channel.command('session.spawn', {
+      deviceId: 'local',
+      parentId: 's4',
+      kind: 'fresh',
+      title: 'Split the sidebar',
+      prompt: 'Split the sidebar into two files',
+      wakeParent: true,
+      ...extra,
+    })
+  const { sessionId: own } = await spawn({})
+  const { sessionId: shared } = await spawn({ worktree: false })
+  for (let i = 0; i < 20 && !rows.get(own)?.worktree; i++) {
+    time.advance(50)
+    await settle()
+  }
+  assert.equal(rows.get(own)?.worktree?.baseRef, 'litch/sidebar-tweaks-3f2a1c')
+  assert.equal(rows.get(own)?.cwd, rows.get(own)?.worktree?.path)
+  assert.equal(rows.get(shared)?.worktree, null)
+  assert.equal(rows.get(shared)?.cwd, rows.get('s4')?.cwd)
+  // 提案投影：模型定的、没定时的缺省
+  const [view] = projectProposals(
+    [
+      {
+        id: 'p1',
+        threadId: 's4',
+        title: 't',
+        prompt: 'p',
+        harness: null,
+        model: null,
+        cwd: null,
+        kind: 'fresh',
+        wakeParent: true,
+        status: 'pending',
+        createdAt: 1,
+        expiresAt: 2_000_000_000,
+        startedThreadId: null,
+        worktree: null,
+        worktreeDefault: true,
+      },
+    ],
+    1_700_000_000_000,
+  )
+  assert.deepEqual([view?.worktree, view?.worktreeDefault], [null, true])
 })

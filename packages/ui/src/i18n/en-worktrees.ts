@@ -57,4 +57,7 @@ export const enWorktrees: Record<keyof typeof zhWorktrees, Entry> = {
   'worktree.removeBranch': 'Remove with branch',
   'worktree.removeBranch.ask':
     'Removes the worktree folder, the branch {branch} and its snapshot. Unmerged commits on the branch are lost for good.',
+  'worktree.check': 'New worktree',
+  'worktree.check.hint':
+    'Checked: the sub-session gets its own worktree and branch. Unchecked: it shares this session’s folder',
 }

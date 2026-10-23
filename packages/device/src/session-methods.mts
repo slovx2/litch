@@ -22,6 +22,12 @@ const optional = (value: unknown, name: string): string | undefined => {
   return value || undefined
 }
 
+const flag = (value: unknown, name: string): boolean | undefined => {
+  if (value == null) return undefined
+  if (typeof value !== 'boolean') throw new ProtocolError(-32602, `${name} 必须是布尔值`)
+  return value
+}
+
 function kindOf(value: unknown): SessionLineageKind {
   if (value === 'fresh' || value === 'fork') return value
   throw new ProtocolError(-32602, 'kind 只能是 fresh 或 fork')
@@ -48,6 +54,8 @@ function overridesOf(value: unknown): ProposalOverrides {
       throw new ProtocolError(-32602, 'overrides.wakeParent 必须是布尔值')
     out.wakeParent = value.wakeParent
   }
+  const worktree = flag(value.worktree, 'overrides.worktree')
+  if (worktree !== undefined) out.worktree = worktree
   return out
 }
 
@@ -95,6 +103,7 @@ export async function sessionTreeCall(
             wakeParent,
             approvalPolicy: fields.approvalPolicy,
             sandbox: fields.sandbox,
+            worktree: flag(fields.worktree, 'worktree') ?? null,
           },
           'user',
         ),
@@ -133,7 +142,7 @@ export async function sessionTreeCall(
       const choice = fields.choice
       if (choice !== 'session' && choice !== 'here')
         throw new ProtocolError(-32602, 'choice 只能是 session 或 here')
-      tree.answerOffer(id, choice)
+      tree.answerOffer(id, choice, flag(fields.worktree, 'worktree'))
       return {}
     }
     case SESSION_TREE_METHOD.proposalHere:

@@ -510,6 +510,20 @@ button.sev-title {
   gap: 6px;
   font-size: 13px;
 }
+/* “新工作树”勾选：卡片上跟在按钮后面，弹窗里和“完成后唤醒”一样一行 */
+.wt-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.prop-acts .wt-check {
+  margin-left: 4px;
+}
+.prop-acts[data-small="true"] .wt-check {
+  font-size: 12px;
+}
 .spawn-kind label.off {
   color: var(--ink-3);
 }

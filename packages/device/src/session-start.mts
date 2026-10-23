@@ -3,6 +3,9 @@
 // 再 turn/start。审批策略、沙箱取父会话和请求值里更严的那个；模型、强度不限，没给的取开始那一刻父会话的
 //（目标 harness 和父会话不同时用那边的默认；那个模型没有这一档强度的也用默认）。建好后记父子关系、登记进会话索引
 // 和设备级工作区（跟父会话在同一个工作区，除非指定了别的），给每条客户端连接发 thread/started 和父子关系的通知。
+// 目录：worktree 为真的在设备层新建一个工作树（从宿主分支的最新提交切），为假的共用父会话的目录；没定的看宿主——
+// 父会话是某棵设备层工作树的主人、或者目录就在某棵里（共用着它），就开新的，否则共用（placement）。
+import { realpathSync } from 'node:fs'
 import {
   isPresentationSpec,
   PRESENTATION_SPEC,
@@ -18,9 +21,11 @@ import {
   type SessionLineageKind,
   type SessionLineageOrigin,
 } from '../../protocol/src/session-tree.mjs'
+import type { Worktree, WorktreeFrom } from '../../protocol/src/worktrees.mjs'
 import type { EngineLink } from './engine-link.mjs'
 import type { SessionTree } from './session-tree.mjs'
 import { DeviceError, isObject } from './wire.mjs'
+import { worktreeCwd } from './worktrees.mjs'
 
 export interface ChildSpec {
   /** 不给是父会话的 harness */
@@ -47,6 +52,8 @@ export interface ChildSpec {
    * 第一条消息说明它接手的是父会话做到一半的任务，prompt 是剩下的计划
    */
   handOffBefore?: string | null
+  /** 要不要自己的工作树：真开新的，假共用父会话的目录，不给照宿主算（placement） */
+  worktree?: boolean | null
 }
 
 /** 派不出来：说明是给人（或模型）看的 */
@@ -259,12 +266,87 @@ async function fitEffort(
   }
 }
 
+/**
+ * 宿主：父会话（或它共用着的祖先）在哪棵设备层工作树里。父会话是哪棵的主人，或者目录在哪棵下面（共用着它）；
+ * 删了的也算（“有过”，目录字符串还在）。cwd 是子会话要用的目录，模型另给了目录时只看目录。没有是 null
+ */
+export function hostWorktree(
+  tree: SessionTree,
+  parentId: string,
+  cwd: string | null,
+  ownDir: boolean,
+): Worktree | null {
+  const worktrees = tree.host.worktrees
+  if (!worktrees) return null
+  const inside =
+    cwd === null
+      ? null
+      : (worktrees.list().find((one) => cwd === one.path || cwd.startsWith(`${one.path}/`)) ?? null)
+  return inside ?? (ownDir ? null : worktrees.forThread(parentId))
+}
+
+/**
+ * 提案上没人定时子会话会不会开工作树（卡上开关的初值）。cwd 是提案给的目录；没给时看父会话现在的目录
+ *（父会话是哪棵的主人就不用问；设备上一棵都没有就不用问）
+ */
+export async function worktreeDefault(
+  tree: SessionTree,
+  parentId: string,
+  cwd: string | null,
+): Promise<boolean> {
+  const worktrees = tree.host.worktrees
+  if (!worktrees || worktrees.list().length === 0) return false
+  if (cwd) return hostWorktree(tree, parentId, cwd, true) !== null
+  if (worktrees.forThread(parentId)) return true
+  try {
+    const { config } = await parentSettings(tree, parentId, await tree.owner(parentId))
+    const thread = isObject(config?.thread) ? config.thread : null
+    const dir =
+      (typeof config?.cwd === 'string' ? config.cwd : null) ||
+      (typeof thread?.cwd === 'string' ? thread.cwd : null)
+    return hostWorktree(tree, parentId, dir, false) !== null
+  } catch {
+    return false
+  }
+}
+
+/** 子会话在哪：共用目录，或者新建一棵工作树（从哪切） */
+export type Placement = { kind: 'share' } | { kind: 'worktree'; from: WorktreeFrom }
+
+/**
+ * 照规则定子会话的目录：明说了的照办（要工作树却没有 git、没有目录的拒绝），没说的宿主在工作树里就开新的。
+ * 新的从宿主分支的最新提交切（宿主没提交的改动不带）；宿主在普通目录、明说要的，从那个目录当前的 HEAD 切
+ */
+export function placement(
+  tree: SessionTree,
+  parentId: string,
+  cwd: string | null,
+  asked: boolean | null | undefined,
+  ownDir = false,
+): Placement {
+  if (asked === false) return { kind: 'share' }
+  const host = hostWorktree(tree, parentId, cwd, ownDir)
+  if (asked == null && !host) return { kind: 'share' }
+  if (!tree.host.worktrees) {
+    if (asked)
+      throw new StartRefused(
+        'invalid',
+        'This device cannot create worktrees (git is not installed there). Leave worktree out or set it to false.',
+      )
+    return { kind: 'share' }
+  }
+  return {
+    kind: 'worktree',
+    from: host ? { kind: 'branch', branch: host.branch } : { kind: 'head' },
+  }
+}
+
 export async function startChild(
   tree: SessionTree,
   parentId: string,
   spec: ChildSpec,
   origin: SessionLineageOrigin,
-): Promise<{ threadId: string; harness: string }> {
+): Promise<{ threadId: string; harness: string; branch: string | null }> {
   const title = spec.title.trim().slice(0, 120)
   if (!title) throw new StartRefused('invalid', 'title must not be empty.')
   if (!spec.prompt.trim()) throw new StartRefused('invalid', 'prompt must not be empty.')
@@ -317,23 +399,48 @@ export async function startChild(
     spec.cwd ||
     (typeof parentConfig?.cwd === 'string' ? parentConfig.cwd : null) ||
     (typeof parentThread?.cwd === 'string' ? parentThread.cwd : null)
-  const created =
-    spec.kind === 'fork'
-      ? await link.request('thread/fork', {
-          threadId: parentId,
-          ...(spec.handOffBefore ? { beforeTurnId: spec.handOffBefore } : {}),
-          ...(model ? { model } : {}),
-          ...permissions,
-        })
-      : await link.request('thread/start', {
-          ...(cwd ? { cwd } : {}),
-          ...(model ? { model } : {}),
-          ...permissions,
-          ...(tools?.length ? { dynamicTools: tools } : {}),
-        })
+  const place = placement(tree, parentId, cwd, spec.worktree, Boolean(spec.cwd))
+  const made =
+    place.kind === 'worktree'
+      ? await newWorktree(tree, cwd, place.from, title, spec.worktree === true)
+      : null
+  const where = made ? worktreeCwd(made) : cwd
+  let created: unknown
+  try {
+    created =
+      spec.kind === 'fork'
+        ? await link.request('thread/fork', {
+            threadId: parentId,
+            ...(spec.handOffBefore ? { beforeTurnId: spec.handOffBefore } : {}),
+            ...(made ? { cwd: where } : {}),
+            ...(model ? { model } : {}),
+            ...permissions,
+          })
+        : await link.request('thread/start', {
+            ...(where ? { cwd: where } : {}),
+            ...(model ? { model } : {}),
+            ...permissions,
+            ...(tools?.length ? { dynamicTools: tools } : {}),
+          })
+  } catch (error) {
+    if (made) void tree.host.worktrees?.abandon(made.id)
+    throw error
+  }
   const thread = isObject(created) && isObject(created.thread) ? created.thread : null
-  if (!thread || typeof thread.id !== 'string') throw new Error(`${harness} 没有给回新会话`)
+  if (!thread || typeof thread.id !== 'string') {
+    if (made) void tree.host.worktrees?.abandon(made.id)
+    throw new Error(`${harness} 没有给回新会话`)
+  }
   const threadId = thread.id
+  // 分叉时不是每个引擎都认 cwd（Pi、OpenCode、通用 ACP 照源会话的目录）：没换过去的，刚建的工作树删掉、共用父会话的目录
+  let branch: string | null = null
+  if (made && !sameDir(thread.cwd, where)) {
+    tree.host.log(`${harness} 分叉时没用新工作树的目录，子会话 ${threadId} 共用父会话的目录`)
+    void tree.host.worktrees?.abandon(made.id)
+  } else if (made) {
+    tree.host.worktrees?.own(made.id, threadId)
+    branch = made.branch
+  }
   tree.noteSubscribed(harness, threadId)
   // 不起名的话引擎拿第一条消息（派出说明）当标题，侧栏里一排子会话都是同一句开头
   await link.request('thread/name/set', { threadId, name: title }).catch((error: unknown) => {
@@ -377,8 +484,54 @@ export async function startChild(
     input: [{ type: 'text', text, text_elements: [] }],
     ...(effort ? { effort } : {}),
   })
-  tree.host.log(`会话 ${parentId} 派出子会话 ${threadId}（${harness}，${spec.kind}，${origin}）`)
-  return { threadId, harness }
+  tree.host.log(
+    `会话 ${parentId} 派出子会话 ${threadId}（${harness}，${spec.kind}，${origin}${branch ? `，工作树分支 ${branch}` : ''}）`,
+  )
+  return { threadId, harness, branch }
+}
+
+/** 两个目录是不是同一个（引擎可能把路径规范化过） */
+function sameDir(given: unknown, wanted: string | null): boolean {
+  if (typeof given !== 'string' || !wanted) return false
+  if (given === wanted) return true
+  try {
+    return realpathSync(given) === realpathSync(wanted)
+  } catch {
+    return false
+  }
+}
+
+/**
+ * 给子会话建工作树。明说要的建不成就拒绝（说明原因）；照缺省开的建不成（宿主的分支删了之类）退回共用目录
+ */
+async function newWorktree(
+  tree: SessionTree,
+  cwd: string | null,
+  from: WorktreeFrom,
+  title: string,
+  asked: boolean,
+): Promise<Worktree | null> {
+  const worktrees = tree.host.worktrees
+  if (!worktrees || !cwd) {
+    if (asked)
+      throw new StartRefused(
+        'invalid',
+        'This session has no folder, so there is nothing to make a worktree from.',
+      )
+    return null
+  }
+  try {
+    return await worktrees.create({ cwd, from, title })
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error)
+    if (asked)
+      throw new StartRefused(
+        'invalid',
+        `Could not create a worktree from ${cwd}: ${reason}. Leave worktree out or set it to false to work in this session's folder.`,
+      )
+    tree.host.log(`子会话的工作树没建成（${reason}），共用父会话的目录`)
+    return null
+  }
 }
 
 /** 从提案开始时改的东西（用户在卡片上改了再开始）。不给的照提案；空字符串是清掉提案里的值、用缺省（父会话的） */
@@ -397,6 +550,8 @@ export interface ProposalOverrides {
   sandbox?: unknown
   /** 子会话停下后要不要唤醒父会话。不给照提案 */
   wakeParent?: boolean
+  /** 要不要自己的工作树。不给照提案（提案也没定就照缺省） */
+  worktree?: boolean
 }
 
 /**
@@ -410,7 +565,7 @@ export async function acceptProposal(
   proposalId: string,
   overrides: ProposalOverrides = {},
   from: 'pending' | 'chosen' = 'pending',
-): Promise<{ threadId: string; harness: string }> {
+): Promise<{ threadId: string; harness: string; branch: string | null }> {
   if (tree.accepting.has(proposalId))
     throw new DeviceError('unsupported', `提案 ${proposalId} 正在开始`)
   const proposal = tree.pendingProposal(proposalId, from)
@@ -433,6 +588,7 @@ export async function acceptProposal(
       approvalPolicy: overrides.approvalPolicy,
       sandbox: overrides.sandbox,
       proposalId: proposal.id,
+      worktree: overrides.worktree ?? proposal.worktree ?? null,
     },
     'proposal',
   )

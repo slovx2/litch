@@ -315,6 +315,7 @@ export class DeviceServer {
       index: this.index,
       workspaces: this.workspaces,
       store: new SessionStore(this.sessionsDb),
+      worktrees: this.worktrees,
       enabled: () => this.sessionTreeOn(),
       clients: () => [...this.sessions].filter((session) => session.ready).length,
       announce: (method, params, extension) => this.announce(method, params, extension),

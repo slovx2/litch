@@ -67,6 +67,8 @@ export function projectProposal(
       typeof proposal.widerSandbox === 'string' && LEVELS.has(proposal.widerSandbox)
         ? (proposal.widerSandbox as SandboxLevel)
         : null,
+    worktree: typeof proposal.worktree === 'boolean' ? proposal.worktree : null,
+    worktreeDefault: proposal.worktreeDefault === true,
   }
 }
 

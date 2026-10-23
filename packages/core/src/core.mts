@@ -680,10 +680,10 @@ export function createCore(options: CoreOptions): Core {
           return {}
         }
         case 'session.proposal.answer': {
-          const { deviceId, sessionId, proposalId, choice } =
+          const { deviceId, sessionId, proposalId, choice, worktree } =
             params as Commands['session.proposal.answer']['params']
           try {
-            await deviceOf(deviceId).answerProposal(sessionId, proposalId, choice)
+            await deviceOf(deviceId).answerProposal(sessionId, proposalId, choice, worktree)
           } catch (error) {
             throw toChannelFailure(error)
           }

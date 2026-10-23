@@ -38,6 +38,7 @@ import type { SessionStore } from './session-store.mjs'
 import type { ThreadIndex } from './thread-index.mjs'
 import { DeviceError, isObject } from './wire.mjs'
 import type { Workspaces } from './workspaces.mjs'
+import type { Worktrees } from './worktrees.mjs'
 
 export interface SessionTreeHost {
   harnesses(): HarnessSource[]
@@ -45,6 +46,8 @@ export interface SessionTreeHost {
   index: ThreadIndex
   workspaces: Workspaces
   store: SessionStore
+  /** 设备层的工作树。没有 git 时是 null：子会话一律共用父会话的目录 */
+  worktrees: Worktrees | null
   /** 设置里“会话编排”开着 */
   enabled(): boolean
   /** 现在握手完成的客户端连接有几条 */
@@ -926,7 +929,7 @@ export class SessionTree {
    * 用户在 offer 卡上选了（litch/sessionProposal/answer）：session 改成 chosen（等模型补简报），here 了结成 here，
    * 在等的那次调用拿到选择。不是 offer 卡、已经选过（或者别的原因了结了）的抛错
    */
-  answerOffer(proposalId: string, choice: 'session' | 'here'): void {
+  answerOffer(proposalId: string, choice: 'session' | 'here', worktree?: boolean): void {
     const proposal = this.proposal(proposalId)
     if (!proposal) throw new DeviceError('unsupported', `没有提案 ${proposalId}`)
     if (!proposal.offer)
@@ -940,6 +943,9 @@ export class SessionTree {
       throw new DeviceError('unsupported', `提案 ${proposalId} 那次调用已经结束了`)
     }
     const status = choice === 'session' ? 'chosen' : 'here'
+    // 卡上的工作树开关：模型补简报开起来时照它
+    if (choice === 'session' && worktree !== undefined)
+      this.store.setProposalWorktree(proposalId, worktree)
     if (!this.settleProposal(proposalId, status, null, ['offered']))
       throw new DeviceError('unsupported', `提案 ${proposalId} 已经了结了`)
     this.offers.delete(proposalId)

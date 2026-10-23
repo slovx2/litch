@@ -1756,6 +1756,19 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     settings: (deviceId, harness) => sampleSettings(harnessOn(deviceId, harness)),
     can: (deviceId, harness) => canOf(deviceId, harness),
     nextId: (prefix) => `${prefix}${++seq}`,
+    childWorktree(deviceId, sessionId, cwd, from, title) {
+      // 建不成（不在工作区里之类）就共用父会话的目录，和设备进程照缺省开的一样
+      worktrees
+        .create(deviceId, cwd, from, title)
+        .then((made) => {
+          worktrees.own(deviceId, made.id, sessionId)
+          const where = made.subPath ? `${made.path}/${made.subPath}` : made.path
+          updateSummary(deviceId, sessionId, { cwd: where })
+          const view = sessions.get(`session:${deviceId}:${sessionId}`)
+          if (view) view.cwd = where
+        })
+        .catch(() => {})
+    },
   })
 
   // 后台任务：回合结束后还在跑的两条命令，先结束的那条叫醒会话（mock-background.mts）

@@ -1,7 +1,7 @@
 // 工作树用到的 git 操作（worktrees.mts）。一律不弹凭据提示、输出用英文，跑在设备所在的机器上。
 import { execFileSync, spawn } from 'node:child_process'
 import { rmSync } from 'node:fs'
-import { join } from 'node:path'
+import { basename, dirname, isAbsolute, join } from 'node:path'
 import { ProtocolError } from '../../shared/src/protocol-contract.mjs'
 
 const GIT_ENV = {
@@ -106,13 +106,18 @@ export interface RepoInfo {
   top: string
   /** cwd 相对 top 的子路径，带结尾的斜杠或空串 */
   prefix: string
+  /** 仓库的主检出：cwd 在别的工作树（比如另一个会话的）里时是主仓库，不是那棵工作树；裸仓库等认不出时同 top */
+  main: string
 }
 
 export async function repoOf(cwd: string): Promise<RepoInfo> {
   const top = await gitMaybe(cwd, ['rev-parse', '--show-toplevel'])
   if (!top) throw new ProtocolError(-32602, `${cwd} 不在 git 仓库里，建不了工作树`)
   const prefix = (await gitMaybe(cwd, ['rev-parse', '--show-prefix'])) ?? ''
-  return { top, prefix }
+  // 在别的工作树里时给的是绝对路径；相对路径只在主检出里出现，那时主检出就是 top
+  const common = await gitMaybe(cwd, ['rev-parse', '--git-common-dir'])
+  const main = common && isAbsolute(common) && basename(common) === '.git' ? dirname(common) : top
+  return { top, prefix, main }
 }
 
 const exists = async (top: string, ref: string): Promise<boolean> =>

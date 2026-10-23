@@ -103,8 +103,17 @@ export function useProposalAct(deviceId: string, sessionId: string, proposalId: 
       ),
     dismiss: () =>
       run(channel.command('session.proposal.dismiss', { deviceId, sessionId, proposalId })),
-    answer: (choice: OfferChoice) =>
-      run(channel.command('session.proposal.answer', { deviceId, sessionId, proposalId, choice })),
+    /** worktree：选新会话时卡上的工作树开关（设备能建工作树时才带） */
+    answer: (choice: OfferChoice, worktree?: boolean) =>
+      run(
+        channel.command('session.proposal.answer', {
+          deviceId,
+          sessionId,
+          proposalId,
+          choice,
+          ...(worktree === undefined ? {} : { worktree }),
+        }),
+      ),
     here: () =>
       run(
         channel.command('session.proposal.here', {

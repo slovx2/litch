@@ -911,6 +911,8 @@ export interface Commands {
       wakeParent: boolean
       /** 子会话的沙箱档（审批策略跟着配）。不给是跟父会话一样；给了也收紧到不宽于父会话 */
       sandbox?: SandboxLevel
+      /** 要不要自己的工作树。不给照设备的缺省（父会话在设备层工作树里就开新的） */
+      worktree?: boolean
     }
     result: { sessionId: string }
   }
@@ -941,7 +943,14 @@ export interface Commands {
    * 等着的那次 start 调用拿到答复，模型接着用 accept 补上简报，设备进程才起
    */
   'session.proposal.answer': {
-    params: { deviceId: string; sessionId: string; proposalId: string; choice: OfferChoice }
+    params: {
+      deviceId: string
+      sessionId: string
+      proposalId: string
+      choice: OfferChoice
+      /** 选新会话时卡上的工作树开关 */
+      worktree?: boolean
+    }
     result: Record<string, never>
   }
   /**
