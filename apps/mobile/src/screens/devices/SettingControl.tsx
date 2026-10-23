@@ -65,6 +65,7 @@ export function SettingControl({
           color: c.ink,
           backgroundColor: c.raised,
           borderColor: problem ? c.err : c.line2,
+          borderRadius: theme.radius.m,
           minHeight: theme.hit,
           fontFamily: theme.font.mono,
         },
@@ -122,10 +123,14 @@ export function SettingControl({
                 onPress={() => onDraft(option.value === value ? undefined : option.value)}
                 style={[
                   styles.option,
-                  { borderColor: c.line2, backgroundColor: picked ? c.invBg : c.raised },
+                  {
+                    borderColor: c.line2,
+                    backgroundColor: picked ? c.selBg : c.raised,
+                    borderRadius: theme.radius.m,
+                  },
                 ]}
               >
-                <Text style={{ color: picked ? c.invFg : c.ink }}>{t.said(option.title)}</Text>
+                <Text style={{ color: picked ? c.selFg : c.ink }}>{t.said(option.title)}</Text>
               </Pressable>
             )
           })}

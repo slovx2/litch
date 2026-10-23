@@ -1,11 +1,15 @@
 // 界面预览的首页（打开预览地址看到的就是它）：左边是场景，右边是一块或两块手机屏。
 // 手机屏是 iframe，里面是完整的应用（/?app=1&...，见 frame.ts），所以底部弹层、确认框都在屏里，不会跑到外面。
-// 选了什么记在地址上（?scene=&look=&lang=&size=），复制地址给别人打开是同一屏。
+// 选了什么记在地址上（?scene=&look=&skin=&lang=&size=），复制地址给别人打开是同一屏。
 import { useEffect, useMemo, useState } from 'react'
+import { SKINS, type Skin } from '../ui/theme'
 import { SCENES } from './scenes.web.ts'
 import { CSS } from './style.web.ts'
 
 type Look = 'light' | 'dark' | 'both'
+type SkinPick = Skin | 'all'
+
+const SKIN_NAMES: Record<Skin, string> = { retro: '复古', human: '文艺', standard: '标准' }
 type Lang = 'zh-CN' | 'en'
 
 const SIZES = [
@@ -17,6 +21,7 @@ const SIZES = [
 interface State {
   scene: string
   look: Look
+  skin: SkinPick
   lang: Lang
   size: (typeof SIZES)[number]['id']
 }
@@ -24,19 +29,27 @@ interface State {
 function readState(): State {
   const params = new URLSearchParams(location.search)
   const look = params.get('look')
+  const skin = params.get('skin')
   const size = SIZES.find((entry) => entry.id === params.get('size'))
   return {
     scene: SCENES.some((scene) => scene.id === params.get('scene'))
       ? (params.get('scene') as string)
       : 'home',
     look: look === 'light' || look === 'dark' ? look : 'both',
+    skin: skin === 'all' || SKINS.includes(skin as Skin) ? (skin as SkinPick) : 'retro',
     lang: params.get('lang') === 'en' ? 'en' : 'zh-CN',
     size: size?.id ?? '412',
   }
 }
 
-function frameUrl(state: State, appearance: 'light' | 'dark'): string {
-  const params = new URLSearchParams({ app: '1', scene: state.scene, appearance, lang: state.lang })
+function frameUrl(state: State, appearance: 'light' | 'dark', skin: Skin): string {
+  const params = new URLSearchParams({
+    app: '1',
+    scene: state.scene,
+    appearance,
+    skin,
+    lang: state.lang,
+  })
   return `/?${params}`
 }
 
@@ -92,6 +105,8 @@ export function PreviewIndex() {
 
   const size = SIZES.find((entry) => entry.id === state.size) ?? SIZES[0]
   const looks: ('light' | 'dark')[] = state.look === 'both' ? ['light', 'dark'] : [state.look]
+  const skins: readonly Skin[] = state.skin === 'all' ? SKINS : [state.skin]
+  const screens = skins.flatMap((skin) => looks.map((look) => ({ skin, look })))
   const current = SCENES.find((scene) => scene.id === state.scene)
 
   return (
@@ -112,6 +127,12 @@ export function PreviewIndex() {
               ['dark', '深色'],
             ]}
             onChange={(look) => set({ look })}
+          />
+          <Seg<SkinPick>
+            label="皮肤"
+            value={state.skin}
+            options={[...SKINS.map((skin) => [skin, SKIN_NAMES[skin]] as const), ['all', '三种']]}
+            onChange={(skin) => set({ skin })}
           />
           <Seg
             label="语言"
@@ -164,17 +185,17 @@ export function PreviewIndex() {
           </button>
         </div>
         <div className="pv-phones">
-          {looks.map((look) => (
-            <figure key={look} className="pv-phone">
+          {screens.map(({ skin, look }) => (
+            <figure key={`${skin}-${look}`} className="pv-phone">
               <iframe
-                key={`${look}-${round}`}
-                title={`${current?.name ?? ''} · ${look}`}
-                src={frameUrl(state, look)}
+                key={`${skin}-${look}-${round}`}
+                title={`${current?.name ?? ''} · ${skin} · ${look}`}
+                src={frameUrl(state, look, skin)}
                 style={{ width: size.w, height: size.h }}
               />
               <figcaption>
-                {look === 'light' ? '浅色' : '深色'} ·{' '}
-                <a href={frameUrl(state, look)} target="_blank" rel="noreferrer">
+                {SKIN_NAMES[skin]} · {look === 'light' ? '浅色' : '深色'} ·{' '}
+                <a href={frameUrl(state, look, skin)} target="_blank" rel="noreferrer">
                   单独打开
                 </a>
               </figcaption>

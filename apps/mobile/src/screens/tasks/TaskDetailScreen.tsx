@@ -123,7 +123,16 @@ export function TaskDetailScreen({ route, navigation }: Props) {
         ) : null}
         <Text
           selectable
-          style={[styles.prompt, { color: c.ink, backgroundColor: c.sunken, borderColor: c.line1 }]}
+          style={[
+            styles.prompt,
+            {
+              color: c.ink,
+              backgroundColor: c.sunken,
+              borderColor: c.line1,
+              borderRadius: theme.radius.l,
+              overflow: 'hidden',
+            },
+          ]}
         >
           {task.prompt}
         </Text>

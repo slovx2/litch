@@ -36,7 +36,7 @@ export const CSS = `
 .pv-bar { display: flex; align-items: baseline; gap: 10px; padding: 14px 24px; border-bottom: 1px solid var(--line); }
 .pv-bar span { color: var(--ink2); }
 .pv-bar button { margin-left: auto; color: var(--accent); }
-.pv-phones { flex: 1; overflow: auto; display: flex; gap: 32px; padding: 24px; align-items: flex-start; }
+.pv-phones { flex: 1; overflow: auto; display: flex; flex-wrap: wrap; gap: 32px; padding: 24px; align-items: flex-start; }
 .pv-phone { margin: 0; display: flex; flex-direction: column; gap: 8px; }
 .pv-phone iframe { border: 0; border-radius: 18px; background: #000;
   box-shadow: 0 0 0 8px #1c1d22, 0 0 0 9px rgba(127,127,127,.35), 0 18px 40px rgba(0,0,0,.25); margin: 9px; }

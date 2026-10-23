@@ -23,7 +23,7 @@ export function SlashGoal({
       accessibilityRole="button"
       testID="slash:goal"
       onPress={() => onPick(GOAL_PREFIX)}
-      style={[styles.row, { borderColor: c.line3, borderRadius: theme.radius }]}
+      style={[styles.row, { borderColor: c.line3, borderRadius: theme.radius.m }]}
     >
       <Text style={{ color: c.accent, fontFamily: font.mono, fontSize: font.size.meta }}>
         /goal

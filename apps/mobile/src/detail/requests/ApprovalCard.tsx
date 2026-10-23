@@ -141,7 +141,13 @@ export function ApprovalCard(props: CardProps<ApprovalRequest>) {
           testID="request:note"
           style={[
             styles.note,
-            { color: c.ink, borderColor: c.line2, backgroundColor: c.panel, minHeight: theme.hit },
+            {
+              color: c.ink,
+              borderColor: c.line2,
+              backgroundColor: c.panel,
+              borderRadius: theme.radius.m,
+              minHeight: theme.hit,
+            },
           ]}
         />
       ) : null}

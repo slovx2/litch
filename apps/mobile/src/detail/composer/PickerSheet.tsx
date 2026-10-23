@@ -7,6 +7,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { SEARCH_FROM } from '../../../../../packages/ui/src/composer/picker-search.ts'
 import { useT } from '../../ui/i18n'
+import { sectionFont } from '../../ui/kit/controls'
 import { useTheme } from '../../ui/theme'
 
 export interface PickerOption {
@@ -61,11 +62,18 @@ export function PickerSheet({
         testID={testID}
         style={[
           styles.sheet,
-          { backgroundColor: c.raised, borderColor: c.line3, paddingBottom: insets.bottom + 8 },
+          {
+            backgroundColor: c.raised,
+            borderColor: c.line3,
+            borderTopLeftRadius: theme.radius.l,
+            borderTopRightRadius: theme.radius.l,
+            paddingBottom: insets.bottom + 8,
+          },
         ]}
       >
-        <Text style={[styles.title, { color: c.ink2, fontFamily: theme.font.mono }]}>
-          ## {title}
+        <Text style={[styles.title, sectionFont(theme), { color: c.ink2 }]}>
+          {theme.sectionPrefix}
+          {title}
         </Text>
         {searchable ? (
           <TextInput
@@ -82,6 +90,7 @@ export function PickerSheet({
                 color: c.ink,
                 borderColor: c.line2,
                 backgroundColor: c.panel,
+                borderRadius: theme.radius.m,
                 minHeight: theme.hit,
               },
             ]}
@@ -90,7 +99,7 @@ export function PickerSheet({
         <ScrollView style={styles.list} keyboardShouldPersistTaps="handled">
           {shown.map((option) => {
             const selected = option.id === value
-            const ink = selected ? c.invFg : option.disabled ? c.ink3 : c.ink
+            const ink = selected ? c.selFg : option.disabled ? c.ink3 : c.ink
             return (
               <Pressable
                 key={option.id}
@@ -107,7 +116,7 @@ export function PickerSheet({
                   {
                     minHeight: theme.hit + 4,
                     borderTopColor: c.line1,
-                    backgroundColor: selected ? c.invBg : pressed ? c.press : 'transparent',
+                    backgroundColor: selected ? c.selBg : pressed ? c.press : 'transparent',
                   },
                 ]}
               >
@@ -116,7 +125,7 @@ export function PickerSheet({
                   {option.title}
                 </Text>
                 {option.note ? (
-                  <Text style={[styles.rowNote, { color: selected ? c.invFg : c.ink3 }]}>
+                  <Text style={[styles.rowNote, { color: selected ? c.selFg : c.ink3 }]}>
                     {option.note}
                   </Text>
                 ) : null}

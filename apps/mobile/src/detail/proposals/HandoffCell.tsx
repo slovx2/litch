@@ -9,12 +9,15 @@ import type { Props } from '../cells'
 import { ChildLine } from './ChildLine'
 
 export const HandoffCell = memo(function HandoffCell({ row }: Props<'handoff'>) {
-  const { c, font } = useTheme()
+  const { c, font, radius } = useTheme()
   const t = useT()
   return (
     <View
       testID={`handoff:${row.itemId}`}
-      style={[styles.card, { borderColor: c.line2, backgroundColor: c.raised }]}
+      style={[
+        styles.card,
+        { borderColor: c.line2, backgroundColor: c.raised, borderRadius: radius.l },
+      ]}
     >
       <View style={styles.body}>
         <Text style={[styles.kind, { color: c.ink3, fontFamily: font.mono }]}>

@@ -64,6 +64,7 @@ export function HcControl(props: HcControlProps) {
       color: c.ink,
       backgroundColor: c.raised,
       borderColor: wrong ? c.err : c.line2,
+      borderRadius: theme.radius.m,
       minHeight: theme.hit,
       opacity: off ? 0.6 : 1,
     },
@@ -282,15 +283,15 @@ function OptionPicker({
                   {
                     minHeight: theme.hit,
                     borderTopColor: c.line1,
-                    backgroundColor: on ? c.invBg : pressed ? c.press : 'transparent',
+                    backgroundColor: on ? c.selBg : pressed ? c.press : 'transparent',
                   },
                 ]}
               >
-                <Text style={{ color: on ? c.invFg : c.ink, fontSize: 15 }}>
+                <Text style={{ color: on ? c.selFg : c.ink, fontSize: 15 }}>
                   {t.said(option.title)}
                 </Text>
                 {option.description ? (
-                  <Text style={[styles.small, { color: on ? c.invFg : c.ink3 }]}>
+                  <Text style={[styles.small, { color: on ? c.selFg : c.ink3 }]}>
                     {t.said(option.description)}
                   </Text>
                 ) : null}

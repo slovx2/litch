@@ -114,6 +114,7 @@ export function CustomForm({
                 color: c.ink,
                 backgroundColor: c.raised,
                 borderColor: c.line2,
+                borderRadius: theme.radius.m,
                 minHeight: theme.hit,
                 fontFamily: theme.font.mono,
                 opacity: provider === null ? 1 : 0.6,

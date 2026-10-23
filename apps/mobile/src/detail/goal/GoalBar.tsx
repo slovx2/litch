@@ -54,7 +54,7 @@ function GoalLine({
   return (
     <View
       testID="goal:bar"
-      style={[styles.bar, { borderColor: c.line3, borderRadius: theme.radius }]}
+      style={[styles.bar, { borderColor: c.line3, borderRadius: theme.radius.m }]}
     >
       <View style={styles.head}>
         <Text style={[styles.mark, { color: markColor(goal.status, c) }]}>◎</Text>

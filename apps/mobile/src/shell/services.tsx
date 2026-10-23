@@ -14,12 +14,14 @@ import {
   useSyncExternalStore,
 } from 'react'
 import type { Lang } from '../ui/i18n'
+import type { Skin } from '../ui/theme'
 import type { Booted, BootMode } from './boot'
 import { jsonFile } from './json-file'
 
 export interface Prefs {
   lang: Lang | 'system'
   appearance: 'system' | 'light' | 'dark'
+  skin: Skin
   /** 核心怎么装（src/shell/boot.ts）。正式用是 stored；开发、测试时用链接 litch://boot?mode=… 切换 */
   boot: BootMode
   /** 自动检查应用更新（src/update/）；关了只在设置页点“检查更新”时查 */
@@ -29,6 +31,7 @@ export interface Prefs {
 const DEFAULT_PREFS: Prefs = {
   lang: 'system',
   appearance: 'system',
+  skin: 'retro',
   boot: 'stored',
   autoUpdate: true,
 }

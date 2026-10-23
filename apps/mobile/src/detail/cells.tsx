@@ -18,7 +18,7 @@ import { experiment } from '../experiment'
 import { noteWork } from '../probe'
 import { useKey } from '../shell/services'
 import { useT } from '../ui/i18n'
-import { type Palette, useTheme } from '../ui/theme'
+import { type Palette, type Theme, useTheme } from '../ui/theme'
 import { AskCell, AskReplyText, useAsks } from './asks/AskCell'
 import { CommentCards, commentsOfRow } from './comments/CommentCards'
 import { useComments, useFlashedRow } from './comments/context'
@@ -36,7 +36,8 @@ export const seconds = (ms: number): string => (ms / 1000).toFixed(1)
 const pressed = (c: Palette) => ({ backgroundColor: c.press })
 
 export const UserCell = memo(function UserCell({ row }: Props<'user'>) {
-  const { c, font } = useTheme()
+  const theme = useTheme()
+  const { c, font, radius } = theme
   const t = useT()
   const { turnMenu, viewImage } = useTranscript()
   const images = row.attachments.filter((each) => each.kind === 'image' && each.url)
@@ -58,9 +59,13 @@ export const UserCell = memo(function UserCell({ row }: Props<'user'>) {
         onLongPress={menu}
         style={({ pressed: down }) => [
           styles.userBubble,
+          // 气泡右下角收小一点，像从右边说出来的；人文皮肤是强调色的淡底、不画线
+          { borderRadius: radius.l, borderBottomRightRadius: radius.s },
           peer
             ? { backgroundColor: c.panel, borderColor: c.line3, borderStyle: 'dashed' }
-            : { backgroundColor: c.sunken, borderColor: c.line2 },
+            : theme.skin === 'human'
+              ? { backgroundColor: c.sel, borderColor: 'transparent' }
+              : { backgroundColor: c.sunken, borderColor: c.line2 },
           down ? pressed(c) : null,
         ]}
         testID={peer ? 'peer-message' : 'user-message'}
@@ -84,7 +89,7 @@ export const UserCell = memo(function UserCell({ row }: Props<'user'>) {
               >
                 <Image
                   source={{ uri: image.url }}
-                  style={[styles.thumb, { borderColor: c.line2 }]}
+                  style={[styles.thumb, { borderColor: c.line2, borderRadius: radius.s }]}
                 />
               </Pressable>
             ))}
@@ -99,7 +104,12 @@ export const UserCell = memo(function UserCell({ row }: Props<'user'>) {
                 numberOfLines={1}
                 style={[
                   styles.chip,
-                  { color: c.ink2, borderColor: c.line2, fontFamily: font.mono },
+                  {
+                    color: c.ink2,
+                    borderColor: c.line2,
+                    borderRadius: radius.s,
+                    fontFamily: font.mono,
+                  },
                 ]}
               >
                 {t(`attachment.${each.kind}`)}
@@ -114,7 +124,14 @@ export const UserCell = memo(function UserCell({ row }: Props<'user'>) {
         {replies ? (
           <AskReplyText replies={replies} />
         ) : text ? (
-          <Text style={[styles.userText, { color: c.ink, fontSize: font.size.body }]}>{text}</Text>
+          <Text
+            style={[
+              styles.userText,
+              { color: c.ink, fontSize: font.size.body, fontFamily: font.ui },
+            ]}
+          >
+            {text}
+          </Text>
         ) : null}
       </Pressable>
     </View>
@@ -124,27 +141,31 @@ export const UserCell = memo(function UserCell({ row }: Props<'user'>) {
 /** 每套配色一份 Markdown 样式（对象不变，组件不会因为它重新排版） */
 const styleCache = new WeakMap<Palette, MarkdownStyle>()
 
-function markdownStyleOf(c: Palette, mono: string): MarkdownStyle {
+/** 每种皮肤、每种明暗的配色是各自的一份，按配色缓存就是按皮肤缓存 */
+function markdownStyleOf({ c, font, radius, skin }: Theme): MarkdownStyle {
   let style = styleCache.get(c)
   if (style) return style
+  const ui = font.ui
+  // 人文皮肤正文行距放开一点
+  const body = skin === 'human' ? 25 : 22
   style = {
-    paragraph: { fontSize: 15, lineHeight: 22, color: c.ink },
-    h1: { fontSize: 20, lineHeight: 28, color: c.ink, fontWeight: '700' },
-    h2: { fontSize: 19, lineHeight: 26, color: c.ink, fontWeight: '700' },
-    h3: { fontSize: 17, lineHeight: 24, color: c.ink, fontWeight: '700' },
-    list: { fontSize: 15, lineHeight: 22, color: c.ink },
+    paragraph: { fontSize: 15, lineHeight: body, color: c.ink, fontFamily: ui },
+    h1: { fontSize: 20, lineHeight: 28, color: c.ink, fontWeight: '700', fontFamily: ui },
+    h2: { fontSize: 19, lineHeight: 26, color: c.ink, fontWeight: '700', fontFamily: ui },
+    h3: { fontSize: 17, lineHeight: 24, color: c.ink, fontWeight: '700', fontFamily: ui },
+    list: { fontSize: 15, lineHeight: body, color: c.ink, fontFamily: ui },
     codeBlock: {
       fontSize: 13,
       lineHeight: 19,
-      fontFamily: mono,
+      fontFamily: font.mono,
       color: c.ink,
       backgroundColor: c.sunken,
       borderColor: c.line1,
       borderWidth: 1,
       padding: 10,
-      borderRadius: 0,
+      borderRadius: radius.m,
     },
-    code: { fontSize: 13, fontFamily: mono, color: c.ink, backgroundColor: c.sunken },
+    code: { fontSize: 13, fontFamily: font.mono, color: c.ink, backgroundColor: c.sunken },
     blockquote: { borderColor: c.line2, color: c.ink2 },
     link: { color: c.accent, underline: true },
     // 文件路径和网址一个颜色，只是不画下划线：改写前后字形一样（links.ts）
@@ -177,7 +198,8 @@ export const MarkdownCell = memo(function MarkdownCell({ row }: Props<'md'>) {
 
 const MarkdownBody = memo(function MarkdownBody({ row }: Props<'md'>) {
   noteWork('mdCell', 0, row.text.length)
-  const { c, font } = useTheme()
+  const theme = useTheme()
+  const { c, font } = theme
   const t = useT()
   const { scope, openLink, turnMenu } = useTranscript()
   const hub = useComments()
@@ -210,7 +232,7 @@ const MarkdownBody = memo(function MarkdownBody({ row }: Props<'md'>) {
       <EnrichedMarkdownText
         markdown={markdown}
         flavor="github"
-        markdownStyle={markdownStyleOf(c, font.mono)}
+        markdownStyle={markdownStyleOf(theme)}
         selectable={false}
         streamingConfig={streamingConfig}
         onLinkPress={(event) => onLink(event.url)}
@@ -382,9 +404,15 @@ export const StatusCell = memo(function StatusCell({ row }: Props<'status'>) {
 
 /** 失败的回合带的原因（对面的原话） */
 export const ErrorCell = memo(function ErrorCell({ row }: Props<'error'>) {
-  const { c, font } = useTheme()
+  const theme = useTheme()
+  const { c, font } = theme
   return (
-    <View style={[styles.error, { borderColor: c.err, backgroundColor: c.raised }]}>
+    <View
+      style={[
+        styles.error,
+        { borderColor: c.err, backgroundColor: c.raised, borderRadius: theme.radius.l },
+      ]}
+    >
       <Text style={{ color: c.err, fontSize: font.size.meta, lineHeight: 19 }}>{row.text}</Text>
     </View>
   )
@@ -471,15 +499,19 @@ export const ForkedCell = memo(function ForkedCell({ row }: Props<'forked'>) {
   )
 })
 
-const TODO_MARK = { pending: '[ ]', inProgress: '[~]', completed: '[x]' } as const
-
 /** 待办：模型自己列的几步，做到哪了。整份原地换 */
 export const TodoCell = memo(function TodoCell({ row }: Props<'todo'>) {
-  const { c, font } = useTheme()
+  const theme = useTheme()
+  const { c, font, todo } = theme
   const t = useT()
   const done = row.steps.filter((step) => step.status === 'completed').length
   return (
-    <View style={[styles.todo, { borderColor: c.line2, backgroundColor: c.raised }]}>
+    <View
+      style={[
+        styles.todo,
+        { borderColor: c.line2, backgroundColor: c.raised, borderRadius: theme.radius.l },
+      ]}
+    >
       <Text
         style={[styles.meta, { color: c.ink2, fontSize: font.size.meta, fontFamily: font.mono }]}
       >
@@ -498,7 +530,7 @@ export const TodoCell = memo(function TodoCell({ row }: Props<'todo'>) {
             style={styles.todoStep}
           >
             <Text style={[styles.todoMark, { color: c.ink3, fontFamily: font.mono }]}>
-              {TODO_MARK[status]}
+              {todo[status]}
             </Text>
             <Text
               style={[

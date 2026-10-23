@@ -83,6 +83,7 @@ export function ModelForm({
                 color: c.ink,
                 backgroundColor: c.raised,
                 borderColor: c.line2,
+                borderRadius: theme.radius.m,
                 minHeight: theme.hit,
               },
             ]}

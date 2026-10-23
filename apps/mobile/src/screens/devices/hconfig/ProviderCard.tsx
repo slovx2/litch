@@ -278,7 +278,10 @@ function MethodForm({
     if (done) onClose()
   }
   return (
-    <View style={[styles.form, { borderColor: theme.c.line2 }]} testID={tid}>
+    <View
+      style={[styles.form, { borderColor: theme.c.line2, borderRadius: theme.radius.l }]}
+      testID={tid}
+    >
       <Text style={[styles.formTitle, { color: theme.c.ink }]}>{t.said(method.title)}</Text>
       {method.description ? <Note text={t.said(method.description)} tone="dim" /> : null}
       {env ? <Note text={t('hc.env.note', { name: envName })} tone="dim" /> : null}

@@ -1,4 +1,4 @@
-// 预览里的一块手机屏（iframe 里的 /?app=1&...）：先按地址上的参数定明暗和语言，再把场景的几步交给正式的页面栈。
+// 预览里的一块手机屏（iframe 里的 /?app=1&...）：先按地址上的参数定明暗、皮肤和语言，再把场景的几步交给正式的页面栈。
 // 跳页面用 navigationRef；测试链接交给 App 自己挂在 Linking 上的监听器（和手机上收到 litch:// 链接走同一条路），
 // 核心还没装好时那边会自己稍后再试。
 import { Linking } from 'react-native'
@@ -6,15 +6,18 @@ import type { RouteName } from '../nav/routes'
 import { navigationRef } from '../shell/dev-links'
 import { jsonFile } from '../shell/json-file'
 import type { Prefs } from '../shell/services'
+import { SKINS, type Skin } from '../ui/theme'
 import { type SceneStep, sceneById } from './scenes.web.ts'
 
-/** 地址上的参数写进设置（App 起来时读），场景里的明暗、语言就跟着地址走 */
+/** 地址上的参数写进设置（App 起来时读），场景里的明暗、皮肤、语言就跟着地址走 */
 export function applyPrefs(params: URLSearchParams): void {
   const file = jsonFile<Partial<Prefs>>('prefs.json')
   const patch: Partial<Prefs> = { boot: 'mock', autoUpdate: false }
   const appearance = params.get('appearance')
   if (appearance === 'light' || appearance === 'dark' || appearance === 'system')
     patch.appearance = appearance
+  const skin = params.get('skin')
+  if (SKINS.includes(skin as Skin)) patch.skin = skin as Skin
   const lang = params.get('lang')
   if (lang === 'zh-CN' || lang === 'en') patch.lang = lang
   file.write({ ...(file.read() ?? {}), ...patch })

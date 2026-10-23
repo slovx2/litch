@@ -237,7 +237,10 @@ export function ModelsTab({
         </View>
 
         {movedElsewhere ? (
-          <View style={[styles.moved, { borderColor: c.wait }]} testID="hc:models:moved">
+          <View
+            style={[styles.moved, { borderColor: c.wait, borderRadius: theme.radius.l }]}
+            testID="hc:models:moved"
+          >
             <Note text={t('hc.models.moved')} tone="wait" />
             <View style={styles.acts}>
               <Chip label={t('manage.conflict.keepMine')} onPress={() => setBase(slot.revision)} />

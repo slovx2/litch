@@ -157,7 +157,13 @@ export function AttemptView({
       break
   }
   return (
-    <View style={[styles.attempt, { borderColor: c.line2, backgroundColor: c.panel }]} testID={tid}>
+    <View
+      style={[
+        styles.attempt,
+        { borderColor: c.line2, backgroundColor: c.panel, borderRadius: theme.radius.l },
+      ]}
+      testID={tid}
+    >
       <View style={styles.head}>
         <Text style={[styles.title, { color: c.ink }]} numberOfLines={1}>
           {t('hc.auth.title', { name: title })}

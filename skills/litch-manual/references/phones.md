@@ -40,6 +40,8 @@ to happen within 2 minutes. Do not show the QR code while sharing the screen.
 - On a machine without the desktop app, `codex-harness-adapter pair` shows the same QR code in a
   terminal.
 - Settings of the Litch app on the phone itself are out of reach (exception E9).
+  They live in the phone app under Settings: language, theme (follow the system, light, dark), skin
+  (Retro, Literary, Standard, the same three as on the desktop; default Retro), task cards, updates.
 
 ## Tailscale SSH
 

@@ -45,7 +45,11 @@ export function CommentChips({
             onPress={() => setEditing(at)}
             style={({ pressed }) => [
               styles.chip,
-              { borderColor: c.line2, backgroundColor: pressed ? c.press : c.raised },
+              {
+                borderColor: c.line2,
+                backgroundColor: pressed ? c.press : c.raised,
+                borderRadius: theme.radius.s,
+              },
             ]}
           >
             <Text style={[styles.index, { color: c.ink, fontFamily: theme.font.mono }]}>

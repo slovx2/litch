@@ -176,7 +176,8 @@ function Cap({
         {
           minHeight: theme.hit - 6,
           borderColor: c.line2,
-          backgroundColor: on ? c.invBg : pressed ? c.press : c.raised,
+          borderRadius: theme.radius.m,
+          backgroundColor: on ? c.selBg : pressed ? c.press : c.raised,
           opacity: disabled ? 0.4 : 1,
         },
       ]}
@@ -185,7 +186,7 @@ function Cap({
         style={[
           styles.capText,
           {
-            color: on ? c.invFg : c.ink,
+            color: on ? c.selFg : c.ink,
             fontFamily: theme.font.mono,
             fontSize: theme.font.size.meta,
           },

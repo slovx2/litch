@@ -90,7 +90,10 @@ export function Screen({
           <View style={styles.titles}>
             <Text
               numberOfLines={1}
-              style={[styles.title, { color: c.ink, fontSize: theme.font.size.title }]}
+              style={[
+                styles.title,
+                { color: c.ink, fontSize: theme.font.size.title, fontFamily: theme.font.ui },
+              ]}
             >
               {title}
             </Text>
