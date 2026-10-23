@@ -206,7 +206,8 @@ var versionProbeTimeout = 2 * time.Second
 // 找到的命令行在哪。
 type locatedCLI struct {
 	path string
-	// 设置或环境变量给的那一项指不到能跑的命令行，是绕开它找到的：harness 还会照那一项去找，
+	// 设置或环境变量给的那一项指不到能跑的命令行，是绕开它找到的；或者是 npm 全局目录里新装的那份，
+	// 照常的次序找不到它、或先找到的是旧的另一份：harness 还会照原来的次序去找，
 	// 所以装完要把这里找到的写进设置里的命令行路径（设置排在环境变量前面）
 	overrides bool
 }
@@ -269,6 +270,60 @@ func probeVersion(ctx context.Context, path string, env []string) string {
 		return ""
 	}
 	return firstVersion(string(output))
+}
+
+// 问 npm 全局目录最多等这么久。
+var npmPrefixTimeout = 10 * time.Second
+
+// npmGlobalCLI 问 npm 它的全局目录（npm prefix -g），在那里找这个 harness 的命令：类 Unix 系统在 <前缀>/bin，
+// Windows 就在前缀下。npm 装的东西都到这里，不管它在不在 PATH 上。问不出来、没有都是空串。
+func npmGlobalCLI(ctx context.Context, install *installSpec, npm string, env []string) string {
+	if npm == "" {
+		return ""
+	}
+	ctx, cancel := context.WithTimeout(ctx, npmPrefixTimeout)
+	defer cancel()
+	command := exec.CommandContext(ctx, npm, "prefix", "-g")
+	command.Env = env
+	if home := envHome(env); home != "" {
+		command.Dir = home
+	}
+	hostplatform.Prepare(command)
+	command.Cancel = func() error { return hostplatform.Kill(command) }
+	command.WaitDelay = time.Second
+	output, err := command.Output()
+	if err != nil || ctx.Err() != nil {
+		return ""
+	}
+	prefix := ""
+	for _, line := range strings.Split(string(output), "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			prefix = line
+		}
+	}
+	if !filepath.IsAbs(prefix) {
+		return ""
+	}
+	bin := prefix
+	if installGOOS != "windows" {
+		bin = filepath.Join(prefix, "bin")
+	}
+	for _, name := range install.commands {
+		if path := lookPath(bin, name); path != "" {
+			return path
+		}
+	}
+	return ""
+}
+
+// 两个路径是不是同一个文件（顺着符号链接看，比如 /usr/local/bin/dsh 链到 npm 全局目录里的那份）。
+func sameFile(a, b string) bool {
+	first, err := os.Stat(a)
+	if err != nil {
+		return false
+	}
+	second, err := os.Stat(b)
+	return err == nil && os.SameFile(first, second)
 }
 
 func firstVersion(text string) string {

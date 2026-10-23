@@ -249,6 +249,29 @@ func (i *installer) run(job *installJob, install *installSpec, resolved string) 
 			found.overrides = true
 		}
 	}
+	if install.methodHere() == installNPM {
+		// npm 装进的是它自己的全局目录，可能不在 PATH 上，也可能被 PATH 里更靠前的旧的一份挡住
+		// （两份 Node 各有各的前缀）：照常找到的那份跑出来的不是新装的版本，就改用 npm 全局目录里的这份
+		if fresh := npmGlobalCLI(ctx, install, lookPath(search, "npm"), env); fresh != "" {
+			switch {
+			case !ok:
+				found, ok = locatedCLI{path: fresh, overrides: true}, true
+				i.update(job, func() {
+					appendLog(job, both("[litch] %s 不在 PATH 上，改用 npm 全局目录里的这份", "[litch] %s is not on PATH; using the copy in the npm global directory").with(fresh).String())
+				})
+			case !sameFile(found.path, fresh):
+				if old, now := probeVersion(ctx, found.path, env), probeVersion(ctx, fresh, env); now != "" && old != now {
+					i.update(job, func() {
+						appendLog(job, both(
+							"[litch] 先找到的 %s 是 %s，新装的在 npm 全局目录 %s（%s），改用新装的这份",
+							"[litch] The first one found, %s, is %s; the new one is in the npm global directory at %s (%s), so that one is used instead",
+						).with(found.path, old, fresh, now).String())
+					})
+					found = locatedCLI{path: fresh, overrides: true}
+				}
+			}
+		}
+	}
 	if !ok {
 		failure := both(
 			"安装命令跑完了，但找不到 %s 的命令行：它装到的目录可能不在 PATH 上。把那个目录加进 PATH，或者在设置里填它的命令行路径，然后点“重新检测”",

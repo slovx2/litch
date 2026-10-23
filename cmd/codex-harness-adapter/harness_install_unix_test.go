@@ -213,6 +213,74 @@ EOF
 	}
 }
 
+// npm 有自己的全局目录（prefix -g），不在 PATH 上：假的 npm 问 prefix 时答它，装的时候把 pi 放进 <前缀>/bin。
+// 跟 song-debian 一样，PATH 上可能还有另一份 Node 早先装的 pi。
+func (r *installRig) fakeNPMWithPrefix(t *testing.T, version string) string {
+	t.Helper()
+	prefix := filepath.Join(filepath.Dir(r.bin), "npm-global")
+	writeScript(t, filepath.Join(r.tools, "npm"), fmt.Sprintf(`if [ "$1" = prefix ]; then echo "%s"; exit 0; fi
+echo "npm $*"
+/bin/mkdir -p "%s/bin"
+printf '#!/bin/sh\necho "%s"\n' > "%s/bin/pi"
+/bin/chmod +x "%s/bin/pi"
+`, prefix, prefix, version, prefix, prefix))
+	return filepath.Join(prefix, "bin", "pi")
+}
+
+// PATH 上先找到的是旧的一份（另一个 npm 前缀装的），新装的在 npm 全局目录：改用新装的，标明要写进设置。
+func TestInstallNPMShadowedByOlderCopy(t *testing.T) {
+	rig := newInstallRig(t, "")
+	writeScript(t, filepath.Join(rig.bin, "pi"), "echo 0.99.1\n")
+	fresh := rig.fakeNPMWithPrefix(t, "1.4.0")
+	last := rig.finished(t, rig.start(t, "pi", installTargetVerified))
+	if last.State != installSucceeded || last.Installed == nil || *last.Installed != "1.4.0" {
+		t.Fatalf("应报新装的 1.4.0: %+v", last)
+	}
+	if len(rig.found) != 1 || !rig.found[0].overrides || rig.found[0].path != fresh {
+		t.Fatalf("应改用 npm 全局目录里的那份并标明要盖过: %+v", rig.found)
+	}
+	if log := strings.Join(last.Log, "\n"); !strings.Contains(log, filepath.Join(rig.bin, "pi")+" 是 0.99.1") || !strings.Contains(log, "改用新装的这份") {
+		t.Fatalf("日志应交代为什么改用:\n%s", log)
+	}
+}
+
+// npm 全局目录根本不在 PATH 上、别处也没有：不算失败，改用那里的这份。
+func TestInstallNPMGlobalNotOnPath(t *testing.T) {
+	rig := newInstallRig(t, "")
+	fresh := rig.fakeNPMWithPrefix(t, "1.4.0")
+	last := rig.finished(t, rig.start(t, "pi", installTargetVerified))
+	if last.State != installSucceeded || *last.Installed != "1.4.0" || len(rig.found) != 1 || !rig.found[0].overrides || rig.found[0].path != fresh {
+		t.Fatalf("应装成并改用 npm 全局目录里的那份: %+v %+v", last, rig.found)
+	}
+	if log := strings.Join(last.Log, "\n"); !strings.Contains(log, "不在 PATH 上") {
+		t.Fatalf("日志应交代不在 PATH 上:\n%s", log)
+	}
+}
+
+// PATH 上的是链到 npm 全局目录的链接，或者是版本相同的另一份（包装脚本）：照常用先找到的那份，不写设置。
+func TestInstallNPMKeepsSameCopy(t *testing.T) {
+	t.Run("符号链接", func(t *testing.T) {
+		rig := newInstallRig(t, "")
+		fresh := rig.fakeNPMWithPrefix(t, "1.4.0")
+		if err := os.Symlink(fresh, filepath.Join(rig.bin, "pi")); err != nil {
+			t.Fatal(err)
+		}
+		last := rig.finished(t, rig.start(t, "pi", installTargetVerified))
+		if last.State != installSucceeded || *last.Installed != "1.4.0" || len(rig.found) != 1 || rig.found[0].overrides || rig.found[0].path != filepath.Join(rig.bin, "pi") {
+			t.Fatalf("链到同一个文件不该盖过: %+v %+v", last, rig.found)
+		}
+	})
+	t.Run("版本相同", func(t *testing.T) {
+		rig := newInstallRig(t, "")
+		writeScript(t, filepath.Join(rig.bin, "pi"), "echo 1.4.0\n")
+		rig.fakeNPMWithPrefix(t, "1.4.0")
+		last := rig.finished(t, rig.start(t, "pi", installTargetVerified))
+		if last.State != installSucceeded || len(rig.found) != 1 || rig.found[0].overrides || rig.found[0].path != filepath.Join(rig.bin, "pi") {
+			t.Fatalf("版本相同不该盖过: %+v %+v", last, rig.found)
+		}
+	})
+}
+
 func TestInstallFailures(t *testing.T) {
 	cases := []struct {
 		name, npm, want string
