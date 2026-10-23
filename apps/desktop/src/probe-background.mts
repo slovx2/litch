@@ -5,6 +5,7 @@
 //   右侧页运行中在上、已结束在下，每行名称、用时、状态，组头写跑完会不会接着做；
 //   收起的过程那一行末尾“· 2 个在后台运行”；侧栏那一行是只剩后台任务在跑的记号，三种皮肤各画各的；
 //   自发回合开头一行“后台任务结束，自动继续”和叫醒它的任务，没有用户气泡；
+//   回合在跑时（自发回合、人接着说的一句）输入框上方那一行照样在，数着还在跑的；
 //   全部结束后提示行、收起行和侧栏上的记号都没了，右侧页只剩已结束的两行（完成、失败）。
 // 下面的 backgroundProbe 会被原样送进页面里执行，不能引用函数外面的东西。
 
@@ -28,6 +29,10 @@ export interface BackgroundSeen {
   originLine: boolean
   /** 一个跑完以后那一行写 1 个 */
   barOne: boolean
+  /** 自发回合在跑时那一行照样在 */
+  barWhileWoken: boolean
+  /** 人接着说一句、新回合在跑时那一行照样在 */
+  barWhileTurn: boolean
   /** 全部结束：提示行、收起行和侧栏的记号都没了 */
   barGone: boolean
   foldGone: boolean
@@ -54,23 +59,29 @@ export async function backgroundProbe(sessionId: string): Promise<BackgroundSeen
   const $$ = (selector: string) => [...document.querySelectorAll<HTMLElement>(selector)]
   const seen: Record<string, string> = {}
   const rowMark = () => $(`.row-line[data-session="${sessionId}"] .st`)
+  const say = async (text: string) => {
+    const box = $<HTMLTextAreaElement>('.main .dock textarea.cmp-text')
+    if (!box) throw new Error('找不到输入框')
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set?.call(box, text)
+    box.dispatchEvent(new Event('input', { bubbles: true }))
+    await sleep(80)
+    box.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+  }
+  /** 回合在跑：对话末尾那一格“正在工作”在 */
+  const turnRunning = () => $('.main .running-line') !== null
 
   await until(() => $(`.row-line[data-session="${sessionId}"]`) !== null, 20000)
   $(`.row-line[data-session="${sessionId}"] .ss-row`)?.click()
   await until(() => $('.main .dock textarea.cmp-text') !== null)
   await sleep(200)
-  const box = $<HTMLTextAreaElement>('.main .dock textarea.cmp-text')
-  if (!box) throw new Error('找不到输入框')
-  Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set?.call(
-    box,
-    '起两个后台任务',
-  )
-  box.dispatchEvent(new Event('input', { bubbles: true }))
-  await sleep(80)
-  box.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+  await say('起两个后台任务')
 
   // —— 回合说完、两条还在跑 ——
-  const bar = await until(() => ($('.main .bgbar')?.dataset.background ?? '') === '2', 4000)
+  // 那一行在回合进行中就出了；收起行、侧栏记号要等回合说完
+  const bar = await until(
+    () => !turnRunning() && ($('.main .bgbar')?.dataset.background ?? '') === '2',
+    4000,
+  )
   seen.bar = $('.main .bgbar')?.textContent ?? '没有'
   const glow = $('.main .bgbar') ? getComputedStyle($('.main .bgbar') as HTMLElement) : null
   const breathing = (glow?.animationName ?? '').includes('bg-glow')
@@ -142,6 +153,9 @@ export async function backgroundProbe(sessionId: string): Promise<BackgroundSeen
     () => $('.main .turn-origin[data-origin="backgroundTask"]') !== null,
     10000,
   )
+  const barWhileWoken =
+    originLine && turnRunning() && ($('.main .bgbar')?.dataset.background ?? '') === '1'
+  seen.woken = `${turnRunning() ? '在跑' : '没在跑'}：${$('.main .bgbar')?.textContent ?? '没有那一行'}`
   const origin = $('.main .turn-origin[data-origin="backgroundTask"]')
   seen.origin = origin?.textContent ?? '没有'
   const originTurn = origin?.closest('.turn')
@@ -163,6 +177,14 @@ export async function backgroundProbe(sessionId: string): Promise<BackgroundSeen
   }
   appearance.set({ skin: was.skin, theme: was.theme })
   const barOne = await until(() => ($('.main .bgbar')?.dataset.background ?? '') === '1', 6000)
+
+  // —— dev 服务还在跑，人接着说一句：新回合在跑，那一行照样在 ——
+  await until(() => !turnRunning(), 6000)
+  await say('趁它还在跑，再说一句')
+  const sent = await until(turnRunning, 4000)
+  const barWhileTurn = sent && ($('.main .bgbar')?.dataset.background ?? '') === '1'
+  seen.turn = `${sent ? '在跑' : '没在跑'}：${$('.main .bgbar')?.textContent ?? '没有那一行'}`
+  await until(() => !turnRunning(), 6000)
 
   // —— dev 服务也结束了 ——
   const barGone = await until(() => $('.main .bgbar') === null, 10000)
@@ -189,6 +211,8 @@ export async function backgroundProbe(sessionId: string): Promise<BackgroundSeen
     panelClosed,
     originLine: originLine && quiet,
     barOne,
+    barWhileWoken,
+    barWhileTurn,
     barGone,
     foldGone,
     sidebarGone,
@@ -210,6 +234,8 @@ const LABELS: Record<Exclude<keyof BackgroundSeen, 'seen' | 'looks'>, string> = 
   panelClosed: '再点一下收起',
   originLine: '自发回合开头一行写来历和叫醒它的任务，没有用户气泡',
   barOne: '一个跑完以后那一行写 1 个',
+  barWhileWoken: '自发回合在跑时那一行照样在、写 1 个',
+  barWhileTurn: '人接着说一句、新回合在跑时那一行照样在、写 1 个',
   barGone: '全部结束后那一行没了',
   foldGone: '全部结束后收起行上的记号没了',
   sidebarGone: '全部结束后侧栏的记号没了',

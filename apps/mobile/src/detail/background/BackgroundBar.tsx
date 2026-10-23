@@ -1,9 +1,10 @@
-// 输入框上方的一行：回合停了、后台还有任务在跑时出现，只说有几个在跑，整条一起慢呼吸（减少动态效果时不动）。
+// 输入框上方的一行：后台还有任务在跑时出现，只说有几个在跑，整条一起慢呼吸（减少动态效果时不动）。
 // 点一下从底部弹出列表（和桌面右侧的“后台任务”页同样的内容）：运行中在上、已结束在下，每行名称、用时、状态，
-// 组头写跑完会不会自动接着做；不展开详情。最新回合还在进行时这一行不出，全部跑完就没了。
+// 组头写跑完会不会自动接着做；不展开详情。人接着说话、新回合在跑时照样在（后台的任务没有停），全部跑完就没了。
 // 对面报集合的照侧栏摘要（SessionSummary.background），不报的用会话存储派生的那一份（meta.derived）。
 import {
   type BackgroundTaskView,
+  backgroundHint,
   keys,
   type SessionBackgroundView,
   type SessionSummary,
@@ -30,13 +31,12 @@ export function BackgroundBar({ store }: { store: SessionStore }) {
   const t = useT()
   const theme = useTheme()
   const { c } = theme
-  const meta = useSyncExternalStore(store.subscribeMeta, store.getMeta)
   const background = useSessionBackground(store)
   const [open, setOpen] = useState(false)
   const [pressed, setPressed] = useState(false)
   const breath = useBreath(pressed)
-  const count = background?.running ?? 0
-  const shown = count > 0 && !meta?.running
+  const count = backgroundHint(background)
+  const shown = count > 0
   // 底色跟着呼吸一明一暗：呼吸值 1 → 0.35 对应底色的浓淡 0.06 → 0.2
   const glow = breath.interpolate({ inputRange: [0.35, 1], outputRange: [0.2, 0.06] })
   return (

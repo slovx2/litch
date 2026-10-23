@@ -17,6 +17,7 @@ import {
   type TurnView,
 } from '../src/index.mjs'
 import {
+  backgroundHint,
   deriveBackground,
   projectBackground,
   projectOrigin,
@@ -295,4 +296,70 @@ test('BG-CORE-004 模拟：说“后台任务”起两条后台命令，回合�
       ['npm test -- --reporter dot', 'completed'],
     ],
   )
+})
+
+test('BG-CORE-005 后台任务还在跑时人接着说话：新回合进行中，集合和输入框上方那一行照样数着它们', async () => {
+  const time = fakeClock(1_700_000_000_000)
+  const [uiPort, corePort] = createPortPair()
+  serveChannel(corePort, createMockCore({ clock: time.clock, chunkMs: 40 }), { clock: time.clock })
+  const channel = connectChannel(uiPort)
+  const rows = new Map<string, SessionSummary>()
+  channel.subscribe(
+    { kind: 'sidebar', deviceId: 'local' },
+    {
+      snapshot: (data) => {
+        for (const entry of data.sessions) rows.set(entry.id, entry)
+      },
+      delta(ops: SidebarOp[]) {
+        for (const op of ops) if (op.op === 'session.upsert') rows.set(op.session.id, op.session)
+      },
+    },
+  )
+  const state = { view: null as SessionView | null }
+  channel.subscribe(
+    { kind: 'session', deviceId: 'local', sessionId: 's1' },
+    {
+      snapshot: (data) => {
+        state.view = structuredClone(data)
+      },
+      delta(ops: SessionOp[]) {
+        for (const op of ops) if (state.view) reduceSession(state.view, structuredClone(op))
+      },
+    },
+  )
+  const until = async (check: () => boolean, label: string) => {
+    for (let i = 0; i < 400 && !check(); i++) {
+      time.advance(20)
+      await settle()
+    }
+    assert.ok(check(), label)
+  }
+  const send = (text: string) =>
+    channel.command('session.send', { deviceId: 'local', sessionId: 's1', text })
+  // 报集合的照摘要，不报的照会话派生：两条路都要数得出
+  const reported = () => backgroundHint(rows.get('s1')?.background ?? null)
+  const derived = () =>
+    backgroundHint(deriveBackground(state.view?.turns ?? [], state.view?.items ?? {}))
+  // 等的是 n 个回合之后新起的那个回合（样例会话里本来就有说完了的回合）
+  const turnAfter = (n: number, status: string) => () =>
+    (state.view?.turns.length ?? 0) > n && state.view?.turns.at(-1)?.status === status
+  // 样例会话载入时最后一个回合还在流：等它说完再发，免得消息排进队里
+  await until(
+    () => state.view !== null && state.view.turns.at(-1)?.status !== 'running',
+    '会话载入了、空闲',
+  )
+  const first = state.view?.turns.length ?? 0
+  await send('起两个后台任务')
+  await until(turnAfter(first, 'completed'), '回合说完了')
+  assert.equal(reported(), 2)
+  assert.equal(derived(), 2)
+  const before = state.view?.turns.length ?? 0
+
+  await send('趁它们跑着，再说一句')
+  await until(turnAfter(before, 'running'), '新回合在跑')
+  assert.equal(rows.get('s1')?.status, 'running')
+  assert.equal(reported(), 2, '新回合进行中，摘要上的集合还数着两个')
+  assert.equal(derived(), 2, '新回合进行中，上一回合留下的两条命令照样派生得出')
+  await until(turnAfter(before, 'completed'), '新回合说完了')
+  assert.equal(reported(), 2)
 })

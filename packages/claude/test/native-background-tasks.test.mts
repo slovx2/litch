@@ -284,6 +284,53 @@ test('BG-003 后台命令：集合挂在会话上、变了就发通知，续跑�
   }
 })
 
+test('BG-006 后台命令还在跑时用户再发一句：新回合进行中、结束后集合里它都照旧在跑', {
+  timeout: 120_000,
+}, async () => {
+  const scene = await startScene('native-bg-next-turn', {}, declaring)
+  scene.client.standardView = standardView
+  const command = uniqueSleep(20)
+  // 第二个回合的模型请求先压着，好在回合进行中看集合
+  let release: () => void = () => {}
+  const held = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  try {
+    scene.model.enqueue(backgroundBash('toolu_bgnext', command))
+    scene.model.enqueue(say('已在后台启动'))
+    scene.model.enqueue(async () => {
+      await held
+      return [{ type: 'text', text: '收到第二句' }]
+    })
+    scene.model.fallback = () => [{ type: 'text', text: '命令结束了' }]
+    await runTurn(scene, '在后台启动一条长命令')
+    const [task] = (await scene.client.request('thread/read', { threadId: scene.threadId })).thread
+      .litchBackground.tasks
+    assert.equal(task.status, 'running')
+    const before = backgroundChanges(scene).length
+
+    const { turn } = await scene.client.request('turn/start', {
+      threadId: scene.threadId,
+      input: [{ type: 'text', text: '第二句话' }],
+    })
+    await until('第二个回合的模型请求到了', () => scene.model.requests.length >= 3)
+    const during = (await scene.client.request('thread/read', { threadId: scene.threadId })).thread
+      .litchBackground
+    assert.equal(during?.tasks.find((one: any) => one.id === task.id)?.status, 'running')
+    release()
+    await scene.client.completed(turn.id)
+    const after = (await scene.client.request('thread/read', { threadId: scene.threadId })).thread
+      .litchBackground
+    assert.equal(after?.tasks.find((one: any) => one.id === task.id)?.status, 'running')
+    // 新回合期间发出的集合也都还把它算在跑
+    for (const change of backgroundChanges(scene).slice(before))
+      assert.equal(change.tasks.find((one: any) => one.id === task.id)?.status, 'running')
+  } finally {
+    release()
+    await disposeScene(scene)
+  }
+})
+
 test('BG-004 没声明的连接：只有原生表示', { timeout: 120_000 }, async () => {
   const scene = await startScene('native-bg-plain')
   const command = uniqueSleep(2)
