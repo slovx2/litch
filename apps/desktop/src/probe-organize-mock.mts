@@ -399,9 +399,10 @@ export async function organizeMockProbe(): Promise<OrganizeMockProbe> {
   const declared: OrganizeMockProbe['declared'] = {
     hidden,
     shownOnOthers: claudeHasFork,
-    // 模拟核心的本机声明了会话树：能派子会话
+    // 模拟核心的本机声明了会话树：能派子会话；harness 可用，能在输入框里引用
     noDelete:
-      seen.dshMenu === '置顶|移到组…|移到项目…|为此会话创建定时任务|派出子会话…|重命名|归档',
+      seen.dshMenu ===
+      '置顶|移到组…|移到项目…|在输入框里引用|为此会话创建定时任务|派出子会话…|重命名|归档',
     presetNotes: dsh.read.length === 3 && Boolean(dsh.read[0]?.startsWith('只读：不能改文件')),
     solePreset:
       pi.read.length === 1 &&

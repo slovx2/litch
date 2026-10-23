@@ -37,7 +37,9 @@ export async function cwdSeen(): Promise<CwdSeen> {
   await need(SUB)
 
   // ---- 一、哪些行有记号，写的是什么 ----
-  const marks = () => all('.ss-row .cwd-mark')
+  // 只看子目录、不在项目里这两种；在工作树里的会话也用这个位置画一个工作树记号（data-cwd="worktree"），不归这里验
+  const marks = () =>
+    all('.ss-row .cwd-mark').filter((mark) => (mark as HTMLElement).dataset.cwd !== 'worktree')
   const marked = marks().map((mark) =>
     [
       mark.closest<HTMLElement>('.dev-group')?.dataset.device,

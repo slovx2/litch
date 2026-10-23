@@ -289,8 +289,9 @@ const SessionRow = memo(function SessionRow({
         },
       })
   }
-  // 在眼前的输入框里引用这个会话（写成 @[标题]）：只引用得了同一台设备上的别的会话，输入区自己判断
-  actions.push({ id: 'quote', title: t('session.quote') })
+  // 在眼前的输入框里引用这个会话（写成 @[标题]）：只引用得了同一台设备上的别的会话，输入区自己判断。
+  // 它的 harness 用不了时不出：模型读不到它，替它附摘录也取不到
+  if (online) actions.push({ id: 'quote', title: t('session.quote') })
   // 为这个会话建定时任务：到点在这个会话里接着发。设备的服务要支持定时任务
   if (online && schedulable) actions.push({ id: 'schedule', title: t('tasks.forSession') })
   // 会话树是设备层的事：设备连着、声明了就能脱离，不用经过它所属的 harness；
