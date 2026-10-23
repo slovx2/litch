@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { resolve } from 'node:path'
+import { backgroundShellEnabled } from '../../shared/src/background-shell.mjs'
 import { isVersionAtLeast } from '../../shared/src/min-version.mjs'
 import { ProcessRpc } from '../../shared/src/process-rpc.mjs'
 import { codexCliVersion } from '../../shared/src/runtime-version.mjs'
@@ -11,7 +12,7 @@ import {
   startWebSocketTransport,
 } from '../../shared/src/transports.mjs'
 import type { RpcPeer } from '../../shared/src/types.mjs'
-import { agentId, agentSpec } from './agent.mjs'
+import { agentId, agentSpec, BACKGROUND_SHELL_AGENTS } from './agent.mjs'
 import { AcpRuntime } from './runtime.mjs'
 import { AcpServer } from './server.mjs'
 import { runtimeInfo, versions } from './versions.mjs'
@@ -87,7 +88,8 @@ async function runtimeCheck(): Promise<void> {
   })
   try {
     const agent = await runtime.agent()
-    process.stdout.write(`${JSON.stringify(runtimeInfo(id, agent.caps))}\n`)
+    const shell = BACKGROUND_SHELL_AGENTS.has(id) && backgroundShellEnabled()
+    process.stdout.write(`${JSON.stringify(runtimeInfo(id, agent.caps, shell))}\n`)
   } finally {
     await runtime.close()
   }

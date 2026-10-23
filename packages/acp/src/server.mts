@@ -1,5 +1,18 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { appendFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { BACKGROUND_TASKS_NOTIFICATION } from '../../protocol/src/background-tasks.mjs'
+import { EXTENSION } from '../../protocol/src/device.mjs'
+import {
+  type BackgroundReport,
+  notificationWithOrigin,
+} from '../../shared/src/background-report.mjs'
+import {
+  BackgroundShells,
+  backgroundShellEnabled,
+  formatShellEvent,
+  type ShellTask,
+} from '../../shared/src/background-shell.mjs'
 import { FilesystemRpc } from '../../shared/src/filesystem-rpc.mjs'
 import { FuzzyFileSearch, FuzzySearchSessions } from '../../shared/src/fuzzy-session.mjs'
 import { ProcessRpc } from '../../shared/src/process-rpc.mjs'
@@ -12,7 +25,8 @@ import {
 import { QueueStore } from '../../shared/src/queue-store.mjs'
 import { ServerRequests } from '../../shared/src/server-requests.mjs'
 import type { RpcPeer, WireMessage } from '../../shared/src/types.mjs'
-import { type AcpAgentId, agentId } from './agent.mjs'
+import { sleep } from '../../shared/src/util.mjs'
+import { type AcpAgentId, agentId, BACKGROUND_SHELL_AGENTS } from './agent.mjs'
 import { requestPermission } from './approvals.mjs'
 import {
   type Catalog,
@@ -46,6 +60,7 @@ const trace = (direction: 'in' | 'out', message: unknown) => {
 const EPHEMERAL_PREFIX = 'ephemeral-'
 /** 回合被打断时撤回挂着的审批用的原因 */
 export const TURN_STOPPED = '回合已停止'
+
 /** 打断之后等 agent 回 session/prompt 的时限，到点由适配器收尾 */
 const INTERRUPT_WAIT_MS = 10_000
 
@@ -104,6 +119,16 @@ export class AcpServer {
   readonly terminals: Terminals
   /** 动态工具（含 Litch 的客户端工具）：按会话挂给 agent 的 MCP 桥 */
   readonly clientTools: ClientTools
+  /**
+   * 注入的后台 shell（shared/src/background-shell.mts）：只给通用入口 acp（gemini、qwen 有自己的，不带），
+   * 设置 harness.acp.backgroundShell 关着时是 null。进程归这个运行时，运行时退出时一起结束
+   */
+  readonly shells: BackgroundShells | null
+  /** 后台任务的集合、回合的来历怎么加到给声明过 backgroundTasks 的连接的应答和通知上 */
+  readonly report: BackgroundReport
+  /** 各连接握手时声明认识的扩展：服务端主动给的扩展内容只发给声明过的连接 */
+  readonly declared = new Map<string, Set<string>>()
+  private closed = false
   private readonly loading = new Map<string, Promise<LiveThread>>()
   private readonly locks = new Map<string, Promise<unknown>>()
   // 正在 session/load 回放的会话：这期间的更新归到这里
@@ -139,6 +164,24 @@ export class AcpServer {
           this.notify(sessionId, method, params),
         ),
     )
+    this.shells =
+      BACKGROUND_SHELL_AGENTS.has(this.agentId) && backgroundShellEnabled(env)
+        ? new BackgroundShells(join(home, 'background-shell'), {
+            changed: (threadId) => this.publishBackground(threadId),
+            finished: (threadId, tasks) =>
+              void this.wake(threadId, tasks).catch((error) =>
+                this.notify(threadId, 'warning', {
+                  message: `后台命令结束后没能叫醒 ${this.agentName()}：${error instanceof Error ? error.message : String(error)}`,
+                }),
+              ),
+          })
+        : null
+    this.report = {
+      declared: (peerId) => this.declared.get(peerId)?.has(EXTENSION.backgroundTasks) === true,
+      tasks: (threadId) => this.shells?.collection(threadId) ?? [],
+      origin: (threadId, turnId) => this.live.get(threadId)?.projection.origins.get(turnId),
+      wakes: true,
+    }
     this.clientTools = new ClientTools(this)
     this.runtime = new AcpRuntime(
       home,
@@ -244,8 +287,19 @@ export class AcpServer {
       threadId === null ||
       (BROADCAST_THREAD_NOTIFICATIONS.has(method) && !threadId.startsWith(EPHEMERAL_PREFIX))
     for (const peer of this.peers.values())
-      if (everyone || (threadId !== null && this.subscriptions.get(threadId)?.has(peer.id)))
-        peer.send({ method, params: threadId ? { threadId, ...params } : params })
+      if (everyone || (threadId !== null && this.subscriptions.get(threadId)?.has(peer.id))) {
+        // 回合的来历只给声明了 backgroundTasks 的连接（另拷一份）
+        const shaped = notificationWithOrigin(this.report, peer.id, threadId, method, params)
+        peer.send({ method, params: threadId ? { threadId, ...shaped } : shaped })
+      }
+  }
+
+  /** 后台 shell 的集合变了：整份发给所有声明过 backgroundTasks 的连接（不只是订阅者，侧栏要标没打开的会话） */
+  publishBackground(threadId: string): void {
+    const params = { threadId, tasks: this.report.tasks(threadId), wakesOnFinish: true }
+    for (const peer of this.peers.values())
+      if (this.report.declared(peer.id))
+        peer.send({ method: BACKGROUND_TASKS_NOTIFICATION.changed, params })
   }
 
   /** 订阅着这个线程、还连着的连接，按订阅的先后 */
@@ -448,7 +502,10 @@ export class AcpServer {
     if (record) {
       const live = this.fresh(threadOf(record))
       live.projection.userNamed = record.userNamed
-      live.projection.restore(this.store.getMeta('turns', id) ?? [])
+      live.projection.restore(
+        this.store.getMeta('turns', id) ?? [],
+        this.store.getMeta('turnOrigins', id) ?? {},
+      )
       Object.assign(live.projection, this.store.getMeta('catalog', id) ?? {})
       live.projection.commands = this.store.getMeta('commands', record.cwd) ?? []
       this.live.set(id, live)
@@ -563,6 +620,9 @@ export class AcpServer {
   saveTurns(live: LiveThread): void {
     if (live.projection.thread.ephemeral) return
     this.store.setMeta('turns', live.projection.thread.id, live.projection.snapshot())
+    const { origins } = live.projection
+    if (origins.size)
+      this.store.setMeta('turnOrigins', live.projection.thread.id, Object.fromEntries(origins))
   }
 
   // 客户端发来的输入记一份，按会话和交给 agent 的那段文字：session/load 回放出的用户消息是 agent 收到的样子，
@@ -798,14 +858,33 @@ export class AcpServer {
     projection.userMessage(echoContent(input), clientId, notify)
     if (clientId) live.submitted.set(clientId, turn)
     this.save(live, true)
+    this.drive(live, turn, async (agent) => {
+      const { blocks, text } = await promptContent(input, agent.caps)
+      this.remember(threadId, text, input, clientId)
+      return blocks
+    })
+    return turn
+  }
+
+  /**
+   * 回合开了之后在后台做的：接上会话、交设置、交提示词（prompt 给出要交的内容），按 agent 的应答收尾；
+   * 出错按失败收尾，被打断的按打断
+   */
+  private drive(
+    live: LiveThread,
+    turn: AcpTurn,
+    prompt: (agent: AgentHandle) => Promise<unknown[]>,
+  ): void {
+    const { projection } = live
+    const threadId = projection.thread.id
+    const notify = (method: string, value: any) => this.notify(threadId, method, value)
     const running: Running = { turn, sent: false, stopped: false, done: Promise.resolve() }
     live.running = running
     running.done = (async () => {
       try {
         const agent = await this.attach(live)
         await this.flush(live, agent)
-        const { blocks, text } = await promptContent(input, agent.caps)
-        this.remember(threadId, text, input, clientId)
+        const blocks = await prompt(agent)
         // 接上会话的这会儿被打断了：提示词不交
         if (running.stopped || projection.active !== turn) return
         running.sent = true
@@ -832,7 +911,34 @@ export class AcpServer {
         this.saveTurns(live)
       }
     })()
-    return turn
+  }
+
+  /**
+   * 后台 shell 自己结束了（shared/src/background-shell.mts）：把结果作为一句话交给 agent，另开一轮，
+   * 记成后台任务唤醒的（不画成用户的话）。正在跑一轮的等它收尾再开（ACP 回合中途不能插话）
+   */
+  async wake(threadId: string, tasks: ShellTask[]): Promise<void> {
+    const text = await formatShellEvent(tasks)
+    for (let attempt = 0; attempt < 600; attempt++) {
+      if (this.closed) return
+      const live = await this.load(threadId)
+      const busy = live.running
+      if (busy) {
+        await busy.done.catch(() => {})
+        continue
+      }
+      const started = await this.serial(threadId, async () => {
+        if (live.running || live.projection.active) return false
+        const notify = (method: string, value: any) => this.notify(threadId, method, value)
+        const turn = live.projection.begin(notify, Date.now(), 'backgroundTask')
+        live.starter = null
+        this.save(live, true)
+        this.drive(live, turn, async () => [{ type: 'text', text }])
+        return true
+      })
+      if (started) return
+      await sleep(100)
+    }
   }
 
   // 临时线程上的回合：没有 agent 会话。带输出结构的（标题、摘要）以空结果正常结束，客户端走自己的回退；普通回合拒绝
@@ -956,6 +1062,7 @@ export class AcpServer {
 
   closePeer(peer: RpcPeer): void {
     this.peers.delete(peer.id)
+    this.declared.delete(peer.id)
     this.skillPeers.delete(peer.id)
     this.clientTools.drop(peer.id)
     this.files.closePeer(peer.id)
@@ -967,7 +1074,9 @@ export class AcpServer {
 
   // signalled：是被结束信号要求退出的，交给 AcpRuntime.close 定怎么关 agent
   async close(signalled = false): Promise<void> {
+    this.closed = true
     this.requests.reject(() => true, '适配器正在关闭')
+    await this.shells?.close()
     for (const live of this.live.values()) {
       if (live.projection.active) {
         live.projection.finish({ interrupted: true }, () => {})
