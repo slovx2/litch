@@ -23,12 +23,16 @@ export interface SpawnFields {
   background: string
   sandbox: SandboxLevel | ''
   wake: boolean
+  /** 在新工作树里开（设备能建工作树时才发） */
+  worktree: boolean
 }
 
 /** 父会话里弹窗要用到的那几样 */
 export interface SpawnParent {
   harness: HarnessId
   workspaceId: string | null
+  /** 父会话是设备层工作树的主人：手动派时“新工作树”默认勾上（同设备的缺省） */
+  worktree?: object | null
 }
 
 /**
@@ -54,6 +58,9 @@ export function fieldsFor(
     background: proposal?.background ?? '',
     sandbox: '',
     wake: proposal?.wakeParent ?? true,
+    worktree: proposal
+      ? (proposal.worktree ?? proposal.worktreeDefault)
+      : parent.worktree !== null && parent.worktree !== undefined,
   }
 }
 
@@ -61,8 +68,11 @@ export function fieldsFor(
 export const kindOf = (fields: SpawnFields, parent: SpawnParent): LineageKind =>
   fields.harness === parent.harness ? fields.kind : 'fresh'
 
-/** 手动派：session.spawn 的参数（不含设备和父会话）。和父会话一样的不带 */
-export function spawnParams(fields: SpawnFields, parent: SpawnParent) {
+/**
+ * 手动派：session.spawn 的参数（不含设备和父会话）。和父会话一样的不带；
+ * 设备能建工作树（worktrees）时工作树开关照表单上的发
+ */
+export function spawnParams(fields: SpawnFields, parent: SpawnParent, worktrees = false) {
   const cwd = fields.cwd.trim()
   const kind = kindOf(fields, parent)
   const background = kind === 'fresh' ? fields.background.trim() : ''
@@ -80,14 +90,16 @@ export function spawnParams(fields: SpawnFields, parent: SpawnParent) {
       : {}),
     ...(cwd ? { cwd } : {}),
     ...(fields.sandbox ? { sandbox: fields.sandbox } : {}),
+    ...(worktrees ? { worktree: fields.worktree } : {}),
   }
 }
 
-/** 改了再开始：和提案不一样的那几项。什么都没改是空对象 */
+/** 改了再开始：和提案不一样的那几项（工作树开关在设备能建时照表单上的发）。什么都没改是空对象 */
 export function overridesOf(
   fields: SpawnFields,
   parent: SpawnParent,
   proposal: SessionProposalView,
+  worktrees = false,
 ): ProposalOverrides {
   const overrides: ProposalOverrides = {}
   const harnessChanged = fields.harness !== (proposal.harness ?? parent.harness)
@@ -113,5 +125,6 @@ export function overridesOf(
     overrides.background = background
   if (fields.sandbox) overrides.sandbox = fields.sandbox
   if (fields.wake !== proposal.wakeParent) overrides.wakeParent = fields.wake
+  if (worktrees) overrides.worktree = fields.worktree
   return overrides
 }

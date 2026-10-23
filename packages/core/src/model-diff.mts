@@ -79,6 +79,11 @@ export interface DiffView {
   watching: boolean
   /** 能不能暂存、取消暂存、还原：只有 git 来源能 */
   writable: boolean
+  /**
+   * “全部”对着哪个提交算：设备层工作树里的会话是它的起点（和基础分支最近的共同祖先，合入过基础分支也只算这个会话改的），
+   * 已经提交了的改动也在里面；别的是 null（上一次提交）
+   */
+  since: string | null
 }
 
 /** 一段连着的改动，连同它前后的几行上下文 */

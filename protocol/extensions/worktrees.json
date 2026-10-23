@@ -1,0 +1,66 @@
+{
+  "extension": "worktrees",
+  "description": "工作树：设备进程在会话所在的机器上跑 git 建工作树，新会话的 cwd 换成工作树里对应的子目录再交给引擎，所以各 harness 一套做法、引擎不用改。记录存在设备进程自己的库里（worktrees.sqlite），工作树的 git 目录里另有一份 litch-worktree.json。类型在 packages/protocol/src/worktrees.mts。",
+  "appliesTo": "聚合面（设备进程）。设备信息的 extensions 里列了 worktrees（这台机器上有 git）才能用；引擎不认识也不需要认识这些字段和方法。",
+  "declaration": {
+    "description": "设备服务在 runtime/info 的 device.extensions 里列出 worktrees，表示这台机器上有 git、下面的方法可用。客户端握手时在 capabilities.litchExtensions 里声明 worktrees，表示它认识 thread/start 的 litchWorktree、会话对象上的 litchWorktree 和变化通知。",
+    "where": "initialize.params.capabilities.litchExtensions",
+    "schema": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "contains": {
+        "const": "worktrees"
+      }
+    }
+  },
+  "undeclared": "没声明的连接（官方 Codex 桌面端、旧版 Litch）：thread/start 带了 litchWorktree 也当不认识的参数丢掉，会话照常在给的 cwd 里建；看不到会话对象上的 litchWorktree，收不到 litch/worktree/changed。设备层建的工作树里的会话对它们来说是 cwd 在别处的普通会话，照常能打开、跑回合。litch/worktree/* 不看声明，设备列了扩展就能调。",
+  "rules": [
+    "thread/start 的 litchWorktree（ThreadStartWorktree：from、title）：设备进程在 cwd 所在的仓库建一个新工作树，把 cwd 换成工作树根加 cwd 相对仓库根的子路径，摘掉 litchWorktree 再转给引擎；新会话的应答回来后记成这个工作树的主人。cwd 不给、不在 git 仓库里、from 指的分支不存在回 -32602；git 出错回 -32603，不建会话，也不留下半个工作树。引擎建会话没成（回了错误、断开）时把刚建的、还没有主人的工作树删掉（连分支）。",
+    "from.kind：default 是仓库默认分支（origin/HEAD 指的，没有就 main、master），本地与 origin 上那份哪个新用哪个（本地是 origin 的祖先就用 origin 的），设置 worktrees.fetchFirst 开着时先拉一次；branch 是给的本地或 origin/ 分支；head 是源检出当前的 HEAD；working-tree 是 HEAD 加未提交的改动（打成补丁应用）加未跟踪、没被忽略的文件。不给是 default。",
+    "位置与分支：目录 <worktrees.root>/<仓库目录名>/<短名>（根默认 <设备状态目录>/worktrees），分支 <worktrees.branchPrefix><短名>（前缀默认 litch/），短名是 title 转成的小写短横线串（最多 40 字符，转不出是空）加 6 位十六进制随机数，和已有目录、分支重名就换一个。git worktree add --no-track -b，仓库自己的钩子照常跑。",
+    "被忽略的文件只复制两类：仓库根 .worktreeinclude（gitignore 语法）匹配到、而且确被仓库规矩忽略的文件；各 harness 被忽略的本地配置（.claude/settings.local.json、.mcp.json、CLAUDE.local.md、AGENTS.override.md）。目标已存在不覆盖；最多 2000 个、总共 200MB。",
+    "litchWorktree（会话对象上，ThreadWorktree）：只发给声明了 worktrees 的连接，只在是设备层工作树主人的会话上有，挂法同 litchLineage（thread/list、thread/read、thread/started、thread/resume 等）。",
+    "litch/worktree/list：这台设备上设备层建的全部工作树（含 removed，不含连分支一起删掉的），新建的在前。",
+    "litch/worktree/branches（cwd）：所在仓库的当前分支、默认分支、本地分支、origin/ 远程分支。cwd 不在 git 仓库里回 -32602。",
+    "litch/worktree/remove（id、discard、withBranch）：目录还在、有未提交的改动或未跟踪的文件、discard 不为真时，先把工作区（含未跟踪文件，用临时索引，不碰暂存区）做成挂在 HEAD 上的提交，记在源仓库的 refs/litch/snapshots/<id>-<毫秒时间戳>（不覆盖已有的引用），快照引用立刻记进记录，再 git worktree remove --force；目录确实删掉了才记成 removed、带 snapshotRef。删到一半失败（目录删不掉、分支删不掉）回错误，记录的状态不变、快照引用留着：再删一次接着删，不重做快照。分支默认留着；withBranch 为真时连分支（git branch -D）和快照一起删，记录也删掉，发一次 state 为 removed、带 deleted: true 的变化通知。",
+    "litch/worktree/restore（id）：removed 的建回原路径：分支在就检出分支，分支没了但有快照就从快照的父提交建回分支。有快照的：分支还在快照的父提交上，把快照里的文件放回去、快照里删掉的删掉、清掉暂存（改动回到未提交的样子）；分支之后又有了新提交，把快照相对父提交的改动三方应用（git apply --3way）到分支上，不撤掉新提交；干净应用的删掉快照引用，有冲突的冲突留在工作区、快照引用不删（记录上的 snapshotRef 清掉）。原路径上已经有东西回 -32602。删到一半的（状态不是 removed 却带着 snapshotRef）先删完再这样建回；目录不在了的（被手动删掉）照 removed 建回。kept 的（目录还在）改回 ready。",
+    "litch/worktree/syncBase（id）：在工作树里 git merge --no-edit 起点分支（起点是 origin/ 的先 fetch 那一支），不推送。目录不在、有未提交的改动或未跟踪的文件、合并或变基做到一半、起点不是分支（HEAD、working-tree）回 -32602。结果 merged、upToDate（起点分支已经在 HEAD 的历史里）或 conflicts（停在冲突状态，files 是冲突的文件），合并因别的原因失败时先 git merge --abort 再回错误。",
+    "会话归档、删除、重新打开时设备进程照规矩处理它的工作树（见 32 号设计）：主人归档时还有没归档的会话共用着就转给它，否则干净的删目录、有改动的记 kept；kept 超过 worktrees.keptDays 天做快照再删；thread/resume 一个工作树已删的会话之前先 restore；thread/unarchive 之后 kept 改回 ready、removed 的 restore；thread/delete 之后不留快照直接删目录。thread/delete 时还有别的会话共用着就先转给它（它归档了的照归档处理）。共用者：目录在工作树里、不是主人的会话（设备进程派的子会话、分叉出来的、经聚合面见到的会话对象和列表行），主人不在用了时它重新打开也会建回、并成为主人。worktrees.autoCleanup 开着时活着的超过 worktrees.keepCount 个就回收主人已归档的（快照后删），按主人最后活动从旧到新；主人没归档的不回收（设备进程自己发的回合不经过重新打开），所以这是软上限；置顶的、在跑的、一小时内建的、被加成工作区根的不动。到期删 kept、回收、归档时删目录都在队里重读记录再判一次。设备进程起来时把上次建到一半（creating）的、和建好了却没有主人、没人共用、没有改动的删掉（连分支）。分支一律留着。",
+    "建、删、恢复在设备进程里排成一条队做（同一个仓库上同时跑两个 git worktree 会抢锁）。git 一律带 GIT_TERMINAL_PROMPT=0，不弹凭据提示。",
+    "litch/worktree/changed（WorktreeChangedNotification）：建成、主人变了、删了、恢复了都发，只发给声明了 worktrees 的连接。"
+  ],
+  "parts": [
+    {
+      "kind": "RequestField",
+      "name": "litchWorktree",
+      "on": "thread/start",
+      "description": "ThreadStartWorktree（from、title）。见规则第一条；只认声明了 worktrees 的连接，别的连接带了也丢掉。"
+    },
+    {
+      "kind": "ThreadField",
+      "name": "litchWorktree",
+      "on": "thread/list、thread/read、thread/resume、thread/started 等经过聚合面的会话对象",
+      "description": "只发给声明了 worktrees 的连接，只在设备层工作树主人的会话上有。形状见 worktrees.mts 的 ThreadWorktree。"
+    },
+    {
+      "kind": "ClientRequest",
+      "methods": [
+        "litch/worktree/list",
+        "litch/worktree/branches",
+        "litch/worktree/remove",
+        "litch/worktree/restore",
+        "litch/worktree/syncBase"
+      ],
+      "description": "参数与应答见 worktrees.mts。"
+    },
+    {
+      "kind": "ServerNotification",
+      "methods": [
+        "litch/worktree/changed"
+      ],
+      "description": "只发给声明了 worktrees 的连接。"
+    }
+  ]
+}

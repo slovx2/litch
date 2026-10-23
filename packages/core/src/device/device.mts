@@ -40,6 +40,7 @@ import {
   type Turn,
 } from '../../../protocol/src/index.mjs'
 import { taskCardsSettingKey } from '../../../protocol/src/session-tree.mjs'
+import type { ThreadWorktree, WorktreeFrom } from '../../../protocol/src/worktrees.mjs'
 import { ChannelError, type Clock, type SidebarOp } from '../channel/protocol.mjs'
 import type { HostSink } from '../channel/server.mjs'
 import { createLink, type LinkState } from '../connection/link.mjs'
@@ -92,6 +93,7 @@ import type {
   SandboxLevel,
 } from '../model-tree.mjs'
 import { describeText, phrase, sameText, type Text } from '../phrase.mjs'
+import { outgoing } from '../projection/outgoing.mjs'
 import type { RequestChoice } from '../projection/requests.mjs'
 import { projectService, projectUpgrade } from '../projection/service.mjs'
 import { isAgentThread, parentOf, projectSummary, threadTitle } from '../projection/session.mjs'
@@ -106,7 +108,7 @@ import { collectThreads, type Listing, mergeListing } from './catalog.mjs'
 import { createComposeAids } from './compose.mjs'
 import { createDiffs, type Diffs } from './diffs.mjs'
 import { createExec } from './exec.mjs'
-import { channelFailure, listNames } from './faults.mjs'
+import { channelFailure, lacksMethod, listNames } from './faults.mjs'
 import { createFiles, type Files } from './files.mjs'
 import {
   codexHarness,
@@ -149,6 +151,7 @@ import {
   type ToolAskPlace,
 } from './tool-calls.mjs'
 import { projectWorkspaces, resolveWorkspace } from './workspaces.mjs'
+import { createWorktrees, type Worktrees } from './worktrees.mjs'
 
 export type { DeviceSnapshot, SnapshotStore } from './snapshot.mjs'
 
@@ -274,6 +277,8 @@ export interface Device {
     workspaceId?: string,
     /** message 的文字是持续目标：建好后设下目标，不发消息（live.mts 的 create） */
     asGoal?: boolean,
+    /** 在新工作树里建（worktrees 扩展） */
+    worktree?: { from?: WorktreeFrom },
   ): Promise<string>
   /** 整理侧栏：工作区的增删改和排序、把会话移到别的工作区、置顶 */
   readonly organize: Organizer
@@ -344,6 +349,8 @@ export interface Device {
   readonly pairing: Pairing
   /** 这台设备上给 harness 安装：版本、安装任务（install.mts） */
   readonly install: Install
+  /** 这台设备上设备层建的工作树：列表、分支、删、恢复（worktrees.mts） */
+  readonly worktrees: Worktrees
   /** 这台设备上各 harness 的详情设置：配置项、账号与 provider、MCP、指令文件（harness-config.mts） */
   readonly harnessConfig: HarnessConfig
   /** 这台设备上各 harness 的账号额度（account-limits.mts） */
@@ -367,8 +374,14 @@ export interface Device {
   /** 会话树：提案上点了“不要” */
   dismissProposal(sessionId: string, proposalId: string): Promise<void>
   /** 用户在 offer 卡上选了“新会话”（session）或“在这里做”（here） */
-  answerProposal(sessionId: string, proposalId: string, choice: OfferChoice): Promise<void>
-  /** 普通提案卡上的“在这里做”：设备进程往父会话发标题加任务（在跑就排到回合后） */
+  /** worktree：选新会话时卡上的工作树开关 */
+  answerProposal(
+    sessionId: string,
+    proposalId: string,
+    choice: OfferChoice,
+    worktree?: boolean,
+  ): Promise<void>
+  /** 普通提案卡上的“在这里做”：“在这里做：标题”加任务当用户的话进输入队列（在跑就排到回合后，同 Claude 桌面端） */
   hereProposal(sessionId: string, proposalId: string, lead?: string): Promise<void>
   /** 这个会话下面引擎自己的子代理线程（直接的子女） */
   agents(sessionId: string): Promise<AgentThreadView[]>
@@ -389,6 +402,8 @@ export interface SpawnRequest {
   background?: string
   wakeParent: boolean
   sandbox?: SandboxLevel
+  /** 要不要自己的工作树。不给照设备的缺省（父会话在设备层工作树里就开新的） */
+  worktree?: boolean
 }
 
 /** 沙箱档配的审批策略（和内置的三档权限预设一样：完全访问不问，别的按需问） */
@@ -489,6 +504,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   let pairable = false
   /** 对面支不支持给 harness 安装（harnessInstall 扩展）。断开之后留着断开前知道的 */
   let installable = false
+  /** 对面能不能建工作树（worktrees 扩展）。断开之后留着断开前知道的 */
+  let worktreesOn = false
   /** 对面支不支持 harness 详情设置（harnessConfig 扩展，设备那一级）。断开之后留着断开前知道的 */
   let configurable = false
   /**
@@ -618,6 +635,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     sessionTree,
     pairing: pairable,
     install: installable,
+    worktrees: worktreesOn,
   })
 
   /**
@@ -924,6 +942,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     patch: Partial<Thread> & {
       litchLineage?: SessionTreeThreadFields['litchLineage'] | undefined
       litchBackground?: LitchBackground | undefined
+      litchWorktree?: ThreadWorktree | undefined
     },
   ) => {
     if (transient.has(threadId)) return
@@ -1361,6 +1380,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         sessionTree = info.device.extensions?.includes(EXTENSION.sessionTree) === true
         pairable = info.device.extensions?.includes(EXTENSION.devicePairing) === true
         installable = info.device.extensions?.includes(EXTENSION.harnessInstall) === true
+        worktreesOn = info.device.extensions?.includes(EXTENSION.worktrees) === true
         // 在跑的是哪一份服务：握手时声明过才给，旧版的设备服务不报
         service = projectService(info.device.service)
         serviceDue =
@@ -1381,6 +1401,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         sessionTree = false
         pairable = false
         installable = false
+        worktreesOn = false
         configurable = false
         service = null
         home = null
@@ -1403,6 +1424,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       sessionTree = false
       pairable = false
       installable = false
+      worktreesOn = false
       configurable = false
       service = null
       home = null
@@ -1433,6 +1455,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     tasks.resync()
     pairing.resync()
     install.resync()
+    worktrees.resync()
     harnessConfig.resync()
     accountLimits.resync()
     await reconcile()
@@ -1478,6 +1501,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       tasks.offline()
       pairing.offline()
       install.offline()
+      worktrees.offline()
       harnessConfig.offline()
       accountLimits.offline()
     }
@@ -1552,6 +1576,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         const { harness, part } = params as { harness?: string; part?: string }
         if (part === 'providers' && harness) composeCache.delete(mode === 'full' ? harness : '')
       }
+      // 工作树：建成、换了主人、删了、恢复了
+      if (worktrees.notification(method, params)) return
       // harness 详情设置：配置变了、登录有进展
       if (harnessConfig.notification(method, params)) return
       // 账号额度变了
@@ -1922,6 +1948,16 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     log,
   })
 
+  const worktrees = createWorktrees({
+    deviceId: config.id,
+    online: () => online,
+    supported: () => worktreesOn,
+    request: (method, params, requestOptions) => link.request(method, params, requestOptions),
+    fail: (error) => fail(error),
+    owned: (threadId, worktree) => patchThread(threadId, { litchWorktree: worktree ?? undefined }),
+    log,
+  })
+
   const harnessConfig = createHarnessConfig({
     deviceId: config.id,
     target: () => config.target,
@@ -1995,12 +2031,20 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     log,
   })
 
-  /** 认得的根：工作区的根，和会话的工作目录（不属于工作区的会话，面板以它的工作目录为根） */
+  /** 会话所在的设备层工作树（worktrees 扩展挂在会话对象上的）；没有是 null */
+  const worktreeOf = (thread: Thread): ThreadWorktree | null =>
+    (thread as Thread & { litchWorktree?: ThreadWorktree }).litchWorktree ?? null
+
+  /**
+   * 认得的根：工作区的根，会话的工作目录（不属于工作区的会话，面板以它的工作目录为根），
+   * 和会话所在的设备层工作树的根（工作树里的会话，面板以工作树为根）
+   */
   const knownRoot = (root: string): boolean => {
     if (workspaces.some((workspace) => workspace.roots.some((entry) => samePath(entry, root)))) {
       return true
     }
-    for (const thread of threads.values()) if (samePath(thread.cwd, root)) return true
+    for (const thread of threads.values())
+      if (samePath(thread.cwd, root) || samePath(worktreeOf(thread)?.path ?? '', root)) return true
     return false
   }
 
@@ -2009,6 +2053,15 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     online: () => online,
     platform: () => platform,
     knownRoot,
+    startOf(root) {
+      for (const thread of threads.values()) {
+        const tree = worktreeOf(thread)
+        if (!tree || tree.state === 'removed' || !samePath(tree.path, root)) continue
+        const branch = tree.baseRef !== 'HEAD' && tree.baseRef !== 'working-tree'
+        return { commit: tree.baseCommit, ref: branch ? tree.baseRef : null }
+      }
+      return null
+    },
     turnDiffDeclared(sessionId) {
       const thread = threads.get(sessionId)
       if (!thread) return null
@@ -2117,6 +2170,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         ...(request.cwd ? { cwd: request.cwd } : {}),
         ...(projectId ? { projectId } : {}),
         ...sandboxParams(request.sandbox),
+        ...(request.worktree === undefined ? {} : { worktree: request.worktree }),
       }),
     )
     await adoptChild(threadId)
@@ -2156,7 +2210,10 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       tasks.seen(sessionId)
       return close
     },
-    async create(cwd, message, settings, harness, workspaceId, asGoal) {
+    async create(cwd, message, settings, harness, workspaceId, asGoal, worktree) {
+      if (worktree && !worktreesOn)
+        throw new ChannelError('unsupported', '此设备的服务不支持工作树')
+      if (worktree && cwd === null) throw new ChannelError('rejected', '没有工作区，建不了工作树')
       // 聚合面上新建会话必须说建在哪个 harness 上；别的对面没有这个参数，不带
       const target = mode === 'full' ? pickHarness(harness) : null
       // 归到哪个工作区：对面有这组方法、这个工作区也还在才带
@@ -2175,7 +2232,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       const said = mentionsSessions(message)
         ? await withMentionRefs(message, readable, mentionHost)
         : message
-      return live.create(cwd, said, settings, target, home, asGoal === true)
+      return live.create(cwd, said, settings, target, home, asGoal === true, worktree)
     },
     organize,
     rootCandidates: () =>
@@ -2301,6 +2358,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     tasks,
     pairing,
     install,
+    worktrees,
     harnessConfig,
     accountLimits,
     machineLink,
@@ -2338,16 +2396,48 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       await guarded(() => link.request(SESSION_TREE_METHOD.proposalDismiss, { proposalId }))
       live.settleProposal(sessionId, proposalId, 'dismissed', null)
     },
-    async answerProposal(sessionId, proposalId, choice) {
+    async answerProposal(sessionId, proposalId, choice, worktree) {
       treeOnly()
-      await guarded(() => link.request(SESSION_TREE_METHOD.proposalAnswer, { proposalId, choice }))
+      await guarded(() =>
+        link.request(SESSION_TREE_METHOD.proposalAnswer, {
+          proposalId,
+          choice,
+          ...(choice === 'session' && worktree !== undefined ? { worktree } : {}),
+        }),
+      )
       live.settleProposal(sessionId, proposalId, choice === 'session' ? 'chosen' : 'here', null)
     },
     async hereProposal(sessionId, proposalId, lead) {
       treeOnly()
-      await guarded(() =>
-        link.request(SESSION_TREE_METHOD.proposalHere, { proposalId, ...(lead ? { lead } : {}) }),
-      )
+      const params = { proposalId, ...(lead ? { lead } : {}) }
+      // 照 Claude 桌面端：那句话当用户的话进这边的输入队列，回合在跑就排到回合结束，界面上看得见、能撤、能插话。
+      // 会话没在界面上开着、设备进程旧（没有 markHere）的，交给设备进程发（它在回合结束后发）
+      if (live.watched(sessionId)) {
+        // 应答超时的再问一遍：设备那边可能已经了结了，重复问回同一句话
+        const mark = async () =>
+          (await link.request(SESSION_TREE_METHOD.proposalMarkHere, params)).text
+        let text: string | null = null
+        try {
+          text = await mark()
+        } catch (error) {
+          if (!lacksMethod(error)) {
+            if (fail(error).code !== 'timeout') throw fail(error)
+            text = await mark().catch((again: unknown) => {
+              throw fail(again)
+            })
+          }
+        }
+        if (text !== null) {
+          live.settleProposal(sessionId, proposalId, 'here', null)
+          // 提案已经了结、设备不会再发：发不出去的那句话留在输入队列里，不能丢
+          const message = outgoing(text)
+          await live.send(sessionId, message, false).catch((error: unknown) => {
+            live.hold(sessionId, message, error)
+          })
+          return
+        }
+      }
+      await guarded(() => link.request(SESSION_TREE_METHOD.proposalHere, params))
       live.settleProposal(sessionId, proposalId, 'here', null)
     },
     async agents(sessionId) {

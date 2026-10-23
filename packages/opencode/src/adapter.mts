@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { backgroundShellEnabled } from '../../shared/src/background-shell.mjs'
 import { isVersionAtLeast } from '../../shared/src/min-version.mjs'
 import { ProcessRpc } from '../../shared/src/process-rpc.mjs'
 import { codexCliVersion } from '../../shared/src/runtime-version.mjs'
@@ -27,7 +28,7 @@ async function main(): Promise<void> {
     // runtimeInfo 会定位用户安装的 OpenCode 并核对版本下限，找不到或过低时在这里报错。
     if (!isVersionAtLeast(process.versions.node, versions.node))
       throw new Error(`需要 Node >= ${versions.node}`)
-    process.stdout.write(`${JSON.stringify(runtimeInfo())}\n`)
+    process.stdout.write(`${JSON.stringify(runtimeInfo(backgroundShellEnabled()))}\n`)
     return
   }
   if (args[0] === '--pty-self-check') {
@@ -47,8 +48,10 @@ async function main(): Promise<void> {
     listenIndex < 0 ? 'stdio://' : (args[listenIndex + 1] ?? 'stdio://'),
   )
   if (listen === 'off') return
+  // 带不带后台 shell 在这里定下：环境变量由命令行那一层按设置 harness.opencode.backgroundShell 给出
   const server = new OpencodeServer(
     resolve(process.env.CHA_OPENCODE_HOME ?? join(homedir(), '.codex-harness-adapter/opencode')),
+    { backgroundShell: backgroundShellEnabled() },
   )
   let transport: Awaited<ReturnType<typeof startWebSocketTransport>>
   // 收场只做一遍：途中再被要求退出的（连接断了之后又来了结束信号）等的是同一遍，不半路退出。
@@ -74,6 +77,8 @@ async function main(): Promise<void> {
         )
   for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP'])
     process.once(signal, () => void close(true).then(() => process.exit(0)))
+  // 没走到收场就退出的（未捕获的异常等）：同步杀掉还在跑的后台命令，免得留下孤儿进程组
+  process.once('exit', () => server.shells?.killAllSync())
 }
 
 async function ptyCheck(): Promise<void> {

@@ -57,6 +57,12 @@ export class ThreadIndex {
     return known
   }
 
+  /** 认识的会话的近况（updatedAt 是秒）；不认识是 null */
+  recent(threadId: string): { updatedAt: number; archived: boolean } | null {
+    const known = this.load(threadId)
+    return known ? { updatedAt: known.updatedAt, archived: known.archived } : null
+  }
+
   lookup(threadId: string): string | null {
     return this.load(threadId)?.harness ?? null
   }

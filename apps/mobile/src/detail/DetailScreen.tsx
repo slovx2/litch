@@ -23,9 +23,12 @@ import { Composer } from './Composer'
 import { CommentOverlays } from './comments/CommentOverlays'
 import { CommentsContext } from './comments/context'
 import { CommentsHub } from './comments/hub'
+import { SelectBar } from './comments/SelectBar'
 import { draftKey } from './composer/drafts'
 import { RequestSlot } from './requests/RequestSlot'
 import { Transcript } from './Transcript'
+import { compaction } from './usage/logic'
+import { UsageSheet } from './usage/UsageSheet'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Detail'>
 
@@ -64,6 +67,7 @@ export function DetailScreen({ route, navigation }: Props) {
   const [renaming, setRenaming] = useState(false)
   const [archiving, setArchiving] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
+  const [usageOpen, setUsageOpen] = useState(false)
   const input = useRef<TextInput>(null)
 
   // 卡片最高多少：屏幕减去状态栏、标题栏、键盘、输入区，再给对话区留一截
@@ -96,9 +100,28 @@ export function DetailScreen({ route, navigation }: Props) {
     if (field?.isFocused()) field.blur()
     requestAnimationFrame(() => input.current?.focus())
   }
+  // 选字回复把引用加到输入框上面之后，输入框拿焦点接着打字（revise 只经 ref 摸输入框，挂一次就够）
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 同上
+  useEffect(() => {
+    comments.focusInput = revise
+    return () => {
+      comments.focusInput = null
+    }
+  }, [comments])
   const run = (work: Promise<unknown>, after?: () => void) => {
     setFailure(null)
     work.then(after, (reason: unknown) => setFailure(whyNot(reason, t)))
+  }
+  // 手动压缩上下文（照桌面端）：harness 不会的不出；回合在跑时点了说一句为什么压不了
+  const compact = compaction(meta?.live ? meta.can : undefined, meta?.running ?? false)
+  const compactNow = () => {
+    setFailure(null)
+    if (compact.blocked) return setFailure(t(compact.blocked))
+    channel
+      .command('session.compact', { deviceId, sessionId })
+      .catch((reason: unknown) =>
+        setFailure(t('context.compactFailed', { reason: whyNot(reason, t) })),
+      )
   }
   const actions = [
     ...(cwd
@@ -134,6 +157,14 @@ export function DetailScreen({ route, navigation }: Props) {
               navigation.navigate('Proposals', { deviceId, sessionId, title: shownTitle }),
           },
         ]
+      : []),
+    {
+      label: t('usage.menu'),
+      testID: 'detail:menu:usage',
+      onPress: () => setUsageOpen(true),
+    },
+    ...(compact.shown
+      ? [{ label: t('context.compact'), testID: 'detail:menu:compact', onPress: compactNow }]
       : []),
     ...(abilities?.rename === false
       ? []
@@ -204,19 +235,37 @@ export function DetailScreen({ route, navigation }: Props) {
           </View>
         )}
         <KeyboardStickyView offset={{ closed: 0, opened: insets.bottom }}>
+          <SelectBar hub={comments} />
           <RequestSlot store={store} maxHeight={cardMax} onRevise={revise} />
           <View
             style={{ paddingBottom: insets.bottom, backgroundColor: c.panel }}
             onLayout={(event) => setComposerHeight(event.nativeEvent.layout.height)}
           >
             <CommentsContext.Provider value={comments}>
-              <Composer store={store} markers={markers} inputRef={input} />
+              <Composer
+                store={store}
+                markers={markers}
+                inputRef={input}
+                onUsage={() => setUsageOpen(true)}
+              />
             </CommentsContext.Provider>
           </View>
         </KeyboardStickyView>
       </View>
       <CommentOverlays hub={comments} />
       <Sheet visible={menu} title={shownTitle} actions={actions} onClose={() => setMenu(false)} />
+      <UsageSheet
+        visible={usageOpen}
+        deviceId={deviceId}
+        harness={meta?.harness}
+        usage={meta?.usage}
+        compact={
+          compact.shown
+            ? { blocked: compact.blocked ? t(compact.blocked) : null, run: compactNow }
+            : null
+        }
+        onClose={() => setUsageOpen(false)}
+      />
       <Prompt
         visible={renaming}
         title={t('session.rename')}

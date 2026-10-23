@@ -1,0 +1,368 @@
+diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/renderer/CodeRenderer.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/renderer/CodeRenderer.kt
+index 0008d9b..c70bbde 100644
+--- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/renderer/CodeRenderer.kt
++++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/renderer/CodeRenderer.kt
+@@ -2,7 +2,9 @@ package com.swmansion.enriched.markdown.renderer
+ 
+ import android.text.SpannableStringBuilder
+ import com.swmansion.enriched.markdown.parser.MarkdownASTNode
++import com.swmansion.enriched.markdown.spans.CODE_PAD
+ import com.swmansion.enriched.markdown.spans.CodeBackgroundSpan
++import com.swmansion.enriched.markdown.spans.CodePaddingSpan
+ import com.swmansion.enriched.markdown.spans.CodeSpan
+ import com.swmansion.enriched.markdown.utils.text.span.SPAN_FLAGS_EXCLUSIVE_EXCLUSIVE
+ 
+@@ -18,19 +20,25 @@ class CodeRenderer(
+   ) {
+     if (node.children.isEmpty() || node.children.all { it.content.isEmpty() }) return
+ 
+-    factory.renderWithSpan(builder, { node.children.forEach { builder.append(it.content) } }) { start, end, blockStyle ->
++    // Litch patch: an invisible pad at both ends gives the background room on the left and right
++    factory.renderWithSpan(builder, {
++      builder.append(CODE_PAD)
++      node.children.forEach { builder.append(it.content) }
++      builder.append(CODE_PAD)
++    }) { start, end, blockStyle ->
++      // Litch patch: set at the end of the render so the code font is applied after the list and
++      // blockquote spans (set once their item is done), which otherwise put the body font back on
++      // code inside them; the pads after CodeSpan, so they are squeezed in the code font. Anchored, so
++      // text a block inserts in front later doesn't shift them
++      factory.registerAnchoredSpan(builder, CodeSpan(factory.styleCache, blockStyle), start, end)
+       builder.setSpan(
+-        CodeSpan(factory.styleCache, blockStyle),
+-        start,
+-        end,
+-        SPAN_FLAGS_EXCLUSIVE_EXCLUSIVE,
+-      )
+-      builder.setSpan(
+-        CodeBackgroundSpan(config.style),
++        CodeBackgroundSpan(config.style, factory.styleCache, blockStyle),
+         start,
+         end,
+         SPAN_FLAGS_EXCLUSIVE_EXCLUSIVE,
+       )
++      factory.registerAnchoredSpan(builder, CodePaddingSpan(), start, start + 1)
++      factory.registerAnchoredSpan(builder, CodePaddingSpan(), end - 1, end)
+     }
+   }
+ }
+diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/renderer/NodeRenderer.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/renderer/NodeRenderer.kt
+index a0f37cd..ad51d50 100644
+--- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/renderer/NodeRenderer.kt
++++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/renderer/NodeRenderer.kt
+@@ -55,16 +55,45 @@ class RendererFactory(
+     deferredSpans.add(DeferredSpan(span, start, end))
+   }
+ 
++  /** Litch patch: marks where an anchored span goes until the flush (moves with inserted text) */
++  private class Anchor
++
++  private val anchoredSpans = mutableListOf<Pair<Anchor, MetricAffectingSpan>>()
++
++  /**
++   * Litch patch: like [registerDeferredSpan] (set after the block-level spans), but the range is held
++   * by a placeholder span in [builder], so text a block inserts before it later (a top margin, a
++   * blockquote's padding) moves it along instead of leaving it at a stale offset.
++   */
++  fun registerAnchoredSpan(
++    builder: SpannableStringBuilder,
++    span: MetricAffectingSpan,
++    start: Int,
++    end: Int,
++  ) {
++    val anchor = Anchor()
++    builder.setSpan(anchor, start, end, SPAN_FLAGS_EXCLUSIVE_EXCLUSIVE)
++    anchoredSpans.add(anchor to span)
++  }
++
+   fun flushDeferredSpans(builder: SpannableStringBuilder) {
+     for ((span, start, end) in deferredSpans) {
+       builder.setSpan(span, start, end, SPAN_FLAGS_EXCLUSIVE_EXCLUSIVE)
+     }
+     deferredSpans.clear()
++    for ((anchor, span) in anchoredSpans) {
++      val start = builder.getSpanStart(anchor)
++      val end = builder.getSpanEnd(anchor)
++      builder.removeSpan(anchor)
++      if (start in 0 until end) builder.setSpan(span, start, end, SPAN_FLAGS_EXCLUSIVE_EXCLUSIVE)
++    }
++    anchoredSpans.clear()
+   }
+ 
+   fun resetForNewRender() {
+     blockStyleContext.resetForNewRender()
+     deferredSpans.clear()
++    anchoredSpans.clear()
+   }
+ 
+   fun createImageSpan(
+diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/CodeBackgroundSpan.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/CodeBackgroundSpan.kt
+index 5060e8a..91b5290 100644
+--- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/CodeBackgroundSpan.kt
++++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/CodeBackgroundSpan.kt
+@@ -5,17 +5,26 @@ import android.graphics.Paint
+ import android.graphics.Path
+ import android.graphics.RectF
+ import android.text.Spanned
++import android.text.TextPaint
+ import android.text.style.LineBackgroundSpan
++import com.swmansion.enriched.markdown.renderer.BlockStyle
++import com.swmansion.enriched.markdown.renderer.SpanStyleCache
+ import com.swmansion.enriched.markdown.spoiler.isConcealedBySpoiler
+ import com.swmansion.enriched.markdown.styles.StyleConfig
+ import kotlin.math.max
+ import kotlin.math.min
+ 
++/**
++ * Litch patch: the box hugs the code glyphs (font ascent to descent plus a little padding) instead
++ * of filling the whole line height, so boxes on neighbouring lines don't touch; the pads at both
++ * ends (CodePaddingSpan) give it room on the left and right; radius in dp.
++ */
+ class CodeBackgroundSpan(
+   private val styleConfig: StyleConfig,
++  styleCache: SpanStyleCache,
++  blockStyle: BlockStyle,
+ ) : LineBackgroundSpan {
+   companion object {
+-    private const val CORNER_RADIUS = 6.0f
+     private const val BORDER_WIDTH = 1.0f
+ 
+     private val sharedBackgroundPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+@@ -28,6 +37,15 @@ class CodeBackgroundSpan(
+       }
+   }
+ 
++  private val CORNER_RADIUS = dp(CODE_RADIUS_DP)
++
++  /** Ascent and descent of the code font, measured once */
++  private val codeMetrics: Paint.FontMetrics by lazy {
++    val paint = TextPaint(Paint.ANTI_ALIAS_FLAG)
++    CodeSpan(styleCache, blockStyle).applyMonospacedFont(paint)
++    paint.fontMetrics
++  }
++
+   // Reusable drawing objects per instance
+   private val rect = RectF()
+   private val path = Path()
+@@ -75,7 +93,15 @@ class CodeBackgroundSpan(
+         right.toFloat()
+       }
+ 
+-    rect.set(min(startX, endX), top.toFloat(), max(startX, endX), finalBottom.toFloat())
++    // The pads belong to the box, minus a small gap to the text outside it
++    val margin = dp(CODE_MARGIN_DP)
++    val boxLeft = min(startX, endX) + if (isFirst) margin else 0f
++    val boxRight = max(startX, endX) - if (isLast) margin else 0f
++    val padY = dp(CODE_PAD_Y_DP)
++    // Stay a pixel inside the line so boxes on consecutive lines never meet
++    val boxTop = max(top + 1f, baseline + codeMetrics.ascent - padY)
++    val boxBottom = min(finalBottom - 1f, baseline + codeMetrics.descent + padY)
++    rect.set(boxLeft, boxTop, boxRight, boxBottom)
+ 
+     // 3. Apply Style
+     val codeStyle = styleConfig.codeStyle
+diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/CodePaddingSpan.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/CodePaddingSpan.kt
+new file mode 100644
+index 0000000..66dd21a
+--- /dev/null
++++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/CodePaddingSpan.kt
+@@ -0,0 +1,68 @@
++package com.swmansion.enriched.markdown.spans
++
++import android.content.res.Resources
++import android.text.Spanned
++import android.text.TextPaint
++import android.text.style.MetricAffectingSpan
++
++/**
++ * Litch patch: the character placed at both ends of inline code. It is squeezed to [CODE_PAD_DP]
++ * of width and draws nothing, so the code background has room on the left and right (a
++ * LineBackgroundSpan can't change the layout). U+202F NARROW NO-BREAK SPACE glues the pad to the
++ * code, so a line never breaks between them (a ReplacementSpan would allow that break). Copy, the
++ * selection menu, Markdown and HTML conversion skip the characters CodePaddingSpan covers (by
++ * position, so a U+202F that is part of the text stays): see [textWithoutCodePads], [isCodePad].
++ */
++const val CODE_PAD = '\u202F'
++
++/** Width of each pad in dp: the gap outside the box plus the padding inside it */
++const val CODE_PAD_DP = 5f
++
++/** Gap between the box and the text next to it, in dp (the rest of the pad is padding) */
++const val CODE_MARGIN_DP = 1f
++
++/** Padding above and below the code glyphs, in dp */
++const val CODE_PAD_Y_DP = 1f
++
++/** Corner radius of the box, in dp */
++const val CODE_RADIUS_DP = 4f
++
++fun dp(value: Float): Float = value * Resources.getSystem().displayMetrics.density
++
++/** [start, end) is a code pad and nothing else */
++fun Spanned.isCodePad(
++  start: Int,
++  end: Int,
++): Boolean =
++  end > start &&
++    getSpans(start, end, CodePaddingSpan::class.java).any { getSpanStart(it) <= start && getSpanEnd(it) >= end }
++
++/** The text of [start, end) without the code pads */
++fun CharSequence.textWithoutCodePads(
++  start: Int,
++  end: Int,
++): String {
++  val spanned = this as? Spanned ?: return subSequence(start, end).toString()
++  val pads = spanned.getSpans(start, end, CodePaddingSpan::class.java)
++  if (pads.isEmpty()) return subSequence(start, end).toString()
++  val skip = BooleanArray(end - start)
++  for (pad in pads) {
++    for (at in maxOf(start, spanned.getSpanStart(pad)) until minOf(end, spanned.getSpanEnd(pad))) skip[at - start] = true
++  }
++  val out = StringBuilder(end - start)
++  for (at in start until end) if (!skip[at - start]) out.append(this[at])
++  return out.toString()
++}
++
++/** Set after CodeSpan, so the code font is already on the paint when the pad is squeezed */
++class CodePaddingSpan : MetricAffectingSpan() {
++  override fun updateMeasureState(tp: TextPaint) = squeeze(tp)
++
++  override fun updateDrawState(tp: TextPaint) = squeeze(tp)
++
++  private fun squeeze(paint: TextPaint) {
++    paint.textScaleX = 1f
++    val natural = paint.measureText(CODE_PAD.toString())
++    if (natural > 0f) paint.textScaleX = dp(CODE_PAD_DP) / natural
++  }
++}
+diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/CodeSpan.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/CodeSpan.kt
+index a8c0b17..e403de2 100644
+--- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/CodeSpan.kt
++++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/CodeSpan.kt
+@@ -5,6 +5,7 @@ import android.text.TextPaint
+ import android.text.style.MetricAffectingSpan
+ import com.swmansion.enriched.markdown.renderer.BlockStyle
+ import com.swmansion.enriched.markdown.renderer.SpanStyleCache
++import com.swmansion.enriched.markdown.utils.text.extensions.applyColorPreserving
+ 
+ class CodeSpan(
+   private val styleCache: SpanStyleCache,
+@@ -12,14 +13,16 @@ class CodeSpan(
+ ) : MetricAffectingSpan() {
+   override fun updateDrawState(tp: TextPaint) {
+     applyMonospacedFont(tp)
+-    tp.color = styleCache.codeColor
++    // Litch patch: applied last now (deferred), so keep a link's or strong text's own color
++    tp.applyColorPreserving(styleCache.codeColor, *styleCache.colorsToPreserve)
+   }
+ 
+   override fun updateMeasureState(tp: TextPaint) {
+     applyMonospacedFont(tp)
+   }
+ 
+-  private fun applyMonospacedFont(paint: TextPaint) {
++  // Litch patch: CodeBackgroundSpan measures the code font with this too
++  fun applyMonospacedFont(paint: TextPaint) {
+     paint.textSize = if (styleCache.codeFontSize > 0) styleCache.codeFontSize else blockStyle.fontSize
+     val preservedStyle = (paint.typeface?.style ?: 0) and (Typeface.BOLD or Typeface.ITALIC)
+     paint.typeface =
+diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/LinkSpan.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/LinkSpan.kt
+index 392c5be..469b491 100644
+--- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/LinkSpan.kt
++++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/LinkSpan.kt
+@@ -43,16 +43,16 @@ class LinkSpan(
+   override fun updateDrawState(textPaint: TextPaint) {
+     super.updateDrawState(textPaint)
+ 
+-    textPaint.textSize = blockStyle.fontSize
+-
+     val variant = styleCache.resolvedVariantForUrl(url)
+ 
++    // Litch patch: only touch the font when a link font is configured. A link isn't measured with
++    // its own font, so resetting size and font here drew `[`code`](url)` in the body font over a box
++    // measured for the code font.
+     val fontFamily = variant?.fontFamily?.takeIf { it.isNotEmpty() } ?: styleCache.linkFontFamily
+     if (fontFamily.isNotEmpty()) {
++      textPaint.textSize = blockStyle.fontSize
+       val overriddenBlockStyle = blockStyle.copy(fontFamily = fontFamily)
+       textPaint.applyBlockStyleFont(overriddenBlockStyle, context)
+-    } else {
+-      textPaint.applyBlockStyleFont(blockStyle, context)
+     }
+ 
+     textPaint.color = variant?.color ?: styleCache.linkColor
+diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/utils/text/conversion/HTMLGenerator.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/utils/text/conversion/HTMLGenerator.kt
+index 3a60ebb..2a73b76 100644
+--- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/utils/text/conversion/HTMLGenerator.kt
++++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/utils/text/conversion/HTMLGenerator.kt
+@@ -9,6 +9,7 @@ import com.swmansion.enriched.markdown.spans.BaseListSpan
+ import com.swmansion.enriched.markdown.spans.BlockquoteSpan
+ import com.swmansion.enriched.markdown.spans.CodeBlockSpan
+ import com.swmansion.enriched.markdown.spans.CodeSpan
++import com.swmansion.enriched.markdown.spans.isCodePad
+ import com.swmansion.enriched.markdown.spans.EmphasisSpan
+ import com.swmansion.enriched.markdown.spans.HeadingSpan
+ import com.swmansion.enriched.markdown.spans.HighlightSpan
+@@ -681,7 +682,8 @@ object HTMLGenerator {
+           val segmentEnd = minOf(text.nextSpanTransition(i, end, Any::class.java), end)
+           val segmentText = text.subSequence(i, segmentEnd).toString()
+ 
+-          if (segmentText.isNotEmpty() && segmentText != "\n") {
++          // Litch patch: skip code pads (an empty <code> each and a stray U+202F otherwise)
++          if (segmentText.isNotEmpty() && segmentText != "\n" && !text.isCodePad(i, segmentEnd)) {
+             appendStyledSegment(html, text, i, segmentEnd, segmentText, styles, isCodeBlock)
+           }
+           i = segmentEnd
+diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/utils/text/conversion/MarkdownExtractor.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/utils/text/conversion/MarkdownExtractor.kt
+index 2957f98..ac19f21 100644
+--- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/utils/text/conversion/MarkdownExtractor.kt
++++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/utils/text/conversion/MarkdownExtractor.kt
+@@ -20,6 +20,7 @@ import com.swmansion.enriched.markdown.spans.StrongSpan
+ import com.swmansion.enriched.markdown.spans.TaskListSpan
+ import com.swmansion.enriched.markdown.spans.ThematicBreakSpan
+ import com.swmansion.enriched.markdown.spans.UnorderedListSpan
++import com.swmansion.enriched.markdown.spans.isCodePad
+ 
+ /** Extracts markdown from styled text (Spannable). */
+ object MarkdownExtractor {
+@@ -91,6 +92,10 @@ object MarkdownExtractor {
+     state: ExtractionState,
+     headingAccumulator: HeadingAccumulator,
+   ): Boolean {
++    // Litch patch: a code pad is its own segment (its span starts and ends there); skip it, or the
++    // code would come out as three backtick runs, two of them empty
++    if (spannable.isCodePad(segmentStart, segmentEnd)) return true
++
+     // Check for thematic breaks first (uses " \n" as placeholder)
+     val thematicBreakSpans = spannable.getSpans(segmentStart, segmentEnd, ThematicBreakSpan::class.java)
+     if (thematicBreakSpans.isNotEmpty()) {
+diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/utils/text/view/SelectionActionMode.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/utils/text/view/SelectionActionMode.kt
+index 21bec3b..5599968 100644
+--- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/utils/text/view/SelectionActionMode.kt
++++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/utils/text/view/SelectionActionMode.kt
+@@ -12,6 +12,7 @@ import android.widget.TextView
+ import com.swmansion.enriched.markdown.EnrichedMarkdown
+ import com.swmansion.enriched.markdown.EnrichedMarkdownText
+ import com.swmansion.enriched.markdown.spans.ImageSpan
++import com.swmansion.enriched.markdown.spans.textWithoutCodePads
+ import com.swmansion.enriched.markdown.styles.StyleConfig
+ import com.swmansion.enriched.markdown.utils.common.layout.isLayoutRTL
+ import com.swmansion.enriched.markdown.utils.text.conversion.HTMLGenerator
+@@ -152,7 +153,7 @@ fun createSelectionActionModeCallback(
+       if (customIndex in customItems.indices) {
+         val start = textView.selectionStart
+         val end = textView.selectionEnd
+-        val selectedText = if (start >= 0 && end > start) textView.text.substring(start, end) else ""
++        val selectedText = if (start >= 0 && end > start) textView.text.textWithoutCodePads(start, end) else ""
+         onCustomItemPress(customItems[customIndex], selectedText, start, end)
+         mode?.finish()
+         return true
+@@ -172,7 +173,7 @@ private fun TextView.copyWithHTML() {
+ 
+   val spannable = text as? Spannable ?: return
+   val selectedText = spannable.subSequence(start, end)
+-  val plainText = selectedText.toString()
++  val plainText = spannable.textWithoutCodePads(start, end)
+ 
+   val styleConfig =
+     (this as? EnrichedMarkdownText)?.markdownStyle

@@ -43,6 +43,23 @@ to happen within 2 minutes. Do not show the QR code while sharing the screen.
   They live in the phone app under Settings: language, theme (follow the system, light, dark), skin
   (Retro, Literary, Standard, the same three as on the desktop; default Retro), task cards, updates.
 
+## In a session on the phone
+
+- **Usage and limits**: tap "Context N% ›" under the input box, or ⋯ → Usage and limits. It shows the
+  context in use and, for subscription logins (Claude Code with an Anthropic subscription, Codex with a
+  ChatGPT login), each limit window's usage and when it resets; API keys have no limits to show.
+- **Compact context**: ⋯ → Compact context, or the button in the usage sheet. Not offered for harnesses
+  that cannot compact; while a turn runs it says to wait.
+- **Quote part of a reply**: long-press a reply → Select text, select a passage, then Reply in the system
+  menu. The passage goes above the input box as a quote (the same comment chip as "Comment on this
+  reply" on the desktop, sent as `<litch-comments>`); tap the chip to add a note. Done leaves selecting.
+- **Updates**: the phone checks the GitHub release feed and shows a bar on the device and session lists;
+  the user taps Update, then confirms the system installer. If it says the new version is signed
+  differently, the installed build was not a release build (for example one installed for testing):
+  uninstall it and install the release APK once (this clears the phone app's data; devices must be added
+  again), after which updates work. If the download breaks off, the bar offers Retry; any failure bar can
+  be closed with ✕ and stays closed for that package until a newer one is released.
+
 ## Tailscale SSH
 
 When the address in the code is served by Tailscale SSH (the machine runs `tailscale set --ssh` and the

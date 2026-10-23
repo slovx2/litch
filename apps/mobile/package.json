@@ -15,7 +15,8 @@
     "fixture": "node scripts/fixture.mjs",
     "smoke:ssh": "node scripts/ssh-smoke.mjs",
     "e2e": "node scripts/e2e.mjs",
-    "test": "node --experimental-transform-types --disable-warning=ExperimentalWarning --import ./test/register.mjs --test test/*.test.mjs"
+    "test": "node --experimental-transform-types --disable-warning=ExperimentalWarning --import ./test/register.mjs --test test/*.test.mjs",
+    "postinstall": "patch-package"
   },
   "dependencies": {
     "@react-navigation/native": "7.5.0",
@@ -38,7 +39,7 @@
     "react-native": "0.86.3",
     "react-native-enriched-markdown": "1.1.0",
     "react-native-keyboard-controller": "1.21.9",
-    "react-native-reanimated": "4.5.1",
+    "react-native-reanimated": "4.5.5",
     "react-native-safe-area-context": "5.7.0",
     "react-native-screens": "4.26.2",
     "react-native-webview": "13.16.1",
@@ -50,6 +51,7 @@
     "@expo/metro-runtime": "57.0.17",
     "@types/react": "19.2.18",
     "babel-preset-expo": "57.0.13",
+    "patch-package": "8.0.1",
     "react-dom": "19.2.3",
     "react-native-web": "0.21.4",
     "typescript": "7.0.2"

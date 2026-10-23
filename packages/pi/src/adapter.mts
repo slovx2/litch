@@ -2,6 +2,7 @@
 import { spawnSync } from 'node:child_process'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { backgroundShellEnabled } from '../../shared/src/background-shell.mjs'
 import { cliCommand } from '../../shared/src/host-cli.mjs'
 import { isVersionAtLeast } from '../../shared/src/min-version.mjs'
 import { ProcessRpc } from '../../shared/src/process-rpc.mjs'
@@ -27,7 +28,7 @@ async function main(): Promise<void> {
   if (args[0] === '--runtime-info') {
     if (!isVersionAtLeast(process.versions.node, versions.node))
       throw new Error(`需要 Node >= ${versions.node}`)
-    const info = runtimeInfo(approvalsEnabled())
+    const info = runtimeInfo(approvalsEnabled(), backgroundShellEnabled())
     // 实际加载一次，接口不兼容的 Pi 在检测阶段就报出来，而不是等到启动后崩溃。
     await import('./sdk.mjs')
     const [command, ...cliArgs] = cliCommand(hostPi().cli, ['--version'])
@@ -61,10 +62,11 @@ async function main(): Promise<void> {
   const { PiServer } = await import('./server.mjs')
   // 照 Pi 命令行把设置里的 httpProxy 补进环境变量（环境里已有的不动）
   ;(await import('./http-proxy.mjs')).applyHttpProxy()
-  // 问不问用户在这里定下：环境变量由命令行那一层按设置 harness.pi.approvals 给出，改了要重启运行时。
+  // 问不问用户、带不带后台 shell 在这里定下：环境变量由命令行那一层按设置 harness.pi.approvals、
+  // harness.pi.backgroundShell 给出，改了要重启运行时。
   const server = new PiServer(
     resolve(process.env.CHA_PI_HOME ?? join(homedir(), '.codex-harness-adapter/pi')),
-    { approvals: approvalsEnabled() },
+    { approvals: approvalsEnabled(), backgroundShell: backgroundShellEnabled() },
   )
   let transport: Awaited<ReturnType<typeof startWebSocketTransport>>
   let closing = false
@@ -88,6 +90,8 @@ async function main(): Promise<void> {
         )
   for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP'])
     process.once(signal, () => void close().then(() => process.exit(0)))
+  // 没走到收场就退出的（未捕获的异常等）：同步杀掉还在跑的后台命令，免得留下孤儿进程组
+  process.once('exit', () => server.shells?.killAllSync())
 }
 async function ptyCheck(): Promise<void> {
   const rpc = new ProcessRpc((command) => command)

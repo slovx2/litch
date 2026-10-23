@@ -253,6 +253,16 @@ export function createGit(host: GitHost) {
       return result.stdout.trim()
     },
 
+    /** HEAD 和 ref 最近的共同祖先；算不出（ref 不在了、没有共同的历史）是 null */
+    async mergeBase(root: string, ref: string, signal?: AbortSignalLike): Promise<string | null> {
+      const result = await run(root, 'mergeBase', ['merge-base', 'HEAD', ref], {
+        cap: MIB,
+        accept: [0, 1, 128],
+        signal,
+      })
+      return result.exitCode === 0 ? result.stdout.trim() || null : null
+    },
+
     /** 这个范围里变了哪些文件、各增删多少行。rev 是比的两头（空着是暂存区对工作区） */
     async changed(
       root: string,

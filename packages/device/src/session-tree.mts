@@ -38,6 +38,7 @@ import type { SessionStore } from './session-store.mjs'
 import type { ThreadIndex } from './thread-index.mjs'
 import { DeviceError, isObject } from './wire.mjs'
 import type { Workspaces } from './workspaces.mjs'
+import type { Worktrees } from './worktrees.mjs'
 
 export interface SessionTreeHost {
   harnesses(): HarnessSource[]
@@ -45,6 +46,8 @@ export interface SessionTreeHost {
   index: ThreadIndex
   workspaces: Workspaces
   store: SessionStore
+  /** 设备层的工作树。没有 git 时是 null：子会话一律共用父会话的目录 */
+  worktrees: Worktrees | null
   /** 设置里“会话编排”开着 */
   enabled(): boolean
   /** 现在握手完成的客户端连接有几条 */
@@ -155,6 +158,8 @@ export class SessionTree {
   private readonly offers = new Map<string, OfferWait>()
   /** 提案卡上点了“在这里做”、还没发出去的用户消息：会话 → 按先后排的几条（会话在跑时排到回合结束后发） */
   private readonly heres = new Map<string, string[]>()
+  /** markHere 了结的提案交回去的那句话（设备进程活着时重复问回同一句） */
+  private readonly marked = new Map<string, string>()
   private expiry: NodeJS.Timeout | null = null
   private recovered = false
   private closed = false
@@ -858,17 +863,26 @@ export class SessionTree {
   /**
    * 普通提案卡上用户点了“在这里做”（litch/sessionProposal/here）：只收 pending 的，提案记 here，往父会话发一条用户消息
    *（lead 加标题，空一行再是任务原文，不带背景）。父会话闲着当场发，在跑就排到回合结束后（check 里先发它）；
-   * 设备进程关掉时还没发出的丢掉，提案仍是 here
+   * 设备进程关掉时还没发出的丢掉，提案仍是 here。send 为 false（litch/sessionProposal/markHere）时只了结、
+   * 不发，那句话交回给客户端自己排进输入队列。返回那句话
    */
-  proposalHere(proposalId: string, lead?: string): void {
+  proposalHere(proposalId: string, lead?: string, send = true): string {
+    // markHere 的应答丢了（超时）客户端会再问一遍：已经由 markHere 了结的回同一句话
+    const marked = send ? undefined : this.marked.get(proposalId)
+    if (marked !== undefined) return marked
     if (this.accepting.has(proposalId))
       throw new DeviceError('unsupported', `提案 ${proposalId} 正在开始`)
     const proposal = this.pendingProposal(proposalId)
     if (!this.settleProposal(proposalId, 'here', null, ['pending']))
       throw new DeviceError('unsupported', `提案 ${proposalId} 已经了结了`)
     const text = `${lead ?? 'Do it here: '}${proposal.title}\n\n${proposal.prompt}`
+    if (!send) {
+      this.marked.set(proposalId, text)
+      return text
+    }
     this.heres.set(proposal.threadId, [...(this.heres.get(proposal.threadId) ?? []), text])
     this.check(proposal.threadId)
+    return text
   }
 
   /**
@@ -923,7 +937,7 @@ export class SessionTree {
    * 用户在 offer 卡上选了（litch/sessionProposal/answer）：session 改成 chosen（等模型补简报），here 了结成 here，
    * 在等的那次调用拿到选择。不是 offer 卡、已经选过（或者别的原因了结了）的抛错
    */
-  answerOffer(proposalId: string, choice: 'session' | 'here'): void {
+  answerOffer(proposalId: string, choice: 'session' | 'here', worktree?: boolean): void {
     const proposal = this.proposal(proposalId)
     if (!proposal) throw new DeviceError('unsupported', `没有提案 ${proposalId}`)
     if (!proposal.offer)
@@ -937,6 +951,9 @@ export class SessionTree {
       throw new DeviceError('unsupported', `提案 ${proposalId} 那次调用已经结束了`)
     }
     const status = choice === 'session' ? 'chosen' : 'here'
+    // 卡上的工作树开关：模型补简报开起来时照它
+    if (choice === 'session' && worktree !== undefined)
+      this.store.setProposalWorktree(proposalId, worktree)
     if (!this.settleProposal(proposalId, status, null, ['offered']))
       throw new DeviceError('unsupported', `提案 ${proposalId} 已经了结了`)
     this.offers.delete(proposalId)

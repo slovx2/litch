@@ -172,6 +172,8 @@ export function createMockDiffs(host: MockDiffsHost): MockDiffs {
         knownRoot: (root) =>
           host.knownRoot(deviceId, root) || host.knownRoot(deviceId, shrink(root)),
         turnDiffDeclared: (sessionId) => host.turnDiffDeclared(deviceId, sessionId),
+        // 示例仓库里的工作树没有真的 git 历史：“全部”照旧对着上一次提交
+        startOf: () => null,
         request: <M extends ClientRequestMethod>(
           method: M,
           params: ClientRequests[M]['params'],

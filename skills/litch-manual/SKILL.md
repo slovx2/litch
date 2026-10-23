@@ -135,6 +135,6 @@ Read only the file you need.
 - `references/browser-and-computer-use.md`: the built-in browser and Computer Use.
 - `references/operate-this-computer.md`: letting agents on remote devices run commands and touch files
   on this computer.
-- `references/phones.md`: pairing the Android app by QR code, revoking phones.
+- `references/phones.md`: pairing the Android app by QR code, revoking phones; usage, compacting, quoting replies and updates in the phone app.
 - `references/appearance-and-preferences.md`: look, language, notifications, links.
 - `references/troubleshooting.md`: common problems and how to diagnose them.

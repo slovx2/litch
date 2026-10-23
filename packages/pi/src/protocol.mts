@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { unlink } from 'node:fs/promises'
 import { isAbsolute, join } from 'node:path'
+import { backgroundTerminalsPage, withBackground } from '../../shared/src/background-report.mjs'
 import { gitDiffToRemote } from '../../shared/src/git-diff-remote.mjs'
 import { projectRequest } from '../../shared/src/project-rpc.mjs'
 import {
@@ -80,7 +81,7 @@ export async function dispatch(s: PiServer, peer: RpcPeer, method: string, p: an
         platformOs: platformOs(),
       }
     case 'runtime/info':
-      return runtimeInfo(s.approvals)
+      return runtimeInfo(s.approvals, s.shells !== null)
     case 'server/diagnostics':
       // 形状照上游：进程信息加一组计数。只报本适配器进程实测的数，物理占用没有等价的量法。
       return {
@@ -341,12 +342,13 @@ export async function dispatch(s: PiServer, peer: RpcPeer, method: string, p: an
             (s.store.getMeta('thread', t.id)?.sectionId === PINNED_SECTION_ID) === p.isPinned) &&
           (!p.searchTerm || `${t.name ?? ''} ${t.preview}`.includes(p.searchTerm)),
       )
-      return pageRecords(
+      const page = pageRecords(
         rows.map((t) => s.envelope(t, false, byId)),
         p,
         `threads:${JSON.stringify([p.archived === true, p.projectId !== undefined, p.projectId, p.sectionId !== undefined, p.sectionId, p.isPinned, p.cwd, p.parentThreadId, p.ancestorThreadId, p.sourceKinds, p.searchTerm])}`,
         (t) => t.id,
       )
+      return withBackground(s.report, peer.id, page)
     }
     case 'thread/loaded/list':
       return { data: [...s.sessions.keys()], nextCursor: null }
@@ -355,11 +357,17 @@ export async function dispatch(s: PiServer, peer: RpcPeer, method: string, p: an
       await s.index()
       const thread = s.store.thread(p.threadId)
       // 和上游一样只读不订阅：官方桌面端找置顶会话在哪台机器上时，拿会话号向每个入口都读一遍
-      if (method === 'thread/read') return { thread: s.envelope(thread, p.includeTurns !== false) }
+      if (method === 'thread/read')
+        return withBackground(s.report, peer.id, {
+          thread: s.envelope(thread, p.includeTurns !== false),
+        })
       s.subscribe(peer, thread.id)
       if (!s.active.has(thread.id)) await s.load(thread, peer, true)
       restoreUsage(s, peer, thread.id)
-      return { ...s.settings(thread), ...historyHeadCursors(thread.id, s.store.turns(thread.id)) }
+      return withBackground(s.report, peer.id, {
+        ...s.settings(thread),
+        ...historyHeadCursors(thread.id, s.store.turns(thread.id)),
+      })
     }
     case 'thread/unsubscribe': {
       const subscribed = s.subscriptions.get(p.threadId)?.delete(peer.id)
@@ -437,7 +445,12 @@ export async function dispatch(s: PiServer, peer: RpcPeer, method: string, p: an
       return method === 'turn/settings/update' ? { status: 'applied' } : {}
     }
     case 'thread/turns/list':
-      return pageRecords(s.store.turns(p.threadId), p, `turns:${p.threadId}`, (t) => t.id)
+      return withBackground(
+        s.report,
+        peer.id,
+        pageRecords(s.store.turns(p.threadId), p, `turns:${p.threadId}`, (t) => t.id),
+        p.threadId,
+      )
     case 'thread/turns/items/list':
     case 'thread/items/list':
       return pageThreadItems(p.threadId, s.store.turns(p.threadId), p)
@@ -494,9 +507,16 @@ export async function dispatch(s: PiServer, peer: RpcPeer, method: string, p: an
         .catch((error) => s.notify(p.threadId, 'warning', { message: String(error) }))
       return {}
     }
+    // 后台终端就是注入的后台 shell（没打开时一直是空的）；用户在这里停的不唤醒模型
     case 'thread/backgroundTerminals/list':
-      return { terminals: [] }
+      return backgroundTerminalsPage(s.shells?.terminals(s.store.thread(p.threadId).id) ?? [], p)
+    case 'thread/backgroundTerminals/terminate':
+      return {
+        terminated:
+          s.shells?.stop(p.threadId, requiredString(p.processId, 'processId'), 'user') === true,
+      }
     case 'thread/backgroundTerminals/clean':
+      s.shells?.stopThread(s.store.thread(p.threadId).id, 'user')
       return {}
     case 'thread/increment_elicitation':
     case 'thread/decrement_elicitation':

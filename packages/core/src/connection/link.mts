@@ -213,6 +213,9 @@ export function createLink(options: LinkOptions): Link {
                 // nativeOwner：声明了，导进来的会话被本机另一个进程占着时会话对象上带 litchNativeOwner、
                 // 占用变了收得到通知，输入框据此置灰
                 EXTENSION.nativeOwner,
+                // worktrees：声明了，thread/start 的 litchWorktree 才生效，会话对象上才有 litchWorktree，
+                // 才收得到工作树变了的通知（litch/worktree/changed）
+                EXTENSION.worktrees,
                 // peerMessages：声明了，别的会话发来的消息（Claude 的本机收件箱）在用户消息条目上带 litchPeer，
                 // 对话里画成“来自 X 的消息”
                 EXTENSION.peerMessages,

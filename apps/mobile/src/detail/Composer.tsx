@@ -33,11 +33,14 @@ export function Composer({
   store,
   markers,
   inputRef,
+  onUsage,
 }: {
   store: SessionStore
   markers: boolean
   /** 输入框：请求卡片上“带意见修改”要把焦点放进来 */
   inputRef?: RefObject<TextInput | null>
+  /** 点了“上下文 N%”：打开用量页（上下文、账号额度、压缩） */
+  onUsage?(): void
 }) {
   const { deviceId, sessionId } = store
   const t = useT()
@@ -168,6 +171,7 @@ export function Composer({
             options={options}
             settings={meta.settings}
             usage={meta.usage}
+            {...(onUsage ? { onUsage } : {})}
             onChange={(patch) => {
               channel
                 .command('session.configure', { deviceId, sessionId, settings: patch })

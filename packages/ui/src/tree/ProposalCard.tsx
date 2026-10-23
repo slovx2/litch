@@ -27,6 +27,7 @@ import { usePopover } from '../app/popover.ts'
 import { useKey, useServices } from '../app/services.tsx'
 import { useActions } from '../transcript/actions.tsx'
 import type { ItemRef } from '../transcript/messages.tsx'
+import { useWorktreesOn, WorktreeCheck } from '../worktrees/WorktreeCheck.tsx'
 import { STATUS_TEXT, useProposalAct, useProposalClock, useProposalList } from './proposals.ts'
 import { SpawnDialog } from './SpawnDialog.tsx'
 import { SANDBOX_LEVEL } from './sandbox.ts'
@@ -38,7 +39,7 @@ const LONG_BRIEF = 160
 
 /**
  * “开始”“在这里做”“改了再开始”“不要”四个按钮，和没做成时的那句话。卡片和侧面板共用。
- * “在这里做”：设备进程往这个会话发“在这里做：标题”加任务，回合在跑就排到回合后
+ * “在这里做”：“在这里做：标题”加任务当用户的话进这个会话的输入队列，回合在跑就排到回合后（同 Claude 桌面端）
  */
 export function ProposalActs({
   deviceId,
@@ -56,6 +57,9 @@ export function ProposalActs({
   const parent = useKey<SessionSummary>(keys.summary(deviceId, sessionId))
   const act = useProposalAct(deviceId, sessionId, proposal.id)
   const [editing, setEditing] = useState(false)
+  // 卡上的工作树开关为准：初值是模型定的，没定的照设备算的缺省
+  const [worktree, setWorktree] = useState(proposal.worktree ?? proposal.worktreeDefault)
+  const worktrees = useWorktreesOn(deviceId)
   const off = act.busy || device?.connection !== 'online'
   return (
     <>
@@ -65,7 +69,7 @@ export function ProposalActs({
           className="btn primary"
           data-act="start"
           disabled={off}
-          onClick={() => act.accept()}
+          onClick={() => act.accept(worktrees ? { worktree } : undefined)}
         >
           {t('proposal.start')}
         </button>
@@ -97,6 +101,12 @@ export function ProposalActs({
         >
           {t('proposal.dismiss')}
         </button>
+        <WorktreeCheck
+          deviceId={deviceId}
+          checked={worktree}
+          disabled={off}
+          onChange={setWorktree}
+        />
       </div>
       {act.failure ? <p className="prop-err err">{act.failure}</p> : null}
       {editing && parent ? (

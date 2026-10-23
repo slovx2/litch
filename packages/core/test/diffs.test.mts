@@ -710,3 +710,36 @@ test('几百个文件的改动：概况取得出来，命令的条数不随文�
   assert.equal(bundle.truncated, true)
   assert.equal(bundle.files.length, 0)
 })
+
+test('工作树里的会话：“全部”对着起点（和基础分支最近的共同祖先）算，已提交的也在；只在提交里的不能还原', async (t) => {
+  const world = gitWorld()
+  t.after(world.cleanup)
+  world.put('a.txt', 'a\n')
+  world.put('b.txt', 'b\n')
+  world.git('add', '.')
+  world.git('commit', '-q', '-m', 'init')
+  const start = world.git('rev-parse', 'HEAD').trim()
+  world.git('checkout', '-q', '-b', 'litch/work')
+  world.put('a.txt', 'a\nmine\n')
+  world.git('commit', '-q', '-am', 'mine')
+  // 基础分支后来又有提交、合进了工作树：合进来的不算这个会话改的
+  world.git('checkout', '-q', 'main')
+  world.put('c.txt', 'c\n')
+  world.git('add', 'c.txt')
+  world.git('commit', '-q', '-m', 'main moves')
+  world.git('checkout', '-q', 'litch/work')
+  world.git('merge', '-q', '--no-edit', 'main')
+  world.put('b.txt', 'b\nnot yet\n')
+  world.state.starts.set(world.remoteRoot, { commit: start, ref: 'main' })
+  const view = await world.watch('all').settled()
+  assert.equal(view.since, world.git('merge-base', 'HEAD', 'main').trim())
+  assert.deepEqual(brief(view), [
+    ['a.txt', 'modified', 1, 0],
+    ['b.txt', 'modified', 1, 0],
+  ])
+  const entries = byPath(view)
+  assert.deepEqual([entries['a.txt']?.staged, entries['a.txt']?.unstaged], [false, false])
+  // 暂存区那一档照旧对着上一次提交
+  const staged = await world.watch('staged').settled()
+  assert.equal(staged.since, null)
+})

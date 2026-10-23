@@ -115,3 +115,6 @@ export function resolveAgent(env: NodeJS.ProcessEnv = process.env): ResolvedAgen
   }
   return { spec, cli, argv: cliCommand(cli, spec.args) }
 }
+
+/** 注入后台 shell 的 agent：只有通用入口 acp。gemini、qwen 自己有后台命令（用户定：不带） */
+export const BACKGROUND_SHELL_AGENTS: ReadonlySet<AcpAgentId> = new Set(['acp'])

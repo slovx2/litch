@@ -41,6 +41,7 @@ import type {
   SessionNoteView,
   SessionProposalView,
 } from '../model-tree.mjs'
+import type { WorktreeFrom } from '../model-worktrees.mjs'
 import { phrase } from '../phrase.mjs'
 import { projectItem } from '../projection/items.mjs'
 import { outgoing } from '../projection/outgoing.mjs'
@@ -105,12 +106,22 @@ export interface MockTreeHost {
   /** 回合还在跑的话打断它（和用户点停止一样收尾） */
   stop(view: SessionView, turnId: string): void
   running(view: SessionView): boolean
+  /** 把一条话放进输入队列（回合结束后照常发） */
+  enqueue(view: SessionView, message: OutgoingMessage): void
   /** 这台设备有没有会话树（DeviceView.sessionTree） */
   treeOn(deviceId: string): boolean
   harnesses(deviceId: string): HarnessView[]
   settings(deviceId: string, harness: string): SessionSettings
   can(deviceId: string, harness: string): SessionAbilities
   nextId(prefix: string): string
+  /** 子会话要自己的工作树：建好后记成主人、目录换过去（建要一会儿，mock-worktrees.mts） */
+  childWorktree(
+    deviceId: string,
+    sessionId: string,
+    cwd: string,
+    from: WorktreeFrom,
+    title: string,
+  ): void
 }
 
 interface AgentEntry {
@@ -155,16 +166,13 @@ export function createMockTree(host: MockTreeHost): MockTree {
   const held = new Set<string>()
   /** 这一回合模型没调收尾的会话：回合结束后替它开一个提醒的回合 */
   const unwrapped = new Set<string>()
-  /** 提案卡上点了“在这里做”、回合还在跑的：等回合结束再发的那几条话 */
-  const heres = new Map<string, string[]>()
   /** 点了“在这里做”发出去的话：模型照示例回一句 */
   const hereTexts = new Set<string>()
 
-  /** 往会话里发“在这里做”的那条话：回合在跑就排到回合结束后 */
+  /** 往会话里发“在这里做”的那条话：同真的核心，当用户的话进输入队列，回合在跑就排到回合结束后 */
   const sendHere = (view: SessionView, message: string) => {
-    const key = sameKey(view.deviceId, view.sessionId)
     hereTexts.add(message)
-    if (host.running(view)) heres.set(key, [...(heres.get(key) ?? []), message])
+    if (host.running(view) || view.queued.length > 0) host.enqueue(view, outgoing(message))
     else host.startTurn(view, outgoing(message))
   }
 
@@ -200,6 +208,8 @@ export function createMockTree(host: MockTreeHost): MockTree {
       workspaceId?: string
       cwd?: string
       proposalId?: string
+      /** 要不要自己的工作树；不给照缺省（父会话在工作树里就开） */
+      worktree?: boolean | null
     },
   ): string => {
     const { deviceId } = parent
@@ -244,8 +254,20 @@ export function createMockTree(host: MockTreeHost): MockTree {
       },
       nativeLineage: null,
       background: null,
+      worktree: null,
     }
     host.addSummary(deviceId, summary)
+    // 和设备进程一样：明说的照办，没说的父会话在工作树里（另给了目录的不算）就开新的，从父会话的分支切
+    const hostTree = options.cwd ? null : (parentSummary?.worktree ?? null)
+    if (options.worktree ?? hostTree !== null)
+      host.childWorktree(
+        deviceId,
+        summary.id,
+        // 模拟里只有工作区根算仓库：父会话在工作树里时从它的源仓库建
+        hostTree ? hostTree.sourceRoot : summary.cwd,
+        hostTree ? { kind: 'branch', branch: hostTree.branch } : { kind: 'head' },
+        options.title,
+      )
     // fork：带着父会话到现在为止的全部内容
     const copy = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T
     const view: SessionView = {
@@ -352,6 +374,10 @@ export function createMockTree(host: MockTreeHost): MockTree {
       ),
     )
 
+  /** 提案卡上工作树开关的初值：会话在设备层工作树里、提案没另给目录 */
+  const inWorktree = (view: SessionView, sample?: { cwd?: string }) =>
+    !sample?.cwd && host.summary(view.deviceId, view.sessionId)?.worktree != null
+
   /** 还等着、没过期的那一个 */
   const waiting = (view: SessionView, id: string): SessionProposalView | undefined =>
     view.proposals.find(
@@ -364,6 +390,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
     turnId: string,
     callId: string,
     createdAt: number,
+    fallback: boolean,
   ): SessionProposalView => {
     const proposal: SessionProposalView = {
       id: host.nextId('pr'),
@@ -387,6 +414,8 @@ export function createMockTree(host: MockTreeHost): MockTree {
       turnId,
       callId,
       widerSandbox: sample.widerSandbox ?? null,
+      worktree: null,
+      worktreeDefault: fallback,
     }
     scripted.set(`proposal:${proposal.id}`, sample.reply)
     return proposal
@@ -417,7 +446,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
     const made: SessionProposalView[] = []
     const results = samples.map((sample, index) => {
       if (sample.refused) return { title: sample.title, refused: sample.refused }
-      const proposal = newProposal(sample, turnId, callId, now + index)
+      const proposal = newProposal(sample, turnId, callId, now + index, inWorktree(view, sample))
       made.push(proposal)
       return { title: sample.title, proposal_id: proposal.id }
     })
@@ -461,7 +490,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
   const proposeDemo = (view: SessionView, turnId: string) => {
     const now = host.now()
     const made = text.proposals.map((sample, index) =>
-      newProposal(sample, turnId, host.nextId('ls'), now + index),
+      newProposal(sample, turnId, host.nextId('ls'), now + index, inWorktree(view, sample)),
     )
     host.apply(view, [
       ...made.map((proposal) =>
@@ -539,6 +568,8 @@ export function createMockTree(host: MockTreeHost): MockTree {
       turnId,
       callId,
       widerSandbox: null,
+      worktree: null,
+      worktreeDefault: inWorktree(view),
     }
     offers.set(proposal.id, { view, turnId, callId })
     host.apply(view, [
@@ -551,7 +582,12 @@ export function createMockTree(host: MockTreeHost): MockTree {
    * offer 卡有了答复：等着的那次 start 调用拿到结果。选了新会话，过一会儿模型用 accept 补上简报、起子会话；
    * 选了在这里做（或者没选就停了回合），模型在这里接着做
    */
-  const answerOffer = (proposalId: string, choice: 'session' | 'here', stopped = false) => {
+  const answerOffer = (
+    proposalId: string,
+    choice: 'session' | 'here',
+    stopped = false,
+    worktree?: boolean,
+  ) => {
     const offer = offers.get(proposalId)
     if (!offer) return
     offers.delete(proposalId)
@@ -587,6 +623,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
         wakeParent: true,
         reply: text.offer.reply,
         proposalId,
+        worktree: worktree ?? null,
       })
       setProposals(
         view,
@@ -666,6 +703,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
       ...(overrides.workspaceId ? { workspaceId: overrides.workspaceId } : {}),
       ...(overrides.cwd || proposal.cwd ? { cwd: overrides.cwd ?? proposal.cwd ?? '' } : {}),
       proposalId: proposal.id,
+      worktree: overrides.worktree ?? proposal.worktree,
     })
     scripted.delete(`proposal:${proposal.id}`)
     settle(view, proposal.id, 'started', sessionId)
@@ -998,14 +1036,6 @@ export function createMockTree(host: MockTreeHost): MockTree {
       if (unwrapped.delete(key) && status === 'completed' && !host.running(view)) {
         host.startTurn(view, { text: '', images: [], extras: [] }, { kind: 'remind', notes: [] })
       }
-      // 回合在跑时点了“在这里做”的：现在发
-      const queued = heres.get(key)
-      if (queued?.length && !host.running(view)) {
-        const [next, ...rest] = queued
-        if (rest.length > 0) heres.set(key, rest)
-        else heres.delete(key)
-        if (next !== undefined) host.startTurn(view, outgoing(next))
-      }
     },
 
     notesFor(view) {
@@ -1051,6 +1081,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
           },
           ...(rest.workspaceId ? { workspaceId: rest.workspaceId } : {}),
           ...(rest.cwd ? { cwd: rest.cwd } : {}),
+          worktree: rest.worktree ?? null,
         })
         return { sessionId }
       }
@@ -1087,13 +1118,13 @@ export function createMockTree(host: MockTreeHost): MockTree {
         return {}
       }
       if (name === 'session.proposal.answer') {
-        const { deviceId, sessionId, proposalId, choice } =
+        const { deviceId, sessionId, proposalId, choice, worktree } =
           params as Commands['session.proposal.answer']['params']
         const view = host.view(deviceId, sessionId)
         const proposal = view.proposals.find((entry) => entry.id === proposalId)
         if (proposal?.status !== 'offered' || !offers.has(proposalId))
           throw new ChannelError('notFound', '这张卡已经选过了')
-        answerOffer(proposalId, choice)
+        answerOffer(proposalId, choice, false, worktree)
         return {}
       }
       if (name === 'session.agents') {

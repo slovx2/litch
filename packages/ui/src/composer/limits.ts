@@ -1,4 +1,5 @@
-// 账号额度怎么写成字（AccountLimits.tsx 用）：窗口叫什么、多久之后重置。不碰界面，测试直接引用
+// 用量怎么写成字（AccountLimits.tsx、ContextMeter.tsx 和手机端用）：词元数写短、额度的窗口叫什么、多久之后重置。
+// 不碰界面，测试直接引用
 import type { AccountLimitWindow } from '@litch/core'
 import type { Translator } from '../i18n/index.ts'
 
@@ -31,4 +32,14 @@ export function resetsIn(resetsAt: number | null, now: number, t: Translator): s
           })
         : t('limits.in.days', { d: Math.floor(left / DAY), h: Math.floor((left % DAY) / HOUR) })
   return t('limits.resetsIn', { when })
+}
+
+/** 把词元数写短：980 → 980，84000 → 84k，1250000 → 1.3M */
+export function shortTokens(count: number): string {
+  if (count < 1000) return String(count)
+  if (count < 1_000_000) {
+    const k = count / 1000
+    return `${k < 10 ? k.toFixed(1).replace(/\.0$/, '') : Math.round(k)}k`
+  }
+  return `${(count / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`
 }

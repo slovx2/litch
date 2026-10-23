@@ -18,6 +18,7 @@ import {
   type ThreadItem,
   type Turn,
 } from '../../../protocol/src/index.mjs'
+import type { WorktreeFrom } from '../../../protocol/src/worktrees.mjs'
 import { type Cancel, createCancel } from '../channel/cancel.mjs'
 import { ChannelError, type Clock, type SessionOp } from '../channel/protocol.mjs'
 import type { HostSink } from '../channel/server.mjs'
@@ -179,6 +180,8 @@ export interface LiveSessions {
      * 强度、协作模式这些要跟着回合发的设置，这时到用户第一次自己发消息才带过去
      */
     asGoal?: boolean,
+    /** 在新工作树里建：设备先建工作树再起会话（worktrees 扩展），会话的目录是工作树里对应的子目录 */
+    worktree?: { from?: WorktreeFrom },
   ): Promise<string>
   /** 在 harness 上新建会话时会带上的客户端工具定义（create 用的同一份）；不带是空的 */
   toolsFor(harness: HarnessId | null): unknown[]
@@ -188,6 +191,8 @@ export interface LiveSessions {
   implementPlan(sessionId: string, text: string): Promise<void>
   /** now：有回合在进行时直接插进去（引导），插不进去就照常排队 */
   send(sessionId: string, message: OutgoingMessage, now?: boolean): Promise<void>
+  /** 发不出去的消息放进队尾、写一句为什么，等用户处理（同排队的消息发不出去时） */
+  hold(sessionId: string, message: OutgoingMessage, error: unknown): void
   /** 把一条排着队的消息现在就插进正在进行的回合里 */
   steer(sessionId: string, messageId: string): Promise<void>
   interrupt(sessionId: string): Promise<void>
@@ -262,6 +267,8 @@ type Notes = {
 }
 
 const LOAD_TIMEOUT = 60_000
+/** 在新工作树里建会话最多等多久 */
+const WORKTREE_TIMEOUT = 10 * 60_000
 /** 按停止时先暂停目标，最多等这么久（官方桌面端也是 500 毫秒） */
 const PAUSE_BEFORE_STOP_MS = 500
 
@@ -1367,7 +1374,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
 
     toolsFor: (harness) => host.dynamicTools?.(harness) ?? [],
 
-    async create(cwd, message, settings, harness, workspaceId, asGoal = false) {
+    async create(cwd, message, settings, harness, workspaceId, asGoal = false, worktree) {
       if (!host.online()) throw new ChannelError('offline', '设备未连接')
       let started: Awaited<ReturnType<typeof host.request<'thread/start'>>>
       // 还没有会话对象：它算在谁头上，聚合面上就是指定的那个，单个入口上只有那一个
@@ -1399,8 +1406,18 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
             // 归到哪个工作区。这是协议里原有的参数；对面没有工作区这回事时调用方给的是 null
             ...(workspaceId === null ? {} : { projectId: workspaceId }),
             ...(tools && tools.length > 0 ? { dynamicTools: tools as never } : {}),
+            // 工作树的短名用第一句话起（设备转成小写短横线串，转不出就只用随机串）
+            ...(worktree
+              ? {
+                  litchWorktree: {
+                    ...(worktree.from ? { from: worktree.from } : {}),
+                    title: objective.split('\n')[0]?.slice(0, 80) ?? '',
+                  },
+                }
+              : {}),
           },
-          { timeoutMs: LOAD_TIMEOUT },
+          // 先建工作树的要多等：大仓库检出、复制被忽略的文件可能要几十秒
+          { timeoutMs: worktree ? WORKTREE_TIMEOUT : LOAD_TIMEOUT },
         )
       } catch (error) {
         throw failure(error)
@@ -1482,6 +1499,13 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       }
       await startTurn(live, message)
       if (live.view.note) setNote(live, null)
+    },
+
+    hold(sessionId, message, error) {
+      const live = need(sessionId)
+      live.queued = [...live.queued, { id: `q${++localSeq}`, ...message }]
+      emit(live, [{ op: 'queue.set', queued: live.queued }])
+      setNote(live, phrase('session.queueFailed', { message: failure(error).message }))
     },
 
     async steer(sessionId, messageId) {

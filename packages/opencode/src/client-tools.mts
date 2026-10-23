@@ -1,6 +1,14 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
+import { isAbsolute, relative } from 'node:path'
 import { type ClientToolCallResponse, clientToolFailure } from '../../protocol/src/client-tools.mjs'
+import {
+  BACKGROUND_SHELL_NAMESPACE,
+  backgroundShellSpec,
+  runShellTool,
+  SHELL_START_TOOL,
+  shellCwd,
+} from '../../shared/src/background-shell.mjs'
 import {
   clientToolNamespaces,
   isClientToolNamespace,
@@ -10,7 +18,8 @@ import {
 import { ProtocolError, requiredString } from '../../shared/src/protocol-contract.mjs'
 import type { RpcPeer } from '../../shared/src/types.mjs'
 import type { OpencodeApi } from './api.mjs'
-import type { LiveThread, OpencodeServer } from './server.mjs'
+import { approve, DECLINED_MESSAGE } from './approvals.mjs'
+import type { LiveThread, OpencodeServer, Preset } from './server.mjs'
 
 // 动态工具（thread/start.dynamicTools），含客户端工具（clientTools 扩展，protocol/extensions/client-tools.json）。
 //
@@ -173,17 +182,25 @@ export class ClientTools {
   /** 每条连接握手时声明能执行的客户端工具命名空间：连接标识 → 命名空间 */
   private readonly declared = new Map<string, ReadonlySet<string>>()
   private readonly cache = new Map<string, DynamicToolSpec[]>()
+  /**
+   * 入口自己带的工具：注入的后台 shell（litch_shell，shared/src/background-shell.mts）。每个会话都有，
+   * 和动态工具挂在同一个 MCP 服务上，调用由入口自己执行、不经客户端
+   */
+  private readonly builtIn: DynamicToolSpec[]
   /** 已经开始跑、还没对上 MCP 调用的工具部件（按会话） */
   private readonly running = new Map<string, Running[]>()
   private readonly waiters = new Set<() => void>()
   /** 正在执行的 MCP 调用：会话号 + JSON-RPC 请求号 → 取消 */
   private readonly calls = new Map<string, AbortController>()
+  /** 后台命令在项目外跑、用户答了“本会话都允许”的目录（含子目录）：会话号 → 目录。只在内存里 */
+  private readonly outside = new Map<string, Set<string>>()
   private readonly secret = randomBytes(24).toString('base64url')
   private http: Server | null = null
   private listening: Promise<string> | null = null
 
   constructor(server: OpencodeServer) {
     this.server = server
+    this.builtIn = server.shells ? dynamicToolSpecs([backgroundShellSpec(true)]) : []
   }
 
   /** initialize：记下这条连接能执行的命名空间 */
@@ -209,7 +226,13 @@ export class ClientTools {
     if (raw) this.remember(to, raw)
   }
 
+  /** 这个会话交给 OpenCode 的全部工具：建会话时带的动态工具，加上入口自己带的 */
   specs(threadId: string): DynamicToolSpec[] {
+    const own = this.dynamic(threadId)
+    return this.builtIn.length ? [...own, ...this.builtIn] : own
+  }
+
+  private dynamic(threadId: string): DynamicToolSpec[] {
     const cached = this.cache.get(threadId)
     if (cached) return cached
     const raw = this.server.store.getMeta('dynamicTools', threadId)
@@ -231,9 +254,17 @@ export class ClientTools {
     return this.specs(threadId).find((spec) => spec.mcpName === mcpName) ?? null
   }
 
-  /** 这个会话发消息时 tools 里要加的规则 */
-  rules(threadId: string): Record<string, boolean> {
-    return toolRules(this.specs(threadId).length ? threadId : null)
+  /**
+   * 这个会话发消息时 tools 里要加的规则。只读档连后台 shell 起命令也禁掉（和 OpenCode 自己的 bash 一样，turns.mts
+   * 的 presetTools），读、停、列照给：规则照先后、最后对得上的算数，所以写在放开的那条后面
+   */
+  rules(threadId: string, preset: Preset | null = null): Record<string, boolean> {
+    const rules = toolRules(this.specs(threadId).length ? threadId : null)
+    if (preset === ':read-only' && this.builtIn.length) {
+      const start = this.builtIn.find((spec) => spec.tool === SHELL_START_TOOL)
+      if (start) rules[`${serverName(threadId)}_${start.mcpName}`] = false
+    }
+    return rules
   }
 
   /**
@@ -446,6 +477,46 @@ export class ClientTools {
     }
   }
 
+  /**
+   * 后台命令要在项目目录之外跑：照 OpenCode 自己对项目外目录的默认（external_directory 要问），经同一条审批的路问一次。
+   * 完全访问的不问（OpenCode 要问的那时一律放行）；“本会话都允许”记下那个目录，之后它和它下面的不再问。
+   * 返回拒绝时给模型的话，放行返回 null
+   */
+  private async outsideDirectory(
+    live: LiveThread,
+    callId: string,
+    args: unknown,
+    signal: AbortSignal,
+  ): Promise<string | null> {
+    const given = (args as { cwd?: unknown } | null)?.cwd
+    const cwd = shellCwd(live.directory, typeof given === 'string' ? given : undefined)
+    const inside = (root: string) => {
+      const path = relative(root, cwd)
+      return path === '' || (!path.startsWith('..') && !isAbsolute(path))
+    }
+    const threadId = live.projection.thread.id
+    if (inside(live.directory)) return null
+    if ((live.turnPreset ?? live.settings.preset) === ':danger-full-access') return null
+    if ([...(this.outside.get(threadId) ?? [])].some(inside)) return null
+    const answer = await approve(
+      this.server,
+      live,
+      {
+        id: callId,
+        sessionID: threadId,
+        permission: 'external_directory',
+        patterns: [cwd],
+        tool: { callID: callId },
+      },
+      signal,
+    )
+    if (answer.interrupt) void this.server.turns.interrupt(threadId)
+    if (answer.reply === 'always')
+      this.outside.set(threadId, new Set([...(this.outside.get(threadId) ?? []), cwd]))
+    if (answer.reply === 'reject') return answer.message ?? DECLINED_MESSAGE
+    return null
+  }
+
   /** 模型调了一个动态工具：交给执行方，等它答 */
   private async call(
     threadId: string,
@@ -458,6 +529,26 @@ export class ClientTools {
     const live = await this.server.load(threadId)
     const callId = (await this.claim(threadId, name, args)) ?? `call_${randomUUID()}`
     const turnId = live.projection.active?.id ?? ''
+    // 后台 shell 由入口自己执行
+    if (spec.namespace === BACKGROUND_SHELL_NAMESPACE && this.server.shells) {
+      if (spec.tool === SHELL_START_TOOL) {
+        const denied = await this.outsideDirectory(live, callId, args, signal)
+        if (denied) return { success: false, contentItems: [{ type: 'inputText', text: denied }] }
+      }
+      const result = await runShellTool(
+        this.server.shells,
+        {
+          threadId,
+          cwd: live.directory,
+          tool: spec.tool,
+          arguments: args,
+          itemId: callId,
+          ...(turnId ? { turnId } : {}),
+        },
+        signal,
+      )
+      return { success: !result.isError, contentItems: [{ type: 'inputText', text: result.text }] }
+    }
     const starter =
       live.starter && live.starter.turnId === turnId
         ? (this.server.peers.get(live.starter.peerId) ?? null)

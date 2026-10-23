@@ -103,6 +103,11 @@ export interface SessionsStartArguments {
   /** 缺省 fresh。fork 带上这个会话的全部上下文，只能同 harness */
   kind?: SessionLineageKind
   /**
+   * true：子会话有自己的 git 工作树和分支（从这个会话分支的最新提交切）；false：在这个会话的目录里做。
+   * 不给：这个会话在 Litch 建的工作树里（或者共用着一棵）就开新的，否则共用目录。offer 不给（用户在卡上定）
+   */
+  worktree?: boolean
+  /**
    * user_asked：用户在这个回合里亲口要求起这个会话，直接起（设备进程还要核对这个回合确实是用户发起的，
    * 不是就降成提案）；propose（缺省）：出一张提案卡片，用户点了才起；
    * offer：用户这条消息是和这个会话无关的新任务，只带标题出一张“新会话 / 在这里做”的卡，调用一直等到用户选
@@ -130,6 +135,8 @@ export interface SessionsHandOffArguments {
   title: string
   /** 还剩什么：步骤、文件、怎样算完。分叉会话带着这个会话到上一个回合为止的全部上下文，再收到这一段 */
   remaining_plan: string
+  /** 同 SessionsStartArguments.worktree */
+  worktree?: boolean
 }
 
 export interface SessionsWithdrawArguments {
@@ -148,6 +155,8 @@ export interface SessionsSuggestion {
   model?: string
   cwd?: string
   kind?: SessionLineageKind
+  /** 同 SessionsStartArguments.worktree */
+  worktree?: boolean
 }
 
 /** wrap_up 的一个回复按钮：点了把 message（没有就是 label）当用户消息发回这个会话 */
@@ -357,6 +366,7 @@ export function sessionProposalRules(wrapUp: boolean, taskCards = true): string 
       ? 'Every turn ends with litch_sessions.wrap_up and then your final answer, in that order. When the work is done (in a turn that only answers a question: before you write the answer), call wrap_up exactly once. Part of wrapping up is deciding, unasked, whether the request left a real follow-up and where it runs. Most turns leave no card: a task of its own (work that lands apart from this change, something the user set aside earlier, or a self-contained next task better started fresh than from a long history; never work unrelated to the request) goes into suggestions, skipping cards you already proposed this turn. A decision or step the turn leaves to the user goes into ask: that one decision as one short question, with reply buttons in actions, your pick first. The usual one is going ahead here with what you just found, also after a turn that only investigated or answered a question and turned up something to act on (a cause, a bug, a list of fixes). With neither, pass an empty suggestions list and no ask. Then write your final answer to the user as the last message of the turn: complete on its own, never a summary of or a pointer to text above it, because what came before wrap_up is shown folded as work in progress. If you skip wrap_up, Litch reminds you in a new message.'
       : 'Most turns leave no follow-up. To suggest a task of its own, call litch_sessions.start with initiation "propose": each call makes one card the user can start; nothing runs until they do. Write your final answer to the user as the last message of the turn.',
     FRESH_BRIEF,
+    WORKTREE_RULE,
     TITLE_LINE,
     'If the user tells you to start a card ("start the second one"), call litch_sessions.accept with its proposal_id. If a card went stale (done here after all, no longer needed, replaced by a better one), withdraw it with litch_sessions.withdraw; propose the replacement first.',
     outsideLitch(wrapUp),
@@ -384,6 +394,9 @@ const HAND_OFF =
 
 const FRESH_BRIEF = `A fresh session sees nothing of this conversation: it gets only the two parts of its brief, written in your own words for someone who has not read any of this. background: the overall goal, what has been decided or ruled out so far, the constraints to respect, and how this piece fits in (at least ${SESSION_TOOL_LIMITS.freshBackgroundMinWidth} wide; a CJK character counts as 2). prompt: the task itself, the files or area, and what done looks like. A fork already has this conversation, so it needs only the prompt. Follow-ups for a session you started go to it with litch_sessions.send, not to a new session.`
 
+const WORKTREE_RULE =
+  "Where a new session works: work that ends in a branch or pull request of its own gets its own git worktree (worktree true; the folder must be in a git repository), so it does not mix with this session's changes; work that must land in one change with this one, or only reads, shares this folder (worktree false). Leave worktree out to follow the default: a new worktree when this session is in a worktree Litch created, otherwise this folder. A new worktree starts from the last commit of this session's branch, so commit first what it needs. If this session is already in a worktree Litch created, do not create another one with your own worktree tool (for example EnterWorktree)."
+
 const TITLE_LINE =
   'Right before each litch_sessions.start or hand_off, write a bold title line and one sentence on what it will do.'
 
@@ -395,6 +408,7 @@ function plainSessionRules(): string {
     USER_ASKED.slice(2),
     HAND_OFF,
     FRESH_BRIEF,
+    WORKTREE_RULE,
     TITLE_LINE,
     'If the user tells you to start one of the cards already in this conversation, call litch_sessions.accept with its proposal_id. Write your final answer to the user as the last message of the turn.',
     outsideLitch(false),
@@ -404,6 +418,11 @@ function plainSessionRules(): string {
 /** 收尾开着（默认）、任务卡开着时的规则：客户端带的就是这一份 */
 export const SESSION_PROPOSAL_RULES = sessionProposalRules(true)
 
+const WORKTREE_PARAM = {
+  type: 'boolean',
+  description:
+    'true: its own git worktree and branch, from the last commit of this session’s branch. false: this session’s folder. Default: a new worktree when this session is in a worktree Litch created, otherwise this folder. Not for "offer" (the user picks on the card).',
+}
 const THREAD_ID = { type: 'string', description: 'Session id (thread id) from list or start.' }
 const PROPOSAL_ID = { type: 'string', description: 'proposal_id returned by start.' }
 
@@ -442,6 +461,7 @@ const WRAP_UP_TOOL: ClientToolFunctionSpec = {
                 'Reasoning effort. Default: this session’s current effort (the target harness’s default when the harness differs).',
             },
             cwd: { type: 'string', description: 'Default: this session’s folder.' },
+            worktree: WORKTREE_PARAM,
             kind: {
               type: 'string',
               enum: ['fresh', 'fork'],
@@ -574,6 +594,7 @@ export function sessionTools(wrapUp: boolean, taskCards = true): ClientToolNames
                 'Reasoning effort. Default: this session’s current effort (the target harness’s default when the harness differs).',
             },
             cwd: { type: 'string', description: 'Default: this session’s folder.' },
+            worktree: WORKTREE_PARAM,
             kind: {
               type: 'string',
               enum: ['fresh', 'fork'],
@@ -683,6 +704,7 @@ export function sessionTools(wrapUp: boolean, taskCards = true): ClientToolNames
               type: 'string',
               description: 'What is left: steps, files, what done looks like.',
             },
+            worktree: WORKTREE_PARAM,
           },
           required: ['title', 'remaining_plan'],
           additionalProperties: false,

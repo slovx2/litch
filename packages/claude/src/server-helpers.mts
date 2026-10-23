@@ -80,7 +80,6 @@ import {
   resolveClaudeModel,
   textFromInput,
 } from './util.mjs'
-import { maybeCreateThreadWorktree } from './worktree.mjs'
 
 const execFileAsync = promisify(execFile)
 

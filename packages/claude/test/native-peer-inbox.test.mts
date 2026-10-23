@@ -224,6 +224,11 @@ const turnsStarted = (scene: Scene): string[] =>
     .filter((m: any) => m.method === 'turn/started')
     .map((m: any) => m.params.turn.id as string)
 
+const turnsOf = (scene: Scene, threadId: string): number =>
+  scene.client.trace.filter(
+    (m: any) => m.method === 'turn/started' && m.params.threadId === threadId,
+  ).length
+
 async function until(what: string, check: () => boolean, ms = 30_000): Promise<void> {
   const end = Date.now() + ms
   while (!check()) {
@@ -371,6 +376,215 @@ test('回合进行中发来的插进当前回合；没声明 peerMessages 的连
     )
   } finally {
     release()
+    await disposeScene(scene)
+  }
+})
+
+// 2026-10-23 song-debian：别的会话照着收到的消息信封回信（to 是 uds:<套接字>），这期间用户打断了对方的回合，
+// 入口关掉 CLI、下个回合起了新进程，按进程号起的地址作废，回信报 ENOENT、模型当成对方不在线。
+// 入口给每个会话一个固定地址，换了进程照样发得到
+test('收件箱地址固定：打断回合换了进程，别处按旧地址发来照样收到', {
+  timeout: 180_000,
+}, async () => {
+  const scene = await startScene(
+    'native-peer-stable',
+    {},
+    declaring('peerMessages', 'backgroundTasks'),
+  )
+  let release = () => {}
+  const held = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  try {
+    scene.model.enqueue(async () => {
+      await held
+      return [{ type: 'text', text: '被打断的回答' }]
+    })
+    scene.model.enqueue(() => [{ type: 'text', text: '第二个回合' }])
+    scene.model.fallback = () => [{ type: 'text', text: '这是对外来消息的回答' }]
+    const { turn } = await scene.client.request('turn/start', {
+      threadId: scene.threadId,
+      input: [{ type: 'text', text: '说一句' }],
+    })
+    await until('模型请求到达', () => scene.model.requests.length === 1)
+    const [first] = cliProcesses(scene)
+    const before = registry(scene).find((entry) => entry.pid === first?.pid)
+    const address = before?.messagingSocketPath
+    assert.ok(address, '应登记收件箱套接字')
+    assert.ok(
+      address.endsWith(`/litch-${scene.threadId}.sock`),
+      `地址应按会话固定，不按进程号：${address}`,
+    )
+
+    // 没有后台命令时打断会关掉 CLI，下个回合起新进程（就是现场那样）
+    await scene.client.request('turn/interrupt', { threadId: scene.threadId, turnId: turn.id })
+    assert.equal((await scene.client.completed(turn.id)).status, 'interrupted')
+    release()
+    assert.equal((await runTurn(scene, '再说一句')).status, 'completed')
+    const [second] = cliProcesses(scene)
+    assert.ok(second && second.pid !== first?.pid, '打断之后应换了进程')
+    const after = registry(scene).find((entry) => entry.pid === second.pid)
+    assert.equal(after?.messagingSocketPath, address, '新进程登记的是同一个地址')
+
+    const started = turnsStarted(scene).length
+    const peer = await peerSend(scene, `uds:${address}`)
+    assert.equal(peer.ended, 'result')
+    assert.match(peer.send, /success\\?":true/, `按旧地址应发得出去：${peer.send}`)
+    await until('外来消息开回合', () => turnsStarted(scene).length > started)
+    const done = await scene.client.completed(turnsStarted(scene).at(-1)!)
+    assert.equal(done.status, 'completed')
+    assert.equal(done.litchOrigin, 'peer')
+  } finally {
+    release()
+    await disposeScene(scene)
+  }
+})
+
+// 对方会话没有 CLI（空闲保留到时、设备服务重启过）：发送方也是这里的会话时，入口在它的 SendMessage 之前把对方的 CLI
+// 拉起来（一个来历为 peer 的回合），等收件箱就绪再放行，消息照旧由 CLI 投递。按固定地址、按名字发都认
+test('对方没有 CLI 时发送方的 SendMessage 先把它唤醒，按地址、按名字都送得到', {
+  timeout: 240_000,
+}, async () => {
+  // 回合结束 CLI 就退，模拟对方不在线
+  const scene = await startScene(
+    'native-peer-wake',
+    { CHA_CLAUDE_KEEP_ALIVE_IDLE_SECONDS: '0' },
+    declaring('peerMessages', 'backgroundTasks'),
+  )
+  try {
+    const target = scene.threadId
+    await scene.client.request('thread/name/set', { threadId: target, name: '状态网页' })
+    let address = ''
+    scene.model.enqueue(() => {
+      address =
+        registry(scene).find((entry) => entry.messagingSocketPath?.includes(target))
+          ?.messagingSocketPath ?? ''
+      return [{ type: 'text', text: '好的' }]
+    })
+    assert.equal((await runTurn(scene, '说一句')).status, 'completed')
+    assert.ok(address.endsWith(`litch-${target}.sock`), `目标的固定地址：${address}`)
+    await until('目标的 CLI 退出', () => cliProcesses(scene).length === 0)
+
+    const { thread: sender } = await scene.client.request('thread/start', {
+      cwd: scene.workspace,
+      approvalPolicy: 'never',
+      sandbox: 'danger-full-access',
+    })
+    const sends: string[] = []
+    const peerSeen: string[] = []
+    // 两个 CLI 的请求交错到同一个假模型：按最后一条消息分辨
+    scene.model.fallback = (request) => {
+      const last = JSON.stringify(request.messages?.at(-1)?.content ?? '')
+      if (last.includes('cross-session-message')) {
+        peerSeen.push(last)
+        return [{ type: 'text', text: '这是对外来消息的回答' }]
+      }
+      const result = toolResult(request, `toolu_wake_${sends.length}`)
+      if (result) sends.push(result)
+      return [{ type: 'text', text: '发完了' }]
+    }
+    const sendFrom = async (to: string, id: string): Promise<string> => {
+      scene.model.enqueue(() => [
+        {
+          type: 'tool_use',
+          id,
+          name: 'SendMessage',
+          input: { to, summary: '通知', message: '我要重启服务了' },
+        },
+      ])
+      const before = turnsOf(scene, target)
+      const { turn } = await scene.client.request('turn/start', {
+        threadId: sender.id,
+        input: [{ type: 'text', text: '通知状态网页' }],
+      })
+      assert.equal((await scene.client.completed(turn.id)).status, 'completed')
+      await until('目标被唤醒', () => turnsOf(scene, target) > before)
+      const woken = scene.client.trace
+        .filter((m: any) => m.method === 'turn/started' && m.params.threadId === target)
+        .at(-1).params.turn.id
+      const done = await scene.client.completed(woken)
+      assert.equal(done.status, 'completed')
+      assert.equal(done.litchOrigin, 'peer')
+      return woken
+    }
+
+    await sendFrom(`uds:${address}`, 'toolu_wake_0')
+    assert.match(sends[0] ?? '', /success\\?":true/, `按地址应发得出去：${sends[0]}`)
+    assert.equal(peerSeen.length, 1, '目标应收到那条消息')
+
+    await until('目标的 CLI 又退出', () => cliProcesses(scene).length === 0)
+    await sendFrom('状态网页', 'toolu_wake_1')
+    assert.match(sends[1] ?? '', /success\\?":true/, `按名字应发得出去：${sends[1]}`)
+    assert.equal(peerSeen.length, 2)
+
+    const read = await scene.client.request('thread/read', { threadId: target, includeTurns: true })
+    const last = read.thread.turns.at(-1)
+    const [first] = last.items
+    assert.equal(first.type, 'userMessage')
+    assert.equal(first.content[0].text, '我要重启服务了')
+    assert.ok(first.litchPeer, '应是带 litchPeer 的外来消息')
+  } finally {
+    await disposeScene(scene)
+  }
+})
+
+test('唤醒了对方却没等到消息（发送失败）：唤醒回合说明一声按时收尾，不挂着', {
+  timeout: 180_000,
+}, async () => {
+  const scene = await startScene(
+    'native-peer-wake-empty',
+    { CHA_CLAUDE_KEEP_ALIVE_IDLE_SECONDS: '0', CHA_CLAUDE_PEER_WAKE_WAIT_MS: '3000' },
+    declaring('peerMessages', 'backgroundTasks'),
+  )
+  try {
+    const target = scene.threadId
+    scene.model.enqueue(() => [{ type: 'text', text: '好的' }])
+    assert.equal((await runTurn(scene, '说一句')).status, 'completed')
+    await until('目标的 CLI 退出', () => cliProcesses(scene).length === 0)
+
+    const { thread: sender } = await scene.client.request('thread/start', {
+      cwd: scene.workspace,
+      approvalPolicy: 'never',
+      sandbox: 'danger-full-access',
+    })
+    let send = ''
+    // 文件名是目标的固定地址、目录不对：入口按会话键照样先唤醒，CLI 随后发不出去
+    scene.model.enqueue(() => [
+      {
+        type: 'tool_use',
+        id: 'toolu_empty',
+        name: 'SendMessage',
+        input: {
+          to: `uds:/nonexistent-litch-test/litch-${target}.sock`,
+          summary: '通知',
+          message: '我要重启服务了',
+        },
+      },
+    ])
+    scene.model.fallback = (request) => {
+      send ||= toolResult(request, 'toolu_empty')
+      return [{ type: 'text', text: '发完了' }]
+    }
+    const before = turnsOf(scene, target)
+    const { turn } = await scene.client.request('turn/start', {
+      threadId: sender.id,
+      input: [{ type: 'text', text: '通知' }],
+    })
+    assert.equal((await scene.client.completed(turn.id)).status, 'completed')
+    assert.match(send, /ENOENT|Failed/, `发送方应发不出去：${send}`)
+    assert.ok(turnsOf(scene, target) > before, '目标应被唤醒')
+    const woken = scene.client.trace
+      .filter((m: any) => m.method === 'turn/started' && m.params.threadId === target)
+      .at(-1).params.turn.id
+    const done = await scene.client.completed(woken)
+    assert.equal(done.status, 'completed', '唤醒回合按时收尾')
+    const read = await scene.client.request('thread/read', { threadId: target, includeTurns: true })
+    const items = read.thread.turns.at(-1).items
+    assert.ok(
+      !items.some((item: any) => item.type === 'userMessage'),
+      `不该有消息条目：${JSON.stringify(items)}`,
+    )
+  } finally {
     await disposeScene(scene)
   }
 })

@@ -23,6 +23,12 @@ import { createInterface } from 'node:readline'
 import { fileURLToPath } from 'node:url'
 import { type ClientToolCallResponse, clientToolFailure } from '../../protocol/src/client-tools.mjs'
 import {
+  BACKGROUND_SHELL_NAMESPACE,
+  type BackgroundShells,
+  backgroundShellSpec,
+  runShellTool,
+} from '../../shared/src/background-shell.mjs'
+import {
   clientToolNamespaces,
   isClientToolNamespace,
   noClientToolExecutor,
@@ -215,6 +221,8 @@ export interface ClientToolsHost {
   }
   readonly peers: Map<string, RpcPeer>
   readonly live: Map<string, LiveThread>
+  /** 注入的后台 shell；没打开是 null */
+  readonly shells: BackgroundShells | null
   subscribers(threadId: string): RpcPeer[]
   notify(threadId: string, method: string, params: any): void
   /** 向客户端发请求等它答（不补送给后来订阅的连接）；signal 中止时撤回 */
@@ -232,6 +240,11 @@ export class ClientTools {
   /** 每条连接握手时声明能执行的客户端工具命名空间：连接标识 → 命名空间 */
   private readonly declared = new Map<string, ReadonlySet<string>>()
   private readonly cache = new Map<string, DynamicToolSpec[]>()
+  /**
+   * 入口自己带的工具：注入的后台 shell（litch_shell，shared/src/background-shell.mts）。每个会话都有，
+   * 和动态工具挂在同一个 MCP 桥上，调用由入口自己执行、不经客户端
+   */
+  private readonly builtIn: DynamicToolSpec[]
   private readonly bridges = new Map<string, Bridge>()
   /** 会话号 → 它的桥的标识：接回会话时用同一个，桥的个数不随接回的次数涨 */
   private readonly keys = new Map<string, string>()
@@ -245,6 +258,7 @@ export class ClientTools {
 
   constructor(host: ClientToolsHost) {
     this.host = host
+    this.builtIn = host.shells ? dynamicToolSpecs([backgroundShellSpec(true)]) : []
   }
 
   /** initialize：记下这条连接能执行的命名空间 */
@@ -272,7 +286,13 @@ export class ClientTools {
     return this.host.store.getMeta('dynamicTools', threadId)
   }
 
+  /** 这个会话交给 agent 的全部工具：建会话时带的动态工具，加上入口自己带的 */
   specs(threadId: string): DynamicToolSpec[] {
+    const own = this.dynamic(threadId)
+    return this.builtIn.length ? [...own, ...this.builtIn] : own
+  }
+
+  private dynamic(threadId: string): DynamicToolSpec[] {
     const cached = this.cache.get(threadId)
     if (cached) return cached
     const raw = this.raw(threadId)
@@ -304,7 +324,7 @@ export class ClientTools {
     threadId: string | null,
     raw: unknown,
   ): Promise<{ servers: StdioMcpServer[]; key: string | null }> {
-    const specs = dynamicToolSpecs(raw)
+    const specs = [...dynamicToolSpecs(raw), ...this.builtIn]
     if (!specs.length && !toolInstructions(raw)) return { servers: [], key: null }
     let path: string
     try {
@@ -544,9 +564,38 @@ export class ClientTools {
     const item = (await this.claim(live, spec, args)) ?? projection.addDynamic(spec, args, notify)
     const callId = item?.id ?? `call_${randomUUID()}`
     const turnId = projection.active?.id ?? ''
-    const response = await this.deliver(live, spec, args, callId, turnId, signal)
+    const response =
+      spec.namespace === BACKGROUND_SHELL_NAMESPACE && this.host.shells
+        ? await this.runShell(live, spec, args, callId, turnId, signal)
+        : await this.deliver(live, spec, args, callId, turnId, signal)
     if (item) projection.finishDynamic(item, response, Date.now() - startedMs, notify)
     return response
+  }
+
+  /** 后台 shell 由入口自己执行 */
+  private async runShell(
+    live: LiveThread,
+    spec: DynamicToolSpec,
+    args: unknown,
+    callId: string,
+    turnId: string,
+    signal: AbortSignal,
+  ): Promise<ClientToolCallResponse> {
+    const shells = this.host.shells as BackgroundShells
+    const { thread } = live.projection
+    const result = await runShellTool(
+      shells,
+      {
+        threadId: thread.id,
+        cwd: thread.cwd,
+        tool: spec.tool,
+        arguments: args,
+        itemId: callId,
+        ...(turnId ? { turnId } : {}),
+      },
+      signal,
+    )
+    return { success: !result.isError, contentItems: [{ type: 'inputText', text: result.text }] }
   }
 
   private async deliver(

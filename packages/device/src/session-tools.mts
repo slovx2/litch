@@ -41,6 +41,7 @@ import {
   startChild,
   threadTitle,
   widerSandbox,
+  worktreeDefault,
 } from './session-start.mjs'
 import { lastAnswer, type OfferOutcome, type SessionTree, trimText } from './session-tree.mjs'
 import { isObject } from './wire.mjs'
@@ -237,6 +238,8 @@ interface Spec {
   effort: string | undefined
   cwd: string | undefined
   kind: SessionLineageKind
+  /** 要不要自己的工作树；不给照缺省 */
+  worktree: boolean | undefined
 }
 
 /** 子会话起在哪：harness、模型、强度、目录、fresh 还是 fork。harness 要在这台设备上，fork 只能同 harness */
@@ -252,11 +255,14 @@ function targetOf(
   const kind = string(args, 'kind') ?? 'fresh'
   if (kind !== 'fresh' && kind !== 'fork')
     throw new Refused('invalid', 'kind must be fresh or fork.')
+  const worktree = args.worktree ?? undefined
+  if (worktree !== undefined && typeof worktree !== 'boolean')
+    throw new Refused('invalid', 'worktree must be true or false.')
   if (harness && !tree.host.harnesses().some((source) => source.id === harness))
     throw new Refused('invalid', `There is no harness "${harness}" on this device.`)
   if (kind === 'fork' && harness && harness !== call.harness)
     throw new Refused('invalid', `fork only works within the same harness (${call.harness}).`)
-  return { harness, model, effort, cwd, kind }
+  return { harness, model, effort, cwd, kind, worktree }
 }
 
 /**
@@ -293,12 +299,17 @@ function specOf(args: Record<string, unknown>, call: DeviceToolCall, tree: Sessi
 const widerFor = (tree: SessionTree, call: DeviceToolCall, spec: Spec) =>
   widerSandbox(tree, call.threadId, spec.harness ?? call.harness).catch(() => null)
 
+/** 起出来的子会话在新工作树里时，结果里说一句在哪个分支上 */
+const worktreeNote = (branch: string | null) =>
+  branch ? ` in a new git worktree on branch ${branch}` : ''
+
 /** 过门槛、落一张提案。门槛在落库之前同步查，同一回合里并发的几次 start 不会一起漏过去 */
 function proposeOne(
   tree: SessionTree,
   call: DeviceToolCall,
   spec: Spec,
   wider: string | null,
+  fallback: boolean,
 ): SessionProposal {
   const title = spec.title.trim().slice(0, 120)
   gate(tree, call, title)
@@ -312,6 +323,8 @@ function proposeOne(
     effort: spec.effort ?? null,
     cwd: spec.cwd ?? null,
     kind: spec.kind,
+    worktree: spec.worktree ?? null,
+    worktreeDefault: fallback,
     // 子会话停下后唤不唤醒由 Litch 定，不交给模型：模型派的、提的一律唤醒（用户从卡片开始时可以改）
     wakeParent: true,
     turnId: call.turnId || null,
@@ -356,12 +369,13 @@ async function start(
         prompt: spec.prompt,
         background: spec.background,
         wakeParent: true,
+        worktree: spec.worktree ?? null,
       },
       'model',
     )
     return {
       thread_id: child.threadId,
-      note: `Started sub-session ${child.threadId} on ${child.harness}. It runs on its own; you will be woken with its result as a <litch-session-event> message. Do not poll it.`,
+      note: `Started sub-session ${child.threadId} on ${child.harness}${worktreeNote(child.branch)}. It runs on its own; you will be woken with its result as a <litch-session-event> message. Do not poll it.`,
     }
   }
   const why =
@@ -376,7 +390,13 @@ async function start(
       'blocked',
       `${why}${cardsOff(call.harness)}${initiation === 'user_asked' ? ' Tell the user they can start it themselves from the session menu (Start a sub-session).' : ''}`,
     )
-  const proposal = proposeOne(tree, call, spec, wider)
+  const proposal = proposeOne(
+    tree,
+    call,
+    spec,
+    wider,
+    await worktreeDefault(tree, call.threadId, spec.cwd ?? null),
+  )
   return {
     proposal_id: proposal.id,
     note: `${why}The user now sees a proposal card for "${proposal.title}". Nothing runs until they accept it; ${EXPIRES}. Do not do the work here as well.`,
@@ -409,6 +429,7 @@ async function offer(
       'blocked',
       `An offer is only for a new task in a message the user just typed, and this turn was not started that way. Do the work here, or suggest it with ${tree.hasWrapUp(call.threadId) ? 'wrap_up' : 'start (initiation "propose")'}.`,
     )
+  const fallback = await worktreeDefault(tree, call.threadId, target.cwd ?? null)
   gate(tree, call, title)
   const proposal = tree.propose({
     threadId: call.threadId,
@@ -420,6 +441,9 @@ async function offer(
     effort: target.effort ?? null,
     cwd: target.cwd ?? null,
     kind: target.kind,
+    // offer 卡上的工作树开关由用户定（选新会话时带回来），模型给的不认
+    worktree: null,
+    worktreeDefault: fallback,
     wakeParent: true,
     turnId: call.turnId || null,
     callId: call.callId || null,
@@ -504,7 +528,13 @@ async function wrapUp(
           'Each suggestion must be an object with title, prompt and (for fresh) background.',
         )
       const spec = specOf(one, call, tree)
-      const proposal = proposeOne(tree, call, spec, await widerFor(tree, call, spec))
+      const proposal = proposeOne(
+        tree,
+        call,
+        spec,
+        await widerFor(tree, call, spec),
+        await worktreeDefault(tree, call.threadId, spec.cwd ?? null),
+      )
       suggestions.push({ title: proposal.title, proposal_id: proposal.id })
     } catch (error) {
       suggestions.push({ title, refused: messageOf(error) })
@@ -626,7 +656,7 @@ async function accept(
   const child = await acceptProposal(tree, proposalId)
   return {
     thread_id: child.threadId,
-    note: `Started sub-session ${child.threadId} on ${child.harness} from the proposal. It runs on its own; ${current.wakeParent ? 'you will be woken with its result as a <litch-session-event> message' : 'its result is attached to the next user message'}. Do not poll it.`,
+    note: `Started sub-session ${child.threadId} on ${child.harness}${worktreeNote(child.branch)} from the proposal. It runs on its own; ${current.wakeParent ? 'you will be woken with its result as a <litch-session-event> message' : 'its result is attached to the next user message'}. Do not poll it.`,
   }
 }
 
@@ -709,7 +739,7 @@ async function acceptOffer(
   )
   return {
     thread_id: child.threadId,
-    note: `Started sub-session ${child.threadId} on ${child.harness} for "${spec.title.trim()}". It runs on its own; you will be woken with its result as a <litch-session-event> message. Do not do that work here, and do not poll it.`,
+    note: `Started sub-session ${child.threadId} on ${child.harness}${worktreeNote(child.branch)} for "${spec.title.trim()}". It runs on its own; you will be woken with its result as a <litch-session-event> message. Do not do that work here, and do not poll it.`,
   }
 }
 
@@ -775,12 +805,22 @@ async function handOff(
       'blocked',
       'hand_off is for when the user sends a new, unrelated message while you are working, and this turn was not started by the user typing a message. Keep working here.',
     )
-  let child: { threadId: string; harness: string }
+  const worktree = args.worktree ?? undefined
+  if (worktree !== undefined && typeof worktree !== 'boolean')
+    throw new Refused('invalid', 'worktree must be true or false.')
+  let child: { threadId: string; harness: string; branch: string | null }
   try {
     child = await startChild(
       tree,
       call.threadId,
-      { kind: 'fork', title, prompt: plan, wakeParent: true, handOffBefore: call.turnId },
+      {
+        kind: 'fork',
+        title,
+        prompt: plan,
+        wakeParent: true,
+        handOffBefore: call.turnId,
+        worktree: worktree ?? null,
+      },
       'model',
     )
   } catch (error) {
@@ -792,7 +832,7 @@ async function handOff(
   }
   return {
     thread_id: child.threadId,
-    note: `Handed "${title.trim()}" off to session ${child.threadId}: a fork of this conversation up to the previous turn, with the remaining plan. It starts now; you will be woken with its result as a <litch-session-event> message. Stop that task here (do not continue it or poll it) and answer the user's new message.`,
+    note: `Handed "${title.trim()}" off to session ${child.threadId}${worktreeNote(child.branch)}: a fork of this conversation up to the previous turn, with the remaining plan. It starts now; you will be woken with its result as a <litch-session-event> message. Stop that task here (do not continue it or poll it) and answer the user's new message.`,
   }
 }
 

@@ -34,6 +34,11 @@ export interface RelayHost {
   observe(link: UpstreamLink, method: string, params: Record<string, unknown>): void
   /** 会话树要看的几样（session-tree.mts） */
   sessions: RelaySessions
+  /** 工作树主人的会话对象挂 litchWorktree；目录在工作树里的会话记成共用者（worktrees.mts） */
+  worktrees: {
+    decorate(thread: Record<string, unknown>): void
+    adopt(thread: Record<string, unknown>): void
+  }
   /** 后台任务（background.mts） */
   background: RelayBackground
 }
@@ -112,8 +117,11 @@ export class Relay {
   private readonly renamed = new Map<UpstreamLink, Map<string, RpcId>>()
   /** 转发出去、应答回来时还有事要做的请求，键是客户端的请求号 */
   private readonly tracked = new Map<string, Tracked>()
-  /** 转发出去的请求成功应答时要顺手做的事，键是客户端的请求号 */
-  private readonly afterwards = new Map<string, (result: unknown) => void>()
+  /** 转发出去的请求应答时要顺手做的事（成功、失败各一样），键是客户端的请求号 */
+  private readonly afterwards = new Map<
+    string,
+    { work: (result: unknown) => void; failed?: () => void }
+  >()
   private sequence = 0
 
   constructor(host: RelayHost) {
@@ -127,9 +135,9 @@ export class Relay {
     else this.notification(link, frame, frame.method, raw)
   }
 
-  /** 这个请求（马上要转给上游）成功应答时调一下 work。失败、上游断开就不调了 */
-  after(id: RpcId, work: (result: unknown) => void): void {
-    this.afterwards.set(idKey(id), work)
+  /** 这个请求（马上要转给上游）成功应答时调一下 work；失败、上游断开时调 failed（有的话） */
+  after(id: RpcId, work: (result: unknown) => void, failed?: () => void): void {
+    this.afterwards.set(idKey(id), failed ? { work, failed } : { work })
   }
 
   /** 一个请求刚转给了上游，它的应答回来时设备层还有事要做 */
@@ -184,7 +192,8 @@ export class Relay {
     const result = frame.result
     const afterwards = key === null ? undefined : this.afterwards.get(key)
     if (key !== null && afterwards) this.afterwards.delete(key)
-    if (afterwards && frame.error === undefined) afterwards(result)
+    if (afterwards && frame.error === undefined) afterwards.work(result)
+    else if (afterwards) afterwards.failed?.()
     if (tracked && frame.error === undefined) this.fulfil(link, tracked, result)
     if (request && frame.error === undefined) this.clientToolsSaw(link, request.method, result)
     if (request?.method === 'thread/resume' && isObject(result) && isObject(result.thread))
@@ -247,10 +256,12 @@ export class Relay {
   private stamp(link: UpstreamLink, thread: unknown): boolean {
     if (!isObject(thread) || typeof thread.id !== 'string') return false
     this.see(link, thread.id, thread)
+    this.host.worktrees.adopt(thread)
     thread.harness = link.harness
     this.host.workspaces.decorate(thread.id, thread)
     if (this.host.declares(EXTENSION.sessionTree)) this.host.sessions.decorate(thread)
     if (this.host.declares(EXTENSION.backgroundTasks)) this.host.background.decorate(thread)
+    if (this.host.declares(EXTENSION.worktrees)) this.host.worktrees.decorate(thread)
     return true
   }
 
@@ -458,7 +469,10 @@ export class Relay {
         )
     }
     this.renamed.delete(link)
-    for (const request of forwarded) this.afterwards.delete(idKey(request.id))
+    for (const request of forwarded) {
+      this.afterwards.get(idKey(request.id))?.failed?.()
+      this.afterwards.delete(idKey(request.id))
+    }
     // 等不到应答了，设备层这边该记的也就不记了；扣着的会话开始通知照常放出去
     const held: Frame[] = []
     for (const [key, tracked] of this.tracked) {

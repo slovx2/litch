@@ -387,8 +387,18 @@ export function createCore(options: CoreOptions): Core {
           return {}
         }
         case 'session.create': {
-          const { deviceId, harness, workspaceId, cwd, text, images, extras, settings, goal } =
-            params as Commands['session.create']['params']
+          const {
+            deviceId,
+            harness,
+            workspaceId,
+            cwd,
+            text,
+            images,
+            extras,
+            settings,
+            goal,
+            worktree,
+          } = params as Commands['session.create']['params']
           try {
             const message = outgoing(text, images, extras)
             const device = deviceOf(deviceId)
@@ -400,6 +410,7 @@ export function createCore(options: CoreOptions): Core {
                 harness,
                 workspaceId,
                 goal === true,
+                worktree,
               ),
             }
           } catch (error) {
@@ -669,10 +680,10 @@ export function createCore(options: CoreOptions): Core {
           return {}
         }
         case 'session.proposal.answer': {
-          const { deviceId, sessionId, proposalId, choice } =
+          const { deviceId, sessionId, proposalId, choice, worktree } =
             params as Commands['session.proposal.answer']['params']
           try {
-            await deviceOf(deviceId).answerProposal(sessionId, proposalId, choice)
+            await deviceOf(deviceId).answerProposal(sessionId, proposalId, choice, worktree)
           } catch (error) {
             throw toChannelFailure(error)
           }
@@ -1140,6 +1151,29 @@ export function createCore(options: CoreOptions): Core {
           return {}
         }
         // 给设备装 harness。出错的原因安装模块自己已经换成给人看的了，原样过去
+        // 工作树。出错的原因工作树模块自己已经换成给人看的了，原样过去
+        case 'worktree.branches': {
+          const { deviceId, cwd } = params as Commands['worktree.branches']['params']
+          return { branches: await deviceOf(deviceId).worktrees.branches(String(cwd)) }
+        }
+        case 'worktree.remove': {
+          const { deviceId, id, discard, withBranch } =
+            params as Commands['worktree.remove']['params']
+          return {
+            worktree: await deviceOf(deviceId).worktrees.remove(String(id), {
+              discard: discard === true,
+              withBranch: withBranch === true,
+            }),
+          }
+        }
+        case 'worktree.restore': {
+          const { deviceId, id } = params as Commands['worktree.restore']['params']
+          return { worktree: await deviceOf(deviceId).worktrees.restore(String(id)) }
+        }
+        case 'worktree.syncBase': {
+          const { deviceId, id } = params as Commands['worktree.syncBase']['params']
+          return { result: await deviceOf(deviceId).worktrees.syncBase(String(id)) }
+        }
         case 'install.versions': {
           const { deviceId, latest } = params as Commands['install.versions']['params']
           return { harnesses: await deviceOf(deviceId).install.versions(latest === true) }
@@ -1387,6 +1421,8 @@ export function createCore(options: CoreOptions): Core {
       if (topic.kind === 'tasks') return device.tasks.open(sink)
       if (topic.kind === 'pairing') return device.pairing.open(sink)
       if (topic.kind === 'install') return device.install.open(sink)
+      // 工作树：设备不支持时 available 是 false，照样成立
+      if (topic.kind === 'worktrees') return device.worktrees.open(sink)
       // harness 详情设置：设备不支持时 supported 是 false，照样成立
       if (topic.kind === 'harnessConfig') return device.harnessConfig.open(topic.harness, sink)
       // 账号额度：没有额度、对面不认识时 rows 是空的，照样成立

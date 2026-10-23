@@ -2,6 +2,7 @@
 // 这里只管各条客户端连接共用的东西；一条连接上的事在 session.mts。
 
 import { mkdirSync } from 'node:fs'
+import { join } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
 import { BACKGROUND_TASKS_NOTIFICATION } from '../../protocol/src/background-tasks.mjs'
 import { CLIENT_TOOL_NAMESPACE } from '../../protocol/src/client-tools.mjs'
@@ -10,6 +11,8 @@ import { HARNESS_INSTALL_NOTIFICATION } from '../../protocol/src/device-harness-
 import type { DeviceSettingsSnapshot } from '../../protocol/src/device-settings.mjs'
 import { HARNESS_CONFIG_NOTIFICATION } from '../../protocol/src/harness-config.mjs'
 import { taskCardsSettingKey } from '../../protocol/src/session-tree.mjs'
+import { WORKTREE_DEFAULTS, WORKTREE_SETTING } from '../../protocol/src/worktrees.mjs'
+import { PINNED_SECTION_ID } from '../../shared/src/thread-sections.mjs'
 import { DeviceBackground } from './background.mjs'
 import { ClientToolInvoker } from './client-tool-invoke.mjs'
 import { ClientToolRouter } from './client-tools.mjs'
@@ -45,6 +48,9 @@ import { registerTasksTool } from './tasks-tool.mjs'
 import { ThreadIndex } from './thread-index.mjs'
 import { type Connector, isObject, type Wire, type WireHandlers } from './wire.mjs'
 import { Workspaces } from './workspaces.mjs'
+import { gitVersion } from './worktree-git.mjs'
+import { WorktreeLife } from './worktree-life.mjs'
+import { openWorktreeDatabase, type WorktreeSettings, Worktrees } from './worktrees.mjs'
 
 /** 记一条结构化的摘要：事件名和少量字段（不带正文、内容、密钥） */
 export type DeviceTrace = (
@@ -134,6 +140,31 @@ const DEFAULT_TIMING: SessionTiming = {
   releaseMs: 5000,
 }
 
+/** 设备设置里的工作树那一组（Go 层 settings_worktrees.go 声明）。没写、写坏了的用默认值；根目录默认在状态目录下 */
+export function worktreeSettings(
+  values: Record<string, unknown> | undefined,
+  stateDir: string,
+): WorktreeSettings {
+  const root = values?.[WORKTREE_SETTING.root]
+  const prefix = values?.[WORKTREE_SETTING.branchPrefix]
+  const fetch = values?.[WORKTREE_SETTING.fetchFirst]
+  const clean = values?.[WORKTREE_SETTING.autoCleanup]
+  const count = (key: string, fallback: number, least: number, most: number) => {
+    const value = values?.[key]
+    return typeof value === 'number' && Number.isInteger(value) && value >= least && value <= most
+      ? value
+      : fallback
+  }
+  return {
+    root: typeof root === 'string' && root.trim() ? root.trim() : join(stateDir, 'worktrees'),
+    branchPrefix: typeof prefix === 'string' ? prefix.trim() : WORKTREE_DEFAULTS.branchPrefix,
+    fetchFirst: typeof fetch === 'boolean' ? fetch : WORKTREE_DEFAULTS.fetchFirst,
+    autoCleanup: typeof clean === 'boolean' ? clean : WORKTREE_DEFAULTS.autoCleanup,
+    keepCount: count(WORKTREE_SETTING.keepCount, WORKTREE_DEFAULTS.keepCount, 1, 200),
+    keptDays: count(WORKTREE_SETTING.keptDays, WORKTREE_DEFAULTS.keptDays, 7, 365),
+  }
+}
+
 /**
  * 设置里“会话编排”的开关（Go 层的 settings_sessions.go 声明）。没有主进程在管（没有设置功能）时按开着算
  */
@@ -192,6 +223,10 @@ export class DeviceServer {
   private orchestrating: boolean
   /** 扫码绑定手机。没给配置时是 null */
   private readonly pairing: DevicePairing | null
+  /** 设备层的工作树。这台机器上没有 git 时是 null */
+  readonly worktrees: Worktrees | null
+  readonly worktreeLife: WorktreeLife | null
+  private readonly worktreesDb: DatabaseSync | null
 
   constructor(options: DeviceOptions) {
     mkdirSync(options.stateDir, { recursive: true, mode: 0o700 })
@@ -276,6 +311,16 @@ export class DeviceServer {
         this.announce(HARNESS_INSTALL_NOTIFICATION.changed, job, EXTENSION.harnessInstall)
     }
     this.sessionsDb = openSessionDatabase(options.stateDir)
+    // 工作树：要有 git 才列这项扩展
+    this.worktreesDb = gitVersion() ? openWorktreeDatabase(options.stateDir) : null
+    this.worktrees = this.worktreesDb
+      ? new Worktrees(this.worktreesDb, {
+          settings: () => this.worktreeSettings(),
+          announce: (method, params, extension) => this.announce(method, params, extension),
+          log,
+        })
+      : null
+    if (this.worktrees) info.extensions.push(EXTENSION.worktrees)
     this.orchestrating = this.sessionTreeOn()
     this.sessionTree = new SessionTree({
       harnesses: () => this.harnesses(),
@@ -283,6 +328,7 @@ export class DeviceServer {
       index: this.index,
       workspaces: this.workspaces,
       store: new SessionStore(this.sessionsDb),
+      worktrees: this.worktrees,
       enabled: () => this.sessionTreeOn(),
       clients: () => [...this.sessions].filter((session) => session.ready).length,
       announce: (method, params, extension) => this.announce(method, params, extension),
@@ -317,6 +363,21 @@ export class DeviceServer {
       if (dropped > 0) log(`清掉了 ${dropped} 个已删会话留下的动态工具`)
     }
     this.deviceTools.register(CLIENT_TOOL_NAMESPACE.sessions, sessionToolsHandler(this.sessionTree))
+    // 工作树跟着会话的归档、删除、重新打开走，定时清理（worktree-life.mts）
+    this.worktreeLife = this.worktrees
+      ? new WorktreeLife(this.worktrees, {
+          known: (threadId) => this.index.recent(threadId),
+          pinned: (threadId) =>
+            this.workspaces.sections.placement(threadId)?.section.id === PINNED_SECTION_ID,
+          running: (threadId) => this.sessionTree.isActive(threadId),
+          roots: () =>
+            this.workspaces.projects
+              .list()
+              .flatMap((project) => project.roots.map((root) => root.path)),
+          log,
+        })
+      : null
+    this.worktreeLife?.start()
     // 子会话的后台任务跑完了：引擎不会接着做的，会话树补一条回报（决 430）
     this.background.onSettled((threadId, tasks) =>
       this.sessionTree.backgroundSettled(threadId, tasks),
@@ -361,6 +422,8 @@ export class DeviceServer {
       harnessEnvNames: (harness) => this.harnessEnvNames(harness),
       titles: this.titles,
       background: this.background,
+      worktrees: this.worktrees,
+      worktreeLife: this.worktreeLife,
       codexCatalog: () =>
         this.control
           ? this.control.request('codex.models', {}, CODEX_CATALOG_TIMEOUT_MS)
@@ -446,6 +509,10 @@ export class DeviceServer {
   }
 
   /** 设置里“会话编排”开着没有。没有设置功能（没有主进程在管）时按开着算 */
+  private worktreeSettings(): WorktreeSettings {
+    return worktreeSettings(this.control?.state?.snapshot.values, this.options.stateDir)
+  }
+
   private sessionTreeOn(): boolean {
     return this.control?.state?.snapshot.values[SESSION_TREE_SETTING] !== false
   }
@@ -639,11 +706,13 @@ export class DeviceServer {
     for (const link of [...this.engineLinks]) link.close()
     for (const session of [...this.sessions]) session.close()
     this.sessionTree.close()
+    this.worktreeLife?.stop()
     this.titles.close()
     this.deviceTools.close()
     await this.importer?.close()
     await this.layer.close()
     this.db.close()
     this.sessionsDb.close()
+    this.worktreesDb?.close()
   }
 }

@@ -15,6 +15,7 @@ import { enProposals } from './en-proposals.ts'
 import { enRupgrade } from './en-rupgrade.ts'
 import { enSwitches } from './en-switches.ts'
 import { enTasks } from './en-tasks.ts'
+import { enWorktrees } from './en-worktrees.ts'
 import type { Entry } from './types.ts'
 import type { MessageKey } from './zh-CN.ts'
 
@@ -32,6 +33,7 @@ export const en: Record<MessageKey, Entry> = {
   ...enBimport,
   ...enComments,
   ...enBackground,
+  ...enWorktrees,
   ...enSwitches,
   ...enGoal,
   ...enPeer,

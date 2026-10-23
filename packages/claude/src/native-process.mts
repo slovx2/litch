@@ -50,6 +50,7 @@ export class NativeProcess {
   private exited: Promise<void> = Promise.resolve()
   private terminating: Promise<void> | undefined
   private gracefulClose = false
+  private cliPidValue: number | null = null
 
   private readonly threadId: string
   private readonly turnId: string
@@ -69,12 +70,11 @@ export class NativeProcess {
       detached: process.platform !== 'win32',
     }) as ChildProcessWithoutNullStreams
     this.child = child
-    let cliPid: number | null = null
     const identity = child.stdio[3]
     if (!identity || !('read' in identity)) throw new Error('无法读取 CLI 进程身份')
     createInterface({ input: identity }).on('line', (line) => {
       const { childPid } = JSON.parse(line) as { childPid: number }
-      cliPid = childPid
+      this.cliPidValue = childPid
       ownProcesses.set(childPid, this.threadId)
       debugLog('native.process.started', {
         threadId: this.threadId,
@@ -87,7 +87,7 @@ export class NativeProcess {
     this.exited = new Promise<void>((resolve) => {
       child.once('close', () => {
         this.closed = true
-        if (cliPid !== null) ownProcesses.delete(cliPid)
+        if (this.cliPidValue !== null) ownProcesses.delete(this.cliPidValue)
         ownExits.set(this.threadId, Date.now())
         debugLog('native.process.closed', {
           threadId: this.threadId,
@@ -98,6 +98,11 @@ export class NativeProcess {
       })
     })
     return child
+  }
+
+  // 守护进程报上来的 CLI 进程号（收件箱登记按它起名）；还没报上来时为 null
+  get cliPid(): number | null {
+    return this.cliPidValue
   }
 
   get hasExited(): boolean {

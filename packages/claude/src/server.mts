@@ -80,7 +80,7 @@ import { type McpCallbacks, McpOperationCancelled, McpRpc, type McpScope } from 
 import { type McpToolRef, mcpToolRef } from './mcp-tool-name.mjs'
 import { parseContextItems } from './native-context.mjs'
 import { alive, NativeOwners, nativeOwnerMessage, readRegistry } from './native-owner.mjs'
-import { ownCliAlive, ownCliExitedAt, ownCliPids } from './native-process.mjs'
+import { ownCliAlive, ownCliExitedAt, ownCliPids, succeedsWithin } from './native-process.mjs'
 import type { NativeSettings } from './native-record.mjs'
 import {
   type NativeRedraw,
@@ -90,6 +90,7 @@ import {
   sdkNativeSessionSource,
 } from './native-sessions.mjs'
 import { lostToolCallsNotice, NativeToolIntents } from './native-tool-intents.mjs'
+import { sessionKeyFromAddress } from './peer-inbox-socket.mjs'
 import { type PeerLookup, resolvePeer } from './peer-target.mjs'
 import { PendingInteractions } from './pending-interactions.mjs'
 import {
@@ -227,6 +228,7 @@ import type {
   RpcPeer,
   RuntimeBackgroundCommandEnd,
   RuntimeEvent,
+  RuntimePeerWake,
   ThreadItem,
   ThreadRecord,
   ThreadSectionAppearance,
@@ -259,7 +261,6 @@ import {
   textFromInput,
 } from './util.mjs'
 import { parseWorkflowCommand } from './workflow-command.mjs'
-import { maybeCreateThreadWorktree } from './worktree.mjs'
 
 // A missing Claude Task result must not keep Codex cc in its working state
 // forever. 看门狗按“多久没有子代理活动”算，不按子代理阶段的总时长：派出、续跑子代理，
@@ -413,6 +414,8 @@ export class CodexClaudeAppServer {
   // 后台任务的集合（backgroundTasks 扩展），按 CLI 进程所属的线程记
   private readonly backgroundTasks = new BackgroundTaskTracker()
   private spontaneousTurns = new Set<string>()
+  // 正在为别的会话发来的消息唤醒的会话（线程 → 唤醒结果），同时有几个发送方时一起等
+  private peerWakes = new Map<string, Promise<RuntimePeerWake | null>>()
   // 已经交到运行时手里的回合：运行时再说“没有回合在跑”，就是它已经交还、协议层还在收尾。
   private handedToRuntime = new Set<string>()
   private turnClearWaiters = new Map<string, Array<() => void>>()
@@ -506,6 +509,10 @@ export class CodexClaudeAppServer {
       const thread = record ? this.store.getThread(record.threadId) : null
       return thread ? { id: thread.id, name: thread.name?.trim() || null } : null
     },
+    litchThread: (threadId) => {
+      const thread = this.store.getThread(threadId)
+      return thread ? { id: thread.id, name: thread.name?.trim() || null } : null
+    },
   }
   /** 会话里收到过的消息（只记在内存里）：会话 → 发送方的收件箱地址 → 发送方。回信的 SendMessage 按它认收件方 */
   private readonly peerAddresses = new Map<string, Map<string, LitchPeer>>()
@@ -536,6 +543,7 @@ export class CodexClaudeAppServer {
       : null
     this.runtime.setSessionHandlers?.({
       onSpontaneousTurn: (threadId) => this.spontaneousTurn(threadId),
+      onPeerWake: (to, from) => this.peerWake(to, from),
       onBackgroundCommandEnded: (threadId, end) => {
         const entry = this.backgroundCommands.take(threadId, end.taskId)
         if (entry) this.finishBackgroundCommand(entry, end)
@@ -1307,8 +1315,7 @@ export class CodexClaudeAppServer {
     if (projectId !== null) this.store.projects.read(projectId)
     const id = newId()
     const now = nowSeconds()
-    const requestedCwd = stringOr(params.cwd, process.cwd())
-    const cwd = maybeCreateThreadWorktree(id, requestedCwd).cwd
+    const cwd = stringOr(params.cwd, process.cwd())
     const requestedModel = modelFromParams(params, this.configModel)
     // 与 Codex 的 allowProviderModelFallback 一致：Desktop 以自身默认模型（如 gpt-*）新建会话时，
     // 本运行时目录中不可用的模型换成已保存的默认模型，而不是原样记录后在运行时静默改用 CLI 默认。
@@ -1538,8 +1545,7 @@ export class CodexClaudeAppServer {
     const boundaries = this.remapNativeBoundaries(retained, nativeFork, cut)
     const now = nowSeconds()
     const id = newId()
-    const requestedCwd = stringOr(params.cwd, parent.cwd)
-    const cwd = maybeCreateThreadWorktree(id, requestedCwd).cwd
+    const cwd = stringOr(params.cwd, parent.cwd)
     // 临时分叉是客户端拿来做杂事的（官方桌面端改名后起描述，带的是它自己的生成模型 gpt-*）：
     // Codex 的模型沿用源会话的。源会话的模型装得下带过来的这段历史，用户的模型服务也一定有它
     const requestedModel = modelFromParams(params, parent.model)
@@ -3203,6 +3209,100 @@ export class CodexClaudeAppServer {
     return true
   }
 
+  // 会话 from 的模型要用 SendMessage 发给 to（29 号文档第七节）：认出 to 是这里的哪个会话（固定地址里的会话键，
+  // 或按名字对会话标题），它没有 CLI 时建一个 wake 回合把 CLI 拉起来，消息照旧由 CLI 的收件箱投递。
+  // 返回目标线程和那个回合什么时候结束（起进程失败也算结束，调用方不必再等）；不是这里的会话、
+  // 被别处占着、拉不起来时返回 null
+  private async peerWake(to: string, from: string): Promise<RuntimePeerWake | null> {
+    if (this.stopped) return null
+    const threadId = sessionKeyFromAddress(to) ?? this.peerThreadByName(to)
+    if (!threadId || threadId === from) return null
+    const thread = this.store.getThread(threadId)
+    if (!thread || thread.archived || thread.ephemeral || thread.runtimeBackend !== 'claude')
+      return null
+    // 导进来的会话正被 Claude 桌面端或终端开着：不另起 CLI 续接（会分叉），消息由占着它的进程收。登记现读
+    if (this.native?.owners([threadId], true, true).has(threadId)) return null
+    const waking = this.peerWakes.get(threadId)
+    if (waking) return waking
+    const started = this.startPeerWake(threadId).finally(() => this.peerWakes.delete(threadId))
+    this.peerWakes.set(threadId, started)
+    return started
+  }
+
+  // 按名字发的（ListAgents 列的名字，可能带“ [ref]”）：对上恰好一个顶层 Claude 会话的标题才算。
+  // 本机登记里活着的别的进程（Claude 桌面端、终端）叫这个名字时 CLI 会发给它，不另唤醒
+  private peerThreadByName(to: string): string | null {
+    const name = to.replace(/\s*\[[0-9a-zA-Z]+\]$/, '').trim()
+    // 发给自己的子代理的（main、a 开头的代理号）不算
+    if (!name || name === 'main' || /^a[0-9a-f]{8,}$/.test(name) || /[/:]/.test(name)) return null
+    const own = ownCliPids()
+    try {
+      const registry = readRegistry(join(claudeConfigDir(), 'sessions'))
+      if (registry.some((entry) => entry.name === name && !own.has(entry.pid) && alive(entry.pid)))
+        return null
+    } catch {
+      // 登记读不了：只按会话标题认
+    }
+    const ids = this.store.claudeThreadsNamed(name, 2)
+    return ids.length === 1 ? (ids[0] as string) : null
+  }
+
+  private async startPeerWake(threadId: string): Promise<RuntimePeerWake | null> {
+    // 进程正在收场（打断、空闲到时）：等它退完再唤醒，不然拿到的是要退的那个
+    const closing = this.runtime.closingSession?.(threadId)
+    if (closing) await succeedsWithin(closing, 10_000)
+    if (this.runtime.cliProcessKeys?.().includes(threadId)) return { key: threadId, ended: null }
+    // 回合正在起（进程马上就有）：等它就是了，回合结束了还没就绪就不必再等
+    const active = this.activeTurnByThread.get(threadId)
+    if (active) return { key: threadId, ended: this.activeTurnCleared(threadId, active) }
+    if (
+      this.interruptingByThread.has(threadId) ||
+      this.nativeMutations.has(threadId) ||
+      this.store.pendingContextInjection(threadId) ||
+      this.store.listTurns(threadId).some((turn) => turn.status === 'inProgress')
+    )
+      return null
+    const thread = this.store.getThread(threadId)
+    if (!thread) return null
+    // 和 CLI 自己开的一轮一样，不属于哪条连接（见 spontaneousTurn）
+    const peer = detachedPeer(threadId)
+    const turn: TurnRecord = {
+      id: newId(),
+      threadId,
+      status: 'inProgress',
+      startedAt: nowSeconds(),
+      completedAt: null,
+      durationMs: null,
+      items: [],
+      diff: '',
+      error: null,
+    }
+    this.store.upsertTurn(turn)
+    this.store.saveTurnOrigin(turn.id, 'peer')
+    this.spontaneousTurns.add(turn.id)
+    this.goals.begin(threadId, turn.id)
+    recordRunEvent('turn.started', {
+      threadId,
+      turnId: turn.id,
+      cwd: thread.cwd,
+      model: thread.model,
+      runtimeBackend: thread.runtimeBackend,
+      purpose: 'normal',
+    })
+    this.markActiveTurn(threadId, turn.id)
+    this.setThreadStatus(peer, threadId, { type: 'active', activeFlags: [] })
+    this.notify(peer, {
+      method: 'turn/started',
+      params: { threadId, turn: this.toLifecycleTurn(turn) },
+    })
+    const ended = this.runRuntimeTurn(peer, thread, turn, '', {
+      threadId,
+      _spontaneous: true,
+      _wake: true,
+    }).catch((error) => this.failTurn(peer, threadId, turn, error))
+    return { key: threadId, ended }
+  }
+
   private sessionHolder(threadId: string): { threadId: string; turnId: string } | null {
     const own = this.activeTurnByThread.get(threadId)
     if (own) return { threadId, turnId: own }
@@ -4503,6 +4603,7 @@ export class CodexClaudeAppServer {
             }
           : {}),
         ...(params._spontaneous === true ? { spontaneous: true } : {}),
+        ...(params._wake === true ? { wake: true } : {}),
         goalContext: turnPurpose === 'normal' ? this.goals.context(runtimeThread.id) : null,
         cwd: relay ? relay.parent.cwd : stringOr(params.cwd, thread.cwd),
         runtimeType: isCodexThread ? 'codex-proxy' : null,

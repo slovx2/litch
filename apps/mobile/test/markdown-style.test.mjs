@@ -141,6 +141,22 @@ for (const { name, theme } of themes) {
   })
 }
 
+for (const { name, theme } of themes) {
+  test(`${name}：行内代码照桌面端，一层淡的墨色、不描边，看得出是一块`, () => {
+    const { code, paragraph } = markdownStyleOf(theme)
+    const ground = theme.c.raised
+    assert.equal(code.borderColor, 'transparent')
+    assert.equal(code.fontFamily, theme.font.mono)
+    // 比正文小一号，不把行撑高
+    assert.ok(code.fontSize < paragraph.fontSize)
+    const box = over(code.backgroundColor, ground)
+    assert.ok(
+      contrast(box, ground) > 1.1,
+      `代码底和正文底分不开 ${contrast(box, ground).toFixed(2)}`,
+    )
+  })
+}
+
 /** 组件给深底配的那套上色里要换掉的记号（运算符、标点、变量、内嵌的跟着代码块的字色，不用写） */
 const SYNTAX_KEYS = [
   'comment',
@@ -178,4 +194,13 @@ test('浅色复古另配了更深的代码颜色，深色用皮肤的线色', ()
 test('同一套配色拿到的是同一个样式对象（组件不因此重新排版）', () => {
   const [{ theme }] = themes
   assert.equal(markdownStyleOf(theme), markdownStyleOf({ ...theme }))
+})
+
+test('行内代码的组件补丁对得上装的版本（升级组件时要重做补丁）', async () => {
+  const { readdirSync, readFileSync } = await import('node:fs')
+  const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
+  const version = pkg.dependencies['react-native-enriched-markdown']
+  const patches = readdirSync(new URL('../patches/', import.meta.url))
+  assert.ok(patches.includes(`react-native-enriched-markdown+${version}.patch`), patches.join(', '))
+  assert.equal(pkg.scripts.postinstall, 'patch-package')
 })
