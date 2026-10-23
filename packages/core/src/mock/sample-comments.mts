@@ -1,5 +1,5 @@
 // 模拟核心里演示“选中回答加评论”用的文字。
-// 话里带“评论”（英文 comment）时回一段能选字的回答：过程里一段说明、一条命令，最终回答里有段落、代码块和表格；
+// 话里带“评论”（英文 comment）时回一段能选字的回答：过程里一段说明、一条命令，最终回答里有段落、行内代码（含文件路径）、代码块和表格；
 // 消息带着评论时逐条回应，用 [N] 标出对应哪一条，末尾故意多写一个超出条数的编号（界面应照原文显示）。
 import type { CommentExtra } from '../projection/comments.mjs'
 import type { SampleLang } from './sample-text.mjs'
@@ -24,7 +24,7 @@ const zh: CommentSample = {
   command: 'grep -n "retry" src/net/client.ts',
   output: '12:  const retry = 3\n40:  for (let at = 0; at < retry; at++) {\n',
   answer: [
-    '重试现在固定三次、每次立刻重来，网络抖一下就会把三次全用掉。建议改成指数退避：',
+    '重试现在固定三次（`src/net/client.ts` 第 12 行的 `retry`）、每次立刻重来，网络抖一下就会把三次全用掉。建议改成指数退避：',
     '',
     '```ts',
     'const delay = (attempt: number) => Math.min(30_000, 500 * 2 ** attempt)',
@@ -36,7 +36,7 @@ const zh: CommentSample = {
     '| 2 | 1 秒 |',
     '| 3 | 2 秒 |',
     '',
-    '另外，超时的请求不该重试：服务端可能已经处理过了，再发一次会重复下单。',
+    '另外，超时的请求（`ETIMEDOUT`）不该重试：服务端可能已经处理过了，再发一次会重复下单。后台任务是`t3`。',
   ].join('\n'),
   lead: (n) => `收到 ${n} 条评论，逐条回应：`,
   one: (n, quote, note) =>
@@ -49,7 +49,7 @@ const en: CommentSample = {
   command: 'grep -n "retry" src/net/client.ts',
   output: '12:  const retry = 3\n40:  for (let at = 0; at < retry; at++) {\n',
   answer: [
-    'Retries are fixed at three, each one immediate, so a brief network blip burns all three. I suggest exponential backoff:',
+    'Retries are fixed at three (`retry` on line 12 of `src/net/client.ts`), each one immediate, so a brief network blip burns all three. I suggest exponential backoff:',
     '',
     '```ts',
     'const delay = (attempt: number) => Math.min(30_000, 500 * 2 ** attempt)',

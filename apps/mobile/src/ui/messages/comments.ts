@@ -24,6 +24,12 @@ export const zhCN = {
   'comment.ref': '评论 {n}',
   'comment.chip.remove': '移除评论 {n}',
   'comment.count': '{n} 条评论',
+  'comment.select': '选择文字',
+  'comment.select.hint': '长按文字开始选择，在弹出的菜单里点“回复”引用到输入框',
+  'comment.select.done': '完成',
+  'comment.reply': '回复',
+  'comment.copy': '复制',
+  'comment.copyMarkdown': '复制为 Markdown',
 } satisfies Record<`comment.${string}`, Entry>
 
 export const en: Record<keyof typeof zhCN, Entry> = {
@@ -48,4 +54,11 @@ export const en: Record<keyof typeof zhCN, Entry> = {
   'comment.ref': 'Comment {n}',
   'comment.chip.remove': 'Remove comment {n}',
   'comment.count': ({ n }) => (n === 1 ? '1 comment' : `${n} comments`),
+  'comment.select': 'Select text',
+  'comment.select.hint':
+    'Long-press to start selecting, then tap Reply to quote it in your message',
+  'comment.select.done': 'Done',
+  'comment.reply': 'Reply',
+  'comment.copy': 'Copy',
+  'comment.copyMarkdown': 'Copy as Markdown',
 }

@@ -8,6 +8,7 @@ export const zhCN = {
   'update.action.update': '更新',
   'update.action.install': '安装',
   'update.action.check': '检查更新',
+  'update.action.details': '详情',
   'update.auto': '自动检查更新',
   'update.auto.note':
     '启动后及每隔几小时检查一次；关闭后仅在点击“检查更新”时检查。新版本需手动下载。',
@@ -24,7 +25,8 @@ export const zhCN = {
   'update.fail.size': '下载的文件大小不符，可能未完整下载',
   'update.fail.checksum': '下载的文件校验失败，已删除',
   'update.fail.package': '下载的文件不是可安装的 Litch 新版本',
-  'update.fail.signature': '新版本的签名与当前安装的不一致，系统不允许覆盖安装',
+  'update.fail.signature':
+    '新版本的签名与当前安装的不一致，系统不允许覆盖安装。卸载后从发布页装一次发布版即可恢复自动更新',
   'update.fail.install': '无法打开系统安装器',
   'update.fail.retry': '稍后会自动重新检查，也可点击“检查更新”。',
 } satisfies Record<`update.${string}`, Entry>
@@ -36,6 +38,7 @@ export const en: Record<keyof typeof zhCN, Entry> = {
   'update.action.update': 'Update',
   'update.action.install': 'Install',
   'update.action.check': 'Check for updates',
+  'update.action.details': 'Details',
   'update.auto': 'Check for updates automatically',
   'update.auto.note':
     'Checks at launch and every few hours. When off, Litch checks only when you tap “Check for updates”. New versions download only when you tap Update.',
@@ -54,7 +57,7 @@ export const en: Record<keyof typeof zhCN, Entry> = {
   'update.fail.checksum': 'The download failed its checksum and was deleted',
   'update.fail.package': 'The download isn’t an installable newer version of Litch',
   'update.fail.signature':
-    'The new version is signed differently, so the system won’t install it over this app',
+    'The new version is signed differently, so the system won’t install it over this app. Uninstall it and install the release build once to get updates again',
   'update.fail.install': 'Couldn’t open the system installer',
   'update.fail.retry': 'Litch will check again later. You can also tap “Check for updates”.',
 }

@@ -26,6 +26,7 @@ import { Empty } from '../../ui/kit/controls'
 import { Confirm, Prompt, Sheet } from '../../ui/kit/overlays'
 import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
+import { UpdateBanner } from '../devices/UpdateBanner'
 import { DeviceBanner } from './Banner'
 import { buildList, type GroupHead, type ListItem } from './list'
 import { ArchivedHead, ArchivedNote, ArchivedRow, GroupRow, SessionRow, titleOf } from './rows'
@@ -272,6 +273,8 @@ export function SessionsScreen({ navigation, route }: Props) {
       ]}
       testID="sessions"
     >
+      {/* 进了会话列表就很少回首页：新版本的横条这里也出 */}
+      <UpdateBanner />
       <DeviceBanner deviceId={deviceId} />
       {failure ? (
         <Pressable

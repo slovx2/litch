@@ -1,6 +1,7 @@
 // 长按一个回合出来的菜单（复制、分叉、回退），看大图，和对话区底部一闪而过的提示。
 // 能不能分叉、回退照会话的声明：声明了不会的不出这一项；没声明的留着，对面说不认识了点了说为什么（照桌面端）。
-// 从一条回答上长按出来的，第一项是“评论这条回答”：打开全文页选一段加评论（comments/）。
+// 从一条回答上长按出来的，头两项是“选择文字”（这条回答变得能自由选字，选中后系统菜单里点“回复”引用到输入框）
+// 和“评论这条回答”（打开全文页选一段加评论，comments/）。
 import { parseComments } from '@litch/core'
 import * as Clipboard from 'expo-clipboard'
 import { useEffect, useState, useSyncExternalStore } from 'react'
@@ -47,6 +48,11 @@ export function TurnMenu({
   const actions: SheetAction[] = []
   const pressedItem = turnId ? pressedAnswer(turnId) : null
   if (turnId && comments && pressedItem && store.kindOf(pressedItem) === 'agentMessage') {
+    actions.push({
+      label: t('comment.select'),
+      testID: 'menu:select',
+      onPress: () => comments.select(pressedItem),
+    })
     actions.push({
       label: t('comment.menu'),
       testID: 'menu:comment',

@@ -1,5 +1,6 @@
 // 对话区的各种行（过程那几种在 steps.tsx）。每个单元格按行对象 memo：行对象没换（rows.ts 的 keep）就不重画。
-// 文字一律不可选：安卓上文本选择的监听在滚动时占主线程；复制走长按回合的菜单（长按用户消息、回答，或点状态行的“⋯”）。
+// 文字平时不可选：安卓上文本选择的监听在滚动时占主线程；复制走长按回合的菜单（长按用户消息、回答，或点状态行的“⋯”）。
+// 长按菜单里点了“选择文字”的那条回答例外：它的几块能自由选字，系统的选字菜单里多一个“回复”（comments/hub.ts）。
 // 颜色、字号只从主题取。会长高的东西（流式的那一块）之外，行的高度在内容不变时不变。
 import { type FileScope, keys, parseAskReply, type SessionSummary } from '@litch/core'
 import { memo, useEffect, useState } from 'react'
@@ -21,7 +22,7 @@ import { useT } from '../ui/i18n'
 import { type Palette, useTheme } from '../ui/theme'
 import { AskCell, AskReplyText, useAsks } from './asks/AskCell'
 import { CommentCards, commentsOfRow } from './comments/CommentCards'
-import { useComments, useFlashedRow } from './comments/context'
+import { useComments, useFlashedRow, useHubValue } from './comments/context'
 import { notePressedAnswer } from './comments/hub'
 import { linkCommentRefs, parseCommentHref } from './comments/refs'
 import { useTranscript } from './context'
@@ -164,6 +165,8 @@ const MarkdownBody = memo(function MarkdownBody({ row }: Props<'md'>) {
   const { scope, openLink, turnMenu } = useTranscript()
   const hub = useComments()
   const flashed = useFlashedRow(row.key)
+  // 长按菜单里点了“选择文字”：这条回答的每一块都能选字，长按不再出回合的菜单（长按是系统的选字）
+  const selecting = useHubValue(hub, (each) => each.selecting === row.itemId, false)
   const { width } = useWindowDimensions()
   const [, setFrozenAt] = useState(0)
   const known = frozen.get(row)
@@ -193,7 +196,22 @@ const MarkdownBody = memo(function MarkdownBody({ row }: Props<'md'>) {
         markdown={markdown}
         flavor="github"
         markdownStyle={markdownStyleOf(theme)}
-        selectable={false}
+        selectable={selecting}
+        {...(selecting && hub
+          ? {
+              contextMenuItems: [
+                {
+                  text: t('comment.reply'),
+                  onPress: ({ text }: { text: string }) => hub.reply(row.itemId, text),
+                },
+              ],
+              selectionMenuConfig: {
+                copy: { label: t('comment.copy') },
+                copyAsMarkdown: { label: t('comment.copyMarkdown') },
+                copyImageUrl: { enabled: false },
+              },
+            }
+          : {})}
         streamingConfig={streamingConfig}
         onLinkPress={(event) => onLink(event.url)}
         containerStyle={height === null ? undefined : { height }}
@@ -202,14 +220,19 @@ const MarkdownBody = memo(function MarkdownBody({ row }: Props<'md'>) {
     )
   return (
     <Pressable
-      onLongPress={() => {
-        notePressedAnswer(row.turnId, row.itemId)
-        turnMenu(row.turnId)
-      }}
+      onLongPress={
+        selecting
+          ? undefined
+          : () => {
+              notePressedAnswer(row.turnId, row.itemId)
+              turnMenu(row.turnId)
+            }
+      }
       style={[
         styles.md,
         row.plan ? [styles.plan, { borderLeftColor: c.line3 }] : null,
-        flashed ? { backgroundColor: c.sel } : null,
+        // 选字时铺一层淡底，看得出能选的是哪条（不改边距：钉过高度的块宽度一变会排出不同的行数）
+        flashed || selecting ? { backgroundColor: c.sel } : null,
       ]}
       testID="answer"
     >

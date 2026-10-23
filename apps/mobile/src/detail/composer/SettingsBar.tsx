@@ -108,6 +108,7 @@ export function SettingsBar({
   settings,
   usage,
   fresh,
+  onUsage,
   onChange,
 }: {
   options: ComposeOptions | null
@@ -115,6 +116,8 @@ export function SettingsBar({
   usage?: ContextUsage | null
   /** 这是在新建会话：会话建好之后换不了的那几档权限这时可以选 */
   fresh?: boolean
+  /** 给了的话“上下文 N%”能点，打开用量页（上下文、账号额度） */
+  onUsage?(): void
   onChange(patch: Partial<SessionSettings>): void
 }) {
   const t = useT()
@@ -128,7 +131,10 @@ export function SettingsBar({
   if (!options) {
     return percent === null ? null : (
       <View style={styles.bar}>
-        <Chip label={`${t('compose.context')} ${percent}%`} />
+        <Chip
+          label={`${t('compose.context')} ${percent}%`}
+          {...(onUsage ? { onPress: onUsage, testID: 'settings:usage' } : {})}
+        />
       </View>
     )
   }
@@ -215,9 +221,17 @@ export function SettingsBar({
           <PlanSwitch on={plan} onPress={() => onChange({ mode: plan ? 'default' : 'plan' })} />
         ) : null}
         {percent !== null ? (
-          <Text style={[styles.usage, { color: theme.c.ink3, fontFamily: theme.font.mono }]}>
-            {t('compose.context')} {percent}%
-          </Text>
+          <Pressable
+            disabled={!onUsage}
+            accessibilityRole={onUsage ? 'button' : 'text'}
+            testID="settings:usage"
+            hitSlop={8}
+            {...(onUsage ? { onPress: onUsage } : {})}
+          >
+            <Text style={[styles.usage, { color: theme.c.ink3, fontFamily: theme.font.mono }]}>
+              {t('compose.context')} {percent}%{onUsage ? ' ›' : ''}
+            </Text>
+          </Pressable>
         ) : null}
       </View>
       <PickerSheet

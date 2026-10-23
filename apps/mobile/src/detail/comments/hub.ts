@@ -1,6 +1,8 @@
 // 一个会话详情页里评论这件事的中枢：对话区的单元格、长按菜单、输入框上的评论片和几个浮层都经它说话。
 // 详情页建一个、经上下文给下去（context.tsx）。上下文的值一直是同一个对象，单元格不会因为它重画；
 // 会变的状态（在选字的是哪条回答、弹出的是哪条评论、要滚到哪一行、哪一行在闪）放在它自己身上，用的地方订阅。
+// 选字回复：长按菜单里“选择文字”让那条回答能自由选字（selecting），选中后系统菜单里多一个“回复”，
+// 选中的那段作为一条不带评论的评论片加到输入框上面（照桌面端选字后的“评论”，发出去拼成 <litch-comments>）。
 import {
   type ParsedComment,
   type ParsedComments,
@@ -8,6 +10,7 @@ import {
   type UserMessageItem,
 } from '@litch/core'
 import type { SessionStore } from '../../core/session-store'
+import { addDraftComment } from '../composer/drafts'
 import { findQuote, type QuoteTarget } from './refs'
 
 /** 弹出来看的一条评论：发出去的那些（卡片、回答里的 [N]） */
@@ -36,6 +39,12 @@ const FLASH_MS = 1600
 
 export class CommentsHub {
   picking: string | null = null
+  /** 能自由选字的那条回答；不在选是 null */
+  selecting: string | null = null
+  /** 上一次“回复”没加上：一条消息带的评论满了 */
+  replyFull = false
+  /** 让输入框拿到焦点（详情页给）：引用加上之后接着打字 */
+  focusInput: (() => void) | null = null
   shown: ShownComment | null = null
   /** 要滚过去的那一行的键，对话区拿走一次 */
   jumpTo: string | null = null
@@ -72,6 +81,27 @@ export class CommentsHub {
   pick(itemId: string | null): void {
     this.picking = itemId
     this.notify()
+  }
+
+  /** 让这条回答能自由选字；null 是不选了 */
+  select(itemId: string | null): void {
+    this.selecting = itemId
+    this.replyFull = false
+    this.notify()
+  }
+
+  /** 选中的一段作为引用加到输入框上面，不选了、输入框拿焦点。满了加不上返回 false */
+  reply(itemId: string, text: string): boolean {
+    const quote = text.trim()
+    if (!quote) return false
+    if (!addDraftComment(this.draftKey, { kind: 'comment', itemId, quote, note: '' })) {
+      this.replyFull = true
+      this.notify()
+      return false
+    }
+    this.select(null)
+    this.focusInput?.()
+    return true
   }
 
   show(shown: ShownComment | null): void {
