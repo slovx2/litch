@@ -250,7 +250,6 @@ import {
   textFromInput,
 } from './util.mjs'
 import { parseWorkflowCommand } from './workflow-command.mjs'
-import { maybeCreateThreadWorktree } from './worktree.mjs'
 
 // A missing Claude Task result must not keep Codex cc in its working state
 // forever. 看门狗按“多久没有子代理活动”算，不按子代理阶段的总时长：派出、续跑子代理，
@@ -1280,8 +1279,7 @@ export class CodexClaudeAppServer {
     if (projectId !== null) this.store.projects.read(projectId)
     const id = newId()
     const now = nowSeconds()
-    const requestedCwd = stringOr(params.cwd, process.cwd())
-    const cwd = maybeCreateThreadWorktree(id, requestedCwd).cwd
+    const cwd = stringOr(params.cwd, process.cwd())
     const requestedModel = modelFromParams(params, this.configModel)
     // 与 Codex 的 allowProviderModelFallback 一致：Desktop 以自身默认模型（如 gpt-*）新建会话时，
     // 本运行时目录中不可用的模型换成已保存的默认模型，而不是原样记录后在运行时静默改用 CLI 默认。
@@ -1509,8 +1507,7 @@ export class CodexClaudeAppServer {
     const boundaries = this.remapNativeBoundaries(retained, nativeFork, cut)
     const now = nowSeconds()
     const id = newId()
-    const requestedCwd = stringOr(params.cwd, parent.cwd)
-    const cwd = maybeCreateThreadWorktree(id, requestedCwd).cwd
+    const cwd = stringOr(params.cwd, parent.cwd)
     // 临时分叉是客户端拿来做杂事的（官方桌面端改名后起描述，带的是它自己的生成模型 gpt-*）：
     // Codex 的模型沿用源会话的。源会话的模型装得下带过来的这段历史，用户的模型服务也一定有它
     const requestedModel = modelFromParams(params, parent.model)

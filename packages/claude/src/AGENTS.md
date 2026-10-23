@@ -13,7 +13,6 @@ Adapter internals. All files are `.mts` ESM, compiled to `dist/*.mjs`. See the
 - `types.mts` — shared protocol/runtime types.
 - `util.mts` — shared helpers.
 - `mcp.mts` — MCP stdio/HTTP tool & resource calls.
-- `worktree.mts` — optional per-thread git worktree isolation.
 - `cli-config.mts` — `app-server -c key=<TOML>` 的白名单与叠层；`permission-profiles.mts` — 自定义权限档位（`permissions.*`），命令沙箱与文件类工具共用这一份规则。
 
 ## Runtime backends

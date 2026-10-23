@@ -83,13 +83,11 @@ on it for raw prompt, response, credential, or user-secret recovery.
 
 ## Worktree isolation
 
-Set `CHA_CLAUDE_WORKTREE_ROOT` to enable optional per-thread git worktrees.
-Each thread id is mapped to a root-confined, collision-resistant label. If the
-worktree already exists, it is reused. If setup fails, the adapter logs the
-failure and keeps the original cwd so the app-server session can continue.
-
-This feature isolates concurrent coding agents without making worktree creation
-a hard dependency for normal Codex App operation.
+Worktrees are created by the device service, not by an engine: a client that
+declared the `worktrees` extension adds `litchWorktree` to `thread/start`, and
+the device service creates the worktree with git and starts the session in it.
+See `protocol/extensions/worktrees.json`. The three device settings under
+`worktrees.*` choose the location, the branch prefix, and whether to fetch first.
 
 ## GitHub trust boundary
 

@@ -279,16 +279,6 @@ Claude Code 自己的开关只认名字，所以按路径关掉同名 Skill 里�
 
 `thread/start`、`thread/resume` 等请求的 `config` 里也可以给 `skills`，照 codex 只对这个会话生效：它接在 `-c` 后面当覆盖（整张 `skills` 表给的就换掉 `-c` 那张，`skills.config` 这样带点的键只换那一项），这一层的 `skills.config` 接在 `config.json` 那一串后面。`skills.bundled.enabled = false` 关掉 Claude Code 自带的 Skill（它的 `disableBundledSkills`）。会话级的开关只能按名字交给 Claude Code：额外目录的链接是整个进程共用的，只按进程级的规则藏，所以会话里打开一个进程级关掉的额外目录 Skill 不生效，会话里按路径关掉的同名 Skill 整个名字关。`skills/list` 不带会话（codex 也不带），列的是进程级的开关。
 
-## Worktree isolation
-
-```bash
-# Per-thread git worktree isolation (off by default — it creates branches).
-export CHA_CLAUDE_AUTO_WORKTREE=1
-export CHA_CLAUDE_WORKTREE_ROOT="$HOME/.codex-harness-adapter/worktrees"
-```
-
-When enabled, each new Codex thread runs in a dedicated `git worktree`.
-
 ## Daemon（仅远程 shim 部署）
 
 以下变量只对[远程主机 shim 部署](/guide/deployment)生效；本地 SSH 入口固定不空闲退出，并通过 `--node` 选择 Node。
@@ -329,7 +319,6 @@ export CHA_CLAUDE_NODE="/absolute/path/to/node"
 | `CHA_CLAUDE_MCP_IDLE_CONNECTIONS` | 整个适配器最多留几条没人用的 MCP 连接（一个会话的一个服务算一条），超出时先关最久没用的，默认 `8`；`0` 也表示不复用。 |
 | `CHA_CLAUDE_ALLOWED_TOOLS` | Pre-approved tools. |
 | `CHA_CLAUDE_ADD_DIRS` | Extra directories exposed to Claude. |
-| `CHA_CLAUDE_AUTO_WORKTREE` / `_WORKTREE_ROOT` | Per-thread worktree isolation. |
 | `CHA_CLAUDE_SETTING_SOURCES` | 起 CLI 时读哪几层 Claude Code 设置，逗号分隔的 `user`、`project`、`local`，默认三层都读；认不出的值启动报错。 |
 | `CHA_CLAUDE_PLANS_LOCATION` | 计划文件放哪：`workspace`（默认，工作区里每个线程一个目录）或 `config`（`<CLAUDE_CONFIG_DIR 或 ~/.claude>/plans/`）。CLI 只认项目内的 `plansDirectory`，所以不能指定任意目录。 |
 | `CHA_CLAUDE_THREAD_ID_HEADER` | 设成 `1` 时模型请求带 `thread-id: <线程号>`（合进 `ANTHROPIC_CUSTOM_HEADERS`），不带回合号；默认关。 |

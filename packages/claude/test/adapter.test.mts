@@ -6324,52 +6324,6 @@ test('direct MCP HTTP tool calls work', async () => {
   }
 })
 
-test('optional auto worktree binds new threads to isolated git worktrees', async () => {
-  const home = await mkdtemp(join(tmpdir(), 'codex-harness-adapter-test-'))
-  const repo = join(home, 'repo')
-  const worktrees = join(home, 'worktrees')
-  await writeFile(join(home, 'placeholder'), '')
-  execFileSync('mkdir', ['-p', repo])
-  execFileSync('git', ['init'], { cwd: repo, stdio: 'ignore' })
-  await writeFile(join(repo, 'README.md'), 'hello\n')
-  execFileSync('git', ['add', 'README.md'], { cwd: repo })
-  execFileSync(
-    'git',
-    ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '-m', 'init'],
-    { cwd: repo, stdio: 'ignore' },
-  )
-
-  const proc = spawn(process.execPath, [adapter, 'app-server', '--listen', 'stdio://'], {
-    stdio: ['pipe', 'pipe', 'pipe'],
-    env: {
-      ...isolatedEnv,
-      CODEX_HOME: home,
-      CHA_CLAUDE_HOME: join(home, 'codex-harness-adapter'),
-      CHA_CLAUDE_MOCK: '1',
-      CHA_CLAUDE_AUTO_WORKTREE: '1',
-      CHA_CLAUDE_WORKTREE_ROOT: worktrees,
-      NODE_NO_WARNINGS: '1',
-    },
-  })
-  const reader = new JsonLineReader(proc)
-  try {
-    proc.stdin.write(
-      json({
-        id: 1,
-        method: 'thread/start',
-        params: { cwd: repo, experimentalRawEvents: false, persistExtendedHistory: false },
-      }),
-    )
-    const response = await reader.nextResponse(1)
-    assert.match(response.result.cwd, /worktrees/)
-    assert.match(response.result.thread.cwd, /worktrees/)
-    assert.notEqual(response.result.cwd, repo)
-  } finally {
-    proc.kill()
-    await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 80 })
-  }
-})
-
 class JsonLineReader {
   private buffer = ''
   private queue: any[] = []

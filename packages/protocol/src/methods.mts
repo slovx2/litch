@@ -248,6 +248,15 @@ import type {
   SessionStartParams,
   SessionStartResponse,
 } from './session-tree.mjs'
+import type {
+  Worktree,
+  WorktreeBranchesParams,
+  WorktreeBranchesResponse,
+  WorktreeChangedNotification,
+  WorktreeListResponse,
+  WorktreeRemoveParams,
+  WorktreeStartFields,
+} from './worktrees.mjs'
 
 /**
  * 设备服务的聚合面上，不带会话标识的请求要多带一个 `harness` 指明发给谁（见 device.mts）。
@@ -277,7 +286,10 @@ export interface ClientRequests {
   /** 载入一个会话并订阅它的事件。之后这条连接会收到它的回合、条目通知和待答复的请求 */
   'thread/resume': { params: ThreadResumeParams; result: ThreadResumeResponse }
   'thread/unsubscribe': { params: ThreadUnsubscribeParams; result: ThreadUnsubscribeResponse }
-  'thread/start': { params: ToHarness<ThreadStartParams>; result: ThreadStartResponse }
+  'thread/start': {
+    params: ToHarness<ThreadStartParams & WorktreeStartFields>
+    result: ThreadStartResponse
+  }
   'thread/name/set': { params: ThreadSetNameParams; result: Record<string, never> }
   // 持续目标（协议原有，harness 声明了 features.goals 才调）。set 是部分更新：省略的字段不变，
   // tokenBudget 给 null 是去掉预算；用户在界面上点的带 origin: 'user'
@@ -529,6 +541,11 @@ export interface ClientRequests {
     params: SessionProposalHereParams
     result: Record<string, never>
   }
+  // 以下是工作树（扩展 worktrees，见 worktrees.mts）：只有聚合面有，设备信息的 `extensions` 里列了 worktrees 才能用
+  'litch/worktree/list': { params: Record<string, never>; result: WorktreeListResponse }
+  'litch/worktree/branches': { params: WorktreeBranchesParams; result: WorktreeBranchesResponse }
+  'litch/worktree/remove': { params: WorktreeRemoveParams; result: { worktree: Worktree } }
+  'litch/worktree/restore': { params: { id: string }; result: { worktree: Worktree } }
   // 以下是文件面板用的：列目录、读文件、取元数据、模糊找文件。都是协议里现成的方法，哪种对面都有。
   // 聚合面上它们由设备进程自己处理（packages/device/src/routes.mts），不转给任何引擎，所以不带 `harness`，
   // 哪个 harness 掉线都不影响；单个 harness 的入口上是那个引擎进程在读；原生 codex 是它自己读。
@@ -611,6 +628,8 @@ export interface ServerNotifications {
   'litch/thread/lineage/updated': LineageUpdatedNotification
   /** 扩展，只发给握手时声明过 sessionTree 的连接：一个会话上的提案变了 */
   'litch/sessionProposal/changed': ProposalChangedNotification
+  /** 扩展，只发给握手时声明过 worktrees 的连接：设备层的一个工作树建成、换了主人、删了或恢复了 */
+  'litch/worktree/changed': WorktreeChangedNotification
   /** 扩展，只发给握手时声明过 devicePairing 的连接：一个配对的状态变了 */
   'litch/pair/changed': DevicePairChangedNotification
   /** 扩展，只发给握手时声明过 devicePairing 的连接：已绑定的手机多了、少了 */
