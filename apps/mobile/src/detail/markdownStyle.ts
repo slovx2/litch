@@ -97,12 +97,14 @@ export function markdownStyleOf({
       borderRadius: radius.m,
       syntaxColors: syntaxColorsOf(c, skin, dark),
     },
+    // 行内代码照桌面端（.md code）：等宽小一号、一层淡的墨色、不描边。左右留白、圆角、框只包住字形不占满行高
+    // 是组件里补的（patches/ 下的 react-native-enriched-markdown 补丁：CodePaddingSpan、CodeBackgroundSpan）
     code: {
       fontSize: 13,
       fontFamily: font.mono,
       color: c.ink,
-      backgroundColor: c.sunken,
-      borderColor: c.line1,
+      backgroundColor: c.press,
+      borderColor: 'transparent',
     },
     blockquote: { borderColor: c.line3, color: c.ink2, backgroundColor: 'transparent' },
     link: { color: c.accent, underline: true },
