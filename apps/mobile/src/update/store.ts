@@ -24,7 +24,8 @@ export const CURRENT_VERSION: string = app.expo.version
 
 /** 失败的种类，界面照它挑说法（文案 update.fail.*）；message 里放具体的那句（状态码、系统的原话） */
 export type UpdateFailure =
-  | 'network' // 取清单或下载时连不上、超时、状态码不对（还没有清单的发布页是 404）
+  | 'network' // 取清单时连不上、超时、状态码不对（还没有清单的发布页是 404）
+  | 'download' // 人点了“更新”后下安装包时断了、超时（换个时候再下多半就好，不算这一份坏了）
   | 'feed' // 清单读不了
   | 'size' // 下下来的大小和清单上的不一样
   | 'checksum' // SHA-256 和清单上的不一样
@@ -34,7 +35,11 @@ export type UpdateFailure =
 
 export type MobileUpdateState =
   | Exclude<UpdateState, { phase: 'failed' }>
-  | (Extract<UpdateState, { phase: 'failed' }> & { reason: UpdateFailure })
+  | (Extract<UpdateState, { phase: 'failed' }> & {
+      reason: UpdateFailure
+      /** 人点了“更新”之后（下载、校验、安装）失败的：那一份安装包的 SHA-256；后台查失败的没有 */
+      download?: string
+    })
 
 export interface UpdateSnapshot {
   state: MobileUpdateState
@@ -44,6 +49,8 @@ export interface UpdateSnapshot {
   apk: string | null
   /** 等人去系统设置里允许“安装未知应用”，回到应用时接着装 */
   needsPermission: boolean
+  /** 人在横条上关掉的那次失败（安装包的 SHA-256）：同一份再失败不再出失败横条，清单换了新包再出 */
+  dismissed: string | null
 }
 
 const PLATFORM = 'android-arm64'
@@ -56,6 +63,7 @@ let snapshot: UpdateSnapshot = {
   offer: null,
   apk: null,
   needsPermission: false,
+  dismissed: null,
 }
 let lastCheckAt = 0
 /**
@@ -70,9 +78,9 @@ function set(patch: Partial<UpdateSnapshot>) {
   for (const listener of listeners) listener()
 }
 
-function fail(reason: UpdateFailure, message: string) {
+function fail(reason: UpdateFailure, message: string, download?: string) {
   set({
-    state: { phase: 'failed', reason, message, checkedAt: Date.now() },
+    state: { phase: 'failed', reason, message, checkedAt: Date.now(), download },
     apk: null,
     needsPermission: false,
   })
@@ -133,14 +141,17 @@ async function fetchFeed() {
 
 let checking: Promise<void> | null = null
 
-/** 查一次。正在下的时候不查；已经有新版本（等人点、已下好）时查的过程不把横条收起来 */
+/** 查一次。正在下的时候不查；横条上有东西（有新版本、已下好、人点了更新后失败）时查的过程不把横条收起来 */
 export function checkForUpdate(): Promise<void> {
   if (snapshot.state.phase === 'downloading') return Promise.resolve()
   if (checking) return checking
   checking = (async () => {
     lastCheckAt = Date.now()
     const before = snapshot
-    const quiet = before.state.phase === 'available' || before.state.phase === 'ready'
+    const quiet =
+      before.state.phase === 'available' ||
+      before.state.phase === 'ready' ||
+      (before.state.phase === 'failed' && before.state.download !== undefined)
     if (!quiet) set({ state: { phase: 'checking' } })
     try {
       const feed = await fetchFeed()
@@ -167,7 +178,7 @@ export function checkForUpdate(): Promise<void> {
         needsPermission: false,
       })
     } catch (error) {
-      // 已经有新版本时再查没查成：手上那一版照旧可以装，不拿这次失败把它盖掉
+      // 横条上有东西时再查没查成：手上那一版照旧可以装、那次失败照旧说，不拿这次失败把它盖掉
       if (!quiet) fail(reasonOf(error, 'network'), errorText(error))
     } finally {
       checking = null
@@ -176,11 +187,12 @@ export function checkForUpdate(): Promise<void> {
   return checking
 }
 
-/** 人点了“更新”：下到缓存目录、对大小和 SHA-256、看包名和签名，都对了就拉起系统安装器 */
+/** 人点了“更新”（或下载断了之后点“重试”）：下到缓存目录、对大小和 SHA-256、看包名和签名，都对了就拉起系统安装器 */
 export async function downloadUpdate(): Promise<void> {
   const { state, offer } = snapshot
   if (state.phase === 'ready') return installUpdate()
-  if (state.phase !== 'available' || !offer) return
+  const retry = state.phase === 'failed' && state.reason === 'download'
+  if ((state.phase !== 'available' && !retry) || !offer) return
   const { version, notesUrl, asset } = offer
   set({ state: { phase: 'downloading', version, notesUrl, progress: 0 } })
   let shown = 0
@@ -226,9 +238,10 @@ export async function downloadUpdate(): Promise<void> {
     try {
       if (target?.exists) target.delete()
     } catch {}
-    const reason = reasonOf(error, 'network')
-    fail(reason, errorText(error))
-    if (reason !== 'network') broken = { sha256: asset.sha256, state: snapshot.state }
+    // 没带种类的是下载本身抛的（断网、超时、状态码不对）
+    const reason = reasonOf(error, 'download')
+    fail(reason, errorText(error), asset.sha256)
+    if (reason !== 'download') broken = { sha256: asset.sha256, state: snapshot.state }
     return
   }
   return installUpdate()
@@ -236,7 +249,7 @@ export async function downloadUpdate(): Promise<void> {
 
 /** 拉起系统安装器；还没允许“安装未知应用”就先打开那一页设置，回到应用时接着装 */
 export function installUpdate(): void {
-  const { state, apk } = snapshot
+  const { state, apk, offer } = snapshot
   if (state.phase !== 'ready' || !apk) return
   try {
     if (!updater.canInstall()) {
@@ -247,8 +260,14 @@ export function installUpdate(): void {
     set({ needsPermission: false })
     updater.install(apk)
   } catch (error) {
-    fail('install', errorText(error))
+    fail('install', errorText(error), offer?.asset.sha256)
   }
+}
+
+/** 横条上关掉失败：这一份安装包再失败也不出失败横条（设置页“关于”里照旧说） */
+export function dismissFailure(): void {
+  const { state } = snapshot
+  if (state.phase === 'failed' && state.download) set({ dismissed: state.download })
 }
 
 /**
@@ -285,6 +304,6 @@ export function startUpdateSchedule(auto: () => boolean): () => void {
 // 换了清单地址（测试链接）：从头来，马上查一次
 onFeedOverride(() => {
   broken = null
-  set({ state: { phase: 'idle' }, offer: null, apk: null, needsPermission: false })
+  set({ state: { phase: 'idle' }, offer: null, apk: null, needsPermission: false, dismissed: null })
   void checkForUpdate()
 })

@@ -9,6 +9,8 @@ export const zhCN = {
   'update.action.install': '安装',
   'update.action.check': '检查更新',
   'update.action.details': '详情',
+  'update.action.retry': '重试',
+  'update.action.dismiss': '关闭',
   'update.auto': '自动检查更新',
   'update.auto.note':
     '启动后及每隔几小时检查一次；关闭后仅在点击“检查更新”时检查。新版本需手动下载。',
@@ -22,6 +24,7 @@ export const zhCN = {
   'update.fail.title': '更新失败',
   'update.fail.network': '无法从更新服务器获取更新信息',
   'update.fail.feed': '无法读取更新信息',
+  'update.fail.download': '新版本没有下载完，可能是网络中断',
   'update.fail.size': '下载的文件大小不符，可能未完整下载',
   'update.fail.checksum': '下载的文件校验失败，已删除',
   'update.fail.package': '下载的文件不是可安装的 Litch 新版本',
@@ -39,6 +42,8 @@ export const en: Record<keyof typeof zhCN, Entry> = {
   'update.action.install': 'Install',
   'update.action.check': 'Check for updates',
   'update.action.details': 'Details',
+  'update.action.retry': 'Retry',
+  'update.action.dismiss': 'Dismiss',
   'update.auto': 'Check for updates automatically',
   'update.auto.note':
     'Checks at launch and every few hours. When off, Litch checks only when you tap “Check for updates”. New versions download only when you tap Update.',
@@ -53,6 +58,8 @@ export const en: Record<keyof typeof zhCN, Entry> = {
   'update.fail.title': 'Update failed',
   'update.fail.network': 'Couldn’t get update information from the server',
   'update.fail.feed': 'Couldn’t read the update information',
+  'update.fail.download':
+    'The new version didn’t finish downloading; the connection may have dropped',
   'update.fail.size': 'The download has the wrong size and may be incomplete',
   'update.fail.checksum': 'The download failed its checksum and was deleted',
   'update.fail.package': 'The download isn’t an installable newer version of Litch',
