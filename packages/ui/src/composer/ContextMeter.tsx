@@ -4,16 +4,10 @@ import { whyNot } from '../app/errors.ts'
 import { usePopover } from '../app/popover.ts'
 import { showToast } from '../app/toasts.tsx'
 import { AccountLimits, MeterRow, useAccountLimits } from './AccountLimits.tsx'
+import { shortTokens } from './limits.ts'
 
-/** 把词元数写短：980 → 980，84000 → 84k，1250000 → 1.3M */
-export function shortTokens(count: number): string {
-  if (count < 1000) return String(count)
-  if (count < 1_000_000) {
-    const k = count / 1000
-    return `${k < 10 ? k.toFixed(1).replace(/\.0$/, '') : Math.round(k)}k`
-  }
-  return `${(count / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`
-}
+// 写短词元数的在 limits.ts（手机端也用），这里转一手，别处照旧从这里引
+export { shortTokens }
 
 /** 圆环的周长（半径 6） */
 const RING = 2 * Math.PI * 6

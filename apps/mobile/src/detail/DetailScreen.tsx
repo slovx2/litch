@@ -26,6 +26,8 @@ import { CommentsHub } from './comments/hub'
 import { draftKey } from './composer/drafts'
 import { RequestSlot } from './requests/RequestSlot'
 import { Transcript } from './Transcript'
+import { compaction } from './usage/logic'
+import { UsageSheet } from './usage/UsageSheet'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Detail'>
 
@@ -64,6 +66,7 @@ export function DetailScreen({ route, navigation }: Props) {
   const [renaming, setRenaming] = useState(false)
   const [archiving, setArchiving] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
+  const [usageOpen, setUsageOpen] = useState(false)
   const input = useRef<TextInput>(null)
 
   // 卡片最高多少：屏幕减去状态栏、标题栏、键盘、输入区，再给对话区留一截
@@ -100,6 +103,17 @@ export function DetailScreen({ route, navigation }: Props) {
     setFailure(null)
     work.then(after, (reason: unknown) => setFailure(whyNot(reason, t)))
   }
+  // 手动压缩上下文（照桌面端）：harness 不会的不出；回合在跑时点了说一句为什么压不了
+  const compact = compaction(meta?.live ? meta.can : undefined, meta?.running ?? false)
+  const compactNow = () => {
+    setFailure(null)
+    if (compact.blocked) return setFailure(t(compact.blocked))
+    channel
+      .command('session.compact', { deviceId, sessionId })
+      .catch((reason: unknown) =>
+        setFailure(t('context.compactFailed', { reason: whyNot(reason, t) })),
+      )
+  }
   const actions = [
     ...(cwd
       ? [
@@ -134,6 +148,14 @@ export function DetailScreen({ route, navigation }: Props) {
               navigation.navigate('Proposals', { deviceId, sessionId, title: shownTitle }),
           },
         ]
+      : []),
+    {
+      label: t('usage.menu'),
+      testID: 'detail:menu:usage',
+      onPress: () => setUsageOpen(true),
+    },
+    ...(compact.shown
+      ? [{ label: t('context.compact'), testID: 'detail:menu:compact', onPress: compactNow }]
       : []),
     ...(abilities?.rename === false
       ? []
@@ -210,13 +232,30 @@ export function DetailScreen({ route, navigation }: Props) {
             onLayout={(event) => setComposerHeight(event.nativeEvent.layout.height)}
           >
             <CommentsContext.Provider value={comments}>
-              <Composer store={store} markers={markers} inputRef={input} />
+              <Composer
+                store={store}
+                markers={markers}
+                inputRef={input}
+                onUsage={() => setUsageOpen(true)}
+              />
             </CommentsContext.Provider>
           </View>
         </KeyboardStickyView>
       </View>
       <CommentOverlays hub={comments} />
       <Sheet visible={menu} title={shownTitle} actions={actions} onClose={() => setMenu(false)} />
+      <UsageSheet
+        visible={usageOpen}
+        deviceId={deviceId}
+        harness={meta?.harness}
+        usage={meta?.usage}
+        compact={
+          compact.shown
+            ? { blocked: compact.blocked ? t(compact.blocked) : null, run: compactNow }
+            : null
+        }
+        onClose={() => setUsageOpen(false)}
+      />
       <Prompt
         visible={renaming}
         title={t('session.rename')}
