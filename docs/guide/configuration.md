@@ -313,6 +313,7 @@ export CHA_CLAUDE_NODE="/absolute/path/to/node"
 | `CHA_CLAUDE_CLI` | 宿主 Claude Code 可执行文件，默认从 PATH 查找 claude。运行时诊断接受 CLI >= 2.1.282 的稳定版，配置仍由原生 CLAUDE_CONFIG_DIR 提供。 |
 | `CHA_DSH_CLI` | 宿主 DeepSeek Harness 可执行文件，默认从 PATH 查找 dsh；要求 >= 0.2.0-rc.2。 |
 | `CHA_PI_APPROVALS` | 值是 `1` 时 Pi 在动手之前先问，其它值都算关。通常不用手写，由设置 `harness.pi.approvals` 给出；设置里写过的优先于这里。改了要重启 Pi 的运行时。 |
+| `CHA_BACKGROUND_SHELL` | 只给 Pi、OpenCode 和通用 ACP 入口（`acp`）：值是 `1` 时给模型一组 `litch_shell` 后台命令工具（回合结束后接着跑、跑完唤醒模型、报 `backgroundTasks` 集合），`0` 关。通常不用手写，由设置 `harness.<id>.backgroundShell` 给出；设置里写过的优先于这里。改了要重启这个运行时。 |
 | `CHA_DSH_SESSION_LOG` | 设为 `1` 时保留 dsh 默认的会话日志上传；默认关闭。 |
 | `DEEPSEEK_API_KEY` | dsh 入口使用的密钥，不要提交到任何仓库。 |
 | `CHA_CLAUDE_RUNTIME_TYPE` | Active backend route. |

@@ -55,18 +55,26 @@ explain it:
   staged / unstaged, stage, unstage, discard, comment on lines; comments go with the next message),
   Browser, Suggested tasks, Background, Subagents.
 - **Background tasks**: work still running after a turn ends (a background command, a Claude Code
-  Monitor, a dsh background job, a long-running Codex command). The session counts as idle, not stuck:
+  Monitor, a dsh background job, a long-running Codex command, or a background command Litch gives Pi,
+  OpenCode and ACP sessions through its `litch_shell` tools when the harness's "Background commands"
+  setting is on). The session counts as idle, not stuck:
   a breathing line above the composer says how many are running; clicking it opens the Background tab
   (running tasks first, then finished ones; name, elapsed time and status, no output). The folded
   turn says "N running in the background", and the sidebar row shows a slowly breathing hollow mark
-  instead of the spinner. Claude Code and dsh continue on their own when a task finishes; that turn
-  starts with "Background task finished, continuing" instead of a message from the user. Codex does
-  not continue on its own. A sub-session reports to its parent when its turn ends and says how many
+  instead of the spinner. Claude Code, dsh and Litch's background commands (Pi, OpenCode, ACP)
+  continue on their own when a task finishes by itself; that turn starts with "Background task
+  finished, continuing" instead of a message from the user. A task you or the model stopped does not
+  wake the session. Codex does not continue on its own. Gemini CLI and Qwen Code get no Litch
+  background commands. Litch's background commands run on the device the session runs on, as the
+  model's own commands do; their output goes to a log file the model can read. They keep running when
+  every client disconnects, and stop when the harness's runtime restarts (a settings change, a service
+  restart or upgrade) or the session is deleted. A sub-session reports to its parent when its turn ends and says how many
   background tasks are still running, then reports again when they finish (after the turn that
   continues, or right away for Codex). A scheduled run ends with its turn too; when the background
   work finishes later, the run's summary and count are updated and it shows as unread again.
   There is no stop button yet: ask the model to stop a task, or
-  stop the turn. On the phone, the same line opens a list from the bottom; the folded steps and the
+  stop the turn. With Pi's "Ask before acting" on, starting a background command is asked about like
+  any other command; in OpenCode's read-only permission mode the model cannot start one. On the phone, the same line opens a list from the bottom; the folded steps and the
   line at the start of a continuing turn look the same as on the desktop.
 - **Goals** (Codex and Claude Code only; other harnesses show no goal controls): type `/goal` followed
   by what should be achieved and send it. Instead of a normal message this sets the session's goal,
