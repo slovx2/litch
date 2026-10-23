@@ -41,6 +41,7 @@ import {
 import { mergeProposals, projectProposals } from '../src/projection/tree.mjs'
 import { deviceWorld, features } from './device-world.mjs'
 import { harness } from './fake-device.mjs'
+import { RpcFailure } from './fake-server.mjs'
 import { thread, turn, userText } from './fixtures.mjs'
 import { fakeClock, settle } from './helpers.mjs'
 import { watchSession } from './wire.mjs'
@@ -1282,6 +1283,27 @@ test('设备：提案卡上点“在这里做”，设备进程只了结（markH
   const started = world.sent('turn/start').filter((params) => params.threadId === 'p')
   assert.equal(started.length, 1, '会话闲着：核心当场发出')
   assert.match(JSON.stringify(started[0]?.input), /在这里做：整理 CHANGELOG/)
+  watched.close()
+})
+
+test('设备：markHere 了结之后那句话发不出去（引擎回了错），留在输入队列里、写一句为什么，不丢', async () => {
+  const world = treeWorld()
+  world.core.start()
+  await settle()
+  const watched = watchSession(world.core, 'p')
+  await settle()
+  await settle()
+  world.fake.turnFailure = new RpcFailure(-32000, '模型网关回了 502')
+  await world.command('session.proposal.here', { sessionId: 'p', proposalId: 'pr1' })
+  await settle()
+  assert.equal(watched.seen.view?.proposals[0]?.status, 'here')
+  const queued = watched.seen.view?.queued ?? []
+  assert.equal(queued.length, 1)
+  assert.match(queued[0]?.text ?? '', /整理 CHANGELOG/)
+  assert.deepEqual(watched.seen.view?.note, {
+    key: 'session.queueFailed',
+    args: { message: '模型网关回了 502' },
+  })
   watched.close()
 })
 

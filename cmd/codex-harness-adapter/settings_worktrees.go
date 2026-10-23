@@ -58,8 +58,8 @@ func worktreeSettings() (settingGroup, []settingSpec) {
 				Key: worktreeCleanKey, Group: worktreeGroup, Type: settingBoolean, Scope: deviceScope, Restart: restartNone,
 				Default: true, Title: both("自动清理", "Clean up automatically"),
 				Description: both(
-					"工作树超过保留个数时，先删主人会话已归档或已不存在的，再按最后活动从旧到新删；有改动的先存快照，都能从列表里恢复。置顶的、正在运行的、一小时内建的不删。",
-					"When there are more worktrees than the number to keep, remove those whose session is archived or gone first, then the least recently active. Changes are saved as a snapshot first, and every one can be restored from the list. Pinned, running and recently created ones are kept.",
+					"工作树超过保留个数时，删会话已归档的，按最后活动从旧到新；有改动的先存快照，都能从列表里恢复。会话没归档的不删，所以可能超过保留个数；置顶的、正在运行的、一小时内建的也不删。",
+					"When there are more worktrees than the number to keep, remove those whose session is archived, least recently active first. Changes are saved as a snapshot first, and every one can be restored from the list. Worktrees of sessions that are not archived are never removed, so the count can go over; pinned, running and recently created ones are kept too.",
 				),
 			},
 			{

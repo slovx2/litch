@@ -278,11 +278,8 @@ export function hostWorktree(
 ): Worktree | null {
   const worktrees = tree.host.worktrees
   if (!worktrees) return null
-  const inside =
-    cwd === null
-      ? null
-      : (worktrees.list().find((one) => cwd === one.path || cwd.startsWith(`${one.path}/`)) ?? null)
-  return inside ?? (ownDir ? null : worktrees.forThread(parentId))
+  const found = cwd === null ? null : worktrees.containing(cwd)
+  return found ?? (ownDir ? null : worktrees.forThread(parentId))
 }
 
 /**

@@ -158,6 +158,8 @@ export class SessionTree {
   private readonly offers = new Map<string, OfferWait>()
   /** 提案卡上点了“在这里做”、还没发出去的用户消息：会话 → 按先后排的几条（会话在跑时排到回合结束后发） */
   private readonly heres = new Map<string, string[]>()
+  /** markHere 了结的提案交回去的那句话（设备进程活着时重复问回同一句） */
+  private readonly marked = new Map<string, string>()
   private expiry: NodeJS.Timeout | null = null
   private recovered = false
   private closed = false
@@ -865,13 +867,19 @@ export class SessionTree {
    * 不发，那句话交回给客户端自己排进输入队列。返回那句话
    */
   proposalHere(proposalId: string, lead?: string, send = true): string {
+    // markHere 的应答丢了（超时）客户端会再问一遍：已经由 markHere 了结的回同一句话
+    const marked = send ? undefined : this.marked.get(proposalId)
+    if (marked !== undefined) return marked
     if (this.accepting.has(proposalId))
       throw new DeviceError('unsupported', `提案 ${proposalId} 正在开始`)
     const proposal = this.pendingProposal(proposalId)
     if (!this.settleProposal(proposalId, 'here', null, ['pending']))
       throw new DeviceError('unsupported', `提案 ${proposalId} 已经了结了`)
     const text = `${lead ?? 'Do it here: '}${proposal.title}\n\n${proposal.prompt}`
-    if (!send) return text
+    if (!send) {
+      this.marked.set(proposalId, text)
+      return text
+    }
     this.heres.set(proposal.threadId, [...(this.heres.get(proposal.threadId) ?? []), text])
     this.check(proposal.threadId)
     return text

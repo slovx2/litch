@@ -34,8 +34,11 @@ export interface RelayHost {
   observe(link: UpstreamLink, method: string, params: Record<string, unknown>): void
   /** 会话树要看的几样（session-tree.mts） */
   sessions: RelaySessions
-  /** 工作树主人的会话对象挂 litchWorktree（worktrees.mts） */
-  worktrees: { decorate(thread: Record<string, unknown>): void }
+  /** 工作树主人的会话对象挂 litchWorktree；目录在工作树里的会话记成共用者（worktrees.mts） */
+  worktrees: {
+    decorate(thread: Record<string, unknown>): void
+    adopt(thread: Record<string, unknown>): void
+  }
   /** 后台任务（background.mts） */
   background: RelayBackground
 }
@@ -253,6 +256,7 @@ export class Relay {
   private stamp(link: UpstreamLink, thread: unknown): boolean {
     if (!isObject(thread) || typeof thread.id !== 'string') return false
     this.see(link, thread.id, thread)
+    this.host.worktrees.adopt(thread)
     thread.harness = link.harness
     this.host.workspaces.decorate(thread.id, thread)
     if (this.host.declares(EXTENSION.sessionTree)) this.host.sessions.decorate(thread)

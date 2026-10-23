@@ -290,7 +290,7 @@ test('HERE-002：父会话闲着当场发，lead 不给用英文；offer 卡、�
   }
 })
 
-test('HERE-003：markHere 只了结提案、把那句话交回给客户端，设备进程自己不发（回合结束后也不发）', async () => {
+test('HERE-003：markHere 只了结提案、把那句话交回给客户端，设备进程自己不发（回合结束后也不发）；重复问回同一句', async () => {
   const env = treeRig({}, { wrapUpReminder: false })
   try {
     const client = await litch(env)
@@ -306,7 +306,11 @@ test('HERE-003：markHere 只了结提案、把那句话交回给客户端，设
     await until(() => !env.device.sessionTree.isActive(threadId), '回合结束')
     await settle(60)
     assert.equal(sentText(env, threadId, message).length, 0, '设备进程不发')
-    const again = await client.fails('litch/sessionProposal/markHere', { proposalId })
+    // 应答丢了客户端再问一遍：回同一句话；改用 here 让设备进程发的照样不行
+    assert.deepEqual(await client.call('litch/sessionProposal/markHere', { proposalId }), {
+      text: message,
+    })
+    const again = await client.fails('litch/sessionProposal/here', { proposalId })
     assert.match(again.message, /已经当作在这里做了结了/)
   } finally {
     await env.close()

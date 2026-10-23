@@ -2407,15 +2407,27 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       // 照 Claude 桌面端：那句话当用户的话进这边的输入队列，回合在跑就排到回合结束，界面上看得见、能撤、能插话。
       // 会话没在界面上开着、设备进程旧（没有 markHere）的，交给设备进程发（它在回合结束后发）
       if (live.watched(sessionId)) {
+        // 应答超时的再问一遍：设备那边可能已经了结了，重复问回同一句话
+        const mark = async () =>
+          (await link.request(SESSION_TREE_METHOD.proposalMarkHere, params)).text
         let text: string | null = null
         try {
-          text = (await link.request(SESSION_TREE_METHOD.proposalMarkHere, params)).text
+          text = await mark()
         } catch (error) {
-          if (!lacksMethod(error)) throw fail(error)
+          if (!lacksMethod(error)) {
+            if (fail(error).code !== 'timeout') throw fail(error)
+            text = await mark().catch((again: unknown) => {
+              throw fail(again)
+            })
+          }
         }
         if (text !== null) {
           live.settleProposal(sessionId, proposalId, 'here', null)
-          await live.send(sessionId, outgoing(text), false)
+          // 提案已经了结、设备不会再发：发不出去的那句话留在输入队列里，不能丢
+          const message = outgoing(text)
+          await live.send(sessionId, message, false).catch((error: unknown) => {
+            live.hold(sessionId, message, error)
+          })
           return
         }
       }

@@ -3,7 +3,7 @@
 // 分叉时引擎不认 cwd 的退回共用、刚建的删掉；提案上记模型或用户定的和照缺省算的，开始时卡上的为准。
 // 上游是假引擎（fake-engine.mts），仓库是真的 git 仓库。
 import assert from 'node:assert/strict'
-import { readFileSync, realpathSync, rmSync } from 'node:fs'
+import { existsSync, readFileSync, realpathSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import test from 'node:test'
 import { failureOf, resultOf } from './fake-engine.mjs'
@@ -241,6 +241,38 @@ test('WTC-004：提案记下缺省和模型定的；开始时卡上改的为准�
     const made = w.env.device.worktrees?.forThread(opened.thread_id)
     assert.ok(made, 'offer 开出来的子会话在新工作树里')
     assert.equal(made.baseRef, 'HEAD')
+  } finally {
+    await w.done()
+  }
+})
+
+test('WTC-005：经聚合面分叉出来的会话记成共用者；原会话归档（干净、有改动）或删掉时工作树转给分叉的，目录不动', async () => {
+  const w = world()
+  try {
+    const client = await w.client()
+    w.env.pi.handlers['thread/delete'] = (params) => {
+      w.env.pi.threads = w.env.pi.threads.filter((one) => one.id !== params.threadId)
+      return {}
+    }
+    const worktrees = w.env.device.worktrees
+    assert.ok(worktrees)
+    for (const ending of ['archive-clean', 'archive-dirty', 'delete'] as const) {
+      const { threadId } = await parentIn(w, client, true)
+      const tree = worktrees.forThread(threadId)
+      assert.ok(tree)
+      w.env.pi.end(threadId, 'completed', '好了')
+      const forked = await client.call('thread/fork', { threadId })
+      const forkId = forked.thread.id as string
+      assert.deepEqual(worktrees.sharers(tree.id), [forkId], `${ending}：分叉的记成共用者`)
+      if (ending === 'archive-dirty') write(tree.path, 'src/app.txt', 'fork works here\n')
+      if (ending === 'delete') await client.call('thread/delete', { threadId })
+      else await client.call('thread/archive', { threadId })
+      await until(() => worktrees.get(tree.id)?.ownerThreadId === forkId, `${ending}：转给分叉的`)
+      assert.equal(worktrees.get(tree.id)?.state, 'ready')
+      assert.equal(existsSync(tree.path), true)
+      if (ending === 'archive-dirty')
+        assert.equal(readFileSync(join(tree.path, 'src/app.txt'), 'utf8'), 'fork works here\n')
+    }
   } finally {
     await w.done()
   }

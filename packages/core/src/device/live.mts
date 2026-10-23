@@ -191,6 +191,8 @@ export interface LiveSessions {
   implementPlan(sessionId: string, text: string): Promise<void>
   /** now：有回合在进行时直接插进去（引导），插不进去就照常排队 */
   send(sessionId: string, message: OutgoingMessage, now?: boolean): Promise<void>
+  /** 发不出去的消息放进队尾、写一句为什么，等用户处理（同排队的消息发不出去时） */
+  hold(sessionId: string, message: OutgoingMessage, error: unknown): void
   /** 把一条排着队的消息现在就插进正在进行的回合里 */
   steer(sessionId: string, messageId: string): Promise<void>
   interrupt(sessionId: string): Promise<void>
@@ -1497,6 +1499,13 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       }
       await startTurn(live, message)
       if (live.view.note) setNote(live, null)
+    },
+
+    hold(sessionId, message, error) {
+      const live = need(sessionId)
+      live.queued = [...live.queued, { id: `q${++localSeq}`, ...message }]
+      emit(live, [{ op: 'queue.set', queued: live.queued }])
+      setNote(live, phrase('session.queueFailed', { message: failure(error).message }))
     },
 
     async steer(sessionId, messageId) {
