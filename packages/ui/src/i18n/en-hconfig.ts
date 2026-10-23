@@ -50,7 +50,7 @@ export const enHconfig: Record<keyof typeof zhHconfig, Entry> = {
   'hc.action.failed': '{name} failed: {reason}',
 
   'hc.accounts.note':
-    'Sign-in status for each provider. Sign-in happens in the harness on the device, and credentials stay on the device.',
+    'Sign-in status for each provider. The model menu lists models from every usable provider, and each session runs on the provider of its model. Credentials stay on the device.',
   'hc.accounts.note.switch': 'Sign-in status for each provider. Credentials stay on the device.',
   'hc.provider.active': 'In use',
   'hc.provider.activate': 'Use',
@@ -68,6 +68,12 @@ export const enHconfig: Record<keyof typeof zhHconfig, Entry> = {
   'hc.provider.id.note': 'Letters, digits, - and _. Can’t be changed later',
   'hc.provider.remove.title': 'Remove {name}?',
   'hc.provider.remove.note': 'Its definition and stored secrets will be deleted.',
+  'hc.discover': 'Fetch models from provider',
+  'hc.discover.asking': 'Fetching…',
+  'hc.discover.needKey': 'Save the provider with a key first',
+  'hc.discover.none': 'The provider reported no models',
+  'hc.discover.apply': 'Use selected ({count})',
+  'hc.discover.cancel': 'Cancel',
   'hc.auth.signedOut': 'Signed out',
   'hc.auth.signedInAs': 'Signed in as {label}',
   'hc.auth.kind.oauth': 'Signed in',

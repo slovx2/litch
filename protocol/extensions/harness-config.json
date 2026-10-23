@@ -1123,6 +1123,10 @@
           "items": {
             "$ref": "#/definitions/HarnessSettingSpec"
           }
+        },
+        "discoverModels": {
+          "type": "string",
+          "description": "能用 providers/discoverModels 拉型号来填的字段（stringList）"
         }
       },
       "required": ["id", "title", "description", "fields"]

@@ -73,7 +73,9 @@ harness's own config files on that device (shared with its CLI there):
   `claude setup-token` long-lived token) and any number of providers the user adds (Anthropic API keys,
   Anthropic-compatible gateways with a hand-written or fetched model list) all appear in the model
   picker as `[Provider] model` once more than one is usable. Each session runs on the provider of its
-  model and can switch at the next turn; new sessions start with the last model picked. Keys of added
+  model and can switch at the next turn (the composer says so under the input); new sessions start
+  with the last model picked. Editing a gateway offers "Fetch models from provider" to tick models
+  from its `/v1/models` into the list. Keys of added
   providers are stored by Litch on the device (not in `~/.claude`), shown only by their last four
   characters. Credentials or a gateway configured in Claude Code's own `settings.json` or environment
   show as a read-only "Claude Code" provider.

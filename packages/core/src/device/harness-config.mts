@@ -110,6 +110,10 @@ export interface HarnessConfig {
     expectedVersion: string,
   ): Promise<{ restartRequired: boolean }>
   removeProvider(harness: string, providerId: string): Promise<{ restartRequired: boolean }>
+  discoverModels(
+    harness: string,
+    providerId: string,
+  ): Promise<{ models: Array<{ id: string; title: string | null }> }>
   activateProvider(
     harness: string,
     providerId: string,
@@ -661,6 +665,29 @@ export function createHarnessConfig(host: HarnessConfigHost): HarnessConfig {
       )
       needsRestart(harness, result?.restartRequired === true)
       return { restartRequired: result?.restartRequired === true }
+    },
+
+    async discoverModels(harness, providerId) {
+      reachable(harness)
+      let response: { models?: unknown } | undefined
+      try {
+        response = await host.request(
+          HARNESS_CONFIG_METHOD.providersDiscoverModels,
+          { harness, providerId },
+          { timeoutMs: WAIT_MS },
+        )
+      } catch (error) {
+        throw fail(error)
+      }
+      const models = Array.isArray(response?.models) ? response.models : []
+      return {
+        models: models.flatMap((raw) => {
+          const one = raw as { id?: unknown; title?: unknown }
+          return typeof one.id === 'string' && one.id
+            ? [{ id: one.id, title: typeof one.title === 'string' ? one.title : null }]
+            : []
+        }),
+      }
     },
 
     async activateProvider(harness, providerId, expectedVersion) {

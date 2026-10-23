@@ -168,3 +168,22 @@ test('统一模式：换掉存在的、不是底稿、还没指向底稿的那�
   )
   assert.deepEqual(overwrittenBy(overview, 'nobody'), [])
 })
+
+test('从 provider 拉来的型号勾完并回清单：勾掉的去掉、新勾的加在末尾、别的行不动', async () => {
+  const { mergeDiscovered, modelLineId } = await import('../src/devices/hconfig/logic.ts')
+  assert.equal(modelLineId(' glm-4.6 = GLM 4.6 '), 'glm-4.6')
+  const found = [
+    { id: 'glm-4.6', title: 'GLM 4.6' },
+    { id: 'kimi-k2', title: 'kimi-k2' },
+    { id: 'old', title: null },
+  ]
+  assert.deepEqual(
+    mergeDiscovered(
+      ['old', 'mine = 我自己的', 'glm-4.6 = 改过的名字'],
+      found,
+      new Set(['glm-4.6', 'kimi-k2']),
+    ),
+    ['mine = 我自己的', 'glm-4.6 = 改过的名字', 'kimi-k2'],
+  )
+  assert.deepEqual(mergeDiscovered([], found, new Set(['glm-4.6'])), ['glm-4.6 = GLM 4.6'])
+})

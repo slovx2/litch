@@ -1253,6 +1253,10 @@ export const en: Record<MessageKey, Entry> = {
   'composer.stop': 'Stop',
   'composer.stopKeys': 'Stop (press Esc twice)',
   'composer.escAgain': 'Press Esc again to stop',
+  'composer.providerSwitch':
+    'The next turn uses {name}. Its first turn won’t hit the prompt cache.',
+  'composer.providerSwitch.claude':
+    'The next turn uses {name}. Its first turn won’t hit the prompt cache. With the same model name it may reject the previous provider’s thinking signatures; if so, switch back or pick a different model.',
   'composer.context': 'Context {percent}% used ({used} of {window})',
   'composer.offline': 'The device isn’t connected, so messages can’t be sent.',
   'composer.harnessDown': '{name} is unavailable. You can send messages once it’s back.',

@@ -44,7 +44,8 @@ export const zhHconfig = {
   'hc.action.done': '{name}：已完成',
   'hc.action.failed': '{name} 失败：{reason}',
 
-  'hc.accounts.note': '各 provider 的登录状态。登录在设备上的 harness 中进行，凭据保存在设备上。',
+  'hc.accounts.note':
+    '各 provider 的登录状态。模型选单列出所有可用 provider 的模型，会话按所选模型的 provider 运行。凭据保存在设备上。',
   'hc.accounts.note.switch': '各 provider 的登录状态。凭据保存在设备上。',
   'hc.provider.active': '使用中',
   'hc.provider.activate': '设为当前',
@@ -62,6 +63,12 @@ export const zhHconfig = {
   'hc.provider.id.note': '字母、数字、- 和 _，创建后不可更改',
   'hc.provider.remove.title': '删除 {name}？',
   'hc.provider.remove.note': '其定义和已保存的密钥将被删除。',
+  'hc.discover': '从 provider 拉取型号',
+  'hc.discover.asking': '正在拉取…',
+  'hc.discover.needKey': '保存并填好密钥后可拉取',
+  'hc.discover.none': 'provider 没有报任何型号',
+  'hc.discover.apply': '写入清单（已选 {count} 个）',
+  'hc.discover.cancel': '取消',
   'hc.auth.signedOut': '未登录',
   'hc.auth.signedInAs': '已登录 {label}',
   'hc.auth.kind.oauth': '已登录',

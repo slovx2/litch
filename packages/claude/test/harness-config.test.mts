@@ -938,6 +938,18 @@ test('HC-CLAUDE-007：加改删供应商，密钥只进 0600 的密钥文件，�
       expectedVersion: version,
     }).version
     assert.equal(readProviderSecrets().work, 'sk-ant-api-work-0000')
+    // 改已有的只送改过的几栏（详情设置的表单就这样）：没送的照旧
+    version = providers.upsert({
+      providerId: 'corp',
+      templateId: 'anthropicGateway',
+      definition: { models: ['kimi-k2'] },
+      expectedVersion: version,
+    }).version
+    const kept = readProviderConfig().providers.corp!
+    assert.equal(kept.baseUrl, 'https://gw.example.test')
+    assert.equal(kept.title, '公司网关')
+    assert.equal(kept.smallModel, 'glm-4.5-air')
+    assert.deepEqual(kept.models, [{ id: 'kimi-k2', title: null }])
     await providers.authLogout({ providerId: 'work' })
     assert.equal(readProviderSecrets().work, undefined)
 

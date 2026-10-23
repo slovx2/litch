@@ -149,7 +149,7 @@ export async function homeMoreProbe(): Promise<HomeMoreProbe> {
   const pickedKept = shown('harness')
   await choose('harness', 'Claude Code')
   // 选了模型、强度，开了计划模式，再换项目：都还在。计划模式按提示语认开没开，不认具体的属性
-  await choose('model', 'Opus 5.5')
+  await choose('model', '[Account] Opus 5.5')
   await choose('effort', '高')
   const plan = await until('计划模式的开关', () =>
     one<HTMLButtonElement>('.mode-btn[data-kind="plan"]'),
@@ -271,7 +271,7 @@ export function judgeHomeMore(probe: HomeMoreProbe): string[] {
   if (harness.pickedKept !== 'dsh') {
     failed.push(`只是点选、没发出去的 harness，换了项目再换回来没了：“${harness.pickedKept}”`)
   }
-  if (harness.settingsCarried !== 'Opus 5.5/高/开') {
+  if (harness.settingsCarried !== '[Account] Opus 5.5/高/开') {
     failed.push(`页上选的模型、强度、计划模式，换了项目没留住：“${harness.settingsCarried}”`)
   }
   if (add.last !== '添加项目…' || !add.marked || add.before !== '无项目') {

@@ -7,7 +7,7 @@ versioning or publishing metadata.
 
 ## 未发布
 
-- Claude Code：官方账号（只有一个）和用户自己加的多个供应商（Anthropic API key、Anthropic 兼容网关）共存，不再三选一。各家的型号进同一个模型选单，能用的多于一家时显示成“[供应商] 型号”、ID 写成 `<供应商>/<型号>`；每个会话按所选型号的供应商起 CLI，下一回合可以换，新会话照上一次选的。供应商的密钥由适配器存在状态目录的 `provider-secrets.json`（0600），不进 `~/.claude`，不改账号的登录；没填密钥的供应商报错，绝不退回账号的凭据。网关可以手填型号或从它的 `/v1/models` 拉取（协议扩展：`litch/harness/providers/discoverModels`）；Claude Code 自己配置里的凭据或网关列成只读的“Claude Code”。以前的 `LITCH_CLAUDE_*` 变量与“当前供应商”不再使用（不迁移）。桌面端、手机端的界面另做
+- Claude Code：官方账号（只有一个）和用户自己加的多个供应商（Anthropic API key、Anthropic 兼容网关）共存，不再三选一。各家的型号进同一个模型选单，能用的多于一家时显示成“[供应商] 型号”、ID 写成 `<供应商>/<型号>`；每个会话按所选型号的供应商起 CLI，下一回合可以换，新会话照上一次选的。供应商的密钥由适配器存在状态目录的 `provider-secrets.json`（0600），不进 `~/.claude`，不改账号的登录；没填密钥的供应商报错，绝不退回账号的凭据。网关可以手填型号或从它的 `/v1/models` 拉取（协议扩展：`litch/harness/providers/discoverModels`）；Claude Code 自己配置里的凭据或网关列成只读的“Claude Code”。以前的 `LITCH_CLAUDE_*` 变量与“当前供应商”不再使用（不迁移）。桌面端：详情设置“账号”页按两种模板加改供应商，编辑网关时“从 provider 拉取型号”列出来勾选后写回清单（模板上的 `discoverModels` 指着那一栏）；会话中途选了另一家的型号，输入框下面提示下一轮起换到哪家；供应商或登录变了模型选单重新取。手机端的界面另做
 - 扫码绑定手机：设备走 Tailscale SSH、桌面端按 MagicDNS 名（或短名）连它时，出码对话框的主机默认填它的 tailnet IP（手机上开着别的 VPN 时 `*.ts.net` 常常解析不了）；主机一栏旁加下拉，在 IP、MagicDNS 全名、短名之间换。设备服务在 `litch/pair/start` 的结果里多带 `tailnet`（名字和地址）。`codex-harness-adapter pair` 选 Tailscale 方式又没给 `--host` 时也用 tailnet IP
 
 ## 0.18.0

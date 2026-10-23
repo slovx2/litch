@@ -1187,6 +1187,13 @@ export function createCore(options: CoreOptions): Core {
             String(p.providerId),
           )
         }
+        case 'harnessConfig.providers.discoverModels': {
+          const p = params as Commands['harnessConfig.providers.discoverModels']['params']
+          return deviceOf(p.deviceId).harnessConfig.discoverModels(
+            String(p.harness),
+            String(p.providerId),
+          )
+        }
         case 'harnessConfig.providers.activate': {
           const p = params as Commands['harnessConfig.providers.activate']['params']
           return deviceOf(p.deviceId).harnessConfig.activateProvider(

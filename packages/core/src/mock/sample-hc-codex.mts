@@ -383,6 +383,7 @@ export function sampleCodex({ home, remote }: SampleHome): SampleHc {
               options: [opt('responses', 'Responses'), opt('chat', 'Chat Completions')],
             }),
           ],
+          discoverModels: null,
         },
       ],
       version: 'p1',

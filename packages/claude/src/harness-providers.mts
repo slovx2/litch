@@ -187,6 +187,7 @@ function gatewayTemplate(): HarnessProviderTemplate {
         description: text('每行一个“名字: 值”。', 'One "Name: Value" per line.'),
       }),
     ],
+    discoverModels: 'models',
   }
 }
 
@@ -458,7 +459,21 @@ export class ClaudeProviders {
         ),
         'templateId',
       )
-    const definition = (params.definition ?? {}) as Record<string, unknown>
+    // 改已有的：没给的项照旧（详情设置的表单只送改过的那几栏）
+    const given = (params.definition ?? {}) as Record<string, unknown>
+    const definition: Record<string, unknown> = {
+      ...(existing
+        ? {
+            title: existing.title,
+            baseUrl: existing.baseUrl,
+            authHeader: existing.authHeader,
+            models: modelLines(existing.models),
+            smallModel: existing.smallModel,
+            headers: existing.headers,
+          }
+        : {}),
+      ...given,
+    }
     const baseUrl = typeof definition.baseUrl === 'string' ? definition.baseUrl.trim() : ''
     if (baseUrl || kind === 'gateway') {
       let url: URL | null = null

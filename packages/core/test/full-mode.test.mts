@@ -484,7 +484,7 @@ test('新建会话：带上选的 harness，建在它上面；没说就用第一
 })
 
 test('底栏的选择器按 harness 取：各问一遍、各记各的，掉线再回来的那个重新问', async () => {
-  const { core, command, sent, set } = setup()
+  const { core, command, sent, set, peer } = setup()
   core.start()
   await settle()
   const options = (harnessId?: string) =>
@@ -511,6 +511,17 @@ test('底栏的选择器按 harness 取：各问一遍、各记各的，掉线�
   assert.deepEqual(
     sent('model/list').map((params) => params.harness),
     ['cc', 'pi', 'cc'],
+  )
+
+  // 供应商、登录变了（Claude 的选单按能用的供应商拼）：那个 harness 的重新问，别的不动
+  peer.last().notify('litch/harness/config/changed', { harness: 'cc', part: 'providers' })
+  peer.last().notify('litch/harness/config/changed', { harness: 'pi', part: 'mcp' })
+  await settle()
+  await options('cc')
+  await options('pi')
+  assert.deepEqual(
+    sent('model/list').map((params) => params.harness),
+    ['cc', 'pi', 'cc', 'cc'],
   )
 })
 

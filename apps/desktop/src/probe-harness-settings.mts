@@ -3,7 +3,7 @@
 // 一、配置：改开关和整数（填错了保存不了）、保存后写进去；只读项、被盖住的项有说明；
 //    别的客户端抢先改了（聊天里说“抢先改配置”）：保存撞上冲突、改动留着、再存就成；
 //    改着的时候别处改了（“别处改配置”）：提示一句，用最新的；
-// 二、账号：本机 Claude 粘贴授权码（错的没成、对的成了）、切换在用的 provider 要重启、就地重启；
+// 二、账号：本机 Claude 粘贴授权码（错的没成、对的成了）、改网关供应商时从它那里拉型号勾进清单；
 //    远程 build-01 上 Codex：浏览器登录先经 ssh 转发回调端口再成、设备码、API key（错的、对的）、
 //    只认环境变量的写进设备设置、按模板加一个自定义 provider 再删掉；配置里要确认的动作；
 // 三、MCP：加一个本地命令的（带密钥环境变量）、关掉一个、删掉加的那个、远程服务的 OAuth 授权；
@@ -31,11 +31,11 @@ export interface HarnessSettingsProbe {
   /** 别处改：提示、用最新的之后 */
   moved: boolean
   tookLatest: boolean
-  /** 账号（本机 Claude）：粘贴授权码错的、对的；切换 provider 后的重启提示、重启后 */
+  /** 账号（本机 Claude）：粘贴授权码错的、对的；网关拉来的型号勾进清单后表单里的、存完卡片上的 */
   pasteFailed: string
   pasteDone: string
-  restartBanner: boolean
-  restartCleared: boolean
+  discovered: string
+  gatewayModels: string
   /** 账号（build-01 的 Codex）：浏览器登录时看到的转发状态和端口、最后一步；设备码；API key */
   forwardStates: string[]
   forwardText: string
@@ -252,35 +252,39 @@ export async function harnessSettingsProbe(): Promise<HarnessSettingsProbe> {
   await click('“用最新的”', () => act('hc-take-latest'))
   const tookLatest = (await until('改动放弃、保存条收掉', () => !bar())) === true
 
-  // ---------- 二、账号（本机 Claude Code）：粘贴授权码；切换 provider 要重启 ----------
+  // ---------- 二、账号（本机 Claude Code）：粘贴授权码；网关从它那里拉型号 ----------
   await openSettings('local', 'claude', 'accounts')
-  const consoleCard = () => card('console')
-  await click('Console 的登录', () =>
-    one<HTMLButtonElement>('[data-act="hc-method"]', consoleCard() ?? document),
-  )
-  let attempt = await stepOf(consoleCard, ['openUrl', 'prompt'])
+  const account = () => card('anthropic')
+  const consoleLogin = () =>
+    one<HTMLButtonElement>('[data-act="hc-method"][data-method="console"]', account() ?? document)
+  await click('Console 的登录', consoleLogin)
+  let attempt = await stepOf(account, ['openUrl', 'prompt'])
   fill(await until('授权码输入框', () => one<HTMLInputElement>('input', attempt)), 'bad')
   await click('交上授权码', () => act('hc-auth-send', attempt))
-  const pasteFailed = text(await stepOf(consoleCard, ['failed']))
-  await dismiss(consoleCard)
-  await click('再登一次', () =>
-    one<HTMLButtonElement>('[data-act="hc-method"]', consoleCard() ?? document),
-  )
-  attempt = await stepOf(consoleCard, ['openUrl', 'prompt'])
+  const pasteFailed = text(await stepOf(account, ['failed']))
+  await dismiss(account)
+  await click('再登一次', consoleLogin)
+  attempt = await stepOf(account, ['openUrl', 'prompt'])
   fill(await until('授权码输入框', () => one<HTMLInputElement>('input', attempt)), 'code#state')
   await click('交上授权码', () => act('hc-auth-send', attempt))
-  const pasteDone = text(await stepOf(consoleCard, ['done']))
-  await dismiss(consoleCard)
-  await click('改用 Console', () => act('hc-provider-activate', consoleCard() ?? document))
-  await until('Console 在用', () => consoleCard()?.dataset.active === 'true')
-  const restartBanner = (await until('要重启的提示', () => one('[data-hc-restart]'))) !== null
-  await click('就地重启', () => act('hc-restart'))
-  // 示例里本机的 Claude 有回合在跑：问一声，照样重启
-  const busy = await until('重启的结果或者“有回合在跑”', () =>
-    one('dialog.confirm[open]') ? 'busy' : !one('[data-hc-restart]') ? 'done' : null,
+  const pasteDone = text(await stepOf(account, ['done']))
+  await dismiss(account)
+  // 改 DeepSeek 这个网关：从它那里拉型号，勾上清单里还没有的那个，写回清单再保存
+  await click('改 DeepSeek', () => act('hc-provider-edit', card('deepseek') ?? document))
+  const gateway = await until('网关的对话框', () => one('[data-hc-dialog="provider"]'))
+  await click('从 provider 拉取型号', () => act('hc-discover', gateway))
+  const found = await until('拉到的型号', () => one('.hc-discover-list', gateway))
+  const pick = all('label', found).find((label) => text(label).includes('deepseek-r2'))
+  one<HTMLInputElement>('input[type="checkbox"]', pick ?? document)?.click()
+  await frame()
+  await click('写入清单', () => act('hc-discover-apply', gateway))
+  const discovered = one<HTMLTextAreaElement>('#hc-def-models', gateway)?.value ?? ''
+  await submitDialog('provider')
+  const gatewayModels = text(
+    await until('卡片上的新型号', () =>
+      text(card('deepseek')).includes('deepseek-r2') ? card('deepseek') : null,
+    ),
   )
-  if (busy === 'busy') await confirmYes()
-  const restartCleared = (await until('重启后提示收掉', () => !one('[data-hc-restart]'))) === true
 
   // ---------- 二、账号（build-01 的 Codex）：浏览器登录经转发、设备码、API key、环境变量、自定义 provider ----------
   await openSettings('build', 'codex', 'accounts')
@@ -463,8 +467,8 @@ export async function harnessSettingsProbe(): Promise<HarnessSettingsProbe> {
     tookLatest,
     pasteFailed,
     pasteDone,
-    restartBanner,
-    restartCleared,
+    discovered,
+    gatewayModels,
     forwardStates,
     forwardText,
     browserDone,
@@ -517,8 +521,13 @@ export function judgeHarnessSettings(seen: HarnessSettingsProbe): string[] {
   must(seen.pasteFailed.includes('登录失败'), `错的授权码没有说没成：“${seen.pasteFailed}”`)
   must(seen.pasteDone.includes('登录成功'), `对的授权码没有登录好：“${seen.pasteDone}”`)
   must(
-    seen.restartBanner && seen.restartCleared,
-    '切换 provider 之后没有重启提示，或者重启后没收掉',
+    seen.discovered.includes('deepseek-v4 = DeepSeek V4') &&
+      seen.discovered.includes('deepseek-r2 = DeepSeek R2'),
+    `从网关拉来勾上的型号没写进清单，或者原有的丢了：“${seen.discovered}”`,
+  )
+  must(
+    seen.gatewayModels.includes('deepseek-r2'),
+    `存完之后卡片上没有新型号：“${seen.gatewayModels}”`,
   )
   must(
     seen.forwardStates.includes('ready') && seen.forwardStates[0] === 'opening',

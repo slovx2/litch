@@ -16,6 +16,7 @@ import { CONFIG_NAMESPACE } from '../../../protocol/src/client-tools-config.mjs'
 import type { MachineSpecContext } from '../../../protocol/src/client-tools-machine.mjs'
 import { presentationSpec } from '../../../protocol/src/client-tools-presentation.mjs'
 import { clientToolSpecs } from '../../../protocol/src/client-tools-specs.mjs'
+import { HARNESS_CONFIG_NOTIFICATION } from '../../../protocol/src/harness-config.mjs'
 import {
   CLIENT_TOOL_NAMESPACE,
   type ClientInfo,
@@ -1546,6 +1547,11 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       if (pairing.notification(method, params)) return
       // 给 harness 安装：任务的状态和日志
       if (install.notification(method, params)) return
+      // 供应商、登录变了：问过的模型清单作废（Claude 的选单按能用的供应商拼，账号登没登录也算）
+      if (method === HARNESS_CONFIG_NOTIFICATION.changed) {
+        const { harness, part } = params as { harness?: string; part?: string }
+        if (part === 'providers' && harness) composeCache.delete(mode === 'full' ? harness : '')
+      }
       // harness 详情设置：配置变了、登录有进展
       if (harnessConfig.notification(method, params)) return
       // 账号额度变了

@@ -218,6 +218,8 @@ export function projectProviders(raw: HarnessProvidersReadResponse): HcProviders
                 : { 'zh-CN': template.id, en: template.id },
               description: textOrNull(template.description),
               fields: specs(template.fields),
+              discoverModels:
+                typeof template.discoverModels === 'string' ? template.discoverModels : null,
             },
           ]
         : [],

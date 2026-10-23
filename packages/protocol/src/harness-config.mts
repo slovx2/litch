@@ -332,8 +332,13 @@ export interface HarnessProviderTemplate {
   id: string
   title: HarnessText
   description: HarnessText | null
-  /** 定义里的字段，形状同配置项（type 只用 string、enum、secret、boolean、stringList） */
+  /** 定义里的字段，形状同配置项（type 只用 string、enum、secret、boolean、stringList、text） */
   fields: HarnessSettingSpec[]
+  /**
+   * 能用 providers/discoverModels 从 provider 自己那里拉型号来填的字段（stringList，一行一个
+   * `id` 或 `id = 显示名`）。没有就不给
+   */
+  discoverModels?: string
 }
 
 export interface HarnessProvidersReadResponse {
