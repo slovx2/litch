@@ -51,6 +51,13 @@ export interface KeyDescription {
   fingerprint: string
 }
 
+/** 批准钥匙：种子（32 字节，标准 base64，只进安全存储）、公钥（32 字节，标准 base64）、指纹 */
+export interface ApprovalKeyDescription {
+  seed: string
+  approvalKey: string
+  fingerprint: string
+}
+
 export const ssh = {
   async probeHost(host: string, port: number, user: string): Promise<HostKey> {
     return JSON.parse(await native.probeHost(host, port, user)) as HostKey
@@ -82,8 +89,17 @@ export const ssh = {
    */
   enrollPair: (target: SshTarget, line: string): Promise<string> =>
     native.enrollPair(JSON.stringify(target), line),
-  /** 6 位确认码，和电脑上显示的那个比对 */
-  pairConfirmCode: (pairId: string, publicKey: string) => native.pairConfirmCode(pairId, publicKey),
+  /** 6 位确认码，和电脑上显示的那个比对。approvalKey 给空串是不带批准公钥（二维码里没有 a） */
+  pairConfirmCode: (pairId: string, publicKey: string, approvalKey: string) =>
+    native.pairConfirmCode(pairId, publicKey, approvalKey),
   /** 这部手机在对面钥匙行里的编号 */
   pairPhoneId: (publicKey: string) => native.pairPhoneId(publicKey),
+  /** 生成一把批准钥匙（手机批准登录用，和 ssh 钥匙无关） */
+  async newApprovalKey(): Promise<ApprovalKeyDescription> {
+    return JSON.parse(await native.newApprovalKey()) as ApprovalKeyDescription
+  },
+  /** 用批准钥匙的种子对 text 签名（ed25519），标准 base64 */
+  approvalSign: (seed: string, text: string) => native.approvalSign(seed, text),
+  /** 批准公钥的指纹：4 组、每组 4 个十六进制字 */
+  approvalFingerprint: (approvalKey: string) => native.approvalFingerprint(approvalKey),
 }

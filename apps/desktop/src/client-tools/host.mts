@@ -91,6 +91,25 @@ export function createClientToolHost(
           post({ type: CLIENT_TOOL, op: 'ask', id, askId, ask })
         })
       },
+      show(ask: ClientToolAsk, onAnswer?: (answer: ClientToolAnswer | null) => void) {
+        if (signal.aborted || running.get(id) !== entry) return () => {}
+        const askId = `${id}#${++askSeq}`
+        entry.asks.add(askId)
+        let shown = true
+        waiting.set(askId, (answer) => {
+          shown = false
+          entry.asks.delete(askId)
+          onAnswer?.(answer)
+        })
+        post({ type: CLIENT_TOOL, op: 'ask', id, askId, ask })
+        return () => {
+          if (!shown) return
+          shown = false
+          waiting.delete(askId)
+          entry.asks.delete(askId)
+          if (running.get(id) === entry) post({ type: CLIENT_TOOL, op: 'askDone', askId })
+        }
+      },
       hold() {
         if (signal.aborted || running.get(id) !== entry) return () => {}
         post({ type: CLIENT_TOOL, op: 'hold', id, held: true })
@@ -167,6 +186,15 @@ export function createClientToolHost(
               })
             } catch (error) {
               log(`执行器 ${executor.namespace} 收尾出错：${String(error)}`)
+            }
+          }
+          return
+        case 'phoneAnswer':
+          for (const executor of byNamespace.values()) {
+            try {
+              executor.phoneAnswer?.(message.answer)
+            } catch (error) {
+              log(`执行器 ${executor.namespace} 处理手机答复出错：${String(error)}`)
             }
           }
           return

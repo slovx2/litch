@@ -19,6 +19,7 @@ import {
   type ToolToMain,
 } from '@litch/core'
 import type { MessagePortMain } from 'electron'
+import { APPROVAL_KEYS, type ApprovalKeysMessage } from './approvals/ipc.mjs'
 import { CLIENT_TOOL, type ClientToolToCore, type ClientToolToMain } from './client-tools/types.mjs'
 import { fileDeviceStore } from './device-store.mjs'
 import { ATTACH, LANGUAGE, SERVICE, TERMINALS } from './ipc.mjs'
@@ -99,6 +100,8 @@ const toolPort: ClientToolPort = {
     toolInbox = handler
   },
 }
+
+const postApprovalKeys = (message: ApprovalKeysMessage) => process.parentPort.postMessage(message)
 
 /** 跑一个很快的系统命令拿一行字；没有这个命令、出错都是空串 */
 function quick(command: string, args: string[]): string {
@@ -197,8 +200,14 @@ function createHost(): Core | MockCore {
     forward: authForward(),
     // 操作这台电脑（litch_machine）的脚本只有 POSIX 的写法：Windows 的桌面端不提供，远程设备上就没有这个工具和开关
     ...(process.platform === 'win32' ? {} : { machine: { desktop } }),
-    // 扫码绑定手机：一次性私钥的临时文件放在用户数据目录下；本机给手机看的名字用电脑名称
-    pairing: desktopPairing({ dataDir, localName: () => desktop.name }),
+    // 扫码绑定手机：一次性私钥的临时文件放在用户数据目录下；本机给手机看的名字用电脑名称。
+    // 扫码时核对过的批准公钥、撤销的手机交给主进程（批准钥匙只由它读写，approvals/main.mts）
+    pairing: {
+      ...desktopPairing({ dataDir, localName: () => desktop.name }),
+      trustApprovalKey: (key) => postApprovalKeys({ type: APPROVAL_KEYS, op: 'trust', ...key }),
+      forgetApprovalKey: (phoneId) =>
+        postApprovalKeys({ type: APPROVAL_KEYS, op: 'forget', phoneId }),
+    },
     // 本机 harness 里的 litch config（产品手册的配置命令）交给这台桌面端执行；没给语言时按界面的
     config: { lang: () => adapterLang },
     ...(dataDir ? { store: fileDeviceStore(dataDir) } : {}),

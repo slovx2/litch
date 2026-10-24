@@ -11,7 +11,10 @@
 // 要不要提示、提示给谁由主进程定（导航完成后只推给 Litch 的界面）。
 //
 // 交还代理：代理交给人登录的标签（request_sign_in）交还之前，主进程请每个框架清空密码框，清完回一声。
+//
+// Litch 代填（人在卡片上选了已存的账号）：主进程一步一步请（sign-in-page.mts），这期间的提交不出保存提示。
 import { ipcRenderer } from 'electron'
+import type { SecretProbe } from './fill-rules.mjs'
 import {
   fillInput,
   type LoginFields,
@@ -27,7 +30,18 @@ import {
   AUTOFILL_FILL,
   AUTOFILL_OFFER,
   AUTOFILL_QUERY,
+  SIGNIN_PAGE,
+  SIGNIN_PAGE_REPLY,
 } from './ipc.mjs'
+import {
+  fillLogin,
+  focusField,
+  hasPasswordField,
+  probeLogin,
+  requestSubmit,
+  scrub,
+  signingIn,
+} from './sign-in-page.mjs'
 
 /** 获得焦点前多久以内的一次真实按下算“有人点了这个框” */
 const POINTER_WINDOW_MS = 1000
@@ -57,6 +71,8 @@ const offer = (field: HTMLInputElement, fields: LoginFields) => {
 
 /** 一次登录提交：表单里（没有表单就是整个文档）交上去的用户名和密码；只有用户名的当两步登录的第一步 */
 function capture(scope: ParentNode | null) {
+  // Litch 代填的提交：填的就是库里那一条，不提示保存
+  if (signingIn()) return
   const root = scope ?? document
   const submitted = submissionOf(root)
   if (submitted) {
@@ -218,5 +234,54 @@ ipcRenderer.on(AUTOFILL_CLEAR, (_event, message: unknown) => {
     clear(document)
   } finally {
     ipcRenderer.send(AUTOFILL_CLEARED, { token, cleared })
+  }
+})
+
+// Litch 代填的各步：只回状态。fill 带来的值填完就丢，不留在这里
+ipcRenderer.on(SIGNIN_PAGE, (_event, message: unknown) => {
+  const one = (message ?? {}) as Record<string, unknown>
+  const { rid, op } = one
+  if (typeof rid !== 'string') return
+  const token = typeof one.token === 'string' ? one.token : ''
+  let result: unknown = null
+  try {
+    switch (op) {
+      case 'probe':
+        result = probeLogin(
+          token,
+          typeof one.hintToken === 'string' ? one.hintToken : null,
+          one.begin === true,
+        )
+        break
+      case 'fill':
+        result = fillLogin(token, {
+          ...(typeof one.username === 'string' ? { username: one.username } : {}),
+          ...(typeof one.password === 'string' ? { password: one.password } : {}),
+        })
+        break
+      case 'focus':
+        if (one.which === 'username' || one.which === 'password' || one.which === 'submit') {
+          result = focusField(token, one.which)
+        }
+        break
+      case 'submit':
+        result = requestSubmit(token)
+        break
+      case 'password':
+        result = hasPasswordField()
+        break
+      case 'scrub': {
+        const since = typeof one.since === 'number' ? one.since : Number.POSITIVE_INFINITY
+        result = scrub(
+          one.probe as SecretProbe,
+          (field) => wasSecret.has(field) || (typedAt.get(field) ?? 0) >= since,
+        )
+        break
+      }
+    }
+  } catch {
+    result = null
+  } finally {
+    ipcRenderer.send(SIGNIN_PAGE_REPLY, { rid, result })
   }
 })

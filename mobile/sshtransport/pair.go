@@ -4,7 +4,10 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
@@ -148,9 +151,14 @@ func isEnrollResult(line string) bool {
 }
 
 // PairConfirmCode 是两边各自算出来比对的 6 位确认码：
-// SHA-256(配对号 + "\n" + 公钥行) 的前 4 字节按大端读成无符号整数，模 1000000，左边补零
-func PairConfirmCode(pairID, publicKey string) string {
-	sum := sha256.Sum256([]byte(pairID + "\n" + strings.TrimSpace(publicKey)))
+// SHA-256(配对号 + "\n" + 公钥行) 的前 4 字节按大端读成无符号整数，模 1000000，左边补零。
+// 登记时带了批准公钥（二维码里有 a，approvalKey 不是空的）就哈希 配对号 + "\n" + 公钥行 + "\n" + approvalKey
+func PairConfirmCode(pairID, publicKey, approvalKey string) string {
+	text := pairID + "\n" + strings.TrimSpace(publicKey)
+	if approvalKey != "" {
+		text += "\n" + approvalKey
+	}
+	sum := sha256.Sum256([]byte(text))
 	return fmt.Sprintf("%06d", binary.BigEndian.Uint32(sum[:4])%1000000)
 }
 
@@ -162,4 +170,61 @@ func PairPhoneID(publicKey string) (string, error) {
 	}
 	sum := sha256.Sum256(key.Marshal())
 	return hex.EncodeToString(sum[:8]), nil
+}
+
+// 批准钥匙（手机批准登录，算法写在 litch 仓库 packages/protocol/src/client-approvals.mts 开头）：
+// 手机另生成的一把 ed25519，专门签批准，和 ssh 钥匙无关。种子（32 字节，标准 base64）存在系统的安全存储里，
+// 公钥 approvalKey 是 32 字节原始公钥的标准 base64。
+
+// 生成批准钥匙时给的：种子（存进安全存储）、公钥、指纹
+type approvalKeyDescription struct {
+	Seed        string `json:"seed"`
+	ApprovalKey string `json:"approvalKey"`
+	Fingerprint string `json:"fingerprint"`
+}
+
+// NewApprovalKey 生成一把批准钥匙（返回 JSON：approvalKeyDescription）
+func NewApprovalKey() (string, error) {
+	seed := make([]byte, ed25519.SeedSize)
+	if _, err := rand.Read(seed); err != nil {
+		return "", err
+	}
+	public := ed25519.NewKeyFromSeed(seed).Public().(ed25519.PublicKey)
+	return marshalJSON(approvalKeyDescription{
+		Seed:        base64.StdEncoding.EncodeToString(seed),
+		ApprovalKey: base64.StdEncoding.EncodeToString(public),
+		Fingerprint: approvalFingerprint(public),
+	})
+}
+
+// ApprovalSign 用种子对 text 的 UTF-8 做 ed25519 签名（不预先哈希），返回 64 字节的标准 base64
+func ApprovalSign(seed, text string) (string, error) {
+	key, err := approvalSeed(seed)
+	if err != nil {
+		return "", err
+	}
+	return base64.StdEncoding.EncodeToString(ed25519.Sign(key, []byte(text))), nil
+}
+
+// ApprovalFingerprint 是批准公钥的指纹：32 字节原始公钥的 SHA-256 前 8 字节的小写十六进制，每 4 个字一组、空格隔开
+func ApprovalFingerprint(approvalKey string) (string, error) {
+	raw, err := base64.StdEncoding.DecodeString(approvalKey)
+	if err != nil || len(raw) != ed25519.PublicKeySize {
+		return "", kindf(kindKey, "不是批准公钥")
+	}
+	return approvalFingerprint(raw), nil
+}
+
+func approvalFingerprint(public []byte) string {
+	sum := sha256.Sum256(public)
+	hexed := hex.EncodeToString(sum[:8])
+	return hexed[0:4] + " " + hexed[4:8] + " " + hexed[8:12] + " " + hexed[12:16]
+}
+
+func approvalSeed(seed string) (ed25519.PrivateKey, error) {
+	raw, err := base64.StdEncoding.DecodeString(seed)
+	if err != nil || len(raw) != ed25519.SeedSize {
+		return nil, kindf(kindKey, "批准钥匙坏了")
+	}
+	return ed25519.NewKeyFromSeed(raw), nil
 }

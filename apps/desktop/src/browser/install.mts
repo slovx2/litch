@@ -11,6 +11,7 @@ import {
   ipcMain,
   shell,
 } from 'electron'
+import { approvalDesktopId, phoneAnswerLanded, verifyPhoneAnswer } from '../approvals/verify.mjs'
 import { installBrowserImport } from '../browser-import/install.mjs'
 import { fileDeviceStore } from '../device-store.mjs'
 import { createElectronHost, type ElectronBrowserHost, type Rect } from './electron-host.mjs'
@@ -139,12 +140,21 @@ export function installBrowser(options: {
   app.on('will-quit', () => forwarding.close())
   // 代理把标签交给人登录（request_sign_in）：卡片推给界面在 installPasswords 里接
   const signIns = createSignIns()
+  /** 密码库建得比交接晚（下面的 installPasswords），交接用的时候再取 */
+  let passwordStore: PasswordStore | null = null
   const executor = createBrowserExecutor({
     host,
     sites,
     resolveUrl: forwarding.resolveUrl,
     describeUrl: forwarding.describeUrl,
-    handover: createHandover({ host, signIns }),
+    handover: createHandover({
+      host,
+      signIns,
+      store: () => passwordStore,
+      verifyPhoneAnswer,
+      phoneAnswerLanded,
+      desktopId: approvalDesktopId,
+    }),
   })
 
   const fromUi = (event: IpcMainEvent | IpcMainInvokeEvent): boolean => {
@@ -269,6 +279,7 @@ export function installBrowser(options: {
   })
   // 已保存的密码：设置页的列、删，用户标签的自动填充（passwords/install.mts）。清除浏览数据不碰它
   const passwords = installPasswords({ userData: options.userData, fromUi, broadcast, signIns })
+  passwordStore = passwords
   ipcMain.handle(BROWSER_CLEAR_DATA, async (event) => {
     if (!fromUi(event)) return false
     await settings.clearData()

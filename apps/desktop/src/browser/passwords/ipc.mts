@@ -5,7 +5,8 @@
 //   弹原生菜单）、报一次登录提交；主进程在点选后把这一条送进那个框架。交还代理之前主进程请它清空密码框。
 //   这几条只认登记过的标签发来的（autofill.mts、handover.mts 里查）。
 // - 保存提示：主进程推给界面，界面答。提示里没有密码，只给界面，不给代理。
-// - 交给人登录（request_sign_in）：主进程推给界面“代理请你登录”的卡片，界面答交还或取消。
+// - 交给人登录（request_sign_in）：主进程推给界面“代理请你登录”的卡片，界面答（代填、自己登录、交还、拒绝）；
+//   人选了代填，主进程经 SIGNIN_PAGE 一步一步请框架里的预加载填、提交、清框自检。
 
 /** 界面 → 主进程，等应答：已保存的密码列表（SavedPassword[]，没有密码） */
 export const PASSWORDS_LIST = 'litch:browser:passwords:list'
@@ -40,9 +41,22 @@ export const AUTOFILL_CLEAR = 'litch:autofill:clear'
 /** 预加载 → 主进程：清完了（{ token }） */
 export const AUTOFILL_CLEARED = 'litch:autofill:cleared'
 
+/**
+ * 主进程 → 标签的某个框架：Litch 代填的一步（{ rid, token, op, … }：probe 认登录表单、fill 填、focus 聚焦、
+ * submit 兜底提交、password 密码框出来没有、scrub 清框自检）。只有 fill 带值，只发给那一个框架
+ */
+export const SIGNIN_PAGE = 'litch:autofill:sign-in'
+/** 预加载 → 主进程：那一步的结果（{ rid, result }，不带任何值） */
+export const SIGNIN_PAGE_REPLY = 'litch:autofill:sign-in-reply'
+
 /** 界面 → 主进程，等应答：现在挂着的“代理请你登录”（SignInRequest[]） */
 export const SIGNIN_LIST = 'litch:browser:signin:list'
-/** 界面 → 主进程，等应答：答一条（{ id, answer: done | cancel }），回答没答到 */
+/** 界面 → 主进程，等应答：答一条（{ id, answer: done | cancel | dismiss | self | { fill, remember } }），回答没答到 */
 export const SIGNIN_ANSWER = 'litch:browser:signin:answer'
 /** 主进程 → 界面：“代理请你登录”变了，带着现在所有的 */
 export const SIGNIN_CHANGED = 'litch:browser:signin:changed'
+
+/** 界面 → 主进程，等应答：“代填前要 Touch ID”（{ available, on }；available 为假时设置页不显示这个开关） */
+export const SIGNIN_TOUCH_ID = 'litch:browser:signin:touch-id'
+/** 界面 → 主进程，等应答：开关“代填前要 Touch ID”（布尔），回现在的 { available, on } */
+export const SIGNIN_SET_TOUCH_ID = 'litch:browser:signin:set-touch-id'

@@ -3,6 +3,7 @@
 // 以及设置页里内置浏览器、Computer Use 那两节要的几件事（各自一个全局对象，和 litchShell 分开）。
 // 拿到端口之后界面和核心直接对话，主进程和这个脚本都不在数据路径上。
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
+import { approvalsBridge } from './approvals/bridge.mjs'
 import { browserBridge } from './browser/bridge.mjs'
 import {
   ABOUT,
@@ -136,3 +137,6 @@ contextBridge.exposeInMainWorld('litchManual', {
   status: () => ipcRenderer.invoke(MANUAL_STATUS),
   setEnabled: (on: boolean) => ipcRenderer.invoke(MANUAL_SET_ENABLED, on === true),
 })
+
+// 手机批准钥匙（approvals/）：设备详情“手机”一节列出、删掉记下的批准钥匙，收“第一次记下”“对不上”的提示
+contextBridge.exposeInMainWorld('litchApprovals', approvalsBridge)

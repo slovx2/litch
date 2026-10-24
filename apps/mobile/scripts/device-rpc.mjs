@@ -1,11 +1,12 @@
 // 端到端的入口脚本替桌面端调设备服务（夹具里装了适配器的那台）用的最小客户端：设备服务的套接字上跑的是 WebSocket，
-// 一帧一条 JSON-RPC。这里只做到够用：握手、发带掩码的文本帧、收不分片或分片的文本帧、回 ping，不握 initialize
-// （litch/pair/* 不要求握手，和命令行 pair 一样）。不引第三方包。
+// 一帧一条 JSON-RPC。这里只做到够用：握手、发带掩码的文本帧、收不分片或分片的文本帧、回 ping。
+// 不替调用方握 initialize（litch/pair/* 不要求握手，和命令行 pair 一样）；要握的自己 call('initialize') 再 notify('initialized')。
+// 设备发来的通知交给 onNotification。不引第三方包。
 import { createHash, randomBytes } from 'node:crypto'
 import { connect } from 'node:net'
 
-/** 连上套接字，返回 { call(method, params, timeoutMs), close() } */
-export function deviceRpc(socketPath) {
+/** 连上套接字，返回 { call(method, params, timeoutMs), notify(method, params), close() } */
+export function deviceRpc(socketPath, onNotification = () => {}) {
   return new Promise((resolve, reject) => {
     const socket = connect(socketPath)
     const key = randomBytes(16).toString('base64')
@@ -33,6 +34,10 @@ export function deviceRpc(socketPath) {
       try {
         value = JSON.parse(text)
       } catch {
+        return
+      }
+      if (value.method && value.id === undefined) {
+        onNotification(value.method, value.params)
         return
       }
       const pending = waiting.get(value.id)
@@ -122,6 +127,9 @@ export function deviceRpc(socketPath) {
               })
               send(1, Buffer.from(JSON.stringify({ id, method, params })))
             })
+          },
+          notify(method, params = {}) {
+            send(1, Buffer.from(JSON.stringify({ method, params })))
           },
           close: () => socket.end(),
         })

@@ -42,6 +42,7 @@ export {
   type AbortSignalLike,
   type AccountLimitsOp,
   type AppOp,
+  type ApprovalsOp,
   ChannelError,
   type ChannelErrorExtra,
   type ChannelErrorShape,
@@ -139,6 +140,7 @@ export type { AuthForwardPlatform } from './device/harness-config.mjs'
 export {
   hostKeyTrusted,
   type PairEnrollTestInput,
+  type PairingApprovalKey,
   type PairingHostAddress,
   type PairingPlatform,
   type PairSelfTestInput,
@@ -192,6 +194,7 @@ export { projectWorkspaces, resolveWorkspace } from './device/workspaces.mjs'
 export { createMockCore, type MockCore, type MockCoreOptions } from './mock/mock-core.mjs'
 export type { SampleLang } from './mock/sample-text.mjs'
 export type * from './model.mjs'
+export type * from './model-approvals.mjs'
 export type * from './model-background.mjs'
 export type * from './model-client-tools.mjs'
 export { CLIENT_TOOL } from './model-client-tools.mjs'

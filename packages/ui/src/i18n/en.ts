@@ -1756,4 +1756,67 @@ export const en: Record<MessageKey, Entry> = {
     'Steps fold into summary lines; the process folds when a turn ends',
   'transcriptView.verbose': 'Verbose',
   'transcriptView.verbose.note': 'Every step, tool input and output, and thought stays expanded',
+  // —— Phone approval keys (clientApprovals: the Phones section in device details, and notices) ——
+  'phones.approvalKey': 'Approval key {fingerprint}',
+  'phones.approvalKey.pairing': 'Verified when paired',
+  'phones.approvalKey.first': 'Recorded at first approval',
+  'phones.approvalKey.conflict':
+    'Approval key mismatch, so approvals from this phone are refused. Remove the key and pair the phone again.',
+  'phones.approvalKey.forget': 'Remove approval key',
+  'phones.approvalKey.forgetAsk':
+    'Remove the approval key of “{name}”? The next approval from this phone records its key again.',
+  'phones.approvalKey.forgotten': 'Removed the approval key of “{name}”.',
+  'phones.approvalKey.other': 'Other phones with approval keys',
+  'approvals.firstSeen':
+    '“{name}” approved a sign-in for the first time, and its approval key was recorded (fingerprint {fingerprint}). If you didn’t approve it, remove the key under Phones in the device details.',
+  'approvals.mismatch':
+    'The approval key of “{name}” doesn’t match, so its approval was refused. Pair the phone again.',
+  'phones.approvals.title': 'Approve agent sign-ins on phones (experimental)',
+  'phones.approvals.note':
+    'When on, sign-in cards from the built-in browser are sent through the session’s device to paired phones, where they can be approved. Applies to all devices. Off by default.',
+  // ---- Agent sign-in, plan B: sign-in cards (browser panel and conversation), Touch ID before filling ----
+  'browser.signIn.chooseNote':
+    'Pick a saved account and Litch fills it in and submits for you — the agent never sees the password. Or sign in on the page yourself.',
+  'browser.signIn.fill': 'Sign in as {user}',
+  'browser.signIn.noUser': '(no username)',
+  'browser.signIn.filling': 'Signing in…',
+  'browser.signIn.lastUsed': 'Last used: {day}',
+  'browser.signIn.self': 'I’ll sign in myself',
+  'browser.signIn.decline': 'Decline',
+  'browser.signIn.noAccounts': 'No saved accounts for this site.',
+  'browser.signIn.remember': 'Use this account for this site from now on in this scheduled task',
+  'browser.signIn.expires': ({ minutes }) =>
+    `Scheduled task request: expires in ${minutes} ${Number(minutes) === 1 ? 'minute' : 'minutes'} if nobody answers`,
+  'browser.signIn.expired': 'Scheduled task request: expired',
+  'browser.signIn.blocked': 'Litch can’t fill this in: {reason}',
+  'browser.signIn.block.noForm': 'there’s no sign-in form Litch recognizes on the page',
+  'browser.signIn.block.notVisible':
+    'the sign-in fields aren’t visible (covered, too small, or off screen)',
+  'browser.signIn.block.locator':
+    'the field or button the agent pointed at isn’t in the sign-in form Litch found, or the page has several sign-in forms',
+  'browser.signIn.block.insecure':
+    'the page isn’t https, the form would send the password with GET or to another site, or this tab is linked to another window',
+  'browser.signIn.block.verification':
+    'last time the site asked for a code or second factor after filling, so sign in yourself this time',
+  'browser.signIn.block.unavailable':
+    'the password store can’t be opened right now (system keychain unavailable)',
+  'browser.signIn.block.origin':
+    'the page moved to another site after the card appeared, so these accounts don’t belong to it',
+  'browser.signIn.block.other': 'this page can’t be filled in ({code})',
+  'browser.signIn.noneNote':
+    'Click “I’ll sign in myself”, sign in on the page below, then click “Done, hand back”.',
+  'browser.signIn.fillingTitle': 'Litch is signing in with a saved account',
+  'browser.signIn.fillingNote':
+    'The agent can’t use this tab until the form is filled, submitted and the page has moved on.',
+  'browser.signIn.fillingPhone': 'Phone “{name}” approved signing in with a saved account.',
+  'browser.signIn.fillingSomePhone': 'A paired phone approved signing in with a saved account.',
+  'signInAsk.title': 'The agent asks you to sign in',
+  'signInAsk.task': 'Scheduled task turn',
+  'signInAsk.noneNote':
+    'Click “I’ll sign in myself”, sign in in the browser panel, then click “Done, hand back” there.',
+  'signInAsk.desktopOnly':
+    'Signing in only works in the Litch desktop app. You can only decline here.',
+  'settings.browser.touchId.title': 'Require Touch ID before filling',
+  'settings.browser.touchId.note':
+    'Confirm with your fingerprint before Litch signs in with a saved account for the agent. Guards against stray clicks and people nearby.',
 }

@@ -158,6 +158,8 @@ jobs:
       - run: npm run client:test:ui
       # 桌面端自己的日志：轮转、清理、console 落盘
       - run: npm run test:log-file --prefix apps/desktop
+      # 手机批准的验签与批准钥匙：伪造、篡改、重放、过期、换钥匙都不认
+      - run: npm run test:approvals --prefix apps/desktop
       - run: npm run client:build
       - run: npm run client:smoke
       # 对话区“不飘”的验收：在不显示的窗口里真的去滚、去点，逐帧量位置

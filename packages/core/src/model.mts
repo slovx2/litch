@@ -867,7 +867,36 @@ export type ClientAskView =
       /** 能不能选“始终允许”（远程设备的会话不能） */
       allowAlways: boolean
     }
+  | SignInAskView
   | MachineAskView
+
+/**
+ * 代理请人登录（内置浏览器的 request_sign_in）：和桌面端的 ClientToolAsk 里 signIn 那种同形，和浏览器面板上那张
+ * 是同一张（id 是它的编号）。界面经外壳 signIn.answer(id, …) 答，不走核心的答复；只在等人选的时候挂着。
+ * 样子见界面的 composer/SignInAskCard.tsx
+ */
+export interface SignInAskView {
+  kind: 'signIn'
+  /** 登录卡片的编号（桌面端主进程的 SignInRequest.id） */
+  id: string
+  /** 主进程取到的标签的真实来源 */
+  origin: string
+  /** 代理说的站名、原因，只作附注 */
+  site: string
+  reason: string
+  /** 密码库里和 origin 完全一样的账号，最近用过的在前。ref 是这张卡片里随机的编号；给手机的只用 masked */
+  accounts: { ref: string; username: string; masked: string; lastUsed: number | null }[]
+  /** 预检不过、不能代填的原因，能代填是 null */
+  fillBlocked: string | null
+  /** 定时任务的回合才有：多一个“以后直接用这个账号”的勾选 */
+  taskId: string | null
+  /** 毫秒，只有定时任务的回合有 */
+  expiresAt: number | null
+  /** 桌面端出的随机数：转给手机，手机的答复要签上它 */
+  nonce: string
+  /** 哪台桌面端出的（主进程放上，核心转给手机时用），界面不画 */
+  desktopId?: string | null
+}
 
 /**
  * 这台桌面端在执行一次客户端工具调用（内置浏览器、Computer Use）时要用户点头。

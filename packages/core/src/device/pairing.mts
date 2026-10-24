@@ -99,6 +99,13 @@ export interface PairingPlatform {
   selfTest(input: PairSelfTestInput): Promise<PairSelfTestResult>
   /** tailscale 方式：用临时钥匙登地址、执行登记命令，标准输入写自检那一行，等回 {"ok":true,"probe":true} */
   enrollTest(input: PairEnrollTestInput): Promise<PairSelfTestResult>
+  /**
+   * 扫码时人核对过确认码、点了允许，手机带了批准公钥：交给桌面端主进程记下（apps/desktop/src/approvals/，
+   * 扫码时核对过）。手机批准登录时桌面端只认记下的钥匙
+   */
+  trustApprovalKey?(input: PairingApprovalKey): void
+  /** 撤销了一部手机：桌面端忘掉它的批准钥匙，下次批准按第一次批准重新记 */
+  forgetApprovalKey?(phoneId: string): void
 }
 
 export interface PairingHost {
@@ -111,6 +118,8 @@ export interface PairingHost {
   online(): boolean
   /** 对面支不支持：它是设备服务，而且设备信息的 extensions 里列了 devicePairing */
   supported(): boolean
+  /** 对面认手机的批准公钥：设备信息的 extensions 里列了 clientApprovals */
+  approvals(): boolean
   /** 外壳给的那几样。没有就出不了码 */
   platform: PairingPlatform | null
   request<M extends ClientRequestMethod>(
@@ -121,6 +130,22 @@ export interface PairingHost {
   /** 请求没做成：换成给人看的错误 */
   fail(error: unknown): ChannelError
   log(line: string): void
+}
+
+/**
+ * 扫码时核对过的批准公钥，连同重算确认码要的东西：主进程用配对号、手机公钥行、批准公钥自己算一遍，
+ * 和人核对过的确认码、手机号都对得上才记下（设备报的不能直接信）
+ */
+export interface PairingApprovalKey {
+  deviceId: string
+  pairId: string
+  phoneId: string
+  name: string
+  /** 手机的公钥行 */
+  publicKey: string
+  approvalKey: string
+  /** 人核对过的确认码 */
+  code: string
 }
 
 /** pairing.start 的结果，还差“预填哪个地址”（记在桌面端，由核心那一层填） */
@@ -136,6 +161,8 @@ export interface PairingStarted {
   original: PairingAddress
   /** 设备在 tailnet 里的主机写法（tailnetHosts），给界面做下拉；没有是空的 */
   hosts: string[]
+  /** 设备认手机的批准公钥（PairingView.approvals） */
+  approvals: boolean
 }
 
 export interface PairingStartOptions {
@@ -189,6 +216,7 @@ export function pairingPayload(pairing: PairingView, address: PairingAddress): P
     k: { t: pairing.hostKey.type, f: pairing.hostKey.fingerprint },
     i: pairing.pairId,
     e: pairing.expiresAt,
+    ...(pairing.approvals ? { a: 1 as const } : {}),
   }
   return pairing.mode === 'tailscale'
     ? { ...base, m: 'tailscale', c: pairing.command ?? '' }
@@ -613,6 +641,7 @@ export function createPairing(host: PairingHost): Pairing {
           hostKey: started.hostKey,
           original: vetted.original,
           hosts: tailnetHosts(started.tailnet),
+          approvals: host.approvals(),
         }
       } catch (error) {
         pairs.delete(started.pairId)
@@ -641,7 +670,29 @@ export function createPairing(host: PairingHost): Pairing {
     },
 
     async decide(pairId, allow) {
+      // 允许之前就定下记哪一把：人核对的确认码是这台桌面端开出来、设备报过的那一个，带着的批准公钥算在里面
+      const asked = pairs.get(pairId)?.phone ?? null
       const status = await guarded(() => host.request(DEVICE_PAIR_DECIDE, { pairId, allow }))
+      const phone = status.phone
+      if (
+        allow &&
+        status.state === 'done' &&
+        phone?.approvalKey &&
+        phone.publicKey &&
+        asked?.approvalKey === phone.approvalKey &&
+        asked.publicKey === phone.publicKey &&
+        asked.code === phone.code
+      ) {
+        host.platform?.trustApprovalKey?.({
+          deviceId,
+          pairId,
+          phoneId: phone.phoneId,
+          name: phone.name,
+          publicKey: phone.publicKey,
+          approvalKey: phone.approvalKey,
+          code: phone.code,
+        })
+      }
       return settleStatus(status)
     },
 
@@ -656,6 +707,7 @@ export function createPairing(host: PairingHost): Pairing {
 
     async revoke(phoneId) {
       await guarded(() => host.request(DEVICE_PAIR_REVOKE, { phoneId }))
+      host.platform?.forgetApprovalKey?.(phoneId)
       // 对面随后也会发通知；这边先改，不等
       if (phones?.some((phone) => phone.phoneId === phoneId)) {
         setPhones(phones.filter((phone) => phone.phoneId !== phoneId))

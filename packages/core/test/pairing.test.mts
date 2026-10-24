@@ -13,12 +13,14 @@ import {
   type DeviceStore,
   hostKeyTrusted,
   type PairEnrollTestInput,
+  type PairingApprovalKey,
   type PairingOp,
   type PairingPlatform,
   type PairingTopicView,
   type PairingView,
   type PairSelfTestInput,
   type PairSelfTestResult,
+  pairingPayload,
   type SavedDevices,
 } from '../src/index.mjs'
 import { fakeDevice, harness } from './fake-device.mjs'
@@ -58,6 +60,8 @@ interface Options {
   tailnet?: PairTailnet
   /** ssh -G 解析出的地址，默认 10.0.0.5:2222、dev */
   resolved?: { host: string; port: number; user: string }
+  /** decide 允许后设备回的手机（默认 null） */
+  decidedPhone?: PairStatus['phone']
 }
 
 function world(options: Options = {}) {
@@ -68,6 +72,8 @@ function world(options: Options = {}) {
     enrollTests: [] as PairEnrollTestInput[],
     banners: [] as string[],
     localSsh: 0,
+    trusted: [] as PairingApprovalKey[],
+    forgotten: [] as string[],
   }
   let n = 0
   const phones = [{ phoneId: 'ph1', name: 'Pixel 8', fingerprint: 'SHA256:p1', addedAt: 5 }]
@@ -99,7 +105,12 @@ function world(options: Options = {}) {
     'litch/pair/cancel': () => ({}),
     'litch/pair/decide': (params: unknown) => {
       const { pairId, allow } = params as { pairId: string; allow: boolean }
-      return { pairId, state: allow ? 'done' : 'rejected', expiresAt: 1, phone: null }
+      return {
+        pairId,
+        state: allow ? 'done' : 'rejected',
+        expiresAt: 1,
+        phone: options.decidedPhone ?? null,
+      }
     },
     'litch/pair/phones': () => ({ data: phones, tailscaleSsh: options.tailscaleSsh ?? false }),
     'litch/pair/revoke': (params: unknown) => {
@@ -131,6 +142,8 @@ function world(options: Options = {}) {
       calls.enrollTests.push(input)
       return options.enrollTest?.(input) ?? { ok: true }
     },
+    trustApprovalKey: (key) => calls.trusted.push(key),
+    forgetApprovalKey: (phoneId) => calls.forgotten.push(phoneId),
   }
   const time = fakeClock()
   const kind = options.kind ?? 'ssh'
@@ -656,4 +669,73 @@ test('本机：不读自己 tailnet 地址的横幅（回环到的是系统的 s
   const failure = await failureOf(off.command('pairing.start', { address }))
   assert.equal(failure.key, 'sshOff')
   assert.deepEqual(off.sent('litch/pair/cancel'), [{ pairId: 'pair1' }])
+})
+
+test('批准公钥：设备列了 clientApprovals 才往二维码里放 a；允许后只记人核对过的那一把；撤销时忘掉', async () => {
+  const phone = {
+    phoneId: 'ph2',
+    name: 'iPhone',
+    fingerprint: 'SHA256:p2',
+    code: '123456',
+    approvalKey: 'ebVWLo/mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmQ=',
+    publicKey: 'ssh-ed25519 AAAAPHONE',
+  }
+  const w = world({
+    extensions: ['harness', 'devicePairing', 'clientApprovals'],
+    decidedPhone: phone,
+  })
+  w.core.start()
+  await settled()
+  const init = w.sent('initialize')[0] as { capabilities: { litchExtensions: string[] } }
+  assert.ok(init.capabilities.litchExtensions.includes('clientApprovals'))
+  const { close } = w.watch()
+  const pairing = await started(w)
+  assert.equal(pairing.approvals, true)
+  assert.equal(pairingPayload(pairing, pairing.address).a, 1)
+  const requested: PairStatus = {
+    pairId: pairing.pairId,
+    state: 'requested',
+    expiresAt: pairing.expiresAt,
+    phone,
+  }
+  w.broadcast('litch/pair/changed', requested)
+  await settled()
+  await w.command('pairing.decide', { pairId: pairing.pairId, allow: true })
+  assert.deepEqual(w.calls.trusted, [
+    {
+      deviceId: 'dev',
+      pairId: pairing.pairId,
+      phoneId: 'ph2',
+      name: 'iPhone',
+      publicKey: phone.publicKey,
+      approvalKey: phone.approvalKey,
+      code: '123456',
+    },
+  ])
+  await w.command('pairing.revoke', { phoneId: 'ph1' })
+  assert.deepEqual(w.calls.forgotten, ['ph1'])
+  close()
+
+  // 允许时设备换了一把批准公钥（和人核对的那张确认码对不上）：不记
+  const swapped = world({
+    extensions: ['harness', 'devicePairing', 'clientApprovals'],
+    decidedPhone: { ...phone, approvalKey: 'AGENTAGENTAGENTAGENTAGENTAGENTAGENTAGENTAGE=' },
+  })
+  swapped.core.start()
+  await settled()
+  const watched = swapped.watch()
+  const other = await started(swapped)
+  swapped.broadcast('litch/pair/changed', { ...requested, pairId: other.pairId })
+  await settled()
+  await swapped.command('pairing.decide', { pairId: other.pairId, allow: true })
+  assert.deepEqual(swapped.calls.trusted, [])
+  watched.close()
+
+  // 设备没列 clientApprovals：二维码里没有 a
+  const old = world()
+  old.core.start()
+  await settled()
+  const plain = await started(old)
+  assert.equal(plain.approvals, false)
+  assert.equal(pairingPayload(plain, plain.address).a, undefined)
 })

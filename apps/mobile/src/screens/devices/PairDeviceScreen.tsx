@@ -10,6 +10,7 @@ import { Keyboard, Linking, Platform, StyleSheet, Text, View } from 'react-nativ
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 import { ssh } from '../../../modules/litch-ssh/src'
 import type { RootStackParamList } from '../../nav/routes'
+import { ensureApprovalKey } from '../../platform/approval-key'
 import { forgetKey, generateKey, keySecret } from '../../platform/keys'
 import { trustHost } from '../../platform/known-hosts'
 import {
@@ -119,6 +120,7 @@ export function PairDeviceScreen({ navigation }: Props) {
       makeKey: generateKey,
       dropKey: forgetKey,
       privateKey: async (id) => (await keySecret(id))?.privateKey ?? null,
+      approvalKey: async () => (await ensureApprovalKey()).approvalKey,
       confirmCode: ssh.pairConfirmCode,
       enroll: ssh.enrollPair,
       trust: trustHost,

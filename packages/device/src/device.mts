@@ -13,6 +13,7 @@ import { HARNESS_CONFIG_NOTIFICATION } from '../../protocol/src/harness-config.m
 import { taskCardsSettingKey } from '../../protocol/src/session-tree.mjs'
 import { WORKTREE_DEFAULTS, WORKTREE_SETTING } from '../../protocol/src/worktrees.mjs'
 import { PINNED_SECTION_ID } from '../../shared/src/thread-sections.mjs'
+import { DeviceApprovals } from './approvals.mjs'
 import { DeviceBackground } from './background.mjs'
 import { ClientToolInvoker } from './client-tool-invoke.mjs'
 import { ClientToolRouter } from './client-tools.mjs'
@@ -228,6 +229,8 @@ export class DeviceServer {
   private orchestrating: boolean
   /** 扫码绑定手机。没给配置时是 null */
   private readonly pairing: DevicePairing | null
+  /** 手机上批准：桌面端挂的卡片（只在内存） */
+  private readonly approvals: DeviceApprovals
   /** 设备层的工作树。这台机器上没有 git 时是 null */
   readonly worktrees: Worktrees | null
   readonly worktreeLife: WorktreeLife | null
@@ -268,6 +271,12 @@ export class DeviceServer {
         })
       : null
     if (this.pairing?.available) info.extensions.push(EXTENSION.devicePairing)
+    // 手机上批准只是转交，设备上什么都不要
+    this.approvals = new DeviceApprovals({
+      announce: (method, params, extension) => this.announce(method, params, extension),
+      log,
+    })
+    info.extensions.push(EXTENSION.clientApprovals)
     const taskTiming = { ...DEFAULT_TASK_TIMING, ...options.tasks?.timing }
     this.taskTiming = taskTiming
     this.deviceTools = new DeviceTools(log)
@@ -422,6 +431,7 @@ export class DeviceServer {
       sessionTree: this.sessionTree,
       sessionTreeOn: () => this.sessionTreeOn(),
       pairing: this.pairing,
+      approvals: this.approvals,
       harnessConfigChanged: (params) =>
         this.announce(HARNESS_CONFIG_NOTIFICATION.changed, params, EXTENSION.harnessConfig),
       harnessEnvNames: (harness) => this.harnessEnvNames(harness),
@@ -709,6 +719,7 @@ export class DeviceServer {
     // 先停任务、关内部连接：等着的回合当场醒来，运行留着 running，下次起来去查
     this.tasks?.close()
     this.pairing?.close()
+    this.approvals.shutdown()
     for (const link of [...this.engineLinks]) link.close()
     for (const session of [...this.sessions]) session.close()
     this.sessionTree.close()

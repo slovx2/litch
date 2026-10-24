@@ -25,14 +25,76 @@ const (
 	vectorCode        = "965093"
 	vectorPhoneID     = "f83898df0bef57a4"
 	vectorFingerprint = "SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU"
+	// 批准钥匙的向量（packages/protocol/src/client-approvals.mts）：种子是 0x01……0x20
+	vectorApprovalKey   = "ebVWLo/mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmQ="
+	vectorApprovalPrint = "65b6 0673 d6ed 884b"
+	vectorApprovalCode  = "977558"
+	vectorSignedText    = "litch-approval-v1\n" + `{"id":"Ap7cK2mQ9xW4rT6v","nonce":"Nq3vL8sD1fG5hJ0k","desktopId":"Dz5yX2wV8uT1sR4q",` +
+		`"origin":"https://github.com","ref":"a1","decision":"approve","remember":false,"phoneId":"f83898df0bef57a4"}`
+	vectorSignature = "CN7xYgg3bNV+mLfeWMRmrBSPbHMehY5JKWZsnml5M/74XWpsoitp1YZPbsqV+k0saqYZWQ9V3WbJw7og4d0DAw=="
 )
 
+func vectorApprovalSeed() string {
+	seed := make([]byte, ed25519.SeedSize)
+	for i := range seed {
+		seed[i] = byte(i + 1)
+	}
+	return base64.StdEncoding.EncodeToString(seed)
+}
+
+func TestApprovalVectors(t *testing.T) {
+	if code := PairConfirmCode(vectorPairID, vectorPublicKey, vectorApprovalKey); code != vectorApprovalCode {
+		t.Fatalf("带批准公钥的确认码 %s，要 %s", code, vectorApprovalCode)
+	}
+	if print, err := ApprovalFingerprint(vectorApprovalKey); err != nil || print != vectorApprovalPrint {
+		t.Fatalf("指纹 %s（%v），要 %s", print, err, vectorApprovalPrint)
+	}
+	signature, err := ApprovalSign(vectorApprovalSeed(), vectorSignedText)
+	if err != nil || signature != vectorSignature {
+		t.Fatalf("签名 %s（%v），要 %s", signature, err, vectorSignature)
+	}
+	if _, err := ApprovalSign("AAAA", "x"); err == nil {
+		t.Fatal("坏的种子应该报错")
+	}
+	if _, err := ApprovalFingerprint("AAAA"); err == nil {
+		t.Fatal("坏的公钥应该报错")
+	}
+}
+
+func TestNewApprovalKey(t *testing.T) {
+	text, err := NewApprovalKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var made approvalKeyDescription
+	if err := json.Unmarshal([]byte(text), &made); err != nil {
+		t.Fatal(err)
+	}
+	if len(made.ApprovalKey) != 44 || len(made.Seed) != 44 {
+		t.Fatalf("长度不对: %+v", made)
+	}
+	print, _ := ApprovalFingerprint(made.ApprovalKey)
+	if print != made.Fingerprint {
+		t.Fatalf("指纹对不上: %s / %s", print, made.Fingerprint)
+	}
+	// 种子签出来的能用公钥验过
+	signature, err := ApprovalSign(made.Seed, "hello")
+	if err != nil {
+		t.Fatal(err)
+	}
+	public, _ := base64.StdEncoding.DecodeString(made.ApprovalKey)
+	raw, _ := base64.StdEncoding.DecodeString(signature)
+	if !ed25519.Verify(public, []byte("hello"), raw) {
+		t.Fatal("签名验不过")
+	}
+}
+
 func TestPairVectors(t *testing.T) {
-	if code := PairConfirmCode(vectorPairID, vectorPublicKey); code != vectorCode {
+	if code := PairConfirmCode(vectorPairID, vectorPublicKey, ""); code != vectorCode {
 		t.Fatalf("确认码 %s，要 %s", code, vectorCode)
 	}
 	// 公钥行带注释、前后有空白也一样
-	if code := PairConfirmCode(vectorPairID, " "+vectorPublicKey+"\n"); code != vectorCode {
+	if code := PairConfirmCode(vectorPairID, " "+vectorPublicKey+"\n", ""); code != vectorCode {
 		t.Fatalf("去空白后确认码 %s，要 %s", code, vectorCode)
 	}
 	id, err := PairPhoneID(vectorPublicKey + " phone")

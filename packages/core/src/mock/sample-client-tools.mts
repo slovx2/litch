@@ -10,10 +10,25 @@ import type { ClientAskRequest, ClientAskView, DeviceView } from '../model.mjs'
 export const SAMPLE_SHOT =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAUAAAADICAIAAAAWZq/8AAACqUlEQVR42u3boQ2AQBBFQcpBEBTVXE1oFAJFVWiCoAIwSAwQDGKPSaaCyz3zky3mZQWCKjwBCBgQMCBgEDAgYEDAgIBBwICAAQGDgAEBAwIGBAwCBgQMCBgQMAgYEDAgYBAwECrgbduBoAQMAgYEDAgYBAwIGBAwIGAQMCBgQMAgYEDAgIABAYOAn5RVA5ekJWAEjIARsIAFjIAFjIARMAJGwAhYwCBgASNgBIyABSxgBCxgBIyAETACRsACFjACFjACxkE/CNgrgIABAQMCBgEDAgYEDAgYBAwIGBAwCBgQMCBgokvtxEsCRsACBgELGAQsYAQsYAEjYAGDgAWMgBEwAhawgBHw3wPu+pGMCVjACBgBI2ABCxgBC1jAAhawFRorNAJGwAIGAQsYBCxgBCxgASNgAYOABYyAETACFrCAEbCAQcACRsACFjACFjAIWMAgYPfAuAcWsIARsIAFLGABCxgBI2AELGArNFZoAYOABYyABSxgBCxgELCAETACRsACFjACFjAIWMAIGAEjYAH7aghYwCBgASNgAQsYAQvYPbB7YAELGAEjYAQsYAEjYAELWMACtkJjhUbACFjAIGABg4AFjIAFLGAELGAQsIARMAJGwAIWMAIWMAhYwAhYwAJGwAIGAQsYASvTPTDugQUsYAQsYAELWMACRsAIGAEL2AqNFVrAIGABI2ABCxgBCxgELGDgWwIGAQMCBgQMAgYEDAgYEDAIGMghYBez7oHv1EP6FQEjYAELGAELWMAIWMAIWMBWaAISsIARsIAFjIAFDAIWMAIWsIARsIAFjIAFDAIWMAIWsIARsIBBwAJGwAIWMAIWsIARsIBBwAIGBAwC9gogYEDAgIBBwICAAQEDAgYBAwIGBAwCBgQMCBgQMAgYEDAgYOB0AHd3bRbc0GZfAAAAAElFTkSuQmCC'
 
-/** 两出各是哪一种：网站（浏览器打开一个没去过的地方）、应用（Computer Use 操作一个高风险的应用） */
-export type ClientToolDemo = 'site' | 'app'
+/**
+ * 各出是哪一种：网站（浏览器打开一个没去过的地方）、应用（Computer Use 操作一个高风险的应用）、
+ * 代理请人登录（request_sign_in）的四样：有已存账号、库里没有、预检不过、定时任务的回合
+ */
+export type ClientToolDemo = 'site' | 'app' | SignInDemo
+
+export type SignInDemo = 'signIn' | 'signInNone' | 'signInBlocked' | 'signInTask'
+
+const SIGN_IN_CALL = {
+  namespace: CLIENT_TOOL_NAMESPACE.browser,
+  tool: 'request_sign_in',
+  args: { tabId: 'tab-1', site: 'GitHub', reason: 'Need to open the repository settings.' },
+}
 
 const CALLS: Record<ClientToolDemo, { namespace: string; tool: string; args: JsonValue }> = {
+  signIn: SIGN_IN_CALL,
+  signInNone: SIGN_IN_CALL,
+  signInBlocked: SIGN_IN_CALL,
+  signInTask: SIGN_IN_CALL,
   site: {
     namespace: CLIENT_TOOL_NAMESPACE.browser,
     tool: 'navigate',
@@ -49,7 +64,12 @@ export function clientToolCall(
         ? [
             {
               type: 'inputText',
-              text: demo === 'site' ? 'Opened https://example.com/docs/start' : 'Safari · 1 window',
+              text:
+                demo === 'site'
+                  ? 'Opened https://example.com/docs/start'
+                  : demo === 'app'
+                    ? 'Safari · 1 window'
+                    : 'Litch filled the account the user approved and submitted; the page loaded https://github.com. Take a fresh snapshot to check you are signed in.',
             },
             { type: 'inputImage', imageUrl: SAMPLE_SHOT },
           ]
@@ -72,12 +92,14 @@ export function clientAskRequest(
   const ask: ClientAskView =
     demo === 'site'
       ? { kind: 'site', origin: 'https://example.com', url: 'https://example.com/docs/start' }
-      : {
-          kind: 'app',
-          app: { name: 'Safari', bundleId: 'com.apple.Safari' },
-          risk: 'elevated',
-          allowAlways: device.kind !== 'ssh',
-        }
+      : demo === 'app'
+        ? {
+            kind: 'app',
+            app: { name: 'Safari', bundleId: 'com.apple.Safari' },
+            risk: 'elevated',
+            allowAlways: device.kind !== 'ssh',
+          }
+        : signInAsk(demo, id)
   return {
     id,
     kind: 'clientAsk',
@@ -86,5 +108,34 @@ export function clientAskRequest(
     tool: { namespace: call.namespace, name: call.tool },
     ask,
     options: clientAskOptions(ask),
+  }
+}
+
+/** 登录卡片的样例：两个已存账号（一个用过），库里没有时是空的；预检不过的是 http 页面；定时任务的 30 分钟后过期 */
+function signInAsk(demo: SignInDemo, id: string): ClientAskView {
+  const accounts =
+    demo === 'signInNone'
+      ? []
+      : [
+          {
+            ref: `${id}-a1`,
+            username: 'song@example.com',
+            masked: 'so•••@example.com',
+            lastUsed: Date.now() - 3 * 86_400_000,
+          },
+          { ref: `${id}-a2`, username: 'ops-bot', masked: 'op•••', lastUsed: null },
+        ]
+  const task = demo === 'signInTask'
+  return {
+    kind: 'signIn',
+    id: `${id}-sign-in`,
+    origin: demo === 'signInBlocked' ? 'http://login.example.com' : 'https://accounts.github.com',
+    site: 'GitHub',
+    reason: 'Need to open the repository settings.',
+    accounts,
+    fillBlocked: demo === 'signInBlocked' ? 'insecure' : null,
+    taskId: task ? 'task-nightly' : null,
+    expiresAt: task ? Date.now() + 30 * 60_000 : null,
+    nonce: `${id}-nonce`,
   }
 }

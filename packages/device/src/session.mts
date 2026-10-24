@@ -1,6 +1,7 @@
 // 聚合面上的一条客户端连接：握手、路由、它专属的那一组上游连接。
 import { randomUUID } from 'node:crypto'
 import { BACKGROUND_TASKS_NOTIFICATION } from '../../protocol/src/background-tasks.mjs'
+import { APPROVAL_PREFIX } from '../../protocol/src/client-approvals.mjs'
 import {
   CLIENT_TOOL_METHOD,
   CLIENT_TOOLS_CAPABILITY,
@@ -32,6 +33,7 @@ import {
   platformFamily,
   platformOs,
 } from '../../shared/src/runtime-version.mjs'
+import type { DeviceApprovals } from './approvals.mjs'
 import type { DeviceBackground } from './background.mjs'
 import type { ClientToolInvoker } from './client-tool-invoke.mjs'
 import type { ClientToolPeer, ClientToolRouter } from './client-tools.mjs'
@@ -148,6 +150,8 @@ export interface SessionHost {
   sessionTreeOn(): boolean
   /** 扫码绑定手机（devicePairing）。设备进程没给配置时是 null */
   pairing: DevicePairing | null
+  /** 手机上批准（clientApprovals）：桌面端挂的卡片、手机的答复，各连接共用 */
+  approvals: DeviceApprovals
   /** harness 详情设置经设备进程的翻译改了配置：告诉所有声明过 harnessConfig 的连接 */
   harnessConfigChanged(params: HarnessConfigChangedNotification): void
   /** 设备设置里 `harness.<id>.env` 填了哪些变量名。没有设置功能时是空的 */
@@ -324,6 +328,7 @@ export class ClientSession implements ClientToolPeer {
     this.host.clientTools.left(this)
     this.host.clientInvoke.callerLeft(this)
     this.host.clientInvoke.peerLeft(this)
+    this.host.approvals.left(this)
     this.host.closed(this)
     if (greeted) this.host.log(`${this.tag} 断开`)
     this.host.trace?.('peer.close', {
@@ -452,6 +457,8 @@ export class ClientSession implements ClientToolPeer {
             frame.params,
             this.declared.has(EXTENSION.sessionTree),
           )
+        if (method.startsWith(APPROVAL_PREFIX))
+          return this.host.approvals.call(this, method, frame.params)
         if (method.startsWith('litch/worktree/')) {
           if (!this.host.worktrees)
             throw new DeviceError('unsupported', '这台设备上没有 git，用不了工作树', { method })
@@ -999,6 +1006,11 @@ export class ClientSession implements ClientToolPeer {
     if (this.state !== 'ready' || !this.declared.has(EXTENSION.deviceSettings)) return
     if (this.optOut.has(DEVICE_SETTINGS_CHANGED)) return
     this.send(JSON.stringify({ method: DEVICE_SETTINGS_CHANGED, params }))
+  }
+
+  /** 握手时声明了这项扩展没有 */
+  declares(extension: string): boolean {
+    return this.declared.has(extension)
   }
 
   /** 握手已经完成、还没有断开 */

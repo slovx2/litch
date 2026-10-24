@@ -8,7 +8,7 @@
 //   弹窗关掉，冻结期间的控制台消息代理读不到；代理拿到“用户登录完了”，不带任何输入；之后代理照常能用；
 // - 回合打断：卡片上的来源跟着导航换过，卡片变成“代理已收回”，这一页重新打开，人输到一半的没了；
 // - 有封闭影子树里的框（预加载够不着）：交还时重新打开这一页；
-// - 再交一次、人点取消：代理拿到“取消了”；
+// - 再交一次、人点拒绝：代理拿到“拒绝了”；
 // - 代理自己输入新的一组、点登录：快照、type、evaluate 里都没有密码，导航完成后只给界面推一条保存提示。
 import { app, type BrowserWindow } from 'electron'
 import type { ClientToolCallResponse } from '../../../packages/protocol/src/client-tools.mjs'
@@ -60,7 +60,8 @@ export async function checkAgentSignIn(options: {
     const invocation: ClientToolInvocation = {
       id: `call-${++seq}`,
       threadId: 'thread-a',
-      turnId: 'turn-1',
+      // 每次请人登录算一个新回合：同一回合里人拒绝过的源，再请求直接回拒绝（这里要的是每次都出卡片）
+      turnId: tool === 'request_sign_in' ? `turn-sign-in-${seq}` : 'turn-1',
       callId: `c${seq}`,
       namespace: 'litch_browser',
       tool,
@@ -310,7 +311,7 @@ export async function checkAgentSignIn(options: {
   const again = call('request_sign_in', { reason: 'Need access.' })
   await waitFor(() => signIns.list().length === 1)
   signIns.answer(signIns.list()[0]?.id ?? '', 'cancel')
-  check('人点取消：代理拿到“取消了”', /cancelled signing in/.test(textOf(await again)))
+  check('人点拒绝：代理拿到“拒绝了”', /declined signing in/.test(textOf(await again)))
 
   // 代理自己输入新的一组再点登录：读页工具里都没有密码，导航完成后只给界面推一条保存提示
   const fresh = await run('snapshot')

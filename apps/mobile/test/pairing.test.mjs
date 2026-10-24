@@ -28,6 +28,7 @@ const payload = {
   e: NOW + 60_000,
 }
 const PUBLIC = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl'
+const APPROVAL_KEY = 'ebVWLo/mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmQ='
 
 test('配对文本：认前缀和格式，过期的照样解出来给人看', () => {
   const text = encodePairPayload(payload)
@@ -57,6 +58,12 @@ test('登记：用一次性钥匙、只协商二维码里那一种主机钥匙�
     v: 1,
     publicKey: PUBLIC,
     name: 'Pixel 8',
+  })
+  assert.deepEqual(JSON.parse(enrollLine(PUBLIC, 'Pixel 8', APPROVAL_KEY)), {
+    v: 1,
+    publicKey: PUBLIC,
+    name: 'Pixel 8',
+    approvalKey: APPROVAL_KEY,
   })
 })
 
@@ -125,15 +132,19 @@ function fakeDeps({ enroll, check = async () => ({ ok: true }) } = {}) {
       calls.push(`privateKey ${id}`)
       return 'PRIVATE'
     },
-    async confirmCode(pairId, publicKey) {
-      calls.push(`code ${pairId} ${publicKey === PUBLIC}`)
-      return '965093'
+    async approvalKey() {
+      calls.push('approvalKey')
+      return APPROVAL_KEY
+    },
+    async confirmCode(pairId, publicKey, approvalKey) {
+      calls.push(`code ${pairId} ${publicKey === PUBLIC}${approvalKey ? ` ${approvalKey}` : ''}`)
+      return approvalKey ? '977558' : '965093'
     },
     async enroll(target, line) {
       calls.push(
         target.enrollCommand
           ? `enroll ${target.privateKey} ${target.enrollCommand} ${JSON.parse(line).name}`
-          : `enroll ${target.seed === payload.s} ${JSON.parse(line).name}`,
+          : `enroll ${target.seed === payload.s} ${JSON.parse(line).name}${JSON.parse(line).approvalKey ? ` ${JSON.parse(line).approvalKey}` : ''}`,
       )
       return enroll ? enroll() : '{"ok":true}'
     },
@@ -171,6 +182,23 @@ test('流程：生成钥匙 → 确认码 → 登记 → 记主机指纹 → 检
     'check k-0123456789abcdef 2222',
     'add 家里的 Mac mac.tail',
   ])
+})
+
+test('流程：二维码里有 a（设备认批准公钥）时登记带上批准公钥，确认码把它算进去；没有 a 不取也不带', async () => {
+  const { deps, calls } = fakeDeps()
+  const steps = []
+  const result = await runPairing({ ...payload, a: 1 }, deps, (step) => steps.push(step))
+  assert.equal(result.ok, true)
+  assert.deepEqual(steps[1], { step: 'enroll', code: '977558' })
+  assert.deepEqual(calls.slice(0, 4), [
+    'makeKey',
+    'approvalKey',
+    `code Ab3dEf6hIj9kLm2n true ${APPROVAL_KEY}`,
+    `enroll true Pixel 8 ${APPROVAL_KEY}`,
+  ])
+  const old = fakeDeps()
+  await runPairing(payload, old.deps, () => {})
+  assert.equal(old.calls.includes('approvalKey'), false)
 })
 
 test('流程：电脑上拒绝了、一次性钥匙被拒——不记指纹、不添加，刚生成的钥匙删掉', async () => {

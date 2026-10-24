@@ -17,6 +17,10 @@ export interface AutofillTab {
 }
 
 const tabs = new Map<number, AutofillTab>()
+/** Litch 正在代填的标签（观察闸开着）：网页开的弹窗不开、登录提交不出保存提示 */
+const gated = new Set<number>()
+/** 闸开着时网页想开过弹窗的标签 */
+const popupTried = new Set<number>()
 /** 交给人登录、还没交还的代理标签（passwords/handover.mts 管） */
 const handedOver = new Set<number>()
 /** 交给人登录期间网页开的弹窗（开成用户的标签）：开它的标签的 webContents 编号 → 弹窗的标签编号 */
@@ -37,6 +41,8 @@ export function registerAutofillTab(contents: WebContents, tab: AutofillTab): vo
   contents.once('destroyed', () => {
     tabs.delete(id)
     handedOver.delete(id)
+    gated.delete(id)
+    popupTried.delete(id)
   })
 }
 
@@ -87,3 +93,22 @@ export function popupRoot(tabId: string): number | null {
 export function handoverOf(openerContentsId: number, openerTabId: string): number | null {
   return handedOver.has(openerContentsId) ? openerContentsId : popupRoot(openerTabId)
 }
+
+/** Litch 代填开始（on）、结束（off）：观察闸（passwords/handover.mts 管） */
+export function setGated(contentsId: number, on: boolean): void {
+  popupTried.delete(contentsId)
+  if (on && tabs.has(contentsId)) gated.add(contentsId)
+  else gated.delete(contentsId)
+}
+
+export const isGated = (contentsId: number): boolean => gated.has(contentsId)
+
+/** 闸开着时网页要开弹窗（electron-host.mts 不开，记一笔）；回 true 是拦下了 */
+export function blockGatedPopup(openerContentsId: number): boolean {
+  if (!gated.has(openerContentsId)) return false
+  popupTried.add(openerContentsId)
+  return true
+}
+
+/** 这一次代填里网页想开过弹窗没有（靠弹窗登录的，回 popup_needed） */
+export const popupWasTried = (contentsId: number): boolean => popupTried.has(contentsId)
