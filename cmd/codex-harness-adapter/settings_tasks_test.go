@@ -61,3 +61,43 @@ func TestTaskSettingsAreDeclaredAndPushed(t *testing.T) {
 		t.Fatalf("改坏了的值应按默认值: %v", got)
 	}
 }
+
+// 审批等多久自动拒绝：设备级、立刻生效、默认 30 分钟、1 到 1440；推给设备进程，改坏了的按默认值。
+func TestTaskApprovalTimeoutSetting(t *testing.T) {
+	cfg := settingsTestConfiguration(t)
+	schema := buildSettingsSchema(cfg)
+	spec, declared := schema.spec(taskApprovalKey)
+	if !declared || spec.Group != taskGroup || spec.Type != settingInteger || spec.Default != 30 || spec.Restart != restartNone || spec.Scope != deviceScope ||
+		spec.Minimum == nil || *spec.Minimum != 1 || spec.Maximum == nil || *spec.Maximum != 1440 {
+		t.Fatalf("审批时限声明得不对: %+v", spec)
+	}
+	if spec.Title.ZH == "" || spec.Title.EN == "" || spec.Description.ZH == "" || spec.Description.EN == "" {
+		t.Fatal("审批时限缺中文或者英文的标题、说明")
+	}
+	if got := cfg.taskSettings(); got["approvalTimeoutMinutes"] != 30 {
+		t.Fatalf("没写过时应是 30: %v", got)
+	}
+	for _, outside := range []int{0, 1441} {
+		if _, problem, _ := cfg.settings.apply(0, []settingEdit{edit(taskApprovalKey, outside)}, schema, cfg.validateSettings); problem == nil || problem.key != taskApprovalKey {
+			t.Fatalf("写成 %d 应被拒绝", outside)
+		}
+	}
+	if _, problem, err := cfg.settings.apply(0, []settingEdit{edit(taskApprovalKey, 5)}, schema, cfg.validateSettings); err != nil || problem != nil {
+		t.Fatalf("写入失败: %+v %v", problem, err)
+	}
+	if got := cfg.taskSettings(); got["approvalTimeoutMinutes"] != 5 {
+		t.Fatalf("写过的设置没有推给设备进程: %v", got)
+	}
+	data, _ := json.Marshal(settingsFile{Version: 2, Values: map[string]json.RawMessage{taskApprovalKey: json.RawMessage("99999")}})
+	if err := os.WriteFile(settingsPath(cfg.home), data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	reloaded, err := loadSettings(cfg.home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.settings = reloaded
+	if got := cfg.taskSettings(); got["approvalTimeoutMinutes"] != 30 {
+		t.Fatalf("改坏了的值应按默认值: %v", got)
+	}
+}

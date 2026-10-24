@@ -5,6 +5,7 @@
 import { nextTaskRun } from '../../../protocol/src/task-schedule.mjs'
 import type {
   TaskErrorView,
+  TaskRunApprovalView,
   TaskRunStatus,
   TaskRunView,
   TaskSchedule,
@@ -143,6 +144,15 @@ interface RunSpec {
   summary?: string | null
   error?: TaskErrorView | null
   read?: boolean
+  /** 跑了多久，默认 3 分钟 */
+  duration?: number
+  /** 回合里要人答的请求：相对开始的时间、一句话、状态 */
+  approvals?: {
+    after: number
+    kind: TaskRunApprovalView['kind']
+    title: string
+    state: TaskRunApprovalView['state']
+  }[]
 }
 
 export interface SampleTasks {
@@ -256,8 +266,16 @@ export function sampleTasks(deviceId: string, now: number, lang: SampleLang): Sa
         threadId: 'gone-deps-1',
         summary: lang === 'en' ? 'No security updates.' : '没有安全更新。',
       },
-      // 构建监控：在 s8 里接着发，现在这一次正在跑
-      { taskId: 'task-watch', ago: 2 * MINUTE, status: 'running', threadId: 's8' },
+      // 构建监控：在 s8 里接着发，现在这一次正在跑，停在一个命令审批上
+      {
+        taskId: 'task-watch',
+        ago: 2 * MINUTE,
+        status: 'running',
+        threadId: 's8',
+        approvals: [
+          { after: MINUTE, kind: 'command', title: 'npm run build -- --clean', state: 'waiting' },
+        ],
+      },
       {
         taskId: 'task-watch',
         ago: 32 * MINUTE,
@@ -298,7 +316,7 @@ export function sampleTasks(deviceId: string, now: number, lang: SampleLang): Sa
       },
     )
     runSpecs.push(
-      // 夜间测试：成功了，还没看
+      // 夜间测试：成功了，还没看；中间一个改文件的审批没人答，到时限自动拒绝了
       {
         taskId: 'task-nightly',
         ago: 15 * HOUR,
@@ -306,6 +324,15 @@ export function sampleTasks(deviceId: string, now: number, lang: SampleLang): Sa
         threadId: 'b2',
         summary: text.nightly[2],
         read: false,
+        duration: 42 * MINUTE,
+        approvals: [
+          {
+            after: 5 * MINUTE,
+            kind: 'fileChange',
+            title: lang === 'en' ? 'Update snapshot files' : '更新快照文件',
+            state: 'autoDeclined',
+          },
+        ],
       },
       {
         taskId: 'task-disk',
@@ -330,10 +357,22 @@ export function sampleTasks(deviceId: string, now: number, lang: SampleLang): Sa
       harness: specs.find((task) => task.id === spec.taskId)?.target.harness ?? '',
       threadId: spec.threadId,
       startedAt,
-      finishedAt: finished && startedAt !== null ? startedAt + 3 * MINUTE : null,
+      finishedAt: finished && startedAt !== null ? startedAt + (spec.duration ?? 3 * MINUTE) : null,
       summary: spec.summary ?? null,
       error: spec.error ?? null,
       read: finished ? (spec.read ?? true) : true,
+      approvals: (spec.approvals ?? []).map((one, index) => {
+        const requestedAt = now - spec.ago + one.after
+        return {
+          requestId: `ask-${at + 1}-${index + 1}`,
+          kind: one.kind,
+          title: one.title,
+          requestedAt,
+          declineAt: requestedAt + 30 * MINUTE,
+          state: one.state,
+          settledAt: one.state === 'waiting' ? null : requestedAt + 30 * MINUTE,
+        }
+      }),
     }
   })
   const tasks: TaskView[] = specs.map((spec) => {

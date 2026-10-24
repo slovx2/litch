@@ -10,7 +10,7 @@ import { wireStyle } from '../app/device.ts'
 import { Close, Forward, Plus } from '../app/icons.tsx'
 import { useKey } from '../app/services.tsx'
 import type { MessageKey } from '../i18n/index.ts'
-import { runStatusText, runTone, scheduleLine, whenText } from './describe.ts'
+import { runStatusText, runTone, scheduleLine, waitingAsks, whenText } from './describe.ts'
 import { TaskDetail } from './TaskDetail.tsx'
 import { TaskFormPage } from './TaskForm.tsx'
 import { useSchedulable } from './useSchedulable.ts'
@@ -50,7 +50,12 @@ function TaskRow({
         </span>
         <span className="tk-row-last">
           <span className="tk-row-label">{t('tasks.row.last')}</span>
-          {last ? (
+          {last && waitingAsks(last).length > 0 ? (
+            <span className="tk-st ell" data-tone="wait" data-mark="asking">
+              <i className="tk-dot" />
+              {t('tasks.ask.mark')}
+            </span>
+          ) : last ? (
             <span className="tk-st ell" data-tone={runTone(last.status)}>
               <i className="tk-dot" />
               {runStatusText(last.status, t)}

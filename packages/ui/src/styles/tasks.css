@@ -107,6 +107,10 @@
   border-radius: 1px;
   transform: rotate(45deg);
 }
+/* 回合停在一个审批上，等人处理 */
+.tk-st[data-mark="asking"] {
+  color: var(--wait);
+}
 .tk-st-when {
   color: var(--ink-3);
 }
@@ -245,6 +249,34 @@
 }
 .tk-run-error {
   color: var(--err);
+}
+/* 回合里要人答的请求：一条一行，左边是什么，右边是怎样了 */
+.tk-run-asks {
+  list-style: none;
+  margin: 2px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  line-height: 18px;
+}
+.tk-run-asks li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  min-width: 0;
+  color: var(--ink-2);
+}
+.tk-ask-line {
+  min-width: 0;
+  max-width: 100%;
+}
+.tk-ask-state {
+  color: var(--ink-3);
+}
+.tk-run-asks li[data-state="waiting"] .tk-ask-state {
+  color: var(--wait);
 }
 .tk-more {
   display: flex;

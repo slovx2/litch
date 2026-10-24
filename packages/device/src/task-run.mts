@@ -21,6 +21,7 @@ import {
   turnResult,
   watchTurn,
 } from './engine-link.mjs'
+import type { GuardedTurn } from './task-approvals.mjs'
 import type { TaskRow } from './task-store.mjs'
 import type { TaskTurns } from './task-turns.mjs'
 import { isObject, UpstreamRpcError } from './wire.mjs'
@@ -91,6 +92,11 @@ export interface RunHost {
   backgroundRunning(threadId: string): number
   /** 记下任务发起的回合（会话树认出它们，不拿来唤醒父会话） */
   turns: TaskTurns
+  /**
+   * 接管这条内部连接上、任务回合里要人答的请求：等人答，到时限替人拒绝，记进这次运行（task-approvals.mts）。
+   * turn 给出此刻在跑的任务回合，没有是 null。一直管到连接关
+   */
+  guardApprovals(link: EngineLink, run: DeviceTaskRun, turn: () => GuardedTurn | null): void
 }
 
 /** 给模型看的时间：任务时区里的 YYYY-MM-DD HH:MM */
@@ -225,6 +231,9 @@ export async function executeRun(
   }
   const link = await reach(host, run.harness)
   let kept = false
+  // 任务回合在跑的这段（turn/start 发出去到回合结束），回合里的审批由设备进程接管
+  let guarded: GuardedTurn | null = null
+  host.guardApprovals(link, initial, () => guarded)
   try {
     if (run.threadId === null && target.kind === 'newThread') {
       const started = await link.request('thread/start', {
@@ -274,6 +283,7 @@ export async function executeRun(
     const threadId = run.threadId as string
     const effort = target.kind === 'newThread' ? target.settings.effort : null
     const sent = host.turns.starting(threadId)
+    guarded = { threadId, turnId: null }
     const result = await runTurn(
       link,
       {
@@ -285,13 +295,17 @@ export async function executeRun(
         timeoutMs: host.timing.turnTimeoutMs,
         interruptGraceMs: host.timing.interruptGraceMs,
         onStarted: (turnId) => {
+          guarded = { threadId, turnId }
           host.turns.started(threadId, turnId)
           sent()
           run = { ...run, turnId, status: 'running', startedAt: Math.floor(host.now() / 1000) }
           host.progress(run)
         },
       },
-    ).finally(sent)
+    ).finally(() => {
+      sent()
+      guarded = null
+    })
     if (result.status === 'timedOut') host.log(`任务 ${task.id} 的回合超过了时限，打断了`)
     const outcome = outcomeOf(result)
     const background = host.backgroundRunning(threadId)
@@ -377,6 +391,9 @@ export async function recoverRun(host: RunHost, run: DeviceTaskRun): Promise<Run
     return interrupted(message(error))
   }
   host.turns.started(run.threadId, run.turnId)
+  // 还在等的审批：引擎在 thread/resume 之后重放给这条连接，沿用原来的时限
+  const turn: GuardedTurn = { threadId: run.threadId, turnId: run.turnId }
+  host.guardApprovals(link, run, () => turn)
   const watch = watchTurn(link, run.threadId)
   try {
     const read = await link

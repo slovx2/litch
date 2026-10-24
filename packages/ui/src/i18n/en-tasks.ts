@@ -69,6 +69,17 @@ export const enTasks: Record<keyof typeof zhTasks, Entry> = {
   'tasks.run.open': 'Open session',
   'tasks.run.gone': 'Session no longer in the sidebar',
   'tasks.run.pending': 'Session not created yet',
+  'tasks.ask.kind.command': 'Command',
+  'tasks.ask.kind.fileChange': 'File change',
+  'tasks.ask.kind.permissions': 'Permission request',
+  'tasks.ask.kind.question': 'Question',
+  'tasks.ask.kind.elicitation': 'MCP request',
+  'tasks.ask.line': '{kind}: {title}',
+  'tasks.ask.mark': 'Waiting for you',
+  'tasks.ask.waiting':
+    'Waiting for you; open the session to respond. Declined automatically in {minutes} min',
+  'tasks.ask.resolved': 'Handled',
+  'tasks.ask.autoDeclined': 'No answer in {minutes} min; declined automatically {when}',
   'tasks.error.harnessUnavailable': 'Harness unavailable',
   'tasks.error.threadMissing': 'Target session no longer exists; task paused',
   'tasks.error.cwdMissing': 'Working directory not found',
@@ -188,6 +199,9 @@ export const enTasks: Record<keyof typeof zhTasks, Entry> = {
   'tasks.notice.failed': 'Scheduled task failed: {name}',
   'tasks.notice.succeeded': 'Scheduled task finished: {name}',
   'tasks.notice.body': '{device} · {text}',
+  'tasks.notice.asking': 'Scheduled task needs you: {name}',
+  'tasks.notice.askingBody':
+    '{device} · {line} (declined automatically if no one answers in {minutes} min)',
   'settings.group.notify': 'Notifications',
   'settings.notify.intro':
     'System notifications when scheduled tasks finish. Click one to open its session.',

@@ -117,6 +117,11 @@ export function taskSettings(state: ControlState | null): TaskSettings {
     if (typeof given.enabled === 'boolean') settings.enabled = given.enabled
     if (Number.isInteger(given.maxConcurrent) && (given.maxConcurrent as number) >= 1)
       settings.maxConcurrent = given.maxConcurrent as number
+    if (
+      Number.isInteger(given.approvalTimeoutMinutes) &&
+      (given.approvalTimeoutMinutes as number) >= 1
+    )
+      settings.approvalTimeoutMinutes = given.approvalTimeoutMinutes as number
   }
   return settings
 }

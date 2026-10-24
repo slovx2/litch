@@ -12,6 +12,7 @@ import type {
   TaskDraft,
   TaskErrorView,
   TaskPatch,
+  TaskRunApprovalView,
   TaskRunView,
   TaskView,
 } from '../model-tasks.mjs'
@@ -39,7 +40,29 @@ export function projectRun(deviceId: string, run: DeviceTaskRun): TaskRunView {
     error: errorOf(run.error),
     // 没结束的总是“看过了”：协议这么约定，这里照着守一遍
     read: finishedRun(run.status) ? run.read !== false : true,
+    approvals: (Array.isArray(run.approvals) ? run.approvals : []).map((entry) => ({
+      requestId: String(entry.requestId),
+      kind: entry.kind,
+      title: String(entry.title ?? ''),
+      requestedAt: ms(entry.requestedAt) ?? 0,
+      declineAt: ms(entry.declineAt) ?? 0,
+      state: entry.state,
+      settledAt: ms(entry.settledAt),
+    })),
   }
+}
+
+/** 这次运行里新出现的、在等人答的请求（before 是之前手上那一份，没有是 undefined） */
+export function newlyWaiting(
+  run: TaskRunView,
+  before: TaskRunView | undefined,
+): TaskRunApprovalView[] {
+  const known = new Set(
+    (before?.approvals ?? [])
+      .filter((entry) => entry.state === 'waiting')
+      .map((entry) => entry.requestId),
+  )
+  return run.approvals.filter((entry) => entry.state === 'waiting' && !known.has(entry.requestId))
 }
 
 export function projectTask(deviceId: string, task: DeviceTask): TaskView {

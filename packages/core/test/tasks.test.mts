@@ -308,6 +308,50 @@ test('运行的通知：看着它结束的标 finished；标成看过了、对�
   )
 })
 
+test('运行里要人答的请求：时间换成毫秒；看着新来的等人处理的标 asking，同一条再来、有了结果的不标', async () => {
+  const w = world()
+  w.tasks.tasks.push(rawTask('a'))
+  const { seen } = w.watch()
+  w.core.start()
+  await settled()
+  const ask = (requestId: string, state: 'waiting' | 'resolved' | 'autoDeclined') => ({
+    requestId,
+    kind: 'command' as const,
+    title: 'rm -rf build',
+    requestedAt: 1_700_000_200,
+    declineAt: 1_700_002_000,
+    state,
+    settledAt: state === 'waiting' ? null : 1_700_002_000,
+  })
+  const run = (approvals: ReturnType<typeof ask>[]) => ({
+    run: rawRun('r1', 'a', { status: 'running', finishedAt: null, threadId: 'p2', approvals }),
+  })
+  w.broadcast('litch/task/run/changed', run([]))
+  w.broadcast('litch/task/run/changed', run([ask('x', 'waiting')]))
+  w.broadcast('litch/task/run/changed', run([ask('x', 'waiting')]))
+  w.broadcast('litch/task/run/changed', run([ask('x', 'autoDeclined'), ask('y', 'waiting')]))
+  w.broadcast('litch/task/run/changed', run([ask('x', 'autoDeclined'), ask('y', 'resolved')]))
+  await settled()
+  const runs = seen.ops.filter((op) => op.op === 'run.upsert')
+  assert.deepEqual(
+    runs.map((op) =>
+      op.op === 'run.upsert' ? (op.asking ?? []).map((one) => one.requestId) : null,
+    ),
+    [[], ['x'], [], ['y'], []],
+  )
+  const last = runs.at(-1)
+  assert.ok(last?.op === 'run.upsert')
+  assert.deepEqual(last.run.approvals[0], {
+    requestId: 'x',
+    kind: 'command',
+    title: 'rm -rf build',
+    requestedAt: 1_700_000_200_000,
+    declineAt: 1_700_002_000_000,
+    state: 'autoDeclined',
+    settledAt: 1_700_002_000_000,
+  })
+})
+
 test('会话上的记号：任务的目标会话是 target，运行跑出来的是 run（最近的那一次），变了侧栏那一行跟着换', async () => {
   const w = world()
   w.tasks.tasks.push(

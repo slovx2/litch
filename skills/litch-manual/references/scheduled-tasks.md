@@ -43,6 +43,10 @@ Exact flags: `scripts/litch tasks --help`.
   missed runs"; a one-time task still runs once.
 - A run is limited to 2 hours. A failed run does not pause the task; a task whose target session is
   gone is paused.
+- Approvals and questions in a task's turn wait for a person: the session shows "waiting for you" in the
+  session list on the desktop and phone, opening it shows the approval, and the desktop shows a system
+  notification. Unanswered after `tasks.approvalTimeoutMinutes` (default 30), the device declines them
+  (questions are skipped) and the run history says which ones and when.
 - At most 200 tasks per device. Runs at once per device are limited by `tasks.maxConcurrent` (default
   2); `tasks.enabled` switches all schedules on the device off and on (`device-settings.md`).
 - Failed runs always show a system notification on the desktop; successful ones only when the user

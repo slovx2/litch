@@ -404,6 +404,7 @@ export function createMockTasks(host: MockTasksHost): MockTasks {
         summary: null,
         error: null,
         read: true,
+        approvals: [],
       }
       putRun(params.deviceId, state, run, false)
       play(params.deviceId, state, task, run)

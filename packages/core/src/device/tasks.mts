@@ -28,6 +28,7 @@ import { phrase } from '../phrase.mjs'
 import {
   createParams,
   finishedRun,
+  newlyWaiting,
   projectRun,
   projectTask,
   sameMark,
@@ -218,7 +219,9 @@ export function createTasks(host: TasksHost): Tasks {
     // 连着的时候看着它结束：头一次见到它是结束了的（没见过开始，比如很快就跑完）也算，
     // 但标成看过了的那种通知不算（打开看过之后设备会再发一遍）
     const finished = finishedRun(run.status) && !run.read && (!was || !finishedRun(was.status))
-    publish([{ op: 'run.upsert', run, finished }])
+    // 连着的时候看着新来的、在等人答的请求（对账补上的不经这里）
+    const asking = newlyWaiting(run, was)
+    publish([{ op: 'run.upsert', run, finished, ...(asking.length > 0 ? { asking } : {}) }])
     remark()
   }
 

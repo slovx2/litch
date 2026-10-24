@@ -82,7 +82,14 @@ import type {
   PairPhone,
   PairStatus,
 } from '../model-pairing.mjs'
-import type { TaskDraft, TaskPatch, TaskRunView, TasksView, TaskView } from '../model-tasks.mjs'
+import type {
+  TaskDraft,
+  TaskPatch,
+  TaskRunApprovalView,
+  TaskRunView,
+  TasksView,
+  TaskView,
+} from '../model-tasks.mjs'
 import type {
   TerminalHave,
   TerminalOp,
@@ -273,12 +280,13 @@ export type DiffOp = { op: 'diff.set'; view: DiffView }
  * 定时任务的增量。任务整条换（它不大，变的往往是好几项：下一次、最近一次、未读数一起变）。
  * run.upsert 是一次运行开始、结束、标成看过了：详情页开着的运行记录据此更新。
  * finished 为真：这一条是核心看着这次运行结束的（连着的时候收到的通知），界面据此发系统通知；
- * 对账时补上的、标成看过了的都是 false
+ * 对账时补上的、标成看过了的都是 false。
+ * asking：核心看着这次运行里新来的、在等人答的请求（审批、提问），界面据此发“定时任务在等你处理”的系统通知；没有不带
  */
 export type TasksOp =
   | { op: 'task.upsert'; task: TaskView }
   | { op: 'task.remove'; taskId: string }
-  | { op: 'run.upsert'; run: TaskRunView; finished: boolean }
+  | { op: 'run.upsert'; run: TaskRunView; finished: boolean; asking?: TaskRunApprovalView[] }
 
 /**
  * 扫码绑定手机的增量。已绑定的手机整份换（不长，变得也少）；

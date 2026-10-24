@@ -1,6 +1,6 @@
 package main
 
-// 定时任务（协议扩展 deviceTasks）的两项设置：总开关、整台设备同时在跑的上限。
+// 定时任务（协议扩展 deviceTasks）的设置：总开关、整台设备同时在跑的上限、回合里的审批等多久没人答就替人拒绝。
 // 任务本身和调度都在设备进程里（packages/device/src/tasks.mts），这一层只管设置。
 // 怎么生效：和可重连的终端那几项一样（settings_processes.go），设置改了不重启设备进程，
 // 经控制通道把现行值推过去（controlState.Tasks），设备进程当场换上。
@@ -13,14 +13,21 @@ const (
 	taskConcurrentDefault = 2
 	taskConcurrentMinimum = 1
 	taskConcurrentMaximum = 16
+	taskApprovalKey       = "tasks.approvalTimeoutMinutes"
+	// 和设备进程自己的默认值（DEFAULT_APPROVAL_TIMEOUT_MINUTES）一样。最长一天：回合本身最长 2 小时，
+	// 设得比它长就等于不自动拒绝，回合到时限被打断时审批一并作废。
+	taskApprovalDefault = 30
+	taskApprovalMinimum = 1
+	taskApprovalMaximum = 1440
 )
 
 func taskSettings() (settingGroup, []settingSpec) {
 	description := both(
-		"定时任务存在这台设备上，到点由设备服务自己去跑，客户端断开、桌面端退出都照样跑。下面两项改了立刻生效，不用重启任何东西。",
+		"定时任务存在这台设备上，到点由设备服务自己去跑，客户端断开、桌面端退出都照样跑。下面几项改了立刻生效，不用重启任何东西。",
 		"Scheduled tasks live on this device and the device service runs them on time, even when no client is connected or the desktop app has quit. Changes below take effect at once and restart nothing.",
 	)
 	minimum, maximum := taskConcurrentMinimum, taskConcurrentMaximum
+	approvalMinimum, approvalMaximum := taskApprovalMinimum, taskApprovalMaximum
 	return settingGroup{
 			ID: taskGroup, Scope: deviceScope, Description: &description,
 			Title: both("定时任务", "Scheduled tasks"),
@@ -42,6 +49,15 @@ func taskSettings() (settingGroup, []settingSpec) {
 					"At most this many task runs go at once on this device; the rest wait and start in order of their scheduled time. Default 2. Lowering it never interrupts runs already going.",
 				),
 			},
+			{
+				Key: taskApprovalKey, Group: taskGroup, Type: settingInteger, Scope: deviceScope, Restart: restartNone,
+				Default: taskApprovalDefault, Minimum: &approvalMinimum, Maximum: &approvalMaximum,
+				Title: both("审批等多久自动拒绝（分钟）", "Auto-decline approvals after (minutes)"),
+				Description: both(
+					"任务回合里要人批的命令、改文件、权限申请和提问，等的时候桌面端和手机打开那个会话就能批；过了这么多分钟还没人答，设备服务替你拒绝（提问按跳过），记进运行记录。默认 30。改了只影响之后到的审批。",
+					"Commands, file changes, permission requests and questions in a task's turn can be answered from the desktop or phone by opening that session while they wait; after this many minutes with no answer the device service declines them for you (questions are skipped) and notes it in the run history. Default 30. Changes apply to approvals that arrive later.",
+				),
+			},
 		}
 }
 
@@ -52,8 +68,13 @@ func (c configuration) taskSettings() map[string]any {
 	if limit < taskConcurrentMinimum || limit > taskConcurrentMaximum {
 		limit = taskConcurrentDefault
 	}
+	approval := c.settings.integer(taskApprovalKey, taskApprovalDefault)
+	if approval < taskApprovalMinimum || approval > taskApprovalMaximum {
+		approval = taskApprovalDefault
+	}
 	return map[string]any{
-		"enabled":       c.settings.boolean(taskEnabledKey, true),
-		"maxConcurrent": limit,
+		"enabled":                c.settings.boolean(taskEnabledKey, true),
+		"maxConcurrent":          limit,
+		"approvalTimeoutMinutes": approval,
 	}
 }

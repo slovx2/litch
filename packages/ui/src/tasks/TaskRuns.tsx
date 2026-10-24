@@ -6,7 +6,16 @@ import { useT } from '../app/appearance.ts'
 import { useNow } from '../app/clock.ts'
 import { reasonOf } from '../app/errors.ts'
 import { useKey, useServices } from '../app/services.tsx'
-import { errorText, runStatusText, runTone, triggerText, whenText } from './describe.ts'
+import {
+  askLine,
+  askStateText,
+  errorText,
+  runStatusText,
+  runTone,
+  triggerText,
+  waitingAsks,
+  whenText,
+} from './describe.ts'
 
 function RunRow({
   run,
@@ -35,6 +44,12 @@ function RunRow({
         {run.coalesced > 0 ? (
           <span className="tk-run-more">{t('tasks.run.coalesced', { count: run.coalesced })}</span>
         ) : null}
+        {waitingAsks(run).length > 0 ? (
+          <span className="tk-st" data-tone="wait" data-mark="asking">
+            <i className="tk-dot" />
+            {t('tasks.ask.mark')}
+          </span>
+        ) : null}
         <span className="grow" />
         {open && run.threadId ? (
           <button
@@ -57,6 +72,16 @@ function RunRow({
       </div>
       {run.summary ? <div className="tk-run-summary">{run.summary}</div> : null}
       {run.error ? <div className="tk-run-error">{errorText(run.error, t)}</div> : null}
+      {run.approvals.length > 0 ? (
+        <ul className="tk-run-asks">
+          {run.approvals.map((entry) => (
+            <li key={entry.requestId} data-ask={entry.requestId} data-state={entry.state}>
+              <span className="tk-ask-line ell">{askLine(entry, t)}</span>
+              <span className="tk-ask-state">{askStateText(entry, now, t)}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </li>
   )
 }
