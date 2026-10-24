@@ -241,6 +241,7 @@ export {
   parseAskReply,
 } from './projection/asks.mjs'
 export {
+  backgroundEntries,
   backgroundHint,
   deriveBackground,
   runningFromTurn,

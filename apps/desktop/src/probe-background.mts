@@ -6,7 +6,9 @@
 //   收起的过程那一行末尾“· 2 个在后台运行”；侧栏那一行是只剩后台任务在跑的记号，三种皮肤各画各的；
 //   自发回合开头一行“后台任务结束，自动继续”和叫醒它的任务，没有用户气泡；
 //   回合在跑时（自发回合、人接着说的一句）输入框上方那一行照样在，数着还在跑的；
-//   全部结束后提示行、收起行和侧栏上的记号都没了，右侧页只剩已结束的两行（完成、失败）。
+//   全部结束后提示行、收起行和侧栏上的记号都没了，右侧页只剩已结束的两行（完成、失败）；
+//   再起两个后台任务、接着派子代理：回合里子代理一个个出条目时那一行一直在，数里算上子代理；右侧页里
+//   子代理和后台命令同在一张列表，点子代理在下面开子代理页，点命令看输出，“停止”把在跑的命令停掉。
 // 下面的 backgroundProbe 会被原样送进页面里执行，不能引用函数外面的东西。
 
 export interface BackgroundSeen {
@@ -39,6 +41,16 @@ export interface BackgroundSeen {
   sidebarGone: boolean
   /** 右侧页只剩已结束的两行：完成一行、失败一行，写着没有在跑的 */
   panelEnded: boolean
+  /** 再起两个后台任务、接着派子代理：回合里子代理一个个出条目的时候那一行一直在，数里算上在跑的子代理 */
+  barGapless: boolean
+  barCountsAgents: boolean
+  /** 右侧页里子代理和后台命令在同一张列表里，点子代理在下面打开子代理页 */
+  panelAgents: boolean
+  agentPage: boolean
+  /** 点后台命令看它的输出（这时还没有输出，写着暂无输出） */
+  taskPage: boolean
+  /** 在跑的命令行尾的“停止”：点了记成已停止，那一行少数一个 */
+  stopped: boolean
   /** 三种皮肤、深浅两套下提示行、右侧页的行、开头那一行不溢出 */
   looks: string[]
   seen: Record<string, string>
@@ -199,7 +211,61 @@ export async function backgroundProbe(sessionId: string): Promise<BackgroundSeen
     ended.includes('completed') &&
     ended.includes('failed')
 
+  // —— 再起两个后台任务，接着派子代理：子代理在回合里一个个出条目，那一行一直在、数里算上子代理 ——
+  await say('再起两个后台任务')
+  await until(() => !turnRunning() && ($('.main .bgbar')?.dataset.background ?? '') === '2', 6000)
+  await say('用子代理看看')
+  let barGapless = true
+  let most = 0
+  const counts: string[] = []
+  await until(turnRunning, 4000)
+  while (turnRunning()) {
+    const count = Number($('.main .bgbar')?.dataset.background ?? '0')
+    if (count === 0) barGapless = false
+    most = Math.max(most, count)
+    if (counts.at(-1) !== String(count)) counts.push(String(count))
+    await sleep(30)
+  }
+  seen.agentTurn = counts.join('→')
+  const barCountsAgents = most > 2
+  // 子代理那一回合比两条后台命令跑得久：再起两条，在跑的时候看右侧页
+  await until(() => $('.main .bgbar') === null, 10000)
+  await say('第三次起两个后台任务')
+  await until(() => !turnRunning() && ($('.main .bgbar')?.dataset.background ?? '') === '2', 6000)
+  if (!$('.bg-panel')) $('.main .bgbar')?.click()
+  await until(() => $('.bg-panel') !== null)
+  const panelAgents = await until(
+    () =>
+      $$('.bg-panel .bg-row[data-source="agent"]').length > 0 &&
+      $$('.bg-panel .bg-row[data-source="task"][data-status="running"]').length === 2,
+  )
+  seen.mixed = $$('.bg-panel .bg-row')
+    .map((row) => `${row.dataset.source}:${row.dataset.status}`)
+    .join(',')
+  $('.bg-panel .bg-row[data-source="agent"]')?.click()
+  const agentPage = await until(() => $('.bg-panel[data-detail="agent"] .agents-view') !== null)
+  const running = () => $$('.bg-panel .bg-row[data-source="task"][data-status="running"]')
+  running()[0]?.click()
+  const taskPage = await until(
+    () => $('.bg-panel[data-detail="task"] .bg-task') !== null && $('.bg-task-none') !== null,
+  )
+  seen.task = $('.bg-task')?.textContent ?? '没有'
+  const target = running()[0]?.dataset.entry ?? ''
+  ;($(`.bg-row[data-entry="${target}"] .bg-stop`) as HTMLButtonElement | null)?.click()
+  const stopped = await until(
+    () =>
+      $(`.bg-row[data-entry="${target}"]`)?.dataset.status === 'stopped' &&
+      ($('.main .bgbar')?.dataset.background ?? '') === '1',
+  )
+  await until(() => $('.main .bgbar') === null, 10000)
+
   return {
+    barGapless,
+    barCountsAgents,
+    panelAgents,
+    agentPage,
+    taskPage,
+    stopped,
     bar,
     breathing,
     foldMark,
@@ -240,6 +306,12 @@ const LABELS: Record<Exclude<keyof BackgroundSeen, 'seen' | 'looks'>, string> = 
   foldGone: '全部结束后收起行上的记号没了',
   sidebarGone: '全部结束后侧栏的记号没了',
   panelEnded: '右侧页只剩已结束的两行（完成、失败），写着没有在跑的',
+  barGapless: '派子代理的回合里子代理一个个出条目时那一行一直在',
+  barCountsAgents: '那一行的数算上在跑的子代理',
+  panelAgents: '右侧页里子代理和后台命令在同一张列表里',
+  agentPage: '点子代理在列表下面打开子代理页',
+  taskPage: '点后台命令看它的输出',
+  stopped: '在跑的命令点“停止”后记成已停止，那一行少数一个',
 }
 
 export function judgeBackground(seen: BackgroundSeen): string[] {

@@ -9,12 +9,17 @@ import {
 } from '../../../protocol/src/background-tasks.mjs'
 import type { ItemView, TurnView } from '../model.mjs'
 import type {
+  BackgroundChildInput,
+  BackgroundEntriesView,
+  BackgroundEntryView,
   BackgroundTaskKind,
   BackgroundTaskStatus,
   BackgroundTaskView,
   SessionBackgroundView,
   TurnOrigin,
 } from '../model-background.mjs'
+import type { AgentRunState, AgentState, AgentThreadView } from '../model-tree.mjs'
+import { agentRunState } from './tree.mjs'
 
 const KINDS: readonly string[] = ['shell', 'agent', 'monitor', 'workflow', 'remote', 'other']
 const STATUSES: readonly string[] = ['running', 'completed', 'failed', 'stopped']
@@ -115,11 +120,108 @@ export function sessionBackground(
 }
 
 /**
- * 输入框上方那一行写几个（0 就不出）：在跑的后台任务个数。和回合进不进行无关——人接着说话、
- * 新回合在跑时，上一回合留在后台的任务照样在跑，这一行照样在（“正在工作”说的是前台）
+ * 输入框上方那一行写几个（0 就不出）：在跑的后台任务个数，子代理、子会话也算（backgroundEntries）。
+ * 和回合进不进行无关——人接着说话、新回合在跑时，上一回合留在后台的任务照样在跑，这一行照样在
+ * （“正在工作”说的是前台）
  */
-export const backgroundHint = (background: SessionBackgroundView | null): number =>
-  background?.running ?? 0
+export const backgroundHint = (entries: BackgroundEntriesView | null): number =>
+  entries?.running ?? 0
+
+/** 子代理的状态在后台任务列表里怎么写：排队的也算在跑 */
+const AGENT_STATUS: Record<AgentRunState, BackgroundTaskStatus> = {
+  queued: 'running',
+  running: 'running',
+  completed: 'completed',
+  failed: 'failed',
+  stopped: 'stopped',
+}
+
+/** 子会话：在跑、等人的算在跑，出错的算失败，停下了的算完成 */
+const CHILD_STATUS: Record<BackgroundChildInput['status'], BackgroundTaskStatus> = {
+  running: 'running',
+  waiting: 'running',
+  error: 'failed',
+  idle: 'completed',
+}
+
+/** 运行中的在前（先开始的在前），已结束的在后（后结束的在前） */
+function ordered(entries: BackgroundEntryView[]): BackgroundEntryView[] {
+  const running = entries
+    .filter((entry) => entry.status === 'running')
+    .sort((a, b) => (a.startedAt ?? Infinity) - (b.startedAt ?? Infinity))
+  const ended = entries
+    .filter((entry) => entry.status !== 'running')
+    .sort((a, b) => (b.endedAt ?? b.startedAt ?? 0) - (a.endedAt ?? a.startedAt ?? 0))
+  return [...running, ...ended]
+}
+
+/**
+ * 后台任务页和输入框上方那一行用的整张列表：集合里的后台任务、引擎自己的子代理（父会话的子代理列表，
+ * reported 是父会话条目里报的状态，子线程说不出时用）、会话树里的子会话，界面上都叫后台任务。
+ * Claude 的后台子代理既在集合里（种类 agent）又有子线程：同名的只留子线程那一行（点了能进子代理页）
+ */
+export function backgroundEntries(
+  background: SessionBackgroundView | null,
+  agents: readonly AgentThreadView[] | null | undefined,
+  children: readonly BackgroundChildInput[] = [],
+  reported: ReadonlyMap<string, AgentState> = new Map(),
+): BackgroundEntriesView | null {
+  const entries: BackgroundEntryView[] = []
+  const agentTitles = new Set<string>()
+  for (const agent of agents ?? []) {
+    const status = AGENT_STATUS[agentRunState(agent, reported.get(agent.id), null)]
+    const startedAt = agent.turn?.startedAt ?? null
+    const spent = agent.turn?.durationMs ?? null
+    const title = agent.description || agent.nickname || agent.role || ''
+    if (title) agentTitles.add(title.trim())
+    entries.push({
+      key: `agent:${agent.id}`,
+      source: 'agent',
+      kind: 'agent',
+      title,
+      status,
+      id: agent.id,
+      task: null,
+      startedAt,
+      endedAt:
+        status === 'running' || startedAt === null || spent === null ? null : startedAt + spent,
+    })
+  }
+  for (const task of background?.tasks ?? []) {
+    if (task.kind === 'agent' && agentTitles.has(task.title.trim())) continue
+    entries.push({
+      key: `task:${task.id}`,
+      source: 'task',
+      kind: task.kind,
+      title: task.title,
+      status: task.status,
+      id: task.id,
+      task,
+      startedAt: task.startedAt,
+      endedAt: task.endedAt,
+    })
+  }
+  for (const child of children) {
+    const status = CHILD_STATUS[child.status]
+    entries.push({
+      key: `child:${child.id}`,
+      source: 'child',
+      kind: 'agent',
+      title: child.title,
+      status,
+      id: child.id,
+      task: null,
+      startedAt: child.startedAt,
+      endedAt: status === 'running' ? null : child.updatedAt,
+    })
+  }
+  if (entries.length === 0) return null
+  return {
+    entries: ordered(entries),
+    running: entries.filter((entry) => entry.status === 'running').length,
+    wakesOnFinish: background?.wakesOnFinish ?? null,
+  }
+}
 
 /** 这个回合发起的、还在跑的后台任务有几个（收起行末尾的“· N 个在后台运行”） */
 export function runningFromTurn(background: SessionBackgroundView | null, turn: TurnView): number {

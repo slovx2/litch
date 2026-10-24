@@ -1,17 +1,26 @@
 // 一个会话的后台任务（回合结束后还在跑的工作）：输入框上方那一行、侧面板的“后台任务”页、收起行上的记号都用它。
 // 对面报集合的照侧栏摘要上的那份（SessionSummary.background）；不报的从最近几个已结束的回合里
 // 还在跑的命令派生（核心的 deriveBackground）。界面只认结果，不区分是哪一种来的。
+// 输入框上方那一行和“后台任务”页列的是合起来的一张（useBackgroundEntries）：再加上引擎自己的子代理、
+// 会话树里这个会话派出的子会话，界面上都叫后台任务。
 import {
+  type AgentState,
+  type AgentThreadView,
+  type BackgroundChildInput,
+  type BackgroundEntriesView,
+  backgroundEntries,
   deriveBackground,
   type ItemView,
   keys,
   type SessionBackgroundView,
+  type SessionChildren,
   type SessionMeta,
   type SessionSummary,
   type TurnView,
 } from '@litch/core'
 import { useMemo } from 'react'
 import { useKey, useKeys } from '../app/services.tsx'
+import { useAgentList } from '../tree/useAgentList.ts'
 
 /** 派生时看最近几个回合。更早的回合里还挂着没结束的命令，多半是对面早就忘了的 */
 const DERIVE_TURNS = 20
@@ -56,6 +65,56 @@ export function useSessionBackground(
       byId,
     )
   }, [reports, summary, turns, itemIds, items])
+}
+
+const NO_AGENTS: readonly AgentThreadView[] = []
+const NO_REPORTED: ReadonlyMap<string, AgentState> = new Map()
+
+/** 会话树里这个会话派出的子会话（Litch 自己派的），合进后台任务列表要的几样 */
+function useChildren(deviceId: string, sessionId: string | null): BackgroundChildInput[] {
+  const children = useKey<SessionChildren>(sessionId ? keys.children(deviceId) : '')
+  const ids = sessionId ? children?.[sessionId] : undefined
+  const summaryKeys = useMemo(
+    () => (ids ?? NO_KEYS).map((id) => keys.summary(deviceId, id)),
+    [deviceId, ids],
+  )
+  const summaries = useKeys<SessionSummary>(summaryKeys)
+  return useMemo(
+    () =>
+      summaries.flatMap((summary) =>
+        summary && summary.lineage?.parentId === sessionId
+          ? [
+              {
+                id: summary.id,
+                title:
+                  summary.lineage.title || (typeof summary.title === 'string' ? summary.title : ''),
+                status: summary.status,
+                startedAt: summary.lineage.createdAt || null,
+                updatedAt: summary.updatedAt || null,
+              },
+            ]
+          : [],
+      ),
+    [summaries, sessionId],
+  )
+}
+
+/**
+ * 输入框上方那一行、“后台任务”页列的整张：集合里的后台任务、引擎自己的子代理（父会话开着时核心推来的
+ * keys.agents）、会话树里的子会话。reported 是父会话条目里报的子代理状态（页上要准，那一行不订条目）
+ */
+export function useBackgroundEntries(
+  deviceId: string,
+  sessionId: string | null,
+  reported: ReadonlyMap<string, AgentState> = NO_REPORTED,
+): BackgroundEntriesView | null {
+  const background = useSessionBackground(deviceId, sessionId)
+  const agents = useAgentList(deviceId, sessionId)
+  const children = useChildren(deviceId, sessionId)
+  return useMemo(
+    () => backgroundEntries(background, agents ?? NO_AGENTS, children, reported),
+    [background, agents, children, reported],
+  )
 }
 
 /** 一个任务跑了多久（毫秒）。不知道开始时间的是 null */

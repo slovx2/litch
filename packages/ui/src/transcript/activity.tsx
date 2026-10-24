@@ -156,7 +156,7 @@ function Running({ item, deviceId, sessionId }: ItemRef & { item: CommandItem })
  * 省掉的地方单独占一行，写明省了多少。省略记号是块级的，头、尾各在自己的匿名块里排版；
  * 省过之后开头那段不再变，流式时每一帧变的只有末尾那段（至多几万个字），改它不牵动开头
  */
-function OutputWell({ item }: { item: CommandItem }) {
+export function OutputWell({ item }: { item: CommandItem }) {
   const t = useT()
   const { output, elided } = item
   return (

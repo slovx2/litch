@@ -315,6 +315,8 @@ export interface Device {
   send(sessionId: string, message: OutgoingMessage, now?: boolean): Promise<void>
   steer(sessionId: string, messageId: string): Promise<void>
   interrupt(sessionId: string): Promise<void>
+  /** 停掉会话的一个后台命令（session.stopBackground） */
+  stopBackground(sessionId: string, taskId: string, itemId: string | null): Promise<void>
   unqueue(sessionId: string, messageId: string): void
   respond(sessionId: string, requestId: string, choice: RequestChoice): void
   /** itemId：切在这个回合里插进去的那条用户消息之前（界面里的条目标识） */
@@ -2356,6 +2358,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         : live.send(sessionId, message, now),
     steer: (sessionId, messageId) => live.steer(sessionId, messageId),
     interrupt: (sessionId) => live.interrupt(sessionId),
+    stopBackground: (sessionId, taskId, itemId) => live.stopBackground(sessionId, taskId, itemId),
     unqueue: (sessionId, messageId) => live.unqueue(sessionId, messageId),
     respond: (sessionId, requestId, choice) => live.respond(sessionId, requestId, choice),
     fork: (sessionId, turnId, itemId) => live.fork(sessionId, turnId, itemId),

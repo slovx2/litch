@@ -7,7 +7,6 @@ import type { MessageKey } from '../i18n/index.ts'
 import './browser/show.ts'
 import { BACKGROUND_TAB } from '../background/tab.ts'
 import { GOAL_TAB } from '../goal/tab.ts'
-import { AGENTS_TAB } from '../tree/agents.ts'
 import { BROWSER_TAB } from './browser/store.ts'
 
 /**
@@ -94,7 +93,8 @@ export const SIDE_TABS: readonly SideTabSpec[] = [
     ),
   },
   {
-    // 回合结束后还在跑的后台任务：输入框上方那一行点了打开（background/state.ts）
+    // 后台任务：回合结束后还在跑的命令、引擎自己的子代理、会话树里的子会话合在一页，选中子代理时下面是子代理页。
+    // 输入框上方那一行、对话里的子代理卡片点了打开（background/tab.ts）
     id: BACKGROUND_TAB,
     label: 'side.tab.background',
     icon: 'loop',
@@ -112,15 +112,6 @@ export const SIDE_TABS: readonly SideTabSpec[] = [
     needs: 'goals',
     Panel: lazy(() =>
       import('../goal/GoalTab.tsx').then((module) => ({ default: module.GoalTab })),
-    ),
-  },
-  {
-    // 引擎自己派出的子代理：对话里点子代理卡片时打开（tree/agents.ts 的 openAgent）
-    id: AGENTS_TAB,
-    label: 'side.tab.agents',
-    icon: 'agents',
-    Panel: lazy(() =>
-      import('../tree/AgentsTab.tsx').then((module) => ({ default: module.AgentsTab })),
     ),
   },
 ]

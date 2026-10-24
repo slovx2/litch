@@ -583,6 +583,16 @@ export function createCore(options: CoreOptions): Core {
           }
           return {}
         }
+        case 'session.stopBackground': {
+          const { deviceId, sessionId, taskId, itemId } =
+            params as Commands['session.stopBackground']['params']
+          try {
+            await deviceOf(deviceId).stopBackground(sessionId, taskId, itemId)
+          } catch (error) {
+            throw toChannelFailure(error)
+          }
+          return {}
+        }
         case 'session.interrupt': {
           const { deviceId, sessionId } = params as Commands['session.interrupt']['params']
           try {

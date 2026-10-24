@@ -1,4 +1,5 @@
-// 后台任务在界面这一头的样子：回合结束以后还在跑的工作（后台命令、Monitor、工作流）。
+// 后台任务在界面这一头的样子：回合结束以后还在跑的工作（后台命令、Monitor、工作流），
+// 界面上再和子代理、会话树里的子会话合成一张“后台任务”列表（BackgroundEntryView）。
 // 报集合的连接（backgroundTasks 扩展，harness 声明了 features.backgroundTasks）照对面的集合投影；
 // 不报的退回从已结束回合里还 inProgress 的命令条目派生（projection/background.mts）。
 // 回合的状态只描述前台工作：后台任务在跑时会话照样是 idle。
@@ -27,6 +28,49 @@ export interface BackgroundTaskView {
   /** 毫秒时间戳。不知道是 null */
   startedAt: number | null
   endedAt: number | null
+}
+
+/**
+ * 界面上统一叫“后台任务”的一行：集合里的后台任务（task）、引擎自己派出的子代理线程（agent）、
+ * 会话树里这个会话派出的 Litch 子会话（child）合在一起（projection/background.mts 的 backgroundEntries）
+ */
+export type BackgroundEntrySource = 'task' | 'agent' | 'child'
+
+export interface BackgroundEntryView {
+  /** 在列表里唯一：来源加标识 */
+  key: string
+  source: BackgroundEntrySource
+  /** 子代理、子会话都是 agent */
+  kind: BackgroundTaskKind
+  title: string
+  status: BackgroundTaskStatus
+  /** task 是集合里任务的标识，agent 是子代理线程，child 是子会话 */
+  id: string
+  /** source 为 task 时是集合里的那个任务，别的是 null */
+  task: BackgroundTaskView | null
+  /** 毫秒时间戳。不知道是 null */
+  startedAt: number | null
+  endedAt: number | null
+}
+
+/** 会话树里的一个子会话，合进后台任务列表时要的几样（界面从侧栏摘要里取） */
+export interface BackgroundChildInput {
+  id: string
+  title: string
+  status: 'idle' | 'running' | 'waiting' | 'error'
+  /** 派出的时间，毫秒 */
+  startedAt: number | null
+  /** 最近动过的时间，毫秒（停下了的当结束时间） */
+  updatedAt: number | null
+}
+
+export interface BackgroundEntriesView {
+  /** 运行中的在前（先开始的在前），已结束的在后（后结束的在前） */
+  entries: BackgroundEntryView[]
+  /** 还在跑的有几个（输入框上方那一行写的数） */
+  running: number
+  /** 集合里的后台任务跑完以后 harness 会不会自己接着做。不知道是 null */
+  wakesOnFinish: boolean | null
 }
 
 export interface SessionBackgroundView {

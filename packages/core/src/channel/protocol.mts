@@ -547,6 +547,14 @@ export interface Commands {
     result: Record<string, never>
   }
   /**
+   * 停掉会话的一个后台命令（后台任务页上的“停止”）：经协议的 thread/backgroundTerminals/list 找到它
+   * （进程标识就是任务标识，或者终端挂着的条目就是发起它的条目），再 terminate。找不到、对面不会的报 rejected
+   */
+  'session.stopBackground': {
+    params: { deviceId: string; sessionId: string; taskId: string; itemId: string | null }
+    result: Record<string, never>
+  }
+  /**
    * 把一条排着队的消息现在就插进正在进行的回合里（引导）。
    * 对面不支持或者没插成时，消息留在队列里，出错原因交给界面显示。
    */
