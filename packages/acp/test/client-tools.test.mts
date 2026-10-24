@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import test from 'node:test'
+import { BROWSER_TOOLS } from '../../protocol/src/client-tools-browser.mjs'
 import {
   PRESENTATION_RULES,
   PRESENTATION_SPEC,
@@ -372,6 +373,15 @@ test('认标题：几家 agent 写 MCP 工具的样子都认得，名字是别�
   assert.equal(name('echo_echo'), null)
   assert.equal(name('ls -la'), null)
   assert.equal(matchDynamicTool(specs, {}), null)
+})
+
+test('request_sign_in 加的可选提示参数（origin、三个 ref）在新会话里原样交给 agent，必填仍只有 reason', () => {
+  const signIn = dynamicToolSpecs([BROWSER_TOOLS]).find((spec) => spec.tool === 'request_sign_in')
+  assert.ok(signIn)
+  const properties = signIn.inputSchema.properties as Record<string, unknown>
+  for (const name of ['origin', 'usernameRef', 'passwordRef', 'submitRef'])
+    assert.ok(name in properties, name)
+  assert.deepEqual(signIn.inputSchema.required, ['reason'])
 })
 
 test('Litch 的呈现风格（不带工具的命名空间）进 MCP 服务的 instructions、排在工具的规则后面，不多出工具', () => {
