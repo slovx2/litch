@@ -1,5 +1,6 @@
 // 模拟核心里演示“选中回答加评论”用的文字。
 // 话里带“评论”（英文 comment）时回一段能选字的回答：过程里一段说明、一条命令，最终回答里有段落、行内代码（含文件路径）、代码块和表格；
+// 还有一段行内代码长到要折行的、一张窄屏放不下要横着滑的宽表；
 // 消息带着评论时逐条回应，用 [N] 标出对应哪一条，末尾故意多写一个超出条数的编号（界面应照原文显示）。
 import type { CommentExtra } from '../projection/comments.mjs'
 import type { SampleLang } from './sample-text.mjs'
@@ -37,6 +38,13 @@ const zh: CommentSample = {
     '| 3 | 2 秒 |',
     '',
     '另外，超时的请求（`ETIMEDOUT`）不该重试：服务端可能已经处理过了，再发一次会重复下单。后台任务是`t3`。',
+    '',
+    '恢复要改服务器文件并重启容器，需要你同意，具体步骤在 `infra/docs/SERVER_CONTENT_RESTORE.md`。我已经在这里改正了“没用”那句，并补上了重试的核对结果。',
+    '',
+    '| 接口 | 现在的重试 | 建议的重试 | 超时 | 幂等 | 备注 |',
+    '| --- | --- | --- | --- | --- | --- |',
+    '| `POST /orders` | 立刻重试三次 | 不重试 | 10 秒 | 否 | 重复下单的风险最大 |',
+    '| `GET /orders/:id` | 立刻重试三次 | 指数退避 | 5 秒 | 是 | 可以放心重试 |',
   ].join('\n'),
   lead: (n) => `收到 ${n} 条评论，逐条回应：`,
   one: (n, quote, note) =>
@@ -62,6 +70,13 @@ const en: CommentSample = {
     '| 3 | 2 s |',
     '',
     'Also, timed-out requests should not be retried: the server may already have handled them, and a second try could place the order twice.',
+    '',
+    'Restoring means editing server files and restarting the container, so it needs your approval; the steps are in `infra/docs/SERVER_CONTENT_RESTORE.md`. I have already fixed the “useless” sentence there and added the retry check results.',
+    '',
+    '| Endpoint | Retries now | Suggested retries | Timeout | Idempotent | Notes |',
+    '| --- | --- | --- | --- | --- | --- |',
+    '| `POST /orders` | three, immediately | none | 10 s | no | highest risk of a duplicate order |',
+    '| `GET /orders/:id` | three, immediately | exponential backoff | 5 s | yes | safe to retry |',
   ].join('\n'),
   lead: (n) => `Got ${n} ${n === 1 ? 'comment' : 'comments'}; one by one:`,
   one: (n, quote, note) =>

@@ -96,8 +96,129 @@ index a0f37cd..ad51d50 100644
    }
  
    fun createImageSpan(
+diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/segments/CodeBlockContainerView.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/segments/CodeBlockContainerView.kt
+index f3c451c..d887024 100644
+--- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/segments/CodeBlockContainerView.kt
++++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/segments/CodeBlockContainerView.kt
+@@ -21,7 +21,6 @@ import android.view.GestureDetector
+ import android.view.MotionEvent
+ import android.view.View
+ import android.widget.FrameLayout
+-import android.widget.HorizontalScrollView
+ import android.widget.ImageView
+ import androidx.appcompat.widget.AppCompatImageButton
+ import androidx.appcompat.widget.AppCompatTextView
+@@ -100,8 +99,9 @@ class CodeBlockContainerView(
+       setOnLongClickListener { view -> showContextMenu(view) }
+     }
+ 
++  // Litch patch: hands vertical drags to the list, keeps sideways ones (NestedHorizontalScrollView)
+   private val scrollView =
+-    HorizontalScrollView(context).apply {
++    NestedHorizontalScrollView(context).apply {
+       isHorizontalScrollBarEnabled = true
+       overScrollMode = View.OVER_SCROLL_NEVER
+       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/segments/NestedHorizontalScrollView.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/segments/NestedHorizontalScrollView.kt
+new file mode 100644
+index 0000000..1e34d33
+--- /dev/null
++++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/segments/NestedHorizontalScrollView.kt
+@@ -0,0 +1,69 @@
++package com.swmansion.enriched.markdown.segments
++
++import android.content.Context
++import android.view.MotionEvent
++import android.view.ViewConfiguration
++import android.widget.HorizontalScrollView
++import com.facebook.react.uimanager.events.NativeGestureUtil
++import kotlin.math.abs
++
++/**
++ * Litch patch: the horizontal scroller of tables and code blocks inside a vertical list. A vertical
++ * ScrollView takes the gesture as soon as the finger has moved a touch slop vertically, whatever
++ * the horizontal movement, so a sideways swipe that drifts a little up or down scrolled the list
++ * instead of the table. While there is something to scroll sideways, keep the parents from
++ * intercepting until the direction is known: mostly vertical hands the gesture back to them,
++ * mostly horizontal keeps it here and cancels the JS touch (a Pressable's long press around it).
++ */
++class NestedHorizontalScrollView(
++  context: Context,
++) : HorizontalScrollView(context) {
++  private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
++  private var downX = 0f
++  private var downY = 0f
++  private var deciding = false
++
++  /** This gesture went vertical: leave it to the parents, don't start a sideways drag in it */
++  private var vertical = false
++
++  override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
++    when (ev.actionMasked) {
++      MotionEvent.ACTION_DOWN -> {
++        downX = ev.x
++        downY = ev.y
++        vertical = false
++        deciding = canScrollHorizontally(1) || canScrollHorizontally(-1)
++        if (deciding) parent?.requestDisallowInterceptTouchEvent(true)
++      }
++
++      MotionEvent.ACTION_MOVE -> {
++        if (deciding) {
++          val dx = abs(ev.x - downX)
++          val dy = abs(ev.y - downY)
++          if (dx > touchSlop || dy > touchSlop) {
++            deciding = false
++            if (dy > dx) {
++              vertical = true
++              parent?.requestDisallowInterceptTouchEvent(false)
++              // The parent only takes over at the next move; cancel the cells now, so their long
++              // press (the table's copy menu) doesn't fire in between, as it couldn't before
++              val cancel = MotionEvent.obtain(ev).apply { action = MotionEvent.ACTION_CANCEL }
++              super.dispatchTouchEvent(cancel)
++              cancel.recycle()
++              return true
++            } else {
++              NativeGestureUtil.notifyNativeGestureStarted(this, ev)
++            }
++          }
++        }
++      }
++
++      MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> deciding = false
++    }
++    return super.dispatchTouchEvent(ev)
++  }
++
++  override fun onInterceptTouchEvent(ev: MotionEvent): Boolean = !vertical && super.onInterceptTouchEvent(ev)
++
++  override fun onTouchEvent(ev: MotionEvent): Boolean = if (vertical) true else super.onTouchEvent(ev)
++}
+diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/segments/TableContainerView.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/segments/TableContainerView.kt
+index 1100ee4..b0cc0d4 100644
+--- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/segments/TableContainerView.kt
++++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/segments/TableContainerView.kt
+@@ -19,7 +19,6 @@ import android.view.Gravity
+ import android.view.MotionEvent
+ import android.view.View
+ import android.widget.FrameLayout
+-import android.widget.HorizontalScrollView
+ import androidx.core.view.ViewCompat
+ import com.swmansion.enriched.markdown.accessibility.AccessibilityLabels
+ import com.swmansion.enriched.markdown.parser.MarkdownASTNode
+@@ -67,8 +66,9 @@ class TableContainerView(
+   // Runtime-mutable block props read live at menu-open. See DynamicBlockProps.
+   var dynamicProps: DynamicBlockProps = DynamicBlockProps()
+ 
++  // Litch patch: hands vertical drags to the list, keeps sideways ones (NestedHorizontalScrollView)
+   private val scrollView =
+-    HorizontalScrollView(context).apply {
++    NestedHorizontalScrollView(context).apply {
+       isHorizontalScrollBarEnabled = true
+       overScrollMode = View.OVER_SCROLL_NEVER
+       importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
 diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/CodeBackgroundSpan.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/CodeBackgroundSpan.kt
-index 5060e8a..91b5290 100644
+index 5060e8a..c6146aa 100644
 --- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/CodeBackgroundSpan.kt
 +++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/CodeBackgroundSpan.kt
 @@ -5,17 +5,26 @@ import android.graphics.Paint
@@ -144,11 +265,23 @@ index 5060e8a..91b5290 100644
    // Reusable drawing objects per instance
    private val rect = RectF()
    private val path = Path()
-@@ -75,7 +93,15 @@ class CodeBackgroundSpan(
-         right.toFloat()
+@@ -68,14 +86,20 @@ class CodeBackgroundSpan(
+       } else {
+         left.toFloat() + leadingMargin
        }
- 
+-    val endX =
+-      if (isLast) {
+-        InlineBackgroundGeometry.horizontalOffset(text, start, end, spanEnd, p, leadingMargin) + left
+-      } else {
+-        right.toFloat()
+-      }
+-
 -    rect.set(min(startX, endX), top.toFloat(), max(startX, endX), finalBottom.toFloat())
++    // Litch patch: on a line the code wraps from, end at its last character there rather than at the
++    // line's right edge (a line broken early left the box running on past the text)
++    val endIndex = if (isLast) spanEnd else lastInk(text, start, end)
++    val endX = InlineBackgroundGeometry.horizontalOffset(text, start, end, endIndex, p, leadingMargin) + left
++
 +    // The pads belong to the box, minus a small gap to the text outside it
 +    val margin = dp(CODE_MARGIN_DP)
 +    val boxLeft = min(startX, endX) + if (isFirst) margin else 0f
@@ -161,6 +294,24 @@ index 5060e8a..91b5290 100644
  
      // 3. Apply Style
      val codeStyle = styleConfig.codeStyle
+@@ -164,6 +188,17 @@ class CodeBackgroundSpan(
+     }
+   }
+ 
++  /** End of the line's text without the trailing spaces and line break */
++  private fun lastInk(
++    text: CharSequence,
++    lineStart: Int,
++    lineEnd: Int,
++  ): Int {
++    var at = lineEnd
++    while (at > lineStart && text[at - 1].isWhitespace() && text[at - 1] != CODE_PAD) at--
++    return at
++  }
++
+   private fun adjustBottomForMargin(
+     text: Spanned,
+     lineEnd: Int,
 diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/CodePaddingSpan.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/CodePaddingSpan.kt
 new file mode 100644
 index 0000000..66dd21a
