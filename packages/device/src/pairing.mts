@@ -7,6 +7,7 @@
 // Tailscale 方式（start 的 mode 为 tailscale）不写一次性钥匙行，把登记命令交给出码的一方放进二维码，
 // 手机登进去后自己执行它；之后的状态和登记都一样。
 import { hostname as osHostname, userInfo } from 'node:os'
+import { isApprovalKey } from '../../protocol/src/client-approvals.mjs'
 import { EXTENSION } from '../../protocol/src/device.mjs'
 import {
   DEVICE_PAIR_CANCEL,
@@ -352,6 +353,10 @@ export class DevicePairing {
       return pair && ACTIVE.has(pair.state) ? { ok: true, probe: true } : expired
     const parsed = typeof input.publicKey === 'string' ? parseEd25519Line(input.publicKey) : null
     if (!parsed || typeof input.name !== 'string') return fail(PAIR_ENROLL_ERROR.invalid)
+    // 批准公钥（clientApprovals）可选；带了就要是 32 字节的 ed25519
+    if (input.approvalKey !== undefined && !isApprovalKey(input.approvalKey))
+      return fail(PAIR_ENROLL_ERROR.invalid)
+    const approvalKey = input.approvalKey ?? null
     if (!pair || pair.state === 'expired' || pair.state === 'cancelled') return expired
     if (pair.state !== 'waiting') return fail(PAIR_ENROLL_ERROR.used)
     pair.state = 'requested'
@@ -360,7 +365,8 @@ export class DevicePairing {
       phoneId: phoneIdOf(parsed.blob),
       name: cleanPhoneName(input.name),
       fingerprint: fingerprintOf(parsed.blob),
-      code: confirmCodeOf(pair.id, parsed.line),
+      code: confirmCodeOf(pair.id, parsed.line, approvalKey),
+      ...(approvalKey === null ? {} : { approvalKey }),
     }
     pair.timers.decide = this.clock.setTimeout(() => {
       if (pair.state === 'requested') this.finish(pair, 'rejected', PAIR_ENROLL_ERROR.timeout)
@@ -465,7 +471,7 @@ const ENROLL_MESSAGES: Record<PairEnrollError, string> = {
   used: '这个二维码已经用过了，请在电脑上重新生成',
   rejected: '电脑上拒绝了',
   timeout: '电脑上没有确认',
-  invalid: '看不懂登记的内容：公钥要是 ssh-ed25519，名字要是字符串',
+  invalid: '看不懂登记的内容：公钥要是 ssh-ed25519，名字要是字符串，批准公钥要是 32 字节的 base64',
   keysFile: '这台机器的钥匙文件改不了，请手动添加',
   unavailable: '连不上设备服务',
 }

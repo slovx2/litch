@@ -52,8 +52,14 @@ export function phoneIdOf(blob: Buffer): string {
 }
 
 /** 确认码：SHA-256(配对号 + "\n" + 公钥行) 的前 4 字节按大端读，模 1000000，补零到 6 位 */
-export function confirmCodeOf(pairId: string, publicKeyLine: string): string {
-  const digest = createHash('sha256').update(`${pairId}\n${publicKeyLine}`, 'utf8').digest()
+export function confirmCodeOf(
+  pairId: string,
+  publicKeyLine: string,
+  approvalKey: string | null = null,
+): string {
+  // 手机带了批准公钥的，把它也算进去：人核对过确认码，就连它一起核对过了
+  const text = `${pairId}\n${publicKeyLine}${approvalKey === null ? '' : `\n${approvalKey}`}`
+  const digest = createHash('sha256').update(text, 'utf8').digest()
   return String(digest.readUInt32BE(0) % 1_000_000).padStart(6, '0')
 }
 

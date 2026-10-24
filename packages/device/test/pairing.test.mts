@@ -592,3 +592,30 @@ test('detectTailnet：跑 tailscale status --peers=false --json，命令不在�
     rmSync(place.root, { recursive: true, force: true })
   }
 })
+
+test('登记带批准公钥：确认码把它算进去，requested 的 phone 里带着它；格式不对按 invalid', async () => {
+  const r = rig()
+  try {
+    const approvalKey = 'ebVWLo/mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmQ='
+    const { pairId } = await r.call('litch/pair/start')
+    const bad = await r.call('litch/pair/enroll', {
+      pairId,
+      input: { ...enrollInput(phoneKey()), approvalKey: 'not-a-key' },
+    })
+    assert.equal(bad.error, 'invalid')
+    const key = phoneKey()
+    const pending = r.call('litch/pair/enroll', {
+      pairId,
+      input: { ...enrollInput(key), approvalKey },
+    }) as Promise<any>
+    const status: PairStatus = await r.call('litch/pair/wait', { pairId, since: 'waiting' })
+    assert.equal(status.phone?.code, confirmCodeOf(pairId, key, approvalKey))
+    assert.notEqual(status.phone?.code, confirmCodeOf(pairId, key))
+    assert.equal(status.phone?.approvalKey, approvalKey)
+    const decided: PairStatus = await r.call('litch/pair/decide', { pairId, allow: true })
+    assert.equal(decided.phone?.approvalKey, approvalKey)
+    assert.equal((await pending).ok, true)
+  } finally {
+    r.close()
+  }
+})
