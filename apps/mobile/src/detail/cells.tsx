@@ -14,6 +14,7 @@ import {
   View,
 } from 'react-native'
 import { EnrichedMarkdownText } from 'react-native-enriched-markdown'
+import { duration, elapsed } from '../../../../packages/ui/src/app/format.ts'
 import type { Row } from '../core/rows'
 import { experiment } from '../experiment'
 import { noteWork } from '../probe'
@@ -25,16 +26,13 @@ import { CommentCards, commentsOfRow } from './comments/CommentCards'
 import { useComments, useFlashedRow, useHubValue } from './comments/context'
 import { notePressedAnswer } from './comments/hub'
 import { linkCommentRefs, parseCommentHref } from './comments/refs'
-import { useTranscript } from './context'
+import { useToggleInPlace, useTranscript } from './context'
 import { linkify } from './links'
 import { markdownStyleOf } from './markdownStyle'
 import { labelMermaid } from './mermaid'
 import { MentionedText } from './SessionMentions'
 
 export type Props<T extends Row['type']> = { row: Extract<Row, { type: T }> }
-
-/** 秒数：一位小数，满一分钟写成“几分几秒”那样的就不必了，手机上一行放得下 */
-export const seconds = (ms: number): string => (ms / 1000).toFixed(1)
 
 const pressed = (c: Palette) => ({ backgroundColor: c.press })
 
@@ -278,7 +276,8 @@ function linkedText(
 export const ReasoningCell = memo(function ReasoningCell({ row }: Props<'reasoning'>) {
   const { c, font } = useTheme()
   const t = useT()
-  const { toggle } = useTranscript()
+  // 全文在这一行下面长出来：开头不动
+  const toggle = useToggleInPlace()
   return (
     <Pressable
       onPress={() => toggle(row.key, row.turnId)}
@@ -317,7 +316,7 @@ function useLasting(on: boolean): boolean {
 }
 
 /** 从 since 起已经过了多久，每秒更新一次。since 是 null（不在显示、不知道何时开始）时不计时 */
-function useTicking(since: number | null): number | null {
+export function useTicking(since: number | null): number | null {
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
     if (since === null) return
@@ -338,15 +337,12 @@ export const StatusCell = memo(function StatusCell({ row }: Props<'status'>) {
   const { turnMenu, harness } = useTranscript()
   const working = useLasting(row.working)
   const spent = useTicking(working ? row.startedAt : null)
-  const time =
-    row.durationMs == null ? '' : ` · ${t('detail.seconds', { s: seconds(row.durationMs) })}`
+  const time = row.durationMs == null ? '' : ` · ${duration(row.durationMs, t)}`
   const text =
     row.status === 'running'
       ? working
         ? `${t('turn.working', { name: harness })}${
-            spent !== null && spent >= 1000
-              ? ` · ${t('detail.seconds', { s: String(Math.floor(spent / 1000)) })}`
-              : ''
+            spent !== null && spent >= 1000 ? ` · ${elapsed(spent, t)}` : ''
           }`
         : ''
       : row.status === 'completed'

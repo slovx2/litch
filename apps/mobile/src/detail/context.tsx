@@ -9,8 +9,11 @@ import {
   type SessionSummary,
   type WorkspaceView,
 } from '@litch/core'
+import { useFlashListContext } from '@shopify/flash-list'
 import { createContext, useContext, useMemo } from 'react'
+import type { Row } from '../core/rows'
 import { useKey } from '../shell/services'
+import { keepPlace } from './keep-place'
 
 export interface TranscriptActions {
   deviceId: string
@@ -50,6 +53,16 @@ export function useTranscript(): TranscriptActions {
   const value = useContext(TranscriptContext)
   if (!value) throw new Error('对话区的单元格要放在 TranscriptContext 里')
   return value
+}
+
+/**
+ * 展开收起（一组过程、一步的细节、一段思考），被点的那一行原地不动、多出来的往下长（keep-place.ts）。
+ * 拿不到列表（不在对话区的列表里）就照常展开收起
+ */
+export function useToggleInPlace(): (key: string, turnId: string) => void {
+  const { toggle } = useTranscript()
+  const list = useFlashListContext<Row>()
+  return (key, turnId) => keepPlace(list?.getRef(), key, () => toggle(key, turnId))
 }
 
 /**

@@ -50,6 +50,10 @@ to happen within 2 minutes. Do not show the QR code while sharing the screen.
   ChatGPT login), each limit window's usage and when it resets; API keys have no limits to show.
 - **Compact context**: ⋯ → Compact context, or the button in the usage sheet. Not offered for harnesses
   that cannot compact; while a turn runs it says to wait.
+- **Activity and subagents**: as on the desktop, each subagent a harness starts is one line (type,
+  description, time, and a status: queued, running, done, failed or stopped); tap it to open the
+  subagent's page with its task, the failure reason and its own transcript (read only). Tapping an
+  activity group opens its steps below it, with **Collapse** at the end; the tapped line stays in place.
 - **Quote part of a reply**: long-press a reply → Select text, select a passage, then Reply in the system
   menu. The passage goes above the input box as a quote (the same comment chip as "Comment on this
   reply" on the desktop, sent as `<litch-comments>`); tap the chip to add a note. Done leaves selecting.

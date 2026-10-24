@@ -3,9 +3,9 @@
 import type { Entry } from '../../../../../packages/ui/src/i18n/types.ts'
 
 export const zhCN = {
-  'detail.seconds': '{s} 秒',
   'detail.activity': '活动',
   'detail.group.running': '正在运行：{label}',
+  'detail.group.collapse': '收起',
   'detail.step.declined': '已拒绝',
   'detail.step.failed': '失败',
   'detail.step.earlier': '已省略前 {n} 行',
@@ -28,9 +28,9 @@ export const zhCN = {
 } satisfies Record<`detail.${string}`, Entry>
 
 export const en: Record<keyof typeof zhCN, Entry> = {
-  'detail.seconds': '{s}s',
   'detail.activity': 'Activity',
   'detail.group.running': 'Running: {label}',
+  'detail.group.collapse': 'Collapse',
   'detail.step.declined': 'Declined',
   'detail.step.failed': 'Failed',
   'detail.step.earlier': '{n} earlier lines',

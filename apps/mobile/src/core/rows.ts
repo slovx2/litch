@@ -1,13 +1,17 @@
 // 会话视图 → 对话区的行。规矩（对着验证原型里查出来的“飘”和“卡”的原因定的）：
 // - 行的标识只由回合、条目、块号决定，流式和定稿之间不变；内容没变的行原样复用同一个对象，单元格不重画。
 // - 过程（命令、工具调用、改文件、搜索、说明）连成一组，收起时是一行高度固定的摘要；展开时每一步各是一行，
-//   排在摘要的上面（倒置列表里往上长，被点的摘要原地不动）。展开收起只由用户点，回合结束时不自动收起。
+//   排在摘要的下面，最后再一行“收起”（照桌面端往下展开；被点的摘要不动由 detail/keep-place.ts 管）。
+//   展开收起只由用户点，回合结束时不自动收起。
+// - 启动子代理的那次调用不进过程组，单独一行，每个子代理一条（照桌面端）；等待、发输入这些协作调用还是组里的一步。
 // - 每个回合末尾一行状态，从回合开始到结束一直在，只换字不换高度。回合在跑时写“{name} 正在工作”和已用的时间，只在正文出字、等人答复时留空（workingShown）。
 // - 建议任务的卡片（收尾带的、start 提的）和收尾留的问题排在回合最下方（回答下面、状态行上面），过程里调用的位置只留一步；
 //   offer 卡挂在回合中间等人选，不挪。没字的思考不画。
 // - 行里放条目对象本身（单元格从它取要画的东西），再加上条目里会被原地改掉的那几项（核心对文字、状态是原地改的，
 //   对 item.add 是整个换掉）：这样逐项比一遍（sameRow）就知道内容变没变。
 import type {
+  AgentState,
+  AgentThreadView,
   CommandItem,
   CompactionItem,
   FileChangeItem,
@@ -27,7 +31,15 @@ import type {
   UserAttachment,
   WebSearchItem,
 } from '@litch/core'
-import { goalReachedIn, spanOf, thoughtShown, workingShown } from '@litch/core'
+import {
+  agentRunState,
+  agentStatesOf,
+  goalReachedIn,
+  isAgentSpawn,
+  spanOf,
+  thoughtShown,
+  workingShown,
+} from '@litch/core'
 import { cardsOf, eventKind, handOffOf, isOfferCall, isWrapUp } from '../detail/proposals/logic'
 import { type ChunkState, chunkText, emptyChunks } from './blocks'
 
@@ -151,6 +163,21 @@ export type Row =
       ids: string
       ended: boolean
     }
+  /** 展开的一组末尾那一行“收起”。group 是那一组的键 */
+  | { type: 'groupEnd'; key: string; turnId: string; group: string }
+  /**
+   * 启动子代理的那一次调用（collab.spawnAgent）：每个子代理一条，点了看它。
+   * threads 是会话上的子代理列表（view.agents，换了才换）；states 是条目里每个子代理现在的状态（空格隔开，
+   * 先后同 item.agents），按核心的 agentRunState 取：子线程自己的回合优先，其次同一回合里协作条目报的，最后是派出时的快照
+   */
+  | {
+      type: 'agents'
+      key: string
+      turnId: string
+      item: ToolCallItem
+      threads: AgentThreadView[]
+      states: string
+    }
   /** 展开的一组里的一步。output、tail、exitCode、durationMs 是命令条目上会原地变的几项 */
   | {
       type: 'step'
@@ -272,6 +299,8 @@ export class RowBuilder {
     const tailCards: Row[] = []
     /** 最后一条回答的末尾在 out 里的位置：目标达成那一句插在这里 */
     let answerEnd = -1
+    /** 这一回合里协作条目最后报的各个子代理的状态：有启动子代理的那一行时才算 */
+    let reported: Map<string, AgentState> | null = null
     for (const itemId of turn.itemIds) {
       const item = view.items[itemId]
       if (!item) continue
@@ -329,6 +358,12 @@ export class RowBuilder {
             running: item.status === 'inProgress',
           }),
         )
+        continue
+      }
+      if (isAgentSpawn(item) && item.kind === 'toolCall') {
+        flush()
+        reported ??= agentStatesOf(turn.itemIds.map((id) => view.items[id]))
+        out.push(this.agents(turn.id, item, view.agents, reported))
         continue
       }
       if (isStep(item)) {
@@ -444,12 +479,13 @@ export class RowBuilder {
     return out
   }
 
-  /** 一组过程：展开时先是每一步（从旧到新），最后是摘要，倒置之后摘要在最下面 */
+  /** 一组过程：先是摘要，展开时下面是每一步（从旧到新），最后一行“收起”（倒置之后摘要在最上面，照桌面端往下展开） */
   private pushGroup(out: Row[], turn: TurnView, steps: StepItem[]): void {
     const key = `${turn.id}:p:${steps[0]?.id}`
     const expanded = this.expanded.has(key)
     let failed = 0
     let current: Text | null = null
+    const shown: Row[] = []
     for (const item of steps) {
       const state = stateOf(item)
       if (state === 'failed') failed++
@@ -457,7 +493,7 @@ export class RowBuilder {
       if (!expanded) continue
       const command = item.kind === 'command' ? item : null
       const stepKey = `s:${item.id}`
-      out.push(
+      shown.push(
         this.keep({
           type: 'step',
           key: stepKey,
@@ -487,6 +523,33 @@ export class RowBuilder {
         ended: turn.status !== 'running',
       }),
     )
+    if (!expanded) return
+    out.push(...shown)
+    out.push(this.keep({ type: 'groupEnd', key: `${key}:end`, turnId: turn.id, group: key }))
+  }
+
+  /** 启动子代理的那一次调用：每个子代理现在的状态按核心的 agentRunState 取（见行的说明） */
+  private agents(
+    turnId: string,
+    item: ToolCallItem,
+    threads: AgentThreadView[],
+    reported: Map<string, AgentState>,
+  ): Row {
+    const states = (item.agents ?? []).map((agent) =>
+      agentRunState(
+        threads.find((thread) => thread.id === agent.threadId),
+        reported.get(agent.threadId),
+        agent.state,
+      ),
+    )
+    return this.keep({
+      type: 'agents',
+      key: `${item.id}:agents`,
+      turnId,
+      item,
+      threads,
+      states: states.join(' '),
+    })
   }
 
   private notice(item: NoticeItem): Row {

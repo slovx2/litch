@@ -117,13 +117,34 @@ test('审批：请求进会话层面的状态，答了“允许”之后请求�
   })
   await until(() => finished(store), { what: '答完之后回合结束' })
   assert.deepEqual(store.getMeta().requests, [])
-  // 命令那一步收在过程组里；展开后多出一步，只重算这个回合
+  // 命令那一步收在过程组里；展开后多出每一步和末尾的“收起”，只重算这个回合
   const group = store.getSnapshot().rows.find((row) => row.type === 'group')
   assert.ok(group, '有过程组')
   const before = store.getSnapshot().rows.length
   store.toggle(group.key, group.turnId)
-  assert.equal(store.getSnapshot().rows.length, before + group.count)
+  assert.equal(store.getSnapshot().rows.length, before + group.count + 1)
   assert.ok(store.getSnapshot().rows.some((row) => row.type === 'step'))
+  // 新的在前：“收起”在步骤前面、摘要在它们后面（倒置后摘要在最上面）
+  const order = kinds(store.getSnapshot().rows).filter((type) => /group|step/.test(type))
+  assert.deepEqual(order.slice(0, 2), ['group', 'step'])
+  assert.equal(order.at(-1), 'groupEnd')
+})
+
+test('子代理：派出的那一行跟着子线程的回合换状态，等待收在过程组里，会话层面带着子代理列表', async () => {
+  const { store } = await open('用子代理')
+  store.start()
+  await until(() => finished(store), { timeoutMs: 20000, what: '子代理都停下、回合结束' })
+  const { rows } = store.getSnapshot()
+  assert.deepEqual(kinds(rows), ['user', 'agents', 'group', 'md', 'status'])
+  const agents = rows.find((row) => row.type === 'agents')
+  // 模拟核心和真的 Claude 入口一样：派出的那一条一直报“在跑”，状态以子线程为准
+  assert.equal(agents.states, 'completed stopped failed')
+  assert.equal(agents.threads.length, 3)
+  assert.equal(rows.find((row) => row.type === 'group').count, 1)
+  assert.deepEqual(
+    store.getMeta().agents.map((agent) => agent.id),
+    agents.item.agents.map((agent) => agent.threadId),
+  )
 })
 
 test('回合里的用户消息、最后一条回答的全文', async () => {
