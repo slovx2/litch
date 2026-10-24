@@ -100,6 +100,7 @@ import { installTerminalKit } from './probe-terminal-kit.mjs'
 import { runTerminalChecks, type TerminalMode } from './probe-terminal-run.mjs'
 import { judgeTools, toolsProbe } from './probe-tools.mjs'
 import { runTreeChecks } from './probe-tree.mjs'
+import { judgeView, viewProbe } from './probe-view.mjs'
 import { judgeWorking, workingProbe } from './probe-working.mjs'
 import type { QuitOutcome } from './quit-terminals.mjs'
 
@@ -319,10 +320,13 @@ async function measure(
     const toolsAfter = processMemory(window)
     // 回合结束后在过程区和长回答之间点开、收起：被点的那一行不动
     const fold = await runInPage(window, foldProbe)
+    // 接着在同一个会话里切精简、详细两档：该展开的都展开，眼前那一行不动
+    const view = await runInPage(window, viewProbe)
     return [
       {
         ...result,
         fold,
+        view,
         output: { ...output, memory: { before, after } },
         burst: { ...burst, memory: { before: after, after: burstAfter } },
         tools: { ...tools, memory: { before: burstAfter, after: toolsAfter } },
@@ -333,6 +337,7 @@ async function measure(
         ...judgeOutput(burst, OUTPUT_SHOWN_LIMIT).map((line) => `（猛打）${line}`),
         ...judgeTools(tools, TOOL_LIMITS),
         ...judgeFold(fold),
+        ...judgeView(view),
       ],
     ]
   }

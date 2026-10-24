@@ -1660,6 +1660,13 @@ export const zhCN = {
   'compaction.automatic': '上下文快满了，已自动压缩',
   'compaction.interrupted': '压缩没有完成',
   'notice.unknownItem': '当前版本不支持的条目：{type}',
+  // 对话区的两档视图（transcript/view.ts），在标题栏会话标题后面的菜单里切
+  'sessionMenu.title': '会话菜单',
+  'transcriptView.title': '对话视图',
+  'transcriptView.compact': '精简',
+  'transcriptView.compact.note': '步骤收成汇总行，回合结束收起过程',
+  'transcriptView.verbose': '详细',
+  'transcriptView.verbose.note': '展开全部步骤、工具的输入输出和思考',
 } satisfies Record<string, Entry>
 
 export type MessageKey = keyof typeof zhCN
