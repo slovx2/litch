@@ -94,20 +94,22 @@ explain it:
   sub-sessions too; clicking it opens the Background tasks tab. That tab lists background commands,
   the harness's own subagents and the session's sub-sessions together (running first, then finished
   ones; type icon, name, elapsed time and status). Click a subagent to open its page below the list,
-  a command to see its output, a sub-session to open it. Running commands, sub-sessions, and subagents
-  of harnesses that can stop one on its own have a Stop button (Claude Code subagents cannot be stopped
-  from Litch yet). The folded
+  a command to see its output, a sub-session to open it. Running sub-sessions have a Stop button; so do
+  running commands and monitors of harnesses that can stop them (not dsh, whose background jobs can only
+  be listed) and subagents of harnesses that can stop one on its own (Claude Code; stopping one leaves
+  the turn and the other subagents running). The folded
   turn says "N running in the background", and the sidebar row shows a slowly breathing hollow mark
   instead of the spinner. Claude Code, dsh and Litch's background commands (Pi, OpenCode, ACP)
   continue on their own when a task finishes by itself; that turn starts with "Background task
   finished, continuing" instead of a message from the user. A task you or the model stopped does not
-  wake the session. Codex does not continue on its own. Gemini CLI and Qwen Code get no Litch
+  wake the session; when you stop one, the model is told on its next turn that you stopped it. Codex does not continue on its own. Gemini CLI and Qwen Code get no Litch
   background commands. Litch's background commands run on the device the session runs on, as the
   model's own commands do; their output goes to a log file the model can read. They keep running when
   every client disconnects, and stop when the harness's runtime restarts (a settings change, a service
   restart or upgrade) or the session is deleted. A sub-session reports to its parent when its turn ends and says how many
   background tasks are still running, then reports again when they finish (after the turn that
-  continues, or right away for Codex). A scheduled run ends with its turn too; when the background
+  continues, or right away for Codex and when the tasks were stopped). If you stopped them, that report
+  says so and does not wake the parent. A scheduled run ends with its turn too; when the background
   work finishes later, the run's summary and count are updated and it shows as unread again.
   To stop a task without the Stop button, ask the model or stop the turn. With Pi's "Ask before acting" on, starting a background command is asked about like
   any other command; in OpenCode's read-only permission mode the model cannot start one, and outside
