@@ -334,14 +334,14 @@ try {
       // “没装”得是真的没找到，不是执行了什么之后失败：它要找的那个路径（夹具指的）确实不存在；
       // 它自己的诊断日志里是“未找到”那一句，找的正是这个路径；执行过再失败的话，日志里会是读不出版本或版本不符
       assert.equal(existsSync(login.claude), false)
-      const diagnostics = readLog(join(home, 'claude-code', 'diagnostics.log'))
+      const diagnostics = readLog(join(home, 'logs', 'claude-code', 'diagnostics.log'))
       assert.ok(
         diagnostics.includes(`宿主 Claude CLI 不可执行或未找到: ${login.claude}`),
         `claude-code 的诊断日志里不是预期的原因：\n${diagnostics}`,
       )
       assert.doesNotMatch(diagnostics, /无法读取宿主 Claude CLI 版本|Claude CLI 版本不符/)
       assert.doesNotMatch(
-        readLog(join(home, 'dsh', 'diagnostics.log')),
+        readLog(join(home, 'logs', 'dsh', 'diagnostics.log')),
         /无法读取宿主 dsh CLI 版本|dsh CLI 版本不符/,
       )
       // 这几个的运行时都没有起
@@ -418,9 +418,12 @@ try {
         const env = environmentOf(pid)
         assert.deepEqual(
           Object.keys(env).filter(
-            // LITCH_DEVICE_SOCKET 是适配器有意交给运行时的（harness 跑的 litch-machine 命令靠它找设备服务）
+            // LITCH_DEVICE_SOCKET 是适配器有意交给运行时的（harness 跑的 litch-machine 命令靠它找设备服务）；
+            // LITCH_LOG_DIR 是桌面端有意交给服务的日志目录（测试隔离靠它）
             (name) =>
-              (name.startsWith('LITCH_') && name !== 'LITCH_DEVICE_SOCKET') ||
+              (name.startsWith('LITCH_') &&
+                name !== 'LITCH_DEVICE_SOCKET' &&
+                name !== 'LITCH_LOG_DIR') ||
               name === 'ELECTRON_RUN_AS_NODE',
           ),
           [],
