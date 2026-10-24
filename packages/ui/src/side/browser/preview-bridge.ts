@@ -141,11 +141,6 @@ function createPreviewBridge(variant: string): BrowserBridge {
       remove: async () => false,
       removeAll: async () => 0,
       onChanged: () => () => {},
-      touchId: async () => touchId,
-      async setTouchId(on) {
-        touchId = { ...touchId, on }
-        return touchId
-      },
       never: async () => [],
       allowSite: async () => false,
       prompts: async () => [],
@@ -170,6 +165,11 @@ function createPreviewBridge(variant: string): BrowserBridge {
         return true
       },
       onChanged: (handler) => listen(signInListeners, handler),
+      touchId: async () => touchId,
+      async setTouchId(on) {
+        touchId = { ...touchId, on }
+        return touchId
+      },
     },
     import: {
       sources: async () => [],

@@ -63,6 +63,7 @@ const BLOCK_TEXT: Record<NonNullable<ReturnType<typeof knownBlock>>, MessageKey>
   insecure: 'browser.signIn.block.insecure',
   verification: 'browser.signIn.block.verification',
   unavailable: 'browser.signIn.block.unavailable',
+  origin_changed: 'browser.signIn.block.origin',
 }
 
 /** 预检不过：为什么不能代填 */

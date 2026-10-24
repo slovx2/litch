@@ -33,6 +33,7 @@ test('认不出的来源整个放在中间', () => {
 test('预检原因：认得的原样回，认不出的是 null', () => {
   assert.equal(knownBlock('insecure'), 'insecure')
   assert.equal(knownBlock('verification'), 'verification')
+  assert.equal(knownBlock('origin_changed'), 'origin_changed')
   assert.equal(knownBlock('something_new'), null)
 })
 

@@ -1774,6 +1774,8 @@ export const en: Record<MessageKey, Entry> = {
     'last time the site asked for a code or second factor after filling, so sign in yourself this time',
   'browser.signIn.block.unavailable':
     'the password store can’t be opened right now (system keychain unavailable)',
+  'browser.signIn.block.origin':
+    'the page moved to another site after the card appeared, so these accounts don’t belong to it',
   'browser.signIn.block.other': 'this page can’t be filled in ({code})',
   'browser.signIn.noneNote':
     'Click “I’ll sign in myself”, sign in on the page below, then click “Done, hand back”.',

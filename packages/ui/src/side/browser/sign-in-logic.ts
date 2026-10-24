@@ -76,6 +76,7 @@ export const FILL_BLOCKS = [
   'insecure',
   'verification',
   'unavailable',
+  'origin_changed',
 ] as const
 
 export type FillBlock = (typeof FILL_BLOCKS)[number]

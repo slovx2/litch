@@ -1682,6 +1682,7 @@ export const zhCN = {
     '页面不是 https，表单会用 GET 把密码发出去或交给别的网站，或者这个标签和别的窗口互相开着',
   'browser.signIn.block.verification': '上一次代填后网站要验证码或二次验证，这一次请自己登录',
   'browser.signIn.block.unavailable': '密码库这会儿打不开（系统钥匙串不可用）',
+  'browser.signIn.block.origin': '出卡片之后页面换到了别的网站，这些账号不是这个网站的',
   'browser.signIn.block.other': '这个页面没法代填（{code}）',
   'browser.signIn.noneNote': '点“我自己登录”后在下面的网页里登录，完成后点“完成，交还”。',
   'browser.signIn.fillingTitle': 'Litch 正在用已存的账号登录',

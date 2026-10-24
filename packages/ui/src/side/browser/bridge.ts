@@ -97,10 +97,6 @@ export interface BrowserPasswordsBridge {
   removeAll(): Promise<number>
   /** 密码库变了（导入了、保存了、别处删了、永不名单变了） */
   onChanged(handler: () => void): () => void
-  /** Litch 代填前要不要过 Touch ID。只有 macOS 有（available 为假时设置里不显示这个开关），默认关 */
-  touchId(): Promise<BrowserTouchId>
-  /** 开关，回新的样子 */
-  setTouchId(on: boolean): Promise<BrowserTouchId>
   /** “这个网站永不保存”的名单 */
   never(): Promise<BrowserNeverSite[]>
   /** 从名单里去掉，回去没去掉 */
@@ -141,7 +137,7 @@ export interface BrowserSignInRequest {
   accounts: BrowserSignInAccount[]
   /**
    * 预检不过、Litch 不能代填的原因（no_form、not_user_visible、locator_invalid、insecure、verification、
-   * unavailable），能代填是 null。不过时账号还列着，只是点不了
+   * unavailable、origin_changed），能代填是 null。不过时账号还列着，只是点不了
    */
   fillBlocked: string | null
   /** 定时任务的回合才有：卡片上多一个“以后直接用这个账号”的勾选 */
@@ -183,6 +179,10 @@ export interface BrowserSignInBridge {
   answer(id: string, answer: BrowserSignInAnswer): Promise<boolean>
   /** 变了，带着现在所有的 */
   onChanged(handler: (requests: BrowserSignInRequest[]) => void): () => void
+  /** Litch 代填前要不要过 Touch ID。只有 macOS 有（available 为假时设置里不显示这个开关），默认关 */
+  touchId(): Promise<BrowserTouchId>
+  /** 开关，回新的样子 */
+  setTouchId(on: boolean): Promise<BrowserTouchId>
 }
 
 export interface BrowserBridge {

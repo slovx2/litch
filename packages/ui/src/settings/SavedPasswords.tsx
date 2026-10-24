@@ -1,7 +1,7 @@
 // 设置页“内置浏览器”一组里的“已保存的密码”：按站点和用户名列、搜索、删一条、全删（先确认）。
 // 经外壳的 window.litchBrowser.passwords（apps/desktop/src/browser/passwords/install.mts）；
 // 外壳给的列表只有站点、用户名、来源、时间，这里看不到也复制不了密码。导入了、别处删了，外壳会推“变了”，再取一次。
-// 标题下面是“代填前要 Touch ID”的开关（只有 macOS 有）。
+// 标题下面是“代填前要 Touch ID”的开关（只有 macOS 有，经外壳的 litchBrowser.signIn）。
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { Confirm } from '../app/Confirm.tsx'
@@ -12,6 +12,7 @@ import type {
   BrowserNeverSite,
   BrowserPasswordsBridge,
   BrowserSavedPassword,
+  BrowserSignInBridge,
   BrowserTouchId,
 } from '../side/browser/bridge.ts'
 import {
@@ -85,7 +86,7 @@ export function SavedPasswords({ bridge }: { bridge: BrowserBridge }) {
         {t('settings.browser.passwords')}
         <span>{t('settings.browser.passwords.note')}</span>
       </h3>
-      <TouchIdSwitch passwords={passwords} />
+      <TouchIdSwitch signIn={bridge.signIn} />
       {phase === 'loading' ? (
         <p className="set-para">{t('settings.about.loading')}</p>
       ) : phase === 'failed' ? (
@@ -185,7 +186,7 @@ export function SavedPasswords({ bridge }: { bridge: BrowserBridge }) {
  * 代填前要不要过 Touch ID（默认关）。外壳说这台电脑用不了（不是 macOS、没有指纹）时不显示。
  * 主进程在 Litch 用已存账号代填之前弹系统的指纹框
  */
-function TouchIdSwitch({ passwords }: { passwords: BrowserPasswordsBridge }) {
+function TouchIdSwitch({ signIn }: { signIn: BrowserSignInBridge }) {
   const t = useT()
   /** null：在取 */
   const [state, setState] = useState<BrowserTouchId | null>(null)
@@ -193,7 +194,7 @@ function TouchIdSwitch({ passwords }: { passwords: BrowserPasswordsBridge }) {
   const [busy, setBusy] = useState(false)
   useEffect(() => {
     let live = true
-    passwords.touchId().then(
+    signIn.touchId().then(
       (next) => {
         if (live) setState(next)
       },
@@ -204,13 +205,13 @@ function TouchIdSwitch({ passwords }: { passwords: BrowserPasswordsBridge }) {
     return () => {
       live = false
     }
-  }, [passwords, t])
+  }, [signIn, t])
   if (!state?.available) return null
 
   const flip = () => {
     setBusy(true)
     setFailure(null)
-    passwords
+    signIn
       .setTouchId(!state.on)
       .then(setState, (error: unknown) => setFailure(reasonOf(error, t)))
       .finally(() => setBusy(false))
