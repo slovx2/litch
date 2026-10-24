@@ -5,6 +5,10 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
+## 未发布
+
+- 内置浏览器：代理请人登录时，登录卡片（浏览器面板和对话里各一张）列出密码库里这个网站的已存账号，人批准后由 Litch 代填并提交，代理拿不到密码；也可以照旧自己登录或拒绝。设置里可要求代填前过 Touch ID。手机远程批准是实验功能，默认关（设备详情“手机”一节的开关），打开后登录卡片经会话所在设备发到已绑定的手机，在手机上验证身份后批准；协议扩展 `clientApprovals`
+
 ## 0.19.0
 
 - 工作树：新建会话可以放进一个新的 git 工作树（新建页选位置和起点分支），侧栏有记号、信息栏有卡片，设备设置里能看所有工作树。子会话、任务卡、交接默认跟着父会话所在的目录，卡片和派子会话的弹窗上可以换。会话归档时干净的工作树删目录（分支留着），有改动的留着；取消归档、重新打开时建回来（有快照从快照恢复，分支动过就三方合）；删会话前先转给还在用它的会话。自动清理只收已归档会话的工作树，置顶、正在跑、刚建的不动。差异对着工作树的起点，可以合回基础分支。协议扩展 `worktrees`
