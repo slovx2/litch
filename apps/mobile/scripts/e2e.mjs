@@ -432,7 +432,8 @@ async function startHelper(config, serial) {
 
 /**
  * 扫码绑定，替桌面端那一头调夹具里装了适配器的那台（svc）的设备服务。一次性钥匙登进来跑的是真的 pair-enroll：
- *   POST /pair           出一张码：经 ssh 让设备服务常驻（device-start），调 litch/pair/start，配上手机要连的地址，回配对文本
+ *   POST /pair           出一张码：经 ssh 让设备服务常驻（device-start），撤掉之前留下的手机，调 litch/pair/start，
+ *                        配上手机要连的地址，回配对文本
  *   GET  /pair/request   等手机登记上来（litch/pair/wait 到 requested），回那条请求（手机名、确认码、手机号）
  *   POST /pair/allow     演“电脑上点了允许”（litch/pair/decide）
  *   GET  /pair/phones    设备服务列出的已绑定手机有几部（litch/pair/phones），钥匙文件里手机的钥匙行有几行
@@ -568,6 +569,13 @@ function pairing(config) {
     if (path.startsWith('/approval')) return approval(method, path)
     const device = await service()
     if (method === 'POST' && path === '/pair') {
+      // 上一轮流程绑了手机、没走到移除那一步就挂了（比如模拟器掉线），重跑时那部手机还在：先撤掉，
+      // 流程收尾“一部都不剩”才验得准
+      const { data: left } = await device.call('litch/pair/phones', {})
+      for (const one of left) {
+        await device.call('litch/pair/revoke', { phoneId: one.phoneId })
+        log(`撤掉上一轮留下的手机 ${one.phoneId}`)
+      }
       const start = await device.call('litch/pair/start', {})
       current = start.pairId
       return encodePairPayload({
