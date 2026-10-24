@@ -13,6 +13,8 @@ import {
   useState,
   useSyncExternalStore,
 } from 'react'
+import type { SendMode } from '../../../../packages/ui/src/composer/send-mode-logic.ts'
+import { sendModeOf } from '../detail/composer/send-mode'
 import type { Lang } from '../ui/i18n'
 import type { Skin } from '../ui/theme'
 import type { Booted, BootMode } from './boot'
@@ -31,6 +33,8 @@ export interface Prefs {
    * 照桌面侧栏默认不显示，开关在会话列表的“⋯”里
    */
   nativeChildren: boolean
+  /** 回合进行中发的消息立即插进去还是排队（src/detail/composer/send-mode.ts），照桌面默认立即发送 */
+  sendMode: SendMode
 }
 
 const DEFAULT_PREFS: Prefs = {
@@ -40,11 +44,13 @@ const DEFAULT_PREFS: Prefs = {
   boot: 'stored',
   autoUpdate: true,
   nativeChildren: false,
+  sendMode: sendModeOf(null),
 }
 const prefsFile = jsonFile<Partial<Prefs>>('prefs.json')
 
 export function loadPrefs(): Prefs {
-  return { ...DEFAULT_PREFS, ...(prefsFile.read() ?? {}) }
+  const saved = prefsFile.read() ?? {}
+  return { ...DEFAULT_PREFS, ...saved, sendMode: sendModeOf(saved.sendMode) }
 }
 
 export function savePrefs(prefs: Prefs): void {
