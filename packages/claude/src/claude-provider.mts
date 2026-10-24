@@ -31,6 +31,24 @@ export type ProviderAuthHeader = 'bearer' | 'apiKey'
 export interface ProviderModel {
   id: string
   title: string | null
+  /**
+   * 上下文窗口（token）；null 是没填，CLI 按它自己的规则（认不出的型号是 200K）。
+   * 起 CLI 时作为 CLAUDE_CODE_MAX_CONTEXT_TOKENS 给，CLI 只对它不认识的型号认这个变量
+   */
+  contextWindow: number | null
+}
+
+export const CONTEXT_WINDOW_MIN = 1_000
+export const CONTEXT_WINDOW_MAX = 100_000_000
+
+/** 能用的上下文窗口：范围内的整数，别的都是 null */
+export function contextWindowValue(value: unknown): number | null {
+  return typeof value === 'number' &&
+    Number.isSafeInteger(value) &&
+    value >= CONTEXT_WINDOW_MIN &&
+    value <= CONTEXT_WINDOW_MAX
+    ? value
+    : null
 }
 
 export interface ProviderDefinition {
@@ -76,7 +94,11 @@ function parseModels(value: unknown): ProviderModel[] {
     const id = optionalString(entry.id)
     if (!id || seen.has(id)) continue
     seen.add(id)
-    models.push({ id, title: optionalString(entry.title) })
+    models.push({
+      id,
+      title: optionalString(entry.title),
+      contextWindow: contextWindowValue(entry.contextWindow),
+    })
   }
   return models
 }
@@ -143,6 +165,7 @@ export function writeProviderConfig(config: ProviderConfig, path = providerConfi
               models: provider.models.map((model) => ({
                 id: model.id,
                 ...(model.title ? { title: model.title } : {}),
+                ...(model.contextWindow ? { contextWindow: model.contextWindow } : {}),
               })),
               ...(provider.smallModel ? { smallModel: provider.smallModel } : {}),
             }
@@ -291,6 +314,8 @@ const MODEL_VARS = [
   'CLAUDE_CODE_SUBAGENT_MODEL',
 ] as const
 const HOST_VARS = ['CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST', 'CLAUDE_CODE_HOST_AUTH_ENV_VAR'] as const
+/** CLI 对它认不出的型号用这个变量定上下文窗口（不设是 200K），自动压缩的门槛跟着它 */
+export const CONTEXT_WINDOW_VAR = 'CLAUDE_CODE_MAX_CONTEXT_TOKENS'
 
 /** 这几个变量里配了值，CLI 就不走账号：用户在 Claude Code 自己的配置里另配了凭据或模型服务 */
 const NATIVE_MARKERS = [
@@ -436,6 +461,12 @@ export function providerLaunch(
   if (definition.baseUrl) env.ANTHROPIC_BASE_URL = definition.baseUrl
   if (definition.authHeader === 'bearer') env.ANTHROPIC_AUTH_TOKEN = secret
   else env.ANTHROPIC_API_KEY = secret
+  // 所选型号填了窗口就交给 CLI（盖过 harness 环境里的同名变量）；没填不动外面带进来的
+  const window =
+    definition.kind === 'gateway' && model
+      ? (definition.models.find((entry) => entry.id === model)?.contextWindow ?? null)
+      : null
+  if (window) env[CONTEXT_WINDOW_VAR] = String(window)
   if (definition.kind === 'gateway') {
     if (model) {
       env.ANTHROPIC_DEFAULT_OPUS_MODEL = model
@@ -451,12 +482,12 @@ export function providerLaunch(
     flagSettings: null,
     managed: true,
     // 只算进了环境的几项：改显示名、型号清单不换进程。网关的型号也算，opus、sonnet 档的映射跟着它，
-    // 进程起来之后改不了
+    // 进程起来之后改不了；所选型号的窗口也一样（改了老会话下一回合换进程就生效）
     scope: scopeOf([
       provider,
       definition.baseUrl,
       definition.authHeader,
-      definition.kind === 'gateway' ? [model, definition.smallModel] : null,
+      definition.kind === 'gateway' ? [model, definition.smallModel, window] : null,
       createHash('sha256')
         .update(`${secret}\n${headers ?? ''}`)
         .digest('hex'),

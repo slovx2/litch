@@ -336,7 +336,7 @@ export interface HarnessProviderTemplate {
   fields: HarnessSettingSpec[]
   /**
    * 能用 providers/discoverModels 从 provider 自己那里拉型号来填的字段（stringList，一行一个
-   * `id` 或 `id = 显示名`）。没有就不给
+   * `id` 或 `id = 显示名`，后面可再加 ` | 上下文窗口`，如 `| 1M`）。没有就不给
    */
   discoverModels?: string
 }
@@ -375,6 +375,8 @@ export interface HarnessProviderModel {
   id: string
   /** 对方给的显示名；没有是 null */
   title: string | null
+  /** 对方声明的上下文窗口（token）；没声明是 null。后加的，旧的设备不给 */
+  contextWindow?: number | null
 }
 
 export interface HarnessProvidersDiscoverModelsResponse {

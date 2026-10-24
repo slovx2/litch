@@ -3,6 +3,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { contextLaunch } from './claude-provider.mjs'
+import { claudeBashTimeoutEnv } from './host-claude.mjs'
 import type { ClaudeRuntime, RuntimeHandlers, RuntimeTurnContext } from './types.mjs'
 
 export interface ClaudePRuntimeOptions {
@@ -123,12 +124,13 @@ export class ClaudePTranscriptRuntime implements ClaudeRuntime {
     cwd: string,
   ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
     const { threadId } = context
+    const launchEnv = contextLaunch(context.provider, context.model).env
     const child = spawn(this.options.command, args, {
       cwd,
       // 命令里调 litch-machine 时按它认会话
       // 照会话型号的供应商起（选了网关的型号就用网关的凭据）；账号放进设置层的那几项这个包装命令收不了，
       // 用户设置里另配的凭据照旧
-      env: { ...contextLaunch(context.provider, context.model).env, LITCH_THREAD_ID: threadId },
+      env: { ...launchEnv, ...claudeBashTimeoutEnv(launchEnv), LITCH_THREAD_ID: threadId },
       stdio: ['ignore', 'pipe', 'pipe'],
       detached: process.platform !== 'win32',
     })

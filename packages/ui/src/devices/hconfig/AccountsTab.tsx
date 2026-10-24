@@ -18,6 +18,8 @@ import { useServices } from '../../app/services.tsx'
 import { showToast } from '../../app/toasts.tsx'
 import { HcControl } from './HcControl.tsx'
 import {
+  type DiscoveredModel,
+  formatContextWindow,
   type HcDraft,
   linesOf,
   mergeDiscovered,
@@ -662,7 +664,7 @@ function Discover({
 }) {
   const t = useT()
   const { channel } = useServices()
-  const [found, setFound] = useState<{ id: string; title: string | null }[] | null>(null)
+  const [found, setFound] = useState<DiscoveredModel[] | null>(null)
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [asking, setAsking] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
@@ -725,6 +727,13 @@ function Discover({
                   <span className="mono ell">{model.id}</span>
                   {model.title && model.title !== model.id ? (
                     <span className="ell hc-discover-title">{model.title}</span>
+                  ) : null}
+                  {model.contextWindow ? (
+                    <span className="hc-discover-title" data-hc-window>
+                      {t('hc.discover.window', {
+                        window: formatContextWindow(model.contextWindow),
+                      })}
+                    </span>
                   ) : null}
                 </label>
               </li>

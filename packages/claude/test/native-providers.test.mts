@@ -13,7 +13,11 @@ import { ProtocolClient } from './fixtures/protocol-client.mjs'
 // 用户自己的配置（这里是启动环境里的 ANTHROPIC_API_KEY 和地址）照旧；同一会话下一回合可以换供应商；
 // 没填密钥的供应商报错，不退回别的凭据。
 
-async function writeProviders(home: string, baseUrl: string): Promise<void> {
+async function writeProviders(
+  home: string,
+  baseUrl: string,
+  contextWindow?: number,
+): Promise<void> {
   const adapter = join(home, 'adapter')
   await mkdir(adapter, { recursive: true })
   await writeFile(
@@ -27,7 +31,7 @@ async function writeProviders(home: string, baseUrl: string): Promise<void> {
               title: 'Corp',
               baseUrl,
               authHeader: 'bearer',
-              models: [{ id: 'glm-4.6', title: 'GLM 4.6' }],
+              models: [{ id: 'glm-4.6', title: 'GLM 4.6', contextWindow }],
             },
             work: { kind: 'apiKey', title: 'Work' },
           },
@@ -138,6 +142,47 @@ test('PROVIDERS-E2E-001：网关会话用它的密钥和型号，下一回合换
     assert.equal(turn.status, 'failed')
     assert.match(JSON.stringify(turn.error), /密钥/)
     assert.equal(model.requests.length, before)
+  } finally {
+    await client.close()
+    await model.close()
+    await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
+  }
+})
+
+test('PROVIDERS-E2E-004：网关型号配的上下文窗口交给 CLI，用量按它报；后台命令上限给到 24 小时', {
+  timeout: 150_000,
+}, async () => {
+  const home = await mkdtemp(join(tmpdir(), 'native-providers-'))
+  const model = new MockLLM()
+  const url = await model.start()
+  await writeProviders(home, url, 1_000_000)
+  const client = await ProtocolClient.start(home, url)
+  try {
+    let tools: any[] = []
+    model.enqueue((request: any) => {
+      tools = request.tools ?? []
+      return [{ type: 'text', text: 'OK' }]
+    })
+    const { thread } = await client.request('thread/start', { cwd: home, model: 'corp/glm-4.6' })
+    const turn = await client.request('turn/start', {
+      threadId: thread.id,
+      input: [{ type: 'text', text: '你好' }],
+    })
+    assert.equal((await client.completed(turn.turn.id)).status, 'completed')
+    // CLI 认不出 glm-4.6，没有这个窗口时按 200K 算
+    const usage = await client.notification(
+      'thread/tokenUsage/updated',
+      (params) => params.threadId === thread.id && params.tokenUsage.modelContextWindow !== null,
+    )
+    assert.equal(usage.tokenUsage.modelContextWindow, 1_000_000)
+    // 写给模型看的 Bash 超时上限：前台的上限就是这个变量；后台那句（CLI 新一些的版本才有）按 24 小时写
+    const bash = tools.find((tool) => tool.name === 'Bash')
+    assert.ok(bash, `没有 Bash 工具：${tools.map((tool) => tool.name).join(',')}`)
+    const schema = JSON.stringify(bash.input_schema)
+    assert.match(schema, /max 86400000/)
+    const background = `${bash.description}${schema}`.match(/max \d+ms \/ (\d+) hours/)
+    if (background) assert.equal(background[1], '24')
+    model.assertConsumed()
   } finally {
     await client.close()
     await model.close()

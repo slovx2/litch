@@ -61,6 +61,7 @@ import {
 import { dynamicToolCliNames, dynamicToolServer } from './dynamic-tools.mjs'
 import { goalToolServer, isGoalTool } from './goal-tools.mjs'
 import {
+  claudeBashTimeoutEnv,
   hostClaudeEnvOverrides,
   hostClaudeExecutable,
   hostClaudeSessionEnv,
@@ -1525,6 +1526,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       // 失败后由持久化状态对账；禁止 CLI 自行重放可能已接收的模型请求。
       env: {
         ...childEnv,
+        ...claudeBashTimeoutEnv(childEnv),
         ...hostClaudeSessionEnv(inbox),
         // 收件箱里的登记名：别的会话 ListAgents 看到、SendMessage 发往的就是它。没有名字时 CLI 按目录自己起
         ...(inbox && context.sessionName ? { CLAUDE_CODE_SESSION_NAME: context.sessionName } : {}),

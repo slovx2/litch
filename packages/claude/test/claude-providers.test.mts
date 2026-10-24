@@ -106,8 +106,8 @@ function addProviders(): void {
         baseUrl: 'https://gw.example.test',
         authHeader: 'bearer',
         models: [
-          { id: 'glm-4.6', title: 'GLM 4.6' },
-          { id: 'vendor/kimi', title: null },
+          { id: 'glm-4.6', title: 'GLM 4.6', contextWindow: null },
+          { id: 'vendor/kimi', title: null, contextWindow: null },
         ],
         smallModel: null,
       },

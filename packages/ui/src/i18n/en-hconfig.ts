@@ -74,6 +74,7 @@ export const enHconfig: Record<keyof typeof zhHconfig, Entry> = {
   'hc.discover.none': 'The provider reported no models',
   'hc.discover.apply': 'Use selected ({count})',
   'hc.discover.cancel': 'Cancel',
+  'hc.discover.window': 'Context {window}',
   'hc.auth.signedOut': 'Signed out',
   'hc.auth.signedInAs': 'Signed in as {label}',
   'hc.auth.kind.oauth': 'Signed in',

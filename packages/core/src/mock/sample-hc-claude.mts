@@ -208,7 +208,7 @@ export function sampleClaude({ home }: SampleHome): SampleHc {
             baseUrl: 'https://api.deepseek.com/anthropic',
             apiKey: { set: true },
             authHeader: 'bearer',
-            models: ['deepseek-v4 = DeepSeek V4', 'deepseek-v4-flash'],
+            models: ['deepseek-v4 = DeepSeek V4 | 1M', 'deepseek-v4-flash'],
             smallModel: 'deepseek-v4-flash',
           },
         }),
@@ -256,8 +256,8 @@ export function sampleClaude({ home }: SampleHome): SampleHc {
             }),
             spec('models', 'provider', 'stringList', t('型号', 'Models'), {
               description: t(
-                '每行一个型号 ID，要显示别的名字写成“ID = 名字”。可以从网关拉取。',
-                'One model ID per line; write "ID = Name" for a display name. Can be fetched from the gateway.',
+                '每行一个型号 ID，要显示别的名字写成“ID = 名字”，上下文窗口加在后面写成“| 1M”（如 deepseek-v4 = DeepSeek | 1M；不写时 Claude Code 按 200K 算）。从网关拉取时带上它声明的窗口。',
+                'One model ID per line; write "ID = Name" for a display name and append "| 1M" for the context window (e.g. deepseek-v4 = DeepSeek | 1M; without it Claude Code assumes 200K). Fetching from the gateway fills in the window it declares.',
               ),
             }),
             spec('smallModel', 'provider', 'string', t('小模型', 'Small model'), {

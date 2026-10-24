@@ -6,6 +6,8 @@ import { useState } from 'react'
 import { StyleSheet, Text, TextInput, View } from 'react-native'
 import { whyNot } from '../../../../../../packages/ui/src/app/errors.ts'
 import {
+  type DiscoveredModel,
+  formatContextWindow,
   type HcDraft,
   linesOf,
   mergeDiscovered,
@@ -216,7 +218,7 @@ function Discover({
   const t = useT()
   const channel = useChannel()
   const { c } = useTheme()
-  const [found, setFound] = useState<{ id: string; title: string | null }[] | null>(null)
+  const [found, setFound] = useState<DiscoveredModel[] | null>(null)
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [asking, setAsking] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
@@ -271,11 +273,15 @@ function Discover({
             {found.map((model) => (
               <Chip
                 key={model.id}
-                label={
-                  model.title && model.title !== model.id
-                    ? `${model.id} · ${model.title}`
-                    : model.id
-                }
+                label={[
+                  model.id,
+                  model.title && model.title !== model.id ? model.title : null,
+                  model.contextWindow
+                    ? t('hc.discover.window', { window: formatContextWindow(model.contextWindow) })
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
                 on={picked.has(model.id)}
                 disabled={disabled}
                 testID={`hc:custom:discover:${model.id}`}

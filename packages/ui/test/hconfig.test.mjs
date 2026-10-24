@@ -187,3 +187,32 @@ test('从 provider 拉来的型号勾完并回清单：勾掉的去掉、新勾�
   )
   assert.deepEqual(mergeDiscovered([], found, new Set(['glm-4.6'])), ['glm-4.6 = GLM 4.6'])
 })
+
+test('拉来的型号带上声明的上下文窗口：新加的、没写窗口的行补上，手写了的不动', async () => {
+  const { mergeDiscovered, modelLineId, formatContextWindow } = await import(
+    '../src/devices/hconfig/logic.ts'
+  )
+  assert.equal(modelLineId('deepseek-v4 | 1M'), 'deepseek-v4')
+  assert.equal(modelLineId('deepseek-v4 = DeepSeek | 1M'), 'deepseek-v4')
+  assert.equal(formatContextWindow(1_000_000), '1M')
+  assert.equal(formatContextWindow(128_000), '128K')
+  assert.equal(formatContextWindow(131_072), '131072')
+  const found = [
+    { id: 'deepseek-v4', title: 'DeepSeek V4', contextWindow: 1_000_000 },
+    { id: 'deepseek-r2', title: null, contextWindow: 128_000 },
+    { id: 'flash', title: null, contextWindow: null },
+    // 旧的设备不给 contextWindow
+    { id: 'old', title: null },
+  ]
+  assert.deepEqual(
+    mergeDiscovered(
+      ['deepseek-v4 = 我的名字', 'deepseek-r2 | 64K', 'mine'],
+      found,
+      new Set(['deepseek-v4', 'deepseek-r2', 'flash', 'old']),
+    ),
+    ['deepseek-v4 = 我的名字 | 1M', 'deepseek-r2 | 64K', 'mine', 'flash', 'old'],
+  )
+  assert.deepEqual(mergeDiscovered([], found, new Set(['deepseek-v4'])), [
+    'deepseek-v4 = DeepSeek V4 | 1M',
+  ])
+})
