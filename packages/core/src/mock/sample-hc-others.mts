@@ -430,6 +430,15 @@ export function sampleDsh({ home }: SampleHome): SampleHc {
           effect: 'harness',
         },
       ),
+      // dsh 离不开的内置插件：开着的只读
+      spec('plugins.include:session', 'tools', 'boolean', t('插件：session', 'Plugin: session'), {
+        default: true,
+        readOnly: true,
+        readOnlyReason: t(
+          'dsh 运行离不开它，关掉后 dsh 会起不来或用不了',
+          'dsh cannot run without it; turning it off breaks dsh',
+        ),
+      }),
       spec(
         'telemetry.uploadSessions',
         'advanced',

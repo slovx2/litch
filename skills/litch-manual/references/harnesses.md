@@ -64,7 +64,9 @@ harness's own config files on that device (shared with its CLI there):
   Litch's own switch, kept on the device, not in Codex's config file): after the first turn of a
   session started in Litch, Litch names it with a small model of the luna family, only if the account's
   model list has one, and never over a name the user set. Turning it off affects sessions started
-  afterwards.
+  afterwards. DSH's Config tab lists its built-in plugins; the ones DSH cannot run without are locked
+  on (turning them off broke turns, restarts or this page), and one that is already off can be turned
+  back on (it says so). Turning off any other removes what it provides.
 - **Accounts**: sign in (browser, device code, or pasting a code back), set an API key, add custom
   providers, switch the active provider. Codex can stay signed in to ChatGPT while using an API-key
   provider. OAuth credentials stay in the harness's own store; keys the harness only reads from
