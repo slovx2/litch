@@ -150,12 +150,22 @@ function ProposalRow({
       </Pressable>
       {status === 'pending' ? (
         <View style={styles.acts}>
-          <ProposalActs deviceId={deviceId} sessionId={sessionId} proposalId={proposal.id} />
+          <ProposalActs
+            deviceId={deviceId}
+            sessionId={sessionId}
+            proposalId={proposal.id}
+            worktree={proposal.worktree ?? proposal.worktreeDefault}
+          />
         </View>
       ) : null}
       {status === 'offered' ? (
         <View style={styles.acts}>
-          <OfferActs deviceId={deviceId} sessionId={sessionId} proposalId={proposal.id} />
+          <OfferActs
+            deviceId={deviceId}
+            sessionId={sessionId}
+            proposalId={proposal.id}
+            worktree={proposal.worktree ?? proposal.worktreeDefault}
+          />
         </View>
       ) : null}
     </View>

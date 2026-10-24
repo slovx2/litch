@@ -1,5 +1,5 @@
 // 提案的“改了再开始”：单独一页（字段多、要打字，底部弹层放不下也躲不开键盘）。照提案预填，
-// harness、模型、强度、项目、目录、权限、全新还是带上下文、标题、简报、完成后唤醒都能改；
+// harness、模型、强度、项目、目录、权限、全新还是带上下文、标题、简报、完成后唤醒、新工作树都能改；
 // 开始时只把和提案不一样的几项放进 overrides（logic.ts 的 overridesFor，初值和改动用桌面 spawn-form.ts 那一份）。
 // 沙箱照样收紧到不宽于父会话，目标 harness 收不紧时写明；带上下文只能用父会话的 harness。成了就回到对话。
 import {
@@ -30,6 +30,7 @@ import { useComposeOptions } from '../../detail/composer/options'
 import { type PickerOption, PickerSheet } from '../../detail/composer/PickerSheet'
 import { useProposalList, useSessionStore } from '../../detail/proposals/hooks'
 import { overridesFor, STATUS_TEXT } from '../../detail/proposals/logic'
+import { useWorktreesOn, WorktreeSwitch } from '../../detail/proposals/WorktreeSwitch'
 import type { RootStackParamList } from '../../nav/routes'
 import { useBusy, useChannel, useKey } from '../../shell/services'
 import { useT } from '../../ui/i18n'
@@ -97,6 +98,7 @@ function StartForm({
   )
   const [fields, setFields] = useState<SpawnFields>(() => fieldsFor(parent, proposal))
   const set = (patch: Partial<SpawnFields>) => setFields((now) => ({ ...now, ...patch }))
+  const worktrees = useWorktreesOn(deviceId)
   const [picking, setPicking] = useState<Picking | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
   const [busy, run] = useBusy()
@@ -136,7 +138,7 @@ function StartForm({
           deviceId,
           sessionId: parent.id,
           proposalId: proposal.id,
-          overrides: overridesFor(fields, parent, proposal),
+          overrides: overridesFor(fields, parent, proposal, worktrees),
         }),
       )
       onDone()
@@ -331,6 +333,13 @@ function StartForm({
             onValueChange={(wake) => set({ wake })}
           />
         </View>
+        <WorktreeSwitch
+          deviceId={deviceId}
+          value={fields.worktree}
+          onChange={(worktree) => set({ worktree })}
+          testID="proposal-start:worktree"
+          inset
+        />
         {blocked ? (
           <Text style={[styles.note, { color: c.err }]} testID="proposal-start:blocked">
             {blocked}

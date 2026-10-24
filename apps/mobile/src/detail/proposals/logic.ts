@@ -142,13 +142,17 @@ export const STATUS_TEXT = {
   expired: 'proposal.state.expired',
 } as const satisfies Record<ProposalStatus, Key>
 
-/** “改了再开始”发的改动：和桌面同一份算法（含“完成后唤醒”）。什么都没改是空对象 */
+/**
+ * “改了再开始”发的改动：和桌面同一份算法（含“完成后唤醒”）。什么都没改是空对象；
+ * 设备能建工作树（worktrees）时工作树开关照表单上的发
+ */
 export function overridesFor(
   fields: SpawnFields,
   parent: SpawnParent,
   proposal: SessionProposalView,
+  worktrees = false,
 ): ProposalOverrides {
-  return overridesOf(fields, parent, proposal)
+  return overridesOf(fields, parent, proposal, worktrees)
 }
 
 /** 注入的会话事件是哪一种：notes 带回报，wake 是唤醒回合，remind 是提醒收尾 */
