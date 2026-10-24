@@ -2465,6 +2465,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         else goal.set(view, change)
         return {}
       }
+      // 界面的诊断：模拟核心不写日志
+      if (name === 'diag.note') return {}
       if (name === 'session.stopBackground') {
         const { taskId } = params as Commands['session.stopBackground']['params']
         const view = reachView(params as Commands['session.stopBackground']['params'])

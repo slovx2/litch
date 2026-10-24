@@ -470,3 +470,96 @@ test('BG-CORE-007 已在列表里的会话再收到 thread/started（没带集�
   await settle()
   assert.equal(world.side.sessions.get('a')?.background, null)
 })
+
+test('BG-CORE-008 诊断：后台任务数从有变没有时记一行 background.drop（是谁改的、前后的集合摘要、会话状态），平时不记；界面的 diag.note 进同一份', async () => {
+  const codex = harness('codex', {
+    declaration: { features: features({ backgroundTasks: true }) },
+    threads: [
+      thread({
+        id: 'a',
+        updatedAt: 1_700_000_300,
+        turns: [turn('t1', [userText('u1', '起服务')])],
+        litchBackground: {
+          tasks: [
+            { id: 'k1', kind: 'shell', title: 'npm run dev', status: 'running', startedAt: 1 },
+            { id: 'k2', kind: 'monitor', title: 'tail -f log', status: 'running', startedAt: 2 },
+          ],
+          wakesOnFinish: true,
+        },
+      } as never),
+    ],
+  })
+  const world = deviceWorld([codex])
+  world.core.start()
+  for (let i = 0; i < 4; i++) await settle()
+  const drops = () => world.traces.filter((entry) => entry.event === 'background.drop')
+  const task = (id: string, kind: string, status: string) => ({
+    id,
+    kind,
+    title: 'secret command text',
+    status,
+    startedAt: 1,
+  })
+
+  // 少了一个、还有一个在跑：不记
+  world.peer.last().notify('litch/thread/background/changed', {
+    threadId: 'a',
+    tasks: [task('k1', 'shell', 'running'), task('k2', 'monitor', 'completed')],
+    wakesOnFinish: true,
+  })
+  await settle()
+  assert.equal(drops().length, 0)
+
+  world.peer.last().notify('litch/thread/background/changed', {
+    threadId: 'a',
+    tasks: [task('k1', 'shell', 'completed'), task('k2', 'monitor', 'completed')],
+    wakesOnFinish: true,
+  })
+  await settle()
+  assert.equal(drops().length, 1)
+  const [drop] = drops()
+  assert.equal(drop?.level, 'warn')
+  assert.equal(drop?.fields.device, 'local')
+  assert.equal(drop?.fields.sessionId, 'a')
+  assert.equal(drop?.fields.cause, 'litch/thread/background/changed')
+  assert.deepEqual(drop?.fields.before, {
+    running: 1,
+    total: 2,
+    tasks: [
+      { id: 'k1', kind: 'shell', status: 'running' },
+      { id: 'k2', kind: 'monitor', status: 'completed' },
+    ],
+  })
+  assert.equal((drop?.fields.after as { running: number } | undefined)?.running, 0)
+  assert.equal(JSON.stringify(drop).includes('secret command text'), false, '不记标题（命令）')
+
+  // 已经是 0 了：再来一份空的不再记
+  world.peer.last().notify('litch/thread/background/changed', {
+    threadId: 'a',
+    tasks: [],
+    wakesOnFinish: true,
+  })
+  await settle()
+  assert.equal(drops().length, 1)
+
+  await world.command('diag.note', {
+    event: 'backgroundBar.hidden',
+    fields: {
+      sessionId: 'a',
+      beforeTasks: 1,
+      reports: true,
+      nested: { no: 1 },
+      long: 'x'.repeat(300),
+    },
+  })
+  const note = world.traces.find((entry) => entry.event === 'ui.backgroundBar.hidden')
+  assert.ok(note, '界面的诊断进了核心的摘要')
+  assert.equal(note.fields.beforeTasks, 1)
+  assert.equal('nested' in note.fields, false, '对象不收')
+  assert.equal((note.fields.long as string).length, 100)
+  assert.equal(
+    world.traces.some((entry) => entry.event === 'command' && entry.fields.command === 'diag.note'),
+    false,
+    '不另记一行命令',
+  )
+})

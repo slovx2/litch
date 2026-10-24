@@ -71,10 +71,13 @@ export function deviceWorld(
   const time = fakeClock()
   const peer = fakeOpener({ ...fake.handlers, ...options.extra })
   const logs: string[] = []
+  /** 核心交出的摘要（桌面端写进 core.jsonl 的那些） */
+  const traces: Array<{ event: string; fields: Record<string, unknown>; level?: string }> = []
   const core = createCore({
     clock: time.clock,
     version: '9.9.9',
     log: (line) => logs.push(line),
+    trace: (event, fields, level) => traces.push({ event, fields, ...(level ? { level } : {}) }),
     ...(options.clientTools ? { clientTools: options.clientTools } : {}),
     devices: [
       {
@@ -148,5 +151,5 @@ export function deviceWorld(
     entry.down = down
     peer.last().notify('litch/harness/status/changed', { harness: id, info: infoOf(entry) })
   }
-  return { core, fake: fake.device, peer, time, logs, side, device, command, sent, set }
+  return { core, fake: fake.device, peer, time, logs, traces, side, device, command, sent, set }
 }

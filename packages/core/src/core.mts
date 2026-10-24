@@ -116,6 +116,17 @@ export interface Core extends CoreHost {
  */
 const toChannelFailure = (error: unknown): ChannelError => channelFailure(error)
 
+/** 界面诊断的字段：只留数、真假、空和 100 字以内的字，最多 20 个（diag.note） */
+function noteFields(fields: unknown): Record<string, string | number | boolean | null> {
+  const kept: Record<string, string | number | boolean | null> = {}
+  if (fields === null || typeof fields !== 'object' || Array.isArray(fields)) return kept
+  for (const [key, value] of Object.entries(fields).slice(0, 20)) {
+    if (value === null || typeof value === 'number' || typeof value === 'boolean') kept[key] = value
+    else if (typeof value === 'string') kept[key] = value.slice(0, 100)
+  }
+  return kept
+}
+
 export function createCore(options: CoreOptions): Core {
   const clientInfo: ClientInfo = { name: 'litch', title: 'Litch', version: options.version }
   const devices = new Map<string, Device>()
@@ -581,6 +592,11 @@ export function createCore(options: CoreOptions): Core {
           } catch (error) {
             throw toChannelFailure(error)
           }
+          return {}
+        }
+        case 'diag.note': {
+          const { event, fields } = params as Commands['diag.note']['params']
+          options.trace?.(`ui.${String(event).slice(0, 60)}`, noteFields(fields), 'warn')
           return {}
         }
         case 'session.stopBackground': {

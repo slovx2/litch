@@ -8,6 +8,7 @@ import {
   type LitchBackgroundTask,
   orderBackgroundTasks,
 } from '../../protocol/src/background-tasks.mjs'
+import { debugLog } from './util.mjs'
 
 interface TrackedTask {
   id: string
@@ -154,6 +155,13 @@ export class BackgroundTaskTracker {
       if (known) {
         // 同一个任务重新出现（比如被停又被接回）：照旧算运行中
         if (known.status !== 'running') {
+          // 诊断：先前从电平里消失、按完成算了的又回来了，说明那一次是 CLI 漏报（那一行会因此闪没）
+          debugLog('background.reappeared', {
+            threadId,
+            taskId: id,
+            taskType: known.taskType,
+            was: known.status,
+          })
           known.status = 'running'
           known.endedAt = null
           changed = true
@@ -181,8 +189,18 @@ export class BackgroundTaskTracker {
     }
     // 不在了的：结束通知随后会来改成它真正的状态，先按完成算
     for (const task of tasks.values())
-      if (task.status === 'running' && !live.has(task.id) && this.end(task, 'completed'))
+      if (task.status === 'running' && !live.has(task.id) && this.end(task, 'completed')) {
+        // 诊断：每个任务结束时一行。随后没有 task_notification / task_updated 改成真正的状态、
+        // 或者后来又 reappeared 的，就是电平信号漏报
+        debugLog('background.levelDropped', {
+          threadId,
+          taskId: task.id,
+          taskType: task.taskType,
+          turnId,
+          listed: live.size,
+        })
         changed = true
+      }
     this.trim(tasks)
     return changed
   }
@@ -202,6 +220,8 @@ export class BackgroundTaskTracker {
     if (!tasks) return false
     let changed = false
     for (const task of tasks.values()) if (this.end(task, 'stopped')) changed = true
+    // 诊断：CLI 进程退出把还在跑的都收了
+    if (changed) debugLog('background.closeAll', { threadId })
     return changed
   }
 
@@ -268,5 +288,16 @@ export class BackgroundTaskTracker {
       startedAt: task.startedAt,
       ...(task.endedAt != null ? { endedAt: task.endedAt } : {}),
     }))
+  }
+}
+
+/** 诊断里记的集合摘要：在跑几个、一共几个，前 10 个的标识、种类、状态（不记标题，标题是命令） */
+export function backgroundDigest(tasks: readonly LitchBackgroundTask[]) {
+  return {
+    running: tasks.filter((task) => task.status === 'running').length,
+    total: tasks.length,
+    tasks: tasks
+      .slice(0, 10)
+      .map((task) => ({ id: task.id, kind: task.kind, status: task.status })),
   }
 }

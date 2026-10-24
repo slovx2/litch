@@ -47,6 +47,8 @@ export interface ServeOptions {
 
 /** 太密的界面命令不记：终端的按键、改尺寸、确认收到输出、重画 */
 const UNTRACED_COMMANDS = new Set([
+  // 界面的诊断自己就是一行日志（core.mts），不再另记一行命令
+  'diag.note',
   'terminal.write',
   'terminal.resize',
   'terminal.ack',

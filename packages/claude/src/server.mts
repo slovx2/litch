@@ -36,7 +36,7 @@ import {
   BackgroundCommands,
   endedCommandItem,
 } from './background-commands.mjs'
-import { BackgroundTaskTracker } from './background-tasks.mjs'
+import { BackgroundTaskTracker, backgroundDigest } from './background-tasks.mjs'
 import {
   backgroundTerminals,
   type ListedBackgroundTerminal,
@@ -415,6 +415,8 @@ export class CodexClaudeAppServer {
   private readonly backgroundCommands = new BackgroundCommands()
   // 后台任务的集合（backgroundTasks 扩展），按 CLI 进程所属的线程记
   private readonly backgroundTasks = new BackgroundTaskTracker()
+  /** 每个会话上一次发出去的集合里在跑几个（诊断 background.drop 用） */
+  private readonly publishedRunning = new Map<string, number>()
   private spontaneousTurns = new Set<string>()
   // 正在为别的会话发来的消息唤醒的会话（线程 → 唤醒结果），同时有几个发送方时一起等
   private peerWakes = new Map<string, Promise<RuntimePeerWake | null>>()
@@ -7726,6 +7728,7 @@ export class CodexClaudeAppServer {
       method: notification.method,
       params: summarizeRpcParams(notification.method, notification.params),
     })
+    if (notification.method === 'thread/started') this.noteBareThread(target, notification.params)
     const params =
       notification.method === 'turn/started' || notification.method === 'turn/completed'
         ? this.withTurnOrigin(target, notification.params)
@@ -7792,9 +7795,38 @@ export class CodexClaudeAppServer {
   private publishBackground(threadId: string): void {
     if (this.stopped || this.store.getThread(threadId)?.ephemeral) return
     const params = { threadId, tasks: this.backgroundTasks.list(threadId), wakesOnFinish: true }
+    // 诊断：发出去的集合里在跑的从有变没有（客户端输入框上方那一行随之消失），记一行，和核心的 background.drop 对着看
+    const running = params.tasks.filter((task) => task.status === 'running').length
+    const before = this.publishedRunning.get(threadId) ?? 0
+    this.publishedRunning.set(threadId, running)
+    if (before > 0 && running === 0)
+      debugLog('background.drop', {
+        threadId,
+        before,
+        tasks: backgroundDigest(params.tasks),
+        turnId: this.sessionHolder(threadId)?.turnId ?? null,
+      })
     for (const target of this.accountPeers)
       if (this.isConnected(target) && this.declaresBackground(target))
         this.deliver(target, { method: BACKGROUND_TASKS_NOTIFICATION.changed, params }, target)
+  }
+
+  /**
+   * 诊断：发给声明了 backgroundTasks 的连接的会话对象没带集合，而这个会话有后台任务在跑。
+   * 客户端会整个换掉会话对象，那一行可能因此没了（核心那头的 background.drop 记 cause 为 thread/started）
+   */
+  private noteBareThread(target: RpcPeer, params: unknown): void {
+    if (!this.declaresBackground(target)) return
+    const thread = asRecord(asRecord(params).thread)
+    const threadId = stringOr(thread.id, '')
+    if (!threadId || thread.litchBackground) return
+    const tasks = this.backgroundTasks.list(threadId)
+    if (!tasks.some((task) => task.status === 'running')) return
+    debugLog('background.bareThread', {
+      peerId: target.id,
+      threadId,
+      tasks: backgroundDigest(tasks),
+    })
   }
 
   /**
