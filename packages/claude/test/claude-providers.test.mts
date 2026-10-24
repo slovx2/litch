@@ -40,11 +40,14 @@ const catalogs: Record<string, NativeModelInfo[]> = {
   ],
 }
 
-function fakeRuntime(asked: Array<string | null | undefined>): ClaudeRuntime {
+function fakeRuntime(
+  asked: Array<string | null | undefined>,
+  from: Record<string, NativeModelInfo[]> = catalogs,
+): ClaudeRuntime {
   return {
     supportedModels: async (provider?: string | null) => {
       asked.push(provider)
-      return catalogs[provider ?? 'anthropic'] ?? []
+      return from[provider ?? 'anthropic'] ?? []
     },
   } as unknown as ClaudeRuntime
 }
@@ -231,4 +234,36 @@ test('PROVIDERS-005：删掉的供应商的型号仍认得出是它，供应商�
     // 不落到账号：起 CLI 时按 corp 报没有这个供应商；选单里那一行带着它的名字
     assert.deepEqual(runModel('corp/glm-4.6'), { provider: 'corp', model: 'glm-4.6' })
     assert.equal(extraModelOption('corp/glm-4.6', false).displayName, '[corp] glm-4.6')
+  }))
+
+test('PROVIDERS-006：完整型号落到眼下指向它的那个别名那一行，和从选单里选的一样', () =>
+  withProviders(async () => {
+    addProviders()
+    writeProviderSecret('corp', 'gw-token')
+    const anthropic: NativeModelInfo[] = [
+      {
+        value: 'default',
+        resolvedModel: 'claude-opus-5-5',
+        displayName: 'Default',
+        description: '',
+      },
+      { value: 'opus', resolvedModel: 'claude-opus-5-5', displayName: 'Opus', description: '' },
+      {
+        value: 'opus[1m]',
+        resolvedModel: 'claude-opus-5-5[1m]',
+        displayName: 'Opus (1M context)',
+        description: '',
+      },
+      { value: 'sonnet', displayName: 'Sonnet', description: 'Sonnet 5' },
+    ]
+    await loadRuntimeModelCatalog(fakeRuntime([], { anthropic }))
+    // 不带前缀的、带账号前缀的、只差大小写的都落到 opus 那一行；“默认”那一行跟着 CLI 的默认走，不算
+    assert.equal(catalogModelId('claude-opus-5-5'), 'anthropic/opus')
+    assert.equal(catalogModelId('anthropic/claude-opus-5-5'), 'anthropic/opus')
+    assert.equal(catalogModelId('Claude-Opus-5-5'), 'anthropic/opus')
+    assert.equal(catalogModelId('claude-opus-5-5[1m]'), 'anthropic/opus[1m]')
+    // 别家的同名型号不落到账号；目录里没有哪一行指向的照原样
+    assert.equal(catalogModelId('corp/claude-opus-5-5'), 'corp/claude-opus-5-5')
+    assert.equal(catalogModelId('claude-opus-4-6'), 'claude-opus-4-6')
+    assert.equal(isSelectableModel('claude-opus-5-5'), true)
   }))
