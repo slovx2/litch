@@ -383,6 +383,8 @@ test('SESSION-PROPOSALS-006：用户开始时可改 harness、模型、强度、
   try {
     const client = await litch(env)
     const { threadId } = await parent(client)
+    // 模型提的型号要在 claude-code 的清单里（session-options.mts 的校验）
+    env.claude.handlers['model/list'] = () => ({ data: [{ id: 'big' }], nextCursor: null })
     const proposalId = await propose(env, threadId, '原来的标题', {
       harness: 'claude-code',
       model: 'big',

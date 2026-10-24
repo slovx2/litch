@@ -82,6 +82,8 @@ test('DEFAULTS-002：目标 harness 不同、没写 model、effort：不带，�
   try {
     const client = await litch(env)
     const threadId = await parentOn(env, client)
+    // 模型给的型号要在目标 harness 的清单里（session-options.mts 的校验）
+    env.claude.handlers['model/list'] = () => ({ data: [{ id: 'opus' }], nextCursor: null })
     const other = await call(env, threadId, 'start', {
       title: '换 harness',
       ...brief('换 harness'),

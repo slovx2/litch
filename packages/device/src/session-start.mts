@@ -137,7 +137,7 @@ export async function widerSandbox(
  * 父会话现在的设置（审批策略、沙箱、目录）：恢复一下就拿得到，顺带让设备进程的连接订阅它。
  * 订阅留到父会话这一回合结束，用不着了由会话树退订（releaseLater）
  */
-async function parentSettings(
+export async function parentSettings(
   tree: SessionTree,
   parentId: string,
   parentHarness: string,

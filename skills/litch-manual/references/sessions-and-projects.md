@@ -179,7 +179,11 @@ woken to continue.
 - **By the model**: in sessions of every harness (Codex, Claude Code, Pi, DSH, OpenCode, Gemini CLI,
   Qwen Code, ACP) the model has `litch_sessions` tools: list and read sessions on the device, start
   sub-sessions, send to and interrupt its own sub-sessions, wait for them. When the user did not ask for
-  a sub-session in that turn, it becomes a suggested task instead of starting directly.
+  a sub-session in that turn, it becomes a suggested task instead of starting directly. To use another
+  harness or model it first looks up what the device offers (`litch_sessions.options`: each harness's
+  models as in the model menu, Claude Code's with their provider, reasoning efforts, defaults); a
+  harness or model the device does not have is refused with the choices instead of starting a session
+  that fails on its first turn.
 - **Suggested tasks**: the model suggests a task of its own as a card instead of only mentioning it:
   work that ends in something of its own (a branch, a pull request) and that you may want to follow
   apart from this conversation, such as something it noticed, the follow-up its answer recommends, or

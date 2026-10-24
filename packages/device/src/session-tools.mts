@@ -1,6 +1,6 @@
 // litch_sessions：模型列出、读取这台设备上的会话，派子会话，给自己的子会话发消息、打断，等它们停下。
 // 执行方是设备进程（device-tools.mts 注册的一个命名空间），工具定义在 packages/protocol/src/client-tools-sessions.mts。
-// 读类（list、read、wait）能看这台设备上所有会话；写类（send、interrupt）只能作用于调用者自己的 Litch 子孙会话，
+// 读类（list、read、wait）能看这台设备上所有会话，options 列能用的 harness 和型号（session-options.mts）；写类（send、interrupt）只能作用于调用者自己的 Litch 子孙会话，
 // 别的一律 [litch:blocked]，引擎自己的子代理线程另外提示用引擎自己的工具。提案类（start 出提案、accept、withdraw）
 // 只作用于调用者自己会话上的提案；提案的门槛（一回合几张、同标题、fresh 简报的显示宽度）在 start 和 wrap_up 里查。
 // wrap_up 是每回合收尾必调的（干完活先调它、再写最终回答）：每条建议成一张提案，调没调记在会话树里
@@ -9,6 +9,8 @@
 // 模型再用 accept 带上简报开起来。hand_off 把做到一半的任务交给一个分叉到这个回合之前的子会话，立刻开始。
 // 这个 harness 的任务卡关着（设备设置 harness.<id>.taskCards）时当场生效：wrap_up 的建议一条都不落、propose 回 blocked、
 // offer 直接当在这里做；wrap_up 的 ask、actions 只整理（wrapUpAsk）、不存库，界面从调用参数里读。
+// start、accept（补 offer 的简报）、wrap_up 的建议里模型给的 harness、model 先查这台设备上有没有（不认的回 invalid，带可选项），
+// 免得开出第一轮就报错的会话。
 // 结果是一段 JSON 文字，失败第一行是 [litch:<kind>]，后面是模型能照着改的一句话。
 import {
   type ClientToolCallResponse,
@@ -35,6 +37,7 @@ import {
   type SessionProposal,
 } from '../../protocol/src/session-tree.mjs'
 import type { DeviceToolCall, DeviceToolHandler } from './device-tools.mjs'
+import { checkHarness, modelFor, sessionOptions } from './session-options.mjs'
 import {
   acceptProposal,
   StartRefused,
@@ -258,11 +261,19 @@ function targetOf(
   const worktree = args.worktree ?? undefined
   if (worktree !== undefined && typeof worktree !== 'boolean')
     throw new Refused('invalid', 'worktree must be true or false.')
-  if (harness && !tree.host.harnesses().some((source) => source.id === harness))
-    throw new Refused('invalid', `There is no harness "${harness}" on this device.`)
+  if (harness) checkHarness(tree, harness)
   if (kind === 'fork' && harness && harness !== call.harness)
     throw new Refused('invalid', `fork only works within the same harness (${call.harness}).`)
   return { harness, model, effort, cwd, kind, worktree }
+}
+
+/** 模型这次给的 model 在目标 harness 上认不认，认的换成清单里的写法（session-options.mts 的 modelFor） */
+async function checked<T extends { harness: string | undefined; model: string | undefined }>(
+  tree: SessionTree,
+  call: DeviceToolCall,
+  target: T,
+): Promise<T> {
+  return { ...target, model: await modelFor(tree, call, target.harness, target.model) }
 }
 
 /**
@@ -350,7 +361,7 @@ async function start(
   if (initiation === 'offer') return cards ? offer(tree, args, call, signal) : offerOff(args, call)
   if (initiation !== 'user_asked' && initiation !== 'propose')
     throw new Refused('invalid', 'initiation must be user_asked, propose or offer.')
-  const spec = specOf(args, call, tree)
+  const spec = await checked(tree, call, specOf(args, call, tree))
   // 目标 harness 收不到父会话那么严（比如没有沙箱的 Pi）：模型派的一律变成提案，由用户看过再点
   const wider = await widerFor(tree, call, spec)
   // 只有用户亲手发起的这个回合里、模型说是用户要的，才直接起；别的一律变成提案
@@ -423,7 +434,7 @@ async function offer(
       'invalid',
       'An offer takes the title only. Call start again with initiation "offer" and no prompt or background; if the user chooses a new session, you pass the brief to accept.',
     )
-  const target = targetOf(args, call, tree)
+  const target = await checked(tree, call, targetOf(args, call, tree))
   if (!tree.isUserTurn(call.harness, call.turnId))
     throw new Refused(
       'blocked',
@@ -527,7 +538,7 @@ async function wrapUp(
           'invalid',
           'Each suggestion must be an object with title, prompt and (for fresh) background.',
         )
-      const spec = specOf(one, call, tree)
+      const spec = await checked(tree, call, specOf(one, call, tree))
       const proposal = proposeOne(
         tree,
         call,
@@ -707,19 +718,23 @@ async function acceptOffer(
       'invalid',
       `prompt is required: the user chose a new session for "${proposal.title}", so pass the full brief: prompt (the task, the files or area, what done looks like) and, for fresh, background (the context it cannot see).`,
     )
-  const spec = specOf(
-    {
-      title: args.title ?? proposal.title,
-      prompt,
-      background: args.background,
-      harness: args.harness ?? proposal.harness,
-      model: args.model ?? proposal.model,
-      effort: args.effort ?? proposal.effort,
-      cwd: args.cwd ?? proposal.cwd,
-      kind: args.kind ?? proposal.kind,
-    },
-    call,
+  const spec = await checked(
     tree,
+    call,
+    specOf(
+      {
+        title: args.title ?? proposal.title,
+        prompt,
+        background: args.background,
+        harness: args.harness ?? proposal.harness,
+        model: args.model ?? proposal.model,
+        effort: args.effort ?? proposal.effort,
+        cwd: args.cwd ?? proposal.cwd,
+        kind: args.kind ?? proposal.kind,
+      },
+      call,
+      tree,
+    ),
   )
   const wider = await widerFor(tree, call, spec)
   // 目标 harness 收不到这个会话那么严：不开，降成一张带简报的普通提案卡，用户看过提醒再决定点不点
@@ -997,6 +1012,8 @@ export function sessionToolsHandler(tree: SessionTree): DeviceToolHandler {
           return ok(await list(tree, args, call))
         case SESSION_TOOL.read:
           return ok(await read(tree, args, call))
+        case SESSION_TOOL.options:
+          return ok(await sessionOptions(tree, args, call))
         case SESSION_TOOL.start:
           return ok(await start(tree, args, call, signal))
         case SESSION_TOOL.accept:
