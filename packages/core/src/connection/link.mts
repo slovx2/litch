@@ -205,6 +205,8 @@ export function createLink(options: LinkOptions): Link {
                 EXTENSION.sessionTree,
                 // devicePairing：声明了才收得到配对状态和已绑定手机的变化通知（litch/pair/changed、litch/pair/phones/changed）
                 EXTENSION.devicePairing,
+                // clientApprovals：声明了才能把登录卡片挂到设备上、收到手机的答复（桌面端），收得到卡片变化的通知（手机）
+                EXTENSION.clientApprovals,
                 // harnessInstall：声明了才收得到安装任务的进度通知（litch/device/harness/install/changed）
                 EXTENSION.harnessInstall,
                 // nativeLineage：声明了，别的应用（Claude 桌面端）派出来的原生会话上才有 litchNativeLineage，

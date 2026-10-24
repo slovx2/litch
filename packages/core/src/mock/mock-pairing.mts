@@ -283,6 +283,7 @@ export function createMockPairing(host: MockPairingHost): MockPairing {
           address: state.remembered ? { ...state.remembered } : { ...original },
           original,
           hosts: tailnetHostsOf(device),
+          approvals: true,
         }
         return { pairing }
       }

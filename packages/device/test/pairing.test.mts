@@ -612,6 +612,7 @@ test('登记带批准公钥：确认码把它算进去，requested 的 phone 里
     assert.equal(status.phone?.code, confirmCodeOf(pairId, key, approvalKey))
     assert.notEqual(status.phone?.code, confirmCodeOf(pairId, key))
     assert.equal(status.phone?.approvalKey, approvalKey)
+    assert.equal(status.phone?.publicKey, key)
     const decided: PairStatus = await r.call('litch/pair/decide', { pairId, allow: true })
     assert.equal(decided.phone?.approvalKey, approvalKey)
     assert.equal((await pending).ok, true)

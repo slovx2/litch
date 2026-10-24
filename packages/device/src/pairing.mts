@@ -366,7 +366,7 @@ export class DevicePairing {
       name: cleanPhoneName(input.name),
       fingerprint: fingerprintOf(parsed.blob),
       code: confirmCodeOf(pair.id, parsed.line, approvalKey),
-      ...(approvalKey === null ? {} : { approvalKey }),
+      ...(approvalKey === null ? {} : { approvalKey, publicKey: parsed.line }),
     }
     pair.timers.decide = this.clock.setTimeout(() => {
       if (pair.state === 'requested') this.finish(pair, 'rejected', PAIR_ENROLL_ERROR.timeout)

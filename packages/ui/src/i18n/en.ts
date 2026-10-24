@@ -1748,4 +1748,19 @@ export const en: Record<MessageKey, Entry> = {
   'compaction.automatic': 'Context was nearly full and got compacted',
   'compaction.interrupted': 'Compaction didn’t finish',
   'notice.unknownItem': 'Unsupported item type: {type}',
+  // —— Phone approval keys (clientApprovals: the Phones section in device details, and notices) ——
+  'phones.approvalKey': 'Approval key {fingerprint}',
+  'phones.approvalKey.pairing': 'Verified when paired',
+  'phones.approvalKey.first': 'Recorded at first approval',
+  'phones.approvalKey.conflict':
+    'Approval key mismatch, so approvals from this phone are refused. Remove the key and pair the phone again.',
+  'phones.approvalKey.forget': 'Remove approval key',
+  'phones.approvalKey.forgetAsk':
+    'Remove the approval key of “{name}”? The next approval from this phone records its key again.',
+  'phones.approvalKey.forgotten': 'Removed the approval key of “{name}”.',
+  'phones.approvalKey.other': 'Other phones with approval keys',
+  'approvals.firstSeen':
+    '“{name}” approved a sign-in for the first time, and its approval key was recorded (fingerprint {fingerprint}). If you didn’t approve it, remove the key under Phones in the device details.',
+  'approvals.mismatch':
+    'The approval key of “{name}” doesn’t match, so its approval was refused. Pair the phone again.',
 }

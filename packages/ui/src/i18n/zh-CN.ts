@@ -1660,6 +1660,18 @@ export const zhCN = {
   'compaction.automatic': '上下文快满了，已自动压缩',
   'compaction.interrupted': '压缩没有完成',
   'notice.unknownItem': '当前版本不支持的条目：{type}',
+  // —— 手机批准钥匙（clientApprovals，设备详情“手机”一节和提示） ——
+  'phones.approvalKey': '批准钥匙 {fingerprint}',
+  'phones.approvalKey.pairing': '扫码时已核对',
+  'phones.approvalKey.first': '首次批准时记录',
+  'phones.approvalKey.conflict': '批准钥匙不一致，已停用。删除后请在手机上重新扫码绑定。',
+  'phones.approvalKey.forget': '删除批准钥匙',
+  'phones.approvalKey.forgetAsk': '删除“{name}”的批准钥匙？该手机下次批准登录时会重新记录。',
+  'phones.approvalKey.forgotten': '已删除“{name}”的批准钥匙。',
+  'phones.approvalKey.other': '其他已记录批准钥匙的手机',
+  'approvals.firstSeen':
+    '手机“{name}”首次批准登录，已记录其批准钥匙（指纹 {fingerprint}）。如果不是你批准的，请在设备详情的“手机”一节删除它。',
+  'approvals.mismatch': '手机“{name}”的批准钥匙不一致，已拒绝其批准。请在手机上重新扫码绑定。',
 } satisfies Record<string, Entry>
 
 export type MessageKey = keyof typeof zhCN
