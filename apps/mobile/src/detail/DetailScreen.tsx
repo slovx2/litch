@@ -165,6 +165,11 @@ export function DetailScreen({ route, navigation }: Props) {
         ]
       : []),
     {
+      label: t('side.tab.background'),
+      testID: 'detail:menu:background',
+      onPress: () => navigation.navigate('Background', { deviceId, sessionId, title: shownTitle }),
+    },
+    {
       label: t('usage.menu'),
       testID: 'detail:menu:usage',
       onPress: () => setUsageOpen(true),

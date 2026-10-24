@@ -8,6 +8,8 @@
 //   尾巴放在倒置列表的表头里（最底下），长高时上面的行跟着一起被顶上去，和原生的普通布局一样，同一帧完成。
 import type {
   AgentMessageItem,
+  AgentState,
+  AgentThreadView,
   AskAnswers,
   CoreChannel,
   SessionBackgroundView,
@@ -18,7 +20,13 @@ import type {
   TurnStatus,
   UserMessageItem,
 } from '@litch/core'
-import { deriveBackground, gatherAnswers, parseAskReply, reduceSession } from '@litch/core'
+import {
+  agentStatesOf,
+  deriveBackground,
+  gatherAnswers,
+  parseAskReply,
+  reduceSession,
+} from '@litch/core'
 import { experiment } from '../experiment'
 import { noteOpenStage, noteWork } from '../probe'
 import { type Row, RowBuilder } from './rows'
@@ -69,7 +77,17 @@ export interface SessionMeta {
   derived: SessionBackgroundView | null
   /** 持续目标（harness 会才有）：输入框上方那一行用。达成了核心马上清掉，回答下面那一句在对话区的行里 */
   goal: SessionGoalView | null
+  /** 引擎自己派出的子代理（会话开着时核心推来的 session.agents）：后台任务那一行和后台任务页算它们 */
+  agents: readonly AgentThreadView[]
+  /** 父会话的协作条目里报的各个子代理的状态（子线程说不出来时用）。没有子代理时是空的 */
+  reported: ReadonlyMap<string, AgentState>
 }
+
+const NO_REPORTED: ReadonlyMap<string, AgentState> = new Map()
+
+/** 协作条目（派出、等待、关闭子代理的那一次调用） */
+const isAgentCall = (item: SessionView['items'][string] | undefined): boolean =>
+  item?.kind === 'toolCall' && item.agents !== undefined
 
 const EMPTY: SessionSnapshot = { rows: [], running: false, error: null, publishedAt: 0 }
 const NO_TAIL: TailSnapshot = { rows: [], publishedAt: 0 }
@@ -316,7 +334,8 @@ export class SessionStore {
         this.itemTurn.set(op.item.id, op.turnId)
         mark(op.turnId)
         // 命令的状态决定不报集合的会话有没有后台任务在跑（meta.derived）
-        if (op.item.kind === 'command') this.metaDirty = true
+        // 子代理的状态也在条目上报（派出、等待的协作条目）
+        if (op.item.kind === 'command' || isAgentCall(op.item)) this.metaDirty = true
         const answers = gatherAnswers(this.answers, [op.item])
         if (answers !== this.answers) {
           this.answers = answers
@@ -332,7 +351,8 @@ export class SessionStore {
         return
       case 'item.status':
         mark(this.itemTurn.get(op.itemId))
-        if (view.items[op.itemId]?.kind === 'command') this.metaDirty = true
+        if (view.items[op.itemId]?.kind === 'command' || isAgentCall(view.items[op.itemId]))
+          this.metaDirty = true
         return
       case 'item.appendText':
       case 'item.appendOutput':
@@ -430,6 +450,11 @@ export class SessionStore {
         lastTurn: lastTurnOf(view),
         derived: view.can.backgroundTasks ? null : deriveBackground(view.turns, view.items),
         goal: view.goal ?? null,
+        agents: view.agents,
+        reported:
+          view.agents.length > 0
+            ? agentStatesOf(view.turns.flatMap((turn) => turn.itemIds.map((id) => view.items[id])))
+            : NO_REPORTED,
       }
       for (const listener of this.metaListeners) listener()
     }
