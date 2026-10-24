@@ -332,6 +332,7 @@ test('登记：同一个标签一次一张在等；来源跟着导航换；答�
     taskId: null,
     expiresAt: null,
     nonce: signIns.list()[0]?.nonce,
+    by: null,
     at: 5,
   })
   signIns.setOrigin(one.id, 'https://sso.example')

@@ -161,6 +161,11 @@ export interface HandoverOptions {
   /** 手机答复的验签（approvals/verify.mts）；不给一律不认 */
   verifyPhoneAnswer?: VerifyPhoneAnswer
   /**
+   * 这台桌面端的号（approvals/verify.mts 的 approvalDesktopId）：放进对话里的卡片，核心看到它才转给手机；
+   * 不给或回 null 就不转
+   */
+  desktopId?(): string | null
+  /**
    * 定时任务的事先授权：设备、任务、源对上一条授权时回条目号（grants/），不出卡片直接代填；没有回 null
    */
   preauthorized?(input: { deviceId: string; taskId: string; origin: string }): string | null
@@ -185,7 +190,7 @@ const sessionOf = (owner: { deviceId: string; threadId: string }) =>
   `${owner.deviceId}\u0000${owner.threadId}`
 
 /** 对话里的那张卡片（和面板上的同一张，ClientToolAsk 的 signIn） */
-const askOf = (card: SignInRequest): ClientToolAsk => ({
+const askOf = (card: SignInRequest, desktopId: string | null): ClientToolAsk => ({
   kind: 'signIn',
   id: card.id,
   origin: card.origin,
@@ -196,6 +201,7 @@ const askOf = (card: SignInRequest): ClientToolAsk => ({
   taskId: card.taskId,
   expiresAt: card.expiresAt,
   nonce: card.nonce,
+  desktopId,
 })
 
 /** 这个标签有开它的窗口（同源的父子窗口能直接读彼此的网页） */
@@ -323,7 +329,7 @@ export function createHandover(options: HandoverOptions): BrowserHandover {
         log(`手机答复没认：${verdict.why}`)
         return
       }
-      const by = { phoneId: verdict.phoneId }
+      const by = { phoneId: verdict.phoneId, ...(verdict.name ? { name: verdict.name } : {}) }
       if (verdict.choice === null) signIns.answer(card.id, 'cancel', by)
       else signIns.answer(card.id, { fill: verdict.choice, remember: verdict.remember }, by)
     },
@@ -520,7 +526,7 @@ export function createHandover(options: HandoverOptions): BrowserHandover {
         retract = null
         mirrored = key
         if (want && ask.show) {
-          retract = ask.show(askOf(want), (answer) => {
+          retract = ask.show(askOf(want, options.desktopId?.() ?? null), (answer) => {
             // 核心那条路回来的拒绝（界面本该走浏览器桥）
             if (answer === 'decline') signIns.answer(begun.id, 'cancel')
           })

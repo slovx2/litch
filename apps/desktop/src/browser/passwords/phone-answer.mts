@@ -11,10 +11,17 @@ export type PhoneAnswerCard = Pick<
 
 /**
  * 验签的结论。choice 是选的账号（卡片里的 ref），拒绝是 null；remember 是“以后直接用这个账号”（签进去的）；
- * firstSeen：这把批准钥匙是这次第一次批准时记下的（桌面端要出提示）
+ * firstSeen：这把批准钥匙是这次第一次批准时记下的（桌面端要出提示）；name 是给人看的手机名（有就带上，卡片上显示）
  */
 export type PhoneAnswerVerdict =
-  | { ok: true; phoneId: string; choice: string | null; remember: boolean; firstSeen: boolean }
+  | {
+      ok: true
+      phoneId: string
+      name?: string
+      choice: string | null
+      remember: boolean
+      firstSeen: boolean
+    }
   | { ok: false; why: string }
 
 export type VerifyPhoneAnswer = (

@@ -75,6 +75,8 @@ export interface SignInRequest {
   expiresAt: number | null
   /** 桌面端出的随机数：手机的答复要签上它（用一次作废） */
   nonce: string
+  /** 谁选的代填（filling 时有）：桌面端，或某台手机（name 是给人看的手机名，可能没有）；没选是 null */
+  by: 'desktop' | { phoneId: string; name?: string } | null
   /** 毫秒 */
   at: number
 }
@@ -91,8 +93,8 @@ export type SignInAnswer =
   | 'self'
   | { fill: string; remember: boolean }
 
-/** 谁答的：桌面端界面，或者某台手机（验过签名的） */
-export type SignInBy = 'desktop' | { phoneId: string }
+/** 谁答的：桌面端界面，或者某台手机（验过签名的；name 是给人看的手机名，可能没有） */
+export type SignInBy = 'desktop' | { phoneId: string; name?: string }
 
 /** 卡片怎么结束的（交给 handover.mts） */
 export type SignInResolution =
@@ -192,6 +194,7 @@ export function createSignIns(
   const copy = (request: SignInRequest): SignInRequest => ({
     ...request,
     accounts: request.accounts.map((one) => ({ ...one })),
+    by: request.by === null || request.by === 'desktop' ? request.by : { ...request.by },
   })
   const list = () => [...open.values()].map((one) => copy(one.request))
   const changed = () => {
@@ -226,6 +229,7 @@ export function createSignIns(
     taskId: null,
     expiresAt: null,
     nonce: randomBytes(16).toString('base64url'),
+    by: null,
     at: now(),
   })
 
@@ -311,6 +315,7 @@ export function createSignIns(
       if (!entryId) return false
       // 卡片留着（filling，没有按钮），代填完由 handover.mts 撤掉
       request.stage = 'filling'
+      request.by = by === 'desktop' ? 'desktop' : { ...by }
       one.settle({
         kind: 'fill',
         ref: answer.fill,

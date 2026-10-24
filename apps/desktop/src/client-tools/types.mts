@@ -91,6 +91,8 @@ export type ClientToolAsk =
       expiresAt: number | null
       /** 桌面端出的随机数：转给手机，手机的答复要签上它 */
       nonce: string
+      /** 这台桌面端的号：有它核心才把卡片经会话所在设备转给手机；没有（验签没装好）不转 */
+      desktopId?: string | null
     }
 
 /** 卡片的答复。session：本会话都允许；always：一直允许（记下来）；decline：拒绝；null：没答就被取消了 */

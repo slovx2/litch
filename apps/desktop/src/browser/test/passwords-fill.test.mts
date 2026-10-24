@@ -161,6 +161,7 @@ test('登记：账号用随机 ref 指，条目号不出登记；代填答复给
   const resolved = await one.answered
   assert.deepEqual(resolved, { kind: 'fill', ref, entryId: 'e1', remember: false, by: 'desktop' })
   assert.equal(signIns.get(one.id)?.stage, 'filling')
+  assert.equal(signIns.get(one.id)?.by, 'desktop')
   // 代填期间什么都答不了
   assert.equal(signIns.answer(one.id, 'cancel'), false)
   signIns.end(one.id)
@@ -188,6 +189,7 @@ test('登记：我自己登录转成 manual，再交还；预检不过不能代�
   const got = (await two.answered) as Extract<SignInResolution, { kind: 'fill' }>
   assert.equal(got.entryId, 'e2')
   assert.deepEqual(got.by, { phoneId: 'p1' })
+  assert.deepEqual(signIns.get(two.id)?.by, { phoneId: 'p1' })
 
   const three = signIns.begin({ ...input, tabId: 't3', accounts })
   assert.ok(three)
