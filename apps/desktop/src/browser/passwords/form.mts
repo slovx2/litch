@@ -87,7 +87,7 @@ export function fillInput(input: HTMLInputElement | HTMLTextAreaElement, value: 
 const USERNAME_NAME = /user|email|login|account|identifier/i
 
 /** 像不像用户名框（不管看不看得见）：写明 autocomplete 是 username、email 的，email 类型的，名字或编号像的 */
-function looksLikeUsername(input: HTMLInputElement): boolean {
+export function looksLikeUsername(input: HTMLInputElement): boolean {
   if (input.type === 'password') return false
   const tokens = tokensOf(input)
   if (tokens.includes('username') || tokens.includes('email')) return true

@@ -23,7 +23,7 @@ import { AUTOFILL_CAPTURE, AUTOFILL_FILL, AUTOFILL_OFFER, AUTOFILL_QUERY } from 
 import { fillableOrigin } from './origin.mjs'
 import type { SavePrompts } from './prompts.mjs'
 import type { PasswordStore } from './store.mjs'
-import { autofillKind, autofillTab } from './tabs.mjs'
+import { autofillKind, autofillTab, isGated } from './tabs.mjs'
 
 /** 菜单里一条用户名最长显示这么多字 */
 const LABEL_MAX = 80
@@ -172,6 +172,8 @@ export function installAutofill(store: PasswordStore, prompts: SavePrompts): Aut
     const tab = autofillTab(event.sender.id)
     const frame = frameRefOf(event)
     if (!tab || !frame?.alive()) return
+    // Litch 代填的提交：填的就是库里那一条，不提示保存（预加载那头也不报，这里再挡一道）
+    if (isGated(event.sender.id)) return
     const origin = fillableOrigin(frame.origin())
     const { username, password, current, step } = (payload ?? {}) as Record<string, unknown>
     if (!origin || typeof username !== 'string') return

@@ -19,6 +19,7 @@ import { type Args, BadArgs, objectOf, str } from './args.mjs'
 import { newRefBook, type RefBook } from './ax.mjs'
 import { CdpRefused } from './cdp-allow.mjs'
 import type { BrowserHost, BrowserPage, TabOwner } from './model.mjs'
+import type { FillFailure } from './passwords/fill-rules.mjs'
 import { type SiteBook, sessionKey } from './sites.mjs'
 import { TOOLS } from './tools.mjs'
 import { needsApproval, originOf } from './url.mjs'
@@ -70,10 +71,60 @@ export interface Call {
 export type Tool = (call: Call) => Promise<ClientToolCallResponse>
 
 /**
- * 交给人登录（request_sign_in）的结果。failed：没能安全地重新载入，标签已关掉；
- * busy：这个标签已经交给人了，这一次什么都没动
+ * request_sign_in 的结果。人自己登录的（方案 A）：done 交还了、cancel 拒绝或取消、closed 标签被关了、
+ * failed 没能安全地重新载入（标签已关掉）、busy 这个标签已经在等人（这一次什么都没动）、aborted 不等了。
+ * 另有：declined 同一回合里人已经拒绝过这个源（不出卡片）；origin_changed 代理给的源和页面的不一样（不出卡片）；
+ * expired 定时任务的回合，卡片到点没人答；filled、fillFailed 是 Litch 代填的（方案 B）
  */
-export type SignInOutcome = 'done' | 'cancel' | 'closed' | 'aborted' | 'failed' | 'busy'
+export type SignInOutcome =
+  | 'done'
+  | 'cancel'
+  | 'closed'
+  | 'aborted'
+  | 'failed'
+  | 'busy'
+  | 'declined'
+  | 'origin_changed'
+  | 'expired'
+  | {
+      kind: 'filled'
+      /** 落定后页面的源 */
+      origin: string
+      /** 主框架换了文档 */
+      navigated: boolean
+      /** 自检不干净，关掉重开了：新标签的编号；没有是 null */
+      reopened: string | null
+      /** 落定后要验证码、二次验证 */
+      verification: boolean
+      /** 落定后页面上还有密码框（多半没登上） */
+      stillSignIn: boolean
+      /** 按定时任务的事先授权代填的（没出卡片） */
+      preauthorized: boolean
+    }
+  | {
+      kind: 'fillFailed'
+      why: FillFailure
+      /** 自检不干净，关掉重开了：新标签的编号；没有是 null */
+      reopened: string | null
+    }
+
+/** 代理请人登录时给的东西 */
+export interface SignInAsk {
+  /** 给人看的站名、原因（代理说的） */
+  site: string
+  reason: string
+  /** 代理认为要登录的源；给了就要和页面的真实源一样 */
+  origin: string | null
+  /** 冻结之前给代理指的编号加的一次性标记的口令（tools-signin.mts）；没有是 null */
+  hintToken: string | null
+  /** 代理给了登录按钮的编号 */
+  submitHint: boolean
+  /** 这一回合是哪个定时任务跑的 */
+  task: { id: string; name: string } | null
+  turnId: string
+  /** 在对话里挂一张同样的卡片（不等答复）；不给就只在浏览器面板上 */
+  show?: ClientToolContext['show']
+}
 
 /**
  * 把代理的标签交给人登录（passwords/handover.mts 是真的那一份）。交出去的这段时间里，代理对这个标签的
@@ -86,12 +137,12 @@ export interface BrowserHandover {
   hides(tabId: string): boolean
   /** 代理在这个标签当前的文档里执行过脚本（evaluate）：交给人之前要重新载入 */
   markScripted(tabId: string): void
-  /** 交给人，等人交还或取消（signal 中止时回 aborted）。交还前清空各框架里密码框的值 */
-  request(
-    page: BrowserPage,
-    ask: { site: string; reason: string },
-    signal: AbortSignal,
-  ): Promise<SignInOutcome>
+  /** 出卡片，等人选：代填、自己登录（交还前清空各框架里密码框的值）、拒绝。signal 中止时回 aborted */
+  request(page: BrowserPage, ask: SignInAsk, signal: AbortSignal): Promise<SignInOutcome>
+  /** 核心转来的手机答复（验过签名才认） */
+  phoneAnswer?(answer: unknown): void
+  /** 回合结束：同一回合里被拒的记录不要了 */
+  turnEnded?(session: string, turnId: string): void
 }
 
 /** 交给人登录的标签上，代理的调用一律回这一句 */
@@ -357,6 +408,7 @@ export function createBrowserExecutor(options: BrowserExecutorOptions): BrowserE
       } else host.release(page.id)
     }
     sites.turnEnded(session, turn.turnId)
+    options.handover?.turnEnded?.(session, turn.turnId)
     if (turns.get(session) === turn.turnId) turns.delete(session)
     const current = currents.get(session)
     if (current && !host.page(current)) currents.delete(session)
@@ -366,6 +418,7 @@ export function createBrowserExecutor(options: BrowserExecutorOptions): BrowserE
     namespace: BROWSER_NAMESPACE,
     call,
     turnEnded,
+    phoneAnswer: (answer) => options.handover?.phoneAnswer?.(answer),
     currentTab: (deviceId, threadId) => currents.get(sessionKey(deviceId, threadId)) ?? null,
   }
 }

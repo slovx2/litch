@@ -33,10 +33,12 @@ export interface SavedPassword {
   lastUsedAt?: number
 }
 
-/** 自动填充的候选：只有编号和用户名 */
+/** 自动填充的候选：只有编号和用户名（和最近一次填过的时间，Litch 代填的卡片按它排） */
 export interface PasswordCandidate {
   id: string
   username: string
+  /** 毫秒：最近一次填过；没填过不给 */
+  lastUsedAt?: number
 }
 
 /** 文件里的一条 */
@@ -112,6 +114,8 @@ export interface PasswordStore extends PasswordSink {
    * 取到了顺手记一笔最近使用的时间
    */
   reveal(id: string, origin: string): { username: string; password: string } | null
+  /** 这一条记下的登录表单交去的源（导入时带的）；没有是 null */
+  actionOriginOf(id: string): string | null
   /** 库变了（导入、保存、删除、永不名单）时通知，回取消的函数 */
   onChange(listener: () => void): () => void
   /** 登录时提交的这一组和库里比（要解开同源同用户名的那一条） */
@@ -357,7 +361,14 @@ export function createPasswordStore(options: {
       return peek()
         .filter((entry) => entry.origin === origin)
         .sort((a, b) => (b.lastUsedAt ?? b.createdAt) - (a.lastUsedAt ?? a.createdAt))
-        .map((entry) => ({ id: entry.id, username: entry.username }))
+        .map((entry) => ({
+          id: entry.id,
+          username: entry.username,
+          ...(entry.lastUsedAt !== undefined ? { lastUsedAt: entry.lastUsedAt } : {}),
+        }))
+    },
+    actionOriginOf(id) {
+      return peek().find((one) => one.id === id)?.actionOrigin ?? null
     },
     reveal(id, origin) {
       const current = peek()

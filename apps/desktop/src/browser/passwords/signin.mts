@@ -30,7 +30,8 @@ export interface SignInAccount {
  * locator_invalid：代理给的编号提示不在 Litch 认出的登录表单里，或者登录表单不止一个、认不出该填哪个；
  * insecure：不是 https（本机回环除外）、表单用 GET 交、交给别的站、这个标签有开它的或它开的窗口；
  * verification：上一次代填后网站要验证码或二次验证，这一次只能人自己登录；
- * unavailable：密码库这会儿用不了（钥匙串打不开）
+ * unavailable：密码库这会儿用不了（钥匙串打不开）；
+ * origin_changed：出卡片之后页面换到了别的源，卡片上的账号不是这个源的
  */
 export type SignInBlock =
   | 'no_form'
@@ -39,6 +40,7 @@ export type SignInBlock =
   | 'insecure'
   | 'verification'
   | 'unavailable'
+  | 'origin_changed'
 
 /** 给界面的一张卡片 */
 export interface SignInRequest {

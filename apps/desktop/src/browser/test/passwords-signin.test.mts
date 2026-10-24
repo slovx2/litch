@@ -103,12 +103,13 @@ function fakeHandover() {
     hides: (tabId) => frozen.has(tabId),
     markScripted: (tabId) => void scripted.push(tabId),
     async request(page, ask, signal): Promise<SignInOutcome> {
-      asked.push(ask)
+      asked.push({ site: ask.site, reason: ask.reason })
       const begun = signIns.begin({
         owner: page.info().owner,
         tabId: page.id,
         origin: new URL(page.info().url).origin,
-        ...ask,
+        site: ask.site,
+        reason: ask.reason,
       })
       if (!begun) return 'aborted'
       frozen.add(page.id)
@@ -237,8 +238,8 @@ test('人点取消：告诉代理别换别的办法登录；回合打断：卡�
   await settle()
   signIns.answer(signIns.list()[0]?.id ?? '', 'cancel')
   const cancelled = await first
-  assert.match(textOf(cancelled), /cancelled signing in to localhost:3000/)
-  assert.match(textOf(cancelled), /Do not try to sign in another way/)
+  assert.match(textOf(cancelled), /declined signing in to localhost:3000/)
+  assert.match(textOf(cancelled), /Do not try another way/)
 
   const controller = new AbortController()
   const second = run('request_sign_in', { reason: 'Need access.' }, controller.signal)
