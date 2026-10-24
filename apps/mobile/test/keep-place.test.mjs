@@ -78,7 +78,13 @@ test('第一次滚被截短（原生那边内容还没长高）：下一帧按�
   })
   const before = topOf(list, 'group')
   keepPlace(list, 'group', () => {
-    list.props.data = [row('md', 100), row('end', 32), row('s1', 40), row('group', 32), row('user', 40)]
+    list.props.data = [
+      row('md', 100),
+      row('end', 32),
+      row('s1', 40),
+      row('group', 32),
+      row('user', 40),
+    ]
     for (const each of list.props.data) list.heights[each.key] = each.h
   })
   await Promise.resolve()
