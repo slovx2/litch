@@ -3,6 +3,7 @@
 // 回合结束时两条都还在跑（会话照样是空闲，侧栏摘要上的集合有两个在跑）；
 // 过一会儿测试先跑完，harness 自己接着做（自发回合，来历 backgroundTask，没有用户消息）；
 // 再过一会儿 dev 服务退出（退出码 1，记失败），这次不再接着做。
+// 后台任务页上点“停止”（session.stopBackground）：在跑的那条记成已停止，到点也不再结束、不再叫醒。
 // 条目的显示标识照真的核心写成“回合:协议条目标识”，集合里的 itemId 是协议那一截。
 import type { SessionOp } from '../channel/protocol.mjs'
 import type { ItemView, OutgoingMessage, SessionSummary, SessionView } from '../model.mjs'
@@ -46,6 +47,8 @@ export interface MockBackgroundHost {
 export interface MockBackground {
   /** 这条消息是不是后台任务这一出：是的话由这里接着演，返回 true */
   claim(view: SessionView, turnId: string, message: OutgoingMessage): boolean
+  /** 后台任务页上点了“停止”：在跑的那条命令记成已停止，不再叫醒会话。不是在跑的返回 false */
+  stop(view: SessionView, taskId: string): boolean
 }
 
 export function createMockBackground(host: MockBackgroundHost): MockBackground {
@@ -88,10 +91,12 @@ export function createMockBackground(host: MockBackgroundHost): MockBackground {
     item: ItemView,
     task: BackgroundTaskView,
     output: string,
-    exitCode: number,
+    /** null：停掉的 */
+    exitCode: number | null,
   ) => {
     if (item.kind !== 'command') return
     const now = host.now()
+    const status = exitCode === null ? 'stopped' : exitCode === 0 ? 'completed' : 'failed'
     host.apply(view, [
       {
         op: 'item.add',
@@ -101,11 +106,11 @@ export function createMockBackground(host: MockBackgroundHost): MockBackground {
           output,
           exitCode,
           durationMs: now - (item.startedAt ?? now),
-          status: exitCode === 0 ? 'completed' : 'failed',
+          status: status === 'completed' ? 'completed' : 'failed',
         },
       },
     ])
-    put(view, { ...task, status: exitCode === 0 ? 'completed' : 'failed', endedAt: now })
+    put(view, { ...task, status, endedAt: now })
   }
 
   /** 后台任务结束后 harness 自己开的一轮：没有用户消息，回合上记着来历 */
@@ -129,7 +134,16 @@ export function createMockBackground(host: MockBackgroundHost): MockBackground {
     host.reply(view, turnId, text.woke)
   }
 
+  /** 在跑的命令：任务标识 → 停掉它（取消计时，条目和集合记成已停止） */
+  const running = new Map<string, () => void>()
+
   return {
+    stop(_view, taskId) {
+      const halt = running.get(taskId)
+      if (!halt) return false
+      halt()
+      return true
+    },
     claim(view, turnId, message) {
       if (!STARTS.test(message.text)) return false
       const now = host.now()
@@ -155,11 +169,27 @@ export function createMockBackground(host: MockBackgroundHost): MockBackground {
       put(view, devTask)
       put(view, testTask)
       host.reply(view, turnId, text.started)
-      host.setTimer(() => {
-        end(view, turnId, tests, testTask, text.testOutput, 0)
-        wake(view)
-      }, BACKGROUND_FIRST_MS)
-      host.setTimer(() => end(view, turnId, dev, devTask, text.devOutput, 1), BACKGROUND_SECOND_MS)
+      const follow = (
+        item: ItemView,
+        task: BackgroundTaskView,
+        ms: number,
+        output: string,
+        exitCode: number,
+        then: () => void = () => {},
+      ) => {
+        const cancel = host.setTimer(() => {
+          running.delete(task.id)
+          end(view, turnId, item, task, output, exitCode)
+          then()
+        }, ms)
+        running.set(task.id, () => {
+          cancel()
+          running.delete(task.id)
+          end(view, turnId, item, task, '', null)
+        })
+      }
+      follow(tests, testTask, BACKGROUND_FIRST_MS, text.testOutput, 0, () => wake(view))
+      follow(dev, devTask, BACKGROUND_SECOND_MS, text.devOutput, 1)
       return true
     },
   }

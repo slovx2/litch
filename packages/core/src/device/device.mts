@@ -316,6 +316,8 @@ export interface Device {
   send(sessionId: string, message: OutgoingMessage, now?: boolean): Promise<void>
   steer(sessionId: string, messageId: string): Promise<void>
   interrupt(sessionId: string): Promise<void>
+  /** 停掉会话的一个后台命令（session.stopBackground） */
+  stopBackground(sessionId: string, taskId: string, itemId: string | null): Promise<void>
   unqueue(sessionId: string, messageId: string): void
   respond(sessionId: string, requestId: string, choice: RequestChoice): void
   /** itemId：切在这个回合里插进去的那条用户消息之前（界面里的条目标识） */
@@ -484,6 +486,26 @@ type DirectoryMethod = Exclude<
   | 'litch/harness/auth/updated'
 >
 type Routes = { [M in DirectoryMethod]: (params: ServerNotifications[M]) => void }
+
+/** 会话对象上的后台任务集合（对面不报的没有） */
+const backgroundOf = (thread: Thread | undefined): LitchBackground | undefined =>
+  (thread as { litchBackground?: LitchBackground } | undefined)?.litchBackground
+
+/** 会话对象上在跑的后台任务有几个 */
+const backgroundRunning = (thread: Thread | undefined): number =>
+  backgroundOf(thread)?.tasks.filter((task) => task.status === 'running').length ?? 0
+
+/** 诊断里记的集合摘要：在跑几个、一共几个，前 10 个任务的标识、种类、状态（不记标题，标题是命令） */
+const backgroundDigest = (thread: Thread | undefined) => {
+  const tasks = backgroundOf(thread)?.tasks ?? []
+  return {
+    running: backgroundRunning(thread),
+    total: tasks.length,
+    tasks: tasks
+      .slice(0, 10)
+      .map((task) => ({ id: task.id, kind: task.kind, status: task.status })),
+  }
+}
 
 export function createDevice(config: DeviceConfig, options: DeviceOptions): Device {
   const { hooks } = options
@@ -860,6 +882,46 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     live.setAgents(parentId, agentThreads.list(parentId)),
   )
 
+  /**
+   * 这一刻是谁在改会话对象：收到的通知的方法名、thread/read、thread/list。后台任务数掉到 0 时
+   * 写进诊断（background.drop），好分清是哪条消息让输入框上方那一行没了
+   */
+  let changeCause = 'other'
+  const causedBy = <T,>(cause: string, work: () => T): T => {
+    const was = changeCause
+    changeCause = cause
+    try {
+      return work()
+    } finally {
+      changeCause = was
+    }
+  }
+
+  /**
+   * 后台任务数从大于 0 变成 0（会话还在、只是集合空了或没带，或者会话被拿掉）：记一行。
+   * 只在这个转折点记；集合只记个数和每个任务的标识、种类、状态，不记标题（标题是命令）
+   */
+  const noteBackgroundDrop = (
+    threadId: string,
+    before: Thread | undefined,
+    after: Thread | undefined,
+    cause: string,
+  ) => {
+    if (!trace || backgroundRunning(before) === 0 || backgroundRunning(after) > 0) return
+    trace(
+      'background.drop',
+      {
+        sessionId: threadId,
+        cause,
+        before: backgroundDigest(before),
+        after: after ? backgroundDigest(after) : 'removed',
+        threadStatus: (after ?? before)?.status?.type ?? null,
+        open: live.watched(threadId),
+      },
+      'warn',
+    )
+  }
+
   const upsertThread = (thread: Thread) => {
     if (thread.ephemeral) {
       transient.add(thread.id)
@@ -872,7 +934,9 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     unspoken.delete(thread.id)
     // 目录里不留回合，会话内容打开时再取
     const kept: Thread = { ...thread, turns: [] }
+    const before = threads.get(kept.id)
     threads.set(kept.id, kept)
+    noteBackgroundDrop(kept.id, before, kept, changeCause)
     hooks.sidebarOps([{ op: 'session.upsert', session: summaryOf(kept) }])
     saveSoon()
   }
@@ -899,6 +963,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     unread.delete(threadId)
     unspoken.delete(threadId)
     live.forget(threadId)
+    noteBackgroundDrop(threadId, threads.get(threadId), undefined, `remove:${changeCause}`)
     if (threads.delete(threadId)) hooks.sidebarOps([{ op: 'session.remove', sessionId: threadId }])
     saveSoon()
   }
@@ -929,8 +994,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     try {
       const { thread } = await link.request('thread/read', { threadId, includeTurns: false })
       if (mine !== session) return
-      if (spoken) upsertThread(thread)
-      else adopt(thread)
+      causedBy('thread/read', () => (spoken ? upsertThread(thread) : adopt(thread)))
     } catch (error) {
       log(`取会话 ${threadId} 的信息失败：${String(error)}`)
     }
@@ -1071,12 +1135,15 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   /** 新取到的列表并进会话目录，记下这一次哪些 harness 没有包含进来 */
   const setThreads = (listing: Listing, only: HarnessId | null = null) => {
     const next = mergeListing(threads.values(), listing, harnessOf, only, downHarnesses())
+    const before = trace ? new Map(threads) : null
     threads.clear()
     for (const [id, thread] of next) {
       // 列表里混进来的子代理线程（不按上游的默认排除它们的入口）也不进侧栏
       if (isAgentThread(thread)) agentThreads.put(thread)
       else threads.set(id, thread)
     }
+    for (const [id, was] of before ?? [])
+      noteBackgroundDrop(id, was, threads.get(id), 'thread/list')
     // 设备上已经没有了的会话，未读也不留
     for (const id of unread) if (!threads.has(id)) unread.delete(id)
     // 已归档的表还没取过时不知道它是不是归档了，先留着
@@ -1169,7 +1236,18 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   }
 
   const routes: Routes = {
-    'thread/started': ({ thread }) => adopt(thread),
+    // 已在列表里的会话再收到一次（比如 Claude 入口重扫原生会话后重发）：通知里的会话对象只在集合不空时带
+    // litchBackground，没带不等于空了（空了另有 litch/thread/background/changed），沿用已知的那份，
+    // 免得输入框上方那一行在后台任务还在跑时没了
+    'thread/started': ({ thread }) => {
+      const known = threads.get(thread.id) as { litchBackground?: LitchBackground } | undefined
+      const carried = thread as Thread & { litchBackground?: LitchBackground }
+      adopt(
+        known?.litchBackground && !carried.litchBackground
+          ? ({ ...thread, litchBackground: known.litchBackground } as Thread)
+          : thread,
+      )
+    },
     'thread/status/changed': ({ threadId, status }) => {
       // 认出来了的子代理线程：只记状态，不去要、不进侧栏
       if (agentThreads.has(threadId)) {
@@ -1251,7 +1329,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   const route = (method: string, params: unknown) => {
     const handler = (routes as Record<string, ((params: never) => void) | undefined>)[method]
     if (handler) {
-      handler(params as never)
+      causedBy(method, () => handler(params as never))
     } else if (live.notification(method, params)) {
       // 会话里的事，已经交给打开着的那个会话了。子代理线程的回合开始、结束另记一份：
       // 父会话的子代理列表照它写状态，子线程自己开没开着都一样
@@ -2408,6 +2486,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         : live.send(sessionId, message, now),
     steer: (sessionId, messageId) => live.steer(sessionId, messageId),
     interrupt: (sessionId) => live.interrupt(sessionId),
+    stopBackground: (sessionId, taskId, itemId) => live.stopBackground(sessionId, taskId, itemId),
     unqueue: (sessionId, messageId) => live.unqueue(sessionId, messageId),
     respond: (sessionId, requestId, choice) => live.respond(sessionId, requestId, choice),
     fork: (sessionId, turnId, itemId) => live.fork(sessionId, turnId, itemId),

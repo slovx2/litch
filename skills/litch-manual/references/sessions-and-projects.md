@@ -85,13 +85,18 @@ explain it:
   keys and third-party providers have no plan limits, and those rows are not shown.
 - **Side panel**: Files (tree, search, read-only viewer, add a file to the conversation), Diff (all /
   staged / unstaged, stage, unstage, discard, comment on lines; comments go with the next message),
-  Browser, Suggested tasks, Background, Subagents.
+  Browser, Suggested tasks, Background tasks.
 - **Background tasks**: work still running after a turn ends (a background command, a Claude Code
   Monitor, a dsh background job, a long-running Codex command, or a background command Litch gives Pi,
   OpenCode and ACP sessions through its `litch_shell` tools (on by default; each harness's "Background
   commands" setting turns it off). The session counts as idle, not stuck:
-  a breathing line above the composer says how many are running; clicking it opens the Background tab
-  (running tasks first, then finished ones; name, elapsed time and status, no output). The folded
+  a breathing line above the composer says how many are running, counting running subagents and
+  sub-sessions too; clicking it opens the Background tasks tab. That tab lists background commands,
+  the harness's own subagents and the session's sub-sessions together (running first, then finished
+  ones; type icon, name, elapsed time and status). Click a subagent to open its page below the list,
+  a command to see its output, a sub-session to open it. Running commands, sub-sessions, and subagents
+  of harnesses that can stop one on its own have a Stop button (Claude Code subagents cannot be stopped
+  from Litch yet). The folded
   turn says "N running in the background", and the sidebar row shows a slowly breathing hollow mark
   instead of the spinner. Claude Code, dsh and Litch's background commands (Pi, OpenCode, ACP)
   continue on their own when a task finishes by itself; that turn starts with "Background task
@@ -104,11 +109,11 @@ explain it:
   background tasks are still running, then reports again when they finish (after the turn that
   continues, or right away for Codex). A scheduled run ends with its turn too; when the background
   work finishes later, the run's summary and count are updated and it shows as unread again.
-  There is no stop button yet: ask the model to stop a task, or
-  stop the turn. With Pi's "Ask before acting" on, starting a background command is asked about like
+  To stop a task without the Stop button, ask the model or stop the turn. With Pi's "Ask before acting" on, starting a background command is asked about like
   any other command; in OpenCode's read-only permission mode the model cannot start one, and outside
-  the project folder it asks first (except with full access). On the phone, the same line opens a list
-  from the bottom; the folded steps and the
+  the project folder it asks first (except with full access). On the phone, the same line (or
+  "Background tasks" in the session's menu) opens a simpler page with the same list, where a subagent
+  opens its own page and running commands can be stopped; the folded steps and the
   line at the start of a continuing turn look the same as on the desktop.
 - **Goals** (Codex and Claude Code only; other harnesses show no goal controls): type `/goal` followed
   by what should be achieved and send it. Instead of a normal message this sets the session's goal,
@@ -259,7 +264,7 @@ woken to continue.
 - **Detach as a standalone session** (session menu or the "Started from …" bar at the top of a
   sub-session) cuts the link.
 - **Subagents** started by a harness itself (for example Codex's agents) are not sub-sessions; they show
-  in the side panel's Subagents tab and cannot be messaged directly. In Claude Code sessions, Litch stops
+  in the side panel's Background tasks tab and cannot be messaged directly. In Claude Code sessions, Litch stops
   a subagent that shows no activity for 30 minutes; the turn and the other subagents keep running, and
   the model is told that Litch, not you, stopped it.
 - **Messages from other Claude sessions**: Claude Code sessions on the same computer can message each

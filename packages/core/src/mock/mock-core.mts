@@ -2503,6 +2503,15 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         else goal.set(view, change)
         return {}
       }
+      // 界面的诊断：模拟核心不写日志
+      if (name === 'diag.note') return {}
+      if (name === 'session.stopBackground') {
+        const { taskId } = params as Commands['session.stopBackground']['params']
+        const view = reachView(params as Commands['session.stopBackground']['params'])
+        if (!background.stop(view, taskId))
+          throw new ChannelError('rejected', '找不到这个后台任务', phrase('fault.backgroundStop'))
+        return {}
+      }
       if (name === 'session.interrupt') {
         const view = reachView(params as Commands['session.interrupt']['params'])
         const turn = running(view)

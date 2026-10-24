@@ -566,6 +566,22 @@ export interface Commands {
     result: Record<string, never>
   }
   /**
+   * 停掉会话的一个后台命令（后台任务页上的“停止”）：经协议的 thread/backgroundTerminals/list 找到它
+   * （进程标识就是任务标识，或者终端挂着的条目就是发起它的条目），再 terminate。找不到、对面不会的报 rejected
+   */
+  'session.stopBackground': {
+    params: { deviceId: string; sessionId: string; taskId: string; itemId: string | null }
+    result: Record<string, never>
+  }
+  /**
+   * 界面记一条诊断，写进核心的摘要日志（桌面端是 core.jsonl），事件名前面加 ui.。
+   * 只收短字段：数、真假、空、100 字以内的字（标识之类），最多 20 个；不带正文
+   */
+  'diag.note': {
+    params: { event: string; fields: Record<string, string | number | boolean | null> }
+    result: Record<string, never>
+  }
+  /**
    * 把一条排着队的消息现在就插进正在进行的回合里（引导）。
    * 对面不支持或者没插成时，消息留在队列里，出错原因交给界面显示。
    */

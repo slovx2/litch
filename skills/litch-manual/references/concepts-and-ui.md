@@ -46,7 +46,7 @@
   rename, pin, move, delete; schedule a task, start a sub-session, archive, delete).
 - **Main area**: the new-session page, a session, or one of the pages (Devices, Settings, Scheduled
   tasks, Archived sessions).
-- **Side panel** (right) with tabs **Files**, **Diff**, **Browser**, **Subagents**. It follows the
+- **Side panel** (right) with tabs **Files**, **Diff**, **Browser**, **Background tasks** (background commands, subagents and sub-sessions). It follows the
   current session's device and project.
 - **Terminal panel** (below the conversation). Terminals belong to a project and keep running on the
   device when the connection drops.

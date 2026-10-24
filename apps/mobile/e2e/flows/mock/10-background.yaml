@@ -1,5 +1,7 @@
-# 模拟核心：后台任务。新建会话说“background tasks”→ 回合说完两条后台命令还在跑：输入框上方一行、过程摘要末尾“· 2 个在后台运行”→
-# 点那一行从底部弹出列表→ 关掉 → 测试先跑完，自发回合开头一行“后台任务结束，自动继续”→ dev 服务也结束，那一行没了
+# 模拟核心：后台任务。新建会话说“background tasks”→ 回合说完两条后台命令还在跑：输入框上方一行 →
+# 点那一行进“后台任务”页（命令的行。停止不在这里点：dev 服务 9 秒就结束，慢的模拟器上点不及，桌面的 client:check:background 点）→ 返回 → 测试先跑完，自发回合开头一行
+# “后台任务结束，自动继续”→ dev 服务也结束，那一行没了 → 再说“use sub-agents”派子代理 → 从右上角菜单进“后台任务”页，
+# 子代理和命令列在一起 → 点子代理进它的详情页 → 返回
 appId: dev.litch.app
 name: mock-后台任务
 tags: [mock]
@@ -26,20 +28,37 @@ tags: [mock]
     visible:
       id: background:bar
     timeout: 20000
-# 摘要那一行末尾（嵌套的文字在安卓上并进外层，只能按整行的字认）。测试 4 秒后就跑完，不卡个数
-- assertVisible:
-    text: "[▸▾].*(running in the background|个在后台运行).*"
+# 先点：dev 服务 9 秒就结束，慢的模拟器上 Maestro 从看见到点下去要三四秒，点的时候那一行可能已经没了，
+# 那样就从右上角菜单进同一页
 - tapOn:
     id: background:bar
+    optional: true
+- runFlow:
+    when:
+      notVisible:
+        id: background
+    commands:
+      - tapOn:
+          id: detail:menu
+      - tapOn:
+          id: detail:menu:background
 - extendedWaitUntil:
     visible:
-      id: background:sheet
+      id: background
     timeout: 5000
-# 点一下就要几秒，这时 dev 服务也许已经结束：只要求列表里有任务的行
+# 点一下就要几秒，这时 dev 服务也许已经结束：只要求列表里有命令的行
 - assertVisible:
-    id: background:task:.*
+    id: "background:entry:task:.*"
 - tapOn:
-    id: background:scrim
+    id: header:back
+# 过程摘要末尾“· N 个在后台运行”：dev 服务还在跑时才有
+- runFlow:
+    when:
+      visible:
+        id: background:bar
+    commands:
+      - assertVisible:
+          text: "[▸▾].*(running in the background|个在后台运行).*"
 - extendedWaitUntil:
     visible:
       id: turn-origin:backgroundTask
@@ -50,3 +69,37 @@ tags: [mock]
     timeout: 20000
 - assertNotVisible:
     text: "[▸▾].*(running in the background|个在后台运行).*"
+# 派子代理：回合说完以后从菜单进后台任务页，子代理和命令在同一张里
+- tapOn:
+    id: composer-input
+- inputText: use sub-agents
+- tapOn:
+    id: composer-send
+- extendedWaitUntil:
+    visible:
+      text: ".*Hubble.*"
+    timeout: 20000
+- tapOn:
+    id: detail:menu
+- tapOn:
+    id: detail:menu:background
+- extendedWaitUntil:
+    visible:
+      id: "background:entry:agent:.*"
+    timeout: 5000
+- assertVisible:
+    id: "background:entry:task:.*"
+- tapOn:
+    id: background:entry:agent:completed
+- extendedWaitUntil:
+    visible:
+      id: detail
+    timeout: 10000
+- tapOn:
+    id: header:back
+- extendedWaitUntil:
+    visible:
+      id: background
+    timeout: 5000
+- tapOn:
+    id: header:back

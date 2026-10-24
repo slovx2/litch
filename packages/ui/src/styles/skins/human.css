@@ -410,7 +410,7 @@
 [data-skin="human"] .agent-st {
   border-radius: 999px;
 }
-[data-skin="human"] .agents-pick {
+[data-skin="human"] .bg-row {
   border-radius: 10px;
 }
 [data-skin="human"] :is(.agents-task, .agents-fail) {

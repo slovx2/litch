@@ -32,6 +32,8 @@ export type PhraseKey =
   | 'session.heldElsewhere'
   // 带图片的消息不能中途插进回合里（它所属的 harness 声明了引导时带不了图片）
   | 'fault.steerImages'
+  // 后台任务页上的“停止”：对面列不出这个后台命令，或者没停掉
+  | 'fault.backgroundStop'
   // 整理侧栏：工作区、归属、置顶
   | 'fault.organizeUnsupported'
   | 'fault.workspaceName'

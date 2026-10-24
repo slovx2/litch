@@ -4,6 +4,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { WebViewBench } from '../bench/WebViewBench'
 import { AgentScreen } from '../detail/agents/AgentScreen'
 import { DetailScreen } from '../detail/DetailScreen'
+import { BackgroundScreen } from '../screens/background/BackgroundScreen'
 import { AddDeviceScreen } from '../screens/devices/AddDeviceScreen'
 import { DeviceDetailScreen } from '../screens/devices/DeviceDetailScreen'
 import { DevicesScreen } from '../screens/devices/DevicesScreen'
@@ -45,6 +46,7 @@ export function Navigator() {
       <Stack.Screen name="Detail" component={DetailScreen} />
       <Stack.Screen name="Agent" component={AgentScreen} />
       <Stack.Screen name="Proposals" component={ProposalsScreen} />
+      <Stack.Screen name="Background" component={BackgroundScreen} />
       <Stack.Screen name="ProposalStart" component={ProposalStartScreen} />
       <Stack.Screen name="Terminal" component={TerminalScreen} />
       <Stack.Screen name="Diff" component={DiffScreen} />

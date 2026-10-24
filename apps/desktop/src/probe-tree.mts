@@ -12,7 +12,7 @@
 //   “新任务”出 offer 卡（“新会话 / 在这里做”），选新会话等模型补简报再写“已开始”、下面一行是子会话，
 //   选在这里做写“在这里做”；侧面板里也有这一行和两个按钮；选新会话后简报开在收不紧沙箱的 Pi 上的，
 //   卡片降成待开始的提案、写明原因，点开始才起；“交接”画成交给了分叉会话的卡，能点开；
-//   子代理在对话流里一个一行（完成、已停止、失败以子线程为准），点了在侧面板里看子线程，失败的有红框写原话，
+//   子代理在对话流里一个一行（完成、已停止、失败以子线程为准），点了在右侧“后台任务”页里选中它、下面看子线程，失败的有红框写原话，
 //   不接受直接输入的没有输入框；子代理线程不进侧栏；
 //   三种皮肤、深浅两套下这几样东西不溢出。
 // 下面的 treeProbe、treeLooks 会被原样送进页面里执行，不能引用函数外面的东西。
@@ -615,8 +615,8 @@ export async function treeProbe(): Promise<TreeSeen> {
   const agentPanel = await until(
     () =>
       $('.side')?.hidden === false &&
-      $$('.side .agents-pick').length === 3 &&
-      $(`.side .agents-pick[data-agent="${ids[2]}"]`)?.getAttribute('aria-selected') === 'true' &&
+      $$('.side .bg-row[data-source="agent"]').length === 3 &&
+      $(`.side .bg-row[data-entry="agent:${ids[2]}"]`)?.getAttribute('aria-selected') === 'true' &&
       $(`.side .agents-view[data-agent="${ids[2]}"] .tr .turn`) !== null,
   )
   const agentFail = await until(() =>
@@ -625,13 +625,13 @@ export async function treeProbe(): Promise<TreeSeen> {
     ),
   )
   seen.fail = $('.side .agents-fail')?.textContent ?? '没有'
-  $(`.side .agents-pick[data-agent="${ids[1]}"]`)?.click()
+  $(`.side .bg-row[data-entry="agent:${ids[1]}"]`)?.click()
   await until(() => $(`.side .agents-view[data-agent="${ids[1]}"] .tr .turn`) !== null)
   const agentMuted =
     $('.side .agents-view .dock textarea') === null &&
     ($('.side .agents-view .cmp.off')?.textContent ?? '') !== ''
   seen.muted = $('.side .agents-view .dock')?.textContent ?? '没有'
-  $(`.side .agents-pick[data-agent="${ids[0]}"]`)?.click()
+  $(`.side .bg-row[data-entry="agent:${ids[0]}"]`)?.click()
   const agentOpen = await until(
     () => $(`.side .agents-view[data-agent="${ids[0]}"] .dock textarea`) !== null,
   )

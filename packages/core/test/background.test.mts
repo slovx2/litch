@@ -17,6 +17,7 @@ import {
   type TurnView,
 } from '../src/index.mjs'
 import {
+  backgroundEntries,
   backgroundHint,
   deriveBackground,
   projectBackground,
@@ -337,9 +338,11 @@ test('BG-CORE-005 后台任务还在跑时人接着说话：新回合进行中�
   const send = (text: string) =>
     channel.command('session.send', { deviceId: 'local', sessionId: 's1', text })
   // 报集合的照摘要，不报的照会话派生：两条路都要数得出
-  const reported = () => backgroundHint(rows.get('s1')?.background ?? null)
+  const reported = () => backgroundHint(backgroundEntries(rows.get('s1')?.background ?? null, []))
   const derived = () =>
-    backgroundHint(deriveBackground(state.view?.turns ?? [], state.view?.items ?? {}))
+    backgroundHint(
+      backgroundEntries(deriveBackground(state.view?.turns ?? [], state.view?.items ?? {}), []),
+    )
   // 等的是 n 个回合之后新起的那个回合（样例会话里本来就有说完了的回合）
   const turnAfter = (n: number, status: string) => () =>
     (state.view?.turns.length ?? 0) > n && state.view?.turns.at(-1)?.status === status
@@ -362,4 +365,201 @@ test('BG-CORE-005 后台任务还在跑时人接着说话：新回合进行中�
   assert.equal(derived(), 2, '新回合进行中，上一回合留下的两条命令照样派生得出')
   await until(turnAfter(before, 'completed'), '新回合说完了')
   assert.equal(reported(), 2)
+})
+
+test('BG-CORE-006 后台任务列表把子代理、子会话合进来：同名的 Claude 后台子代理只留子线程那一行，运行中在前，数在跑的', () => {
+  const background = projectBackground({
+    wakesOnFinish: true,
+    tasks: [
+      { id: 'b1', kind: 'shell', title: 'npm run dev', status: 'running', startedAt: 1_000 },
+      { id: 'b2', kind: 'agent', title: '查日志', status: 'running', startedAt: 2_000 },
+      {
+        id: 'b3',
+        kind: 'shell',
+        title: 'npm test',
+        status: 'completed',
+        startedAt: 500,
+        endedAt: 3_000,
+      },
+    ],
+  })
+  const agent = (id: string, description: string, state: 'running' | 'completed' | null) => ({
+    id,
+    parentId: 'p',
+    nickname: null,
+    role: 'general-purpose',
+    description,
+    prompt: '',
+    status: state === 'running' ? ('running' as const) : ('idle' as const),
+    turn:
+      state === null
+        ? null
+        : { state, startedAt: 1_500, durationMs: state === 'running' ? null : 900, error: null },
+    canInput: null,
+    updatedAt: 0,
+  })
+  const view = backgroundEntries(
+    background,
+    [
+      agent('a1', '查日志', 'running'),
+      agent('a2', '读文档', 'completed'),
+      agent('a3', '排队', null),
+    ],
+    [
+      { id: 'c1', title: '修 CI', status: 'waiting', startedAt: 800, updatedAt: 4_000 },
+      { id: 'c2', title: '写文档', status: 'idle', startedAt: 100, updatedAt: 5_000 },
+    ],
+  )
+  assert.ok(view)
+  assert.deepEqual(
+    view.entries.map((entry) => [entry.key, entry.status]),
+    [
+      ['child:c1', 'running'],
+      ['task:b1', 'running'],
+      ['agent:a1', 'running'],
+      // 还没回合的子代理是排队，也算在跑；不知道开始时间的排在在跑的最后
+      ['agent:a3', 'running'],
+      ['child:c2', 'completed'],
+      ['task:b3', 'completed'],
+      ['agent:a2', 'completed'],
+    ],
+  )
+  // 集合里的 b2 和子线程 a1 同名：只算一次
+  assert.equal(backgroundHint(view), 4)
+  assert.equal(view.entries.find((entry) => entry.key === 'agent:a2')?.endedAt, 2_400)
+  assert.equal(view.wakesOnFinish, true)
+  assert.equal(backgroundEntries(null, [], []), null)
+  // 只有子代理在跑（没有集合）也数得出：输入框上方那一行照样出
+  assert.equal(backgroundHint(backgroundEntries(null, [agent('a1', '查日志', 'running')])), 1)
+})
+
+test('BG-CORE-007 已在列表里的会话再收到 thread/started（没带集合）：后台任务照旧在跑，空了只认变化通知', async () => {
+  const codex = harness('codex', {
+    declaration: { features: features({ backgroundTasks: true }) },
+    threads: [
+      thread({
+        id: 'a',
+        updatedAt: 1_700_000_300,
+        turns: [turn('t1', [userText('u1', '起服务')])],
+        litchBackground: {
+          tasks: [
+            { id: 'k1', kind: 'shell', title: 'npm run dev', status: 'running', startedAt: 1 },
+          ],
+          wakesOnFinish: true,
+        },
+      } as never),
+    ],
+  })
+  const world = deviceWorld([codex])
+  world.core.start()
+  for (let i = 0; i < 4; i++) await settle()
+  assert.equal(world.side.sessions.get('a')?.background?.running, 1)
+
+  // Claude 入口重扫原生会话后把这个会话再发一次：会话对象里没有 litchBackground
+  world.peer.last().notify('thread/started', {
+    thread: thread({ id: 'a', updatedAt: 1_700_000_400, name: '改了名' }),
+  })
+  await settle()
+  assert.equal(world.side.sessions.get('a')?.background?.running, 1, '那一行不能因此没了')
+
+  world.peer.last().notify('litch/thread/background/changed', {
+    threadId: 'a',
+    tasks: [],
+    wakesOnFinish: true,
+  })
+  await settle()
+  assert.equal(world.side.sessions.get('a')?.background, null)
+})
+
+test('BG-CORE-008 诊断：后台任务数从有变没有时记一行 background.drop（是谁改的、前后的集合摘要、会话状态），平时不记；界面的 diag.note 进同一份', async () => {
+  const codex = harness('codex', {
+    declaration: { features: features({ backgroundTasks: true }) },
+    threads: [
+      thread({
+        id: 'a',
+        updatedAt: 1_700_000_300,
+        turns: [turn('t1', [userText('u1', '起服务')])],
+        litchBackground: {
+          tasks: [
+            { id: 'k1', kind: 'shell', title: 'npm run dev', status: 'running', startedAt: 1 },
+            { id: 'k2', kind: 'monitor', title: 'tail -f log', status: 'running', startedAt: 2 },
+          ],
+          wakesOnFinish: true,
+        },
+      } as never),
+    ],
+  })
+  const world = deviceWorld([codex])
+  world.core.start()
+  for (let i = 0; i < 4; i++) await settle()
+  const drops = () => world.traces.filter((entry) => entry.event === 'background.drop')
+  const task = (id: string, kind: string, status: string) => ({
+    id,
+    kind,
+    title: 'secret command text',
+    status,
+    startedAt: 1,
+  })
+
+  // 少了一个、还有一个在跑：不记
+  world.peer.last().notify('litch/thread/background/changed', {
+    threadId: 'a',
+    tasks: [task('k1', 'shell', 'running'), task('k2', 'monitor', 'completed')],
+    wakesOnFinish: true,
+  })
+  await settle()
+  assert.equal(drops().length, 0)
+
+  world.peer.last().notify('litch/thread/background/changed', {
+    threadId: 'a',
+    tasks: [task('k1', 'shell', 'completed'), task('k2', 'monitor', 'completed')],
+    wakesOnFinish: true,
+  })
+  await settle()
+  assert.equal(drops().length, 1)
+  const [drop] = drops()
+  assert.equal(drop?.level, 'warn')
+  assert.equal(drop?.fields.device, 'local')
+  assert.equal(drop?.fields.sessionId, 'a')
+  assert.equal(drop?.fields.cause, 'litch/thread/background/changed')
+  assert.deepEqual(drop?.fields.before, {
+    running: 1,
+    total: 2,
+    tasks: [
+      { id: 'k1', kind: 'shell', status: 'running' },
+      { id: 'k2', kind: 'monitor', status: 'completed' },
+    ],
+  })
+  assert.equal((drop?.fields.after as { running: number } | undefined)?.running, 0)
+  assert.equal(JSON.stringify(drop).includes('secret command text'), false, '不记标题（命令）')
+
+  // 已经是 0 了：再来一份空的不再记
+  world.peer.last().notify('litch/thread/background/changed', {
+    threadId: 'a',
+    tasks: [],
+    wakesOnFinish: true,
+  })
+  await settle()
+  assert.equal(drops().length, 1)
+
+  await world.command('diag.note', {
+    event: 'backgroundBar.hidden',
+    fields: {
+      sessionId: 'a',
+      beforeTasks: 1,
+      reports: true,
+      nested: { no: 1 },
+      long: 'x'.repeat(300),
+    },
+  })
+  const note = world.traces.find((entry) => entry.event === 'ui.backgroundBar.hidden')
+  assert.ok(note, '界面的诊断进了核心的摘要')
+  assert.equal(note.fields.beforeTasks, 1)
+  assert.equal('nested' in note.fields, false, '对象不收')
+  assert.equal((note.fields.long as string).length, 100)
+  assert.equal(
+    world.traces.some((entry) => entry.event === 'command' && entry.fields.command === 'diag.note'),
+    false,
+    '不另记一行命令',
+  )
 })

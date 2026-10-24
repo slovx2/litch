@@ -486,10 +486,10 @@
 [data-skin="retro"] button.agent-row:hover {
   box-shadow: 3px 3px 0 var(--line-3);
 }
-[data-skin="retro"] :is(.agents-pick, .agents-task, .agents-fail) {
+[data-skin="retro"] :is(.bg-row, .bg-stop, .agents-task, .agents-fail) {
   border-radius: 0;
 }
-[data-skin="retro"] .agents-pick[aria-selected="true"] {
+[data-skin="retro"] .bg-row[aria-selected="true"] {
   background: var(--inv-bg);
   color: var(--inv-fg);
   box-shadow: none;

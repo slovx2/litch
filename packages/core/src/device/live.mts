@@ -203,6 +203,8 @@ export interface LiveSessions {
   /** 把一条排着队的消息现在就插进正在进行的回合里 */
   steer(sessionId: string, messageId: string): Promise<void>
   interrupt(sessionId: string): Promise<void>
+  /** 停掉一个后台命令：列出会话的后台终端，按进程标识或发起它的条目认出来，再 terminate */
+  stopBackground(sessionId: string, taskId: string, itemId: string | null): Promise<void>
   unqueue(sessionId: string, messageId: string): void
   respond(sessionId: string, requestId: string, choice: RequestChoice): void
   /**
@@ -1608,6 +1610,34 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
         await host.request('turn/interrupt', { threadId: sessionId, turnId })
       } catch (error) {
         throw failure(error)
+      }
+    },
+
+    async stopBackground(sessionId, taskId, itemId) {
+      need(sessionId)
+      let processId: string | null = null
+      try {
+        const listed = await host.request('thread/backgroundTerminals/list', {
+          threadId: sessionId,
+        })
+        const found = listed.data.find(
+          (terminal) => terminal.processId === taskId || (itemId && terminal.itemId === itemId),
+        )
+        processId = found?.processId ?? null
+      } catch (error) {
+        throw failure(error)
+      }
+      if (processId === null)
+        throw new ChannelError('rejected', '找不到这个后台任务', phrase('fault.backgroundStop'))
+      try {
+        const { terminated } = await host.request('thread/backgroundTerminals/terminate', {
+          threadId: sessionId,
+          processId,
+        })
+        if (!terminated)
+          throw new ChannelError('rejected', '没能停掉这个后台任务', phrase('fault.backgroundStop'))
+      } catch (error) {
+        throw error instanceof ChannelError ? error : failure(error)
       }
     },
 

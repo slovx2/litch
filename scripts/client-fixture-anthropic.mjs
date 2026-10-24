@@ -12,6 +12,8 @@
 //               （计划模式开着才有这个工具）
 //   慢慢说       回话分很多段慢慢发
 //   后台跑       Bash 带 run_in_background              bash 带 run_in_background（见 client-fixture-background.mjs）
+//   派子代理     Agent 派一个前台子代理，它一步步跑几条命令    没有子代理：照常回话（见 client-fixture-subagent.mjs）
+//   后台子代理   同上，子代理放到后台（run_in_background）
 //   本机：…、命令行：…、你在哪   操作本机，见 client-fixture-machine.mjs
 //   别的         把收到的话带回来，开头注明是哪个 harness 收到的；带着技能正文的记号时把记号带回来
 //
@@ -44,6 +46,7 @@ import {
 import { FIXTURE_PLAN, PLAN_TRIGGER } from './client-fixture-plan.mjs'
 import { RUN_COMMAND, RUN_COMMAND_PWSH, RUN_TRIGGER } from './client-fixture-run.mjs'
 import { sessionsAnthropic } from './client-fixture-sessions.mjs'
+import { subagentAnthropic } from './client-fixture-subagent.mjs'
 
 /** 两家各自的工具名。没有的是 null */
 const TOOLS = {
@@ -151,6 +154,9 @@ export function anthropicReply(harness, body, pace) {
   // 会话树（litch_sessions 和设备注入的唤醒）的那几句，见 client-fixture-sessions.mjs
   const sessions = sessionsAnthropic(body, said)
   if (sessions) return sessions
+  // 派子代理、后台子代理（只有 Claude Code 有 Agent 工具），见 client-fixture-subagent.mjs
+  const subagent = harness === 'claude-code' ? subagentAnthropic(said, step, offered) : null
+  if (subagent) return subagent
   // Windows 上 dsh 给的跑命令的工具是 pwsh（参数和 bash 一样），命令要换成 PowerShell 的写法
   const pwsh = harness === 'dsh' && !offered.has(tools.shell) && offered.has('pwsh')
   const shell = pwsh ? 'pwsh' : tools.shell

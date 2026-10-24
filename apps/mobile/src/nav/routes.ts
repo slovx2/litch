@@ -28,6 +28,11 @@ export type RootStackParamList = {
   Agent: { deviceId: string; parentId: string; agentId: string; title?: string }
   /** 一个会话里的建议任务（模型提的子会话提案）：等着的在上、了结的在下，点一条回到对话里那张卡片。title 是会话名，首帧就画 */
   Proposals: { deviceId: string; sessionId: string; title?: string }
+  /**
+   * 一个会话的后台任务：后台命令、引擎自己派出的子代理、会话树里的子会话合在一张（运行中在上），
+   * 每行类型、名称、用时、状态，在跑的能停；点子代理、子会话进它的详情页。title 是会话名，首帧就画
+   */
+  Background: { deviceId: string; sessionId: string; title?: string }
   /** 提案的“改了再开始”：照提案预填，harness、模型、强度、项目、目录、权限、全新还是带上下文、标题、简报、完成后唤醒都能改 */
   ProposalStart: { deviceId: string; sessionId: string; proposalId: string }
   /** 终端。root 是开在哪个目录（工作区的根或会话的工作目录）；terminalId 给了就直接打开那一个 */

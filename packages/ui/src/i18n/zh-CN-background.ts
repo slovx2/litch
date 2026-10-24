@@ -13,7 +13,8 @@ export const zhBackground = {
   'background.running': '运行中',
   'background.ended': '已结束',
   'background.none': '没有正在运行的后台任务',
-  'background.noneEver': '此会话暂无后台任务。回合结束后仍在运行的命令会显示在这里。',
+  'background.noneEver':
+    '此会话暂无后台任务。回合结束后仍在运行的命令、子代理和子会话会显示在这里。',
   'background.pick': '打开会话后，此处显示其后台任务。',
   'background.wakes': '完成后自动继续',
   'background.noWake': '完成后不会自动继续',
@@ -32,4 +33,12 @@ export const zhBackground = {
   'background.origin.goal': '目标未达成，自动继续',
   'background.origin.queue': '排队的消息，已自动发送',
   'background.origin.peer': '另一个会话发来消息',
+  // 后台任务和子代理合成一页（子代理、子会话也算后台任务），能停的给“停止”，命令看输出
+  'background.kind.child': '子会话',
+  'background.stop': '停止',
+  'background.stop.title': '停止此后台任务',
+  'background.stopping': '正在停止',
+  'background.output.none': '暂无输出',
+  'background.output.unknown': '找不到此命令的输出',
+  'fault.backgroundStop': '无法停止此后台任务：它可能已结束，或当前 harness 不支持单独停止',
 } satisfies Record<string, Entry>

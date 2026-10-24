@@ -1,17 +1,12 @@
-// 引擎自己的子代理（原生 codex 的 collabAgentToolCall 派出的子线程）在界面上的两样状态：
-// 侧面板“子代理”标签里正看着哪一个（按父会话记），和父会话的子代理列表（昵称、角色、能不能输入）。
-// 子代理线程不进侧栏（核心那边就挡掉了），只从对话里的卡片、信息卡、这个标签进去。
-// 这个文件不碰界面的服务（侧面板的标签登记表也要引它）；问列表的钩子在 useAgentList.ts。
+// 引擎自己的子代理（原生 codex 的 collabAgentToolCall 派出的子线程）的列表：昵称、角色、能不能输入。
+// 子代理线程不进侧栏（核心那边就挡掉了），只从对话里的卡片、信息卡、右侧“后台任务”页进去
+// （页上看哪一个记在 background/tab.ts，openAgent 也在那里）。问列表的钩子在 useAgentList.ts。
 import type { AgentThreadView, CoreChannel } from '@litch/core'
-import { useSyncExternalStore } from 'react'
-import { showSideTab } from '../side/side.ts'
 
-export const AGENTS_TAB = 'agents'
+export { openAgent } from '../background/tab.ts'
 
 export const keyOf = (deviceId: string, parentId: string) => `${deviceId}:${parentId}`
 
-/** 父会话 → 正看着的子代理线程 */
-const picked = new Map<string, string>()
 /** 父会话 → 子代理列表。问过一次就留着，卡片上子代理的状态变了再问 */
 export const lists = new Map<string, { list: AgentThreadView[]; at: number }>()
 const asking = new Set<string>()
@@ -29,23 +24,6 @@ export const subscribe = (listener: () => void) => {
   return () => {
     listeners.delete(listener)
   }
-}
-
-/** 在侧面板里看父会话的这个子代理 */
-export function openAgent(deviceId: string, parentId: string, threadId: string): void {
-  picked.set(keyOf(deviceId, parentId), threadId)
-  publish()
-  showSideTab(AGENTS_TAB)
-}
-
-export function pickAgent(deviceId: string, parentId: string, threadId: string): void {
-  picked.set(keyOf(deviceId, parentId), threadId)
-  publish()
-}
-
-export function usePickedAgent(deviceId: string, parentId: string | null): string | null {
-  useSyncExternalStore(subscribe, () => version)
-  return parentId === null ? null : (picked.get(keyOf(deviceId, parentId)) ?? null)
 }
 
 /** 隔这么久以内问过的不再问（同一个父会话的几张卡片、信息卡都会要） */
