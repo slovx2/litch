@@ -1,4 +1,4 @@
-// litch_sessions：模型列出、读取同一台设备上的会话，派出子会话，给自己的子会话发消息、打断，等它们结束。
+// litch_sessions：模型列出、读取同一台设备上的会话，查能用的 harness 和型号，派出子会话，给自己的子会话发消息、打断，等它们结束。
 // 和 litch_browser 这些不同，执行方是设备进程自己，不是桌面端（会话在设备上）：建会话时带不带它看的是
 // 设备信息的 extensions 有没有 sessionTree、设置里“会话编排”开没开，不看桌面端的声明；设备进程替每条
 // 通往引擎的连接声明能执行它，调用到了设备进程就自己答，不转给任何客户端。父子关系、提案见 session-tree.mts，
@@ -15,6 +15,8 @@ import type { SessionLineageKind } from './session-tree.mjs'
 export const SESSION_TOOL = {
   list: 'list',
   read: 'read',
+  /** 这台设备上能开子会话的 harness、各自的型号和强度、这个会话现在用的：换 harness 或型号之前先查 */
+  options: 'options',
   start: 'start',
   send: 'send',
   wait: 'wait',
@@ -34,6 +36,8 @@ export type SessionToolName = (typeof SESSION_TOOL)[keyof typeof SESSION_TOOL]
 export const SESSION_TOOL_LIMITS = {
   /** list 最多回多少个 */
   listMax: 50,
+  /** options 里每个 harness 最多列几个型号（多出来的标 truncated，可以用 harness 只查那一个） */
+  optionsModelsMax: 100,
   /** read 缺省读最近几个回合、最多几个 */
   readTurnsDefault: 3,
   readTurnsMax: 10,
@@ -73,6 +77,11 @@ export interface SessionsListArguments {
   /** 只列在跑的 / 停着的 */
   status?: 'running' | 'idle'
   limit?: number
+}
+
+export interface SessionsOptionsArguments {
+  /** 只查这个 harness */
+  harness?: string
 }
 
 export interface SessionsReadArguments {
@@ -213,6 +222,37 @@ export interface SessionsListResult {
   sessions: SessionSummary[]
   /** 没列全时为 true */
   truncated: boolean
+}
+
+/** options 里的一个型号 */
+export interface SessionModelOption {
+  /** start、accept、wrap_up 建议的 model 照它填（Claude Code 是 `<供应商>/<型号>`） */
+  id: string
+  /** 给人看的名字（Claude Code 有多个供应商时是“[供应商] 模型名”） */
+  name: string
+  /** 支持的强度，填 effort 用；空是没列 */
+  efforts: string[]
+  /** 不给 effort 时用的那一档；没有就不给 */
+  default_effort?: string
+}
+
+/** options 里的一个 harness */
+export interface SessionHarnessOptions {
+  harness: string
+  /** 现在开不了（没装、没在运行、连不上）的原因；能开的不给，models 是空的 */
+  unavailable?: string
+  /** 不给 model 时新会话用的型号；列不出来是 null */
+  default_model: string | null
+  /** 能选的型号，和型号选单一致（没登录、没填密钥的供应商不列） */
+  models: SessionModelOption[]
+  /** 型号多于 optionsModelsMax、没列全时为 true */
+  truncated?: boolean
+}
+
+export interface SessionsOptionsResult {
+  /** 这个会话现在用的；读不出来的是 null */
+  current: { harness: string; model: string | null; effort: string | null }
+  harnesses: SessionHarnessOptions[]
 }
 
 export interface SessionTurnSummary {
@@ -453,7 +493,7 @@ const WRAP_UP_TOOL: ClientToolFunctionSpec = {
             model: {
               type: 'string',
               description:
-                'Default: this session’s current model (the target harness’s default when the harness differs).',
+                'Default: this session’s current model (the target harness’s default when the harness differs). To change it, pass a model id listed by options.',
             },
             effort: {
               type: 'string',
@@ -511,7 +551,7 @@ function suggestionLine(wrapUp: boolean, taskCards: boolean): string {
 
 /** start 的说明：任务卡关着时只有 user_asked */
 function startDescription(wrapUp: boolean, taskCards: boolean): string {
-  const fresh = `A fresh sub-session knows only background and prompt: background gives the context it cannot see (at least ${SESSION_TOOL_LIMITS.freshBackgroundMinWidth} wide; a CJK character counts as 2), prompt the task. Harness, model, effort and folder default to this session's current ones (model and effort: the target harness's defaults when the harness differs).`
+  const fresh = `A fresh sub-session knows only background and prompt: background gives the context it cannot see (at least ${SESSION_TOOL_LIMITS.freshBackgroundMinWidth} wide; a CJK character counts as 2), prompt the task. Harness, model, effort and folder default to this session's current ones (model and effort: the target harness's defaults when the harness differs). To use another harness or model, call options first and pass the ids it lists.`
   if (!taskCards)
     return `Start a sub-session the user asked for in their latest message (initiation "user_asked"); it starts now and runs on its own. ${fresh}`
   return `Start a sub-session, propose one, or offer a new session. initiation "user_asked": the user asked for separate work in their latest message; it starts now. "propose" (default): a card the user may start; nothing runs until they do (at most ${SESSION_TOOL_LIMITS.proposalsPerTurn} cards per turn). "offer": after a task has been finished in this session, the user's latest message is a new task unrelated to it; send the title only, as the only call in that message; the card asks the user "New session" or "Do it here" and the call waits for the answer, which tells you what to do next. ${fresh}${wrapUp ? ' To suggest work at the end of a turn, use wrap_up instead.' : ''}`
@@ -566,6 +606,19 @@ export function sessionTools(wrapUp: boolean, taskCards = true): ClientToolNames
       },
       {
         type: 'function',
+        name: SESSION_TOOL.options,
+        description:
+          'List the harnesses on this device you can start sub-sessions on, with their models (the ids start takes as model), reasoning efforts and defaults, and this session’s current harness, model and effort. Call it before choosing a harness or model other than this session’s; do not guess model ids.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            harness: { type: 'string', description: 'Only this harness.' },
+          },
+          additionalProperties: false,
+        },
+      },
+      {
+        type: 'function',
         name: SESSION_TOOL.start,
         description: startDescription(wrapUp, taskCards),
         inputSchema: {
@@ -586,7 +639,7 @@ export function sessionTools(wrapUp: boolean, taskCards = true): ClientToolNames
             model: {
               type: 'string',
               description:
-                'Default: this session’s current model (the target harness’s default when the harness differs).',
+                'Default: this session’s current model (the target harness’s default when the harness differs). To change it, pass a model id listed by options.',
             },
             effort: {
               type: 'string',
@@ -674,7 +727,7 @@ export function sessionTools(wrapUp: boolean, taskCards = true): ClientToolNames
             model: {
               type: 'string',
               description:
-                'Default: this session’s current model (the target harness’s default when the harness differs).',
+                'Default: this session’s current model (the target harness’s default when the harness differs). To change it, pass a model id listed by options.',
             },
             effort: {
               type: 'string',
