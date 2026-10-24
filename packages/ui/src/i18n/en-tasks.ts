@@ -104,6 +104,7 @@ export const enTasks: Record<keyof typeof zhTasks, Entry> = {
   'tasks.detail.next': 'Next run',
   'tasks.detail.target': 'Runs in',
   'tasks.detail.newThread': 'A new session each time',
+  'tasks.detail.newWorktree': 'A new session in a new worktree each time',
   'tasks.detail.inThread': 'This session',
   'tasks.detail.where': 'Where',
   'tasks.detail.harness': 'Harness',
@@ -162,6 +163,11 @@ export const enTasks: Record<keyof typeof zhTasks, Entry> = {
   'tasks.form.workspace': 'Project',
   'tasks.form.cwd': 'Working directory',
   'tasks.form.cwdPlaceholder': 'Full path on the device',
+  'tasks.form.worktree': 'Run in a new worktree each time',
+  'tasks.form.worktreeHint':
+    'Each run gets a new worktree and branch from the default branch of this folder’s repository; the session works there and the project folder is left alone',
+  'tasks.form.worktreeNoRepo':
+    'This folder is not in a git repository, so it cannot run in a new worktree',
   'tasks.form.harness': 'Harness',
   'tasks.form.settings': 'Model, effort, permissions',
   'tasks.form.session': 'Session',

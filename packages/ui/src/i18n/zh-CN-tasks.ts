@@ -105,6 +105,7 @@ export const zhTasks = {
   'tasks.detail.next': '下次运行',
   'tasks.detail.target': '运行方式',
   'tasks.detail.newThread': '每次新建会话',
+  'tasks.detail.newWorktree': '每次新建会话，在新工作树里跑',
   'tasks.detail.inThread': '在此会话中继续',
   'tasks.detail.where': '位置',
   'tasks.detail.harness': 'harness',
@@ -164,6 +165,10 @@ export const zhTasks = {
   'tasks.form.workspace': '项目',
   'tasks.form.cwd': '工作目录',
   'tasks.form.cwdPlaceholder': '设备上的完整路径',
+  'tasks.form.worktree': '每次在新工作树里跑',
+  'tasks.form.worktreeHint':
+    '每次运行从这个目录所在仓库的默认分支切一个新工作树和分支，会话开在里面，项目目录不受影响',
+  'tasks.form.worktreeNoRepo': '这个目录不在 git 仓库里，没法在新工作树里跑',
   'tasks.form.harness': 'harness',
   'tasks.form.settings': '模型、强度、权限',
   'tasks.form.session': '会话',

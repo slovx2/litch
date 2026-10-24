@@ -12,6 +12,7 @@ import {
   type TaskError,
   type TaskRunErrorCode,
 } from '../../protocol/src/device-tasks.mjs'
+import type { Worktree } from '../../protocol/src/worktrees.mjs'
 import {
   type EngineLink,
   EngineUnavailable,
@@ -25,6 +26,7 @@ import type { GuardedTurn } from './task-approvals.mjs'
 import type { TaskRow } from './task-store.mjs'
 import type { TaskTurns } from './task-turns.mjs'
 import { isObject, UpstreamRpcError } from './wire.mjs'
+import { type Worktrees, worktreeCwd } from './worktrees.mjs'
 
 export interface TaskTiming {
   /** 一个回合最长跑多久，到点打断（毫秒） */
@@ -83,6 +85,8 @@ export interface RunHost {
   progress(run: DeviceTaskRun): void
   /** 新建出来的会话：登记进索引、归进工作区 */
   born(harness: string, thread: Record<string, unknown>, workspaceId: string | null): void
+  /** 设备层的工作树（target.worktree 的任务每次建一个）。没有 git 时是 null */
+  worktrees(): Worktrees | null
   /**
    * 开一条内部连接（DeviceServer.openEngineLink，harness 正在起、暂时连不上时最多等 harnessWaitMs）。
    * 开不了抛 EngineUnavailable。设备进程退出时它替我们关掉
@@ -202,6 +206,18 @@ const supportsClientTools = (link: EngineLink): boolean => {
   return Array.isArray(extensions) && extensions.includes(EXTENSION.clientTools)
 }
 
+/** 给这次运行建工作树（从 cwd 所在仓库的默认分支切）。建不成这次失败，不退回原目录跑 */
+async function newWorktree(host: RunHost, task: TaskRow, cwd: string): Promise<Worktree> {
+  const worktrees = host.worktrees()
+  if (!worktrees)
+    throw new RunFailure('internal', 'this device cannot make worktrees (git is not available)')
+  try {
+    return await worktrees.create({ cwd, title: task.name })
+  } catch (error) {
+    throw new RunFailure('internal', `could not create a worktree from ${cwd}: ${message(error)}`)
+  }
+}
+
 /** 失败（不论哪种）都按 RunFailure 抛，丢了连接的算 internal */
 const lostOrRethrow = (error: unknown): never => {
   if (error instanceof RunFailure) throw error
@@ -236,19 +252,30 @@ export async function executeRun(
   host.guardApprovals(link, initial, () => guarded)
   try {
     if (run.threadId === null && target.kind === 'newThread') {
-      const started = await link.request('thread/start', {
-        cwd: target.cwd,
-        ...(target.settings.model ? { model: target.settings.model } : {}),
-        ...permissionParams(target.settings.permission, link),
-        // 任务自己的回合里模型也能管任务（litch_tasks 由设备进程执行）。别的客户端工具要桌面端，不带。
-        // 任务的会话也在 Litch 里看，带上呈现风格（原生 codex 不带，client-tools-presentation.mts）
-        ...(supportsClientTools(link) ? { dynamicTools: taskTools(link) } : {}),
-        // 原生 codex 认这个来源（上游的 ThreadSource::Feature("automation")），适配器的引擎不认，不带
-        ...(link.native ? { threadSource: 'automation' } : {}),
-      })
+      // 每次在新工作树里跑：先建工作树，会话开在里面；会话没建成就删掉它
+      const made = target.worktree ? await newWorktree(host, task, target.cwd) : null
+      let started: unknown
+      try {
+        started = await link.request('thread/start', {
+          cwd: made ? worktreeCwd(made) : target.cwd,
+          ...(target.settings.model ? { model: target.settings.model } : {}),
+          ...permissionParams(target.settings.permission, link),
+          // 任务自己的回合里模型也能管任务（litch_tasks 由设备进程执行）。别的客户端工具要桌面端，不带。
+          // 任务的会话也在 Litch 里看，带上呈现风格（原生 codex 不带，client-tools-presentation.mts）
+          ...(supportsClientTools(link) ? { dynamicTools: taskTools(link) } : {}),
+          // 原生 codex 认这个来源（上游的 ThreadSource::Feature("automation")），适配器的引擎不认，不带
+          ...(link.native ? { threadSource: 'automation' } : {}),
+        })
+      } catch (error) {
+        if (made) void host.worktrees()?.abandon(made.id)
+        throw error
+      }
       const thread = isObject(started) && isObject(started.thread) ? started.thread : null
-      if (typeof thread?.id !== 'string')
+      if (typeof thread?.id !== 'string') {
+        if (made) void host.worktrees()?.abandon(made.id)
         throw new RunFailure('internal', `${run.harness} did not return the new thread`)
+      }
+      if (made) host.worktrees()?.own(made.id, thread.id)
       host.born(run.harness, thread, target.workspaceId)
       run = { ...run, threadId: thread.id }
       host.progress(run)

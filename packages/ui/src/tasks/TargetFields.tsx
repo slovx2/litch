@@ -14,6 +14,7 @@ import { nameOf, wireStyle } from '../app/device.ts'
 import { useKey, useKeys } from '../app/services.tsx'
 import { Picker, type PickerOption } from '../composer/Picker.tsx'
 import { SettingsBar, useComposeOptions } from '../composer/SettingsBar.tsx'
+import { useBranches } from '../composer/useBranches.ts'
 import type { FormProblems, TaskForm } from './form.ts'
 
 interface TargetFieldsProps {
@@ -37,6 +38,7 @@ export function placeOn(device: DeviceView | undefined): Partial<TaskForm> {
     cwd: '',
     threadId: null,
     settings: { model: null, effort: null, permission: null },
+    worktree: false,
   }
 }
 
@@ -60,6 +62,11 @@ export function TargetFields({
 }: TargetFieldsProps) {
   const t = useT()
   const device = useKey<DeviceView>(keys.device(form.deviceId))
+  // 目录在不在 git 仓库里（每次在新工作树里跑要它）；不是新建会话、没填目录时不问
+  const branches = useBranches(
+    device,
+    form.target === 'newThread' && form.cwd.trim() ? form.cwd.trim() : null,
+  )
   const workspaces = useKey<WorkspaceView[]>(keys.workspaces(form.deviceId)) ?? []
   const sessions = useSessions(form.deviceId)
   const options = useComposeOptions(form.deviceId, form.harness || undefined)
@@ -194,6 +201,23 @@ export function TargetFields({
             />
             {problems.cwd ? <span className="form-note err">{t(problems.cwd)}</span> : null}
           </div>
+          {/* 每次在新工作树里跑：设备能建工作树、目录在仓库里才出；已经开着的照样显示，好关掉 */}
+          {device?.worktrees && (branches || form.worktree) ? (
+            <div className="form-field">
+              <label className="form-check">
+                <input
+                  type="checkbox"
+                  data-act="task-worktree"
+                  checked={form.worktree}
+                  onChange={(event) => onChange({ worktree: event.target.checked })}
+                />
+                {t('tasks.form.worktree')}
+              </label>
+              <span className={branches === null ? 'form-note err' : 'form-note'}>
+                {t(branches === null ? 'tasks.form.worktreeNoRepo' : 'tasks.form.worktreeHint')}
+              </span>
+            </div>
+          ) : null}
           {options ? (
             <div className="form-field">
               <span className="form-label">{t('tasks.form.settings')}</span>

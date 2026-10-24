@@ -51,6 +51,8 @@ export interface TaskForm {
   /** 不属于工作区时自己填的目录；属于工作区时是工作区的根 */
   cwd: string
   settings: TaskSessionSettings
+  /** 每次在新工作树里跑（设备要能建工作树、目录要在 git 仓库里） */
+  worktree: boolean
   /** 在哪个会话里接着发 */
   threadId: string | null
   /** 建好之后先暂停（只在新建时有） */
@@ -117,6 +119,7 @@ export function blankForm(place: {
     workspaceId: place.workspaceId,
     cwd: place.cwd,
     settings: { model: null, effort: null, permission: null },
+    worktree: false,
     threadId: place.threadId ?? null,
     paused: false,
   }
@@ -140,6 +143,7 @@ export function formOf(task: TaskView): TaskForm {
     timezone: task.timezone,
     target: task.target.kind,
     settings: task.target.kind === 'newThread' ? { ...task.target.settings } : form.settings,
+    worktree: task.target.kind === 'newThread' && task.target.worktree === true,
   }
   switch (schedule.type) {
     case 'once':
@@ -254,6 +258,7 @@ export function targetOf(form: TaskForm): TaskTarget {
         cwd: form.cwd.trim(),
         workspaceId: form.workspaceId,
         settings: { ...form.settings },
+        ...(form.worktree ? { worktree: true } : {}),
       }
 }
 
@@ -286,6 +291,7 @@ export function patchOf(task: TaskView, form: TaskForm): TaskPatch | null {
     if (form.cwd.trim() !== task.target.cwd) target.cwd = form.cwd.trim()
     if (form.workspaceId !== task.target.workspaceId) target.workspaceId = form.workspaceId
     if (!same(form.settings, task.target.settings)) target.settings = { ...form.settings }
+    if (form.worktree !== (task.target.worktree === true)) target.worktree = form.worktree
     if (Object.keys(target).length > 0) patch.target = target
   }
   return Object.keys(patch).length > 0 ? patch : null

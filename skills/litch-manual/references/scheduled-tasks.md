@@ -15,7 +15,8 @@ Exact flags: `scripts/litch tasks --help`.
 - `scripts/litch tasks list` lists tasks (all devices, or one) with schedule, next and last run, state.
 - `scripts/litch tasks create` creates one. It needs a device, a name, a prompt, a schedule and what
   happens when it fires (below). It can be created paused.
-- `scripts/litch tasks update` changes name, prompt, schedule, time zone or the new-session options.
+- `scripts/litch tasks update` changes name, prompt, schedule, time zone or the new-session options
+  (including `--worktree on|off`).
   The harness and the "new session vs. continue a session" choice cannot be changed after creation:
   create a new task instead (and delete the old one, after asking).
 - `scripts/litch tasks pause` / `scripts/litch tasks resume` stop and restart firing on schedule.
@@ -33,7 +34,13 @@ Exact flags: `scripts/litch tasks --help`.
   this computer's. Mention it when the device is in another zone.
 - **When it fires**, one of:
   - start a **new session** each time: harness, project (or working folder), model, reasoning effort,
-    permissions;
+    permissions, and optionally **Run in a new worktree each time** (`--worktree` on create,
+    `--worktree on|off` on update): each run gets its own git worktree and branch cut from the default
+    branch of the folder's repository, and the session works there, so the project folder is left alone.
+    Only offered when the device supports worktrees and the folder is in a git repository. If the
+    worktree cannot be made, that run fails instead of running in the folder. The worktrees follow the
+    usual rules (`sessions-and-projects.md`): archiving the run's session removes the folder
+    if nothing in it changed, and the branch stays;
   - **continue an existing session**: the prompt is sent into that session each time.
 - **Start paused**.
 

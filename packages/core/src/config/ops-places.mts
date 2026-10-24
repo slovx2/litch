@@ -156,7 +156,7 @@ const taskOf = (ctx: OpContext, list: TaskView[], arg: string | undefined): Task
 }
 
 const taskLine = (task: TaskView): string =>
-  `${task.id} "${task.name}" ${task.status} · ${JSON.stringify(task.schedule)} · ${task.target.kind === 'thread' ? `thread ${task.target.threadId}` : `new session in ${task.target.cwd}`} (${task.target.harness})${task.nextRunAt ? ` · next ${new Date(task.nextRunAt).toISOString()}` : ''}`
+  `${task.id} "${task.name}" ${task.status} · ${JSON.stringify(task.schedule)} · ${task.target.kind === 'thread' ? `thread ${task.target.threadId}` : `new session in ${task.target.worktree ? 'a new worktree of ' : ''}${task.target.cwd}`} (${task.target.harness})${task.nextRunAt ? ` · next ${new Date(task.nextRunAt).toISOString()}` : ''}`
 
 const TASK_OPTIONS = [
   'name',
@@ -326,9 +326,9 @@ export const PLACE_OPS: Record<string, OpSpec> = {
   'tasks create': {
     args: [1, 1],
     options: TASK_OPTIONS,
-    flags: ['paused'],
+    flags: ['paused', 'worktree'],
     usage:
-      'tasks create <device> --name <name> --prompt <text> --schedule <schedule> [--harness <id>] [--cwd <dir>|--project <project>|--thread <session-id>] [--timezone <IANA>] [--model <id>] [--effort <level>] [--permission <id>] [--paused]',
+      'tasks create <device> --name <name> --prompt <text> --schedule <schedule> [--harness <id>] [--cwd <dir>|--project <project>|--thread <session-id>] [--timezone <IANA>] [--model <id>] [--effort <level>] [--permission <id>] [--worktree] [--paused]',
     summary: { zh: '建一个定时任务', en: 'Create a scheduled task' },
     async run(ctx) {
       const device = await ctx.device(ctx.cmd.positionals[0])
@@ -387,6 +387,8 @@ export const PLACE_OPS: Record<string, OpSpec> = {
                   effort: get('effort') ?? null,
                   permission: get('permission') ?? null,
                 },
+                // 每次在新工作树里跑
+                ...(ctx.cmd.flags.has('worktree') ? { worktree: true } : {}),
               },
           ...(ctx.cmd.flags.has('paused') ? { status: 'paused' as const } : {}),
         },
@@ -396,9 +398,19 @@ export const PLACE_OPS: Record<string, OpSpec> = {
   },
   'tasks update': {
     args: [2, 2],
-    options: ['name', 'prompt', 'schedule', 'timezone', 'cwd', 'model', 'effort', 'permission'],
+    options: [
+      'name',
+      'prompt',
+      'schedule',
+      'timezone',
+      'cwd',
+      'model',
+      'effort',
+      'permission',
+      'worktree',
+    ],
     usage:
-      'tasks update <device> <task> [--name] [--prompt] [--schedule] [--timezone] [--cwd] [--model] [--effort] [--permission]',
+      'tasks update <device> <task> [--name] [--prompt] [--schedule] [--timezone] [--cwd] [--model] [--effort] [--permission] [--worktree on|off]',
     summary: { zh: '改一个定时任务', en: 'Change a scheduled task' },
     async run(ctx) {
       const device = await ctx.device(ctx.cmd.positionals[0])
@@ -416,13 +428,20 @@ export const PLACE_OPS: Record<string, OpSpec> = {
       const settingsChanged = ['model', 'effort', 'permission'].some(
         (key) => get(key) !== undefined,
       )
-      if (get('cwd') !== undefined || settingsChanged) {
+      const worktree = get('worktree')
+      if (worktree !== undefined && worktree !== 'on' && worktree !== 'off') {
+        throw new ConfigFailure(
+          'invalid',
+          ctx.say('--worktree 写 on 或 off。', 'Pass --worktree on or off.'),
+        )
+      }
+      if (get('cwd') !== undefined || settingsChanged || worktree !== undefined) {
         if (task.target.kind !== 'newThread') {
           throw new ConfigFailure(
             'invalid',
             ctx.say(
-              '在已有会话里接着发的任务改不了目录和模型。',
-              'Tasks that continue an existing session have no directory or model to change.',
+              '在已有会话里接着发的任务改不了目录、模型和工作树。',
+              'Tasks that continue an existing session have no directory, model or worktree to change.',
             ),
           )
         }
@@ -430,6 +449,7 @@ export const PLACE_OPS: Record<string, OpSpec> = {
         const cwd = get('cwd')
         patch.target = {
           ...(cwd !== undefined ? { cwd } : {}),
+          ...(worktree !== undefined ? { worktree: worktree === 'on' } : {}),
           ...(settingsChanged
             ? {
                 settings: {

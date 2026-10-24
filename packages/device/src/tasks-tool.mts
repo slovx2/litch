@@ -84,7 +84,7 @@ export class TasksTool {
           const change: Record<string, unknown> = { id: current.id, revision: current.revision }
           for (const key of ['name', 'prompt', 'schedule', 'timezone', 'status'])
             if (fields[key] !== undefined) change[key] = fields[key]
-          return ok({ task: tasks.update(change) })
+          return ok({ task: await tasks.update(change) })
         }
         case 'delete': {
           const id = String(fields.id ?? '')

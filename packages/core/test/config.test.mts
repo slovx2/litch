@@ -488,6 +488,43 @@ test('撤不回（E7）：删任务、撤手机、移除设备、清浏览器数
   assert.ok(!(await m.app()).devices.some((d) => d.id === 'build'))
 })
 
+test('定时任务每次在新工作树里跑：create 带 --worktree，update 用 on/off 开关', async () => {
+  const m = mock()
+  const run = async (argv: string[]) => {
+    const pending = m.run(argv, { lang: 'en' })
+    for (let round = 0; round < 200; round++) {
+      m.time.advance(20)
+      await flush()
+    }
+    return pending
+  }
+  const made = await run([
+    'tasks',
+    'create',
+    'local',
+    '--name',
+    'wt',
+    '--prompt',
+    'go',
+    '--schedule',
+    'daily 09:00',
+    '--harness',
+    'pi',
+    '--cwd',
+    '/work/litch',
+    '--worktree',
+  ])
+  assert.ok(made.ok, made.text)
+  assert.match(made.text, /new session in a new worktree of \/work\/litch/)
+  const id = made.text.split(' ')[0] ?? ''
+  const off = await run(['tasks', 'update', 'local', id, '--worktree', 'off'])
+  assert.ok(off.ok, off.text)
+  assert.match(off.text, /new session in \/work\/litch/)
+  const bad = await run(['tasks', 'update', 'local', id, '--worktree', 'maybe'])
+  assert.equal(bad.ok, false)
+  assert.match(bad.text, /--worktree on or off/)
+})
+
 test('对话里“配置：…”：当成本机 harness 跑了一次，确认卡上写着是哪个会话', async () => {
   const m = mock()
   const win = m.window()

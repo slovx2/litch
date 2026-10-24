@@ -293,6 +293,8 @@ export class DeviceServer {
         this.openEngineLink(harness, { waitMs: taskTiming.harnessWaitMs }),
       backgroundRunning: (threadId) => this.background.running(threadId),
       backgroundWakes: (threadId) => this.background.wakes(threadId),
+      // 工作树在下面才建好，用的时候再取
+      worktrees: () => this.worktrees,
     })
     // 定时任务：任务存在设备上，到点由设备进程自己连上 harness 去跑
     if (this.tasks) info.extensions.push(EXTENSION.deviceTasks)

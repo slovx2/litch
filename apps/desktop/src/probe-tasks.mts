@@ -26,6 +26,10 @@ export interface TasksProbe {
   /** 建好之后：详情页的标题、日程那一行；回到列表里有没有这一行 */
   created: string
   schedule: string
+  /** 表单上出了“每次在新工作树里跑”、勾上了 */
+  worktreeOffered: boolean
+  /** 详情里“运行方式”那一行 */
+  target: string
   listed: boolean
   /** 立即运行：说了什么、跑完的那一次是什么状态 */
   said: string
@@ -130,6 +134,12 @@ export async function tasksProbe(name: string): Promise<TasksProbe> {
   await until('星期几那一排', () => one('[data-day="FR"]'))
   one<HTMLButtonElement>('[data-day="FR"]')?.click()
   fill(await until('工作目录', () => one<HTMLInputElement>('#tk-cwd')), '~/work/litch')
+  // 目录在仓库里：出“每次在新工作树里跑”，勾上
+  const worktreeBox = await until('“每次在新工作树里跑”', () =>
+    one<HTMLInputElement>('[data-act="task-worktree"]'),
+  )
+  worktreeBox.click()
+  const worktreeOffered = worktreeBox.checked
   await sleep(50)
   const previewBox = one('.tk-preview')
   const preview = previewBox?.dataset.preview ?? ''
@@ -138,6 +148,8 @@ export async function tasksProbe(name: string): Promise<TasksProbe> {
   await until('建好之后的详情', () => text(one('[data-tasks="detail"] [data-task-name]')) === name)
   const created = text(one('[data-task-name]'))
   const schedule = text(one('.tk-facts dd'))
+  const targetFact = all('.tk-facts > div').find((entry) => text(one('dt', entry)) === '运行方式')
+  const target = text(one('dd', targetFact))
 
   // 回到列表看得到它，再点开
   await click('[data-tasks="detail"] [data-act="back"]')
@@ -193,6 +205,8 @@ export async function tasksProbe(name: string): Promise<TasksProbe> {
     previewText,
     created,
     schedule,
+    worktreeOffered,
+    target,
     listed,
     said,
     runStatus,
@@ -236,6 +250,8 @@ export function judgeTasks(seen: TasksProbe, name: string): string[] {
   )
   must(seen.created === name, `建好之后的详情不是这个任务：“${seen.created}”`)
   must(seen.schedule.includes('每周一、五'), `详情里的日程不对：“${seen.schedule}”`)
+  must(seen.worktreeOffered, '目录在仓库里，表单上没出“每次在新工作树里跑”或勾不上')
+  must(seen.target === '每次新建会话，在新工作树里跑', `详情里的运行方式是“${seen.target}”`)
   must(seen.listed, '回到列表里没有刚建的那一行')
   must(seen.said === 'started', `立即运行之后说的是 ${seen.said}`)
   must(seen.runStatus === 'succeeded', `立即运行的那一次是 ${seen.runStatus}`)

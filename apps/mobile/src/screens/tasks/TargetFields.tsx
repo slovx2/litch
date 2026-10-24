@@ -12,7 +12,7 @@ import {
   type WorkspaceView,
 } from '@litch/core'
 import { useState } from 'react'
-import { StyleSheet, Text, View } from 'react-native'
+import { StyleSheet, Switch, Text, View } from 'react-native'
 import type { TaskForm } from '../../../../../packages/ui/src/tasks/form.ts'
 import { useComposeOptions, useNewSessionDefaults } from '../../detail/composer/options'
 import { PickerSheet } from '../../detail/composer/PickerSheet'
@@ -22,6 +22,7 @@ import { useT } from '../../ui/i18n'
 import { Chip, Row } from '../../ui/kit/controls'
 import { Prompt } from '../../ui/kit/overlays'
 import { useTheme } from '../../ui/theme'
+import { useBranches } from '../new-session/useBranches'
 
 export interface TargetModel {
   /** 实际用的 harness；一个可用的都没有是 null */
@@ -111,9 +112,11 @@ export function TargetFields({
   onChange(patch: Partial<TaskForm>): void
 }) {
   const t = useT()
-  const { c } = useTheme()
+  const { c, font } = useTheme()
   const { store } = useReplica()
   const device = useKey<DeviceView>(keys.device(deviceId))
+  // 目录在不在 git 仓库里（每次在新工作树里跑要它）
+  const branches = useBranches(device, form.target === 'newThread' && model.cwd ? model.cwd : null)
   const workspaces = useKey<WorkspaceView[]>(keys.workspaces(deviceId)) ?? []
   const summary = useKey<SessionSummary>(keys.summary(deviceId, form.threadId ?? ''))
   const [asking, setAsking] = useState(false)
@@ -201,6 +204,30 @@ export function TargetFields({
             selected={ownDir}
             onPress={() => setAsking(true)}
           />
+          {/* 每次在新工作树里跑：设备能建工作树、目录在仓库里才出；已经开着的照样显示，好关掉 */}
+          {device?.worktrees && (branches || form.worktree) ? (
+            <View style={styles.switchRow}>
+              <View style={styles.switchText}>
+                <Text style={{ color: c.ink, fontSize: font.size.body }}>
+                  {t('tasks.form.worktree')}
+                </Text>
+                <Text
+                  style={[
+                    styles.hint,
+                    { color: branches === null ? c.err : c.ink3, fontSize: font.size.meta },
+                  ]}
+                >
+                  {t(branches === null ? 'tasks.form.worktreeNoRepo' : 'tasks.form.worktreeHint')}
+                </Text>
+              </View>
+              <Switch
+                testID="task:worktree"
+                value={form.worktree}
+                onValueChange={(worktree) => onChange({ worktree })}
+                accessibilityLabel={t('tasks.form.worktree')}
+              />
+            </View>
+          ) : null}
           <View style={styles.bar}>
             <SettingsBar
               fresh
@@ -272,4 +299,13 @@ const styles = StyleSheet.create({
   },
   note: { fontSize: 13, lineHeight: 19, paddingHorizontal: 16, paddingVertical: 8 },
   bar: { paddingTop: 10 },
+  switchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  switchText: { flex: 1, gap: 2 },
+  hint: { lineHeight: 18 },
 })

@@ -111,7 +111,7 @@ export function TaskDetailScreen({ route, navigation }: Props) {
           testID="task:detail:schedule"
         />
         <InfoLine label={t('tasks.detail.next')} value={statusLine} testID="task:detail:status" />
-        <InfoLine label={t('tasks.detail.target')} value={target} />
+        <InfoLine label={t('tasks.detail.target')} value={target} testID="task:detail:target" />
         <InfoLine label={t('tasks.detail.origin')} value={origin} />
         {task.lastError ? (
           <Text testID="task:detail:error" style={[styles.note, { color: c.err }]}>

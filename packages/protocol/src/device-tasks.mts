@@ -44,7 +44,7 @@ export interface TaskSessionSettings {
  * 到点之后做什么。
  * newThread：每次新建一个会话，在里面发提示词。
  * thread：在一个已有的会话里接着发（会话正在跑回合时等它空下来）。
- * 任务建好之后 kind 不能改，harness、threadId 也不能改；newThread 的 cwd、workspaceId、settings 能改。
+ * 任务建好之后 kind 不能改，harness、threadId 也不能改；newThread 的 cwd、workspaceId、settings、worktree 能改。
  */
 export type TaskTarget =
   | {
@@ -55,6 +55,11 @@ export type TaskTarget =
       /** 新会话归到哪个工作区（deviceWorkspaces 扩展里的项目 id）；不归是 null */
       workspaceId: string | null
       settings: TaskSessionSettings
+      /**
+       * 每次在新工作树里跑（worktrees 扩展）：设备层从 cwd 所在仓库的默认分支切一个新工作树，新会话开在里面，
+       * 会话是工作树的主人。只有设备列了 worktrees、cwd 在 git 仓库里才能设；不在的不带（等于 false）
+       */
+      worktree?: boolean
     }
   | { kind: 'thread'; harness: string; threadId: string }
 
@@ -241,6 +246,8 @@ export interface DeviceTaskUpdateParams {
     cwd?: string
     workspaceId?: string | null
     settings?: TaskSessionSettings
+    /** 每次在新工作树里跑；false 是关掉 */
+    worktree?: boolean
   }
 }
 

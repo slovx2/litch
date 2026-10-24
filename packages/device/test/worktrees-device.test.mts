@@ -163,3 +163,95 @@ test('WTD-004：经聚合面归档工作树的主人，干净的删了目录；�
     await done()
   }
 })
+
+const taskFields = (cwd: string, worktree?: unknown) => ({
+  name: 'Nightly check',
+  prompt: '看一眼仓库',
+  schedule: { type: 'interval', minutes: 30 },
+  timezone: 'Asia/Shanghai',
+  target: {
+    kind: 'newThread',
+    harness: 'pi',
+    cwd,
+    workspaceId: null,
+    settings: { model: null, effort: null, permission: null },
+    ...(worktree === undefined ? {} : { worktree }),
+  },
+})
+
+test('WTD-005：定时任务每次在新工作树里跑：每次运行从默认分支切一个、会话是主人；建不成这次失败不退回原目录；设置时目录要在仓库里', async () => {
+  const { env, repo, done } = world()
+  try {
+    const client = env.connect()
+    await client.initialize(['harness', 'worktrees', 'deviceTasks'])
+    // 设置时就查：不是仓库、类型不对都拒绝
+    const plainDir = realpathSync(tempDir())
+    const notRepo = await client.fails('litch/task/create', taskFields(plainDir, true))
+    assert.equal(notRepo.data.litch, 'invalidTarget')
+    assert.equal(notRepo.data.field, 'target.worktree')
+    const wrongType = await client.fails('litch/task/create', taskFields(repo, 'yes'))
+    assert.equal(wrongType.data.field, 'target.worktree')
+    rmSync(plainDir, { recursive: true, force: true })
+
+    const { task } = await client.call('litch/task/create', taskFields(join(repo, 'src'), true))
+    assert.equal(task.target.worktree, true)
+    const runOnce = async (index: number) => {
+      await client.call('litch/task/runNow', { id: task.id })
+      await until(() => env.pi.turns.size === index, `第 ${index} 次运行的回合开始`)
+      const threadId = [...env.pi.turns.keys()][index - 1] as string
+      env.pi.end(threadId, 'completed', '看过了')
+      await until(async () => {
+        const runs = (await client.call('litch/task/runs/list', { taskId: task.id })).data
+        return runs.length === index && runs[0].status === 'succeeded'
+      }, `第 ${index} 次运行结束`)
+      return threadId
+    }
+    const first = await runOnce(1)
+    const made = env.device.worktrees?.forThread(first)
+    assert.ok(made, '第一次运行的会话是工作树的主人')
+    assert.equal(made.baseRef, 'main')
+    assert.equal(env.pi.thread(first).cwd, join(made.path, 'src'))
+    // 第二次另建一个，互不相干
+    const second = await runOnce(2)
+    const again = env.device.worktrees?.forThread(second)
+    assert.ok(again && again.id !== made.id, '第二次运行有自己的工作树')
+    assert.equal(env.device.worktrees?.list().length, 2)
+
+    // 关掉之后照原目录跑；旧客户端改任务时不带 worktree 不动它
+    const kept = await client.call('litch/task/update', {
+      id: task.id,
+      revision: task.revision,
+      target: { cwd: join(repo, 'src') },
+    })
+    assert.equal(kept.task.target.worktree, true)
+    const off = await client.call('litch/task/update', {
+      id: task.id,
+      revision: kept.task.revision,
+      target: { worktree: false },
+    })
+    assert.equal('worktree' in off.task.target, false)
+    const third = await runOnce(3)
+    assert.equal(env.pi.thread(third).cwd, join(repo, 'src'))
+    assert.equal(env.device.worktrees?.list().length, 2)
+
+    // 打开着、仓库没了：这次失败（internal），不往引擎发 thread/start
+    const on = await client.call('litch/task/update', {
+      id: task.id,
+      revision: off.task.revision,
+      target: { worktree: true },
+    })
+    rmSync(join(repo, '.git'), { recursive: true, force: true })
+    const starts = env.pi.seen.filter((frame) => frame.method === 'thread/start').length
+    await client.call('litch/task/runNow', { id: on.task.id })
+    await until(async () => {
+      const runs = (await client.call('litch/task/runs/list', { taskId: task.id })).data
+      return runs.length === 4 && runs[0].status === 'failed'
+    }, '第四次运行失败')
+    const failed = (await client.call('litch/task/runs/list', { taskId: task.id })).data[0]
+    assert.equal(failed.error.code, 'internal')
+    assert.match(failed.error.message, /could not create a worktree/)
+    assert.equal(env.pi.seen.filter((frame) => frame.method === 'thread/start').length, starts)
+  } finally {
+    await done()
+  }
+})

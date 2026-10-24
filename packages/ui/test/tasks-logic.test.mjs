@@ -212,3 +212,20 @@ test('先查的几样：只查这一种日程要的栏，名字、提示词、�
   assert.equal(checkForm(thread, known).threadId, 'tasks.check.session')
   assert.equal(checkForm(thread, known, true).threadId, undefined)
 })
+
+test('每次在新工作树里跑：新建时开着才带 worktree；编辑时换回表单，开关变了才带', () => {
+  const blank = blankForm({ deviceId: 'local', harness: 'pi', workspaceId: null, cwd: '/w/app' })
+  assert.equal(blank.worktree, false)
+  const filled = { ...blank, name: 'n', prompt: 'p' }
+  assert.equal('worktree' in draftOf(filled).target, false)
+  assert.equal(draftOf({ ...filled, worktree: true }).target.worktree, true)
+  // 已有的任务：开着的换回表单还是开着；关掉只发 worktree: false
+  const on = { ...task, target: { ...task.target, worktree: true } }
+  const form = formOf(on)
+  assert.equal(form.worktree, true)
+  assert.equal(patchOf(on, form), null)
+  assert.deepEqual(patchOf(on, { ...form, worktree: false }), { target: { worktree: false } })
+  assert.deepEqual(patchOf(task, { ...formOf(task), worktree: true }), {
+    target: { worktree: true },
+  })
+})

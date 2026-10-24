@@ -140,6 +140,8 @@ export interface TaskPatch {
     cwd?: string
     workspaceId?: string | null
     settings?: TaskSessionSettings
+    /** 每次在新工作树里跑（设备要有 worktrees） */
+    worktree?: boolean
   }
 }
 
