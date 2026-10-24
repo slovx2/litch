@@ -3,6 +3,8 @@
 //
 // 网页不在界面里：界面只占一块矩形、把它的位置大小报给外壳，网页由外壳在主进程里叠上去。
 
+import { previewBridge } from './preview-bridge.ts'
+
 /** 标签归哪个会话。新建对话页上（会话还没建）threadId 是空字符串 */
 export interface BrowserOwner {
   deviceId: string
@@ -79,6 +81,13 @@ export interface BrowserSavePrompt {
 
 export type BrowserSaveAnswer = 'save' | 'dismiss' | 'never'
 
+/** 代填前的 Touch ID 开关 */
+export interface BrowserTouchId {
+  /** 这台电脑能用（macOS 且有指纹） */
+  available: boolean
+  on: boolean
+}
+
 /** 已保存的密码和保存提示：只能列、删、答，看不到明文 */
 export interface BrowserPasswordsBridge {
   list(): Promise<BrowserSavedPassword[]>
@@ -88,6 +97,10 @@ export interface BrowserPasswordsBridge {
   removeAll(): Promise<number>
   /** 密码库变了（导入了、保存了、别处删了、永不名单变了） */
   onChanged(handler: () => void): () => void
+  /** Litch 代填前要不要过 Touch ID。只有 macOS 有（available 为假时设置里不显示这个开关），默认关 */
+  touchId(): Promise<BrowserTouchId>
+  /** 开关，回新的样子 */
+  setTouchId(on: boolean): Promise<BrowserTouchId>
   /** “这个网站永不保存”的名单 */
   never(): Promise<BrowserNeverSite[]>
   /** 从名单里去掉，回去没去掉 */
@@ -119,10 +132,38 @@ export interface BrowserSignInRequest {
   state: 'waiting' | 'withdrawn' | 'closed'
   /** 毫秒 */
   at: number
+  /** 密码库里和 origin 完全一样的账号，最近用过的在前；没有就是空的，只能人自己登录 */
+  accounts: BrowserSignInAccount[]
+  /**
+   * 预检不过、Litch 不能代填的原因（insecure、not_user_visible、locator_invalid、popup_needed、
+   * origin_changed、page_changed、verification），能代填是 null。不过时账号还列着，只是点不了
+   */
+  fillBlocked: string | null
+  /** 定时任务的回合才有：卡片上多一个“以后直接用这个账号”的勾选 */
+  taskId?: string
+  /** 定时任务的回合才有：到这个时候（毫秒）没人答就过期 */
+  expiresAt?: number
 }
 
-/** done：人登录完、交还给代理；cancel：不登录了；dismiss：“代理已收回”看过了 */
-export type BrowserSignInAnswer = 'done' | 'cancel' | 'dismiss'
+/** 卡片上的一个已存账号。ref 是这张卡片里随机的编号，不是密码库的条目号 */
+export interface BrowserSignInAccount {
+  ref: string
+  username: string
+  /** 打了码的用户名（手机上用的那份） */
+  masked: string
+  /** 毫秒，没用过是 null */
+  lastUsed: number | null
+}
+
+/**
+ * done：人登录完、交还给代理；cancel：不登录了（卡片上的“拒绝”）；dismiss：“代理已收回”看过了；
+ * fill：用卡片上的这个账号由 Litch 代填代提交，remember 是定时任务的“以后直接用这个账号”
+ */
+export type BrowserSignInAnswer =
+  | 'done'
+  | 'cancel'
+  | 'dismiss'
+  | { fill: string; remember: boolean }
 
 export interface BrowserSignInBridge {
   /** 现在挂着的 */
@@ -273,9 +314,12 @@ declare global {
   }
 }
 
-/** 外壳给的接口。普通浏览器里、不在页面里（界面的单元测试直接在 Node 里读源文件）时没有 */
+/**
+ * 外壳给的接口。普通浏览器里、不在页面里（界面的单元测试直接在 Node 里读源文件）时没有；
+ * 普通浏览器里地址带 ?browser=preview 时是预览用的假外壳（preview-bridge.ts）
+ */
 export const browserBridge = (): BrowserBridge | undefined =>
-  typeof window === 'undefined' ? undefined : window.litchBrowser
+  typeof window === 'undefined' ? undefined : (window.litchBrowser ?? previewBridge())
 
 /** 会话的键 */
 export const ownerKey = (owner: BrowserOwner): string => `${owner.deviceId}\u0000${owner.threadId}`

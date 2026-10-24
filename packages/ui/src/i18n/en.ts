@@ -1748,4 +1748,42 @@ export const en: Record<MessageKey, Entry> = {
   'compaction.automatic': 'Context was nearly full and got compacted',
   'compaction.interrupted': 'Compaction didn’t finish',
   'notice.unknownItem': 'Unsupported item type: {type}',
+  // ---- Agent sign-in, plan B: sign-in cards (browser panel and conversation), Touch ID before filling ----
+  'browser.signIn.chooseNote':
+    'Pick a saved account and Litch fills it in and submits for you — the agent never sees the password. Or sign in on the page yourself.',
+  'browser.signIn.fill': 'Sign in as {user}',
+  'browser.signIn.noUser': '(no username)',
+  'browser.signIn.filling': 'Signing in…',
+  'browser.signIn.lastUsed': 'Last used: {day}',
+  'browser.signIn.self': 'I’ll sign in myself',
+  'browser.signIn.back': 'Use a saved account',
+  'browser.signIn.decline': 'Decline',
+  'browser.signIn.noAccounts': 'No saved accounts for this site.',
+  'browser.signIn.remember': 'Use this account for this site from now on in this scheduled task',
+  'browser.signIn.expires': ({ minutes }) =>
+    `Scheduled task request: expires in ${minutes} ${Number(minutes) === 1 ? 'minute' : 'minutes'} if nobody answers`,
+  'browser.signIn.expired': 'Scheduled task request: expired',
+  'browser.signIn.blocked': 'Litch can’t fill this in: {reason}',
+  'browser.signIn.block.insecure':
+    'the page isn’t https, or the form would send the password with GET or to another site',
+  'browser.signIn.block.notVisible':
+    'the sign-in fields aren’t visible (covered, too small, or off screen)',
+  'browser.signIn.block.locator':
+    'the field or button the agent pointed at isn’t in the sign-in form Litch found',
+  'browser.signIn.block.popup': 'this site signs in through a pop-up window',
+  'browser.signIn.block.origin': 'the page’s origin isn’t the one the agent named',
+  'browser.signIn.block.page': 'the page has changed',
+  'browser.signIn.block.verification':
+    'the site asks for a code or second factor; finish it on the page yourself',
+  'browser.signIn.block.other': 'this page can’t be filled in ({code})',
+  'signInAsk.title': 'The agent asks you to sign in',
+  'signInAsk.task': 'Scheduled task turn',
+  'signInAsk.selfNote':
+    'Sign in yourself in the browser panel, then click “Done, hand back”. The agent can’t use this tab meanwhile.',
+  'signInAsk.showTab': 'Open browser panel',
+  'signInAsk.desktopOnly':
+    'Signing in only works in the Litch desktop app. You can only decline here.',
+  'settings.browser.touchId.title': 'Require Touch ID before filling',
+  'settings.browser.touchId.note':
+    'Confirm with your fingerprint before Litch signs in with a saved account for the agent. Guards against stray clicks and people nearby.',
 }

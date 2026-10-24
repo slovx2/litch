@@ -1660,6 +1660,38 @@ export const zhCN = {
   'compaction.automatic': '上下文快满了，已自动压缩',
   'compaction.interrupted': '压缩没有完成',
   'notice.unknownItem': '当前版本不支持的条目：{type}',
+  // ---- 代理登录方案 B：登录卡片（浏览器面板、对话里）、代填前的 Touch ID ----
+  'browser.signIn.chooseNote':
+    '选一个已存的账号，Litch 替你填好并提交，代理看不到密码；也可以自己在网页里登录。',
+  'browser.signIn.fill': '用 {user} 登录',
+  'browser.signIn.noUser': '（没有用户名）',
+  'browser.signIn.filling': '正在登录…',
+  'browser.signIn.lastUsed': '上次用：{day}',
+  'browser.signIn.self': '我自己登录',
+  'browser.signIn.back': '用已存的账号',
+  'browser.signIn.decline': '拒绝',
+  'browser.signIn.noAccounts': '密码库里没有这个网站的账号。',
+  'browser.signIn.remember': '这个定时任务以后登录这个网站时直接用这个账号',
+  'browser.signIn.expires': '定时任务的请求：{minutes} 分钟内没人答就过期',
+  'browser.signIn.expired': '定时任务的请求：已过期',
+  'browser.signIn.blocked': 'Litch 不能代填：{reason}',
+  'browser.signIn.block.insecure': '页面不是 https，或者表单会用 GET 把密码发出去、交给别的网站',
+  'browser.signIn.block.notVisible': '登录框看不见（被遮住、太小或在屏幕外）',
+  'browser.signIn.block.locator': '代理指的输入框或按钮不在 Litch 认出的登录表单里',
+  'browser.signIn.block.popup': '这个网站要在弹出窗口里登录',
+  'browser.signIn.block.origin': '页面的来源和代理说的不一样',
+  'browser.signIn.block.page': '页面已经变了',
+  'browser.signIn.block.verification': '网站要验证码或二次验证，请自己在网页里完成',
+  'browser.signIn.block.other': '这个页面没法代填（{code}）',
+  'signInAsk.title': '代理请你登录网站',
+  'signInAsk.task': '定时任务的回合',
+  'signInAsk.selfNote':
+    '在浏览器面板里自己登录，完成后点“完成，交还”。这段时间代理用不了这个标签。',
+  'signInAsk.showTab': '打开浏览器面板',
+  'signInAsk.desktopOnly': '只有在 Litch 桌面端里才能登录，这里只能拒绝。',
+  'settings.browser.touchId.title': '代填前要 Touch ID',
+  'settings.browser.touchId.note':
+    'Litch 用已存的账号替代理登录之前，先用指纹确认一次。防的是误点和身边的人。',
 } satisfies Record<string, Entry>
 
 export type MessageKey = keyof typeof zhCN

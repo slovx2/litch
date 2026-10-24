@@ -3,7 +3,8 @@
 // 核心只给“问的是什么”。卡片上写明调用来自哪台设备：远程设备上的模型在用这台电脑时要显眼。
 // 网站的卡片上多一个“信任所有网站”：经外壳打开设置里的那个开关，再按“本回合允许”答这一张。
 // 远程设备操作这台电脑的命令与文件（ask.kind 是 machine）是另一个样子，和顶栏里的全局待处理共用
-// 一个组件（machine/MachineCard.tsx）。
+// 一个组件（machine/MachineCard.tsx）。代理请人登录（ask.kind 是 signIn）是浏览器面板上那张登录卡片的另一个样子
+// （SignInAskCard.tsx）。
 import type { ApprovalOption, ClientAskRequest } from '@litch/core'
 import { Fragment, useEffect, useRef } from 'react'
 import { useT } from '../app/appearance.ts'
@@ -14,6 +15,7 @@ import { MachineSessionCard } from '../machine/MachineCard.tsx'
 import { browserBridge } from '../side/browser/bridge.ts'
 import { useCardFocus } from './focus.ts'
 import { type CardProps, Foot, ownsKey, useRespond } from './respond.tsx'
+import { SignInAskCard } from './SignInAskCard.tsx'
 
 const OPTION_TEXT: Record<ApprovalOption['role'], MessageKey> = {
   accept: 'clientAsk.option.once',
@@ -26,6 +28,7 @@ const OPTION_TEXT: Record<ApprovalOption['role'], MessageKey> = {
 export function ClientAskCard(props: CardProps<ClientAskRequest>) {
   const { ask } = props.request
   if (ask.kind === 'machine') return <MachineSessionCard {...props} ask={ask} />
+  if (ask.kind === 'signIn') return <SignInAskCard {...props} ask={ask} />
   return <SiteOrAppCard {...props} />
 }
 

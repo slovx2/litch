@@ -867,7 +867,32 @@ export type ClientAskView =
       /** 能不能选“始终允许”（远程设备的会话不能） */
       allowAlways: boolean
     }
+  | SignInAskView
   | MachineAskView
+
+/**
+ * 代理请人登录（内置浏览器的 request_sign_in）：和浏览器面板上那张是同一张，按 signInId 经外壳答，
+ * 任何一处答了两处都收掉。样子见界面的 composer/SignInAskCard.tsx
+ */
+export interface SignInAskView {
+  kind: 'signIn'
+  /** 主进程登记的那张卡片（浏览器面板上的）的编号 */
+  signInId: string
+  tabId: string
+  /** 主进程取到的标签的真实来源 */
+  origin: string
+  /** 代理说的站名、原因，只作附注 */
+  site: string
+  reason: string
+  /** 密码库里和 origin 完全一样的账号，最近用过的在前。ref 是这张卡片里随机的编号 */
+  accounts: { ref: string; username: string; masked: string; lastUsed: number | null }[]
+  /** 预检不过、不能代填的原因，能代填是 null */
+  fillBlocked: string | null
+  /** 定时任务的回合才有：多一个“以后直接用这个账号”的勾选 */
+  taskId?: string
+  /** 定时任务的回合才有：过期的时候（毫秒） */
+  expiresAt?: number
+}
 
 /**
  * 这台桌面端在执行一次客户端工具调用（内置浏览器、Computer Use）时要用户点头。

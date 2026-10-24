@@ -1,5 +1,5 @@
 // 浏览器面板上“代理请你登录”的卡片（probe-browser-ui.mts 的一段）：眼前会话里代理开一个标签、调 request_sign_in，
-// 面板上出卡片（站点、原因、“完成，交还”“取消”），点“完成，交还”之后调用回“登录完了”、卡片没了；
+// 面板上出卡片（站点、原因；库里没有这个网站的账号，直接是“完成，交还”“取消”那一版），点“完成，交还”之后调用回“登录完了”、卡片没了；
 // 再调一次点“取消”，回“取消了”；再调一次打断回合，卡片变成“代理已收回”，点“知道了”才没。
 // 再让一个执行过脚本的标签交出去之前重新打开不成（自带的小服务第二次 GET 回 204）：卡片是“标签已关掉”，
 // 没有“显示”“完成”，点“知道了”才没。
@@ -61,6 +61,13 @@ export async function checkSignInCard(options: {
     '登录卡片：醒目的是外壳取到的真实来源',
     (await page("document.querySelector('.bw-signin [data-sign-in-origin]')?.textContent")) ===
       new URL(url).origin,
+  )
+  check(
+    '登录卡片：库里没有这个网站的账号时直接是自己登录那一版，写明没有已存账号，没有“用账号登录”',
+    (await page(
+      "(() => { const card = document.querySelector('.bw-signin'); return card?.dataset.mode === 'self' && !!card.querySelector('[data-sign-in-none]') && !card.querySelector('[data-act=\"sign-in-fill\"], [data-act=\"sign-in-self\"]') })()",
+    )) === true,
+    await page("document.querySelector('.bw-signin')?.outerHTML ?? null"),
   )
   await shot('sign-in-card')
   await page(`document.querySelector('.bw-signin [data-act="sign-in-done"]').click()`)

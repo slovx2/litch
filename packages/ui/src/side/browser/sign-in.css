@@ -40,3 +40,48 @@
   flex-wrap: wrap;
   gap: 6px;
 }
+
+/* 来源里可注册域名突出，子域名、协议、端口淡一点 */
+.bw-signin-origin b {
+  font-weight: 700;
+}
+
+.bw-signin-dim {
+  color: var(--ink-2);
+  font-weight: 400;
+}
+
+/* 预检不过的原因 */
+.bw-signin-blocked {
+  color: var(--err);
+}
+
+.bw-signin-expiry {
+  color: var(--ink-2);
+}
+
+/* 一个账号一个按钮，占满一行，窄了换行；定时任务的勾选跟在后面 */
+.bw-signin-accounts {
+  flex: 1 1 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.bw-signin-accounts .btn {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bw-signin-remember {
+  flex: 1 1 100%;
+  color: var(--ink-2);
+}
+
+/* 对话里那张：账号按钮排在卡片正文最后 */
+.req-body .bw-signin-accounts {
+  margin-top: 8px;
+}
