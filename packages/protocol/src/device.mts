@@ -126,6 +126,13 @@ export const EXTENSION = {
    * thread/start 的 `litchWorktree` 才能用；声明了它的连接才会在会话对象上看到 `litchWorktree`、收到变化通知。
    */
   worktrees: 'worktrees',
+  /**
+   * 手机上批准：桌面端要人点头的卡片（第一版只有内置浏览器的代理登录）经会话所在设备转给手机，手机的答复带着
+   * 批准钥匙的签名交回发卡片的连接（client-approvals.mts，定义在 protocol/extensions/client-approvals.json）。
+   * 设备信息的 `extensions` 里列了它，litch/approval/* 才能用；声明了它的连接才会收到卡片变化的通知，
+   * 发卡片的连接要声明了它才能 open。
+   */
+  clientApprovals: 'clientApprovals',
 } as const
 
 export type ExtensionName = (typeof EXTENSION)[keyof typeof EXTENSION]

@@ -2,6 +2,8 @@
 // 核心收到 `item/tool/call` 之后经外壳交给主进程里登记的执行器去做，执行器要用户点头时经核心在对话里出一张卡片。
 // 核心不认识 Electron：这里的形状和桌面外壳的 apps/desktop/src/client-tools/types.mts 是同一份，
 // 由外壳（core-host.mts）把两边接起来，类型在那里对一遍。
+
+import type { ApprovalAnswer } from '../../protocol/src/client-approvals.mjs'
 import type {
   ClientToolCallParams,
   ClientToolCallResponse,
@@ -64,6 +66,11 @@ export type ToolToMain =
   | { type: typeof CLIENT_TOOL; op: 'notify'; notice: MachineNotice }
   /** litch config 里属于主进程的一项（浏览器网站、Computer Use）。主进程用 configResult 回 */
   | { type: typeof CLIENT_TOOL; op: 'config'; id: string; request: ConfigMainRequest }
+  /**
+   * 手机答了一张发到它那里的登录卡片（clientApprovals，经会话所在设备转来，没验签）：主进程按答复里的卡片号
+   * 找到那张卡片，验签（apps/desktop/src/approvals/verify.mts），验不过的丢掉、卡片接着等
+   */
+  | { type: typeof CLIENT_TOOL; op: 'phoneAnswer'; answer: ApprovalAnswer }
 
 /** 主进程 → 核心 */
 export type ToolToCore =

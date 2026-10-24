@@ -1756,4 +1756,22 @@ export const en: Record<MessageKey, Entry> = {
     'Steps fold into summary lines; the process folds when a turn ends',
   'transcriptView.verbose': 'Verbose',
   'transcriptView.verbose.note': 'Every step, tool input and output, and thought stays expanded',
+  // —— Phone approval keys (clientApprovals: the Phones section in device details, and notices) ——
+  'phones.approvalKey': 'Approval key {fingerprint}',
+  'phones.approvalKey.pairing': 'Verified when paired',
+  'phones.approvalKey.first': 'Recorded at first approval',
+  'phones.approvalKey.conflict':
+    'Approval key mismatch, so approvals from this phone are refused. Remove the key and pair the phone again.',
+  'phones.approvalKey.forget': 'Remove approval key',
+  'phones.approvalKey.forgetAsk':
+    'Remove the approval key of “{name}”? The next approval from this phone records its key again.',
+  'phones.approvalKey.forgotten': 'Removed the approval key of “{name}”.',
+  'phones.approvalKey.other': 'Other phones with approval keys',
+  'approvals.firstSeen':
+    '“{name}” approved a sign-in for the first time, and its approval key was recorded (fingerprint {fingerprint}). If you didn’t approve it, remove the key under Phones in the device details.',
+  'approvals.mismatch':
+    'The approval key of “{name}” doesn’t match, so its approval was refused. Pair the phone again.',
+  'phones.approvals.title': 'Approve agent sign-ins on phones (experimental)',
+  'phones.approvals.note':
+    'When on, sign-in cards from the built-in browser are sent through the session’s device to paired phones, where they can be approved. Applies to all devices. Off by default.',
 }

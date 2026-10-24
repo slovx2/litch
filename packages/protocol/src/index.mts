@@ -10,6 +10,28 @@ export {
   orderBackgroundTasks,
   runningBackgroundTasks,
 } from './background-tasks.mjs'
+// 手机上批准（clientApprovals 扩展）：卡片、答复、签名内容、形状检查。不依赖别的文件
+export type * from './client-approvals.mjs'
+export {
+  APPROVAL_ACCOUNTS_MAX,
+  APPROVAL_ANSWER,
+  APPROVAL_ANSWERED,
+  APPROVAL_ANSWERS_MAX,
+  APPROVAL_CHANGED,
+  APPROVAL_CLOSE,
+  APPROVAL_ERROR,
+  APPROVAL_LIST,
+  APPROVAL_MAX_PER_CONNECTION,
+  APPROVAL_OPEN,
+  APPROVAL_PREFIX,
+  APPROVAL_SIGN_PREFIX,
+  APPROVAL_TEXT_MAX,
+  approvalSignedText,
+  isApprovalAnswer,
+  isApprovalKey,
+  isApprovalRef,
+  isApprovalToken,
+} from './client-approvals.mjs'
 // 客户端工具（clientTools 扩展）：谁能执行 litch_ 开头的动态工具、没人能执行时怎么回。不依赖别的文件
 export type * from './client-tools.mjs'
 export {

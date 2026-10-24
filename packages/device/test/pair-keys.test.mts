@@ -49,6 +49,10 @@ test('确认码、手机号、指纹和约定里的测试向量一致', () => {
   const parsed = parseEd25519Line(line)
   assert.ok(parsed)
   assert.equal(confirmCodeOf('Ab3dEf6hIj9kLm2n', line), '965093')
+  assert.equal(
+    confirmCodeOf('Ab3dEf6hIj9kLm2n', line, 'ebVWLo/mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmQ='),
+    '977558',
+  )
   assert.equal(phoneIdOf(parsed.blob), 'f83898df0bef57a4')
   assert.equal(fingerprintOf(parsed.blob), 'SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU')
 })

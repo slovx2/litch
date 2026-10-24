@@ -2,6 +2,9 @@
 // 设备服务支持扫码绑定（DeviceView.pairing）才有；连着但服务太旧的说一句先升级；只有 codex 的设备不出这一节。
 // 平时收着，标题后面写几部；开着这一节（或者对话框）时才订阅，核心那时才去设备上取。
 // 设备开着 Tailscale SSH 时列表上方、撤销的确认里都写明：撤销只删钥匙，拦不住 tailnet 里被 ACL 允许的设备。
+// 桌面外壳记下了某部手机的批准钥匙（手机上批准登录用，approvals-bridge.ts）时，那一行下面写指纹、怎么记下的，能删；
+// 经这台设备记下、却不在这台设备的手机列表里的（以前手动加的设备上第一次批准的），列在后面。
+// 列表上方是“手机远程批准”开关（实验功能，默认关，对所有设备生效；也只有桌面外壳里有）。
 import { type DeviceView, keys, type PairingTopicView, type PairPhone } from '@litch/core'
 import { useEffect, useId, useState } from 'react'
 import { useT } from '../app/appearance.ts'
@@ -9,6 +12,12 @@ import { reasonOf } from '../app/errors.ts'
 import { Fold } from '../app/Fold.tsx'
 import { useKey, useServices } from '../app/services.tsx'
 import { showToast } from '../app/toasts.tsx'
+import {
+  approvalsBridge,
+  type TrustedPhoneEntry,
+  useApprovalsEnabled,
+  useTrustedPhones,
+} from './approvals-bridge.ts'
 import { PairDialog } from './PairDialog.tsx'
 
 /** 从这一版起设备服务支持扫码绑定手机 */
@@ -39,6 +48,7 @@ export function PhonesSection({ device }: { device: DeviceView }) {
     [replica, device.id, supported],
   )
   const topic = useKey<PairingTopicView>(keys.pairing(device.id))
+  const trusted = useTrustedPhones()
 
   if (!supported) {
     // 连着、对面是设备服务，只是版本太旧：说一句。只有 codex 的、没连上过的不说
@@ -62,6 +72,11 @@ export function PhonesSection({ device }: { device: DeviceView }) {
   }
   const phones = topic?.phones ?? null
   const tailscale = topic?.tailscale === true
+  const keyOf = (phoneId: string) => trusted?.find((entry) => entry.phoneId === phoneId) ?? null
+  const others = (trusted ?? []).filter(
+    (entry) =>
+      entry.deviceId === device.id && !phones?.some((phone) => phone.phoneId === entry.phoneId),
+  )
   return (
     <section className="mng-sec" data-sec="phones" data-open={open}>
       <div className="mng-sec-head">
@@ -90,6 +105,7 @@ export function PhonesSection({ device }: { device: DeviceView }) {
       </div>
       {open ? (
         <div id={id} className="mng-sec-body">
+          <ApprovalsSwitch />
           {online && tailscale ? (
             <div className="devp-note" data-phones-tailscale="true">
               {t('phones.tailscale')}
@@ -109,14 +125,63 @@ export function PhonesSection({ device }: { device: DeviceView }) {
                   deviceId={device.id}
                   phone={phone}
                   tailscale={tailscale}
+                  approval={keyOf(phone.phoneId)}
                 />
               ))}
             </ul>
           )}
+          {others.length > 0 ? (
+            <>
+              <div className="devp-note" data-phones-other-keys="true">
+                {t('phones.approvalKey.other')}
+              </div>
+              <ul className="phone-list">
+                {others.map((entry) => (
+                  <li key={entry.phoneId} className="phone-row" data-approval-phone={entry.phoneId}>
+                    <div className="phone-main">
+                      <span className="phone-name ell">{entry.name}</span>
+                    </div>
+                    <ApprovalKeyLine entry={entry} />
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : null}
         </div>
       ) : null}
       {pairing ? <PairDialog device={device} onClose={() => setPairing(false)} /> : null}
     </section>
+  )
+}
+
+/** 手机远程批准的开关：关着时登录卡片不发到手机，手机的答复也不认。没有外壳时不显示 */
+function ApprovalsSwitch() {
+  const t = useT()
+  const on = useApprovalsEnabled()
+  const switchId = useId()
+  if (on === null) return null
+  return (
+    <div className="phone-approvals" data-phone-approvals={on ? 'on' : 'off'}>
+      <div className="phone-approvals-text">
+        <label htmlFor={switchId}>{t('phones.approvals.title')}</label>
+        <span>{t('phones.approvals.note')}</span>
+      </div>
+      <button
+        id={switchId}
+        type="button"
+        role="switch"
+        className="switch"
+        data-act="phone-approvals"
+        aria-checked={on}
+        onClick={() => {
+          approvalsBridge()
+            ?.setEnabled(!on)
+            .catch(() => {})
+        }}
+      >
+        <i />
+      </button>
+    </div>
   )
 }
 
@@ -125,10 +190,13 @@ function PhoneRow({
   deviceId,
   phone,
   tailscale,
+  approval,
 }: {
   deviceId: string
   phone: PairPhone
   tailscale: boolean
+  /** 桌面外壳记下的这部手机的批准钥匙，没有是 null */
+  approval: TrustedPhoneEntry | null
 }) {
   const { channel } = useServices()
   const t = useT()
@@ -197,11 +265,73 @@ function PhoneRow({
           </button>
         </div>
       ) : null}
+      {approval ? <ApprovalKeyLine entry={approval} /> : null}
       {failure ? (
         <div className="devp-note err" role="alert">
           {failure}
         </div>
       ) : null}
     </li>
+  )
+}
+
+/** 一部手机的批准钥匙：指纹、怎么记下的（或者对不上已停用），删除前先问一句 */
+function ApprovalKeyLine({ entry }: { entry: TrustedPhoneEntry }) {
+  const t = useT()
+  const [asking, setAsking] = useState(false)
+  const forget = () => {
+    setAsking(false)
+    approvalsBridge()
+      ?.forget(entry.phoneId)
+      .then(
+        () =>
+          showToast({
+            id: `approval-forgotten:${entry.phoneId}`,
+            text: (tt) => tt('phones.approvalKey.forgotten', { name: entry.name }),
+            lifeMs: 5000,
+          }),
+        () => {},
+      )
+  }
+  return (
+    <div className="phone-key" data-approval-key={entry.source} data-conflict={entry.conflict}>
+      <div className="phone-main">
+        <span className="dim ell">
+          {t('phones.approvalKey', { fingerprint: entry.fingerprint })}
+          {' · '}
+          {t(
+            entry.source === 'pairing' ? 'phones.approvalKey.pairing' : 'phones.approvalKey.first',
+          )}
+        </span>
+        <span className="grow" />
+        {asking ? null : (
+          <button
+            type="button"
+            className="btn ghost"
+            data-act="forget-key"
+            onClick={() => setAsking(true)}
+          >
+            {t('phones.approvalKey.forget')}
+          </button>
+        )}
+      </div>
+      {entry.conflict ? (
+        <div className="devp-note err">{t('phones.approvalKey.conflict')}</div>
+      ) : null}
+      {asking ? (
+        <div className="phone-ask">
+          <span className="devp-ask">
+            {t('phones.approvalKey.forgetAsk', { name: entry.name })}
+          </span>
+          <span className="grow" />
+          <button type="button" className="btn ghost" onClick={() => setAsking(false)}>
+            {t('permission.confirm.no')}
+          </button>
+          <button type="button" className="btn danger" data-act="forget-key-yes" onClick={forget}>
+            {t('phones.approvalKey.forget')}
+          </button>
+        </div>
+      ) : null}
+    </div>
   )
 }

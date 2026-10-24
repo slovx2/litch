@@ -48,6 +48,7 @@ import { settleAnswers } from '../projection/questions.mjs'
 import { reduceSession } from '../projection/reduce.mjs'
 import { spanOp } from '../projection/span.mjs'
 import { settleSteps, todoKey } from '../projection/todo.mjs'
+import { createMockApprovals } from './mock-approvals.mjs'
 import { createMockOrganize } from './mock-arrange.mjs'
 import { createMockBackground } from './mock-background.mjs'
 import { createMockCompose } from './mock-compose.mjs'
@@ -1489,6 +1490,16 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     device: (deviceId) => app.devices.find((entry) => entry.id === deviceId),
   })
 
+  // ---------- 手机批准（mock-approvals.mts） ----------
+  const approvals = createMockApprovals({
+    clock,
+    firstSession: (deviceId) => sidebars.get(deviceId)?.sessions[0]?.id ?? null,
+    deviceName: (deviceId) => {
+      const named = app.devices.find((entry) => entry.id === deviceId)?.name
+      return typeof named === 'string' ? named : deviceId
+    },
+  })
+
   // ---------- 工作树（mock-worktrees.mts） ----------
   const worktrees = createMockWorktrees({
     clock,
@@ -2225,6 +2236,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       if (scheduled !== undefined) return scheduled
       const paired = pairing.command(name, params)
       if (paired !== undefined) return paired
+      const approved = approvals.command(name, params)
+      if (approved !== undefined) return approved
       const installing = install.command(name, params)
       if (installing !== undefined) return installing
       const branched = worktrees.command(name, params)
@@ -2813,6 +2826,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       if (topic.kind === 'tasks') return tasks.subscribe(topic.deviceId, sink)
       // 扫码绑定手机（mock-pairing.mts）
       if (topic.kind === 'pairing') return pairing.subscribe(topic.deviceId, sink)
+      // 手机批准（mock-approvals.mts）
+      if (topic.kind === 'approvals') return approvals.subscribe(topic.deviceId, sink)
       // 给设备装 harness（mock-install.mts）、litch config（mock-config.mts）
       if (topic.kind === 'install') return install.subscribe(topic.deviceId, sink)
       // 工作树（mock-worktrees.mts）

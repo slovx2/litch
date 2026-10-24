@@ -104,6 +104,7 @@ import type { ToolHub } from '../tool-hub.mjs'
 import { type CoreTrace, traceError, traceWith } from '../trace.mjs'
 import { type AccountLimits, createAccountLimits } from './account-limits.mjs'
 import { createAgentThreads } from './agents.mjs'
+import { type Approvals, createApprovals } from './approvals.mjs'
 import { collectThreads, type Listing, mergeListing } from './catalog.mjs'
 import { type CodexThreadNotesStore, createDirectInstructions } from './codex-instructions.mjs'
 import { createComposeAids } from './compose.mjs'
@@ -350,6 +351,8 @@ export interface Device {
   readonly tasks: Tasks
   /** 这台设备上的扫码绑定手机：出码、确认、已绑定的手机（pairing.mts） */
   readonly pairing: Pairing
+  /** 这台设备上的手机批准：桌面端挂登录卡片、转回手机的答复，手机取和答（approvals.mts） */
+  readonly approvals: Approvals
   /** 这台设备上给 harness 安装：版本、安装任务（install.mts） */
   readonly install: Install
   /** 这台设备上设备层建的工作树：列表、分支、删、恢复（worktrees.mts） */
@@ -507,6 +510,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   let sessionTree = false
   /** 对面支不支持扫码绑定手机（devicePairing 扩展）。断开之后留着断开前知道的 */
   let pairable = false
+  /** 对面转不转手机批准（clientApprovals 扩展）。断开之后留着断开前知道的 */
+  let approvalsOn = false
   /** 对面支不支持给 harness 安装（harnessInstall 扩展）。断开之后留着断开前知道的 */
   let installable = false
   /** 对面能不能建工作树（worktrees 扩展）。断开之后留着断开前知道的 */
@@ -1395,6 +1400,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         schedulable = info.device.extensions?.includes(EXTENSION.deviceTasks) === true
         sessionTree = info.device.extensions?.includes(EXTENSION.sessionTree) === true
         pairable = info.device.extensions?.includes(EXTENSION.devicePairing) === true
+        approvalsOn = info.device.extensions?.includes(EXTENSION.clientApprovals) === true
         installable = info.device.extensions?.includes(EXTENSION.harnessInstall) === true
         worktreesOn = info.device.extensions?.includes(EXTENSION.worktrees) === true
         // 在跑的是哪一份服务：握手时声明过才给，旧版的设备服务不报
@@ -1471,6 +1477,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     diffs.resync()
     tasks.resync()
     pairing.resync()
+    approvals.resync()
     install.resync()
     worktrees.resync()
     harnessConfig.resync()
@@ -1517,6 +1524,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       manage.offline()
       tasks.offline()
       pairing.offline()
+      approvals.offline()
       install.offline()
       worktrees.offline()
       harnessConfig.offline()
@@ -1586,6 +1594,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       if (tasks.notification(method, params)) return
       // 扫码绑定手机：配对的状态、已绑定的手机
       if (pairing.notification(method, params)) return
+      // 手机批准：卡片变了（手机）、手机答了（桌面端）
+      if (approvals.notification(method, params)) return
       // 给 harness 安装：任务的状态和日志
       if (install.notification(method, params)) return
       // 供应商、登录变了：问过的模型清单作废（Claude 的选单按能用的供应商拼，账号登没登录也算）
@@ -1742,6 +1752,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       call: () => {},
       cancel: () => {},
       answer: () => {},
+      phoneAnswer: () => {},
       turnEnded: () => {},
       notify: () => {},
       config: async () => ({ ok: false, reason: 'no desktop shell' }),
@@ -1764,7 +1775,18 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         cwd: thread?.cwd || null,
       }
     },
-    showAsk: (place: ToolAskPlace, answer) => askInSession(place, (picked) => answer(picked)),
+    showAsk(place: ToolAskPlace, answer) {
+      // 带桌面端号的登录卡片同时挂到设备上给手机看；这边答了、撤了都收掉
+      const phone = approvals.ask(place)
+      const drop = askInSession(place, (picked) => {
+        phone?.()
+        answer(picked)
+      })
+      return () => {
+        phone?.()
+        drop()
+      }
+    },
     ...(options.machine ? { machine: machineCalls(options.machine) } : {}),
     ...(options.config ? { config: options.config } : {}),
     log,
@@ -1978,8 +2000,20 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     displayName: () => (typeof name === 'string' ? name : config.host),
     online: () => online,
     supported: () => pairable,
+    approvals: () => approvalsOn,
     platform: options.pairing ?? null,
     request: (method, params, requestOptions) => link.request(method, params, requestOptions),
+    fail: (error) => fail(error),
+    log,
+  })
+
+  const approvals = createApprovals({
+    deviceId: config.id,
+    online: () => online,
+    supported: () => approvalsOn,
+    deviceName: () => (typeof name === 'string' ? name : config.host),
+    request: (method, params) => link.request(method, params),
+    ...(options.tools ? { phoneAnswer: options.tools.phoneAnswer } : {}),
     fail: (error) => fail(error),
     log,
   })
@@ -2403,6 +2437,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     diffs,
     tasks,
     pairing,
+    approvals,
     install,
     worktrees,
     harnessConfig,

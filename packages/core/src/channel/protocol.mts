@@ -28,6 +28,7 @@ import type {
   WireColor,
   WorkspaceView,
 } from '../model.mjs'
+import type { ApprovalAnswer, ApprovalsTopicView } from '../model-approvals.mjs'
 import type { ConfigTopicOp, ConfigTopicView } from '../model-config.mjs'
 import type {
   DiffBundle,
@@ -161,6 +162,11 @@ export type Topic =
    */
   | { kind: 'pairing'; deviceId: string }
   /**
+   * 一台设备上挂着的、要在手机上批准的卡片（clientApprovals 扩展）。手机的会话页开着时订阅；
+   * 设备没有这项扩展时 available 是 false，照样成立；没连上时 cards 是空的。连上、重连之后再给一份
+   */
+  | { kind: 'approvals'; deviceId: string }
+  /**
    * 一台设备上给 harness 安装的情况（harnessInstall 扩展）：各 harness 的版本、在跑和刚结束的安装任务。
    * 设备详情、新建页“没有可用的 harness”、首启引导开着时才订阅，有人订阅核心才去问版本。
    * 设备没有这项扩展时快照里 available 是 false，照样成立；没连上时给上次知道的。连上、重连之后再给一份快照
@@ -203,6 +209,7 @@ export interface TopicData {
   machine: MachineActivityView
   tasks: TasksView
   pairing: PairingTopicView
+  approvals: ApprovalsTopicView
   install: InstallTopicView
   harnessConfig: HarnessConfigTopicView
   accountLimits: AccountLimitsView
@@ -296,6 +303,9 @@ export type PairingOp =
   | { op: 'phones.set'; phones: PairPhone[]; tailscale: boolean }
   | { op: 'pair.status'; status: PairStatus }
 
+/** 挂着的批准卡片整份换：不多，变得也少 */
+export type ApprovalsOp = { op: 'approvals.set'; view: ApprovalsTopicView }
+
 /** 安装情况整份换：不大，一次变的往往是好几项（任务的日志、状态，接着版本也重新探测） */
 export type InstallOp = { op: 'install.set'; view: InstallTopicView }
 
@@ -319,6 +329,7 @@ export interface TopicOp {
   machine: MachineOp
   tasks: TasksOp
   pairing: PairingOp
+  approvals: ApprovalsOp
   install: InstallOp
   harnessConfig: HarnessConfigOp
   accountLimits: AccountLimitsOp
@@ -896,6 +907,14 @@ export interface Commands {
   'pairing.phones': { params: { deviceId: string }; result: { phones: PairPhone[] } }
   /** 撤掉一部手机的钥匙行 */
   'pairing.revoke': { params: { deviceId: string; phoneId: string }; result: Record<string, never> }
+  /**
+   * 手机答一张批准卡片（clientApprovals）：答复由移动端的外壳签好名（approvalSignedText），原样交给设备。
+   * 设备不认（卡片没了、答太多次）时以 notFound 或 rejected 结束；验签是桌面端的事，这里不知道算不算数
+   */
+  'approval.answer': {
+    params: { deviceId: string; answer: ApprovalAnswer }
+    result: Record<string, never>
+  }
   // ---------- 会话树 ----------
   // 这一组要设备服务声明了会话树（DeviceView.sessionTree），没有时以 unsupported 结束（session.agents 除外）。
   /**

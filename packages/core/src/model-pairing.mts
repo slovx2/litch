@@ -48,6 +48,8 @@ export interface PairingView {
   original: PairingAddress
   /** 主机的候选：设备在 tailnet 里的 IP、MagicDNS 全名、短名（设备报了 tailnet 才有），界面做成下拉 */
   hosts: string[]
+  /** 设备认手机的批准公钥（列了 clientApprovals）：二维码里放 a，手机登记时带上它 */
+  approvals: boolean
 }
 
 /**
