@@ -122,6 +122,11 @@ export const signInResult = {
     const [reason, next] = SIGN_IN_FILL_FAILURES[why]
     return `Litch could not sign in automatically (${why}): ${reason}. ${next}`
   },
+  /** 代填提交、落定后页面上还有密码框（多半没登上），接在 filled、filledInPlace 后面 */
+  stillSignIn: () => 'The page still shows a sign-in form, so signing in may have failed.',
+  /** 代填做不了、自检不干净关掉重开了，接在 fillFailed 后面 */
+  movedAfterFailure: (tabId: string) =>
+    `Litch closed that tab and opened the page again in a new tab ${tabId}; use the new tab.`,
   /** 定时任务的回合里卡片过期了 */
   expired: () =>
     'The sign-in request expired before anyone answered. Do not try to sign in another way.',

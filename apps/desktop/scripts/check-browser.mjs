@@ -9,6 +9,8 @@
 //                                          用户标签的自动填充和代理读不到密码（src/probe-browser-autofill.mts）：窗口显示在屏幕上，
 //                                          原生菜单换成桩；再加 --manual 弹真的菜单，等人去点（打出要点的屏幕坐标）。
 //                                          safeStorage 在钥匙串里建的“Litch Autofill Probe Safe Storage”跑完删掉
+//   node scripts/check-browser.mjs --fill   Litch 代填（request_sign_in 的方案 B）和泄露用例（src/probe-browser-fill.mts）：
+//                                          窗口显示在屏幕上，密码库是临时的、加密器是假的，不碰钥匙串
 //   node scripts/check-browser.mjs --import 从别的浏览器导入：真的界面（先构建 packages/ui）、真的导入管线，
 //                                          读取器是假的、来源是临时目录里自造的样本（LITCH_BROWSER_IMPORT_FAKE）
 import { spawn, spawnSync } from 'node:child_process'
@@ -26,6 +28,7 @@ const v0 = process.argv.includes('--v0')
 const imports = process.argv.includes('--import')
 const ui = process.argv.includes('--ui') || imports
 const autofill = process.argv.includes('--autofill')
+const fill = process.argv.includes('--fill')
 const entry = v0
   ? 'src/probe-browser-v0.mts'
   : imports
@@ -34,7 +37,9 @@ const entry = v0
       ? 'src/probe-browser-ui.mts'
       : autofill
         ? 'src/probe-browser-autofill.mts'
-        : 'src/probe-browser.mts'
+        : fill
+          ? 'src/probe-browser-fill.mts'
+          : 'src/probe-browser.mts'
 const uiRoot = fileURLToPath(new URL('../../../packages/ui/dist', import.meta.url))
 if (ui && !existsSync(join(uiRoot, 'index.html'))) {
   console.error('没有界面的构建产物，先 npm run build --prefix packages/ui')

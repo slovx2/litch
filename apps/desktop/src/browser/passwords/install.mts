@@ -3,7 +3,6 @@
 // browser/install.mts 调一次，拿回来的库交给导入管线（它的 importMany 就是 PasswordSink）。
 import { type IpcMainEvent, type IpcMainInvokeEvent, ipcMain, safeStorage } from 'electron'
 import { installAutofill } from './autofill.mjs'
-import { installSignInIpc } from './handover.mjs'
 import {
   PASSWORDS_ALLOW_SITE,
   PASSWORDS_ANSWER,
@@ -16,6 +15,7 @@ import {
   PASSWORDS_REMOVE_ALL,
 } from './ipc.mjs'
 import { createSavePrompts, type PromptAnswer } from './prompts.mjs'
+import { installSignInIpc } from './sign-in-ipc.mjs'
 import type { SignIns } from './signin.mjs'
 import {
   createPasswordStore,

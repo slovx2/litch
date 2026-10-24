@@ -9,7 +9,7 @@
 import { type BrowserWindow, session } from 'electron'
 import { createTab, HIDDEN_BOUNDS, type HostTab, PARTITION } from './electron-tab.mjs'
 import type { BrowserHost, BrowserPage, OpenOptions, TabInfo, TabKind, TabOwner } from './model.mjs'
-import { handoverOf, isHandedOver, notePopup } from './passwords/tabs.mjs'
+import { blockGatedPopup, handoverOf, isHandedOver, notePopup } from './passwords/tabs.mjs'
 
 /** 界面报来的矩形（界面页面里的 CSS 像素） */
 export interface Rect {
@@ -112,6 +112,8 @@ export function createElectronHost(): ElectronBrowserHost {
           )
           return
         }
+        // Litch 正在代填（观察闸开着）：不开，代填完回 popup_needed，交给人登录
+        if (blockGatedPopup(from.view.webContents.id)) return
         // 交给人登录的标签开的弹窗（单点登录常用）：开成用户的标签，代理碰不到，交接结束时一并处理
         // 弹窗里再开的弹窗也记进同一次交接
         const handover = handoverOf(from.view.webContents.id, from.id)
