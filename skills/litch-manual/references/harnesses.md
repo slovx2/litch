@@ -64,7 +64,9 @@ harness's own config files on that device (shared with its CLI there):
   Litch's own switch, kept on the device, not in Codex's config file): after the first turn of a
   session started in Litch, Litch names it with a small model of the luna family, only if the account's
   model list has one, and never over a name the user set. Turning it off affects sessions started
-  afterwards.
+  afterwards. DSH's Config tab lists its built-in plugins; the ones DSH cannot run without are locked
+  on (turning them off broke turns, restarts or this page), and one that is already off can be turned
+  back on (it says so). Turning off any other removes what it provides.
 - **Accounts**: sign in (browser, device code, or pasting a code back), set an API key, add custom
   providers, switch the active provider. Codex can stay signed in to ChatGPT while using an API-key
   provider. OAuth credentials stay in the harness's own store; keys the harness only reads from
@@ -85,9 +87,16 @@ harness's own config files on that device (shared with its CLI there):
   picker. Each entry either uses a built-in model as is, or is based on one with a new model name,
   display name or context window (everything else is copied from the base). Models not in the list
   disappear from the picker; "restore" goes back to the built-in catalog. Takes effect after a restart.
+  When the list was first taken over from the user's own `model_catalog_json` file, a model there with
+  the same name as a built-in one keeps the user's own fields (the user's win where they differ); only
+  the fields the user did not set follow Codex's built-in catalog.
 - **MCP**: the harness's user-level MCP servers.
 - **Instructions**: the user-level `AGENTS.md` (Claude Code: `CLAUDE.md`). **Unified mode** writes one
   copy and turns the other harnesses' files into symlinks to it (old files are backed up beside them).
+
+Unsaved changes on the Config, Models or Instructions tab are not dropped silently: switching tab,
+going back, opening another page or device, or closing the window (desktop) first asks Save, Discard or
+Cancel (on the phone: switching tab and going back).
 
 Guide the user there; signing in needs the user in a browser. If the user hands you an API key, you may
 still store it in that harness's environment on that device:

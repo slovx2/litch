@@ -24,6 +24,7 @@ import { useT } from '../../../ui/i18n'
 import { Button, Chip, Row, SectionLabel } from '../../../ui/kit/controls'
 import { Confirm, Sheet } from '../../../ui/kit/overlays'
 import { useTheme } from '../../../ui/theme'
+import { useLeaveGuard } from './leave'
 import { ModelForm } from './ModelForm'
 import { Note, type Said, SaidNote, SlotState } from './parts'
 
@@ -84,6 +85,13 @@ export function ModelsTab({
   useEffect(() => {
     if (!editingNow) setBase(slot.revision)
   }, [editingNow, slot.revision])
+  // 有没保存的清单：离开前问（“保存”走下面的 write）
+  const leave = useLeaveGuard(
+    draft !== null &&
+      !!data &&
+      landing === null &&
+      (!data.custom || !sameEntries(draft, data.entries)),
+  )
 
   if (!data) {
     return (
@@ -112,7 +120,7 @@ export function ModelsTab({
     setDraft(next)
   }
 
-  const write = async (next: HcModelEntry[] | null) => {
+  const write = async (next: HcModelEntry[] | null): Promise<boolean> => {
     setSaving(true)
     setFailure(null)
     setSaid(null)
@@ -136,6 +144,7 @@ export function ModelsTab({
               }),
         bad: false,
       })
+      return true
     } catch (error) {
       const shape = error as ChannelErrorShape
       if (next === null) {
@@ -147,14 +156,17 @@ export function ModelsTab({
               : t('hc.failed', { reason: whyNot(shape, t) }),
           bad: true,
         })
-        return
+        return false
       }
       if (shape?.code === 'conflict') setStaleVersion(data.version)
       setFailure(shape)
+      return false
     } finally {
       setSaving(false)
     }
   }
+  leave.current = async () =>
+    !busy && !rereading && entries.length > 0 && dirty ? write(entries) : false
 
   const taken = (except: number | null) =>
     new Set(entries.flatMap((entry, at) => (at === except ? [] : [entry.id])))

@@ -6978,13 +6978,16 @@ export class CodexClaudeAppServer {
     const catalog = allSelectableModelOptions()
     const listed = new Set(catalog.map((option) => option.id.toLowerCase()))
     const extras: string[] = []
-    // 以前的会话记的是不带供应商的型号：目录里已有它带前缀的那一行时，补的这一行藏起来（会话报的型号仍找得到）
-    const duplicates = new Set<string>()
+    // 以前的会话记的是不带供应商的型号：目录里已有它带前缀的那一行时，补的这一行藏起来（会话报的型号仍找得到）。
+    // 供应商用不了（删掉了、没填密钥）的那几行也藏起来：客户端新建页会照它记着的上一次选择去对清单，
+    // 对得上就照用，新会话第一轮就报错
+    const hidden = new Set<string>()
+    const usable = usableProviders()
     for (const id of [defaultModel, ...this.store.threadModels()]) {
       if (!id || isCodexOpenAiModel(id) || listed.has(id.toLowerCase())) continue
       listed.add(id.toLowerCase())
       extras.push(id)
-      if (catalogModelId(id) !== id) duplicates.add(id)
+      if (catalogModelId(id) !== id || !usable.includes(splitModelRef(id).provider)) hidden.add(id)
     }
     const options = [...catalog, ...extras.map((id) => extraModelOption(id, id === defaultModel))]
     const hasConfiguredDefault = options.some((option) => option.id === defaultModel)
@@ -7008,7 +7011,7 @@ export class CodexClaudeAppServer {
       displayName: option.displayName,
       description: option.description,
       modelSpecialty: null,
-      hidden: duplicates.has(option.id),
+      hidden: hidden.has(option.id),
       supportedReasoningEfforts: reasoningEffortsFor(option.efforts),
       defaultReasoningEffort: this.configReasoningEffort,
       inputModalities: ['text', 'image'],

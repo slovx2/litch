@@ -28,6 +28,7 @@ import { Button, Chip, SectionLabel } from '../../../ui/kit/controls'
 import { Confirm } from '../../../ui/kit/overlays'
 import { useTheme } from '../../../ui/theme'
 import { HcControl, isInline } from './HcControl'
+import { useLeaveGuard } from './leave'
 import { groupsOf, valueText } from './logic'
 import { Files, Note, type Said, SaidNote, SlotState } from './parts'
 
@@ -84,6 +85,8 @@ export function ConfigTab({
     if (dirty.length === 0) setBase(slot.revision)
   }, [dirty.length, slot.revision])
   const moved = dirty.length > 0 && slot.revision > base
+  // 有没保存的改动：离开前问（“保存”走下面的 save）
+  const leave = useLeaveGuard(dirty.length > 0 && landing === null)
 
   if (!data) {
     return (
@@ -122,7 +125,7 @@ export function ConfigTab({
     const edits = Object.entries(parsed).flatMap(([key, one]) =>
       one.ok ? [{ key, value: one.value }] : [],
     )
-    if (wrong || rereading || edits.length === 0) return
+    if (busy || wrong || rereading || edits.length === 0) return false
     setSaving(true)
     setFailure(null)
     setSaid(null)
@@ -139,15 +142,18 @@ export function ConfigTab({
         text: t(result.restartRequired ? 'hc.saved.restart' : 'hc.saved', { count: edits.length }),
         bad: false,
       })
+      return true
     } catch (error) {
       const shape = error as ChannelErrorShape
       // 版本冲突：核心在重读这一块，改动留着，看着最新的再保存
       if (shape?.code === 'conflict') setStaleVersion(data.version)
       setFailure({ key: shape?.code === 'conflict' ? null : (shape?.key ?? null), error: shape })
+      return false
     } finally {
       setSaving(false)
     }
   }
+  leave.current = save
 
   const runAction = async (action: HcAction) => {
     setSaid(null)

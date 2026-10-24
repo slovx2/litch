@@ -9,6 +9,7 @@ import { useT } from '../../app/appearance.ts'
 import { Confirm } from '../../app/Confirm.tsx'
 import { whyNot } from '../../app/errors.ts'
 import { Down, Up } from '../../app/icons.tsx'
+import { useLeaveGuard } from '../../app/leave-guard.tsx'
 import { useServices } from '../../app/services.tsx'
 import { showToast } from '../../app/toasts.tsx'
 import { effectKey } from './logic.ts'
@@ -59,6 +60,13 @@ export function ModelsTab({ device, harnessId, name, slot }: ModelsTabProps) {
   useEffect(() => {
     if (!editingNow) setBase(slot.revision)
   }, [editingNow, slot.revision])
+  // 有没保存的清单：离开前问（“保存”走下面的 write）
+  const leave = useLeaveGuard(
+    draft !== null &&
+      !!data &&
+      landing === null &&
+      (!data.custom || !sameEntries(draft, data.entries)),
+  )
 
   if (!data) {
     return (
@@ -89,7 +97,7 @@ export function ModelsTab({ device, harnessId, name, slot }: ModelsTabProps) {
     setDraft(next)
   }
 
-  const write = async (next: HcModelEntry[] | null) => {
+  const write = async (next: HcModelEntry[] | null): Promise<boolean> => {
     setSaving(true)
     setFailure(null)
     setStaleVersion(null)
@@ -113,6 +121,7 @@ export function ModelsTab({ device, harnessId, name, slot }: ModelsTabProps) {
               }),
         lifeMs: 4000,
       })
+      return true
     } catch (error) {
       const shape = error as ChannelErrorShape
       if (next === null) {
@@ -126,14 +135,17 @@ export function ModelsTab({ device, harnessId, name, slot }: ModelsTabProps) {
               : say('hc.failed', { reason: whyNot(shape, say) }),
           lifeMs: 9000,
         })
-        return
+        return false
       }
       if (shape?.code === 'conflict') setStaleVersion(data.version)
       setFailure(shape)
+      return false
     } finally {
       setSaving(false)
     }
   }
+  leave.current = async () =>
+    !busy && !rereading && entries.length > 0 && dirty ? write(entries) : false
   const restore = () => {
     setAsking(false)
     void write(null)

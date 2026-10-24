@@ -12,6 +12,8 @@ import {
   COMPUTER_USE_RESTART,
   COMPUTER_USE_STATUS,
   CORE_PORT,
+  LEAVE_ASK,
+  LEAVE_GO,
   LICENSE_TEXT,
   MENU,
   NOTIFY,
@@ -22,6 +24,7 @@ import {
   REQUEST_CORE_PORT,
   SET_LANGUAGE,
   SET_LOOK,
+  UNSAVED,
   UPDATE_CHECK,
   UPDATE_GET,
   UPDATE_INSTALL,
@@ -81,6 +84,16 @@ contextBridge.exposeInMainWorld('litchShell', {
       ipcRenderer.removeListener(NOTIFY_CLICK, listener)
     }
   },
+  // 有没保存的改动：有的话关窗口、退出之前主进程先拦下来请界面问，问完了可以走再告诉它（leave-guard.mts）
+  setUnsaved: (value: boolean) => ipcRenderer.send(UNSAVED, value === true),
+  onLeaveAsk(handler: () => void) {
+    const listener = () => handler()
+    ipcRenderer.on(LEAVE_ASK, listener)
+    return () => {
+      ipcRenderer.removeListener(LEAVE_ASK, listener)
+    }
+  },
+  leaveGo: () => ipcRenderer.send(LEAVE_GO),
 })
 
 // 内置浏览器：界面报矩形、开关标签、导航，设置页取“一直允许”的网站、清除浏览数据（browser/bridge.mts）

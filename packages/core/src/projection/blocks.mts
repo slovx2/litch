@@ -7,6 +7,7 @@
 // 收尾（wrap_up）带的卡片和问题等回合结束才进收尾区：规矩是先收尾、再写最终回答，收到就画的话卡片比回答先出来，
 // 没头没尾（照 Claude 桌面端：下一步框在回合结束前藏着）。回合中途 start 提的提案照旧收到就进，要趁回合在跑点开始。
 
+import { CLIENT_TOOL_NAMESPACE } from '../../../protocol/src/client-tools.mjs'
 import type { ItemView } from '../model.mjs'
 import type { AgentThreadView } from '../model-tree.mjs'
 import type { Text } from '../phrase.mjs'
@@ -326,6 +327,8 @@ export function stepKindOf(item: ItemView): StepKind | null {
     case 'toolCall':
       if (item.wrapUp) return item.wrapUp.suggestions.length > 0 ? 'suggest' : 'ask'
       if (item.spawned?.via === 'start') return 'suggest'
+      // 会话工具的 read、list 读的是会话，不是文件、目录
+      if (item.source === CLIENT_TOOL_NAMESPACE.sessions) return 'tool'
       return toolKind(item.tool)
     case 'webSearch':
       return 'web'

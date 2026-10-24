@@ -242,4 +242,10 @@ export const enHconfig: Record<keyof typeof zhHconfig, Entry> = {
   'hc.models.bad.id': 'Enter a model name',
   'hc.models.bad.taken': '{id} is already in the list',
   'hc.models.bad.window': 'Enter a positive whole number, or a short form like 200K or 1M',
+  // 离开前问（app/leave-guard.tsx）
+  'leave.title': 'You have unsaved changes',
+  'leave.note': 'Save them before leaving? If you discard them, they are lost.',
+  'leave.save': 'Save',
+  'leave.discard': 'Discard',
+  'leave.cancel': 'Cancel',
 }

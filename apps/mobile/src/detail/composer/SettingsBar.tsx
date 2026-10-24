@@ -192,7 +192,7 @@ export function SettingsBar({
         {options.models.length > 0 ? (
           <Chip
             testID="settings:model"
-            label={`${model?.title ?? settings.model ?? t('composer.model')} ▾`}
+            label={`${model?.title ?? (settings.model && options.hiddenTitles?.[settings.model]) ?? settings.model ?? t('composer.model')} ▾`}
             onPress={() => setOpen('model')}
           />
         ) : null}

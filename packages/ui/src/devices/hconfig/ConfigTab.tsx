@@ -15,6 +15,7 @@ import { useEffect, useState } from 'react'
 import { useT } from '../../app/appearance.ts'
 import { Confirm } from '../../app/Confirm.tsx'
 import { whyNot } from '../../app/errors.ts'
+import { useLeaveGuard } from '../../app/leave-guard.tsx'
 import { useServices } from '../../app/services.tsx'
 import { showToast } from '../../app/toasts.tsx'
 import { HcControl, isWide, useHcValueText } from './HcControl.tsx'
@@ -66,6 +67,8 @@ export function ConfigTab({ device, harnessId, slot }: ConfigTabProps) {
     if (dirty.length === 0) setBase(slot.revision)
   }, [dirty.length, slot.revision])
   const moved = dirty.length > 0 && slot.revision > base
+  // 有没保存的改动：离开前问（“保存”走下面的 save）
+  const leave = useLeaveGuard(dirty.length > 0 && landing === null)
 
   const reload = () => {
     channel
@@ -97,7 +100,7 @@ export function ConfigTab({ device, harnessId, slot }: ConfigTabProps) {
     const edits = Object.entries(parsed).flatMap(([key, one]) =>
       one.ok ? [{ key, value: one.value }] : [],
     )
-    if (wrong || rereading || edits.length === 0) return
+    if (busy || wrong || rereading || edits.length === 0) return false
     setSaving(true)
     setFailure(null)
     setStaleVersion(null)
@@ -115,15 +118,18 @@ export function ConfigTab({ device, harnessId, slot }: ConfigTabProps) {
           say(result.restartRequired ? 'hc.saved.restart' : 'hc.saved', { count: edits.length }),
         lifeMs: 4000,
       })
+      return true
     } catch (error) {
       const shape = error as ChannelErrorShape
       // 版本冲突：核心在重读这一块，改动留着，看着最新的再保存
       if (shape?.code === 'conflict') setStaleVersion(data.version)
       setFailure({ key: shape?.code === 'conflict' ? null : (shape?.key ?? null), error: shape })
+      return false
     } finally {
       setSaving(false)
     }
   }
+  leave.current = save
 
   const runAction = async (action: HcAction) => {
     setAsking(null)

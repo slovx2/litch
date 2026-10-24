@@ -3,12 +3,14 @@
 // 配置里说有模型清单（modelCatalog）的 harness 多一个“模型”标签。
 // 内容全按对面的声明画，界面不认识哪一项是干什么的。改过要重启才生效的，顶上一直提示，可以就地重启。
 // 开着这一页才订阅（harnessConfig 主题），核心这时才去设备上读。
+// 配置、模型、指令文件三个标签有没保存的改动时，切标签、回设备详情、去别的页之前先问（app/leave-guard.tsx）。
 import type { DeviceView, HarnessConfigTopicView } from '@litch/core'
 import { useEffect, useState } from 'react'
 import { useT } from '../../app/appearance.ts'
 import { Confirm } from '../../app/Confirm.tsx'
 import { whyNot } from '../../app/errors.ts'
 import { Back, Close } from '../../app/icons.tsx'
+import { leaveThen } from '../../app/leave-guard.tsx'
 import { useServices } from '../../app/services.tsx'
 import { showToast } from '../../app/toasts.tsx'
 import { AccountsTab } from './AccountsTab.tsx'
@@ -66,7 +68,7 @@ export function HarnessSettingsPage({ device, harnessId, onBack, onClose }: Page
       if (event.key !== 'Escape' || event.defaultPrevented) return
       if (document.querySelector('dialog[open]')) return
       event.preventDefault()
-      onBack()
+      leaveThen(onBack)
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
@@ -107,7 +109,7 @@ export function HarnessSettingsPage({ device, harnessId, onBack, onClose }: Page
           data-act="hc-back"
           title={t('hc.back')}
           aria-label={t('hc.back')}
-          onClick={onBack}
+          onClick={() => leaveThen(onBack)}
         >
           <Back />
         </button>
@@ -146,7 +148,9 @@ export function HarnessSettingsPage({ device, harnessId, onBack, onClose }: Page
                       type="button"
                       data-tab={one}
                       aria-pressed={shown === one}
-                      onClick={() => setTab(one)}
+                      onClick={() => {
+                        if (one !== shown) leaveThen(() => setTab(one))
+                      }}
                     >
                       {t(`hc.tab.${one}`)}
                     </button>

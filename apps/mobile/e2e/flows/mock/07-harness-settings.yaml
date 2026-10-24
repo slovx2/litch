@@ -1,4 +1,5 @@
 # 模拟核心：harness 详情设置。设备详情里 Claude Code 的“详情设置” → 配置：改强度、保存 →
+# 离开前问：再改不存，切标签时问、取消留在原地，返回时问、放弃回到设备详情 →
 # 账号：Anthropic 账号走 Console 粘贴授权码登录 → API key 供应商填密钥 → 网关从 provider 拉取型号、勾选写回、保存 →
 # MCP、指令文件只能看（要重启的提示由 09-model-list 在 Codex 上走）
 appId: dev.litch.app
@@ -38,6 +39,44 @@ tags: [mock]
     visible:
       id: hc:config:said
     timeout: 10000
+# 离开前问：再改一次不存，切到账号时问；取消留在原地，改动还在
+- extendedWaitUntil:
+    notVisible:
+      id: hc:save
+    timeout: 10000
+- tapOn:
+    id: hc:key:effortLevel:low
+- tapOn:
+    id: hc:tab:accounts:pick
+- extendedWaitUntil:
+    visible:
+      id: hc:leave
+    timeout: 5000
+- tapOn:
+    id: hc:leave:cancel
+- assertVisible:
+    id: hc:save
+# 返回时也问；放弃就回到设备详情，再进来改动没了
+- tapOn:
+    id: header:back
+- extendedWaitUntil:
+    visible:
+      id: hc:leave
+    timeout: 5000
+- tapOn:
+    id: hc:leave:discard
+- scrollUntilVisible:
+    element:
+      id: harness:claude:settings
+    timeout: 10000
+- tapOn:
+    id: harness:claude:settings
+- extendedWaitUntil:
+    visible:
+      id: hc:tab:config
+    timeout: 15000
+- assertNotVisible:
+    id: hc:save
 # 账号：Anthropic 账号用 Console 粘贴授权码登录
 - tapOn:
     id: hc:tab:accounts:pick
