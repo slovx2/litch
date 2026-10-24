@@ -114,7 +114,9 @@ function fakeHandover() {
       frozen.add(page.id)
       try {
         return await Promise.race([
-          begun.answered,
+          begun.answered.then(
+            (resolved): SignInOutcome => (resolved.kind === 'done' ? 'done' : 'cancel'),
+          ),
           new Promise<SignInOutcome>((resolve) =>
             signal.addEventListener('abort', () => resolve('aborted'), { once: true }),
           ),
@@ -322,6 +324,12 @@ test('登记：同一个标签一次一张在等；来源跟着导航换；答�
     site: 's',
     reason: 'r',
     state: 'waiting',
+    stage: 'choose',
+    accounts: [],
+    fillBlocked: null,
+    taskId: null,
+    expiresAt: null,
+    nonce: signIns.list()[0]?.nonce,
     at: 5,
   })
   signIns.setOrigin(one.id, 'https://sso.example')

@@ -88,7 +88,8 @@ export function browserBridge() {
     // 代理请人登录（request_sign_in）：列、答“完成，交还”或“取消”
     signIn: {
       list: () => ipcRenderer.invoke(SIGNIN_LIST),
-      answer: (id: string, answer: string) => ipcRenderer.invoke(SIGNIN_ANSWER, { id, answer }),
+      // answer：done、cancel、dismiss、self，或 { fill: ref, remember }（用卡片上的账号代填）
+      answer: (id: string, answer: unknown) => ipcRenderer.invoke(SIGNIN_ANSWER, { id, answer }),
       onChanged: (handler: (requests: unknown) => void) => listen(SIGNIN_CHANGED, handler),
     },
     // 从别的浏览器导入（browser-import/bridge.mts）

@@ -34,6 +34,22 @@ export interface ClientToolInvocation extends ClientToolCallParams {
   harness: string | null
   /** 会话的工作目录（设备上的路径），没有是 null */
   cwd: string | null
+  /**
+   * 这一回合是哪个定时任务跑的（核心按 deviceTasks 的运行记录对 threadId、turnId）；不是是 null，
+   * 老的核心不给。内置浏览器的登录卡片按它出“以后直接用这个账号”的勾选、设过期
+   */
+  task?: { id: string; name: string } | null
+}
+
+/** 登录卡片上的一个账号（和 browser/passwords/signin.mts 的 SignInAccount 同形） */
+export interface ClientToolSignInAccount {
+  /** 这张卡片里随机的不透明编号，答复按它指 */
+  ref: string
+  /** 完整用户名：桌面端显示；给手机的那份核心只给 masked */
+  username: string
+  masked: string
+  /** 毫秒，没填过是 null */
+  lastUsed: number | null
 }
 
 /** 执行器请用户点头时出的卡片。文字由界面按语言拼，这里只给结构 */
@@ -52,6 +68,30 @@ export type ClientToolAsk =
       /** 能不能选“始终允许”（远程设备的会话不能） */
       allowAlways: boolean
     }
+  | {
+      /**
+       * 内置浏览器请人登录（request_sign_in）：对话里和浏览器面板上同一张卡片（字段同 SignInRequest）。
+       * 只在等人选的时候挂着；答复经浏览器桥 signIn.answer(id, …) 交给主进程（面板那张同一条路），
+       * 主进程的 SignIns 是准，任何一处答了两处一起收。核心那条答复路回来的 decline 当拒绝
+       */
+      kind: 'signIn'
+      /** 登录卡片的编号（SignInRequest.id） */
+      id: string
+      /** 主进程取到的真实来源 */
+      origin: string
+      /** 代理说的站名、原因，只作附注 */
+      site: string
+      reason: string
+      accounts: ClientToolSignInAccount[]
+      /** 预检不过的原因（SignInBlock），null 是能代填 */
+      fillBlocked: string | null
+      /** 定时任务的回合才有 */
+      taskId: string | null
+      /** 毫秒，只有定时任务的回合有 */
+      expiresAt: number | null
+      /** 桌面端出的随机数：转给手机，手机的答复要签上它 */
+      nonce: string
+    }
 
 /** 卡片的答复。session：本会话都允许；always：一直允许（记下来）；decline：拒绝；null：没答就被取消了 */
 export type ClientToolAnswer = 'once' | 'session' | 'always' | 'decline'
@@ -67,6 +107,11 @@ export interface ClientToolContext {
    * 回“不等了”的函数，表从头算；调用结束时自动不等
    */
   hold?(): () => void
+  /**
+   * 在对话里挂一张卡片但不等它（答复走别的路，比如登录卡片经浏览器桥）。回“撤掉”的函数；
+   * 核心那条路回来的答复交给 onAnswer。调用结束时自动撤掉
+   */
+  show?(ask: ClientToolAsk, onAnswer?: (answer: ClientToolAnswer | null) => void): () => void
 }
 
 /** 一个命名空间的执行器，由主进程登记 */
@@ -80,6 +125,8 @@ export interface ClientToolExecutor {
   ): Promise<ClientToolCallResponse>
   /** 回合结束（完成、打断、出错都算）时调用：收拾这个回合留下的临时东西 */
   turnEnded?(turn: { deviceId: string; threadId: string; turnId: string }): void
+  /** 核心转来的一条手机答复（clientApprovals 的 litch/approval/answered，原样），由执行器自己验 */
+  phoneAnswer?(answer: unknown): void
 }
 
 /**
@@ -109,6 +156,8 @@ export type ClientToolToMain =
       turnId: string
     }
   | { type: typeof CLIENT_TOOL; op: 'notify'; notice: MachineNotice }
+  /** 手机经会话所在设备答了一张审批卡（litch/approval/answered 的内容原样），主进程验过签名才认 */
+  | { type: typeof CLIENT_TOOL; op: 'phoneAnswer'; answer: unknown }
   /** litch config 里属于主进程的一项（内置浏览器的网站、Computer Use），做完回 configResult（config-main.mts） */
   | { type: typeof CLIENT_TOOL; op: 'config'; id: string; request: ConfigMainRequest }
 

@@ -28,7 +28,7 @@ import {
   SIGNIN_CHANGED,
   SIGNIN_LIST,
 } from './ipc.mjs'
-import type { SignIns } from './signin.mjs'
+import type { SignInAnswer, SignIns } from './signin.mjs'
 import { isHandoverPopup, setHandedOver, takePopups } from './tabs.mjs'
 
 /** 重新打开最多等多久 */
@@ -282,7 +282,12 @@ export function createHandover(options: { host: BrowserHost; signIns: SignIns })
       contents.once('destroyed', onGone)
       let outcome: SignInOutcome = 'aborted'
       try {
-        outcome = await Promise.race([begun.answered, stopped])
+        outcome = await Promise.race([
+          begun.answered.then(
+            (resolved): SignInOutcome => (resolved.kind === 'done' ? 'done' : 'cancel'),
+          ),
+          stopped,
+        ])
       } finally {
         signal.removeEventListener('abort', onAbort)
         if (!contents.isDestroyed()) {
@@ -329,7 +334,18 @@ export function installSignInIpc(options: {
     if (!options.fromUi(event)) return false
     const { id, answer } = (payload ?? {}) as { id?: unknown; answer?: unknown }
     if (typeof id !== 'string') return false
-    if (answer !== 'done' && answer !== 'cancel' && answer !== 'dismiss') return false
-    return signIns.answer(id, answer)
+    const parsed = parseSignInAnswer(answer)
+    return parsed ? signIns.answer(id, parsed) : false
   })
+}
+
+/** 界面送来的回答：done、cancel、dismiss、self，或 { fill: ref, remember } */
+export function parseSignInAnswer(answer: unknown): SignInAnswer | null {
+  if (answer === 'done' || answer === 'cancel' || answer === 'dismiss' || answer === 'self') {
+    return answer
+  }
+  if (!answer || typeof answer !== 'object') return null
+  const { fill, remember } = answer as { fill?: unknown; remember?: unknown }
+  if (typeof fill !== 'string' || fill === '') return null
+  return { fill, remember: remember === true }
 }
