@@ -20,6 +20,7 @@ import {
   type ReactNode,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -59,6 +60,7 @@ import {
   startDrag,
 } from './drop.ts'
 import { dropNativeChildren, keepSessions, keptAnyway, workspaceShown } from './filter.ts'
+import { foldsKeep, foldsSettled } from './folds.ts'
 import { HarnessFilter } from './HarnessFilter.tsx'
 import { DeviceInfo, SessionInfo, WorkspaceInfo } from './InfoCards.tsx'
 import { type RowAction, RowMenu, type RowMenuHandle } from './RowMenu.tsx'
@@ -67,9 +69,12 @@ import { SidebarFoot } from './SidebarFoot.tsx'
 import { SidebarFrame } from './SidebarFrame.tsx'
 import { SidebarMore } from './SidebarMore.tsx'
 import {
+  pruneSidebarFolds,
   setSidebarBands,
   setSidebarHarnesses,
+  toggleSidebarFold,
   useSidebarBands,
+  useSidebarFolds,
   useSidebarHarnesses,
   useSidebarNativeChildren,
   useSidebarShowActive,
@@ -701,6 +706,7 @@ const FOCUS_ROWS = 50
 const MORE_ROWS = 10
 const NO_IDS: readonly string[] = []
 const NO_CHILDREN: SessionChildren = {}
+const NO_GROUPS: SessionGroups = {}
 /** 子会话每一层往里缩多少像素（和 tree.css 的 .tree-kids 一致） */
 const INDENT = 14
 
@@ -746,7 +752,9 @@ function DeviceGroup(props: GroupProps) {
   const { channel } = useServices()
   const device = useKey<DeviceView>(keys.device(deviceId))
   const workspaces = useKey<WorkspaceView[]>(keys.workspaces(deviceId)) ?? NO_WORKSPACES
-  const groups = useKey<SessionGroups>(keys.groups(deviceId)) ?? {}
+  /** 没有是这台设备的会话目录还没到 */
+  const listed = useKey<SessionGroups>(keys.groups(deviceId))
+  const groups = listed ?? NO_GROUPS
   const sections = useKey<SectionView[]>(keys.sections(deviceId)) ?? NO_SECTIONS
   /** 开着的工作区对话框：添加（workspace 为 null），或者改某一个 */
   const [dialog, setDialog] = useState<{ workspace: WorkspaceView | null } | null>(null)
@@ -755,12 +763,15 @@ function DeviceGroup(props: GroupProps) {
     section: SectionView | null
     then?: (sectionId: string) => void
   } | null>(null)
-  /** 收起了的：设备（''）、工作区、置顶、组，键和 SessionGroups 的一样 */
-  const [closed, setClosed] = useState<ReadonlySet<string>>(new Set())
+  /**
+   * 收起了的：设备（''）、工作区、置顶、组，键和 SessionGroups 的一样（closed）；收起了子会话的父会话（folded）。
+   * 都记在这台电脑上（state.ts），重启之后照上次的样子
+   */
+  const folds = useSidebarFolds(deviceId)
+  const closed = useMemo(() => new Set(folds.closed), [folds.closed])
+  const folded = useMemo(() => new Set(folds.folded), [folds.folded])
   /** 各组点“展示更多”多露出来的个数。没点过的不在里面 */
   const [extra, setExtra] = useState<Readonly<Record<string, number>>>({})
-  /** 收起了子会话的父会话 */
-  const [folded, setFolded] = useState<ReadonlySet<string>>(new Set())
   /** 拖着东西停在哪、放下去会怎样（能放的时候才记） */
   const [over, setOver] = useState<Over | null>(null)
   /** 开着“在手机上使用…”的出码对话框 */
@@ -795,6 +806,20 @@ function DeviceGroup(props: GroupProps) {
   useEffect(() => {
     if (gone) onFocus(null)
   }, [gone, onFocus])
+  // 会话目录和对面对过账了：删掉、归档了的会话，删掉的工作区和组，它们收起的记录清掉
+  const settled = foldsSettled(device)
+  useEffect(() => {
+    if (!settled || !listed) return
+    const kept = [
+      '',
+      PINNED,
+      PROJECTS,
+      LOOSE,
+      ...workspaces.map((entry) => entry.id),
+      ...sections.map((entry) => groupOfSection(entry.id)),
+    ]
+    pruneSidebarFolds(deviceId, foldsKeep(listed, kept))
+  }, [settled, listed, workspaces, sections, deviceId])
   // 拖完了：落点的高亮去掉
   useEffect(() => {
     if (!dragging) setOver(null)
@@ -842,12 +867,7 @@ function DeviceGroup(props: GroupProps) {
   )
   const kidsOf = (id: string) =>
     keepSessions(dropNativeChildren(children[id], hidden, always), filter, harnessOf, unfiltered)
-  const fold = (id: string) =>
-    setFolded((prev) => {
-      const next = new Set(prev)
-      if (!next.delete(id)) next.add(id)
-      return next
-    })
+  const fold = (id: string) => toggleSidebarFold(deviceId, 'folded', id)
   /** 一行会话，和挂在它下面的子会话（一层套一层）。收起了的父会话下面只露出非露出来不可的 */
   const tree = (sessionId: string, depth: number): ReactNode => {
     // 父子关系由设备进程保证不成环；万一对面给错了，也不至于一直套下去
@@ -880,12 +900,7 @@ function DeviceGroup(props: GroupProps) {
     )
   }
 
-  const toggle = (id: string) =>
-    setClosed((prev) => {
-      const next = new Set(prev)
-      if (!next.delete(id)) next.add(id)
-      return next
-    })
+  const toggle = (id: string) => toggleSidebarFold(deviceId, 'closed', id)
   /**
    * 一组里的会话。多的时候只露出最近的几个，其余的收在“展示更多”后面，
    * 点一次多露出一批。折在后面的也有非露出来不可的（见上面的 always）。

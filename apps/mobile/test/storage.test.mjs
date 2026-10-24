@@ -116,3 +116,22 @@ test('测试链接写的远程开发参数：命令名要合规，环境变量�
   dev.setRemoteDev(new URLSearchParams('reset=1'))
   assert.deepEqual(dev.remoteDev(), {})
 })
+
+test('会话列表收起了的组和父会话：按设备记在文件里，重开应用还在；会话没了就清掉', async () => {
+  const folds = await fresh('../src/screens/sessions/folds.ts')
+  folds.toggleFolded('dev', 'folded', 'p1')
+  folds.toggleFolded('dev', 'closed', 'ws1')
+  const saved = () => JSON.parse(files.get('doc:/session-folds.json'))
+  assert.deepEqual(saved(), { dev: { closed: ['ws1'], folded: ['p1'] } })
+
+  // 重开：照文件里的接着记；再点一次是展开
+  const reopened = await fresh('../src/screens/sessions/folds.ts')
+  reopened.toggleFolded('dev', 'folded', 'p2')
+  reopened.toggleFolded('dev', 'closed', 'ws1')
+  assert.deepEqual(saved(), { dev: { closed: [], folded: ['p1', 'p2'] } })
+  // p1 删掉或归档了：清掉；全清空了这台设备不留
+  reopened.pruneFolded('dev', { closed: new Set(), folded: new Set(['p2']) })
+  assert.deepEqual(saved(), { dev: { closed: [], folded: ['p2'] } })
+  reopened.pruneFolded('dev', { closed: new Set(), folded: new Set() })
+  assert.deepEqual(saved(), {})
+})

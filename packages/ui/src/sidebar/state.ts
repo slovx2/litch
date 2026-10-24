@@ -1,7 +1,18 @@
-// 侧栏自己的状态：开没开、多宽、是不是只看某几个 harness 的会话、显不显示别的应用派出来的子会话、各台设备上组的先后。
+// 侧栏自己的状态：开没开、多宽、是不是只看某几个 harness 的会话、显不显示别的应用派出来的子会话、各台设备上组的先后、
+// 各台设备上收起了哪些组和父会话。
 // 记在这台电脑的界面里（litch.sidebar），和外观、终端面板、侧面板一样不经核心。
 // 这个文件不碰页面上的元素，只管数和存取：窗口窄的时候侧栏最宽能画多宽也在这里，好单独测。
 import { useSyncExternalStore } from 'react'
+import {
+  type DeviceFolds,
+  type FoldKind,
+  type Folds,
+  NO_DEVICE_FOLDS,
+  NO_FOLDS,
+  pruneFolds,
+  readFolds,
+  toggleFold,
+} from './folds.ts'
 
 export interface SidebarState {
   open: boolean
@@ -24,6 +35,8 @@ export interface SidebarState {
    * 只记在这台电脑上：协议里的组没有先后，Codex 桌面端也是把分区的先后记在客户端
    */
   bands: Readonly<Record<string, readonly string[]>>
+  /** 各台设备上收起了的组和父会话（folds.ts）。重启之后照上次的样子，没记着的展开 */
+  folds: Folds
 }
 
 const NONE: readonly string[] = []
@@ -71,6 +84,7 @@ function readSaved(): SidebarState {
                 ]),
             )
           : NO_BANDS,
+      folds: readFolds(parsed.folds),
     }
   } catch {
     // 读不到就用默认的：开着，默认宽度，都看，不显示别的应用派出来的，组照设备给的先后
@@ -81,6 +95,7 @@ function readSaved(): SidebarState {
       nativeChildren: false,
       showActive: true,
       bands: NO_BANDS,
+      folds: NO_FOLDS,
     }
   }
 }
@@ -146,6 +161,24 @@ export const useSidebarBands = (deviceId: string): readonly string[] | undefined
 
 export function setSidebarBands(deviceId: string, keys: readonly string[]): void {
   publish({ ...sidebar, bands: { ...sidebar.bands, [deviceId]: [...keys] } })
+}
+
+/** 这台设备上收起了的组和父会话 */
+export const useSidebarFolds = (deviceId: string): DeviceFolds =>
+  useSyncExternalStore(subscribe, () => sidebar.folds[deviceId] ?? NO_DEVICE_FOLDS)
+
+/** 收起或展开一个组（closed）、一个父会话的子会话（folded） */
+export function toggleSidebarFold(deviceId: string, kind: FoldKind, id: string): void {
+  publish({ ...sidebar, folds: toggleFold(sidebar.folds, deviceId, kind, id) })
+}
+
+/** 只留还在的组和父会话的记录（keep 见 folds.ts 的 foldsKeep）。没有要去掉的就不写 */
+export function pruneSidebarFolds(
+  deviceId: string,
+  keep: Readonly<Record<FoldKind, ReadonlySet<string>>>,
+): void {
+  const next = pruneFolds(sidebar.folds, deviceId, keep)
+  if (next !== sidebar.folds) publish({ ...sidebar, folds: next })
 }
 
 export function setSidebarOpen(open: boolean): void {
