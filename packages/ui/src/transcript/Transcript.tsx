@@ -277,7 +277,8 @@ const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { 
       )?.itemId,
   )
   // 分叉、回退挂在用户消息上：回合开头那条按回合切，后面插进来的话切在它之前（harness 会切在回合中间才出，
-  // TurnActions 里判断）。回合结束了、会话能发消息、设备连着、它所属的 harness 可用才出
+  // TurnActions 里判断）。是不是插进来的按它在回合条目里的位置认，和核心一样：不画出来的条目（续做回合开头那句）
+  // 也算数，插进来的话不会被当成回合开头、点了退掉整个回合。回合结束了、会话能发消息、设备连着、它所属的 harness 可用才出
   const actable =
     !running &&
     meta?.live === true &&
@@ -303,7 +304,7 @@ const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { 
                 {...ref}
                 itemId={block.itemId}
                 turnId={actable ? turnId : undefined}
-                steered={index > 0}
+                steered={turn.itemIds.indexOf(block.itemId) > 0}
               />
             )
           if (block.type === 'answer')

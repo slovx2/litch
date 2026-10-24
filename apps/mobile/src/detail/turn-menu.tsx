@@ -1,5 +1,6 @@
 // 长按一个回合出来的菜单（复制、分叉、回退），看大图，和对话区底部一闪而过的提示。
 // 能不能分叉、回退照会话的声明：声明了不会的不出这一项；没声明的留着，对面说不认识了点了说为什么（照桌面端）。
+// 从回合进行中插进来的话上长按出来的，复制、分叉、回退对的是这条话（turn-target.ts）。
 // 从一条回答上长按出来的，头两项是“选择文字”（这条回答变得能自由选字，选中后系统菜单里点“回复”引用到输入框）
 // 和“评论这条回答”（打开全文页选一段加评论，comments/）。
 import { parseComments } from '@litch/core'
@@ -12,9 +13,10 @@ import { useT } from '../ui/i18n'
 import { Confirm, Sheet, type SheetAction } from '../ui/kit/overlays'
 import { useTheme } from '../ui/theme'
 import { useComments } from './comments/context'
-import { pressedAnswer } from './comments/hub'
+import { pressedItem } from './comments/hub'
 import { UNKNOWN_ITEM } from './comments/refs'
 import { refillDraft } from './refill'
+import { turnTarget } from './turn-target'
 
 export const reasonOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error)
@@ -37,30 +39,31 @@ export function TurnMenu({
   const t = useT()
   const channel = useChannel()
   const meta = useSyncExternalStore(store.subscribeMeta, store.getMeta)
-  const [asking, setAsking] = useState<string | null>(null)
+  /** 等确认的回退：哪一回合，切在哪条插进来的话之前（没有 itemId 是整个回合） */
+  const [asking, setAsking] = useState<{ turnId: string; itemId?: string } | null>(null)
   const comments = useComments()
   const { deviceId, sessionId } = store
-  const declared = meta?.can.declared === true
   /** 现在做不了的原因。能做是 null */
   const blocked = (able: boolean | undefined): string | null =>
     able === false ? t('ability.unsupported') : meta?.running ? t('turn.busy') : null
 
   const actions: SheetAction[] = []
-  const pressedItem = turnId ? pressedAnswer(turnId) : null
-  if (turnId && comments && pressedItem && store.kindOf(pressedItem) === 'agentMessage') {
+  const pressed = turnId ? pressedItem(turnId) : null
+  if (turnId && comments && pressed && store.kindOf(pressed) === 'agentMessage') {
     actions.push({
       label: t('comment.select'),
       testID: 'menu:select',
-      onPress: () => comments.select(pressedItem),
+      onPress: () => comments.select(pressed),
     })
     actions.push({
       label: t('comment.menu'),
       testID: 'menu:comment',
-      onPress: () => comments.pick(pressedItem),
+      onPress: () => comments.pick(pressed),
     })
   }
-  if (turnId) {
-    const user = store.userMessage(turnId)
+  const target = turnId ? turnTarget(store, meta?.can, turnId, pressed) : null
+  if (turnId && target) {
+    const { user, fork, rollback: back } = target
     const answer = store.answerText(turnId)
     const copy = (text: string) => {
       Clipboard.setStringAsync(text).then(
@@ -71,7 +74,7 @@ export function TurnMenu({
     if (answer) actions.push({ label: t('detail.menu.copyAnswer'), onPress: () => copy(answer) })
     if (user?.text)
       actions.push({ label: t('detail.menu.copyMessage'), onPress: () => copy(user.text) })
-    if (!(declared && meta?.can.fork === false)) {
+    if (fork) {
       actions.push({
         label: t('turn.fork'),
         testID: 'menu:fork',
@@ -79,7 +82,7 @@ export function TurnMenu({
           const why = blocked(meta?.can.fork)
           if (why) return say(why)
           say(t('detail.forked.going'))
-          channel.command('session.fork', { deviceId, sessionId, turnId }).then(
+          channel.command('session.fork', { deviceId, sessionId, turnId, ...fork }).then(
             (result) => {
               say(t('turn.fork.done'))
               onForked(result.sessionId)
@@ -89,7 +92,7 @@ export function TurnMenu({
         },
       })
     }
-    if (!(declared && meta?.can.rollback === false)) {
+    if (back) {
       actions.push({
         label: t('turn.rollback'),
         danger: true,
@@ -97,16 +100,18 @@ export function TurnMenu({
         onPress: () => {
           const why = blocked(meta?.can.rollback)
           if (why) say(why)
-          else setAsking(turnId)
+          else setAsking({ turnId, ...back })
         },
       })
     }
   }
 
-  const rollback = (turnId: string) => {
+  const rollback = (where: { turnId: string; itemId?: string }) => {
     // 回退之后这条消息就不在了：先把它拿在手里，成了放回输入框给用户改
-    const user = store.userMessage(turnId)
-    channel.command('session.rollback', { deviceId, sessionId, turnId }).then(
+    const user = where.itemId
+      ? store.steeredMessage(where.turnId, where.itemId)
+      : store.userMessage(where.turnId)
+    channel.command('session.rollback', { deviceId, sessionId, ...where }).then(
       () => {
         if (!user) return
         // 带着评论的，评论放回输入框上面，正文只放打的字
@@ -128,7 +133,7 @@ export function TurnMenu({
     )
   }
 
-  const preview = turnId ? store.userMessage(turnId)?.text.trim() : undefined
+  const preview = target?.user?.text.trim()
   return (
     <>
       <Sheet

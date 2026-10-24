@@ -15,6 +15,7 @@ import { useActions } from './actions.tsx'
 import { commentsOf } from './comments/Cite.tsx'
 import { findOrigin } from './comments/locate.ts'
 import { MAX_COMMENTS, newCommentId } from './comments/model.ts'
+import { messageActions } from './turn-actions.ts'
 
 interface TurnActionsProps {
   deviceId: string
@@ -29,6 +30,7 @@ interface TurnActionsProps {
 export function TurnActions({ deviceId, sessionId, turnId, itemId, steered }: TurnActionsProps) {
   const { channel, replica } = useServices()
   const meta = useKey<SessionMeta>(keys.session(deviceId, sessionId))
+  const message = useKey<ItemView>(keys.item(deviceId, sessionId, itemId))
   const { busy, open } = useActions()
   const t = useT()
   const [asking, setAsking] = useState(false)
@@ -39,17 +41,8 @@ export function TurnActions({ deviceId, sessionId, turnId, itemId, steered }: Tu
     able === false ? t('ability.unsupported') : busy ? t('turn.busy') : null
   const forkBlocked = blocked(meta?.can.fork)
   const rollbackBlocked = blocked(meta?.can.rollback)
-  // 它所属的 harness 声明了不会的那一样：不出这个入口。
-  // 没有声明的照旧留着能点：对面说不认识了，点了说为什么
-  const declared = meta?.can.declared === true
-  // 切在回合中间只认声明：插进来的话上，声明了会的才出
-  const cut = meta?.can.cutInTurn === true
-  const showFork = steered
-    ? cut && meta?.can.fork === true
-    : !(declared && meta?.can.fork === false)
-  const showRollback = steered
-    ? cut && meta?.can.rollback === true
-    : !(declared && meta?.can.rollback === false)
+  // 出不出、切不切在回合中间（turn-actions.ts）
+  const { fork: showFork, rollback: showRollback, cut } = messageActions(meta, steered, message)
   if (!showFork && !showRollback) return null
 
   const say = (text: string, tone: 'plain' | 'err' = 'err') =>

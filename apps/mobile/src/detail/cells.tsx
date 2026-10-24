@@ -24,7 +24,7 @@ import { type Palette, useTheme } from '../ui/theme'
 import { AskCell, AskReplyText, useAsks } from './asks/AskCell'
 import { CommentCards, commentsOfRow } from './comments/CommentCards'
 import { useComments, useFlashedRow, useHubValue } from './comments/context'
-import { notePressedAnswer } from './comments/hub'
+import { notePressed } from './comments/hub'
 import { linkCommentRefs, parseCommentHref } from './comments/refs'
 import { useToggleInPlace, useTranscript } from './context'
 import { linkify } from './links'
@@ -51,7 +51,7 @@ export const UserCell = memo(function UserCell({ row }: Props<'user'>) {
   const comments = replies || peer ? null : commentsOfRow(row)
   const text = comments ? comments.rest : row.text
   const menu = () => {
-    notePressedAnswer(row.turnId, null)
+    notePressed(row.turnId, row.key)
     turnMenu(row.turnId)
   }
   return (
@@ -222,7 +222,7 @@ const MarkdownBody = memo(function MarkdownBody({ row }: Props<'md'>) {
         selecting
           ? undefined
           : () => {
-              notePressedAnswer(row.turnId, row.itemId)
+              notePressed(row.turnId, row.itemId)
               turnMenu(row.turnId)
             }
       }
@@ -372,7 +372,7 @@ export const StatusCell = memo(function StatusCell({ row }: Props<'status'>) {
           accessibilityLabel={t('detail.menu.more')}
           hitSlop={{ top: 10, bottom: 10, left: 14, right: 14 }}
           onPress={() => {
-            notePressedAnswer(row.turnId, null)
+            notePressed(row.turnId, null)
             turnMenu(row.turnId)
           }}
           style={({ pressed: down }) => [styles.more, down ? pressed(c) : null]}

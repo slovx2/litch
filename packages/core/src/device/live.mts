@@ -1590,7 +1590,11 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       live.steered.set(clientId, { key, turnId: running.id, message: said })
       emit(live, [
         { op: 'queue.set', queued: live.queued },
-        { op: 'item.add', turnId: running.id, item: localUserMessage(key, said, mentions) },
+        {
+          op: 'item.add',
+          turnId: running.id,
+          item: { ...localUserMessage(key, said, mentions), unconfirmed: true },
+        },
       ])
       try {
         await host.request('turn/steer', {

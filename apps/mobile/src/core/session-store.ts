@@ -229,6 +229,29 @@ export class SessionStore {
     return null
   }
 
+  /**
+   * 回合进行中插进这一回合的一条用户消息（不是回合的第一个条目，和核心认的一样）。
+   * 是的话返回它，回合不在了、不是用户消息、是回合开头那条的都是 null
+   */
+  steeredMessage(turnId: string, itemId: string): UserMessageItem | null {
+    const turn = this.view?.turns.find((each) => each.id === turnId)
+    const item = this.view?.items[itemId]
+    if (!turn || item?.kind !== 'userMessage' || turn.itemIds.indexOf(itemId) < 1) return null
+    return item
+  }
+
+  /** 这一回合里 itemId 后面那条自己插进来的话（分叉带到它之前）；别的会话发来的、只是一条系统提示的不算 */
+  nextSteer(turnId: string, itemId: string): string | null {
+    const ids = this.view?.turns.find((each) => each.id === turnId)?.itemIds ?? []
+    const at = ids.indexOf(itemId)
+    if (at < 0) return null
+    for (const id of ids.slice(at + 1)) {
+      const item = this.view?.items[id]
+      if (item?.kind === 'userMessage' && !item.peer && (!item.event || item.text)) return id
+    }
+    return null
+  }
+
   /** 一个条目是什么种类。条目的种类定了就不变，现取就行 */
   readonly kindOf = (itemId: string): string | undefined => this.view?.items[itemId]?.kind
 
