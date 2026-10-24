@@ -3,9 +3,14 @@
 # 每个流程都从这里起：互不依赖，单跑哪一个都行
 appId: dev.litch.app
 ---
-- launchApp:
-    clearState: true
-    stopApp: true
+# 刚起的 Maestro 驱动和清数据挤在一起时，模拟器的 adb 连接偶尔断一下（Maestro 打出 device offline，接着
+# Unable to launch app）：本地仿 CI 的模拟器上也能复现，再来一次就好，只是要多等 Maestro 那两分钟的超时
+- retry:
+    maxRetries: 2
+    commands:
+      - launchApp:
+          clearState: true
+          stopApp: true
 - extendedWaitUntil:
     visible:
       id: devices

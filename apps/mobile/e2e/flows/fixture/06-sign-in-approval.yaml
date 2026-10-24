@@ -36,6 +36,11 @@ tags: [fixture]
     timeout: 30000
 - assertVisible:
     text: .*so•••@gmail\.com.*
+# 320×640 上卡片的正文放不下，第二个账号在卡片里往下翻才看得到
+- scrollUntilVisible:
+    element:
+      id: request:signIn:account:a2
+    direction: DOWN
 - tapOn:
     id: request:signIn:account:a2
 - tapOn:

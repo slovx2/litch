@@ -1,4 +1,4 @@
-// 模拟核心里的手机批准（clientApprovals）：每台在线设备的第一个会话上挂一张代理登录的卡片，两个打码的账号；
+// 模拟核心里的手机批准（clientApprovals）：每台在线设备第一个不在等人答的会话上挂一张代理登录的卡片，两个打码的账号；
 // 手机答了（approval.answer）就收掉。给移动端的界面预览和测试用，不验签。
 import type { ApprovalCardView } from '../../../protocol/src/client-approvals.mjs'
 import type { ApprovalsOp, Clock, Commands } from '../channel/protocol.mjs'
@@ -7,7 +7,7 @@ import type { ApprovalsTopicView } from '../model-approvals.mjs'
 
 export interface MockApprovalsOptions {
   clock: Clock
-  /** 这台设备上第一个会话；没有是 null（不挂卡片） */
+  /** 这台设备上第一个不在等人答的会话；没有是 null（不挂卡片） */
   firstSession(deviceId: string): string | null
   /** 设备的名字 */
   deviceName(deviceId: string): string
