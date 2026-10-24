@@ -1,0 +1,32 @@
+diff --git a/node_modules/@shopify/flash-list/dist/FlashListProps.d.ts b/node_modules/@shopify/flash-list/dist/FlashListProps.d.ts
+index 5e90a5c..b5f2079 100644
+--- a/node_modules/@shopify/flash-list/dist/FlashListProps.d.ts
++++ b/node_modules/@shopify/flash-list/dist/FlashListProps.d.ts
+@@ -311,6 +311,10 @@ export interface FlashListProps<TItem> extends Omit<ScrollViewProps, "maintainVi
+          * If true, initial render will start from the bottom of the list, useful for chat-like interfaces when there are only few messages
+          */
+         startRenderingFromBottom?: boolean;
++        /**
++         * Litch 补丁：下标小于它的行不当“保持可见位置”的锚点（会自己长高的行）
++         */
++        anchorFrom?: number;
+     };
+     /**
+      * New arch only
+diff --git a/node_modules/@shopify/flash-list/dist/recyclerview/hooks/useRecyclerViewController.js b/node_modules/@shopify/flash-list/dist/recyclerview/hooks/useRecyclerViewController.js
+index 08724d1..95111ed 100644
+--- a/node_modules/@shopify/flash-list/dist/recyclerview/hooks/useRecyclerViewController.js
++++ b/node_modules/@shopify/flash-list/dist/recyclerview/hooks/useRecyclerViewController.js
+@@ -62,7 +62,11 @@ export function useRecyclerViewController(recyclerViewManager, ref, scrollViewRe
+             recyclerViewManager.getDataLength() > 0 &&
+             recyclerViewManager.shouldMaintainVisibleContentPosition()) {
+             // Update the tracked first visible item
+-            const firstVisibleIndex = Math.max(0, recyclerViewManager.computeVisibleIndices().startIndex);
++            // Litch 补丁：anchorFrom 之前的行不当锚点（会自己长高的行，比如正在流式输出的那一块：
++            // 它是锚点时它长高不算位移，用户翻着看的内容会被一点点顶走）
++            const config = recyclerViewManager.props.maintainVisibleContentPosition;
++            const anchorFrom = (config && config.anchorFrom) || 0;
++            const firstVisibleIndex = Math.min(recyclerViewManager.getDataLength() - 1, Math.max(0, anchorFrom, recyclerViewManager.computeVisibleIndices().startIndex));
+             if (firstVisibleIndex !== undefined && firstVisibleIndex >= 0) {
+                 firstVisibleItemKey.current =
+                     recyclerViewManager.getDataKey(firstVisibleIndex);
