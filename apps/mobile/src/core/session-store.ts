@@ -128,6 +128,7 @@ export class SessionStore {
   private timer: ReturnType<typeof setTimeout> | null = null
   private lastPublish = 0
   private unsubscribe: (() => void) | null = null
+  private readonly dataListeners = new Set<() => void>()
   /** 给测量用：一共交给界面几次、最近一次花了多少毫秒 */
   readonly stats = { publishes: 0, lastBuildMs: 0, ops: 0 }
 
@@ -152,11 +153,13 @@ export class SessionStore {
           this.metaDirty = true
           this.proposalsDirty = true
           this.recountAnswers(data)
+          for (const listener of this.dataListeners) listener()
           this.schedule()
         },
         delta: (ops) => {
           if (!this.view) return
           for (const op of ops) this.apply(this.view, op)
+          for (const listener of this.dataListeners) listener()
           this.schedule()
         },
         error: (error) => {
@@ -230,6 +233,19 @@ export class SessionStore {
   }
 
   readonly getSnapshot = (): SessionSnapshot => this.snapshot
+
+  /**
+   * 收到数据（快照、增量）就叫，不等下一帧交给界面；配着 runningNow 用。
+   * 离开详情页后留着的存储靠它（store-cache.ts）：交给界面要等帧，应用在后台时帧不来
+   */
+  readonly subscribeData = (listener: () => void): (() => void) => {
+    this.dataListeners.add(listener)
+    return () => this.dataListeners.delete(listener)
+  }
+
+  /** 照收到的数据现算有没有回合在跑 */
+  readonly runningNow = (): boolean =>
+    this.view?.turns.some((turn) => turn.status === 'running') ?? false
 
   readonly subscribeTail = (listener: () => void): (() => void) => {
     this.tailListeners.add(listener)
