@@ -3,6 +3,11 @@
 //   - 原生的 codex（native-codex.mts）：只说标准的 Codex 协议，不认识我们加的任何东西。
 // 两种上游在路由上完全一样（按会话归属、按 harness 参数转发，通知和服务端请求原样带回）；
 // 不一样的只有下面这几处，都收在这个接口后面，路由那几个文件不用知道对面是谁。
+import {
+  composeInstructions,
+  instructionSection,
+  isEmptyNamespace,
+} from '../../protocol/src/codex-developer-instructions.mjs'
 import { HARNESS_CONFIG_METHOD } from '../../protocol/src/harness-config.mjs'
 import type { InstructionContext, PreparedInstructions } from './codex-instructions.mjs'
 import {
@@ -112,13 +117,6 @@ export const ADAPTER_DIALECT: UpstreamDialect = {
 /** 带 dynamicTools 的方法。上游只有 thread/start 收它；恢复、分叉真带了也照样处理（上游悄悄丢掉） */
 const DYNAMIC_TOOL_METHODS = new Set(['thread/start', 'thread/resume', 'thread/fork'])
 
-/** 一个工具都没有的命名空间（比如只带 instructions 的 litch_presentation） */
-export const isEmptyNamespace = (spec: unknown): boolean =>
-  isObject(spec) &&
-  spec.type === 'namespace' &&
-  Array.isArray(spec.tools) &&
-  spec.tools.length === 0
-
 /**
  * 原生 codex 转发前：去掉一个工具都没有的命名空间，连同它带的 instructions。上游 validate_dynamic_tools
  * 对这种命名空间直接报错（must contain at least one tool），带上一个整个 thread/start 都会失败；
@@ -161,14 +159,14 @@ export function foldToolInstructions(
     const { instructions, ...rest } = spec
     stripped = true
     const text = typeof instructions === 'string' ? instructions.trim() : ''
-    const section = text ? `# Tool instructions: ${String(spec.name)}\n${text}` : ''
+    const section = text ? instructionSection(String(spec.name), text) : ''
     if (section && !sections.includes(section)) sections.push(section)
     return rest
   })
   if (!stripped) return null
-  const given = typeof params.developerInstructions === 'string' ? params.developerInstructions : ''
-  const missing = sections.filter((section) => !given.includes(section))
-  const developerInstructions = [given.trimEnd(), ...missing].filter(Boolean).join('\n\n')
+  const given =
+    typeof params.developerInstructions === 'string' ? params.developerInstructions : null
+  const developerInstructions = composeInstructions(given, sections)
   return {
     ...params,
     dynamicTools,

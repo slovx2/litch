@@ -1,5 +1,6 @@
 // 原生 codex 的开发者指令由设备进程补齐（codex-instructions.mts）：建会话时客户端没给就拿 config.toml 里实际生效的那段当底子，
-// 按会话记下，恢复、分叉没带时照记下的补回去，规则按这一版的重拼；分叉的分叉接得上；设备进程自己的连接也一样。
+// 按会话记下（没有规则、客户端给了自己那段的也记），恢复、分叉没带时照记下的补回去，规则按这一版的重拼；分叉的分叉接得上；
+// 设备进程自己的连接也一样。
 import assert from 'node:assert/strict'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -12,7 +13,7 @@ import {
   sessionTools,
 } from '../../protocol/src/client-tools-sessions.mjs'
 import { ECHO_TOOLS } from '../../protocol/src/client-tools-specs.mjs'
-import { composeInstructions } from '../src/codex-instructions.mjs'
+import { composeInstructions } from '../../protocol/src/codex-developer-instructions.mjs'
 import { openSessionDatabase, SessionStore } from '../src/session-store.mjs'
 import { codexRig, sentTo } from './codex-kit.mjs'
 import { codexThread } from './fake-codex.mjs'
@@ -253,6 +254,9 @@ test('CODEX-DEV-005：记下的存在 sessions.sqlite 里，设备进程重启�
   assert.equal(composeInstructions('  ', ['# A']), '# A')
   assert.equal(composeInstructions('Mine\n', ['# A', '# B']), 'Mine\n\n# A\n\n# B')
   assert.equal(composeInstructions('Mine\n\n# A', ['# A', '# B']), 'Mine\n\n# A\n\n# B')
+  // 没什么要拼的：底子原样，末尾的空白也不动
+  assert.equal(composeInstructions('Mine\n', []), 'Mine\n')
+  assert.equal(composeInstructions('Mine\n\n# A', ['# A']), 'Mine\n\n# A')
 })
 
 test('CODEX-DEV-007：任务卡关着时建的会话（没有建议的那份）：恢复时规则挑那一份；没记下工具的看原文头一句，旧版收尾关着的原文认得出', async () => {
@@ -289,6 +293,42 @@ test('CODEX-DEV-007：任务卡关着时建的会话（没有建议的那份）�
       last(env, 'thread/resume').developerInstructions,
       `${USER}\n\n# Tool instructions: litch_sessions\n${sessionProposalRules(false)}`,
     )
+  } finally {
+    await env.close()
+  }
+})
+
+test('CODEX-DEV-008：没有规则、客户端给了自己的开发者指令的会话也记下：照转不问 config.toml，恢复、分叉没带时补回；没记过的会话恢复时带了也记', async () => {
+  const env = codexRig()
+  try {
+    withConfig(env)
+    const client = await litch(env)
+    const { store } = env.device.sessionTree
+    const own = (
+      await client.call('thread/start', {
+        harness: 'codex',
+        cwd: '/work/a',
+        developerInstructions: USER,
+        dynamicTools: [ECHO_TOOLS],
+      })
+    ).thread.id
+    assert.equal(sentTo(env.codex, 'config/read').length, 0)
+    assert.equal(last(env, 'thread/start').developerInstructions, USER)
+    assert.deepEqual(store.instructions(own), { given: USER, namespaces: [], cwd: '/work/a' })
+    await client.call('thread/resume', { threadId: own })
+    assert.equal(last(env, 'thread/resume').developerInstructions, USER)
+    const fork = (await client.call('thread/fork', { threadId: own })).thread.id
+    assert.equal(last(env, 'thread/fork').developerInstructions, USER)
+    assert.equal(store.instructions(fork)?.given, USER)
+    // 别处建的、没记过的会话：恢复时不带的照转不记，带了的照转并记下，下一次没带时补回
+    await client.call('thread/resume', { threadId: OLD_ONE })
+    assert.equal('developerInstructions' in last(env, 'thread/resume'), false)
+    assert.equal(store.instructions(OLD_ONE), null)
+    await client.call('thread/resume', { threadId: OLD_TWO, developerInstructions: USER })
+    assert.equal(store.instructions(OLD_TWO)?.given, USER)
+    await client.call('thread/resume', { threadId: OLD_TWO })
+    assert.equal(last(env, 'thread/resume').developerInstructions, USER)
+    assert.equal(sentTo(env.codex, 'config/read').length, 0)
   } finally {
     await env.close()
   }

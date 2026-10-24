@@ -63,6 +63,7 @@
     "bench:delta": "npm run build && node scripts/bench-delta.mjs",
     "check:native-codex": "node scripts/check-native-codex.mjs",
     "check:native-codex-instructions": "node scripts/check-native-codex-instructions.mjs",
+    "check:codex-direct-instructions": "node scripts/check-codex-direct-instructions.mjs",
     "check:client-tools-codex": "node scripts/check-client-tools-codex.mjs",
     "check:live-user-message": "node scripts/check-live-user-message.mjs",
     "check:pair-cli": "node scripts/build-cli.mjs && node scripts/check-pair-cli.mjs",

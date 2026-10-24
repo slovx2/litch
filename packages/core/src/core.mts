@@ -224,6 +224,7 @@ export function createCore(options: CoreOptions): Core {
       ...(options.trace ? { trace: options.trace } : {}),
       ...(store ? { snapshot: store.snapshot(config.id) } : {}),
       ...(store?.terminals ? { terminalNotes: store.terminals(config.id) } : {}),
+      ...(store?.codexThreads ? { codexThreads: store.codexThreads(config.id) } : {}),
       tools: hub,
       toolSwitches: (harness) => switchesOf(config.id, harness),
       ...(options.pairing ? { pairing: options.pairing } : {}),
