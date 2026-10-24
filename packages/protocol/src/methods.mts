@@ -3,6 +3,18 @@
 // 新增一项要在这里登记，核心里才有类型可用。
 
 import type { BackgroundChangedNotification } from './background-tasks.mjs'
+import type {
+  ApprovalAnsweredNotification,
+  ApprovalAnswerParams,
+  ApprovalAnswerResponse,
+  ApprovalChangedNotification,
+  ApprovalCloseParams,
+  ApprovalCloseResponse,
+  ApprovalListParams,
+  ApprovalListResponse,
+  ApprovalOpenParams,
+  ApprovalOpenResponse,
+} from './client-approvals.mjs'
 import type { ClientToolCallParams, ClientToolCallResponse } from './client-tools.mjs'
 import type {
   AccountRateLimitsUpdatedNotification,
@@ -462,6 +474,11 @@ export interface ClientRequests {
   'litch/pair/enroll': { params: DevicePairEnrollParams; result: DevicePairEnrollResponse }
   'litch/pair/phones': { params: Record<string, never>; result: DevicePairPhonesResponse }
   'litch/pair/revoke': { params: DevicePairRevokeParams; result: Record<string, never> }
+  /** 扩展 clientApprovals：桌面端挂、收一张要人点头的卡片，手机取、答 */
+  'litch/approval/open': { params: ApprovalOpenParams; result: ApprovalOpenResponse }
+  'litch/approval/close': { params: ApprovalCloseParams; result: ApprovalCloseResponse }
+  'litch/approval/list': { params: ApprovalListParams; result: ApprovalListResponse }
+  'litch/approval/answer': { params: ApprovalAnswerParams; result: ApprovalAnswerResponse }
   // 以下是给设备装 harness（扩展 harnessInstall，见 device-harness-install.mts）：只有聚合面有，
   // 设备信息的 `extensions` 里列了 harnessInstall 才能用
   'litch/device/harness/versions': {
@@ -646,6 +663,10 @@ export interface ServerNotifications {
   'litch/pair/changed': DevicePairChangedNotification
   /** 扩展，只发给握手时声明过 devicePairing 的连接：已绑定的手机多了、少了 */
   'litch/pair/phones/changed': DevicePairPhonesChangedNotification
+  /** 扩展，只发给握手时声明过 clientApprovals 的连接：一个会话挂着的卡片变了 */
+  'litch/approval/changed': ApprovalChangedNotification
+  /** 扩展，只发给发卡片的那条连接：手机答了一张卡片（原样转交，没验签） */
+  'litch/approval/answered': ApprovalAnsweredNotification
   /** 扩展，只发给握手时声明过 harnessInstall 的连接：一个安装任务的状态或日志变了 */
   'litch/device/harness/install/changed': HarnessInstallChangedNotification
   'litch/harness/config/changed': HarnessConfigChangedNotification

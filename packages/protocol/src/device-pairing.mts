@@ -44,12 +44,14 @@ export type PairMode = 'key' | 'tailscale'
 //
 // 确认码：SHA-256( UTF-8( 配对号 + "\n" + 手机公钥行 ) )，取前 4 字节按大端读成无符号整数，模 1000000，
 //   左边补零到 6 位。公钥行是 "ssh-ed25519 <base64>"，不带注释。
+//   手机带了批准公钥（PairEnrollInput.approvalKey）时，哈希的是 配对号 + "\n" + 手机公钥行 + "\n" + approvalKey。
 // 手机号：手机公钥的二进制（base64 解出来的那段）做 SHA-256，取前 8 字节的小写十六进制，16 个字符。
 // 指纹：和 `ssh-keygen -l -E sha256` 一样，"SHA256:" 加无填充的标准 base64。
 //
 // 测试向量：配对号 "Ab3dEf6hIj9kLm2n"，
 //   公钥行 "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl"
-//   → 确认码 "965093"，手机号 "f83898df0bef57a4"，指纹 "SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU"
+//   → 确认码 "965093"，手机号 "f83898df0bef57a4"，指纹 "SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU"；
+//   再带上批准公钥 "ebVWLo/mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmQ=" → 确认码 "977558"
 
 // ---------- 二维码里的内容 ----------
 
@@ -77,6 +79,11 @@ interface PairPayloadBase {
   i: string
   /** 过期时间，毫秒时间戳 */
   e: number
+  /**
+   * 设备认批准公钥（列了 clientApprovals）：手机登记时带上 approvalKey，确认码把它算进去。
+   * 没有这一项时手机不带（老设备算确认码时不认它，带了两边的确认码就对不上）
+   */
+  a?: 1
 }
 
 export interface PairKeyPayload extends PairPayloadBase {
@@ -93,7 +100,8 @@ export interface PairTailscalePayload extends PairPayloadBase {
 
 /**
  * 键的顺序是固定的（命令行的 Go 那份照同样的顺序拼，两边一字不差）：
- * 一次性钥匙方式 v n h p u k s i e；Tailscale 方式 v n h p u k m c i e
+ * 一次性钥匙方式 v n h p u k s i e；Tailscale 方式 v n h p u k m c i e；有 a 的接在最后
+ * （命令行出码时没有桌面端记批准公钥，不带 a）
  */
 export function encodePairPayload(payload: PairPayload): string {
   const head = { v: 1, n: payload.n, h: payload.h, p: payload.p, u: payload.u, k: payload.k }
@@ -101,7 +109,8 @@ export function encodePairPayload(payload: PairPayload): string {
     payload.m === 'tailscale'
       ? { ...head, m: payload.m, c: payload.c, i: payload.i, e: payload.e }
       : { ...head, s: payload.s, i: payload.i, e: payload.e }
-  return PAIR_PAYLOAD_PREFIX + base64UrlEncode(utf8Encode(JSON.stringify(body)))
+  const full = payload.a === 1 ? { ...body, a: 1 } : body
+  return PAIR_PAYLOAD_PREFIX + base64UrlEncode(utf8Encode(JSON.stringify(full)))
 }
 
 /** 不是配对文本、格式不对时返回 null。不检查是否过期（手机拿 e 和自己的时钟比，只用来提示） */
@@ -149,6 +158,7 @@ export function decodePairPayload(text: string): PairPayload | null {
     k: { t: k.t, f: k.f },
     i: v.i,
     e: v.e,
+    ...(v.a === 1 ? { a: 1 as const } : {}),
   }
   if (v.m === 'tailscale') {
     // 命令原样交给对面的 shell：只许一行
@@ -208,6 +218,11 @@ export type PairEnrollInput =
       publicKey: string
       /** 手机名，给出码的一方看、写进钥匙行的注释 */
       name: string
+      /**
+       * 手机批准登录用的批准公钥（clientApprovals，client-approvals.mts）：32 字节 ed25519 的标准 base64。
+       * 可选：老手机不带。带了的，确认码把它也算进去，出码的一方在人核对过确认码、允许的那一刻记下它（扫码时核对过）
+       */
+      approvalKey?: string
     }
 
 /**
@@ -348,6 +363,8 @@ export interface PairPhoneRequest {
   fingerprint: string
   /** 6 位确认码 */
   code: string
+  /** 手机登记时带的批准公钥（PairEnrollInput.approvalKey），已经算进了确认码。没带是没有这一项 */
+  approvalKey?: string
 }
 
 export interface PairPhone {

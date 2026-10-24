@@ -34,7 +34,8 @@
     "手机钥匙行：ssh-ed25519 <公钥> litch-mobile:<手机号> <名字> <YYYY-MM-DD（UTC）>，不加选项。名字去掉控制字符和不可见的格式字符，连续的空白并成一个空格（解析时手机号和行尾日期之间的都是名字），截到 PAIR_PHONE_NAME_MAX 个 UTF-16 码元（不切开代理对），清完是空的用 phone。同一个公钥已经在文件里（任何一行，包括用户手动加的）就不重复写，照样回 ok。",
     "phones：列出带 litch-mobile:<16 位小写十六进制> 标记、钥匙是 ed25519 的行，同一个手机号只列第一行。revoke 删掉带这个手机号的所有行，一行都没有回 unknownPhone。done 和 revoke 之后发 litch/pair/phones/changed（带全部列表）。",
     "确认码、手机号、指纹的算法和测试向量见 device-pairing.mts。",
-    "pair-enroll 子命令：读标准输入的一行（最多 4 KB），调 litch/pair/enroll，把结果写成一行到标准输出后退出，退出码 0；连不上设备服务回 unavailable。"
+    "pair-enroll 子命令：读标准输入的一行（最多 4 KB），调 litch/pair/enroll，把结果写成一行到标准输出后退出，退出码 0；连不上设备服务回 unavailable。",
+    "批准公钥（clientApprovals）：pair-enroll 的输入可以带 approvalKey（32 字节 ed25519 的标准 base64，格式不对按 invalid）；带了的，确认码改用 配对号、手机公钥行、approvalKey 三段算（见 device-pairing.mts），requested、done 的 phone 里带着它。出码的一方只在设备列了 clientApprovals 时往二维码里放 a: 1，手机看到 a 才带；命令行 pair 出的码不带 a。"
   ],
   "parts": [
     {
@@ -341,6 +342,11 @@
         "code": {
           "type": "string",
           "pattern": "^[0-9]{6}$"
+        },
+        "approvalKey": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9+/]{43}=$",
+          "description": "手机登记时带的批准公钥，已经算进了确认码；没带是没有这一项"
         }
       }
     },
@@ -478,6 +484,11 @@
             },
             "name": {
               "type": "string"
+            },
+            "approvalKey": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9+/]{43}=$",
+              "description": "手机批准登录用的批准公钥（clientApprovals）。可选；带了的确认码把它算进去"
             }
           }
         }
