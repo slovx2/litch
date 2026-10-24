@@ -92,6 +92,19 @@ function tailSize(built: Row[]): number {
   }
 }
 
+/**
+ * 列表最前面（最新、在最底下）有几行会自己长高：回合在跑时末尾的状态行，和它上面正在流的那一块。
+ * 对话区往上翻着看时不拿它们当“保持可见位置”的锚点（detail/Transcript.tsx）
+ */
+export function growingRows(snapshot: SessionSnapshot): number {
+  if (!snapshot.running) return 0
+  const { rows } = snapshot
+  let count = rows[0]?.type === 'status' ? 1 : 0
+  const block = rows[count]
+  if (block?.type === 'md' && block.open) count += 1
+  return count
+}
+
 function lastTurnOf(view: SessionView): SessionMeta['lastTurn'] {
   const turn = view.turns[view.turns.length - 1]
   return turn ? { id: turn.id, status: turn.status, itemIds: [...turn.itemIds] } : null

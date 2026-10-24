@@ -2,7 +2,7 @@
 // 新建会话收到流式回答、流式时尾巴单独交出、审批答完回合接着走、展开一组只重算那个回合、停了就不再交。
 import assert from 'node:assert/strict'
 import { afterEach, test } from 'node:test'
-import { SessionStore } from '../src/core/session-store.ts'
+import { growingRows, SessionStore } from '../src/core/session-store.ts'
 import { acquireStore, releaseStore } from '../src/core/store-cache.ts'
 import { mockChannel, until } from './helpers.mjs'
 
@@ -67,6 +67,36 @@ test('流式时尾巴单独交出：列表里没有正在长的回答，写完�
   await until(() => finished(store), { timeoutMs: 20000, what: '长回答写完' })
   assert.deepEqual(store.getTail().rows, [])
   assert.ok(store.getSnapshot().rows.some((row) => row.type === 'md'))
+})
+
+test('往上翻着看时尾巴并回列表：最底下会长高的是状态行和正在流的那一块，回合结束后没有', async () => {
+  const { store } = await open('长回答', { chunkMs: 20 })
+  store.setSplitTail(true)
+  store.start()
+  await until(() => (store.getTail().rows.length >= 2 ? true : null), { what: '尾巴' })
+  assert.equal(growingRows(store.getSnapshot()), 0, '贴底时它们在尾巴里，不在列表里')
+  store.setSplitTail(false)
+  assert.deepEqual(store.getTail().rows, [])
+  // 字刚好停在块的边上时最后一块已经封口、新的一块还没开始，等到正在长的那一块
+  const rows = await until(
+    () => (store.getSnapshot().rows[1]?.open ? store.getSnapshot().rows : null),
+    {
+      what: '正在长的那一块',
+    },
+  )
+  assert.equal(rows[0].type, 'status')
+  assert.equal(rows[1].type, 'md')
+  assert.equal(growingRows(store.getSnapshot()), 2)
+  await until(() => finished(store), { timeoutMs: 20000, what: '长回答写完' })
+  assert.equal(growingRows(store.getSnapshot()), 0)
+})
+
+test('挑锚点的 FlashList 补丁对得上装的版本（升级 FlashList 时要重做补丁）', async () => {
+  const { readdirSync, readFileSync } = await import('node:fs')
+  const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
+  const version = pkg.dependencies['@shopify/flash-list']
+  const patches = readdirSync(new URL('../patches/', import.meta.url))
+  assert.ok(patches.includes(`@shopify+flash-list+${version}.patch`), patches.join(', '))
 })
 
 test('审批：请求进会话层面的状态，答了“允许”之后请求没了、回合走完', async () => {
