@@ -1,4 +1,5 @@
-// litch_sessions：模型列出、读取同一台设备上的会话，查能用的 harness 和型号，派出子会话，给自己的子会话发消息、打断，等它们结束。
+// litch_sessions：模型列出、读取同一台设备上的会话，查能用的 harness 和型号，派出子会话，给自己的子会话发消息、打断，等它们结束，
+// 用户同意后归档、恢复会话。
 // 和 litch_browser 这些不同，执行方是设备进程自己，不是桌面端（会话在设备上）：建会话时带不带它看的是
 // 设备信息的 extensions 有没有 sessionTree、设置里“会话编排”开没开，不看桌面端的声明；设备进程替每条
 // 通往引擎的连接声明能执行它，调用到了设备进程就自己答，不转给任何客户端。父子关系、提案见 session-tree.mts，
@@ -29,6 +30,10 @@ export const SESSION_TOOL = {
   wrapUp: 'wrap_up',
   /** 做到一半来了一条无关的新消息：把手上的任务连同剩下的计划交给一个分叉会话，立刻开始 */
   handOff: 'hand_off',
+  /** 归档一个会话（自己派出的、用户点名的别的会话，或者 self 这个会话自己）：只在用户同意之后 */
+  archive: 'archive',
+  /** 把归档了的会话放回列表 */
+  unarchive: 'unarchive',
 } as const
 
 export type SessionToolName = (typeof SESSION_TOOL)[keyof typeof SESSION_TOOL]
@@ -200,6 +205,18 @@ export interface SessionsInterruptArguments {
   thread_id: string
 }
 
+/** archive 的 thread_id 写成它是这个会话自己：这个回合结束时归档 */
+export const SESSION_SELF = 'self'
+
+export interface SessionsArchiveArguments {
+  /** 会话号，或者 SESSION_SELF */
+  thread_id: string
+}
+
+export interface SessionsUnarchiveArguments {
+  thread_id: string
+}
+
 // —— 结果（成功时整段 JSON 作为一条文字回给模型） ——
 
 export type SessionStatusWord = 'running' | 'idle' | 'needsUser' | 'failed' | 'unavailable'
@@ -296,6 +313,21 @@ export interface SessionsWithdrawResult {
   status: 'withdrawn' | 'started' | 'dismissed' | 'expired'
   /** status 是 started 时起出来的子会话 */
   thread_id?: string
+  note: string
+}
+
+/** archive 的结果。self 的要等回合结束才归档，只有 note */
+export interface SessionsArchiveResult {
+  thread_id: string
+  /** 跟着它一起归档的子孙会话（已经停下的） */
+  archived_with?: string[]
+  /** 还在干活、留在列表里的子孙会话 */
+  left_live?: string[]
+  note: string
+}
+
+export interface SessionsUnarchiveResult {
+  thread_id: string
   note: string
 }
 
@@ -409,6 +441,7 @@ export function sessionProposalRules(wrapUp: boolean, taskCards = true): string 
     WORKTREE_RULE,
     TITLE_LINE,
     'If the user tells you to start a card ("start the second one"), call litch_sessions.accept with its proposal_id. If a card went stale (done here after all, no longer needed, replaced by a better one), withdraw it with litch_sessions.withdraw; propose the replacement first.',
+    archiveRule(wrapUp),
     outsideLitch(wrapUp),
   ].join('\n')
 }
@@ -437,6 +470,14 @@ const FRESH_BRIEF = `A fresh session sees nothing of this conversation: it gets 
 const WORKTREE_RULE =
   "Where a new session works: work that ends in a branch or pull request of its own gets its own git worktree (worktree true; the folder must be in a git repository), so it does not mix with this session's changes; work that must land in one change with this one, or only reads, shares this folder (worktree false). Leave worktree out to follow the default: a new worktree when this session is in a worktree Litch created, otherwise this folder. A new worktree starts from the last commit of this session's branch, so commit first what it needs. If this session is already in a worktree Litch created, do not create another one with your own worktree tool (for example EnterWorktree)."
 
+/**
+ * 归档：照 Claude 桌面端 archive_session 的用法，只在用户同意了归档那个会话之后才归档，不自己拿主意；
+ * 子会话都跑完、结果到手之后可以提议归档它们，用户说好再归档。有收尾时用收尾的 ask 问
+ */
+function archiveRule(wrapUp: boolean): string {
+  return `Archiving: litch_sessions.archive moves a session to Archived, and litch_sessions.unarchive brings it back. Archive a session only after the user has explicitly agreed to archiving that specific session, never on your own or speculatively. When all of your sub-sessions have finished and you have their results, you may ask the user whether to archive them (${wrapUp ? "with wrap_up's ask and a reply button" : 'in one short question'}) and archive them when they say yes.`
+}
+
 const TITLE_LINE =
   'Right before each litch_sessions.start or hand_off, write a bold title line and one sentence on what it will do.'
 
@@ -451,6 +492,7 @@ function plainSessionRules(): string {
     WORKTREE_RULE,
     TITLE_LINE,
     'If the user tells you to start one of the cards already in this conversation, call litch_sessions.accept with its proposal_id. Write your final answer to the user as the last message of the turn.',
+    archiveRule(false),
     outsideLitch(false),
   ].join('\n')
 }
@@ -566,7 +608,7 @@ export function sessionTools(wrapUp: boolean, taskCards = true): ClientToolNames
   return {
     type: 'namespace',
     name: CLIENT_TOOL_NAMESPACE.sessions,
-    description: `Litch sessions on this device. A sub-session is a full, separate session the user can open and talk to; it is for a task of its own that the user may want to follow apart from this work, or for work that needs another harness, model or folder. Parts of the task at hand, however large, run here or in your own subagents. ${suggestionLine(wrapUp, taskCards)} Results of your sub-sessions arrive later as a <litch-session-event> message; do not poll. You can only send to or interrupt your own sub-sessions. Never answer approvals or questions waiting inside a sub-session: only the user can. If these tools report an unsupported namespace or a missing tool, you are not in Litch: stop calling litch_* tools in this conversation.`,
+    description: `Litch sessions on this device. A sub-session is a full, separate session the user can open and talk to; it is for a task of its own that the user may want to follow apart from this work, or for work that needs another harness, model or folder. Parts of the task at hand, however large, run here or in your own subagents. ${suggestionLine(wrapUp, taskCards)} Results of your sub-sessions arrive later as a <litch-session-event> message; do not poll. You can only send to or interrupt your own sub-sessions, and archive a session only when the user has agreed. Never answer approvals or questions waiting inside a sub-session: only the user can. If these tools report an unsupported namespace or a missing tool, you are not in Litch: stop calling litch_* tools in this conversation.`,
     instructions: sessionProposalRules(wrapUp, taskCards),
     tools: [
       {
@@ -779,6 +821,34 @@ export function sessionTools(wrapUp: boolean, taskCards = true): ClientToolNames
         type: 'function',
         name: SESSION_TOOL.interrupt,
         description: 'Interrupt the running turn of one of your sub-sessions.',
+        inputSchema: {
+          type: 'object',
+          properties: { thread_id: THREAD_ID },
+          required: ['thread_id'],
+          additionalProperties: false,
+        },
+      },
+      {
+        type: 'function',
+        name: SESSION_TOOL.archive,
+        description: `Archive a session on this device: it leaves the session list and stays in Archived with its conversation intact, where the user (or unarchive) can bring it back. A clean git worktree Litch created for it is removed (the branch stays); one with uncommitted changes is kept. Its sub-sessions that have stopped are archived with it; ones still working stay in the list. Pass "${SESSION_SELF}" to archive this session itself when this turn ends. Only call it after the user has explicitly agreed to archive that specific session, in a message they typed (refused on turns the user did not start); never speculatively. When your sub-sessions have all finished, you may ask the user whether to archive them and wait for their yes. A session that is still working (a turn running, waiting for the user, or background tasks running) or pinned is not archived, and the result says so.`,
+        inputSchema: {
+          type: 'object',
+          properties: {
+            thread_id: {
+              type: 'string',
+              description: `Session id (thread id) from list or start, or "${SESSION_SELF}" for this session.`,
+            },
+          },
+          required: ['thread_id'],
+          additionalProperties: false,
+        },
+      },
+      {
+        type: 'function',
+        name: SESSION_TOOL.unarchive,
+        description:
+          'Bring an archived session back to the session list, conversation intact (a worktree removed at archive is brought back). Use it when the user asks to restore a session. Your own sub-sessions can be restored any time; any other session only on a turn the user started.',
         inputSchema: {
           type: 'object',
           properties: { thread_id: THREAD_ID },

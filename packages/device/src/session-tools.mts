@@ -1,7 +1,9 @@
 // litch_sessions：模型列出、读取这台设备上的会话，派子会话，给自己的子会话发消息、打断，等它们停下。
 // 执行方是设备进程（device-tools.mts 注册的一个命名空间），工具定义在 packages/protocol/src/client-tools-sessions.mts。
 // 读类（list、read、wait）能看这台设备上所有会话，options 列能用的 harness 和型号（session-options.mts）；写类（send、interrupt）只能作用于调用者自己的 Litch 子孙会话，
-// 别的一律 [litch:blocked]，引擎自己的子代理线程另外提示用引擎自己的工具。提案类（start 出提案、accept、withdraw）
+// 别的一律 [litch:blocked]，引擎自己的子代理线程另外提示用引擎自己的工具。归档（archive）照 Claude 桌面端的 archive_session：
+// 这台设备上哪个会话都行（self 是这个会话自己，回合结束时归档），只在用户亲手发起的回合里收，在干活的、置顶的不归档；
+// 恢复（unarchive）自己的子孙随时可以，别的也要用户发起的回合（session-archive.mts）。提案类（start 出提案、accept、withdraw）
 // 只作用于调用者自己会话上的提案；提案的门槛（一回合几张、同标题、fresh 简报的显示宽度）在 start 和 wrap_up 里查。
 // wrap_up 是每回合收尾必调的（干完活先调它、再写最终回答）：每条建议成一张提案，调没调记在会话树里
 // （没调的用户回合结束后设备进程开回合提醒）。设置里“每回合收尾”关掉时新会话没有这个工具（session-tree.mts）。
@@ -18,12 +20,15 @@ import {
   clientToolFailure,
 } from '../../protocol/src/client-tools.mjs'
 import {
+  SESSION_SELF,
   SESSION_TOOL,
   SESSION_TOOL_LIMITS,
   type SessionStatusWord,
   type SessionSummary,
+  type SessionsArchiveResult,
   type SessionsHandOffResult,
   type SessionsStartResult,
+  type SessionsUnarchiveResult,
   type SessionsWithdrawResult,
   type SessionsWrapUpResult,
   type SessionTurnSummary,
@@ -37,6 +42,7 @@ import {
   type SessionProposal,
 } from '../../protocol/src/session-tree.mjs'
 import type { DeviceToolCall, DeviceToolHandler } from './device-tools.mjs'
+import type { Cascade, SessionArchives } from './session-archive.mjs'
 import { checkHarness, modelFor, sessionOptions } from './session-options.mjs'
 import {
   acceptProposal,
@@ -997,8 +1003,106 @@ async function interrupt(tree: SessionTree, args: Record<string, unknown>, call:
   return { thread_id: threadId, note: 'Interrupted its running turn.' }
 }
 
+/** 引擎自己的子代理线程不是 Litch 会话：归档、恢复让模型用引擎自己的工具 */
+function notSubagent(thread: Record<string, unknown>, threadId: string): void {
+  if (typeof thread.parentThreadId === 'string' && thread.parentThreadId)
+    throw new Refused(
+      'blocked',
+      `Session ${threadId} is a subagent thread of its harness, not a Litch session. Use your own subagent tools for it.`,
+    )
+}
+
+/**
+ * 归档一个会话（照 Claude 桌面端的 archive_session）：只在用户亲手发起的回合里收（用户在这句话里同意了）。
+ * 别的会话：在干活的、置顶的不归档，照实回；归档了的话它已经停下的子孙跟着归档。self：等这个回合结束再归档
+ */
+async function archive(
+  tree: SessionTree,
+  archives: SessionArchives,
+  args: Record<string, unknown>,
+  call: DeviceToolCall,
+): Promise<SessionsArchiveResult> {
+  const given = string(args, 'thread_id', true)
+  const self = given === SESSION_SELF || given === call.threadId
+  const threadId = self ? call.threadId : given
+  if (!tree.isUserTurn(call.harness, call.turnId))
+    throw new Refused(
+      'blocked',
+      'Archive a session only after the user agreed to it in a message they typed, and this turn was not started that way. Ask the user first, and archive it when they say yes.',
+    )
+  if (archives.pinned(threadId))
+    throw new Refused(
+      'blocked',
+      `Session ${threadId} is pinned, so it was not archived. Ask the user to unpin it or archive it themselves.`,
+    )
+  if (self) {
+    if (tree.host.backgroundRunning(threadId) > 0)
+      throw new Refused(
+        'blocked',
+        'This session has background tasks still running, so it was not archived. Wait for them to finish or stop them, then try again.',
+      )
+    archives.archiveAfterTurn(threadId)
+    return {
+      thread_id: threadId,
+      note: 'This session will be archived when this turn ends, with its sub-sessions that have stopped. End your turn now with at most one short line.',
+    }
+  }
+  const { thread } = await found(tree, threadId, false)
+  notSubagent(thread, threadId)
+  if (tree.host.index.archived(threadId))
+    return { thread_id: threadId, note: 'It is already archived. Nothing to do.' }
+  if (await archives.working(threadId))
+    throw new Refused(
+      'blocked',
+      `Session ${threadId} is still working (a turn running, waiting for the user, or background tasks running), so it was not archived. Wait until it stops, or ask the user to stop it, then try again.`,
+    )
+  let cascade: Cascade
+  try {
+    cascade = await archives.archive(threadId, 'model')
+  } catch (error) {
+    throw new Refused('failed', `Could not archive session ${threadId}: ${messageOf(error)}`)
+  }
+  const left = cascade.left.length
+    ? ` ${cascade.left.length} of its sub-sessions are still working or pinned and stay in the list.`
+    : ''
+  return {
+    thread_id: threadId,
+    ...(cascade.archived.length ? { archived_with: cascade.archived } : {}),
+    ...(cascade.left.length ? { left_live: cascade.left } : {}),
+    note: `Archived. The user can restore it from Archived${cascade.archived.length ? `; ${cascade.archived.length} of its stopped sub-sessions were archived with it` : ''}.${left}`,
+  }
+}
+
+/** 把归档了的会话放回来：自己的子孙随时可以，别的要用户亲手发起的回合 */
+async function unarchive(
+  tree: SessionTree,
+  archives: SessionArchives,
+  args: Record<string, unknown>,
+  call: DeviceToolCall,
+): Promise<SessionsUnarchiveResult> {
+  const threadId = string(args, 'thread_id', true)
+  if (threadId === call.threadId || threadId === SESSION_SELF)
+    throw new Refused('invalid', 'This session is not archived.')
+  if (!tree.store.descends(threadId, call.threadId) && !tree.isUserTurn(call.harness, call.turnId))
+    throw new Refused(
+      'blocked',
+      `Session ${threadId} is not one of your sub-sessions, so restore it only when the user asks for it in a message they typed. This turn was not started that way.`,
+    )
+  const { thread } = await found(tree, threadId, false)
+  notSubagent(thread, threadId)
+  try {
+    await archives.unarchive(threadId)
+  } catch (error) {
+    throw new Refused('failed', `Could not restore session ${threadId}: ${messageOf(error)}`)
+  }
+  return { thread_id: threadId, note: 'Restored: it is back in the session list.' }
+}
+
 /** litch_sessions 的处理函数，注册进设备进程的命名空间表 */
-export function sessionToolsHandler(tree: SessionTree): DeviceToolHandler {
+export function sessionToolsHandler(
+  tree: SessionTree,
+  archives: SessionArchives,
+): DeviceToolHandler {
   return async (call, { signal }) => {
     if (!tree.host.enabled())
       return clientToolFailure(
@@ -1030,6 +1134,10 @@ export function sessionToolsHandler(tree: SessionTree): DeviceToolHandler {
           return ok(await wait(tree, args, call, signal))
         case SESSION_TOOL.interrupt:
           return ok(await interrupt(tree, args, call))
+        case SESSION_TOOL.archive:
+          return ok(await archive(tree, archives, args, call))
+        case SESSION_TOOL.unarchive:
+          return ok(await unarchive(tree, archives, args, call))
         default:
           return clientToolFailure('invalid', `litch_sessions has no tool "${call.tool}".`)
       }

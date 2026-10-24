@@ -143,6 +143,9 @@ explain it:
   Litch are named by Litch after their first turn (switch and conditions in `harnesses.md`). A name the
   user sets by hand is never replaced.
 - **Archived sessions** page: restore, open read-only, delete.
+- **Archiving with sub-sessions**: archiving a session (sub-sessions included) also archives its
+  sub-sessions that have stopped, and theirs; ones still working (a turn running, waiting for you,
+  background tasks) or pinned stay in the list. Restoring a session brings back only that one.
 - **Reply style**: sessions that Litch starts (including sub-sessions and scheduled tasks) tell the model
   that replies appear in Litch, which renders Markdown and Mermaid diagrams, and to answer
   conversationally rather than like a terminal. Codex sessions do not get this (Codex keeps its own
@@ -189,7 +192,10 @@ woken to continue.
   the dialog warns that the sub-session will be looser.
 - **By the model**: in sessions of every harness (Codex, Claude Code, Pi, DSH, OpenCode, Gemini CLI,
   Qwen Code, ACP) the model has `litch_sessions` tools: list and read sessions on the device, start
-  sub-sessions, send to and interrupt its own sub-sessions, wait for them. When the user did not ask for
+  sub-sessions, send to and interrupt its own sub-sessions, wait for them, and archive or restore
+  sessions. It archives a session only after you agree in a message you typed (when its sub-sessions
+  have all finished it may suggest archiving them), never one that is still working or pinned; it can
+  restore its own sub-sessions any time. When the user did not ask for
   a sub-session in that turn, it becomes a suggested task instead of starting directly. To use another
   harness or model it first looks up what the device offers (`litch_sessions.options`: each harness's
   models as in the model menu, Claude Code's with their provider, reasoning efforts, defaults); a

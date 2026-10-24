@@ -58,6 +58,7 @@ import { type DevicePairing, PAIR_PREFIX, PairingError } from './pairing.mjs'
 import { Relay } from './relay.mjs'
 import { classify } from './routes.mjs'
 import { describeDevice } from './service-info.mjs'
+import type { SessionArchives } from './session-archive.mjs'
 import { sessionTreeCall } from './session-methods.mjs'
 import type { SessionTree } from './session-tree.mjs'
 import { DEVICE_TASK_PREFIX, type DeviceTasks } from './tasks.mjs'
@@ -166,6 +167,8 @@ export interface SessionHost {
   worktrees: Worktrees | null
   /** 工作树跟着会话的归档、删除、重新打开走（worktree-life.mts）。没有 git 时是 null */
   worktreeLife: WorktreeLife | null
+  /** 归档时子会话跟着走、设备进程替模型归档（session-archive.mts） */
+  archives: SessionArchives
 }
 
 /** 请求已经有着落：转给上游了（应答由上游来），或者已经自己答过了 */
@@ -644,7 +647,9 @@ export class ClientSession implements ClientToolPeer {
     }
     // 用户归档子会话：先记下来，归档打断的那个回合结束时就认得出是用户停的（引擎可能先发回合结束再应答）
     if (params && method === 'thread/archive' && typeof params.threadId === 'string')
-      this.host.sessionTree.archived(params.threadId)
+      this.host.archives.userArchiving(params.threadId)
+    if (params && method === 'thread/unarchive' && typeof params.threadId === 'string')
+      this.host.archives.userUnarchiving(params.threadId)
     // 建会话带的 litch_sessions 换成设备进程按设置给的那份（“每回合收尾”开关、这个 harness 的“任务卡”开关，
     // session-tree.mts 的 currentSessionTools）
     if (params && method === 'thread/start') {
@@ -677,12 +682,14 @@ export class ClientSession implements ClientToolPeer {
         const thread = isObject(result) ? result.thread : null
         if (isObject(thread)) this.host.titles.born(link.harness, thread)
       })
-    // 工作树跟着会话走（worktree-life.mts）：归档、删了之后收拾，取消归档之后建回或接着用
+    // 工作树跟着会话走（worktree-life.mts）：归档、删了之后收拾，取消归档之后建回或接着用；
+    // 归档了的会话已经停下的子会话跟着归档（session-archive.mts）
     const life = this.host.worktreeLife
     const subject = typeof fields?.threadId === 'string' ? fields.threadId : null
+    if (subject && method === 'thread/archive')
+      afterwards.push(() => void this.host.archives.archived(subject, 'user'))
     if (life && subject) {
-      if (method === 'thread/archive') afterwards.push(() => void life.archived(subject))
-      else if (method === 'thread/unarchive') afterwards.push(() => void life.reopen(subject))
+      if (method === 'thread/unarchive') afterwards.push(() => void life.reopen(subject))
       else if (method === 'thread/delete') afterwards.push(() => void life.deleted(subject))
     }
     // 分叉出来的会话共用着源会话的工作树（应答没带目录时照源会话算）：记成共用者，源会话归档、删掉时转给它
@@ -1059,6 +1066,13 @@ export class ClientSession implements ClientToolPeer {
     if (this.declared.has(EXTENSION.sessionTree)) this.host.sessionTree.decorate(copy)
     if (this.declared.has(EXTENSION.worktrees)) this.host.worktrees?.decorate(copy)
     this.send(JSON.stringify({ method: 'thread/started', params: { thread: copy } }))
+  }
+
+  /** 设备进程替模型归档、放回、跟着父会话归档的会话（session-archive.mts）：照标准通知告诉这条连接 */
+  threadShelved(threadId: string, archived: boolean): void {
+    const method = archived ? 'thread/archived' : 'thread/unarchived'
+    if (this.state !== 'ready' || this.optOut.has(method)) return
+    this.send(JSON.stringify({ method, params: { threadId } }))
   }
 
   /** 一个上游的状态变了：真的和上次报的不一样才通知客户端 */

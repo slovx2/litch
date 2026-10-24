@@ -407,6 +407,30 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     emit(`sidebar:${deviceId}`, ops)
   }
 
+  /**
+   * 归档一个会话：从列表拿到已归档里，内容留着（恢复之后还是原来那些）。它已经停下、没置顶的子会话跟着归档，
+   * 在干活的、置顶的连同底下的留在列表里（照设备的 session-archive.mts）
+   */
+  const shelveOne = (deviceId: string, summary: SessionSummary) => {
+    const sidebar = sidebars.get(deviceId)
+    if (!sidebar) return
+    sidebar.sessions = sidebar.sessions.filter((entry) => entry !== summary)
+    replies.get(`session:${deviceId}:${summary.id}`)?.()
+    const ops: SidebarOp[] = [{ op: 'session.remove', sessionId: summary.id }]
+    emit(`sidebar:${deviceId}`, ops)
+    const list = shelved.get(deviceId) ?? []
+    shelved.set(deviceId, [...list, { ...summary, status: 'idle', waitingFor: null }])
+    archivedChanged(deviceId)
+    const kidsOf = (id: string) =>
+      sidebar.sessions.filter((entry) => entry.lineage?.parentId === id)
+    const settled = (one: SessionSummary): boolean =>
+      !one.pinned &&
+      (one.status === 'idle' || one.status === 'error') &&
+      (one.background?.running ?? 0) === 0 &&
+      kidsOf(one.id).every(settled)
+    for (const kid of kidsOf(summary.id)) if (settled(kid)) shelveOne(deviceId, kid)
+  }
+
   const isShelved = (deviceId: string, sessionId: string): boolean =>
     (shelved.get(deviceId) ?? []).some((session) => session.id === sessionId)
 
@@ -2381,16 +2405,15 @@ export function createMockCore(options: MockCoreOptions): MockCore {
           archivedChanged(deviceId)
           return {}
         }
+        if (name === 'session.archive') {
+          shelveOne(deviceId, summary)
+          return {}
+        }
         if (sidebar) sidebar.sessions = sidebar.sessions.filter((entry) => entry !== summary)
         replies.get(`session:${deviceId}:${sessionId}`)?.()
-        // 归档的会话内容留着，恢复之后还是原来那些；删除的才清掉
-        if (name === 'session.delete') sessions.delete(`session:${deviceId}:${sessionId}`)
+        sessions.delete(`session:${deviceId}:${sessionId}`)
         const ops: SidebarOp[] = [{ op: 'session.remove', sessionId }]
         emit(`sidebar:${deviceId}`, ops)
-        if (name === 'session.archive') {
-          shelved.set(deviceId, [...list, { ...summary, status: 'idle', waitingFor: null }])
-          archivedChanged(deviceId)
-        }
         return {}
       }
       if (name === 'session.configure') {
