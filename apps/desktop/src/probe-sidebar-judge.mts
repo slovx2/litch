@@ -73,6 +73,7 @@ export function judgeFrame(seen: FrameChecks): string[] {
         nativeChildren: false,
         showActive: true,
         bands: {},
+        folds: {},
       }),
     `拖出来的宽度没有记下来：${seen.afterDrag.saved}`,
   )
@@ -116,6 +117,8 @@ export function judgeFrame(seen: FrameChecks): string[] {
         nativeChildren: false,
         showActive: true,
         bands: {},
+        // 前面收起过的那一项也记着（重启后照旧）
+        folds: { nas: { closed: ['bk'], folded: [] } },
       }),
     `侧栏收起没有记下来：${hide.savedClosed}`,
   )
