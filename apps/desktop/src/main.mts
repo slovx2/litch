@@ -60,6 +60,7 @@ import {
   UPDATE_SET_AUTO,
   UPDATE_STATE,
 } from './ipc.mjs'
+import { guardQuit, guardWindow, installLeaveGuard } from './leave-guard.mjs'
 import {
   bundledAdapter,
   defaultAdapterHome,
@@ -412,9 +413,16 @@ function createWindow(): BrowserWindow {
     if (!isUiUrl(url)) event.preventDefault()
   })
   if (!smoke) window.once('ready-to-show', () => window.show())
+  // 界面上有没保存的改动时，关窗口之前先请界面问
+  guardWindow(window)
   void window.loadURL(uiUrl(forcedLook))
   return window
 }
+
+// 界面报有没保存的改动、问完了可以走：只认界面自己的主框架
+installLeaveGuard(
+  (sender, frame) => !!frame && frame === sender.mainFrame && isUiUrl(sender.mainFrame.url),
+)
 
 // 牵线：界面要端口时，新开一对端口，一头给核心，一头给界面。之后两边直接对话
 ipcMain.on(REQUEST_CORE_PORT, (event) => {
@@ -665,8 +673,14 @@ ipcMain.handle(UPDATE_SET_AUTO, (event, on: unknown) => {
   return updateView()
 })
 // 点了“重启以更新”：退出前的规矩照旧（还有终端在跑就问一声），点了“不退了”就什么都不做
-ipcMain.handle(UPDATE_INSTALL, async (event) => {
-  if (!fromUi(event) || updater?.state().phase !== 'ready') return false
+ipcMain.handle(UPDATE_INSTALL, (event) =>
+  fromUi(event) && updater?.state().phase === 'ready' ? installUpdate() : false,
+)
+
+async function installUpdate(): Promise<boolean> {
+  if (updater?.state().phase !== 'ready') return false
+  // 界面上有没保存的改动：先问，问完了可以走再来一遍
+  if (guardQuit(BrowserWindow.getAllWindows(), () => void installUpdate())) return false
   const outcome = await settleQuit().catch(
     (): QuitOutcome => ({ proceed: true, alive: null, asked: false, did: 'none' }),
   )
@@ -680,7 +694,7 @@ ipcMain.handle(UPDATE_INSTALL, async (event) => {
     app.quit()
   }
   return true
-})
+}
 
 /**
  * Windows：退出时有下好的安装程序就装。新版本要换掉内置适配器的文件，常驻的设备服务正用着它们，
@@ -934,6 +948,11 @@ let quitSettled = false
 let quitAsking = false
 
 app.on('before-quit', (event) => {
+  // 界面上有没保存的改动：先问，问完了可以走再退一遍
+  if (!quitSettled && !quitting && guardQuit(BrowserWindow.getAllWindows(), () => app.quit())) {
+    event.preventDefault()
+    return
+  }
   if (!quitSettled && !quitting && core) {
     // 先别退：问清楚终端怎么办（留在设备上、结束、还是不退了），办完再退
     event.preventDefault()

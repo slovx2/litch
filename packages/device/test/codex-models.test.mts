@@ -352,6 +352,86 @@ test('用户自己的清单文件：照样列出、补进底稿、提醒默认�
   }
 })
 
+test('用户文件里和自带同名的模型：自带的打底、用户的字段盖上去；切到 Litch 的文件后再读再写都留着，自带升级只跟着变用户没动的', async () => {
+  const { env, state, client, litch, file } = await setup()
+  try {
+    const own = join(tempDir(), 'mine.json')
+    const mine = {
+      ...shipped('gpt-a', 4, 'list'),
+      display_name: '我的 A',
+      description: '我自己写的说明',
+      supported_reasoning_levels: [{ effort: 'high', description: '慢' }],
+      my_extra: { keep: true },
+    }
+    // 用户的这份没写 context_window，自带的有
+    writeFileSync(own, `${JSON.stringify({ models: [mine] })}\n`)
+    state.user = { model_catalog_json: own }
+    const read = await client.call(READ, CODEX)
+    assert.deepEqual(read.entries, [entry('gpt-a')])
+    assert.deepEqual(read.bases[0], {
+      id: 'gpt-a',
+      displayName: '我的 A',
+      contextWindow: 200000,
+      description: '我自己写的说明',
+    })
+    await client.call(WRITE, {
+      ...CODEX,
+      entries: [entry('gpt-a'), entry('my-a', 'gpt-a', null, 300000)],
+      expectedVersion: read.version,
+    })
+    const expectOwn = {
+      display_name: '我的 A',
+      description: '我自己写的说明',
+      supported_reasoning_levels: [{ effort: 'high', description: '慢' }],
+      my_extra: { keep: true },
+    }
+    {
+      const [a, derived] = file()
+      assert.deepEqual(a, { ...SHIPPED[1], ...expectOwn, priority: 0, litch_own: expectOwn })
+      assert.equal(derived.my_extra.keep, true, '照它改的也带着用户的字段')
+      assert.equal(derived.description, '我自己写的说明')
+      assert.equal(derived.context_window, 300000)
+      assert.deepEqual(derived.litch_own, expectOwn)
+    }
+    // 自带目录升级：用户没动的字段跟着变，用户写的不变
+    const upgraded: Record<string, unknown>[] = structuredClone(SHIPPED)
+    upgraded[1] = {
+      ...upgraded[1],
+      base_instructions: '新版的 gpt-a',
+      description: '新版说明',
+      new_field: 1,
+    }
+    env.control.handlers['codex.models'] = () => ({
+      executable: '/fake/bin/codex',
+      catalog: { models: structuredClone(upgraded) },
+    })
+    const back = await client.call(READ, CODEX)
+    assert.equal(back.path, litch)
+    assert.deepEqual(back.entries, [entry('gpt-a'), entry('my-a', 'gpt-a', null, 300000)])
+    assert.equal(back.bases[0].displayName, '我的 A')
+    // 只留照它改的那一项：底稿里用户的字段照样记下来
+    await client.call(WRITE, {
+      ...CODEX,
+      entries: [entry('my-a', 'gpt-a', '改个名', null)],
+      expectedVersion: back.version,
+    })
+    const [only] = file()
+    assert.equal(only.display_name, '改个名')
+    assert.equal(only.description, '我自己写的说明', '冲突以用户的为准')
+    assert.deepEqual(only.supported_reasoning_levels, [{ effort: 'high', description: '慢' }])
+    assert.deepEqual(only.my_extra, { keep: true })
+    assert.equal(only.base_instructions, '新版的 gpt-a')
+    assert.equal(only.new_field, 1)
+    assert.equal(only.context_window, 200000)
+    assert.deepEqual(only.litch_own, expectOwn)
+    const last = await client.call(READ, CODEX)
+    assert.deepEqual(last.entries, [entry('my-a', 'gpt-a', '改个名', null)])
+    assert.equal(last.bases[0].description, '我自己写的说明')
+  } finally {
+    await env.close()
+  }
+})
+
 test('清单读不出来、问不到自带目录：照样能读，note 里说；管理员定了清单时只读', async () => {
   const { env, state, client } = await setup()
   try {

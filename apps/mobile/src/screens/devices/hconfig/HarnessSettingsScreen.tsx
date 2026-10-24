@@ -3,10 +3,11 @@
 // 配置里说有模型清单（modelCatalog）的 harness 多一个“模型”标签（能改）。
 // 内容全按对面的声明画，界面不认识哪一项是干什么的。改过要重启才生效的，顶上一直提示，可以就地重启。
 // 开着这一页才订阅（harnessConfig 主题），核心这时才去设备上读。
+// 配置、模型有没保存的改动时，切标签、返回之前先问“保存 / 放弃 / 取消”（leave.tsx）。
 import type { DeviceView } from '@litch/core'
 import { keys } from '@litch/core'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { StyleSheet, View } from 'react-native'
 import { whyNot } from '../../../../../../packages/ui/src/app/errors.ts'
 import type { RootStackParamList } from '../../../nav/routes'
@@ -18,6 +19,7 @@ import { Screen } from '../../../ui/kit/Screen'
 import { useTheme } from '../../../ui/theme'
 import { AccountsTab } from './AccountsTab'
 import { ConfigTab } from './ConfigTab'
+import { LeaveScope, useLeave } from './leave'
 import { pageState } from './logic'
 import { ModelsTab } from './ModelsTab'
 import { Note, SaidNote, useHarnessConfig, useSaid } from './parts'
@@ -27,13 +29,28 @@ type Props = NativeStackScreenProps<RootStackParamList, 'HarnessSettings'>
 type Tab = 'config' | 'accounts' | 'models' | 'mcp' | 'instructions'
 const TABS: readonly Tab[] = ['config', 'accounts', 'models', 'mcp', 'instructions']
 
-export function HarnessSettingsScreen({ route }: Props) {
+export function HarnessSettingsScreen({ route, navigation }: Props) {
   const { deviceId, harness: harnessId } = route.params
   const theme = useTheme()
   const t = useT()
   const device = useKey<DeviceView>(keys.device(deviceId))
   const view = useHarnessConfig(deviceId, harnessId)
   const [tab, setTab] = useState<Tab>('config')
+  const { leaveThen, unsaved, guards, dialog } = useLeave()
+  // 返回（标题栏的、系统的、手势）：有没保存的改动先问，问完了再照原来的动作走；走的那一次不再拦
+  const leaving = useRef(false)
+  useEffect(
+    () =>
+      navigation.addListener('beforeRemove', (event) => {
+        if (leaving.current || !unsaved()) return
+        event.preventDefault()
+        leaveThen(() => {
+          leaving.current = true
+          navigation.dispatch(event.data.action)
+        })
+      }),
+    [navigation, unsaved, leaveThen],
+  )
   const name =
     device?.harnesses.find((entry) => entry.id === harnessId)?.name ??
     route.params.name ??
@@ -97,13 +114,18 @@ export function HarnessSettingsScreen({ route }: Props) {
                 label={t(`hc.tab.${one}`)}
                 on={shown === one}
                 testID={`hc:tab:${one}:pick`}
-                onPress={() => setTab(one)}
+                onPress={() => {
+                  if (one !== shown) leaveThen(() => setTab(one))
+                }}
               />
             ))}
           </View>
         </>
       ) : null}
-      <View style={styles.fill}>{body}</View>
+      <View style={styles.fill}>
+        <LeaveScope guards={guards}>{body}</LeaveScope>
+      </View>
+      {dialog}
     </Screen>
   )
 }

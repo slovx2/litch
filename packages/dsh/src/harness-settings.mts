@@ -2,6 +2,8 @@
 // 默认模型、权限预设、联网搜索、子代理、终端（Shell）、内置插件启停，外加只读的“会话日志上传由 Litch 关闭”。
 // 值都读写 dsh 自己的设置（settings/*、pluginManager/*、credentials/*），不另存。
 // 键用 dsh 的“命名空间.路径”（agent-default-model.model 这种）；插件是 plugins.<条目号>。
+// 内置插件里有 dsh 运行离不开的（REQUIRED_PLUGINS）：开着的只读、不让关；已经被关掉的可以打开，并提示要打开。
+// dsh 一部分组件没了（被关掉了）时照样读得出来（模型目录、权限预设、设置读不到就少那几项），好让人把插件开回去。
 
 import type {
   HarnessConfigEdit,
@@ -56,15 +58,80 @@ const GROUPS: HarnessSettingGroup[] = [
     id: 'tools',
     title: text('内置插件', 'Built-in plugins'),
     description: text(
-      'dsh 自带的插件，关掉的不再加载。改动立即生效',
-      'Plugins shipped with dsh; disabled ones are not loaded. Changes apply immediately',
+      'dsh 自带的插件，关掉的不再加载，改动立即生效。dsh 运行离不开的那些不能关；其余的关掉后对应的功能就没了，dsh 官方界面也不让改这些，不确定时别动',
+      'Plugins shipped with dsh; disabled ones are not loaded and changes apply immediately. The ones dsh cannot run without cannot be turned off; turning off any other removes what it provides. The official dsh app does not let you change these, so leave them alone if unsure',
     ),
   },
 ]
 
-/** 插件页不列的：别处已经有开关的、Litch 自己插进去的、MCP 服务（在 MCP 那一页） */
-const UNLISTED_PLUGINS =
-  /(dsh-mcp-client|dsh-session-log-deepseek|dsh-web-search-deepseek)$|litch-client-tools/
+/** 插件页不列的：别处已经有开关的、MCP 服务（在 MCP 那一页）；按模块名认 */
+const UNLISTED_MODULES = /\/dsh-(mcp-client|session-log-deepseek|web-search-deepseek)$/
+/** Litch 自己插进去的 */
+const LITCH_PLUGIN = /litch-client-tools/
+
+/**
+ * dsh 运行离不开的内置插件（按补丁里的 id）。对着 dsh 0.2.0-rc.2 逐个关掉试过（隔离的 DSH_HOME、回环上的假模型）：
+ * 关掉之后回合跑不起来、重启 dsh 后跑不起来、dsh 自己说停用失败（关到一半，依赖它的跟着起不来），
+ * 或者 Litch 读不出这一页（没法再打开），就算离不开。
+ */
+export const REQUIRED_PLUGINS = new Set<string>([
+  // 模型、会话、智能体主循环和它带的工具
+  'llm',
+  'llm-deepseek',
+  'agent',
+  'agent-loop',
+  'agent-default-model',
+  'system-prompt',
+  'session',
+  'session-controller',
+  'user-questions',
+  'commands',
+  'preset-standard',
+  'agent-preset-registry',
+  'deepseek-llm-api-extensions',
+  'session-title',
+  'subagent',
+  'subagent-model-selection-settings',
+  'goal',
+  'skill',
+  'token-meter',
+  'jobs',
+  'web',
+  // 存储与会话记录
+  'storage',
+  'storage-json',
+  'storage-domain',
+  'session-persistence-jsonl',
+  'session-projection',
+  'session-query-sqlite',
+  'attachment-local',
+  'workspace',
+  'workspace-files',
+  'workspace-changes',
+  // 沙箱、命令、权限
+  'subprocess',
+  'sandbox',
+  'sandbox-policy',
+  'bash-sandbox',
+  'fs-sandbox',
+  'shell-env',
+  'ptc-runtime',
+  'approval',
+  'permission',
+  // 设置、凭据、账号（关掉之后 Litch 这一页也读不出来）
+  'settings',
+  'config-editor',
+  'settings-controller',
+  'credentials',
+  'authorization',
+  'deepseek-account',
+  // 宿主与 Web 接口
+  'typert-loader',
+  'cordis-host-runner',
+  'web-startup',
+  'web-runtime',
+  'file-upload',
+])
 
 /** 读一次要用的 dsh 状态 */
 interface Context {
@@ -256,8 +323,25 @@ function pluginItem(
   title: HarnessText,
   description: HarnessText | null,
 ): Item {
+  const required = REQUIRED_PLUGINS.has(plugin.patchId)
+  const on = plugin.enabled === true
+  const rest: Partial<HarnessSettingSpec> = { description, clearable: false }
+  // 离不开的：开着的不让关；被关掉了的可以打开，说一声要打开
+  if (required && on)
+    Object.assign(rest, {
+      readOnly: true,
+      readOnlyReason: text(
+        'dsh 运行离不开它，关掉后 dsh 会起不来或用不了',
+        'dsh cannot run without it; turning it off breaks dsh',
+      ),
+    })
+  else if (required)
+    rest.description = text(
+      `dsh 运行离不开它，现在被关掉了，dsh 可能起不来或用不了，请打开${description ? `。${description['zh-CN']}` : ''}`,
+      `dsh cannot run without it and it is off, so dsh may not work; turn it on${description ? `. ${description.en}` : ''}`,
+    )
   return {
-    spec: spec(key, group, 'boolean', title, { description, clearable: false }),
+    spec: spec(key, group, 'boolean', title, rest),
     direct: true,
     read: (ctx) => ctx.plugins.find((one) => one.entryId === plugin.entryId)?.enabled === true,
     write: async (ctx, value) => {
@@ -508,7 +592,8 @@ function items(ctx: Context): Item[] {
     if (
       !plugin.patchId ||
       plugin.readOnlyReason ||
-      UNLISTED_PLUGINS.test(`${plugin.moduleName ?? ''}|${plugin.entryId}`)
+      UNLISTED_MODULES.test(String(plugin.moduleName ?? '')) ||
+      LITCH_PLUGIN.test(`${plugin.moduleName ?? ''}|${plugin.entryId}`)
     )
       continue
     const title = String(plugin.meta?.title ?? plugin.moduleName ?? plugin.patchId)
@@ -528,10 +613,13 @@ function items(ctx: Context): Item[] {
 
 async function load(remote: WebRemote): Promise<Context> {
   try {
+    // 插件列表读不到才算读不出来；别的几样读不到（提供它们的插件被关掉了）就少那几项，好让人把插件开回去
     const [settings, catalog, presets, plugins] = await Promise.all([
-      describeSettings(remote),
-      remote.rpc('session/modelCatalog', {}),
-      remote.rpc('permissionPresets/catalog', {}),
+      describeSettings(remote).catch(
+        (): SettingsSnapshot => ({ writable: false, namespaces: new Map() }),
+      ),
+      remote.rpc('session/modelCatalog', {}).catch(() => null),
+      remote.rpc('permissionPresets/catalog', {}).catch(() => null),
       remote.rpc('pluginManager/listPlugins', {}, Array.isArray),
     ])
     const search = settings.namespaces.get(WEB_SEARCH)

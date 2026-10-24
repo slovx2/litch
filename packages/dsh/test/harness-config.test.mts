@@ -237,6 +237,61 @@ test('HARNESS-DSH-002：配置项读写 dsh 自己的设置，版本对不上、
   }
 })
 
+test('HARNESS-DSH-007：dsh 离不开的内置插件开着时只读、不让关；被关掉了照样读得出来，能打开；别处有开关的插件不列', {
+  timeout: 180000,
+}, async () => {
+  const s = await scene()
+  try {
+    const read = await s.desktop.call(M.configRead, { harness: 'dsh' })
+    const specOf = (from: any, key: string) => from.settings.find((one: any) => one.key === key)
+    const session = specOf(read, 'plugins.include:session')
+    assert.equal(read.values['plugins.include:session'], true)
+    assert.equal(session.readOnly, true)
+    assert.match(session.readOnlyReason['zh-CN'], /离不开/)
+    assert.equal(
+      await refused(
+        s.desktop.call(M.configWrite, {
+          harness: 'dsh',
+          edits: [{ key: session.key, value: false }],
+          expectedVersion: read.version,
+        }),
+      ),
+      'readOnly',
+    )
+    // 关掉了也不碍事的照样能关
+    const retry = specOf(read, 'plugins.include:llm-retry')
+    assert.ok(retry && !retry.readOnly, '关掉不碍事的插件不是只读')
+    // 会话日志上传、联网搜索在别的组里有开关：插件组里不列
+    for (const id of ['session-log-deepseek', 'web-search-deepseek'])
+      assert.equal(specOf(read, `plugins.include:${id}`), undefined, `插件组里不该有 ${id}`)
+
+    // 以前的版本让人把权限预设插件关掉了：dsh 的权限预设没了，这一页照样读得出来，那个插件能打开
+    const remote = await s.server.remote()
+    const plugins = await remote.rpc('pluginManager/listPlugins', {})
+    const permission = plugins.find((one: any) => one.patchId === 'permission')
+    await remote
+      .rpc('pluginManager/setPluginEnabled', { id: permission.entryId, enabled: false })
+      .catch(() => {})
+    const broken = await s.desktop.call(M.configRead, { harness: 'dsh' })
+    const off = specOf(broken, 'plugins.include:permission')
+    assert.equal(broken.values['plugins.include:permission'], false)
+    assert.ok(!off.readOnly, '被关掉的离不开的插件可以打开')
+    assert.match(off.description['zh-CN'], /请打开/)
+    assert.equal(specOf(broken, 'permission.defaultPreset')?.options?.length ?? 0, 0)
+    await s.desktop.call(M.configWrite, {
+      harness: 'dsh',
+      edits: [{ key: off.key, value: true }],
+      expectedVersion: broken.version,
+    })
+    const fixed = await s.desktop.call(M.configRead, { harness: 'dsh' })
+    assert.equal(fixed.values['plugins.include:permission'], true)
+    assert.equal(specOf(fixed, 'plugins.include:permission').readOnly, true)
+    assert.ok(specOf(fixed, 'permission.defaultPreset').options.length > 0, '权限预设回来了')
+  } finally {
+    await dispose(s)
+  }
+})
+
 const providerOf = (read: any, id: string) => read.providers.find((one: any) => one.id === id)
 
 test('HARNESS-DSH-003：provider：自带的填 key、登出，自定义网关的增改删和切换', {

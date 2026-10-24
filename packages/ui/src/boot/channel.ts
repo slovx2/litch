@@ -45,6 +45,12 @@ export interface ShellBridge {
    * 选出来的是这台电脑上的路径。defaultPath 是从哪里开始找
    */
   pickFolder?(options: { defaultPath?: string; title?: string }): Promise<string | null>
+  /** 告诉外壳现在有没有没保存的改动：有的话关窗口、退出之前它先拦下来，请界面问（onLeaveAsk） */
+  setUnsaved?(unsaved: boolean): void
+  /** 外壳拦下了关窗口、退出，请界面问“保存 / 放弃 / 取消”。返回的函数用来不再听 */
+  onLeaveAsk?(handler: () => void): () => void
+  /** 问完了可以走（保存成了或者放弃了）：外壳接着关窗口、退出 */
+  leaveGo?(): void
 }
 
 /** 一份能在应用里看的许可文本 */
