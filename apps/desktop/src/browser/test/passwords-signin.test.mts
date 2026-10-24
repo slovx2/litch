@@ -24,16 +24,28 @@ import {
   takePopups,
 } from '../passwords/tabs.mjs'
 import { createSiteBook } from '../sites.mjs'
+import { createTabLog, type TabLog } from '../tab-log.mjs'
 
-function fakeHost(): BrowserHost {
+/** quiet：这个标签正交给人登录（真的那一份是 passwords/tabs.mts 的 isHandedOver），控制台和提示照它不收 */
+function fakeHost(
+  quiet: (tabId: string) => boolean,
+): BrowserHost & { logOf(tabId: string): TabLog } {
   const pages = new Map<string, BrowserPage>()
+  const logs = new Map<string, TabLog>()
   let seq = 0
   return {
+    logOf: (tabId) => {
+      const log = logs.get(tabId)
+      if (!log) throw new Error(`no tab ${tabId}`)
+      return log
+    },
     pages: () => [...pages.values()],
     page: (id) => pages.get(id),
     open(owner: TabOwner, kind: TabKind) {
       const id = `t${++seq}`
       let url = 'about:blank'
+      const log = createTabLog(() => quiet(id))
+      logs.set(id, log)
       const page: BrowserPage = {
         id,
         info: () => ({
@@ -61,11 +73,11 @@ function fakeHost(): BrowserHost {
           if (method === 'Page.captureScreenshot') return { data: 'AAAA' } as T
           return {} as T
         },
-        consoleEntries: () => [],
-        clearConsole() {},
+        consoleEntries: log.consoleEntries,
+        clearConsole: log.clearConsole,
         dialog: (): DialogInfo | null => null,
         dialogOpened: () => new Promise<DialogInfo>(() => {}),
-        takeNotices: () => [],
+        takeNotices: log.takeNotices,
         setAgentActive() {},
         pointAt: async () => {},
       }
@@ -117,8 +129,8 @@ function fakeHandover() {
 }
 
 function setup() {
-  const host = fakeHost()
   const { handover, signIns, scripted, asked } = fakeHandover()
+  const host = fakeHost((tabId) => handover.active(tabId))
   const executor = createBrowserExecutor({ host, sites: createSiteBook(null), handover })
   let holds = 0
   let released = 0
@@ -149,7 +161,15 @@ function setup() {
       },
     })
   }
-  return { run, signIns, scripted, asked, holds: () => holds, released: () => released }
+  return {
+    run,
+    signIns,
+    scripted,
+    asked,
+    logOf: host.logOf,
+    holds: () => holds,
+    released: () => released,
+  }
 }
 
 const textOf = (reply: ClientToolCallResponse) =>
@@ -230,6 +250,40 @@ test('人点取消：告诉代理别换别的办法登录；回合打断：卡�
   assert.equal(released(), 2)
   const after = await run('snapshot')
   assert.equal(after.success, true, textOf(after))
+})
+
+test('交给人期间网页打的日志、被拦的地址不收：交还后 console 读不到，结果的提示里也没有；交之前、交还之后的照常', async () => {
+  const { run, signIns, logOf } = setup()
+  await run('navigate', { url: 'http://localhost:3000/login' })
+  const log = logOf('t1')
+  const entry = (text: string) => ({ level: 'info' as const, text, source: '', at: Date.now() })
+  log.console(entry('before-handover'))
+  log.notice('Notice before handover.')
+
+  const pending = run('request_sign_in', { site: 'Demo', reason: 'To open your dashboard.' })
+  await settle()
+  const [card] = signIns.list()
+  // 人登录的时候网页把输入打进控制台、跳去的地址里带着输入、弹窗开去别处，都被拦下来记成提示
+  log.console(entry('typed password hunter2-secret'))
+  log.notice(
+    'A redirect to https://evil.example/?p=hunter2-secret was blocked because that site is not approved yet.',
+  )
+  log.notice('The page opened https://sso.example/?u=ann-secret in a new tab t9.')
+  assert.ok(card)
+  signIns.answer(card.id, 'done')
+  const reply = textOf(await pending)
+  assert.match(reply, /finished signing in to Demo/)
+  assert.equal(/secret/.test(reply), false, reply)
+
+  const consoleText = textOf(await run('console', {}))
+  assert.match(consoleText, /before-handover/)
+  assert.equal(consoleText.includes('hunter2-secret'), false, consoleText)
+  log.console(entry('after-handover'))
+  log.notice('Notice after handover.')
+  const snapshot = textOf(await run('snapshot'))
+  assert.equal(/secret/.test(snapshot), false, snapshot)
+  assert.match(snapshot, /Notice after handover/)
+  assert.match(textOf(await run('console', {})), /after-handover/)
 })
 
 test('同一个标签前后脚两次请人登录：第二次直接回“已在等”，不动第一次的交接', async () => {

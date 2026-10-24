@@ -6,27 +6,18 @@ import { type Event, WebContentsView } from 'electron'
 import { CdpRefused, isAllowedCdp } from './cdp-allow.mjs'
 import { SIGNING_IN } from './executor.mjs'
 import { failurePage } from './forwarding.mjs'
-import type {
-  BrowserPage,
-  ConsoleEntry,
-  DialogInfo,
-  LoadOutcome,
-  TabInfo,
-  TabKind,
-  TabOwner,
-} from './model.mjs'
+import type { BrowserPage, DialogInfo, LoadOutcome, TabInfo, TabKind, TabOwner } from './model.mjs'
 import { autofillPreferences, isHandedOver, registerAutofillTab } from './passwords/tabs.mjs'
+import { createTabLog } from './tab-log.mjs'
 import { BLANK, isOpenable } from './url.mjs'
 
 /** 共用的持久分区：登录一次，各个会话的代理都能用 */
 export const PARTITION = 'persist:litch-browser'
 
-const CONSOLE_KEEP = 200
 /** 没显示的时候页面按这么大排版（代理看到的视口） */
 export const HIDDEN_BOUNDS = { x: 0, y: 0, width: 1280, height: 800 }
 /** 一条 CDP 命令最多等多久。跑脚本的命令自己带 30 秒的时限，这里留出余量 */
 const CDP_TIMEOUT_MS = 35_000
-const NOTICES_KEEP = 20
 
 export interface TabHooks {
   /** 标签的样子变了（地址、标题、加载、代理在用……） */
@@ -92,8 +83,8 @@ export function createTab(
   view.setBounds(HIDDEN_BOUNDS)
   const contents = view.webContents
   const cdp = contents.debugger
-  let consoleEntries: ConsoleEntry[] = []
-  let notices: string[] = []
+  // 交给人登录的这段时间里的事（控制台、弹窗地址、对话框、跳转）不留给代理
+  const log = createTabLog(() => isHandedOver(contents.id))
   let dialog: DialogInfo | null = null
   let dialogWaiters: Array<(info: DialogInfo) => void> = []
   let agentActive = false
@@ -103,12 +94,7 @@ export function createTab(
   let rewrites = 0
   let rewrite: { done: Promise<void>; error: string | null } | null = null
 
-  const addNotice = (text: string) => {
-    // 交给人登录的这段时间里的事（弹窗地址、对话框、跳转）不留给代理
-    if (isHandedOver(contents.id)) return
-    notices.push(text)
-    if (notices.length > NOTICES_KEEP) notices = notices.slice(-NOTICES_KEEP)
-  }
+  const addNotice = log.notice
 
   const onMessage = (_event: Event, method: string, params: Record<string, unknown>) => {
     if (method === 'Page.javascriptDialogOpening') {
@@ -310,19 +296,16 @@ export function createTab(
     }
   })
   contents.on('console-message', (event) => {
-    // 交给人登录的这段时间里网页打的东西（可能带着人输的字）不收
-    if (isHandedOver(contents.id)) return
     const level =
       event.level === 'warning' || event.level === 'error' || event.level === 'debug'
         ? event.level
         : 'info'
-    consoleEntries.push({
+    log.console({
       level,
       text: event.message.slice(0, 4000),
       source: event.sourceId ? `${event.sourceId}:${event.lineNumber}` : '',
       at: Date.now(),
     })
-    if (consoleEntries.length > CONSOLE_KEEP) consoleEntries = consoleEntries.slice(-CONSOLE_KEEP)
   })
   contents.on('render-process-gone', (_event, details) => {
     addNotice(`The page crashed (${details.reason}). Reload it with \`navigate\` action "reload".`)
@@ -377,18 +360,12 @@ export function createTab(
     },
     waitForLoad: (timeoutMs, signal) => settled(timeoutMs, signal),
     cdp: send,
-    consoleEntries: () => [...consoleEntries],
-    clearConsole() {
-      consoleEntries = []
-    },
+    consoleEntries: log.consoleEntries,
+    clearConsole: log.clearConsole,
     dialog: () => dialog,
     dialogOpened: () =>
       dialog ? Promise.resolve(dialog) : new Promise((resolve) => dialogWaiters.push(resolve)),
-    takeNotices() {
-      const taken = notices
-      notices = []
-      return taken
-    },
+    takeNotices: log.takeNotices,
     handoverChanged() {
       hooks.changed()
     },
