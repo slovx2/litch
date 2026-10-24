@@ -447,6 +447,30 @@ export const CompactionCell = memo(function CompactionCell({ row }: Props<'compa
   )
 })
 
+/**
+ * 设备服务重启时这个会话的回合被打断了（SessionSummary.restarted）：对话区最下面一条分隔线，说发消息就能接着做。
+ * 再开始一个回合，核心就去掉这个记号。画法和压缩那一条一样
+ */
+export function RestartNoteCell() {
+  const { c, font } = useTheme()
+  const t = useT()
+  const { deviceId, sessionId } = useTranscript()
+  const summary = useKey<SessionSummary>(keys.summary(deviceId, sessionId))
+  if (summary?.restarted === undefined) return null
+  return (
+    <View style={styles.compaction} testID="restart-note">
+      <View style={[styles.compactionLine, { backgroundColor: c.line2 }]} />
+      <Text
+        style={[styles.meta, styles.compactionText, { color: c.ink3, fontSize: font.size.meta }]}
+        numberOfLines={2}
+      >
+        {t('restart.note')}
+      </Text>
+      <View style={[styles.compactionLine, { backgroundColor: c.line2 }]} />
+    </View>
+  )
+}
+
 /** 会话最上面：从哪个会话分叉出来的。原会话这台设备上还有，点名字过去 */
 export const ForkedCell = memo(function ForkedCell({ row }: Props<'forked'>) {
   const { c, font } = useTheme()

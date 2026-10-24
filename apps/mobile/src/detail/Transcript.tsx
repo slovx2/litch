@@ -39,6 +39,7 @@ import {
   MarkdownCell,
   NoticeCell,
   ReasoningCell,
+  RestartNoteCell,
   StatusCell,
   TodoCell,
   UserCell,
@@ -131,6 +132,7 @@ function Tail({ store, markers }: { store: SessionStore; markers: boolean }) {
         <View key={row.key}>{renderRow(row)}</View>
       ))}
       {/* 子会话交来、还排着没交给模型的回报：进队列就画在最下面，不等下一回合 */}
+      <RestartNoteCell />
       <QueuedNotesCell />
       <EndMark markers={markers} />
     </View>

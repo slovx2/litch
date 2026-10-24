@@ -20,6 +20,7 @@ import { useUpdateSchedule } from '../../update/use-update'
 import { reasonText, type ShownState, shownState } from './failure'
 import { forgetUnusedKey } from './forget'
 import { RemoveDevice } from './RemoveDevice'
+import { RestartDevice } from './RestartDevice'
 import { UpdateBanner } from './UpdateBanner'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Devices'>
@@ -143,6 +144,7 @@ export function DevicesScreen({ navigation }: Props) {
   const [menu, setMenu] = useState<DeviceView | null>(null)
   const [renaming, setRenaming] = useState<DeviceView | null>(null)
   const [removing, setRemoving] = useState<DeviceView | null>(null)
+  const [restartingId, setRestartingId] = useState<string | null>(null)
   useForegroundReconnect()
   useUpdateSchedule()
   const add = () => navigation.navigate('AddDevice')
@@ -203,6 +205,16 @@ export function DevicesScreen({ navigation }: Props) {
                     void channel.command('device.reconnect', { deviceId: menu.id })
                   },
                 },
+                // 外壳给了停服务的能力才有这一项；做不了的也点得开，框里说原因
+                ...(menu.restart
+                  ? [
+                      {
+                        label: t('restart.menu'),
+                        testID: 'menu:restart',
+                        onPress: () => setRestartingId(menu.id),
+                      },
+                    ]
+                  : []),
                 ...(menu.kind === 'ssh'
                   ? [
                       {
@@ -248,6 +260,7 @@ export function DevicesScreen({ navigation }: Props) {
         }}
         onClose={() => setRemoving(null)}
       />
+      <RestartDevice deviceId={restartingId} onClose={() => setRestartingId(null)} />
     </Screen>
   )
 }

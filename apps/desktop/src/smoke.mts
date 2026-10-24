@@ -95,6 +95,11 @@ import { type ServiceAliases, serviceConnect } from './probe-remote-service.mjs'
 import { serviceFailures, serviceGrow } from './probe-remote-service-ends.mjs'
 import { judgeRemoteService, type ServiceSeen } from './probe-remote-service-judge.mjs'
 import { serviceSession } from './probe-remote-service-more.mjs'
+import {
+  judgeServiceRestart,
+  type ServiceRestart,
+  serviceRestart,
+} from './probe-remote-service-restart.mjs'
 import { judgeScroll, scrollProbe } from './probe-scroll.mjs'
 import { judgeMockService, judgeService, mockServiceProbe, serviceProbe } from './probe-service.mjs'
 import { judgeSession, sessionProbe } from './probe-session.mjs'
@@ -258,13 +263,21 @@ async function measureRemoteService(window: BrowserWindow): Promise<readonly [ob
     await runInPage(window, installTerminalKit)
     seen.connect = await runInPage(window, serviceConnect, aliases, work)
     seen.session = await runInPage(window, serviceSession, aliases.svc, opening)
+    // 设备行菜单里的“设置”“重启设备服务”：真的经 ssh 停、重连时拉起
+    seen.restart = await runInPage(window, serviceRestart, aliases.svc, opening)
     seen.grow = await runInPage(window, serviceGrow, aliases, opening)
     seen.failures = await runInPage(window, serviceFailures, aliases)
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error)
     throw new Error(`${reason}（已经量到的：${JSON.stringify(seen)}）`)
   }
-  return [seen, judgeRemoteService(seen as ServiceSeen, aliases)]
+  return [
+    seen,
+    [
+      ...judgeRemoteService(seen as ServiceSeen, aliases),
+      ...judgeServiceRestart(seen.restart as ServiceRestart, aliases.svc, opening),
+    ],
+  ]
 }
 
 /** 跑一种验收，返回量到的数字和不合格的项 */

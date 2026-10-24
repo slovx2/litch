@@ -13,6 +13,7 @@ import { zhPairing } from './zh-CN-pairing.ts'
 import { zhPasswords } from './zh-CN-passwords.ts'
 import { zhPeer } from './zh-CN-peer.ts'
 import { zhProposals } from './zh-CN-proposals.ts'
+import { zhRestart } from './zh-CN-restart.ts'
 import { zhRupgrade } from './zh-CN-rupgrade.ts'
 import { zhSwitches } from './zh-CN-switches.ts'
 import { zhTasks } from './zh-CN-tasks.ts'
@@ -48,6 +49,8 @@ export const zhCN = {
   ...zhLimits,
   // 远程设备服务的一键升级（zh-CN-rupgrade.ts）
   ...zhRupgrade,
+  // 重启设备服务（zh-CN-restart.ts）
+  ...zhRestart,
   'title.location': '当前位置',
   'workspace.none': '无项目',
 

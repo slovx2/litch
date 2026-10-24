@@ -7,7 +7,12 @@ import type { SessionMentionRef } from '../../protocol/src/session-mentions.mjs'
 import type { SessionBackgroundView, TurnOrigin } from './model-background.mjs'
 import type { GoalReachedView, SessionGoalView } from './model-goal.mjs'
 import type { MachineAccessView, MachineAskView } from './model-machine.mjs'
-import type { DeviceServiceView, RemoteUpgradeView, ServiceUpgradeView } from './model-service.mjs'
+import type {
+  DeviceServiceView,
+  RemoteUpgradeView,
+  ServiceRestartView,
+  ServiceUpgradeView,
+} from './model-service.mjs'
 import type { SessionTaskMark } from './model-tasks.mjs'
 import type {
   AgentRefView,
@@ -243,6 +248,11 @@ export interface DeviceView {
    */
   remoteUpgrade: RemoteUpgradeView | null
   /**
+   * 重启设备服务（侧栏设备行“⋯”里的那一项）：能不能做、做到哪了（model-service.mts 的 ServiceRestartView）。
+   * 这一端做不了时是 null：另外指定了入口的本机、外壳没给这项能力的远程设备
+   */
+  restart: ServiceRestartView | null
+  /**
    * 这台设备上的会话能不能用这台桌面端的两项能力（设备设置页的两个开关，存在桌面端、按设备记）。
    * null：这台桌面端根本执行不了这一项（比如不在 macOS 上就没有 Computer Use），设置页不出这个开关
    */
@@ -400,6 +410,11 @@ export interface SessionSummary {
   background: SessionBackgroundView | null
   /** 会话所在的设备层工作树（worktrees 扩展，model-worktrees.mts）。不在工作树里的、对面不报的是 null */
   worktree: SessionWorktreeView | null
+  /**
+   * 这边重启设备服务时它的回合（或后台任务）被打断了：重启完成的时刻（毫秒）。
+   * 对话末尾据此说一句“回合被打断，发消息继续”；它再开始一个回合就去掉。只记在这次运行里，没有这回事时不带
+   */
+  restarted?: number
 }
 
 /** 派出这个原生会话的应用。app 是对面报的原样，认不认识由界面定 */

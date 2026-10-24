@@ -23,6 +23,7 @@ import {
   type AbortSignalLike,
   ConnectError,
   phrase,
+  type RemoteStopResult,
   type ServiceUpgradeReport,
   type TransportOpener,
 } from '@litch/core'
@@ -385,6 +386,12 @@ export interface LocalDevice {
    * 还没成功过、本机走的是另外指定的入口、自带的命令行没报自己是哪一份，都是 null。
    */
   upgrade(): UpgradeOutcome | null
+  /**
+   * 重启设备服务的第一步：请服务停下，等它完全退出（device-stop）。ifIdle 时只是有客户端连着不算忙
+   * （这个应用自己就连着），紧接着不带 --if-idle 再停一次。停了之后核心重连，下一次打开时用旧服务启动时带的参数拉起。
+   * 另外指定了入口、没有自带的适配器时没有这一项
+   */
+  stopService?(ifIdle: boolean, signal: AbortSignalLike): Promise<RemoteStopResult>
 }
 
 /**
@@ -427,6 +434,12 @@ export function localDevice(options: LocalDeviceOptions): LocalDevice {
   const home = options.adapterHome ? absolute(options.adapterHome) : defaultAdapterHome()
   // 登录 shell 只问一遍：问一次要起一个交互式的 shell，重连的时候不该每次都来
   let login: Promise<Environment | null> | null = null
+  const environment = async (): Promise<NodeJS.ProcessEnv> => {
+    login ??= (options.environment ?? loginEnvironment)()
+    return serviceEnv(options.lang(), await login)
+  }
+  /** 重启时停掉的那份服务启动时带的参数：下一次打开时原样带上，不替用户改主意。用过就清掉 */
+  let relaunch: readonly string[] | null = null
   /**
    * 试过、换不了的那几份服务，和当时的原因。同一份服务不再去请它停：
    * 它不认识这个请求的话问多少遍都一样，停到一半卡住的再来一遍只会让每次重连都多等上一阵。
@@ -507,13 +520,51 @@ export function localDevice(options: LocalDeviceOptions): LocalDevice {
 
   const open: TransportOpener = async (signal, report) => {
     report?.(phrase('connect.adapterStarting'))
-    login ??= (options.environment ?? loginEnvironment)()
-    const env = serviceEnv(options.lang(), await login)
-    const found = await startDevice(adapter, home, env, signal, options.startTimeoutMs)
+    const env = await environment()
+    const given = relaunch
+    const found = await startDevice(
+      adapter,
+      home,
+      env,
+      signal,
+      options.startTimeoutMs,
+      given ?? DEFAULT_OPTIONS,
+    )
+    relaunch = null
     const result = await reconcile(found, env, signal)
     last = result
     if (result.started) launched = result
     return unixSocketOpener(result.socket)(signal)
   }
-  return { open, ...state }
+
+  const stopService = async (
+    ifIdle: boolean,
+    signal: AbortSignalLike,
+  ): Promise<RemoteStopResult> => {
+    const env = await environment()
+    const kept = last?.service?.options ?? []
+    const timeout = options.stopTimeoutMs
+    let stop = await stopDevice(adapter, home, env, signal, ifIdle, timeout)
+    // 服务把连着的客户端也算不闲，这个应用自己就连着：不闲的原因只有客户端时，紧接着直接停（它们会自己重连）
+    const onlyClients =
+      stop.kind === 'busy' &&
+      stop.busy.length > 0 &&
+      stop.busy.every((entry) => entry.reason === 'clients')
+    if (ifIdle && onlyClients) stop = await stopDevice(adapter, home, env, signal, false, timeout)
+    switch (stop.kind) {
+      case 'stopped':
+        relaunch = kept.length > 0 ? kept : null
+        return { result: 'stopped' }
+      case 'busy':
+        return {
+          result: 'busy',
+          busy: stop.busy.filter((entry) => entry.reason !== 'clients'),
+        }
+      case 'unsupported':
+        return { result: 'unsupported', said: stop.detail }
+      case 'failed':
+        return { result: 'failed', said: stop.detail }
+    }
+  }
+  return { open, stopService, ...state }
 }

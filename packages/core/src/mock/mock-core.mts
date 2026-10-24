@@ -64,6 +64,7 @@ import { createMockManagement } from './mock-manage.mjs'
 import { createMockPairing } from './mock-pairing.mjs'
 import { createMockPeer } from './mock-peer.mjs'
 import { createMockRemoteUpgrade } from './mock-remote-upgrade.mjs'
+import { createMockRestart } from './mock-restart.mjs'
 import { createMockService } from './mock-service.mjs'
 import { createMockTasks } from './mock-tasks.mjs'
 import { createMockTerminals } from './mock-terminals.mjs'
@@ -453,6 +454,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     const index = view?.sessions.findIndex((session) => session.id === sessionId) ?? -1
     if (!view || index < 0) return
     const next = { ...(view.sessions[index] as SessionSummary), ...patch }
+    // 和真的核心一样：重启时被打断的会话又开始了一个回合，“发消息继续”那句去掉
+    if (patch.status === 'running') delete next.restarted
     view.sessions[index] = next
     const ops: SidebarOp[] = [{ op: 'session.upsert', session: next }]
     emit(`sidebar:${deviceId}`, ops)
@@ -666,6 +669,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     service.stage(view.deviceId, message.text)
     // 远程设备服务比应用旧、一键升级的几出（关键字在 mock-remote-upgrade.mts 开头）
     remoteUpgrade.stage(view.deviceId, message.text)
+    // 重启设备服务的几出（关键字在 mock-restart.mts 开头）
+    restart.stage(view.deviceId, message.text)
     if (DROPS_HARNESS.test(message.text) && dropHarness(view, turnId)) return turnId
     if (ASKS_APPROVAL.test(message.text)) {
       askApproval(view, turnId)
@@ -1540,30 +1545,33 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     },
     busy: (deviceId, harnessId) => engaged(deviceId, harnessId).length > 0,
     // 强行重启：这个 harness 上在跑的回合都记成中断，等着的请求一并作废
-    interrupt(deviceId, harnessId) {
-      for (const summary of engaged(deviceId, harnessId)) {
-        const view = sessions.get(`session:${deviceId}:${summary.id}`)
-        const turn = view ? running(view) : undefined
-        if (!view || !turn) {
-          // 没打开过的会话只有侧栏上的那一行
-          updateSummary(deviceId, summary.id, { status: 'idle', waitingFor: null })
-          continue
-        }
-        replies.get(sessionKey(view))?.()
-        if (sessionKey(view) === streamKey && streaming === 'running') {
-          stopStream?.()
-          stopStream = null
-          streaming = 'done'
-        }
-        applySessionOps(
-          view,
-          view.requests.map((request) => ({ op: 'request.remove', requestId: request.id })),
-        )
-        const current = replyItems.get(sessionKey(view))
-        endTurn(view, turn.id, current?.turnId === turn.id ? current.itemId : null, 'interrupted')
-      }
-    },
+    interrupt: (deviceId, harnessId) => interruptAll(deviceId, engaged(deviceId, harnessId)),
   })
+
+  /** 这几个会话在跑的回合都记成中断，等着的请求一并作废（强行重启 harness、重启设备服务） */
+  function interruptAll(deviceId: string, summaries: SessionSummary[]) {
+    for (const summary of summaries) {
+      const view = sessions.get(`session:${deviceId}:${summary.id}`)
+      const turn = view ? running(view) : undefined
+      if (!view || !turn) {
+        // 没打开过的会话只有侧栏上的那一行
+        updateSummary(deviceId, summary.id, { status: 'idle', waitingFor: null })
+        continue
+      }
+      replies.get(sessionKey(view))?.()
+      if (sessionKey(view) === streamKey && streaming === 'running') {
+        stopStream?.()
+        stopStream = null
+        streaming = 'done'
+      }
+      applySessionOps(
+        view,
+        view.requests.map((request) => ({ op: 'request.remove', requestId: request.id })),
+      )
+      const current = replyItems.get(sessionKey(view))
+      endTurn(view, turn.id, current?.turnId === turn.id ? current.itemId : null, 'interrupted')
+    }
+  }
 
   // ---------- 扫码绑定手机（mock-pairing.mts） ----------
   const pairing = createMockPairing({
@@ -1798,6 +1806,40 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     ],
   })
 
+  const restart = createMockRestart({
+    clock,
+    stepMs: chunkMs,
+    device: (deviceId) => app.devices.find((entry) => entry.id === deviceId),
+    patch: (deviceId, patch) => void patchDevice(deviceId, patch),
+    sessions: (deviceId) =>
+      (sidebars.get(deviceId)?.sessions ?? []).flatMap((session) => {
+        const running = session.status === 'running' || session.status === 'waiting'
+        const background = session.background?.running ?? 0
+        return running || background > 0
+          ? [{ id: session.id, title: session.title, running, background }]
+          : []
+      }),
+    interrupt(deviceId, ids) {
+      const summaries = sidebars.get(deviceId)?.sessions ?? []
+      interruptAll(
+        deviceId,
+        summaries.filter((session) => ids.includes(session.id)),
+      )
+      // 后台任务的进程随服务一起结束
+      for (const id of ids) {
+        const summary = summaries.find((session) => session.id === id)
+        if (summary?.background?.running) {
+          updateSummary(deviceId, id, {
+            background: { ...summary.background, running: 0, tasks: [] },
+          })
+        }
+      }
+    },
+    mark(deviceId, ids, at) {
+      for (const id of ids) updateSummary(deviceId, id, { restarted: at })
+    },
+  })
+
   const compose = createMockCompose({
     clock,
     // 晚三拍到：够看见“正在取”，又不至于让人等
@@ -2021,13 +2063,15 @@ export function createMockCore(options: MockCoreOptions): MockCore {
   /** 发出去之前把开关一栏算一遍：harness 装了、连上了、任务卡改了，都在这里跟上 */
   const emitDevice = (device: DeviceView) => {
     const fresh = { ...device, tools: toolsOf(device) }
+    fresh.restart = restart.viewOf(fresh)
     const index = app.devices.findIndex((entry) => entry.id === device.id)
     if (index !== -1) app.devices[index] = fresh
     emit('app', [{ op: 'device.upsert', device: fresh }])
   }
   // 一开始的那几台：开关一栏先算好
   for (const [index, device] of app.devices.entries()) {
-    app.devices[index] = { ...device, tools: toolsOf(device) }
+    const fresh = { ...device, tools: toolsOf(device) }
+    app.devices[index] = { ...fresh, restart: restart.viewOf(fresh) }
   }
 
   const patchDevice = (deviceId: string, patch: Partial<DeviceView>): DeviceView => {
@@ -2179,6 +2223,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         service: null,
         upgrade: null,
         remoteUpgrade: null,
+        restart: null,
         tools: { browser: true, computer: false },
         // 新加的远程设备：“操作这台电脑”默认关
         machine: sampleMachineAccess(''),
@@ -2270,6 +2315,15 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       emitDevice(device)
       return {}
     }
+    if (name === 'device.restartService') {
+      const { deviceId, mode } = params as Commands['device.restartService']['params']
+      restart.run(deviceId, mode)
+      return {}
+    }
+    if (name === 'device.restartSessions') {
+      const { deviceId } = params as Commands['device.restartSessions']['params']
+      return { sessions: restart.sessions(deviceId) }
+    }
     if (name === 'device.upgradeService') {
       const { deviceId, mode } = params as Commands['device.upgradeService']['params']
       remoteUpgrade.run(deviceId, mode)
@@ -2277,6 +2331,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     }
     if (name === 'device.reconnect') {
       const { deviceId } = params as Commands['device.reconnect']['params']
+      // 重启之后没能连回来的：这就把它连上
+      if (restart.reconnect(deviceId)) return {}
       // 因为忙没换版本的本机：这就是“现在再试一次”
       if (service.retry(deviceId)) return {}
       const device = app.devices.find((entry) => entry.id === deviceId)

@@ -206,3 +206,67 @@ export type RemoteStopResult =
   | { result: 'stopped' }
   | { result: 'busy'; busy: ServiceBusyView[] }
   | { result: 'legacy' | 'unsupported' | 'failed'; said: string | null }
+
+// ---------- 重启设备服务（侧栏设备行“⋯”里的那一项） ----------
+
+/**
+ * 现在不能重启的原因：
+ * offline 没连上；single 对面不是设备服务（只有一个 harness 的入口）；
+ * managed 服务由前台或者服务管理器管着（不是 device-start 拉起的），要用户用自己的方式重启；
+ * upgrading 一键升级正在进行
+ */
+export type ServiceRestartBlock = 'offline' | 'single' | 'managed' | 'upgrading'
+
+/**
+ * 没做成的是哪一步：
+ * connect 经 ssh 连不上那台机器（原因在 text 里）；unsupported 在跑的服务不认识停止的请求，或者它的控制通道连不上；
+ * legacy 在跑的是不带聚合面的旧服务；stop 去停了，没停成；
+ * start 停了之后没能重新连上（原因在 text 里，没有原因是等到点了）；stale 重连上来，在跑的还是原来那一份
+ */
+export type ServiceRestartFailure =
+  | 'connect'
+  | 'unsupported'
+  | 'legacy'
+  | 'stop'
+  | 'start'
+  | 'stale'
+
+/**
+ * 走到了哪一步：
+ * idle 没在做；stopping 正在请服务停下（device-stop 等它完全退出才返回）；
+ * busy 没有会话在跑，服务却说不闲（设备上的终端、这边看不到的回合）：等用户看过原因再决定；
+ * starting 停了，正在重连（重连时服务被拉起来）；
+ * done 重连上了、在跑的换了一份（interrupted 是被打断的会话有几个）；failed 没做成。
+ * done、failed 的 at 是那一刻的时间（毫秒）：界面据此只提示一次
+ */
+export type ServiceRestartPhase =
+  | { step: 'idle' }
+  | { step: 'stopping' }
+  | { step: 'busy'; busy: ServiceBusyView[] }
+  | { step: 'starting' }
+  | { step: 'done'; at: number; interrupted: number }
+  | {
+      step: 'failed'
+      at: number
+      reason: ServiceRestartFailure
+      /** connect、start 时是连不上的原因；别的由界面按 reason 说，这里是 null */
+      text: Text | null
+      /** device-stop 或连接时的原话，给“详情”用。没有就是 null */
+      detail: string | null
+    }
+
+/** 重启设备服务：能不能做、做到哪了。这一端做不了（另外指定了入口的本机、手机端没有这项能力）时设备上没有这一项 */
+export interface ServiceRestartView {
+  blocked: ServiceRestartBlock | null
+  phase: ServiceRestartPhase
+}
+
+/** 重启会打断的一个会话：在跑回合（包括停下来等人的）、或者有后台任务在跑 */
+export interface ServiceRestartSession {
+  id: string
+  title: Text
+  /** 回合在跑（包括停下来等人的） */
+  running: boolean
+  /** 在跑的后台任务有几个 */
+  background: number
+}

@@ -1,13 +1,16 @@
 // 远程设备第二遍验收的判定（量的办法在 probe-remote-service*.mts）。在主进程里跑，不进页面。
+
 import type { ServiceAliases, ServiceConnect } from './probe-remote-service.mjs'
 import type { FailureSeen, ServiceFailures, ServiceGrow } from './probe-remote-service-ends.mjs'
 import type { ServiceSession } from './probe-remote-service-more.mjs'
+import type { ServiceRestart } from './probe-remote-service-restart.mjs'
 
 export interface ServiceSeen {
   connect: ServiceConnect
   session: ServiceSession
   grow: ServiceGrow
   failures: ServiceFailures
+  restart: ServiceRestart
 }
 
 /** 给人看的话里不该有 ssh 或 shell 的原话 */

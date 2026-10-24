@@ -8,6 +8,7 @@ import type {
   NoticeItem,
   ReasoningItem,
   RequestView,
+  SessionSummary,
   ToolCallItem,
   ToolPart,
   WebSearchItem,
@@ -490,6 +491,28 @@ export const Compaction = memo(function Compaction(ref: ItemRef) {
     <div className="compaction" data-state={item.status} data-anchor={`i:${ref.itemId}`}>
       {running ? <i className="st run" /> : <Icon name="compact" small />}
       <span>{label}</span>
+    </div>
+  )
+})
+
+/**
+ * 这边重启设备服务时这个会话的回合被打断了：对话末尾一条和压缩一样的分隔线，说一句发消息继续。
+ * 再开始一个回合核心就把记号去掉（SessionSummary.restarted）
+ */
+export const RestartNote = memo(function RestartNote({
+  deviceId,
+  sessionId,
+}: {
+  deviceId: string
+  sessionId: string
+}) {
+  const summary = useKey<SessionSummary>(keys.summary(deviceId, sessionId))
+  const t = useT()
+  if (summary?.restarted === undefined) return null
+  return (
+    <div className="compaction" data-state="restarted" data-restart-note="">
+      <Icon name="info" small />
+      <span>{t('restart.note')}</span>
     </div>
   )
 })

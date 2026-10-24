@@ -12,6 +12,7 @@ import { enPairing } from './en-pairing.ts'
 import { enPasswords } from './en-passwords.ts'
 import { enPeer } from './en-peer.ts'
 import { enProposals } from './en-proposals.ts'
+import { enRestart } from './en-restart.ts'
 import { enRupgrade } from './en-rupgrade.ts'
 import { enSwitches } from './en-switches.ts'
 import { enTasks } from './en-tasks.ts'
@@ -39,6 +40,8 @@ export const en: Record<MessageKey, Entry> = {
   ...enPeer,
   ...enLimits,
   ...enRupgrade,
+  // 重启设备服务（en-restart.ts）
+  ...enRestart,
   'title.location': 'Location',
   'workspace.none': 'No project',
 

@@ -39,7 +39,8 @@ import { showToast } from '../app/toasts.tsx'
 import { mentionInComposer } from '../composer/drafts.ts'
 import type { PlaceWish } from '../composer/new-place.ts'
 import { PairDialog } from '../devices/PairDialog.tsx'
-import { serviceFlagOf } from '../devices/service.ts'
+import { useRestart } from '../devices/RestartService.tsx'
+import { restartItemOf, restarting, serviceFlagOf } from '../devices/service.ts'
 import { FailureNote, shownState, useReconnect } from '../devices/status.tsx'
 import { useBrowserWants } from '../side/browser/store.ts'
 import { SpawnDialog } from '../tree/SpawnDialog.tsx'
@@ -778,6 +779,8 @@ function DeviceGroup(props: GroupProps) {
   const [pairing, setPairing] = useState(false)
   /** 设备那一行的菜单：行尾的按钮和右键是同一份 */
   const deviceMenu = useRef<RowMenuHandle>(null)
+  /** 菜单里的“重启设备服务”：确认框和结果提示 */
+  const restart = useRestart(deviceId)
   const dragging = useDragging()
   /** 父会话 → 挂在它下面的子会话（只有父会话也在侧栏里的才在） */
   const children = useKey<SessionChildren>(keys.children(deviceId)) ?? NO_CHILDREN
@@ -957,7 +960,10 @@ function DeviceGroup(props: GroupProps) {
     offline: ['pill mute', t('sidebar.offline')],
     error: ['pill err', t('sidebar.failed')],
   }
-  const pill = state[shownState(device)]
+  // 正在重启：停、等重连都写“重启中”，不写“重连中”
+  const pill: [string, string] | null = restarting(device)
+    ? ['pill wait', t('restart.pill')]
+    : state[shownState(device)]
   /**
    * 有 harness 用不了、而下面还留着它的会话：行上只出一个记号，不放字。
    * 是哪个、为什么在信息卡里；它的会话那几行自己也看得出（变淡、徽标画成虚线）。
@@ -1536,9 +1542,14 @@ function DeviceGroup(props: GroupProps) {
         />
       ) : null}
       {pairing ? <PairDialog device={device} onClose={() => setPairing(false)} /> : null}
+      {restart.dialogs}
     </>
   )
-  /** 设备那一行的菜单：能整理的加项目、加组；支持扫码绑定、连着的“在手机上使用…” */
+  /**
+   * 设备那一行的菜单：能整理的加项目、加组；支持扫码绑定、连着的“在手机上使用…”；
+   * 设备的设置页（和设备列表里进的是同一页）；这一端能重启的“重启设备服务”（现在做不了的淡下去、写原因）
+   */
+  const restartItem = restartItemOf(device)
   const deviceActions: RowAction[] = [
     ...(device.organizable
       ? [
@@ -1548,6 +1559,18 @@ function DeviceGroup(props: GroupProps) {
       : []),
     ...(device.pairing && device.connection === 'online'
       ? [{ id: 'pair', title: t('pairing.use') }]
+      : []),
+    { id: 'settings', title: t('restart.settings') },
+    ...(restartItem
+      ? [
+          {
+            id: 'restart',
+            title: t(restartItem.title),
+            ...(restartItem.enabled
+              ? {}
+              : { disabled: restartItem.note ? t(restartItem.note) : (true as const) }),
+          },
+        ]
       : []),
   ]
 
@@ -1641,6 +1664,8 @@ function DeviceGroup(props: GroupProps) {
             onAction={(id) => {
               if (id === 'pair') setPairing(true)
               else if (id === 'addSection') newSection()
+              else if (id === 'settings') requestDevice(deviceId)
+              else if (id === 'restart') restart.begin()
               else setDialog({ workspace: null })
             }}
           />

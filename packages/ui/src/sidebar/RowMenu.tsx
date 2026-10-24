@@ -19,6 +19,8 @@ export interface RowAction {
   confirm?: { title: string; note: string; yes: string; no: string }
   /** 点了之后还要再挑一个（移到哪个工作区）：换成一屏选项，挑中的那一项的标识随 onAction 给出去 */
   choices?: { title: string; back: string; options: RowChoice[] }
+  /** 现在做不了：淡下去。给了字的，下面一行写为什么 */
+  disabled?: string | true
 }
 
 export interface RowChoice {
@@ -88,6 +90,7 @@ export function RowMenu({ label, actions, onAction, handle }: RowMenuProps) {
   }, [floating, setOpen])
 
   const run = (action: RowAction, confirmed = false) => {
+    if (action.disabled !== undefined) return
     if (action.choices) {
       setChoosing(action)
       return
@@ -175,9 +178,11 @@ export function RowMenu({ label, actions, onAction, handle }: RowMenuProps) {
                   role="menuitem"
                   className="pick-opt"
                   data-action={action.id}
+                  aria-disabled={action.disabled !== undefined || undefined}
                   onClick={() => run(action)}
                 >
                   <b>{action.title}</b>
+                  {typeof action.disabled === 'string' ? <span>{action.disabled}</span> : null}
                 </button>
               ))}
             </div>

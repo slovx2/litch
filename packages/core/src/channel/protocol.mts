@@ -84,6 +84,7 @@ import type {
   PairPhone,
   PairStatus,
 } from '../model-pairing.mjs'
+import type { ServiceRestartSession } from '../model-service.mjs'
 import type {
   TaskDraft,
   TaskPatch,
@@ -625,6 +626,20 @@ export interface Commands {
   'device.upgradeService': {
     params: { deviceId: string; mode: 'start' | 'retry' | 'force' }
     result: Record<string, never>
+  }
+  /**
+   * 重启设备服务（界面上点了才发）：请服务停下、等它完全退出、重连时拉起来。
+   * start：空闲时停，服务说不闲就停在 busy 等用户决定；force：用户确认过会打断什么，直接停；dismiss：收起 busy 和结果。
+   * 立刻返回，进度和结果在设备显示数据的 restart 里；现在不能做（没连上、有别的东西管着服务、上一次没做完）是 rejected
+   */
+  'device.restartService': {
+    params: { deviceId: string; mode: 'start' | 'force' | 'dismiss' }
+    result: Record<string, never>
+  }
+  /** 现在重启设备服务会打断哪些会话：回合在跑（包括停下来等人的）、有后台任务在跑。界面在确认框里列出来 */
+  'device.restartSessions': {
+    params: { deviceId: string }
+    result: { sessions: ServiceRestartSession[] }
   }
   /** 手动刷新一台设备的会话目录 */
   'device.refresh': { params: { deviceId: string }; result: Record<string, never> }

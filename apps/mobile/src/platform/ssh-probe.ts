@@ -10,6 +10,8 @@ import {
   harnessFromInfo,
   isDeviceRuntime,
   phrase,
+  type RemoteStopResult,
+  type ServiceBusyView,
   type Transport,
 } from '@litch/core'
 import { ssh } from '../../modules/litch-ssh/src'
@@ -24,6 +26,7 @@ import {
   type RemoteScript,
   type ScriptNames,
   startScript,
+  stopScript,
 } from './ssh-script'
 import type { RemoteConfig } from './ssh-transport'
 
@@ -198,6 +201,61 @@ export async function startPeer(
     true,
     said(out.said) ?? tailOf(started.stderr),
   )
+}
+
+/** device-stop 那一行里的 busy：逐条不闲的原因。读不懂是空的 */
+function busyOf(line: string | undefined): ServiceBusyView[] {
+  try {
+    const value = JSON.parse(line?.trim().split('\n').at(-1) ?? '') as { busy?: unknown }
+    if (!Array.isArray(value.busy)) return []
+    return value.busy.flatMap((item: Record<string, unknown>) =>
+      typeof item?.reason === 'string'
+        ? [
+            {
+              reason: item.reason,
+              harnesses: Array.isArray(item.harnesses)
+                ? item.harnesses.filter((name): name is string => typeof name === 'string')
+                : [],
+              count: typeof item.count === 'number' ? item.count : 0,
+            },
+          ]
+        : [],
+    )
+  } catch {
+    return []
+  }
+}
+
+/**
+ * 请对面的设备服务停下（重启设备服务）。退出码的含义和桌面端一样（cmd/codex-harness-adapter/device_stop.go）。
+ * ssh 自己没连上时抛 ConnectError；只是有客户端连着的不闲脚本里已经处理，不列出来
+ */
+export async function stopPeer(
+  config: RemoteConfig,
+  names: ScriptNames,
+  ifIdle: boolean,
+  signal: AbortSignalLike,
+): Promise<RemoteStopResult> {
+  const result = await run(config, stopScript(names, ifIdle))
+  checkAborted(signal)
+  if (result.code === EXIT.notFound) throw notInstalled()
+  if (!result.marked) return { result: 'failed', said: tailOf(result.stderr) }
+  const out = parsePairs(result.output)
+  switch (out.code) {
+    case '0':
+      return { result: 'stopped' }
+    case '4':
+      return {
+        result: 'busy',
+        busy: busyOf(out.out).filter((entry) => entry.reason !== 'clients'),
+      }
+    case '3':
+      return { result: 'legacy', said: said(out.said) }
+    case '5':
+      return { result: 'unsupported', said: said(out.said) }
+    default:
+      return { result: 'failed', said: said(out.said) ?? said(out.out) }
+  }
 }
 
 /**
