@@ -240,8 +240,9 @@ ipcRenderer.on(AUTOFILL_CLEAR, (_event, message: unknown) => {
 // Litch 代填的各步：只回状态。fill 带来的值填完就丢，不留在这里
 ipcRenderer.on(SIGNIN_PAGE, (_event, message: unknown) => {
   const one = (message ?? {}) as Record<string, unknown>
-  const { rid, token, op } = one
-  if (typeof rid !== 'string' || typeof token !== 'string') return
+  const { rid, op } = one
+  if (typeof rid !== 'string') return
+  const token = typeof one.token === 'string' ? one.token : ''
   let result: unknown = null
   try {
     switch (op) {

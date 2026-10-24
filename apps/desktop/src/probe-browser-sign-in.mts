@@ -30,7 +30,8 @@ export async function checkSignInCard(options: {
     const invocation: ClientToolInvocation = {
       id: `signin-${++seq}`,
       threadId: owner.threadId,
-      turnId: 'turn-signin',
+      // 每次请人登录算一个新回合：同一回合里人拒绝过的源，再请求直接回拒绝（这里要的是每次都出卡片）
+      turnId: tool === 'request_sign_in' ? `turn-signin-${seq}` : 'turn-signin',
       callId: `s${seq}`,
       namespace: 'litch_browser',
       tool,
@@ -76,7 +77,7 @@ export async function checkSignInCard(options: {
   await until("!!document.querySelector('.bw-signin')", 10_000)
   await page(`document.querySelector('.bw-signin [data-act="sign-in-cancel"]').click()`)
   const cancelled = textOf(await again)
-  check('登录卡片：点“取消”之后调用回取消了', /cancelled signing in/.test(cancelled), cancelled)
+  check('登录卡片：点“取消”之后调用回拒绝了', /declined signing in/.test(cancelled), cancelled)
 
   // 回合打断：卡片变成“代理已收回”，只有“知道了”，点了才没
   const controller = new AbortController()

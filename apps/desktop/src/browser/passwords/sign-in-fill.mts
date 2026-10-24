@@ -405,9 +405,11 @@ export async function fillTab(input: {
   secret = null
   const ok = await put(contents, first.frame, token, values)
   if (!ok) return end('page_changed')
+  // 先开始等落定再提交：提交引起的换页可能在提交这一步里就完成了
+  let landing = settle(contents)
   await submit(contents, first.frame, token, twoStep ? 'username' : 'password', input.submitHint)
   submitted = true
-  let landed = await settle(contents)
+  let landed = await landing
   if (landed === 'gone') return end(null, true)
   if (landed === 'navigated') navigated = true
 
@@ -438,8 +440,9 @@ export async function fillTab(input: {
     if (!(await put(contents, second.frame, token, { password: again.password }))) {
       return end('page_changed')
     }
+    landing = settle(contents)
     await submit(contents, second.frame, token, 'password', false)
-    landed = await settle(contents)
+    landed = await landing
     if (landed === 'gone') return end(null, true)
     if (landed === 'navigated') navigated = true
   }

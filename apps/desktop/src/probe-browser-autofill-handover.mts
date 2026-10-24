@@ -38,7 +38,8 @@ export async function checkHandoverFailures(options: {
     const invocation: ClientToolInvocation = {
       id: `fail-${++seq}`,
       threadId: 'thread-a',
-      turnId: 'turn-1',
+      // 每次请人登录算一个新回合：同一回合里人拒绝过的源，再请求直接回拒绝（这里要的是每次都出卡片）
+      turnId: tool === 'request_sign_in' ? `turn-sign-in-${seq}` : 'turn-1',
       callId: `f${seq}`,
       namespace: 'litch_browser',
       tool,

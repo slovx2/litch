@@ -29,7 +29,7 @@ export interface LoginReport {
   hint: 'none' | 'ok' | 'invalid'
   /** 要填的框都看得见：有大小、不透明、不在页面外、中心点上取到的是它自己 */
   visible: boolean
-  /** 表单的方法；不在表单里是 null */
+  /** 表单写明的方法（小写），没写是 default；不在表单里是 null。只有写明 get 的算用 GET 交 */
   method: string | null
   /** 表单交去的地址（form.action 解析后的）；不在表单里是 null */
   action: string | null

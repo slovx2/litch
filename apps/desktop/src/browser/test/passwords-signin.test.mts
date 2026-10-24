@@ -633,6 +633,6 @@ test('编号提示：冻结之前给指的元素加一次性标记，口令交�
   })
   const marks = sent
     .filter((one) => one.method === 'Runtime.callFunctionOn')
-    .map((one) => (one.params?.arguments as Array<{ value: string }>)[0]?.value)
+    .map((one) => ((one.params?.arguments ?? []) as Array<{ value: string }>)[0]?.value)
   assert.deepEqual(marks, [`${ask.hintToken}:username`, `${ask.hintToken}:submit`])
 })

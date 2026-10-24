@@ -34,6 +34,8 @@ import {
   SIGNIN_ANSWER,
   SIGNIN_CHANGED,
   SIGNIN_LIST,
+  SIGNIN_SET_TOUCH_ID,
+  SIGNIN_TOUCH_ID,
 } from './passwords/ipc.mjs'
 
 const listen = (channel: string, handler: (payload: unknown) => void) => {
@@ -85,12 +87,15 @@ export function browserBridge() {
       onPrompts: (handler: (prompts: unknown) => void) =>
         listen(PASSWORDS_PROMPTS_CHANGED, handler),
     },
-    // 代理请人登录（request_sign_in）：列、答“完成，交还”或“取消”
+    // 代理请人登录（request_sign_in）：列、答（代填、自己登录、交还、拒绝），对话里的那张卡片也走这里
     signIn: {
       list: () => ipcRenderer.invoke(SIGNIN_LIST),
       // answer：done、cancel、dismiss、self，或 { fill: ref, remember }（用卡片上的账号代填）
       answer: (id: string, answer: unknown) => ipcRenderer.invoke(SIGNIN_ANSWER, { id, answer }),
       onChanged: (handler: (requests: unknown) => void) => listen(SIGNIN_CHANGED, handler),
+      // “代填前要 Touch ID”：回 { available, on }（available 为假时设置页不显示这个开关）
+      touchId: () => ipcRenderer.invoke(SIGNIN_TOUCH_ID),
+      setTouchId: (on: boolean) => ipcRenderer.invoke(SIGNIN_SET_TOUCH_ID, on),
     },
     // 从别的浏览器导入（browser-import/bridge.mts）
     import: importBridge(),

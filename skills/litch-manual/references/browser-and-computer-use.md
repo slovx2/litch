@@ -116,17 +116,29 @@ keeps them.
 ### When an agent needs the user signed in
 
 Agents never ask for passwords, one-time codes or other secrets in the chat and never type them. When
-a page needs signing in, the agent hands the tab to the user (`litch_browser` → `request_sign_in`,
-with the site and a short reason):
+a page needs signing in, the agent asks Litch (`litch_browser` → `request_sign_in`, with the site and
+a short reason). Until the request is over, the agent cannot touch that tab; if it had run scripts on
+that page, the page is reloaded first.
 
-- The Browser panel shows a card "The agent asks you to sign in to …" with **Done, hand back** and
-  **Cancel** (and "Show that tab").
-- The user signs in on that page themselves; saved passwords work there like in their own tabs.
-  Until they answer, the agent cannot touch that tab. If the agent had run scripts on that page, it is
-  reloaded first.
-- Before the tab goes back, password fields are cleared. The agent only learns whether the user
-  signed in or cancelled, never what was entered. There is no time limit; interrupting the turn also
-  ends it.
+- A card shows in the Browser panel and in the conversation (and on a paired phone, see phones.md):
+  the real site, the agent's reason, and the saved accounts for exactly that site.
+- **Sign in with {account}**: Litch fills that saved account and submits the form itself. The agent
+  never sees the password or the user name; while Litch fills and until the page has moved on, the
+  agent sees nothing of that tab (console, dialogs, popups, title). If the page still holds the
+  password afterwards, Litch closes the tab and opens the same address in a new one. Litch's own
+  fill does not ask to save the password. Sites that need a popup, a one-time code or a second step
+  after the password are handed to the user.
+- **Sign in myself**: the user signs in on the page (saved passwords work as in their own tabs) and
+  clicks **Done, hand back**; password fields are cleared before the tab goes back.
+- **Decline**: the agent is told not to try another way; it cannot ask again for that site in the
+  same turn.
+- Filling is greyed out, with the reason, when the page is not https (loopback excepted), sends the
+  password with GET or to another site, or the sign-in form cannot be found or is hidden.
+- There is no time limit, except in scheduled-task turns (30 minutes). There the card can also be
+  ticked "Use this account for this task from now on"; next time that task signs in to that site
+  with that account without asking (see scheduled-tasks.md).
+- Optional: Settings → Built-in browser → Saved passwords → **Require Touch ID before filling**
+  (macOS only, off by default).
 
 If the user asks you (as the agent) to sign in somewhere, use `request_sign_in` rather than asking
 for their password.

@@ -233,7 +233,8 @@ export function probeLogin(token: string, hintToken: string | null, begin: boole
   if (begin) session = { token, fields: { username, password }, submit, submitted: false }
   return report(password ? 'login' : 'username', {
     visible,
-    method: form ? (form.getAttribute('method') ?? 'get').toLowerCase() : null,
+    // 没写 method 的（单页应用常这样，提交由脚本拦下）报 default，只有写明 get 的算用 GET 交
+    method: form ? (form.getAttribute('method')?.toLowerCase() ?? 'default') : null,
     action: form ? form.action : null,
   })
 }
