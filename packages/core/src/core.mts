@@ -293,15 +293,22 @@ export function createCore(options: CoreOptions): Core {
           throw new ConnectError('unreachable', phrase('ssh.noClient'), false)
         }
 
-  const remoteConfig = (entry: SavedRemote): DeviceConfig => ({
-    id: entry.id,
-    name: entry.name,
-    host: hostLabel(entry.target),
-    kind: 'ssh',
-    target: entry.target,
-    wire: entry.wire,
-    open: openerOf(entry),
-  })
+  const remoteConfig = (entry: SavedRemote): DeviceConfig => {
+    const stopService = remote?.stopService
+    return {
+      id: entry.id,
+      name: entry.name,
+      host: hostLabel(entry.target),
+      kind: 'ssh',
+      target: entry.target,
+      wire: entry.wire,
+      open: openerOf(entry),
+      // 重启设备服务：外壳能经 ssh 请那台机器上的服务停下才有
+      ...(stopService
+        ? { stopService: (ifIdle, signal) => stopService(entry.target, ifIdle, signal) }
+        : {}),
+    }
+  }
 
   for (const config of options.devices) {
     const wire = config.id === 'local' ? (saved.localWire ?? config.wire) : config.wire
@@ -991,6 +998,18 @@ export function createCore(options: CoreOptions): Core {
         case 'device.reconnect':
           deviceOf((params as { deviceId: string }).deviceId).retry()
           return {}
+        case 'device.restartService': {
+          const { deviceId, mode } = params as Commands['device.restartService']['params']
+          if (mode !== 'start' && mode !== 'force' && mode !== 'dismiss') {
+            throw new ChannelError('rejected', '不认识的做法')
+          }
+          deviceOf(deviceId).restartService(mode)
+          return {}
+        }
+        case 'device.restartSessions': {
+          const { deviceId } = params as Commands['device.restartSessions']['params']
+          return { sessions: deviceOf(deviceId).restartSessions() }
+        }
         case 'device.upgradeService': {
           const { deviceId, mode } = params as Commands['device.upgradeService']['params']
           if (mode !== 'start' && mode !== 'retry' && mode !== 'force') {

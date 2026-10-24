@@ -82,6 +82,7 @@ import type {
 } from '../model-manage.mjs'
 import type {
   DeviceServiceView,
+  ServiceRestartSession,
   ServiceUpgradeReport,
   ServiceUpgradeView,
 } from '../model-service.mjs'
@@ -140,6 +141,11 @@ import {
 import { createOrganizer, looseDirectories, type Organizer } from './organize.mjs'
 import { createPairing, type Pairing, type PairingPlatform } from './pairing.mjs'
 import { DEFAULT_TOOL_SWITCHES, type RemoteUpgradePlatform } from './remote.mjs'
+import {
+  createServiceRestarter,
+  type RestartMode,
+  type ServiceStopper,
+} from './service-restart.mjs'
 import { createServiceUpgrader, type UpgradeMode } from './service-upgrade.mjs'
 import type { SnapshotStore } from './snapshot.mjs'
 import { createTasks, type Tasks } from './tasks.mjs'
@@ -173,6 +179,11 @@ export interface DeviceConfig {
    * 不给，或者返回 null，就是没有这回事：远程设备、另外指定了入口的本机
    */
   upgrade?: () => ServiceUpgradeReport | null
+  /**
+   * 请这台设备上的服务停下（重启设备服务的第一步，service-restart.mts）。外壳给的：本机执行自带的 device-stop，
+   * 远程经 ssh 执行那台机器上的。不给就没有“重启设备服务”：另外指定了入口的本机、外壳没有这项能力的远程设备
+   */
+  stopService?: ServiceStopper
 }
 
 export interface DeviceHooks {
@@ -261,6 +272,10 @@ export interface Device {
   retry(): void
   /** 远程设备服务的一键升级：升级（或换上新版）、现在再请一次空闲时停、立即换上。做不了的抛 ChannelError */
   upgradeService(mode: UpgradeMode): void
+  /** 重启设备服务：先空闲时停、确认过之后直接停、收起结果。做不了的抛 ChannelError */
+  restartService(mode: RestartMode): void
+  /** 现在重启会打断的会话（在跑回合的、停下来等人的、有后台任务在跑的） */
+  restartSessions(): ServiceRestartSession[]
   /** 改显示名、线色。怎么连不在这里改：那要换一条连接，由核心重建这台设备 */
   update(patch: { name?: Text; wire?: WireColor }): void
   /** 手动刷新：重新做一次全量对账 */
@@ -577,6 +592,42 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       serviceDue: online && serviceDue,
       guide: online ? null : guide,
     })
+    tellRestarter()
+  }
+  /**
+   * 重启设备服务（service-restart.mts）：外壳给了怎么停才有。
+   * 重启成了，force 时在跑的那些会话记下重启的时刻（restarted），对话末尾据此说一句
+   */
+  const restarter = config.stopService
+    ? createServiceRestarter({
+        clock: options.clock,
+        stop: config.stopService,
+        changed: () => hooks.device(view()),
+        reconnect: () => retry(),
+        sessions: () => restartSessions(),
+        interrupted(ids) {
+          const at = options.clock.now()
+          const ops: SidebarOp[] = []
+          for (const id of ids) {
+            restarted.set(id, at)
+            const thread = threads.get(id)
+            if (thread) ops.push({ op: 'session.upsert', session: summaryOf(thread) })
+          }
+          if (ops.length > 0) hooks.sidebarOps(ops)
+        },
+        log,
+      })
+    : null
+  /** 把现在的连接状态告诉重启那一头 */
+  function tellRestarter() {
+    const step = upgrader?.view()?.phase.step
+    restarter?.seen({
+      online,
+      full: mode === 'full',
+      service: online ? service : null,
+      failure,
+      upgrading: step === 'installing' || step === 'stopping' || step === 'reconnecting',
+    })
   }
   /** 设备的主目录和系统。主目录只有设备服务会报 */
   let home: string | null = null
@@ -667,6 +718,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     service,
     upgrade,
     remoteUpgrade: upgrader?.view() ?? null,
+    restart: restarter?.view() ?? null,
     tools: toolSwitchesView(),
     // 远程设备“操作这台电脑”：本机设备、执行不了的桌面端是 null
     machine: options.machine?.view() ?? null,
@@ -744,8 +796,25 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       unread: unread.has(thread.id),
       task: tasks.mark(thread.id),
     }
+    const at = restarted.get(thread.id)
+    if (at !== undefined) summary.restarted = at
     if (!asking.has(thread.id)) return summary
     return { ...summary, status: 'waiting', waitingFor: 'approval' }
+  }
+  /** 重启设备服务时被打断的会话 → 重启完成的时刻。它再开始一个回合就去掉 */
+  const restarted = new Map<string, number>()
+  /** 现在重启会打断的会话：回合在跑（包括停下来等人的），或者有后台任务在跑 */
+  function restartSessions(): ServiceRestartSession[] {
+    const found: ServiceRestartSession[] = []
+    for (const thread of threads.values()) {
+      const summary = summaryOf(thread)
+      const running = summary.status === 'running' || summary.status === 'waiting'
+      const background = summary.background?.running ?? 0
+      if (running || background > 0) {
+        found.push({ id: summary.id, title: summary.title, running, background })
+      }
+    }
+    return found
   }
   /** 一个会话上的卡片多了一张（+1）或少了一张（-1）：侧栏那一行跟着换 */
   const markAsking = (threadId: string, change: 1 | -1) => {
@@ -788,6 +857,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     connection = next
     note = nextNote
     failure = nextFailure
+    tellRestarter()
     // 连接的状态变了，之前算的不算数：没连着的时候没有，刚连上的要等对过账再算
     stranded = []
     organizable = false
@@ -1270,6 +1340,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       }
       const was = known.status?.type === 'active'
       const running = status.type === 'active'
+      // 重启时被打断的会话又开始了一个回合：末尾那句“发消息继续”不用再说了
+      if (running) restarted.delete(threadId)
       // 从“在跑”变成“停了”，而界面上没人开着它：标成未读
       if (was && !running && !live.watched(threadId)) unread.add(threadId)
       if (was === running) {
@@ -2352,6 +2424,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     start: () => link.start(),
     stop: () => {
       upgrader?.dispose()
+      restarter?.dispose()
       link.stop()
     },
     // 连着的时候也照做：丢掉这条连接重新连一次，对面换了东西（装上了设备服务）就此换过去
@@ -2360,6 +2433,11 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       if (!upgrader) throw new ChannelError('rejected', '只有远程设备能一键升级设备服务')
       upgrader.run(mode)
     },
+    restartService(mode) {
+      if (!restarter) throw new ChannelError('rejected', '这一端不能重启这台设备的服务')
+      restarter.run(mode)
+    },
+    restartSessions,
     update(patch) {
       if (patch.name !== undefined) name = patch.name
       if (patch.wire !== undefined) wire = patch.wire

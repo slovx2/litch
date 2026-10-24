@@ -83,6 +83,16 @@ computer" 0.10.0, session trees and scheduled tasks 0.11.0, phone pairing 0.12.0
   commands to copy; a service run in the foreground or by a service manager (`brew services`, systemd)
   is installed but not restarted. This is desktop-only and not available through `scripts/litch`; the
   phone app only shows that the service is older.
+- **Restart device service** is in the device row's ⋯ menu in the sidebar (next to **Settings**, which
+  opens the device's detail page) and in the phone's device-list menu, for local and remote devices.
+  It asks the service to stop, waits until the old process has exited, starts it again and reconnects;
+  the row shows "Restarting" and a note says whether it worked and why not. If any session is running a
+  turn or a background task, Litch first lists the sessions that will be interrupted; those turns are
+  not resumed automatically, the session ends with a line saying so, and sending a message continues.
+  If the service reports other work (terminals, device processes), Litch lists it and asks again. Not
+  offered while the device is offline, connected to a single harness only, run in the foreground or by
+  a service manager (restart it the way it was started), or upgrading. It never upgrades. This is
+  not available through `scripts/litch`.
 
 ## Related
 

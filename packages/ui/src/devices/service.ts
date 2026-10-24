@@ -8,6 +8,7 @@ import type {
   RemoteInstallMethod,
   RemoteUpgradeView,
   ServiceBusyView,
+  ServiceRestartFailure,
   ServiceUpgradeView,
 } from '@litch/core'
 import type { Args, MessageKey } from '../i18n/index.ts'
@@ -319,4 +320,34 @@ export function remoteSteps(view: RemoteUpgradeView, pid: number | null): GuideS
     case 'stale':
       return [swap, after]
   }
+}
+
+// ---------- 重启设备服务（侧栏设备行“⋯”里的那一项） ----------
+// 状态由核心记（DeviceView.restart，device/service-restart.mts），这里只定菜单上那一项怎么摆、结果说哪一句。
+
+/**
+ * 菜单上那一项：没有这项能力（另外指定了入口的本机、手机端）不出；正在做时写“正在重启…”、点不了；
+ * 现在做不了的点不了，下面一行（note）写原因
+ */
+export function restartItemOf(
+  device: DeviceView,
+): { title: MessageKey; enabled: boolean; note: MessageKey | null } | null {
+  const view = device.restart
+  if (!view) return null
+  if (restarting(device)) return { title: 'restart.menu.busy', enabled: false, note: null }
+  if (view.blocked !== null) {
+    return { title: 'restart.menu', enabled: false, note: `restart.blocked.${view.blocked}` }
+  }
+  return { title: 'restart.menu', enabled: true, note: null }
+}
+
+/** 设备那一行要不要写“重启中”：停着、等重连都算 */
+export function restarting(device: DeviceView): boolean {
+  const step = device.restart?.phase.step
+  return step === 'stopping' || step === 'starting'
+}
+
+/** 没做成的那一句里，原因说成哪一句 */
+export function restartFailureKey(reason: ServiceRestartFailure): MessageKey {
+  return `restart.failed.${reason}`
 }

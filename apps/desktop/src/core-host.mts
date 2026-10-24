@@ -184,6 +184,8 @@ function createHost(): Core | MockCore {
   // 设备配置和侧栏快照放在用户数据目录里，目录由主进程告诉我们
   const dataDir = process.env.LITCH_DATA_DIR
   const desktop = desktopFacts()
+  // 远程设备服务的一键升级；远端命令行的原话跟界面的语言
+  const upgrade = remoteUpgrade(() => adapterLang)
   const core = createCore({
     clock,
     version,
@@ -193,8 +195,9 @@ function createHost(): Core | MockCore {
       opener: sshOpener,
       discover: discoverHosts,
       check: checkRemote,
-      // 远程设备服务的一键升级；远端命令行的原话跟界面的语言
-      upgrade: remoteUpgrade(() => adapterLang),
+      upgrade,
+      // 重启设备服务：和一键升级“换上新版”是同一步
+      stopService: upgrade.stop,
     },
     clientTools: toolPort,
     forward: authForward(),
@@ -222,6 +225,8 @@ function createHost(): Core | MockCore {
         open: local.open,
         // 每次连上之后核心来取：这一次打开时在跑的服务换没换成自带的、没换是因为什么
         upgrade: () => upgradeReport(local),
+        // 重启设备服务：另外指定了入口（LITCH_ENTRY）时没有自带的适配器，不能重启
+        ...(local.stopService ? { stopService: local.stopService } : {}),
       },
     ],
   })

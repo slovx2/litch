@@ -482,6 +482,26 @@ try {
         `（第一段字 ${turn.firstDeltaMs} 毫秒），再连 ${result.connectMs} 毫秒`,
     )
   })
+
+  await check(
+    '重启设备服务：连着时请它空闲时停（只有客户端连着不算忙），等它退出，再连时用原来的参数拉起一份新的',
+    async () => {
+      const before = service
+      const { lines } = await run(['--restart'])
+      const result = resultOf(lines)
+      assert.equal(result.result, 'ok', JSON.stringify(lines))
+      const restarted = pick(lines, 'restarted')
+      assert.deepEqual(restarted.stop, { result: 'stopped' }, JSON.stringify(restarted))
+      assert.equal(alive(before), false, '说是停了，原来的服务还在')
+      assert.equal(restarted.before.pid, before)
+      assert.notEqual(restarted.after.pid, before, '再连时没有拉起新的一份')
+      assert.deepEqual(restarted.after.options, restarted.before.options, '拉起时带的参数变了')
+      assert.equal(restarted.launched?.started, true)
+      assert.ok(alive(restarted.after.pid), '新拉起的服务不在')
+      seen.add(before)
+      service = restarted.after.pid
+    },
+  )
 } catch (error) {
   failure = error
 }

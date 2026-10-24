@@ -104,6 +104,7 @@ export function sampleApp(_lang: SampleLang, now: number): AppView {
       // 在跑的就是应用自带的那一份。别的情形由对话里的关键字来演（mock-service.mts）
       ...sampleLocalService(now),
       remoteUpgrade: null,
+      restart: null,
       // 设备设置页的两个开关：默认浏览器开、Computer Use 关
       tools: { browser: true, computer: false },
       machine: null,
@@ -155,6 +156,7 @@ export function sampleApp(_lang: SampleLang, now: number): AppView {
       service: sampleRemoteService(now),
       upgrade: null,
       remoteUpgrade: null,
+      restart: null,
       tools: { browser: true, computer: false },
       // 08 号：远程设备“操作这台电脑”。示例里只有 build-01 开着
       machine: sampleMachineAccess('build'),
@@ -186,6 +188,7 @@ export function sampleApp(_lang: SampleLang, now: number): AppView {
       service: null,
       upgrade: null,
       remoteUpgrade: null,
+      restart: null,
       tools: { browser: true, computer: false },
       machine: sampleMachineAccess('nas'),
       // 只有原生 codex：没有设备服务，也就没有会话树
@@ -224,6 +227,7 @@ export function sampleApp(_lang: SampleLang, now: number): AppView {
       service: null,
       upgrade: null,
       remoteUpgrade: null,
+      restart: null,
       tools: { browser: true, computer: false },
       machine: sampleMachineAccess('gpu'),
       sessionTree: true,

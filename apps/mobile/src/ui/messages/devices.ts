@@ -10,6 +10,9 @@ export const zhCN = {
   'devices.empty.detail':
     '添加一台已安装适配器（codex-harness-adapter）或 Codex 的电脑，手机通过 SSH 连接。',
   'devices.menu.detail': '设备详情',
+  'devices.restart.running': '正在重启 {name} 的设备服务…',
+  'devices.restart.ok': '知道了',
+  'devices.restart.close': '关闭',
   'devices.menu.sessions': '会话',
   'devices.stale': '上次的内容',
   'devices.more': '更多',
@@ -103,6 +106,9 @@ export const en: Record<keyof typeof zhCN, Entry> = {
   'devices.empty.detail':
     'Add a computer with the adapter (codex-harness-adapter) or Codex installed. The phone connects over SSH.',
   'devices.menu.detail': 'Device details',
+  'devices.restart.running': 'Restarting the device service on {name}…',
+  'devices.restart.ok': 'OK',
+  'devices.restart.close': 'Close',
   'devices.menu.sessions': 'Sessions',
   'devices.stale': 'From last time',
   'devices.more': 'More',

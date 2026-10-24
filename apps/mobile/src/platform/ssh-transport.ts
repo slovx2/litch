@@ -13,6 +13,7 @@ import {
   ConnectError,
   phrase,
   type RemoteCheck,
+  type RemoteStopResult,
   type Text,
   type Transport,
   type TransportHandlers,
@@ -23,7 +24,7 @@ import { getRandomBytes } from 'expo-crypto'
 import { type SshTarget, ssh } from '../../modules/litch-ssh/src'
 import { noteWork } from '../probe'
 import { sshFailure } from './ssh-errors'
-import { checkAborted, notInstalled, peekHarnesses, probe, startPeer } from './ssh-probe'
+import { checkAborted, notInstalled, peekHarnesses, probe, startPeer, stopPeer } from './ssh-probe'
 import { EXIT, type Peer, proxyScript, type ScriptNames } from './ssh-script'
 
 export interface RemoteConfig {
@@ -235,4 +236,14 @@ export async function checkRemote(
       },
     }
   }
+}
+
+/** 请对面的设备服务停下（重启设备服务的第一步）。停了之后由核心重连，连的时候 device-start 把它拉起来 */
+export async function stopRemote(
+  source: ConfigSource,
+  ifIdle: boolean,
+  signal: AbortSignalLike,
+): Promise<RemoteStopResult> {
+  const config = await resolveConfig(source)
+  return stopPeer(config, namesOf(config), ifIdle, signal)
 }

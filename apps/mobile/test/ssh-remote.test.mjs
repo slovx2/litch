@@ -3,13 +3,13 @@
 // 手机端 SSH 模块的 runScript 由下面的 runLocally 顶替：把脚本喂给 sh，标记那一行之后才算脚本的输出（和 Go 那头一样）。
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, beforeEach, test } from 'node:test'
 import { natives } from 'expo-modules-core'
 import { sshFailure, sshProblem } from '../src/platform/ssh-errors.ts'
-import { atLeast, decide, probe, startPeer, tailOf } from '../src/platform/ssh-probe.ts'
+import { atLeast, decide, probe, startPeer, stopPeer, tailOf } from '../src/platform/ssh-probe.ts'
 import { checkName, parsePairs, proxyScript } from '../src/platform/ssh-script.ts'
 
 const root = mkdtempSync(join(tmpdir(), 'litch-mobile-ssh-'))
@@ -206,6 +206,56 @@ test('启动服务：报了 ready 就成；旧服务在跑（退出码 3）要�
   })
   tools({})
   await assert.rejects(startPeer(config, names, 'service', live), { stage: 'notInstalled' })
+})
+
+test('停服务（重启设备服务）：停了、不闲（只有客户端连着时不算）、旧服务、太旧、停了没退出', async () => {
+  /** device-stop 的替身：把收到的参数记进 calls，按 plan 里的退出码和输出应答 */
+  const calls = join(root, 'stop-calls')
+  const stopper = (plan) => {
+    rmSync(calls, { force: true })
+    tools({
+      [names.adapter]: [`[ "$1" = device-stop ] || exit 9`, `echo "$*" >> '${calls}'`, plan].join(
+        '\n',
+      ),
+    })
+  }
+  const called = () => readFileSync(calls, 'utf8').trim().split('\n')
+  const clients = '{"stopped":false,"busy":[{"reason":"clients","harnesses":[],"count":1}]}'
+  const terminals =
+    '{"stopped":false,"busy":[{"reason":"terminals","harnesses":[],"count":2},{"reason":"clients","harnesses":[],"count":1}]}'
+
+  stopper('echo \'{"stopped":true}\'')
+  assert.deepEqual(await stopPeer(config, names, true, live), { result: 'stopped' })
+  assert.deepEqual(called(), ['device-stop --if-idle'])
+
+  // 只有客户端连着（就是手机自己这条）：去掉 --if-idle 再停一次
+  stopper(`if [ "$2" = --if-idle ]; then echo '${clients}'; exit 4; fi; echo '{"stopped":true}'`)
+  assert.deepEqual(await stopPeer(config, names, true, live), { result: 'stopped' })
+  assert.deepEqual(called(), ['device-stop --if-idle', 'device-stop'])
+
+  // 还有别的在忙：列出来，客户端那条不列
+  stopper(`echo '${terminals}'; exit 4`)
+  assert.deepEqual(await stopPeer(config, names, true, live), {
+    result: 'busy',
+    busy: [{ reason: 'terminals', harnesses: [], count: 2 }],
+  })
+  assert.deepEqual(called(), ['device-stop --if-idle'])
+
+  stopper('echo "旧服务" >&2; exit 3')
+  assert.deepEqual(await stopPeer(config, names, false, live), { result: 'legacy', said: '旧服务' })
+  assert.deepEqual(called(), ['device-stop'])
+  stopper('echo "不认这个控制命令" >&2; exit 5')
+  assert.deepEqual(await stopPeer(config, names, false, live), {
+    result: 'unsupported',
+    said: '不认这个控制命令',
+  })
+  stopper('echo "45 秒还没退出" >&2; exit 1')
+  assert.deepEqual(await stopPeer(config, names, false, live), {
+    result: 'failed',
+    said: '45 秒还没退出',
+  })
+  tools({})
+  await assert.rejects(stopPeer(config, names, false, live), { stage: 'notInstalled' })
 })
 
 test('启动原生 codex：已经在听就什么都不做', async () => {

@@ -152,6 +152,34 @@ export function startScript(names: ScriptNames, peer: Peer): RemoteScript {
 }
 
 /**
+ * 请对面的设备服务停下（重启设备服务的第一步），和桌面端的 stopScript 同一个做法：device-stop 等服务退出才返回，
+ * 标准输出那一行前面加 `out=`、说的话加 `said=`、退出码在 `code=`。
+ * 带 ifIdle 时服务把连着的客户端也算不闲，发请求的这部手机自己就连着：原因只有客户端时，紧接着不带 --if-idle 再停一次
+ */
+export function stopScript(names: ScriptNames, ifIdle: boolean): RemoteScript {
+  const flag = ifIdle ? ' --if-idle' : ''
+  return wrap(names, ({ marker, adapter }) => [
+    `printf '%s\\n' ${quote(marker)}`,
+    `${has(adapter)} || exit ${EXIT.notFound}`,
+    'note=$(mktemp 2>/dev/null || mktemp -t litch-stop 2>/dev/null) || note=',
+    `out=$(${adapter} device-stop${flag} </dev/null 2>"\${note:-/dev/null}")`,
+    'code=$?',
+    ...(ifIdle
+      ? [
+          `if [ "$code" = 4 ] && printf '%s' "$out" | grep -q '"reason":"clients"' &&`,
+          `  ! printf '%s' "$out" | grep -o '"reason":"[A-Za-z]*"' | grep -qv '"reason":"clients"'; then`,
+          `  out=$(${adapter} device-stop </dev/null 2>"\${note:-/dev/null}")`,
+          '  code=$?',
+          'fi',
+        ]
+      : []),
+    `if [ -n "$note" ]; then sed 's/^/said=/' "$note"; rm -f "$note"; fi`,
+    `printf '%s\\n' "$out" | sed 's/^/out=/'`,
+    `printf 'code=%s\\n' "$code"`,
+  ])
+}
+
+/**
  * 接到对面的服务上：`<标记> service` 或 `<标记> codex` 那一行之后，这条 ssh 的标准输入输出就是那条套接字。
  * auto 由对面当场认，先适配器后 codex
  */

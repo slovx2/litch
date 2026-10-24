@@ -1,6 +1,7 @@
 // 给核心的远程能力（RemotePlatform）：一份连接配置（RemoteTarget）怎么连。
 // 每次连都现取钥匙和记下的主机指纹，所以改了钥匙、重新信任了主机，下一次重连就用上。
 // 手机上没有 ssh 配置文件，discover 永远是空的；别名（kind: 'alias'）也就不认。
+// 一键升级（upgrade）不给：手机上只显示“比应用旧”；重启设备服务（stopService）给。
 import {
   type Clock,
   ConnectError,
@@ -11,7 +12,7 @@ import {
 import { remoteDev } from './dev'
 import { keySecret } from './keys'
 import { knownHost } from './known-hosts'
-import { checkRemote, type RemoteConfig, sshOpener } from './ssh-transport'
+import { checkRemote, type RemoteConfig, sshOpener, stopRemote } from './ssh-transport'
 
 const ADAPTER = 'codex-harness-adapter'
 
@@ -55,5 +56,7 @@ export function mobileRemote(clock: Clock, version: string): RemotePlatform {
     opener: (target) => sshOpener(() => configFor(target)),
     discover: async () => [],
     check: (target, signal) => checkRemote(() => configFor(target), signal, clock, version),
+    // 重启设备服务：经 ssh 请那台机器上的服务停下（手机的钥匙是普通的登录钥匙，跑得了 device-stop）
+    stopService: (target, ifIdle, signal) => stopRemote(() => configFor(target), ifIdle, signal),
   }
 }
