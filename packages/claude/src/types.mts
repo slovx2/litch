@@ -584,8 +584,11 @@ export type NativeModelInfo = {
 export type RuntimeBackgroundShell = {
   taskId: string
   toolUseId: string | null
+  /** 命令；监视是它的描述 */
   command: string
   seq: number
+  /** 监视（monitor_*），不是命令：只列给声明了 backgroundTasks 的连接 */
+  monitor?: true
 }
 
 // 后台命令结束：自己退出、被停止，或者随 CLI 进程一起结束。

@@ -88,6 +88,29 @@ export function goalReminder(previous: string | null, next: string | null): stri
   return `<system-reminder>\n${body}\n</system-reminder>`
 }
 
+// 斜杠命令必须保持纯文本才会按命令解析，这样的消息带不了提醒（userMessage 里丢掉）
+export function carriesReminder(context: RuntimeTurnContext): boolean {
+  return !workflowRuntimePrompt(context.prompt).trimStart().startsWith('/')
+}
+
+// 用户停掉的后台命令，照 CLI 自己那条不开回合的通知的样子（task-notification，状态 killed）写，
+// 放在提醒里：画历史时和别的提醒一样去掉
+export function stopNotice(
+  stops: Array<{ taskId: string; toolUseId: string | null; description: string }>,
+): string {
+  const notes = stops.map((stop) =>
+    [
+      '<task-notification>',
+      `<task-id>${stop.taskId}</task-id>`,
+      ...(stop.toolUseId ? [`<tool-use-id>${stop.toolUseId}</tool-use-id>`] : []),
+      '<status>killed</status>',
+      `<summary>Task "${stop.description}" was stopped by the user</summary>`,
+      '</task-notification>',
+    ].join('\n'),
+  )
+  return `<system-reminder>\n${notes.join('\n')}\n</system-reminder>`
+}
+
 // uuid 为空表示不需要按消息确认：新进程的第一条消息，它的 result 不会与别的轮次混淆。
 export function userMessage(
   context: RuntimeTurnContext,
@@ -98,7 +121,7 @@ export function userMessage(
   const images = context.imageInputs ?? []
   // 斜杠命令必须保持纯文本，CLI 才会按命令解析。前面带空白（换行、空格）的也是命令，空白去掉再交给 CLI：
   // 进程里头一条消息 CLI 自己会去空白，之后的就不去了，前面带空白的原样当成一句话发给模型。后面的空白 CLI 认
-  const command = prompt.trimStart().startsWith('/')
+  const command = !carriesReminder(context)
   const text = command ? prompt.trimStart() : prompt
   const note = reminder && !command ? reminder : null
   const envelope = {

@@ -1096,11 +1096,11 @@ export class CodexClaudeAppServer {
       case 'thread/shellCommand':
         return this.threadShellCommand(peer, asRecord(params))
       case 'thread/backgroundTerminals/clean':
-        return this.threadBackgroundTerminalsClean(asRecord(params))
+        return this.threadBackgroundTerminalsClean(peer, asRecord(params))
       case 'thread/backgroundTerminals/list':
-        return this.threadBackgroundTerminalsList(asRecord(params))
+        return this.threadBackgroundTerminalsList(peer, asRecord(params))
       case 'thread/backgroundTerminals/terminate':
-        return this.threadBackgroundTerminalsTerminate(asRecord(params))
+        return this.threadBackgroundTerminalsTerminate(peer, asRecord(params))
       case 'thread/rollback':
         return this.threadRollback(asRecord(params))
       case 'thread/revert':
@@ -3449,33 +3449,41 @@ export class CodexClaudeAppServer {
     return thread
   }
 
-  private listedBackgroundTerminals(thread: ThreadRecord): ListedBackgroundTerminal[] {
+  // 监视（monitor_*）不是终端，只列给声明了 backgroundTasks 的连接：后台任务页上停得掉，官方桌面端看到的照旧
+  private listedBackgroundTerminals(
+    peer: RpcPeer,
+    thread: ThreadRecord,
+  ): ListedBackgroundTerminal[] {
+    const monitors = this.declaresBackground(peer)
     const turnIds = new Set(this.backgroundCommands.list(thread.id).map((entry) => entry.turnId))
     const active = this.activeTurnByThread.get(thread.id)
     if (active) turnIds.add(active)
     const items = [...turnIds].flatMap((turnId) => this.store.getTurn(turnId)?.items ?? [])
     return backgroundTerminals(
-      this.runtime.listBackgroundShells?.(thread.id) ?? [],
+      (this.runtime.listBackgroundShells?.(thread.id) ?? []).filter(
+        (shell) => monitors || !shell.monitor,
+      ),
       thread.cwd,
       items,
     )
   }
 
-  private threadBackgroundTerminalsList(params: Record<string, unknown>): unknown {
+  private threadBackgroundTerminalsList(peer: RpcPeer, params: Record<string, unknown>): unknown {
     const thread = this.loadedThreadForTerminals(params)
     return paginateBackgroundTerminals(
-      this.listedBackgroundTerminals(thread).map((entry) => entry.terminal),
+      this.listedBackgroundTerminals(peer, thread).map((entry) => entry.terminal),
       params.cursor,
       params.limit,
     )
   }
 
   private async threadBackgroundTerminalsTerminate(
+    peer: RpcPeer,
     params: Record<string, unknown>,
   ): Promise<unknown> {
     const thread = this.loadedThreadForTerminals(params)
     const processId = requiredString(params.processId, 'processId')
-    const entry = this.listedBackgroundTerminals(thread).find(
+    const entry = this.listedBackgroundTerminals(peer, thread).find(
       (listed) => listed.terminal.processId === processId,
     )
     if (!entry) return { terminated: false }
@@ -3485,9 +3493,9 @@ export class CodexClaudeAppServer {
   }
 
   // 原生提交清理操作后立即返回，不等待终止完成。
-  private threadBackgroundTerminalsClean(params: Record<string, unknown>): unknown {
+  private threadBackgroundTerminalsClean(peer: RpcPeer, params: Record<string, unknown>): unknown {
     const thread = this.loadedThreadForTerminals(params)
-    for (const entry of this.listedBackgroundTerminals(thread))
+    for (const entry of this.listedBackgroundTerminals(peer, thread))
       void this.runtime.stopBackgroundShell?.(thread.id, entry.taskId)
     return {}
   }

@@ -32,6 +32,9 @@ const completions = (scene: Scene, itemId: string): any[] =>
     .filter((message) => message.method === 'item/completed' && message.params.item.id === itemId)
     .map((message) => message.params)
 
+/** 给模型的话里有几处“被用户停了” */
+const stoppedNotes = (text: string): number => text.split('was stopped by the user').length - 1
+
 const turnsStarted = (scene: Scene): string[] =>
   scene.client.trace
     .filter((message) => message.method === 'turn/started')
@@ -206,11 +209,58 @@ for (const method of ['terminate', 'clean'] as const)
       // 进程退出后线程照常可用：下一回合另起进程接着原来的历史。
       scene.model.enqueue(say('还能继续'))
       assert.equal((await runTurn(scene, '继续')).status, 'completed')
-      assert.match(JSON.stringify(scene.model.requests.at(-1)?.messages), /toolu_stop/)
+      const next = JSON.stringify(scene.model.requests.at(-1)?.messages)
+      assert.match(next, /toolu_stop/)
+      // CLI 那条“被用户停了”的通知随进程没了，由 Litch 在这一轮补上，只一次
+      assert.equal(stoppedNotes(next), 1, next)
+      assert.ok(next.includes('<tool-use-id>toolu_stop</tool-use-id>'), next)
+      assert.ok(next.includes('<status>killed</status>'), next)
+      scene.model.enqueue(say('再来'))
+      assert.equal((await runTurn(scene, '再来')).status, 'completed')
+      assert.equal(stoppedNotes(JSON.stringify(scene.model.requests.at(-1)?.messages)), 1)
+      // 画出来的用户的话里没有这段
+      assert.doesNotMatch(JSON.stringify(await readTurns(scene)), /stopped by the user/)
     } finally {
       await disposeScene(scene)
     }
   })
+
+test('空闲时停掉后台命令、进程还留着：下一轮由 CLI 自己告诉模型，Litch 不重复', {
+  timeout: 90_000,
+}, async () => {
+  const scene = await startScene('native-bg-stop-kept', {
+    CHA_CLAUDE_KEEP_ALIVE_IDLE_SECONDS: '120',
+  })
+  const command = uniqueSleep(60)
+  try {
+    scene.model.enqueue(backgroundBash('toolu_kept', command))
+    scene.model.enqueue(say('已在后台启动'))
+    await runTurn(scene, '在后台启动一条长命令')
+    const [cli] = cliProcesses(scene)
+    assert.ok(cli)
+    assert.deepEqual(
+      await scene.client.request('thread/backgroundTerminals/terminate', {
+        threadId: scene.threadId,
+        processId: 'claude:toolu_kept',
+      }),
+      { terminated: true },
+    )
+    await until('命令进程退出', () => !commandAlive(command), 5_000)
+    await new Promise((resolve) => setTimeout(resolve, 800))
+    assert.equal(turnsStarted(scene).length, 1, '不应出现新回合')
+    scene.model.enqueue(say('知道了'))
+    assert.equal((await runTurn(scene, '继续')).status, 'completed')
+    assert.deepEqual(
+      cliProcesses(scene).map((row) => row.pid),
+      [cli.pid],
+      '还是同一个进程',
+    )
+    const next = JSON.stringify(scene.model.requests.at(-1)?.messages)
+    assert.equal(stoppedNotes(next), 1, next)
+  } finally {
+    await disposeScene(scene)
+  }
+})
 
 test('打断回合不连带停掉后台命令：进程留下，下一回合接着用', { timeout: 90_000 }, async () => {
   const scene = await startScene('native-bg-interrupt')

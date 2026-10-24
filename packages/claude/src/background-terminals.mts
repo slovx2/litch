@@ -27,9 +27,12 @@ export function backgroundTerminals(
   return [...shells]
     .sort((a, b) => a.seq - b.seq)
     .map((shell) => {
-      const processId = shell.toolUseId
-        ? `claude:${shell.toolUseId}`
-        : `claude-task:${shell.taskId}`
+      // 监视没有命令条目：进程号就是 CLI 的任务号，和后台任务集合里的一样（客户端按它找）
+      const processId = shell.monitor
+        ? shell.taskId
+        : shell.toolUseId
+          ? `claude:${shell.toolUseId}`
+          : `claude-task:${shell.taskId}`
       const item = items.find(
         (entry) =>
           entry.type === 'commandExecution' &&
