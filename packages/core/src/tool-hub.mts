@@ -35,8 +35,8 @@ export interface ToolHub {
   cancel(id: string): void
   /** 卡片答了，或者被撤了（null） */
   answer(askId: string, answer: ToolAnswer | null): void
-  /** 手机答了这张卡片（没验签）：交给主进程验，算不算数由它定；算数时它照常 askDone */
-  phoneAnswer(askId: string, answer: ApprovalAnswer): void
+  /** 手机答了一张登录卡片（没验签）：交给主进程按卡片号找卡片、验签，算不算数由它定；算数时它照常 askDone */
+  phoneAnswer(answer: ApprovalAnswer): void
   /** 一个执行过工具调用的回合结束了：执行器收拾这个回合留下的临时东西 */
   turnEnded(deviceId: string, threadId: string, turnId: string): void
   /** 请主进程发一条系统通知（litch_machine 找不到会话的卡片，08 号 4.2）。没有外壳就不发 */
@@ -131,9 +131,8 @@ export function createToolHub(
       asks.delete(askId)
       port?.post({ type: CLIENT_TOOL, op: 'answer', askId, answer })
     },
-    phoneAnswer(askId, answer) {
-      if (!asks.has(askId)) return
-      port?.post({ type: CLIENT_TOOL, op: 'phoneAnswer', askId, answer })
+    phoneAnswer(answer) {
+      port?.post({ type: CLIENT_TOOL, op: 'phoneAnswer', answer })
     },
     turnEnded(deviceId, threadId, turnId) {
       port?.post({ type: CLIENT_TOOL, op: 'turnEnded', deviceId, threadId, turnId })

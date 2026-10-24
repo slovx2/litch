@@ -1,6 +1,6 @@
 // 一台设备上的手机批准（协议扩展 clientApprovals）在客户端这一头：桌面端和手机两头的转运都在这里，验签不在这里。
 //
-// 桌面端（有外壳、执行内置浏览器的那一台）：执行器在会话的对话里出登录卡片时（kind 为 signIn、带着主进程出的票据 phone），
+// 桌面端（有外壳、执行内置浏览器的那一台）：执行器在会话的对话里出登录卡片时（kind 为 signIn、带着主进程的桌面端号 desktopId），
 // 把给人看的摘要（打码的用户名，没有明文）经会话所在的这台设备挂上去（litch/approval/open）；卡片答了、撤了就收掉
 // （litch/approval/close）。设备转来手机的答复（litch/approval/answered）原样交给主进程，主进程自己验签
 // （apps/desktop/src/approvals/verify.mts），验过了才算数、卡片两处一起收。
@@ -41,8 +41,8 @@ export interface ApprovalsHost {
     method: M,
     params: ClientRequests[M]['params'],
   ): Promise<ClientRequests[M]['result']>
-  /** 手机的答复交给主进程验（ToolHub.phoneAnswer）。没有外壳（手机、测试）时不给 */
-  phoneAnswer?(askId: string, answer: ApprovalAnswer): void
+  /** 手机的答复交给主进程验（ToolHub.phoneAnswer；主进程按答复里的卡片号找卡片）。没有外壳（手机、测试）时不给 */
+  phoneAnswer?(answer: ApprovalAnswer): void
   /** 请求没做成：换成给人看的错误 */
   fail(error: unknown): ChannelError
   log(line: string): void
@@ -50,7 +50,7 @@ export interface ApprovalsHost {
 
 export interface Approvals {
   /**
-   * 对话里出了一张客户端工具的卡片：是带票据的登录卡片就挂到设备上，回“收掉”的函数；别的卡片回 null。
+   * 对话里出了一张客户端工具的卡片：是带桌面端号的登录卡片就挂到设备上，回“收掉”的函数；别的卡片回 null。
    * 卡片答了、撤了都要调一次收掉
    */
   ask(place: ToolAskPlace): (() => void) | null
@@ -66,27 +66,16 @@ export interface Approvals {
   offline(): void
 }
 
-/** 登录卡片上主进程出的票据（apps/desktop/src/approvals/verify.mts 的 ApprovalTicket） */
-interface Ticket {
-  id: string
-  nonce: string
-  desktopId: string
-}
-
 /**
  * 从对话里那张登录卡片（ClientAskView 的 signIn）拼出发到设备的卡片。只取给人看的、打码的东西：
- * 账号只给 ref 和打码的用户名。不是登录卡片、没带票据、形状不对都是 null（不发到手机）
+ * 账号只给 ref 和打码的用户名。卡片号、随机数用登录卡片自己的 id、nonce，桌面端号是主进程带上的 desktopId
+ * （apps/desktop/src/approvals/verify.mts 的 approvalDesktopId，主进程没装好验签时是 null）。
+ * 不是登录卡片、没带桌面端号、形状不对都是 null（不发到手机）
  */
 export function phoneCardOf(place: ToolAskPlace, device: string): ApprovalCard | null {
   const ask = place.ask as unknown as Record<string, unknown>
   if (ask.kind !== 'signIn') return null
-  const phone = ask.phone as Partial<Ticket> | null | undefined
-  if (
-    !phone ||
-    !isApprovalToken(phone.id) ||
-    !isApprovalToken(phone.nonce) ||
-    !isApprovalToken(phone.desktopId)
-  )
+  if (!isApprovalToken(ask.id) || !isApprovalToken(ask.nonce) || !isApprovalToken(ask.desktopId))
     return null
   if (typeof ask.origin !== 'string' || !ask.origin) return null
   const accounts: ApprovalCard['summary']['accounts'] = []
@@ -98,7 +87,7 @@ export function phoneCardOf(place: ToolAskPlace, device: string): ApprovalCard |
   const task = ask.task as { id?: unknown; name?: unknown } | null | undefined
   const taskId = typeof task?.id === 'string' ? task.id : ask.taskId
   return {
-    id: phone.id,
+    id: ask.id,
     threadId: place.threadId,
     kind: 'browserSignIn',
     summary: {
@@ -113,8 +102,8 @@ export function phoneCardOf(place: ToolAskPlace, device: string): ApprovalCard |
           : null,
       fillBlocked: typeof ask.fillBlocked === 'string' ? ask.fillBlocked : null,
     },
-    desktopId: phone.desktopId,
-    nonce: phone.nonce,
+    desktopId: ask.desktopId,
+    nonce: ask.nonce,
     expiresAt: typeof ask.expiresAt === 'number' ? ask.expiresAt : null,
   }
 }
@@ -203,8 +192,7 @@ export function createApprovals(host: ApprovalsHost): Approvals {
       if (method === APPROVAL_ANSWERED) {
         // 原样交给主进程验签；不是这台桌面端挂的（或者已经收掉了）不理
         if (!isApprovalAnswer(params)) return true
-        const askId = outgoing.get(params.id)
-        if (askId !== undefined) host.phoneAnswer?.(askId, params)
+        if (outgoing.has(params.id)) host.phoneAnswer?.(params)
         return true
       }
       if (method === APPROVAL_CHANGED) {

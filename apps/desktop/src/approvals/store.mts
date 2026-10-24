@@ -60,7 +60,7 @@ export function approvalKeyFingerprint(approvalKey: string): string {
 }
 
 /** 随机标识：base64url，22 个字（16 字节） */
-export const randomToken = (): string => randomBytes(16).toString('base64url')
+const randomToken = (): string => randomBytes(16).toString('base64url')
 
 const isPhone = (value: unknown): value is TrustedPhone => {
   if (!value || typeof value !== 'object') return false

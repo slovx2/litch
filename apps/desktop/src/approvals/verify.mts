@@ -12,23 +12,15 @@ import {
   isApprovalKey,
 } from '../../../../packages/protocol/src/client-approvals.mjs'
 import type { ApprovalNotice } from './ipc.mjs'
-import {
-  approvalKeyFingerprint,
-  randomToken,
-  type TrustedPhone,
-  type TrustedPhones,
-} from './store.mjs'
+import { approvalKeyFingerprint, type TrustedPhone, type TrustedPhones } from './store.mjs'
 
-/** 一张发到手机的卡片在桌面端记着的票据：卡片号、随机数、桌面端号。登录卡片（对话里那张）带着它，核心看到才转给设备 */
-export interface ApprovalTicket {
+/**
+ * 验签要的卡片内容：主进程自己记着的那张登录卡片（内置浏览器的 SignInRequest，B1a 的 PhoneAnswerCard 是它的子集），
+ * 不用答复里带回来的。卡片号和随机数就是登录卡片的 id、nonce；桌面端号用这里记着的（approvalDesktopId）
+ */
+export interface PhoneCard {
   id: string
   nonce: string
-  desktopId: string
-}
-
-/** 验签要的卡片内容：主进程自己记着的那份，不用答复里带回来的 */
-export interface PhoneCard {
-  phone: ApprovalTicket
   /** 页面的真实源 */
   origin: string
   /** 卡片上列的账号（只看 ref） */
@@ -37,8 +29,6 @@ export interface PhoneCard {
   taskId?: string | null
   /** 毫秒；不限时是 null */
   expiresAt?: number | null
-  /** 会话所在的设备：第一次批准时记下“经哪台设备” */
-  deviceId?: string
 }
 
 /** 为什么不认 */
@@ -89,14 +79,17 @@ export interface PhoneApprovalsOptions {
 /** ed25519 的 SPKI 前缀，后面接 32 字节原始公钥 */
 const ED25519_SPKI = Buffer.from('302a300506032b6570032100', 'hex')
 
-function signatureOk(answer: ApprovalAnswer, card: PhoneCard): boolean {
+function signatureOk(answer: ApprovalAnswer, card: PhoneCard, desktopId: string): boolean {
   try {
     const key = createPublicKey({
       key: Buffer.concat([ED25519_SPKI, Buffer.from(answer.approvalKey, 'base64')]),
       format: 'der',
       type: 'spki',
     })
-    const text = approvalSignedText({ ...card.phone, origin: card.origin }, answer)
+    const text = approvalSignedText(
+      { id: card.id, nonce: card.nonce, desktopId, origin: card.origin },
+      answer,
+    )
     return verify(null, Buffer.from(text, 'utf8'), key, Buffer.from(answer.signature, 'base64'))
   } catch {
     return false
@@ -122,23 +115,21 @@ export class PhoneApprovals {
     this.options = options
   }
 
-  /** 给一张要发到手机的卡片出票据 */
-  ticket(): ApprovalTicket {
-    return { id: randomToken(), nonce: randomToken(), desktopId: this.store.desktopId }
+  /** 这台桌面端的标识：发到手机的卡片带上它，手机签进去 */
+  get desktopId(): string {
+    return this.store.desktopId
   }
 
   verify(card: PhoneCard, answer: unknown): PhoneVerdict {
     if (!isApprovalAnswer(answer)) return { ok: false, why: 'shape' }
-    const { phone } = card
-    if (answer.id !== phone.id || phone.desktopId !== this.store.desktopId)
-      return { ok: false, why: 'card' }
-    if (this.used.has(phone.nonce)) return { ok: false, why: 'replay' }
+    if (answer.id !== card.id) return { ok: false, why: 'card' }
+    if (this.used.has(card.nonce)) return { ok: false, why: 'replay' }
     if (card.expiresAt != null && this.now() >= card.expiresAt) return { ok: false, why: 'expired' }
     if (answer.ref !== null && !card.accounts.some((account) => account.ref === answer.ref))
       return { ok: false, why: 'account' }
     if (answer.remember && !card.taskId) return { ok: false, why: 'remember' }
     // 先验签名（用答复带的钥匙），再看认不认这把钥匙：签名都不对的不该动记下的东西
-    if (!signatureOk(answer, card)) return { ok: false, why: 'signature' }
+    if (!signatureOk(answer, card, this.store.desktopId)) return { ok: false, why: 'signature' }
     const known = this.store.get(answer.phoneId)
     let firstSeen = false
     if (!known) {
@@ -148,7 +139,8 @@ export class PhoneApprovals {
         name: nameOf(answer),
         approvalKey: answer.approvalKey,
         source: 'firstApproval',
-        deviceId: card.deviceId ?? null,
+        // 答复只说是哪张卡片，没说经哪台设备转来的
+        deviceId: null,
         addedAt: this.now(),
         lastApprovedAt: null,
         conflict: false,
@@ -171,7 +163,7 @@ export class PhoneApprovals {
       this.options.notice?.({ kind: 'mismatch', phoneId: known.phoneId, name: known.name })
       return { ok: false, why: 'keyMismatch' }
     }
-    this.used.add(phone.nonce)
+    this.used.add(card.nonce)
     const trusted = this.store.get(answer.phoneId)
     if (trusted) this.store.put({ ...trusted, lastApprovedAt: this.now() })
     this.options.changed?.()
@@ -248,12 +240,15 @@ export function installPhoneApprovals(approvals: PhoneApprovals | null): void {
   installed = approvals
 }
 
-/** 给一张要发到手机的卡片出票据。还没装好（没有数据目录）时是 null，这张卡片就不发到手机 */
-export function newApprovalTicket(): ApprovalTicket | null {
-  return installed?.ticket() ?? null
+/**
+ * 这台桌面端的标识：登录卡片（ClientToolAsk 的 signIn）带上它，核心看到才把卡片转到设备上。
+ * 还没装好（没有数据目录）时是 null，这张卡片就不发到手机
+ */
+export function approvalDesktopId(): string | null {
+  return installed?.desktopId ?? null
 }
 
-/** 验手机的答复（22 号设计 12.2 第 3 条） */
+/** 验手机的答复（22 号设计 12.2 第 3 条；照 browser/passwords/phone-answer.mts 的 VerifyPhoneAnswer） */
 export function verifyPhoneAnswer(card: PhoneCard, answer: unknown): PhoneVerdict {
   return installed ? installed.verify(card, answer) : { ok: false, why: 'unavailable' }
 }
