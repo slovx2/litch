@@ -432,3 +432,41 @@ test('BG-CORE-006 后台任务列表把子代理、子会话合进来：同名�
   // 只有子代理在跑（没有集合）也数得出：输入框上方那一行照样出
   assert.equal(backgroundHint(backgroundEntries(null, [agent('a1', '查日志', 'running')])), 1)
 })
+
+test('BG-CORE-007 已在列表里的会话再收到 thread/started（没带集合）：后台任务照旧在跑，空了只认变化通知', async () => {
+  const codex = harness('codex', {
+    declaration: { features: features({ backgroundTasks: true }) },
+    threads: [
+      thread({
+        id: 'a',
+        updatedAt: 1_700_000_300,
+        turns: [turn('t1', [userText('u1', '起服务')])],
+        litchBackground: {
+          tasks: [
+            { id: 'k1', kind: 'shell', title: 'npm run dev', status: 'running', startedAt: 1 },
+          ],
+          wakesOnFinish: true,
+        },
+      } as never),
+    ],
+  })
+  const world = deviceWorld([codex])
+  world.core.start()
+  for (let i = 0; i < 4; i++) await settle()
+  assert.equal(world.side.sessions.get('a')?.background?.running, 1)
+
+  // Claude 入口重扫原生会话后把这个会话再发一次：会话对象里没有 litchBackground
+  world.peer.last().notify('thread/started', {
+    thread: thread({ id: 'a', updatedAt: 1_700_000_400, name: '改了名' }),
+  })
+  await settle()
+  assert.equal(world.side.sessions.get('a')?.background?.running, 1, '那一行不能因此没了')
+
+  world.peer.last().notify('litch/thread/background/changed', {
+    threadId: 'a',
+    tasks: [],
+    wakesOnFinish: true,
+  })
+  await settle()
+  assert.equal(world.side.sessions.get('a')?.background, null)
+})

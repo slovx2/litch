@@ -1703,9 +1703,13 @@ export class CodexClaudeAppServer {
             this.isConnected(target) &&
             this.peerFeatures.get(target)?.extensions.has(EXTENSION.nativeLineage)
           )
+            // 后台任务的集合也带上：客户端按标识整个换掉会话对象，不带就把还在跑的后台任务丢了
             this.deliver(
               target,
-              { method: 'thread/started', params: structuredClone(params) },
+              {
+                method: 'thread/started',
+                params: this.withBackground(target, structuredClone(params)),
+              },
               target,
             )
       }

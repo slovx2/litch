@@ -1156,7 +1156,18 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   }
 
   const routes: Routes = {
-    'thread/started': ({ thread }) => adopt(thread),
+    // 已在列表里的会话再收到一次（比如 Claude 入口重扫原生会话后重发）：通知里的会话对象只在集合不空时带
+    // litchBackground，没带不等于空了（空了另有 litch/thread/background/changed），沿用已知的那份，
+    // 免得输入框上方那一行在后台任务还在跑时没了
+    'thread/started': ({ thread }) => {
+      const known = threads.get(thread.id) as { litchBackground?: LitchBackground } | undefined
+      const carried = thread as Thread & { litchBackground?: LitchBackground }
+      adopt(
+        known?.litchBackground && !carried.litchBackground
+          ? ({ ...thread, litchBackground: known.litchBackground } as Thread)
+          : thread,
+      )
+    },
     'thread/status/changed': ({ threadId, status }) => {
       // 认出来了的子代理线程：只记状态，不去要、不进侧栏
       if (agentThreads.has(threadId)) {
