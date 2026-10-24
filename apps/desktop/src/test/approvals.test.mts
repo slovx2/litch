@@ -137,6 +137,7 @@ test('第一次批准：验过签名就记下、当次生效，出提示；之�
       choice: 'a1',
       remember: false,
       firstSeen: true,
+      name: 'Pixel 8',
     })
     assert.deepEqual(r.notices, [
       { kind: 'firstSeen', phoneId: PHONE_ID, name: 'Pixel 8', fingerprint: '65b6 0673 d6ed 884b' },
@@ -159,6 +160,7 @@ test('第一次批准：验过签名就记下、当次生效，出提示；之�
       choice: null,
       remember: false,
       firstSeen: false,
+      name: 'Pixel 8',
     })
     assert.equal(r.notices.length, 1)
     // 记在文件里，重开还在，桌面端号不变

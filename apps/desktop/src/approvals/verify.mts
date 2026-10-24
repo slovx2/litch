@@ -60,6 +60,8 @@ export type PhoneVerdict =
       remember: boolean
       /** 这次是第一次批准记下的钥匙 */
       firstSeen: boolean
+      /** 手机名：记下的那条里的（扫码时登记的，或第一次批准时答复里带的），卡片上写“手机 X 批准了” */
+      name: string
     }
   | { ok: false; why: PhoneRejection }
 
@@ -173,6 +175,7 @@ export class PhoneApprovals {
       choice: answer.decision === 'approve' ? answer.ref : null,
       remember: answer.remember,
       firstSeen,
+      name: trusted?.name ?? nameOf(answer),
     }
   }
 
