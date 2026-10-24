@@ -4,7 +4,12 @@ import { mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/pro
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import test from 'node:test'
-import { hostClaudeExecutable, hostClaudeVersion } from '../src/host-claude.mjs'
+import {
+  CLAUDE_BASH_MAX_TIMEOUT_MS,
+  claudeBashTimeoutEnv,
+  hostClaudeExecutable,
+  hostClaudeVersion,
+} from '../src/host-claude.mjs'
 
 test('宿主 CLI 使用显式路径或 PATH，拒绝缺失和低于下限的版本，诊断保留独立配置', async () => {
   const root = await mkdtemp(join(tmpdir(), 'host-claude-'))
@@ -60,4 +65,18 @@ test('宿主 CLI 使用显式路径或 PATH，拒绝缺失和低于下限的版�
   } finally {
     await rm(root, { recursive: true, force: true })
   }
+})
+
+test('后台命令上限：没写 BASH_MAX_TIMEOUT_MS 时给 24 小时，用户写了的照它', () => {
+  assert.equal(CLAUDE_BASH_MAX_TIMEOUT_MS, '86400000')
+  assert.deepEqual(claudeBashTimeoutEnv({ PATH: '/bin' }), { BASH_MAX_TIMEOUT_MS: '86400000' })
+  assert.deepEqual(claudeBashTimeoutEnv({ BASH_MAX_TIMEOUT_MS: ' ' }), {
+    BASH_MAX_TIMEOUT_MS: '86400000',
+  })
+  assert.deepEqual(claudeBashTimeoutEnv({ BASH_MAX_TIMEOUT_MS: '3600000' }), {})
+  // 默认超时不动
+  assert.equal(
+    'BASH_DEFAULT_TIMEOUT_MS' in claudeBashTimeoutEnv({ BASH_DEFAULT_TIMEOUT_MS: '1000' }),
+    false,
+  )
 })

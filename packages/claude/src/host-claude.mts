@@ -12,6 +12,15 @@ export function hostClaudeSessionEnv(inbox: boolean): Readonly<Record<string, st
   return inbox ? {} : hostClaudeEnvOverrides
 }
 
+// 后台命令的时长上限：CLI 取 max(2 小时, BASH_MAX_TIMEOUT_MS)，到点停掉命令。Litch 起的 CLI 放宽到 24 小时；
+// 用户在 harness 的环境设置或启动环境里写了就照它，settings.json 的 env 里写的本来就盖过进程环境。
+// 这个变量同时是前台命令超时的上限（CLI 默认 10 分钟），一起变；默认超时（BASH_DEFAULT_TIMEOUT_MS）不动
+export const CLAUDE_BASH_MAX_TIMEOUT_MS = String(24 * 60 * 60 * 1000)
+
+export function claudeBashTimeoutEnv(env: NodeJS.ProcessEnv): Readonly<Record<string, string>> {
+  return env.BASH_MAX_TIMEOUT_MS?.trim() ? {} : { BASH_MAX_TIMEOUT_MS: CLAUDE_BASH_MAX_TIMEOUT_MS }
+}
+
 // 解析真实文件，保留 npm CLI 的 .js 后缀，让 SDK 使用其官方 Node 启动方式。
 export function hostClaudeExecutable(env: NodeJS.ProcessEnv = process.env): string {
   const command = env.CHA_CLAUDE_CLI?.trim() || 'claude'
