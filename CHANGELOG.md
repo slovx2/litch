@@ -5,7 +5,7 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
-## 未发布
+## 0.21.0
 
 - Claude Code：Litch 转给 CLI 的 MCP 工具不再一律标成常驻，照服务自己的声明，和 CLI 自己连时一样“用到再找”。以前工具多的服务（比如两百多个工具的 rea）每个请求都带着全部定义，压缩也压不掉，会话一开头就占掉大半上下文，跑几步就自动压缩一次
 - 对话里用户消息上的“回退”改成“编辑”：桌面端点了之后那条消息原地变成编辑框（带原文，Esc 或“取消”恢复原样），手机端从长按菜单打开编辑框；点“发送”才生效：先回退到这条消息之前（回合进行中插进来的话切在它之前），成了再用改过的字开新回合。回退没成时什么都不改、编辑框和字留着并写明原因；回退成了发送没成时字放回输入框。评论、提到的会话、能显示的图片照带，设备上的图片、音频、文件、技能带不上，编辑框里写明。分叉不变
