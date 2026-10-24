@@ -90,8 +90,8 @@ func TestInstallCommands(t *testing.T) {
 	if opencodeInstall.methodHere() != installNPM || opencodeInstall.manual("1.18.33") != "npm install -g opencode-ai@1.18.33" {
 		t.Fatalf("Windows 上 OpenCode 走 npm: %q", opencodeInstall.manual("1.18.33"))
 	}
-	if codexInstall.methodHere() != "" {
-		t.Fatal("Windows 上的原生 Codex 不能装")
+	if codexInstall.methodHere() != installNPM || codexInstall.manual("0.163.0") != "npm install -g @openai/codex@0.163.0" {
+		t.Fatalf("Windows 上的原生 Codex 走 npm: %q", codexInstall.manual("0.163.0"))
 	}
 }
 

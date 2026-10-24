@@ -92,8 +92,7 @@ var (
 		docsURL: "https://github.com/QwenLM/qwen-code", commands: []string{"qwen"},
 	}
 	codexInstall = &installSpec{
-		// Windows 上还接不进原生 Codex（inspectCodex），装了也用不上
-		method: installNPM, npmPackage: "@openai/codex",
+		method: installNPM, windowsMethod: installNPM, npmPackage: "@openai/codex",
 		docsURL: "https://developers.openai.com/codex/cli", verifiedKey: "codexVerified", minimum: minimumCodexVersion,
 		commands: []string{"codex"},
 	}

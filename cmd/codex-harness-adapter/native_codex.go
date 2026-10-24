@@ -19,7 +19,8 @@ import (
 
 // 原生 codex：这台设备上用户自己装的 codex，作为又一个受管的 harness 接进聚合面。
 // 它和适配器自己的三个引擎不一样的地方都收在这个文件里：
-//   - 运行时不是适配器的 Node 进程，而是用户的 codex 起的一个 app-server，监听 <home>/codex/runtime.sock；
+//   - 运行时不是适配器的 Node 进程，而是用户的 codex 起的一个 app-server，监听 <home>/codex/runtime.sock
+//     （Windows 上听在 AF_UNIX 上，由服务转到命名管道，见 native_codex_windows.go）；
 //   - 没有给官方桌面端的 SSH 入口：官方桌面端自己会连 codex，用不着我们转；
 //   - 数据目录是用户自己的那一份（默认 ~/.codex，或者环境里的 CODEX_HOME）：会话、登录状态和用户在终端里
 //     用的是同一份，这是有意的。适配器不往里写任何东西，也不替它定位置；
@@ -164,12 +165,6 @@ func compareVersions(a, b string) (int, bool) {
 
 // 找到 codex、读出版本、看够不够下限。原始输出只进这个 harness 的诊断日志。
 func inspectCodex(ctx context.Context, c configuration) (path, version string, err error) {
-	if runtime.GOOS == "windows" {
-		return "", "", plainFailure(both(
-			"Windows 上还不能把原生 Codex 接进来",
-			"Native Codex cannot be attached on Windows yet",
-		))
-	}
 	log, err := openLocalLog(c, "diagnostics.log")
 	if err != nil {
 		return "", "", err
@@ -212,9 +207,10 @@ func inspectCodex(ctx context.Context, c configuration) (path, version string, e
 
 // 起 app-server 的命令行。参数以 codex 自己的 `app-server --help` 和上游源码为准：
 // `--listen unix://PATH` 让它在这个套接字上监听（线上是套接字里的 WebSocket，和适配器的运行时一样）。
+// 它只认 unix://，Windows 上也是（那边是 AF_UNIX，套接字放在哪见 codexSocketPath）。
 // 工作目录放在用户主目录：它不属于任何项目，不该捡到服务启动时所在目录里的项目配置。
 func codexCommand(c configuration, path string) *exec.Cmd {
-	process := exec.Command(path, "app-server", "--listen", hostplatform.ListenURL(c.socket()))
+	process := exec.Command(path, "app-server", "--listen", "unix://"+codexSocketPath(c))
 	process.Env = c.environment()
 	if home, err := os.UserHomeDir(); err == nil {
 		process.Dir = home
