@@ -4,7 +4,7 @@ import { mkdtempSync, readdirSync, readFileSync, utimesSync, writeFileSync } fro
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
-import { createDesktopLog, logLimits, pruneLogs, teeConsole } from '../log-file.mjs'
+import { createDesktopLog, isBrokenPipe, logLimits, pruneLogs, teeConsole } from '../log-file.mjs'
 
 const lines = (path: string) =>
   readFileSync(path, 'utf8')
@@ -92,4 +92,38 @@ test('console.error、console.warn 原样输出，也记一份', () => {
       { event: 'log', level: 'warn', text: '小心' },
     ],
   )
+})
+
+test('标准输出管道断开（EPIPE）时控制台一侧静默失败，日志照写，别的错误照抛', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'litch-desktop-epipe-'))
+  const path = join(directory, 'main.jsonl')
+  const log = createDesktopLog(path, { source: 'main' })
+  const original = { error: console.error, warn: console.warn }
+  const broken = (code: string) => Object.assign(new Error(`write ${code}`), { code })
+  let failure: Error | null = broken('EPIPE')
+  console.error = () => {
+    if (failure) throw failure
+  }
+  console.warn = console.error
+  try {
+    teeConsole(log)
+    assert.doesNotThrow(() => console.error('管道断了'))
+    failure = broken('ERR_STREAM_DESTROYED')
+    assert.doesNotThrow(() => console.warn('流已销毁'))
+    failure = broken('EIO')
+    assert.throws(() => console.error('别的错误'), /EIO/)
+  } finally {
+    console.error = original.error
+    console.warn = original.warn
+  }
+  log.flush()
+  assert.deepEqual(
+    lines(path).map(({ text }) => text),
+    ['管道断了', '流已销毁', '别的错误'],
+  )
+  assert.equal(isBrokenPipe(broken('EPIPE')), true)
+  assert.equal(isBrokenPipe(broken('EIO')), false)
+  // 异步的 error 事件：断开类被吞，别的类仍抛出
+  assert.doesNotThrow(() => process.stdout.emit('error', broken('EPIPE')))
+  assert.throws(() => process.stderr.emit('error', broken('EIO')), /EIO/)
 })
