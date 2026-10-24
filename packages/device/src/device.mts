@@ -38,6 +38,7 @@ import {
   type SessionTiming,
   type UpstreamConfig,
 } from './session.mjs'
+import { SessionArchives } from './session-archive.mjs'
 import { openSessionDatabase, SessionStore } from './session-store.mjs'
 import { sessionToolsHandler } from './session-tools.mjs'
 import { SessionTree } from './session-tree.mjs'
@@ -234,6 +235,7 @@ export class DeviceServer {
   /** 设备层的工作树。这台机器上没有 git 时是 null */
   readonly worktrees: Worktrees | null
   readonly worktreeLife: WorktreeLife | null
+  readonly archives: SessionArchives
   private readonly worktreesDb: DatabaseSync | null
 
   constructor(options: DeviceOptions) {
@@ -378,7 +380,21 @@ export class DeviceServer {
       sessionStore.choreDone('pruneThreadTools')
       if (dropped > 0) log(`清掉了 ${dropped} 个已删会话留下的动态工具`)
     }
-    this.deviceTools.register(CLIENT_TOOL_NAMESPACE.sessions, sessionToolsHandler(this.sessionTree))
+    // 归档时子会话跟着走、模型的 litch_sessions.archive（session-archive.mts）
+    this.archives = new SessionArchives({
+      tree: this.sessionTree,
+      worktreeLife: () => this.worktreeLife,
+      pinned: (threadId) =>
+        this.workspaces.sections.placement(threadId)?.section.id === PINNED_SECTION_ID,
+      shelved: (threadId, archived) => {
+        for (const session of this.sessions) session.threadShelved(threadId, archived)
+      },
+      log,
+    })
+    this.deviceTools.register(
+      CLIENT_TOOL_NAMESPACE.sessions,
+      sessionToolsHandler(this.sessionTree, this.archives),
+    )
     // 工作树跟着会话的归档、删除、重新打开走，定时清理（worktree-life.mts）
     this.worktreeLife = this.worktrees
       ? new WorktreeLife(this.worktrees, {
@@ -441,6 +457,7 @@ export class DeviceServer {
       background: this.background,
       worktrees: this.worktrees,
       worktreeLife: this.worktreeLife,
+      archives: this.archives,
       codexCatalog: () =>
         this.control
           ? this.control.request('codex.models', {}, CODEX_CATALOG_TIMEOUT_MS)

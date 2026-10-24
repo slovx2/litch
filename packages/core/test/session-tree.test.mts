@@ -1947,3 +1947,44 @@ test('提案是不是那一条调用提的：条目键是“回合号:条目号�
   assert.equal(proposedBy({ callId: null }, 't1:'), false)
   assert.equal(proposedBy({ callId: '' }, 't1:'), false)
 })
+
+test('模拟：归档父会话时已经停下的子会话跟着归档，放回父会话只放它一个；子会话自己也能归档、放回', async () => {
+  const world = mockWorld()
+  await settle()
+  const parent = world.watch('s6')
+  await settle()
+  await world.channel.command('session.send', {
+    deviceId: 'local',
+    sessionId: 's6',
+    text: '派子会话去查',
+  })
+  await world.until(() => world.children('s6').length === 2, '两个子会话进了侧栏')
+  await world.until(
+    () =>
+      parent.view?.turns.at(-1)?.status === 'completed' &&
+      userItems(parent.view).some((item) => item.event?.kind === 'wake'),
+    '子会话都停下、父会话被唤醒',
+  )
+  await world.until(() => parent.view?.turns.at(-1)?.status === 'completed', '唤醒的回合结束')
+  const [first, second] = world.children('s6').map((entry) => entry.id)
+  assert.ok(first && second)
+  const listed = (id: string) => world.sidebar.view?.sessions.some((entry) => entry.id === id)
+  // 子会话自己归档、放回
+  await world.channel.command('session.archive', { deviceId: 'local', sessionId: first })
+  await world.until(() => !listed(first), '子会话归档了')
+  await world.channel.command('session.unarchive', { deviceId: 'local', sessionId: first })
+  await world.until(() => listed(first) === true, '子会话放回来了')
+  assert.deepEqual(
+    world
+      .children('s6')
+      .map((entry) => entry.id)
+      .sort(),
+    [first, second].sort(),
+  )
+  // 归档父会话：两个停下的子会话跟着走
+  await world.channel.command('session.archive', { deviceId: 'local', sessionId: 's6' })
+  await world.until(() => !listed('s6') && !listed(first) && !listed(second), '子会话跟着归档')
+  await world.channel.command('session.unarchive', { deviceId: 'local', sessionId: 's6' })
+  await world.until(() => listed('s6') === true, '父会话放回来了')
+  assert.equal(listed(first), false, '放回父会话不带子会话')
+})

@@ -132,6 +132,8 @@ export class SessionTree {
    * 那条回报注明是用户停的、不唤醒父会话。模型用 litch_sessions 打断的走设备进程自己的连接，不经过这里
    */
   private readonly userStops = new Map<string, 'interrupted' | 'archived'>()
+  /** 模型用 litch_sessions 归档的会话（session-archive.mts）：引擎发回的 thread/archived 不算用户归档 */
+  readonly modelArchived = new Set<string>()
   /** 子会话里挂着没人答的请求：会话 → 请求号 → 开始挂的时刻（毫秒） */
   private readonly waiting = new Map<string, Map<string, number>>()
   /** 已经为“在等用户”进过一次队列的回合，同一个回合只报一次 */
@@ -578,7 +580,7 @@ export class SessionTree {
       if (status !== 'completed') error ??= turnError(full)
     }
     // 回合刚结束、还在读的工夫里用户把它归档了（archived 那时还没有这条回报可改）：一样不唤醒
-    if (!userStopped && this.host.index.archived(threadId)) {
+    if (!userStopped && this.host.index.archived(threadId) && !this.modelArchived.has(threadId)) {
       userStopped = 'archived'
       wakeable = false
     }
@@ -1011,7 +1013,7 @@ export class SessionTree {
    * 在跑的回合结束时的回报、已经排着的回报都不再唤醒父会话，注明已归档
    */
   archived(threadId: string): void {
-    if (!this.store.parentOf(threadId)) return
+    if (!this.store.parentOf(threadId) || this.modelArchived.has(threadId)) return
     if (this.active.has(threadId)) this.userStops.set(threadId, 'archived')
     this.store.muteNotes(threadId, 'archived')
   }
