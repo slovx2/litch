@@ -448,6 +448,11 @@ export interface UserMessageItem {
    * 正文里的提及是 ＠[标题]，界面按 mentionSegments 切开画成能点的片。没提到会话的不带这一项
    */
   sessions?: SessionMentionView[]
+  /**
+   * 本机先显示出来、对面还没回显的插话：还没有对面的条目标识，回退、分叉切不到它（界面不出这两个按钮）。
+   * 对面回显后条目照对面的重建，就没有这一项了
+   */
+  unconfirmed?: true
 }
 
 /** 用户消息里提到的一个会话（同一台设备上） */

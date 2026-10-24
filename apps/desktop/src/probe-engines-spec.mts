@@ -70,7 +70,7 @@ export const WORDS = {
   earlier: '分叉从这一句开始',
   later: '这一句不该进新会话',
   aside: '在岔出来的会话里说',
-  again: '回退之后重发',
+  again: '编辑之后重发',
   afterCompact: '压缩之后再说一句',
 }
 

@@ -286,6 +286,7 @@ export {
   type ParsedComments,
   parseComments,
 } from './projection/comments.mjs'
+export { type EditableMessage, editableOf, resendOf } from './projection/edit.mjs'
 export {
   type FileRef,
   type FileRefMode,

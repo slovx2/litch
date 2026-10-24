@@ -969,15 +969,17 @@ export const zhCN = {
   'turn.fork': '从此处分叉为新会话',
   'turn.fork.done': '已分叉并切换到新会话',
   'turn.fork.failed': '分叉失败：{reason}',
-  'turn.rollback': '回退到此处并编辑',
-  'turn.rollback.askTitle': '回退到此消息之前？',
-  'turn.rollback.askNote':
-    '此消息及之后的对话将从会话中移除，且无法恢复；消息内容会放回输入框，可编辑后重发。已对文件做的改动不会还原。',
-  'turn.rollback.askNoteRestores':
-    '此消息及之后的对话将从会话中移除，且无法恢复；消息内容会放回输入框，可编辑后重发。此后改动过的文件也会一并还原。',
-  'turn.rollback.yes': '回退',
-  'turn.rollback.no': '取消',
-  'turn.rollback.failed': '回退失败：{reason}',
+  'turn.edit': '编辑消息',
+  'turn.edit.editing': '正在编辑消息',
+  'turn.edit.cancel': '取消',
+  'turn.edit.send': '发送',
+  'turn.edit.note':
+    '发送后，此消息及之后的对话将从会话中移除，且无法恢复，再以编辑后的内容重新发送。已对文件做的改动不会还原。',
+  'turn.edit.noteRestores':
+    '发送后，此消息及之后的对话将从会话中移除，且无法恢复，再以编辑后的内容重新发送。此后改动过的文件也会一并还原。',
+  'turn.edit.dropped': '以下附件无法随编辑后的消息重发：{names}',
+  'turn.edit.failed': '未能编辑，对话未作改动：{reason}',
+  'turn.edit.sendFailed': '原消息已移除，但编辑后的消息未发出，内容已放回输入框：{reason}',
   'context.unknown': '尚未报告上下文用量',
   'context.label': '上下文',
   'context.compact': '压缩上下文',

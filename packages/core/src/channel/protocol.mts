@@ -425,6 +425,24 @@ export interface Commands {
     result: Record<string, never>
   }
   /**
+   * 编辑一条发过的用户消息再重发：先照 session.rollback 回退到它之前（turnId、itemId 同 session.rollback），
+   * 成了再把编辑后的消息照 session.send 发出去。回退没成按出错结束，会话什么都没改；
+   * 回退成了、发送没成，应答里带 sendFailure（原因），这时那条消息已经撤掉了，界面把文字放回输入框。
+   * 要切在回合中间的，等照对面重新载入完了才发
+   */
+  'session.edit': {
+    params: {
+      deviceId: string
+      sessionId: string
+      turnId: string
+      itemId?: string
+      text: string
+      images?: ImageAttachment[]
+      extras?: MessageExtra[]
+    }
+    result: { sendFailure?: ChannelErrorShape }
+  }
+  /**
    * 压缩上下文：让对面把之前的对话总结一遍，腾出上下文。
    * 应答表示对面受理了；压缩本身作为一个回合进行，结果照常从会话的增量里来。
    */

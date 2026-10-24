@@ -73,9 +73,14 @@ explain it:
   permissions, MCP tools (Allow once / Allow for this session / Always allow / Decline / Decline and
   stop, or decline with a note for the model); multi-question forms; plan confirmation (Run the plan /
   Ask for changes / Not now).
-- **Per message**: Fork a new conversation from here; Roll back to here and edit (deletes that message
-  and everything after it; files are only restored where the harness supports it, the confirmation says
-  which).
+- **Per message**: Fork a new conversation from here; Edit (the message turns into an editor in place,
+  a dialog on the phone; nothing changes until Send, Esc or Cancel restores it. Send removes that
+  message and everything after it, then sends the edited text as a new turn; files are only restored
+  where the harness supports it, the note under the editor says which. Comments, mentioned sessions and
+  inline images are resent; device-disk images, audio, files and skills are not, the editor lists
+  them). On a message sent while the turn was running, both cut at that message and keep the earlier
+  part of the turn; harnesses that can't cut inside a turn (only Claude Code can) don't offer them
+  there. On the phone, long-press the message.
 - **Composer**: `/` for commands and skills, `@` to mention a file, attach images and files (remote
   devices: text files only), context meter. In an existing session, clicking the meter shows context
   usage and a Compact context button (dimmed with the reason underneath while a turn runs or when the

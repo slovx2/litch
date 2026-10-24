@@ -6,7 +6,7 @@
 // 另有几种“验收”：scroll 对着模拟核心量对话区在流式输出、点开条目、切换会话时有没有飘；
 // scroll-entry 对着真实入口量真实会话的滚动；compose 和 compose-entry 量输入区：发送、排队、
 // 打断、草稿和请求卡片，后面接着量会话操作（附说明的拒绝、撤销归档、右键菜单、看已归档的对话、
-// 待办、分叉、回退、压缩）。量的办法在 probe-scroll.mts、probe-entry.mts、probe-compose.mts、probe-session.mts。
+// 待办、分叉、编辑重发、压缩）。量的办法在 probe-scroll.mts、probe-entry.mts、probe-compose.mts、probe-session.mts。
 // compose（只对着模拟核心）最后量选中回答加评论（probe-comments.mts）。
 // compose 这两种最前面先量新建对话页（probe-home.mts，模拟核心上再量它的样子：probe-home-look.mts），
 // 最后量请求卡片和输入框并存（probe-cards.mts：平常大小、最小的窗口、模拟核心上再开着终端面板）。

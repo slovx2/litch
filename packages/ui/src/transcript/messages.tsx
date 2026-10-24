@@ -18,6 +18,7 @@ import { AskReplyBody } from './AskCard.tsx'
 import { SentComments } from './comments/Cards.tsx'
 import { commentsOf } from './comments/Cite.tsx'
 import { Markdown } from './Markdown.tsx'
+import { MessageEdit } from './MessageEdit.tsx'
 import { PeerHead } from './PeerHead.tsx'
 import { MentionedText } from './SessionMentions.tsx'
 import { usePin } from './scroll.ts'
@@ -78,7 +79,7 @@ export function UserAttachments({ attachments }: { attachments: UserAttachment[]
 }
 
 interface UserMessageProps extends ItemRef {
-  /** 给了就在这条消息上出“分叉”“回退”：现在做得了（回合结束了、设备连着这些） */
+  /** 给了就在这条消息上出“分叉”“编辑”：现在做得了（回合结束了、设备连着这些） */
   turnId?: string | undefined
   /** 它不是回合开头的那条，是回合进行中插进来的话 */
   steered?: boolean
@@ -97,6 +98,8 @@ export const UserMessage = memo(function UserMessage({
   const item = useItem<UserMessageItem>(ref)
   const [open, setOpen] = useToggle(sessionKeyOf(ref), `u:${ref.itemId}`, false)
   const [long, setLong] = useState(false)
+  /** 在原消息上编辑（MessageEdit.tsx）：气泡换成编辑框 */
+  const [editing, setEditing] = useState(false)
   const body = useRef<HTMLDivElement | null>(null)
   const bubble = useRef<HTMLDivElement | null>(null)
   const pin = usePin()
@@ -122,6 +125,10 @@ export const UserMessage = memo(function UserMessage({
   }, [hasText, open])
 
   if (item?.kind !== 'userMessage') return null
+  if (editing && turnId)
+    return (
+      <MessageEdit {...ref} turnId={turnId} steered={steered} onDone={() => setEditing(false)} />
+    )
   const event = item.event
   if (event && !said && item.attachments.length === 0) {
     return <SessionEventBar deviceId={ref.deviceId} event={event} anchor={`u:${ref.itemId}`} />
@@ -161,7 +168,7 @@ export const UserMessage = memo(function UserMessage({
       ) : null}
       {/* 别的会话发来的话不是自己插的，不在它上面切 */}
       {turnId && !(steered && peer) ? (
-        <TurnActions {...ref} turnId={turnId} steered={steered} />
+        <TurnActions {...ref} turnId={turnId} steered={steered} onEdit={() => setEditing(true)} />
       ) : null}
     </div>
   )

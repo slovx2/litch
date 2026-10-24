@@ -15,6 +15,7 @@ import {
   type SidebarOp,
   type SidebarView,
   shownEffort,
+  type UserMessageItem,
 } from '../src/index.mjs'
 import { fakeOpener, type Handler, RpcFailure } from './fake-server.mjs'
 import { agentText, thread, turn, userText } from './fixtures.mjs'
@@ -1138,14 +1139,19 @@ test('引导：排着的消息插进正在进行的回合，对面回显时不�
     ['三'],
   )
   assert.deepEqual(session.texts(), [['一', '二']])
+  // 先显示出来、对面还没回显的插话标着 unconfirmed：没有对面的标识，界面上不出回退、分叉
+  const steerKey = session.seen.view?.turns[0]?.itemIds[1] ?? ''
+  const shown = () => session.seen.view?.items[steerKey] as UserMessageItem | undefined
+  assert.equal(shown()?.unconfirmed, true)
 
-  // 对面把这句话当成一个条目发回来（开始、完成各一次）：还是那两条
+  // 对面把这句话当成一个条目发回来（开始、完成各一次）：还是那两条，标记没了
   const echo = { ...userText('u9', '二'), clientId: steer.clientUserMessageId }
   const base = { threadId: 'a', turnId: 'srv-1' }
   peer.last().notify('item/started', { ...base, item: echo, startedAtMs: 0 })
   peer.last().notify('item/completed', { ...base, item: echo, completedAtMs: 0 })
   await settle()
   assert.deepEqual(session.texts(), [['一', '二']])
+  assert.equal(shown()?.unconfirmed, undefined)
 
   // 对面不让插：消息回到队首，对话里撤掉，出错原因交给界面
   world.steerFailure = new RpcFailure(-32009, '指定回合与活动回合不一致')

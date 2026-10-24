@@ -374,7 +374,7 @@ export async function organizeMockProbe(): Promise<OrganizeMockProbe> {
   await open(S4)
   await until('这个会话的消息', () => one('.umsg'))
   await until('底栏', () => one('.cmp-bar .pick'))
-  const hidden = !one('.umsg .act-fork') && !one('.umsg .act-rollback') && !one('.cmp-bar .ctx-btn')
+  const hidden = !one('.umsg .act-fork') && !one('.umsg .act-edit') && !one('.cmp-bar .ctx-btn')
   const dshPop = await menuOf(lineOf(S4), S4)
   seen.dshMenu = items(dshPop)
   await closeMenu(dshPop)

@@ -267,6 +267,13 @@ interface Live {
   steered: Map<string, { key: string; turnId: string; message: OutgoingMessage }>
   /** 我们自己发出的回退还没回来。这期间对面的“历史被改写了”通知说的就是这一次，不用重新载入 */
   reverting: boolean
+  /** 回退途中已经收到了对面的“历史被改写了” */
+  revertEchoed: boolean
+  /**
+   * 回退的应答先到、通知后到时，到这个时刻之前来的第一条“历史被改写了”说的还是这一次，不再载入。
+   * 编辑重发紧接着就发新回合，再载入一遍会和它撞上（新回合被载入回来的历史盖掉）
+   */
+  revertEchoUntil: number
   /** 这边发出的手动压缩里，对面还没开始压的几次：接下来开始的压缩算手动的（官方桌面端也这样认） */
   compacting: number
 }
@@ -276,6 +283,9 @@ type Notes = {
 }
 
 const LOAD_TIMEOUT = 60_000
+
+/** 自己回退之后多久之内来的“历史被改写了”算这一次的回音（Live.revertEchoUntil） */
+const REVERT_ECHO_MS = 5000
 /** 在新工作树里建会话最多等多久 */
 const WORKTREE_TIMEOUT = 10 * 60_000
 /** 按停止时先暂停目标，最多等这么久（官方桌面端也是 500 毫秒） */
@@ -847,7 +857,15 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       settleRequests(live, (request) => request.view.id === String(requestId)),
     // 会话的历史被改写了（别的客户端回退了它）：不知道撤掉了哪些，整个重新载入
     'thread/reverted': (live) => {
-      if (!live.reverting) load(live)
+      if (live.reverting) {
+        live.revertEchoed = true
+        return
+      }
+      if (live.revertEchoUntil > host.clock.now()) {
+        live.revertEchoUntil = 0
+        return
+      }
+      load(live)
     },
     // 持续目标设了、改了（状态、用量）、清掉了。上游发给每条连接，这里只管打开着的会话；
     // 恢复会话时上游也会补一条现在的样子（有目标的话）
@@ -977,12 +995,13 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     }
   }
 
-  const load = (live: Live) => {
+  /** 重新载入会话。返回的承诺在载入完（或放弃）时落定，不会失败 */
+  const load = (live: Live): Promise<void> => {
     live.loading?.abort()
     const cancel = createCancel()
     live.loading = cancel
     live.held = []
-    fetchView(live, cancel).then(
+    return fetchView(live, cancel).then(
       (view) => {
         if (cancel.signal.aborted) return
         live.loading = null
@@ -1188,6 +1207,8 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     pending: {},
     steered: new Map(),
     reverting: false,
+    revertEchoed: false,
+    revertEchoUntil: 0,
     compacting: 0,
   })
 
@@ -1590,7 +1611,11 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       live.steered.set(clientId, { key, turnId: running.id, message: said })
       emit(live, [
         { op: 'queue.set', queued: live.queued },
-        { op: 'item.add', turnId: running.id, item: localUserMessage(key, said, mentions) },
+        {
+          op: 'item.add',
+          turnId: running.id,
+          item: { ...localUserMessage(key, said, mentions), unconfirmed: true },
+        },
       ])
       try {
         await host.request('turn/steer', {
@@ -1755,6 +1780,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       if (!before) throw new ChannelError('rejected', '该回合已不存在')
       const cut = itemId === undefined ? null : cutAt(live, turnId, itemId)
       live.reverting = true
+      live.revertEchoed = false
       try {
         // 按回合的标识回退，不按“倒数几个”：两边数出来的个数万一不一样，撤错了找不回来
         await attempt(live, 'rollback', () =>
@@ -1767,9 +1793,12 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       } finally {
         live.reverting = false
       }
-      // 切在回合中间：这一回合只剩前半段，照对面的重新载入，不在这边一条条拿掉
+      // 对面的“历史被改写了”还没到：等会儿到的那一条说的是这一次
+      if (!live.revertEchoed) live.revertEchoUntil = host.clock.now() + REVERT_ECHO_MS
+      // 切在回合中间：这一回合只剩前半段，照对面的重新载入（等载入完再应答，紧接着发的新回合不会被盖掉），
+      // 不在这边一条条拿掉
       if (cut) {
-        if (sessions.get(live.id) === live) load(live)
+        if (sessions.get(live.id) === live) await load(live)
         host.touched(live.id)
         return
       }

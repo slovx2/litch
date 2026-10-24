@@ -20,19 +20,19 @@ export interface ShownComment {
   turnId: string
 }
 
-/** 回合的菜单是从哪儿打开的：菜单里的“评论”要知道是哪条回答 */
+/** 回合的菜单是从哪儿打开的：菜单里的“评论”要知道是哪条回答，回退、分叉要知道是哪条用户消息 */
 let pressed: { turnId: string; itemId: string | null } | null = null
 
 /**
- * 打开回合的菜单之前记下是从哪儿打开的：长按回答的单元格给它的条目，别处（用户消息、状态行的“⋯”）给 null。
+ * 打开回合的菜单之前记下是从哪儿打开的：长按回答、用户消息的单元格给它的条目，状态行的“⋯”给 null。
  * 对话区的上下文只把回合交给菜单（Transcript.tsx 的 turnMenu），条目从这里走
  */
-export function notePressedAnswer(turnId: string, itemId: string | null): void {
+export function notePressed(turnId: string, itemId: string | null): void {
   pressed = { turnId, itemId }
 }
 
-/** 这一回合的菜单是从哪条回答上打开的。不是从回答上是 null */
-export const pressedAnswer = (turnId: string): string | null =>
+/** 这一回合的菜单是从哪个条目上打开的（种类问 SessionStore.kindOf）。不是从条目上是 null */
+export const pressedItem = (turnId: string): string | null =>
   pressed?.turnId === turnId ? pressed.itemId : null
 
 const FLASH_MS = 1600
