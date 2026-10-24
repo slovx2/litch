@@ -996,9 +996,10 @@ export class SessionTree {
     this.store.muteNotes(threadId, 'archived')
   }
 
-  /** 会话删掉了：它带的动态工具跟着删 */
+  /** 会话删掉了：它带的动态工具、记下的速度跟着删 */
   deleted(threadId: string): void {
     this.store.dropTools(threadId)
+    this.store.setSpeed(threadId, null)
   }
 
   /**

@@ -12,11 +12,13 @@
 //     例外是调用方用 claimRequests 接过去的（定时任务回合里的审批，task-approvals.mts）：由它等人、到时限答。
 // 握手时声明 clientTools，命名空间取注册表里的，引擎挑执行方时挑得中这条连接。
 
+import { prepareSpeed, type SpeedStore } from '../../protocol/src/codex-speeds.mjs'
 import { EXTENSION, EXTENSIONS_CAPABILITY } from '../../protocol/src/device.mjs'
 import { NO_RECIPIENT_MESSAGE } from '../../shared/src/server-requests.mjs'
 import type { InstructionStore } from './codex-instructions.mjs'
 import { type DeviceTools, declareDeviceTools } from './device-tools.mjs'
 import type { UpstreamDialect } from './dialect.mjs'
+import { NATIVE_CODEX_DIALECT } from './native-codex.mjs'
 import {
   type Connector,
   DeviceError,
@@ -93,6 +95,8 @@ export interface EngineLinkOptions {
   heldRecheckMs?: number
   /** 原生 codex 的开发者指令按会话记在哪（codex-instructions.mts）。不给就不补 */
   instructions?: InstructionStore
+  /** 原生 codex 的速度按会话记在哪（codex-speeds.mts）。不给就不记不补 */
+  speeds?: SpeedStore
   log?(line: string): void
 }
 
@@ -259,8 +263,21 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
     },
     async request(method, params, requestOptions) {
       const timeoutMs = requestOptions?.timeoutMs ?? options.requestTimeoutMs
-      const send = (ready: unknown) =>
-        call(method, (isObject(ready) ? dialect.outgoing(method, ready) : null) ?? ready, timeoutMs)
+      // 原生 codex 不保存速度：带了的记下来，恢复、分叉没带时补回（codex-speeds.mts）
+      const sped =
+        isObject(params) && options.speeds && dialect === NATIVE_CODEX_DIALECT
+          ? prepareSpeed(method, params, options.speeds)
+          : null
+      if (sped) params = sped.params
+      const send = async (ready: unknown) => {
+        const result = await call(
+          method,
+          (isObject(ready) ? dialect.outgoing(method, ready) : null) ?? ready,
+          timeoutMs,
+        )
+        sped?.remember(result)
+        return result
+      }
       // 原生 codex 建会话、恢复、分叉：先补齐开发者指令（codex-instructions.mts）
       const prepared =
         isObject(params) && options.instructions

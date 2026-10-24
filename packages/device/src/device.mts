@@ -655,6 +655,7 @@ export class DeviceServer {
               requestTimeoutMs: this.taskTiming.requestTimeoutMs,
               tools: this.deviceTools,
               instructions: this.sessionTree.store,
+              speeds: this.sessionTree.store,
               log: (line) => this.options.log?.(`[${harness}] ${line}`),
               ...this.options.engineLinks,
               held: (from, requestId) =>

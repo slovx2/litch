@@ -581,6 +581,11 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
    * 只留目录里有的会话（removeThread、setThreads 时清）
    */
   const unread = new Set<string>()
+  /**
+   * 直连原生 codex 时按会话记的速度（codex 不保存，恢复、分叉时补回，protocol 包的 codex-speeds.mts）。
+   * 也是这台电脑自己记的，跟着侧栏的快照存。会话目录、已归档的表里都没有了才清（归档再放回来还在）
+   */
+  const speeds = new Map<string, string>()
   // 上次留下的侧栏先摆上。会话当时在跑也好、在等也好，现在都不知道了，一律当成没载入
   const remembered = options.snapshot?.load() ?? null
   if (remembered) {
@@ -592,6 +597,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       threads.set(thread.id, { ...thread, turns: [], status: { type: 'notLoaded' } })
     }
     for (const id of remembered.unread) if (threads.has(id)) unread.add(id)
+    for (const [id, speed] of Object.entries(remembered.speeds ?? {})) speeds.set(id, speed)
     stale = true
   }
   /** 对面有没有“项目”这组方法：null 是还不知道 */
@@ -816,6 +822,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
           sections,
           threads: [...threads.values()],
           unread: [...unread],
+          speeds: Object.fromEntries(speeds),
         })
       } catch (error) {
         log(`存侧栏的快照失败：${String(error)}`)
@@ -1067,6 +1074,9 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     }
     // 设备上已经没有了的会话，未读也不留
     for (const id of unread) if (!threads.has(id)) unread.delete(id)
+    // 已归档的表还没取过时不知道它是不是归档了，先留着
+    for (const id of speeds.keys())
+      if (!threads.has(id) && archived && !archived.has(id)) speeds.delete(id)
     // 列表里有了的就不再是“还没说过话”的
     for (const id of unspoken) if (threads.has(id)) unspoken.delete(id)
     if (only === null) gaps.clear()
@@ -1673,6 +1683,14 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       })
     },
     started: (thread) => upsertThread(thread),
+    speeds: {
+      speed: (sessionId) => speeds.get(sessionId) ?? null,
+      setSpeed(sessionId, speed) {
+        if (speed === null) speeds.delete(sessionId)
+        else speeds.set(sessionId, speed)
+        saveSoon()
+      },
+    },
     turnEnded(sessionId, turnId) {
       diffs.turnEnded(sessionId)
       toolCalls.turnEnded(sessionId, turnId)

@@ -121,6 +121,11 @@ const MIGRATIONS: readonly string[] = [
   // 提案上子会话要不要自己的工作树（worktrees 扩展）：模型或用户定的（null 是没定），和没定时照缺省算出来的
   `ALTER TABLE proposals ADD COLUMN worktree INTEGER;
    ALTER TABLE proposals ADD COLUMN worktree_default INTEGER NOT NULL DEFAULT 0;`,
+  // 原生 codex 不保存速度（serviceTier）：客户端选过的记下来，恢复、分叉没带时设备进程补回（codex-speeds.mts）
+  `CREATE TABLE thread_speeds(
+     thread_id TEXT PRIMARY KEY,
+     speed TEXT NOT NULL
+   ) WITHOUT ROWID;`,
 ]
 
 export const SESSION_SCHEMA_VERSION = MIGRATIONS.length
@@ -292,6 +297,12 @@ export class SessionStore {
         `INSERT INTO thread_instructions(thread_id, given, namespaces, cwd) VALUES(?, ?, ?, ?)
          ON CONFLICT(thread_id) DO UPDATE SET given=excluded.given, namespaces=excluded.namespaces, cwd=excluded.cwd`,
       ),
+      speed: prepare('SELECT speed FROM thread_speeds WHERE thread_id=?'),
+      setSpeed: prepare(
+        `INSERT INTO thread_speeds(thread_id, speed) VALUES(?, ?)
+         ON CONFLICT(thread_id) DO UPDATE SET speed=excluded.speed`,
+      ),
+      dropSpeed: prepare('DELETE FROM thread_speeds WHERE thread_id=?'),
       option: prepare('SELECT value FROM harness_options WHERE harness=? AND key=?'),
       setOption: prepare(
         `INSERT INTO harness_options(harness, key, value) VALUES(?, ?, ?)
@@ -595,6 +606,18 @@ export class SessionStore {
   /** 会话删掉了：它带的动态工具跟着删 */
   dropTools(threadId: string): void {
     this.run('dropTools', threadId)
+  }
+
+  // ---------- 原生 codex 会话的速度（codex-speeds.mts） ----------
+
+  speed(threadId: string): string | null {
+    const raw = this.statements.speed?.get(threadId)?.speed
+    return typeof raw === 'string' ? raw : null
+  }
+
+  setSpeed(threadId: string, speed: string | null): void {
+    if (speed === null) this.run('dropSpeed', threadId)
+    else this.run('setSpeed', threadId, speed)
   }
 
   /** 只做一次的整理还没做 */

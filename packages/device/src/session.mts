@@ -6,6 +6,7 @@ import {
   CLIENT_TOOLS_CAPABILITY,
   type ClientToolsDesktopInfo,
 } from '../../protocol/src/client-tools.mjs'
+import { prepareSpeed } from '../../protocol/src/codex-speeds.mjs'
 import {
   type DeviceInfo,
   type DeviceRuntimeInfo,
@@ -632,6 +633,14 @@ export class ClientSession implements ClientToolPeer {
     // 应答回来之后要记的（一个请求只有一个 after）；没成时要收拾的
     const afterwards: ((result: unknown) => void)[] = []
     const failures: (() => void)[] = []
+    // 原生 codex 不保存速度：客户端选过的记下来，恢复、分叉没带时补回（codex-speeds.mts）
+    if (params && link.dialect === NATIVE_CODEX_DIALECT) {
+      const sped = prepareSpeed(method, params, this.host.sessionTree.store)
+      if (sped) {
+        params = sped.params
+        afterwards.push(sped.remember)
+      }
+    }
     // 建会话时带的动态工具记下来：设备进程替这个会话派子会话时照样带上
     if (method === 'thread/start' && Array.isArray(params?.dynamicTools)) {
       const tools = params.dynamicTools as unknown[]
