@@ -5,7 +5,7 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
-## 未发布
+## 0.20.0
 
 - 内置浏览器：代理请人登录时，登录卡片（浏览器面板和对话里各一张）列出密码库里这个网站的已存账号，人批准后由 Litch 代填并提交，代理拿不到密码；也可以照旧自己登录或拒绝。设置里可要求代填前过 Touch ID。手机远程批准是实验功能，默认关（设备详情“手机”一节的开关），打开后登录卡片经会话所在设备发到已绑定的手机，在手机上验证身份后批准；协议扩展 `clientApprovals`
   - 库里没有这个网站的账号时卡片只有“我自己登录”“拒绝”；预检不过的账号置灰并写原因（比如出卡片后页面换了网站）；同一回合拒绝过的网站不再出卡片；定时任务回合里的卡片有“以后直接用这个账号”的勾选和过期倒计时；卡片上写明是桌面端还是哪台手机批准的
