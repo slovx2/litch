@@ -14,6 +14,11 @@ export interface TurnScript {
   streams?: boolean
   /** slow 回合被打断之后调：放掉还压着的模型应答 */
   release?: () => void
+  /**
+   * slow 回合：模型收到这一回合的请求时兑现。按排队顺序应答的假模型要给：打断赶在请求发出之前的话，
+   * 压着的那条应答留在队里，会被下一回合拿走
+   */
+  requested?: Promise<void>
 }
 
 /**

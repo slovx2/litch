@@ -62,6 +62,7 @@ export async function runStandardFlow(
   await client.until('turn/started', (params) => params.turn?.id === slow.id, '回合开始')
   if (slow.script.streams)
     await client.until('item/agentMessage/delta', (params) => params.turnId === slow.id, '头一段话')
+  await slow.script.requested
   await client.ok('turn/interrupt', { threadId, turnId: slow.id })
   const interrupted = await client.completed(slow.id)
   slow.script.release?.()
