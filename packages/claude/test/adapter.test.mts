@@ -1575,7 +1575,7 @@ test('default runtime tool policy leaves Claude Code tools unrestricted unless e
   }
 })
 
-test('unix websocket app-server accepts initialize', { timeout: 15_000 }, async () => {
+test('unix websocket app-server accepts initialize', { timeout: 60_000 }, async () => {
   const home = await mkdtemp(join(tmpdir(), 'codex-harness-adapter-test-'))
   // Keep the socket path short — a mkdtemp dir nested under macOS tmpdir blows
   // past the ~104-byte sockaddr_un limit, which surfaced as a bind EINVAL.
@@ -6569,11 +6569,12 @@ async function waitForStderr(proc: ChildProcess, pattern: RegExp): Promise<void>
       cleanup()
       reject(new Error(`process exited before stderr matched ${pattern}; saw: ${acc}`))
     }
+    // 只防挂死，不量启动快慢：起进程要把 SDK 等模块整个加载一遍，忙的跑机上光这一步就过了 5 秒
     const timeout = setTimeout(() => {
       cleanup()
       proc.kill()
       reject(new Error(`timed out waiting for stderr ${pattern}; saw: ${acc}`))
-    }, 5000)
+    }, 30_000)
     proc.stderr?.on('data', onData)
     proc.once('exit', onExit)
   })

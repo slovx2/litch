@@ -51,16 +51,21 @@ async function open(): Promise<OpenedEntry> {
         return { prompt: '先问我再做计划。', params: mode('plan') }
       }
       if (name === 'slow') {
-        // 模型的应答压着不给，等回合被打断之后才放
+        // 模型的应答压着不给，等回合被打断之后才放；Pi 不流式，等请求到了模型这边再打断
         let release = () => {}
         const held = new Promise<void>((resolve) => {
           release = resolve
         })
+        let asked = () => {}
+        const requested = new Promise<void>((resolve) => {
+          asked = resolve
+        })
         harness.steps.push(async () => {
+          asked()
           await held
           return { text: '来晚了。' }
         })
-        return { prompt: '慢慢说。', params: mode('default'), release }
+        return { prompt: '慢慢说。', params: mode('default'), release, requested }
       }
       harness.steps.push({ text: '好的。' })
       return { prompt: '说一句话。', params: mode('default') }

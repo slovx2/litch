@@ -70,9 +70,24 @@ function watchPeer(id: string, batches: string[][]): RpcPeer {
   }
 }
 
+const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
 async function waitFor(check: () => boolean): Promise<void> {
-  for (let attempt = 0; attempt < 100 && !check(); attempt++)
-    await new Promise((resolve) => setTimeout(resolve, 20))
+  for (let attempt = 0; attempt < 100 && !check(); attempt++) await pause(20)
+}
+
+// macOS 上目录监视刚建好的那一小段系统还不送事件，这段里的变更丢了（不是晚到，见 path-watch.mts）。
+// 要看哪几次变更报上来的用例先确认监视已经在送事件：往目录里写探针直到收到通知，等这一批去抖完再清掉。
+async function untilLive(dir: string, batches: string[][]): Promise<string> {
+  const probe = join(dir, '.probe')
+  for (let attempt = 0; attempt < 100 && !batches.flat().includes(probe); attempt++) {
+    if (attempt % 5 === 0) await writeFile(probe, String(attempt))
+    await pause(20)
+  }
+  assert.ok(batches.flat().includes(probe), '监视一直没有送来事件')
+  await pause(400)
+  batches.length = 0
+  return probe
 }
 
 test('fs/watch 与 Codex 一致：只监视本层、去抖合并、原样返回路径，监视错误不成为进程异常', async () => {
@@ -86,15 +101,18 @@ test('fs/watch 与 Codex 一致：只监视本层、去抖合并、原样返回�
       path: home,
     })
     assert.equal(response.path, home)
+    const probe = await untilLive(home, batches)
     await writeFile(join(home, 'b.txt'), 'b')
     await writeFile(join(home, 'a.txt'), 'a')
     await writeFile(join(home, 'nested', 'deep.txt'), 'deep')
     await waitFor(() => batches.flat().includes(join(home, 'b.txt')))
-    await new Promise((resolve) => setTimeout(resolve, 300))
-    const changed = batches.flat()
+    await pause(300)
+    // 探针那几次写的事件可能还有晚到的，不算在里面
+    const ours = batches.filter((batch) => batch.some((path) => path !== probe))
+    const changed = ours.flat()
     assert.ok(changed.includes(join(home, 'a.txt')) && changed.includes(join(home, 'b.txt')))
     assert.equal(changed.includes(join(home, 'nested', 'deep.txt')), false)
-    assert.ok(batches.length <= 2, `去抖后通知批次过多：${batches.length}`)
+    assert.ok(ours.length <= 2, `去抖后通知批次过多：${ours.length}`)
     const watch = ((files as any).watchers.get('watch') as Map<string, any>).get('w')
     watch.watcher.emit('error', Object.assign(new Error('ENOSPC'), { code: 'ENOSPC' }))
     assert.equal(watch.watcher, null)
@@ -146,15 +164,40 @@ test('fs/watch 挪监视的当口路径又往前长了也跟得上，目标出�
   try {
     await files.call(watchPeer('racing', batches), 'fs/watch', { watchId: 'r', path: target })
     await mkdir(first)
-    // macOS 上监视刚建好的那一下系统可能还没开始送事件，头一次变更会漏掉。那不是这里要守的：
-    // 没等到就在起点目录里再动一下，只要求迟早有一次事件送到。
-    for (let attempt = 1; attempt <= 100 && !batches.flat().includes(target); attempt++) {
-      if (attempt % 10 === 0) await writeFile(join(home, `nudge-${attempt}`), '')
-      await new Promise((resolve) => setTimeout(resolve, 20))
-    }
-    // 一次事件一路跟到目标：中间两层都没有等到自己的事件
+    // 起点目录的这次变更赶上监视刚建好、系统还没送事件的话，靠建好之后的再看一遍跟上（下一个用例守着）
+    await waitFor(() => batches.flat().includes(target))
+    // 一路跟到目标：中间两层都没有等到自己的事件
     assert.deepEqual(watched, [home, first, nearest, target])
     assert.deepEqual([...new Set(batches.flat())], [target])
+  } finally {
+    files.close()
+    context.mock.restoreAll()
+    syncBuiltinESMExports()
+    await rm(home, { recursive: true, force: true })
+  }
+})
+
+// 监视刚建好、系统还没开始送事件的那一段里路径往前长了、目标出现了：建好之后过一会儿再看一遍，照样跟上。
+// 这里让起点目录上的监视一个事件都收不到，把那一段拉到无穷长。
+test('fs/watch 刚建好的监视收不到事件时，过一会儿再看一遍也跟得上', async (context) => {
+  const home = await mkdtemp(join(tmpdir(), 'codex-harness-adapter-watch-'))
+  const files = new FilesystemRpc()
+  const batches: string[][] = []
+  const target = join(home, 'later', 'dir', 'file.txt')
+  const watch = fs.watch as (...args: unknown[]) => FSWatcher
+  const watched: unknown[] = []
+  context.mock.method(fs, 'watch', (...args: unknown[]) => {
+    watched.push(args[0])
+    return args[0] === home ? watch(args[0], args[1], () => {}) : watch(...args)
+  })
+  syncBuiltinESMExports()
+  try {
+    await files.call(watchPeer('blind', batches), 'fs/watch', { watchId: 'b', path: target })
+    await mkdir(join(home, 'later', 'dir'), { recursive: true })
+    await writeFile(target, 'now')
+    await waitFor(() => batches.flat().includes(target))
+    assert.deepEqual([...new Set(batches.flat())], [target])
+    assert.deepEqual(watched, [home, target])
   } finally {
     files.close()
     context.mock.restoreAll()

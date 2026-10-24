@@ -137,8 +137,17 @@ test('经真的套接字：连上用运行时监听代码起的上游，设备�
       (entry: any) => entry.fileName,
     )
     assert.deepEqual(names.sort(), ['note.txt', 'src'])
-    // macOS 上目录监听走文件系统事件：整套用例并发跑、别的进程在大量建删文件时，这条通知要晚到十来秒
-    const changed = await client.waitFor((frame) => frame.method === 'fs/changed', 15_000)
+    // macOS 上目录监听走文件系统事件：监听刚建好的那一小段系统还不送事件，赶上的话那次写就没有通知
+    // （丢了，不是晚到；机器越忙这段越长）。没等到就再写一次，只要求监听起来之后的写有通知
+    let changed: Awaited<ReturnType<typeof client.waitFor>> | null = null
+    for (let attempt = 0; attempt < 15 && !changed; attempt++) {
+      changed = await client
+        .waitFor((frame) => frame.method === 'fs/changed', 1_000)
+        .catch(() => null)
+      if (!changed)
+        await client.call('fs/writeFile', { path: file, dataBase64: base64('设备层写的') })
+    }
+    assert.ok(changed, '目录监听一直没有通知')
     assert.equal((changed.params as any).watchId, 'w1')
     assert.equal((await client.fails('fs/readFile', { path: 'relative' })).code, -32602)
 

@@ -77,13 +77,18 @@ test('KEEP-IDLE-002：开了空闲保留，下个回合用同一个 CLI；归档
 test('KEEP-IDLE-003：空闲到时退出', { timeout: 60_000 }, async () => {
   const scene = await startScene('keep-idle-expire', { CHA_CLAUDE_KEEP_ALIVE_IDLE_SECONDS: '3' })
   try {
-    await reply(scene, '好的')
-    const finished = Date.now()
-    await pause(1_500)
-    assert.equal(pids(scene).length, 1, '还没到时')
+    // 计时从运行时交还回合算起，那之后协议层还要收尾（算差异要跑 git）才发 turn/completed，忙的机器上这段
+    // 能有一两秒：从这边收到回合结束算会把这段算进去。下界用模型回完话的时刻，它一定早于交还回合
+    let answered = 0
+    scene.model.enqueue((request, headers) => {
+      answered = Date.now()
+      return say('好的')(request, headers)
+    })
+    assert.equal((await runTurn(scene, '说一句')).status, 'completed')
+    assert.equal(pids(scene).length, 1, `还没到时（模型回完话 ${Date.now() - answered} 毫秒）`)
+    // 看到它不在了的时刻只会比它实际退出晚一个轮询间隔：这条只会放过早退出一点点的，不会错挂
     await until('到时退出', () => pids(scene).length === 0, 10_000)
-    // 计时从适配器那边回合结束算起，比这边收到回合结束早一点，留出这段传递的余量
-    assert.ok(Date.now() - finished >= 2_700, '不早于设定的时长')
+    assert.ok(Date.now() - answered >= 3_000, '不早于设定的时长')
   } finally {
     await disposeScene(scene)
   }

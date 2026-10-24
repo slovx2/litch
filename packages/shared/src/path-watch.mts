@@ -5,6 +5,10 @@ import { debugLog } from './util.mjs'
 const changeDebounceMs = 200
 // 一次事件里监视最多挪几回。正常只会挪到路径的层数那么多回，这个数远在它之上。
 const maxMovesPerEvent = 256
+// 新建的监视过这么久再看一遍该监视哪里、目标在不在。macOS 上目录监视走 FSEvents，刚建好的那一小段
+// 系统还没开始送事件，这段里的变化就没有事件（不是晚到，是丢了，机器越忙这段越长）：路径在这段里往前长了、
+// 目标在这段里出现了，不再看一遍的话监视就停在上一层，要等那个目录下一次有变化才跟上。
+const armRecheckMs = 250
 
 function isDirectory(path: string): boolean {
   try {
@@ -21,6 +25,7 @@ export class PathWatch {
   private watchedPath: string | null = null
   private readonly pending = new Set<string>()
   private timer: NodeJS.Timeout | null = null
+  private recheck: NodeJS.Timeout | null = null
   private closed = false
   private lastExists: boolean
   private readonly path: string
@@ -37,6 +42,8 @@ export class PathWatch {
     this.closed = true
     if (this.timer) clearTimeout(this.timer)
     this.timer = null
+    if (this.recheck) clearTimeout(this.recheck)
+    this.recheck = null
     this.watcher?.close()
     this.watcher = null
   }
@@ -54,13 +61,14 @@ export class PathWatch {
   // 不再看一遍，监视就一直停在上一层，目标出现了也不知道。一圈对应路径的一次变化，圈数有上限：
   // 路径被别处不停地改来改去时不占着事件循环，停在最后建好的那一层，下一次事件接着挪。
   private arm(): void {
+    let armed = false
     for (let moves = 0; moves < maxMovesPerEvent; moves++) {
       const target = this.target()
-      if (this.closed || (target === this.watchedPath && this.watcher)) return
+      if (this.closed || (target === this.watchedPath && this.watcher)) break
       this.watcher?.close()
       this.watcher = null
       this.watchedPath = target
-      if (!target) return
+      if (!target) break
       try {
         const watcher = watch(target, { persistent: false }, (_, filename) =>
           this.onEvent(target, filename),
@@ -71,11 +79,21 @@ export class PathWatch {
           debugLog('fs.watch.failed', { path: this.path, target, error: String(error) })
         })
         this.watcher = watcher
+        armed = true
       } catch (error) {
         debugLog('fs.watch.failed', { path: this.path, target, error: String(error) })
-        return
+        break
       }
     }
+    // 只在这一次真的新建了监视时再看：再看时什么都没变就不建新的，也就不会再排下一次。
+    // 监视出错停掉了的不再看（照旧只记录），免得出错一次重建一次
+    if (!armed || this.closed) return
+    if (this.recheck) clearTimeout(this.recheck)
+    this.recheck = setTimeout(() => {
+      this.recheck = null
+      if (!this.closed && this.watcher) this.settle()
+    }, armRecheckMs)
+    this.recheck.unref()
   }
 
   // 把监视挪到该在的地方，再看目标在不在：出现或消失时通知目标本身。要在监视落定之后看，

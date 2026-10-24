@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import test from 'node:test'
 import { client, isolate, skip, text, violations } from './client.mjs'
 import { scripted } from './mock-model.mjs'
@@ -17,7 +19,7 @@ test('OpenCode：多条连接订阅同一会话，审批先答先得、晚连上
           {
             type: 'tool',
             name: 'bash',
-            input: { command: 'printf shared', description: '要审批' },
+            input: { command: 'printf shared > shared.txt', description: '要审批' },
           },
         ],
         [{ type: 'text', chunks: ['跑完了。'] }],
@@ -62,9 +64,11 @@ test('OpenCode：多条连接订阅同一会话，审批先答先得、晚连上
       assert.equal(done.status, 'completed')
       const command = done.items.find((item: any) => item.type === 'commandExecution')
       assert.equal(command.status, 'completed')
-      assert.equal(command.aggregatedOutput, 'shared')
       assert.equal(peer.of('serverRequest/resolved', thread.id).length, 1)
     }
+    // 命令真的跑了：看它写下的文件。不看命令输出：OpenCode（1.18.33）的 bash 在命令很快退出时会丢掉输出，
+    // 记成“(no output)”，和有没有审批、几条连接无关
+    assert.equal(await readFile(join(env.cwd, 'shared.txt'), 'utf8'), 'shared')
     // 回合中途才订阅的连接也收到后面的流
     assert.ok(late.of('item/completed', thread.id).length > 0)
 

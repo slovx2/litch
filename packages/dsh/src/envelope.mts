@@ -49,7 +49,8 @@ export function envelope(s: DshServer, thread: DshThread, turns: DshTurn[] = [])
   const metadata = s.store.getMeta('thread', thread.id) ?? {}
   const live = s.live.get(thread.id) ?? s.ephemeral.get(thread.id)
   // 没打开的会话，预览和名字是 dsh 的清单给的，适配器记过的照记的报（DshServer.display）：预览是用户发来的
-  // 那句话；清单给的名字是记下的兜底标题时，名字是记下的（模型起的、用户改的，或者没有），
+  // 那句话；清单给的名字是记下的兜底标题、或者没有名字时（清单出自它的投影缓存，缓存可能还停在会话刚建好、
+  // 还没有标题的时候，见 DshServer.blank），名字是记下的（模型起的、用户改的，或者没有），
   // 别的照 dsh 的（适配器没跟着的时候 dsh 那边改了名）。
   const shown = live ? null : s.store.getMeta('display', thread.id)
   const subagent = thread.parentThreadId ? s.subagentInfo(thread.id) : null
@@ -58,7 +59,8 @@ export function envelope(s: DshServer, thread: DshThread, turns: DshTurn[] = [])
     sessionId: thread.id,
     forkedFromId: thread.forkedFromId,
     preview: shown?.preview || thread.preview,
-    name: shown && thread.name === shown.fallback ? shown.name : thread.name,
+    name:
+      shown && (thread.name === null || thread.name === shown.fallback) ? shown.name : thread.name,
     modelProvider: thread.model?.split('/')[0] ?? 'dsh',
     createdAt: thread.createdAt,
     updatedAt: thread.updatedAt,

@@ -187,7 +187,17 @@ test('SUBMIT-003：真实 SDK 追加指令、并发提交、重复请求与冲�
       -32009,
     )
     release.resolve()
-    assert.equal((await client.completed(turn.id)).status, 'completed')
+    // 第二条请求里的断言不过时假模型回 400，回合只看得到 failed：把假模型记下的原因带出来
+    const done = await client.completed(turn.id)
+    assert.equal(
+      done.status,
+      'completed',
+      JSON.stringify({
+        error: done.error,
+        unexpected: model.unexpected,
+        requests: model.requests.length,
+      }),
+    )
     assert.equal(model.requests.length, 2, '追加指令必须真正进入 SDK 模型请求')
     const history = await client.request('thread/read', { threadId: thread.id, includeTurns: true })
     assert.equal(history.thread.turns.length, 1)

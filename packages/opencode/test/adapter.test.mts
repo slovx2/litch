@@ -26,10 +26,12 @@ test('OpenCode：逐字流、命令与改文件审批、待办、差异、用量
         [
           { type: 'reasoning', text: '先跑个命令。' },
           { type: 'text', chunks: ['逐', '字', '输', '出'], delayMs: 40 },
+          // 末尾再停一下：OpenCode 的 bash 在命令退出时还没读到的输出会丢掉（multi-subscriber 用例里有说明），
+          // 最后一段紧贴着退出的话时有时无
           {
             type: 'tool',
             name: 'bash',
-            input: { command: 'printf one; sleep 1; printf two', description: '打印两段' },
+            input: { command: 'printf one; sleep 1; printf two; sleep 1', description: '打印两段' },
           },
         ],
         [

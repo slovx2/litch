@@ -105,6 +105,7 @@ test('dsh：投影缓存还停在会话刚建好时（说成没说过话），�
       input: text('说一句话。'),
     })
     await desktop.until('turn/completed', (params) => params.turn.id === turn.id)
+    await desktop.until('thread/name/updated', (params) => params.threadId === spoken)
 
     await server.close()
     await writeFile(cacheFile(spoken), created)
@@ -129,6 +130,12 @@ test('dsh：投影缓存还停在会话刚建好时（说成没说过话），�
       (await again.call('thread/list', { limit: 50 })).data.map((thread: any) => thread.id)
     assert.deepEqual(await ids(), [spoken])
     assert.deepEqual(asked.sort(), [silent, spoken].sort(), '缓存说空白的都另问一次')
+    // 名字和预览照适配器记下的报：缓存里这时还没有标题，不能把模型起的名字报成没有
+    const shown = (await again.call('thread/list', { limit: 50 })).data[0]
+    assert.deepEqual(
+      { name: shown.name, preview: shown.preview },
+      { name: 'mock 标题', preview: '说一句话。' },
+    )
     // 再列几遍：说过话的记住了；真没说过话的这个 dsh 进程里问过一次就记着，不再问
     asked.length = 0
     assert.deepEqual(await ids(), [spoken])
