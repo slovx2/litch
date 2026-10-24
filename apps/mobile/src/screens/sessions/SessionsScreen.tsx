@@ -18,7 +18,7 @@ import {
 } from '@litch/core'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { FlashList, type ListRenderItem } from '@shopify/flash-list'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { Pressable, StyleSheet, Text } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { reasonOf } from '../../../../../packages/ui/src/app/errors.ts'
@@ -32,7 +32,7 @@ import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
 import { UpdateBanner } from '../devices/UpdateBanner'
 import { DeviceBanner } from './Banner'
-import { pruneFolded, toggleFolded, useFolds } from './folds'
+import { foldsOf, pruneFolded, subscribeFolds, toggleFolded } from './folds'
 import { buildList, type GroupHead, type ListItem, PROJECTS } from './list'
 import { ArchivedHead, ArchivedNote, ArchivedRow, GroupRow, SessionRow, titleOf } from './rows'
 import { type Ask, type Menu, useSheet } from './useSheet'
@@ -72,7 +72,7 @@ export function SessionsScreen({ navigation, route }: Props) {
   const organizable = device?.organizable === true
   const canMenu = online || organizable
   /** 收起来的组（collapsed）和收起了子会话的父会话（folded），记在手机上（folds.ts）。没记着的展开 */
-  const folds = useFolds(deviceId)
+  const folds = useSyncExternalStore(subscribeFolds, () => foldsOf(deviceId))
   const collapsed = useMemo(() => new Set(folds.closed), [folds.closed])
   const folded = useMemo(() => new Set(folds.folded), [folds.folded])
   const [archivedOpen, setArchivedOpen] = useState(false)
