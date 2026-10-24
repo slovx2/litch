@@ -950,6 +950,11 @@ export interface ComposeOptions {
   permissions: PermissionPreset[]
   /** 这个 harness 会不会计划模式（先出计划、确认之后再动手）。不会的话界面不出这个入口 */
   plan: boolean
+  /**
+   * 清单里藏起来的型号（会话还用着、新建时不给选，比如供应商删掉了）的显示名，按型号标识。
+   * 底栏上会话用着它时照样显示成名字，不露原始标识
+   */
+  hiddenTitles?: Record<string, string>
 }
 
 /** 协作模式：default 是照常干活，plan 是先出计划 */

@@ -118,11 +118,19 @@ export const composeOptions = (
   models: Model[],
   presets: readonly PermissionPreset[] | null = null,
   plan = false,
-): ComposeOptions => ({
-  models: projectModels(models),
-  permissions: [...(presets ?? BUILTIN_PERMISSIONS)],
-  plan,
-})
+): ComposeOptions => {
+  const hidden = models.filter((model) => model.hidden && model.displayName)
+  return {
+    models: projectModels(models),
+    permissions: [...(presets ?? BUILTIN_PERMISSIONS)],
+    plan,
+    ...(hidden.length
+      ? {
+          hiddenTitles: Object.fromEntries(hidden.map((model) => [model.model, model.displayName])),
+        }
+      : {}),
+  }
+}
 
 /**
  * 底栏上显示哪一档强度。对面报了就是它；报的是 null 时它用的是这个模型自己的默认档，显示那一档。

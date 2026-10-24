@@ -992,7 +992,7 @@ test('原生 codex 没配强度：建会话、载入时报的强度是 null，�
   assert.equal(shownEffort(null, undefined), null)
 })
 
-test('可选项：隐藏的模型不列，没有强度档的模型强度是空的；一次连接只问一遍', async () => {
+test('可选项：隐藏的模型不列（只留名字），没有强度档的模型强度是空的；一次连接只问一遍', async () => {
   const { core, command, sent } = setup()
   core.start()
   await settle()
@@ -1004,6 +1004,8 @@ test('可选项：隐藏的模型不列，没有强度档的模型强度是空�
       ['gate/plain', []],
     ],
   )
+  // 隐藏的只留名字：会话还用着它时底栏照样显示成名字
+  assert.deepEqual(options.hiddenTitles, { 'gate/secret': 'GATE/SECRET' })
   // 速度：对面给的那几档（标准不在里面，界面自己补）和模型默认的那一档；没有速度可选的是空的
   assert.deepEqual(
     options.models.map((entry) => [entry.id, entry.speeds, entry.defaultSpeed]),
