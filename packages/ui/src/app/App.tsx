@@ -27,6 +27,7 @@ import {
   onTasksRequest,
   type TasksRoute,
 } from './actions.ts'
+import { readWhileOpen } from './read.ts'
 import { useKey, useServices } from './services.tsx'
 import { TitleBar } from './TitleBar.tsx'
 import { Toasts } from './toasts.tsx'
@@ -78,13 +79,10 @@ export function App() {
   // 开着某一页的时候，侧栏里没有哪个会话是选中的
   const selection = page ? null : picked
 
-  // 打开一个会话就算读过了
+  // 开着一个会话就算读过了：摘要上的未读一出现就清（摘要比选中晚到的也算）
   useEffect(() => {
     if (!selection) return
-    const { deviceId, sessionId } = selection
-    const summary = replica.store.get<SessionSummary>(keys.summary(deviceId, sessionId))
-    if (summary?.unread)
-      channel.command('session.markRead', { deviceId, sessionId }).catch(() => {})
+    return readWhileOpen(channel, replica.store, selection.deviceId, selection.sessionId)
   }, [selection, channel, replica])
 
   const openPage = useCallback((next: Page | null) => {

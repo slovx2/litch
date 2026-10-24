@@ -1,6 +1,6 @@
-// 开着会话就算读过了（照桌面 packages/ui/src/app/App.tsx 选中会话时）：摘要上的未读一出现就清掉，
-// 进来之前就有的、摘要比页面晚到的都算。开着的时候核心自己不会再标（会话有人订阅着），
-// 离开以后回合再结束才重新标；离开后会话存储还留着订阅的那一阵见 src/core/store-cache.ts
+// 开着会话就算读过了（桌面 App.tsx 选中的会话、手机详情页共用）：摘要上的未读一出现就清掉，
+// 打开之前就有的、摘要比打开晚到的都算。开着的时候核心自己不会再标（会话有人订阅着），
+// 离开以后回合再结束才重新标。不依赖 React，手机直接引用
 import type { CoreChannel, KeyedStore, SessionSummary } from '@litch/core'
 import { keys } from '@litch/core'
 

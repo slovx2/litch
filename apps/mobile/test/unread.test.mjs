@@ -1,10 +1,10 @@
-// 未读（src/detail/read.ts、src/core/store-cache.ts）接在模拟核心上：进会话清掉、开着时回合结束不标、
+// 未读（packages/ui/src/app/read.ts、src/core/store-cache.ts）接在模拟核心上：进会话清掉、开着时回合结束不标、
 // 离开后回合结束重新标；离开时还留着的会话存储不能让核心以为还有人在看；子会话和父会话各记各的。
 import assert from 'node:assert/strict'
 import { afterEach, test } from 'node:test'
 import { createReplica, keys } from '@litch/core'
+import { readWhileOpen } from '../../../packages/ui/src/app/read.ts'
 import { acquireStore, releaseStore } from '../src/core/store-cache.ts'
-import { readWhileOpen } from '../src/detail/read.ts'
 import { mockChannel, until } from './helpers.mjs'
 
 const cleanup = []
