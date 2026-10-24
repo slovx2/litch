@@ -381,7 +381,13 @@ test('OpenCode：只读档拿不到改文件和命令工具，完全访问档来
   const s = await scene(
     scripted({
       FULL: [
-        [{ type: 'tool', name: 'bash', input: { command: 'printf ran', description: '跑' } }],
+        [
+          {
+            type: 'tool',
+            name: 'bash',
+            input: { command: 'printf ran > ran.txt', description: '跑' },
+          },
+        ],
         [{ type: 'text', chunks: ['跑完了'] }],
       ],
       PLAN: [[{ type: 'text', chunks: ['1. 先看\n', '2. 再改'] }]],
@@ -405,7 +411,9 @@ test('OpenCode：只读档拿不到改文件和命令工具，完全访问档来
     assert.equal(full.status, 'completed', JSON.stringify(full.error))
     assert.ok(tools().includes('bash'))
     const command = full.items.find((item: any) => item.type === 'commandExecution')
-    assert.equal(command.aggregatedOutput, 'ran')
+    assert.equal(command.status, 'completed')
+    // 命令真的跑了：看它写下的文件（OpenCode 的 bash 在命令很快退出时会丢掉输出，见 multi-subscriber 用例）
+    assert.equal(await readFile(join(s.cwd, 'ran.txt'), 'utf8'), 'ran')
     assert.equal(desktop.requests.length, 0, '完全访问档不来问')
     assert.equal(
       (await desktop.call('thread/read', { threadId: thread.id })).thread.activePermissionProfile,
