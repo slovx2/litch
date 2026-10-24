@@ -636,3 +636,14 @@ test('编号提示：冻结之前给指的元素加一次性标记，口令交�
     .map((one) => ((one.params?.arguments ?? []) as Array<{ value: string }>)[0]?.value)
   assert.deepEqual(marks, [`${ask.hintToken}:username`, `${ask.hintToken}:submit`])
 })
+
+test('代理给的源规范成 scheme://host[:port] 交给交接；认不出的当参数错', async () => {
+  const { run, asks } = scriptedSetup(() => filled())
+  await run('navigate', { url: 'http://localhost:3000/login' })
+  await run('request_sign_in', { reason: 'r', origin: 'https://GitHub.com/login/' })
+  assert.equal(asks[0]?.origin, 'https://github.com')
+  const bad = await run('request_sign_in', { reason: 'r', origin: 'github' })
+  assert.equal(bad.success, false)
+  assert.match(textOf(bad), /origin must look like/)
+  assert.equal(asks.length, 1)
+})

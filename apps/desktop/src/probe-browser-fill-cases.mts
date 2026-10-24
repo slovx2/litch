@@ -31,6 +31,8 @@ export interface FillKit {
   setTask(task: { id: string; name: string } | null): void
   /** 记下的事先授权（自检里的那份） */
   grants: Map<string, string>
+  /** 核心转来一条手机答复 */
+  phoneAnswer(answer: unknown): void
 }
 
 export async function runCases(kit: FillKit): Promise<void> {
@@ -280,6 +282,28 @@ export async function runCases(kit: FillKit): Promise<void> {
       '普通会话没有事先授权：照常出卡片，没有过期时间',
       plain.card?.expiresAt === null,
       plain.card,
+    )
+  }
+
+  // 13. 手机的答复：验签不过的丢掉、卡片接着等；过了的照它代填
+  {
+    await open('/plain')
+    let stillWaiting = false
+    const { text } = await request({
+      turn: 'turn-phone',
+      answer: async (card) => {
+        const ref = card.accounts[0]?.ref ?? null
+        kit.phoneAnswer({ id: card.id, nonce: card.nonce, ref, signature: 'forged' })
+        await sleep(300)
+        stillWaiting = kit.signIns.get(card.id)?.stage === 'choose'
+        kit.phoneAnswer({ id: card.id, nonce: card.nonce, ref, signature: 'good' })
+      },
+    })
+    check('手机答复验签不过：丢掉，卡片接着等', stillWaiting)
+    check(
+      '手机答复验签过了：照它代填',
+      /Litch filled the account the user approved/.test(text),
+      text,
     )
   }
 }

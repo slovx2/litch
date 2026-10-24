@@ -5,7 +5,7 @@
 // 可选的 origin 要和页面的真实源完全一样；usernameRef、passwordRef、submitRef 只当提示：冻结之前经 CDP 给这几个元素
 // 加一次性的标记，网页那一侧（passwords/sign-in-page.mts）按标记找，标记必须落在 Litch 认出的登录表单里。
 import { randomUUID } from 'node:crypto'
-import { str } from './args.mjs'
+import { BadArgs, str } from './args.mjs'
 import type { Call, SignInOutcome, Tool } from './executor.mjs'
 import type { BrowserPage } from './model.mjs'
 import { nodeOf } from './page-ops.mjs'
@@ -108,7 +108,7 @@ export const requestSignIn: Tool = async (call) => {
   if (handover.active(page.id)) return call.done(null, BUSY)
   const reason = clip(str(call.args, 'reason', true).trim())
   const site = clip(str(call.args, 'site')?.trim() || hostOf(page.info().url))
-  const origin = str(call.args, 'origin')?.trim() || null
+  const origin = originArg(str(call.args, 'origin')?.trim() || null)
   // 冻结之前（CDP 还连着）给提示的元素加标记。没给提示时不让出一拍：前后脚的第二次调用要看得到这一次的冻结
   const hinted = HINTS.some(([arg]) => str(call.args, arg) !== undefined)
   const hintToken = hinted ? await markHints(call, page) : null
@@ -179,6 +179,18 @@ export const requestSignIn: Tool = async (call) => {
   } finally {
     release?.()
   }
+}
+
+/** 代理给的源规范成 scheme://host[:port]（带了路径、末尾斜杠的也认）；认不出是参数错 */
+function originArg(value: string | null): string | null {
+  if (value === null) return null
+  try {
+    const origin = new URL(value).origin
+    if (origin !== 'null') return origin
+  } catch {
+    // 下面一起报
+  }
+  throw new BadArgs(`origin must look like "https://example.com": ${value}`)
 }
 
 function hostOf(url: string): string {

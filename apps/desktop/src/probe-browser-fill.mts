@@ -137,6 +137,13 @@ void app.whenReady().then(async () => {
         grants.get(`${deviceId}|${taskId}|${origin}`) ?? null,
       remember: ({ deviceId, taskId, origin, entryId }) =>
         void grants.set(`${deviceId}|${taskId}|${origin}`, entryId),
+      // 手机答复的验签：自检里签名写 good 的才认
+      verifyPhoneAnswer: (card, answer) => {
+        const one = answer as { signature?: unknown; ref?: unknown; nonce?: unknown }
+        if (one.signature !== 'good' || one.nonce !== card.nonce) return { ok: false, why: 'bad' }
+        const ref = typeof one.ref === 'string' ? one.ref : null
+        return { ok: true, phoneId: 'phone-1', choice: ref, remember: false, firstSeen: false }
+      },
     }),
   })
 
@@ -258,6 +265,7 @@ void app.whenReady().then(async () => {
     setTask: (next) => {
       task = next
     },
+    phoneAnswer: (answer) => executor.phoneAnswer?.(answer),
     grants,
   })
 
