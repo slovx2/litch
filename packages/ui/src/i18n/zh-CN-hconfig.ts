@@ -222,4 +222,10 @@ export const zhHconfig = {
   'hc.models.bad.id': '请填写模型名',
   'hc.models.bad.taken': '清单中已有 {id}',
   'hc.models.bad.window': '请输入正整数，或 200K、1M 等写法',
+  // 离开前问：有没保存的改动时切标签、回上一页、去别的页、关窗口（app/leave-guard.tsx）
+  'leave.title': '有未保存的改动',
+  'leave.note': '离开前要保存这些改动吗？放弃后改动将丢失。',
+  'leave.save': '保存',
+  'leave.discard': '放弃',
+  'leave.cancel': '取消',
 } satisfies Record<string, Entry>

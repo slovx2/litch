@@ -27,6 +27,7 @@ import {
   onTasksRequest,
   type TasksRoute,
 } from './actions.ts'
+import { LeaveGuardHost, leaveThen } from './leave-guard.tsx'
 import { useKey, useServices } from './services.tsx'
 import { TitleBar } from './TitleBar.tsx'
 import { Toasts } from './toasts.tsx'
@@ -87,34 +88,45 @@ export function App() {
       channel.command('session.markRead', { deviceId, sessionId }).catch(() => {})
   }, [selection, channel, replica])
 
-  const openPage = useCallback((next: Page | null) => {
-    setPage(next)
-    setPeek(null)
-  }, [])
+  // 换页的动作都先过 leaveThen：眼前那一页有没保存的改动（harness 详情设置）时先问，问完了才换（leave-guard.tsx）
+  const openPage = useCallback(
+    (next: Page | null) =>
+      leaveThen(() => {
+        setPage(next)
+        setPeek(null)
+      }),
+    [],
+  )
   const select = useCallback(
-    (next: Selection) => {
-      setPicked(next)
-      setWish(null)
-      openPage(null)
-    },
+    (next: Selection) =>
+      leaveThen(() => {
+        setPicked(next)
+        setWish(null)
+        openPage(null)
+      }),
     [openPage],
   )
   /** 到新建对话页去。next 是明说要建在哪；null 是按默认的来 */
   const compose = useCallback(
-    (next: PlaceWish | null) => {
-      setPicked(null)
-      setWish(next)
-      openPage(null)
-    },
+    (next: PlaceWish | null) =>
+      leaveThen(() => {
+        setPicked(null)
+        setWish(next)
+        openPage(null)
+      }),
     [openPage],
   )
   const closePage = useCallback(() => openPage(null), [openPage])
   /** 别处要求直接进哪台设备的详情。seq 每次都变，同一台再要一次也重新进 */
   const [deviceAt, setDeviceAt] = useState<{ deviceId: string; seq: number } | null>(null)
-  const openDevices = useCallback(() => {
-    setDeviceAt(null)
-    openPage('devices')
-  }, [openPage])
+  const openDevices = useCallback(
+    () =>
+      leaveThen(() => {
+        setDeviceAt(null)
+        openPage('devices')
+      }),
+    [openPage],
+  )
   const closePeek = useCallback(() => setPeek(null), [])
   /** 定时任务那一页一打开去哪。seq 每次都变：在那一页里再要一次也重新进 */
   const [tasksAt, setTasksAt] = useState<{ route: TasksRoute; seq: number }>({
@@ -122,19 +134,22 @@ export function App() {
     seq: 0,
   })
   const onPage = useCallback(
-    (next: Page) => {
-      if (next === 'tasks') setTasksAt((was) => ({ route: { view: 'list' }, seq: was.seq + 1 }))
-      openPage(next)
-    },
+    (next: Page) =>
+      leaveThen(() => {
+        if (next === 'tasks') setTasksAt((was) => ({ route: { view: 'list' }, seq: was.seq + 1 }))
+        openPage(next)
+      }),
     [openPage],
   )
   // 别处要去定时任务的某个地方（会话顶上那一条的“去看任务”、会话菜单的“为这个会话建定时任务”）
   useEffect(
     () =>
-      onTasksRequest((route) => {
-        setTasksAt((was) => ({ route, seq: was.seq + 1 }))
-        openPage('tasks')
-      }),
+      onTasksRequest((route: TasksRoute) =>
+        leaveThen(() => {
+          setTasksAt((was) => ({ route, seq: was.seq + 1 }))
+          openPage('tasks')
+        }),
+      ),
     [openPage],
   )
 
@@ -158,16 +173,20 @@ export function App() {
     document.addEventListener('keydown', onKey)
     const offMenu = window.litchShell?.onMenu?.((action) => {
       if (action !== 'settings.open' && action !== 'settings.about') return
-      if (action === 'settings.about') setSettingsAt('about')
-      openPage('settings')
+      leaveThen(() => {
+        if (action === 'settings.about') setSettingsAt('about')
+        openPage('settings')
+      })
     })
     // 别处要直接开到某一组（设备详情里 Computer Use 开关旁的“去设置里看看”）。
     // “设备”原来是设置里的一组，现在是设置页上直接进设备页的入口：要它就直接进设备页
-    const offAsk = onSettingsRequest((section) => {
-      if (section === 'devices') return openDevices()
-      if (isSettingsSection(section)) setSettingsAt(section)
-      openPage('settings')
-    })
+    const offAsk = onSettingsRequest((section: string) =>
+      leaveThen(() => {
+        if (section === 'devices') return openDevices()
+        if (isSettingsSection(section)) setSettingsAt(section)
+        openPage('settings')
+      }),
+    )
     return () => {
       document.removeEventListener('keydown', onKey)
       offMenu?.()
@@ -193,10 +212,12 @@ export function App() {
   // 别处要直接进某台设备的详情（顶栏弹层里“不确认”那一行的“去设置”）
   useEffect(
     () =>
-      onDeviceRequest((deviceId) => {
-        setDeviceAt((was) => ({ deviceId, seq: (was?.seq ?? 0) + 1 }))
-        openPage('devices')
-      }),
+      onDeviceRequest((deviceId: string) =>
+        leaveThen(() => {
+          setDeviceAt((was) => ({ deviceId, seq: (was?.seq ?? 0) + 1 }))
+          openPage('devices')
+        }),
+      ),
     [openPage],
   )
 
@@ -312,6 +333,8 @@ export function App() {
       </div>
       {/* litch config 要界面做的事、放宽安全的确认卡、执行器开的出码对话框 */}
       <ConfigAgent />
+      {/* 有没保存的改动时离开前问的那个对话框 */}
+      <LeaveGuardHost />
     </div>
   )
 }

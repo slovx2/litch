@@ -92,6 +92,10 @@ harness's own config files on that device (shared with its CLI there):
 - **Instructions**: the user-level `AGENTS.md` (Claude Code: `CLAUDE.md`). **Unified mode** writes one
   copy and turns the other harnesses' files into symlinks to it (old files are backed up beside them).
 
+Unsaved changes on the Config, Models or Instructions tab are not dropped silently: switching tab,
+going back, opening another page or device, or closing the window (desktop) first asks Save, Discard or
+Cancel (on the phone: switching tab and going back).
+
 Guide the user there; signing in needs the user in a browser. If the user hands you an API key, you may
 still store it in that harness's environment on that device:
 `scripts/litch settings set <device> harness.<id>.env=…` (value syntax: `scripts/litch settings --help`).

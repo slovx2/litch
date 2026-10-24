@@ -13,6 +13,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useT } from '../../app/appearance.ts'
 import { Confirm } from '../../app/Confirm.tsx'
 import { whyNot } from '../../app/errors.ts'
+import { useLeaveGuard } from '../../app/leave-guard.tsx'
 import { useServices } from '../../app/services.tsx'
 import { showToast } from '../../app/toasts.tsx'
 import { overwrittenBy } from './logic.ts'
@@ -35,6 +36,8 @@ export function InstructionsTab({ device, harnessId, slot }: InstructionsTabProp
   const [saving, setSaving] = useState(false)
   const [failure, setFailure] = useState<ChannelErrorShape | null>(null)
   const [overviewKey, setOverviewKey] = useState(0)
+  // 有没保存的改动：离开前问（“保存”走下面的 save）
+  const leave = useLeaveGuard(draft !== null && !!data && draft !== data.content)
 
   if (!data) {
     return (
@@ -64,8 +67,8 @@ export function InstructionsTab({ device, harnessId, slot }: InstructionsTabProp
     setBase(null)
     setFailure(null)
   }
-  const save = async () => {
-    if (draft === null) return
+  const save = async (): Promise<boolean> => {
+    if (draft === null) return false
     setSaving(true)
     setFailure(null)
     try {
@@ -82,12 +85,15 @@ export function InstructionsTab({ device, harnessId, slot }: InstructionsTabProp
         text: (say) => say('manage.saved'),
         lifeMs: 3000,
       })
+      return true
     } catch (error) {
       setFailure(error as ChannelErrorShape)
+      return false
     } finally {
       setSaving(false)
     }
   }
+  leave.current = async () => (dirty && !saving && !moved ? save() : false)
 
   return (
     <div className="hc-tab" data-hc-tab="instructions" data-hash={data.hash}>

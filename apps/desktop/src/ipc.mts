@@ -40,6 +40,13 @@ export const NOTIFY = 'litch:notify'
 export const NOTIFY_CLICK = 'litch:notify-click'
 /** 界面 → 主进程，等应答：弹系统的选文件夹对话框，回选中的那个目录（没选是 null）。只给本机的设备用 */
 export const PICK_FOLDER = 'litch:pick-folder'
+// —— 有没保存的改动时关窗口、退出之前先问（leave-guard.mts） ——
+/** 界面 → 主进程：现在有没有没保存的改动（true、false） */
+export const UNSAVED = 'litch:unsaved'
+/** 主进程 → 界面：关窗口、退出被拦下了，请界面问“保存 / 放弃 / 取消” */
+export const LEAVE_ASK = 'litch:leave-ask'
+/** 界面 → 主进程：问完了可以走（保存成了或者放弃了），接着关窗口、退出 */
+export const LEAVE_GO = 'litch:leave-go'
 // —— 设置页里 Computer Use 那一节（只在 macOS 上有；computer-use/settings.mts） ——
 /** 界面 → 主进程，等应答：助手和两项系统权限的状态。参数 launch：助手没在跑时要不要拉起它 */
 export const COMPUTER_USE_STATUS = 'litch:computer-use:status'

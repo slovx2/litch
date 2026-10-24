@@ -74,7 +74,12 @@ import { runFirstTurnChecks } from './probe-first-turn.mjs'
 import { foldProbe, judgeFold } from './probe-fold.mjs'
 import { fullProbe, judgeFull, judgeMockFull, mockFullProbe } from './probe-full.mjs'
 import { goalProbe, judgeGoal } from './probe-goal.mjs'
-import { harnessSettingsProbe, judgeHarnessSettings } from './probe-harness-settings.mjs'
+import {
+  harnessSettingsProbe,
+  judgeHarnessSettings,
+  leaveCloseCheck,
+  leaveCloseSetup,
+} from './probe-harness-settings.mjs'
 import { homeProbe, judgeHome } from './probe-home.mjs'
 import { homeLook, judgeHomeLook } from './probe-home-look.mjs'
 import { homeMoreProbe, judgeHomeMore } from './probe-home-more.mjs'
@@ -295,7 +300,17 @@ async function measure(
   }
   if (mode === 'harness-settings') {
     const result = await runInPage(window, harnessSettingsProbe)
-    return [result, judgeHarnessSettings(result)]
+    const failed = judgeHarnessSettings(result)
+    // 关窗口前问：页面里改一项不存，由主进程关窗口（和点关闭按钮一样），看界面问了、取消之后窗口还在
+    const ready = await runInPage(window, leaveCloseSetup)
+    let closeAsked = 'no page'
+    if (ready) {
+      window.close()
+      closeAsked = window.isDestroyed() ? 'closed' : await runInPage(window, leaveCloseCheck)
+    }
+    if (closeAsked !== 'asked:dirty' || window.isDestroyed())
+      failed.push(`有没保存的改动时关窗口没先问，或者取消之后没留住：${closeAsked}`)
+    return [{ ...result, closeAsked }, failed]
   }
   if (mode === 'engines') return runEnginesChecks(window, hooks)
   if (mode === 'first-turn') return runFirstTurnChecks(window)

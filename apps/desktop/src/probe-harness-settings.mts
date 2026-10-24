@@ -3,6 +3,7 @@
 // 一、配置：改开关和整数（填错了保存不了）、保存后写进去；只读项、被盖住的项有说明；
 //    别的客户端抢先改了（聊天里说“抢先改配置”）：保存撞上冲突、改动留着、再存就成；
 //    改着的时候别处改了（“别处改配置”）：提示一句，用最新的；
+//    有没保存的改动时离开前问：切标签问、取消留在原地；返回问、放弃回到设备详情；去设置页问、保存了再走；
 // 二、账号：本机 Claude 粘贴授权码（错的没成、对的成了）、改网关供应商时从它那里拉型号勾进清单；
 //    远程 build-01 上 Codex：浏览器登录先经 ssh 转发回调端口再成、设备码、API key（错的、对的）、
 //    只认环境变量的写进设备设置、按模板加一个自定义 provider 再删掉；配置里要确认的动作；
@@ -31,6 +32,11 @@ export interface HarnessSettingsProbe {
   /** 别处改：提示、用最新的之后 */
   moved: boolean
   tookLatest: boolean
+  /** 离开前问：切标签时问了没有、取消后还在配置页且改动在；返回时放弃、再进来改动没了；去设置页时保存、存进去的值 */
+  leaveAsked: boolean
+  leaveStayed: string
+  leaveDiscarded: string
+  leaveSaved: string
   /** 账号（本机 Claude）：粘贴授权码错的、对的；网关拉来的型号勾进清单后表单里的、存完卡片上的 */
   pasteFailed: string
   pasteDone: string
@@ -252,6 +258,34 @@ export async function harnessSettingsProbe(): Promise<HarnessSettingsProbe> {
   await click('“用最新的”', () => act('hc-take-latest'))
   const tookLatest = (await until('改动放弃、保存条收掉', () => !bar())) === true
 
+  // 有没保存的改动时离开前问：切到账号时问，取消就留在原地
+  const asked = () => one('dialog[data-leave-ask][open]')
+  const fastNow = () => switchOf('fastMode')?.getAttribute('aria-checked') ?? ''
+  const fastSaved = fastNow()
+  switchOf('fastMode')?.click()
+  await until('保存条', () => bar())
+  one<HTMLButtonElement>('.hc-tabs [data-tab="accounts"]')?.click()
+  const leaveAsked = (await until('离开前问', asked)) !== null
+  await click('“取消”', () => act('leave-cancel'))
+  await until('问的框关掉', () => !asked())
+  const leaveStayed = `${one('[data-hc-tab]')?.dataset.hcTab}:${bar()?.dataset.dirtyCount ?? 0}`
+  // 返回时问，放弃就回到设备详情；再进来改动没了
+  act('hc-back')?.click()
+  await until('离开前问', asked)
+  await click('“放弃”', () => act('leave-discard'))
+  await until('设备详情', () => !one('.hc-page') && one('[data-detail="local"]'))
+  await openSettings('local', 'claude')
+  const leaveDiscarded = `${fastNow()}:${bar() ? 'dirty' : 'clean'}`
+  // 去设置页时问，保存了再走
+  switchOf('fastMode')?.click()
+  await until('保存条', () => bar())
+  one<HTMLButtonElement>('.sb-settings')?.click()
+  await until('离开前问', asked)
+  await click('“保存”', () => act('leave-save'))
+  await until('到了设置页', () => !one('.hc-page') && one('.set-go[data-page="devices"]'))
+  await openSettings('local', 'claude')
+  const leaveSaved = `${fastSaved}→${fastNow()}`
+
   // ---------- 二、账号（本机 Claude Code）：粘贴授权码；网关从它那里拉型号 ----------
   await openSettings('local', 'claude', 'accounts')
   const account = () => card('anthropic')
@@ -465,6 +499,10 @@ export async function harnessSettingsProbe(): Promise<HarnessSettingsProbe> {
     resaved,
     moved,
     tookLatest,
+    leaveAsked,
+    leaveStayed,
+    leaveDiscarded,
+    leaveSaved,
     pasteFailed,
     pasteDone,
     discovered,
@@ -518,6 +556,10 @@ export function judgeHarnessSettings(seen: HarnessSettingsProbe): string[] {
   must(seen.keptAfterConflict === 1, `冲突之后改动没留着：${seen.keptAfterConflict}`)
   must(seen.resaved === 'false', `冲突之后再存没存成：自动记忆是 ${seen.resaved}`)
   must(seen.moved && seen.tookLatest, '别处改了没有提示，或者“用最新的”没放弃改动')
+  must(seen.leaveAsked, '有没保存的改动时切标签没有问')
+  must(seen.leaveStayed === 'config:1', `问了之后点取消没留在原地：${seen.leaveStayed}`)
+  must(seen.leaveDiscarded === 'true:clean', `返回时放弃之后改动还在：${seen.leaveDiscarded}`)
+  must(seen.leaveSaved === 'true→false', `去设置页时保存没存进去：${seen.leaveSaved}`)
   must(seen.pasteFailed.includes('登录失败'), `错的授权码没有说没成：“${seen.pasteFailed}”`)
   must(seen.pasteDone.includes('登录成功'), `对的授权码没有登录好：“${seen.pasteDone}”`)
   must(
@@ -558,4 +600,58 @@ export function judgeHarnessSettings(seen: HarnessSettingsProbe): string[] {
   must(seen.unifiedEntries.includes('指向'), `统一之后各家没有指向底稿：${seen.unifiedEntries}`)
   must(seen.separated.includes('退出统一模式'), `退出统一模式没有提示：“${seen.separated}”`)
   return failed
+}
+
+/**
+ * 关窗口前问（接在上面的验收后面，smoke.mts 里由主进程关窗口：页面自己 window.close() 不走窗口的 close 事件）。
+ * 一、打开本机 Claude Code 的配置，改一项不存，等外壳知道有改动
+ */
+export async function leaveCloseSetup(): Promise<boolean> {
+  const sleep = (ms: number) => new Promise<void>((done) => setTimeout(done, ms))
+  const one = <E extends Element = HTMLElement>(selector: string, root: ParentNode = document) =>
+    root.querySelector<E>(selector)
+  const until = async <T,>(check: () => T | null | undefined | false, ms = 20_000) => {
+    const end = performance.now() + ms
+    while (performance.now() < end) {
+      const value = check()
+      if (value) return value
+      await sleep(16)
+    }
+    throw new Error('关窗口前问的验收：等不到页面')
+  }
+  // 上面的验收停在本机的设备详情上：从 Claude Code 那一块进详情设置
+  if (!one('.hc-page[data-hc="claude"]')) {
+    const block = await until(() => one('[data-detail="local"] [data-harness-block="claude"]'))
+    one<HTMLButtonElement>('[data-act="harness-settings"]', block)?.click()
+  }
+  ;(await until(() => one<HTMLButtonElement>('.hc-tabs [data-tab="config"]'))).click()
+  const row = await until(() => one('[data-hc-key="fastMode"]'))
+  one<HTMLButtonElement>('button[role="switch"]', row)?.click()
+  await until(() => one('[data-hc-save]'))
+  // 界面报给外壳是异步的：等一下再关
+  await sleep(300)
+  return true
+}
+
+/** 二、主进程关了窗口之后：问了没有；点取消，窗口和改动都还在；再放弃改动 */
+export async function leaveCloseCheck(): Promise<string> {
+  const sleep = (ms: number) => new Promise<void>((done) => setTimeout(done, ms))
+  const one = <E extends Element = HTMLElement>(selector: string) =>
+    document.querySelector<E>(selector)
+  const until = async <T,>(check: () => T | null | undefined | false, ms = 10_000) => {
+    const end = performance.now() + ms
+    while (performance.now() < end) {
+      const value = check()
+      if (value) return value
+      await sleep(16)
+    }
+    return null
+  }
+  if (!(await until(() => one('dialog[data-leave-ask][open]')))) return 'not asked'
+  one<HTMLButtonElement>('[data-act="leave-cancel"]')?.click()
+  await until(() => !one('dialog[data-leave-ask]'))
+  const kept = one('[data-hc-save]') ? 'dirty' : 'clean'
+  one<HTMLButtonElement>('[data-act="hc-discard"]')?.click()
+  await until(() => !one('[data-hc-save]'))
+  return `asked:${kept}`
 }
