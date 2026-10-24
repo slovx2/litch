@@ -7,6 +7,7 @@ import { nextAssistSeq } from '../assist/useAssistant.ts'
 import { NewSession } from '../composer/NewSession.tsx'
 import type { PlaceWish } from '../composer/new-place.ts'
 import { useNewPlace } from '../composer/useNewPlace.ts'
+import { ApprovalNotices } from '../devices/ApprovalNotices.tsx'
 import { DevicesPage } from '../devices/DevicesPage.tsx'
 import { Onboarding } from '../onboarding/Onboarding.tsx'
 import { InfoRail } from '../rail/InfoRail.tsx'
@@ -247,6 +248,7 @@ export function App() {
       <div className="body">
         <main className="main">
           <Toasts />
+          <ApprovalNotices />
           <TaskNotices onOpen={select} />
           {page === 'archived' && peek ? (
             <ArchivedSession

@@ -25,6 +25,7 @@ import type {
   SidebarView,
   TurnView,
 } from '../model.mjs'
+import type { ApprovalsTopicView } from '../model-approvals.mjs'
 import type { DiffScope, DiffView } from '../model-diff.mjs'
 import type {
   InheritedEnvView,
@@ -164,6 +165,8 @@ export const keys = {
     `diff:${deviceId}:error:${scope}:${sessionId ?? ''}:${root}`,
   /** PairingTopicView：一台设备上已绑定的手机和这台桌面端开出来的配对。openPairing 开着才有 */
   pairing: (deviceId: string) => `pairing:${deviceId}`,
+  /** ApprovalsTopicView：一台设备上挂着的、要在手机上批准的卡片。openApprovals 开着才有 */
+  approvals: (deviceId: string) => `approvals:${deviceId}`,
 }
 
 /** 一个任务的运行记录（详情页那一列）：新的在前，往下翻页 */
@@ -353,6 +356,11 @@ export interface Replica {
    */
   openPairing(deviceId: string): () => void
   /**
+   * 打开一台设备上要在手机上批准的卡片（keys.approvals，手机的会话页用）。核心在有人订阅时才去设备上取。
+   * 可以打开多次，全部关掉后才退订并清掉
+   */
+  openApprovals(deviceId: string): () => void
+  /**
    * 一次运行刚结束（核心连着的时候看着它结束的）：桌面端据此发系统通知。返回取消函数。
    * 对账补上的、断开期间结束的不算
    */
@@ -479,6 +487,7 @@ export function createReplica(channel: CoreChannel): Replica {
   const managed = new Map<string, { count: number; stop(): void }>()
   const diffs = new Map<string, { count: number; stop(): void }>()
   const pairings = new Map<string, { count: number; stop(): void }>()
+  const approvalTopics = new Map<string, { count: number; stop(): void }>()
   const files = createFileTrees(channel, store)
   /** 各台设备的定时任务的订阅，和每台设备上的任务（算未读合计、找任务名要用） */
   const taskLists = new Map<string, { stop(): void; tasks: Map<string, TaskView> }>()
@@ -1263,6 +1272,41 @@ export function createReplica(channel: CoreChannel): Replica {
         if (entry.count > 0) return
         entry.stop()
         pairings.delete(key)
+        store.delete(key)
+      }
+    },
+
+    openApprovals(deviceId) {
+      const key = keys.approvals(deviceId)
+      const existing = approvalTopics.get(key)
+      if (existing) {
+        existing.count++
+      } else {
+        const stop = channel.subscribe(
+          { kind: 'approvals', deviceId },
+          {
+            snapshot(view: ApprovalsTopicView) {
+              store.set(key, view)
+            },
+            delta(ops) {
+              // 只有整份换的一种
+              const last = ops.at(-1)
+              if (last) store.set(key, last.view)
+            },
+          },
+        )
+        approvalTopics.set(key, { count: 1, stop })
+      }
+      let released = false
+      return () => {
+        if (released) return
+        released = true
+        const entry = approvalTopics.get(key)
+        if (!entry) return
+        entry.count--
+        if (entry.count > 0) return
+        entry.stop()
+        approvalTopics.delete(key)
         store.delete(key)
       }
     },

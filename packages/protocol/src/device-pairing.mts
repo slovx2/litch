@@ -365,6 +365,11 @@ export interface PairPhoneRequest {
   code: string
   /** 手机登记时带的批准公钥（PairEnrollInput.approvalKey），已经算进了确认码。没带是没有这一项 */
   approvalKey?: string
+  /**
+   * 手机的公钥行（"ssh-ed25519 <base64>"）。带了批准公钥才有：出码的一方拿它、配对号和批准公钥自己重算一遍确认码，
+   * 对得上才记下批准公钥（设备不可信，它报的确认码和批准公钥不能直接信）
+   */
+  publicKey?: string
 }
 
 export interface PairPhone {

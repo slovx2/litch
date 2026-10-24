@@ -193,3 +193,11 @@
   color: var(--ink-3);
   white-space: nowrap;
 }
+/* 一部手机的批准钥匙：指纹、怎么记下的，字比名字小一号 */
+.phone-key {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--ink-3);
+}

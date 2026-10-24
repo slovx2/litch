@@ -258,17 +258,46 @@
       }
     },
     "CardView": {
-      "allOf": [
-        {
-          "$ref": "#/definitions/Card"
-        }
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "threadId",
+        "kind",
+        "summary",
+        "desktopId",
+        "nonce",
+        "expiresAt",
+        "openedAt"
       ],
       "properties": {
+        "id": {
+          "$ref": "#/definitions/Token"
+        },
+        "threadId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "const": "browserSignIn"
+        },
+        "summary": {
+          "$ref": "#/definitions/BrowserSignInSummary"
+        },
+        "desktopId": {
+          "$ref": "#/definitions/Token"
+        },
+        "nonce": {
+          "$ref": "#/definitions/Token"
+        },
+        "expiresAt": {
+          "type": ["number", "null"]
+        },
         "openedAt": {
-          "type": "number"
+          "type": "number",
+          "description": "设备服务收下这张卡片的时间，毫秒时间戳"
         }
-      },
-      "required": ["openedAt"]
+      }
     },
     "ListResponse": {
       "type": "object",

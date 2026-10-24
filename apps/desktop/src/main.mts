@@ -24,6 +24,7 @@ import {
   utilityProcess,
 } from 'electron'
 import { openLicenses } from './about.mjs'
+import { startApprovalsMain } from './approvals/main.mjs'
 import { type InstalledBrowser, installBrowser } from './browser/install.mjs'
 import { createClientToolHost } from './client-tools/host.mjs'
 import { showMachineNotice } from './client-tools/notice.mjs'
@@ -296,6 +297,8 @@ function startCore(): void {
   child.postMessage({ type: CLIENT_TOOL, op: 'namespaces', namespaces: clientTools.namespaces() })
   // 核心往回发两种消息：客户端工具的调用和答复；退出前问它终端的事，它的回答
   child.on('message', (message: unknown) => {
+    // 扫码时核对过的批准钥匙、撤销的手机（approvals/main.mts）
+    if (core === child && approvalsMain.message(message)) return
     if ((message as { type?: unknown } | null)?.type === CLIENT_TOOL) {
       if (core !== child) return
       const tool = message as ClientToolToMain
@@ -595,6 +598,14 @@ const fromUi = (event: Electron.IpcMainInvokeEvent): boolean => {
   const frame = event.senderFrame
   return !!frame && frame === event.sender.mainFrame && isUiUrl(frame.url)
 }
+/** 手机批准钥匙：验签、扫码时记下、设置页列出和删掉（approvals/main.mts） */
+const approvalsMain = startApprovalsMain({
+  dataDir: app.getPath('userData'),
+  ipcMain,
+  fromUi,
+  windows: () => BrowserWindow.getAllWindows(),
+  log: (line) => console.error(`[approvals] ${line}`),
+})
 ipcMain.handle(COMPUTER_USE_STATUS, (event, launch: unknown) =>
   fromUi(event) && computerUseSettings ? computerUseSettings.status(launch === true) : null,
 )

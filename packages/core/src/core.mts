@@ -1108,6 +1108,7 @@ export function createCore(options: CoreOptions): Core {
             address: remembered ? { ...remembered } : { ...started.original },
             original: started.original,
             hosts: started.hosts,
+            approvals: started.approvals,
           }
           return { pairing }
         }
@@ -1149,6 +1150,11 @@ export function createCore(options: CoreOptions): Core {
         case 'pairing.revoke': {
           const { deviceId, phoneId } = params as Commands['pairing.revoke']['params']
           await deviceOf(deviceId).pairing.revoke(phoneId)
+          return {}
+        }
+        case 'approval.answer': {
+          const { deviceId, answer } = params as Commands['approval.answer']['params']
+          await deviceOf(deviceId).approvals.answer(answer)
           return {}
         }
         // 给设备装 harness。出错的原因安装模块自己已经换成给人看的了，原样过去
@@ -1421,6 +1427,8 @@ export function createCore(options: CoreOptions): Core {
       // 定时任务：设备没连上时给上次知道的，不支持时 available 是 false
       if (topic.kind === 'tasks') return device.tasks.open(sink)
       if (topic.kind === 'pairing') return device.pairing.open(sink)
+      // 手机批准：设备不支持时 available 是 false，照样成立
+      if (topic.kind === 'approvals') return device.approvals.open(sink)
       if (topic.kind === 'install') return device.install.open(sink)
       // 工作树：设备不支持时 available 是 false，照样成立
       if (topic.kind === 'worktrees') return device.worktrees.open(sink)

@@ -1,5 +1,6 @@
 // 核心里通往主进程的那一头（客户端工具）：各台设备收到的工具调用都经它交给主进程，主进程的回话按调用的标识
 // 分回给发起的那一台。它只管收发和对号，开关、超时、卡片、回合收尾都是设备那一层的事（device/tool-calls.mts）。
+import type { ApprovalAnswer } from '../../protocol/src/client-approvals.mjs'
 import type { ClientToolCallResponse } from '../../protocol/src/client-tools.mjs'
 import type { ClientAskView } from './model.mjs'
 import {
@@ -34,6 +35,8 @@ export interface ToolHub {
   cancel(id: string): void
   /** 卡片答了，或者被撤了（null） */
   answer(askId: string, answer: ToolAnswer | null): void
+  /** 手机答了这张卡片（没验签）：交给主进程验，算不算数由它定；算数时它照常 askDone */
+  phoneAnswer(askId: string, answer: ApprovalAnswer): void
   /** 一个执行过工具调用的回合结束了：执行器收拾这个回合留下的临时东西 */
   turnEnded(deviceId: string, threadId: string, turnId: string): void
   /** 请主进程发一条系统通知（litch_machine 找不到会话的卡片，08 号 4.2）。没有外壳就不发 */
@@ -127,6 +130,10 @@ export function createToolHub(
     answer(askId, answer) {
       asks.delete(askId)
       port?.post({ type: CLIENT_TOOL, op: 'answer', askId, answer })
+    },
+    phoneAnswer(askId, answer) {
+      if (!asks.has(askId)) return
+      port?.post({ type: CLIENT_TOOL, op: 'phoneAnswer', askId, answer })
     },
     turnEnded(deviceId, threadId, turnId) {
       port?.post({ type: CLIENT_TOOL, op: 'turnEnded', deviceId, threadId, turnId })
