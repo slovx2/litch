@@ -1,0 +1,57 @@
+# 模拟核心：回合进行中发消息。用等审批的会话 s2（回合停在等审批，一直在跑，不靠计时）：
+# 默认立即发送，发一句 → 插进这个回合、不排队 → 设置页“对话”改成排队 → 回来再发一句 → 排在输入框上方的托盘里
+appId: dev.litch.app
+name: mock-回合中发消息插话或排队
+tags: [mock]
+---
+- runFlow:
+    file: ../_shared/fresh.yaml
+    env:
+      MODE: mock
+      READY: device:local
+- openLink: litch://open?session=s2&device=local
+- extendedWaitUntil:
+    visible:
+      id: request:approval
+    timeout: 15000
+- tapOn:
+    id: composer-input
+- inputText: steer e2e
+- tapOn:
+    id: composer-send
+- extendedWaitUntil:
+    visible:
+      text: steer e2e
+    timeout: 10000
+- assertNotVisible:
+    id: queue
+
+# 改成排队，回到同一个会话（回合还停在等审批）
+- openLink: litch://home
+- tapOn:
+    id: devices:settings
+- scrollUntilVisible:
+    element:
+      id: settings:sendMode:queue
+    direction: DOWN
+- tapOn:
+    id: settings:sendMode:queue
+- assertVisible:
+    id: settings:sendMode:queue
+    selected: true
+- openLink: litch://open?session=s2&device=local
+- extendedWaitUntil:
+    visible:
+      id: request:approval
+    timeout: 15000
+- tapOn:
+    id: composer-input
+- inputText: queue e2e
+- tapOn:
+    id: composer-send
+- extendedWaitUntil:
+    visible:
+      id: queue:0
+    timeout: 10000
+- assertVisible:
+    text: queue e2e

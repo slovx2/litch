@@ -1,9 +1,11 @@
 // 应用设置：语言、明暗、任务卡按 harness 的开关（TaskCardsSection.tsx）、关于（版本与更新，UpdateSection.tsx）、开发者里的启动方式。都记在 prefs.json（useServices 的 prefs/setPrefs），
 // 改了马上生效：语言和明暗由 App 跟着换，启动方式换了核心重新装一次。
+// “对话”一组是回合进行中发的消息立即插进去还是排队（src/detail/composer/send-mode.ts），也记在 prefs.json。
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import type { ReactNode } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { SEND_MODES } from '../../../../../packages/ui/src/composer/send-mode-logic.ts'
 import type { RootStackParamList } from '../../nav/routes'
 import type { BootMode } from '../../shell/boot'
 import { type Prefs, useServices } from '../../shell/services'
@@ -128,6 +130,19 @@ export function SettingsScreen(_props: Props) {
           options={SKINS.map((skin) => ({ value: skin, label: t(SKIN_LABEL[skin]) }))}
           onPick={(skin) => setPrefs({ skin })}
         />
+
+        <SectionLabel>{t('settings.group.chat')}</SectionLabel>
+        <Text style={[styles.sub, { color: c.ink2 }]}>{t('settings.chat.sendMode')}</Text>
+        <Choices<Prefs['sendMode']>
+          name="sendMode"
+          value={prefs.sendMode}
+          options={SEND_MODES.map((mode) => ({
+            value: mode,
+            label: t(`settings.chat.mode.${mode}`),
+          }))}
+          onPick={(sendMode) => setPrefs({ sendMode })}
+        />
+        <Note>{t('settings.chat.sendMode.note')}</Note>
 
         <SectionLabel>{t('switches.col.taskCards')}</SectionLabel>
         <TaskCardsSection />

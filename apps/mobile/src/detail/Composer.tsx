@@ -1,6 +1,7 @@
 // 会话详情的输入区：排着队的消息、输入框、设置条。会话层面的状态（排队、设置、用量、能不能发、在不在跑）
 // 一律从会话存储的 meta 订阅来（src/core/session-store.ts），不另开会话订阅。
-// 发消息走 session.send：没有回合在跑就开一个，在跑就由核心排队；排着的可以现在就插进去（steer）、拿回来改、拿掉。
+// 发消息走 session.send：没有回合在跑就开一个；在跑时照设置里的“回合进行中发消息”（composer/send-mode.ts），默认带 now
+// 直接插进去，选了排队或这个会话插不了话的由核心排队；排着的可以现在就插进去（steer）、拿回来改、拿掉。
 // 回合在跑而输入框是空的，按钮是“停止”（session.interrupt；有在做的目标时核心先把它暂停）。
 // harness 会持续目标时，输入框上方有目标那一行，`/goal 要做到的事` 截下来设目标（goal/）。
 import {
@@ -13,9 +14,11 @@ import {
 } from '@litch/core'
 import { type RefObject, useEffect, useState, useSyncExternalStore } from 'react'
 import type { TextInput } from 'react-native'
+import { nameOf } from '../../../../packages/ui/src/app/device.ts'
 import { whyNot } from '../../../../packages/ui/src/app/errors.ts'
+import { runningPlaceholder } from '../../../../packages/ui/src/composer/send-mode-logic.ts'
 import type { SessionStore } from '../core/session-store'
-import { useChannel, useKey } from '../shell/services'
+import { useKey, useServices } from '../shell/services'
 import { useT } from '../ui/i18n'
 import { BackgroundBar } from './background/BackgroundBar'
 import { ComposeBox, useDraft } from './composer/ComposeBox'
@@ -24,6 +27,7 @@ import { downHarness, useComposeOptions } from './composer/options'
 import { ProviderSwitch } from './composer/ProviderSwitch'
 import { QueueTray } from './composer/QueueTray'
 import { SettingsBar } from './composer/SettingsBar'
+import { sendFlags, whenRunning } from './composer/send-mode'
 import { GoalBar } from './goal/GoalBar'
 import { SlashGoal } from './goal/SlashGoal'
 import { useGoalSend } from './goal/useGoalSend'
@@ -44,7 +48,7 @@ export function Composer({
 }) {
   const { deviceId, sessionId } = store
   const t = useT()
-  const channel = useChannel()
+  const { channel, prefs } = useServices()
   const meta = useSyncExternalStore(store.subscribeMeta, store.getMeta)
   const device = useKey<DeviceView>(keys.device(deviceId))
   const draft = useDraft(draftKey(deviceId, sessionId))
@@ -85,8 +89,16 @@ export function Composer({
         ? t('composer.image.unsupported')
         : null
 
+  const onRunning = whenRunning(prefs.sendMode, meta?.can)
   const send = async (text: string, images: ImageAttachment[], extras: MessageExtra[]) => {
-    await channel.command('session.send', { deviceId, sessionId, text, images, extras })
+    await channel.command('session.send', {
+      deviceId,
+      sessionId,
+      text,
+      images,
+      extras,
+      ...sendFlags(onRunning),
+    })
   }
   // 输入框里的 /goal 截在这里设目标（harness 会才截），换掉没做完的目标前问的那个对话框也在这里画
   const goal = useGoalSend(deviceId, sessionId, meta, send)
@@ -123,7 +135,11 @@ export function Composer({
   return (
     <ComposeBox
       draft={draft}
-      placeholder={t(running ? 'compose.placeholderRunning' : 'compose.placeholder')}
+      placeholder={
+        running
+          ? t(runningPlaceholder(onRunning), { harness: nameOf(device, meta?.harness ?? '') })
+          : t('compose.placeholder')
+      }
       running={running}
       blocked={blocked}
       imagesOff={imagesOff}
