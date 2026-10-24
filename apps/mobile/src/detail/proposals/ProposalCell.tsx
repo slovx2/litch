@@ -5,6 +5,8 @@
 // （它的 harness 和目录照子会话本身写，不照提案），点了进去。列表页点一条回来时这张描一圈。
 // offer 卡（start 带 initiation offer，用户这条消息是和会话无关的新任务）：只有标题和一句说明，
 // 等你选时有“新会话”“在这里做”；选了之后写等模型补简报、已开始（下面一行同上）、在这里做。
+// 选了新会话、模型补的简报要开到收不紧沙箱的 harness 上时，设备服务不开，卡片带着简报降成待开始的提案：
+// 写明没直接开的原因（换了 harness、沙箱收不紧），按钮同普通提案卡。
 import {
   type DeviceView,
   keys,
@@ -70,6 +72,8 @@ export const ProposalCell = memo(function ProposalCell({ row }: Props<'proposal'
   const shaped = !offer || prompt !== ''
   const waiting = status === 'pending' && proposal !== null
   const choosing = status === 'offered' && proposal !== null
+  // 降成了普通提案的 offer 卡：等你开始，卡上说明为什么没直接开
+  const held = offer && waiting
   const note =
     offer && status !== null && status in OFFER_NOTE
       ? OFFER_NOTE[status as keyof typeof OFFER_NOTE]
@@ -164,7 +168,17 @@ export const ProposalCell = memo(function ProposalCell({ row }: Props<'proposal'
             ) : null}
           </Pressable>
         ) : null}
-        {waiting && proposal.widerSandbox ? (
+        {held ? (
+          <Text
+            testID={`proposal:${proposalId}:held`}
+            style={[styles.wider, { color: c.wait, fontSize: font.size.meta }]}
+          >
+            {t('proposal.offer.held', {
+              harness: harness ? nameOf(harness) : '',
+              level: proposal.widerSandbox ? t(SANDBOX_LEVEL[proposal.widerSandbox]) : '',
+            })}
+          </Text>
+        ) : waiting && proposal.widerSandbox ? (
           <Text style={[styles.wider, { color: c.wait, fontSize: font.size.meta }]}>
             {t('proposal.wider', { level: t(SANDBOX_LEVEL[proposal.widerSandbox]) })}
           </Text>

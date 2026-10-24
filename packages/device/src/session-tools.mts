@@ -663,7 +663,7 @@ async function accept(
 /**
  * 开始一张自己的 offer 卡：用户选了新会话（chosen），模型补上简报。必须带 prompt，fresh 还要带够宽的 background；
  * title、harness、model、cwd、kind 不给的照卡上的。不要求用户发起的回合（用户在卡上选新会话就是同意）。
- * 目标 harness 收不到这个会话那么严的不起（没有卡片让用户看过再点）
+ * 目标 harness 收不到这个会话那么严的不起，卡片带着简报降成普通提案（pending、带 widerSandbox），由用户看过再点
  */
 async function acceptOffer(
   tree: SessionTree,
@@ -674,6 +674,12 @@ async function acceptOffer(
   switch (proposal.status) {
     case 'chosen':
       break
+    case 'pending':
+      // 补的简报开到收不紧的 harness 上、降成了普通提案卡：只能由用户在卡上开始
+      throw new Refused(
+        'blocked',
+        `Proposal ${proposal.id} is now a card waiting for the user${proposal.widerSandbox ? ` (it would run with a wider sandbox, ${proposal.widerSandbox}, than this session)` : ''}; only the user can start it, from the card. Tell them so.`,
+      )
     case 'offered':
       throw new Refused(
         'invalid',
@@ -716,11 +722,29 @@ async function acceptOffer(
     tree,
   )
   const wider = await widerFor(tree, call, spec)
-  if (wider)
-    throw new Refused(
-      'blocked',
-      `${spec.harness ?? call.harness} cannot be sandboxed as tightly as this session (it would run with ${wider}), so you cannot start this offer there. Call accept again on another harness (leave harness out for this session's), or tell the user.`,
-    )
+  // 目标 harness 收不到这个会话那么严：不开，降成一张带简报的普通提案卡，用户看过提醒再决定点不点
+  if (wider) {
+    const held = tree.holdOffer(proposal.id, {
+      title: spec.title,
+      prompt: spec.prompt,
+      background: spec.background,
+      harness: spec.harness ?? null,
+      model: spec.model ?? null,
+      effort: spec.effort ?? null,
+      cwd: spec.cwd ?? null,
+      kind: spec.kind,
+      widerSandbox: wider,
+    })
+    if (!held)
+      throw new Refused(
+        'invalid',
+        `Proposal ${proposal.id} is no longer waiting for a brief (the turn ended or it was withdrawn). Do not start a session for it.`,
+      )
+    return {
+      proposal_id: held.id,
+      note: `${spec.harness ?? call.harness} cannot be sandboxed as tightly as this session (it would run with ${wider}), so the session was not started. The card now shows your brief as a proposal: the user reviews it and starts it themselves (they can change the harness there); nothing runs until they do, and ${EXPIRES}. Tell the user why in one line. Do not do the work here, and do not call accept for it again.`,
+    }
+  }
   const child = await acceptProposal(
     tree,
     proposal.id,

@@ -2430,6 +2430,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       const { threadId } = await guarded(() =>
         link.request(SESSION_TREE_METHOD.proposalAccept, {
           proposalId,
+          threadId: sessionId,
           ...(Object.keys(changed).length > 0 ? { overrides: changed } : {}),
         }),
       )
@@ -2439,7 +2440,9 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     },
     async dismissProposal(sessionId, proposalId) {
       treeOnly()
-      await guarded(() => link.request(SESSION_TREE_METHOD.proposalDismiss, { proposalId }))
+      await guarded(() =>
+        link.request(SESSION_TREE_METHOD.proposalDismiss, { proposalId, threadId: sessionId }),
+      )
       live.settleProposal(sessionId, proposalId, 'dismissed', null)
     },
     async answerProposal(sessionId, proposalId, choice, worktree) {
@@ -2447,6 +2450,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       await guarded(() =>
         link.request(SESSION_TREE_METHOD.proposalAnswer, {
           proposalId,
+          threadId: sessionId,
           choice,
           ...(choice === 'session' && worktree !== undefined ? { worktree } : {}),
         }),
@@ -2455,7 +2459,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     },
     async hereProposal(sessionId, proposalId, lead) {
       treeOnly()
-      const params = { proposalId, ...(lead ? { lead } : {}) }
+      const params = { proposalId, threadId: sessionId, ...(lead ? { lead } : {}) }
       // 照 Claude 桌面端：那句话当用户的话进这边的输入队列，回合在跑就排到回合结束，界面上看得见、能撤、能插话。
       // 会话没在界面上开着、设备进程旧（没有 markHere）的，交给设备进程发（它在回合结束后发）
       if (live.watched(sessionId)) {

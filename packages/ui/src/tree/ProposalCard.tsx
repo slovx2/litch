@@ -121,8 +121,8 @@ export function ProposalActs({
   )
 }
 
-/** 卡片上那一排小字：harness、模型、目录、全新还是带上下文。开始了的写的是实际起出来的子会话 */
-function ProposalMeta({ deviceId, shape }: { deviceId: string; shape: ProposalShape }) {
+/** 卡片上那一排小字：harness、模型、目录、全新还是带上下文。开始了的写的是实际起出来的子会话。offer 卡也用 */
+export function ProposalMeta({ deviceId, shape }: { deviceId: string; shape: ProposalShape }) {
   const t = useT()
   const device = useKey<DeviceView>(keys.device(deviceId))
   const { harness, model, effort, cwd, kind } = shape

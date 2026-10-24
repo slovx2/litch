@@ -80,6 +80,8 @@ export interface TreeText {
   offer: TreeChild
   offerStartedReply: string
   offerHereReply: string
+  /** 说“新任务交给 Pi”时：简报开在 Pi 上收不紧沙箱，卡片降成待开始的提案，父会话的回话 */
+  offerHeldReply: string
   /**
    * 说“交接”时：父会话手上做到一半的任务（标题、剩下的计划、分叉会话的回话），和父会话交出去之后
    * 回答新消息的那段话
@@ -220,6 +222,8 @@ export const TREE_TEXT: Record<SampleLang, TreeText> = {
     },
     offerStartedReply: '已经单开了一个会话去做设置页的导出按钮，做完它会回报到这里。',
     offerHereReply: '好，就在这里做。先看一下设置页诊断那一节的结构，再加导出按钮。',
+    offerHeldReply:
+      'Pi 的沙箱收不到这个会话那么严，所以没有直接开：简报已经写在卡上，你看过再点开始。',
     handOff: {
       title: '整理会话列表的排序',
       prompt:
@@ -374,6 +378,8 @@ export const TREE_TEXT: Record<SampleLang, TreeText> = {
       'I started a separate session for the settings export button; it will report back here when done.',
     offerHereReply:
       'OK, doing it here. First a look at the Diagnostics section of the settings page, then the export button.',
+    offerHeldReply:
+      'Pi can’t be sandboxed as tightly as this session, so I didn’t start it: the brief is on the card for you to review and start.',
     handOff: {
       title: 'Tidy up session list sorting',
       prompt:

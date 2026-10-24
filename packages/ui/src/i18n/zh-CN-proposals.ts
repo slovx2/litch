@@ -45,6 +45,8 @@ export const zhProposals = {
   'proposal.offer.doneHere': '在当前会话中继续',
   'proposal.offer.waiting': '待选择',
   'proposal.offer.failed': '卡片未能显示',
+  'proposal.offer.held':
+    '已选择新会话，但模型改用 {harness}，其沙箱无法收紧到当前会话的程度（将以「{level}」运行），因此未自动开始。确认后再开始。',
   'proposal.refused': '未接受：{reason}',
   'proposal.refusedBare': '未接受',
   'proposal.actual': '已开始：显示的是实际启动的子会话',

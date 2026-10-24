@@ -1,0 +1,53 @@
+# 模拟核心：offer 卡降成提案。新建会话说“new task for Pi”→ 对话里一张“新会话 / 在这里做”的卡 → 点“新会话”→
+# 模型补的简报开在 Pi 上、沙箱收不紧：卡片不开，降成待开始的提案，写明没直接开的原因，带“开始”→ 点开始 → 卡片下面是起出来的子会话
+appId: dev.litch.app
+name: mock-offer卡降成提案
+tags: [mock]
+---
+- runFlow:
+    file: ../_shared/fresh.yaml
+    env:
+      MODE: mock
+      READY: device:local
+- tapOn:
+    id: device:local
+- tapOn:
+    id: sessions:new
+- extendedWaitUntil:
+    visible:
+      id: new-input
+    timeout: 15000
+- tapOn:
+    id: new-input
+- inputText: new task for Pi
+- tapOn:
+    id: new-send
+- extendedWaitUntil:
+    visible:
+      id: proposal:.*:session
+    timeout: 20000
+- tapOn:
+    id: proposal:.*:session
+# 模型补完简报（模拟时钟里不到一秒）：卡片写明原因，按钮换成普通提案的那一排
+- scrollUntilVisible:
+    element:
+      id: proposal:.*:held
+    direction: DOWN
+    timeout: 15000
+- assertVisible:
+    text: .*Pi.*
+- assertNotVisible:
+    id: proposal:.*:child
+- scrollUntilVisible:
+    element:
+      id: proposal:.*:start
+    direction: DOWN
+    centerElement: true
+    timeout: 10000
+- tapOn:
+    id: proposal:.*:start
+- scrollUntilVisible:
+    element:
+      id: proposal:.*:child
+    direction: DOWN
+    timeout: 15000
