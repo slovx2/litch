@@ -14,6 +14,7 @@ import {
   APPROVAL_ANSWERED,
   APPROVAL_CHANGED,
   APPROVAL_CLOSE,
+  APPROVAL_ERROR,
   APPROVAL_LIST,
   APPROVAL_OPEN,
   type ApprovalAnswer,
@@ -25,8 +26,9 @@ import {
   isApprovalToken,
 } from '../../../protocol/src/client-approvals.mjs'
 import type { ClientRequestMethod, ClientRequests } from '../../../protocol/src/index.mjs'
-import type { ApprovalsOp, ChannelError } from '../channel/protocol.mjs'
+import { type ApprovalsOp, ChannelError } from '../channel/protocol.mjs'
 import type { HostSink } from '../channel/server.mjs'
+import { RpcError } from '../connection/rpc.mjs'
 import type { ApprovalsTopicView } from '../model-approvals.mjs'
 import type { ToolAskPlace } from './tool-calls.mjs'
 
@@ -184,6 +186,13 @@ export function createApprovals(host: ApprovalsHost): Approvals {
       try {
         await host.request(APPROVAL_ANSWER, answer)
       } catch (error) {
+        // 卡片已经收掉（答过了、撤了、过期了）：手机按 notFound 认出来，说“卡片已收掉”
+        if (
+          error instanceof RpcError &&
+          (error.data as { reason?: unknown } | undefined)?.reason ===
+            APPROVAL_ERROR.unknownApproval
+        )
+          throw new ChannelError('notFound', `批准卡片已收掉：${answer.id}`)
         throw host.fail(error)
       }
     },

@@ -67,11 +67,18 @@ function world(extensions = ['harness', 'clientApprovals']) {
     }),
   ])
   fake.device.extensions = extensions
+  /** 设备对下一次 litch/approval/answer 回的错误 */
+  const answerFailure: { next: unknown } = { next: null }
   const peer = fakeOpener({
     ...fake.handlers,
     'litch/approval/open': () => ({}),
     'litch/approval/close': () => ({}),
-    'litch/approval/answer': () => ({}),
+    'litch/approval/answer': () => {
+      const failure = answerFailure.next
+      answerFailure.next = null
+      if (failure) throw failure
+      return {}
+    },
     'litch/approval/list': () => ({
       data: [{ ...phoneCard(), openedAt: 7 }],
     }),
@@ -128,7 +135,7 @@ function world(extensions = ['harness', 'clientApprovals']) {
     reply({ op: 'ask', id: id?.op === 'call' ? id.invocation.id : '', askId, ask: cardAsk })
     await settled()
   }
-  return { core, peer, sent, reply, seen, broadcast, ask }
+  return { core, peer, sent, reply, seen, broadcast, ask, answerFailure }
 }
 
 function phoneCard(): ApprovalCard {
@@ -248,5 +255,15 @@ test('手机：主题先取挂着的卡片，跟着通知换；approval.answer �
   )
   await w.core.command('approval.answer', { deviceId: 'dev', answer }, never)
   assert.deepEqual(w.seen('litch/approval/answer'), [answer])
+  // 卡片已经收掉：设备回 unknownApproval，手机拿到 notFound；别的原因照原样
+  w.answerFailure.next = { code: -32602, message: '没有卡片', data: { reason: 'unknownApproval' } }
+  await assert.rejects(w.core.command('approval.answer', { deviceId: 'dev', answer }, never), {
+    code: 'notFound',
+  })
+  w.answerFailure.next = { code: -32000, message: '答得太多', data: { reason: 'tooMany' } }
+  await assert.rejects(
+    w.core.command('approval.answer', { deviceId: 'dev', answer }, never),
+    (error: { code?: unknown }) => error.code !== 'notFound',
+  )
   close()
 })
