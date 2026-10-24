@@ -1,14 +1,17 @@
 // 过程：一组的摘要（收起时一行，高度固定）和展开后的每一步。每一步一行，点开看细节：
 // 命令的输出末尾、改了哪些文件和一小段差异、工具调用的参数和结果。细节都有上限，长的到“差异”“文件”页去看。
 import { diffLines, knownFileRef, stepKindOf, type ToolPart, taskOfItem } from '@litch/core'
+import { useFlashListContext } from '@shopify/flash-list'
 import { Children, memo, type ReactNode } from 'react'
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { duration } from '../../../../packages/ui/src/app/format.ts'
 import { suggestTitles } from '../../../../packages/ui/src/transcript/steps-text.ts'
 import type { Row, StepState } from '../core/rows'
 import { type Translator, useT } from '../ui/i18n'
 import { type Palette, useTheme } from '../ui/theme'
-import { styles as cellStyles, type Props, seconds } from './cells'
-import { useBackgroundView, useTranscript } from './context'
+import { styles as cellStyles, type Props } from './cells'
+import { useBackgroundView, useToggleInPlace, useTranscript } from './context'
+import { keepPlace, rowBelow } from './keep-place'
 import { fileHref, isWebUrl } from './links'
 
 /** 命令的输出最多露出末尾多少行 */
@@ -23,11 +26,11 @@ const TOOL_SHOTS = 3
 
 const MARK: Record<StepState, string> = { running: '…', done: '✓', failed: '✕', declined: '⊘' }
 
-/** 一组过程的摘要。点了展开收起；展开的步骤在它上面，它自己原地不动 */
+/** 一组过程的摘要。点了展开收起；展开的步骤在它下面，最后一行“收起”，它自己原地不动 */
 export const GroupCell = memo(function GroupCell({ row }: Props<'group'>) {
   const { c, font } = useTheme()
   const t = useT()
-  const { toggle } = useTranscript()
+  const toggle = useToggleInPlace()
   const background = useBackgroundView()
   // 回合结束了还在跑的步骤是后台任务：摘要末尾写还有几个在后台运行（照桌面端收起行的记号）
   const inBackground =
@@ -39,7 +42,7 @@ export const GroupCell = memo(function GroupCell({ row }: Props<'group'>) {
   const tail = row.current
     ? ` · ${t('detail.group.running', { label: t.text(row.current) })}`
     : row.durationMs
-      ? ` · ${t('detail.seconds', { s: seconds(row.durationMs) })}`
+      ? ` · ${duration(row.durationMs, t)}`
       : ''
   return (
     <View style={styles.group}>
@@ -70,13 +73,44 @@ export const GroupCell = memo(function GroupCell({ row }: Props<'group'>) {
   )
 })
 
+/**
+ * 展开的一组末尾那一行“收起”：收起后下面的内容原地不动，摘要落到这一行原来的地方
+ * （步骤多、摘要已经翻出屏幕时，看着的位置不丢）。下面没有别的行时列表的底本来就不动
+ */
+export const GroupEndCell = memo(function GroupEndCell({ row }: Props<'groupEnd'>) {
+  const { c, font } = useTheme()
+  const t = useT()
+  const { toggle } = useTranscript()
+  const list = useFlashListContext<Row>()
+  const collapse = () => {
+    const ref = list?.getRef()
+    const below = ref ? rowBelow(ref, row.key) : null
+    if (!below) return toggle(row.group, row.turnId)
+    keepPlace(ref, below, () => toggle(row.group, row.turnId))
+  }
+  return (
+    <View style={[styles.step, styles.end, { borderLeftColor: c.line2 }]}>
+      <Pressable
+        onPress={collapse}
+        accessibilityRole="button"
+        style={({ pressed }) => [styles.endButton, pressed ? { backgroundColor: c.press } : null]}
+        testID="process-collapse"
+      >
+        <Text style={{ fontSize: font.size.meta, color: c.ink3 }}>
+          ▴ {t('detail.group.collapse')}
+        </Text>
+      </Pressable>
+    </View>
+  )
+})
+
 function stateText(row: Extract<Row, { type: 'step' }>, t: Translator): string {
   if (row.state === 'running') return t('command.running')
   if (row.state === 'declined') return t('detail.step.declined')
   if (row.item.kind === 'command' && row.exitCode !== null && row.exitCode !== 0)
     return t('command.exitCode', { code: row.exitCode })
   if (row.state === 'failed') return t('detail.step.failed')
-  return row.durationMs == null ? '' : t('detail.seconds', { s: seconds(row.durationMs) })
+  return row.durationMs == null ? '' : duration(row.durationMs, t)
 }
 
 const stateColor = (state: StepState, c: Palette): string =>
@@ -86,7 +120,9 @@ const stateColor = (state: StepState, c: Palette): string =>
 export const StepCell = memo(function StepCell({ row }: Props<'step'>) {
   const { c, font } = useTheme()
   const t = useT()
-  const { toggle, openLink } = useTranscript()
+  const { openLink } = useTranscript()
+  // 细节在这一步的下面长出来：这一步的标题不动
+  const toggle = useToggleInPlace()
   const item = row.item
   const expandable =
     item.kind === 'command' || item.kind === 'fileChange' || item.kind === 'toolCall'
@@ -412,6 +448,8 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   stepHead: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, paddingVertical: 4 },
+  end: { marginBottom: 4 },
+  endButton: { height: 32, justifyContent: 'center', alignSelf: 'flex-start', paddingRight: 12 },
   mark: { fontSize: 13, lineHeight: 18, width: 14 },
   stepLabel: { fontSize: 13, lineHeight: 18 },
   stepState: { fontSize: 11, lineHeight: 18 },

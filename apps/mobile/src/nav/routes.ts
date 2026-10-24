@@ -21,6 +21,11 @@ export type RootStackParamList = {
   NewSession: { deviceId: string; workspaceId?: string | null }
   /** 会话详情。title 是列表里那一行的标题，首帧就画出来（F1） */
   Detail: { deviceId: string; sessionId: string; title?: string }
+  /**
+   * 引擎自己派出的一个子代理（对话里子代理那一行点进来）：状态、类型、用时、任务、失败原因，下面是它的对话。
+   * parentId 是派出它的会话，title 是那一行上的描述，首帧就画
+   */
+  Agent: { deviceId: string; parentId: string; agentId: string; title?: string }
   /** 一个会话里的建议任务（模型提的子会话提案）：等着的在上、了结的在下，点一条回到对话里那张卡片。title 是会话名，首帧就画 */
   Proposals: { deviceId: string; sessionId: string; title?: string }
   /** 提案的“改了再开始”：照提案预填，harness、模型、强度、项目、目录、权限、全新还是带上下文、标题、简报、完成后唤醒都能改 */

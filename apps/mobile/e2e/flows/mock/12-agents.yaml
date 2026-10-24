@@ -1,0 +1,59 @@
+# 模拟核心：引擎自己的子代理。新建会话说“use sub-agents”→ 派出三个：每个一条（描述加状态的字），状态跟着子线程走
+# （完成、已停止、失败），等待收在过程组里 → 点开过程组，末尾有“收起”，点了收回去 → 点失败的那一条进子代理页，看到失败的原因
+appId: dev.litch.app
+name: mock-子代理
+tags: [mock]
+---
+- runFlow:
+    file: ../_shared/fresh.yaml
+    env:
+      MODE: mock
+      READY: device:local
+- tapOn:
+    id: device:local
+- tapOn:
+    id: sessions:new
+- extendedWaitUntil:
+    visible:
+      id: new-input
+    timeout: 15000
+- tapOn:
+    id: new-input
+- inputText: use sub-agents
+- tapOn:
+    id: new-send
+# 子代理那一条的无障碍文字是“描述 状态”。停掉的那个要等别的都回来以后再过 2.5 秒
+- extendedWaitUntil:
+    visible:
+      text: ".*(Walk the repository layout|走一遍仓库的目录结构).*(Done|完成).*"
+    timeout: 20000
+- extendedWaitUntil:
+    visible:
+      text: ".*(Find duplicated helpers in core|找出 core 里重复的工具函数).*(Stopped|已停止).*"
+    timeout: 20000
+- assertVisible:
+    text: ".*(Compare OpenCode|对照 OpenCode).*(Failed|失败).*"
+# 过程组里只剩等待那一步：点开，末尾一行“收起”，点了收回去
+- tapOn:
+    id: process-toggle
+- extendedWaitUntil:
+    visible:
+      id: process-collapse
+    timeout: 5000
+- tapOn:
+    id: process-collapse
+- extendedWaitUntil:
+    notVisible:
+      id: process-collapse
+    timeout: 5000
+# 点失败的那一条：子代理页上写着失败和原因，下面是它自己的对话
+- tapOn:
+    text: ".*(Compare OpenCode|对照 OpenCode).*(Failed|失败).*"
+- extendedWaitUntil:
+    visible:
+      id: agent:head
+    timeout: 10000
+- assertVisible:
+    id: agent:failure
+- assertVisible:
+    text: ".*PreToolUse:Agent hook error.*"

@@ -29,6 +29,7 @@ import { noteFirstContent, noteWork } from '../probe'
 import { useKey } from '../shell/services'
 import { useT } from '../ui/i18n'
 import { useTheme } from '../ui/theme'
+import { AgentsCell } from './agents/AgentsCell'
 import { useSessionBackground } from './background/BackgroundBar'
 import { OriginCell } from './background/OriginCell'
 import {
@@ -56,7 +57,7 @@ import { HandoffCell } from './proposals/HandoffCell'
 import { flash, takeReveal, useRevealWaiting } from './proposals/hooks'
 import { ProposalCell } from './proposals/ProposalCell'
 import { WrapAskCell } from './proposals/WrapAskCell'
-import { GroupCell, StepCell } from './steps'
+import { GroupCell, GroupEndCell, StepCell } from './steps'
 import { colors } from './theme'
 import { Flash, ImageViewer, TurnMenu } from './turn-menu'
 
@@ -91,6 +92,10 @@ function renderRow(row: Row) {
       return <GroupCell row={row} />
     case 'step':
       return <StepCell row={row} />
+    case 'groupEnd':
+      return <GroupEndCell row={row} />
+    case 'agents':
+      return <AgentsCell row={row} />
     case 'todo':
       return <TodoCell row={row} />
     case 'notice':

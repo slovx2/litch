@@ -18,7 +18,13 @@ import type {
   TurnStatus,
   UserMessageItem,
 } from '@litch/core'
-import { deriveBackground, gatherAnswers, parseAskReply, reduceSession } from '@litch/core'
+import {
+  deriveBackground,
+  gatherAnswers,
+  isAgentSpawn,
+  parseAskReply,
+  reduceSession,
+} from '@litch/core'
 import { experiment } from '../experiment'
 import { noteOpenStage, noteWork } from '../probe'
 import { type Row, RowBuilder } from './rows'
@@ -69,6 +75,8 @@ export interface SessionMeta {
   derived: SessionBackgroundView | null
   /** 持续目标（harness 会才有）：输入框上方那一行用。达成了核心马上清掉，回答下面那一句在对话区的行里 */
   goal: SessionGoalView | null
+  /** 引擎自己派出的子代理线程（核心跟着子线程的回合推来）：子代理页的标题、状态、任务用 */
+  agents: SessionView['agents']
 }
 
 const EMPTY: SessionSnapshot = { rows: [], running: false, error: null, publishedAt: 0 }
@@ -352,6 +360,12 @@ export class SessionStore {
         mark(reachedBefore)
         mark(op.reached?.turnId)
         return
+      case 'session.agents':
+        // 子代理的列表变了（子线程开始、结束了）：画着子代理那一行的回合重算，子代理页的标题跟着换
+        for (const turn of view.turns)
+          if (turn.itemIds.some((id) => isAgentSpawn(view.items[id]))) mark(turn.id)
+        this.metaDirty = true
+        return
       case 'request.add':
       case 'request.remove':
         // 有没有待答的请求决定回合末尾那一行写不写“运行中”：在跑的回合重算
@@ -430,6 +444,7 @@ export class SessionStore {
         lastTurn: lastTurnOf(view),
         derived: view.can.backgroundTasks ? null : deriveBackground(view.turns, view.items),
         goal: view.goal ?? null,
+        agents: view.agents,
       }
       for (const listener of this.metaListeners) listener()
     }

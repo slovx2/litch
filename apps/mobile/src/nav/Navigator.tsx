@@ -2,6 +2,7 @@
 // 每个页面自己画标题栏（src/ui/kit/Screen.tsx），所以这里一律关掉导航库的标题栏。
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { WebViewBench } from '../bench/WebViewBench'
+import { AgentScreen } from '../detail/agents/AgentScreen'
 import { DetailScreen } from '../detail/DetailScreen'
 import { AddDeviceScreen } from '../screens/devices/AddDeviceScreen'
 import { DeviceDetailScreen } from '../screens/devices/DeviceDetailScreen'
@@ -42,6 +43,7 @@ export function Navigator() {
       <Stack.Screen name="Sessions" component={SessionsScreen} />
       <Stack.Screen name="NewSession" component={NewSessionScreen} />
       <Stack.Screen name="Detail" component={DetailScreen} />
+      <Stack.Screen name="Agent" component={AgentScreen} />
       <Stack.Screen name="Proposals" component={ProposalsScreen} />
       <Stack.Screen name="ProposalStart" component={ProposalStartScreen} />
       <Stack.Screen name="Terminal" component={TerminalScreen} />
