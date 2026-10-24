@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { BROWSER_TOOLS } from '../../protocol/src/client-tools-browser.mjs'
 import { clientTools, toolDescription } from '../src/dynamic-tools.mjs'
 
 // Pi 没有命名空间这一层：命名空间的说明（litch_machine 开头写着“你在哪台机器、控制端是哪台”）要接在它第一个工具的说明前面，
@@ -33,4 +34,13 @@ test('命名空间没有说明时照旧', () => {
     },
   ])
   assert.equal(tool && toolDescription(tool), '[litch_echo.echo] Echo.')
+})
+
+test('request_sign_in 加的可选提示参数（origin、三个 ref）在新会话里原样交给 Pi，必填仍只有 reason', () => {
+  const signIn = clientTools([BROWSER_TOOLS]).find((tool) => tool.name === 'request_sign_in')
+  assert.ok(signIn)
+  const properties = signIn.inputSchema.properties as Record<string, unknown>
+  for (const name of ['origin', 'usernameRef', 'passwordRef', 'submitRef'])
+    assert.ok(name in properties, name)
+  assert.deepEqual(signIn.inputSchema.required, ['reason'])
 })

@@ -294,6 +294,11 @@ test('dsh 客户端工具：现有的命名空间（浏览器、Computer Use、l
       expected.filter((name) => !names.includes(name)),
       [],
     )
+    // request_sign_in 加的可选提示参数新会话里模型看得到
+    const signIn = sent.tools.find((tool: any) => tool.name === 'litch_browser__request_sign_in')
+    const schema = signIn?.input_schema ?? signIn?.parameters
+    for (const name of ['origin', 'usernameRef', 'passwordRef', 'submitRef'])
+      assert.ok(name in (schema?.properties ?? {}), name)
     assert.deepEqual([...violations], [])
   } finally {
     await server.close()
