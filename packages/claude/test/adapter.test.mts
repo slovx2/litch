@@ -824,6 +824,50 @@ test('model/list follows the native Claude catalog with Codex-safe reasoning eff
   }
 })
 
+test('thread/start 给的完整型号记成选单里那个别名的那一行，清单里不多出一条一样的', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'codex-harness-adapter-test-'))
+  const proc = spawn(process.execPath, [adapter, 'app-server', '--listen', 'stdio://'], {
+    stdio: ['pipe', 'pipe', 'pipe'],
+    env: {
+      ...isolatedEnv,
+      CODEX_HOME: home,
+      CHA_CLAUDE_HOME: join(home, 'codex-harness-adapter'),
+      CLAUDE_CONFIG_DIR: join(home, 'claude'),
+      CHA_CLAUDE_MOCK: '1',
+      CHA_CLAUDE_MODELS: '',
+      CHA_CLAUDE_MODEL_ALIASES: '',
+      CHA_CLAUDE_DEFAULT_MODEL: 'sonnet',
+      NODE_NO_WARNINGS: '1',
+    },
+  })
+  const reader = new JsonLineReader(proc)
+  try {
+    // 假目录里 sonnet 指向 claude-sonnet-5，opus[1m] 和“默认”都指向 claude-opus-5-5[1m]
+    let id = 1
+    const start = async (model: string) => {
+      const request = id++
+      proc.stdin.write(
+        json({ id: request, method: 'thread/start', params: { cwd: process.cwd(), model } }),
+      )
+      return (await reader.nextResponse(request)).result.model
+    }
+    assert.equal(await start('claude-sonnet-5'), 'sonnet')
+    assert.equal(await start('claude-opus-5-5[1m]'), 'opus[1m]')
+    assert.equal(await start('Claude-Sonnet-5'), 'sonnet')
+    proc.stdin.write(json({ id, method: 'model/list', params: {} }))
+    const models = (await reader.nextResponse(id)).result.data
+    const shown = models.filter((model: any) => !model.hidden)
+    assert.deepEqual(
+      shown.map((model: any) => model.id),
+      ['default', 'opus[1m]', 'claude-fable-5-1', 'sonnet', 'sonnet[1m]', 'haiku'],
+    )
+    assert.equal(new Set(shown.map((model: any) => model.displayName)).size, shown.length)
+  } finally {
+    proc.kill()
+    await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 80 })
+  }
+})
+
 test('config/read exposes sanitized provider loop selection over stdio', async () => {
   const home = await mkdtemp(join(tmpdir(), 'codex-harness-adapter-test-'))
   const proc = spawn(process.execPath, [adapter, 'app-server', '--listen', 'stdio://'], {

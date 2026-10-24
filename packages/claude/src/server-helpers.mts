@@ -101,6 +101,8 @@ export type SelectableModelOption = {
   description: string
   isDefault?: boolean
   efforts?: string[]
+  /** 这个别名眼下指向的完整型号（CLI 报的 resolvedModel，只有原生目录的行有） */
+  resolved?: string
 }
 
 // 一个供应商的原生目录取得前只提供默认项；默认项交由原生 SDK 解析 settings.json。
@@ -213,6 +215,7 @@ export async function loadRuntimeModelCatalog(runtime: ClaudeRuntime): Promise<v
               description: model.description,
               isDefault: model.value === 'default',
               ...(model.supportedEffortLevels ? { efforts: model.supportedEffortLevels } : {}),
+              ...(model.resolvedModel ? { resolved: model.resolvedModel } : {}),
             }
           }),
         })
@@ -315,7 +318,8 @@ export function defaultSelectableModelId(): string {
 }
 
 // 目录里的那一行：逐字相同的优先，其次型号只差大小写的（CLI 的别名不分大小写）。供应商前缀照原样比，
-// 不会把 Corp/x 认成 corp/x。
+// 不会把 Corp/x 认成 corp/x。再其次是同一家里眼下指向这个完整型号的别名（claude-opus-5-5 → opus），
+// 和从选单里选的一样；“默认”那一行跟着 CLI 的默认走，不算。
 function findCatalogId(
   options: readonly SelectableModelOption[],
   candidate: string,
@@ -323,11 +327,20 @@ function findCatalogId(
   const exact = options.find((option) => option.id === candidate)
   if (exact) return exact.id
   const prefix = (id: string) => id.slice(0, Math.max(0, id.indexOf('/')))
-  return options.find(
+  const cased = options.find(
     (option) =>
       prefix(option.id) === prefix(candidate) &&
       option.id.toLowerCase() === candidate.toLowerCase(),
-  )?.id
+  )
+  if (cased) return cased.id
+  const config = readProviderConfig()
+  const wanted = splitModelRef(candidate, config)
+  const model = wanted.model.toLowerCase()
+  return options.find((option) => {
+    if (option.resolved?.toLowerCase() !== model) return false
+    const row = splitModelRef(option.id, config)
+    return row.provider === wanted.provider && row.model !== 'default'
+  })?.id
 }
 
 // 和目录里某一行只是大小写不同的，按目录里的写法记：会话报的模型和 model/list 的那一行逐字相同。
