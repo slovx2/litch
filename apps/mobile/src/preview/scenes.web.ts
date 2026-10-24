@@ -124,7 +124,7 @@ export const SCENES: Scene[] = [
     id: 'sign-in-approval',
     group: '对话',
     name: '批准电脑上的登录',
-    note: '代理请求登录的卡片：打码的账号、批准前过指纹（模拟核心里每台设备的第一个会话上一张）',
+    note: '代理请求登录的卡片：打码的账号、批准前过指纹（模拟核心里每台设备第一个不在等人答的会话上一张）',
     steps: [sessions('local'), open('local', 'p1')],
   },
   {

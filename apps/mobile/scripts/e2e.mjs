@@ -358,7 +358,10 @@ function prepareRepo(dir) {
 async function startHelper(config, serial) {
   const port = await freePort()
   const pair = pairing(config)
+  let locked = false
   const lock = (on) => {
+    // 上一轮流程设了密码、没走到清的那一步就挂了（比如模拟器掉线），重跑时还设着：再 set-pin 会失败，当成已经设好
+    if (on && locked) return true
     const list = on ? ['set-pin', LOCK_PIN] : ['clear', '--old', LOCK_PIN]
     const done = spawnSync(adbBin, ['-s', serial, 'shell', 'locksettings', ...list], {
       encoding: 'utf8',
@@ -366,7 +369,6 @@ async function startHelper(config, serial) {
     })
     return done.status === 0
   }
-  let locked = false
   cleanups.push(() => {
     if (locked) lock(false)
   })

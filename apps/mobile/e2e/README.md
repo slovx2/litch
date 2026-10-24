@@ -113,7 +113,9 @@ echo no | avdmanager create avd -n <名字> --package 'system-images;android-35;
 - `litch://new` 不等设备连上，夹具刚列出设备时发会落空：夹具的流程走界面新建会话，或者先等设备那一行写着“已连接”。
 - CI 的模拟器偶尔掉线一下（Maestro 打出 `device offline`），正跑着的流程会挂，`adb reverse` 的映射也全没了、
   后面的夹具流程都连不上 127.0.0.1:8765。入口脚本跑的时候每两秒看一眼映射、少了就补，再加上没过的重跑一次。
-  本地用 `adb -s <序列号> reconnect` 能复现。
+  本地用 `adb -s <序列号> reconnect` 能复现。最常掉在 `launchApp` 清完数据、停应用那一下（Maestro 驱动刚起来时多），
+  流程报 Unable to launch app，本地仿 CI 的模拟器上也有；`fresh.yaml` 给它包了 `retry`，碰上时多等两分钟。
+- 重跑时上一轮可能把锁屏密码设着没清（流程半路挂了），入口脚本的 `/lock/pin` 已经设过就不再设。
 - xterm 的内容读屏读不到：终端里的命令跑没跑，由入口脚本开在回环上的小口去看工作目录里的文件（`_shared/wait-file.js`）。
 - 入口脚本不能用同步的方式起 Maestro：流程里的 `runScript` 要连同一个进程里的小口。
 - 同一台电脑上同时只能跑一个 Maestro：2.3.0 在安卓上把驱动固定映射到电脑的 7001 口、没有参数能改，第二个会在启动应用时超时。

@@ -1518,7 +1518,9 @@ export function createMockCore(options: MockCoreOptions): MockCore {
   // ---------- 手机批准（mock-approvals.mts） ----------
   const approvals = createMockApprovals({
     clock,
-    firstSession: (deviceId) => sidebars.get(deviceId)?.sessions[0]?.id ?? null,
+    // 不挂在本来就在等人答的会话上（build 的 b1 是提问和表单，卡片会排到它们前面）
+    firstSession: (deviceId) =>
+      sidebars.get(deviceId)?.sessions.find((session) => session.waitingFor === null)?.id ?? null,
     deviceName: (deviceId) => {
       const named = app.devices.find((entry) => entry.id === deviceId)?.name
       return typeof named === 'string' ? named : deviceId

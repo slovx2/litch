@@ -19,6 +19,8 @@ tags: [mock]
 - inputText: steer e2e
 - tapOn:
     id: composer-send
+# 没有硬键盘时（CI 的模拟器）软键盘还弹着，320×640 上它和审批卡片把对话区挤没了，插进去的那句在键盘后面
+- hideKeyboard
 - extendedWaitUntil:
     visible:
       text: steer e2e
