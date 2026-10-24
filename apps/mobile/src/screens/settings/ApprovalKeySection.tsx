@@ -3,7 +3,11 @@
 import { useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import { whyNot } from '../../../../../packages/ui/src/app/errors.ts'
-import { type ApprovalKeyInfo, approvalKeyInfo, ensureApprovalKey } from '../../platform/approval-key'
+import {
+  type ApprovalKeyInfo,
+  approvalKeyInfo,
+  ensureApprovalKey,
+} from '../../platform/approval-key'
 import { useT } from '../../ui/i18n'
 import { Button } from '../../ui/kit/controls'
 import { useTheme } from '../../ui/theme'

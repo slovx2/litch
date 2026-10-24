@@ -2,9 +2,10 @@
 // 手机上只有“用 {账号} 登录”和“拒绝”（网页在电脑上，自己登录要到电脑上去）。账号只显示打码的名字，答复里用 ref 指。
 // 批准前要过系统的指纹、面容或锁屏密码，过了才拿得出批准钥匙签名；拒绝不用过验证（签名照样带）。
 // 送出去之后卡片不马上消失：电脑验过签、答完了才收掉；电脑不认（钥匙对不上之类）时卡片还在，可以再点。
-import type { ApprovalCardView } from '../../../../../packages/protocol/src/client-approvals.mts'
+
 import { useEffect, useState } from 'react'
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
+import type { ApprovalCardView } from '../../../../../packages/protocol/src/client-approvals.mts'
 import { whyNot } from '../../../../../packages/ui/src/app/errors.ts'
 import {
   ensureApprovalKey,
@@ -75,7 +76,9 @@ export function SignInApprovalCard({
         const unlocked = await unlockForApproval(t('approval.unlock'), t('approval.unlock.cancel'))
         if (!unlocked.ok) {
           if (unlocked.reason !== 'cancel')
-            setError(t(unlocked.reason === 'noLock' ? 'approval.fail.noLock' : 'approval.fail.unlock'))
+            setError(
+              t(unlocked.reason === 'noLock' ? 'approval.fail.noLock' : 'approval.fail.unlock'),
+            )
           return
         }
       }
@@ -84,7 +87,10 @@ export function SignInApprovalCard({
         { ref, remember },
         {
           phoneId,
-          phoneName: phoneNameOf(Platform.constants as unknown as Record<string, unknown>, Platform.OS),
+          phoneName: phoneNameOf(
+            Platform.constants as unknown as Record<string, unknown>,
+            Platform.OS,
+          ),
           approvalKey: key.approvalKey,
           sign: signWithApprovalKey,
         },
@@ -92,7 +98,11 @@ export function SignInApprovalCard({
       await sendApprovalAnswer(channel, deviceId, signed)
       setSent(true)
     } catch (failure) {
-      setError(isGone(failure) ? t('approval.fail.gone') : t('approval.fail.send', { reason: whyNot(failure, t) }))
+      setError(
+        isGone(failure)
+          ? t('approval.fail.gone')
+          : t('approval.fail.send', { reason: whyNot(failure, t) }),
+      )
     } finally {
       setBusy(false)
     }
@@ -104,7 +114,9 @@ export function SignInApprovalCard({
     <Card
       testID="request:signIn"
       title={t('approval.title', { domain: origin.main })}
-      right={left !== null && left > 0 ? t('approval.remain', { time: remainingText(left) }) : undefined}
+      right={
+        left !== null && left > 0 ? t('approval.remain', { time: remainingText(left) }) : undefined
+      }
       waiting={waiting}
       error={error}
       actions={

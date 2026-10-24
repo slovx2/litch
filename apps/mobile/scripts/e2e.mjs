@@ -18,6 +18,7 @@
 // Maestro 2.3.0（MAESTRO 指过去，或者在 PATH 里）；跑夹具的流程要先在仓库根目录 npm run build（适配器、Pi、设备进程）。
 // LITCH_E2E_ARTIFACTS=<目录>：Maestro 的调试输出（失败时的截图、日志）放到这里并留着（CI 上传用）；不给就放临时目录、跑完删掉。
 import { execFile, execFileSync, spawn, spawnSync } from 'node:child_process'
+import { createHash, createPublicKey, randomBytes, verify } from 'node:crypto'
 import {
   appendFileSync,
   existsSync,
@@ -33,6 +34,7 @@ import { createServer } from 'node:http'
 import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { approvalSignedText } from '../../../packages/protocol/src/client-approvals.mts'
 import { encodePairPayload } from '../../../packages/protocol/src/device-pairing.mts'
 import { deviceRpc } from './device-rpc.mjs'
 
@@ -48,6 +50,8 @@ const arg = (name, fallback = null) => {
 const args = (name) => argv.flatMap((value, index) => (argv[index - 1] === name ? [value] : []))
 
 const PKG = 'dev.litch.app'
+/** 手机批准的流程给模拟器设的锁屏密码（流程里在系统验证框输入它） */
+const LOCK_PIN = '1111'
 const androidHome = process.env.ANDROID_HOME ?? join(homedir(), 'Library/Android/sdk')
 const adbBin = join(androidHome, 'platform-tools/adb')
 const emulatorBin = join(androidHome, 'emulator/emulator')
@@ -300,7 +304,7 @@ async function startFixture(serial) {
     ['tcp:8765', `tcp:${serve}`],
   ])
   prepareRepo(config.work)
-  const helper = await startHelper(config)
+  const helper = await startHelper(config, serial)
   log(`夹具就绪（${since(start)}），sshd 在 127.0.0.1:${config.target.port}`)
   return { config, helper }
 }
@@ -348,10 +352,24 @@ function prepareRepo(dir) {
  *   POST /authorize        请求体是一行公钥，写进夹具 sshd 的 authorized_keys（演“用户在电脑上授权了手机的钥匙”）
  *   GET  /file?name=&text= 夹具的工作目录里这个文件有没有写出这段字（终端里敲的命令真跑了没有），最多等十秒
  *   /pair、/pair/request、/pair/allow、/pair/phones   扫码绑定，见 pairing()
+ *   /approval/open、/approval/answered、/approval/fingerprint   手机批准登录，见 pairing()
+ *   POST /lock/pin、/lock/clear   给模拟器设、清锁屏密码 1111（批准前的系统验证要有锁屏；清的那一步收尾时也做）
  */
-async function startHelper(config) {
+async function startHelper(config, serial) {
   const port = await freePort()
   const pair = pairing(config)
+  const lock = (on) => {
+    const list = on ? ['set-pin', LOCK_PIN] : ['clear', '--old', LOCK_PIN]
+    const done = spawnSync(adbBin, ['-s', serial, 'shell', 'locksettings', ...list], {
+      encoding: 'utf8',
+      timeout: 20_000,
+    })
+    return done.status === 0
+  }
+  let locked = false
+  cleanups.push(() => {
+    if (locked) lock(false)
+  })
   const fileHas = async (name, text) => {
     if (!/^[A-Za-z0-9._-]+$/.test(name)) return false
     for (let i = 0; i < 40; i++) {
@@ -366,7 +384,17 @@ async function startHelper(config) {
     req.on('data', (chunk) => (body += chunk))
     req.on('end', async () => {
       const url = new URL(req.url ?? '/', 'http://helper')
-      if (url.pathname.startsWith('/pair')) {
+      if (
+        req.method === 'POST' &&
+        (url.pathname === '/lock/pin' || url.pathname === '/lock/clear')
+      ) {
+        const on = url.pathname === '/lock/pin'
+        const ok = lock(on)
+        if (ok) locked = on
+        res.writeHead(ok ? 200 : 500).end()
+        return
+      }
+      if (url.pathname.startsWith('/pair') || url.pathname.startsWith('/approval')) {
         const answer = await pair(req.method, url.pathname).catch((error) => {
           log(`扫码绑定的小口出错：${error.message}`)
           return null
@@ -406,11 +434,24 @@ async function startHelper(config) {
  *   GET  /pair/request   等手机登记上来（litch/pair/wait 到 requested），回那条请求（手机名、确认码、手机号）
  *   POST /pair/allow     演“电脑上点了允许”（litch/pair/decide）
  *   GET  /pair/phones    设备服务列出的已绑定手机有几部（litch/pair/phones），钥匙文件里手机的钥匙行有几行
+ * 设备认批准公钥（clientApprovals），码里带 a：手机登记时带上批准公钥，/pair/request 回的请求里有它，这里记下来验签用。
+ * 手机批准登录，替桌面端挂卡片、收答复、验签（另开一条声明了 clientApprovals 的连接）：
+ *   POST /approval/open        在最近的会话上挂一张代理登录的卡片（两个打码的账号），回卡片号
+ *   GET  /approval/answered    等手机的答复（litch/approval/answered），用扫码时记下的批准公钥验签、核对卡片，
+ *                              回 { verified, ref, decision }；验过就把卡片收掉（litch/approval/close）
+ *   GET  /approval/fingerprint 扫码时记下的批准公钥的指纹（手机设置里显示的应该是同一串）
  */
 function pairing(config) {
   const keysFile = join(config.root, 'authorized_keys')
   let rpc = null
   let current = null
+  let socket = null
+  /** 扫码登记上来的那部手机：手机号和批准公钥 */
+  let phone = null
+  /** 挂着的卡片（只挂一张）和它收到的答复 */
+  let card = null
+  const answers = []
+  let desk = null
   const service = async () => {
     if (rpc) return rpc
     // 和手机的启动脚本一样经登录 shell 跑：适配器只在那里才进 PATH
@@ -430,6 +471,7 @@ function pairing(config) {
       .map((line) => JSON.parse(line))
       .find((line) => line.ready === true)
     if (!ready) throw new Error(`设备服务没起来：${said.slice(-2000)}`)
+    socket = ready.socket
     rpc = await deviceRpc(ready.socket)
     cleanups.push(() => rpc?.close())
     return rpc
@@ -438,7 +480,90 @@ function pairing(config) {
     readFileSync(keysFile, 'utf8')
       .split('\n')
       .filter((row) => row.includes(' litch-mobile:')).length
+  /** 演桌面端的那条连接：握手时声明 clientApprovals，收手机的答复 */
+  const desktop = async () => {
+    if (desk) return desk
+    await service()
+    desk = await deviceRpc(socket, (method, params) => {
+      if (method === 'litch/approval/answered') answers.push(params)
+    })
+    cleanups.push(() => desk?.close())
+    await desk.call('initialize', {
+      clientInfo: { name: 'litch-e2e', title: 'Litch e2e', version: '0.0.0' },
+      capabilities: { experimentalApi: true, litchExtensions: ['harness', 'clientApprovals'] },
+    })
+    desk.notify('initialized')
+    return desk
+  }
+  const token = () => randomBytes(16).toString('base64url')
+  const rawKey = (base64) =>
+    createPublicKey({
+      key: Buffer.concat([
+        Buffer.from('302a300506032b6570032100', 'hex'),
+        Buffer.from(base64, 'base64'),
+      ]),
+      format: 'der',
+      type: 'spki',
+    })
+  const approval = async (method, path) => {
+    const link = await desktop()
+    if (method === 'POST' && path === '/approval/open') {
+      const { data } = await link.call('thread/list', {})
+      const newest = [...data].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))[0]
+      if (!newest) return null
+      card = {
+        id: token(),
+        threadId: newest.id,
+        kind: 'browserSignIn',
+        summary: {
+          origin: 'https://accounts.example.com',
+          site: 'Example',
+          reason: 'e2e：看看登录后的页面',
+          device: 'e2e-pair',
+          accounts: [
+            { ref: 'a1', masked: 'so•••@gmail.com' },
+            { ref: 'a2', masked: 'li•••@example.com' },
+          ],
+          task: null,
+          fillBlocked: null,
+        },
+        desktopId: 'e2eDesktop0000000',
+        nonce: token(),
+        expiresAt: null,
+      }
+      answers.length = 0
+      await link.call('litch/approval/open', card)
+      return JSON.stringify({ id: card.id, threadId: card.threadId })
+    }
+    if (method === 'GET' && path === '/approval/fingerprint') {
+      if (!phone?.approvalKey) return null
+      const hex = createHash('sha256')
+        .update(Buffer.from(phone.approvalKey, 'base64'))
+        .digest('hex')
+      return hex.slice(0, 16).match(/.{4}/g).join(' ')
+    }
+    if (method === 'GET' && path === '/approval/answered' && card) {
+      for (let i = 0; i < 240 && !answers.some((one) => one.id === card.id); i++) await sleep(250)
+      const answer = answers.find((one) => one.id === card.id)
+      if (!answer) return null
+      const text = approvalSignedText({ ...card, origin: card.summary.origin }, answer)
+      const verified =
+        !!phone?.approvalKey &&
+        answer.approvalKey === phone.approvalKey &&
+        answer.phoneId === phone.phoneId &&
+        verify(
+          null,
+          Buffer.from(text),
+          rawKey(answer.approvalKey),
+          Buffer.from(answer.signature, 'base64'),
+        )
+      if (verified) await link.call('litch/approval/close', { id: card.id })
+      return JSON.stringify({ verified, ref: answer.ref, decision: answer.decision })
+    }
+    return null
+  }
   return async (method, path) => {
+    if (path.startsWith('/approval')) return approval(method, path)
     const device = await service()
     if (method === 'POST' && path === '/pair') {
       const start = await device.call('litch/pair/start', {})
@@ -453,6 +578,7 @@ function pairing(config) {
         s: start.seed,
         i: start.pairId,
         e: start.expiresAt,
+        a: 1,
       })
     }
     if (method === 'GET' && path === '/pair/phones') {
@@ -464,7 +590,10 @@ function pairing(config) {
       let since = null
       for (let i = 0; i < 4; i++) {
         const status = await device.call('litch/pair/wait', { pairId: current, since }, 40_000)
-        if (status.state === 'requested') return JSON.stringify(status.phone)
+        if (status.state === 'requested') {
+          phone = status.phone
+          return JSON.stringify(status.phone)
+        }
         if (status.state !== 'waiting') return null
         since = status.state
       }

@@ -4,7 +4,7 @@
 // 签名前要过系统的指纹、面容或锁屏密码（expo-local-authentication）。没有用 SecureStore 的 requireAuthentication：
 // 换了指纹 Keystore 会作废那把钥匙，手机就得重新扫码绑定，太麻烦（22 号设计“先不做太安全”）。
 // 第一次要用（扫码时设备认批准公钥、第一次批准）时才生成。
-import { getEnrolledLevelAsync, SecurityLevel, authenticateAsync } from 'expo-local-authentication'
+import { authenticateAsync, getEnrolledLevelAsync, SecurityLevel } from 'expo-local-authentication'
 import * as SecureStore from 'expo-secure-store'
 import { ssh } from '../../modules/litch-ssh/src'
 import { jsonFile } from '../shell/json-file'
@@ -74,14 +74,23 @@ export function ensureApprovalKey(): Promise<ApprovalKeyInfo> {
 export type Unlock = { ok: true } | { ok: false; reason: 'noLock' | 'cancel' | 'failed' }
 
 /** 弹系统的指纹、面容（不行可以用锁屏密码） */
-export async function unlockForApproval(promptMessage: string, cancelLabel: string): Promise<Unlock> {
+export async function unlockForApproval(
+  promptMessage: string,
+  cancelLabel: string,
+): Promise<Unlock> {
   if ((await getEnrolledLevelAsync()) === SecurityLevel.NONE) return { ok: false, reason: 'noLock' }
-  const result = await authenticateAsync({ promptMessage, cancelLabel, disableDeviceFallback: false })
+  const result = await authenticateAsync({
+    promptMessage,
+    cancelLabel,
+    disableDeviceFallback: false,
+  })
   if (result.success) return { ok: true }
   return {
     ok: false,
     reason:
-      result.error === 'user_cancel' || result.error === 'system_cancel' || result.error === 'app_cancel'
+      result.error === 'user_cancel' ||
+      result.error === 'system_cancel' ||
+      result.error === 'app_cancel'
         ? 'cancel'
         : 'failed',
   }

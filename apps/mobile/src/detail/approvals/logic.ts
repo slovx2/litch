@@ -8,9 +8,28 @@ import {
 
 /** 两段的公共后缀里常见的：可注册域名要多带一段。只为卡片上突出显示，不求全 */
 const TWO_PART_SUFFIX = new Set([
-  'co.uk', 'org.uk', 'ac.uk', 'gov.uk', 'com.cn', 'net.cn', 'org.cn', 'gov.cn', 'edu.cn', 'com.hk',
-  'com.tw', 'co.jp', 'ne.jp', 'or.jp', 'co.kr', 'com.au', 'net.au', 'org.au', 'co.nz', 'com.br',
-  'com.sg', 'co.in',
+  'co.uk',
+  'org.uk',
+  'ac.uk',
+  'gov.uk',
+  'com.cn',
+  'net.cn',
+  'org.cn',
+  'gov.cn',
+  'edu.cn',
+  'com.hk',
+  'com.tw',
+  'co.jp',
+  'ne.jp',
+  'or.jp',
+  'co.kr',
+  'com.au',
+  'net.au',
+  'org.au',
+  'co.nz',
+  'com.br',
+  'com.sg',
+  'co.in',
 ])
 
 /**
@@ -33,7 +52,11 @@ export function originParts(origin: string): { lead: string; main: string; tail:
     return { lead, main: host, tail }
   const take = TWO_PART_SUFFIX.has(labels.slice(-2).join('.')) ? 3 : 2
   if (labels.length <= take) return { lead, main: host, tail }
-  return { lead: `${lead}${labels.slice(0, -take).join('.')}.`, main: labels.slice(-take).join('.'), tail }
+  return {
+    lead: `${lead}${labels.slice(0, -take).join('.')}.`,
+    main: labels.slice(-take).join('.'),
+    tail,
+  }
 }
 
 /** 预检不过的原因里认得的（桌面主进程的 SignInBlock 和界面认的几种），各有一句话；认不出的照原样写 */

@@ -87,20 +87,40 @@ test('批准：签名内容和协议的向量一字不差，签名能用批准�
   )
   assert.equal(isApprovalAnswer(answer), true)
   const text = approvalSignedText(
-    { id: answer.id, nonce: 'Nq3vL8sD1fG5hJ0k', desktopId: 'Dz5yX2wV8uT1sR4q', origin: 'https://github.com' },
+    {
+      id: answer.id,
+      nonce: 'Nq3vL8sD1fG5hJ0k',
+      desktopId: 'Dz5yX2wV8uT1sR4q',
+      origin: 'https://github.com',
+    },
     answer,
   )
   assert.equal(
-    verify(null, Buffer.from(text), createPublicKey(privateKey), Buffer.from(answer.signature, 'base64')),
+    verify(
+      null,
+      Buffer.from(text),
+      createPublicKey(privateKey),
+      Buffer.from(answer.signature, 'base64'),
+    ),
     true,
   )
   // 签的是手机看到的源：设备把卡片上的源换了，桌面端拿自己记着的源验不过
   const forged = approvalSignedText(
-    { id: answer.id, nonce: 'Nq3vL8sD1fG5hJ0k', desktopId: 'Dz5yX2wV8uT1sR4q', origin: 'https://github.io' },
+    {
+      id: answer.id,
+      nonce: 'Nq3vL8sD1fG5hJ0k',
+      desktopId: 'Dz5yX2wV8uT1sR4q',
+      origin: 'https://github.io',
+    },
     answer,
   )
   assert.equal(
-    verify(null, Buffer.from(forged), createPublicKey(privateKey), Buffer.from(answer.signature, 'base64')),
+    verify(
+      null,
+      Buffer.from(forged),
+      createPublicKey(privateKey),
+      Buffer.from(answer.signature, 'base64'),
+    ),
     false,
   )
 })
@@ -146,7 +166,10 @@ test('能做什么：有账号能批、没账号要到电脑上、预检不过�
   assert.equal(abilityOf(card(), 0), 'fill')
   assert.equal(abilityOf(card({ summary: { accounts: [] } }), 0), 'noAccount')
   assert.equal(abilityOf(card({ summary: { fillBlocked: 'insecure' } }), 0), 'blocked')
-  assert.equal(abilityOf(card({ expiresAt: 10, summary: { fillBlocked: 'insecure' } }), 10), 'expired')
+  assert.equal(
+    abilityOf(card({ expiresAt: 10, summary: { fillBlocked: 'insecure' } }), 10),
+    'expired',
+  )
 })
 
 test('来源拆三段：突出可注册域名，两段后缀多带一段，IP 和短主机名整个突出', () => {
