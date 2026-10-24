@@ -356,6 +356,7 @@ export class DeviceServer {
       releaseMs: options.timing?.releaseMs ?? DEFAULT_TIMING.releaseMs,
       taskTurn: (threadId, turnId) => this.tasks?.isTaskTurn(threadId, turnId) ?? false,
       backgroundRunning: (threadId) => this.background.running(threadId),
+      backgroundTasks: (threadId) => this.background.tasks(threadId),
       backgroundWakes: (threadId) => this.background.wakes(threadId),
       wrapUp: () => {
         const value = this.control?.state?.snapshot.values[WRAP_UP_SETTING]

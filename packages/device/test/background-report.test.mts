@@ -94,6 +94,63 @@ test('BG-REPORT-002 子会话：引擎不会接着做的，后台全部结束时
   }
 })
 
+test('BG-REPORT-005 子会话：后台任务被用户停了、引擎不会续跑（会续跑的 harness 也一样）：补一条不唤醒的收尾回报，写明是用户停的', async () => {
+  for (const wakes of [true, false]) {
+    const env = treeRig()
+    try {
+      const { threadId, childId } = await child(env)
+      const notes = () => env.device.sessionTree.store.notes(threadId)
+      env.claude.handlers['thread/backgroundTerminals/terminate'] = () => ({ terminated: true })
+      background(env.claude, childId, [task('b1', 'running', 'npm run dev')], wakes)
+      env.claude.end(childId, 'completed', '起了 dev 服务')
+      await eventually(() => notes().length === 1, '第一条回报')
+      const client = await litch(env)
+      await client.call('thread/backgroundTerminals/terminate', {
+        threadId: childId,
+        processId: 'p1',
+      })
+      background(env.claude, childId, [task('b1', 'stopped', 'npm run dev')], wakes)
+      await eventually(() => notes().length === 2, `收尾回报（wakes=${wakes}）`)
+      assert.equal(
+        notes()[1]?.excerpt,
+        'Background tasks finished: npm run dev (stopped by the user)',
+      )
+      assert.equal(notes()[1]?.wake, false, '用户停的不唤醒父会话（决 481）')
+    } finally {
+      await env.close()
+    }
+  }
+})
+
+test('BG-REPORT-006 子会话：不是用户停的（进程退出之类）照旧写 stopped；会续跑的 harness 有自己跑完的就等它续跑的那一回合', async () => {
+  const env = treeRig()
+  try {
+    const { threadId, childId } = await child(env)
+    const notes = () => env.device.sessionTree.store.notes(threadId)
+    background(env.claude, childId, [task('b1', 'running'), task('b2', 'running', 'dev')], true)
+    env.claude.end(childId, 'completed', '起了两个')
+    await eventually(() => notes().length === 1, '第一条回报')
+    // 一个自己跑完、一个停了：引擎会为跑完的那个接着做，不补
+    background(env.claude, childId, [task('b1', 'completed'), task('b2', 'stopped', 'dev')], true)
+    await settle(30)
+    assert.equal(notes().length, 1)
+    env.claude.selfTurn(childId)
+    env.claude.end(childId, 'completed', '测试过了')
+    await eventually(() => notes().length === 2, '续跑的回合结束后再报')
+    // 再起一个，CLI 进程退出时它跟着停了（没人点停止）：补报、照常唤醒
+    env.claude.selfTurn(childId)
+    background(env.claude, childId, [task('b3', 'running', 'serve')], true)
+    env.claude.end(childId, 'completed', '又起了一个')
+    await eventually(() => notes().length === 3, '第三条回报')
+    background(env.claude, childId, [task('b3', 'stopped', 'serve')], true)
+    await eventually(() => notes().length === 4, '收尾回报')
+    assert.equal(notes()[3]?.excerpt, 'Background tasks finished: serve (stopped)')
+    assert.equal(notes()[3]?.wake, true)
+  } finally {
+    await env.close()
+  }
+})
+
 /** 立刻跑一次任务；回合由测试来结束。返回客户端、任务号和那个回合 */
 async function runOnce(target: ReturnType<typeof taskRig>, engine: TaskEngine) {
   engine.script = () => ({ status: null })

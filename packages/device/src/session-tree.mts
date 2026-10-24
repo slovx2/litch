@@ -65,6 +65,8 @@ export interface SessionTreeHost {
   taskTurn(threadId: string, turnId: string): boolean
   /** 会话里还有几个后台任务在跑（background.mts） */
   backgroundRunning(threadId: string): number
+  /** 会话的后台任务集合（background.mts） */
+  backgroundTasks(threadId: string): LitchBackgroundTask[]
   /** 后台任务跑完了引擎会不会自己接着做（background.mts 的 wakes） */
   backgroundWakes(threadId: string): boolean
   /** 设置里“每回合收尾”开着（sessions.wrapUp）：关掉时新会话的 litch_sessions 里没有 wrap_up，也不提醒 */
@@ -147,8 +149,11 @@ export class SessionTree {
   private readonly reminders = new Map<string, string>()
   /** 提醒回合（会话 + 回合）→ 它替哪个用户回合提醒：一回合几张提案的门槛把两个回合合起来算 */
   private readonly remindedFor = new Map<string, string>()
-  /** 上一次回报写了还有后台任务在跑的子会话：跑完了要再报一次 */
-  private readonly backgroundOwed = new Set<string>()
+  /**
+   * 上一次回报写了还有后台任务在跑的子会话：跑完了要再报一次。值是回报时在跑的那几个任务，
+   * byUser 是这之后用户在后台任务页上停过它的命令（客户端的 thread/backgroundTerminals/terminate、clean）
+   */
+  private readonly backgroundOwed = new Map<string, { tasks: Set<string>; byUser: boolean }>()
   /** 回合结束时要叫醒的（wait 工具在等） */
   private readonly listeners = new Set<(threadId: string) => void>()
   /** 每个父会话的唤醒检查排成一条，免得一次结束触发两个唤醒 */
@@ -596,7 +601,11 @@ export class SessionTree {
     this.store.addNote(lineage.parentThreadId, note, lineage.wakeParent && wakeable)
     this.host.log(`子会话 ${threadId}（${harness}）的回合 ${String(turn.id)} 已进父会话的回报队列`)
     if (background > 0) {
-      this.backgroundOwed.add(threadId)
+      const running = this.host
+        .backgroundTasks(threadId)
+        .filter((task) => task.status === 'running')
+        .map((task) => task.id)
+      this.backgroundOwed.set(threadId, { tasks: new Set(running), byUser: false })
       // 跑完以后的事（自发回合、集合变化）要看得到：盯上这个子会话
       void this.watch(harness, threadId).catch((error: unknown) =>
         this.host.log(`盯子会话 ${threadId} 的后台任务没成：${String(error)}`),
@@ -605,19 +614,32 @@ export class SessionTree {
     this.check(lineage.parentThreadId)
   }
 
+  /** 用户在后台任务页上停了这个会话的命令（客户端的 thread/backgroundTerminals/terminate、clean） */
+  backgroundStopped(threadId: string): void {
+    const owed = this.backgroundOwed.get(threadId)
+    if (owed) owed.byUser = true
+  }
+
   /**
-   * 子会话的后台任务全部结束了（background.mts 的 onSettled）。引擎会自己接着做的，等那一回合结束照常回报；
-   * 不会的（原生 codex）这里补一条回报，摘录写各任务的结局
+   * 子会话的后台任务全部结束了（background.mts 的 onSettled）。引擎会自己接着做、也真有任务是自己跑完的，
+   * 等那一回合结束照常回报；不会接着做的（原生 codex），或者一个都不是自己跑完的（都被停了，引擎不续跑），
+   * 这里补一条回报，摘录写各任务的结局。全是用户停的（决 481）：写明是用户停的，只进队列、不唤醒父会话
    */
   backgroundSettled(threadId: string, tasks: LitchBackgroundTask[]): void {
-    if (!this.backgroundOwed.has(threadId) || this.host.backgroundWakes(threadId)) return
+    const owed = this.backgroundOwed.get(threadId)
+    if (!owed) return
+    const ended = tasks.filter((task) => owed.tasks.has(task.id) && task.status !== 'running')
+    const finished = ended.some((task) => task.status === 'completed' || task.status === 'failed')
+    if (finished && this.host.backgroundWakes(threadId)) return
     this.backgroundOwed.delete(threadId)
     const lineage = this.store.parentOf(threadId)
     if (!lineage || !this.host.enabled()) return
-    const outcomes = tasks
-      .filter((task) => task.status !== 'running')
+    const byUser = owed.byUser && ended.some((task) => task.status === 'stopped')
+    const outcome = (task: LitchBackgroundTask) =>
+      task.status === 'stopped' && byUser ? 'stopped by the user' : task.status
+    const outcomes = (ended.length ? ended : tasks.filter((task) => task.status !== 'running'))
       .slice(0, 5)
-      .map((task) => `${task.title} (${task.status})`)
+      .map((task) => `${task.title} (${outcome(task)})`)
       .join('; ')
     const note: SessionEventNote = {
       threadId,
@@ -625,7 +647,8 @@ export class SessionTree {
       status: 'completed',
       excerpt: `Background tasks finished: ${outcomes}`.slice(0, SESSION_TREE_LIMITS.noteChars),
     }
-    this.store.addNote(lineage.parentThreadId, note, lineage.wakeParent)
+    const allByUser = byUser && !finished
+    this.store.addNote(lineage.parentThreadId, note, lineage.wakeParent && !allByUser)
     this.host.log(`子会话 ${threadId} 的后台任务跑完了，补了一条回报`)
     this.check(lineage.parentThreadId)
   }

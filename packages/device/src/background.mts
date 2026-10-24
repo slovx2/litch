@@ -38,6 +38,11 @@ export class DeviceBackground {
   private readonly inTurn = new Map<string, Map<string, RunningCommand>>()
   /** 原生 codex 派生出来的集合：会话 → 任务（键是命令条目的标识） */
   private readonly derived = new Map<string, Map<string, LitchBackgroundTask>>()
+  /**
+   * 原生 codex：用户经 thread/backgroundTerminals/terminate（按 processId）、clean（全部，记成 null）停过的，按会话。
+   * 停掉的命令的 item/completed 带的是非零退出码，记成 stopped 而不是 failed（会话树据此写“用户停的”）
+   */
+  private readonly userStops = new Map<string, Set<string | null>>()
   /** 上一次看到的在跑个数：从有变成没有时叫 settled 的订阅者 */
   private readonly lastRunning = new Map<string, number>()
   private readonly settled = new Set<(threadId: string, tasks: LitchBackgroundTask[]) => void>()
@@ -74,6 +79,7 @@ export class DeviceBackground {
     if (running > 0) this.lastRunning.set(threadId, running)
     else this.lastRunning.delete(threadId)
     if (before === 0 || running > 0) return
+    this.userStops.delete(threadId)
     const tasks = this.derivedOf(threadId)?.tasks ?? this.reported.get(threadId)?.tasks ?? []
     for (const listener of [...this.settled]) listener(threadId, tasks)
   }
@@ -98,7 +104,7 @@ export class DeviceBackground {
       this.inTurn.get(threadId)?.delete(item.id)
       const task = this.derived.get(threadId)?.get(item.id)
       if (task?.status !== 'running') return
-      task.status = commandStatus(item)
+      task.status = this.stoppedByUser(threadId, item) ? 'stopped' : commandStatus(item)
       task.endedAt = typeof params.completedAtMs === 'number' ? params.completedAtMs : this.now()
       this.publish(threadId)
     } else if (method === 'turn/completed') {
@@ -199,8 +205,24 @@ export class DeviceBackground {
     return changed
   }
 
+  /** 客户端请停后台终端（terminate 给 processId，clean 是 null：全部）。只对原生 codex 派生的集合有用 */
+  userStopped(threadId: string, processId: string | null): void {
+    if (!this.derived.get(threadId)?.size) return
+    const stops = this.userStops.get(threadId) ?? new Set<string | null>()
+    stops.add(processId)
+    this.userStops.set(threadId, stops)
+  }
+
+  private stoppedByUser(threadId: string, item: Record<string, unknown>): boolean {
+    const stops = this.userStops.get(threadId)
+    if (!stops) return false
+    if (stops.has(null)) return true
+    return typeof item.processId === 'string' && stops.delete(item.processId)
+  }
+
   forget(threadId: string): void {
     this.lastRunning.delete(threadId)
+    this.userStops.delete(threadId)
     this.reported.delete(threadId)
     this.inTurn.delete(threadId)
     this.derived.delete(threadId)
@@ -243,6 +265,11 @@ export class DeviceBackground {
   wakes(threadId: string): boolean {
     if (this.derived.get(threadId)?.size) return false
     return this.reported.get(threadId)?.wakesOnFinish === true
+  }
+
+  /** 这个会话的集合（会话树记下回报时哪几个在跑）。没有是空的 */
+  tasks(threadId: string): LitchBackgroundTask[] {
+    return this.derivedOf(threadId)?.tasks ?? this.reported.get(threadId)?.tasks ?? []
   }
 
   /** 这个会话还有几个后台任务在跑（会话树、定时任务的回报里写） */
