@@ -1,6 +1,6 @@
 // 手机上批准（clientApprovals 扩展）：核心对着假的聚合面（fake-device.mts）和假的主进程跑。
-// 桌面端：带票据的登录卡片挂到设备上（摘要只有打码的用户名）、答了撤了都收掉、设备转来的答复只交给自己挂的那张；
-// 没有票据、设备没列这项扩展时不挂。手机：主题先取挂着的、跟着通知换，approval.answer 原样交给设备。
+// 桌面端：带桌面端号的登录卡片挂到设备上（摘要只有打码的用户名）、答了撤了都收掉、设备转来的答复只交给自己挂的那张；
+// 没有桌面端号（主进程没装好验签）、设备没列这项扩展时不挂。手机：主题先取挂着的、跟着通知换，approval.answer 原样交给设备。
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import type { ApprovalAnswer, ApprovalCard } from '../../protocol/src/client-approvals.mjs'
@@ -24,12 +24,17 @@ const settled = async () => {
   for (let round = 0; round < 6; round++) await settle()
 }
 
-const ticket = { id: 'Ap7cK2mQ9xW4rT6v', nonce: 'Nq3vL8sD1fG5hJ0k', desktopId: 'Dz5yX2wV8uT1sR4q' }
+/** 登录卡片的编号、随机数（内置浏览器出的），主进程的桌面端号 */
+const ticket = {
+  id: '5f0c2a8e-7b1d-4c3a-9e6f-2d4b8a1c0e7f',
+  nonce: 'Nq3vL8sD1fG5hJ0kWx2yZa',
+  desktopId: 'Dz5yX2wV8uT1sR4q',
+}
 
 /** 主进程给的登录卡片（B1 的 signIn 那一种，界面拿到的有完整用户名） */
 const signInAsk = (more: Record<string, unknown> = {}) => ({
   kind: 'signIn',
-  id: 'req-1',
+  id: ticket.id,
   origin: 'https://github.com',
   site: 'GitHub',
   reason: 'Push the branch',
@@ -40,7 +45,8 @@ const signInAsk = (more: Record<string, unknown> = {}) => ({
   fillBlocked: null,
   taskId: null,
   expiresAt: null,
-  phone: ticket,
+  nonce: ticket.nonce,
+  desktopId: ticket.desktopId,
   ...more,
 })
 
@@ -61,11 +67,18 @@ function world(extensions = ['harness', 'clientApprovals']) {
     }),
   ])
   fake.device.extensions = extensions
+  /** 设备对下一次 litch/approval/answer 回的错误 */
+  const answerFailure: { next: unknown } = { next: null }
   const peer = fakeOpener({
     ...fake.handlers,
     'litch/approval/open': () => ({}),
     'litch/approval/close': () => ({}),
-    'litch/approval/answer': () => ({}),
+    'litch/approval/answer': () => {
+      const failure = answerFailure.next
+      answerFailure.next = null
+      if (failure) throw failure
+      return {}
+    },
     'litch/approval/list': () => ({
       data: [{ ...phoneCard(), openedAt: 7 }],
     }),
@@ -122,7 +135,7 @@ function world(extensions = ['harness', 'clientApprovals']) {
     reply({ op: 'ask', id: id?.op === 'call' ? id.invocation.id : '', askId, ask: cardAsk })
     await settled()
   }
-  return { core, peer, sent, reply, seen, broadcast, ask }
+  return { core, peer, sent, reply, seen, broadcast, ask, answerFailure }
 }
 
 function phoneCard(): ApprovalCard {
@@ -148,7 +161,7 @@ function phoneCard(): ApprovalCard {
   }
 }
 
-test('桌面端：带票据的登录卡片挂到设备上，只有打码的用户名；答复交给主进程；主进程撤了卡片就收掉', async () => {
+test('桌面端：带桌面端号的登录卡片挂到设备上，只有打码的用户名；答复交给主进程；主进程撤了卡片就收掉', async () => {
   const w = world()
   w.core.start()
   await settled()
@@ -166,7 +179,7 @@ test('桌面端：带票据的登录卡片挂到设备上，只有打码的用�
   await settled()
   assert.deepEqual(
     w.sent.filter((message) => message.op === 'phoneAnswer'),
-    [{ type: CLIENT_TOOL, op: 'phoneAnswer', askId: 'k1', answer }],
+    [{ type: CLIENT_TOOL, op: 'phoneAnswer', answer }],
   )
   // 主进程验过、答完了：askDone 撤掉卡片，设备上一起收
   w.reply({ op: 'askDone', askId: 'k1' })
@@ -178,7 +191,7 @@ test('桌面端：带票据的登录卡片挂到设备上，只有打码的用�
   assert.equal(w.sent.filter((message) => message.op === 'phoneAnswer').length, 1)
 })
 
-test('桌面端：人在桌面端答了也收掉；没有票据、不是登录卡片、设备没列 clientApprovals 都不挂', async () => {
+test('桌面端：人在桌面端答了也收掉；没有桌面端号、不是登录卡片、设备没列 clientApprovals 都不挂', async () => {
   const w = world()
   w.core.start()
   await settled()
@@ -199,7 +212,7 @@ test('桌面端：人在桌面端答了也收掉；没有票据、不是登录�
   )
   assert.deepEqual(w.seen('litch/approval/close'), [{ id: ticket.id }])
 
-  await w.ask(signInAsk({ phone: null }), 'k2')
+  await w.ask(signInAsk({ desktopId: null }), 'k2')
   await w.ask({ kind: 'site', origin: 'https://a.example', url: 'https://a.example/' }, 'k3')
   assert.equal(w.seen('litch/approval/open').length, 1)
 
@@ -242,5 +255,15 @@ test('手机：主题先取挂着的卡片，跟着通知换；approval.answer �
   )
   await w.core.command('approval.answer', { deviceId: 'dev', answer }, never)
   assert.deepEqual(w.seen('litch/approval/answer'), [answer])
+  // 卡片已经收掉：设备回 unknownApproval，手机拿到 notFound；别的原因照原样
+  w.answerFailure.next = { code: -32602, message: '没有卡片', data: { reason: 'unknownApproval' } }
+  await assert.rejects(w.core.command('approval.answer', { deviceId: 'dev', answer }, never), {
+    code: 'notFound',
+  })
+  w.answerFailure.next = { code: -32000, message: '答得太多', data: { reason: 'tooMany' } }
+  await assert.rejects(
+    w.core.command('approval.answer', { deviceId: 'dev', answer }, never),
+    (error: { code?: unknown }) => error.code !== 'notFound',
+  )
   close()
 })

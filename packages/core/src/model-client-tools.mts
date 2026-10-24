@@ -67,10 +67,10 @@ export type ToolToMain =
   /** litch config 里属于主进程的一项（浏览器网站、Computer Use）。主进程用 configResult 回 */
   | { type: typeof CLIENT_TOOL; op: 'config'; id: string; request: ConfigMainRequest }
   /**
-   * 手机答了一张发到它那里的卡片（clientApprovals，经会话所在设备转来，没验签）：交给出这张卡片的执行器，
-   * 由主进程验签（apps/desktop/src/approvals/verify.mts），验不过的丢掉、卡片接着等
+   * 手机答了一张发到它那里的登录卡片（clientApprovals，经会话所在设备转来，没验签）：主进程按答复里的卡片号
+   * 找到那张卡片，验签（apps/desktop/src/approvals/verify.mts），验不过的丢掉、卡片接着等
    */
-  | { type: typeof CLIENT_TOOL; op: 'phoneAnswer'; askId: string; answer: ApprovalAnswer }
+  | { type: typeof CLIENT_TOOL; op: 'phoneAnswer'; answer: ApprovalAnswer }
 
 /** 主进程 → 核心 */
 export type ToolToCore =

@@ -1758,7 +1758,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       }
     },
     showAsk(place: ToolAskPlace, answer) {
-      // 带票据的登录卡片同时挂到设备上给手机看；这边答了、撤了都收掉
+      // 带桌面端号的登录卡片同时挂到设备上给手机看；这边答了、撤了都收掉
       const phone = approvals.ask(place)
       const drop = askInSession(place, (picked) => {
         phone?.()

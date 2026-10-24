@@ -5,7 +5,6 @@
 // 传的只有这一次调用的参数和结果，不传会话内容。
 
 import type { ConfigMainRequest, ConfigMainResult } from '@litch/core'
-import type { ApprovalAnswer } from '../../../../packages/protocol/src/client-approvals.mjs'
 import type {
   ClientToolCallParams,
   ClientToolCallResponse,
@@ -110,10 +109,10 @@ export type ClientToolToMain =
       turnId: string
     }
   | { type: typeof CLIENT_TOOL; op: 'notify'; notice: MachineNotice }
+  /** 手机经会话所在设备答了一张审批卡（litch/approval/answered 的内容原样），主进程验过签名才认 */
+  | { type: typeof CLIENT_TOOL; op: 'phoneAnswer'; answer: unknown }
   /** litch config 里属于主进程的一项（内置浏览器的网站、Computer Use），做完回 configResult（config-main.mts） */
   | { type: typeof CLIENT_TOOL; op: 'config'; id: string; request: ConfigMainRequest }
-  /** 手机答了一张卡片（经会话所在设备转来，没验签）：执行器调 approvals/verify.mts 的 verifyPhoneAnswer 验过才算数 */
-  | { type: typeof CLIENT_TOOL; op: 'phoneAnswer'; askId: string; answer: ApprovalAnswer }
 
 /** 主进程 → 核心 */
 export type ClientToolToCore =

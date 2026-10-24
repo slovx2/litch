@@ -3,7 +3,7 @@
 // 钥匙文件在临时目录里，不碰真实的用户数据目录。
 //   node scripts/test-approvals.mjs
 import assert from 'node:assert/strict'
-import { createPrivateKey, createPublicKey, sign } from 'node:crypto'
+import { createPrivateKey, createPublicKey, randomBytes, randomUUID, sign } from 'node:crypto'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -14,8 +14,8 @@ import {
 } from '../../../../packages/protocol/src/client-approvals.mjs'
 import { approvalKeyFingerprint, TrustedPhones } from '../approvals/store.mjs'
 import {
+  approvalDesktopId,
   installPhoneApprovals,
-  newApprovalTicket,
   PhoneApprovals,
   type PhoneCard,
   type PhoneNotice,
@@ -37,6 +37,8 @@ function keyOf(seed: number[]) {
 const PHONE = keyOf(Array.from({ length: 32 }, (_, i) => i + 1))
 const AGENT = keyOf(Array.from({ length: 32 }, (_, i) => 200 - i))
 const PHONE_ID = 'f83898df0bef57a4'
+/** 正在跑的那个用例里这台桌面端的号（rig 里设） */
+const DESKTOP_ID = { current: '' }
 
 function rig() {
   const dir = mkdtempSync(join(tmpdir(), 'litch-approvals-'))
@@ -52,13 +54,15 @@ function rig() {
       changed: () => changes++,
     })
   const approvals = make()
+  DESKTOP_ID.current = approvals.desktopId
+  // 编号和随机数照内置浏览器的登录卡片（browser/passwords/signin.mts）出
   const card = (more: Partial<PhoneCard> = {}): PhoneCard => ({
-    phone: approvals.ticket(),
+    id: randomUUID(),
+    nonce: randomBytes(16).toString('base64url'),
     origin: 'https://github.com',
     accounts: [{ ref: 'a1' }, { ref: 'a2' }],
     taskId: null,
     expiresAt: null,
-    deviceId: 'song-debian',
     ...more,
   })
   return {
@@ -76,15 +80,16 @@ function rig() {
   }
 }
 
-/** 手机照它看到的卡片签一份答复 */
+/** 手机照它看到的卡片签一份答复（桌面端号是卡片上带的，平常就是这台桌面端的） */
 function answerFor(
   card: PhoneCard,
   key = PHONE,
   more: Partial<ApprovalAnswer> = {},
   signedOrigin = card.origin,
+  desktopId = DESKTOP_ID.current,
 ): ApprovalAnswer {
   const base = {
-    id: card.phone.id,
+    id: card.id,
     ref: 'a1' as string | null,
     decision: 'approve' as const,
     remember: false,
@@ -92,7 +97,10 @@ function answerFor(
     phoneName: 'Pixel 8',
     ...more,
   }
-  const text = approvalSignedText({ ...card.phone, origin: signedOrigin }, base)
+  const text = approvalSignedText(
+    { id: card.id, nonce: card.nonce, desktopId, origin: signedOrigin },
+    base,
+  )
   return {
     ...base,
     approvalKey: key.approvalKey,
@@ -135,7 +143,7 @@ test('第一次批准：验过签名就记下、当次生效，出提示；之�
     ])
     const [phone] = r.approvals.phones()
     assert.equal(phone?.source, 'firstApproval')
-    assert.equal(phone?.deviceId, 'song-debian')
+    assert.equal(phone?.deviceId, null)
     assert.equal(phone?.lastApprovedAt, 1_800_000_000_000)
     // 重放：同一张卡片的答复再来一次
     assert.deepEqual(r.approvals.verify(card, answerFor(card)), { ok: false, why: 'replay' })
@@ -156,7 +164,7 @@ test('第一次批准：验过签名就记下、当次生效，出提示；之�
     // 记在文件里，重开还在，桌面端号不变
     const reopened = r.make()
     assert.equal(reopened.phones().length, 1)
-    assert.equal(reopened.ticket().desktopId, card.phone.desktopId)
+    assert.equal(reopened.desktopId, r.approvals.desktopId)
     assert.equal(JSON.parse(readFileSync(r.file, 'utf8')).phones[0].approvalKey, PHONE.approvalKey)
   } finally {
     r.close()
@@ -175,12 +183,9 @@ test('伪造与篡改：签名不对、卡片号不对、别的桌面端、源�
       ['signature', answerFor(card, PHONE, {}, 'https://github.evil.com'), card],
       // 签的是 a2，答复里改成 a1
       ['signature', { ...answerFor(card, PHONE, { ref: 'a2' }), ref: 'a1' }, card],
-      ['card', answerFor(card), { ...card, phone: { ...card.phone, id: 'Zz9yX8wV7uT6sR5q' } }],
-      [
-        'card',
-        answerFor(card),
-        { ...card, phone: { ...card.phone, desktopId: 'Other0desktop01x' } },
-      ],
+      ['card', answerFor(card), { ...card, id: randomUUID() }],
+      // 发给别的桌面端的卡片（签的是别的桌面端号）
+      ['signature', answerFor(card, PHONE, {}, card.origin, 'Other0desktop01x'), card],
       ['account', answerFor(card, PHONE, { ref: 'zz' }), card],
       ['remember', answerFor(card, PHONE, { remember: true }), card],
     ]
@@ -267,7 +272,7 @@ test('扫码核对过的不被顶掉：别的钥匙不认，这把照旧能用�
   }
 })
 
-test('读不懂的文件挪到一边重新开始；没装好时不出票据、一律不认', () => {
+test('读不懂的文件挪到一边重新开始；没装好时没有桌面端号、一律不认', () => {
   const r = rig()
   try {
     writeFileSync(r.file, '{not json')
@@ -275,10 +280,11 @@ test('读不懂的文件挪到一边重新开始；没装好时不出票据、�
     assert.equal(store.list().length, 0)
     assert.match(store.desktopId, /^[A-Za-z0-9_-]{22}$/)
     installPhoneApprovals(null)
-    assert.equal(newApprovalTicket(), null)
+    assert.equal(approvalDesktopId(), null)
     const card = r.card()
     assert.deepEqual(verifyPhoneAnswer(card, answerFor(card)), { ok: false, why: 'unavailable' })
     installPhoneApprovals(r.approvals)
+    assert.equal(approvalDesktopId(), r.approvals.desktopId)
     assert.equal(verifyPhoneAnswer(card, answerFor(card)).ok, true)
     installPhoneApprovals(null)
   } finally {
