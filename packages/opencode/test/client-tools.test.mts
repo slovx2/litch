@@ -271,6 +271,12 @@ test('OpenCode：桌面端带的整套客户端工具（浏览器、Computer Use
         ),
         `${spec.name} 的工具交给了模型`,
       )
+    // request_sign_in 加的可选提示参数新会话里模型看得到
+    const signIn = asked.tools.find((tool: any) =>
+      String(tool.function?.description).startsWith('[litch_browser.request_sign_in]'),
+    )
+    for (const name of ['origin', 'usernameRef', 'passwordRef', 'submitRef'])
+      assert.ok(name in (signIn?.function?.parameters?.properties ?? {}), name)
   } finally {
     await env.restore()
   }
