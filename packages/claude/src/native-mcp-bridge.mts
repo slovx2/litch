@@ -179,19 +179,14 @@ export class NativeMcpBridge {
       lease.track(requestSignal, false, (signal) =>
         run({ signal, ...(config.timeout === undefined ? {} : { timeout: config.timeout }) }),
       )
-    instance.server.setRequestHandler(ListToolsRequestSchema, async (request, extra) => {
-      if (!capabilities.tools) return { tools: [] }
-      const listed = await call(extra.signal, (options) =>
-        connection.listTools(request.params, options),
-      )
-      return {
-        ...listed,
-        tools: listed.tools.map((tool) => ({
-          ...tool,
-          _meta: { ...tool._meta, 'anthropic/alwaysLoad': true },
-        })),
-      }
-    })
+    // 工具清单原样转交，常驻与否由服务自己的 _meta 定，跟 CLI 自己连时一样：CLI 缺省把 MCP 工具放进
+    // “用到再找”的那一批，只有名字进上下文。全标常驻的话工具多的服务（几百个工具）每个请求都带着全部定义，
+    // 压缩也压不掉，会话一开头就占掉大半窗口、几步就又要压
+    instance.server.setRequestHandler(ListToolsRequestSchema, (request, extra) =>
+      capabilities.tools
+        ? call(extra.signal, (options) => connection.listTools(request.params, options))
+        : { tools: [] },
+    )
     instance.server.setRequestHandler(CallToolRequestSchema, (request, extra) =>
       call(extra.signal, (options) => client.callTool(request.params, undefined, options)),
     )
