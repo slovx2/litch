@@ -19,6 +19,11 @@ export interface DeviceSnapshot {
    * 只记 threads 里有的：会话没了（删了、归档了、对账时设备上已经没有）就不留，所以不会比会话还多
    */
   unread: string[]
+  /**
+   * 直连原生 codex 时这台电脑按会话记的速度（serviceTier）：codex 不保存它，恢复、分叉时由核心补回
+   * （protocol 包的 codex-speeds.mts）。经设备服务的由设备进程记，这里没有。和未读一样只记 threads 里有的
+   */
+  speeds?: Record<string, string>
 }
 
 /** 快照存在哪由外壳定。存取失败不影响使用 */
@@ -33,7 +38,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 /** 检查读回来的快照。形状对不上的（包括以前的版本存的）当作没存过，不去猜 */
 export function checkSnapshot(value: unknown): DeviceSnapshot | null {
   if (!isRecord(value)) return null
-  const { mode, harnesses, workspaces, threads, unread, sections } = value
+  const { mode, harnesses, workspaces, threads, unread, sections, speeds } = value
   if (mode !== 'full' && mode !== 'single') return null
   if (!Array.isArray(harnesses) || !Array.isArray(workspaces) || !Array.isArray(threads)) {
     return null
@@ -55,5 +60,15 @@ export function checkSnapshot(value: unknown): DeviceSnapshot | null {
     unread: Array.isArray(unread)
       ? unread.filter((id): id is string => typeof id === 'string')
       : [],
+    // 上一版存的快照里没有这一项：当作都没记过
+    ...(isRecord(speeds)
+      ? {
+          speeds: Object.fromEntries(
+            Object.entries(speeds).filter(
+              (entry): entry is [string, string] => typeof entry[1] === 'string',
+            ),
+          ),
+        }
+      : {}),
   }
 }

@@ -9,6 +9,8 @@
 // - 断线时待答复的请求全部作废（重新订阅后对面会再发一遍），排着队的消息留着。
 // - 完整模式下一台设备上有多个 harness，其中一个可以单独不可用：它上面的会话和断线时一样对待
 //   （不去载入、不去发），等它恢复之后重新订阅。别的 harness 的会话不受影响。
+
+import { prepareSpeed, type SpeedStore } from '../../../protocol/src/codex-speeds.mjs'
 import {
   type ClientRequests,
   EXTENSION,
@@ -125,6 +127,11 @@ export interface LiveHost {
   sessionTree?(): boolean
   /** 设备记着的这个会话的子代理（载入会话时放进快照，之后的变化经 setAgents 来） */
   agentsOf?(sessionId: string): AgentThreadView[]
+  /**
+   * 直连原生 codex 时按会话记速度的地方（codex 不保存速度，protocol 包的 codex-speeds.mts）。
+   * 只在对面就是原生 codex 自己时用；连的是设备服务时由设备进程记。不给就不记
+   */
+  speeds?: SpeedStore
   log(line: string): void
 }
 
@@ -279,6 +286,26 @@ const UNSUPPORTED = '对方不支持此操作'
 
 export function createLiveSessions(host: LiveHost): LiveSessions {
   const sessions = new Map<string, Live>()
+  /**
+   * 建会话、恢复、分叉、发回合都经这里：直连原生 codex 时记下选过的速度，恢复、分叉没带时补回
+   * （protocol 包的 codex-speeds.mts）。连的是设备服务、适配器时照发，设备进程那边自己记
+   */
+  const withSpeed = <M extends keyof ClientRequests>(
+    method: M,
+    params: ClientRequests[M]['params'],
+    options?: RpcRequestOptions,
+  ): Promise<ClientRequests[M]['result']> => {
+    const store = host.sole() === 'codex' ? host.speeds : undefined
+    const prepared = store
+      ? prepareSpeed(method, params as unknown as Record<string, unknown>, store)
+      : null
+    if (!prepared) return host.request(method, params, options)
+    const ready = prepared.params as unknown as ClientRequests[M]['params']
+    return host.request(method, ready, options).then((result) => {
+      prepared.remember(result)
+      return result
+    })
+  }
   let localSeq = 0
   /**
    * 这次运行的记号，拼进发给对面的消息号里。localSeq 每次启动从 0 数起，入口按“会话 + 消息号”永久记账
@@ -849,7 +876,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       }
     }
     try {
-      const resumed = await host.request('thread/resume', { threadId: live.id }, options)
+      const resumed = await withSpeed('thread/resume', { threadId: live.id }, options)
       const view = projectThread(resumed.thread, scope(resumed.thread))
       return {
         ...view,
@@ -1044,7 +1071,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     const declared = live.view ? presetsOf(live.view.harness) !== null : false
     const overrides = turnOverrides(sent, declared, live.view?.settings)
     try {
-      const { turn } = await host.request(
+      const { turn } = await withSpeed(
         'turn/start',
         {
           threadId: live.id,
@@ -1396,7 +1423,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
           collaborationMode: _withTurn,
           ...atStart
         } = turnOverrides(settings, presets !== null)
-        started = await host.request(
+        started = await withSpeed(
           'thread/start',
           {
             cwd,
@@ -1624,7 +1651,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       if (!last) throw new ChannelError('rejected', '该回合已不存在')
       const cut = itemId === undefined ? null : cutAt(live, turnId, itemId)
       const { thread } = await attempt(live, 'fork', () =>
-        host.request(
+        withSpeed(
           'thread/fork',
           // 新会话的内容打开时再取，这里不要
           {
