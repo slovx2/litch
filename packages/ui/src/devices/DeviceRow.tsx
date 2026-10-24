@@ -9,7 +9,7 @@ import { chipTitle, downHarness, wireStyle } from '../app/device.ts'
 import { ago } from '../app/format.ts'
 import { Forward, Notice } from '../app/icons.tsx'
 import { useKey } from '../app/services.tsx'
-import { staleRemote, staleService } from './service.ts'
+import { serviceFlagOf } from './service.ts'
 import { StatePill } from './status.tsx'
 
 /** 一行上最多摆几个 harness 的徽标，再多的收成“+N” */
@@ -116,6 +116,7 @@ export function DeviceRow({ deviceId, focus, onOpen }: DeviceRowProps) {
 
   const online = device.connection === 'online'
   const last = activity?.lastActiveAt ?? null
+  const flag = serviceFlagOf(device)
   return (
     <li className="devp-item" style={wireStyle(device.wire)} data-device={deviceId}>
       <button
@@ -133,13 +134,13 @@ export function DeviceRow({ deviceId, focus, onOpen }: DeviceRowProps) {
           <StatePill device={device} />
           {/* 唯一一种要在行上留记号的：服务比应用的旧、还没换成（本机是这次没换成，远程是还没升级或者在等着换）。
               只是个记号，原因和办法在详情里 */}
-          {staleService(device) || staleRemote(device) ? (
+          {flag ? (
             <span
               className="devp-flag"
               role="img"
               data-flag="service"
-              title={t(device.kind === 'local' ? 'service.flag' : 'service.remote.flag')}
-              aria-label={t(device.kind === 'local' ? 'service.flag' : 'service.remote.flag')}
+              title={t(flag)}
+              aria-label={t(flag)}
             >
               <Notice />
             </span>

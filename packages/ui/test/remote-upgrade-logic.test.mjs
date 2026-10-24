@@ -12,6 +12,7 @@ const {
   remotePillOf,
   remoteSteps,
   STOP_IF_IDLE,
+  serviceFlagOf,
   staleRemote,
 } = await import('../src/devices/service.ts')
 const { translate } = await import('../src/i18n/index.ts')
@@ -115,6 +116,14 @@ test('设备行的记号：连着、比应用旧（包括正在升级、等着�
   )
   assert.equal(staleRemote(device(view(), 'offline')), false)
   assert.equal(staleRemote(device(null)), false)
+})
+
+test('设备列表和侧栏的记号是同一个判断：本机旧而没换成、远程比应用旧，各给各的提示', () => {
+  assert.equal(serviceFlagOf({ ...device(view()), upgrade: null }), 'service.remote.flag')
+  assert.equal(serviceFlagOf({ ...device(view(), 'offline'), upgrade: null }), null)
+  assert.equal(serviceFlagOf({ ...device(null), upgrade: null }), null)
+  const busy = { action: 'kept', reason: 'busy' }
+  assert.equal(serviceFlagOf({ ...device(null), upgrade: busy }), 'service.flag')
 })
 
 test('没做成：按停在哪一步给办法，按钮变成“重试”', () => {

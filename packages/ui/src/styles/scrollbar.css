@@ -1,0 +1,37 @@
+/* 滚动条：全界面一份，各组件不再自己写。细、轨道透明、只画一根滑块；
+   颜色取墨色（--ink-rgb）的透明度，三种皮肤和明暗都跟着走；圆角跟皮肤的 --r1：
+   复古是 0，滑块是方的；另两种是胶囊形。
+   平时淡，鼠标进到能滚的区域里深一档，指着滑块、按住拖时再深。
+   滚动区要平时不画滑块的（对话区、信息栏）把 --sb-rest 设成 transparent。
+   注意：元素上写了标准的 scrollbar-width / scrollbar-color（除了 none），Chromium 就不认下面这些了，
+   所以组件里不要再写这两个属性；要藏起滚动条照旧写 scrollbar-width: none */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+  background: transparent;
+}
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+::-webkit-scrollbar-button {
+  display: none;
+}
+/* 滑块四周留 2px 透明的边：平时看得见的只有 4px 宽，指着的时候边收到 1px，变粗一点 */
+::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: calc(var(--r1) * 100);
+  background-clip: padding-box;
+  background-color: var(--sb-rest, rgb(var(--ink-rgb) / 0.16));
+}
+:hover::-webkit-scrollbar-thumb {
+  background-color: rgb(var(--ink-rgb) / 0.28);
+}
+::-webkit-scrollbar-thumb:hover {
+  border-width: 1px;
+  background-color: rgb(var(--ink-rgb) / 0.42);
+}
+::-webkit-scrollbar-thumb:active {
+  border-width: 1px;
+  background-color: rgb(var(--ink-rgb) / 0.55);
+}

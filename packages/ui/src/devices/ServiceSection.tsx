@@ -113,7 +113,14 @@ function UpgradeNote({ device, upgrade, notice, retrying, onRetry }: NoteProps) 
   )
 }
 
-export function ServiceSection({ device }: { device: DeviceView }) {
+export function ServiceSection({
+  device,
+  reveal = false,
+}: {
+  device: DeviceView
+  /** 一出来就打开、滚到眼前，焦点放到升级按钮上（侧栏设备行上的升级记号点进来的） */
+  reveal?: boolean
+}) {
   const { channel } = useServices()
   const t = useT()
   const id = useId()
@@ -127,10 +134,22 @@ export function ServiceSection({ device }: { device: DeviceView }) {
   const remoteBusy = remote !== null && remote.phase.step !== 'idle'
   const stale = staleService(device) || staleRemote(device) || remoteBusy
   /** 开没开。有“没换成”要说的时候默认开着；之后听用户的，那件事了结了也不自己合上 */
-  const [open, setOpen] = useState(stale)
+  const [open, setOpen] = useState(stale || reveal)
   useEffect(() => {
     if (stale) setOpen(true)
   }, [stale])
+  const box = useRef<HTMLElement>(null)
+  // 点升级记号进来的：滚到这一节，焦点放到该按的那个按钮上（远程的“升级”、本机的“立即重试”），都没有就落在标题上
+  useEffect(() => {
+    if (!reveal) return
+    const sec = box.current
+    if (!sec) return
+    sec.scrollIntoView({ block: 'start' })
+    const target = ['[data-act^="remote-"]', '[data-act="service-retry"]', '.mng-sec-head button']
+      .map((selector) => sec.querySelector<HTMLElement>(selector))
+      .find((found) => found !== null)
+    target?.focus({ preventScroll: true })
+  }, [reveal])
 
   /** 点了“再试一次”，还没有结果 */
   const [retrying, setRetrying] = useState(false)
@@ -177,6 +196,7 @@ export function ServiceSection({ device }: { device: DeviceView }) {
   const pill = remote ? remotePillOf(remote) : pillOf(upgrade)
   return (
     <section
+      ref={box}
       className="mng-sec"
       data-sec="service"
       data-open={open}

@@ -11,12 +11,8 @@
   gap: 12px;
   padding: 14px 14px 14px 6px;
   background: var(--panel);
-  /* 滚动条和对话区一样是悬浮的：平时不画，鼠标进来才露出滑块（transcript.css 的 .tr-scroll） */
-  scrollbar-width: thin;
-  scrollbar-color: transparent transparent;
-}
-.rail:hover {
-  scrollbar-color: var(--line-2) transparent;
+  /* 滚动条和对话区一样：平时不画，鼠标进来才露出滑块（scrollbar.css） */
+  --sb-rest: transparent;
 }
 .rail-card {
   flex: none;

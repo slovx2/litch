@@ -73,8 +73,8 @@ computer" 0.10.0, session trees and scheduled tasks 0.11.0, phone pairing 0.12.0
 - Authentication failures, untrusted host keys, missing or too-old adapters are not retried
   automatically: fix the cause, then `scripts/litch devices reconnect`.
 - Litch never upgrades or stops a remote device service on its own. When the remote service is older
-  than the app, the device's "Device service" section says so (the device row gets a small mark) and
-  offers **Upgrade**. Only after the user confirms does Litch, over ssh, install the app's own version
+  than the app, the device's "Device service" section says so (the device's row in the device list and
+  in the sidebar gets a small mark; clicking the sidebar mark opens that section) and offers **Upgrade**. Only after the user confirms does Litch, over ssh, install the app's own version
   there (the install script with `--version`, or `brew upgrade codex-harness-adapter`) and ask the
   service to stop when idle (`device-stop --if-idle`); the reconnect then starts the new version. While
   the service is busy the old one keeps running and Litch retries on every connection and every 5

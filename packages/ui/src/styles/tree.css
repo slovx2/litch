@@ -698,7 +698,6 @@ button.agent-row:hover {
   flex-direction: column;
   gap: 10px;
   padding: 14px 16px 4px;
-  scrollbar-width: thin;
 }
 .agents-title {
   display: flex;

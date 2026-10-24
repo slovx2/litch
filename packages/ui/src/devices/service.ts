@@ -213,6 +213,16 @@ export function staleRemote(device: DeviceView): boolean {
   return notice !== null && notice !== 'done'
 }
 
+/**
+ * 设备列表的行、侧栏的设备行上那个记号：服务比应用的旧、还没换成（本机是这次没换成，远程是还没升级或者在等着换）。
+ * 给的是记号的提示文字；不用留记号时是 null
+ */
+export function serviceFlagOf(device: DeviceView): MessageKey | null {
+  if (staleService(device)) return 'service.flag'
+  if (staleRemote(device)) return 'service.remote.flag'
+  return null
+}
+
 /** 装应用这一版的那一句（确认卡上给人看、没做成时给人复制）。和核心让那台机器跑的是同一件事 */
 export function installCommand(method: RemoteInstallMethod, version: string): string {
   return method === 'brew'

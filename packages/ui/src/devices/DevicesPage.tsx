@@ -1,5 +1,6 @@
 import { keys } from '@litch/core'
 import { useCallback, useEffect, useState } from 'react'
+import type { DeviceSection } from '../app/actions.ts'
 import { useT } from '../app/appearance.ts'
 import { Close, Plus } from '../app/icons.tsx'
 import { useKey } from '../app/services.tsx'
@@ -13,10 +14,13 @@ import { DeviceRow } from './DeviceRow.tsx'
  */
 export function DevicesPage({
   initial = null,
+  section = null,
   onClose,
 }: {
   /** 一打开就进这台设备的详情。null：在列表上 */
   initial?: string | null
+  /** 进了 initial 的详情之后停在哪一节。null：从头看 */
+  section?: DeviceSection | null
   onClose(): void
 }) {
   const deviceIds = useKey<string[]>(keys.devices) ?? []
@@ -49,7 +53,16 @@ export function DevicesPage({
     return () => document.removeEventListener('keydown', onKey)
   }, [onClose, adding, inDetail])
 
-  if (inDetail) return <DeviceDetail deviceId={detail} onBack={back} onClose={onClose} />
+  if (inDetail) {
+    return (
+      <DeviceDetail
+        deviceId={detail}
+        section={detail === initial ? section : null}
+        onBack={back}
+        onClose={onClose}
+      />
+    )
+  }
 
   return (
     <div className="arch-page devp">
