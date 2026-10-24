@@ -69,7 +69,12 @@ import { createMockTasks } from './mock-tasks.mjs'
 import { createMockTerminals } from './mock-terminals.mjs'
 import { createMockTree } from './mock-tree.mjs'
 import { createMockWorktrees, shownOf } from './mock-worktrees.mjs'
-import { type ClientToolDemo, clientAskRequest, clientToolCall } from './sample-client-tools.mjs'
+import {
+  type ClientToolDemo,
+  clientAskRequest,
+  clientToolCall,
+  type SignInDemo,
+} from './sample-client-tools.mjs'
 import { ASKS_COMMENTABLE, commentSample, commentsReply } from './sample-comments.mjs'
 import { PI_PLAN_QUESTION, samplePlan } from './sample-compose.mjs'
 import {
@@ -265,6 +270,22 @@ const toolKey = (turnId: string): string => `${turnId}-w2`
  */
 const BROWSES = /用浏览器|use the browser/i
 const USES_APP = /操作应用|use an app/i
+
+/**
+ * 发的话里带“登录网站”时，演一次代理请人登录（request_sign_in）：对话里出登录卡片。再带“没账号”是库里没有这个网站的账号，
+ * 带“预检”是页面不能代填（http），带“定时”是定时任务的回合（多一个勾选、30 分钟过期）。
+ * 模拟核心里没有外壳，卡片只能拒绝
+ */
+const SIGNS_IN = /登录网站|sign in to a site/i
+
+const signInDemo = (text: string): SignInDemo =>
+  /没账号|no account/i.test(text)
+    ? 'signInNone'
+    : /预检|blocked/i.test(text)
+      ? 'signInBlocked'
+      : /定时|scheduled/i.test(text)
+        ? 'signInTask'
+        : 'signIn'
 
 /**
  * 发的话里带这些字样时，演一次远程设备操作这台电脑（litch_machine）：回合里出一条工具条目，
@@ -682,6 +703,10 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     const machineDemo = MACHINE_ASKS.find(([pattern]) => pattern.test(message.text))?.[1]
     if (machineDemo) {
       askMachine(view, turnId, machineDemo)
+      return turnId
+    }
+    if (SIGNS_IN.test(message.text)) {
+      askClientTool(view, turnId, signInDemo(message.text))
       return turnId
     }
     if (BROWSES.test(message.text) || USES_APP.test(message.text)) {

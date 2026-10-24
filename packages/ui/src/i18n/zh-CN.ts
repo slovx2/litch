@@ -1682,6 +1682,42 @@ export const zhCN = {
   'phones.approvals.title': '在手机上批准代理登录（实验功能）',
   'phones.approvals.note':
     '打开后，内置浏览器的登录卡片会经会话所在设备发到已绑定的手机，可在手机上批准。对所有设备生效，默认关闭。',
+  // ---- 代理登录方案 B：登录卡片（浏览器面板、对话里）、代填前的 Touch ID ----
+  'browser.signIn.chooseNote':
+    '选一个已存的账号，Litch 替你填好并提交，代理看不到密码；也可以自己在网页里登录。',
+  'browser.signIn.fill': '用 {user} 登录',
+  'browser.signIn.noUser': '（没有用户名）',
+  'browser.signIn.filling': '正在登录…',
+  'browser.signIn.lastUsed': '上次用：{day}',
+  'browser.signIn.self': '我自己登录',
+  'browser.signIn.decline': '拒绝',
+  'browser.signIn.noAccounts': '密码库里没有这个网站的账号。',
+  'browser.signIn.remember': '这个定时任务以后登录这个网站时直接用这个账号',
+  'browser.signIn.expires': '定时任务的请求：{minutes} 分钟内没人答就过期',
+  'browser.signIn.expired': '定时任务的请求：已过期',
+  'browser.signIn.blocked': 'Litch 不能代填：{reason}',
+  'browser.signIn.block.noForm': '页面上没有认得出的登录框',
+  'browser.signIn.block.notVisible': '登录框看不见（被遮住、太小或在屏幕外）',
+  'browser.signIn.block.locator':
+    '代理指的输入框或按钮不在 Litch 认出的登录表单里，或者页面上有好几个登录表单',
+  'browser.signIn.block.insecure':
+    '页面不是 https，表单会用 GET 把密码发出去或交给别的网站，或者这个标签和别的窗口互相开着',
+  'browser.signIn.block.verification': '上一次代填后网站要验证码或二次验证，这一次请自己登录',
+  'browser.signIn.block.unavailable': '密码库这会儿打不开（系统钥匙串不可用）',
+  'browser.signIn.block.origin': '出卡片之后页面换到了别的网站，这些账号不是这个网站的',
+  'browser.signIn.block.other': '这个页面没法代填（{code}）',
+  'browser.signIn.noneNote': '点“我自己登录”后在下面的网页里登录，完成后点“完成，交还”。',
+  'browser.signIn.fillingTitle': 'Litch 正在用已存的账号登录',
+  'browser.signIn.fillingNote': '填好、提交、页面换掉之前，代理碰不了这个标签。',
+  'browser.signIn.fillingPhone': '手机“{name}”批准了用已存的账号登录。',
+  'browser.signIn.fillingSomePhone': '一台绑定的手机批准了用已存的账号登录。',
+  'signInAsk.title': '代理请你登录网站',
+  'signInAsk.task': '定时任务的回合',
+  'signInAsk.noneNote': '点“我自己登录”后在浏览器面板里登录，完成后在那里点“完成，交还”。',
+  'signInAsk.desktopOnly': '只有在 Litch 桌面端里才能登录，这里只能拒绝。',
+  'settings.browser.touchId.title': '代填前要 Touch ID',
+  'settings.browser.touchId.note':
+    'Litch 用已存的账号替代理登录之前，先用指纹确认一次。防的是误点和身边的人。',
 } satisfies Record<string, Entry>
 
 export type MessageKey = keyof typeof zhCN

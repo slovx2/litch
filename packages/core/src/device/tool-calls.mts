@@ -160,18 +160,21 @@ export const clientAskOptions = (ask: ClientAskView): ApprovalOption[] =>
         // 拒绝时可以附一句理由给模型
         { id: 'decline', role: 'decline', note: true },
       ]
-    : ask.kind === 'site'
-      ? [
-          { id: 'once', role: 'accept' },
-          { id: 'session', role: 'acceptSession' },
-          { id: 'always', role: 'acceptAlways' },
-          { id: 'decline', role: 'decline' },
-        ]
-      : [
-          { id: 'session', role: 'acceptSession' },
-          ...(ask.allowAlways ? [{ id: 'always', role: 'acceptAlways' } as const] : []),
-          { id: 'decline', role: 'decline' },
-        ]
+    : ask.kind === 'signIn'
+      ? // 代理请人登录：选账号、自己登录都经外壳答浏览器面板上的那张（主进程的登记是准），这里只留拒绝
+        [{ id: 'decline', role: 'decline' }]
+      : ask.kind === 'site'
+        ? [
+            { id: 'once', role: 'accept' },
+            { id: 'session', role: 'acceptSession' },
+            { id: 'always', role: 'acceptAlways' },
+            { id: 'decline', role: 'decline' },
+          ]
+        : [
+            { id: 'session', role: 'acceptSession' },
+            ...(ask.allowAlways ? [{ id: 'always', role: 'acceptAlways' } as const] : []),
+            { id: 'decline', role: 'decline' },
+          ]
 
 const turnKey = (threadId: string, turnId: string) => `${threadId}\u0000${turnId}`
 
