@@ -256,6 +256,18 @@ test('NAT-003：列表里有命令行开的会话、没有程序化入口的；�
       '前一个回合原样留着，新的接在后面',
     )
     assert.equal(again.thread.turns[1].items[1].text, '收到')
+
+    // CLI 记下的最后一句（last-prompt）不是名字：SDK 没有标题时拿它当 summary，以前会把会话改名成最后一句
+    await appendFile(
+      join(projectDir, `${CLI}.jsonl`),
+      `${JSON.stringify({ type: 'last-prompt', lastPrompt: '再说一句', sessionId: CLI })}\n`,
+    )
+    await settle(join(projectDir, `${CLI}.jsonl`))
+    await (
+      stage.server as unknown as { refreshNative(announce: boolean): Promise<void> }
+    ).refreshNative(true)
+    const named = await app.request('thread/list', {})
+    assert.equal(named.data[0].name ?? null, null, JSON.stringify(named.data[0]))
   })
 })
 
