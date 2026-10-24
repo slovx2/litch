@@ -5,6 +5,10 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
+## 未发布
+
+- Claude Code：Litch 转给 CLI 的 MCP 工具不再一律标成常驻，照服务自己的声明，和 CLI 自己连时一样“用到再找”。以前工具多的服务（比如两百多个工具的 rea）每个请求都带着全部定义，压缩也压不掉，会话一开头就占掉大半上下文，跑几步就自动压缩一次
+
 ## 0.20.0
 
 - 内置浏览器：代理请人登录时，登录卡片（浏览器面板和对话里各一张）列出密码库里这个网站的已存账号，人批准后由 Litch 代填并提交，代理拿不到密码；也可以照旧自己登录或拒绝。设置里可要求代填前过 Touch ID。手机远程批准是实验功能，默认关（设备详情“手机”一节的开关），打开后登录卡片经会话所在设备发到已绑定的手机，在手机上验证身份后批准；协议扩展 `clientApprovals`

@@ -13,12 +13,16 @@ export interface CountedServer {
   closed: boolean
 }
 
-/** 起这个服务的 stdio 配置。Claude Code 的配置文件和会话配置里都能用 */
-export function countServer(log: string, tools: string[] = ['echo']) {
+/** 起这个服务的 stdio 配置。Claude Code 的配置文件和会话配置里都能用。lazy 里的工具不声明常驻 */
+export function countServer(log: string, tools: string[] = ['echo'], lazy: string[] = []) {
   return {
     command: process.execPath,
     args: [resolve('packages/claude/test/fixtures/mcp-count-server.mjs')],
-    env: { FIXTURE_LOG_PATH: log, FIXTURE_TOOLS: JSON.stringify(tools) },
+    env: {
+      FIXTURE_LOG_PATH: log,
+      FIXTURE_TOOLS: JSON.stringify(tools),
+      FIXTURE_LAZY_TOOLS: JSON.stringify(lazy),
+    },
   }
 }
 

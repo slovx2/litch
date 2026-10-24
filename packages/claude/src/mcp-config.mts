@@ -72,7 +72,6 @@ export function sdkMcpServers(
         headers.Authorization = `Bearer ${variable(server.bearer_token_env_var, env)}`
       result[name] = { type, url: server.url, headers }
     }
-    result[name].alwaysLoad = true
     if (server.tool_timeout_sec != null) {
       if (
         typeof server.tool_timeout_sec !== 'number' ||

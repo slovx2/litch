@@ -3,6 +3,7 @@
 // 每被起一次往 FIXTURE_LOG_PATH 记一行 started，握手时记是谁连的，工具被调用时记是哪个工具，
 // 连接关了或者被信号结束也记一行。每行都带进程号，测试按进程号把同一份的几行对起来。
 // 工具的名字由 FIXTURE_TOOLS 给（一段 JSON 数组，缺省只有 echo），调用时把工具名原样回出去。
+// FIXTURE_LAZY_TOOLS 里的那几个（也是 JSON 数组）不声明常驻，交给 CLI 用到再找。
 import { appendFileSync } from 'node:fs'
 import readline from 'node:readline'
 
@@ -11,12 +12,13 @@ const record = (entry) =>
     process.env.FIXTURE_LOG_PATH,
     `${JSON.stringify({ pid: process.pid, ...entry })}\n`,
   )
+const LAZY = new Set(JSON.parse(process.env.FIXTURE_LAZY_TOOLS ?? '[]'))
 const TOOLS = JSON.parse(process.env.FIXTURE_TOOLS ?? '["echo"]').map((name) => ({
   name,
   description: `Echo back which tool was called (${name})`,
   inputSchema: { type: 'object', properties: {} },
   // 让 CLI 一开始就把这些工具交给模型，不放到“用到再找”的那一批里
-  _meta: { 'anthropic/alwaysLoad': true },
+  ...(LAZY.has(name) ? {} : { _meta: { 'anthropic/alwaysLoad': true } }),
 }))
 
 const send = (message) =>
