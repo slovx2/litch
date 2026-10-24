@@ -434,6 +434,18 @@
 .row-more > .ibtn {
   background: var(--panel);
 }
+/* 行尾按钮悬停、按下、菜单开着的时候，底色是叠在面板色上的，整块还是不透明的。
+   通用的 .ibtn:hover 只铺一层半透明：底下的时间会透出来，复古皮肤反白的选中行上，墨色还和行底撞成一片，按钮整个看不见 */
+.ibtn.row-add:hover,
+.row-more > .ibtn:hover,
+.row-more.on > .ibtn {
+  background: linear-gradient(var(--hover), var(--hover)) var(--panel);
+  color: var(--ink);
+}
+.ibtn.row-add:active,
+.row-more > .ibtn:active {
+  background: linear-gradient(var(--press), var(--press)) var(--panel);
+}
 .row-line:hover .row-more,
 .row-more:focus-within,
 .row-more.on {
