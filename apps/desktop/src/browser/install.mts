@@ -11,6 +11,7 @@ import {
   ipcMain,
   shell,
 } from 'electron'
+import { approvalDesktopId, phoneAnswerLanded, verifyPhoneAnswer } from '../approvals/verify.mjs'
 import { installBrowserImport } from '../browser-import/install.mjs'
 import { fileDeviceStore } from '../device-store.mjs'
 import { createElectronHost, type ElectronBrowserHost, type Rect } from './electron-host.mjs'
@@ -146,8 +147,14 @@ export function installBrowser(options: {
     sites,
     resolveUrl: forwarding.resolveUrl,
     describeUrl: forwarding.describeUrl,
-    // 手机答复的验签还没接上（approvals/verify.mts）：先一律不认
-    handover: createHandover({ host, signIns, store: () => passwordStore }),
+    handover: createHandover({
+      host,
+      signIns,
+      store: () => passwordStore,
+      verifyPhoneAnswer,
+      phoneAnswerLanded,
+      desktopId: approvalDesktopId,
+    }),
   })
 
   const fromUi = (event: IpcMainEvent | IpcMainInvokeEvent): boolean => {

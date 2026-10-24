@@ -1,12 +1,15 @@
 // 手机经会话所在设备答的登录卡片（22 号文档第八节）：设备服务不可信，答复要验过手机批准钥匙的签名才认。
-// 真的验签在 apps/desktop/src/approvals/verify.mts（照这里的 VerifyPhoneAnswer 写）；这里只有约定和一个
-// 一律不认的桩：没接上验签之前，手机的答复全部丢掉，卡片接着等桌面端答。
+// 真的验签在 apps/desktop/src/approvals/verify.mts（照这里的 VerifyPhoneAnswer 写，browser/install.mts 建交接时传进来）；
+// 这里只有约定和一个一律不认的桩（不传验签时用，比如单测）。
 import type { SignInRequest } from './signin.mjs'
 
-/** 交给验签的卡片：桌面端自己发出去的那张（编号、随机数、源、账号的 ref、过期时间、是不是定时任务的回合） */
+/**
+ * 交给验签的卡片：桌面端自己发出去的那张（编号、随机数、源、账号的 ref、过期时间、是不是定时任务的回合、
+ * 会话所在的设备）
+ */
 export type PhoneAnswerCard = Pick<
   SignInRequest,
-  'id' | 'nonce' | 'origin' | 'accounts' | 'taskId' | 'expiresAt'
+  'id' | 'nonce' | 'origin' | 'accounts' | 'taskId' | 'expiresAt' | 'deviceId'
 >
 
 /**
@@ -35,7 +38,7 @@ export function phoneAnswerCardId(answer: unknown): string | null {
   return typeof id === 'string' ? id : null
 }
 
-/** 还没接上验签时用的桩：一律不认 */
+/** 不传验签时用的桩：一律不认 */
 export const rejectPhoneAnswers: VerifyPhoneAnswer = () => ({
   ok: false,
   why: 'phone approvals are not verified yet',

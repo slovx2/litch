@@ -33,6 +33,7 @@ import { type DomNode, hasClosedShadowFields } from './dom-tree.mjs'
 import { AUTOFILL_CLEAR, AUTOFILL_CLEARED } from './ipc.mjs'
 import { fillableOrigin } from './origin.mjs'
 import {
+  type PhoneAnswerCard,
   type PhoneAnswerVerdict,
   phoneAnswerCardId,
   rejectPhoneAnswers,
@@ -160,6 +161,8 @@ export interface HandoverOptions {
   store?: () => PasswordStore | null
   /** 手机答复的验签（approvals/verify.mts）；不给一律不认 */
   verifyPhoneAnswer?: VerifyPhoneAnswer
+  /** 验签认了的答复真把卡片答上了（approvals/verify.mts）：作废这张卡片的随机数，同一张卡片不能再答 */
+  phoneAnswerLanded?(card: PhoneAnswerCard): void
   /**
    * 这台桌面端的号（approvals/verify.mts 的 approvalDesktopId）：放进对话里的卡片，核心看到它才转给手机；
    * 不给或回 null 就不转
@@ -323,6 +326,7 @@ export function createHandover(options: HandoverOptions): BrowserHandover {
             accounts: card.accounts,
             taskId: card.taskId,
             expiresAt: card.expiresAt,
+            deviceId: card.deviceId,
           },
           answer,
         )
@@ -335,8 +339,11 @@ export function createHandover(options: HandoverOptions): BrowserHandover {
         return
       }
       const by = { phoneId: verdict.phoneId, ...(verdict.name ? { name: verdict.name } : {}) }
-      if (verdict.choice === null) signIns.answer(card.id, 'cancel', by)
-      else signIns.answer(card.id, { fill: verdict.choice, remember: verdict.remember }, by)
+      const landed =
+        verdict.choice === null
+          ? signIns.answer(card.id, 'cancel', by)
+          : signIns.answer(card.id, { fill: verdict.choice, remember: verdict.remember }, by)
+      if (landed) options.phoneAnswerLanded?.(card)
     },
     async request(page, ask, signal): Promise<SignInOutcome> {
       const contents = contentsOf(page.id)
