@@ -33,6 +33,8 @@ export interface FillKit {
   grants: Map<string, string>
   /** 核心转来一条手机答复 */
   phoneAnswer(answer: unknown): void
+  /** 验签认了、真把卡片答上的手机答复的随机数 */
+  landed: readonly string[]
 }
 
 export async function runCases(kit: FillKit): Promise<void> {
@@ -329,17 +331,26 @@ export async function runCases(kit: FillKit): Promise<void> {
   {
     await open('/plain')
     let stillWaiting = false
+    let nonce = ''
+    let landedBefore = -1
     const { text } = await request({
       turn: 'turn-phone',
       answer: async (card) => {
+        nonce = card.nonce
         const ref = card.accounts[0]?.ref ?? null
         kit.phoneAnswer({ id: card.id, nonce: card.nonce, ref, signature: 'forged' })
         await sleep(300)
         stillWaiting = kit.signIns.get(card.id)?.stage === 'choose'
+        landedBefore = kit.landed.length
         kit.phoneAnswer({ id: card.id, nonce: card.nonce, ref, signature: 'good' })
       },
     })
-    check('手机答复验签不过：丢掉，卡片接着等', stillWaiting)
+    check('手机答复验签不过：丢掉，卡片接着等', stillWaiting && landedBefore === 0)
+    check(
+      '手机答复验签过了、卡片答上：作废这张卡片的随机数（只一次）',
+      kit.landed.length === 1 && kit.landed[0] === nonce,
+      kit.landed,
+    )
     check(
       '手机答复验签过了：照它代填',
       /Litch filled the account the user approved/.test(text),

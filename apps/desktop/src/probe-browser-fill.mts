@@ -127,6 +127,8 @@ void app.whenReady().then(async () => {
   const host = createElectronHost()
   const signIns = createSignIns()
   const grants = new Map<string, string>()
+  /** 验签认了、真把卡片答上的手机答复（phoneAnswerLanded 收到的随机数） */
+  const landed: string[] = []
   const executor = createBrowserExecutor({
     host,
     sites: createSiteBook(join(work, 'sites.json')),
@@ -141,13 +143,15 @@ void app.whenReady().then(async () => {
         grants.get(`${deviceId}|${taskId}|${origin}`) ?? null,
       remember: ({ deviceId, taskId, origin, entryId }) =>
         void grants.set(`${deviceId}|${taskId}|${origin}`, entryId),
-      // 手机答复的验签：自检里签名写 good 的才认
+      // 手机答复的验签：自检里签名写 good 的才认；卡片要带着会话所在的设备
       verifyPhoneAnswer: (card, answer) => {
         const one = answer as { signature?: unknown; ref?: unknown; nonce?: unknown }
         if (one.signature !== 'good' || one.nonce !== card.nonce) return { ok: false, why: 'bad' }
+        if (!card.deviceId) return { ok: false, why: 'no device' }
         const ref = typeof one.ref === 'string' ? one.ref : null
         return { ok: true, phoneId: 'phone-1', choice: ref, remember: false, firstSeen: false }
       },
+      phoneAnswerLanded: (card) => void landed.push(card.nonce),
     }),
   })
 
@@ -270,6 +274,7 @@ void app.whenReady().then(async () => {
       task = next
     },
     phoneAnswer: (answer) => executor.phoneAnswer?.(answer),
+    landed,
     grants,
   })
 
