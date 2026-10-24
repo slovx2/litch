@@ -26,6 +26,7 @@ versioning or publishing metadata.
 - 原生 Codex：Windows 设备上也能用了；给设备装 harness 在 Windows 上也能经 npm 装 codex
 - harness 详情设置：有没保存的改动（配置、模型清单、指令文件）时，切标签、返回、去别的页、开别的设备、关窗口或退出前先问“保存 / 放弃 / 取消”，手机上切标签和返回同样问。原生 Codex 的模型清单里和自带同名的模型，以自带的为底、用户写的字段盖上去，再读再写都留着。DSH 的内置插件里运行离不开的那些开着时只读、不让关（已被关掉的可以打开并提示）；模型目录等读不到时插件页照样能打开；不该列的几个插件不再列进插件组
 - Claude Code：后台命令的时长上限从 2 小时放宽到 24 小时（Litch 起 CLI 时设 `BASH_MAX_TIMEOUT_MS=86400000`；harness 环境、启动环境或 settings.json 里自己写了的照用户的）。CLI 里这个变量也是前台命令超时的上限，一起变成 24 小时
+- Claude Code：恢复 CLI 自带的模型请求重试（连接中断、5xx、529 等，默认最多 10 次；harness 环境里设了 `CLAUDE_CODE_MAX_RETRIES` 的照用户的），以前 Litch 起 CLI 时把它关成了 0，网络一断回合就失败。重试时回合状态行写“重试中 x/y · 原因”（桌面和手机），作废的半截回答撤掉；连接类错误归成连接失败而不是服务器错误。协议扩展 `apiRetry`（`litch/turn/apiRetry/updated`）
 - Claude Code：网关供应商的每个型号能配上下文窗口。详情设置“账号”页编辑供应商时，型号清单每行后面写 `| 1M`、`| 200K` 或整数（如 `deepseek-v4 = DeepSeek | 1M`）；从网关拉取型号时带上它声明的窗口（`max_input_tokens`、`context_length` 等），清单里没写窗口的行顺带补上，手写的不动。起 CLI 时作为 `CLAUDE_CODE_MAX_CONTEXT_TOKENS` 给，用量百分比和自动压缩门槛跟着变；改了以后老会话下一轮换进程就生效。以前认不出的型号一律按 200K 算。Claude 自家型号名的窗口仍由 Claude Code 定（要 1M 在型号 ID 后加 `[1m]`）。协议扩展 `harnessConfig` 的 `providers/discoverModels` 每个型号加可选的 `contextWindow`
 - Claude Code：供应商删掉或没填密钥后，还在用它的型号的会话底栏照样显示“[供应商] 型号”，不露原始标识；新建页不再按记着的上一次选择选中这种型号（以前新会话第一轮就报没有这家供应商）
 - Claude Code：模型开子会话时给的完整型号（如 `claude-opus-5-5`）记成眼下指向它的别名那一行，底栏不再显示原始 ID，重连后模型选单里也不再多出一行同名的
