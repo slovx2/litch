@@ -158,6 +158,7 @@ test('侧栏的状态：没记过就是开着、默认宽度；改了就记下�
     nativeChildren: false,
     showActive: true,
     bands: {},
+    folds: {},
   })
   state.setSidebarWidth(356.4)
   assert.deepEqual(saved(), {
@@ -167,6 +168,7 @@ test('侧栏的状态：没记过就是开着、默认宽度；改了就记下�
     nativeChildren: false,
     showActive: true,
     bands: {},
+    folds: {},
   })
   // 存的是想要的宽度，夹在最窄和最宽之间
   state.setSidebarWidth(5000)
@@ -181,6 +183,7 @@ test('侧栏的状态：没记过就是开着、默认宽度；改了就记下�
     nativeChildren: false,
     showActive: true,
     bands: {},
+    folds: {},
   })
   // 只看哪几个 harness 也记在这一份里，重复的只留一个；取消就是记回“都看”
   state.setSidebarHarnesses(['pi', 'claude', 'pi'])
@@ -191,6 +194,7 @@ test('侧栏的状态：没记过就是开着、默认宽度；改了就记下�
     nativeChildren: false,
     showActive: true,
     bands: {},
+    folds: {},
   })
   state.setSidebarHarnesses([])
   assert.deepEqual(saved().harnesses, [])
@@ -223,6 +227,7 @@ test('侧栏的状态：记着的照记着的来，离谱的宽度拉回范围�
     nativeChildren: true,
     showActive: true,
     bands: {},
+    folds: {},
   })
   state.toggleSidebar()
   // 应用菜单的快捷键和页面自己的按键各来一次：第二次不算
@@ -241,6 +246,7 @@ test('侧栏的状态：记着的照记着的来，离谱的宽度拉回范围�
     nativeChildren: false,
     showActive: true,
     bands: {},
+    folds: {},
   })
   // 记着的不是数组：当成没在筛；数组里不是字符串的、空的丢掉
   stored.set('litch.sidebar', JSON.stringify({ harnesses: 'pi' }))
@@ -253,6 +259,78 @@ test('侧栏的状态：记着的照记着的来，离谱的宽度拉回范围�
   stored.set('litch.sidebar', JSON.stringify({ nativeChildren: 'yes' }))
   const loose = await import('../src/sidebar/state.ts?loose')
   assert.equal(loose.sidebarNow().nativeChildren, false)
+})
+
+// ---------- 收起了什么 ----------
+
+test('收起的组和父会话：按设备记，再点一次就展开，什么都没收起的设备不留', async () => {
+  const { NO_FOLDS, toggleFold } = await import('../src/sidebar/folds.ts')
+  let folds = toggleFold(NO_FOLDS, 'local', 'folded', 'p1')
+  folds = toggleFold(folds, 'local', 'closed', '')
+  folds = toggleFold(folds, 'remote', 'closed', ':pinned')
+  assert.deepEqual(folds, {
+    local: { closed: [''], folded: ['p1'] },
+    remote: { closed: [':pinned'], folded: [] },
+  })
+  folds = toggleFold(folds, 'local', 'folded', 'p1')
+  folds = toggleFold(folds, 'remote', 'closed', ':pinned')
+  assert.deepEqual(folds, { local: { closed: [''], folded: [] } })
+})
+
+test('收起的记录读回来：形状不对的丢掉，设备那一行的空键留着', async () => {
+  const { readFolds } = await import('../src/sidebar/folds.ts')
+  assert.deepEqual(readFolds(undefined), {})
+  assert.deepEqual(readFolds([1]), {})
+  assert.deepEqual(
+    readFolds({
+      local: { closed: ['', 'ws', 'ws', 3], folded: ['p1'] },
+      empty: { closed: [], folded: 'p2' },
+      odd: 'x',
+    }),
+    { local: { closed: ['', 'ws'], folded: ['p1'] } },
+  )
+})
+
+test('收起的记录清理：只留还在的会话、工作区、组；没要去掉的原样返回', async () => {
+  const { foldsKeep, foldsSettled, pruneFolds } = await import('../src/sidebar/folds.ts')
+  const folds = {
+    local: { closed: ['', ':section:gone', 'ws1', 'ws-gone'], folded: ['p1', 'archived'] },
+    remote: { closed: ['x'], folded: ['y'] },
+  }
+  const keep = foldsKeep({ ws1: ['p1', 'c1'], ':pinned': ['p2'] }, ['', ':pinned', 'ws1'])
+  assert.deepEqual(pruneFolds(folds, 'local', keep), {
+    local: { closed: ['', 'ws1'], folded: ['p1'] },
+    remote: { closed: ['x'], folded: ['y'] },
+  })
+  // 别的设备不动；没有要去掉的，原样返回
+  const kept = { local: { closed: ['ws1'], folded: ['p1'] } }
+  assert.equal(pruneFolds(kept, 'local', keep), kept)
+  assert.equal(pruneFolds(kept, 'remote', keep), kept)
+  // 全清掉了：这台设备不留
+  assert.deepEqual(pruneFolds({ local: { closed: [], folded: ['gone'] } }, 'local', keep), {})
+  // 只有连着、对过账、目录取全了才拿来清
+  const device = { connection: 'online', stale: false, note: null }
+  assert.equal(foldsSettled(device), true)
+  assert.equal(foldsSettled(undefined), false)
+  assert.equal(foldsSettled({ ...device, connection: 'reconnecting' }), false)
+  assert.equal(foldsSettled({ ...device, stale: true }), false)
+  assert.equal(foldsSettled({ ...device, note: { text: '有个 harness 没取到' } }), false)
+})
+
+test('侧栏的状态：收起的组和父会话记在 litch.sidebar 里，重开照上次的样子', async () => {
+  stored.clear()
+  const state = await import('../src/sidebar/state.ts?folds')
+  state.toggleSidebarFold('local', 'folded', 'p1')
+  state.toggleSidebarFold('local', 'closed', 'ws1')
+  assert.deepEqual(saved().folds, { local: { closed: ['ws1'], folded: ['p1'] } })
+  const again = await import('../src/sidebar/state.ts?folds-again')
+  assert.deepEqual(again.sidebarNow().folds, { local: { closed: ['ws1'], folded: ['p1'] } })
+  // 父会话删掉、归档了：记录清掉；没要清的不写
+  const before = stored.get('litch.sidebar')
+  again.pruneSidebarFolds('local', { closed: new Set(['ws1']), folded: new Set(['p1']) })
+  assert.equal(stored.get('litch.sidebar'), before)
+  again.pruneSidebarFolds('local', { closed: new Set(['ws1']), folded: new Set() })
+  assert.deepEqual(saved().folds, { local: { closed: ['ws1'], folded: [] } })
 })
 
 // ---------- 只看某几个 harness 的会话 ----------

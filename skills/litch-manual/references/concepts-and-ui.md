@@ -44,6 +44,8 @@
   project. Right-click or the "more"
   button on a device, project or session row opens its menu (add project, new group, use on phone;
   rename, pin, move, delete; schedule a task, start a sub-session, archive, delete).
+  Device rows, groups, projects and sessions with sub-sessions can be collapsed. What is collapsed is
+  remembered per device (on the phone too) and kept after a restart; new ones start expanded.
 - **Main area**: the new-session page, a session, or one of the pages (Devices, Settings, Scheduled
   tasks, Archived sessions).
 - **Side panel** (right) with tabs **Files**, **Diff**, **Browser**, **Background tasks** (background commands, subagents and sub-sessions). It follows the

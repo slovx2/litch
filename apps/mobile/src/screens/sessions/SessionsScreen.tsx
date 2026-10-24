@@ -6,7 +6,10 @@
 // 下拉刷新是重新取一遍会话目录（device.refresh）。
 import {
   type DeviceView,
+  groupOfSection,
   keys,
+  LOOSE,
+  PINNED,
   type SectionView,
   type SessionChildren,
   type SessionGroups,
@@ -19,6 +22,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Pressable, StyleSheet, Text } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { reasonOf } from '../../../../../packages/ui/src/app/errors.ts'
+import { foldsKeep, foldsSettled } from '../../../../../packages/ui/src/sidebar/folds.ts'
 import type { RootStackParamList } from '../../nav/routes'
 import { useChannel, useKey, useServices } from '../../shell/services'
 import { useT } from '../../ui/i18n'
@@ -28,7 +32,8 @@ import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
 import { UpdateBanner } from '../devices/UpdateBanner'
 import { DeviceBanner } from './Banner'
-import { buildList, type GroupHead, type ListItem } from './list'
+import { pruneFolded, toggleFolded, useFolds } from './folds'
+import { buildList, type GroupHead, type ListItem, PROJECTS } from './list'
 import { ArchivedHead, ArchivedNote, ArchivedRow, GroupRow, SessionRow, titleOf } from './rows'
 import { type Ask, type Menu, useSheet } from './useSheet'
 import { WorkspaceDialog, type WorkspaceEdit } from './WorkspaceDialog'
@@ -49,7 +54,9 @@ export function SessionsScreen({ navigation, route }: Props) {
   const channel = useChannel()
   const insets = useSafeAreaInsets()
   const device = useKey<DeviceView>(keys.device(deviceId))
-  const groups = useKey<SessionGroups>(keys.groups(deviceId)) ?? NO_GROUPS
+  /** 没有是这台设备的会话目录还没到 */
+  const listed = useKey<SessionGroups>(keys.groups(deviceId))
+  const groups = listed ?? NO_GROUPS
   const sections = useKey<SectionView[]>(keys.sections(deviceId)) ?? NO_SECTIONS
   const workspaces = useKey<WorkspaceView[]>(keys.workspaces(deviceId)) ?? NO_WORKSPACES
   const archived = useKey<SessionSummary[] | null>(keys.archived(deviceId)) ?? null
@@ -64,9 +71,10 @@ export function SessionsScreen({ navigation, route }: Props) {
   // 工作区那一行的“＋”要设备连着；“⋯”里的事要连着或者能整理，一件都做不了就不出
   const organizable = device?.organizable === true
   const canMenu = online || organizable
-  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set())
-  /** 收起了子会话的父会话。默认都展开 */
-  const [folded, setFolded] = useState<ReadonlySet<string>>(() => new Set())
+  /** 收起来的组（collapsed）和收起了子会话的父会话（folded），记在手机上（folds.ts）。没记着的展开 */
+  const folds = useFolds(deviceId)
+  const collapsed = useMemo(() => new Set(folds.closed), [folds.closed])
+  const folded = useMemo(() => new Set(folds.folded), [folds.folded])
   const [archivedOpen, setArchivedOpen] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
@@ -138,13 +146,8 @@ export function SessionsScreen({ navigation, route }: Props) {
     [],
   )
   const toggleGroup = useCallback(
-    (key: string) =>
-      setCollapsed((before) => {
-        const next = new Set(before)
-        if (!next.delete(key)) next.add(key)
-        return next
-      }),
-    [],
+    (key: string) => toggleFolded(deviceId, 'closed', key),
+    [deviceId],
   )
   const newIn = useCallback(
     (head: GroupHead) =>
@@ -160,15 +163,20 @@ export function SessionsScreen({ navigation, route }: Props) {
   const workspaceOf = useCallback((head: GroupHead) => {
     if (head.kind === 'workspace') setMenu({ kind: 'workspace', workspace: head.workspace })
   }, [])
-  const toggleFold = useCallback(
-    (id: string) =>
-      setFolded((before) => {
-        const next = new Set(before)
-        if (!next.delete(id)) next.add(id)
-        return next
-      }),
-    [],
-  )
+  const toggleFold = useCallback((id: string) => toggleFolded(deviceId, 'folded', id), [deviceId])
+  // 会话目录和对面对过账了：删掉、归档了的会话，删掉的工作区和分区，它们收起的记录清掉
+  const settled = foldsSettled(device)
+  useEffect(() => {
+    if (!settled || !listed) return
+    const kept = [
+      PINNED,
+      PROJECTS,
+      LOOSE,
+      ...workspaces.map((entry) => entry.id),
+      ...sections.map((entry) => groupOfSection(entry.id)),
+    ]
+    pruneFolded(deviceId, foldsKeep(listed, kept))
+  }, [settled, listed, workspaces, sections, deviceId])
   const toggleArchived = useCallback(() => setArchivedOpen((open) => !open), [])
   // 展开着、还没取过、设备连着才去取（没连着的等连上）；取过之后核心自己跟着改
   const needArchived = archivedOpen && archived === null && online
