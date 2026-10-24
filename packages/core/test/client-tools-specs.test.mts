@@ -116,6 +116,7 @@ test('request_sign_in 代填的结果文字：原因只有固定几种、各带�
     'insecure',
     'popup_needed',
     'no_answer',
+    'unavailable',
   ])
   for (const why of Object.keys(SIGN_IN_FILL_FAILURES) as SignInFillFailure[]) {
     const text = signInResult.fillFailed(why)

@@ -80,6 +80,10 @@ export const SIGN_IN_FILL_FAILURES = {
     'the page did not respond while Litch filled it',
     'Call `request_sign_in` again so the user can sign in themselves, or ask the user how to proceed.',
   ],
+  unavailable: [
+    'the saved passwords could not be read on this computer',
+    'Call `request_sign_in` again so the user can sign in themselves, or ask the user how to proceed.',
+  ],
 } as const satisfies Record<string, readonly [string, string]>
 
 /** 代填做不了的原因 */
