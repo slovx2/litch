@@ -105,6 +105,7 @@ import { type CoreTrace, traceError, traceWith } from '../trace.mjs'
 import { type AccountLimits, createAccountLimits } from './account-limits.mjs'
 import { createAgentThreads } from './agents.mjs'
 import { collectThreads, type Listing, mergeListing } from './catalog.mjs'
+import { type CodexThreadNotesStore, createDirectInstructions } from './codex-instructions.mjs'
 import { createComposeAids } from './compose.mjs'
 import { createDiffs, type Diffs } from './diffs.mjs'
 import { createExec } from './exec.mjs'
@@ -188,6 +189,8 @@ export interface DeviceOptions {
   snapshot?: SnapshotStore
   /** 终端的两样记在这台电脑上的东西（改过的名字、留在设备上不看的）存在哪。不给就不记 */
   terminalNotes?: TerminalNotesStore
+  /** 直连原生 codex 时，哪些会话带了哪几个命名空间的规则，记在这台电脑上的哪（codex-instructions.mts）。不给就只记在内存里 */
+  codexThreads?: CodexThreadNotesStore
   /** 通往主进程的客户端工具那一头（tool-hub.mts）。不给就是这台桌面什么都执行不了 */
   tools?: ToolHub
   /**
@@ -487,6 +490,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
   let wire = config.wire
   /** 对面是哪一种。认出来之前、对面不是设备服务时都是 single */
   let mode: DeviceView['mode'] = 'single'
+  /** 对面是原生 codex 自己（不认识 runtime/info）：开发者指令由核心补（codex-instructions.mts） */
+  let nativeDirect = false
   /** 这台设备上的 harness。单 harness 模式下只有对面那一个；完整模式下是设备服务声明的，带着各自的状态 */
   let harnesses: HarnessView[] = []
   /** 对面有没有设备配置接口（deviceSettings 扩展）。认出来之前、对面不是设备服务时都是没有 */
@@ -1360,6 +1365,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     // 上一次连接时认的声明不算数了：对面可能升级过
     terms.clear()
     serviceDue = false
+    nativeDirect = false
     try {
       const info = await link.request('runtime/info', {})
       if (mine !== session) return
@@ -1418,6 +1424,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       if (mode === 'full') hasProjects = null
       mode = 'single'
       harnesses = [codexHarness(state.info)]
+      nativeDirect = true
       manageable = false
       reattachable = false
       schedulable = false
@@ -1616,6 +1623,20 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     log,
   }
 
+  // 直连原生 codex：建会话、恢复、分叉之前把规则和 config.toml 那段拼成开发者指令（经设备服务的由设备进程补）
+  const directInstructions = createDirectInstructions({
+    clock: options.clock,
+    ...(options.codexThreads ? { store: options.codexThreads } : {}),
+    ask: (method, params) => link.request(method as never, params as never),
+    specs: (namespaces) =>
+      clientToolSpecs(namespaces, {
+        machine: machineSpec(),
+        desktopPlatform: options.tools?.platform?.() ?? null,
+      }),
+    cwdOf: (threadId) => threads.get(threadId)?.cwd ?? null,
+    log,
+  })
+
   const live = createLiveSessions({
     deviceId: config.id,
     clock: options.clock,
@@ -1633,7 +1654,14 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     terms: (id) => terms.get(id) ?? null,
     shelved: (sessionId) => archived?.has(sessionId) ?? false,
     agentsOf: (sessionId) => agentThreads.list(sessionId),
-    request: (method, params, requestOptions) => link.request(method, params, requestOptions),
+    async request(method, params, requestOptions) {
+      const prepared = nativeDirect ? directInstructions.prepare(method, params) : null
+      if (!prepared) return link.request(method, params, requestOptions)
+      const { params: ready, remember } = await prepared
+      const result = await link.request(method, ready as typeof params, requestOptions)
+      remember(result)
+      return result
+    },
     touched(sessionId, said) {
       const thread = threads.get(sessionId)
       if (!thread) return

@@ -105,6 +105,11 @@ export {
   createCore,
 } from './core.mjs'
 export {
+  type CodexThreadNotes,
+  type CodexThreadNotesStore,
+  checkCodexThreadNotes,
+} from './device/codex-instructions.mjs'
+export {
   createDevice,
   type Device,
   type DeviceConfig,

@@ -3,6 +3,8 @@
 // 钥匙的编号和会话的摘要；私钥在安全存储里（keys.ts）。形状由核心来认：读不懂的当作没记过。
 // 启动时核心同步读回设备和快照，首屏直接摆出上次的内容，不等网络。
 import {
+  type CodexThreadNotesStore,
+  checkCodexThreadNotes,
   checkNotes,
   checkSaved,
   checkSnapshot,
@@ -19,6 +21,8 @@ const safe = (deviceId: string): string => deviceId.replace(/[^A-Za-z0-9_-]/g, '
 const devicesFile = jsonFile<unknown>('devices.json')
 const snapshotFile = (deviceId: string) => jsonFile<unknown>(`snapshot-${safe(deviceId)}.json`)
 const terminalFile = (deviceId: string) => jsonFile<unknown>(`terminals-${safe(deviceId)}.json`)
+// 直连原生 codex 时哪些会话带了哪几个命名空间的规则，恢复、分叉时核心照它补开发者指令
+const codexFile = (deviceId: string) => jsonFile<unknown>(`codex-threads-${safe(deviceId)}.json`)
 
 export function fileDeviceStore(): DeviceStore {
   return {
@@ -43,9 +47,17 @@ export function fileDeviceStore(): DeviceStore {
         save: (notes) => file.write(notes),
       }
     },
+    codexThreads(deviceId): CodexThreadNotesStore {
+      const file = codexFile(deviceId)
+      return {
+        load: () => checkCodexThreadNotes(file.read()),
+        save: (notes) => file.write(notes),
+      }
+    },
     forget(deviceId) {
       snapshotFile(deviceId).remove()
       terminalFile(deviceId).remove()
+      codexFile(deviceId).remove()
     },
   }
 }

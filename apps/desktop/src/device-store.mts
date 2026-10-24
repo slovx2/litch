@@ -4,6 +4,8 @@
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
+  type CodexThreadNotesStore,
+  checkCodexThreadNotes,
   checkNotes,
   checkSaved,
   checkSnapshot,
@@ -45,6 +47,9 @@ export function fileDeviceStore(dir: string): DeviceStore {
   // 远程设备在这台电脑上的操作记录（litch_machine，08 号 3.4）：只存在本机，条数由核心限着
   const machineDir = join(dir, 'machine-log')
   const machineFile = (deviceId: string) => join(machineDir, `${safe(deviceId)}.json`)
+  // 直连原生 codex 时哪些会话带了哪几个命名空间的规则（只有命名空间的名字），恢复、分叉时核心照它补开发者指令
+  const codexDir = join(dir, 'codex-threads')
+  const codexFile = (deviceId: string) => join(codexDir, `${safe(deviceId)}.json`)
 
   return {
     load(): SavedDevices {
@@ -88,10 +93,21 @@ export function fileDeviceStore(dir: string): DeviceStore {
       }
     },
 
+    codexThreads(deviceId): CodexThreadNotesStore {
+      return {
+        load: () => checkCodexThreadNotes(readJson(codexFile(deviceId))),
+        save(notes) {
+          mkdirSync(codexDir, { recursive: true, mode: 0o700 })
+          writeJson(codexFile(deviceId), notes)
+        },
+      }
+    },
+
     forget(deviceId) {
       rmSync(snapshotFile(deviceId), { force: true })
       rmSync(terminalFile(deviceId), { force: true })
       rmSync(machineFile(deviceId), { force: true })
+      rmSync(codexFile(deviceId), { force: true })
     },
   }
 }

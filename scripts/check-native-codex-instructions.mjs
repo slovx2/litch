@@ -2,7 +2,8 @@
 // codex 不保存 developerInstructions，会话重新装载过、恢复时没带、之后又压缩过一次，规则就没了；带了又会整段盖掉
 // config.toml 的 developer_instructions。这里走一遍：建会话（带 litch_sessions，不给开发者指令）→ 回合 → 重启 codex →
 // 恢复不带开发者指令 → 手动压缩 → 再发回合；再从这个会话分叉（不带）→ 分叉上压缩 → 回合。每次模型请求里，
-// 建议任务的规则和 config.toml 那段都要在，而且各只出现 1 次。
+// 建议任务的规则和 config.toml 那段都要在，而且各只出现 1 次。最后再建一个不带规则、客户端给了自己那段开发者指令的会话，
+// 重启、恢复不带、压缩之后，客户端那段要在（各 1 次），config.toml 那段不在（客户端给的整段替换它，和建会话时一样）。
 // 真的适配器主进程（Go，现编到临时目录里）+ 真的设备进程 + 真的 codex，模型是回环上的假 Responses 接口。
 //
 // 用法：node scripts/check-native-codex-instructions.mjs（先 npm run build --prefix packages/device；需要本机有 go）
@@ -67,6 +68,8 @@ const deviceSocket = join(dirs.adapterHome, 'device', 'device.sock')
 // 认标记：规则的头一句（从构建产物里取，规则改写了也跟着变）、config.toml 那段里的记号
 const RULES_MARK = SESSION_TOOLS.instructions.split('. ')[0]
 const CONFIG_MARK = 'CFG_MARK_7Q'
+// 客户端自己给的开发者指令里的记号（不带规则的会话用）
+const GIVEN_MARK = 'GIVEN_MARK_4K'
 // 规则末尾“不在 Litch 里就别再调 litch_*”的兜底：拿到官方桌面端分叉、接着用的会话靠它停手，要跟着规则一起到
 const OUTSIDE_MARK = outsideLitch(true)
 
@@ -82,6 +85,7 @@ const model = await startResponsesModel((body) => {
     rules: count(input, RULES_MARK),
     outside: count(input, JSON.stringify(OUTSIDE_MARK).slice(1, -1)),
     config: count(input, CONFIG_MARK),
+    given: count(input, GIVEN_MARK),
   })
   return { text: compaction ? 'SUMMARY_OF_CONVERSATION' : `假模型收到：${said}` }
 })
@@ -326,6 +330,39 @@ async function main() {
   await turn(again, '分叉的分叉压缩之后')
   bothOnce(from, '分叉的分叉、压缩之后')
   passed('分叉、分叉的分叉不带开发者指令，压缩后两段都在、各 1 次')
+
+  // 不带规则、客户端给了自己那段的会话：设备进程照样记下，重启、恢复不带、压缩之后补回
+  const own = (
+    await client.call('thread/start', {
+      harness: 'codex',
+      cwd: dirs.work,
+      permissions: ':workspace',
+      developerInstructions: `客户端自己的开发者指令 ${GIVEN_MARK}`,
+    })
+  ).thread.id
+  const givenOnce = (start, what) => {
+    const asked = seen.slice(start).filter((entry) => entry.said !== '（压缩）')
+    expect(asked.length > 0, `${what}：没有模型请求`)
+    for (const entry of asked)
+      expect(
+        entry.given === 1 && entry.config === 0 && entry.rules === 0,
+        `${what}：请求「${entry.said}」里客户端那段 ${entry.given} 次、config.toml 那段 ${entry.config} 次、规则 ${entry.rules} 次，应是 1、0、0`,
+      )
+  }
+  from = seen.length
+  await turn(own, '自带指令的第一回合')
+  givenOnce(from, '自带指令的会话建好后')
+  mark = client.incoming.length
+  await client.call('litch/device/harness/restart', { harness: 'codex', force: true })
+  await client.waitFor('Codex 再次重启后可用', available, mark)
+  await client.call('thread/resume', { threadId: own })
+  await compact(own)
+  from = seen.length
+  await turn(own, '自带指令压缩之后')
+  givenOnce(from, '自带指令的会话重启、恢复、压缩之后')
+  passed(
+    '不带规则、客户端给了开发者指令的会话：重启 → 恢复不带 → 压缩 → 回合，客户端那段还在、1 次',
+  )
   client.close()
 }
 
@@ -339,7 +376,7 @@ const tail = (value) => value.split('\n').slice(-40).join('\n')
 if (failure) {
   console.error(`✖ ${failure.message}`)
   console.error(
-    `\n模型请求（规则、config.toml 那段出现的次数）：\n${seen.map((entry, at) => `  ${at + 1} ${entry.said} 规则 ${entry.rules} config ${entry.config}`).join('\n')}`,
+    `\n模型请求（规则、config.toml 那段出现的次数）：\n${seen.map((entry, at) => `  ${at + 1} ${entry.said} 规则 ${entry.rules} config ${entry.config} 客户端 ${entry.given}`).join('\n')}`,
   )
   console.error(`\n主进程的输出（末尾）：\n${tail(output)}`)
   const runtimeLog = join(dirs.adapterHome, 'codex', 'runtime.log')
