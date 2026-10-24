@@ -2,6 +2,7 @@
 // 没列在这里的方法客户端不调用；没列在这里的通知客户端不处理（记日志后丢弃）。
 // 新增一项要在这里登记，核心里才有类型可用。
 
+import type { ApiRetryUpdatedNotification } from './api-retry.mjs'
 import type { BackgroundChangedNotification } from './background-tasks.mjs'
 import type {
   ApprovalAnsweredNotification,
@@ -680,6 +681,8 @@ export interface ServerNotifications {
   'litch/thread/background/changed': BackgroundChangedNotification
   /** 扩展，只发给握手时声明过 nativeOwner 的连接：一个导进来的会话被别处占上、放开了，或者对方开始、停下跑了 */
   'litch/thread/nativeOwner/changed': NativeOwnerChangedNotification
+  /** 扩展，只发给订阅着会话、握手时声明过 apiRetry 的连接：回合里的模型请求开始重试、又一次重试、重试结束了 */
+  'litch/turn/apiRetry/updated': ApiRetryUpdatedNotification
   /** 扩展，只发给握手时声明过 deviceTasks 的连接：任务多了、变了、没了 */
   'litch/task/changed': DeviceTaskChangedNotification
   /** 扩展，只发给握手时声明过 deviceTasks 的连接：一次运行开始了、结束了、标成看过了 */

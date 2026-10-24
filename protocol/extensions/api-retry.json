@@ -1,0 +1,24 @@
+{
+  "extension": "apiRetry",
+  "description": "模型请求在重试：harness 自己重试一次失败的模型请求（Claude Code 的 CLI 遇到连接中断、过载、5xx 时默认最多重试 10 次），回合不失败。订阅着会话的连接收到第几次、最多几次、原因，重试结束时收到空的状态；失败那次已经流出来、没定稿的半截回答撤掉。类型在 packages/protocol/src/api-retry.mts。",
+  "appliesTo": "claude-code 入口（原生运行方式）。聚合面原样转发通知，不加也不删。",
+  "declaration": {
+    "description": "客户端握手时在 capabilities.litchExtensions 里声明 apiRetry，表示它认识 litch/turn/apiRetry/updated。聚合面把客户端的 capabilities 原样带给每个上游，入口按这条连接的声明决定发不发。",
+    "where": "initialize.params.capabilities.litchExtensions",
+    "schema": { "type": "array", "items": { "type": "string" }, "contains": { "const": "apiRetry" } }
+  },
+  "undeclared": "没声明的连接只收到上游的 error 通知（willRetry 为真，message 照上游写成“Reconnecting... 第几次/最多几次”，带 codexErrorInfo 和 additionalDetails），和上游 codex 重试时一样；作废的半截回答收到正文为空的 item/completed。",
+  "rules": [
+    "CLI 每次重试前在 SDK 流里发 system/api_retry（attempt、max_retries、retry_delay_ms、error_status、error、no_response）。入口每收到一条，给订阅着会话的每条连接发一条 error（willRetry 为真），给其中声明了的连接再发 litch/turn/apiRetry/updated，retry 是这一次的状态。",
+    "重试结束：新一次请求开始流出内容（message_start）、来了助手消息或回合结束时，给声明了的连接发一条 retry 为 null 的 litch/turn/apiRetry/updated。",
+    "CLI 只在这次请求还没出过一条助手消息时重试；已经出过的话它不重试，而是留下收到的部分、让模型接着说。所以重试时作废的只有流式增量推出来、还没定稿的那一段正文：入口把这段回答（以及它在计划模式下开出的计划条目）从回合里删掉，对它们发一次正文为空的 item/completed，并在这条通知的 discardedItemIds 里列出来。",
+    "回合的 token 用量照 CLI 结果里的 usage 记一次，CLI 已把失败那次请求花掉的算进去；原生记录里只有成功的那一次。"
+  ],
+  "parts": [
+    {
+      "kind": "ServerNotification",
+      "methods": ["litch/turn/apiRetry/updated"],
+      "description": "只发给订阅着会话、声明了 apiRetry 的连接。参数见 api-retry.mts 的 ApiRetryUpdatedNotification。"
+    }
+  ]
+}

@@ -763,6 +763,10 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     'turn/started': (live, { turn }) => putTurn(live, turn),
     'turn/completed': (live, { turn }) => {
       putTurn(live, turn)
+      // 回合结束了，还在重试的那一句不留着（对面一般在结束前已经说过重试结束了）
+      const viewId = viewTurn(live, turn.id)
+      if (live.view?.turns.find((entry) => entry.id === viewId)?.retry)
+        emit(live, [{ op: 'turn.retry', turnId: viewId, retry: null }])
       markGoalTurn(live, viewTurn(live, turn.id))
       settleItems(live, turn.id, turn.status === 'completed')
       settleTodo(live, turn.id)
@@ -810,6 +814,28 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       if (current?.kind !== 'fileChange') return
       const item: ItemView = { ...current, changes: changes.map(projectFileChange) }
       emit(live, [{ op: 'item.add', turnId: viewId, item }])
+    },
+    // 模型请求在重试（apiRetry 扩展）：状态行写第几次和原因，重试结束时去掉。
+    // 失败那次流出来的半截回答对面已经删了，这里也撤掉
+    'litch/turn/apiRetry/updated': (live, { turnId, retry, discardedItemIds }) => {
+      const viewId = viewTurn(live, turnId)
+      const ops: SessionOp[] = (discardedItemIds ?? []).map((itemId) => ({
+        op: 'item.remove',
+        turnId: viewId,
+        itemId: viewItem(live, viewId, itemId),
+      }))
+      if (retry || live.view?.turns.find((entry) => entry.id === viewId)?.retry)
+        ops.push({
+          op: 'turn.retry',
+          turnId: viewId,
+          retry: retry && {
+            attempt: retry.attempt,
+            maxRetries: retry.maxRetries,
+            reason: retry.reason,
+            httpStatus: retry.httpStatus,
+          },
+        })
+      emit(live, ops)
     },
     error: (live, { error, willRetry, turnId }) => {
       // 不再重试的错误，随后的“回合结束”里带着同样的原因；这里只留个记录

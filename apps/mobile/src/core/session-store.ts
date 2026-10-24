@@ -344,6 +344,9 @@ export class SessionStore {
         // 回合开始、结束改变“有回合在跑”
         this.metaDirty = true
         return
+      case 'turn.retry':
+        mark(op.turnId)
+        return
       case 'item.add': {
         this.itemTurn.set(op.item.id, op.turnId)
         mark(op.turnId)

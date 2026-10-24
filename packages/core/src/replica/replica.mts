@@ -939,6 +939,11 @@ export function createReplica(channel: CoreChannel): Replica {
           })
         return
       }
+      case 'turn.retry': {
+        const turn = store.get<TurnView>(turnKey(op.turnId))
+        if (turn) store.set(turnKey(op.turnId), { ...turn, retry: op.retry })
+        return
+      }
       case 'item.add': {
         store.set(itemKey(op.item.id), op.item)
         if (op.item.kind === 'userMessage' && op.item.event) {

@@ -32,7 +32,7 @@ import {
 import { useT } from '../app/appearance.ts'
 import { useElapsed } from '../app/clock.ts'
 import { downHarness, downText, nameOf } from '../app/device.ts'
-import { duration, elapsed } from '../app/format.ts'
+import { duration, elapsed, retryText } from '../app/format.ts'
 import { useKey, useServices } from '../app/services.tsx'
 import { TurnOrigin } from '../background/TurnOrigin.tsx'
 import { Dock, Requests } from '../composer/Dock.tsx'
@@ -239,6 +239,8 @@ const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { 
   const { blocks, remind, answerId, processIds } = useBlocks(ref, turn?.itemIds ?? [], turn?.status)
   const settled = useSettled(ref, running, answerId, meta?.can.finalOnStart === true)
   const working = useLasting(useWorking(ref, running, turn?.itemIds ?? NO_ITEMS), WORKING_DELAY_MS)
+  // 模型请求在重试：状态行一直显出，后面写第几次和原因，重试结束（新一次出字）就去掉
+  const retry = running ? (turn?.retry ?? null) : null
   const touched = useTurnTouched(sessionKey, turnId)
   // 待办在右边的信息栏里时，对话里不再画一遍
   const todoInRail = useRailHasTodo(sessionKey)
@@ -369,12 +371,13 @@ const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { 
           <div
             className="running-line slot"
             data-anchor={`t:${turnId}`}
-            data-hidden={working ? undefined : ''}
-            aria-hidden={!working}
+            data-hidden={working || retry ? undefined : ''}
+            aria-hidden={!working && !retry}
           >
             <i className="st run" />
             <span>{t('turn.working', { name: nameOf(device, meta?.harness ?? '') })}</span>
             <TurnElapsed since={turn.startedAt} />
+            {retry ? <span className="running-retry">{retryText(retry, t)}</span> : null}
           </div>
         ) : (
           <div className="turn-foot" data-anchor={`t:${turnId}`}>

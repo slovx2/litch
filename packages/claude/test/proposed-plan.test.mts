@@ -66,3 +66,11 @@ test('PLAN-PARSE-004：没有计划块时字原样放出，不以 < 开头的行
   assert.deepEqual(parser.push('se 体'), [{ type: 'text', text: '<prose 体' }])
   assert.deepEqual(parser.finish(), [])
 })
+
+test('PLAN-PARSE-005：流出来的回答作废（模型请求重试）时 reset，攒着的半行和计划块都不要了', () => {
+  const parser = new ProposedPlanParser()
+  parser.push('<proposed_plan>\n- 第一步\n<pro')
+  parser.reset()
+  assert.deepEqual(parser.push('重新回答\n'), [{ type: 'text', text: '重新回答\n' }])
+  assert.deepEqual(parser.finish(), [])
+})

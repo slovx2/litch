@@ -5,6 +5,11 @@ import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { isDeepStrictEqual } from 'node:util'
 import {
+  API_RETRY_NOTIFICATION,
+  type ApiRetryUpdatedNotification,
+  type TurnApiRetry,
+} from '../../protocol/src/api-retry.mjs'
+import {
   BACKGROUND_TASKS_NOTIFICATION,
   type LitchTurnOrigin,
 } from '../../protocol/src/background-tasks.mjs'
@@ -29,6 +34,7 @@ import {
 import { ProcessRpc } from '../../shared/src/process-rpc.mjs'
 import { projectRequest } from '../../shared/src/project-rpc.mjs'
 import { BROADCAST_THREAD_NOTIFICATIONS } from '../../shared/src/protocol-contract.mjs'
+import { retryTurnError } from './api-retry.mjs'
 import { allowsApproval } from './approval-policy.mjs'
 import { approvalRequest, mcpToolApprovalDecision, sessionGrantKey } from './approval-request.mjs'
 import {
@@ -4161,6 +4167,10 @@ export class CodexClaudeAppServer {
     let planMode = turnSettings.planMode === true
     let planItemId: string | null = null
     const planText = new ProposedPlanParser()
+    // 这次模型请求（上一个 message_boundary 之后）流出来的字开的回答、计划条目：请求重试时它们作废
+    const streamItems: string[] = []
+    // CLI 正在重试模型请求（apiRetry 扩展）：回合结束时还没重试完的，告诉客户端重试结束了
+    let apiRetrying = false
     const completePlanItem = (): void => {
       if (!planItemId) return
       const item = this.store.getTurn(turn.id)?.items.find((i) => i.id === planItemId)
@@ -4174,6 +4184,7 @@ export class CodexClaudeAppServer {
     const ensurePlanItem = (): string => {
       if (planItemId) return planItemId
       planItemId = newId()
+      streamItems.push(planItemId)
       const item: ThreadItem = { type: 'plan', id: planItemId, text: '' }
       this.store.appendItem(turn.id, item)
       this.notify(peer, {
@@ -4185,6 +4196,7 @@ export class CodexClaudeAppServer {
     const ensureAgentItem = (): string => {
       if (agentItemId) return agentItemId
       agentItemId = newId()
+      streamItems.push(agentItemId)
       const item: ThreadItem = {
         type: 'agentMessage',
         id: agentItemId,
@@ -4275,6 +4287,30 @@ export class CodexClaudeAppServer {
     const completeMessage = (phase: 'commentary' | 'final_answer' = 'commentary'): void => {
       completeReasoningItem()
       completeAgentItem(phase)
+    }
+    // 模型请求要重试，失败那次流出来的回答、计划作废：从回合里删掉，每条连接都收到一次正文为空的完成
+    // （没声明 apiRetry 的客户端据此清掉已经显示的字），返回删掉了哪些
+    const discardStreamItems = (): string[] => {
+      planText.reset()
+      agentItemId = null
+      planItemId = null
+      const discarded: string[] = []
+      for (const itemId of streamItems.splice(0)) {
+        const item = this.store.getItem(turn.id, itemId)
+        if (item?.type !== 'agentMessage' && item?.type !== 'plan') continue
+        this.store.removeItem(turn.id, itemId)
+        discarded.push(itemId)
+        this.notify(peer, {
+          method: 'item/completed',
+          params: {
+            threadId: thread.id,
+            turnId: turn.id,
+            item: { ...item, text: '' },
+            completedAtMs: nowMillis(),
+          },
+        })
+      }
+      return discarded
     }
     // CLI 回合中途自己压缩上下文（自动压缩）：照上游发一个 contextCompaction 条目，开始时 item/started，
     // 压成了（compact_boundary）才记进回合、发 item/completed；没压成就一直不完成，客户端在回合结束时当它没压完。
@@ -5000,6 +5036,18 @@ export class CodexClaudeAppServer {
           }
           if (event.type === 'message_boundary') {
             completeMessage()
+            streamItems.length = 0
+            return
+          }
+          if (event.type === 'api_retry') {
+            const discarded = event.discarded ? discardStreamItems() : []
+            apiRetrying = true
+            this.announceApiRetry(peer, thread.id, turn.id, event.retry, discarded)
+            return
+          }
+          if (event.type === 'api_retry_resolved') {
+            if (apiRetrying) this.announceApiRetry(peer, thread.id, turn.id, null, [])
+            apiRetrying = false
             return
           }
           if (event.type === 'peer_message') {
@@ -5769,6 +5817,8 @@ export class CodexClaudeAppServer {
             return
           }
           if (event.type === 'completed') {
+            if (apiRetrying) this.announceApiRetry(peer, thread.id, turn.id, null, [])
+            apiRetrying = false
             if (event.claudeSessionId) {
               // Codex-backed threads route the SAME claudeSessionId slot into
               // codex_session_id (used as `codex exec resume <id>` on the
@@ -7831,6 +7881,39 @@ export class CodexClaudeAppServer {
     if (turnsPage) strip(body.data)
     else strip(asRecord(body.thread).turns)
     return result
+  }
+
+  // ── 模型请求在重试（apiRetry 扩展）──
+
+  /**
+   * 重试开始、又一次重试（retry 是这一次的状态）、重试结束（null）。订阅着会话的每条连接收到上游的 error
+   * （willRetry 为真，和上游 codex 重试时一样），其中声明了 apiRetry 的再收到结构化的那一份
+   */
+  private announceApiRetry(
+    peer: RpcPeer,
+    threadId: string,
+    turnId: string,
+    retry: TurnApiRetry | null,
+    discardedItemIds: string[],
+  ): void {
+    if (retry)
+      this.notify(peer, {
+        method: 'error',
+        params: { threadId, turnId, willRetry: true, error: retryTurnError(retry) },
+      })
+    this.notify(
+      peer,
+      {
+        method: API_RETRY_NOTIFICATION.updated,
+        params: {
+          threadId,
+          turnId,
+          retry,
+          ...(discardedItemIds.length > 0 ? { discardedItemIds } : {}),
+        } satisfies ApiRetryUpdatedNotification,
+      },
+      (target) => this.peerFeatures.get(target)?.extensions.has(EXTENSION.apiRetry) === true,
+    )
   }
 
   // ── 后台任务（backgroundTasks 扩展）──

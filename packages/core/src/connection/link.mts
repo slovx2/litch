@@ -227,6 +227,8 @@ export function createLink(options: LinkOptions): Link {
                 // backgroundTasks：声明了，会话对象上才有后台任务的集合 litchBackground、回合上才有来历 litchOrigin，
                 // 才收得到集合变了的通知（litch/thread/background/changed）
                 EXTENSION.backgroundTasks,
+                // apiRetry：声明了才收得到模型请求重试的通知（litch/turn/apiRetry/updated），回合状态行写“重试中”
+                EXTENSION.apiRetry,
                 // clientTools：litch_ 开头的命名空间的工具调用交给声明了的连接执行（内置浏览器、Computer Use）
                 ...(tools.length > 0 ? [EXTENSION.clientTools] : []),
               ],

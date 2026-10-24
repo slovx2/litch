@@ -168,6 +168,11 @@ const ORGANIZES_ELSEWHERE = /别处整理|organize elsewhere/i
 /** 发的话里带这些字样时，回答里带一张 mermaid 图和一张画不出来的。给界面试画图、切源码、语法错时退回源码用 */
 const DRAWS = /画图|draw a diagram/i
 
+/** 发的话里带这些字样时，模拟的回合先重试两次模型请求（连接中断、服务过载）再回话。给界面试状态行上的“重试中”用 */
+const RETRIES = /重试请求|retry the request/i
+/** 模拟的每次重试停多久 */
+const RETRY_MS = 4000
+
 /** 发的话里带这些字样时，回答里带着几种写法的文件路径。给界面试“对话里的路径可以点开”用 */
 const SHOWS_FILES = /看文件|show files/i
 
@@ -842,6 +847,10 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       reply(view, turnId, SAMPLE_TEXT[lang].diagramReply)
       return turnId
     }
+    if (RETRIES.test(message.text)) {
+      retryThenReply(view, turnId)
+      return turnId
+    }
     if (EDITS_FILES.test(message.text)) {
       applySessionOps(view, [
         {
@@ -990,6 +999,32 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       replies.set(sessionKey(view), clock.setTimer(step, every))
     }
     replies.set(sessionKey(view), clock.setTimer(start, RUN_MS))
+  }
+
+  /** 模型请求重试两次（apiRetry 扩展的样子），重试结束后照常回话（见 RETRIES） */
+  const retryThenReply = (view: SessionView, turnId: string) => {
+    const retry = (
+      attempt: number,
+      reason: 'connection' | 'overloaded',
+      httpStatus: number | null,
+    ) =>
+      applySessionOps(view, [
+        { op: 'turn.retry', turnId, retry: { attempt, maxRetries: 10, reason, httpStatus } },
+      ])
+    retry(1, 'connection', null)
+    replies.set(
+      sessionKey(view),
+      clock.setTimer(() => {
+        retry(2, 'overloaded', 529)
+        replies.set(
+          sessionKey(view),
+          clock.setTimer(() => {
+            applySessionOps(view, [{ op: 'turn.retry', turnId, retry: null }])
+            reply(view, turnId, SAMPLE_TEXT[lang].retryReply)
+          }, RETRY_MS),
+        )
+      }, RETRY_MS),
+    )
   }
 
   /** 回合里按真的时间来一串过程，步与步之间停一会儿，最后照常回话（见 KEEPS_BUSY） */

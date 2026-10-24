@@ -2,6 +2,9 @@
 // codex.mts 是 Codex 原有的，extensions.mts 是我们加的，两边分开放，
 // 改上游的类型时不会碰到我们的扩展。
 
+// 模型请求在重试（apiRetry 扩展）：回合状态行上的“重试中”。不依赖别的文件
+export type * from './api-retry.mjs'
+export { API_RETRY_NOTIFICATION } from './api-retry.mjs'
 // 后台任务（backgroundTasks 扩展）：会话上回合结束后还在跑的工作、回合是谁开的。不依赖别的文件
 export type * from './background-tasks.mjs'
 export {

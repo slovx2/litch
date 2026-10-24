@@ -50,6 +50,13 @@ export class ProposedPlanParser {
     return segments
   }
 
+  // 流出来的这段回答作废了（模型请求重试）：攒着的和在不在计划块里都不要了，从头开始
+  reset(): void {
+    this.inPlan = false
+    this.detectTag = true
+    this.line = ''
+  }
+
   // 一段回答说完了：攒着的那一行按完整的一行算，没合上的计划块就此合上。
   finish(): ProposedPlanSegment[] {
     const segments: ProposedPlanSegment[] = []

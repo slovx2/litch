@@ -44,6 +44,9 @@ export function protocolEnv(
       : { ANTHROPIC_API_KEY: 'test-not-a-secret' }),
     ANTHROPIC_BASE_URL: baseURL,
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
+    // 默认关掉 CLI 自己的重试（和用户在 harness 环境里关掉一样，入口不盖它）：假模型按计划一条请求回一个应答，
+    // 失败的应答被 CLI 重放会打乱计划。测重试的用例经 extraEnv 打开
+    CLAUDE_CODE_MAX_RETRIES: '0',
     DISABLE_AUTOUPDATER: '1',
     DISABLE_TELEMETRY: '1',
     DISABLE_ERROR_REPORTING: '1',

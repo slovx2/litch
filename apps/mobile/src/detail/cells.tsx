@@ -14,7 +14,7 @@ import {
   View,
 } from 'react-native'
 import { EnrichedMarkdownText } from 'react-native-enriched-markdown'
-import { duration, elapsed } from '../../../../packages/ui/src/app/format.ts'
+import { duration, elapsed, retryText } from '../../../../packages/ui/src/app/format.ts'
 import type { Row } from '../core/rows'
 import { experiment } from '../experiment'
 import { noteWork } from '../probe'
@@ -335,16 +335,19 @@ export const StatusCell = memo(function StatusCell({ row }: Props<'status'>) {
   const { c, font } = useTheme()
   const t = useT()
   const { turnMenu, harness } = useTranscript()
-  const working = useLasting(row.working)
+  // 模型请求在重试时一直写着：手机上窄，第几次和原因写在最前面，不再写“正在工作”
+  const retry = row.status === 'running' ? row.retry : null
+  const working = useLasting(row.working) || retry !== null
   const spent = useTicking(working ? row.startedAt : null)
   const time = row.durationMs == null ? '' : ` · ${duration(row.durationMs, t)}`
+  const took = spent !== null && spent >= 1000 ? ` · ${elapsed(spent, t)}` : ''
   const text =
     row.status === 'running'
-      ? working
-        ? `${t('turn.working', { name: harness })}${
-            spent !== null && spent >= 1000 ? ` · ${elapsed(spent, t)}` : ''
-          }`
-        : ''
+      ? retry
+        ? took
+        : working
+          ? `${t('turn.working', { name: harness })}${took}`
+          : ''
       : row.status === 'completed'
         ? `${t('turn.completed')}${time}`
         : row.status === 'interrupted'
@@ -360,6 +363,7 @@ export const StatusCell = memo(function StatusCell({ row }: Props<'status'>) {
         ]}
         numberOfLines={1}
       >
+        {retry ? <Text style={{ color: c.wait }}>{retryText(retry, t)}</Text> : null}
         {text}
       </Text>
       {row.status === 'running' ? null : (

@@ -451,6 +451,14 @@
   color: var(--ink-3);
   font-variant-numeric: tabular-nums;
 }
+/* 模型请求在重试：第几次和原因 */
+.running-retry {
+  color: var(--wait);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .running-line.slot {
   height: 18px;
   transition: opacity 0.2s ease;
