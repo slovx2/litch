@@ -230,20 +230,28 @@ function settle(contents: WebContents, maxMs = SETTLE_MS): Promise<'navigated' |
   })
 }
 
-/** 交上去：有按钮提示且在主框架里，对按钮中心真的点一下；不然在框里真的按回车；表单还没交就 requestSubmit 兜底 */
+/** 预加载 focus 的回答；method 是表单这会儿实际用的方法 */
+type Focused = {
+  ok?: boolean
+  point?: { x: number; y: number } | null
+  method?: string | null
+} | null
+
+/**
+ * 交上去：有按钮提示且在主框架里，对按钮中心真的点一下；不然在框里真的按回车；表单还没交就 requestSubmit 兜底。
+ * 表单这会儿是用 GET 交的就不提交，回 false
+ */
 async function submit(
   contents: WebContents,
   frame: WebFrameMain,
   token: string,
   field: 'username' | 'password',
   button: boolean,
-): Promise<void> {
+): Promise<boolean> {
   let clicked = false
   if (button && frame === contents.mainFrame) {
-    const focused = (await askFrame(frame, 'focus', { token, which: 'submit' })) as {
-      ok?: boolean
-      point?: { x: number; y: number } | null
-    }
+    const focused = (await askFrame(frame, 'focus', { token, which: 'submit' })) as Focused
+    if (focused?.method === 'get') return false
     if (focused?.ok && focused.point && !contents.isDestroyed()) {
       const zoom = contents.getZoomFactor()
       const x = Math.round(focused.point.x * zoom)
@@ -254,8 +262,9 @@ async function submit(
     }
   }
   if (!clicked) {
-    await askFrame(frame, 'focus', { token, which: field })
-    if (contents.isDestroyed()) return
+    const focused = (await askFrame(frame, 'focus', { token, which: field })) as Focused
+    if (focused?.method === 'get') return false
+    if (contents.isDestroyed()) return true
     contents.sendInputEvent({ type: 'keyDown', keyCode: 'Enter' })
     contents.sendInputEvent({ type: 'char', keyCode: '\r' })
     contents.sendInputEvent({ type: 'keyUp', keyCode: 'Enter' })
@@ -265,6 +274,7 @@ async function submit(
   if (!contents.isDestroyed() && !contents.isLoading()) {
     await askFrame(frame, 'submit', { token }, 800)
   }
+  return true
 }
 
 /** 填一步：值只送进这一个框架；网页把值改回去的框，聚焦后用真的输入再填 */
@@ -407,7 +417,10 @@ export async function fillTab(input: {
   if (!ok) return end('page_changed')
   // 先开始等落定再提交：提交引起的换页可能在提交这一步里就完成了
   let landing = settle(contents)
-  await submit(contents, first.frame, token, twoStep ? 'username' : 'password', input.submitHint)
+  const field = twoStep ? 'username' : 'password'
+  if (!(await submit(contents, first.frame, token, field, input.submitHint))) {
+    return end('insecure')
+  }
   submitted = true
   let landed = await landing
   if (landed === 'gone') return end(null, true)
@@ -441,7 +454,7 @@ export async function fillTab(input: {
       return end('page_changed')
     }
     landing = settle(contents)
-    await submit(contents, second.frame, token, 'password', false)
+    if (!(await submit(contents, second.frame, token, 'password', false))) return end('insecure')
     landed = await landing
     if (landed === 'gone') return end(null, true)
     if (landed === 'navigated') navigated = true

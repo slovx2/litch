@@ -148,7 +148,8 @@ test('登记：账号用随机 ref 指，条目号不出登记；代填答复给
   assert.ok(card)
   assert.equal(card.stage, 'choose')
   assert.equal(card.accounts.length, 2)
-  assert.ok(!JSON.stringify(card).includes('e1'))
+  // 随机的 ref、nonce 里可能碰巧有 e1：按 JSON 里的整个字符串值找
+  assert.ok(!JSON.stringify(card).includes('"e1"'))
   assert.equal(card.accounts[0]?.masked, 'so•••@example.com')
   assert.equal(card.accounts[0]?.lastUsed, 10)
   assert.ok(card.nonce.length >= 16)

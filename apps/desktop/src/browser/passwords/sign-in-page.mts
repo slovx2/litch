@@ -158,6 +158,33 @@ function visibleToUser(element: HTMLElement): boolean {
   return hit instanceof HTMLLabelElement && hit.control === element
 }
 
+const methodOf = (value: string | null) => {
+  const one = value?.trim().toLowerCase()
+  return one === 'post' || one === 'dialog' ? one : 'get'
+}
+
+/**
+ * 表单实际用什么方法交（小写）：提交用的按钮（给了的，不然是表单的默认按钮，也就是回车交的那个）写了
+ * formmethod 的按它，不然按表单的 method；没写、写错都是 HTML 的默认 get。不在表单里是 null。
+ * 读属性不读 form.method：表单里叫 method 的输入框会把它盖掉
+ */
+function submitMethod(form: HTMLFormElement | null, submit: HTMLElement | null): string | null {
+  if (!form) return null
+  const button =
+    submit ??
+    form.querySelector(
+      'button:not([type]), button[type="submit"], input[type="submit"], input[type="image"]',
+    )
+  if (button?.hasAttribute('formmethod')) return methodOf(button.getAttribute('formmethod'))
+  return methodOf(form.getAttribute('method'))
+}
+
+/** 这次代填认出的框所在的表单 */
+const formOf = (one: Session) => {
+  const field = one.fields.password ?? one.fields.username
+  return field?.isConnected ? field.form : null
+}
+
 /**
  * 认这个框架里的登录表单。hintToken 是主进程加提示时用的口令（没有提示是 null）。begin 为真时开一次代填
  * （记下认出的框，之后的填、聚焦、提交按 token 找；出卡片时的预检不开，免得人自己登录时不出保存提示）。
@@ -233,8 +260,7 @@ export function probeLogin(token: string, hintToken: string | null, begin: boole
   if (begin) session = { token, fields: { username, password }, submit, submitted: false }
   return report(password ? 'login' : 'username', {
     visible,
-    // 没写 method 的（单页应用常这样，提交由脚本拦下）报 default，只有写明 get 的算用 GET 交
-    method: form ? (form.getAttribute('method')?.toLowerCase() ?? 'default') : null,
+    method: submitMethod(form, submit),
     action: form ? form.action : null,
   })
 }
@@ -274,7 +300,7 @@ export function fillLogin(
 export function focusField(
   token: string,
   which: 'username' | 'password' | 'submit',
-): { ok: boolean; point: { x: number; y: number } | null } {
+): { ok: boolean; point: { x: number; y: number } | null; method: string | null } {
   const one = current(token)
   const element =
     which === 'submit'
@@ -282,20 +308,25 @@ export function focusField(
       : which === 'username'
         ? one?.fields.username
         : one?.fields.password
-  if (!element?.isConnected) return { ok: false, point: null }
+  if (!one || !element?.isConnected) return { ok: false, point: null, method: null }
   element.focus()
   if (element instanceof HTMLInputElement) element.select()
   const rect = element.getBoundingClientRect()
-  return { ok: true, point: { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 } }
+  return {
+    ok: true,
+    point: { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 },
+    // 提交前再看一次方法：出卡片之后网页可能改了表单、按钮
+    method: submitMethod(formOf(one), one.submit),
+  }
 }
 
 /** 回车没交上去时的兜底：表单的 requestSubmit()。已经交过回 true；没有表单回 false */
 export function requestSubmit(token: string): boolean {
   const one = current(token)
-  if (one?.submitted) return true
-  const field = one?.fields.password ?? one?.fields.username
-  const form = field?.isConnected ? field.form : null
-  if (!form) return false
+  if (!one) return false
+  if (one.submitted) return true
+  const form = formOf(one)
+  if (!form || submitMethod(form, one.submit) === 'get') return false
   try {
     form.requestSubmit()
     return true

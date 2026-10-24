@@ -5,21 +5,14 @@
 // - 自检时找“那串密码”：不把密码送进每个框架，只送一个滚动哈希（两组随机底数、两个模数），框架里按长度滑窗比对。
 //   碰巧撞上的概率约 2^-52，撞上了只是当“不干净”关掉重开，不会放过真的泄露。
 
+import type { SignInFillFailure } from '../../../../../packages/protocol/src/client-tools-browser.mjs'
 import type { SignInBlock } from './signin.mjs'
 
 /** 冻结之前给代理指的元素加的一次性标记（tools-signin.mts 加，sign-in-page.mts 取走） */
 export const HINT_ATTRIBUTE = 'data-litch-sign-in'
 
-/** 代填没做成的原因（给代理的固定几种，tools-signin.mts 拼成文字） */
-export type FillFailure =
-  | 'origin_changed'
-  | 'page_changed'
-  | 'locator_invalid'
-  | 'not_user_visible'
-  | 'insecure'
-  | 'popup_needed'
-  | 'no_answer'
-  | 'unavailable'
+/** 代填没做成的原因（给代理的固定几种，文字在协议包的 SIGN_IN_FILL_FAILURES） */
+export type FillFailure = SignInFillFailure
 
 /** 预加载在一个框架里看到的登录表单（不带任何值） */
 export interface LoginReport {
@@ -29,7 +22,7 @@ export interface LoginReport {
   hint: 'none' | 'ok' | 'invalid'
   /** 要填的框都看得见：有大小、不透明、不在页面外、中心点上取到的是它自己 */
   visible: boolean
-  /** 表单写明的方法（小写），没写是 default；不在表单里是 null。只有写明 get 的算用 GET 交 */
+  /** 表单实际交的方法（小写，提交按钮的 formmethod 优先，没写是 HTML 默认的 get）；不在表单里是 null */
   method: string | null
   /** 表单交去的地址（form.action 解析后的）；不在表单里是 null */
   action: string | null

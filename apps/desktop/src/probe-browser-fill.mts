@@ -2,7 +2,8 @@
 // 真的宿主、真的预加载和主进程接线、真的观察闸；密码库用临时目录里的、加密器是假的（不碰钥匙串）。
 // 窗口显示在屏幕上（真的点击、按键要窗口在前台）。测试网页在回环上（probe-browser-fill-pages.mts）。
 // 泄露用例逐条：执行过脚本的页面、“显示密码”的按钮当提交、GET 表单、单页应用不换文档、页面把密码打进控制台、
-// 改标题、弹框带密码、OAuth 弹窗、编号指向搜索框、两步登录、验证码页。每一条都查：代理拿到的所有工具结果里
+// 改标题、弹框带密码、OAuth 弹窗、编号指向搜索框、两步登录、验证码页、没写 method、按钮 formmethod 是 get、
+// 提交前改成 GET、代填后后退。每一条都查：代理拿到的所有工具结果里
 // 没有那串密码，代填的提交不出保存提示，服务器收到的是对的账号。
 // 结果打一行 LITCH_BROWSER {ok, checks}。
 import { mkdtempSync, rmSync } from 'node:fs'
@@ -53,6 +54,9 @@ function serve(): Promise<{
   const pages: Record<string, string> = {
     '/plain': PAGES.PLAIN,
     '/get': PAGES.GET_FORM,
+    '/no-method': PAGES.NO_METHOD,
+    '/button-get': PAGES.BUTTON_GET,
+    '/method-flip': PAGES.METHOD_FLIP,
     '/search': PAGES.SEARCH,
     '/step1': PAGES.STEP1,
     '/otp-login': PAGES.OTP_LOGIN,

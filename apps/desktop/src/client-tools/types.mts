@@ -87,6 +87,8 @@ export type ClientToolAsk =
       fillBlocked: string | null
       /** 定时任务的回合才有 */
       taskId: string | null
+      /** 定时任务的回合：任务的号和名字（卡片上显示“定时任务 X 要登录”） */
+      task?: { id: string; name: string } | null
       /** 毫秒，只有定时任务的回合有 */
       expiresAt: number | null
       /** 桌面端出的随机数：转给手机，手机的答复要签上它 */

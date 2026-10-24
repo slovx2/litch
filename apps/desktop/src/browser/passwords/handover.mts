@@ -190,7 +190,11 @@ const sessionOf = (owner: { deviceId: string; threadId: string }) =>
   `${owner.deviceId}\u0000${owner.threadId}`
 
 /** 对话里的那张卡片（和面板上的同一张，ClientToolAsk 的 signIn） */
-const askOf = (card: SignInRequest, desktopId: string | null): ClientToolAsk => ({
+const askOf = (
+  card: SignInRequest,
+  task: { id: string; name: string } | null,
+  desktopId: string | null,
+): ClientToolAsk => ({
   kind: 'signIn',
   id: card.id,
   origin: card.origin,
@@ -199,6 +203,7 @@ const askOf = (card: SignInRequest, desktopId: string | null): ClientToolAsk => 
   accounts: card.accounts.map((one) => ({ ...one })),
   fillBlocked: card.fillBlocked,
   taskId: card.taskId,
+  task,
   expiresAt: card.expiresAt,
   nonce: card.nonce,
   desktopId,
@@ -357,6 +362,8 @@ export function createHandover(options: HandoverOptions): BrowserHandover {
       const unfreeze = () => {
         if (!contents.isDestroyed()) {
           contents.removeListener('before-input-event', holdKeys)
+          // 清掉这个标签的历史（连带往返缓存）：不然后退会原样拿回填过密码、人输过密码的那一页
+          contents.navigationHistory.clear()
           forget(page)
           setGated(contentsId, false)
           setHandedOver(contentsId, false)
@@ -423,16 +430,25 @@ export function createHandover(options: HandoverOptions): BrowserHandover {
       const runFill = async (entryId: string, preauthorized: boolean): Promise<SignInOutcome> => {
         if (!store) return { kind: 'fillFailed', why: 'unavailable', reopened: null }
         setGated(contentsId, true)
-        const report = await fillTab({
-          contents,
-          store,
-          entryId,
-          origin,
-          hintToken,
-          submitHint: ask.submitHint,
-          related: () => related(contents),
-          since,
-        })
+        let report: Awaited<ReturnType<typeof fillTab>> | null = null
+        try {
+          report = await fillTab({
+            contents,
+            store,
+            entryId,
+            origin,
+            hintToken,
+            submitHint: ask.submitHint,
+            related: () => related(contents),
+            since,
+          })
+        } finally {
+          // 代填中途抛了：页面上可能留着密码，不解冻交回，关掉这个标签（解冻、关闸随它）
+          if (!report) {
+            if (!contents.isDestroyed()) setGated(contentsId, false)
+            fail()
+          }
+        }
         if (report.gone || contents.isDestroyed()) return gone()
         let reopened: string | null = null
         if (report.clean) unfreeze()
@@ -526,7 +542,7 @@ export function createHandover(options: HandoverOptions): BrowserHandover {
         retract = null
         mirrored = key
         if (want && ask.show) {
-          retract = ask.show(askOf(want, options.desktopId?.() ?? null), (answer) => {
+          retract = ask.show(askOf(want, ask.task, options.desktopId?.() ?? null), (answer) => {
             // 核心那条路回来的拒绝（界面本该走浏览器桥）
             if (answer === 'decline') signIns.answer(begun.id, 'cancel')
           })

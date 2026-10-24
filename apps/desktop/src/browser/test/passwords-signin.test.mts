@@ -522,7 +522,7 @@ test('Litch 代填了：只说用了人批准的账号、页面换到哪，不�
   )
   const text = textOf(reply)
   assert.equal(reply.success, true)
-  assert.match(text, /Litch filled the account the user approved and submitted the sign-in/)
+  assert.match(text, /Litch filled the account the user approved and submitted; the page loaded/)
   assert.match(text, /the page loaded http:\/\/localhost:3000/)
   assert.match(text, /Take a fresh snapshot/)
   assert.doesNotMatch(text, /did not load a new document/)
@@ -544,7 +544,7 @@ test('Litch 代填的几种说法：没换文档、要验证码、还停在登�
   }
   assert.match(
     await say(filled({ navigated: false })),
-    /did not load a new document; Litch cleared/,
+    /did not load a new document, and Litch cleared/,
   )
   assert.match(
     await say(filled({ verification: true })),
@@ -578,15 +578,15 @@ test('代填做不了、源对不上、过期、同回合拒绝过：各自的�
     return textOf(await run('request_sign_in', { reason: 'r', ...args }))
   }
   const failed = await say({ kind: 'fillFailed', why: 'insecure', reopened: null })
-  assert.match(failed, /could not sign in to localhost:3000 automatically: insecure/)
-  assert.match(failed, /`request_sign_in` again so the user can sign in themselves/)
+  assert.match(failed, /could not sign in automatically \(insecure\)/)
+  assert.match(failed, /Do not sign in on this page/)
   assert.match(
     await say({ kind: 'fillFailed', why: 'popup_needed', reopened: 't9' }),
     /popup_needed.*new tab t9/,
   )
   assert.match(
     await say('origin_changed', { origin: 'https://github.com' }),
-    /not on https:\/\/github.com, so no sign-in was requested/,
+    /\(origin_changed\): the page is not on the origin you gave/,
   )
   assert.match(await say('expired'), /expired before anyone answered/)
   assert.match(await say('declined'), /declined signing in/)

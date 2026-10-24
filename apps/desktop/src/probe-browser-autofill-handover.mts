@@ -168,7 +168,12 @@ export async function checkHandoverFailures(options: {
   )
   signIns.answer(signIns.list()[0]?.id ?? '', 'cancel')
   await asking
-  check('交接结束后退又能用了', backPage?.info().canGoBack === true)
+  // 交还后这个标签的历史清掉了（连带往返缓存）：后退回不到人输过密码的那一页
+  check(
+    '交接结束后历史清了，后退不回交接前的页面',
+    backPage?.info().canGoBack === false && !!backPage?.info().url.endsWith('/login?second'),
+    backPage?.info(),
+  )
 
   // 4. 回合打断之后回合结束关掉代理的标签：“代理已收回”的卡片随标签撤掉
   await openTab('/login')

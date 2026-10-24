@@ -45,7 +45,9 @@ export async function runCases(kit: FillKit): Promise<void> {
   // 1. 普通表单：卡片列这个源的账号，对话里同一张；代填后换文档，服务器收到对的账号，不出保存提示
   {
     const before = prompts()
-    await open('/plain')
+    const plain = await open('/plain')
+    // 直接在网页里做个记号（不经代理，不算执行过脚本）：后退回来还在就是往返缓存原样拿回的
+    await page(plain, 'window.__litchProbeMark = 1')
     const { card, text } = await request({ answer: 'fill' })
     check(
       '卡片列出这个源的已存账号（完整用户名、打码的、随机 ref），能代填',
@@ -76,6 +78,18 @@ export async function runCases(kit: FillKit): Promise<void> {
     const snapshot = await run('snapshot')
     check('解闸后代理照常能用、看到登进去的页面', /Signed in/.test(snapshot), snapshot)
     check('卡片收掉了', kit.signIns.list().length === 0, kit.signIns.list())
+    // 后退拿不回填过密码的那一页（往返缓存）：代填后这个标签的历史清掉了
+    const tab = current()
+    const history = tab?.view.webContents.navigationHistory
+    const couldGoBack = history?.canGoBack() ?? null
+    const back = await run('navigate', { action: 'back' })
+    const field = await page(current(), "document.getElementById('pass')?.value ?? null")
+    const restored = await page(current(), 'window.__litchProbeMark ?? null')
+    check(
+      '代填后后退再读密码框：读不到密码（历史清了，后退不回登录页）',
+      couldGoBack === false && field !== kit.password && !back.includes(kit.password),
+      { couldGoBack, field, restored, back },
+    )
   }
 
   // 2. 代理先执行过脚本（装了偷看输入的监听）：先重新载入，监听没了；单页应用不换文档，密码框清空
@@ -93,7 +107,7 @@ export async function runCases(kit: FillKit): Promise<void> {
     )
     check(
       '单页应用不换文档：告诉代理没换文档、密码框清了',
-      /did not load a new document; Litch cleared/.test(text),
+      /did not load a new document, and Litch cleared/.test(text),
       text,
     )
     check('单页应用：密码框是空的', (await page(current() ?? tab, 'pass.value')) === '')
@@ -142,6 +156,32 @@ export async function runCases(kit: FillKit): Promise<void> {
       '同一回合同一个源再请求：直接回拒绝，不出卡片',
       /declined signing in/.test(again) && kit.signIns.list().length === 0,
       again,
+    )
+  }
+
+  // 4b. 没写 method（HTML 默认 GET）、按钮 formmethod 是 get：卡片上不能代填；出卡片后才改成 GET 的，提交前挡下
+  for (const path of ['/no-method', '/button-get']) {
+    await open(path)
+    const { card } = await request({ answer: 'cancel', turn: `turn${path}` })
+    check(
+      `${path}：实际用 GET 交，卡片上 fillBlocked 是 insecure`,
+      card?.fillBlocked === 'insecure',
+      card,
+    )
+  }
+  {
+    const posts = postsTo('/welcome').length
+    await open('/method-flip')
+    const { card, text } = await request({ answer: 'fill', turn: 'turn-flip' })
+    const url = current()?.info().url ?? ''
+    check(
+      '提交前网页改成 GET 交：不提交，告诉代理 insecure，密码框清空、地址里没有密码',
+      card?.fillBlocked === null &&
+        /\(insecure\)/.test(text) &&
+        postsTo('/welcome').length === posts &&
+        !url.includes(encodeURIComponent(kit.password)) &&
+        (await page(current(), 'pass.value')) === '',
+      { text, url },
     )
   }
 

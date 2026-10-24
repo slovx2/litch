@@ -5,11 +5,12 @@
 // 可选的 origin 要和页面的真实源完全一样；usernameRef、passwordRef、submitRef 只当提示：冻结之前经 CDP 给这几个元素
 // 加一次性的标记，网页那一侧（passwords/sign-in-page.mts）按标记找，标记必须落在 Litch 认出的登录表单里。
 import { randomUUID } from 'node:crypto'
+import { signInResult } from '../../../../packages/protocol/src/client-tools-browser.mjs'
 import { BadArgs, str } from './args.mjs'
 import type { Call, SignInOutcome, Tool } from './executor.mjs'
 import type { BrowserPage } from './model.mjs'
 import { nodeOf } from './page-ops.mjs'
-import { type FillFailure, HINT_ATTRIBUTE } from './passwords/fill-rules.mjs'
+import { HINT_ATTRIBUTE } from './passwords/fill-rules.mjs'
 
 const MAX_TEXT = 200
 const BUSY =
@@ -25,20 +26,6 @@ const HINTS = [
   ['passwordRef', 'password'],
   ['submitRef', 'submit'],
 ] as const
-
-/** 代填做不了的原因 → 给代理的话 */
-const WHY: Record<FillFailure, string> = {
-  origin_changed: 'the page moved to a different origin before Litch could fill it',
-  page_changed: 'the page changed and the sign-in form Litch found is gone',
-  locator_invalid:
-    'Litch could not tell which sign-in form to fill (the refs you gave are not in the sign-in form Litch found, or the page has several)',
-  not_user_visible: 'the sign-in fields are not visible to the user',
-  insecure:
-    'the page is not safe for filling a password (not https, the form sends the password with GET or to another site, or another window is linked to this tab)',
-  popup_needed: 'the site signs in through a popup window, which Litch does not open while filling',
-  no_answer: 'the page did not respond',
-  unavailable: 'the saved passwords could not be read on this computer',
-}
 
 /** 给代理指的元素加标记；一个都没给回 null。编号不认识时抛错（BadArgs） */
 async function markHints(call: Call, page: BrowserPage): Promise<string | null> {
@@ -64,32 +51,16 @@ async function markHints(call: Call, page: BrowserPage): Promise<string | null> 
   return token
 }
 
-/** Litch 代填的结果给代理的话 */
-function filledText(
-  outcome: Extract<SignInOutcome, { kind: 'filled' }>,
-  site: string,
-  pageUrl: string,
-): string {
-  const who = outcome.preauthorized
-    ? 'the account the user authorized in advance for this task'
-    : 'the account the user approved'
-  if (outcome.reopened) {
-    return `Litch filled ${who} and submitted the sign-in to ${site}, then closed that tab and opened ${pageUrl} in a new tab ${outcome.reopened}. Use the new tab. Take a fresh snapshot to check you are signed in.`
-  }
+/** Litch 代填的结果给代理的话（文字在协议包的 signInResult） */
+function filledText(outcome: Extract<SignInOutcome, { kind: 'filled' }>, pageUrl: string): string {
+  const by = outcome.preauthorized ? 'grant' : 'user'
+  if (outcome.reopened) return signInResult.reopened(pageUrl, outcome.reopened, by)
+  const origin = outcome.origin || pageUrl
   const lines = [
-    `Litch filled ${who} and submitted the sign-in to ${site}; the page loaded ${outcome.origin || pageUrl}.`,
+    outcome.navigated ? signInResult.filled(origin, by) : signInResult.filledInPlace(origin, by),
   ]
-  if (!outcome.navigated) {
-    lines.push('The page did not load a new document; Litch cleared the password fields.')
-  }
-  if (outcome.verification) {
-    lines.push(
-      'The site asks for extra verification after the password. Call `request_sign_in` again so the user can finish it.',
-    )
-  } else if (outcome.stillSignIn) {
-    lines.push('The page still shows a sign-in form, so signing in may have failed.')
-  }
-  lines.push('Take a fresh snapshot to check you are signed in.')
+  if (outcome.verification) lines.push(signInResult.needsVerification())
+  else if (outcome.stillSignIn) lines.push(signInResult.stillSignIn())
   return lines.join(' ')
 }
 
@@ -137,14 +108,12 @@ export const requestSignIn: Tool = async (call) => {
       if (next) call.setCurrent(next)
       const shown = next ?? (outcome.reopened ? null : page)
       if (outcome.kind === 'filled') {
-        return call.done(shown, filledText(outcome, site, next?.info().url ?? page.info().url))
+        return call.done(shown, filledText(outcome, next?.info().url ?? page.info().url))
       }
-      const moved = outcome.reopened
-        ? ` Litch closed that tab and opened the page again in a new tab ${outcome.reopened}; use the new tab.`
-        : ''
+      const failed = signInResult.fillFailed(outcome.why)
       return call.done(
         shown,
-        `Litch could not sign in to ${site} automatically: ${outcome.why} (${WHY[outcome.why]}).${moved} Call \`request_sign_in\` again so the user can sign in themselves, or ask the user how to proceed.`,
+        outcome.reopened ? `${failed} ${signInResult.movedAfterFailure(outcome.reopened)}` : failed,
       )
     }
     switch (outcome) {
@@ -155,17 +124,11 @@ export const requestSignIn: Tool = async (call) => {
         )
       case 'cancel':
       case 'declined':
-        return call.done(
-          page,
-          `The user declined signing in to ${site}. Do not try another way; ask the user how to proceed.`,
-        )
+        return call.done(page, signInResult.declined(site))
       case 'origin_changed':
-        return call.done(
-          page,
-          `The page is not on ${origin ?? 'the origin you gave'}, so no sign-in was requested. Check the page with \`snapshot\` first.`,
-        )
+        return call.done(page, signInResult.fillFailed('origin_changed'))
       case 'expired':
-        return call.done(page, 'The sign-in request expired before anyone answered.')
+        return call.done(page, signInResult.expired())
       case 'closed':
         return call.done(null, `The tab was closed while the user was signing in to ${site}.`)
       case 'failed':
