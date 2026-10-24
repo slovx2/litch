@@ -521,10 +521,13 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         ...(error ? { error } : {}),
       },
     ])
+    // 没人开着它：和真的一样标成未读
+    const watched = (sinks.get(sessionKey(view))?.size ?? 0) > 0
     updateSummary(view.deviceId, view.sessionId, {
       status: 'idle',
       waitingFor: null,
       updatedAt: clock.now(),
+      ...(watched ? {} : { unread: true }),
     })
     diffs.turnEnded(view.deviceId, view.sessionId)
     tree.turnStopped(view)
