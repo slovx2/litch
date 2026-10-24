@@ -7,7 +7,7 @@ import {
   type LitchBackground,
   type LitchTurnOrigin,
 } from '../../../protocol/src/background-tasks.mjs'
-import type { ItemView, TurnView } from '../model.mjs'
+import type { HarnessAbilities, ItemView, TurnView } from '../model.mjs'
 import type {
   BackgroundChildInput,
   BackgroundEntriesView,
@@ -221,6 +221,24 @@ export function backgroundEntries(
     running: entries.filter((entry) => entry.status === 'running').length,
     wakesOnFinish: background?.wakesOnFinish ?? null,
   }
+}
+
+/** 后台任务页上能停的种类：命令和监视，经协议的后台终端停（session.stopBackground） */
+const STOPPABLE_KINDS: readonly BackgroundTaskKind[] = ['shell', 'monitor']
+
+/**
+ * 这一行有没有“停止”（桌面、手机一样）：在跑的命令和监视要 harness 报了停得掉（stopBackground），
+ * 在跑的子代理要它报了会单独停（stopAgent），在跑的子会话都能停（打断它的回合）
+ */
+export function backgroundStoppable(
+  entry: BackgroundEntryView,
+  abilities: HarnessAbilities | null | undefined,
+): boolean {
+  if (entry.status !== 'running') return false
+  if (entry.source === 'task')
+    return abilities?.stopBackground === true && STOPPABLE_KINDS.includes(entry.kind)
+  if (entry.source === 'agent') return abilities?.stopAgent === true
+  return true
 }
 
 /** 这个回合发起的、还在跑的后台任务有几个（收起行末尾的“· N 个在后台运行”） */

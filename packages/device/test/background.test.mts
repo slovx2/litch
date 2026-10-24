@@ -157,6 +157,10 @@ test('BG-DEVICE-003 聚合面：声明了的连接收到原生 codex 的集合�
       info.harnesses.find((item: any) => item.id === 'codex').features.backgroundTasks,
       true,
     )
+    assert.equal(
+      info.harnesses.find((item: any) => item.id === 'codex').features.stopBackground,
+      true,
+    )
     await declared.call('thread/resume', { threadId: thread.id })
     await settle()
     env.codex.notify('item/started', {

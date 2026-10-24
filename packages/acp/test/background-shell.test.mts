@@ -29,6 +29,7 @@ test('ACP：后台 shell 跑完另开一轮；来历、集合只给声明过的�
     const peer = await litch(s.server)
     const info = await peer.call('runtime/info', {})
     assert.equal(info.features.backgroundTasks, true)
+    assert.equal(info.features.stopBackground, true)
     assert.ok(info.extensions.includes('backgroundTasks'))
     const { thread } = await peer.call('thread/start', { cwd: s.cwd })
     await s.desktop.call('thread/resume', { threadId: thread.id })

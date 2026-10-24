@@ -77,7 +77,7 @@ export const AgentDetail = memo(function AgentDetail({
   const tools = useToolCount(deviceId, agentId)
   const [open, setOpen] = useState(false)
   const [stopping, setStopping] = useState(false)
-  // 单独停一个子代理要 harness 声明了会（Claude 入口还不会）
+  // 单独停一个子代理要 harness 声明了会（stopAgent）
   const canStop =
     state === 'running' &&
     device?.harnesses.find((entry) => entry.id === parent?.harness)?.abilities?.stopAgent === true

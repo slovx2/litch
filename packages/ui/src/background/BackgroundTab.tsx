@@ -8,8 +8,10 @@ import {
   agentRunState,
   type BackgroundEntryView,
   type BackgroundTaskKind,
+  backgroundStoppable,
   type CommandItem,
   type DeviceView,
+  type HarnessAbilities,
   keys,
   type SessionSummary,
   type TurnView,
@@ -39,16 +41,13 @@ const ICON: Record<BackgroundTaskKind, IconName> = {
   other: 'tool',
 }
 
-/** 能从这里停的后台命令：经协议的后台终端停（session.stopBackground） */
-const STOPPABLE_TASKS: ReadonlySet<BackgroundTaskKind> = new Set(['shell', 'monitor'])
-
 export function BackgroundTab({ place }: SideTabProps) {
   const t = useT()
   const { deviceId, sessionId } = place
   const reported = useReported(deviceId, sessionId ?? '')
   const view = useBackgroundEntries(deviceId, sessionId, reported)
   const picked = usePickedBackground(deviceId, sessionId)
-  const stopsAgents = useStopsAgents(deviceId, sessionId)
+  const abilities = useAbilities(deviceId, sessionId)
   if (!sessionId) return <div className="side-none dim">{t('background.pick')}</div>
   const entries = view?.entries ?? []
   const chosen = entries.find((entry) => entry.key === picked) ?? null
@@ -71,7 +70,7 @@ export function BackgroundTab({ place }: SideTabProps) {
         sessionId={sessionId}
         entry={entry}
         selected={entry.key === picked}
-        stoppable={stoppable(entry, stopsAgents)}
+        stoppable={backgroundStoppable(entry, abilities)}
       />
     ))
   return (
@@ -120,21 +119,11 @@ export function BackgroundTab({ place }: SideTabProps) {
 const agentOf = (key: string | null): string | null =>
   key?.startsWith('agent:') ? key.slice('agent:'.length) : null
 
-/** 这个会话的 harness 会不会单独停一个子代理（turn/interrupt 打在子线程上） */
-function useStopsAgents(deviceId: string, sessionId: string | null): boolean {
+/** 这个会话的 harness 报的能力：停不停得掉命令（stopBackground）、子代理（stopAgent） */
+function useAbilities(deviceId: string, sessionId: string | null): HarnessAbilities | null {
   const device = useKey<DeviceView>(keys.device(deviceId))
   const summary = useKey<SessionSummary>(sessionId ? keys.summary(deviceId, sessionId) : '')
-  return (
-    device?.harnesses.find((entry) => entry.id === summary?.harness)?.abilities?.stopAgent === true
-  )
-}
-
-/** 这一行有没有“停止”：在跑的命令和监视、harness 会单独停的子代理、在跑的子会话 */
-function stoppable(entry: BackgroundEntryView, stopsAgents: boolean): boolean {
-  if (entry.status !== 'running') return false
-  if (entry.source === 'task') return STOPPABLE_TASKS.has(entry.kind)
-  if (entry.source === 'agent') return stopsAgents
-  return true
+  return device?.harnesses.find((entry) => entry.id === summary?.harness)?.abilities ?? null
 }
 
 const EntryRow = memo(function EntryRow({

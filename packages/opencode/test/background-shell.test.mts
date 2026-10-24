@@ -46,6 +46,7 @@ test('OpenCode：后台 shell 回合结束后跑完，自己开一轮；来历�
     await plain.initialize()
     const info = await litch.call('runtime/info', {})
     assert.equal(info.features.backgroundTasks, true)
+    assert.equal(info.features.stopBackground, true)
     const { thread } = await litch.call('thread/start', { cwd: env.cwd })
     startName.value = `${serverName(thread.id)}_shell_start`
     await plain.call('thread/resume', { threadId: thread.id })
@@ -179,6 +180,7 @@ test('OpenCode：后台 shell 关着时模型看不到这几个工具', { skip, 
     await litch.initialize()
     const info = await litch.call('runtime/info', {})
     assert.equal(info.features.backgroundTasks, undefined)
+    assert.equal(info.features.stopBackground, undefined)
     const { thread } = await litch.call('thread/start', { cwd: env.cwd })
     const { turn } = await litch.call('turn/start', { threadId: thread.id, input: text('HI') })
     await litch.until('turn/completed', (p) => p.turn.id === turn.id, 60000)

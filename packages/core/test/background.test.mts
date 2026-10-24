@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import type { ThreadItem } from '../../protocol/src/index.mjs'
+import { abilitiesOf } from '../src/device/harness.mjs'
 import {
   connectChannel,
   createMockCore,
@@ -19,6 +20,7 @@ import {
 import {
   backgroundEntries,
   backgroundHint,
+  backgroundStoppable,
   deriveBackground,
   projectBackground,
   projectOrigin,
@@ -431,6 +433,56 @@ test('BG-CORE-006 后台任务列表把子代理、子会话合进来：同名�
   assert.equal(backgroundEntries(null, [], []), null)
   // 只有子代理在跑（没有集合）也数得出：输入框上方那一行照样出
   assert.equal(backgroundHint(backgroundEntries(null, [agent('a1', '查日志', 'running')])), 1)
+})
+
+test('BG-CORE-009 停止按钮看 harness 报的能力：命令、监视要 stopBackground，子代理要 stopAgent，子会话都能停，结束的都不能', () => {
+  const background = projectBackground({
+    wakesOnFinish: true,
+    tasks: [
+      { id: 'b1', kind: 'shell', title: 'npm run dev', status: 'running', startedAt: 1 },
+      { id: 'b2', kind: 'monitor', title: 'PR 检查', status: 'running', startedAt: 2 },
+      { id: 'b3', kind: 'workflow', title: '工作流', status: 'running', startedAt: 3 },
+      { id: 'b4', kind: 'shell', title: 'npm test', status: 'completed', startedAt: 0, endedAt: 1 },
+    ],
+  })
+  const agent = {
+    id: 'a1',
+    parentId: 'p',
+    nickname: null,
+    role: 'general-purpose',
+    description: '查日志',
+    prompt: '',
+    status: 'running' as const,
+    turn: { state: 'running' as const, startedAt: 4, durationMs: null, error: null },
+    canInput: null,
+    updatedAt: 0,
+  }
+  const view = backgroundEntries(
+    background,
+    [agent],
+    [{ id: 'c1', title: '修 CI', status: 'waiting', startedAt: 5, updatedAt: 6 }],
+  )
+  assert.ok(view)
+  const stoppable = (features: object) => {
+    const abilities = abilitiesOf(features as never, 'x')
+    return view.entries
+      .filter((entry) => backgroundStoppable(entry, abilities))
+      .map((entry) => entry.key)
+      .sort()
+  }
+  // dsh 那样只报集合、停不了：命令不出“停止”，子会话照样能停
+  assert.deepEqual(stoppable({ backgroundTasks: true }), ['child:c1'])
+  assert.deepEqual(stoppable({ backgroundTasks: true, stopBackground: true, stopAgent: true }), [
+    'agent:a1',
+    'child:c1',
+    'task:b1',
+    'task:b2',
+  ])
+  // 没有能力位（harness 还没报上来）的只有子会话
+  assert.deepEqual(
+    view.entries.filter((entry) => backgroundStoppable(entry, null)).map((entry) => entry.key),
+    ['child:c1'],
+  )
 })
 
 test('BG-CORE-007 已在列表里的会话再收到 thread/started（没带集合）：后台任务照旧在跑，空了只认变化通知', async () => {

@@ -27,17 +27,26 @@ const ALL: HarnessAbilities = {
   turnDiff: true,
   stopAgent: true,
   backgroundTasks: true,
+  stopBackground: true,
   // 持续目标只有原生 codex 和 Claude Code 会（Claude 入口自己照上游做了一份）
   goals: false,
 }
 
 const DECLARED: Record<string, HarnessAbilities> = {
   // 引导只把文字交给模型，图片到不了
-  // 子代理不能单独停（Claude 入口还不支持对子线程打断）
-  claude: { ...ALL, steerImages: false, stopAgent: false, goals: true, cutInTurn: true },
+  claude: { ...ALL, steerImages: false, goals: true, cutInTurn: true },
   // Pi 和 dsh 不发本回合的差异：工作目录不是 git 仓库时，差异面板在它们的会话里没有东西可看
   pi: { ...ALL, turnDiff: false },
-  dsh: { ...ALL, fork: false, rollback: false, compact: false, remove: false, turnDiff: false },
+  // dsh 的后台作业只列得出（job/list），停不了
+  dsh: {
+    ...ALL,
+    fork: false,
+    rollback: false,
+    compact: false,
+    remove: false,
+    turnDiff: false,
+    stopBackground: false,
+  },
   // 原生 codex 的消息一开始就带着准的阶段值：最终回答一开始活动区就收。
   // 它的 mention 不是给文件用的：提到的文件写进正文
   codex: { ...ALL, finalOnStart: true, mentions: false, goals: true },

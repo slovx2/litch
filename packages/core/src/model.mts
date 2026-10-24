@@ -104,6 +104,8 @@ export interface HarnessAbilities {
   stopAgent: boolean
   /** 报后台任务的集合（backgroundTasks 扩展）。不报的，界面从已结束回合里还在跑的命令派生 */
   backgroundTasks: boolean
+  /** 集合里在跑的命令、监视停得掉（thread/backgroundTerminals/terminate）。后台任务页上命令的“停止”按它出 */
+  stopBackground: boolean
   /** 持续目标（thread/goal/*）。不会的不出目标的入口 */
   goals: boolean
 }

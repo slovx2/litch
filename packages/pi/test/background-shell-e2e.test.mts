@@ -167,6 +167,7 @@ test('BG-SHELL-PI-001：起后台命令、回合结束、命令跑完自己开�
     async ({ server, cwd, litch, plain, bodies, ok }) => {
       const info = await ok(litch, 'runtime/info', {})
       assert.equal(info.features.backgroundTasks, true)
+      assert.equal(info.features.stopBackground, true)
       assert.ok(info.extensions.includes('backgroundTasks'))
       const threadId = (await ok(litch, 'thread/start', { cwd, model: 'gate/gate' })).thread.id
       await ok(plain, 'thread/resume', { threadId })
@@ -264,6 +265,7 @@ test('BG-SHELL-PI-003：关着时模型看不到工具，声明里也不报', { 
     async ({ cwd, litch, bodies, ok }) => {
       const info = await ok(litch, 'runtime/info', {})
       assert.equal(info.features.backgroundTasks, undefined)
+      assert.equal(info.features.stopBackground, undefined)
       assert.equal(info.extensions.includes('backgroundTasks'), false)
       const threadId = (await ok(litch, 'thread/start', { cwd, model: 'gate/gate' })).thread.id
       await ok(litch, 'turn/start', { threadId, input: [{ type: 'text', text: '你好' }] })

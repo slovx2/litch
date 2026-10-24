@@ -92,13 +92,13 @@ export function backgroundTerminalsPage<T extends { processId: string }>(
   }
 }
 
-/** 打开了后台 shell 的入口在声明里加上 backgroundTasks：扩展列表里有它、能力位报会报集合 */
+/** 打开了后台 shell 的入口在声明里加上 backgroundTasks：扩展列表里有它、能力位报会报集合、停得掉 */
 export function declareBackgroundTasks(declaration: HarnessDeclaration): HarnessDeclaration {
   return {
     ...declaration,
     extensions: [...(declaration.extensions ?? []), EXTENSION.backgroundTasks],
     ...(declaration.features
-      ? { features: { ...declaration.features, backgroundTasks: true } }
+      ? { features: { ...declaration.features, backgroundTasks: true, stopBackground: true } }
       : {}),
   }
 }

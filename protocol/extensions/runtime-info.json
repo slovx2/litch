@@ -377,6 +377,10 @@
             "description": "后加的位，可以不报（不报就是不报）：会报后台任务的集合（backgroundTasks 扩展，protocol/extensions/background-tasks.json）",
             "type": "boolean"
           },
+          "stopBackground": {
+            "description": "后加的位，可以不报（不报就是停不了）：后台任务集合里在跑的命令、监视（kind 为 shell、monitor）经 thread/backgroundTerminals/terminate 停得掉（客户端后台任务页上的“停止”）",
+            "type": "boolean"
+          },
           "goals": {
             "description": "后加的位，可以不报（不报就是不会）：持续目标做得到，即标准的 thread/goal/set、thread/goal/get、thread/goal/clear 和 thread/goal/updated、thread/goal/cleared 通知照 codex 的语义工作。客户端只给报了的 harness 出目标的入口；原生 codex 配置里关了 goals 时方法报 goals feature is disabled，客户端按不会处理",
             "type": "boolean"

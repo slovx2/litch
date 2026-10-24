@@ -51,7 +51,8 @@ const features = (approvals: boolean, backgroundShell: boolean): HarnessFeatures
   // 一段话是过程说明还是最终回答取决于这次请求的停止原因，流式过程中还没有：
   // 开始时报的阶段值不能信，消息结束时才准。
   agentMessagePhase: 'onCompleted',
-  ...(backgroundShell ? { backgroundTasks: true } : {}),
+  // 后台 shell 停得掉（thread/backgroundTerminals/terminate）
+  ...(backgroundShell ? { backgroundTasks: true, stopBackground: true } : {}),
 })
 
 // Pi 没有沙箱，所以一直是“完全访问”这一档，没得选；问不问跟着设置走，说明照实写。
