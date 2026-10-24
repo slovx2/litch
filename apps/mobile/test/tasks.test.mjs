@@ -88,6 +88,7 @@ const run = (over = {}) => ({
   summary: null,
   error: null,
   read: true,
+  approvals: [],
   ...over,
 })
 
@@ -147,4 +148,50 @@ test('运行记录一行：状态、时间、触发、合并；错误优先于�
   assert.equal(bad.detail, '工作目录不存在')
   assert.equal(bad.mark, 'error')
   assert.match(runLines(run({ status: 'queued' }), now, en).title, /^Queued · /)
+})
+
+test('回合停在审批上：任务和运行都标等你处理，运行的每条审批一行，自动拒绝的说等了多久', () => {
+  const now = Date.now()
+  const ask = (over) => ({
+    requestId: 'r1',
+    kind: 'command',
+    title: 'rm -rf build',
+    requestedAt: now - 60_000,
+    declineAt: now + 29 * 60_000,
+    state: 'waiting',
+    settledAt: null,
+    ...over,
+  })
+  const waiting = run({ status: 'running', startedAt: now, approvals: [ask()] })
+  const lines = runLines(waiting, now, zh)
+  assert.equal(lines.mark, 'waiting')
+  assert.match(lines.title, /· 等你处理$/)
+  assert.match(lines.detail, /^命令：rm -rf build · 等你处理，打开会话即可回应；29 分钟后自动拒绝$/)
+  const listed = taskLines(task({ lastRun: waiting }), now, 'UTC', zh)
+  assert.equal(listed.mark, 'waiting')
+  assert.match(listed.detail, /上次 等你处理 今天/)
+
+  const declined = runLines(
+    run({
+      summary: '跳过了',
+      approvals: [
+        ask({
+          kind: 'fileChange',
+          title: '改配置',
+          requestedAt: now - 31 * 60_000,
+          declineAt: now - 60_000,
+          state: 'autoDeclined',
+          settledAt: now - 60_000,
+        }),
+      ],
+    }),
+    now,
+    zh,
+  )
+  assert.equal(declined.mark, 'idle')
+  assert.equal(declined.detail.split('\n')[0], '跳过了')
+  assert.match(
+    declined.detail.split('\n')[1],
+    /^改文件：改配置 · 等了 30 分钟没人处理，今天 \d\d:\d\d 已自动拒绝$/,
+  )
 })

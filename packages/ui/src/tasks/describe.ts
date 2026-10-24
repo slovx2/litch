@@ -1,7 +1,14 @@
 // 定时任务的人话：日程怎么说、一个时间点怎么说、运行的状态和失败的原因怎么说。两种语言。
 // 纯函数，不依赖 React 和页面：界面测试直接引，移动端也可以按相对路径引来用。
 // 时间点按这台电脑的时区说（看的人在这里）；日程按任务自己的时区说，和这台电脑不一样时后面带上时区名。
-import type { TaskErrorView, TaskRunView, TaskSchedule, TaskView, TaskWeekday } from '@litch/core'
+import type {
+  TaskErrorView,
+  TaskRunApprovalView,
+  TaskRunView,
+  TaskSchedule,
+  TaskView,
+  TaskWeekday,
+} from '@litch/core'
 import type { MessageKey, Translator } from '../i18n/index.ts'
 
 /** 星期的顺序，周一在前 */
@@ -147,6 +154,30 @@ export const runStatusText = (status: TaskRunView['status'], t: Translator): str
 
 export const triggerText = (trigger: TaskRunView['trigger'], t: Translator): string =>
   t(`tasks.trigger.${trigger}` as MessageKey)
+
+/** 回合里一条要人答的请求：种类加一句话 */
+export const askLine = (entry: TaskRunApprovalView, t: Translator): string => {
+  const kind = t(`tasks.ask.kind.${entry.kind}` as MessageKey)
+  return entry.title ? t('tasks.ask.line', { kind, title: entry.title }) : kind
+}
+
+/** 它现在怎样：等着（还剩几分钟）、处理了、自动拒绝了（等了多久、什么时候） */
+export function askStateText(entry: TaskRunApprovalView, now: number, t: Translator): string {
+  if (entry.state === 'waiting')
+    return t('tasks.ask.waiting', {
+      minutes: Math.max(1, Math.ceil((entry.declineAt - now) / 60_000)),
+    })
+  if (entry.state === 'autoDeclined')
+    return t('tasks.ask.autoDeclined', {
+      minutes: Math.max(1, Math.round((entry.declineAt - entry.requestedAt) / 60_000)),
+      when: whenText(entry.settledAt ?? entry.declineAt, now, t),
+    })
+  return t('tasks.ask.resolved')
+}
+
+/** 这次运行里还在等人答的 */
+export const waitingAsks = (run: TaskRunView | null | undefined): TaskRunApprovalView[] =>
+  run?.approvals.filter((entry) => entry.state === 'waiting') ?? []
 
 /** 失败的原因：种类说一句人话，后面跟设备的原话 */
 export function errorText(error: TaskErrorView, t: Translator): string {

@@ -49,7 +49,8 @@ export class FakeControl implements ControlChannel {
   /** 可重连的终端现行的上限和期限。没给过就不带，设备进程用它启动时的那一份 */
   private processes: Partial<ProcessLimits> | null = null
   /** 定时任务的两项设置。null：主进程没推（旧版） */
-  tasks: { enabled?: boolean; maxConcurrent?: number } | null = null
+  tasks: { enabled?: boolean; maxConcurrent?: number; approvalTimeoutMinutes?: number } | null =
+    null
   private snapshot: DeviceSettingsSnapshot = {
     version: 0,
     values: {},
@@ -136,7 +137,11 @@ export class FakeControl implements ControlChannel {
   }
 
   /** 设置里定时任务那一组改了：主进程把现行值推过来 */
-  taskSettings(tasks: { enabled?: boolean; maxConcurrent?: number }): void {
+  taskSettings(tasks: {
+    enabled?: boolean
+    maxConcurrent?: number
+    approvalTimeoutMinutes?: number
+  }): void {
     this.tasks = { ...this.tasks, ...tasks }
     this.push(Object.keys(tasks).map((key) => `tasks.${key}`))
   }

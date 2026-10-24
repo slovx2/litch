@@ -34,7 +34,7 @@ import type {
   SettingsSnapshotView,
 } from '../model-manage.mjs'
 import type { PairingTopicView } from '../model-pairing.mjs'
-import type { TaskRunView, TasksView, TaskView } from '../model-tasks.mjs'
+import type { TaskRunApprovalView, TaskRunView, TasksView, TaskView } from '../model-tasks.mjs'
 import type { TerminalInfo, TerminalsOp, TerminalsView } from '../model-terminal.mjs'
 import type { AgentThreadView, SessionNoteView, SessionProposalView } from '../model-tree.mjs'
 import type { Text } from '../phrase.mjs'
@@ -357,6 +357,12 @@ export interface Replica {
    * 对账补上的、断开期间结束的不算
    */
   onTaskRunFinished(listener: (run: TaskRunView, task: TaskView | undefined) => void): () => void
+  /**
+   * 一次运行里新来了在等人答的请求（审批、提问，核心连着的时候看着来的）：桌面端据此发系统通知。返回取消函数
+   */
+  onTaskRunAsking(
+    listener: (run: TaskRunView, task: TaskView | undefined, asking: TaskRunApprovalView[]) => void,
+  ): () => void
 }
 
 const byId = (a: { id: string }, b: { id: string }): number =>
@@ -489,6 +495,9 @@ export function createReplica(channel: CoreChannel): Replica {
     { count: number; deviceId: string; taskId: string; epoch: number }
   >()
   const finishedListeners = new Set<(run: TaskRunView, task: TaskView | undefined) => void>()
+  const askingListeners = new Set<
+    (run: TaskRunView, task: TaskView | undefined, asking: TaskRunApprovalView[]) => void
+  >()
 
   /** 各台设备上没看过的运行加起来。数没变就不换 */
   const refreshTasksUnread = () => {
@@ -573,6 +582,10 @@ export function createReplica(channel: CoreChannel): Replica {
         if (op.finished) {
           const task = tasks.get(op.run.taskId)
           for (const listener of [...finishedListeners]) listener(op.run, task)
+        }
+        if (op.asking?.length) {
+          const task = tasks.get(op.run.taskId)
+          for (const listener of [...askingListeners]) listener(op.run, task, op.asking)
         }
         return
       }
@@ -1221,6 +1234,13 @@ export function createReplica(channel: CoreChannel): Replica {
       finishedListeners.add(listener)
       return () => {
         finishedListeners.delete(listener)
+      }
+    },
+
+    onTaskRunAsking(listener) {
+      askingListeners.add(listener)
+      return () => {
+        askingListeners.delete(listener)
       }
     },
 

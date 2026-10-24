@@ -1,6 +1,8 @@
 // 定时任务的验收，对着模拟核心：侧栏入口带着没看过的数；列表按设备分开（不支持的那台说一句）；
 // 在表单里新建一个任务、表单底下说得出下一次；建好进详情、回列表看得到它；立即运行一次跑完、
 // 运行记录里点“去会话”打开那个会话，会话顶上那一条说是哪个任务的哪一次，点“去看任务”回到这个任务。
+// 回合停在审批上的（本机的构建监控）：列表那一行和运行记录标“等你处理”、说还剩几分钟；到时限自动拒绝了的
+// （build-01 的夜间测试）运行记录里说等了多久、已自动拒绝。
 // 模拟核心的示例任务见 packages/core/src/mock/sample-tasks.mts：本机和 build-01 有任务，nas 的服务不支持，
 // gpu-box 没连上。立即运行在模拟核心里真的演一次：排队、开出一个会话、发提示词、回答完了算成功。
 // 和别的验收一样，tasksProbe 会被原样送进页面里执行，不能引用函数外面的东西；judgeTasks 在主进程里跑。
@@ -12,6 +14,11 @@ export interface TasksProbe {
   sections: string[]
   rows: number
   unsupported: string
+  /** 等人处理：列表那一行的记号、详情里运行那一行的记号、那条审批说的话；自动拒绝了的那条说的话 */
+  askingRow: boolean
+  askingRun: boolean
+  askWaiting: string
+  askDeclined: string
   /** 表单：打开了没有、底下那一句是哪一种（at：算出了下一次）、说的什么 */
   formShown: boolean
   preview: string
@@ -85,6 +92,28 @@ export async function tasksProbe(name: string): Promise<TasksProbe> {
   const rows = all('.tk-row').length
   const unsupported = text(one('.tk-dev[data-device="nas"] .arch-note'))
 
+  // 等人处理的和自动拒绝了的
+  const openTask = async (id: string) => {
+    one<HTMLButtonElement>(`.tk-row[data-task="${id}"] .tk-row-btn`)?.click()
+    await until(`${id} 的运行记录`, () => one(`[data-tasks="detail"] .tk-run`))
+  }
+  const backToList = async () => {
+    await click('[data-tasks="detail"] [data-act="back"]')
+    await until('回到列表', () => one('[data-tasks="list"]') && one('.tk-row'))
+  }
+  const askingRow = Boolean(one('.tk-row[data-task="task-watch"] [data-mark="asking"]'))
+  await openTask('task-watch')
+  const askingRun = Boolean(one('.tk-run[data-status="running"] [data-mark="asking"]'))
+  const askWaiting = text(
+    await until('等着的那条审批', () => one('.tk-run-asks li[data-state="waiting"]')),
+  )
+  await backToList()
+  await openTask('task-nightly')
+  const askDeclined = text(
+    await until('自动拒绝了的那条', () => one('.tk-run-asks li[data-state="autoDeclined"]')),
+  )
+  await backToList()
+
   // 新建：名字、提示词、每周一和周五、工作目录
   await click('[data-act="new-task"]')
   const form = await until('新建表单', () => one('.tk-form'))
@@ -155,6 +184,10 @@ export async function tasksProbe(name: string): Promise<TasksProbe> {
     sections,
     rows,
     unsupported,
+    askingRow,
+    askingRun,
+    askWaiting,
+    askDeclined,
     formShown: true,
     preview,
     previewText,
@@ -184,6 +217,18 @@ export function judgeTasks(seen: TasksProbe, name: string): string[] {
   )
   must(seen.rows >= 7, `列表只有 ${seen.rows} 行`)
   must(seen.unsupported.includes('不支持'), `不支持的那台没说清楚：“${seen.unsupported}”`)
+  must(seen.askingRow, '回合停在审批上的任务，列表那一行没标“等你处理”')
+  must(seen.askingRun, '回合停在审批上的那次运行没标“等你处理”')
+  must(
+    /^命令：npm run build -- --clean等你处理，打开会话即可回应；\d+ 分钟后自动拒绝$/.test(
+      seen.askWaiting,
+    ),
+    `等着的那条审批说的是“${seen.askWaiting}”`,
+  )
+  must(
+    /^改文件：更新快照文件等了 30 分钟没人处理，.+ 已自动拒绝$/.test(seen.askDeclined),
+    `自动拒绝了的那条说的是“${seen.askDeclined}”`,
+  )
   must(seen.formShown, '新建表单没出来')
   must(
     seen.preview === 'at' && seen.previewText.startsWith('下次运行：'),

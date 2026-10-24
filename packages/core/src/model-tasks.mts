@@ -4,6 +4,8 @@
 // 日程、目标的形状和协议一模一样，直接沿用（界面要拿它们去做表单、预览下一次）。
 import type {
   TaskOrigin,
+  TaskRunApprovalKind,
+  TaskRunApprovalState,
   TaskRunErrorCode,
   TaskRunStatus,
   TaskSchedule,
@@ -18,6 +20,8 @@ import type {
 
 export type {
   TaskOrigin,
+  TaskRunApprovalKind,
+  TaskRunApprovalState,
   TaskRunErrorCode,
   TaskRunStatus,
   TaskSchedule,
@@ -57,6 +61,21 @@ export interface TaskRunView {
   error: TaskErrorView | null
   /** 看过了没有。没结束的总是 true */
   read: boolean
+  /** 回合里要人答的请求（审批、提问），按收到的先后；没有是空数组 */
+  approvals: TaskRunApprovalView[]
+}
+
+/** 任务回合里一条要人答的请求。等着的时候打开那个会话就能答，到 declineAt 没人答设备替人拒绝 */
+export interface TaskRunApprovalView {
+  requestId: string
+  kind: TaskRunApprovalKind
+  /** 一句话：命令原文、改文件的理由、要的权限、第一道题…… */
+  title: string
+  /** 毫秒 */
+  requestedAt: number
+  declineAt: number
+  state: TaskRunApprovalState
+  settledAt: number | null
 }
 
 export interface TaskView {

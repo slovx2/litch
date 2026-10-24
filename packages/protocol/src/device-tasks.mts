@@ -135,7 +135,46 @@ export interface DeviceTaskRun {
    * 之后续跑的回合结束、后台全部结束时设备进程会更新它（和 summary），没有的不带
    */
   backgroundTasks?: number
+  /**
+   * 回合里引擎发来、要人答的请求（审批、提问、MCP 征询），按收到的先后。等着的时候连着的客户端打开会话就能答；
+   * 到 declineAt 还没人答，设备服务替人拒绝（设备设置 tasks.approvalTimeoutMinutes，默认 30 分钟）。
+   * 没有的不带。不含登录审批（litch_browser 的 request_sign_in，那是客户端工具调用，不经这里）
+   */
+  approvals?: TaskRunApproval[]
 }
+
+/** 回合里要人答的请求是哪一种 */
+export type TaskRunApprovalKind =
+  | 'command'
+  | 'fileChange'
+  | 'permissions'
+  | 'question'
+  | 'elicitation'
+
+/**
+ * waiting：还在等人答；resolved：有了结果（有人答了，或者回合结束、连接断了作废了）；
+ * autoDeclined：等满时限没人答，设备服务替人拒绝了（提问是全部跳过，MCP 征询是拒绝）
+ */
+export type TaskRunApprovalState = 'waiting' | 'resolved' | 'autoDeclined'
+
+export interface TaskRunApproval {
+  /** 引擎发来的请求号（转成字符串） */
+  requestId: string
+  kind: TaskRunApprovalKind
+  /** 一句话说是什么：命令原文、改文件的理由、要的权限、第一道题、MCP 服务名加说明。最多 TASK_RUN_APPROVAL_TITLE_MAX 个字 */
+  title: string
+  requestedAt: number
+  /** 到这个时间还没人答就自动拒绝 */
+  declineAt: number
+  state: TaskRunApprovalState
+  /** 有结果、被自动拒绝的时间；还在等是 null */
+  settledAt: number | null
+}
+
+/** 审批的一句话最多留多少个字 */
+export const TASK_RUN_APPROVAL_TITLE_MAX = 200
+/** 一次运行最多记这么多条审批，多的只答不记 */
+export const TASK_RUN_APPROVALS_MAX = 50
 
 /** 运行记录里摘要最多留多少个字 */
 export const TASK_RUN_SUMMARY_MAX = 500

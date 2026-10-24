@@ -8,9 +8,10 @@
 // 定时器不按固定间隔轮询，只等到最近的那个 nextRunAt；但最长等 maxTimerMs 就醒来看一眼墙钟：
 // 机器睡眠时单调时钟停着，到点的定时器会晚，醒来时比预期晚很多就当作睡眠醒来，按错过合并。
 import { randomUUID } from 'node:crypto'
-import type { DeviceTaskRun } from '../../protocol/src/device-tasks.mjs'
+import type { DeviceTaskRun, TaskRunApproval } from '../../protocol/src/device-tasks.mjs'
 import { countTaskRuns, nextTaskRun } from '../../protocol/src/task-schedule.mjs'
 import type { EngineLink } from './engine-link.mjs'
+import { DEFAULT_APPROVAL_TIMEOUT_MINUTES, guardApprovals } from './task-approvals.mjs'
 import { type FollowUpdate, followBackground } from './task-follow.mjs'
 import {
   executeRun,
@@ -24,15 +25,21 @@ import {
 import { publicRun, type RunRow, type TaskRow, type TaskStore } from './task-store.mjs'
 import type { TaskTurns } from './task-turns.mjs'
 
-/** 设置里的两项（Go 层 settings_tasks.go，经控制通道推来） */
+/** 设置里的几项（Go 层 settings_tasks.go，经控制通道推来） */
 export interface TaskSettings {
   /** 总开关。关着时不按日程触发；已经排上的、立即运行的照跑 */
   enabled: boolean
   /** 整台设备同时在跑的运行最多几个 */
   maxConcurrent: number
+  /** 回合里要人答的请求等多久（分钟）没人答就替人拒绝（task-approvals.mts） */
+  approvalTimeoutMinutes: number
 }
 
-export const DEFAULT_TASK_SETTINGS: TaskSettings = { enabled: true, maxConcurrent: 2 }
+export const DEFAULT_TASK_SETTINGS: TaskSettings = {
+  enabled: true,
+  maxConcurrent: 2,
+  approvalTimeoutMinutes: DEFAULT_APPROVAL_TIMEOUT_MINUTES,
+}
 
 /** 时间从哪来、定时器怎么设。测试换成可控的 */
 export interface TaskClock {
@@ -220,7 +227,28 @@ export class TaskScheduler {
       openEngineLink: (harness) => host.openEngineLink(harness),
       backgroundRunning: (threadId) => host.backgroundRunning(threadId),
       turns: host.turns,
+      guardApprovals: (link, run, turn) =>
+        guardApprovals(
+          link,
+          turn,
+          {
+            clock: host.clock,
+            timeoutMs: () => this.settings.approvalTimeoutMinutes * 60_000,
+            log: host.log,
+            changed: (approvals) => this.approvalsChanged(run.id, approvals),
+          },
+          run.approvals,
+        ),
     }
+  }
+
+  /** 运行里要人答的请求有了变化（多了一条、有了结果、被自动拒绝）：记下来，告诉客户端 */
+  private approvalsChanged(id: string, approvals: TaskRunApproval[]): void {
+    if (this.closed) return
+    const { store } = this.host
+    if (!store.updateApprovals(id, approvals)) return
+    const run = store.run(id)
+    if (run) this.host.runChanged(publicRun(run))
   }
 
   private begin(run: RunRow): void {
@@ -266,7 +294,9 @@ export class TaskScheduler {
         store.saveTask(task)
       }
     }
-    this.host.runChanged(run)
+    // 审批记录另外改（approvalsChanged），发出去的以库里的为准
+    const stored = store.run(run.id)
+    this.host.runChanged(stored ? publicRun(stored) : run)
     this.host.taskChanged(run.taskId)
   }
 

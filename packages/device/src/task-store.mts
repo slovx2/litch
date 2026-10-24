@@ -9,6 +9,7 @@ import type {
   DeviceTaskRun,
   TaskError,
   TaskOrigin,
+  TaskRunApproval,
   TaskRunStatus,
   TaskSchedule,
   TaskStatus,
@@ -67,6 +68,8 @@ const MIGRATIONS: readonly string[] = [
    CREATE INDEX runs_by_status ON runs(status);`,
   // 回合结束时会话里还有几个后台任务在跑（backgroundTasks 扩展）。旧的运行记成 0
   `ALTER TABLE runs ADD COLUMN background INTEGER NOT NULL DEFAULT 0;`,
+  // 回合里要人答的请求和它们的结果（task-approvals.mts），JSON 数组。没有是 null
+  `ALTER TABLE runs ADD COLUMN approvals TEXT;`,
 ]
 
 /** 现在的结构版本 */
@@ -152,7 +155,13 @@ function runOf(row: Record<string, SQLInputValue>): RunRow {
     error: parsed<TaskError>(row.error),
     read: row.read === 1,
     ...(Number(row.background) > 0 ? { backgroundTasks: Number(row.background) } : {}),
+    ...approvalsOf(row.approvals),
   }
+}
+
+function approvalsOf(value: unknown): { approvals?: TaskRunApproval[] } {
+  const list = parsed<TaskRunApproval[]>(value)
+  return Array.isArray(list) && list.length > 0 ? { approvals: list } : {}
 }
 
 /** 协议里的运行对象：去掉库里自己用的两项 */
@@ -319,7 +328,15 @@ export class TaskStore {
     return Number(result.changes) > 0
   }
 
-  /** 改一次运行的状态和结果。运行已经随任务删掉了返回 false */
+  /** 换掉一次运行的审批记录（只有 task-approvals.mts 改它，updateRun 不碰）。运行已经删掉了返回 false */
+  updateApprovals(id: string, approvals: readonly TaskRunApproval[]): boolean {
+    const result = this.db
+      .prepare('UPDATE runs SET approvals=? WHERE id=?')
+      .run(approvals.length > 0 ? JSON.stringify(approvals) : null, id)
+    return Number(result.changes) > 0
+  }
+
+  /** 改一次运行的状态和结果（审批记录除外）。运行已经随任务删掉了返回 false */
   updateRun(run: DeviceTaskRun): boolean {
     const result = this.db
       .prepare(

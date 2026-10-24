@@ -59,6 +59,7 @@ snippet for entries that are on and running (see `troubleshooting.md`).
 |---|---|---|
 | `tasks.enabled` | on | "Run on schedule". Off: schedules do not fire; running and manually started runs continue. When turned back on, missed times are not made up (one-time tasks still run once) |
 | `tasks.maxConcurrent` | 2 (1 – 16) | Task runs going at once on the device; the rest wait in order |
+| `tasks.approvalTimeoutMinutes` | 30 (1 – 1440) | Approvals and questions in a task's turn wait this long for someone to answer them from the desktop or phone, then the device declines them (questions skipped) and notes it in the run history |
 
 ### Session orchestration (group `sessions`, applies at once; `sessions.wrapUp` to new sessions)
 
