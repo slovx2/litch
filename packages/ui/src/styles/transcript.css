@@ -23,13 +23,9 @@
   display: flex;
   flex-direction: column-reverse;
   overflow-anchor: none;
-  /* 悬浮式滚动条：轨道一直透明，滑块只在鼠标进来时露出来。
-     右边常驻信息栏和对话之间就不会立着一条轨道，把页面隔成两块 */
-  scrollbar-width: thin;
-  scrollbar-color: transparent transparent;
-}
-.tr-scroll:hover {
-  scrollbar-color: var(--line-2) transparent;
+  /* 滑块平时不画，鼠标进来才露出来（scrollbar.css）。
+     右边常驻信息栏和对话之间就不会立着一条滑块，把页面隔成两块 */
+  --sb-rest: transparent;
 }
 .tr {
   width: 100%;
@@ -437,7 +433,6 @@ button.smen:focus-visible {
   display: flex;
   flex-direction: column-reverse;
   overflow-anchor: none;
-  scrollbar-width: thin;
 }
 .well pre {
   font: 12px / 19px var(--mono);
@@ -483,7 +478,6 @@ button.smen:focus-visible {
   overflow-wrap: anywhere;
   max-height: 168px;
   overflow: auto;
-  scrollbar-width: thin;
 }
 .io + .io {
   border-top: 1px solid var(--line-1);
@@ -564,7 +558,6 @@ button.smen:focus-visible {
 .diff {
   max-height: 240px;
   overflow: auto;
-  scrollbar-width: thin;
 }
 .diff-note {
   padding: 8px 12px;

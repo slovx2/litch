@@ -699,7 +699,6 @@
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  scrollbar-width: thin;
 }
 /* 卡片里的东西各占各的高度，不够就滚，不互相挤扁 */
 .req > * {

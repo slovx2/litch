@@ -14,6 +14,8 @@ export interface MockServiceProbe {
   engagedBefore: number
   /** 平时设备列表上哪几行有“服务旧了没换成”的记号 */
   flagsBefore: string[]
+  /** 平时侧栏里哪几台设备的行上有同样的记号（按钮） */
+  sidebarBefore: string[]
   /** 本机平时：这一节开没开:要说的是哪种:标题后面的版本:小标 */
   localHead: string
   /** 点开之后：版本｜应用自带｜来源是哪一种:来源｜是不是按需拉起的｜启动时间｜进程号 */
@@ -25,6 +27,9 @@ export interface MockServiceProbe {
   absent: string[]
   /** 旧而忙没换：列表行上的记号、这一节的样子、说明、逐条的原因、按钮上的字 */
   flagsBusy: string[]
+  /** 那时侧栏里哪几台设备的行上有记号；点了之后：进了哪台的详情:这一节开没开:焦点在哪个按钮上 */
+  sidebarBusy: string[]
+  sidebarJump: string
   busyHead: string
   busyText: string
   busyReasons: string[]
@@ -43,6 +48,7 @@ export interface MockServiceProbe {
   replacedText: string
   replacedHasRetry: boolean
   flagsAfter: string[]
+  sidebarAfter: string[]
   /** 另外几种（关键字 → 这一节的样子｜给的命令｜命令行的原话），和那时列表行上的记号 */
   scenes: Record<string, string>
   sceneFlags: Record<string, string[]>
@@ -91,6 +97,11 @@ export async function mockServiceProbe(): Promise<MockServiceProbe> {
       .filter((item) => one('[data-flag="service"]', item))
       .map((item) => item.dataset.device ?? '')
   }
+  /** 侧栏里哪几台设备的行上有记号 */
+  const sidebarFlags = () =>
+    all('.dev-group')
+      .filter((group) => one(':scope > .row-line > .dev-upg[data-flag="service"]', group))
+      .map((group) => group.dataset.device ?? '')
   const openDetail = async (deviceId: string) => {
     await openList()
     one<HTMLButtonElement>(`.devp-item[data-device="${deviceId}"] .devp-row`)?.click()
@@ -164,6 +175,7 @@ export async function mockServiceProbe(): Promise<MockServiceProbe> {
 
   // ---- 一、平时：看得到版本，不打扰 ----
   const flagsBefore = await flags()
+  const sidebarBefore = sidebarFlags()
   await openDetail('local')
   await until('“设备服务”一节', section)
   const localHead = head()
@@ -184,6 +196,17 @@ export async function mockServiceProbe(): Promise<MockServiceProbe> {
   await say('服务旧而忙，这一步要一次审批')
   await until('审批卡片', () => one('.req'))
   const flagsBusy = await flags()
+  const sidebarBusy = sidebarFlags()
+  // 从对话里点侧栏的记号：直接进那台设备的详情，停在“设备服务”一节，焦点在该按的按钮上
+  await openSession()
+  one<HTMLButtonElement>('.dev-group[data-device="local"] .dev-upg')?.click()
+  await until('点记号进了详情', () => one('[data-detail="local"]') && section())
+  await frame()
+  const sidebarJump = [
+    one<HTMLElement>('[data-detail]')?.dataset.detail,
+    section()?.dataset.open,
+    (document.activeElement as HTMLElement | null)?.dataset.act ?? '没有',
+  ].join(':')
   await openDetail('local')
   await until('没换成的说明', () => note('busy'))
   const busyHead = head()
@@ -226,6 +249,7 @@ export async function mockServiceProbe(): Promise<MockServiceProbe> {
   const replacedText = text(note('replaced'))
   const replacedHasRetry = Boolean(retryButton())
   const flagsAfter = await flags()
+  const sidebarAfter = sidebarFlags()
 
   // ---- 五、另外几种：各是什么样、给了什么办法 ----
   const scenes: Record<string, string> = {}
@@ -250,12 +274,15 @@ export async function mockServiceProbe(): Promise<MockServiceProbe> {
   return {
     engagedBefore,
     flagsBefore,
+    sidebarBefore,
     localHead,
     localFacts,
     remoteHead,
     remoteFacts,
     absent,
     flagsBusy,
+    sidebarBusy,
+    sidebarJump,
     busyHead,
     busyText,
     busyReasons,
@@ -270,6 +297,7 @@ export async function mockServiceProbe(): Promise<MockServiceProbe> {
     replacedText,
     replacedHasRetry,
     flagsAfter,
+    sidebarAfter,
     scenes,
     sceneFlags,
   }
@@ -366,6 +394,7 @@ export function judgeMockService(probe: MockServiceProbe): string[] {
 
   // 平时：看得到版本，这一节收着，没有说明，列表行上没有记号
   same(probe.flagsBefore, [], '平时设备列表的行上不该有服务的记号')
+  same(probe.sidebarBefore, [], '平时侧栏设备行上不该有服务的记号')
   same(probe.localHead, 'false:没有要说的:0.7.0:', '本机平时“设备服务”一节的样子不对')
   same(
     probe.localFacts,
@@ -386,6 +415,12 @@ export function judgeMockService(probe: MockServiceProbe): string[] {
 
   // 旧而忙没换
   same(probe.flagsBusy, ['local'], '旧而忙没换时，只有本机那一行该有记号')
+  same(probe.sidebarBusy, ['local'], '旧而忙没换时，侧栏里只有本机那一行该有记号')
+  same(
+    probe.sidebarJump,
+    'local:true:service-retry',
+    '点侧栏的记号没有进本机详情、打开“设备服务”一节、把焦点放到“立即重试”上',
+  )
   same(
     probe.busyHead,
     'true:busy:0.6.0:比应用自带的版本旧',
@@ -423,6 +458,7 @@ export function judgeMockService(probe: MockServiceProbe): string[] {
   )
   must(!probe.replacedHasRetry, '换上新版之后不该还有“现在再试一次”')
   same(probe.flagsAfter, [], '换上新版之后列表行上的记号该没了')
+  same(probe.sidebarAfter, [], '换上新版之后侧栏设备行上的记号该没了')
 
   // 另外几种
   const [front = '', frontCommands = ''] = (probe.scenes.服务是前台的 ?? '').split('｜')

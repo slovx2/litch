@@ -8,6 +8,7 @@
 // 远程设备还说一句对面是哪一种：设备服务，还是只有 codex；只有 codex 的给出装设备服务的办法。
 import { type DeviceView, keys, WIRES, type WireColor } from '@litch/core'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { DeviceSection } from '../app/actions.ts'
 import { useT } from '../app/appearance.ts'
 import { viaOf, wireStyle } from '../app/device.ts'
 import { reasonOf } from '../app/errors.ts'
@@ -26,13 +27,15 @@ import { ToolSwitches } from './ToolSwitches.tsx'
 
 interface DeviceDetailProps {
   deviceId: string
+  /** 一打开就停在哪一节（侧栏设备行上的升级记号点进来的，是“设备服务”）。null：从头看 */
+  section?: DeviceSection | null
   /** 回到设备列表 */
   onBack(): void
   /** 回到对话 */
   onClose(): void
 }
 
-export function DeviceDetail({ deviceId, onBack, onClose }: DeviceDetailProps) {
+export function DeviceDetail({ deviceId, section = null, onBack, onClose }: DeviceDetailProps) {
   const { channel } = useServices()
   const device = useKey<DeviceView>(keys.device(deviceId))
   const reconnect = useReconnect(deviceId)
@@ -334,7 +337,7 @@ export function DeviceDetail({ deviceId, onBack, onClose }: DeviceDetailProps) {
             ) : null}
           </section>
           <ToolSwitches device={device} />
-          <ServiceSection device={device} />
+          <ServiceSection device={device} reveal={section === 'service'} />
           <PhonesSection device={device} />
           {managed ? (
             <ManagePanel device={device} onSettings={setSettingsOf} />

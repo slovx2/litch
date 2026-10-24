@@ -25,7 +25,7 @@ import {
   useSyncExternalStore,
 } from 'react'
 import type { Draft, Page, Selection } from '../app/App.tsx'
-import { requestTasks } from '../app/actions.ts'
+import { requestDevice, requestTasks } from '../app/actions.ts'
 import { useT } from '../app/appearance.ts'
 import { useNow } from '../app/clock.ts'
 import { badgeOf, downHarness, downText, nameOf, wireStyle } from '../app/device.ts'
@@ -38,6 +38,7 @@ import { showToast } from '../app/toasts.tsx'
 import { mentionInComposer } from '../composer/drafts.ts'
 import type { PlaceWish } from '../composer/new-place.ts'
 import { PairDialog } from '../devices/PairDialog.tsx'
+import { serviceFlagOf } from '../devices/service.ts'
 import { FailureNote, shownState, useReconnect } from '../devices/status.tsx'
 import { useBrowserWants } from '../side/browser/store.ts'
 import { SpawnDialog } from '../tree/SpawnDialog.tsx'
@@ -956,6 +957,8 @@ function DeviceGroup(props: GroupProps) {
       : stuck.some((entry) => entry.state === 'unavailable')
         ? 'dev-flag'
         : 'dev-flag mute'
+  /** 设备服务比应用的旧、还没换成：行上一个和设备列表同样的记号，点了进设备详情的“设备服务”一节 */
+  const stale = serviceFlagOf(device)
   /** 对面不是设备服务、只有一个 harness 时，是哪一个 */
   const only = device.mode === 'single' ? device.harnesses[0] : undefined
   const open = !closed.has('')
@@ -1592,6 +1595,8 @@ function DeviceGroup(props: GroupProps) {
               <Notice />
             </span>
           ) : null}
+          {/* 升级记号的位置：按钮不能放进这个按钮里，摆在行外，用锚点定位贴到这里（shell.css 的 .dev-upg） */}
+          {stale ? <span className="dev-upg-slot" /> : null}
           <span className="grow" />
           {/* 整台设备收起来了：下面所有会话合起来的状况 */}
           {open ? null : <TallyMarks deviceId={deviceId} group={null} />}
@@ -1600,6 +1605,18 @@ function DeviceGroup(props: GroupProps) {
             <span className="pill mute">{t('sidebar.single', { name: only.name })}</span>
           ) : null}
         </button>
+        {stale ? (
+          <button
+            type="button"
+            className="dev-upg"
+            data-flag="service"
+            title={t(stale)}
+            aria-label={t(stale)}
+            onClick={() => requestDevice(deviceId, 'service')}
+          >
+            <Notice />
+          </button>
+        ) : null}
         {add(null)}
         {deviceActions.length > 0 ? (
           <RowMenu

@@ -49,14 +49,19 @@ export function onOpenSessionRequest(listener: (session: SessionRef) => void): (
   }
 }
 
-const deviceListeners = new Set<(deviceId: string) => void>()
+/** 设备详情里要直接去的一节。service：“设备服务”那一节（侧栏设备行上的升级记号） */
+export type DeviceSection = 'service'
 
-/** 打开“设备”一页，直接进这台设备的详情（顶栏弹层里“不确认”那一行的“去设置”） */
-export function requestDevice(deviceId: string): void {
-  for (const listener of deviceListeners) listener(deviceId)
+const deviceListeners = new Set<(deviceId: string, section: DeviceSection | null) => void>()
+
+/** 打开“设备”一页，直接进这台设备的详情（顶栏弹层里“不确认”那一行的“去设置”）；给了 section 就停在那一节 */
+export function requestDevice(deviceId: string, section: DeviceSection | null = null): void {
+  for (const listener of deviceListeners) listener(deviceId, section)
 }
 
-export function onDeviceRequest(listener: (deviceId: string) => void): () => void {
+export function onDeviceRequest(
+  listener: (deviceId: string, section: DeviceSection | null) => void,
+): () => void {
   deviceListeners.add(listener)
   return () => {
     deviceListeners.delete(listener)

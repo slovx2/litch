@@ -88,7 +88,6 @@
 }
 .md-table {
   overflow-x: auto;
-  scrollbar-width: thin;
 }
 .md table {
   border-collapse: collapse;
@@ -130,7 +129,6 @@
   padding: 10px 12px;
   font: 12px / 20px var(--mono);
   overflow-x: auto;
-  scrollbar-width: thin;
 }
 .code pre code {
   font: inherit;
@@ -210,7 +208,6 @@
   justify-content: center;
   padding: 12px;
   overflow-x: auto;
-  scrollbar-width: thin;
 }
 .mmd-fig svg {
   max-width: 100%;

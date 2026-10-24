@@ -5,6 +5,7 @@
 @import "./skins/retro.css";
 @import "./skins/human.css";
 @import "./base.css";
+@import "./scrollbar.css";
 @import "./shell.css";
 @import "./transcript.css";
 @import "./transcript-prose.css";

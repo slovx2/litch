@@ -99,7 +99,6 @@
   flex-direction: column;
   gap: 10px;
   font-size: 12.5px;
-  scrollbar-width: thin;
 }
 .goal-head {
   display: flex;

@@ -20,6 +20,7 @@ import { TasksPage } from '../tasks/TasksPage.tsx'
 import { TerminalSlot } from '../terminal/TerminalSlot.tsx'
 import { Transcript } from '../transcript/Transcript.tsx'
 import {
+  type DeviceSection,
   onAssistantRequest,
   onDeviceRequest,
   onNewSessionRequest,
@@ -117,7 +118,11 @@ export function App() {
   )
   const closePage = useCallback(() => openPage(null), [openPage])
   /** 别处要求直接进哪台设备的详情。seq 每次都变，同一台再要一次也重新进 */
-  const [deviceAt, setDeviceAt] = useState<{ deviceId: string; seq: number } | null>(null)
+  const [deviceAt, setDeviceAt] = useState<{
+    deviceId: string
+    section: DeviceSection | null
+    seq: number
+  } | null>(null)
   const openDevices = useCallback(
     () =>
       leaveThen(() => {
@@ -208,12 +213,12 @@ export function App() {
   // 别处要打开某个会话（浏览器的 show 留在别的会话上的提示，点“去看”）
   useEffect(() => onOpenSessionRequest(select), [select])
 
-  // 别处要直接进某台设备的详情（顶栏弹层里“不确认”那一行的“去设置”）
+  // 别处要直接进某台设备的详情（顶栏弹层里“不确认”那一行的“去设置”、侧栏设备行上的升级记号）
   useEffect(
     () =>
-      onDeviceRequest((deviceId: string) =>
+      onDeviceRequest((deviceId, section) =>
         leaveThen(() => {
-          setDeviceAt((was) => ({ deviceId, seq: (was?.seq ?? 0) + 1 }))
+          setDeviceAt((was) => ({ deviceId, section, seq: (was?.seq ?? 0) + 1 }))
           openPage('devices')
         }),
       ),
@@ -282,6 +287,7 @@ export function App() {
             <DevicesPage
               key={deviceAt?.seq ?? 0}
               initial={deviceAt?.deviceId ?? null}
+              section={deviceAt?.section ?? null}
               onClose={closePage}
             />
           ) : page === 'tasks' ? (

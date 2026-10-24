@@ -97,7 +97,6 @@
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  scrollbar-width: thin;
   /* 行是按位置摆的：滚得再快也别让浏览器去挪锚点 */
   overflow-anchor: none;
 }
@@ -205,7 +204,6 @@
   flex: 1 1 0;
   min-height: 0;
   overflow-y: auto;
-  scrollbar-width: thin;
   padding: 0 6px 6px;
 }
 .ft-hit {
@@ -370,7 +368,6 @@
   flex: 1 1 0;
   min-height: 0;
   overflow: auto;
-  scrollbar-width: thin;
   overflow-anchor: none;
   font: 12px / var(--fv-line) var(--mono);
   tab-size: 4;
