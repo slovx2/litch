@@ -68,6 +68,9 @@ test('DECL-001：runtime/info 带结构化声明，原有字段原样保留', as
       declared,
     )
     assert.deepEqual([displayName, badge], ['Claude Code', 'CC'])
+    // 后台命令、监视、子代理都停得掉（stop_task）
+    assert.equal(wired.stopBackground, true)
+    assert.equal(wired.stopAgent, true)
     assert.deepEqual(extensions, [
       'declineWithNote',
       'planConfirmation',

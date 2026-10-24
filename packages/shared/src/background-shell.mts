@@ -195,6 +195,11 @@ export class BackgroundShells {
   private readonly running = new Map<string, Running>()
   /** 自己退出、还没交给 host.finished 的，按会话 */
   private readonly settling = new Map<string, { tasks: ShellTask[]; timer: NodeJS.Timeout }>()
+  /**
+   * 用户停掉的、模型还不知道的，按会话。照 Claude 的做法不唤醒，下一轮开头由引擎经 takeStopNotice 交给模型，
+   * 只交一次；模型在这之前自己 read、list 看到了的就不再交
+   */
+  private readonly userStops = new Map<string, ShellTask[]>()
   private seq = 0
   private closed = false
 
@@ -424,6 +429,7 @@ export class BackgroundShells {
     const tasks = this.threads.get(threadId)
     this.threads.delete(threadId)
     this.settling.delete(threadId)
+    this.userStops.delete(threadId)
     if (tasks) rmSync(join(this.dir, threadKey(threadId)), { recursive: true, force: true })
   }
 
@@ -453,6 +459,25 @@ export class BackgroundShells {
       )
     }
     await Promise.all(waits)
+  }
+
+  /**
+   * 下一轮开头交给模型的那段话：上一轮之后用户停掉了哪几个（引擎在用户的下一条消息、后台唤醒等任何一轮交出去时取）。
+   * 取了就清掉，没有返回 null
+   */
+  takeStopNotice(threadId: string): string | null {
+    const tasks = this.userStops.get(threadId)
+    this.userStops.delete(threadId)
+    return tasks?.length ? formatStopNotice(tasks) : null
+  }
+
+  /** 模型经工具看到了这几个的状态（read、list、stop 的结果）：用户停掉的不用再在下一轮说 */
+  seen(threadId: string, ids: string[]): void {
+    const tasks = this.userStops.get(threadId)
+    if (!tasks) return
+    const rest = tasks.filter((task) => !ids.includes(task.id))
+    if (rest.length) this.userStops.set(threadId, rest)
+    else this.userStops.delete(threadId)
   }
 
   /** 运行时退出时同步地把还在跑的整组杀掉（进程的 exit 事件里只能做同步的事） */
@@ -538,6 +563,8 @@ export class BackgroundShells {
     this.host.log?.(`后台 shell ${task.id}（会话 ${task.threadId}）结束：${statusText(task)}`)
     this.evict(task.threadId)
     this.host.changed(task.threadId)
+    if (task.stoppedBy === 'user' && !this.closed)
+      this.userStops.set(task.threadId, [...(this.userStops.get(task.threadId) ?? []), task])
     if (task.stoppedBy || this.closed) return
     // 自己退出的：攒一小会儿，差不多同时结束的一起交出去
     const pending = this.settling.get(task.threadId)
@@ -764,6 +791,7 @@ export async function runShellTool(
           { waitSeconds: wait, ...(max !== undefined ? { maxBytes: max } : {}) },
           signal,
         )
+        shells.seen(call.threadId, [task.id])
         const head = taskLine(task, now())
         const note =
           omittedBytes > 0
@@ -775,12 +803,17 @@ export async function runShellTool(
         const id = text(args.id)
         const task = shells.get(call.threadId, id)
         if (!task) return fail(`no background task ${id} in this session`)
+        shells.seen(call.threadId, [id])
         if (!shells.stop(call.threadId, id, 'model'))
           return { text: `${id} is not running: ${statusText(task)}`, isError: false }
         return { text: `Stopping ${id}.`, isError: false }
       }
       case 'list': {
         const tasks = shells.list(call.threadId)
+        shells.seen(
+          call.threadId,
+          tasks.map((task) => task.id),
+        )
         if (tasks.length === 0)
           return { text: 'No background tasks in this session.', isError: false }
         return { text: tasks.map((task) => taskLine(task, now())).join('\n'), isError: false }
@@ -812,6 +845,26 @@ export async function formatShellEvent(tasks: ShellTask[]): Promise<string> {
     )
   }
   return `<${EVENT_TAG}>\n${blocks.join('\n\n')}\n</${EVENT_TAG}>`
+}
+
+const NOTICE_TAG = 'litch-background-notice'
+
+/**
+ * 用户停掉了的那几个，下一轮开头交给模型的那段话（不唤醒，照 Claude 对用户停的后台命令那条不开回合的通知）。
+ * 标签和唤醒的不同：引擎把它接在用户那句话后面，重读历史时不能被当成一轮唤醒
+ */
+export function formatStopNotice(tasks: ShellTask[]): string {
+  const lines = tasks.map(
+    (task) =>
+      `Background task ${task.id} was stopped by the user after ${formatDuration((task.endedAt ?? task.startedAt) - task.startedAt)}. Command: ${task.command}`,
+  )
+  return `<${NOTICE_TAG}>\n${lines.join('\n')}\n</${NOTICE_TAG}>`
+}
+
+/** 一句话后面接上用户停掉的那段（没有就原样） */
+export function withStopNotice(text: string, notice: string | null): string {
+  if (!notice) return text
+  return text ? `${text}\n\n${notice}` : notice
 }
 
 /** 这段文字是不是唤醒时交给模型的（引擎重读历史时认出来：不画成用户的话，回合记成后台任务唤醒的） */

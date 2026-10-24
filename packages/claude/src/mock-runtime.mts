@@ -64,6 +64,36 @@ export class MockRuntime implements ClaudeRuntime {
       return
     }
 
+    // 模拟一个后台 shell 加一个监视（monitor_*）：回合保持进行，直到它们都被结束
+    if (/mock background monitor/i.test(context.prompt)) {
+      const shells = new Map<string, RuntimeBackgroundShell>()
+      this.shells.set(context.threadId, shells)
+      await handlers.onEvent({
+        type: 'tool_use',
+        toolUseId: 'tool-bg-1',
+        toolName: 'Bash',
+        input: { command: 'sleep 101', run_in_background: true },
+      })
+      shells.set('mock-task-1', {
+        taskId: 'mock-task-1',
+        toolUseId: 'tool-bg-1',
+        command: 'sleep 101',
+        seq: 0,
+      })
+      shells.set('mock-monitor-1', {
+        taskId: 'mock-monitor-1',
+        toolUseId: null,
+        command: 'PR 检查',
+        seq: 1,
+        monitor: true,
+      })
+      while (shells.size && !this.interrupted.has(context.threadId))
+        await new Promise((resolve) => setTimeout(resolve, 20))
+      this.shells.delete(context.threadId)
+      await handlers.onEvent({ type: 'completed', success: true })
+      return
+    }
+
     if (/approval|permission|bash/i.test(context.prompt)) {
       const toolUseId = `tool-${Date.now()}`
       await handlers.onEvent({

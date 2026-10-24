@@ -183,6 +183,17 @@ export interface SessionNoteView {
   title: string
   status: 'completed' | 'failed' | 'interrupted' | 'needsUser'
   excerpt: string
+  /** 回合失败、被打断时回合上的错误原文。没有的不带 */
+  error?: string
+}
+
+/**
+ * 排在会话的回报队列里、还没交给模型的一条回报（会话对象上的 litchQueuedNotes）。界面不等交出去就把它画在对话区末尾，
+ * 交出去之后它画在带着它的那条消息上（UserMessageItem.event）
+ */
+export interface SessionQueuedNoteView extends SessionNoteView {
+  /** 进队列的时间，毫秒时间戳 */
+  at: number
 }
 
 /**

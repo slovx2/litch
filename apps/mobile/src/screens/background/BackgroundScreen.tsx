@@ -5,7 +5,7 @@
 // 从输入框上方那一行或者会话详情右上角菜单里的“后台任务”进来。
 import {
   type BackgroundEntryView,
-  type BackgroundTaskKind,
+  backgroundStoppable,
   type DeviceView,
   keys,
   type SessionSummary,
@@ -26,17 +26,6 @@ import { useTheme } from '../../ui/theme'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Background'>
 
-/** 能从这里停的后台命令：经协议的后台终端停（session.stopBackground） */
-const STOPPABLE_TASKS: ReadonlySet<BackgroundTaskKind> = new Set(['shell', 'monitor'])
-
-/** 这一行有没有“停止”：在跑的命令和监视、harness 会单独停的子代理、在跑的子会话 */
-function stoppable(entry: BackgroundEntryView, stopsAgents: boolean): boolean {
-  if (entry.status !== 'running') return false
-  if (entry.source === 'task') return STOPPABLE_TASKS.has(entry.kind)
-  if (entry.source === 'agent') return stopsAgents
-  return true
-}
-
 export function BackgroundScreen({ route, navigation }: Props) {
   const { deviceId, sessionId } = route.params
   const t = useT()
@@ -50,8 +39,8 @@ export function BackgroundScreen({ route, navigation }: Props) {
   const entries = view?.entries ?? []
   const running = entries.filter((entry) => entry.status === 'running')
   const ended = entries.filter((entry) => entry.status !== 'running')
-  const stopsAgents =
-    device?.harnesses.find((entry) => entry.id === summary?.harness)?.abilities?.stopAgent === true
+  // 停不停得掉看 harness 报的能力（stopBackground、stopAgent），桌面同一个判断
+  const abilities = device?.harnesses.find((entry) => entry.id === summary?.harness)?.abilities
   // 在跑的用时一秒一秒地走：有在跑的才走
   const [now, setNow] = useState(Date.now())
   const ticking = running.length > 0
@@ -72,7 +61,7 @@ export function BackgroundScreen({ route, navigation }: Props) {
       sessionId={sessionId}
       entry={entry}
       now={now}
-      canStop={stoppable(entry, stopsAgents)}
+      canStop={backgroundStoppable(entry, abilities)}
       onFail={setFailure}
       onOpen={
         entry.source === 'task'

@@ -6,9 +6,11 @@
 // 回合的开始与结束还从各条客户端连接的上游上看（relay.mts 调 turnEvent），两边按回合号去重。
 //
 // 回报：子会话一回合结束，取最后一条回答前 400 字进父会话的队列（sessions.sqlite），父会话下一个由客户端发起的
-// 回合把它们包成 kind=notes 的一段放在用户消息前面（beforeUserTurn）。
+// 回合把它们包成 kind=notes 的一段放在用户消息前面（beforeUserTurn）。队列一变就发 litch/thread/queuedNotes/updated，
+// 客户端不等交给模型就把排着的回报画在父会话对话区的末尾。
 // 唤醒：有客户端连着、开关开着、父会话闲着、它没脱离的直接子会话都停下了（在等用户答的挂满 needsUserMs 也算停下）、
 // 队列里有该唤醒的回报、上一条用户消息之后唤醒不到 10 次，设备进程替父会话发一个 kind=wake 的回合。
+// 出错、被打断的回合，用户自己、定时任务发起的回合，用户停下的子会话，回报都不算该唤醒的。
 // 提醒收尾：会话带着 wrap_up、用户亲手发起的回合正常结束（completed）时这一回合没调过 wrap_up，
 // 设置里“每回合收尾”和提醒都开着，设备进程替它再开一个 kind=remind 的回合。提醒回合、唤醒回合、定时任务的回合都不是用户发起的，
 // 不会再引出提醒，所以一条用户消息之后最多一次。提醒和唤醒排在同一条检查队列里（check），先提醒、后唤醒：
@@ -31,6 +33,7 @@ import {
   type SessionEventNote,
   type SessionLineage,
   type SessionProposal,
+  type SessionQueuedNote,
 } from '../../protocol/src/session-tree.mjs'
 import type { EngineLink } from './engine-link.mjs'
 import type { HarnessSource } from './session.mjs'
@@ -65,6 +68,8 @@ export interface SessionTreeHost {
   taskTurn(threadId: string, turnId: string): boolean
   /** 会话里还有几个后台任务在跑（background.mts） */
   backgroundRunning(threadId: string): number
+  /** 会话的后台任务集合（background.mts） */
+  backgroundTasks(threadId: string): LitchBackgroundTask[]
   /** 后台任务跑完了引擎会不会自己接着做（background.mts 的 wakes） */
   backgroundWakes(threadId: string): boolean
   /** 设置里“每回合收尾”开着（sessions.wrapUp）：关掉时新会话的 litch_sessions 里没有 wrap_up，也不提醒 */
@@ -147,8 +152,11 @@ export class SessionTree {
   private readonly reminders = new Map<string, string>()
   /** 提醒回合（会话 + 回合）→ 它替哪个用户回合提醒：一回合几张提案的门槛把两个回合合起来算 */
   private readonly remindedFor = new Map<string, string>()
-  /** 上一次回报写了还有后台任务在跑的子会话：跑完了要再报一次 */
-  private readonly backgroundOwed = new Set<string>()
+  /**
+   * 上一次回报写了还有后台任务在跑的子会话：跑完了要再报一次。值是回报时在跑的那几个任务，
+   * byUser 是这之后用户在后台任务页上停过它的命令（客户端的 thread/backgroundTerminals/terminate、clean）
+   */
+  private readonly backgroundOwed = new Map<string, { tasks: Set<string>; byUser: boolean }>()
   /** 回合结束时要叫醒的（wait 工具在等） */
   private readonly listeners = new Set<(threadId: string) => void>()
   /** 每个父会话的唤醒检查排成一条，免得一次结束触发两个唤醒 */
@@ -373,6 +381,7 @@ export class SessionTree {
         { threadId, title: lineage.title, status: 'needsUser', excerpt: '' },
         lineage.wakeParent && !this.host.taskTurn(threadId, turnId),
       )
+      this.notesChanged(lineage.parentThreadId)
     }
     this.check(lineage.parentThreadId)
   }
@@ -593,10 +602,21 @@ export class SessionTree {
       ...(error ? { error: error.slice(0, SESSION_TREE_LIMITS.noteChars) } : {}),
       ...(userStopped ? { userStopped } : {}),
     }
-    this.store.addNote(lineage.parentThreadId, note, lineage.wakeParent && wakeable)
+    // 出错、被打断的回合只进队列、不唤醒（同 Claude 桌面端：被截断的回合不算），等父会话下一回合带上，
+    // 或者别的子会话的回报唤醒父会话时一起交出去
+    this.store.addNote(
+      lineage.parentThreadId,
+      note,
+      lineage.wakeParent && wakeable && status === 'completed',
+    )
+    this.notesChanged(lineage.parentThreadId)
     this.host.log(`子会话 ${threadId}（${harness}）的回合 ${String(turn.id)} 已进父会话的回报队列`)
     if (background > 0) {
-      this.backgroundOwed.add(threadId)
+      const running = this.host
+        .backgroundTasks(threadId)
+        .filter((task) => task.status === 'running')
+        .map((task) => task.id)
+      this.backgroundOwed.set(threadId, { tasks: new Set(running), byUser: false })
       // 跑完以后的事（自发回合、集合变化）要看得到：盯上这个子会话
       void this.watch(harness, threadId).catch((error: unknown) =>
         this.host.log(`盯子会话 ${threadId} 的后台任务没成：${String(error)}`),
@@ -605,19 +625,32 @@ export class SessionTree {
     this.check(lineage.parentThreadId)
   }
 
+  /** 用户在后台任务页上停了这个会话的命令（客户端的 thread/backgroundTerminals/terminate、clean） */
+  backgroundStopped(threadId: string): void {
+    const owed = this.backgroundOwed.get(threadId)
+    if (owed) owed.byUser = true
+  }
+
   /**
-   * 子会话的后台任务全部结束了（background.mts 的 onSettled）。引擎会自己接着做的，等那一回合结束照常回报；
-   * 不会的（原生 codex）这里补一条回报，摘录写各任务的结局
+   * 子会话的后台任务全部结束了（background.mts 的 onSettled）。引擎会自己接着做、也真有任务是自己跑完的，
+   * 等那一回合结束照常回报；不会接着做的（原生 codex），或者一个都不是自己跑完的（都被停了，引擎不续跑），
+   * 这里补一条回报，摘录写各任务的结局。全是用户停的（决 481）：写明是用户停的，只进队列、不唤醒父会话
    */
   backgroundSettled(threadId: string, tasks: LitchBackgroundTask[]): void {
-    if (!this.backgroundOwed.has(threadId) || this.host.backgroundWakes(threadId)) return
+    const owed = this.backgroundOwed.get(threadId)
+    if (!owed) return
+    const ended = tasks.filter((task) => owed.tasks.has(task.id) && task.status !== 'running')
+    const finished = ended.some((task) => task.status === 'completed' || task.status === 'failed')
+    if (finished && this.host.backgroundWakes(threadId)) return
     this.backgroundOwed.delete(threadId)
     const lineage = this.store.parentOf(threadId)
     if (!lineage || !this.host.enabled()) return
-    const outcomes = tasks
-      .filter((task) => task.status !== 'running')
+    const byUser = owed.byUser && ended.some((task) => task.status === 'stopped')
+    const outcome = (task: LitchBackgroundTask) =>
+      task.status === 'stopped' && byUser ? 'stopped by the user' : task.status
+    const outcomes = (ended.length ? ended : tasks.filter((task) => task.status !== 'running'))
       .slice(0, 5)
-      .map((task) => `${task.title} (${task.status})`)
+      .map((task) => `${task.title} (${outcome(task)})`)
       .join('; ')
     const note: SessionEventNote = {
       threadId,
@@ -625,7 +658,9 @@ export class SessionTree {
       status: 'completed',
       excerpt: `Background tasks finished: ${outcomes}`.slice(0, SESSION_TREE_LIMITS.noteChars),
     }
-    this.store.addNote(lineage.parentThreadId, note, lineage.wakeParent)
+    const allByUser = byUser && !finished
+    this.store.addNote(lineage.parentThreadId, note, lineage.wakeParent && !allByUser)
+    this.notesChanged(lineage.parentThreadId)
     this.host.log(`子会话 ${threadId} 的后台任务跑完了，补了一条回报`)
     this.check(lineage.parentThreadId)
   }
@@ -690,6 +725,7 @@ export class SessionTree {
     if (typeof turn?.id === 'string' && !this.active.has(parentId))
       this.active.set(parentId, turn.id)
     this.store.dropNotes(parentId, Math.max(...fresh.map((note) => note.seq)))
+    this.notesChanged(parentId)
     this.store.setWakes(parentId, this.store.wakes(parentId) + 1)
     this.host.log(`替会话 ${parentId}（${harness}）开了一个唤醒回合，带着 ${latest.length} 条回报`)
   }
@@ -720,6 +756,7 @@ export class SessionTree {
     const notes = this.store.notes(threadId)
     if (notes.length === 0) return null
     this.store.dropNotes(threadId, Math.max(...notes.map((note) => note.seq)))
+    this.notesChanged(threadId)
     const event = formatSessionEvent({
       kind: 'notes',
       notes: latestPerSession(notes).map(publicNote),
@@ -751,6 +788,8 @@ export class SessionTree {
     if (typeof thread.id !== 'string') return
     const lineage = this.lineage(thread.id)
     if (lineage) thread.litchLineage = lineage
+    const queued = this.queuedNotes(thread.id)
+    if (queued.length) thread.litchQueuedNotes = queued
     const tools = this.store.tools(thread.id)
     if (tools) {
       thread.litchToolNamespaces = tools.flatMap((spec) =>
@@ -784,6 +823,23 @@ export class SessionTree {
     this.host.announce(
       SESSION_TREE_NOTIFICATION.lineageUpdated,
       { threadId, lineage: this.lineage(threadId) },
+      EXTENSION.sessionTree,
+    )
+  }
+
+  /** 这个会话现在排着、还没交给模型的回报：每个子会话最新的一条，次序同交出去时 */
+  queuedNotes(threadId: string): SessionQueuedNote[] {
+    return latestPerSession(this.store.notes(threadId)).map((note) => ({
+      ...publicNote(note),
+      at: note.at,
+    }))
+  }
+
+  /** 回报队列变了：告诉声明了 sessionTree 的连接，父会话的对话区当场画出来 */
+  private notesChanged(threadId: string): void {
+    this.host.announce(
+      SESSION_TREE_NOTIFICATION.queuedNotesUpdated,
+      { threadId, notes: this.queuedNotes(threadId) },
       EXTENSION.sessionTree,
     )
   }
@@ -1011,9 +1067,11 @@ export class SessionTree {
    * 在跑的回合结束时的回报、已经排着的回报都不再唤醒父会话，注明已归档
    */
   archived(threadId: string): void {
-    if (!this.store.parentOf(threadId)) return
+    const lineage = this.store.parentOf(threadId)
+    if (!lineage) return
     if (this.active.has(threadId)) this.userStops.set(threadId, 'archived')
     this.store.muteNotes(threadId, 'archived')
+    this.notesChanged(lineage.parentThreadId)
   }
 
   /** 会话删掉了：它带的动态工具、记下的速度跟着删 */

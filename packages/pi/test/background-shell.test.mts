@@ -12,6 +12,7 @@ import {
   isShellEventText,
   runShellTool,
   type ShellTask,
+  withStopNotice,
 } from '../../shared/src/background-shell.mjs'
 
 function rig() {
@@ -159,6 +160,65 @@ test('模型停的、用户停的记 stopped，不交给 finished；连它起的
     })
     assert.match(list.text, /stopped by you/)
     assert.match(list.text, /stopped by the user/)
+  } finally {
+    await cleanup()
+  }
+})
+
+test('用户停的：不唤醒，下一轮开头交给模型一次；模型停的、模型自己看过的不交', async () => {
+  const { root, shells, finished, cleanup } = rig()
+  const start = (command: string) =>
+    runShellTool(shells, { threadId: 't1', cwd: root, tool: 'start', arguments: { command } })
+  const waitEnd = async () => {
+    for (let i = 0; i < 100 && shells.runningCount('t1') > 0; i++)
+      await new Promise((done) => setTimeout(done, 50))
+  }
+  try {
+    await start('sleep 60')
+    await start('sleep 60')
+    await start('sleep 60')
+    assert.equal(shells.takeStopNotice('t1'), null)
+    assert.equal(shells.stop('t1', 'shell-1', 'user'), true)
+    assert.equal(shells.stop('t1', 'shell-2', 'model'), true)
+    assert.equal(shells.stop('t1', 'shell-3', 'user'), true)
+    await waitEnd()
+    await new Promise((done) => setTimeout(done, 400))
+    assert.equal(finished.length, 0)
+    // 模型自己 read 过 shell-3：它知道了，不再说
+    const read = await runShellTool(shells, {
+      threadId: 't1',
+      cwd: root,
+      tool: 'read',
+      arguments: { id: 'shell-3' },
+    })
+    assert.match(read.text, /stopped by the user/)
+    const notice = shells.takeStopNotice('t1')
+    assert.ok(notice)
+    assert.match(notice, /^<litch-background-notice>/)
+    assert.match(
+      notice,
+      /Background task shell-1 was stopped by the user after \d+s\. Command: sleep 60/,
+    )
+    assert.doesNotMatch(notice, /shell-2|shell-3/)
+    // 不是唤醒那段：重读历史时不会被当成一轮后台唤醒
+    assert.equal(isShellEventText(notice), false)
+    assert.equal(isShellEventText(withStopNotice('hi', notice)), false)
+    assert.equal(withStopNotice('hi', notice), `hi\n\n${notice}`)
+    assert.equal(withStopNotice('hi', null), 'hi')
+    // 只交一次
+    assert.equal(shells.takeStopNotice('t1'), null)
+    // list 过的也算看到了
+    await start('sleep 60')
+    shells.stop('t1', 'shell-4', 'user')
+    await waitEnd()
+    await runShellTool(shells, { threadId: 't1', cwd: root, tool: 'list', arguments: {} })
+    assert.equal(shells.takeStopNotice('t1'), null)
+    // 会话删掉了：不留
+    await start('sleep 60')
+    shells.stop('t1', 'shell-5', 'user')
+    await waitEnd()
+    shells.forget('t1')
+    assert.equal(shells.takeStopNotice('t1'), null)
   } finally {
     await cleanup()
   }

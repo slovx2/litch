@@ -82,6 +82,7 @@ import { NativeMcpPool } from './native-mcp-pool.mjs'
 import { NativeProcess, succeedsWithin } from './native-process.mjs'
 import {
   backgroundCommandEnd,
+  carriesReminder,
   goalReminder,
   isMainToolResult,
   keepAliveIdleMs,
@@ -95,6 +96,7 @@ import {
   sessionFingerprint,
   startsRound,
   steerMessage,
+  stopNotice,
   userMessage,
 } from './native-session.mjs'
 import { forkNativeSession } from './native-session-fork.mjs'
@@ -219,9 +221,9 @@ interface NativeSession {
   shells: BackgroundShellState
   // 出现在 background_tasks_changed 里的任务（任意类型）。它们结束后 CLI 会自己再跑一轮。
   backgroundTasks: Set<string>
-  // 还在跑的非 ambient 的 MCP、WebSocket 监视（monitor_*）。和后台命令一样要保活进程：
-  // 进程一退它们就没了（Monitor 工具起的是 local_bash，已经算在 shells 里）
-  monitors: Set<string>
+  // 还在跑的非 ambient 的 MCP、WebSocket 监视（monitor_*）：描述和列出来的先后（和后台命令共用一个计数）。
+  // 和后台命令一样要保活进程：进程一退它们就没了（Monitor 工具起的是 local_bash，已经算在 shells 里）
+  monitors: Map<string, { description: string; seq: number }>
   // CLI 上报的会话状态。idle 表示后台子代理及其通知触发的续跑都已结束；
   // null 表示 CLI 没有上报过状态，回合仍在第一条 result 处结束。
   state: 'idle' | 'running' | 'requires_action' | null
@@ -356,6 +358,9 @@ function hasBackgroundWork(session: NativeSession): boolean {
   return session.shells.live.size > 0 || session.monitors.size > 0
 }
 
+const joinReminders = (...notes: Array<string | null>): string | null =>
+  notes.filter((note) => note !== null).join('\n') || null
+
 export class NativeClaudeRuntime implements ClaudeRuntime {
   private sdk: ClaudeSdk | null = null
   private turns = new Map<string, PendingTurn>()
@@ -379,6 +384,11 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
   private mcpPool = new NativeMcpPool()
   // 会话里起过的有名字的子代理（Agent 工具的 name），按会话键：SendMessage 发给它们时不当成发给别的会话
   private agentNames = new Map<string, Set<string>>()
+  // 用户停掉的、还没告诉模型的后台命令，按线程，记着是哪个进程停的（takeStopNotice）
+  private userStops = new Map<
+    string,
+    Array<{ session: NativeSession; taskId: string; toolUseId: string | null; description: string }>
+  >()
 
   setSessionHandlers(handlers: RuntimeSessionHandlers): void {
     this.sessionHandlers = handlers
@@ -593,7 +603,10 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
           const reminder =
             context.purpose === 'compact'
               ? null
-              : goalReminder(session.applied.goalContext, context.goalContext ?? null)
+              : joinReminders(
+                  goalReminder(session.applied.goalContext, context.goalContext ?? null),
+                  carriesReminder(context) ? this.takeStopNotice(session.key, session) : null,
+                )
           if (context.purpose !== 'compact')
             session.applied.goalContext = context.goalContext ?? null
           session.input.send(userMessage(context, uuid, reminder))
@@ -849,7 +862,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
           nextSeq: 0,
         },
         backgroundTasks: new Set(),
-        monitors: new Set(),
+        monitors: new Map(),
         state: null,
         applied: {
           model: context.model,
@@ -882,7 +895,8 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       // 唤醒回合不送用户消息：这一轮由收件箱里别的会话发来的消息开
       if (context.wake) this.armWakeTimeout(session, pending)
       else {
-        input.send(userMessage(context, null, null))
+        const notice = carriesReminder(context) ? this.takeStopNotice(session.key, session) : null
+        input.send(userMessage(context, null, notice))
         this.requestTitle(session, context)
       }
     } catch (error) {
@@ -986,32 +1000,67 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
   }
 
   listBackgroundShells(threadId: string): RuntimeBackgroundShell[] {
-    const state = this.sessions.get(threadId)?.shells
-    if (!state) return []
-    return [...state.live]
-      .map(([taskId, seq]) => {
-        const toolUseId = state.taskToolUse.get(taskId) ?? null
-        return {
-          taskId,
-          toolUseId,
-          command: (toolUseId && state.bashCommand.get(toolUseId)) || '',
-          seq,
-        }
+    const session = this.sessions.get(threadId)
+    if (!session) return []
+    const state = session.shells
+    const shells: RuntimeBackgroundShell[] = [...state.live].map(([taskId, seq]) => {
+      const toolUseId = state.taskToolUse.get(taskId) ?? null
+      return {
+        taskId,
+        toolUseId,
+        command: (toolUseId && state.bashCommand.get(toolUseId)) || '',
+        seq,
+      }
+    })
+    for (const [taskId, monitor] of session.monitors)
+      shells.push({
+        taskId,
+        toolUseId: null,
+        command: monitor.description,
+        seq: monitor.seq,
+        monitor: true,
       })
-      .sort((a, b) => a.seq - b.seq)
+    return shells.sort((a, b) => a.seq - b.seq)
   }
 
-  // 有没有回合在跑都能停：后台命令属于进程，不属于某个回合。
+  // 有没有回合在跑都能停：后台命令、监视属于进程，不属于某个回合。CLI 的 stop_task 停哪种任务都是同一个函数，
+  // 监视（monitor_*）也停得掉。用户停的命令记下来（userStops），下一轮换了进程时由 Litch 告诉模型
   async stopBackgroundShell(threadId: string, taskId: string): Promise<boolean> {
     const session = this.sessions.get(threadId)
-    if (!session || session.closing || !session.shells.live.has(taskId)) return false
+    if (!session || session.closing) return false
+    const shell = session.shells.live.has(taskId)
+    if (!shell && !session.monitors.has(taskId)) return false
     try {
       await session.query.stopTask(taskId)
-      return true
     } catch (error) {
       debugLog('native.backgroundShell.stopFailed', { threadId, taskId, error: String(error) })
       return false
     }
+    if (shell) {
+      const toolUseId = session.shells.taskToolUse.get(taskId) ?? null
+      const stops = this.userStops.get(threadId) ?? []
+      stops.push({
+        session,
+        taskId,
+        toolUseId,
+        description: (toolUseId && session.shells.bashCommand.get(toolUseId)) || taskId,
+      })
+      this.userStops.set(threadId, stops)
+    }
+    return true
+  }
+
+  /**
+   * 上一轮之后用户停掉的后台命令，这一轮开头给模型的那段话。CLI 对用户停的命令自己会在下一轮开头并进一条
+   * 不开回合的通知，但它只在进程的内存里：还是停它的那个进程就交给 CLI，换了进程（空闲回收、配置变了）的由
+   * Litch 照 CLI 的样子补上。取了就清掉，只交一次
+   */
+  private takeStopNotice(threadId: string, session: NativeSession): string | null {
+    const stops = this.userStops.get(threadId)
+    if (!stops) return null
+    this.userStops.delete(threadId)
+    const lost = stops.filter((stop) => stop.session !== session)
+    return lost.length ? stopNotice(lost) : null
   }
 
   async stopSubagentTask(threadId: string, taskId: string): Promise<boolean> {
@@ -2111,12 +2160,15 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     if (subtype === 'background_tasks_changed' && Array.isArray(message.tasks)) {
       const state = session.shells
       const live = new Map<string, number>()
-      const monitors = new Set<string>()
+      const monitors: NativeSession['monitors'] = new Map()
       for (const task of message.tasks as Array<Record<string, unknown>>) {
         if (typeof task.task_id !== 'string' || !task.task_id) continue
         session.backgroundTasks.add(task.task_id)
         if (String(task.task_type ?? '').startsWith('monitor_') && task.ambient !== true)
-          monitors.add(task.task_id)
+          monitors.set(task.task_id, {
+            description: typeof task.description === 'string' ? task.description : '',
+            seq: session.monitors.get(task.task_id)?.seq ?? state.nextSeq++,
+          })
         if (task.task_type !== 'local_bash' || task.ambient === true) continue
         let seq = state.seqByTask.get(task.task_id)
         if (seq == null) {

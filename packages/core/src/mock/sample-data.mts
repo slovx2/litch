@@ -266,6 +266,7 @@ const summaries = (
     placedAt: null,
     task: null,
     lineage: null,
+    queuedNotes: [],
     nativeLineage: null,
     background: null,
     worktree: null,

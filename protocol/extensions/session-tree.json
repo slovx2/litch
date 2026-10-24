@@ -3,11 +3,11 @@
   "description": "会话树：一个会话派出的子会话（任意 harness、同一台设备）、模型提的“另起一个子会话”的提案、子会话的回报与唤醒父会话，以及模型用的 litch_sessions 工具（列出、读取、派出或提案、给无关的新任务出“新会话 / 在这里做”的卡、开始提案、撤回提案、交接做到一半的任务、发消息、等待、打断、每回合的收尾）。父子关系存在设备进程自己的库里，不存在任何引擎里；子会话本身是普通的顶层会话，照常出现在 thread/list 里。引擎自己的子代理线程（标准协议的 parentThreadId、source.subAgent）不归这里管。类型在 packages/protocol/src/session-tree.mts，工具定义在 client-tools-sessions.mts。",
   "appliesTo": "只有聚合面。litch_sessions 的执行方是设备进程：原生 codex 发来的调用设备进程本来就拦；claude-code、pi、dsh、opencode 的入口按 clientTools 的规矩挑执行方，设备进程在转给它们的握手里替每条上游连接声明 litch_sessions，调用落到哪条上游连接上就在那里拦下自己答，不转给任何客户端。引擎不支持客户端工具（没声明 clientTools）时，它上面的会话没有这组工具，但照样能当子会话、也能由用户在界面上派子会话。",
   "declaration": {
-    "description": "设备服务在 runtime/info 的 device.extensions 里列出 sessionTree，表示下面的方法可用、会话编排的开关开着。客户端握手时在 capabilities.litchExtensions 里声明 sessionTree，表示它认识会话对象上的 litchLineage 和下面两条通知。",
+    "description": "设备服务在 runtime/info 的 device.extensions 里列出 sessionTree，表示下面的方法可用、会话编排的开关开着。客户端握手时在 capabilities.litchExtensions 里声明 sessionTree，表示它认识会话对象上的 litchLineage、litchQueuedNotes 和下面三条通知。",
     "where": "initialize.params.capabilities.litchExtensions",
     "schema": { "type": "array", "items": { "type": "string" }, "contains": { "const": "sessionTree" } }
   },
-  "undeclared": "没声明的连接上：会话对象上没有 litchLineage，收不到 litch/thread/lineage/updated、litch/sessionProposal/changed；litch/session/*、litch/sessionProposal/* 照样能调（客户端发起的方法），只有 litch/sessionProposal/answer 回不支持（看不到 offer 卡的连接不能替用户选）。子会话在它们眼里是普通会话；设备注入给父会话的回报与唤醒是一段包在 <litch-session-event> 里的文字，它们按普通的用户消息显示。",
+  "undeclared": "没声明的连接上：会话对象上没有 litchLineage，收不到 litch/thread/lineage/updated、litch/sessionProposal/changed、litch/thread/queuedNotes/updated，会话对象上也没有 litchQueuedNotes；litch/session/*、litch/sessionProposal/* 照样能调（客户端发起的方法），只有 litch/sessionProposal/answer 回不支持（看不到 offer 卡的连接不能替用户选）。子会话在它们眼里是普通会话；设备注入给父会话的回报与唤醒是一段包在 <litch-session-event> 里的文字，它们按普通的用户消息显示。",
   "rules": [
     "父子关系只在 Litch 子会话之间。写类工具（send、interrupt）只能作用于调用者自己的 Litch 子孙会话，对别的会话回 [litch:blocked]，说明里让模型请用户自己去做；对引擎原生子线程回 [litch:blocked]，说明里让模型用引擎自己的子代理工具。",
     "子会话停下后唤不唤醒父会话由 Litch 定，不交给模型：模型调 start 直接起的子会话、start 和 wrap_up 落下的提案，wakeParent 一律为真（模型给了 wake_parent 也不认）。用户在界面上派（litch/session/start 的 wakeParent）、从卡片开始（overrides.wakeParent）时按用户选的。",
@@ -33,7 +33,8 @@
     "从提案开始的子会话，litchLineage 上带 proposalId。",
     "fork 只能同 harness，用目标引擎的 thread/fork；跨 harness 只能 fresh。",
     "子会话一回合结束：取最后一条回答的前 SESSION_TREE_LIMITS.noteChars 个字，等父会话下一个由用户发起的回合时，包成 kind=notes 的 <litch-session-event> 放在用户消息前面。",
-    "子会话的回合失败、被打断：回报（SessionEventNote）另带 error，是回合上的错误原文，截到 SESSION_TREE_LIMITS.noteChars 个字以内；给模型的那一行写在最后（error: …）。",
+    "子会话的回合失败、被打断：回报（SessionEventNote）另带 error，是回合上的错误原文，截到 SESSION_TREE_LIMITS.noteChars 个字以内；给模型的那一行写在最后（error: …）。这样的回报（第一回合也一样）照常进队列，但不算“要唤醒”的：等父会话下一个回合带上，或者别的子会话的回报唤醒父会话时一起交出去（同 Claude 桌面端：被截断的回合不唤醒）。派子会话时简报没发出去（turn/start 失败）不进队列，错误当场回给派它的那次调用。",
+    "回报队列一变（进了一条、交出去了、改成不唤醒）就给声明了 sessionTree 的连接发 litch/thread/queuedNotes/updated（threadId、notes），notes 是这个会话现在排着、还没交给模型的回报（SessionQueuedNote：SessionEventNote 加进队列的时间 at，单位秒），每个子会话最新的一条，次序同交出去时；空了是空数组。经过聚合面的会话对象上同样挂 litchQueuedNotes（空着时没有这个字段）。客户端据此不等交给模型就把排着的回报画在父会话对话区的末尾，交出去之后画在带着它的那条消息上。",
     "唤醒：父会话空闲、它的直接子会话都停下、它自己没有待处理的请求、而且至少有一个子会话的 wakeParent 为真时，设备进程替父会话发一个 turn/start，内容是 kind=wake 的 <litch-session-event>。上一条用户消息之后最多唤醒 SESSION_TREE_LIMITS.wakesPerUserMessage 次。没有客户端连着时不唤醒，等有连接上来再查一遍。",
     "子会话里由用户自己发起的回合（客户端的 turn/start）、由定时任务（deviceTasks）发起的回合：结束时照常回报，但这条回报不算“要唤醒”的。",
     "用户亲手停下的子会话（客户端对它发的 turn/interrupt 打断了在跑的回合，或者它被归档：客户端发的 thread/archive、引擎的 thread/archived 通知）：那一回合的回报照常进队列，带 userStopped（interrupted 或 archived），不算“要唤醒”的；归档时已经排着的这个子会话的回报也改成不唤醒、带 userStopped=archived。父会话下一个用户回合照常看到这些回报，给模型的那一行注明（stopped by the user / archived by the user）。模型用 litch_sessions 打断的不算用户停的，照常唤醒。",
@@ -62,13 +63,19 @@
       "description": "只发给声明了 sessionTree 的连接，只在设备进程记着这个会话建的时候带了哪些动态工具时有（经设备进程建的会话）：其中 litch_ 开头的命名空间名，字符串数组，可以是空的。客户端据此判断这个会话里的模型能不能用 litch_sessions 读别的会话；没有这个字段的当没带。"
     },
     {
+      "kind": "ThreadField",
+      "name": "litchQueuedNotes",
+      "on": "同 litchLineage",
+      "description": "只发给声明了 sessionTree 的连接，只在这个会话的回报队列里有东西时有：排着、还没交给模型的子会话回报，形状见 session-tree.mts 的 SessionQueuedNote。"
+    },
+    {
       "kind": "ClientRequest",
       "methods": ["litch/session/start", "litch/session/detach", "litch/sessionProposal/list", "litch/sessionProposal/accept", "litch/sessionProposal/dismiss", "litch/sessionProposal/answer", "litch/sessionProposal/here", "litch/sessionProposal/markHere"],
       "description": "参数与应答见 session-tree.mts。start 起好后发 litch/thread/lineage/updated 和标准的 thread/started。 litch/sessionProposal/answer 只收声明了 sessionTree 的连接。"
     },
     {
       "kind": "ServerNotification",
-      "methods": ["litch/thread/lineage/updated", "litch/sessionProposal/changed"],
+      "methods": ["litch/thread/lineage/updated", "litch/sessionProposal/changed", "litch/thread/queuedNotes/updated"],
       "description": "只发给声明了 sessionTree 的连接。"
     },
     {

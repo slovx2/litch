@@ -1,6 +1,7 @@
 // 设备进程注入给父会话的那段文字（<litch-session-event>）：子会话的回报、唤醒、没调收尾时的提醒。
 // 核心已经把它从用户消息里拆出来了（UserMessageItem.event），这里画成一条系统提示，不画成用户说的话；
-// 提醒没有回报，只是一行更轻的字。
+// 提醒没有回报，只是一行更轻的字。还排着、没交给模型的回报（SessionSummary.queuedNotes）同样画一条，
+// 放在对话区末尾（QueuedNotesBar，同 Claude 桌面端），交出去之后它画在带着它的那条消息上。
 import type { SessionEventView, SessionNoteView, SessionSummary } from '@litch/core'
 import { keys } from '@litch/core'
 import { useT } from '../app/appearance.ts'
@@ -44,6 +45,7 @@ function Note({ deviceId, note }: { deviceId: string; note: SessionNoteView }) {
       )}
       <span className="sev-status">{t(`tree.note.${note.status}`)}</span>
       {note.excerpt ? <span className="sev-text">{note.excerpt}</span> : null}
+      {note.error ? <span className="sev-text sev-error">{note.error}</span> : null}
     </li>
   )
 }
@@ -52,18 +54,26 @@ export function SessionEventBar({
   deviceId,
   event,
   anchor,
+  queued = false,
 }: {
   deviceId: string
   event: SessionEventView
   /** 这条消息没有用户自己的话（唤醒的回合）时，滚动定位的标记打在这一条上 */
   anchor?: string | undefined
+  /** 还排着、没交给模型的回报（对话区末尾那一条） */
+  queued?: boolean
 }) {
   const t = useT()
   return (
-    <div className="sev" data-event={event.kind} data-anchor={anchor}>
+    <div
+      className="sev"
+      data-event={event.kind}
+      data-anchor={anchor}
+      data-queued={queued || undefined}
+    >
       <div className="sev-head">
         <Icon name="info" small />
-        <span>{t(HEAD_TEXT[event.kind])}</span>
+        <span>{t(queued ? 'tree.event.queued' : HEAD_TEXT[event.kind])}</span>
       </div>
       {event.notes.length > 0 ? (
         <ul className="sev-notes">
@@ -74,4 +84,12 @@ export function SessionEventBar({
       ) : null}
     </div>
   )
+}
+
+/** 这个会话还排着、没交给模型的子会话回报：对话区末尾一条，进队列就出现，交出去就没了。没有的不画 */
+export function QueuedNotesBar({ deviceId, sessionId }: { deviceId: string; sessionId: string }) {
+  const summary = useKey<SessionSummary>(keys.summary(deviceId, sessionId))
+  const notes = summary?.queuedNotes
+  if (!notes?.length) return null
+  return <SessionEventBar deviceId={deviceId} event={{ kind: 'notes', notes }} queued />
 }

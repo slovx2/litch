@@ -1590,6 +1590,30 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     },
 
     async interrupt(sessionId) {
+      const opened = sessions.get(sessionId)
+      // 没打开过的会话（后台任务页上停一个子会话、子代理）：不为停它去打开订阅，问对面最近一个回合，在跑就打断它
+      if (!opened?.view) {
+        let last: { id: string; status: string } | undefined
+        try {
+          const page = await host.request('thread/turns/list', {
+            threadId: sessionId,
+            limit: 1,
+            sortDirection: 'desc',
+            itemsView: 'notLoaded',
+          })
+          last = page.data[0]
+        } catch (error) {
+          throw failure(error)
+        }
+        if (last?.status !== 'inProgress')
+          throw new ChannelError('rejected', '当前没有可中断的回合')
+        try {
+          await host.request('turn/interrupt', { threadId: sessionId, turnId: last.id })
+        } catch (error) {
+          throw failure(error)
+        }
+        return
+      }
       const live = need(sessionId)
       const running = isRunning(live.view)
       const turnId = running ? serverTurn(live, running.id) : null

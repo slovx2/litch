@@ -29,6 +29,7 @@ test('ACP：后台 shell 跑完另开一轮；来历、集合只给声明过的�
     const peer = await litch(s.server)
     const info = await peer.call('runtime/info', {})
     assert.equal(info.features.backgroundTasks, true)
+    assert.equal(info.features.stopBackground, true)
     assert.ok(info.extensions.includes('backgroundTasks'))
     const { thread } = await peer.call('thread/start', { cwd: s.cwd })
     await s.desktop.call('thread/resume', { threadId: thread.id })
@@ -85,7 +86,7 @@ test('ACP：后台 shell 跑完另开一轮；来历、集合只给声明过的�
   }
 })
 
-test('ACP：用户停掉的不唤醒；backgroundTerminals 列得出、停得掉', async () => {
+test('ACP：用户停掉的不唤醒，下一轮接在用户的话后面告诉 agent 一次；backgroundTerminals 列得出、停得掉', async () => {
   const s = await scene(ON)
   try {
     const peer = await litch(s.server)
@@ -103,6 +104,18 @@ test('ACP：用户停掉的不唤醒；backgroundTerminals 列得出、停得掉
     await new Promise((resolve) => setTimeout(resolve, 800))
     const completed = peer.notifications.filter((m: any) => m.method === 'turn/completed')
     assert.equal(completed.length, 1, '没有唤醒')
+    // 用户的下一句：agent 收到的那句后面接着“被用户停了”，画出来的用户的话还是原话；只交一次
+    const next = await turn(s, thread.id, text('接着'))
+    const reply = next.items.find((entry: any) => entry.type === 'agentMessage')?.text ?? ''
+    assert.match(reply, /^收到：接着\n\n<litch-background-notice>/)
+    assert.match(reply, /shell-1 was stopped by the user after \d+s\. Command: sleep 30/)
+    const user = next.items.find((entry: any) => entry.type === 'userMessage')
+    assert.deepEqual(
+      user.content.map((part: any) => part.text),
+      ['接着'],
+    )
+    const after = await turn(s, thread.id, text('再说'))
+    assert.doesNotMatch(JSON.stringify(after.items), /stopped by the user/)
   } finally {
     await dispose(s)
   }
@@ -179,4 +192,41 @@ test('ACP：回放历史时，交给 agent 的后台结果另起一轮、记来�
   assert.deepEqual(third?.items, [])
   assert.equal(projection.origins.get(fourth?.id ?? ''), undefined)
   assert.equal((fourth?.items[0] as any)?.content[0].text, '还有一句')
+})
+
+test('ACP：回放历史时，接在用户的话后面的“被用户停了”不另起一轮，照记下的整句找回原话', () => {
+  const sent =
+    '接着\n\n<litch-background-notice>\nBackground task shell-1 was stopped by the user after 3s. Command: sleep 30\n</litch-background-notice>'
+  const projection = new Projection(
+    {
+      id: 's1',
+      cwd: '/tmp',
+      name: null,
+      preview: '',
+      createdAt: 1,
+      updatedAt: 2,
+      forkedFromId: null,
+      ephemeral: false,
+    },
+    (value) =>
+      value === sent
+        ? { content: [{ type: 'text', text: '接着', text_elements: [] }], clientId: 'c1' }
+        : null,
+  )
+  const quiet = () => {}
+  projection.startReplay()
+  projection.update(
+    { sessionUpdate: 'user_message_chunk', content: { type: 'text', text: sent } },
+    quiet,
+  )
+  projection.update(
+    { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: '好' } },
+    quiet,
+  )
+  projection.endReplay()
+  assert.equal(projection.turns.length, 1)
+  assert.equal(projection.origins.get(projection.turns[0]?.id ?? ''), undefined)
+  const user = projection.turns[0]?.items[0] as any
+  assert.deepEqual(user.content, [{ type: 'text', text: '接着', text_elements: [] }])
+  assert.equal(user.clientId, 'c1')
 })

@@ -46,6 +46,7 @@ test('OpenCode：后台 shell 回合结束后跑完，自己开一轮；来历�
     await plain.initialize()
     const info = await litch.call('runtime/info', {})
     assert.equal(info.features.backgroundTasks, true)
+    assert.equal(info.features.stopBackground, true)
     const { thread } = await litch.call('thread/start', { cwd: env.cwd })
     startName.value = `${serverName(thread.id)}_shell_start`
     await plain.call('thread/resume', { threadId: thread.id })
@@ -111,6 +112,67 @@ test('OpenCode：后台 shell 回合结束后跑完，自己开一轮；来历�
   }
 })
 
+test('OpenCode：用户停掉的不唤醒，下一轮作为不显示的一段交给模型一次', {
+  skip,
+  timeout: 180000,
+}, async () => {
+  const env = await isolate(
+    scripted({
+      BG: [
+        [
+          {
+            type: 'tool',
+            get name() {
+              return startName.value
+            },
+            input: { command: 'sleep 30' },
+          },
+        ],
+        [{ type: 'text', chunks: ['在跑了。'] }],
+      ],
+      NEXT: [[{ type: 'text', chunks: ['知道了。'] }]],
+      AGAIN: [[{ type: 'text', chunks: ['好。'] }]],
+    }),
+    { server: { backgroundShell: true } },
+  )
+  try {
+    const litch = client(env.server, ['backgroundTasks'])
+    await litch.initialize()
+    const { thread } = await litch.call('thread/start', { cwd: env.cwd })
+    startName.value = `${serverName(thread.id)}_shell_start`
+    const { turn } = await litch.call('turn/start', { threadId: thread.id, input: text('BG 跑') })
+    await litch.until('turn/completed', (p) => p.turn.id === turn.id, 60000)
+    const listed = await litch.call('thread/backgroundTerminals/list', { threadId: thread.id })
+    assert.equal(listed.data.length, 1)
+    const stopped = await litch.call('thread/backgroundTerminals/terminate', {
+      threadId: thread.id,
+      processId: listed.data[0].processId,
+    })
+    assert.equal(stopped.terminated, true)
+    await litch.until(
+      'litch/thread/background/changed',
+      (p) => p.tasks[0]?.status === 'stopped',
+      10000,
+    )
+    await new Promise((resolve) => setTimeout(resolve, 800))
+    assert.equal(litch.of('turn/completed').length, 1, '没有唤醒')
+    const notices = (body: any) =>
+      JSON.stringify(body?.messages ?? []).split('was stopped by the user').length - 1
+    const next = await litch.call('turn/start', { threadId: thread.id, input: text('NEXT') })
+    await litch.until('turn/completed', (p) => p.turn.id === next.turn.id, 60000)
+    assert.equal(notices(env.model.requests.at(-1)), 1)
+    const again = await litch.call('turn/start', { threadId: thread.id, input: text('AGAIN') })
+    await litch.until('turn/completed', (p) => p.turn.id === again.turn.id, 60000)
+    assert.equal(notices(env.model.requests.at(-1)), 1, '记在历史里，不重复加')
+    // 画出来的用户的话里没有这段
+    const read = (await litch.call('thread/read', { threadId: thread.id, includeTurns: true }))
+      .thread
+    assert.doesNotMatch(JSON.stringify(read.turns), /stopped by the user/)
+  } finally {
+    await env.restore()
+  }
+})
+
 test('OpenCode：后台 shell 关着时模型看不到这几个工具', { skip, timeout: 120000 }, async () => {
   const env = await isolate(scripted({ HI: [[{ type: 'text', chunks: ['好。'] }]] }))
   try {
@@ -118,6 +180,7 @@ test('OpenCode：后台 shell 关着时模型看不到这几个工具', { skip, 
     await litch.initialize()
     const info = await litch.call('runtime/info', {})
     assert.equal(info.features.backgroundTasks, undefined)
+    assert.equal(info.features.stopBackground, undefined)
     const { thread } = await litch.call('thread/start', { cwd: env.cwd })
     const { turn } = await litch.call('turn/start', { threadId: thread.id, input: text('HI') })
     await litch.until('turn/completed', (p) => p.turn.id === turn.id, 60000)

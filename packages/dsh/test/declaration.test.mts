@@ -14,6 +14,11 @@ import { type MockBlock, scripted } from './mock-model.mjs'
 const features = declaration.features as HarnessFeatures
 const presets = declaration.permissionPresets as PermissionPreset[]
 
+test('后台作业只列得出（job/list）、停不了：报集合，不报停得掉，后台任务页上不出“停止”', () => {
+  assert.equal(features.backgroundTasks, true)
+  assert.equal(features.stopBackground, undefined)
+})
+
 const text = (value: string) => [{ type: 'text', text: value }]
 
 // 一个像素的 PNG。

@@ -6214,6 +6214,74 @@ test('thread/backgroundTerminals 列出、分页、结束与清理本轮后台 s
   }
 })
 
+test('thread/backgroundTerminals：监视只列给声明了 backgroundTasks 的连接，停得掉', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'codex-harness-adapter-test-'))
+  const proc = spawn(process.execPath, [adapter, 'app-server', '--listen', 'stdio://'], {
+    stdio: ['pipe', 'pipe', 'pipe'],
+    env: {
+      ...isolatedEnv,
+      CODEX_HOME: home,
+      CHA_CLAUDE_HOME: join(home, 'codex-harness-adapter'),
+      CHA_CLAUDE_MOCK: '1',
+      NODE_NO_WARNINGS: '1',
+    },
+  })
+  const reader = new JsonLineReader(proc)
+  let id = 0
+  const call = async (method: string, params: unknown) => {
+    id += 1
+    proc.stdin.write(json({ id, method, params }))
+    return reader.nextResponse(id)
+  }
+  const processes = async (threadId: string) =>
+    (await call('thread/backgroundTerminals/list', { threadId })).result.data.map(
+      (terminal: any) => [terminal.processId, terminal.command],
+    )
+  try {
+    const threadId = (await call('thread/start', { cwd: home })).result.thread.id
+    id += 1
+    proc.stdin.write(
+      json({
+        id,
+        method: 'turn/start',
+        params: {
+          threadId,
+          input: [{ type: 'text', text: 'mock background monitor', text_elements: [] }],
+        },
+      }),
+    )
+    for (;;) {
+      const message = await reader.next()
+      if (message.method === 'item/started' && message.params.item.type === 'commandExecution')
+        break
+    }
+    // 没声明的连接（官方桌面端）只看到命令
+    assert.deepEqual(await processes(threadId), [['claude:tool-bg-1', 'sleep 101']])
+    await call('initialize', {
+      clientInfo: { name: 'litch', version: '0' },
+      capabilities: { litchExtensions: ['backgroundTasks'] },
+    })
+    assert.deepEqual(await processes(threadId), [
+      ['claude:tool-bg-1', 'sleep 101'],
+      ['mock-monitor-1', 'PR 检查'],
+    ])
+    const stopped = await call('thread/backgroundTerminals/terminate', {
+      threadId,
+      processId: 'mock-monitor-1',
+    })
+    assert.deepEqual(stopped.result, { terminated: true })
+    assert.deepEqual(await processes(threadId), [['claude:tool-bg-1', 'sleep 101']])
+    await call('thread/backgroundTerminals/clean', { threadId })
+    for (;;) {
+      const message = await reader.next()
+      if (message.method === 'turn/completed') break
+    }
+  } finally {
+    proc.kill()
+    await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 80 })
+  }
+})
+
 test('skills/list and hooks/list surface Claude Code skills and settings hooks', async () => {
   const home = await mkdtemp(join(tmpdir(), 'codex-harness-adapter-test-'))
   const workspace = join(home, 'ws')

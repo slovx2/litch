@@ -246,6 +246,7 @@ export {
 export {
   backgroundEntries,
   backgroundHint,
+  backgroundStoppable,
   deriveBackground,
   runningFromTurn,
   sessionBackground,

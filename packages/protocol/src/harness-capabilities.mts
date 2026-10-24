@@ -106,6 +106,11 @@ export interface HarnessFeatures {
    */
   backgroundTasks?: boolean
   /**
+   * 集合里在跑的命令、监视（kind 为 shell、monitor）经 `thread/backgroundTerminals/terminate` 停得掉
+   * （客户端后台任务页上的“停止”）。后加的位，没报就是停不了
+   */
+  stopBackground?: boolean
+  /**
    * 持续目标：协议原有的 `thread/goal/set`、`thread/goal/get`、`thread/goal/clear` 和
    * `thread/goal/updated`、`thread/goal/cleared` 照上游的语义做得到（目标一直有效、空闲时自动续跑、
    * 模型用目标工具报完成或受阻、用量和预算）。后加的位，没报就是不会：客户端不出目标的入口

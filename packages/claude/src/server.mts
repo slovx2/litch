@@ -278,7 +278,7 @@ const WORKFLOW_WATCH = 'workflow'
 function watchdogStopNote(title: string, agentId: string, seconds: number): string {
   return [
     `Litch stopped the subagent "${title}" (agent ID ${agentId}) because it showed no activity for ${seconds} second${seconds === 1 ? '' : 's'}.`,
-    'The user did not stop it. If a task notification or SendMessage says it was stopped by the user, that was Litch.',
+    `The user did not stop it. If a task notification or SendMessage says this subagent (agent ID ${agentId}) was stopped by the user, that was Litch; other subagents reported as stopped by the user were stopped by the user.`,
     'Its partial changes may already be on disk: check them before you start the work again. Your other subagents keep running.',
     'This message is from Litch, not typed by the user.',
   ].join(' ')
@@ -337,6 +337,8 @@ interface ActiveSubagentState {
   active: Set<string>
   // 主模型用 SendMessage 续跑的子代理：当初派出它的 Agent 调用 ID → 子线程上新开的回合
   resumed: Map<string, ResumedSubagent>
+  // 用户单独停一个子代理（对子线程发 turn/interrupt）：停得掉返回 true，不是这个回合里在跑的子代理返回 null
+  stopByUser?: (childThreadId: string) => Promise<boolean | null>
 }
 
 // 被主模型续跑的子代理在子线程上新开的回合
@@ -1096,11 +1098,11 @@ export class CodexClaudeAppServer {
       case 'thread/shellCommand':
         return this.threadShellCommand(peer, asRecord(params))
       case 'thread/backgroundTerminals/clean':
-        return this.threadBackgroundTerminalsClean(asRecord(params))
+        return this.threadBackgroundTerminalsClean(peer, asRecord(params))
       case 'thread/backgroundTerminals/list':
-        return this.threadBackgroundTerminalsList(asRecord(params))
+        return this.threadBackgroundTerminalsList(peer, asRecord(params))
       case 'thread/backgroundTerminals/terminate':
-        return this.threadBackgroundTerminalsTerminate(asRecord(params))
+        return this.threadBackgroundTerminalsTerminate(peer, asRecord(params))
       case 'thread/rollback':
         return this.threadRollback(asRecord(params))
       case 'thread/revert':
@@ -3449,33 +3451,41 @@ export class CodexClaudeAppServer {
     return thread
   }
 
-  private listedBackgroundTerminals(thread: ThreadRecord): ListedBackgroundTerminal[] {
+  // 监视（monitor_*）不是终端，只列给声明了 backgroundTasks 的连接：后台任务页上停得掉，官方桌面端看到的照旧
+  private listedBackgroundTerminals(
+    peer: RpcPeer,
+    thread: ThreadRecord,
+  ): ListedBackgroundTerminal[] {
+    const monitors = this.declaresBackground(peer)
     const turnIds = new Set(this.backgroundCommands.list(thread.id).map((entry) => entry.turnId))
     const active = this.activeTurnByThread.get(thread.id)
     if (active) turnIds.add(active)
     const items = [...turnIds].flatMap((turnId) => this.store.getTurn(turnId)?.items ?? [])
     return backgroundTerminals(
-      this.runtime.listBackgroundShells?.(thread.id) ?? [],
+      (this.runtime.listBackgroundShells?.(thread.id) ?? []).filter(
+        (shell) => monitors || !shell.monitor,
+      ),
       thread.cwd,
       items,
     )
   }
 
-  private threadBackgroundTerminalsList(params: Record<string, unknown>): unknown {
+  private threadBackgroundTerminalsList(peer: RpcPeer, params: Record<string, unknown>): unknown {
     const thread = this.loadedThreadForTerminals(params)
     return paginateBackgroundTerminals(
-      this.listedBackgroundTerminals(thread).map((entry) => entry.terminal),
+      this.listedBackgroundTerminals(peer, thread).map((entry) => entry.terminal),
       params.cursor,
       params.limit,
     )
   }
 
   private async threadBackgroundTerminalsTerminate(
+    peer: RpcPeer,
     params: Record<string, unknown>,
   ): Promise<unknown> {
     const thread = this.loadedThreadForTerminals(params)
     const processId = requiredString(params.processId, 'processId')
-    const entry = this.listedBackgroundTerminals(thread).find(
+    const entry = this.listedBackgroundTerminals(peer, thread).find(
       (listed) => listed.terminal.processId === processId,
     )
     if (!entry) return { terminated: false }
@@ -3485,9 +3495,9 @@ export class CodexClaudeAppServer {
   }
 
   // 原生提交清理操作后立即返回，不等待终止完成。
-  private threadBackgroundTerminalsClean(params: Record<string, unknown>): unknown {
+  private threadBackgroundTerminalsClean(peer: RpcPeer, params: Record<string, unknown>): unknown {
     const thread = this.loadedThreadForTerminals(params)
-    for (const entry of this.listedBackgroundTerminals(thread))
+    for (const entry of this.listedBackgroundTerminals(peer, thread))
       void this.runtime.stopBackgroundShell?.(thread.id, entry.taskId)
     return {}
   }
@@ -4438,7 +4448,12 @@ export class CodexClaudeAppServer {
       active: activeSubagents,
       resumed: resumedSubagents,
     }
-    this.subagentStateByTurn.set(turn.id, { thread, turn, ...closureSubagents })
+    this.subagentStateByTurn.set(turn.id, {
+      thread,
+      turn,
+      ...closureSubagents,
+      stopByUser: (childThreadId) => stopSubagentByUser(childThreadId),
+    })
     let acceptRuntimeEvents = true
     let watchdogTimer: NodeJS.Timeout | null = null
     let resolveWatchdog: (() => void) | null = null
@@ -4457,6 +4472,8 @@ export class CodexClaudeAppServer {
     const subagentByTask = new Map<string, string>()
     // 被看门狗停掉的子代理（Agent 调用）：之后它的结果、事件都不再投影，已经按“Litch 停掉”收了尾
     const stoppedByWatchdog = new Set<string>()
+    // 用户停掉的子代理（Agent 调用）：照 CLI 自己的行为收尾（它的结果照常投影），看门狗不再管它
+    const stoppedByUser = new Set<string>()
     const subagentsRunning = (): boolean =>
       activeSubagents.size > 0 || resumedSubagents.size > 0 || workflowInFlight
     const runningSubagents = (): string[] => [
@@ -4483,6 +4500,8 @@ export class CodexClaudeAppServer {
         const silent: string[] = []
         let next = watchdogTimeoutMs
         for (const key of runningSubagents()) {
+          // 用户已经停了、等 CLI 报结果的不再计时：不能又被当成没动静、记成 Litch 停的
+          if (stoppedByUser.has(key)) continue
           if (!subagentActiveAt.has(key)) subagentActiveAt.set(key, now)
           const left =
             Math.max(subagentActiveAt.get(key) ?? now, answeredAt) + watchdogTimeoutMs - now
@@ -4517,6 +4536,21 @@ export class CodexClaudeAppServer {
     const rememberSubagentTask = (key: string, taskId: string): void => {
       subagentTaskIds.set(key, taskId)
       subagentByTask.set(taskId, key)
+    }
+    // 用户在子代理页、后台任务页上停一个子代理：经 CLI 的 stop_task 停（和 Claude 桌面端、TaskStop 同一个停止函数），
+    // 之后照 CLI 自己的行为：Agent 调用的结果、结束通知照常投影，子线程的回合随之收尾，不另外告诉模型
+    const stopSubagentByUser = async (childThreadId: string): Promise<boolean | null> => {
+      const key =
+        [...activeSubagents].find(
+          (one) => subagentContexts.get(one)?.childThreadId === childThreadId,
+        ) ?? [...resumedSubagents].find(([, ctx]) => ctx.childThreadId === childThreadId)?.[0]
+      if (!key || stoppedByWatchdog.has(key)) return null
+      const taskId = subagentTaskIds.get(key)
+      if (!taskId || !this.runtime.stopSubagentTask) return false
+      stoppedByUser.add(key)
+      if (await this.runtime.stopSubagentTask(thread.id, taskId)) return true
+      stoppedByUser.delete(key)
+      return false
     }
     // 只停没动静的那几个子代理，回合和别的子代理照常。有一个停不了就返回 false，由调用方结束整个回合
     const stopSilentSubagents = async (keys: string[]): Promise<boolean> => {
@@ -4893,6 +4927,7 @@ export class CodexClaudeAppServer {
             resumedSubagents.set(ctx.agentToolUseId, ctx.context)
             resumedBySend.set(event.toolUseId, ctx.agentToolUseId)
             stoppedByWatchdog.delete(ctx.agentToolUseId)
+            stoppedByUser.delete(ctx.agentToolUseId)
             rememberSubagentTask(ctx.agentToolUseId, event.agentId)
             subagentActivity(ctx.agentToolUseId)
             return
@@ -4905,12 +4940,14 @@ export class CodexClaudeAppServer {
             if (stoppedByWatchdog.has(agentToolUseId)) return
             resumedBySend.delete(event.toolUseId)
             resumedSubagents.delete(agentToolUseId)
-            const failure = event.status === 'failed' ? subagentFailure(event.summary) : null
+            const stopped = event.status !== 'completed' && stoppedByUser.delete(agentToolUseId)
+            const failure =
+              event.status === 'failed' && !stopped ? subagentFailure(event.summary) : null
             this.completeSubagentChildTurn(
               peer,
               ctx,
               event.status === 'completed' ? event.summary : '',
-              event.status,
+              stopped ? 'interrupted' : event.status,
               failure ? { message: failure } : null,
             )
             const childThread = this.store.getThread(ctx.childThreadId)
@@ -5255,14 +5292,16 @@ export class CodexClaudeAppServer {
             const parsed =
               subagentStructuredResult(event.structured) ?? parseSubagentTrailer(rawResultText)
             const resultText = parsed.cleanText
+            // 用户停掉的：子线程的回合记成被打断（不是出错，和打断父回合时一样）
+            const stopped = event.isError && stoppedByUser.delete(event.toolUseId)
             // 失败时 CLI 给的结果就是原因（钩子拒绝、子代理类型不存在……），原话写进子线程回合的 error
-            const failure = event.isError ? subagentFailure(resultText) : null
+            const failure = event.isError && !stopped ? subagentFailure(resultText) : null
 
             const childTurn = this.completeSubagentChildTurn(
               peer,
               ctx,
-              resultText,
-              event.isError ? 'failed' : 'completed',
+              stopped ? '' : resultText,
+              stopped ? 'interrupted' : event.isError ? 'failed' : 'completed',
               failure ? { message: failure } : null,
               parsed.usage?.durationMs ?? null,
             )
@@ -6591,6 +6630,12 @@ export class CodexClaudeAppServer {
     if (activeTurnId && activeTurnId !== requestedTurnId)
       throw new ProtocolError(-32009, '指定回合与当前活动回合不一致')
     if (!requested) throw new ProtocolError(-32602, '指定回合不存在')
+    // 子代理的子线程：只停这一个子代理，父会话的回合照常（stopAgent）
+    for (const state of this.subagentStateByTurn.values()) {
+      const stopped = await state.stopByUser?.(threadId)
+      if (stopped === true) return {}
+      if (stopped === false) throw new ProtocolError(-32603, '没能停掉这个子代理')
+    }
     const stopping = this.interruptingByThread.get(threadId)
     if (stopping) {
       await stopping

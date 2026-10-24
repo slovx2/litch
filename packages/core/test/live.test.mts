@@ -37,6 +37,9 @@ function setup(threads: Thread[] = [thread({ id: 'a', turns: [] })]) {
     startFailure: null as RpcFailure | null,
     steerFailure: null as RpcFailure | null,
     turnSeq: 0,
+    /** thread/turns/list 回的最近一个回合（按会话），每次问都记下参数 */
+    lastTurn: {} as Record<string, Turn | null>,
+    turnLists: [] as unknown[],
     /** 对面报的会话设置 */
     settings: {
       model: 'gate/small',
@@ -120,6 +123,11 @@ function setup(threads: Thread[] = [thread({ id: 'a', turns: [] })]) {
       return { turn: turn(`srv-${++world.turnSeq}`, [], { status: 'inProgress' }) }
     },
     'turn/interrupt': () => ({}),
+    'thread/turns/list': (params) => {
+      world.turnLists.push(params)
+      const last = world.lastTurn[(params as { threadId: string }).threadId]
+      return { data: last ? [last] : [], nextCursor: null }
+    },
     'turn/steer': (params) => {
       if (world.steerFailure) throw world.steerFailure
       return { turnId: (params as { expectedTurnId: string }).expectedTurnId }
@@ -497,6 +505,34 @@ test('打断：用对面给的回合标识；对面还没给标识、或者没�
   await command('session.send', { ...where, text: '跑起来' })
   await command('session.interrupt', where)
   assert.deepEqual(sent('turn/interrupt'), [{ threadId: 'a', turnId: 'srv-1' }])
+})
+
+test('打断没打开过的会话（后台任务页上停一个子会话）：问对面最近的回合，在跑就打断它', async () => {
+  const { core, world, command, sent } = setup([
+    thread({ id: 'a', turns: [] }),
+    thread({ id: 'b', turns: [] }),
+  ])
+  world.lastTurn.b = turn('srv-9', [], { status: 'inProgress' })
+  core.start()
+  await settle()
+  await command('session.interrupt', { deviceId: 'local', sessionId: 'b' })
+  assert.deepEqual(sent('turn/interrupt'), [{ threadId: 'b', turnId: 'srv-9' }])
+  assert.deepEqual(world.turnLists[0], {
+    threadId: 'b',
+    limit: 1,
+    sortDirection: 'desc',
+    itemsView: 'notLoaded',
+  })
+  // 最近的回合已经结束、或者一个回合都没有：照打开着的一样报“做不了”
+  world.lastTurn.b = turn('srv-9', [], { status: 'completed' })
+  await assert.rejects(command('session.interrupt', { deviceId: 'local', sessionId: 'b' }), {
+    code: 'rejected',
+  })
+  world.lastTurn.b = null
+  await assert.rejects(command('session.interrupt', { deviceId: 'local', sessionId: 'b' }), {
+    code: 'rejected',
+  })
+  assert.equal(sent('turn/interrupt').length, 1)
 })
 
 test('打开一个正在跑的会话：增量接在快照后面，载入期间到达的文本不会出现两遍', async () => {

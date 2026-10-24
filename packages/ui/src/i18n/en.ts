@@ -1165,6 +1165,7 @@ export const en: Record<MessageKey, Entry> = {
   'tree.agent.spawning': 'Starting a subagent',
   'tree.agent.spawnFailed': 'Couldn’t start a subagent',
   'tree.event.notes': 'Reports from sub-sessions',
+  'tree.event.queued': 'Reports from sub-sessions · handed to the model next turn',
   'tree.event.wake': 'All sub-sessions stopped; this session was woken',
   'tree.event.remind': 'Reminded the model to wrap up (skipped last turn)',
   'tree.note.completed': 'done',

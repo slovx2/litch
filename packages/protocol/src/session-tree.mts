@@ -49,6 +49,11 @@ export interface SessionTreeThreadFields {
    * 设备进程没记着的（不是经它建的、更早的设备进程）没有这个字段
    */
   litchToolNamespaces?: string[]
+  /**
+   * 排在这个会话的回报队列里、还没交给模型的子会话回报（每个子会话最新的一条，按进队列的先后）。
+   * 只发给声明了 sessionTree 的连接，队列空着时没有这个字段；变了发 litch/thread/queuedNotes/updated
+   */
+  litchQueuedNotes?: SessionQueuedNote[]
 }
 
 /** 提案的状态 */
@@ -180,6 +185,8 @@ export const SESSION_TREE_NOTIFICATION = {
   lineageUpdated: 'litch/thread/lineage/updated',
   /** 一个会话上的提案变了（新提、开始、不要、撤回、过期）。带这个会话现在全部 pending 的提案，和刚变的那几条 */
   proposalChanged: 'litch/sessionProposal/changed',
+  /** 一个会话的回报队列变了。带这个会话现在排着的全部回报 */
+  queuedNotesUpdated: 'litch/thread/queuedNotes/updated',
 } as const
 
 /** `litch/session/start` 的参数 */
@@ -282,6 +289,12 @@ export interface LineageUpdatedNotification {
   lineage: SessionLineage | null
 }
 
+/** 一个会话的回报队列变了（进了一条、交给了模型、改成不唤醒）。notes 是现在排着的，同 litchQueuedNotes，空了是空数组 */
+export interface QueuedNotesUpdatedNotification {
+  threadId: string
+  notes: SessionQueuedNote[]
+}
+
 export interface ProposalChangedNotification {
   threadId: string
   proposals: SessionProposal[]
@@ -327,6 +340,12 @@ export interface SessionEventNote {
    * 这样的回报只进队列、不唤醒父会话。模型用 litch_sessions 打断的不算，不带
    */
   userStopped?: 'interrupted' | 'archived'
+}
+
+/** 排在父会话队列里、还没交给模型的一条回报：交出去之前客户端就能画出来（同 Claude 桌面端） */
+export interface SessionQueuedNote extends SessionEventNote {
+  /** 进队列的时间（秒） */
+  at: number
 }
 
 export interface SessionEvent {

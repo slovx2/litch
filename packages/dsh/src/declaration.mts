@@ -49,7 +49,8 @@ const features: HarnessFeatures = {
   // 一段话是过程说明还是最终回答，要等这一步落盘、看它带不带工具调用才知道：
   // 流式开始时一律先报成最终回答，结束时才准。
   agentMessagePhase: 'onCompleted',
-  // 后台作业（后台 shell、工作流）从 Web Remote 的 job/list 来（background.mts）；子代理是子会话，不在里面
+  // 后台作业（后台 shell、工作流）从 Web Remote 的 job/list 来（background.mts）；子代理是子会话，不在里面。
+  // 只列得出、停不了，不报 stopBackground
   backgroundTasks: true,
 }
 

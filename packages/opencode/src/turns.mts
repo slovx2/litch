@@ -84,6 +84,15 @@ export class Turns {
     }
   }
 
+  /**
+   * 交给 OpenCode 的这一句后面接上上一轮之后用户停掉的后台 shell（synthetic，模型看得到、界面上不画），
+   * 不另开回合，只交一次
+   */
+  private withStopNotice(threadId: string, parts: any[]): any[] {
+    const notice = this.server.shells?.takeStopNotice(threadId)
+    return notice ? [...parts, { type: 'text', text: notice, synthetic: true }] : parts
+  }
+
   async start(peer: RpcPeer, live: LiveThread, params: any): Promise<OcTurn> {
     const { projection } = live
     const clientId = params.clientUserMessageId ?? params.clientMessageId ?? null
@@ -139,7 +148,7 @@ export class Turns {
           ...options,
           body: {
             messageID: id,
-            parts: input.parts,
+            parts: this.withStopNotice(threadId, input.parts),
             ...body,
             ...(params.outputSchema != null
               ? { format: { type: 'json_schema', schema: params.outputSchema } }
@@ -197,7 +206,7 @@ export class Turns {
     await this.server.clientTools.ensure(api, live)
     await api.request('POST', `/session/${threadId}/prompt_async`, {
       directory: live.directory,
-      body: { messageID: id, parts: input.parts, ...body },
+      body: { messageID: id, parts: this.withStopNotice(threadId, input.parts), ...body },
     })
     return { turnId: active.id }
   }
@@ -209,7 +218,9 @@ export class Turns {
   async wake(threadId: string, tasks: ShellTask[]): Promise<void> {
     const live = await this.server.load(threadId)
     const { projection } = live
-    const parts = [{ type: 'text', text: await formatShellEvent(tasks), synthetic: true }]
+    const parts = this.withStopNotice(threadId, [
+      { type: 'text', text: await formatShellEvent(tasks), synthetic: true },
+    ])
     const api = await this.server.api()
     await this.server.clientTools.ensure(api, live)
     // 每次等完都再看一眼：等的时候这一轮结束了，就按闲着另开一轮，不记到已经结束的回合上

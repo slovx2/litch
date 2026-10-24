@@ -14,6 +14,7 @@ import type {
   SessionEventView,
   SessionLineageView,
   SessionProposalView,
+  SessionQueuedNoteView,
   SpawnedView,
   WrapUpView,
 } from './model-tree.mjs'
@@ -104,6 +105,8 @@ export interface HarnessAbilities {
   stopAgent: boolean
   /** 报后台任务的集合（backgroundTasks 扩展）。不报的，界面从已结束回合里还在跑的命令派生 */
   backgroundTasks: boolean
+  /** 集合里在跑的命令、监视停得掉（thread/backgroundTerminals/terminate）。后台任务页上命令的“停止”按它出 */
+  stopBackground: boolean
   /** 持续目标（thread/goal/*）。不会的不出目标的入口 */
   goals: boolean
 }
@@ -379,6 +382,11 @@ export interface SessionSummary {
   task: SessionTaskMark | null
   /** 它是哪个会话派出的 Litch 子会话（会话树）。不是子会话的、对面没有会话树的是 null */
   lineage: SessionLineageView | null
+  /**
+   * 它的子会话交来、还排着没交给模型的回报（会话树），每个子会话最新的一条，按进队列的先后。
+   * 对话区末尾当场画出来；没有、对面没有会话树的是空数组
+   */
+  queuedNotes: SessionQueuedNoteView[]
   /**
    * 别的应用（比如 Claude 桌面端）从另一个会话派出来的原生会话（nativeLineage 扩展）。
    * 侧栏默认不显示它们，“更多”菜单里能打开；认得出父会话的挂在父会话下面。不是的、认不出的是 null

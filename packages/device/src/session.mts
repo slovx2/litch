@@ -628,6 +628,20 @@ export class ClientSession implements ClientToolPeer {
       this.host.sessionTree.userSpoke(params.threadId)
     if (params && method === 'turn/interrupt' && typeof params.threadId === 'string')
       this.host.sessionTree.interrupted(params.threadId)
+    // 用户在后台任务页上停命令：原生 codex 派生的集合把它记成 stopped（不是 failed），子会话补的回报写明是用户停的
+    if (
+      params &&
+      (method === 'thread/backgroundTerminals/terminate' ||
+        method === 'thread/backgroundTerminals/clean') &&
+      typeof params.threadId === 'string'
+    ) {
+      const processId =
+        method === 'thread/backgroundTerminals/terminate' && typeof params.processId === 'string'
+          ? params.processId
+          : null
+      this.host.background.userStopped(params.threadId, processId)
+      this.host.sessionTree.backgroundStopped(params.threadId)
+    }
     // 用户归档子会话：先记下来，归档打断的那个回合结束时就认得出是用户停的（引擎可能先发回合结束再应答）
     if (params && method === 'thread/archive' && typeof params.threadId === 'string')
       this.host.sessionTree.archived(params.threadId)
