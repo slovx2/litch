@@ -52,7 +52,7 @@ import {
 } from './context'
 import { GoalReachedCell } from './goal/GoalReachedCell'
 import { isWebUrl, parseFileHref } from './links'
-import { EventCell } from './proposals/EventCell'
+import { EventCell, QueuedNotesCell } from './proposals/EventCell'
 import { HandoffCell } from './proposals/HandoffCell'
 import { flash, takeReveal, useRevealWaiting } from './proposals/hooks'
 import { ProposalCell } from './proposals/ProposalCell'
@@ -130,6 +130,8 @@ function Tail({ store, markers }: { store: SessionStore; markers: boolean }) {
       {tail.rows.toReversed().map((row) => (
         <View key={row.key}>{renderRow(row)}</View>
       ))}
+      {/* 子会话交来、还排着没交给模型的回报：进队列就画在最下面，不等下一回合 */}
+      <QueuedNotesCell />
       <EndMark markers={markers} />
     </View>
   )

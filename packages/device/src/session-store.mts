@@ -146,6 +146,8 @@ export interface LineageRow extends SessionLineage {
 /** 队列里的一条回报 */
 export interface QueuedNote extends SessionEventNote {
   seq: number
+  /** 进队列的时间（秒） */
+  at: number
   /** 派这个子会话时说了要唤醒父会话 */
   wake: boolean
 }
@@ -584,6 +586,7 @@ export class SessionStore {
   notes(parentThreadId: string): QueuedNote[] {
     return (this.statements.notes?.all(parentThreadId) ?? []).map((row) => ({
       seq: Number(row.seq),
+      at: Number(row.created_at),
       threadId: text(row.thread_id),
       title: text(row.title),
       status: text(row.status) as SessionEventNote['status'],

@@ -16,11 +16,11 @@ import type {
   SessionView,
   TurnView,
 } from '../model.mjs'
-import type { SessionLineageView } from '../model-tree.mjs'
+import type { SessionLineageView, SessionQueuedNoteView } from '../model-tree.mjs'
 import type { SessionWorktreeView, WorktreeState } from '../model-worktrees.mjs'
 import { phrase, type Text } from '../phrase.mjs'
 import { projectBackground, projectOrigin } from './background.mjs'
-import { projectItem } from './items.mjs'
+import { noteView, projectItem } from './items.mjs'
 import { NO_SETTINGS } from './settings.mjs'
 
 const TITLE_MAX = 80
@@ -178,6 +178,17 @@ export function projectLineage(thread: Thread): SessionLineageView | null {
   return lineageOf(raw)
 }
 
+/** 会话对象上设备进程挂的排着、还没交给模型的回报（只发给声明了 sessionTree 的连接）。时间是秒，界面用毫秒 */
+export function projectQueuedNotes(thread: Thread): SessionQueuedNoteView[] {
+  const raw: unknown = (thread as Thread & SessionTreeThreadFields).litchQueuedNotes
+  if (!Array.isArray(raw)) return []
+  return raw.flatMap((note) => {
+    const view = noteView(note)
+    if (!view) return []
+    return [{ ...view, at: toMs((note as { at?: number }).at) ?? 0 }]
+  })
+}
+
 /** 会话对象上入口加的“别的应用派出来的”（只发给声明了 nativeLineage 的连接）。没有、形状不对的是 null */
 export function projectNativeLineage(thread: Thread): NativeLineageView | null {
   const raw: unknown = (thread as Thread & { litchNativeLineage?: unknown }).litchNativeLineage
@@ -284,6 +295,7 @@ export function projectSummary(
     // 和定时任务的关系由设备那一层按任务模块补上（device.mts 的 summaryOf）
     task: null,
     lineage: projectLineage(thread),
+    queuedNotes: projectQueuedNotes(thread),
     nativeLineage: projectNativeLineage(thread),
     background: projectBackground(
       (thread as Thread & { litchBackground?: unknown }).litchBackground,

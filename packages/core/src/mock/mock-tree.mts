@@ -40,8 +40,8 @@ import type {
   ProposalOverrides,
   SandboxLevel,
   SessionEventView,
-  SessionNoteView,
   SessionProposalView,
+  SessionQueuedNoteView,
 } from '../model-tree.mjs'
 import type { WorktreeFrom } from '../model-worktrees.mjs'
 import { phrase } from '../phrase.mjs'
@@ -158,7 +158,15 @@ const sameKey = (deviceId: string, sessionId: string): string => `${deviceId}:${
 export function createMockTree(host: MockTreeHost): MockTree {
   const text = TREE_TEXT[host.lang]
   /** 父会话 → 攒着的回报（同一个子会话后来的盖掉先前的） */
-  const pending = new Map<string, SessionNoteView[]>()
+  const pending = new Map<string, SessionQueuedNoteView[]>()
+  /** 攒着的回报变了：父会话的摘要跟着改，对话区末尾当场画出来（设备进程的 litch/thread/queuedNotes/updated） */
+  const queue = (deviceId: string, parentId: string, notes: SessionQueuedNoteView[]) => {
+    const key = sameKey(deviceId, parentId)
+    if (notes.length > 0) pending.set(key, notes)
+    else pending.delete(key)
+    if (host.summary(deviceId, parentId))
+      host.updateSummary(deviceId, parentId, { queuedNotes: notes })
+  }
   /** 父会话 → 上一条用户消息之后唤醒了几次 */
   const wakes = new Map<string, number>()
   /** 子会话 → 它要回的话（演示里写好的）。没有的照模拟核心平常那样回 */
@@ -255,6 +263,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
         createdAt: now,
         proposalId: options.proposalId ?? null,
       },
+      queuedNotes: [],
       nativeLineage: null,
       background: null,
       worktree: null,
@@ -970,19 +979,18 @@ export function createMockTree(host: MockTreeHost): MockTree {
     const parent = host.view(deviceId, parentId)
     if (host.running(parent) || parent.requests.length > 0) return
     if (!childrenStopped(deviceId, parentId)) return
-    const wanted = host
-      .summaries(deviceId)
-      .some(
-        (entry) =>
-          entry.lineage?.parentId === parentId &&
-          entry.lineage.wakeParent &&
-          notes.some((note) => note.threadId === entry.id),
-      )
+    const wanted = host.summaries(deviceId).some(
+      (entry) =>
+        entry.lineage?.parentId === parentId &&
+        entry.lineage.wakeParent &&
+        // 出错、被打断的回合不算（同设备进程）
+        notes.some((note) => note.threadId === entry.id && note.status === 'completed'),
+    )
     if (!wanted) return
     const count = wakes.get(key) ?? 0
     if (count >= SESSION_TREE_LIMITS.wakesPerUserMessage) return
     wakes.set(key, count + 1)
-    pending.delete(key)
+    queue(deviceId, parentId, [])
     // 唤醒的回合只有注入的那一段，没有用户自己的话（不过 outgoing 的空消息检查）
     host.startTurn(parent, { text: '', images: [], extras: [] }, { kind: 'wake', notes })
   }
@@ -1082,8 +1090,8 @@ export function createMockTree(host: MockTreeHost): MockTree {
             : ''
         const key = sameKey(deviceId, lineage.parentId)
         const notes = (pending.get(key) ?? []).filter((note) => note.threadId !== sessionId)
-        notes.push({ threadId: sessionId, title: lineage.title, status, excerpt })
-        pending.set(key, notes)
+        notes.push({ threadId: sessionId, title: lineage.title, status, excerpt, at: Date.now() })
+        queue(deviceId, lineage.parentId, notes)
         tryWake(deviceId, lineage.parentId)
       }
       // 自己是父会话：刚停下，看看攒着的回报够不够唤醒自己
@@ -1100,8 +1108,8 @@ export function createMockTree(host: MockTreeHost): MockTree {
       wakes.delete(key)
       const notes = pending.get(key)
       if (!notes?.length) return undefined
-      pending.delete(key)
-      return { kind: 'notes', notes }
+      queue(view.deviceId, view.sessionId, [])
+      return { kind: 'notes', notes: notes.map(({ at: _, ...note }) => note) }
     },
 
     agentView(deviceId, sessionId) {

@@ -25,6 +25,7 @@ import type {
   AgentRefView,
   AgentState,
   SessionEventView,
+  SessionNoteView,
   SpawnedView,
   WrapUpSuggestionView,
   WrapUpView,
@@ -122,21 +123,26 @@ const NOTE_STATUS = new Set(['completed', 'failed', 'interrupted', 'needsUser'])
 /** 注入文字里那段 JSON 是对面写的：逐项核对，不合的那一条不要 */
 function sessionEvent(event: { kind: string; notes: unknown[] }): SessionEventView {
   const notes = event.notes.flatMap((note) => {
-    if (typeof note !== 'object' || note === null) return []
-    const { threadId, title, status, excerpt } = note as Record<string, unknown>
-    if (typeof threadId !== 'string' || typeof status !== 'string' || !NOTE_STATUS.has(status))
-      return []
-    return [
-      {
-        threadId,
-        title: typeof title === 'string' ? title : '',
-        status: status as SessionEventView['notes'][number]['status'],
-        excerpt: typeof excerpt === 'string' ? excerpt : '',
-      },
-    ]
+    const view = noteView(note)
+    return view ? [view] : []
   })
   const kind = event.kind === 'wake' || event.kind === 'remind' ? event.kind : 'notes'
   return { kind, notes }
+}
+
+/** 一条回报（注入文字里的、会话对象上排着的）：对面写的，逐项核对。不合的是 null */
+export function noteView(note: unknown): SessionNoteView | null {
+  if (typeof note !== 'object' || note === null) return null
+  const { threadId, title, status, excerpt, error } = note as Record<string, unknown>
+  if (typeof threadId !== 'string' || typeof status !== 'string' || !NOTE_STATUS.has(status))
+    return null
+  return {
+    threadId,
+    title: typeof title === 'string' ? title : '',
+    status: status as SessionNoteView['status'],
+    excerpt: typeof excerpt === 'string' ? excerpt : '',
+    ...(typeof error === 'string' && error ? { error } : {}),
+  }
 }
 
 const AGENT_STATES = new Set<string>([

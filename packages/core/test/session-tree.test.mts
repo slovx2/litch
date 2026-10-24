@@ -35,6 +35,7 @@ import { projectItem } from '../src/projection/items.mjs'
 import {
   projectLineage,
   projectNativeLineage,
+  projectQueuedNotes,
   projectSummary,
   projectThread,
 } from '../src/projection/session.mjs'
@@ -675,6 +676,88 @@ test('设备：子代理线程不进侧栏；Litch 子会话带着父子关系�
     .notify('litch/thread/lineage/updated', { threadId: 'c1', lineage: lineageOf('p', '回来') })
   await settle()
   assert.equal(world.side.sessions.get('c1')?.lineage?.title, '回来')
+})
+
+test('投影：会话对象上排着的回报（litchQueuedNotes）时间换成毫秒、带上错误；坏的那条不要，没有是空数组', () => {
+  const raw = {
+    ...thread({ id: 'p' }),
+    litchQueuedNotes: [
+      {
+        threadId: 'c1',
+        title: '攻略',
+        status: 'failed',
+        excerpt: '',
+        error: '模型不对',
+        at: 1_700_000_000,
+      },
+      {
+        threadId: 'c2',
+        title: '客户端',
+        status: 'completed',
+        excerpt: '上线了',
+        at: 1_700_000_100,
+      },
+      { threadId: 'c3', status: '不认识' },
+      '坏的',
+    ],
+  }
+  assert.deepEqual(projectQueuedNotes(raw as never), [
+    {
+      threadId: 'c1',
+      title: '攻略',
+      status: 'failed',
+      excerpt: '',
+      error: '模型不对',
+      at: 1_700_000_000_000,
+    },
+    {
+      threadId: 'c2',
+      title: '客户端',
+      status: 'completed',
+      excerpt: '上线了',
+      at: 1_700_000_100_000,
+    },
+  ])
+  assert.deepEqual(projectQueuedNotes(thread({ id: 'p' })), [])
+  // 注入文字里的回报也带上错误原文
+  const event = formatSessionEvent({
+    kind: 'notes',
+    notes: [{ threadId: 'c1', title: '攻略', status: 'failed', excerpt: '', error: '模型不对' }],
+  })
+  const item = projectItem(userText('u1', event)) as UserMessageItem
+  assert.equal(item.event?.notes[0]?.error, '模型不对')
+})
+
+test('设备：回报队列的通知改父会话的摘要（排着的回报），空了清掉；会话对象上带着的也认', async () => {
+  const world = treeWorld()
+  world.core.start()
+  await settle()
+  assert.deepEqual(world.side.sessions.get('p')?.queuedNotes, [])
+  world.peer.last().notify('litch/thread/queuedNotes/updated', {
+    threadId: 'p',
+    notes: [
+      {
+        threadId: 'c1',
+        title: '子任务',
+        status: 'completed',
+        excerpt: '做完了',
+        at: 1_700_000_000,
+      },
+    ],
+  })
+  await settle()
+  assert.deepEqual(world.side.sessions.get('p')?.queuedNotes, [
+    {
+      threadId: 'c1',
+      title: '子任务',
+      status: 'completed',
+      excerpt: '做完了',
+      at: 1_700_000_000_000,
+    },
+  ])
+  world.peer.last().notify('litch/thread/queuedNotes/updated', { threadId: 'p', notes: [] })
+  await settle()
+  assert.deepEqual(world.side.sessions.get('p')?.queuedNotes, [])
 })
 
 test('设备：子代理线程列表按父会话问；能打开、能读，不能输入的标成只能看', async () => {
@@ -1467,6 +1550,8 @@ test('模拟：说“派子会话”派出两个子会话（侧栏里挂在父�
   const wake = userItems(parent.view).find((item) => item.event?.kind === 'wake')
   assert.equal(wake?.event?.notes.length, 2)
   assert.equal(wake?.text, '')
+  // 唤醒带走了排着的回报：父会话的摘要上不再挂着
+  assert.deepEqual(world.sidebar.view?.sessions.find((entry) => entry.id === 's6')?.queuedNotes, [])
 })
 
 test('模拟：说“提个子会话”出三张提案；短的那张到点过期；开始（可改）的起出子会话，了结的留着', async () => {

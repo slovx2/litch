@@ -1,5 +1,6 @@
-// 会话树里子会话“怎么停下的”：回合失败、被打断时回报带上错误原文；用户亲手停掉、归档的子会话只记回报不唤醒父会话
-// （模型自己用 litch_sessions 打断的照旧唤醒）；删会话时它带的动态工具一并删掉，之前留下的在启动时清掉。
+// 会话树里子会话“怎么停下的”：回合失败、被打断时回报带上错误原文，只进队列不唤醒（同 Claude 桌面端），
+// 模型自己用 litch_sessions 打断的也一样，只是不算用户停的；用户亲手停掉、归档的子会话只记回报不唤醒父会话，注明怎么停的；
+// 删会话时它带的动态工具一并删掉，之前留下的在启动时清掉。
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -40,10 +41,10 @@ async function family(env: ReturnType<typeof treeRig>) {
 const notesOf = (env: ReturnType<typeof treeRig>, threadId: string) =>
   env.device.sessionTree.store.notes(threadId)
 
-test('SESSION-STOP-001：子会话的回合失败、被打断：回报带上回合的错误原文，长的截到回报长度以内，给模型的那一行也写上', async () => {
+test('SESSION-STOP-001：子会话的回合失败、被打断：回报带上回合的错误原文，长的截到回报长度以内，给模型的那一行也写上；不唤醒，下一回合带上', async () => {
   const env = treeRig()
   try {
-    const { threadId, childId } = await family(env)
+    const { client, threadId, childId } = await family(env)
     env.claude.end(
       childId,
       'failed',
@@ -55,11 +56,13 @@ test('SESSION-STOP-001：子会话的回合失败、被打断：回报带上回�
     assert.equal(failed?.status, 'failed')
     assert.equal(failed?.excerpt, '做了一半')
     assert.equal(failed?.error, 'Subagent timed out: no subagent activity for 1800 seconds.')
+    assert.equal(failed?.wake, false, '出错的回合不算该唤醒的（同 Claude 桌面端）')
     env.pi.end(threadId)
-    await until(() => wakesOf(env, threadId).length === 1, '失败的照常唤醒')
-    const [wake] = wakesOf(env, threadId)
-    assert.equal(wake?.notes[0]?.error, failed?.error)
+    await settle(60)
+    assert.equal(wakesOf(env, threadId).length, 0, '失败的不唤醒')
+    await client.call('turn/start', { threadId, input: text('那个怎么样了') })
     const sent = env.pi.sent('turn/start').at(-1).input[0].text as string
+    assert.equal(parseSessionEvent(sent).event?.notes[0]?.error, failed?.error)
     assert.match(sent, /failed: 做了一半 \(error: Subagent timed out: no subagent activity/)
 
     // 打断的、错误很长的：截到 noteChars 以内；回合结束的通知里没带错误时，读一遍会话补上
@@ -72,8 +75,10 @@ test('SESSION-STOP-001：子会话的回合失败、被打断：回报带上回�
       threadId: childId,
       turn: { ...turn, items: [], error: null },
     })
-    await until(() => wakesOf(env, threadId).length === 2, '打断的照常唤醒')
-    const interrupted = wakesOf(env, threadId)[1]?.notes[0]
+    await until(() => notesOf(env, threadId).length === 1, '打断的回报进队列')
+    await settle(60)
+    assert.equal(wakesOf(env, threadId).length, 0, '打断的也不唤醒')
+    const [interrupted] = notesOf(env, threadId)
     assert.equal(interrupted?.status, 'interrupted')
     assert.equal(interrupted?.error?.length, SESSION_TREE_LIMITS.noteChars)
     assert.ok(interrupted?.error?.startsWith('Exxx'))
@@ -151,7 +156,7 @@ test('SESSION-STOP-003：用户归档在跑的子会话：回合被打断的回�
   }
 })
 
-test('SESSION-STOP-004：模型自己用 litch_sessions 打断子会话：照旧唤醒，回报不算用户停的', async () => {
+test('SESSION-STOP-004：模型自己用 litch_sessions 打断子会话：回报不算用户停的；被打断的回合同出错的，不唤醒', async () => {
   const env = treeRig()
   try {
     const { threadId, childId } = await family(env)
@@ -161,9 +166,10 @@ test('SESSION-STOP-004：模型自己用 litch_sessions 打断子会话：照旧
     const [note] = notesOf(env, threadId)
     assert.equal(note?.status, 'interrupted')
     assert.equal(note?.userStopped, undefined)
-    assert.equal(note?.wake, true)
+    assert.equal(note?.wake, false)
     env.pi.end(threadId)
-    await until(() => wakesOf(env, threadId).length === 1, '模型打断的照旧唤醒')
+    await settle(60)
+    assert.equal(wakesOf(env, threadId).length, 0, '模型打断的也不唤醒')
   } finally {
     await env.close()
   }

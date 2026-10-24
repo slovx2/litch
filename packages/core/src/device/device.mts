@@ -1022,6 +1022,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     threadId: string,
     patch: Partial<Thread> & {
       litchLineage?: SessionTreeThreadFields['litchLineage'] | undefined
+      litchQueuedNotes?: SessionTreeThreadFields['litchQueuedNotes'] | undefined
       litchBackground?: LitchBackground | undefined
       litchWorktree?: ThreadWorktree | undefined
     },
@@ -1319,6 +1320,9 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     // 会话树：一个会话的 Litch 父子关系建立了、脱离了。只发给声明了 sessionTree 的连接
     'litch/thread/lineage/updated': ({ threadId, lineage }) =>
       patchThread(threadId, { litchLineage: lineage ?? undefined }),
+    // 会话树：子会话交来的回报进了这个会话的队列、交给了模型（整份）。对话区末尾当场画排着的
+    'litch/thread/queuedNotes/updated': ({ threadId, notes }) =>
+      patchThread(threadId, { litchQueuedNotes: notes.length > 0 ? notes : undefined }),
     // 后台任务的集合变了（整份）。只发给声明了 backgroundTasks 的连接；没打开过的会话也发，侧栏要标
     'litch/thread/background/changed': ({ threadId, tasks, wakesOnFinish }) =>
       patchThread(threadId, {
