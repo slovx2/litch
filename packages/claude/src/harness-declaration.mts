@@ -45,6 +45,8 @@ const features: HarnessFeatures = {
   agentMessagePhase: 'onCompleted',
   // 回合结束后还在跑的后台命令、Monitor、后台子代理从 CLI 的 background_tasks_changed 攒成集合（background-tasks.mts）
   backgroundTasks: true,
+  // 子代理的子线程上的 turn/interrupt 只停这一个子代理（CLI 的 stop_task），父会话的回合照常
+  stopAgent: true,
   // 持续目标照上游做（goal-controller.mts）：目标存在入口自己的库里，空闲时自动续跑，
   // 模型经 codex_harness_adapter_goal 的三个工具读目标、报完成或受阻，用量按原生消息累计
   goals: true,
