@@ -706,9 +706,9 @@ export function createMockHarnessConfig(host: MockHarnessConfigHost): MockHarnes
       if (!was.auth.signedIn) throw new ChannelError('rejected', '先填密钥')
       return {
         models: [
-          { id: 'deepseek-v4', title: 'DeepSeek V4' },
-          { id: 'deepseek-v4-flash', title: null },
-          { id: 'deepseek-r2', title: 'DeepSeek R2' },
+          { id: 'deepseek-v4', title: 'DeepSeek V4', contextWindow: 1_000_000 },
+          { id: 'deepseek-v4-flash', title: null, contextWindow: null },
+          { id: 'deepseek-r2', title: 'DeepSeek R2', contextWindow: 128_000 },
         ],
       }
     },

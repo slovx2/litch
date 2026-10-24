@@ -1126,7 +1126,7 @@
         },
         "discoverModels": {
           "type": "string",
-          "description": "能用 providers/discoverModels 拉型号来填的字段（stringList）"
+          "description": "能用 providers/discoverModels 拉型号来填的字段（stringList，一行一个 `id`、`id = 显示名`，后面可再加 ` | 上下文窗口`，如 `| 1M`）"
         }
       },
       "required": ["id", "title", "description", "fields"]
@@ -1709,6 +1709,10 @@
               },
               "title": {
                 "type": ["string", "null"]
+              },
+              "contextWindow": {
+                "type": ["integer", "null"],
+                "description": "provider 声明的上下文窗口（token），没声明是 null。后加的字段，旧的设备不给"
               }
             },
             "required": ["id", "title"]

@@ -69,6 +69,7 @@ export const zhHconfig = {
   'hc.discover.none': 'provider 没有报任何型号',
   'hc.discover.apply': '写入清单（已选 {count} 个）',
   'hc.discover.cancel': '取消',
+  'hc.discover.window': '上下文 {window}',
   'hc.auth.signedOut': '未登录',
   'hc.auth.signedInAs': '已登录 {label}',
   'hc.auth.kind.oauth': '已登录',

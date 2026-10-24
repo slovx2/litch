@@ -113,7 +113,7 @@ export interface HarnessConfig {
   discoverModels(
     harness: string,
     providerId: string,
-  ): Promise<{ models: Array<{ id: string; title: string | null }> }>
+  ): Promise<{ models: Array<{ id: string; title: string | null; contextWindow: number | null }> }>
   activateProvider(
     harness: string,
     providerId: string,
@@ -682,9 +682,20 @@ export function createHarnessConfig(host: HarnessConfigHost): HarnessConfig {
       const models = Array.isArray(response?.models) ? response.models : []
       return {
         models: models.flatMap((raw) => {
-          const one = raw as { id?: unknown; title?: unknown }
+          const one = raw as { id?: unknown; title?: unknown; contextWindow?: unknown }
+          // contextWindow 是后加的，旧的设备不给
+          const window = one.contextWindow
           return typeof one.id === 'string' && one.id
-            ? [{ id: one.id, title: typeof one.title === 'string' ? one.title : null }]
+            ? [
+                {
+                  id: one.id,
+                  title: typeof one.title === 'string' ? one.title : null,
+                  contextWindow:
+                    typeof window === 'number' && Number.isSafeInteger(window) && window > 0
+                      ? window
+                      : null,
+                },
+              ]
             : []
         }),
       }

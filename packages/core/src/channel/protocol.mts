@@ -1097,7 +1097,8 @@ export interface Commands {
   /** 列出某个自定义 provider 自己报的型号，给用户勾进清单（模板的 discoverModels 指着的字段）。不写任何东西 */
   'harnessConfig.providers.discoverModels': {
     params: { deviceId: string; harness: string; providerId: string }
-    result: { models: Array<{ id: string; title: string | null }> }
+    /** contextWindow：provider 声明的上下文窗口（token），没声明是 null */
+    result: { models: Array<{ id: string; title: string | null; contextWindow: number | null }> }
   }
   /** 切换当前在用的 provider（providers 的 switchable 为真时才有） */
   'harnessConfig.providers.activate': {

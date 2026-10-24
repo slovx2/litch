@@ -109,28 +109,55 @@ export function sameAsStored(
   return JSON.stringify(parsed.value) === JSON.stringify(now)
 }
 
-/** 型号清单的一行（`id` 或 `id = 显示名`）里的型号 ID */
-export const modelLineId = (line: string): string => line.split('=')[0]?.trim() ?? ''
+/** 型号清单的一行（`id`、`id = 显示名`，后面可再加 ` | 上下文窗口`）里的型号 ID */
+export const modelLineId = (line: string): string => line.split(/[=|]/)[0]?.trim() ?? ''
+
+/** 这一行写了上下文窗口（` | 1M` 那一段） */
+const hasWindow = (line: string): boolean => /\|\s*\S/.test(line)
+
+/** 上下文窗口写成 1M、200K 这样，除不尽的写整数（和设备那边的写法一样） */
+export function formatContextWindow(window: number): string {
+  if (window % 1_000_000 === 0) return `${window / 1_000_000}M`
+  if (window % 1_000 === 0) return `${window / 1_000}K`
+  return String(window)
+}
+
+/** provider 报来的一个型号；contextWindow 是它声明的上下文窗口，旧的设备不给 */
+export interface DiscoveredModel {
+  id: string
+  title: string | null
+  contextWindow?: number | null
+}
 
 /**
  * 从 provider 拉来的型号勾选完，并回清单：拉来的里勾掉的去掉，勾上而清单里没有的加在末尾
- * （有显示名写成 `id = 显示名`），清单里别的行原样留着
+ * （有显示名写成 `id = 显示名`，有声明的窗口再加 ` | 窗口`）；清单里留着的、自己没写窗口的行补上声明的窗口，
+ * 写了的不动（手改的为准），别的行原样留着
  */
 export function mergeDiscovered(
   current: readonly string[],
-  found: readonly { id: string; title: string | null }[],
+  found: readonly DiscoveredModel[],
   picked: ReadonlySet<string>,
 ): string[] {
-  const foundIds = new Set(found.map((model) => model.id))
-  const kept = current.filter((line) => {
-    const id = modelLineId(line)
-    return !foundIds.has(id) || picked.has(id)
-  })
+  const byId = new Map(found.map((model) => [model.id, model]))
+  const withWindow = (line: string, model: DiscoveredModel | undefined) =>
+    model?.contextWindow && !hasWindow(line)
+      ? `${line.trimEnd()} | ${formatContextWindow(model.contextWindow)}`
+      : line
+  const kept = current
+    .filter((line) => {
+      const id = modelLineId(line)
+      return !byId.has(id) || picked.has(id)
+    })
+    .map((line) => withWindow(line, byId.get(modelLineId(line))))
   const have = new Set(kept.map(modelLineId))
   const added = found
     .filter((model) => picked.has(model.id) && !have.has(model.id))
     .map((model) =>
-      model.title && model.title !== model.id ? `${model.id} = ${model.title}` : model.id,
+      withWindow(
+        model.title && model.title !== model.id ? `${model.id} = ${model.title}` : model.id,
+        model,
+      ),
     )
   return [...kept, ...added]
 }

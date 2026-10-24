@@ -27,6 +27,7 @@ import {
 } from './claude-auth.mjs'
 import {
   ACCOUNT_PROVIDER,
+  contextWindowValue,
   NATIVE_PROVIDER,
   nativeOverrides,
   PROVIDER_ID_PATTERN,
@@ -183,8 +184,8 @@ function gatewayTemplate(): HarnessProviderTemplate {
       }),
       field('models', 'stringList', text('型号', 'Models'), {
         description: text(
-          '每行一个型号 ID，要显示别的名字写成“ID = 名字”。可以从网关拉取。',
-          'One model ID per line; write "ID = Name" for a display name. Can be fetched from the gateway.',
+          '每行一个型号 ID，要显示别的名字写成“ID = 名字”，上下文窗口加在后面写成“| 1M”（如 deepseek-v4 = DeepSeek | 1M；不写时 Claude Code 按 200K 算）。从网关拉取时带上它声明的窗口。Claude 自家型号名的窗口由 Claude Code 自己定，这里写了不生效，要 1M 在 ID 后加 [1m]。',
+          'One model ID per line; write "ID = Name" for a display name and append "| 1M" for the context window (e.g. deepseek-v4 = DeepSeek | 1M; without it Claude Code assumes 200K). Fetching from the gateway fills in the window it declares. For Claude model names Claude Code uses its own window and ignores this; append [1m] to the ID for 1M.',
         ),
       }),
       field('smallModel', 'string', text('小模型', 'Small model'), {
@@ -232,24 +233,84 @@ function unmaskHeaders(given: string, stored: string | null): string {
     .join('\n')
 }
 
-function modelLines(models: ProviderModel[]): string[] {
-  return models.map((model) => (model.title ? `${model.id} = ${model.title}` : model.id))
+/** 窗口写成 1M、200K 这样，除不尽的写整数 */
+export function formatContextWindow(window: number): string {
+  if (window % 1_000_000 === 0) return `${window / 1_000_000}M`
+  if (window % 1_000 === 0) return `${window / 1_000}K`
+  return String(window)
 }
 
-function parseModelLines(value: unknown): ProviderModel[] {
+/** `1M`、`200k`、`131072`、`1.5M`；写得不对是 undefined */
+export function parseContextWindow(raw: string): number | null | undefined {
+  const text = raw.trim()
+  if (!text) return null
+  const match = /^(\d+(?:\.\d+)?)\s*([kKmM])?$/.exec(text)
+  if (!match) return undefined
+  const unit = match[2]?.toLowerCase()
+  return (
+    contextWindowValue(
+      Math.round(Number(match[1]) * (unit === 'm' ? 1_000_000 : unit === 'k' ? 1_000 : 1)),
+    ) ?? undefined
+  )
+}
+
+/** 清单的一行：`ID`、`ID = 名字`，后面可再加 ` | 窗口` */
+function modelLine(model: ProviderModel): string {
+  const head = model.title ? `${model.id} = ${model.title}` : model.id
+  return model.contextWindow ? `${head} | ${formatContextWindow(model.contextWindow)}` : head
+}
+
+function modelLines(models: ProviderModel[]): string[] {
+  return models.map(modelLine)
+}
+
+/**
+ * 型号清单的每一行拆开。`strict` 时窗口写得不对报错（保存的时候），否则当没写（读别处来的）
+ */
+function parseModelLines(value: unknown, strict = false): ProviderModel[] {
   const lines = Array.isArray(value) ? value : typeof value === 'string' ? value.split('\n') : []
   const seen = new Set<string>()
   const models: ProviderModel[] = []
   for (const line of lines) {
     if (typeof line !== 'string') continue
-    const at = line.indexOf('=')
-    const id = (at < 0 ? line : line.slice(0, at)).trim()
-    const title = at < 0 ? '' : line.slice(at + 1).trim()
+    const bar = line.lastIndexOf('|')
+    const head = bar < 0 ? line : line.slice(0, bar)
+    const at = head.indexOf('=')
+    const id = (at < 0 ? head : head.slice(0, at)).trim()
+    const title = at < 0 ? '' : head.slice(at + 1).trim()
     if (!id || seen.has(id)) continue
+    const window = bar < 0 ? null : parseContextWindow(line.slice(bar + 1))
+    if (window === undefined && strict)
+      throw new HarnessConfigError(
+        'invalidValue',
+        text(
+          `型号 ${id} 的上下文窗口写得不对：写整数或带 K、M（如 200K、1M），在 1K 到 100M 之间`,
+          `Context window of ${id} is invalid: use an integer or K/M (like 200K, 1M), between 1K and 100M`,
+        ),
+        'models',
+      )
     seen.add(id)
-    models.push({ id, title: title || null })
+    models.push({ id, title: title || null, contextWindow: window ?? null })
   }
   return models
+}
+
+/** `/v1/models` 一项里声明的上下文长度：各家字段名不同，取第一个能用的 */
+function declaredContextWindow(record: Record<string, unknown>): number | null {
+  const top = record.top_provider
+  const candidates = [
+    record.max_input_tokens,
+    record.context_window,
+    record.context_length,
+    top && typeof top === 'object' ? (top as Record<string, unknown>).context_length : undefined,
+    record.max_context_length,
+    record.max_model_len,
+  ]
+  for (const candidate of candidates) {
+    const window = contextWindowValue(candidate)
+    if (window) return window
+  }
+  return null
 }
 
 function hostOf(baseUrl: string | null): string | null {
@@ -574,7 +635,7 @@ export class ClaudeProviders {
       title: string(definition.title),
       baseUrl: baseUrl || null,
       authHeader: kind === 'gateway' && definition.authHeader !== 'apiKey' ? 'bearer' : 'apiKey',
-      models: kind === 'gateway' ? parseModelLines(definition.models) : [],
+      models: kind === 'gateway' ? parseModelLines(definition.models, true) : [],
       smallModel: kind === 'gateway' ? string(definition.smallModel) : null,
     }
     // 密钥：给了字串就换（空串是清掉）；不给、或原样交回读到的 {set} 不动。
@@ -684,14 +745,20 @@ export class ClaudeProviders {
         text(`网关回了 ${response.status}`, `The gateway answered ${response.status}`),
       )
     const body = (await response.json().catch(() => null)) as { data?: unknown } | null
-    const models = parseModelLines(
-      (Array.isArray(body?.data) ? body.data : []).flatMap((entry: unknown) => {
-        const record = entry && typeof entry === 'object' ? (entry as Record<string, unknown>) : {}
-        if (typeof record.id !== 'string') return []
-        const title = typeof record.display_name === 'string' ? record.display_name.trim() : ''
-        return [title && title !== record.id ? `${record.id} = ${title}` : record.id]
-      }),
-    )
+    const seen = new Set<string>()
+    const models: ProviderModel[] = []
+    for (const entry of Array.isArray(body?.data) ? body.data : []) {
+      const record = entry && typeof entry === 'object' ? (entry as Record<string, unknown>) : {}
+      const id = typeof record.id === 'string' ? record.id.trim() : ''
+      if (!id || seen.has(id)) continue
+      seen.add(id)
+      const title = typeof record.display_name === 'string' ? record.display_name.trim() : ''
+      models.push({
+        id,
+        title: title && title !== id ? title : null,
+        contextWindow: declaredContextWindow(record),
+      })
+    }
     return { models }
   }
 

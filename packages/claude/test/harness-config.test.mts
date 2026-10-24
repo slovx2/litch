@@ -45,7 +45,11 @@ import {
   writeClaudeInstructions,
 } from '../src/harness-config.mjs'
 import { HarnessConfigError } from '../src/harness-config-common.mjs'
-import { ClaudeProviders } from '../src/harness-providers.mjs'
+import {
+  ClaudeProviders,
+  formatContextWindow,
+  parseContextWindow,
+} from '../src/harness-providers.mjs'
 import { summarizeRpcParams } from '../src/server-helpers.mjs'
 import { requiredClaudeCli } from './fixtures/claude-cli.mjs'
 import { declaring } from './fixtures/extension-wire.mjs'
@@ -623,7 +627,10 @@ test('HC-CLAUDE-006：按会话的供应商算起 CLI 的环境，没填密钥�
         title: '公司网关',
         baseUrl: 'https://gw.example.test',
         authHeader: 'bearer' as const,
-        models: [{ id: 'glm-4.6', title: null }],
+        models: [
+          { id: 'glm-4.6', title: null, contextWindow: null },
+          { id: 'kimi-k2', title: null, contextWindow: 256_000 },
+        ],
         smallModel: 'glm-4.5-air',
       },
       work: {
@@ -719,10 +726,47 @@ test('HC-CLAUDE-006：按会话的供应商算起 CLI 的环境，没填密钥�
     ...config,
     providers: {
       ...config.providers,
-      corp: { ...config.providers.corp, title: '新名字', models: [{ id: 'x', title: null }] },
+      corp: {
+        ...config.providers.corp,
+        title: '新名字',
+        models: [{ id: 'x', title: null, contextWindow: null }],
+      },
     },
   }
   assert.equal(providerLaunch('corp', 'glm-4.6', base, renamed, secrets).scope, corp.scope)
+
+  // 所选型号填了上下文窗口：交给 CLI，盖过外面带进来的；没填的不动外面的。改窗口要换进程
+  const kimi = providerLaunch(
+    'corp',
+    'kimi-k2',
+    { ...base, CLAUDE_CODE_MAX_CONTEXT_TOKENS: '64000' },
+    config,
+    secrets,
+  )
+  assert.equal(kimi.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS, '256000')
+  assert.equal(
+    providerLaunch(
+      'corp',
+      'glm-4.6',
+      { ...base, CLAUDE_CODE_MAX_CONTEXT_TOKENS: '64000' },
+      config,
+      secrets,
+    ).env.CLAUDE_CODE_MAX_CONTEXT_TOKENS,
+    '64000',
+  )
+  const wider = {
+    ...config,
+    providers: {
+      ...config.providers,
+      corp: {
+        ...config.providers.corp,
+        models: [{ id: 'kimi-k2', title: null, contextWindow: 1_000_000 }],
+      },
+    },
+  }
+  const kimiWide = providerLaunch('corp', 'kimi-k2', base, wider, secrets)
+  assert.equal(kimiWide.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS, '1000000')
+  assert.notEqual(kimiWide.scope, providerLaunch('corp', 'kimi-k2', base, config, secrets).scope)
   const apiKeyHeader = {
     ...config,
     providers: {
@@ -974,7 +1018,7 @@ test('HC-CLAUDE-007：加改删供应商，密钥只进 0600 的密钥文件，�
     assert.equal(kept.baseUrl, 'https://gw.example.test')
     assert.equal(kept.title, '公司网关')
     assert.equal(kept.smallModel, 'glm-4.5-air')
-    assert.deepEqual(kept.models, [{ id: 'kimi-k2', title: null }])
+    assert.deepEqual(kept.models, [{ id: 'kimi-k2', title: null, contextWindow: null }])
     await providers.authLogout({ providerId: 'work' })
     assert.equal(readProviderSecrets().work, undefined)
 
@@ -1021,10 +1065,13 @@ test('HC-CLAUDE-015：从网关拉型号（回环上的假网关）', () =>
       res.end(
         JSON.stringify({
           data: [
-            { id: 'glm-4.6', display_name: 'GLM 4.6' },
-            { id: 'kimi-k2', display_name: 'kimi-k2' },
+            { id: 'glm-4.6', display_name: 'GLM 4.6', max_input_tokens: 200_000 },
+            { id: 'kimi-k2', display_name: 'kimi-k2', context_length: 262_144 },
             { id: 'glm-4.6' },
             { name: 'no-id' },
+            { id: 'or/qwen', top_provider: { context_length: 1_000_000 } },
+            { id: 'vllm', max_model_len: 32_768, context_window: 'big' },
+            { id: 'tiny', context_window: 12 },
           ],
         }),
       )
@@ -1046,8 +1093,11 @@ test('HC-CLAUDE-015：从网关拉型号（回环上的假网关）', () =>
       }).version
       assert.deepEqual(await providers.discoverModels({ providerId: 'corp' }), {
         models: [
-          { id: 'glm-4.6', title: 'GLM 4.6' },
-          { id: 'kimi-k2', title: null },
+          { id: 'glm-4.6', title: 'GLM 4.6', contextWindow: 200_000 },
+          { id: 'kimi-k2', title: null, contextWindow: 262_144 },
+          { id: 'or/qwen', title: null, contextWindow: 1_000_000 },
+          { id: 'vllm', title: null, contextWindow: 32_768 },
+          { id: 'tiny', title: null, contextWindow: null },
         ],
       })
       assert.equal(seen[0]!.url, '/v1/models?limit=1000')
@@ -1080,6 +1130,90 @@ test('HC-CLAUDE-015：从网关拉型号（回环上的假网关）', () =>
     } finally {
       providers.close()
       await new Promise((resolve) => server.close(resolve))
+    }
+  }))
+
+test('HC-CLAUDE-017：网关型号的上下文窗口（清单每行“| 窗口”），存进定义、原样读回、写错报错', () =>
+  isolated(async ({ adapter }) => {
+    assert.equal(parseContextWindow('1M'), 1_000_000)
+    assert.equal(parseContextWindow(' 200k '), 200_000)
+    assert.equal(parseContextWindow('1.5M'), 1_500_000)
+    assert.equal(parseContextWindow('131072'), 131_072)
+    assert.equal(parseContextWindow(''), null)
+    for (const bad of ['abc', '1G', '-5', '12', '200M'])
+      assert.equal(parseContextWindow(bad), undefined, bad)
+    assert.equal(formatContextWindow(1_000_000), '1M')
+    assert.equal(formatContextWindow(256_000), '256K')
+    assert.equal(formatContextWindow(131_072), '131072')
+
+    const providers = new ClaudeProviders({ broadcast: () => {} })
+    try {
+      let version = (await providers.read()).version
+      version = providers.upsert({
+        providerId: 'ds',
+        templateId: 'anthropicGateway',
+        definition: {
+          baseUrl: 'https://ds.example.test',
+          apiKey: 'ds-token-123456789',
+          models: [
+            'deepseek-flash = DeepSeek Flash | 1M',
+            'deepseek-pro | 131072',
+            'glm = a = b',
+            'plain',
+          ],
+        },
+        expectedVersion: version,
+      }).version
+      const stored = JSON.parse(await readFile(join(adapter, 'config.json'), 'utf8')).overrides
+        .litch_providers.providers.ds.models
+      assert.deepEqual(stored, [
+        { id: 'deepseek-flash', title: 'DeepSeek Flash', contextWindow: 1_000_000 },
+        { id: 'deepseek-pro', contextWindow: 131_072 },
+        { id: 'glm', title: 'a = b' },
+        { id: 'plain' },
+      ])
+      assert.deepEqual(readProviderConfig().providers.ds!.models[0], {
+        id: 'deepseek-flash',
+        title: 'DeepSeek Flash',
+        contextWindow: 1_000_000,
+      })
+      const ds = (await providers.read()).providers.find((provider) => provider.id === 'ds')!
+      assert.deepEqual(ds.definition?.models, [
+        'deepseek-flash = DeepSeek Flash | 1M',
+        'deepseek-pro | 131072',
+        'glm = a = b',
+        'plain',
+      ])
+      // 起 CLI 时所选型号的窗口进环境
+      assert.equal(
+        providerLaunch('ds', 'deepseek-flash').env.CLAUDE_CODE_MAX_CONTEXT_TOKENS,
+        '1000000',
+      )
+      assert.equal(providerLaunch('ds', 'plain').env.CLAUDE_CODE_MAX_CONTEXT_TOKENS, undefined)
+
+      // 写错的窗口：整份不存，报 models 那一栏
+      const failed = await rejectsWith(
+        () =>
+          providers.upsert({
+            providerId: 'ds',
+            templateId: 'anthropicGateway',
+            definition: { models: ['deepseek-flash | lots'] },
+            expectedVersion: version,
+          }),
+        'invalidValue',
+      )
+      assert.equal(failed.data.key, 'models')
+      assert.equal(readProviderConfig().providers.ds!.models.length, 4)
+      // 手改：去掉窗口
+      providers.upsert({
+        providerId: 'ds',
+        templateId: 'anthropicGateway',
+        definition: { models: ['deepseek-flash = DeepSeek Flash'] },
+        expectedVersion: version,
+      })
+      assert.equal(readProviderConfig().providers.ds!.models[0]!.contextWindow, null)
+    } finally {
+      providers.close()
     }
   }))
 
