@@ -398,3 +398,66 @@ test('OFFER-006：选了新会话的卡模型可以撤回；设备进程重启�
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
+test('OFFER-007：选了新会话、模型补的简报开到收不紧沙箱的 harness 上：不开，卡带着简报降成 pending 的提案，由用户开始', async () => {
+  const env = treeRig()
+  try {
+    env.claude.declaration = {
+      extensions: ['clientTools'],
+      permissionPresets: [{ id: ':danger-full-access' }],
+    }
+    const client = await litch(env)
+    const { threadId } = await parent(client)
+    const { proposalId, call } = await offer(env, threadId, '整理发布脚本')
+    await client.call('litch/sessionProposal/answer', { proposalId, choice: 'session' })
+    assert.equal(resultOf(await answerOf(call)).choice, 'session')
+    const held = resultOf(
+      (
+        await env.pi.callTool(threadId, SESSIONS, 'accept', {
+          proposal_id: proposalId,
+          ...brief('整理 scripts 下的发布脚本。'),
+          harness: 'claude-code',
+        })
+      )?.answer,
+    )
+    assert.equal(held.proposal_id, proposalId)
+    assert.equal(held.thread_id, undefined, '没有起子会话')
+    assert.match(held.note, /cannot be sandboxed as tightly .*danger-full-access.*not started/)
+    assert.deepEqual(env.claude.sent('turn/start'), [])
+    const stored = env.device.sessionTree.store.proposal(proposalId)
+    assert.equal(stored?.status, 'pending')
+    assert.equal(stored?.offer, true, '仍是 offer 卡，界面据此写明没直接开的原因')
+    assert.equal(stored?.widerSandbox, 'danger-full-access')
+    assert.equal(stored?.harness, 'claude-code')
+    assert.match(String(stored?.prompt), /整理 scripts 下的发布脚本/)
+    assert.match(String(stored?.background), /这是 \/work\/app 的一轮整理/)
+    assert.equal(stored?.settledAt, null)
+    assert.ok(Number(stored?.expiresAt) > Date.now() / 1000, '从降级那一刻起算过期')
+    await until(
+      () =>
+        got(client, CHANGED).some(
+          (one) => one.changed[0].status === 'pending' && one.changed[0].widerSandbox,
+        ),
+      '降级的通知',
+    )
+    // 模型再 accept：只能用户从卡片开始
+    const again = await env.pi.callTool(threadId, SESSIONS, 'accept', { proposal_id: proposalId })
+    assert.equal(failureOf(again?.answer), 'blocked')
+    assert.match(again?.answer.result.contentItems[0].text, /only the user can start it/)
+    // 回合结束：不再当作在这里做（已经不是 chosen 了）
+    env.pi.end(threadId)
+    await until(() => !env.device.sessionTree.isActive(threadId), '回合结束')
+    assert.equal(env.device.sessionTree.store.proposal(proposalId)?.status, 'pending')
+    // 用户在卡上点开始：照简报起在 claude-code 上
+    const { threadId: child } = await client.call('litch/sessionProposal/accept', {
+      proposalId,
+      threadId,
+    })
+    assert.equal(child, 'claude-code-t1')
+    const [first] = env.claude.sent('turn/start')
+    assert.match(first.input[0].text, /整理 scripts 下的发布脚本/)
+    assert.equal(env.device.sessionTree.store.proposal(proposalId)?.status, 'started')
+  } finally {
+    await env.close()
+  }
+})

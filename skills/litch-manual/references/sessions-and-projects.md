@@ -223,7 +223,9 @@ woken to continue.
 - **New task or here**: when the user asks for something unrelated to the current session (after a
   first task has been done in it; the first request is simply what the session is for), the model
   first shows a card with only a title and two buttons, "New session" and "Do it here". New session: the
-  model writes the brief and the sub-session starts. Do it here: the model does it in this session.
+  model writes the brief and the sub-session starts; if the brief targets a harness that cannot be
+  sandboxed as tightly as this session, it does not start and the card turns into an ordinary
+  suggested task saying why, for you to review and start. Do it here: the model does it in this session.
   Sending a new message instead of choosing counts as "Do it here". Requests that build on the session
   (corrections, follow-ups, the next iteration, going ahead with what was just suggested) get no card.
 - **Hand-off**: when an unrelated message arrives while the model is in the middle of a task, it hands the

@@ -507,3 +507,42 @@ test('SESSION-PROPOSALS-007：用户正在开始一张提案时：再点开始�
     await env.close()
   }
 })
+
+test('SESSION-PROPOSALS-008：答复提案带了 threadId 的核对提案所属的会话，不符回 -32602、提案不动；不带照旧', async () => {
+  const env = treeRig()
+  try {
+    const client = await litch(env)
+    const { threadId } = await parent(client)
+    const proposalId = await propose(env, threadId, '整理日志')
+    const other = 'pi-t-other'
+    for (const method of [
+      'litch/sessionProposal/accept',
+      'litch/sessionProposal/dismiss',
+      'litch/sessionProposal/answer',
+      'litch/sessionProposal/here',
+      'litch/sessionProposal/markHere',
+    ]) {
+      const wrong = await client.fails(method, { proposalId, threadId: other, choice: 'here' })
+      assert.equal(wrong.code, -32602, method)
+      assert.match(wrong.message, new RegExp(`不是会话 ${other} 的`), method)
+    }
+    assert.equal(env.device.sessionTree.store.proposal(proposalId)?.status, 'pending')
+    // 对得上的照常
+    assert.deepEqual(
+      await client.call('litch/sessionProposal/dismiss', { proposalId, threadId }),
+      {},
+    )
+    assert.equal(env.device.sessionTree.store.proposal(proposalId)?.status, 'dismissed')
+    // 不带 threadId（旧客户端）照旧
+    const second = await propose(env, threadId, '整理配置')
+    assert.deepEqual(await client.call('litch/sessionProposal/dismiss', { proposalId: second }), {})
+    // 没有这个提案的照旧报没有
+    const missing = await client.fails('litch/sessionProposal/dismiss', {
+      proposalId: 'nope',
+      threadId,
+    })
+    assert.match(missing.message, /没有提案 nope/)
+  } finally {
+    await env.close()
+  }
+})

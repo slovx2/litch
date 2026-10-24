@@ -34,6 +34,8 @@ export const enProposals: Record<keyof typeof zhProposals, Entry> = {
   'proposal.offer.doneHere': 'Continuing in this session',
   'proposal.offer.waiting': 'Awaiting choice',
   'proposal.offer.failed': 'Couldn’t show card',
+  'proposal.offer.held':
+    'You chose a new session, but the model picked {harness}, which can’t be sandboxed as tightly as this session (it would run as “{level}”), so it didn’t start automatically. Review it before starting.',
   'proposal.refused': 'Not accepted: {reason}',
   'proposal.refusedBare': 'Not accepted',
   'proposal.actual': 'Started: showing the sub-session that was actually started',

@@ -15,6 +15,8 @@
 // - 说“新任务”（new task）：模型调 litch_sessions.start（initiation offer，只带标题），出“新会话 / 在这里做”的卡，
 //   调用一直等着；选新会话：过一会儿模型用 accept 补上简报，起子会话，父会话回一句；选在这里做：模型在这里回答；
 //   没选就停掉回合也算在这里做；
+// - 说“新任务交给 Pi”（new task for Pi）：同上出 offer 卡，但选新会话后模型补的简报开在 Pi 上、沙箱收不紧，
+//   设备进程不开，卡片带着简报降成待开始的提案（offer 仍为真、带 widerSandbox），由用户看过再点开始；
 // - 说“交接”（hand off）：模型把手上做到一半的任务交给一个分叉会话（litch_sessions.hand_off，立刻起、不出卡），
 //   再回答这条新消息；
 // - 说“用子代理”（use sub-agents）：引擎自己派两个子代理线程（不进侧栏），一个能直接输入、一个不能，
@@ -59,6 +61,7 @@ const WITHDRAWS = /撤回提案|withdraw a proposal/i
 const WRAPS = /收尾建议|suggest follow-ups/i
 const FORGETS = /忘了收尾|forget the wrap-up/i
 const OFFERS = /新任务|new task/i
+const HELD_OFFERS = /新任务交给 ?Pi|new task for Pi/i
 const HANDS = /交接|hand off/i
 
 /** offer 卡上选了新会话之后，模型过多久补上简报（按模拟的时钟） */
@@ -542,10 +545,16 @@ export function createMockTree(host: MockTreeHost): MockTree {
   }
 
   /** 等着用户选的 offer 卡：提案号 → 提出它的会话、回合、那次 start 调用 */
-  const offers = new Map<string, { view: SessionView; turnId: string; callId: string }>()
+  const offers = new Map<
+    string,
+    { view: SessionView; turnId: string; callId: string; held: boolean }
+  >()
 
-  /** 模型出一张 offer 卡（只带标题），那次 start 调用一直等着，回合也不结束 */
-  const offerDemo = (view: SessionView, turnId: string) => {
+  /**
+   * 模型出一张 offer 卡（只带标题），那次 start 调用一直等着，回合也不结束。
+   * held：选新会话后模型补的简报开在收不紧沙箱的 Pi 上，卡片降成待开始的提案
+   */
+  const offerDemo = (view: SessionView, turnId: string, held = false) => {
     const callId = host.nextId('ls')
     const now = host.now()
     const proposal: SessionProposalView = {
@@ -571,7 +580,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
       worktree: null,
       worktreeDefault: inWorktree(view),
     }
-    offers.set(proposal.id, { view, turnId, callId })
+    offers.set(proposal.id, { view, turnId, callId, held })
     host.apply(view, [
       sessionsCall(turnId, { title: proposal.title, initiation: 'offer' }, null, 'start', callId),
       { op: 'session.proposals', proposals: [...view.proposals, proposal] },
@@ -591,7 +600,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
     const offer = offers.get(proposalId)
     if (!offer) return
     offers.delete(proposalId)
-    const { view, turnId, callId } = offer
+    const { view, turnId, callId, held } = offer
     const note =
       choice === 'session'
         ? 'The user chose a new session. Call accept with this proposal_id and the full brief.'
@@ -609,6 +618,10 @@ export function createMockTree(host: MockTreeHost): MockTree {
     if (stopped) return
     if (choice === 'here') {
       host.reply(view, turnId, text.offerHereReply, emptyWrapUp(turnId))
+      return
+    }
+    if (held) {
+      host.setTimer(() => heldOffer(view, turnId, proposalId), BRIEF_MS)
       return
     }
     host.setTimer(() => {
@@ -654,6 +667,46 @@ export function createMockTree(host: MockTreeHost): MockTree {
       ])
       host.reply(view, turnId, text.offerStartedReply, emptyWrapUp(turnId))
     }, BRIEF_MS)
+  }
+
+  /**
+   * 选了新会话、模型补的简报开在 Pi 上（沙箱收不紧）：同设备进程，不开，卡片带着简报降成待开始的提案，
+   * 用户点开始时照简报起，子会话照示例回话
+   */
+  const heldOffer = (view: SessionView, turnId: string, proposalId: string) => {
+    if (!host.running(view)) return
+    const brief = {
+      prompt: text.offer.prompt,
+      background: text.offer.background ?? '',
+      harness: 'pi',
+    }
+    setProposals(
+      view,
+      view.proposals.map((entry) =>
+        entry.id === proposalId
+          ? {
+              ...entry,
+              ...brief,
+              status: 'pending',
+              expiresAt: host.now() + SESSION_TREE_LIMITS.proposalTtlSeconds * 1000,
+              widerSandbox: 'danger-full-access',
+            }
+          : entry,
+      ),
+    )
+    scripted.set(`proposal:${proposalId}`, text.offer.reply)
+    host.apply(view, [
+      sessionsCall(
+        turnId,
+        { proposal_id: proposalId, ...brief },
+        {
+          proposal_id: proposalId,
+          note: 'pi cannot be sandboxed as tightly as this session, so the session was not started. The card now shows your brief as a proposal.',
+        },
+        'accept',
+      ),
+    ])
+    host.reply(view, turnId, text.offerHeldReply, emptyWrapUp(turnId))
   }
 
   /** 模型把做到一半的任务交给一个分叉会话（立刻起，不出卡），再回答这条新消息 */
@@ -985,6 +1038,10 @@ export function createMockTree(host: MockTreeHost): MockTree {
       }
       if (FORGETS.test(message.text)) {
         forgetDemo(view, turnId)
+        return true
+      }
+      if (HELD_OFFERS.test(message.text)) {
+        offerDemo(view, turnId, true)
         return true
       }
       if (OFFERS.test(message.text)) {

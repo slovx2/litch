@@ -1179,6 +1179,7 @@ test('设备：打开会话时连了结的一起取提案；变了的通知并�
     world.calls.find((entry) => entry.method === 'litch/sessionProposal/accept')?.params,
     {
       proposalId: 'pr2',
+      threadId: 'p',
       overrides: {
         harness: 'dsh',
         title: '清理旧分支',
@@ -1209,9 +1210,14 @@ test('设备：没改的“开始”不带 overrides；“不要”记成不要�
   await world.command('session.proposal.accept', { sessionId: 'p', proposalId: 'pr1' })
   assert.deepEqual(
     world.calls.find((entry) => entry.method === 'litch/sessionProposal/accept')?.params,
-    { proposalId: 'pr1' },
+    { proposalId: 'pr1', threadId: 'p' },
+    '带上所属会话，设备进程据此核对',
   )
   await world.command('session.proposal.dismiss', { sessionId: 'p', proposalId: 'pr1' })
+  assert.deepEqual(
+    world.calls.find((entry) => entry.method === 'litch/sessionProposal/dismiss')?.params,
+    { proposalId: 'pr1', threadId: 'p' },
+  )
   await settle()
   assert.equal(watched.seen.view?.proposals[0]?.status, 'dismissed')
   watched.close()
@@ -1231,7 +1237,7 @@ test('设备：offer 卡上选“新会话”先记成等补简报（不起子�
   })
   assert.deepEqual(
     world.calls.find((entry) => entry.method === 'litch/sessionProposal/answer')?.params,
-    { proposalId: 'pr1', choice: 'session' },
+    { proposalId: 'pr1', threadId: 'p', choice: 'session' },
   )
   await settle()
   const first = watched.seen.view?.proposals[0]
@@ -1274,7 +1280,7 @@ test('设备：提案卡上点“在这里做”，设备进程只了结（markH
     [
       {
         method: 'litch/sessionProposal/markHere',
-        params: { proposalId: 'pr1', lead: '在这里做：' },
+        params: { proposalId: 'pr1', threadId: 'p', lead: '在这里做：' },
       },
     ],
     '只了结，不让设备进程发',
@@ -1318,7 +1324,7 @@ test('设备：设备进程旧、没有 markHere 时退回 here，由设备进�
   await settle()
   assert.deepEqual(
     world.calls.filter((entry) => entry.method === 'litch/sessionProposal/here'),
-    [{ method: 'litch/sessionProposal/here', params: { proposalId: 'pr1' } }],
+    [{ method: 'litch/sessionProposal/here', params: { proposalId: 'pr1', threadId: 'p' } }],
   )
   assert.equal(watched.seen.view?.proposals[0]?.status, 'here')
   assert.equal(world.sent('turn/start').filter((params) => params.threadId === 'p').length, 0)
@@ -1631,6 +1637,45 @@ test('模拟：说“新任务”出 offer 卡、调用等着；选新会话模�
   await world.channel.command('session.interrupt', { deviceId: 'local', sessionId: 's6' })
   await world.until(() => list().at(-1)?.status === 'here', '停了回合算在这里做')
   assert.equal(list().at(-1)?.id, third.id)
+})
+
+test('模拟：说“新任务交给 Pi”选新会话后，简报开在收不紧沙箱的 Pi 上：卡片降成待开始的提案，用户开始才起', async () => {
+  const world = mockWorld()
+  await settle()
+  const parent = world.watch('s6')
+  await settle()
+  const list = () => parent.view?.proposals ?? []
+  const before = list().length
+  const kids = world.children('s6').length
+  await world.channel.command('session.send', {
+    deviceId: 'local',
+    sessionId: 's6',
+    text: '新任务交给 Pi：给设置页加个导出按钮',
+  })
+  await world.until(() => list().length === before + 1, '出了一张 offer 卡')
+  const offer = list().at(-1)
+  assert.equal(offer?.status, 'offered')
+  await world.channel.command('session.proposal.answer', {
+    deviceId: 'local',
+    sessionId: 's6',
+    proposalId: offer?.id ?? '',
+    choice: 'session',
+  })
+  await world.until(() => list().at(-1)?.status === 'pending', '降成待开始的提案')
+  const held = list().at(-1)
+  assert.deepEqual(
+    [held?.offer, held?.harness, held?.widerSandbox, held?.prompt !== ''],
+    [true, 'pi', 'danger-full-access', true],
+  )
+  await world.until(() => parent.view?.turns.at(-1)?.status === 'completed', '父会话回一句')
+  assert.equal(world.children('s6').length, kids, '没有起子会话')
+  const { sessionId } = (await world.channel.command('session.proposal.accept', {
+    deviceId: 'local',
+    sessionId: 's6',
+    proposalId: held?.id ?? '',
+  })) as { sessionId: string }
+  await world.until(() => list().at(-1)?.status === 'started', '用户点了开始')
+  assert.equal(world.children('s6').find((entry) => entry.id === sessionId)?.harness, 'pi')
 })
 
 test('模拟：说“交接”模型把手上的任务交给分叉会话（不出卡，立刻起），再回答新消息', async () => {

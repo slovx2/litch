@@ -960,6 +960,26 @@ export class SessionTree {
     wait.resolve({ choice, reason: 'answered' })
   }
 
+  /**
+   * 选了新会话的 offer 卡（chosen），模型补的简报要开到收不紧沙箱的 harness 上：不开，降成一张带简报的普通提案
+   *（pending、带 widerSandbox，offer 仍为真），用户在卡上看过再决定开不开。已经不是 chosen 了（回合结束当作在这里做了）返回 null
+   */
+  holdOffer(
+    proposalId: string,
+    brief: Pick<
+      SessionProposal,
+      'title' | 'prompt' | 'background' | 'harness' | 'model' | 'effort' | 'cwd' | 'kind'
+    > & { widerSandbox: string },
+  ): SessionProposal | null {
+    const expiresAt = now() + SESSION_TREE_LIMITS.proposalTtlSeconds
+    if (!this.store.holdOffer(proposalId, { ...brief, expiresAt })) return null
+    const held = this.store.proposal(proposalId)
+    if (!held) return null
+    this.proposalsChanged(held.threadId, [held])
+    this.scheduleExpiry()
+    return held
+  }
+
   /** 一张在等的 offer 卡不等了：当作在这里做（还没选的才改库），在等的那次调用拿到 here */
   private offerHere(proposalId: string, reason: OfferOutcome['reason']): void {
     const wait = this.offers.get(proposalId)

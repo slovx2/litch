@@ -92,7 +92,11 @@ export interface SessionProposal {
   kind: SessionLineageKind
   wakeParent: boolean
   status: SessionProposalStatus
-  /** offer 卡（litch_sessions.start 的 initiation offer）：只有标题，prompt 是空的，直到模型补上简报。旧设备进程不带 */
+  /**
+   * offer 卡（litch_sessions.start 的 initiation offer）：只有标题，prompt 是空的，直到模型补上简报。旧设备进程不带。
+   * 用户选了新会话、模型补的简报要开到收不紧沙箱的 harness 上时不开，降成带简报的 pending 提案：offer 仍为真、
+   * 带 widerSandbox，卡上写明没直接开的原因，由用户看过再点。offer 为真又是 pending 的只有这一种
+   */
   offer?: boolean
   createdAt: number
   /** 到这个时间（秒）还没点就过期 */
@@ -224,6 +228,11 @@ export interface SessionProposalListResponse {
 
 export interface SessionProposalIdParams {
   proposalId: string
+  /**
+   * 提案所属的会话（客户端在哪个会话的卡上点的）。给了的话设备进程核对，不是这个会话的提案回 -32602；
+   * 不给不核对（旧客户端）。旧设备进程不认这个字段、照旧只看 proposalId
+   */
+  threadId?: string
 }
 
 /** 用户从卡片开始时改的东西。不给的照提案里的；和 litch/session/start 一样，沙箱收紧到不宽于父会话 */

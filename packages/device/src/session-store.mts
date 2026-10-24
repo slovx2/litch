@@ -250,6 +250,10 @@ export class SessionStore {
          VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ),
       proposalWorktree: prepare('UPDATE proposals SET worktree=? WHERE id=?'),
+      holdOffer: prepare(
+        `UPDATE proposals SET status='pending', title=?, prompt=?, background=?, harness=?, model=?, effort=?, cwd=?, kind=?, wider_sandbox=?, expires_at=?
+         WHERE id=? AND status='chosen'`,
+      ),
       proposal: prepare('SELECT * FROM proposals WHERE id=?'),
       // 还在等的：等用户点的卡、等用户选的 offer 卡、用户选了新会话等模型补简报的
       pending: prepare(
@@ -447,6 +451,33 @@ export class SessionStore {
   /** 用户在 offer 卡上选新会话时定了工作树开关 */
   setProposalWorktree(id: string, worktree: boolean): void {
     this.run('proposalWorktree', worktree ? 1 : 0, id)
+  }
+
+  /**
+   * 选了新会话的 offer 卡（chosen），模型补的简报开到收不紧沙箱的 harness 上：不开，带着简报改成普通的 pending 提案，
+   * 记下 widerSandbox，从这一刻起算过期。已经不是 chosen 了返回 false
+   */
+  holdOffer(
+    id: string,
+    brief: Pick<
+      SessionProposal,
+      'title' | 'prompt' | 'background' | 'harness' | 'model' | 'effort' | 'cwd' | 'kind'
+    > & { widerSandbox: string; expiresAt: number },
+  ): boolean {
+    const result = this.statements.holdOffer?.run(
+      brief.title,
+      brief.prompt,
+      brief.background ?? '',
+      brief.harness,
+      brief.model,
+      brief.effort ?? null,
+      brief.cwd,
+      brief.kind,
+      brief.widerSandbox,
+      brief.expiresAt,
+      id,
+    )
+    return Number(result?.changes ?? 0) > 0
   }
 
   proposal(id: string): SessionProposal | null {
