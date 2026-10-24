@@ -10,6 +10,7 @@ import {
   type BrowserHandover,
   createBrowserExecutor,
   SIGNING_IN,
+  type SignInAsk,
   type SignInOutcome,
 } from '../executor.mjs'
 import type { BrowserHost, BrowserPage, DialogInfo, TabKind, TabOwner } from '../model.mjs'
@@ -448,4 +449,190 @@ test('封闭的影子树里有输入框：算清不到（重新打开）；开�
   assert.equal(hasClosedShadowFields(page('closed', 'SPAN')), false)
   // 同进程子框架里的封闭影子树
   assert.equal(hasClosedShadowFields({ nodeName: 'IFRAME', contentDocument: page('closed') }), true)
+})
+
+/** 交接直接回给定的结果（Litch 代填那几种），记下执行器交过来的东西 */
+function scriptedSetup(outcome: (page: BrowserPage, host: BrowserHost) => SignInOutcome) {
+  const asks: SignInAsk[] = []
+  const host = fakeHost(() => false)
+  const handover: BrowserHandover = {
+    active: () => false,
+    hides: () => false,
+    markScripted() {},
+    async request(page, ask) {
+      asks.push(ask)
+      return outcome(page, host)
+    },
+  }
+  const executor = createBrowserExecutor({ host, sites: createSiteBook(null), handover })
+  let seq = 0
+  const shown: unknown[] = []
+  const run = (
+    tool: string,
+    args: unknown = {},
+    task: { id: string; name: string } | null = null,
+  ) =>
+    executor.call(
+      {
+        id: `i${++seq}`,
+        threadId: 'a',
+        turnId: 'turn-1',
+        callId: `c${seq}`,
+        namespace: 'litch_browser',
+        tool,
+        arguments: args,
+        device: { id: 'local', name: '本机', kind: 'local', target: null },
+        harness: 'pi',
+        cwd: null,
+        task,
+      },
+      {
+        signal: new AbortController().signal,
+        ask: async () => null,
+        show(ask) {
+          shown.push(ask)
+          return () => {}
+        },
+      },
+    )
+  return { run, asks, host, shown }
+}
+
+const filled = (
+  extra: Partial<Extract<SignInOutcome, { kind: 'filled' }>> = {},
+): SignInOutcome => ({
+  kind: 'filled',
+  origin: 'http://localhost:3000',
+  navigated: true,
+  reopened: null,
+  verification: false,
+  stillSignIn: false,
+  preauthorized: false,
+  ...extra,
+})
+
+test('Litch 代填了：只说用了人批准的账号、页面换到哪，不带用户名；定时任务、回合、对话卡片的口子交给交接', async () => {
+  const { run, asks } = scriptedSetup(() => filled())
+  await run('navigate', { url: 'http://localhost:3000/login' })
+  const reply = await run(
+    'request_sign_in',
+    { reason: 'Need access.' },
+    { id: 'task-1', name: '日报' },
+  )
+  const text = textOf(reply)
+  assert.equal(reply.success, true)
+  assert.match(text, /Litch filled the account the user approved and submitted the sign-in/)
+  assert.match(text, /the page loaded http:\/\/localhost:3000/)
+  assert.match(text, /Take a fresh snapshot/)
+  assert.doesNotMatch(text, /did not load a new document/)
+  const [ask] = asks
+  assert.ok(ask)
+  assert.deepEqual(ask.task, { id: 'task-1', name: '日报' })
+  assert.equal(ask.turnId, 'turn-1')
+  assert.equal(ask.hintToken, null)
+  assert.equal(ask.submitHint, false)
+  assert.equal(ask.origin, null)
+  assert.equal(typeof ask.show, 'function')
+})
+
+test('Litch 代填的几种说法：没换文档、要验证码、还停在登录页、事先授权、关掉重开换了标签', async () => {
+  const say = async (outcome: SignInOutcome) => {
+    const { run } = scriptedSetup(() => outcome)
+    await run('navigate', { url: 'http://localhost:3000/login' })
+    return textOf(await run('request_sign_in', { reason: 'r' }))
+  }
+  assert.match(
+    await say(filled({ navigated: false })),
+    /did not load a new document; Litch cleared/,
+  )
+  assert.match(
+    await say(filled({ verification: true })),
+    /extra verification.*`request_sign_in` again/,
+  )
+  assert.match(await say(filled({ stillSignIn: true })), /still shows a sign-in form/)
+  assert.match(
+    await say(filled({ preauthorized: true })),
+    /the account the user authorized in advance for this task/,
+  )
+  // 关掉重开：之后不给 tabId 的调用落在新标签上
+  const { run } = scriptedSetup((page, host) => {
+    host.close(page.id)
+    const next = host.open(page.info().owner, 'agent')
+    void next.load('http://localhost:3000/home', 1000)
+    return filled({ reopened: next.id })
+  })
+  await run('navigate', { url: 'http://localhost:3000/login' })
+  const moved = textOf(await run('request_sign_in', { reason: 'r' }))
+  assert.match(moved, /closed that tab and opened http:\/\/localhost:3000\/home in a new tab t2/)
+  const after = await run('tabs', { action: 'list' })
+  assert.match(textOf(after), /t2/)
+  const snap = await run('snapshot')
+  assert.equal(snap.success, true, textOf(snap))
+})
+
+test('代填做不了、源对不上、过期、同回合拒绝过：各自的说法', async () => {
+  const say = async (outcome: SignInOutcome, args: Record<string, unknown> = {}) => {
+    const { run } = scriptedSetup(() => outcome)
+    await run('navigate', { url: 'http://localhost:3000/login' })
+    return textOf(await run('request_sign_in', { reason: 'r', ...args }))
+  }
+  const failed = await say({ kind: 'fillFailed', why: 'insecure', reopened: null })
+  assert.match(failed, /could not sign in to localhost:3000 automatically: insecure/)
+  assert.match(failed, /`request_sign_in` again so the user can sign in themselves/)
+  assert.match(
+    await say({ kind: 'fillFailed', why: 'popup_needed', reopened: 't9' }),
+    /popup_needed.*new tab t9/,
+  )
+  assert.match(
+    await say('origin_changed', { origin: 'https://github.com' }),
+    /not on https:\/\/github.com, so no sign-in was requested/,
+  )
+  assert.match(await say('expired'), /expired before anyone answered/)
+  assert.match(await say('declined'), /declined signing in/)
+})
+
+test('编号提示：冻结之前给指的元素加一次性标记，口令交给交接；不认识的编号直接失败', async () => {
+  const { run, asks, host } = scriptedSetup(() => filled())
+  await run('navigate', { url: 'http://localhost:3000/login' })
+  const page = host.page('t1')
+  assert.ok(page)
+  const sent: Array<{ method: string; params: Record<string, unknown> | undefined }> = []
+  const plain = page.cdp.bind(page)
+  page.cdp = async <T,>(method: string, params?: Record<string, unknown>): Promise<T> => {
+    sent.push({ method, params })
+    if (method === 'Accessibility.getFullAXTree') {
+      return {
+        nodes: [
+          { nodeId: '1', role: { value: 'RootWebArea' }, childIds: ['2'] },
+          {
+            nodeId: '2',
+            parentId: '1',
+            role: { value: 'textbox' },
+            name: { value: 'Email' },
+            backendDOMNodeId: 7,
+          },
+        ],
+      } as T
+    }
+    if (method === 'DOM.resolveNode') return { object: { objectId: 'o7' } } as T
+    return plain<T>(method, params)
+  }
+  const snap = textOf(await run('snapshot'))
+  const ref = /\[ref=(e\d+)\]/.exec(snap)?.[1]
+  assert.ok(ref, snap)
+  const bad = await run('request_sign_in', { reason: 'r', passwordRef: 'e99' })
+  assert.equal(bad.success, false)
+  assert.match(textOf(bad), /unknown ref e99/)
+  assert.equal(asks.length, 0)
+  await run('request_sign_in', { reason: 'r', usernameRef: ref, submitRef: ref })
+  const [ask] = asks
+  assert.ok(ask?.hintToken)
+  assert.equal(ask.submitHint, true)
+  assert.deepEqual(sent.find((one) => one.method === 'DOM.resolveNode')?.params, {
+    backendNodeId: 7,
+  })
+  const marks = sent
+    .filter((one) => one.method === 'Runtime.callFunctionOn')
+    .map((one) => (one.params?.arguments as Array<{ value: string }>)[0]?.value)
+  assert.deepEqual(marks, [`${ask.hintToken}:username`, `${ask.hintToken}:submit`])
 })
