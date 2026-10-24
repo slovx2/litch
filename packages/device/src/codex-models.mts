@@ -23,12 +23,15 @@
 // 清单文件里有、自带目录里没有的模型（用户自己配的、新版 codex 去掉了的）也补进底稿。
 // 原样用一个自带模型的项，写的时候总是照这一版 codex 自带的重新拷，codex 升级之后重写一遍就跟上了。
 //
-// model_catalog_json 指向的不是 Litch 的文件（用户自己配的）：照样读出来列，那个文件里的模型就是它们自己的底稿；
-// 写的时候写到 Litch 的文件、改指向，原文件不动。
+// model_catalog_json 指向的不是 Litch 的文件（用户自己配的）：照样读出来列；写的时候写到 Litch 的文件、改指向，原文件不动。
+// 那个文件里自带目录没有的模型就是它们自己的底稿。和自带的同名的，底稿是两份合起来：自带的打底，用户写了的字段盖上去
+// （冲突以用户的为准）。用户写的、和自带不一样的那些字段记在每一项的 litch_own 里（以它为底稿的项都记），
+// 往后再读 Litch 的文件也照这样合，自带目录升级了跟着变的只有用户没动过的字段。
 import { createHash } from 'node:crypto'
 import { readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { isDeepStrictEqual } from 'node:util'
 import type {
   HarnessModelBase,
   HarnessModelEntry,
@@ -52,6 +55,10 @@ import { isObject } from './wire.mjs'
 export const LITCH_CATALOG = 'litch-models.json'
 /** 每一项里记底稿的字段 */
 export const BASE_FIELD = 'litch_base'
+/** 每一项里记用户自己写的字段（底稿是自带模型、用户又改过的时候） */
+export const OWN_FIELD = 'litch_own'
+/** 不算用户自己的字段：名字是这一项自己的，顺序和是否列出由清单定，另两个是 Litch 记的 */
+const NOT_OWN = new Set(['slug', 'priority', 'visibility', BASE_FIELD, OWN_FIELD])
 const KEY = 'model_catalog_json'
 
 type ModelInfo = Record<string, unknown>
@@ -72,6 +79,8 @@ interface CatalogState {
   userPath: string | null
   /** 底稿：模型名 → 完整的 ModelInfo */
   templates: Map<string, ModelInfo>
+  /** 底稿是自带模型、用户又改过的：模型名 → 用户自己写的字段 */
+  owns: Map<string, ModelInfo>
   bases: HarnessModelBase[]
   entries: HarnessModelEntry[]
   version: string
@@ -85,6 +94,15 @@ const numberOf = (value: unknown): number | null =>
 /** 记在这一项里的底稿；没有记（原样的、用户自己写的）是它自己 */
 const baseOf = (model: ModelInfo): string =>
   typeof model[BASE_FIELD] === 'string' && model[BASE_FIELD] ? model[BASE_FIELD] : slugOf(model)
+
+/** 用户的模型里和自带的不一样（或自带没有）的字段 */
+function ownFields(mine: ModelInfo, shipped: ModelInfo): ModelInfo {
+  return Object.fromEntries(
+    Object.entries(mine).filter(
+      ([key, value]) => !NOT_OWN.has(key) && !isDeepStrictEqual(value, shipped[key]),
+    ),
+  )
+}
 
 async function readText(path: string): Promise<string | null> {
   try {
@@ -230,15 +248,31 @@ async function readState(context: ModelsContext): Promise<CatalogState> {
       .filter((model) => baseOf(model) === slugOf(model))
       .map((model) => [slugOf(model), model]),
   )
+  // 用户改过的自带模型：用户自己的文件里和自带的比出来；Litch 的文件里照记下的
+  const owns = new Map<string, ModelInfo>()
+  for (const model of models) {
+    const base = baseOf(model)
+    if (owns.has(base)) continue
+    const shippedOne = shippedBySlug.get(base)
+    const own = foreign
+      ? plain.has(base) && shippedOne
+        ? ownFields(plain.get(base) as ModelInfo, shippedOne)
+        : null
+      : isObject(model[OWN_FIELD])
+        ? model[OWN_FIELD]
+        : null
+    if (own && Object.keys(own).length) owns.set(base, own)
+  }
   const templateOf = (id: string): ModelInfo | null => {
-    // 用户自己的文件里的模型就是它们自己的底稿；Litch 的文件里原样的项照这一版 codex 自带的重新拷
-    if (foreign && plain.has(id)) return plain.get(id) as ModelInfo
-    const found = shippedBySlug.get(id) ?? plain.get(id)
+    // 自带的打底、用户的字段盖上去；自带目录里没有的，用户文件里的就是它自己的底稿
+    const shippedOne = shippedBySlug.get(id)
+    if (shippedOne) return { ...shippedOne, ...owns.get(id) }
+    const found = plain.get(id)
     if (found) return found
     // 底稿哪儿都找不着了（新版 codex 去掉了）：拿照它改的那一项充当，名字换回去
     const derived = models.find((model) => baseOf(model) === id)
     if (!derived) return null
-    const { [BASE_FIELD]: _base, ...rest } = derived
+    const { [BASE_FIELD]: _base, [OWN_FIELD]: _own, ...rest } = derived
     return { ...rest, slug: id, display_name: id }
   }
   const templates = new Map<string, ModelInfo>()
@@ -292,6 +326,7 @@ async function readState(context: ModelsContext): Promise<CatalogState> {
     current,
     userPath,
     templates,
+    owns,
     bases,
     entries,
     version: await versionOf(snapshot, current, litchPath),
@@ -379,7 +414,7 @@ function build(harness: string, state: CatalogState, given: unknown): ModelInfo[
         `${String(base)} is not one of the available bases`,
       )
     const template = state.templates.get(base) as ModelInfo
-    const { [BASE_FIELD]: _base, ...model } = structuredClone(template)
+    const { [BASE_FIELD]: _base, [OWN_FIELD]: _own, ...model } = structuredClone(template)
     model.slug = id
     model.display_name =
       displayName ?? (typeof template.display_name === 'string' ? template.display_name : id)
@@ -393,6 +428,8 @@ function build(harness: string, state: CatalogState, given: unknown): ModelInfo[
     model.visibility = 'list'
     model.priority = index
     if (base !== id) model[BASE_FIELD] = base
+    const own = state.owns.get(base)
+    if (own) model[OWN_FIELD] = structuredClone(own)
     return model
   })
 }

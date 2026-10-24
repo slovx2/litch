@@ -85,6 +85,9 @@ harness's own config files on that device (shared with its CLI there):
   picker. Each entry either uses a built-in model as is, or is based on one with a new model name,
   display name or context window (everything else is copied from the base). Models not in the list
   disappear from the picker; "restore" goes back to the built-in catalog. Takes effect after a restart.
+  When the list was first taken over from the user's own `model_catalog_json` file, a model there with
+  the same name as a built-in one keeps the user's own fields (the user's win where they differ); only
+  the fields the user did not set follow Codex's built-in catalog.
 - **MCP**: the harness's user-level MCP servers.
 - **Instructions**: the user-level `AGENTS.md` (Claude Code: `CLAUDE.md`). **Unified mode** writes one
   copy and turns the other harnesses' files into symlinks to it (old files are backed up beside them).
