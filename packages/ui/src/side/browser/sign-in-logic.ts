@@ -70,13 +70,12 @@ export function originParts(origin: string): { lead: string; main: string; tail:
 
 /** 预检不过的原因里认得的几种，卡片上各有一句话；认不出的说一句笼统的 */
 export const FILL_BLOCKS = [
-  'insecure',
+  'no_form',
   'not_user_visible',
   'locator_invalid',
-  'popup_needed',
-  'origin_changed',
-  'page_changed',
+  'insecure',
   'verification',
+  'unavailable',
 ] as const
 
 export type FillBlock = (typeof FILL_BLOCKS)[number]

@@ -1,7 +1,7 @@
 // 界面预览用的假外壳：普通浏览器里（模拟核心）没有 window.litchBrowser，浏览器标签和设置页只有一句说明。
 // 地址里带 ?browser=preview 时换成这个，看得到浏览器面板上的卡片和设置页里经外壳的那几块。没有真的网页。
 // 在面板里新开一个标签就出一张登录卡片，样子按 ?signIn= 选：accounts（有已存账号，默认）、none（库里没有）、
-// blocked（预检不过）、task（定时任务的回合）。在桌面外壳里、地址里没带这一项时不起作用。
+// blocked（预检不过）、task（定时任务的回合）、phone（手机批准了、正在代填）。在桌面外壳里、地址里没带这一项时不起作用。
 import type {
   BrowserBridge,
   BrowserOwner,
@@ -85,7 +85,12 @@ function createPreviewBridge(variant: string): BrowserBridge {
             { ref: `${tab.id}-a2`, username: 'ops-bot', masked: 'op•••', lastUsed: null },
           ],
     fillBlocked: variant === 'blocked' ? 'insecure' : null,
-    ...(variant === 'task' ? { taskId: 'task-nightly', expiresAt: Date.now() + 30 * 60_000 } : {}),
+    taskId: variant === 'task' ? 'task-nightly' : null,
+    expiresAt: variant === 'task' ? Date.now() + 30 * 60_000 : null,
+    nonce: `${tab.id}-nonce`,
+    // phone：手机已经批准、Litch 正在代填的样子
+    stage: variant === 'phone' ? 'filling' : 'choose',
+    by: variant === 'phone' ? { phoneId: 'phone-1', name: 'Pixel 9' } : null,
   })
 
   const open = async (owner: BrowserOwner, url: string) => {
@@ -150,11 +155,18 @@ function createPreviewBridge(variant: string): BrowserBridge {
     signIn: {
       list: async () => signIns,
       async answer(id, answer) {
-        if (!signIns.some((one) => one.id === id)) return false
-        // 代填要一会儿：卡片上先看得到“正在登录…”
-        if (typeof answer === 'object') await new Promise((done) => setTimeout(done, 1500))
-        signIns = signIns.filter((one) => one.id !== id)
-        signInsChanged()
+        const one = signIns.find((each) => each.id === id)
+        if (!one) return false
+        const swap = (next: BrowserSignInRequest | null) => {
+          signIns = signIns.flatMap((each) => (each.id !== id ? [each] : next ? [next] : []))
+          signInsChanged()
+        }
+        if (answer === 'self') swap({ ...one, stage: 'manual' })
+        else if (typeof answer === 'object') {
+          // 代填要一会儿：先看得到 filling 那一版
+          swap({ ...one, stage: 'filling', by: 'desktop' })
+          setTimeout(() => swap(null), 3000)
+        } else swap(null)
         return true
       },
       onChanged: (handler) => listen(signInListeners, handler),

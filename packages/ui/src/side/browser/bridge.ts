@@ -132,17 +132,26 @@ export interface BrowserSignInRequest {
   state: 'waiting' | 'withdrawn' | 'closed'
   /** 毫秒 */
   at: number
+  /**
+   * waiting 时卡片在哪一步。choose：等人选（用账号登录 / 我自己登录 / 拒绝）；
+   * manual：人选了自己登录，等人点“完成，交还”或“取消”；filling：Litch 正在代填，没有按钮
+   */
+  stage: 'choose' | 'manual' | 'filling'
   /** 密码库里和 origin 完全一样的账号，最近用过的在前；没有就是空的，只能人自己登录 */
   accounts: BrowserSignInAccount[]
   /**
-   * 预检不过、Litch 不能代填的原因（insecure、not_user_visible、locator_invalid、popup_needed、
-   * origin_changed、page_changed、verification），能代填是 null。不过时账号还列着，只是点不了
+   * 预检不过、Litch 不能代填的原因（no_form、not_user_visible、locator_invalid、insecure、verification、
+   * unavailable），能代填是 null。不过时账号还列着，只是点不了
    */
   fillBlocked: string | null
   /** 定时任务的回合才有：卡片上多一个“以后直接用这个账号”的勾选 */
-  taskId?: string
+  taskId: string | null
   /** 定时任务的回合才有：到这个时候（毫秒）没人答就过期 */
-  expiresAt?: number
+  expiresAt: number | null
+  /** 桌面端出的随机数（转给手机签名用），界面不用 */
+  nonce: string
+  /** 谁选的代填（filling 时有）：桌面端，或者某台手机；还没人答是 null */
+  by: 'desktop' | { phoneId: string; name: string } | null
 }
 
 /** 卡片上的一个已存账号。ref 是这张卡片里随机的编号，不是密码库的条目号 */
@@ -157,12 +166,14 @@ export interface BrowserSignInAccount {
 
 /**
  * done：人登录完、交还给代理；cancel：不登录了（卡片上的“拒绝”）；dismiss：“代理已收回”看过了；
- * fill：用卡片上的这个账号由 Litch 代填代提交，remember 是定时任务的“以后直接用这个账号”
+ * self：我自己登录（choose → manual）；fill：用卡片上的这个账号由 Litch 代填代提交，
+ * remember 是定时任务的“以后直接用这个账号”
  */
 export type BrowserSignInAnswer =
   | 'done'
   | 'cancel'
   | 'dismiss'
+  | 'self'
   | { fill: string; remember: boolean }
 
 export interface BrowserSignInBridge {

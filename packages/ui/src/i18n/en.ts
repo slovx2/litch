@@ -1756,7 +1756,6 @@ export const en: Record<MessageKey, Entry> = {
   'browser.signIn.filling': 'Signing in…',
   'browser.signIn.lastUsed': 'Last used: {day}',
   'browser.signIn.self': 'I’ll sign in myself',
-  'browser.signIn.back': 'Use a saved account',
   'browser.signIn.decline': 'Decline',
   'browser.signIn.noAccounts': 'No saved accounts for this site.',
   'browser.signIn.remember': 'Use this account for this site from now on in this scheduled task',
@@ -1764,23 +1763,28 @@ export const en: Record<MessageKey, Entry> = {
     `Scheduled task request: expires in ${minutes} ${Number(minutes) === 1 ? 'minute' : 'minutes'} if nobody answers`,
   'browser.signIn.expired': 'Scheduled task request: expired',
   'browser.signIn.blocked': 'Litch can’t fill this in: {reason}',
-  'browser.signIn.block.insecure':
-    'the page isn’t https, or the form would send the password with GET or to another site',
+  'browser.signIn.block.noForm': 'there’s no sign-in form Litch recognizes on the page',
   'browser.signIn.block.notVisible':
     'the sign-in fields aren’t visible (covered, too small, or off screen)',
   'browser.signIn.block.locator':
-    'the field or button the agent pointed at isn’t in the sign-in form Litch found',
-  'browser.signIn.block.popup': 'this site signs in through a pop-up window',
-  'browser.signIn.block.origin': 'the page’s origin isn’t the one the agent named',
-  'browser.signIn.block.page': 'the page has changed',
+    'the field or button the agent pointed at isn’t in the sign-in form Litch found, or the page has several sign-in forms',
+  'browser.signIn.block.insecure':
+    'the page isn’t https, the form would send the password with GET or to another site, or this tab is linked to another window',
   'browser.signIn.block.verification':
-    'the site asks for a code or second factor; finish it on the page yourself',
+    'last time the site asked for a code or second factor after filling, so sign in yourself this time',
+  'browser.signIn.block.unavailable':
+    'the password store can’t be opened right now (system keychain unavailable)',
   'browser.signIn.block.other': 'this page can’t be filled in ({code})',
+  'browser.signIn.noneNote':
+    'Click “I’ll sign in myself”, sign in on the page below, then click “Done, hand back”.',
+  'browser.signIn.fillingTitle': 'Litch is signing in with a saved account',
+  'browser.signIn.fillingNote':
+    'The agent can’t use this tab until the form is filled, submitted and the page has moved on.',
+  'browser.signIn.fillingPhone': 'Phone “{name}” approved signing in with a saved account.',
   'signInAsk.title': 'The agent asks you to sign in',
   'signInAsk.task': 'Scheduled task turn',
-  'signInAsk.selfNote':
-    'Sign in yourself in the browser panel, then click “Done, hand back”. The agent can’t use this tab meanwhile.',
-  'signInAsk.showTab': 'Open browser panel',
+  'signInAsk.noneNote':
+    'Click “I’ll sign in myself”, sign in in the browser panel, then click “Done, hand back” there.',
   'signInAsk.desktopOnly':
     'Signing in only works in the Litch desktop app. You can only decline here.',
   'settings.browser.touchId.title': 'Require Touch ID before filling',

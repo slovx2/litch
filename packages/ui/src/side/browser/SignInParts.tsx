@@ -1,11 +1,11 @@
 // 登录卡片（浏览器面板上的 SignInCard、对话里的 composer/SignInAskCard）共用的几块：突出可注册域名的来源、
 // “用某个账号登录”的一排按钮和定时任务的勾选、不能代填的原因、过期的倒计时。两处是同一张卡片的两个样子。
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useT } from '../../app/appearance.ts'
 import { useNow } from '../../app/clock.ts'
 import type { MessageKey } from '../../i18n/index.ts'
 import { dayOf } from '../../settings/tools-logic.ts'
-import type { BrowserSignInRequest } from './bridge.ts'
+import type { BrowserSignInBridge, BrowserSignInRequest } from './bridge.ts'
 import { knownBlock, minutesLeft, originParts } from './sign-in-logic.ts'
 import './sign-in.css'
 
@@ -14,6 +14,27 @@ export type SignInShape = Pick<
   BrowserSignInRequest,
   'origin' | 'accounts' | 'fillBlocked' | 'taskId' | 'expiresAt'
 >
+
+/** 外壳登记着的所有登录卡片，变了跟着变 */
+export function useSignIns(signIn: BrowserSignInBridge | undefined): BrowserSignInRequest[] {
+  const [all, setAll] = useState<BrowserSignInRequest[]>([])
+  useEffect(() => {
+    if (!signIn) return
+    let live = true
+    signIn.list().then(
+      (list) => {
+        if (live) setAll(list)
+      },
+      () => {},
+    )
+    const off = signIn.onChanged((list) => setAll(list))
+    return () => {
+      live = false
+      off()
+    }
+  }, [signIn])
+  return all
+}
 
 /** 来源：可注册域名突出，前面的子域名和协议、后面的端口淡一点 */
 export function SignInOrigin({ origin }: { origin: string }) {
@@ -36,13 +57,12 @@ export function SignInOrigin({ origin }: { origin: string }) {
 }
 
 const BLOCK_TEXT: Record<NonNullable<ReturnType<typeof knownBlock>>, MessageKey> = {
-  insecure: 'browser.signIn.block.insecure',
+  no_form: 'browser.signIn.block.noForm',
   not_user_visible: 'browser.signIn.block.notVisible',
   locator_invalid: 'browser.signIn.block.locator',
-  popup_needed: 'browser.signIn.block.popup',
-  origin_changed: 'browser.signIn.block.origin',
-  page_changed: 'browser.signIn.block.page',
+  insecure: 'browser.signIn.block.insecure',
   verification: 'browser.signIn.block.verification',
+  unavailable: 'browser.signIn.block.unavailable',
 }
 
 /** 预检不过：为什么不能代填 */
@@ -105,7 +125,7 @@ export function SignInAccounts({
               ? undefined
               : t('browser.signIn.lastUsed', { day: dayOf(account.lastUsed) })
           }
-          onClick={() => onFill(account.ref, request.taskId !== undefined && remember)}
+          onClick={() => onFill(account.ref, request.taskId !== null && remember)}
         >
           {filling === account.ref
             ? t('browser.signIn.filling')
@@ -114,7 +134,7 @@ export function SignInAccounts({
               })}
         </button>
       ))}
-      {request.taskId !== undefined ? (
+      {request.taskId !== null ? (
         <label className="form-check bw-signin-remember">
           <input
             type="checkbox"

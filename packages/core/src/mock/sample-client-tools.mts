@@ -125,17 +125,17 @@ function signInAsk(demo: SignInDemo, id: string): ClientAskView {
           },
           { ref: `${id}-a2`, username: 'ops-bot', masked: 'op•••', lastUsed: null },
         ]
+  const task = demo === 'signInTask'
   return {
     kind: 'signIn',
-    signInId: `${id}-sign-in`,
-    tabId: 'tab-1',
+    id: `${id}-sign-in`,
     origin: demo === 'signInBlocked' ? 'http://login.example.com' : 'https://accounts.github.com',
     site: 'GitHub',
     reason: 'Need to open the repository settings.',
     accounts,
     fillBlocked: demo === 'signInBlocked' ? 'insecure' : null,
-    ...(demo === 'signInTask'
-      ? { taskId: 'task-nightly', expiresAt: Date.now() + 30 * 60_000 }
-      : {}),
+    taskId: task ? 'task-nightly' : null,
+    expiresAt: task ? Date.now() + 30 * 60_000 : null,
+    nonce: `${id}-nonce`,
   }
 }
