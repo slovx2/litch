@@ -1,5 +1,5 @@
 // 新建页“在哪做”“从哪切”的判断：选项标识换成起点、记下的分支没了退回默认分支、按设备加工作区记住上次选的。
-// 不起浏览器：worktree-place.ts 只有判断。跑法：npm run test --prefix packages/ui。
+// 不起浏览器：worktree-from.ts、worktree-place.ts 只有判断。跑法：npm run test --prefix packages/ui。
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
@@ -9,8 +9,10 @@ globalThis.localStorage = {
   setItem: (key, value) => memory.set(key, String(value)),
 }
 
-const { branchFrom, FROM_DEFAULT, FROM_WORKING, fitFrom, fromOf, recallWhere, rememberWhere } =
-  await import('../src/composer/worktree-place.ts')
+const { branchFrom, FROM_DEFAULT, FROM_WORKING, fitFrom, fromOf } = await import(
+  '../src/composer/worktree-from.ts'
+)
+const { recallWhere, rememberWhere } = await import('../src/composer/worktree-place.ts')
 
 const branches = {
   current: 'main',

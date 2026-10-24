@@ -1,0 +1,120 @@
+# 模拟核心：工作树。新建页在 litch 工作区里选“新工作树”、起点挑 release/0.18 → 说“提个子会话”→
+# 详情页副标题写分支，提案卡上“新工作树”开关：父会话在工作树里，没另写目录的卡默认开着→ 菜单“工作树”一页：分支、起点、
+# 合入 release/0.18 → 回到会话列表，示例里的工作树会话行上写着分支
+appId: dev.litch.app
+name: mock-工作树
+tags: [mock]
+---
+- runFlow:
+    file: ../_shared/fresh.yaml
+    env:
+      MODE: mock
+      READY: device:local
+- tapOn:
+    id: device:local
+- tapOn:
+    id: sessions:new
+- extendedWaitUntil:
+    visible:
+      id: new-input
+    timeout: 15000
+- tapOn:
+    id: new:where:litch
+# 工作区根是 git 仓库：问到分支才出“位置”
+- scrollUntilVisible:
+    element:
+      id: new:place:worktree
+    direction: DOWN
+    timeout: 10000
+- tapOn:
+    id: new:place:worktree
+- scrollUntilVisible:
+    element:
+      id: new:from
+    direction: DOWN
+    timeout: 10000
+- assertVisible:
+    text: .*(Default branch|默认分支).*main.*
+- tapOn:
+    id: new:from
+- extendedWaitUntil:
+    visible:
+      id: picker:option:branch:release/0.18
+    timeout: 10000
+- tapOn:
+    id: picker:option:branch:release/0.18
+- extendedWaitUntil:
+    visible:
+      id: new:from
+    timeout: 10000
+- assertVisible:
+    text: release/0.18
+- tapOn:
+    id: new-input
+- inputText: propose a sub-session
+- tapOn:
+    id: new-send
+- extendedWaitUntil:
+    visible:
+      id: detail
+    timeout: 20000
+# 建工作树要一会儿，建好了详情页副标题写分支
+- extendedWaitUntil:
+    visible:
+      text: .*(Worktree|工作树)[:：] litch/.*
+    timeout: 20000
+- extendedWaitUntil:
+    visible:
+      id: proposal:.*:start
+    timeout: 20000
+# 三张卡：Pi 那张自己写了目录，开关默认关；没写目录的（整理 CHANGELOG）默认开。顺手那张一会儿就过期、不再有开关
+- scrollUntilVisible:
+    element:
+      id: proposal:.*:worktree
+      checked: false
+    direction: DOWN
+    centerElement: true
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: proposal:.*:worktree
+      checked: true
+    direction: UP
+    centerElement: true
+    timeout: 15000
+- tapOn:
+    id: detail:menu
+- tapOn:
+    id: detail:menu:worktree
+- extendedWaitUntil:
+    visible:
+      id: worktree:sheet
+    timeout: 10000
+- assertVisible:
+    id: worktree:branch
+    text: litch/.*
+- assertVisible:
+    id: worktree:base
+    text: release/0.18
+- tapOn:
+    id: worktree:sync
+- extendedWaitUntil:
+    visible:
+      id: worktree:synced
+    timeout: 10000
+- assertVisible:
+    text: .*(Merged the new commits from|已合入) release/0.18.*
+- back
+- back
+- extendedWaitUntil:
+    visible:
+      id: sessions:list
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: session:s5:worktree
+    direction: DOWN
+    timeout: 15000
+- assertVisible:
+    id: session:s5:worktree
+    text: .*litch/sidebar-tweaks-3f2a1c.*

@@ -24,6 +24,7 @@ import {
 } from './task-run.mjs'
 import { publicRun, type RunRow, type TaskRow, type TaskStore } from './task-store.mjs'
 import type { TaskTurns } from './task-turns.mjs'
+import type { Worktrees } from './worktrees.mjs'
 
 /** 设置里的几项（Go 层 settings_tasks.go，经控制通道推来） */
 export interface TaskSettings {
@@ -82,6 +83,8 @@ export interface SchedulerHost {
   runChanged(run: DeviceTaskRun): void
   born(harness: string, thread: Record<string, unknown>, workspaceId: string | null): void
   turns: TaskTurns
+  /** 见 RunHost.worktrees */
+  worktrees(): Worktrees | null
 }
 
 const seconds = (ms: number): number => Math.floor(ms / 1000)
@@ -224,6 +227,7 @@ export class TaskScheduler {
       log: host.log,
       progress: (run) => this.progress(run),
       born: host.born,
+      worktrees: () => host.worktrees(),
       openEngineLink: (harness) => host.openEngineLink(harness),
       backgroundRunning: (threadId) => host.backgroundRunning(threadId),
       turns: host.turns,

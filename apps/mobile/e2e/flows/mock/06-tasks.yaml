@@ -70,6 +70,12 @@ tags: [mock]
       id: task:preview
 - assertVisible:
     id: task:preview
+# 默认的项目是 git 仓库：出“每次在新工作树里跑”，打开
+- scrollUntilVisible:
+    element:
+      id: task:worktree
+- tapOn:
+    id: task:worktree
 - scrollUntilVisible:
     element:
       id: task:save
@@ -81,6 +87,9 @@ tags: [mock]
     timeout: 10000
 - assertVisible:
     id: task:detail:schedule
+- assertVisible:
+    id: task:detail:target
+    text: .*(new worktree|新工作树).*
 # 任务跑出来的会话：顶上一条写着是哪个任务跑的
 - openLink: litch://open?session=s3&device=local
 - extendedWaitUntil:

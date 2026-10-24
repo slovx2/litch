@@ -24,6 +24,7 @@
     "总开关（设备设置 tasks.enabled，默认开）：关着时不按日程触发；已经排上的、立即运行的照跑，客户端的方法照常能用。再打开时，关着期间错过的时间点不补跑，nextRunAt 从那一刻往后算；一次性任务除外，照常补跑一次。设备服务刚起来时等适配器主进程把设置送过来再开始排（最多等 10 秒）。",
     "执行：到点后设备服务自己开一条内部连接到 target.harness（握手时声明能执行 litch_tasks）。harness 停用了、没装、起不来，这次失败（harnessUnavailable）；正在起或者暂时连不上的，最多等 60 秒。",
     "执行 newThread：工作目录不存在这次失败（cwdMissing）。设备服务在 target.harness 上 thread/start（cwd、模型照 target；权限：harness 声明了权限预设的给 permissions，没声明的当作审批策略给 approvalPolicy；harness 报了 clientTools 的带上 litch_tasks 的动态工具；原生 codex 带 threadSource automation），workspaceId 不是 null 时归进那个工作区（工作区这期间被删了就不归），用 thread/name/set 给会话起名“任务名 · 计划时间”（计划时间是任务时区里的 YYYY-MM-DD HH:MM，起名失败不影响运行），再 turn/start 发提示词（强度照 target）。建出来的会话是普通会话，出现在 thread/list 里，客户端可以打开、接着聊。",
+    "newThread 的 worktree 为 true（每次在新工作树里跑，worktrees 扩展）：建会话之前设备服务从 cwd 所在仓库的默认分支切一个新工作树（规矩同 worktrees 扩展的 thread/start.litchWorktree，不带起点），新会话开在工作树里对应 cwd 的那一层，是工作树的主人，之后归档、清理照工作树的规矩走。建不成（git 出错、cwd 不再是仓库）这次失败（internal，message 写原因），不退回原目录跑；会话没建成时刚建的工作树删掉。设了 worktree 的任务，create、update 时设备没有 worktrees 扩展或 cwd 不在 git 仓库里回 invalidTarget（field 为 target.worktree）。没设或为 false 的照原样。旧客户端不认这个字段，照原样显示任务，改任务时不带 target.worktree 就不动它。",
     "执行 thread：设备服务恢复那个会话（thread/resume）、在里面 turn/start。会话正在跑回合时等它空下来（最多 TASK_THREAD_WAIT，30 分钟，超了这次失败，原因 internal）；会话没了（恢复时引擎回了错误）这次失败（threadMissing），任务暂停（revision 加一）。",
     "发给模型的提示词前面加一段英文说明：这是定时任务的自动运行、任务名、是按日程还是手动、计划时间和当前时间（任务时区）、合并了几次、没有人在看要尽量自己完成。原文照用户写的放在后面，中间隔一行 ---。",
     "回合的时限：一次运行最长 2 小时（从回合开始算），超了 turn/interrupt 打断，记 timedOut。",
@@ -428,6 +429,9 @@
             },
             "settings": {
               "$ref": "#/definitions/SessionSettings"
+            },
+            "worktree": {
+              "type": "boolean"
             }
           }
         },
@@ -937,6 +941,9 @@
             },
             "settings": {
               "$ref": "#/definitions/SessionSettings"
+            },
+            "worktree": {
+              "type": "boolean"
             }
           }
         }

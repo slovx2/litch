@@ -31,7 +31,11 @@ export function useTargetLine(deviceId: string, target: TaskTarget | undefined):
     ? workspaces?.find((entry) => entry.id === target.workspaceId)
     : undefined
   const where = workspace ? `${workspace.name} (${target.cwd})` : target.cwd
-  return [t('tasks.detail.newThread'), harness, where].join(' · ')
+  return [
+    t(target.worktree ? 'tasks.detail.newWorktree' : 'tasks.detail.newThread'),
+    harness,
+    where,
+  ].join(' · ')
 }
 
 export function useOriginLine(deviceId: string, origin: TaskOrigin | undefined): string {

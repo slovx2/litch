@@ -184,10 +184,20 @@ export const ProposalCell = memo(function ProposalCell({ row }: Props<'proposal'
           </Text>
         ) : null}
         {waiting ? (
-          <ProposalActs deviceId={deviceId} sessionId={sessionId} proposalId={proposalId} />
+          <ProposalActs
+            deviceId={deviceId}
+            sessionId={sessionId}
+            proposalId={proposalId}
+            worktree={proposal.worktree ?? proposal.worktreeDefault}
+          />
         ) : null}
         {choosing ? (
-          <OfferActs deviceId={deviceId} sessionId={sessionId} proposalId={proposalId} />
+          <OfferActs
+            deviceId={deviceId}
+            sessionId={sessionId}
+            proposalId={proposalId}
+            worktree={proposal.worktree ?? proposal.worktreeDefault}
+          />
         ) : null}
         {offer ? null : cardsOff.notice}
       </View>

@@ -39,16 +39,8 @@ import {
 import { useComposeOptions, useNewSessionDefaults } from './SettingsBar.tsx'
 import { useBranches } from './useBranches.ts'
 import { useDevices } from './useNewPlace.ts'
-import {
-  branchFrom,
-  FROM_DEFAULT,
-  FROM_WORKING,
-  fitFrom,
-  fromOf,
-  recallWhere,
-  rememberWhere,
-  type WhereChoice,
-} from './worktree-place.ts'
+import { branchFrom, FROM_DEFAULT, FROM_WORKING, fitFrom, fromOf } from './worktree-from.ts'
+import { recallWhere, rememberWhere, type WhereChoice } from './worktree-place.ts'
 
 interface NewSessionProps {
   /** 现在指着哪台设备、哪个工作区。一台设备都没有就是 null */

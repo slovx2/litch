@@ -148,11 +148,20 @@ function SummaryLine({
               {waiting}
             </Text>
           ) : null}
+          {/* 在设备层建的工作树里：目录名是随机的短串，没意思，换成写分支 */}
           <Text
             numberOfLines={1}
+            testID={summary.worktree ? `${testID}:worktree` : undefined}
             style={[styles.cwd, { color: c.ink3, fontFamily: theme.font.mono }]}
           >
-            {lastSegment(summary.cwd)}
+            {summary.worktree
+              ? t(
+                  summary.worktree.state === 'removed'
+                    ? 'session.worktree.removed'
+                    : 'session.worktree',
+                  { branch: summary.worktree.branch },
+                )
+              : lastSegment(summary.cwd)}
           </Text>
         </View>
       </View>

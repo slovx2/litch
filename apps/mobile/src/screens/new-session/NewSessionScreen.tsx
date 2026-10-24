@@ -3,6 +3,7 @@
 // 建会话和发第一条消息是一条命令（session.create），成了就把这一页换成详情页；没成就把文字还回输入框。
 // harness 会持续目标时第一句可以是 `/goal 要做到的事`：建好会话就设目标、不发消息（和桌面一样）。
 // 建不了的时候（设备没连上、没有可用的 harness、明说的工作区不在了）当场写原因，不悄悄换去处。
+// 工作区根在 git 仓库里、设备能建工作树时多一组“位置”：本地或新工作树，选了新工作树再选起点（worktree.ts）。
 import {
   type DeviceView,
   type HarnessView,
@@ -18,10 +19,12 @@ import { useState } from 'react'
 import { ScrollView, StyleSheet, Text, View } from 'react-native'
 import { KeyboardStickyView, useKeyboardState } from 'react-native-keyboard-controller'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { fitFrom } from '../../../../../packages/ui/src/composer/worktree-from.ts'
 import { acquireStore, releaseStore } from '../../core/store-cache'
 import { ComposeBox, useDraft } from '../../detail/composer/ComposeBox'
 import { draftKey } from '../../detail/composer/drafts'
 import { useComposeOptions, useNewSessionDefaults } from '../../detail/composer/options'
+import { PickerSheet } from '../../detail/composer/PickerSheet'
 import { SettingsBar } from '../../detail/composer/SettingsBar'
 import { goalIntent } from '../../detail/goal/logic'
 import { SlashGoal } from '../../detail/goal/SlashGoal'
@@ -32,7 +35,16 @@ import { Row, SectionLabel } from '../../ui/kit/controls'
 import { Prompt } from '../../ui/kit/overlays'
 import { Screen } from '../../ui/kit/Screen'
 import { useTheme } from '../../ui/theme'
-import { lastPlace, pickHarness, recallPicks, remember } from './remembered'
+import {
+  lastPlace,
+  pickHarness,
+  recallPicks,
+  recallWhere,
+  remember,
+  rememberWhere,
+} from './remembered'
+import { useBranches } from './useBranches'
+import { fromOptions, worktreeParam } from './worktree'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'NewSession'>
 
@@ -75,6 +87,22 @@ export function NewSessionScreen({ navigation, route }: Props) {
   const harnessId = harness?.id ?? ''
   const options = useComposeOptions(deviceId, harness?.id)
   const defaults = useNewSessionDefaults(deviceId, harness?.id, cwd)
+  /** 工作区根的分支：不是 git 仓库、设备建不了工作树时是 null，不出“位置” */
+  const branches = useBranches(device, workspace ? cwd : null)
+  /** 这次在页上选的位置和起点，连同是在哪个工作区选的；换了工作区就回到那里记下的 */
+  const [placeChosen, setPlaceChosen] = useState<{
+    spot: string
+    choice: { worktree: boolean; from: string }
+  } | null>(null)
+  const [pickingFrom, setPickingFrom] = useState(false)
+  const placeSpot = `${deviceId}/${workspaceId ?? ''}`
+  const placeRaw =
+    placeChosen?.spot === placeSpot ? placeChosen.choice : recallWhere(deviceId, workspaceId)
+  const place = { ...placeRaw, from: fitFrom(placeRaw.from, branches) }
+  const inWorktree = Boolean(branches) && place.worktree
+  const froms = branches ? fromOptions(branches, t) : []
+  const choosePlace = (patch: Partial<typeof place>) =>
+    setPlaceChosen({ spot: placeSpot, choice: { ...place, ...patch } })
 
   // 选过的设置只在同一台设备的同一个 harness 上作数
   const slot = `${deviceId}/${harnessId}`
@@ -135,9 +163,12 @@ export function NewSessionScreen({ navigation, route }: Props) {
       ...(extras.length > 0 ? { extras } : {}),
       settings: sent,
       ...(goal ? { goal: true } : {}),
+      // 在新工作树里建：设备先建工作树（可能要几秒），再在里面起会话
+      ...(inWorktree ? { worktree: worktreeParam(place.from) } : {}),
     })
     const { mode: _thisOnce, ...kept } = picks
     remember(deviceId, workspaceId, harness?.id, kept)
+    if (branches) rememberWhere(deviceId, workspaceId, place)
     // 先把会话订阅上，内容到了（或者等过了时限）再换页：详情页拿的是同一份会话存储
     const store = acquireStore(channel, deviceId, sessionId)
     await new Promise<void>((done) => {
@@ -242,6 +273,32 @@ export function NewSessionScreen({ navigation, route }: Props) {
               selected={where.kind === 'dir'}
               onPress={() => setAsking(true)}
             />
+            {branches && where.kind === 'workspace' ? (
+              <>
+                <SectionLabel>{t('newSession.where')}</SectionLabel>
+                <Row
+                  testID="new:place:local"
+                  title={t('newSession.where.local')}
+                  selected={!place.worktree}
+                  onPress={() => choosePlace({ worktree: false })}
+                />
+                <Row
+                  testID="new:place:worktree"
+                  title={t('newSession.where.worktree')}
+                  detail={t('newSession.where.worktreeHint')}
+                  selected={place.worktree}
+                  onPress={() => choosePlace({ worktree: true })}
+                />
+                {place.worktree ? (
+                  <Row
+                    testID="new:from"
+                    title={t('newSession.from')}
+                    detail={froms.find((entry) => entry.id === place.from)?.title}
+                    onPress={() => setPickingFrom(true)}
+                  />
+                ) : null}
+              </>
+            ) : null}
             {blocked && device ? (
               <Text testID="new:blocked" style={[styles.blocked, { color: c.err }]}>
                 {blocked}
@@ -273,6 +330,19 @@ export function NewSessionScreen({ navigation, route }: Props) {
           </View>
         </KeyboardStickyView>
       </View>
+      <PickerSheet
+        visible={pickingFrom}
+        title={t('newSession.from.label')}
+        value={place.from}
+        options={froms}
+        search={t('newSession.from.search')}
+        onPick={(from) => {
+          choosePlace({ from })
+          setPickingFrom(false)
+        }}
+        onClose={() => setPickingFrom(false)}
+        testID="new:from:picker"
+      />
       <Prompt
         visible={asking}
         title={t('compose.new.dirTitle')}

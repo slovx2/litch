@@ -301,7 +301,7 @@ export function TaskDetail({
                       />
                     </>
                   ) : (
-                    t('tasks.detail.newThread')
+                    t(target.worktree ? 'tasks.detail.newWorktree' : 'tasks.detail.newThread')
                   )}
                 </dd>
               </div>

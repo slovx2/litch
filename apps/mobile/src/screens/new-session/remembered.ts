@@ -1,7 +1,9 @@
-// 新建会话页记住的几样：上次在这台设备上建在哪个工作区、用哪个 harness，各 harness 上选过的模型、强度、权限。
+// 新建会话页记住的几样：上次在这台设备上建在哪个工作区、用哪个 harness，各 harness 上选过的模型、强度、权限，
+// 各工作区上次选的“位置”（本地还是新工作树）和“起点”。
 // 存在应用文档目录的 new-session.json。计划模式不记：它只管眼前这一个新会话（和桌面端 remembered.ts 一样）。
 // 记下的东西过期了（工作区删了、harness 没了、模型换了）就当没记过，由默认值顶上。
 import type { ComposeOptions, HarnessView, SessionSettings } from '@litch/core'
+import { FROM_DEFAULT } from '../../../../../packages/ui/src/composer/worktree-from.ts'
 import { jsonFile } from '../../shell/json-file'
 
 type Picks = Partial<Omit<SessionSettings, 'mode'>>
@@ -13,6 +15,8 @@ interface Memory {
   harness: Record<string, string>
   /** `设备/harness` → 上次选的设置 */
   picks: Record<string, Picks>
+  /** `设备/工作区` → 上次选的位置和起点（起点的标识同桌面 composer/worktree-from.ts） */
+  where: Record<string, { worktree: boolean; from: string }>
 }
 
 const file = jsonFile<Memory>('new-session.json')
@@ -25,6 +29,7 @@ function read(): Memory {
     place: stored?.place ?? {},
     harness: stored?.harness ?? {},
     picks: stored?.picks ?? {},
+    where: stored?.where ?? {},
   }
   return memory
 }
@@ -75,6 +80,31 @@ export function remember(
     mine.harness[deviceId] = harness
     mine.picks[`${deviceId}/${harness}`] = picks
   }
+  try {
+    file.write(mine)
+  } catch {
+    // 记不下不影响建会话
+  }
+}
+
+/** 这个工作区上次选的位置和起点；没记过是本地、默认分支 */
+export function recallWhere(
+  deviceId: string,
+  workspaceId: string | null,
+): { worktree: boolean; from: string } {
+  const last = workspaceId ? read().where[spot(deviceId, workspaceId)] : undefined
+  return { worktree: last?.worktree === true, from: last?.from ?? FROM_DEFAULT }
+}
+
+/** 会话建成了：记下这次在这个工作区里选的位置和起点 */
+export function rememberWhere(
+  deviceId: string,
+  workspaceId: string | null,
+  choice: { worktree: boolean; from: string },
+): void {
+  if (!workspaceId) return
+  const mine = read()
+  mine.where[spot(deviceId, workspaceId)] = choice
   try {
     file.write(mine)
   } catch {

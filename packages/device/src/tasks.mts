@@ -56,6 +56,7 @@ import {
 import type { ThreadIndex } from './thread-index.mjs'
 import { DeviceError, isObject } from './wire.mjs'
 import type { Workspaces } from './workspaces.mjs'
+import type { Worktrees } from './worktrees.mjs'
 
 /** 这个扩展的方法都在这个前缀下，由设备进程自己处理 */
 export const DEVICE_TASK_PREFIX = 'litch/task/'
@@ -79,6 +80,8 @@ export interface DeviceTasksOptions {
   backgroundRunning?(threadId: string): number
   /** 后台任务跑完了引擎会不会自己接着做。不给当不会 */
   backgroundWakes?(threadId: string): boolean
+  /** 设备层的工作树（每次在新工作树里跑的任务用）。没有 git、不给时是 null */
+  worktrees?(): Worktrees | null
 }
 
 const seconds = (ms: number): number => Math.floor(ms / 1000)
@@ -134,6 +137,7 @@ export class DeviceTasks {
       runChanged: (run) => this.runChanged(run),
       born: (harness, thread, workspaceId) => this.born(harness, thread, workspaceId),
       turns: this.turns,
+      worktrees: () => options.worktrees?.() ?? null,
     })
   }
 
@@ -185,7 +189,7 @@ export class DeviceTasks {
       case DEVICE_TASK_CREATE:
         return this.createFromClient(fields).then((task) => ({ task }))
       case DEVICE_TASK_UPDATE:
-        return { task: this.update(fields) }
+        return this.update(fields).then((task) => ({ task }))
       case DEVICE_TASK_DELETE:
         this.delete(requiredId(fields.id, 'id'))
         return {}
@@ -307,12 +311,16 @@ export class DeviceTasks {
       const workspaceId =
         value.workspaceId == null ? null : requiredId(value.workspaceId, 'target.workspaceId')
       if (workspaceId !== null) this.requireWorkspace(workspaceId)
+      const cwd = taskCwd(value.cwd)
+      const worktree = optionalWorktree(value.worktree)
+      if (worktree) await this.requireRepo(cwd)
       return {
         kind: 'newThread',
         harness,
-        cwd: taskCwd(value.cwd),
+        cwd,
         workspaceId,
         settings: sessionSettings(value.settings),
+        ...(worktree ? { worktree } : {}),
       }
     }
     if (value.kind === 'thread') {
@@ -321,6 +329,21 @@ export class DeviceTasks {
       return { kind: 'thread', harness, threadId }
     }
     throw invalid('target.kind', 'target.kind must be newThread or thread')
+  }
+
+  /** 每次在新工作树里跑：设备要能建工作树、目录要在 git 仓库里 */
+  private async requireRepo(cwd: string): Promise<void> {
+    const worktrees = this.options.worktrees?.() ?? null
+    if (!worktrees)
+      throw badTarget('target.worktree', 'This device cannot make worktrees (git is not available)')
+    try {
+      await worktrees.branches(cwd)
+    } catch {
+      throw badTarget(
+        'target.worktree',
+        `${cwd} is not in a git repository, so the task cannot run in a new worktree`,
+      )
+    }
   }
 
   private requireWorkspace(workspaceId: string): void {
@@ -363,7 +386,7 @@ export class DeviceTasks {
     )
   }
 
-  update(fields: Record<string, unknown>): DeviceTask {
+  async update(fields: Record<string, unknown>): Promise<DeviceTask> {
     const row = this.task(requiredId(fields.id, 'id'))
     if (fields.revision !== row.revision) {
       if (!Number.isInteger(fields.revision))
@@ -386,7 +409,11 @@ export class DeviceTasks {
     }
     const status = optionalStatus(fields.status, ['active', 'paused', 'completed'] as const)
     if (status !== null) next.status = status
-    if (fields.target !== undefined) next.target = this.retarget(row.target, fields.target)
+    if (fields.target !== undefined) {
+      next.target = this.retarget(row.target, fields.target)
+      if (next.target.kind === 'newThread' && next.target.worktree)
+        await this.requireRepo(next.target.cwd)
+    }
     if (next.status !== 'active') {
       next.nextRunAt = null
       next.pendingCoalesced = 0
@@ -402,11 +429,14 @@ export class DeviceTasks {
     return this.describe(next)
   }
 
-  /** 改 target：只能改 newThread 的 cwd、workspaceId、settings */
+  /** 改 target：只能改 newThread 的 cwd、workspaceId、settings、worktree */
   private retarget(current: TaskTarget, value: unknown): TaskTarget {
     if (!isObject(value)) throw invalid('target', 'target must be an object')
     for (const key of Object.keys(value))
-      if (current.kind !== 'newThread' || !['cwd', 'workspaceId', 'settings'].includes(key))
+      if (
+        current.kind !== 'newThread' ||
+        !['cwd', 'workspaceId', 'settings', 'worktree'].includes(key)
+      )
         throw invalid(`target.${key}`, `target.${key} cannot be changed`)
     if (current.kind !== 'newThread') return current
     const next = { ...current }
@@ -417,6 +447,10 @@ export class DeviceTasks {
       if (next.workspaceId !== null) this.requireWorkspace(next.workspaceId)
     }
     if (value.settings !== undefined) next.settings = sessionSettings(value.settings)
+    if (value.worktree !== undefined) {
+      if (optionalWorktree(value.worktree)) next.worktree = true
+      else delete next.worktree
+    }
     return next
   }
 
@@ -502,4 +536,12 @@ export class DeviceTasks {
     )
     if (workspaceId !== null) this.options.workspaces.adoptThread(id, workspaceId)
   }
+}
+
+/** target.worktree：不给、null 是 false */
+function optionalWorktree(value: unknown): boolean {
+  if (value == null) return false
+  if (typeof value !== 'boolean')
+    throw invalid('target.worktree', 'target.worktree must be a boolean')
+  return value
 }

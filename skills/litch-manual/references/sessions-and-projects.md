@@ -63,6 +63,10 @@ explain it:
   the session hands the worktree to a session still sharing it, otherwise deletes the folder without
   a snapshot (the confirmation says so).
   Where worktrees go, how branches are named and automatic cleanup: `device-settings.md`.
+  The phone app has the same "Where" and "Start from" choices on its New session page; a session in a
+  worktree shows its branch in the session list and under the title, and the conversation menu's
+  **Worktree** sheet shows branch, base and path with Terminal, Merge <base>, Copy path, and Restore
+  when the folder was removed.
 - **While a turn runs**: messages sent are queued; "Say it now" steers the running turn; Stop
   interrupts it.
 - **Approvals and questions** appear as cards above the composer: commands, file changes, extra
@@ -211,7 +215,8 @@ woken to continue.
   the "New session" choice of an offer card and the Start a sub-session dialog have a "New worktree"
   checkbox, preset this way, and what is checked there wins. "Do it here" always stays in the current
   session and folder. A handed-off task gets a worktree only on harnesses that can fork into another
-  folder (Codex, Claude Code); elsewhere it shares the folder.
+  folder (Codex, Claude Code); elsewhere it shares the folder. On the phone the cards, the offer card
+  and "Edit and start" have the same "New worktree" switch.
   The side panel's **Suggested tasks** tab lists every card of the current session, with a badge for
   the waiting ones; clicking one scrolls to it. You can also tell the model "start the second one", and
   it withdraws cards that went stale. At most three cards it raises on its own per turn (independent

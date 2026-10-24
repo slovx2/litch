@@ -30,6 +30,7 @@ import { RequestSlot } from './requests/RequestSlot'
 import { Transcript } from './Transcript'
 import { compaction } from './usage/logic'
 import { UsageSheet } from './usage/UsageSheet'
+import { WorktreeSheet } from './worktree/WorktreeSheet'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Detail'>
 
@@ -74,6 +75,7 @@ export function DetailScreen({ route, navigation }: Props) {
   const [archiving, setArchiving] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
   const [usageOpen, setUsageOpen] = useState(false)
+  const [treeOpen, setTreeOpen] = useState(false)
   const input = useRef<TextInput>(null)
 
   // 卡片最高多少：屏幕减去状态栏、标题栏、键盘、输入区，再给对话区留一截
@@ -95,7 +97,14 @@ export function DetailScreen({ route, navigation }: Props) {
     : meta
       ? t.text(meta.title)
       : (title ?? sessionId)
-  const subtitle = [harness?.name ?? meta?.harness, cwd].filter(Boolean).join(' · ') || undefined
+  // 在设备层工作树里的会话，副标题写分支（路径在“工作树”那一页里）
+  const tree = summary?.worktree ?? null
+  const place = tree
+    ? t(tree.state === 'removed' ? 'session.worktree.removed' : 'session.worktree', {
+        branch: tree.branch,
+      })
+    : cwd
+  const subtitle = [harness?.name ?? meta?.harness, place].filter(Boolean).join(' · ') || undefined
   // 文件页开在会话所在工作区的根上（会话的工作目录可能是它下面的一层）；不属于工作区的开在工作目录上
   const workspace = workspaces?.find((entry) => entry.id === summary?.workspaceId)
   const filesRoot = workspace?.roots[0] ?? cwd
@@ -151,6 +160,15 @@ export function DetailScreen({ route, navigation }: Props) {
             label: t('compose.menu.files'),
             testID: 'detail:menu:files',
             onPress: () => navigation.navigate('Files', { deviceId, root: filesRoot }),
+          },
+        ]
+      : []),
+    ...(tree
+      ? [
+          {
+            label: t('worktree.title'),
+            testID: 'detail:menu:worktree',
+            onPress: () => setTreeOpen(true),
           },
         ]
       : []),
@@ -272,6 +290,15 @@ export function DetailScreen({ route, navigation }: Props) {
         }
         onClose={() => setUsageOpen(false)}
       />
+      {tree ? (
+        <WorktreeSheet
+          visible={treeOpen}
+          deviceId={deviceId}
+          worktree={tree}
+          onTerminal={() => navigation.navigate('Terminal', { deviceId, root: cwd ?? tree.path })}
+          onClose={() => setTreeOpen(false)}
+        />
+      ) : null}
       <Prompt
         visible={renaming}
         title={t('session.rename')}

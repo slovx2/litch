@@ -340,6 +340,7 @@ export function createMockTasks(host: MockTasksHost): MockTasks {
                 ? {}
                 : { workspaceId: patch.target.workspaceId }),
               ...(patch.target.settings === undefined ? {} : { settings: patch.target.settings }),
+              ...(patch.target.worktree === undefined ? {} : { worktree: patch.target.worktree }),
             }
           : task.target
       const now = clock.now()

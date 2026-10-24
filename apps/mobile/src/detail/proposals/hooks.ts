@@ -80,8 +80,17 @@ export function useProposalAct(deviceId: string, sessionId: string, proposalId: 
       ),
     dismiss: () =>
       run(channel.command('session.proposal.dismiss', { deviceId, sessionId, proposalId })),
-    answer: (choice: 'session' | 'here') =>
-      run(channel.command('session.proposal.answer', { deviceId, sessionId, proposalId, choice })),
+    /** worktree：选新会话时卡上的工作树开关（设备能建工作树时才带） */
+    answer: (choice: 'session' | 'here', worktree?: boolean) =>
+      run(
+        channel.command('session.proposal.answer', {
+          deviceId,
+          sessionId,
+          proposalId,
+          choice,
+          ...(worktree === undefined ? {} : { worktree }),
+        }),
+      ),
     // 普通提案卡上的“在这里做”：“在这里做：”（界面语言）加标题和任务当用户的话进这个会话的输入队列，回合在跑就排到回合后
     here: () =>
       run(
