@@ -26,6 +26,7 @@ import {
   type TurnView,
 } from '../src/index.mjs'
 import { STREAM_SESSION, streamText } from '../src/mock/sample-data.mjs'
+import { sameTallies } from '../src/replica/replica.mjs'
 import { fakeClock, settle } from './helpers.mjs'
 
 const { head: STREAM_HEAD, rest: STREAM_REST } = streamText('zh-CN')
@@ -176,6 +177,26 @@ test('各组的状况：几个待审批、待回答、在跑、未读；只记�
   await settle()
   assert.deepEqual(tallies('local')?.docs, { claude: tally(0, 0, 1, 0), pi: tally(0, 0, 0, 1) })
   assert.ok(seen.n >= 1)
+})
+
+test('各组的状况比较：只剩后台任务在跑的数变了也算变了', () => {
+  const tally = (unread: number, background: number) => ({
+    approval: 0,
+    answer: 0,
+    running: 0,
+    unread,
+    background,
+  })
+  // 同一组同一个 harness 里有个未读的会话，另一个会话的后台任务跑起来了：其余几个数都没变
+  assert.equal(sameTallies({ docs: { pi: tally(1, 0) } }, { docs: { pi: tally(1, 1) } }), false)
+  // 键的先后不算数
+  assert.equal(
+    sameTallies(
+      { docs: { pi: tally(1, 1), claude: tally(0, 1) } },
+      { docs: { claude: tally(0, 1), pi: tally(1, 1) } },
+    ),
+    true,
+  )
 })
 
 test('每个会话属于哪个 harness：一张表，会话多了少了才换', async () => {
