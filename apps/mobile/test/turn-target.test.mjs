@@ -1,8 +1,9 @@
-// 回合菜单对的是哪条用户消息（src/detail/turn-target.ts）：从插进来的话上长按，回退切在它之前、
+// 回合菜单对的是哪条用户消息（src/detail/turn-target.ts）：从插进来的话上长按，编辑切在它之前、
 // 分叉带到下一条插的话之前；harness 不会切在回合中间的，插进来的话上不出这两项，不退整个回合。
-// 接在模拟核心上，回退照菜单给的参数真的发一次。
+// 接在模拟核心上，照菜单给的参数真的回退、编辑重发（session.edit，编辑框 edit-message.tsx 发的就是它）。
 import assert from 'node:assert/strict'
 import { afterEach, test } from 'node:test'
+import { editableOf, resendOf } from '@litch/core'
 import { SessionStore } from '../src/core/session-store.ts'
 import { turnTarget } from '../src/detail/turn-target.ts'
 import { mockChannel, until } from './helpers.mjs'
@@ -94,6 +95,46 @@ test('会切在回合中间：插进来的话上回退切在它之前，分叉�
     { what: '回退之后的对话' },
   )
   assert.equal(store.getSnapshot().rows.filter((row) => row.type === 'status').length, 1)
+})
+
+const userTexts = (store) =>
+  store
+    .getSnapshot()
+    .rows.filter((row) => row.type === 'user')
+    .map((row) => row.text)
+    .toReversed()
+    .join('|')
+
+test('编辑插进来的话：切在它之前、用改过的字开新回合；发不出去时原消息已撤、给回失败原因', async () => {
+  const { store, channel, sessionId, turnId, users } = await steered('claude')
+  const can = store.getMeta().can
+  const target = turnTarget(store, can, turnId, users[1].key)
+  assert.equal(editableOf(target.user).text, '插一句', '编辑框里带着原文')
+  const edit = (text) =>
+    channel.command('session.edit', {
+      deviceId: 'local',
+      sessionId,
+      turnId,
+      ...target.rollback,
+      ...resendOf(target.user, text),
+    })
+  const result = await edit('改过的一句')
+  assert.equal(result.sendFailure, undefined)
+  await until(() => userTexts(store) === '长回答|改过的一句', { what: '编辑之后的对话' })
+  await until(() => store.getMeta()?.running === false, { timeoutMs: 20000, what: '新回合结束' })
+  assert.equal(store.getSnapshot().rows.filter((row) => row.type === 'status').length, 2)
+
+  // 发不出去：回退已经做了，结果里带着原因（编辑框据此把字放回输入框）
+  const again = turnTarget(store, store.getMeta().can, users[0].turnId, users[0].key)
+  const failed = await channel.command('session.edit', {
+    deviceId: 'local',
+    sessionId,
+    turnId: users[0].turnId,
+    ...again.rollback,
+    ...resendOf(again.user, '这条发不出去'),
+  })
+  assert.match(failed.sendFailure?.message ?? '', /没发出去/)
+  await until(() => userTexts(store) === '', { what: '原消息已撤' })
 })
 
 test('不会切在回合中间：插进来的话上不出分叉、回退，回合开头那条照旧', async () => {

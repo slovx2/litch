@@ -10,7 +10,7 @@ import {
   enginesDevice,
   enginesStart,
 } from './probe-engines.mjs'
-import { enginesActs, enginesCompact, enginesFork, enginesRollback } from './probe-engines-acts.mjs'
+import { enginesActs, enginesCompact, enginesEdit, enginesFork } from './probe-engines-acts.mjs'
 import { enginesApproval, enginesQuestion, enginesSettle } from './probe-engines-asks.mjs'
 import { judgeEngines } from './probe-engines-judge.mjs'
 import { type EnginesKit, installEnginesKit } from './probe-engines-kit.mjs'
@@ -191,7 +191,7 @@ async function run(window: BrowserWindow, hooks: SmokeHooks): Promise<readonly [
     return { turns: now.length, lines: now.flat().length, differs: firstDifference(was, now) }
   })
 
-  // ---- 十（下）、分叉、回退、压缩：声明了会的才有入口 ----
+  // ---- 十（下）、分叉、编辑重发、压缩：声明了会的才有入口 ----
   await each('acts', () => inPage(window, enginesActs, WORDS.earlier, WORDS.later))
   const offered = (id: string, what: string) =>
     (seen.steps.acts?.[id] as Record<string, unknown> | undefined)?.[what] === '有'
@@ -201,9 +201,9 @@ async function run(window: BrowserWindow, hooks: SmokeHooks): Promise<readonly [
     (id) => offered(id, 'fork'),
   )
   await each(
-    'rollback',
-    () => inPage(window, enginesRollback, WORDS.later, WORDS.again),
-    (id) => offered(id, 'rollback'),
+    'edit',
+    () => inPage(window, enginesEdit, WORDS.later, WORDS.again),
+    (id) => offered(id, 'edit'),
     () => WORDS.later,
   )
   const went = (name: string, id: string) => {
@@ -214,8 +214,8 @@ async function run(window: BrowserWindow, hooks: SmokeHooks): Promise<readonly [
     'compact',
     () => inPage(window, enginesCompact, WORDS.afterCompact),
     (id) => offered(id, 'compact'),
-    // 原来的那个会话：回退成了的话里面是重发的那一句，没成（没试）的话后发的那一句还在
-    (id) => (went('rollback', id) ? WORDS.again : WORDS.later),
+    // 原来的那个会话：编辑成了的话里面是改过的那一句，没成（没试）的话后发的那一句还在
+    (id) => (went('edit', id) ? WORDS.again : WORDS.later),
   )
   const { failed, known, table } = judgeEngines(seen)
   return [{ ids, picked, table, known, device: seen.device, steps: seen.steps }, failed]

@@ -764,3 +764,96 @@ test('切在回合中间只认声明：声明了的发 beforeItemId，切口换�
   onClaude.close()
   onPi.close()
 })
+
+test('编辑重发：回退成了才发；切在回合中间的等重新载入完才发；回退没成什么都不发；发送没成在应答里说', async () => {
+  const steered = turn('t1', [userText('u1', '开头'), userText('s1', '插的话')])
+  let refuseRevert = false
+  const { core, command, sent, peer, fake } = deviceWorld(
+    [
+      harness('claude', {
+        displayName: 'Claude Code',
+        declaration: {
+          extensions: [],
+          features: features({
+            revert: { byTurnId: true, byCount: true, restoresFiles: false, byItemId: true },
+          }),
+        },
+        threads: [thread({ id: 'c1', turns: [steered] })],
+      }),
+    ],
+    {
+      extra: {
+        'thread/revert': (params) => {
+          if (refuseRevert) throw new RpcFailure(-32009, '活动会话不能回退')
+          return { thread: thread({ id: (params as { threadId: string }).threadId }) }
+        },
+      },
+    },
+  )
+  core.start()
+  await settle()
+  const session = watchSession(core, 'c1')
+  await settle()
+  const order = () =>
+    peer
+      .last()
+      .seen.map((entry) => entry.method)
+      .filter((method) =>
+        ['thread/revert', 'thread/resume', 'thread/read', 'turn/start'].includes(method),
+      )
+
+  // 切在插话之前：回退、重新载入、再开新回合，依次
+  const before = order().length
+  const result = await command('session.edit', {
+    sessionId: 'c1',
+    turnId: 't1',
+    itemId: 't1:s1',
+    text: '改过的插话',
+  })
+  assert.deepEqual(result, {})
+  const steps = order().slice(before)
+  assert.equal(steps[0], 'thread/revert')
+  assert.ok(['thread/resume', 'thread/read'].includes(steps[1] ?? ''), steps.join(','))
+  assert.equal(steps.at(-1), 'turn/start')
+  assert.deepEqual(sent('thread/revert').at(-1), {
+    threadId: 'c1',
+    beforeTurnId: 't1',
+    beforeItemId: 's1',
+  })
+  assert.deepEqual((sent('turn/start').at(-1) as { input: unknown }).input, [
+    { type: 'text', text: '改过的插话', text_elements: [] },
+  ])
+  // 对面随后发来的“历史被改写了”说的就是这一次：不再载入一遍（会盖掉刚开的回合）
+  const reloads = order().length
+  peer.last().notify('thread/reverted', { threadId: 'c1' })
+  await settle()
+  assert.equal(order().length, reloads)
+  peer.last().notify('turn/completed', {
+    threadId: 'c1',
+    turn: turn(`srv-${fake.turnSeq}`, [], { status: 'completed' }),
+  })
+  await settle()
+
+  // 回退没成：抛错，不发新回合
+  refuseRevert = true
+  const starts = sent('turn/start').length
+  const turnId = session.seen.view?.turns[0]?.id ?? ''
+  await assert.rejects(command('session.edit', { sessionId: 'c1', turnId, text: '再改' }), {
+    code: 'remote',
+  })
+  assert.equal(sent('turn/start').length, starts)
+  // 发不出去的消息（空的）不先回退
+  refuseRevert = false
+  const reverts = sent('thread/revert').length
+  await assert.rejects(command('session.edit', { sessionId: 'c1', turnId, text: '  ' }), {
+    code: 'rejected',
+  })
+  assert.equal(sent('thread/revert').length, reverts)
+
+  // 回退成了、发送没成：应答里带原因
+  fake.turnFailure = new RpcFailure(-32000, '发不出去')
+  const failed = await command('session.edit', { sessionId: 'c1', turnId, text: '又改' })
+  assert.equal(sent('thread/revert').length, reverts + 1)
+  assert.equal((failed as { sendFailure?: { message: string } }).sendFailure?.message, '发不出去')
+  session.close()
+})

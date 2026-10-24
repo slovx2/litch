@@ -5,6 +5,10 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
+## 未发布
+
+- 对话里用户消息上的“回退”改成“编辑”：桌面端点了之后那条消息原地变成编辑框（带原文，Esc 或“取消”恢复原样），手机端从长按菜单打开编辑框；点“发送”才生效：先回退到这条消息之前（回合进行中插进来的话切在它之前），成了再用改过的字开新回合。回退没成时什么都不改、编辑框和字留着并写明原因；回退成了发送没成时字放回输入框。评论、提到的会话、能显示的图片照带，设备上的图片、音频、文件、技能带不上，编辑框里写明。分叉不变
+
 ## 0.20.0
 
 - 内置浏览器：代理请人登录时，登录卡片（浏览器面板和对话里各一张）列出密码库里这个网站的已存账号，人批准后由 Litch 代填并提交，代理拿不到密码；也可以照旧自己登录或拒绝。设置里可要求代填前过 Touch ID。手机远程批准是实验功能，默认关（设备详情“手机”一节的开关），打开后登录卡片经会话所在设备发到已绑定的手机，在手机上验证身份后批准；协议扩展 `clientApprovals`

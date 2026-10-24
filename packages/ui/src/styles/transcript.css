@@ -641,3 +641,35 @@ button.smen:focus-visible {
   padding: 0 4px;
   font-size: 12px;
 }
+/* 在原消息上编辑（MessageEdit.tsx）：位置、宽度同气泡，撑满能给的宽度；下面一行说明、出错原因和“取消”“发送” */
+.umsg.editing {
+  width: min(82%, 760px);
+  border-color: var(--accent);
+}
+.umsg-edit {
+  width: 100%;
+  min-height: 44px;
+  resize: none;
+  border: 0;
+  outline: none;
+  padding: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  line-height: inherit;
+}
+.umsg-edit-note {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-3);
+}
+.umsg-edit-error {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--err);
+}
+.umsg-edit-bar {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

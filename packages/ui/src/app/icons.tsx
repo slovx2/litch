@@ -133,8 +133,8 @@ export const Palette = glyph(
 export const Machine = glyph('M2.5 3.5h11v7h-11zM5.5 13h5M8 10.5V13')
 /** 分叉：一条竖线，半路岔出去一支 */
 export const Fork = glyph('M5 3v10M5 9.5c0-2.5 6-2 6-4.5V3')
-/** 回退：一个往回拐的箭头 */
-export const Rewind = glyph('M4 6.5h5.5a3 3 0 0 1 0 6H6.5M6.5 4L4 6.5 6.5 9')
+/** 编辑：一支斜放的笔 */
+export const Pencil = glyph('M3 13l.6-2.6L10.4 3.6a1.4 1.4 0 0 1 2 2L5.6 12.4zM9.4 4.6l2 2')
 /** 定时任务：一个钟面，两根指针 */
 export const Clock = glyph('M8 13.5a5.5 5.5 0 1 0 0-11 5.5 5.5 0 0 0 0 11zM8 5v3l2 1.5')
 /** 返回：朝左的尖角 */

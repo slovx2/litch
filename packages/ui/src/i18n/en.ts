@@ -1017,15 +1017,18 @@ export const en: Record<MessageKey, Entry> = {
   'turn.fork': 'Fork from here',
   'turn.fork.done': 'Forked. Now viewing the new conversation.',
   'turn.fork.failed': 'Couldn’t fork: {reason}',
-  'turn.rollback': 'Roll back to here and edit',
-  'turn.rollback.askTitle': 'Roll back to before this message?',
-  'turn.rollback.askNote':
-    'This message and everything after it will be permanently removed. Its text returns to the input for editing. File changes are not undone.',
-  'turn.rollback.askNoteRestores':
-    'This message and everything after it will be permanently removed. Its text returns to the input for editing. Files changed since then are also restored.',
-  'turn.rollback.yes': 'Roll back',
-  'turn.rollback.no': 'Cancel',
-  'turn.rollback.failed': 'Couldn’t roll back: {reason}',
+  'turn.edit': 'Edit message',
+  'turn.edit.editing': 'Editing message',
+  'turn.edit.cancel': 'Cancel',
+  'turn.edit.send': 'Send',
+  'turn.edit.note':
+    'Sending permanently removes this message and everything after it, then sends the edited version. File changes are not undone.',
+  'turn.edit.noteRestores':
+    'Sending permanently removes this message and everything after it, then sends the edited version. Files changed since then are also restored.',
+  'turn.edit.dropped': 'These attachments can’t be resent with the edited message: {names}',
+  'turn.edit.failed': 'Couldn’t edit. Nothing was changed: {reason}',
+  'turn.edit.sendFailed':
+    'The original message was removed, but the edited one wasn’t sent. Its text is back in the input: {reason}',
   'context.unknown': 'Context usage not reported yet',
   'context.label': 'Context',
   'context.compact': 'Compact context',

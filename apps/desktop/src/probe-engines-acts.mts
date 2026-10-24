@@ -1,19 +1,19 @@
-// 三个引擎各走一遍的验收（五）：分叉、回退、压缩。harness 声明了会的才有入口，没有入口的照实记“没有”。
+// 三个引擎各走一遍的验收（五）：分叉、编辑重发、压缩。harness 声明了会的才有入口，没有入口的照实记“没有”。
 // 都在眼前这个会话里做（哪个会话由 probe-engines-run.mts 先点开）；这几样会改会话，排在最后。
 // 和别的验收一样，下面的函数会被原样送进页面里执行，不能引用函数外面的东西。
 import type { EnginesKit } from './probe-engines-kit.mjs'
 import type { FilesKit } from './probe-files-kit.mjs'
 
 export interface ActsOffered {
-  /** 一条用户消息上的“分叉”“回退”，上下文圆环里的“压缩上下文”：有、没有，或者停着（连同为什么） */
+  /** 一条用户消息上的“分叉”“编辑”，上下文圆环里的“压缩上下文”：有、没有，或者停着（连同为什么） */
   fork: string
-  rollback: string
+  edit: string
   compact: string
   /** 先发的那两句各自的回答 */
   answers: string[]
 }
 
-/** 先发两句（后面分叉、回退拿它们当靶子），再看三个入口在不在 */
+/** 先发两句（后面分叉、编辑拿它们当靶子），再看三个入口在不在 */
 export async function enginesActs(earlier: string, later: string): Promise<ActsOffered> {
   const files = (window as unknown as { __filesKit: FilesKit }).__filesKit
   const kit = (window as unknown as { __enginesKit: EnginesKit }).__enginesKit
@@ -33,7 +33,7 @@ export async function enginesActs(earlier: string, later: string): Promise<ActsO
   }
   const bubble = all('.umsg').findLast((entry) => text(one('.umsg-text', entry)).includes(earlier))
   const fork = state(kit.sub<HTMLButtonElement>(bubble, '.act-fork'))
-  const rollback = state(kit.sub<HTMLButtonElement>(bubble, '.act-rollback'))
+  const edit = state(kit.sub<HTMLButtonElement>(bubble, '.act-edit'))
   let compact = '没有上下文圆环'
   const meter = one<HTMLButtonElement>('.ctx-btn')
   if (meter) {
@@ -46,7 +46,7 @@ export async function enginesActs(earlier: string, later: string): Promise<ActsO
     if (one('.ctx-pop')) meter.click()
     await frame()
   }
-  return { fork, rollback, compact, answers }
+  return { fork, edit, compact, answers }
 }
 
 export interface ForkSeen {
@@ -122,58 +122,56 @@ export async function enginesFork(
   }
 }
 
-export interface RollbackSeen {
-  /** 确认框里说了什么 */
-  asked: string
-  /** 确认之后：那条消息没了、回合少了一个 */
-  removed: boolean
+export interface EditSeen {
+  /** 编辑框里原来是什么，下面的说明写了什么 */
+  original: string
+  note: string
+  /** 改过的那句发出去之后：后发的那一句没了，换成改过的那句，回合数不变 */
+  replaced: boolean
   turns: number
   turnsBefore: number
-  /** 那句话回没回到输入框里 */
-  refilled: string
   /** 提示里说了什么（没做成的时候） */
   told: string
-  /** 之后再发一句 */
-  next: { foot: string; answer: string; turns: number }
+  /** 改过的那句开的回合 */
+  next: { foot: string; answer: string }
 }
 
-/** 回退到后发的那一句之前，再发一句别的 */
-export async function enginesRollback(later: string, again: string): Promise<RollbackSeen> {
+/** 把后发的那一句原地改成另一句，按回车：回退到它之前、用改过的字重发 */
+export async function enginesEdit(later: string, again: string): Promise<EditSeen> {
   const files = (window as unknown as { __filesKit: FilesKit }).__filesKit
   const kit = (window as unknown as { __enginesKit: EnginesKit }).__enginesKit
-  const { one, all, text, until, frame, write } = files
+  const { one, all, text, until, frame, write, press } = files
   const bubble = (words: string) =>
-    all('.umsg').findLast((entry) => text(one('.umsg-text', entry)).includes(words))
-  const confirm = () => one<HTMLDialogElement>('dialog.confirm[open]')
+    all('.umsg:not(.editing)').findLast((entry) => text(one('.umsg-text', entry)).includes(words))
+  const editor = () => one<HTMLTextAreaElement>('.umsg.editing textarea.umsg-edit')
 
   await kit.idle()
   const turnsBefore = kit.turns().length
-  const button = kit.sub<HTMLButtonElement>(bubble(later), '.act-rollback')
-  if (!button) throw new Error('后发的那一句上没有回退的入口')
+  const button = kit.sub<HTMLButtonElement>(bubble(later), '.act-edit')
+  if (!button) throw new Error('后发的那一句上没有编辑的入口')
   button.click()
-  const asking = await until('回退前的确认', confirm, 10_000)
-  const asked = text(asking).slice(0, 200)
-  one<HTMLButtonElement>('.confirm-yes', asking)?.click()
-  const removed = await files.seen(() => !bubble(later), 30_000)
-  await files.seen(() => Boolean(kit.area()?.value.includes(later)), 5000)
+  const box = await until('编辑框', editor, 10_000)
   await frame()
-  const seen = {
-    asked,
-    removed,
-    turns: kit.turns().length,
-    turnsBefore,
-    refilled: kit.area()?.value ?? '',
-    told: all('.toast').map(text).join('｜'),
-  }
-  const input = kit.area()
-  if (input?.value) write(input, '')
+  const original = box.value
+  const note = text(one('.umsg.editing .umsg-edit-note')).slice(0, 200)
+  write(box, again)
   await frame()
-  await kit.idle()
-  await kit.send(again)
+  press(box, 'Enter')
+  const replaced = await files.seen(
+    () => !editor() && !bubble(later) && Boolean(bubble(again)),
+    30_000,
+  )
+  await frame()
+  const told = all('.toast').map(text).join('｜')
   await kit.idle()
   return {
-    ...seen,
-    next: { foot: kit.foot(), answer: kit.lastAnswer(), turns: kit.turns().length },
+    original,
+    note,
+    replaced,
+    turns: kit.turns().length,
+    turnsBefore,
+    told,
+    next: { foot: kit.foot(), answer: kit.lastAnswer() },
   }
 }
 

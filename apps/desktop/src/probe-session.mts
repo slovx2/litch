@@ -1,8 +1,8 @@
 // 会话操作的验收：拒绝审批时附说明、归档之后的撤销、会话行的右键菜单、只读地看已归档的对话、
-// 待办进度、分叉、回退重发、压缩上下文。跟在输入区那一组（probe-compose.mts）后面，在同一个窗口里接着量。
+// 待办进度、分叉、编辑重发、压缩上下文。跟在输入区那一组（probe-compose.mts）后面，在同一个窗口里接着量。
 // 和别的验收一样，下面的函数会被原样送进页面里执行，不能引用函数外面的东西。
 // 隔离入口里的 Pi 引擎不发审批、也不发待办更新，那两项只对着模拟核心量；“对面不会的事要降级”也只有
-// 模拟核心里有不会的引擎。分叉、回退、压缩两边都量：真实入口上压缩的请求发得出去，但那里的会话太小，
+// 模拟核心里有不会的引擎。分叉、编辑重发、压缩两边都量：真实入口上压缩的请求发得出去，但那里的会话太小，
 // Pi 不压：不开回合，请求的错误是它的原话，客户端出一条“没压缩成”的提示；“上下文已压缩”那一行
 // 只在模拟核心上看得到。
 
@@ -101,19 +101,23 @@ export interface SessionProbe {
     /** 原来的会话没动：后面那条还在，也没有多出新会话里说的话 */
     sourceKept: boolean
   }
-  /** 回退到一条消息之前，改了重发 */
-  rollback: {
-    /** 点“回退”先问一次，说了找不回来、文件不还原；焦点在“取消”上 */
-    asked: boolean
-    /** 取消：什么都没动 */
+  /** 在原消息上编辑，确认了才回退到它之前、用改过的字重发 */
+  edit: {
+    /** 点“编辑”，那条消息原地变成编辑框：带着原文，焦点在框里，下面写了找不回来、文件不还原 */
+    opened: boolean
+    /** Esc：编辑框收起，什么都没动（消息、回合、输入框里写了一半的字） */
+    escKept: boolean
+    /** “取消”按钮同样 */
     cancelKept: boolean
-    /** 确认：这条消息和它后面的都没了，前面的还在 */
-    removed: boolean
-    /** 这条消息的字回到输入框，排在已经写了一半的字前面，焦点在输入框里 */
-    refilled: boolean
+    /** 改了字按回车：这条和它后面的都没了，换成改过的那句开了新回合，前面的还在 */
+    replaced: boolean
+    /** 输入框里写了一半的字没被动过 */
+    draftKept: boolean
     /** 切走再回来（真实入口上是重新向设备取一遍）：撤掉的没有回来 */
     stayedGone: boolean
-    /** 回退之后照常能发 */
+    /** 回退成了、发送没成：原消息撤掉，改过的字回到输入框，提示里说了没发出去。只在模拟核心上量 */
+    sendFailed: boolean | null
+    /** 编辑之后照常能发 */
     resent: boolean
   }
   /** 手动压缩上下文 */
@@ -146,7 +150,7 @@ export interface SessionProbe {
     forkStopped: boolean
     /** 压缩同样 */
     compactStopped: boolean
-    /** 这种引擎会的事（回退）不受影响 */
+    /** 这种引擎会的事（编辑重发）不受影响 */
     othersKept: boolean
     /** 别的引擎的会话不受影响 */
     elsewhereKept: boolean
@@ -554,7 +558,7 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
 
   // ---- 六、从一条消息分叉 ----
   await open(main)
-  const bubbles = () => all('.umsg')
+  const bubbles = () => all('.umsg:not(.editing)')
   const bubble = (text: string) => bubbles().find((element) => element.textContent?.includes(text))
   const turns = () => all('.turn').length
   /** 发一句话，等这一轮结束 */
@@ -565,7 +569,7 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
     await until('这一轮结束', () => !running() && area(), 60_000)
     await frame()
   }
-  const act = (text: string, kind: 'fork' | 'rollback') =>
+  const act = (text: string, kind: 'fork' | 'edit') =>
     bubble(text)?.querySelector<HTMLButtonElement>(`.act-${kind}`) ?? null
   const actionToast = () => one('.toast[data-toast="turn-action"]')
   const mainRows = () => all('.ss-row').filter((element) => element.textContent?.includes(main))
@@ -623,46 +627,89 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
   fork.wentBack = Boolean(back) && !one('.forked-from[data-source]')
   fork.sourceKept = turns() === turnsBefore && !bubble(aside)
 
-  // ---- 七、回退到一条消息之前，改了重发 ----
-  const confirm = () => one<HTMLDialogElement>('dialog.confirm[open]')
+  // ---- 七、在原消息上编辑，确认了才回退、重发 ----
+  const editor = () => one<HTMLTextAreaElement>('.umsg.editing textarea.umsg-edit')
+  const editBox = () => one('.umsg.editing')
   const half = '写了一半的话'
   write(await until('输入框', area), half)
   await frame()
-  act(later, 'rollback')?.click()
-  const asking = await until('回退前的确认', confirm)
+  /** 什么都没动：消息、回合都在，输入框里还是写了一半的字 */
+  const untouched = () =>
+    turns() === turnsBefore && Boolean(bubble(later)) && area()?.value === half
+  act(later, 'edit')?.click()
+  const box = await until('编辑框', editor)
   await frame()
-  const rollback: SessionProbe['rollback'] = {
-    asked:
-      Boolean(asking.textContent?.includes('无法恢复')) &&
-      Boolean(asking.textContent?.includes('不会还原')) &&
-      document.activeElement?.textContent === '取消',
+  const edit: SessionProbe['edit'] = {
+    opened:
+      box.value === later &&
+      document.activeElement === box &&
+      Boolean(editBox()?.textContent?.includes('无法恢复')) &&
+      Boolean(editBox()?.textContent?.includes('不会还原')),
+    escKept: false,
     cancelKept: false,
-    removed: false,
-    refilled: false,
+    replaced: false,
+    draftKept: false,
     stayedGone: false,
+    sendFailed: null,
     resent: false,
   }
-  ;(document.activeElement as HTMLElement | null)?.click()
-  await until('确认收起', () => !confirm())
+  write(box, '改到一半不要了')
+  await frame()
+  press(box, 'Escape')
+  await until('编辑框收起', () => !editor())
   await sleep(150)
-  rollback.cancelKept = turns() === turnsBefore && Boolean(bubble(later))
-  act(later, 'rollback')?.click()
-  ;(await until('回退前的确认', confirm)).querySelector<HTMLButtonElement>('.confirm-yes')?.click()
-  await until('这条消息被撤掉', () => !bubble(later))
-  await until('消息的字回到输入框', () => area()?.value.includes(later), 5000)
+  edit.escKept = untouched()
+  act(later, 'edit')?.click()
+  write(await until('编辑框', editor), '改到一半不要了')
   await frame()
+  one<HTMLButtonElement>('.umsg.editing .umsg-edit-bar .btn.ghost')?.click()
+  await until('编辑框收起', () => !editor())
+  await sleep(150)
+  edit.cancelKept = untouched()
+  const edited = '改过的这一句'
+  act(later, 'edit')?.click()
+  const box2 = await until('编辑框', editor)
+  await until('编辑框里是原文', () => box2.value === later)
+  write(box2, edited)
   await frame()
-  rollback.removed = turns() === turnsBefore - 1 && Boolean(bubble(earlier))
-  rollback.refilled = area()?.value === `${later}\n\n${half}` && document.activeElement === area()
+  press(box2, 'Enter')
+  await until('原来那句撤掉、换成改过的', () => !bubble(later) && bubble(edited) && !editor())
+  await until('这一轮结束', () => !running() && area(), 60_000)
+  await frame()
+  edit.replaced =
+    turns() === turnsBefore &&
+    Boolean(bubble(earlier)) &&
+    (real ? Boolean(all('.turn').at(-1)?.textContent?.includes(`收到：${edited}`)) : true)
+  edit.draftKept = area()?.value === half
   write(area() as HTMLTextAreaElement, '')
   await frame()
   await open(other)
   await open(main)
-  rollback.stayedGone = turns() === turnsBefore - 1 && !bubble(later) && Boolean(bubble(earlier))
-  const again = '回退之后重发'
+  edit.stayedGone =
+    turns() === turnsBefore && !bubble(later) && Boolean(bubble(edited)) && Boolean(bubble(earlier))
+  if (!real) {
+    // 模拟核心：话里带“发不出去”时发送报错，回退已经做了
+    const failing = '这一句发不出去'
+    act(edited, 'edit')?.click()
+    write(await until('编辑框', editor), failing)
+    await frame()
+    one<HTMLButtonElement>('.umsg.editing .umsg-edit-bar .btn.primary')?.click()
+    await until('原消息撤掉', () => !bubble(edited) && !editor())
+    await until('改过的字回到输入框', () => area()?.value.includes(failing), 5000)
+    await frame()
+    edit.sendFailed =
+      turns() === turnsBefore - 1 &&
+      area()?.value === failing &&
+      Boolean(actionToast()?.textContent?.includes('未发出'))
+    one<HTMLButtonElement>('.toast[data-toast="turn-action"] .toast-x')?.click()
+    write(area() as HTMLTextAreaElement, '')
+    await frame()
+  }
+  const turnsAfter = turns()
+  const again = '编辑之后再发'
   await sayAndWait(again)
-  rollback.resent =
-    turns() === turnsBefore &&
+  edit.resent =
+    turns() === turnsAfter + 1 &&
     (real ? Boolean(all('.turn').at(-1)?.textContent?.includes(`收到：${again}`)) : true)
 
   // ---- 八、手动压缩上下文 ----
@@ -760,14 +807,14 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
       Boolean(one('.ctx-pop .ctx-why')?.textContent?.includes('不支持'))
     press(compactEntry() as HTMLElement, 'Escape')
     await until('浮层收起', () => !one('.ctx-pop'))
-    const othersKept = !off(one('.umsg .act-rollback'))
+    const othersKept = !off(one('.umsg .act-edit'))
     one<HTMLButtonElement>('.toast.err .toast-x')?.click()
     await open(main)
     const elsewhereKept = !off(act(earlier, 'fork'))
     degrade = { openBefore, forkStopped, compactStopped, othersKept, elsewhereKept }
   }
 
-  return { declineNote, contextMenu, undo, peek, todo, fork, rollback, compact, degrade }
+  return { declineNote, contextMenu, undo, peek, todo, fork, edit, compact, degrade }
 }
 
 /** 界面在说不出具体原因时自己用的几句话（packages/ui 的 error.*、ability.unsupported） */
@@ -794,8 +841,8 @@ export function judgeSession(probe: SessionProbe): string[] {
   for (const [name, ok] of Object.entries(probe.fork)) {
     if (!ok) failed.push(`分叉：${name} 不对`)
   }
-  for (const [name, ok] of Object.entries(probe.rollback)) {
-    if (!ok) failed.push(`回退：${name} 不对`)
+  for (const [name, ok] of Object.entries(probe.edit)) {
+    if (ok === false) failed.push(`编辑重发：${name} 不对`)
   }
   for (const [name, ok] of Object.entries(probe.compact)) {
     // 真实入口上的假模型不一定压得成，那两项只记不判

@@ -67,3 +67,45 @@ test('认不出来的照原文：不在开头、没收尾、编号不连、多�
   assert.equal(parseComments('<litch-comments>\n要求\n</litch-comments>'), null)
   assert.equal(parseComments('普通的一句话'), null)
 })
+
+test('编辑重发：评论原样带上、编辑框里只有打的字；提到的会话换回 @[标题]；能显示的图带上，别的写明带不上', async () => {
+  const { editableOf, resendOf } = await import('../src/projection/edit.mjs')
+  const sessions = [{ index: 1, threadId: 'b', title: '构建', harness: null }]
+  const text = bodyOf(
+    {
+      text: '看看 @[构建] 这里',
+      extras: [comment('一段原文', '改一下'), { kind: 'session', threadId: 'b', title: '构建' }],
+    },
+    true,
+  ).split('\n\n<litch-session-mentions>')[0] as string
+  const png = 'data:image/png;base64,iVBORw0KGgo='
+  const item = {
+    id: 'u1',
+    kind: 'userMessage' as const,
+    text,
+    sessions,
+    attachments: [
+      { kind: 'image' as const, label: 'a.png', url: png },
+      { kind: 'image' as const, label: '设备上的图' },
+      { kind: 'file' as const, label: 'app.ts' },
+    ],
+  }
+  const editable = editableOf(item)
+  assert.equal(editable.text, '看看 @[构建] 这里')
+  assert.equal(editable.comments, 1)
+  assert.deepEqual(
+    editable.kept.map((one) => one.label),
+    ['a.png'],
+  )
+  assert.deepEqual(
+    editable.dropped.map((one) => one.label),
+    ['设备上的图', 'app.ts'],
+  )
+  const again = resendOf(item, '改过的 @[构建]')
+  assert.deepEqual(again.images, [{ url: png, name: 'a.png' }])
+  // 拼回去发：评论还在开头，会话照常提到
+  const sent = outgoing(again.text, again.images, again.extras)
+  assert.match(bodyOf(sent, true), /^<litch-comments>/)
+  assert.match(bodyOf(sent, true), /改过的 ＠\[构建\]/)
+  assert.deepEqual(parseComments(bodyOf(sent, true))?.comments[0]?.note, '改一下')
+})

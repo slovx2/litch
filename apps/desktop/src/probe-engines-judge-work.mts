@@ -1,6 +1,6 @@
-// 三个引擎各走一遍的验收：计划模式、写文件、图片、读历史、分叉回退压缩这几步各家该是什么。
+// 三个引擎各走一遍的验收：计划模式、写文件、图片、读历史、分叉、编辑重发、压缩这几步各家该是什么。
 // 怎么判、三种判定各是什么意思见 probe-engines-judge.mts。
-import type { ActsOffered, CompactSeen, ForkSeen, RollbackSeen } from './probe-engines-acts.mjs'
+import type { ActsOffered, CompactSeen, EditSeen, ForkSeen } from './probe-engines-acts.mjs'
 import { headLooks } from './probe-engines-judge-talk.mjs'
 import type { ImageSeen, PlanSeen, WriteSeen } from './probe-engines-rest.mjs'
 import { type StepJudge, WORDS } from './probe-engines-spec.mjs'
@@ -130,11 +130,11 @@ const acts: StepJudge = (id, _spec, raw, v) => {
     seen.answers.length === 2 && seen.answers.every((answer) => answer.startsWith(`${id} 收到：`)),
     `先发的那两句的回答是 ${seen.answers.map((answer) => answer.slice(0, 30)).join('｜')}`,
   )
-  // 分叉、回退、压缩：Claude Code 和 Pi 的入口声明了会；dsh 的入口声明了不会，这三个入口都不出
+  // 分叉、编辑、压缩：Claude Code 和 Pi 的入口声明了会；dsh 的入口声明了不会，这三个入口都不出
   const able = id !== 'dsh'
   for (const [name, state] of [
     ['分叉', seen.fork],
-    ['回退', seen.rollback],
+    ['编辑', seen.edit],
     ['压缩上下文', seen.compact],
   ] as const) {
     v.check((state === '有') === able, `“${name}”的入口：${state}`)
@@ -160,23 +160,19 @@ const fork: StepJudge = (id, spec, raw, v) => {
   v.check(seen.sourceKept, '回到原来的会话，内容变了（少了回合，或者多了新会话里说的那句）')
 }
 
-const rollback: StepJudge = (id, _spec, raw, v) => {
-  const seen = raw as RollbackSeen
-  v.check(seen.asked.includes('回退'), `回退之前的确认框里写的是“${seen.asked.slice(0, 40)}”`)
+const edit: StepJudge = (id, _spec, raw, v) => {
+  const seen = raw as EditSeen
+  v.check(seen.original === WORDS.later, `编辑框里原来是“${seen.original.slice(0, 40)}”`)
+  v.check(seen.note.includes('无法恢复'), `编辑框下面的说明是“${seen.note.slice(0, 40)}”`)
   v.check(
-    seen.removed && seen.turns === seen.turnsBefore - 1,
-    `确认之后那条消息没有撤掉（${seen.told}）`,
+    seen.replaced && seen.turns === seen.turnsBefore,
+    `改过的那句没有替掉后发的那一句（${seen.turns}/${seen.turnsBefore} 个回合；${seen.told}）`,
   )
-  v.check(
-    seen.refilled === WORDS.later,
-    `撤掉的那句话没有回到输入框里（输入框里是“${seen.refilled}”）`,
-  )
-  v.check(seen.next.foot === '完成', `回退之后再发一句，回合的结尾是“${seen.next.foot}”`)
+  v.check(seen.next.foot === '完成', `改过的那句开的回合，结尾是“${seen.next.foot}”`)
   v.check(
     seen.next.answer.startsWith(`${id} 收到：${WORDS.again}`),
-    `回退之后再发一句，回答是“${seen.next.answer.slice(0, 60)}”`,
+    `改过的那句的回答是“${seen.next.answer.slice(0, 60)}”`,
   )
-  v.check(seen.next.turns === seen.turnsBefore, `回退再重发之后有 ${seen.next.turns} 个回合`)
 }
 
 /** 界面在说不出具体原因时自己用的几句话（packages/ui 的 error.*、ability.unsupported） */
@@ -225,6 +221,6 @@ export const WORK: Record<string, StepJudge> = {
   historyRestart: history('核心重启、窗口重新加载之后'),
   acts,
   fork,
-  rollback,
+  edit,
   compact,
 }

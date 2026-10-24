@@ -131,6 +131,12 @@ const topicKey = (topic: Extract<Topic, { kind: 'app' | 'sidebar' | 'session' }>
 /** 发的话里带这些字样时，模拟的回合会先停下来要一次审批。给界面试审批卡片用 */
 const ASKS_APPROVAL = /审批|approval/i
 
+/** 发的话里带这些字样时发不出去（对面报错）。给界面试“发送没成、文字放回输入框”用，编辑重发也是 */
+const SEND_FAILS = /发不出去|fail to send/i
+
+/** 编辑重发时改成的字里带这些字样，回退那一步就不成（对面拒绝）。给界面试“回退没成、编辑框留着”用 */
+const REVERT_FAILS = /退不回去|fail to revert/i
+
 /**
  * 没有声明的 harness 不会哪件事（示例里是直接连的那台原生 codex，假装它是个旧版本）。
  * 和真的一样，事先不知道：第一次去做的时候对面说不认识，这才记下来，之后它的会话上那个入口就停了。
@@ -2351,6 +2357,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         const { text, images, extras, now, ...where } = params as Commands['session.send']['params']
         const message = outgoing(text, images, extras)
         const view = reachView(where)
+        if (SEND_FAILS.test(text)) throw new ChannelError('remote', '模拟：这条消息没发出去')
         // 和真的核心一样：只读的会话（不接受直接输入的子代理、归档着的）发不了
         if (!view.live) throw new ChannelError('rejected', '这个会话是只读的')
         const turn = running(view)
@@ -2840,6 +2847,25 @@ export function createMockCore(options: MockCoreOptions): MockCore {
           forkedFrom: view.sessionId,
         })
         return { sessionId: summary.id }
+      }
+      // 编辑重发：回退成了才发；发送没成的原因放在应答里（和真的核心一样）
+      if (name === 'session.edit') {
+        const { text, images, extras, ...where } = params as Commands['session.edit']['params']
+        outgoing(text, images, extras)
+        if (REVERT_FAILS.test(text)) throw new ChannelError('rejected', '模拟：这次回退没成')
+        await core.command('session.rollback', where, signal)
+        try {
+          await core.command(
+            'session.send',
+            { deviceId: where.deviceId, sessionId: where.sessionId, text, images, extras },
+            signal,
+          )
+        } catch (error) {
+          const failure =
+            error instanceof ChannelError ? error : new ChannelError('internal', String(error))
+          return { sendFailure: failure.toShape() }
+        }
+        return {}
       }
       if (name === 'session.rollback') {
         const { turnId, itemId, ...where } = params as Commands['session.rollback']['params']

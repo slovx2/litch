@@ -36,7 +36,7 @@ import {
   type MachineSettings,
   type MachineWiring,
 } from './machine-wiring.mjs'
-import type { AppView, RemoteCheck, WireColor } from './model.mjs'
+import type { AppView, OutgoingMessage, RemoteCheck, WireColor } from './model.mjs'
 import type { ClientToolPort } from './model-client-tools.mjs'
 import type { MachineAccessMode, MachineAccessView, MachineApproval } from './model-machine.mjs'
 import type { PairingView } from './model-pairing.mjs'
@@ -645,6 +645,24 @@ export function createCore(options: CoreOptions): Core {
             await deviceOf(deviceId).rollback(sessionId, turnId, itemId)
           } catch (error) {
             throw toChannelFailure(error)
+          }
+          return {}
+        }
+        case 'session.edit': {
+          const { deviceId, sessionId, turnId, itemId, text, images, extras } =
+            params as Commands['session.edit']['params']
+          // 先查消息的形状：发不出去的消息不该先把会话回退了
+          let message: OutgoingMessage
+          try {
+            message = outgoing(text, images, extras)
+            await deviceOf(deviceId).rollback(sessionId, turnId, itemId)
+          } catch (error) {
+            throw toChannelFailure(error)
+          }
+          try {
+            await deviceOf(deviceId).send(sessionId, message, false)
+          } catch (error) {
+            return { sendFailure: toChannelFailure(error).toShape() }
           }
           return {}
         }
