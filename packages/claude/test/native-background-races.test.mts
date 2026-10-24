@@ -115,7 +115,15 @@ test('自行续跑的回合正在收尾时用户发来消息：按新回合提�
         (message) =>
           message.method === 'item/agentMessage/delta' && message.params.turnId === spontaneousId,
       ),
-    )
+    ).catch((error) => {
+      // 等不到时带上假模型收到几条请求、出过什么错和最近的通知，流水线上偶尔挂了能看出卡在哪
+      const seen = scene.client.trace
+        .map((message) => `${message.method}@${message.params?.turnId ?? message.params?.turn?.id}`)
+        .slice(-40)
+      throw new Error(
+        `${error.message}：${JSON.stringify({ spontaneousId, requests: scene.model.requests.length, unexpected: scene.model.unexpected, seen })}`,
+      )
+    })
     // 正文之后紧跟着就是这一轮的结束；稍等片刻，运行时里它已经结束，协议层还在算差异。
     await new Promise((resolve) => setTimeout(resolve, 600))
     assert.equal(
