@@ -201,3 +201,22 @@
   font-size: 12px;
   color: var(--ink-3);
 }
+/* 手机远程批准的开关：说明在左、开关在右 */
+.phone-approvals {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.phone-approvals-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.phone-approvals-text span {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-3);
+}

@@ -1,5 +1,6 @@
 // 桌面端记着的手机批准钥匙：`<用户数据>/trusted-phones.json`。手机在别的设备上批准登录时，桌面端只认这里记下的钥匙；
-// 不从设备上读（设备上 authorized_keys 那一行代理改得了）。文件里还有这台桌面端自己的标识（desktopId，卡片和签名里带）。
+// 不从设备上读（设备上 authorized_keys 那一行代理改得了）。文件里还有这台桌面端自己的标识（desktopId，卡片和签名里带），
+// 和“手机远程批准”开关（enabled，实验功能，默认关；关着时卡片不发到手机、答复一律不认）。
 //
 // 钥匙怎么来（22 号设计 8.2，决 415）：
 // - pairing：扫码绑定时手机带上、确认码把它算进去，人核对过确认码、点“允许”时记下（扫码时核对过）。
@@ -44,6 +45,8 @@ export interface TrustedPhoneView extends TrustedPhone {
 interface StoredFile {
   version: 1
   desktopId: string
+  /** 手机远程批准开着；没写是关 */
+  enabled: boolean
   phones: TrustedPhone[]
 }
 
@@ -94,6 +97,16 @@ export class TrustedPhones {
     return this.data.desktopId
   }
 
+  /** 手机远程批准开没开 */
+  get enabled(): boolean {
+    return this.data.enabled
+  }
+
+  setEnabled(enabled: boolean): void {
+    this.data = { ...this.data, enabled }
+    this.save()
+  }
+
   get(phoneId: string): TrustedPhone | null {
     const found = this.data.phones.find((phone) => phone.phoneId === phoneId)
     return found ? { ...found } : null
@@ -133,7 +146,12 @@ export class TrustedPhones {
           isApprovalToken(parsed.desktopId) &&
           Array.isArray(parsed.phones)
         )
-          return { version: 1, desktopId: parsed.desktopId, phones: parsed.phones.filter(isPhone) }
+          return {
+            version: 1,
+            desktopId: parsed.desktopId,
+            enabled: parsed.enabled === true,
+            phones: parsed.phones.filter(isPhone),
+          }
       } catch {}
       // 读不懂：挪到一边留着，重新开始（之前记下的手机下次批准时按第一次批准重新记）
       const aside = `${this.file}.broken-${Date.now()}`
@@ -142,7 +160,7 @@ export class TrustedPhones {
         this.log(`trusted-phones.json 读不懂，挪到了 ${aside}`)
       } catch {}
     }
-    const fresh: StoredFile = { version: 1, desktopId: randomToken(), phones: [] }
+    const fresh: StoredFile = { version: 1, desktopId: randomToken(), enabled: false, phones: [] }
     this.data = fresh
     this.save()
     return fresh

@@ -1,6 +1,6 @@
 // 手机批准钥匙在主进程、工具进程（核心）、界面之间的消息名和形状。预加载脚本在沙箱里只认打包进去的纯代码，
 // 所以这里不引 Node 的模块；实现在 approvals/main.mts。
-// 界面经预加载脚本拿到 window.litchApprovals = { list(), forget(phoneId), onChanged(cb), onNotice(cb) }，
+// 界面经预加载脚本拿到 window.litchApprovals = { list(), forget(phoneId), enabled(), setEnabled(on), onChanged(cb), onNotice(cb) }，
 // 类型在 packages/ui/src/devices/approvals-bridge.ts 照抄一份，改一边要改另一边。
 
 /**
@@ -28,7 +28,11 @@ export type ApprovalKeysMessage =
 export const APPROVALS_LIST = 'litch:approvals:list'
 /** 界面 → 主进程，等应答：删掉一部手机的批准钥匙，回删没删掉 */
 export const APPROVALS_FORGET = 'litch:approvals:forget'
-/** 主进程 → 界面：记下的手机变了（不带内容，界面再取一次） */
+/** 界面 → 主进程，等应答：手机远程批准开没开（实验功能，默认关） */
+export const APPROVALS_ENABLED = 'litch:approvals:enabled'
+/** 界面 → 主进程，等应答：打开、关掉手机远程批准，回改后的值 */
+export const APPROVALS_SET_ENABLED = 'litch:approvals:setEnabled'
+/** 主进程 → 界面：记下的手机或开关变了（不带内容，界面再取一次） */
 export const APPROVALS_CHANGED = 'litch:approvals:changed'
 /** 主进程 → 界面：第一次记下一部手机、某部手机的钥匙对不上（ApprovalNotice），界面出一条不挡事的提示 */
 export const APPROVALS_NOTICE = 'litch:approvals:notice'

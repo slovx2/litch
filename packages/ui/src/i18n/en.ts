@@ -1763,4 +1763,7 @@ export const en: Record<MessageKey, Entry> = {
     '“{name}” approved a sign-in for the first time, and its approval key was recorded (fingerprint {fingerprint}). If you didn’t approve it, remove the key under Phones in the device details.',
   'approvals.mismatch':
     'The approval key of “{name}” doesn’t match, so its approval was refused. Pair the phone again.',
+  'phones.approvals.title': 'Approve agent sign-ins on phones (experimental)',
+  'phones.approvals.note':
+    'When on, sign-in cards from the built-in browser are sent through the session’s device to paired phones, where they can be approved. Applies to all devices. Off by default.',
 }

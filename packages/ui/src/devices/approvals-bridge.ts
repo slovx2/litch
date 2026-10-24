@@ -25,6 +25,10 @@ export type ApprovalNotice =
 export interface ApprovalsBridge {
   list(): Promise<TrustedPhoneEntry[]>
   forget(phoneId: string): Promise<boolean>
+  /** 手机远程批准开没开（实验功能，默认关；关着时登录卡片不发到手机） */
+  enabled(): Promise<boolean>
+  /** 回改后的值 */
+  setEnabled(on: boolean): Promise<boolean>
   onChanged(handler: () => void): () => void
   onNotice(handler: (notice: ApprovalNotice) => void): () => void
 }
@@ -62,4 +66,29 @@ export function useTrustedPhones(): TrustedPhoneEntry[] | null {
     }
   }, [])
   return phones
+}
+
+/** 手机远程批准开没开（没有外壳时是 null），在别处改了跟着重取 */
+export function useApprovalsEnabled(): boolean | null {
+  const [enabled, setEnabled] = useState<boolean | null>(null)
+  useEffect(() => {
+    const bridge = approvalsBridge()
+    if (!bridge) return
+    let live = true
+    const load = () => {
+      bridge.enabled().then(
+        (on) => {
+          if (live) setEnabled(on)
+        },
+        () => {},
+      )
+    }
+    load()
+    const stop = bridge.onChanged(load)
+    return () => {
+      live = false
+      stop()
+    }
+  }, [])
+  return enabled
 }

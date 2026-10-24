@@ -4,6 +4,8 @@
 // 只认：自己发出去的卡片号、随机数对得上（用一次作废）、没过期、签的源和账号和自己卡片上的一样、
 // 定时任务的卡片才许“以后直接用”、签名能用记下的这台手机的批准钥匙验过。
 // 没记过这个手机号的：验过签名就记下、当次生效（先信任、后核对，决 415），并告诉界面出一条提示。
+// 手机远程批准是实验功能、默认关（store.mts 的 enabled）：关着时 approvalDesktopId() 是 null（核心就不把卡片挂到设备上），
+// 答复一律不认。随机数在卡片真答上之后（phoneAnswerLanded）才记作用过。
 import { createHash, createPublicKey, verify } from 'node:crypto'
 import {
   type ApprovalAnswer,
@@ -29,12 +31,16 @@ export interface PhoneCard {
   taskId?: string | null
   /** 毫秒；不限时是 null */
   expiresAt?: number | null
+  /** 会话所在的设备（桌面端给设备的标识）：答复经它转来，第一次批准时记下“经哪台设备” */
+  deviceId?: string | null
 }
 
 /** 为什么不认 */
 export type PhoneRejection =
   /** 主进程还没装好（没有数据目录） */
   | 'unavailable'
+  /** 手机远程批准没开 */
+  | 'disabled'
   /** 答复的形状不对 */
   | 'shape'
   /** 卡片号对不上 */
@@ -125,6 +131,7 @@ export class PhoneApprovals {
   verify(card: PhoneCard, answer: unknown): PhoneVerdict {
     if (!isApprovalAnswer(answer)) return { ok: false, why: 'shape' }
     if (answer.id !== card.id) return { ok: false, why: 'card' }
+    if (!this.store.enabled) return { ok: false, why: 'disabled' }
     if (this.used.has(card.nonce)) return { ok: false, why: 'replay' }
     if (card.expiresAt != null && this.now() >= card.expiresAt) return { ok: false, why: 'expired' }
     if (answer.ref !== null && !card.accounts.some((account) => account.ref === answer.ref))
@@ -141,8 +148,7 @@ export class PhoneApprovals {
         name: nameOf(answer),
         approvalKey: answer.approvalKey,
         source: 'firstApproval',
-        // 答复只说是哪张卡片，没说经哪台设备转来的
-        deviceId: null,
+        deviceId: card.deviceId ?? null,
         addedAt: this.now(),
         lastApprovedAt: null,
         conflict: false,
@@ -165,7 +171,6 @@ export class PhoneApprovals {
       this.options.notice?.({ kind: 'mismatch', phoneId: known.phoneId, name: known.name })
       return { ok: false, why: 'keyMismatch' }
     }
-    this.used.add(card.nonce)
     const trusted = this.store.get(answer.phoneId)
     if (trusted) this.store.put({ ...trusted, lastApprovedAt: this.now() })
     this.options.changed?.()
@@ -177,6 +182,23 @@ export class PhoneApprovals {
       firstSeen,
       name: trusted?.name ?? nameOf(answer),
     }
+  }
+
+  /** 认了的答复真把卡片答上了：这张卡片的随机数作废 */
+  landed(card: Pick<PhoneCard, 'nonce'>): void {
+    this.used.add(card.nonce)
+  }
+
+  /** 手机远程批准开没开（实验功能，默认关） */
+  get enabled(): boolean {
+    return this.store.enabled
+  }
+
+  setEnabled(enabled: boolean): void {
+    if (enabled === this.store.enabled) return
+    this.store.setEnabled(enabled)
+    this.options.log?.(`手机远程批准${enabled ? '打开' : '关掉'}了`)
+    this.options.changed?.()
   }
 
   /** 扫码绑定时人核对过确认码、点了允许：记下（换掉这个手机号原来的，包括对不上的那条） */
@@ -245,13 +267,18 @@ export function installPhoneApprovals(approvals: PhoneApprovals | null): void {
 
 /**
  * 这台桌面端的标识：登录卡片（ClientToolAsk 的 signIn）带上它，核心看到才把卡片转到设备上。
- * 还没装好（没有数据目录）时是 null，这张卡片就不发到手机
+ * 还没装好（没有数据目录）、手机远程批准没开时是 null，这张卡片就不发到手机
  */
 export function approvalDesktopId(): string | null {
-  return installed?.desktopId ?? null
+  return installed?.enabled ? installed.desktopId : null
 }
 
 /** 验手机的答复（22 号设计 12.2 第 3 条；照 browser/passwords/phone-answer.mts 的 VerifyPhoneAnswer） */
 export function verifyPhoneAnswer(card: PhoneCard, answer: unknown): PhoneVerdict {
   return installed ? installed.verify(card, answer) : { ok: false, why: 'unavailable' }
+}
+
+/** verifyPhoneAnswer 认了的答复真把卡片答上了（登录卡片从等人选变成代填或取消）：随机数作废，同一张卡片不能再答 */
+export function phoneAnswerLanded(card: Pick<PhoneCard, 'nonce'>): void {
+  installed?.landed(card)
 }

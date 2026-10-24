@@ -1672,6 +1672,9 @@ export const zhCN = {
   'approvals.firstSeen':
     '手机“{name}”首次批准登录，已记录其批准钥匙（指纹 {fingerprint}）。如果不是你批准的，请在设备详情的“手机”一节删除它。',
   'approvals.mismatch': '手机“{name}”的批准钥匙不一致，已拒绝其批准。请在手机上重新扫码绑定。',
+  'phones.approvals.title': '在手机上批准代理登录（实验功能）',
+  'phones.approvals.note':
+    '打开后，内置浏览器的登录卡片会经会话所在设备发到已绑定的手机，可在手机上批准。对所有设备生效，默认关闭。',
 } satisfies Record<string, Entry>
 
 export type MessageKey = keyof typeof zhCN

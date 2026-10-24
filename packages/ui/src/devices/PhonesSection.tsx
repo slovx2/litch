@@ -4,6 +4,7 @@
 // 设备开着 Tailscale SSH 时列表上方、撤销的确认里都写明：撤销只删钥匙，拦不住 tailnet 里被 ACL 允许的设备。
 // 桌面外壳记下了某部手机的批准钥匙（手机上批准登录用，approvals-bridge.ts）时，那一行下面写指纹、怎么记下的，能删；
 // 经这台设备记下、却不在这台设备的手机列表里的（以前手动加的设备上第一次批准的），列在后面。
+// 列表上方是“手机远程批准”开关（实验功能，默认关，对所有设备生效；也只有桌面外壳里有）。
 import { type DeviceView, keys, type PairingTopicView, type PairPhone } from '@litch/core'
 import { useEffect, useId, useState } from 'react'
 import { useT } from '../app/appearance.ts'
@@ -11,7 +12,12 @@ import { reasonOf } from '../app/errors.ts'
 import { Fold } from '../app/Fold.tsx'
 import { useKey, useServices } from '../app/services.tsx'
 import { showToast } from '../app/toasts.tsx'
-import { approvalsBridge, type TrustedPhoneEntry, useTrustedPhones } from './approvals-bridge.ts'
+import {
+  approvalsBridge,
+  type TrustedPhoneEntry,
+  useApprovalsEnabled,
+  useTrustedPhones,
+} from './approvals-bridge.ts'
 import { PairDialog } from './PairDialog.tsx'
 
 /** 从这一版起设备服务支持扫码绑定手机 */
@@ -99,6 +105,7 @@ export function PhonesSection({ device }: { device: DeviceView }) {
       </div>
       {open ? (
         <div id={id} className="mng-sec-body">
+          <ApprovalsSwitch />
           {online && tailscale ? (
             <div className="devp-note" data-phones-tailscale="true">
               {t('phones.tailscale')}
@@ -144,6 +151,37 @@ export function PhonesSection({ device }: { device: DeviceView }) {
       ) : null}
       {pairing ? <PairDialog device={device} onClose={() => setPairing(false)} /> : null}
     </section>
+  )
+}
+
+/** 手机远程批准的开关：关着时登录卡片不发到手机，手机的答复也不认。没有外壳时不显示 */
+function ApprovalsSwitch() {
+  const t = useT()
+  const on = useApprovalsEnabled()
+  const switchId = useId()
+  if (on === null) return null
+  return (
+    <div className="phone-approvals" data-phone-approvals={on ? 'on' : 'off'}>
+      <div className="phone-approvals-text">
+        <label htmlFor={switchId}>{t('phones.approvals.title')}</label>
+        <span>{t('phones.approvals.note')}</span>
+      </div>
+      <button
+        id={switchId}
+        type="button"
+        role="switch"
+        className="switch"
+        data-act="phone-approvals"
+        aria-checked={on}
+        onClick={() => {
+          approvalsBridge()
+            ?.setEnabled(!on)
+            .catch(() => {})
+        }}
+      >
+        <i />
+      </button>
+    </div>
   )
 }
 

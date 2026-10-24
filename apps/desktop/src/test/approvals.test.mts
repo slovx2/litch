@@ -20,6 +20,7 @@ import {
   type PhoneCard,
   type PhoneNotice,
   pairingKeyMatches,
+  phoneAnswerLanded,
   verifyPhoneAnswer,
 } from '../approvals/verify.mjs'
 
@@ -54,6 +55,7 @@ function rig() {
       changed: () => changes++,
     })
   const approvals = make()
+  approvals.setEnabled(true)
   DESKTOP_ID.current = approvals.desktopId
   // 编号和随机数照内置浏览器的登录卡片（browser/passwords/signin.mts）出
   const card = (more: Partial<PhoneCard> = {}): PhoneCard => ({
@@ -63,6 +65,7 @@ function rig() {
     accounts: [{ ref: 'a1' }, { ref: 'a2' }],
     taskId: null,
     expiresAt: null,
+    deviceId: 'song-debian',
     ...more,
   })
   return {
@@ -126,7 +129,7 @@ test('约定里的测试向量：批准公钥、指纹、签名', () => {
   )
 })
 
-test('第一次批准：验过签名就记下、当次生效，出提示；之后同一把照认，同一张卡片不能再用', () => {
+test('第一次批准：验过签名就记下（连同经哪台设备）、当次生效，出提示；之后同一把照认，答上了的卡片不能再用', () => {
   const r = rig()
   try {
     const card = r.card()
@@ -144,9 +147,11 @@ test('第一次批准：验过签名就记下、当次生效，出提示；之�
     ])
     const [phone] = r.approvals.phones()
     assert.equal(phone?.source, 'firstApproval')
-    assert.equal(phone?.deviceId, null)
+    assert.equal(phone?.deviceId, 'song-debian')
     assert.equal(phone?.lastApprovedAt, 1_800_000_000_000)
-    // 重放：同一张卡片的答复再来一次
+    // 认了但卡片没答上（比如人在桌面端先答了）：随机数不作废；答上了才作废，同一张卡片的答复再来就是重放
+    assert.equal(r.approvals.verify(card, answerFor(card)).ok, true)
+    r.approvals.landed(card)
     assert.deepEqual(r.approvals.verify(card, answerFor(card)), { ok: false, why: 'replay' })
     // 新卡片：认，不算第一次
     const next = r.card()
@@ -307,4 +312,42 @@ test('扫码时记下之前自己重算确认码和手机号：设备塞进别�
   assert.equal(pairingKeyMatches({ ...input, code: '965093' }), false)
   assert.equal(pairingKeyMatches({ ...input, phoneId: 'aaaaaaaaaaaaaaaa' }), false)
   assert.equal(pairingKeyMatches({ ...input, publicKey: 'ssh-rsa AAAA' }), false)
+})
+
+test('手机远程批准默认关：关着时没有桌面端号（卡片不发到手机）、答复一律不认；开了才认，开关记在文件里', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'litch-approvals-'))
+  try {
+    const file = join(dir, 'trusted-phones.json')
+    let changes = 0
+    const approvals = new PhoneApprovals({
+      store: new TrustedPhones(file),
+      changed: () => changes++,
+    })
+    DESKTOP_ID.current = approvals.desktopId
+    assert.equal(approvals.enabled, false)
+    installPhoneApprovals(approvals)
+    assert.equal(approvalDesktopId(), null)
+    const card: PhoneCard = {
+      id: randomUUID(),
+      nonce: randomBytes(16).toString('base64url'),
+      origin: 'https://github.com',
+      accounts: [{ ref: 'a1' }],
+      deviceId: 'song-debian',
+    }
+    assert.deepEqual(verifyPhoneAnswer(card, answerFor(card)), { ok: false, why: 'disabled' })
+    assert.equal(approvals.phones().length, 0)
+    approvals.setEnabled(true)
+    assert.equal(changes, 1)
+    assert.equal(approvalDesktopId(), approvals.desktopId)
+    assert.equal(verifyPhoneAnswer(card, answerFor(card)).ok, true)
+    phoneAnswerLanded(card)
+    assert.deepEqual(verifyPhoneAnswer(card, answerFor(card)), { ok: false, why: 'replay' })
+    assert.equal(new TrustedPhones(file).enabled, true)
+    approvals.setEnabled(false)
+    assert.equal(new TrustedPhones(file).enabled, false)
+    assert.equal(approvalDesktopId(), null)
+  } finally {
+    installPhoneApprovals(null)
+    rmSync(dir, { recursive: true, force: true })
+  }
 })

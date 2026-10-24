@@ -6,9 +6,11 @@ import type { BrowserWindow, IpcMain, IpcMainInvokeEvent } from 'electron'
 import {
   APPROVAL_KEYS,
   APPROVALS_CHANGED,
+  APPROVALS_ENABLED,
   APPROVALS_FORGET,
   APPROVALS_LIST,
   APPROVALS_NOTICE,
+  APPROVALS_SET_ENABLED,
   type ApprovalKeysMessage,
   type TrustedPhoneEntry,
 } from './ipc.mjs'
@@ -60,6 +62,13 @@ export function startApprovalsMain(options: ApprovalsMainOptions): ApprovalsMain
   options.ipcMain.handle(APPROVALS_FORGET, (event, phoneId: unknown) =>
     options.fromUi(event) && typeof phoneId === 'string' ? approvals.forget(phoneId) : false,
   )
+  options.ipcMain.handle(APPROVALS_ENABLED, (event) =>
+    options.fromUi(event) ? approvals.enabled : false,
+  )
+  options.ipcMain.handle(APPROVALS_SET_ENABLED, (event, on: unknown) => {
+    if (options.fromUi(event) && typeof on === 'boolean') approvals.setEnabled(on)
+    return approvals.enabled
+  })
 
   return {
     message(raw) {
