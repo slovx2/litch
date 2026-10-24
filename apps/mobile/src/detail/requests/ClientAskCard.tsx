@@ -2,6 +2,8 @@
 // 会话同时开在桌面端时，同一份请求也会排到这里（模拟核心里也有），照样能答。文字按结构在这里拼，核心只给“问的是什么”；
 // 远程设备上的模型要用那台电脑时写明白（和桌面端 ClientAskCard 同样的取舍）。
 // 操作那台桌面端的命令与文件（ask.kind 是 machine）也会排到这里：写出要做的事，选项的说法照桌面端的那一套。
+// 代理请人登录（ask.kind 是 signIn）只能在桌面端登录，这里只能拒绝（核心只给拒绝一个选项）；手机远程批准开着时，
+// 批准走 approvals/ 那张卡片，排在这张前面。
 import type { ApprovalOption, ClientAskRequest, MachineAskView } from '@litch/core'
 import { type Key, useT } from '../../ui/i18n'
 import { Card, CardButton, type CardProps, Meta, useRespond, Well, Why } from './Card'
@@ -47,7 +49,9 @@ export function ClientAskCard(props: CardProps<ClientAskRequest>) {
           ? 'clientAsk.site'
           : ask.kind === 'machine'
             ? MACHINE_TITLE[ask.action]
-            : 'clientAsk.app',
+            : ask.kind === 'signIn'
+              ? 'signInAsk.title'
+              : 'clientAsk.app',
       )}
       waiting={waiting}
       error={error}
@@ -78,6 +82,12 @@ export function ClientAskCard(props: CardProps<ClientAskRequest>) {
         </>
       ) : ask.kind === 'machine' ? (
         <MachineWhat ask={ask} />
+      ) : ask.kind === 'signIn' ? (
+        <>
+          <Meta label={t('clientAsk.origin')} value={ask.origin} />
+          {ask.reason ? <Well>{ask.reason}</Well> : null}
+          <Why>{t('signInAsk.desktopOnly')}</Why>
+        </>
       ) : (
         <>
           <Meta label={t('clientAsk.appName')} value={`${ask.app.name}  ${ask.app.bundleId}`} />
