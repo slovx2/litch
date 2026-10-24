@@ -1,0 +1,346 @@
+{
+  "extension": "clientApprovals",
+  "status": "已定（2026-10-24，22 号设计第八节、决 415、决 422）",
+  "description": "手机上批准：桌面端要人点头的卡片经会话所在设备的设备服务转给绑了这台设备的手机，手机的答复带着批准钥匙（手机另生成的一把 ed25519，和 ssh 钥匙无关）的签名经设备服务交回发卡片的那条连接，由桌面端自己验签。设备服务不可信（代理就跑在那台设备上），只转交、不验签。第一版只有一种卡片：内置浏览器的代理登录（browserSignIn）。类型、签名内容、形状检查在 packages/protocol/src/client-approvals.mts。",
+  "appliesTo": "只有聚合面。兼容面上没有这个扩展的任何内容。",
+  "declaration": {
+    "description": "设备服务在 runtime/info 的 device.extensions 里列出 clientApprovals，表示支持。通知 litch/approval/changed 只发给握手时在 capabilities.litchExtensions 里列了 clientApprovals 的连接；litch/approval/open 要求发卡片的连接声明了它（答复只送给发卡片的那一条）。",
+    "where": "initialize.params.capabilities.litchExtensions",
+    "schema": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "contains": {
+        "const": "clientApprovals"
+      }
+    }
+  },
+  "undeclared": "没声明的连接（官方 Codex 桌面端、旧版 Litch、旧版手机）收不到 litch/approval/changed，open 回 undeclared；list、answer、close 照样能调。没改过的官方桌面端看不到任何变化。",
+  "rules": [
+    "卡片只放在设备服务的内存里，按卡片号记，带着发卡片的那条连接。那条连接断了、过了 expiresAt、它 close 了就收掉，收掉时给这个会话发一次 litch/approval/changed。设备服务重启后一张都没有。",
+    "open：同一条连接用同一个卡片号再开一次是换掉内容（openedAt 不变）；别的连接已经用了这个号回 duplicate。expiresAt 已经过了回 expired。一条连接最多挂 32 张，再开回 tooMany。摘要里的文字去掉控制字符、按 APPROVAL_TEXT_MAX 截断，账号最多 50 个。",
+    "close：只有发卡片的那条连接能收；不是它开的、或者没有这张卡片都回成功、什么都不做。",
+    "list：现在挂着的全部卡片（给了 threadId 只回这个会话的），先开的在前。",
+    "answer：设备服务只查形状（isApprovalAnswer）和卡片还在不在，原样（只留定义里的键）发给发卡片的那条连接（litch/approval/answered），不验签名、不收掉卡片；桌面端验过签名、答完了自己 close，验不过的丢掉、卡片接着等。一张卡片最多转交 8 次答复，再答回 tooMany。",
+    "签名：手机对 UTF-8( 'litch-approval-v1\\n' + 一行 JSON ) 做 ed25519 签名，JSON 的键按 id、nonce、desktopId、origin、ref、decision、remember、phoneId 的顺序（approvalSignedText）。桌面端只认：自己发出去的卡片号、随机数对得上（用一次作废）、没过期、签的源和账号和自己卡片上的一样、签名能用它记下的这台手机的批准公钥验过。算法、指纹和测试向量见 client-approvals.mts。",
+    "批准公钥怎么到桌面端：扫码绑定时手机在 pair-enroll 的输入里带上 approvalKey（二维码里有 a 时才带），确认码把它算进去，出码的桌面端在人核对过确认码、允许时记下（扫码时核对过）；以前绑的手机第一次答卡片时答复里带上，桌面端没记过这个手机号就验过签名后记下并当次生效（第一次批准时记下）。之后同一个手机号带来一把不一样的钥匙，两把都不认。记在桌面端自己的数据目录，不从设备上读。"
+  ],
+  "parts": [
+    {
+      "kind": "ClientRequest",
+      "method": "litch/approval/open",
+      "params": {
+        "$ref": "#/definitions/Card"
+      },
+      "response": {
+        "$ref": "#/definitions/Empty"
+      },
+      "description": "桌面端挂一张卡片。"
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/approval/close",
+      "params": {
+        "$ref": "#/definitions/IdParams"
+      },
+      "response": {
+        "$ref": "#/definitions/Empty"
+      },
+      "description": "桌面端收掉一张卡片。"
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/approval/list",
+      "params": {
+        "$ref": "#/definitions/ListParams"
+      },
+      "response": {
+        "$ref": "#/definitions/ListResponse"
+      },
+      "description": "手机取现在挂着的卡片。"
+    },
+    {
+      "kind": "ClientRequest",
+      "method": "litch/approval/answer",
+      "params": {
+        "$ref": "#/definitions/Answer"
+      },
+      "response": {
+        "$ref": "#/definitions/Empty"
+      },
+      "description": "手机答一张卡片，设备服务原样转给发卡片的连接。"
+    },
+    {
+      "kind": "ServerNotification",
+      "method": "litch/approval/changed",
+      "params": {
+        "$ref": "#/definitions/ChangedParams"
+      },
+      "description": "只发给声明了 clientApprovals 的连接：这个会话挂着的卡片变了，带这个会话现在的全部。"
+    },
+    {
+      "kind": "ServerNotification",
+      "method": "litch/approval/answered",
+      "params": {
+        "$ref": "#/definitions/Answer"
+      },
+      "description": "只发给发卡片的那条连接：手机的答复，原样。"
+    },
+    {
+      "kind": "Error",
+      "description": "这个扩展自己回的错误在 error.data.reason 里带原因。参数形状不对回 -32602、不带 data；unknownApproval 是 -32602，其余 -32000。设备不支持（没列 clientApprovals）时这组方法照聚合面的规矩回不支持。",
+      "data": {
+        "type": "object",
+        "required": ["reason"],
+        "properties": {
+          "reason": {
+            "enum": ["unknownApproval", "duplicate", "expired", "tooMany", "undeclared"]
+          }
+        }
+      },
+      "errors": [
+        {
+          "reason": "unknownApproval",
+          "code": -32602,
+          "description": "没有这张卡片（收掉了、过期了、从没有过）"
+        },
+        {
+          "reason": "duplicate",
+          "code": -32000,
+          "description": "别的连接已经用了这个卡片号"
+        },
+        {
+          "reason": "expired",
+          "code": -32000,
+          "description": "open 时过期时间已经过了"
+        },
+        {
+          "reason": "tooMany",
+          "code": -32000,
+          "description": "这条连接挂的卡片太多，或者这张卡片答的次数太多"
+        },
+        {
+          "reason": "undeclared",
+          "code": -32000,
+          "description": "发卡片的连接握手时没有声明 clientApprovals"
+        }
+      ]
+    }
+  ],
+  "definitions": {
+    "Empty": {
+      "type": "object"
+    },
+    "Token": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{16,64}$"
+    },
+    "Ref": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{1,64}$"
+    },
+    "PhoneId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{16}$"
+    },
+    "IdParams": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/Token"
+        }
+      }
+    },
+    "ListParams": {
+      "type": "object",
+      "properties": {
+        "threadId": {
+          "type": "string"
+        }
+      }
+    },
+    "Account": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ref", "masked"],
+      "properties": {
+        "ref": {
+          "$ref": "#/definitions/Ref"
+        },
+        "masked": {
+          "type": "string"
+        }
+      }
+    },
+    "BrowserSignInSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["origin", "site", "reason", "device", "accounts", "task", "fillBlocked"],
+      "properties": {
+        "origin": {
+          "type": "string",
+          "description": "页面的真实源"
+        },
+        "site": {
+          "type": "string",
+          "description": "代理给的站名"
+        },
+        "reason": {
+          "type": "string",
+          "description": "代理给的原因"
+        },
+        "device": {
+          "type": "string",
+          "description": "会话所在设备在桌面端的名字"
+        },
+        "accounts": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "$ref": "#/definitions/Account"
+          }
+        },
+        "task": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "name"],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              }
+            }
+          ]
+        },
+        "fillBlocked": {
+          "type": ["string", "null"],
+          "description": "预检不过、不能代填的原因；能代填是 null"
+        }
+      }
+    },
+    "Card": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "threadId", "kind", "summary", "desktopId", "nonce", "expiresAt"],
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/Token"
+        },
+        "threadId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "const": "browserSignIn"
+        },
+        "summary": {
+          "$ref": "#/definitions/BrowserSignInSummary"
+        },
+        "desktopId": {
+          "$ref": "#/definitions/Token"
+        },
+        "nonce": {
+          "$ref": "#/definitions/Token"
+        },
+        "expiresAt": {
+          "type": ["number", "null"]
+        }
+      }
+    },
+    "CardView": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/Card"
+        }
+      ],
+      "properties": {
+        "openedAt": {
+          "type": "number"
+        }
+      },
+      "required": ["openedAt"]
+    },
+    "ListResponse": {
+      "type": "object",
+      "required": ["data"],
+      "properties": {
+        "data": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CardView"
+          }
+        }
+      }
+    },
+    "ChangedParams": {
+      "type": "object",
+      "required": ["threadId", "data"],
+      "properties": {
+        "threadId": {
+          "type": "string"
+        },
+        "data": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CardView"
+          }
+        }
+      }
+    },
+    "Answer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "ref", "decision", "remember", "phoneId", "approvalKey", "signature"],
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/Token"
+        },
+        "ref": {
+          "oneOf": [
+            {
+              "$ref": "#/definitions/Ref"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "选的账号；拒绝时是 null"
+        },
+        "decision": {
+          "enum": ["approve", "decline"]
+        },
+        "remember": {
+          "type": "boolean",
+          "description": "定时任务的卡片上勾了“以后直接用”；拒绝时必须是 false"
+        },
+        "phoneId": {
+          "$ref": "#/definitions/PhoneId"
+        },
+        "phoneName": {
+          "type": "string",
+          "description": "只用来显示，不在签名里"
+        },
+        "approvalKey": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9+/]{43}=$",
+          "description": "批准公钥，32 字节 ed25519 的标准 base64"
+        },
+        "signature": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9+/]{86}==$",
+          "description": "ed25519 签名，标准 base64"
+        }
+      }
+    }
+  }
+}
