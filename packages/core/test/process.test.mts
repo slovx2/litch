@@ -12,6 +12,7 @@ import {
   processSettled,
   processTally,
   spanOp,
+  stepKindOf,
   stepsTally,
   type ToolCallItem,
   thoughtShown,
@@ -402,6 +403,10 @@ test('工具名认成哪种动作：各家的读、搜、列目录、看网页�
   assert.equal(toolKind('WebFetch'), 'web')
   assert.equal(toolKind('browser_click'), 'tool')
   assert.equal(toolKind({ key: 'collab.wait' } as never), 'tool')
+  // 会话工具的 read、list 读的是会话；同名的机器工具读的是文件
+  assert.equal(stepKindOf(tool('s', 'read', { source: 'litch_sessions' })), 'tool')
+  assert.equal(stepKindOf(tool('s', 'list', { source: 'litch_sessions' })), 'tool')
+  assert.equal(stepKindOf(tool('m', 'read_file', { source: 'litch_machine' })), 'read')
 })
 
 test('汇总：动作按先后排、带个数；同一个文件改几次算一个；思考不计入；用时是第一条开始到最后一条结束', () => {
