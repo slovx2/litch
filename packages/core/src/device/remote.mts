@@ -11,6 +11,7 @@ import type {
   RemoteInstallResult,
   RemoteStopResult,
 } from '../model-service.mjs'
+import type { CodexThreadNotesStore } from './codex-instructions.mjs'
 import type { SnapshotStore } from './device.mjs'
 import type { TerminalNotesStore } from './terminal-launch.mjs'
 
@@ -190,6 +191,8 @@ export interface DeviceStore {
   terminals?(deviceId: string): TerminalNotesStore
   /** 一台设备的 litch_machine 操作记录。不实现就只记在内存里 */
   machineLog?(deviceId: string): MachineLogStore
+  /** 直连原生 codex 时哪些会话带了哪几个命名空间的规则（codex-instructions.mts）。不实现就只记在内存里 */
+  codexThreads?(deviceId: string): CodexThreadNotesStore
   /** 设备去掉了，或者换了一台机器：它的快照不要了 */
   forget(deviceId: string): void
 }

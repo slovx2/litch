@@ -185,19 +185,47 @@ export function createDesktopLog(
  * 不都是出错，所以记成 info
  */
 export function teeConsole(log: DesktopLog): void {
+  guardStdio()
   for (const [method, level] of [
     ['error', 'info'],
     ['warn', 'warn'],
   ] as const) {
     const original = console[method].bind(console)
     console[method] = (...args: unknown[]) => {
-      original(...args)
-      const text = args
-        .map((arg) => (arg instanceof Error ? (arg.stack ?? arg.message) : String(arg)))
-        .join(' ')
-      log.write('log', { text: text.length > 2000 ? `${text.slice(0, 2000)}…` : text }, level)
+      try {
+        original(...args)
+      } catch (error) {
+        // 终端关了或父进程先退出，管道断了；控制台这一侧静默失败，日志文件照写
+        if (!isBrokenPipe(error)) throw error
+      } finally {
+        const text = args
+          .map((arg) => (arg instanceof Error ? (arg.stack ?? arg.message) : String(arg)))
+          .join(' ')
+        log.write('log', { text: text.length > 2000 ? `${text.slice(0, 2000)}…` : text }, level)
+      }
     }
   }
+}
+
+/** 标准输出、标准错误的管道断了（对面已退出）时写它们会报的错 */
+export function isBrokenPipe(error: unknown): boolean {
+  const code = (error as { code?: unknown } | null)?.code
+  return code === 'EPIPE' || code === 'ERR_STREAM_DESTROYED' || code === 'ERR_STREAM_WRITE_AFTER_END'
+}
+
+/**
+ * 管道断开时流会异步发 error 事件，没有监听者就成了未捕获异常、弹出错误框。
+ * 断开类错误吞掉；别的错误在监听器里原样抛出，和没挂监听时一样是未捕获异常
+ */
+function guardStdio(): void {
+  for (const stream of [process.stdout, process.stderr]) {
+    if (stream.listeners('error').includes(rethrowUnlessBrokenPipe)) continue
+    stream.on('error', rethrowUnlessBrokenPipe)
+  }
+}
+
+function rethrowUnlessBrokenPipe(error: unknown): void {
+  if (!isBrokenPipe(error)) throw error
 }
 
 /** 日志目录交给核心进程用的变量 */

@@ -444,7 +444,7 @@ function tallySessions(sessions: Iterable<SessionSummary>): GroupTallies {
 }
 
 /** 键的先后不算数：同样的几组、同样的几个 harness、同样的几个数就是没变 */
-function sameTallies(a: GroupTallies, b: GroupTallies): boolean {
+export function sameTallies(a: GroupTallies, b: GroupTallies): boolean {
   const groups = Object.keys(a)
   if (groups.length !== Object.keys(b).length) return false
   return groups.every((group) => {
@@ -459,7 +459,8 @@ function sameTallies(a: GroupTallies, b: GroupTallies): boolean {
         one.approval === other.approval &&
         one.answer === other.answer &&
         one.running === other.running &&
-        one.unread === other.unread
+        one.unread === other.unread &&
+        one.background === other.background
       )
     })
   })

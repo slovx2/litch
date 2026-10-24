@@ -9,12 +9,13 @@ import { StyleSheet, Text, type TextInput, useWindowDimensions, View } from 'rea
 import { KeyboardStickyView, useKeyboardState } from 'react-native-keyboard-controller'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { whyNot } from '../../../../packages/ui/src/app/errors.ts'
+import { readWhileOpen } from '../../../../packages/ui/src/app/read.ts'
 import { acquireStore, releaseStore } from '../core/store-cache'
 import { experiment } from '../experiment'
 import type { RootStackParamList } from '../nav/routes'
 import { ProposalsStrip } from '../screens/proposals/ProposalsStrip'
 import { SessionTaskStrip } from '../screens/tasks/SessionTaskStrip'
-import { useChannel, useKey } from '../shell/services'
+import { useChannel, useKey, useServices } from '../shell/services'
 import { useT } from '../ui/i18n'
 import { Confirm, Prompt, Sheet } from '../ui/kit/overlays'
 import { Screen } from '../ui/kit/Screen'
@@ -49,6 +50,11 @@ export function DetailScreen({ route, navigation }: Props) {
     [channel, deviceId, sessionId],
   )
   useEffect(() => () => releaseStore(store), [store])
+  const { replica } = useServices()
+  useEffect(
+    () => readWhileOpen(channel, replica.store, deviceId, sessionId),
+    [channel, replica, deviceId, sessionId],
+  )
   // 选中回答加评论：对话区、菜单、输入框上的评论片共用一个（comments/hub.ts）
   const comments = useMemo(
     () => new CommentsHub(store, draftKey(deviceId, sessionId)),
