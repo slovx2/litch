@@ -25,6 +25,12 @@
         }
       ],
       [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Litch uses Face ID to confirm sign-in approvals for your computer."
+        }
+      ],
+      [
         "expo-build-properties",
         {
           "android": {

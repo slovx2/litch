@@ -10,8 +10,11 @@ export interface Native {
   generateEd25519Key(): Promise<string>
   inspectPrivateKey(privateKey: string, passphrase: string): Promise<string>
   enrollPair(target: string, line: string): Promise<string>
-  pairConfirmCode(pairId: string, publicKey: string): Promise<string>
+  pairConfirmCode(pairId: string, publicKey: string, approvalKey: string): Promise<string>
   pairPhoneId(publicKey: string): Promise<string>
+  newApprovalKey(): Promise<string>
+  approvalSign(seed: string, text: string): Promise<string>
+  approvalFingerprint(approvalKey: string): Promise<string>
 }
 
 export const native = requireNativeModule<Native>('LitchSsh')

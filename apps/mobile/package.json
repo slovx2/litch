@@ -31,6 +31,7 @@
     "expo-file-system": "57.0.7",
     "expo-haptics": "57.0.3",
     "expo-image-picker": "57.0.20",
+    "expo-local-authentication": "57.0.3",
     "expo-localization": "57.0.2",
     "expo-secure-store": "57.0.4",
     "expo-status-bar": "57.0.1",

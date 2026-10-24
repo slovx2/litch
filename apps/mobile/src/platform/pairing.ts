@@ -126,9 +126,17 @@ export function enrollTarget(payload: PairPayload, privateKey: string): SshTarge
 export const keyLine = (publicKey: string): string =>
   publicKey.trim().split(/\s+/).slice(0, 2).join(' ')
 
-/** 写进 pair-enroll 标准输入的那一行（PairEnrollInput） */
-export function enrollLine(publicKey: string, phoneName: string): string {
-  return JSON.stringify({ v: 1, publicKey: keyLine(publicKey), name: phoneName })
+/**
+ * 写进 pair-enroll 标准输入的那一行（PairEnrollInput）。approvalKey 是这部手机的批准公钥，
+ * 只有二维码里有 a（设备认它）时才带，不然老设备算的确认码对不上
+ */
+export function enrollLine(publicKey: string, phoneName: string, approvalKey?: string): string {
+  return JSON.stringify({
+    v: 1,
+    publicKey: keyLine(publicKey),
+    name: phoneName,
+    ...(approvalKey ? { approvalKey } : {}),
+  })
 }
 
 /**
@@ -168,7 +176,10 @@ export interface PairDeps {
   dropKey(id: string): Promise<void>
   /** 刚生成的那把的私钥（Tailscale 方式登记时用它登录）。读不出来是 null */
   privateKey(id: string): Promise<string | null>
-  confirmCode(pairId: string, publicKey: string): Promise<string>
+  /** 这部手机的批准公钥（没有就生成一把）。二维码里有 a 时才要 */
+  approvalKey(): Promise<string>
+  /** approvalKey 给空串是不带批准公钥 */
+  confirmCode(pairId: string, publicKey: string, approvalKey: string): Promise<string>
   enroll(target: SshTarget, line: string): Promise<string>
   trust(host: string, port: number, key: HostKey): void
   check(target: RemoteTarget): Promise<RemoteCheck>
@@ -185,7 +196,9 @@ export async function runPairing(
   const key = await deps.makeKey()
   let enrolled = false
   try {
-    const code = await deps.confirmCode(payload.i, keyLine(key.publicKey))
+    // 设备认批准公钥（二维码里有 a）才带上：扫码时带的算人核对过（确认码把它盖住了）
+    const approvalKey = payload.a === 1 ? await deps.approvalKey() : ''
+    const code = await deps.confirmCode(payload.i, keyLine(key.publicKey), approvalKey)
     onStep({ step: 'enroll', code })
     let line: string
     try {
@@ -194,7 +207,7 @@ export async function runPairing(
         return { ok: false, problem: 'unknown', detail: '读不出刚生成的私钥' }
       line = await deps.enroll(
         enrollTarget(payload, privateKey),
-        enrollLine(key.publicKey, deps.phoneName),
+        enrollLine(key.publicKey, deps.phoneName, approvalKey),
       )
     } catch (error) {
       const { problem, detail } = enrollFailure(error, payload)

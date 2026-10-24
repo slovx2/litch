@@ -26,4 +26,13 @@ export const native: Native = {
   enrollPair: unreachable,
   pairConfirmCode: async () => '000000',
   pairPhoneId: async () => 'preview',
+  // 批准钥匙：示例的种子和公钥是协议里的测试向量，签名给一串格式对的占位
+  newApprovalKey: async () =>
+    JSON.stringify({
+      seed: 'AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=',
+      approvalKey: 'ebVWLo/mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmQ=',
+      fingerprint: '65b6 0673 d6ed 884b',
+    }),
+  approvalSign: async () => `${'A'.repeat(86)}==`,
+  approvalFingerprint: async () => '65b6 0673 d6ed 884b',
 }

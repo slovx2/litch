@@ -1,4 +1,4 @@
-// 应用设置：语言、明暗、任务卡按 harness 的开关（TaskCardsSection.tsx）、关于（版本与更新，UpdateSection.tsx）、开发者里的启动方式。都记在 prefs.json（useServices 的 prefs/setPrefs），
+// 应用设置：语言、明暗、任务卡按 harness 的开关（TaskCardsSection.tsx）、批准登录的钥匙指纹（ApprovalKeySection.tsx）、关于（版本与更新，UpdateSection.tsx）、开发者里的启动方式。都记在 prefs.json（useServices 的 prefs/setPrefs），
 // 改了马上生效：语言和明暗由 App 跟着换，启动方式换了核心重新装一次。
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import type { ReactNode } from 'react'
@@ -12,6 +12,7 @@ import { SectionLabel } from '../../ui/kit/controls'
 import { Screen } from '../../ui/kit/Screen'
 import { SKINS, type Skin, useTheme } from '../../ui/theme'
 import { CURRENT_VERSION } from '../../update/store'
+import { ApprovalKeySection } from './ApprovalKeySection'
 import { TaskCardsSection } from './TaskCardsSection'
 import { AutoUpdateSwitch, UpdateStatus } from './UpdateSection'
 
@@ -134,6 +135,10 @@ export function SettingsScreen(_props: Props) {
         <Note>
           {t('switches.note')} {t('switches.note.taskCards')}
         </Note>
+
+        <SectionLabel>{t('approval.settings')}</SectionLabel>
+        <ApprovalKeySection />
+        <Note>{t('approval.settings.note')}</Note>
 
         <SectionLabel>{t('settings.group.about')}</SectionLabel>
         <View style={[styles.about, { backgroundColor: c.panel, borderColor: c.line2 }]}>

@@ -41,7 +41,8 @@ to happen within 2 minutes. Do not show the QR code while sharing the screen.
   terminal.
 - Settings of the Litch app on the phone itself are out of reach (exception E9).
   They live in the phone app under Settings: language, theme (follow the system, light, dark), skin
-  (Retro, Literary, Standard, the same three as on the desktop; default Retro), task cards, updates.
+  (Retro, Literary, Standard, the same three as on the desktop; default Retro), task cards, the
+  sign-in approval key's fingerprint, updates.
 
 ## In a session on the phone
 
@@ -59,6 +60,30 @@ to happen within 2 minutes. Do not show the QR code while sharing the screen.
   uninstall it and install the release APK once (this clears the phone app's data; devices must be added
   again), after which updates work. If the download breaks off, the bar offers Retry; any failure bar can
   be closed with ✕ and stays closed for that package until a newer one is released.
+
+## Approving the agent's sign-ins on the phone
+
+When an agent asks to sign in to a site in the built-in browser (see `browser-and-computer-use.md`) and
+the session's device is paired with the phone, the card also shows in that session on the phone, above
+the input box. The phone only offers "Sign in as {account}" and Decline (the web page is on the computer,
+so signing in by hand happens there); whichever side answers first wins.
+
+- Usernames are masked on the phone (`so•••@gmail.com`); the password never goes through it. Litch on
+  the computer fills in and submits after it has checked the phone's signature.
+- Approving needs the phone's fingerprint, face or screen lock. Without any screen lock the phone cannot
+  approve.
+- The phone signs with its own **approval key** (separate from its SSH key, one per phone, whichever way
+  it connects, ordinary sshd or Tailscale SSH). Pairing by QR code with a current desktop sends it along
+  (covered by the confirmation code). Phones paired earlier do not need to pair again: the computer
+  remembers the key at the first approval and shows a notice; if that was not the user, remove the phone
+  in the desktop's settings.
+- Phone Settings → Sign-in approvals shows the approval key's fingerprint; the desktop's paired-phones
+  setting shows the same one. If the computer says the phone's key does not match, pair the phone again
+  by scanning.
+- Cards from scheduled-task turns expire after 30 minutes and can carry "Let this scheduled task use this
+  account for this site from now on".
+- The phone must have Litch open and be connected to that device to see the card (no background
+  notifications yet).
 
 ## Tailscale SSH
 
