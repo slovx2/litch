@@ -6,6 +6,7 @@ import { createContext, useContext } from 'react'
 import { type Lang, type MessageKey, translate } from '../../../../packages/ui/src/i18n/index.ts'
 import type { Args, Entry } from '../../../../packages/ui/src/i18n/types.ts'
 import * as app from './messages/app'
+import * as approvals from './messages/approvals'
 import * as comments from './messages/comments'
 import * as compose from './messages/compose'
 import * as detail from './messages/detail'
@@ -35,6 +36,7 @@ const zhCN = {
   ...tasks.zhCN,
   ...update.zhCN,
   ...usage.zhCN,
+  ...approvals.zhCN,
 }
 type MobileKey = keyof typeof zhCN
 const en: Record<MobileKey, Entry> = {
@@ -51,6 +53,7 @@ const en: Record<MobileKey, Entry> = {
   ...tasks.en,
   ...update.en,
   ...usage.en,
+  ...approvals.en,
 }
 const MOBILE: Record<Lang, Record<MobileKey, Entry>> = { 'zh-CN': zhCN, en }
 

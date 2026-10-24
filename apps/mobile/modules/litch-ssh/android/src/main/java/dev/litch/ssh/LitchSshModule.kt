@@ -41,12 +41,24 @@ class LitchSshModule : Module() {
       Sshtransport.enrollPair(target, line)
     }
 
-    AsyncFunction("pairConfirmCode") { pairId: String, publicKey: String ->
-      Sshtransport.pairConfirmCode(pairId, publicKey)
+    AsyncFunction("pairConfirmCode") { pairId: String, publicKey: String, approvalKey: String ->
+      Sshtransport.pairConfirmCode(pairId, publicKey, approvalKey)
     }
 
     AsyncFunction("pairPhoneId") { publicKey: String ->
       Sshtransport.pairPhoneID(publicKey)
+    }
+
+    AsyncFunction("newApprovalKey") {
+      Sshtransport.newApprovalKey()
+    }
+
+    AsyncFunction("approvalSign") { seed: String, text: String ->
+      Sshtransport.approvalSign(seed, text)
+    }
+
+    AsyncFunction("approvalFingerprint") { approvalKey: String ->
+      Sshtransport.approvalFingerprint(approvalKey)
     }
   }
 }
