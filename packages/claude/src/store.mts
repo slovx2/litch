@@ -74,12 +74,12 @@ function withStreamedText(item: ThreadItem, text: string): ThreadItem {
 }
 
 /** 条目的一笔改动：set 换掉第几个，add 接在最后，move 把第几个拿掉、换成新的接在最后 */
-type ItemChange = 'set' | 'add' | 'move'
+type ItemChange = 'set' | 'add' | 'move' | 'remove'
 
 /**
  * 把一笔改动用到条目上。内存里改和从库里重放都走这里，所以两边得到的一样。
- * set、move 记的是第几个、原来那一个的标识（换上去的条目标识可能不同）；对不上时（不该发生）按标识找，
- * 找不到的 set 不用，move 只接在最后。
+ * set、move、remove 记的是第几个、原来那一个的标识（换上去的条目标识可能不同）；对不上时（不该发生）按标识找，
+ * 找不到的 set、remove 不用，move 只接在最后。
  */
 function applyChange(
   items: ThreadItem[],
@@ -99,7 +99,7 @@ function applyChange(
     return
   }
   if (index >= 0) items.splice(index, 1)
-  items.push(item)
+  if (change === 'move') items.push(item)
 }
 
 /**
@@ -1669,6 +1669,16 @@ export class SessionStore {
     const current = live.items[index]
     if (index < 0 || !current) return
     this.logChange(turnId, live, 'move', index, updater(jsonClone(current)))
+    this.flushIfFinished(turnId)
+  }
+
+  /** 从回合里撤掉一个条目（同上，只记这一个条目）：流出来的半截回答作废了（模型请求重试） */
+  removeItem(turnId: string, itemId: string): void {
+    this.settle(turnId)
+    const live = this.liveTurn(turnId)
+    const index = live?.items.findIndex((item) => item.id === itemId) ?? -1
+    const current = live?.items[index]
+    if (live && current) this.logChange(turnId, live, 'remove', index, current)
     this.flushIfFinished(turnId)
   }
 

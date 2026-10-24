@@ -38,6 +38,7 @@ applyPromptCacheTtl()
 // CLI 来自宿主安装；Worker 仍通过独立 CLAUDE_CONFIG_DIR 提供配置和认证。
 
 import type { OnElicitation, Query, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
+import { apiRetryOf } from './api-retry.mjs'
 import { type ApprovalPolicy, allowsApproval, toolApprovalFlow } from './approval-policy.mjs'
 import { deniedMessage } from './approval-request.mjs'
 import { claudeConfigDir } from './claude-native-files.mjs'
@@ -319,6 +320,8 @@ interface PendingTurn {
   subagentStreamAt: Map<string, number>
   // 主会话最近一条 API 出错的助手消息上 CLI 归的类（SDKAssistantMessageError），回合失败时拼 codexErrorInfo
   apiErrorCategory: string | null
+  // CLI 在重试主会话的模型请求（api_retry 之后，新一次还没出内容）
+  apiRetrying: boolean
 }
 
 interface PendingTurnResult {
@@ -572,6 +575,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       resumedAgents: new Map(),
       subagentStreamAt: new Map(),
       apiErrorCategory: null,
+      apiRetrying: false,
     }
     this.turns.set(context.turnId, pending)
     session.context = context
@@ -1572,7 +1576,8 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       forwardSubagentText: true,
       cwd: context.cwd,
       settingSources: claudeSettingSources(),
-      // 失败后由持久化状态对账；禁止 CLI 自行重放可能已接收的模型请求。
+      // 模型请求失败时用 CLI 自己的重试（默认最多 10 次，harness 环境里配了 CLAUDE_CODE_MAX_RETRIES 以它为准）：
+      // 它只在这次请求还没出过助手消息时重试，工具不会重跑；重试的进度和作废的半截回答见 apiRetry
       env: {
         ...childEnv,
         ...claudeBashTimeoutEnv(childEnv),
@@ -1580,7 +1585,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
         // 收件箱里的登记名：别的会话 ListAgents 看到、SendMessage 发往的就是它。没有名字时 CLI 按目录自己起
         ...(inbox && context.sessionName ? { CLAUDE_CODE_SESSION_NAME: context.sessionName } : {}),
         ...sdkMcpStartupEnvironment(context.mcpServers),
-        CLAUDE_CODE_MAX_RETRIES: '0',
+        // 流式请求失败时不改用非流式再发一遍：那一遍没有增量，长回答要等整段生成完才出字
         CLAUDE_CODE_DISABLE_NONSTREAMING_FALLBACK: '1',
         // 清单只映射 TodoWrite：新模型默认不提供清单工具，旧模型默认提供未映射的 Task*。
         CLAUDE_CODE_ENABLE_TODO_TOOLS: '1',
@@ -2361,6 +2366,10 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       if (message.status === 'compacting') await pending.handlers.onEvent({ type: 'compacting' })
       return
     }
+    if (subtype === 'api_retry') {
+      await this.apiRetry(pending, message)
+      return
+    }
     if (subtype === 'compact_boundary') {
       const meta = message.compact_metadata as Record<string, unknown> | undefined
       await pending.handlers.onEvent({
@@ -2603,6 +2612,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     pending.usageByMessage ??= new Map()
     if (eventType === 'message_start') {
       const inner = event.message as Record<string, unknown> | undefined
+      if (!source) await this.apiRetryResolved(pending)
       if (typeof inner?.id === 'string') {
         pending.usageMessageIds.set(source, inner.id)
         pending.usageByMessage.set(inner.id, (inner.usage ?? {}) as Record<string, unknown>)
@@ -2672,6 +2682,37 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     }
   }
 
+  /**
+   * CLI 要重试这次模型请求（api-retry.mts）。它只在还没出过助手消息时重试，所以这次流出来的正文都还没定稿：
+   * 作废，新一次从头再来（结构化输出攒着的那一截也去掉）
+   */
+  private async apiRetry(pending: PendingTurn, message: Record<string, unknown>): Promise<void> {
+    const retry = apiRetryOf(message)
+    if (!retry) return
+    let streamed = 0
+    for (const block of pending.streamedBlocks.values())
+      if (block.type === 'text') streamed += block.text.length
+    if (pending.context?.outputFormat && streamed > 0)
+      pending.structuredBuffer = pending.structuredBuffer.slice(
+        0,
+        Math.max(0, pending.structuredBuffer.length - streamed),
+      )
+    pending.streamedBlocks = new Map()
+    pending.assistantMessageId = null
+    pending.apiRetrying = true
+    await pending.handlers.onEvent({
+      type: 'api_retry',
+      retry,
+      discarded: streamed > 0 && !pending.context?.outputFormat,
+    })
+  }
+
+  private async apiRetryResolved(pending: PendingTurn): Promise<void> {
+    if (!pending.apiRetrying) return
+    pending.apiRetrying = false
+    await pending.handlers.onEvent({ type: 'api_retry_resolved' })
+  }
+
   private recordStreamedBlock(
     pending: PendingTurn,
     index: unknown,
@@ -2709,6 +2750,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
       inner.id,
       inner.usage,
     )
+    if (!nestedMessage) await this.apiRetryResolved(pending)
     if (!nestedMessage && pending.activeSubagents.size === 0) {
       await this.beginAssistantMessage(pending, stringOrNull(inner.id))
     }

@@ -27,6 +27,7 @@ import type {
   TodoStep,
   ToolCallItem,
   TurnOrigin,
+  TurnRetryView,
   TurnView,
   UserAttachment,
   WebSearchItem,
@@ -218,6 +219,8 @@ export type Row =
       startedAt: number | null
       /** 回合在跑、没有正文在出字、没有等人答复（核心的 workingShown）：这时写“正在工作”，别的时候留空 */
       working: boolean
+      /** 回合在跑、模型请求在重试：状态行照写“正在工作”，后面接第几次和原因 */
+      retry: TurnRetryView | null
     }
 
 interface ItemCache {
@@ -474,6 +477,7 @@ export class RowBuilder {
             turn.itemIds.map((id) => view.items[id]),
             view.requests.length,
           ),
+        retry: running ? (turn.retry ?? null) : null,
       }),
     )
     return out

@@ -264,7 +264,7 @@ export async function appendNativeContext(
     env: {
       ...launch.env,
       ...hostClaudeEnvOverrides,
-      CLAUDE_CODE_MAX_RETRIES: '0',
+      // 重试用 CLI 自己的（追加上下文不调工具，重试不会重复做事）；不改用非流式再发一遍
       CLAUDE_CODE_DISABLE_NONSTREAMING_FALLBACK: '1',
     },
     spawnClaudeCodeProcess: nativeProcess.spawn.bind(nativeProcess),

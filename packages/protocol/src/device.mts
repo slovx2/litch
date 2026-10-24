@@ -133,6 +133,12 @@ export const EXTENSION = {
    * 发卡片的连接要声明了它才能 open。
    */
   clientApprovals: 'clientApprovals',
+  /**
+   * 模型请求在重试：harness 自己重试失败的模型请求时，订阅着会话的连接收到 litch/turn/apiRetry/updated
+   * （第几次、最多几次、原因；重试结束时为空），失败那次流出来的半截回答随之撤掉（api-retry.mts，
+   * 定义在 protocol/extensions/api-retry.json）。声明了它的连接才收得到这个通知。
+   */
+  apiRetry: 'apiRetry',
 } as const
 
 export type ExtensionName = (typeof EXTENSION)[keyof typeof EXTENSION]

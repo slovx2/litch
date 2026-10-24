@@ -12,7 +12,8 @@
 //   500 → internalServerError
 //   400 其余（codex 的 InvalidRequest）→ other
 //   其余带状态码的（403、404、502、503、504…，codex 的 UnexpectedStatus）→ httpConnectionFailed{httpStatusCode}
-//   没有状态码的连接错误（超时、连不上）→ httpConnectionFailed{httpStatusCode: null}
+//   没有状态码的连接错误（超时、连不上、连接被断开）→ httpConnectionFailed{httpStatusCode: null}。
+//        CLI 给连接中断也可能归成 server_error，所以先按文字认连接错误，再看这个类
 // 认不出是模型接口错误的（工具、钩子、入口自己的失败）不给，和上游一样是 null。
 
 export type CodexErrorInfo =
@@ -37,7 +38,8 @@ export interface ModelApiError {
 const OVERLOADED = /\b529\b|overloaded/i
 const CONTEXT = /prompt is too long|context (window|length)|exceeds? (the )?(maximum )?context/i
 const QUOTA = /credit balance|billing|quota|usage limit|spend limit/i
-const CONNECTION = /connection error|timed? ?out|ECONNREFUSED|ECONNRESET|ENOTFOUND|fetch failed/i
+const CONNECTION =
+  /connection (error|dropped|closed|refused|reset)|unable to connect|socket hang up|timed? ?out|ECONNREFUSED|ECONNRESET|ENOTFOUND|ETIMEDOUT|EPIPE|EAI_AGAIN|fetch failed/i
 
 export function codexErrorInfoFor(error: ModelApiError): CodexErrorInfo | null {
   const status = typeof error.status === 'number' ? error.status : null
@@ -60,8 +62,8 @@ export function codexErrorInfoFor(error: ModelApiError): CodexErrorInfo | null {
   if (status === 500) return 'internalServerError'
   if (status === 400 || category === 'invalid_request') return 'other'
   if (status !== null) return { httpConnectionFailed: { httpStatusCode: status } }
-  if (category === 'server_error') return 'internalServerError'
   if (CONNECTION.test(text)) return { httpConnectionFailed: { httpStatusCode: null } }
+  if (category === 'server_error') return 'internalServerError'
   return 'other'
 }
 

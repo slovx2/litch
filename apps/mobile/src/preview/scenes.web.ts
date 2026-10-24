@@ -207,6 +207,13 @@ export const SCENES: Scene[] = [
   },
   { id: 'mermaid', group: '对话', name: '图表', note: 'Mermaid', steps: [say('画图')] },
   {
+    id: 'retry',
+    group: '对话',
+    name: '重试中',
+    note: '模型请求在重试：状态行写第几次和原因',
+    steps: [say('重试请求')],
+  },
+  {
     id: 'report',
     group: '对话',
     name: '长报告',

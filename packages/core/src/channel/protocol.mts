@@ -23,6 +23,7 @@ import type {
   SidebarView,
   SkillOption,
   SkillProblem,
+  TurnRetryView,
   TurnStatus,
   TurnView,
   WireColor,
@@ -246,6 +247,8 @@ export type SessionOp =
       /** 回合的来历（TurnView.origin）。不带表示不变：有的入口只在回合结束时才给 */
       origin?: NonNullable<TurnView['origin']>
     }
+  /** 回合里的模型请求开始重试、又重试了一次（第几次、原因），null 是重试结束了 */
+  | { op: 'turn.retry'; turnId: string; retry: TurnRetryView | null }
   /** 加一个条目；标识已经有了就整个换掉（条目定稿时对面会给出完整的最终内容） */
   | { op: 'item.add'; turnId: string; item: ItemView }
   | { op: 'item.appendText'; itemId: string; field: 'text' | 'output'; text: string }
@@ -255,7 +258,7 @@ export type SessionOp =
    */
   | ({ op: 'item.appendOutput'; itemId: string } & SkippingOutput)
   | { op: 'item.status'; itemId: string; status: ItemStatus }
-  /** 撤掉一个条目：插进回合里的那句话没发成功 */
+  /** 撤掉一个条目：插进回合里的那句话没发成功；模型请求重试时失败那次流出来的半截回答 */
   | { op: 'item.remove'; turnId: string; itemId: string }
   | { op: 'request.add'; request: RequestView }
   | { op: 'request.remove'; requestId: string }

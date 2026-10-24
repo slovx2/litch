@@ -2,6 +2,7 @@
 // 协议条目怎么变成这些显示条目，见 projection 目录。
 // 类型是 Text 的字段可能是对面给的原文，也可能是核心自己要说的一句话（见 phrase.mts），界面按当前语言显示。
 
+import type { ApiRetryReason } from '../../protocol/src/api-retry.mjs'
 import type { SessionMentionRef } from '../../protocol/src/session-mentions.mjs'
 import type { SessionBackgroundView, TurnOrigin } from './model-background.mjs'
 import type { GoalReachedView, SessionGoalView } from './model-goal.mjs'
@@ -761,6 +762,18 @@ export interface TurnView {
   error: string | null
   /** 不是用户发起的回合是怎么开始的（后台任务结束后接着做、定时任务触发）。用户发的不带 */
   origin?: Exclude<TurnOrigin, 'user'>
+  /** 回合里的模型请求正在重试（apiRetry 扩展）。没在重试不带或是 null */
+  retry?: TurnRetryView | null
+}
+
+/** 模型请求在重试：状态行写“重试中 第几次/最多几次”和原因 */
+export interface TurnRetryView {
+  attempt: number
+  /** 最多几次；harness 没说是 null，只写第几次 */
+  maxRetries: number | null
+  reason: ApiRetryReason
+  /** 失败那次的 HTTP 状态码；连接错误没有 */
+  httpStatus: number | null
 }
 
 /**

@@ -1,4 +1,5 @@
 // 给人看的时间和时长。侧栏的行很窄，所以用最短的写法。
+import type { TurnRetryView } from '@litch/core'
 import type { Translator } from '../i18n/index.ts'
 
 const MINUTE = 60_000
@@ -33,4 +34,26 @@ export function duration(ms: number, t: Translator): string {
   const minutes = Math.floor(ms / MINUTE)
   const seconds = Math.floor((ms % MINUTE) / 1000)
   return t('duration.minutes', { m: minutes, s: String(seconds).padStart(2, '0') })
+}
+
+const RETRY_REASONS = {
+  connection: 'turn.retry.connection',
+  noResponse: 'turn.retry.noResponse',
+  overloaded: 'turn.retry.overloaded',
+  rateLimit: 'turn.retry.rateLimit',
+  server: 'turn.retry.server',
+  other: 'turn.retry.other',
+} as const
+
+/** 模型请求在重试时状态行上的那一段：重试中 2/10 · 连接中断。不知道最多几次时写第几次 */
+export function retryText(retry: TurnRetryView, t: Translator): string {
+  const progress = retry.maxRetries
+    ? t('turn.retry', { n: retry.attempt, max: retry.maxRetries })
+    : t('turn.retryBare', { n: retry.attempt })
+  const reason = t(RETRY_REASONS[retry.reason] ?? RETRY_REASONS.other)
+  const cause =
+    retry.httpStatus !== null && (retry.reason === 'server' || retry.reason === 'other')
+      ? t('turn.retry.status', { reason, status: retry.httpStatus })
+      : reason
+  return `${progress} · ${cause}`
 }

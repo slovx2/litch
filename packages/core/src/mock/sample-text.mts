@@ -67,6 +67,8 @@ export interface SampleText {
   filesReply: string
   /** 发的话里带“画图”时的回答：一张 mermaid 图，后面跟一张有语法错、画不出来的 */
   diagramReply: string
+  /** 发的话里带“重试请求”时，重试两次之后的回答 */
+  retryReply: string
   /** 发的话里带“改文件”时，改完之后说的一句 */
   editReply: string
   /** 拒绝审批时附了说明：对面听到之后说的一句。{note} 换成那句说明 */
@@ -272,6 +274,7 @@ const zh: SampleText = {
     '',
     '下面这几样不是工作区里的文件：`console.log`、`../outside/secret.txt`、读/写，还有 https://example.com/a/b.ts 这个网址。',
   ].join('\n'),
+  retryReply: '模型请求重试两次后成功，这是回答。',
   diagramReply: [
     '会话树现在的数据流是这样的，虚线是子会话停下后回到父会话的那一路：',
     '',
@@ -506,6 +509,7 @@ const en: SampleText = {
     '',
     'These are not files in the workspace: `console.log`, https://example.com/a/b.ts, `../outside/secret.txt`, read/write.',
   ].join('\n'),
+  retryReply: 'The model request succeeded after two retries. Here is the answer.',
   diagramReply: [
     "Here is how the session tree's data flows today. The dashed line is the path back to the parent once a child stops:",
     '',

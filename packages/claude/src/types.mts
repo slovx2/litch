@@ -118,6 +118,7 @@ export interface TurnRecord {
   costUsd?: number | null
 }
 
+import type { TurnApiRetry } from '../../protocol/src/api-retry.mjs'
 import type { LitchPeer } from '../../protocol/src/peer-messages.mjs'
 import type { UserInput } from '../../shared/src/types.mjs'
 
@@ -418,6 +419,11 @@ export type RuntimeEvent =
       questions: UserInputQuestion[]
     }
   | { type: 'notice'; level: 'info' | 'warning' | 'error'; message: string }
+  // CLI 自己在重试这次模型请求（api-retry.mts）。discarded：失败那次已经流出来的正文作废了（没等到助手消息），
+  // 入口把这次请求开出来的回答条目撤掉
+  | { type: 'api_retry'; retry: TurnApiRetry; discarded: boolean }
+  // 重试的请求有了回应（新一次开始出内容）
+  | { type: 'api_retry_resolved' }
   // 别的会话发来的消息进了模型（CLI 回显的 origin.kind=peer）：text 是对方的原文，
   // address 是对方的收件箱地址（uds:<套接字路径>），CLI 给了才有
   | { type: 'peer_message'; text: string; peer: LitchPeer; address?: string }

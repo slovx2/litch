@@ -42,6 +42,24 @@ test('codexErrorInfoFor：按状态码、CLI 归的类和错误文字归到 code
   assert.deepEqual(codexErrorInfoFor({ text: 'API Error: Connection error.' }), {
     httpConnectionFailed: { httpStatusCode: null },
   })
+  // 连接被断开：CLI 可能把它归成 server_error，按文字先认成连接错误（不是 500）
+  assert.deepEqual(
+    codexErrorInfoFor({
+      category: 'server_error',
+      text: 'API Error: Connection dropped (ECONNRESET)',
+    }),
+    { httpConnectionFailed: { httpStatusCode: null } },
+  )
+  assert.deepEqual(
+    codexErrorInfoFor({ category: 'unknown', text: 'API Error: Unable to connect' }),
+    {
+      httpConnectionFailed: { httpStatusCode: null },
+    },
+  )
+  assert.equal(
+    codexErrorInfoFor({ category: 'server_error', text: 'API Error: 服务出错' }),
+    'internalServerError',
+  )
   // 不是模型接口的失败不给
   assert.equal(codexErrorInfoFor({ text: '工具执行失败' }), null)
 })

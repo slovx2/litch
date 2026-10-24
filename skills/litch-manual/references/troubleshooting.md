@@ -34,6 +34,13 @@ started elsewhere" for how to make it let go. Litch picks up the change by itsel
 **A harness is "Unavailable" or "Not installed".** See `harnesses.md` → "Not installed or Unavailable".
 After fixing, `scripts/litch harness restart <device> <id>`.
 
+**A Claude Code turn shows "Retrying 2/10 · Connection lost" (or "Retrying (attempt 2)").** The model
+request failed (dropped connection, overload, server error) and Claude Code is retrying it by itself, up
+to 10 times by default; the turn keeps going and the line disappears once the request goes through. Text
+the failed attempt had already shown is withdrawn. To change the number of retries, set
+`CLAUDE_CODE_MAX_RETRIES` in the harness's environment (`0` turns retrying off). If every retry fails, the
+turn fails with the last error.
+
 **A model is unavailable or every turn fails at once.** Usually the harness's own sign-in or model
 configuration. The user checks it in the harness's own CLI (exception E3); the harness's runtime log
 (`diagnose logs`) shows the error.
