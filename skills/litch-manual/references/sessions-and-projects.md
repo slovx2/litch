@@ -261,7 +261,10 @@ woken to continue.
   dialog, Edit and start) you can turn "Wake the main session when done" off. Nothing is woken while no client is
   connected; it happens when one connects. Turns run by scheduled tasks report but do not wake.
   A sub-session you stop or archive yourself does not wake the parent either: the report notes it and
-  the parent sees it on your next message. A failed or interrupted turn's report carries its error.
+  the parent sees it on your next message. A failed or interrupted turn's report carries its error and
+  does not wake the parent (as in Claude's desktop app); it goes with your next message, or with a wake
+  another sub-session's report brings. Nothing wakes while another sub-session is still running.
+  Reports not yet handed over show at the end of the parent's conversation as soon as they arrive.
   If a sub-session finishes several turns while the parent is busy, only its latest report is handed over.
 - **Detach as a standalone session** (session menu or the "Started from …" bar at the top of a
   sub-session) cuts the link.
