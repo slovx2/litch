@@ -1687,6 +1687,7 @@ export const zhCN = {
   'browser.signIn.fillingTitle': 'Litch 正在用已存的账号登录',
   'browser.signIn.fillingNote': '填好、提交、页面换掉之前，代理碰不了这个标签。',
   'browser.signIn.fillingPhone': '手机“{name}”批准了用已存的账号登录。',
+  'browser.signIn.fillingSomePhone': '一台绑定的手机批准了用已存的账号登录。',
   'signInAsk.title': '代理请你登录网站',
   'signInAsk.task': '定时任务的回合',
   'signInAsk.noneNote': '点“我自己登录”后在浏览器面板里登录，完成后在那里点“完成，交还”。',

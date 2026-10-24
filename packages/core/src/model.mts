@@ -894,8 +894,8 @@ export interface SignInAskView {
   expiresAt: number | null
   /** 桌面端出的随机数：转给手机，手机的答复要签上它 */
   nonce: string
-  /** 要转给手机时桌面端给的（clientApprovals）；没有就不转。字段由批准那一线定 */
-  phone?: { id: string; nonce: string; desktopId: string } | null
+  /** 哪台桌面端出的（主进程放上，核心转给手机时用），界面不画 */
+  desktopId?: string | null
 }
 
 /**

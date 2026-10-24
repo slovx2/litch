@@ -160,7 +160,9 @@ function Waiting({
         <>
           {request.by && request.by !== 'desktop' ? (
             <span className="bw-signin-note" data-sign-in-phone={request.by.phoneId}>
-              {t('browser.signIn.fillingPhone', { name: request.by.name })}
+              {request.by.name
+                ? t('browser.signIn.fillingPhone', { name: request.by.name })
+                : t('browser.signIn.fillingSomePhone')}
             </span>
           ) : null}
           <span className="bw-signin-note">{t('browser.signIn.fillingNote')}</span>

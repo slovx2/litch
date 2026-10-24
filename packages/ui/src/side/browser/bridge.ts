@@ -150,8 +150,8 @@ export interface BrowserSignInRequest {
   expiresAt: number | null
   /** 桌面端出的随机数（转给手机签名用），界面不用 */
   nonce: string
-  /** 谁选的代填（filling 时有）：桌面端，或者某台手机；还没人答是 null */
-  by: 'desktop' | { phoneId: string; name: string } | null
+  /** 谁选的代填（filling 时有）：桌面端，或者某台手机（name 是给人看的手机名，可能没有）；还没人答是 null */
+  by: 'desktop' | { phoneId: string; name?: string } | null
 }
 
 /** 卡片上的一个已存账号。ref 是这张卡片里随机的编号，不是密码库的条目号 */

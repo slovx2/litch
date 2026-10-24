@@ -1781,6 +1781,7 @@ export const en: Record<MessageKey, Entry> = {
   'browser.signIn.fillingNote':
     'The agent can’t use this tab until the form is filled, submitted and the page has moved on.',
   'browser.signIn.fillingPhone': 'Phone “{name}” approved signing in with a saved account.',
+  'browser.signIn.fillingSomePhone': 'A paired phone approved signing in with a saved account.',
   'signInAsk.title': 'The agent asks you to sign in',
   'signInAsk.task': 'Scheduled task turn',
   'signInAsk.noneNote':
