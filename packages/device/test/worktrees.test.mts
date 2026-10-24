@@ -142,7 +142,7 @@ test('WT-003：从分支、从 HEAD、从当前本地状态（未提交的改动
   }
 })
 
-test('WT-004：被忽略的文件只复制 .worktreeinclude 列的和各 harness 的本地配置', async () => {
+test('WT-004：被忽略的文件只复制 .worktreeinclude 列的和各 harness 的本地配置，恢复时再复制一遍', async () => {
   const env = world()
   try {
     write(
@@ -166,6 +166,14 @@ test('WT-004：被忽略的文件只复制 .worktreeinclude 列的和各 harness
     assert.equal(existsSync(join(made.path, '.mcp.json')), true)
     assert.equal(existsSync(join(made.path, 'node_modules')), false)
     assert.equal(existsSync(join(made.path, 'not-ignored.txt')), false)
+    // 存快照删掉再建回：快照里没有被忽略的文件，恢复时照同样的规矩再复制一遍
+    write(made.path, 'work.txt', 'w\n')
+    await env.worktrees.remove(made.id)
+    await env.worktrees.restore(made.id)
+    assert.equal(readFileSync(join(made.path, 'work.txt'), 'utf8'), 'w\n')
+    assert.equal(readFileSync(join(made.path, '.env'), 'utf8'), 'TOKEN=x\n')
+    assert.equal(existsSync(join(made.path, '.claude/settings.local.json')), true)
+    assert.equal(existsSync(join(made.path, 'node_modules')), false)
   } finally {
     env.done()
   }

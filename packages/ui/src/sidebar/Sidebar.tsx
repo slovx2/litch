@@ -310,6 +310,18 @@ const SessionRow = memo(function SessionRow({
         },
       })
   }
+  // 删掉这个会话的工作树目录（会话留着）：改动存成快照，下次打开会话时建回。会话在跑时不给删
+  if (online && tree && tree.state !== 'removed' && summary.status !== 'running')
+    actions.push({
+      id: 'worktree-remove',
+      title: t('session.worktree.remove'),
+      confirm: {
+        title: t('session.worktree.remove.title'),
+        note: t('session.worktree.remove.note', { branch: tree.branch }),
+        yes: t('worktree.remove'),
+        no: t('permission.confirm.no'),
+      },
+    })
   if (online) {
     if (can?.rename !== false) actions.push({ id: 'rename', title: t('session.rename') })
     if (can?.archive !== false) actions.push({ id: 'archive', title: t('session.archive') })
@@ -319,7 +331,11 @@ const SessionRow = memo(function SessionRow({
         title: t('session.delete'),
         confirm: {
           title: t('session.delete.title'),
-          note: t('session.delete.note'),
+          // 会话是工作树的主人：目录一起删，改动不留快照（还有别的会话在用时设备会转给它，不删）
+          note:
+            tree && tree.state !== 'removed'
+              ? t('session.delete.worktree', { branch: tree.branch })
+              : t('session.delete.note'),
           yes: t('session.delete'),
           no: t('permission.confirm.no'),
         },
@@ -346,6 +362,10 @@ const SessionRow = memo(function SessionRow({
       else if (choice) place({ sectionId: choice })
     } else if (id === 'move') {
       if (choice) move(choice)
+    } else if (id === 'worktree-remove') {
+      if (!tree) return
+      setFailure(null)
+      channel.command('worktree.remove', { deviceId, id: tree.id }).catch(failed)
     } else run(id === 'archive' ? 'session.archive' : 'session.delete')
   }
   return (

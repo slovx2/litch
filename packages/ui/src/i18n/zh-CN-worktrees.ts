@@ -18,6 +18,12 @@ export const zhWorktrees = {
   'newSession.creatingWorktree': '正在新建工作树…',
   'session.worktree': '工作树：{branch}',
   'session.worktree.removed': '工作树已删除：{branch}',
+  'session.worktree.remove': '删除工作树',
+  'session.worktree.remove.title': '删除此会话的工作树？',
+  'session.worktree.remove.note':
+    '删除工作树目录，会话和分支 {branch} 保留。未提交的改动存为快照，下次打开会话时连同改动一起建回。',
+  'session.delete.worktree':
+    '设备上的会话记录将一并删除，且无法恢复。它的工作树（分支 {branch}）没有别的会话在用时也一并删除，未提交的改动不保留；分支保留。',
   'info.worktree': '工作树',
   'info.worktree.from': '从 {base} 切出',
   'info.worktree.removed': '已删除',
@@ -39,6 +45,7 @@ export const zhWorktrees = {
   'worktree.list.empty': '还没有建过工作树。',
   'worktree.list.actionFailed': '没有做成：{reason}',
   'worktree.list.ownerGone': '所属会话已不在',
+  'worktree.list.ownerArchived': '{title}（已归档）',
   'worktree.list.noOwner': '没有所属会话',
   'worktree.list.from': '从 {base} 切出',
   'worktree.state.ready': '使用中',

@@ -109,3 +109,26 @@ export function usePickedTab(key: string): string | undefined {
   useSyncExternalStore(subscribePicks, () => pickVersion)
   return picked.get(key)
 }
+
+// ---------- 要一个开在会话目录里的终端 ----------
+// 会话在工作树里时，信息栏卡片上的“终端”要的是那棵工作树里的终端，不只是把面板打开（面板开着时点它也得有反应）。
+// 每要一次加一，面板看到变了就去找或新开一个开在会话目录里的
+
+let hereAsks = 0
+const hereListeners = new Set<() => void>()
+
+const subscribeHere = (listener: () => void) => {
+  hereListeners.add(listener)
+  return () => {
+    hereListeners.delete(listener)
+  }
+}
+
+/** 打开面板，并切到（没有就新开）开在眼前会话目录里的终端 */
+export function openTerminalHere(): void {
+  hereAsks += 1
+  for (const listener of hereListeners) listener()
+  setPanelOpen(true)
+}
+
+export const useHereAsks = (): number => useSyncExternalStore(subscribeHere, () => hereAsks)

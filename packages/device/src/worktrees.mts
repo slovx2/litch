@@ -618,7 +618,8 @@ export class Worktrees {
   /**
    * 建回原路径。删到一半的（不是已删除、却带着快照引用）先删完；目录不在了的（手动删的）照删了的建回。
    * 分支在就检出分支，分支没了但有快照就从快照的父提交建回分支。有快照的：分支还在快照的父提交上，把快照里的文件放回去；
-   * 分支之后又有了新提交，把快照的改动三方应用上去（不撤掉新提交），有冲突的冲突留在工作区、快照引用留着不删
+   * 分支之后又有了新提交，把快照的改动三方应用上去（不撤掉新提交），有冲突的冲突留在工作区、快照引用留着不删。
+   * 被忽略的文件（.env 一类）不在快照和分支里，照新建时的规矩重新复制
    */
   restore(id: string): Promise<Worktree> {
     return this.serial(async () => {
@@ -652,6 +653,8 @@ export class Worktrees {
           )
         else await gitMaybe(worktree.sourceRoot, ['update-ref', '-d', worktree.snapshotRef ?? ''])
       }
+      // 快照只收没被忽略的文件：.worktreeinclude 列出的、各 harness 的本地配置照新建时那样再从源检出复制一遍
+      await this.copyIgnored(worktree.sourceRoot, worktree.path)
       this.ownerFile(worktree)
       this.host.log(`恢复了工作树 ${worktree.path}`)
       return this.update(worktree, { state: 'ready', snapshotRef: null })

@@ -1,5 +1,5 @@
 // 终端面板接进主区的那一小段：眼前这个会话算哪个工作区、开合的快捷键，和标题栏上的开合按钮。
-import { keys, type SessionSummary } from '@litch/core'
+import { keys, type SessionSummary, type WorkspaceView } from '@litch/core'
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import type { Draft, Selection } from '../app/App.tsx'
 import { useT } from '../app/appearance.ts'
@@ -14,7 +14,7 @@ const TerminalPanel = lazy(() =>
 )
 
 /**
- * 终端跟着眼前的会话走：会话在哪个工作区，面板里就是那个工作区的一组；新建对话页上看它要建在哪，
+ * 终端跟着眼前的会话走：会话在哪个工作区，面板里就是那个工作区的一组（会话在工作树里时终端开在工作树里）；新建对话页上看它要建在哪，
  * 在那一页上换设备、换工作区，面板跟着换。开着“设备”“已归档对话”这类页面时没有终端；
  * 一台设备都没有的时候也没有。
  */
@@ -26,11 +26,20 @@ function usePlace(
   const summary = useKey<SessionSummary>(
     keys.summary(selection?.deviceId ?? '', selection?.sessionId ?? ''),
   )
+  const workspaces = useKey<WorkspaceView[]>(keys.workspaces(selection?.deviceId ?? ''))
   if (page) return null
   if (draft) return { deviceId: draft.deviceId, workspaceId: draft.workspaceId }
   if (selection) {
     // 摘要还没到的那一帧先不动：不然面板会先闪到“无工作区”那一组
-    return summary ? { deviceId: selection.deviceId, workspaceId: summary.workspaceId } : null
+    if (!summary) return null
+    // 在工作树里的会话：终端开在工作树里（目录被删了的开在工作区的根）。别的会话看工作区的根
+    const tree = summary.worktree && summary.worktree.state !== 'removed'
+    const root = workspaces?.find((entry) => entry.id === summary.workspaceId)?.roots[0]
+    return {
+      deviceId: selection.deviceId,
+      workspaceId: summary.workspaceId,
+      ...(tree ? { cwd: summary.cwd, tree: true } : root ? { cwd: root, tree: false } : {}),
+    }
   }
   return null
 }
