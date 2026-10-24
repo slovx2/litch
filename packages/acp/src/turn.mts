@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { basename, extname } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { withStopNotice } from '../../shared/src/background-shell.mjs'
 import { ProtocolError } from '../../shared/src/protocol-contract.mjs'
 import type { AgentCapabilities } from './declaration.mjs'
 
@@ -55,6 +56,17 @@ export async function promptContent(
   if (!text.trim() && !images.length && !links.length)
     throw new ProtocolError(-32602, '输入不能为空')
   return { blocks: [...(text ? [{ type: 'text', text }] : []), ...links, ...images], text }
+}
+
+/** promptContent 的结果接上用户停掉的后台 shell 那段（没有就原样）：接在那段文字后面，没有文字就单独一块 */
+export function withStopNoticeBlocks(
+  prompt: { blocks: any[]; text: string },
+  notice: string | null,
+): { blocks: any[]; text: string } {
+  if (!notice) return prompt
+  const text = withStopNotice(prompt.text, notice)
+  const rest = prompt.text ? prompt.blocks.slice(1) : prompt.blocks
+  return { blocks: [{ type: 'text', text }, ...rest], text }
 }
 
 /**

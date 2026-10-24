@@ -12,6 +12,7 @@ import {
   backgroundShellEnabled,
   formatShellEvent,
   type ShellTask,
+  withStopNotice,
 } from '../../shared/src/background-shell.mjs'
 import { FilesystemRpc } from '../../shared/src/filesystem-rpc.mjs'
 import { FuzzyFileSearch, FuzzySearchSessions } from '../../shared/src/fuzzy-session.mjs'
@@ -49,7 +50,7 @@ import { type AcpThread, type AcpTurn, Projection } from './projection.mjs'
 import { dispatch } from './protocol.mjs'
 import { AcpRuntime, type AgentHandle } from './runtime.mjs'
 import { AcpStore } from './store.mjs'
-import { echoContent, promptContent } from './turn.mjs'
+import { echoContent, promptContent, withStopNoticeBlocks } from './turn.mjs'
 
 // 调试用：CHA_ACP_TRACE 指向文件时逐行记录与客户端往来的协议消息，默认关闭。
 const tracePath = process.env.CHA_ACP_TRACE
@@ -859,7 +860,13 @@ export class AcpServer {
     if (clientId) live.submitted.set(clientId, turn)
     this.save(live, true)
     this.drive(live, turn, async (agent) => {
-      const { blocks, text } = await promptContent(input, agent.caps)
+      const prompt = await promptContent(input, agent.caps)
+      // 上一轮之后用户停掉的后台 shell 接在这句话后面（不另开回合，只交一次）。记下的是 agent 收到的整句，
+      // 回放时照它找回客户端发来的样子，接上的那段不画出来
+      const { blocks, text } = withStopNoticeBlocks(
+        prompt,
+        this.shells?.takeStopNotice(threadId) ?? null,
+      )
       this.remember(threadId, text, input, clientId)
       return blocks
     })
@@ -918,7 +925,7 @@ export class AcpServer {
    * 记成后台任务唤醒的（不画成用户的话）。正在跑一轮的等它收尾再开（ACP 回合中途不能插话）
    */
   async wake(threadId: string, tasks: ShellTask[]): Promise<void> {
-    const text = await formatShellEvent(tasks)
+    const event = await formatShellEvent(tasks)
     for (let attempt = 0; attempt < 600; attempt++) {
       if (this.closed) return
       const live = await this.load(threadId)
@@ -933,7 +940,12 @@ export class AcpServer {
         const turn = live.projection.begin(notify, Date.now(), 'backgroundTask')
         live.starter = null
         this.save(live, true)
-        this.drive(live, turn, async () => [{ type: 'text', text }])
+        this.drive(live, turn, async () => [
+          {
+            type: 'text',
+            text: withStopNotice(event, this.shells?.takeStopNotice(threadId) ?? null),
+          },
+        ])
         return true
       })
       if (started) return

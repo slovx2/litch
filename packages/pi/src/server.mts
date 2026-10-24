@@ -19,6 +19,7 @@ import {
   SHELL_START_TOOL,
   type ShellTask,
   shellCwd,
+  withStopNotice,
 } from '../../shared/src/background-shell.mjs'
 import {
   clientToolNamespaces,
@@ -202,7 +203,7 @@ export class PiServer {
     } catch {
       return
     }
-    const text = await formatShellEvent(tasks)
+    const event = await formatShellEvent(tasks)
     while (!this.closing) {
       const busy = this.active.get(threadId)
       if (busy) {
@@ -217,6 +218,8 @@ export class PiServer {
         // Pi 同步标成在跑（之后 ensureIdle 拒掉客户端的 turn/start），agent_start 时 turn.mts 取走来历。
         // 整轮跑完才返回，不在锁里等
         this.pendingOrigins.set(threadId, 'backgroundTask')
+        // 上一轮之后用户停掉的也一起说（只说一次）
+        const text = withStopNotice(event, this.shells?.takeStopNotice(threadId) ?? null)
         live.session
           .sendCustomMessage(
             { customType: SHELL_EVENT_MESSAGE, content: text, display: false },
@@ -234,6 +237,19 @@ export class PiServer {
       // Pi 自己还没闲下来（压缩、扩展在等输入）：过一会儿再看
       await new Promise((resolve) => setTimeout(resolve, WAKE_RETRY_MS))
     }
+  }
+  /**
+   * 回合开头：上一轮之后用户停掉的后台 shell，作为一条不显示的消息记进 Pi 的会话（不开回合），
+   * 这一轮的模型调用看得到，只交一次。Pi 这时没在跑，消息直接落进会话文件
+   */
+  async deliverStopNotice(threadId: string, session: LiveSession['session']): Promise<void> {
+    const notice = this.shells?.takeStopNotice(threadId)
+    if (!notice) return
+    await session.sendCustomMessage({
+      customType: SHELL_EVENT_MESSAGE,
+      content: notice,
+      display: false,
+    })
   }
   /** Pi 自己开了一轮（不是客户端发起的）：要是在等后台 shell 的唤醒，这一轮记成它开的。返回来历 */
   takeOrigin(threadId: string, turnId: string): LitchTurnOrigin | undefined {

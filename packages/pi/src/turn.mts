@@ -449,6 +449,7 @@ export async function runTurn(server: PiServer, active: ActiveTurn, params: any)
       thread.model = params.model
     }
     if (params.effort) session.setThinkingLevel(params.effort)
+    await server.deliverStopNotice(thread.id, session)
     const sent = active.pending[0]
     session.sessionManager.appendCustomEntry('codex-harness-adapter-turn', {
       id: turn.id,

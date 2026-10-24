@@ -213,7 +213,7 @@ test('BG-SHELL-PI-001：起后台命令、回合结束、命令跑完自己开�
   )
 })
 
-test('BG-SHELL-PI-002：用户经 backgroundTerminals 停掉的不唤醒；列得出在跑的', {
+test('BG-SHELL-PI-002：用户经 backgroundTerminals 停掉的不唤醒，下一轮告诉模型一次；列得出在跑的', {
   timeout: 60_000,
 }, async () => {
   await scene(
@@ -240,6 +240,19 @@ test('BG-SHELL-PI-002：用户经 backgroundTerminals 停掉的不唤醒；列�
       assert.equal(completed(litch).length, 1, '没有唤醒')
       assert.equal(bodies.length, 2)
       assert.deepEqual((await ok(litch, 'thread/backgroundTerminals/list', { threadId })).data, [])
+      // 用户的下一句：模型这一轮看得到“被用户停了”，只一次；再下一轮不再追加
+      const notices = (body: any) =>
+        JSON.stringify(body.messages).split('was stopped by the user').length - 1
+      await ok(litch, 'turn/start', { threadId, input: [{ type: 'text', text: '接着说' }] })
+      await until('第二轮结束', () => completed(litch).length === 2)
+      assert.equal(notices(bodies[2]), 1)
+      assert.match(JSON.stringify(bodies[2].messages), /shell-1 was stopped by the user/)
+      await ok(litch, 'turn/start', { threadId, input: [{ type: 'text', text: '再说' }] })
+      await until('第三轮结束', () => completed(litch).length === 3)
+      assert.equal(notices(bodies.at(-1)), 1, '记在历史里，不重复加')
+      // 画出来的会话里没有这段
+      const read = await ok(litch, 'thread/read', { threadId, includeTurns: true })
+      assert.doesNotMatch(JSON.stringify(read.thread.turns), /stopped by the user/)
     },
   )
 })
