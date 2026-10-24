@@ -210,7 +210,9 @@ export function teeConsole(log: DesktopLog): void {
 /** 标准输出、标准错误的管道断了（对面已退出）时写它们会报的错 */
 export function isBrokenPipe(error: unknown): boolean {
   const code = (error as { code?: unknown } | null)?.code
-  return code === 'EPIPE' || code === 'ERR_STREAM_DESTROYED' || code === 'ERR_STREAM_WRITE_AFTER_END'
+  return (
+    code === 'EPIPE' || code === 'ERR_STREAM_DESTROYED' || code === 'ERR_STREAM_WRITE_AFTER_END'
+  )
 }
 
 /**
