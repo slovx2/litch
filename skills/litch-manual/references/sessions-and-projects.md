@@ -42,7 +42,13 @@ explain it:
   branch, the current local state (current commit plus uncommitted changes and new files), or any
   local or remote branch. The choice is remembered per device and project. Such a session shows a
   branch mark in the sidebar and a Worktree card in the info rail (branch, base, path; Terminal, Copy
-  path, and Restore when the folder was removed). Device settings → Worktrees lists every worktree on
+  path, and Restore when the folder was removed). The terminal panel follows the session: in such a
+  session it switches to a terminal opened in the worktree (opening one if needed; the card's
+  Terminal does the same), and new terminals open there; other sessions of the project switch back to
+  one at the project root. The session's menu has "Delete worktree": it deletes the folder and keeps
+  the session and branch (uncommitted changes saved as a snapshot, brought back when the session is
+  opened again). Ignored files copied when the worktree was made (`.worktreeinclude`, local harness
+  settings) are copied again when it is restored. Device settings → Worktrees lists every worktree on
   the device: Remove deletes the folder and keeps the branch (uncommitted changes saved as a snapshot,
   or discarded), Restore brings a removed one back with its snapshot, Remove with branch deletes both
   for good. The Worktree card also has "Merge <base>": it merges new commits from the branch the
@@ -55,7 +61,7 @@ explain it:
   that folder); reopening or unarchiving the session, or a sharing session, brings the folder back
   (changes made on the branch since then are kept; a clash is left as conflicts to resolve). Deleting
   the session hands the worktree to a session still sharing it, otherwise deletes the folder without
-  a snapshot.
+  a snapshot (the confirmation says so).
   Where worktrees go, how branches are named and automatic cleanup: `device-settings.md`.
 - **While a turn runs**: messages sent are queued; "Say it now" steers the running turn; Stop
   interrupts it.

@@ -148,7 +148,11 @@ export function sessionsStep(said, { nameOf, results }) {
 const HAND_OFF_PLAN =
   '相关文件都在这个项目里，先读一遍 README 和目录结构再动手；做完的标准是改动能通过已有的检查，结束时用两三句话说明改了什么、怎么验证的、还剩什么没做。'
 
-/** 新任务：先出 offer 卡等用户选；选了新会话再 accept 补简报 */
+/** 选了新会话时补的背景：新开的会话看不到这边的对话，设备进程要求 fresh 的简报带够宽的背景（同上，至少 80） */
+const OFFER_BACKGROUND =
+  '这是隔离环境里的验收项目，用户在原来的会话里提了一件和那边的工作无关的新任务，在卡上选了开新会话；原来的会话没做过和它相关的决定，也没有别的约束。'
+
+/** 新任务：先出 offer 卡等用户选；选了新会话再 accept 补简报和背景 */
 function offerStep(title, { nameOf, results }) {
   if (results.length === 0) {
     const name = nameOf(SPACES.会话, 'start')
@@ -172,6 +176,7 @@ function offerStep(title, { nameOf, results }) {
       args: {
         proposal_id: answered.proposal_id,
         prompt: `新会话的任务是${title}。${HAND_OFF_PLAN}`,
+        background: OFFER_BACKGROUND,
       },
     },
   }

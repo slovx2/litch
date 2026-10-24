@@ -39,9 +39,20 @@ function useWorktrees(device: DeviceView): WorktreesTopicView | undefined {
   return able ? view : undefined
 }
 
+/** 主人会话归档了的，不在会话列表里：读一次这台设备的已归档会话，好写出它是谁 */
+function useArchivedOnce(device: DeviceView, wanted: boolean): void {
+  const { channel } = useServices()
+  const online = device.connection === 'online'
+  useEffect(() => {
+    if (wanted && online)
+      channel.command('device.loadArchived', { deviceId: device.id }).catch(() => {})
+  }, [channel, device.id, online, wanted])
+}
+
 export function WorktreeList({ device }: { device: DeviceView }) {
   const t = useT()
   const view = useWorktrees(device)
+  useArchivedOnce(device, Boolean(view?.list?.some((entry) => entry.ownerSessionId)))
   if (!device.worktrees) return null
   let body: React.ReactNode
   if (device.connection !== 'online')
@@ -78,6 +89,8 @@ function WorktreeRow({ deviceId, worktree }: { deviceId: string; worktree: Workt
   const { channel } = useServices()
   const t = useT()
   const owner = useKey<SessionSummary>(keys.summary(deviceId, worktree.ownerSessionId ?? ''))
+  const archived = useKey<SessionSummary[] | null>(keys.archived(deviceId))
+  const shelved = owner ? null : archived?.find((entry) => entry.id === worktree.ownerSessionId)
   const [asking, setAsking] = useState<Asking>(null)
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
@@ -144,9 +157,11 @@ function WorktreeRow({ deviceId, worktree }: { deviceId: string; worktree: Workt
         <span className="ell">
           {owner
             ? t.text(owner.title)
-            : worktree.ownerSessionId
-              ? t('worktree.list.ownerGone')
-              : t('worktree.list.noOwner')}
+            : shelved
+              ? t('worktree.list.ownerArchived', { title: t.text(shelved.title) })
+              : worktree.ownerSessionId
+                ? t('worktree.list.ownerGone')
+                : t('worktree.list.noOwner')}
         </span>
         <span>{t('worktree.list.from', { base: baseName(worktree.baseRef, t) })}</span>
         <span className="mono ell">{worktree.path}</span>

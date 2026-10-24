@@ -1,12 +1,12 @@
 // 信息栏里的工作树卡片：会话在设备层建的工作树里时出来。写分支、起点、工作树路径；
-// 能复制路径、打开终端（终端本来就以会话目录为根）、把基础分支的新提交合进来（不推送）；
+// 能复制路径、打开开在工作树里的终端、把基础分支的新提交合进来（不推送）；
 // 目录被删了的（改动留了快照）能建回来。
 import type { SessionWorktreeView, WorktreeSyncView } from '@litch/core'
 import { useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { Caret, Icon } from '../app/icons.tsx'
 import { useServices } from '../app/services.tsx'
-import { setPanelOpen } from '../terminal/panel.ts'
+import { openTerminalHere } from '../terminal/panel.ts'
 import { useToggle } from '../transcript/state.ts'
 import { baseName } from './labels.ts'
 
@@ -120,7 +120,7 @@ export function RailWorktree({
                 type="button"
                 className="btn ghost"
                 data-act="worktree-terminal"
-                onClick={() => setPanelOpen(true)}
+                onClick={openTerminalHere}
               >
                 <Icon name="term" small />
                 {t('worktree.terminal')}

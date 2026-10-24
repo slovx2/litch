@@ -20,6 +20,12 @@ export const enWorktrees: Record<keyof typeof zhWorktrees, Entry> = {
   'newSession.creatingWorktree': 'Creating worktree…',
   'session.worktree': 'Worktree: {branch}',
   'session.worktree.removed': 'Worktree removed: {branch}',
+  'session.worktree.remove': 'Delete worktree',
+  'session.worktree.remove.title': 'Delete this session’s worktree?',
+  'session.worktree.remove.note':
+    'Deletes the worktree folder. The session and branch {branch} stay. Uncommitted changes are saved as a snapshot and come back when the session is opened again.',
+  'session.delete.worktree':
+    'The session record on the device is also deleted. This can’t be undone. Its worktree (branch {branch}) is deleted too unless another session uses it, and uncommitted changes are not kept. The branch stays.',
   'info.worktree': 'Worktree',
   'info.worktree.from': 'from {base}',
   'info.worktree.removed': 'Removed',
@@ -42,6 +48,7 @@ export const enWorktrees: Record<keyof typeof zhWorktrees, Entry> = {
   'worktree.list.empty': 'No worktrees yet.',
   'worktree.list.actionFailed': 'That didn’t work: {reason}',
   'worktree.list.ownerGone': 'Session no longer exists',
+  'worktree.list.ownerArchived': '{title} (archived)',
   'worktree.list.noOwner': 'No session',
   'worktree.list.from': 'from {base}',
   'worktree.state.ready': 'In use',

@@ -300,7 +300,7 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
   // 末尾三项总是这三样。设备上能整理侧栏的话前面多出“置顶”“移到组…”和“移到项目…”：
   // 模拟核心里一定有；真实入口上看对面有没有这组方法、有没有别的项目。
   // 设备声明了会话树的话还有“派出子会话…”，支持定时任务的话还有“为此会话创建定时任务”
-  // （模拟核心的本机两样都声明了；真实入口看对面）。“在输入框里引用”总在
+  // （模拟核心的本机两样都声明了；真实入口看对面）。“在输入框里引用”总在；会话在设备层建的工作树里时还有“删除工作树”
   const spawnable = names.includes('派出子会话…')
   const schedulable = names.includes('为此会话创建定时任务')
   const quotable = names.includes('在输入框里引用')
@@ -308,7 +308,10 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
     .slice(0, -3)
     .filter(
       (name) =>
-        name !== '派出子会话…' && name !== '为此会话创建定时任务' && name !== '在输入框里引用',
+        name !== '派出子会话…' &&
+        name !== '为此会话创建定时任务' &&
+        name !== '在输入框里引用' &&
+        name !== '删除工作树',
     )
     .join('|')
   const contextMenu: SessionProbe['contextMenu'] = {

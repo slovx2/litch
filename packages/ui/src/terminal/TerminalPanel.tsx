@@ -31,6 +31,7 @@ import {
   pickTab,
   setPanelHeight,
   setPanelOpen,
+  useHereAsks,
   usePanel,
   usePickedTab,
 } from './panel.ts'
@@ -41,6 +42,13 @@ import { type TabActions, TerminalTabs, terminalName } from './TerminalTabs.tsx'
 export interface TerminalPlace {
   deviceId: string
   workspaceId: string | null
+  /**
+   * 眼前的会话该看哪个目录里的终端：在设备层建的工作树里的是会话目录，别的是工作区的根。
+   * 打开面板、换到这个会话时切到开在这里的那个终端
+   */
+  cwd?: string | null
+  /** cwd 是工作树：新开的终端开在这里，一个都没有时顺手新开一个。工作区的根照旧（新开的本来就在根上） */
+  tree?: boolean
 }
 
 const NONE: string[] = []
@@ -151,7 +159,13 @@ export function TerminalPanel({
     opening.current = true
     const { rows, cols } = sessions.sizeHint()
     channel
-      .command('terminal.open', { deviceId, workspaceId: place.workspaceId, rows, cols })
+      .command('terminal.open', {
+        deviceId,
+        workspaceId: place.workspaceId,
+        cwd: place.tree ? (place.cwd ?? null) : null,
+        rows,
+        cols,
+      })
       .then(
         ({ terminalId }) => {
           wantFocus.current = true
@@ -206,6 +220,29 @@ export function TerminalPanel({
     if (groups && ids.length === 0 && online) create()
     else sessions.focus()
   }, [panel.open, place, groups, ids.length, online, create, sessions])
+
+  // 面板开着时看的应当是开在会话目录里的终端：打开面板、换到这个会话、点信息栏卡片上的“终端”时切过去；
+  // 会话在工作树里而一个都没有，就新开一个。人后来自己点了别的标签不拽回来（只在这几样变了的时候看一次）
+  const here = place?.cwd ?? null
+  const tree = place?.tree === true
+  const asks = useHereAsks()
+  const ready = Boolean(groups) && online
+  const idsNow = useRef(ids)
+  idsNow.current = ids
+  // biome-ignore lint/correctness/useExhaustiveDependencies: asks 只用来在每次要的时候再看一次
+  useEffect(() => {
+    if (!visible || !here || !ready) return
+    const info = (id: string) => replica.store.get<TerminalInfo>(keys.terminal(deviceId, id))
+    if (activeId && info(activeId)?.cwd === here) return
+    const found = idsNow.current.findLast((id) => info(id)?.cwd === here)
+    if (found) {
+      pickTab(gkey, found)
+      return
+    }
+    if (!tree) return
+    wantFocus.current = true
+    create()
+  }, [visible, here, tree, ready, asks, deviceId, gkey, replica, create])
 
   const actions: TabActions = useMemo(
     () => ({
