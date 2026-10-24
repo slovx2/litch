@@ -161,6 +161,7 @@ export function SettingsBar({ options, settings, fresh, onChange }: SettingsBarP
           kind="model"
           label={t('composer.model')}
           value={settings.model}
+          fallback={settings.model ? options.hiddenTitles?.[settings.model] : undefined}
           // 只列名字，不带简介：清单长的时候一眼找得到（所有 harness 一样）
           options={options.models.map((entry) => ({ id: entry.id, title: entry.title }))}
           onPick={pickModel}

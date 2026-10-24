@@ -1462,6 +1462,14 @@ test('HC-CLAUDE-010：经适配器调 litch/harness/*，默认模型以 settings
     const models = (await client.request('model/list', {})).data
     const corp = models.find((entry: any) => entry.id === 'corp/glm-4.6')
     assert.equal(corp?.displayName, '[corp] GLM 4.6', JSON.stringify(models))
+    // 有会话用着它时删掉这家：补的那一行还在（会话报的型号找得到），但藏起来，新建页不会再照记着的选它
+    await client.request('thread/start', { cwd: home, model: 'corp/glm-4.6' })
+    await call('litch/harness/providers/remove', { providerId: 'corp' })
+    const removed = (await client.request('model/list', {})).data.find(
+      (entry: any) => entry.id === 'corp/glm-4.6',
+    )
+    assert.equal(removed?.hidden, true, JSON.stringify(removed))
+    assert.equal(removed?.displayName, '[corp] glm-4.6')
     const activate = await client.raw('litch/harness/providers/activate', {
       harness: 'claude-code',
       providerId: 'corp',

@@ -28,8 +28,9 @@ interface PickerProps {
   kind?: string
   /** 这个选择器选的是什么，给读屏用，也是按钮的提示 */
   label: string
-  /** 当前的值。选项里没有它的时候照原样显示 */
+  /** 当前的值。选项里没有它的时候显示 fallback，没有 fallback 照原样显示 */
   value: string | null
+  fallback?: string | undefined
   options: PickerOption[]
   onPick(id: string): void
   /**
@@ -40,7 +41,7 @@ interface PickerProps {
 }
 
 /** 底栏上的一个选择器：一个显示当前值的按钮，点开是往上弹的选项列表 */
-export function Picker({ kind, label, value, options, onPick, search }: PickerProps) {
+export function Picker({ kind, label, value, fallback, options, onPick, search }: PickerProps) {
   const t = useT()
   /** 正在等用户确认的那一项 */
   const [asking, setAsking] = useState<PickerOption | null>(null)
@@ -79,7 +80,7 @@ export function Picker({ kind, label, value, options, onPick, search }: PickerPr
     if (option.id !== value) onPick(option.id)
   }
 
-  const display = current?.title ?? value ?? label
+  const display = current?.title ?? fallback ?? value ?? label
   return (
     <div className="pick" ref={root} data-kind={kind}>
       <button
@@ -89,7 +90,7 @@ export function Picker({ kind, label, value, options, onPick, search }: PickerPr
         // 当前值自己就以方括号开头（带供应商前缀的模型，“[Account] Opus”）：皮肤别再套一层
         data-bracketed={display.startsWith('[') ? '' : undefined}
         title={label}
-        aria-label={`${label}：${current?.title ?? value ?? ''}`}
+        aria-label={`${label}：${current?.title ?? fallback ?? value ?? ''}`}
         aria-haspopup="listbox"
         aria-expanded={open}
         onClick={() => setOpen(!open)}

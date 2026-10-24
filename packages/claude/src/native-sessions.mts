@@ -85,11 +85,12 @@ const markOf = (info: NativeSessionInfo): string => `${info.fileSize ?? -1}:${in
 const seconds = (ms: number | undefined, fallback: number): number =>
   typeof ms === 'number' && Number.isFinite(ms) ? Math.floor(ms / 1000) : fallback
 
-/** 会话的名字：用户起的名字，其次是 CLI 自己总结的（和第一句话一样就不算名字） */
+/**
+ * 会话的名字：SDK 的 customTitle 已经是“用户起的，没有就 CLI 起的”。summary 不能用：没有标题时它是 CLI 记的最后一句
+ * （last-prompt），会把会话改名成后来说的某一句，连同 Litch 拼在正文后面的那几段
+ */
 function nameOf(info: NativeSessionInfo): string | null {
-  if (info.customTitle?.trim()) return info.customTitle.trim()
-  const summary = info.summary?.trim()
-  return summary && summary !== info.firstPrompt?.trim() ? summary : null
+  return info.customTitle?.trim() || null
 }
 
 export interface NativeSessionsHost {
