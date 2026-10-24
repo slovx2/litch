@@ -22,6 +22,15 @@
 // 输入区的高度也会跟着皮肤变，视口自己变高变矮的那几个像素也要算进去。
 // 这一阵子里用户自己滚了，就不再盯，照他滚到的地方来。
 //
+// 换视图（精简、详细，view.ts）也这么办：步骤组、条目一下子全展开或全收起，视口里每一块都在变。
+// 变的全在过程里（整段过程、步骤组、条目），所以先盯视口里过程外面的行（用户消息、回答、回合结尾）：
+// 过程在它上面展开就往上长，在它下面就往下长，盯住的那行不动。挑哪一行：离视口上方四分之一处最近的那行
+// （人多半在读那一带；挑最靠上的那行的话，它和下面正读着的话之间的过程一展开，正读着的就被推下去）。
+// 视口里没有过程外面的行，才盯过程里最靠上的那一行。
+// 从详细换回精简，过程里的行可能整个收没了，所以换之前把视口里露着的行都记下来，换完盯第一个还在的；
+// 一个都不在了（整屏都在一个收起来的步骤组里），退到它所在的步骤组、整段过程的那一行，摆在原来的位置，
+// 原来在视口上面就摆到视口顶上。
+//
 // 滚到靠近最上面时收起一块：滚动范围变小，浏览器在排版时就先把滚动位置夹回范围里，补偿要从夹之前的位置算（见 shift）。
 //
 // 补不了的情况：收起的高度比下面剩的内容还多（比如贴着底部收起一大块），滚动位置已经到头了，
@@ -38,6 +47,7 @@ import {
   useState,
 } from 'react'
 import { onAppearanceChange } from '../app/appearance.ts'
+import { onViewSwitch } from './view.ts'
 
 /** 离底部不超过这么多像素算“在底部” */
 const AT_BOTTOM = 1
@@ -53,11 +63,20 @@ interface Hold {
   fromBottom: number
 }
 
-interface Steady {
+interface Mark {
   element: Element
+  /** 它的上边缘该在的纵坐标（窗口里） */
   top: number
+}
+
+interface Steady {
+  /** 盯哪一行：排在前面的还在页面里就盯它 */
+  marks: Mark[]
   scrollTop: number
 }
+
+const markOf = (steady: Steady): Mark | undefined =>
+  steady.marks.find((mark) => mark.element.isConnected)
 
 /** rows 里从头数，连续满足条件的有多少个。条件必须是“前一段都满足、后一段都不满足” */
 function countWhile(rows: NodeListOf<Element>, test: (row: Element) => boolean): number {
@@ -177,9 +196,10 @@ export function useTranscriptScroll(sessionKey: string): TranscriptScroll {
     // 外观正在变：把盯着的那一行放回它在屏幕上原来的位置（它要是已经不在页面里了，就照平时的算）。
     // 刚点过的那一行优先
     const steady = steadied.current
+    const mark = steady ? markOf(steady) : undefined
     const scroller = scrollerRef.current
-    if (!pin && steady?.element.isConnected && scroller) {
-      const drift = steady.element.getBoundingClientRect().top - steady.top
+    if (!pin && steady && mark && scroller) {
+      const drift = mark.element.getBoundingClientRect().top - mark.top
       // 不到半个像素的不追：滚动位置会被取整到设备像素，追它只会来回抖
       if (Math.abs(drift) >= 0.5) {
         scroller.scrollTop += drift
@@ -265,6 +285,22 @@ export function useTranscriptScroll(sessionKey: string): TranscriptScroll {
     }
   }, [compensate, observe])
 
+  /** 接下来这一阵子盯住这几行（排前面的优先），版面定下来再放手 */
+  const steadyOn = useCallback((held: Steady) => {
+    steadied.current = held
+    const since = performance.now()
+    const release = () => {
+      if (steadied.current === held) steadied.current = null
+    }
+    // 先过一帧（样式重算了，字体才开始取），等字体到齐，凑够时间，再过两帧让版面定下来
+    requestAnimationFrame(() => {
+      void document.fonts.ready.then(() => {
+        const rest = Math.max(0, STEADY_MS - (performance.now() - since))
+        setTimeout(() => requestAnimationFrame(() => requestAnimationFrame(release)), rest)
+      })
+    })
+  }, [])
+
   // 外观变了：盯住变之前视口里最靠上的那一行。贴在底部的时候没有要盯的，照旧由反向列布局自己保持。
   // 这里只是换一下“盯谁”，不读版面：属性刚换、版面还没重排，记着的距离都还是换之前的，正好拿来比
   useEffect(
@@ -274,23 +310,51 @@ export function useTranscriptScroll(sessionKey: string): TranscriptScroll {
         if (!scroller || !upper.current || follow.current) return
         // 连着换（上一次的还没定下来）：接着盯原来那一行、原来的位置，不重新认，免得一次次认出来的零头越积越多
         const kept = steadied.current
-        const held: Steady = kept?.element.isConnected
-          ? { ...kept }
-          : { element: upper.current.element, top: upperTop.current, scrollTop: scroller.scrollTop }
-        steadied.current = held
-        const since = performance.now()
-        const release = () => {
-          if (steadied.current === held) steadied.current = null
-        }
-        // 先过一帧（样式重算了，字体才开始取），等字体到齐，凑够时间，再过两帧让版面定下来
-        requestAnimationFrame(() => {
-          void document.fonts.ready.then(() => {
-            const rest = Math.max(0, STEADY_MS - (performance.now() - since))
-            setTimeout(() => requestAnimationFrame(() => requestAnimationFrame(release)), rest)
-          })
-        })
+        steadyOn(
+          kept && markOf(kept)
+            ? { ...kept }
+            : {
+                marks: [{ element: upper.current.element, top: upperTop.current }],
+                scrollTop: scroller.scrollTop,
+              },
+        )
       }),
-    [],
+    [steadyOn],
+  )
+
+  // 换视图：页面还没重画，这时把视口里露着的行和退路记下来（见文件开头）。贴在底部的照旧不用管
+  useEffect(
+    () =>
+      onViewSwitch((sessionKey) => {
+        const scroller = scrollerRef.current
+        const content = contentRef.current
+        if (sessionKey !== shown.current || !scroller || !content || !armed.current) return
+        if (follow.current) return
+        const view = scroller.getBoundingClientRect()
+        const outside: Mark[] = []
+        const inside: Mark[] = []
+        for (const row of content.querySelectorAll('[data-anchor]')) {
+          const box = row.getBoundingClientRect()
+          if (box.bottom <= view.top || box.top >= view.bottom) continue
+          ;(row.closest('.proc') ? inside : outside).push({ element: row, top: box.top })
+        }
+        const reading = view.top + view.height / 4
+        outside.sort((a, b) => Math.abs(a.top - reading) - Math.abs(b.top - reading))
+        const marks = [...outside, ...inside]
+        const first = inside[0]?.element
+        // 退路：最靠上那一行所在的步骤组的汇总行、回合里收起整段过程的那一行
+        const fallbacks = [
+          first?.closest('.steps')?.querySelector(':scope > .steps-head'),
+          first?.closest('.turn')?.querySelector('.proc-head'),
+          first?.closest('.turn')?.querySelector(':scope > [data-anchor^="t:"]'),
+        ]
+        for (const element of fallbacks) {
+          if (!element) continue
+          marks.push({ element, top: Math.max(element.getBoundingClientRect().top, view.top) })
+        }
+        if (marks.length > 0) steadyOn({ marks, scrollTop: scroller.scrollTop })
+      }),
+    [steadyOn],
   )
 
   const toBottom = useCallback(() => {

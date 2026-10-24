@@ -5,6 +5,7 @@ import { MachineMarker } from '../machine/MachineMarker.tsx'
 import { SideToggle } from '../side/SideSlot.tsx'
 import { SidebarToggle } from '../sidebar/SidebarFrame.tsx'
 import { TerminalToggle } from '../terminal/TerminalSlot.tsx'
+import { SessionMenu } from '../transcript/ViewMenu.tsx'
 import type { Draft, Page, Selection } from './App.tsx'
 import { useT } from './appearance.ts'
 import { badgeOf, downHarness, downText, nameOf, wireStyle } from './device.ts'
@@ -67,6 +68,10 @@ export function TitleBar({
               </span>
             ) : null}
             {peek ? <span className="pill mute">{t('archived.badge')}</span> : null}
+            {/* 开着一个会话（含只读地看已归档的）：标题后面是这个会话的菜单（对话区的两档视图） */}
+            {summary && !draft ? (
+              <SessionMenu deviceId={deviceId} sessionId={peek?.sessionId ?? sessionId} />
+            ) : null}
           </>
         ) : (
           <b>

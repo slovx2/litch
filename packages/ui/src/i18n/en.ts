@@ -1748,4 +1748,12 @@ export const en: Record<MessageKey, Entry> = {
   'compaction.automatic': 'Context was nearly full and got compacted',
   'compaction.interrupted': 'Compaction didn’t finish',
   'notice.unknownItem': 'Unsupported item type: {type}',
+  // 对话区的两档视图（transcript/view.ts），在标题栏会话标题后面的菜单里切
+  'sessionMenu.title': 'Session menu',
+  'transcriptView.title': 'Transcript view',
+  'transcriptView.compact': 'Compact',
+  'transcriptView.compact.note':
+    'Steps fold into summary lines; the process folds when a turn ends',
+  'transcriptView.verbose': 'Verbose',
+  'transcriptView.verbose.note': 'Every step, tool input and output, and thought stays expanded',
 }

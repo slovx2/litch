@@ -52,8 +52,9 @@ import { FileLinksProvider, useSessionFileLinks } from './FileLinks.tsx'
 import { AgentAnswer, PlanCard, UserMessage } from './messages.tsx'
 import { ProcessHead, ProcessParts } from './process.tsx'
 import { PinProvider, useTranscriptScroll } from './scroll.ts'
-import { TurnTouch, touchTurn, useToggle, useTurnTouched } from './state.ts'
+import { TurnTouch, touchTurn, useFold, useTurnTouched } from './state.ts'
 import { TodoCard } from './Todo.tsx'
+import { useTranscriptView } from './view.ts'
 
 interface SessionRef {
   deviceId: string
@@ -242,12 +243,17 @@ const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { 
   const todoInRail = useRailHasTodo(sessionKey)
   // 回合里还有没做完的子代理时不自动收（状态以子线程为准，见 tree/agent-view.tsx）
   const agentsRunning = useAgentsUnfinished(deviceId, sessionId, turnId)
-  const [open, setOpen] = useToggle(
+  // 详细视图里整段过程一直开着，回合结束也不收（useFold）
+  const [open, setOpen] = useFold(
     sessionKey,
     `p:${turnId}`,
     !processFolded(settled, touched, agentsRunning),
   )
-  const touch = useCallback(() => touchTurn(sessionKey, turnId), [sessionKey, turnId])
+  // 详细视图里点开什么都不算“手动展开过”：切回精简时照常自动收
+  const verbose = useTranscriptView(sessionKey) === 'verbose'
+  const touch = useCallback(() => {
+    if (!verbose) touchTurn(sessionKey, turnId)
+  }, [sessionKey, turnId, verbose])
   // 收尾区是看着回合结束才出来的（这里见过它在跑、在跑时还没有收尾区）：滑进来，读历史、滚回来时不动
   const seen = useRef({ running: false, tail: false })
   const hasTail = blocks.some((block) => block.type === 'tail')

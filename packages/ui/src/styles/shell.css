@@ -59,6 +59,42 @@
   color: var(--ink);
 }
 
+/* 会话标题后面的“···”（transcript/ViewMenu.tsx）：往下弹、靠左对齐，样子和侧栏的“更多”一样 */
+.tb-menu {
+  position: relative;
+  flex: none;
+}
+.tb-menu > .ibtn[aria-expanded="true"] {
+  background: var(--hover);
+  color: var(--ink);
+}
+.tb-menu .pick-pop.down {
+  left: 0;
+  right: auto;
+  width: 248px;
+}
+.tb-menu .pick-title {
+  white-space: nowrap;
+}
+.tb-menu .pick-opt b {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tb-menu .pick-mark {
+  flex: none;
+  display: inline-flex;
+  width: 12px;
+  height: 12px;
+}
+.tb-menu .pick-mark > svg.ic {
+  width: 12px;
+  height: 12px;
+}
+.tb-menu .pick-opt > span {
+  padding-left: 18px;
+}
+
 /* ---------- 侧栏 ---------- */
 /* 宽度由组件写在元素上（sidebar/state.ts 的 widthCss：记着的宽度，窗口窄的时候自己收窄） */
 .sb {

@@ -30,7 +30,7 @@ import { ToolPath } from './FileLinks.tsx'
 import { type ItemRef, sessionKeyOf, useItem } from './messages.tsx'
 import { desktopSessionLink, PeerLinks } from './PeerHead.tsx'
 import { usePin } from './scroll.ts'
-import { seenSince, TurnTouch, useToggle } from './state.ts'
+import { seenSince, TurnTouch, useFold } from './state.ts'
 import { messageTarget, nowOf, stepsSummary, suggestTitles } from './steps-text.ts'
 
 interface RowProps {
@@ -49,7 +49,7 @@ interface RowProps {
 
 /** 步骤组里的一行：动词、对象、右边的元信息；有详情时点一下展开 */
 function Row({ itemRef, icon, verb, target, meta, busy, detail, tone }: RowProps) {
-  const [open, setOpen] = useToggle(sessionKeyOf(itemRef), `i:${itemRef.itemId}`, false)
+  const [open, setOpen] = useFold(sessionKeyOf(itemRef), `i:${itemRef.itemId}`, false)
   const head = useRef<HTMLButtonElement | null>(null)
   const pin = usePin()
   const touch = useContext(TurnTouch)
@@ -586,7 +586,7 @@ export const Steps = memo(function Steps({
   live,
 }: StepsProps) {
   const sessionKey = sessionKeyOf({ deviceId, sessionId })
-  const [open, setOpen] = useToggle(sessionKey, `g:${groupKey}`, false)
+  const [open, setOpen] = useFold(sessionKey, `g:${groupKey}`, false)
   const touch = useContext(TurnTouch)
   const head = useRef<HTMLButtonElement | null>(null)
   const pin = usePin()

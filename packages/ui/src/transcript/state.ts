@@ -8,52 +8,15 @@ import {
   useState,
   useSyncExternalStore,
 } from 'react'
+import { useTranscriptView } from './view.ts'
 
 // ---------- 展开状态 ----------
 // 按会话、按条目标识记在内存里。组件卸载再回来（切走会话、以后的虚拟化）还是原来的样子。
 const toggles = new Map<string, Map<string, boolean>>()
-
-/**
- * 一个可以折叠的东西现在开没开。用户点过就以用户的为准，没点过用 fallback。
- * fallback 可以随时间变（比如活动区在回合进行中是开的，结束后是关的）。
- */
-export function useToggle(
-  sessionKey: string,
-  id: string,
-  fallback: boolean,
-): [open: boolean, set: (next: boolean) => void] {
-  const [picked, setPicked] = useState<boolean | undefined>(() => toggles.get(sessionKey)?.get(id))
-  // 别处替它开（跳到收起的过程里的一段原文）
-  useEffect(() => {
-    const key = toggleKey(sessionKey, id)
-    const listener = (changed: string) => {
-      if (changed === key) setPicked(toggles.get(sessionKey)?.get(id))
-    }
-    toggleListeners.add(listener)
-    return () => {
-      toggleListeners.delete(listener)
-    }
-  }, [sessionKey, id])
-  const set = useCallback(
-    (next: boolean) => {
-      let map = toggles.get(sessionKey)
-      if (!map) {
-        map = new Map()
-        toggles.set(sessionKey, map)
-      }
-      map.set(id, next)
-      setPicked(next)
-    },
-    [sessionKey, id],
-  )
-  return [picked ?? fallback, set]
-}
-
 const toggleListeners = new Set<(key: string) => void>()
 const toggleKey = (sessionKey: string, id: string) => `${sessionKey}\n${id}`
 
-/** 从外面替一个可折叠的东西定开没开：和用户点了一样，正画着的那个跟着变 */
-export function setToggle(sessionKey: string, id: string, next: boolean): void {
+function pickToggle(sessionKey: string, id: string, next: boolean): void {
   let map = toggles.get(sessionKey)
   if (!map) {
     map = new Map()
@@ -62,6 +25,56 @@ export function setToggle(sessionKey: string, id: string, next: boolean): void {
   map.set(id, next)
   const key = toggleKey(sessionKey, id)
   for (const listener of toggleListeners) listener(key)
+}
+
+/**
+ * 一个可以折叠的东西现在开没开。用户点过就以用户的为准，没点过用 fallback。
+ * fallback 可以随时间变（比如活动区在回合进行中是开的，结束后是关的）；id 也可以变（换了一档视图）。
+ */
+export function useToggle(
+  sessionKey: string,
+  id: string,
+  fallback: boolean,
+): [open: boolean, set: (next: boolean) => void] {
+  // 别处替它开（跳到收起的过程里的一段原文）时跟着变
+  const subscribe = useCallback(
+    (listener: () => void) => {
+      const key = toggleKey(sessionKey, id)
+      const changed = (which: string) => {
+        if (which === key) listener()
+      }
+      toggleListeners.add(changed)
+      return () => {
+        toggleListeners.delete(changed)
+      }
+    },
+    [sessionKey, id],
+  )
+  const picked = useSyncExternalStore(subscribe, () => toggles.get(sessionKey)?.get(id))
+  const set = useCallback((next: boolean) => pickToggle(sessionKey, id, next), [sessionKey, id])
+  return [picked ?? fallback, set]
+}
+
+/** 详细视图里点过的开合另记一份：切回精简还是原来的样子，再切到详细也还是那时点成的样子 */
+const VERBOSE = 'v:'
+
+/**
+ * 对话里的步骤组、条目、整段过程开没开：跟着这个会话的视图走。
+ * 精简视图照 fallback；详细视图里一律先开着，用户在详细视图里收起的单记一份
+ */
+export function useFold(
+  sessionKey: string,
+  id: string,
+  fallback: boolean,
+): [open: boolean, set: (next: boolean) => void] {
+  const verbose = useTranscriptView(sessionKey) === 'verbose'
+  return useToggle(sessionKey, verbose ? VERBOSE + id : id, verbose || fallback)
+}
+
+/** 从外面替一个可折叠的东西定开没开：和用户点了一样，正画着的那个跟着变。两档视图都算 */
+export function setToggle(sessionKey: string, id: string, next: boolean): void {
+  pickToggle(sessionKey, id, next)
+  pickToggle(sessionKey, VERBOSE + id, next)
 }
 
 // ---------- 回合里手动展开过没有 ----------
