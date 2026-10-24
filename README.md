@@ -67,7 +67,7 @@ Litch 致力于打造舒适的桌面客户端 + 远程连接体验。
 | 系统 | 文件 | 说明 |
 |---|---|---|
 | macOS（Apple Silicon） | `Litch-<版本>-macos-arm64.dmg` | 签过名，经过苹果公证。打开后把 Litch 拖进“应用程序” |
-| Windows（x64） | `Litch-<版本>-windows-x64-setup.exe` | 主要功能在 Windows 11 上验过（终端用的是 Windows PowerShell）；**操作这台电脑、原生 Codex 在 Windows 上还不能用**，Windows 的管理员账号还不能扫码绑定手机。安装程序没有签名，Windows 会提示来源不明，点“更多信息”再点“仍要运行”。只装给当前用户，不要管理员权限 |
+| Windows（x64） | `Litch-<版本>-windows-x64-setup.exe` | 主要功能在 Windows 11 上验过（终端用的是 Windows PowerShell）；**操作这台电脑在 Windows 上还不能用**，Windows 的管理员账号还不能扫码绑定手机。安装程序没有签名，Windows 会提示来源不明，点“更多信息”再点“仍要运行”。只装给当前用户，不要管理员权限 |
 | 安卓（arm64，Android 7.0 及以上） | `Litch-<版本>-android-arm64.apk` | 直接安装，第一次系统会让你允许“安装未知应用”。应用自己生成一把 SSH 钥匙，把它的公钥加到远程机器的 `authorized_keys` 里就能连 |
 
 应用自带一份适配器，打开就把本机上装了的 Claude Code、Pi、DSH、OpenCode 和 codex 收在“本机”这台设备下；这些 harness 本身要另外装好并登录。Intel 芯片的 Mac 暂时没有安装包，可以从源码运行。

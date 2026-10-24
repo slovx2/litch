@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/slovx2/litch/internal/hostplatform"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -48,6 +49,14 @@ func prepareRuntime(ctx context.Context, c configuration) (process *exec.Cmd, ve
 	process = exec.Command(c.node, c.adapter(), "app-server", "--listen", hostplatform.ListenURL(c.socket()))
 	process.Env = c.environment()
 	return process, info.ProtocolVersion + " (codex-harness-adapter-" + c.harness + ")", nil
+}
+
+// 看运行时起来没有：连得上它听的那个套接字就算。
+func dialRuntime(c configuration) (net.Conn, error) {
+	if c.native() {
+		return dialCodex(c)
+	}
+	return hostplatform.Dial(c.socket())
 }
 
 // 一个入口分两段：先是运行时（只用本机套接字），然后才是给 Codex 桌面端的 SSH 入口。
@@ -145,12 +154,20 @@ func serveRuntime(ctx context.Context, c configuration, autoInit bool, stage *st
 		case <-deadline.C:
 			return runtimeFailure(stateStartFailed, both("引擎启动超时", "The engine timed out while starting"), context.DeadlineExceeded)
 		case <-ticker.C:
-			connection, err := hostplatform.Dial(c.socket())
+			connection, err := dialRuntime(c)
 			if err == nil {
 				_ = connection.Close()
 				ready = true
 			}
 		}
+	}
+	if c.native() {
+		// Windows 上 app-server 听的是 AF_UNIX，要转到命名管道上设备进程才连得上（Unix 上什么都不做）
+		stop, err := bridgeCodex(c)
+		if err != nil {
+			return runtimeFailure(stateStartFailed, startFailure, err)
+		}
+		defer stop()
 	}
 	runtimeUp = true
 	stage.settle(c.harness, true)

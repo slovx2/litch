@@ -3,6 +3,7 @@
 package main
 
 import (
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,6 +14,11 @@ import (
 
 	"github.com/slovx2/litch/internal/hostplatform"
 )
+
+// Unix 上 app-server 直接听在这个 harness 平常的套接字上，设备进程照常连它，用不着转发（Windows 见 native_codex_windows.go）。
+func codexSocketPath(c configuration) string      { return c.socket() }
+func dialCodex(c configuration) (net.Conn, error) { return hostplatform.Dial(c.socket()) }
+func bridgeCodex(configuration) (func(), error)   { return func() {}, nil }
 
 // 上一次的服务要是被强杀了（来不及收尾），它起的 codex app-server 会留下来：没有人管它，
 // 它却还占着 codex 自己给这个套接字加的锁，新起的那个会报“control socket is already in use”起不来（实测）。

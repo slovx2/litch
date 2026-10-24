@@ -5,7 +5,7 @@
 | Id | Name | Notes |
 |---|---|---|
 | `claude-code` | Claude Code | Needs the standalone `claude` CLI, signed in. Also lists Claude Code sessions started elsewhere on the machine |
-| `codex` | Codex | The native Codex CLI (`codex app-server`). Uses the user's own Codex data (`~/.codex`, or `CODEX_HOME`); only one codex process should write a given session at a time. Not available on Windows devices yet |
+| `codex` | Codex | The native Codex CLI (`codex app-server`). Uses the user's own Codex data (`~/.codex`, or `CODEX_HOME`); only one codex process should write a given session at a time |
 | `pi` | Pi | Installed with npm (`@earendil-works/pi-coding-agent`) |
 | `dsh` | DSH (DeepSeek Harness) | Experimental |
 | `opencode` | OpenCode | Experimental; uses the user's `opencode` |

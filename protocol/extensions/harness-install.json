@@ -18,7 +18,7 @@
   },
   "undeclared": "没声明的连接收不到 litch/device/harness/install/changed，方法照样能调；要知道进度就隔一会儿调一次 litch/device/harness/install/read。设备服务没有适配器主进程在管时（device.extensions 里没有 harnessInstall），这些方法回 settingsUnavailable。",
   "rules": [
-    "官方装法（适配器登记表 cmd/codex-harness-adapter/harness_install.go）：claude-code 是 `curl -fsSL https://claude.ai/install.sh | bash -s <版本>`（Windows 是 PowerShell 跑 install.ps1，参数同样是版本）；opencode 是 `curl -fsSL https://opencode.ai/install | bash -s -- --version <版本>`（Windows 是 npm 的 opencode-ai）；codex、pi、dsh、gemini、qwen 是 `npm install -g <包>@<版本>`，包名依次是 @openai/codex、@earendil-works/pi-coding-agent、@deepseek-ai/dsh、@google/gemini-cli、@qwen-code/qwen-code。acp（自填命令）不可装；原生 Codex 在 Windows 上不可装（Windows 上还接不进来）。脚本在类 Unix 系统上用 `bash -c 'set -o pipefail; <命令>'` 跑，下载失败也算失败。",
+    "官方装法（适配器登记表 cmd/codex-harness-adapter/harness_install.go）：claude-code 是 `curl -fsSL https://claude.ai/install.sh | bash -s <版本>`（Windows 是 PowerShell 跑 install.ps1，参数同样是版本）；opencode 是 `curl -fsSL https://opencode.ai/install | bash -s -- --version <版本>`（Windows 是 npm 的 opencode-ai）；codex、pi、dsh、gemini、qwen 是 `npm install -g <包>@<版本>`，包名依次是 @openai/codex、@earendil-works/pi-coding-agent、@deepseek-ai/dsh、@google/gemini-cli、@qwen-code/qwen-code。acp（自填命令）不可装。脚本在类 Unix 系统上用 `bash -c 'set -o pipefail; <命令>'` 跑，下载失败也算失败。",
     "验证版：编进适配器的 protocol/versions.json，claude-code 取 claudeCli，codex 取 codexVerified 的最后一个，pi 取 piCli，dsh 取 dshVerified 的最后一个，opencode 取 opencodeVerified 的最后一个；gemini、qwen 没有记录（verified 为 null，只能装最新版，界面标“未验证”）。minimum 是适配器的下限：Claude 2.1.282、Codex 0.157.1、Pi 0.99.1、dsh 0.2.0-rc.2、OpenCode 1.18.0，其余为 null。",
     "已装版本：不依赖运行时。按 harness 自己找命令行的次序找：设置里的命令行路径（或它的环境变量，只写了命令名时在 PATH 里找），PATH 里的命令名（Windows 上带 .exe、.cmd），引擎会看的固定位置（~/.opencode/bin/opencode），官方装法的位置（~/.local/bin/claude）。找到就跑 `<命令> --version`，两秒超时，取输出里的第一个版本号。结果缓存到下次安装或设置的版本号变化。",
     "最新版：只在 versions 带 latest:true 时现查，直接 HTTPS GET <注册表>/<包>/latest 取 version（claude-code 问 @anthropic-ai/claude-code，opencode 问 opencode-ai），五秒超时，不依赖本机有 npm。注册表默认 https://registry.npmjs.org，环境变量 LITCH_NPM_REGISTRY 给了就用它（测试用；读适配器常驻服务的进程环境，再看状态目录的 env 文件）。不带 latest 时给上次查到的结果（含上次的 latestError），没查过是 null。版本号只认 x.y.z[-预发布][+构建]，注册表给的不像样也算查不到。",
@@ -199,7 +199,7 @@
         },
         "installable": {
           "type": "boolean",
-          "description": "能不能由 Litch 装。自填命令的 acp、这个系统上没有官方方式的（Windows 上的原生 Codex）是 false"
+          "description": "能不能由 Litch 装。自填命令的 acp、这个系统上没有官方方式的是 false"
         },
         "method": {
           "oneOf": [
