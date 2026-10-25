@@ -11,6 +11,7 @@ import {
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import test from 'node:test'
+import { sessionTools } from '../../protocol/src/client-tools-sessions.mjs'
 import {
   assertDeclaration,
   assertProject,
@@ -589,6 +590,94 @@ async function startDevice(fixture: Fixture, directory: string): Promise<ChildPr
   })
   return child
 }
+
+test('端到端：Claude Code 的父会话回合在跑时子会话做完，回报当场插进这个回合，模型在同一回合里看到，不另开唤醒回合', async () => {
+  const fixture = await startFixture(['--managed', '--engines', 'claude'])
+  try {
+    const client = await TestClient.overSocket(fixture.socket)
+    await client.initialize(['harness', 'deviceWorkspaces', 'sessionTree', 'clientTools'])
+    for (let attempt = 0; ; attempt++) {
+      const info = await client.call('runtime/info')
+      if (info.harnesses.some((item: any) => item.id === 'claude-code' && item.available)) break
+      assert.ok(attempt < 300, '等了 30 秒，Claude Code 还没连上')
+      await pause(100)
+    }
+    const started = await client.call('thread/start', {
+      harness: 'claude-code',
+      cwd: fixture.engines?.cwd,
+      dynamicTools: [sessionTools(false)],
+    })
+    const parentId: string = started.thread.id
+    const ended = (turnId: string) =>
+      client.waitFor(
+        (frame) => frame.method === 'turn/completed' && (frame.params as any).turn.id === turnId,
+        120_000,
+      )
+    // 第一回合：假模型照话调 litch_sessions.start 派一个子会话。子会话先问用户一道题（问一句）、等着，
+    // 这样它什么时候做完由这里定：父会话开始慢慢回话之后再答，它在父会话这一回合里做完
+    const spec = {
+      title: '问一句的子会话',
+      prompt:
+        '问一句：这个仓库先看哪一部分？用户答了之后照答复说一句就结束这一回合，不要做别的事情。',
+      background:
+        '这是一次隔离验证：父会话在跑的时候子会话做完，回报要当场插进父会话的回合里，模型在同一个回合里就能看到。',
+      harness: 'claude-code',
+      initiation: 'user_asked',
+    }
+    const first = await client.call('turn/start', {
+      threadId: parentId,
+      input: [{ type: 'text', text: `会话：start ${JSON.stringify(spec)}` }],
+    })
+    await ended(first.turn.id)
+    const childId = client.notifications
+      .map((frame) => (frame.params as any)?.thread)
+      .find((thread) => thread?.litchLineage?.parentThreadId === parentId)?.id
+    assert.ok(childId, '派出了子会话')
+    await client.call('thread/resume', { threadId: childId })
+    const question = await client.waitFor(
+      (frame) =>
+        frame.method === 'item/tool/requestUserInput' && (frame.params as any).threadId === childId,
+      60_000,
+    )
+    // 第二回合：父会话慢慢回话（九秒上下），这时才答子会话的题，子会话在这期间做完
+    const second = await client.call('turn/start', {
+      threadId: parentId,
+      input: [{ type: 'text', text: '慢慢说' }],
+    })
+    client.answer(question.id, {
+      answers: { [(question.params as any).questions[0].id]: { answers: ['先看设备服务'] } },
+    })
+    await ended(second.turn.id)
+    const steered = client.notifications.filter(
+      (frame) =>
+        frame.method === 'item/started' &&
+        (frame.params as any).item.type === 'userMessage' &&
+        JSON.stringify((frame.params as any).item.content).includes('<litch-session-event kind='),
+    )
+    assert.equal(steered.length, 1, '插了一次')
+    const inserted = steered[0]?.params as any
+    assert.equal(inserted.turnId, second.turn.id, '插在第二回合里')
+    assert.match(inserted.item.clientId, /^litch-sessions-[a-z0-9]+-\d+$/)
+    await pause(2000)
+    const read = await client.call('thread/read', { threadId: parentId, includeTurns: true })
+    assert.equal(read.thread.turns.length, 2, '没有另开唤醒回合')
+    const items: any[] = read.thread.turns[1].items
+    const at = items.findIndex(
+      (item) =>
+        item.type === 'userMessage' && JSON.stringify(item.content).includes('kind=\\"notes\\"'),
+    )
+    assert.ok(at > 0, '记录里留着插进去的回报，在回合中间')
+    // 假模型认出只有回报的那条消息，照着回一句（client-fixture-sessions.mjs）：模型在这一回合里看到了它，是这个子会话的
+    const answer = items.slice(at + 1).find((item) => item.type === 'agentMessage')?.text ?? ''
+    assert.match(answer, /^收到子会话的回报：1 条/)
+    assert.ok(answer.includes(childId), answer.slice(0, 400))
+    client.close()
+  } finally {
+    const exited = new Promise((resolve) => fixture.child.once('exit', resolve))
+    fixture.child.kill('SIGTERM')
+    await exited
+  }
+})
 
 test('端到端：设备级的工作区，从两个真的 Pi 现有的项目导入；建改删、移会话、置顶、带工作区新建；引擎没有被改；重新导入结果一样', async () => {
   const fixture = await startFixture(['--workspaces'])

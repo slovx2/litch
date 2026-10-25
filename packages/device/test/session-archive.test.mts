@@ -12,6 +12,7 @@ import {
   got,
   litch,
   parent,
+  refuseSteer,
   SESSIONS,
   TREE,
   text,
@@ -43,6 +44,7 @@ const notesOf = (env: Env, threadId: string) => env.device.sessionTree.store.not
 
 test('SESSION-ARCHIVE-001：用户归档父会话：已经停下的子孙会话跟着归档（算用户归档的），在跑的、置顶的留着，各客户端连接都收到', async () => {
   const env = treeRig()
+  refuseSteer(env.pi)
   try {
     const client = await litch(env)
     const other = await litch(env)
@@ -118,6 +120,7 @@ test('SESSION-ARCHIVE-001：用户归档父会话：已经停下的子孙会话�
 
 test('SESSION-ARCHIVE-002：模型在用户回合里归档自己的子会话：回报照常唤醒、不算用户停的；放回不用用户回合', async () => {
   const env = treeRig()
+  refuseSteer(env.pi)
   try {
     const client = await litch(env)
     const { threadId } = await parent(client)

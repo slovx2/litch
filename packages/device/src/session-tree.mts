@@ -5,9 +5,10 @@
 // 读会话，并订阅它建的子会话：子会话一回合结束，哪怕没有客户端开着它，设备进程也收得到。
 // 回合的开始与结束还从各条客户端连接的上游上看（relay.mts 调 turnEvent），两边按回合号去重。
 //
-// 回报：子会话一回合结束，取最后一条回答前 400 字进父会话的队列（sessions.sqlite），父会话下一个由客户端发起的
-// 回合把它们包成 kind=notes 的一段放在用户消息前面（beforeUserTurn）。队列一变就发 litch/thread/queuedNotes/updated，
-// 客户端不等交给模型就把排着的回报画在父会话对话区的末尾。
+// 回报：子会话一回合结束，取最后一条回答前 400 字进父会话的队列（sessions.sqlite）。父会话有回合在跑的，当场把排着的
+// 包成 kind=notes 的一段插进那个回合（steerNotes，turn/steer），插成了就出队列；插不进（回合正在收尾、引擎不会插话）的
+// 留着，父会话下一个由客户端发起的回合把它们放在用户消息前面（beforeUserTurn），或者唤醒时交出去。
+// 队列一变就发 litch/thread/queuedNotes/updated，客户端不等交给模型就把排着的回报画在父会话对话区的末尾。
 // 唤醒：有客户端连着、开关开着、父会话闲着、它没脱离的直接子会话都停下了（在等用户答的挂满 needsUserMs 也算停下）、
 // 队列里有该唤醒的回报、上一条用户消息之后唤醒不到 10 次，设备进程替父会话发一个 kind=wake 的回合。
 // 出错、被打断的回合，用户自己、定时任务发起的回合，用户停下的子会话，回报都不算该唤醒的。
@@ -39,7 +40,7 @@ import type { EngineLink } from './engine-link.mjs'
 import type { HarnessSource } from './session.mjs'
 import type { SessionStore } from './session-store.mjs'
 import type { ThreadIndex } from './thread-index.mjs'
-import { DeviceError, isObject } from './wire.mjs'
+import { DeviceError, isObject, UpstreamRpcError } from './wire.mjs'
 import type { Workspaces } from './workspaces.mjs'
 import type { Worktrees } from './worktrees.mjs'
 
@@ -170,6 +171,14 @@ export class SessionTree {
   private readonly heres = new Map<string, string[]>()
   /** markHere 了结的提案交回去的那句话（设备进程活着时重复问回同一句） */
   private readonly marked = new Map<string, string>()
+  /** 回报插话不认识 turn/steer 的 harness（-32601）：这次运行里不再去插，回报照旧排着 */
+  private readonly noSteer = new Set<string>()
+  /**
+   * 回报插话的消息号：litch-sessions-<这次运行的记号>-<序号>。入口按“会话 + 消息号”永久记账，
+   * 只用序号的话设备进程重启后会撞上以前用过的号（同客户端的做法）
+   */
+  private readonly runMark = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
+  private steerSeq = 0
   private expiry: NodeJS.Timeout | null = null
   private recovered = false
   private closed = false
@@ -604,8 +613,8 @@ export class SessionTree {
       ...(error ? { error: error.slice(0, SESSION_TREE_LIMITS.noteChars) } : {}),
       ...(userStopped ? { userStopped } : {}),
     }
-    // 出错、被打断的回合只进队列、不唤醒（同 Claude 桌面端：被截断的回合不算），等父会话下一回合带上，
-    // 或者别的子会话的回报唤醒父会话时一起交出去
+    // 出错、被打断的回合不唤醒（同 Claude 桌面端：被截断的回合不算），等父会话下一回合带上，
+    // 或者别的子会话的回报唤醒父会话时一起交出去。父会话正在跑的话不分结局都当场插进去（check 里的 steerNotes）
     this.store.addNote(
       lineage.parentThreadId,
       note,
@@ -670,13 +679,18 @@ export class SessionTree {
   // ---------- 唤醒 ----------
 
   /**
-   * 看看要不要发“在这里做”、提醒收尾、唤醒这个会话。同一个会话的检查排成一条，检查途中又来的再查一遍。
-   * 先发用户点出来的那句话（它是用户的话，提醒跟着作废、回报跟着交出去），再提醒，最后唤醒：
-   * 前一样开出回合之后会话就不闲了，后面的等它结束（turnEvent 再查）
+   * 看看要不要把回报插进在跑的回合、发“在这里做”、提醒收尾、唤醒这个会话。同一个会话的检查排成一条，检查途中又来的再查一遍。
+   * 会话在跑时只有插话这一样做得了；停着时先发用户点出来的那句话（它是用户的话，提醒跟着作废、回报跟着交出去），
+   * 再提醒，最后唤醒：前一样开出回合之后会话就不闲了，后面的等它结束（turnEvent 再查）
    */
   check(parentId: string): void {
     const previous = this.checks.get(parentId) ?? Promise.resolve()
     const next = previous
+      .then(() =>
+        this.steerNotes(parentId).catch((error: unknown) =>
+          this.host.log(`往 ${parentId} 在跑的回合里插回报没成：${String(error)}`),
+        ),
+      )
       .then(() =>
         this.sendHere(parentId).catch((error: unknown) =>
           this.host.log(`往 ${parentId} 发“在这里做”没成：${String(error)}`),
@@ -698,6 +712,44 @@ export class SessionTree {
   /** 全部有回报在排队的父会话都查一遍（有客户端连上来时） */
   checkAll(): void {
     for (const parentId of this.store.noteParents()) this.check(parentId)
+  }
+
+  /**
+   * 父会话有回合在跑：把排着的回报（每个子会话最新一条，合成一段）当场插进这个回合（turn/steer），
+   * 模型在同一回合里就看到，不用等回合结束、也不多开回合（同 Claude 桌面端）。出错、被打断的也插：插话不开回合，没有唤醒的代价。
+   * 插成了从队列里拿掉，界面上它是回合里一条只有回报的用户消息（核心认出 <litch-session-event>，画成“子会话的回报”）；
+   * 回合正好在收尾、引擎不会插话的，留在队列里照旧等下一回合或唤醒
+   */
+  private async steerNotes(parentId: string): Promise<void> {
+    if (this.closed || !this.host.enabled()) return
+    const running = this.active.get(parentId)
+    if (running === undefined || this.store.notes(parentId).length === 0) return
+    const harness = await this.owner(parentId)
+    if (this.noSteer.has(harness)) return
+    // 设备进程的连接要订阅着它才插得进（有的引擎只认装着这个会话的连接），回合结束时 turnEvent 退订
+    await this.watch(harness, parentId)
+    const notes = this.store.notes(parentId)
+    if (notes.length === 0 || this.active.get(parentId) !== running) return
+    const link = await this.link(harness)
+    const latest = latestPerSession(notes)
+    const text = formatSessionEvent({ kind: 'notes', notes: latest.map(publicNote) })
+    try {
+      await link.request('turn/steer', {
+        threadId: parentId,
+        expectedTurnId: running,
+        clientUserMessageId: `litch-sessions-${this.runMark}-${++this.steerSeq}`,
+        input: [{ type: 'text', text, text_elements: [] }],
+      })
+    } catch (error) {
+      if (error instanceof UpstreamRpcError && error.code === -32601) this.noSteer.add(harness)
+      this.host.log(
+        `回报没插进 ${parentId}（${harness}）在跑的回合，留着等下一回合：${String(error)}`,
+      )
+      return
+    }
+    this.store.dropNotes(parentId, Math.max(...notes.map((note) => note.seq)))
+    this.notesChanged(parentId)
+    this.host.log(`把 ${latest.length} 条回报插进了 ${parentId}（${harness}）在跑的回合 ${running}`)
   }
 
   private async wake(parentId: string): Promise<void> {

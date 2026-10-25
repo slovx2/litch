@@ -5,6 +5,10 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
+## 未发布
+
+- 会话树：父会话的回合还在跑时，子会话一结束一个回合，它的回报当场插进父会话这一回合（照 Claude 桌面端），模型在同一回合里就看到，不用等回合结束、也不多开唤醒回合；出错、被打断的回报同样插进去。界面上画成回合中间的一条“子会话的回报”，不再显示“下一回合交给模型”。几个子会话差不多同时做完时合成一条插。回合正好在收尾、引擎不支持插话（通用 ACP 入口）时照旧排着，等父会话下一回合带上或唤醒时交出去。桌面和手机同样
+
 ## 0.21.0
 
 - Claude Code：Litch 转给 CLI 的 MCP 工具不再一律标成常驻，照服务自己的声明，和 CLI 自己连时一样“用到再找”。以前工具多的服务（比如两百多个工具的 rea）每个请求都带着全部定义，压缩也压不掉，会话一开头就占掉大半上下文，跑几步就自动压缩一次

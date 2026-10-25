@@ -7,7 +7,15 @@ import { resultOf } from './fake-engine.mjs'
 import type { FakeUpstream } from './fake-upstream.mjs'
 import { settle } from './helpers.mjs'
 import { intervalTask, TaskEngine, taskRig, tasksClient, until } from './task-kit.mjs'
-import { brief, until as eventually, litch, parent, SESSIONS, treeRig } from './tree-kit.mjs'
+import {
+  brief,
+  until as eventually,
+  litch,
+  parent,
+  refuseSteer,
+  SESSIONS,
+  treeRig,
+} from './tree-kit.mjs'
 
 const task = (id: string, status: string, title = 'npm test') => ({
   id,
@@ -45,6 +53,7 @@ async function child(env: ReturnType<typeof treeRig>) {
 
 test('BG-REPORT-001 子会话：回报注明还有几个在跑；后台跑完、引擎自己续跑的那一回合结束时照常再报一次', async () => {
   const env = treeRig()
+  refuseSteer(env.pi)
   try {
     const { threadId, childId } = await child(env)
     background(env.claude, childId, [task('b1', 'running')], true)
@@ -67,6 +76,7 @@ test('BG-REPORT-001 子会话：回报注明还有几个在跑；后台跑完、
 
 test('BG-REPORT-002 子会话：引擎不会接着做的，后台全部结束时补一条回报写各任务的结局；没写过在跑的不补', async () => {
   const env = treeRig()
+  refuseSteer(env.pi)
   try {
     const { threadId, childId } = await child(env)
     const notes = () => env.device.sessionTree.store.notes(threadId)
@@ -97,6 +107,7 @@ test('BG-REPORT-002 子会话：引擎不会接着做的，后台全部结束时
 test('BG-REPORT-005 子会话：后台任务被用户停了、引擎不会续跑（会续跑的 harness 也一样）：补一条不唤醒的收尾回报，写明是用户停的', async () => {
   for (const wakes of [true, false]) {
     const env = treeRig()
+    refuseSteer(env.pi)
     try {
       const { threadId, childId } = await child(env)
       const notes = () => env.device.sessionTree.store.notes(threadId)
@@ -124,6 +135,7 @@ test('BG-REPORT-005 子会话：后台任务被用户停了、引擎不会续跑
 
 test('BG-REPORT-006 子会话：不是用户停的（进程退出之类）照旧写 stopped；会续跑的 harness 有自己跑完的就等它续跑的那一回合', async () => {
   const env = treeRig()
+  refuseSteer(env.pi)
   try {
     const { threadId, childId } = await child(env)
     const notes = () => env.device.sessionTree.store.notes(threadId)

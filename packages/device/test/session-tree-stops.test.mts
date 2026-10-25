@@ -12,7 +12,17 @@ import {
 } from '../../protocol/src/session-tree.mjs'
 import { resultOf } from './fake-engine.mjs'
 import { settle } from './helpers.mjs'
-import { brief, ECHO_SPEC, litch, parent, SESSIONS, text, treeRig, until } from './tree-kit.mjs'
+import {
+  brief,
+  ECHO_SPEC,
+  litch,
+  parent,
+  refuseSteer,
+  SESSIONS,
+  text,
+  treeRig,
+  until,
+} from './tree-kit.mjs'
 
 const wakesOf = (env: ReturnType<typeof treeRig>, threadId: string) =>
   env.pi
@@ -43,6 +53,7 @@ const notesOf = (env: ReturnType<typeof treeRig>, threadId: string) =>
 
 test('SESSION-STOP-001：子会话的回合失败、被打断：回报带上回合的错误原文，长的截到回报长度以内，给模型的那一行也写上；不唤醒，下一回合带上', async () => {
   const env = treeRig()
+  refuseSteer(env.pi)
   try {
     const { client, threadId, childId } = await family(env)
     env.claude.end(
@@ -114,6 +125,7 @@ test('SESSION-STOP-002：用户在子会话里点停止（客户端的 turn/inte
 
 test('SESSION-STOP-003：用户归档在跑的子会话：回合被打断的回报不唤醒、注明已归档；已经排着的回报也不再唤醒', async () => {
   const env = treeRig()
+  refuseSteer(env.pi)
   try {
     const { client, threadId, childId } = await family(env)
     env.pi.end(threadId)
@@ -158,6 +170,7 @@ test('SESSION-STOP-003：用户归档在跑的子会话：回合被打断的回�
 
 test('SESSION-STOP-004：模型自己用 litch_sessions 打断子会话：回报不算用户停的；被打断的回合同出错的，不唤醒', async () => {
   const env = treeRig()
+  refuseSteer(env.pi)
   try {
     const { threadId, childId } = await family(env)
     const answer = await env.pi.callTool(threadId, SESSIONS, 'interrupt', { thread_id: childId })

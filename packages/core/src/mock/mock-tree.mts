@@ -22,7 +22,7 @@
 // - 说“用子代理”（use sub-agents）：引擎自己派两个子代理线程（不进侧栏），一个能直接输入、一个不能，
 //   它们回来之后父会话才接着说；
 // - 界面上手动派（session.spawn）、脱离（session.detach）、提案的开始和不要、列子代理（session.agents）。
-// 子会话的回报没被唤醒带走的，攒到父会话下一条用户消息前面（kind="notes"）。
+// 子会话的回报：父会话在跑就当场插进那个回合；没被插走、唤醒带走的，攒到父会话下一条用户消息前面（kind="notes"）。
 import { CLIENT_TOOL_NAMESPACE, SESSION_TREE_LIMITS } from '../../../protocol/src/index.mjs'
 import { ChannelError, type Commands, type SessionOp } from '../channel/protocol.mjs'
 import type {
@@ -142,7 +142,7 @@ interface AgentEntry {
 export interface MockTree {
   /** 这条消息是不是会话树的一出：是的话由这里接着演，返回 true */
   claim(view: SessionView, turnId: string, message: OutgoingMessage): boolean
-  /** 一个回合停了（排着的消息接着发之前）：等着选的 offer 卡当在这里做（和设备进程一样） */
+  /** 一个回合停了（排着的消息接着发之前）：等着选的 offer 卡当在这里做（和设备进程一样），等着它停下的子会话开始跑 */
   turnStopped(view: SessionView): void
   /** 一个回合结束了：子会话的话记一条回报，看要不要唤醒父会话；子代理的话看父会话能不能接着说 */
   ended(view: SessionView, status: 'completed' | 'interrupted' | 'failed'): void
@@ -177,6 +177,8 @@ export function createMockTree(host: MockTreeHost): MockTree {
   const held = new Set<string>()
   /** 这一回合模型没调收尾的会话：回合结束后替它开一个提醒的回合 */
   const unwrapped = new Set<string>()
+  /** 等父会话这一回合停下再开始跑的子会话：父会话 → 各自的开始 */
+  const deferred = new Map<string, (() => void)[]>()
   /** 点了“在这里做”发出去的话：模型照示例回一句 */
   const hereTexts = new Set<string>()
 
@@ -221,6 +223,8 @@ export function createMockTree(host: MockTreeHost): MockTree {
       proposalId?: string
       /** 要不要自己的工作树；不给照缺省（父会话在工作树里就开） */
       worktree?: boolean | null
+      /** 等父会话这一回合停下再发第一段话（演示唤醒用） */
+      afterParentTurn?: boolean
     },
   ): string => {
     const { deviceId } = parent
@@ -304,7 +308,11 @@ export function createMockTree(host: MockTreeHost): MockTree {
     host.putView(view)
     if (options.reply) scripted.set(sameKey(deviceId, summary.id), options.reply)
     const background = options.kind === 'fresh' ? (options.background ?? '') : ''
-    host.startTurn(view, outgoing(briefOf(parent, options.prompt, background)))
+    const start = () => host.startTurn(view, outgoing(briefOf(parent, options.prompt, background)))
+    if (options.afterParentTurn) {
+      const key = sameKey(deviceId, parent.sessionId)
+      deferred.set(key, [...(deferred.get(key) ?? []), start])
+    } else start()
     return summary.id
   }
 
@@ -347,6 +355,9 @@ export function createMockTree(host: MockTreeHost): MockTree {
         origin: 'model',
         wakeParent: true,
         reply: child.reply,
+        // 真的子会话一般比派它的那一回合跑得久：等父会话停下再跑，演示的是唤醒；
+        // 不然回报都在父会话的回合里当场插进去了
+        afterParentTurn: true,
       })
       ops.push(
         sessionsCall(
@@ -970,6 +981,29 @@ export function createMockTree(host: MockTreeHost): MockTree {
       .filter((entry) => entry.lineage?.parentId === parentId)
       .every((entry) => entry.status !== 'running' && entry.status !== 'waiting')
 
+  /** 父会话有回合在跑：攒着的回报当场插进这个回合（同设备进程的 steerNotes），画在插进去的位置 */
+  const steerNotes = (deviceId: string, parentId: string) => {
+    const notes = pending.get(sameKey(deviceId, parentId)) ?? []
+    if (notes.length === 0 || !host.summary(deviceId, parentId)) return
+    const parent = host.view(deviceId, parentId)
+    const turn = parent.turns.find((entry) => entry.status === 'running')
+    if (!turn) return
+    queue(deviceId, parentId, [])
+    host.apply(parent, [
+      {
+        op: 'item.add',
+        turnId: turn.id,
+        item: {
+          id: host.nextId('notes'),
+          kind: 'userMessage',
+          text: '',
+          attachments: [],
+          event: { kind: 'notes', notes: notes.map(({ at: _, ...note }) => note) },
+        },
+      },
+    ])
+  }
+
   /** 唤醒的条件都满足了就替父会话开一个回合（决 271） */
   const tryWake = (deviceId: string, parentId: string) => {
     const key = sameKey(deviceId, parentId)
@@ -1066,6 +1100,11 @@ export function createMockTree(host: MockTreeHost): MockTree {
     turnStopped(view) {
       for (const [proposalId, offer] of offers)
         if (offer.view === view) answerOffer(proposalId, 'here', true)
+      // 等着父会话这一回合停下的子会话开始跑（排着的话接着开回合也一样）
+      const key = sameKey(view.deviceId, view.sessionId)
+      const starts = deferred.get(key) ?? []
+      deferred.delete(key)
+      for (const start of starts) start()
     },
 
     ended(view, status) {
@@ -1092,6 +1131,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
         const notes = (pending.get(key) ?? []).filter((note) => note.threadId !== sessionId)
         notes.push({ threadId: sessionId, title: lineage.title, status, excerpt, at: Date.now() })
         queue(deviceId, lineage.parentId, notes)
+        steerNotes(deviceId, lineage.parentId)
         tryWake(deviceId, lineage.parentId)
       }
       // 自己是父会话：刚停下，看看攒着的回报够不够唤醒自己

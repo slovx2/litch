@@ -5,6 +5,7 @@ import type { DeviceOptions } from '../src/device.mjs'
 import type { SessionTiming } from '../src/session.mjs'
 import { FakeControl, managed } from './fake-control.mjs'
 import { FakeEngine } from './fake-engine.mjs'
+import { RpcFailure } from './fake-upstream.mjs'
 import { rig, type TestClient } from './helpers.mjs'
 
 /** Litch 客户端声明的扩展 */
@@ -108,3 +109,13 @@ export const BACKGROUND =
 
 /** 简报的两段：任务（原样）和够宽的背景。用法是 ...brief('任务') */
 export const brief = (task: string) => ({ prompt: task, background: BACKGROUND })
+
+/**
+ * 父会话所在的假引擎不收插话（同不会插话的引擎）：父会话在跑时子会话的回报照旧排着，等它停下唤醒或者下一回合带上。
+ * 测排队、唤醒的用例用它；父会话在跑时当场插进去的做法见 session-tree-steer.test.mts
+ */
+export function refuseSteer(engine: FakeEngine): void {
+  engine.handlers['turn/steer'] = () => {
+    throw new RpcFailure(-32601, 'method not found: turn/steer')
+  }
+}

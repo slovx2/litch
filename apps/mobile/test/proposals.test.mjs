@@ -328,6 +328,17 @@ test('注入的会话事件：唤醒只画提示不画用户消息，提醒收�
   const both = new RowBuilder().build(viewOf(['u'], [user('u', '接着做', notes)]), 'all')
   assert.deepEqual(types(both), ['event', 'user', 'status'])
   assert.equal(both[0].notes[0].excerpt, '好了')
+  // 回合在跑时设备进程插进来的回报：画在插进去的位置，只有提示、不画成用户气泡
+  const steered = new RowBuilder().build(
+    viewOf(['u', 'a', 's'], [user('u', '接着做'), said, user('s', '', notes)]),
+    'all',
+  )
+  assert.deepEqual(
+    types(steered).filter((type) => type !== 'status'),
+    ['user', 'md', 'event'],
+  )
+  assert.equal(steered.find((row) => row.type === 'event').notes[0].excerpt, '好了')
+  assert.equal(steered.find((row) => row.type === 'event').kind, 'notes')
 })
 
 test('列表的排法：等着的在上（先提的在前），了结的在下（刚了结的在前）；过期了的不算等着', () => {

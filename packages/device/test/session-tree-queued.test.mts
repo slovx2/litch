@@ -1,4 +1,4 @@
-// 会话树的回报队列：出错、被打断的子会话回合只进队列不唤醒（同 Claude 桌面端），
+// 会话树的回报队列（父会话停着时）：出错、被打断的子会话回合只进队列不唤醒（同 Claude 桌面端），
 // 队列一变就通知声明了 sessionTree 的连接、会话对象上挂着排着的回报（父会话的对话区当场画出来）
 import assert from 'node:assert/strict'
 import test from 'node:test'
@@ -33,13 +33,15 @@ test('SESSION-TREE-017：子会话第一回合就出错（模型不对）：回�
     const client = await litch(env)
     const { threadId } = await parent(client)
     const childId = await child(env, threadId, '攻略整理')
+    // 父会话先停下（在跑的话回报当场插进去，见 session-tree-steer.test.mts）
+    env.pi.end(threadId, 'completed', '派出去了')
+    await until(() => !env.device.sessionTree.isActive(threadId), '父会话停下')
     env.claude.end(childId, 'failed', undefined, 'There’s an issue with the selected model')
     await until(() => env.device.sessionTree.store.notes(threadId).length === 1, '回报进队列')
     const [queued] = env.device.sessionTree.store.notes(threadId)
     assert.equal(queued?.status, 'failed')
     assert.equal(queued?.error, 'There’s an issue with the selected model')
     assert.equal(queued?.wake, false, '出错的回合不算该唤醒的')
-    env.pi.end(threadId, 'completed', '派出去了')
     await settle(80)
     assert.equal(wakesOf(env, threadId).length, 0, '子会话都停了、父会话也闲着，照样不唤醒')
     await client.call('turn/start', { threadId, input: text('那个怎么样了') })
@@ -84,14 +86,16 @@ test('SESSION-TREE-018：出错的回报不唤醒，另一个子会话做完的�
   }
 })
 
-test('SESSION-TREE-019：回报一进队列就通知（父会话在跑也通知），会话对象上挂着；交给模型后通知空的；没声明的连接收不到', async () => {
+test('SESSION-TREE-019：回报一进队列就通知，会话对象上挂着；交给模型后通知空的；没声明的连接收不到', async () => {
   const env = treeRig()
   try {
     const client = await litch(env)
     const other = await plain(env)
     const { threadId } = await parent(client)
     const done = await child(env, threadId, '三号客户端')
-    const running = await child(env, threadId, '外挂分析')
+    await child(env, threadId, '外挂分析')
+    env.pi.end(threadId)
+    await until(() => !env.device.sessionTree.isActive(threadId), '父会话停下')
     env.claude.end(done, 'completed', '常驻无头客户端上线了')
     await until(() => got(client, QUEUED).length === 1, '进队列就通知')
     const [first] = got(client, QUEUED)
@@ -106,8 +110,7 @@ test('SESSION-TREE-019：回报一进队列就通知（父会话在跑也通知�
     assert.deepEqual(read.thread.litchQueuedNotes, first.notes)
     const bare = await other.call('thread/read', { threadId, includeTurns: false })
     assert.equal(bare.thread.litchQueuedNotes, undefined, '没声明的连接上没有')
-    // 父会话停下了，另一个子会话还在跑：不唤醒，回报留在队列里
-    env.pi.end(threadId)
+    // 父会话停着，另一个子会话还在跑：不唤醒，回报留在队列里
     await settle(80)
     assert.equal(wakesOf(env, threadId).length, 0)
     assert.equal(env.device.sessionTree.store.notes(threadId).length, 1)
@@ -118,10 +121,6 @@ test('SESSION-TREE-019：回报一进队列就通知（父会话在跑也通知�
     const after = await client.call('thread/read', { threadId, includeTurns: false })
     assert.equal(after.thread.litchQueuedNotes, undefined)
     assert.equal(got(other, QUEUED).length, 0, '没声明 sessionTree 的连接收不到')
-    // 父会话又在跑（用户刚说的话）：还在跑的那个做完了，回报照样当场通知
-    env.claude.end(running, 'completed', '跑完了')
-    await until(() => got(client, QUEUED).length === 3, '父会话在跑也通知')
-    assert.equal(got(client, QUEUED)[2].notes[0].threadId, running)
   } finally {
     await env.close()
   }
