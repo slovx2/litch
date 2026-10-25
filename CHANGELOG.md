@@ -5,7 +5,7 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
-## 未发布
+## 0.23.0
 
 - 侧栏单独查看一组时，行尾的“新建会话”“更多”还在（以前只剩设备名）
 - 手机端会话列表：“项目”后面的数算上里面各工作区的会话（以前一直是 0）
