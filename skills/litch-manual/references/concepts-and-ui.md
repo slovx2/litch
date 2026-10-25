@@ -130,7 +130,8 @@ configuration conversation.
 
 Shortcuts cannot be changed. The full list is in Settings → Shortcuts. The common ones (Mod is Cmd on
 macOS, Ctrl elsewhere): Mod+, settings; Mod+N new session; Mod+Shift+B sidebar; Ctrl+` terminal (also on
-macOS); Mod+Alt+B side panel; Mod+= / Mod+- / Mod+0 zoom; Enter send, Shift+Enter new line; in approval
+macOS); Mod+Alt+B side panel; Mod+= / Mod+- / Mod+0 zoom; Enter send, Shift+Enter new line; Cmd+← / Cmd+→ (Home / End on
+Windows and Linux) start or end of the line in the composer; in approval
 cards Enter approves and Esc declines; Esc leaves the Devices, Archived and Settings pages.
 
 ## Composer commands

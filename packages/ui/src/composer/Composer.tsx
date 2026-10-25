@@ -29,6 +29,7 @@ import { useT } from '../app/appearance.ts'
 import { nameOf } from '../app/device.ts'
 import { reasonOf } from '../app/errors.ts'
 import { Clip, Close, Send, Stop } from '../app/icons.tsx'
+import { currentPlatform } from '../app/platform.ts'
 import { useKey, useServices } from '../app/services.tsx'
 import { notesKey, takeNotes, withNotes } from '../diff/annotations.ts'
 import { noteWords, PendingNotes } from '../diff/Notes.tsx'
@@ -456,6 +457,25 @@ export function Composer(props: ComposerProps) {
   }, [stoppable, turnId, disarm])
 
   /**
+   * macOS 上 Cmd+←/→ 跳到这一行（折行之后看到的那一行）的开头、结尾，带 Shift 是选到那里。
+   * 不靠系统的按键绑定，自己按同样的规矩挪；Windows、Linux 照惯例是 Home/End，文本框自己就认
+   */
+  const lineJump = (event: KeyboardEvent<HTMLTextAreaElement>): boolean => {
+    if (currentPlatform() !== 'mac' || !event.metaKey || event.ctrlKey || event.altKey) return false
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return false
+    if (event.nativeEvent.isComposing || event.keyCode === 229) return false
+    event.preventDefault()
+    window
+      .getSelection()
+      ?.modify(
+        event.shiftKey ? 'extend' : 'move',
+        event.key === 'ArrowLeft' ? 'backward' : 'forward',
+        'lineboundary',
+      )
+    return true
+  }
+
+  /**
    * 输入历史：光标在最前面时按上箭头，换成上一次发过的话，再按接着往前；下箭头往回，翻过头回到原来写了一半的字。
    * 光标不在最前面时上下箭头照常在多行文字里移动。动手改了字就不算在翻了。
    */
@@ -483,6 +503,7 @@ export function Composer(props: ComposerProps) {
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     // 单子开着：上下键、回车、Tab、Esc 先归它
     if (suggest.onKeyDown(event)) return
+    if (lineJump(event)) return
     if ((event.key === 'ArrowUp' || event.key === 'ArrowDown') && recall(event)) return
     if (event.key !== 'Enter' || event.shiftKey) return
     // 输入法还在选词：这个回车是确认候选，不是发送。229 是有些浏览器在组字期间报的键码

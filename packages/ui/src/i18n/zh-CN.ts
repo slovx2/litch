@@ -918,6 +918,7 @@ export const zhCN = {
   'keys.send': '发送',
   'keys.newline': '换行',
   'keys.history': '光标位于开头时：浏览此会话中发送过的消息',
+  'keys.lineEdge': '跳到行首、行尾（加 Shift 选中）',
   'keys.suggestMove': '“/”和“@”菜单：在各项之间移动',
   'keys.suggestTake': '“/”和“@”菜单：选择当前项',
   'keys.suggestClose': '“/”和“@”菜单：关闭',

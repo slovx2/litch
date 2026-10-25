@@ -965,6 +965,7 @@ export const en: Record<MessageKey, Entry> = {
   'keys.send': 'Send',
   'keys.newline': 'New line',
   'keys.history': 'At the start of the box: browse messages sent in this session',
+  'keys.lineEdge': 'Go to the start or end of the line (add Shift to select)',
   'keys.suggestMove': '“/” and “@” menu: move between items',
   'keys.suggestTake': '“/” and “@” menu: choose the highlighted item',
   'keys.suggestClose': '“/” and “@” menu: close',
