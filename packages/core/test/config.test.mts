@@ -262,6 +262,7 @@ test('界面那几项交给最近开的窗口，窗口做完回话；没有窗�
       lang: 'zh-CN',
       linksInApp: true,
       notifySuccess: false,
+      notifySessions: true,
     },
   })
   const done = await pending

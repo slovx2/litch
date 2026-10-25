@@ -38,6 +38,8 @@ export const LICENSE_TEXT = 'litch:license-text'
 export const NOTIFY = 'litch:notify'
 /** 主进程 → 界面：用户点了哪一条系统通知，带着发的时候给的标识 */
 export const NOTIFY_CLICK = 'litch:notify-click'
+/** 界面 → 主进程：Dock 上的角标数（要人看一眼的会话有几个，0 是不显示） */
+export const SET_BADGE = 'litch:set-badge'
 /** 界面 → 主进程，等应答：弹系统的选文件夹对话框，回选中的那个目录（没选是 null）。只给本机的设备用 */
 export const PICK_FOLDER = 'litch:pick-folder'
 // —— 有没保存的改动时关窗口、退出之前先问（leave-guard.mts） ——

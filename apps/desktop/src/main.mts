@@ -52,6 +52,7 @@ import {
   PICK_FOLDER,
   REQUEST_CORE_PORT,
   SERVICE,
+  SET_BADGE,
   SET_LANGUAGE,
   SET_LOOK,
   TERMINALS,
@@ -487,6 +488,14 @@ ipcMain.on(NOTIFY, (event, value: unknown) => {
   if (!frame || frame !== event.sender.mainFrame || !isUiUrl(frame.url)) return
   const notice = parseTaskNotice(value)
   if (notice) showTaskNotice(notice, event.sender, NOTIFY_CLICK)
+})
+
+// Dock 上的角标：界面数好了要人看一眼的会话有几个报过来。macOS、部分 Linux 桌面显示，别处 Electron 不做什么
+ipcMain.on(SET_BADGE, (event, value: unknown) => {
+  const frame = event.senderFrame
+  if (!frame || frame !== event.sender.mainFrame || !isUiUrl(frame.url)) return
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > 9999) return
+  app.setBadgeCount(value)
 })
 
 // 界面的外观是用户在界面里选的，存在界面那边：它启动时和每次改的时候报一声。

@@ -125,6 +125,40 @@ test('每台设备的忙闲汇总：几个在跑、几个在等人、最近一�
   assert.ok(seen.n >= 1)
 })
 
+test('要人看一眼的会话数（等人的、没看过的，一个只算一次）；会话摘要换了通知听的人，带着换之前那一份', async () => {
+  const { store, channel, replica, time } = await setup()
+  const expected = (deviceId: string) =>
+    Object.values(store.get<SessionGroups>(keys.groups(deviceId)) ?? {})
+      .flat()
+      .map((id) => store.get<SessionSummary>(keys.summary(deviceId, id)))
+      .filter((session) => session?.status === 'waiting' || session?.unread).length
+  assert.ok(expected('local') > 0)
+  assert.equal(store.get(keys.attention('local')), expected('local'))
+  assert.equal(store.get(keys.attention('nas')), 0)
+  const seen: [string, string | undefined, string][] = []
+  const stop = replica.onSessionUpdate((deviceId, before, after) => {
+    if (after.id === 's3') seen.push([deviceId, before?.status, after.status])
+  })
+  await channel.command('session.markRead', { deviceId: 'local', sessionId: 's3' })
+  time.advance(16)
+  await settle()
+  assert.equal(store.get(keys.attention('local')), expected('local'))
+  await channel.command('session.send', { deviceId: 'local', sessionId: 's3', text: '在吗' })
+  time.advance(16)
+  await settle()
+  assert.ok(
+    seen.some(
+      ([deviceId, before, after]) =>
+        deviceId === 'local' && before === 'idle' && after === 'running',
+    ),
+  )
+  stop()
+  const count = seen.length
+  time.advance(60_000)
+  await settle()
+  assert.equal(seen.length, count, '取消之后不再通知')
+})
+
 test('各组的状况：几个待审批、待回答、在跑、未读；只记有事的组，数没变不惊动订阅者', async () => {
   const { store, channel, time, count } = await setup()
   const tallies = (deviceId: string) => store.get<GroupTallies>(keys.tallies(deviceId))

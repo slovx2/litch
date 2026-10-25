@@ -36,7 +36,7 @@ export const SETTINGS_SECTIONS = [
 ]
 
 const prefsLine = (prefs: ConfigPrefs) =>
-  `language ${prefs.lang} · skin ${prefs.skin} · mode ${prefs.theme} · density ${prefs.density} · width ${prefs.chatWidth} · zoom ${Math.round(prefs.zoom * 100)}% · links ${prefs.linksInApp ? 'in-app' : 'system'} · task-success notices ${prefs.notifySuccess ? 'on' : 'off'}`
+  `language ${prefs.lang} · skin ${prefs.skin} · mode ${prefs.theme} · density ${prefs.density} · width ${prefs.chatWidth} · zoom ${Math.round(prefs.zoom * 100)}% · links ${prefs.linksInApp ? 'in-app' : 'system'} · task-success notices ${prefs.notifySuccess ? 'on' : 'off'} · session notices ${prefs.notifySessions ? 'on' : 'off'}`
 
 const setPrefs = async (ctx: OpContext, patch: Partial<ConfigPrefs>) => {
   const prefs = (await ctx.ui({ kind: 'prefs.set', patch })) as ConfigPrefs
@@ -419,6 +419,19 @@ export const APP_OPS: Record<string, OpSpec> = {
       const on = parseSwitch(ctx.cmd.positionals[0])
       if (on === null) throw bad(ctx, '只能是 on 或 off', 'Use on or off')
       return setPrefs(ctx, { notifySuccess: on })
+    },
+  },
+  'notify sessions': {
+    args: [1, 1],
+    usage: 'notify sessions on|off',
+    summary: {
+      zh: '会话回合结束、要人审批或回答时发系统通知（窗口不在前台时）',
+      en: 'Notify when a session turn ends or needs approval or an answer (window in the background)',
+    },
+    async run(ctx) {
+      const on = parseSwitch(ctx.cmd.positionals[0])
+      if (on === null) throw bad(ctx, '只能是 on 或 off', 'Use on or off')
+      return setPrefs(ctx, { notifySessions: on })
     },
   },
 }

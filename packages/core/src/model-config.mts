@@ -17,6 +17,8 @@ export interface ConfigPrefs {
   linksInApp: boolean
   /** 定时任务成功跑完也发系统通知 */
   notifySuccess: boolean
+  /** 会话回合结束、要人审批或回答时发系统通知（窗口不在前台时） */
+  notifySessions: boolean
 }
 
 /** 打开哪一页 */

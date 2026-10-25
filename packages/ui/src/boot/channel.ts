@@ -32,7 +32,9 @@ export interface ShellBridge {
    * 三样它都记着，下次冷启动时窗口在页面画出来之前的底色和缩放就按它们来
    */
   setLook(look: { skin: string; theme: string; zoom: number }): void
-  /** 发一条系统通知（定时任务跑完了）。id 是自己认的，点了从 onNotifyClick 原样回来 */
+  /** Dock 上的角标数（要人看一眼的会话有几个，0 是不显示） */
+  setBadge?(count: number): void
+  /** 发一条系统通知（定时任务跑完了、会话回合结束或要人处理）。id 是自己认的，点了从 onNotifyClick 原样回来 */
   notify?(notice: { id: string; title: string; body: string }): void
   /** 用户点了哪一条系统通知。返回的函数用来不再听 */
   onNotifyClick?(handler: (id: string) => void): () => void

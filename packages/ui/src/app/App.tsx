@@ -9,6 +9,7 @@ import type { PlaceWish } from '../composer/new-place.ts'
 import { useNewPlace } from '../composer/useNewPlace.ts'
 import { ApprovalNotices } from '../devices/ApprovalNotices.tsx'
 import { DevicesPage } from '../devices/DevicesPage.tsx'
+import { SessionNotices } from '../notify/SessionNotices.tsx'
 import { Onboarding } from '../onboarding/Onboarding.tsx'
 import { InfoRail } from '../rail/InfoRail.tsx'
 import { isSettingsSection, SettingsPage, type SettingsSection } from '../settings/SettingsPage.tsx'
@@ -274,6 +275,7 @@ export function App() {
           <Toasts />
           <ApprovalNotices />
           <TaskNotices onOpen={select} />
+          <SessionNotices onOpen={select} />
           {page === 'archived' && peek ? (
             <ArchivedSession
               key={`${peek.deviceId}:${peek.sessionId}`}
