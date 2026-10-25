@@ -3,7 +3,7 @@
 // 流式输出时文本每帧都在变，但变的只有结尾：解析只重做最后一块，前面已经稳定的块不重新解析也不重画。
 // 解析结果直接变成 React 元素，不经过 HTML 字符串，所以回答里写的任何 HTML 都只会被当成文字显示。
 import { repairStreamingMarkdown } from '@litch/core'
-import { Lexer, type Token, type Tokens } from 'marked'
+import type { Token, Tokens } from 'marked'
 import { memo, type ReactNode, useRef } from 'react'
 import { CodeBlock } from './CodeBlock.tsx'
 import { CiteText, HAS_CITE } from './comments/Cite.tsx'
@@ -12,11 +12,8 @@ import { ExternalLink } from './ExternalLink.tsx'
 import { CodeSpan, Link, Prose } from './FileLinks.tsx'
 import { languageOf } from './highlight.tsx'
 import { MermaidBlock } from './Mermaid.tsx'
+import { lex } from './markdown-lex.ts'
 import { AnswerMentions, HAS_MENTION } from './SessionMentions.tsx'
-
-function lex(source: string): Token[] {
-  return new Lexer({ gfm: true }).lex(source)
-}
 
 interface Parsed {
   /** 已经稳定的那部分源文本，等于 stable 里各块原文的拼接 */

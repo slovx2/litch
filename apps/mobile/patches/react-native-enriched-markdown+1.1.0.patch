@@ -517,3 +517,19 @@ index 21bec3b..5599968 100644
  
    val styleConfig =
      (this as? EnrichedMarkdownText)?.markdownStyle
+diff --git a/node_modules/react-native-enriched-markdown/cpp/md4c/md4c.c b/node_modules/react-native-enriched-markdown/cpp/md4c/md4c.c
+index 44d5134..4bde08c 100644
+--- a/node_modules/react-native-enriched-markdown/cpp/md4c/md4c.c
++++ b/node_modules/react-native-enriched-markdown/cpp/md4c/md4c.c
+@@ -3635,8 +3635,9 @@
+                         flags &= ~MD_MARK_POTENTIAL_CLOSER;
+                     if(flags != 0)
+                         ADD_MARK(ch, off, off + 1, flags);
+-                } else if(tmp - off <= 2  &&  (ctx->parser.flags & MD_FLAG_STRIKETHROUGH)) {
+-                    /* Strikethrough: standard GFM left/right-flanking rules. */
++                } else if(tmp - off == 2  &&  (ctx->parser.flags & MD_FLAG_STRIKETHROUGH)) {
++                    /* Strikethrough: standard GFM left/right-flanking rules.
++                     * Litch: only "~~" (a single "~" in "147~155", "~/path" stays text). */
+                     unsigned flags = MD_MARK_POTENTIAL_OPENER | MD_MARK_POTENTIAL_CLOSER;
+ 
+                     if(off > line->beg  &&  !ISUNICODEWHITESPACEBEFORE(off)  &&  !ISUNICODEPUNCTBEFORE(off))
