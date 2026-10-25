@@ -8,6 +8,13 @@ import { mock, test } from 'node:test'
 let now = 20
 mock.method(globalThis.performance, 'now', () => now)
 
+// 侧面板的开合、标签存在这台电脑上：给一个假的存储
+const stored = new Map()
+globalThis.localStorage = {
+  getItem: (key) => stored.get(key) ?? null,
+  setItem: (key, value) => void stored.set(key, value),
+}
+
 const side = await import('../src/side/side.ts')
 const state = await import('../src/files/state.ts')
 const { treeMove, selectable } = await import('../src/files/nav.ts')
@@ -66,6 +73,29 @@ test('开合侧面板：紧挨着的第二次当成同一次按键；别处要�
   // 宽度不会被设得比最窄还窄
   side.setSideWidth(10)
   assert.equal(side.sideNow().width, side.SIDE_MIN)
+})
+
+test('开合和标签按会话记：A 开着浏览器、B 开着文件，切回 A 还是浏览器；没选过的会话看最近选的', () => {
+  const view = () => ({ open: side.sideNow().open, tab: side.sideNow().tab })
+  now = 1000
+  side.setSideView('d:a')
+  side.showSideTab('browser')
+  side.setSideView('d:b')
+  assert.deepEqual(view(), { open: false, tab: 'browser' })
+  side.showSideTab('files')
+  side.setSideView('d:a')
+  assert.deepEqual(view(), { open: true, tab: 'browser' })
+  side.setSideView('d:b')
+  assert.deepEqual(view(), { open: true, tab: 'files' })
+  side.setSideView('d:c')
+  assert.deepEqual(view(), { open: false, tab: 'files' })
+  // 记进了本机的界面状态
+  const saved = JSON.parse(localStorage.getItem('litch.side'))
+  assert.deepEqual(saved.tabs, [
+    ['d:a', 'browser'],
+    ['d:b', 'files'],
+  ])
+  side.setSideView('')
 })
 
 const shape = (key) =>

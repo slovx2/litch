@@ -54,7 +54,7 @@
   show, such as the session's latest to-do list and its worktree. It stays out when the window is too
   narrow; when it is hidden or out, the to-do list is shown in the conversation instead.
 - **Side panel** (right) with tabs **Files**, **Diff**, **Browser**, **Background tasks** (background commands and subagents). It follows the
-  current session's device and project.
+  current session's device and project. Each session remembers whether the panel is open and which tab it shows.
 - **Terminal panel** (below the conversation). Terminals belong to a project and keep running on the
   device when the connection drops.
 
