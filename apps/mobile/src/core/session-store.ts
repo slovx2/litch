@@ -28,6 +28,7 @@ import {
   parseAskReply,
   reduceSession,
 } from '@litch/core'
+import { type LatestTodo, latestTodo } from '../detail/todo/logic'
 import { experiment } from '../experiment'
 import { noteOpenStage, noteWork } from '../probe'
 import { type Row, RowBuilder } from './rows'
@@ -152,6 +153,10 @@ export class SessionStore {
   private answers: AskAnswers = {}
   private readonly answerListeners = new Set<() => void>()
   private answersDirty = false
+  /** 会话里最近的一份待办（输入框上方那个小按钮和它的浮窗用）。待办整份换、回合开始结束时重找 */
+  private todo: LatestTodo | null = null
+  private readonly todoListeners = new Set<() => void>()
+  private todoDirty = false
   private readonly builder = new RowBuilder()
   private readonly listeners = new Set<() => void>()
   private readonly itemTurn = new Map<string, string>()
@@ -184,6 +189,7 @@ export class SessionStore {
           this.dirty = 'all'
           this.metaDirty = true
           this.proposalsDirty = true
+          this.todoDirty = true
           this.recountAnswers(data)
           for (const listener of this.dataListeners) listener()
           this.schedule()
@@ -331,6 +337,13 @@ export class SessionStore {
 
   readonly getAnswers = (): AskAnswers => this.answers
 
+  readonly subscribeTodo = (listener: () => void): (() => void) => {
+    this.todoListeners.add(listener)
+    return () => this.todoListeners.delete(listener)
+  }
+
+  readonly getTodo = (): LatestTodo | null => this.todo
+
   /** 答复表照会话里现有的条目重算 */
   private recountAnswers(view: SessionView): void {
     const ordered = view.turns.flatMap((turn) => turn.itemIds.flatMap((id) => view.items[id] ?? []))
@@ -360,12 +373,14 @@ export class SessionStore {
         mark(op.turn.id)
         // 新回合多半一来就是在跑的，还换了“最后一个回合”
         this.metaDirty = true
+        this.todoDirty = true
         return
       case 'turn.remove':
       case 'turn.status':
         mark(op.turnId)
-        // 回合开始、结束改变“有回合在跑”
+        // 回合开始、结束改变“有回合在跑”，也改变待办那个小按钮出不出
         this.metaDirty = true
+        this.todoDirty = true
         return
       case 'turn.retry':
         mark(op.turnId)
@@ -376,6 +391,8 @@ export class SessionStore {
         // 命令的状态决定不报集合的会话有没有后台任务在跑（meta.derived）
         // 子代理的状态也在条目上报（派出、等待的协作条目）
         if (op.item.kind === 'command' || isAgentCall(op.item)) this.metaDirty = true
+        // 待办改了一次：整份换掉
+        if (op.item.kind === 'todo') this.todoDirty = true
         const answers = gatherAnswers(this.answers, [op.item])
         if (answers !== this.answers) {
           this.answers = answers
@@ -385,6 +402,7 @@ export class SessionStore {
       }
       case 'item.remove':
         mark(op.turnId)
+        if (removed?.kind === 'todo') this.todoDirty = true
         // 拿掉的是一份答复（插话没插成，退回了队列）：答复表照剩下的条目重算
         if (removed?.kind === 'userMessage' && parseAskReply(removed.text))
           this.recountAnswers(view)
@@ -512,6 +530,15 @@ export class SessionStore {
     if (this.answersDirty) {
       this.answersDirty = false
       for (const listener of this.answerListeners) listener()
+    }
+    if (this.todoDirty) {
+      this.todoDirty = false
+      const todo = latestTodo(view)
+      const prev = this.todo
+      if (todo?.item !== prev?.item || todo?.running !== prev?.running) {
+        this.todo = todo
+        for (const listener of this.todoListeners) listener()
+      }
     }
     noteWork('emit', performance.now() - emitted)
   }

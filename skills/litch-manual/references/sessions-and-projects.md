@@ -67,8 +67,12 @@ explain it:
   worktree shows its branch in the session list and under the title, and the conversation menu's
   **Worktree** sheet shows branch, base and path with Terminal, Merge <base>, Copy path, and Restore
   when the folder was removed.
-- **While a turn runs**: messages sent are queued; "Say it now" steers the running turn; Stop
-  interrupts it.
+- **While a turn runs**: with Settings → Conversation → Sending during a turn set to Send now (the
+  default) a message goes straight into the running turn and the button reads Send; set to Queue, or
+  when the harness can't take messages mid-turn (or can't take images mid-turn and the message has
+  some), it waits in the queue above the composer until the turn ends and the button reads Queue
+  (the composer's placeholder says which). "Send now" on a queued message puts it into the running
+  turn. With nothing typed the button is Stop, which interrupts the turn.
 - **Approvals and questions** appear as cards above the composer: commands, file changes, extra
   permissions, MCP tools (Allow once / Allow for this session / Always allow / Decline / Decline and
   stop, or decline with a note for the model); multi-question forms; plan confirmation (Run the plan /
@@ -122,6 +126,12 @@ explain it:
   "Background tasks" in the session's menu) opens a simpler page with the same list, where a subagent
   opens its own page and running commands can be stopped; the folded steps and the
   line at the start of a continuing turn look the same as on the desktop.
+- **To-dos**: the to-do list a harness keeps (Claude Code, OpenCode, ACP agents, Codex) shows in the
+  info rail on the right, with the latest list staying until the next one replaces it; when the rail
+  doesn't fit it shows in the conversation instead. On the phone a small "To-do 2/6" button sits above
+  the composer next to the background-tasks line while steps remain (or the turn is still running);
+  tap it to open the list above the composer and Collapse to put it away. In the conversation the
+  phone shows one line per list (progress and the current step); tap it to expand the list in place.
 - **Goals** (Codex and Claude Code only; other harnesses show no goal controls): type `/goal` followed
   by what should be achieved and send it. Instead of a normal message this sets the session's goal,
   and the harness keeps working on it turn after turn while the session is idle, until the goal is
@@ -215,7 +225,8 @@ woken to continue.
   question at the end of the turn with one or two reply buttons instead of making a card; a click
   sends the button's words as your message, and the question lapses with your next message. The
   cards and the question from the wrap-up appear below the final answer once the turn has ended;
-  cards for independent plan steps appear as soon as the model suggests them. The
+  cards the model raises mid-turn (independent plan steps) appear where it raised them, as soon as it
+  does, and scroll with the conversation. The
   card shows its state (waiting, started, done here, dismissed, withdrawn by the model, expired after
   7 days). Buttons: Start, Do it here (the card is settled and "Do it here: <title>" plus the task is
   sent to the session as your message, after the running turn if one is running), Edit and start

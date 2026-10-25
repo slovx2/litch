@@ -31,6 +31,8 @@ import { linkify } from './links'
 import { markdownStyleOf } from './markdownStyle'
 import { labelMermaid } from './mermaid'
 import { MentionedText } from './SessionMentions'
+import { currentStep, todoProgress } from './todo/logic'
+import { TodoSteps } from './todo/TodoViews'
 
 export type Props<T extends Row['type']> = { row: Extract<Row, { type: T }> }
 
@@ -506,57 +508,43 @@ export const ForkedCell = memo(function ForkedCell({ row }: Props<'forked'>) {
   )
 })
 
-/** 待办：模型自己列的几步，做到哪了。整份原地换 */
+/**
+ * 待办：模型自己列的几步，做到哪了。整份原地换。平时只一行（做到第几步、正在做哪一步），点了在原处展开整份；
+ * 最近那份另在输入框上方有个小按钮（todo/TodoViews.tsx），对话里不再画整块
+ */
 export const TodoCell = memo(function TodoCell({ row }: Props<'todo'>) {
-  const theme = useTheme()
-  const { c, font, todo } = theme
+  const { c, font, todo } = useTheme()
   const t = useT()
-  const done = row.steps.filter((step) => step.status === 'completed').length
+  const toggle = useToggleInPlace()
+  const { done, total } = todoProgress(row.steps)
+  const now = currentStep(row.steps, row.running)
   return (
-    <View
-      style={[
-        styles.todo,
-        { borderColor: c.line2, backgroundColor: c.raised, borderRadius: theme.radius.l },
-      ]}
+    <Pressable
+      onPress={() => toggle(row.key, row.turnId)}
+      accessibilityRole="button"
+      accessibilityState={{ expanded: row.expanded }}
+      accessibilityHint={row.expanded ? undefined : t('detail.todo.tap')}
+      style={({ pressed: down }) => [styles.todo, down ? pressed(c) : null]}
+      testID="todo:row"
     >
-      <Text
-        style={[styles.meta, { color: c.ink2, fontSize: font.size.meta, fontFamily: font.mono }]}
-      >
-        {t('todo.title')} · {t('todo.count', { done, total: row.steps.length })}
-      </Text>
-      {row.note ? (
-        <Text style={{ color: c.ink2, fontSize: font.size.meta, lineHeight: 19 }}>{row.note}</Text>
+      <View style={styles.todoStep}>
+        <Text style={[styles.todoMark, { color: c.ink3, fontFamily: font.mono }]}>
+          {row.expanded ? '▾' : done === total ? todo.completed : todo.inProgress}
+        </Text>
+        <Text
+          numberOfLines={1}
+          style={[styles.grow, styles.todoLine, { color: c.ink2, fontSize: font.size.meta }]}
+        >
+          {t('todo.title')} · {t('todo.count', { done, total })}
+          {now && !row.expanded ? ` · ${now.text}` : ''}
+        </Text>
+      </View>
+      {row.expanded ? (
+        <View style={styles.todoBody}>
+          <TodoSteps note={row.note} steps={row.steps} running={row.running} />
+        </View>
       ) : null}
-      {row.steps.map((step, index) => {
-        // 回合结束时还标着“正在做”的，算没做完
-        const status = step.status === 'inProgress' && !row.running ? 'pending' : step.status
-        return (
-          <View
-            // biome-ignore lint/suspicious/noArrayIndexKey: 待办整份换，按位置对就行
-            key={index}
-            style={styles.todoStep}
-          >
-            <Text style={[styles.todoMark, { color: c.ink3, fontFamily: font.mono }]}>
-              {todo[status]}
-            </Text>
-            <Text
-              style={[
-                styles.grow,
-                {
-                  color: status === 'completed' ? c.ink3 : c.ink,
-                  fontSize: font.size.meta + 1,
-                  lineHeight: 20,
-                  fontWeight: status === 'inProgress' ? '600' : 'normal',
-                  textDecorationLine: status === 'completed' ? 'line-through' : 'none',
-                },
-              ]}
-            >
-              {step.text}
-            </Text>
-          </View>
-        )
-      })}
-    </View>
+    </Pressable>
   )
 })
 
@@ -608,7 +596,9 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  todo: { marginHorizontal: 16, marginVertical: 6, borderWidth: 1, padding: 10, gap: 4 },
+  todo: { paddingHorizontal: 16, paddingVertical: 4, minHeight: 28, justifyContent: 'center' },
   todoStep: { flexDirection: 'row', gap: 8 },
   todoMark: { fontSize: 13, lineHeight: 20 },
+  todoLine: { lineHeight: 20 },
+  todoBody: { gap: 4, marginTop: 4, paddingLeft: 4 },
 })

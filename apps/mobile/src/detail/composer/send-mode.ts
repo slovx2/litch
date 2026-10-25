@@ -21,3 +21,19 @@ export const whenRunning = (mode: SendMode, can: { steer?: boolean } | undefined
 /** session.send 要多带的：要插进去才带 now（没有回合在跑时核心不看它） */
 export const sendFlags = (send: RunningSend): { now?: true } =>
   send === 'steer' ? { now: true } : {}
+
+/**
+ * 发送按钮现在是哪个：有东西要发时，回合不在跑、或者在跑而这条会插进当前回合，是“发送”；在跑而这条要排队
+ * （选了排队、这个会话插不了话、带着图片而 harness 插话不收图片）是“排队”。什么都没写而回合在跑，是“停止”。
+ * 和桌面一样，插话不另起名字，就叫“发送”
+ */
+export function sendButton(state: {
+  filled: boolean
+  running: boolean
+  /** 回合在跑时发出去会插进当前回合（whenRunning 是 steer，图片也插得进去） */
+  steer: boolean
+  stoppable: boolean
+}): 'send' | 'queue' | 'stop' {
+  if (state.filled) return state.running && !state.steer ? 'queue' : 'send'
+  return state.running && state.stoppable ? 'stop' : 'send'
+}

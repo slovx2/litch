@@ -1,4 +1,4 @@
-// 输入框上方的一行：后台还有任务在跑时出现，只说有几个在跑，整条一起慢呼吸（减少动态效果时不动）。
+// 输入框上方的一行（和待办的小按钮排在一起，Composer.tsx）：后台还有任务在跑时出现，只说有几个在跑，整条一起慢呼吸（减少动态效果时不动）。
 // 数的是合起来的整张（state.ts）：后台命令、引擎自己派出的子代理、会话树里的子会话，都叫后台任务。
 // 点一下进“后台任务”页（src/screens/background/BackgroundScreen.tsx）。人接着说话、新回合在跑时照样在
 // （后台的任务没有停），全部跑完就没了。
@@ -63,7 +63,6 @@ const styles = StyleSheet.create({
     gap: 8,
     minHeight: 32,
     paddingHorizontal: 10,
-    marginHorizontal: 12,
     marginBottom: 6,
     borderWidth: 1,
     overflow: 'hidden',

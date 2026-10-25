@@ -178,7 +178,7 @@ test('收尾区：带建议、留了问题的收尾在过程里只留一步，�
   assert.deepEqual(types(askOnly), ['user', 'group', 'md', 'wrapAsk', 'status'])
 })
 
-test('收尾区：回合还在跑时收尾带的卡片和问题先不排，过程里那一步照留；中途 start 的提案照排', () => {
+test('收尾区：回合还在跑时收尾带的卡片和问题先不排，过程里那一步照留；中途 start 的提案排在调用的位置', () => {
   const wrapUp = { summary: null, suggestions: [{ title: '任务 p1' }], ask: '接着做哪个？' }
   const spawned = { proposalId: 'p2', threadId: null, title: '任务 p2', prompt: '简报' }
   const list = [proposal('p1', { callId: 'w' }), proposal('p2', { callId: 's' })]
@@ -191,17 +191,17 @@ test('收尾区：回合还在跑时收尾带的卡片和问题先不排，过�
   const view = viewOf(['u', 's', 'w', 'a'], items, list)
   const running = { ...view, turns: [{ ...view.turns[0], status: 'running', durationMs: null }] }
   const live = new RowBuilder().build(running, 'all')
-  assert.deepEqual(types(live), ['user', 'group', 'md', 'proposal', 'status'])
-  assert.equal(live[1].count, 2, '收尾那一步留在过程里')
-  assert.equal(live.find((row) => row.type === 'proposal').key, 's:p2')
-  // 回合结束：问题和收尾的卡排进来
+  assert.deepEqual(types(live), ['user', 'proposal', 'group', 'md', 'status'])
+  assert.equal(live[2].count, 1, '收尾那一步留在过程里，start 不算进过程')
+  assert.equal(live[1].key, 's:p2')
+  // 回合结束：问题和收尾的卡排到回答下面，start 的卡留在原处
   const done = new RowBuilder().build(view, 'all')
   assert.deepEqual(types(done), [
     'user',
+    'proposal',
     'group',
     'md',
     'wrapAsk',
-    'proposal',
     'proposal',
     'status',
   ])
@@ -209,6 +209,31 @@ test('收尾区：回合还在跑时收尾带的卡片和问题先不排，过�
     done.filter((row) => row.type === 'proposal').map((row) => row.key),
     ['s:p2', 'w:p1'],
   )
+})
+
+test('中途 start 的提案不钉在回合末尾：后面的过程和回答接着往下排', () => {
+  const spawned = { proposalId: 'p2', threadId: null, title: '任务 p2', prompt: '简报' }
+  const list = [proposal('p2', { callId: 's' })]
+  const items = [
+    user('u', '做吧'),
+    command('c1'),
+    call('s', 'start', { spawned }),
+    command('c2'),
+    { id: 'a', kind: 'agentMessage', text: '还在查', status: 'inProgress' },
+    command('c3'),
+  ]
+  const view = viewOf(['u', 'c1', 's', 'c2', 'a', 'c3'], items, list)
+  const running = { ...view, turns: [{ ...view.turns[0], status: 'running', durationMs: null }] }
+  for (const turnView of [running, view])
+    assert.deepEqual(types(new RowBuilder().build(turnView, 'all')), [
+      'user',
+      'group',
+      'proposal',
+      'group',
+      'md',
+      'group',
+      'status',
+    ])
 })
 
 const json = (value) => [{ kind: 'text', text: JSON.stringify(value, null, 2) }]

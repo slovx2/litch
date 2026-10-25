@@ -13,7 +13,7 @@ import {
   type QueuedMessage,
 } from '@litch/core'
 import { type RefObject, useEffect, useState, useSyncExternalStore } from 'react'
-import type { TextInput } from 'react-native'
+import { StyleSheet, type TextInput, View } from 'react-native'
 import { nameOf } from '../../../../packages/ui/src/app/device.ts'
 import { whyNot } from '../../../../packages/ui/src/app/errors.ts'
 import { runningPlaceholder } from '../../../../packages/ui/src/composer/send-mode-logic.ts'
@@ -32,6 +32,7 @@ import { GoalBar } from './goal/GoalBar'
 import { SlashGoal } from './goal/SlashGoal'
 import { useGoalSend } from './goal/useGoalSend'
 import { onRefill } from './refill'
+import { TodoChip, TodoPanel } from './todo/TodoViews'
 
 export function Composer({
   store,
@@ -54,6 +55,7 @@ export function Composer({
   const draft = useDraft(draftKey(deviceId, sessionId))
   const options = useComposeOptions(deviceId, meta?.harness)
   const [error, setError] = useState<string | null>(null)
+  const [todoOpen, setTodoOpen] = useState(false)
   const { refill } = draft
   // 对话区回退了一个回合：那条消息放回输入框（src/detail/refill.ts）
   useEffect(
@@ -141,6 +143,8 @@ export function Composer({
           : t('compose.placeholder')
       }
       running={running}
+      steer={onRunning === 'steer'}
+      steerImages={meta?.can.steerImages !== false}
       blocked={blocked}
       imagesOff={imagesOff}
       error={error}
@@ -158,8 +162,18 @@ export function Composer({
             <SlashGoal text={draft.text} able={goalsAble} onPick={draft.setText} />
             {/* 会话的持续目标：状态、用时、目标的话，暂停或继续、清除 */}
             <GoalBar store={store} onError={setError} />
-            {/* 后台还有任务在跑（回合在不在跑都一样）：一行，只说有几个，点开从底部列出来 */}
-            <BackgroundBar store={store} />
+            {/* 待办的浮窗：点了下面的小按钮展开，整份清单跟着待办换 */}
+            {todoOpen ? <TodoPanel store={store} onClose={() => setTodoOpen(false)} /> : null}
+            {/* 后台还有任务在跑（回合在不在跑都一样）：一行，只说有几个，点开进后台任务页；
+                旁边是待办的小按钮（照桌面端信息栏的待办卡片），排不下就折到下一行 */}
+            <View style={styles.chips}>
+              <BackgroundBar store={store} />
+              <TodoChip
+                store={store}
+                open={todoOpen}
+                onToggle={() => setTodoOpen((open) => !open)}
+              />
+            </View>
             {/* 下一轮要换到别的供应商：提示一行 */}
             <ProviderSwitch
               sessionId={sessionId}
@@ -209,3 +223,7 @@ const sessionsIn = (extras: MessageExtra[]): SessionExtra[] =>
       ? [{ kind: 'session', threadId: extra.threadId, title: extra.title }]
       : [],
   )
+
+const styles = StyleSheet.create({
+  chips: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 8, paddingHorizontal: 12 },
+})

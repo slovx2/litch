@@ -25,6 +25,9 @@ export const zhCN = {
   'detail.link.failed': '无法打开链接：{url}',
   'detail.link.noFiles': '此路径不在会话的工作区中，无法打开',
   'detail.image.close': '关闭',
+  'detail.todo.chip': '待办 {done}/{total}',
+  'detail.todo.chipLabel': '待办，已完成 {done}/{total}',
+  'detail.todo.tap': '点击展开全部步骤',
 } satisfies Record<`detail.${string}`, Entry>
 
 export const en: Record<keyof typeof zhCN, Entry> = {
@@ -49,4 +52,7 @@ export const en: Record<keyof typeof zhCN, Entry> = {
   'detail.link.failed': 'Couldn’t open the link: {url}',
   'detail.link.noFiles': 'This path isn’t in the session’s workspace',
   'detail.image.close': 'Close',
+  'detail.todo.chip': 'To-do {done}/{total}',
+  'detail.todo.chipLabel': 'To-do, {done} of {total} done',
+  'detail.todo.tap': 'Tap to show all steps',
 }
