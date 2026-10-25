@@ -136,7 +136,7 @@ button.sev-title {
 .sev-error {
   color: var(--err);
 }
-/* 还排着、没交给模型的回报（对话区末尾）：和交出去之后那条同样子，头一行说明下一回合交给模型 */
+/* 还排着、没交给模型的回报（对话区末尾）：和交出去之后那条同样子 */
 .sev[data-queued] {
   margin-top: 8px;
 }

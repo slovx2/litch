@@ -1,7 +1,7 @@
 // 设备进程注入在用户消息开头的那一段（<litch-session-event>）画成一条轻的提示，不画成用户说的话：
 // 子会话的回报（每条一行，还在列表里的子会话点了进去）、子会话都停下了的唤醒、模型没调收尾时的提醒。
 // 还排着、没交给模型的回报（SessionSummary.queuedNotes）同样画一条，放在对话区最下面（QueuedNotesCell），
-// 进队列就出现，交出去之后它画在带着它的那条消息上。
+// 进队列就出现，交出去之后它画在带着它的那条消息上。排着的和交出去的画得一样（照 Claude 桌面端）。
 import { keys, type SessionNoteView, type SessionSummary } from '@litch/core'
 import { memo } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
@@ -74,7 +74,7 @@ export function QueuedNotesCell() {
   const summary = useKey<SessionSummary>(keys.summary(deviceId, sessionId))
   const notes = summary?.queuedNotes
   if (!notes?.length) return null
-  return <EventBar testID="session-event:queued" head="tree.event.queued" notes={notes} />
+  return <EventBar testID="session-event:queued" head="tree.event.notes" notes={notes} />
 }
 
 const styles = StyleSheet.create({

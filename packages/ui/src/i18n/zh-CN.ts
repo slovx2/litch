@@ -1130,7 +1130,6 @@ export const zhCN = {
   'tree.agent.spawning': '正在派出子代理',
   'tree.agent.spawnFailed': '子代理派出失败',
   'tree.event.notes': '子会话的回报',
-  'tree.event.queued': '子会话的回报 · 下一回合交给模型',
   'tree.event.wake': '子会话均已停止，已唤醒当前会话',
   'tree.event.remind': '上一回合未调用收尾，已提醒模型收尾',
   'tree.note.completed': '已完成',

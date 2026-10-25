@@ -1,7 +1,8 @@
 // 设备进程注入给父会话的那段文字（<litch-session-event>）：子会话的回报、唤醒、没调收尾时的提醒。
 // 核心已经把它从用户消息里拆出来了（UserMessageItem.event），这里画成一条系统提示，不画成用户说的话；
 // 提醒没有回报，只是一行更轻的字。还排着、没交给模型的回报（SessionSummary.queuedNotes）同样画一条，
-// 放在对话区末尾（QueuedNotesBar，同 Claude 桌面端），交出去之后它画在带着它的那条消息上。
+// 放在对话区末尾（QueuedNotesBar），交出去之后它画在带着它的那条消息上。照 Claude 桌面端，排着的和交出去的
+// 画得一样，不另写“下一回合交给模型”：用户自己在子会话里说话的那一回合不唤醒父会话，排着的回报可能一直等到用户再说话。
 import type { SessionEventView, SessionNoteView, SessionSummary } from '@litch/core'
 import { keys } from '@litch/core'
 import { useT } from '../app/appearance.ts'
@@ -73,7 +74,7 @@ export function SessionEventBar({
     >
       <div className="sev-head">
         <Icon name="info" small />
-        <span>{t(queued ? 'tree.event.queued' : HEAD_TEXT[event.kind])}</span>
+        <span>{t(HEAD_TEXT[event.kind])}</span>
       </div>
       {event.notes.length > 0 ? (
         <ul className="sev-notes">
