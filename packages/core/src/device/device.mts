@@ -474,6 +474,8 @@ const MAX_PAGES = 500
  */
 const SERVICE_ASK_MS = 1000
 const SERVICE_ASKS = 4
+/** 子代理的会话状态说不在跑了、记着的回合还在跑：等这么久还没收到回合结束的通知，再问它最近的回合 */
+const AGENT_RECHECK_MS = 2000
 
 /**
  * 会话目录这一层处理的通知：会话和工作区的增减改，加上完整模式下 harness 的状态变化。
@@ -948,9 +950,50 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
    * 记下它的会话对象和最近的一个回合（答“这是不是子代理”，给父会话一份带状态的子代理列表），删掉了就忘掉。
    * 列表变了就交给开着的父会话（session.agents）
    */
-  const agentThreads = createAgentThreads((parentId) =>
-    live.setAgents(parentId, agentThreads.list(parentId)),
+  const agentThreads = createAgentThreads(
+    (parentId) => live.setAgents(parentId, agentThreads.list(parentId)),
+    (threadId) => recheckAgentTurn(threadId),
   )
+  /** 正在问的子线程最近一个回合：同一个子线程同时只问一次 */
+  const askingAgentTurn = new Map<string, Promise<void>>()
+  /** 等着再看一眼的子线程（会话状态先到、回合结束的通知随后就到，隔一会儿还对不上才问） */
+  const recheckingAgent = new Set<string>()
+
+  /** 问一个子线程最近的一个回合（不带条目）。问不到的（旧版的入口）就不知道，状态退回到对话里协作条目报的 */
+  const askAgentTurn = (threadId: string): Promise<void> => {
+    const asking = askingAgentTurn.get(threadId)
+    if (asking) return asking
+    const since = agentThreads.stamp(threadId)
+    const job = link
+      .request('thread/turns/list', {
+        threadId,
+        limit: 1,
+        sortDirection: 'desc',
+        itemsView: 'notLoaded',
+      })
+      .then((page) => {
+        const last = page.data[0]
+        if (last) agentThreads.settle(threadId, last, since)
+      })
+      .catch((error: unknown) => log(`取子代理 ${threadId} 最近的回合失败：${String(error)}`))
+      .finally(() => askingAgentTurn.delete(threadId))
+    askingAgentTurn.set(threadId, job)
+    return job
+  }
+
+  /**
+   * 子线程记着的回合在跑、会话状态却说不在跑了（agents.mts 的 stale）：回合结束的通知没送到这条连接
+   * （那时没看着父会话，或者断开过），不再问就会一直显示进行中。正常结束时状态比回合结束的通知早到一点，
+   * 所以隔一会儿还对不上再问
+   */
+  const recheckAgentTurn = (threadId: string) => {
+    if (recheckingAgent.has(threadId)) return
+    recheckingAgent.add(threadId)
+    options.clock.setTimer(() => {
+      recheckingAgent.delete(threadId)
+      if (online && agentThreads.stale(threadId)) void askAgentTurn(threadId)
+    }, AGENT_RECHECK_MS)
+  }
 
   /**
    * 这一刻是谁在改会话对象：收到的通知的方法名、thread/read、thread/list。后台任务数掉到 0 时
@@ -1625,6 +1668,8 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     setConnection('online', null)
     if (serviceDue) askServiceLater(mine, 1)
     live.resync()
+    // 断开那阵结束了的子代理、引擎进程换了停在半路的（入口重启时记成被打断）：回合结束的通知都收不到
+    for (const threadId of agentThreads.running()) void askAgentTurn(threadId)
     manage.resync()
     terminals.resync()
     files.resync()
@@ -2702,26 +2747,11 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       // 不认识 parentThreadId 的引擎会把全部会话都回来：只留父会话确实是它的
       const own = listing.threads.filter((thread) => parentOf(thread) === sessionId)
       for (const thread of own) agentThreads.put(thread)
-      // 列表里不带回合：还不知道最近一个回合的，问一下（不带条目）。问不到的（旧版的入口）就不知道，
-      // 状态退回到对话里协作条目报的
+      // 列表里不带回合：还不知道最近一个回合的、记着的对不上了的，问一下
       await Promise.all(
         own
-          .filter((thread) => !agentThreads.knowsTurn(thread.id))
-          .map(async (thread) => {
-            const since = agentThreads.stamp(thread.id)
-            try {
-              const page = await link.request('thread/turns/list', {
-                threadId: thread.id,
-                limit: 1,
-                sortDirection: 'desc',
-                itemsView: 'notLoaded',
-              })
-              const last = page.data[0]
-              if (last) agentThreads.settle(thread.id, last, since)
-            } catch (error) {
-              log(`取子代理 ${thread.id} 最近的回合失败：${String(error)}`)
-            }
-          }),
+          .filter((thread) => !agentThreads.knowsTurn(thread.id) || agentThreads.stale(thread.id))
+          .map((thread) => askAgentTurn(thread.id)),
       )
       return agentThreads.list(sessionId)
     },

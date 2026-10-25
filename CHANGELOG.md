@@ -5,6 +5,10 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
+## 未发布
+
+- 后台任务：引擎的子代理早就跑完了，后台任务页和输入框上方那一行却一直写“进行中”、带着“停止”。子代理结束时这台客户端没在看父会话（手机切到别的会话、断开重连过）就收不到回合结束的通知，客户端一直留着之前问来的“在跑”。现在会话状态说它不在跑了、重连之后、再列子代理时，都重问它最近的回合：跑完的显示完成，设备服务重启时停在半路的显示已停止。桌面和手机同样
+
 ## 0.21.0
 
 - Claude Code：Litch 转给 CLI 的 MCP 工具不再一律标成常驻，照服务自己的声明，和 CLI 自己连时一样“用到再找”。以前工具多的服务（比如两百多个工具的 rea）每个请求都带着全部定义，压缩也压不掉，会话一开头就占掉大半上下文，跑几步就自动压缩一次
