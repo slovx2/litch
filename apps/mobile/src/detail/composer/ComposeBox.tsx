@@ -43,6 +43,7 @@ import { useGrow } from './grow'
 import { MAX_IMAGE_MB, MAX_IMAGES, pickImages, REFUSAL_TEXT } from './images'
 import { rowLayout } from './layout'
 import { MentionList, mentionTrigger } from './MentionList'
+import { sendButton } from './send-mode'
 
 export interface Draft {
   text: string
@@ -159,6 +160,8 @@ export function ComposeBox({
   draft,
   placeholder,
   running,
+  steer = false,
+  steerImages = true,
   blocked,
   imagesOff,
   error,
@@ -175,8 +178,12 @@ export function ComposeBox({
   inputRef?: RefObject<TextInput | null>
   draft: Draft
   placeholder: string
-  /** 回合在跑：有字时按钮是“排队”，没字时是“停止”（给了 onStop 的话） */
+  /** 回合在跑：有字时按钮是“发送”（插进当前回合）或“排队”，没字时是“停止”（给了 onStop 的话） */
   running: boolean
+  /** 回合在跑时发出去会插进当前回合（设置里选了立即发送、这个会话插得了话）。不给是排队 */
+  steer?: boolean
+  /** 插话收不收图片：不收时带着图片的那条照样排队，按钮写“排队” */
+  steerImages?: boolean
   /** 发不了的原因（设备没连上、harness 用不了）。照样能写草稿 */
   blocked: string | null
   /** 带不了图片的原因。null 是能带 */
@@ -211,7 +218,12 @@ export function ComposeBox({
   const trigger = mentions ? mentionTrigger(draft.text, caret) : null
   const filled =
     draft.text.trim().length > 0 || draft.images.length > 0 || draft.comments.length > 0
-  const mode = filled ? (running ? 'queue' : 'send') : running && onStop ? 'stop' : 'send'
+  const mode = sendButton({
+    filled,
+    running,
+    steer: steer && (steerImages || draft.images.length === 0),
+    stoppable: onStop !== undefined,
+  })
 
   const send = () => {
     if (mode === 'stop') {
@@ -353,6 +365,7 @@ export function ComposeBox({
         />
         <Pressable
           accessibilityRole="button"
+          accessibilityLabel={sendLabel}
           accessibilityState={{ disabled: mode !== 'stop' && (!filled || !!blocked) }}
           testID={`${testID}-send`}
           onPress={send}

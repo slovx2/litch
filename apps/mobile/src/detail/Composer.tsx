@@ -143,6 +143,8 @@ export function Composer({
           : t('compose.placeholder')
       }
       running={running}
+      steer={onRunning === 'steer'}
+      steerImages={meta?.can.steerImages !== false}
       blocked={blocked}
       imagesOff={imagesOff}
       error={error}

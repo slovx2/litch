@@ -67,8 +67,12 @@ explain it:
   worktree shows its branch in the session list and under the title, and the conversation menu's
   **Worktree** sheet shows branch, base and path with Terminal, Merge <base>, Copy path, and Restore
   when the folder was removed.
-- **While a turn runs**: messages sent are queued; "Say it now" steers the running turn; Stop
-  interrupts it.
+- **While a turn runs**: with Settings → Conversation → Sending during a turn set to Send now (the
+  default) a message goes straight into the running turn and the button reads Send; set to Queue, or
+  when the harness can't take messages mid-turn (or can't take images mid-turn and the message has
+  some), it waits in the queue above the composer until the turn ends and the button reads Queue
+  (the composer's placeholder says which). "Send now" on a queued message puts it into the running
+  turn. With nothing typed the button is Stop, which interrupts the turn.
 - **Approvals and questions** appear as cards above the composer: commands, file changes, extra
   permissions, MCP tools (Allow once / Allow for this session / Always allow / Decline / Decline and
   stop, or decline with a note for the model); multi-question forms; plan confirmation (Run the plan /

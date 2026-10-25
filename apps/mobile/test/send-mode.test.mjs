@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict'
 import { afterEach, test } from 'node:test'
 import { SessionStore } from '../src/core/session-store.ts'
-import { sendFlags, sendModeOf, whenRunning } from '../src/detail/composer/send-mode.ts'
+import { sendButton, sendFlags, sendModeOf, whenRunning } from '../src/detail/composer/send-mode.ts'
 import { mockChannel, until } from './helpers.mjs'
 
 const cleanup = []
@@ -18,6 +18,22 @@ test('设置：默认立即发送，存着的认得就用，认不得的按默�
   assert.equal(sendModeOf('now'), 'now')
   assert.equal(sendModeOf('steer'), 'now')
   assert.equal(sendModeOf(1), 'now')
+})
+
+test('发送按钮：回合中插话写“发送”，选了排队、插不了话的写“排队”；没字而回合在跑是“停止”', () => {
+  const button = (filled, running, send, stoppable = true) =>
+    sendButton({ filled, running, steer: send === 'steer', stoppable })
+  assert.equal(button(true, false, 'queue'), 'send', '没回合在跑：发送')
+  assert.equal(button(true, true, whenRunning('now', { steer: true })), 'send', '插话：发送')
+  assert.equal(button(true, true, whenRunning('queue', { steer: true })), 'queue', '选了排队')
+  assert.equal(
+    button(true, true, whenRunning('now', { steer: false })),
+    'queue',
+    '插不了话退回排队',
+  )
+  assert.equal(button(false, true, 'steer'), 'stop')
+  assert.equal(button(false, true, 'steer', false), 'send', '不给停止的地方（新建页）')
+  assert.equal(button(false, false, 'steer'), 'send')
 })
 
 test('回合进行中按下发送：插得了话才带 now，选了排队或插不了话的都排队', () => {
