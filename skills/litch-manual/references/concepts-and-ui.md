@@ -48,7 +48,7 @@
   remembered per device (on the phone too) and kept after a restart; new ones start expanded.
 - **Main area**: the new-session page, a session, or one of the pages (Devices, Settings, Scheduled
   tasks, Archived sessions).
-- **Side panel** (right) with tabs **Files**, **Diff**, **Browser**, **Background tasks** (background commands, subagents and sub-sessions). It follows the
+- **Side panel** (right) with tabs **Files**, **Diff**, **Browser**, **Background tasks** (background commands and subagents). It follows the
   current session's device and project.
 - **Terminal panel** (below the conversation). Terminals belong to a project and keep running on the
   device when the connection drops.

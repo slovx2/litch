@@ -369,7 +369,7 @@ test('BG-CORE-005 后台任务还在跑时人接着说话：新回合进行中�
   assert.equal(reported(), 2)
 })
 
-test('BG-CORE-006 后台任务列表把子代理、子会话合进来：同名的 Claude 后台子代理只留子线程那一行，运行中在前，数在跑的', () => {
+test('BG-CORE-006 后台任务列表把子代理合进来（会话树的子会话不算）：同名的 Claude 后台子代理只留子线程那一行，运行中在前，数在跑的', () => {
   const background = projectBackground({
     wakesOnFinish: true,
     tasks: [
@@ -400,42 +400,33 @@ test('BG-CORE-006 后台任务列表把子代理、子会话合进来：同名�
     canInput: null,
     updatedAt: 0,
   })
-  const view = backgroundEntries(
-    background,
-    [
-      agent('a1', '查日志', 'running'),
-      agent('a2', '读文档', 'completed'),
-      agent('a3', '排队', null),
-    ],
-    [
-      { id: 'c1', title: '修 CI', status: 'waiting', startedAt: 800, updatedAt: 4_000 },
-      { id: 'c2', title: '写文档', status: 'idle', startedAt: 100, updatedAt: 5_000 },
-    ],
-  )
+  const view = backgroundEntries(background, [
+    agent('a1', '查日志', 'running'),
+    agent('a2', '读文档', 'completed'),
+    agent('a3', '排队', null),
+  ])
   assert.ok(view)
   assert.deepEqual(
     view.entries.map((entry) => [entry.key, entry.status]),
     [
-      ['child:c1', 'running'],
       ['task:b1', 'running'],
       ['agent:a1', 'running'],
       // 还没回合的子代理是排队，也算在跑；不知道开始时间的排在在跑的最后
       ['agent:a3', 'running'],
-      ['child:c2', 'completed'],
       ['task:b3', 'completed'],
       ['agent:a2', 'completed'],
     ],
   )
   // 集合里的 b2 和子线程 a1 同名：只算一次
-  assert.equal(backgroundHint(view), 4)
+  assert.equal(backgroundHint(view), 3)
   assert.equal(view.entries.find((entry) => entry.key === 'agent:a2')?.endedAt, 2_400)
   assert.equal(view.wakesOnFinish, true)
-  assert.equal(backgroundEntries(null, [], []), null)
+  assert.equal(backgroundEntries(null, []), null)
   // 只有子代理在跑（没有集合）也数得出：输入框上方那一行照样出
   assert.equal(backgroundHint(backgroundEntries(null, [agent('a1', '查日志', 'running')])), 1)
 })
 
-test('BG-CORE-009 停止按钮看 harness 报的能力：命令、监视要 stopBackground，子代理要 stopAgent，子会话都能停，结束的都不能', () => {
+test('BG-CORE-009 停止按钮看 harness 报的能力：命令、监视要 stopBackground，子代理要 stopAgent，结束的都不能', () => {
   const background = projectBackground({
     wakesOnFinish: true,
     tasks: [
@@ -457,11 +448,7 @@ test('BG-CORE-009 停止按钮看 harness 报的能力：命令、监视要 stop
     canInput: null,
     updatedAt: 0,
   }
-  const view = backgroundEntries(
-    background,
-    [agent],
-    [{ id: 'c1', title: '修 CI', status: 'waiting', startedAt: 5, updatedAt: 6 }],
-  )
+  const view = backgroundEntries(background, [agent])
   assert.ok(view)
   const stoppable = (features: object) => {
     const abilities = abilitiesOf(features as never, 'x')
@@ -470,18 +457,17 @@ test('BG-CORE-009 停止按钮看 harness 报的能力：命令、监视要 stop
       .map((entry) => entry.key)
       .sort()
   }
-  // dsh 那样只报集合、停不了：命令不出“停止”，子会话照样能停
-  assert.deepEqual(stoppable({ backgroundTasks: true }), ['child:c1'])
+  // dsh 那样只报集合、停不了：一个“停止”都不出
+  assert.deepEqual(stoppable({ backgroundTasks: true }), [])
   assert.deepEqual(stoppable({ backgroundTasks: true, stopBackground: true, stopAgent: true }), [
     'agent:a1',
-    'child:c1',
     'task:b1',
     'task:b2',
   ])
-  // 没有能力位（harness 还没报上来）的只有子会话
+  // 没有能力位（harness 还没报上来）的都不出
   assert.deepEqual(
     view.entries.filter((entry) => backgroundStoppable(entry, null)).map((entry) => entry.key),
-    ['child:c1'],
+    [],
   )
 })
 

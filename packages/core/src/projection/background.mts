@@ -9,7 +9,6 @@ import {
 } from '../../../protocol/src/background-tasks.mjs'
 import type { HarnessAbilities, ItemView, TurnView } from '../model.mjs'
 import type {
-  BackgroundChildInput,
   BackgroundEntriesView,
   BackgroundEntryView,
   BackgroundTaskKind,
@@ -120,7 +119,7 @@ export function sessionBackground(
 }
 
 /**
- * 输入框上方那一行写几个（0 就不出）：在跑的后台任务个数，子代理、子会话也算（backgroundEntries）。
+ * 输入框上方那一行写几个（0 就不出）：在跑的后台任务个数，子代理也算（backgroundEntries）。
  * 和回合进不进行无关——人接着说话、新回合在跑时，上一回合留在后台的任务照样在跑，这一行照样在
  * （“正在工作”说的是前台）
  */
@@ -136,14 +135,6 @@ const AGENT_STATUS: Record<AgentRunState, BackgroundTaskStatus> = {
   stopped: 'stopped',
 }
 
-/** 子会话：在跑、等人的算在跑，出错的算失败，停下了的算完成 */
-const CHILD_STATUS: Record<BackgroundChildInput['status'], BackgroundTaskStatus> = {
-  running: 'running',
-  waiting: 'running',
-  error: 'failed',
-  idle: 'completed',
-}
-
 /** 运行中的在前（先开始的在前），已结束的在后（后结束的在前） */
 function ordered(entries: BackgroundEntryView[]): BackgroundEntryView[] {
   const running = entries
@@ -157,13 +148,13 @@ function ordered(entries: BackgroundEntryView[]): BackgroundEntryView[] {
 
 /**
  * 后台任务页和输入框上方那一行用的整张列表：集合里的后台任务、引擎自己的子代理（父会话的子代理列表，
- * reported 是父会话条目里报的状态，子线程说不出时用）、会话树里的子会话，界面上都叫后台任务。
+ * reported 是父会话条目里报的状态，子线程说不出时用），界面上都叫后台任务。
+ * 会话树里派出的子会话不算（用户要求，2026-10-25）：它们在侧栏挂在父会话下面，对话里有卡片和回报。
  * Claude 的后台子代理既在集合里（种类 agent）又有子线程：同名的只留子线程那一行（点了能进子代理页）
  */
 export function backgroundEntries(
   background: SessionBackgroundView | null,
   agents: readonly AgentThreadView[] | null | undefined,
-  children: readonly BackgroundChildInput[] = [],
   reported: ReadonlyMap<string, AgentState> = new Map(),
 ): BackgroundEntriesView | null {
   const entries: BackgroundEntryView[] = []
@@ -201,20 +192,6 @@ export function backgroundEntries(
       endedAt: task.endedAt,
     })
   }
-  for (const child of children) {
-    const status = CHILD_STATUS[child.status]
-    entries.push({
-      key: `child:${child.id}`,
-      source: 'child',
-      kind: 'agent',
-      title: child.title,
-      status,
-      id: child.id,
-      task: null,
-      startedAt: child.startedAt,
-      endedAt: status === 'running' ? null : child.updatedAt,
-    })
-  }
   if (entries.length === 0) return null
   return {
     entries: ordered(entries),
@@ -228,7 +205,7 @@ const STOPPABLE_KINDS: readonly BackgroundTaskKind[] = ['shell', 'monitor']
 
 /**
  * 这一行有没有“停止”（桌面、手机一样）：在跑的命令和监视要 harness 报了停得掉（stopBackground），
- * 在跑的子代理要它报了会单独停（stopAgent），在跑的子会话都能停（打断它的回合）
+ * 在跑的子代理要它报了会单独停（stopAgent）
  */
 export function backgroundStoppable(
   entry: BackgroundEntryView,
@@ -237,8 +214,7 @@ export function backgroundStoppable(
   if (entry.status !== 'running') return false
   if (entry.source === 'task')
     return abilities?.stopBackground === true && STOPPABLE_KINDS.includes(entry.kind)
-  if (entry.source === 'agent') return abilities?.stopAgent === true
-  return true
+  return abilities?.stopAgent === true
 }
 
 /** 这个回合发起的、还在跑的后台任务有几个（收起行末尾的“· N 个在后台运行”） */

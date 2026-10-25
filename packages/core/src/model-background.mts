@@ -31,37 +31,26 @@ export interface BackgroundTaskView {
 }
 
 /**
- * 界面上统一叫“后台任务”的一行：集合里的后台任务（task）、引擎自己派出的子代理线程（agent）、
- * 会话树里这个会话派出的 Litch 子会话（child）合在一起（projection/background.mts 的 backgroundEntries）
+ * 界面上统一叫“后台任务”的一行：集合里的后台任务（task）和引擎自己派出的子代理线程（agent）合在一起
+ * （projection/background.mts 的 backgroundEntries）。会话树里派出的 Litch 子会话不算（用户要求，2026-10-25）
  */
-export type BackgroundEntrySource = 'task' | 'agent' | 'child'
+export type BackgroundEntrySource = 'task' | 'agent'
 
 export interface BackgroundEntryView {
   /** 在列表里唯一：来源加标识 */
   key: string
   source: BackgroundEntrySource
-  /** 子代理、子会话都是 agent */
+  /** 子代理是 agent */
   kind: BackgroundTaskKind
   title: string
   status: BackgroundTaskStatus
-  /** task 是集合里任务的标识，agent 是子代理线程，child 是子会话 */
+  /** task 是集合里任务的标识，agent 是子代理线程 */
   id: string
   /** source 为 task 时是集合里的那个任务，别的是 null */
   task: BackgroundTaskView | null
   /** 毫秒时间戳。不知道是 null */
   startedAt: number | null
   endedAt: number | null
-}
-
-/** 会话树里的一个子会话，合进后台任务列表时要的几样（界面从侧栏摘要里取） */
-export interface BackgroundChildInput {
-  id: string
-  title: string
-  status: 'idle' | 'running' | 'waiting' | 'error'
-  /** 派出的时间，毫秒 */
-  startedAt: number | null
-  /** 最近动过的时间，毫秒（停下了的当结束时间） */
-  updatedAt: number | null
 }
 
 export interface BackgroundEntriesView {

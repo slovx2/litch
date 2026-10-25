@@ -616,6 +616,8 @@ export async function treeProbe(): Promise<TreeSeen> {
     () =>
       $('.side')?.hidden === false &&
       $$('.side .bg-row[data-source="agent"]').length === 3 &&
+      // 会话树派出的子会话不算后台任务（用户要求，2026-10-25）
+      $$('.side .bg-row[data-source="child"]').length === 0 &&
       $(`.side .bg-row[data-entry="agent:${ids[2]}"]`)?.getAttribute('aria-selected') === 'true' &&
       $(`.side .agents-view[data-agent="${ids[2]}"] .tr .turn`) !== null,
   )
