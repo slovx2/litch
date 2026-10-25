@@ -230,7 +230,8 @@ woken to continue.
   unfinished or unverified, stay in the conversation; most turns end with no card. When the next step
   simply continues what the model just found (say, fixing what it diagnosed), it asks one short
   question at the end of the turn with one or two reply buttons instead of making a card; a click
-  sends the button's words as your message, and the question lapses with your next message. The
+  sends the button's words as your message, and the question lapses with your next message (a
+  lapsed question stays as one line only when you answered with a button; otherwise it is hidden). The
   cards and the question from the wrap-up appear below the final answer once the turn has ended;
   cards the model raises mid-turn (independent plan steps) appear where it raised them, as soon as it
   does, and scroll with the conversation. The

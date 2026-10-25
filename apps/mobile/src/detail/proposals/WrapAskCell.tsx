@@ -1,11 +1,11 @@
 // 回合最下方收尾区里的问题（litch_sessions.wrap_up 的 ask）和回复按钮，排在这一回合的建议卡片前面。
 // 和桌面端（packages/ui/src/tree/TurnTail.tsx）同一套规矩：点了按钮把它的话当用户消息发出（回合在跑时和输入框一样
-// 跟着“回合进行中发消息”的设置，composer/send-mode.ts），下一条用户消息之后按钮失效、问题折成一行。
+// 跟着“回合进行中发消息”的设置，composer/send-mode.ts），下一条用户消息之后按钮失效：点过按钮的折成一行，别的不再画。
 // 取哪个、还能不能答用桌面那一份纯函数（tree/tail.ts）。
 import { memo, useState, useSyncExternalStore } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import { whyNot } from '../../../../../packages/ui/src/app/errors.ts'
-import { actionText, askOpen } from '../../../../../packages/ui/src/tree/tail.ts'
+import { actionText, askOpen, pastAskShown } from '../../../../../packages/ui/src/tree/tail.ts'
 import { useServices } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Button } from '../../ui/kit/controls'
@@ -54,6 +54,7 @@ export const WrapAskCell = memo(function WrapAskCell({ row }: Props<'wrapAsk'>) 
   }
 
   if (!open) {
+    if (!pastAskShown(picked)) return null
     return (
       <View style={styles.past} testID={`wrap-ask:${row.itemId}`}>
         <Text numberOfLines={1} style={{ color: c.ink3, fontSize: font.size.meta }}>

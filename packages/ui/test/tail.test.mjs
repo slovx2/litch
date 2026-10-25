@@ -3,7 +3,9 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-const { actionText, askOpen, askReplied, tailAsk } = await import('../src/tree/tail.ts')
+const { actionText, askOpen, askReplied, pastAskShown, tailAsk } = await import(
+  '../src/tree/tail.ts'
+)
 const { suggestTitles, stepsSummary } = await import('../src/transcript/steps-text.ts')
 const { translator } = await import('../src/i18n/index.ts')
 
@@ -70,6 +72,13 @@ test('问题在下一条用户消息之后失效：回合不是最后一个、�
   // 问题前面的用户消息不算
   assert.equal(askOpen(['u', 's', 'w'], 'w', true, kindOf), true)
   assert.equal(askOpen(['u'], 'w', true, kindOf), false)
+})
+
+test('过期的问题：认得出回了哪个按钮才留一行；插话之后回合接着跑完的、另写了话的不画', () => {
+  const actions = [{ label: '修吧', message: '好，在这里修' }]
+  assert.equal(pastAskShown(askReplied(actions, '好，在这里修')), true)
+  assert.equal(pastAskShown(askReplied(actions, '换个做法')), false)
+  assert.equal(pastAskShown(askReplied(actions, null)), false)
 })
 
 test('过程里收尾那一行：写建议的标题；只留了问题的写问题；汇总写建议了几个任务', () => {
