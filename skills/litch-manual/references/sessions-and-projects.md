@@ -294,11 +294,12 @@ woken to continue.
   connected; it happens when one connects. Turns run by scheduled tasks report but do not wake.
   A sub-session you stop or archive yourself does not wake the parent either: the report notes it and
   the parent sees it on your next message. The same goes for a turn you start yourself by typing in the
-  sub-session (as in Claude's desktop app): its report waits at the end of the parent's conversation
-  until you next message the parent. A failed or interrupted turn's report carries its error and
+  sub-session (as in Claude's desktop app): its report waits until you next message the parent. A failed or interrupted turn's report carries its error and
   does not wake the parent (as in Claude's desktop app); it goes with your next message, or with a wake
   another sub-session's report brings. Nothing wakes while another sub-session is still running.
-  Reports not yet handed over show at the end of the parent's conversation as soon as they arrive.
+  Reports not yet handed over show as soon as they arrive as one small button above the parent's
+  composer, next to Background tasks ("Report from …", or "Reports from N sub-sessions"); tap it to
+  see them. Once handed over they show on the message that carried them.
   If a sub-session finishes several turns while the parent is busy, only its latest report is handed over.
 - **Detach as a standalone session** (session menu or the "Started from …" bar at the top of a
   sub-session) cuts the link.

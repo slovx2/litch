@@ -17,6 +17,7 @@ import { downHarness, downText, wireStyle } from '../app/device.ts'
 import { useKey, useServices } from '../app/services.tsx'
 import { BackgroundBar } from '../background/BackgroundBar.tsx'
 import { GoalBar } from '../goal/GoalBar.tsx'
+import { QueuedNotesChip } from '../tree/EventBar.tsx'
 import { SessionComposer } from './Composer.tsx'
 import { PlanAsk } from './PlanAsk.tsx'
 import { asksAboutPlan, markPlanAsked } from './plan-ask.ts'
@@ -58,8 +59,12 @@ export function Dock({ deviceId, sessionId }: DockProps) {
         {meta.note ? <div className="cmp-hint err">{t.text(meta.note)}</div> : null}
         {/* 会话有持续目标：一行，状态、目标和用量，点开右侧的“目标”页 */}
         <GoalBar deviceId={deviceId} sessionId={sessionId} />
-        {/* 后台还有任务在跑（回合在不在跑都一样）：一行，只说有几个，点开右侧的“后台任务”页 */}
-        <BackgroundBar deviceId={deviceId} sessionId={sessionId} />
+        {/* 后台还有任务在跑（回合在不在跑都一样）：只说有几个，点开右侧的“后台任务”页；
+            右边是还排着、没交给模型的子会话回报，几条合成一个，点开往上弹出。两样都没有时这一行不占地方 */}
+        <div className="dock-bars">
+          <BackgroundBar deviceId={deviceId} sessionId={sessionId} />
+          <QueuedNotesChip deviceId={deviceId} sessionId={sessionId} />
+        </div>
         <SessionComposer deviceId={deviceId} sessionId={sessionId} blocked={blocked} />
       </>
     )
