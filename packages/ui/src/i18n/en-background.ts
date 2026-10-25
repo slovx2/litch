@@ -39,7 +39,6 @@ export const enBackground: Record<keyof typeof zhBackground, Entry> = {
   'background.origin.queue': 'Queued message, sent automatically',
   'background.origin.peer': 'Message from another session',
   // Background tasks and subagents share one tab (subagents and sub-sessions count as background tasks)
-  'background.kind.child': 'Sub-session',
   'background.stop': 'Stop',
   'background.stop.title': 'Stop this background task',
   'background.stopping': 'Stopping',

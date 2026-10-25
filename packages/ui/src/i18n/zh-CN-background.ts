@@ -34,7 +34,6 @@ export const zhBackground = {
   'background.origin.queue': '排队的消息，已自动发送',
   'background.origin.peer': '另一个会话发来消息',
   // 后台任务和子代理合成一页（子代理、子会话也算后台任务），能停的给“停止”，命令看输出
-  'background.kind.child': '子会话',
   'background.stop': '停止',
   'background.stop.title': '停止此后台任务',
   'background.stopping': '正在停止',

@@ -1,8 +1,9 @@
-// 侧面板的“后台任务”页：眼前这个会话回合结束后还在跑的命令（以及这次运行里结束过的）、引擎自己派出的子代理、
-// 会话树里这个会话派出的子会话，合成一张列表，都叫后台任务（照 Claude 桌面端：不按种类分组，类型看行首的图标）。
+// 侧面板的“后台任务”页：眼前这个会话回合结束后还在跑的命令（以及这次运行里结束过的）、引擎自己派出的子代理，
+// 合成一张列表，都叫后台任务（照 Claude 桌面端：不按种类分组，类型看行首的图标）。会话树里派出的子会话不列
+// （用户要求，2026-10-25），它们挂在侧栏的父会话下面，在自己的页面里停。
 // 运行中在上、已结束在下，每行是类型、名称（一行截断，悬停全文）、用时、状态，能停的给“停止”。
 // 跑完会不会自动接着做写在运行中那一组的组头右边（派生出来的不知道，就不写）。没有在跑的时候也能打开。
-// 点一行：子代理在列表下面打开子代理页，命令看它的输出，子会话直接打开那个会话。
+// 点一行：子代理在列表下面打开子代理页，命令看它的输出。
 import {
   type AgentThreadView,
   agentRunState,
@@ -17,7 +18,6 @@ import {
   type TurnView,
 } from '@litch/core'
 import { type MouseEvent, memo, useMemo, useState } from 'react'
-import { requestOpenSession } from '../app/actions.ts'
 import { useT } from '../app/appearance.ts'
 import { useElapsed } from '../app/clock.ts'
 import { whyNot } from '../app/errors.ts'
@@ -145,13 +145,8 @@ const EntryRow = memo(function EntryRow({
   // 在跑的一秒一秒地走；结束了的是定数
   const ticking = useElapsed(entry.status === 'running' ? entry.startedAt : null)
   const elapsed = entry.status === 'running' ? ticking : elapsedOf(entry, Date.now())
-  const label = t(
-    entry.source === 'child' ? 'background.kind.child' : `background.kind.${entry.kind}`,
-  )
-  const open = () => {
-    if (entry.source === 'child') requestOpenSession({ deviceId, sessionId: entry.id })
-    else pickBackground(deviceId, sessionId, selected ? null : entry.key)
-  }
+  const label = t(`background.kind.${entry.kind}`)
+  const open = () => pickBackground(deviceId, sessionId, selected ? null : entry.key)
   const stop = (event: MouseEvent) => {
     event.stopPropagation()
     setStopping(true)
@@ -194,7 +189,7 @@ const EntryRow = memo(function EntryRow({
       }}
     >
       <span className="bg-kind" role="img" aria-label={label}>
-        <Icon name={entry.source === 'child' ? 'tree' : ICON[entry.kind]} small />
+        <Icon name={ICON[entry.kind]} small />
       </span>
       <span className="t ell">{entry.title || label}</span>
       <span className="meta">

@@ -243,3 +243,117 @@ test('设备：列子代理时问每个子线程最近的一个回合；子线�
   assert.equal(agentRunState(finished, null, 'running'), 'completed')
   parent.close()
 })
+
+/** 一个在跑的后台子代理：会话状态 active，最近的回合 inProgress */
+function backgroundAgentWorld() {
+  const child = thread({
+    id: 'bg',
+    updatedAt: 1_700_000_200,
+    parentThreadId: 'p',
+    name: 'Research fame, MP, gear, spots',
+    status: { type: 'active', activeFlags: [] },
+    turns: [turn('tr', [], { status: 'inProgress', completedAt: null, durationMs: null })],
+  })
+  const codex = harness('codex', {
+    declaration: { extensions: [], features: features() },
+    threads: [thread({ id: 'p', updatedAt: 1_700_000_300, turns: [turn('t1', [])] }), child],
+  })
+  return { world: deviceWorld([codex]), child }
+}
+
+/** 子代理在对面跑完了：会话对象和最近的回合都改成结束了（回合结束的通知这条连接没收到） */
+const finishOnDevice = (child: ReturnType<typeof thread>) => {
+  child.status = { type: 'idle' }
+  child.turns = [turn('tr', [], { status: 'completed', durationMs: 832_221 })]
+}
+
+test('设备：子代理跑完时这条连接没看着父会话、只收到会话状态变成空闲（没收到回合结束）：再问一次最近的回合，不一直显示进行中', async () => {
+  const { world, child } = backgroundAgentWorld()
+  world.core.start()
+  await settle()
+  const parent = watchSession(world.core, 'p')
+  await settle()
+  const { agents } = (await world.command('session.agents', { sessionId: 'p' })) as {
+    agents: AgentThreadView[]
+  }
+  assert.equal(agents[0]?.turn?.state, 'running')
+  const asked = world.sent('thread/turns/list').length
+
+  finishOnDevice(child)
+  world.peer.last().notify('thread/status/changed', { threadId: 'bg', status: { type: 'idle' } })
+  await settle()
+  // 正常结束时回合结束的通知紧跟着就到：先等一会儿
+  assert.equal(world.sent('thread/turns/list').length, asked)
+  world.time.advance(2000)
+  await settle()
+  assert.equal(world.sent('thread/turns/list').length, asked + 1)
+  const done = parent.seen.view?.agents.find((entry) => entry.id === 'bg')
+  assert.equal(done?.turn?.state, 'completed')
+  assert.equal(agentRunState(done, null, 'running'), 'completed')
+  parent.close()
+})
+
+test('设备：回合结束的通知紧跟着会话状态到了，就不再问', async () => {
+  const { world, child } = backgroundAgentWorld()
+  world.core.start()
+  await settle()
+  const parent = watchSession(world.core, 'p')
+  await settle()
+  await world.command('session.agents', { sessionId: 'p' })
+  const asked = world.sent('thread/turns/list').length
+  finishOnDevice(child)
+  world.peer.last().notify('thread/status/changed', { threadId: 'bg', status: { type: 'idle' } })
+  world.peer.last().notify('turn/completed', { threadId: 'bg', turn: child.turns[0] })
+  await settle()
+  world.time.advance(2000)
+  await settle()
+  assert.equal(world.sent('thread/turns/list').length, asked)
+  assert.equal(
+    parent.seen.view?.agents.find((entry) => entry.id === 'bg')?.turn?.state,
+    'completed',
+  )
+  parent.close()
+})
+
+test('设备：状态变化也没收到（断开过），再列子代理时对面说它空闲了：记着的“在跑”不算数，重问最近的回合', async () => {
+  const { world, child } = backgroundAgentWorld()
+  world.core.start()
+  await settle()
+  await world.command('session.agents', { sessionId: 'p' })
+  const asked = world.sent('thread/turns/list').length
+  finishOnDevice(child)
+  const { agents } = (await world.command('session.agents', { sessionId: 'p' })) as {
+    agents: AgentThreadView[]
+  }
+  assert.equal(world.sent('thread/turns/list').length, asked + 1, '同一个子线程只问一次')
+  assert.equal(agents[0]?.turn?.state, 'completed')
+  assert.equal(agents[0]?.turn?.durationMs, 832_221)
+})
+
+test('设备：断开那阵子代理结束了（或引擎进程换了、它被记成打断）：重连之后重问记着在跑的子线程，没人再列也不停在进行中', async () => {
+  const { world, child } = backgroundAgentWorld()
+  world.core.start()
+  await settle()
+  const parent = watchSession(world.core, 'p')
+  await settle()
+  await world.command('session.agents', { sessionId: 'p' })
+  assert.equal(parent.seen.view?.agents[0]?.turn?.state, 'running')
+
+  // 入口重启：在跑的回合记成被打断，会话空闲，不发任何通知
+  child.status = { type: 'idle' }
+  child.turns = [turn('tr', [], { status: 'interrupted', durationMs: 60_000 })]
+  world.peer.last().drop()
+  await settle()
+  world.time.advance(500)
+  await settle()
+  await settle()
+  // 一连上就问（不等会话状态对不上的那一次复查）；sent 只看最后一条连接
+  assert.deepEqual(
+    world.sent('thread/turns/list').map((params) => params.threadId),
+    ['bg'],
+  )
+  const ended = parent.seen.view?.agents.find((entry) => entry.id === 'bg')
+  assert.equal(ended?.turn?.state, 'stopped')
+  assert.equal(agentRunState(ended, null, 'running'), 'stopped')
+  parent.close()
+})

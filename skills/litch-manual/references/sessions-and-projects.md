@@ -99,14 +99,14 @@ explain it:
   Monitor, a dsh background job, a long-running Codex command, or a background command Litch gives Pi,
   OpenCode and ACP sessions through its `litch_shell` tools (on by default; each harness's "Background
   commands" setting turns it off). The session counts as idle, not stuck:
-  a breathing line above the composer says how many are running, counting running subagents and
-  sub-sessions too; clicking it opens the Background tasks tab. That tab lists background commands,
-  the harness's own subagents and the session's sub-sessions together (running first, then finished
-  ones; type icon, name, elapsed time and status). Click a subagent to open its page below the list,
-  a command to see its output, a sub-session to open it. Running sub-sessions have a Stop button; so do
-  running commands and monitors of harnesses that can stop them (not dsh, whose background jobs can only
-  be listed) and subagents of harnesses that can stop one on its own (Claude Code; stopping one leaves
-  the turn and the other subagents running). The folded
+  a breathing line above the composer says how many are running, counting running subagents too;
+  clicking it opens the Background tasks tab. That tab lists background commands and the harness's own
+  subagents together (running first, then finished ones; type icon, name, elapsed time and status).
+  Sub-sessions are not background tasks: they sit under their parent in the sidebar, and you stop one
+  from its own page. Click a subagent to open its page below the list, a command to see its output.
+  Running commands and monitors have a Stop button on harnesses that can stop them (not dsh, whose
+  background jobs can only be listed), and so do subagents of harnesses that can stop one on its own
+  (Claude Code; stopping one leaves the turn and the other subagents running). The folded
   turn says "N running in the background", and the sidebar row shows a slowly breathing hollow mark
   instead of the spinner. Claude Code, dsh and Litch's background commands (Pi, OpenCode, ACP)
   continue on their own when a task finishes by itself; that turn starts with "Background task
