@@ -14,7 +14,6 @@ const {
   PANES,
   permissionLook,
   siteLabel,
-  sortApps,
   sortSites,
   winWarnings,
 } = await import('../src/settings/tools-logic.ts')
@@ -96,16 +95,6 @@ test('网站最近允许的在前，应用按名字排；https 的来源只写�
   )
   assert.equal(siteLabel('https://new.example:8443'), 'new.example:8443')
   assert.equal(siteLabel('http://old.example'), 'http://old.example')
-
-  const apps = sortApps([
-    { bundleId: 'com.b', name: 'Notes', addedAt: '' },
-    { bundleId: 'com.a', name: 'Notes', addedAt: '' },
-    { bundleId: 'com.c', name: 'Maps', addedAt: '' },
-  ])
-  assert.deepEqual(
-    apps.map((app) => app.bundleId),
-    ['com.c', 'com.a', 'com.b'],
-  )
 })
 
 test('日期写成 年-月-日，认不出的给空的', () => {

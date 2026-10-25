@@ -88,7 +88,7 @@ export interface ToolCallsHost {
   machine?: MachineCalls
   /** litch_config 的调用交给它（只有本机设备有）。不给回 noExecutor */
   config?(input: ConfigCallInput): Promise<ClientToolCallResponse>
-  /** 调用来自哪台设备，交给执行器（远程设备的 Computer Use 没有“始终允许”，执行器按 kind 判断） */
+  /** 调用来自哪台设备，交给执行器 */
   device(): ToolInvocation['device']
   /**
    * 这台设备上这个 harness 的开关里这个命名空间开着没有（harness 不知道是 null，按设备一级）。
@@ -147,8 +147,7 @@ const DISABLED: Record<string, string> = {
 }
 
 /**
- * 卡片上的选项：网站是“这一次 / 这个会话 / 一直 / 拒绝”；
- * 应用是“这个会话 / 始终 / 拒绝”，执行器说不许“始终”（远程设备）时没有那一项
+ * 卡片上的选项：网站是“这一次 / 这个会话 / 一直 / 拒绝”
  */
 export const clientAskOptions = (ask: ClientAskView): ApprovalOption[] =>
   ask.kind === 'machine'
@@ -163,18 +162,12 @@ export const clientAskOptions = (ask: ClientAskView): ApprovalOption[] =>
     : ask.kind === 'signIn'
       ? // 代理请人登录：选账号、自己登录都经外壳答浏览器面板上的那张（主进程的登记是准），这里只留拒绝
         [{ id: 'decline', role: 'decline' }]
-      : ask.kind === 'site'
-        ? [
-            { id: 'once', role: 'accept' },
-            { id: 'session', role: 'acceptSession' },
-            { id: 'always', role: 'acceptAlways' },
-            { id: 'decline', role: 'decline' },
-          ]
-        : [
-            { id: 'session', role: 'acceptSession' },
-            ...(ask.allowAlways ? [{ id: 'always', role: 'acceptAlways' } as const] : []),
-            { id: 'decline', role: 'decline' },
-          ]
+      : [
+          { id: 'once', role: 'accept' },
+          { id: 'session', role: 'acceptSession' },
+          { id: 'always', role: 'acceptAlways' },
+          { id: 'decline', role: 'decline' },
+        ]
 
 const turnKey = (threadId: string, turnId: string) => `${threadId}\u0000${turnId}`
 

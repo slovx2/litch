@@ -36,8 +36,6 @@ import { createConfigMain } from './config-main.mjs'
 import {
   ABOUT,
   ATTACH,
-  COMPUTER_USE_APPS,
-  COMPUTER_USE_FORGET_APP,
   COMPUTER_USE_OPEN_SETTINGS,
   COMPUTER_USE_RESTART,
   COMPUTER_USE_STATUS,
@@ -588,7 +586,7 @@ ipcMain.handle(PICK_FOLDER, async (event, options: unknown) => {
 // ---------- 设置页里 Computer Use 那一节（macOS 和 Windows 上有，computer-use/settings.mts） ----------
 
 /**
- * macOS：两项系统权限的状态、打开系统设置对应的那一页；Windows：助手的状态。两边都有重启助手、“始终允许”的清单。
+ * macOS：两项系统权限的状态、打开系统设置对应的那一页；Windows：助手的状态。两边都有重启助手。
  * 只接受界面自己的主框架发来的；预加载脚本也只在这两个平台上给界面这一组接口
  */
 const computerUseSettings = computerUse
@@ -601,8 +599,6 @@ const computerUseSettings = computerUse
         running: () => computerUse.supervisor.connected !== null,
         openPermissionSettings: (pane) => computerUse.openPermissionSettings(pane),
         restartHelper: () => computerUse.restartHelper(),
-        listAlwaysAllowed: () => computerUse.listAlwaysAllowed(),
-        removeAlwaysAllowed: (bundleId) => computerUse.removeAlwaysAllowed(bundleId),
       },
       // 自检和截图一律不去拉起真的助手：没指定假权限时当作两项都没给
       fakePermissions(process.env.LITCH_COMPUTER_USE_PERMISSIONS ?? (smoke ? 'none' : undefined)),
@@ -631,12 +627,6 @@ ipcMain.handle(COMPUTER_USE_OPEN_SETTINGS, (event, pane: unknown) =>
 )
 ipcMain.handle(COMPUTER_USE_RESTART, (event) =>
   fromUi(event) && computerUseSettings ? computerUseSettings.restart() : null,
-)
-ipcMain.handle(COMPUTER_USE_APPS, (event) =>
-  fromUi(event) && computerUseSettings ? computerUseSettings.apps() : [],
-)
-ipcMain.handle(COMPUTER_USE_FORGET_APP, (event, bundleId: unknown) =>
-  fromUi(event) && computerUseSettings ? computerUseSettings.forgetApp(bundleId) : false,
 )
 
 // 产品手册：设置页“配置助手”一节的状态和开关（manual-skill.mts，形状在 manual-ipc.mts）

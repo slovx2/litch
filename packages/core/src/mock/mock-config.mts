@@ -1,5 +1,5 @@
 // 模拟核心的 litch config：和真的核心用同一个执行器、同一条界面桥（config 主题），只是主进程那几项换成假的
-// （内置浏览器一直允许的网站、Computer Use 的状态和“始终允许”的应用）。
+// （内置浏览器一直允许的网站、Computer Use 的状态）。
 // 对话里说“配置：<参数>”（英文 “config: <args>”）就当本机 harness 里的模型跑了一次 litch config，
 // 放宽安全的那几项照样弹确认卡，界面那几项照样交给最近订阅的窗口去做。
 import { ChannelError, type Clock, type Commands } from '../channel/protocol.mjs'
@@ -9,7 +9,6 @@ import { createConfigBridge } from '../config/bridge.mjs'
 import type { ConfigCaller } from '../config/context.mjs'
 import { type ConfigExecutor, createConfigExecutor } from '../config/executor.mjs'
 import type {
-  ConfigAppView,
   ConfigComputerView,
   ConfigMainRequest,
   ConfigMainResult,
@@ -46,10 +45,6 @@ export function createMockConfig(host: MockConfigHost): MockConfig {
     { origin: 'https://github.com', at: host.clock.now() - 86_400_000 },
   ]
   const policy: ConfigSitePolicyView = { trustAll: false, blocked: [] }
-  let apps: ConfigAppView[] = [
-    { bundleId: 'com.apple.Notes', name: host.lang === 'en' ? 'Notes' : '备忘录' },
-    { bundleId: 'com.apple.TextEdit', name: host.lang === 'en' ? 'TextEdit' : '文本编辑' },
-  ]
   const computer: ConfigComputerView = {
     platform: 'darwin',
     helper: 'ready',
@@ -97,13 +92,6 @@ export function createMockConfig(host: MockConfigHost): MockConfig {
         return { ok: true, data: { ...policy, blocked: [...policy.blocked] } }
       case 'computer.status':
         return { ok: true, data: computer }
-      case 'computer.apps':
-        return { ok: true, data: apps.map((app) => ({ ...app })) }
-      case 'computer.forget': {
-        const before = apps.length
-        apps = apps.filter((app) => app.bundleId !== request.bundleId)
-        return { ok: true, data: apps.length < before }
-      }
     }
   }
 

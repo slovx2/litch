@@ -79,7 +79,7 @@ button.
 ### Session
 
 The transcript (messages, activity, to-dos, plans, file changes that open in the Diff tab), cards above
-the composer (approvals, questions, forms, browser and Computer Use approvals, "operate this computer"
+the composer (approvals, questions, forms, browser site approvals, "operate this computer"
 approvals, plan confirmation, sub-session proposals), and the composer. Details in
 `sessions-and-projects.md`.
 
@@ -98,7 +98,7 @@ together with a save bar. See `devices.md` and `device-settings.md`.
 
 Sections in order: **Appearance** (skin, theme, density, conversation width, zoom), **Language**, **Devices** (a shortcut
 to the Devices page), **Built-in browser** (links, import from another browser, trust all sites and the blocklist, always-allowed sites, saved passwords, clear browsing data),
-**Computer Use** (macOS and Windows only: permissions or helper status, always-allowed apps),
+**Computer Use** (macOS and Windows only: permissions or helper status),
 **Notifications** (sessions, scheduled tasks), **Config assistant** (section id `assist`: the switch that
 installs this manual into local harnesses and where it went, "Open config assistant", "Show the
 welcome guide again"), **Shortcuts** (read-only list), **About** (version, updates, licenses).

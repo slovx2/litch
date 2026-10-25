@@ -7,8 +7,6 @@ import { approvalsBridge } from './approvals/bridge.mjs'
 import { browserBridge } from './browser/bridge.mjs'
 import {
   ABOUT,
-  COMPUTER_USE_APPS,
-  COMPUTER_USE_FORGET_APP,
   COMPUTER_USE_OPEN_SETTINGS,
   COMPUTER_USE_RESTART,
   COMPUTER_USE_STATUS,
@@ -120,7 +118,7 @@ contextBridge.exposeInMainWorld('litchUpdate', {
 })
 
 // Computer Use（macOS 和 Windows 上有）：设置页里那一节要的状态（macOS 是两项权限，Windows 是助手的状态）、
-// 打开系统设置对应的那一页（只有 macOS）、重启助手、“始终允许”的清单。
+// 打开系统设置对应的那一页（只有 macOS）、重启助手。
 // 界面那边的类型在 packages/ui/src/settings/computer-bridge.ts，改一边要改另一边。别的系统上没有这个对象，界面就不显示那一节
 if (process.platform === 'darwin' || process.platform === 'win32') {
   contextBridge.exposeInMainWorld('litchComputerUse', {
@@ -129,8 +127,6 @@ if (process.platform === 'darwin' || process.platform === 'win32') {
     status: (launch: boolean) => ipcRenderer.invoke(COMPUTER_USE_STATUS, launch === true),
     openSettings: (pane: string) => ipcRenderer.invoke(COMPUTER_USE_OPEN_SETTINGS, pane),
     restart: () => ipcRenderer.invoke(COMPUTER_USE_RESTART),
-    apps: () => ipcRenderer.invoke(COMPUTER_USE_APPS),
-    forgetApp: (bundleId: string) => ipcRenderer.invoke(COMPUTER_USE_FORGET_APP, bundleId),
   })
 }
 

@@ -25,7 +25,7 @@ out when a device's box is clicked, and its switches are kept and apply again on
 |---|---|---|
 | Task cards | on | Stored on the device; per harness only |
 | Built-in browser | on | |
-| Computer Use | off | Turning it on is **guarded**: Litch shows a confirmation card and the user must click Allow. For a remote device it means agents on that machine can operate this computer's apps |
+| Computer Use | off | Turning it on is **guarded**: Litch shows a confirmation card and the user must click Allow. For a remote device it means agents on that machine can operate any app on this computer, without asking app by app |
 | Operate this computer | off | Remote devices only, not per harness, see `operate-this-computer.md`. Guarded |
 
 In the UI: Settings → Per-harness switches, a table with a row per device (expand it to see its
@@ -175,11 +175,8 @@ notice is shown; **Esc** (or Stop) takes control back and ends Computer Use for 
 - **Windows**: no system permission is needed; the helper starts when needed. Litch warns when it runs
   as administrator or UAC is off (the helper could then control elevated windows).
 - `scripts/litch computer status` reports the permission or helper state.
-- **App approval**: the first action on each app in a session asks: Allow this turn / Allow for this
-  session / Always allow / Decline. Sessions on remote devices never get "Always allow", and this
-  computer's always-allowed apps do not count for them. Some apps are always refused (Litch itself,
-  password managers, Keychain, system authentication dialogs, System Settings; on Windows also security
-  tools, Control Panel, registry and task manager); browsers and terminals are marked high-risk. The
-  agent does not open apps that are not running; it asks the user to.
-- `scripts/litch computer apps` lists always-allowed apps; `scripts/litch computer forget` removes one.
+- **No per-app approval**: once Computer Use is on for the device and harness, the agent can use any
+  app with a window, including on sessions from remote devices; nothing asks first and there is no app
+  list to manage. On Windows, windows that run as administrator still cannot be controlled. The agent
+  does not open apps that are not running; it asks the user to.
 - Not supported: Linux, a locked screen.

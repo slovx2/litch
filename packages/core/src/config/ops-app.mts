@@ -2,7 +2,6 @@
 // 外观、语言、两个本地偏好、打开某一页在界面那边（经 bridge）；浏览器网站、Computer Use 在主进程那边（经 main）。
 import type { DeviceView } from '../model.mjs'
 import type {
-  ConfigAppView,
   ConfigComputerView,
   ConfigOpenPlace,
   ConfigPrefs,
@@ -379,33 +378,6 @@ export const APP_OPS: Record<string, OpSpec> = {
         text: `${state.platform} · helper ${state.helper} · ${permissions}${state.reason ? ` · ${state.reason}` : ''}`,
         data: state,
       }
-    },
-  },
-  'computer apps': {
-    args: [0, 0],
-    usage: 'computer apps',
-    summary: { zh: 'Computer Use“始终允许”的应用', en: 'Apps Computer Use always allows' },
-    async run(ctx) {
-      const apps = (await ctx.main({ kind: 'computer.apps' })) as ConfigAppView[]
-      return {
-        text:
-          apps.map((app) => `${app.bundleId} "${app.name}"`).join('\n') ||
-          ctx.say('没有。', 'None.'),
-        data: apps,
-      }
-    },
-  },
-  'computer forget': {
-    args: [1, 1],
-    usage: 'computer forget <bundle-id>',
-    summary: { zh: '从“始终允许”里去掉一个应用', en: 'Remove an app from always-allowed' },
-    async run(ctx) {
-      const removed = (await ctx.main({
-        kind: 'computer.forget',
-        bundleId: ctx.cmd.positionals[0] ?? '',
-      })) as boolean
-      if (!removed) throw bad(ctx, '“始终允许”里没有它。', 'It is not in the always-allowed list.')
-      return { text: ctx.say('去掉了。', 'Removed.') }
     },
   },
   'notify task-success': {

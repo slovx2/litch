@@ -39,7 +39,7 @@ The screenshots show demo data. Skin, light or dark, and language (中文 / Engl
 - **Remote connections.** Connect through your own ssh config and keys, with no port opened on either side; dropped connections reconnect by themselves and running turns are not lost.
 - **Multiple harnesses.** Claude Code, Pi, Codex, plus experimental DeepSeek Harness (DSH), OpenCode and ACP agents (Gemini CLI, Qwen Code and more), all in one window.
 - **Built-in browser.** Shared by you and the agent; the remote machine's localhost is forwarded over ssh.
-- **Computer Use (macOS and Windows).** The agent operates apps on this computer, and each app needs your approval before the first action; a notice shows on screen while it works, and Esc stops it.
+- **Computer Use (macOS and Windows).** The agent operates any app on this computer without asking app by app; a notice shows on screen while it works, and Esc stops it.
 - **Operate this computer.** Once you approve, agents on remote devices can run commands, read and write files, and copy files between the two machines on the desktop computer. Off by default, turned on per device.
 - **Session trees.** A session can spawn sub-sessions on any harness, shown nested under it; when a sub-session finishes it reports back, and the parent is woken to carry on when needed.
 - **Scheduled tasks.** Tasks live on the device and the device runs them on schedule, even while the desktop is closed or disconnected; each run starts a new session or continues an existing one.

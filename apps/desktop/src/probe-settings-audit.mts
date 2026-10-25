@@ -96,11 +96,9 @@ export async function screensSeen(titles: { talk: string; waiting: string }): Pr
       }
       if (section === 'browser' || section === 'computer') {
         await until(`“${section}”那一组取到`, () =>
-          all(
-            '.set-content [data-sites], .set-content [data-perms], .set-content [data-apps]',
-          ).every(
+          all('.set-content [data-sites], .set-content [data-perms]').every(
             (block) =>
-              (block.dataset.sites ?? block.dataset.perms ?? block.dataset.apps) !== 'loading' &&
+              (block.dataset.sites ?? block.dataset.perms) !== 'loading' &&
               block.dataset.checking !== 'true',
           ),
         )

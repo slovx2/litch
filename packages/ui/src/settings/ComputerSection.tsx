@@ -1,18 +1,17 @@
 // 设置页“Computer Use”那一组（只在 macOS、Windows 上的桌面外壳里有，见 computer-bridge.ts）。
 // macOS：两项系统权限（辅助功能、屏幕录制）给没给，没给的说明一句、给一个“打开系统设置”让用户自己去打开；
-// 屏幕录制授权之后要重启助手才生效，所以没给的时候还有“重启助手”；“始终允许”的应用（可删）；
-// 最后一句说明每台设备的开关在设备详情里。
+// 屏幕录制授权之后要重启助手才生效，所以没给的时候还有“重启助手”；最后一句说明每台设备的开关在设备详情里。
+// 没有按应用的授权：所有应用都能操作。
 //
 // 查权限会拉起助手，只在这一组打开时查（不在启动时、也不在设备详情里为看一眼去拉起）。用户从系统设置切回来时
 // 窗口重新拿到焦点，再问一次在跑的助手（不拉起）。应用从不替用户改系统设置，也不调会弹系统授权框的接口。
 // Windows：没有系统权限这一块，换成助手的状态（在不在跑、版本、上次的错）和两条提醒（Litch 以管理员身份运行、
-// UAC 关着）。“始终允许”的清单和设备开关的说明两个平台一样。
+// UAC 关着）。设备开关的说明两个平台一样。
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { reasonOf } from '../app/errors.ts'
 import type { MessageKey } from '../i18n/index.ts'
 import {
-  type AlwaysAllowedApp,
   type ComputerUseBridge,
   type ComputerUseState,
   computerBridge,
@@ -20,14 +19,11 @@ import {
 } from './computer-bridge.ts'
 import {
   allGranted,
-  dayOf,
   helperLook,
-  listPhase,
   offersRestart,
   PANES,
   type PermissionLook,
   permissionLook,
-  sortApps,
   winWarnings,
 } from './tools-logic.ts'
 
@@ -57,7 +53,6 @@ export function ComputerSection({ onDevices }: { onDevices(): void }) {
       ) : (
         <Permissions bridge={bridge} />
       )}
-      <AlwaysAllowed bridge={bridge} />
       <section className="set-block">
         <div className="set-rows">
           <div className="set-row">
@@ -303,84 +298,6 @@ function HelperStatus({ bridge }: { bridge: ComputerUseBridge }) {
             : t('settings.computer.recheck')}
         </button>
       </div>
-    </section>
-  )
-}
-
-/** 始终允许的应用。这一组打开时取一次，删了之后再取 */
-function AlwaysAllowed({ bridge }: { bridge: ComputerUseBridge }) {
-  const t = useT()
-  const [apps, setApps] = useState<AlwaysAllowedApp[] | null>(null)
-  const [failure, setFailure] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
-
-  const load = useCallback(
-    () =>
-      bridge.apps().then(
-        (list) => {
-          setApps(sortApps(list))
-          setFailure(null)
-        },
-        (error: unknown) => setFailure(reasonOf(error, t)),
-      ),
-    [bridge, t],
-  )
-  useEffect(() => {
-    void load()
-  }, [load])
-
-  const forget = (bundleId: string) => {
-    setBusy(true)
-    bridge
-      .forgetApp(bundleId)
-      .then(load, (error: unknown) => setFailure(reasonOf(error, t)))
-      .finally(() => setBusy(false))
-  }
-
-  const phase = listPhase(apps, failure !== null && apps === null)
-  return (
-    <section className="set-block" data-apps={phase}>
-      <h3>
-        {t('settings.computer.apps')}
-        <span>{t('settings.computer.apps.note')}</span>
-      </h3>
-      {phase === 'loading' ? (
-        <p className="set-para">{t('settings.about.loading')}</p>
-      ) : phase === 'failed' ? (
-        <p className="set-para err" role="alert">
-          {t('settings.browser.failed', { reason: failure ?? '' })}
-        </p>
-      ) : phase === 'empty' ? (
-        <p className="set-para">{t('settings.computer.apps.empty')}</p>
-      ) : (
-        <div className="set-rows">
-          {(apps ?? []).map((app) => (
-            <div key={app.bundleId} className="set-row tool-row" data-app={app.bundleId}>
-              <span className="tool-name" title={app.bundleId}>
-                {app.name}
-                <span className="tool-id">{app.bundleId}</span>
-              </span>
-              <span className="tool-when">
-                {t('settings.computer.apps.at', { day: dayOf(app.addedAt) })}
-              </span>
-              <button
-                type="button"
-                className="mini"
-                data-act="forget-app"
-                disabled={busy}
-                onClick={() => forget(app.bundleId)}
-              >
-                {t('settings.computer.forget')}
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-      {failure && phase === 'list' ? (
-        <p className="set-para err" role="alert">
-          {t('settings.browser.failed', { reason: failure })}
-        </p>
-      ) : null}
     </section>
   )
 }

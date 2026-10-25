@@ -33,14 +33,6 @@ export interface ComputerUseState {
   reason?: string
 }
 
-/** “始终允许”的一个应用 */
-export interface AlwaysAllowedApp {
-  bundleId: string
-  name: string
-  /** 什么时候加的（ISO 时间） */
-  addedAt: string
-}
-
 export interface ComputerUseBridge {
   /** 这台桌面的平台：darwin 是权限那一套，win32 是助手状态那一套 */
   readonly platform: 'darwin' | 'win32'
@@ -50,9 +42,6 @@ export interface ComputerUseBridge {
   openSettings(pane: PermissionPane): Promise<boolean>
   /** 重启助手：macOS 屏幕录制授权之后要重启进程才生效。回重启之后的状态 */
   restart(): Promise<ComputerUseState | null>
-  apps(): Promise<AlwaysAllowedApp[]>
-  /** 从“始终允许”里删掉一个，回删没删掉 */
-  forgetApp(bundleId: string): Promise<boolean>
 }
 
 declare global {

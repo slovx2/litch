@@ -38,7 +38,8 @@ export interface ToolsSeen {
     restartShown: boolean
     /** 点了“重启助手”之后还是好好的 */
     restartedOk: boolean
-    apps: string
+    /** 还有按应用授权的清单（不该有） */
+    appList: boolean
     /** 去设备页的按钮 */
     toDevices: boolean
   } | null
@@ -153,10 +154,7 @@ export async function toolsSeen(): Promise<ToolsSeen> {
           5000,
         )),
     )
-    const appsBlock = await until('始终允许的应用取到', () => {
-      const found = one('.set-content [data-apps]')
-      return found && found.dataset.apps !== 'loading' ? found : null
-    })
+    const appList = one('.set-content [data-apps]') !== null
     one<HTMLButtonElement>('.set-content [data-act="open-devices"]')?.click()
     const toDevices = await seen(() => !one('.set-page') && one('.devp'), 3000)
     computer = {
@@ -165,7 +163,7 @@ export async function toolsSeen(): Promise<ToolsSeen> {
       openButtons,
       restartShown: Boolean(restart),
       restartedOk,
-      apps: appsBlock.dataset.apps ?? '',
+      appList,
       toDevices,
     }
   }
@@ -283,7 +281,7 @@ export function judgeTools(seen: ToolsSeen, platform: string): string[] {
       must(computer.openButtons === 2, `“打开系统设置”有 ${computer.openButtons} 个（应该两个）`)
       must(computer.restartShown, '屏幕录制没给时没有“重启助手”')
       must(computer.restartedOk, '点了“重启助手”之后权限那一块没有回到问到了的样子')
-      must(computer.apps === 'empty', `始终允许的应用不是空的样子：${computer.apps}`)
+      must(!computer.appList, '还有按应用授权的清单')
       must(computer.toDevices, 'Computer Use 那一组的按钮没有通到设备页')
     }
     must(

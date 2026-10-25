@@ -1,28 +1,14 @@
 // litch_computer 执行器的单元测试：助手用桩，不起真的进程、不碰系统权限。
 import assert from 'node:assert/strict'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { after, test } from 'node:test'
+import { test } from 'node:test'
 import type {
   ClientToolAnswer,
   ClientToolAsk,
   ClientToolContext,
   ClientToolInvocation,
 } from '../../client-tools/types.mjs'
-import { APPROVALS_FILE, ApprovalStore } from '../approvals.mjs'
 import { createComputerExecutor, type HelperAccess, type HelperRequester } from '../executor.mjs'
 import { type HelperApp, HelperError } from '../wire.mjs'
-
-const dirs: string[] = []
-after(() => {
-  for (const dir of dirs) rmSync(dir, { recursive: true, force: true })
-})
-function tempDir(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'litch-cu-test-'))
-  dirs.push(dir)
-  return dir
-}
 
 // 文本编辑按中文系统的样子给：显示名是本地化的，模型叫它 TextEdit（包的文件名）也要找得到
 const APPS: HelperApp[] = [
@@ -158,19 +144,17 @@ function textOf(response: { contentItems: { type: string; text?: string }[] }): 
     .join('\n')
 }
 
-test('list_apps 不查权限，禁止的应用标出来', async () => {
+test('list_apps 不查权限，所有应用照常列出', async () => {
   const helper = fakeHelper()
   helper.setPermissions({ accessibility: false, screenRecording: false })
-  const executor = createComputerExecutor({
-    helper: helper.access,
-    store: new ApprovalStore(tempDir()),
-  })
+  const executor = createComputerExecutor({ helper: helper.access })
   const { ctx } = context()
   const response = await executor.call(invocation('list_apps', {}), ctx)
   assert.equal(response.success, true)
   assert.match(textOf(response), /文本编辑 \(TextEdit\) — com\.apple\.TextEdit \(frontmost\)/)
   assert.match(textOf(response), /- Safari — com\.apple\.Safari\n/)
-  assert.match(textOf(response), /1Password — com\.1password\.1password \(not allowed\)/)
+  assert.match(textOf(response), /- 1Password — com\.1password\.1password\n/)
+  assert.doesNotMatch(textOf(response), /not allowed/)
   assert.deepEqual(
     helper.calls.map((call) => call.method),
     ['listApps'],
@@ -183,10 +167,9 @@ test('没有权限：重启一次助手再查，还没有就回 permission，不
   let clock = 100_000
   const executor = createComputerExecutor({
     helper: helper.access,
-    store: new ApprovalStore(tempDir()),
     now: () => clock,
   })
-  const { ctx, asks } = context(['session'])
+  const { ctx, asks } = context()
   const response = await executor.call(invocation('get_app_state', { app: 'TextEdit' }), ctx)
   assert.equal(response.success, false)
   assert.match(textOf(response), /^\[litch:permission\] /)
@@ -203,155 +186,47 @@ test('没有权限：重启一次助手再查，还没有就回 permission，不
   assert.equal(helper.restarts, 2)
 })
 
-test('禁止的应用当场 declined，不问用户，也不交给助手', async () => {
-  for (const app of ['1Password', 'io.github.slovx2.litch']) {
+test('任何应用都直接交给助手，不问用户：浏览器、密码管理器、Litch 自己都一样', async () => {
+  for (const [app, bundleId] of [
+    ['safari', 'com.apple.Safari'],
+    ['1Password', 'com.1password.1password'],
+    ['io.github.slovx2.litch', 'io.github.slovx2.litch'],
+  ]) {
     const helper = fakeHelper()
-    const executor = createComputerExecutor({
-      helper: helper.access,
-      store: new ApprovalStore(tempDir()),
-    })
-    const { ctx, asks } = context(['always'])
-    const response = await executor.call(invocation('click', { app, element: 3 }), ctx)
-    assert.equal(response.success, false)
-    assert.match(textOf(response), /^\[litch:declined\] /)
+    const executor = createComputerExecutor({ helper: helper.access })
+    const { ctx, asks } = context()
+    const response = await executor.call(invocation('click', { app, element: 2 }), ctx)
+    assert.equal(response.success, true, app)
     assert.equal(asks.length, 0)
-    assert.equal(
-      helper.calls.some((call) => call.method === 'click'),
-      false,
-    )
+    // 交给助手的是包标识（模型给的别名不往下传）和会话键
+    const click = helper.calls.find((call) => call.method === 'click')
+    assert.deepEqual(click?.params, { app: bundleId, element: 2, session: 'local/thread-1' })
   }
 })
 
-test('首次操作要问；本会话允许之后同一会话不再问，别的会话还要问；高风险标出来', async () => {
+test('远程设备的会话也不问', async () => {
   const helper = fakeHelper()
-  const executor = createComputerExecutor({
-    helper: helper.access,
-    store: new ApprovalStore(tempDir()),
-  })
-  const first = context(['session'])
-  const ok = await executor.call(invocation('click', { app: 'safari', element: 2 }), first.ctx)
-  assert.equal(ok.success, true)
-  assert.deepEqual(first.asks, [
-    {
-      kind: 'app',
-      app: { name: 'Safari', bundleId: 'com.apple.Safari' },
-      risk: 'elevated',
-      allowAlways: true,
-    },
-  ])
-  // 交给助手的是包标识（模型给的别名不往下传）和会话键
-  const click = helper.calls.find((call) => call.method === 'click')
-  assert.deepEqual(click?.params, {
-    app: 'com.apple.Safari',
-    element: 2,
-    session: 'local/thread-1',
-  })
-
-  const again = context()
-  await executor.call(invocation('click', { app: 'com.apple.Safari', element: 2 }), again.ctx)
-  assert.equal(again.asks.length, 0)
-
-  const other = context(['once'])
-  await executor.call(invocation('click', { app: 'Safari', element: 2 }, {}, 'thread-2'), other.ctx)
-  assert.equal(other.asks.length, 1)
-  // “仅这一次”不记
-  const third = context(['decline'])
-  const declined = await executor.call(
-    invocation('click', { app: 'Safari', element: 2 }, {}, 'thread-2'),
-    third.ctx,
-  )
-  assert.equal(third.asks.length, 1)
-  assert.match(textOf(declined), /^\[litch:declined\] /)
-})
-
-test('始终允许：存进用户数据目录，换一个会话、重开执行器都不再问；删掉后又问', async () => {
-  const userData = tempDir()
-  const helper = fakeHelper()
-  const store = new ApprovalStore(userData)
-  const executor = createComputerExecutor({ helper: helper.access, store })
-  const first = context(['always'])
-  await executor.call(invocation('type_text', { app: 'TextEdit', text: 'hi' }), first.ctx)
-  assert.equal(first.asks.length, 1)
-  const saved = JSON.parse(readFileSync(join(userData, APPROVALS_FILE), 'utf8'))
-  assert.equal(saved.apps[0].bundleId, 'com.apple.TextEdit')
-
-  const reopened = createComputerExecutor({
-    helper: helper.access,
-    store: new ApprovalStore(userData),
-  })
-  const second = context()
-  const response = await reopened.call(
-    invocation('type_text', { app: 'TextEdit', text: 'hi' }, {}, 'thread-9'),
-    second.ctx,
-  )
-  assert.equal(response.success, true)
-  assert.equal(second.asks.length, 0)
-
-  assert.equal(store.remove('com.apple.TextEdit'), true)
-  assert.deepEqual(store.list(), [])
-  const fresh = createComputerExecutor({
-    helper: helper.access,
-    store: new ApprovalStore(userData),
-  })
-  const third = context(['session'])
-  await fresh.call(
-    invocation('type_text', { app: 'TextEdit', text: 'hi' }, {}, 'thread-10'),
-    third.ctx,
-  )
-  assert.equal(third.asks.length, 1)
-})
-
-test('远程设备的会话：没有“始终允许”，已存的始终允许也不算', async () => {
-  const userData = tempDir()
-  const store = new ApprovalStore(userData)
-  store.addAlways({ bundleId: 'com.apple.TextEdit', name: 'TextEdit' })
-  const helper = fakeHelper()
-  const executor = createComputerExecutor({ helper: helper.access, store })
+  const executor = createComputerExecutor({ helper: helper.access })
   const remote = { id: 'box', name: 'Build box', kind: 'ssh' as const, target: 'box' }
-  const first = context(['always'])
+  const { ctx, asks } = context()
   const response = await executor.call(
     invocation('press_key', { app: 'TextEdit', key: 'cmd+s' }, remote),
-    first.ctx,
+    ctx,
   )
   assert.equal(response.success, true)
-  assert.equal(first.asks.length, 1)
-  assert.equal(first.asks[0]?.kind === 'app' && first.asks[0].allowAlways, false)
-  // 选了 always 也只当本会话，不写进清单
-  assert.deepEqual(
-    store.list().map((one) => one.bundleId),
-    ['com.apple.TextEdit'],
-  )
-  assert.equal(store.list().length, 1)
-  // 同一会话不再问，另一个远程会话还要问
-  const same = context()
-  await executor.call(invocation('press_key', { app: 'TextEdit', key: 'a' }, remote), same.ctx)
-  assert.equal(same.asks.length, 0)
-  const other = context(['session'])
-  await executor.call(
-    invocation('press_key', { app: 'TextEdit', key: 'a' }, remote, 'thread-2'),
-    other.ctx,
-  )
-  assert.equal(other.asks.length, 1)
-})
-
-test('卡片被取消（没答）回 failed', async () => {
-  const helper = fakeHelper()
-  const executor = createComputerExecutor({
-    helper: helper.access,
-    store: new ApprovalStore(tempDir()),
+  assert.equal(asks.length, 0)
+  const press = helper.calls.find((call) => call.method === 'pressKey')
+  assert.deepEqual(press?.params, {
+    app: 'com.apple.TextEdit',
+    key: 'cmd+s',
+    session: 'box/thread-1',
   })
-  const { ctx } = context([null])
-  const response = await executor.call(invocation('click', { app: 'TextEdit', x: 1, y: 2 }), ctx)
-  assert.match(textOf(response), /^\[litch:failed\] The approval request was cancelled/)
 })
 
 test('get_app_state：文字加截图（data: 地址）', async () => {
   const helper = fakeHelper()
-  const executor = createComputerExecutor({
-    helper: helper.access,
-    store: new ApprovalStore(tempDir()),
-  })
-  const { ctx } = context(['session'])
+  const executor = createComputerExecutor({ helper: helper.access })
+  const { ctx } = context()
   const response = await executor.call(
     invocation('get_app_state', { app: 'TextEdit', full: true }),
     ctx,
@@ -377,7 +252,6 @@ test('助手的错误分类转成失败答复', async () => {
     ['stopped', /^\[litch:failed\] stopped by user/],
     ['userActive', /^\[litch:failed\] stopped by user/],
     ['invalid', /^\[litch:invalid\] stopped by user/],
-    ['forbidden', /^\[litch:declined\] stopped by user/],
     ['permission', /^\[litch:permission\] /],
   ]
   for (const [kind, expected] of cases) {
@@ -388,9 +262,8 @@ test('助手的错误分类转成失败答复', async () => {
     })
     const executor = createComputerExecutor({
       helper: helper.access,
-      store: new ApprovalStore(tempDir()),
     })
-    const { ctx } = context(['session'])
+    const { ctx } = context()
     const response = await executor.call(invocation('click', { app: 'TextEdit', element: 1 }), ctx)
     assert.equal(response.success, false)
     assert.match(textOf(response), expected, kind)
@@ -399,10 +272,7 @@ test('助手的错误分类转成失败答复', async () => {
 
 test('参数不对、工具不认识、应用没在跑', async () => {
   const helper = fakeHelper()
-  const executor = createComputerExecutor({
-    helper: helper.access,
-    store: new ApprovalStore(tempDir()),
-  })
+  const executor = createComputerExecutor({ helper: helper.access })
   const { ctx } = context()
   assert.match(textOf(await executor.call(invocation('click', 'oops'), ctx)), /^\[litch:invalid\]/)
   assert.match(
@@ -421,10 +291,7 @@ test('参数不对、工具不认识、应用没在跑', async () => {
 
 test('被打断：回 failed', async () => {
   const helper = fakeHelper()
-  const executor = createComputerExecutor({
-    helper: helper.access,
-    store: new ApprovalStore(tempDir()),
-  })
+  const executor = createComputerExecutor({ helper: helper.access })
   const { ctx, controller } = context()
   controller.abort()
   const response = await executor.call(invocation('list_apps', {}), ctx)
@@ -433,10 +300,7 @@ test('被打断：回 failed', async () => {
 
 test('回合结束：告诉助手撤提示、清这个会话', async () => {
   const helper = fakeHelper()
-  const executor = createComputerExecutor({
-    helper: helper.access,
-    store: new ApprovalStore(tempDir()),
-  })
+  const executor = createComputerExecutor({ helper: helper.access })
   executor.turnEnded?.({ deviceId: 'box', threadId: 't7', turnId: 'u1' })
   await new Promise((resolve) => setTimeout(resolve, 0))
   assert.deepEqual(helper.calls, [{ method: 'turnEnded', params: { session: 'box/t7' } }])

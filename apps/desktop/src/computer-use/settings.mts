@@ -1,5 +1,5 @@
 // 设置页里 Computer Use 那一节在主进程这一侧要的几件事：助手和两项系统权限的状态、打开系统设置对应的那一页、
-// 重启助手、“始终允许”的清单。界面经预加载脚本的 window.litchComputerUse 调，消息在 main.mts 里登记
+// 重启助手。界面经预加载脚本的 window.litchComputerUse 调，消息在 main.mts 里登记
 // （只认界面自己的主框架发来的）。这里不引 electron，方便测试。
 //
 // 查权限要助手在跑。launch 为真（用户打开了设置页的那一节）时，助手没在跑就拉起它；为假（设备详情里顺带看一眼）时
@@ -13,7 +13,6 @@
 // LITCH_COMPUTER_USE_PERMISSIONS 是给自检和截图用的：设了就不碰助手，权限照它说的回
 // （none、accessibility、screenRecording、both），打开系统设置、重启助手都只当作做了。
 // Windows 上设了它（任何认得的值）也不碰助手，助手的状态照一份假的回。
-import type { AlwaysAllowedApp } from './approvals.mjs'
 import type { WinHelperInfo } from './index.mjs'
 import type { PermissionStatus } from './wire.mjs'
 
@@ -45,16 +44,12 @@ export interface ComputerUseControls {
   running(): boolean
   openPermissionSettings(pane: PermissionPane): Promise<boolean>
   restartHelper(): Promise<void>
-  listAlwaysAllowed(): AlwaysAllowedApp[]
-  removeAlwaysAllowed(bundleId: string): boolean
 }
 
 export interface ComputerUseSettings {
   status(launch: boolean): Promise<ComputerUseState>
   openSettings(pane: unknown): Promise<boolean>
   restart(): Promise<ComputerUseState>
-  apps(): AlwaysAllowedApp[]
-  forgetApp(bundleId: unknown): boolean
 }
 
 export const isPane = (value: unknown): value is PermissionPane =>
@@ -160,8 +155,5 @@ export function createComputerUseSettings(
       }
       return status(true)
     },
-    apps: () => controls.listAlwaysAllowed(),
-    forgetApp: (bundleId) =>
-      typeof bundleId === 'string' && bundleId !== '' && controls.removeAlwaysAllowed(bundleId),
   }
 }

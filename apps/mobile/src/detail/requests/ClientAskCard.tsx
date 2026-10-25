@@ -1,4 +1,4 @@
-// 客户端工具（内置浏览器、Computer Use）要人点头的事。手机上执行不了这些工具，不会自己发起这种询问；
+// 客户端工具（内置浏览器等）要人点头的事。手机上执行不了这些工具，不会自己发起这种询问；
 // 会话同时开在桌面端时，同一份请求也会排到这里（模拟核心里也有），照样能答。文字按结构在这里拼，核心只给“问的是什么”；
 // 远程设备上的模型要用那台电脑时写明白（和桌面端 ClientAskCard 同样的取舍）。
 // 操作那台桌面端的命令与文件（ask.kind 是 machine）也会排到这里：写出要做的事，选项的说法照桌面端的那一套。
@@ -49,9 +49,7 @@ export function ClientAskCard(props: CardProps<ClientAskRequest>) {
           ? 'clientAsk.site'
           : ask.kind === 'machine'
             ? MACHINE_TITLE[ask.action]
-            : ask.kind === 'signIn'
-              ? 'signInAsk.title'
-              : 'clientAsk.app',
+            : 'signInAsk.title',
       )}
       waiting={waiting}
       error={error}
@@ -82,17 +80,11 @@ export function ClientAskCard(props: CardProps<ClientAskRequest>) {
         </>
       ) : ask.kind === 'machine' ? (
         <MachineWhat ask={ask} />
-      ) : ask.kind === 'signIn' ? (
+      ) : (
         <>
           <Meta label={t('clientAsk.origin')} value={ask.origin} />
           {ask.reason ? <Well>{ask.reason}</Well> : null}
           <Why>{t('signInAsk.desktopOnly')}</Why>
-        </>
-      ) : (
-        <>
-          <Meta label={t('clientAsk.appName')} value={`${ask.app.name}  ${ask.app.bundleId}`} />
-          {ask.risk === 'elevated' ? <Why tone="err">{t('clientAsk.elevated')}</Why> : null}
-          {!ask.allowAlways ? <Why>{t('clientAsk.noAlways')}</Why> : null}
         </>
       )}
     </Card>

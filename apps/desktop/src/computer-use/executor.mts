@@ -1,13 +1,14 @@
 // litch_computer 的执行器：模型的每次调用在这里过一遍检查，再交给助手执行。
-// 审批、名单、出错的说法两个平台共用；Windows 上找应用、编号、换算坐标、组装结果在 executor-win.mts（platform 为 win32 时）。
+// 所有应用都能操作，不按应用审批，本机和远程设备的会话一样；
+// 能不能用只看设备和 harness 两级的开关（核心在调用到这里之前查）。
+// 出错的说法两个平台共用；Windows 上找应用、编号、换算坐标、组装结果在 executor-win.mts（platform 为 win32 时）。
 //
 // macOS 上一次调用的顺序：
 //   1. 认工具、看参数是不是对象
 //   2. list_apps 不要系统权限，直接问助手；别的先查辅助功能和屏幕录制，缺了回 permission，告诉模型和用户去哪里开
-//   3. 按模型给的 app 在在跑的应用里找到它，定下包标识（之后只用包标识，模型换个别名绕不过审批）
-//   4. 禁止的应用当场回 declined；这个会话没批过这个应用就出卡片问用户（远程设备的会话没有“始终允许”）
-//   5. 交给助手，结果转成给模型的文字和截图
-// 回合结束时告诉助手：撤掉屏幕提示、清掉这个会话的编号和“已停止”的记录。本会话的授权不随回合清。
+//   3. 按模型给的 app 在在跑的应用里找到它，定下包标识
+//   4. 交给助手，结果转成给模型的文字和截图
+// 回合结束时告诉助手：撤掉屏幕提示、清掉这个会话的编号和“已停止”的记录。
 import {
   CLIENT_TOOL_NAMESPACE,
   type ClientToolCallResponse,
@@ -20,16 +21,8 @@ import type {
   ClientToolExecutor,
   ClientToolInvocation,
 } from '../client-tools/types.mjs'
-import type { ApprovalStore } from './approvals.mjs'
-import {
-  type Approve,
-  CALL_TIMEOUT,
-  type HelperAccess,
-  sessionKey,
-  text,
-} from './executor-shared.mjs'
+import { CALL_TIMEOUT, type HelperAccess, sessionKey, text } from './executor-shared.mjs'
 import { createWinRunner } from './executor-win.mjs'
-import { classifyApp } from './policy.mjs'
 import {
   type ActionResult,
   type AppStateResult,
@@ -44,7 +37,6 @@ export { sessionKey } from './executor-shared.mjs'
 
 export interface ComputerExecutorOptions {
   helper: HelperAccess
-  store: ApprovalStore
   /** 这台桌面的平台：win32 走 Windows 那一套，别的按 macOS */
   platform?: string
   /** 测试用的时钟 */
@@ -67,14 +59,6 @@ export interface ComputerExecutor extends ClientToolExecutor {
   stopped(notice: HelperStopped): void
 }
 
-/** 禁止的应用：两个平台各自说一句为什么 */
-const FORBIDDEN_NOTE: Record<'darwin' | 'win32', string> = {
-  darwin:
-    'password managers, Keychain, system security prompts, System Settings and Litch itself are off limits',
-  win32:
-    'password managers, security software, sign-in and UAC prompts, Settings, Control Panel, Task Manager and Litch itself are off limits',
-}
-
 /** 没给权限时给模型（和用户）看的话 */
 export function permissionMessage(status: PermissionStatus): string {
   const missing = [
@@ -89,7 +73,7 @@ export function permissionMessage(status: PermissionStatus): string {
 }
 
 export function createComputerExecutor(options: ComputerExecutorOptions): ComputerExecutor {
-  const { helper, store } = options
+  const { helper } = options
   const platform = options.platform === 'win32' ? 'win32' : 'darwin'
   const now = options.now ?? Date.now
   let lastRestart = 0
@@ -122,54 +106,6 @@ export function createComputerExecutor(options: ComputerExecutorOptions): Comput
     )
   }
 
-  /**
-   * 这个会话能不能操作这个应用；不能时回失败答复。授权记在 app.key 上（存储和卡片里的字段叫 bundleId，
-   * Windows 上放的是应用号）
-   */
-  const approve: Approve = async (invocation, context, app) => {
-    const { key, risk } = app
-    if (risk === 'forbidden') {
-      return clientToolFailure(
-        'declined',
-        `${app.name} cannot be controlled with Computer Use (${FORBIDDEN_NOTE[platform]}). Ask the user to do this step themselves.`,
-      )
-    }
-    const session = sessionKey(invocation)
-    const remote = invocation.device.kind === 'ssh'
-    if (store.isAllowedForSession(session, key)) return null
-    if (!remote && store.isAlwaysAllowed(key)) {
-      store.allowForSession(session, key)
-      return null
-    }
-    const answer = await context.ask({
-      kind: 'app',
-      app: { name: app.name, bundleId: key },
-      risk,
-      allowAlways: !remote,
-    })
-    switch (answer) {
-      case 'once':
-        return null
-      case 'session':
-        store.allowForSession(session, key)
-        return null
-      case 'always':
-        if (!remote) store.addAlways({ bundleId: key, name: app.name })
-        store.allowForSession(session, key)
-        return null
-      case 'decline':
-        return clientToolFailure(
-          'declined',
-          `The user did not allow controlling ${app.name}. Do not try to use it again unless the user asks.`,
-        )
-      default:
-        return clientToolFailure(
-          'failed',
-          'The approval request was cancelled before the user answered.',
-        )
-    }
-  }
-
   async function run(
     invocation: ClientToolInvocation,
     context: ClientToolContext,
@@ -188,8 +124,7 @@ export function createComputerExecutor(options: ComputerExecutorOptions): Comput
         apps: HelperApp[]
       }
       const lines = apps.map((one) => {
-        const risk = classifyApp({ platform: 'darwin', ...one })
-        const note = risk === 'forbidden' ? ' (not allowed)' : one.active ? ' (frontmost)' : ''
+        const note = one.active ? ' (frontmost)' : ''
         const also = one.fileName && one.fileName !== one.name ? ` (${one.fileName})` : ''
         return `- ${one.name}${also} — ${one.bundleId ?? 'no bundle id'}${note}`
       })
@@ -231,22 +166,14 @@ export function createComputerExecutor(options: ComputerExecutorOptions): Comput
         `${found.name} has no bundle identifier and cannot be controlled.`,
       )
     }
-    const app = { ...found, bundleId: found.bundleId }
-    const refused = await approve(invocation, context, {
-      key: app.bundleId,
-      name: app.name,
-      risk: classifyApp({ platform: 'darwin', ...app }),
-    })
-    if (refused) return refused
-
     const client = await helper.client()
-    const request = { ...params, app: app.bundleId, session: sessionKey(invocation) }
+    const request = { ...params, app: found.bundleId, session: sessionKey(invocation) }
     const result = await client.request(method, request, CALL_TIMEOUT, signal)
     if (method === 'getAppState') return stateResponse(result as AppStateResult)
     return text((result as ActionResult).text)
   }
 
-  const win = platform === 'win32' ? createWinRunner({ helper, approve }) : null
+  const win = platform === 'win32' ? createWinRunner({ helper }) : null
 
   return {
     namespace: CLIENT_TOOL_NAMESPACE.computer,
@@ -302,11 +229,6 @@ function failureOf(error: unknown, signal: AbortSignal): ClientToolCallResponse 
             accessibility: !error.message.includes('Accessibility'),
             screenRecording: !error.message.includes('Screen Recording'),
           }),
-        )
-      case 'forbidden':
-        return clientToolFailure(
-          'declined',
-          `${error.message} Ask the user to do this step themselves.`,
         )
       case 'invalid':
         return clientToolFailure('invalid', error.message)

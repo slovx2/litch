@@ -109,8 +109,6 @@ export type ConfigMainRequest =
   /** host 给 null 是清空 */
   | { kind: 'browser.unblock'; host: string | null }
   | { kind: 'computer.status' }
-  | { kind: 'computer.apps' }
-  | { kind: 'computer.forget'; bundleId: string }
 
 /** 主进程的回话。data 的形状按 request.kind 定（见 config/ops-app.mts 里怎么读） */
 export type ConfigMainResult = { ok: true; data: unknown } | { ok: false; reason: string }
@@ -133,10 +131,4 @@ export interface ConfigComputerView {
   helper: string
   permissions: { accessibility: boolean; screenRecording: boolean } | null
   reason?: string
-}
-
-/** “始终允许”的一个应用 */
-export interface ConfigAppView {
-  bundleId: string
-  name: string
 }

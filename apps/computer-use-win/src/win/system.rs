@@ -155,7 +155,7 @@ pub fn locked_reason() -> Option<String> {
     let fg = unsafe { GetForegroundWindow() };
     if !fg.is_invalid() {
         if let Some(exe) = open_process(window_pid(fg)).and_then(|p| process_exe(&p)) {
-            if crate::baseline::file_name(&exe) == "lockapp.exe" {
+            if crate::shell::file_name(&exe) == "lockapp.exe" {
                 return Some("the lock screen is in front".into());
             }
         }

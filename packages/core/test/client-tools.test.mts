@@ -443,24 +443,15 @@ test('卡片：主进程要用户点头时在这个会话里出一张（会话�
   assert.equal(session.seen.view?.requests.length, 0)
   assert.equal(summary()?.waitingFor, null)
 
-  // 应用的卡片：执行器说不许“始终”时没有那一项
+  // 第二张卡片
   main?.reply({
     op: 'ask',
     id,
     askId: 'k2',
-    ask: {
-      kind: 'app',
-      app: { name: 'Safari', bundleId: 'com.apple.Safari' },
-      risk: 'elevated',
-      allowAlways: false,
-    },
+    ask: { kind: 'site', origin: 'https://b.example', url: 'https://b.example/' },
   })
   await settle()
-  const app = session.seen.view?.requests[0] as ClientAskRequest | undefined
-  assert.deepEqual(
-    app?.options.map((option) => option.role),
-    ['acceptSession', 'decline'],
-  )
+  assert.equal(session.seen.view?.requests.length, 1)
   // 执行器不等了（askDone）：卡片撤掉，不再回答
   main?.reply({ op: 'askDone', askId: 'k2' })
   await settle()
@@ -703,7 +694,7 @@ test('开关存在设备配置里：改过的才记，移除设备时一起去�
   )
 })
 
-test('模拟核心：“用浏览器”出一张网站卡片，答应了工具条目带着截图；“操作应用”在远程设备上没有“始终允许”', async () => {
+test('模拟核心：“用浏览器”出一张网站卡片，答应了工具条目带着截图；“操作应用”在远程设备上也不出卡片', async () => {
   const time = fakeClock()
   const [uiPort, corePort] = createPortPair()
   serveChannel(corePort, createMockCore({ clock: time.clock, chunkMs: 5 }), { clock: time.clock })
@@ -758,12 +749,9 @@ test('模拟核心：“用浏览器”出一张网站卡片，答应了工具�
   })
   time.advance(20)
   await settle()
-  const app = remote.view?.requests.find((entry) => entry.kind === 'clientAsk') as
-    | ClientAskRequest
-    | undefined
-  assert.equal(app?.device.kind, 'ssh')
-  assert.deepEqual(
-    app?.options.map((option) => option.role),
-    ['acceptSession', 'decline'],
+  assert.equal(remote.view?.requests.length, 0)
+  const used = Object.values(remote.view?.items ?? {}).find(
+    (item): item is ToolCallItem => item.kind === 'toolCall' && item.source === 'litch_computer',
   )
+  assert.equal(used?.status, 'completed')
 })

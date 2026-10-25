@@ -900,14 +900,6 @@ export type ClientAskView =
       origin: string
       url: string
     }
-  | {
-      kind: 'app'
-      app: { name: string; bundleId: string }
-      /** elevated：浏览器、终端这类高风险应用，卡片上标出来 */
-      risk: 'normal' | 'elevated'
-      /** 能不能选“始终允许”（远程设备的会话不能） */
-      allowAlways: boolean
-    }
   | SignInAskView
   | MachineAskView
 

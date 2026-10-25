@@ -61,14 +61,6 @@ export type ClientToolAsk =
       url: string
     }
   | {
-      kind: 'app'
-      app: { name: string; bundleId: string }
-      /** elevated：浏览器、终端这类高风险应用，卡片上标出来 */
-      risk: 'normal' | 'elevated'
-      /** 能不能选“始终允许”（远程设备的会话不能） */
-      allowAlways: boolean
-    }
-  | {
       /**
        * 内置浏览器请人登录（request_sign_in）：对话里和浏览器面板上同一张卡片（字段同 SignInRequest）。
        * 只在等人选的时候挂着；答复经浏览器桥 signIn.answer(id, …) 交给主进程（面板那张同一条路），

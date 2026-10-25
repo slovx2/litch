@@ -67,8 +67,6 @@ public enum RPCErrorKind: String, Sendable {
   case permission
   /// 找不到应用、应用没有窗口
   case notFound
-  /// 这个应用不许操作（助手这一侧的底线名单）
-  case forbidden
   /// 用户在这个回合里停掉了这个应用
   case stopped
   /// 用户正在动这个应用，等一会儿
