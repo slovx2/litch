@@ -19,6 +19,7 @@ import {
   litch,
   parent,
   plain,
+  refuseSteer,
   SESSIONS,
   startedOn,
   text,
@@ -253,8 +254,9 @@ test('SESSION-TREE-003：不是用户发起的回合里说 user_asked 也只出�
   }
 })
 
-test('SESSION-TREE-004：子会话一回合结束进父会话的队列；父会话还在跑不唤醒，停下了才唤醒，回报取前 400 字', async () => {
+test('SESSION-TREE-004：子会话一回合结束进父会话的队列；父会话还在跑、引擎不收插话的不唤醒，停下了才唤醒，回报取前 400 字', async () => {
   const env = treeRig()
+  refuseSteer(env.pi)
   try {
     const client = await litch(env)
     const { threadId } = await parent(client)
@@ -510,6 +512,7 @@ test('SESSION-TREE-010：用户在界面上派子会话（litch/session/start）
 
 test('SESSION-TREE-011：设备进程到子会话所在 harness 的连接断了：隔一阵重开、重新订阅在跑的子会话，之后的回合照样回报', async () => {
   const env = treeRig()
+  refuseSteer(env.pi)
   try {
     const { threadId, childId } = await family(env)
     const own = () =>
@@ -656,6 +659,7 @@ test('SESSION-TREE-014：父会话带着呈现风格派子会话：子会话也�
 
 test('SESSION-TREE-015：父会话忙着时同一个子会话跑了几回合：唤醒只交它最新的一条', async () => {
   const env = treeRig()
+  refuseSteer(env.pi)
   try {
     const { threadId, childId } = await family(env)
     env.claude.end(childId, 'failed', undefined, '连接断了')

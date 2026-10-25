@@ -9,7 +9,7 @@ import { codexRig } from './codex-kit.mjs'
 import { codexThread } from './fake-codex.mjs'
 import { failureOf, resultOf } from './fake-engine.mjs'
 import { assertRuntimeInfo, settle, TestClient } from './helpers.mjs'
-import { brief, litch, parent, SESSIONS, text, treeRig, until } from './tree-kit.mjs'
+import { brief, litch, parent, refuseSteer, SESSIONS, text, treeRig, until } from './tree-kit.mjs'
 
 async function family(env: ReturnType<typeof treeRig>) {
   const client = await litch(env)
@@ -294,6 +294,7 @@ test('SESSION-TOOLS-006：原生 codex 把同一个 litch_sessions 调用发给�
 
 test('SESSION-TOOLS-007：父子关系、提案、回报存在 sessions.sqlite 里，设备进程重启之后还在', async () => {
   const env = treeRig()
+  refuseSteer(env.pi)
   const { threadId, childId } = await family(env)
   env.claude.end(childId, 'completed', '重启前做完的')
   await until(() => env.device.sessionTree.store.notes(threadId).length === 1, '回报进队列')

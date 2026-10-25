@@ -1166,6 +1166,40 @@ test('引导：排着的消息插进正在进行的回合，对面回显时不�
   assert.deepEqual(session.texts(), [['一', '二']])
 })
 
+test('回报插话：设备进程插进回合的子会话回报画在插进去的位置，是“子会话的回报”，不是用户的话、不是别的会话发来的', async () => {
+  const { core, peer, command } = setup()
+  core.start()
+  await settle()
+  const session = watch(core)
+  await settle()
+  await command('session.send', { ...where, text: '一' })
+  const base = { threadId: 'a', turnId: 'srv-1' }
+  peer.last().notify('item/completed', { ...base, item: userText('u1', '一'), completedAtMs: 0 })
+  const answer = { type: 'agentMessage', id: 'a1', text: '先看看', phase: null }
+  peer.last().notify('item/completed', { ...base, item: answer, completedAtMs: 0 })
+  const text = formatSessionEvent({
+    kind: 'notes',
+    notes: [{ threadId: 'c1', title: '三号客户端', status: 'completed', excerpt: '上线了' }],
+  })
+  const steered = { ...userText('s1', text), clientId: 'litch-sessions-mz1abc-1' }
+  peer.last().notify('item/started', { ...base, item: steered, startedAtMs: 0 })
+  peer.last().notify('item/completed', { ...base, item: steered, completedAtMs: 0 })
+  await settle()
+  const view = session.seen.view
+  const ids = view?.turns[0]?.itemIds ?? []
+  assert.equal(ids.length, 3, '用户的话、回答、回报各一条')
+  const note = view?.items[ids[2] ?? ''] as UserMessageItem | undefined
+  assert.equal(note?.kind, 'userMessage')
+  assert.equal(note?.text, '', '没有用户自己的话')
+  assert.equal(note?.peer, undefined)
+  assert.equal(note?.unconfirmed, undefined)
+  assert.deepEqual(note?.event?.kind, 'notes')
+  assert.deepEqual(
+    note?.event?.notes.map((one) => [one.threadId, one.status, one.excerpt]),
+    [['c1', 'completed', '上线了']],
+  )
+})
+
 test('立即发送：消息号每次运行都不一样（入口按消息号永久记账，重启后不能撞上以前用过的）；没插成写一句、照常排着', async () => {
   const ids: string[] = []
   for (let run = 0; run < 2; run++) {

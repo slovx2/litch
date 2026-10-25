@@ -18,6 +18,7 @@ import {
   ECHO_SPEC,
   litch,
   parent,
+  refuseSteer,
   SESSIONS,
   type TreeEnv,
   text,
@@ -318,6 +319,7 @@ test('WRAP-UP-006：设置 sessions.wrapUpReminder 关掉不提醒，wrap_up 照
 
 test('WRAP-UP-007：同一时刻该提醒也该唤醒：先提醒，提醒回合结束后再唤醒；唤醒回合不引出提醒', async () => {
   const env = treeRig()
+  refuseSteer(env.pi)
   try {
     const client = await litch(env)
     const threadId = await withTools(client)

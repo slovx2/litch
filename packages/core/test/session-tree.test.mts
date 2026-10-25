@@ -1546,6 +1546,48 @@ test('模拟：说“派子会话”派出两个子会话（侧栏里挂在父�
   assert.deepEqual(world.sidebar.view?.sessions.find((entry) => entry.id === 's6')?.queuedNotes, [])
 })
 
+test('模拟：父会话的回合还在跑时子会话做完，回报当场插进这个回合（画在插进去的位置），不再唤醒', async () => {
+  const world = mockWorld()
+  await settle()
+  const parent = world.watch('s6')
+  await settle()
+  await world.channel.command('session.send', {
+    deviceId: 'local',
+    sessionId: 's6',
+    text: '派子会话去查',
+  })
+  // 父会话还在回话时用户又说了一句（排着）：这一回合停下时子会话开始跑，排着的那句接着开回合，
+  // 子会话在那个回合里做完（“想一会儿”让它跑得久一些）。不拨钟就发，这时第一回合还没回完
+  await world.channel.command('session.send', {
+    deviceId: 'local',
+    sessionId: 's6',
+    text: '想一会儿再说',
+  })
+  const steered = () =>
+    userItems(parent.view).filter(
+      (item) =>
+        item.event?.kind === 'notes' &&
+        parent.view?.turns.some((turn) => turn.itemIds.indexOf(item.id) > 0),
+    )
+  await world.until(() => steered().length > 0, '回报插进了回合')
+  assert.equal(steered()[0]?.text, '')
+  await world.until(
+    () => parent.view?.turns.every((turn) => turn.status !== 'running') === true,
+    '回合都结束了',
+  )
+  await world.until(
+    () => world.children('s6').every((entry) => entry.status !== 'running'),
+    '子会话都停了',
+  )
+  const delivered = steered().flatMap((item) => item.event?.notes ?? [])
+  const woke = userItems(parent.view).filter((item) => item.event?.kind === 'wake')
+  assert.equal(
+    delivered.length + woke.flatMap((item) => item.event?.notes ?? []).length,
+    2,
+    '两条回报各交一次',
+  )
+})
+
 test('模拟：说“提个子会话”出三张提案；短的那张到点过期；开始（可改）的起出子会话，了结的留着', async () => {
   const world = mockWorld()
   await settle()

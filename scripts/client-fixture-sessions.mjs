@@ -13,6 +13,7 @@
 //                              回合结束了）回一句“在这里做：<标题>”
 //   交接：<标题>               要在行首，调 litch_sessions.hand_off（剩下的计划是一段写死的话），结果回来后回一句“已交接：”加结果原文
 // 设备进程注入的唤醒（<litch-session-event kind="wake">）：回一句“收到子会话的结果：<几条>”，不调工具。
+// 回合进行中设备进程插进来的回报（只有 <litch-session-event kind="notes">、后面没有用户的话）：回一句“收到子会话的回报：<几条>”，不调工具。
 // 设备进程注入的提醒收尾（<litch-session-event kind="remind">）：调一次 wrap_up（空列表），结果回来后回一句“已收尾”。
 // 平时的回合不调 wrap_up（夹具的设备设置里提醒收尾缺省关，见 client-fixture-engines.mjs 的 fixtureDeviceSettings）。
 // 工具不在（会话不是 Litch 建的、这家没有客户端工具、设置里关了会话编排）时照实说一句。
@@ -25,6 +26,7 @@
 export const SESSIONS_TRIGGER = /^(会话|任务|浏览器)：(\w+)\s*(\{[\s\S]*\})?/m
 export const SESSIONS_HEARD = '会话结果：'
 export const SESSIONS_WOKEN = '收到子会话的结果：'
+export const SESSIONS_NOTED = '收到子会话的回报：'
 export const WRAP_UP_TRIGGER = /^收尾：\s*([[{][\s\S]*)$/m
 export const WRAP_UP_HEARD = '收尾结果：'
 export const REMIND_DONE = '已收尾'
@@ -34,6 +36,7 @@ export const OFFER_HERE = '在这里做：'
 export const HAND_OFF_TRIGGER = /^交接：\s*(.+)$/m
 export const HAND_OFF_HEARD = '已交接：'
 const WAKE = /<litch-session-event kind="wake">([\s\S]*?)<\/litch-session-event>/
+const NOTES_ONLY = /^<litch-session-event kind="notes">([\s\S]*?)<\/litch-session-event>\s*$/
 const REMIND = /<litch-session-event kind="remind">/
 
 const SPACES = {
@@ -94,6 +97,11 @@ export function sessionsStep(said, { nameOf, results }) {
   if (wake) {
     const lines = wake[1].split('\n').filter((line) => line.startsWith('- '))
     return { text: `${SESSIONS_WOKEN}${lines.length} 条\n${lines.join('\n')}` }
+  }
+  const noted = said.match(NOTES_ONLY)
+  if (noted) {
+    const lines = noted[1].split('\n').filter((line) => line.startsWith('- '))
+    return { text: `${SESSIONS_NOTED}${lines.length} 条\n${lines.join('\n')}` }
   }
   // 提醒收尾、用户点名的收尾：都是调 litch_sessions.wrap_up
   const reminded = REMIND.test(said)
