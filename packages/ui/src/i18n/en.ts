@@ -1039,6 +1039,7 @@ export const en: Record<MessageKey, Entry> = {
   'context.compactUnsupported': 'Not supported by this harness',
   'context.compactFailed': 'Couldn’t compact: {reason}',
   'rail.label': 'Session info',
+  'rail.toggle': 'Info panel',
   'todo.title': 'To-do',
   'todo.count': '{done}/{total} done',
   'todo.now': 'on step {index}',

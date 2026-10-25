@@ -990,6 +990,7 @@ export const zhCN = {
   'context.compactUnsupported': '此 harness 不支持压缩',
   'context.compactFailed': '压缩失败：{reason}',
   'rail.label': '会话信息',
+  'rail.toggle': '信息栏',
   'todo.title': '待办',
   'todo.count': '已完成 {done}/{total}',
   'todo.now': '正在进行第 {index} 项',

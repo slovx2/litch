@@ -2,7 +2,7 @@
 // 和文件、浏览器那种要手动打开的侧面板不是一回事：它排在对话和侧面板之间，跟着眼前的会话走。
 // 眼下两张卡片：会话最近的一份待办（各家 harness 的待办都经协议里的“回合计划更新”过来），
 // 和会话所在的工作树（在设备层建的工作树里才有）。
-// 窗口窄到放下它对话就太挤的时候整栏不出，待办回到对话里（见 rail-state.ts）。
+// 窗口窄到放下它对话就太挤的时候整栏不出，待办回到对话里（见 rail-state.ts）；用户也能从标题栏上把它收起来（RailToggle）。
 import {
   type ItemView,
   keys,
@@ -13,12 +13,19 @@ import {
 } from '@litch/core'
 import { type RefObject, useEffect, useMemo, useRef, useState } from 'react'
 import { useT } from '../app/appearance.ts'
-import { Caret } from '../app/icons.tsx'
+import { Caret, Icon } from '../app/icons.tsx'
 import { useKey, useKeys } from '../app/services.tsx'
 import { useToggle } from '../transcript/state.ts'
 import { TodoBar, TodoSteps, todoProgress } from '../transcript/Todo.tsx'
 import { RailWorktree } from '../worktrees/RailWorktree.tsx'
-import { setRailTodo, useRailAllowed } from './rail-state.ts'
+import {
+  setRailAvailable,
+  setRailTodo,
+  toggleRail,
+  useRailAllowed,
+  useRailAvailable,
+  useRailOpen,
+} from './rail-state.ts'
 
 /** 信息栏的宽度，和样式里 .rail 的一致 */
 const RAIL_WIDTH = 280
@@ -78,12 +85,19 @@ export function InfoRail({ deviceId, sessionId }: InfoRailProps) {
   const summary = useKey<SessionSummary>(keys.summary(deviceId, sessionId))
   const worktree = summary?.worktree ?? null
   const allowed = useRailAllowed()
-  const show = allowed && fits && (item !== null || worktree !== null)
+  const open = useRailOpen()
+  const available = allowed && fits && (item !== null || worktree !== null)
+  // 用户收起了：整栏不出、不占宽度，待办回到对话里；标题栏上的开关还在，点了再出来
+  const show = available && open
   const todoShown = show && item !== null
   useEffect(() => {
     setRailTodo(todoShown ? sessionKey : null)
     return () => setRailTodo(null)
   }, [todoShown, sessionKey])
+  useEffect(() => {
+    setRailAvailable(available)
+    return () => setRailAvailable(false)
+  }, [available])
   if (!show) return null
   return (
     <aside className="rail" ref={rail} aria-label={t('rail.label')}>
@@ -130,5 +144,24 @@ function RailTodo({
         </div>
       ) : null}
     </section>
+  )
+}
+
+/** 标题栏上开合信息栏的按钮。栏里没东西、窗口放不下的时候没有 */
+export function RailToggle() {
+  const t = useT()
+  const open = useRailOpen()
+  if (!useRailAvailable()) return null
+  return (
+    <button
+      type="button"
+      className="ibtn tb-rail"
+      title={t('rail.toggle')}
+      aria-label={t('rail.toggle')}
+      aria-pressed={open}
+      onClick={toggleRail}
+    >
+      <Icon name="rail" />
+    </button>
   )
 }

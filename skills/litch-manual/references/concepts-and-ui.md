@@ -29,8 +29,10 @@
 
 - **Title bar** (top): sidebar toggle, a breadcrumb "device / project / session" with the harness badge,
   and on the right: the remote-activity marker (only when remote devices are running commands on this
-  computer or waiting for approval, see `operate-this-computer.md`), the terminal toggle and the side
-  panel toggle. The bar takes the current device's wire color.
+  computer or waiting for approval, see `operate-this-computer.md`), the terminal toggle, the info
+  panel toggle (only while the session has something for the info panel) and the side panel toggle.
+  The bar takes the current device's wire color. The sidebar and the info panel can be hidden
+  completely; whether they are hidden is remembered on this computer.
 - **Sidebar** (left): **New session** button, a harness filter and a "more" menu at the top (the menu's
   **Always show active conversations**, on by default, keeps running, unread and waiting sessions listed
   while the filter is on; **Show Claude Code sub-sessions** shows sessions the Claude desktop app
@@ -48,6 +50,9 @@
   remembered per device (on the phone too) and kept after a restart; new ones start expanded.
 - **Main area**: the new-session page, a session, or one of the pages (Devices, Settings, Scheduled
   tasks, Archived sessions).
+- **Info panel** (right of the conversation): small cards that appear only when there is something to
+  show, such as the session's latest to-do list and its worktree. It stays out when the window is too
+  narrow; when it is hidden or out, the to-do list is shown in the conversation instead.
 - **Side panel** (right) with tabs **Files**, **Diff**, **Browser**, **Background tasks** (background commands and subagents). It follows the
   current session's device and project.
 - **Terminal panel** (below the conversation). Terminals belong to a project and keep running on the
