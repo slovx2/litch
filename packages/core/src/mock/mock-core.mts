@@ -71,7 +71,7 @@ import { createMockTerminals } from './mock-terminals.mjs'
 import { createMockTree } from './mock-tree.mjs'
 import { createMockWorktrees, shownOf } from './mock-worktrees.mjs'
 import {
-  type ClientToolDemo,
+  type ClientAskDemo,
   clientAskRequest,
   clientToolCall,
   type SignInDemo,
@@ -276,10 +276,10 @@ const TOOL_MS = 600
 const toolKey = (turnId: string): string => `${turnId}-w2`
 
 /**
- * 发的话里带这些字样时，演一次客户端工具调用：回合里出一条工具条目，停下来出一张“要你批准”的卡片
- * （和审批卡片同一处），答应了条目带着一张截图完成、拒绝了条目失败，再照常回话。
- * - 用浏览器：内置浏览器要打开一个没去过的网站（这一次 / 这个会话 / 一直 / 拒绝）；
- * - 操作应用：Computer Use 要操作一个高风险的应用。远程设备上的会话没有“始终允许”，卡片上标着来自哪台设备。
+ * 发的话里带这些字样时，演一次客户端工具调用，再照常回话：
+ * - 用浏览器：内置浏览器要打开一个没去过的网站，回合里出一条工具条目，停下来出一张“要你批准”的卡片
+ *   （和审批卡片同一处；这一次 / 这个会话 / 一直 / 拒绝），答应了条目带着一张截图完成、拒绝了条目失败；
+ * - 操作应用：Computer Use 看一个应用，不问用户，条目直接带着一张截图完成。
  * 条目标识和“工具大结果”的第二次是同一个，被打断时一样记成没成
  */
 const BROWSES = /用浏览器|use the browser/i
@@ -751,8 +751,19 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       askClientTool(view, turnId, signInDemo(message.text))
       return turnId
     }
-    if (BROWSES.test(message.text) || USES_APP.test(message.text)) {
-      askClientTool(view, turnId, BROWSES.test(message.text) ? 'site' : 'app')
+    if (BROWSES.test(message.text)) {
+      askClientTool(view, turnId, 'site')
+      return turnId
+    }
+    if (USES_APP.test(message.text)) {
+      applySessionOps(view, [
+        {
+          op: 'item.add',
+          turnId,
+          item: projectItem(clientToolCall('app', toolKey(turnId), 'shot')),
+        },
+      ])
+      replyHeard(view, turnId)
       return turnId
     }
     if (ASKS_QUESTIONS.test(message.text)) {
@@ -1261,10 +1272,10 @@ export function createMockCore(options: MockCoreOptions): MockCore {
   }
 
   /** 客户端工具那两出：卡片的标识 → 演的是哪一出、条目是哪个 */
-  const clientAsks = new Map<string, { demo: ClientToolDemo; itemId: string }>()
+  const clientAsks = new Map<string, { demo: ClientAskDemo; itemId: string }>()
 
-  /** 回合里调一次客户端工具，停下来等用户点头（见 BROWSES、USES_APP） */
-  const askClientTool = (view: SessionView, turnId: string, demo: ClientToolDemo) => {
+  /** 回合里调一次客户端工具，停下来等用户点头（见 BROWSES、SIGNS_IN） */
+  const askClientTool = (view: SessionView, turnId: string, demo: ClientAskDemo) => {
     const device = app.devices.find((entry) => entry.id === view.deviceId)
     if (!device) return
     const itemId = toolKey(turnId)

@@ -844,9 +844,8 @@ export const zhCN = {
   'settings.browser.clearFailed': '清除浏览数据失败，请重试',
   'settings.browser.failed': '操作失败：{reason}',
   'settings.computer.intro':
-    '允许模型操作本机应用。系统权限授予独立的助手应用“Litch Computer Use”，而非 Litch 本身。',
-  'settings.computer.intro.win':
-    '允许模型操作本机应用。操作由 Litch 启动的助手程序执行，每个应用首次使用时需要你批准。',
+    '允许模型操作本机任意应用。系统权限授予独立的助手应用“Litch Computer Use”，而非 Litch 本身。',
+  'settings.computer.intro.win': '允许模型操作本机任意应用，操作由 Litch 启动的助手程序执行。',
   'settings.computer.helper': '助手',
   'settings.computer.helper.state': '状态',
   'settings.computer.helper.running': '运行中',
@@ -878,11 +877,6 @@ export const zhCN = {
   'settings.computer.checking': '正在检查…',
   'settings.computer.failed': '助手启动失败：{reason}',
   'settings.computer.ready': '权限已全部授予，模型可以操作本机应用。',
-  'settings.computer.apps': '始终允许的应用',
-  'settings.computer.apps.note': '仅对本机会话生效，远程设备上的会话每次都会询问',
-  'settings.computer.apps.empty': '暂无始终允许的应用。',
-  'settings.computer.apps.at': '{day} 添加',
-  'settings.computer.forget': '删除',
   'settings.computer.devices':
     '各设备上的会话能否使用 Computer Use，需在设备详情中设置，默认关闭。',
 
@@ -1410,14 +1404,10 @@ export const zhCN = {
   'request.more': '另有 {count} 个请求待处理',
   'request.failed': '答复失败：{reason}',
   'clientAsk.site': '需要批准：打开网站',
-  'clientAsk.app': '需要批准：操作应用',
   'clientAsk.from': '来自',
   'clientAsk.remote': '远程设备上的模型请求使用本机',
   'clientAsk.origin': '网站',
   'clientAsk.url': '网址',
-  'clientAsk.appName': '应用',
-  'clientAsk.elevated': '高风险：该应用可浏览网页或运行其他程序',
-  'clientAsk.noAlways': '远程设备上的会话不提供“始终允许”，每个会话、每个应用需单独批准',
   'clientAsk.tool': '工具',
   'clientAsk.option.once': '本回合允许',
   'clientAsk.option.session': '本会话内允许',
@@ -1430,7 +1420,7 @@ export const zhCN = {
   'devices.tools.browser': '内置浏览器',
   'devices.tools.computer': 'Computer Use',
   'devices.tools.computer.remote':
-    '这是远程设备。开启后，该设备上运行的代理将操作本机（你面前的这台电脑），而不是远程设备。如果该设备被他人控制，对方即可远程操作你的桌面。每个会话、每个应用都需单独批准，不提供“始终允许”。',
+    '这是远程设备。开启后，该设备上运行的代理将操作本机（你面前的这台电脑），而不是远程设备。如果该设备被他人控制，对方即可远程操作你的桌面。代理可操作本机任意应用，不逐个确认。',
   'devices.tools.computer.missing':
     '本机尚未授予 Computer Use 所需的两项系统权限（辅助功能、屏幕录制），开启后也无法使用。',
   'devices.tools.computer.unknown':

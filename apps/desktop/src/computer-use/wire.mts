@@ -15,7 +15,6 @@ export type HelperErrorKind =
   | 'invalid'
   | 'permission'
   | 'notFound'
-  | 'forbidden'
   | 'stopped'
   | 'userActive'
   | 'stale'
@@ -159,8 +158,6 @@ export interface WinHelperApp {
   pid: number
   active: boolean
   integrity: WinIntegrity
-  /** 版本资源里的 OriginalFilename（防改名）。可选，助手给了就用 */
-  originalFilename?: string | null
   windows: WinWindow[]
 }
 

@@ -1,8 +1,7 @@
 // litch config 里只有主进程做得了的那几项（14 号设计 3.3）：内置浏览器“一直允许”的网站、信任所有网站和黑名单、浏览数据、
-// Computer Use 的状态和“始终允许”的应用。核心的执行器经 CLIENT_TOOL 的 config 消息交过来，这里做完回 configResult。
+// Computer Use 的状态。核心的执行器经 CLIENT_TOOL 的 config 消息交过来，这里做完回 configResult。
 // 和设置页上点按钮走的是同一份设置（browser/install.mts、computer-use/settings.mts），界面那边下次打开就是新的。
 import type {
-  ConfigAppView,
   ConfigComputerView,
   ConfigMainRequest,
   ConfigMainResult,
@@ -77,16 +76,6 @@ export function createConfigMain(deps: ConfigMainDeps) {
           }
           return { ok: true, data: view }
         }
-        case 'computer.apps': {
-          const apps: ConfigAppView[] = (deps.computer?.apps() ?? []).map((app) => ({
-            bundleId: app.bundleId,
-            name: app.name,
-          }))
-          return { ok: true, data: apps }
-        }
-        case 'computer.forget':
-          if (!deps.computer) return fail('This desktop has no Computer Use.')
-          return { ok: true, data: deps.computer.forgetApp(request.bundleId) }
       }
     } catch (error) {
       return fail(error instanceof Error ? error.message : String(error))

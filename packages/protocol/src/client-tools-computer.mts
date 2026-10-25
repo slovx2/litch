@@ -69,7 +69,7 @@ const SAFETY = `- Ask the user before anything irreversible or sensitive: deleti
 - Do not bypass security checks or solve CAPTCHAs.`
 
 const NAMESPACE_DESCRIPTION: Record<ComputerPlatform, string> = {
-  darwin: `Control macOS apps on the user's computer through Litch. The user approves each app the first time you use it in a conversation; password managers, Keychain, System Settings and Litch itself are never allowed.
+  darwin: `Control macOS apps on the user's computer through Litch. Any app with a window can be used; there is no per-app approval.
 
 ${HOW_TO_WORK}
 
@@ -78,7 +78,7 @@ ${SAFETY}`,
   // 3.6 节的 Windows 规矩：不按 Windows 键、不用“运行”、不在资源管理器地址栏或文件对话框里输入命令、
   // 管理员窗口请用户自己做、桌面锁着就停下请用户解锁。codex 限命名空间说明 1024 个字，所以比 macOS 那份写得紧，
   // 安全规矩一条不少
-  win32: `Control Windows apps through Litch. Each app needs the user's approval on first use; password managers, security tools, system settings and Litch are off limits.
+  win32: `Control Windows apps through Litch. Any app with a window can be used; there is no per-app approval.
 
 How to work: list_apps, then get_app_state BEFORE any action (screenshot + numbered elements like [12]). Act by element number, x/y only without one. Verify with get_app_state. On "user is using", wait and retry; if the user stopped you, leave that app alone this turn. Dialogs are separate windows: pass window.
 

@@ -1,7 +1,7 @@
 // 设置页“内置浏览器”“Computer Use”两节，和设备详情里 Computer Use 开关旁那一句提示，用到的判断。
 // 纯函数，单独测（test/settings-tools.test.mjs）；组件只管照着画。
 import type { BrowserSavedSite } from '../side/browser/bridge.ts'
-import type { AlwaysAllowedApp, ComputerUseState, PermissionPane } from './computer-bridge.ts'
+import type { ComputerUseState, PermissionPane } from './computer-bridge.ts'
 
 /** 两项系统权限，按这个顺序排 */
 export const PANES: readonly PermissionPane[] = ['accessibility', 'screenRecording']
@@ -76,13 +76,6 @@ export function listPhase(list: readonly unknown[] | null | undefined, failed: b
 /** “一直允许”的网站：最近允许的在前，同时允许的按来源排 */
 export function sortSites(sites: readonly BrowserSavedSite[]): BrowserSavedSite[] {
   return [...sites].sort((a, b) => b.at - a.at || a.origin.localeCompare(b.origin))
-}
-
-/** “始终允许”的应用：按名字排，名字一样按包标识 */
-export function sortApps(apps: readonly AlwaysAllowedApp[]): AlwaysAllowedApp[] {
-  return [...apps].sort(
-    (a, b) => a.name.localeCompare(b.name) || a.bundleId.localeCompare(b.bundleId),
-  )
 }
 
 /** 来源显示成什么：https 的只写主机（加端口），别的照原样 */

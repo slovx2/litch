@@ -1,12 +1,11 @@
 // Computer Use 在主进程这一侧的入口：主进程启动时（macOS 和 Windows 上）调 createComputerUse，把返回的 executor 登记到
-// 客户端工具的登记表里，界面语言变了调 setLanguage，退出前调 dispose。设置页要的“始终允许”清单的读、删，助手的状态，
+// 客户端工具的登记表里，界面语言变了调 setLanguage，退出前调 dispose。设置页要的助手的状态、
 // macOS 的权限状态和打开系统设置对应的那一页，也在返回的对象上。
 //
 // 两个平台的助手不同：macOS 是单独签名的应用（launcher-mac.mts），Windows 是 Litch 子进程起的 exe（launcher-win.mts）。
 // 这里不引 electron：要的几样（平台、是否打包、资源目录、用户数据目录、版本、语言）由调用方传进来，方便测试。
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { type AlwaysAllowedApp, ApprovalStore } from './approvals.mjs'
 import { createComputerExecutor } from './executor.mjs'
 import { MacLauncher } from './launcher-mac.mjs'
 import { WinLauncher, type WinLauncherOptions } from './launcher-win.mjs'
@@ -83,7 +82,6 @@ export function locateHelper(where: {
 export function createComputerUse(options: ComputerUseOptions) {
   let lang = options.lang
   const windows = options.platform === 'win32'
-  const store = new ApprovalStore(options.userData)
   const launcher: HelperLauncher = windows
     ? new WinLauncher({
         exePath: options.helperPath,
@@ -106,7 +104,7 @@ export function createComputerUse(options: ComputerUseOptions) {
       options.onStopped?.(notice)
     },
   })
-  const executor = createComputerExecutor({ helper: supervisor, store, platform: options.platform })
+  const executor = createComputerExecutor({ helper: supervisor, platform: options.platform })
 
   return {
     platform: windows ? ('win32' as const) : ('darwin' as const),
@@ -115,14 +113,6 @@ export function createComputerUse(options: ComputerUseOptions) {
     setLanguage(next: string): void {
       lang = next
       supervisor.setLanguage(next)
-    },
-    /** 设置页：“始终允许”的应用 */
-    listAlwaysAllowed(): AlwaysAllowedApp[] {
-      return store.list()
-    },
-    /** 设置页：从“始终允许”里删掉一个 */
-    removeAlwaysAllowed(appKey: string): boolean {
-      return store.remove(appKey)
     },
     /** 设置页（macOS）：两项系统权限现在给了没有（会拉起助手）。Windows 上没有这回事 */
     async permissions(): Promise<PermissionStatus> {

@@ -176,7 +176,7 @@ function asker(answer: ClientToolAnswer | null = 'session') {
 const textOf = (response: { contentItems: { type: string; text?: string }[] }) =>
   response.contentItems.map((item) => (item.type === 'inputText' ? item.text : '')).join('\n')
 
-test('执行器（win32）：列应用、审批、取状态、编号换 ref、坐标带截图号、动作后的差异', async () => {
+test('执行器（win32）：列应用、不问用户、取状态、编号换 ref、坐标带截图号、动作后的差异', async () => {
   const userData = mkdtempSync(join(tmpdir(), 'litch-cu-win-'))
   dirs.push(userData)
   const cu = createComputerUse({
@@ -195,27 +195,18 @@ test('执行器（win32）：列应用、审批、取状态、编号换 ref、�
     const list = textOf(listed)
     assert.match(list, /- Notepad — Microsoft\.WindowsNotepad_8wekyb3d8bbwe!App \(frontmost\)/)
     assert.match(list, /window 1002: "Save As"/)
-    assert.match(list, /Task Manager — .*Taskmgr\.exe \(not allowed\)/)
+    assert.match(list, /Task Manager — .*Taskmgr\.exe\n/)
+    assert.doesNotMatch(list, /not allowed/)
     assert.match(list, /Command Prompt — .* \(runs as administrator; cannot be controlled\)/)
 
-    // 禁止的、管理员的：不弹卡片
-    const taskmgr = await executor.call(invocation('get_app_state', { app: 'taskmgr' }), context)
-    assert.equal(taskmgr.success, false)
-    assert.match(textOf(taskmgr), /^\[litch:declined\] Task Manager cannot be controlled/)
+    // 管理员的发不进输入，直接说明
     const admin = await executor.call(invocation('click', { app: 'cmd.exe', x: 1, y: 1 }), context)
     assert.match(textOf(admin), /^\[litch:failed\] Command Prompt runs as administrator/)
     assert.equal(asks.length, 0)
 
-    // 第一次取状态：问一次（高风险标在卡片上的是资源管理器，记事本是普通的）
     const state = await executor.call(invocation('get_app_state', { app: 'notepad' }), context)
     assert.equal(state.success, true, textOf(state))
-    assert.equal(asks.length, 1)
-    assert.deepEqual(asks[0], {
-      kind: 'app',
-      app: { name: 'Notepad', bundleId: NOTEPAD },
-      risk: 'normal',
-      allowAlways: true,
-    })
+    assert.equal(asks.length, 0)
     const first = textOf(state)
     assert.match(
       first,
@@ -229,12 +220,11 @@ test('执行器（win32）：列应用、审批、取状态、编号换 ref、�
     )
     assert.ok(state.contentItems.some((item) => item.type === 'inputImage'))
 
-    // 打字：编号换成 ref，结果带差异；同一会话不再问
+    // 打字：编号换成 ref，结果带差异
     const typed = await executor.call(
       invocation('type_text', { app: NOTEPAD, text: 'hello', element: 3 }),
       context,
     )
-    assert.equal(asks.length, 1)
     assert.match(
       textOf(typed),
       /^Typed 5 characters\.\n\nChanges in the app's accessibility tree since the last state:\n~ \[3\] Document "Text editor" = "hello" \{focused\}/,
@@ -328,7 +318,7 @@ test('执行器（win32）：列应用、审批、取状态、编号换 ref、�
   }
 })
 
-test('执行器（win32）：物理 Esc 之后本回合不再操作，回合结束恢复；锁屏；远程会话没有始终允许', async () => {
+test('执行器（win32）：物理 Esc 之后本回合不再操作，回合结束恢复；锁屏；远程会话也不问', async () => {
   const userData = mkdtempSync(join(tmpdir(), 'litch-cu-win-'))
   dirs.push(userData)
   const stops: string[] = []
@@ -380,18 +370,18 @@ test('执行器（win32）：物理 Esc 之后本回合不再操作，回合结�
     )
     await cu.supervisor.connected?.request('_test.unlock')
 
+    // 远程设备的会话也不问
     const remote = asker('session')
-    await executor.call(
+    const explorer = await executor.call(
       invocation('get_app_state', { app: 'File Explorer' }, { id: 'build', kind: 'ssh' }),
       remote.context,
     )
-    assert.equal(remote.asks.length, 1)
-    assert.deepEqual(remote.asks[0], {
-      kind: 'app',
-      app: { name: 'File Explorer', bundleId: 'C:\\Windows\\explorer.exe' },
-      risk: 'elevated',
-      allowAlways: false,
-    })
+    assert.equal(explorer.success, true, textOf(explorer))
+    assert.equal(remote.asks.length, 0)
+
+    // 没有禁止的应用：任务管理器也照常操作
+    const taskmgr = await executor.call(invocation('get_app_state', { app: 'taskmgr' }), context)
+    assert.equal(taskmgr.success, true, textOf(taskmgr))
   } finally {
     await cu.dispose()
   }

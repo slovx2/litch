@@ -87,7 +87,6 @@ const KINDS = new Set<HelperErrorKind>([
   'invalid',
   'permission',
   'notFound',
-  'forbidden',
   'stopped',
   'userActive',
   'stale',

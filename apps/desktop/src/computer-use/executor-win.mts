@@ -1,8 +1,8 @@
-// litch_computer 在 Windows 上的那一半（共用的审批、名单、出错的说法在 executor.mts）。助手的协议见 wire.mts。
+// litch_computer 在 Windows 上的那一半（共用的出错的说法在 executor.mts）。助手的协议见 wire.mts。
 //
 // 和 macOS 不同的地方：
 //   - 没有系统权限这一步。
-//   - 应用按应用号认（打包应用是 AUMID，其余是 exe 的完整路径，不分大小写），授权也记在应用号上。
+//   - 应用按应用号认（打包应用是 AUMID，其余是 exe 的完整路径，不分大小写）。
 //   - 助手只回结构化的界面树（WinNode），编号、差异、文字化在这边（ax-text.mts）。工具参数里的 element 编号换成助手认的
 //     ref；drag 的 from_element / to_element 换成元素中心的截图坐标；坐标动作带上最近一次截图的截图号。
 //   - 助手的动作只回 {}，这边接着用 getAppState{screenshot:false} 取树算差异，和 macOS 一样附在结果里。
@@ -15,15 +15,7 @@ import { clientToolFailure } from '../../../../packages/protocol/src/client-tool
 import { COMPUTER_TOOL } from '../../../../packages/protocol/src/client-tools-computer.mjs'
 import type { ClientToolContext, ClientToolInvocation } from '../client-tools/types.mjs'
 import { ACTION_DIFF_LIMIT, AXIndexBook, type AXLine, diff, render } from './ax-text.mjs'
-import {
-  type Approve,
-  CALL_TIMEOUT,
-  type HelperAccess,
-  sessionKey,
-  text,
-} from './executor-shared.mjs'
-import { classifyApp } from './policy.mjs'
-import { exeName } from './policy-win.mjs'
+import { CALL_TIMEOUT, type HelperAccess, sessionKey, text } from './executor-shared.mjs'
 import { type WinShot, winActionParams } from './win-params.mjs'
 import {
   isWinHello,
@@ -45,13 +37,19 @@ interface AppBook {
 
 const RANK: Record<WinIntegrity, number> = { low: 0, medium: 1, high: 2, system: 3 }
 
+/** 路径或文件名 → 小写的文件名 */
+function exeName(path: string | null | undefined): string {
+  if (!path) return ''
+  const parts = path.split(/[\\/]/)
+  return (parts[parts.length - 1] ?? '').trim().toLowerCase()
+}
+
 export interface WinRunnerDeps {
   helper: HelperAccess
-  approve: Approve
 }
 
 export function createWinRunner(deps: WinRunnerDeps) {
-  const { helper, approve } = deps
+  const { helper } = deps
   /** 会话 → 应用号（小写）→ 状态 */
   const books = new Map<string, Map<string, AppBook>>()
   /** 会话 → 用户按了停止的应用号（小写） */
@@ -101,15 +99,12 @@ export function createWinRunner(deps: WinRunnerDeps) {
     const mine = RANK[helperIntegrity()]
     const lines: string[] = []
     for (const one of apps) {
-      const risk = classifyApp({ platform: 'win32', ...one })
       const note =
-        risk === 'forbidden'
-          ? ' (not allowed)'
-          : RANK[one.integrity] > mine
-            ? ' (runs as administrator; cannot be controlled)'
-            : one.active
-              ? ' (frontmost)'
-              : ''
+        RANK[one.integrity] > mine
+          ? ' (runs as administrator; cannot be controlled)'
+          : one.active
+            ? ' (frontmost)'
+            : ''
       lines.push(`- ${one.name} — ${one.appId}${note}`)
       for (const window of one.windows) {
         const flags = [window.active ? 'active' : '', window.minimized ? 'minimized' : '']
@@ -253,9 +248,8 @@ export function createWinRunner(deps: WinRunnerDeps) {
       )
     }
     const session = sessionKey(invocation)
-    const risk = classifyApp({ platform: 'win32', ...app })
-    // 管理员窗口发不进输入，问用户也没用：先说清楚（禁止的照审批那边的说法）
-    if (risk !== 'forbidden' && RANK[app.integrity] > RANK[helperIntegrity()]) {
+    // 管理员窗口发不进输入：先说清楚
+    if (RANK[app.integrity] > RANK[helperIntegrity()]) {
       return clientToolFailure(
         'failed',
         `${app.name} runs as administrator, so Litch cannot control it. Ask the user to do this step themselves.`,
@@ -267,8 +261,6 @@ export function createWinRunner(deps: WinRunnerDeps) {
         `The user stopped you from controlling ${app.name} for the rest of this turn. Do not try again in this turn; summarize what you did and what is left.`,
       )
     }
-    const refused = await approve(invocation, context, { key: app.appId, name: app.name, risk })
-    if (refused) return refused
 
     const entry = bookOf(session, app.appId)
     const windowId = typeof window === 'number' ? window : entry.windowId

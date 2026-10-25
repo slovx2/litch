@@ -889,9 +889,9 @@ export const en: Record<MessageKey, Entry> = {
   'settings.browser.clearFailed': 'Couldn’t clear browsing data. Try again.',
   'settings.browser.failed': 'Action failed: {reason}',
   'settings.computer.intro':
-    'Lets the model use apps on this Mac. System permissions are granted to a separate helper app, “Litch Computer Use”, not to Litch.',
+    'Lets the model use any app on this Mac. System permissions are granted to a separate helper app, “Litch Computer Use”, not to Litch.',
   'settings.computer.intro.win':
-    'Lets the model use apps on this PC through a helper program started by Litch. Each app needs your approval the first time.',
+    'Lets the model use any app on this PC through a helper program started by Litch.',
   'settings.computer.helper': 'Helper',
   'settings.computer.helper.state': 'Status',
   'settings.computer.helper.running': 'Running',
@@ -924,12 +924,6 @@ export const en: Record<MessageKey, Entry> = {
   'settings.computer.checking': 'Checking…',
   'settings.computer.failed': 'The helper failed to start: {reason}',
   'settings.computer.ready': 'All permissions granted. The model can use apps on this Mac.',
-  'settings.computer.apps': 'Always-allowed apps',
-  'settings.computer.apps.note':
-    'Applies to sessions on this computer only; sessions on remote devices always ask',
-  'settings.computer.apps.empty': 'No always-allowed apps.',
-  'settings.computer.apps.at': 'Added {day}',
-  'settings.computer.forget': 'Remove',
   'settings.computer.devices':
     'Whether sessions on each device can use Computer Use is set in the device details. Off by default.',
 
@@ -1469,15 +1463,10 @@ export const en: Record<MessageKey, Entry> = {
   'request.more': '{count} more pending',
   'request.failed': 'Couldn’t send the response: {reason}',
   'clientAsk.site': 'Approval needed: open a website',
-  'clientAsk.app': 'Approval needed: control an app',
   'clientAsk.from': 'From',
   'clientAsk.remote': 'A model on a remote device wants to use this computer',
   'clientAsk.origin': 'Site',
   'clientAsk.url': 'Address',
-  'clientAsk.appName': 'App',
-  'clientAsk.elevated': 'High risk: this app can browse the web or run other programs',
-  'clientAsk.noAlways':
-    '“Always allow” isn’t available for sessions on a remote device. Each session and app needs its own approval',
   'clientAsk.tool': 'Tool',
   'clientAsk.option.once': 'Allow this turn',
   'clientAsk.option.session': 'Allow for this session',
@@ -1491,7 +1480,7 @@ export const en: Record<MessageKey, Entry> = {
   'devices.tools.browser': 'Built-in browser',
   'devices.tools.computer': 'Computer Use',
   'devices.tools.computer.remote':
-    'This is a remote device. When on, agents on the remote device control this computer (the one in front of you), not the remote one. If someone takes over that device, they can control your desktop. Each session and app needs your approval; “Always allow” isn’t available.',
+    'This is a remote device. When on, agents on the remote device control this computer (the one in front of you), not the remote one. If someone takes over that device, they can control your desktop. Agents can use any app without asking first.',
   'devices.tools.computer.missing':
     'This Mac hasn’t granted Computer Use the required permissions (Accessibility, Screen Recording). It won’t work until they’re granted.',
   'devices.tools.computer.unknown':

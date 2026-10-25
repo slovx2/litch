@@ -56,10 +56,6 @@ export const COMPUTER_USE_STATUS = 'litch:computer-use:status'
 export const COMPUTER_USE_OPEN_SETTINGS = 'litch:computer-use:open-settings'
 /** 界面 → 主进程，等应答：重启助手（授完屏幕录制之后要重启才生效），回重启之后的状态 */
 export const COMPUTER_USE_RESTART = 'litch:computer-use:restart'
-/** 界面 → 主进程，等应答：“始终允许”的应用 */
-export const COMPUTER_USE_APPS = 'litch:computer-use:apps'
-/** 界面 → 主进程，等应答：从“始终允许”里删掉一个（按包标识），回删没删掉 */
-export const COMPUTER_USE_FORGET_APP = 'litch:computer-use:forget-app'
 // —— 应用自己的更新（updater.mts） ——
 /** 界面 → 主进程，等应答：这台机器出不出更新、现在的状态、自动检查开着没有 */
 export const UPDATE_GET = 'litch:update:get'

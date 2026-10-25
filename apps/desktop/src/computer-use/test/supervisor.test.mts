@@ -5,8 +5,6 @@ import { createServer, type Server, type Socket } from 'node:net'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
 import { MacLauncher, type MacLauncherOptions } from '../launcher-mac.mjs'
-import { classifyApp } from '../policy.mjs'
-import { FORBIDDEN_FOR_TEST } from '../policy-mac.mjs'
 import { HelperSupervisor } from '../supervisor.mjs'
 import { encodeFrame, FrameReader, HELPER_PROTOCOL, HelperError, MAX_FRAME } from '../wire.mjs'
 
@@ -120,38 +118,6 @@ test('帧编解码：分片、粘包、超限', () => {
   head.writeUInt32BE(MAX_FRAME + 1)
   big.push(head)
   assert.throws(() => big.next())
-})
-
-test('名单：助手底线名单里的每一项主进程这份都禁止；浏览器、终端算高风险', () => {
-  for (const id of [
-    'io.github.slovx2.litch',
-    'io.github.slovx2.litch.computer-use',
-    'com.apple.keychainaccess',
-    'com.apple.Passwords',
-    'com.apple.SecurityAgent',
-    'com.apple.systempreferences',
-    'com.1password.1password',
-    'com.bitwarden.desktop',
-  ]) {
-    assert.equal(classifyApp({ platform: 'darwin', bundleId: id, name: 'x' }), 'forbidden', id)
-  }
-  assert.ok(FORBIDDEN_FOR_TEST.ids.size > 5)
-  assert.equal(
-    classifyApp({ platform: 'darwin', bundleId: 'com.google.Chrome.canary', name: 'Chrome' }),
-    'elevated',
-  )
-  assert.equal(
-    classifyApp({ platform: 'darwin', bundleId: 'com.apple.Terminal', name: 'Terminal' }),
-    'elevated',
-  )
-  assert.equal(
-    classifyApp({ platform: 'darwin', bundleId: 'com.example.vault', name: 'My Password Vault' }),
-    'forbidden',
-  )
-  assert.equal(
-    classifyApp({ platform: 'darwin', bundleId: 'com.apple.TextEdit', name: 'TextEdit' }),
-    'normal',
-  )
 })
 
 test('拉起：带一次性令牌握手；崩溃后自己重拉', async () => {

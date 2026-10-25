@@ -1,5 +1,5 @@
-// 客户端工具（内置浏览器、Computer Use）要用户点头的卡片。不是对面的请求：是这台桌面端在替某个会话执行工具时
-// 自己要问的（打开一个没去过的网站、操作一个应用）。样子和审批卡片一样、排在同一处；文字按结构在这里拼，
+// 客户端工具要用户点头的卡片。不是对面的请求：是这台桌面端在替某个会话执行工具时
+// 自己要问的（内置浏览器打开一个没去过的网站；Computer Use 不问）。样子和审批卡片一样、排在同一处；文字按结构在这里拼，
 // 核心只给“问的是什么”。卡片上写明调用来自哪台设备：远程设备上的模型在用这台电脑时要显眼。
 // 网站的卡片上多一个“信任所有网站”：经外壳打开设置里的那个开关，再按“本回合允许”答这一张。
 // 远程设备操作这台电脑的命令与文件（ask.kind 是 machine）是另一个样子，和顶栏里的全局待处理共用
@@ -29,11 +29,11 @@ export function ClientAskCard(props: CardProps<ClientAskRequest>) {
   const { ask } = props.request
   if (ask.kind === 'machine') return <MachineSessionCard {...props} ask={ask} />
   if (ask.kind === 'signIn') return <SignInAskCard {...props} ask={ask} />
-  return <SiteOrAppCard {...props} />
+  return <SiteCard {...props} />
 }
 
-/** 内置浏览器、Computer Use 的那两种 */
-function SiteOrAppCard(props: CardProps<ClientAskRequest>) {
+/** 内置浏览器要打开一个没去过的网站 */
+function SiteCard(props: CardProps<ClientAskRequest>) {
   const { request, waiting } = props
   const t = useT()
   const { busy, error, respond } = useRespond(props)
@@ -43,7 +43,7 @@ function SiteOrAppCard(props: CardProps<ClientAskRequest>) {
   const refuse = request.options.find((option) => option.role === 'decline')
   const { ask, device } = request
   const remote = device.kind === 'ssh'
-  const title = t(ask.kind === 'site' ? 'clientAsk.site' : 'clientAsk.app')
+  const title = t('clientAsk.site')
   /** 信任所有网站要经外壳改设置；普通浏览器里（模拟核心）没有外壳，不出这个按钮 */
   const bridge = ask.kind === 'site' ? browserBridge() : undefined
   const once = request.options.find((option) => option.role === 'accept')
@@ -125,21 +125,6 @@ function SiteOrAppCard(props: CardProps<ClientAskRequest>) {
                 <pre>{ask.url}</pre>
               </div>
             ) : null}
-          </>
-        ) : ask.kind === 'app' ? (
-          <>
-            <div className="req-meta">
-              <span>
-                {t('clientAsk.appName')} <b>{ask.app.name}</b>
-              </span>
-              <span className="mono">{ask.app.bundleId}</span>
-            </div>
-            {ask.risk === 'elevated' ? (
-              <div className="req-why err" data-elevated>
-                {t('clientAsk.elevated')}
-              </div>
-            ) : null}
-            {!ask.allowAlways ? <div className="req-why">{t('clientAsk.noAlways')}</div> : null}
           </>
         ) : null}
       </div>

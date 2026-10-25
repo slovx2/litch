@@ -11,10 +11,13 @@ export const SAMPLE_SHOT =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAUAAAADICAIAAAAWZq/8AAACqUlEQVR42u3boQ2AQBBFQcpBEBTVXE1oFAJFVWiCoAIwSAwQDGKPSaaCyz3zky3mZQWCKjwBCBgQMCBgEDAgYEDAgIBBwICAAQGDgAEBAwIGBAwCBgQMCBgQMAgYEDAgYBAwECrgbduBoAQMAgYEDAgYBAwIGBAwIGAQMCBgQMAgYEDAgIABAYOAn5RVA5ekJWAEjIARsIAFjIAFjIARMAJGwAhYwCBgASNgBIyABSxgBCxgBIyAETACRsACFjACFjACxkE/CNgrgIABAQMCBgEDAgYEDAgYBAwIGBAwCBgQMCBgokvtxEsCRsACBgELGAQsYAQsYAEjYAGDgAWMgBEwAhawgBHw3wPu+pGMCVjACBgBI2ABCxgBC1jAAhawFRorNAJGwAIGAQsYBCxgBCxgASNgAYOABYyAETACFrCAEbCAQcACRsACFjACFjAIWMAgYPfAuAcWsIARsIAFLGABCxgBI2AELGArNFZoAYOABYyABSxgBCxgELCAETACRsACFjACFjAIWMAIGAEjYAH7aghYwCBgASNgAQsYAQvYPbB7YAELGAEjYAQsYAEjYAELWMACtkJjhUbACFjAIGABg4AFjIAFLGAELGAQsIARMAJGwAIWMAIWMAhYwAhYwAJGwAIGAQsYASvTPTDugQUsYAQsYAELWMACRsAIGAEL2AqNFVrAIGABI2ABCxgBCxgELGDgWwIGAQMCBgQMAgYEDAgYEDAIGMghYBez7oHv1EP6FQEjYAELGAELWMAIWMAIWMBWaAISsIARsIAFjIAFDAIWMAIWsIARsIAFjIAFDAIWMAIWsIARsIBBwAJGwAIWMAIWsIARsIBBwAIGBAwC9gogYEDAgIBBwICAAQEDAgYBAwIGBAwCBgQMCBgQMAgYEDAgYOB0AHd3bRbc0GZfAAAAAElFTkSuQmCC'
 
 /**
- * 各出是哪一种：网站（浏览器打开一个没去过的地方）、应用（Computer Use 操作一个高风险的应用）、
+ * 各出是哪一种：网站（浏览器打开一个没去过的地方）、应用（Computer Use 看一个应用，不出卡片）、
  * 代理请人登录（request_sign_in）的四样：有已存账号、库里没有、预检不过、定时任务的回合
  */
-export type ClientToolDemo = 'site' | 'app' | SignInDemo
+export type ClientToolDemo = ClientAskDemo | 'app'
+
+/** 要出卡片的那几出 */
+export type ClientAskDemo = 'site' | SignInDemo
 
 export type SignInDemo = 'signIn' | 'signInNone' | 'signInBlocked' | 'signInTask'
 
@@ -81,9 +84,9 @@ export function clientToolCall(
   }
 }
 
-/** 那一次调用要用户点头的卡片。远程设备上的会话操作应用时没有“始终允许” */
+/** 那一次调用要用户点头的卡片 */
 export function clientAskRequest(
-  demo: ClientToolDemo,
+  demo: ClientAskDemo,
   id: string,
   itemId: string,
   device: DeviceView,
@@ -92,14 +95,7 @@ export function clientAskRequest(
   const ask: ClientAskView =
     demo === 'site'
       ? { kind: 'site', origin: 'https://example.com', url: 'https://example.com/docs/start' }
-      : demo === 'app'
-        ? {
-            kind: 'app',
-            app: { name: 'Safari', bundleId: 'com.apple.Safari' },
-            risk: 'elevated',
-            allowAlways: device.kind !== 'ssh',
-          }
-        : signInAsk(demo, id)
+      : signInAsk(demo, id)
   return {
     id,
     kind: 'clientAsk',

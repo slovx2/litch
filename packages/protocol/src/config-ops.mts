@@ -79,8 +79,6 @@ export const CONFIG_OPS: readonly ConfigOp[] = [
   { group: 'browser', action: 'clear-data', write: true, irreversible: true },
 
   { group: 'computer', action: 'status', write: false },
-  { group: 'computer', action: 'apps', write: false },
-  { group: 'computer', action: 'forget', write: true },
 
   { group: 'notify', action: 'task-success', write: true },
   { group: 'notify', action: 'sessions', write: true },
