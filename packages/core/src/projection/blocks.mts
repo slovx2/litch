@@ -2,10 +2,10 @@
 // 一个回合画成：用户消息 → 过程 → 最终回答。过程按时间排三种东西：说明段（助手的中间说明，和回答同一套正文样式）、
 // 步骤组（两段说明之间连续的工具调用、思考、提示，收成一行汇总）、启动子代理的那一行。
 // 计划、待办、上下文压缩、派出的子会话露在过程外面，位置不变。回合结束后整段过程再收成一行。
-// 建议任务的卡片（收尾 wrap_up 带的、start 提的）连同收尾留给用户的问题，固定画在回合最下方（最终回答下面）的
-// 收尾区里，原来调用的位置在过程里只留一行；offer 卡挂在回合中间等用户选，不挪。
-// 收尾（wrap_up）带的卡片和问题等回合结束才进收尾区：规矩是先收尾、再写最终回答，收到就画的话卡片比回答先出来，
-// 没头没尾（照 Claude 桌面端：下一步框在回合结束前藏着）。回合中途 start 提的提案照旧收到就进，要趁回合在跑点开始。
+// 收尾（wrap_up）带的建议任务卡片连同留给用户的问题，固定画在回合最下方（最终回答下面）的收尾区里，
+// 原来调用的位置在过程里只留一行；等回合结束才进收尾区：规矩是先收尾、再写最终回答，收到就画的话卡片比回答先出来，
+// 没头没尾（照 Claude 桌面端：下一步框在回合结束前藏着）。
+// 回合中途 start 提的提案、offer 卡露在调用的位置，跟着对话往上走，后面的过程和回答接着往下长。
 
 import { CLIENT_TOOL_NAMESPACE } from '../../../protocol/src/client-tools.mjs'
 import type { ItemView } from '../model.mjs'
@@ -20,9 +20,9 @@ export interface BlockInput {
   kind: ItemView['kind']
   phase?: 'commentary' | 'final' | 'unknown'
   /**
-   * 画成卡片的条目（cardPlace）：outside 露在过程外面（派出的子会话、offer 卡、带题的助手消息）；
+   * 画成卡片的条目（cardPlace）：outside 露在过程外面（start 派出的子会话和提的提案、offer 卡、带题的助手消息）；
    * inline 排进过程里它所在的位置（启动子代理那一行），整段过程收起时跟着收；
-   * tail 是建议任务和收尾的问题：卡片画在回合最下方的收尾区，过程里它的位置只留一行
+   * tail 是收尾带的建议任务和问题：卡片画在回合最下方的收尾区，过程里它的位置只留一行
    */
   card?: CardPlace
   /** 不画的条目（quietOf）：空的收尾调用。不占块，也不算进步数 */
@@ -53,10 +53,10 @@ export type Block =
   | { type: 'todo'; itemId: string }
   /** 上下文压缩：一条分隔线，一直露在外面（官方桌面端也是），压的时候写“正在压缩”，压完写“已压缩” */
   | { type: 'compaction'; itemId: string }
-  /** 派出的子会话、offer 卡、带题的助手消息：一直露在外面 */
+  /** 派出的子会话、start 提的提案、offer 卡、带题的助手消息：一直露在外面 */
   | { type: 'card'; itemId: string }
   /**
-   * 回合最下方的收尾区：这一回合的建议任务卡片和收尾留给用户的问题，按调用的先后。
+   * 回合最下方的收尾区：这一回合收尾带的建议任务卡片和留给用户的问题，按调用的先后。
    * 有就排在全部块的最后（最终回答下面）；条目同时还在过程里占一行。收尾带的要等回合结束（BucketOptions）
    */
   | { type: 'tail'; itemIds: string[] }
@@ -223,7 +223,7 @@ export function quietOf(item: ItemView): boolean {
   )
 }
 
-/** 收尾区的东西：带建议或问题的收尾，start 提的提案（用户亲口要的那种直接起，不算） */
+/** 卡片放哪：露在外面、排进过程、收尾区（只有带建议或问题的收尾） */
 export type CardPlace = 'outside' | 'inline' | 'tail'
 
 /**
@@ -236,21 +236,15 @@ export function cardOf(item: ItemView): boolean {
 }
 
 /**
- * 卡片放在哪：启动子代理那一行排进过程里（inline）；建议任务（收尾带的、start 提的）和收尾的问题进回合最下方的
- * 收尾区（tail）；别的露在过程外面（outside）；不是卡片是 null。
- * 带题的助手消息（模型边干活边问）也露在外面：过程收起来时不能把要人回答的题一起收掉。
- * 用户亲口要的 start（user_asked）是直接派出的子会话，露在原处；设备进程核对不过、降成了提案的，
- * 有了结果（回合结束时重新分块）才挪进收尾区
+ * 卡片放在哪：启动子代理那一行排进过程里（inline）；收尾带的建议任务和问题进回合最下方的收尾区（tail）；
+ * 别的露在过程外面（outside）；不是卡片是 null。
+ * start 派出的子会话、提的提案、offer 卡都露在调用的位置：回合中途开的卡不钉在回合末尾，随对话滚走。
+ * 带题的助手消息（模型边干活边问）也露在外面：过程收起来时不能把要人回答的题一起收掉
  */
 export function cardPlace(item: ItemView): CardPlace | null {
   if (item.kind === 'agentMessage') return item.questions ? 'outside' : null
   if (item.kind !== 'toolCall') return null
-  const spawned = item.spawned
-  if (spawned) {
-    // 直接起出了子会话的（有子会话号）是派出的卡；用户亲口要的在有结果之前也当它是
-    if (spawned.via !== 'start' || spawned.threadId !== null) return 'outside'
-    return spawned.asked && spawned.proposalId === null ? 'outside' : 'tail'
-  }
+  if (item.spawned) return 'outside'
   if (item.wrapUp) return quietOf(item) ? null : 'tail'
   // 启动子代理刚开始时还不知道子线程是谁（上游开始的事件里没有），也画成卡片，等结束时填上
   return item.agents !== undefined &&
@@ -274,7 +268,7 @@ export type StepKind =
   | 'delete'
   | 'tool'
   | 'notice'
-  /** 建议了几个任务（卡片在回合最下方的收尾区，过程里只留这一行） */
+  /** 收尾建议了几个任务（卡片在回合最下方的收尾区，过程里只留这一行） */
   | 'suggest'
   /** 收尾时留了一个问题给用户（问题和按钮也在收尾区） */
   | 'ask'

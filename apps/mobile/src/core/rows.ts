@@ -297,7 +297,7 @@ export class RowBuilder {
           startedAt: turn.startedAt,
         }),
       )
-    /** 回合最下方的收尾区：收尾留的问题（最后一个），和这一回合的建议卡片 */
+    /** 回合最下方的收尾区：收尾留的问题（最后一个），和收尾带的建议卡片 */
     let tailAsk: Row | null = null
     const tailCards: Row[] = []
     /** 最后一条回答的末尾在 out 里的位置：目标达成那一句插在这里 */
@@ -325,16 +325,16 @@ export class RowBuilder {
             offer,
           }),
         )
-        // offer 卡挂在回合中间等人选，不挪
-        if (offer) {
+        // 中途 start 提的提案、offer 卡排在调用的位置，跟着对话往上走；只有收尾带的进回合最下方
+        if (offer || !isWrapUp(item)) {
           flush()
           out.push(...rows)
           continue
         }
-        // 建议任务、收尾的问题：过程里只留一步（提醒的回合没有过程），卡片和问题排到回合最下方。
-        // 收尾带的等回合结束再排：先收尾、再写回答，收到就排的话卡片比回答先出来（中途 start 的提案照旧）
+        // 收尾带的建议、问题：过程里只留一步（提醒的回合没有过程），卡片和问题排到回合最下方，
+        // 等回合结束再排：先收尾、再写回答，收到就排的话卡片比回答先出来
         if (!remind) group.push(item)
-        if (running && isWrapUp(item)) continue
+        if (running) continue
         tailCards.push(...rows)
         if (ask)
           tailAsk = this.keep({

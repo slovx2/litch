@@ -5,6 +5,10 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
+## 未发布
+
+- 建议任务卡：回合中途模型用 `litch_sessions.start` 提的提案卡（连同开始后挂在下面的子会话那一行）排在提出它的位置，随对话滚动，后面的过程和回答接着往下长；以前一直钉在回合最下方，直到回合结束都在最后。只有收尾（`wrap_up`）带的建议和问题仍在回合结束后排到最终回答下面。桌面和手机同样
+
 ## 0.21.0
 
 - Claude Code：Litch 转给 CLI 的 MCP 工具不再一律标成常驻，照服务自己的声明，和 CLI 自己连时一样“用到再找”。以前工具多的服务（比如两百多个工具的 rea）每个请求都带着全部定义，压缩也压不掉，会话一开头就占掉大半上下文，跑几步就自动压缩一次

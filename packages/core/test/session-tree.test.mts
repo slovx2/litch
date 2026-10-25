@@ -120,7 +120,7 @@ test('投影：子代理调用带上每个子线程的状态；litch_sessions.st
     kind: 'fresh',
     asked: false,
   })
-  // 直接派出去的子会话露在原处；提的提案进回合最下方的收尾区
+  // 直接派出去的子会话、提的提案都露在调用的位置（只有收尾带的进回合最下方的收尾区）
   assert.equal(cardPlace(started), 'outside')
 
   const proposed = projectItem({
@@ -137,8 +137,8 @@ test('投影：子代理调用带上每个子线程的状态；litch_sessions.st
   assert.equal(proposed.spawned?.proposalId, 'pr1')
   assert.equal(proposed.spawned?.threadId, null)
   assert.equal(proposed.spawned?.via, 'start')
-  assert.equal(cardPlace(proposed), 'tail')
-  // 用户亲口要的（user_asked）：开始时是派出的卡；设备进程核对不过、降成了提案的，有了结果就进收尾区
+  assert.equal(cardPlace(proposed), 'outside')
+  // 用户亲口要的（user_asked）：开始时是派出的卡；设备进程核对不过、降成了提案的，也还在原处
   const askedArgs = { title: '整理', prompt: '整理一下', initiation: 'user_asked', effort: 'high' }
   const asked = projectItem({
     type: 'dynamicToolCall',
@@ -165,7 +165,7 @@ test('投影：子代理调用带上每个子线程的状态；litch_sessions.st
     success: true,
     durationMs: 3,
   } as never) as ToolCallItem
-  assert.equal(cardPlace(demoted), 'tail')
+  assert.equal(cardPlace(demoted), 'outside')
 
   // offer 卡：调用还在等用户选，没有结果；选了之后结果里有提案号和选择
   const offerArgs = { title: '加导出按钮', initiation: 'offer' }
@@ -1023,12 +1023,12 @@ test('分块：不画的条目不占块、不算进步骤；回合只剩提示�
   )
 })
 
-test('分块：一回合的建议卡片和收尾的问题都排在最终回答下面，过程里原位置只留一行；offer 卡不挪', () => {
+test('分块：收尾带的卡片和问题排在最终回答下面，过程里原位置只留一行；start 的提案、offer 卡不挪', () => {
   assert.deepEqual(
     bucketItems([
       { id: 'u', kind: 'userMessage' },
       { id: 'c', kind: 'command' },
-      { id: 's', kind: 'toolCall', card: 'tail' },
+      { id: 's', kind: 'toolCall', card: 'outside' },
       { id: 'm', kind: 'agentMessage', phase: 'commentary' },
       { id: 'o', kind: 'toolCall', card: 'outside' },
       { id: 'w', kind: 'toolCall', card: 'tail', wrapUp: true },
@@ -1036,18 +1036,13 @@ test('分块：一回合的建议卡片和收尾的问题都排在最终回答�
     ]),
     [
       { type: 'user', itemId: 'u' },
-      {
-        type: 'process',
-        key: 'c',
-        parts: [
-          { type: 'steps', key: 'c', itemIds: ['c', 's'] },
-          { type: 'note', itemId: 'm' },
-        ],
-      },
+      { type: 'process', key: 'c', parts: [{ type: 'steps', key: 'c', itemIds: ['c'] }] },
+      { type: 'card', itemId: 's' },
+      { type: 'process', key: 'm', parts: [{ type: 'note', itemId: 'm' }] },
       { type: 'card', itemId: 'o' },
       { type: 'process', key: 'w', parts: [{ type: 'steps', key: 'w', itemIds: ['w'] }] },
       { type: 'answer', itemId: 'a' },
-      { type: 'tail', itemIds: ['s', 'w'] },
+      { type: 'tail', itemIds: ['w'] },
     ],
   )
   // 旧顺序（先写完整回答、再调带建议的收尾、再补一句）：和空收尾一样，前后的话都算回答
@@ -1068,31 +1063,28 @@ test('分块：一回合的建议卡片和收尾的问题都排在最终回答�
   )
 })
 
-test('分块：回合还在跑时收尾带的卡片和问题先不进收尾区，过程里那一步照留；中途 start 的提案照旧进', () => {
+test('分块：回合还在跑时收尾带的卡片和问题先不进收尾区，过程里那一步照留；中途 start 的提案在原处', () => {
   const items = [
     { id: 'u', kind: 'userMessage' as const },
-    { id: 's', kind: 'toolCall' as const, card: 'tail' as const },
+    { id: 'c1', kind: 'command' as const },
+    { id: 's', kind: 'toolCall' as const, card: 'outside' as const },
+    { id: 'c2', kind: 'command' as const },
     { id: 'w', kind: 'toolCall' as const, card: 'tail' as const, wrapUp: true },
     { id: 'a', kind: 'agentMessage' as const, phase: 'unknown' as const },
   ]
-  // 先收尾、回答正在写：回答照旧认得出来，收尾区里只有中途提的那张
-  assert.deepEqual(bucketItems(items, { turnRunning: true }), [
+  // 先收尾、回答正在写：回答照旧认得出来；start 的卡夹在两段过程中间，后面的接着往下长，没有收尾区
+  const running = bucketItems(items, { turnRunning: true })
+  assert.deepEqual(running, [
     { type: 'user', itemId: 'u' },
-    { type: 'process', key: 's', parts: [{ type: 'steps', key: 's', itemIds: ['s', 'w'] }] },
+    { type: 'process', key: 'c1', parts: [{ type: 'steps', key: 'c1', itemIds: ['c1'] }] },
+    { type: 'card', itemId: 's' },
+    { type: 'process', key: 'c2', parts: [{ type: 'steps', key: 'c2', itemIds: ['c2', 'w'] }] },
     { type: 'answer', itemId: 'a' },
-    { type: 'tail', itemIds: ['s'] },
   ])
-  // 回合结束（不传、传 false 都一样）：收尾带的排进来，按调用先后
+  // 回合结束（不传、传 false 都一样）：收尾带的排进来，start 的卡还在原处
   const ended = bucketItems(items, { turnRunning: false })
-  assert.deepEqual(ended.at(-1), { type: 'tail', itemIds: ['s', 'w'] })
+  assert.deepEqual(ended, [...running, { type: 'tail', itemIds: ['w'] }])
   assert.deepEqual(bucketItems(items), ended)
-  // 只有收尾的回合在跑：没有收尾区
-  assert.equal(
-    bucketItems([items[0], items[2], items[3]] as typeof items, { turnRunning: true }).some(
-      (block) => block.type === 'tail',
-    ),
-    false,
-  )
 })
 
 test('提案卡片写什么：开始了、子会话在侧栏里的写实际的 harness、目录、方式；别的写提案的，没给的跟父会话', () => {
