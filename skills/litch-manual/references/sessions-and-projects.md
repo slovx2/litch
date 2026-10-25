@@ -122,6 +122,12 @@ explain it:
   "Background tasks" in the session's menu) opens a simpler page with the same list, where a subagent
   opens its own page and running commands can be stopped; the folded steps and the
   line at the start of a continuing turn look the same as on the desktop.
+- **To-dos**: the to-do list a harness keeps (Claude Code, OpenCode, ACP agents, Codex) shows in the
+  info rail on the right, with the latest list staying until the next one replaces it; when the rail
+  doesn't fit it shows in the conversation instead. On the phone a small "To-do 2/6" button sits above
+  the composer next to the background-tasks line while steps remain (or the turn is still running);
+  tap it to open the list above the composer and Collapse to put it away. In the conversation the
+  phone shows one line per list (progress and the current step); tap it to expand the list in place.
 - **Goals** (Codex and Claude Code only; other harnesses show no goal controls): type `/goal` followed
   by what should be achieved and send it. Instead of a normal message this sets the session's goal,
   and the harness keeps working on it turn after turn while the session is idle, until the goal is

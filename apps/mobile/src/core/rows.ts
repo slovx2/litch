@@ -192,7 +192,16 @@ export type Row =
       durationMs: number | null
       expanded: boolean
     }
-  | { type: 'todo'; key: string; note: string | null; steps: TodoStep[]; running: boolean }
+  /** 待办：平时一行（做到第几步、正在做哪一步），点开在原处展开整份；最近那份另在输入框上方有个小按钮 */
+  | {
+      type: 'todo'
+      key: string
+      turnId: string
+      note: string | null
+      steps: TodoStep[]
+      running: boolean
+      expanded: boolean
+    }
   | { type: 'notice'; key: string; label: Text; detail: string | null }
   /** 上下文压缩：一条分隔线，不进过程组（照桌面端）。startedAt：这边看着它开始的时刻，压久了多写一句 */
   | {
@@ -427,7 +436,15 @@ export class RowBuilder {
         }
         case 'todo':
           out.push(
-            this.keep({ type: 'todo', key: item.id, note: item.note, steps: item.steps, running }),
+            this.keep({
+              type: 'todo',
+              key: item.id,
+              turnId: turn.id,
+              note: item.note,
+              steps: item.steps,
+              running,
+              expanded: this.expanded.has(item.id),
+            }),
           )
           break
         case 'compaction':
