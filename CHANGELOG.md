@@ -5,7 +5,7 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
-## 未发布
+## 0.22.0
 
 - 手机端：回答里的 mermaid 代码块画成图（以前只显示源码、提示去桌面端看）。对话里是一张固定高度的卡片，里面是整张图等比缩小的样子，块头可切到源码、复制源码；点卡片全屏看，双指缩放、拖动、双击复原，可切到源码、复制，返回键关掉。还在输出、代码块没写完时先显示源码，写完再画；画不出来（语法错）时显示源码并在块头写原因。颜色跟皮肤和深浅主题。用应用自带的 mermaid（和桌面端同一版本 12.1.0）画，不联网；卡片进了屏幕才画，画过的记着。安卓安装包大约大了 2.1 MB
 - 建议任务卡：回合中途模型用 `litch_sessions.start` 提的提案卡（连同开始后挂在下面的子会话那一行）排在提出它的位置，随对话滚动，后面的过程和回答接着往下长；以前一直钉在回合最下方，直到回合结束都在最后。只有收尾（`wrap_up`）带的建议和问题仍在回合结束后排到最终回答下面。桌面和手机同样
