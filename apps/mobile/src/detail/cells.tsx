@@ -3,7 +3,7 @@
 // 长按菜单里点了“选择文字”的那条回答例外：它的几块能自由选字，系统的选字菜单里多一个“回复”（comments/hub.ts）。
 // 颜色、字号只从主题取。会长高的东西（流式的那一块）之外，行的高度在内容不变时不变。
 import { type FileScope, keys, parseAskReply, type SessionSummary } from '@litch/core'
-import { memo, useEffect, useState } from 'react'
+import { memo, useEffect, useMemo, useState } from 'react'
 import {
   Image,
   type LayoutChangeEvent,
@@ -29,7 +29,8 @@ import { linkCommentRefs, parseCommentHref } from './comments/refs'
 import { useToggleInPlace, useTranscript } from './context'
 import { linkify } from './links'
 import { markdownStyleOf } from './markdownStyle'
-import { labelMermaid } from './mermaid'
+import { MermaidCard } from './mermaid/MermaidCard'
+import { splitMermaid } from './mermaid/segments'
 import { MentionedText } from './SessionMentions'
 import { currentStep, todoProgress } from './todo/logic'
 import { TodoSteps } from './todo/TodoViews'
@@ -167,56 +168,72 @@ const MarkdownBody = memo(function MarkdownBody({ row }: Props<'md'>) {
   const flashed = useFlashedRow(row.key)
   // 长按菜单里点了“选择文字”：这条回答的每一块都能选字，长按不再出回合的菜单（长按是系统的选字）
   const selecting = useHubValue(hub, (each) => each.selecting === row.itemId, false)
+  // 紧跟在带评论的用户消息之后、同一回合里的回答：[N] 画成能点的“评论 N”
+  const comments = hub && !row.plan ? hub.commentsOf(row.turnId) : null
+  const refs = comments ? { count: comments.comments.length, t } : null
+  const markdown = linkedText(row, scope, refs)
+  // 写完的 mermaid 块拆出来画成卡片，前后的字照旧交给 Markdown 组件
+  const segments = useMemo(() => splitMermaid(markdown), [markdown])
+  const whole = segments.length === 1 && segments[0]?.kind === 'md'
   const { width } = useWindowDimensions()
   const [, setFrozenAt] = useState(0)
-  const known = frozen.get(row)
+  // 钉高度只给整块是一段字的：带卡片的块分成了几段，卡片高度本来就固定
+  const known = whole ? frozen.get(row) : undefined
   const height = !row.open && known?.width === width ? known.height : null
   const freeze =
-    row.open || height !== null || !experiment.freeze
+    !whole || row.open || height !== null || !experiment.freeze
       ? undefined
       : (event: LayoutChangeEvent) => {
           frozen.set(row, { width, height: event.nativeEvent.layout.height })
           setFrozenAt(Date.now())
         }
-  // 紧跟在带评论的用户消息之后、同一回合里的回答：[N] 画成能点的“评论 N”
-  const comments = hub && !row.plan ? hub.commentsOf(row.turnId) : null
-  const refs = comments ? { count: comments.comments.length, t } : null
-  const markdown = labelMermaid(linkedText(row, scope, refs), t('mermaid.onDesktop'))
   const onLink = (url: string) => {
     const index = parseCommentHref(url)
     if (index === null) return openLink(url)
     const comment = comments?.comments[index - 1]
     if (comment) hub?.show({ comment, turnId: row.turnId })
   }
+  const prose = (text: string, key?: string) => (
+    <EnrichedMarkdownText
+      key={key}
+      markdown={text}
+      flavor="github"
+      markdownStyle={markdownStyleOf(theme)}
+      selectable={selecting}
+      {...(selecting && hub
+        ? {
+            contextMenuItems: [
+              {
+                text: t('comment.reply'),
+                onPress: ({ text: picked }: { text: string }) => hub.reply(row.itemId, picked),
+              },
+            ],
+            selectionMenuConfig: {
+              copy: { label: t('comment.copy') },
+              copyAsMarkdown: { label: t('comment.copyMarkdown') },
+              copyImageUrl: { enabled: false },
+            },
+          }
+        : {})}
+      streamingConfig={streamingConfig}
+      onLinkPress={(event) => onLink(event.url)}
+      containerStyle={height === null ? undefined : { height }}
+      onLayout={freeze}
+    />
+  )
   const body =
     experiment.render === 'plain' ? (
       <Text style={{ fontSize: 15, lineHeight: 22, color: c.ink }}>{row.text}</Text>
+    ) : whole ? (
+      prose(markdown)
     ) : (
-      <EnrichedMarkdownText
-        markdown={markdown}
-        flavor="github"
-        markdownStyle={markdownStyleOf(theme)}
-        selectable={selecting}
-        {...(selecting && hub
-          ? {
-              contextMenuItems: [
-                {
-                  text: t('comment.reply'),
-                  onPress: ({ text }: { text: string }) => hub.reply(row.itemId, text),
-                },
-              ],
-              selectionMenuConfig: {
-                copy: { label: t('comment.copy') },
-                copyAsMarkdown: { label: t('comment.copyMarkdown') },
-                copyImageUrl: { enabled: false },
-              },
-            }
-          : {})}
-        streamingConfig={streamingConfig}
-        onLinkPress={(event) => onLink(event.url)}
-        containerStyle={height === null ? undefined : { height }}
-        onLayout={freeze}
-      />
+      segments.map((segment) =>
+        segment.kind === 'md' ? (
+          prose(segment.text, `t${segment.at}`)
+        ) : (
+          <MermaidCard key={`d${segment.at}`} source={segment.source} />
+        ),
+      )
     )
   return (
     <Pressable

@@ -132,6 +132,13 @@ explain it:
   the composer next to the background-tasks line while steps remain (or the turn is still running);
   tap it to open the list above the composer and Collapse to put it away. In the conversation the
   phone shows one line per list (progress and the current step); tap it to expand the list in place.
+- **Mermaid diagrams**: a `mermaid` code block in a reply is drawn as a diagram once the block is
+  complete (while it is still being written, the source shows). The block's header switches between
+  Diagram and Source and copies the source; Enlarge opens a viewer (wheel to zoom, drag to pan). If a
+  diagram can't be drawn (a syntax error), the source shows with the reason in the header. On the
+  phone each diagram is a fixed-height card with the whole diagram scaled down; tap it for full screen
+  (pinch to zoom, drag, double-tap to reset, Source and Copy at the top, Back closes it). Diagrams are
+  drawn on the desktop or phone itself, without a network connection.
 - **Goals** (Codex and Claude Code only; other harnesses show no goal controls): type `/goal` followed
   by what should be achieved and send it. Instead of a normal message this sets the session's goal,
   and the harness keeps working on it turn after turn while the session is idle, until the goal is

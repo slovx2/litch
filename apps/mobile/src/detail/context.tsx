@@ -35,6 +35,8 @@ export interface TranscriptActions {
   openSession(sessionId: string): void
   /** 看大图 */
   viewImage(url: string): void
+  /** 全屏看一张 mermaid 图（原文和画好的 SVG） */
+  viewMermaid(source: string, svg: string): void
 }
 
 export const TranscriptContext = createContext<TranscriptActions | null>(null)

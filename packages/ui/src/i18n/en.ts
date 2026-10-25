@@ -1121,7 +1121,6 @@ export const en: Record<MessageKey, Entry> = {
   'mermaid.failed': 'Couldn’t render the diagram: {reason}',
   'mermaid.label': 'Mermaid diagram',
   'mermaid.hint': 'Scroll to zoom · drag to pan · double-click to reset',
-  'mermaid.onDesktop': 'Mermaid · view the diagram on desktop',
 
   'turn.broken': 'This turn can’t be displayed.',
   'turn.failed': 'Failed',
