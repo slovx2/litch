@@ -11,6 +11,7 @@ import {
   processFolded,
   processSettled,
   processTally,
+  spanFrom,
   spanOp,
   stepKindOf,
   stepsTally,
@@ -453,6 +454,15 @@ test('汇总：动作按先后排、带个数；同一个文件改几次算一�
     ]).durationMs,
     800,
   )
+  // 在跑的组界面一秒一秒地算累计用时：从组里最早开始的那一条起；没记过时刻是 null
+  assert.equal(
+    spanFrom([
+      { ...command('d', { status: 'inProgress' }), span: { from: 900, to: null } },
+      { ...command('c'), span: { from: 100, to: 600 } },
+    ]),
+    100,
+  )
+  assert.equal(spanFrom([command('c')]), null)
 })
 
 test('汇总：没字的思考不算；收尾的建议和问题只记个数、不算步骤', () => {
