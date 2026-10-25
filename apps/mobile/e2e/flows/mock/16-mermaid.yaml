@@ -1,0 +1,50 @@
+# 模拟核心：mermaid 卡片。新建会话说“draw a diagram”→ 回答里两张卡片：第一张画出缩略图，第二张语法错、块头写原因、照源码显示
+# → 点第一张全屏看图 → 切到源码 → 返回键关掉
+appId: dev.litch.app
+name: mock-mermaid
+tags: [mock]
+---
+- runFlow:
+    file: ../_shared/fresh.yaml
+    env:
+      MODE: mock
+      READY: device:local
+- tapOn:
+    id: device:local
+- tapOn:
+    id: sessions:new
+- extendedWaitUntil:
+    visible:
+      id: new-input
+    timeout: 15000
+- tapOn:
+    id: new-input
+- inputText: draw a diagram
+- tapOn:
+    id: new-send
+# 第一次画要先装 mermaid（藏着的画图页），模拟器上要几秒
+- extendedWaitUntil:
+    visible:
+      id: mermaid-card:image
+    timeout: 30000
+- extendedWaitUntil:
+    visible:
+      text: ".*(Parse error on line 2|图表渲染失败|Couldn’t render).*"
+    timeout: 15000
+- tapOn:
+    id: mermaid-card:image
+- extendedWaitUntil:
+    visible:
+      id: mermaid-viewer:web
+    timeout: 10000
+- tapOn:
+    id: mermaid-viewer:source
+- assertVisible:
+    text: ".*flowchart LR.*"
+- back
+- extendedWaitUntil:
+    notVisible:
+      id: mermaid-viewer
+    timeout: 5000
+- assertVisible:
+    id: mermaid-card:image

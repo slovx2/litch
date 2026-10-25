@@ -205,7 +205,20 @@ export const SCENES: Scene[] = [
     note: '改了哪些文件和一小段差异',
     steps: [say('改文件')],
   },
-  { id: 'mermaid', group: '对话', name: '图表', note: 'Mermaid', steps: [say('画图')] },
+  {
+    id: 'mermaid',
+    group: '对话',
+    name: '图表',
+    note: 'Mermaid 卡片，第二张有语法错',
+    steps: [say('画图')],
+  },
+  {
+    id: 'mermaid-many',
+    group: '对话',
+    name: '多张图',
+    note: '一长段回答里七张 Mermaid：滚动、进屏才画',
+    steps: [say('画几张图')],
+  },
   {
     id: 'retry',
     group: '对话',

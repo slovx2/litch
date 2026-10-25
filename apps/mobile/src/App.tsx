@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Linking, StyleSheet, Text, useColorScheme, View } from 'react-native'
 import { KeyboardProvider } from 'react-native-keyboard-controller'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
+import { MermaidHost } from './detail/mermaid/MermaidHost'
 import { Navigator } from './nav/Navigator'
 import { type Booted, boot } from './shell/boot'
 import { handleDevLink, navigationRef } from './shell/dev-links'
@@ -136,6 +137,7 @@ export default function App() {
           <I18nContext.Provider value={t}>
             <StatusBar style={isDark ? 'light' : 'dark'} />
             {body}
+            <MermaidHost />
           </I18nContext.Provider>
         </ThemeContext.Provider>
       </KeyboardProvider>

@@ -28,6 +28,10 @@ export const zhCN = {
   'detail.todo.chip': '待办 {done}/{total}',
   'detail.todo.chipLabel': '待办，已完成 {done}/{total}',
   'detail.todo.tap': '点击展开全部步骤',
+  'detail.mermaid.drawing': '正在画图…',
+  'detail.mermaid.timeout': '画图超时',
+  'detail.mermaid.open': '全屏查看',
+  'detail.mermaid.hint': '双指缩放 · 拖动平移 · 双击复原',
 } satisfies Record<`detail.${string}`, Entry>
 
 export const en: Record<keyof typeof zhCN, Entry> = {
@@ -55,4 +59,8 @@ export const en: Record<keyof typeof zhCN, Entry> = {
   'detail.todo.chip': 'To-do {done}/{total}',
   'detail.todo.chipLabel': 'To-do, {done} of {total} done',
   'detail.todo.tap': 'Tap to show all steps',
+  'detail.mermaid.drawing': 'Drawing…',
+  'detail.mermaid.timeout': 'Drawing timed out',
+  'detail.mermaid.open': 'View full screen',
+  'detail.mermaid.hint': 'Pinch to zoom · drag to pan · double-tap to reset',
 }

@@ -1072,7 +1072,6 @@ export const zhCN = {
   'mermaid.failed': '图表渲染失败：{reason}',
   'mermaid.label': 'Mermaid 图',
   'mermaid.hint': '滚轮缩放 · 拖动平移 · 双击复原',
-  'mermaid.onDesktop': 'Mermaid · 请在桌面端查看图表',
 
   'turn.broken': '此回合无法显示。',
   'turn.failed': '出错',

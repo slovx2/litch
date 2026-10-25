@@ -53,6 +53,8 @@ import {
 } from './context'
 import { GoalReachedCell } from './goal/GoalReachedCell'
 import { isWebUrl, parseFileHref } from './links'
+import { InView, InViewContext } from './mermaid/in-view'
+import { type MermaidShown, MermaidViewer } from './mermaid/MermaidViewer'
 import { EventCell, QueuedNotesCell } from './proposals/EventCell'
 import { HandoffCell } from './proposals/HandoffCell'
 import { flash, takeReveal, useRevealWaiting } from './proposals/hooks'
@@ -162,6 +164,7 @@ function useActions(store: SessionStore) {
   const { scope, root } = useFileScope(deviceId, sessionId, cwd)
   const [menu, setMenu] = useState<string | null>(null)
   const [image, setImage] = useState<string | null>(null)
+  const [diagram, setDiagram] = useState<MermaidShown | null>(null)
   const [flash, setFlash] = useState<string | null>(null)
   const clearFlash = useCallback(() => setFlash(null), [])
   const openSession = useCallback(
@@ -198,6 +201,7 @@ function useActions(store: SessionStore) {
       },
       openSession,
       viewImage: setImage,
+      viewMermaid: (source, svg) => setDiagram({ source, svg }),
     }),
     [store, deviceId, sessionId, harness, scope, root, cwd, navigation, openSession, t],
   )
@@ -211,6 +215,7 @@ function useActions(store: SessionStore) {
         say={setFlash}
       />
       <ImageViewer url={image} onClose={() => setImage(null)} />
+      <MermaidViewer shown={diagram} onClose={() => setDiagram(null)} />
       <Flash text={flash} onDone={clearFlash} />
     </>
   )
@@ -258,6 +263,8 @@ export function Transcript({ store, bottomOffset, markers }: Props) {
   /** 刚离开底部、尾巴正从表头并回列表时是当时的内容总高（见 onScroll），平时是 0 */
   const unpinningRef = useRef(0)
   const guard = useMemo(() => new Guard(), [])
+  /** 滚动时让 mermaid 卡片量自己在不在屏幕上：进了屏幕才画图 */
+  const inView = useMemo(() => new InView(), [])
   // 贴底时列表的数据变了（回合结束、尾巴并回列表，发了新的一句）：这一次别让“保持可见位置”去校正。
   // 它只看行的位置，不管表头（尾巴）同时缩了多少，会按并进来的行高把列表推离底部，而且不发滚动事件，
   // 这边还以为贴着底（2026-10-18 复现：回答比一屏长时，回合一结束就停在回答开头）。
@@ -326,41 +333,44 @@ export function Transcript({ store, bottomOffset, markers }: Props) {
   return (
     <TranscriptContext.Provider value={actions.value}>
       <BackgroundContext.Provider value={background}>
-        <View style={[styles.list, { backgroundColor: actions.background }]}>
-          <FlashList
-            ref={listRef}
-            data={rows}
-            inverted
-            renderItem={renderItem}
-            keyExtractor={keyOf}
-            getItemType={typeOf}
-            drawDistance={1500}
-            maintainVisibleContentPosition={visiblePosition}
-            ListHeaderComponent={header}
-            onEndReached={loadOlder}
-            onEndReachedThreshold={0.5}
-            renderScrollComponent={
-              experiment.keyboard === 'chat' ? (ScrollComponent as never) : undefined
-            }
-            ListFooterComponent={footer}
-            scrollEventThrottle={16}
-            onScroll={(event) => {
-              noteWork('offset', event.nativeEvent.contentOffset.y)
-              const next = event.nativeEvent.contentOffset.y < 8
-              if (next !== pinnedRef.current) {
-                noteWork(next ? 'pin' : 'unpin', event.nativeEvent.contentOffset.y)
-                pinnedRef.current = next
-                // 尾巴搬家就在这里同步做（它会同步通知上面的订阅），不等重渲染后的副作用：
-                // 那样跳过校正的标记可能在两次提交之间就被清掉
-                unpinningRef.current = next ? 0 : event.nativeEvent.contentSize.height
-                store.setSplitTail(next)
-                unpinningRef.current = 0
+        <InViewContext.Provider value={inView}>
+          <View style={[styles.list, { backgroundColor: actions.background }]}>
+            <FlashList
+              ref={listRef}
+              data={rows}
+              inverted
+              renderItem={renderItem}
+              keyExtractor={keyOf}
+              getItemType={typeOf}
+              drawDistance={1500}
+              maintainVisibleContentPosition={visiblePosition}
+              ListHeaderComponent={header}
+              onEndReached={loadOlder}
+              onEndReachedThreshold={0.5}
+              renderScrollComponent={
+                experiment.keyboard === 'chat' ? (ScrollComponent as never) : undefined
               }
-            }}
-            style={styles.list}
-          />
-          {actions.overlays}
-        </View>
+              ListFooterComponent={footer}
+              scrollEventThrottle={16}
+              onScroll={(event) => {
+                noteWork('offset', event.nativeEvent.contentOffset.y)
+                inView.scrolled()
+                const next = event.nativeEvent.contentOffset.y < 8
+                if (next !== pinnedRef.current) {
+                  noteWork(next ? 'pin' : 'unpin', event.nativeEvent.contentOffset.y)
+                  pinnedRef.current = next
+                  // 尾巴搬家就在这里同步做（它会同步通知上面的订阅），不等重渲染后的副作用：
+                  // 那样跳过校正的标记可能在两次提交之间就被清掉
+                  unpinningRef.current = next ? 0 : event.nativeEvent.contentSize.height
+                  store.setSplitTail(next)
+                  unpinningRef.current = 0
+                }
+              }}
+              style={styles.list}
+            />
+            {actions.overlays}
+          </View>
+        </InViewContext.Provider>
       </BackgroundContext.Provider>
     </TranscriptContext.Provider>
   )
