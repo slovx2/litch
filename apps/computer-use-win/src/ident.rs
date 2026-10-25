@@ -1,6 +1,6 @@
 // 认应用：appId（打包应用是 AUMID，其余是 exe 的完整路径）比较时不分大小写；也接受应用名或 exe 文件名，
 // 方便模型照着 list_apps 的显示名来叫。完整性级别的名字也在这里。
-use crate::baseline::file_name;
+use crate::shell::file_name;
 
 /// 一个应用的几种叫法
 pub struct AppNames<'a> {

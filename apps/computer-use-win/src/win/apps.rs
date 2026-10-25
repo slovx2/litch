@@ -4,7 +4,7 @@
 // - UWP 应用的顶层窗口属于 ApplicationFrameHost.exe，真正的应用在它的子窗口里，按子窗口的进程认。
 // - 系统外壳（任务栏、桌面、开始菜单、输入法面板）和助手自己不列。
 use super::system::{self, from_wide, open_process, process_exe, window_pid};
-use crate::baseline;
+use crate::shell;
 use crate::fail;
 use crate::geometry::Rect;
 use crate::ident::{match_score, AppNames};
@@ -34,7 +34,6 @@ pub struct App {
     pub name: String,
     pub exe: String,
     pub aumid: Option<String>,
-    pub original_filename: Option<String>,
     pub pid: u32,
     pub integrity: u32,
     pub windows: Vec<Win>,
@@ -137,7 +136,7 @@ fn app_window(h: HWND) -> Option<bool> {
         if owned && style & WS_CAPTION.0 != WS_CAPTION.0 {
             return None;
         }
-        if baseline::is_shell_class(&class(h)) {
+        if shell::is_shell_class(&class(h)) {
             return None;
         }
         let r = bounds(h);
@@ -194,13 +193,12 @@ fn identify(pid: u32, cache: &mut HashMap<u32, Option<App>>) -> Option<App> {
         let process = open_process(pid)?;
         let exe = process_exe(&process)?;
         let aumid = aumid_of(&process);
-        let original_filename = system::version_string(&exe, "OriginalFilename");
         let name = aumid
             .as_deref()
             .and_then(aumid_display_name)
             .or_else(|| system::version_string(&exe, "FileDescription"))
             .unwrap_or_else(|| {
-                let file = baseline::file_name(&exe);
+                let file = shell::file_name(&exe);
                 file.strip_suffix(".exe").unwrap_or(&file).to_string()
             });
         Some(App {
@@ -208,7 +206,6 @@ fn identify(pid: u32, cache: &mut HashMap<u32, Option<App>>) -> Option<App> {
             name,
             exe,
             aumid,
-            original_filename,
             pid,
             integrity: system::integrity_rid(&process).unwrap_or(0x2000),
             windows: vec![],
@@ -231,13 +228,13 @@ pub fn list() -> Vec<App> {
             continue;
         }
         let Some(mut identity) = identify(pid, &mut cache) else { continue };
-        if baseline::file_name(&identity.exe) == "applicationframehost.exe" {
+        if shell::file_name(&identity.exe) == "applicationframehost.exe" {
             let Some(child) = frame_child_pid(h, pid) else { continue };
             pid = child;
             let Some(real) = identify(pid, &mut cache) else { continue };
             identity = real;
         }
-        if baseline::is_shell_exe(&identity.exe) {
+        if shell::is_shell_exe(&identity.exe) {
             continue;
         }
         let text = title(h);

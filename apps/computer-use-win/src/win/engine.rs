@@ -130,7 +130,6 @@ impl Engine {
                     .collect();
                 json!({
                     "appId": a.app_id, "name": a.name, "exe": a.exe, "aumid": a.aumid,
-                    "originalFilename": a.original_filename,
                     "pid": a.pid, "active": a.active(), "integrity": integrity_name(a.integrity), "windows": windows,
                 })
             })
@@ -151,9 +150,6 @@ impl Engine {
         self.require_handshake()?;
         let session = req_str(p, "session")?;
         let (app, win) = apps::resolve(&req_str(p, "appId")?, window_id(p))?;
-        if crate::baseline::is_forbidden(&app.exe, app.original_filename.as_deref()) {
-            return Err(fail!(Forbidden, "{} cannot be used by Litch", app.name));
-        }
         self.ensure_watchers();
         activity::begin(&session, &app.app_id, &app.name, win.hwnd);
         let hwnd = apps::hwnd(win.hwnd);
@@ -206,14 +202,11 @@ impl Engine {
         id
     }
 
-    /// 动作前的统一关卡：禁区、管理员、被 Esc 停、锁屏、用户在动；过了就登记并回窗口句柄
+    /// 动作前的统一关卡：管理员、被 Esc 停、锁屏、用户在动；过了就登记并回窗口句柄
     fn guard(&mut self, p: &Value) -> RpcResult<(super::apps::App, super::apps::Win)> {
         self.require_handshake()?;
         let session = req_str(p, "session")?;
         let (app, win) = apps::resolve(&req_str(p, "appId")?, window_id(p))?;
-        if crate::baseline::is_forbidden(&app.exe, app.original_filename.as_deref()) {
-            return Err(fail!(Forbidden, "{} cannot be used by Litch", app.name));
-        }
         if app.integrity > self.own_integrity {
             return Err(fail!(Elevated, "{} runs as administrator; Litch cannot control it. Ask the user to do it themselves.", app.name));
         }

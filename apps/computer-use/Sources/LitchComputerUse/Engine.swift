@@ -164,14 +164,11 @@ final class Engine: ConnectionHandler {
         ["session": .string(session), "app": .string(name), "bundleId": .string(appKey)]))
   }
 
-  /// 动作和取状态之前的共同检查：找应用、底线名单、停没停、权限
+  /// 动作和取状态之前的共同检查：找应用、停没停、权限
   func prepare(_ params: JSONValue) throws -> (session: String, app: NSRunningApplication, key: String) {
     let session = try string(params, "session")
     let app = try Apps.resolve(try string(params, "app"))
     let key = Engine.appKey(app)
-    if Baseline.isForbidden(bundleId: app.bundleIdentifier) {
-      throw RPCError(.forbidden, "\(Engine.name(app)) cannot be controlled.")
-    }
     lock.lock()
     let isStopped = stopped[session]?.contains(key) == true
     lock.unlock()

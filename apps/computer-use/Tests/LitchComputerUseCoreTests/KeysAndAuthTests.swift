@@ -82,15 +82,7 @@ final class PeerAuthTests: XCTestCase {
   }
 }
 
-final class BaselineAndCopyTests: XCTestCase {
-  func testBaseline() {
-    XCTAssertTrue(Baseline.isForbidden(bundleId: "io.github.slovx2.litch"))
-    XCTAssertTrue(Baseline.isForbidden(bundleId: "com.1password.1password"))
-    XCTAssertTrue(Baseline.isForbidden(bundleId: "com.apple.systempreferences"))
-    XCTAssertFalse(Baseline.isForbidden(bundleId: "com.apple.TextEdit"))
-    XCTAssertFalse(Baseline.isForbidden(bundleId: nil))
-  }
-
+final class CopyTests: XCTestCase {
   func testCopy() {
     XCTAssertEqual(Copy.language("zh-CN"), .zh)
     XCTAssertEqual(Copy.language("en"), .en)

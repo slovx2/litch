@@ -17,8 +17,6 @@ pub enum Kind {
     Invalid,
     /// 找不到应用或窗口
     NotFound,
-    /// 底线名单里的应用
-    Forbidden,
     /// 用户在这个回合里按 Esc 停掉了这个应用
     Stopped,
     /// 用户正在动这个窗口
@@ -41,7 +39,6 @@ impl Kind {
             Kind::Unauthorized => "unauthorized",
             Kind::Invalid => "invalid",
             Kind::NotFound => "notFound",
-            Kind::Forbidden => "forbidden",
             Kind::Stopped => "stopped",
             Kind::UserActive => "userActive",
             Kind::Stale => "stale",
