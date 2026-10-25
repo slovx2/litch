@@ -1395,6 +1395,19 @@ function DeviceGroup(props: GroupProps) {
    * 照常显示：置顶、各个组排在“项目”前面，是用户特意拿出来的；里面的东西不再出现在别处。
    * 其余的工作区都在内置的“项目”组里，最后是“无项目”
    */
+  /** “项目”行尾的加号：添加项目。整理不了的设备上没有 */
+  const addProject = device.organizable ? (
+    <button
+      type="button"
+      className="ibtn row-add"
+      title={t('workspace.add')}
+      aria-label={t('workspace.add')}
+      onClick={() => setDialog({ workspace: null })}
+    >
+      <Plus />
+    </button>
+  ) : null
+
   const everything = () => {
     const pinnedShown =
       shown(PINNED).length > 0 ||
@@ -1403,17 +1416,6 @@ function DeviceGroup(props: GroupProps) {
       (draggingHere && filter.length === 0)
     // “项目”能整理的设备上一直在（空的时候也在，好用行尾的加号添加）；整理不了的设备上有项目才出
     const projectsShown = plainWorkspaces.length > 0 || device.organizable === true
-    const addProject = device.organizable ? (
-      <button
-        type="button"
-        className="ibtn row-add"
-        title={t('workspace.add')}
-        aria-label={t('workspace.add')}
-        onClick={() => setDialog({ workspace: null })}
-      >
-        <Plus />
-      </button>
-    ) : null
     // 用户的组和“项目”照这台电脑上记着的先后排（拖标题行、菜单里的上移下移）
     const bands = bandKeys.flatMap((key) => {
       if (key === PROJECTS) {
@@ -1523,6 +1525,27 @@ function DeviceGroup(props: GroupProps) {
         : (sections.find((entry) => groupOfSection(entry.id) === key)?.name ??
           workspaces.find((entry) => entry.id === key)?.name ??
           '')
+  /** 单独查看时顶上那一行行尾的按钮：和照常显示时这一组标题行行尾的一样（新建会话、添加项目、“更多”） */
+  const focusTools = (key: string): ReactNode => {
+    if (key === PINNED) return null
+    if (key === PROJECTS)
+      return (
+        <>
+          {addProject}
+          {projectsMenu()}
+        </>
+      )
+    const section = sections.find((entry) => groupOfSection(entry.id) === key)
+    if (section) return sectionMenu(section)
+    const workspace = workspaces.find((entry) => entry.id === key)
+    if (!workspace) return null
+    return (
+      <>
+        {add(workspace.id)}
+        {workspaceMenu(workspace)}
+      </>
+    )
+  }
 
   const dialogs = (
     <>
@@ -1590,6 +1613,7 @@ function DeviceGroup(props: GroupProps) {
           </button>
           <span className="focus-title ell">{focusTitle(focus)}</span>
           <span className="focus-device dim ell">{t.text(device.name)}</span>
+          {focusTools(focus)}
         </div>
         {dialogs}
         <div className="dev-body">{focused(focus)}</div>

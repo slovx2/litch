@@ -342,3 +342,9 @@
   margin-left: auto;
   font-size: 11px;
 }
+/* 行尾按钮露出来的时候设备名让位（和设备行尾小标的规矩一样） */
+.focus-bar:has(> .row-add, > .row-more):hover > .focus-device,
+.focus-bar:has(> .row-add:focus-visible, > .row-add.on, > .row-more:focus-within, > .row-more.on)
+  > .focus-device {
+  visibility: hidden;
+}
