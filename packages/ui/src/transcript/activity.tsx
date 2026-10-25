@@ -13,7 +13,7 @@ import type {
   ToolPart,
   WebSearchItem,
 } from '@litch/core'
-import { keys, stepKindOf, stepsTally, thoughtShown } from '@litch/core'
+import { keys, spanFrom, stepKindOf, stepsTally, thoughtShown } from '@litch/core'
 import { Fragment, memo, type ReactNode, useContext, useMemo, useRef, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { useElapsed } from '../app/clock.ts'
@@ -133,6 +133,13 @@ const Suggest = memo(function Suggest(ref: ItemRef) {
 })
 
 /**
+ * 条目从什么时候开始的（本机的钟）：命令自己记的时刻，其次是核心记的 span。
+ * 都没有（接手时已经在跑的）时界面记下第一次看到它在跑的时刻（seenSince）
+ */
+const startOf = (item: ItemView): number | null =>
+  (item.kind === 'command' ? item.startedAt : null) ?? item.span?.from ?? null
+
+/**
  * 还在跑的命令右边那几个字。等批准的写“待审批”，不写“运行中”；
  * 看着它开始的带上已经跑了多久——对面不增量给输出的时候，这是唯一看得出它还活着的东西。
  * 单独一个组件：每秒重画的只有这几个字，命令结束了它就不在了。
@@ -142,7 +149,9 @@ function Running({ item, deviceId, sessionId }: ItemRef & { item: CommandItem })
   const pending = useKey<RequestView[]>(keys.requests(deviceId, sessionId))
   const waiting =
     pending?.some((request) => request.kind === 'approval' && request.itemId === item.id) === true
-  const spent = useElapsed(waiting ? null : item.startedAt)
+  const spent = useElapsed(
+    waiting ? null : seenSince(`${deviceId}:${sessionId}:${item.id}`, startOf(item)),
+  )
   if (waiting) return <span data-state="waiting">{t('command.waiting')}</span>
   return (
     <>
@@ -371,6 +380,7 @@ const ToolCall = memo(function ToolCall(ref: ItemRef) {
       busy={item.status === 'inProgress'}
       meta={
         <>
+          {item.status === 'inProgress' ? <NowTime {...ref} item={item} /> : null}
           {item.durationMs === null ? null : <span>{duration(item.durationMs, t)}</span>}
           {item.status === 'failed' || error ? (
             <span className="minus">{t('status.failed')}</span>
@@ -568,18 +578,21 @@ const isSuggest = (item: ItemView): boolean => {
 }
 
 /**
- * 正在跑的那一条已经跑了多久。等批准的命令写“待审批”，不计时（等人的时间不算它跑的）。
+ * 已经跑了多久，一秒一秒地走：给了 since 从它算（步骤组从组里第一条开始算，是累计用时），
+ * 没给就从这一条开始算。等批准的命令写“待审批”，不计时（等人的时间不算它跑的）。
  * 单独一个组件：每秒重画的只有这几个字
  */
-function NowTime({ item, deviceId, sessionId }: ItemRef & { item: ItemView }) {
+function NowTime({
+  item,
+  deviceId,
+  sessionId,
+  since: given = null,
+}: ItemRef & { item: ItemView; since?: number | null }) {
   const t = useT()
   const pending = useKey<RequestView[]>(keys.requests(deviceId, sessionId))
   const waiting =
     pending?.some((request) => request.kind === 'approval' && request.itemId === item.id) === true
-  const since = seenSince(
-    `${deviceId}:${sessionId}:${item.id}`,
-    item.kind === 'command' ? item.startedAt : null,
-  )
+  const since = given ?? seenSince(`${deviceId}:${sessionId}:${item.id}`, startOf(item))
   const spent = useElapsed(waiting ? null : since)
   if (waiting) return <span data-state="waiting">{t('command.waiting')}</span>
   return spent === null || spent < 1000 ? null : <span data-elapsed="">{elapsed(spent, t)}</span>
@@ -598,7 +611,7 @@ interface StepsProps {
 /**
  * 步骤组：一行灰色的汇总，默认收着，正在跑的时候也不自动展开。
  * 汇总写动作和个数；右边是被拒的个数（红字）、改动行数、这一组从第一条开始到最后一条结束的用时。
- * 失败的条数不写（每条命令自己的退出码照写）。正在跑时左边是运行记号，写当前这一条和计时。
+ * 失败的条数不写（每条命令自己的退出码照写）。正在跑时左边是运行记号，写当前这一条，右边是这一组到现在的累计用时（一秒一秒地走）。
  * 没字的思考不画、不算；只剩有字的思考的组不收成汇总，每条思考直接是一行浅字
  */
 export const Steps = memo(function Steps({
@@ -667,7 +680,13 @@ export const Steps = memo(function Steps({
             </span>
           )}
           {current ? (
-            <NowTime deviceId={deviceId} sessionId={sessionId} itemId={current.id} item={current} />
+            <NowTime
+              deviceId={deviceId}
+              sessionId={sessionId}
+              itemId={current.id}
+              item={current}
+              since={spanFrom(items)}
+            />
           ) : tally.durationMs ? (
             <span>{duration(tally.durationMs, t)}</span>
           ) : null}

@@ -44,3 +44,16 @@ export function spanOf(items: readonly ItemView[]): number | null {
   }
   return Number.isFinite(from) ? Math.max(0, to - from) : null
 }
+
+/**
+ * 一组条目里最早开始的时刻（本机的钟）。一条都没记过时刻是 null。
+ * 组里还有在跑的时候，界面拿它一秒一秒地算到现在为止的累计用时（spanOf 只算到已经结束的那一刻）
+ */
+export function spanFrom(items: readonly ItemView[]): number | null {
+  let from: number | null = null
+  for (const item of items) {
+    const at = item.span?.from
+    if (at !== undefined && (from === null || at < from)) from = at
+  }
+  return from
+}

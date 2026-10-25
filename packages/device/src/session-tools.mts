@@ -881,8 +881,16 @@ async function handOff(
   }
 }
 
-/** 写类工具的对象：只能是调用者自己的 Litch 子孙会话 */
-async function own(tree: SessionTree, threadId: string, call: DeviceToolCall): Promise<string> {
+/**
+ * 写类工具的对象：调用者自己的 Litch 子孙会话随时可以；用户亲手发起的回合里任何会话都可以；
+ * 发消息（mentioned 为真）还可以发给两边之间用户 @ 过的会话（谁在谁里面 @ 的都算，回消息也一样）
+ */
+async function writable(
+  tree: SessionTree,
+  threadId: string,
+  call: DeviceToolCall,
+  mentioned: boolean,
+): Promise<string> {
   if (threadId === call.threadId) throw new Refused('blocked', 'This is your own session.')
   if (tree.store.descends(threadId, call.threadId)) return tree.owner(threadId)
   const { thread } = await found(tree, threadId, false)
@@ -891,9 +899,13 @@ async function own(tree: SessionTree, threadId: string, call: DeviceToolCall): P
       'blocked',
       `Session ${threadId} is a subagent thread of its harness, not a Litch sub-session. Use your own subagent tools to talk to it.`,
     )
+  if (tree.isUserTurn(call.harness, call.turnId)) return tree.owner(threadId)
+  if (mentioned && tree.store.mentioned(call.threadId, threadId)) return tree.owner(threadId)
   throw new Refused(
     'blocked',
-    `Session ${threadId} is not one of your sub-sessions, so you cannot change it. Ask the user to do it themselves.`,
+    mentioned
+      ? `Session ${threadId} is not one of your sub-sessions, and the user has not mentioned it in this session (nor this session in it), so you can message it only on a turn the user started. This turn was not. Ask the user to mention it or to send the message.`
+      : `Session ${threadId} is not one of your sub-sessions, so you can interrupt it only on a turn the user started. This turn was not. Ask the user to do it themselves.`,
   )
 }
 
@@ -905,9 +917,13 @@ async function send(tree: SessionTree, args: Record<string, unknown>, call: Devi
       'invalid',
       `message is longer than ${SESSION_TOOL_LIMITS.messageChars} characters.`,
     )
-  const harness = await own(tree, threadId, call)
+  const harness = await writable(tree, threadId, call, true)
   const caller = tree.store.parentOf(call.threadId)?.title ?? ''
-  const text = `[Litch] Message from session ${caller ? `"${caller}" ` : ''}(${call.threadId}), not typed by the user:\n\n${message}`
+  // 两边之间用户 @ 过：对面可以回消息，告诉它怎么回（回答写在它自己的对话里，这边看不到）
+  const reply = tree.store.mentioned(call.threadId, threadId)
+    ? `\n\n(To answer, send a message back with litch_sessions.send to thread_id ${call.threadId}; your reply in this conversation does not reach that session.)`
+    : ''
+  const text = `[Litch] Message from session ${caller ? `"${caller}" ` : ''}(${call.threadId}), not typed by the user:\n\n${message}${reply}`
   const input = [{ type: 'text', text, text_elements: [] }]
   // 订阅它，它这一回合结束时设备进程收得到（回报、wait）
   await tree.watch(harness, threadId)
@@ -990,7 +1006,7 @@ async function wait(
 
 async function interrupt(tree: SessionTree, args: Record<string, unknown>, call: DeviceToolCall) {
   const threadId = string(args, 'thread_id', true)
-  const harness = await own(tree, threadId, call)
+  const harness = await writable(tree, threadId, call, false)
   let turnId = tree.activeTurn(threadId)
   if (!turnId) {
     const { thread } = await found(tree, threadId)

@@ -13,6 +13,17 @@
   flex-direction: column;
   gap: 8px;
 }
+/* 输入框上方一行：“后台任务”和右边排着的子会话回报，都没有时不占地方 */
+.dock-bars {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.dock-bars:empty {
+  display: none;
+}
 
 /* ---------- 通用小控件 ---------- */
 .btn {

@@ -1,7 +1,7 @@
 // 回合最下方的收尾区：这一回合的建议任务卡片（收尾 wrap_up 带的、start 提的）和收尾留给用户的问题，
 // 固定画在最终回答下面，不会被后面的回答冲上去（核心的 bucketItems 把它们排成最后一块 tail）。
 // 依次是：问题和回复按钮，然后按调用先后的卡片。卡片照常带状态，过去的回合里能开始的还能开始。
-// 问题在下一条用户消息之后失效，折成一行（用户点的是哪个按钮看得出来时写上）。
+// 问题在下一条用户消息之后失效：看得出用户点的是哪个按钮时折成一行写上，看不出的（插话之后回合接着跑完、用户另写了话）不再画。
 // 收尾带的卡片和问题等回合结束才排进来（核心的 bucketItems）；看着回合结束出来的那一下滑进来（fresh）。
 import { type DeviceView, type ItemView, keys, type SessionMeta, type TurnView } from '@litch/core'
 import { memo, useMemo, useState } from 'react'
@@ -11,7 +11,7 @@ import { useKey, useKeys, useServices } from '../app/services.tsx'
 import { useSendMode } from '../composer/send-mode.ts'
 import { runningSend } from '../composer/send-mode-logic.ts'
 import { TreeCard } from './TreeCards.tsx'
-import { actionText, askOpen, askReplied, type TailAsk, tailAsk } from './tail.ts'
+import { actionText, askOpen, askReplied, pastAskShown, type TailAsk, tailAsk } from './tail.ts'
 
 interface TailProps {
   deviceId: string
@@ -57,7 +57,7 @@ export const TurnTail = memo(function TurnTail({
   )
 })
 
-/** 收尾留的问题：还能答时带回复按钮，点了把按钮的话当用户消息发出（回合在跑就排队）；过去了折成一行 */
+/** 收尾留的问题：还能答时带回复按钮，点了把按钮的话当用户消息发出（回合在跑就排队）；过去了折成一行，认不出回了什么的不画 */
 function AskLine({
   deviceId,
   sessionId,
@@ -119,6 +119,7 @@ function AskLine({
   }
 
   if (!open) {
+    if (!pastAskShown(replied)) return null
     return (
       <div className="tail-ask" data-state="past" title={ask.ask}>
         <i className="st" />

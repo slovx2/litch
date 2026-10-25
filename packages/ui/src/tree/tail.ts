@@ -39,6 +39,12 @@ export function askOpen(
   return !turnItemIds.slice(at + 1).some((id) => kindOf(id) === 'userMessage')
 }
 
+/**
+ * 过去了的问题还画不画：认得出用户回的是哪个按钮（replied 不空）才留一行“已回复”。
+ * 别的都不画：用户插了话、回合接着跑完的，用户另写了别的话的，问题已经过期，留着只是一行没头没尾的字
+ */
+export const pastAskShown = (replied: string | null): boolean => replied !== null
+
 /** 用户回的是哪个按钮：下一条用户消息的字和哪个按钮发的话一样，就是它（按钮上的字）。都不是是 null */
 export function askReplied(
   actions: readonly { label: string; message?: string }[],

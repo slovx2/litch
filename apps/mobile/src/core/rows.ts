@@ -37,6 +37,7 @@ import {
   agentStatesOf,
   goalReachedIn,
   isAgentSpawn,
+  spanFrom,
   spanOf,
   thoughtShown,
   workingShown,
@@ -159,6 +160,8 @@ export type Row =
       /** 这一组从第一条开始到最后一条结束用了多久（条目上记的 span）。没记过是 null */
       durationMs: number | null
       current: Text | null
+      /** 有一步在跑时这一组最早开始的时刻（本机的钟），单元格从它一秒一秒地算累计用时；没在跑、没记过是 null */
+      since: number | null
       running: boolean
       expanded: boolean
       ids: string
@@ -538,6 +541,7 @@ export class RowBuilder {
         failed,
         durationMs: spanOf(steps),
         current,
+        since: current === null ? null : spanFrom(steps),
         running: current !== null,
         expanded,
         ids: steps.map((item) => item.id).join(' '),

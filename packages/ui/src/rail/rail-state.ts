@@ -50,3 +50,54 @@ function subscribeAllowed(listener: () => void): () => void {
 export function useRailAllowed(): boolean {
   return useSyncExternalStore(subscribeAllowed, () => allowed)
 }
+
+// ---------- 用户收起信息栏：记在这台电脑上，收起时一点宽度都不占 ----------
+// 栏有没有内容、放不放得下（available）由 InfoRail 报上来：标题栏上的开关只在有东西可收、可放的时候出现
+const OPEN_KEY = 'litch.rail'
+
+function readOpen(): boolean {
+  try {
+    return (JSON.parse(localStorage.getItem(OPEN_KEY) ?? '{}') as { open?: unknown }).open !== false
+  } catch {
+    return true
+  }
+}
+
+let open = readOpen()
+let available = false
+const openListeners = new Set<() => void>()
+
+function subscribeOpen(listener: () => void): () => void {
+  openListeners.add(listener)
+  return () => openListeners.delete(listener)
+}
+
+const notifyOpen = () => {
+  for (const listener of openListeners) listener()
+}
+
+/** 信息栏是不是开着（用户没收起） */
+export function useRailOpen(): boolean {
+  return useSyncExternalStore(subscribeOpen, () => open)
+}
+
+export function toggleRail(): void {
+  open = !open
+  try {
+    localStorage.setItem(OPEN_KEY, JSON.stringify({ open }))
+  } catch {
+    // 记不下来不影响这一次
+  }
+  notifyOpen()
+}
+
+/** InfoRail 报：眼前这个会话的信息栏有内容、窗口也放得下（不管用户收没收起） */
+export function setRailAvailable(next: boolean): void {
+  if (available === next) return
+  available = next
+  notifyOpen()
+}
+
+export function useRailAvailable(): boolean {
+  return useSyncExternalStore(subscribeOpen, () => available)
+}

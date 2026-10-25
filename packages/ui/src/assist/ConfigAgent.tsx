@@ -33,6 +33,7 @@ import {
 import { useKey, useKeys, useServices } from '../app/services.tsx'
 import { PairDialog } from '../devices/PairDialog.tsx'
 import type { Translator } from '../i18n/index.ts'
+import { notifySessions, setNotifySessions } from '../notify/session-notice.ts'
 import { linksInApp, setLinksInBrowser } from '../side/browser/links.ts'
 import { notifySuccess, setNotifySuccess } from '../tasks/notify-pref.ts'
 
@@ -47,6 +48,7 @@ function prefsNow(look: Appearance): ConfigPrefs {
     lang: currentLang(),
     linksInApp: linksInApp(),
     notifySuccess: notifySuccess(),
+    notifySessions: notifySessions(),
   }
 }
 
@@ -59,6 +61,7 @@ function applyPrefs(patch: Partial<ConfigPrefs>): void {
   if (Object.keys(look).length > 0) setAppearance(look)
   if (typeof patch.linksInApp === 'boolean') setLinksInBrowser(patch.linksInApp)
   if (typeof patch.notifySuccess === 'boolean') setNotifySuccess(patch.notifySuccess)
+  if (typeof patch.notifySessions === 'boolean') setNotifySessions(patch.notifySessions)
 }
 
 /** 确认卡上一项的话 */

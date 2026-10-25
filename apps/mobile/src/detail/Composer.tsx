@@ -31,6 +31,7 @@ import { sendFlags, whenRunning } from './composer/send-mode'
 import { GoalBar } from './goal/GoalBar'
 import { SlashGoal } from './goal/SlashGoal'
 import { useGoalSend } from './goal/useGoalSend'
+import { QueuedNotesChip, QueuedNotesPanel } from './proposals/EventCell'
 import { onRefill } from './refill'
 import { TodoChip, TodoPanel } from './todo/TodoViews'
 
@@ -55,7 +56,9 @@ export function Composer({
   const draft = useDraft(draftKey(deviceId, sessionId))
   const options = useComposeOptions(deviceId, meta?.harness)
   const [error, setError] = useState<string | null>(null)
-  const [todoOpen, setTodoOpen] = useState(false)
+  // 输入框上方的浮窗：待办或排着的回报，同时只开一个
+  const [panel, setPanel] = useState<'todo' | 'notes' | null>(null)
+  const toggle = (which: 'todo' | 'notes') => setPanel((open) => (open === which ? null : which))
   const { refill } = draft
   // 对话区回退了一个回合：那条消息放回输入框（src/detail/refill.ts）
   useEffect(
@@ -163,16 +166,26 @@ export function Composer({
             {/* 会话的持续目标：状态、用时、目标的话，暂停或继续、清除 */}
             <GoalBar store={store} onError={setError} />
             {/* 待办的浮窗：点了下面的小按钮展开，整份清单跟着待办换 */}
-            {todoOpen ? <TodoPanel store={store} onClose={() => setTodoOpen(false)} /> : null}
+            {panel === 'todo' ? <TodoPanel store={store} onClose={() => setPanel(null)} /> : null}
+            {/* 排着的回报的浮窗：点了下面的小按钮展开，一条一行 */}
+            {panel === 'notes' ? (
+              <QueuedNotesPanel
+                deviceId={deviceId}
+                sessionId={sessionId}
+                onClose={() => setPanel(null)}
+              />
+            ) : null}
             {/* 后台还有任务在跑（回合在不在跑都一样）：一行，只说有几个，点开进后台任务页；
-                旁边是待办的小按钮（照桌面端信息栏的待办卡片），排不下就折到下一行 */}
+                旁边是排着的子会话回报（几条合成一个）和待办的小按钮（照桌面端信息栏的待办卡片），排不下就折到下一行 */}
             <View style={styles.chips}>
               <BackgroundBar store={store} />
-              <TodoChip
-                store={store}
-                open={todoOpen}
-                onToggle={() => setTodoOpen((open) => !open)}
+              <QueuedNotesChip
+                deviceId={deviceId}
+                sessionId={sessionId}
+                open={panel === 'notes'}
+                onToggle={() => toggle('notes')}
               />
+              <TodoChip store={store} open={panel === 'todo'} onToggle={() => toggle('todo')} />
             </View>
             {/* 下一轮要换到别的供应商：提示一行 */}
             <ProviderSwitch

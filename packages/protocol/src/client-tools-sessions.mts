@@ -608,7 +608,7 @@ export function sessionTools(wrapUp: boolean, taskCards = true): ClientToolNames
   return {
     type: 'namespace',
     name: CLIENT_TOOL_NAMESPACE.sessions,
-    description: `Litch sessions on this device. A sub-session is a full, separate session the user can open and talk to; it is for a task of its own that the user may want to follow apart from this work, or for work that needs another harness, model or folder. Parts of the task at hand, however large, run here or in your own subagents. ${suggestionLine(wrapUp, taskCards)} Results of your sub-sessions arrive later as a <litch-session-event> message; do not poll. You can only send to or interrupt your own sub-sessions, and archive a session only when the user has agreed. Never answer approvals or questions waiting inside a sub-session: only the user can. If these tools report an unsupported namespace or a missing tool, you are not in Litch: stop calling litch_* tools in this conversation.`,
+    description: `Litch sessions on this device. A sub-session is a full, separate session the user can open and talk to; it is for a task of its own that the user may want to follow apart from this work, or for work that needs another harness, model or folder. Parts of the task at hand, however large, run here or in your own subagents. ${suggestionLine(wrapUp, taskCards)} Results of your sub-sessions arrive later as a <litch-session-event> message; do not poll. Send to or interrupt only your sub-sessions, any session on a turn the user started, or (send only) a ＠-mentioned one; archive only when the user agreed. Never answer approvals or questions waiting inside a sub-session: only the user can. If these tools report an unsupported namespace or a missing tool, you are not in Litch: stop calling litch_* tools in this conversation.`,
     instructions: sessionProposalRules(wrapUp, taskCards),
     tools: [
       {
@@ -709,7 +709,7 @@ export function sessionTools(wrapUp: boolean, taskCards = true): ClientToolNames
         type: 'function',
         name: SESSION_TOOL.send,
         description:
-          'Send a message to one of your sub-sessions. It is marked as coming from this session, not from the user.',
+          'Send a message to a session: one of your sub-sessions, a session the user mentioned in this session (or that mentioned this one), or any session on a turn the user started. It is marked as coming from this session, not from the user.',
         inputSchema: {
           type: 'object',
           properties: { thread_id: THREAD_ID, message: { type: 'string' } },
@@ -820,7 +820,8 @@ export function sessionTools(wrapUp: boolean, taskCards = true): ClientToolNames
       {
         type: 'function',
         name: SESSION_TOOL.interrupt,
-        description: 'Interrupt the running turn of one of your sub-sessions.',
+        description:
+          'Interrupt the running turn of one of your sub-sessions, or of any session on a turn the user started.',
         inputSchema: {
           type: 'object',
           properties: { thread_id: THREAD_ID },

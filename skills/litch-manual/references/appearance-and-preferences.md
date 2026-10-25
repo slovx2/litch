@@ -27,6 +27,12 @@ app menu). There is no "follow the system" choice; on first launch Litch picks t
 
 ## Notifications (Settings → Notifications)
 
+While the Litch window is in the background, a session shows a system notification when its turn
+ends or fails and when it stops for an approval or an answer (sub-sessions only for the latter; runs
+of scheduled tasks are covered below). Clicking it opens that session. `scripts/litch notify sessions
+on` (or `off`) turns this on or off (default on). The Dock icon shows how many sessions are waiting
+for you or unread.
+
 Failed scheduled-task runs always show a system notification. `scripts/litch notify task-success on`
 (or `off`) controls whether successful runs notify too (default off).
 

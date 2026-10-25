@@ -136,9 +136,54 @@ button.sev-title {
 .sev-error {
   color: var(--err);
 }
-/* 还排着、没交给模型的回报（对话区末尾）：和交出去之后那条同样子，头一行说明下一回合交给模型 */
-.sev[data-queued] {
-  margin-top: 8px;
+/* 还排着、没交给模型的回报：输入框上方“后台任务”右边的小按钮（QueuedNotesChip），点开往上弹出各条 */
+.qn-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  max-width: 100%;
+  padding: 0 6px 0 8px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r2);
+  background: var(--panel);
+  font-size: 12px;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.qn-chip:hover,
+.qn-chip[aria-expanded="true"] {
+  background: var(--hover);
+  color: var(--ink);
+}
+.qn-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.qn-chip .lead {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.qn-chip .caret-ic {
+  flex: none;
+  color: var(--ink-3);
+}
+.qn-pick {
+  min-width: 0;
+}
+.pick-pop.qn-pop {
+  width: 420px;
+  max-width: min(420px, 90vw);
+  max-height: min(360px, 60vh);
+  overflow: auto;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+.qn-hint {
+  margin: 0 0 6px;
+  color: var(--ink-3);
 }
 
 /* ---------- 建议任务：对话流里的提案卡片（ProposalCard.tsx） ---------- */
@@ -841,6 +886,10 @@ button.agent-row:hover {
   flex-direction: column;
   gap: 8px;
   min-width: 0;
+}
+/* 只有一个过期了不画的问题时整块不占地方 */
+.turn-tail:empty {
+  display: none;
 }
 /* 看着回合结束才出来的那一下：滑进来 */
 .turn-tail[data-fresh] {

@@ -83,6 +83,7 @@ export const CONFIG_OPS: readonly ConfigOp[] = [
   { group: 'computer', action: 'forget', write: true },
 
   { group: 'notify', action: 'task-success', write: true },
+  { group: 'notify', action: 'sessions', write: true },
 
   { group: 'diagnose', action: 'run', write: false },
   { group: 'diagnose', action: 'logs', write: false },

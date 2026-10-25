@@ -215,7 +215,9 @@ woken to continue.
 - **By the model**: in sessions of every harness (Codex, Claude Code, Pi, DSH, OpenCode, Gemini CLI,
   Qwen Code, ACP) the model has `litch_sessions` tools: list and read sessions on the device, start
   sub-sessions, send to and interrupt its own sub-sessions, wait for them, and archive or restore
-  sessions. It archives a session only after you agree in a message you typed (when its sub-sessions
+  sessions. In a turn you started it may send to or interrupt any session; it may also message, at any
+  time, a session you mentioned with `@` in this session (or one where you mentioned this session),
+  and that session may message back. It archives a session only after you agree in a message you typed (when its sub-sessions
   have all finished it may suggest archiving them), never one that is still working or pinned; it can
   restore its own sub-sessions any time. When the user did not ask for
   a sub-session in that turn, it becomes a suggested task instead of starting directly. To use another
@@ -230,7 +232,8 @@ woken to continue.
   unfinished or unverified, stay in the conversation; most turns end with no card. When the next step
   simply continues what the model just found (say, fixing what it diagnosed), it asks one short
   question at the end of the turn with one or two reply buttons instead of making a card; a click
-  sends the button's words as your message, and the question lapses with your next message. The
+  sends the button's words as your message, and the question lapses with your next message (a
+  lapsed question stays as one line only when you answered with a button; otherwise it is hidden). The
   cards and the question from the wrap-up appear below the final answer once the turn has ended;
   cards the model raises mid-turn (independent plan steps) appear where it raised them, as soon as it
   does, and scroll with the conversation. The
@@ -290,10 +293,13 @@ woken to continue.
   dialog, Edit and start) you can turn "Wake the main session when done" off. Nothing is woken while no client is
   connected; it happens when one connects. Turns run by scheduled tasks report but do not wake.
   A sub-session you stop or archive yourself does not wake the parent either: the report notes it and
-  the parent sees it on your next message. A failed or interrupted turn's report carries its error and
+  the parent sees it on your next message. The same goes for a turn you start yourself by typing in the
+  sub-session (as in Claude's desktop app): its report waits until you next message the parent. A failed or interrupted turn's report carries its error and
   does not wake the parent (as in Claude's desktop app); it goes with your next message, or with a wake
   another sub-session's report brings. Nothing wakes while another sub-session is still running.
-  Reports not yet handed over show at the end of the parent's conversation as soon as they arrive.
+  Reports not yet handed over show as soon as they arrive as one small button above the parent's
+  composer, next to Background tasks ("Report from …", or "Reports from N sub-sessions"); tap it to
+  see them. Once handed over they show on the message that carried them.
   If a sub-session finishes several turns while the parent is busy, only its latest report is handed over.
 - **Detach as a standalone session** (session menu or the "Started from …" bar at the top of a
   sub-session) cuts the link.

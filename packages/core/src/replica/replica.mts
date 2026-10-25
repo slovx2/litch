@@ -68,6 +68,8 @@ export const keys = {
   activity: (deviceId: string) => `sidebar:${deviceId}:activity`,
   /** GroupTallies：每一组里几个在等人、几个在跑、几个只剩后台任务在跑、几个未读。侧栏里收起来的工作区、设备那一行用它 */
   tallies: (deviceId: string) => `sidebar:${deviceId}:tallies`,
+  /** number：这台设备上要人看一眼的会话有几个（停下来等人的、没看过的，一个会话只算一次）。桌面端的 Dock 角标用它 */
+  attention: (deviceId: string) => `sidebar:${deviceId}:attention`,
   /** SessionHarnesses：这台设备上每个会话属于哪个 harness。侧栏只看某个 harness 时按它挑会话 */
   harnessOf: (deviceId: string) => `sidebar:${deviceId}:harnessOf`,
   /**
@@ -371,6 +373,13 @@ export interface Replica {
   onTaskRunAsking(
     listener: (run: TaskRunView, task: TaskView | undefined, asking: TaskRunApprovalView[]) => void,
   ): () => void
+  /**
+   * 侧栏里一个会话的摘要换了（增量里来的，核心连着的时候看着变的）：桌面端据此在回合结束、要人处理时发系统通知。
+   * before 是换之前那一份，新出现的会话是 undefined。重连拿到的整份快照不算。返回取消函数
+   */
+  onSessionUpdate(
+    listener: (deviceId: string, before: SessionSummary | undefined, after: SessionSummary) => void,
+  ): () => void
 }
 
 const byId = (a: { id: string }, b: { id: string }): number =>
@@ -504,6 +513,9 @@ export function createReplica(channel: CoreChannel): Replica {
     { count: number; deviceId: string; taskId: string; epoch: number }
   >()
   const finishedListeners = new Set<(run: TaskRunView, task: TaskView | undefined) => void>()
+  const sessionListeners = new Set<
+    (deviceId: string, before: SessionSummary | undefined, after: SessionSummary) => void
+  >()
   const askingListeners = new Set<
     (run: TaskRunView, task: TaskView | undefined, asking: TaskRunApprovalView[]) => void
   >()
@@ -715,6 +727,13 @@ export function createReplica(channel: CoreChannel): Replica {
     ) {
       store.set(keys.activity(deviceId), activity)
     }
+    let attention = 0
+    for (const session of sessions.values()) {
+      if (session.status === 'waiting' || session.unread) attention++
+    }
+    if (store.get<number>(keys.attention(deviceId)) !== attention) {
+      store.set(keys.attention(deviceId), attention)
+    }
     // 各组的状况同理：数没变就不换，收起的那一行不跟着别的会话的动静重画
     const tallies = tallySessions(sessions.values())
     const tallied = store.get<GroupTallies>(keys.tallies(deviceId))
@@ -748,10 +767,13 @@ export function createReplica(channel: CoreChannel): Replica {
 
   const applySidebar = (deviceId: string, sessions: Map<string, SessionSummary>, op: SidebarOp) => {
     switch (op.op) {
-      case 'session.upsert':
+      case 'session.upsert': {
+        const before = sessions.get(op.session.id)
         sessions.set(op.session.id, op.session)
         store.set(keys.summary(deviceId, op.session.id), op.session)
+        for (const listener of [...sessionListeners]) listener(deviceId, before, op.session)
         return
+      }
       case 'session.remove':
         sessions.delete(op.sessionId)
         store.delete(keys.summary(deviceId, op.sessionId))
@@ -1255,6 +1277,13 @@ export function createReplica(channel: CoreChannel): Replica {
       askingListeners.add(listener)
       return () => {
         askingListeners.delete(listener)
+      }
+    },
+
+    onSessionUpdate(listener) {
+      sessionListeners.add(listener)
+      return () => {
+        sessionListeners.delete(listener)
       }
     },
 

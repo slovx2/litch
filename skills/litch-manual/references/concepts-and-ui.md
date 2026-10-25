@@ -29,8 +29,10 @@
 
 - **Title bar** (top): sidebar toggle, a breadcrumb "device / project / session" with the harness badge,
   and on the right: the remote-activity marker (only when remote devices are running commands on this
-  computer or waiting for approval, see `operate-this-computer.md`), the terminal toggle and the side
-  panel toggle. The bar takes the current device's wire color.
+  computer or waiting for approval, see `operate-this-computer.md`), the terminal toggle, the info
+  panel toggle (only while the session has something for the info panel) and the side panel toggle.
+  The bar takes the current device's wire color. The sidebar and the info panel can be hidden
+  completely; whether they are hidden is remembered on this computer.
 - **Sidebar** (left): **New session** button, a harness filter and a "more" menu at the top (the menu's
   **Always show active conversations**, on by default, keeps running, unread and waiting sessions listed
   while the filter is on; **Show Claude Code sub-sessions** shows sessions the Claude desktop app
@@ -48,8 +50,11 @@
   remembered per device (on the phone too) and kept after a restart; new ones start expanded.
 - **Main area**: the new-session page, a session, or one of the pages (Devices, Settings, Scheduled
   tasks, Archived sessions).
+- **Info panel** (right of the conversation): small cards that appear only when there is something to
+  show, such as the session's latest to-do list and its worktree. It stays out when the window is too
+  narrow; when it is hidden or out, the to-do list is shown in the conversation instead.
 - **Side panel** (right) with tabs **Files**, **Diff**, **Browser**, **Background tasks** (background commands and subagents). It follows the
-  current session's device and project.
+  current session's device and project. Each session remembers whether the panel is open and which tab it shows.
 - **Terminal panel** (below the conversation). Terminals belong to a project and keep running on the
   device when the connection drops.
 
@@ -94,7 +99,7 @@ together with a save bar. See `devices.md` and `device-settings.md`.
 Sections in order: **Appearance** (skin, theme, density, conversation width, zoom), **Language**, **Devices** (a shortcut
 to the Devices page), **Built-in browser** (links, import from another browser, trust all sites and the blocklist, always-allowed sites, saved passwords, clear browsing data),
 **Computer Use** (macOS and Windows only: permissions or helper status, always-allowed apps),
-**Notifications** (scheduled tasks), **Config assistant** (section id `assist`: the switch that
+**Notifications** (sessions, scheduled tasks), **Config assistant** (section id `assist`: the switch that
 installs this manual into local harnesses and where it went, "Open config assistant", "Show the
 welcome guide again"), **Shortcuts** (read-only list), **About** (version, updates, licenses).
 
@@ -125,7 +130,8 @@ configuration conversation.
 
 Shortcuts cannot be changed. The full list is in Settings → Shortcuts. The common ones (Mod is Cmd on
 macOS, Ctrl elsewhere): Mod+, settings; Mod+N new session; Mod+Shift+B sidebar; Ctrl+` terminal (also on
-macOS); Mod+Alt+B side panel; Mod+= / Mod+- / Mod+0 zoom; Enter send, Shift+Enter new line; in approval
+macOS); Mod+Alt+B side panel; Mod+= / Mod+- / Mod+0 zoom; Enter send, Shift+Enter new line; Cmd+← / Cmd+→ (Home / End on
+Windows and Linux) start or end of the line in the composer; in approval
 cards Enter approves and Esc declines; Esc leaves the Devices, Archived and Settings pages.
 
 ## Composer commands

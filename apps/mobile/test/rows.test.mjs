@@ -74,6 +74,17 @@ test('正在跑的一步：摘要上说它在做什么；只有说明的一组�
   // 说明和命令挨着就是同一组；只有说明时单独一行
   assert.deepEqual(types(rows), ['user', 'group', 'status'])
   assert.equal(rows[1].current, 'run c')
+  assert.equal(rows[1].since, null, '没记过时刻的不计时')
+  // 记过时刻的：累计用时从这一组最早开始的那一条算（在跑的那条还没结束，也要算进去）
+  const timed = viewOf(
+    [{ id: 't', status: 'running', itemIds: ['u', 'c1', 'c'] }],
+    [
+      user('u', '跑'),
+      { ...command('c1'), status: 'completed', span: { from: 1000, to: 3000 } },
+      { ...command('c'), status: 'inProgress', span: { from: 3500, to: null } },
+    ],
+  )
+  assert.equal(new RowBuilder().build(timed, 'all')[1].since, 1000)
   const onlyNotice = viewOf([{ id: 't', status: 'completed', itemIds: ['n'] }], [notice('n')])
   assert.deepEqual(types(new RowBuilder().build(onlyNotice, 'all')), ['notice', 'status'])
 })

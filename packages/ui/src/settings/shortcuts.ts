@@ -211,6 +211,12 @@ export const SHORTCUTS = [
     source: [{ file: `${UI}/composer/Composer.tsx`, has: 'area.selectionStart === 0' }],
   },
   {
+    id: 'lineEdge',
+    group: 'composer',
+    keys: { mac: ['Cmd+Left', 'Cmd+Right'], win: ['Home', 'End'], linux: ['Home', 'End'] },
+    source: [{ file: `${UI}/composer/Composer.tsx`, has: "'lineboundary'" }],
+  },
+  {
     id: 'suggestMove',
     group: 'composer',
     keys: ['Up', 'Down'],

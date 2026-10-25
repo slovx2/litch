@@ -23,6 +23,7 @@ import {
   OPEN_LOGS,
   PICK_FOLDER,
   REQUEST_CORE_PORT,
+  SET_BADGE,
   SET_LANGUAGE,
   SET_LOOK,
   UNSAVED,
@@ -85,6 +86,8 @@ contextBridge.exposeInMainWorld('litchShell', {
       ipcRenderer.removeListener(NOTIFY_CLICK, listener)
     }
   },
+  // Dock 上的角标：要人看一眼的会话有几个
+  setBadge: (count: number) => ipcRenderer.send(SET_BADGE, count),
   // 有没保存的改动：有的话关窗口、退出之前主进程先拦下来请界面问，问完了可以走再告诉它（leave-guard.mts）
   setUnsaved: (value: boolean) => ipcRenderer.send(UNSAVED, value === true),
   onLeaveAsk(handler: () => void) {

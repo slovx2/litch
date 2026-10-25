@@ -237,6 +237,9 @@ const MarkdownBody = memo(function MarkdownBody({ row }: Props<'md'>) {
     )
   return (
     <Pressable
+      // 选字时这一层不接触摸：Pressable 一拿到 JS 的触摸响应，RN 就让它这一层拦下之后的移动事件，
+      // 手指稍一抖，里面的文字就收到取消，系统的长按选字起不来（只有一点不动的长按才行）
+      disabled={selecting}
       onLongPress={
         selecting
           ? undefined

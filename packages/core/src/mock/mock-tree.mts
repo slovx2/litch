@@ -159,7 +159,7 @@ export function createMockTree(host: MockTreeHost): MockTree {
   const text = TREE_TEXT[host.lang]
   /** 父会话 → 攒着的回报（同一个子会话后来的盖掉先前的） */
   const pending = new Map<string, SessionQueuedNoteView[]>()
-  /** 攒着的回报变了：父会话的摘要跟着改，对话区末尾当场画出来（设备进程的 litch/thread/queuedNotes/updated） */
+  /** 攒着的回报变了：父会话的摘要跟着改，输入框上方的小按钮当场出来（设备进程的 litch/thread/queuedNotes/updated） */
   const queue = (deviceId: string, parentId: string, notes: SessionQueuedNoteView[]) => {
     const key = sameKey(deviceId, parentId)
     if (notes.length > 0) pending.set(key, notes)

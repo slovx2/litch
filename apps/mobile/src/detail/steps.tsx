@@ -1,15 +1,22 @@
 // 过程：一组的摘要（收起时一行，高度固定）和展开后的每一步。每一步一行，点开看细节：
 // 命令的输出末尾、改了哪些文件和一小段差异、工具调用的参数和结果。细节都有上限，长的到“差异”“文件”页去看。
-import { diffLines, knownFileRef, stepKindOf, type ToolPart, taskOfItem } from '@litch/core'
+import {
+  diffLines,
+  type ItemView,
+  knownFileRef,
+  stepKindOf,
+  type ToolPart,
+  taskOfItem,
+} from '@litch/core'
 import { useFlashListContext } from '@shopify/flash-list'
 import { Children, memo, type ReactNode } from 'react'
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
-import { duration } from '../../../../packages/ui/src/app/format.ts'
+import { duration, elapsed } from '../../../../packages/ui/src/app/format.ts'
 import { suggestTitles } from '../../../../packages/ui/src/transcript/steps-text.ts'
 import type { Row, StepState } from '../core/rows'
 import { type Translator, useT } from '../ui/i18n'
 import { type Palette, useTheme } from '../ui/theme'
-import { styles as cellStyles, type Props } from './cells'
+import { styles as cellStyles, type Props, useTicking } from './cells'
 import { useBackgroundView, useToggleInPlace, useTranscript } from './context'
 import { keepPlace, rowBelow } from './keep-place'
 import { fileHref, isWebUrl } from './links'
@@ -38,9 +45,13 @@ export const GroupCell = memo(function GroupCell({ row }: Props<'group'>) {
       ? row.ids.split(' ').filter((id) => taskOfItem(background, id)?.status === 'running').length
       : 0
   const steps = t('activity.steps', { n: row.count })
+  // 有一步在跑：这一组到现在的累计用时，一秒一秒地走
+  const spent = useTicking(row.current ? row.since : null)
   // 失败的条数不写（每一步自己的退出码、失败照写）；跑完了写这一组从第一条开始到最后一条结束的用时
   const tail = row.current
-    ? ` · ${t('detail.group.running', { label: t.text(row.current) })}`
+    ? ` · ${t('detail.group.running', { label: t.text(row.current) })}${
+        spent !== null && spent >= 1000 ? ` · ${elapsed(spent, t)}` : ''
+      }`
     : row.durationMs
       ? ` · ${duration(row.durationMs, t)}`
       : ''
@@ -104,8 +115,20 @@ export const GroupEndCell = memo(function GroupEndCell({ row }: Props<'groupEnd'
   )
 })
 
-function stateText(row: Extract<Row, { type: 'step' }>, t: Translator): string {
-  if (row.state === 'running') return t('command.running')
+/** 这一步从什么时候开始的（本机的钟）：命令自己记的时刻，其次是核心记的 span。都没有是 null */
+const startOf = (item: ItemView): number | null =>
+  (item.kind === 'command' ? item.startedAt : null) ?? item.span?.from ?? null
+
+/** spent：在跑的这一步已经跑了多久（不知道何时开始的是 null，只写“运行中”） */
+function stateText(
+  row: Extract<Row, { type: 'step' }>,
+  t: Translator,
+  spent: number | null,
+): string {
+  if (row.state === 'running')
+    return spent !== null && spent >= 1000
+      ? `${elapsed(spent, t)} · ${t('command.running')}`
+      : t('command.running')
   if (row.state === 'declined') return t('detail.step.declined')
   if (row.item.kind === 'command' && row.exitCode !== null && row.exitCode !== 0)
     return t('command.exitCode', { code: row.exitCode })
@@ -160,7 +183,8 @@ export const StepCell = memo(function StepCell({ row }: Props<'step'>) {
     : item.kind === 'webSearch' && isWebUrl(item.query)
       ? () => openLink(item.query)
       : undefined
-  const state = stateText(row, t)
+  const spent = useTicking(row.state === 'running' ? startOf(item) : null)
+  const state = stateText(row, t, spent)
   return (
     <View style={[styles.step, { borderLeftColor: c.line2 }]}>
       <Pressable

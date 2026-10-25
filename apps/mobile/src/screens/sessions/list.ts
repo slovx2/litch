@@ -117,8 +117,10 @@ export function buildList(input: ListInput): ListItem[] {
   const band = (groupKey: string, head: GroupHead, all: WorkspaceView[], keep: boolean) => {
     // 藏着派出来的会话时，里面只有这些会话的工作区整块不出
     const inside = all.filter((entry) => workspaceShown(groups[entry.id], hidden, always))
-    const count = shown(groupKey).length
-    if (count === 0 && inside.length === 0 && !keep) return
+    if (shown(groupKey).length === 0 && inside.length === 0 && !keep) return
+    // 标题后面的数是这一组里一共几个会话：直接放进来的加上里面各个工作区的（“项目”自己没有会话，全在工作区里）
+    const count =
+      shown(groupKey).length + inside.reduce((sum, entry) => sum + shown(entry.id).length, 0)
     const shut = collapsed.has(groupKey)
     const tally = head.kind === 'projects' ? { tally: inside.map((entry) => entry.id) } : {}
     items.push({

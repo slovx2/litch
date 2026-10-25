@@ -41,7 +41,6 @@ import type { MessageKey, Translator } from '../i18n/index.ts'
 import { useRailHasTodo } from '../rail/rail-state.ts'
 import { TaskNote } from '../tasks/TaskNote.tsx'
 import { useAgentsUnfinished } from '../tree/agent-view.tsx'
-import { QueuedNotesBar } from '../tree/EventBar.tsx'
 import { LineageBar } from '../tree/LineageBar.tsx'
 import { TreeCard } from '../tree/TreeCards.tsx'
 import { TurnTail } from '../tree/TurnTail.tsx'
@@ -527,10 +526,6 @@ export function Transcript({ deviceId, sessionId, footer, onOpen }: TranscriptPr
                 {/* 这边重启设备服务时回合被打断了：最后说一句发消息继续 */}
                 {turnIds && !failure ? (
                   <RestartNote deviceId={deviceId} sessionId={sessionId} />
-                ) : null}
-                {/* 子会话交来、还排着没交给模型的回报：进队列就画在最后，不等下一回合 */}
-                {turnIds && !failure ? (
-                  <QueuedNotesBar deviceId={deviceId} sessionId={sessionId} />
                 ) : null}
               </ActionsProvider>
             </FileLinksProvider>

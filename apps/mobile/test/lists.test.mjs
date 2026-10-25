@@ -107,6 +107,9 @@ test('收起的组只剩标题行（还带着数目）；收起“项目”连�
     [`g:${PROJECTS}`, 'a:head'],
   )
   assert.equal(shut[0].collapsed, true)
+  // “项目”后面的数是里面各个工作区的会话加起来
+  assert.equal(items[0].count, 2)
+  assert.equal(shut[0].count, 1)
 })
 
 test('“项目”：能整理的设备上空着也有标题（好在那里添加）；整理不了又没有工作区的不画', () => {

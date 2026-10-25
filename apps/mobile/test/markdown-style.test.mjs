@@ -204,3 +204,17 @@ test('行内代码的组件补丁对得上装的版本（升级组件时要重�
   assert.ok(patches.includes(`react-native-enriched-markdown+${version}.patch`), patches.join(', '))
   assert.equal(pkg.scripts.postinstall, 'patch-package')
 })
+
+test('删除线只认两个波浪号：组件补丁改了 md4c 认 ~ 的那一处（桌面端 markdown-lex.ts 是同一条规矩）', async () => {
+  const { readFileSync } = await import('node:fs')
+  const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
+  const version = pkg.dependencies['react-native-enriched-markdown']
+  const patch = readFileSync(
+    new URL(`../patches/react-native-enriched-markdown+${version}.patch`, import.meta.url),
+    'utf8',
+  )
+  assert.match(
+    patch,
+    /^\+ *\} else if\(tmp - off == 2 {2}&& {2}\(ctx->parser\.flags & MD_FLAG_STRIKETHROUGH\)\) \{$/m,
+  )
+})
