@@ -27,6 +27,7 @@ import type { LitchBackgroundTask } from '../../protocol/src/background-tasks.mj
 import { CLIENT_TOOL_NAMESPACE } from '../../protocol/src/client-tools.mjs'
 import { SESSION_TOOL, sessionTools } from '../../protocol/src/client-tools-sessions.mjs'
 import { EXTENSION } from '../../protocol/src/device.mjs'
+import { parseSessionMentions } from '../../protocol/src/session-mentions.mjs'
 import {
   formatSessionEvent,
   SESSION_TREE_LIMITS,
@@ -798,6 +799,20 @@ export class SessionTree {
   }
 
   /**
+   * 用户在这个会话里发的话（发起回合、回合里插话）@ 了别的会话（末尾的 <litch-session-mentions>）：记下来，
+   * 之后这两个会话之间可以互相发消息（session-tools.mts 的 writable）
+   */
+  userMentioned(threadId: string, input: unknown): void {
+    if (!Array.isArray(input)) return
+    const ids = input.flatMap((item) =>
+      isObject(item) && item.type === 'text' && typeof item.text === 'string'
+        ? (parseSessionMentions(item.text)?.mentions.map((mention) => mention.threadId) ?? [])
+        : [],
+    )
+    if (ids.length) this.store.addMentions(threadId, ids)
+  }
+
+  /**
    * 客户端要给一个会话发起回合（turn/start）：这是用户的一句话。唤醒计数清零；有回报在排队的话，
    * 包成 kind=notes 的一段放在用户消息前面一起交给引擎，返回新的输入。没有要附的返回 null。
    */
@@ -1132,6 +1147,7 @@ export class SessionTree {
   deleted(threadId: string): void {
     this.store.dropTools(threadId)
     this.store.setSpeed(threadId, null)
+    this.store.dropMentions(threadId)
   }
 
   /**

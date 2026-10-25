@@ -126,6 +126,14 @@ const MIGRATIONS: readonly string[] = [
      thread_id TEXT PRIMARY KEY,
      speed TEXT NOT NULL
    ) WITHOUT ROWID;`,
+  // 用户在一个会话里 @ 过另一个会话：这两个会话之间可以互相发消息（litch_sessions.send），不论有没有父子关系
+  `CREATE TABLE mentions(
+     thread_id TEXT NOT NULL,
+     mentioned_id TEXT NOT NULL,
+     created_at INTEGER NOT NULL,
+     PRIMARY KEY(thread_id, mentioned_id)
+   ) WITHOUT ROWID;
+   CREATE INDEX mentions_by_target ON mentions(mentioned_id);`,
 ]
 
 export const SESSION_SCHEMA_VERSION = MIGRATIONS.length
@@ -309,6 +317,14 @@ export class SessionStore {
          ON CONFLICT(thread_id) DO UPDATE SET speed=excluded.speed`,
       ),
       dropSpeed: prepare('DELETE FROM thread_speeds WHERE thread_id=?'),
+      addMention: prepare(
+        'INSERT OR IGNORE INTO mentions(thread_id, mentioned_id, created_at) VALUES(?, ?, ?)',
+      ),
+      mentioned: prepare(
+        `SELECT 1 AS hit FROM mentions
+         WHERE (thread_id=? AND mentioned_id=?) OR (thread_id=? AND mentioned_id=?) LIMIT 1`,
+      ),
+      dropMentions: prepare('DELETE FROM mentions WHERE thread_id=? OR mentioned_id=?'),
       option: prepare('SELECT value FROM harness_options WHERE harness=? AND key=?'),
       setOption: prepare(
         `INSERT INTO harness_options(harness, key, value) VALUES(?, ?, ?)
@@ -652,6 +668,24 @@ export class SessionStore {
   setSpeed(threadId: string, speed: string | null): void {
     if (speed === null) this.run('dropSpeed', threadId)
     else this.run('setSpeed', threadId, speed)
+  }
+
+  // ---------- 用户 @ 过的会话 ----------
+
+  /** 用户在 threadId 里发的话 @ 了这些会话 */
+  addMentions(threadId: string, mentioned: readonly string[]): void {
+    for (const id of mentioned)
+      if (id && id !== threadId) this.run('addMention', threadId, id, now())
+  }
+
+  /** 两个会话之间用户 @ 过（谁在谁里面 @ 的都算） */
+  mentioned(a: string, b: string): boolean {
+    return this.statements.mentioned?.get(a, b, b, a) !== undefined
+  }
+
+  /** 会话删掉了：和它有关的 @ 都不留 */
+  dropMentions(threadId: string): void {
+    this.run('dropMentions', threadId, threadId)
   }
 
   /** 只做一次的整理还没做 */

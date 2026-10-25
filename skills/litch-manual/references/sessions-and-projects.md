@@ -215,7 +215,9 @@ woken to continue.
 - **By the model**: in sessions of every harness (Codex, Claude Code, Pi, DSH, OpenCode, Gemini CLI,
   Qwen Code, ACP) the model has `litch_sessions` tools: list and read sessions on the device, start
   sub-sessions, send to and interrupt its own sub-sessions, wait for them, and archive or restore
-  sessions. It archives a session only after you agree in a message you typed (when its sub-sessions
+  sessions. In a turn you started it may send to or interrupt any session; it may also message, at any
+  time, a session you mentioned with `@` in this session (or one where you mentioned this session),
+  and that session may message back. It archives a session only after you agree in a message you typed (when its sub-sessions
   have all finished it may suggest archiving them), never one that is still working or pinned; it can
   restore its own sub-sessions any time. When the user did not ask for
   a sub-session in that turn, it becomes a suggested task instead of starting directly. To use another

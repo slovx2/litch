@@ -626,6 +626,13 @@ export class ClientSession implements ClientToolPeer {
       const input = this.host.sessionTree.beforeUserTurn(params.threadId, params.input)
       if (input) params = { ...params, input }
     }
+    // 用户的话里 @ 了别的会话：记下来，两个会话之间从此可以互相发消息
+    if (
+      params &&
+      (method === 'turn/start' || method === 'turn/steer') &&
+      typeof params.threadId === 'string'
+    )
+      this.host.sessionTree.userMentioned(params.threadId, params.input)
     // 回合里插话、打断：模型在等用户选的 offer 卡当作在这里做
     if (params && method === 'turn/steer' && typeof params.threadId === 'string')
       this.host.sessionTree.userSpoke(params.threadId)
