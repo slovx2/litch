@@ -17,6 +17,7 @@ import type {
   RequestView,
   SessionAbilities,
   SessionDefaults,
+  SessionPeek,
   SessionSettings,
   SessionSummary,
   SessionView,
@@ -350,6 +351,11 @@ export interface Commands {
   'session.markRead': {
     params: { deviceId: string; sessionId: string }
     result: Record<string, never>
+  }
+  /** 会话眼下的情况（最后一条回答、失败原因、等人处理的事），系统通知的正文用 */
+  'session.peek': {
+    params: { deviceId: string; sessionId: string }
+    result: SessionPeek
   }
   /**
    * 发一条消息，可以带图片和别的东西（extras：技能）；带着这些时文字可以是空的。

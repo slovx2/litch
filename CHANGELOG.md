@@ -5,6 +5,11 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
+## 未发布
+
+- 桌面端会话通知写实际内容：标题是会话标题，下面一行小字是项目和设备；正文是最后一条回答的开头（去掉 Markdown，掐到 100 字）、出错的原因、要批准的命令或文件、要回答的问题本身。拿不到时退回原来那句
+- Dock 角标只数未读的会话（回合结束、出错时没在看的），审批、提问照发通知但不进角标；未读的会话在侧栏里收起的父会话下面、“展示更多”后面也照样露出来，角标上的每一个都能在侧栏里找到带点的那一行
+
 ## 0.23.0
 
 - 侧栏单独查看一组时，行尾的“新建会话”“更多”还在（以前只剩设备名）

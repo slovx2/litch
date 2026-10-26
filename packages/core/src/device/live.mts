@@ -139,6 +139,8 @@ export interface LiveSessions {
   open(sessionId: string, sink: HostSink): () => void
   /** 界面上有没有人开着这个会话 */
   watched(sessionId: string): boolean
+  /** 核心手里这个会话的视图（开着的、刚关上还留着的）。没有是 null */
+  view(sessionId: string): SessionView | null
   /** 设备连上并认出了对面：订阅着的会话全部重新载入 */
   resync(): void
   /** 连接断了 */
@@ -1290,6 +1292,8 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     },
 
     watched: (sessionId) => (sessions.get(sessionId)?.sinks.size ?? 0) > 0,
+
+    view: (sessionId) => sessions.get(sessionId)?.view ?? null,
 
     resync() {
       lacking.clear()

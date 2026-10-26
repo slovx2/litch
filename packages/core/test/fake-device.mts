@@ -393,12 +393,16 @@ export function fakeDevice(harnesses: FakeHarness[]): {
     'thread/read': byThread('thread/read', (entry, found, params) => ({
       thread: stamp(entry, found, (params as { includeTurns?: boolean }).includeTurns === true),
     })),
-    // 新的回合在前；不带条目（子代理列表只问最近的一个回合）
+    // 新的回合在前；要了 full 才带条目（子代理列表只问最近的一个回合、不带条目，系统通知要带）
     'thread/turns/list': byThread('thread/turns/list', (_entry, found, params) => {
-      const { limit } = params as { limit?: number | null }
+      const { limit, itemsView } = params as { limit?: number | null; itemsView?: string | null }
       const turns = [...(found.turns ?? [])].reverse().slice(0, limit ?? undefined)
       return {
-        data: turns.map((entry) => ({ ...entry, items: [], itemsView: 'notLoaded' })),
+        data: turns.map((entry) =>
+          itemsView === 'full'
+            ? { ...entry, itemsView: 'full' }
+            : { ...entry, items: [], itemsView: 'notLoaded' },
+        ),
         nextCursor: null,
         backwardsCursor: null,
       }

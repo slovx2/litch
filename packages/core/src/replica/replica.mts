@@ -68,8 +68,11 @@ export const keys = {
   activity: (deviceId: string) => `sidebar:${deviceId}:activity`,
   /** GroupTallies：每一组里几个在等人、几个在跑、几个只剩后台任务在跑、几个未读。侧栏里收起来的工作区、设备那一行用它 */
   tallies: (deviceId: string) => `sidebar:${deviceId}:tallies`,
-  /** number：这台设备上要人看一眼的会话有几个（停下来等人的、没看过的，一个会话只算一次）。桌面端的 Dock 角标用它 */
-  attention: (deviceId: string) => `sidebar:${deviceId}:attention`,
+  /**
+   * string[]：这台设备上未读的会话（有了新结果、还没点开看过的），按标识排。桌面端的 Dock 角标数它，
+   * 侧栏让它们收不起、折不住，角标上的每一个都能在侧栏里看到记号。停下来等人的不算（那是另一个记号）
+   */
+  unread: (deviceId: string) => `sidebar:${deviceId}:unread`,
   /** SessionHarnesses：这台设备上每个会话属于哪个 harness。侧栏只看某个 harness 时按它挑会话 */
   harnessOf: (deviceId: string) => `sidebar:${deviceId}:harnessOf`,
   /**
@@ -727,13 +730,12 @@ export function createReplica(channel: CoreChannel): Replica {
     ) {
       store.set(keys.activity(deviceId), activity)
     }
-    let attention = 0
-    for (const session of sessions.values()) {
-      if (session.status === 'waiting' || session.unread) attention++
-    }
-    if (store.get<number>(keys.attention(deviceId)) !== attention) {
-      store.set(keys.attention(deviceId), attention)
-    }
+    const unread = [...sessions.values()]
+      .filter((session) => session.unread)
+      .map((session) => session.id)
+      .sort()
+    const seen = store.get<string[]>(keys.unread(deviceId))
+    if (!seen || seen.join('\n') !== unread.join('\n')) store.set(keys.unread(deviceId), unread)
     // 各组的状况同理：数没变就不换，收起的那一行不跟着别的会话的动静重画
     const tallies = tallySessions(sessions.values())
     const tallied = store.get<GroupTallies>(keys.tallies(deviceId))

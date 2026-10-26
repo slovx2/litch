@@ -61,6 +61,7 @@ import type {
   RemoteTarget,
   SectionView,
   SessionDefaults,
+  SessionPeek,
   SessionSettings,
   SessionSummary,
   SidebarView,
@@ -95,9 +96,16 @@ import type {
 } from '../model-tree.mjs'
 import { describeText, phrase, sameText, type Text } from '../phrase.mjs'
 import { outgoing } from '../projection/outgoing.mjs'
+import { peekOf } from '../projection/peek.mjs'
 import type { RequestChoice } from '../projection/requests.mjs'
 import { projectService, projectUpgrade } from '../projection/service.mjs'
-import { isAgentThread, parentOf, projectSummary, threadTitle } from '../projection/session.mjs'
+import {
+  isAgentThread,
+  parentOf,
+  projectSummary,
+  projectTurn,
+  threadTitle,
+} from '../projection/session.mjs'
 import { composeOptions, projectDefaults } from '../projection/settings.mjs'
 import type { SkillCatalog } from '../projection/skills.mjs'
 import { pathTwin, samePath } from '../text/paths.mjs'
@@ -344,6 +352,11 @@ export interface Device {
   clearGoal(sessionId: string): Promise<void>
   markRead(sessionId: string): void
   /**
+   * 会话眼下的情况，系统通知的正文用：开着的从核心自己的视图取，没开的向对面要最近一个回合。
+   * 设备没连着、要不到时抛错（界面退回到不带内容的那句）
+   */
+  peek(sessionId: string): Promise<SessionPeek>
+  /**
    * 订阅这台设备的管理数据（设置的结构和现在的值）。先给快照，之后给增量；返回退订函数。
    * 对面没有设置接口时抛 unsupported；设备还没连上时订阅照样成立，连上之后才有快照
    */
@@ -476,6 +489,8 @@ const SERVICE_ASK_MS = 1000
 const SERVICE_ASKS = 4
 /** 子代理的会话状态说不在跑了、记着的回合还在跑：等这么久还没收到回合结束的通知，再问它最近的回合 */
 const AGENT_RECHECK_MS = 2000
+/** 系统通知要写内容时向对面要最近一个回合最多等多久：等不到就发不带内容的那句，通知不能拖太久 */
+const PEEK_TIMEOUT_MS = 3000
 
 /**
  * 会话目录这一层处理的通知：会话和工作区的增减改，加上完整模式下 harness 的状态变化。
@@ -2626,6 +2641,22 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       const thread = threads.get(sessionId)
       if (thread) hooks.sidebarOps([{ op: 'session.upsert', session: summaryOf(thread) }])
       saveSoon()
+    },
+    async peek(sessionId) {
+      const view = live.view(sessionId)
+      if (view) {
+        return peekOf(view.turns.at(-1), (id) => view.items[id], view.requests)
+      }
+      const page = await link.request(
+        'thread/turns/list',
+        { threadId: sessionId, limit: 1, sortDirection: 'desc', itemsView: 'full' },
+        { timeoutMs: PEEK_TIMEOUT_MS },
+      )
+      const last = page.data[0]
+      if (!last) return { answer: null, error: null, pending: null }
+      const { turn, items } = projectTurn(last)
+      const byId = new Map(items.map((item) => [item.id, item]))
+      return peekOf(turn, (id) => byId.get(id), [])
     },
     openManage: (sink) => manage.open(sink),
     writeSettings: (expectedVersion, edits) => manage.write(expectedVersion, edits),
