@@ -741,7 +741,7 @@ const NO_IDS: readonly string[] = []
 const NO_CHILDREN: SessionChildren = {}
 const NO_GROUPS: SessionGroups = {}
 /** 子会话每一层往里缩多少像素（和 tree.css 的 .tree-kids 一致） */
-const INDENT = 14
+const INDENT = 20
 
 /** 一处放东西的地方（置顶、组、“项目”、工作区、无项目）接拖放的那几个事件 */
 interface Zone {
@@ -978,13 +978,15 @@ function DeviceGroup(props: GroupProps) {
   })
   if (!device) return null
   const fold = (id: string) => toggleSidebarFold(deviceId, 'folded', id)
-  /** 一行会话，和挂在它下面的子会话（一层套一层）。收起了的父会话下面只露出非露出来不可的 */
+  /** 一行会话，和挂在它下面的子会话（一层套一层）。收起了的父会话下面只露出折不住的，再加一行还收着几个 */
   const tree = (sessionId: string, depth: number): ReactNode => {
     // 父子关系由设备进程保证不成环；万一对面给错了，也不至于一直套下去
     if (depth > MAX_DEPTH) return null
     const kids = kidsOf(sessionId)
     const shut = folded.has(sessionId)
     const visible = kidsShown(kids, shut, unfolded)
+    /** 收起时还收着几个：露出来的（选中的、等人的、未读的）不算 */
+    const tucked = kids.length - visible.length
     return (
       <div
         key={sessionId}
@@ -1003,8 +1005,24 @@ function DeviceGroup(props: GroupProps) {
           folded={shut}
           onFold={() => fold(sessionId)}
         />
-        {visible.length > 0 ? (
-          <div className="tree-kids">{visible.map((id) => tree(id, depth + 1))}</div>
+        {visible.length > 0 || tucked > 0 ? (
+          <div className="tree-kids">
+            {visible.map((id) => tree(id, depth + 1))}
+            {tucked > 0 ? (
+              <button
+                type="button"
+                className="tree-sum"
+                aria-expanded="false"
+                title={t('tree.unfold', { n: kids.length })}
+                onClick={() => fold(sessionId)}
+              >
+                <Caret />
+                <span className="ell">
+                  {t(visible.length > 0 ? 'tree.tuckedMore' : 'tree.tucked', { n: tucked })}
+                </span>
+              </button>
+            ) : null}
+          </div>
         ) : null}
       </div>
     )

@@ -1268,6 +1268,8 @@ export const en: Record<MessageKey, Entry> = {
   'tree.detach.yes': 'Detach',
   'tree.fold': 'Collapse sub-sessions',
   'tree.unfold': ({ n }) => (n === 1 ? 'Expand 1 sub-session' : `Expand ${n} sub-sessions`),
+  'tree.tucked': ({ n }) => (n === 1 ? '1 sub-session' : `${n} sub-sessions`),
+  'tree.tuckedMore': ({ n }) => (n === 1 ? '1 more sub-session' : `${n} more sub-sessions`),
   'tree.spawnMenu': 'Start a sub-session…',
   'tree.dialog.title': 'Start a sub-session',
   'tree.dialog.harness': 'Harness',

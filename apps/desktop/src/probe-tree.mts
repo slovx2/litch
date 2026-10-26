@@ -19,6 +19,7 @@
 import type { BrowserWindow } from 'electron'
 import { pendingLooks } from './probe-pending-asks.mjs'
 import { checkSidebarReveal } from './probe-sidebar-reveal.mjs'
+import { checkTreeSummary } from './probe-tree-summary.mjs'
 
 export interface TreeSeen {
   /** 派子会话：侧栏里两个子会话挂在父会话下面，行上显示状态点、名字与 harness */
@@ -163,14 +164,18 @@ export async function treeProbe(): Promise<TreeSeen> {
   const fold = $(`.row-line[data-session="${PARENT}"] .tree-fold`)
   fold?.click()
   await sleep(150)
+  // 收起之后父会话下面一行写着还收着几个，画在竖线里面
+  const tucked = node?.querySelector<HTMLElement>(':scope > .tree-kids > .tree-sum')
   const folded =
     kids().length === 0 &&
     fold?.getAttribute('aria-expanded') === 'false' &&
-    (fold.getAttribute('aria-label') ?? '').includes('2')
-  seen.fold = fold?.getAttribute('aria-label') ?? '没有箭头'
-  fold?.click()
+    (fold.getAttribute('aria-label') ?? '').includes('2') &&
+    (tucked?.textContent ?? '').includes('2')
+  seen.fold = `${fold?.getAttribute('aria-label') ?? '没有箭头'} / ${tucked?.textContent ?? '没有摘要行'}`
+  // 点那一行展开回来
+  tucked?.click()
   await sleep(150)
-  const unfolded = kids().length === 2
+  const unfolded = kids().length === 2 && node?.querySelector('.tree-sum') === null
 
   // 唤醒：两个子会话都停下之后父会话被唤醒
   await until(() => $('.main .sev[data-event="wake"]') !== null, 15000)
@@ -816,8 +821,8 @@ export async function treeLooks(parent: string): Promise<TreeLooks> {
 const LABELS: Record<Exclude<keyof TreeSeen, 'seen'>, string> = {
   nested: '派出的两个子会话挂在父会话下面',
   bareRows: '子会话行显示状态、名字与 harness，省略时间',
-  folded: '收起之后子会话不见了，箭头写着展开几个',
-  unfolded: '再点一下展开回来',
+  folded: '收起之后子会话不见了，箭头和下面一行都写着几个',
+  unfolded: '点那一行展开回来',
   spawnCards: '对话里两张派出卡片',
   jumped: '点派出卡片跳到子会话',
   lineageBar: '子会话最上面一行写着由父会话派出',
@@ -892,8 +897,9 @@ export async function runTreeChecks(window: BrowserWindow): Promise<readonly [ob
   const pending = await pendingLooks(window)
   const looks = await inPage(treeLooks, 's6')
   const reveal = await checkSidebarReveal(window)
+  const summary = await checkTreeSummary(window)
   return [
-    { ...seen, looks, pending, reveal: reveal.result },
-    [...judgeTree(seen, looks), ...pending.failed, ...reveal.failed],
+    { ...seen, looks, pending, reveal: reveal.result, summary },
+    [...judgeTree(seen, looks), ...pending.failed, ...reveal.failed, ...summary.failed],
   ]
 }

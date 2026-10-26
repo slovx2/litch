@@ -31,6 +31,14 @@ sidebar.
 
 ## Sessions
 
+### 侧栏中的子会话
+
+桌面侧栏将子会话缩进显示在父会话下方，以实线连接。收起父会话后，仍显示当前选中、
+待处理和未读的子会话（未读会话仍受 harness 筛选影响）。其余子会话在竖线内汇总为
+“N 个子会话”；已有子会话显示时，汇总为“还有 N 个子会话”，只计算尚未显示的数量。
+点击汇总行展开。筛选或显示开关隐藏的子会话不计入该数量；全部已显示时没有汇总行。
+手机端仍使用父会话行上的箭头和数量展开、收起，没有单独的数量汇总行。
+
 ### Opening from outside the sidebar
 
 Opening a session from a notification, task card, link, manager workline or pending activity reveals

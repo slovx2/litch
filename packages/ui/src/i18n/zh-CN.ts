@@ -1218,6 +1218,8 @@ export const zhCN = {
   'tree.detach.yes': '脱离',
   'tree.fold': '收起子会话',
   'tree.unfold': '展开 {n} 个子会话',
+  'tree.tucked': '{n} 个子会话',
+  'tree.tuckedMore': '还有 {n} 个子会话',
   'tree.spawnMenu': '派出子会话…',
   'tree.dialog.title': '派出子会话',
   'tree.dialog.harness': 'Harness',

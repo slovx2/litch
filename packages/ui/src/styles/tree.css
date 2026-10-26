@@ -622,18 +622,46 @@ button.sysm-from {
 }
 
 /* ---------- 侧栏里的嵌套 ---------- */
+/* 子会话往里缩得比工作区下面的会话多一截（和 Sidebar.tsx 的 INDENT 一致），一眼看得出不是平级的 */
 .tree-kids {
   position: relative;
-  padding-left: 14px;
+  padding-left: 20px;
 }
-/* 一根竖线把子会话和父会话连起来 */
+/* 一根竖线从父会话的状态点下面拉下来，把子会话和父会话连起来。用实线、深一档，淡了分不清层级 */
 .tree-kids::before {
   content: "";
   position: absolute;
-  left: 18px;
+  left: 19px;
   top: 0;
   bottom: 6px;
-  border-left: 1px solid var(--line-2);
+  border-left: 1px solid var(--ink-3);
+  opacity: 0.7;
+}
+/* 收起了的父会话下面那一行：还有几个子会话收着，点一下展开。画在竖线里面，
+   它后面平级的会话就不会被看成这个父会话的子会话 */
+.tree-sum {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: round(calc(22px * var(--fs)), 1px);
+  padding: 0 6px 0 12px;
+  border: 0;
+  border-radius: var(--r1);
+  background: none;
+  color: var(--ink-3);
+  font: inherit;
+  font-size: calc(11px * var(--fs));
+  text-align: left;
+  cursor: pointer;
+}
+.tree-sum:hover {
+  color: var(--ink);
+  background: var(--hover);
+}
+.tree-sum .caret-ic {
+  width: 10px;
+  height: 10px;
 }
 /* 选中的子会话：连到设备竖线上的那一小段跨过缩进 */
 .tree-kids .ss-row.sel::before {
@@ -964,9 +992,6 @@ button.agent-row:hover {
 }
 [data-skin="retro"] .side-badge {
   border-radius: 0;
-}
-[data-skin="retro"] .tree-kids::before {
-  border-left-style: dashed;
 }
 [data-skin="human"] .tree-card {
   border-radius: 14px;

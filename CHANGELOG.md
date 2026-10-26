@@ -5,6 +5,10 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
+## 未发布
+
+- 桌面侧栏收起父会话后，在子会话竖线内显示“N 个子会话”；部分子会话仍显示时，只计入尚未显示的数量，写为“还有 N 个子会话”。点击该行展开。增加子会话缩进并加深实线，明确后续平级会话的层级
+
 ## 0.27.0
 
 - 经理的新建流程分为三步，设置按页签编辑；移除模板选择，改为可选的“经理设定”，运行规则由设备自动生成，工作树默认关闭。界面文案统一，经理出现新决策时发送桌面通知
