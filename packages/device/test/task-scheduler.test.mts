@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import test from 'node:test'
+import { parseSystemMessage } from '../../protocol/src/system-messages.mjs'
 import type { TestClient } from './helpers.mjs'
 import { settle, tempDir } from './helpers.mjs'
 import {
@@ -59,6 +60,13 @@ test('到点在新会话里跑一个回合：会话起了名、进了索引，�
     assert.match(text, /Task: 整理日报/)
     assert.match(text, /No one is watching this run/)
     assert.ok(text.endsWith('---\n把今天的提交整理成日报。'))
+    // 客户端认得回来（画成“定时任务 · 名字”卡片）
+    assert.deepEqual(parseSystemMessage(text), {
+      kind: 'scheduledTask',
+      task: '整理日报',
+      manual: false,
+      prompt: '把今天的提交整理成日报。',
+    })
     const thread = engine.threads.at(-1)
     assert.match(String(thread?.name), /^整理日报 · \d{4}-\d{2}-\d{2} \d{2}:\d{2}$/)
 

@@ -4,6 +4,7 @@
 
 import type { ApiRetryReason } from '../../protocol/src/api-retry.mjs'
 import type { SessionMentionRef } from '../../protocol/src/session-mentions.mjs'
+import type { SystemMessage } from '../../protocol/src/system-messages.mjs'
 import type { SessionBackgroundView, TurnOrigin } from './model-background.mjs'
 import type { GoalReachedView, SessionGoalView } from './model-goal.mjs'
 import type { MachineAccessView, MachineAskView } from './model-machine.mjs'
@@ -461,6 +462,11 @@ export interface UserMessageItem {
    */
   peer?: PeerView
   /**
+   * Litch 替用户发的话（定时任务触发、子会话启动时的简报、提案卡上点的“在这里做”）认出来的样子：
+   * 界面画成一张卡片（来源和类型、简略内容，点开看全文），不画成用户自己的话。text 照旧是全文（session-event 去掉之后的）
+   */
+  system?: SystemMessageView
+  /**
    * 提到的会话（正文末尾那一段 <litch-session-mentions> 认出来的，按序号）。有它的时候 text 里没有那一段，
    * 正文里的提及是 ＠[标题]，界面按 mentionSegments 切开画成能点的片。没提到会话的不带这一项
    */
@@ -471,6 +477,9 @@ export interface UserMessageItem {
    */
   unconfirmed?: true
 }
+
+/** Litch 替用户发的话认出来的样子（protocol/src/system-messages.mts） */
+export type SystemMessageView = SystemMessage
 
 /** 用户消息里提到的一个会话（同一台设备上） */
 export interface SessionMentionView {

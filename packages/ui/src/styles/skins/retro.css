@@ -62,11 +62,7 @@
   }
 }
 
-/* 小标题前面的记号；标签不填底色，只画框 */
-[data-skin="retro"] .sec-label::before {
-  content: "## ";
-  white-space: pre;
-}
+/* 标签不填底色，只画框 */
 [data-skin="retro"] .pill {
   background: none;
   border: 1px solid currentColor;
@@ -378,16 +374,7 @@
   border-top-color: var(--line-2);
 }
 
-/* 设备详情：实线框、虚线分隔、标题前面的记号；开关是一个方的拨块 */
-[data-skin="retro"] .mng-sec-head h2::before {
-  content: "## ";
-  white-space: pre;
-  color: var(--ink-3);
-}
-/* 能收起的一节前面已经有箭头了，不再放记号 */
-[data-skin="retro"] .mng-sec-head h2:has(.fold)::before {
-  content: none;
-}
+/* 设备详情：实线框、虚线分隔；开关是一个方的拨块 */
 [data-skin="retro"] :is(.mng-sec, .mng-state) {
   border-top-style: dashed;
   border-top-color: var(--line-2);

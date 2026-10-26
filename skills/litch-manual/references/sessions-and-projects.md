@@ -138,6 +138,13 @@ explain it:
   "Background tasks" in the session's menu) opens a simpler page with the same list, where a subagent
   opens its own page and running commands can be stopped; the folded steps and the
   line at the start of a continuing turn look the same as on the desktop.
+- **Messages Litch sends for you** show as cards, not as your own message: a scheduled task's run
+  ("Scheduled task · <name>", with "Run manually" for Run now), a sub-session's first message ("Sub-session
+  brief", "Fork brief" or "Handed-off task", with the session it came from, which opens it), and "Do it
+  here" on a suggested-task card ("Task card · Do it here"). The card shows the title and the start of
+  the task; Show full text shows exactly what the model received, Show less folds it again. A message
+  another session sent with `litch_sessions.send` shows as "Message from …" (as below), folded to four
+  lines until you expand it. Desktop and phone alike.
 - **To-dos**: the to-do list a harness keeps (Claude Code, OpenCode, ACP agents, Codex) shows in the
   info rail on the right, with the latest list staying until the next one replaces it; when the rail
   doesn't fit it shows in the conversation instead. On the phone a small "To-do 2/6" button sits above
@@ -322,7 +329,7 @@ woken to continue.
 - **Messages from other Claude sessions**: Claude Code sessions on the same computer can message each
   other (`ListAgents`, `SendMessage`), including the Claude desktop app's sessions and Claude Code in a
   terminal. A message that reaches a Litch session shows as "Message from …" in place of your own
-  message (with "Sender skips approvals" when the sender runs tools without asking, and "Open in
+  message, folded to four lines until expanded (with "Sender skips approvals" when the sender runs tools without asking, and "Open in
   Claude" when it came from a Claude desktop session); an idle session handles it in a turn of its own,
   a busy one right after its current step. On the sending side the step reads "Message …". This is the
   device setting `harness.claude-code.crossSessionInbox` (on by default), and works only between

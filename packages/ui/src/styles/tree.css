@@ -365,6 +365,57 @@ button.sev-title {
   border-color: transparent;
   color: var(--ink-3);
 }
+/* Litch 替用户发的话（SystemCard.tsx：定时任务、子会话的启动指令、在这里做）：同回报那一条的框，
+   第一行来源和类型，下面两行简略内容，展开看发给模型的原文 */
+.sysm-head {
+  min-width: 0;
+}
+.sysm-head > .ic {
+  flex: none;
+}
+.sysm-kind {
+  min-width: 0;
+  flex: 0 1 auto;
+}
+.sysm-from {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+button.sysm-from {
+  max-width: 50%;
+  font-weight: 400;
+  color: var(--ink-2);
+}
+.sysm-tag {
+  flex: none;
+  padding: 0 6px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r1);
+}
+.sysm-sum {
+  margin-top: 2px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.sysm-title {
+  font-weight: 600;
+  color: var(--ink);
+}
+.sysm-full {
+  margin-top: 4px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.sysm-toggle {
+  display: block;
+  margin-top: 2px;
+}
 
 /* 侧面板点了一条：对话里那张卡片（找不到时是那一行）闪一圈 */
 [data-flash] {

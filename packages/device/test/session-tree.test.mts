@@ -8,6 +8,7 @@ import {
   presentationSpec,
 } from '../../protocol/src/client-tools-presentation.mjs'
 import { parseSessionEvent } from '../../protocol/src/session-tree.mjs'
+import { parseSystemMessage } from '../../protocol/src/system-messages.mjs'
 import { briefing } from '../src/session-start.mjs'
 import { failureOf, resultOf } from './fake-engine.mjs'
 import { settle } from './helpers.mjs'
@@ -139,6 +140,35 @@ test('SESSION-TREE-BRIEF：fresh 的第一条消息分“背景 / 任务”两�
   const handOff = briefing('fork', parent, '接着做', '剩下两步。', true, '不该出现')
   assert.match(handOff, /Remaining plan:\n剩下两步。/)
   assert.doesNotMatch(handOff, /Background:|不该出现/)
+})
+
+test('SESSION-TREE-BRIEF：客户端认得回简报（画成“子会话的启动指令”卡片）：哪一种、父会话、标题、背景、任务', () => {
+  const parent = { id: 'p1', harness: 'pi', title: '主会话 "旧" (二)' }
+  const fresh = briefing(
+    'fresh',
+    parent,
+    '查构建',
+    '找出最慢的三步。\n\n再看缓存。',
+    false,
+    '提速 CI',
+  )
+  assert.deepEqual(parseSystemMessage(fresh), {
+    kind: 'briefing',
+    mode: 'fresh',
+    parent,
+    title: '查构建',
+    background: '提速 CI',
+    prompt: '找出最慢的三步。\n\n再看缓存。',
+  })
+  const fork = parseSystemMessage(briefing('fork', parent, '换个办法', '试试缓存。'))
+  assert.equal(fork?.kind === 'briefing' && fork.mode, 'fork')
+  assert.equal(fork?.kind === 'briefing' && fork.prompt, '试试缓存。')
+  const handOff = parseSystemMessage(briefing('fork', parent, '接着做', '剩下两步。', true))
+  assert.equal(handOff?.kind === 'briefing' && handOff.mode, 'handOff')
+  assert.equal(handOff?.kind === 'briefing' && handOff.prompt, '剩下两步。')
+  // 父会话没有标题：简报里写的是会话号，认回来标题是空的
+  const untitled = parseSystemMessage(briefing('fresh', { ...parent, title: '' }, '查', '看看。'))
+  assert.deepEqual(untitled?.kind === 'briefing' && untitled.parent, { ...parent, title: '' })
 })
 
 test('SESSION-TREE-002：fork 用同 harness 的 thread/fork；跨 harness 的 fork、不认识的 harness、空标题都是参数不对', async () => {

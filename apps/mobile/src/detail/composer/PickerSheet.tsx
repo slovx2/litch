@@ -71,10 +71,7 @@ export function PickerSheet({
           },
         ]}
       >
-        <Text style={[styles.title, sectionFont(theme), { color: c.ink2 }]}>
-          {theme.sectionPrefix}
-          {title}
-        </Text>
+        <Text style={[styles.title, sectionFont(theme), { color: c.ink2 }]}>{title}</Text>
         {searchable ? (
           <TextInput
             value={query}

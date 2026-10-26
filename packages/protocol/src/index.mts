@@ -203,6 +203,9 @@ export {
   SESSION_TREE_METHOD,
   SESSION_TREE_NOTIFICATION,
 } from './session-tree.mjs'
+// Litch 替用户发进会话的话（定时任务、子会话的简报、在这里做、litch_sessions.send）：从用户消息里认回来。不依赖别的文件
+export type * from './system-messages.mjs'
+export { HERE_LEADS, parseSessionMessage, parseSystemMessage } from './system-messages.mjs'
 // 定时任务的日程：校验、下一次、错过了几次。只用标准库
 export type * from './task-schedule.mjs'
 export {

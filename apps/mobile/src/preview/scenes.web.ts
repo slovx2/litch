@@ -242,6 +242,13 @@ export const SCENES: Scene[] = [
     steps: [say('别的会话')],
   },
   {
+    id: 'system-cards',
+    group: '对话',
+    name: '系统消息',
+    note: '定时任务、子会话的启动指令、在这里做画成的卡片',
+    steps: [say('系统消息')],
+  },
+  {
     id: 'browser',
     group: '对话',
     name: '内置浏览器',

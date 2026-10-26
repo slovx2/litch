@@ -21,6 +21,7 @@ import { Markdown } from './Markdown.tsx'
 import { MessageEdit } from './MessageEdit.tsx'
 import { PeerHead } from './PeerHead.tsx'
 import { MentionedText } from './SessionMentions.tsx'
+import { SystemCard } from './SystemCard.tsx'
 import { usePin } from './scroll.ts'
 import { useSmoothText, useToggle } from './state.ts'
 import { TurnActions } from './TurnActions.tsx'
@@ -88,7 +89,8 @@ interface UserMessageProps extends ItemRef {
 /**
  * 用户消息：靠右的气泡。很长的时候先收成 20 行，可以展开。
  * 设备进程注入的回报、唤醒（item.event）画成气泡上面的一条系统提示；唤醒的回合没有用户自己的话，只有那一条。
- * 别的会话发来的（item.peer）换一种底色，最上面一行写是谁发来的；正文是对方的原话，不认评论、答题这些格式
+ * 别的会话发来的（item.peer）换一种底色，最上面一行写是谁发来的；正文是对方的原话，不认评论、答题这些格式，先收成几行。
+ * Litch 替用户发的话（item.system：定时任务、子会话的简报、在这里做）画成系统卡片（SystemCard.tsx）
  */
 export const UserMessage = memo(function UserMessage({
   turnId,
@@ -133,7 +135,9 @@ export const UserMessage = memo(function UserMessage({
   if (event && !said && item.attachments.length === 0) {
     return <SessionEventBar deviceId={ref.deviceId} event={event} anchor={`u:${ref.itemId}`} />
   }
-  const message = (
+  const message = item.system ? (
+    <SystemCard {...ref} item={item} system={item.system} />
+  ) : (
     <div
       className={peer ? 'umsg peer' : 'umsg'}
       data-anchor={`u:${ref.itemId}`}

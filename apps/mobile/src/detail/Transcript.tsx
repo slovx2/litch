@@ -60,6 +60,7 @@ import { HandoffCell } from './proposals/HandoffCell'
 import { flash, takeReveal, useRevealWaiting } from './proposals/hooks'
 import { ProposalCell } from './proposals/ProposalCell'
 import { WrapAskCell } from './proposals/WrapAskCell'
+import { SystemCell } from './SystemCell'
 import { GroupCell, GroupEndCell, StepCell } from './steps'
 import { colors } from './theme'
 import { Flash, ImageViewer, TurnMenu } from './turn-menu'
@@ -77,6 +78,8 @@ function renderRow(row: Row) {
       return <ForkedCell row={row} />
     case 'user':
       return <UserCell row={row} />
+    case 'system':
+      return <SystemCell row={row} />
     case 'origin':
       return <OriginCell row={row} />
     case 'event':

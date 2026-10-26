@@ -16,7 +16,7 @@ import type {
   UserMessageItem,
 } from '../model.mjs'
 import { type CommentExtra, commentsBlock, MAX_COMMENTS } from './comments.mjs'
-import { isInlineImage, withSessionMentions } from './items.mjs'
+import { isInlineImage, withSessionMentions, withSystemMessage } from './items.mjs'
 
 type SessionExtra = Extract<MessageExtra, { kind: 'session' }>
 
@@ -170,20 +170,22 @@ const shown = (extras: MessageExtra[], mentions: boolean): UserAttachment[] => [
   ),
 ]
 
-/** 不等对面、先显示出来的那条用户消息。提到会话的那一段和对面回显的一样认出来 */
+/** 不等对面、先显示出来的那条用户消息。提到会话的那一段、“在这里做”这类 Litch 替用户发的话和对面回显的一样认出来 */
 export const localUserMessage = (
   id: string,
   message: OutgoingMessage,
   mentions: boolean,
 ): UserMessageItem =>
-  withSessionMentions({
-    id,
-    kind: 'userMessage',
-    text: bodyOf(message, mentions),
-    attachments: [
-      ...shown(message.extras, mentions),
-      ...message.images.map(
-        (image): UserAttachment => ({ kind: 'image', label: image.name, url: image.url }),
-      ),
-    ],
-  })
+  withSessionMentions(
+    withSystemMessage({
+      id,
+      kind: 'userMessage',
+      text: bodyOf(message, mentions),
+      attachments: [
+        ...shown(message.extras, mentions),
+        ...message.images.map(
+          (image): UserAttachment => ({ kind: 'image', label: image.name, url: image.url }),
+        ),
+      ],
+    }),
+  )
