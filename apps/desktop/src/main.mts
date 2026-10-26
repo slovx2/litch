@@ -83,7 +83,7 @@ import {
 } from './look.mjs'
 import { MANUAL_SET_ENABLED, MANUAL_STATUS } from './manual-ipc.mjs'
 import { createManualSkill } from './manual-skill.mjs'
-import { installMenu, type MenuLang } from './menu.mjs'
+import { installContextMenu, installMenu, type MenuLang } from './menu.mjs'
 import { readPreferences, writePreference } from './preferences.mjs'
 import {
   askServiceBeforeQuit,
@@ -418,6 +418,10 @@ function createWindow(): BrowserWindow {
   if (!smoke) window.once('ready-to-show', () => window.show())
   // 界面上有没保存的改动时，关窗口之前先请界面问
   guardWindow(window)
+  installContextMenu(
+    window.webContents,
+    () => menuLang ?? (app.getLocale().startsWith('zh') ? 'zh-CN' : 'en'),
+  )
   void window.loadURL(uiUrl(forcedLook))
   return window
 }

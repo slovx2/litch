@@ -1,7 +1,14 @@
 // 应用菜单。Electron 自带的那一份是英文的，还带着“重新加载”“开发者工具”和指向 Electron 网站的帮助，
 // 不是给用这个应用的人准备的：这里按界面的语言自己排一份，只留用得上的。
 // 系统自己往菜单里加的几项（听写、表情与符号、窗口排列）跟的是系统语言，管不了。
-import { app, Menu, type MenuItemConstructorOptions, shell } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  Menu,
+  type MenuItemConstructorOptions,
+  shell,
+  type WebContents,
+} from 'electron'
 
 export type MenuLang = 'zh-CN' | 'en'
 
@@ -296,4 +303,36 @@ export function installMenu(lang: MenuLang, hooks: MenuHooks): void {
     },
   ]
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
+}
+
+/**
+ * 右键菜单：输入框里给系统那几项（撤销、重做、剪切、拷贝、粘贴、全选），
+ * 在别处选中了文字只给“拷贝”。Electron 默认右键什么都不出；也不放“检查元素”。
+ * 界面自己画了菜单的地方（文件树、侧栏）会拦掉右键，走不到这里。
+ */
+export function installContextMenu(contents: WebContents, langOf: () => MenuLang): void {
+  contents.on('context-menu', (_event, params) => {
+    const say = (word: Word) => WORDS[langOf()][word]
+    const flags = params.editFlags
+    const line: MenuItemConstructorOptions = { type: 'separator' }
+    let template: MenuItemConstructorOptions[]
+    if (params.isEditable) {
+      template = [
+        { role: 'undo', label: say('undo'), enabled: flags.canUndo },
+        { role: 'redo', label: say('redo'), enabled: flags.canRedo },
+        line,
+        { role: 'cut', label: say('cut'), enabled: flags.canCut },
+        { role: 'copy', label: say('copy'), enabled: flags.canCopy },
+        { role: 'paste', label: say('paste'), enabled: flags.canPaste },
+        line,
+        { role: 'selectAll', label: say('selectAll'), enabled: flags.canSelectAll },
+      ]
+    } else if (params.selectionText.trim()) {
+      template = [{ role: 'copy', label: say('copy') }]
+    } else {
+      return
+    }
+    const window = BrowserWindow.fromWebContents(contents)
+    Menu.buildFromTemplate(template).popup(window ? { window } : {})
+  })
 }
