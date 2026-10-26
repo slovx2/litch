@@ -171,12 +171,22 @@ interface CommentChipProps {
   onRemove(): void
   /** 只把这一条直接发出去 */
   onSend(note: string): void
+  /** 回合在跑、这时发出去会排队（不是插进回合）：按钮写“排队” */
+  queue: boolean
   /** 滚到原文、闪一下。不在已有的会话里（新建页）不给 */
   onLocate?: (() => void) | undefined
 }
 
 /** 一条评论：编号、引用的开头、评论的开头。点开在片旁边弹编辑框（改、删、定位原文），× 删掉 */
-export function CommentChip({ comment, n, onSave, onRemove, onSend, onLocate }: CommentChipProps) {
+export function CommentChip({
+  comment,
+  n,
+  queue,
+  onSave,
+  onRemove,
+  onSend,
+  onLocate,
+}: CommentChipProps) {
   const t = useT()
   const [open, setOpen] = useState(false)
   const chip = useRef<HTMLLIElement>(null)
@@ -211,6 +221,7 @@ export function CommentChip({ comment, n, onSave, onRemove, onSend, onLocate }: 
           quote={comment.quote}
           note={comment.note}
           side="above"
+          queue={queue}
           anchor={() => chip.current?.getBoundingClientRect() ?? null}
           owner={() => chip.current}
           onCancel={() => setOpen(false)}

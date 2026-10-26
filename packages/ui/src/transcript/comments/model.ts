@@ -40,12 +40,16 @@ export const updateComment = (key: string, id: string, note: string): void =>
 export const removeComment = (key: string, id: string): void =>
   editDraftComments(key, (list) => list.filter((comment) => comment.id !== id))
 
-/** 只把这一条直接发出去：输入框里别的东西不动。回合在跑就照常排队（核心那边管） */
+/**
+ * 只把这一条直接发出去：输入框里别的东西不动。回合在跑时和输入框的发送一样跟着“回合进行中发消息”的设置：
+ * now（useRunningSend 说插得进去）就插进正在跑的回合，否则核心照常排队
+ */
 export const sendComment = (
   channel: CoreChannel,
   deviceId: string,
   sessionId: string,
   comment: DraftComment,
+  now: boolean,
 ): Promise<unknown> =>
   channel.command('session.send', {
     deviceId,
@@ -53,6 +57,7 @@ export const sendComment = (
     text: '',
     images: [],
     extras: [commentExtra(comment)],
+    ...(now ? { now: true } : {}),
   })
 
 /** 会话的键 */

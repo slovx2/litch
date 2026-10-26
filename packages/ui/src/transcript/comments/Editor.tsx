@@ -18,6 +18,8 @@ export interface EditorProps {
   owner?: () => Element | null
   onSave(note: string): void
   onSend(note: string): void
+  /** 回合在跑、直接发出去会排队（设置选了排队，或者这个会话插不了话）：按钮和提示写“排队” */
+  queue?: boolean
   onCancel(): void
   onDelete?(): void
   onLocate?(): void
@@ -178,15 +180,18 @@ export function CommentEditor(props: EditorProps) {
             {t('comment.delete')}
           </button>
         ) : null}
-        <span className="grow cmt-edit-hint">{t('comment.keys', { send: `${sendKey}↵` })}</span>
+        <span className="grow cmt-edit-hint">
+          {t(props.queue ? 'comment.keys.queue' : 'comment.keys', { send: `${sendKey}↵` })}
+        </span>
         <button
           type="button"
           className="btn ghost"
           data-act="send"
-          title={t('comment.send.note')}
+          data-queue={props.queue ? 'true' : undefined}
+          title={t(props.queue ? 'comment.queue.note' : 'comment.send.note')}
           onClick={() => onSend(note)}
         >
-          {t('comment.send')}
+          {t(props.queue ? 'comment.queue' : 'comment.send')}
         </button>
         <button type="button" className="btn primary" data-act="save" onClick={() => onSave(note)}>
           {t(mode === 'new' ? 'comment.save.new' : 'comment.save')}

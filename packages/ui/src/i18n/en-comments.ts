@@ -13,6 +13,10 @@ export const enComments: Record<keyof typeof zhComments, Entry> = {
   'comment.keys': '↵ add · {send} send now',
   'comment.send': 'Send now',
   'comment.send.note': 'Sends only this comment; the rest of the composer stays as is',
+  'comment.keys.queue': '↵ add · {send} queue',
+  'comment.queue': 'Queue',
+  'comment.queue.note':
+    'Queues only this comment to send when the current turn ends; the rest of the composer stays as is',
   'comment.save.new': 'Add',
   'comment.save': 'Save',
   'comment.locate': 'Show in reply',
