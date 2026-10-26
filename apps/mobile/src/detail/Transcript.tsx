@@ -30,6 +30,7 @@ import { useKey } from '../shell/services'
 import { useT } from '../ui/i18n'
 import { useTheme } from '../ui/theme'
 import { AgentsCell } from './agents/AgentsCell'
+import { AskedCell } from './asks/AskCell'
 import { useSessionBackground } from './background/BackgroundBar'
 import { OriginCell } from './background/OriginCell'
 import {
@@ -88,6 +89,8 @@ function renderRow(row: Row) {
       return <ProposalCell row={row} />
     case 'wrapAsk':
       return <WrapAskCell row={row} />
+    case 'asked':
+      return <AskedCell item={row.item} />
     case 'handoff':
       return <HandoffCell row={row} />
     case 'md':

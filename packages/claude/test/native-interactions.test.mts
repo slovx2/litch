@@ -11,6 +11,7 @@ import { ProtocolClient } from './fixtures/protocol-client.mjs'
 // 没声明的客户端（官方桌面端）入口不问，见 native-plan-desktop.test.mts。
 const PLAN_CONFIRMATION = { litchExtensions: ['planConfirmation'] }
 
+import { askAnswerContent } from '../src/user-questions.mjs'
 import { validatePayload } from './fixtures/schema-contract.mjs'
 
 interface AskedQuestion {
@@ -256,6 +257,11 @@ test('QUESTION-001：一次三道题，选项、跳过、自己写，请求的�
       { type: 'inputText', text: '日志: (no answer)' },
       { type: 'inputText', text: '时间: 等发版之后' },
     ])
+    // 读历史（native-history.mts）时只有 CLI 写给模型的这句话：按题面认回来，和实时的条目逐题一样
+    assert.deepEqual(
+      askAnswerContent({ questions }, request.questions, result.text),
+      item.stored[0].contentItems,
+    )
     assert.equal(
       client.trace.filter((event) => event.method === 'serverRequest/resolved').length,
       1,

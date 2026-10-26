@@ -262,6 +262,8 @@ export function cardPlace(item: ItemView): CardPlace | null {
   if (item.kind === 'agentMessage') return item.questions ? 'outside' : null
   if (item.kind !== 'toolCall') return null
   if (item.spawned) return 'outside'
+  // 问用户的工具画成问答卡片，露在外面：过程收起时题和回答还看得见
+  if (item.asked) return 'outside'
   if (item.wrapUp) return quietOf(item) ? null : 'tail'
   // 启动子代理刚开始时还不知道子线程是谁（上游开始的事件里没有），也画成卡片，等结束时填上
   return item.agents !== undefined &&

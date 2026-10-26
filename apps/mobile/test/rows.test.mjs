@@ -465,3 +465,46 @@ test('过程收起：回合结束整段收成一行；说明段在过程里；�
   assert.deepEqual(types(agentRows), ['user', 'process', 'agents', 'md', 'status'])
   assert.equal(agentRows[1].expanded, true)
 })
+
+test('问用户的工具（AskUserQuestion 等）：一张问答卡片，露在过程外面，过程收起时还在', () => {
+  const asked = {
+    questions: [
+      {
+        header: '范围',
+        question: '装在哪？',
+        options: [],
+        answer: '系统级',
+        picked: [],
+        other: '系统级',
+      },
+    ],
+    raw: null,
+  }
+  const ask = {
+    id: 'q',
+    kind: 'toolCall',
+    source: 'claude',
+    tool: 'AskUserQuestion',
+    input: [],
+    output: [],
+    error: null,
+    durationMs: 5,
+    status: 'completed',
+    asked,
+  }
+  const items = [
+    user('u', '先问我'),
+    { ...command('c1'), status: 'completed', exitCode: 0 },
+    ask,
+    { ...command('c2'), status: 'completed', exitCode: 0 },
+    answer('a', '照你说的装好了'),
+  ]
+  const view = viewOf(
+    [{ id: 't', status: 'completed', itemIds: items.map((item) => item.id) }],
+    items,
+  )
+  const rows = new RowBuilder().build(view, 'all')
+  assert.deepEqual(types(rows), ['user', 'process', 'asked', 'md', 'status'])
+  assert.equal(rows[2].item, ask)
+  assert.equal(rows[1].steps, 2, '提问不算进过程的步数')
+})

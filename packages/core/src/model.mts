@@ -700,6 +700,34 @@ export interface ToolCallItem {
   wrapUp?: WrapUpView
   /** 给别的会话发消息（Claude 的 SendMessage，peerMessages 扩展）：认出来的收件方。认不出、别的工具调用没有这一项 */
   peer?: PeerView
+  /**
+   * 问用户的工具（Claude 的 AskUserQuestion、OpenCode 的 question、dsh 的 ask_user_question）：题目和用户的回答，
+   * 对话里画成问答卡片（projection/asked.mts）。别的工具调用没有这一项
+   */
+  asked?: AskedView
+}
+
+/** 问用户的工具问了什么、用户答了什么 */
+export interface AskedView {
+  questions: AskedQuestion[]
+  /**
+   * 结果对不上题目（引擎给的不是每题一行“题头: 回答”）时的原始回答文字，每道题的 answer 都是 null；
+   * 对得上、还没有结果时是 null
+   */
+  raw: string | null
+}
+
+export interface AskedQuestion {
+  /** 题头（短标签），没有是空的 */
+  header: string
+  question: string
+  options: { label: string; description: string }[]
+  /** 用户的回答原文（几项连在一起的照连着）。还没答、没答这一题是 null */
+  answer: string | null
+  /** 回答里选中的选项，按 options 的下标 */
+  picked: number[]
+  /** 回答里不是选项的那部分（用户自己写的），没有是 null */
+  other: string | null
 }
 
 export interface PlanItem {

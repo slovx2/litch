@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { projectNativeHistory } from '../src/native-history.mjs'
 import { normalizeUserInputAnswers, userInputAnswersAsContent } from '../src/server-helpers.mjs'
 import {
   answerText,
+  askAnswerContent,
   askUserQuestionUpdatedInput,
   PLAN_NOT_CONFIRMED,
   parseAskUserQuestions,
@@ -204,4 +206,60 @@ test('确认执行时带的补充并进计划的末尾；还没有成文的计�
   )
   for (const empty of [undefined, null, '', '  \n', 42])
     assert.equal(planWithNote(empty, '先备份'), '## 用户确认执行时的补充\n\n先备份\n')
+})
+
+test('QUESTION-UNIT-HISTORY：读历史时提问的结果按题面认回答，和实时回合一样每题一行“题头: 回答”；画成动态工具条目', () => {
+  const questions = parseAskUserQuestions(input)
+  // CLI 写给模型的那句话：答了的题按先后列出，没答的不列；回答里可以有引号、逗号、换行
+  const said =
+    'User has answered your questions: "归到哪一类？"="Bug", "要开哪些功能？"="同步, "导入, 导出"\n第二行 "引"". You can now continue with these answers in mind.'
+  assert.deepEqual(
+    askAnswerContent(input, questions, said).map((part) => part.text),
+    ['这个题头超过了十二个字符: Bug', '功能: 同步, "导入, 导出"\n第二行 "引"', '补充: (no answer)'],
+  )
+  // 新版 CLI 的说法，只有一道题
+  assert.deepEqual(
+    askAnswerContent(
+      input,
+      questions,
+      'The user answered: "还有要补充的吗？"="没有". Read the answers carefully.',
+    ).map((part) => part.text),
+    ['这个题头超过了十二个字符: (no answer)', '功能: (no answer)', '补充: 没有'],
+  )
+  // 一道题都认不出来：原样一行
+  assert.deepEqual(askAnswerContent(input, questions, '用户拒绝回答'), [
+    { type: 'inputText', text: '用户拒绝回答' },
+  ])
+
+  const message = (type: string, uuid: string, content: unknown) => ({
+    type,
+    uuid,
+    message: { content },
+    timestamp: '2026-10-27T00:00:00Z',
+  })
+  const { turns } = projectNativeHistory(
+    't1',
+    [
+      message('user', 'u1', '问我'),
+      message('assistant', 'a1', [
+        { type: 'tool_use', id: 'ask1', name: 'AskUserQuestion', input },
+      ]),
+      message('user', 'r1', [{ type: 'tool_result', tool_use_id: 'ask1', content: said }]),
+      message('assistant', 'a2', [
+        { type: 'tool_use', id: 'ask2', name: 'AskUserQuestion', input },
+      ]),
+    ],
+    '/w',
+  )
+  const [first, second] = (turns[0]?.items ?? []).filter(
+    (item) => item.type === 'dynamicToolCall',
+  ) as any[]
+  assert.equal(first.namespace, 'claude')
+  assert.equal(first.tool, 'AskUserQuestion')
+  assert.deepEqual(first.arguments, { questions })
+  assert.equal(first.status, 'completed')
+  assert.deepEqual(first.contentItems, askAnswerContent(input, questions, said))
+  // 没等到结果（被打断）的提问：记成失败，不一直“在问”
+  assert.equal(second.status, 'failed')
+  assert.equal(second.success, false)
 })

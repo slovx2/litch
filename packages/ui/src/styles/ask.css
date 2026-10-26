@@ -47,6 +47,44 @@
   border-left-color: var(--line-2);
   color: var(--ink-2);
 }
+/* 问答卡片（AskedCard）：题头一行小字，选项一行一个，选中的打勾、没选的淡一些 */
+.ask-kicker {
+  color: var(--ink-2);
+  font-size: 12px;
+}
+.ask-picks {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ask-picks li {
+  display: flex;
+  gap: 8px;
+  color: var(--ink-2);
+}
+.ask-picks li[data-picked="true"] {
+  color: var(--ink);
+}
+.ask-picks .mark {
+  flex: none;
+  width: 1em;
+  color: var(--accent);
+}
+.ask-picks .tx {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.ask-picks .tx b {
+  font-weight: 500;
+}
+.ask-picks .tx span {
+  font-size: 12px;
+}
 .ask-options {
   margin: 0;
   padding-left: 18px;

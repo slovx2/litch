@@ -90,6 +90,39 @@ export function askUserQuestionUpdatedInput(
   }
 }
 
+// 读历史时 AskUserQuestion 的工具结果 → 条目里的内容，和实时回合（server-helpers.mts 的 userInputAnswersAsContent）
+// 一个样子：每道题一行“题头: 回答”，没答的是 (no answer)。CLI 写给模型的那句话是
+// `… "题面"="回答", "题面"="回答". 后面一句提示`，没答的题不列；一道题都认不出来的整段原样放一行。
+// input 是模型出题时的原始参数（题面按它找），questions 是同一组题转成的协议题目（题头按它写）。
+export function askAnswerContent(
+  input: Record<string, unknown>,
+  questions: UserInputQuestion[],
+  text: string,
+): Array<{ type: 'inputText'; text: string }> {
+  const original = (input.questions as Array<Record<string, unknown>>) || []
+  const found = questions
+    .map((question, index) => {
+      const marker = `${JSON.stringify(String(original[index]?.question ?? question.question))}="`
+      const at = text.indexOf(marker)
+      return { index, at, from: at + marker.length }
+    })
+    .filter((entry) => entry.at >= 0)
+    .sort((a, b) => a.at - b.at)
+  if (found.length === 0) return [{ type: 'inputText', text }]
+  const answers = new Map<number, string>()
+  found.forEach((entry, order) => {
+    const next = found[order + 1]
+    // 到下一道题前面的 `", ` 为止；最后一道到结尾那句提示前面的 `".` 为止
+    let end = next ? next.at - 3 : text.lastIndexOf('". ')
+    if (end < entry.from) end = text.lastIndexOf('"')
+    if (end >= entry.from) answers.set(entry.index, text.slice(entry.from, end))
+  })
+  return questions.map((question, index) => ({
+    type: 'inputText',
+    text: `${question.header}: ${answers.get(index) || '(no answer)'}`,
+  }))
+}
+
 // ── 计划确认 ──
 //
 // 模型要退出计划模式（ExitPlanMode）时，引擎自己出一道题问用户，走的是同一条提问的路，但含义不同：

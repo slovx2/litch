@@ -1,6 +1,7 @@
 // 投影的第一步：协议条目 → 显示条目。纯函数，不碰连接，不碰状态。
 // 各种 harness 的差异在这里消化掉，界面拿到的条目和 harness 无关。
 // 对面的协议版本可能比我们的类型新，所以不认识的条目类型、缺的字段都有兜底，不抛错。
+
 import {
   CLIENT_TOOL_NAMESPACE,
   type FileUpdateChange,
@@ -36,6 +37,7 @@ import { type Phrase, type PhraseKey, phrase } from '../phrase.mjs'
 import { capDiff } from '../text/diff.mjs'
 import { capOutput, utf8Length } from '../text/output-cap.mjs'
 import { blob, capParts } from '../text/tool-cap.mjs'
+import { askedOf } from './asked.mjs'
 import { projectQuestions } from './asks.mjs'
 import { stripSideChatNote } from './side-chat.mjs'
 
@@ -680,9 +682,11 @@ export function projectItem(item: ThreadItem, streaming = false): ItemView {
         item.contentItems,
         item.success === false,
       )
+      const asked = askedOf(item.namespace, item.tool, item.arguments, item.contentItems)
       return toolCall(id, {
         ...(spawned ? { spawned } : {}),
         ...(wrapUp ? { wrapUp } : {}),
+        ...(asked ? { asked } : {}),
         source: item.namespace ?? null,
         tool: item.tool,
         input: textParts(showJson(item.arguments)),

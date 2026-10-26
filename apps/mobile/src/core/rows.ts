@@ -138,6 +138,11 @@ export type Row =
       actions: readonly { label: string; message?: string }[]
     }
   /**
+   * 问用户的工具（AskUserQuestion 等，核心的 ToolCallItem.asked）画成的问答卡片，露在过程外面。
+   * item 换了（核心对 item.add 整个换掉）才换
+   */
+  | { type: 'asked'; key: string; turnId: string; item: ToolCallItem }
+  /**
    * litch_sessions.hand_off：做到一半的任务交给了分叉会话。threadId 是起出来的那个，还没有结果是 null。
    * running：调用还没完
    */
@@ -546,7 +551,7 @@ export class RowBuilder {
       )
   }
 
-  /** 露在过程外面的卡片：带题的助手消息、start 派出的子会话和提的提案、offer 卡 */
+  /** 露在过程外面的卡片：带题的助手消息、问用户的工具、start 派出的子会话和提的提案、offer 卡 */
   private outside(out: Row[], turn: TurnView, view: SessionView, itemId: string): void {
     const item = view.items[itemId]
     if (item?.kind === 'agentMessage') {
@@ -554,6 +559,10 @@ export class RowBuilder {
       return
     }
     if (item?.kind !== 'toolCall') return
+    if (item.asked) {
+      out.push(this.keep({ type: 'asked', key: `${item.id}:asked`, turnId: turn.id, item }))
+      return
+    }
     const cards = cardsOf(item, view.proposals)
     // start 直接派出的子会话：没有提案卡，照一步画
     if (cards) out.push(...this.proposals(turn, item, cards))

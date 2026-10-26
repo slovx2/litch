@@ -19,9 +19,10 @@ import type { LitchPeer } from '../../protocol/src/peer-messages.mjs'
 import { isNarration } from './narration.mjs'
 import { peerFromOrigin } from './peer-message.mjs'
 import { type PeerLookup, resolvePeer } from './peer-target.mjs'
-import { toolItemWithResult } from './server-helpers.mjs'
+import { toolItemWithResult, toolResultText } from './server-helpers.mjs'
 import { readImageView, toolUseItem, withPeerTarget } from './tool-items.mjs'
-import type { TurnRecord, UserInput } from './types.mjs'
+import type { ThreadItem, TurnRecord, UserInput } from './types.mjs'
+import { askAnswerContent, parseAskUserQuestions } from './user-questions.mjs'
 
 /** 记录里的一条消息：SDK 的 SessionMessage，加上它实际带着的时间和来源 */
 export interface NativeMessage {
@@ -54,8 +55,8 @@ export interface ProjectOptions {
   peers?: Omit<PeerLookup, 'seen'>
 }
 
-/** 这些工具在实时回合里也不画成工具条目：提问、计划确认由界面问，结构化输出是最终回答，待办是计划卡片 */
-const HIDDEN_TOOLS = new Set(['AskUserQuestion', 'ExitPlanMode', 'StructuredOutput', 'TodoWrite'])
+/** 这些工具在实时回合里也不画成工具条目：计划确认由界面问，结构化输出是最终回答，待办是计划卡片 */
+const HIDDEN_TOOLS = new Set(['ExitPlanMode', 'StructuredOutput', 'TodoWrite'])
 const INTERRUPTED = /^\[Request interrupted by user[^\]]*\]$/
 const REMINDER = /<system-reminder>[\s\S]*?<\/system-reminder>/g
 const LOCAL_OUTPUT = /<(local-command-stdout|local-command-stderr|local-command-caveat)>/
@@ -116,6 +117,8 @@ export function projectNativeHistory(
   let turn: TurnRecord | null = null
   /** 这个回合里还没收到结果的工具调用：tool_use_id → 条目在 items 里的位置 */
   let open = new Map<string, number>()
+  /** 提问（AskUserQuestion）的原始参数：tool_use_id → 参数。结果按题面认回答 */
+  const asks = new Map<string, Record<string, unknown>>()
   /** 当前回合停下了：最后是助手的话（或者被打断），不是工具结果 */
   let settled = false
   /** 旁白变成的说明条目的 id */
@@ -143,9 +146,12 @@ export function projectNativeHistory(
       if (final) last = false
     }
     // 没等到结果的工具调用：记录到这里就断了，当成失败
-    for (const at of open.values()) {
+    for (const [toolUseId, at] of open) {
       const item = done.items[at]
-      if (item) done.items[at] = toolItemWithResult(item, '', true, null)
+      const asked = asks.get(toolUseId)
+      if (item?.type === 'dynamicToolCall' && asked)
+        done.items[at] = { ...item, status: 'failed', success: false }
+      else if (item) done.items[at] = toolItemWithResult(item, '', true, null)
     }
     open = new Map()
     if (done.startedAt !== null && done.completedAt !== null)
@@ -184,6 +190,11 @@ export function projectNativeHistory(
         const item = at === undefined ? undefined : turn.items[at]
         if (at === undefined || !item) continue
         open.delete(toolUseId)
+        const asked = asks.get(toolUseId)
+        if (asked && item.type === 'dynamicToolCall') {
+          turn.items[at] = askedItem(item, asked, block.content, block.is_error === true)
+          continue
+        }
         turn.items[at] = toolItemWithResult(item, block.content, block.is_error === true, null)
         const image = readImageView(item, block.content, block.is_error === true, cwd)
         if (image) turn.items.push(image)
@@ -283,6 +294,22 @@ export function projectNativeHistory(
         if (!toolUseId || HIDDEN_TOOLS.has(name)) return
         const input = (block.input as Record<string, unknown> | undefined) ?? {}
         open.set(toolUseId, current.items.length)
+        if (name === 'AskUserQuestion') {
+          // 提问和实时回合一样画成一个动态工具条目，参数是协议里的题（server.mts 的 onUserInputRequest）
+          asks.set(toolUseId, input)
+          current.items.push({
+            type: 'dynamicToolCall',
+            id,
+            namespace: 'claude',
+            tool: name,
+            arguments: { questions: parseAskUserQuestions(input) },
+            status: 'inProgress',
+            contentItems: null,
+            success: null,
+            durationMs: null,
+          })
+          return
+        }
         const item = withPeerTarget(
           toolUseItem({ toolUseId, toolName: name, input }, cwd, mcpServers, id),
           (address) => resolvePeer(address, lookup),
@@ -310,4 +337,22 @@ export function projectNativeHistory(
   }
   finish(turn, true)
   return { turns, boundaries, origins }
+}
+
+/** 提问条目收到结果：答了的每道题一行“题头: 回答”（和实时回合一样）；出错的（用户没答、被拒）是 CLI 那句话 */
+function askedItem(
+  item: Extract<ThreadItem, { type: 'dynamicToolCall' }>,
+  input: Record<string, unknown>,
+  content: unknown,
+  failed: boolean,
+): ThreadItem {
+  const text = toolResultText(content)
+  return {
+    ...item,
+    status: failed ? 'failed' : 'completed',
+    success: !failed,
+    contentItems: failed
+      ? [{ type: 'inputText', text }]
+      : askAnswerContent(input, parseAskUserQuestions(input), text),
+  }
 }
