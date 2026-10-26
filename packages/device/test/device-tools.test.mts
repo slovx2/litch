@@ -232,6 +232,39 @@ test('内部连接收到审批（Pi 这种没人可送就失败的引擎）：�
   }
 })
 
+test('内部连接收到审批：设备进程的另一条连接接过去了（定时任务回合里的审批）也算有人拿着，不替引擎回“没人可送”；那条连接关了再回', async () => {
+  const engine = new TaskEngine()
+  const target = taskRig({ pi: engine }, { engineLinks: { heldGraceMs: 30, heldRecheckMs: 50 } })
+  try {
+    // 先开的是定时任务那条，接过这个会话里的审批；后开的是会话树那条（客户端断开后跟着在跑的会话）
+    const task = await target.device.openEngineLink('pi')
+    task.claimRequests(
+      (method, params) => method.endsWith('requestApproval') && params.threadId === 'pi-1',
+    )
+    const tree = await target.device.openEngineLink('pi')
+    const [taskSide, treeSide] = internal(engine) as FakeConnection[]
+    if (!taskSide || !treeSide) throw new Error('少了一条内部连接')
+    approval(taskSide, 'req-5', 'pi-1')
+    approval(treeSide, 'req-5', 'pi-1')
+    await until('接过去了', () => task.claimed('req-5'))
+    await settle(200)
+    assert.equal(errorOf(treeSide, 'req-5'), undefined, '定时任务那条拿着，会话树那条不答')
+    // 定时任务那条答了：不再算它拿着
+    task.answer('req-5', { decision: 'decline' })
+    assert.equal(task.claimed('req-5'), false)
+    // 还没答就关了：没人拿着了，照引擎的规矩替它回
+    approval(taskSide, 'req-6', 'pi-1')
+    approval(treeSide, 'req-6', 'pi-1')
+    await until('接过去了', () => task.claimed('req-6'))
+    task.close()
+    await until('关了以后回了', () => errorOf(treeSide, 'req-6') !== undefined)
+    assert.equal(errorOf(treeSide, 'req-6').message, NO_RECIPIENT_MESSAGE)
+    tree.close()
+  } finally {
+    await target.close()
+  }
+})
+
 test('内部连接收到审批（Claude 这种没人可送时一直等着的引擎）：照引擎原来的做法，不答', async () => {
   const engine = new TaskEngine('claude-code')
   const target = taskRig(

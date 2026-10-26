@@ -10,6 +10,8 @@
 //     连接拿着这条请求时，替引擎回它原来“没人可送”的结果；有客户端拿着就留给客户端，客户端都走了再回。
 //     没人可送时本来就一直等着、等有连接来再送的引擎（Claude、原生 codex）照它原来的做法，不答。
 //     例外是调用方用 claimRequests 接过去的（定时任务回合里的审批，task-approvals.mts）：由它等人、到时限答。
+//     别的内部连接接过去的也算有人拿着（held 里问 claimed）：会话树的连接在客户端断开后也订阅着在跑的会话，
+//     引擎把任务回合里的审批补送给它，它不能替引擎回“没人可送”把定时任务那条连接还在等的请求答掉。
 // 握手时声明 clientTools，命名空间取注册表里的，引擎挑执行方时挑得中这条连接。
 
 import { prepareSpeed, type SpeedStore } from '../../protocol/src/codex-speeds.mjs'
@@ -51,6 +53,8 @@ export interface EngineLink {
    * 调用方要负责它有答复。收到请求时先问 onServerRequest 的订阅者、再问 match。只认最后给的一个
    */
   claimRequests(match: (method: string, params: any) => boolean): void
+  /** 这条请求被这条连接接过去了（claimRequests 挑中的，还没答、没结束） */
+  claimed(id: RpcId): boolean
   /** 答一条对面发来的请求。连接断了返回 false */
   answer(id: RpcId, result: unknown): boolean
   /** 连接断了（引擎退出、设备进程关、自己关）。已经断了的当场调用。返回取消订阅 */
@@ -114,6 +118,8 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
   const closing = new Set<(reason: string) => void>()
   /** 替引擎看着的请求（没答的审批、提问……），键是请求号 */
   const unanswered = new Map<string, NodeJS.Timeout>()
+  /** claimRequests 挑中、由调用方答的请求，键是请求号 */
+  const taken = new Set<string>()
   let sequence = 0
   let claims: ((method: string, params: any) => boolean) | null = null
   let closedWith: string | null = null
@@ -133,6 +139,7 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
     waiting.clear()
     for (const timer of unanswered.values()) clearTimeout(timer)
     unanswered.clear()
+    taken.clear()
     for (const listener of [...closing]) listener(reason)
     return true
   }
@@ -170,6 +177,7 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
           const key = idKey(params.requestId as RpcId)
           clearTimeout(unanswered.get(key))
           unanswered.delete(key)
+          taken.delete(key)
         }
         // 回合结束：这个回合里还在执行的设备工具作废
         if (frame.method === 'turn/completed' && isObject(params.turn))
@@ -187,7 +195,8 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
         return
       }
       for (const listener of [...requested]) listener(frame.method, params, id)
-      if (!claims?.(frame.method, params) && failsUnheld()) watchRequest(id)
+      if (claims?.(frame.method, params)) taken.add(idKey(id))
+      else if (failsUnheld()) watchRequest(id)
       return
     }
     const entry = typeof frame.id === 'number' ? waiting.get(frame.id) : undefined
@@ -304,11 +313,15 @@ export async function connectEngineLink(options: EngineLinkOptions): Promise<Eng
     claimRequests(match) {
       claims = match
     },
+    claimed(id) {
+      return taken.has(idKey(id))
+    },
     answer(id, result) {
       if (closedWith !== null) return false
       const key = idKey(id)
       clearTimeout(unanswered.get(key))
       unanswered.delete(key)
+      taken.delete(key)
       send({ id, result })
       return true
     },

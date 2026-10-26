@@ -61,6 +61,7 @@ class FakeLink {
       claimRequests: (match) => {
         this.claim = match
       },
+      claimed: () => false,
       answer: (id, result) => {
         if (this.closed) return false
         this.answers.push({ id, result })

@@ -705,8 +705,12 @@ export class DeviceServer {
               speeds: this.sessionTree.store,
               log: (line) => this.options.log?.(`[${harness}] ${line}`),
               ...this.options.engineLinks,
+              // 真正的客户端拿着，或者设备进程的另一条连接接过去了（定时任务回合里的审批）
               held: (from, requestId) =>
-                [...this.sessions].some((session) => session.holdsServerRequest(from, requestId)),
+                [...this.sessions].some((session) => session.holdsServerRequest(from, requestId)) ||
+                [...this.engineLinks].some(
+                  (link) => link.harness === from && link.claimed(requestId),
+                ),
             }),
           )
         } catch (error) {
