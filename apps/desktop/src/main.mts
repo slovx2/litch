@@ -45,6 +45,7 @@ import {
   MENU,
   NOTIFY,
   NOTIFY_CLICK,
+  NOTIFY_CLOSE,
   OPEN_EXTERNAL,
   OPEN_LOGS,
   PICK_FOLDER,
@@ -100,7 +101,7 @@ import {
 } from './quit-terminals.mjs'
 import { runShots } from './shots.mjs'
 import { MOCK_MODES, runSmoke, SMOKE_MODES, type SmokeMode } from './smoke.mjs'
-import { parseTaskNotice, showTaskNotice } from './task-notice.mjs'
+import { closeTaskNotice, parseTaskNotice, showTaskNotice } from './task-notice.mjs'
 import { createUpdater, type Updater, updatePlatform } from './updater.mjs'
 
 const here = fileURLToPath(new URL('.', import.meta.url))
@@ -480,7 +481,7 @@ ipcMain.on(OPEN_LOGS, (event, which: unknown) => {
   })
 })
 
-// 定时任务跑完了的系统通知：要不要发、说什么由界面定，这里只认界面自己的主框架发来的、形状对的那一条
+// 系统通知（定时任务、会话）：要不要发、说什么由界面定，这里只认界面自己的主框架发来的、形状对的那一条
 ipcMain.on(NOTIFY, (event, value: unknown) => {
   const frame = event.senderFrame
   if (!frame || frame !== event.sender.mainFrame || !isUiUrl(frame.url)) return
@@ -488,7 +489,14 @@ ipcMain.on(NOTIFY, (event, value: unknown) => {
   if (notice) showTaskNotice(notice, event.sender, NOTIFY_CLICK)
 })
 
-// Dock 上的角标：界面数好了要人看一眼的会话有几个报过来。macOS、部分 Linux 桌面显示，别处 Electron 不做什么
+// 收回一条：会话里的事处理掉了、人已经在看那个会话了
+ipcMain.on(NOTIFY_CLOSE, (event, id: unknown) => {
+  const frame = event.senderFrame
+  if (!frame || frame !== event.sender.mainFrame || !isUiUrl(frame.url)) return
+  if (typeof id === 'string' && id.length <= 200) closeTaskNotice(id)
+})
+
+// Dock 上的角标：界面数好了未读的会话有几个报过来。macOS、部分 Linux 桌面显示，别处 Electron 不做什么
 ipcMain.on(SET_BADGE, (event, value: unknown) => {
   const frame = event.senderFrame
   if (!frame || frame !== event.sender.mainFrame || !isUiUrl(frame.url)) return

@@ -952,6 +952,22 @@ export interface ClientAskRequest {
 /** 对面停下来等人答复的一件事 */
 export type RequestView = ApprovalRequest | QuestionRequest | FormRequest | ClientAskRequest
 
+/**
+ * 一个会话眼下的情况，系统通知的正文用（session.peek）：最近一个回合最后一条回答、回合失败的原因、
+ * 停下来等人处理的那件事。都是原文，掐字、加前缀由界面做；拿不到的是 null
+ */
+export interface SessionPeek {
+  answer: string | null
+  error: string | null
+  pending: SessionPeekPending | null
+}
+
+/** 等人处理的那件事：要跑的命令、要改的文件、要调的工具、要的权限、要答的题、要填的表，别的归 other */
+export interface SessionPeekPending {
+  kind: 'command' | 'fileChange' | 'tool' | 'permissions' | 'question' | 'form' | 'other'
+  text: Text
+}
+
 /** 回合进行中发的消息先排着，回合结束后按顺序发出去 */
 export interface QueuedMessage extends OutgoingMessage {
   id: string

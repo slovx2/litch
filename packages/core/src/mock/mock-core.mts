@@ -44,6 +44,7 @@ import type { SessionEventView } from '../model-tree.mjs'
 import { phrase } from '../phrase.mjs'
 import { projectItem } from '../projection/items.mjs'
 import { localUserMessage, outgoing } from '../projection/outgoing.mjs'
+import { peekOf } from '../projection/peek.mjs'
 import { settleAnswers } from '../projection/questions.mjs'
 import { reduceSession } from '../projection/reduce.mjs'
 import { spanOp } from '../projection/span.mjs'
@@ -2425,6 +2426,10 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         if (findSummary(deviceId, sessionId).unread)
           updateSummary(deviceId, sessionId, { unread: false })
         return {}
+      }
+      if (name === 'session.peek') {
+        const view = openView(params as { deviceId: string; sessionId: string })
+        return peekOf(view.turns.at(-1), (id) => view.items[id], view.requests)
       }
       if (name === 'session.send') {
         const { text, images, extras, now, ...where } = params as Commands['session.send']['params']

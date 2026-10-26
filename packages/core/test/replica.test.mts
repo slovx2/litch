@@ -125,16 +125,17 @@ test('每台设备的忙闲汇总：几个在跑、几个在等人、最近一�
   assert.ok(seen.n >= 1)
 })
 
-test('要人看一眼的会话数（等人的、没看过的，一个只算一次）；会话摘要换了通知听的人，带着换之前那一份', async () => {
+test('未读的会话（只算没看过的，等人的不算），标成已读就少一个；会话摘要换了通知听的人，带着换之前那一份', async () => {
   const { store, channel, replica, time } = await setup()
   const expected = (deviceId: string) =>
     Object.values(store.get<SessionGroups>(keys.groups(deviceId)) ?? {})
       .flat()
-      .map((id) => store.get<SessionSummary>(keys.summary(deviceId, id)))
-      .filter((session) => session?.status === 'waiting' || session?.unread).length
-  assert.ok(expected('local') > 0)
-  assert.equal(store.get(keys.attention('local')), expected('local'))
-  assert.equal(store.get(keys.attention('nas')), 0)
+      .filter((id) => store.get<SessionSummary>(keys.summary(deviceId, id))?.unread)
+      .sort()
+  // 示例数据里本机有两个未读（s3、s7），还有一个等审批的：它不算
+  assert.deepEqual(store.get(keys.unread('local')), ['s3', 's7'])
+  assert.deepEqual(store.get(keys.unread('local')), expected('local'))
+  assert.deepEqual(store.get(keys.unread('nas')), [])
   const seen: [string, string | undefined, string][] = []
   const stop = replica.onSessionUpdate((deviceId, before, after) => {
     if (after.id === 's3') seen.push([deviceId, before?.status, after.status])
@@ -142,7 +143,7 @@ test('要人看一眼的会话数（等人的、没看过的，一个只算一�
   await channel.command('session.markRead', { deviceId: 'local', sessionId: 's3' })
   time.advance(16)
   await settle()
-  assert.equal(store.get(keys.attention('local')), expected('local'))
+  assert.deepEqual(store.get(keys.unread('local')), ['s7'])
   await channel.command('session.send', { deviceId: 'local', sessionId: 's3', text: '在吗' })
   time.advance(16)
   await settle()

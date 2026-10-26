@@ -785,6 +785,8 @@ function DeviceGroup(props: GroupProps) {
   /** 父会话 → 挂在它下面的子会话（只有父会话也在侧栏里的才在） */
   const children = useKey<SessionChildren>(keys.children(deviceId)) ?? NO_CHILDREN
   const pressing = useKey<string[]>(keys.pressing(deviceId)) ?? NO_IDS
+  /** 未读的会话：和 Dock 角标数的是同一份 */
+  const unread = useKey<string[]>(keys.unread(deviceId)) ?? NO_IDS
   /** 侧栏正只看哪几个 harness 的会话。空的：都看 */
   const filter = useSidebarHarnesses()
   const harnessOf = useKey<SessionHarnesses>(keys.harnessOf(deviceId))
@@ -831,18 +833,28 @@ function DeviceGroup(props: GroupProps) {
   const picked = selection?.deviceId === deviceId ? selection.sessionId : null
   /** 非露出来不可的会话：正选中的那个，和停下来等人的那些。筛选筛不掉它们，“展示更多”也折不住它们 */
   const always = (id: string) => id === picked || pressing.includes(id)
+  /**
+   * 收起的父会话、“展示更多”、藏起来的派出会话都藏不住的：非露出来不可的，加上未读的。
+   * 角标数的是未读的会话，每一个都得在侧栏里找得到（harness 筛选另说，那是用户明着筛的）
+   */
+  const unfolded = (id: string) => always(id) || unread.includes(id)
   /** 只看某几个 harness 时也筛不掉的：非露出来不可的，和开关开着时活动的那些 */
   const unfiltered = keptAnyway(always, showActive, active)
   /** 不显示别的应用派出来的会话时，这些藏起来（非露出来不可的照样露） */
   const hidden = showNative ? NO_IDS : nativeChildren
   /** 一组里现在要画的会话：别的应用派出来的藏掉，只看某几个 harness 的时候再筛一遍 */
   const shown = (groupId: string) =>
-    keepSessions(dropNativeChildren(groups[groupId], hidden, always), filter, harnessOf, unfiltered)
+    keepSessions(
+      dropNativeChildren(groups[groupId], hidden, unfolded),
+      filter,
+      harnessOf,
+      unfiltered,
+    )
   /** 一组里被 harness 筛选筛掉的会话有几个（藏起来的派出会话不算） */
   const filteredOut = (groupId: string) =>
     filter.length === 0
       ? 0
-      : dropNativeChildren(groups[groupId], hidden, always).length - shown(groupId).length
+      : dropNativeChildren(groups[groupId], hidden, unfolded).length - shown(groupId).length
   /**
    * 一组里的会话全被筛掉了：写一句有几个被筛掉，带“关闭筛选”。
    * 不写的话这一组看着是空的，可里面其实有会话
@@ -869,7 +881,7 @@ function DeviceGroup(props: GroupProps) {
     children,
   )
   const kidsOf = (id: string) =>
-    keepSessions(dropNativeChildren(children[id], hidden, always), filter, harnessOf, unfiltered)
+    keepSessions(dropNativeChildren(children[id], hidden, unfolded), filter, harnessOf, unfiltered)
   const fold = (id: string) => toggleSidebarFold(deviceId, 'folded', id)
   /** 一行会话，和挂在它下面的子会话（一层套一层）。收起了的父会话下面只露出非露出来不可的 */
   const tree = (sessionId: string, depth: number): ReactNode => {
@@ -877,7 +889,7 @@ function DeviceGroup(props: GroupProps) {
     if (depth > MAX_DEPTH) return null
     const kids = kidsOf(sessionId)
     const shut = folded.has(sessionId)
-    const visible = kidsShown(kids, shut, always)
+    const visible = kidsShown(kids, shut, unfolded)
     return (
       <div
         key={sessionId}
@@ -906,7 +918,7 @@ function DeviceGroup(props: GroupProps) {
   const toggle = (id: string) => toggleSidebarFold(deviceId, 'closed', id)
   /**
    * 一组里的会话。多的时候只露出最近的几个，其余的收在“展示更多”后面，
-   * 点一次多露出一批。折在后面的也有非露出来不可的（见上面的 always）。
+   * 点一次多露出一批。折不住的照样露出来（见上面的 unfolded）。
    */
   const rows = (all: readonly string[], groupId: string, first = FIRST_ROWS) => {
     // 挂在父会话下面的不在组里单独占一行
@@ -915,7 +927,7 @@ function DeviceGroup(props: GroupProps) {
     let limit = first + more
     // 只剩一个没露出来，不值得为它多一个按钮
     if (list.length - limit <= 1) limit = list.length
-    const visible = list.filter((id, index) => index < limit || always(id))
+    const visible = list.filter((id, index) => index < limit || unfolded(id))
     const hidden = list.length - visible.length
     const shrinkable = more > 0 && list.length > first + 1
     return (
@@ -1191,7 +1203,7 @@ function DeviceGroup(props: GroupProps) {
    * harness 筛选不藏工作区：藏了就没法在空项目里新建会话、整理它；里面的会话全被筛掉时写一句（filteredNote）
    */
   const showsWorkspace = (workspace: WorkspaceView) =>
-    workspaceShown(groups[workspace.id], hidden, always)
+    workspaceShown(groups[workspace.id], hidden, unfolded)
   /**
    * 一个工作区：那一行和它下面的会话。它总在某一组（band）里，siblings 是这一组里画出来的工作区：
    * 拖着会话停在上面是回到自己的项目（那一行高亮）；拖着工作区停在上面是插到它前面或者后面（画一条线）
@@ -1222,7 +1234,7 @@ function DeviceGroup(props: GroupProps) {
         <WorkspaceHead
           workspace={workspace}
           device={device}
-          count={dropNativeChildren(groups[workspace.id], hidden, always).length}
+          count={dropNativeChildren(groups[workspace.id], hidden, unfolded).length}
           expanded={expanded}
           onToggle={() => toggle(workspace.id)}
           onFocus={() => onFocus(workspace.id)}

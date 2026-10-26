@@ -395,6 +395,14 @@ export function createCore(options: CoreOptions): Core {
           deviceOf(deviceId).markRead(sessionId)
           return {}
         }
+        case 'session.peek': {
+          const { deviceId, sessionId } = params as Commands['session.peek']['params']
+          try {
+            return await deviceOf(deviceId).peek(sessionId)
+          } catch (error) {
+            throw toChannelFailure(error)
+          }
+        }
         case 'session.send': {
           const { deviceId, sessionId, text, images, extras, now } =
             params as Commands['session.send']['params']

@@ -17,6 +17,7 @@ import {
   MENU,
   NOTIFY,
   NOTIFY_CLICK,
+  NOTIFY_CLOSE,
   OPEN_EXTERNAL,
   OPEN_LOGS,
   PICK_FOLDER,
@@ -73,8 +74,15 @@ contextBridge.exposeInMainWorld('litchShell', {
       ipcRenderer.removeListener(MENU, listener)
     }
   },
-  // 定时任务跑完了的系统通知：界面拼好文字交过来；点了哪一条再告诉界面
-  notify: (notice: { id: string; title: string; body: string }) => ipcRenderer.send(NOTIFY, notice),
+  // 系统通知（定时任务、会话）：界面拼好文字交过来；点了哪一条再告诉界面；按标识收回
+  notify: (notice: {
+    id: string
+    title: string
+    subtitle?: string
+    body: string
+    urgent?: boolean
+  }) => ipcRenderer.send(NOTIFY, notice),
+  closeNotice: (id: string) => ipcRenderer.send(NOTIFY_CLOSE, id),
   onNotifyClick(handler: (id: string) => void) {
     const listener = (_event: unknown, id: unknown) => {
       if (typeof id === 'string') handler(id)
@@ -84,7 +92,7 @@ contextBridge.exposeInMainWorld('litchShell', {
       ipcRenderer.removeListener(NOTIFY_CLICK, listener)
     }
   },
-  // Dock 上的角标：要人看一眼的会话有几个
+  // Dock 上的角标：未读的会话有几个
   setBadge: (count: number) => ipcRenderer.send(SET_BADGE, count),
   // 有没保存的改动：有的话关窗口、退出之前主进程先拦下来请界面问，问完了可以走再告诉它（leave-guard.mts）
   setUnsaved: (value: boolean) => ipcRenderer.send(UNSAVED, value === true),

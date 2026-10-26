@@ -275,7 +275,7 @@ export function App() {
           <Toasts />
           <ApprovalNotices />
           <TaskNotices onOpen={select} />
-          <SessionNotices onOpen={select} />
+          <SessionNotices onOpen={select} selection={selection} />
           {page === 'archived' && peek ? (
             <ArchivedSession
               key={`${peek.deviceId}:${peek.sessionId}`}
