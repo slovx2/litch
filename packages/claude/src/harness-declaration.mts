@@ -52,6 +52,8 @@ const features: HarnessFeatures = {
   // 持续目标照上游做（goal-controller.mts）：目标存在入口自己的库里，空闲时自动续跑，
   // 模型经 codex_harness_adapter_goal 的三个工具读目标、报完成或受阻，用量按原生消息累计
   goals: true,
+  // 临时分叉（ephemeral）是一份带着历史的 CLI 会话，照常跑回合；卸载时连 CLI 写下的记录一起删（server.mts 的 scheduleEphemeralUnload）
+  ephemeralFork: true,
 }
 
 // 权限档随回合开始时的会话设置定下来：两个回合之间可以换，回合进行中改的要到下一个回合才起作用。
