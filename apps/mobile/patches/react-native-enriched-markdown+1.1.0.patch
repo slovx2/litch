@@ -1,3 +1,159 @@
+diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/EnrichedMarkdown.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/EnrichedMarkdown.kt
+index b6b38b4..4712363 100644
+--- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/EnrichedMarkdown.kt
++++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/EnrichedMarkdown.kt
+@@ -5,8 +5,15 @@ import android.content.res.Configuration
+ import android.os.Build
+ import android.os.Handler
+ import android.os.Looper
++import android.os.SystemClock
+ import android.util.Log
++import android.view.InputDevice
++import android.view.MotionEvent
+ import android.view.View
++import android.view.ViewGroup
++import android.view.ViewConfiguration
++import android.view.ViewTreeObserver
++import android.widget.TextView
+ import com.facebook.react.bridge.Arguments
+ import com.facebook.react.bridge.ReadableMap
+ import com.facebook.react.uimanager.StateWrapper
+@@ -37,6 +44,7 @@ import com.swmansion.enriched.markdown.utils.text.view.ImagePressHost
+ import com.swmansion.enriched.markdown.utils.text.view.SelectionMenuConfig
+ import com.swmansion.enriched.markdown.utils.text.view.applySelectionColors
+ import com.swmansion.enriched.markdown.utils.text.view.emitImagePressEvent
++import java.lang.ref.WeakReference
+ import java.util.EnumSet
+ import java.util.concurrent.ExecutorService
+ import java.util.concurrent.Executors
+@@ -234,6 +242,102 @@ class EnrichedMarkdown(
+     segmentViews.filterIsInstance<EnrichedMarkdownInternalText>().forEach {
+       it.setIsSelectable(value)
+     }
++    // Litch patch: selection turned on right after a long press on this view (the app's long-press
++    // menu has a "Select text" item): start it at that point, word selected with both handles and the
++    // selection menu up, as a long press on selectable text would, instead of making the user long
++    // press a second time
++    val press = lastPress
++    if (value && press != null && press.view.get() === this &&
++      SystemClock.uptimeMillis() - press.at < SELECT_AFTER_PRESS_MS
++    ) {
++      lastPress = null
++      selectWhenFocused(press.x, press.y)
++    }
++  }
++
++  /**
++   * Litch patch: the menu that turned selection on is a dialog, a window of its own; until this window
++   * has the focus back the text view selects the word but shows neither handles nor the selection menu.
++   * Wait for it (a little while at most, and only while still selectable)
++   */
++  private fun selectWhenFocused(
++    x: Float,
++    y: Float,
++  ) {
++    val since = SystemClock.uptimeMillis()
++    val run = { if (selectable && SystemClock.uptimeMillis() - since < FOCUS_WAIT_MS) selectAt(x, y) }
++    if (hasWindowFocus()) {
++      post(run)
++      return
++    }
++    val observer = viewTreeObserver
++    observer.addOnWindowFocusChangeListener(
++      object : ViewTreeObserver.OnWindowFocusChangeListener {
++        override fun onWindowFocusChanged(hasFocus: Boolean) {
++          if (!hasFocus) return
++          if (observer.isAlive) observer.removeOnWindowFocusChangeListener(this)
++          post(run)
++        }
++      },
++    )
++  }
++
++  // Litch patch: remember where the last touch in any markdown view went down
++  override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
++    if (ev.actionMasked == MotionEvent.ACTION_DOWN) {
++      lastPress = Press(WeakReference(this), ev.x, ev.y, SystemClock.uptimeMillis())
++    }
++    return super.dispatchTouchEvent(ev)
++  }
++
++  /**
++   * Litch patch: a long press at the point (relative to this view, which may have moved since the press
++   * as the app shows the selection bar), dispatched through the window like a real one: down, the long
++   * press timeout, up. The text view under it then selects the word there and shows both handles and
++   * the selection menu, which calling its own touch and long click methods doesn't do
++   */
++  private fun selectAt(
++    localX: Float,
++    localY: Float,
++  ) {
++    val at = IntArray(2)
++    getLocationOnScreen(at)
++    textViewAt(this, (at[0] + localX).toInt(), (at[1] + localY).toInt()) ?: return
++    getLocationInWindow(at)
++    val x = at[0] + localX
++    val y = at[1] + localY
++    val root = rootView
++    val down = SystemClock.uptimeMillis()
++    root.dispatchTouchEvent(touch(down, down, MotionEvent.ACTION_DOWN, x, y))
++    postDelayed({
++      root.dispatchTouchEvent(touch(down, SystemClock.uptimeMillis(), MotionEvent.ACTION_UP, x, y))
++    }, ViewConfiguration.getLongPressTimeout() + LONG_PRESS_MARGIN_MS)
++  }
++
++  private fun touch(
++    down: Long,
++    time: Long,
++    action: Int,
++    x: Float,
++    y: Float,
++  ): MotionEvent = MotionEvent.obtain(down, time, action, x, y, 0).apply { source = InputDevice.SOURCE_TOUCHSCREEN }
++
++  /** Litch patch: the deepest visible, selectable text view containing the screen point */
++  private fun textViewAt(
++    group: ViewGroup,
++    x: Int,
++    y: Int,
++  ): TextView? {
++    val at = IntArray(2)
++    for (index in group.childCount - 1 downTo 0) {
++      val child = group.getChildAt(index)
++      if (child.visibility != View.VISIBLE) continue
++      child.getLocationOnScreen(at)
++      if (x < at[0] || y < at[1] || x >= at[0] + child.width || y >= at[1] + child.height) continue
++      if (child is TextView) return child.takeIf { it.isTextSelectable }
++      if (child is ViewGroup) textViewAt(child, x, y)?.let { return it }
++    }
++    return null
+   }
+ 
+   fun setSelectionColor(color: Int?) {
+@@ -649,5 +753,24 @@ class EnrichedMarkdown(
+   companion object {
+     private const val TAG = "EnrichedMarkdown"
+     private const val BLOCK_FADE_DURATION_MS = 200L
++
++    // Litch patch: how long after the press turning selection on still starts it at the press
++    private const val SELECT_AFTER_PRESS_MS = 60_000L
++
++    // Litch patch: how long to wait for the window focus to come back before giving up
++    private const val FOCUS_WAIT_MS = 3_000L
++
++    // Litch patch: how much longer than the long press timeout the replayed press is held
++    private const val LONG_PRESS_MARGIN_MS = 100L
++
++    private class Press(
++      val view: WeakReference<EnrichedMarkdown>,
++      val x: Float,
++      val y: Float,
++      val at: Long,
++    )
++
++    // Litch patch: the last touch down in any markdown view (only the latest one may start a selection)
++    private var lastPress: Press? = null
+   }
+ }
 diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/renderer/CodeRenderer.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/renderer/CodeRenderer.kt
 index 0008d9b..c70bbde 100644
 --- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/renderer/CodeRenderer.kt
@@ -521,7 +677,7 @@ diff --git a/node_modules/react-native-enriched-markdown/cpp/md4c/md4c.c b/node_
 index 44d5134..4bde08c 100644
 --- a/node_modules/react-native-enriched-markdown/cpp/md4c/md4c.c
 +++ b/node_modules/react-native-enriched-markdown/cpp/md4c/md4c.c
-@@ -3635,8 +3635,9 @@
+@@ -3635,8 +3635,9 @@ md_collect_marks(MD_CTX* ctx, const MD_LINE* lines, MD_SIZE n_lines, int table_m
                          flags &= ~MD_MARK_POTENTIAL_CLOSER;
                      if(flags != 0)
                          ADD_MARK(ch, off, off + 1, flags);

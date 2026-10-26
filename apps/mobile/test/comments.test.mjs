@@ -160,30 +160,35 @@ test('草稿里的评论：文件里形状不对的条目不收', async () => {
   assert.deepEqual(drafts.loadDraftComments('bad'), [])
 })
 
-test('选字回复：选中的一段作为不带评论的评论片加到输入框上面，退出选字、输入框拿焦点；满了不退出、说满了', async () => {
+test('选字回复：退出选字、弹出写评论的对话框，加上后带着评论加到输入框上面；取消什么都不加；满了不退出、说满了', async () => {
   const { CommentsHub } = await import('../src/detail/comments/hub.ts')
   const drafts = await import('../src/detail/composer/drafts.ts')
   const key = drafts.draftKey('dev', 'select')
   const hub = new CommentsHub(/** @type {any} */ ({}), key)
-  let focused = 0
   let heard = 0
-  hub.focusInput = () => focused++
   const off = hub.subscribe(() => heard++)
   hub.select('a1')
   assert.equal(hub.selecting, 'a1')
   assert.equal(hub.reply('a1', '   '), false, '只选了空白不算')
   assert.equal(hub.reply('a1', '  缓存要清掉 \n'), true)
-  assert.deepEqual(drafts.loadDraftComments(key), [
-    { kind: 'comment', itemId: 'a1', quote: '缓存要清掉', note: '' },
-  ])
   assert.equal(hub.selecting, null)
-  assert.equal(focused, 1)
+  assert.deepEqual(hub.replying, { itemId: 'a1', quote: '缓存要清掉' })
+  assert.deepEqual(drafts.loadDraftComments(key), [], '写好评论之前不加')
+  hub.replied('换个地方清')
+  assert.equal(hub.replying, null)
+  assert.deepEqual(drafts.loadDraftComments(key), [
+    { kind: 'comment', itemId: 'a1', quote: '缓存要清掉', note: '换个地方清' },
+  ])
+  hub.select('a1')
+  assert.equal(hub.reply('a1', '另一段'), true)
+  hub.replied(null)
+  assert.equal(hub.replying, null)
+  assert.equal(drafts.loadDraftComments(key).length, 1, '取消了不加')
   for (let n = 2; n <= 10; n++) drafts.addDraftComment(key, comment(n))
   hub.select('a2')
   assert.equal(hub.reply('a2', '再引一段'), false)
   assert.equal(hub.selecting, 'a2', '满了留在选字里，可以先去删掉几条')
   assert.equal(hub.replyFull, true)
-  assert.equal(focused, 1)
   hub.select(null)
   assert.equal(hub.replyFull, false)
   assert.ok(heard >= 4)

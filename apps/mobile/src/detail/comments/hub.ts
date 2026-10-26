@@ -2,15 +2,17 @@
 // 详情页建一个、经上下文给下去（context.tsx）。上下文的值一直是同一个对象，单元格不会因为它重画；
 // 会变的状态（在选字的是哪条回答、弹出的是哪条评论、要滚到哪一行、哪一行在闪）放在它自己身上，用的地方订阅。
 // 选字回复：长按菜单里“选择文字”让那条回答能自由选字（selecting），选中后系统菜单里多一个“回复”，
-// 选中的那段作为一条不带评论的评论片加到输入框上面（照桌面端选字后的“评论”，发出去拼成 <litch-comments>）。
+// 点了先退出选字、弹出写评论的对话框（输入框拿着焦点），“加上”后作为评论片加到输入框上面
+// （照桌面端选字后的“评论”：写在对话框里，加上以后不另外抢输入框的焦点；发出去拼成 <litch-comments>）。
 import {
+  MAX_COMMENTS,
   type ParsedComment,
   type ParsedComments,
   parseComments,
   type UserMessageItem,
 } from '@litch/core'
 import type { SessionStore } from '../../core/session-store'
-import { addDraftComment } from '../composer/drafts'
+import { addDraftComment, loadDraftComments } from '../composer/drafts'
 import { findQuote, type QuoteTarget } from './refs'
 
 /** 弹出来看的一条评论：发出去的那些（卡片、回答里的 [N]） */
@@ -43,8 +45,8 @@ export class CommentsHub {
   selecting: string | null = null
   /** 上一次“回复”没加上：一条消息带的评论满了 */
   replyFull = false
-  /** 让输入框拿到焦点（详情页给）：引用加上之后接着打字 */
-  focusInput: (() => void) | null = null
+  /** “回复”选中的那段，正在写评论（对话框开着）；没在写是 null */
+  replying: { itemId: string; quote: string } | null = null
   shown: ShownComment | null = null
   /** 要滚过去的那一行的键，对话区拿走一次 */
   jumpTo: string | null = null
@@ -90,18 +92,28 @@ export class CommentsHub {
     this.notify()
   }
 
-  /** 选中的一段作为引用加到输入框上面，不选了、输入框拿焦点。满了加不上返回 false */
+  /** 回复选中的一段：不选了，打开写评论的对话框。满了加不上返回 false（留在选字里） */
   reply(itemId: string, text: string): boolean {
     const quote = text.trim()
     if (!quote) return false
-    if (!addDraftComment(this.draftKey, { kind: 'comment', itemId, quote, note: '' })) {
+    if (loadDraftComments(this.draftKey).length >= MAX_COMMENTS) {
       this.replyFull = true
       this.notify()
       return false
     }
+    this.replying = { itemId, quote }
     this.select(null)
-    this.focusInput?.()
     return true
+  }
+
+  /** 写好了（可以不写）：引用带着评论加到输入框上面。取消是 null，什么都不加 */
+  replied(note: string | null): void {
+    const replying = this.replying
+    if (!replying) return
+    this.replying = null
+    this.notify()
+    if (note === null) return
+    addDraftComment(this.draftKey, { kind: 'comment', ...replying, note })
   }
 
   show(shown: ShownComment | null): void {

@@ -25,7 +25,7 @@ export const zhCN = {
   'comment.chip.remove': '移除评论 {n}',
   'comment.count': '{n} 条评论',
   'comment.select': '选择文字',
-  'comment.select.hint': '长按文字开始选择，在弹出的菜单里点“回复”引用到输入框',
+  'comment.select.hint': '拖动把手调整选区，在菜单里点“回复”写评论',
   'comment.select.done': '完成',
   'comment.reply': '回复',
   'comment.copy': '复制',
@@ -55,8 +55,7 @@ export const en: Record<keyof typeof zhCN, Entry> = {
   'comment.chip.remove': 'Remove comment {n}',
   'comment.count': ({ n }) => (n === 1 ? '1 comment' : `${n} comments`),
   'comment.select': 'Select text',
-  'comment.select.hint':
-    'Long-press to start selecting, then tap Reply to quote it in your message',
+  'comment.select.hint': 'Drag the handles to adjust, then tap Reply to comment',
   'comment.select.done': 'Done',
   'comment.reply': 'Reply',
   'comment.copy': 'Copy',

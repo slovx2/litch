@@ -115,14 +115,6 @@ export function DetailScreen({ route, navigation }: Props) {
     if (field?.isFocused()) field.blur()
     requestAnimationFrame(() => input.current?.focus())
   }
-  // 选字回复把引用加到输入框上面之后，输入框拿焦点接着打字（revise 只经 ref 摸输入框，挂一次就够）
-  // biome-ignore lint/correctness/useExhaustiveDependencies: 同上
-  useEffect(() => {
-    comments.focusInput = revise
-    return () => {
-      comments.focusInput = null
-    }
-  }, [comments])
   const run = (work: Promise<unknown>, after?: () => void) => {
     setFailure(null)
     work.then(after, (reason: unknown) => setFailure(whyNot(reason, t)))

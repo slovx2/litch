@@ -107,16 +107,25 @@ export function Sheet({
 export function Dialog({
   visible,
   onClose,
+  onShow,
   children,
 }: {
   visible: boolean
   onClose(): void
+  /** 对话框出来以后（安卓上这时才拿得到窗口焦点，输入框此时拿焦点键盘才会出来） */
+  onShow?(): void
   children: ReactNode
 }) {
   const theme = useTheme()
   const { c } = theme
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+      onShow={onShow}
+    >
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.center}

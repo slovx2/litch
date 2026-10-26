@@ -1,6 +1,7 @@
 // 评论的两层浮层，由详情页放一份：
 // - 全文页：一条回答的全文放在一个能选字的输入框里（RN 的文字组件拿不到选区，输入框能），不弹键盘、改不动；
 //   长按选好一段点“评论”，写评论后加到输入框上面（草稿，composer/drafts.ts）。
+// - 选字后点“回复”：写评论的对话框，“加上”后加到输入框上面。
 // - 看一条发出去的评论：卡片、回答里的 [N] 点出来的，引用全文和评论，能找到原文的可以滚过去。
 import { MAX_COMMENTS } from '@litch/core'
 import { useState } from 'react'
@@ -29,6 +30,7 @@ export function CommentOverlays({ hub }: { hub: CommentsHub }) {
     <>
       {/* 每次打开都是新的一份：全文、选区从头来 */}
       {picking ? <Picker key={picking} hub={hub} itemId={picking} /> : null}
+      <Replying hub={hub} />
       <Shown hub={hub} />
     </>
   )
@@ -121,6 +123,21 @@ function Picker({ hub, itemId }: { hub: CommentsHub; itemId: string }) {
         onClose={() => setQuote(null)}
       />
     </Modal>
+  )
+}
+
+/** 选字后点了“回复”：给选中的那段写评论（可以不写），输入框一打开就拿着焦点 */
+function Replying({ hub }: { hub: CommentsHub }) {
+  const replying = useHubValue(hub, (each) => each.replying, null)
+  return (
+    <CommentEditor
+      visible={replying !== null}
+      index={null}
+      quote={replying?.quote ?? ''}
+      note=""
+      onSubmit={(note) => hub.replied(note)}
+      onClose={() => hub.replying && hub.replied(null)}
+    />
   )
 }
 
