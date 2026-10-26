@@ -767,6 +767,15 @@ export function createCore(options: CoreOptions): Core {
           }
           return {}
         }
+        case 'session.queuedNotes.deliver': {
+          const { deviceId, sessionId } =
+            params as Commands['session.queuedNotes.deliver']['params']
+          try {
+            return { delivered: await deviceOf(deviceId).deliverQueuedNotes(sessionId) }
+          } catch (error) {
+            throw toChannelFailure(error)
+          }
+        }
         case 'session.agents': {
           const { deviceId, sessionId } = params as Commands['session.agents']['params']
           try {

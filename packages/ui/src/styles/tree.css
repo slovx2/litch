@@ -181,9 +181,22 @@ button.sev-title {
   padding: 8px 10px;
   font-size: 12px;
 }
-.qn-hint {
+.qn-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin: 0 0 6px;
+}
+
+.qn-hint {
+  flex: 1;
+  margin: 0;
   color: var(--ink-3);
+}
+
+.qn-failure {
+  margin: 0 0 6px;
+  color: var(--err);
 }
 
 /* ---------- 建议任务：对话流里的提案卡片（ProposalCard.tsx） ---------- */

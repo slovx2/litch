@@ -429,7 +429,7 @@ test('SESSION-TREE-006：不要唤醒的子会话、用户自己在子会话里�
   }
 })
 
-test('SESSION-TREE-007：没有客户端连着时只攒着不唤醒，有客户端连上来再唤醒', async () => {
+test('SESSION-TREE-007：没有客户端连着也照样回报、唤醒父会话（同 Claude 桌面端）', async () => {
   const env = treeRig()
   try {
     const { client, threadId, childId } = await family(env)
@@ -437,14 +437,8 @@ test('SESSION-TREE-007：没有客户端连着时只攒着不唤醒，有客户�
     client.close()
     await settle(20)
     env.claude.end(childId, 'completed', '没人看着的时候做完了')
-    await until(
-      () => env.device.sessionTree.store.notes(threadId).length === 1,
-      '没人连着也照样回报',
-    )
-    await settle(60)
-    assert.equal(wakesOf(env, threadId).length, 0, '没人连着不唤醒')
-    await litch(env)
-    await until(() => wakesOf(env, threadId).length === 1, '连上来之后唤醒')
+    await until(() => wakesOf(env, threadId).length === 1, '没人连着也唤醒')
+    assert.equal(env.device.sessionTree.store.notes(threadId).length, 0, '跟着唤醒交出去了')
   } finally {
     await env.close()
   }

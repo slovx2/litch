@@ -421,6 +421,8 @@ export interface Device {
   ): Promise<void>
   /** 普通提案卡上的“在这里做”：“在这里做：标题”加任务当用户的话进输入队列（在跑就排到回合后，同 Claude 桌面端） */
   hereProposal(sessionId: string, proposalId: string, lead?: string): Promise<void>
+  /** 排着的子会话回报上点了“立即处理” */
+  deliverQueuedNotes(sessionId: string): Promise<'steered' | 'woken' | 'none'>
   /** 这个会话下面引擎自己的子代理线程（直接的子女） */
   agents(sessionId: string): Promise<AgentThreadView[]>
 }
@@ -2731,6 +2733,17 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
         }),
       )
       live.settleProposal(sessionId, proposalId, choice === 'session' ? 'chosen' : 'here', null)
+    },
+    async deliverQueuedNotes(sessionId) {
+      treeOnly()
+      try {
+        return (await link.request(SESSION_TREE_METHOD.queuedNotesDeliver, { threadId: sessionId }))
+          .delivered
+      } catch (error) {
+        if (lacksMethod(error))
+          throw new ChannelError('unsupported', '这台设备的服务版本太旧，升级后才能立即处理')
+        throw fail(error)
+      }
     },
     async hereProposal(sessionId, proposalId, lead) {
       treeOnly()

@@ -1056,6 +1056,14 @@ export interface Commands {
     result: Record<string, never>
   }
   /**
+   * 用户在排着的子会话回报上点了“立即处理”：会话在跑就插进去，停着就替它开一个回合，不等别的子会话（决 659）。
+   * delivered 是 none 的：队列已经空了，或者这会儿插不进去（留着照旧）
+   */
+  'session.queuedNotes.deliver': {
+    params: { deviceId: string; sessionId: string }
+    result: { delivered: 'steered' | 'woken' | 'none' }
+  }
+  /**
    * 这个会话下面引擎自己的子代理线程（thread/list 带 parentThreadId，只要直接的子女）。
    * 不缓存，每次现问；对面不会按父会话查的以 unsupported 结束
    */

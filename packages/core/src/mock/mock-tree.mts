@@ -1232,6 +1232,22 @@ export function createMockTree(host: MockTreeHost): MockTree {
         answerOffer(proposalId, choice, false, worktree)
         return {}
       }
+      // 立即处理（同设备进程的 deliver）：在跑就插进去，停着就开唤醒回合，不等别的子会话，计数清零
+      if (name === 'session.queuedNotes.deliver') {
+        const { deviceId, sessionId } = params as Commands['session.queuedNotes.deliver']['params']
+        const key = sameKey(deviceId, sessionId)
+        const notes = pending.get(key) ?? []
+        if (notes.length === 0) return { delivered: 'none' }
+        wakes.delete(key)
+        const parent = host.view(deviceId, sessionId)
+        if (host.running(parent)) {
+          steerNotes(deviceId, sessionId)
+          return { delivered: 'steered' }
+        }
+        queue(deviceId, sessionId, [])
+        host.startTurn(parent, { text: '', images: [], extras: [] }, { kind: 'wake', notes })
+        return { delivered: 'woken' }
+      }
       if (name === 'session.agents') {
         const { deviceId, sessionId } = params as Commands['session.agents']['params']
         return { agents: agentList(deviceId, sessionId) }

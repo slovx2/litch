@@ -167,6 +167,8 @@ export async function sessionTreeCall(
       return {
         text: tree.proposalHere(proposalIdOf(tree, fields), optional(fields.lead, 'lead'), false),
       }
+    case SESSION_TREE_METHOD.queuedNotesDeliver:
+      return { delivered: await tree.deliver(requiredString(fields.threadId, 'threadId')) }
     default:
       throw new DeviceError('unsupported', `聚合面不支持 ${method}`, { method })
   }

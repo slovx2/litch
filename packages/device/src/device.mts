@@ -297,6 +297,17 @@ export class DeviceServer {
       log,
       version: this.version,
       timing: taskTiming,
+      // 对准已有会话的任务回合：带上排着的子会话回报，开始结束告诉会话树（决 657）
+      turnHooks: {
+        input: (threadId, input) => this.sessionTree.beforeDeviceTurn(threadId, input),
+        started: (harness, threadId, turnId) =>
+          this.sessionTree.turnEvent(harness, 'turn/started', { threadId, turn: { id: turnId } }),
+        ended: (harness, threadId, turnId, status) =>
+          this.sessionTree.turnEvent(harness, 'turn/completed', {
+            threadId,
+            turn: { id: turnId, status: status === 'timedOut' ? 'interrupted' : status },
+          }),
+      },
       ...(options.tasks?.clock ? { clock: options.tasks.clock } : {}),
       ...(options.tasks?.maxTimerMs ? { maxTimerMs: options.tasks.maxTimerMs } : {}),
       // harness 正在起（比如服务刚重启、错过的运行正要补跑）时等它一会儿
@@ -348,7 +359,6 @@ export class DeviceServer {
       store: new SessionStore(this.sessionsDb),
       worktrees: this.worktrees,
       enabled: () => this.sessionTreeOn(),
-      clients: () => [...this.sessions].filter((session) => session.ready).length,
       announce: (method, params, extension) => this.announce(method, params, extension),
       threadStarted: (harness, thread) => {
         for (const session of this.sessions) session.threadStarted(harness, thread)
@@ -411,6 +421,8 @@ export class DeviceServer {
         })
       : null
     this.worktreeLife?.start()
+    // 不等客户端连上：在跑的子会话重新盯上、排着的回报看看要不要唤醒（没人连着也唤醒，决 660）
+    this.sessionTree.started()
     // 子会话的后台任务跑完了：引擎不会接着做的，会话树补一条回报（决 430）
     this.background.onSettled((threadId, tasks) =>
       this.sessionTree.backgroundSettled(threadId, tasks),

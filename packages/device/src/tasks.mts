@@ -28,7 +28,7 @@ import { localTaskTimeZone, nextTaskRun } from '../../protocol/src/task-schedule
 import type { EngineLink } from './engine-link.mjs'
 import type { HarnessSource } from './session.mjs'
 import { openSideLink } from './side-link.mjs'
-import { DEFAULT_TASK_TIMING, type TaskTiming } from './task-run.mjs'
+import { DEFAULT_TASK_TIMING, type TaskTiming, type TaskTurnHooks } from './task-run.mjs'
 import {
   DEFAULT_TASK_SETTINGS,
   MAX_TIMER_MS,
@@ -82,6 +82,8 @@ export interface DeviceTasksOptions {
   backgroundWakes?(threadId: string): boolean
   /** 设备层的工作树（每次在新工作树里跑的任务用）。没有 git、不给时是 null */
   worktrees?(): Worktrees | null
+  /** 会话树对任务回合的接应（见 RunHost.hooks） */
+  turnHooks?: TaskTurnHooks
 }
 
 const seconds = (ms: number): number => Math.floor(ms / 1000)
@@ -137,6 +139,7 @@ export class DeviceTasks {
       runChanged: (run) => this.runChanged(run),
       born: (harness, thread, workspaceId) => this.born(harness, thread, workspaceId),
       turns: this.turns,
+      hooks: options.turnHooks ?? null,
       worktrees: () => options.worktrees?.() ?? null,
     })
   }
