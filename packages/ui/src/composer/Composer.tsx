@@ -85,8 +85,8 @@ import {
 } from './images.ts'
 import { switchedProvider } from './provider-switch.ts'
 import { SettingsBar, useComposeOptions } from './SettingsBar.tsx'
-import { useSendMode } from './send-mode.ts'
-import { runningPlaceholder, runningSend } from './send-mode-logic.ts'
+import { useRunningSend } from './send-mode.ts'
+import { runningPlaceholder } from './send-mode-logic.ts'
 import { keepMentioned } from './session-hits.ts'
 import { useSuggest } from './useSuggest.tsx'
 
@@ -587,14 +587,10 @@ export function Composer(props: ComposerProps) {
     input.current?.focus()
   }
 
+  // 回合在跑、发出去插不进去（设置选了排队，或者插不了话）：发的东西排队。主按钮和评论的直接发送都按它写字
+  const queuing = running === true && !props.steerNow
   // 有字、有图或带着东西的时候主按钮是发送（回合进行中就是排队）；什么都没写而回合在跑，主按钮是停止
-  const mode = filled
-    ? running && !props.steerNow
-      ? 'queue'
-      : 'send'
-    : running && onStop
-      ? 'stop'
-      : 'send'
+  const mode = filled ? (queuing ? 'queue' : 'send') : running && onStop ? 'stop' : 'send'
   return (
     <>
       {queued.length > 0 ? (
@@ -661,6 +657,7 @@ export function Composer(props: ComposerProps) {
                 key={comment.id}
                 comment={comment}
                 n={index + 1}
+                queue={queuing}
                 onSave={(note) => updateComment(draftKey, comment.id, note)}
                 onRemove={() => {
                   removeComment(draftKey, comment.id)
@@ -670,10 +667,12 @@ export function Composer(props: ComposerProps) {
                   if (!sessionId) return
                   removeComment(draftKey, comment.id)
                   const one = { ...comment, note }
-                  sendComment(channel, deviceId, sessionId, one).catch((reason: unknown) => {
-                    saveDraftComments(draftKey, [one, ...loadComments(draftKey)])
-                    setError(t('composer.failed', { reason: reasonOf(reason, t) }))
-                  })
+                  sendComment(channel, deviceId, sessionId, one, props.steerNow === true).catch(
+                    (reason: unknown) => {
+                      saveDraftComments(draftKey, [one, ...loadComments(draftKey)])
+                      setError(t('composer.failed', { reason: reasonOf(reason, t) }))
+                    },
+                  )
                 }}
                 onLocate={
                   sessionId
@@ -869,9 +868,8 @@ export function SessionComposer({ deviceId, sessionId, blocked }: SessionCompose
 
   // 回合进行中发的消息：设置里选的是立即发送、这个会话也插得了话就带 now 直接插进去，否则排队。
   // 带着图而这个 harness 引导时带不了图的，核心照常排着（插不进去不算没发成）
-  const sendMode = useSendMode()
   const device = useKey<DeviceView>(keys.device(deviceId))
-  const whenRunning = runningSend(sendMode, can?.steer !== false)
+  const whenRunning = useRunningSend(can?.steer)
   const onSend = useCallback(
     (text: string, images: ImageAttachment[], extras: MessageExtra[]) => {
       // 差异面板里攒着的批注接在这条消息后面一起发；没发成就还回去（diff/annotations.ts）

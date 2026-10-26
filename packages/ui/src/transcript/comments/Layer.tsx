@@ -1,7 +1,7 @@
 // 对话区里评论的那一层：在回答里选中一段时选区上方的小浮层（评论、复制），从那里打开的编辑框；
 // 还挂在输入框上的评论在原文上的淡底色（CSS Custom Highlight，不改页面结构）和段尾的编号小记号。
 // 挂在对话内容（.tr）里，位置按它算：滚动时跟着走，不用重算。
-import { clipQuote, keys, type SessionMeta } from '@litch/core'
+import { clipQuote, keys, type SessionMeta, type TurnView } from '@litch/core'
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useT } from '../../app/appearance.ts'
@@ -10,6 +10,7 @@ import { useKey, useServices } from '../../app/services.tsx'
 import { showToast } from '../../app/toasts.tsx'
 import { quoteToParent, startAside, useAside } from '../../aside/state.ts'
 import type { DraftComment } from '../../composer/drafts.ts'
+import { useRunningSend } from '../../composer/send-mode.ts'
 import { CommentEditor } from './Editor.tsx'
 import { originRange } from './locate.ts'
 import {
@@ -124,6 +125,12 @@ export const CommentLayer = memo(function CommentLayer({
   const services = useServices()
   const { channel } = services
   const meta = useKey<SessionMeta>(keys.session(deviceId, sessionId))
+  // 直接发送和输入框的发送一样跟着“回合进行中发消息”的设置：插得进去就插进正在跑的回合，否则排队
+  const turnIds = useKey<string[]>(keys.turnIds(deviceId, sessionId))
+  const running =
+    useKey<TurnView>(keys.turn(deviceId, sessionId, turnIds?.at(-1) ?? ''))?.status === 'running'
+  const steer = useRunningSend(meta?.can.steer) === 'steer'
+  const queue = running && !steer
   const aside = useAside(deviceId, parentId === null ? sessionId : null)
   const own = useRef(Symbol('comment-layer')).current
   const key = commentKey(deviceId, sessionId)
@@ -290,7 +297,7 @@ export const CommentLayer = memo(function CommentLayer({
 
   const send = (comment: DraftComment) =>
     // 没发出去就留在输入框上面，不丢
-    sendComment(channel, deviceId, sessionId, comment).catch(() => addComment(key, comment))
+    sendComment(channel, deviceId, sessionId, comment, steer).catch(() => addComment(key, comment))
 
   const editor = (() => {
     if (!editing) return null
@@ -302,6 +309,7 @@ export const CommentLayer = memo(function CommentLayer({
           mode="new"
           quote={from.quote}
           side="below"
+          queue={queue}
           anchor={() => from.range.getBoundingClientRect()}
           onCancel={() => setEditing(null)}
           onSave={(note) => {
@@ -326,6 +334,7 @@ export const CommentLayer = memo(function CommentLayer({
         quote={comment.quote}
         note={comment.note}
         side="below"
+        queue={queue}
         anchor={() => badgeEls.current.get(comment.id)?.getBoundingClientRect() ?? null}
         owner={() => badgeEls.current.get(comment.id) ?? null}
         onCancel={() => setEditing(null)}
