@@ -23,6 +23,7 @@ import type {
   SessionProposalView,
   SessionView,
   SpawnedView,
+  SystemMessageView,
   Text,
   TodoStep,
   ToolCallItem,
@@ -59,10 +60,24 @@ export type Row =
       turnId: string
       text: string
       attachments: UserAttachment[]
-      /** 别的会话发来的消息（peerMessages 扩展）：气泡上面写是谁发来的 */
+      /** 别的会话发来的消息（peerMessages 扩展、litch_sessions.send）：气泡上面写是谁发来的，正文先收成几行 */
       peer?: PeerView
+      /** 别的会话发来的那种点开了全文 */
+      expanded?: boolean
       /** 提到的会话：正文里的 ＠[标题] 画成能点的字（核心认出来的 UserMessageItem.sessions） */
       sessions?: SessionMentionView[]
+    }
+  /**
+   * Litch 替用户发的话（核心认出来的 UserMessageItem.system：定时任务、子会话的简报、在这里做）：画成系统卡片，
+   * 一行来源和类型、两行简略内容，点开看全文（text 是发给模型的原文）
+   */
+  | {
+      type: 'system'
+      key: string
+      turnId: string
+      text: string
+      system: SystemMessageView
+      expanded: boolean
     }
   /**
    * 不是用户发起的回合开头那一行（后台任务跑完后 harness 自己接着做的……），放在用户气泡的位置。
@@ -299,7 +314,8 @@ export class RowBuilder {
     // 状态行都不画，只留收尾带出来的卡片和问题
     const remind = first?.kind === 'userMessage' && first.event?.kind === 'remind'
     // 别的会话发来消息开的回合：开头那条消息自己写着来源，不再另写一行（照桌面端）
-    if (turn.origin && turn.origin !== 'peer' && !remind)
+    // 别的会话发来消息、定时任务开的回合：开头那条消息自己写着来源，不再另写一行
+    if (turn.origin && turn.origin !== 'peer' && turn.origin !== 'schedule' && !remind)
       out.push(
         this.keep({
           type: 'origin',
@@ -398,8 +414,19 @@ export class RowBuilder {
                 notes: item.event.notes,
               }),
             )
+          if (item.system)
+            out.push(
+              this.keep({
+                type: 'system',
+                key: item.id,
+                turnId: turn.id,
+                text: item.text,
+                system: item.system,
+                expanded: this.expanded.has(item.id),
+              }),
+            )
           // 唤醒、提醒的回合没有用户自己说的话：只有上面那条提示
-          if (item.text || item.attachments.length > 0 || !item.event)
+          else if (item.text || item.attachments.length > 0 || !item.event)
             out.push(
               this.keep({
                 type: 'user',
@@ -407,7 +434,7 @@ export class RowBuilder {
                 turnId: turn.id,
                 text: item.text,
                 attachments: item.attachments,
-                ...(item.peer ? { peer: item.peer } : {}),
+                ...(item.peer ? { peer: item.peer, expanded: this.expanded.has(item.id) } : {}),
                 ...(item.sessions ? { sessions: item.sessions } : {}),
               }),
             )

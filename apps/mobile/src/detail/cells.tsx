@@ -39,11 +39,16 @@ export type Props<T extends Row['type']> = { row: Extract<Row, { type: T }> }
 
 const pressed = (c: Palette) => ({ backgroundColor: c.press })
 
+/** 别的会话发来的话超过这么多行、字先收起来 */
+const PEER_LINES = 4
+const PEER_CHARS = 200
+
 export const UserCell = memo(function UserCell({ row }: Props<'user'>) {
   const theme = useTheme()
   const { c, font, radius } = theme
   const t = useT()
   const { turnMenu, viewImage } = useTranscript()
+  const toggle = useToggleInPlace()
   const images = row.attachments.filter((each) => each.kind === 'image' && each.url)
   const others = row.attachments.filter((each) => !(each.kind === 'image' && each.url))
   // 别的会话发来的：原话照登，不认答题、评论这些格式
@@ -53,6 +58,9 @@ export const UserCell = memo(function UserCell({ row }: Props<'user'>) {
   // 开头带评论的：评论画成卡片，下面才是打的字
   const comments = replies || peer ? null : commentsOfRow(row)
   const text = comments ? comments.rest : row.text
+  // 别的会话发来的长话先收成几行，点一下在原处展开、再点收起
+  const folds =
+    peer !== undefined && (text.length > PEER_CHARS || text.split('\n').length > PEER_LINES)
   const menu = () => {
     notePressed(row.turnId, row.key)
     turnMenu(row.turnId)
@@ -61,6 +69,8 @@ export const UserCell = memo(function UserCell({ row }: Props<'user'>) {
     <View style={styles.userWrap}>
       <Pressable
         onLongPress={menu}
+        onPress={folds ? () => toggle(row.key, row.turnId) : undefined}
+        accessibilityState={folds ? { expanded: row.expanded === true } : undefined}
         style={({ pressed: down }) => [
           styles.userBubble,
           // 气泡右下角收小一点，像从右边说出来的；人文皮肤是强调色的淡底、不画线
@@ -129,12 +139,18 @@ export const UserCell = memo(function UserCell({ row }: Props<'user'>) {
           <AskReplyText replies={replies} />
         ) : text ? (
           <Text
+            numberOfLines={folds && !row.expanded ? PEER_LINES : undefined}
             style={[
               styles.userText,
               { color: c.ink, fontSize: font.size.body, fontFamily: font.ui },
             ]}
           >
             {peer ? text : <MentionedText text={text} sessions={row.sessions} />}
+          </Text>
+        ) : null}
+        {folds ? (
+          <Text style={{ color: c.accent, fontSize: font.size.meta }}>
+            {t(row.expanded ? 'sysmsg.collapse' : 'sysmsg.expand')}
           </Text>
         ) : null}
       </Pressable>

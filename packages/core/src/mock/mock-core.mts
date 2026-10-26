@@ -66,6 +66,7 @@ import { createMockPeer } from './mock-peer.mjs'
 import { createMockRemoteUpgrade } from './mock-remote-upgrade.mjs'
 import { createMockRestart } from './mock-restart.mjs'
 import { createMockService } from './mock-service.mjs'
+import { createMockSystem } from './mock-system.mjs'
 import { createMockTasks } from './mock-tasks.mjs'
 import { createMockTerminals } from './mock-terminals.mjs'
 import { createMockTree } from './mock-tree.mjs'
@@ -664,6 +665,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     if (tree.claim(view, turnId, message)) return turnId
     if (background.claim(view, turnId, message)) return turnId
     if (peerDemo.claim(view, turnId, message)) return turnId
+    if (systemDemo.claim(view, turnId, message)) return turnId
     // 这三样只是顺带演一出别处的动静，回合照常往下走
     if (EDITS_ELSEWHERE.test(message.text)) manage.editElsewhere(view.deviceId, view.harness)
     if (RACES_SETTINGS.test(message.text)) manage.raceNextWrite(view.deviceId, view.harness)
@@ -1957,6 +1959,14 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     setTimer: (run, ms) => clock.setTimer(run, ms),
     updateSummary,
     apply: applySessionOps,
+    reply,
+    nextId: (prefix) => `${prefix}${++seq}`,
+  })
+
+  // Litch 替用户发的话画成的卡片：说“系统消息”摆出几轮（mock-system.mts）
+  const systemDemo = createMockSystem({
+    lang,
+    now: () => clock.now(),
     reply,
     nextId: (prefix) => `${prefix}${++seq}`,
   })

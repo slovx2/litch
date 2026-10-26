@@ -1,4 +1,4 @@
-// 别的会话发来的消息的英文文案。键必须和 zh-CN-peer.ts 完全一致，多一句少一句都编译不过。
+// 别的会话发来的消息、Litch 替用户发的话的卡片的英文文案。键必须和 zh-CN-peer.ts 完全一致，多一句少一句都编译不过。
 import type { Entry } from './types.ts'
 import type { zhPeer } from './zh-CN-peer.ts'
 
@@ -23,4 +23,14 @@ export const enPeer: Record<keyof typeof zhPeer, Entry> = {
   'tool.message.to': 'Recipient',
   'tool.message.openLitchHint': 'Open the session that received this message in Litch',
   'tool.message.openHint': 'Open the Claude desktop session that received this message',
+  'sysmsg.scheduledTask': 'Scheduled task · {name}',
+  'sysmsg.manual': 'Run manually',
+  'sysmsg.briefing.fresh': 'Sub-session brief',
+  'sysmsg.briefing.fork': 'Fork brief',
+  'sysmsg.briefing.handOff': 'Handed-off task',
+  'sysmsg.from': 'from {name}',
+  'sysmsg.openParentHint': 'Open the session that started this one',
+  'sysmsg.here': 'Task card · Do it here',
+  'sysmsg.expand': 'Show full text',
+  'sysmsg.collapse': 'Show less',
 }

@@ -5,6 +5,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { SESSION_TOOLS } from '../../protocol/src/client-tools-sessions.mjs'
 import { sessionMentionsBlock } from '../../protocol/src/session-mentions.mjs'
+import { parseSessionMessage } from '../../protocol/src/system-messages.mjs'
 import { DeviceServer } from '../src/device.mjs'
 import { tightened } from '../src/session-start.mjs'
 import { codexRig } from './codex-kit.mjs'
@@ -119,6 +120,10 @@ test('SESSION-TOOLS-002：不是用户发起的回合里，send、interrupt 只�
       env.claude.sent('turn/steer')[0].input[0].text,
       new RegExp(`\\(${threadId}\\), not typed by the user`),
     )
+    // 客户端认得回来（画成“来自 X 的消息”）：发来的会话、原话
+    const parsed = parseSessionMessage(env.claude.sent('turn/steer')[0].input[0].text)
+    assert.equal(parsed?.from.id, threadId)
+    assert.equal(parsed?.message, '先跑单测')
     const stop = resultOf(
       (await env.pi.callTool(threadId, SESSIONS, 'interrupt', { thread_id: childId }))?.answer,
     )
@@ -193,6 +198,11 @@ test('SESSION-TOOLS-009：用户发起的回合里 send、interrupt 不限；两
     assert.match(
       env.claude.sent('turn/start').at(-1).input[0].text,
       new RegExp(`litch_sessions\\.send to thread_id ${threadId}`),
+    )
+    // 教模型怎么回的那句不算对方的原话
+    assert.equal(
+      parseSessionMessage(env.claude.sent('turn/start').at(-1).input[0].text)?.message,
+      '你那边呢',
     )
     resultOf(
       (await env.claude.callTool(other, SESSIONS, 'send', { thread_id: threadId, message: '好了' }))

@@ -6,6 +6,8 @@ import {
   type FileUpdateChange,
   parseSessionEvent,
   parseSessionMentions,
+  parseSessionMessage,
+  parseSystemMessage,
   SESSION_TOOL,
   SESSION_TOOL_LIMITS,
   type ThreadItem,
@@ -92,14 +94,32 @@ function userMessage(id: string, content: UserInput[], rawPeer?: unknown): UserM
   if (peer) return { id, kind: 'userMessage', text, attachments, peer }
   // 设备进程注入在开头的子会话回报、唤醒：认出来单放，剩下的才是用户自己说的话
   const { event, rest } = parseSessionEvent(text)
-  if (!event) return withSessionMentions({ id, kind: 'userMessage', text, attachments })
-  return withSessionMentions({
-    id,
-    kind: 'userMessage',
-    text: rest,
-    attachments,
-    event: sessionEvent(event),
-  })
+  const said = event ? rest : text
+  return withSessionMentions(
+    withSystemMessage({
+      id,
+      kind: 'userMessage',
+      text: said,
+      attachments,
+      ...(event ? { event: sessionEvent(event) } : {}),
+    }),
+  )
+}
+
+/**
+ * Litch 替用户发的话（protocol/src/system-messages.mts）：定时任务、子会话的简报、在这里做认出来放进 system；
+ * 别的会话用 litch_sessions.send 发来的，同 Claude 收件箱里来的一样当成 peer，text 只留对方的原话
+ */
+export function withSystemMessage(item: UserMessageItem): UserMessageItem {
+  const system = parseSystemMessage(item.text)
+  if (system) return { ...item, system }
+  const message = parseSessionMessage(item.text)
+  if (!message) return item
+  return {
+    ...item,
+    text: message.message,
+    peer: { name: message.from.title, session: null, thread: message.from.id, bypass: false },
+  }
 }
 
 /** 正文末尾是提到会话的那一段的：认出来单放（sessions），text 里去掉那一段 */

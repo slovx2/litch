@@ -286,9 +286,9 @@ const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { 
   return (
     <TurnTouch.Provider value={touch}>
       <section className="turn">
-        {/* 后台任务结束后、定时任务触发时 harness 自己开的回合：开头一行写怎么来的 */}
-        {/* 别的会话发来消息开的回合：开头那条消息自己写着来源，不再另写一行 */}
-        {turn.origin && turn.origin !== 'peer' && !remind ? (
+        {/* 后台任务结束后、目标续跑时 harness 自己开的回合：开头一行写怎么来的 */}
+        {/* 别的会话发来消息、定时任务开的回合：开头那条消息（来自 X 的消息、定时任务卡片）自己写着来源，不再另写一行 */}
+        {turn.origin && turn.origin !== 'peer' && turn.origin !== 'schedule' && !remind ? (
           <TurnOrigin
             deviceId={deviceId}
             sessionId={sessionId}

@@ -192,6 +192,11 @@
   line-clamp: 20;
   overflow: hidden;
 }
+/* 别的会话发来的先收成 4 行，点开看全文 */
+.umsg.peer .umsg-text.clamp {
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+}
 .umsg .atts {
   display: flex;
   flex-wrap: wrap;

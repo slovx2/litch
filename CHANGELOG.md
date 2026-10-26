@@ -5,6 +5,10 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
+## 未发布
+
+- Litch 替用户发进会话的话画成卡片，不再画成用户的气泡：定时任务的那条（“定时任务 · 名字”，手动运行的标出来）、子会话启动时的指令（“子会话的启动指令”“分叉的启动指令”“交接的任务”，写来自哪个会话、点了打开）、提案卡上点的“在这里做”（“任务卡 · 在这里做”）。卡片上是标题和任务开头两行，“展开全文”看发给模型的原文、可收起；定时任务的回合不再另写“定时任务触发”那一行。别的会话用 `litch_sessions.send` 发来的照 Claude 收件箱来的画成“来自 X 的消息”（能点回那个会话），这类消息先收成四行。桌面和手机同样
+
 ## 0.23.0
 
 - 侧栏单独查看一组时，行尾的“新建会话”“更多”还在（以前只剩设备名）

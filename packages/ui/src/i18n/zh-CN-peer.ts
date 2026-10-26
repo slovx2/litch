@@ -1,5 +1,6 @@
-// 别的会话发来的消息（Claude 的本机收件箱）的中文文案：对话里那条消息上面的来源行，发送方那边“发消息给”的步骤
-// （收件方认不出名字时的说法、详情里的收件方）。
+// 别的会话发来的消息（Claude 的本机收件箱、litch_sessions.send）的中文文案：对话里那条消息上面的来源行，
+// 发送方那边“发消息给”的步骤（收件方认不出名字时的说法、详情里的收件方）；
+// 还有 Litch 替用户发的话画成的卡片（定时任务、子会话的启动指令、在这里做）的那一行来源。
 // 并进 zh-CN.ts 的那一份里用（键的集合以那一份为准），英文在 en-peer.ts。
 import type { Entry } from './types.ts'
 
@@ -20,4 +21,14 @@ export const zhPeer = {
   'tool.message.to': '收件方',
   'tool.message.openLitchHint': '在 Litch 里打开收到这条消息的会话',
   'tool.message.openHint': '打开收到这条消息的 Claude 桌面端会话',
+  'sysmsg.scheduledTask': '定时任务 · {name}',
+  'sysmsg.manual': '手动运行',
+  'sysmsg.briefing.fresh': '子会话的启动指令',
+  'sysmsg.briefing.fork': '分叉的启动指令',
+  'sysmsg.briefing.handOff': '交接的任务',
+  'sysmsg.from': '来自 {name}',
+  'sysmsg.openParentHint': '打开派出这个会话的会话',
+  'sysmsg.here': '任务卡 · 在这里做',
+  'sysmsg.expand': '展开全文',
+  'sysmsg.collapse': '收起',
 } satisfies Record<string, Entry>
