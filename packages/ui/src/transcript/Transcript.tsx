@@ -450,16 +450,26 @@ interface TranscriptProps extends SessionRef {
   footer?: ReactNode
   /** 打开另一个会话（分叉出来的那个） */
   onOpen?(selection: SessionRef): void
+  /**
+   * 这是一个侧聊（aside/state.ts）：parentId 是它的主会话（选字浮层上换成“带回主会话”），
+   * skip 是从主会话带来的回合（不画），lead 画在对话最前面，替掉“分叉自”那一行
+   */
+  aside?: { parentId: string; skip: readonly string[]; lead: ReactNode }
 }
 
 /** 对话区：只在显示期间订阅这个会话，切走就退订 */
-export function Transcript({ deviceId, sessionId, footer, onOpen }: TranscriptProps) {
+export function Transcript({ deviceId, sessionId, footer, onOpen, aside }: TranscriptProps) {
   const { replica } = useServices()
   // 读取失败后点“重试”：把订阅关掉再开一次
   const [attempt, setAttempt] = useState(0)
   // biome-ignore lint/correctness/useExhaustiveDependencies: attempt 变了就是要重新订阅
   useEffect(() => replica.openSession(deviceId, sessionId), [replica, deviceId, sessionId, attempt])
-  const turnIds = useKey<string[]>(keys.turnIds(deviceId, sessionId))
+  const allTurns = useKey<string[]>(keys.turnIds(deviceId, sessionId))
+  const skip = aside?.skip
+  const turnIds = useMemo(
+    () => (allTurns && skip?.length ? allTurns.filter((id) => !skip.includes(id)) : allTurns),
+    [allTurns, skip],
+  )
   const failure = useKey<SessionFailure>(keys.sessionError(deviceId, sessionId))
   // 内容还没读到、而它所属的 harness 现在用不了：这时核心在等它恢复，不是“正在读取”
   const device = useKey<DeviceView>(keys.device(deviceId))
@@ -490,9 +500,14 @@ export function Transcript({ deviceId, sessionId, footer, onOpen }: TranscriptPr
                 {/* 选字加评论、原文上的标记。只读地看（已归档）时不加。排在最前面：它不占地方，
                   放在回合后面的话 .turn:last-child 就认不出最后一个回合了 */}
                 {turnIds && !failure && !footer ? (
-                  <CommentLayer deviceId={deviceId} sessionId={sessionId} />
+                  <CommentLayer
+                    deviceId={deviceId}
+                    sessionId={sessionId}
+                    parentId={aside?.parentId ?? null}
+                  />
                 ) : null}
-                {turnIds && !failure ? (
+                {turnIds && !failure && aside ? aside.lead : null}
+                {turnIds && !failure && !aside ? (
                   <>
                     <ForkedFrom deviceId={deviceId} sessionId={sessionId} onOpen={onOpen} />
                     <LineageBar deviceId={deviceId} sessionId={sessionId} onOpen={onOpen} />
@@ -515,7 +530,9 @@ export function Transcript({ deviceId, sessionId, footer, onOpen }: TranscriptPr
                     <div className="dim">{t('transcript.loading')}</div>
                   </Delayed>
                 ) : turnIds.length === 0 ? (
-                  <div className="dim">{t('transcript.empty')}</div>
+                  aside ? null : (
+                    <div className="dim">{t('transcript.empty')}</div>
+                  )
                 ) : (
                   turnIds.map((turnId) => (
                     <TurnBoundary key={turnId} label={t('turn.broken')}>

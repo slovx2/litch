@@ -51,6 +51,8 @@ const features = (approvals: boolean, backgroundShell: boolean): HarnessFeatures
   // 一段话是过程说明还是最终回答取决于这次请求的停止原因，流式过程中还没有：
   // 开始时报的阶段值不能信，消息结束时才准。
   agentMessagePhase: 'onCompleted',
+  // 临时分叉建在内存会话管理器里，复制源会话的条目，照常跑回合，不写会话文件（protocol.mts 的 forkSession）
+  ephemeralFork: true,
   // 后台 shell 停得掉（thread/backgroundTerminals/terminate）
   ...(backgroundShell ? { backgroundTasks: true, stopBackground: true } : {}),
 })

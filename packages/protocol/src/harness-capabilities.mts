@@ -116,6 +116,12 @@ export interface HarnessFeatures {
    * 模型用目标工具报完成或受阻、用量和预算）。后加的位，没报就是不会：客户端不出目标的入口
    */
   goals?: boolean
+  /**
+   * 临时分叉带着上下文：`thread/fork` 带 `ephemeral: true` 得到的会话里有源会话到分叉位置为止的历史，
+   * 能照常跑回合（工具、审批都和普通会话一样），不进 `thread/list`，没人订阅、闲着一阵后卸载就没了。
+   * 客户端的侧聊靠它。后加的位，没报就是不会（有的引擎的临时会话只是个不带历史的帮手）
+   */
+  ephemeralFork?: boolean
 }
 
 export type PermissionRisk = 'low' | 'medium' | 'high'

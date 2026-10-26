@@ -384,6 +384,10 @@
           "goals": {
             "description": "后加的位，可以不报（不报就是不会）：持续目标做得到，即标准的 thread/goal/set、thread/goal/get、thread/goal/clear 和 thread/goal/updated、thread/goal/cleared 通知照 codex 的语义工作。客户端只给报了的 harness 出目标的入口；原生 codex 配置里关了 goals 时方法报 goals feature is disabled，客户端按不会处理",
             "type": "boolean"
+          },
+          "ephemeralFork": {
+            "description": "后加的位，可以不报（不报就是不会）：thread/fork 带 ephemeral: true 得到的临时会话带着源会话到分叉位置为止的历史，能照常跑回合（工具、审批和普通会话一样），不进 thread/list，没有订阅者、闲置一段时间后卸载即消失。客户端的侧聊只给报了的 harness 出入口",
+            "type": "boolean"
           }
         }
       },

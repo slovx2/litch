@@ -345,6 +345,8 @@ export interface Device {
   respond(sessionId: string, requestId: string, choice: RequestChoice): void
   /** itemId：切在这个回合里插进去的那条用户消息之前（界面里的条目标识） */
   fork(sessionId: string, turnId: string, itemId?: string): Promise<string>
+  /** 侧聊：临时分出一个会话（live.mts 的 sideChat） */
+  sideChat(sessionId: string): Promise<string>
   rollback(sessionId: string, turnId: string, itemId?: string): Promise<void>
   compact(sessionId: string): Promise<void>
   /** 设、改、清持续目标（live.mts 的 setGoal、clearGoal） */
@@ -2632,6 +2634,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     unqueue: (sessionId, messageId) => live.unqueue(sessionId, messageId),
     respond: (sessionId, requestId, choice) => live.respond(sessionId, requestId, choice),
     fork: (sessionId, turnId, itemId) => live.fork(sessionId, turnId, itemId),
+    sideChat: (sessionId) => live.sideChat(sessionId),
     rollback: (sessionId, turnId, itemId) => live.rollback(sessionId, turnId, itemId),
     compact: (sessionId) => live.compact(sessionId),
     setGoal: (sessionId, change) => live.setGoal(sessionId, change),

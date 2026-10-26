@@ -423,6 +423,14 @@ export interface Commands {
     result: { sessionId: string }
   }
   /**
+   * 侧聊：从这个会话临时分出一个会话（带着到最近一个结束了的回合为止的上下文，有回合在跑也行），返回它的标识。
+   * 新会话不进侧栏、不落盘；界面开着它（openSession）它就在，都关掉之后过一阵对面就把它扔了。要会话的 can.sideChat
+   */
+  'session.sideChat': {
+    params: { deviceId: string; sessionId: string }
+    result: { sessionId: string }
+  }
+  /**
    * 回退：把 turnId 这个回合和它后面的回合都从会话里撤掉，找不回来。
    * 只改会话的历史，已经对文件做的改动不会还原。有回合在进行时不能回退。
    * 带 itemId（这个回合里插进去的一条用户消息）时只撤掉它和它之后的，这一回合前面的留着。要会话的 can.cutInTurn

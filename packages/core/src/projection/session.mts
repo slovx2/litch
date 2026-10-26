@@ -38,6 +38,8 @@ export const ALL_ABLE: SessionAbilities = {
   backgroundTasks: false,
   // 持续目标只认声明：没有声明可看时不出入口
   goals: false,
+  // 侧聊也只认声明
+  sideChat: false,
   declared: false,
 }
 

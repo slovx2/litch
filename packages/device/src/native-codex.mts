@@ -96,6 +96,8 @@ function codexFeatures(): HarnessFeatures {
     // thread/goal/*：上游 0.157.1 起 goals 特性就是稳定版、默认开（features/src/lib.rs，到 0.163.0 都是）。用户在自己的配置里关了的，
     // 调用会报 goals feature is disabled，客户端照实际的来。设备进程不读用户的配置，按默认报
     goals: true,
+    // thread/fork 带 ephemeral：上游的临时线程带着源线程的历史、只在内存里，卸载即消失（thread_processor.rs）；官方桌面端的侧聊用它
+    ephemeralFork: true,
   }
 }
 
