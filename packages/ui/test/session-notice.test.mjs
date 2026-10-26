@@ -1,11 +1,11 @@
 // 会话的系统通知发不发、发哪一种（src/notify/session-notice.ts）：回合结束、出错、停下来等审批或回答才发；
-// 定时任务跑出来的不发（TaskNotices 发），子会话、别的应用派出来的会话回合结束不发、要人处理照发。
+// 定时任务跑出来的不发（TaskNotices 发）；子会话照发；别的应用派出来的会话在侧栏里藏着时什么都不发（照 Claude 桌面端）。
 // 正文怎么写（noticeBodyOf）：回答去掉 Markdown 掐到 100 字，出错写原因，审批写要做的事，提问写问题。
 // 跑法：npm run test --prefix packages/ui（Node 直接读 .ts，不用先构建）。
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-const { clipText, noticeBodyOf, plainText, sessionNoticeOf } = await import(
+const { clipText, noticeBodyOf, plainText, sessionNoticeOf, slotOf } = await import(
   '../src/notify/session-notice.ts'
 )
 
@@ -41,17 +41,30 @@ test('回合结束、出错、要审批、要回答各是一种；别的变化�
   assert.equal(sessionNoticeOf(undefined, session()), null)
 })
 
-test('定时任务跑出来的不发；子会话回合结束不发，要人处理照发', () => {
+test('定时任务跑出来的不发；子会话照发；藏着的派出会话什么都不发，显示出来以后照发', () => {
   const run = { kind: 'run', taskId: 't', runId: 'r', trigger: 'manual', scheduledFor: 0 }
   assert.equal(sessionNoticeOf(running, session({ task: run })), null)
   const child = { lineage: { parentId: 'p' } }
-  assert.equal(sessionNoticeOf({ ...running, ...child }, session(child)), null)
+  assert.equal(sessionNoticeOf({ ...running, ...child }, session(child)), 'done')
   assert.equal(
     sessionNoticeOf({ ...running, ...child }, session({ ...child, status: 'waiting' })),
     'approval',
   )
   const native = { nativeLineage: { app: 'claude-desktop', parentId: null, createdAt: 0 } }
-  assert.equal(sessionNoticeOf({ ...running, ...native }, session(native)), null)
+  const waiting = session({ ...native, status: 'waiting', waitingFor: 'answer' })
+  assert.equal(sessionNoticeOf({ ...running, ...native }, session(native), true), null)
+  assert.equal(sessionNoticeOf({ ...running, ...native }, waiting, true), null)
+  assert.equal(sessionNoticeOf({ ...running, ...native }, session(native), false), 'done')
+  assert.equal(sessionNoticeOf({ ...running, ...native }, waiting, false), 'answer')
+})
+
+test('每个会话两条：回合结束、出错占一条，审批、回答占另一条', () => {
+  assert.deepEqual(['done', 'failed', 'approval', 'answer'].map(slotOf), [
+    'turn',
+    'turn',
+    'ask',
+    'ask',
+  ])
 })
 
 const say = (text) => (typeof text === 'string' ? text : `[${text.key}]`)

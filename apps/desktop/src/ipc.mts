@@ -34,11 +34,13 @@ export const SET_LOOK = 'litch:set-look'
 export const ABOUT = 'litch:about'
 /** 界面 → 主进程，等应答：一份许可文本的全文，按 ABOUT 给的标识取 */
 export const LICENSE_TEXT = 'litch:license-text'
-/** 界面 → 主进程：发一条定时任务跑完了的系统通知（标识、标题、正文；task-notice.mts） */
+/** 界面 → 主进程：发一条系统通知（定时任务、会话；标识、标题、正文；task-notice.mts） */
 export const NOTIFY = 'litch:notify'
 /** 主进程 → 界面：用户点了哪一条系统通知，带着发的时候给的标识 */
 export const NOTIFY_CLICK = 'litch:notify-click'
-/** 界面 → 主进程：Dock 上的角标数（要人看一眼的会话有几个，0 是不显示） */
+/** 界面 → 主进程：收回一条系统通知（发的时候给的标识） */
+export const NOTIFY_CLOSE = 'litch:notify-close'
+/** 界面 → 主进程：Dock 上的角标数（未读的会话有几个，0 是不显示） */
 export const SET_BADGE = 'litch:set-badge'
 /** 界面 → 主进程，等应答：弹系统的选文件夹对话框，回选中的那个目录（没选是 null）。只给本机的设备用 */
 export const PICK_FOLDER = 'litch:pick-folder'

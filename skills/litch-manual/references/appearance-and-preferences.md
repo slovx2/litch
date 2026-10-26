@@ -27,12 +27,18 @@ app menu). There is no "follow the system" choice; on first launch Litch picks t
 
 ## Notifications (Settings → Notifications)
 
-While the Litch window is in the background, a session shows a system notification when its turn
-ends or fails and when it stops for an approval or an answer (sub-sessions only for the latter; runs
-of scheduled tasks are covered below). The title is the session's title, the line under it names the
-project and device, and the text says what happened: the start of the last answer, the error, the
-command or files waiting for approval, or the question itself. Clicking it opens that session.
-`scripts/litch notify sessions on` (or `off`) turns this on or off (default on).
+A session shows a system notification when its turn ends or fails and when it stops for an approval
+or an answer, unless you are looking at that very session in the focused Litch window (looking at
+another session still notifies). Sub-sessions notify too; sessions another app started stay quiet
+while the sidebar hides them; runs of scheduled tasks are covered below. The title is the session's
+title (for an approval, the project), the line under it names the project or session and the device,
+and the text says what happened: the start of the last answer, the error, the command or files
+waiting for approval, or the question itself. Each session keeps at most one notification for its
+latest turn and one for what it is waiting on: a newer one replaces the older, the waiting one is
+withdrawn once it is handled anywhere, and opening the session withdraws its turn notification. While
+an approval or question waits and the window is in the background, the Dock icon bounces. Clicking a
+notification opens that session. `scripts/litch notify sessions on` (or `off`) turns this on or off
+(default on).
 
 The Dock icon counts unread sessions only: a session becomes unread when its turn ends or fails while
 you are not looking at it, and opening it clears that. Approvals and questions notify but do not add
