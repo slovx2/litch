@@ -5,6 +5,7 @@ import type { IconName } from '../app/icons.tsx'
 import type { MessageKey } from '../i18n/index.ts'
 // 内置浏览器：代理要给人看网页时打开面板（启动时就装上，见 browser/show.ts）
 import './browser/show.ts'
+import { ASIDE_TAB } from '../aside/state.ts'
 import { BACKGROUND_TAB } from '../background/tab.ts'
 import { GOAL_TAB } from '../goal/tab.ts'
 import { BROWSER_TAB } from './browser/store.ts'
@@ -48,7 +49,7 @@ export interface SideTabSpec {
    * 眼前会话的 harness 得会这件事才出这个标签（SessionAbilities 里的那一位）。不给就一直在。
    * 不会的时候标签栏上没有它；面板正停在它上面时照常画，内容自己说做不了
    */
-  needs?: 'goals'
+  needs?: 'goals' | 'sideChat'
 }
 
 export const FILES_TAB = 'files'
@@ -112,6 +113,16 @@ export const SIDE_TABS: readonly SideTabSpec[] = [
     needs: 'goals',
     Panel: lazy(() =>
       import('../goal/GoalTab.tsx').then((module) => ({ default: module.GoalTab })),
+    ),
+  },
+  {
+    // 侧聊：从眼前会话临时分出的一段对话（aside/state.ts）。选字浮层的“侧聊”也打开它。harness 不会的不出
+    id: ASIDE_TAB,
+    label: 'side.tab.aside',
+    icon: 'aside',
+    needs: 'sideChat',
+    Panel: lazy(() =>
+      import('../aside/AsideTab.tsx').then((module) => ({ default: module.AsideTab })),
     ),
   },
 ]

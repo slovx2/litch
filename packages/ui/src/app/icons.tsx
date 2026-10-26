@@ -81,6 +81,8 @@ const PATHS = {
   play: <path d="M5.5 4l6 4-6 4z" />,
   /** 清掉：一个垃圾桶 */
   trash: <path d="M3.5 4.5h9M6.5 4.5V3h3v1.5M4.5 4.5l.7 8.5h5.6l.7-8.5M7 7v4M9 7v4" />,
+  /** 侧聊：前面一个对话气泡，后面露出另一个的一角 */
+  aside: <path d="M2.5 5.5h8v5.5h-4.5l-2 2v-2h-1.5zM5.5 5.5v-2.5h8v5.5h-1.5v1.5l-1.5-1.5" />,
 }
 
 export type IconName = keyof typeof PATHS

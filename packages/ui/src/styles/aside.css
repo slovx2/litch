@@ -1,0 +1,78 @@
+/* 侧聊（aside/）：侧面板的“侧聊”页。只用皮肤变量；对话和输入区沿用对话区的样式，这里只管页上的框 */
+
+.aside-start {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px 28px;
+  text-align: center;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--ink-2);
+}
+.aside-start p {
+  max-width: 340px;
+  margin: 0;
+}
+.aside-start > .ic {
+  color: var(--ink-3);
+}
+.aside-fail {
+  color: var(--err);
+}
+.aside-view {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.aside-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 6px 0 12px;
+  border-bottom: 1px solid var(--line-1);
+}
+.aside-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+.aside-transcript {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.aside-transcript .tr {
+  padding: 10px 14px;
+}
+.aside-transcript .dock {
+  padding: 0 12px 12px;
+}
+.aside-transcript .req-slot {
+  padding: 0 12px 8px;
+}
+.aside-lead {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.aside-context {
+  padding-bottom: 8px;
+  border-bottom: 1px dashed var(--line-2);
+  color: var(--ink-3);
+}

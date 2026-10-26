@@ -1,11 +1,14 @@
 // 对话区里评论的那一层：在回答里选中一段时选区上方的小浮层（评论、复制），从那里打开的编辑框；
 // 还挂在输入框上的评论在原文上的淡底色（CSS Custom Highlight，不改页面结构）和段尾的编号小记号。
 // 挂在对话内容（.tr）里，位置按它算：滚动时跟着走，不用重算。
+import { clipQuote, keys, type SessionMeta } from '@litch/core'
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useT } from '../../app/appearance.ts'
 import { Bubble, Icon } from '../../app/icons.tsx'
-import { useServices } from '../../app/services.tsx'
+import { useKey, useServices } from '../../app/services.tsx'
+import { showToast } from '../../app/toasts.tsx'
+import { quoteToParent, startAside, useAside } from '../../aside/state.ts'
 import type { DraftComment } from '../../composer/drafts.ts'
 import { CommentEditor } from './Editor.tsx'
 import { originRange } from './locate.ts'
@@ -78,14 +81,51 @@ function readSelection(scope: Element): Pick | null {
 
 const highlights = () => (typeof CSS !== 'undefined' ? CSS.highlights : undefined)
 
+/**
+ * 同时开着的几层（主对话、侧面板里的侧聊和子代理页）各自的底色：高亮按名字登记、全页只有一份，
+ * 各层只报自己的，合起来再交给 CSS.highlights，免得一层清掉另一层的
+ */
+const painted = new Map<symbol, { marks: Range[]; pending: Range | null }>()
+
+function paintAll(): void {
+  const registry = highlights()
+  if (!registry) return
+  const marks = [...painted.values()].flatMap((entry) => entry.marks)
+  const pending = [...painted.values()].flatMap((entry) => (entry.pending ? [entry.pending] : []))
+  if (marks.length > 0) registry.set(MARK, new Highlight(...marks))
+  else registry.delete(MARK)
+  if (pending.length > 0) registry.set(PENDING, new Highlight(...pending))
+  else registry.delete(PENDING)
+}
+
+function paintLayer(layer: symbol, marks: Range[], pending: Range | null): void {
+  if (marks.length === 0 && !pending) painted.delete(layer)
+  else painted.set(layer, { marks, pending })
+  paintAll()
+}
+
+function unpaintLayer(layer: symbol): void {
+  if (painted.delete(layer)) paintAll()
+}
+
 interface LayerProps {
   deviceId: string
   sessionId: string
+  /** 这是侧聊的对话：它的主会话。浮层上不出“侧聊”（不嵌套），换成“带回主会话” */
+  parentId: string | null
 }
 
-export const CommentLayer = memo(function CommentLayer({ deviceId, sessionId }: LayerProps) {
+export const CommentLayer = memo(function CommentLayer({
+  deviceId,
+  sessionId,
+  parentId,
+}: LayerProps) {
   const t = useT()
-  const { channel } = useServices()
+  const services = useServices()
+  const { channel } = services
+  const meta = useKey<SessionMeta>(keys.session(deviceId, sessionId))
+  const aside = useAside(deviceId, parentId === null ? sessionId : null)
+  const own = useRef(Symbol('comment-layer')).current
   const key = commentKey(deviceId, sessionId)
   const comments = useDraftComments(key)
   const layer = useRef<HTMLDivElement>(null)
@@ -141,20 +181,18 @@ export const CommentLayer = memo(function CommentLayer({ deviceId, sessionId }: 
   // 原文上的底色和记号：评论变了、对话里的东西变了（流式输出、展开收起）、尺寸变了都重画一遍
   useLayoutEffect(() => {
     const root = scope()
-    const own = layer.current
-    const registry = highlights()
-    if (!root || !own) return
+    const self = layer.current
+    if (!root || !self) return
     const pending = editing?.kind === 'new' ? editing.pick.range : null
     if (comments.length === 0 && !pending) {
-      registry?.delete(MARK)
-      registry?.delete(PENDING)
+      unpaintLayer(own)
       setBadges((current) => (current.length === 0 ? current : []))
       return
     }
     let frame = 0
     const paint = () => {
       frame = 0
-      const base = own.getBoundingClientRect()
+      const base = self.getBoundingClientRect()
       const ranges: Range[] = []
       const next: Badge[] = []
       comments.forEach((comment, index) => {
@@ -173,12 +211,7 @@ export const CommentLayer = memo(function CommentLayer({ deviceId, sessionId }: 
           y: Math.round(last.top - base.top),
         })
       })
-      if (registry) {
-        if (ranges.length > 0) registry.set(MARK, new Highlight(...ranges))
-        else registry.delete(MARK)
-        if (pending) registry.set(PENDING, new Highlight(pending))
-        else registry.delete(PENDING)
-      }
+      paintLayer(own, ranges, pending)
       setBadges((current) =>
         current.length === next.length &&
         current.every(
@@ -198,7 +231,7 @@ export const CommentLayer = memo(function CommentLayer({ deviceId, sessionId }: 
     paint()
     const mutations = new MutationObserver((records) => {
       // 自己这一层的变化不算
-      if (records.every((record) => own.contains(record.target))) return
+      if (records.every((record) => self.contains(record.target))) return
       later()
     })
     mutations.observe(root, { childList: true, subtree: true, characterData: true })
@@ -209,16 +242,10 @@ export const CommentLayer = memo(function CommentLayer({ deviceId, sessionId }: 
       mutations.disconnect()
       sizes.disconnect()
     }
-  }, [comments, editing, scope, deviceId, sessionId])
+  }, [comments, editing, scope, deviceId, sessionId, own])
 
-  // 换会话、关掉对话时把底色拿掉
-  useEffect(
-    () => () => {
-      highlights()?.delete(MARK)
-      highlights()?.delete(PENDING)
-    },
-    [],
-  )
+  // 换会话、关掉对话时把这一层的底色拿掉
+  useEffect(() => () => unpaintLayer(own), [own])
 
   const clearSelection = () => window.getSelection()?.removeAllRanges()
 
@@ -226,6 +253,21 @@ export const CommentLayer = memo(function CommentLayer({ deviceId, sessionId }: 
     if (!pick || full) return
     setEditing({ kind: 'new', pick })
     setPick(null)
+  }
+
+  // 选中的文字开侧聊（或者放进开着的侧聊的输入框）；在侧聊里则是带回主会话的输入框。都不发
+  const toAside = () => {
+    if (!pick) return
+    startAside(services, deviceId, sessionId, clipQuote(pick.quote))
+    clearSelection()
+    setPick(null)
+  }
+  const toParent = () => {
+    if (!pick || parentId === null) return
+    quoteToParent(deviceId, parentId, clipQuote(pick.quote))
+    clearSelection()
+    setPick(null)
+    showToast({ id: 'aside-quoted', lifeMs: 3000, text: (tr) => tr('aside.quoted') })
   }
 
   const copy = () => {
@@ -354,6 +396,17 @@ export const CommentLayer = memo(function CommentLayer({ deviceId, sessionId }: 
                 <Bubble />
                 {t('comment.add')}
               </button>
+              {parentId !== null ? (
+                <button type="button" data-act="parent" onClick={toParent}>
+                  <Icon name="aside" />
+                  {t('aside.pop.parent')}
+                </button>
+              ) : meta?.can.sideChat ? (
+                <button type="button" data-act="aside" onClick={toAside}>
+                  <Icon name="aside" />
+                  {t(aside && !aside.failure ? 'aside.pop.send' : 'aside.pop')}
+                </button>
+              ) : null}
               <button type="button" data-act="copy" onClick={copy}>
                 <Icon name="copy" />
                 {t(copied ? 'code.copied' : 'code.copy')}
