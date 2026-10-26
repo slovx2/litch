@@ -148,6 +148,38 @@ test('BG-002 结束过的最多留 50 个', () => {
   assert.equal(listed[0]?.id, 'b59')
 })
 
+test('BG-007 后台子代理挂上子线程：先到后到都行，挂上后集合变了，删会话一起忘', () => {
+  const tracker = new BackgroundTaskTracker(() => 1)
+  // 子线程先认出来、任务还没进集合：记着，不算集合变了
+  assert.equal(tracker.linkAgent('t', 'a1', 'child-1'), false)
+  tracker.apply(
+    't',
+    level([{ task_id: 'a1', task_type: 'local_agent', description: '查资料' }]),
+    null,
+  )
+  assert.equal(tracker.list('t')[0]?.agentThreadId, 'child-1')
+  // 已经在集合里的再挂一个：集合变了；同一个再挂不算
+  tracker.apply(
+    't',
+    level([
+      { task_id: 'a1', task_type: 'local_agent', description: '查资料' },
+      { task_id: 'a2', task_type: 'local_agent', description: '读文档' },
+    ]),
+    null,
+  )
+  assert.equal(tracker.list('t').find((task) => task.id === 'a2')?.agentThreadId, undefined)
+  assert.equal(tracker.linkAgent('t', 'a2', 'child-2'), true)
+  assert.equal(tracker.linkAgent('t', 'a2', 'child-2'), false)
+  assert.equal(tracker.list('t').find((task) => task.id === 'a2')?.agentThreadId, 'child-2')
+  tracker.forget('t')
+  tracker.apply(
+    't',
+    level([{ task_id: 'a1', task_type: 'local_agent', description: '查资料' }]),
+    null,
+  )
+  assert.equal(tracker.list('t')[0]?.agentThreadId, undefined)
+})
+
 test('BG-005 用时：从 CLI 真正起它算到 CLI 记的结束时刻，不含等审批，不按消息到达时刻', () => {
   // 照 2.1.282 的实际顺序：审批过了 CLI 才起命令（task_started 和电平信号一起到），
   // 结束时电平信号、task_updated（带 end_time）、task_notification 一起到，电平信号在前

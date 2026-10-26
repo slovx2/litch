@@ -81,6 +81,7 @@ test('BG-CORE-001 集合的投影：形状不对的丢掉，不认识的种类�
         status: 'running',
         itemId: 'i1',
         turnId: null,
+        agentThreadId: null,
         startedAt: 5,
         endedAt: null,
       },
@@ -91,6 +92,7 @@ test('BG-CORE-001 集合的投影：形状不对的丢掉，不认识的种类�
         status: 'completed',
         itemId: null,
         turnId: null,
+        agentThreadId: null,
         startedAt: null,
         endedAt: 9,
       },
@@ -369,12 +371,19 @@ test('BG-CORE-005 后台任务还在跑时人接着说话：新回合进行中�
   assert.equal(reported(), 2)
 })
 
-test('BG-CORE-006 后台任务列表把子代理合进来（会话树的子会话不算）：同名的 Claude 后台子代理只留子线程那一行，运行中在前，数在跑的', () => {
+test('BG-CORE-006 后台任务列表把子代理合进来（会话树的子会话不算）：挂着子线程的 Claude 后台子代理只留子线程那一行，运行中在前，数在跑的', () => {
   const background = projectBackground({
     wakesOnFinish: true,
     tasks: [
       { id: 'b1', kind: 'shell', title: 'npm run dev', status: 'running', startedAt: 1_000 },
-      { id: 'b2', kind: 'agent', title: '查日志', status: 'running', startedAt: 2_000 },
+      {
+        id: 'b2',
+        kind: 'agent',
+        title: '查日志（标题和子线程的不一样也认得出）',
+        status: 'running',
+        agentThreadId: 'a1',
+        startedAt: 2_000,
+      },
       {
         id: 'b3',
         kind: 'shell',
@@ -417,13 +426,21 @@ test('BG-CORE-006 后台任务列表把子代理合进来（会话树的子会�
       ['agent:a2', 'completed'],
     ],
   )
-  // 集合里的 b2 和子线程 a1 同名：只算一次
+  // 集合里的 b2 挂着子线程 a1：只算一次
   assert.equal(backgroundHint(view), 3)
   assert.equal(view.entries.find((entry) => entry.key === 'agent:a2')?.endedAt, 2_400)
   assert.equal(view.wakesOnFinish, true)
   assert.equal(backgroundEntries(null, []), null)
   // 只有子代理在跑（没有集合）也数得出：输入框上方那一行照样出
   assert.equal(backgroundHint(backgroundEntries(null, [agent('a1', '查日志', 'running')])), 1)
+  // 子代理列表还没来（设备没列过）：挂着子线程的那一行也当子代理画，点了进子代理页；没挂的照旧是任务
+  const early = backgroundEntries(background, [])
+  assert.ok(early)
+  const b2 = early.entries.find((entry) => entry.key === 'agent:a1')
+  assert.equal(b2?.source, 'agent')
+  assert.equal(b2?.id, 'a1')
+  assert.equal(b2?.task?.id, 'b2')
+  assert.equal(early.entries.find((entry) => entry.key === 'task:b1')?.source, 'task')
 })
 
 test('BG-CORE-009 停止按钮看 harness 报的能力：命令、监视要 stopBackground，子代理要 stopAgent，结束的都不能', () => {

@@ -1,6 +1,6 @@
 // 一个会话的后台任务（桌面右侧“后台任务”页的简化版）：后台命令和引擎自己派出的子代理合在一张（会话树里的子会话
 // 不列，用户要求，2026-10-25），运行中在上（先开始的在前）、已结束在下（刚结束的在前），每行类型、名称、用时、状态。
-// 点子代理进它的详情页（子代理的对话照核心的规矩，能不能直接说话由核心定）；命令不展开输出。
+// 点子代理进它的子代理页（和对话里子代理那一行点进去的是同一页）；命令、监视不展开输出。
 // 在跑的命令和监视、harness 会单独停的子代理给“停止”。
 // 从输入框上方那一行或者会话详情右上角菜单里的“后台任务”进来。
 import {
@@ -66,7 +66,13 @@ export function BackgroundScreen({ route, navigation }: Props) {
       onOpen={
         entry.source === 'task'
           ? null
-          : () => navigation.push('Detail', { deviceId, sessionId: entry.id, title: entry.title })
+          : () =>
+              navigation.push('Agent', {
+                deviceId,
+                parentId: sessionId,
+                agentId: entry.id,
+                title: entry.title,
+              })
       }
     />
   )
@@ -133,7 +139,7 @@ function EntryRow({
   now: number
   canStop: boolean
   onFail(message: string | null): void
-  /** 点这一行进它的详情页；命令是 null */
+  /** 点这一行进它的子代理页；命令、监视是 null */
   onOpen: (() => void) | null
 }) {
   const t = useT()

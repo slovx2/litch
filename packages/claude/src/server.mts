@@ -4572,6 +4572,11 @@ export class CodexClaudeAppServer {
     const rememberSubagentTask = (key: string, taskId: string): void => {
       subagentTaskIds.set(key, taskId)
       subagentByTask.set(taskId, key)
+      // 后台任务集合里这个任务挂上子线程：后台任务页点它进子代理页
+      const childThreadId =
+        subagentContexts.get(key)?.childThreadId ?? resumedSubagents.get(key)?.childThreadId
+      if (childThreadId && this.backgroundTasks.linkAgent(thread.id, taskId, childThreadId))
+        this.publishBackground(thread.id)
     }
     // 用户在子代理页、后台任务页上停一个子代理：经 CLI 的 stop_task 停（和 Claude 桌面端、TaskStop 同一个停止函数），
     // 之后照 CLI 自己的行为：Agent 调用的结果、结束通知照常投影，子线程的回合随之收尾，不另外告诉模型

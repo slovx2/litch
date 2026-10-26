@@ -22,6 +22,8 @@ export interface LitchBackgroundTask {
   /** 发起它的条目（一般是那条命令），能挂回对话 */
   itemId?: string
   turnId?: string
+  /** 后台子代理（kind 为 agent）在这个会话里对应的子线程：客户端点这一行进它的子代理页。没有子线程的不带 */
+  agentThreadId?: string
   /** 毫秒。界面的“用时”=（endedAt ?? 现在）− startedAt */
   startedAt?: number
   endedAt?: number

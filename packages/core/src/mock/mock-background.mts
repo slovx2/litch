@@ -161,6 +161,7 @@ export function createMockBackground(host: MockBackgroundHost): MockBackground {
         status: 'running',
         itemId: item.id.slice(turnId.length + 1),
         turnId,
+        agentThreadId: null,
         startedAt,
         endedAt: null,
       })

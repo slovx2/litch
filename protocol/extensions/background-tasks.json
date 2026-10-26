@@ -11,6 +11,7 @@
   "rules": [
     "集合里是运行中的任务，加上这次运行里结束过的（最多 50 个，BACKGROUND_ENDED_LIMIT）。运行中的在前、按开始时间；结束过的在后、按结束时间倒序。结束过的只在引擎（设备进程）的内存里，重启就没了，不进库。",
     "任务的 id 在引擎内唯一、前后不变；itemId 是发起它的那个条目（能挂回对话），拿不到时不带。",
+    "agentThreadId：后台子代理有子线程时（Claude 的 local_agent 由 Agent 调用派出），带上那个子线程的标识，客户端点这一行进子代理页、和子代理列表里的同一个合成一行；没有子线程的（Workflow 里的、嵌套的）不带。",
     "status：running、completed、failed、stopped。Claude 取 task_notification 的状态，CLI 进程退出时还在跑的记 stopped；原生 codex 取命令条目 item/completed 的状态，退出码非零记 failed，会话卸载、关闭时还在跑的记 stopped；dsh 取作业的状态（killed 记 stopped）；Litch 注入的后台命令：自己退出且退出码为 0、没有信号记 completed，否则 failed，被停掉（模型、用户、运行时退出、会话删除）的记 stopped。命令把进程放到后台的（同一个进程组），shell 退出后组里还有活的就还算 running，都结束了才按 shell 的退出码结束。",
     "wakesOnFinish：后台任务结束后这个 harness 会不会自己接着做。claude-code、dsh 和打开了注入后台命令的 pi、opencode、acp 为真（注入的命令自己结束时才唤醒，被停掉的不唤醒），原生 codex 为假。",
     "litch/thread/background/changed 发给所有声明过的连接（不只是订阅了这个会话的），侧栏要标没打开过的会话；集合整份重发。临时会话的不发。",

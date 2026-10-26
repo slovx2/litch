@@ -299,3 +299,58 @@ test('复用进程的回合带输出格式：约束仍由 CLI 强制；输出格
     await disposeScene(scene)
   }
 })
+
+// 声明了后台任务扩展的连接：会话对象、回合多出我们的字段，校验上游结构时去掉
+function withoutBackground(method: string, _kind: string, payload: any): unknown {
+  if (method.startsWith('litch/')) return undefined
+  const copy = structuredClone(payload)
+  const strip = (thread: any) => {
+    if (!thread || typeof thread !== 'object') return
+    delete thread.litchBackground
+    for (const turn of thread.turns ?? []) delete turn.litchOrigin
+  }
+  strip(copy?.thread)
+  for (const entry of copy?.data ?? []) {
+    strip(entry)
+    delete entry?.litchOrigin
+  }
+  delete copy?.turn?.litchOrigin
+  return copy
+}
+
+test('后台子代理在集合里挂着它的子线程（agentThreadId）：后台任务页点它进子代理页', {
+  timeout: 120_000,
+}, async () => {
+  const scene = await startScene(
+    'native-bg-subagent-link',
+    {},
+    {
+      litchExtensions: ['backgroundTasks'],
+    },
+  )
+  scene.client.standardView = withoutBackground
+  try {
+    await writeFile(probe(scene), 'probe-file-content: 42\n')
+    const child = childSteps(scene, 'LINK_CHILD', 1_000)
+    scene.model.fallback = async (request) => {
+      const fromChild = await child(request)
+      if (fromChild) return fromChild
+      const { first, started, tailText } = shape(request)
+      assert.ok(first.includes('LINK_MAIN'), '收到无法归属的模型请求')
+      if (!started) return [text('MAIN_START'), agent('LINK_CHILD 读取 a.txt 并返回内容', false)]
+      if (tailText.includes('task-notification')) return [text('MAIN_AFTER_NOTIFICATION')]
+      return [text('MAIN_CONTINUES')]
+    }
+    assert.equal((await runTurn(scene, 'LINK_MAIN 派子代理读取 a.txt')).status, 'completed')
+    const started = childStarted(scene)
+    assert.ok(started, '应创建子线程')
+    const agentTask = async () =>
+      (await readThread(scene, scene.threadId)).litchBackground?.tasks?.find(
+        (task: any) => task.kind === 'agent',
+      )
+    await until('集合里有后台子代理', async () => (await agentTask()) !== undefined)
+    assert.equal((await agentTask()).agentThreadId, started.id)
+  } finally {
+    await disposeScene(scene)
+  }
+})

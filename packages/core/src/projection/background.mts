@@ -54,6 +54,7 @@ export function projectBackground(raw: unknown): SessionBackgroundView | null {
         : 'completed') as BackgroundTaskStatus,
       itemId: text(one.itemId),
       turnId: text(one.turnId),
+      agentThreadId: text(one.agentThreadId),
       startedAt: time(one.startedAt),
       endedAt: time(one.endedAt),
     })
@@ -97,6 +98,7 @@ export function deriveBackground(
         status: 'running',
         itemId: protocolItemId(turn.id, itemId),
         turnId: turn.id,
+        agentThreadId: null,
         startedAt: item.startedAt ?? turn.startedAt,
         endedAt: null,
       })
@@ -150,7 +152,8 @@ function ordered(entries: BackgroundEntryView[]): BackgroundEntryView[] {
  * 后台任务页和输入框上方那一行用的整张列表：集合里的后台任务、引擎自己的子代理（父会话的子代理列表，
  * reported 是父会话条目里报的状态，子线程说不出时用），界面上都叫后台任务。
  * 会话树里派出的子会话不算（用户要求，2026-10-25）：它们在侧栏挂在父会话下面，对话里有卡片和回报。
- * Claude 的后台子代理既在集合里（种类 agent）又有子线程：同名的只留子线程那一行（点了能进子代理页）
+ * Claude 的后台子代理既在集合里（种类 agent，带 agentThreadId）又有子线程：只留子线程那一行；
+ * 子代理列表里还没有那个子线程的（设备还没列过），集合里的那一行也当子代理画，点了照样进子代理页
  */
 export function backgroundEntries(
   background: SessionBackgroundView | null,
@@ -158,13 +161,13 @@ export function backgroundEntries(
   reported: ReadonlyMap<string, AgentState> = new Map(),
 ): BackgroundEntriesView | null {
   const entries: BackgroundEntryView[] = []
-  const agentTitles = new Set<string>()
+  const agentIds = new Set<string>()
   for (const agent of agents ?? []) {
     const status = AGENT_STATUS[agentRunState(agent, reported.get(agent.id), null)]
     const startedAt = agent.turn?.startedAt ?? null
     const spent = agent.turn?.durationMs ?? null
     const title = agent.description || agent.nickname || agent.role || ''
-    if (title) agentTitles.add(title.trim())
+    agentIds.add(agent.id)
     entries.push({
       key: `agent:${agent.id}`,
       source: 'agent',
@@ -179,14 +182,15 @@ export function backgroundEntries(
     })
   }
   for (const task of background?.tasks ?? []) {
-    if (task.kind === 'agent' && agentTitles.has(task.title.trim())) continue
+    const agentId = task.agentThreadId
+    if (agentId && agentIds.has(agentId)) continue
     entries.push({
-      key: `task:${task.id}`,
-      source: 'task',
+      key: agentId ? `agent:${agentId}` : `task:${task.id}`,
+      source: agentId ? 'agent' : 'task',
       kind: task.kind,
       title: task.title,
       status: task.status,
-      id: task.id,
+      id: agentId ?? task.id,
       task,
       startedAt: task.startedAt,
       endedAt: task.endedAt,
