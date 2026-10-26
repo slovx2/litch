@@ -65,6 +65,8 @@ test('对话里的待办：平时一行，展开了带上 expanded，回合号�
     turns: [turn('t', 'running', ['u', item.id])],
     items: { u: user, [item.id]: item },
     forkedFrom: null,
+    can: { finalOnStart: false },
+    agents: [],
     proposals: [],
     requests: [],
   }

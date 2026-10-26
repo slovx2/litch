@@ -61,7 +61,7 @@ import { flash, takeReveal, useRevealWaiting } from './proposals/hooks'
 import { ProposalCell } from './proposals/ProposalCell'
 import { WrapAskCell } from './proposals/WrapAskCell'
 import { SystemCell } from './SystemCell'
-import { GroupCell, GroupEndCell, StepCell } from './steps'
+import { GroupCell, GroupEndCell, ProcessCell, StepCell } from './steps'
 import { colors } from './theme'
 import { Flash, ImageViewer, TurnMenu } from './turn-menu'
 
@@ -94,6 +94,8 @@ function renderRow(row: Row) {
       return <MarkdownCell row={row} />
     case 'reasoning':
       return <ReasoningCell row={row} />
+    case 'process':
+      return <ProcessCell row={row} />
     case 'group':
       return <GroupCell row={row} />
     case 'step':

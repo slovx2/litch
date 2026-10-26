@@ -1,14 +1,13 @@
 import {
   type Block,
+  blockInput,
   bucketItems,
-  cardPlace,
   type DeviceView,
   type ItemView,
   keys,
   processFolded,
   processItemIds,
   processSettled,
-  quietOf,
   type RequestView,
   type SessionMeta,
   type SessionSummary,
@@ -86,21 +85,7 @@ function useBlocks(
     const inputs = []
     for (const id of itemIds) {
       const item = store.get<ItemView>(keys.item(deviceId, sessionId, id))
-      if (!item) continue
-      const place = cardPlace(item)
-      // 收尾调用（空的、带建议的）：认最终回答时看它前后
-      const wrapUp = item.kind === 'toolCall' && item.wrapUp !== undefined ? { wrapUp: true } : {}
-      inputs.push(
-        item.kind === 'agentMessage'
-          ? { id, kind: item.kind, phase: item.phase, ...(place ? { card: place } : {}) }
-          : item.kind === 'userMessage' && item.event?.kind === 'remind'
-            ? { id, kind: item.kind, remind: true }
-            : place
-              ? { id, kind: item.kind, card: place, ...wrapUp }
-              : quietOf(item)
-                ? { id, kind: item.kind, quiet: true, ...wrapUp }
-                : { id, kind: item.kind },
-      )
+      if (item) inputs.push(blockInput(id, item))
     }
     const blocks = bucketItems(inputs, { turnRunning: status === 'running' })
     return {

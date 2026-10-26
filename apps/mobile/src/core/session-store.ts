@@ -219,8 +219,7 @@ export class SessionStore {
 
   /** 展开或收起一样东西（一组过程、其中一步、一段思考）。只重算它所在的那一个回合 */
   toggle(key: string, turnId: string): void {
-    if (this.builder.expanded.has(key)) this.builder.expanded.delete(key)
-    else this.builder.expanded.add(key)
+    this.builder.toggle(key, turnId)
     if (this.dirty !== 'all') this.dirty.add(turnId)
     this.publish()
   }

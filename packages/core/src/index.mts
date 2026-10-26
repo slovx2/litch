@@ -258,6 +258,7 @@ export {
   type Block,
   type BlockInput,
   type BucketOptions,
+  blockInput,
   bucketItems,
   type CardPlace,
   cardOf,

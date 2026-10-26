@@ -61,6 +61,21 @@ const call = (id, tool, extra = {}) => ({
   status: 'completed',
   ...extra,
 })
+/** 收尾调用：核心认出来的都带 wrapUp（没带建议、也没留问题的是空收尾，不画） */
+const wrapUpCall = (id, suggestions = 0, extra = {}) =>
+  call(id, 'wrap_up', {
+    wrapUp: {
+      summary: null,
+      suggestions: Array.from({ length: suggestions }, (_, n) => ({ title: `任务 ${n + 1}` })),
+    },
+    ...extra,
+  })
+/** 回合结束后整段过程收成一行：点开它（第一次建行之前点就是展开），看过程里的各段 */
+const opened = (view, turnId = 't') => {
+  const builder = new RowBuilder()
+  builder.toggle(`${turnId}:process`, turnId)
+  return builder.build(view, 'all')
+}
 const command = (id) => ({
   id,
   kind: 'command',
@@ -82,6 +97,8 @@ const user = (id, text, event) => ({
 })
 const viewOf = (itemIds, items, proposals = []) => ({
   forkedFrom: null,
+  can: { finalOnStart: false },
+  agents: [],
   proposals,
   requests: [],
   turns: [{ id: 't', status: 'completed', itemIds, startedAt: null, durationMs: 10, error: null }],
@@ -121,17 +138,16 @@ test('哪条调用画成几张卡：收尾按 callId 对上几张；start 按提
 })
 
 test('对话里的行：收尾的每条建议一张卡、排在过程组后面；没带建议的收尾不画，也不把过程组拆成两段', () => {
-  const items = [user('u', '做吧'), command('c1'), call('w0', 'wrap_up'), command('c2')]
-  const empty = new RowBuilder().build(viewOf(['u', 'c1', 'w0', 'c2'], items), 'all')
-  assert.deepEqual(types(empty), ['user', 'group', 'status'])
-  assert.equal(empty[1].count, 2)
+  const items = [user('u', '做吧'), command('c1'), wrapUpCall('w0'), command('c2')]
+  const empty = opened(viewOf(['u', 'c1', 'w0', 'c2'], items))
+  assert.deepEqual(types(empty), ['user', 'process', 'group', 'status'])
+  assert.equal(empty[2].count, 2)
 
   const list = [proposal('p1', { callId: 'w' }), proposal('p2', { callId: 'w' })]
-  const rows = new RowBuilder().build(
-    viewOf(['u', 'c1', 'w'], [user('u', '做吧'), command('c1'), call('w', 'wrap_up')], list),
-    'all',
+  const rows = opened(
+    viewOf(['u', 'c1', 'w'], [user('u', '做吧'), command('c1'), wrapUpCall('w', 2)], list),
   )
-  assert.deepEqual(types(rows), ['user', 'group', 'proposal', 'proposal', 'status'])
+  assert.deepEqual(types(rows), ['user', 'process', 'group', 'proposal', 'proposal', 'status'])
   assert.deepEqual(
     rows.filter((row) => row.type === 'proposal').map((row) => row.key),
     ['w:p1', 'w:p2'],
@@ -147,16 +163,15 @@ test('收尾区：带建议、留了问题的收尾在过程里只留一步，�
     actions: [{ label: '先修测试', message: '先把测试修了' }, { label: '不用了' }],
   }
   const list = [proposal('p1', { callId: 'w' })]
-  const rows = new RowBuilder().build(
+  const rows = opened(
     viewOf(
       ['u', 'c1', 'w', 'a'],
       [user('u', '做吧'), command('c1'), call('w', 'wrap_up', { wrapUp }), answer],
       list,
     ),
-    'all',
   )
-  assert.deepEqual(types(rows), ['user', 'group', 'md', 'wrapAsk', 'proposal', 'status'])
-  assert.equal(rows[1].count, 2, '收尾那一步留在过程里')
+  assert.deepEqual(types(rows), ['user', 'process', 'group', 'md', 'wrapAsk', 'proposal', 'status'])
+  assert.equal(rows[2].count, 2, '收尾那一步留在过程里')
   const ask = rows.find((row) => row.type === 'wrapAsk')
   assert.equal(ask.ask, '接着做哪个？')
   assert.deepEqual(
@@ -175,7 +190,8 @@ test('收尾区：带建议、留了问题的收尾在过程里只留一步，�
     ),
     'all',
   )
-  assert.deepEqual(types(askOnly), ['user', 'group', 'md', 'wrapAsk', 'status'])
+  // 过程收成一行，问题照样排在回答下面
+  assert.deepEqual(types(askOnly), ['user', 'process', 'md', 'wrapAsk', 'status'])
 })
 
 test('收尾区：回合还在跑时收尾带的卡片和问题先不排，过程里那一步照留；中途 start 的提案排在调用的位置', () => {
@@ -195,10 +211,11 @@ test('收尾区：回合还在跑时收尾带的卡片和问题先不排，过�
   assert.equal(live[2].count, 1, '收尾那一步留在过程里，start 不算进过程')
   assert.equal(live[1].key, 's:p2')
   // 回合结束：问题和收尾的卡排到回答下面，start 的卡留在原处
-  const done = new RowBuilder().build(view, 'all')
+  const done = opened(view)
   assert.deepEqual(types(done), [
     'user',
     'proposal',
+    'process',
     'group',
     'md',
     'wrapAsk',
@@ -224,16 +241,33 @@ test('中途 start 的提案不钉在回合末尾：后面的过程和回答接�
   ]
   const view = viewOf(['u', 'c1', 's', 'c2', 'a', 'c3'], items, list)
   const running = { ...view, turns: [{ ...view.turns[0], status: 'running', durationMs: null }] }
-  for (const turnView of [running, view])
-    assert.deepEqual(types(new RowBuilder().build(turnView, 'all')), [
-      'user',
-      'group',
-      'proposal',
-      'group',
-      'md',
-      'group',
-      'status',
-    ])
+  assert.deepEqual(types(new RowBuilder().build(running, 'all')), [
+    'user',
+    'group',
+    'proposal',
+    'group',
+    'md',
+    'group',
+    'status',
+  ])
+  // 回合结束：几段过程收成第一段开头的一行，点开了照原样排
+  assert.deepEqual(types(new RowBuilder().build(view, 'all')), [
+    'user',
+    'process',
+    'proposal',
+    'md',
+    'status',
+  ])
+  assert.deepEqual(types(opened(view)), [
+    'user',
+    'process',
+    'group',
+    'proposal',
+    'group',
+    'md',
+    'group',
+    'status',
+  ])
 })
 
 const json = (value) => [{ kind: 'text', text: JSON.stringify(value, null, 2) }]
@@ -299,10 +333,10 @@ test('交接：画成单独一行（标题、分叉会话），不进过程组�
   assert.equal(handOffOf(handOff('h', { input: cut })).title, '长任务 "引号"')
 
   const items = [user('u', '先别做了，看看这个'), command('c1'), handOff('h'), command('c2')]
-  const rows = new RowBuilder().build(viewOf(['u', 'c1', 'h', 'c2'], items), 'all')
-  assert.deepEqual(types(rows), ['user', 'group', 'handoff', 'group', 'status'])
-  assert.equal(rows[2].threadId, 'th-fork')
-  assert.equal(rows[2].running, false)
+  const rows = opened(viewOf(['u', 'c1', 'h', 'c2'], items))
+  assert.deepEqual(types(rows), ['user', 'process', 'group', 'handoff', 'group', 'status'])
+  assert.equal(rows[3].threadId, 'th-fork')
+  assert.equal(rows[3].running, false)
   const failed = new RowBuilder().build(
     viewOf(['u', 'h'], [user('u', 'x'), handOff('h', { status: 'failed', error: [] })]),
     'all',

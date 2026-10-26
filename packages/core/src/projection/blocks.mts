@@ -223,6 +223,23 @@ export function quietOf(item: ItemView): boolean {
   )
 }
 
+/**
+ * 一个条目交给 bucketItems 的样子（桌面、手机分块共用这一份）：助手消息带阶段和卡片位置，提醒收尾的那条用户消息带 remind，
+ * 画成卡片的带位置（收尾调用另带 wrapUp），空收尾标 quiet，别的只有标识和种类
+ */
+export function blockInput(id: string, item: ItemView): BlockInput {
+  const place = cardPlace(item)
+  // 收尾调用（空的、带建议的）：认最终回答时看它前后
+  const wrapUp = item.kind === 'toolCall' && item.wrapUp !== undefined ? { wrapUp: true } : {}
+  if (item.kind === 'agentMessage')
+    return { id, kind: item.kind, phase: item.phase, ...(place ? { card: place } : {}) }
+  if (item.kind === 'userMessage' && item.event?.kind === 'remind')
+    return { id, kind: item.kind, remind: true }
+  if (place) return { id, kind: item.kind, card: place, ...wrapUp }
+  if (quietOf(item)) return { id, kind: item.kind, quiet: true, ...wrapUp }
+  return { id, kind: item.kind }
+}
+
 /** 卡片放哪：露在外面、排进过程、收尾区（只有带建议或问题的收尾） */
 export type CardPlace = 'outside' | 'inline' | 'tail'
 
