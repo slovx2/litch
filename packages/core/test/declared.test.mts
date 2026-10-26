@@ -89,6 +89,7 @@ test('声明到了界面看得到的地方：harness 上带着它会什么；没
     backgroundTasks: false,
     stopBackground: false,
     goals: false,
+    ephemeralFork: false,
   })
   assert.equal(abilities.codex?.fork, true)
   assert.equal(abilities.old, null)
@@ -112,6 +113,7 @@ test('会话操作按声明来：声明了不会的一上来就是不会，去�
     finalOnStart: false,
     backgroundTasks: false,
     goals: false,
+    sideChat: false,
     declared: true,
   })
   for (const [name, params] of [

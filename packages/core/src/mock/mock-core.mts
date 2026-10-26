@@ -488,6 +488,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       finalOnStart: declared ? declared.finalOnStart : false,
       backgroundTasks: declared ? declared.backgroundTasks : false,
       goals: declared?.goals === true && !lacking.has(`${deviceId}:${harness}:goals`),
+      sideChat: declared?.ephemeralFork === true && can('fork'),
       declared: declared !== null,
     }
   }
@@ -2920,6 +2921,37 @@ export function createMockCore(options: MockCoreOptions): MockCore {
           forkedFrom: view.sessionId,
         })
         return { sessionId: summary.id }
+      }
+      // 侧聊：和真的核心一样带着到最近一个结束了的回合为止的内容，有回合在跑也行；不进侧栏
+      if (name === 'session.sideChat') {
+        const view = reachView(params as Commands['session.sideChat']['params'])
+        if (!view.can.sideChat) throw new ChannelError('unsupported', '对方不支持此操作')
+        const copy = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T
+        const turns = copy(view.turns.filter((turn) => turn.status !== 'running'))
+        const items: SessionView['items'] = {}
+        for (const turn of turns) {
+          for (const id of turn.itemIds) {
+            const item = view.items[id]
+            if (item) items[id] = copy(item)
+          }
+        }
+        const sessionId = `side${++seq}`
+        sessions.set(`session:${view.deviceId}:${sessionId}`, {
+          ...view,
+          sessionId,
+          live: true,
+          note: null,
+          turns,
+          items,
+          requests: [],
+          queued: [],
+          forkedFrom: view.sessionId,
+          proposals: [],
+          agents: [],
+          goal: null,
+          goalReached: null,
+        })
+        return { sessionId }
       }
       // 编辑重发：回退成了才发；发送没成的原因放在应答里（和真的核心一样）
       if (name === 'session.edit') {

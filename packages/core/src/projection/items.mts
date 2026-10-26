@@ -35,6 +35,7 @@ import { capDiff } from '../text/diff.mjs'
 import { capOutput, utf8Length } from '../text/output-cap.mjs'
 import { blob, capParts } from '../text/tool-cap.mjs'
 import { projectQuestions } from './asks.mjs'
+import { stripSideChatNote } from './side-chat.mjs'
 
 const baseName = (path: string): string => path.split(/[\\/]/).pop() || path
 
@@ -86,7 +87,8 @@ function userMessage(id: string, content: UserInput[], rawPeer?: unknown): UserM
         break
     }
   }
-  const text = texts.join('\n')
+  // 侧聊第一条消息开头给模型的边界说明不给人看
+  const text = stripSideChatNote(texts.join('\n'))
   // 别的会话发来的：原文照登，不认注入（那是对方的话）
   const peer = peerOf(rawPeer)
   if (peer) return { id, kind: 'userMessage', text, attachments, peer }

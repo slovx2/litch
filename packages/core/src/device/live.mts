@@ -19,6 +19,7 @@ import {
   type Thread,
   type ThreadItem,
   type Turn,
+  type UserInput,
 } from '../../../protocol/src/index.mjs'
 import type { WorktreeFrom } from '../../../protocol/src/worktrees.mjs'
 import { type Cancel, createCancel } from '../channel/cancel.mjs'
@@ -60,6 +61,7 @@ import {
   settingsDiff,
   turnOverrides,
 } from '../projection/settings.mjs'
+import { withSideChatNote } from '../projection/side-chat.mjs'
 import { spanOp } from '../projection/span.mjs'
 import {
   type KeptTodo,
@@ -212,6 +214,11 @@ export interface LiveSessions {
    * itemId：这个回合只带到插进去的这条用户消息之前（界面里的条目标识）
    */
   fork(sessionId: string, turnId: string, itemId?: string): Promise<string>
+  /**
+   * 侧聊：从这个会话临时分出一个会话（thread/fork 带 ephemeral），返回它的标识。带着到最近一个结束了的回合为止的上下文；
+   * 有回合在跑时截在它之前（主会话不受影响）。新会话不进侧栏，没人订阅一阵后对面就卸载了
+   */
+  sideChat(sessionId: string): Promise<string>
   /** 把 turnId 这个回合和它后面的都撤掉；带 itemId 时这一回合只撤掉这条插进去的话和它之后的 */
   rollback(sessionId: string, turnId: string, itemId?: string): Promise<void>
   /** 让对面开始压缩上下文。受理了就返回 */
@@ -318,6 +325,21 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       return result
     })
   }
+  /** 刚分出来的侧聊：第一条消息开头还要拼上给模型的边界说明（projection/side-chat.mts），发出去了就拿掉 */
+  const noted = new Set<string>()
+  /** 说明拼在正文那一段前面；只有图片、技能的消息补一段正文（放在技能后面：技能那一句要在话的开头） */
+  const withNote = (input: UserInput[]): UserInput[] => {
+    const at = input.findIndex((part) => part.type === 'text')
+    if (at >= 0) {
+      const part = input[at] as Extract<UserInput, { type: 'text' }>
+      return input.map((each, index) =>
+        index === at ? { ...part, text: withSideChatNote(part.text) } : each,
+      )
+    }
+    const skills = input.filter((part) => part.type === 'skill').length
+    const note: UserInput = { type: 'text', text: withSideChatNote(''), text_elements: [] }
+    return [...input.slice(0, skills), note, ...input.slice(skills)]
+  }
   let localSeq = 0
   /**
    * 这次运行的记号，拼进发给对面的消息号里。localSeq 每次启动从 0 数起，入口按“会话 + 消息号”永久记账
@@ -357,6 +379,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       backgroundTasks: declared ? declared.backgroundTasks : false,
       // 持续目标只认声明，没有声明的不先当它会（入口出来了也只能告诉人做不了）
       goals: declared?.goals === true && !lacks?.has('goals'),
+      sideChat: declared?.ephemeralFork === true && can('fork'),
       declared: declared !== null,
     }
   }
@@ -1122,12 +1145,15 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
         'turn/start',
         {
           threadId: live.id,
-          input: toInput(message, mentions),
+          input: noted.has(live.id)
+            ? withNote(toInput(message, mentions))
+            : toInput(message, mentions),
           ...overrides,
           ...(clientId ? { clientUserMessageId: clientId } : {}),
         },
         { timeoutMs: LOAD_TIMEOUT },
       )
+      noted.delete(live.id)
       // 对面收下了。请求途中用户又改过的那几项留着，下个回合再发。
       // 模式要是这一回没带上（还不知道模型），也留着
       for (const key of Object.keys(sent) as (keyof SessionSettings)[]) {
@@ -1768,6 +1794,38 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
         ),
       )
       host.started(thread)
+      return thread.id
+    },
+
+    async sideChat(sessionId) {
+      const live = need(sessionId)
+      mustReach(live)
+      if (!live.view.can.sideChat) throw new ChannelError('unsupported', UNSUPPORTED)
+      const { turns } = live.view
+      const running = isRunning(live.view)
+      // 有回合在跑：截在它之前，带走的都是结束了的回合（几家都只许这样在跑的时候分）；
+      // 它还没拿到对面的回合标识（刚发出去）就等一会儿再来。没在跑：带到最后一个回合为止
+      let where: { beforeTurnId: string } | { lastTurnId: string } | null = null
+      if (running) {
+        const server = serverTurn(live, running.id)
+        if (!server) throw new ChannelError('rejected', '回合正在开始，稍后再试')
+        where = { beforeTurnId: server }
+      } else {
+        const last = turns.at(-1)
+        const server = last ? serverTurn(live, last.id) : null
+        if (last && !server) throw new ChannelError('rejected', '回合正在开始，稍后再试')
+        if (server) where = { lastTurnId: server }
+      }
+      const { thread } = await attempt(live, 'fork', () =>
+        withSpeed(
+          'thread/fork',
+          // 内容打开时再取。临时的：不落盘、不进线程列表，侧栏也不放（device.mts 的 transient）
+          { threadId: sessionId, ...where, ephemeral: true, excludeTurns: true },
+          { timeoutMs: LOAD_TIMEOUT },
+        ),
+      )
+      host.started(thread)
+      noted.add(thread.id)
       return thread.id
     },
 

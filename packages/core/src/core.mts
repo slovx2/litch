@@ -645,6 +645,14 @@ export function createCore(options: CoreOptions): Core {
             throw toChannelFailure(error)
           }
         }
+        case 'session.sideChat': {
+          const { deviceId, sessionId } = params as Commands['session.sideChat']['params']
+          try {
+            return { sessionId: await deviceOf(deviceId).sideChat(sessionId) }
+          } catch (error) {
+            throw toChannelFailure(error)
+          }
+        }
         case 'session.rollback': {
           const { deviceId, sessionId, turnId, itemId } =
             params as Commands['session.rollback']['params']

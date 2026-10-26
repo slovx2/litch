@@ -115,6 +115,8 @@ export interface HarnessAbilities {
   stopBackground: boolean
   /** 持续目标（thread/goal/*）。不会的不出目标的入口 */
   goals: boolean
+  /** 临时分叉带着上下文（声明里的 ephemeralFork）。侧聊靠它，不会的不出侧聊的入口 */
+  ephemeralFork: boolean
 }
 
 /** 设备服务给的一段话的两种语言版本。核心不认识语言，原样交给界面，界面按当前的语言取 */
@@ -1084,6 +1086,11 @@ export interface SessionAbilities {
    * 声明了、调用时对面说没有这个方法或者关着这个特性的，记成不会
    */
   goals: boolean
+  /**
+   * 侧聊：从这个会话临时分出一段对话（带着它的上下文，不进侧栏，关掉就扔）。只认声明（ephemeralFork），
+   * 没声明的当它不会，不出入口
+   */
+  sideChat: boolean
   /** 这几项是照 harness 的声明给的，不是先当它会 */
   declared: boolean
 }
