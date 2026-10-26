@@ -1,14 +1,14 @@
 // 投影的第三步：一个回合里的显示条目 → 块。纯函数。
 // 一个回合画成：用户消息 → 过程 → 最终回答。过程按时间排三种东西：说明段（助手的中间说明，和回答同一套正文样式）、
 // 步骤组（两段说明之间连续的工具调用、思考、提示，收成一行汇总）、启动子代理的那一行。
-// 计划、待办、上下文压缩、派出的子会话露在过程外面，位置不变。回合结束后整段过程再收成一行。
+// 计划、待办、上下文压缩、派出的子会话露在过程外面，位置不变。有最终回答的回合结束后整段过程再收成一行（被打断的不收）。
 // 收尾（wrap_up）带的建议任务卡片连同留给用户的问题，固定画在回合最下方（最终回答下面）的收尾区里，
 // 原来调用的位置在过程里只留一行；等回合结束才进收尾区：规矩是先收尾、再写最终回答，收到就画的话卡片比回答先出来，
 // 没头没尾（照 Claude 桌面端：下一步框在回合结束前藏着）。
 // 回合中途 start 提的提案、offer 卡露在调用的位置，跟着对话往上走，后面的过程和回答接着往下长。
 
 import { CLIENT_TOOL_NAMESPACE } from '../../../protocol/src/client-tools.mjs'
-import type { ItemView } from '../model.mjs'
+import type { ItemView, TurnStatus } from '../model.mjs'
 import type { AgentThreadView } from '../model-tree.mjs'
 import type { Text } from '../phrase.mjs'
 import { spanOf } from './span.mjs'
@@ -183,17 +183,21 @@ export function processItemIds(parts: ProcessPart[]): string[] {
 }
 
 /**
- * 过程是不是告一段落了。回合结束了就是；回合还在进行时，最终回答已经写完也是。
- * “刚开始就说自己是最终回答”的消息只在 finalOnStart 为真时采信：harness 声明了消息一开始阶段值就是准的
- *（原生 codex），最终回答一开始就算。没声明的不信——前置验证 P6 的结论是 Claude Code 和 Pi 都要等消息写完才分得清。
+ * 过程是不是告一段落、可以收成一行了。照 Codex 桌面端（有最终回答、没被打断才让收）：
+ * 被打断的回合不收，没有最终回答的回合结束了也不收——收起来只剩一行“已处理”“已中断”，
+ * 中途做了什么、写了一半的回答都藏进去了，而停下来以后用户要看的就是这些。
+ * 回合还在进行时，最终回答已经写完就算。“刚开始就说自己是最终回答”的消息只在 finalOnStart 为真时采信：
+ * harness 声明了消息一开始阶段值就是准的（原生 codex），最终回答一开始就算。没声明的不信——
+ * 前置验证 P6 的结论是 Claude Code 和 Pi 都要等消息写完才分得清。
  * answer 是最终回答那一条（没有就不给）
  */
 export function processSettled(
-  turnRunning: boolean,
+  status: TurnStatus,
   answer: { kind: ItemView['kind']; phase?: string; status?: string }[],
   finalOnStart = false,
 ): boolean {
-  if (!turnRunning) return true
+  if (status === 'interrupted') return false
+  if (status !== 'running') return answer.length > 0
   return answer.some(
     (item) =>
       item.kind === 'agentMessage' &&

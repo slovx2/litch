@@ -139,15 +139,16 @@ test('哪条调用画成几张卡：收尾按 callId 对上几张；start 按提
 
 test('对话里的行：收尾的每条建议一张卡、排在过程组后面；没带建议的收尾不画，也不把过程组拆成两段', () => {
   const items = [user('u', '做吧'), command('c1'), wrapUpCall('w0'), command('c2')]
+  // 没有最终回答的回合结束了也不收（核心的 processSettled），没有收起整段过程的那一行
   const empty = opened(viewOf(['u', 'c1', 'w0', 'c2'], items))
-  assert.deepEqual(types(empty), ['user', 'process', 'group', 'status'])
-  assert.equal(empty[2].count, 2)
+  assert.deepEqual(types(empty), ['user', 'group', 'status'])
+  assert.equal(empty[1].count, 2)
 
   const list = [proposal('p1', { callId: 'w' }), proposal('p2', { callId: 'w' })]
   const rows = opened(
     viewOf(['u', 'c1', 'w'], [user('u', '做吧'), command('c1'), wrapUpCall('w', 2)], list),
   )
-  assert.deepEqual(types(rows), ['user', 'process', 'group', 'proposal', 'proposal', 'status'])
+  assert.deepEqual(types(rows), ['user', 'group', 'proposal', 'proposal', 'status'])
   assert.deepEqual(
     rows.filter((row) => row.type === 'proposal').map((row) => row.key),
     ['w:p1', 'w:p2'],
@@ -334,9 +335,9 @@ test('交接：画成单独一行（标题、分叉会话），不进过程组�
 
   const items = [user('u', '先别做了，看看这个'), command('c1'), handOff('h'), command('c2')]
   const rows = opened(viewOf(['u', 'c1', 'h', 'c2'], items))
-  assert.deepEqual(types(rows), ['user', 'process', 'group', 'handoff', 'group', 'status'])
-  assert.equal(rows[3].threadId, 'th-fork')
-  assert.equal(rows[3].running, false)
+  assert.deepEqual(types(rows), ['user', 'group', 'handoff', 'group', 'status'])
+  assert.equal(rows[2].threadId, 'th-fork')
+  assert.equal(rows[2].running, false)
   const failed = new RowBuilder().build(
     viewOf(['u', 'h'], [user('u', 'x'), handOff('h', { status: 'failed', error: [] })]),
     'all',

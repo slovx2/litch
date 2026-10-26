@@ -398,11 +398,11 @@ export class RowBuilder {
       reported ??= agentStatesOf(items)
       return reported
     }
-    // 整段过程告一段落（回合结束，或者最终回答写完了）就收成一行，照桌面端：用户在这一回合里点开过某一组、某一步，
+    // 整段过程告一段落（有最终回答、没被打断，规矩在核心的 processSettled）就收成一行，照桌面端：用户在这一回合里点开过某一组、某一步，
     // 或者还有子代理没做完时不自动收。点那一行翻转（expanded 里有它的键就和自动的相反）
     const answerId = blocks.find((block) => block.type === 'answer')?.itemId
     const answer = answerId ? view.items[answerId] : undefined
-    const settled = processSettled(running, answer ? [answer] : [], view.can.finalOnStart)
+    const settled = processSettled(turn.status, answer ? [answer] : [], view.can.finalOnStart)
     const processKey = `${turn.id}:process`
     const open =
       this.processOpen.get(turn.id) ??

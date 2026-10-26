@@ -81,7 +81,9 @@ button.
 The transcript (messages, activity, to-dos, plans, file changes that open in the Diff tab), cards above
 the composer (approvals, questions, forms, browser site approvals, "operate this computer"
 approvals, plan confirmation, sub-session proposals), and the composer. Details in
-`sessions-and-projects.md`.
+`sessions-and-projects.md`. When a turn ends with a final answer its activity folds into one line (click
+to open it; the phone does the same); a stopped turn, or one that ended without a final answer, stays
+open, so what was done and a reply cut off midway are in view.
 
 ### Devices
 

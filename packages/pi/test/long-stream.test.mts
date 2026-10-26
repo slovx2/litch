@@ -627,3 +627,71 @@ test('STREAM-PI-006：回合被打断、出错时，库里存着的是完整的�
       },
     )
 })
+
+test('STREAM-PI-007：写了一半的回答时被打断，读过的工具和那半段话都在回合里，换一个服务进程读也在', {
+  timeout: 60_000,
+}, async () => {
+  const PARTIAL = '读过了，接下来要改的是'
+  await scene(
+    async (body, res) => {
+      if (toolResults(body) === 0) {
+        for (const text of callFrames(0)) res.write(text)
+        return
+      }
+      // 字写出去以后停住，等被打断（Pi 断开请求）
+      res.write(frame({ role: 'assistant', content: PARTIAL }))
+      await new Promise((resolve) => res.on('close', resolve))
+    },
+    async ({ server, root, cwd, first, ok }) => {
+      await writeFile(join(cwd, 'big.txt'), FILE)
+      const threadId = (await ok(first, 'thread/start', { cwd, model: 'gate/gate' })).thread.id
+      await ok(first, 'turn/start', { threadId, input: [{ type: 'text', text: '读一遍再改' }] })
+      await until('回答的字流出来', () =>
+        first.deltas('item/agentMessage/delta').join('').includes(PARTIAL),
+      )
+      await ok(first, 'turn/interrupt', { threadId })
+      await until('回合结束', () => first.messages.some((m) => m.method === 'turn/completed'))
+      const completed = first.messages.find((m) => m.method === 'turn/completed').params.turn
+      assert.equal(completed.status, 'interrupted')
+      const shape = (turn: any) =>
+        turn.items.map((item: any) =>
+          item.type === 'agentMessage' ? [item.type, item.text] : [item.type, item.status ?? null],
+        )
+      const expected = [
+        ['userMessage', null],
+        ['mcpToolCall', 'completed'],
+        ['agentMessage', PARTIAL],
+      ]
+      assert.deepEqual(shape(completed), expected, '打断时')
+      // 另起一个服务进程（库是这一刻的副本），读会话时从 Pi 自己的记录重画
+      const home = await mkdtemp(join(root, 'again-'))
+      server.store.db.exec(`VACUUM INTO '${join(home, 'adapter.sqlite')}'`)
+      const again = new PiServer(home)
+      try {
+        const peer = recorder('again')
+        await again.handle(peer, {
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'initialize',
+          params: {
+            clientInfo: { name: 'again', title: null, version: '1.0.0' },
+            capabilities: {},
+          },
+        })
+        await again.handle(peer, {
+          jsonrpc: '2.0',
+          id: 2,
+          method: 'thread/read',
+          params: { threadId, includeTurns: true },
+        })
+        const read = peer.messages.find((m) => m.id === 2 && !m.method)
+        assert.equal(read?.error, undefined, JSON.stringify(read?.error))
+        const turn = read.result.thread.turns.at(-1)
+        assert.equal(turn.status, 'interrupted')
+        assert.deepEqual(shape(turn), expected, '换一个服务进程读')
+      } finally {
+        await again.close()
+      }
+    },
+  )
+})
