@@ -58,6 +58,8 @@ test('斜杠单子：会目标、只打了 / 开头的一个词、是 /goal 的�
 test('达成那一句：排在达成它的回合最后一条回答下面、收尾卡片和状态行上面；回合在跑时不排', () => {
   const view = {
     forkedFrom: null,
+    can: { finalOnStart: false },
+    agents: [],
     proposals: [],
     requests: [],
     turns: [
@@ -101,7 +103,8 @@ test('达成那一句：排在达成它的回合最后一条回答下面、收�
   const rows = new RowBuilder().build(view, 'all')
   assert.deepEqual(
     rows.map((row) => row.type),
-    ['md', 'status', 'origin', 'md', 'group', 'md', 'goalReached', 'status'],
+    // 第二轮里先说的那句是过程里的说明，回合结束跟着过程收成一行（照桌面端）
+    ['md', 'status', 'origin', 'process', 'md', 'goalReached', 'status'],
   )
   const line = rows.find((row) => row.type === 'goalReached')
   assert.equal(line.turnId, 't2')

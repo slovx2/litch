@@ -57,6 +57,8 @@ export interface RelaySessions {
   clientTurn(harness: string, turnId: string): void
   /** 一个回合开始或结束了（turn/started、turn/completed 的参数） */
   turnEvent(harness: string, method: string, params: Record<string, unknown>): void
+  /** 一个条目开始或结束了（item/started、item/completed 的参数）：认别的会话经 harness 自己的收件箱发来的消息 */
+  itemEvent(params: Record<string, unknown>): void
   /** 会话对象经过、这条连接声明了 sessionTree：挂上 litchLineage */
   decorate(thread: Record<string, unknown>): void
   /** 会话删掉了（thread/delete 成功、thread/deleted 通知） */
@@ -335,6 +337,8 @@ export class Relay {
         this.host.clientTools.turnBegan(link, threadId, turn.id)
       if (fields) this.host.sessions.turnEvent(link.harness, method, fields)
     }
+    if (fields && (method === 'item/started' || method === 'item/completed'))
+      this.host.sessions.itemEvent(fields)
     if (fields) this.host.observe(link, method, fields)
     // harness 详情设置的通知（引擎发的配置变了、登录有进展）只给声明过这项扩展的连接
     if (isHarnessConfigNotification(method) && !this.host.declares(EXTENSION.harnessConfig)) return

@@ -180,3 +180,38 @@ test('SESSION-STORE-004：上一版的库升上来：提案多出 effort 一列�
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
+test('SESSION-STORE-005：上一版的库升上来：用户 @ 过的、派出过子会话的两边都算发过消息，mentions 表去掉', () => {
+  const dir = tempDir()
+  try {
+    const old = new DatabaseSync(join(dir, 'sessions.sqlite'))
+    initializeStoreFormat(old)
+    const previous = SESSION_SCHEMA_VERSION - 1
+    for (const step of SESSION_MIGRATIONS.slice(0, previous)) old.exec(step)
+    old.exec(`PRAGMA user_version=${previous}`)
+    old.exec(
+      `INSERT INTO mentions(thread_id, mentioned_id, created_at) VALUES('z1', 'a1', 5), ('a1', 'z1', 6)`,
+    )
+    old.exec(`INSERT INTO lineage(thread_id, parent_thread_id, harness, kind, origin, title, prompt, wake_parent, created_at)
+      VALUES('c1', 'p1', 'pi', 'fresh', 'model', '子', '做事', 1, 10)`)
+    old.close()
+    const db = openSessionDatabase(dir)
+    const store = new SessionStore(db)
+    assert.equal(store.contacted('a1', 'z1'), true)
+    assert.equal(store.contacted('z1', 'a1'), true)
+    assert.equal(store.contacted('p1', 'c1'), true)
+    assert.equal(store.contacted('c1', 'z1'), false)
+    assert.equal(
+      db.prepare("SELECT count(*) AS n FROM sqlite_master WHERE name='mentions'").get()?.n,
+      0,
+    )
+    store.addContact('x', 'c1')
+    assert.equal(store.contacted('c1', 'x'), true)
+    store.dropContacts('c1')
+    assert.equal(store.contacted('p1', 'c1'), false)
+    assert.equal(store.contacted('x', 'c1'), false)
+    db.close()
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})

@@ -1,18 +1,18 @@
 import {
   type Block,
+  blockInput,
   bucketItems,
-  cardPlace,
   type DeviceView,
   type ItemView,
   keys,
   processFolded,
   processItemIds,
   processSettled,
-  quietOf,
   type RequestView,
   type SessionMeta,
   type SessionSummary,
   type Text,
+  type TurnStatus,
   type TurnView,
   workingShown,
 } from '@litch/core'
@@ -86,21 +86,7 @@ function useBlocks(
     const inputs = []
     for (const id of itemIds) {
       const item = store.get<ItemView>(keys.item(deviceId, sessionId, id))
-      if (!item) continue
-      const place = cardPlace(item)
-      // 收尾调用（空的、带建议的）：认最终回答时看它前后
-      const wrapUp = item.kind === 'toolCall' && item.wrapUp !== undefined ? { wrapUp: true } : {}
-      inputs.push(
-        item.kind === 'agentMessage'
-          ? { id, kind: item.kind, phase: item.phase, ...(place ? { card: place } : {}) }
-          : item.kind === 'userMessage' && item.event?.kind === 'remind'
-            ? { id, kind: item.kind, remind: true }
-            : place
-              ? { id, kind: item.kind, card: place, ...wrapUp }
-              : quietOf(item)
-                ? { id, kind: item.kind, quiet: true, ...wrapUp }
-                : { id, kind: item.kind },
-      )
+      if (item) inputs.push(blockInput(id, item))
     }
     const blocks = bucketItems(inputs, { turnRunning: status === 'running' })
     return {
@@ -115,12 +101,12 @@ function useBlocks(
 }
 
 /**
- * 过程是不是告一段落了：回合结束，或者最终回答写完了（声明了一开始就知道的 harness，一开始就算）。
+ * 过程是不是告一段落、可以收成一行了（规矩在核心的 processSettled：有最终回答、没被打断）。
  * 要看最终回答那一条，所以订阅它；结果是个布尔值，回答的文字在变而结论没变时不会引起重画
  */
 function useSettled(
   ref: SessionRef,
-  running: boolean,
+  status: TurnStatus | undefined,
   answerId: string | undefined,
   finalOnStart: boolean,
 ): boolean {
@@ -133,7 +119,7 @@ function useSettled(
   )
   return useSyncExternalStore(subscribe, () => {
     const answer = key ? store.get<ItemView>(key) : undefined
-    return processSettled(running, answer ? [answer] : [], finalOnStart)
+    return processSettled(status ?? 'running', answer ? [answer] : [], finalOnStart)
   })
 }
 
@@ -236,7 +222,7 @@ const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { 
   const sessionKey = `${deviceId}:${sessionId}`
   const running = turn?.status === 'running'
   const { blocks, remind, answerId, processIds } = useBlocks(ref, turn?.itemIds ?? [], turn?.status)
-  const settled = useSettled(ref, running, answerId, meta?.can.finalOnStart === true)
+  const settled = useSettled(ref, turn?.status, answerId, meta?.can.finalOnStart === true)
   const working = useLasting(useWorking(ref, running, turn?.itemIds ?? NO_ITEMS), WORKING_DELAY_MS)
   // 模型请求在重试：状态行一直显出，后面写第几次和原因，重试结束（新一次出字）就去掉
   const retry = running ? (turn?.retry ?? null) : null

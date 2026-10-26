@@ -2,7 +2,14 @@
 // 和桌面端（packages/ui/src/transcript/AskCard.tsx）同一套规矩：题目来自助手消息上的 questions，
 // 答复是一条普通的用户消息（核心的 projection/asks.mts 写、认），回合还在跑时直接插进这个回合。
 // 带题的消息在行里照常是几块 Markdown（行的规矩不动）：第一块画成这张卡片，其余的块不画。
-import { type AskQuestion, type AskReply, askReplyText, askState } from '@litch/core'
+// 问用户的工具（AskUserQuestion 等）答完以后画成同一个样子的问答卡片（AskedCell，同桌面端的 AskedCard）。
+import {
+  type AskQuestion,
+  type AskReply,
+  askReplyText,
+  askState,
+  type ToolCallItem,
+} from '@litch/core'
 import { memo, useState, useSyncExternalStore } from 'react'
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import { whyNot } from '../../../../../packages/ui/src/app/errors.ts'
@@ -221,6 +228,104 @@ export const AskCell = memo(function AskCell({
   )
 })
 
+/**
+ * 问用户的工具画成的问答卡片（核心的 ToolCallItem.asked）：每题是题头、题目、选项（选中的打勾），自己写的回答引在下面，
+ * 没答的写“已跳过”；结果对不上题目的，题目下面是原始回答。问的时候在请求卡片上答，这里只读
+ */
+export const AskedCell = memo(function AskedCell({ item }: { item: ToolCallItem }) {
+  const theme = useTheme()
+  const { c, font } = theme
+  const t = useT()
+  const asked = item.asked
+  if (!asked) return null
+  const state =
+    item.status === 'inProgress' ? 'open' : item.status === 'completed' ? 'answered' : 'closed'
+  const quote = (text: string, skipped: boolean) => (
+    <Text
+      style={[
+        styles.answer,
+        { color: skipped ? c.ink3 : c.ink, borderLeftColor: skipped ? c.line2 : c.accent },
+      ]}
+    >
+      {text}
+    </Text>
+  )
+  return (
+    <View
+      testID={`asked:${item.id}`}
+      style={[
+        styles.card,
+        {
+          borderColor: state === 'open' ? c.line3 : c.line2,
+          backgroundColor: c.raised,
+          borderRadius: theme.radius.l,
+        },
+      ]}
+    >
+      <View style={styles.head}>
+        <Text style={[styles.kind, { color: c.ink3, fontFamily: font.mono }]}>
+          ? {t('ask.title')}
+        </Text>
+        <Text
+          style={[
+            styles.state,
+            { color: state === 'open' ? c.wait : c.ink3, fontFamily: font.mono },
+          ]}
+        >
+          {t(`ask.state.${state}`)}
+        </Text>
+      </View>
+      {asked.questions.map((question, at) => (
+        <View
+          // biome-ignore lint/suspicious/noArrayIndexKey: 题目不会增删换位
+          key={at}
+          style={[styles.question, at > 0 ? { borderTopColor: c.line1, ...styles.split } : null]}
+        >
+          {question.header ? (
+            <Text style={{ color: c.ink3, fontSize: font.size.meta }}>{question.header}</Text>
+          ) : null}
+          <Text style={[styles.title, { color: c.ink, fontSize: font.size.body }]}>
+            {question.question}
+          </Text>
+          {question.options.map((option, index) => {
+            const picked = question.picked.includes(index)
+            return (
+              <View
+                // biome-ignore lint/suspicious/noArrayIndexKey: 同上
+                key={index}
+                style={styles.pick}
+                accessibilityLabel={picked ? `${t('ask.picked')} ${option.label}` : option.label}
+              >
+                <Text style={[styles.mark, { color: c.accent }]}>{picked ? '✓' : ''}</Text>
+                <View style={styles.pickText}>
+                  <Text style={{ color: picked ? c.ink : c.ink2, fontSize: font.size.body }}>
+                    {option.label}
+                  </Text>
+                  {option.description ? (
+                    <Text style={{ color: c.ink3, fontSize: font.size.meta }}>
+                      {option.description}
+                    </Text>
+                  ) : null}
+                </View>
+              </View>
+            )
+          })}
+          {question.other !== null
+            ? quote(question.other, false)
+            : state === 'answered' && asked.raw === null && question.answer === null
+              ? quote(t('ask.skipped'), true)
+              : null}
+        </View>
+      ))}
+      {asked.raw !== null ? (
+        <View style={[styles.question, { borderTopColor: c.line1, ...styles.split }]}>
+          {quote(asked.raw, state !== 'answered')}
+        </View>
+      ) : null}
+    </View>
+  )
+})
+
 /** 用户消息整段是一份答复时，气泡里画成“题目 → 回答”，不露那一段标签和 JSON */
 export function AskReplyText({ replies }: { replies: AskReply[] }) {
   const { c, font } = useTheme()
@@ -256,6 +361,9 @@ const styles = StyleSheet.create({
   option: { borderWidth: 1, paddingHorizontal: 10, paddingVertical: 8, justifyContent: 'center' },
   input: { borderWidth: 1, paddingHorizontal: 10, fontSize: 15 },
   answer: { borderLeftWidth: 2, paddingLeft: 10, fontSize: 15, lineHeight: 21 },
+  pick: { flexDirection: 'row', gap: 8 },
+  mark: { width: 14, fontSize: 15, lineHeight: 21 },
+  pickText: { flex: 1, gap: 2 },
   note: { paddingHorizontal: 12, paddingBottom: 8, lineHeight: 19 },
   acts: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, paddingTop: 0 },
   hint: { flex: 1, lineHeight: 18 },

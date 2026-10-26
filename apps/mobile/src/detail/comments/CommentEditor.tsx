@@ -1,6 +1,6 @@
 // 写评论、改评论的对话框：上面是引用的那段（太长的可以在框里滚），下面一个多行输入框。
 // 新加的（全文页选好一段之后）按钮是“加上”；改输入框上的评论片时是“保存”，另有“删掉”，能找到原文的还有“定位原文”。
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { useT } from '../../ui/i18n'
 import { Button } from '../../ui/kit/controls'
@@ -33,11 +33,21 @@ export function CommentEditor({
   const { c } = theme
   const t = useT()
   const [value, setValue] = useState(note)
+  const input = useRef<TextInput>(null)
+  // 新加的一打开就写：autoFocus 在安卓的对话框里只给光标不出键盘（那时对话框的窗口还没拿到焦点），
+  // 对话框出来以后放掉焦点再拿一次
+  const focus = () => {
+    if (index !== null) return
+    requestAnimationFrame(() => {
+      input.current?.blur()
+      input.current?.focus()
+    })
+  }
   useEffect(() => {
     if (visible) setValue(note)
   }, [visible, note])
   return (
-    <Dialog visible={visible} onClose={onClose}>
+    <Dialog visible={visible} onClose={onClose} onShow={focus}>
       <Text style={[styles.title, { color: c.ink }]}>
         {index === null ? t('comment.editor.new') : t('comment.ref', { n: index })}
       </Text>
@@ -50,6 +60,7 @@ export function CommentEditor({
         </Text>
       </ScrollView>
       <TextInput
+        ref={input}
         autoFocus={index === null}
         value={value}
         onChangeText={setValue}
@@ -97,8 +108,9 @@ export function CommentEditor({
           label={t(index === null ? 'comment.editor.add' : 'comment.editor.save')}
           testID="comment-editor:ok"
           onPress={() => {
-            onClose()
+            // 先交上去再关：关掉在“回复”那里等于取消
             onSubmit(value.trim())
+            onClose()
           }}
         />
       </View>

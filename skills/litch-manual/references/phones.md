@@ -55,9 +55,11 @@ to happen within 2 minutes. Do not show the QR code while sharing the screen.
   description, time, and a status: queued, running, done, failed or stopped); tap it to open the
   subagent's page with its task, the failure reason and its own transcript (read only). Tapping an
   activity group opens its steps below it, with **Collapse** at the end; the tapped line stays in place.
-- **Quote part of a reply**: long-press a reply → Select text, select a passage, then Reply in the system
-  menu. The passage goes above the input box as a quote (the same comment chip as "Comment on this
-  reply" on the desktop, sent as `<litch-comments>`); tap the chip to add a note. Done leaves selecting.
+- **Quote part of a reply**: long-press a reply → Select text; the word under the finger is already
+  selected with both handles (drag them, or long-press elsewhere). Reply in the system menu opens a box
+  to write a note on the passage (it can stay empty); Add puts it above the input box as a quote (the same
+  comment chip as "Comment on this reply" on the desktop, sent as `<litch-comments>`) and focuses the
+  input. Tap the chip to change the note. Done leaves selecting.
 - **Updates**: the phone checks the GitHub release feed and shows a bar on the device and session lists;
   the user taps Update, then confirms the system installer. If it says the new version is signed
   differently, the installed build was not a release build (for example one installed for testing):

@@ -3,8 +3,9 @@
 //     （对面不增量给输出时，这是唯一看得出它还活着的东西）；等批准的命令写的是“待审批”，不计时。
 //     跑完之后那一行是动作和个数（“运行 1 条命令”）和用时。
 //     回合在跑时，最下面“{harness} 正在工作”那一行后面跟着这一回合已经跑了多久。
-// 二、整段过程什么时候自己收成一行：一般的 harness 等最终回答写完（这里是回合停下）；声明了“最终回答一开始就知道”的
-//     （模拟核心里的 Codex）在最终回答一开始就收。用户在回合里手动展开过步骤组的，回合结束也不收。
+// 二、整段过程什么时候自己收成一行：一般的 harness 等最终回答写完；声明了“最终回答一开始就知道”的
+//     （模拟核心里的 Codex）在最终回答一开始就收。用户在回合里手动展开过步骤组的，回合结束也不收；
+//     点了停止的回合不收（照 Codex 桌面端），过程摊着。
 // 三、思考：只有一行浅字（不写“想了一下”），点开看全文。
 // 整个函数会被转成文字放进页面里执行，所以用到的工具都写在函数里面。
 
@@ -19,15 +20,15 @@ export interface ActivityProbe {
     done: string
     /** 最终回答已经在出字、回合还没结束的那一刻，过程是不是还摊着 */
     openWhileAnswering: boolean
-    /** 回合结束之后整段过程收成了一行 */
+    /** 回合写完回答、正常结束之后整段过程收成了一行 */
     closedAfter: boolean
     /** 回合在跑时“正在工作”那一行后面写的回合用时（去重，按出现的先后） */
     turnElapsed: string[]
   }
   /** 只有思考的一段：浅字一行、没有动词、点开有全文 */
   thought: { line: string; quiet: boolean; verb: boolean; full: boolean }
-  /** 等批准的命令：步骤组那一行写的字、有没有在计时 */
-  waiting: { label: string; timed: boolean }
+  /** 等批准的命令：步骤组那一行写的字、有没有在计时；点了停止之后过程还摊着、没有收起那一行 */
+  waiting: { label: string; timed: boolean; openAfterStop: boolean }
   /** 回合进行中手动展开过步骤组：回合结束之后过程还摊着 */
   touched: { openAfter: boolean }
   /** 声明了“最终回答一开始就知道”的 harness（Codex）上的会话 */
@@ -113,8 +114,11 @@ export async function activityProbe(): Promise<ActivityProbe> {
     }
     return false
   }
-  /** 发一句“跑一会儿”，一路看到回合结束。touch：命令在跑的时候点开步骤组 */
-  const runAWhile = async (touch = false) => {
+  /**
+   * 发一句“跑一会儿”，一路看到回合结束。touch：命令在跑的时候点开步骤组。
+   * finish：等回答写完、回合自己结束（要十几秒）；不给就看到回答出字后停掉
+   */
+  const runAWhile = async (touch = false, finish = false) => {
     const before = all('.turn').length
     await say('跑一会儿')
     await until('新的回合', () => all('.turn').length > before)
@@ -143,7 +147,8 @@ export async function activityProbe(): Promise<ActivityProbe> {
     // 最终回答开始出字、回合还在跑的那一刻
     await until('最终回答开始出字', () => answering() || !running(), 60_000)
     const openWhileAnswering = running() ? procOpen() : null
-    await stop()
+    if (finish) await idle()
+    else await stop()
     await frame()
     await frame()
     return {
@@ -159,7 +164,7 @@ export async function activityProbe(): Promise<ActivityProbe> {
 
   // ---- 一、一般的 harness ----
   await open('远程设备安装指引')
-  const plain = await runAWhile()
+  const plain = await runAWhile(false, true)
   if (plain.openWhileAnswering === null) {
     throw new Error('过程区：没赶上最终回答出字的那一段（回合已经结束了）')
   }
@@ -175,10 +180,13 @@ export async function activityProbe(): Promise<ActivityProbe> {
   const waiting = {
     label: text(one('[data-state="waiting"]', held ?? undefined)),
     timed: Boolean(one('[data-elapsed]', lastTurn() ?? undefined)),
+    openAfterStop: false,
   }
   // 不答它，直接把回合停掉：挂着的请求跟着作废
   if (!card.isConnected) throw new Error('过程区：审批卡片自己没了')
   await stop()
+  await frame()
+  waiting.openAfterStop = procOpen() && !one('.proc-head', lastTurn() ?? undefined)
 
   // ---- 只有思考的一段 ----
   await say('推理一会儿')
@@ -256,6 +264,7 @@ export function judgeActivity(probe: ActivityProbe): string[] {
   if (!plain.closedAfter) failed.push('回合结束之后整段过程没有收成一行')
   if (waiting.label !== '待审批') failed.push(`等批准的命令那一行写的是“${waiting.label}”`)
   if (waiting.timed) failed.push('等批准的命令在计时：等人的时间不该算成它跑了多久')
+  if (!waiting.openAfterStop) failed.push('点了停止的回合，过程收起来了（应该摊着）')
   if (!touched.openAfter) failed.push('回合里手动展开过步骤组，回合结束时过程还是自己收起来了')
   if (!early.closedWhileAnswering) {
     failed.push('声明了“最终回答一开始就知道”的 harness：最终回答已经在出字，过程还摊着')

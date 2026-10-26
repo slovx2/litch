@@ -25,6 +25,8 @@ export interface BackgroundTaskView {
   itemId: string | null
   /** 发起它的回合（协议里的回合标识）。不知道是 null */
   turnId: string | null
+  /** 后台子代理在会话里对应的子线程（点了进子代理页）。没有是 null */
+  agentThreadId: string | null
   /** 毫秒时间戳。不知道是 null */
   startedAt: number | null
   endedAt: number | null
@@ -46,7 +48,7 @@ export interface BackgroundEntryView {
   status: BackgroundTaskStatus
   /** task 是集合里任务的标识，agent 是子代理线程 */
   id: string
-  /** source 为 task 时是集合里的那个任务，别的是 null */
+  /** 集合里的那个任务；子代理线程不在集合里的是 null */
   task: BackgroundTaskView | null
   /** 毫秒时间戳。不知道是 null */
   startedAt: number | null

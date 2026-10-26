@@ -134,6 +134,20 @@ const MIGRATIONS: readonly string[] = [
      PRIMARY KEY(thread_id, mentioned_id)
    ) WITHOUT ROWID;
    CREATE INDEX mentions_by_target ON mentions(mentioned_id);`,
+  // 两个会话之间发过消息（任何一方向另一方：litch_sessions.send、打断、用户 @、派子会话……）：之后一直可以互相发消息。
+  // 一对不分方向，a 是字典序小的那个。以前记的 @、派出的子会话都算发过
+  `CREATE TABLE contacts(
+     a TEXT NOT NULL,
+     b TEXT NOT NULL,
+     created_at INTEGER NOT NULL,
+     PRIMARY KEY(a, b)
+   ) WITHOUT ROWID;
+   CREATE INDEX contacts_by_b ON contacts(b);
+   INSERT OR IGNORE INTO contacts(a, b, created_at)
+     SELECT min(thread_id, mentioned_id), max(thread_id, mentioned_id), created_at FROM mentions;
+   INSERT OR IGNORE INTO contacts(a, b, created_at)
+     SELECT min(thread_id, parent_thread_id), max(thread_id, parent_thread_id), created_at FROM lineage;
+   DROP TABLE mentions;`,
 ]
 
 export const SESSION_SCHEMA_VERSION = MIGRATIONS.length
@@ -317,14 +331,9 @@ export class SessionStore {
          ON CONFLICT(thread_id) DO UPDATE SET speed=excluded.speed`,
       ),
       dropSpeed: prepare('DELETE FROM thread_speeds WHERE thread_id=?'),
-      addMention: prepare(
-        'INSERT OR IGNORE INTO mentions(thread_id, mentioned_id, created_at) VALUES(?, ?, ?)',
-      ),
-      mentioned: prepare(
-        `SELECT 1 AS hit FROM mentions
-         WHERE (thread_id=? AND mentioned_id=?) OR (thread_id=? AND mentioned_id=?) LIMIT 1`,
-      ),
-      dropMentions: prepare('DELETE FROM mentions WHERE thread_id=? OR mentioned_id=?'),
+      addContact: prepare('INSERT OR IGNORE INTO contacts(a, b, created_at) VALUES(?, ?, ?)'),
+      contacted: prepare('SELECT 1 AS hit FROM contacts WHERE a=? AND b=?'),
+      dropContacts: prepare('DELETE FROM contacts WHERE a=? OR b=?'),
       option: prepare('SELECT value FROM harness_options WHERE harness=? AND key=?'),
       setOption: prepare(
         `INSERT INTO harness_options(harness, key, value) VALUES(?, ?, ?)
@@ -412,6 +421,8 @@ export class SessionStore {
       row.proposalId ?? null,
     )
     this.lineage.set(row.threadId, full)
+    // 派子会话就是父会话给它发了第一条消息：之后两边一直可以互相发
+    this.addContact(row.parentThreadId, row.threadId)
     return full
   }
 
@@ -670,22 +681,27 @@ export class SessionStore {
     else this.run('setSpeed', threadId, speed)
   }
 
-  // ---------- 用户 @ 过的会话 ----------
+  // ---------- 发过消息的会话 ----------
 
-  /** 用户在 threadId 里发的话 @ 了这些会话 */
-  addMentions(threadId: string, mentioned: readonly string[]): void {
-    for (const id of mentioned)
-      if (id && id !== threadId) this.run('addMention', threadId, id, now())
+  /**
+   * 一个会话给另一个发过消息（send、打断、用户 @、派子会话、别的会话经 harness 自己的收件箱发来……）：
+   * 记下这一对，之后两边一直可以互相发消息（session-tools.mts 的 writable）。不分方向，归档、恢复都不影响
+   */
+  addContact(from: string, to: string): void {
+    if (!from || !to || from === to) return
+    const [a, b] = from < to ? [from, to] : [to, from]
+    this.run('addContact', a, b, now())
   }
 
-  /** 两个会话之间用户 @ 过（谁在谁里面 @ 的都算） */
-  mentioned(a: string, b: string): boolean {
-    return this.statements.mentioned?.get(a, b, b, a) !== undefined
+  /** 两个会话之间发过消息（谁发给谁都算） */
+  contacted(one: string, other: string): boolean {
+    const [a, b] = one < other ? [one, other] : [other, one]
+    return this.statements.contacted?.get(a, b) !== undefined
   }
 
-  /** 会话删掉了：和它有关的 @ 都不留 */
-  dropMentions(threadId: string): void {
-    this.run('dropMentions', threadId, threadId)
+  /** 会话删掉了：和它有关的都不留 */
+  dropContacts(threadId: string): void {
+    this.run('dropContacts', threadId, threadId)
   }
 
   /** 只做一次的整理还没做 */

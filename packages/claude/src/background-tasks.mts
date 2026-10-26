@@ -66,6 +66,8 @@ export class BackgroundTaskTracker {
       turnId: string | null
     }
   >()
+  /** 后台子代理对应的子线程，键是“会话\0任务”。和电平信号谁先到不一定，单独记 */
+  private readonly agentThreads = new Map<string, string>()
   private readonly now: () => number
 
   constructor(now: () => number = Date.now) {
@@ -242,11 +244,22 @@ export class BackgroundTaskTracker {
     return true
   }
 
+  /**
+   * 后台子代理的任务挂上它在会话里的子线程（Agent 调用派出的那个）：客户端点这一行进子代理页。
+   * 返回集合有没有变（任务已经在集合里才算）
+   */
+  linkAgent(threadId: string, taskId: string, agentThreadId: string): boolean {
+    const key = `${threadId}\u0000${taskId}`
+    if (this.agentThreads.get(key) === agentThreadId) return false
+    this.agentThreads.set(key, agentThreadId)
+    return this.byThread.get(threadId)?.has(taskId) === true
+  }
+
   /** 会话删掉了：结束过的也不用留了 */
   forget(threadId: string): void {
     this.byThread.delete(threadId)
-    for (const key of this.pending.keys())
-      if (key.startsWith(`${threadId}\u0000`)) this.pending.delete(key)
+    for (const map of [this.pending, this.agentThreads])
+      for (const key of map.keys()) if (key.startsWith(`${threadId}\u0000`)) map.delete(key)
   }
 
   /** 有任务（运行中的或结束过的）的会话 */
@@ -260,6 +273,7 @@ export class BackgroundTaskTracker {
     return orderBackgroundTasks(
       [...tasks.values()].map((task) => {
         const title = (task.kind === 'shell' && task.command) || task.description || task.taskType
+        const agentThreadId = this.agentThreads.get(`${threadId}\u0000${task.id}`)
         return {
           id: task.id,
           kind: task.kind,
@@ -267,6 +281,7 @@ export class BackgroundTaskTracker {
           status: task.status,
           ...(task.itemId ? { itemId: task.itemId } : {}),
           ...(task.turnId ? { turnId: task.turnId } : {}),
+          ...(agentThreadId ? { agentThreadId } : {}),
           startedAt: task.startedAt,
           ...(task.endedAt != null ? { endedAt: task.endedAt } : {}),
         }

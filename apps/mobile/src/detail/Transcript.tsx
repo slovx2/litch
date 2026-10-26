@@ -30,6 +30,7 @@ import { useKey } from '../shell/services'
 import { useT } from '../ui/i18n'
 import { useTheme } from '../ui/theme'
 import { AgentsCell } from './agents/AgentsCell'
+import { AskedCell } from './asks/AskCell'
 import { useSessionBackground } from './background/BackgroundBar'
 import { OriginCell } from './background/OriginCell'
 import {
@@ -61,7 +62,7 @@ import { flash, takeReveal, useRevealWaiting } from './proposals/hooks'
 import { ProposalCell } from './proposals/ProposalCell'
 import { WrapAskCell } from './proposals/WrapAskCell'
 import { SystemCell } from './SystemCell'
-import { GroupCell, GroupEndCell, StepCell } from './steps'
+import { GroupCell, GroupEndCell, ProcessCell, StepCell } from './steps'
 import { colors } from './theme'
 import { Flash, ImageViewer, TurnMenu } from './turn-menu'
 
@@ -88,12 +89,16 @@ function renderRow(row: Row) {
       return <ProposalCell row={row} />
     case 'wrapAsk':
       return <WrapAskCell row={row} />
+    case 'asked':
+      return <AskedCell item={row.item} />
     case 'handoff':
       return <HandoffCell row={row} />
     case 'md':
       return <MarkdownCell row={row} />
     case 'reasoning':
       return <ReasoningCell row={row} />
+    case 'process':
+      return <ProcessCell row={row} />
     case 'group':
       return <GroupCell row={row} />
     case 'step':

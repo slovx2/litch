@@ -6,7 +6,8 @@
 //     恢复会话时从历史里补，再拿 thread/backgroundTerminals/list 核一遍（原生 codex 重启之后历史里留着的
 //     inProgress 命令其实早没了）。派生出来的集合由这里发通知、挂到会话对象上。
 // 同一条通知会经每条订阅了这个会话的上游连接各来一份，这里的每一步都是幂等的，真的变了才发。
-// 一个会话在跑的从有变成没有时叫一声 onSettled（会话树、定时任务要补报，决 430）。
+// 一个会话在跑的从有变成没有时叫一声 onSettled（会话树、定时任务要补报，决 430），从没有变成有时叫一声 onBusy
+// （会话树的连接跟着它，后台跑完引擎自己续跑的那一回合里调设备工具要有执行方）。
 import {
   BACKGROUND_TASKS_NOTIFICATION,
   type BackgroundTaskStatus,
@@ -46,6 +47,7 @@ export class DeviceBackground {
   /** 上一次看到的在跑个数：从有变成没有时叫 settled 的订阅者 */
   private readonly lastRunning = new Map<string, number>()
   private readonly settled = new Set<(threadId: string, tasks: LitchBackgroundTask[]) => void>()
+  private readonly busy = new Set<(threadId: string) => void>()
 
   constructor(host: BackgroundHost) {
     this.host = host
@@ -73,11 +75,20 @@ export class DeviceBackground {
     }
   }
 
+  /** 一个会话从没有后台任务在跑变成有时叫一声。返回取消 */
+  onBusy(listener: (threadId: string) => void): () => void {
+    this.busy.add(listener)
+    return () => {
+      this.busy.delete(listener)
+    }
+  }
+
   private settle(threadId: string): void {
     const running = this.running(threadId)
     const before = this.lastRunning.get(threadId) ?? 0
     if (running > 0) this.lastRunning.set(threadId, running)
     else this.lastRunning.delete(threadId)
+    if (before === 0 && running > 0) for (const listener of [...this.busy]) listener(threadId)
     if (before === 0 || running > 0) return
     this.userStops.delete(threadId)
     const tasks = this.derivedOf(threadId)?.tasks ?? this.reported.get(threadId)?.tasks ?? []

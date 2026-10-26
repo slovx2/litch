@@ -246,6 +246,44 @@ const BUSY_GAP_MS = 900
 const BUSY_STEP_MS = 150
 /** “忙一阵”里的条目标识带这个前缀，回合被打断时还在跑的记成没成 */
 const busyKey = (turnId: string, n: number): string => `${turnId}-b${n}`
+/** 提问时那条问用户的工具条目的标识 */
+const askToolKey = (turnId: string): string => `${turnId}-ask`
+
+/**
+ * 问用户的工具条目，和 Claude 入口画的一样（packages/claude 的 onUserInputRequest）：动态工具条目，参数是协议里的题，
+ * 答完的结果是每题一行“题头: 回答”。answers 给了就是答完的样子
+ */
+function askToolItem(
+  id: string,
+  questions: QuestionView[],
+  answers?: Record<string, string[]>,
+): ThreadItem {
+  return {
+    type: 'dynamicToolCall',
+    id,
+    namespace: 'claude',
+    tool: 'AskUserQuestion',
+    arguments: {
+      questions: questions.map((question) => ({
+        id: question.id,
+        header: question.header,
+        question: question.question,
+        isOther: question.allowOther,
+        isSecret: question.secret,
+        options: question.options,
+      })),
+    },
+    status: answers ? 'completed' : 'inProgress',
+    contentItems: answers
+      ? questions.map((question) => ({
+          type: 'inputText',
+          text: `${question.header}: ${answers[question.id]?.join(', ') || '(no answer)'}`,
+        }))
+      : null,
+    success: answers ? true : null,
+    durationMs: null,
+  }
+}
 /** “跑一会儿”那条命令的条目标识 */
 const runKey = (turnId: string): string => `${turnId}-w`
 
@@ -693,7 +731,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       return turnId
     }
     if (ASKS_ONE.test(message.text)) {
-      askQuestions(view, turnId, sampleQuestions([SAMPLE_TEXT[lang].singleQuestion], false))
+      askQuestions(view, turnId, sampleQuestions([SAMPLE_TEXT[lang].singleQuestion], false), true)
       return turnId
     }
     if (RUNS_A_WHILE.test(message.text)) {
@@ -771,7 +809,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       return turnId
     }
     if (ASKS_QUESTIONS.test(message.text)) {
-      askQuestions(view, turnId, sampleQuestions(SAMPLE_TEXT[lang].questions, true))
+      askQuestions(view, turnId, sampleQuestions(SAMPLE_TEXT[lang].questions, true), true)
       return turnId
     }
     if (view.settings.mode === 'plan') {
@@ -1373,12 +1411,24 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     updateSummary(view.deviceId, view.sessionId, { status: 'waiting', waitingFor: 'approval' })
   }
 
-  /** 回合停下来提问。答完之后照常回话 */
-  const askQuestions = (view: SessionView, turnId: string, questions: QuestionView[]) => {
+  /**
+   * 回合停下来提问。答完之后照常回话。tool 为真时和 Claude 入口一样，回合里另有一条问用户的工具条目
+   *（AskUserQuestion，参数是协议里的题），请求挂在它上面，答完它带着每题一行“题头: 回答”（对话里画成问答卡片）
+   */
+  const askQuestions = (
+    view: SessionView,
+    turnId: string,
+    questions: QuestionView[],
+    tool = false,
+  ) => {
+    const itemId = tool ? askToolKey(turnId) : null
     applySessionOps(view, [
+      ...(itemId
+        ? [{ op: 'item.add', turnId, item: projectItem(askToolItem(itemId, questions)) } as const]
+        : []),
       {
         op: 'request.add',
-        request: { id: `${turnId}-r`, kind: 'question', itemId: null, questions },
+        request: { id: `${turnId}-r`, kind: 'question', itemId, questions },
       },
     ])
     updateSummary(view.deviceId, view.sessionId, { status: 'waiting', waitingFor: 'answer' })
@@ -2808,6 +2858,14 @@ export function createMockCore(options: MockCoreOptions): MockCore {
             ])
           }
           const sample = SAMPLE_TEXT[lang]
+          if (request.itemId && request.itemId === askToolKey(running(view)?.id ?? ''))
+            applySessionOps(view, [
+              {
+                op: 'item.add',
+                turnId: running(view)?.id ?? '',
+                item: projectItem(askToolItem(request.itemId, request.questions, settled)),
+              },
+            ])
           heard.set(
             sessionKey(view),
             request.questions

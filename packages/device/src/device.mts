@@ -415,6 +415,8 @@ export class DeviceServer {
     this.background.onSettled((threadId, tasks) =>
       this.sessionTree.backgroundSettled(threadId, tasks),
     )
+    // 有后台任务在跑的会话：设备进程的连接跟着它，跑完以后引擎自己续跑的回合里调设备工具（收尾、任务卡）有执行方
+    this.background.onBusy((threadId) => this.sessionTree.follow(threadId))
     this.titles = new CodexTitles({
       openEngineLink: (harness) => this.openEngineLink(harness),
       store: this.sessionTree.store,
@@ -442,7 +444,10 @@ export class DeviceServer {
       layer: this.layer,
       timing: { ...DEFAULT_TIMING, ...options.timing },
       log,
-      closed: (session) => this.sessions.delete(session),
+      closed: (session) => {
+        this.sessions.delete(session)
+        this.sessionTree.clientLeft()
+      },
       clientTools: router,
       clientInvoke: new ClientToolInvoker({ router, index: this.index, log }),
       tasks: this.tasks,

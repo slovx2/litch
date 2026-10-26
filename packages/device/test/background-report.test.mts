@@ -218,7 +218,8 @@ test('BG-REPORT-003 定时任务：运行照常结束、记着还有几个在跑
     assert.equal(run.backgroundTasks, undefined)
     assert.equal(run.read, false)
     assert.equal(run.status, 'succeeded')
-    await until('连接关了', () => engine.live.length === 1, 2000)
+    // 只看任务自己那条：有后台任务在跑时会话树的连接也跟着这个会话（session-tree.mts 的 follow），它不关
+    await until('任务的连接关了', () => !turn.connection.open, 2000)
   } finally {
     await target.close()
   }
@@ -229,7 +230,6 @@ test('BG-REPORT-004 定时任务：引擎不会接着做的，后台全部结束
   const target = taskRig({ pi: engine })
   try {
     const { client, taskId, turn } = await runOnce(target, engine)
-    const connections = engine.live.length
     background(engine, turn.threadId, [task('b1', 'running')], false)
     engine.finish(turn, 'completed', '起了 dev 服务')
     await until('运行记好', async () => (await runs(client, taskId))[0]?.status === 'succeeded')
@@ -260,7 +260,8 @@ test('BG-REPORT-004 定时任务：引擎不会接着做的，后台全部结束
     ;[run] = await runs(client, taskId)
     assert.equal(run.summary, '起了 dev 服务')
     assert.equal(run.read, false)
-    await until('连接关了', () => engine.live.length === connections - 1, 2000)
+    // 只看任务自己那条：有后台任务在跑时会话树的连接也跟着这个会话（session-tree.mts 的 follow），它不关
+    await until('任务的连接关了', () => !turn.connection.open, 2000)
   } finally {
     await target.close()
   }

@@ -12,7 +12,7 @@ import { useFlashListContext } from '@shopify/flash-list'
 import { Children, memo, type ReactNode } from 'react'
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { duration, elapsed } from '../../../../packages/ui/src/app/format.ts'
-import { suggestTitles } from '../../../../packages/ui/src/transcript/steps-text.ts'
+import { processSummary, suggestTitles } from '../../../../packages/ui/src/transcript/steps-text.ts'
 import type { Row, StepState } from '../core/rows'
 import { type Translator, useT } from '../ui/i18n'
 import { type Palette, useTheme } from '../ui/theme'
@@ -33,25 +33,76 @@ const TOOL_SHOTS = 3
 
 const MARK: Record<StepState, string> = { running: '…', done: '✓', failed: '✕', declined: '⊘' }
 
+/** 回合里还在后台跑的步骤有几个（ids 是空格隔开的条目标识）：回合结束了才数 */
+function useInBackground(ended: boolean, ids: string): number {
+  const background = useBackgroundView()
+  if (!ended || !background || background.running === 0) return 0
+  return ids.split(' ').filter((id) => taskOfItem(background, id)?.status === 'running').length
+}
+
+/**
+ * 告一段落后整段过程收成的那一行（照桌面端的收起行）：已处理多久、几段说明、几步、几个子代理，被拒、失败的子代理、
+ * 回合出错或中断红字标在后面。点了开合整段过程
+ */
+export const ProcessCell = memo(function ProcessCell({ row }: Props<'process'>) {
+  const { c, font } = useTheme()
+  const t = useT()
+  const toggle = useToggleInPlace()
+  const ended = row.status !== 'running'
+  const inBackground = useInBackground(ended, row.ids)
+  const { plain, bad } = processSummary(
+    { ...row, failed: 0 },
+    ended && row.durationMs ? duration(row.durationMs, t) : null,
+    t,
+    row.status === 'failed' || row.status === 'interrupted' ? row.status : null,
+  )
+  return (
+    <View style={styles.group}>
+      <Pressable
+        onPress={() => toggle(row.key, row.turnId)}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: row.expanded }}
+        style={({ pressed }) => [styles.groupHeader, pressed ? { backgroundColor: c.press } : null]}
+        testID="process-head"
+      >
+        <Text style={{ fontSize: font.size.meta, color: c.ink3 }} numberOfLines={1}>
+          {row.expanded ? '▾' : '▸'} {plain.join(' · ')}
+          {bad.length > 0 ? <Text style={{ color: c.err }}>{` · ${bad.join(' · ')}`}</Text> : null}
+          {inBackground > 0 ? (
+            <Text style={{ color: c.accent }}>
+              {` · ${t('background.inTurn', { count: inBackground })}`}
+            </Text>
+          ) : null}
+        </Text>
+      </Pressable>
+    </View>
+  )
+})
+
+/** 有一步在跑时摘要后半：在跑的是什么、到现在的累计用时。在想的时候不写动词，只写思考的第一行（照桌面端） */
+function runningTail(
+  row: Extract<Row, { type: 'group' }>,
+  t: Translator,
+  spent: number | null,
+): string {
+  const label = row.current === null ? '' : t.text(row.current)
+  const now = row.thinking ? label : t('detail.group.running', { label })
+  return `${now ? ` · ${now}` : ''}${spent !== null && spent >= 1000 ? ` · ${elapsed(spent, t)}` : ''}`
+}
+
 /** 一组过程的摘要。点了展开收起；展开的步骤在它下面，最后一行“收起”，它自己原地不动 */
 export const GroupCell = memo(function GroupCell({ row }: Props<'group'>) {
   const { c, font } = useTheme()
   const t = useT()
   const toggle = useToggleInPlace()
-  const background = useBackgroundView()
   // 回合结束了还在跑的步骤是后台任务：摘要末尾写还有几个在后台运行（照桌面端收起行的记号）
-  const inBackground =
-    row.ended && background && background.running > 0
-      ? row.ids.split(' ').filter((id) => taskOfItem(background, id)?.status === 'running').length
-      : 0
+  const inBackground = useInBackground(row.ended, row.ids)
   const steps = t('activity.steps', { n: row.count })
   // 有一步在跑：这一组到现在的累计用时，一秒一秒地走
-  const spent = useTicking(row.current ? row.since : null)
+  const spent = useTicking(row.running ? row.since : null)
   // 失败的条数不写（每一步自己的退出码、失败照写）；跑完了写这一组从第一条开始到最后一条结束的用时
-  const tail = row.current
-    ? ` · ${t('detail.group.running', { label: t.text(row.current) })}${
-        spent !== null && spent >= 1000 ? ` · ${elapsed(spent, t)}` : ''
-      }`
+  const tail = row.running
+    ? runningTail(row, t, spent)
     : row.durationMs
       ? ` · ${duration(row.durationMs, t)}`
       : ''

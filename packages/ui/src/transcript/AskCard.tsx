@@ -2,6 +2,7 @@
 // 题目来自助手消息上的 questions；答复是一条普通的用户消息（projection/asks.mts 写、认），
 // 回合还在跑时直接插进这个回合，不排队（和官方客户端一样）。
 // 卡片的三种样子：还能答（选一个建议的回答，或者自己写）、答过了（每题答了什么）、过去了（只读）。
+// 问用户的工具（AskUserQuestion 等）答完以后画成同一个样子的问答卡片（AskedCard）。
 import {
   type AgentMessageItem,
   type AskAnswers,
@@ -11,6 +12,7 @@ import {
   askState,
   keys,
   type SessionMeta,
+  type ToolCallItem,
   type TurnView,
 } from '@litch/core'
 import { memo, useState } from 'react'
@@ -196,3 +198,76 @@ export function AskReplyBody({ replies }: { replies: AskReply[] }) {
     </div>
   )
 }
+
+/** 问用户的工具卡片现在怎样：问着、答过了、没问成（失败、被拒、被打断） */
+function askedState(item: ToolCallItem): 'open' | 'answered' | 'closed' {
+  if (item.status === 'inProgress') return 'open'
+  return item.status === 'completed' ? 'answered' : 'closed'
+}
+
+/**
+ * 问用户的工具（AskUserQuestion 等，核心的 ToolCallItem.asked）画成的问答卡片，和上面答过的问题卡片一个样子：
+ * 每题是题头、题目、选项（选中的打勾），自己写的回答引在下面；没答的写“已跳过”。
+ * 问的时候在输入区的请求卡片上答，这里只读。结果对不上题目的，题目下面是原始回答
+ */
+export const AskedCard = memo(function AskedCard({ item }: { item: ToolCallItem }) {
+  const t = useT()
+  const asked = item.asked
+  if (!asked) return null
+  const state = askedState(item)
+  return (
+    <section
+      className="ask"
+      data-card="asked"
+      data-state={state}
+      data-anchor={`i:${item.id}`}
+      aria-label={t('ask.title')}
+    >
+      <div className="ask-head">
+        <i className={state === 'open' ? 'st wait' : 'st'} />
+        <span className="grow">{t('ask.title')}</span>
+        <span className="ask-state">{t(`ask.state.${state}`)}</span>
+      </div>
+      {asked.questions.map((question, index) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: 题目不会增删换位
+        <div className="ask-q" key={index}>
+          {question.header ? <div className="ask-kicker">{question.header}</div> : null}
+          <div className="ask-text">{question.question}</div>
+          {question.options.length > 0 ? (
+            <ul className="ask-picks">
+              {question.options.map((option, at) => {
+                const picked = question.picked.includes(at)
+                return (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: 同上
+                  <li key={at} data-picked={picked} title={picked ? t('ask.picked') : undefined}>
+                    <span className="mark" aria-hidden="true">
+                      {picked ? '✓' : ''}
+                    </span>
+                    <span className="tx">
+                      <b>{option.label}</b>
+                      {option.description ? <span>{option.description}</span> : null}
+                    </span>
+                  </li>
+                )
+              })}
+            </ul>
+          ) : null}
+          {question.other !== null ? (
+            <div className="ask-answer">{question.other}</div>
+          ) : state === 'answered' && asked.raw === null && question.answer === null ? (
+            <div className="ask-answer" data-skipped="true">
+              {t('ask.skipped')}
+            </div>
+          ) : null}
+        </div>
+      ))}
+      {asked.raw !== null ? (
+        <div className="ask-q">
+          <div className="ask-answer" data-skipped={state !== 'answered'}>
+            {asked.raw}
+          </div>
+        </div>
+      ) : null}
+    </section>
+  )
+})

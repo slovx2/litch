@@ -1,6 +1,7 @@
 // 会话树的测试用的假引擎：在 fake-upstream.mts 上补齐回合（turn/start、turn/steer、turn/interrupt，测试决定什么时候结束）、
 // 会话的状态和回合记录、thread/resume 报的权限设置，以及适配器入口挑客户端工具执行方的规矩：
-// litch_ 命名空间的 item/tool/call 交给发起这个回合、握手时声明了它的连接，否则交给最早连上、声明了它的连接。
+// litch_ 命名空间的 item/tool/call 交给发起这个回合、握手时声明了它的连接，否则交给订阅着会话（thread/start、
+// thread/fork、thread/resume 订阅，thread/unsubscribe 退订）、声明了它的连接里最早订阅的那条，都没有就挑不出来。
 // 通知发给所有连着的连接（真的引擎只发给订阅者；这里不区分，够测设备进程的去重）。
 import { type FakeConnection, type FakeThread, FakeUpstream, RpcFailure } from './fake-upstream.mjs'
 
@@ -18,6 +19,8 @@ export class FakeEngine extends FakeUpstream {
   readonly turns = new Map<string, FakeTurn[]>()
   /** 发起每个回合的连接 */
   readonly starters = new Map<string, FakeConnection>()
+  /** 每个会话订阅着的连接，按订阅的先后 */
+  readonly subscribers = new Map<string, FakeConnection[]>()
   /** thread/resume 报的审批策略和沙箱 */
   config: { approvalPolicy: unknown; sandbox: unknown } = {
     approvalPolicy: 'on-request',
@@ -38,7 +41,7 @@ export class FakeEngine extends FakeUpstream {
       ...thread,
       status: this.running(thread.id) ? { type: 'active', activeFlags: [] } : { type: 'idle' },
     })
-    this.handlers['thread/start'] = (params) => {
+    this.handlers['thread/start'] = (params, connection) => {
       const thread: FakeThread = {
         id: `${engine}-t${++this.serial}`,
         updatedAt: 9000 + this.serial,
@@ -49,6 +52,7 @@ export class FakeEngine extends FakeUpstream {
         ephemeral: false,
       }
       this.threads.push(thread)
+      this.subscribe(thread.id, connection)
       return {
         thread: { ...withState(thread), turns: [] },
         model: 'fake',
@@ -56,14 +60,16 @@ export class FakeEngine extends FakeUpstream {
         ...this.config,
       }
     }
-    this.handlers['thread/fork'] = (params) => {
+    this.handlers['thread/fork'] = (params, connection) => {
       const parent = this.thread(params.threadId)
       const thread = { ...parent, id: `${parent.id}-fork${++this.serial}`, forkedFromId: parent.id }
       this.threads.push(thread)
+      this.subscribe(thread.id, connection)
       return { thread: { ...withState(thread), turns: [] }, model: 'fake', ...this.config }
     }
-    this.handlers['thread/resume'] = (params) => {
+    this.handlers['thread/resume'] = (params, connection) => {
       const thread = this.thread(params.threadId)
+      this.subscribe(thread.id, connection)
       return {
         thread: { ...withState(thread), turns: [] },
         model: 'fake',
@@ -71,7 +77,14 @@ export class FakeEngine extends FakeUpstream {
         ...this.config,
       }
     }
-    this.handlers['thread/unsubscribe'] = () => ({ status: 'unsubscribed' })
+    this.handlers['thread/unsubscribe'] = (params, connection) => {
+      const list = this.subscribers.get(params.threadId) ?? []
+      this.subscribers.set(
+        params.threadId,
+        list.filter((one) => one !== connection),
+      )
+      return { status: 'unsubscribed' }
+    }
     this.handlers['thread/read'] = (params) => {
       const thread = this.thread(params.threadId)
       const turns = params.includeTurns ? (this.turns.get(thread.id) ?? []) : []
@@ -122,6 +135,11 @@ export class FakeEngine extends FakeUpstream {
       queueMicrotask(() => this.notify('thread/archived', { threadId: thread.id }))
       return {}
     }
+  }
+
+  private subscribe(threadId: string, connection: FakeConnection): void {
+    const list = this.subscribers.get(threadId) ?? []
+    if (!list.includes(connection)) this.subscribers.set(threadId, [...list, connection])
   }
 
   thread(threadId: unknown): FakeThread {
@@ -194,7 +212,9 @@ export class FakeEngine extends FakeUpstream {
     const connection =
       starter?.open && this.declared(starter).includes(namespace)
         ? starter
-        : this.live.find((one) => this.declared(one).includes(namespace))
+        : (this.subscribers.get(threadId) ?? []).find(
+            (one) => one.open && this.declared(one).includes(namespace),
+          )
     if (!connection) return null
     const id = `req-${++this.requestSerial}`
     const before = connection.answers.length

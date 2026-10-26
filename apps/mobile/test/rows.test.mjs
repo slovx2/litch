@@ -31,6 +31,8 @@ const notice = (id) => ({ id, kind: 'notice', label: '进入审查模式', detai
 function viewOf(turns, items) {
   return {
     forkedFrom: null,
+    can: { finalOnStart: false },
+    agents: [],
     proposals: [],
     requests: [],
     turns: turns.map((turn) => ({
@@ -45,6 +47,13 @@ function viewOf(turns, items) {
 
 const types = (rows) => rows.map((row) => row.type)
 
+/** 回合结束后整段过程收成一行：点开它（第一次建行之前点就是展开），看过程里的各段 */
+const openedBuilder = (turnId = 't') => {
+  const builder = new RowBuilder()
+  builder.toggle(`${turnId}:process`, turnId)
+  return builder
+}
+
 test('一个回合：用户消息、收起的过程组、回答、状态行', () => {
   const items = [
     user('u', '你好'),
@@ -57,12 +66,20 @@ test('一个回合：用户消息、收起的过程组、回答、状态行', ()
     items.map((item) => (item.kind === 'command' ? { ...item, status: 'completed' } : item)),
   )
   const rows = new RowBuilder().build(view, 'all')
-  assert.deepEqual(types(rows), ['user', 'group', 'md', 'status'])
-  const group = rows[1]
+  // 回合结束：整段过程收成一行（照桌面端），写几步、回合用时
+  assert.deepEqual(types(rows), ['user', 'process', 'md', 'status'])
+  assert.equal(rows[1].key, 't:process')
+  assert.equal(rows[1].steps, 2)
+  assert.equal(rows[1].expanded, false)
+  assert.equal(rows[1].durationMs, 900)
+  assert.equal(rows[1].ids, 'c1 c2')
+  assert.equal(rows[3].durationMs, 900)
+  const open = openedBuilder().build(view, 'all')
+  assert.deepEqual(types(open), ['user', 'process', 'group', 'md', 'status'])
+  const group = open[2]
   assert.equal(group.count, 2)
   assert.equal(group.failed, 1, '退出码不是 0 的算没成')
   assert.equal(group.running, false)
-  assert.equal(rows[3].durationMs, 900)
 })
 
 test('正在跑的一步：摘要上说它在做什么；只有说明的一组不折叠', () => {
@@ -110,17 +127,18 @@ test('状态行在回合跑时写“正在工作”：只在正文出字、等�
 test('展开一组：摘要在前，每一步各一行排在它后面，最后一行“收起”（倒置后往下展开）', () => {
   const items = [user('u', '跑'), { ...command('c1'), status: 'completed', exitCode: 0 }]
   const view = viewOf([{ id: 't', status: 'completed', itemIds: ['u', 'c1'] }], items)
-  const builder = new RowBuilder()
+  const builder = openedBuilder()
   const group = builder.build(view, 'all')[1]
-  builder.expanded.add(group.key)
+  builder.toggle(group.key, 't')
   const rows = builder.build(view, new Set(['t']))
+  // 没有最终回答，回合结束了过程也不收，没有收起整段过程的那一行
   assert.deepEqual(types(rows), ['user', 'group', 'step', 'groupEnd', 'status'])
   assert.equal(rows[1].expanded, true)
   assert.equal(rows[2].output, 'c1 的输出')
   assert.equal(rows[2].state, 'done')
   assert.equal(rows[3].group, group.key)
   // 收起：摘要还是原来那个键，步骤和“收起”都没了
-  builder.expanded.delete(group.key)
+  builder.toggle(group.key, 't')
   const folded = builder.build(view, new Set(['t']))
   assert.deepEqual(types(folded), ['user', 'group', 'status'])
   assert.equal(folded[1].key, group.key)
@@ -154,9 +172,12 @@ test('启动子代理不进过程组，单独一行；等待还是组里的一�
   const items = [user('u', '用子代理'), spawn, wait, answer('a', '都停下了')]
   const view = viewOf([{ id: 't', status: 'completed', itemIds: ['u', 'sp', 'w', 'a'] }], items)
   view.agents = []
-  const builder = new RowBuilder()
-  const rows = builder.build(view, 'all')
-  assert.deepEqual(types(rows), ['user', 'agents', 'group', 'md', 'status'])
+  const builder = openedBuilder()
+  const all = builder.build(view, 'all')
+  assert.deepEqual(types(all), ['user', 'process', 'agents', 'group', 'md', 'status'])
+  assert.equal(all[1].agents, 3)
+  assert.equal(all[1].agentsFailed, 1, '出错的子代理在收起行上标红')
+  const rows = all.filter((row) => row.type !== 'process')
   assert.equal(rows[1].item, spawn)
   // 子线程还没列出来：按等待那一条报的状态
   assert.equal(rows[1].states, 'completed stopped failed')
@@ -172,10 +193,10 @@ test('启动子代理不进过程组，单独一行；等待还是组里的一�
     { id: 'a2', status: 'running', turn: { state: 'running', startedAt: 1, durationMs: null } },
   ]
   const again = builder.build(view, new Set(['t']))
-  assert.equal(again[1].states, 'failed running failed')
-  assert.equal(again[1].threads, view.agents)
+  assert.equal(again[2].states, 'failed running failed')
+  assert.equal(again[2].threads, view.agents)
   // 内容没变的行复用同一个对象
-  assert.equal(builder.build(view, new Set(['t']))[1], again[1])
+  assert.equal(builder.build(view, new Set(['t']))[2], again[2])
 })
 
 test('启动子代理刚开始、还不知道派了谁：也是单独一行，没有状态', () => {
@@ -260,14 +281,26 @@ test('后台任务：回合结束了还在跑的步骤不再写“正在做”�
       answer('t2:a', '跑完了', 'inProgress'),
     ],
   )
-  const rows = new RowBuilder().build(view, 'all')
-  assert.deepEqual(types(rows), ['user', 'group', 'md', 'status', 'origin', 'md', 'status'])
-  const group = rows[1]
+  const folded = new RowBuilder().build(view, 'all')
+  assert.deepEqual(types(folded), ['user', 'process', 'md', 'status', 'origin', 'md', 'status'])
+  assert.equal(folded[1].ids, 't1:c', '收起行带条目号给单元格数后台在跑的')
+  const rows = openedBuilder('t1').build(view, 'all')
+  assert.deepEqual(types(rows), [
+    'user',
+    'process',
+    'group',
+    'md',
+    'status',
+    'origin',
+    'md',
+    'status',
+  ])
+  const group = rows[2]
   assert.equal(group.current, null, '回合结束了：还 inProgress 的是后台命令，不当成正在做的一步')
   assert.equal(group.running, false)
   assert.equal(group.ended, true)
   assert.equal(group.ids, 't1:c')
-  assert.deepEqual(rows[4], {
+  assert.deepEqual(rows[5], {
     type: 'origin',
     key: 't2:origin',
     turnId: 't2',
@@ -309,4 +342,210 @@ test('上下文压缩：一条单独的分隔行，不进过程组；压的时�
     [after[0].status, after[0].source, after[0].startedAt],
     ['completed', 'manual', null],
   )
+})
+
+const thought = (id, text, status = 'completed') => ({ id, kind: 'reasoning', text, status })
+const note = (id, text) => ({
+  id,
+  kind: 'agentMessage',
+  text,
+  phase: 'commentary',
+  status: 'completed',
+})
+
+test('思考是步骤组里的一步：不把组拆开、不算步数；在想时摘要写它的第一行（和桌面端同一份分块）', () => {
+  const items = [
+    user('u', '查一下'),
+    thought('r1', '先看目录'),
+    { ...command('c1'), status: 'completed', exitCode: 0 },
+    thought('r2', '再看配置\n第二行'),
+    { ...command('c2'), status: 'completed', exitCode: 0 },
+    thought('r3', '想想下一步\n细节', 'inProgress'),
+  ]
+  const view = viewOf(
+    [{ id: 't', status: 'running', itemIds: items.map((item) => item.id) }],
+    items,
+  )
+  const builder = new RowBuilder()
+  const rows = builder.build(view, 'all')
+  assert.deepEqual(types(rows), ['user', 'group', 'status'], '思考不再单独成行把组切碎')
+  assert.equal(rows[1].count, 2, '思考不算步数')
+  assert.equal(rows[1].current, '想想下一步')
+  assert.equal(rows[1].thinking, true)
+  assert.equal(rows[1].ids, 'r1 c1 r2 c2 r3')
+  // 展开：思考和步骤按先后各一行
+  builder.toggle(rows[1].key, 't')
+  const open = builder.build(view, new Set(['t']))
+  assert.deepEqual(types(open), [
+    'user',
+    'group',
+    'reasoning',
+    'step',
+    'reasoning',
+    'step',
+    'reasoning',
+    'groupEnd',
+    'status',
+  ])
+  // 只有思考的一组（两段说明之间只想了想）：不收成摘要，每条一行；没字的思考不画
+  const only = [user('u', '想想'), thought('r1', '只是想想'), thought('r2', '', 'completed')]
+  const plain = viewOf([{ id: 't', status: 'running', itemIds: ['u', 'r1', 'r2'] }], only)
+  assert.deepEqual(types(new RowBuilder().build(plain, 'all')), ['user', 'reasoning', 'status'])
+})
+
+test('过程收起：回合结束整段收成一行；说明段在过程里；用户展开过、子代理没做完时不自动收；点那一行开合', () => {
+  const items = [
+    user('u', '修一下'),
+    note('n1', '我先跑测试'),
+    thought('r1', '看看结果'),
+    { ...command('c1'), status: 'completed', exitCode: 1 },
+    note('n2', '再改代码'),
+    { ...command('c2'), status: 'declined', exitCode: null },
+    answer('a', '修好了'),
+  ]
+  const ids = items.map((item) => item.id)
+  const running = viewOf(
+    [{ id: 't', status: 'running', itemIds: ids }],
+    [...items.slice(0, -1), answer('a', '修好', 'inProgress')],
+  )
+  const builder = new RowBuilder()
+  // 回合在跑、回答还在写：过程摊开，说明是正文
+  assert.deepEqual(types(builder.build(running, 'all')), [
+    'user',
+    'md',
+    'group',
+    'md',
+    'group',
+    'md',
+    'status',
+  ])
+  // 回答写完了（回合还没结束）也算告一段落：收起
+  const answered = viewOf([{ id: 't', status: 'running', itemIds: ids }], items)
+  assert.deepEqual(types(builder.build(answered, 'all')), ['user', 'process', 'md', 'status'])
+  const done = viewOf([{ id: 't', status: 'failed', itemIds: ids, durationMs: 4000 }], items)
+  const rows = builder.build(done, 'all')
+  assert.deepEqual(types(rows), ['user', 'process', 'md', 'status'])
+  assert.deepEqual(
+    {
+      notes: rows[1].notes,
+      steps: rows[1].steps,
+      declined: rows[1].declined,
+      status: rows[1].status,
+      durationMs: rows[1].durationMs,
+    },
+    { notes: 2, steps: 2, declined: 1, status: 'failed', durationMs: 4000 },
+  )
+  // 点开、再点收起
+  builder.toggle('t:process', 't')
+  const open = builder.build(done, new Set(['t']))
+  assert.deepEqual(types(open), ['user', 'process', 'md', 'group', 'md', 'group', 'md', 'status'])
+  assert.equal(open[1].expanded, true)
+  builder.toggle('t:process', 't')
+  assert.deepEqual(types(builder.build(done, new Set(['t']))), ['user', 'process', 'md', 'status'])
+
+  // 回合进行中用户展开过某一组：结束时不自动收
+  const touched = new RowBuilder()
+  const live = touched.build(running, 'all')
+  touched.toggle(live[2].key, 't')
+  touched.toggle(live[2].key, 't')
+  const after = touched.build(done, 'all')
+  assert.equal(after[1].type, 'process')
+  assert.equal(after[1].expanded, true, '展开过（收起了也算）：结束时照开着')
+  assert.ok(after.some((row) => row.type === 'group'))
+
+  // 回合里还有子代理没做完：不自动收
+  const spawn = collab('sp', 'spawnAgent', [{ threadId: 'a1', state: 'running', message: null }])
+  const withAgent = viewOf(
+    [{ id: 't', status: 'completed', itemIds: ['u', 'sp', 'a'] }],
+    [user('u', '派出去'), spawn, answer('a', '派出去了')],
+  )
+  withAgent.agents = [
+    { id: 'a1', status: 'running', turn: { state: 'running', startedAt: 1, durationMs: null } },
+  ]
+  const agentRows = new RowBuilder().build(withAgent, 'all')
+  assert.deepEqual(types(agentRows), ['user', 'process', 'agents', 'md', 'status'])
+  assert.equal(agentRows[1].expanded, true)
+})
+
+test('被打断的回合不收（照 Codex 桌面端）：中途插的话之间的过程、写了一半的回答都摊着；没有最终回答的回合结束了也不收', () => {
+  const items = [
+    user('u', '看看目录再改'),
+    note('n1', '先看目录'),
+    { ...command('c1'), status: 'completed', exitCode: 0 },
+    user('u2', '顺便看下测试'),
+    { ...command('c2'), status: 'completed', exitCode: 0 },
+    { ...answer('a', '接下来要改的是'), phase: 'unknown' },
+  ]
+  const ids = items.map((item) => item.id)
+  const stopped = viewOf(
+    [{ id: 't', status: 'interrupted', itemIds: ids, durationMs: 9000 }],
+    items,
+  )
+  assert.deepEqual(types(new RowBuilder().build(stopped, 'all')), [
+    'user',
+    'md',
+    'group',
+    'user',
+    'group',
+    'md',
+    'status',
+  ])
+  // 同样的条目、回合正常结束：有最终回答，收成一行
+  const done = viewOf([{ id: 't', status: 'completed', itemIds: ids }], items)
+  assert.deepEqual(types(new RowBuilder().build(done, 'all')), [
+    'user',
+    'process',
+    'user',
+    'md',
+    'status',
+  ])
+  // 没有最终回答（最后一条是过程说明）：结束了也摊着
+  const quiet = viewOf(
+    [{ id: 't', status: 'completed', itemIds: ['u', 'n1', 'c1'] }],
+    items.slice(0, 3),
+  )
+  assert.deepEqual(types(new RowBuilder().build(quiet, 'all')), ['user', 'md', 'group', 'status'])
+})
+
+test('问用户的工具（AskUserQuestion 等）：一张问答卡片，露在过程外面，过程收起时还在', () => {
+  const asked = {
+    questions: [
+      {
+        header: '范围',
+        question: '装在哪？',
+        options: [],
+        answer: '系统级',
+        picked: [],
+        other: '系统级',
+      },
+    ],
+    raw: null,
+  }
+  const ask = {
+    id: 'q',
+    kind: 'toolCall',
+    source: 'claude',
+    tool: 'AskUserQuestion',
+    input: [],
+    output: [],
+    error: null,
+    durationMs: 5,
+    status: 'completed',
+    asked,
+  }
+  const items = [
+    user('u', '先问我'),
+    { ...command('c1'), status: 'completed', exitCode: 0 },
+    ask,
+    { ...command('c2'), status: 'completed', exitCode: 0 },
+    answer('a', '照你说的装好了'),
+  ]
+  const view = viewOf(
+    [{ id: 't', status: 'completed', itemIds: items.map((item) => item.id) }],
+    items,
+  )
+  const rows = new RowBuilder().build(view, 'all')
+  assert.deepEqual(types(rows), ['user', 'process', 'asked', 'md', 'status'])
+  assert.equal(rows[2].item, ask)
+  assert.equal(rows[1].steps, 2, '提问不算进过程的步数')
 })

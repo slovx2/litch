@@ -309,22 +309,28 @@ test('分块：新顺序“干活 → 空收尾 → 完整回答”照旧；收�
   )
 })
 
-test('过程什么时候告一段落：回合结束，或者最终回答写完（声明了一开始就知道的，一开始就算）', () => {
-  assert.equal(processSettled(false, []), true)
-  assert.equal(processSettled(true, []), false)
+test('过程什么时候告一段落：有最终回答的回合结束，或者最终回答写完（声明了一开始就知道的，一开始就算）；被打断的、没回答的不算', () => {
   const answer = (phase: string, status: string) => [
     { kind: 'agentMessage' as const, phase, status },
   ]
-  assert.equal(processSettled(true, answer('final', 'completed')), true)
+  assert.equal(processSettled('completed', answer('unknown', 'completed')), true)
+  assert.equal(processSettled('failed', answer('final', 'completed')), true)
+  // 照 Codex 桌面端：收起来只剩一行，停下来以后要看的过程、写了一半的回答都藏进去了
+  assert.equal(processSettled('interrupted', answer('final', 'completed')), false, '被打断的')
+  assert.equal(processSettled('interrupted', []), false)
+  assert.equal(processSettled('completed', []), false, '没有最终回答的')
+  assert.equal(processSettled('failed', []), false)
+  assert.equal(processSettled('running', []), false)
+  assert.equal(processSettled('running', answer('final', 'completed')), true)
   assert.equal(
-    processSettled(true, answer('final', 'inProgress')),
+    processSettled('running', answer('final', 'inProgress')),
     false,
     '刚开始就自称最终回答的不算',
   )
-  assert.equal(processSettled(true, answer('unknown', 'completed')), false)
-  assert.equal(processSettled(true, answer('final', 'inProgress'), true), true)
-  assert.equal(processSettled(true, answer('unknown', 'inProgress'), true), false)
-  assert.equal(processSettled(true, [], true), false)
+  assert.equal(processSettled('running', answer('unknown', 'completed')), false)
+  assert.equal(processSettled('running', answer('final', 'inProgress'), true), true)
+  assert.equal(processSettled('running', answer('unknown', 'inProgress'), true), false)
+  assert.equal(processSettled('running', [], true), false)
 })
 
 test('整段过程收不收：告一段落了才收；手动展开过、子代理没做完都不收', () => {
