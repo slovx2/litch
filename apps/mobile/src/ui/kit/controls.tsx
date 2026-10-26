@@ -141,13 +141,12 @@ export function Row({
   )
 }
 
-/** 分组的小标题（复古皮肤里前面带 “## ”、用等宽字） */
+/** 分组的小标题（复古皮肤里用等宽字） */
 export function SectionLabel({ children, right }: { children: string; right?: ReactNode }) {
   const theme = useTheme()
   return (
     <View style={[styles.section, { backgroundColor: theme.c.win }]}>
       <Text style={[styles.sectionText, sectionFont(theme), { color: theme.c.ink2 }]}>
-        {theme.sectionPrefix}
         {children}
       </Text>
       {right}

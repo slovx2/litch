@@ -44,8 +44,6 @@ export interface Theme {
   radius: { s: number; m: number; l: number }
   /** 可点的东西至少这么高（触控目标） */
   hit: number
-  /** 分组小标题前面的记号（复古是 “## ”） */
-  sectionPrefix: string
   /** 状态记号：用形状区分，不只靠颜色 */
   marks: Record<StatusKind, string>
   /** 单选、多选的记号 */
@@ -63,7 +61,6 @@ type Shape = Omit<Theme, 'skin' | 'dark' | 'c' | 'font' | 'space' | 'hit'> & { u
 const SHAPES: Record<Skin, Shape> = {
   retro: {
     radius: { s: 0, m: 0, l: 0 },
-    sectionPrefix: '## ',
     marks: {
       idle: '·',
       running: '▶',
@@ -80,7 +77,6 @@ const SHAPES: Record<Skin, Shape> = {
   human: {
     ui: serif,
     radius: { s: 6, m: 10, l: 16 },
-    sectionPrefix: '',
     marks: {
       idle: '·',
       running: '○',
@@ -96,7 +92,6 @@ const SHAPES: Record<Skin, Shape> = {
   },
   standard: {
     radius: { s: 3, m: 6, l: 10 },
-    sectionPrefix: '',
     marks: {
       idle: '·',
       running: '■',
