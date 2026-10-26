@@ -48,6 +48,9 @@
   font-weight: 500;
   color: var(--ink-2);
 }
+.aside-bar .mini {
+  align-self: center;
+}
 .aside-transcript {
   flex: 1 1 0;
   min-height: 0;

@@ -1,13 +1,12 @@
 // 侧聊（从眼前会话临时分出的一段对话，对面的临时分叉）在界面里的状态：每个会话同时一个，按“设备:主会话”记在内存里。
 // 侧聊一直开着（订阅着）直到人关掉它：切会话、换侧面板的标签、收起面板都不放手，回来接着聊；
-// 关掉、重开应用就没了（对面没人订阅一阵后把它卸载）。这个文件不画东西，侧面板的标签登记表也要引它。
+// 关掉、重开应用就没了（对面没人订阅一阵后把它卸载）。这个文件不画东西。
 import { keys, type TurnView } from '@litch/core'
 import { useSyncExternalStore } from 'react'
 import type { Services } from '../app/services.tsx'
 import { prefillDraft } from '../composer/drafts.ts'
 import { showSideTab } from '../side/side.ts'
-
-export const ASIDE_TAB = 'aside'
+import { ASIDE_TAB } from './tab.ts'
 
 export interface AsideState {
   /** 侧聊会话的标识。正在分叉时是 null */

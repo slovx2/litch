@@ -5,7 +5,7 @@ import type { IconName } from '../app/icons.tsx'
 import type { MessageKey } from '../i18n/index.ts'
 // 内置浏览器：代理要给人看网页时打开面板（启动时就装上，见 browser/show.ts）
 import './browser/show.ts'
-import { ASIDE_TAB } from '../aside/state.ts'
+import { ASIDE_TAB } from '../aside/tab.ts'
 import { BACKGROUND_TAB } from '../background/tab.ts'
 import { GOAL_TAB } from '../goal/tab.ts'
 import { BROWSER_TAB } from './browser/store.ts'
