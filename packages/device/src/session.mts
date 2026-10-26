@@ -239,6 +239,7 @@ export class ClientSession implements ClientToolPeer {
           host.sessionTree.turnEvent(harness, method, params)
           host.titles.turnEvent(method, params)
         },
+        itemEvent: (params) => host.sessionTree.itemEvent(params),
         decorate: (thread) => host.sessionTree.decorate(thread),
         deleted: (threadId) => host.sessionTree.deleted(threadId),
       },

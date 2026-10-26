@@ -134,7 +134,10 @@ test('SESSION-TOOLS-002：不是用户发起的回合里，send、interrupt 只�
       (await env.pi.callTool(threadId, SESSIONS, 'send', { thread_id: childId, message: '再来' }))
         ?.answer,
     )
-    assert.match(env.claude.sent('turn/start').at(-1).input[0].text, /再来$/)
+    assert.equal(
+      parseSessionMessage(env.claude.sent('turn/start').at(-1).input[0].text)?.message,
+      '再来',
+    )
     // 孙子也算自己的子孙
     const grandchild = resultOf(
       (
@@ -156,14 +159,16 @@ test('SESSION-TOOLS-002：不是用户发起的回合里，send、interrupt 只�
   }
 })
 
-test('SESSION-TOOLS-009：用户发起的回合里 send、interrupt 不限；两边之间用户 @ 过的会话随时能互相发消息，打断不算', async () => {
+test('SESSION-TOOLS-009：用户发起的回合里 send、interrupt 不限；两个会话之间发过一次消息（send、打断、用户 @）就一直能互相发，打断不算', async () => {
   const env = treeRig()
   try {
     const client = await litch(env)
     const { threadId } = await parent(client)
     const stranger = (await client.call('thread/start', { harness: 'claude-code' })).thread.id
     const other = (await client.call('thread/start', { harness: 'claude-code' })).thread.id
-    // 用户回合：别人的会话也发得出、打断得了
+    const third = (await client.call('thread/start', { harness: 'claude-code' })).thread.id
+    const stopped = (await client.call('thread/start', { harness: 'claude-code' })).thread.id
+    // 用户回合：别人的会话也发得出、打断得了；对面收到怎么回
     const sent = resultOf(
       (
         await env.pi.callTool(threadId, SESSIONS, 'send', {
@@ -173,28 +178,6 @@ test('SESSION-TOOLS-009：用户发起的回合里 send、interrupt 不限；两
       )?.answer,
     )
     assert.match(sent.note, /new turn/)
-    assert.doesNotMatch(env.claude.sent('turn/start').at(-1).input[0].text, /To answer/)
-    resultOf(
-      (await env.pi.callTool(threadId, SESSIONS, 'interrupt', { thread_id: stranger }))?.answer,
-    )
-    // 用户在回合里插话时 @ 了 other
-    const mention = `看看 ＠[另一个]\n\n${sessionMentionsBlock([{ threadId: other, title: '另一个' }])}`
-    const running = env.device.sessionTree.activeTurn(threadId)
-    await client.call('turn/steer', { threadId, input: text(mention), expectedTurnId: running })
-    env.pi.end(threadId)
-    env.pi.selfTurn(threadId)
-    // 不是用户回合了：没 @ 过的又不行了
-    const refused = await env.pi.callTool(threadId, SESSIONS, 'send', {
-      thread_id: stranger,
-      message: 'x',
-    })
-    assert.equal(failureOf(refused?.answer), 'blocked')
-    assert.match(refused?.answer.result.contentItems[0].text, /mention/)
-    // @ 过的：发得出，对面收到怎么回；对面回过来也行
-    resultOf(
-      (await env.pi.callTool(threadId, SESSIONS, 'send', { thread_id: other, message: '你那边呢' }))
-        ?.answer,
-    )
     assert.match(
       env.claude.sent('turn/start').at(-1).input[0].text,
       new RegExp(`litch_sessions\\.send to thread_id ${threadId}`),
@@ -202,16 +185,109 @@ test('SESSION-TOOLS-009：用户发起的回合里 send、interrupt 不限；两
     // 教模型怎么回的那句不算对方的原话
     assert.equal(
       parseSessionMessage(env.claude.sent('turn/start').at(-1).input[0].text)?.message,
-      '你那边呢',
+      '看一下',
     )
     resultOf(
-      (await env.claude.callTool(other, SESSIONS, 'send', { thread_id: threadId, message: '好了' }))
-        ?.answer,
+      (await env.pi.callTool(threadId, SESSIONS, 'interrupt', { thread_id: stranger }))?.answer,
     )
-    // 打断不因为 @ 过就放开
+    await client.call('turn/start', { threadId: stopped, input: text('跑着') })
+    resultOf(
+      (await env.pi.callTool(threadId, SESSIONS, 'interrupt', { thread_id: stopped }))?.answer,
+    )
+    // 用户在回合里插话时 @ 了 other
+    const mention = `看看 ＠[另一个]\n\n${sessionMentionsBlock([{ threadId: other, title: '另一个' }])}`
+    const running = env.device.sessionTree.activeTurn(threadId)
+    await client.call('turn/steer', { threadId, input: text(mention), expectedTurnId: running })
+    env.pi.end(threadId)
+    env.pi.selfTurn(threadId)
+    // 不是用户回合了：从没互相发过的不行
+    const refused = await env.pi.callTool(threadId, SESSIONS, 'send', {
+      thread_id: third,
+      message: 'x',
+    })
+    assert.equal(failureOf(refused?.answer), 'blocked')
+    assert.match(refused?.answer.result.contentItems[0].text, /never messaged each other.*mention/)
+    // 发过的（用户回合里 send 过、打断过、@ 过）：两边随时能互相发
+    for (const target of [stranger, stopped, other]) {
+      resultOf(
+        (
+          await env.pi.callTool(threadId, SESSIONS, 'send', {
+            thread_id: target,
+            message: '你那边呢',
+          })
+        )?.answer,
+      )
+      env.claude.end(target)
+      resultOf(
+        (
+          await env.claude.callTool(target, SESSIONS, 'send', {
+            thread_id: threadId,
+            message: '好了',
+          })
+        )?.answer,
+      )
+    }
+    // 打断不因为发过消息就放开
     const stop = await env.pi.callTool(threadId, SESSIONS, 'interrupt', { thread_id: other })
     assert.equal(failureOf(stop?.answer), 'blocked')
-    assert.equal(env.device.sessionTree.store.mentioned(other, threadId), true)
+    const store = env.device.sessionTree.store
+    assert.equal(store.contacted(other, threadId), true)
+    assert.equal(store.contacted(threadId, third), false)
+    // 归档、恢复都不影响；删掉的才忘掉
+    await client.call('thread/archive', { threadId: stranger })
+    await client.call('thread/unarchive', { threadId: stranger })
+    assert.equal(store.contacted(threadId, stranger), true)
+    env.device.sessionTree.deleted(stranger)
+    assert.equal(store.contacted(threadId, stranger), false)
+  } finally {
+    await env.close()
+  }
+})
+
+test('SESSION-TOOLS-010：子会话能给父会话发消息（派出就算发过）；别的会话经 harness 自己的收件箱发来的消息也算发过', async () => {
+  const env = treeRig()
+  try {
+    const { client, threadId, childId } = await family(env)
+    env.claude.end(childId)
+    env.claude.selfTurn(childId)
+    resultOf(
+      (
+        await env.claude.callTool(childId, SESSIONS, 'send', {
+          thread_id: threadId,
+          message: '父会话你好',
+        })
+      )?.answer,
+    )
+    // 另一个会话用 Claude 的 SendMessage 给 pi 上的父会话发过（用户消息条目上的 litchPeer 是发送方）
+    const peer = (await client.call('thread/start', { harness: 'claude-code' })).thread.id
+    await client.call('turn/start', { threadId: peer, input: text('开始') })
+    env.pi.end(threadId)
+    env.pi.selfTurn(threadId)
+    env.claude.end(peer)
+    env.claude.selfTurn(peer)
+    const blocked = await env.claude.callTool(peer, SESSIONS, 'send', {
+      thread_id: threadId,
+      message: 'x',
+    })
+    assert.equal(failureOf(blocked?.answer), 'blocked')
+    env.pi.notify('item/completed', {
+      threadId,
+      turnId: env.pi.current(threadId)?.id,
+      item: {
+        type: 'userMessage',
+        id: 'peer-1',
+        content: [],
+        litchPeer: { name: '对面', thread: peer },
+      },
+    })
+    await until(
+      () => env.device.sessionTree.store.contacted(peer, threadId),
+      '收件箱来的消息记下了',
+    )
+    resultOf(
+      (await env.claude.callTool(peer, SESSIONS, 'send', { thread_id: threadId, message: '回你' }))
+        ?.answer,
+    )
   } finally {
     await env.close()
   }

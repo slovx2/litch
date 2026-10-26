@@ -376,6 +376,7 @@ export class SessionTree {
     const threadId = typeof params.threadId === 'string' ? params.threadId : null
     if (method === 'turn/started' || method === 'turn/completed')
       this.turnEvent(harness, method, params)
+    else if (method === 'item/started' || method === 'item/completed') this.itemEvent(params)
     // 别处（官方桌面端等直连引擎的客户端）归档、删掉的，只能从引擎的通知上看到
     else if (method === 'thread/archived' && threadId) this.archived(threadId)
     else if (method === 'thread/deleted' && threadId) this.deleted(threadId)
@@ -818,8 +819,20 @@ export class SessionTree {
   }
 
   /**
-   * 用户在这个会话里发的话（发起回合、回合里插话）@ 了别的会话（末尾的 <litch-session-mentions>）：记下来，
-   * 之后这两个会话之间可以互相发消息（session-tools.mts 的 writable）
+   * 一个条目开始或结束了（各条客户端连接的上游、设备进程自己的连接都会报）：别的 Litch 会话经 harness 自己的
+   * 收件箱发来的消息（Claude 的 SendMessage，peerMessages 扩展：用户消息条目上的 litchPeer 是发送方，
+   * 发送方那条工具条目上的是收件方）也算两边发过消息，之后可以互相用 litch_sessions.send
+   */
+  itemEvent(params: Record<string, unknown>): void {
+    const threadId = typeof params.threadId === 'string' ? params.threadId : null
+    const item = isObject(params.item) ? params.item : null
+    const peer = isObject(item?.litchPeer) ? item.litchPeer : null
+    if (threadId && typeof peer?.thread === 'string') this.store.addContact(threadId, peer.thread)
+  }
+
+  /**
+   * 用户在这个会话里发的话（发起回合、回合里插话）@ 了别的会话（末尾的 <litch-session-mentions>）：算两边发过消息，
+   * 之后这两个会话之间一直可以互相发（session-tools.mts 的 writable）
    */
   userMentioned(threadId: string, input: unknown): void {
     if (!Array.isArray(input)) return
@@ -828,7 +841,7 @@ export class SessionTree {
         ? (parseSessionMentions(item.text)?.mentions.map((mention) => mention.threadId) ?? [])
         : [],
     )
-    if (ids.length) this.store.addMentions(threadId, ids)
+    for (const id of ids) this.store.addContact(threadId, id)
   }
 
   /**
@@ -1166,7 +1179,7 @@ export class SessionTree {
   deleted(threadId: string): void {
     this.store.dropTools(threadId)
     this.store.setSpeed(threadId, null)
-    this.store.dropMentions(threadId)
+    this.store.dropContacts(threadId)
   }
 
   /**
