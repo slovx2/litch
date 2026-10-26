@@ -94,7 +94,19 @@ explain it:
   keys and third-party providers have no plan limits, and those rows are not shown.
 - **Side panel**: Files (tree, search, read-only viewer, add a file to the conversation), Diff (all /
   staged / unstaged, stage, unstage, discard, comment on lines; comments go with the next message),
-  Browser, Suggested tasks, Background tasks.
+  Browser, Suggested tasks, Background tasks, Goal, Side chat.
+- **Side chat**: a temporary fork of the current session for asking something on the side. It starts
+  with the session's context up to the last finished turn (if a turn is running it stops before it, and
+  the main turn keeps going), lives in the side panel's Side chat tab, never shows in the sidebar, and
+  is gone when closed (closing one you talked in asks first) or when the app restarts, and may be gone
+  after the device was disconnected for a while; New side chat starts over from the main session's latest. Two ways in: the Side chat tab
+  (Start side chat), or select text in a reply and choose Side chat (the text goes into the side chat's
+  composer as a quote, not sent; with a side chat open the button reads Send to side chat). Selecting
+  text in a side chat reply offers Add to main chat instead, which quotes it into the main composer.
+  One side chat per session. It uses the main session's model and permissions (changeable in the side
+  chat) and the same folder, so it can change files if asked; the model is told to only answer and not
+  to continue the main task. Only Claude Code, Pi and Codex sessions have it: OpenCode and generic ACP
+  temporary sessions carry no history, and DSH can't fork.
 - **Background tasks**: work still running after a turn ends (a background command, a Claude Code
   Monitor, a dsh background job, a long-running Codex command, or a background command Litch gives Pi,
   OpenCode and ACP sessions through its `litch_shell` tools (on by default; each harness's "Background

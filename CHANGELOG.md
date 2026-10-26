@@ -5,6 +5,10 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
+## 未发布
+
+- 侧聊：从眼前会话临时分出一段对话，带着它到最近一个结束的回合为止的上下文（主回合在跑也能开，主会话不受影响），在侧面板的“侧聊”标签里聊，不进侧栏，关掉、重开应用就没了。两个入口：侧面板的“侧聊”标签（开始侧聊），或在回答里选字后点“侧聊”（选中的文字作为引用放进侧聊的输入框）；在侧聊的回答里选字可以“带回主会话”。每个会话同时一个侧聊，用主会话的模型和权限。只有 Claude Code、Pi、Codex 的会话有：OpenCode 和通用 ACP 的临时会话不带历史，DSH 不会分叉。协议的能力位新加可选的 `ephemeralFork`
+
 ## 0.23.0
 
 - 侧栏单独查看一组时，行尾的“新建会话”“更多”还在（以前只剩设备名）
