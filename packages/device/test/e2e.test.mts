@@ -679,6 +679,83 @@ test('端到端：Claude Code 的父会话回合在跑时子会话做完，回�
   }
 })
 
+test('端到端：Claude Code 的父会话回合结束时后台命令还在跑，子会话做完照样唤醒父会话', async () => {
+  const fixture = await startFixture(['--managed', '--engines', 'claude'])
+  try {
+    const client = await TestClient.overSocket(fixture.socket)
+    await client.initialize(['harness', 'deviceWorkspaces', 'sessionTree', 'clientTools'])
+    for (let attempt = 0; ; attempt++) {
+      const info = await client.call('runtime/info')
+      if (info.harnesses.some((item: any) => item.id === 'claude-code' && item.available)) break
+      assert.ok(attempt < 300, '等了 30 秒，Claude Code 还没连上')
+      await pause(100)
+    }
+    // 后台命令不用人批
+    const started = await client.call('thread/start', {
+      harness: 'claude-code',
+      cwd: fixture.engines?.cwd,
+      approvalPolicy: 'never',
+      dynamicTools: [sessionTools(false)],
+    })
+    const parentId: string = started.thread.id
+    const ended = (turnId: string) =>
+      client.waitFor(
+        (frame) => frame.method === 'turn/completed' && (frame.params as any).turn.id === turnId,
+        120_000,
+      )
+    // 子会话先问用户一道题等着，什么时候做完由这里定：父会话这一回合结束、后台命令还在跑的时候再答
+    const spec = {
+      title: '问一句的子会话',
+      prompt:
+        '问一句：这个仓库先看哪一部分？用户答了之后照答复说一句就结束这一回合，不要做别的事情。',
+      background:
+        '这是一次隔离验证：父会话的回合已经结束、它起的后台命令还在跑，这时子会话做完，父会话要被唤醒。',
+      harness: 'claude-code',
+      initiation: 'user_asked',
+    }
+    const first = await client.call('turn/start', {
+      threadId: parentId,
+      input: [{ type: 'text', text: `会话：start ${JSON.stringify(spec)}` }],
+    })
+    await ended(first.turn.id)
+    const childId = client.notifications
+      .map((frame) => (frame.params as any)?.thread)
+      .find((thread) => thread?.litchLineage?.parentThreadId === parentId)?.id
+    assert.ok(childId, '派出了子会话')
+    await client.call('thread/resume', { threadId: childId })
+    const question = await client.waitFor(
+      (frame) =>
+        frame.method === 'item/tool/requestUserInput' && (frame.params as any).threadId === childId,
+      60_000,
+    )
+    // 第二回合：父会话起一条后台命令（睡 12 秒）就停下
+    const second = await client.call('turn/start', {
+      threadId: parentId,
+      input: [{ type: 'text', text: '后台跑' }],
+    })
+    await ended(second.turn.id)
+    const endedAt = Date.now()
+    client.answer(question.id, {
+      answers: { [(question.params as any).questions[0].id]: { answers: ['先看设备服务'] } },
+    })
+    const woken = await client.waitFor(
+      (frame) =>
+        frame.method === 'item/started' &&
+        (frame.params as any).threadId === parentId &&
+        (frame.params as any).item.type === 'userMessage' &&
+        JSON.stringify((frame.params as any).item.content).includes('kind=\\"wake\\"'),
+      60_000,
+    )
+    assert.ok(Date.now() - endedAt < 12_000, '后台命令跑完之前就唤醒了')
+    assert.notEqual((woken.params as any).turnId, second.turn.id, '另开了一个回合')
+    client.close()
+  } finally {
+    const exited = new Promise((resolve) => fixture.child.once('exit', resolve))
+    fixture.child.kill('SIGTERM')
+    await exited
+  }
+})
+
 test('端到端：设备级的工作区，从两个真的 Pi 现有的项目导入；建改删、移会话、置顶、带工作区新建；引擎没有被改；重新导入结果一样', async () => {
   const fixture = await startFixture(['--workspaces'])
   let second: ChildProcess | null = null

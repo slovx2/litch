@@ -23,6 +23,7 @@ import {
   type DeviceSettingsChangedNotification,
 } from '../../protocol/src/device-settings.mjs'
 import type { HarnessConfigChangedNotification } from '../../protocol/src/harness-config.mjs'
+import { SESSION_TREE_METHOD } from '../../protocol/src/session-tree.mjs'
 import { localTaskTimeZone } from '../../protocol/src/task-schedule.mjs'
 import { clientToolNamespaces } from '../../shared/src/client-tool-executor.mjs'
 import { errorText, paramFields } from '../../shared/src/log-file.mjs'
@@ -452,7 +453,11 @@ export class ClientSession implements ClientToolPeer {
     switch (route.kind) {
       case 'device':
         if (method === 'runtime/info') return this.runtimeInfo()
-        if (method.startsWith('litch/session/') || method.startsWith('litch/sessionProposal/'))
+        if (
+          method.startsWith('litch/session/') ||
+          method.startsWith('litch/sessionProposal/') ||
+          method === SESSION_TREE_METHOD.queuedNotesDeliver
+        )
           return sessionTreeCall(
             this.host.sessionTree,
             this.host.sessionTreeOn(),

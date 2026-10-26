@@ -35,7 +35,8 @@
     "子会话一回合结束：取最后一条回答的前 SESSION_TREE_LIMITS.noteChars 个字，等父会话下一个由用户发起的回合时，包成 kind=notes 的 <litch-session-event> 放在用户消息前面。",
     "子会话的回合失败、被打断：回报（SessionEventNote）另带 error，是回合上的错误原文，截到 SESSION_TREE_LIMITS.noteChars 个字以内；给模型的那一行写在最后（error: …）。这样的回报（第一回合也一样）照常进队列，但不算“要唤醒”的：等父会话下一个回合带上，或者别的子会话的回报唤醒父会话时一起交出去（同 Claude 桌面端：被截断的回合不唤醒）。派子会话时简报没发出去（turn/start 失败）不进队列，错误当场回给派它的那次调用。",
     "回报队列一变（进了一条、交出去了、改成不唤醒）就给声明了 sessionTree 的连接发 litch/thread/queuedNotes/updated（threadId、notes），notes 是这个会话现在排着、还没交给模型的回报（SessionQueuedNote：SessionEventNote 加进队列的时间 at，单位秒），每个子会话最新的一条，次序同交出去时；空了是空数组。经过聚合面的会话对象上同样挂 litchQueuedNotes（空着时没有这个字段）。客户端据此不等交给模型就把排着的回报画在父会话对话区的末尾，交出去之后画在带着它的那条消息上。",
-    "唤醒：父会话空闲、它的直接子会话都停下、它自己没有待处理的请求、而且至少有一个子会话的 wakeParent 为真时，设备进程替父会话发一个 turn/start，内容是 kind=wake 的 <litch-session-event>。上一条用户消息之后最多唤醒 SESSION_TREE_LIMITS.wakesPerUserMessage 次。没有客户端连着时不唤醒，等有连接上来再查一遍。",
+    "唤醒：父会话空闲、它的直接子会话都停下（回合结束后还有后台任务在跑的也算停下）、它自己没有待处理的请求、而且至少有一个子会话的 wakeParent 为真时，设备进程替父会话发一个 turn/start，内容是 kind=wake 的 <litch-session-event>。上一条用户消息之后最多唤醒 SESSION_TREE_LIMITS.wakesPerUserMessage 次。父会话上一个回合被打断、失败的（定时任务的回合除外）不唤醒，等用户先说话。没有客户端连着也唤醒（设备进程用自己的引擎连接）；设备进程起来时不等客户端，就把在跑的子会话重新盯上、查一遍排着的回报。",
+    "定时任务对准已有会话的回合：父会话排着的回报放在任务那条消息前面一起交出去（同用户发话时的拼法），不清零唤醒计数；任务回合在跑时子会话的回报照常插进去。提醒收尾的回合开始时排着的回报插进去（不拼在提醒那段文字前面）。",
     "子会话里由用户自己发起的回合（客户端的 turn/start）、由定时任务（deviceTasks）发起的回合：结束时照常回报，但这条回报不算“要唤醒”的。",
     "用户亲手停下的子会话（客户端对它发的 turn/interrupt 打断了在跑的回合，或者它被归档：客户端发的 thread/archive、引擎的 thread/archived 通知）：那一回合的回报照常进队列，带 userStopped（interrupted 或 archived），不算“要唤醒”的；归档时已经排着的这个子会话的回报也改成不唤醒、带 userStopped=archived。父会话下一个用户回合照常看到这些回报，给模型的那一行注明（stopped by the user / archived by the user）。模型用 litch_sessions 打断的不算用户停的，照常唤醒。",
     "归档带上子会话（照 Claude 桌面端）：一个会话归档成了（客户端的 thread/archive 应答回来，或者设备进程自己归档的），它的直接 Litch 子会话里没置顶、自己和没归档的子孙都没在干活（没有回合在跑、没在等用户答、没有后台任务在跑）的，由设备进程跟着归档，各自再往下带；在干活的、置顶的连同它们底下的留在列表里，父子关系不变。设备进程自己归档、放回的会话照客户端经过设备时的样子补上：索引记归档、工作树照归档规则处理（干净的删目录留分支、有改动的留着、有共用的转给它；放回时建回或接着用），给每条客户端连接发标准的 thread/archived、thread/unarchived（客户端退订了这条通知的不发）。放回（thread/unarchive）只放这一个，不带子会话。跟着用户归档的父会话一起归档的算用户归档：回报照上一条带 userStopped=archived、不唤醒。",
@@ -73,8 +74,8 @@
     },
     {
       "kind": "ClientRequest",
-      "methods": ["litch/session/start", "litch/session/detach", "litch/sessionProposal/list", "litch/sessionProposal/accept", "litch/sessionProposal/dismiss", "litch/sessionProposal/answer", "litch/sessionProposal/here", "litch/sessionProposal/markHere"],
-      "description": "参数与应答见 session-tree.mts。start 起好后发 litch/thread/lineage/updated 和标准的 thread/started。 litch/sessionProposal/answer 只收声明了 sessionTree 的连接。"
+      "methods": ["litch/session/start", "litch/session/detach", "litch/sessionProposal/list", "litch/sessionProposal/accept", "litch/sessionProposal/dismiss", "litch/sessionProposal/answer", "litch/sessionProposal/here", "litch/sessionProposal/markHere", "litch/thread/queuedNotes/deliver"],
+      "description": "参数与应答见 session-tree.mts。start 起好后发 litch/thread/lineage/updated 和标准的 thread/started。 litch/sessionProposal/answer 只收声明了 sessionTree 的连接。 litch/thread/queuedNotes/deliver（用户点“立即处理”）：父会话在跑就把排着的回报插进去（turn/steer），停着就开一个 kind=wake 的回合，不看兄弟子会话、回报该不该唤醒、次数上限和上一回合的结局，唤醒计数清零；还有子会话在干活时 <litch-session-event> 的 JSON 带 working（个数）。应答 delivered：steered、woken，或 none（队列空了、插不进去）。"
     },
     {
       "kind": "ServerNotification",

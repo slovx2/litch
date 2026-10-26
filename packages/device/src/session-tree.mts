@@ -55,8 +55,6 @@ export interface SessionTreeHost {
   worktrees: Worktrees | null
   /** 设置里“会话编排”开着 */
   enabled(): boolean
-  /** 现在握手完成的客户端连接有几条 */
-  clients(): number
   /** 发给全部声明了 extension 的客户端连接 */
   announce(method: string, params: unknown, extension: string): void
   /** 设备进程建出来的会话：给每条客户端连接发一条标准的 thread/started（各自挂上 harness、工作区、litchLineage） */
@@ -132,6 +130,11 @@ export class SessionTree {
   private readonly unsubscribing = new Map<string, Promise<void>>()
   /** 在跑的回合：会话 → 回合 */
   private readonly active = new Map<string, string>()
+  /**
+   * 上一个回合被打断、出错的会话：不唤醒它，等用户先说话（同 Claude 桌面端的 lastTurnCutShort）。
+   * 下一个回合正常做完、用户又发了话时去掉
+   */
+  private readonly cutShort = new Set<string>()
   /** 客户端用 turn/start 发起的回合（harness + 回合）：只有它们算用户发起的 */
   private readonly clientTurns = new Set<string>()
   /**
@@ -415,8 +418,15 @@ export class SessionTree {
     if (this.ended.has(key)) return
     if (method === 'turn/started') {
       this.active.set(threadId, turn.id)
+      // 回合开始时已经排着回报的（提醒收尾的回合、定时任务回合开始后才到的）：插进去
+      if (this.store.notes(threadId).length) this.check(threadId)
       return
     }
+    // 定时任务的回合超时、出错不算（不是用户打断的，也不是父会话自己走岔了）
+    if (this.host.taskTurn(threadId, turn.id)) {
+    } else if (turn.status === 'interrupted' || turn.status === 'failed')
+      this.cutShort.add(threadId)
+    else this.cutShort.delete(threadId)
     if (this.ended.size >= ENDED_LIMIT) this.ended.clear()
     this.ended.add(key)
     if (this.active.get(threadId) === turn.id) this.active.delete(threadId)
@@ -753,25 +763,48 @@ export class SessionTree {
     this.host.log(`把 ${latest.length} 条回报插进了 ${parentId}（${harness}）在跑的回合 ${running}`)
   }
 
+  /**
+   * 没有客户端连着也照样唤醒（同 Claude 桌面端），用设备进程自己的引擎连接。
+   * 父会话上一回合被打断、出错的不唤醒，等用户先说话
+   */
   private async wake(parentId: string): Promise<void> {
-    if (this.closed || !this.host.enabled() || this.host.clients() === 0) return
+    if (this.closed || !this.host.enabled()) return
     const notes = this.store.notes(parentId)
     if (!notes.some((note) => note.wake)) return
     if (this.store.wakes(parentId) >= SESSION_TREE_LIMITS.wakesPerUserMessage) return
+    if (this.cutShort.has(parentId)) return
     // 子会话都停下了（在等用户答的挂满一阵也算），父会话自己闲着（等着用户答请求的也是在跑）
+    if ((await this.working(parentId)) > 0) return
+    if (!(await this.idle(parentId))) return
+    // 上面那几步要等应答，这期间可能有用户发了话（回报已经跟着交出去了）
+    if (!this.store.notes(parentId).some((note) => note.wake) || this.active.has(parentId)) return
+    if (await this.startWake(parentId, 0))
+      this.store.setWakes(parentId, this.store.wakes(parentId) + 1)
+  }
+
+  /** 直接子会话里还在干活的有几个（在等用户答、挂满一阵的不算） */
+  private async working(parentId: string): Promise<number> {
+    let count = 0
     for (const child of this.store.childrenOf(parentId)) {
       if (this.waitingOnUser(child.threadId)) continue
-      if (!(await this.idle(child.threadId))) return
+      if (!(await this.idle(child.threadId))) count++
     }
-    if (!(await this.idle(parentId))) return
+    return count
+  }
+
+  /** 替父会话开一个唤醒回合，带着排着的全部回报。working 是还在干活的子会话数，写进给模型的话里 */
+  private async startWake(parentId: string, working: number): Promise<boolean> {
     const harness = await this.owner(parentId)
     await this.watch(harness, parentId)
-    // 上面那几步要等应答，这期间可能有用户发了话（回报已经跟着交出去了）
     const fresh = this.store.notes(parentId)
-    if (!fresh.some((note) => note.wake) || this.active.has(parentId)) return
+    if (fresh.length === 0 || this.active.has(parentId)) return false
     const link = await this.link(harness)
     const latest = latestPerSession(fresh)
-    const text = formatSessionEvent({ kind: 'wake', notes: latest.map(publicNote) })
+    const text = formatSessionEvent({
+      kind: 'wake',
+      notes: latest.map(publicNote),
+      ...(working > 0 ? { working } : {}),
+    })
     const result = await link.request('turn/start', {
       threadId: parentId,
       input: [{ type: 'text', text, text_elements: [] }],
@@ -781,8 +814,36 @@ export class SessionTree {
       this.active.set(parentId, turn.id)
     this.store.dropNotes(parentId, Math.max(...fresh.map((note) => note.seq)))
     this.notesChanged(parentId)
-    this.store.setWakes(parentId, this.store.wakes(parentId) + 1)
     this.host.log(`替会话 ${parentId}（${harness}）开了一个唤醒回合，带着 ${latest.length} 条回报`)
+    return true
+  }
+
+  /**
+   * 用户在排着的回报上点了“立即处理”（litch/thread/queuedNotes/deliver）：父会话在跑就插进去，停着就开一个唤醒回合，
+   * 不看兄弟子会话、回报该不该唤醒、次数上限和上一回合的结局。算用户的动作，唤醒计数清零。
+   * 返回怎么交出去的；队列空了、插不进去的是 none
+   */
+  async deliver(parentId: string): Promise<'steered' | 'woken' | 'none'> {
+    let outcome: 'steered' | 'woken' | 'none' = 'none'
+    const previous = this.checks.get(parentId) ?? Promise.resolve()
+    const next = previous.then(async () => {
+      if (this.store.notes(parentId).length === 0) return
+      if (this.store.wakes(parentId) > 0) this.store.setWakes(parentId, 0)
+      this.cutShort.delete(parentId)
+      if (this.active.has(parentId) || !(await this.idle(parentId))) {
+        await this.steerNotes(parentId)
+        if (this.store.notes(parentId).length === 0) outcome = 'steered'
+        return
+      }
+      if (await this.startWake(parentId, await this.working(parentId))) outcome = 'woken'
+    })
+    const settled = next.catch(() => {})
+    this.checks.set(parentId, settled)
+    void settled.finally(() => {
+      if (this.checks.get(parentId) === settled) this.checks.delete(parentId)
+    })
+    await next
+    return outcome
   }
 
   /**
@@ -819,8 +880,21 @@ export class SessionTree {
   beforeUserTurn(threadId: string, input: unknown): unknown[] | null {
     this.userSpoke(threadId)
     if (this.store.wakes(threadId) > 0) this.store.setWakes(threadId, 0)
+    this.cutShort.delete(threadId)
     // 用户又说话了：上一回合没发出去的提醒不用了，这一回合结束时再看
     this.reminders.delete(threadId)
+    return this.withNotes(threadId, input)
+  }
+
+  /**
+   * 设备自己要给一个已有会话发起回合（定时任务）：排着的回报同样放在那条消息前面，
+   * 但不算用户说话，唤醒计数不清零。没有要附的返回原样的输入
+   */
+  beforeDeviceTurn(threadId: string, input: unknown[]): unknown[] {
+    return this.withNotes(threadId, input) ?? input
+  }
+
+  private withNotes(threadId: string, input: unknown): unknown[] | null {
     if (!this.host.enabled() || !Array.isArray(input)) return null
     const notes = this.store.notes(threadId)
     if (notes.length === 0) return null
@@ -1203,7 +1277,19 @@ export class SessionTree {
 
   // ---------- 客户端来去、收尾 ----------
 
-  /** 一条客户端连接握手完成：攒着的唤醒现在可以做了；设备进程重启后第一次还要把在跑的子会话重新盯上 */
+  /**
+   * 设备进程起来了：不等客户端连上，把在跑的子会话重新盯上、看停着的最后一回合报过没有，再查一遍排着的回报
+   *（没人连着也唤醒）。引擎还在起的，隔一阵再试（rewatch）
+   */
+  started(): void {
+    if (this.recovered || this.closed) return
+    this.recovered = true
+    for (const harness of new Set(this.store.children().map((child) => child.harness)))
+      this.rewatch(harness, 0)
+    this.checkAll()
+  }
+
+  /** 一条客户端连接握手完成：设备进程起来时没做成的重新盯子会话现在做，再查一遍排着的回报 */
   clientJoined(): void {
     if (!this.recovered) {
       this.recovered = true
@@ -1248,7 +1334,7 @@ export class SessionTree {
       return
     this.later(REWATCH_MS[attempt] as number, () => {
       this.link(harness).then(
-        () => this.recover(harness),
+        () => this.recover(harness).then(() => this.checkAll()),
         () => this.rewatch(harness, attempt + 1),
       )
     })

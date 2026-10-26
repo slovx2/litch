@@ -3,13 +3,15 @@
 // 还排着、没交给模型的回报（SessionSummary.queuedNotes）不进对话区：输入框上方、后台任务那一行旁边一个小按钮，
 // 几条都合成一个（一条写来自谁，多条写几条），点开在输入框上方展开整份（QueuedNotesChip、QueuedNotesPanel，
 // 照 Claude 桌面端收成一行、点开再看）；交出去之后小按钮没了，回报画在带着它的那条消息上。
+// 浮窗里的“立即处理”让设备进程当场交出去（在跑就插进去，停着就开一个回合），同桌面端。
 import { keys, type SessionNoteView, type SessionSummary } from '@litch/core'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import { memo } from 'react'
+import { memo, useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { whyNot } from '../../../../../packages/ui/src/app/errors.ts'
 import type { RootStackParamList } from '../../nav/routes'
-import { useKey } from '../../shell/services'
+import { useChannel, useKey } from '../../shell/services'
 import { type Key, useT } from '../../ui/i18n'
 import { useTheme } from '../../ui/theme'
 import type { Props } from '../cells'
@@ -145,11 +147,26 @@ export function QueuedNotesPanel({
   const theme = useTheme()
   const { c, font } = theme
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+  const channel = useChannel()
   const notes = useQueuedNotes(deviceId, sessionId)
+  const [busy, setBusy] = useState(false)
+  const [failure, setFailure] = useState<string | null>(null)
   if (notes.length === 0) return null
   const openSession = (id: string) => {
     onClose()
     navigation.push('Detail', { deviceId, sessionId: id })
+  }
+  const deliver = () => {
+    setBusy(true)
+    setFailure(null)
+    channel
+      .command('session.queuedNotes.deliver', { deviceId, sessionId })
+      .then(({ delivered }) => {
+        if (delivered === 'none') setFailure(t('tree.queued.notNow'))
+        else onClose()
+      })
+      .catch((error: unknown) => setFailure(whyNot(error, t)))
+      .finally(() => setBusy(false))
   }
   return (
     <View
@@ -165,6 +182,22 @@ export function QueuedNotesPanel({
         </Text>
         <Pressable
           accessibilityRole="button"
+          accessibilityState={{ disabled: busy }}
+          testID="queued-notes:deliver"
+          disabled={busy}
+          onPress={deliver}
+          hitSlop={8}
+          style={({ pressed }) => [
+            styles.deliver,
+            { backgroundColor: pressed ? c.press : c.accent, borderRadius: theme.radius.m },
+          ]}
+        >
+          <Text style={{ color: c.onAccent, fontSize: font.size.meta, fontWeight: '600' }}>
+            {t('tree.queued.deliver')}
+          </Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
           testID="queued-notes:close"
           onPress={onClose}
           hitSlop={8}
@@ -175,6 +208,9 @@ export function QueuedNotesPanel({
           </Text>
         </Pressable>
       </View>
+      {failure ? (
+        <Text style={[styles.failure, { color: c.err, fontSize: font.size.meta }]}>{failure}</Text>
+      ) : null}
       <ScrollView style={styles.list} contentContainerStyle={styles.listBody}>
         {notes.map((note) => (
           <Note key={note.threadId} deviceId={deviceId} note={note} openSession={openSession} />
@@ -203,6 +239,8 @@ const styles = StyleSheet.create({
   panel: { marginHorizontal: 12, marginBottom: 6, borderWidth: 1, paddingVertical: 8 },
   panelHead: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, gap: 8 },
   close: { paddingHorizontal: 6, paddingVertical: 2 },
+  deliver: { paddingHorizontal: 10, paddingVertical: 4 },
+  failure: { paddingHorizontal: 12, marginTop: 4 },
   // 排得多了在浮窗里自己滚，不把对话区挤没
   list: { maxHeight: 240, marginTop: 4 },
   listBody: { paddingHorizontal: 12, gap: 2 },

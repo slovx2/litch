@@ -1,4 +1,5 @@
 // 请求怎么路由。只看方法名、会话标识和 harness 参数，别的一概不看。
+import { SESSION_TREE_METHOD } from '../../protocol/src/session-tree.mjs'
 import { DEVICE_PROCESS_PREFIX } from './device-processes.mjs'
 import { DEVICE_TASK_PREFIX } from './tasks.mjs'
 import { isObject } from './wire.mjs'
@@ -46,7 +47,11 @@ export function classify(method: string, params: unknown): Route {
   // 设备配置接口（设置、重启 harness、诊断、日志）：设备进程经控制通道交给适配器主进程
   if (method.startsWith('litch/device/')) return { kind: 'device' }
   // 会话树（sessionTree 扩展）：派子会话、脱离、提案。父子关系存在设备进程自己的库里，不转给引擎
-  if (method.startsWith('litch/session/') || method.startsWith('litch/sessionProposal/'))
+  if (
+    method.startsWith('litch/session/') ||
+    method.startsWith('litch/sessionProposal/') ||
+    method === SESSION_TREE_METHOD.queuedNotesDeliver
+  )
     return { kind: 'device' }
   // 手机上批准（clientApprovals 扩展）：卡片只在设备进程的内存里，不转给引擎（list 带的 threadId 不是指路的）
   if (method.startsWith('litch/approval/')) return { kind: 'device' }

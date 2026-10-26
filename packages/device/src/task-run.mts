@@ -76,6 +76,16 @@ export class RunFailure extends Error {
   }
 }
 
+/**
+ * 会话树（session-tree.mts）对任务回合的接应：对准已有会话的回合，排着的子会话回报放在任务的消息前面；
+ * 回合开始、结束告诉它（它的连接未必订阅着这个会话），在跑时到的回报好插进去、停下后好唤醒
+ */
+export interface TaskTurnHooks {
+  input(threadId: string, input: unknown[]): unknown[]
+  started(harness: string, threadId: string, turnId: string): void
+  ended(harness: string, threadId: string, turnId: string, status: TurnResult['status']): void
+}
+
 export interface RunHost {
   /** 现在的时间（毫秒） */
   now(): number
@@ -96,6 +106,8 @@ export interface RunHost {
   backgroundRunning(threadId: string): number
   /** 记下任务发起的回合（会话树认出它们，不拿来唤醒父会话） */
   turns: TaskTurns
+  /** 会话树的接应，没有是 null */
+  hooks: TaskTurnHooks | null
   /**
    * 接管这条内部连接上、任务回合里要人答的请求：等人答，到时限替人拒绝，记进这次运行（task-approvals.mts）。
    * turn 给出此刻在跑的任务回合，没有是 null。一直管到连接关
@@ -309,13 +321,17 @@ export async function executeRun(
     }
     const threadId = run.threadId as string
     const effort = target.kind === 'newThread' ? target.settings.effort : null
+    const prompt = [{ type: 'text', text: taskPrompt(task, run, Math.floor(host.now() / 1000)) }]
+    // 对准已有会话的：排着的子会话回报放在前面一起交出去（新建的会话没有回报）
+    const input =
+      target.kind === 'thread' && host.hooks ? host.hooks.input(threadId, prompt) : prompt
     const sent = host.turns.starting(threadId)
     guarded = { threadId, turnId: null }
     const result = await runTurn(
       link,
       {
         threadId,
-        input: [{ type: 'text', text: taskPrompt(task, run, Math.floor(host.now() / 1000)) }],
+        input,
         ...(effort ? { overrides: { effort } } : {}),
       },
       {
@@ -324,6 +340,7 @@ export async function executeRun(
         onStarted: (turnId) => {
           guarded = { threadId, turnId }
           host.turns.started(threadId, turnId)
+          host.hooks?.started(run.harness, threadId, turnId)
           sent()
           run = { ...run, turnId, status: 'running', startedAt: Math.floor(host.now() / 1000) }
           host.progress(run)
@@ -333,6 +350,7 @@ export async function executeRun(
       sent()
       guarded = null
     })
+    host.hooks?.ended(run.harness, threadId, result.turnId, result.status)
     if (result.status === 'timedOut') host.log(`任务 ${task.id} 的回合超过了时限，打断了`)
     const outcome = outcomeOf(result)
     const background = host.backgroundRunning(threadId)

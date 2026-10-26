@@ -21,6 +21,7 @@ import {
   recoverRun,
   summaryOf,
   type TaskTiming,
+  type TaskTurnHooks,
 } from './task-run.mjs'
 import { publicRun, type RunRow, type TaskRow, type TaskStore } from './task-store.mjs'
 import type { TaskTurns } from './task-turns.mjs'
@@ -83,6 +84,8 @@ export interface SchedulerHost {
   runChanged(run: DeviceTaskRun): void
   born(harness: string, thread: Record<string, unknown>, workspaceId: string | null): void
   turns: TaskTurns
+  /** 见 RunHost.hooks */
+  hooks: TaskTurnHooks | null
   /** 见 RunHost.worktrees */
   worktrees(): Worktrees | null
 }
@@ -231,6 +234,7 @@ export class TaskScheduler {
       openEngineLink: (harness) => host.openEngineLink(harness),
       backgroundRunning: (threadId) => host.backgroundRunning(threadId),
       turns: host.turns,
+      hooks: host.hooks,
       guardApprovals: (link, run, turn) =>
         guardApprovals(
           link,

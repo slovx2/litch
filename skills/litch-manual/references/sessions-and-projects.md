@@ -309,8 +309,11 @@ woken to continue.
   the parent ("Reports from sub-sessions"). When the parent is idle and its sub-sessions have stopped,
   the parent is woken to continue (limited per user message). Litch decides this, not the model: sub-
   sessions the model started or suggested always wake the parent; when you start one yourself (spawn
-  dialog, Edit and start) you can turn "Wake the main session when done" off. Nothing is woken while no client is
-  connected; it happens when one connects. Turns run by scheduled tasks report but do not wake.
+  dialog, Edit and start) you can turn "Wake the main session when done" off. Waking happens on the
+  device, also when no desktop or phone is connected. Background tasks still running in the parent or a
+  sub-session after its turn do not hold it back. Turns run by scheduled tasks report but do not wake;
+  a scheduled run in the parent itself carries the reports waiting there. After you stop the parent's
+  turn (or it fails) the parent is not woken; waiting reports go with your next message.
   A sub-session you stop or archive yourself does not wake the parent either: the report notes it and
   the parent sees it on your next message. The same goes for a turn you start yourself by typing in the
   sub-session (as in Claude's desktop app): its report waits until you next message the parent. A failed or interrupted turn's report carries its error and
@@ -318,7 +321,9 @@ woken to continue.
   another sub-session's report brings. Nothing wakes while another sub-session is still running.
   Reports not yet handed over show as soon as they arrive as one small button above the parent's
   composer, next to Background tasks ("Report from …", or "Reports from N sub-sessions"); tap it to
-  see them. Once handed over they show on the message that carried them.
+  see them. "Handle now" there hands them over at once: into the running turn, or in a new turn when the
+  parent is idle, without waiting for the other sub-sessions. Once handed over they show on the message
+  that carried them.
   If a sub-session finishes several turns while the parent is busy, only its latest report is handed over.
 - **Detach as a standalone session** (session menu or the "Started from …" bar at the top of a
   sub-session) cuts the link.

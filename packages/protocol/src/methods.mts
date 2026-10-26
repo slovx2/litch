@@ -253,6 +253,8 @@ import type { NativeOwnerChangedNotification } from './native-owner.mjs'
 import type {
   LineageUpdatedNotification,
   ProposalChangedNotification,
+  QueuedNotesDeliverParams,
+  QueuedNotesDeliverResponse,
   QueuedNotesUpdatedNotification,
   SessionDetachParams,
   SessionProposalAnswerParams,
@@ -570,6 +572,10 @@ export interface ClientRequests {
   'litch/sessionProposal/markHere': {
     params: SessionProposalHereParams
     result: SessionProposalMarkHereResult
+  }
+  'litch/thread/queuedNotes/deliver': {
+    params: QueuedNotesDeliverParams
+    result: QueuedNotesDeliverResponse
   }
   // 以下是工作树（扩展 worktrees，见 worktrees.mts）：只有聚合面有，设备信息的 `extensions` 里列了 worktrees 才能用
   'litch/worktree/list': { params: Record<string, never>; result: WorktreeListResponse }

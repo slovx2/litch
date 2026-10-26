@@ -171,6 +171,11 @@ export const SESSION_TREE_METHOD = {
    * 应答 SessionProposalMarkHereResult。旧的设备进程没有这个方法，客户端退回 here
    */
   proposalMarkHere: 'litch/sessionProposal/markHere',
+  /**
+   * 用户在排着的回报上点“立即处理”：父会话在跑就插进去，停着就替它开一个唤醒回合，不等别的子会话。
+   * 参数 QueuedNotesDeliverParams，应答 QueuedNotesDeliverResponse。旧的设备进程没有这个方法
+   */
+  queuedNotesDeliver: 'litch/thread/queuedNotes/deliver',
 } as const
 
 /**
@@ -295,6 +300,15 @@ export interface QueuedNotesUpdatedNotification {
   notes: SessionQueuedNote[]
 }
 
+export interface QueuedNotesDeliverParams {
+  threadId: string
+}
+
+export interface QueuedNotesDeliverResponse {
+  /** steered：插进了在跑的回合；woken：开了一个唤醒回合；none：队列已经空了，或者插不进去（留着照旧） */
+  delivered: 'steered' | 'woken' | 'none'
+}
+
 export interface ProposalChangedNotification {
   threadId: string
   proposals: SessionProposal[]
@@ -351,6 +365,8 @@ export interface SessionQueuedNote extends SessionEventNote {
 export interface SessionEvent {
   kind: SessionEventKind
   notes: SessionEventNote[]
+  /** 唤醒时还有几个子会话在干活（用户点了“立即处理”，不等它们）。都停了的不带 */
+  working?: number
 }
 
 /**
@@ -360,7 +376,9 @@ export interface SessionEvent {
 export function formatSessionEvent(event: SessionEvent): string {
   const head =
     event.kind === 'wake'
-      ? 'Sub-sessions you started have finished their turns. This message is from Litch, not typed by the user.'
+      ? event.working
+        ? `Some sub-sessions you started have finished a turn; ${event.working} still working. The user asked to handle these results now. This message is from Litch, not typed by the user.`
+        : 'Sub-sessions you started have finished their turns. This message is from Litch, not typed by the user.'
       : event.kind === 'remind'
         ? 'You ended your last turn without calling litch_sessions.wrap_up. This message is from Litch, not typed by the user.'
         : 'Updates from sub-sessions you started (from Litch, not typed by the user).'
@@ -381,7 +399,7 @@ export function formatSessionEvent(event: SessionEvent): string {
   })
   const tail =
     event.kind === 'wake'
-      ? 'If the user’s request has steps these results unblock, continue; otherwise tell the user the outcome in one or two lines. Use litch_sessions.read for details. Do not answer requests that are waiting for the user inside a sub-session.'
+      ? `If the user’s request has steps these results unblock, continue${event.working ? ' with those only; the rest arrive when the other sub-sessions finish' : ''}; otherwise tell the user the outcome in one or two lines. Use litch_sessions.read for details. Do not answer requests that are waiting for the user inside a sub-session.`
       : event.kind === 'remind'
         ? 'Call litch_sessions.wrap_up now, with the suggested tasks your last reply implies or an empty list, then end your turn with at most one short line. Do not repeat or summarize your last reply: the user already has it.'
         : 'Use litch_sessions.read for details.'

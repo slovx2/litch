@@ -3,13 +3,16 @@
 // 提醒没有回报，只是一行更轻的字。还排着、没交给模型的回报（SessionSummary.queuedNotes）不进对话区：
 // 输入框上方“后台任务”右边一个小按钮（QueuedNotesChip），几条合成一个，点开再看，交出去之后它画在带着它的那条消息上。
 // 不写“下一回合交给模型”（同 Claude 桌面端）：用户自己在子会话里说话的那一回合不唤醒父会话，排着的回报可能一直等到用户再说话。
+// 浮窗里的“立即处理”让设备进程当场交出去（在跑就插进去，停着就开一个回合），不用用户打一句“收到了，你看看”。
 import type { SessionEventView, SessionNoteView, SessionSummary } from '@litch/core'
 import { keys } from '@litch/core'
+import { useState } from 'react'
 import { requestOpenSession } from '../app/actions.ts'
 import { useT } from '../app/appearance.ts'
+import { whyNot } from '../app/errors.ts'
 import { Caret, Icon } from '../app/icons.tsx'
 import { usePopover } from '../app/popover.ts'
-import { useKey } from '../app/services.tsx'
+import { useKey, useServices } from '../app/services.tsx'
 import { useActions } from '../transcript/actions.tsx'
 
 const HEAD_TEXT = {
@@ -99,10 +102,25 @@ export function SessionEventBar({
  */
 export function QueuedNotesChip({ deviceId, sessionId }: { deviceId: string; sessionId: string }) {
   const t = useT()
+  const { channel } = useServices()
   const summary = useKey<SessionSummary>(keys.summary(deviceId, sessionId))
   const { open, setOpen, root, trigger, pop, onKeyDown } = usePopover()
+  const [busy, setBusy] = useState(false)
+  const [failure, setFailure] = useState<string | null>(null)
   const notes = summary?.queuedNotes
   if (!notes?.length) return null
+  const deliver = () => {
+    setBusy(true)
+    setFailure(null)
+    channel
+      .command('session.queuedNotes.deliver', { deviceId, sessionId })
+      .then(({ delivered }) => {
+        if (delivered === 'none') setFailure(t('tree.queued.notNow'))
+        else setOpen(false)
+      })
+      .catch((error: unknown) => setFailure(whyNot(error, t)))
+      .finally(() => setBusy(false))
+  }
   const only = notes.length === 1 ? notes[0] : undefined
   const label = only
     ? t('tree.queued.one', { title: only.title || only.threadId })
@@ -131,7 +149,18 @@ export function QueuedNotesChip({ deviceId, sessionId }: { deviceId: string; ses
           ref={pop}
           onKeyDown={onKeyDown}
         >
-          <p className="qn-hint">{t('tree.queued.hint')}</p>
+          <div className="qn-head">
+            <p className="qn-hint">{t('tree.queued.hint')}</p>
+            <button
+              type="button"
+              className="btn sm primary qn-deliver"
+              disabled={busy}
+              onClick={deliver}
+            >
+              {t('tree.queued.deliver')}
+            </button>
+          </div>
+          {failure ? <p className="qn-failure">{failure}</p> : null}
           <ul className="sev-notes">
             {notes.map((note) => (
               <Note
