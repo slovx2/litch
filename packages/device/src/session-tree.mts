@@ -272,7 +272,8 @@ export class SessionTree {
     if (
       this.active.has(threadId) ||
       this.backgroundOwed.has(threadId) ||
-      this.waiting.has(threadId)
+      this.waiting.has(threadId) ||
+      this.host.backgroundRunning(threadId) > 0
     )
       return
     threads.delete(threadId)
@@ -287,6 +288,21 @@ export class SessionTree {
         if (this.unsubscribing.get(threadId) === done) this.unsubscribing.delete(threadId)
       })
     this.unsubscribing.set(threadId, done)
+  }
+
+  /**
+   * 设备进程的连接跟着这个会话（订阅着），模型调设备工具（litch_sessions、litch_tasks）时总有执行方：
+   * 引擎只把调用交给发起回合的连接或订阅着会话的连接，客户端断开（桌面合上、手机切走）、或者引擎自己开的回合
+   * 没有客户端订阅着时一条都挑不出来，调用当场失败，任务卡、收尾发不出来。
+   * 回合结束、后台任务也跑完以后照常退订（release）
+   */
+  follow(threadId: string): void {
+    if (this.closed) return
+    void (async () => {
+      const harness = await this.owner(threadId)
+      await this.watch(harness, threadId)
+      this.releaseLater(harness, threadId)
+    })().catch((error: unknown) => this.host.log(`跟着会话 ${threadId} 没成：${String(error)}`))
   }
 
   /** 会话在哪个 harness 上：索引里有的直接给，没有的挨个问 */
@@ -649,6 +665,9 @@ export class SessionTree {
    * 这里补一条回报，摘录写各任务的结局。全是用户停的（决 481）：写明是用户停的，只进队列、不唤醒父会话
    */
   backgroundSettled(threadId: string, tasks: LitchBackgroundTask[]): void {
+    // 跟着它（follow）只为了后台任务的：跑完了，引擎接着做的那一回合结束时也会退订
+    const harness = this.host.index.lookup(threadId)
+    if (harness) this.releaseLater(harness, threadId)
     const owed = this.backgroundOwed.get(threadId)
     if (!owed) return
     const ended = tasks.filter((task) => owed.tasks.has(task.id) && task.status !== 'running')
@@ -1237,6 +1256,14 @@ export class SessionTree {
         this.host.log(`重新盯子会话 ${child.threadId} 没成：${String(error)}`)
       }
     }
+  }
+
+  /**
+   * 一条客户端连接断了：在跑的会话由设备进程的连接接着订阅（follow），这一回合里再调设备工具照样有执行方，
+   * 不用等客户端回来
+   */
+  clientLeft(): void {
+    for (const threadId of this.active.keys()) this.follow(threadId)
   }
 
   /** 到这个 harness 的连接断了：隔一阵重开、把它上面的子会话重新盯上。运行时一时起不来就再等等，几次之后放弃 */

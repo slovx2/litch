@@ -293,6 +293,8 @@ woken to continue.
   sessions too; the model still starts sub-sessions when you ask and hands off tasks. Started cards
   show the harness and folder the sub-session actually got. The mobile app shows the same cards and a
   per-session list (the "N suggested tasks waiting for you" bar at the top of a conversation, or the menu).
+  Cards and wrap-ups are kept on the device, so a session on a remote device makes them even when no
+  desktop or phone is connected; they show up when you open the session later.
 - **New task or here**: when the user asks for something unrelated to the current session (after a
   first task has been done in it; the first request is simply what the session is for), the model
   first shows a card with only a title and two buttons, "New session" and "Do it here". New session: the
