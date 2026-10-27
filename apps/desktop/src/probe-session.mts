@@ -561,6 +561,15 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
   const bubbles = () => all('.umsg:not(.editing)')
   const bubble = (text: string) => bubbles().find((element) => element.textContent?.includes(text))
   const turns = () => all('.turn').length
+  /**
+   * 切回一个会话之后先等回合画全再数：对话区先画最后几个回合、更早的分批往前补（ui 的 turn-window.ts），
+   * 刚切回来那一下数到的是先画的那一截。等不到 count 个就照实数（少了回合照样算没过）
+   */
+  const drawnTo = async (count: number) => {
+    const end = performance.now() + 5000
+    while (performance.now() < end && turns() < count) await sleep(16)
+    await frame()
+  }
   /** 发一句话，等这一轮结束 */
   const sayAndWait = async (text: string) => {
     const before = turns()
@@ -623,7 +632,7 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
       .find((element) => !element.classList.contains('sel'))
       ?.click()
   await until('原来的会话', () => bubble(later))
-  await frame()
+  await drawnTo(turnsBefore)
   fork.wentBack = Boolean(back) && !one('.forked-from[data-source]')
   fork.sourceKept = turns() === turnsBefore && !bubble(aside)
 
@@ -685,6 +694,7 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
   await frame()
   await open(other)
   await open(main)
+  await drawnTo(turnsBefore)
   edit.stayedGone =
     turns() === turnsBefore && !bubble(later) && Boolean(bubble(edited)) && Boolean(bubble(earlier))
   if (!real) {

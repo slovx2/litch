@@ -114,6 +114,8 @@ export async function enginesFork(
   if (!source?.isConnected) throw new Error('原来那个会话的那一行不在侧栏里了')
   source.click()
   await until('原来的会话', () => one('.ss-row.sel') === source && bubble(later), 30_000)
+  // 对话区先画最后几个回合、更早的分批往前补（ui 的 turn-window.ts）：等画全了再数，等不到照实数
+  await files.seen(() => kit.turns().length >= turnsBefore, 10_000)
   await frame()
   return {
     ...seen,

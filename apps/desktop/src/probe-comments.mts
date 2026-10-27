@@ -394,8 +394,9 @@ export function judgeComments(probe: CommentsProbe, reloaded: CommentsReloaded):
   }
   check(probe.pop.shown, '选中回答里的一段之后没有出浮层')
   check(probe.pop.above, '浮层不在选区上面')
+  // 中间那个是侧聊：评论用的模拟会话所属的 harness 声明了 ephemeralFork（mock/sample-harness.mts）
   check(
-    probe.pop.buttons.join() === 'comment,copy',
+    probe.pop.buttons.join() === 'comment,aside,copy',
     `浮层上的按钮不对：${probe.pop.buttons.join()}`,
   )
   check(probe.refused.user, '选中用户消息也出了浮层')
