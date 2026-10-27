@@ -330,6 +330,12 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
+      # 打包安卓之后再解模拟器，跑机的盘会不够（解到一半停下、sdkmanager 不报原因）：先删掉用不上的大件
+      - name: 腾磁盘空间
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/local/share/powershell /usr/local/lib/node_modules
+          df -h /
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
@@ -382,6 +388,7 @@ jobs:
               exit 0
             fi
             echo "第 ${attempt} 次没装上，过一会儿再试" >&2
+            df -h / >&2
             sleep 15
           done
           exit 1
