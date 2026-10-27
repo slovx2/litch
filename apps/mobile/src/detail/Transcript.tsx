@@ -18,7 +18,7 @@ import {
   useState,
   useSyncExternalStore,
 } from 'react'
-import { Linking, type ScrollViewProps, StyleSheet, View } from 'react-native'
+import { Linking, Pressable, type ScrollViewProps, StyleSheet, Text, View } from 'react-native'
 import { KeyboardChatScrollView, useKeyboardState } from 'react-native-keyboard-controller'
 import { nameOf } from '../../../../packages/ui/src/app/device.ts'
 import type { Row } from '../core/rows'
@@ -65,6 +65,7 @@ import { SyncBar } from './SyncBar'
 import { SystemCell } from './SystemCell'
 import { GroupCell, GroupEndCell, ProcessCell, StepCell } from './steps'
 import { colors } from './theme'
+import { Away } from './to-bottom'
 import { Flash, ImageViewer, TurnMenu } from './turn-menu'
 
 interface Props {
@@ -250,6 +251,33 @@ class Guard {
   }
 }
 
+/** 照桌面端：不在底部时对话区下沿正中一个“回到底部”，点了滚到最新 */
+function ToBottom({ away, onPress }: { away: Away; onPress(): void }) {
+  const t = useT()
+  const { c, radius } = useTheme()
+  const shown = useSyncExternalStore(away.subscribe, away.get)
+  if (!shown) return null
+  return (
+    <View pointerEvents="box-none" style={styles.toBottomRow}>
+      <Pressable
+        testID="detail:toBottom"
+        accessibilityRole="button"
+        onPress={onPress}
+        style={({ pressed }) => [
+          styles.toBottom,
+          {
+            backgroundColor: pressed ? c.raised : c.panel,
+            borderColor: c.line2,
+            borderRadius: radius.m,
+          },
+        ]}
+      >
+        <Text style={[styles.toBottomText, { color: c.ink }]}>{t('transcript.toBottom')}</Text>
+      </Pressable>
+    </View>
+  )
+}
+
 /** 倒置列表的表尾（在最上面）：键盘开着时垫的高度，加上尾巴刚并回列表时临时垫的 */
 function Footer({ guard, pad }: { guard: Guard; pad: number }) {
   const raised = useSyncExternalStore(guard.subscribe, guard.get)
@@ -270,6 +298,7 @@ export function Transcript({ store, bottomOffset, markers }: Props) {
   /** 刚离开底部、尾巴正从表头并回列表时是当时的内容总高（见 onScroll），平时是 0 */
   const unpinningRef = useRef(0)
   const guard = useMemo(() => new Guard(), [])
+  const away = useMemo(() => new Away(), [])
   /** 滚动时让 mermaid 卡片量自己在不在屏幕上：进了屏幕才画图 */
   const inView = useMemo(() => new InView(), [])
   // 贴底时列表的数据变了（回合结束、尾巴并回列表，发了新的一句）：这一次别让“保持可见位置”去校正。
@@ -362,6 +391,7 @@ export function Transcript({ store, bottomOffset, markers }: Props) {
               onScroll={(event) => {
                 noteWork('offset', event.nativeEvent.contentOffset.y)
                 inView.scrolled()
+                away.scrolled(event.nativeEvent.contentOffset.y)
                 const next = event.nativeEvent.contentOffset.y < 8
                 if (next !== pinnedRef.current) {
                   noteWork(next ? 'pin' : 'unpin', event.nativeEvent.contentOffset.y)
@@ -374,6 +404,10 @@ export function Transcript({ store, bottomOffset, markers }: Props) {
                 }
               }}
               style={styles.list}
+            />
+            <ToBottom
+              away={away}
+              onPress={() => listRef.current?.scrollToOffset({ offset: 0, animated: true })}
             />
             <SyncBar store={store} />
             {actions.overlays}
@@ -431,4 +465,17 @@ const styles = StyleSheet.create({
   list: { flex: 1 },
   endSpace: { height: 10, justifyContent: 'flex-start' },
   endMark: { height: 2, backgroundColor: colors.markEnd },
+  toBottomRow: { position: 'absolute', left: 0, right: 0, bottom: 12, alignItems: 'center' },
+  toBottom: {
+    height: 30,
+    paddingHorizontal: 14,
+    justifyContent: 'center',
+    borderWidth: 1,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+  },
+  toBottomText: { fontSize: 13 },
 })
