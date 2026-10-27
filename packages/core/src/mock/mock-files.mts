@@ -28,6 +28,8 @@ export interface MockFilesHost {
   device(deviceId: string): DeviceView | undefined
   /** 这个目录是不是这台设备上认得的根：某个工作区的根，或者某个会话的工作目录 */
   knownRoot(deviceId: string, root: string): boolean
+  /** 这台设备上认得的全部根（写法照示例数据，可能是 ~ 开头）。挑目录时示例树之外的目录照它们编出来 */
+  rootsOf(deviceId: string): string[]
 }
 
 export interface MockFiles {
@@ -151,6 +153,18 @@ export function createMockFiles(host: MockFilesHost): MockFiles {
     }
     const { path } = params as { path: string }
     const relative = relativeOf(remote, path)
+    // 示例树之外的目录（挑目录时一层层往上、往下走）：照这台设备认得的根编出它们那一路上的目录
+    if (method === 'fs/readDirectory' && relative === null) {
+      const names = new Set<string>()
+      for (const root of host.rootsOf(deviceId).map((one) => normalizePath(expand(one)))) {
+        const inside = insideRoot(path, root) && root !== path ? relativeTo(path, root) : null
+        const first = inside?.split('/')[0]
+        if (first) names.add(first)
+      }
+      return {
+        entries: [...names].map((name) => ({ fileName: name, isDirectory: true, isFile: false })),
+      }
+    }
     if (method === 'fs/readDirectory') {
       if (relative === 'fixtures/locked') {
         throw new RpcError(INTERNAL_ERROR, `EACCES: permission denied, scandir '${path}'`)
@@ -215,6 +229,7 @@ export function createMockFiles(host: MockFilesHost): MockFiles {
           answer(deviceId, remote, method, params, options) as Promise<ClientRequests[M]['result']>,
         fail: (error) => channelFailure(error),
         log() {},
+        home: () => HOME,
       }),
     }
     remotes.set(deviceId, remote)
@@ -244,6 +259,13 @@ export function createMockFiles(host: MockFilesHost): MockFiles {
       const files = filesOf(deviceId, root)
       const view = await files.list(expand(root), expand(path), fresh === true, signal)
       return { ...view, path: outward(root, view.path) }
+    },
+
+    async 'folders.list'({ deviceId, path }, signal) {
+      // 挑目录不带根：示例树里的那些根先都记上，走进去时认得出
+      const files = filesOf(deviceId, null)
+      for (const root of host.rootsOf(deviceId)) filesOf(deviceId, root)
+      return await files.folders(path === null ? null : expand(path), signal)
     },
 
     async 'files.read'({ deviceId, root, path }, signal) {

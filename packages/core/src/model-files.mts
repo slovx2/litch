@@ -10,6 +10,16 @@ export interface FileEntry {
   kind: FileEntryKind
 }
 
+/**
+ * 挑目录（添加项目）看到的一层：path 下面的目录名（按名字排，隐藏的也在里面，显不显示由界面定），
+ * parent 是上一级，已经到头是 null
+ */
+export interface FolderListing {
+  path: string
+  parent: string | null
+  folders: string[]
+}
+
 /** 一层目录。目录在前，同类按名字排；隐藏的（名字以点开头）也在里面，显不显示由界面定 */
 export interface DirectoryView {
   path: string

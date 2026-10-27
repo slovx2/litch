@@ -14,7 +14,10 @@ the side panel (files, diff) and terminals follow the project.
   folder fits.
 
 In the UI: Add project… on the device's menu, the **+** on the built-in Projects group, or in the
-new-session project picker; rename, color, pin, move to a group (or back to Projects), reorder and delete
+new-session project picker. In the dialog, type the folder, pick one used by sessions not in a project,
+or press Choose…: on this computer it opens the system folder dialog, on a remote device (and in the
+phone app) it browses the device's folders in place (Up, tap a folder to go in; hidden folders are not
+listed); rename, color, pin, move to a group (or back to Projects), reorder and delete
 from the project's menu. Groups (sidebar folders) are made from the device menu (New group…). Projects
 that are not pinned or in a group are listed under the built-in Projects group (it can't be renamed or
 deleted). In the sidebar, drag a project onto a group's title row to put it at the end of that group

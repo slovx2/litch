@@ -1618,6 +1618,14 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     stepMs: chunkMs,
     lang,
     device: (deviceId) => app.devices.find((entry) => entry.id === deviceId),
+    rootsOf(deviceId) {
+      const view = sidebars.get(deviceId)
+      if (!view) return []
+      return [
+        ...view.workspaces.flatMap((workspace) => workspace.roots),
+        ...view.sessions.flatMap((session) => (session.cwd ? [session.cwd] : [])),
+      ]
+    },
     // 认得的根：工作区的根，和会话的工作目录
     knownRoot(deviceId, root) {
       const view = sidebars.get(deviceId)

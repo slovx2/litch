@@ -6,6 +6,7 @@ import { useT } from '../app/appearance.ts'
 import { wireStyle } from '../app/device.ts'
 import { reasonOf } from '../app/errors.ts'
 import { useKey, useServices } from '../app/services.tsx'
+import { FolderPicker } from './FolderPicker.tsx'
 
 interface WorkspaceDialogProps {
   deviceId: string
@@ -37,12 +38,16 @@ export function WorkspaceDialog({ deviceId, workspace, onAdded, onClose }: Works
   const adding = workspace === null
   const device = useKey<DeviceView>(keys.device(deviceId))
   /**
-   * 系统的选文件夹对话框：只有本机的设备、外壳又给得出才有。选出来的是这台电脑上的路径，
-   * 远程设备的目录还是自己填（或者从候选里挑）
+   * 系统的选文件夹对话框：只有本机的设备、外壳又给得出才有。选出来的是这台电脑上的路径。
+   * 别的（远程设备、普通浏览器里）在对话框里浏览设备上的目录（FolderPicker）
    */
   const pickFolder = device?.kind === 'local' ? window.litchShell?.pickFolder : undefined
+  const [browsing, setBrowsing] = useState(false)
   const browse = () => {
-    if (!pickFolder) return
+    if (!pickFolder) {
+      setBrowsing((open) => !open)
+      return
+    }
     const from = root.trim()
     pickFolder({ title: t('workspace.root.browse.title'), ...(from ? { defaultPath: from } : {}) })
       .then((picked) => {
@@ -129,14 +134,24 @@ export function WorkspaceDialog({ deviceId, workspace, onAdded, onClose }: Works
                   autoFocus
                   onChange={(event) => setRoot(event.target.value)}
                 />
-                {pickFolder ? (
-                  <button type="button" className="btn ws-browse" onClick={browse}>
-                    {t('workspace.root.browse')}
-                  </button>
-                ) : null}
+                <button
+                  type="button"
+                  className="btn ws-browse"
+                  aria-expanded={pickFolder ? undefined : browsing}
+                  onClick={browse}
+                >
+                  {t('workspace.root.browse')}
+                </button>
               </span>
               <span className="form-note">{t('workspace.root.hint')}</span>
-              {candidates.length > 0 ? (
+              {browsing ? (
+                <FolderPicker
+                  deviceId={deviceId}
+                  start={/^(\/|[A-Za-z]:[\\/])/.test(path) ? path : null}
+                  onPick={setRoot}
+                  onClose={() => setBrowsing(false)}
+                />
+              ) : candidates.length > 0 ? (
                 <ul className="ws-roots" aria-label={t('workspace.root.candidates')}>
                   <li className="form-note">{t('workspace.root.candidates')}</li>
                   {candidates.map((candidate) => (

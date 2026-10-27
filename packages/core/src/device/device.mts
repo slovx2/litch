@@ -2323,6 +2323,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
     clock: options.clock,
     online: () => online,
     platform: () => platform,
+    home: () => home,
     knownRoot: (root) => knownRoot(root),
     request: (method, params, requestOptions) => link.request(method, params, requestOptions),
     fail: (error) => fail(error),

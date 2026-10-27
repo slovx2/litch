@@ -1,4 +1,5 @@
 // 一台设备上的文件：列一层目录、读一个文件、模糊找文件。文件面板只发这三条命令。
+// 另有挑目录（添加项目时浏览设备上的目录）：只列目录名、不读文件，所以不受下面“只在根之内”的限制。
 //
 // 用的都是 Codex 协议里现成的方法（fs/readDirectory、fs/readFile、fs/getMetadata、fuzzyFileSearch），哪种对面都有：
 // - 设备服务的聚合面：设备进程自己读，不经任何引擎，所以不带 harness，哪个 harness 掉线都不影响；
@@ -19,6 +20,7 @@ import type {
   FileEntry,
   FileMatch,
   FileSearchView,
+  FolderListing,
 } from '../model-files.mjs'
 import { phrase } from '../phrase.mjs'
 import {
@@ -32,6 +34,7 @@ import {
   isNetworkPath,
   joinPath,
   normalizePath,
+  parentPath,
   pathTwin,
   relativeTo,
   withinRoot,
@@ -43,6 +46,8 @@ export interface FilesHost {
   online(): boolean
   /** 对面的系统（macos、linux、windows），还不知道是 null：路径的另一种写法按它认（text/paths.mts 的 pathTwin） */
   platform(): string | null
+  /** 对面的用户主目录（设备服务报的），不知道是 null。挑目录从这里开始 */
+  home(): string | null
   /** 这个目录是不是这台设备上认得的根：某个工作区的根，或者某个会话的工作目录。给的是理过的路径 */
   knownRoot(root: string): boolean
   request<M extends ClientRequestMethod>(
@@ -61,6 +66,8 @@ export interface Files {
   read(root: string, path: string, signal?: AbortSignalLike): Promise<FileContent>
   /** 在根下面模糊找文件。同一个根上后来的一次会让前一次以 cancelled 结束 */
   search(root: string, query: string, signal?: AbortSignalLike): Promise<FileSearchView>
+  /** 挑目录：列任意一层（绝对路径，null 是主目录）下面的目录。走同一份缓存 */
+  folders(path: string | null, signal?: AbortSignalLike): Promise<FolderListing>
   /** 各层目录、各个文件真的向对面要过几次（走缓存的、搭便车的不算）。给验收量“每层只请求一次”用 */
   requests(): { lists: Record<string, number>; reads: Record<string, number> }
   /** 连上并认出对面是谁了：上一次连接里记的（缓存、对面不会什么）都不算数 */
@@ -260,27 +267,52 @@ export function createFiles(host: FilesHost): Files {
     }
   }
 
+  /** 列一层（路径已经核对过）：缓存里新的直接给，同一层正在取的话搭它的车，几处同时要同一层只发一次请求 */
+  const listPath = async (
+    path: string,
+    fresh: boolean,
+    signal: AbortSignalLike | undefined,
+  ): Promise<DirectoryView> => {
+    mustBeOnline()
+    if (lacks.fs) throw unsupported('fs')
+    if (!fresh) {
+      const cached = cache.get(path)
+      if (cached && host.clock.now() - cached.at < LIST_TTL_MS) return cached.view
+    }
+    let work = listing.get(path)
+    if (!work) {
+      work = fetchDirectory(path)
+      listing.set(path, work)
+      const mine = work
+      const done = () => {
+        if (listing.get(path) === mine) listing.delete(path)
+      }
+      work.then(done, done)
+    }
+    return abandonable(work, signal)
+  }
+
   return {
     async list(root, path, fresh, signal) {
-      const at = locate(root, path)
-      mustBeOnline()
-      if (lacks.fs) throw unsupported('fs')
-      if (!fresh) {
-        const cached = cache.get(at.path)
-        if (cached && host.clock.now() - cached.at < LIST_TTL_MS) return cached.view
+      return listPath(locate(root, path).path, fresh, signal)
+    },
+
+    async folders(given, signal) {
+      // 不知道主目录（单个入口连的、旧的设备服务）从根开始
+      const path = given ?? host.home() ?? '/'
+      if (typeof path !== 'string' || isNetworkPath(path)) {
+        throw new ChannelError('unsupported', '网络共享上的目录还不支持', phrase('files.network'))
       }
-      // 同一层正在取的话搭它的车：几处同时要同一层，只发一次请求
-      let work = listing.get(at.path)
-      if (!work) {
-        work = fetchDirectory(at.path)
-        listing.set(at.path, work)
-        const mine = work
-        const done = () => {
-          if (listing.get(at.path) === mine) listing.delete(at.path)
-        }
-        work.then(done, done)
+      const at = normalizePath(path)
+      if (!isAbsolutePath(at)) {
+        throw new ChannelError('rejected', `不是绝对路径：${path}`, phrase('files.outside'))
       }
-      return abandonable(work, signal)
+      const view = await listPath(at, false, signal)
+      return {
+        path: view.path,
+        parent: parentPath(view.path),
+        folders: view.entries.filter((entry) => entry.kind === 'dir').map((entry) => entry.name),
+      }
     },
 
     async read(root, path, signal) {
