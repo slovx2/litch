@@ -1,5 +1,6 @@
-# 模拟核心：引擎自己的子代理。新建会话说“use sub-agents”→ 派出三个：每个一条（描述加状态的字），状态跟着子线程走
-# （完成、已停止、失败），等待收在过程组里 → 点开过程组，末尾有“收起”，点了收回去 → 点失败的那一条进子代理页，看到失败的原因
+# 模拟核心：引擎自己的子代理。新建会话说“use sub-agents”→ 派出三个，回合说完后整段过程收成一行（几个子代理、失败的标红）
+# → 点开那一行：每个子代理一条（描述加状态的字），状态跟着子线程走（完成、已停止、失败），等待收在过程组里
+# → 点开过程组，末尾有“收起”，点了收回去 → 点失败的那一条进子代理页，看到失败的原因
 appId: dev.litch.app
 name: mock-子代理
 tags: [mock]
@@ -22,15 +23,22 @@ tags: [mock]
 - inputText: use sub-agents
 - tapOn:
     id: new-send
-# 子代理那一条的无障碍文字是“描述 状态”。停掉的那个要等别的都回来以后再过 2.5 秒
+# 回合说完（停掉的那个要等别的都回来以后再过 2.5 秒，父会话才接着说）整段过程收成一行：三个子代理、一个失败
+- extendedWaitUntil:
+    visible:
+      id: process-head
+    timeout: 30000
+- assertVisible:
+    text: "▸.*(3 subagents|3 个子代理).*"
+- tapOn:
+    id: process-head
+# 子代理那一条的无障碍文字是“描述 状态”
 - extendedWaitUntil:
     visible:
       text: ".*(Walk the repository layout|走一遍仓库的目录结构).*(Done|完成).*"
-    timeout: 20000
-- extendedWaitUntil:
-    visible:
-      text: ".*(Find duplicated helpers in core|找出 core 里重复的工具函数).*(Stopped|已停止).*"
-    timeout: 20000
+    timeout: 5000
+- assertVisible:
+    text: ".*(Find duplicated helpers in core|找出 core 里重复的工具函数).*(Stopped|已停止).*"
 - assertVisible:
     text: ".*(Compare OpenCode|对照 OpenCode).*(Failed|失败).*"
 # 过程组里只剩等待那一步：点开，末尾一行“收起”，点了收回去

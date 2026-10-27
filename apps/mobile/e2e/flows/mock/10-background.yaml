@@ -1,7 +1,7 @@
 # 模拟核心：后台任务。新建会话说“background tasks”→ 回合说完两条后台命令还在跑：输入框上方一行 →
 # 点那一行进“后台任务”页（命令的行。停止不在这里点：dev 服务 9 秒就结束，慢的模拟器上点不及，桌面的 client:check:background 点）→ 返回 → 测试先跑完，自发回合开头一行
 # “后台任务结束，自动继续”→ dev 服务也结束，那一行没了 → 再说“use sub-agents”派子代理 → 从右上角菜单进“后台任务”页，
-# 子代理和命令列在一起 → 点子代理进它的详情页 → 返回
+# 子代理和命令列在一起 → 点子代理进它的子代理页（和对话里子代理那一行点进去的是同一页）→ 返回
 appId: dev.litch.app
 name: mock-后台任务
 tags: [mock]
@@ -93,8 +93,11 @@ tags: [mock]
     id: background:entry:agent:completed
 - extendedWaitUntil:
     visible:
-      id: detail
+      id: agent:head
     timeout: 10000
+- assertVisible:
+    id: agent:state
+    text: ".*(Done|完成).*"
 - tapOn:
     id: header:back
 - extendedWaitUntil:
