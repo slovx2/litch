@@ -5,7 +5,7 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
-## 未发布
+## 0.24.0
 
 - Claude Code 会话回合进行中插话可以带图片了（以前提示“带图片的消息不能在回合中途插入”）：这是 Litch 的 Claude 入口自己的限制，插话只把文字交给 CLI；CLI 本身回合中途收到带图片的消息照样交给模型。现在插话和回合开头一样把图片发成内容块，入口声明的插话输入种类加上图片；回合进行中再发一条带图片的消息（并进当前回合）也不再被拒。其他 harness 核过：Pi、DSH、OpenCode、原生 Codex 本来就带图片，ACP 入口不支持回合中途插话
 - 添加项目的对话框加了目录选择：本机设备照旧弹系统的选文件夹对话框，远程设备（以前只能手填）和手机端在对话框里浏览设备上的目录，“上一级”、点目录进去，走到哪层就填哪层，从设备的主目录开始（栏里填了绝对路径就从那里开始）；隐藏目录不列。核心加了 `folders.list`（只列目录名，不受工作区根的限制）
