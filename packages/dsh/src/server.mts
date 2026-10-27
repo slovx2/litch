@@ -3,7 +3,9 @@ import { appendFileSync } from 'node:fs'
 import { BACKGROUND_TASKS_NOTIFICATION } from '../../protocol/src/background-tasks.mjs'
 import { type ClientToolCallResponse, clientToolFailure } from '../../protocol/src/client-tools.mjs'
 import {
+  type DeclaredClientTools,
   isClientToolNamespace,
+  NO_CLIENT_TOOLS,
   noClientToolExecutor,
   pickClientToolExecutor,
 } from '../../shared/src/client-tool-executor.mjs'
@@ -113,7 +115,7 @@ export class DshServer {
     this.notify(threadId, method, params),
   )
   // 每条连接握手时声明能执行的客户端工具命名空间（clientTools 扩展）
-  readonly toolNamespaces = new Map<string, ReadonlySet<string>>()
+  readonly toolNamespaces = new Map<string, DeclaredClientTools>()
   // 握手时声明了 harnessConfig 扩展的连接：配置变化、登录进展的通知只发给它们（harness-config.mts）
   readonly configPeers = new Set<string>()
   // 握手时声明了 backgroundTasks 扩展的连接：后台作业的集合、回合的来历只给它们（background.mts）
@@ -863,7 +865,8 @@ export class DshServer {
           namespace as string,
           starter,
           subscribers,
-          (peer) => this.toolNamespaces.get(peer.id) ?? new Set(),
+          (peer) => this.toolNamespaces.get(peer.id) ?? NO_CLIENT_TOOLS,
+          this.peers.values(),
         )
       : (starter ?? subscribers[0] ?? null)
     if (!target)

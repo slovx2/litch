@@ -4,7 +4,7 @@ import type { LitchPeer } from '../../protocol/src/peer-messages.mjs'
 import { peerFromOrigin } from './peer-message.mjs'
 import { submissionHash } from './protocol-contract.mjs'
 import { claudeCrossSessionInbox } from './runtime-config.mjs'
-import type { RuntimeBackgroundCommandEnd, RuntimeTurnContext } from './types.mjs'
+import type { ImageInput, RuntimeBackgroundCommandEnd, RuntimeTurnContext } from './types.mjs'
 import { parseWorkflowCommand, workflowRuntimePrompt } from './workflow-command.mjs'
 
 // CLI 进程在回合结束后是否留下，以及留多少个，见 docs/guide/configuration.md。
@@ -136,26 +136,39 @@ export function userMessage(
   // 带图片时只能发成内容块，CLI 这时只拿最后一块文本去认斜杠命令（选的技能也是这样发的）：
   // 命令排在图片前面的话不会展开，原样当成一句话发给模型。所以命令排到图片后面，别的话照旧排在前面
   if (text && !command) content.push({ type: 'text', text })
-  for (const image of images)
-    content.push({
-      type: 'image',
-      source:
-        image.kind === 'base64'
-          ? { type: 'base64', media_type: image.mediaType, data: image.data }
-          : { type: 'url', url: image.data },
-    })
+  for (const image of images) content.push(imageBlock(image))
   if (command) content.push({ type: 'text', text })
   return { ...envelope, message: { role: 'user', content } } as SDKUserMessage
 }
 
-export function steerMessage(text: string, uuid: string): SDKUserMessage {
+function imageBlock(image: ImageInput): unknown {
+  return {
+    type: 'image',
+    source:
+      image.kind === 'base64'
+        ? { type: 'base64', media_type: image.mediaType, data: image.data }
+        : { type: 'url', url: image.data },
+  }
+}
+
+// 插进回合的话。带图片时发成内容块（文字在前）：CLI 回合中途把排着的消息交给模型时，内容块里的图片照样带上
+// （缩放后放进 queued_command 附件），和回合开头那条一样
+export function steerMessage(
+  text: string,
+  uuid: string,
+  images: ImageInput[] = [],
+): SDKUserMessage {
+  const content =
+    images.length === 0
+      ? text
+      : [...(text ? [{ type: 'text', text }] : []), ...images.map(imageBlock)]
   return {
     type: 'user',
     uuid: uuid as MessageUuid,
-    message: { role: 'user', content: text },
+    message: { role: 'user', content },
     parent_tool_use_id: null,
     origin: { kind: 'human' },
-  }
+  } as SDKUserMessage
 }
 
 // 收件箱开着时 CLI 回显进模型的每条用户消息（--replay-user-messages）。别的会话发来的那条给出原文和发送方

@@ -160,7 +160,9 @@ export class DeviceTools implements DeviceToolRegistry {
 
 /**
  * 设备进程替自己通往引擎的连接声明能执行这些命名空间：litchExtensions 里加上 clientTools，
- * litchClientTools.namespaces 里加上它们。客户端自己的声明照原样保留（它声明了别的命名空间的照旧）。
+ * litchClientTools.namespaces 里加上它们，anyThread 就是它们（不看会话：发起回合的、订阅着的连接都没有时，
+ * 引擎交给任一条设备进程的连接，不要求客户端在线）。客户端自己声明的命名空间照原样保留（它声明了别的命名空间的
+ * 照旧），它声明的 anyThread 不算：客户端执行的工具要在看着这个会话的那一台上执行。
  * 原生 codex 不认识这两个键，它的“话”在握手前会摘掉（native-codex.mts），由设备进程自己拦它的调用。
  */
 export function declareDeviceTools(given: unknown, namespaces: readonly string[]): unknown {
@@ -185,7 +187,11 @@ export function declareDeviceTools(given: unknown, namespaces: readonly string[]
     capabilities: {
       ...capabilities,
       [EXTENSIONS_CAPABILITY]: extensions,
-      [CLIENT_TOOLS_CAPABILITY]: { ...tools, namespaces: [...own, ...added] },
+      [CLIENT_TOOLS_CAPABILITY]: {
+        ...tools,
+        namespaces: [...own, ...added],
+        anyThread: [...namespaces],
+      },
     },
   }
 }

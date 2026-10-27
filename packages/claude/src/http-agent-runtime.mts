@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import type { ClaudeRuntime, RuntimeHandlers, RuntimeTurnContext } from './types.mjs'
+import { ProtocolError } from './protocol-contract.mjs'
+import type { ClaudeRuntime, ImageInput, RuntimeHandlers, RuntimeTurnContext } from './types.mjs'
 import { debugLog, sleep } from './util.mjs'
 
 const execFileAsync = promisify(execFile)
@@ -162,7 +163,17 @@ export class HttpAgentRuntime implements ClaudeRuntime {
     }
   }
 
-  async steer(_threadId: string, prompt: string): Promise<void> {
+  async steer(
+    _threadId: string,
+    prompt: string,
+    _uuid?: string,
+    images: ImageInput[] = [],
+  ): Promise<void> {
+    if (images.length > 0)
+      throw new ProtocolError(
+        -32009,
+        `${this.options.kind} 运行时的插话不能带图片，请等回合结束后再发`,
+      )
     await this.postMessage(
       this.active.get(_threadId)?.baseUrl ?? this.options.baseUrl,
       prompt,

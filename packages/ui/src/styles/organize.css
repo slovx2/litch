@@ -62,7 +62,7 @@
   color: var(--ink-2);
   user-select: text;
 }
-/* 目录那一栏和它右边的“选择…”（只有本机的设备有） */
+/* 目录那一栏和它右边的“选择…”（本机的设备弹系统对话框，别的在下面浏览） */
 .ws-pathrow {
   display: flex;
   align-items: stretch;
@@ -106,6 +106,35 @@
 .ws-root.on {
   background: var(--sel);
   color: var(--accent);
+}
+/* 浏览设备上的目录：顶上一行（上一级、走到的路径、收起），下面这一层的子目录 */
+.ws-picker {
+  margin-top: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--r1);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.ws-picker-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12px;
+}
+.ws-picker-list {
+  margin: 0;
+  max-height: 200px;
+}
+.ws-picker-note {
+  padding: 6px 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 /* 色板最前面的“不要颜色”：一个空心的格子，里面一道斜线 */
 .ws-colors button.none {

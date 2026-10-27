@@ -669,9 +669,10 @@ export interface ClaudeRuntime {
   runTurn(context: RuntimeTurnContext, handlers: RuntimeHandlers): Promise<void>
   /**
    * 往进行中的回合里插话。uuid：这条消息交给 CLI 时用的标识，原生记录里插话那一行（queued_command 附件）
-   * 的 source_uuid 就是它，回退、分叉切在这条插话之前时靠它找位置（steer-cut.mts）
+   * 的 source_uuid 就是它，回退、分叉切在这条插话之前时靠它找位置（steer-cut.mts）。
+   * images：插话带的图片。只有原生运行时送得进去，别的运行时有图片时拒绝（不悄悄丢掉）
    */
-  steer(threadId: string, prompt: string, uuid?: string): Promise<void>
+  steer(threadId: string, prompt: string, uuid?: string, images?: ImageInput[]): Promise<void>
   interrupt(threadId: string): Promise<void>
   stop(): Promise<void>
 }

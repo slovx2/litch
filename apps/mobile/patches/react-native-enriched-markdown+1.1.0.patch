@@ -202,6 +202,31 @@ index 0008d9b..c70bbde 100644
      }
    }
  }
+diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/renderer/ListItemRenderer.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/renderer/ListItemRenderer.kt
+index afbf68f..172bb71 100644
+--- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/renderer/ListItemRenderer.kt
++++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/renderer/ListItemRenderer.kt
+@@ -38,8 +38,10 @@ class ListItemRenderer(
+     val depth = styleContext.listDepth - 1
+     val listStyle = config.style.listStyle
+ 
++    val indentBefore = styleContext.accumulatedIndent
++
+     fun makeSpan(drawsMarker: Boolean): BaseListSpan =
+-      if (isTask) {
++      (if (isTask) {
+         TaskListSpan(
+           taskStyle = config.style.taskListStyle,
+           listStyle = listStyle,
+@@ -62,7 +64,7 @@ class ListItemRenderer(
+             }
+           }
+         }
+-      }
++      }).also { it.indentBefore = indentBefore }
+ 
+     val markerSpan = makeSpan(drawsMarker = true)
+ 
 diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/renderer/NodeRenderer.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/renderer/NodeRenderer.kt
 index a0f37cd..ad51d50 100644
 --- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/renderer/NodeRenderer.kt
@@ -373,6 +398,54 @@ index 1100ee4..b0cc0d4 100644
        isHorizontalScrollBarEnabled = true
        overScrollMode = View.OVER_SCROLL_NEVER
        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/BaseListSpan.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/BaseListSpan.kt
+index 2ab0043..fb41de3 100644
+--- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/BaseListSpan.kt
++++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/BaseListSpan.kt
+@@ -38,6 +38,32 @@ abstract class BaseListSpan(
+ 
+   protected abstract fun getMarkerWidth(): Float
+ 
++  /** Indent taken by enclosing list items (not blockquotes); filled in by ListItemRenderer. */
++  var indentBefore: Int = 0
++
++  protected val markerGap: Float
++    get() = gapWidth.coerceAtLeast(DEFAULT_MIN_GAP)
++
++  /**
++   * Where this item's text starts, measured from [origin] (the paragraph edge) along [dir].
++   * Markers are placed against it, so they keep a fixed gap before the text whatever the
++   * enclosing lists and blockquotes are. The x Android passes to drawLeadingMargin is not
++   * usable for that: nested items are spanned before their parents, so it does not include
++   * the outer margins.
++   */
++  protected fun textStartFrom(
++    origin: Int,
++    dir: Int,
++    layout: Layout?,
++    start: Int,
++  ): Float {
++    val quote =
++      (layout?.text as? Spanned)
++        ?.getSpans(start, start + 1, BlockquoteSpan::class.java)
++        ?.sumOf { it.getLeadingMargin(true) } ?: 0
++    return origin + (quote + indentBefore + getLeadingMargin(true)) * dir.toFloat()
++  }
++
+   override fun updateMeasureState(textPaint: TextPaint) = applyTextStyle(textPaint)
+ 
+   override fun updateDrawState(textPaint: TextPaint) = applyTextStyle(textPaint)
+@@ -72,7 +98,9 @@ abstract class BaseListSpan(
+     // but only the line at the span start should get a bullet/number.
+     if (text is Spanned && text.getSpanStart(this) != start) return
+ 
+-    drawMarkerAt(canvas, paint, x, dir, top, baseline, bottom, layout, start)
++    // Pass the paragraph edge, like ListMarkerAnchorSpan: markers measure from it
++    val origin = if (dir > 0 || layout == null) 0 else layout.width
++    drawMarkerAt(canvas, paint, origin, dir, top, baseline, bottom, layout, start)
+   }
+ 
+   fun drawMarkerAt(
 diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/CodeBackgroundSpan.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/CodeBackgroundSpan.kt
 index 5060e8a..c6146aa 100644
 --- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/CodeBackgroundSpan.kt
@@ -598,6 +671,57 @@ index 392c5be..469b491 100644
      }
  
      textPaint.color = variant?.color ?: styleCache.linkColor
+diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/OrderedListSpan.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/OrderedListSpan.kt
+index 566f528..5dc9dbc 100644
+--- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/OrderedListSpan.kt
++++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/OrderedListSpan.kt
+@@ -52,6 +52,11 @@ class OrderedListSpan(
+       typeface = markerTypeface
+     }
+ 
++  // Nested ordered items reserve room for their own number instead of a fixed indent,
++  // so a two-digit number never runs into the text.
++  override fun getLeadingMargin(first: Boolean): Int =
++    if (depth == 0) super.getLeadingMargin(first) else maxOf(marginLeft, getMarkerWidth() + markerGap).toInt()
++
+   override fun getMarkerWidth(): Float {
+     val paint = configureMarkerPaint()
+     return listStyle.effectiveMarkerWidth(paint.measureText("99."))
+@@ -75,7 +80,7 @@ class OrderedListSpan(
+     val text = if (dir < 0) ".$itemNumber" else "$itemNumber."
+     val textWidth = markerPaint.measureText(text)
+ 
+-    val markerRightEdge = x + (depth * marginLeft + getMarkerWidth()) * dir
++    val markerRightEdge = textStartFrom(x, dir, layout, start) - markerGap * dir
+     val markerX = if (dir > 0) markerRightEdge - textWidth else markerRightEdge
+ 
+     canvas.drawText(text, markerX, baseline.toFloat(), markerPaint)
+diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/TaskListSpan.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/TaskListSpan.kt
+index 3b5a5c6..1e1c627 100644
+--- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/TaskListSpan.kt
++++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/TaskListSpan.kt
+@@ -76,7 +76,7 @@ class TaskListSpan(
+     // Right-align the checkbox inside the reserved marker column so it hugs
+     // the gap before the text. At the default (markerColumnWidth ==
+     // checkboxSize) this is identical to the previous flush-left layout.
+-    val centerX = x + (depth * marginLeft + markerColumnWidth - checkboxSize / HALF_DIVISOR) * dir
++    val centerX = textStartFrom(x, dir, layout, start) - (markerGap + checkboxSize / HALF_DIVISOR) * dir
+     val half = checkboxSize / HALF_DIVISOR
+     rect.set(centerX - half, centerY - half, centerX + half, centerY + half)
+ 
+diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/UnorderedListSpan.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/UnorderedListSpan.kt
+index cc3e704..be0acd2 100644
+--- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/UnorderedListSpan.kt
++++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/UnorderedListSpan.kt
+@@ -65,7 +65,7 @@ class UnorderedListSpan(
+     // it hugs the gap before the text — matches iOS behavior and stays
+     // visually flush-left when the column width equals the bullet radius
+     // (the default).
+-    val bulletX = x + (depth * marginLeft + markerColumnWidth) * dir
++    val bulletX = textStartFrom(x, dir, layout, start) - markerGap * dir
+     val bulletY = baseline + (markerFontMetrics.ascent + markerFontMetrics.descent) / 2f
+ 
+     when (depth) {
 diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/utils/text/conversion/HTMLGenerator.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/utils/text/conversion/HTMLGenerator.kt
 index 3a60ebb..2a73b76 100644
 --- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/utils/text/conversion/HTMLGenerator.kt

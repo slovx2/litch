@@ -220,6 +220,13 @@ export const SCENES: Scene[] = [
     steps: [say('画几张图')],
   },
   {
+    id: 'markdown',
+    group: '对话',
+    name: 'Markdown 样例',
+    note: '各种写法：列表互相嵌套、多位数序号、任务列表、引用、表格、代码、分隔线、图片、长行折行（渲染回归，安卓上另在模拟器里看）',
+    steps: [say('markdown 样例')],
+  },
+  {
     id: 'retry',
     group: '对话',
     name: '重试中',

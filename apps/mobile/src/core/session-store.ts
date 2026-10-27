@@ -38,6 +38,11 @@ export interface SessionSnapshot {
   rows: Row[]
   running: boolean
   error: string | null
+  /**
+   * 行是从上次留下的视图建的（core/view-cache.ts），核心的快照还没到：只读地摆着，快照到了整份换掉。
+   * 这时 meta 还是 null（请求、设置都可能过时，不拿来用）
+   */
+  stale: boolean
   /** 什么时候交给界面的（performance.now()）：对话区提交后用它算 React 渲染加提交花了多久 */
   publishedAt: number
 }
@@ -91,7 +96,13 @@ const NO_REPORTED: ReadonlyMap<string, AgentState> = new Map()
 const isAgentCall = (item: SessionView['items'][string] | undefined): boolean =>
   item?.kind === 'toolCall' && item.agents !== undefined
 
-const EMPTY: SessionSnapshot = { rows: [], running: false, error: null, publishedAt: 0 }
+const EMPTY: SessionSnapshot = {
+  rows: [],
+  running: false,
+  error: null,
+  stale: false,
+  publishedAt: 0,
+}
 const NO_TAIL: TailSnapshot = { rows: [], publishedAt: 0 }
 
 /**
@@ -139,6 +150,8 @@ export class SessionStore {
   private readonly tailListeners = new Set<() => void>()
   private split = false
   private view: SessionView | null = null
+  /** view 是 seed 摆上的旧视图，核心的快照还没到 */
+  private stale = false
   private meta: SessionMeta | null = null
   private readonly metaListeners = new Set<() => void>()
   private metaDirty = false
@@ -183,6 +196,7 @@ export class SessionStore {
         snapshot: (data) => {
           noteOpenStage('snapshot')
           this.view = data
+          this.stale = false
           this.itemTurn.clear()
           for (const turn of data.turns)
             for (const id of turn.itemIds) this.itemTurn.set(id, turn.id)
@@ -195,7 +209,7 @@ export class SessionStore {
           this.schedule()
         },
         delta: (ops) => {
-          if (!this.view) return
+          if (!this.view || this.stale) return
           for (const op of ops) this.apply(this.view, op)
           for (const listener of this.dataListeners) listener()
           this.schedule()
@@ -206,6 +220,25 @@ export class SessionStore {
         },
       },
     )
+  }
+
+  /**
+   * 核心的快照到之前先摆上上次留下的视图（core/view-cache.ts），同步建好行，打开会话的第一帧就有内容。
+   * 已经有视图了（快照先到了）就不用
+   */
+  seed(view: SessionView): void {
+    if (this.view) return
+    this.view = view
+    this.stale = true
+    this.itemTurn.clear()
+    for (const turn of view.turns) for (const id of turn.itemIds) this.itemTurn.set(id, turn.id)
+    this.dirty = 'all'
+    this.publish()
+  }
+
+  /** 核心给的、现在的视图（留一份用）。还没收到快照（包括只摆着旧视图时）是 null */
+  currentView(): SessionView | null {
+    return this.stale ? null : this.view
   }
 
   stop(): void {
@@ -484,17 +517,24 @@ export class SessionStore {
     const tail = size ? built.slice(0, size) : []
     const running = view.turns.some((turn) => turn.status === 'running')
     const now = performance.now()
+    const stale = this.stale
     const listChanged =
       !sameRows(rows, this.snapshot.rows) ||
       running !== this.snapshot.running ||
+      stale !== this.snapshot.stale ||
       this.snapshot.error !== null
     const tailChanged = !sameRows(tail, this.tail.rows)
     if (tailChanged) this.tail = { rows: tail, publishedAt: now }
-    if (listChanged) this.snapshot = { rows, running, error: null, publishedAt: now }
+    if (listChanged) this.snapshot = { rows, running, error: null, stale, publishedAt: now }
     const emitted = performance.now()
     // 两边都变时一起通知：React 把同一轮里的更新合成一次提交，块封口时尾巴缩回、列表多一行在同一帧
     if (tailChanged) for (const listener of this.tailListeners) listener()
     if (listChanged) this.emit()
+    // 旧视图上的会话层面状态（请求、设置、提案、待办）都可能过时：快照到了再交
+    if (stale) {
+      noteWork('emit', performance.now() - emitted)
+      return
+    }
     if (this.metaDirty) {
       this.metaDirty = false
       this.meta = {

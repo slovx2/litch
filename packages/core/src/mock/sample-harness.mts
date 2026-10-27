@@ -36,7 +36,7 @@ const ALL: HarnessAbilities = {
 
 const DECLARED: Record<string, HarnessAbilities> = {
   // 引导只把文字交给模型，图片到不了
-  claude: { ...ALL, steerImages: false, goals: true, cutInTurn: true, ephemeralFork: true },
+  claude: { ...ALL, goals: true, cutInTurn: true, ephemeralFork: true },
   // Pi 和 dsh 不发本回合的差异：工作目录不是 git 仓库时，差异面板在它们的会话里没有东西可看
   pi: { ...ALL, turnDiff: false, ephemeralFork: true },
   // dsh 的后台作业只列得出（job/list），停不了

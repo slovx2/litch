@@ -14,7 +14,8 @@
 
 import { type ChildProcess, spawn } from 'node:child_process'
 import { createInterface, type Interface } from 'node:readline'
-import type { ClaudeRuntime, RuntimeHandlers, RuntimeTurnContext } from './types.mjs'
+import { ProtocolError } from './protocol-contract.mjs'
+import type { ClaudeRuntime, ImageInput, RuntimeHandlers, RuntimeTurnContext } from './types.mjs'
 import { debugLog, resolveCodexBinary } from './util.mjs'
 
 interface PendingTurn {
@@ -179,7 +180,14 @@ export class CodexProxyRuntime implements ClaudeRuntime {
     })
   }
 
-  async steer(threadId: string, prompt: string): Promise<void> {
+  async steer(
+    threadId: string,
+    prompt: string,
+    _uuid?: string,
+    images: ImageInput[] = [],
+  ): Promise<void> {
+    if (images.length > 0)
+      throw new ProtocolError(-32009, 'codex 代理运行时的插话不能带图片，请等回合结束后再发')
     // codex exec doesn't expose mid-turn input. Cleanest behavior: queue the
     // text for the next turn. The server already records the steer in items;
     // we just no-op here so the proxy doesn't crash.

@@ -40,7 +40,7 @@ import type {
   DiffView,
   FileDiff,
 } from '../model-diff.mjs'
-import type { DirectoryView, FileContent, FileSearchView } from '../model-files.mjs'
+import type { DirectoryView, FileContent, FileSearchView, FolderListing } from '../model-files.mjs'
 import type { GoalChange, GoalReachedView, SessionGoalView } from '../model-goal.mjs'
 import type {
   HarnessConfigTopicView,
@@ -832,6 +832,14 @@ export interface Commands {
   'files.list': {
     params: { deviceId: string; root: string; path: string; fresh?: boolean }
     result: DirectoryView
+  }
+  /**
+   * 挑目录（添加项目时浏览设备上的目录）：列一层下面的目录名，不受工作区根的限制，不读文件。
+   * path 是 null 从设备的主目录开始；不是绝对路径以 rejected 结束
+   */
+  'folders.list': {
+    params: { deviceId: string; path: string | null }
+    result: FolderListing
   }
   /** 读一个文件。太大的、不是文字的只说是哪一种，不给内容；路径是目录、文件不在了也各有一种结果，不算出错 */
   'files.read': {

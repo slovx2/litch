@@ -1,4 +1,5 @@
-// 加工作区、改工作区的名字和颜色。加的时候填目录（设备上的完整路径），也可以从“还没归进工作区的会话用过的目录”里挑；
+// 加工作区、改工作区的名字和颜色。加的时候填目录（设备上的完整路径），也可以浏览设备上的目录（FolderPicker），
+// 或者从“还没归进工作区的会话用过的目录”里挑；
 // 目录定了就不改（照桌面端，要换目录另加一个）。名字不填就用目录的最后一段。
 import type { WireColor, WorkspaceView } from '@litch/core'
 import { useEffect, useState } from 'react'
@@ -17,6 +18,7 @@ import { useBusy, useChannel } from '../../shell/services'
 import { useT } from '../../ui/i18n'
 import { Button, Field } from '../../ui/kit/controls'
 import { useTheme } from '../../ui/theme'
+import { FolderPicker } from './FolderPicker'
 
 const COLORS: WireColor[] = ['blue', 'orange', 'green', 'brown', 'slate', 'red', 'yellow', 'violet']
 
@@ -47,6 +49,7 @@ export function WorkspaceDialog({
   const [color, setColor] = useState<WireColor | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
   const [candidates, setCandidates] = useState<string[]>([])
+  const [browsing, setBrowsing] = useState(false)
   const adding = edit?.kind === 'add'
 
   useEffect(() => {
@@ -62,6 +65,7 @@ export function WorkspaceDialog({
     setRoot('')
     setColor(null)
     setCandidates([])
+    setBrowsing(false)
     let live = true
     channel.command('workspace.candidates', { deviceId }).then(
       ({ roots }) => live && setCandidates(roots),
@@ -147,7 +151,24 @@ export function WorkspaceDialog({
                   testID="workspace:root"
                   style={{ fontFamily: theme.font.mono }}
                 />
-                {candidates.length > 0 ? (
+                {browsing ? (
+                  <FolderPicker
+                    deviceId={deviceId}
+                    start={/^(\/|[A-Za-z]:[\\/])/.test(root.trim()) ? root.trim() : null}
+                    onPick={setRoot}
+                    onClose={() => setBrowsing(false)}
+                  />
+                ) : (
+                  <View style={styles.browse}>
+                    <Button
+                      kind="plain"
+                      label={t('workspace.root.browse')}
+                      testID="workspace:browse"
+                      onPress={() => setBrowsing(true)}
+                    />
+                  </View>
+                )}
+                {!browsing && candidates.length > 0 ? (
                   <View style={styles.candidates}>
                     <Text style={[styles.label, { color: c.ink2 }]}>
                       {t('workspace.root.candidates')}
@@ -223,6 +244,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 17, fontWeight: '600' },
   label: { fontSize: 13, fontWeight: '500' },
   candidates: { gap: 6 },
+  browse: { flexDirection: 'row' },
   candidate: { borderWidth: 1, paddingHorizontal: 10, paddingVertical: 8 },
   swatches: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   swatch: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },

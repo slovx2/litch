@@ -8,6 +8,7 @@ import {
   encodeBase64,
   type FileContent,
   type FileSearchView,
+  type FolderListing,
   LIST_TTL_MS,
   MAX_TEXT_BYTES,
   textToBase64,
@@ -545,4 +546,20 @@ test('连接断了：命令以 offline 结束；重新连上之后缓存不算�
   await settle()
   assert.equal((await list(ROOT)).total, 5)
   assert.deepEqual(paths('fs/readDirectory'), [ROOT])
+})
+
+test('挑目录（添加项目）：根之外的也列，只给目录名（指向目录的链接也算）和上一级；不是绝对路径拒掉', async () => {
+  const { dirs, command, paths } = await open()
+  dirs['/work'] = [dir('app'), file('notes.txt'), dir('lib')]
+  const folders = (path: string | null) =>
+    command('folders.list', { deviceId: 'local', path }) as Promise<FolderListing>
+  assert.deepEqual(await folders('/work/'), { path: '/work', parent: '/', folders: ['app', 'lib'] })
+  assert.deepEqual(await folders(ROOT), {
+    path: ROOT,
+    parent: '/work',
+    folders: ['.git', 'docs-link', 'src'],
+  })
+  const before = paths('fs/readDirectory').length
+  assert.equal((await failureOf(folders('work'))).code, 'rejected')
+  assert.equal(paths('fs/readDirectory').length, before, '没去问对面')
 })

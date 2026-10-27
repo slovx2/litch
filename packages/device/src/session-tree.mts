@@ -1359,10 +1359,15 @@ export class SessionTree {
 
   /**
    * 一条客户端连接断了：在跑的会话由设备进程的连接接着订阅（follow），这一回合里再调设备工具照样有执行方，
-   * 不用等客户端回来
+   * 不用等客户端回来。harnesses（在跑的那些）各留一条设备进程的连接：引擎自己开的回合（Claude 收到别的会话
+   * 发来的消息）没人订阅时，引擎按 anyThread 把设备工具的调用交给它
    */
-  clientLeft(): void {
+  clientLeft(harnesses: readonly string[]): void {
     for (const threadId of this.active.keys()) this.follow(threadId)
+    for (const harness of harnesses)
+      this.link(harness).catch((error: unknown) =>
+        this.host.log(`留一条到 ${harness} 的连接没成：${String(error)}`),
+      )
   }
 
   /** 到这个 harness 的连接断了：隔一阵重开、把它上面的子会话重新盯上。运行时一时起不来就再等等，几次之后放弃 */

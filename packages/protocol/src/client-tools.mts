@@ -57,6 +57,19 @@ export function declaredClientToolNamespaces(
   return list.filter((one): one is string => isClientToolNamespace(one as string))
 }
 
+/** 声明的命名空间里不看会话、替任何会话执行的那些（litchClientTools.anyThread，只认也在 namespaces 里的） */
+export function declaredAnyThreadNamespaces(
+  capabilities: unknown,
+  extensionDeclared: boolean,
+): string[] {
+  const namespaces = declaredClientToolNamespaces(capabilities, extensionDeclared)
+  if (namespaces.length === 0) return []
+  const raw = (capabilities as Record<string, unknown>)[CLIENT_TOOLS_CAPABILITY]
+  const list = (raw as Record<string, unknown>).anyThread
+  if (!Array.isArray(list)) return []
+  return namespaces.filter((one) => list.includes(one))
+}
+
 // —— 协议原有的形状（codex 0.157.1 起一致），这里抄一份最小的，免得设备进程去引 codex.mts ——
 
 /** `item/tool/call` 的参数 */

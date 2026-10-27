@@ -13,6 +13,7 @@ import {
 import type { RuntimeTurnSettings } from './turn-settings.mjs'
 import type {
   ClaudeRuntime,
+  ImageInput,
   NativeModelInfo,
   NativeSessionFork,
   RuntimeBackgroundShell,
@@ -188,9 +189,14 @@ class SelectableRuntime implements ClaudeRuntime {
     await Promise.all([...this.runtimes.values()].map((runtime) => runtime.closeIdleMcp?.()))
   }
 
-  async steer(threadId: string, prompt: string, uuid?: string): Promise<void> {
+  async steer(
+    threadId: string,
+    prompt: string,
+    uuid?: string,
+    images: ImageInput[] = [],
+  ): Promise<void> {
     const runtime = this.activeRuntimeByThread.get(threadId) ?? this.runtimeFor(this.config.type)
-    await runtime.steer(threadId, prompt, uuid)
+    await runtime.steer(threadId, prompt, uuid, images)
   }
 
   async interrupt(threadId: string): Promise<void> {

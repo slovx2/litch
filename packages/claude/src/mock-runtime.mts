@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { deniedMessage } from './approval-request.mjs'
 import type {
   ClaudeRuntime,
+  ImageInput,
   NativeModelInfo,
   NativeSessionFork,
   PermissionDecision,
@@ -491,7 +492,17 @@ export class MockRuntime implements ClaudeRuntime {
     this.interrupted.add(threadId)
   }
 
-  async steer(_threadId: string, _prompt: string): Promise<void> {}
+  /** 插进回合的话（测试看送进来的文字和图片） */
+  readonly steered: { threadId: string; prompt: string; images: ImageInput[] }[] = []
+
+  async steer(
+    threadId: string,
+    prompt: string,
+    _uuid?: string,
+    images: ImageInput[] = [],
+  ): Promise<void> {
+    this.steered.push({ threadId, prompt, images })
+  }
 
   listBackgroundShells(threadId: string): RuntimeBackgroundShell[] {
     return [...(this.shells.get(threadId)?.values() ?? [])].sort((a, b) => a.seq - b.seq)

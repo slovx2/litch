@@ -15,6 +15,7 @@
 //   - turn/start 不会让发起的连接订阅会话（实测），所以“发起回合的连接”要设备进程自己记。
 import { type ClientToolsDesktopInfo, clientToolFailure } from '../../protocol/src/client-tools.mjs'
 import {
+  type DeclaredClientTools,
   noClientToolExecutor,
   pickClientToolExecutor,
 } from '../../shared/src/client-tool-executor.mjs'
@@ -27,7 +28,7 @@ export interface ClientToolPeer {
   /** 握手完成、还没断开 */
   readonly ready: boolean
   /** 握手时声明能执行的命名空间。没声明 clientTools 扩展的是空的 */
-  readonly clientToolNamespaces: ReadonlySet<string>
+  readonly clientToolNamespaces: DeclaredClientTools
   /** 握手时报的“我是哪台桌面端”（litchClientTools.desktop）。没报是 null */
   readonly desktop: ClientToolsDesktopInfo | null
   /**
@@ -171,6 +172,8 @@ export class ClientToolRouter {
       starter?.ready ? starter : null,
       ordered.filter((peer) => peer.ready),
       (peer) => peer.clientToolNamespaces,
+      // 到这里的都是客户端执行的命名空间（设备进程自己执行的在 relay 里先截下了），只交给看着这个会话的
+      [],
     )
   }
 
@@ -298,6 +301,7 @@ export class ClientToolRouter {
       starter && allowed(starter) ? starter : null,
       subscribers.filter(allowed),
       (one) => one.clientToolNamespaces,
+      [],
     )
     return { peer, harness, turnId: turn?.turnId ?? null }
   }

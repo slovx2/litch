@@ -14,7 +14,10 @@ the side panel (files, diff) and terminals follow the project.
   folder fits.
 
 In the UI: Add project… on the device's menu, the **+** on the built-in Projects group, or in the
-new-session project picker; rename, color, pin, move to a group (or back to Projects), reorder and delete
+new-session project picker. In the dialog, type the folder, pick one used by sessions not in a project,
+or press Choose…: on this computer it opens the system folder dialog, on a remote device (and in the
+phone app) it browses the device's folders in place (Up, tap a folder to go in; hidden folders are not
+listed); rename, color, pin, move to a group (or back to Projects), reorder and delete
 from the project's menu. Groups (sidebar folders) are made from the device menu (New group…). Projects
 that are not pinned or in a group are listed under the built-in Projects group (it can't be renamed or
 deleted). In the sidebar, drag a project onto a group's title row to put it at the end of that group
@@ -71,8 +74,9 @@ explain it:
   default) a message goes straight into the running turn and the button reads Send; set to Queue, or
   when the harness can't take messages mid-turn (or can't take images mid-turn and the message has
   some), it waits in the queue above the composer until the turn ends and the button reads Queue
-  (the composer's placeholder says which). "Send now" on a queued message puts it into the running
-  turn. With nothing typed the button is Stop, which interrupts the turn.
+  (the composer's placeholder says which). Codex, Claude Code, Pi, DSH and OpenCode take images
+  mid-turn; ACP agents (Gemini, Qwen and the generic ACP entry) take no messages mid-turn. "Send now"
+  on a queued message puts it into the running turn. With nothing typed the button is Stop, which interrupts the turn.
 - **Approvals and questions** appear as cards above the composer: commands, file changes, extra
   permissions, MCP tools (Allow once / Allow for this session / Always allow / Decline / Decline and
   stop, or decline with a note for the model); multi-question forms; plan confirmation (Run the plan /
@@ -345,7 +349,10 @@ woken to continue.
   sessions on the same computer. A session keeps the same address while Litch restarts its Claude Code
   process. When another Litch session messages one whose process is not running, Litch starts it
   first and the message opens a turn there; from the Claude desktop app or a terminal, the receiving
-  session's process has to be running.
+  session's process has to be running. Turns a harness opens by itself like this (and turns that go on
+  after background work finishes) can still use Litch's session tools (messaging other sessions,
+  sub-sessions, task cards, wrap-up) and scheduled tasks when no desktop or phone is connected: the device
+  runs those tools itself.
 
 The whole feature can be switched per device with the `sessions.enabled` setting
 (`scripts/litch settings set <device> sessions.enabled=false`); remote devices need adapter 0.11.0 or

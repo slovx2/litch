@@ -1,8 +1,13 @@
 // 会话树的测试用的假引擎：在 fake-upstream.mts 上补齐回合（turn/start、turn/steer、turn/interrupt，测试决定什么时候结束）、
 // 会话的状态和回合记录、thread/resume 报的权限设置，以及适配器入口挑客户端工具执行方的规矩：
 // litch_ 命名空间的 item/tool/call 交给发起这个回合、握手时声明了它的连接，否则交给订阅着会话（thread/start、
-// thread/fork、thread/resume 订阅，thread/unsubscribe 退订）、声明了它的连接里最早订阅的那条，都没有就挑不出来。
+// thread/fork、thread/resume 订阅，thread/unsubscribe 退订）、声明了它的连接里最早订阅的那条，再没有是把它列在
+// anyThread 里的任一条（设备进程的连接），都没有就挑不出来（挑法用 shared 里那一份）。
 // 通知发给所有连着的连接（真的引擎只发给订阅者；这里不区分，够测设备进程的去重）。
+import {
+  clientToolNamespaces,
+  pickClientToolExecutor,
+} from '../../shared/src/client-tool-executor.mjs'
 import { type FakeConnection, type FakeThread, FakeUpstream, RpcFailure } from './fake-upstream.mjs'
 
 export interface FakeTurn {
@@ -190,13 +195,6 @@ export class FakeEngine extends FakeUpstream {
     return turn
   }
 
-  /** 这条连接握手时声明能执行的命名空间 */
-  declared(connection: FakeConnection): string[] {
-    const capabilities = this.greetings.get(connection)?.capabilities ?? {}
-    if (!(capabilities.litchExtensions ?? []).includes('clientTools')) return []
-    return capabilities.litchClientTools?.namespaces ?? []
-  }
-
   /**
    * 模型调一次 litch_ 命名空间的工具：照适配器的规矩挑一条连接发 item/tool/call，等它答。
    * 挑不出来时返回 null
@@ -209,12 +207,13 @@ export class FakeEngine extends FakeUpstream {
   ): Promise<{ connection: FakeConnection; answer: any } | null> {
     const turn = this.turns.get(threadId)?.at(-1)
     const starter = turn ? this.starters.get(turn.id) : undefined
-    const connection =
-      starter?.open && this.declared(starter).includes(namespace)
-        ? starter
-        : (this.subscribers.get(threadId) ?? []).find(
-            (one) => one.open && this.declared(one).includes(namespace),
-          )
+    const connection = pickClientToolExecutor(
+      namespace,
+      starter?.open ? starter : null,
+      (this.subscribers.get(threadId) ?? []).filter((one) => one.open),
+      (one) => clientToolNamespaces(this.greetings.get(one)),
+      [...this.greetings.keys()].filter((one) => one.open),
+    )
     if (!connection) return null
     const id = `req-${++this.requestSerial}`
     const before = connection.answers.length

@@ -119,6 +119,13 @@
 .umsg-acts:focus-within {
   opacity: 1;
 }
+.umsg-time {
+  align-self: center;
+  padding-right: 4px;
+  font: 11px / 1 var(--mono);
+  color: var(--ink-3);
+  white-space: nowrap;
+}
 .umsg-acts .ibtn[aria-disabled="true"] {
   color: var(--ink-3);
   opacity: 0.55;

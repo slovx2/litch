@@ -19,7 +19,9 @@ import type { LitchPeer } from '../../protocol/src/peer-messages.mjs'
 import { catalogPagination } from '../../shared/src/catalog-pagination.mjs'
 import {
   clientToolNamespaces,
+  type DeclaredClientTools,
   isClientToolNamespace,
+  NO_CLIENT_TOOLS,
   noClientToolExecutor,
   pickClientToolExecutor,
 } from '../../shared/src/client-tool-executor.mjs'
@@ -361,7 +363,7 @@ interface PeerFeatures {
   // 握手时声明认识的协议扩展（capabilities.litchExtensions）。扩展内容只发给声明过的连接。
   extensions: Set<string>
   // 声明能执行的客户端工具命名空间（clientTools 扩展的 capabilities.litchClientTools）
-  clientTools: ReadonlySet<string>
+  clientTools: DeclaredClientTools
 }
 
 function turnItemsView(value: unknown): TurnItemsView {
@@ -3352,15 +3354,20 @@ export class CodexClaudeAppServer {
     }
   }
 
-  /** 插进回合的话交给运行时的文字：选中的 Skill 正文在前（同 turn/start），其余照旧 */
-  private inputPrompt(threadId: string, input: UserInput[]): string {
+  /** 插进回合的话交给运行时的文字和图片：选中的 Skill 正文在前、图片单独拿出来（同 turn/start） */
+  private steerInput(
+    threadId: string,
+    input: UserInput[],
+  ): { prompt: string; images: ImageInput[] } {
     const cwd = this.store.getThread(threadId)?.cwd ?? process.cwd()
     const skills = this.skills.expandSkillInputs(
       cwd,
       input,
       this.store.threadSettings(threadId).config,
     )
-    return withSkillInstructions(skills.instructions, textFromInput(skills.rest))
+    const { textPrompt, images } = extractImageInputs(skills.rest)
+    const text = textPrompt || (images.length > 0 ? '' : textFromInput(skills.rest))
+    return { prompt: withSkillInstructions(skills.instructions, text), images }
   }
 
   // 有活动回合时 turn/start 和上游一样并进那个回合（上游 start_or_steer：相当于 steer，回执里是那个回合），
@@ -3384,13 +3391,6 @@ export class CodexClaudeAppServer {
     if (first === 'contextCompaction' || active.items.some((i) => i.type === 'enteredReviewMode'))
       return null
     const input = Array.isArray(params.input) ? (params.input as UserInput[]) : []
-    if (extractImageInputs(input).images.length > 0)
-      throw new ProtocolError(
-        -32009,
-        this.spontaneousTurns.has(turnId)
-          ? '会话正在处理后台命令的结果，带图片的消息请稍后再发'
-          : '回合正在进行，带图片的消息不能并进去，请等回合结束后再发',
-      )
     const startup = this.runtimeReadyByTurn.get(turnId)
     if (startup && !(await startup.ready)) return null
     if (this.activeTurnByThread.get(threadId) !== turnId) return null
@@ -3402,7 +3402,8 @@ export class CodexClaudeAppServer {
     }
     // 先送进去再落库：送不进去时这条消息不能留下“已提交”的记录。
     try {
-      await this.runtime.steer(threadId, this.inputPrompt(threadId, input), item.id)
+      const { prompt, images } = this.steerInput(threadId, input)
+      await this.runtime.steer(threadId, prompt, item.id, images)
     } catch (error) {
       if (!(error instanceof ProtocolError) || error.code !== -32009) throw error
       // 那一轮刚好结束：等它收尾完，按普通回合提交。
@@ -6799,7 +6800,7 @@ export class CodexClaudeAppServer {
     if (this.activeTurnByThread.get(threadId) !== activeTurnId)
       throw new ProtocolError(-32009, '回合已终结')
     const input = Array.isArray(params.input) ? (params.input as UserInput[]) : []
-    const prompt = this.inputPrompt(threadId, input)
+    const { prompt, images } = this.steerInput(threadId, input)
     // 插的话留在回合里（thread/read），送进去之后和上游一样发给全部订阅者（上游在交给模型时发这条用户消息）
     const item: ThreadItem = {
       type: 'userMessage',
@@ -6810,7 +6811,7 @@ export class CodexClaudeAppServer {
     this.store.saveSteeredMessage(activeTurnId, item, messageId, hash)
     try {
       // 条目的标识就是交给 CLI 的消息标识：以后切在这条插话之前时按它在原生记录里找位置
-      await this.runtime.steer(threadId, prompt, item.id)
+      await this.runtime.steer(threadId, prompt, item.id, images)
     } catch (error) {
       // 运行时已经在收尾、不再收输入（上游同样拒绝往收尾中的回合里插话）：这句话没进回合，别留在记录里
       this.store.withdrawSteeredMessage(activeTurnId, item.id, messageId)
@@ -8125,16 +8126,18 @@ export class CodexClaudeAppServer {
   }
 
   // 客户端工具的执行方（规矩在 shared/src/client-tool-executor.mts）：发起回合的连接还连着、声明了这个
-  // 命名空间就是它；否则订阅着线程（或照 recipients 跟着父会话）、声明了的连接里最早订阅的那条；没有返回 null。
-  // CLI 自己开的回合没有发起者（peer 是脱离的那个）。
+  // 命名空间就是它；否则订阅着线程（或照 recipients 跟着父会话）、声明了的连接里最早订阅的那条；再没有是
+  // 握手过、把它列在 anyThread 里的（设备进程的连接）；没有返回 null。
+  // CLI 自己开的回合（收到别的会话发来的消息、后台跑完续跑）没有发起者（peer 是脱离的那个）。
   private clientToolExecutor(peer: RpcPeer, threadId: string, namespace: string): RpcPeer | null {
     const namespacesOf = (target: RpcPeer) =>
-      this.peerFeatures.get(target)?.clientTools ?? new Set()
+      this.peerFeatures.get(target)?.clientTools ?? NO_CLIENT_TOOLS
     const starter = this.isConnected(peer) ? peer : null
     const watching = this.recipients(peer, { threadId }).filter((target) =>
       this.isConnected(target),
     )
-    return pickClientToolExecutor(namespace, starter, watching, namespacesOf)
+    const everyone = [...this.accountPeers].filter((target) => this.isConnected(target))
+    return pickClientToolExecutor(namespace, starter, watching, namespacesOf, everyone)
   }
 
   private completeActiveTurns(status: 'interrupted' | 'failed', error: unknown): void {

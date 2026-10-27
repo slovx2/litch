@@ -77,6 +77,8 @@ export type Row =
       expanded?: boolean
       /** 提到的会话：正文里的 ＠[标题] 画成能点的字（核心认出来的 UserMessageItem.sessions） */
       sessions?: SessionMentionView[]
+      /** 发送的时刻（回合开始的时刻），只有回合开头那条有：插进来的话条目上不带时刻 */
+      sentAt?: number
     }
   /**
    * Litch 替用户发的话（核心认出来的 UserMessageItem.system：定时任务、子会话的简报、在这里做）：画成系统卡片，
@@ -547,6 +549,9 @@ export class RowBuilder {
           attachments: item.attachments,
           ...(item.peer ? { peer: item.peer, expanded: this.expanded.has(item.id) } : {}),
           ...(item.sessions ? { sessions: item.sessions } : {}),
+          ...(turn.itemIds[0] === item.id && turn.startedAt !== null
+            ? { sentAt: turn.startedAt }
+            : {}),
         }),
       )
   }
