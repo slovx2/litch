@@ -178,6 +178,13 @@ const ORGANIZES_ELSEWHERE = /别处整理|organize elsewhere/i
 const DRAWS = /画图|draw a diagram/i
 /** 发的话里带这些字样时，一长段回答里夹着七张 mermaid 图。给手机试多张图时的滚动和懒画用 */
 const DRAWS_MANY = /画几张图|draw several diagrams/i
+/**
+ * 发的话里带这些字样时，在会话里一下子塞进 LONG_TURNS 个写完的回合（每个回答是那份 Markdown 样例）。
+ * 给界面试“打开一个历史很长的会话”：切到别的会话再切回来，整份历史一次到
+ */
+const MAKES_HISTORY = /造长历史|long history/i
+const LONG_TURNS = 300
+const MINUTE = 60_000
 /** 发的话里带这些字样时，回答是一份覆盖各种 Markdown 写法的样例（手机端渲染回归用） */
 const SHOWS_MARKDOWN = /markdown ?样例|markdown sample/i
 
@@ -909,6 +916,46 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     }
     if (SHOWS_FILES.test(message.text)) {
       reply(view, turnId, SAMPLE_TEXT[lang].filesReply)
+      return turnId
+    }
+    if (MAKES_HISTORY.test(message.text)) {
+      const text = SAMPLE_TEXT[lang]
+      const start = clock.now() - LONG_TURNS * MINUTE
+      const ops: SessionOp[] = []
+      for (let n = 0; n < LONG_TURNS; n++) {
+        const id = `${turnId}-h${n}`
+        ops.push(
+          {
+            op: 'turn.add',
+            turn: {
+              id,
+              status: 'completed',
+              itemIds: [],
+              startedAt: start + n * MINUTE,
+              durationMs: 20_000,
+              error: null,
+            },
+          },
+          {
+            op: 'item.add',
+            turnId: id,
+            item: { id: `${id}-u`, kind: 'userMessage', text: `#${n}`, attachments: [] },
+          },
+          {
+            op: 'item.add',
+            turnId: id,
+            item: {
+              id: `${id}-a`,
+              kind: 'agentMessage',
+              phase: 'final',
+              status: 'completed',
+              text: text.markdownReply,
+            },
+          },
+        )
+      }
+      applySessionOps(view, ops)
+      reply(view, turnId, text.markdownReply.slice(0, 40))
       return turnId
     }
     if (SHOWS_MARKDOWN.test(message.text)) {

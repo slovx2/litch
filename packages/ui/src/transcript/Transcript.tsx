@@ -21,6 +21,7 @@ import {
   Fragment,
   memo,
   type ReactNode,
+  startTransition,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -52,9 +53,10 @@ import { FileLinksProvider, useSessionFileLinks } from './FileLinks.tsx'
 import { AgentAnswer, PlanCard, UserMessage } from './messages.tsx'
 import { ProcessHead, ProcessParts } from './process.tsx'
 import { Stamp } from './Stamp.tsx'
-import { PinProvider, useTranscriptScroll } from './scroll.ts'
+import { PinProvider, savedTurns, useTranscriptScroll } from './scroll.ts'
 import { TurnTouch, touchTurn, useFold, useTurnTouched } from './state.ts'
 import { TodoCard } from './Todo.tsx'
+import { firstWindow, growWindow } from './turn-window.ts'
 import { useTranscriptView } from './view.ts'
 
 interface SessionRef {
@@ -447,6 +449,36 @@ interface TranscriptProps extends SessionRef {
   aside?: { parentId: string; skip: readonly string[]; lead: ReactNode }
 }
 
+/**
+ * 这一刻画最后几个回合（turn-window.ts）：先画一截，之后每次让出主线程再往前补一批，补的渲染可被打断（transition），
+ * 打字、点按不用等它。换了会话从头来
+ */
+function useTurnWindow(sessionKey: string, total: number): number {
+  const [state, setState] = useState(() => ({
+    key: sessionKey,
+    shown: firstWindow(savedTurns(sessionKey)),
+  }))
+  let shown = state.shown
+  if (state.key !== sessionKey) {
+    shown = firstWindow(savedTurns(sessionKey))
+    setState({ key: sessionKey, shown })
+  }
+  useEffect(() => {
+    if (shown >= total) return
+    const timer = setTimeout(() =>
+      startTransition(() =>
+        setState((current) =>
+          current.key === sessionKey
+            ? { key: sessionKey, shown: growWindow(current.shown, total) }
+            : current,
+        ),
+      ),
+    )
+    return () => clearTimeout(timer)
+  }, [sessionKey, shown, total])
+  return shown
+}
+
 /** 对话区：只在显示期间订阅这个会话，切走就退订 */
 export function Transcript({ deviceId, sessionId, footer, onOpen, aside }: TranscriptProps) {
   const { replica } = useServices()
@@ -467,6 +499,11 @@ export function Transcript({ deviceId, sessionId, footer, onOpen, aside }: Trans
   const down = downHarness(device, listed?.harness)
   const t = useT()
   const scroll = useTranscriptScroll(`${deviceId}:${sessionId}`)
+  const span = useTurnWindow(`${deviceId}:${sessionId}`, turnIds?.length ?? 0)
+  const drawn = useMemo(
+    () => (turnIds && span < turnIds.length ? turnIds.slice(-span) : turnIds),
+    [turnIds, span],
+  )
   const { restore } = scroll
   const lastTurn = useKey<TurnView>(keys.turn(deviceId, sessionId, turnIds?.at(-1) ?? ''))
   const busy = lastTurn?.status === 'running'
@@ -524,7 +561,7 @@ export function Transcript({ deviceId, sessionId, footer, onOpen, aside }: Trans
                     <div className="dim">{t('transcript.empty')}</div>
                   )
                 ) : (
-                  turnIds.map((turnId) => (
+                  (drawn ?? turnIds).map((turnId) => (
                     <TurnBoundary key={turnId} label={t('turn.broken')}>
                       <Turn deviceId={deviceId} sessionId={sessionId} turnId={turnId} />
                     </TurnBoundary>
