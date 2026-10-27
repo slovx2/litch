@@ -116,7 +116,8 @@ export function markdownStyleOf({
     },
     strikethrough: { color: c.ink3 },
     underline: { color: c.ink },
-    thematicBreak: { color: c.line2 },
+    // 上下各留 14，照桌面端 .md hr（组件默认 24，前后空得太多）
+    thematicBreak: { color: c.line2, marginTop: 14, marginBottom: 14 },
     table: {
       fontSize: 14,
       color: c.ink,

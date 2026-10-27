@@ -178,6 +178,8 @@ const ORGANIZES_ELSEWHERE = /别处整理|organize elsewhere/i
 const DRAWS = /画图|draw a diagram/i
 /** 发的话里带这些字样时，一长段回答里夹着七张 mermaid 图。给手机试多张图时的滚动和懒画用 */
 const DRAWS_MANY = /画几张图|draw several diagrams/i
+/** 发的话里带这些字样时，回答是一份覆盖各种 Markdown 写法的样例（手机端渲染回归用） */
+const SHOWS_MARKDOWN = /markdown ?样例|markdown sample/i
 
 /** 发的话里带这些字样时，模拟的回合先重试两次模型请求（连接中断、服务过载）再回话。给界面试状态行上的“重试中”用 */
 const RETRIES = /重试请求|retry the request/i
@@ -907,6 +909,10 @@ export function createMockCore(options: MockCoreOptions): MockCore {
     }
     if (SHOWS_FILES.test(message.text)) {
       reply(view, turnId, SAMPLE_TEXT[lang].filesReply)
+      return turnId
+    }
+    if (SHOWS_MARKDOWN.test(message.text)) {
+      reply(view, turnId, SAMPLE_TEXT[lang].markdownReply)
       return turnId
     }
     if (DRAWS_MANY.test(message.text)) {
