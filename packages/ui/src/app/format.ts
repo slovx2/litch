@@ -1,5 +1,5 @@
 // 给人看的时间和时长。侧栏的行很窄，所以用最短的写法。
-import type { TurnRetryView } from '@litch/core'
+import type { TurnRetryView, TurnView } from '@litch/core'
 import type { Translator } from '../i18n/index.ts'
 
 const MINUTE = 60_000
@@ -15,6 +15,55 @@ export function ago(timestamp: number, now: number, t: Translator): string {
   if (diff < 7 * DAY) return t('time.days', { n: Math.floor(diff / DAY) })
   const date = new Date(timestamp)
   return `${date.getMonth() + 1}/${date.getDate()}`
+}
+
+/** 两个时刻差几个自然日（按本地时间，0 是同一天） */
+function daysApart(earlier: number, later: number): number {
+  const a = new Date(earlier)
+  const b = new Date(later)
+  const start = (date: Date) =>
+    new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
+  return Math.round((start(b) - start(a)) / DAY)
+}
+
+/**
+ * 消息上的时刻（照 Codex 桌面端）：当天只写时刻；六天内写星期加时刻；更早写月日加时刻，不是今年的再带上年
+ * （Codex 跨年也不写年）。在未来的（两边时钟对不齐）按当天算
+ */
+export function stamp(timestamp: number, now: number, lang: string): string {
+  const time = { hour: 'numeric', minute: '2-digit' } as const
+  const days = Math.max(0, daysApart(timestamp, now))
+  // 星期和时刻分开排再用空格接上：中文合在一起排是“星期一14:32”，中间没有空格
+  if (days > 0 && days < 7) {
+    const weekday = new Intl.DateTimeFormat(lang, { weekday: 'long' }).format(timestamp)
+    return `${weekday} ${new Intl.DateTimeFormat(lang, time).format(timestamp)}`
+  }
+  const options: Intl.DateTimeFormatOptions =
+    days === 0
+      ? time
+      : new Date(timestamp).getFullYear() === new Date(now).getFullYear()
+        ? { ...time, month: 'short', day: 'numeric' }
+        : { ...time, year: 'numeric', month: 'short', day: 'numeric' }
+  return new Intl.DateTimeFormat(lang, options).format(timestamp)
+}
+
+/** 悬停时看的完整时刻：年月日加时分 */
+export function stampFull(timestamp: number, lang: string): string {
+  return new Intl.DateTimeFormat(lang, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(timestamp)
+}
+
+/** 回合结束的时刻：开始时刻加用时。还在跑、或者两样有一样对面没给，是 null */
+export function turnEnded(
+  turn: Pick<TurnView, 'status' | 'startedAt' | 'durationMs'>,
+): number | null {
+  if (turn.status === 'running' || turn.startedAt === null || turn.durationMs === null) return null
+  return turn.startedAt + turn.durationMs
 }
 
 /** 还在走的时长，整秒：7 秒、2 分 08 秒。给“已经跑了多久”用，不带小数，免得末位一直跳 */

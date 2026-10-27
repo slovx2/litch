@@ -14,7 +14,13 @@ import {
   View,
 } from 'react-native'
 import { EnrichedMarkdownText } from 'react-native-enriched-markdown'
-import { duration, elapsed, retryText } from '../../../../packages/ui/src/app/format.ts'
+import {
+  duration,
+  elapsed,
+  retryText,
+  stamp,
+  turnEnded,
+} from '../../../../packages/ui/src/app/format.ts'
 import type { Row } from '../core/rows'
 import { experiment } from '../experiment'
 import { noteWork } from '../probe'
@@ -154,6 +160,12 @@ export const UserCell = memo(function UserCell({ row }: Props<'user'>) {
           </Text>
         ) : null}
       </Pressable>
+      {/* 发送的时刻：手机上没有悬停，常显在气泡下面（照 Claude 桌面端在触屏上常显） */}
+      {row.sentAt === undefined ? null : (
+        <Text style={[styles.userTime, { color: c.ink3, fontSize: font.size.small }]}>
+          {stamp(row.sentAt, Date.now(), t.lang)}
+        </Text>
+      )}
     </View>
   )
 })
@@ -378,6 +390,9 @@ export const StatusCell = memo(function StatusCell({ row }: Props<'status'>) {
   const working = useLasting(row.working) || retry !== null
   const spent = useTicking(working ? row.startedAt : null)
   const time = row.durationMs == null ? '' : ` · ${duration(row.durationMs, t)}`
+  // 回合结束的时刻（开始加用时），写在用时后面
+  const ended = turnEnded(row)
+  const at = ended === null ? '' : ` · ${stamp(ended, Date.now(), t.lang)}`
   const took = spent !== null && spent >= 1000 ? ` · ${elapsed(spent, t)}` : ''
   const text =
     row.status === 'running'
@@ -387,10 +402,10 @@ export const StatusCell = memo(function StatusCell({ row }: Props<'status'>) {
           ? `${t('turn.working', { name: harness })}${took}`
           : ''
       : row.status === 'completed'
-        ? `${t('turn.completed')}${time}`
+        ? `${t('turn.completed')}${time}${at}`
         : row.status === 'interrupted'
-          ? `${t('turn.interrupted')}${time}`
-          : t('turn.failed')
+          ? `${t('turn.interrupted')}${time}${at}`
+          : `${t('turn.failed')}${at}`
   return (
     <View style={styles.status}>
       <Text
@@ -588,6 +603,7 @@ export const styles = StyleSheet.create({
   grow: { flex: 1 },
   meta: { fontSize: 13 },
   userWrap: { paddingHorizontal: 16, paddingVertical: 6, alignItems: 'flex-end' },
+  userTime: { marginTop: 3, marginRight: 2 },
   userBubble: {
     borderWidth: 1,
     paddingHorizontal: 12,

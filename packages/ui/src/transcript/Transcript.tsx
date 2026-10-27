@@ -32,7 +32,7 @@ import {
 import { useT } from '../app/appearance.ts'
 import { useElapsed } from '../app/clock.ts'
 import { downHarness, downText, nameOf } from '../app/device.ts'
-import { duration, elapsed, retryText } from '../app/format.ts'
+import { duration, elapsed, retryText, turnEnded } from '../app/format.ts'
 import { useKey, useServices } from '../app/services.tsx'
 import { TurnOrigin } from '../background/TurnOrigin.tsx'
 import { Dock, Requests } from '../composer/Dock.tsx'
@@ -51,6 +51,7 @@ import { CommentLayer } from './comments/Layer.tsx'
 import { FileLinksProvider, useSessionFileLinks } from './FileLinks.tsx'
 import { AgentAnswer, PlanCard, UserMessage } from './messages.tsx'
 import { ProcessHead, ProcessParts } from './process.tsx'
+import { Stamp } from './Stamp.tsx'
 import { PinProvider, useTranscriptScroll } from './scroll.ts'
 import { TurnTouch, touchTurn, useFold, useTurnTouched } from './state.ts'
 import { TodoCard } from './Todo.tsx'
@@ -221,6 +222,8 @@ const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { 
   const ref = useMemo(() => ({ deviceId, sessionId }), [deviceId, sessionId])
   const sessionKey = `${deviceId}:${sessionId}`
   const running = turn?.status === 'running'
+  // 回合结束的时刻（开始加用时），结尾那一行写在用时后面
+  const ended = turn ? turnEnded(turn) : null
   const { blocks, remind, answerId, processIds } = useBlocks(ref, turn?.itemIds ?? [], turn?.status)
   const settled = useSettled(ref, turn?.status, answerId, meta?.can.finalOnStart === true)
   const working = useLasting(useWorking(ref, running, turn?.itemIds ?? NO_ITEMS), WORKING_DELAY_MS)
@@ -369,6 +372,7 @@ const Turn = memo(function Turn({ deviceId, sessionId, turnId }: SessionRef & { 
           <div className="turn-foot" data-anchor={`t:${turnId}`}>
             <span>{turn.status === 'running' ? '' : t(TURN_END[turn.status])}</span>
             {turn.durationMs === null ? null : <span>{duration(turn.durationMs, t)}</span>}
+            {ended === null ? null : <Stamp at={ended} />}
           </div>
         )}
       </section>

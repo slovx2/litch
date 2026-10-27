@@ -549,3 +549,29 @@ test('问用户的工具（AskUserQuestion 等）：一张问答卡片，露在�
   assert.equal(rows[2].item, ask)
   assert.equal(rows[1].steps, 2, '提问不算进过程的步数')
 })
+
+test('发送时刻：回合开头那条用户消息带回合开始的时刻，插进来的不带', () => {
+  const view = viewOf(
+    [
+      {
+        id: 't',
+        status: 'completed',
+        startedAt: 1_000,
+        durationMs: 500,
+        itemIds: ['u', 'a', 'u2'],
+      },
+      { id: 't2', status: 'completed', itemIds: ['u3'] },
+    ],
+    [user('u', '先问'), answer('a', '答'), user('u2', '插一句'), user('u3', '没给时刻')],
+  )
+  const rows = new RowBuilder().build(view, 'all')
+  const users = rows.filter((row) => row.type === 'user')
+  assert.deepEqual(
+    users.map((row) => [row.key, row.sentAt]),
+    [
+      ['u', 1_000],
+      ['u2', undefined],
+      ['u3', undefined],
+    ],
+  )
+})
