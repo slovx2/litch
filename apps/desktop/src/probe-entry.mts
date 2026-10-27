@@ -105,7 +105,8 @@ export async function entryProbe(): Promise<EntryProbe> {
   await open('连接层的重连与对账')
   // 对话区先画最后几个回合、更早的分批往前补（ui 的 turn-window.ts）：等画全再数，等不到就照实数
   const drawnBy = performance.now() + 5000
-  while (performance.now() < drawnBy && document.querySelectorAll('.turn').length < 24) await frame()
+  while (performance.now() < drawnBy && document.querySelectorAll('.turn').length < 24)
+    await frame()
   const longTurns = document.querySelectorAll('.turn').length
   scroller().scrollTop = -2400
   await frame()
