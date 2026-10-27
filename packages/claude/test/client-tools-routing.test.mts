@@ -190,3 +190,30 @@ test('CLIENT-TOOLS-007：litch_sessions 照同一套规矩：设备进程替上�
     assert.deepEqual(results, [OK])
   })
 })
+
+test('CLIENT-TOOLS-008：发起者、订阅者都挑不出来时交给把命名空间列在 anyThread 里的连接（设备进程的），只声明没列的不给', async () => {
+  await withStage('ct-any-thread', async (stage) => {
+    const sessions = CLIENT_TOOL_NAMESPACE.sessions
+    // 设备进程自己的连接：没订阅这个会话，litch_sessions 不看会话
+    const device = await stage.connect('device', {
+      litchExtensions: ['clientTools'],
+      litchClientTools: { namespaces: [sessions], anyThread: [sessions] },
+    })
+    // 只声明、没列 anyThread 的连接（客户端执行的工具）：没订阅就不交给它
+    const listed = await stage.connect('listed', {
+      litchExtensions: ['clientTools'],
+      litchClientTools: { namespaces: [sessions, 'litch_echo'] },
+    })
+    const desktop = await stage.connect('desktop')
+    const { thread } = await desktop.request('thread/start', { cwd: stage.directory })
+    await desktop.request('thread/unsubscribe', { threadId: thread.id })
+    const results: unknown[] = []
+    scriptCall(stage, sessions, results)
+    const { turn } = await desktop.request('turn/start', { threadId: thread.id, input: text('调') })
+    const call = await device.serverRequest('item/tool/call')
+    await device.answer(call, OK)
+    await desktop.completed(turn.id)
+    assert.deepEqual(results, [OK])
+    assert.equal(listed.requests('item/tool/call').length, 0)
+  })
+})

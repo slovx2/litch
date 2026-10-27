@@ -458,7 +458,11 @@ export class DeviceServer {
       log,
       closed: (session) => {
         this.sessions.delete(session)
-        this.sessionTree.clientLeft()
+        this.sessionTree.clientLeft(
+          this.harnesses()
+            .filter((source) => !source.managed || source.managed.state === 'running')
+            .map((source) => source.id),
+        )
       },
       clientTools: router,
       clientInvoke: new ClientToolInvoker({ router, index: this.index, log }),

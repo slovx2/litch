@@ -30,7 +30,9 @@ import {
 } from '../../shared/src/background-shell.mjs'
 import {
   clientToolNamespaces,
+  type DeclaredClientTools,
   isClientToolNamespace,
+  NO_CLIENT_TOOLS,
   noClientToolExecutor,
   pickClientToolExecutor,
 } from '../../shared/src/client-tool-executor.mjs'
@@ -238,7 +240,7 @@ export interface ClientToolsHost {
 export class ClientTools {
   private readonly host: ClientToolsHost
   /** 每条连接握手时声明能执行的客户端工具命名空间：连接标识 → 命名空间 */
-  private readonly declared = new Map<string, ReadonlySet<string>>()
+  private readonly declared = new Map<string, DeclaredClientTools>()
   private readonly cache = new Map<string, DynamicToolSpec[]>()
   /**
    * 入口自己带的工具：注入的后台 shell（litch_shell，shared/src/background-shell.mts）。每个会话都有，
@@ -620,7 +622,8 @@ export class ClientTools {
         namespace,
         starter,
         subscribers,
-        (peer) => this.declared.get(peer.id) ?? new Set(),
+        (peer) => this.declared.get(peer.id) ?? NO_CLIENT_TOOLS,
+        this.host.peers.values(),
       )
       if (!executor) return noClientToolExecutor(namespace)
       targets = [executor]

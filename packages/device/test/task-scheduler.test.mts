@@ -46,7 +46,8 @@ test('到点在新会话里跑一个回合：会话起了名、进了索引，�
     await settle()
     // 没有客户端连着：到点照样跑
     target.clock.advance(5 * MINUTE)
-    await until('跑完', () => engine.turns.length === 1 && engine.live.length === 0)
+    // 任务开的连接用完就关；剩下的一条是客户端走时会话树留的（引擎自己开的回合里设备工具要有执行方）
+    await until('跑完', () => engine.turns.length === 1 && engine.live.length === 1)
     const start = engine.seen.find((item) => item.method === 'thread/start')
     assert.equal(start?.params.cwd, target.stateDir)
     assert.equal(start?.params.model, 'gate')

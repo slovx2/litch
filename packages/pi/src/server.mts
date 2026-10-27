@@ -23,7 +23,9 @@ import {
 } from '../../shared/src/background-shell.mjs'
 import {
   clientToolNamespaces,
+  type DeclaredClientTools,
   isClientToolNamespace,
+  NO_CLIENT_TOOLS,
   noClientToolExecutor,
   pickClientToolExecutor,
 } from '../../shared/src/client-tool-executor.mjs'
@@ -145,7 +147,7 @@ export class PiServer {
   /** 每条连接握手时声明认识的扩展：连接标识 → 扩展名 */
   private readonly declared = new Map<string, Set<string>>()
   /** 每条连接握手时声明能执行的客户端工具命名空间（clientTools 扩展）：连接标识 → 命名空间 */
-  private readonly toolNamespaces = new Map<string, ReadonlySet<string>>()
+  private readonly toolNamespaces = new Map<string, DeclaredClientTools>()
   /** 工具执行之前问不问用户。运行时起来时定下，之后不变（设置 harness.pi.approvals，改了要重启运行时） */
   readonly approvals: boolean
   /**
@@ -546,7 +548,8 @@ export class PiServer {
     )
   }
   // 客户端工具的执行方（规矩在 shared/src/client-tool-executor.mts）：发起回合的连接还连着、声明了这个
-  // 命名空间就是它；否则订阅着会话、声明了的连接里最早订阅的那条；都没有返回 null
+  // 命名空间就是它；否则订阅着会话、声明了的连接里最早订阅的那条；再没有是把它列在 anyThread 里的
+  // （设备进程的连接）；都没有返回 null
   private clientToolExecutor(
     peer: RpcPeer | undefined,
     threadId: string,
@@ -557,7 +560,8 @@ export class PiServer {
       namespace,
       starter,
       this.subscribers(threadId),
-      (target) => this.toolNamespaces.get(target.id) ?? new Set(),
+      (target) => this.toolNamespaces.get(target.id) ?? NO_CLIENT_TOOLS,
+      this.peers.values(),
     )
   }
   /** 订阅着这个会话、还连着的连接，按订阅的先后 */

@@ -25,7 +25,11 @@ import {
 import type { HarnessConfigChangedNotification } from '../../protocol/src/harness-config.mjs'
 import { SESSION_TREE_METHOD } from '../../protocol/src/session-tree.mjs'
 import { localTaskTimeZone } from '../../protocol/src/task-schedule.mjs'
-import { clientToolNamespaces } from '../../shared/src/client-tool-executor.mjs'
+import {
+  clientToolNamespaces,
+  type DeclaredClientTools,
+  NO_CLIENT_TOOLS,
+} from '../../shared/src/client-tool-executor.mjs'
 import { errorText, paramFields } from '../../shared/src/log-file.mjs'
 import { ProtocolError, requiredString } from '../../shared/src/protocol-contract.mjs'
 import {
@@ -208,7 +212,7 @@ export class ClientSession implements ClientToolPeer {
   /** 握手时客户端给的参数，之后才出现的 harness 也用它去握手 */
   private initializeParams: unknown = null
   /** 握手时声明能执行的客户端工具命名空间（clientTools 扩展） */
-  clientToolNamespaces: ReadonlySet<string> = new Set()
+  clientToolNamespaces: DeclaredClientTools = NO_CLIENT_TOOLS
   /** 握手时报的桌面端信息（声明了 litch_machine 的 Litch 带） */
   desktop: ClientToolsDesktopInfo | null = null
   /** 每个 harness 上一次报给客户端的声明，用来判断状态是不是真的变了 */

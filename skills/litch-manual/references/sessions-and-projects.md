@@ -345,7 +345,10 @@ woken to continue.
   sessions on the same computer. A session keeps the same address while Litch restarts its Claude Code
   process. When another Litch session messages one whose process is not running, Litch starts it
   first and the message opens a turn there; from the Claude desktop app or a terminal, the receiving
-  session's process has to be running.
+  session's process has to be running. Turns a harness opens by itself like this (and turns that go on
+  after background work finishes) can still use Litch's session tools (messaging other sessions,
+  sub-sessions, task cards, wrap-up) and scheduled tasks when no desktop or phone is connected: the device
+  runs those tools itself.
 
 The whole feature can be switched per device with the `sessions.enabled` setting
 (`scripts/litch settings set <device> sessions.enabled=false`); remote devices need adapter 0.11.0 or

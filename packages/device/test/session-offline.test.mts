@@ -93,3 +93,21 @@ test('SESSION-OFFLINE-002：有后台任务在跑的会话，设备进程跟着�
     await env.close()
   }
 })
+
+test('SESSION-OFFLINE-003：会话空着、客户端都走了，引擎自己开的回合（Claude 收到别的会话发来的消息）里调设备工具，交给设备进程留的连接（anyThread）', async () => {
+  const env = treeRig({ releaseMs: 50 })
+  try {
+    const client = await litch(env)
+    const threadId = await withTools(client)
+    env.pi.end(threadId, 'completed', '做完了')
+    client.close()
+    await until(() => !followed(env, threadId, []), '没有回合在跑：设备进程不订阅这个会话', 3000)
+    env.pi.selfTurn(threadId)
+    const call = await env.pi.callTool(threadId, SESSIONS, 'wrap_up', { suggestions: [] })
+    assert.ok(call, '没人订阅也挑得出执行方')
+    assert.equal(call.answer.result.success, true)
+    assert.ok(call.connection.open, '客户端都断了，接的是设备进程留的那条')
+  } finally {
+    await env.close()
+  }
+})

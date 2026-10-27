@@ -95,6 +95,7 @@ test('握手：我们的扩展键和退订名单不带给原生 codex，别的�
     ])
     assert.deepEqual(toPi.capabilities.litchClientTools, {
       namespaces: ['litch_tasks', 'litch_sessions'],
+      anyThread: ['litch_tasks', 'litch_sessions'],
     })
     assert.equal(toPi.capabilities.optOutNotificationMethods, undefined)
   } finally {

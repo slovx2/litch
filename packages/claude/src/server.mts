@@ -19,7 +19,9 @@ import type { LitchPeer } from '../../protocol/src/peer-messages.mjs'
 import { catalogPagination } from '../../shared/src/catalog-pagination.mjs'
 import {
   clientToolNamespaces,
+  type DeclaredClientTools,
   isClientToolNamespace,
+  NO_CLIENT_TOOLS,
   noClientToolExecutor,
   pickClientToolExecutor,
 } from '../../shared/src/client-tool-executor.mjs'
@@ -361,7 +363,7 @@ interface PeerFeatures {
   // 握手时声明认识的协议扩展（capabilities.litchExtensions）。扩展内容只发给声明过的连接。
   extensions: Set<string>
   // 声明能执行的客户端工具命名空间（clientTools 扩展的 capabilities.litchClientTools）
-  clientTools: ReadonlySet<string>
+  clientTools: DeclaredClientTools
 }
 
 function turnItemsView(value: unknown): TurnItemsView {
@@ -8125,16 +8127,18 @@ export class CodexClaudeAppServer {
   }
 
   // 客户端工具的执行方（规矩在 shared/src/client-tool-executor.mts）：发起回合的连接还连着、声明了这个
-  // 命名空间就是它；否则订阅着线程（或照 recipients 跟着父会话）、声明了的连接里最早订阅的那条；没有返回 null。
-  // CLI 自己开的回合没有发起者（peer 是脱离的那个）。
+  // 命名空间就是它；否则订阅着线程（或照 recipients 跟着父会话）、声明了的连接里最早订阅的那条；再没有是
+  // 握手过、把它列在 anyThread 里的（设备进程的连接）；没有返回 null。
+  // CLI 自己开的回合（收到别的会话发来的消息、后台跑完续跑）没有发起者（peer 是脱离的那个）。
   private clientToolExecutor(peer: RpcPeer, threadId: string, namespace: string): RpcPeer | null {
     const namespacesOf = (target: RpcPeer) =>
-      this.peerFeatures.get(target)?.clientTools ?? new Set()
+      this.peerFeatures.get(target)?.clientTools ?? NO_CLIENT_TOOLS
     const starter = this.isConnected(peer) ? peer : null
     const watching = this.recipients(peer, { threadId }).filter((target) =>
       this.isConnected(target),
     )
-    return pickClientToolExecutor(namespace, starter, watching, namespacesOf)
+    const everyone = [...this.accountPeers].filter((target) => this.isConnected(target))
+    return pickClientToolExecutor(namespace, starter, watching, namespacesOf, everyone)
   }
 
   private completeActiveTurns(status: 'interrupted' | 'failed', error: unknown): void {

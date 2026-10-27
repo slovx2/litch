@@ -83,7 +83,10 @@ test('握手：没声明 harness 扩展的被拒绝并说明原因，声明了�
         requestAttestation: false,
         litchExtensions: ['harness', 'futureThing', 'clientTools'],
         subAgentActivityKinds: ['completed'],
-        litchClientTools: { namespaces: ['litch_tasks', 'litch_sessions'] },
+        litchClientTools: {
+          namespaces: ['litch_tasks', 'litch_sessions'],
+          anyThread: ['litch_tasks', 'litch_sessions'],
+        },
       },
     })
     assert.ok(pi.seen.some((entry) => entry.method === 'initialized' && entry.id === undefined))
@@ -107,8 +110,10 @@ test('一条客户端连接对应一组上游连接，客户端断开时这组�
     assert.equal(env.device.connections, 2)
     first.close()
     await settle()
-    assert.equal(pi.live.length, 1)
-    assert.equal(claude.live.length, 1)
+    // 剩下的是另一条客户端的，加上设备进程自己留的一条（引擎自己开的回合里设备工具要有执行方）
+    assert.equal(pi.live.length, 2)
+    assert.equal(claude.live.length, 2)
+    assert.equal(pi.live.filter((one) => one.raw[0]?.includes(`"name":"litch-device"`)).length, 1)
     assert.equal(env.device.connections, 1)
     // 剩下的那条不受影响
     assert.equal((await second.call('runtime/info')).harnesses.length, 2)
