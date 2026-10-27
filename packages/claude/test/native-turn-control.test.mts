@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
+import { setTimeout as delay } from 'node:timers/promises'
 import { MockLLM } from './fixtures/mock-llm.mjs'
 import { ProtocolClient } from './fixtures/protocol-client.mjs'
 
@@ -12,6 +13,33 @@ function gate(): { promise: Promise<void>; resolve: () => void } {
     resolve = done
   })
   return { promise, resolve }
+}
+
+// 等 CLI 把这几句都读进自己的队列：它排进队列时在会话记录里记一条 queue-operation enqueue。
+// turn/steer 的回执只说明话已写进 CLI 的标准输入，CLI 读进队列还要一会儿；那一刻之前模型应答已经收尾的话，
+// 这句留到下一轮请求（仍在同一回合里）。要几句落进同一次请求，先等到它们都排进队列再放行应答
+async function waitQueued(home: string, texts: string[]): Promise<void> {
+  const projects = join(home, 'claude', 'projects')
+  const deadline = Date.now() + 30_000
+  for (;;) {
+    const queued = new Set<string>()
+    for (const project of await readdir(projects).catch(() => [] as string[]))
+      for (const name of await readdir(join(projects, project))) {
+        if (!name.endsWith('.jsonl')) continue
+        // 最后一行可能还没写完，只看整行
+        const lines = (await readFile(join(projects, project, name), 'utf8'))
+          .split('\n')
+          .slice(0, -1)
+        for (const line of lines) {
+          const entry = JSON.parse(line)
+          if (entry.type === 'queue-operation' && entry.operation === 'enqueue')
+            queued.add(entry.content)
+        }
+      }
+    if (texts.every((text) => queued.has(text))) return
+    assert.ok(Date.now() < deadline, `CLI 没有把这几句排进队列：${texts.join('、')}`)
+    await delay(20)
+  }
 }
 
 test('SUBMIT-003：启动窗口连续追加输入不能丢失或额外创建回合', { timeout: 60_000 }, async () => {
@@ -151,7 +179,11 @@ test('SUBMIT-003：真实 SDK 追加指令、并发提交、重复请求与冲�
     model.enqueue((request) => {
       const text = JSON.stringify(request.messages)
       assert.match(text, /ORIGINAL_INPUT/)
-      assert.equal(text.split('STEER_INPUT').length - 1, 1, '重试不能重复输入模型')
+      assert.equal(
+        text.split('STEER_INPUT').length - 1,
+        1,
+        '追加指令恰好进模型一次：不丢、重复请求不重复输入',
+      )
       assert.equal(text.split('CONCURRENT_INPUT').length - 1, 1)
       return [{ type: 'text', text: 'AFTER_STEER' }]
     })
@@ -186,6 +218,8 @@ test('SUBMIT-003：真实 SDK 追加指令、并发提交、重复请求与冲�
       { ...steer, input: [{ type: 'text', text: 'CONFLICT' }] },
       -32009,
     )
+    // 两句都排进 CLI 的队列再放行第一次应答，它们才一定并进第二次请求（不等的话慢机器上插话可能晚于应答收尾，拆成两轮）
+    await waitQueued(home, ['CONCURRENT_INPUT', 'STEER_INPUT'])
     release.resolve()
     // 第二条请求里的断言不过时假模型回 400，回合只看得到 failed：把假模型记下的原因带出来
     const done = await client.completed(turn.id)
