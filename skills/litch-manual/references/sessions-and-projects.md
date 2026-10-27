@@ -74,8 +74,9 @@ explain it:
   default) a message goes straight into the running turn and the button reads Send; set to Queue, or
   when the harness can't take messages mid-turn (or can't take images mid-turn and the message has
   some), it waits in the queue above the composer until the turn ends and the button reads Queue
-  (the composer's placeholder says which). "Send now" on a queued message puts it into the running
-  turn. With nothing typed the button is Stop, which interrupts the turn.
+  (the composer's placeholder says which). Codex, Claude Code, Pi, DSH and OpenCode take images
+  mid-turn; ACP agents (Gemini, Qwen and the generic ACP entry) take no messages mid-turn. "Send now"
+  on a queued message puts it into the running turn. With nothing typed the button is Stop, which interrupts the turn.
 - **Approvals and questions** appear as cards above the composer: commands, file changes, extra
   permissions, MCP tools (Allow once / Allow for this session / Always allow / Decline / Decline and
   stop, or decline with a note for the model); multi-question forms; plan confirmation (Run the plan /

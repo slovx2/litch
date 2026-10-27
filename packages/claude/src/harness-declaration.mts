@@ -36,8 +36,8 @@ const features: HarnessFeatures = {
   // 待办工具（TodoWrite）转成 turn/plan/updated。
   planUpdates: true,
   inputTypes: ['text', 'image', 'localImage', 'skill', 'mention'],
-  // 引导只把文字交给模型：图片到不了，只剩一个占位的词。
-  steerInputTypes: ['text', 'skill', 'mention'],
+  // 插话带的图片和回合开头一样发成内容块，CLI 回合中途交给模型时照样带上
+  steerInputTypes: ['text', 'image', 'localImage', 'skill', 'mention'],
   archive: true,
   delete: true,
   rename: true,

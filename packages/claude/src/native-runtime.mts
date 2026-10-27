@@ -133,6 +133,7 @@ import {
 import type { RuntimeTurnSettings } from './turn-settings.mjs'
 import type {
   ClaudeRuntime,
+  ImageInput,
   NativeModelInfo,
   NativeSessionFork,
   PermissionDecision,
@@ -1161,7 +1162,12 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     }
   }
 
-  async steer(threadId: string, prompt: string, messageId?: string): Promise<void> {
+  async steer(
+    threadId: string,
+    prompt: string,
+    messageId?: string,
+    images: ImageInput[] = [],
+  ): Promise<void> {
     // 进程还在启动，或回合正在应用设置：等首条用户消息送入之后再送，保证先后。
     const starting = [...this.turnSettingsReady.values()].find(
       (entry) => entry.threadId === threadId,
@@ -1170,7 +1176,7 @@ export class NativeClaudeRuntime implements ClaudeRuntime {
     if (!pending || pending.resolved || pending.context.threadId !== threadId)
       throw new ProtocolError(-32009, '原生回合未启动或已结束')
     const uuid = messageId ?? randomUUID()
-    pending.input.send(steerMessage(workflowRuntimePrompt(prompt), uuid))
+    pending.input.send(steerMessage(workflowRuntimePrompt(prompt), uuid, images))
     pending.awaited = uuid
     pending.awaitedSeen = false
   }

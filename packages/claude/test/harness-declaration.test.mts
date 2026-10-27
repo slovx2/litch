@@ -207,6 +207,14 @@ test('DECL-002：能力位和权限预设与协议行为一致（模拟运行时
       input: text('追加一句'),
     })
     assert.equal(steered.turnId, held.id)
+    // 插话接受的输入种类：声明的都收（图片也收，不再拒）
+    assert.ok(features.steerInputTypes.every((type) => type in inputs))
+    const steeredAll = await client.request('turn/steer', {
+      threadId,
+      expectedTurnId: held.id,
+      input: features.steerInputTypes.map((type) => inputs[type]),
+    })
+    assert.equal(steeredAll.turnId, held.id)
     const queued = await call(client, features.queue, 'thread/queue/add', {
       threadId,
       clientUserMessageId: randomUUID(),

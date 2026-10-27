@@ -17,6 +17,7 @@ import {
   resultConfirms,
   sessionFingerprint,
   startsRound,
+  steerMessage,
   userMessage,
 } from '../src/native-session.mjs'
 import type { RuntimeTurnContext, ThreadItem } from '../src/types.mjs'
@@ -168,6 +169,18 @@ test('带图片的斜杠命令排在图片后面：CLI 只拿最后一块文本�
     userMessage(context({ prompt: '', imageInputs }), null, null).message.content,
     blocks,
   )
+})
+
+test('插话：没图片是一句文字；带图片发成内容块，文字在前', () => {
+  const image = { kind: 'base64' as const, mediaType: 'image/png', data: 'AAAA', displayPath: 'a' }
+  const block = { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'AAAA' } }
+  assert.equal(steerMessage('看看', 'u-1').message.content, '看看')
+  assert.deepEqual(steerMessage('看看', 'u-1', [image]).message.content, [
+    { type: 'text', text: '看看' },
+    block,
+  ])
+  assert.deepEqual(steerMessage('', 'u-1', [image]).message.content, [block])
+  assert.equal(steerMessage('看看', 'u-1', [image]).uuid, 'u-1')
 })
 
 test('当前回合的视图：读写都落在会话当前的上下文上', () => {
