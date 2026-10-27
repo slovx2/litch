@@ -7,13 +7,16 @@ import {
 } from '@react-navigation/native'
 import { StatusBar } from 'expo-status-bar'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Linking, StyleSheet, Text, useColorScheme, View } from 'react-native'
+import { AppState, Linking, StyleSheet, Text, useColorScheme, View } from 'react-native'
 import { KeyboardProvider } from 'react-native-keyboard-controller'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
+import { keepAllViews, setViewCache } from './core/store-cache'
+import { createViewCache } from './core/view-cache'
 import { MermaidHost } from './detail/mermaid/MermaidHost'
 import { Navigator } from './nav/Navigator'
-import { type Booted, boot } from './shell/boot'
+import { type Booted, boot, VERSION } from './shell/boot'
 import { handleDevLink, navigationRef } from './shell/dev-links'
+import { jsonFile } from './shell/json-file'
 import { loadPrefs, type Prefs, type Services, ServicesProvider, savePrefs } from './shell/services'
 import { I18nContext, systemLang, translator } from './ui/i18n'
 import { Button } from './ui/kit/controls'
@@ -35,6 +38,8 @@ function useBooted(prefs: Prefs, lang: 'zh-CN' | 'en') {
         if (cancelled) next.stop()
         else {
           current = next
+          // 会话视图按装法分开留：模拟核心的示例会话和真设备上的不混
+          setViewCache(createViewCache((name) => jsonFile(`${next.mode}-${name}`), VERSION))
           setBooted(next)
         }
       },
@@ -44,9 +49,17 @@ function useBooted(prefs: Prefs, lang: 'zh-CN' | 'en') {
     )
     return () => {
       cancelled = true
+      setViewCache(null)
       current?.stop()
     }
   }, [prefs.boot, attempt])
+  // 退到后台时把开着的会话留一份：进程可能被系统杀掉，回来时先摆上次的内容
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'background') keepAllViews()
+    })
+    return () => subscription.remove()
+  }, [])
   return { booted, error, retry: () => setAttempt((n) => n + 1) }
 }
 

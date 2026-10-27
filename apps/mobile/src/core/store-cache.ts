@@ -3,8 +3,10 @@
 // 最多留 KEEP_COUNT 个，离开超过 KEEP_MS 的关掉。
 // 在跑的会话离开时就关、留着的开始跑了也关：核心按“有没有人订阅”判断回合结束时标不标未读，
 // 留着不关的订阅会让离开后才结束的回合不出未读。
+// 关掉之后再进来、或者应用重开，就靠 view-cache.ts 留的那一份先摆出来（setViewCache 装上才有）。
 import type { CoreChannel } from '@litch/core'
 import { SessionStore } from './session-store'
+import type { ViewCache } from './view-cache'
 
 const KEEP_COUNT = 3
 const KEEP_MS = 60_000
@@ -23,6 +25,28 @@ const entries = new Map<string, Entry>()
 const channelIds = new WeakMap<CoreChannel, number>()
 let channelSeq = 0
 const storeKeys = new WeakMap<SessionStore, string>()
+let viewCache: ViewCache | null = null
+
+/** 应用启动时装上（App.tsx）；单元测试里不装就不留 */
+export function setViewCache(cache: ViewCache | null): void {
+  viewCache = cache
+}
+
+/** 把一个存储现在的视图留一份。核心的快照还没到过就没得留 */
+function keep(store: SessionStore): void {
+  const view = store.currentView()
+  if (view && viewCache) viewCache.remember(view)
+}
+
+/** 设备去掉了：留着的它的会话视图一起删掉 */
+export function forgetViews(deviceId: string): void {
+  viewCache?.forgetDevice(deviceId)
+}
+
+/** 开着的、刚离开还留着的会话都留一份（应用退到后台时叫：进程可能被系统杀掉） */
+export function keepAllViews(): void {
+  for (const entry of entries.values()) keep(entry.store)
+}
 
 export function acquireStore(
   channel: CoreChannel,
@@ -44,6 +68,8 @@ export function acquireStore(
       leftAt: 0,
       unwatch: null,
     }
+    const cached = viewCache?.recall(deviceId, sessionId)
+    if (cached) entry.store.seed(cached)
     entry.store.start()
     entries.set(key, entry)
     storeKeys.set(entry.store, key)
@@ -66,6 +92,7 @@ export function releaseStore(store: SessionStore): void {
     close(key)
     return
   }
+  keep(store)
   entry.leftAt = Date.now()
   entry.timer = setTimeout(() => close(key), KEEP_MS)
   entry.unwatch = store.subscribeData(() => {
@@ -83,6 +110,7 @@ function close(key: string): void {
   if (!entry || entry.users > 0) return
   if (entry.timer) clearTimeout(entry.timer)
   entry.unwatch?.()
+  keep(entry.store)
   entry.store.stop()
   entries.delete(key)
 }

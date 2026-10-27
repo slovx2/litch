@@ -13,6 +13,7 @@ import {
   type SnapshotStore,
   type TerminalNotesStore,
 } from '@litch/core'
+import { forgetViews } from '../core/store-cache'
 import { jsonFile } from '../shell/json-file'
 
 /** 文件名里只留放心的字符。设备标识本来就是核心自己起的，这里再挡一次 */
@@ -58,6 +59,7 @@ export function fileDeviceStore(): DeviceStore {
       snapshotFile(deviceId).remove()
       terminalFile(deviceId).remove()
       codexFile(deviceId).remove()
+      forgetViews(deviceId)
     },
   }
 }

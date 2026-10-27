@@ -61,6 +61,7 @@ import { HandoffCell } from './proposals/HandoffCell'
 import { flash, takeReveal, useRevealWaiting } from './proposals/hooks'
 import { ProposalCell } from './proposals/ProposalCell'
 import { WrapAskCell } from './proposals/WrapAskCell'
+import { SyncBar } from './SyncBar'
 import { SystemCell } from './SystemCell'
 import { GroupCell, GroupEndCell, ProcessCell, StepCell } from './steps'
 import { colors } from './theme'
@@ -374,6 +375,7 @@ export function Transcript({ store, bottomOffset, markers }: Props) {
               }}
               style={styles.list}
             />
+            <SyncBar store={store} />
             {actions.overlays}
           </View>
         </InViewContext.Provider>
