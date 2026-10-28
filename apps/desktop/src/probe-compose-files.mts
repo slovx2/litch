@@ -328,8 +328,8 @@ export function judgeFiles(probe: FilesProbe, real: boolean, dir: string): strin
     )
     check(
       remote.titles.length === 1 &&
-        remote.titles[0]?.includes('litch-blob.bin') &&
-        remote.titles[0]?.includes('在这台电脑上'),
+        (remote.titles[0] ?? '').includes('litch-blob.bin') &&
+        (remote.titles[0] ?? '').includes('在这台电脑上'),
       `远程设备上二进制文件的片没有写明路径在这台电脑上：${remote.titles.join('；') || '没有'}`,
     )
     check(remote.said === '', `远程设备开着“操作本机”，不该有拒绝的说明：“${remote.said}”`)
