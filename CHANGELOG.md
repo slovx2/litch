@@ -5,6 +5,11 @@ The project is still private in `package.json`; this file tracks release notes
 for maintainers preparing the next public release and does not change package
 versioning or publishing metadata.
 
+## 0.25.0
+
+- 桌面端点开远程会话不再每次白屏等加载（手机端 0.24.0 已改，桌面端这次跟上）：刚看过的会话切走后在后台留 10 分钟（最多 6 个），切回来直接显示，不再经 ssh 整份重新拉；关掉过的、或者重启应用后，先摆出这台电脑上存的上次内容（最近 40 个回合，最多 24 个会话、合计约 12M 字，应用换版本作废），最新的载入完整份换上。摆着旧内容时输入框照常能写，提示“正在载入最新内容”，载入完才能发
+- 输入框能收文件夹了（拖进来、粘贴都行，参照 Codex 和 Claude 桌面端）：本机设备的会话里按路径提到文件夹，片上是文件夹图标，不上传、不展开目录；远程设备的会话里，这台电脑上的文件夹、二进制文件在那台设备开了“操作本机”时按这台电脑上的路径带过去，模型用 `litch_machine` 读；没开时说明原因并提示去设备设置打开。Claude Code 会话里提到的路径带空格时写成 `@"路径"`
+
 ## 0.24.0
 
 - Claude Code 会话回合进行中插话可以带图片了（以前提示“带图片的消息不能在回合中途插入”）：这是 Litch 的 Claude 入口自己的限制，插话只把文字交给 CLI；CLI 本身回合中途收到带图片的消息照样交给模型。现在插话和回合开头一样把图片发成内容块，入口声明的插话输入种类加上图片；回合进行中再发一条带图片的消息（并进当前回合）也不再被拒。其他 harness 核过：Pi、DSH、OpenCode、原生 Codex 本来就带图片，ACP 入口不支持回合中途插话
