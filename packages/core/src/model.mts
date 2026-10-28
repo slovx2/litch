@@ -1194,4 +1194,9 @@ export interface SessionView {
   goal?: SessionGoalView | null
   /** 刚达成、已经清掉的目标留下的那一句（model-goal.mts）。没有是 null 或不带 */
   goalReached?: GoalReachedView | null
+  /**
+   * 这是上次留下的旧视图（这台电脑上存的、或者核心留着但订阅已经断了的），最新的还在载入，到了整份换掉。
+   * 这时 live 为假，界面照样画、输入框能写但发不出（device/view-store.mts）。最新的视图不带这一项
+   */
+  stale?: boolean
 }

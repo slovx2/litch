@@ -1,7 +1,7 @@
 // 会话操作这一组测试共用的搭建：一个真的核心，对面是假对端。
 // live.test.mts 里有一份更全的（模型、设置、引导），这里只留会话操作用得到的，方法表可以由测试补。
 import type { Thread, Turn } from '../../protocol/src/index.mjs'
-import { createCore, type SidebarOp, type SidebarView } from '../src/index.mjs'
+import { createCore, type DeviceStore, type SidebarOp, type SidebarView } from '../src/index.mjs'
 import { fakeOpener, type Handler, RpcFailure } from './fake-server.mjs'
 import { thread, turn } from './fixtures.mjs'
 import { fakeClock } from './helpers.mjs'
@@ -28,6 +28,8 @@ export const finished = (id: string, fields: Partial<Turn> = {}): Turn =>
 export function setup(
   threads: Thread[] = [thread({ id: 'a', turns: [] })],
   extra: Record<string, Handler> = {},
+  /** 这台电脑上存东西的地方：要测存下的视图时给 */
+  store?: DeviceStore,
 ) {
   const world = {
     threads,
@@ -77,6 +79,7 @@ export function setup(
   const core = createCore({
     clock: time.clock,
     version: '9.9.9',
+    ...(store ? { store } : {}),
     devices: [
       {
         id: 'local',

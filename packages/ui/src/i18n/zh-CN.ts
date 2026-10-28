@@ -1233,6 +1233,7 @@ export const zhCN = {
     '下一轮起换到 {name}，第一轮不走提示缓存；型号名不变时，上一家的思考签名可能被拒，被拒时换回原来那家或换一个型号。',
   'composer.context': '上下文已用 {percent}%（{used} / {window}）',
   'composer.offline': '设备未连接，无法发送消息。',
+  'composer.syncing': '正在载入最新内容，载入完才能发送。',
   'composer.harnessDown': '{name} 当前不可用，恢复后才能发送消息。',
   'composer.harnessOff': '{name} 已停用，无法发送消息。请在“设备”中重新启用。',
   'composer.failed': '发送失败：{reason}',

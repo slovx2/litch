@@ -190,6 +190,13 @@ export {
   type TerminalsHost,
 } from './device/terminals.mjs'
 export { CALL_TIMEOUT_MS } from './device/tool-calls.mjs'
+export {
+  checkView,
+  staleView,
+  trimView,
+  VIEW_KEEP_TURNS,
+  type ViewStore,
+} from './device/view-store.mjs'
 export { projectWorkspaces, resolveWorkspace } from './device/workspaces.mjs'
 export { createMockCore, type MockCore, type MockCoreOptions } from './mock/mock-core.mjs'
 export type { SampleLang } from './mock/sample-text.mjs'

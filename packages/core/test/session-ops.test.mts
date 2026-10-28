@@ -246,11 +246,11 @@ test('已归档：只读地看完关掉，不向对面退订（本来就没订�
   session.close()
   await settle()
   assert.deepEqual(sent('thread/unsubscribe'), [])
-  // 再打开还是只读的那一份
+  // 关掉后留着一阵：再打开还是只读的那一份，不再读一遍
   const again = watch(core, 'b')
   await settle()
   assert.equal(again.seen.view?.live, false)
-  assert.equal(sent('thread/read').length, 2)
+  assert.equal(sent('thread/read').length, 1)
 })
 
 test('已归档：模拟核心里归档着的会话能只读地打开，恢复之后能发消息', async () => {
@@ -361,7 +361,7 @@ test('待办：模型每改一次整份换掉，位置不变；回合结束后�
 })
 
 test('待办：协议的历史里没有它，会话放掉再打开还在原来的位置；会话删掉了就不留', async () => {
-  const { core, world, peer, command, sent } = setup()
+  const { core, world, peer, time, command, sent } = setup()
   core.start()
   await settle()
   const session = watch(core)
@@ -402,8 +402,10 @@ test('待办：协议的历史里没有它，会话放掉再打开还在原来�
   server.notify('turn/completed', { threadId: 'a', turn: finished('srv-1') })
   await settle()
 
-  // 没人看了：退订、放掉。对面的历史里只有消息，没有待办
+  // 没人看了：留一阵后退订、放掉。对面的历史里只有消息，没有待办
   session.close()
+  await settle()
+  time.advance(10 * 60_000)
   await settle()
   assert.equal(sent('thread/unsubscribe').length, 1)
   const stored = thread({

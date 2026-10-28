@@ -327,6 +327,8 @@ export interface SessionMeta {
   can: SessionAbilities
   /** 从哪个会话分叉出来的，见 SessionView.forkedFrom */
   forkedFrom: string | null
+  /** 摆着的是上次留下的旧内容，最新的还在载入（见 SessionView.stale） */
+  stale?: boolean
 }
 
 export interface Replica {
@@ -1210,6 +1212,7 @@ export function createReplica(channel: CoreChannel): Replica {
                   note: view.note,
                   can: view.can,
                   forkedFrom: view.forkedFrom,
+                  ...(view.stale ? { stale: true } : {}),
                 }
                 store.set(keys.session(deviceId, sessionId), meta)
               })

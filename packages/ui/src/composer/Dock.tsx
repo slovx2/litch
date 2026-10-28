@@ -37,7 +37,14 @@ export function Dock({ deviceId, sessionId }: DockProps) {
   const offline = device !== undefined && device.connection !== 'online'
   // 设备连着，但这个会话所属的 harness 现在用不了：照样能看、能写草稿，只是发不出去
   const down = downHarness(device, meta?.harness)
-  const blocked = offline ? t('composer.offline') : down ? downText(down, 'composer', t) : null
+  // 摆着的是这台电脑上存的旧内容（meta.stale）：照样能写草稿，最新的载入完才能发
+  const blocked = offline
+    ? t('composer.offline')
+    : down
+      ? downText(down, 'composer', t)
+      : meta?.stale
+        ? t('composer.syncing')
+        : null
 
   let body = null
   if (!meta) {
@@ -47,7 +54,7 @@ export function Dock({ deviceId, sessionId }: DockProps) {
         <div className="cmp-text" />
       </div>
     )
-  } else if (!meta.live) {
+  } else if (!meta.live && !meta.stale) {
     body = (
       <div className="cmp off">
         <div className="cmp-text">{meta.note ? t.text(meta.note) : t('composer.offline')}</div>

@@ -153,8 +153,10 @@ test('直连原生 codex：选了快速，切走再切回来、桌面端重启�
   await say(app, '快点')
   assert.equal(app.sent('turn/start')[0]?.serviceTier, 'priority')
 
-  // 切走：没人看了就退订；codex 空闲久了卸载会话，速度忘了
+  // 切走：没人看了留一阵再退订；codex 空闲久了卸载会话，速度忘了
   session.close()
+  await settle()
+  app.time.advance(10 * 60_000)
   await settle()
   codex.unload()
   session = watchSession(app.core)

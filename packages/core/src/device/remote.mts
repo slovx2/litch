@@ -14,6 +14,7 @@ import type {
 import type { CodexThreadNotesStore } from './codex-instructions.mjs'
 import type { SnapshotStore } from './device.mjs'
 import type { TerminalNotesStore } from './terminal-launch.mjs'
+import type { ViewStore } from './view-store.mjs'
 
 /** 外壳提供的远程能力 */
 export interface RemotePlatform {
@@ -202,6 +203,8 @@ export interface DeviceStore {
   machineLog?(deviceId: string): MachineLogStore
   /** 直连原生 codex 时哪些会话带了哪几个命名空间的规则（codex-instructions.mts）。不实现就只记在内存里 */
   codexThreads?(deviceId: string): CodexThreadNotesStore
+  /** 一台设备上打开过的会话的视图（view-store.mts）：再打开时先摆出来。不实现就不存 */
+  views?(deviceId: string): ViewStore
   /** 设备去掉了，或者换了一台机器：它的快照不要了 */
   forget(deviceId: string): void
 }

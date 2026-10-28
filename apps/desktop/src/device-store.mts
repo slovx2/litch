@@ -17,6 +17,7 @@ import {
   type TerminalNotes,
   type TerminalNotesStore,
 } from '@litch/core'
+import { viewFiles } from './view-files.mjs'
 
 function readJson(path: string): unknown {
   try {
@@ -36,8 +37,8 @@ function writeJson(path: string, value: unknown): void {
 /** 快照文件名里只留放心的字符。设备标识本来就是核心自己起的，这里再挡一次 */
 const safe = (deviceId: string): string => deviceId.replace(/[^A-Za-z0-9_-]/g, '_')
 
-/** dir 是用户数据目录 */
-export function fileDeviceStore(dir: string): DeviceStore {
+/** dir 是用户数据目录；version 是应用的版本（存的会话视图换了版本就不用） */
+export function fileDeviceStore(dir: string, version = '0.0.0'): DeviceStore {
   const devicesFile = join(dir, 'devices.json')
   const snapshotDir = join(dir, 'snapshots')
   const snapshotFile = (deviceId: string) => join(snapshotDir, `${safe(deviceId)}.json`)
@@ -50,6 +51,8 @@ export function fileDeviceStore(dir: string): DeviceStore {
   // 直连原生 codex 时哪些会话带了哪几个命名空间的规则（只有命名空间的名字），恢复、分叉时核心照它补开发者指令
   const codexDir = join(dir, 'codex-threads')
   const codexFile = (deviceId: string) => join(codexDir, `${safe(deviceId)}.json`)
+  // 打开过的会话的视图（核心的 view-store.mts）：再打开时先摆出来，最新的到了再换
+  const views = viewFiles(join(dir, 'views'), version)
 
   return {
     load(): SavedDevices {
@@ -103,7 +106,10 @@ export function fileDeviceStore(dir: string): DeviceStore {
       }
     },
 
+    views: (deviceId) => views.views(deviceId),
+
     forget(deviceId) {
+      views.forgetDevice(deviceId)
       rmSync(snapshotFile(deviceId), { force: true })
       rmSync(terminalFile(deviceId), { force: true })
       rmSync(machineFile(deviceId), { force: true })

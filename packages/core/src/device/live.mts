@@ -81,6 +81,7 @@ import {
   lacksMethod,
 } from './faults.mjs'
 import type { HarnessTerms } from './harness.mjs'
+import { staleView, trimView, type ViewStore } from './view-store.mjs'
 
 export interface LiveHost {
   deviceId: string
@@ -134,6 +135,8 @@ export interface LiveHost {
    * 只在对面就是原生 codex 自己时用；连的是设备服务时由设备进程记。不给就不记
    */
   speeds?: SpeedStore
+  /** 会话视图存在这台电脑上的那一份（view-store.mts）：离开、回合结束时存，打开时先摆出来。不给就不存 */
+  views?: ViewStore
   log(line: string): void
 }
 
@@ -285,6 +288,11 @@ interface Live {
   revertEchoUntil: number
   /** 这边发出的手动压缩里，对面还没开始压的几次：接下来开始的压缩算手动的（官方桌面端也这样认） */
   compacting: number
+  /**
+   * 手里的视图是旧的：没人看着时连接断过（或者它的 harness 断过），订阅已经没了、没重新载入。
+   * 再打开时先摆它（标 stale），同时重新载入
+   */
+  stale: boolean
 }
 
 type Notes = {
@@ -292,6 +300,13 @@ type Notes = {
 }
 
 const LOAD_TIMEOUT = 60_000
+
+/**
+ * 没人看了的会话视图和订阅再留多久、每台设备最多留几个（最近离开的在前）：切回来直接画，不用再拉一遍整份历史。
+ * 远程设备上拉一份长会话要几秒到几十秒（2026-10-28 的日志：中位数 0.9 秒，p90 4.8 秒）
+ */
+const LINGER_MS = 10 * 60_000
+const LINGER_MAX = 6
 
 /** 自己回退之后多久之内来的“历史被改写了”算这一次的回音（Live.revertEchoUntil） */
 const REVERT_ECHO_MS = 5000
@@ -307,6 +322,8 @@ const UNSUPPORTED = '对方不支持此操作'
 
 export function createLiveSessions(host: LiveHost): LiveSessions {
   const sessions = new Map<string, Live>()
+  /** 没人看了、还留着的会话（插入的先后就是离开的先后）→ 到点放掉的取消函数 */
+  const lingering = new Map<string, () => void>()
   /**
    * 建会话、恢复、分叉、发回合都经这里：直连原生 codex 时记下选过的速度，恢复、分叉没带时补回
    * （protocol 包的 codex-speeds.mts）。连的是设备服务、适配器时照发，设备进程那边自己记
@@ -813,6 +830,8 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       host.touched(live.id)
       host.turnEnded?.(live.id, turn.id)
       pump(live)
+      // 开着的会话回合结束时也存一份：退出应用时开着的那个，下次打开也有东西先摆（没人看的在 release 里存）
+      if (live.sinks.size > 0) remember(live)
       release(live)
     },
     // 这个回合到现在为止改了什么。对话里不显示它（文件改动的条目里已经有了），留给差异面板
@@ -1036,6 +1055,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
         live.itemAlias.clear()
         live.summarized.clear()
         live.starting = null
+        live.stale = false
         live.view = {
           ...view,
           queued: live.queued,
@@ -1096,17 +1116,67 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     )
   }
 
-  /** 没人看、也没有在跑的事了，就退订并放掉 */
+  /**
+   * 没人看、也没有在跑的事了：存一份视图，再留一阵（LINGER_MS），这期间切回来直接画；到点或者留的太多了才退订并放掉。
+   * 留着的照样收对面的通知、视图跟着变，只是没有界面在看（watched 为假，未读、通知照旧按没人看算）
+   */
   const release = (live: Live) => {
     if (live.sinks.size > 0 || live.loading) return
     if (live.view && (isRunning(live.view) || live.requests.size > 0 || live.queued.length > 0))
       return
+    if (!live.view) {
+      drop(live)
+      return
+    }
+    remember(live)
+    unlinger(live.id)
+    lingering.set(
+      live.id,
+      host.clock.setTimer(() => drop(live), LINGER_MS),
+    )
+    for (const id of lingering.keys()) {
+      if (lingering.size <= LINGER_MAX) break
+      const oldest = sessions.get(id)
+      if (oldest) drop(oldest)
+      else unlinger(id)
+    }
+  }
+
+  /** 不再留：取消到点的计时 */
+  const unlinger = (id: string) => {
+    lingering.get(id)?.()
+    lingering.delete(id)
+  }
+
+  /** 退订并放掉。期间又被打开、换成了别的、已经放掉了的不动 */
+  const drop = (live: Live) => {
+    unlinger(live.id)
+    if (sessions.get(live.id) !== live || live.sinks.size > 0) return
     sessions.delete(live.id)
-    // 够不着的时候不用退：订阅已经随连接（或者它的 harness 的上游连接）一起没了
-    if (live.view?.live && reachable(live)) {
+    // 够不着的时候不用退：订阅已经随连接（或者它的 harness 的上游连接）一起没了；旧的（stale）也一样
+    if (live.view?.live && !live.stale && reachable(live)) {
       host.request('thread/unsubscribe', { threadId: live.id }).catch((error: unknown) => {
         host.log(`退订会话 ${live.id} 失败：${String(error)}`)
       })
+    }
+  }
+
+  /** 这台电脑上存的那一份 */
+  const recall = (id: string): SessionView | null => {
+    try {
+      return host.views?.load(id) ?? null
+    } catch {
+      return null
+    }
+  }
+
+  /** 存一份视图到这台电脑上（裁过的；旧的、只读载入的不存） */
+  const remember = (live: Live) => {
+    if (!host.views || !live.view || live.stale || !live.view.live) return
+    try {
+      host.views.save(trimView(live.view))
+    } catch (error) {
+      host.log(`存会话 ${live.id} 的视图失败：${String(error)}`)
     }
   }
 
@@ -1238,6 +1308,7 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     revertEchoed: false,
     revertEchoUntil: 0,
     compacting: 0,
+    stale: false,
   })
 
   /**
@@ -1301,10 +1372,16 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
         sessions.set(sessionId, live)
       }
       const entry = live
+      unlinger(entry.id)
       entry.sinks.add(sink)
-      if (entry.view) sink.snapshot(entry.view)
-      // 设备还没连上就先等着，连上时会统一载入；它所属的 harness 现在不可用也一样，恢复时再载入
-      else if (!entry.loading && reachable(entry)) load(entry)
+      if (entry.view && !entry.stale) sink.snapshot(entry.view)
+      else {
+        // 手里没有、或者是旧的：先摆旧的（核心留着的，或者这台电脑上存的），最新的到了整份换掉
+        const old = entry.view ?? recall(entry.id)
+        if (old) sink.snapshot(staleView(old))
+        // 设备还没连上就先等着，连上时会统一载入；它所属的 harness 现在不可用也一样，恢复时再载入
+        if (!entry.loading && reachable(entry)) load(entry)
+      }
       return () => {
         entry.sinks.delete(sink)
         if (entry.sinks.size === 0 && !entry.view) {
@@ -1324,7 +1401,11 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     resync() {
       lacking.clear()
       for (const live of [...sessions.values()]) {
-        if (live.sinks.size === 0 && live.queued.length === 0) sessions.delete(live.id)
+        // 没人看、还留着的：订阅随连接没了，视图留着当旧的，再打开时先摆它、同时重新载入
+        if (live.sinks.size === 0 && live.queued.length === 0) {
+          if (lingering.has(live.id)) live.stale = true
+          else sessions.delete(live.id)
+        }
         // 所属的 harness 这时不可用的先不载入，留着上次的内容，等它恢复（harnessUp）
         else if (reachable(live)) load(live)
       }
@@ -1343,8 +1424,10 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       lacking.delete(harness)
       for (const live of [...sessions.values()]) {
         if (ownerOf(live) !== harness) continue
-        if (live.sinks.size === 0 && live.queued.length === 0) sessions.delete(live.id)
-        else load(live)
+        if (live.sinks.size === 0 && live.queued.length === 0) {
+          if (lingering.has(live.id)) live.stale = true
+          else sessions.delete(live.id)
+        } else load(live)
       }
     },
 
@@ -1360,6 +1443,8 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
 
     forget(sessionId, erased = false) {
       if (erased) todos.delete(sessionId)
+      unlinger(sessionId)
+      host.views?.forget(sessionId)
       const live = sessions.get(sessionId)
       if (!live) return
       live.loading?.abort()
@@ -1372,8 +1457,10 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
     restored(sessionId) {
       const live = sessions.get(sessionId)
       if (!live) return
-      if (live.sinks.size === 0) sessions.delete(sessionId)
-      else if (reachable(live)) load(live)
+      if (live.sinks.size === 0) {
+        unlinger(sessionId)
+        sessions.delete(sessionId)
+      } else if (reachable(live)) load(live)
     },
 
     setAgents(sessionId, agents) {

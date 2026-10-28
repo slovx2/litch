@@ -166,6 +166,7 @@ import {
   type MachineCallInput,
   type ToolAskPlace,
 } from './tool-calls.mjs'
+import type { ViewStore } from './view-store.mjs'
 import { projectWorkspaces, resolveWorkspace } from './workspaces.mjs'
 import { createWorktrees, type Worktrees } from './worktrees.mjs'
 
@@ -211,6 +212,8 @@ export interface DeviceOptions {
   terminalNotes?: TerminalNotesStore
   /** 直连原生 codex 时，哪些会话带了哪几个命名空间的规则，记在这台电脑上的哪（codex-instructions.mts）。不给就只记在内存里 */
   codexThreads?: CodexThreadNotesStore
+  /** 会话视图存在这台电脑上的哪（view-store.mts）：打开时先摆出来。不给就不存 */
+  views?: ViewStore
   /** 通往主进程的客户端工具那一头（tool-hub.mts）。不给就是这台桌面什么都执行不了 */
   tools?: ToolHub
   /**
@@ -1911,6 +1914,7 @@ export function createDevice(config: DeviceConfig, options: DeviceOptions): Devi
       })
     },
     started: (thread) => upsertThread(thread),
+    ...(options.views ? { views: options.views } : {}),
     speeds: {
       speed: (sessionId) => speeds.get(sessionId) ?? null,
       setSpeed(sessionId, speed) {

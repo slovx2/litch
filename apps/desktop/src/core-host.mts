@@ -213,7 +213,7 @@ function createHost(): Core | MockCore {
     },
     // 本机 harness 里的 litch config（产品手册的配置命令）交给这台桌面端执行；没给语言时按界面的
     config: { lang: () => adapterLang },
-    ...(dataDir ? { store: fileDeviceStore(dataDir) } : {}),
+    ...(dataDir ? { store: fileDeviceStore(dataDir, version) } : {}),
     devices: [
       {
         id: 'local',

@@ -734,8 +734,8 @@ test('提问：答案按题目标识回给对面；回合结束时没答的请�
   assert.deepEqual(session.seen.view?.requests, [])
 })
 
-test('界面关掉会话：回合还在跑就留着订阅，跑完了才退订；期间跑完的会话标成未读', async () => {
-  const { core, peer, sidebar, command, sent } = setup()
+test('界面关掉会话：回合还在跑就留着订阅，跑完了再留一阵才退订；期间跑完的会话标成未读', async () => {
+  const { core, peer, time, sidebar, command, sent } = setup()
   core.start()
   await settle()
   const session = watch(core)
@@ -753,6 +753,9 @@ test('界面关掉会话：回合还在跑就留着订阅，跑完了才退订�
 
   server.notify('turn/completed', { threadId: 'a', turn: finished('srv-1') })
   server.notify('thread/status/changed', { threadId: 'a', status: { type: 'idle' } })
+  await settle()
+  assert.deepEqual(sent('thread/unsubscribe'), [])
+  time.advance(10 * 60_000)
   await settle()
   assert.deepEqual(sent('thread/unsubscribe'), [{ threadId: 'a' }])
   const last = sidebar.ops.findLast((op) => op.op === 'session.upsert')
