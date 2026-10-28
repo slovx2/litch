@@ -109,15 +109,6 @@ export function CommentEditor(props: EditorProps) {
     if (box && !unfolded) setFoldable(box.scrollHeight > box.clientHeight + 1)
   }, [quote, unfolded])
 
-  // 输入框跟着内容长高
-  // biome-ignore lint/correctness/useExhaustiveDependencies: 字变了要重新量
-  useLayoutEffect(() => {
-    const area = input.current
-    if (!area) return
-    area.style.height = 'auto'
-    area.style.height = `${Math.min(area.scrollHeight, 160)}px`
-  }, [note])
-
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Escape') {
       // 只关自己，别让外面的 Esc（拒绝审批）跟着动

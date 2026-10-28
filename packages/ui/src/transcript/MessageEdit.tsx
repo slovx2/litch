@@ -18,9 +18,6 @@ import { findOrigin } from './comments/locate.ts'
 import { MAX_COMMENTS, newCommentId } from './comments/model.ts'
 import { UserAttachments } from './messages.tsx'
 
-/** 编辑框最高多少像素，再多就在框里滚 */
-const MAX_HEIGHT = 320
-
 interface MessageEditProps {
   deviceId: string
   sessionId: string
@@ -59,13 +56,6 @@ export function MessageEdit({
     element.focus()
     element.setSelectionRange(element.value.length, element.value.length)
   }, [])
-  // biome-ignore lint/correctness/useExhaustiveDependencies: 字变了要重新量高度
-  useLayoutEffect(() => {
-    const element = area.current
-    if (!element) return
-    element.style.height = 'auto'
-    element.style.height = `${Math.min(element.scrollHeight, MAX_HEIGHT)}px`
-  }, [text])
 
   if (!user || !start) return null
   const comments = commentsOf(user.text)

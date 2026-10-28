@@ -661,6 +661,9 @@ button.smen:focus-visible {
 .umsg-edit {
   width: 100%;
   min-height: 44px;
+  /* 跟着内容长高（同输入框，dock.css 的 .cmp-text） */
+  field-sizing: content;
+  max-height: 320px;
   resize: none;
   border: 0;
   outline: none;

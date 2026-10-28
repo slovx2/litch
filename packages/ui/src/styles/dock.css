@@ -285,8 +285,12 @@
   color: var(--ink);
   font: inherit;
   font-size: 14px;
-  /* 行高写整数像素：输入框的高度是按内容量出来的，带零头会让下面的对话区跟着抖 */
+  /* 行高写整数像素：输入框的高度跟着内容长，带零头会让下面的对话区跟着抖 */
   line-height: 24px;
+  /* 跟着内容长高由浏览器做（field-sizing）。以前每打一个字先收成 auto 再量 scrollHeight，
+     会让整页重新布局两次，会话很长时打字跟着卡 */
+  field-sizing: content;
+  max-height: 220px;
 }
 .cmp-text::placeholder {
   color: var(--ink-3);

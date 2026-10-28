@@ -142,9 +142,6 @@ interface ComposerProps {
   holdSettings?: boolean
 }
 
-/** 输入框最多长到这么高，再多就在里面滚 */
-const MAX_HEIGHT = 220
-
 /** 输入区：多行输入、图片、附带项、草稿、发送／排队／停止、排队托盘、底栏。往哪发由用它的一方决定 */
 export function Composer(props: ComposerProps) {
   const { deviceId, sessionId, draftKey, blocked, running, queued, onSend, onStop, onUnqueue } =
@@ -274,13 +271,11 @@ export function Composer(props: ComposerProps) {
     [cwd, os, deviceId, sessionId],
   )
 
-  // 输入框跟着内容长高。先收回去再量，删字的时候才会变矮
-  // biome-ignore lint/correctness/useExhaustiveDependencies: 文字变了就要重新量
+  // 输入框跟着内容长高由样式做（dock.css 的 .cmp-text）。这里只在文字换了之后把光标放到该放的位置
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 文字变了才放
   useLayoutEffect(() => {
     const area = input.current
     if (!area) return
-    area.style.height = 'auto'
-    area.style.height = `${Math.min(area.scrollHeight, MAX_HEIGHT)}px`
     if (landing.current !== null) {
       area.setSelectionRange(landing.current, landing.current)
       landing.current = null
