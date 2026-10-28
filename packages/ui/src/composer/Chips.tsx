@@ -54,12 +54,25 @@ export function ExtraChip({ extra, onRemove, onInline }: ChipProps) {
       </TextChip>
     )
   }
-  // 片上只写名字；提到的文件在哪（完整的路径）鼠标移上去看
+  // 片上只写名字；提到的文件在哪（完整的路径）鼠标移上去看。路径在这台电脑上（远程设备的会话）的也写明
   const about =
-    extra.kind === 'file' ? `${t('chip.file')} · ${extra.path}` : `${t('chip.skill')} ${label}`
+    extra.kind === 'file'
+      ? [
+          t(extra.folder ? 'chip.folder' : 'chip.file'),
+          extra.path,
+          extra.client ? t('chip.client') : '',
+        ]
+          .filter(Boolean)
+          .join(' · ')
+      : `${t('chip.skill')} ${label}`
   return (
-    <li className="cmp-chip" data-kind={extra.kind} title={about}>
-      {extra.kind === 'file' ? <Icon name="file" /> : <Spark />}
+    <li
+      className="cmp-chip"
+      data-kind={extra.kind}
+      data-folder={extra.kind === 'file' && extra.folder ? '' : undefined}
+      title={about}
+    >
+      {extra.kind === 'file' ? <Icon name={extra.folder ? 'folder' : 'file'} /> : <Spark />}
       <span className="ell">{label}</span>
       {remove}
     </li>

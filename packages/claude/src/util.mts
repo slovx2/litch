@@ -227,6 +227,13 @@ export function codexUserAgent(clientName: string, clientVersion: string): strin
 const unavailableFileImagePrompt =
   '[图片内容不可用：当前运行时无法解析 fileId 附件。请勿推测图片内容；可继续处理正文。]'
 
+/**
+ * 提到的文件、文件夹交给 Claude Code 的写法：@路径。路径里有空白时写成 @"路径"，
+ * 不然 CLI 只认到第一个空白为止（Claude 桌面端一律写成带引号的）。路径以 / 结尾的 CLI 当目录，列出一层
+ */
+export const atMention = (path: string): string =>
+  /\s/.test(path) && !path.includes('"') ? `@"${path}"` : `@${path}`
+
 export function textFromInput(input: unknown): string {
   if (!Array.isArray(input)) return ''
   return input
@@ -241,7 +248,7 @@ export function textFromInput(input: unknown): string {
         fileId?: string
       }
       if (value.type === 'text') return value.text ?? ''
-      if (value.type === 'mention') return `@${value.path ?? value.name ?? ''}`
+      if (value.type === 'mention') return atMention(value.path ?? value.name ?? '')
       if (value.type === 'localImage') return `[local image: ${value.path ?? ''}]`
       if (value.type === 'image')
         return typeof value.url !== 'string' && typeof value.fileId === 'string'
@@ -280,7 +287,7 @@ export function extractImageInputs(input: unknown): ImageExtractResult {
       fileId?: string
     }
     if (item.type === 'text' && typeof item.text === 'string') texts.push(item.text)
-    else if (item.type === 'mention') texts.push(`@${item.path ?? item.name ?? ''}`)
+    else if (item.type === 'mention') texts.push(atMention(item.path ?? item.name ?? ''))
     else if (item.type === 'skill') texts.push(`/${item.name ?? 'skill'}`)
     else if (item.type === 'localImage' && typeof item.path === 'string') {
       const img = readLocalImage(item.path)

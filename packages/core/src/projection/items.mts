@@ -5,6 +5,7 @@
 import {
   CLIENT_TOOL_NAMESPACE,
   type FileUpdateChange,
+  parseClientPaths,
   parseSessionEvent,
   parseSessionMentions,
   parseSessionMessage,
@@ -87,7 +88,8 @@ function userMessage(id: string, content: UserInput[], rawPeer?: unknown): UserM
         attachments.push({ kind: 'skill', label: part.name })
         break
       case 'mention':
-        attachments.push({ kind: 'file', label: part.name })
+        // 文件夹的路径以斜杠结尾（输入框里加的就是这样，Claude Code 也按这个认目录）
+        attachments.push({ kind: isFolderPath(part.path) ? 'folder' : 'file', label: part.name })
         break
     }
   }
@@ -126,19 +128,42 @@ export function withSystemMessage(item: UserMessageItem): UserMessageItem {
   }
 }
 
-/** 正文末尾是提到会话的那一段的：认出来单放（sessions），text 里去掉那一段 */
+/** 路径以斜杠结尾的是文件夹 */
+const isFolderPath = (path: unknown): boolean => typeof path === 'string' && /[\\/]$/.test(path)
+
+/**
+ * 正文末尾的两段认出来：提到会话的那一段（最末尾）单放进 sessions；它前面若是提到这台桌面端上路径的那一段
+ * （protocol/src/client-paths.mts），化成附件排在后面。text 里去掉认出来的段
+ */
 export function withSessionMentions(item: UserMessageItem): UserMessageItem {
   const found = parseSessionMentions(item.text)
-  if (!found) return item
+  const rest = withClientPaths(found ? { ...item, text: found.rest } : item)
+  if (!found) return rest
   return {
-    ...item,
-    text: found.rest,
+    ...rest,
     sessions: found.mentions.map(({ index, threadId, title, harness }) => ({
       index,
       threadId,
       title,
       harness,
     })),
+  }
+}
+
+/** 正文末尾是提到这台桌面端上路径的那一段的：每个路径化成一个附件，text 里去掉那一段 */
+function withClientPaths(item: UserMessageItem): UserMessageItem {
+  const found = parseClientPaths(item.text)
+  if (!found) return item
+  return {
+    ...item,
+    text: found.rest,
+    attachments: [
+      ...item.attachments,
+      ...found.paths.map(({ path, folder }) => ({
+        kind: folder ? ('folder' as const) : ('file' as const),
+        label: path,
+      })),
+    ],
   }
 }
 

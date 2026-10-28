@@ -77,7 +77,8 @@ export function fileExtra(
   const base = cwd?.replace(/\/+$/, '')
   const inside = (base && (under(base, full) ?? under(base, twin(full)))) || full
   const path = file.dir ? `${inside}/` : inside
-  return { kind: 'file', name: path.slice(inside.lastIndexOf('/') + 1), path }
+  const name = path.slice(inside.lastIndexOf('/') + 1)
+  return file.dir ? { kind: 'file', name, path, folder: true } : { kind: 'file', name, path }
 }
 
 /**

@@ -105,6 +105,7 @@ test('文件面板交过来的文件变成一片：在工作目录里面写相�
     kind: 'file',
     name: 'docs/',
     path: 'docs/',
+    folder: true,
   })
   // 工作目录是工作区下面的一层：它外面的文件写完整的路径，harness 才找得到
   assert.deepEqual(fileExtra(file('/work/app/README.md'), '/work/app/packages/ui'), {

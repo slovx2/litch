@@ -35,6 +35,14 @@ export {
   isApprovalRef,
   isApprovalToken,
 } from './client-approvals.mjs'
+// 远程设备的会话里提到这台桌面端上的文件、文件夹：正文末尾那一段的写法与认回来。不依赖别的文件
+export type * from './client-paths.mjs'
+export {
+  CLIENT_PATH_TAG,
+  clientPathsBlock,
+  folderPath,
+  parseClientPaths,
+} from './client-paths.mjs'
 // 客户端工具（clientTools 扩展）：谁能执行 litch_ 开头的动态工具、没人能执行时怎么回。不依赖别的文件
 export type * from './client-tools.mjs'
 export {

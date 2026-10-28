@@ -1014,6 +1014,7 @@ export const en: Record<MessageKey, Entry> = {
   'attachment.image': 'Image',
   'attachment.audio': 'Audio',
   'attachment.file': 'File',
+  'attachment.folder': 'Folder',
   'attachment.skill': 'Skill',
   'attachment.view': 'View image',
   'viewer.close': 'Close',
@@ -1307,13 +1308,21 @@ export const en: Record<MessageKey, Entry> = {
   'composer.attach': 'Add images or files',
   'composer.attach.inline': 'Add images or text files',
   'composer.attach.remote': 'Add images or text files (remote devices can’t receive other files)',
+  'composer.attach.client':
+    'Add images or files (other files are mentioned by their path on this computer)',
   'composer.file.binary':
     '"{name}" wasn’t added: its path on disk isn’t available. Only text files can be attached as content.',
   'composer.file.remote':
     '"{name}" wasn’t added: a remote device can’t read files on this computer. Only text files can be attached as content.',
+  'composer.file.remoteMachine':
+    '"{name}" wasn’t added: a remote device can’t read files on this computer. Only text files can be attached as content. Turn on “Operate this computer” in the device settings to mention it by path.',
+  'composer.file.folder':
+    '"{name}" wasn’t added: the folder is on this computer, and the remote device can’t read it.',
+  'composer.file.folderMachine':
+    '"{name}" wasn’t added: the folder is on this computer, and the remote device can’t read it. Turn on “Operate this computer” in the device settings to mention it by path.',
   'composer.file.size': '"{name}" is too large to attach (limit {max} characters).',
   'composer.file.empty': '"{name}" is empty and wasn’t added.',
-  'composer.file.read': '"{name}" couldn’t be read (folders aren’t supported).',
+  'composer.file.read': '"{name}" couldn’t be read.',
   'composer.image.refused': 'This harness doesn’t accept images; not added.',
   'composer.image.remove': 'Remove image',
   'composer.image.type': 'Only PNG, JPEG, WebP and GIF images are supported.',
@@ -1327,6 +1336,8 @@ export const en: Record<MessageKey, Entry> = {
   'composer.extra.remove': 'Remove {name}',
   'chip.skill': 'Skill',
   'chip.file': 'Mentioned file',
+  'chip.folder': 'Mentioned folder',
+  'chip.client': 'on this computer',
   'chip.text': 'Attached text',
   'chip.text.pasted': 'Pasted text · {n} lines',
   'chip.text.size': '{lines} lines, {chars} characters',

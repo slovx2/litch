@@ -73,7 +73,7 @@ import {
   TEXT_LIMIT,
   tidyText,
 } from './extras.ts'
-import { type FilesResult, readFiles } from './files.ts'
+import { type FilesResult, filesOf, type MachineReach, readFiles } from './files.ts'
 import { useGrabFocus } from './focus.ts'
 import {
   hasFiles,
@@ -290,8 +290,10 @@ export function Composer(props: ComposerProps) {
   // 选的模型不收图片：带着图就不让发，免得发出去才报错
   const model = options?.models.find((entry) => entry.id === props.settings.model)
   // 这个 harness 声明了自己收不了图片：图片加不上，草稿里留着图的也不让发（device 在上面取过）
-  // 消息发给本机设备：harness 和这个界面在同一台机器上，文件可以按路径提到。远程设备上只带得了文本文件的内容
+  // 消息发给本机设备：harness 和这个界面在同一台机器上，文件可以按路径提到。远程设备上只带得了文本文件的内容，
+  // 除非那台设备打开了“操作这台电脑”：那时文件夹、二进制文件按这台电脑上的路径提到（files.ts）
   const local = device?.kind === 'local'
+  const machine: MachineReach = device?.machine ? (device.machine.enabled ? 'on' : 'off') : null
   const declared = device?.harnesses.find((entry) => entry.id === props.harness)?.abilities
   const noImages = declared?.images === false
   const imagesRefused =
@@ -345,22 +347,32 @@ export function Composer(props: ComposerProps) {
     if (why === 'size') {
       return t('composer.file.size', { name, max: TEXT_LIMIT.toLocaleString(t.lang) })
     }
-    // 不是文本、内容带不了：说清楚为什么不能按路径提到它
-    if (why === 'binary')
-      return t(local ? 'composer.file.binary' : 'composer.file.remote', { name })
+    // 不是文本、内容带不了：说清楚为什么不能按路径提到它。远程设备能打开“操作这台电脑”的，告诉人去哪里开
+    if (why === 'binary') {
+      if (local) return t('composer.file.binary', { name })
+      return t(machine === 'off' ? 'composer.file.remoteMachine' : 'composer.file.remote', { name })
+    }
+    if (why === 'folder') {
+      return t(machine === 'off' ? 'composer.file.folderMachine' : 'composer.file.folder', { name })
+    }
     return t(`composer.file.${why}`, { name })
   }
 
-  /** 选中的、拖进来的、贴进来的文件：图片内联进消息，别的按路径提到或者把内容当文字带（见 files.ts） */
-  const addFiles = (files: File[], named: boolean) => {
+  /**
+   * 选中的、拖进来的、贴进来的文件：图片内联进消息，别的按路径提到或者把内容当文字带（见 files.ts）。
+   * folders 是拖进来、贴进来时认出的文件夹（选文件的对话框选不了文件夹）
+   */
+  const addFiles = (files: File[], named: boolean, folders: ReadonlySet<File> = new Set()) => {
     if (files.length === 0) return
-    const pictures = files.filter((file) => IMAGE_TYPES.includes(file.type))
-    const others = files.filter((file) => !IMAGE_TYPES.includes(file.type))
+    const pictures = files.filter((file) => !folders.has(file) && IMAGE_TYPES.includes(file.type))
+    const others = files.filter((file) => folders.has(file) || !IMAGE_TYPES.includes(file.type))
     void Promise.all([
       noImages ? null : readImages(pictures, MAX_IMAGES - images.length, named),
       readFiles(others, {
         local,
+        machine,
         pathOf: (file) => window.litchShell?.pathOf(file) ?? '',
+        isFolder: (file) => folders.has(file),
         room: EXTRAS_LIMIT - extras.length - comments.length,
       }),
     ]).then(([shots, rest]) => {
@@ -514,14 +526,14 @@ export function Composer(props: ComposerProps) {
 
   const onPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
     const data = event.clipboardData
-    const files = Array.from(data.files)
+    const { files, folders } = filesOf(data)
     const plain = tidyText(data.getData('text/plain'))
     // 从表格、文档里复制文字时，剪贴板里会顺带一张渲染出来的图：有字又有富文本，就按文字贴
     const rich = data.types.includes('text/html') || data.types.includes('text/rtf')
     if (files.length > 0 && !(rich && plain.trim())) {
       // 贴进来的是文件：图片加成附件，别的按文件带；不让文件名当成文字贴进来
       event.preventDefault()
-      addFiles(files, false)
+      addFiles(files, false, folders)
       return
     }
     // 贴进来的是文字：不长的照常进输入框；长的不塞进去，转成一片带着，发的时候并回正文
@@ -563,7 +575,8 @@ export function Composer(props: ComposerProps) {
     if (!hasFiles(event.dataTransfer)) return
     event.preventDefault()
     setDropping(false)
-    addFiles(Array.from(event.dataTransfer.files), true)
+    const { files, folders } = filesOf(event.dataTransfer)
+    addFiles(files, true, folders)
   }
 
   const steer = (message: QueuedMessage) => {
@@ -744,13 +757,16 @@ export function Composer(props: ComposerProps) {
             type="button"
             className="ibtn"
             data-act="attach"
-            // 能带什么写在按钮上：本机设备、外壳给得出路径时什么文件都能提到；否则只带得了图片和文本文件的内容
+            // 能带什么写在按钮上：本机设备、外壳给得出路径时什么文件都能提到（远程设备开了“操作这台电脑”也是，
+            // 提到的是这台电脑上的路径）；否则只带得了图片和文本文件的内容
             title={t(
-              !local
-                ? 'composer.attach.remote'
-                : window.litchShell
+              !window.litchShell
+                ? 'composer.attach.inline'
+                : local
                   ? 'composer.attach'
-                  : 'composer.attach.inline',
+                  : machine === 'on'
+                    ? 'composer.attach.client'
+                    : 'composer.attach.remote',
             )}
             aria-label={t('composer.attach')}
             onClick={() => picker.current?.click()}

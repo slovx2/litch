@@ -89,8 +89,10 @@ explain it:
   them). On a message sent while the turn was running, both cut at that message and keep the earlier
   part of the turn; harnesses that can't cut inside a turn (only Claude Code can) don't offer them
   there. On the phone, long-press the message.
-- **Composer**: `/` for commands and skills, `@` to mention a file, attach images and files (remote
-  devices: text files only), context meter. In an existing session, clicking the meter shows context
+- **Composer**: `/` for commands and skills, `@` to mention a file, attach images, files and folders
+  (dragged or pasted; files and folders are mentioned by path, never uploaded). Remote devices take the
+  contents of text files only; other files and folders on this computer go by their path here only when
+  the device has "Operate this computer" on, so the agent reads them with `litch_machine`. Context meter. In an existing session, clicking the meter shows context
   usage and a Compact context button (dimmed with the reason underneath while a turn runs or when the
   harness can't compact). When the harness is signed in with a subscription (Claude Code with an
   Anthropic subscription, Codex with ChatGPT) it also lists the plan limits: the 5-hour and weekly

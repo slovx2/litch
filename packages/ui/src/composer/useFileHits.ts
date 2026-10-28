@@ -71,7 +71,10 @@ export function useFileHits(host: FileHitsHost, query: string | null): FileHits 
       if (!match) return null
       const path = spelled(match)
       const cut = match.relative.replace(/\/+$/, '').lastIndexOf('/')
-      return { kind: 'file', name: path.slice(cut + 1), path }
+      const name = path.slice(cut + 1)
+      return match.kind === 'dir'
+        ? { kind: 'file', name, path, folder: true }
+        : { kind: 'file', name, path }
     },
   }
 }

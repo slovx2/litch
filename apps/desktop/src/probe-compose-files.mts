@@ -1,4 +1,5 @@
 // 不是图片的文件的验收：选文件、拖文件，本机设备上按路径提到、远程设备上只带文本文件的内容、带不了的当场说明。
+// 远程那一步用的构建机在模拟核心里开着“操作本机”：带不了内容的文件按这台电脑上的路径提到（关着时的拒绝在 ui 的单元测试里）。
 // 接在带着的文字那一组后面，模拟核心和真实入口都跑。
 // 原生 codex 上“提到的文件把路径写进正文”这一条不在这里量：模拟核心里本机的 Codex 是没装上的样子，发不了消息；
 // 它在核心的单元测试里（declared.test.mts），界面上的在“@ 提到文件”那一组里量（远程的 Codex 会话）。
@@ -36,8 +37,11 @@ export interface FilesProbe {
     /** 一种一行：“皮肤/明暗｜横向溢出的像素｜文件片上的字的对比度” */
     layouts: string[]
   } | null
-  /** 远程设备：文本文件变成一片带名字的文字，二进制的没带上、说了原因；按钮上写着带不过去 */
-  remote: { text: string[]; files: number; said: string; button: string } | null
+  /**
+   * 远程设备（开着“操作本机”）：文本文件变成一片带名字的文字，二进制的按这台电脑上的路径提到（片的说明写着），
+   * 没有拒绝的说明；按钮上写着其他文件以这台电脑上的路径提及
+   */
+  remote: { text: string[]; files: number; titles: string[]; said: string; button: string } | null
   /** 新建对话页：选一个文本文件，出了一片（本机设备是提到的文件，远程设备是带名字的文字） */
   fresh: { chips: number } | null
 }
@@ -250,10 +254,11 @@ export async function filesStep(
 
   if (stage === 'remote') {
     await until('文本文件的片', () => textChips().length === 1, 10_000).catch(() => null)
-    await until('带不过去的说明', hint, 5000).catch(() => null)
+    await until('这台电脑上的文件的片', () => fileChips().length === 1, 5000).catch(() => null)
     const seen = {
       text: labels(textChips()),
       files: fileChips().length,
+      titles: fileChips().map((chip) => chip.getAttribute('title') ?? ''),
       said: hint(),
       button: button(),
     }
@@ -318,16 +323,19 @@ export function judgeFiles(probe: FilesProbe, real: boolean, dir: string): strin
   }
   if (remote) {
     check(
-      remote.text.join() === 'litch-notes.md' && remote.files === 0,
-      `远程设备上选文本文件，该是一片带名字的文字，实际是文字 ${remote.text.join() || '没有'}、文件 ${remote.files} 片`,
+      remote.text.join() === 'litch-notes.md' && remote.files === 1,
+      `远程设备上选一个文本文件、一个二进制文件，该是一片带名字的文字加一片文件，实际是文字 ${remote.text.join() || '没有'}、文件 ${remote.files} 片`,
     )
     check(
-      remote.said.includes('litch-blob.bin') && remote.said.includes('远程'),
-      `远程设备上带不了的文件没有说清楚：“${remote.said}”`,
+      remote.titles.length === 1 &&
+        remote.titles[0]?.includes('litch-blob.bin') &&
+        remote.titles[0]?.includes('在这台电脑上'),
+      `远程设备上二进制文件的片没有写明路径在这台电脑上：${remote.titles.join('；') || '没有'}`,
     )
+    check(remote.said === '', `远程设备开着“操作本机”，不该有拒绝的说明：“${remote.said}”`)
     check(
-      remote.button.includes('远程'),
-      `远程设备上加附件的按钮没有写带不过去：“${remote.button}”`,
+      remote.button.includes('这台电脑'),
+      `远程设备上加附件的按钮没有写其他文件以这台电脑上的路径提及：“${remote.button}”`,
     )
   }
   if (fresh) check(fresh.chips === 1, `新建对话页上选一个文件，该出一片，出了 ${fresh.chips} 片`)
