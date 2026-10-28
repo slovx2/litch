@@ -62,6 +62,8 @@ export interface SessionTreeHost {
   timeoutMs: number
   /** 子会话里的审批、提问挂了这么久没人答，算它停下来在等用户 */
   needsUserMs: number
+  /** 父会话最后一个回合结束超过这么久，不再主动唤醒它 */
+  wakeIdleMs: number
   /** 会话树的连接订阅着、又用不着了的会话，隔这么久退订 */
   releaseMs: number
   /** 这个回合是定时任务发起的：只进回报，不唤醒父会话 */
@@ -135,6 +137,8 @@ export class SessionTree {
    * 下一个回合正常做完、用户又发了话时去掉
    */
   private readonly cutShort = new Set<string>()
+  /** 会话最近一个回合结束的时刻（毫秒）。设备进程重启后没有的，取引擎报的会话更新时刻 */
+  private readonly turnEndedAt = new Map<string, number>()
   /** 客户端用 turn/start 发起的回合（harness + 回合）：只有它们算用户发起的 */
   private readonly clientTurns = new Set<string>()
   /**
@@ -446,6 +450,7 @@ export class SessionTree {
     else this.cutShort.delete(threadId)
     if (this.ended.size >= ENDED_LIMIT) this.ended.clear()
     this.ended.add(key)
+    this.turnEndedAt.set(threadId, Date.now())
     if (this.active.get(threadId) === turn.id) this.active.delete(threadId)
     this.waiting.delete(threadId)
     const userDriven = this.clientTurns.delete(`${harness}\u0000${turn.id}`)
@@ -679,6 +684,14 @@ export class SessionTree {
     // 跟着它（follow）只为了后台任务的：跑完了，引擎接着做的那一回合结束时也会退订
     const harness = this.host.index.lookup(threadId)
     if (harness) this.releaseLater(harness, threadId)
+    // 后台任务在跑时挡着唤醒（wake）：引擎会接着做的（有任务是自己跑完的），排着的回报等那一回合开始时插进去
+    // （turnEvent 的 turn/started），子会话那一回合结束时照常回报；不会接着做的现在就再查一遍
+    const selfDone = tasks.some((task) => task.status === 'completed' || task.status === 'failed')
+    if (!(selfDone && this.host.backgroundWakes(threadId))) {
+      if (this.store.notes(threadId).length) this.check(threadId)
+      const up = this.store.parentOf(threadId)
+      if (up && this.store.notes(up.parentThreadId).length) this.check(up.parentThreadId)
+    }
     const owed = this.backgroundOwed.get(threadId)
     if (!owed) return
     const ended = tasks.filter((task) => owed.tasks.has(task.id) && task.status !== 'running')
@@ -785,7 +798,9 @@ export class SessionTree {
 
   /**
    * 没有客户端连着也照样唤醒（同 Claude 桌面端），用设备进程自己的引擎连接。
-   * 父会话上一回合被打断、出错的不唤醒，等用户先说话
+   * 父会话上一回合被打断、出错的不唤醒，等用户先说话；父会话有后台任务在跑的不唤醒（同 Claude），
+   * 回报等它跑完：引擎接着做的那一回合开始时插进去，不接着做的跑完时再查（backgroundSettled）；
+   * 父会话最后一个回合结束超过 wakeIdleMs（24 小时）的不再主动唤醒。这几种都等用户发话、定时任务回合或“立即处理”带上
    */
   private async wake(parentId: string): Promise<void> {
     if (this.closed || !this.host.enabled()) return
@@ -793,23 +808,40 @@ export class SessionTree {
     if (!notes.some((note) => note.wake)) return
     if (this.store.wakes(parentId) >= SESSION_TREE_LIMITS.wakesPerUserMessage) return
     if (this.cutShort.has(parentId)) return
-    // 子会话都停下了（在等用户答的挂满一阵也算），父会话自己闲着（等着用户答请求的也是在跑）
+    if (this.host.backgroundRunning(parentId) > 0) return
+    // 子会话都停下了（在等用户答的挂满一阵也算，有后台任务在跑的不算），父会话自己闲着（等着用户答请求的也是在跑）
     if ((await this.working(parentId)) > 0) return
     if (!(await this.idle(parentId))) return
+    if (await this.longIdle(parentId)) return
     // 上面那几步要等应答，这期间可能有用户发了话（回报已经跟着交出去了）
     if (!this.store.notes(parentId).some((note) => note.wake) || this.active.has(parentId)) return
     if (await this.startWake(parentId, 0))
       this.store.setWakes(parentId, this.store.wakes(parentId) + 1)
   }
 
-  /** 直接子会话里还在干活的有几个（在等用户答、挂满一阵的不算） */
+  /** 直接子会话里还在干活的有几个（在等用户答、挂满一阵的不算；回合停了、后台任务还在跑的算） */
   private async working(parentId: string): Promise<number> {
     let count = 0
     for (const child of this.store.childrenOf(parentId)) {
       if (this.waitingOnUser(child.threadId)) continue
-      if (!(await this.idle(child.threadId))) count++
+      if (this.host.backgroundRunning(child.threadId) > 0 || !(await this.idle(child.threadId)))
+        count++
     }
     return count
+  }
+
+  /** 会话最后一个回合结束超过 wakeIdleMs 了。设备进程没见过它的回合结束的，看引擎报的会话更新时刻（秒） */
+  private async longIdle(threadId: string): Promise<boolean> {
+    let at = this.turnEndedAt.get(threadId)
+    if (at === undefined) {
+      const { thread } = await this.read(threadId, false).catch(() => ({ thread: null }))
+      if (typeof thread?.updatedAt === 'number') at = thread.updatedAt * 1000
+    }
+    if (at === undefined || Date.now() - at <= this.host.wakeIdleMs) return false
+    this.host.log(
+      `会话 ${threadId} 最后一个回合结束已超过 ${this.host.wakeIdleMs / 3600_000} 小时，回报不主动唤醒它`,
+    )
+    return true
   }
 
   /** 替父会话开一个唤醒回合，带着排着的全部回报。working 是还在干活的子会话数，写进给模型的话里 */

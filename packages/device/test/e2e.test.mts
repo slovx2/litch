@@ -679,7 +679,7 @@ test('端到端：Claude Code 的父会话回合在跑时子会话做完，回�
   }
 })
 
-test('端到端：Claude Code 的父会话回合结束时后台命令还在跑，子会话做完照样唤醒父会话', async () => {
+test('端到端：Claude Code 的父会话回合结束时后台命令还在跑，子会话做完不唤醒；后台跑完 CLI 自己续跑时回报跟着交出去', async () => {
   const fixture = await startFixture(['--managed', '--engines', 'claude'])
   try {
     const client = await TestClient.overSocket(fixture.socket)
@@ -709,7 +709,7 @@ test('端到端：Claude Code 的父会话回合结束时后台命令还在跑�
       prompt:
         '问一句：这个仓库先看哪一部分？用户答了之后照答复说一句就结束这一回合，不要做别的事情。',
       background:
-        '这是一次隔离验证：父会话的回合已经结束、它起的后台命令还在跑，这时子会话做完，父会话要被唤醒。',
+        '这是一次隔离验证：父会话的回合已经结束、它起的后台命令还在跑，这时子会话做完，回报要等后台命令跑完再交给父会话。',
       harness: 'claude-code',
       initiation: 'user_asked',
     }
@@ -728,26 +728,27 @@ test('端到端：Claude Code 的父会话回合结束时后台命令还在跑�
         frame.method === 'item/tool/requestUserInput' && (frame.params as any).threadId === childId,
       60_000,
     )
-    // 第二回合：父会话起一条后台命令（睡 12 秒）就停下
+    // 第二回合：父会话起一条后台命令（睡 12 秒，scripts/client-fixture-background.mjs 的 BG_SECONDS）就停下
+    const secondAt = Date.now()
     const second = await client.call('turn/start', {
       threadId: parentId,
       input: [{ type: 'text', text: '后台跑' }],
     })
     await ended(second.turn.id)
-    const endedAt = Date.now()
     client.answer(question.id, {
       answers: { [(question.params as any).questions[0].id]: { answers: ['先看设备服务'] } },
     })
-    const woken = await client.waitFor(
+    // 后台命令在跑时不唤醒（同 Claude 桌面端）；跑完后 CLI 自己续跑，回报插进那一回合（引擎没续跑的话设备进程唤醒）
+    const report = await client.waitFor(
       (frame) =>
         frame.method === 'item/started' &&
         (frame.params as any).threadId === parentId &&
         (frame.params as any).item.type === 'userMessage' &&
-        JSON.stringify((frame.params as any).item.content).includes('kind=\\"wake\\"'),
-      60_000,
+        /kind=\\"(notes|wake)\\"/.test(JSON.stringify((frame.params as any).item.content)),
+      90_000,
     )
-    assert.ok(Date.now() - endedAt < 12_000, '后台命令跑完之前就唤醒了')
-    assert.notEqual((woken.params as any).turnId, second.turn.id, '另开了一个回合')
+    assert.ok(Date.now() - secondAt >= 11_000, '后台命令跑完之后才交回报')
+    assert.notEqual((report.params as any).turnId, second.turn.id, '在另一个回合里交出去')
     client.close()
   } finally {
     const exited = new Promise((resolve) => fixture.child.once('exit', resolve))

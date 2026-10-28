@@ -1,5 +1,5 @@
-// 父会话停着时的唤醒：父会话、子会话有后台任务在跑的不挡唤醒（没客户端连着也唤醒见 SESSION-TREE-007）；
-// 父会话上一回合被打断、出错的等用户先说话；定时任务回合带上排着的回报；用户点“立即处理”
+// 父会话停着时的唤醒（没客户端连着也唤醒见 SESSION-TREE-007）：父会话、子会话有后台任务在跑的不唤醒，跑完再说（同 Claude）；
+// 父会话上一回合被打断、出错的等用户先说话；父会话闲太久不主动唤醒；定时任务回合带上排着的回报；用户点“立即处理”
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { BACKGROUND_TASKS_NOTIFICATION } from '../../protocol/src/background-tasks.mjs'
@@ -34,7 +34,20 @@ function running(engine: FakeUpstream, threadId: string) {
   })
 }
 
-test('SESSION-WAKE-001 父会话回合结束了、自己还有后台任务在跑，子会话做完照样唤醒', async () => {
+function settled(
+  engine: FakeUpstream,
+  threadId: string,
+  wakesOnFinish: boolean,
+  status: 'completed' | 'stopped' = 'completed',
+) {
+  engine.notify(BACKGROUND_TASKS_NOTIFICATION.changed, {
+    threadId,
+    tasks: [{ id: 'b1', kind: 'shell', title: 'npm test', status, startedAt: 1_000 }],
+    wakesOnFinish,
+  })
+}
+
+test('SESSION-WAKE-001 父会话有后台任务在跑：子会话做完不唤醒；后台跑完、引擎不接着做时再唤醒', async () => {
   const env = treeRig()
   try {
     const client = await litch(env)
@@ -44,23 +57,80 @@ test('SESSION-WAKE-001 父会话回合结束了、自己还有后台任务在跑
     env.pi.end(threadId, 'completed', '派出去了，后台在跑测试')
     await until(() => !env.device.sessionTree.isActive(threadId), '父会话停下')
     env.claude.end(childId, 'completed', '调研完了')
-    await until(() => wakesOf(env, threadId).length === 1, '唤醒父会话')
+    await until(() => env.device.sessionTree.store.notes(threadId).length === 1, '回报进队列')
+    await settle(80)
+    assert.equal(wakesOf(env, threadId).length, 0, '后台任务还在跑，不唤醒（同 Claude）')
+    settled(env.pi, threadId, false)
+    await until(() => wakesOf(env, threadId).length === 1, '后台跑完后唤醒父会话')
   } finally {
     await env.close()
   }
 })
 
-test('SESSION-WAKE-002 子会话回合结束时还有后台任务在跑：算停下，照样唤醒', async () => {
+test('SESSION-WAKE-002 父会话的后台任务跑完、引擎自己接着做：回报插进那一回合，不另开唤醒', async () => {
   const env = treeRig()
   try {
     const client = await litch(env)
     const { threadId } = await parent(client)
-    const childId = await child(env, threadId, '跑测试')
+    const childId = await child(env, threadId, '调研')
+    running(env.pi, threadId)
+    env.pi.end(threadId, 'completed', '派出去了，后台在跑测试')
+    await until(() => !env.device.sessionTree.isActive(threadId), '父会话停下')
+    env.claude.end(childId, 'completed', '调研完了')
+    await until(() => env.device.sessionTree.store.notes(threadId).length === 1, '回报进队列')
+    settled(env.pi, threadId, true)
+    await settle(80)
+    assert.equal(wakesOf(env, threadId).length, 0, '等引擎自己接着做')
+    env.pi.selfTurn(threadId)
+    await until(
+      () => env.device.sessionTree.store.notes(threadId).length === 0,
+      '回报插进续跑的回合',
+    )
+    const steered = env.pi.sent('turn/steer').filter((params) => params.threadId === threadId)
+    assert.equal(parseSessionEvent(steered.at(-1).input[0].text).event?.kind, 'notes')
+    assert.equal(wakesOf(env, threadId).length, 0)
+  } finally {
+    await env.close()
+  }
+})
+
+test('SESSION-WAKE-003 子会话回合结束时还有后台任务在跑：算还在干活，跑完补报时再唤醒', async () => {
+  const env = treeRig()
+  try {
+    const client = await litch(env)
+    const { threadId } = await parent(client)
+    const first = await child(env, threadId, '跑测试')
+    const second = await child(env, threadId, '调研')
     env.pi.end(threadId, 'completed', '派出去了')
     await until(() => !env.device.sessionTree.isActive(threadId), '父会话停下')
-    running(env.claude, childId)
-    env.claude.end(childId, 'completed', '测试在后台跑着')
-    await until(() => wakesOf(env, threadId).length === 1, '唤醒父会话')
+    running(env.claude, first)
+    env.claude.end(first, 'completed', '测试在后台跑着')
+    env.claude.end(second, 'completed', '调研完了')
+    await until(() => env.device.sessionTree.store.notes(threadId).length === 2, '两条回报进队列')
+    await settle(80)
+    assert.equal(wakesOf(env, threadId).length, 0, '兄弟子会话的后台任务还在跑')
+    settled(env.claude, first, false)
+    await until(() => wakesOf(env, threadId).length === 1, '后台跑完后唤醒父会话')
+  } finally {
+    await env.close()
+  }
+})
+
+test('SESSION-WAKE-008 父会话最后一个回合结束超过时限：不再主动唤醒，立即处理照样交出去', async () => {
+  const env = treeRig({ wakeIdleMs: 50 })
+  try {
+    const client = await litch(env)
+    const { threadId } = await parent(client)
+    const childId = await child(env, threadId, '调研')
+    env.pi.end(threadId, 'completed', '派出去了')
+    await until(() => !env.device.sessionTree.isActive(threadId), '父会话停下')
+    await settle(120)
+    env.claude.end(childId, 'completed', '调研完了')
+    await until(() => env.device.sessionTree.store.notes(threadId).length === 1, '回报进队列')
+    await settle(80)
+    assert.equal(wakesOf(env, threadId).length, 0, '父会话闲了太久，不主动唤醒')
+    await client.call('litch/thread/queuedNotes/deliver', { threadId })
+    await until(() => wakesOf(env, threadId).length === 1, '立即处理开唤醒回合')
   } finally {
     await env.close()
   }

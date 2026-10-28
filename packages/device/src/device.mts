@@ -142,6 +142,8 @@ const DEFAULT_TIMING: SessionTiming = {
   clientToolGraceMs: 50,
   // 子会话里的审批、提问挂了这么久没人答，算它停下来在等用户（会话树的唤醒看它）
   needsUserMs: 10_000,
+  // 父会话最后一个回合结束超过这么久，子会话的回报不再主动唤醒它，等用户发话或“立即处理”
+  wakeIdleMs: 24 * 3600_000,
   // 会话树为读设置、开提醒或唤醒回合订阅的会话，用不着了隔这么久退订：原生 codex 只卸载没人订阅的会话，
   // 卸载了才放开写入锁，ChatGPT.app 等别的应用才打得开
   releaseMs: 5000,
@@ -365,6 +367,7 @@ export class DeviceServer {
       },
       timeoutMs: options.timing?.listTimeoutMs ?? DEFAULT_TIMING.listTimeoutMs,
       needsUserMs: options.timing?.needsUserMs ?? DEFAULT_TIMING.needsUserMs,
+      wakeIdleMs: options.timing?.wakeIdleMs ?? DEFAULT_TIMING.wakeIdleMs,
       releaseMs: options.timing?.releaseMs ?? DEFAULT_TIMING.releaseMs,
       taskTurn: (threadId, turnId) => this.tasks?.isTaskTurn(threadId, turnId) ?? false,
       backgroundRunning: (threadId) => this.background.running(threadId),
