@@ -480,10 +480,11 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
     crumb().includes(other) &&
     !one('.crumb .pill')
   peek.toastGone = !toast()
-  const before = all('.turn').length
   const word = '恢复之后接着聊'
   await say(word)
-  await until('恢复之后发出去的那一轮', () => all('.turn').length > before)
+  await until('恢复之后发出去的那一轮', () =>
+    (all('.turn').at(-1)?.textContent ?? '').includes(word),
+  )
   await until('这一轮结束', () => !running() && area(), 60_000)
   const last = all('.turn').at(-1)?.textContent ?? ''
   peek.canSend = last.includes(word) && (real ? last.includes(`收到：${word}`) : true)

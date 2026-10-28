@@ -1465,9 +1465,16 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       const live = sessions.get(sessionId)
       if (!live) return
       if (live.sinks.size === 0) {
+        live.loading?.abort()
+        live.loading = null
         unlinger(sessionId)
         sessions.delete(sessionId)
-      } else if (reachable(live)) load(live)
+        return
+      }
+      // 恢复的应答和对面的 thread/unarchived 都会叫到这里：已经在载入、已经是能发消息的那一份就不再载入一遍，
+      // 免得刚换上的对话区又整份重来（期间发的话也被这一遍盖住）
+      if (live.loading || live.view?.live) return
+      if (reachable(live)) load(live)
     },
 
     setAgents(sessionId, agents) {

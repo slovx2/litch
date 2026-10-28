@@ -233,6 +233,47 @@ test('已归档：不恢复就能只读地打开看；发不了消息；恢复�
   assert.equal(sent('turn/start').length, 1)
 })
 
+test('已归档：看过、关掉（留着）、再打开后恢复：重新载入成能发消息的，回答照常落进来；恢复的应答和通知都到也只载入成一份', async () => {
+  const { core, world, peer, command, sent } = setup()
+  world.archived.push(thread({ id: 'b', turns: [turn('t1', [userText('u', '旧的')])] }))
+  core.start()
+  await settle()
+  await command('device.loadArchived', { deviceId: 'local' })
+  await settle()
+  const first = watch(core, 'b')
+  await settle()
+  first.close()
+  await settle()
+  const session = watch(core, 'b')
+  await settle()
+  assert.equal(session.seen.view?.live, false)
+  await command('session.unarchive', { deviceId: 'local', sessionId: 'b' })
+  // 对面也发来 thread/unarchived（别的连接、或者同一次恢复的回声）
+  peer.last().notify('thread/unarchived', { threadId: 'b' })
+  await settle()
+  await settle()
+  assert.equal(session.seen.view?.live, true)
+  await command('session.send', { deviceId: 'local', sessionId: 'b', text: '接着聊' })
+  await settle()
+  const started = sent('turn/start')
+  assert.equal(started.length, 1)
+  const turnId = 'srv-1'
+  peer.last().notify('turn/started', {
+    threadId: 'b',
+    turn: { id: turnId, items: [], status: 'inProgress', error: null },
+  })
+  peer.last().notify('item/completed', {
+    threadId: 'b',
+    turnId,
+    item: agentText('m1', '收到：接着聊'),
+    completedAtMs: 0,
+  })
+  peer.last().notify('turn/completed', { threadId: 'b', turn: finished(turnId) })
+  await settle()
+  assert.deepEqual(session.texts().at(-1)?.includes('收到：接着聊'), true)
+  assert.deepEqual(sent('thread/unsubscribe'), [])
+})
+
 test('已归档：只读地看完关掉，不向对面退订（本来就没订阅）', async () => {
   const { core, world, command, sent } = setup()
   world.archived.push(thread({ id: 'b', turns: [turn('t1', [userText('u', '旧的')])] }))
