@@ -1286,7 +1286,7 @@ export const en: Record<MessageKey, Entry> = {
     'The next turn uses {name}. Its first turn won’t hit the prompt cache. With the same model name it may reject the previous provider’s thinking signatures; if so, switch back or pick a different model.',
   'composer.context': 'Context {percent}% used ({used} of {window})',
   'composer.offline': 'The device isn’t connected, so messages can’t be sent.',
-  'composer.syncing': 'Loading the latest content. You can send once it’s loaded.',
+  'composer.syncing': 'Loading the latest content. Messages you send now go out once it’s loaded.',
   'composer.harnessDown': '{name} is unavailable. You can send messages once it’s back.',
   'composer.harnessOff': '{name} is disabled. Enable it under Devices to send messages.',
   'composer.failed': 'Couldn’t send: {reason}',

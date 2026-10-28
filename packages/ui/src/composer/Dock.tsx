@@ -37,14 +37,7 @@ export function Dock({ deviceId, sessionId }: DockProps) {
   const offline = device !== undefined && device.connection !== 'online'
   // 设备连着，但这个会话所属的 harness 现在用不了：照样能看、能写草稿，只是发不出去
   const down = downHarness(device, meta?.harness)
-  // 摆着的是这台电脑上存的旧内容（meta.stale）：照样能写草稿，最新的载入完才能发
-  const blocked = offline
-    ? t('composer.offline')
-    : down
-      ? downText(down, 'composer', t)
-      : meta?.stale
-        ? t('composer.syncing')
-        : null
+  const blocked = offline ? t('composer.offline') : down ? downText(down, 'composer', t) : null
 
   let body = null
   if (!meta) {
@@ -64,6 +57,8 @@ export function Dock({ deviceId, sessionId }: DockProps) {
     body = (
       <>
         {meta.note ? <div className="cmp-hint err">{t.text(meta.note)}</div> : null}
+        {/* 摆着的是上次留下的内容（meta.stale）：照样能发，核心先排着，最新的载入完再发 */}
+        {meta.stale && !blocked ? <div className="cmp-hint">{t('composer.syncing')}</div> : null}
         {/* 会话有持续目标：一行，状态、目标和用量，点开右侧的“目标”页 */}
         <GoalBar deviceId={deviceId} sessionId={sessionId} />
         {/* 后台还有任务在跑（回合在不在跑都一样）：只说有几个，点开右侧的“后台任务”页；

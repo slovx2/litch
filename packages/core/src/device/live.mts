@@ -1252,6 +1252,8 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
 
   /** 空下来了就把排着队的第一条发出去 */
   const pump = (live: Live) => {
+    // 摆着旧的、正在重新载入的：等载入完（load 成功时再 pump）
+    if (live.stale || live.loading) return
     if (!live.view?.live || !reachable(live) || isRunning(live.view)) return
     const next = live.queued[0]
     if (!next) return
@@ -1376,9 +1378,14 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       entry.sinks.add(sink)
       if (entry.view && !entry.stale) sink.snapshot(entry.view)
       else {
-        // 手里没有、或者是旧的：先摆旧的（核心留着的，或者这台电脑上存的），最新的到了整份换掉
+        // 手里没有、或者是旧的：先摆旧的（核心留着的，或者这台电脑上存的），最新的到了整份换掉。
+        // 存的那份也放进核心：这期间发的话先排着（send），载入完再发
         const old = entry.view ?? recall(entry.id)
-        if (old) sink.snapshot(staleView(old))
+        if (old) {
+          entry.view ??= old
+          entry.stale = true
+          sink.snapshot(staleView(old))
+        }
         // 设备还没连上就先等着，连上时会统一载入；它所属的 harness 现在不可用也一样，恢复时再载入
         if (!entry.loading && reachable(entry)) load(entry)
       }
@@ -1675,14 +1682,15 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       const live = need(sessionId)
       if (!live.view.live) throw new ChannelError('rejected', '此会话只读')
       mustReach(live)
-      if (isRunning(live.view) || live.queued.length > 0) {
+      // 摆着旧的、正在载入的、回合在跑的、前面还有排着的：排上，载入完或者回合结束再发
+      if (live.stale || live.loading || isRunning(live.view) || live.queued.length > 0) {
         const id = `q${++localSeq}`
         live.queued = [...live.queued, { id, ...message }]
         emit(live, [{ op: 'queue.set', queued: live.queued }])
         pump(live)
         // 插不进去时 steer 已经把它放回了队列：消息照常排着，等这个回合结束再发，不算没发成。
         // 它不会插话的（界面跟着退回排队，提示里写着）不用再说；别的原因写一句，不然只看得到消息躺在队列里
-        if (now && isRunning(live.view)) {
+        if (now && !live.stale && !live.loading && isRunning(live.view)) {
           await sessionsApi.steer(sessionId, id).catch((error: unknown) => {
             if (error instanceof ChannelError && error.code === 'unsupported') return
             setNote(live, phrase('session.steerQueued', { message: failure(error).message }))

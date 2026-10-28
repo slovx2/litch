@@ -168,3 +168,42 @@ test('留着时断了线：重连后它算旧的，再打开先摆出来、再�
   assert.equal(again.seen.snapshots, 2)
   assert.equal(sent('thread/resume').length, 1, '新连接上重新载入了一次')
 })
+
+test('摆着存下的视图时发消息：先排着，载入完再发', async () => {
+  const saved = memoryStore()
+  const before = setup([answered('a')], {}, saved.store)
+  before.core.start()
+  await settle()
+  const first = watch(before.core)
+  await settle()
+  first.close()
+  await settle()
+
+  let reply: (() => void) | null = null
+  const fresh = answered('a')
+  const after = setup(
+    [fresh],
+    {
+      'thread/resume': () =>
+        new Promise((resolve) => {
+          reply = () =>
+            resolve({ thread: fresh, model: 'gate/small', reasoningEffort: 'low', sandbox: {} })
+        }),
+    },
+    saved.store,
+  )
+  after.core.start()
+  await settle()
+  const session = watch(after.core)
+  await settle()
+  assert.equal(session.seen.view?.stale, true)
+  await after.command('session.send', { deviceId: 'local', sessionId: 'a', text: '载入时说的' })
+  await settle()
+  assert.deepEqual(after.sent('turn/start'), [])
+  assert.equal(session.seen.view?.queued.length, 1)
+  ;(reply as unknown as () => void)()
+  await settle()
+  await settle()
+  assert.equal(after.sent('turn/start').length, 1)
+  assert.equal(session.seen.view?.queued.length, 0)
+})
