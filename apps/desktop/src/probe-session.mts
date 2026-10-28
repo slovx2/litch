@@ -64,6 +64,8 @@ export interface SessionProbe {
     canSend: boolean
     /** 恢复之后，归档时出的那条“撤销”提示跟着收起 */
     toastGone: boolean
+    /** canSend 不对时：最后一个回合和输入区的文字，查原因用（不参与判定） */
+    seen?: string
   }
   /** 待办进度。只在模拟核心上量（隔离入口里的引擎不发待办更新） */
   todo: {
@@ -485,6 +487,8 @@ export async function sessionProbe(real: boolean): Promise<SessionProbe> {
   await until('这一轮结束', () => !running() && area(), 60_000)
   const last = all('.turn').at(-1)?.textContent ?? ''
   peek.canSend = last.includes(word) && (real ? last.includes(`收到：${word}`) : true)
+  if (!peek.canSend)
+    peek.seen = `最后一个回合：${last.slice(-160)}｜输入区：${one('.dock')?.textContent?.slice(0, 120) ?? ''}`
 
   // ---- 五、待办进度（模拟核心里话里带“待办”，回合会先列一份待办，一步一步做完） ----
   let todo: SessionProbe['todo'] = null
@@ -843,7 +847,9 @@ export function judgeSession(probe: SessionProbe): string[] {
     if (ok === false) failed.push(`归档之后的撤销：${name} 不对`)
   }
   for (const [name, ok] of Object.entries(probe.peek)) {
-    if (!ok) failed.push(`看已归档的对话：${name} 不对`)
+    if (name === 'seen') continue
+    const seen = name === 'canSend' && probe.peek.seen ? `（${probe.peek.seen}）` : ''
+    if (!ok) failed.push(`看已归档的对话：${name} 不对${seen}`)
   }
   for (const [name, ok] of Object.entries(probe.todo ?? {})) {
     if (!ok) failed.push(`待办进度：${name} 不对`)
