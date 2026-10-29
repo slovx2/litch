@@ -200,7 +200,7 @@ test('工具 schema 校验字段形状，拒绝写系统字段、工作线和跨
   }
 })
 
-test('角色规则保持预算和第一版边界，会话版用看板归档规则并复用其他共用规则', () => {
+test('角色规则保持预算，允许说明选项推荐；经理自行归档自己的线，其他会话仍须同意', () => {
   const role = managerRoleRules('scope-token')
   // 4000 英文字符约为稿中 800 token 预算；实际分词随 harness 而异。
   assert.ok(role.length < 4000, String(role.length))
@@ -210,6 +210,9 @@ test('角色规则保持预算和第一版边界，会话版用看板归档规�
   assert.match(role, /repository is authoritative/)
   assert.match(role, /Use verify after checking that an object remains valid/)
   assert.match(role, /only the user can do/)
+  assert.match(role, /may include options and recommendations/)
+  assert.match(role, /submits answers on the board or explicitly in chat/)
+  assert.doesNotMatch(role, /mention decision titles only/)
   const sessions = managerSessionRules(4)
   for (const shared of [FRESH_BRIEF, WORKTREE_RULE, TITLE_LINE, outsideLitch(false)])
     assert.ok(sessions.includes(shared))
@@ -217,9 +220,15 @@ test('角色规则保持预算和第一版边界，会话版用看板归档规�
   assert.match(sessions, /including event turns/)
   assert.match(sessions, /Do not call wrap_up/)
   assert.ok(!sessions.includes(archiveRule(false)))
-  assert.match(sessions, /changes are landed or discarded/)
-  assert.match(sessions, /archive it through a board decision/)
-  assert.match(sessions, /user agrees on the board or in chat/)
+  assert.match(sessions, /changes are landed \(for example, merged\) or discarded/)
+  assert.match(
+    sessions,
+    /archive them directly with litch_sessions.archive without asking the user/,
+  )
+  assert.match(
+    sessions,
+    /Other sessions still require explicit user agreement on the board or in chat/,
+  )
   assert.doesNotMatch(sessions, /initiation "propose"|initiation "offer"/)
 })
 
@@ -238,5 +247,10 @@ test('线的回报和首次、结束回合遵守草稿约束', () => {
   assert.doesNotMatch(managerOpenText('范围', first), /Do not start lines yet/)
   assert.match(managerEndText('release'), /draft of release notes/)
   assert.doesNotMatch(managerEndText('blank'), /draft of release notes/)
-  assert.match(managerEndText('blank'), /without explicit agreement/)
+  assert.match(
+    managerEndText('blank'),
+    /Archive your finished lines whose changes are landed or discarded without asking the user/,
+  )
+  assert.match(managerEndText('blank'), /Other sessions still require explicit user agreement/)
+  assert.doesNotMatch(managerEndText('blank'), /Ask whether the user wants your lines archived/)
 })

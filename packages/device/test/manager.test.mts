@@ -12,7 +12,7 @@ import { prepareInstructions } from '../src/codex-instructions.mjs'
 import { managerTools } from '../src/manager-rules.mjs'
 import { startChild } from '../src/session-start.mjs'
 import type { TestClient } from './helpers.mjs'
-import { brief, plain, refuseSteer, treeRig, until } from './tree-kit.mjs'
+import { brief, parent, plain, refuseSteer, treeRig, until } from './tree-kit.mjs'
 
 const params = (cwd: string, patch: Partial<ManagerCreateParams> = {}): ManagerCreateParams => ({
   cwd,
@@ -58,12 +58,13 @@ const value = (response: any) => {
   return JSON.parse(response.contentItems[0].text)
 }
 
-test('经理归档：看板答复开出的回合放行，wake 与其他事件仍拦，旧答复不授权后续回合', async () => {
+test('经理归档别的会话：看板答复回合放行，wake 与其他事件仍拦，旧答复不授权后续回合', async () => {
   const env = treeRig()
   refuseSteer(env.pi)
   try {
     const connection = await client(env)
     const { manager, threadId } = await create(env, connection)
+    const { threadId: targetId } = await parent(connection, false)
     const child = await startChild(
       env.device.sessionTree,
       threadId,
@@ -72,19 +73,18 @@ test('经理归档：看板答复开出的回合放行，wake 与其他事件仍
     )
     env.pi.end(child.threadId, 'completed', '已完成且无改动')
     await until(() => env.device.sessionTree.store.notes(threadId).length > 0, '线回报')
-    const archive = () =>
-      tool(env, threadId, 'archive', { thread_id: child.threadId }, 'litch_sessions')
+    const archive = () => tool(env, threadId, 'archive', { thread_id: targetId }, 'litch_sessions')
     const refused = async () => {
       const result = await archive()
       assert.equal(result.success, false)
       assert.match(result.contentItems[0].text, /\[litch:blocked\]/)
-      assert.equal(env.device.sessionTree.host.index.archived(child.threadId), false)
+      assert.equal(env.device.sessionTree.host.index.archived(targetId), false)
     }
     await refused() // manager-open 不算同意。
     const { id } = value(
       await tool(env, threadId, 'add', {
         kind: 'decision',
-        decision: { title: '归档工作线？', background: '线已做完且无改动' },
+        decision: { title: '归档普通会话？', background: '会话已停下' },
       }),
     )
     env.pi.end(threadId, 'completed', '等用户决定')
@@ -104,9 +104,9 @@ test('经理归档：看板答复开出的回合放行，wake 与其他事件仍
     await until(() => env.pi.running(threadId), '看板答复开启回合')
     assert.equal(env.device.sessionTree.isUserTurn('pi', env.pi.current(threadId)?.id ?? ''), false)
     const archived = value(await archive())
-    assert.equal(archived.thread_id, child.threadId)
-    assert.equal(env.device.sessionTree.host.index.archived(child.threadId), true)
-    value(await tool(env, threadId, 'unarchive', { thread_id: child.threadId }, 'litch_sessions'))
+    assert.equal(archived.thread_id, targetId)
+    assert.equal(env.device.sessionTree.host.index.archived(targetId), true)
+    await connection.call('thread/unarchive', { threadId: targetId })
     for (const kind of [
       'notes',
       'remind',
@@ -128,6 +128,70 @@ test('经理归档：看板答复开出的回合放行，wake 与其他事件仍
         true,
       )
       await refused()
+    }
+  } finally {
+    await env.close()
+  }
+})
+
+test('经理在 wake 回合自行归档整棵线子树，不能归档别的经理的线或自己，仍拦在跑和置顶的线', async () => {
+  const env = treeRig()
+  refuseSteer(env.pi)
+  try {
+    const connection = await client(env)
+    const { manager, threadId } = await create(env, connection)
+    const other = await create(env, connection)
+    const spec = {
+      kind: 'fresh' as const,
+      title: '线',
+      prompt: '工作',
+      worktree: false,
+      wakeParent: false,
+    }
+    const child = await startChild(
+      env.device.sessionTree,
+      threadId,
+      { ...spec, wakeParent: true },
+      'model',
+    )
+    const grandchild = await startChild(env.device.sessionTree, child.threadId, spec, 'model')
+    const foreign = await startChild(env.device.sessionTree, other.threadId, spec, 'model')
+    const archive = (targetId: string) =>
+      tool(env, threadId, 'archive', { thread_id: targetId }, 'litch_sessions')
+    const busy = await archive(child.threadId)
+    assert.equal(busy.success, false)
+    assert.match(busy.contentItems[0].text, /still working/)
+    env.pi.end(grandchild.threadId, 'completed', '无改动')
+    env.pi.end(foreign.threadId, 'completed', '无改动')
+    env.pi.end(child.threadId, 'completed', '改动已落地')
+    await until(() => env.device.sessionTree.store.notes(threadId).length > 0, '线回报')
+    env.pi.end(threadId, 'completed', '等待回报')
+    await until(() => env.pi.running(threadId), 'wake 回合')
+    const wake = env.pi.current(threadId)
+    assert.equal(
+      parseSessionEvent((wake?.items[0]?.content as any)?.[0]?.text ?? '').event?.kind,
+      'wake',
+    )
+    assert.equal(env.device.sessionTree.isUserTurn('pi', wake?.id ?? ''), false)
+    for (const targetId of [foreign.threadId, 'self']) {
+      const refused = await archive(targetId)
+      assert.equal(refused.success, false)
+      assert.match(refused.contentItems[0].text, /Ask the user first/)
+    }
+    assert.equal(env.device.sessionTree.host.index.archived(foreign.threadId), false)
+    env.device.sessionTree.host.workspaces.pin(child.threadId, true)
+    const pinned = await archive(child.threadId)
+    assert.equal(pinned.success, false)
+    assert.match(pinned.contentItems[0].text, /pinned/)
+    env.device.sessionTree.host.workspaces.pin(child.threadId, false)
+    // 孙线必须按同一个 managerId 识别，不能只认直属父会话。
+    for (const line of [grandchild, child]) {
+      assert.deepEqual(env.device.managers.lines.mark(line.threadId), {
+        managerId: manager.id,
+        role: 'line',
+      })
+      assert.equal(value(await archive(line.threadId)).thread_id, line.threadId)
+      assert.equal(env.device.sessionTree.host.index.archived(line.threadId), true)
     }
   } finally {
     await env.close()
@@ -321,7 +385,8 @@ test('经理扩展：声明、路由、创建工具/规则、每条投递连接�
       (item: any) => item.name === 'archive',
     ).description
     assert.match(archiveDescription, /on the board or in chat/)
-    assert.match(archiveDescription, /ask through a board decision/)
+    assert.match(archiveDescription, /without asking the user, including on event turns/)
+    assert.match(archiveDescription, /Other sessions require explicit user agreement/)
     assert.doesNotMatch(archiveDescription, /message they typed|in one short question/)
     assert.equal(
       sessions.tools.some((item: any) => item.name === 'wrap_up'),

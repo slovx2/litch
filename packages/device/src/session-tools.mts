@@ -1041,7 +1041,7 @@ function notSubagent(thread: Record<string, unknown>, threadId: string): void {
 }
 
 /**
- * 归档一个会话：用户亲手发话或经理收到看板答复的回合可收，其他事件不算用户同意。
+ * 经理可在任何回合归档自己线子树中的会话；其他目标仍须用户发话或经理收到看板答复。
  * 别的会话：在干活的、置顶的不归档，照实回；归档了的话它已经停下的子孙跟着归档。self：等这个回合结束再归档
  */
 async function archive(
@@ -1055,7 +1055,10 @@ async function archive(
   const threadId = self ? call.threadId : given
   let userConsentTurn = tree.isUserTurn(call.harness, call.turnId)
   const manager = tree.managers?.store.forThread(call.threadId)
-  if (!userConsentTurn && manager?.harness === call.harness) {
+  const target = tree.managers?.lines.mark(threadId)
+  const ownLine =
+    manager?.harness === call.harness && target?.role === 'line' && target.managerId === manager.id
+  if (!ownLine && !userConsentTurn && manager?.harness === call.harness) {
     // 只认开启当前回合的看板答复；旧回合的答复或其他事件中的插话不改变归档闸。
     const { thread } = await tree.read(call.threadId, true)
     const turn = (Array.isArray(thread.turns) ? thread.turns : []).find(
@@ -1069,7 +1072,7 @@ async function archive(
       isObject(first) && typeof first.text === 'string' ? parseSessionEvent(first.text).event : null
     userConsentTurn = event?.kind === 'manager-answers' && event.manager?.managerId === manager.id
   }
-  if (!userConsentTurn)
+  if (!ownLine && !userConsentTurn)
     throw new Refused(
       'blocked',
       'Archive only after the user agreed in chat or in a manager board answer; this turn has neither source. Ask the user first (managers: use a board decision), and archive it when they say yes.',
