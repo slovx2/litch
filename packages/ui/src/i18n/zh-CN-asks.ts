@@ -5,6 +5,8 @@ import type { Entry } from './types.ts'
 
 export const zhAsks = {
   'ask.title': '问题',
+  'ask.pending': '待答问题',
+  'ask.pendingCount': '{count} 个问题待回答',
   'ask.state.open': '待回答',
   'ask.state.answered': '已答',
   'ask.state.closed': '未回答',

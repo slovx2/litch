@@ -41,6 +41,7 @@ import type { AgentThreadView, SessionNoteView, SessionProposalView } from '../m
 import type { Text } from '../phrase.mjs'
 import { type AskAnswers, gatherAnswers, parseAskReply } from '../projection/asks.mjs'
 import { changedKeys } from '../projection/manage.mjs'
+import { changesQuestions, pendingQuestions } from '../projection/pending-asks.mjs'
 import { appendOutput, appendSkipping } from '../text/output-cap.mjs'
 import { createFileTrees, type FileTrees, fileKeys } from './file-trees.mjs'
 import { KeyedStore } from './keyed-store.mjs'
@@ -130,6 +131,9 @@ export const keys = {
    * 带题的那张卡片据此显示“已答”
    */
   answers: (deviceId: string, sessionId: string) => `session:${deviceId}:${sessionId}:answers`,
+  /** PendingQuestion[]：跨回合保留的待答问题，输入框上方只显示这一份。 */
+  pendingQuestions: (deviceId: string, sessionId: string) =>
+    `session:${deviceId}:${sessionId}:pendingQuestions`,
   /** ManageSchema：这台设备上有哪些设置。有这个键说明管理数据的快照已经到了 */
   manage: (deviceId: string) => `manage:${deviceId}:schema`,
   /** SettingsSnapshotView：设置现在的值、待重启的 harness、SSH 入口的状况 */
@@ -930,6 +934,19 @@ export function createReplica(channel: CoreChannel): Replica {
     }
   }
 
+  const refreshQuestions = (deviceId: string, sessionId: string) => {
+    const turns = (store.get<string[]>(keys.turnIds(deviceId, sessionId)) ?? []).flatMap(
+      (id) => store.get<TurnView>(keys.turn(deviceId, sessionId, id)) ?? [],
+    )
+    const questions = pendingQuestions(
+      turns,
+      (id) => store.get<ItemView>(keys.item(deviceId, sessionId, id)),
+      store.get<AskAnswers>(keys.answers(deviceId, sessionId)) ?? {},
+      store.get<QueuedMessage[]>(keys.queued(deviceId, sessionId)) ?? [],
+    )
+    store.set(keys.pendingQuestions(deviceId, sessionId), questions)
+  }
+
   const applySession = (deviceId: string, sessionId: string, op: SessionOp) => {
     const itemKey = (itemId: string) => keys.item(deviceId, sessionId, itemId)
     const turnKey = (turnId: string) => keys.turn(deviceId, sessionId, turnId)
@@ -951,6 +968,14 @@ export function createReplica(channel: CoreChannel): Replica {
         )
         store.delete(turnKey(op.turnId))
         for (const itemId of turn.itemIds) store.delete(itemKey(itemId))
+        const left = ids
+          .filter((id) => id !== op.turnId)
+          .flatMap((id) =>
+            (store.get<TurnView>(turnKey(id))?.itemIds ?? []).flatMap(
+              (itemId) => store.get<ItemView>(itemKey(itemId)) ?? [],
+            ),
+          )
+        store.set(keys.answers(deviceId, sessionId), gatherAnswers({}, left))
         return
       }
       case 'turn.status': {
@@ -1204,6 +1229,7 @@ export function createReplica(channel: CoreChannel): Replica {
                 )
                 store.set(keys.notes(deviceId, sessionId), gatherNotes({}, ordered))
                 store.set(keys.answers(deviceId, sessionId), gatherAnswers({}, ordered))
+                refreshQuestions(deviceId, sessionId)
                 const meta: SessionMeta = {
                   title: view.title,
                   harness: view.harness,
@@ -1219,7 +1245,14 @@ export function createReplica(channel: CoreChannel): Replica {
             },
             delta(ops) {
               store.batch(() => {
+                const changed = ops.some((op) =>
+                  changesQuestions(op, (id) =>
+                    store.get<ItemView>(keys.item(deviceId, sessionId, id)),
+                  ),
+                )
                 for (const op of ops) applySession(deviceId, sessionId, op)
+                // 流式文本不改变问题集合，避免每个 token 扫历史。
+                if (changed) refreshQuestions(deviceId, sessionId)
               })
             },
             error(error) {

@@ -184,11 +184,13 @@ export interface SessionsWrapUpArguments {
   suggestions: SessionsSuggestion[]
   /**
    * 这一回合留给用户定的一件事（一个短问题），比如要不要在这里接着做刚查出来的事；没有就不给。
-   * 和按钮一起画在回合最下方，下一条用户消息之后失效
+   * 和按钮一起留在待答区，直到用户明确回答或模型撤回
    */
   ask?: string
   /** ask 的回复按钮，1 到 wrapUpActions 个，第一个是推荐的；没有 ask 时不给 */
   actions?: SessionsWrapUpAction[]
+  /** 明确撤回的待答问题原文。只作用于这次调用之前的问题。 */
+  withdraw_questions?: string[]
 }
 
 export interface SessionsSendArguments {
@@ -577,6 +579,12 @@ const WRAP_UP_TOOL: ClientToolFunctionSpec = {
           required: ['label'],
           additionalProperties: false,
         },
+      },
+      withdraw_questions: {
+        type: 'array',
+        items: { type: 'string' },
+        description:
+          'Exact titles of earlier pending questions to explicitly withdraw because they no longer need an answer. Automated turns and an empty wrap_up never withdraw questions. Omit unless deliberately withdrawing.',
       },
     },
     required: ['suggestions'],

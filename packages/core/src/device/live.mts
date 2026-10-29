@@ -825,7 +825,8 @@ export function createLiveSessions(host: LiveHost): LiveSessions {
       settleSteered(live, viewTurn(live, turn.id), turn.status === 'completed')
       // 手动压缩的回合结束了还没见到压缩条目（对面不发）：不留到以后，免得把下一次自动压缩认成手动的
       live.compacting = 0
-      // 回合结束时还没答的请求已经没有意义了
+      // 阻塞请求的接收方随所属回合结束而撤销。其他回合的结束不能影响它；
+      // wrap_up 和异步提问没有挂在此 RPC 表里，按明确答复单独保留。
       settleRequests(live, (request) => request.turnId === turn.id)
       host.touched(live.id)
       host.turnEnded?.(live.id, turn.id)

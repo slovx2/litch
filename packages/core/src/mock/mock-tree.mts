@@ -45,6 +45,7 @@ import type {
 } from '../model-tree.mjs'
 import type { WorktreeFrom } from '../model-worktrees.mjs'
 import { phrase } from '../phrase.mjs'
+import { projectQuestions } from '../projection/asks.mjs'
 import { projectItem } from '../projection/items.mjs'
 import { outgoing } from '../projection/outgoing.mjs'
 import type { SampleLang } from './sample-text.mjs'
@@ -171,6 +172,8 @@ export function createMockTree(host: MockTreeHost): MockTree {
   const wakes = new Map<string, number>()
   /** 子会话 → 它要回的话（演示里写好的）。没有的照模拟核心平常那样回 */
   const scripted = new Map<string, string>()
+  /** 待答问题回归：同一回合派子会话并提问，之后的自动唤醒重复旧题、再提两道新题。 */
+  const pendingWakes = new Set<string>()
   /** 引擎自己的子代理线程 */
   const agents = new Map<string, AgentEntry>()
   /** 回合开始时不回话的子代理（演示里失败的、要停掉的） */
@@ -1034,6 +1037,37 @@ export function createMockTree(host: MockTreeHost): MockTree {
       const key = sameKey(view.deviceId, view.sessionId)
       const user = view.items[view.turns.find((turn) => turn.id === turnId)?.itemIds[0] ?? '']
       if (user?.kind === 'userMessage' && user.event?.kind === 'wake') {
+        if (pendingWakes.delete(key)) {
+          const id = host.nextId('async')
+          const questions = projectQuestions(id, [
+            {
+              title: host.lang === 'zh-CN' ? '第二阶段需要运行测试吗？' : 'Run tests in phase two?',
+              options: ['Yes', 'No'],
+            },
+            {
+              title:
+                host.lang === 'zh-CN'
+                  ? '测试结果保存在哪里？'
+                  : 'Where should test results be saved?',
+              options: [],
+            },
+          ])
+          host.apply(view, [
+            ...wrapUpOps(view, turnId, [], { ask: text.wrapAsk, actions: text.wrapActions }),
+            {
+              op: 'item.add',
+              turnId,
+              item: {
+                id,
+                kind: 'agentMessage',
+                text: '',
+                phase: 'commentary',
+                status: 'completed',
+                ...(questions ? { questions } : {}),
+              },
+            },
+          ])
+        }
         host.reply(view, turnId, text.wakeReply, emptyWrapUp(turnId))
         return true
       }
@@ -1062,6 +1096,15 @@ export function createMockTree(host: MockTreeHost): MockTree {
       }
       // Litch 子会话的两出要设备有会话树
       if (!host.treeOn(view.deviceId)) return false
+      if (/收尾后回报|pending question wake/i.test(message.text)) {
+        pendingWakes.add(key)
+        host.apply(
+          view,
+          wrapUpOps(view, turnId, [], { ask: text.wrapAsk, actions: text.wrapActions }),
+        )
+        spawnDemo(view, turnId)
+        return true
+      }
       if (SPAWNS.test(message.text)) {
         spawnDemo(view, turnId)
         return true

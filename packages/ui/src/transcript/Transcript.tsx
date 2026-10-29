@@ -37,6 +37,7 @@ import { duration, elapsed, retryText, turnEnded } from '../app/format.ts'
 import { useKey, useServices } from '../app/services.tsx'
 import { TurnOrigin } from '../background/TurnOrigin.tsx'
 import { Dock, Requests } from '../composer/Dock.tsx'
+import { PendingQuestions } from '../composer/PendingQuestions.tsx'
 import { GoalReached } from '../goal/GoalReached.tsx'
 import type { MessageKey, Translator } from '../i18n/index.ts'
 import { useRailHasTodo } from '../rail/rail-state.ts'
@@ -584,6 +585,7 @@ export function Transcript({ deviceId, sessionId, footer, onOpen, aside }: Trans
           </button>
         )}
         {footer ? null : <Requests deviceId={deviceId} sessionId={sessionId} />}
+        {footer ? null : <PendingQuestions deviceId={deviceId} sessionId={sessionId} />}
       </div>
       <div className="dock-wrap">
         {footer ?? <Dock deviceId={deviceId} sessionId={sessionId} />}

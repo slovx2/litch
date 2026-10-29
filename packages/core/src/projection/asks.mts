@@ -56,6 +56,17 @@ const isReply = (value: unknown): value is AskReply =>
   typeof (value as AskReply).question === 'string' &&
   typeof (value as AskReply).answer === 'string'
 
+/** 合并题的答复仍携带所有调用标识，但气泡里同一题、同一答案只展示一次。 */
+export function distinctReplies(replies: readonly AskReply[]): AskReply[] {
+  const seen = new Set<string>()
+  return replies.filter((reply) => {
+    const key = JSON.stringify([reply.question, reply.answer])
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
 /**
  * 用户消息整段就是一份答复的，拆出每一题；不是、或者格式坏了返回 null，照原文显示。
  * 和官方客户端一样，数组和单独一项都认，一项不对就整段不认
@@ -81,7 +92,8 @@ export type AskAnswers = Record<string, string>
 export function gatherAnswers(before: AskAnswers, items: Iterable<ItemView>): AskAnswers {
   let next = before
   for (const item of items) {
-    if (item.kind !== 'userMessage') continue
+    if (item.kind !== 'userMessage' || item.peer || (item.system && item.system.kind !== 'here'))
+      continue
     for (const reply of parseAskReply(item.text) ?? []) {
       if (next[reply.questionItemId] === reply.answer) continue
       if (next === before) next = { ...before }
@@ -93,18 +105,17 @@ export function gatherAnswers(before: AskAnswers, items: Iterable<ItemView>): As
 
 /**
  * 一条带题的消息现在是什么样子：
- * - answered：答过了（至少答了一题；一起发出去时没答的那几题算跳过）；
- * - open：还能答——没答过，会话能发消息，而且它在会话的最后一个回合里；
- * - closed：过去了——后面已经有了别的回合，或者会话只读。
+ * - answered：每道题都已答；部分答复不会跳过剩下的问题；
+ * - open：还有没答的题，会话能发消息；
+ * - closed：会话只读。新回合不会改变问题的状态。
  */
 export type AskState = 'open' | 'answered' | 'closed'
 
 export function askState(
   questions: readonly AskQuestion[],
   answers: AskAnswers,
-  inLastTurn: boolean,
   live: boolean,
 ): AskState {
-  if (questions.some((question) => answers[question.id] !== undefined)) return 'answered'
-  return inLastTurn && live ? 'open' : 'closed'
+  if (questions.every((question) => answers[question.id] !== undefined)) return 'answered'
+  return live ? 'open' : 'closed'
 }

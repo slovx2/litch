@@ -315,9 +315,11 @@ export interface WrapUpSuggestionView {
  * 每条建议成一张提案，提案的 callId 都是这次调用的条目 id；空的那种界面不画（quietOf）
  */
 export interface WrapUpView {
+  /** 模型明确撤回的题目原文；只撤回这次调用之前的问题。 */
+  withdrawQuestions?: string[]
   /** 照调用时给的顺序 */
   suggestions: WrapUpSuggestionView[]
-  /** 留给用户定的一件事（litch_sessions.wrap_up 的 ask），和按钮一起画在回合最下方；没有是 undefined */
+  /** 留给用户定的一件事（litch_sessions.wrap_up 的 ask），回合结束后进入待答区；没有是 undefined */
   ask?: string
   /** ask 的回复按钮：点了把 message（没有就是 label）当用户消息发回这个会话 */
   actions?: { label: string; message?: string }[]

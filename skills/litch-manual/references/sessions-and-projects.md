@@ -31,6 +31,15 @@ sidebar.
 
 ## Sessions
 
+### 待答问题
+
+桌面和手机的输入框上方会保留收尾问题与异步提问。子会话回报、定时任务、会话间消息和后台唤醒不会清掉它们。
+新旧问题可以同时回答，相同的待答问题只显示一次。点击回复按钮或在题目下填写回答后，只有对应的问题收起；异步卡中尚未回答的其他题目继续保留。
+用户直接在会话输入框发话则视为回答此前的待答问题，一起收起。自动的计划确认也遵循这一区分：自发回合不清除，用户发话后收起。
+待答区可以折叠，折叠后仍显示问题数量。回答会按当前发送方式插话或排队；撤销排队中的答复会恢复问题。
+模型可以在 `litch_sessions.wrap_up` 的 `withdraw_questions` 中列出已经不需要回答的旧题目原文，明确撤回这些问题。
+审批、AskUserQuestion 和阻塞式 request_user_input 仍在请求卡片中回答；只有对应的请求被答复、撤回或其所属回合结束时收起，其他回合不会清掉它们。
+
 Sessions are not created or edited through `litch config`. What the user can do in the UI, so you can
 explain it:
 
@@ -261,9 +270,9 @@ woken to continue.
   unfinished or unverified, stay in the conversation; most turns end with no card. When the next step
   simply continues what the model just found (say, fixing what it diagnosed), it asks one short
   question at the end of the turn with one or two reply buttons instead of making a card; a click
-  sends the button's words as your message, and the question lapses with your next message (a
-  lapsed question stays as one line only when you answered with a button; otherwise it is hidden). The
-  cards and the question from the wrap-up appear below the final answer once the turn has ended;
+  sends the answer with its question as your message. Pending questions stay above the composer until
+  answered or explicitly withdrawn; automated turns do not clear them. A message you type in the main composer settles earlier pending questions; a reply inside one question settles only that question. Suggested
+  cards from the wrap-up appear below the final answer once the turn has ended;
   cards the model raises mid-turn (independent plan steps) appear where it raised them, as soon as it
   does, and scroll with the conversation. The
   card shows its state (waiting, started, done here, dismissed, withdrawn by the model, expired after

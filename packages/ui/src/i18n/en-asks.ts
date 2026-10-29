@@ -4,6 +4,8 @@ import type { zhAsks } from './zh-CN-asks.ts'
 
 export const enAsks: Record<keyof typeof zhAsks, Entry> = {
   'ask.title': 'Question',
+  'ask.pending': 'Pending questions',
+  'ask.pendingCount': '{count} questions awaiting answers',
   'ask.state.open': 'Waiting for you',
   'ask.state.answered': 'Answered',
   'ask.state.closed': 'Not answered',

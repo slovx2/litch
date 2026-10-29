@@ -33,10 +33,10 @@ export function PlanAsk({
   const planId = planToConfirm({
     mode: meta.settings.mode,
     live: meta.live,
-    turn: meta.lastTurn ?? undefined,
+    turn: meta.planTurn ?? undefined,
     // 回合结束时条目都已经到了：现取就行
     kindOf: store.kindOf,
-    asked: meta.lastTurn !== null && planAskedIn(session) === meta.lastTurn.id,
+    asked: meta.planTurn !== null && planAskedIn(session) === meta.planTurn.id,
     settled: settledPlan(session),
   })
   if (!planId) return null

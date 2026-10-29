@@ -1,18 +1,19 @@
 // 模型边干活边问的题：答复的写法、认回来、答复表、卡片的三种样子，以及分块时它露在过程外面、不算最终回答。
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import type { ItemView } from '../src/model.mjs'
+import type { ItemView, UserMessageItem } from '../src/model.mjs'
 import {
   askQuestionId,
   askReplyText,
   askState,
+  distinctReplies,
   gatherAnswers,
   parseAskReply,
   projectQuestions,
 } from '../src/projection/asks.mjs'
 import { answerOf, bucketItems, cardPlace } from '../src/projection/blocks.mjs'
 
-const user = (id: string, text: string): ItemView => ({
+const user = (id: string, text: string): UserMessageItem => ({
   id,
   kind: 'userMessage',
   text,
@@ -50,6 +51,16 @@ test('答复写成一段标签包着的 JSON，字段先后和官方桌面端一
   assert.deepEqual(parseAskReply(text), replies)
 })
 
+test('同一待答题的多个调用：协议保留每个标识，答复气泡去重，不合并不同答案', () => {
+  const replies = [
+    { questionItemId: 'a', question: 'Q', answer: 'A' },
+    { questionItemId: 'b', question: 'Q', answer: 'A' },
+    { questionItemId: 'c', question: 'Q', answer: 'B' },
+  ]
+  assert.deepEqual(parseAskReply(askReplyText(replies)), replies)
+  assert.deepEqual(distinctReplies(replies), [replies[0], replies[2]])
+})
+
 test('认得出 codex 自己写的答复（单项、字段按字母排）；格式不对的照原文', () => {
   // 开源 codex 的 AnsweredQuestion::render 的样子（core/tests/suite/snapshots 里的那一份）
   const codex =
@@ -80,17 +91,22 @@ test('答复表：只认用户消息里的答复，后答的盖掉先答的，�
   assert.deepEqual(first, { [id]: '跳过' })
   assert.equal(gatherAnswers(first, [user('u2', reply('跳过'))]), first)
   assert.deepEqual(gatherAnswers(first, [user('u3', reply('照跑'))]), { [id]: '照跑' })
+  const peerReply = {
+    ...user('peer', reply('自动回报不能代答')),
+    peer: { name: null, session: 'other', bypass: false },
+  } satisfies UserMessageItem
+  assert.equal(gatherAnswers(first, [peerReply]), first)
 })
 
-test('卡片的样子：答了一题就算答过；没答的在最后一个回合、会话能发才能答，否则过去了', () => {
+test('卡片的样子：逐题记录答复，新回合不会让未答题失效', () => {
   const questions = [
     { id: 'a', title: 'A', options: [] },
     { id: 'b', title: 'B', options: [] },
   ]
-  assert.equal(askState(questions, { b: '好' }, false, false), 'answered')
-  assert.equal(askState(questions, {}, true, true), 'open')
-  assert.equal(askState(questions, {}, false, true), 'closed')
-  assert.equal(askState(questions, {}, true, false), 'closed')
+  assert.equal(askState(questions, { b: '好' }, true), 'open')
+  assert.equal(askState(questions, {}, true), 'open')
+  assert.equal(askState(questions, { a: '行', b: '好' }, true), 'answered')
+  assert.equal(askState(questions, {}, false), 'closed')
 })
 
 test('分块：带题的消息是露在外面的卡片，不当最终回答，也不收进过程', () => {

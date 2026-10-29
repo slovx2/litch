@@ -374,6 +374,13 @@ function wrapUpOf(
     .slice(0, SESSION_TOOL_LIMITS.wrapUpActions)
   return {
     suggestions,
+    ...(!failed && Array.isArray(given.withdraw_questions)
+      ? {
+          withdrawQuestions: given.withdraw_questions
+            .filter((v): v is string => typeof v === 'string')
+            .map((v) => v.trim()),
+        }
+      : {}),
     ...(ask ? { ask } : {}),
     ...(ask && actions.length > 0 ? { actions } : {}),
   }

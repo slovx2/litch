@@ -8,11 +8,11 @@ import {
   type SessionSettings,
   type TurnView,
 } from '@litch/core'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { whyNot } from '../app/errors.ts'
-import { useKey, useServices } from '../app/services.tsx'
-import { planAskedIn, planToConfirm, settledPlan, settlePlan } from './plan-ask.ts'
+import { useKey, useKeys, useServices } from '../app/services.tsx'
+import { latestPlanTurn, planAskedIn, planToConfirm, settledPlan, settlePlan } from './plan-ask.ts'
 
 interface PlanAskProps {
   deviceId: string
@@ -26,8 +26,14 @@ export function PlanAsk({ deviceId, sessionId }: PlanAskProps) {
   const settings = useKey<SessionSettings>(keys.settings(deviceId, sessionId))
   const meta = useKey<SessionMeta>(keys.session(deviceId, sessionId))
   const turnIds = useKey<string[]>(keys.turnIds(deviceId, sessionId))
-  const lastId = turnIds?.[turnIds.length - 1] ?? ''
-  const turn = useKey<TurnView>(keys.turn(deviceId, sessionId, lastId))
+  const turnKeys = useMemo(
+    () => (turnIds ?? []).map((id) => keys.turn(deviceId, sessionId, id)),
+    [deviceId, sessionId, turnIds],
+  )
+  const turns = useKeys<TurnView>(turnKeys).filter((turn): turn is TurnView => turn !== undefined)
+  const turn = latestPlanTurn(turns, (id) =>
+    replica.store.get<ItemView>(keys.item(deviceId, sessionId, id)),
+  )
   /** 正在发“执行”的那一份；点了“先不执行”之后重画一次 */
   const [sending, setSending] = useState<string | null>(null)
   const [, redraw] = useState(0)
@@ -39,7 +45,7 @@ export function PlanAsk({ deviceId, sessionId }: PlanAskProps) {
     turn,
     // 回合结束时条目都已经到了：这里现取就行，不用一个个订阅
     kindOf: (id) => replica.store.get<ItemView>(keys.item(deviceId, sessionId, id))?.kind,
-    asked: planAskedIn(session) === lastId,
+    asked: planAskedIn(session) === turn?.id,
     settled: settledPlan(session),
   })
   if (!planId) return null

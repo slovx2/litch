@@ -593,25 +593,27 @@ export class RowBuilder {
     )
   }
 
-  /** 回合最下方的收尾区：收尾留的问题（最后一个）在前，收尾带的建议卡片在后 */
+  /** 回合最下方的收尾区：收尾问题的答复记录在前，建议卡片在后。 */
   private tail(view: SessionView, turn: TurnView, itemIds: string[]): Row[] {
-    let ask: Row | null = null
+    const asks: Row[] = []
     const cards: Row[] = []
     for (const id of itemIds) {
       const item = view.items[id]
       if (item?.kind !== 'toolCall') continue
       cards.push(...this.proposals(turn, item, cardsOf(item, view.proposals) ?? []))
       if (item.wrapUp?.ask)
-        ask = this.keep({
-          type: 'wrapAsk',
-          key: `${item.id}:ask`,
-          turnId: turn.id,
-          itemId: item.id,
-          ask: item.wrapUp.ask,
-          actions: item.wrapUp.actions ?? NO_ACTIONS,
-        })
+        asks.push(
+          this.keep({
+            type: 'wrapAsk',
+            key: `${item.id}:ask`,
+            turnId: turn.id,
+            itemId: item.id,
+            ask: item.wrapUp.ask,
+            actions: item.wrapUp.actions ?? NO_ACTIONS,
+          }),
+        )
     }
-    return ask ? [ask, ...cards] : cards
+    return [...asks, ...cards]
   }
 
   /** 整段过程告一段落后收成的那一行（照桌面端的收起行）：几段说明、几步、几个子代理，被拒、失败的子代理、回合出错 */

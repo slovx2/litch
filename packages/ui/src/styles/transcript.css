@@ -65,6 +65,9 @@
   display: flex;
   flex-direction: column;
 }
+.tr-tail:has(.pending-asks) {
+  max-height: 50vh;
+}
 .to-bottom {
   position: absolute;
   left: 50%;

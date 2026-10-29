@@ -1,43 +1,16 @@
-// 模型边干活边问的题（codex 的 request_user_input_async）：对话里的问题卡片，和用户答复的那条消息。
-// 和桌面端（packages/ui/src/transcript/AskCard.tsx）同一套规矩：题目来自助手消息上的 questions，
-// 答复是一条普通的用户消息（核心的 projection/asks.mts 写、认），回合还在跑时直接插进这个回合。
-// 带题的消息在行里照常是几块 Markdown（行的规矩不动）：第一块画成这张卡片，其余的块不画。
-// 问用户的工具（AskUserQuestion 等）答完以后画成同一个样子的问答卡片（AskedCell，同桌面端的 AskedCard）。
-import {
-  type AskQuestion,
-  type AskReply,
-  askReplyText,
-  askState,
-  type ToolCallItem,
-} from '@litch/core'
-import { memo, useState, useSyncExternalStore } from 'react'
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
-import { whyNot } from '../../../../../packages/ui/src/app/errors.ts'
-import { useChannel } from '../../shell/services'
+// 已答题在历史中留痕，未答题统一在输入框上方作答。
+import { type AskQuestion, type AskReply, distinctReplies, type ToolCallItem } from '@litch/core'
+import { memo, useSyncExternalStore } from 'react'
+import { StyleSheet, Text, View } from 'react-native'
 import { useT } from '../../ui/i18n'
-import { Button } from '../../ui/kit/controls'
 import { useTheme } from '../../ui/theme'
 import { useTranscript } from '../context'
 import { useSessionStore } from '../proposals/hooks'
-
-/** 一题现在填的：选了第几个建议的回答，自己写了什么（写了就以写的为准） */
-interface Draft {
-  pick: number | null
-  text: string
-}
-
-const answerOf = (question: AskQuestion, draft: Draft | undefined): string =>
-  draft?.text.trim() || (draft?.pick != null ? (question.options[draft.pick] ?? '') : '')
-
-/** 这一块 Markdown 所在的消息带不带题。带题的消息由 AskCell 画 */
 export function useAsks(itemId: string): readonly AskQuestion[] | undefined {
   const { deviceId, sessionId } = useTranscript()
   return useSessionStore(deviceId, sessionId).questionsOf(itemId)
 }
-
-/** 带题的助手消息画成的卡片。first 为假（同一条消息切出来的后面几块）时什么都不画 */
 export const AskCell = memo(function AskCell({
-  itemId,
   first,
   questions,
 }: {
@@ -45,185 +18,20 @@ export const AskCell = memo(function AskCell({
   first: boolean
   questions: readonly AskQuestion[]
 }) {
-  const theme = useTheme()
-  const { c, font } = theme
-  const t = useT()
-  const channel = useChannel()
+  const { c, font } = useTheme()
   const { deviceId, sessionId } = useTranscript()
   const store = useSessionStore(deviceId, sessionId)
   const answers = useSyncExternalStore(store.subscribeAnswers, store.getAnswers)
-  const meta = useSyncExternalStore(store.subscribeMeta, store.getMeta)
-  const [drafts, setDrafts] = useState<Record<string, Draft>>({})
-  const [busy, setBusy] = useState(false)
-  const [failure, setFailure] = useState<string | null>(null)
-  /** 发出去了、对面还没收下（排在队列里，等这个回合结束） */
-  const [queued, setQueued] = useState(false)
-  if (!first) return null
-  const inLastTurn = meta?.lastTurn != null && store.turnOf(itemId) === meta.lastTurn.id
-  const state = askState(questions, answers, inLastTurn, meta?.live ?? false)
-  const open = state === 'open' && !queued
-  const replies: AskReply[] = questions.flatMap((question) => {
-    const answer = answerOf(question, drafts[question.id])
-    return answer ? [{ questionItemId: question.id, question: question.title, answer }] : []
-  })
-  const edit = (id: string, next: Partial<Draft>) =>
-    setDrafts((all) => ({ ...all, [id]: { pick: null, text: '', ...all[id], ...next } }))
-  const send = async () => {
-    if (!open || busy || replies.length === 0) return
-    setBusy(true)
-    setFailure(null)
-    try {
-      await channel.command('session.send', {
-        deviceId,
-        sessionId,
-        text: askReplyText(replies),
-        now: true,
-      })
-      setQueued(true)
-    } catch (error) {
-      setFailure(whyNot(error, t))
-    } finally {
-      setBusy(false)
-    }
-  }
-
+  const answered = questions.filter((q) => answers[q.id] !== undefined)
+  if (!first || answered.length === 0) return null
   return (
-    <View
-      testID={`ask:${itemId}`}
-      style={[
-        styles.card,
-        {
-          borderColor: state === 'open' ? c.line3 : c.line2,
-          backgroundColor: c.raised,
-          borderRadius: theme.radius.l,
-        },
-      ]}
-    >
-      <View style={styles.head}>
-        <Text style={[styles.kind, { color: c.ink3, fontFamily: font.mono }]}>
-          ? {t('ask.title')}
-        </Text>
-        <Text
-          testID={`ask:${itemId}:state`}
-          style={[
-            styles.state,
-            { color: state === 'open' ? c.wait : c.ink3, fontFamily: font.mono },
-          ]}
-        >
-          {t(`ask.state.${state}`)}
-        </Text>
-      </View>
-      {questions.map((question, at) => {
-        const draft = drafts[question.id]
-        const answer = answers[question.id]
-        const hint = t(question.options.length > 0 ? 'ask.other' : 'ask.reply')
-        return (
-          <View
-            key={question.id}
-            style={[styles.question, at > 0 ? { borderTopColor: c.line1, ...styles.split } : null]}
-          >
-            <Text style={[styles.title, { color: c.ink, fontSize: font.size.body }]}>
-              {question.title}
-            </Text>
-            {open ? (
-              <>
-                {question.options.map((option, index) => {
-                  const checked = draft?.pick === index && !draft.text.trim()
-                  return (
-                    <Pressable
-                      // biome-ignore lint/suspicious/noArrayIndexKey: 建议的回答不会增删换位
-                      key={index}
-                      accessibilityRole="radio"
-                      accessibilityState={{ checked, disabled: busy }}
-                      disabled={busy}
-                      testID={`ask:${itemId}:${at}:pick:${index}`}
-                      onPress={() =>
-                        edit(question.id, { pick: draft?.pick === index ? null : index, text: '' })
-                      }
-                      style={({ pressed }) => [
-                        styles.option,
-                        {
-                          minHeight: theme.hit,
-                          borderColor: checked ? c.line3 : c.line2,
-                          borderRadius: theme.radius.m,
-                          backgroundColor: checked ? c.selBg : pressed ? c.press : c.panel,
-                        },
-                      ]}
-                    >
-                      <Text style={{ color: checked ? c.selFg : c.ink, fontSize: 15 }}>
-                        {checked ? '◉ ' : '○ '}
-                        {option}
-                      </Text>
-                    </Pressable>
-                  )
-                })}
-                <TextInput
-                  value={draft?.text ?? ''}
-                  onChangeText={(text) => edit(question.id, { text })}
-                  placeholder={hint}
-                  placeholderTextColor={c.ink3}
-                  accessibilityLabel={hint}
-                  editable={!busy}
-                  onSubmitEditing={() => void send()}
-                  submitBehavior="submit"
-                  testID={`ask:${itemId}:${at}:text`}
-                  style={[
-                    styles.input,
-                    {
-                      color: c.ink,
-                      borderColor: c.line2,
-                      backgroundColor: c.panel,
-                      borderRadius: theme.radius.m,
-                      minHeight: theme.hit,
-                    },
-                  ]}
-                />
-              </>
-            ) : state === 'answered' ? (
-              <Text
-                style={[
-                  styles.answer,
-                  {
-                    color: answer === undefined ? c.ink3 : c.ink,
-                    borderLeftColor: answer === undefined ? c.line2 : c.accent,
-                  },
-                ]}
-              >
-                {answer ?? t('ask.skipped')}
-              </Text>
-            ) : (
-              question.options.map((option, index) => (
-                // biome-ignore lint/suspicious/noArrayIndexKey: 同上
-                <Text key={index} style={{ color: c.ink2, fontSize: font.size.meta + 1 }}>
-                  · {option}
-                </Text>
-              ))
-            )}
-          </View>
-        )
-      })}
-      {failure ? (
-        <Text style={[styles.note, { color: c.err, fontSize: font.size.meta }]}>{failure}</Text>
-      ) : null}
-      {state === 'open' && queued ? (
-        <Text style={[styles.note, { color: c.ink2, fontSize: font.size.meta }]}>
-          {t('ask.queued')}
-        </Text>
-      ) : null}
-      {open ? (
-        <View style={styles.acts}>
-          <Text style={[styles.hint, { color: c.ink3, fontSize: font.size.meta }]}>
-            {t('ask.note')}
-          </Text>
-          <Button
-            label={t('ask.send')}
-            disabled={replies.length === 0}
-            busy={busy}
-            onPress={() => void send()}
-            testID={`ask:${itemId}:send`}
-          />
+    <View style={styles.card}>
+      {answered.map((q) => (
+        <View key={q.id} style={styles.question}>
+          <Text style={{ color: c.ink2, fontSize: font.size.body }}>{q.title}</Text>
+          <Text style={{ color: c.ink, fontSize: font.size.body }}>{answers[q.id]}</Text>
         </View>
-      ) : null}
+      ))}
     </View>
   )
 })
@@ -333,7 +141,7 @@ export function AskReplyText({ replies }: { replies: AskReply[] }) {
   return (
     <View style={styles.reply} testID="ask-reply">
       <Text style={{ color: c.ink3, fontSize: font.size.meta }}>{t('ask.replied')}</Text>
-      {replies.map((reply) => (
+      {distinctReplies(replies).map((reply) => (
         <View key={reply.questionItemId} style={styles.replyOne}>
           <Text
             style={[

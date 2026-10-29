@@ -26,6 +26,7 @@ import { CommentsContext } from './comments/context'
 import { CommentsHub } from './comments/hub'
 import { SelectBar } from './comments/SelectBar'
 import { draftKey } from './composer/drafts'
+import { PendingQuestions } from './requests/PendingQuestions'
 import { RequestSlot } from './requests/RequestSlot'
 import { Transcript } from './Transcript'
 import { compaction } from './usage/logic'
@@ -257,7 +258,19 @@ export function DetailScreen({ route, navigation }: Props) {
         )}
         <KeyboardStickyView offset={{ closed: 0, opened: insets.bottom }}>
           <SelectBar hub={comments} />
-          <RequestSlot store={store} maxHeight={cardMax} onRevise={revise} />
+          <RequestSlot
+            store={store}
+            maxHeight={(meta?.pendingQuestions.length ?? 0) > 0 ? cardMax / 2 : cardMax}
+            onRevise={revise}
+          />
+          <PendingQuestions
+            store={store}
+            maxHeight={
+              (meta?.requests.length ?? 0) > 0 || (meta?.settings.mode === 'plan' && meta.planTurn)
+                ? cardMax / 2
+                : cardMax
+            }
+          />
           <View
             style={{ paddingBottom: insets.bottom, backgroundColor: c.panel }}
             onLayout={(event) => setComposerHeight(event.nativeEvent.layout.height)}

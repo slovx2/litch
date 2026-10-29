@@ -247,6 +247,7 @@ export {
   askQuestionId,
   askReplyText,
   askState,
+  distinctReplies,
   gatherAnswers,
   parseAskReply,
 } from './projection/asks.mjs'
@@ -333,6 +334,14 @@ export {
   projectSnapshot,
 } from './projection/manage.mjs'
 export { localUserMessage, MAX_EXTRA_TEXT, MAX_IMAGES } from './projection/outgoing.mjs'
+export {
+  changesQuestions,
+  type PendingQuestion,
+  pendingQuestions,
+  pendingReplyText,
+  questionsOfView,
+  wrapQuestionId,
+} from './projection/pending-asks.mjs'
 export {
   collectAnswers,
   type QuestionEntries,

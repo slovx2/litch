@@ -957,6 +957,24 @@ test('投影：收尾调用的每条建议按顺序对上结果里的提案或�
   assert.equal(cardPlace(asking), 'tail')
   const buttonsOnly = wrapUpItem('w6', [], { suggestions: [] })
   assert.equal(quietOf(buttonsOnly), true)
+  // 只有成功调用的明确撤回才影响待答集合，失败的调用不能撤掉用户的问题。
+  for (const success of [true, false]) {
+    const withdrawal = projectItem({
+      type: 'dynamicToolCall',
+      id: 'withdraw',
+      namespace: 'litch_sessions',
+      tool: 'wrap_up',
+      arguments: { suggestions: [], withdraw_questions: [' 在这里接着修吗？ ', 17] },
+      status: 'completed',
+      contentItems: [],
+      success,
+      durationMs: 1,
+    } as never) as ToolCallItem
+    assert.deepEqual(
+      withdrawal.wrapUp?.withdrawQuestions,
+      success ? ['在这里接着修吗？'] : undefined,
+    )
+  }
 })
 
 test('投影：设备进程的提醒（kind="remind"）拆成事件，没有用户自己的话', () => {

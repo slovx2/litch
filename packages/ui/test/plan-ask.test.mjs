@@ -3,10 +3,15 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-const { markPlanAsked, planAskedIn, planToConfirm, settledPlan, settlePlan } = await import(
-  '../src/composer/plan-ask.ts'
-)
+const { latestPlanTurn, markPlanAsked, planAskedIn, planToConfirm, settledPlan, settlePlan } =
+  await import('../src/composer/plan-ask.ts')
 
+const itemOf = (id) => ({
+  id,
+  kind: kinds[id],
+  text: id === 'u' ? '用户发话' : '',
+  attachments: [],
+})
 const kinds = { u: 'userMessage', p1: 'plan', p2: 'plan', a: 'agentMessage' }
 const facts = (extra = {}) => ({
   mode: 'plan',
@@ -16,6 +21,45 @@ const facts = (extra = {}) => ({
   asked: false,
   settled: undefined,
   ...extra,
+})
+
+test('后台回合不会顶掉待确认计划；新稿替换旧稿', () => {
+  const original = facts().turn
+  const turns = [original, { id: 'wake', status: 'completed', itemIds: ['a'] }]
+  assert.equal(latestPlanTurn(turns, itemOf), original)
+  assert.equal(planToConfirm(facts({ turn: latestPlanTurn(turns, itemOf) })), 'p1')
+  const revised = { id: 'revision', status: 'completed', itemIds: ['p2'] }
+  assert.equal(latestPlanTurn([...turns, revised], itemOf), revised)
+})
+
+test('计划确认：用户自己发过话即收起；自发回合、纯回报和跨会话消息不算，自动回合里的用户插话算', () => {
+  const plan = facts().turn
+  const message = { id: 'm', kind: 'userMessage', text: '进度如何', attachments: [] }
+  const next = { id: 'next', status: 'completed', itemIds: ['m'] }
+  const get = (item) => (id) => (id === 'm' ? item : itemOf(id))
+  assert.equal(latestPlanTurn([plan, next], get(message)), undefined)
+  for (const origin of ['schedule', 'backgroundTask', 'peer', 'goal'])
+    assert.equal(latestPlanTurn([plan, { ...next, origin }], get(message)), plan)
+  assert.equal(latestPlanTurn([plan, next], get({ ...message, peer: {} })), plan)
+  assert.equal(
+    latestPlanTurn([plan, next], get({ ...message, event: { kind: 'wake' }, text: '' })),
+    plan,
+  )
+  assert.equal(
+    latestPlanTurn([plan, next], get({ ...message, event: { kind: 'notes' } })),
+    undefined,
+  )
+  assert.equal(
+    latestPlanTurn([plan, next], get({ ...message, system: { kind: 'scheduledTask' } })),
+    plan,
+  )
+  assert.equal(
+    latestPlanTurn(
+      [plan, { ...next, origin: 'backgroundTask', itemIds: ['a', 'm'] }],
+      get(message),
+    ),
+    undefined,
+  )
 })
 
 test('要问的情形：计划模式里，最后一个回合正常结束，里面出过计划', () => {

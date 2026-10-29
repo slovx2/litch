@@ -17,6 +17,7 @@
 //   三种皮肤、深浅两套下这几样东西不溢出。
 // 下面的 treeProbe、treeLooks 会被原样送进页面里执行，不能引用函数外面的东西。
 import type { BrowserWindow } from 'electron'
+import { pendingLooks } from './probe-pending-asks.mjs'
 
 export interface TreeSeen {
   /** 派子会话：侧栏里两个子会话挂在父会话下面，行上只有状态点和名字 */
@@ -67,6 +68,11 @@ export interface TreeSeen {
   tailBelow: boolean
   askShown: boolean
   askReplied: boolean
+  /** 待答问题跨真实模拟的子会话唤醒保留，新旧题共存，重复题合并，回答只收起对应题。 */
+  pendingSurvived: boolean
+  pendingCoexist: boolean
+  pendingDeduped: boolean
+  pendingAnswered: boolean
   wrapHere: boolean
   cardsOff: boolean
   /** 没调收尾时设备进程补的那一回合：不画提醒、气泡、过程和用时，只有补的那张卡片 */
@@ -373,7 +379,7 @@ export async function treeProbe(): Promise<TreeSeen> {
       tail.nextElementSibling.matches('.turn-foot, .running-line')) &&
     (wrapTurn?.querySelector('.proc')?.textContent ?? '').includes('建议')
   seen.tail = `${tail?.previousElementSibling?.className ?? '没有'} | ${wrapTurn?.querySelector('.proc')?.textContent ?? '没有过程'}`
-  const askBox = () => wrapTurn?.querySelector<HTMLElement>('.turn-tail .tail-ask')
+  const askBox = () => $('.pending-asks .tail-ask')
   const askShown =
     askBox()?.dataset.state === 'open' &&
     (askBox()?.querySelectorAll('button[data-act]').length ?? 0) === 2 &&
@@ -383,8 +389,8 @@ export async function treeProbe(): Promise<TreeSeen> {
     const said = $$('.main .umsg').at(-1)?.textContent ?? ''
     return (
       said.includes('在这里把解析器的单测补齐') &&
-      askBox()?.dataset.state === 'past' &&
-      (askBox()?.textContent ?? '').includes('在这里补')
+      wrapTurn?.querySelector<HTMLElement>('.turn-tail .tail-ask')?.dataset.state === 'past' &&
+      (wrapTurn?.querySelector('.tail-ask')?.textContent ?? '').includes('在这里把解析器的单测补齐')
     )
   })
   seen.ask = askBox()?.textContent ?? '没有'
@@ -420,14 +426,15 @@ export async function treeProbe(): Promise<TreeSeen> {
   // 第二张在这里做：本会话里发一条“在这里做：标题…”，卡片写“在这里做”、不起子会话
   const hereLeft = kids().length
   const secondWrap = () => wrapBox()?.querySelectorAll<HTMLElement>('[data-card="proposal"]')[1]
+  const hereMessage = () => $$('.main .sysm[data-sys="here"]').at(-1)
   secondWrap()?.querySelector<HTMLElement>('[data-act="here"]')?.click()
   const wrapHere = await until(
     () =>
       secondWrap()?.dataset.state === 'here' &&
-      ($$('.main .umsg').at(-1)?.textContent ?? '').startsWith('在这里做：在 Pi 上对一遍文案') &&
+      hereMessage()?.querySelector('.sysm-title')?.textContent === '在 Pi 上对一遍文案' &&
       kids().length === hereLeft,
   )
-  seen.here = `${secondWrap()?.dataset.state} ${$$('.main .umsg').at(-1)?.textContent ?? ''}`
+  seen.here = `${secondWrap()?.dataset.state} ${hereMessage()?.textContent ?? ''}`
   await idle()
 
   // “⋯”里关任务卡
@@ -654,6 +661,34 @@ export async function treeProbe(): Promise<TreeSeen> {
       $(`.row-line[data-session="${target}"]`)?.getAttribute('data-parent') === null,
   )
 
+  // —— 未答问题跨回合保留：用刚脱离的会话，避免前面提案数量的断言互相影响 ——
+  const pending = () => $$('.main .pending-asks [data-pending-question]')
+  const wakesBefore = $$('.main .sev[data-event="wake"]').length
+  await say('收尾后回报')
+  await until(() => pending().length >= 1)
+  const questionId = pending()[0]?.dataset.pendingQuestion
+  await until(() => $$('.main .sev[data-event="wake"]').length > wakesBefore, 15000)
+  await idle()
+  const pendingSurvived =
+    pending()[0]?.dataset.pendingQuestion === questionId &&
+    pending()[0]?.querySelector<HTMLButtonElement>('button[data-act="0"]')?.disabled === false
+  const pendingDeduped =
+    pending().filter((card) => (card.textContent ?? '').includes('解析器的单测')).length === 1
+  const pendingCoexist = await until(() => pending().length === 3)
+  pending()
+    .find((card) => card.dataset.pendingQuestion === questionId)
+    ?.querySelector<HTMLElement>('button[data-act="0"]')
+    ?.click()
+  const pendingAnswered = await until(
+    () =>
+      pending().length === 2 &&
+      pending().every((card) => card.dataset.pendingQuestion !== questionId),
+  )
+  seen.pending = pending()
+    .map((card) => card.textContent)
+    .join(' | ')
+  await idle()
+
   return {
     nested: nested && inside,
     bareRows,
@@ -681,6 +716,10 @@ export async function treeProbe(): Promise<TreeSeen> {
     tailBelow,
     askShown,
     askReplied,
+    pendingSurvived,
+    pendingCoexist,
+    pendingDeduped,
+    pendingAnswered,
     wrapHere,
     cardsOff,
     remindQuiet,
@@ -721,6 +760,9 @@ export async function treeLooks(parent: string): Promise<TreeLooks> {
   await sleep(200)
   const root = document.documentElement
   const was = { skin: root.dataset.skin, theme: root.dataset.theme }
+  const look = (
+    window as unknown as { __litchLook: { set(patch: { skin?: string; theme?: string }): void } }
+  ).__litchLook
   const rows: TreeLooks['rows'] = []
   const parts = [
     '.tree-card',
@@ -736,8 +778,7 @@ export async function treeLooks(parent: string): Promise<TreeLooks> {
   ]
   for (const skin of ['retro', 'human', 'standard']) {
     for (const theme of ['light', 'dark']) {
-      root.dataset.skin = skin
-      root.dataset.theme = theme
+      look.set({ skin, theme })
       await sleep(120)
       const overflow: string[] = []
       const hidden: string[] = []
@@ -759,9 +800,7 @@ export async function treeLooks(parent: string): Promise<TreeLooks> {
       rows.push({ look: `${skin}/${theme}`, overflow, hidden })
     }
   }
-  if (was.skin) root.dataset.skin = was.skin
-  if (was.theme) root.dataset.theme = was.theme
-  else delete root.dataset.theme
+  look.set({ ...(was.skin ? { skin: was.skin } : {}), ...(was.theme ? { theme: was.theme } : {}) })
   return { rows }
 }
 
@@ -792,6 +831,10 @@ const LABELS: Record<Exclude<keyof TreeSeen, 'seen'>, string> = {
   tailBelow: '收尾区在回合最下方、回答下面，过程里那一步写“建议”',
   askShown: '收尾的问题带两个回复按钮',
   askReplied: '点回复按钮发出按钮的话，问题折成一行写着回了哪个',
+  pendingSurvived: '子会话回报唤醒后原问题仍在输入框上方且能答',
+  pendingCoexist: '旧收尾问题与新的异步问题同时保留',
+  pendingDeduped: '重复提出同一待答问题只显示一次',
+  pendingAnswered: '回答旧问题只收起该题，其余待答问题不变',
   wrapHere: '卡片的“在这里做”在本会话发“在这里做：…”，卡片写在这里做、不起子会话',
   cardsOff: '“⋯”里关任务卡：提示可撤销（或说清楚设备服务还没有开关）',
   remindQuiet: '没调收尾时补的那一回合只有补的那张卡片，不画提醒、用户气泡、过程和用时',
@@ -837,6 +880,7 @@ export async function runTreeChecks(window: BrowserWindow): Promise<readonly [ob
     return (await window.webContents.executeJavaScript(`(${probe.toString()})(${list})`, true)) as T
   }
   const seen = await inPage(treeProbe)
+  const pending = await pendingLooks(window)
   const looks = await inPage(treeLooks, 's6')
-  return [{ ...seen, looks }, judgeTree(seen, looks)]
+  return [{ ...seen, looks, pending }, [...judgeTree(seen, looks), ...pending.failed]]
 }

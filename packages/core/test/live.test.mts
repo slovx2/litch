@@ -702,6 +702,11 @@ test('提问：答案按题目标识回给对面；回合结束时没答的请�
   const request = session.seen.view?.requests[0]
   assert.equal(request?.kind, 'question')
   if (request?.kind !== 'question') return
+  // 子会话/后台事件开的别的回合不能清掉仍在等的 RPC；题目仍按原 requestId 答给 harness。
+  server.notify('turn/started', { threadId: 'a', turn: turn('wake', [], { status: 'inProgress' }) })
+  server.notify('turn/completed', { threadId: 'a', turn: finished('wake') })
+  await settle()
+  assert.equal(session.seen.view?.requests[0]?.id, request.id)
   assert.deepEqual(
     request.questions.map((question) => [
       question.id,
@@ -729,6 +734,13 @@ test('提问：答案按题目标识回给对面；回合结束时没答的请�
   })
   await settle()
   assert.equal(session.seen.view?.requests.length, 1)
+  server.notify('turn/started', {
+    threadId: 'a',
+    turn: turn('report', [], { status: 'inProgress' }),
+  })
+  server.notify('turn/completed', { threadId: 'a', turn: finished('report') })
+  await settle()
+  assert.equal(session.seen.view?.requests.length, 1, '其他回合结束不撤销审批')
   server.notify('turn/completed', { threadId: 'a', turn: finished('t1') })
   await settle()
   assert.deepEqual(session.seen.view?.requests, [])

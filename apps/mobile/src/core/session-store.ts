@@ -12,6 +12,7 @@ import type {
   AgentThreadView,
   AskAnswers,
   CoreChannel,
+  PendingQuestion,
   SessionBackgroundView,
   SessionGoalView,
   SessionOp,
@@ -22,13 +23,16 @@ import type {
 } from '@litch/core'
 import {
   agentStatesOf,
+  changesQuestions,
   deriveBackground,
   gatherAnswers,
   isAgentSpawn,
   parseAskReply,
   proposedBy,
+  questionsOfView,
   reduceSession,
 } from '@litch/core'
+import { latestPlanTurn } from '../../../../packages/ui/src/composer/plan-ask.ts'
 import { type LatestTodo, latestTodo } from '../detail/todo/logic'
 import { experiment } from '../experiment'
 import { noteOpenStage, noteWork } from '../probe'
@@ -59,6 +63,7 @@ export interface TailSnapshot {
  * 能不能发、会做哪些事）或者整份快照到了才换一份新的；数组是拷贝，组件拿到的永远是不可变的值
  */
 export interface SessionMeta {
+  pendingQuestions: PendingQuestion[]
   title: SessionView['title']
   harness: string
   cwd: string
@@ -78,6 +83,7 @@ export interface SessionMeta {
    * 计划条目在回合结束、请求到达之前就已经在了
    */
   lastTurn: { id: string; status: TurnStatus; itemIds: readonly string[] } | null
+  planTurn: SessionMeta['lastTurn']
   /**
    * 对面不报后台任务的集合（can.backgroundTasks 为假）时，从已结束回合里还在跑的命令派生的那一份。
    * 报集合的是 null，用侧栏摘要上的 SessionSummary.background
@@ -396,6 +402,7 @@ export class SessionStore {
     const before = op.op === 'session.proposals' ? view.proposals : null
     const removed = op.op === 'item.remove' ? view.items[op.itemId] : undefined
     const reachedBefore = op.op === 'session.goalReached' ? view.goalReached?.turnId : undefined
+    if (changesQuestions(op, (id) => view.items[id])) this.metaDirty = true
     reduceSession(view, op)
     const mark = (turnId: string | undefined) => {
       if (turnId && this.dirty !== 'all') this.dirty.add(turnId)
@@ -409,6 +416,11 @@ export class SessionStore {
         this.todoDirty = true
         return
       case 'turn.remove':
+        this.recountAnswers(view)
+        mark(op.turnId)
+        this.metaDirty = true
+        this.todoDirty = true
+        return
       case 'turn.status':
         mark(op.turnId)
         // 回合开始、结束改变“有回合在跑”，也改变待办那个小按钮出不出
@@ -420,6 +432,8 @@ export class SessionStore {
         return
       case 'item.add': {
         this.itemTurn.set(op.item.id, op.turnId)
+        // 计划确认要区分用户发话与自发消息；插话可能没有新回合通知。
+        if (op.item.kind === 'userMessage') this.metaDirty = true
         mark(op.turnId)
         // 命令的状态决定不报集合的会话有没有后台任务在跑（meta.derived）
         // 子代理的状态也在条目上报（派出、等待的协作条目）
@@ -543,6 +557,7 @@ export class SessionStore {
     if (this.metaDirty) {
       this.metaDirty = false
       this.meta = {
+        pendingQuestions: questionsOfView(view),
         title: view.title,
         harness: view.harness,
         cwd: view.cwd,
@@ -556,6 +571,7 @@ export class SessionStore {
         forkedFrom: view.forkedFrom,
         running,
         lastTurn: lastTurnOf(view),
+        planTurn: latestPlanTurn(view.turns, (id) => view.items[id]) ?? null,
         derived: view.can.backgroundTasks ? null : deriveBackground(view.turns, view.items),
         goal: view.goal ?? null,
         agents: view.agents,

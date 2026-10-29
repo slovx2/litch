@@ -986,3 +986,36 @@ a.btn {
   color: var(--ink-2);
   font-size: 12px;
 }
+.pending-asks {
+  flex: 0 1 auto;
+  min-height: 32px;
+  max-height: 40vh;
+  overflow: auto;
+  border-top: 1px solid var(--line-2);
+  background: var(--panel);
+}
+.pending-asks-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 16px;
+  color: var(--ink-2);
+  background: var(--panel);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.pending-asks-body {
+  max-width: var(--tr-max);
+  margin: 0 auto;
+  padding: 0 16px 8px;
+}
+.pending-asks-reply {
+  display: flex;
+  gap: 8px;
+}
+.pending-asks-reply .req-input {
+  flex: 1;
+  min-width: 0;
+}
