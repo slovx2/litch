@@ -25,6 +25,8 @@
 
 核心 `PreviewKind` 与预算已经预留 pdf/docx/xlsx/csv/html/media。未提供模块的格式照旧看源码或类型占位；增加模块即启用，没有第二份扩展名表要修改。仅 `.md/.markdown`、PNG/JPEG/静态 GIF/WebP、静态 SVG 在第一期启用；不支持的图片不交给任意解码器尝试。
 
+PDF 已接入：实现、安全预算、许可证和无前台验收入口见 [pdf/README.md](pdf/README.md)。依赖和共享入口按合并顺序接入，后续线保留已有 PDF 翻译导入与 CSP 的本地 Worker/WASM 声明。
+
 ## 验收
 
 `node scripts/check-file-preview.mjs`：生产构建 + CSP，隔离 headless Chrome for Testing 的真实文件面板，六套外观、窄布局、Markdown/相对图/Mermaid/恶意 SVG、重复切换释放。没有可见窗口。报告与截图在本工作树 `.local/file-preview-check/<运行>/`。

@@ -1,0 +1,16 @@
+export const zhPreviewPdf = {
+  'preview.pdf.title': 'PDF 预览',
+  'preview.pdf.controls': 'PDF 翻页和缩放',
+  'preview.pdf.page': '页码',
+  'preview.pdf.pageLabel': '第 {page} 页',
+  'preview.pdf.total': '/ {count}',
+  'preview.pdf.previous': '上一页',
+  'preview.pdf.next': '下一页',
+  'preview.pdf.loading': '正在渲染 PDF…',
+  'preview.pdf.invalid': '无法预览此 PDF，文件可能已损坏。',
+  'preview.pdf.encrypted': '此 PDF 需要密码，请在其他应用中打开。',
+  'preview.pdf.pages': 'PDF 超过 200 页，无法预览。',
+  'preview.pdf.size': 'PDF 超过 20 MiB 或页面尺寸过大，无法预览。',
+  'preview.pdf.timeout': 'PDF 处理超时，已停止预览。',
+  'preview.pdf.textLimit': '本页文字过多，仅显示页面图像。',
+}

@@ -18,6 +18,7 @@ import { zhPasswords } from './zh-CN-passwords.ts'
 import { zhPeer } from './zh-CN-peer.ts'
 import { zhPower } from './zh-CN-power.ts'
 import { zhPreview } from './zh-CN-preview.ts'
+import { zhPreviewPdf } from './zh-CN-preview-pdf.ts'
 import { zhProposals } from './zh-CN-proposals.ts'
 import { zhRestart } from './zh-CN-restart.ts'
 import { zhRupgrade } from './zh-CN-rupgrade.ts'
@@ -27,6 +28,7 @@ import { zhWorktrees } from './zh-CN-worktrees.ts'
 
 export const zhCN = {
   ...zhPreview,
+  ...zhPreviewPdf,
   ...zhPower,
   ...zhAutomation,
   ...zhChrome,

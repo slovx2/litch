@@ -5,7 +5,8 @@ import { defineConfig, type Plugin } from 'vite'
 // 内容安全策略只在构建产物里加：开发服务器要往页面里插热更新的内联脚本，加了会被拦
 const CSP = [
   "default-src 'self'",
-  "script-src 'self'",
+  "script-src 'self' 'wasm-unsafe-eval'",
+  "worker-src 'self'",
   "style-src 'self' 'unsafe-inline'",
   "font-src 'self'",
   "img-src 'self' data: blob:",

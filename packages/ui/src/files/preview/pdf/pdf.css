@@ -1,0 +1,110 @@
+.fp-pdf {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+}
+.fp-pdf-tools {
+  border: 0;
+  margin: 0;
+  min-inline-size: 0;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.fp-pdf-tools form {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.fp-pdf-tools input {
+  width: 4ch;
+  padding: 3px 5px;
+  text-align: center;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r1);
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+}
+.fp-pdf-pagination,
+.fp-pdf-zoom {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.fp-pdf-zoom {
+  margin-inline-start: auto;
+}
+.fp-pdf-scroll {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  background: var(--sunken);
+  overflow-anchor: none;
+}
+.fp-pdf-pages {
+  position: relative;
+}
+.fp-pdf-page {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  overflow: hidden;
+  outline: 1px solid var(--line-2);
+  color-scheme: only light;
+  background: Canvas;
+  color: CanvasText;
+}
+.fp-pdf-page canvas {
+  display: block;
+}
+.fp-pdf-page-status {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  pointer-events: none;
+  font-family: var(--ui);
+  font-size: 12px;
+}
+.fp-pdf-page[data-state="textLimit"] .fp-pdf-page-status {
+  inset: auto 0 0;
+  background: Canvas;
+}
+/* PDF.js 文字层用 PDF 字体/字号定位。范围只限文件页，不继承对话字体或全局正文排版。 */
+.fp-pdf-text {
+  position: absolute;
+  inset: 0;
+  overflow: clip;
+  line-height: 1;
+  text-align: initial;
+  text-size-adjust: none;
+  letter-spacing: normal;
+  word-spacing: normal;
+  transform-origin: 0 0;
+  --min-font-size: 1;
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+  --min-font-size-inv: calc(1 / var(--min-font-size));
+}
+.fp-pdf-text :is(span, br) {
+  position: absolute;
+  white-space: pre;
+  color: transparent;
+  cursor: text;
+  user-select: text;
+  transform-origin: 0 0;
+}
+.fp-pdf-text > :not(.markedContent),
+.fp-pdf-text .markedContent span:not(.markedContent) {
+  --font-height: 0;
+  --scale-x: 1;
+  --rotate: 0deg;
+  font-size: calc(var(--text-scale-factor) * var(--font-height));
+  transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
+}
+.fp-pdf-text .markedContent {
+  display: contents;
+}
+.fp-pdf-text ::selection {
+  background: Highlight;
+}

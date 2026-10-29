@@ -70,6 +70,14 @@ export function collectLicenses(out, roots = ROOTS) {
   const missing = []
   for (const [key, { dir, manifest }] of packages) {
     const files = readdirSync(dir).filter((file) => LICENSE_FILE.test(file))
+    // PDF 的字体、CMap、WASM 分别附带许可，根目录的 Apache 许可不能替代它们。
+    if (manifest.name === 'pdfjs-dist') {
+      for (const folder of ['cmaps', 'standard_fonts', 'wasm']) {
+        for (const file of readdirSync(join(dir, folder))) {
+          if (/^(LICENSE|NOTICE)([_.-]|$)/i.test(file)) files.push(join(folder, file))
+        }
+      }
+    }
     if (files.length === 0) {
       missing.push(key)
       continue

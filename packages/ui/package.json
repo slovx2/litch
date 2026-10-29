@@ -24,6 +24,7 @@
     "highlight.js": "11.12.0",
     "marked": "18.0.14",
     "mermaid": "12.1.0",
+    "pdfjs-dist": "6.4.299",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "uqr": "0.1.3"

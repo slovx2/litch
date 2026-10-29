@@ -16,6 +16,7 @@ import { enPasswords } from './en-passwords.ts'
 import { enPeer } from './en-peer.ts'
 import { enPower } from './en-power.ts'
 import { enPreview } from './en-preview.ts'
+import { enPreviewPdf } from './en-preview-pdf.ts'
 import { enProposals } from './en-proposals.ts'
 import { enRestart } from './en-restart.ts'
 import { enRupgrade } from './en-rupgrade.ts'
@@ -30,6 +31,7 @@ const plural = (n: string | number | undefined, one: string, many: string) =>
 
 export const en: Record<MessageKey, Entry> = {
   ...enPreview,
+  ...enPreviewPdf,
   ...enPower,
   ...enAutomation,
   ...enChrome,
