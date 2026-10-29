@@ -66,13 +66,14 @@ import { createMockInstall } from './mock-install.mjs'
 import { mockAccountLimits } from './mock-limits.mjs'
 import { createMockMachine } from './mock-machine.mjs'
 import { createMockManagement } from './mock-manage.mjs'
+import { createMockManagers } from './mock-manager.mjs'
 import { createMockPairing } from './mock-pairing.mjs'
 import { createMockPeer } from './mock-peer.mjs'
 import { createMockRemoteUpgrade } from './mock-remote-upgrade.mjs'
 import { createMockRestart } from './mock-restart.mjs'
 import { createMockService } from './mock-service.mjs'
 import { createMockSystem } from './mock-system.mjs'
-import { createMockTasks } from './mock-tasks.mjs'
+import { createMockTasks, type MockTasksHost } from './mock-tasks.mjs'
 import { createMockTerminals } from './mock-terminals.mjs'
 import { createMockTree } from './mock-tree.mjs'
 import { createMockWorktrees, shownOf } from './mock-worktrees.mjs'
@@ -1860,7 +1861,7 @@ export function createMockCore(options: MockCoreOptions): MockCore {
   })
 
   // ---------- 定时任务（mock-tasks.mts） ----------
-  const tasks = createMockTasks({
+  const tasksHost: MockTasksHost = {
     clock,
     stepMs: chunkMs,
     lang,
@@ -1969,6 +1970,25 @@ export function createMockCore(options: MockCoreOptions): MockCore {
         updatedAt: clock.now(),
         ...(watched ? {} : { unread: true }),
       })
+    },
+  }
+  const tasks = createMockTasks(tasksHost)
+  const managers = createMockManagers({
+    ...tasksHost,
+    add(deviceId, session) {
+      sidebars.get(deviceId)?.sessions.push(session)
+      emit(`sidebar:${deviceId}`, [{ op: 'session.upsert', session }])
+    },
+    mark(deviceId, threadId, manager) {
+      const marked = {
+        title: manager.name || manager.scope,
+        litchManager: { managerId: manager.id, role: 'manager' as const },
+      }
+      updateSummary(deviceId, threadId, marked)
+      if (manager.status === 'ended') {
+        const view = loadSession(deviceId, threadId)
+        applySessionOps(view, [{ op: 'session.state', live: false, note: null }])
+      }
     },
   })
   // 一开始就跟定时任务有关的示例会话：侧栏那几行带着记号
@@ -2598,6 +2618,8 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       }
       const tuned = harnessConfig.command(name, params)
       if (tuned !== undefined) return tuned
+      const managerResult = managers.command(name, params)
+      if (managerResult) return managerResult
       const scheduled = tasks.command(name, params)
       if (scheduled !== undefined) return scheduled
       const paired = pairing.command(name, params)
@@ -3289,6 +3311,9 @@ export function createMockCore(options: MockCoreOptions): MockCore {
       // 08 号：远程会话在这台电脑上的动静（mock-machine.mts）
       if (topic.kind === 'machine') return machine.subscribe(sink)
       // 定时任务（mock-tasks.mts）
+      if (topic.kind === 'managers') return managers.subscribe(topic.deviceId, sink)
+      if (topic.kind === 'managerBoard')
+        return managers.subscribe(topic.deviceId, sink, topic.managerId)
       if (topic.kind === 'tasks') return tasks.subscribe(topic.deviceId, sink)
       // 扫码绑定手机（mock-pairing.mts）
       if (topic.kind === 'pairing') return pairing.subscribe(topic.deviceId, sink)

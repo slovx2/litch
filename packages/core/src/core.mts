@@ -1565,6 +1565,19 @@ export function createCore(options: CoreOptions): Core {
         return device.diffs.open(topic.root, topic.scope, topic.sessionId ?? null, sink)
       }
       // 定时任务：设备没连上时给上次知道的，不支持时 available 是 false
+      if (topic.kind === 'managers' || topic.kind === 'managerBoard') {
+        sink.snapshot(
+          topic.kind === 'managers'
+            ? { deviceId: topic.deviceId, available: null, managers: [] }
+            : {
+                deviceId: topic.deviceId,
+                managerId: topic.managerId,
+                available: null,
+                board: null,
+              },
+        )
+        return () => {}
+      }
       if (topic.kind === 'tasks') return device.tasks.open(sink)
       if (topic.kind === 'pairing') return device.pairing.open(sink)
       // 手机批准：设备不支持时 available 是 false，照样成立
