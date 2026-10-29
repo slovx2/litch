@@ -133,12 +133,7 @@
   color: var(--ink-3);
   opacity: 0.55;
 }
-/* 别的会话发来的消息：位置同用户消息，底色换成面板色、虚线边，最上面一行写是谁发来的（照 Claude 桌面端的 From X） */
-.umsg.peer {
-  background: var(--panel);
-  border-style: dashed;
-  border-color: var(--line-3);
-}
+/* 别的会话发来的消息（messages.tsx）不是用户的话：同系统卡片靠左铺满，展开后这一行是标记和点过去的按钮，都靠左排 */
 .peer-head {
   display: flex;
   align-items: center;
@@ -166,7 +161,6 @@
   font-size: 11px;
 }
 .peer-open {
-  margin-left: auto;
   padding: 0;
   border: 0;
   background: none;
@@ -174,13 +168,10 @@
   font: inherit;
   cursor: pointer;
 }
-.peer-open + .peer-open {
-  margin-left: 0;
-}
 .peer-open:hover {
   text-decoration: underline;
 }
-/* 发送方那边“发消息给”的详情：收件方的名字，后面是点过去的按钮 */
+/* 发送方那边“发消息给”的详情：收件方的名字，点过去的按钮排在最右 */
 .peer-to {
   display: flex;
   align-items: center;
@@ -189,6 +180,9 @@
   padding: 6px 12px 8px;
   font-size: 12px;
   line-height: 18px;
+}
+.peer-to > .peer-open:first-of-type {
+  margin-left: auto;
 }
 .umsg-text {
   white-space: pre-wrap;
@@ -201,11 +195,6 @@
   -webkit-line-clamp: 20;
   line-clamp: 20;
   overflow: hidden;
-}
-/* 别的会话发来的先收成 4 行，点开看全文 */
-.umsg.peer .umsg-text.clamp {
-  -webkit-line-clamp: 4;
-  line-clamp: 4;
 }
 .umsg .atts {
   display: flex;

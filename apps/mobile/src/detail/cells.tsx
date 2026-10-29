@@ -46,110 +46,64 @@ export type Props<T extends Row['type']> = { row: Extract<Row, { type: T }> }
 
 const pressed = (c: Palette) => ({ backgroundColor: c.press })
 
-/** 别的会话发来的话超过这么多行、字先收起来 */
-const PEER_LINES = 4
-const _PEER_CHARS = 200
-
+/**
+ * 用户消息：靠右的气泡，只给用户自己说的话。
+ * 别的会话发来的（row.peer）不是用户的话：同系统消息收成一行（CompactRow），点开在原处、靠左展开原文
+ */
 export const UserCell = memo(function UserCell({ row }: Props<'user'>) {
   const theme = useTheme()
   const { c, font, radius } = theme
   const t = useT()
-  const { turnMenu, viewImage } = useTranscript()
+  const { turnMenu } = useTranscript()
   const toggle = useToggleInPlace()
-  const images = row.attachments.filter((each) => each.kind === 'image' && each.url)
-  const others = row.attachments.filter((each) => !(each.kind === 'image' && each.url))
-  // 别的会话发来的：原话照登，不认答题、评论这些格式
   const peer = row.peer
-  // 答模型边干活边问的题时发的那一段：画成题目和回答
-  const replies = peer ? null : parseAskReply(row.text)
-  // 开头带评论的：评论画成卡片，下面才是打的字
-  const comments = replies || peer ? null : commentsOfRow(row)
-  const text = comments ? comments.rest : row.text
-  // 别的会话发来的长话先收成几行，点一下在原处展开、再点收起
-  const folds = peer !== undefined
-  const menu = () => {
-    notePressed(row.turnId, row.key)
-    turnMenu(row.turnId)
-  }
-  // 收着的时候和系统消息一样是一行（CompactRow）；展开了是下面那个带标题的气泡，能长按出回合菜单
-  if (peer && !row.expanded)
+  if (peer)
     return (
       <CompactRow
         testID="peer-message"
         mark="✉"
         source={peer.name ? t('peer.from', { name: peer.name }) : t('peer.fromUnnamed')}
-        summary={text}
-        open={false}
+        summary={row.text}
+        open={row.expanded === true}
         onPress={() => toggle(row.key, row.turnId)}
-      />
+      >
+        {peer.bypass ? (
+          <Text style={[styles.peerTag, { color: c.wait, fontSize: font.size.meta }]}>
+            {t('peer.bypass')}
+          </Text>
+        ) : null}
+        <UserAttachments row={row} />
+        {/* 对方的原话照登，不认答题、评论这些格式 */}
+        <Text selectable style={[styles.peerText, { color: c.ink2, fontSize: font.size.meta }]}>
+          {row.text}
+        </Text>
+      </CompactRow>
     )
+  // 答模型边干活边问的题时发的那一段：画成题目和回答
+  const replies = parseAskReply(row.text)
+  // 开头带评论的：评论画成卡片，下面才是打的字
+  const comments = replies ? null : commentsOfRow(row)
+  const text = comments ? comments.rest : row.text
+  const menu = () => {
+    notePressed(row.turnId, row.key)
+    turnMenu(row.turnId)
+  }
   return (
     <View style={styles.userWrap}>
       <Pressable
         onLongPress={menu}
-        onPress={folds ? () => toggle(row.key, row.turnId) : undefined}
-        accessibilityState={folds ? { expanded: row.expanded === true } : undefined}
         style={({ pressed: down }) => [
           styles.userBubble,
           // 气泡右下角收小一点，像从右边说出来的；人文皮肤是强调色的淡底、不画线
           { borderRadius: radius.l, borderBottomRightRadius: radius.s },
-          peer
-            ? { backgroundColor: c.panel, borderColor: c.line3, borderStyle: 'dashed' }
-            : theme.skin === 'human'
-              ? { backgroundColor: c.sel, borderColor: 'transparent' }
-              : { backgroundColor: c.sunken, borderColor: c.line2 },
+          theme.skin === 'human'
+            ? { backgroundColor: c.sel, borderColor: 'transparent' }
+            : { backgroundColor: c.sunken, borderColor: c.line2 },
           down ? pressed(c) : null,
         ]}
-        testID={peer ? 'peer-message' : 'user-message'}
+        testID="user-message"
       >
-        {peer ? (
-          <Text style={[styles.peerHead, { color: c.ink2, fontSize: font.size.meta }]}>
-            <Text style={{ color: c.accent }}>✉ </Text>
-            {peer.name ? t('peer.from', { name: peer.name }) : t('peer.fromUnnamed')}
-            {peer.bypass ? <Text style={{ color: c.wait }}>{` · ${t('peer.bypass')}`}</Text> : null}
-          </Text>
-        ) : null}
-        {images.length > 0 ? (
-          <View style={styles.thumbs}>
-            {images.map((image, index) => (
-              <Pressable
-                // biome-ignore lint/suspicious/noArrayIndexKey: 同一条消息里的图片不会重排
-                key={index}
-                accessibilityRole="imagebutton"
-                accessibilityLabel={t('attachment.view')}
-                onPress={() => image.url && viewImage(image.url)}
-              >
-                <Image
-                  source={{ uri: image.url }}
-                  style={[styles.thumb, { borderColor: c.line2, borderRadius: radius.s }]}
-                />
-              </Pressable>
-            ))}
-          </View>
-        ) : null}
-        {others.length > 0 ? (
-          <View style={styles.chips}>
-            {others.map((each, index) => (
-              <Text
-                // biome-ignore lint/suspicious/noArrayIndexKey: 同上
-                key={index}
-                numberOfLines={1}
-                style={[
-                  styles.chip,
-                  {
-                    color: c.ink2,
-                    borderColor: c.line2,
-                    borderRadius: radius.s,
-                    fontFamily: font.mono,
-                  },
-                ]}
-              >
-                {t(`attachment.${each.kind}`)}
-                {each.label ? ` · ${each.label}` : ''}
-              </Text>
-            ))}
-          </View>
-        ) : null}
+        <UserAttachments row={row} />
         {comments ? (
           <CommentCards comments={comments.comments} turnId={row.turnId} onLongPress={menu} />
         ) : null}
@@ -157,18 +111,12 @@ export const UserCell = memo(function UserCell({ row }: Props<'user'>) {
           <AskReplyText replies={replies} />
         ) : text ? (
           <Text
-            numberOfLines={folds && !row.expanded ? PEER_LINES : undefined}
             style={[
               styles.userText,
               { color: c.ink, fontSize: font.size.body, fontFamily: font.ui },
             ]}
           >
-            {peer ? text : <MentionedText text={text} sessions={row.sessions} />}
-          </Text>
-        ) : null}
-        {folds ? (
-          <Text style={{ color: c.accent, fontSize: font.size.meta }}>
-            {t(row.expanded ? 'sysmsg.collapse' : 'sysmsg.expand')}
+            <MentionedText text={text} sessions={row.sessions} />
           </Text>
         ) : null}
       </Pressable>
@@ -181,6 +129,60 @@ export const UserCell = memo(function UserCell({ row }: Props<'user'>) {
     </View>
   )
 })
+
+/** 消息带的附件：图片是能点开的缩略图，别的是一个个小片 */
+function UserAttachments({ row }: Props<'user'>) {
+  const { c, font, radius } = useTheme()
+  const t = useT()
+  const { viewImage } = useTranscript()
+  const images = row.attachments.filter((each) => each.kind === 'image' && each.url)
+  const others = row.attachments.filter((each) => !(each.kind === 'image' && each.url))
+  return (
+    <>
+      {images.length > 0 ? (
+        <View style={styles.thumbs}>
+          {images.map((image, index) => (
+            <Pressable
+              // biome-ignore lint/suspicious/noArrayIndexKey: 同一条消息里的图片不会重排
+              key={index}
+              accessibilityRole="imagebutton"
+              accessibilityLabel={t('attachment.view')}
+              onPress={() => image.url && viewImage(image.url)}
+            >
+              <Image
+                source={{ uri: image.url }}
+                style={[styles.thumb, { borderColor: c.line2, borderRadius: radius.s }]}
+              />
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+      {others.length > 0 ? (
+        <View style={styles.chips}>
+          {others.map((each, index) => (
+            <Text
+              // biome-ignore lint/suspicious/noArrayIndexKey: 同上
+              key={index}
+              numberOfLines={1}
+              style={[
+                styles.chip,
+                {
+                  color: c.ink2,
+                  borderColor: c.line2,
+                  borderRadius: radius.s,
+                  fontFamily: font.mono,
+                },
+              ]}
+            >
+              {t(`attachment.${each.kind}`)}
+              {each.label ? ` · ${each.label}` : ''}
+            </Text>
+          ))}
+        </View>
+      ) : null}
+    </>
+  )
+}
 
 /**
  * 写完的块（不再长）第一次排好版后把高度钉死：宽高都定了，布局引擎就不再调它的测量函数。
@@ -620,7 +622,8 @@ export const styles = StyleSheet.create({
     gap: 6,
   },
   userText: { lineHeight: 22 },
-  peerHead: { fontWeight: '600' },
+  peerTag: { paddingBottom: 2 },
+  peerText: { lineHeight: 18, paddingBottom: 4 },
   thumbs: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   thumb: { width: 72, height: 72, borderWidth: 1 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },

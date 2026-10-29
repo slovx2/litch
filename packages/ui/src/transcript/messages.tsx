@@ -92,7 +92,7 @@ interface UserMessageProps extends ItemRef {
 /**
  * 用户消息：靠右的气泡。很长的时候先收成 20 行，可以展开。
  * 设备进程注入的回报、唤醒（item.event）画成气泡上面的一条系统提示；唤醒的回合没有用户自己的话，只有那一条。
- * 别的会话发来的（item.peer）换一种底色，最上面一行写是谁发来的；正文是对方的原话，不认评论、答题这些格式，先收成几行。
+ * 别的会话发来的（item.peer）不是用户的话：同系统卡片收成一行、靠左，展开是对方的原话，不认评论、答题这些格式。
  * Litch 替用户发的话（item.system：定时任务、子会话的简报、在这里做）画成系统卡片（SystemCard.tsx）
  */
 export const UserMessage = memo(function UserMessage({
@@ -191,24 +191,14 @@ export const UserMessage = memo(function UserMessage({
   const message = item.system ? (
     <SystemCard {...ref} item={item} system={item.system} />
   ) : (
-    <div
-      className={peer ? 'umsg peer' : 'umsg'}
-      data-anchor={`u:${ref.itemId}`}
-      data-peer={peer ? '' : undefined}
-      ref={bubble}
-    >
-      {peer ? <PeerHead deviceId={ref.deviceId} peer={peer} /> : null}
+    <div className="umsg" data-anchor={`u:${ref.itemId}`} ref={bubble}>
       <UserAttachments attachments={item.attachments} />
       {comments ? <SentComments {...ref} comments={comments.comments} /> : null}
       {replies ? (
         <AskReplyBody replies={replies} />
       ) : text ? (
         <div className={open ? 'umsg-text' : 'umsg-text clamp'} ref={body}>
-          {peer ? (
-            text
-          ) : (
-            <MentionedText deviceId={ref.deviceId} text={text} sessions={item.sessions} />
-          )}
+          <MentionedText deviceId={ref.deviceId} text={text} sessions={item.sessions} />
         </div>
       ) : null}
       {long || open ? (
@@ -223,8 +213,7 @@ export const UserMessage = memo(function UserMessage({
           {t(open ? 'message.collapse' : 'message.expand')}
         </button>
       ) : null}
-      {/* 别的会话发来的话不是自己插的，不在它上面切 */}
-      {turnId && !(steered && peer) ? (
+      {turnId ? (
         <TurnActions {...ref} turnId={turnId} steered={steered} onEdit={() => setEditing(true)} />
       ) : null}
     </div>

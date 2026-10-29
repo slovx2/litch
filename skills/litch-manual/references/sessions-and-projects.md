@@ -174,8 +174,9 @@ explain it:
   brief", "Fork brief" or "Handed-off task", with the session it came from, which opens it), and "Do it
   here" on a suggested-task card ("Task card · Do it here"). The card shows the title and the start of
   the task; Show full text shows exactly what the model received, Show less folds it again. A message
-  another session sent with `litch_sessions.send` shows as "Message from …" (as below), folded to four
-  lines until you expand it. Desktop and phone alike.
+  another session sent with `litch_sessions.send` shows as "Message from …" (as below), folded to one
+  line until you expand it. These cards sit on the left at the width of the answers; the right side is
+  only for what you typed yourself. Desktop and phone alike.
 - **To-dos**: the to-do list a harness keeps (Claude Code, OpenCode, ACP agents, Codex) shows in the
   info rail on the right, with the latest list staying until the next one replaces it; when the rail
   doesn't fit it shows in the conversation instead. On the phone a small "To-do 2/6" button sits above
@@ -370,9 +371,10 @@ woken to continue.
   the model is told that Litch, not you, stopped it.
 - **Messages from other Claude sessions**: Claude Code sessions on the same computer can message each
   other (`ListAgents`, `SendMessage`), including the Claude desktop app's sessions and Claude Code in a
-  terminal. A message that reaches a Litch session shows as "Message from …" in place of your own
-  message, folded to four lines until expanded (with "Sender skips approvals" when the sender runs tools without asking, and "Open in
-  Claude" when it came from a Claude desktop session); an idle session handles it in a turn of its own,
+  terminal. A message that reaches a Litch session shows as a "Message from …" card on the left, not as
+  your own message, folded to one line until expanded (with "Sender skips approvals" when the sender
+  runs tools without asking, and "Open session" or "Open in Claude" when the sender is a Litch session
+  or a Claude desktop session); an idle session handles it in a turn of its own,
   a busy one right after its current step. On the sending side the step reads "Message …". This is the
   device setting `harness.claude-code.crossSessionInbox` (on by default), and works only between
   sessions on the same computer. A session keeps the same address while Litch restarts its Claude Code
