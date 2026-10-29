@@ -384,7 +384,7 @@ export async function treeProbe(): Promise<TreeSeen> {
       tail.nextElementSibling.matches('.turn-foot, .running-line')) &&
     (wrapTurn?.querySelector('.proc')?.textContent ?? '').includes('建议')
   seen.tail = `${tail?.previousElementSibling?.className ?? '没有'} | ${wrapTurn?.querySelector('.proc')?.textContent ?? '没有过程'}`
-  const askBox = () => $('.pending-asks .tail-ask')
+  const askBox = () => $('.pending-asks [data-pending-question]')
   const askShown =
     askBox()?.dataset.state === 'open' &&
     (askBox()?.querySelectorAll('button[data-act]').length ?? 0) === 2 &&

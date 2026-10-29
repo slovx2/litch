@@ -343,6 +343,18 @@
 [data-skin="retro"] .req-q {
   text-shadow: var(--tglow);
 }
+/* 待答问题和审批卡一样：实色边加错位的影子，题之间是虚线 */
+[data-skin="retro"] .pending-asks {
+  border-color: var(--wait);
+  box-shadow: 4px 4px 0 var(--wait);
+}
+[data-skin="retro"] .pending-ask {
+  border-top-style: dashed;
+  border-top-color: var(--line-2);
+}
+[data-skin="retro"] .pending-ask-q {
+  text-shadow: var(--tglow);
+}
 [data-skin="retro"] .req-foot {
   border-top-style: dashed;
   border-top-color: var(--line-2);

@@ -48,9 +48,12 @@ export const TurnTail = memo(function TurnTail({
         return (
           <div key={item.id}>
             {ask && answer !== undefined ? (
-              <div className="tail-ask" data-state="past">
+              <div className="tail-ask" data-state="past" title={ask}>
+                <i className="st" />
                 <span className="ell grow">{ask}</span>
-                <span className="tail-ask-replied">{t('wrap.replied', { label: answer })}</span>
+                <span className="tail-ask-replied ell" title={answer}>
+                  {t('wrap.replied', { label: answer })}
+                </span>
               </div>
             ) : null}
             {item.kind === 'toolCall' && item.wrapUp?.suggestions.length === 0 ? null : (

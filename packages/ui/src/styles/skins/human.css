@@ -343,6 +343,21 @@
 [data-skin="human"] .req-foot {
   padding-left: 18px;
 }
+/* 待答问题和审批卡一样 */
+[data-skin="human"] .pending-asks {
+  border-radius: 16px;
+  box-shadow: var(--soft);
+}
+[data-skin="human"] .pending-asks-head {
+  height: 38px;
+  padding-left: 18px;
+}
+[data-skin="human"] .pending-ask {
+  padding: 12px 14px 14px 18px;
+}
+[data-skin="human"] .pending-ask-q {
+  font-size: 14px;
+}
 [data-skin="human"] .tray {
   border-color: var(--line-1);
 }

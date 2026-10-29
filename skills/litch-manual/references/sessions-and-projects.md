@@ -121,8 +121,8 @@ explain it:
   Anthropic subscription, Codex with ChatGPT) it also lists the plan limits: the 5-hour and weekly
   limits, per-model weekly limits when there are any, how much of each is used and when it resets. API
   keys and third-party providers have no plan limits, and those rows are not shown.
-  桌面和手机的压缩状态统一显示「正在压缩上下文」和「已压缩上下文」（英文
-  “Compacting context” / “Context compacted”）；中断且未完成时仍显示「压缩没有完成」。
+  Compaction shows in the conversation as a divider: “Compacting context” while it runs, “Context
+  compacted” when done (manual and automatic alike), “Compaction didn’t finish” when it was cut short.
 - **Side panel**: Files (tree, search, read-only viewer, add a file to the conversation), Diff (all /
   staged / unstaged, stage, unstage, discard, comment on lines; comments go with the next message),
   Browser, Suggested tasks, Background tasks, Goal, Side chat.

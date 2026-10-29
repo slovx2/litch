@@ -970,55 +970,19 @@ button.agent-row:hover {
     animation: none;
   }
 }
+/* 收尾留的问题答过之后：回合末尾折成一行轻字，写着回了什么。还没答的在输入框上方（PendingQuestions） */
 .tail-ask {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 8px 12px 10px;
-  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line-2));
-  border-radius: var(--r2);
-  background: var(--raised);
-  font-size: 13px;
-  line-height: 20px;
-}
-.tail-ask-q {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-.tail-ask-q .st {
-  align-self: center;
-}
-.tail-ask-acts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.tail-ask-acts .btn[data-picked] {
-  outline: 1px solid var(--accent);
-  outline-offset: 1px;
-}
-.tail-ask-hint {
-  margin: 0;
-  font-size: 12px;
-  color: var(--ink-3);
-}
-/* 过去了（下一条用户消息之后）：折成一行轻字，不带框 */
-.tail-ask[data-state="past"] {
-  flex-direction: row;
   align-items: center;
   gap: 8px;
   padding: 0 2px;
-  border: 0;
-  background: none;
   font-size: 12px;
   line-height: 18px;
   color: var(--ink-3);
 }
 .tail-ask-replied {
-  flex: none;
+  flex: 0 1 auto;
+  max-width: 50%;
   color: var(--ink-2);
 }
 /* 提案卡右上角的“···”：一项“对这个 harness 关闭任务卡” */

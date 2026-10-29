@@ -9,6 +9,7 @@ import {
 import { useState } from 'react'
 import { useT } from '../app/appearance.ts'
 import { whyNot } from '../app/errors.ts'
+import { Caret } from '../app/icons.tsx'
 import { useKey, useServices } from '../app/services.tsx'
 import { useRunningSend } from './send-mode.ts'
 
@@ -19,33 +20,37 @@ export function PendingQuestions({ deviceId, sessionId }: { deviceId: string; se
   const device = useKey<DeviceView>(keys.device(deviceId))
   const [expanded, setExpanded] = useState(true)
   if (questions.length === 0) return null
+  // 和审批卡同一个位置、同一种卡片：和输入区一样宽，题多了在卡片里面滚，收起时只剩标题一行
   return (
-    <section className="pending-asks" aria-label={t('ask.pending')}>
-      <button
-        type="button"
-        className="pending-asks-head"
-        aria-expanded={expanded}
-        onClick={() => setExpanded(!expanded)}
-      >
-        <i className="st wait" />
-        {t('ask.pendingCount', { count: questions.length })}
-        <span>{expanded ? '⌄' : '›'}</span>
-      </button>
-      {expanded ? (
-        <div className="pending-asks-body">
-          {questions.map((question) => (
-            <PendingCard
-              key={question.id}
-              question={question}
-              deviceId={deviceId}
-              sessionId={sessionId}
-              enabled={meta?.live === true && device?.connection === 'online'}
-              canSteer={meta?.can.steer}
-            />
-          ))}
-        </div>
-      ) : null}
-    </section>
+    <div className="req-slot">
+      <section className="pending-asks" aria-label={t('ask.pending')}>
+        <button
+          type="button"
+          className="pending-asks-head"
+          aria-expanded={expanded}
+          aria-controls={expanded ? `pending-${sessionId}` : undefined}
+          onClick={() => setExpanded(!expanded)}
+        >
+          <i className="st wait" />
+          <span className="grow">{t('ask.pendingCount', { count: questions.length })}</span>
+          <Caret />
+        </button>
+        {expanded ? (
+          <div className="pending-asks-body" id={`pending-${sessionId}`}>
+            {questions.map((question) => (
+              <PendingCard
+                key={question.id}
+                question={question}
+                deviceId={deviceId}
+                sessionId={sessionId}
+                enabled={meta?.live === true && device?.connection === 'online'}
+                canSteer={meta?.can.steer}
+              />
+            ))}
+          </div>
+        ) : null}
+      </section>
+    </div>
   )
 }
 
@@ -86,12 +91,17 @@ function PendingCard({
       setBusy(false)
     }
   }
+  // 一道题两行：题目，下面是建议的回答和自己写的一栏排在同一行，窄了再折行
   return (
-    <div className="tail-ask" data-state="open" data-pending-question={question.id}>
-      <div className="tail-ask-q">
-        <span className="grow">{question.title}</span>
-      </div>
-      <div className="tail-ask-acts">
+    <div className="pending-ask" data-state="open" data-pending-question={question.id}>
+      <div className="pending-ask-q">{question.title}</div>
+      <form
+        className="pending-ask-row"
+        onSubmit={(event) => {
+          event.preventDefault()
+          void send(text.trim() || picked || '')
+        }}
+      >
         {question.options.map((option, index) => (
           <button
             key={option.label}
@@ -111,15 +121,8 @@ function PendingCard({
             {option.label}
           </button>
         ))}
-      </div>
-      <form
-        className="pending-asks-reply"
-        onSubmit={(event) => {
-          event.preventDefault()
-          void send(text.trim() || picked || '')
-        }}
-      >
         <textarea
+          rows={1}
           className="req-input"
           aria-label={t('ask.reply')}
           placeholder={t('ask.other')}
@@ -146,7 +149,7 @@ function PendingCard({
           {t('ask.send')}
         </button>
       </form>
-      {failure ? <p className="tail-ask-hint err">{failure}</p> : null}
+      {failure ? <p className="pending-ask-err">{failure}</p> : null}
     </div>
   )
 }

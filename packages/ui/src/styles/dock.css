@@ -986,38 +986,83 @@ a.btn {
   color: var(--ink-2);
   font-size: 12px;
 }
+/* ---------- 待答问题：跨回合留着的提问，和审批卡同一个位置、同一种卡片 ---------- */
+/* 外层的 .req-slot 管左右留白；卡片和输入区一样宽，最高到窗口的四成，再多在卡片里面滚，标题一行贴顶 */
 .pending-asks {
   flex: 0 1 auto;
-  min-height: 32px;
+  width: 100%;
+  max-width: var(--tr-max);
+  margin: 0 auto;
+  min-height: 0;
   max-height: 40vh;
-  overflow: auto;
-  border-top: 1px solid var(--line-2);
-  background: var(--panel);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid color-mix(in srgb, var(--wait) 60%, transparent);
+  border-radius: var(--r2);
+  background: var(--raised);
 }
 .pending-asks-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 8px 16px;
+  height: 34px;
+  padding: 0 12px 0 14px;
+  background: var(--raised);
+  font-size: 12px;
   color: var(--ink-2);
-  background: var(--panel);
-  position: sticky;
-  top: 0;
-  z-index: 1;
+  text-align: left;
 }
-.pending-asks-body {
-  max-width: var(--tr-max);
-  margin: 0 auto;
-  padding: 0 16px 8px;
+.pending-asks-head:hover {
+  color: var(--ink);
 }
-.pending-asks-reply {
+.pending-asks-head .caret-ic {
+  color: var(--ink-3);
+}
+.pending-asks-head:hover .caret-ic {
+  color: var(--ink);
+}
+.pending-ask {
   display: flex;
+  flex-direction: column;
   gap: 8px;
+  padding: 10px 12px 12px 14px;
+  border-top: 1px solid var(--line-1);
 }
-.pending-asks-reply .req-input {
-  flex: 1;
+.pending-ask-q {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+/* 建议的回答和自己写的一栏排一行；自己写的那栏占剩下的地方，太窄就折到下一行 */
+.pending-ask-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+/* 自己写的那栏从一行起，跟着内容长高（Shift+Enter 换行），不先占一大块 */
+.pending-ask-row textarea.req-input {
+  flex: 1 1 220px;
   min-width: 0;
+  min-height: 28px;
+  max-height: 120px;
+  height: auto;
+  padding: 4px 10px;
+  line-height: 18px;
+  field-sizing: content;
+  resize: none;
+}
+.pending-ask-err {
+  margin: 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--err);
 }
 
 textarea.req-input {
