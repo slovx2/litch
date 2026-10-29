@@ -1,4 +1,5 @@
 # 键盘打开时直接提交公共输入弹窗、选择搜索结果，不能先收键盘再点击。
+# 改名框打开就聚焦、光标在行末：不点输入框（点了光标会落在点的位置，删不干净），从行末整串删掉再输入，值和标题都按原样比对。
 # 公共 Dialog 同时承载评论与消息编辑；底部 PickerSheet 独立覆盖搜索场景。
 appId: dev.litch.app
 name: mock-输入弹层避让键盘
@@ -18,17 +19,22 @@ tags: [mock]
     id: detail:menu
 - tapOn:
     id: detail:menu:rename
-- tapOn:
-    id: prompt:input
+- extendedWaitUntil:
+    visible:
+      id: prompt:input
+    timeout: 5000
 - eraseText: 200
 - inputText: Keyboard visible rename
+- assertVisible:
+    id: prompt:input
+    text: Keyboard visible rename
 - tapOn:
     id: prompt:ok
 - extendedWaitUntil:
     notVisible:
       id: prompt:input
     timeout: 5000
-- assertVisible: .*Keyboard visible rename.*
+- assertVisible: Keyboard visible rename
 - openLink: litch://open?session=b6&device=build
 - extendedWaitUntil:
     visible:

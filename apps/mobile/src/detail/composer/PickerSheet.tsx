@@ -2,8 +2,10 @@
 // 现在选着的那一项反白（复古皮肤的选中态）；不能选的灰着、带一句为什么。选项多的（模型）顶上有筛选框，
 // 按空白拆开的每一段都要在标题、标识或说明里出现。从几个起出筛选框用桌面的 composer/picker-search.ts；
 // 那边的 matchOptions 要的说明是 string | undefined，这里的选项说明可以是 null，筛的那几行留在这边。
+// 底下留出系统手势条的高度；键盘弹着时手势条被键盘盖住，清单直接贴在键盘上，不再留这一截。
 import { useEffect, useMemo, useState } from 'react'
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import { useKeyboardState } from 'react-native-keyboard-controller'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { SEARCH_FROM } from '../../../../../packages/ui/src/composer/picker-search.ts'
 import { useT } from '../../ui/i18n'
@@ -44,6 +46,7 @@ export function PickerSheet({
   testID?: string
 }) {
   const insets = useSafeAreaInsets()
+  const keyboardShown = useKeyboardState((state) => state.isVisible)
   const theme = useTheme()
   const t = useT()
   const { c } = theme
@@ -69,7 +72,7 @@ export function PickerSheet({
               borderColor: c.line3,
               borderTopLeftRadius: theme.radius.l,
               borderTopRightRadius: theme.radius.l,
-              paddingBottom: insets.bottom + 8,
+              paddingBottom: (keyboardShown ? 0 : insets.bottom) + 8,
             },
           ]}
         >
